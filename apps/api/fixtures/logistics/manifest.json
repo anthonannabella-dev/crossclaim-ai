@@ -1,0 +1,19 @@
+{
+  "datasetVersion": "2026-09-28.1",
+  "synthetic": true,
+  "domain": "LOGISTICS",
+  "channel": "OTHER",
+  "currency": "USD",
+  "carrier": "DEMO_CARRIER",
+  "scenario": "FREIGHT_RATE_OVERCHARGE",
+  "expectedOutcome": "INV-1001 应判为超收（OPPORTUNITY，可追回 17.7500），INV-1002 应判为 PASS（差额 0）；其余票据不产生机会。规则优先级必须选中 CUSTOMER_RATE_CARD 而不是 CARRIER_TARIFF。",
+  "files": {
+    "carrierInvoice": "carrier-invoice.csv",
+    "rateCard": "rate-card.csv",
+    "tracking": "tracking.csv",
+    "ruleSeed": "rules.json",
+    "expectedResults": "expected-results.json",
+    "commercialTerms": "commercial-terms.json"
+  },
+  "productionSafety": "本数据集只能用于 test/dev；demo loader 在 production 必须 fail closed。"
+}

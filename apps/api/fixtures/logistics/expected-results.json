@@ -1,0 +1,70 @@
+{
+  "schemaVersion": 1,
+  "scenario": "FREIGHT_RATE_OVERCHARGE",
+  "currency": "USD",
+  "rows": [
+    {
+      "invoiceExternalId": "INV-1001",
+      "trackingExternalId": "1ZDEMO001",
+      "lane": "CN-SHA>US-LAX",
+      "service": "Ground",
+      "weightKg": "12.5000",
+      "expectedCharge": "135.0000",
+      "actualCharge": "152.7500",
+      "recoverableAmount": "17.7500",
+      "ruleTier": "CUSTOMER_RATE_CARD",
+      "result": "OPPORTUNITY"
+    },
+    {
+      "invoiceExternalId": "INV-1002",
+      "trackingExternalId": "1ZDEMO002",
+      "lane": "CN-SHA>US-LAX",
+      "service": "Ground",
+      "weightKg": "12.0000",
+      "expectedCharge": "133.2000",
+      "actualCharge": "133.2000",
+      "recoverableAmount": "0.0000",
+      "ruleTier": "CUSTOMER_RATE_CARD",
+      "result": "PASS"
+    },
+    {
+      "invoiceExternalId": "INV-1003",
+      "trackingExternalId": "1ZDEMO003",
+      "lane": "CN-SHA>US-LAX",
+      "service": "2Day",
+      "weightKg": "9.7500",
+      "expectedCharge": "272.7000",
+      "actualCharge": "212.7500",
+      "recoverableAmount": "0.0000",
+      "ruleTier": "CUSTOMER_RATE_CARD",
+      "result": "PASS"
+    },
+    {
+      "invoiceExternalId": "INV-1004",
+      "trackingExternalId": "1ZDEMO004",
+      "lane": "CN-SHA>US-ORD",
+      "service": "Ground",
+      "weightKg": "8.0000",
+      "expectedCharge": "130.1760",
+      "actualCharge": "54.2000",
+      "recoverableAmount": "0.0000",
+      "ruleTier": "CUSTOMER_RATE_CARD",
+      "result": "PASS"
+    },
+    {
+      "invoiceExternalId": "INV-1005",
+      "trackingExternalId": "1ZDEMO005",
+      "lane": "CN-SHA>US-ORD",
+      "service": "NextDay",
+      "weightKg": "10.2500",
+      "expectedCharge": "386.4600",
+      "actualCharge": "301.9900",
+      "recoverableAmount": "0.0000",
+      "ruleTier": "CUSTOMER_RATE_CARD",
+      "result": "PASS"
+    }
+  ],
+  "precedenceProof": {
+    "note": "INV-1001 必须在 CUSTOMER_RATE_CARD（expected 135.0000）下判为 OPPORTUNITY；若错误地选中 CARRIER_TARIFF（expected 158.2000）则会被误判为 PASS。"
+  }
+}
