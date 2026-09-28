@@ -1,75 +1,93 @@
-# 报关 SaaS 修复交付包
+# CrossClaim AI
 
-本包是对 `customs-saas` 的一轮全面检查与修复产出。所有代码改动均通过 `tsc --noEmit`(strict)
-全量编译,关键逻辑有测试覆盖(沙箱内 95/97 通过,余 2 个需真实数据库)。
+**Recovery OS · 资金追回操作系统**
 
-> 提示:`.ts` 文件被某些系统按扩展名误认成 MPEG-TS 视频("播放类型")。它们其实是
-> 纯文本 TypeScript 源码。请用编辑器打开,或直接放进项目,**不要双击**。
+一次接入，持续发现并追回散落在平台、物流、货代、保险和关税里的钱。
 
-## 目录结构(已按项目路径归位,可直接覆盖)
+---
+
+## 这是什么
+
+CrossClaim 是跨渠道资金追回系统，覆盖三个追回域：
+
+| 域 | 内容 |
+|---|---|
+| **Platform Recovery** | Amazon FBA 丢失/损坏、库存差异、入库差异、重量尺寸错误、赔付遗漏与错付、退款未归还库存 |
+| **Logistics Recovery** | UPS / FedEx / DHL / 货代的运费账单审计、合同费率核对、重复收费、各类附加费、SLA/GSR 延误退款、丢件破损、账单争议 |
+| **Customs / Trade Recovery** | 多缴机会发现、数据差异、金额测算、证据整理、案件包生成、Broker 协作、结果追踪、到账核对 |
+
+**边界**：需要牌照的正式申报、最终海关判断与正式提交，由持牌报关经纪（Broker）完成，
+CrossClaim 不越权代为完成。
+
+---
+
+## 核心价值链
 
 ```
-backend/src/middleware/auth.ts                      外部网关鉴权:补 req.tenant/tenantRecord(修限流+用量)
-backend/src/index.ts                                启动钩子:卡死恢复 + 队列 worker
-backend/src/services/groupPipelineService.ts        P1富化修复 + 卡死恢复 + 队列调度 + 去@ts-nocheck
-backend/src/services/cronJobs.ts                    每10分钟卡死恢复任务
-backend/src/services/batchOCR.ts                    类型修复(去@ts-nocheck)
-backend/src/services/queue/pipelineQueue.ts         【新增】BullMQ 持久化队列(可选增强层)
-backend/src/routes/api/routes.ts                    外部网关:/submit-once 补审计日志 + 计时中间件上移
-backend/src/routes/routes/batchGroup.ts             类型修复(去@ts-nocheck)
-backend/src/routes/routes/document.ts               类型修复(去@ts-nocheck)
-backend/src/routes/routes/taxRebateSupplement.ts    类型修复(去@ts-nocheck)
-backend/__tests__/group_recovery.test.ts            【新增】卡死恢复测试(9)
-backend/__tests__/pipeline_statemachine.test.ts     【新增】闭环状态机测试(11)
-backend/__tests__/pipeline_queue.test.ts            【新增】队列调度契约测试(7)
-backend/__tests__/declarationBuilder.test.ts        修复:补 prisma mock,解锁 32 个合规/XML 测试
-
-ops/SECURITY_P0_密钥轮换清单.md                     P0 密钥泄露处置与轮换步骤
-ops/gitignore.hardened                              加固版 .gitignore(覆盖到仓库根目录的 .gitignore)
-ops/cleanup_repo.sh                                 P3 可逆清理脚本(默认 dry-run,--apply 才执行)
-ops/p2_ts-nocheck_removal.patch                     去 @ts-nocheck 的统一 diff(含本包未单列的 5 个零改动文件)
+Source Data → Normalize → RecoveryOpportunity → RecoveryGraph
+→ EvidenceGraph → RecoveryRouting → Case → Claim / Appeal
+→ Settlement → RecoveryLedger → Billing
 ```
 
-## 应用方式
+金额、佣金、Deadline、账本结果**一律由确定性代码 / SQL / 规则引擎决定**，不由 LLM 决定。
+AI 负责文档理解、字段抽取、异常解释、证据推荐、案件总结、Claim/Appeal 文本。
 
-1. 备份现有仓库或确保在干净的 git 分支上。
-2. 把 `backend/` 下的文件按相同路径覆盖到你的项目。
-3. `ops/gitignore.hardened` 覆盖到仓库根目录的 `.gitignore`。
-4. 新增依赖:`cd backend && npm install bullmq`(队列需要;不启用队列也可装着不用)。
-5. 另有 5 个文件仅需删掉首行 `// @ts-nocheck`(本包未单列,见 `ops/p2_ts-nocheck_removal.patch`):
-   `services/pdfGenerator.ts`、`services/ocrParser.ts`、`services/declarationService.ts`、
-   `routes/routes/declaration.ts`、`routes/routes/ocr.ts`。
+---
 
-## 验证
+## 仓库结构
 
-```bash
-cd backend
-npx prisma generate          # 生成 Prisma 引擎(沙箱里被网络挡了,你的环境应正常)
-npm test                     # 期望 97 全绿(含需 DB 的 notification/hscode)
-npx tsc --noEmit             # 期望 EXIT 0
-```
+| 路径 | 内容 |
+|---|---|
+| `apps/api/` | 核心 API（Node + TypeScript + Prisma + PostgreSQL） |
+| `apps/api/prisma/schema.prisma` | **领域模型（架构基准）** |
+| `apps/web/` | 前端（Next.js + React + shadcn/ui + Tailwind） |
+| `apps/ai/` | AI 服务（FastAPI + Pydantic + Docling + LangGraph） |
+| `tools/agent-bridge/` | Codex ↔ ChatGPT 通信与监视 |
+| `tools/license-gate/` | 依赖许可证闸门 |
+| `docs/` | 交付文档 |
 
-## 启用 BullMQ 持久化队列(可选)
+### 与旧项目的关系
 
-默认关闭,流水线走 process.nextTick(原行为)。要启用(需 Redis):
+旧项目 `E:\zhuihuiweikuan-saas`（出口报关 SaaS）**只是技术资产来源**，不是本仓库的一部分。
+可复用性判定见 [LEGACY_MIGRATION_AUDIT.md](./LEGACY_MIGRATION_AUDIT.md) 与
+[MIGRATION_PLAN.md](./MIGRATION_PLAN.md)。**旧项目原则上只读。**
 
-```bash
-export PIPELINE_QUEUE_ENABLED=true
-export PIPELINE_QUEUE_CONCURRENCY=3   # 可选
-npm run dev
-```
+---
 
-启用后:OCR/AI/自动填制进持久化队列,进程重启不丢任务、失败指数退避重试 3 次、
-耗尽进死信(分组置 error 转人工)。`recoverStuckGroups` 作为兜底保留。
+## 状态
 
-## 待办(需你的环境实测,本包未覆盖)
+**NOT COMPLETE** —— 当前处于 Gate 0（工程地基）。
 
-- 真·端到端集成测试(真实 Postgres + mock OCR/DeepSeek 跑完整链)
-- BullMQ 队列连 Redis 的运行时实测(入队/消费/重试/死信/重启恢复)
-- P0 密钥轮换属运维动作,按 `ops/SECURITY_P0_密钥轮换清单.md` 执行
+已完成：
 
-## 仍建议你权衡的设计项(本包未改)
+- 领域模型 **26 个（25 核心 + 1 联结）**：`apps/api/prisma/schema.prisma`
+- 架构契约与领域规则（`ARCHITECTURE_CONTRACT.md` / `DOMAIN_MODEL.md`）
+- 数据库迁移（2 个）+ **16 个租户完整性触发器**（数据库级租户隔离）
+- 测试：架构契约 + 真实数据库租户隔离，共 **95 项**
+- Agent 协作规则（`AGENTS.md`）+ AI-ARCHITECT-INBOX + 本地 Watcher
+- CI（在全新 PostgreSQL 上真实执行迁移并跑全部测试）+ 许可证闸门
 
-- 外部 API token 永不过期(建议加 expiresAt)
-- 外部 API 无 scope 权限分级(任何 token 都能打 /submit-once)
-- 外部鉴权每请求 bcrypt 比对(建议改 HMAC 常量时间或缓存已验证 token)
+尚未完成：Wave 0 余项（Logging / Health Check / Storage Adapter / Audit 基础逻辑）、
+`apps/web`、`apps/ai`、端到端返钱闭环、部署与安全文档。
+
+> **本地跑测试需要数据库**：
+> `docker run -d --name crossclaim-postgres -e POSTGRES_USER=crossclaim -e POSTGRES_PASSWORD=ccdevpass -e POSTGRES_DB=crossclaim -p 127.0.0.1:55432:5432 postgres:16-alpine`
+> 然后 `DATABASE_URL=postgresql://crossclaim:ccdevpass@localhost:55432/crossclaim npx prisma migrate deploy && npm test`
+
+详见 [MIGRATION_PLAN.md](./MIGRATION_PLAN.md)。
+
+---
+
+## 文档
+
+| 文档 | 内容 |
+|---|---|
+| `PRODUCT_SPEC.md` | 产品定义与范围 |
+| `ARCHITECTURE_CONTRACT.md` | 不可违反的架构约定 |
+| `DOMAIN_MODEL.md` | 领域模型与不变量 |
+| `MIGRATION_PLAN.md` | 旧项目迁移计划（Wave 0–6） |
+| `LEGACY_MIGRATION_AUDIT.md` | 旧项目只读审计报告 |
+| `AGENTS.md` | AI Agent 协作规则 |
+| `MODEL_LICENSES.md` | 模型权重许可证登记 |
+
+*（`DEPLOYMENT.md` / `SECURITY.md` / `OPERATIONS.md` / `API.md` 待补，未完成的文档不代写。）*

@@ -1,3 +1,0 @@
-FROM alpine:latest
-RUN echo "hello build works" > /tmp/test.txt
-CMD cat /tmp/test.txt

@@ -1,0 +1,982 @@
+// ============================================================
+// CrossClaim AI · 领域模型（Gate 0 · C-0002 REVISE 后）
+// ------------------------------------------------------------
+// 模型清单：25 个核心模型 + 1 个联结模型（CaseEvidence）= 26
+// 架构基准见 ARCHITECTURE_CONTRACT.md；说明见 DOMAIN_MODEL.md
+//
+// 租户隔离策略（重要）：
+//   1) 每个 tenant-owned 模型显式带 organizationId
+//   2) 每个 tenant-owned 模型带 @@unique([organizationId, id])
+//   3) 跨表引用一律使用单列 FK（Prisma 限制：可选关系不能配复合外键），
+//      "引用对象必须同租户"由**数据库触发器**强制 —— 见 migration 中的
+//      crossclaim_assert_tenant_integrity() 与各表 trigger。
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// 枚举
+// ============================================================
+
+enum RecoveryDomain {
+  PLATFORM
+  LOGISTICS
+  CUSTOMS
+}
+
+enum Channel {
+  AMAZON_FBA
+  AMAZON_OTHER
+  UPS
+  FEDEX
+  DHL
+  FREIGHT_FORWARDER
+  INSURANCE
+  CUSTOMS_BROKER
+  OTHER
+}
+
+enum MembershipRole {
+  OWNER
+  ADMIN
+  OPS
+  FINANCE
+  VIEWER
+}
+
+enum SourceConnectionKind {
+  FILE_UPLOAD
+  API
+  SFTP
+  EMAIL
+  MANUAL
+}
+
+enum SourceConnectionStatus {
+  ACTIVE
+  PAUSED
+  NEEDS_AUTH
+  ERROR
+  REVOKED
+}
+
+enum FileKind {
+  PDF
+  XLSX
+  CSV
+  DOCX
+  IMAGE
+  XML
+  OTHER
+}
+
+enum ImportStatus {
+  PENDING
+  PARSING
+  IMPORTED
+  PARTIAL
+  FAILED
+}
+
+enum OpportunityStatus {
+  DETECTED
+  QUALIFIED
+  REJECTED
+  CONVERTED
+  EXPIRED
+}
+
+enum CaseStatus {
+  OPEN
+  COLLECTING_EVIDENCE
+  READY_TO_CLAIM
+  CLAIMED
+  APPEALING
+  WON
+  PARTIALLY_WON
+  LOST
+  SETTLED
+  CLOSED
+}
+
+enum ClaimStatus {
+  DRAFT
+  SUBMITTED
+  ACKNOWLEDGED
+  APPROVED
+  PARTIALLY_APPROVED
+  REJECTED
+  NO_RESPONSE
+  WITHDRAWN
+}
+
+enum AppealStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  UPHELD
+  OVERTURNED
+  REJECTED
+  WITHDRAWN
+}
+
+enum EvidenceKind {
+  CONTRACT
+  RATE_CARD
+  INVOICE
+  CREDIT_NOTE
+  TRACKING
+  POD
+  EMAIL
+  CUSTOMS_DOC
+  BROKER_CORRESPONDENCE
+  OTHER
+}
+
+enum GraphNodeType {
+  ORGANIZATION
+  CHANNEL
+  ACCOUNT
+  SHIPMENT
+  INVOICE
+  OPPORTUNITY
+  CASE
+  CLAIM
+  SETTLEMENT
+  OTHER
+}
+
+enum GraphEdgeType {
+  CAUSES
+  RELATED_TO
+  DUPLICATES
+  DERIVED_FROM
+  RESPONSIBLE_FOR
+  SAME_SHIPMENT
+  OTHER
+}
+
+enum EvidenceEdgeType {
+  SUPPORTS
+  REFUTES
+  CONTEXT_FOR
+  DUPLICATES
+  OTHER
+}
+
+/// 含保险公司与海关当局（C 域需要）
+enum RouteTarget {
+  PLATFORM
+  CARRIER
+  FREIGHT_FORWARDER
+  INSURER
+  CUSTOMS_AUTHORITY
+  CUSTOMS_BROKER
+  CUSTOMER_SELF
+  NONE
+}
+
+enum RouteStatus {
+  PROPOSED
+  CONFIRMED
+  EXECUTED
+  FAILED
+  ABANDONED
+}
+
+enum RuleScope {
+  PLATFORM_FEE
+  FREIGHT_RATE
+  SLA
+  DIM_WEIGHT
+  FUEL_SURCHARGE
+  ACCESSORIAL
+  DUPLICATE_CHARGE
+  INSURANCE
+  CUSTOMS_DUTY
+  OTHER
+}
+
+enum RuleTier {
+  CUSTOMER_CONTRACT
+  CUSTOMER_RATE_CARD
+  CARRIER_TARIFF
+  DATED_POLICY
+  DEFAULT
+}
+
+/// 全局规则 vs 租户规则
+enum RuleOwnerType {
+  SYSTEM
+  TENANT
+}
+
+enum RuleEvaluationResult {
+  PASS
+  OPPORTUNITY
+  NEEDS_MORE_DATA
+  ERROR
+}
+
+enum SettlementStatus {
+  EXPECTED
+  RECEIVED
+  PARTIAL
+  DISPUTED
+  VOID
+}
+
+enum SettlementSource {
+  PLATFORM_CREDIT
+  CARRIER_CREDIT
+  INSURER_PAYOUT
+  BANK_TRANSFER
+  CHECK
+  OFFSET
+  OTHER
+}
+
+enum LedgerEntryType {
+  DISCOVERED
+  RECOVERED
+  ADJUSTMENT
+  REVERSAL
+  WRITE_OFF
+}
+
+enum BillingStatus {
+  DRAFT
+  ISSUED
+  PAID
+  PARTIALLY_PAID
+  VOID
+  WRITTEN_OFF
+}
+
+enum FeeBasis {
+  RECOVERED_AMOUNT_PCT
+  FIXED
+  TIERED
+  NONE
+}
+
+enum AuditActorType {
+  USER
+  SYSTEM
+  AI
+  EXTERNAL
+}
+
+// ============================================================
+// 一、组织与用户
+// ============================================================
+
+model Organization {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  status    String   @default("ACTIVE")
+  plan      String   @default("TRIAL")
+  locale    String   @default("zh-CN")
+  timezone  String   @default("Asia/Shanghai")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  memberships       Membership[]
+  connections       SourceConnection[]
+  fileAssets        FileAsset[]
+  importBatches     ImportBatch[]
+  transactions      SourceTransaction[]
+  opportunities     RecoveryOpportunity[]
+  graphNodes        RecoveryGraphNode[]
+  graphEdges        RecoveryGraphEdge[]
+  evidence          EvidenceArtifact[]
+  evidenceEdges     EvidenceEdge[]
+  cases             Case[]
+  caseEvidences     CaseEvidence[]
+  caseOpportunities CaseOpportunity[]
+  routes            RecoveryRoute[]
+  claims            Claim[]
+  appeals           Appeal[]
+  ruleSets          RuleSet[]
+  ruleVersions      RuleVersion[]
+  ruleEvaluations   RuleEvaluation[]
+  settlements       Settlement[]
+  ledgerEntries     RecoveryLedgerEntry[]
+  billingInvoices   BillingInvoice[]
+  feeCalculations   FeeCalculation[]
+  auditLogs         AuditLog[]
+
+  @@index([status])
+}
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  passwordHash  String?
+  displayName   String
+  status        String    @default("ACTIVE")
+  emailVerified Boolean   @default(false)
+  lastLoginAt   DateTime?
+  failedLogins  Int       @default(0)
+  lockedUntil   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  memberships Membership[]
+  auditLogs   AuditLog[]
+
+  @@index([status])
+}
+
+model Membership {
+  id             String         @id @default(uuid())
+  organizationId String
+  userId         String
+  role           MembershipRole @default(VIEWER)
+  isActive       Boolean        @default(true)
+  invitedBy      String?
+  joinedAt       DateTime       @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@unique([organizationId, id])
+  @@index([organizationId, role])
+}
+
+// ============================================================
+// 二、数据进入系统
+// ============================================================
+
+model SourceConnection {
+  id             String                 @id @default(uuid())
+  organizationId String
+  domain         RecoveryDomain
+  channel        Channel
+  kind           SourceConnectionKind
+  status         SourceConnectionStatus @default(NEEDS_AUTH)
+  label          String
+  credentialRef  String?
+  config         Json?
+  lastSyncAt     DateTime?
+  lastErrorAt    DateTime?
+  lastError      String?
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  fileAssets   FileAsset[]
+  batches      ImportBatch[]
+  transactions SourceTransaction[]
+  evidence     EvidenceArtifact[]
+
+  @@unique([organizationId, channel, label])
+  @@unique([organizationId, id])
+  @@index([organizationId, status])
+}
+
+model FileAsset {
+  id             String   @id @default(uuid())
+  organizationId String
+  connectionId   String?
+  kind           FileKind
+  storageKey     String
+  originalName   String
+  mimeType       String?
+  sizeBytes      Int?
+  sha256         String?
+  uploadedBy     String?
+  sourceRef      String?
+  createdAt      DateTime @default(now())
+
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  connection   SourceConnection?  @relation(fields: [connectionId], references: [id])
+  batches      ImportBatch[]
+  evidence     EvidenceArtifact[]
+
+  @@unique([organizationId, id])
+  @@index([organizationId, sha256])
+  @@index([organizationId, createdAt])
+}
+
+model ImportBatch {
+  id             String         @id @default(uuid())
+  organizationId String
+  connectionId   String?
+  fileAssetId    String?
+  domain         RecoveryDomain
+  channel        Channel
+  status         ImportStatus   @default(PENDING)
+  rowsTotal      Int            @default(0)
+  rowsOk         Int            @default(0)
+  rowsFailed     Int            @default(0)
+  columnMapping  Json?
+  errorReport    Json?
+  startedAt      DateTime       @default(now())
+  finishedAt     DateTime?
+  createdBy      String?
+
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  connection   SourceConnection?   @relation(fields: [connectionId], references: [id])
+  fileAsset    FileAsset?          @relation(fields: [fileAssetId], references: [id])
+  transactions SourceTransaction[]
+
+  @@unique([organizationId, id])
+  @@index([organizationId, channel, startedAt])
+}
+
+/// 原始业务交易。§七.2/§七.3：与账本严格分离。
+/// 溯源链只能走：SourceTransaction → RuleEvaluation → RecoveryOpportunity
+///   → Case → Claim → Settlement → RecoveryLedgerEntry
+model SourceTransaction {
+  id             String         @id @default(uuid())
+  organizationId String
+  connectionId   String?
+  importBatchId  String?
+  domain         RecoveryDomain
+  channel        Channel
+  externalId     String?
+  referenceType  String?
+  occurredAt     DateTime?
+  amount         Decimal?       @db.Decimal(18, 4)
+  currency       String         @default("USD")
+  /// 稳定幂等键，防止重复导入产生重复交易
+  /// 生成：sha256(organizationId|connectionId|referenceType|externalId|rowFingerprint)
+  dedupeKey      String
+  raw            Json
+  createdAt      DateTime       @default(now())
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  connection   SourceConnection? @relation(fields: [connectionId], references: [id])
+  importBatch  ImportBatch?      @relation(fields: [importBatchId], references: [id])
+  evaluations  RuleEvaluation[]
+
+  @@unique([organizationId, dedupeKey])
+  @@unique([organizationId, id])
+  @@index([organizationId, channel, occurredAt])
+  @@index([organizationId, externalId])
+}
+
+// ============================================================
+// 三、核心业务实体
+// ============================================================
+
+model RecoveryOpportunity {
+  id                String            @id @default(uuid())
+  organizationId    String
+  domain            RecoveryDomain
+  channel           Channel
+  status            OpportunityStatus @default(DETECTED)
+  opportunityType   String
+  title             String
+  description       String?
+  amountExpected    Decimal?          @db.Decimal(18, 4)
+  amountActual      Decimal?          @db.Decimal(18, 4)
+  recoverableAmount Decimal?          @db.Decimal(18, 4)
+  currency          String            @default("USD")
+  confidence        Float?
+  claimDeadline     DateTime?
+  detectedAt        DateTime          @default(now())
+  qualifiedAt       DateTime?
+  rejectedReason    String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  organization  Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  evaluations   RuleEvaluation[]
+  caseLinks     CaseOpportunity[]
+  routes        RecoveryRoute[]
+  ledgerEntries RecoveryLedgerEntry[]
+
+  @@unique([organizationId, id])
+  @@index([organizationId, status])
+  @@index([organizationId, channel, detectedAt])
+  @@index([organizationId, claimDeadline])
+}
+
+// ============================================================
+// 四、图
+// ============================================================
+
+model RecoveryGraphNode {
+  id             String        @id @default(uuid())
+  organizationId String
+  nodeType       GraphNodeType
+  /// 多态引用：指向 nodeType 对应实体的主键。允许成为节点的实体见 DOMAIN_MODEL.md。
+  refId          String?
+  label          String
+  properties     Json?
+  createdAt      DateTime      @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  outEdges RecoveryGraphEdge[] @relation("GraphFrom")
+  inEdges  RecoveryGraphEdge[] @relation("GraphTo")
+
+  /// 同租户内同类型同引用唯一 —— 防重复建点
+  @@unique([organizationId, nodeType, refId])
+  @@unique([organizationId, id])
+  @@index([organizationId, refId])
+}
+
+model RecoveryGraphEdge {
+  id             String        @id @default(uuid())
+  organizationId String
+  fromNodeId     String
+  toNodeId       String
+  edgeType       GraphEdgeType
+  weight         Float?
+  properties     Json?
+  createdAt      DateTime      @default(now())
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  fromNode     RecoveryGraphNode @relation("GraphFrom", fields: [fromNodeId], references: [id], onDelete: Cascade)
+  toNode       RecoveryGraphNode @relation("GraphTo", fields: [toNodeId], references: [id], onDelete: Cascade)
+
+  @@unique([fromNodeId, toNodeId, edgeType])
+  @@unique([organizationId, id])
+  @@index([organizationId, edgeType])
+}
+
+// ============================================================
+// 五、证据
+// ============================================================
+
+model EvidenceArtifact {
+  id             String       @id @default(uuid())
+  organizationId String
+  kind           EvidenceKind
+  fileAssetId    String?
+  connectionId   String?
+  externalUrl    String?
+  title          String
+  description    String?
+  reliability    Float?
+  capturedAt     DateTime?
+  createdAt      DateTime     @default(now())
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  fileAsset    FileAsset?        @relation(fields: [fileAssetId], references: [id])
+  connection   SourceConnection? @relation(fields: [connectionId], references: [id])
+  caseLinks    CaseEvidence[]
+  settlements  Settlement[]
+  outEdges     EvidenceEdge[]    @relation("EvidenceFrom")
+  inEdges      EvidenceEdge[]    @relation("EvidenceTo")
+
+  @@unique([organizationId, id])
+  @@index([organizationId, kind])
+  @@index([organizationId, fileAssetId])
+}
+
+model EvidenceEdge {
+  id             String           @id @default(uuid())
+  organizationId String
+  fromId         String
+  toId           String
+  edgeType       EvidenceEdgeType
+  note           String?
+  createdAt      DateTime         @default(now())
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  from         EvidenceArtifact @relation("EvidenceFrom", fields: [fromId], references: [id], onDelete: Cascade)
+  to           EvidenceArtifact @relation("EvidenceTo", fields: [toId], references: [id], onDelete: Cascade)
+
+  @@unique([fromId, toId, edgeType])
+  @@unique([organizationId, id])
+  @@index([organizationId, edgeType])
+}
+
+/// §七.8：一份证据服务多个 Case —— 多对多
+model CaseEvidence {
+  organizationId String
+  caseId         String
+  evidenceId     String
+  role           String?
+  addedBy        String?
+  addedAt        DateTime @default(now())
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  case         Case             @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  evidence     EvidenceArtifact @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+
+  @@id([caseId, evidenceId])
+  @@index([organizationId, evidenceId])
+}
+
+// ============================================================
+// 六、案件
+// ============================================================
+
+model Case {
+  id              String         @id @default(uuid())
+  organizationId  String
+  caseNo          String
+  title           String
+  domain          RecoveryDomain
+  status          CaseStatus     @default(OPEN)
+  claimedAmount   Decimal?       @db.Decimal(18, 4)
+  recoveredAmount Decimal        @default(0) @db.Decimal(18, 4)
+  currency        String         @default("USD")
+  ownerUserId     String?
+  openedAt        DateTime       @default(now())
+  closedAt        DateTime?
+  dueAt           DateTime?
+  workflowId      String?
+  workflowRunId   String?
+  nextActionAt    DateTime?
+  aiSummary       Json?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+
+  organization    Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  opportunities   CaseOpportunity[]
+  evidence        CaseEvidence[]
+  routes          RecoveryRoute[]
+  claims          Claim[]
+  appeals         Appeal[]
+  settlements     Settlement[]
+  ledgerEntries   RecoveryLedgerEntry[]
+  billingInvoices BillingInvoice[]
+  feeCalculations FeeCalculation[]
+
+  @@unique([organizationId, caseNo])
+  @@unique([organizationId, id])
+  @@index([organizationId, status])
+  @@index([organizationId, nextActionAt])
+  @@index([workflowId])
+}
+
+model CaseOpportunity {
+  organizationId String
+  caseId         String
+  opportunityId  String
+  note           String?
+
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  case         Case                @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  opportunity  RecoveryOpportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  @@id([caseId, opportunityId])
+  @@index([organizationId, opportunityId])
+}
+
+model RecoveryRoute {
+  id             String      @id @default(uuid())
+  organizationId String
+  caseId         String?
+  opportunityId  String?
+  target         RouteTarget
+  status         RouteStatus @default(PROPOSED)
+  rationale      String?
+  ruleVersionId  String?
+  decidedAt      DateTime?
+  createdAt      DateTime    @default(now())
+
+  organization Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  case         Case?                @relation(fields: [caseId], references: [id])
+  opportunity  RecoveryOpportunity? @relation(fields: [opportunityId], references: [id])
+  ruleVersion  RuleVersion?         @relation(fields: [ruleVersionId], references: [id])
+
+  @@unique([organizationId, id])
+  @@index([organizationId, status])
+  @@index([caseId])
+}
+
+// ============================================================
+// 七、申诉与复议
+// ============================================================
+
+model Claim {
+  id             String      @id @default(uuid())
+  organizationId String
+  caseId         String
+  round          Int         @default(1)
+  status         ClaimStatus @default(DRAFT)
+  target         RouteTarget
+  externalRef    String?
+  submittedAt    DateTime?
+  submittedBy    String?
+  dueAt          DateTime?
+  respondedAt    DateTime?
+  responseAmount Decimal?    @db.Decimal(18, 4)
+  responseNote   String?
+  aiDraftText    String?
+  finalText      String?
+  attachmentKey  String?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  case         Case         @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  appeals      Appeal[]
+
+  @@unique([organizationId, id])
+  @@index([organizationId, caseId, round])
+  @@index([dueAt, respondedAt])
+}
+
+model Appeal {
+  id             String       @id @default(uuid())
+  organizationId String
+  claimId        String
+  caseId         String
+  round          Int          @default(2)
+  status         AppealStatus @default(DRAFT)
+  submittedAt    DateTime?
+  externalRef    String?
+  dueAt          DateTime?
+  respondedAt    DateTime?
+  outcomeAmount  Decimal?     @db.Decimal(18, 4)
+  responseNote   String?
+  aiDraftText    String?
+  finalText      String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  claim        Claim        @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  case         Case         @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, id])
+  @@index([organizationId, claimId, round])
+}
+
+// ============================================================
+// 八、规则引擎（全局规则 + 租户覆盖）
+// ============================================================
+
+/// ownerType=SYSTEM 为全局规则（organizationId 空，普通租户不可修改）；
+/// ownerType=TENANT 归属某租户。
+/// ownerKey 用于在数据库层保证唯一（PostgreSQL 唯一索引不约束 NULL）：
+/// 租户规则填 organizationId，全局规则填字面量 'GLOBAL'。
+model RuleSet {
+  id             String         @id @default(uuid())
+  ownerType      RuleOwnerType
+  ownerKey       String
+  organizationId String?
+  domain         RecoveryDomain
+  channel        Channel
+  scope          RuleScope
+  name           String
+  description    String?
+  isActive       Boolean        @default(true)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  versions     RuleVersion[]
+
+  @@unique([ownerKey, channel, scope, name])
+  @@index([organizationId, isActive])
+  @@index([ownerType, channel, scope])
+}
+
+/// §七.16：至少含 source / version / effective_from / effective_to / last_verified
+/// organizationId 为空表示继承自全局规则集。
+model RuleVersion {
+  id             String    @id @default(uuid())
+  ruleSetId      String
+  organizationId String?
+  tier           RuleTier
+  source         String
+  version        String
+  effectiveFrom  DateTime
+  effectiveTo    DateTime?
+  lastVerified   DateTime?
+  verifiedBy     String?
+  definition     Json
+  legalBasis     String?
+  notes          String?
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+
+  organization Organization?    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  ruleSet      RuleSet          @relation(fields: [ruleSetId], references: [id], onDelete: Cascade)
+  evaluations  RuleEvaluation[]
+  routes       RecoveryRoute[]
+
+  @@unique([ruleSetId, version, tier])
+  @@unique([organizationId, id])
+  @@index([effectiveFrom, effectiveTo])
+  @@index([organizationId, isActive])
+}
+
+model RuleEvaluation {
+  id                  String               @id @default(uuid())
+  organizationId      String
+  ruleVersionId       String
+  sourceTransactionId String?
+  opportunityId       String?
+  result              RuleEvaluationResult
+  computed            Json
+  message             String?
+  evaluatedAt         DateTime             @default(now())
+  dedupeKey           String?
+
+  organization      Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  ruleVersion       RuleVersion          @relation(fields: [ruleVersionId], references: [id], onDelete: Cascade)
+  sourceTransaction SourceTransaction?   @relation(fields: [sourceTransactionId], references: [id])
+  opportunity       RecoveryOpportunity? @relation(fields: [opportunityId], references: [id])
+
+  @@unique([dedupeKey])
+  @@unique([organizationId, id])
+  @@index([organizationId, ruleVersionId, evaluatedAt])
+  @@index([organizationId, opportunityId])
+}
+
+// ============================================================
+// 九、到账与账本
+// ============================================================
+
+model Settlement {
+  id             String           @id @default(uuid())
+  organizationId String
+  caseId         String?
+  status         SettlementStatus @default(EXPECTED)
+  source         SettlementSource
+  amount         Decimal          @db.Decimal(18, 4)
+  currency       String           @default("USD")
+  receivedAt     DateTime?
+  externalRef    String?
+  /// 到账必须能追到证据（真实关联，不悬空）
+  evidenceId     String?
+  confirmedBy    String?
+  confirmedAt    DateTime?
+  note           String?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  organization    Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  case            Case?                 @relation(fields: [caseId], references: [id])
+  evidence        EvidenceArtifact?     @relation(fields: [evidenceId], references: [id])
+  ledgerEntries   RecoveryLedgerEntry[]
+  feeCalculations FeeCalculation[]
+
+  @@unique([organizationId, id])
+  @@index([organizationId, status, receivedAt])
+  @@index([caseId])
+}
+
+/// 账本分录。**只增不改**：纠错靠 REVERSAL + voidsEntryId。
+/// §七.2/§七.3：与 SourceTransaction 严格分离。
+model RecoveryLedgerEntry {
+  id             String          @id @default(uuid())
+  organizationId String
+  caseId         String?
+  opportunityId  String?
+  settlementId   String?
+  entryType      LedgerEntryType
+  amount         Decimal         @db.Decimal(18, 4)
+  currency       String          @default("USD")
+  occurredAt     DateTime        @default(now())
+  counterparty   String?
+  reference      String?
+  voidsEntryId   String?
+  voidedAt       DateTime?
+  voidedBy       String?
+  voidReason     String?
+  createdBy      String?
+  createdAt      DateTime        @default(now())
+
+  organization    Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  case            Case?                 @relation(fields: [caseId], references: [id])
+  opportunity     RecoveryOpportunity?  @relation(fields: [opportunityId], references: [id])
+  settlement      Settlement?           @relation(fields: [settlementId], references: [id])
+  voids           RecoveryLedgerEntry?  @relation("LedgerVoids", fields: [voidsEntryId], references: [id])
+  voidedByEntries RecoveryLedgerEntry[] @relation("LedgerVoids")
+
+  @@unique([organizationId, id])
+  @@index([organizationId, occurredAt])
+  @@index([organizationId, entryType])
+  @@index([caseId])
+}
+
+// ============================================================
+// 十、收费
+// ============================================================
+
+model BillingInvoice {
+  id             String        @id @default(uuid())
+  organizationId String
+  caseId         String?
+  invoiceNo      String
+  status         BillingStatus @default(DRAFT)
+  subtotal       Decimal       @db.Decimal(18, 4)
+  taxAmount      Decimal       @default(0) @db.Decimal(18, 4)
+  total          Decimal       @db.Decimal(18, 4)
+  currency       String        @default("USD")
+  issuedAt       DateTime?
+  dueAt          DateTime?
+  paidAt         DateTime?
+  paidAmount     Decimal       @default(0) @db.Decimal(18, 4)
+  externalRef    String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  case         Case?            @relation(fields: [caseId], references: [id])
+  fees         FeeCalculation[]
+
+  @@unique([organizationId, invoiceNo])
+  @@unique([organizationId, id])
+  @@index([organizationId, status, dueAt])
+}
+
+/// 成功费计算。可追溯链：Settlement → FeeCalculation → BillingInvoice
+model FeeCalculation {
+  id               String   @id @default(uuid())
+  organizationId   String
+  billingInvoiceId String?
+  settlementId     String?
+  caseId           String?
+  basis            FeeBasis
+  rate             Decimal? @db.Decimal(9, 6)
+  baseAmount       Decimal  @db.Decimal(18, 4)
+  feeAmount        Decimal  @db.Decimal(18, 4)
+  currency         String   @default("USD")
+  computation      Json
+  calculatedAt     DateTime @default(now())
+
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  billingInvoice BillingInvoice? @relation(fields: [billingInvoiceId], references: [id], onDelete: Cascade)
+  settlement     Settlement?     @relation(fields: [settlementId], references: [id])
+  case           Case?           @relation(fields: [caseId], references: [id])
+
+  @@unique([organizationId, id])
+  @@index([organizationId, billingInvoiceId])
+  @@index([organizationId, settlementId])
+}
+
+// ============================================================
+// 十一、审计
+// ============================================================
+
+model AuditLog {
+  id             String         @id @default(uuid())
+  organizationId String?
+  actorType      AuditActorType
+  actorId        String?
+  action         String
+  entityType     String?
+  entityId       String?
+  changes        Json?
+  ip             String?
+  userAgent      String?
+  createdAt      DateTime       @default(now())
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  actor        User?         @relation(fields: [actorId], references: [id])
+
+  @@index([organizationId, createdAt])
+  @@index([entityType, entityId])
+  @@index([action])
+}

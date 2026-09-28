@@ -1,118 +1,107 @@
 name: CI
 
+# CrossClaim 持续集成。
+# 注意：main 历史上曾包含旧项目内容（见 LEGACY_MIGRATION_AUDIT.md）。
+# 本工作流只针对 CrossClaim 正式工程结构。
+#
+# 关键点：CI 会对一个**全新 PostgreSQL** 执行 prisma migrate deploy，
+# 并在该库上跑完整测试（含跨租户隔离等数据库级断言）。
+# 「本地通过但 CI 红」不作为完成依据。
+
 on:
   push:
-    branches: [main, develop]
+    branches: [main, 'gate/**', 'feat/**', 'fix/**']
   pull_request:
     branches: [main]
 
 env:
-  NODE_VERSION: 20
+  NODE_VERSION: '22'
 
 jobs:
-  lint-and-test:
+  api:
+    name: API · migration + typecheck + tests
     runs-on: ubuntu-latest
+
     services:
       postgres:
         image: postgres:16-alpine
         env:
-          POSTGRES_USER: customs
-          POSTGRES_PASSWORD: testpass123
-          POSTGRES_DB: customs_saas_test
+          POSTGRES_USER: crossclaim
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: crossclaim
         ports:
           - 5432:5432
         options: >-
-          --health-cmd pg_isready -U customs -d customs_saas_test
-          --health-interval 10s
+          --health-cmd "pg_isready -U crossclaim -d crossclaim"
+          --health-interval 5s
           --health-timeout 5s
-          --health-retries 5
-      redis:
-        image: redis:7-alpine
-        ports:
-          - 6379:6379
-        options: >-
-          --health-cmd "redis-cli ping"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
+          --health-retries 20
+
+    env:
+      DATABASE_URL: postgresql://crossclaim:ci@localhost:5432/crossclaim
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/setup-node@v4
         with:
-          node-version: \${{ env.NODE_VERSION }}
-          cache: 'npm'
-          cache-dependency-path: backend/package-lock.json
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: apps/api/package-lock.json
 
       - name: Install dependencies
-        working-directory: ./backend
-        run: npm ci
+        working-directory: apps/api
+        run: npm ci --no-audit --no-fund
 
-      - name: Prisma generate
-        working-directory: ./backend
-        run: npx prisma generate
-        env:
-          DATABASE_URL: postgresql://customs:***@localhost:5432/customs_saas_test
+      - name: Validate Prisma schema
+        working-directory: apps/api
+        run: npx prisma validate
 
-      - name: Prisma migrate
-        working-directory: ./backend
+      - name: Apply migrations to a fresh database
+        working-directory: apps/api
         run: npx prisma migrate deploy
-        env:
-          DATABASE_URL: postgresql://customs:***@localhost:5432/customs_saas_test
 
-      - name: TypeScript type check
-        working-directory: ./backend
+      - name: Generate Prisma Client
+        working-directory: apps/api
+        run: npx prisma generate
+
+      - name: Verify tenant-integrity triggers exist
+        run: |
+          PGPASSWORD=ci psql -h localhost -U crossclaim -d crossclaim -t -c \
+            "select count(*) from pg_trigger where tgname like 'cc_tenant%'" \
+            | grep -qE '[[:space:]]*17[[:space:]]*' \
+            && echo "OK: 17 tenant triggers present" \
+            || (echo "FAIL: tenant triggers missing" && exit 1)
+
+      - name: TypeScript typecheck
+        working-directory: apps/api
         run: npx tsc --noEmit
 
-      - name: Lint
-        working-directory: ./backend
-        run: npx eslint . --ext .ts --max-warnings 50 2>/dev/null || echo "ESLint not configured, skipping"
+      - name: Unit + database integration tests
+        working-directory: apps/api
+        run: npm test
 
-      - name: Run tests
-        working-directory: ./backend
-        run: npm test 2>/dev/null || echo "No tests configured yet"
-        env:
-          DATABASE_URL: postgresql://customs:***@localhost:5432/customs_saas_test
-          REDIS_URL: redis://:***@localhost:6379
-          JWT_SECRET: ci-test-jwt-secret
-          NODE_ENV: test
-
-  docker-build:
+  license-gate:
+    name: 许可证闸门
     runs-on: ubuntu-latest
-    needs: lint-and-test
-    if: github.ref == 'refs/heads/main'
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Build backend image
-        uses: docker/build-push-action@v6
+      - uses: actions/setup-node@v4
         with:
-          context: ./backend
-          load: true
-          tags: customs-saas-backend:ci-\${{ github.sha }}
+          node-version: ${{ env.NODE_VERSION }}
 
-      - name: Build frontend image
-        uses: docker/build-push-action@v6
+      - name: Install dependencies (for scanning)
+        working-directory: apps/api
+        run: npm ci --no-audit --no-fund
+
+      - name: Run license gate
+        run: node tools/license-gate/check-licenses.mjs --json tools/license-gate/report.json
+
+      - name: Upload license report
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
-          context: ./frontend
-          load: true
-          tags: customs-saas-frontend:ci-\${{ github.sha }}
-
-      - name: Build OCR service
-        uses: docker/build-push-action@v6
-        with:
-          context: ./ocr_service
-          load: true
-          tags: customs-saas-ocr:ci-\${{ github.sha }}
-
-      - name: Test docker-compose up
-        run: |
-          docker compose -f docker-compose.ci.yml up -d
-          sleep 15
-          docker compose -f docker-compose.ci.yml ps
-          docker compose -f docker-compose.ci.yml down
+          name: license-report
+          path: tools/license-gate/report.json
+          if-no-files-found: ignore
