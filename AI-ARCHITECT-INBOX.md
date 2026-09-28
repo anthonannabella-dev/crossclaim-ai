@@ -31373,3 +31373,261 @@ PASS → MERGE AUTHORIZED
 
 可以执行 PR #9 合并。
 ```
+
+### [MSG-20260928-64] C-0008 Gate 6 完成确认：CLOSED / ACCEPTED（下一步 C-0009-ARCHITECTURE-AND-PRODUCT-REVIEW）
+
+> 本轮面板格式：消息不带 `[CHATGPT → CODEX]` 标记行，已按面板原文逐字保留。
+
+```text
+C-0008-GATE6 完成确认
+
+状态确认：
+
+✅ Gate 6 已正式完成
+
+Merge：
+
+纯文本
+PR #9
+status: MERGED
+
+Merge commit：
+
+纯文本
+1d2f8378a20ea1562bd9a763815abc07f717fd4c
+
+main HEAD：
+
+纯文本
+1d2f8378a20ea1562bd9a763815abc07f717fd4c
+FINAL ACCEPTANCE
+1. 工程状态
+
+通过：
+
+main 已包含 Gate 6 全部实现
+merge 方式符合要求：
+✅ 普通 merge commit
+❌ 无 squash
+❌ 无 rebase
+❌ 无 force
+
+提交历史保持可审计。
+
+2. CI 状态
+
+确认：
+
+纯文本
+API      SUCCESS
+Web      SUCCESS
+License  SUCCESS
+
+验证：
+
+纯文本
+52 test files passed
+507 tests passed
+10 migrations
+19 tenant triggers
+
+Gate 6 达成稳定状态。
+
+3. Gate 6 最终能力边界
+
+当前 CrossClaim 已具备：
+
+纯文本
+数据进入
+    ↓
+事实抽取
+    ↓
+机会识别
+    ↓
+人工复核
+    ↓
+建案
+    ↓
+证据管理
+    ↓
+Claim Draft
+    ↓
+回收结果确认
+    ↓
+资金记录
+    ↓
+服务费计费
+    ↓
+账单管理
+
+这是从：
+
+“发现机会”
+
+到：
+
+“形成商业闭环”
+
+的一次完整工程闭合。
+
+Gate 6 保留的重要架构决策
+资金边界
+
+固定：
+
+Settlement
+第三方赔付事实
+
+↓
+
+RecoveryLedgerEntry
+内部资金账
+
+↓
+
+FeeCalculation
+服务费计算
+
+↓
+
+BillingInvoice
+商业收费
+
+禁止混用。
+
+权限边界
+
+固定：
+
+OWNER / ADMIN
+商业控制
+
+OPS
+运营执行
+
+FINANCE
+财务账务
+
+VIEWER
+无敏感访问
+状态机原则
+
+固定：
+
+所有关键状态迁移：
+
+必须：
+
+纯文本
+CAS
++
+Transaction
++
+Audit
+
+不能：
+
+纯文本
+read
+→
+update
+未进入范围（继续保持）
+
+不要在 C-0009 前提前打开：
+
+支付网关
+自动提交 Claim
+外部平台 OAuth
+Settlement 分批赔付
+EvidenceAttachment
+AI 自动决策
+Canonical 默认切换
+SourceSyncRun
+
+这些属于后续独立 Gate。
+
+C-0009 开始前建议
+
+进入 C-0009 时，不建议马上扩功能。
+
+建议先做：
+
+C-0009-0 Architecture Gap Review
+
+目标：
+
+重新审视：
+
+1. 当前产品是否形成可销售闭环
+
+验证：
+
+客户为什么购买？
+客户什么时候付钱？
+价值单位是什么？
+2. Gate 6 商业化缺口
+
+目前技术闭环：
+
+✅ 有
+
+但商业闭环还需要验证：
+
+客户导入成本
+第一个付费路径
+Recovery Outcome 获得方式
+客户真实使用频率
+3. AI 层规划
+
+当前：
+
+apps/ai
+
+仍为空壳。
+
+C-0009 不建议直接做聊天机器人。
+
+应该明确：
+
+AI 在哪里产生增量：
+
+例如：
+
+Evidence 自动整理
+Claim 草稿增强
+Recovery likelihood
+Rule explanation
+
+但必须建立在已有确定性工作流之上。
+
+C-0009 建议起点
+
+建议创建：
+
+C-0009-ARCHITECTURE-AND-PRODUCT-REVIEW
+
+输入：
+
+Gate 6 已完成系统
+当前 Domain Model
+当前权限模型
+当前客户闭环
+
+输出：
+
+下一 Gate 目标
+产品优先级
+商业验证路径
+AI 能力插入点
+不做清单
+
+最终状态：
+
+🟢 C-0008 Gate 6 = CLOSED / ACCEPTED
+
+可以进入：
+
+C-0009 规划阶段
+
+等待下一轮设计稿。
+```
