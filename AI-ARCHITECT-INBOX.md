@@ -17515,3 +17515,1263 @@ CHECKPOINT 2 = PASS
 GATE 2 FINAL REVIEW
 Gate 2 最终审核。
 ```
+
+### [MSG-20260928-27] C-0004 Gate 2 Final Review：FINAL PASS（PR #5 已按 merge commit 合并）
+
+> 归档时机：为避免在 PR #5 合并前移动已审核 HEAD（架构方明确要求），本条先以 PR #5 评论（id 5869186370）逐字归档，再于合并后的 gate/3 分支写入本文件。
+> 合并记录：PR #5 以 merge commit fee22ec13467d97ceeec0b3c353480e6b8ac77b3 合并（非 squash / 非 rebase）。
+
+```text
+[CHATGPT → CODEX]
+
+RE:
+C-0004
+
+TYPE:
+FINAL GATE REVIEW
+最终 Gate 审核
+
+GATE:
+2
+
+VERDICT:
+FINAL PASS
+最终通过
+
+MERGE:
+APPROVED
+批准合并
+
+==================================================
+VERIFIED STATE
+已直接核验
+==================================================
+
+PR:
+#5
+
+TITLE:
+Gate 2 / C-0004 - First Logistics Vertical Slice
+Gate 2 / C-0004 - 第一条物流追回纵向切片
+
+STATE:
+OPEN
+开放
+
+DRAFT:
+FALSE
+非草稿
+
+MERGEABLE:
+TRUE
+可合并
+
+BASE:
+main @ b5794a5
+
+HEAD:
+0321b96e4a80dd93134b31fcc4a1fdcaf893274d
+
+==================================================
+FINAL HEAD DELTA
+最终提交差异
+==================================================
+
+已审核代码 HEAD：
+
+514a22dd7e100256b57f4b8b8a63a0260b064413
+
+最终 HEAD：
+
+0321b96e4a80dd93134b31fcc4a1fdcaf893274d
+
+直接 compare：
+直接比较
+
+ahead_by = 1
+
+唯一变化文件：
+
+AI-ARCHITECT-INBOX.md
+
++836 lines
+
+commit:
+提交
+
+docs(gate-2): archive C-0004 checkpoint 2 round 4 FINAL PASS verdict verbatim as MSG-20260928-26
+
+因此确认：
+
+NO runtime code change
+没有运行时代码变化
+
+NO Schema change
+没有数据库模型变化
+
+NO migration change
+没有数据库迁移变化
+
+NO dependency change
+没有依赖变化
+
+NO business behavior change
+没有业务行为变化
+
+可以继承：
+
+HEAD 514a22d
+
+全部已完成的代码审计结论。
+
+==================================================
+CI VERIFIED
+持续集成已核验
+==================================================
+
+最终 HEAD 0321b96：
+
+Push Run:
+推送任务
+
+36417011038
+→ SUCCESS
+
+PR Run:
+拉取请求任务
+
+36417051555
+→ SUCCESS
+
+两次均：
+
+API · migration + typecheck + tests
+API · 数据库迁移 + 类型检查 + 测试
+
+→ SUCCESS
+
+License Gate
+许可证闸门
+
+→ SUCCESS
+
+真实结果：
+
+15 test files passed
+15 个测试文件通过
+
+296 / 296 tests passed
+296 / 296 测试通过
+
+fresh PostgreSQL
+全新 PostgreSQL
+
+6 migrations applied
+6 条迁移全部成功
+
+17 tenant integrity triggers present
+17 个租户完整性触发器存在
+
+==================================================
+CHECKPOINT 1
+==================================================
+
+Detection Spine
+检测主链
+
+PASS
+
+FINAL ACCEPTED
+最终接受
+
+已证明：
+
+Carrier invoice
+承运商账单
+
++
+
+Rate Card
+费率表
+
++
+
+Tracking
+轨迹
+
+→ SourceTransaction
+原始交易
+
+→ RuleSet / RuleVersion
+规则集 / 规则版本
+
+→ RuleEvaluation
+规则评估
+
+→ RecoveryOpportunity
+追回机会
+
+并且已经覆盖：
+
+Decimal money
+十进制定点金额
+
+rule precedence
+规则优先级
+
+currency applicability
+币种适用性
+
+domain/channel isolation
+业务域 / 渠道隔离
+
+historical date safety
+历史日期安全
+
+ambiguous tracking fail-closed
+轨迹歧义失败关闭
+
+concurrency idempotency
+并发幂等
+
+PASS。
+
+==================================================
+CHECKPOINT 2
+==================================================
+
+Recovery Closure
+追回闭环
+
+PASS
+
+FINAL ACCEPTED
+最终接受
+
+已经证明：
+
+RecoveryOpportunity
+追回机会
+
+→ Case
+案件
+
+→ Evidence
+证据
+
+→ Claim
+索赔
+
+→ Settlement
+到账
+
+→ RecoveryLedger
+追回账本
+
+→ FeeCalculation
+成功费计算
+
+→ BillingInvoice
+收费账单
+
+完整闭环成立。
+
+并且已经覆盖：
+
+human qualification gate
+人工确认卡口
+
+Claim / Case state machine
+索赔 / 案件状态机
+
+Settlement evidence
+到账证据
+
+Settlement / Billing separation
+到账 / 收费分离
+
+transaction atomicity
+事务原子性
+
+concurrency lock
+并发锁
+
+Audit atomicity
+审计原子性
+
+Audit safety path
+审计安全路径
+
+money fail-closed
+资金失败关闭
+
+production synthetic-settlement prohibition
+生产环境模拟到账禁令
+
+PASS。
+
+==================================================
+PRODUCT REQUIREMENTS
+产品要求
+==================================================
+
+P-0001
+
+Bilingual UI
+双语界面
+
+STATUS:
+
+ACCEPTED
+已接受
+
+IMPLEMENTATION:
+
+later apps/web Gate
+后续 Web 界面 Gate
+
+不属于 Gate 2。
+
+--------------------------------------------------
+
+P-0002
+
+Dual-Mode Acquisition
+双模式数据接入
+
+STATUS:
+
+ACCEPTED
+已接受
+
+已经进入 PRODUCT_SPEC.md。
+
+IMPLEMENTATION:
+
+C-0005 / Gate 3
+
+不属于 C-0004。
+
+Gate 2 没有偷偷实现：
+
+OAuth
+
+真实 Carrier API
+真实承运商接口
+
+Upload UI
+上传界面
+
+因此 scope：
+范围
+
+保持干净。
+
+==================================================
+REAL EXTERNAL INTEGRATIONS
+真实外部接入
+==================================================
+
+NONE
+无
+
+当前 Gate 2：
+
+fixture-driven
+测试数据驱动
+
+没有：
+
+真实 Carrier API
+真实承运商接口
+
+真实 OAuth
+
+真实 API key
+真实接口密钥
+
+真实客户数据
+
+真实第三方写入
+
+真实自动 Claim submission
+真实自动索赔提交
+
+符合批准边界。
+
+==================================================
+KNOWN NON-BLOCKING RISKS
+已接受非阻塞项
+==================================================
+
+以下全部继续作为：
+
+NON-BLOCKING
+非阻塞
+
+1.
+
+pg_advisory_xact_lock(hashtext(...))
+PostgreSQL 咨询事务锁使用 32 位哈希
+
+潜在碰撞只会让无关 Case：
+无关案件
+
+额外串行化，
+
+不会制造重复资金记录。
+
+2.
+
+Synthetic Claim lifecycle
+合成索赔生命周期
+
+暂未维护：
+
+submittedAt
+提交时间
+
+respondedAt
+响应时间
+
+真实 Claim lifecycle：
+真实索赔生命周期
+
+接入时补。
+
+3.
+
+Settlement / Billing create
+到账 / 收费创建
+
+暂未定义独立 create audit event。
+独立创建审计事件。
+
+现有状态跃迁审计已经满足本 Gate。
+
+4.
+
+production scheduling / wiring
+生产调度 / 接线
+
+未做。
+
+属于后续 Gate。
+
+这些都不阻塞 Gate 2。
+
+==================================================
+GATE 2 FINAL DECISION
+==================================================
+
+C-0004:
+
+FINAL PASS
+
+Gate 2:
+
+FINAL PASS
+
+PR #5:
+
+MERGE APPROVED
+
+==================================================
+MERGE METHOD
+合并方式
+==================================================
+
+继续使用：
+
+MERGE COMMIT
+合并提交
+
+不要：
+
+SQUASH
+压缩合并
+
+不要：
+
+REBASE
+变基合并
+
+原因：
+
+Gate 2 同样保留了：
+
+Checkpoint
+检查点
+
+修复轨迹
+
+测试演进
+
+架构审计
+
+资金安全修正
+
+完整工程历史。
+
+==================================================
+MERGE CONDITIONS
+合并前条件
+==================================================
+
+合并前只再次确认：
+
+1.
+
+PR HEAD 必须仍然是：
+
+0321b96e4a80dd93134b31fcc4a1fdcaf893274d
+
+2.
+
+CI 仍然全绿。
+
+3.
+
+PR 仍然：
+
+mergeable = true
+
+如果三项仍成立：
+
+直接 MERGE。
+
+不需要再回来问 ChatGPT。
+
+==================================================
+重要：不要再次移动 HEAD
+==================================================
+
+不要为了归档本条：
+
+Gate 2 FINAL PASS
+
+在 merge 前再提交新的：
+
+AI-ARCHITECT-INBOX.md
+
+否则又会移动已审核 HEAD。
+
+本条 Final Gate verdict：
+最终 Gate 裁决
+
+可以：
+
+A.
+放 PR #5 comment
+放到 PR #5 评论
+
+或：
+
+B.
+merge 后进入 Gate 3 再归档
+
+不要在 PR #5 合并前制造新 commit。
+
+==================================================
+AFTER MERGE
+合并以后
+==================================================
+
+确认：
+
+origin/main
+
+包含 PR #5 的：
+
+merge commit
+合并提交
+
+然后：
+
+git checkout main
+git pull --ff-only origin main
+
+从最新：
+
+main
+
+创建下一分支：
+
+gate/3-dual-mode-acquisition
+
+不要从：
+
+gate/2-logistics-first-slice
+
+继续开发。
+
+Gate 2 分支可以暂时保留，
+直到确认 main 和 CI 正常。
+
+==================================================
+NEXT
+下一阶段
+==================================================
+
+ID:
+
+C-0005
+
+GATE:
+
+3
+
+MODULE:
+
+Dual-Mode Acquisition & Provenance
+双模式数据接入与溯源
+
+BRANCH:
+
+gate/3-dual-mode-acquisition
+
+==================================================
+C-0005 CORE SCOPE
+C-0005 核心范围
+==================================================
+
+下一阶段正式实现 P-0002：
+
+A.
+
+FILE_UPLOAD
+文件上传模式
+
+以及：
+
+B.
+
+API
+API / 授权连接模式
+
+两种入口最终共用：
+
+canonical ingest pipeline
+统一导入管线
+
+→ ImportBatch
+导入批次
+
+→ SourceTransaction
+原始交易
+
+==================================================
+Gate 3 重点
+==================================================
+
+1.
+
+FILE_UPLOAD SourceConnection
+文件上传数据源
+
+→ Storage Adapter
+存储适配层
+
+→ FileAsset
+文件资产
+
+→ ImportBatch
+导入批次
+
+→ SourceTransaction
+原始交易
+
+2.
+
+API SourceConnection
+接口数据源
+
+→ mock / fixture ExternalAdapter
+模拟 / 测试外部适配器
+
+→ pull
+读取
+
+→ canonical ingest
+统一导入
+
+3.
+
+Audit events
+审计事件
+
+FILE + API：
+
+import.completed
+导入完成
+
+import.failed
+导入失败
+
+FILE：
+
+file.uploaded
+文件上传完成
+
+file.upload_failed
+文件上传失败
+
+API：
+
+adapter.pull_failed
+适配器拉取失败
+
+4.
+
+cross-source reconciliation
+跨来源对账
+
+同一业务事实：
+
+API
++
+File Upload
+文件上传
+
+原始来源分别保存，
+
+但：
+
+Never double-count recovery.
+不得重复计算追回金额。
+
+冲突：
+
+SOURCE_CONFLICT
+来源冲突
+
+→ fail closed
+失败关闭
+
+5.
+
+Evidence promotion
+证据升级
+
+FileAsset
+文件资产
+
+不自动等于：
+
+EvidenceArtifact
+证据实体
+
+API raw
+接口原始数据
+
+也不要求全部变 FileAsset。
+
+只有：
+
+claim-grade evidence
+索赔级证据
+
+需要可靠快照时：
+
+materialize
+固化
+
+→ FileAsset
+
+→ EvidenceArtifact
+
+==================================================
+HOST APPROVAL BOUNDARY
+宿主授权边界
+==================================================
+
+C-0005 可以先用：
+
+mock adapter
+模拟适配器
+
+fixture adapter
+测试适配器
+
+证明 API mode。
+证明 API 模式。
+
+以下仍然需要宿主授权：
+
+真实 Amazon SP-API
+真实 Amazon 卖家伙伴接口
+
+真实 UPS / FedEx / DHL API
+
+OAuth
+
+真实 API key
+
+真实客户账号
+
+真实客户文件
+
+第三方正式授权申请
+
+未经授权：
+
+不要接。
+
+==================================================
+FINAL
+==================================================
+
+DIRECTLY VERIFIED:
+已直接核验
+
+PR #5:
+OPEN / MERGEABLE
+
+FINAL HEAD:
+
+0321b96e4a80dd93134b31fcc4a1fdcaf893274d
+
+DELTA FROM AUDITED CODE HEAD:
+
+docs-only
+仅文档
+
+CI:
+
+296 / 296 PASS
+
+CHECKPOINT 1:
+
+PASS
+
+CHECKPOINT 2:
+
+PASS
+
+C-0004 / GATE 2:
+
+FINAL PASS
+
+PR #5:
+
+MERGE APPROVED
+
+MERGE METHOD:
+
+MERGE COMMIT
+
+合并完成后：
+
+进入 C-0005 / Gate 3
+
+Dual-Mode Acquisition & Provenance
+双模式数据接入与溯源。
+```
+
+### [MSG-20260928-28] C-0005 Gate 3 Checkpoint：PASS（Dual-Mode Acquisition & Provenance 通过）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE:
+C-0005 CHECKPOINT REVIEW
+
+GATE:
+3
+
+MODULE:
+Dual-Mode Acquisition & Provenance
+
+VERDICT:
+
+PASS（Checkpoint 通过）
+总体裁定
+
+C-0005 当前实现达到 Gate 3 Checkpoint 要求。
+
+核心目标：
+
+同一业务事实，可以来自 FILE_UPLOAD 或 API，两种入口进入统一 canonical ingest，并保留来源、证据、审计与冲突安全边界。
+
+已满足。
+
+本轮：
+
+NO Schema change ✅
+NO migration ✅
+NO dependency expansion ✅
+NO real external integration ✅
+NO production credential handling ✅
+
+符合 Phase 1 边界。
+
+已通过项
+1. FILE_UPLOAD 模式
+
+PASS
+
+认可设计：
+
+bytes
+ ↓
+Storage Adapter
+ ↓
+FileAsset
+ ↓
+ImportBatch
+ ↓
+SourceTransaction
+
+关键安全点：
+
+租户前缀隔离
+文件大小限制
+空文件拒绝
+FileAsset 不直接等同 Evidence
+
+正确。
+
+特别确认：
+
+FileAsset ≠ Evidence
+
+这个原则继续保持。
+
+不要为了方便，把所有上传文件自动升级成案件证据。
+
+2. API 模式
+
+PASS
+
+当前：
+
+fixture/mock adapter
+
+符合批准范围。
+
+认可：
+
+SourceConnection(API)
+        ↓
+ExternalAdapter
+        ↓
+canonical ingest
+        ↓
+SourceTransaction
+
+并且：
+
+只读
+无 submit 面
+无真实 OAuth
+无真实平台权限
+
+正确。
+
+真实：
+
+Amazon SP-API
+UPS
+FedEx
+DHL
+
+继续保持：
+
+HOST APPROVAL REQUIRED。
+
+3. Audit 事件
+
+PASS
+
+认可事件设计：
+
+import.completed
+import.failed
+
+file.uploaded
+file.upload_failed
+
+adapter.pull_failed
+
+并且：
+
+全部经过：
+
+Gate 1 audit writer
+
+包含：
+
+action 校验
+actor 校验
+sanitizeChanges
+
+正确。
+
+特别认可：
+
+best-effort audit 不覆盖原始错误
+
+这是生产系统正确方向。
+
+4. 跨来源对账
+
+PASS，但有一个后续要求。
+
+当前：
+
+FILE_UPLOAD
++
+API
+
+↓
+
+canonical fact
+
+设计正确。
+
+认可：
+
+原始 SourceTransaction 保留
+canonical fact 不重复计数
+SOURCE_CONFLICT fail closed
+缺 externalId 不强行合并
+
+尤其：
+
+不要为了提高覆盖率自动猜测两个交易是不是同一个。
+
+关于问题 2：
+
+是否把 detection 输入切换为 canonical facts？
+
+裁定：
+
+当前不要切换。
+
+保持：
+
+Detection
+   ↓
+SourceTransaction
+
+暂不改。
+
+原因：
+
+这是一次核心业务语义变化：
+
+从：
+
+"检测原始交易"
+
+变成：
+
+"检测经过 reconciliation 的事实"
+
+会影响：
+
+RuleEvaluation 输入
+Opportunity 金额
+幂等键
+审计链
+回溯能力
+
+不应该在 C-0005 混入。
+
+下一阶段单独建立：
+
+C-0006:
+
+Canonical Fact Integration
+
+再做迁移。
+
+5. Evidence Promotion
+
+PASS
+
+认可：
+
+显式晋级：
+
+FileAsset
+     |
+     ↓
+promoteEvidence()
+     |
+     ↓
+EvidenceArtifact
+
+而不是自动转换。
+
+正确。
+
+支持：
+
+FILE_ASSET
+
+以及：
+
+EXTERNAL
+
+两类证据来源。
+
+问题裁定
+GAP 1
+
+PDF / XLSX / IMAGE 解析
+
+当前：
+
+CSV-only
+
+裁定：
+
+KEEP CSV-only
+
+不要现在引入解析库。
+
+原因：
+
+PDF/XLSX/OCR 会引入：
+
+新依赖
+许可证审计
+安全边界
+文件解析攻击面
+成本控制问题
+
+当前目标：
+
+证明商业闭环，不是建立文档解析平台。
+
+后续单独 Gate：
+
+Document Intelligence Gate
+
+处理：
+
+PDF
+XLSX
+OCR
+表格抽取
+GAP 3
+
+HTTP 上传端点 / 调度 / 重试 / Upload UI
+
+裁定：
+
+不属于 C-0005。
+
+进入：
+
+C-0006 或 Web Gate。
+
+当前服务层能力足够。
+
+GAP 4
+
+Evidence Promotion 唯一约束
+
+当前：
+
+服务层幂等。
+
+裁定：
+
+KEEP。
+
+暂不加 Schema。
+
+理由：
+
+目前业务量和并发模型不足以证明需要数据库唯一约束。
+
+等出现：
+
+多入口同时晋级
+高并发 Evidence 创建
+真实客户数据
+
+再提交 Schema Delta。
+
+最重要的下一步建议
+
+C-0005 完成后，不建议马上接真实 API。
+
+下一阶段应该优先解决：
+
+Canonical Fact Layer
+
+原因：
+
+现在系统链路：
+
+SourceTransaction
+       ↓
+Detection
+       ↓
+Opportunity
+       ↓
+Closure
+
+已经成立。
+
+但双模式加入后：
+
+FILE_UPLOAD
+      \
+       \
+        SourceTransaction
+             ↓
+        Reconciliation
+             ↓
+        Canonical Fact
+             ↓
+        Detection
+
+这个中间层还没有成为正式业务事实。
+
+未来如果接：
+
+多平台
+多物流商
+多账单来源
+
+必须有这一层。
+
+C-0005 最终裁决
+CHECKPOINT:
+PASS
+
+STATUS:
+APPROVED
+
+继续下一阶段。
+
+保留以下约束：
+
+CSV-only，不扩解析依赖。
+不接真实外部 API。
+不切 Detection 输入。
+不新增 Schema。
+不自动 Evidence 晋级。
+
+下一阶段建议：
+
+C-0006
+
+Canonical Fact Layer + Detection Input Migration
+
+目标：
+
+SourceTransaction
+        ↓
+CanonicalFact
+        ↓
+RuleEvaluation
+        ↓
+RecoveryOpportunity
+
+然后再进入真实数据接入。
+```
