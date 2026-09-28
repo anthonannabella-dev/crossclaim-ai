@@ -19239,3 +19239,555 @@ gate/4-canonical-fact-layer
 
 裁决完成。
 ```
+
+### [MSG-20260928-30] C-0006 Schema Delta Review：PASS（方案 A 批准 + firstSeenAt/lastUpdatedAt/observedAt 补充）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE:
+SCHEMA DELTA REVIEW
+
+ID:
+C-0006
+
+GATE:
+4
+
+MODULE:
+Canonical Fact Layer + Detection Input Migration
+
+VERDICT:
+
+PASS（Schema Delta Approved）
+
+批准方案 A：
+
+持久化 CanonicalFact 业务事实层
+
+不批准方案 B。
+
+1. 方案选择
+采用：
+纯文本
+方案 A：
+CanonicalFact + CanonicalFactSource
+
+原因：
+
+C-0005 已经验证：
+
+纯文本
+FILE_UPLOAD
++
+API
+
+↓
+
+SourceTransaction
+
+但是：
+
+SourceTransaction 是：
+
+原始来源事实
+
+不是：
+
+业务统一事实
+
+未来如果增加：
+
+Amazon
+UPS
+FedEx
+DHL
+多 ERP
+多账单来源
+多供应商文件
+
+运行时派生会导致：
+
+无法稳定回溯
+无法审计历史判断
+无法解释为什么当时认为是一条事实
+无法支持规则版本重算
+
+因此 CanonicalFact 必须成为正式层。
+
+2. Schema Delta 批准
+新模型 1：
+CanonicalFact
+
+批准。
+
+字段：
+
+纯文本
+id
+
+organizationId
+
+domain
+
+channel
+
+factKey
+
+referenceType
+
+externalId
+
+occurredAt
+
+amount
+
+currency
+
+status
+
+sourceCount
+
+confirmedAcrossModes
+
+通过。
+
+需要补充字段
+
+建议增加：
+
+firstSeenAt
+
+首次发现时间
+
+原因：
+
+用于回答：
+
+这个业务事实第一次什么时候进入系统？
+
+lastUpdatedAt
+
+最后更新时间
+
+原因：
+
+来源同步可能变化。
+
+evidenceCoverage
+
+暂不增加。
+
+原因：
+
+Evidence 是独立域。
+
+不要把 Evidence 语义塞入 Fact。
+
+最终：
+
+CanonicalFact：
+
+增加：
+
+纯文本
+firstSeenAt
+lastUpdatedAt
+
+即可。
+
+3. CanonicalFactSource
+
+批准。
+
+设计正确：
+
+纯文本
+CanonicalFact
+
+      |
+      |
+
+CanonicalFactSource
+
+      |
+      |
+
+SourceTransaction
+
+保持：
+
+原始数据永不丢失。
+
+字段：
+
+批准：
+
+纯文本
+organizationId
+
+canonicalFactId
+
+sourceTransactionId
+
+connectionKind
+
+补充建议：
+
+增加：
+
+纯文本
+observedAt
+
+表示：
+
+该来源什么时候观察到该事实。
+
+不要使用 SourceTransaction.createdAt。
+
+原因：
+
+创建时间 ≠ 外部发生时间。
+
+最终：
+
+增加：
+
+纯文本
+observedAt
+4. RuleEvaluation 修改
+
+批准：
+
+增加：
+
+纯文本
+canonicalFactId String?
+
+保持：
+
+纯文本
+sourceTransactionId
+
+暂不删除。
+
+原因：
+
+C-0006-A：
+
+双写/对拍阶段必须支持：
+
+旧链路：
+
+纯文本
+SourceTransaction
+       ↓
+RuleEvaluation
+
+新链路：
+
+纯文本
+CanonicalFact
+       ↓
+RuleEvaluation
+
+所以：
+
+两个引用并存。
+
+5. migration 策略
+
+批准：
+
+纯增量。
+
+必须保持：
+
+NO destructive migration。
+
+允许：
+
+新增：
+
+table
+FK
+index
+nullable column
+
+禁止：
+
+删除 SourceTransaction 字段
+修改 RuleEvaluation 唯一键
+修改已有 dedupeKey
+6. 双写策略
+
+批准。
+
+但是补充一个强制要求：
+
+SourceTransaction 与 CanonicalFact 必须同事务
+
+即：
+
+纯文本
+transaction {
+
+ create SourceTransaction
+
+ create/update CanonicalFact
+
+ create CanonicalFactSource
+
+}
+
+不能：
+
+先写交易，
+
+后台异步补 Fact。
+
+原因：
+
+否则 Detection 可能看到半状态。
+
+7. C-0006-A 验收标准
+
+批准你的对拍方案。
+
+必须输出：
+
+migration audit report。
+
+至少包含：
+
+输入一致性
+纯文本
+SourceTransaction count
+
+CanonicalFact count
+Detection 对比
+
+逐项：
+
+纯文本
+expectedCharge
+
+actualCharge
+
+recoverableAmount
+
+RuleVersion
+
+Opportunity count
+
+money trace
+幂等对比
+
+必须证明：
+
+重复运行：
+
+旧链路：
+
+结果 X
+
+新链路：
+
+结果 X
+
+8. CONFLICT 语义
+
+批准：
+
+持久化 CONFLICT
+
+不是只写 Audit。
+
+原因：
+
+Conflict 本身是业务事实：
+
+系统知道存在争议，但不能确定真实值。
+
+所以：
+
+纯文本
+CanonicalFact.status
+
+ACTIVE
+
+CONFLICT
+
+合理。
+
+但是增加一个约束：
+
+CONFLICT:
+
+禁止进入：
+
+纯文本
+Detection
+
+RuleEvaluation
+
+RecoveryOpportunity
+
+只能进入：
+
+纯文本
+Audit
+
+Reconciliation review
+9. B 阶段幂等键裁定
+
+问题：
+
+RuleEvaluation.dedupeKey 是否马上迁移？
+
+裁定：
+
+不一次迁移。
+
+采用：
+
+两阶段。
+C-0006-A
+
+保持：
+
+纯文本
+dedupeKey =
+organizationId
++
+ruleVersionId
++
+invoiceTransactionId
++
+trackingTransactionId
+
+不动。
+
+新增：
+
+纯文本
+canonicalFactId
+C-0006-B
+
+单独提交：
+
+RuleEvaluation identity migration。
+
+届时改为：
+
+纯文本
+organizationId
++
+ruleVersionId
++
+canonicalFactId
+
+或者：
+
+纯文本
+organizationId
++
+ruleVersionId
++
+canonicalFactId
++
+ruleVersion
+
+重新评估。
+
+不要现在动。
+
+10. C-0006-A 边界
+
+允许：
+
+✅ Schema migration
+
+✅ CanonicalFact repository
+
+✅ 双写
+
+✅ 对拍工具
+
+✅ audit report
+
+✅ shadow detection
+
+禁止：
+
+❌ Detection 默认切换
+
+❌ 删除旧链路
+
+❌ 修改资金链
+
+❌ 修改 Closure
+
+❌ 修改 Opportunity 语义
+
+最终 Schema Delta
+纯文本
+APPROVED WITH CHANGES
+批准（带小调整）
+
+需要调整：
+
+CanonicalFact 增加：
+纯文本
+firstSeenAt
+lastUpdatedAt
+CanonicalFactSource 增加：
+纯文本
+observedAt
+
+其他：
+
+全部批准。
+
+C-0006 执行顺序
+
+批准执行：
+
+纯文本
+Step 1:
+Schema migration
+
+↓
+
+Step 2:
+CanonicalFact repository
+
+↓
+
+Step 3:
+SourceTransaction 双写
+
+↓
+
+Step 4:
+Shadow Detection
+
+↓
+
+Step 5:
+Migration audit report
+
+↓
+
+Step 6:
+提交 C-0006-A Review
+
+最终：
+
+纯文本
+C-0006 Schema Delta:
+
+PASS
+
+Proceed.
+```
