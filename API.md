@@ -156,6 +156,21 @@ C-0008-B2（Case / Evidence / Claim Draft / Billing）的端点尚未实现。
 - 审计 `billing.status_changed`：记录 from/to、金额、货币、`paymentReferenceProvided` 与 note（截断）；**绝不写入支付流水原文**
 - **主体边界**：BillingInvoice = 我方向客户收取的服务费；Settlement = 第三方（承运商/平台/保险）赔付给客户的回收款。两者是不同对象，UI 上必须分开，不得出现「追回金额已支付」这类混淆表述
 
+## 案件 / 证据 / Claim 正文（C-0008-B2-2）
+
+| 方法 | 路径 | 成功 | 权限 |
+|---|---|---|---|
+| GET | `/cases` | 200 `{ items: [{ id, caseNo, title, status, domain, currency, claimedAmount, recoveredAmount, createdAt, opportunityIds, claimRounds }] }` | OWNER / ADMIN / OPS |
+| GET | `/cases/:caseId` | 200 案件详情（含关联机会与 Claim **元数据**：round / status / target / dueAt） | OWNER / ADMIN / OPS |
+| GET | `/cases/:caseId/evidence` | 200 `{ items: [{ evidenceId, role, kind, title, description, reliability, capturedAt, addedAt, hasFile }] }` | OWNER / ADMIN / OPS |
+| GET | `/cases/:caseId/claim` | 200 `{ id, caseId, round, version, status, generatedAt, isFinal, sections }` | **仅 OWNER / ADMIN / OPS** |
+
+- **Claim 正文只在此端点返回**；`/cases` 与 `/cases/:caseId` 一律不含正文（FINANCE / VIEWER 也因此看不到）
+- FINANCE / VIEWER 访问案件与证据 → 403（财务事实请走 `/billing`）
+- 正文响应不含任何内部 prompt / 模型信息 / 生成轨迹；存在最终文本时优先返回最终文本（`isFinal: true`）
+- 证据只返回元数据：文件字节必须走既有签名 URL 通道（`/files/<token>`，租户绑定）
+- 跨租户案件 → 404
+
 ## 权限矩阵
 
 见 [DOMAIN_MODEL.md](./DOMAIN_MODEL.md#角色与权限c-0008-b1架构方批准)。
