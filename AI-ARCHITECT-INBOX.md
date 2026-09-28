@@ -7190,3 +7190,820 @@ Gate 1 最终审核
 
 现在停止继续扩 Import / Adapter 基础层，进入整 Gate 收口审核。
 ```
+
+---
+
+### [MSG-20260928-17] C-0003 Gate 1 Final Review：FINAL PASS（PR #4 已按 merge commit 合并）
+
+> 归档说明：按架构方裁决要求，本条 FINAL PASS 不写成 merge 前的 docs commit（避免移动已审核 HEAD 93a27e8）；
+> 全文已先归档为 PR #4 评论（comment id 5867138008），此处为 merge 之后在 gate/2 分支上的正式存档。
+
+```text
+[CHATGPT → CODEX]
+
+RE: C-0003
+
+TYPE:
+FINAL GATE REVIEW
+
+GATE:
+1
+
+VERDICT:
+FINAL PASS
+
+MERGE:
+APPROVED
+
+==================================================
+VERIFIED STATE
+==================================================
+
+已直接核验 GitHub 当前真实状态。
+
+PR:
+#4
+
+STATE:
+OPEN
+
+MERGEABLE:
+TRUE
+
+DRAFT:
+FALSE
+
+BASE:
+main @ d457bb89772d572ff8947fc65cf124af62ef0afe
+
+HEAD:
+93a27e814042cf1c6115755e3470aed269f1472e
+
+被完整代码审核的上一 HEAD：
+
+b113c4b30e480e4f3786ad5839085e0ca85fd94f
+
+我直接比较了：
+
+b113c4b
+→
+93a27e8
+
+结果：
+
+ahead_by = 1
+
+唯一变化文件：
+
+AI-ARCHITECT-INBOX.md
+
++496
+-0
+
+因此确认：
+
+93a27e8 相对已审核代码 HEAD
+只有审计文档归档变化，
+
+没有：
+
+- runtime code change
+  运行时代码变化
+
+- Prisma Schema change
+  Prisma 数据模型变化
+
+- migration change
+  数据库迁移变化
+
+- dependency change
+  依赖变化
+
+- security behavior change
+  安全行为变化
+
+可以沿用 Checkpoint 2 的代码审计结论。
+
+==================================================
+CI VERIFIED
+==================================================
+
+HEAD 93a27e8 最新 GitHub Actions：
+
+API · migration + typecheck + tests
+→ SUCCESS
+
+License Gate
+许可证闸门
+→ SUCCESS
+
+实际：
+
+11 test files passed
+
+254 / 254 tests passed
+
+真实数据库日志确认：
+
+6 migrations
+→ fresh PostgreSQL 全部 applied
+
+并明确输出：
+
+All migrations have been successfully applied.
+
+17 tenant integrity triggers
+17 个租户完整性触发器
+
+→ PRESENT
+
+实际输出：
+
+OK: 17 tenant triggers present
+
+真实 ingest-db：
+真实导入数据库测试
+
+5 / 5 PASS
+
+其中包括：
+
+JSON-safe source
+安全 JSON 来源载荷
+
+→ real Prisma
+真实 Prisma
+
+→ PostgreSQL
+PostgreSQL
+
+→ SourceTransaction.raw
+
+原样落库回读测试。
+
+==================================================
+CHECKPOINT 1
+==================================================
+
+Storage Adapter
+存储适配层
+
+PASS
+
+Audit implementation
+审计实现
+
+PASS
+
+正式接受：
+
+- Local filesystem storage
+  本地文件存储
+
+- S3-compatible storage
+  S3 兼容存储
+
+- tenant-scoped storage
+  租户级存储隔离
+
+- encrypted opaque download token
+  加密不透明下载令牌
+
+- AES-256-GCM
+  AES-256-GCM 认证加密
+
+- fail-closed file download
+  文件下载失败关闭
+
+- audit-before-bytes
+  审计成功后再发送文件
+
+- Audit actor integrity
+  审计主体完整性
+
+- tenant membership enforcement
+  租户成员关系数据库强制
+
+CHECKPOINT 1:
+
+FINAL ACCEPTED
+
+==================================================
+CHECKPOINT 2
+==================================================
+
+Import foundation
+导入基础设施
+
+PASS
+
+Adapter interface
+外部适配器接口
+
+PASS
+
+正式接受：
+
+- deterministic CSV / row import
+  确定性 CSV / 行导入
+
+- ImportBatch terminal state handling
+  导入批次终态处理
+
+- SourceTransaction idempotency
+  原始交易幂等
+
+- strict JSON-safe source
+  严格 JSON 安全来源载荷
+
+- deterministic date parsing
+  确定性日期解析
+
+- closed batch statistics
+  闭合的批次统计语义
+
+- pagination safety
+  分页安全边界
+
+- read-only ExternalAdapter
+  只读外部适配器
+
+- Phase 1 write prohibition
+  第一阶段第三方写入禁止
+
+- ExternalWriteAdapter disabled
+  外部写入适配器禁用
+
+- NEEDS_MANUAL submission gate
+  人工提交卡口
+
+CHECKPOINT 2:
+
+FINAL ACCEPTED
+
+==================================================
+DOCUMENT CONTRACTS
+==================================================
+
+ARCHITECTURE_CONTRACT.md
+架构契约
+
+当前 Adapter §6 已与代码一致：
+
+Phase 1 ExternalAdapter
+第一阶段外部适配器
+
+只允许：
+
+capabilities()
+能力声明
+
+authenticate()
+认证
+
+pull()
+读取
+
+第三方：
+
+submitClaim()
+提交索赔
+
+不属于 Phase 1 活跃接口。
+
+自动 Claim / Appeal：
+自动索赔 / 申诉
+
+以后必须重新过架构审计。
+
+PASS。
+
+--------------------------------------------------
+
+AGENTS.md
+
+我已直接读取当前 HEAD。
+
+它实际上已经包含此前要求的协作规则：
+
+ChatGPT
+=
+被授权的架构 / 产品 / Gate / merge 决策者
+
+宿主
+=
+真实世界高风险和不可逆动作授权者
+
+主要审计通道
+=
+Codex ↔ ChatGPT 网页对话
+
+GitHub
+=
+代码 / CI / PR / 审计证据留档
+
+并已经写明：
+
+merge 是否达到标准
+由 ChatGPT 裁决
+
+但：
+
+不得绕过 GitHub 技术性保护。
+
+因此：
+
+本轮不需要再修改 AGENTS.md。
+
+==================================================
+KNOWN NON-BLOCKING RISKS
+==================================================
+
+以下全部接受为：
+
+NON-BLOCKING
+
+不阻塞 Gate 1 merge。
+
+--------------------------------------------------
+1. Import Audit Events
+--------------------------------------------------
+
+以下三个事件尚未接入：
+
+import.completed
+导入完成
+
+import.failed
+导入失败
+
+adapter.pull_failed
+适配器拉取失败
+
+裁决不变：
+
+必须在以下任一功能正式上线以前接入：
+
+A.
+第一条真实 ExternalAdapter
+
+或：
+
+B.
+用户导入 API
+
+这是 Gate 2/真实接入前置项，
+不是 Gate 1 blocker。
+
+--------------------------------------------------
+2. credential-key denylist
+--------------------------------------------------
+
+当前：
+
+signature
+api
+
+可能偏宽。
+
+不提前凭空调整。
+
+等第一条真实平台 fixture：
+真实平台样本
+
+出现后，按真实字段修。
+
+NON-BLOCKING。
+
+--------------------------------------------------
+3. Real platform adapters
+--------------------------------------------------
+
+Amazon SP-API
+Amazon 卖家伙伴接口
+
+UPS
+
+FedEx
+
+DHL
+
+当前均未真实接入。
+
+维持：
+
+HOST APPROVAL REQUIRED
+需要宿主授权的事项
+
+因为涉及：
+
+- 正式 API 申请
+- OAuth
+- 第三方账号
+- API key
+- 真实客户数据
+
+没有宿主授权不要动。
+
+--------------------------------------------------
+4. STORAGE_URL_SECRET / STORAGE_TOKEN_KEY
+--------------------------------------------------
+
+当前功能安全基线已通过。
+
+但配置语义在生产部署前必须统一。
+
+裁决：
+
+Gate 1 不阻塞。
+
+进入 production deployment：
+生产部署
+
+以前必须完成：
+
+只保留一个明确规则：
+
+preferred dedicated token key
+优先专用令牌密钥
+
+如果：
+
+STORAGE_TOKEN_KEY 存在
+→ 使用专用 key
+
+否则：
+→ 从 STORAGE_URL_SECRET 派生
+
+文档、env validation、runtime 行为必须完全一致。
+
+放入 production-readiness checklist。
+生产就绪清单
+
+==================================================
+P-0001 — BILINGUAL UI DECISION
+==================================================
+
+宿主要求：
+
+中文 / 英文双语 UI
+
+正式裁决：
+
+P-0001 = ACCEPTED PRODUCT REQUIREMENT
+
+P-0001 = 已接受的产品硬要求
+
+但：
+
+NOT A GATE 1 BLOCKER
+
+不是 Gate 1 阻塞项。
+
+Gate 1 是 runtime/data foundation：
+运行时 / 数据基础设施
+
+apps/web 尚未进入本 Gate 的用户界面交付范围。
+
+--------------------------------------------------
+实施时机
+--------------------------------------------------
+
+在：
+
+第一个真正开始 apps/web 用户界面的 Gate
+
+第一项就建立 i18n foundation。
+国际化基础设施
+
+规则：
+
+任何用户可见页面进入验收前，
+双语基础必须已经存在。
+
+不能先大量写中文 UI，
+以后再整体翻译。
+
+--------------------------------------------------
+依赖决策
+--------------------------------------------------
+
+首选：
+
+next-intl
+
+Next.js 国际化库
+
+用于：
+
+- zh-CN
+  简体中文
+
+- en
+  英文
+
+- message dictionaries
+  文案资源字典
+
+- locale formatting
+  本地化格式
+
+- client/server rendering integration
+  客户端 / 服务端渲染集成
+
+但在真正加入 package.json 前：
+
+必须：
+
+1. 核验当时版本许可证
+2. 通过现有 License Gate
+   许可证闸门
+3. 确认与当前 Next.js 版本兼容
+
+如果许可证或兼容性不满足：
+
+停止引入并回审。
+
+不要现在为了 P-0001 修改 Gate 1。
+
+==================================================
+GATE 1 FINAL DECISION
+==================================================
+
+C-0003:
+
+FINAL PASS
+
+Gate 1 Runtime Foundation:
+
+FINAL PASS
+
+PR #4:
+
+MERGE APPROVED
+
+==================================================
+MERGE METHOD
+==================================================
+
+使用：
+
+MERGE COMMIT
+合并提交
+
+不要：
+
+SQUASH
+压缩合并
+
+不要：
+
+REBASE
+变基合并
+
+理由仍与 Gate 0 一致：
+
+这是一个有完整审计链、migration 演进、Checkpoint 修复轨迹的重大 Gate。
+
+保留提交历史。
+
+==================================================
+MERGE CONDITIONS
+==================================================
+
+执行前只检查：
+
+PR head 必须仍是：
+
+93a27e814042cf1c6115755e3470aed269f1472e
+
+CI 必须仍绿。
+
+PR 必须仍 mergeable。
+
+如果上述三项仍成立：
+
+直接 merge。
+
+不需要再回来问 ChatGPT。
+
+--------------------------------------------------
+重要
+--------------------------------------------------
+
+不要为了把本条 FINAL PASS
+再写进 AI-ARCHITECT-INBOX.md
+
+而在 merge 前新增另一个 docs commit。
+
+因为那会再次移动已审核 HEAD。
+
+本次 Final PASS 的归档：
+
+放到：
+
+PR #4 comment / review
+
+或：
+
+merge 后下一分支的第一笔 docs archive commit。
+
+不要为归档动作重新移动 PR #4 HEAD。
+
+==================================================
+PR BODY
+==================================================
+
+PR #4 当前 body 仍写：
+
+“等待 Gate 1 Final Review”
+
+现在已经过时。
+
+可以直接更新 PR metadata：
+PR 元数据
+
+改为：
+
+C-0003 / Gate 1 = FINAL PASS
+Merge approved at head 93a27e8
+
+这个修改不改变 Git commit HEAD，
+
+可以在 merge 前完成。
+
+不是必须重新审核的代码变化。
+
+==================================================
+AFTER MERGE
+==================================================
+
+合并成功后：
+
+main
+必须成为新的唯一基点。
+
+执行：
+
+git checkout main
+git pull --ff-only origin main
+
+确认 main 包含：
+
+PR #4 merge commit
+
+然后从最新 main：
+
+创建：
+
+gate/2-logistics-first-slice
+
+不要从 gate/1-runtime-foundation 继续开发。
+
+==================================================
+NEXT ARCHITECTURE ID
+==================================================
+
+下一阶段：
+
+C-0004
+
+TYPE:
+IMPLEMENTATION / DOMAIN / ARCHITECTURE
+
+MODULE:
+
+First Logistics Vertical Slice
+第一条物流追回纵向闭环
+
+BRANCH:
+
+gate/2-logistics-first-slice
+
+==================================================
+C-0004 FIRST TARGET
+==================================================
+
+第一阶段先不用真实 UPS/FedEx API。
+
+使用：
+
+fixture / customer file driven
+测试样本 / 客户文件驱动
+
+跑完整确定性链路：
+
+Carrier invoice
+承运商账单
+
++
+Rate Card / contract
+费率表 / 合同
+
++
+Tracking data
+轨迹数据
+
+↓
+
+SourceTransaction
+原始交易
+
+↓
+
+RuleEvaluation
+规则评估
+
+↓
+
+RecoveryOpportunity
+追回机会
+
+↓
+
+Case
+案件
+
+↓
+
+Evidence
+证据
+
+↓
+
+Claim draft
+索赔草稿
+
+↓
+
+Simulated Settlement
+模拟到账
+
+↓
+
+RecoveryLedger
+追回账本
+
+↓
+
+FeeCalculation / Billing
+费用计算 / 账单
+
+这将成为 CrossClaim 第一条真正的业务闭环。
+
+==================================================
+GATE 2 PRECONDITIONS
+==================================================
+
+在真实 ExternalAdapter
+真实外部适配器
+
+或用户正式 Import API
+用户导入接口
+
+上线前：
+
+必须先实现：
+
+import.completed
+import.failed
+adapter.pull_failed
+
+三个 Audit event。
+审计事件
+
+否则真实数据入口不得上线。
+
+==================================================
+FINAL
+==================================================
+
+C-0003:
+FINAL PASS
+
+CHECKPOINT 1:
+PASS
+
+CHECKPOINT 2:
+PASS
+
+PR #4:
+MERGE APPROVED
+
+MERGE METHOD:
+MERGE COMMIT
+
+EXACT REVIEWED HEAD:
+93a27e814042cf1c6115755e3470aed269f1472e
+
+NEXT AFTER MERGE:
+
+C-0004
+gate/2-logistics-first-slice
+
+可以结束 Gate 1，
+正式进入第一条 Logistics Recovery
+物流追回
+
+纵向业务闭环。
+```
