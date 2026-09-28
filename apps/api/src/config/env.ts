@@ -24,6 +24,14 @@ export const ENV_SPECS: EnvSpec[] = [
   { name: 'AI_SERVICE_URL', required: false, defaultValue: 'http://localhost:8003', description: 'AI 服务地址' },
   { name: 'S3_ENDPOINT', required: false, defaultValue: '', description: '对象存储端点' },
   { name: 'S3_BUCKET', required: false, defaultValue: '', description: '对象存储桶' },
+  { name: 'S3_REGION', required: false, defaultValue: 'us-east-1', description: '对象存储区域' },
+  { name: 'S3_ACCESS_KEY_REF', required: false, description: '对象存储 accessKey 的**引用名**（不是取值）' },
+  { name: 'S3_SECRET_KEY_REF', required: false, description: '对象存储 secretKey 的**引用名**（不是取值）' },
+  { name: 'STORAGE_DRIVER', required: false, defaultValue: 'local', description: '存储驱动：local|s3' },
+  { name: 'STORAGE_LOCAL_ROOT', required: false, defaultValue: './.storage', description: 'local 驱动的对象根目录' },
+  { name: 'STORAGE_PUBLIC_BASE_URL', required: false, defaultValue: 'http://localhost:3000', description: '签名下载地址的对外基址' },
+  { name: 'STORAGE_URL_SECRET', required: false, description: '签名下载令牌密钥（真实值放密钥管理，不写进仓库）' },
+  { name: 'STORAGE_SIGNED_URL_TTL_SECONDS', required: false, defaultValue: '300', description: '签名下载地址默认有效期（秒）' },
 ];
 
 export class EnvError extends Error {

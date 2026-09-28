@@ -12,11 +12,19 @@ import { PrismaClient } from '@prisma/client';
 import { loadEnv } from './config/env';
 import { createLogger, type LogLevel } from './config/logger';
 import { checkHealth, healthHttpStatus } from './services/health';
+import type { StorageAdapter } from './services/storage';
 
 const VERSION = '0.1.0';
 
-export function createServer(deps: { prisma: PrismaClient; log: ReturnType<typeof createLogger> }): http.Server {
-  const { prisma, log } = deps;
+export interface ServerDeps {
+  prisma: PrismaClient;
+  log: ReturnType<typeof createLogger>;
+  /** 可选：注入存储适配层后，`/files/<token>` 才能提供签名下载 */
+  storage?: StorageAdapter;
+}
+
+export function createServer(deps: ServerDeps): http.Server {
+  const { prisma, log, storage } = deps;
 
   return http.createServer((req, res) => {
     const started = Date.now();
@@ -35,6 +43,33 @@ export function createServer(deps: { prisma: PrismaClient; log: ReturnType<typeo
         .catch((err) =>
           send(503, { status: 'degraded', error: err instanceof Error ? err.message : 'unknown' }),
         );
+      return;
+    }
+
+    // 签名下载：裸 storageKey 永不出现；签名 / 过期 / 租户三类校验都在适配层内部完成
+    if (req.method === 'GET' && url.startsWith('/files/')) {
+      if (!storage) {
+        send(404, { error: 'not_found', path: '/files' });
+        return;
+      }
+      const token = decodeURIComponent(url.slice('/files/'.length));
+      storage
+        .openSignedUrl(token)
+        .then((object) => {
+          res.writeHead(200, {
+            'content-type': object.metadata.contentType ?? 'application/octet-stream',
+            'content-length': String(object.body.byteLength),
+            'content-disposition': `${object.disposition}; filename="${object.filename ?? 'download'}"`,
+            'cache-control': 'private, max-age=60',
+            'x-content-type-options': 'nosniff',
+          });
+          res.end(object.body);
+          log.info('file_downloaded', { bytes: object.body.byteLength });
+        })
+        .catch(() => {
+          // 不区分"签名错 / 已过期 / 越权"，避免被用来探测
+          send(403, { error: 'invalid_or_expired_token' });
+        });
       return;
     }
 
