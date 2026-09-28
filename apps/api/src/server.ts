@@ -78,7 +78,14 @@ export function createServer(deps: ServerDeps): http.Server {
       const body = JSON.stringify(payload);
       res.writeHead(code, { 'content-type': 'application/json; charset=utf-8' });
       res.end(body);
-      log.info('http_request', { method: req.method, path: url, status: code, ms: Date.now() - started });
+      // CHANGE #23：/files/<token> 的 token 是短期访问能力，绝不进运行日志
+      const logPath = url.startsWith('/files/') ? '/files/[REDACTED]' : url;
+      log.info('http_request', {
+        method: req.method,
+        path: logPath,
+        status: code,
+        ms: Date.now() - started,
+      });
     };
 
     if (req.method === 'GET' && (url === '/health' || url === '/healthz')) {
@@ -90,10 +97,11 @@ export function createServer(deps: ServerDeps): http.Server {
       return;
     }
 
-    // 签名下载：裸 storageKey 永不出现；签名 / 过期 / 租户三类校验都在适配层内部完成
+    // 签名下载：裸 storageKey 永不出现；解密 / 过期 / 租户三类校验都在适配层内部完成
     if (req.method === 'GET' && url.startsWith('/files/')) {
-      if (!storage) {
-        send(404, { error: 'not_found', path: '/files' });
+      // CHANGE #21：没有 storage（或没有 audit）时不得提供下载 —— fail closed
+      if (!storage || !audit) {
+        send(503, { error: 'file_download_unavailable' });
         return;
       }
 
@@ -113,31 +121,31 @@ export function createServer(deps: ServerDeps): http.Server {
       storage
         .openSignedUrl(token)
         .then(async (object) => {
-          // CHANGE #17：成功下载属于敏感业务动作，必须进 AuditLog
-          if (audit) {
-            try {
-              await audit.record({
-                organizationId: object.organizationId,
-                actorType: 'EXTERNAL',
-                actorRef: 'signed-url',
-                action: 'file.downloaded',
-                entityType: 'FileAsset',
-                entityId: object.fileAssetId,
-                changes: {
-                  disposition: object.disposition,
-                  bytes: object.body.byteLength,
-                  filename: object.filename ?? null,
-                },
-                ...(req.socket.remoteAddress ? { ip: req.socket.remoteAddress } : {}),
-                ...(req.headers['user-agent'] ? { userAgent: String(req.headers['user-agent']) } : {}),
-              });
-            } catch (err) {
-              // 审计失败不能让文件下载静默变成"无痕下载"：本响应用日志兜底并暴露为错误级
-              log.error('audit_write_failed', {
-                action: 'file.downloaded',
-                reason: err instanceof Error ? err.name : 'unknown',
-              });
-            }
+          // CHANGE #17 + #21：审计必须**先写成功**，才允许把字节发出去。
+          // 审计失败 = 不允许无痕下载 → 503，绝不返回文件内容。
+          try {
+            await audit.record({
+              organizationId: object.organizationId,
+              actorType: 'EXTERNAL',
+              actorRef: 'signed-url',
+              action: 'file.downloaded',
+              entityType: 'FileAsset',
+              entityId: object.fileAssetId,
+              changes: {
+                disposition: object.disposition,
+                bytes: object.body.byteLength,
+                filename: object.filename ?? null,
+              },
+              ...(req.socket.remoteAddress ? { ip: req.socket.remoteAddress } : {}),
+              ...(req.headers['user-agent'] ? { userAgent: String(req.headers['user-agent']) } : {}),
+            });
+          } catch (err) {
+            log.error('audit_write_failed', {
+              action: 'file.downloaded',
+              reason: err instanceof Error ? err.name : 'unknown',
+            });
+            send(503, { error: 'audit_unavailable' });
+            return;
           }
 
           res.writeHead(200, {

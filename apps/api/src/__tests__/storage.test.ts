@@ -25,8 +25,8 @@ import {
   sanitizeFilename,
   sha256Hex,
   signRequest,
-  signToken,
-  verifyToken,
+  sealToken,
+  openToken,
 } from '../services/storage';
 import { createServer } from '../server';
 import { createLogger } from '../config/logger';
@@ -109,39 +109,55 @@ describe('签名下载令牌', () => {
     expiresAt: Date.now() + 60_000,
   };
 
-  it('签名后可校验并还原载荷', () => {
-    const token = signToken(payload, SECRET);
-    expect(verifyToken(token, SECRET).storageKey).toBe(payload.storageKey);
+  it('加密后只有持密钥者能还原载荷', () => {
+    const token = sealToken(payload, SECRET);
+    expect(openToken(token, SECRET).storageKey).toBe(payload.storageKey);
   });
 
-  it('篡改载荷、换密钥、残缺令牌都会失败', () => {
-    const token = signToken(payload, SECRET);
-    const [, signature] = token.split('.');
-    const tamperedPayload = Buffer.from(JSON.stringify({ ...payload, organizationId: ORG_B }), 'utf8')
-      .toString('base64')
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_')
-      .replace(/=+$/, '');
+  // CHANGE #22：令牌不能泄露 storageKey —— base64url 解码也看不到明文
+  it('令牌是不透明的：解码任何一段都看不到 storageKey / 对象路径', () => {
+    const token = sealToken(payload, SECRET);
+    const decoded = token
+      .split('.')
+      .map((part) =>
+        Buffer.from(part.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('latin1'),
+      )
+      .join('|');
 
-    expect(() => verifyToken(`${tamperedPayload}.${signature}`, SECRET)).toThrow(StorageAccessError);
-    expect(() => verifyToken(token, `${SECRET}-other`)).toThrow(StorageAccessError);
-    expect(() => verifyToken('not-a-token', SECRET)).toThrow(StorageAccessError);
+    expect(decoded).not.toContain(payload.storageKey);
+    expect(decoded).not.toContain(ORG_A);
+    expect(decoded).not.toContain(ASSET);
+    expect(decoded).not.toContain('storageKey');
+    expect(decoded).not.toContain('fileAssetId');
+  });
+
+  it('篡改密文、换密钥、残缺令牌都会失败', () => {
+    const token = sealToken(payload, SECRET);
+    const [iv, ciphertext, tag] = token.split('.');
+    const tamperedCipher = `${ciphertext.slice(0, -2)}${ciphertext.slice(-2) === 'AA' ? 'BB' : 'AA'}`;
+
+    expect(() => openToken(`${iv}.${tamperedCipher}.${tag}`, SECRET)).toThrow(StorageAccessError);
+    expect(() => openToken(`${iv}.${ciphertext}.${tag}`, `${SECRET}-other`)).toThrow(
+      StorageAccessError,
+    );
+    expect(() => openToken('not-a-token', SECRET)).toThrow(StorageAccessError);
+    expect(() => openToken(`${iv}.${ciphertext}`, SECRET)).toThrow(StorageAccessError);
   });
 
   it('载荷里的 fileAssetId 必须与 storageKey 一致', () => {
-    const mismatched = signToken({ ...payload, fileAssetId: OTHER_ASSET }, SECRET);
-    expect(() => verifyToken(mismatched, SECRET)).toThrow(/不一致/);
+    const mismatched = sealToken({ ...payload, fileAssetId: OTHER_ASSET }, SECRET);
+    expect(() => openToken(mismatched, SECRET)).toThrow(/不一致/);
 
-    const missing = signToken(
+    const missing = sealToken(
       { ...payload, fileAssetId: undefined as unknown as string },
       SECRET,
     );
-    expect(() => verifyToken(missing, SECRET)).toThrow(StorageAccessError);
+    expect(() => openToken(missing, SECRET)).toThrow(StorageAccessError);
   });
 
   it('过期令牌被拒绝；TTL 有上限', () => {
-    const expired = signToken({ ...payload, expiresAt: Date.now() - 1 }, SECRET);
-    expect(() => verifyToken(expired, SECRET)).toThrow(/过期/);
+    const expired = sealToken({ ...payload, expiresAt: Date.now() - 1 }, SECRET);
+    expect(() => openToken(expired, SECRET)).toThrow(/过期/);
 
     const now = () => 1_700_000_000_000;
     const signed: ReturnType<typeof issueSignedUrl> = issueSignedUrl(
@@ -370,6 +386,8 @@ describe('HTTP 下载路由（签名 URL 端到端）', () => {
       prisma: {} as never,
       log: createLogger({ level: 'error', sink: () => undefined }),
       storage,
+      // CHANGE #21：下载需要审计；测试注入一个记录用的桩
+      audit: { record: async () => ({ id: 'audit-stub', createdAt: new Date() }) },
     });
     await new Promise<void>((resolve) => appServer.listen(0, '127.0.0.1', resolve));
     const address = appServer.address();

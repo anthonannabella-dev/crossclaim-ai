@@ -25,12 +25,14 @@ import {
   type StoredObject,
 } from './types';
 import { assertFileAssetId, assertOrganizationId, assertTenantScopedKey, buildStorageKey, sha256Hex } from './keys';
-import { issueSignedUrl, verifyToken } from './signed-url';
+import { issueSignedUrl, openToken } from './signed-url';
 
 export interface LocalFileStorageOptions {
   rootDir: string;
   secret: string;
   publicBaseUrl: string;
+  /** 可选：令牌加密专用密钥（未提供则由 secret 派生） */
+  tokenKey?: string;
   now?: () => number;
 }
 
@@ -171,7 +173,12 @@ export class LocalFileSystemStorage implements StorageAdapter {
     disposition: 'inline' | 'attachment';
     filename?: string;
   }> {
-    const payload = verifyToken(token, this.options.secret, this.options.now ? this.options.now() : Date.now());
+    const payload = openToken(
+      token,
+      this.options.secret,
+      this.options.now ? this.options.now() : Date.now(),
+      this.options.tokenKey,
+    );
     const { body, metadata } = await this.get(payload.storageKey, payload.organizationId);
     return {
       body,

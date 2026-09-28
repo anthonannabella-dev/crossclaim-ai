@@ -11,8 +11,9 @@ import path from 'node:path';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import type { PrismaClient } from '@prisma/client';
 
-import { createRuntime, type Runtime } from '../server';
+import { createRuntime, createServer, type Runtime } from '../server';
 import { createLogger } from '../config/logger';
+import { LocalFileSystemStorage } from '../services/storage';
 
 const ORG_A = '11111111-1111-4111-8111-111111111111';
 const ASSET = '33333333-3333-4333-8333-333333333333';
@@ -48,6 +49,18 @@ function stubPrisma(rows: CapturedAuditRow[]): PrismaClient {
       create: async (args: { data: CapturedAuditRow & { createdAt?: Date } }) => {
         rows.push(args.data);
         return { id: `audit-${rows.length}`, createdAt: args.data.createdAt ?? new Date() };
+      },
+      findMany: async () => [],
+    },
+  } as unknown as PrismaClient;
+}
+
+/** 审计写库永远失败 —— 用来验证 fail-closed */
+function failingAuditPrisma(): PrismaClient {
+  return {
+    auditLog: {
+      create: async () => {
+        throw new Error('audit store unavailable');
       },
       findMany: async () => [],
     },
@@ -172,5 +185,111 @@ describe('真实运行时下载与审计（CHANGE #17）', () => {
       expect([400, 403], suffix).toContain(response.status);
     }
     expect(rows.length).toBe(before);
+  });
+});
+
+// ============================================================
+describe('fail-closed 与日志脱敏（CHANGE #21 / #23）', () => {
+  it('没有审计组件时 /files 一律 503，绝不返回文件字节', async () => {
+    const storage = new LocalFileSystemStorage({
+      rootDir: tmpRoot,
+      secret: SECRET,
+      publicBaseUrl: 'http://localhost:3000',
+    });
+    const server = createServer({
+      prisma: stubPrisma([]),
+      log: createLogger({ level: 'error', sink: () => undefined }),
+      storage,
+      // 故意不注入 audit
+    });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+    const base = `http://127.0.0.1:${typeof address === 'object' && address ? address.port : 0}`;
+
+    try {
+      const body = Buffer.from('不该被下载的字节', 'utf8');
+      const stored = await storage.put({
+        organizationId: ORG_A,
+        fileAssetId: ASSET,
+        body,
+        contentType: 'application/pdf',
+      });
+      const signed = await storage.createSignedUrl(stored.storageKey, ORG_A, { ttlSeconds: 60 });
+      const response = await fetch(signed.url.replace('http://localhost:3000', base));
+
+      expect(response.status).toBe(503);
+      expect(await response.text()).not.toContain('不该被下载的字节');
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  it('审计写入失败 → 503，且不返回任何文件字节', async () => {
+    const runtime = createRuntime({
+      env: makeEnv({ STORAGE_LOCAL_ROOT: tmpRoot }),
+      prisma: failingAuditPrisma(),
+      log: createLogger({ level: 'error', sink: () => undefined }),
+    });
+    await new Promise<void>((resolve) => runtime.server.listen(0, '127.0.0.1', resolve));
+    const address = runtime.server.address();
+    const base = `http://127.0.0.1:${typeof address === 'object' && address ? address.port : 0}`;
+
+    try {
+      const body = Buffer.from('审计失败时必须拿不到这段字节', 'utf8');
+      const stored = await runtime.storage.put({
+        organizationId: ORG_A,
+        fileAssetId: ASSET,
+        body,
+        contentType: 'application/pdf',
+      });
+      const signed = await runtime.storage.createSignedUrl(stored.storageKey, ORG_A, {
+        ttlSeconds: 60,
+      });
+      const response = await fetch(signed.url.replace('http://localhost:3000', base));
+
+      expect(response.status).toBe(503);
+      const text = await response.text();
+      expect(text).toContain('audit_unavailable');
+      expect(text).not.toContain('审计失败时必须拿不到这段字节');
+    } finally {
+      await new Promise<void>((resolve) => runtime.server.close(() => resolve()));
+    }
+  });
+
+  it('成功与失败请求的运行日志都不含 token，也不含 storageKey', async () => {
+    const lines: string[] = [];
+    const runtime = createRuntime({
+      env: makeEnv({ STORAGE_LOCAL_ROOT: tmpRoot }),
+      prisma: stubPrisma([]),
+      log: createLogger({ level: 'info', sink: (line) => lines.push(line) }),
+    });
+    await new Promise<void>((resolve) => runtime.server.listen(0, '127.0.0.1', resolve));
+    const address = runtime.server.address();
+    const base = `http://127.0.0.1:${typeof address === 'object' && address ? address.port : 0}`;
+
+    try {
+      const stored = await runtime.storage.put({
+        organizationId: ORG_A,
+        fileAssetId: ASSET,
+        body: Buffer.from('日志脱敏验证', 'utf8'),
+        contentType: 'text/plain',
+      });
+      const signed = await runtime.storage.createSignedUrl(stored.storageKey, ORG_A, {
+        ttlSeconds: 60,
+      });
+
+      const ok = await fetch(signed.url.replace('http://localhost:3000', base));
+      expect(ok.status).toBe(200);
+      const denied = await fetch(`${base}/files/AAAA.BBBB.CCCC`);
+      expect([400, 403]).toContain(denied.status);
+
+      const all = lines.join('\n');
+      expect(all).not.toContain(signed.token);
+      expect(all).not.toContain(stored.storageKey);
+      expect(all).not.toContain('AAAA.BBBB.CCCC');
+      expect(all).toContain('/files/[REDACTED]');
+    } finally {
+      await new Promise<void>((resolve) => runtime.server.close(() => resolve()));
+    }
   });
 });

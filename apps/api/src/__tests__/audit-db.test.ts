@@ -19,8 +19,10 @@ import { createAuditWriter, createPrismaAuditSink } from '../services/audit';
 const prisma = new PrismaClient();
 
 const ORG = '11111111-1111-4111-8111-111111111111';
+const ORG_B = '22222222-2222-4222-8222-222222222222';
 const USER_ID = '55555555-5555-4555-8555-555555555555';
 const GHOST_USER_ID = '66666666-6666-4666-8666-666666666666';
+const FOREIGN_USER_ID = '77777777-7777-4777-8777-777777777777';
 const SALT = 'audit-db-salt-0123456789';
 
 const writer = createAuditWriter(createPrismaAuditSink(prisma), { ipSalt: SALT });
@@ -34,10 +36,20 @@ afterAll(async () => {
 });
 
 beforeEach(async () => {
-  await prisma.$executeRawUnsafe('TRUNCATE TABLE "AuditLog", "User", "Organization" CASCADE;');
+  await prisma.$executeRawUnsafe(
+    'TRUNCATE TABLE "AuditLog", "Membership", "User", "Organization" CASCADE;',
+  );
   await prisma.organization.create({ data: { id: ORG, name: '审计租户', slug: 'audit-org' } });
+  await prisma.organization.create({ data: { id: ORG_B, name: '另一个租户', slug: 'audit-org-b' } });
   await prisma.user.create({
     data: { id: USER_ID, email: 'auditor@example.com', displayName: '审计员' },
+  });
+  await prisma.membership.create({ data: { organizationId: ORG, userId: USER_ID, role: 'OWNER' } });
+  await prisma.user.create({
+    data: { id: FOREIGN_USER_ID, email: 'outsider@example.com', displayName: '外部用户' },
+  });
+  await prisma.membership.create({
+    data: { organizationId: ORG_B, userId: FOREIGN_USER_ID, role: 'OWNER' },
   });
 });
 
@@ -95,14 +107,60 @@ describe('CHANGE #16：AuditLog actor 身份', () => {
   it('CHECK 兜底：非 USER 行不得挂用户引用（绕过应用层直接写库也会失败）', async () => {
     await expect(
       prisma.$executeRawUnsafe(
-        `INSERT INTO "AuditLog" ("id","actorType","actorUserId","action","createdAt")
-         VALUES (gen_random_uuid()::text, 'SYSTEM', $1, 'illegal.actor', now())`,
+        `INSERT INTO "AuditLog" ("id","organizationId","actorType","actorUserId","action","createdAt")
+         VALUES (gen_random_uuid()::text, $1, 'SYSTEM', $2, 'illegal.actor', now())`,
+        ORG,
         USER_ID,
       ),
     ).rejects.toThrow(/cc_audit_actor_shape_check|violates/i);
   });
 
-  it('审计载荷里的 storageKey 被掩码（真实库回读验证）', async () => {
+  it('organizationId 不允许为空（数据库层拒绝"无租户审计"）', async () => {
+    await expect(
+      prisma.$executeRawUnsafe(
+        `INSERT INTO "AuditLog" ("id","organizationId","actorType","actorRef","action","createdAt")
+         VALUES (gen_random_uuid()::text, NULL, 'SYSTEM', 'migration-runner', 'illegal.global', now())`,
+      ),
+    ).rejects.toThrow(/null value|not-null|violates/i);
+  });
+
+  it('租户 A 的审计不得挂"只属于租户 B"的用户（跨租户 actor）', async () => {
+    await expect(
+      writer.record({
+        organizationId: ORG,
+        actorType: 'USER',
+        actorUserId: FOREIGN_USER_ID,
+        action: 'case.opened',
+      }),
+    ).rejects.toThrow(/membership|cross-tenant|check_violation|violates/i);
+
+    expect(await prisma.auditLog.count()).toBe(0);
+  });
+
+  it('租户内的合法成员可以正常写审计（正向基线）', async () => {
+    const record = await writer.record({
+      organizationId: ORG,
+      actorType: 'USER',
+      actorUserId: USER_ID,
+      action: 'case.opened',
+    });
+    const row = await prisma.auditLog.findUniqueOrThrow({ where: { id: record.id } });
+    expect(row.organizationId).toBe(ORG);
+    expect(row.actorUserId).toBe(USER_ID);
+  });
+
+  it('绕过应用层直插跨租户 actor 也会被触发器拒绝', async () => {
+    await expect(
+      prisma.$executeRawUnsafe(
+        `INSERT INTO "AuditLog" ("id","organizationId","actorType","actorUserId","action","createdAt")
+         VALUES (gen_random_uuid()::text, $1, 'USER', $2, 'illegal.actor', now())`,
+        ORG,
+        FOREIGN_USER_ID,
+      ),
+    ).rejects.toThrow(/membership|cross-tenant|check_violation|violates/i);
+  });
+
+  it('审计载荷里的敏感值在真实库里仍是脱敏后的形态', async () => {
     const storageKey = `${ORG}/ab/33333333-3333-4333-8333-333333333333`;
     const record = await writer.record({
       organizationId: ORG,

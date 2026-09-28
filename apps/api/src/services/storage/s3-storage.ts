@@ -27,7 +27,7 @@ import {
   buildStorageKey,
   sha256Hex,
 } from './keys';
-import { issueSignedUrl, verifyToken } from './signed-url';
+import { issueSignedUrl, openToken } from './signed-url';
 import { sha256HexOfBuffer, sha256HexOfString, signRequest, type AwsCredentials } from './sigv4';
 
 export interface S3StorageOptions {
@@ -39,6 +39,8 @@ export interface S3StorageOptions {
   /** 本服务自签下载令牌的密钥 */
   secret: string;
   publicBaseUrl: string;
+  /** 可选：令牌加密专用密钥（未提供则由 secret 派生） */
+  tokenKey?: string;
   now?: () => number;
   /** SeaweedFS / MinIO 默认走 path-style；AWS 可设 false */
   forcePathStyle?: boolean;
@@ -193,7 +195,12 @@ export class S3CompatibleStorage implements StorageAdapter {
     disposition: 'inline' | 'attachment';
     filename?: string;
   }> {
-    const payload = verifyToken(token, this.options.secret, this.options.now ? this.options.now() : Date.now());
+    const payload = openToken(
+      token,
+      this.options.secret,
+      this.options.now ? this.options.now() : Date.now(),
+      this.options.tokenKey,
+    );
     const { body, metadata } = await this.get(payload.storageKey, payload.organizationId);
     return {
       body,

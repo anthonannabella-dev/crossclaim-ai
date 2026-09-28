@@ -962,7 +962,8 @@ model FeeCalculation {
 
 model AuditLog {
   id             String         @id @default(uuid())
-  organizationId String?
+  /// 审计永远归属租户：平台级全局日志不共用本表（CHANGE #24）
+  organizationId String
   actorType      AuditActorType
   /// USER 时的用户 id —— 保数据库引用完整性（FK → User.id）
   actorUserId    String?

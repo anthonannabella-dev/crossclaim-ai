@@ -13,7 +13,7 @@ import type { StorageAdapter, StorageDriver } from './types';
 
 export * from './types';
 export { buildStorageKey, assertTenantScopedKey, fileAssetIdFromKey, sha256Hex } from './keys';
-export { signToken, verifyToken, issueSignedUrl, sanitizeFilename } from './signed-url';
+export { sealToken, openToken, issueSignedUrl, sanitizeFilename } from './signed-url';
 export { LocalFileSystemStorage } from './local-file-storage';
 export { S3CompatibleStorage } from './s3-storage';
 export { signRequest, type AwsCredentials } from './sigv4';
@@ -23,6 +23,7 @@ export interface StorageEnvLike {
   STORAGE_LOCAL_ROOT?: string;
   STORAGE_PUBLIC_BASE_URL?: string;
   STORAGE_URL_SECRET?: string;
+  STORAGE_TOKEN_KEY?: string;
   S3_ENDPOINT?: string;
   S3_REGION?: string;
   S3_BUCKET?: string;
@@ -41,12 +42,14 @@ export function createStorageAdapter(
   const driver = (env.STORAGE_DRIVER ?? 'local') as StorageDriver;
   const publicBaseUrl = env.STORAGE_PUBLIC_BASE_URL ?? 'http://localhost:3000';
   const secret = env.STORAGE_URL_SECRET ?? '';
+  const tokenKey = env.STORAGE_TOKEN_KEY;
 
   if (driver === 'local') {
     return new LocalFileSystemStorage({
       rootDir: env.STORAGE_LOCAL_ROOT ?? './.storage',
       secret,
       publicBaseUrl,
+      ...(tokenKey ? { tokenKey } : {}),
     });
   }
 
@@ -61,6 +64,7 @@ export function createStorageAdapter(
       credentials: deps.credentials,
       secret,
       publicBaseUrl,
+      ...(tokenKey ? { tokenKey } : {}),
       ...(deps.fetchImpl ? { fetchImpl: deps.fetchImpl } : {}),
     });
   }

@@ -31,6 +31,7 @@ export const ENV_SPECS: EnvSpec[] = [
   { name: 'STORAGE_LOCAL_ROOT', required: false, defaultValue: './.storage', description: 'local 驱动的对象根目录' },
   { name: 'STORAGE_PUBLIC_BASE_URL', required: false, defaultValue: 'http://localhost:3000', description: '签名下载地址的对外基址' },
   { name: 'STORAGE_URL_SECRET', required: false, description: '签名下载令牌密钥（真实值放密钥管理，不写进仓库）' },
+  { name: 'STORAGE_TOKEN_KEY', required: false, description: '下载令牌加密专用密钥（可选；未配置则由 STORAGE_URL_SECRET 派生）' },
   { name: 'STORAGE_SIGNED_URL_TTL_SECONDS', required: false, defaultValue: '300', description: '签名下载地址默认有效期（秒）' },
   { name: 'AUDIT_IP_SALT', required: false, description: '审计 IP 哈希盐值（真实值放密钥管理；未配置时本地开发回退用 STORAGE_URL_SECRET）' },
 ];
