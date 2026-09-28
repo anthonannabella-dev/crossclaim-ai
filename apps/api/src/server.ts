@@ -25,11 +25,19 @@ import {
 } from './services/storage';
 import { createAuditWriter, createPrismaAuditSink, type AuditWriter } from './services/audit';
 import {
+  createPrismaConnectionLifecyclePort,
+  createPrismaFileAssetLookup,
+  createPrismaFileAssetPort,
+  createPrismaSourceConnectionPort,
+} from './services/acquisition';
+import { createPrismaImportRepository } from './services/ingest';
+import {
   createPrismaAuthUserPort,
   createPrismaMembershipLookup,
   createPrismaSessionPort,
   handleAuthRequest,
   handleDataRequest,
+  handleUploadRequest,
 } from './services/auth';
 
 const VERSION = '0.1.0';
@@ -128,6 +136,28 @@ export function createServer(deps: ServerDeps): http.Server {
         })
         .catch((err) =>
           send(500, { error: err instanceof Error ? err.message : 'auth_error' }),
+        );
+      return;
+    }
+
+    // C-0008-A 内部上传端点（会话保护；文件字节经内容扫描后进入导入流水线）
+    if (auth && storage && url === '/uploads') {
+      handleUploadRequest(req, res, {
+        prisma,
+        session: auth.session,
+        connectionLifecycle: createPrismaConnectionLifecyclePort(prisma),
+        connections: createPrismaSourceConnectionPort(prisma),
+        fileAssets: createPrismaFileAssetPort(prisma),
+        fileAssetLookup: createPrismaFileAssetLookup(prisma),
+        storage,
+        imports: createPrismaImportRepository(prisma, { audit }),
+        audit: audit as AuditWriter,
+      })
+        .then((handled) => {
+          if (!handled) send(404, { error: 'not_found' });
+        })
+        .catch((err) =>
+          send(500, { error: err instanceof Error ? err.message : 'upload_error' }),
         );
       return;
     }

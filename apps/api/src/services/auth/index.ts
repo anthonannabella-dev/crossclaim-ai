@@ -72,3 +72,4 @@ export {
   type AuthRouteDeps,
 } from './http-routes';
 export { handleDataRequest, type DataRouteDeps } from './data-routes';
+export { MAX_UPLOAD_BYTES, handleUploadRequest, type UploadRouteDeps } from './upload-routes';
