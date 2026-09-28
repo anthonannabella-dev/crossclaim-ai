@@ -154,8 +154,9 @@ describe('C-0006-B1 — canonical shadow run（真实 PostgreSQL）', () => {
     expect(summary.activeTracking).toBe(2);
     expect(summary.conflictFactsExcluded).toBe(0);
     expect(summary.evaluationsWritten).toBe(2);
-    expect(summary.opportunitiesFound).toBe(1);
-    expect(summary.moneyTrace).toBe('17.7500');
+    // INV-1001: 152.7500 vs 135.0000 → 17.7500；INV-1002: 140.0000 vs 135.0000 → 5.0000
+    expect(summary.opportunitiesFound).toBe(2);
+    expect(summary.moneyTrace).toBe('22.7500');
     expect(summary.factCoverage.sourceTransactions).toBe(4);
     expect(summary.factCoverage.activeFactTransactions).toBe(4);
 
