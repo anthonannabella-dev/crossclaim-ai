@@ -12,6 +12,11 @@
 import { Prisma, type PrismaClient } from '@prisma/client';
 
 import { canonicalDedupeKeyFor } from '../canonical/identity-key';
+import {
+  CanonicalIdentityRequiredError,
+  resolveDetectionIdentityMode,
+  type DetectionIdentityMode,
+} from './identity-mode';
 import { parseFreightRateDefinition, type RuleCandidate } from './freight-rate';
 import type {
   DetectionPersistenceInput,
@@ -64,7 +69,16 @@ async function resolveCanonicalIdentity(
   };
 }
 
-export function createPrismaDetectionRepository(prisma: PrismaClient): DetectionRepository {
+export interface PrismaDetectionRepositoryOptions {
+  /** C-0006-B2 Step 3：身份模式；默认 legacy（读环境变量 DETECTION_IDENTITY_MODE）。 */
+  identityMode?: DetectionIdentityMode;
+}
+
+export function createPrismaDetectionRepository(
+  prisma: PrismaClient,
+  options: PrismaDetectionRepositoryOptions = {},
+): DetectionRepository {
+  const identityMode = resolveDetectionIdentityMode(options.identityMode);
   const readExisting = async (
     dedupeKey: string,
   ): Promise<DetectionPersistenceResult | null> => {
@@ -161,6 +175,40 @@ export function createPrismaDetectionRepository(prisma: PrismaClient): Detection
     ): Promise<DetectionPersistenceResult> {
       try {
         return await prisma.$transaction(async (tx) => {
+          const resolvedIdentity = await resolveCanonicalIdentity(tx, {
+            organizationId: input.organizationId,
+            ruleVersionId: input.ruleVersionId,
+            sourceTransactionId: input.sourceTransactionId,
+          });
+          // canonical 模式：身份缺失必须 fail closed，绝不退化到旧键
+          if (identityMode === 'canonical' && !resolvedIdentity) {
+            throw new CanonicalIdentityRequiredError(input.sourceTransactionId);
+          }
+          if (resolvedIdentity) {
+            const sameIdentity = await tx.ruleEvaluation.findFirst({
+              where: {
+                organizationId: input.organizationId,
+                canonicalDedupeKey: resolvedIdentity.canonicalDedupeKey,
+              },
+              select: {
+                id: true,
+                result: true,
+                computed: true,
+                opportunityId: true,
+                canonicalDedupeKey: true,
+              },
+            });
+            if (sameIdentity) {
+              return {
+                evaluationId: sameIdentity.id,
+                created: false,
+                result: sameIdentity.result === 'OPPORTUNITY' ? 'OPPORTUNITY' : 'PASS',
+                computed: sameIdentity.computed,
+                opportunityId: sameIdentity.opportunityId,
+                canonicalIdentity: 'MAPPED',
+              } satisfies DetectionPersistenceResult;
+            }
+          }
           const existing = await tx.ruleEvaluation.findUnique({
             where: { dedupeKey: input.dedupeKey },
             select: {
@@ -182,11 +230,7 @@ export function createPrismaDetectionRepository(prisma: PrismaClient): Detection
             } satisfies DetectionPersistenceResult;
           }
 
-          const canonicalIdentity = await resolveCanonicalIdentity(tx, {
-            organizationId: input.organizationId,
-            ruleVersionId: input.ruleVersionId,
-            sourceTransactionId: input.sourceTransactionId,
-          });
+          const canonicalIdentity = resolvedIdentity;
 
           const evaluation = await tx.ruleEvaluation.create({
             data: {

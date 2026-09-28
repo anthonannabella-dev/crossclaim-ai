@@ -316,4 +316,44 @@ describe('C-0006-B2 Step 2 — dual write + identity parity（真实 PostgreSQL�
     expect(stillNull.canonicalFactId).toBeNull();
     expect(stillNull.canonicalDedupeKey).toBeNull();
   });
+
+  it('canonical 模式正常路径：以 canonicalDedupeKey 判幂等，重复执行零增量', async () => {
+    const canonicalRepo = createPrismaDetectionRepository(prisma, { identityMode: 'canonical' });
+    const detectCanonical = () =>
+      runFreightRateDetection({ organizationId: ORG, scope: SCOPE, repository: canonicalRepo });
+
+    const run1 = await detectCanonical();
+    expect(run1.evaluationsCreated).toBe(2);
+    expect(run1.evaluationsWithoutCanonicalIdentity).toBe(0);
+
+    const rows = await prisma.ruleEvaluation.findMany({ where: { organizationId: ORG } });
+    expect(rows).toHaveLength(2);
+    expect(rows.every((row) => row.canonicalDedupeKey !== null)).toBe(true);
+
+    const run2 = await detectCanonical();
+    expect(run2.evaluationsCreated).toBe(0);
+    expect(run2.skippedExisting).toBe(2);
+    expect(await prisma.ruleEvaluation.count({ where: { organizationId: ORG } })).toBe(2);
+  });
+
+  it('canonical 模式缺身份：fail closed（CANONICAL_IDENTITY_REQUIRED），不退化到旧键', async () => {
+    await prisma.canonicalFact.update({
+      where: { organizationId_factKey: { organizationId: ORG, factKey: 'INVOICE:INV-1002' } },
+      data: { status: 'CONFLICT' },
+    });
+    const canonicalRepo = createPrismaDetectionRepository(prisma, { identityMode: 'canonical' });
+
+    await expect(
+      runFreightRateDetection({ organizationId: ORG, scope: SCOPE, repository: canonicalRepo }),
+    ).rejects.toThrow(/CANONICAL_IDENTITY_REQUIRED/);
+
+    // 可映射的发票已按新身份写入；缺身份的那张绝不写入
+    const rows = await prisma.ruleEvaluation.findMany({ where: { organizationId: ORG } });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].canonicalDedupeKey).not.toBeNull();
+    const conflictInvoice = await prisma.sourceTransaction.findFirstOrThrow({
+      where: { organizationId: ORG, externalId: 'INV-1002' },
+    });
+    expect(rows.some((row) => row.sourceTransactionId === conflictInvoice.id)).toBe(false);
+  });
 });
