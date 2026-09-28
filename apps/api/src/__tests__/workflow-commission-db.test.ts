@@ -101,7 +101,8 @@ async function seedReceivedSettlement(options: { organizationId?: string; caseNo
 }
 
 const item = { payoutReference: PAYOUT_REF, amount: '1500.0000', currency: 'USD', payoutDate: '2026-09-21' };
-const base = { organizationId: ORG, actorUserId: adminId, role: 'ADMIN' } as const;
+// 注意：actorUserId 必须在每个用例运行时取值（模块级 const 会在 import 时固化为空）
+const base = () => ({ organizationId: ORG, actorUserId: adminId, role: 'ADMIN' }) as const;
 
 const counts = async () => ({
   fees: await prisma.feeCalculation.count({ where: { organizationId: ORG } }),
@@ -112,7 +113,7 @@ const counts = async () => ({
 describe('C-0009 — 佣金对账（真实 PostgreSQL）', () => {
   it('dry-run 默认零写入：MATCHED 但 Fee/Billing 计数为 0，Settlement 不变', async () => {
     await seedReceivedSettlement();
-    const summary = await reconcilePayoutItems(prisma, { ...base, items: [item] }, { now: () => NOW });
+    const summary = await reconcilePayoutItems(prisma, { ...base(), items: [item] }, { now: () => NOW });
 
     expect(summary.dryRun).toBe(true);
     expect(summary.results[0]).toMatchObject({
@@ -130,7 +131,7 @@ describe('C-0009 — 佣金对账（真实 PostgreSQL）', () => {
     const { settlement } = await seedReceivedSettlement();
     const summary = await reconcilePayoutItems(
       prisma,
-      { ...base, items: [item], dryRun: false },
+      { ...base(), items: [item], dryRun: false },
       { now: () => NOW },
     );
 
@@ -159,8 +160,8 @@ describe('C-0009 — 佣金对账（真实 PostgreSQL）', () => {
 
   it('重复执行幂等：第二次为 ALREADY_CHARGED，不新增记录', async () => {
     await seedReceivedSettlement();
-    await reconcilePayoutItems(prisma, { ...base, items: [item], dryRun: false }, { now: () => NOW });
-    const second = await reconcilePayoutItems(prisma, { ...base, items: [item], dryRun: false }, { now: () => NOW });
+    await reconcilePayoutItems(prisma, { ...base(), items: [item], dryRun: false }, { now: () => NOW });
+    const second = await reconcilePayoutItems(prisma, { ...base(), items: [item], dryRun: false }, { now: () => NOW });
 
     expect(second.results[0]).toMatchObject({
       reconciliationStatus: 'ALREADY_CHARGED',
@@ -174,12 +175,12 @@ describe('C-0009 — 佣金对账（真实 PostgreSQL）', () => {
     await seedReceivedSettlement(); // 本租户也有一个（用于确认没有误匹配）
 
     await expect(
-      reconcilePayoutItems(prisma, { ...base, role: 'FINANCE', items: [item] }, { now: () => NOW }),
+      reconcilePayoutItems(prisma, { ...base(), role: 'FINANCE', items: [item] }, { now: () => NOW }),
     ).rejects.toThrow(ForbiddenError);
 
     const unmatched = await reconcilePayoutItems(
       prisma,
-      { ...base, items: [{ ...item, payoutReference: 'not-a-real-ref' }], dryRun: false },
+      { ...base(), items: [{ ...item, payoutReference: 'not-a-real-ref' }], dryRun: false },
       { now: () => NOW },
     );
     expect(unmatched.results[0].reconciliationStatus).toBe('UNMATCHED');
