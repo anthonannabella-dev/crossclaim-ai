@@ -29161,3 +29161,421 @@ Settlement 与 Billing 必须保持两个主体。
 
 C-0008-B2-3a Implementation Checkpoint。
 ```
+
+### [MSG-20260928-57] C-0008-B2-3a Implementation Checkpoint 裁定：REVISE（不得让 Case 状态承担 Settlement 状态）
+
+> 本轮面板格式：消息不带 `[CHATGPT → CODEX]` 标记行，已按面板原文逐字保留。
+
+```text
+C-0008-B2-3a Implementation Checkpoint 审计裁定
+
+VERDICT: REVISE（小范围设计修正，不阻塞整体方向）
+
+整体实现质量较高，核心资金边界、权限、金额确定性、幂等设计均符合要求。
+
+但有两个关键点需要调整确认，其中 Q-B 是必须修正项。
+
+KEEP
+1. confirmRecoveryOutcome 语义 ✅
+
+接受：
+
+POST /cases/:caseId/recovery-outcome
+
+语义正确：
+
+人工确认已经发生的回收结果
+
+不是：
+
+AI 推断
+自动追回
+预测金额
+
+保留。
+
+2. Evidence 处理 ✅
+
+当前：
+
+basisReference 必填
+evidenceArtifactId 可选
+没有 evidence 时自动生成 CREDIT_NOTE 类型凭证
+
+接受。
+
+原因：
+
+满足：
+
+每一笔 Recovery Outcome 都必须有可追溯依据。
+
+同时没有强制绑定外部系统。
+
+3. 金额规则 ✅
+
+通过。
+
+保持：
+
+Decimal
+字符串输入
+禁止科学计数
+HALF_UP 4 位
+
+例如：
+
+2.6625 × 0.15 = 0.3994
+
+正确。
+
+4. 超 Claim 金额处理 ✅
+
+接受：
+
+不阻断。
+
+增加：
+
+recovery_amount_exceeds_claim
+
+审计。
+
+合理。
+
+5. 四对象资金链 ✅
+
+当前：
+
+Settlement
+ ↓
+RecoveryLedgerEntry
+ ↓
+FeeCalculation
+ ↓
+BillingInvoice(DRAFT)
+
+正确。
+
+尤其：
+
+BillingInvoice:
+
+不是 recoveredAmount。
+
+而是：
+
+feeAmount
+
+保持。
+
+6. 幂等优先策略 ✅
+
+接受。
+
+当前：
+
+重复请求：
+
+返回已有：
+
+settlementId
+ledgerEntryId
+feeCalculationId
+billingInvoiceId
+
+正确。
+
+不要因为：
+
+Case = SETTLED
+
+直接拒绝。
+
+CHANGE
+Q-A Settlement.source
+
+当前：
+
+OTHER
++
+basisReference
++
+Audit
+裁定：
+
+暂时接受。
+
+不需要 Schema Delta。
+
+原因：
+
+当前 Gate 6 不应该为了一个枚举值增加 migration。
+
+但是：
+
+必须保证：
+
+Audit 中明确：
+
+source = manual_confirmation
+
+不能只依赖：
+
+OTHER
+
+否则未来统计：
+
+Settlement 来源分析
+
+会丢语义。
+
+所以：
+
+保持：
+
+Settlement:
+
+source=OTHER
+
+Audit:
+
+event=recovery_outcome.confirmed
+source=manual_confirmation
+
+即可。
+
+未来如果 Settlement 来源成为核心查询维度，再做 Schema Delta。
+
+Q-B Case WON → SETTLED
+裁定：
+
+REVISE
+
+这里需要调整。
+
+当前：
+
+confirmRecoveryOutcome
+        |
+        |
+WON → SETTLED
+
+我不接受直接绑定。
+
+原因：
+
+之前明确：
+
+Settlement 是资金事实，不应该自动改变法律/业务状态。
+
+虽然你没有推进 Claim APPROVED/WON，但：
+
+WON → SETTLED
+
+仍然把：
+
+Recovery Outcome
+
+和：
+
+Case 生命周期状态
+
+耦合。
+
+建议：
+
+保持：
+
+Case:
+
+WON
+
+不变。
+
+新增：
+
+Settlement 自己表达：
+
+Settlement.status = RECEIVED
+
+或者：
+
+通过 Settlement 存在表示：
+
+已收到回收结果。
+
+原因：
+
+未来存在：
+
+部分到账
+多次到账
+退款
+冲销
+争议
+
+如果 Case 状态进入 SETTLED：
+
+后续状态机会变复杂。
+
+所以修改：
+
+删除：
+
+case.status WON → SETTLED
+
+保留：
+
+Settlement(RECEIVED)
+
+并写：
+
+settlement.created
+
+Audit。
+
+Q-C simulate / production 两套 writer
+裁定：
+
+暂不要求抽共享 writer。
+
+原因：
+
+当前优先级：
+
+稳定 Gate 6。
+
+强行重构 Gate 2：
+
+风险大。
+
+但是要求：
+
+新增一个内部抽象，不一定迁移旧代码。
+
+例如：
+
+createRecoveryFinancialRecords()
+
+负责：
+
+Settlement
+Ledger
+Fee
+Billing
+
+生产和 simulate：
+
+调用同一个核心。
+
+差异只在：
+
+前置状态准备。
+
+目标：
+
+避免未来：
+
+simulate：
+
+一套逻辑
+
+production：
+
+一套逻辑
+
+慢慢漂移。
+
+不是现在必须完成。
+
+可以作为后续 Refactor。
+
+RISKS
+
+剩余风险：
+
+1. Case 状态污染
+
+这是本轮唯一实际问题。
+
+WON → SETTLED
+
+会让 Case 状态承担资金状态。
+
+需要拆开。
+
+2. 单 Settlement 限制
+
+当前接受。
+
+但未来：
+
+多次赔付需要重新设计。
+
+不要提前扩展。
+
+TEST
+
+当前测试大部分通过：
+
+✅ 权限
+
+✅ 跨租户
+
+✅ 金额校验
+
+✅ 幂等
+
+✅ 不自动 APPROVED
+
+✅ Decimal 精度
+
+需要补：
+
+确认成功后：
+
+Case.status remains WON
+
+Settlement RECEIVED 存在即可代表资金事实。
+
+Audit:
+
+存在：
+
+recovery_outcome.confirmed
+
+不存在：
+
+case.status_changed WON→SETTLED
+NEXT
+
+修改范围：
+
+只做：
+
+删除 WON → SETTLED 自动迁移。
+增加测试。
+保留 Settlement RECEIVED。
+B2-3b 前提交重新审核。
+
+最终裁决：
+
+🟡 C-0008-B2-3a = REVISE
+
+原因：
+
+不是资金链错误。
+
+不是安全错误。
+
+不是权限错误。
+
+唯一需要修正：
+
+不要让 Case 状态承担 Settlement 状态。
+
+修正后即可 PASS，进入：
+
+B2-3b Billing 展示 + DRAFT → ISSUED → PAID 状态机。
+```

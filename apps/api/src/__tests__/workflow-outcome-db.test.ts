@@ -167,9 +167,16 @@ describe('C-0008-B2-3a — 人工确认回收结果（真实 PostgreSQL）', () 
 
     const row = await prisma.case.findUniqueOrThrow({ where: { id: kase.id } });
     expect(row.recoveredAmount?.toFixed(4)).toBe('2.6625');
-    expect(row.status).toBe('SETTLED');
+    // MSG-20260928-57：Case 状态保持 WON —— 资金事实由 Settlement(RECEIVED) 表达
+    expect(row.status).toBe('WON');
     const claimRow = await prisma.claim.findUniqueOrThrow({ where: { id: claim.id } });
     expect(claimRow.status).toBe('APPROVED');
+
+    // 不得出现 WON → SETTLED 的自动迁移审计
+    const statusAudits = await prisma.auditLog.findMany({
+      where: { organizationId: ORG, action: 'case.status_changed' },
+    });
+    expect(statusAudits).toHaveLength(0);
 
     const audits = await prisma.auditLog.findMany({
       where: { organizationId: ORG, action: 'recovery_outcome.confirmed' },

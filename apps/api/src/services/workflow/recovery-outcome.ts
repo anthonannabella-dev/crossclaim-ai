@@ -310,24 +310,12 @@ export async function confirmRecoveryOutcome(
       },
     });
 
-    // 案件上的回收金额 + WON → SETTLED（回收事实的后果，不等同于自动推进 WON）
+    // 只在案件上记录回收金额；**不**改动 Case.status。
+    // MSG-20260928-57：Case 状态不得承担 Settlement 状态 —— 资金事实由
+    // Settlement(RECEIVED) 表达，Case 保持 WON。
     await tx.case.update({
       where: { id: kase.id },
       data: { recoveredAmount },
-    });
-    await tx.case.updateMany({
-      where: { id: kase.id, organizationId: input.organizationId, status: 'WON' },
-      data: { status: 'SETTLED' },
-    });
-
-    await writeUserAudit(tx, {
-      organizationId: input.organizationId,
-      actorUserId: input.actorUserId,
-      action: 'case.status_changed',
-      entityType: 'Case',
-      entityId: kase.id,
-      changes: { from: 'WON', to: 'SETTLED' },
-      at,
     });
     await writeUserAudit(tx, {
       organizationId: input.organizationId,
