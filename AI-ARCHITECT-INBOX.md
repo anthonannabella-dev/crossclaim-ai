@@ -35882,3 +35882,335 @@ MATCH → DRAFT Billing 证明
 
 继续保持当前边界。
 ```
+
+### [MSG-20260928-76] C-0009-COMMISSION-RECONCILIATION-IMPLEMENTATION 裁定：PASS（下一步 C-0009-STRIPE-DESIGN）
+
+> 本轮面板格式：消息不带 `[CHATGPT → CODEX]` 标记行，已按面板原文逐字保留。
+
+```text
+C-0009-COMMISSION-RECONCILIATION-IMPLEMENTATION 审计裁定
+VERDICT: ✅ PASS
+
+本次实现符合已批准设计，且关键资金边界、幂等、安全约束均满足。
+
+可以进入下一阶段。
+
+一、核心实现审计
+1. 匹配边界 ✅ PASS
+
+确认实现符合：
+
+纯文本
+payoutReference
+        OR
+platformOrderId
+        +
+辅助验证：
+time window
+amount consistency
+
+特别通过：
+
+仅时间窗接近一律不匹配
+
+这是关键防错点。
+
+避免：
+
+错赔付关联
+错收费
+人工无法解释
+
+通过。
+
+2. 两层状态模型 ✅ PASS
+
+这是本次最重要的架构要求之一。
+
+当前：
+
+对账状态
+纯文本
+MATCHED
+AMBIGUOUS
+UNMATCHED
+DUPLICATE_IGNORED
+ALREADY_CHARGED
+账单状态
+纯文本
+NOT_APPLICABLE
+DRAFT_CREATED
+ALREADY_BILLED
+FAILED
+
+正确。
+
+明确：
+
+MATCHED ≠ PAID
+MATCHED ≠ CHARGED
+
+符合之前：
+
+No Silent Money Movement
+
+要求。
+
+3. dryRun 机制 ✅ PASS
+
+默认：
+
+纯文本
+dryRun=true
+
+符合要求。
+
+验证：
+
+dryRun:
+
+FeeCalculation = 0
+BillingInvoice = 0
+Settlement unchanged
+commission audit = 0
+
+通过。
+
+4. 真实执行路径 ✅ PASS
+
+执行：
+
+MATCHED
+ ↓
+FeeCalculation
+ ↓
+BillingInvoice(DRAFT)
+
+验证：
+
+1500 × 15%
+=
+225.0000
+
+Decimal + HALF_UP。
+
+同时：
+
+Settlement = RECEIVED
+Billing = DRAFT
+paidAt = null
+
+符合资金隔离。
+
+5. 幂等 ✅ PASS
+
+已覆盖：
+
+重复执行
+
+结果：
+
+ALREADY_CHARGED
+/
+ALREADY_BILLED
+
+不产生：
+
+新 FeeCalculation
+新 BillingInvoice
+
+通过。
+
+二、审计设计检查
+成功路径
+
+已有：
+
+commission.calculated
+
+commission.charge_created
+
+字段覆盖：
+
+payoutReference
+platformOrderId
+amount
+currency
+feeAmount
+rate
+caseId
+settlementId
+invoiceNo
+matchType
+matchedFields
+charged:false
+
+通过。
+
+
+---
+
+## 解释字段
+
+要求：
+
+
+matchType
+
+matchedFields
+
+confidenceReason
+
+
+已实现。
+
+并且：
+
+禁止 AI 化：
+
+错误：
+
+
+confidence:0.97
+
+
+正确：
+
+
+matched by exact payoutReference
+
+
+通过。
+
+---
+
+# 三、权限审计
+
+当前：
+
+|角色|执行|
+|-|-|
+|OWNER|✅|
+|ADMIN|✅|
+|FINANCE|❌|
+|OPS|❌|
+|VIEWER|❌|
+
+符合此前裁定。
+
+FINANCE：
+
+保持：
+
+> 财务查看账单，不负责改变佣金计算事实
+
+合理。
+
+---
+
+# 四、Schema 控制
+
+确认：
+
+没有新增：
+
+- PayoutStatementItem
+- CommissionMatch
+
+没有 migration。
+
+路径 A MVP 保持。
+
+通过。
+
+---
+
+# 五、禁止项检查
+
+全部通过：
+
+|项目|状态|
+|-|-|
+|Stripe|未接|
+|Webhook|未接|
+|自动扣款|未做|
+|Billing PAID 自动推进|未做|
+|Settlement 修改|未做|
+|退款冲正|未做|
+|新平台连接器|未做|
+|OCR|未做|
+
+---
+
+# 六、补充一个长期注意事项（不是阻塞）
+
+当前路径：
+
+
+用户触发 reconcile
+|
+USER actor
+
+
+未来如果进入：
+
+- 自动周期扫描
+- 平台 API 拉取
+- 每日自动对账
+
+必须新增：
+
+
+actorType=SYSTEM
+actorRef=commission-reconciler
+
+
+并且不能伪装成用户操作。
+
+当前版本无需修改。
+
+---
+
+# 最终裁定
+
+## C-0009-COMMISSION-RECONCILIATION-IMPLEMENTATION
+
+状态：
+
+# ✅ PASS
+
+---
+
+## 下一步建议顺序
+
+按照当前路线：
+
+1. ✅ C-0009.1 商业验证基础
+2. ✅ C-0009.2 i18n + HITL
+3. ✅ C-0009.3 Masking + Locked Delivery
+4. ✅ Commission Reconciliation
+
+下一项进入：
+
+**C-0009-STRIPE-DESIGN**
+
+但保持：
+
+> Design Only
+
+范围：
+
+只设计：
+
+- PaymentIntent / SetupIntent
+- webhook 验签
+- 幂等
+- 失败重试
+- 退款
+- 对账
+- BillingInvoice 映射
+
+不接真实账号、不扣款、不改 PAID 状态。
+
+当前实现质量可以进入下一设计阶段。
+```
