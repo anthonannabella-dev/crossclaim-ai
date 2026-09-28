@@ -109,7 +109,12 @@ Claim / Appeal 文本草稿        直接对外提交
 |---|---|
 | 校验函数 | `crossclaim_assert_tenant_integrity()` |
 | 迁移 | `apps/api/prisma/migrations/20260928060000_tenant_integrity/migration.sql` |
-| 覆盖范围 | 16 张有跨表引用的 tenant-owned 表 |
+| 覆盖范围 | 17 张有跨表引用的 tenant-owned 表 |
+
+另有两类**规则所有权**约束同属本层（`20260928070000_tenant_integrity_fixes`）：
+
+- `RuleSet` 的 `ownerType / ownerKey / organizationId` 组合由 CHECK 约束强制自洽
+- `RuleVersion` 必须与所属 `RuleSet` 的租户归属一致（禁止全局版本指向租户规则集）
 
 规则：行的 `organizationId` 必须与被引用行的 `organizationId` 相同，否则抛 `check_violation`。
 

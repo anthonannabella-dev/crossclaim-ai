@@ -184,7 +184,14 @@ DRAFT → SUBMITTED → ACKNOWLEDGED →
 |---|---|
 | 校验函数 | `crossclaim_assert_tenant_integrity()` |
 | 迁移 | `20260928060000_tenant_integrity/migration.sql` |
-| 覆盖 | **16 张**有跨表引用的 tenant-owned 表 |
+| 覆盖 | **17 张**有跨表引用的 tenant-owned 表 |
+
+另外两类**规则所有权**约束（同属数据库级强制）：
+
+| 约束 | 内容 |
+|---|---|
+| `cc_ruleset_ownership_check` | `RuleSet`：`SYSTEM` ⇒ `organizationId IS NULL` 且 `ownerKey='GLOBAL'`；`TENANT` ⇒ `organizationId IS NOT NULL` 且 `ownerKey=organizationId` |
+| `cc_ruleversion_ownership` | `RuleVersion` 必须与所属 `RuleSet` 的租户归属一致；禁止全局 `RuleVersion` 指向租户 `RuleSet` |
 
 **新增 tenant 相关外键时**，必须同步在对应 trigger 的 `TG_ARGV` 补一对参数，
 否则该外键不受保护（架构契约测试会校验覆盖清单）。
@@ -272,7 +279,7 @@ BillingInvoice（CrossClaim 向客户开票）
 - 所有迁移**必须可重复执行**，破坏性 DDL 必须显式说明
 - 每次 schema 变更必须同步更新本文件
 - fresh clone 必须能跑通：`apps/api` → `npm ci` → `npx prisma migrate deploy`
-- **CI 会在全新 PostgreSQL 上真实执行迁移**，并校验 16 个租户触发器存在
+- **CI 会在全新 PostgreSQL 上真实执行迁移**，并校验 17 个租户触发器存在
 
 当前迁移：
 
@@ -280,3 +287,4 @@ BillingInvoice（CrossClaim 向客户开票）
 |---|---|
 | `20260928055802_init` | 26 个模型的结构 |
 | `20260928060000_tenant_integrity` | 租户完整性触发器（16 张表） |
+| `20260928070000_tenant_integrity_fixes` | BillingInvoice 租户触发器（+1 → 17）+ 规则所有权约束 |

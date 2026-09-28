@@ -7,12 +7,13 @@
  * 数据库级行为（跨租户失败等）见 tenant-isolation.test.ts。
  */
 
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const API_ROOT = join(__dirname, '..', '..');
 const SCHEMA_PATH = join(API_ROOT, 'prisma', 'schema.prisma');
+const MIGRATIONS_DIR = join(API_ROOT, 'prisma', 'migrations');
 const TRIGGER_MIGRATION = join(
   API_ROOT,
   'prisma',
@@ -20,6 +21,15 @@ const TRIGGER_MIGRATION = join(
   '20260928060000_tenant_integrity',
   'migration.sql',
 );
+
+/** 所有迁移 SQL 的拼接 —— 约束与触发器可能分布在多个迁移文件里 */
+const ALL_MIGRATIONS_SQL = readdirSync(MIGRATIONS_DIR, { withFileTypes: true })
+  .filter((entry) => entry.isDirectory())
+  .map((entry) => join(MIGRATIONS_DIR, entry.name, 'migration.sql'))
+  .filter((file) => existsSync(file))
+  .sort()
+  .map((file) => readFileSync(file, 'utf8'))
+  .join('\n');
 
 const schema = readFileSync(SCHEMA_PATH, 'utf8');
 
@@ -181,18 +191,43 @@ describe('租户完整性数据库约束（C-0002 CHANGE #3）', () => {
     'Settlement',
     'RecoveryLedgerEntry',
     'FeeCalculation',
+    // C-0002 第二次复审 CHANGE #13
+    'BillingInvoice',
   ];
 
   it.each(TRIGGERED)('%s 挂了租户校验触发器', (table) => {
-    expect(migration).toContain(`ON "${table}"`);
+    expect(ALL_MIGRATIONS_SQL).toContain(`ON "${table}"`);
   });
 
   it('触发器覆盖图、案件-证据、规则评估、费用计算这几条关键链路', () => {
-    expect(migration).toMatch(/'fromNodeId', 'RecoveryGraphNode'/);
-    expect(migration).toMatch(/'evidenceId', 'EvidenceArtifact'/);
-    expect(migration).toMatch(/'opportunityId', 'RecoveryOpportunity'/);
-    expect(migration).toMatch(/'settlementId', 'Settlement'/);
-    expect(migration).toMatch(/'billingInvoiceId', 'BillingInvoice'/);
+    expect(ALL_MIGRATIONS_SQL).toMatch(/'fromNodeId', 'RecoveryGraphNode'/);
+    expect(ALL_MIGRATIONS_SQL).toMatch(/'evidenceId', 'EvidenceArtifact'/);
+    expect(ALL_MIGRATIONS_SQL).toMatch(/'opportunityId', 'RecoveryOpportunity'/);
+    expect(ALL_MIGRATIONS_SQL).toMatch(/'settlementId', 'Settlement'/);
+    expect(ALL_MIGRATIONS_SQL).toMatch(/'billingInvoiceId', 'BillingInvoice'/);
+  });
+});
+
+// ============================================================
+// C-0002 第二次复审 CHANGE #13 / #14：两处数据库级漏洞的修复必须存在
+// ============================================================
+describe('租户完整性修复（C-0002 第二次复审 CHANGE #13 / #14）', () => {
+  it('CHANGE #13：BillingInvoice 挂上租户校验触发器（caseId → Case）', () => {
+    expect(ALL_MIGRATIONS_SQL).toMatch(/CREATE TRIGGER cc_tenant_BillingInvoice/);
+    expect(ALL_MIGRATIONS_SQL).toMatch(/ON "BillingInvoice"[\s\S]{0,200}'caseId', 'Case'/);
+  });
+
+  it('CHANGE #14：RuleSet 的所有权组合受数据库约束', () => {
+    expect(ALL_MIGRATIONS_SQL).toContain('cc_ruleset_ownership_check');
+    expect(ALL_MIGRATIONS_SQL).toMatch(/"ownerType" = 'SYSTEM'[\s\S]{0,140}"organizationId" IS NULL/);
+    expect(ALL_MIGRATIONS_SQL).toMatch(/"ownerType" = 'TENANT'[\s\S]{0,200}"organizationId"::text/);
+  });
+
+  it('CHANGE #14：RuleVersion 与所属 RuleSet 的租户归属必须一致', () => {
+    expect(ALL_MIGRATIONS_SQL).toContain('crossclaim_assert_ruleversion_ownership');
+    expect(ALL_MIGRATIONS_SQL).toMatch(
+      /CREATE TRIGGER cc_ruleversion_ownership[\s\S]{0,160}ON "RuleVersion"/,
+    );
   });
 });
 

@@ -231,6 +231,204 @@ describe('跨租户关系必须被数据库拒绝（C-0002 CHANGE #3）', () => 
 });
 
 // ============================================================
+describe('CHANGE #13：BillingInvoice 跨租户必须被数据库拒绝', () => {
+  it('跨租户 BillingInvoice → Case 建立失败', async () => {
+    const foreignCase = await makeCase(ORG_B, 'B-301');
+
+    await expect(
+      prisma.billingInvoice.create({
+        data: {
+          organizationId: ORG_A,
+          caseId: foreignCase.id,
+          invoiceNo: 'CC-XT-0001',
+          subtotal: 10,
+          taxAmount: 0,
+          total: 10,
+        },
+      }),
+    ).rejects.toThrow(/cross-tenant|check_violation|violates/i);
+  });
+
+  it('同租户 BillingInvoice → Case 正常建立（基线）', async () => {
+    const ownCase = await makeCase(ORG_A, 'A-301');
+
+    const invoice = await prisma.billingInvoice.create({
+      data: {
+        organizationId: ORG_A,
+        caseId: ownCase.id,
+        invoiceNo: 'CC-OK-0001',
+        subtotal: 10,
+        taxAmount: 0,
+        total: 10,
+      },
+    });
+
+    expect(invoice.id).toBeTruthy();
+  });
+});
+
+// ============================================================
+describe('CHANGE #14：规则所有权由数据库强制', () => {
+  const baseRuleSet = {
+    domain: 'LOGISTICS' as const,
+    channel: 'UPS' as const,
+    scope: 'FREIGHT_RATE' as const,
+  };
+
+  it('SYSTEM RuleSet 带 organizationId 必须失败', async () => {
+    await expect(
+      prisma.ruleSet.create({
+        data: {
+          ...baseRuleSet,
+          ownerType: 'SYSTEM',
+          ownerKey: 'GLOBAL',
+          organizationId: ORG_A,
+          name: '非法全局规则 A',
+        },
+      }),
+    ).rejects.toThrow(/cc_ruleset_ownership_check|check_violation|violates/i);
+  });
+
+  it('SYSTEM RuleSet 的 ownerKey 必须是 GLOBAL', async () => {
+    await expect(
+      prisma.ruleSet.create({
+        data: {
+          ...baseRuleSet,
+          ownerType: 'SYSTEM',
+          ownerKey: 'NOT_GLOBAL',
+          organizationId: null,
+          name: '非法全局规则 B',
+        },
+      }),
+    ).rejects.toThrow(/cc_ruleset_ownership_check|check_violation|violates/i);
+  });
+
+  it('TENANT RuleSet 缺 organizationId 必须失败', async () => {
+    await expect(
+      prisma.ruleSet.create({
+        data: {
+          ...baseRuleSet,
+          ownerType: 'TENANT',
+          ownerKey: ORG_A,
+          organizationId: null,
+          name: '非法租户规则 A',
+        },
+      }),
+    ).rejects.toThrow(/cc_ruleset_ownership_check|check_violation|violates/i);
+  });
+
+  it('TENANT RuleSet 的 ownerKey 必须等于 organizationId', async () => {
+    await expect(
+      prisma.ruleSet.create({
+        data: {
+          ...baseRuleSet,
+          ownerType: 'TENANT',
+          ownerKey: 'someone-else',
+          organizationId: ORG_A,
+          name: '非法租户规则 B',
+        },
+      }),
+    ).rejects.toThrow(/cc_ruleset_ownership_check|check_violation|violates/i);
+  });
+
+  it('全局 RuleVersion 不得引用租户 RuleSet', async () => {
+    const tenantSet = await prisma.ruleSet.create({
+      data: {
+        ...baseRuleSet,
+        ownerType: 'TENANT',
+        ownerKey: ORG_A,
+        organizationId: ORG_A,
+        name: '租户规则集 X',
+      },
+    });
+
+    await expect(
+      prisma.ruleVersion.create({
+        data: {
+          ruleSetId: tenantSet.id,
+          organizationId: null,
+          tier: 'DEFAULT',
+          source: '无主版本',
+          version: '2026.01',
+          effectiveFrom: new Date('2026-01-01'),
+          definition: { op: 'compare' },
+        },
+      }),
+    ).rejects.toThrow(/rule ownership|cross-tenant|check_violation|violates/i);
+  });
+
+  it('租户 RuleVersion 不得引用别租户 RuleSet', async () => {
+    const foreignSet = await prisma.ruleSet.create({
+      data: {
+        ...baseRuleSet,
+        ownerType: 'TENANT',
+        ownerKey: ORG_B,
+        organizationId: ORG_B,
+        name: 'B 租户规则集',
+      },
+    });
+
+    await expect(
+      prisma.ruleVersion.create({
+        data: {
+          ruleSetId: foreignSet.id,
+          organizationId: ORG_A,
+          tier: 'DEFAULT',
+          source: '串线版本',
+          version: '2026.02',
+          effectiveFrom: new Date('2026-01-01'),
+          definition: { op: 'compare' },
+        },
+      }),
+    ).rejects.toThrow(/rule ownership|cross-tenant|check_violation|violates/i);
+  });
+
+  it('租户 RuleEvaluation 可以引用 SYSTEM RuleVersion（必须通过）', async () => {
+    const globalSet = await prisma.ruleSet.create({
+      data: {
+        ...baseRuleSet,
+        ownerType: 'SYSTEM',
+        ownerKey: 'GLOBAL',
+        organizationId: null,
+        name: '官方 UPS Tariff',
+      },
+    });
+    const globalVersion = await prisma.ruleVersion.create({
+      data: {
+        ruleSetId: globalSet.id,
+        organizationId: null,
+        tier: 'CARRIER_TARIFF',
+        source: 'UPS Tariff 2026',
+        version: '2026.01',
+        effectiveFrom: new Date('2026-01-01'),
+        definition: { op: 'tariff' },
+      },
+    });
+    const opportunity = await prisma.recoveryOpportunity.create({
+      data: {
+        organizationId: ORG_A,
+        domain: 'LOGISTICS',
+        channel: 'UPS',
+        opportunityType: 'FUEL_SURCHARGE_MISBILL',
+        title: 'A 租户机会',
+      },
+    });
+
+    const evaluation = await prisma.ruleEvaluation.create({
+      data: {
+        organizationId: ORG_A,
+        ruleVersionId: globalVersion.id,
+        opportunityId: opportunity.id,
+        result: 'OPPORTUNITY',
+        computed: { diff: 1.5 },
+      },
+    });
+
+    expect(evaluation.id).toBeTruthy();
+  });
+});
+
+// ============================================================
 describe('原始交易幂等（C-0002 CHANGE #6）', () => {
   const dedupeKey = 'sha256:same-invoice-row';
 
