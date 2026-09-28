@@ -1,0 +1,22 @@
+# 依赖
+node_modules/
+.venv/
+__pycache__/
+
+# 构建产物
+dist/
+build/
+.next/
+out/
+
+# 环境与密钥（绝不入库）
+.env
+.env.*
+*.pem
+*.key
+
+# 系统与编辑器
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
