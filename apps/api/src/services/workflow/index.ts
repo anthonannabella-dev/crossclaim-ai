@@ -13,6 +13,7 @@ export {
 } from './permissions';
 export {
   REJECT_REASONS,
+  REVIEWABLE_STATUS,
   WorkflowError,
   reviewOpportunity,
   type RejectReason,
@@ -20,3 +21,7 @@ export {
   type ReviewOpportunityResult,
   type WorkflowErrorCode,
 } from './opportunity-review';
+export {
+  handleWorkflowRequest,
+  type WorkflowRouteDeps,
+} from './http-routes';

@@ -39,6 +39,7 @@ import {
   handleDataRequest,
   handleUploadRequest,
 } from './services/auth';
+import { handleWorkflowRequest } from './services/workflow';
 
 const VERSION = '0.1.0';
 
@@ -71,6 +72,9 @@ function asciiFilename(filename: string | undefined): string {
 }
 
 const RFC5987_EXTRA = /[!'()*]/g;
+
+/** C-0008-B1：机会人工复核端点的路径（qualify / reject），其余路径走默认 404。 */
+const WORKFLOW_REVIEW_PATH = /^\/opportunities\/[^/]+\/(qualify|reject)$/;
 
 /** CHANGE #20：Unicode 文件名走 RFC 5987 的 filename*=UTF-8''，同时给 ASCII 回退名 */
 export function buildContentDisposition(
@@ -172,6 +176,18 @@ export function createServer(deps: ServerDeps): http.Server {
         })
         .catch((err) =>
           send(500, { error: err instanceof Error ? err.message : 'data_error' }),
+        );
+      return;
+    }
+
+    // C-0008-B1 内部工作流端点：机会人工复核（qualify / reject）；会话与角色矩阵由服务层校验
+    if (auth && WORKFLOW_REVIEW_PATH.test(url.split('?')[0] ?? '')) {
+      handleWorkflowRequest(req, res, { prisma, session: auth.session })
+        .then((handled) => {
+          if (!handled) send(404, { error: 'not_found' });
+        })
+        .catch((err) =>
+          send(500, { error: err instanceof Error ? err.message : 'workflow_error' }),
         );
       return;
     }
