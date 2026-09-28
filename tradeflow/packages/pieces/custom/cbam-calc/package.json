@@ -1,0 +1,11 @@
+{
+  "name": "@tradeflow/piece-cbam-calc",
+  "version": "1.0.0",
+  "description": "EU CBAM carbon border tax calculator — estimate carbon costs for exports to EU",
+  "license": "MIT",
+  "main": "src/index.ts",
+  "dependencies": {
+    "@activepieces/pieces-framework": "latest",
+    "@activepieces/pieces-common": "latest"
+  }
+}

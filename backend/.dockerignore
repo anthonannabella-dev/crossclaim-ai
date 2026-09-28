@@ -1,0 +1,6 @@
+node_modules
+dist
+.git
+_pre_fix_backup_*
+*.log
+.env

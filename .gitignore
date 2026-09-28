@@ -1,0 +1,187 @@
+# ============================================================
+# CrossClaim AI · .gitignore 加固版 v2
+# 基于现有 ops/gitignore.hardened 扩展，新增阶段 0 清场的发现
+# ============================================================
+
+# ===== 密钥/环境变量 =====
+.env
+.env.*
+!.env.example
+backend/.env
+backend/.env.*
+frontend/.env
+frontend/.env.*
+hs-query-frontend/.env.local
+hs-query-frontend/.env*.local
+*.env
+
+# ===== v2 新增：之前漏掉的凭据类文件 =====
+.token_cache
+.test_token.txt
+*_token.txt
+.*_token.txt
+vultr_key.txt
+.vultr_pwd
+*.pem
+*.key
+!*.pub.key
+.ap_token
+
+# ===== 依赖 =====
+node_modules/
+**/node_modules/
+.pnp
+.pnp.js
+
+# ===== 构建产物 =====
+dist/
+build/
+backend/dist/
+frontend/dist/
+*.tsbuildinfo
+
+# ===== Prisma 本地产物 =====
+**/.prisma/
+*.db
+*.db-journal
+
+# ===== 日志 =====
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.pid
+
+# ===== 运行时/缓存 =====
+.cache/
+tmp/
+temp/
+coverage/
+__pycache__/
+*.pyc
+
+# ===== 上传/对象存储本地落盘 =====
+uploads/
+storage/
+
+# ===== 编辑器/系统 =====
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.swp
+
+# ============================================================
+# v2 新增：大体积快照 / 二进制 / 第三方树
+# ============================================================
+
+# ----- 阶段快照 tar 包（实测 16 个 / 5.63 GB）-----
+*.tar
+*.tar.gz
+*.tgz
+*.zip
+bidos*
+
+# ----- 可执行二进制 -----
+*.exe
+*.msi
+*.dll
+*.so
+*.dylib
+*.node
+
+# ----- 第三方应用与工具树（不得进入产品仓库）-----
+claudecodeui/
+activepieces-main/
+tradeflow/activepieces-main/
+!tradeflow/packages/pieces/custom/
+
+# ----- 生成的数据产物（可重新抓取，不入库）-----
+data_fetcher/output/
+
+# ----- 本仓库自身的配置备份 -----
+.gitignore.bak_*
+
+# ----- 代理 / VPS 运维工具链（与产品无关）-----
+hysteria*
+proxy_switch.ps1
+vultr_*
+start_hermes_gateway*
+start_hysteria*
+run_hysteria*
+run_ssh.bat
+run_paramiko.bat
+cloudcli.*
+
+# ----- 自动化网关与其历史备份 -----
+.hermes/
+.hermes_backup*/
+.hermes_backup_*
+
+# ============================================================
+# v2 新增：一次性调试 / 脚手架产物（根目录）
+# ============================================================
+
+# ----- 一次性临时文件 -----
+_tmp_*
+_tmp_bundle.js
+_ctn_bak_*.js
+*.bak
+*.bak2
+*.orig
+*.depbak
+*.hsbak
+*.volbak
+*2.prisma
+schema2.prisma
+
+# ----- 一次性调试 / 脚手架脚本 -----
+/check_*.js
+/check_*.cmd
+/diag_*.py
+/verify_*.js
+/verify_*.sh
+/fix_*.js
+/fix_*.py
+/fix_*.bat
+/fixed_*.js
+/gen_token*.js
+/trigger_*.js
+/reset*.js
+/archive_new*.js
+/test_*.js
+/test_*.py
+/test-*.png
+/deploy_*.py
+/deploy_*.bat
+/write_*.py
+/do_upload.js
+/rearchive.js
+/final_*.js
+/final_*.py
+/run_*.py
+/run_*.bat
+/dump_*.py
+/patch_*.py
+/ocr_main_fix.py
+/build_customs_codes.js
+/import_hs.*
+/apply_patch.sh
+/cleanup.sh
+
+# ----- 一次性补丁包 -----
+*.patch
+customs-*.zip
+frontend-timeline-link.zip
+
+# ----- 清理脚本产生的隔离区 -----
+.trash_*/
+
+# ============================================================
+# 注意
+# ============================================================
+# 1. zip / tar 打包【不读 .gitignore】。分发请用 `git archive`，
+#    或先跑 stage0-cleanup.ps1 再打包。
+# 2. 本文件顶部的 .env.example 用 ! 排除，务必保证它不含真实密钥。
+# 3. 每次新增依赖后，由 License Gate 复验许可证（见 licenses.allowlist.json）。

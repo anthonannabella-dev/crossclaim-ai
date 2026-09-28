@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 字段命名依据: 海关总署2018年第67号公告《进出口货物报关单申报电子报文格式》 -->
+<DecMessage>
+  <DecHead>
+    <SeqNo></SeqNo>
+    <PreEntryId></PreEntryId>
+    <EntryId></EntryId>
+    <IEFlag>E</IEFlag>
+    <CustomMaster>5300</CustomMaster>
+    <IEPort>美国洛杉矶</IEPort>
+    <ManualNo></ManualNo>
+    <ContrNo>PO-2024-0617</ContrNo>
+    <TradeName>深圳市某进出口贸易有限公司</TradeName>
+    <AgentName>某报关代理有限公司</AgentName>
+    <AgentCode>4403960123</AgentCode>
+    <TrafMode>2</TrafMode>
+    <TrafName>COSCO SHIPPING 0123E</TrafName>
+    <BillNo>COSCO5582147</BillNo>
+    <TradeMode>0110</TradeMode>
+    <CutMode></CutMode>
+    <LicenseNo></LicenseNo>
+    <TradeCountry>502</TradeCountry>
+    <DistinatePort>美国洛杉矶</DistinatePort>
+    <TransMode>3</TransMode>
+    <PackNo>200</PackNo>
+    <WrapType>22</WrapType>
+    <GrossWet>3200.50000</GrossWet>
+    <NetWt>2950.25000</NetWt>
+    <IEDate></IEDate>
+    <NoteS></NoteS>
+    <MarkNo></MarkNo>
+  </DecHead>
+  <DecLists>
+    <DecList>
+      <GNo>1</GNo>
+      <CodeTS>8517120000</CodeTS>
+      <GName>移动电话(智能手机)</GName>
+      <GModel></GModel>
+      <GQty>500.00000</GQty>
+      <GUnit>台</GUnit>
+      <DeclPrice>85.3000</DeclPrice>
+      <DeclTotal>42650.00</DeclTotal>
+      <TradeCurr>502</TradeCurr>
+      <OriginCountry>142</OriginCountry>
+      <DestinationCountry>502</DestinationCountry>
+      <DutyMode>1</DutyMode>
+    </DecList>
+    <DecList>
+      <GNo>2</GNo>
+      <CodeTS>8504401400</CodeTS>
+      <GName>手机充电器</GName>
+      <GModel></GModel>
+      <GQty>500.00000</GQty>
+      <GUnit>个</GUnit>
+      <DeclPrice>12.0000</DeclPrice>
+      <DeclTotal>6000.00</DeclTotal>
+      <TradeCurr>502</TradeCurr>
+      <OriginCountry>142</OriginCountry>
+      <DestinationCountry>502</DestinationCountry>
+      <DutyMode>1</DutyMode>
+    </DecList>
+  </DecLists>
+</DecMessage>

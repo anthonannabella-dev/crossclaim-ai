@@ -1,0 +1,468 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Tenant {
+  id                  String    @id @default(uuid())
+  companyName         String
+  contactName         String
+  contactPhone        String
+  contactEmail        String    @unique
+  passwordHash        String
+  emailVerified       Boolean   @default(false)
+  status              String    @default("TRIAL")
+  planTier            String    @default("ENTERPRISE")
+  paymentCycle        String    @default("ANNUAL")
+  trialStartAt        DateTime  @default(now())
+  trialEndAt          DateTime
+  subscribedAt        DateTime?
+  expiresAt           DateTime?
+  frozenAt            DateTime?
+  failedLoginAttempts Int       @default(0)
+  lockedUntil         DateTime?
+  wechatOpenId        String?
+  wechatUnionId       String?
+  wechatNickname      String?
+  wechatAvatar        String?
+  preferredPorts      String? // JSON: ["上海外高桥","宁波北仑","深圳盐田"] 客户常用口岸
+  hsCodeRanges        String? // JSON: ["72","84","85"] 客户主营HS章节
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  subAccounts          SubAccount[]
+  apiTokens            ApiToken[]
+  documents            Document[]
+  auditLogs            AuditLog[]
+  payments             Payment[]
+  timeGrants           TimeGrant[]
+  legalConsents        LegalConsent[]
+  cbamRecords          CBAMRecord[]
+  webhookSubscriptions WebhookSubscription[]
+  passwordResetTokens  PasswordResetToken[]
+  tenantUsages         TenantUsage[]
+  declarations         Declaration[]
+  batchGroups          BatchGroup[]
+}
+
+model SubAccount {
+  id           String        @id @default(uuid())
+  tenantId     String
+  tenant       Tenant        @relation(fields: [tenantId], references: [id])
+  username     String
+  passwordHash String
+  role         String        @default("operator")
+  isActive     Boolean       @default(true)
+  createdAt    DateTime      @default(now())
+  declarations Declaration[]
+}
+
+model ApiToken {
+  id           String    @id @default(uuid())
+  tenantId     String
+  tenant       Tenant    @relation(fields: [tenantId], references: [id])
+  appKey       String    @unique
+  tokenHash    String
+  name         String
+  rateLimit    Int       @default(100)
+  totalCalls   Int       @default(0)
+  monthlyCalls Int       @default(0)
+  lastUsedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  isActive     Boolean   @default(true)
+
+  callLogs ApiCallLog[]
+}
+
+model ApiCallLog {
+  id         String   @id @default(uuid())
+  tokenId    String
+  token      ApiToken @relation(fields: [tokenId], references: [id])
+  endpoint   String
+  method     String
+  statusCode Int
+  ip         String
+  durationMs Int
+  createdAt  DateTime @default(now())
+}
+
+model Payment {
+  id               String    @id @default(uuid())
+  tenantId         String
+  tenant           Tenant    @relation(fields: [tenantId], references: [id])
+  amount           Float
+  planTier         String
+  paymentCycle     String
+  paymentMethod    String
+  transactionId    String?
+  status           String    @default("pending")
+  invoiceRequested Boolean   @default(false)
+  paidAt           DateTime?
+  createdAt        DateTime  @default(now())
+
+  @@index([tenantId])
+  @@index([status])
+}
+
+model Document {
+  id           String  @id @default(uuid())
+  tenantId     String
+  tenant       Tenant  @relation(fields: [tenantId], references: [id])
+  fileName     String
+  fileType     String
+  fileSize     Int
+  minioPath    String
+  ocrResult    String?
+  category     String?
+  status       String  @default("success") // success | failed
+  errorMessage String?
+
+  // 项目归档字段
+  projectTag String? // 艺人/项目标签
+  contractNo String? // 合同号
+
+  // 校验结果（上传时自动校验，不再单独走AI审核Tab）
+  auditPassed  Boolean? // 校验是否通过
+  auditScore   Int? // 校验评分 0-100
+  auditSummary String? // 校验摘要
+
+  // 提运单归集
+  billOfLading String? // 提单号，用于按票归集单据
+
+  isEncrypted Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([tenantId])
+  @@index([category])
+  @@index([projectTag])
+  @@index([contractNo])
+  @@index([billOfLading])
+}
+
+model HSCode {
+  id          String   @id @default(uuid())
+  code        String   @unique
+  description String
+  unit        String?
+  tariffRate  Float?
+  exportRate  Float?
+  vatRate     Float?
+  exciseRate  Float?
+  supervision String?
+  category    String?
+  updatedAt   DateTime @updatedAt
+}
+
+model RCEPRule {
+  id              String    @id @default(uuid())
+  productCode     String
+  originCriteria  String
+  tariffReduction Float?
+  effectiveDate   DateTime?
+  source          String
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model FtaAgreement {
+  id              String       @id @default(uuid())
+  name            String
+  shortName       String       @unique
+  description     String?
+  memberCountries String
+  effectiveDate   DateTime
+  isActive        Boolean      @default(true)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  originRules     OriginRule[]
+}
+
+model OriginRule {
+  id              String       @id @default(uuid())
+  hsCode          String
+  ftaAgreementId  String
+  ftaAgreement    FtaAgreement @relation(fields: [ftaAgreementId], references: [id])
+  ruleType        String
+  ruleDetail      String?
+  rvcThreshold    Float?
+  tariffReduction Float?
+  source          String?
+  effectiveDate   DateTime?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  @@unique([ftaAgreementId, hsCode])
+}
+
+model CBAMRecord {
+  id                String   @id @default(uuid())
+  tenantId          String
+  tenant            Tenant   @relation(fields: [tenantId], references: [id])
+  hsCode            String
+  productDesc       String?
+  embeddedEmissions Float?
+  carbonPrice       Float?
+  estimatedCost     Float?
+  emissionFactor    Float?
+  carbonCost        Float?
+  riskLevel         String
+  calculatedAt      DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([hsCode])
+}
+
+model PolicyAlert {
+  id              String   @id @default(uuid())
+  title           String
+  content         String?
+  summary         String?
+  source          String
+  publishDate     DateTime
+  category        String
+  portCode        String? // 直属海关代码: "shanghai"|"ningbo"|"shenzhen"|null(全国性)
+  sourceType      String   @default("NATIONAL") // NATIONAL全国性 | LOCAL地方性
+  hsCode          String?
+  impactLevel     String?
+  affectedHsCodes String?
+  actionRequired  String?
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@index([portCode])
+  @@index([sourceType])
+  @@index([category])
+}
+
+model AuditLog {
+  id         String   @id @default(uuid())
+  tenantId   String?
+  tenant     Tenant?  @relation(fields: [tenantId], references: [id])
+  action     String
+  detail     String
+  ip         String?
+  operatorId String?
+  createdAt  DateTime @default(now())
+
+  @@index([tenantId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+model Admin {
+  id           String      @id @default(uuid())
+  username     String      @unique
+  passwordHash String
+  role         String      @default("admin")
+  createdAt    DateTime    @default(now())
+  timeGrants   TimeGrant[]
+}
+
+model TimeGrant {
+  id            String   @id @default(uuid())
+  tenantId      String
+  tenant        Tenant   @relation(fields: [tenantId], references: [id])
+  adminId       String
+  admin         Admin    @relation(fields: [adminId], references: [id])
+  daysGranted   Int
+  monthsGranted Int      @default(0)
+  reason        String?
+  effectiveAt   DateTime @default(now())
+  createdAt     DateTime @default(now())
+}
+
+model Announcement {
+  id        String   @id @default(uuid())
+  title     String
+  content   String
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model LegalConsent {
+  id            String   @id @default(uuid())
+  tenantId      String
+  tenant        Tenant   @relation(fields: [tenantId], references: [id])
+  agreementType String
+  version       String
+  consentedAt   DateTime @default(now())
+}
+
+model PasswordResetToken {
+  id        String    @id @default(uuid())
+  tenantId  String
+  tenant    Tenant    @relation(fields: [tenantId], references: [id])
+  token     String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([token])
+  @@index([tenantId])
+}
+
+model EmailVerificationToken {
+  id        String    @id @default(uuid())
+  email     String
+  token     String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([token])
+}
+
+model WebhookSubscription {
+  id        String   @id @default(uuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  name      String
+  url       String
+  secret    String
+  events    String // JSON array: ["declaration.build","cbam.high_risk"]
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  deliveries WebhookDelivery[]
+
+  @@index([tenantId])
+}
+
+model WebhookDelivery {
+  id             String              @id @default(uuid())
+  subscriptionId String
+  subscription   WebhookSubscription @relation(fields: [subscriptionId], references: [id])
+  eventType      String
+  payload        String
+  statusCode     Int?
+  responseBody   String?
+  durationMs     Int
+  success        Boolean
+  error          String?
+  attempt        Int                 @default(1)
+  createdAt      DateTime            @default(now())
+
+  @@index([subscriptionId])
+  @@index([success])
+  @@index([createdAt])
+}
+
+model TenantUsage {
+  id        String   @id @default(uuid())
+  tenantId  String
+  tenant    Tenant   @relation(fields: [tenantId], references: [id])
+  resource  String // "ai_classify" | "document_upload" | "declaration_build" | "ocr" | "cbam" | "rcep" | "api_call"
+  period    String // "daily" | "monthly"
+  periodKey String // "2026-06-03" | "2026-06"
+  count     Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@unique([tenantId, resource, period, periodKey])
+  @@index([tenantId])
+  @@index([periodKey])
+}
+
+// ---- 报关单（草稿箱 + 历史 + 退单重报） ----
+model Declaration {
+  id            String  @id @default(uuid())
+  tenantId      String
+  declarationNo String? // 可选的报关单号
+  status        String  @default("draft") // draft | submitted | rejected | resubmitted | completed
+
+  // 申报模式相关
+  customsMode     String  @default("normal") // normal | 9610 | 9710 | 9810 | 1210 | 1239
+  supervisionCode String?
+  taxMethod       String?
+
+  // 基本字段（JSON 存储完整 declarationData + items）
+  declarationJson String // JSON 序列化的 DeclarationData
+  itemsJson       String // JSON 序列化的 DeclarationItem[]
+  totalValue      Float    @default(0)
+  currency        String?  @default("USD")
+  score           Int? // 合规评分
+  preCheckPassed  Boolean? // 合规是否通过
+
+  // 退单相关
+  rejectionCode   String? // 退单代码
+  rejectionReason String? // 退单原因
+  rejectedAt      DateTime?
+  resubmittedAt   DateTime?
+
+  // 时间
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // 关联
+  tenant       Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  subAccount   SubAccount? @relation(fields: [subAccountId], references: [id])
+  subAccountId String?
+
+  @@index([tenantId, status])
+  @@index([tenantId, customsMode])
+  @@index([tenantId, createdAt])
+}
+
+
+// 批量识别自动归档 — 提运单归集组
+model BatchGroup {
+  id           String   @id @default(uuid())
+  tenantId     String
+  billOfLading String   // 提运单号
+  projectTag   String?  // 项目标签
+  status       String   @default("pending") // pending | ocr_running | ocr_done | ai_checking | ai_done | archived | auto_filling | auto_filled | pre_checking | checked | declaring | declared | tax_rebating | rebate_done | error
+  docCount     Int      @default(0)
+  ocrCount     Int      @default(0)
+  ocrSuccess   Int      @default(0)
+  aiSummary    String?  // JSON: { classify, tariff, diagnose } 各状态
+  archivedAt   DateTime?
+  xmlPath      String?  // 导出 XML 路径
+  errorMsg     String?
+  
+  // 自动流水线扩展字段
+  declarationId     String?    // 关联的申报单ID
+  preCheckResult    String?    // JSON: 合规预检结果详情
+  preCheckPassed    Boolean?   // 合规预检是否通过
+  declaredAt        DateTime?  // 申报时间
+  taxRebateValue    Float?     // 预估退税金额
+  taxRebateStatus   String?    // pending | processing | completed | failed
+  taxRebateEstimatedAt DateTime? // 预计退税到账时间
+  
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  // 关联 Tenants
+  tenant Tenant @relation(fields: [tenantId], references: [id])
+  declaration Declaration? @relation(fields: [declarationId], references: [id])
+
+  @@index([tenantId, status])
+  @@index([tenantId, billOfLading])
+  @@index([tenantId, projectTag])
+  @@index([tenantId, declarationId])
+}
+
+// 组内 AI 校验结果
+model GroupValidation {
+  id          String   @id @default(uuid())
+  groupId     String
+  docId       String?
+  checkType   String   // classify | tariff | diagnose
+  status      String   @default("pending") // pending | running | passed | warning | error
+  resultJson  String?  // AI 返回的详细结果
+  summary     String?  // 摘要
+  score       Int?
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime @default(now())
+
+  @@index([groupId])
+  @@index([groupId, checkType])
+}

@@ -1,0 +1,14 @@
+{
+  "name": "tradeflow-pieces",
+  "version": "1.0.0",
+  "private": true,
+  "description": "TradeFlow Custom Pieces — HS Classify, Batch Process, Tariff Rate, CBAM Calculator",
+  "license": "MIT",
+  "scripts": {
+    "build": "tsc -b",
+    "dev": "tsc -b -w"
+  },
+  "workspaces": [
+    "packages/pieces/custom/*"
+  ]
+}

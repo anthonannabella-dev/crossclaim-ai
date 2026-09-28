@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>报关引导助手</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+    background: #fff; color: #1F2937; padding: 18px;
+  }
+  .container { max-width: 760px; margin: 0 auto; }
+  .header {
+    background: linear-gradient(135deg, #4F46E5 0%, #7C3AED 100%);
+    padding: 22px 26px; color: white; border-radius: 14px; margin-bottom: 16px;
+  }
+  .header h1 { font-size: 18px; margin-bottom: 6px; }
+  .header p { font-size: 12.5px; opacity: 0.9; line-height: 1.6; }
+  .flow { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; font-size: 11px; }
+  .flow span { background: rgba(255,255,255,0.18); padding: 4px 9px; border-radius: 20px; white-space: nowrap; }
+  .section-title { font-size: 13px; font-weight: 600; color: #6B7280; margin: 18px 4px 10px; letter-spacing: 1px; }
+  .step { margin-bottom: 10px; padding: 14px 16px; border-radius: 12px; cursor: pointer; border: 1.5px solid #E5E7EB; transition: all 0.2s; background: #fff; }
+  .step:hover { border-color: #C7D2FE; background: #FaFaFF; }
+  .step.active { border-color: #6366F1; background: #EEF2FF; }
+  .step-head { display: flex; align-items: center; }
+  .step-number { width: 30px; height: 30px; border-radius: 50%; background: #6366F1; color: white; flex-shrink: 0; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; margin-right: 14px; }
+  .step-title { font-size: 14.5px; font-weight: 600; color: #1F2937; flex: 1; }
+  .step-tag { font-size: 10.5px; color: #6366F1; background: #E0E7FF; padding: 2px 8px; border-radius: 6px; margin-left: 8px; white-space: nowrap; }
+  .step-detail { display: none; margin-top: 12px; padding-left: 44px; font-size: 12.5px; line-height: 1.85; color: #374151; }
+  .step.active .step-detail { display: block; }
+  .step-detail strong { color: #4F46E5; }
+  .step-detail .where { display: inline-block; background: #F3F4F6; color: #4B5563; padding: 1px 7px; border-radius: 5px; font-size: 11.5px; margin: 0 2px; }
+  .step-detail .tip { background: #FEF3C7; border: 1px solid #FDE68A; border-radius: 8px; padding: 8px 12px; margin-top: 8px; font-size: 12px; color: #92400E; }
+  .step-detail .ecom { background: #ECFDF5; border: 1px solid #A7F3D0; border-radius: 8px; padding: 8px 12px; margin-top: 8px; font-size: 12px; color: #065F46; }
+  .step-detail ul { margin: 6px 0 0 18px; }
+  .step-detail li { margin-bottom: 3px; }
+  .footer { margin-top: 18px; padding: 14px 16px; background: #F9FAFB; border-radius: 12px; font-size: 12px; color: #6B7280; line-height: 1.7; }
+  .footer strong { color: #4F46E5; }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <div class="header">
+    <h1>📋 报关引导助手</h1>
+    <p>本系统帮你把报关单从「手工录入」变成「上传单证 → 自动出单」。下面是完整流程，点击每一步查看详细操作。</p>
+    <div class="flow">
+      <span>① 上传单证</span><span>② OCR识别</span><span>③ AI校验</span><span>④ 自动填制</span><span>⑤ 人工复核</span><span>⑥ 合规预检</span><span>⑦ 导出XML申报</span><span>⑧ 回执回填</span>
+    </div>
+  </div>
+
+  <div class="section-title">核心流程 · 一票货怎么走完</div>
+
+  <div class="step active" onclick="toggle(this)">
+    <div class="step-head"><div class="step-number">1</div><div class="step-title">上传单证，启动自动化流水线</div><div class="step-tag">自动化报关</div></div>
+    <div class="step-detail">
+      进入 <span class="where">报关作业 → 自动化报关</span>，点「上传单证」，把同一票货的 <strong>发票、装箱单、提单</strong> 一起上传，并填写<strong>提单号</strong>（同一提单号的单证会自动归为一票）。
+      <ul><li>支持图片（JPG/PNG）和 PDF</li><li>填了提单号，系统就知道这几份单证属于同一票货</li></ul>
+      <div class="tip">💡 提单号是把多份单证「归集成一票」的钥匙，建议每次都填。</div>
+    </div>
+  </div>
+
+  <div class="step" onclick="toggle(this)">
+    <div class="step-head"><div class="step-number">2</div><div class="step-title">OCR 自动识别单证内容</div><div class="step-tag">阿里云 OCR</div></div>
+    <div class="step-detail">
+      上传后，系统自动用 <strong>OCR</strong> 识别每份单证的文字——发票上的商品、数量、金额、原产国，提单上的船名航次等，<strong>无需手工录入</strong>。
+      <ul><li>识别结果可在 <span class="where">单证管理</span> 里查看</li><li>单证越清晰，识别越准（建议扫描件/清晰照片）</li></ul>
+    </div>
+  </div>
+
+  <div class="step" onclick="toggle(this)">
+    <div class="step-head"><div class="step-number">3</div><div class="step-title">AI 智能校验：归类 · 税率 · 风险</div><div class="step-tag">AI 助手</div></div>
+    <div class="step-detail">
+      系统调用 <strong>AI</strong> 对识别出的商品做：
+      <ul><li><strong>HS 编码归类</strong>——自动推荐商品编码（带置信度）</li><li><strong>申报要素提示</strong>——这个编码该填哪些要素</li><li><strong>退单风险诊断</strong>——提前发现可能被退单的问题</li></ul>
+      想单独查编码时，可去 <span class="where">关务工具箱</span> 按品名/编码搜索（内置完整 HS 编码库 + 申报要素）。
+    </div>
+  </div>
+
+  <div class="step" onclick="toggle(this)">
+    <div class="step-head"><div class="step-number">4</div><div class="step-title">自动填制报关单草稿</div><div class="step-tag">自动制单</div></div>
+    <div class="step-detail">
+      系统把 OCR + AI 的结果，<strong>自动填进报关单</strong>——商品名称、数量、单价、总价、原产国、HS编码全部带出，生成草稿，<strong>不用一个字段一个字段手敲</strong>。
+      <div class="ecom">🛒 跨境电商：若上传的是订单、支付单、物流单「三单」，系统会自动识别为跨境电商，判定监管方式（如 <strong>9610</strong>），并把三单号带入报关单，供海关三单对碰。</div>
+    </div>
+  </div>
+
+  <div class="step" onclick="toggle(this)">
+    <div class="step-head"><div class="step-number">5</div><div class="step-title">人工复核，确认无误</div><div class="step-tag">复核</div></div>
+    <div class="step-detail">
+      自动填好的草稿会停在 <strong>「待复核」</strong> 状态，等你确认。报关员在复核界面核对各字段——<strong>系统出骨架，你把关</strong>。
+      <ul><li>需要改的字段直接改，需要补的要素补上</li><li>确认无误后点「复核通过」</li></ul>
+      <div class="tip">💡 工作台「我的待办 → 待复核」会显示有几票在等你确认，点击直达。</div>
+    </div>
+  </div>
+
+  <div class="step" onclick="toggle(this)">
+    <div class="step-head"><div class="step-number">6</div><div class="step-title">合规预检，提前查错</div><div class="step-tag">预检</div></div>
+    <div class="step-detail">
+      复核通过后，系统做 <strong>合规预检</strong>——按报关规则检查必填项、字段格式、逻辑一致性，<strong>把错误挡在申报之前</strong>，减少退单、改单。
+      <ul><li>预检发现待补全要素，会提示你回去修正</li><li>也可在 <span class="where">报关核对 / 单证核对</span> 做多份单证的一致性比对</li></ul>
+    </div>
+  </div>
+
+  <div class="step" onclick="toggle(this)">
+    <div class="step-head"><div class="step-number">7</div><div class="step-title">导出报关单 XML，申报</div><div class="step-tag">导出申报</div></div>
+    <div class="step-detail">
+      预检通过后，点「导出报关单 XML」，生成<strong>符合海关标准格式</strong>的报文，由你<strong>导入贵司对接海关的客户端（单一窗口等）完成申报</strong>。
+      <ul><li>系统生成的是标准报文，申报由你用本企业资质完成</li><li>也可导出 PDF 留档</li></ul>
+      <div class="tip">💡 首次使用，建议先拿一票测试，确认 XML 能被你的客户端正常导入。</div>
+    </div>
+  </div>
+
+  <div class="step" onclick="toggle(this)">
+    <div class="step-head"><div class="step-number">8</div><div class="step-title">回执回填，全程留痕</div><div class="step-tag">归档</div></div>
+    <div class="step-detail">
+      拿到海关回执后，在系统内回填<strong>接单/放行/退单</strong>状态，整票货的处理过程<strong>全程留痕、可追溯</strong>。
+      <ul><li>办结的票可在 <span class="where">归档调档</span> 检索、调取历史单证</li><li>所有操作在 <span class="where">操作日志</span> 留痕</li></ul>
+    </div>
+  </div>
+
+  <div class="section-title">辅助功能 · 随手用得上</div>
+
+  <div class="step" onclick="toggle(this)">
+    <div class="step-head"><div class="step-number">+</div><div class="step-title">手动制单 / 关务工具箱 / 统计报表</div><div class="step-tag">常用</div></div>
+    <div class="step-detail">
+      <ul>
+        <li><strong>手动制单</strong>：没有单证、或想手工建单时，直接填字段生成报关单 + XML</li>
+        <li><strong>关务工具箱</strong>：按品名/编码查 HS 编码、申报要素、税率测算</li>
+        <li><strong>统计报表</strong>：单证量、申报量、AI调用等经营数据一览</li>
+        <li><strong>风控看板</strong>：风险预警一览，随时盯</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="footer">
+    <strong>一句话总结：</strong>上传单证 → 系统自动识别、归类、填制 → 你复核把关 → 导出合规 XML 申报 → 回填回执归档。
+    <br>核心价值是把报关员从「手工录入」中解放出来，<strong>系统出骨架，你专注审核与决策</strong>。
+  </div>
+
+</div>
+<script>
+  function toggle(el) {
+    var active = el.classList.contains('active');
+    document.querySelectorAll('.step').forEach(function(s){ s.classList.remove('active'); });
+    if (!active) el.classList.add('active');
+  }
+</script>
+</body>
+</html>

@@ -1,0 +1,158 @@
+import React, { useState } from 'react';
+import { Outlet, useNavigate, useLocation } from 'react-router-dom';
+import { Layout, Menu, Button, Grid, theme, Modal } from 'antd';
+import {
+  DashboardOutlined, SearchOutlined, RobotOutlined,
+  InboxOutlined, SafetyCertificateOutlined,
+  DollarOutlined, SettingOutlined, LogoutOutlined, QuestionCircleOutlined, CheckCircleOutlined,
+  TeamOutlined, KeyOutlined, SoundOutlined, FilePdfOutlined, ApiOutlined, BarChartOutlined,
+  MenuFoldOutlined, MenuUnfoldOutlined, CompassOutlined, ThunderboltOutlined, FolderOpenOutlined, SwapOutlined, SafetyOutlined } from '@ant-design/icons';
+import TrialBanner from '../components/TrialBanner';
+
+const { Header, Sider, Content } = Layout;
+const { useBreakpoint } = Grid;
+
+// 菜单按「报关作业的真实流水线」组织,而非功能堆叠。
+// 团队现在以「自动化报关」为唯一主入口:上传单证后系统自动跑完
+// OCR → AI校验 → 自动填制 → 人工复核 → 合规预检 → 电子申报 → 海关审核 → 放行结关,
+// 制单/模板/批量/对比等手工工具已并入自动化报关内部,左侧不再单列「报关工作台」。
+// 「风控看板」单独提到一级,确保风险控制随时一眼可见。
+const menuItems = [
+{ key: 'home', icon: <DashboardOutlined />, label: '工作台' },
+{ key: 'risk-dashboard', icon: <SafetyCertificateOutlined />, label: '风控看板' },
+{
+type: 'group' as const, label: '报关作业',
+children: [
+{ key: 'batch-archive', icon: <ThunderboltOutlined />, label: '自动化报关' },
+{ key: 'bill-of-lading', icon: <InboxOutlined />, label: '提单管理' },
+{ key: 'bl-check', icon: <CheckCircleOutlined />, label: '单证核对' },
+{ key: 'declaration-compare', icon: <SwapOutlined />, label: '申报核对' },
+],
+},
+{
+type: 'group' as const, label: '归档与工具',
+children: [
+{ key: 'archive-search', icon: <FolderOpenOutlined />, label: '归档调档' },
+{ key: 'tariff-workbench', icon: <SearchOutlined />, label: '关务工具箱' },
+{ key: 'supplier-invoice', icon: <FilePdfOutlined />, label: '供应商发票' },
+],
+},
+{
+type: 'group' as const, label: '监控与报表',
+children: [
+{ key: 'reports', icon: <BarChartOutlined />, label: '统计报表' },
+{ key: 'audit-logs', icon: <SafetyOutlined />, label: '操作日志' },
+],
+},
+{
+type: 'group' as const, label: '合规与退税',
+children: [
+{ key: 'tax-rebate-manage', icon: <DollarOutlined />, label: '退税管理' },
+{ key: 'policy', icon: <SoundOutlined />, label: '法规变化' },
+{ key: 'license-ledger', icon: <SafetyCertificateOutlined />, label: '证件台账' },
+{ key: 'ai', icon: <RobotOutlined />, label: 'AI助手' },
+],
+},
+{
+type: 'group' as const, label: '系统管理',
+children: [
+{ key: 'api-keys', icon: <KeyOutlined />, label: 'API密钥' },
+{ key: 'webhooks', icon: <ApiOutlined />, label: 'Webhook集成' },
+{ key: 'usage', icon: <BarChartOutlined />, label: '用量统计' },
+{ key: 'sub-accounts', icon: <TeamOutlined />, label: '子账号' },
+{ key: 'payments', icon: <DollarOutlined />, label: '账单与支付' },
+{ key: 'settings', icon: <SettingOutlined />, label: '设置' },
+{ key: 'help', icon: <QuestionCircleOutlined />, label: '帮助中心' },
+],
+},
+];
+
+export default function DashboardLayout() {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const currentPath = location.pathname.split('/').pop() || '';
+  const selectedKey = location.pathname === '/dashboard' ? 'home' : currentPath;
+  const { token } = theme.useToken();
+  const screens = useBreakpoint();
+  const [collapsed, setCollapsed] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(false);
+  const isMobile = !screens.lg;
+
+  const handleMenuClick = ({ key }: { key: string }) => {
+    navigate(key === 'home' ? '/dashboard' : '/dashboard/' + key);
+    if (isMobile) setCollapsed(true);
+  };
+
+  const handleLogout = () => {
+    localStorage.removeItem('token');
+    navigate('/login');
+  };
+
+  return (
+    <React.Fragment>
+      <Layout style={{ minHeight: '100vh' }}>
+        <Sider
+          breakpoint="lg"
+          collapsible
+          collapsedWidth={0}
+          trigger={null}
+          collapsed={collapsed}
+          onCollapse={setCollapsed}
+        >
+          <div style={{ color: token.colorWhite, textAlign: 'center', padding: 16, fontWeight: 'bold' }}>
+            报关合规SaaS
+          </div>
+          <Menu theme="dark" mode="inline" selectedKeys={[selectedKey]} items={menuItems} onClick={handleMenuClick} />
+        </Sider>
+        <Layout>
+          <Header style={{
+            background: token.colorBgContainer,
+            padding: isMobile ? '0 12px' : '0 24px',
+            display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8,
+          }}>
+            {isMobile && (
+              <Button type="text" icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+                onClick={() => setCollapsed(!collapsed)} />
+            )}
+            {isMobile && <span style={{ fontWeight: 600, fontSize: 15 }}>报关合规SaaS</span>}
+            <div style={{ display: 'flex', gap: 8, marginLeft: 'auto' }}>
+              <Button icon={<CompassOutlined />} onClick={() => setGuideOpen(true)}>
+                {!isMobile && '报关引导'}
+              </Button>
+              <Button icon={<LogoutOutlined />} onClick={handleLogout}>
+                {!isMobile && '退出'}
+              </Button>
+            </div>
+          </Header>
+          <Content style={{ margin: isMobile ? 8 : 16 }}>
+            <TrialBanner />
+            <div style={{
+              padding: isMobile ? 12 : 24,
+              background: token.colorBgContainer,
+              minHeight: 360,
+              borderRadius: token.borderRadiusLG,
+            }}>
+              <Outlet />
+            </div>
+          </Content>
+        </Layout>
+      </Layout>
+      <Modal
+        title={<span><CompassOutlined /> 报关引导助手</span>}
+        open={guideOpen}
+        onCancel={() => setGuideOpen(false)}
+        footer={null}
+        width={760}
+        style={{ top: 40 }}
+        bodyStyle={{ padding: 0 }}
+        destroyOnClose
+      >
+        <iframe
+          src="/onboarding-guide.html"
+          style={{ width: '100%', height: '80vh', border: 'none', borderRadius: 8 }}
+          title="报关引导助手"
+        />
+      </Modal>
+    </React.Fragment>
+  );
+}

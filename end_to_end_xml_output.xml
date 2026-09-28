@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 字段命名依据: 海关总署2018年第67号公告《进出口货物报关单申报电子报文格式》 -->
+<DecMessage>
+ <DecHead>
+<SeqNo></SeqNo>
+<PreEntryId></PreEntryId>
+<EntryId></EntryId>
+<IEFlag>E</IEFlag>
+<CustomMaster></CustomMaster>
+<IEPort>上海外高桥</IEPort>
+<ContrNo>CUSAutoTest</ContrNo>
+<TradeName>测试进出口有限公司</TradeName>
+<AgentName>测试进出口有限公司</AgentName>
+<AgentCode></AgentCode>
+<TrafMode>2</TrafMode>
+<TrafName>TEST/2401</TrafName>
+<BillNo>BL20260615001</BillNo>
+<TradeMode>0110</TradeMode>
+<TradeCountry>116</TradeCountry>
+<DistinatePort>东京</DistinatePort>
+<TransMode>1</TransMode>
+<PackNo></PackNo>
+<WrapType>22</WrapType>
+<GrossWet>0.00000</GrossWet>
+<NetWt>0.00000</NetWt>
+<IEDate></IEDate>
+</DecHead>
+<DecLists>
+ <DecList>
+<GNo>1</GNo>
+<CodeTS>847141</CodeTS>
+<GName>自动数据处理设备</GName>
+<GModel></GModel>
+<GQty>10.00000</GQty>
+<GUnit>018</GUnit>
+<DeclPrice>500.0000</DeclPrice>
+<DeclTotal>5000.00</DeclTotal>
+<TradeCurr>502</TradeCurr>
+<OriginCountry>142</OriginCountry>
+<DestinationCountry>116</DestinationCountry>
+<DutyMode>1</DutyMode>
+</DecList>
+</DecLists>
+</DecMessage>

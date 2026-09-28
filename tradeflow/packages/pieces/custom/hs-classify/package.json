@@ -1,0 +1,14 @@
+{
+  "name": "@tradeflow/piece-hs-classify",
+  "version": "1.0.0",
+  "description": "AI-powered HS code classification piece for Activepieces",
+  "license": "MIT",
+  "main": "src/index.ts",
+  "dependencies": {
+    "@activepieces/pieces-framework": "latest",
+    "@activepieces/pieces-common": "latest"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0"
+  }
+}

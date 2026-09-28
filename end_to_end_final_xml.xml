@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- 字段命名依据: 海关总署2018年第67号公告《进出口货物报关单申报电子报文格式》 -->
+<DecMessage>
+ <DecHead>
+<SeqNo></SeqNo>
+<PreEntryId></PreEntryId>
+<EntryId></EntryId>
+<IEFlag>E</IEFlag>
+<CustomMaster></CustomMaster>
+<IEPort>深圳盐田</IEPort>
+<ContrNo>CUSTestOCR001</ContrNo>
+<TradeName>深圳测试贸易有限公司</TradeName>
+<AgentName>深圳测试贸易有限公司</AgentName>
+<AgentCode></AgentCode>
+<TrafMode>2</TrafMode>
+<TrafName>COSCO 0123E</TrafName>
+<BillNo>COSCO5582147</BillNo>
+<TradeMode>0110</TradeMode>
+<TradeCountry>502</TradeCountry>
+<DistinatePort>Los Angeles</DistinatePort>
+<TransMode>3</TransMode>
+<PackNo></PackNo>
+<WrapType>22</WrapType>
+<GrossWet>0.00000</GrossWet>
+<NetWt>0.00000</NetWt>
+<IEDate></IEDate>
+</DecHead>
+<DecLists>
+ <DecList>
+<GNo>1</GNo>
+<CodeTS>851712</CodeTS>
+<GName>智能手机Smartphone</GName>
+<GModel></GModel>
+<GQty>500.00000</GQty>
+<GUnit>018</GUnit>
+<DeclPrice>85.0000</DeclPrice>
+<DeclTotal>42500.00</DeclTotal>
+<TradeCurr>502</TradeCurr>
+<OriginCountry>142</OriginCountry>
+<DestinationCountry>502</DestinationCountry>
+<DutyMode>1</DutyMode>
+</DecList>
+</DecLists>
+</DecMessage>
