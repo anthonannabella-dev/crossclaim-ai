@@ -79,7 +79,10 @@ async function seedRules(): Promise<void> {
     const created = await prisma.ruleSet.create({
       data: {
         ownerType: set.ownerType,
-        ownerKey: set.ownerKey,
+        // 既有数据库约束 cc_ruleset_ownership_check：
+        //   SYSTEM ⇒ organizationId IS NULL 且 ownerKey = 'GLOBAL'
+        //   TENANT ⇒ organizationId IS NOT NULL 且 ownerKey = organizationId
+        ownerKey: set.ownerType === 'TENANT' ? ORG : 'GLOBAL',
         organizationId: set.ownerType === 'TENANT' ? ORG : null,
         domain: 'LOGISTICS',
         channel: 'OTHER',
