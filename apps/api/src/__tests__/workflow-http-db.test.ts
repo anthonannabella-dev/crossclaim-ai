@@ -190,6 +190,13 @@ describe('C-0008-B1 — 机会复核端点（真实 HTTP + PostgreSQL）', () =>
       expect(invalid.status).toBe(400);
       expect(((await invalid.json()) as { error: string }).error).toBe('INVALID_REASON');
 
+      const malformed = await fetch(`${base}/opportunities/${opportunity.id}/reject`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', cookie },
+        body: '{"reason":',
+      });
+      expect(malformed.status).toBe(400);
+
       const rejected = await fetch(`${base}/opportunities/${opportunity.id}/reject`, {
         method: 'POST',
         headers: { 'content-type': 'application/json', cookie },
@@ -300,6 +307,27 @@ describe('C-0008-B1 — 机会复核端点（真实 HTTP + PostgreSQL）', () =>
       });
       expect(withSecret.status).toBe(400);
       expect(((await withSecret.json()) as { error: string }).error).toBe('SECRET_NOT_ACCEPTED');
+
+      const malformed = await fetch(`${base}/connections`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', cookie: adminCookie },
+        body: 'not-json',
+      });
+      expect(malformed.status).toBe(400);
+      expect(((await malformed.json()) as { error: string }).error).toBe('INVALID_BODY');
+
+      const badChannel = await fetch(`${base}/connections`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', cookie: adminCookie },
+        body: JSON.stringify({
+          label: '错误渠道',
+          kind: 'FILE_UPLOAD',
+          domain: 'LOGISTICS',
+          channel: 'NOT_A_CHANNEL',
+        }),
+      });
+      expect(badChannel.status).toBe(400);
+      expect(((await badChannel.json()) as { error: string }).error).toBe('INVALID_INPUT');
 
       const badStatus = await fetch(`${base}/connections/${connection.id}/status`, {
         method: 'POST',
