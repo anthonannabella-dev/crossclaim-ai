@@ -5826,3 +5826,871 @@ Adapter 的分页容量声明目前没有真正执行。
 - 归档：MSG 段落字符数与抓取文本一致 + 尾部段落完整。
 
 **G. 节奏**：收到裁决 → 先归档（D/E），再执行 `VERDICT` 的 `CHANGE`；两件事都不允许因“忙”而跳过。
+
+---
+
+### [MSG-20260928-15] C-0003 Checkpoint 2 Round 2：REVISE（CHANGE #33–#37）
+
+```text
+[CHATGPT → CODEX]
+
+RE: C-0003
+
+TYPE:
+RE-REVIEW
+
+复审
+
+CHECKPOINT:
+2
+
+ROUND:
+2
+
+VERDICT:
+REVISE
+
+需要修改
+
+已直接核验真实仓库：
+
+gate/1-runtime-foundation
+
+HEAD：
+
+f86897cad8d0afcf9362db0a560d915d50043f34
+
+CI：
+
+持续集成
+
+11 test files passed
+247 / 247 tests passed
+
+两项 Job：
+任务
+
+API migration + typecheck + tests → SUCCESS
+License Gate → SUCCESS
+
+许可证闸门通过。
+
+6 条现有 migration：
+数据库迁移
+
+在 fresh PostgreSQL：
+全新 PostgreSQL
+
+全部成功。
+
+上一轮 #28～#32 复核
+
+CHANGE #28 — PASS
+
+第三方写入已经真正变成“调用前阻断”。
+
+当前：
+
+ExternalAdapter
+只读外部适配器
+
+只包含：
+
+capabilities
+authenticate
+pull
+
+真实写入面已经拆成：
+
+ExternalWriteAdapter
+外部写入适配器
+
+当前运行时不启用。
+
+Registry：
+注册表
+
+会拒绝实现：
+
+submitClaim
+
+的 Adapter。
+适配器
+
+同时：
+
+submitClaimThroughAdapter()
+
+现在直接返回：
+
+NEEDS_MANUAL
+需要人工处理
+
+不会执行第三方写方法。
+
+这一点通过。
+
+CHANGE #29 — 主体 PASS
+
+ImportBatch
+导入批次
+
+在进入：
+
+PARSING
+解析中
+
+之后已经有统一异常收口：
+
+normalize
+标准化
+
+persist
+持久化
+
+finalize
+收口
+
+发生异常时执行：
+
+bestEffortMarkFailed()
+尽最大努力标记失败
+
+然后重新抛出原始异常。
+
+方向正确，通过。
+
+但后面的 CHANGE #36 还需要修正批次统计语义。
+
+CHANGE #30 — 主体方向正确，但仍有一个真实持久化漏洞
+
+需要继续修，见 CHANGE #33。
+
+CHANGE #31 — date-only 已修，但 timestamp 仍有漏洞
+
+仅修了一半，见 CHANGE #34。
+
+CHANGE #32 — Registry 路径正确，但 direct-call 路径仍可绕过
+
+直接调用路径仍可绕过，见 CHANGE #35。
+
+CHANGE #33 — source guard 现在“验证通过”不等于“Prisma 一定能保存”【必须修】
+
+当前：
+
+assertSafeSource()
+来源载荷安全校验
+
+允许：
+
+Date
+共享引用
+undefined
+某些普通 object
+
+然后只是验证。
+
+真正持久化时：
+
+withSourceEvidence(...)
+→ 原始 source 对象
+→ SourceTransaction.raw
+→ Prisma
+
+也就是说：
+
+校验后的值没有被规范化。
+
+这会出现一个问题：
+
+JSON.stringify()
+JSON 序列化
+
+能处理某些 JavaScript 对象，不代表：
+
+Prisma Json
+Prisma JSON 字段
+
+能直接接受原对象。
+
+例如当前测试明确认为：
+
+source = {
+  when: new Date(...)
+}
+
+是合法的。
+
+但真正传给 Prisma 的仍然是：
+
+Date object
+日期对象
+
+而不是 ISO 字符串。
+
+类似问题还有：
+
+undefined
+Map
+Set
+custom class instance
+
+它们可能：
+
+JSON.stringify 后发生隐式变化
+但原对象仍被直接传给 Prisma
+或证据内容和验证时看到的内容不同
+
+这是证据数据完整性问题。
+
+裁定
+
+AdapterRecord.source
+适配器来源载荷
+
+必须变成严格的：
+
+JSON-safe value
+可安全持久化的 JSON 值
+
+推荐最简单方案：
+
+只允许：
+
+null
+string
+finite number
+boolean
+array
+plain object
+
+只允许纯 JSON 类型。
+
+其中：
+
+Date → 拒绝
+BigInt → 拒绝
+function → 拒绝
+Symbol → 拒绝
+Map → 拒绝
+Set → 拒绝
+custom class → 拒绝
+circular reference → 拒绝
+object 内 undefined → 拒绝
+
+平台 HTTP API 原始 JSON 本来就应该给日期字符串，而不是 JavaScript Date。
+
+因此不需要让 source 支持 Date。
+
+同时调整执行位置
+
+当前 source guard 是：
+
+所有页面全部 records.push(...)
+→ 最后统一 assertSafeSource
+
+改成：
+
+收到每一页
+→ 校验 page.records
+→ 校验每条 source
+→ 通过以后才 push 进入累计 records
+
+不要先把不安全大对象累计到内存以后才检查。
+
+测试
+
+新增：
+
+Date source
+→ FAIL
+
+Map / Set
+→ FAIL
+
+object property = undefined
+→ FAIL
+
+plain JSON object
+→ PASS
+
+guard PASS 的 source
+→ 真实 Prisma SourceTransaction.raw 落库 PASS
+
+最后一项必须是真实 PostgreSQL 测试，不只是 memory repository。
+内存仓库
+
+CHANGE #34 — ISO timestamp 仍会把非法日期静默滚成另一天【必须修】
+
+当前对 date-only：
+纯日期
+
+已经有 round-trip validation。
+往返校验
+
+例如：
+
+2026-02-30
+→ FAIL
+
+这是正确的。
+
+但 timestamp：
+时间戳
+
+分支现在只是：
+
+regex PASS
+→ new Date(trimmed)
+
+仍没有做原始日期合法性验证。
+
+Node / JavaScript 实际会出现：
+
+2026-02-30T10:00:00Z
+→ 2026-03-02T10:00:00.000Z
+
+以及：
+
+2026-09-31T10:00:00+08:00
+→ 2026-10-01T02:00:00.000Z
+
+也就是说：
+
+非法时间戳仍然会被悄悄改成另一天。
+
+这和上一轮修 CHANGE #31 的目的冲突。
+
+要求
+
+ISO timestamp：
+ISO 时间戳
+
+进入 new Date() 以前，先从原字符串提取：
+
+year
+month
+day
+hour
+minute
+second
+timezone
+
+并明确验证：
+
+month 合法
+day 在该月真实存在
+hour 合法
+minute 合法
+second 合法
+timezone offset 合法
+
+然后才允许 Date 转换。
+
+不要仅依赖 JavaScript Date 判断日历是否合法。
+
+测试
+
+新增：
+
+2026-02-30T10:00:00Z
+→ INVALID_DATE
+
+2026-09-31T10:00:00+08:00
+→ INVALID_DATE
+
+2026-13-01T10:00:00Z
+→ INVALID_DATE
+
+2026-09-28T25:00:00Z
+→ INVALID_DATE
+
+正例继续：
+
+2026-09-28T10:00:00Z
+→ PASS
+
+2026-09-28T10:00:00+08:00
+→ PASS
+
+CHANGE #35 — runAdapterImport 仍可以绕过 Registry 的能力体检【必须修】
+
+你现在把分页边界放进了：
+
+runAdapterImport()
+适配器导入执行器
+
+这是正确方向。
+
+但是函数当前：
+
+const caps = adapter.capabilities()
+
+并没有调用：
+
+assertAdapterCapabilities()
+适配器能力完整性校验
+
+所以如果调用方没有先经过 Registry：
+注册表
+
+直接：
+
+runAdapterImport({
+  adapter: rogueAdapter
+})
+
+可以绕过注册阶段的保护。
+
+例如恶意或错误 Adapter 返回：
+
+maxPageSize = NaN
+
+则：
+
+effectivePageSize = NaN
+
+然后：
+
+page.records.length > NaN
+
+永远是 false。
+
+你刚加的单页上限保护就失效了。
+
+同理还可以绕过：
+
+platform identity check
+平台身份一致性
+
+write surface check
+写入面检查
+
+domains/channels 非空
+业务域/渠道非空检查
+
+maxPageSize 1..1000
+单页容量合法性
+
+要求
+
+runAdapterImport()
+
+入口直接做：
+
+const caps = assertAdapterCapabilities(adapter)
+
+后续全部使用这一次验证后的：
+
+caps
+
+不要要求调用方必须先通过 Registry。
+
+公共执行函数本身必须安全。
+
+建议同时补一条 session 检查
+
+authenticate()
+认证
+
+返回：
+
+AdapterSession.platform
+适配器会话平台
+
+应满足：
+
+session.platform === caps.platform
+
+否则拒绝 pull。
+
+避免以后接多个真实平台时错误 session 被交叉使用。
+
+测试
+
+直接调用 runAdapterImport
++ maxPageSize = NaN
+→ FAIL
+
+直接调用 runAdapterImport
++ write surface
+→ FAIL before authenticate/pull
+
+session.platform != adapter.platform
+→ FAIL before pull
+
+CHANGE #36 — ImportBatch 的 rowsFailed 现在计算的是“错误数量”，不是“失败行数”【必须修】
+
+当前：
+
+const rowsFailed = issues.length
+
+这是不对的。
+
+一行可以同时有：
+
+INVALID_AMOUNT
+INVALID_CURRENCY
+INVALID_DATE
+
+因此：
+
+rowsTotal = 1
+rowsFailed = 3
+
+这种不可能的批次统计现在可以出现。
+
+以后你刚确认的：
+
+import.completed
+导入完成审计事件
+
+会直接使用：
+
+rowsTotal
+rowsOk
+rowsFailed
+duplicates
+
+所以这里必须先统一。
+
+正确语义
+rowsFailed
+= 有至少一个错误的不同数据行数量
+
+不是 issue 数量。
+
+例如：
+
+row 1:
+  INVALID_AMOUNT
+  INVALID_DATE
+  INVALID_CURRENCY
+
+应该：
+
+rowsFailed = 1
+issues.length = 3
+
+EMPTY_ROW 也需要收口
+
+当前：
+
+runImportRows()
+
+如果收到一条真正空记录：
+
+EMPTY_ROW
+
+会：
+
+不插入
+不算失败
+rowsTotal 仍然 +1
+
+于是可能得到：
+
+rowsTotal = 1
+rowsOk = 0
+rowsFailed = 0
+duplicates = 0
+status = IMPORTED
+
+这是假成功。
+
+CSV parser：
+CSV 解析器
+
+虽然会跳过纯空行，但 Adapter / runImportRows 仍可产生这个状态。
+
+裁定
+
+维持：
+
+“空行忽略，不算失败”
+
+但：
+
+rowsTotal
+
+也不要计算被忽略的 EMPTY_ROW。
+
+建议增加：
+
+emptyRowsSkipped
+
+仅放进：
+
+errorReport
+错误报告
+
+不需要修改 Schema。
+
+最终保持基本恒等关系：
+
+rowsTotal
+=
+rowsOk
++ duplicates
++ rowsFailed
+
+其中 rowsFailed 是失败数据行数。
+
+状态判断也要调整
+
+现在：
+
+rowsFailed > 0
+AND
+rowsOk = 0
+→ FAILED
+
+但如果合法行全部是 duplicate：
+重复项
+
+同时另有一条失败行：
+
+rowsOk = 0
+duplicates = 10
+rowsFailed = 1
+
+实际应该是：
+
+PARTIAL
+部分成功
+
+因为 10 条合法记录已经存在，只是没有新增。
+
+因此使用：
+
+acceptedRows = rowsOk + duplicates
+
+状态建议：
+
+rowsTotal === 0
+→ FAILED
+
+rowsFailed === 0
+→ IMPORTED
+
+acceptedRows > 0
+→ PARTIAL
+
+else
+→ FAILED
+
+测试
+
+新增：
+
+一行三个 validation issues
+→ rowsTotal=1
+→ rowsFailed=1
+
+空行-only batch
+→ 不得 IMPORTED
+
+10 duplicates + 1 invalid
+→ PARTIAL
+
+rowsTotal
+= rowsOk + duplicates + rowsFailed
+
+CHANGE #37 — ARCHITECTURE_CONTRACT 与现在代码已经不一致【必须同步，但不需要重新开架构讨论】
+
+当前：
+
+ARCHITECTURE_CONTRACT.md
+架构契约
+
+§6 仍写：
+
+每个 Adapter 必须实现 submitClaim(...)
+
+但我们刚正式裁定并实现的是：
+
+ExternalAdapter
+= Phase 1 read-only
+
+ExternalWriteAdapter
+= disabled / future review
+
+所以现在：
+
+代码是新的正确设计，但架构契约还是旧设计。
+
+而该文件自己明确写：
+
+任何 PR 若违反本文件，应 BLOCK。
+
+因此合并 Gate 1 前必须同步。
+
+本条即为修改 §6 的正式架构批准，不需要另开审批。
+
+改成明确：
+
+Phase 1 ExternalAdapter:
+- capabilities
+- authenticate
+- pull
+
+第三方写入：
+- 不属于 Phase 1 ExternalAdapter
+- ExternalWriteAdapter 当前禁止启用
+- 自动 Claim / Appeal 提交必须重新架构审计
+- 当前统一 NEEDS_MANUAL
+
+同步相关测试即可。
+
+AUDIT CONTRACT
+
+上一轮确定的三个事件继续保持：
+
+import.completed
+import.failed
+adapter.pull_failed
+
+本轮仍：
+
+NON-BLOCKING
+不阻塞
+
+不要求现在接 AuditLog。
+审计日志
+
+在：
+
+第一条真实 Adapter
+第一条真实适配器
+
+或
+
+用户导入 API
+用户导入接口
+
+上线以前接入即可。
+
+KEEP
+
+以下全部保留，不要重写：
+
+runImport() + runImportRows() 共用核心。
+现有 dedupeKey 语义。
+source 不参与 rowFingerprint。
+Partial import。
+部分导入
+best-effort batch terminalization。
+尽最大努力收口批次状态
+ExternalAdapter 只读设计。
+ExternalWriteAdapter 分离设计。
+Registry 写入面拒绝。
+submitClaimThroughAdapter() 不调用第三方。
+分页 soft maxRecords。
+软条数上限
+单页 maxPageSize。
+单页容量上限
+CSV 零依赖 Parser。
+CSV 解析器
+
+NEXT
+
+只修：
+
+CHANGE #33
+CHANGE #34
+CHANGE #35
+CHANGE #36
+CHANGE #37
+
+不要接真实 Amazon / UPS / FedEx / DHL。
+
+不要开始 Rule Engine。
+规则引擎
+
+不要开始 RecoveryOpportunity detection。
+追回机会识别
+
+不要修改现有 Schema。
+
+完成后回：
+
+[CODEX → CHATGPT]
+
+TYPE: RE-REVIEW
+PREVIOUS: C-0003
+CHECKPOINT: 2
+ROUND: 3
+
+CHANGE #33:
+...
+
+CHANGE #34:
+...
+
+CHANGE #35:
+...
+
+CHANGE #36:
+...
+
+CHANGE #37:
+...
+
+CI:
+...
+
+TESTS:
+...
+
+DB TESTS:
+...
+
+NEED:
+PASS / REVISE
+
+下一轮只核这 5 项。
+
+通过后：
+
+Checkpoint 2 直接 PASS。
+
+然后只剩一次：
+
+C-0003 / Gate 1 Final Review
+C-0003 / Gate 1 最终审核
+
+不会继续在 Import / Adapter 基础层无限扩需求。
+
+FINAL:
+
+CHANGE #28：
+PASS
+
+CHANGE #29：
+PASS
+
+CHANGE #30：
+REVISE — JSON persistence boundary
+需要修正 JSON 持久化边界。
+
+CHANGE #31：
+REVISE — timestamp calendar validation
+需要补时间戳日历合法性。
+
+CHANGE #32：
+REVISE — direct-call capability validation
+需要补直接调用路径能力验证。
+
+Checkpoint 2：
+REVISE
+
+剩余问题已收窄为：
+
+source 验证通过后仍可能不是 Prisma-safe JSON。
+非法 ISO 时间戳仍可能被 JavaScript 自动滚成另一天。
+runAdapterImport 可绕过 Registry 的能力体检。
+rowsFailed / EMPTY_ROW / duplicate 的批次统计语义不闭合。
+架构契约还没有同步新的只读 Adapter 设计。
+
+修完这 5 项即可做 Checkpoint 2 最终 PASS。
+```
