@@ -26,6 +26,7 @@ import {
   setConnectionStatus,
 } from './connection-management';
 import { confirmCommercialTerms, createCaseForOpportunity } from './case-creation';
+import { confirmRecoveryOutcome } from './recovery-outcome';
 import { REJECT_REASONS, WorkflowError, reviewOpportunity } from './opportunity-review';
 import { ForbiddenError } from './permissions';
 
@@ -33,6 +34,7 @@ const MAX_BODY_BYTES = 16 * 1024;
 const REVIEW_PATH = /^\/opportunities\/([^/]+)\/(qualify|reject|case)$/;
 const CONNECTION_PATH = /^\/connections(?:\/([^/]+)\/(status|credential-ref))?$/;
 const COMMERCIAL_TERMS_PATH = /^\/cases\/([^/]+)\/commercial-terms$/;
+const RECOVERY_OUTCOME_PATH = /^\/cases\/([^/]+)\/recovery-outcome$/;
 
 /** 请求体层面的错误（与领域状态无关），统一映射为 400。 */
 class HttpBodyError extends Error {
@@ -90,6 +92,9 @@ function statusFor(error: unknown): { code: number; error: string } {
       case 'ILLEGAL_TRANSITION':
       case 'DUPLICATE_CONNECTION':
       case 'SCOPE_NOT_SUPPORTED':
+      case 'COMMERCIAL_TERMS_PENDING':
+      case 'CLAIM_NOT_APPROVED':
+      case 'CURRENCY_MISMATCH':
         return { code: 409, error: error.code };
       case 'FORBIDDEN':
         return { code: 403, error: error.code };
@@ -124,7 +129,8 @@ export async function handleWorkflowRequest(
   const review = REVIEW_PATH.exec(path);
   const connection = CONNECTION_PATH.exec(path);
   const termsPath = COMMERCIAL_TERMS_PATH.exec(path);
-  if (!review && !connection && !termsPath) return false;
+  const outcomePath = RECOVERY_OUTCOME_PATH.exec(path);
+  if (!review && !connection && !termsPath && !outcomePath) return false;
 
   const method = req.method ?? 'GET';
   const allowed = connection && !connection[2] ? ['GET', 'POST'] : ['POST'];
@@ -147,6 +153,32 @@ export async function handleWorkflowRequest(
   };
 
   try {
+    if (outcomePath) {
+      const body = await readJsonBody(req);
+      // 裁定：不接受 simulateSettlement（用户侧永不触发合成资金）
+      if (Object.prototype.hasOwnProperty.call(body, 'simulateSettlement')) {
+        throw new WorkflowError(
+          'INVALID_FIELD',
+          'simulateSettlement 不允许由用户侧请求提交（仅测试/演示环境使用）',
+        );
+      }
+      const outcome = await confirmRecoveryOutcome(
+        deps.prisma,
+        {
+          ...actor,
+          caseId: outcomePath[1] ?? '',
+          recoveredAmount: body.recoveredAmount,
+          currency: body.currency,
+          basisReference: body.basisReference,
+          evidenceArtifactId: body.evidenceArtifactId,
+          note: body.note,
+        },
+        deps.now,
+      );
+      sendJson(res, outcome.created ? 201 : 200, outcome);
+      return true;
+    }
+
     if (termsPath) {
       const body = await readJsonBody(req);
       const confirmed = await confirmCommercialTerms(

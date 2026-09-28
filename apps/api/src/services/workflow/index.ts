@@ -3,6 +3,11 @@
  */
 
 export {
+  confirmRecoveryOutcome,
+  type ConfirmRecoveryOutcomeInput,
+  type ConfirmRecoveryOutcomeResult,
+} from './recovery-outcome';
+export {
   confirmCommercialTerms,
   createCaseForOpportunity,
   type ConfirmCommercialTermsInput,

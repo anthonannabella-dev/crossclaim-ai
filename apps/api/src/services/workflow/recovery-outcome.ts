@@ -1,0 +1,418 @@
+/**
+ * C-0008-B2-3a — manual confirmation of a real recovery outcome.
+ * ---------------------------------------------------------------
+ * Approved design + rulings (MSG-20260928-56):
+ *   · name        : confirmRecoveryOutcome(caseId, { recoveredAmount, currency,
+ *                   basisReference, evidenceArtifactId?, note? })
+ *   · evidence    : basisReference is REQUIRED and non-empty; evidenceArtifactId
+ *                   is optional (recommended). Never “AI decided the money arrived”.
+ *   · amounts     : decimal strings only, 4-dp HALF_UP. recoveredAmount <= 0 or a
+ *                   currency mismatch is rejected; recoveredAmount > claimedAmount
+ *                   is allowed but writes `recovery_amount_exceeds_claim`.
+ *   · status      : NEVER auto-advances Claim APPROVED / Case WON — both must
+ *                   already be true (they are separate manual facts).
+ *   · idempotency : at most one Settlement per case; a repeat returns the
+ *                   existing money objects instead of creating more.
+ *   · roles       : OWNER / ADMIN / FINANCE (advanceBilling), OPS read-only.
+ *   · no payment gateway, no simulateSettlement — both forbidden here.
+ *
+ * Four objects stay separate (approved core boundary):
+ *   Settlement (external recovery fact) → RecoveryLedgerEntry (ledger) →
+ *   FeeCalculation (our service fee) → BillingInvoice (what we charge the client).
+ */
+
+import { Prisma, type PrismaClient } from '@prisma/client';
+
+import { prepareAuditInsert } from '../audit';
+import { billingInvoiceNoFor, type CommercialTerms } from '../recovery';
+import { WorkflowError } from './opportunity-review';
+import { assertPermission } from './permissions';
+
+const MONEY_SCALE = 4;
+const REFERENCE_MAX = 256;
+const NOTE_MAX = 500;
+const DECIMAL_STRING_RE = /^\d+(\.\d+)?$/;
+
+const money = (value: string | InstanceType<typeof Prisma.Decimal>): InstanceType<typeof Prisma.Decimal> =>
+  new Prisma.Decimal(value).toDecimalPlaces(MONEY_SCALE, Prisma.Decimal.ROUND_HALF_UP);
+
+export interface ConfirmRecoveryOutcomeInput {
+  organizationId: string;
+  actorUserId: string;
+  role: string;
+  caseId: string;
+  recoveredAmount: unknown;
+  currency: unknown;
+  basisReference: unknown;
+  evidenceArtifactId?: unknown;
+  note?: unknown;
+}
+
+export interface ConfirmRecoveryOutcomeResult {
+  caseId: string;
+  caseNo: string;
+  settlementId: string;
+  ledgerEntryId: string;
+  feeCalculationId: string;
+  billingInvoiceId: string;
+  recoveredAmount: string;
+  feeAmount: string;
+  /** true = 本次确认产生；false = 复用既有 Settlement（幂等） */
+  created: boolean;
+  /** recoveredAmount > claimedAmount 时为 true（已写警告审计，不阻断） */
+  exceedsClaim: boolean;
+}
+
+function assertMoney(value: unknown, field: string): InstanceType<typeof Prisma.Decimal> {
+  if (typeof value !== 'string' || !DECIMAL_STRING_RE.test(value.trim())) {
+    throw new WorkflowError('INVALID_INPUT', `${field} 必须是十进制字符串`);
+  }
+  const amount = new Prisma.Decimal(value.trim());
+  if (!amount.gt(0)) {
+    throw new WorkflowError('INVALID_INPUT', `${field} 必须 > 0`);
+  }
+  return money(amount);
+}
+
+function assertReference(value: unknown): string {
+  const ref = typeof value === 'string' ? value.trim() : '';
+  if (ref === '') {
+    throw new WorkflowError('INVALID_INPUT', 'basisReference 不能为空（禁止无依据确认到账）');
+  }
+  if (ref.length > REFERENCE_MAX) {
+    throw new WorkflowError('INVALID_INPUT', `basisReference 不得超过 ${REFERENCE_MAX} 个字符`);
+  }
+  return ref;
+}
+
+/**
+ * 「费率已确认」是业务条件：以该案件是否存在 commercial_terms.created 审计为准。
+ * 返回已确认的费率（缺失即 409 COMMERCIAL_TERMS_PENDING）。
+ */
+async function loadConfirmedTerms(
+  prisma: PrismaClient,
+  organizationId: string,
+  caseId: string,
+): Promise<CommercialTerms> {
+  const confirmed = await prisma.auditLog.findFirst({
+    where: {
+      organizationId,
+      entityType: 'Case',
+      entityId: caseId,
+      action: 'commercial_terms.created',
+    },
+    orderBy: { createdAt: 'desc' },
+    select: { changes: true },
+  });
+  const changes = (confirmed?.changes ?? null) as Record<string, unknown> | null;
+  const successFeeRate = typeof changes?.successFeeRate === 'string' ? changes.successFeeRate : '';
+  const source = typeof changes?.source === 'string' ? changes.source : '';
+  if (!confirmed || successFeeRate === '') {
+    throw new WorkflowError(
+      'COMMERCIAL_TERMS_PENDING',
+      '该案件尚未完成商务确认（setCommercialTerms），不能确认回收结果',
+    );
+  }
+  return { successFeeRate, source };
+}
+
+export async function confirmRecoveryOutcome(
+  prisma: PrismaClient,
+  input: ConfirmRecoveryOutcomeInput,
+  now: () => Date = () => new Date(),
+): Promise<ConfirmRecoveryOutcomeResult> {
+  assertPermission(input.role, 'advanceBilling');
+
+  const recoveredAmount = assertMoney(input.recoveredAmount, 'recoveredAmount');
+  const basisReference = assertReference(input.basisReference);
+  const note = typeof input.note === 'string' ? input.note.trim().slice(0, NOTE_MAX) : '';
+  const requestedEvidenceId =
+    typeof input.evidenceArtifactId === 'string' && input.evidenceArtifactId.trim() !== ''
+      ? input.evidenceArtifactId.trim()
+      : null;
+
+  const kase = await prisma.case.findFirst({
+    where: { id: input.caseId, organizationId: input.organizationId },
+    select: { id: true, caseNo: true, status: true, currency: true, claimedAmount: true },
+  });
+  if (!kase) {
+    throw new WorkflowError('NOT_FOUND', `案件 ${input.caseId} 不存在或不属于该租户`);
+  }
+
+  const currency = typeof input.currency === 'string' ? input.currency.trim().toUpperCase() : '';
+  if (currency === '' || currency !== kase.currency) {
+    throw new WorkflowError(
+      'CURRENCY_MISMATCH',
+      `币种必须与案件一致（案件 ${kase.currency}，收到 ${currency || '(空)'}）`,
+    );
+  }
+
+  // 人工事实必须已经存在：绝不自动推进（Q3）
+  if (kase.status !== 'WON') {
+    throw new WorkflowError(
+      'ILLEGAL_TRANSITION',
+      `案件状态 ${kase.status} 不允许确认回收结果（必须先是 WON，由人工推进）`,
+    );
+  }
+  const claim = await prisma.claim.findFirst({
+    where: { organizationId: input.organizationId, caseId: kase.id, round: 1 },
+    select: { id: true, status: true },
+  });
+  if (!claim) {
+    throw new WorkflowError('NOT_FOUND', `案件 ${kase.id} 没有第 1 轮 Claim`);
+  }
+  if (claim.status !== 'APPROVED') {
+    throw new WorkflowError(
+      'CLAIM_NOT_APPROVED',
+      `Claim 状态 ${claim.status} 不允许确认回收结果（必须先是 APPROVED，由人工推进）`,
+    );
+  }
+
+  const terms = await loadConfirmedTerms(prisma, input.organizationId, kase.id);
+
+  if (requestedEvidenceId) {
+    const evidence = await prisma.evidenceArtifact.findFirst({
+      where: { id: requestedEvidenceId, organizationId: input.organizationId },
+      select: { id: true },
+    });
+    if (!evidence) {
+      throw new WorkflowError('NOT_FOUND', `EvidenceArtifact ${requestedEvidenceId} 不存在或不属于该租户`);
+    }
+  }
+
+  const claimedAmount = kase.claimedAmount ? money(kase.claimedAmount) : new Prisma.Decimal(0);
+  const exceedsClaim = recoveredAmount.gt(claimedAmount);
+  const feeAmount = money(recoveredAmount.times(new Prisma.Decimal(terms.successFeeRate)));
+  const at = now();
+
+  return prisma.$transaction(async (tx) => {
+    // 幂等：一个案件只允许一条 Settlement（分批赔付留待未来 Schema Delta）
+    const existing = await tx.settlement.findFirst({
+      where: { organizationId: input.organizationId, caseId: kase.id },
+      select: { id: true, amount: true },
+    });
+    if (existing) {
+      const [ledger, fee, billing] = await Promise.all([
+        tx.recoveryLedgerEntry.findFirst({
+          where: { organizationId: input.organizationId, settlementId: existing.id },
+          select: { id: true },
+        }),
+        tx.feeCalculation.findFirst({
+          where: { organizationId: input.organizationId, settlementId: existing.id },
+          select: { id: true, feeAmount: true },
+        }),
+        tx.billingInvoice.findFirst({
+          where: { organizationId: input.organizationId, caseId: kase.id },
+          select: { id: true },
+        }),
+      ]);
+      return {
+        caseId: kase.id,
+        caseNo: kase.caseNo,
+        settlementId: existing.id,
+        ledgerEntryId: ledger?.id ?? '',
+        feeCalculationId: fee?.id ?? '',
+        billingInvoiceId: billing?.id ?? '',
+        recoveredAmount: money(existing.amount).toFixed(MONEY_SCALE),
+        feeAmount: (fee?.feeAmount ? money(fee.feeAmount) : new Prisma.Decimal(0)).toFixed(MONEY_SCALE),
+        created: false,
+        exceedsClaim,
+      };
+    }
+
+    // 凭证：优先使用用户指定的 EvidenceArtifact，否则为本次人工确认留一条可追溯凭证
+    let evidenceId = requestedEvidenceId;
+    if (!evidenceId) {
+      const created = await tx.evidenceArtifact.create({
+        data: {
+          organizationId: input.organizationId,
+          kind: 'CREDIT_NOTE',
+          title: `Manual recovery confirmation — ${kase.caseNo}`,
+          description: `basisReference: ${basisReference}`,
+          capturedAt: at,
+        },
+      });
+      evidenceId = created.id;
+    }
+    await tx.caseEvidence.upsert({
+      where: { caseId_evidenceId: { caseId: kase.id, evidenceId } },
+      update: {},
+      create: { organizationId: input.organizationId, caseId: kase.id, evidenceId, role: 'CREDIT_NOTE' },
+    });
+
+    const settlement = await tx.settlement.create({
+      data: {
+        organizationId: input.organizationId,
+        caseId: kase.id,
+        evidenceId,
+        status: 'RECEIVED',
+        // SettlementSource 是既有枚举（无 MANUAL_CONFIRMATION 值）：人工确认使用 OTHER，
+        // 真实依据由 basisReference + 本函数的 recovery_outcome.confirmed 审计承载。
+        // 若架构方希望显式枚举值，需要一次 Schema Delta（见检查点）。
+        source: 'OTHER',
+        amount: recoveredAmount,
+        currency,
+        receivedAt: at,
+        confirmedAt: at,
+        ...(note ? { note } : {}),
+      },
+    });
+
+    const ledger = await tx.recoveryLedgerEntry.create({
+      data: {
+        organizationId: input.organizationId,
+        caseId: kase.id,
+        opportunityId: null,
+        settlementId: settlement.id,
+        entryType: 'RECOVERED',
+        amount: recoveredAmount,
+        currency,
+        counterparty: 'EXTERNAL_PAYER',
+        reference: `settlement:${settlement.id}`,
+      },
+    });
+
+    const fee = await tx.feeCalculation.create({
+      data: {
+        organizationId: input.organizationId,
+        settlementId: settlement.id,
+        caseId: kase.id,
+        basis: 'RECOVERED_AMOUNT_PCT',
+        rate: new Prisma.Decimal(terms.successFeeRate),
+        baseAmount: recoveredAmount,
+        feeAmount,
+        currency,
+        computation: {
+          settlementId: settlement.id,
+          baseAmount: recoveredAmount.toFixed(MONEY_SCALE),
+          rate: terms.successFeeRate,
+          feeAmount: feeAmount.toFixed(MONEY_SCALE),
+          rounding: { scale: MONEY_SCALE, mode: 'HALF_UP' },
+          source: terms.source,
+          basisReference,
+        } as Prisma.InputJsonValue,
+      },
+    });
+
+    const billing = await tx.billingInvoice.create({
+      data: {
+        organizationId: input.organizationId,
+        caseId: kase.id,
+        invoiceNo: billingInvoiceNoFor(kase.caseNo),
+        status: 'DRAFT',
+        subtotal: feeAmount,
+        taxAmount: new Prisma.Decimal(0),
+        total: feeAmount,
+        currency,
+        fees: { connect: { id: fee.id } },
+      },
+    });
+
+    // 案件上的回收金额 + WON → SETTLED（回收事实的后果，不等同于自动推进 WON）
+    await tx.case.update({
+      where: { id: kase.id },
+      data: { recoveredAmount },
+    });
+    await tx.case.updateMany({
+      where: { id: kase.id, organizationId: input.organizationId, status: 'WON' },
+      data: { status: 'SETTLED' },
+    });
+
+    await writeUserAudit(tx, {
+      organizationId: input.organizationId,
+      actorUserId: input.actorUserId,
+      action: 'case.status_changed',
+      entityType: 'Case',
+      entityId: kase.id,
+      changes: { from: 'WON', to: 'SETTLED' },
+      at,
+    });
+    await writeUserAudit(tx, {
+      organizationId: input.organizationId,
+      actorUserId: input.actorUserId,
+      action: 'recovery_outcome.confirmed',
+      entityType: 'Settlement',
+      entityId: settlement.id,
+      changes: {
+        caseId: kase.id,
+        caseNo: kase.caseNo,
+        recoveredAmount: recoveredAmount.toFixed(MONEY_SCALE),
+        currency,
+        basisReference,
+        evidenceArtifactId: evidenceId,
+        ...(note ? { hasNote: true } : {}),
+      },
+      at,
+    });
+    if (exceedsClaim) {
+      // Q2：超出索赔金额不阻断，但必须留下警告审计
+      await writeUserAudit(tx, {
+        organizationId: input.organizationId,
+        actorUserId: input.actorUserId,
+        action: 'recovery_amount_exceeds_claim',
+        entityType: 'Case',
+        entityId: kase.id,
+        changes: {
+          recoveredAmount: recoveredAmount.toFixed(MONEY_SCALE),
+          claimedAmount: claimedAmount.toFixed(MONEY_SCALE),
+          currency,
+        },
+        at,
+      });
+    }
+
+    return {
+      caseId: kase.id,
+      caseNo: kase.caseNo,
+      settlementId: settlement.id,
+      ledgerEntryId: ledger.id,
+      feeCalculationId: fee.id,
+      billingInvoiceId: billing.id,
+      recoveredAmount: recoveredAmount.toFixed(MONEY_SCALE),
+      feeAmount: feeAmount.toFixed(MONEY_SCALE),
+      created: true,
+      exceedsClaim,
+    };
+  });
+}
+
+async function writeUserAudit(
+  tx: Prisma.TransactionClient,
+  input: {
+    organizationId: string;
+    actorUserId: string;
+    action: string;
+    entityType: string;
+    entityId: string;
+    changes: Record<string, unknown>;
+    at: Date;
+  },
+): Promise<void> {
+  const row = prepareAuditInsert(
+    {
+      organizationId: input.organizationId,
+      actorType: 'USER',
+      actorUserId: input.actorUserId,
+      action: input.action,
+      entityType: input.entityType,
+      entityId: input.entityId,
+      changes: input.changes,
+    },
+    { maxStringLength: 512 },
+  );
+  await tx.auditLog.create({
+    data: {
+      organizationId: row.organizationId,
+      actorType: row.actorType,
+      actorUserId: row.actorUserId,
+      actorRef: row.actorRef,
+      action: row.action,
+      entityType: row.entityType,
+      entityId: row.entityId,
+      changes: (row.changes ?? undefined) as Prisma.InputJsonValue | undefined,
+      ip: row.ip,
+      userAgent: row.userAgent,
+      createdAt: input.at,
+    },
+  });
+}

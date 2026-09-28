@@ -34,7 +34,10 @@ export type WorkflowErrorCode =
   | 'INVALID_COMMERCIAL_TERMS'
   | 'SCOPE_NOT_SUPPORTED'
   | 'CASE_NOT_CREATED'
-  | 'INVALID_FIELD';
+  | 'INVALID_FIELD'
+  | 'COMMERCIAL_TERMS_PENDING'
+  | 'CLAIM_NOT_APPROVED'
+  | 'CURRENCY_MISMATCH';
 
 export class WorkflowError extends Error {
   readonly code: WorkflowErrorCode;
