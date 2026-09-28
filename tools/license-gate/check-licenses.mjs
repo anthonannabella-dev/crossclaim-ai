@@ -24,7 +24,11 @@ const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(SCRIPT_DIR, '..', '..');
 const ALLOWLIST_PATH = path.join(SCRIPT_DIR, 'allowlist.json');
 
-const WORKSPACES = ['.', 'backend', 'frontend', 'hs-query-frontend', 'bots'];
+/**
+ * CrossClaim 正式工程的包位置（旧项目遗留名已移除）。
+ * 缺失的工作区会被 SKIP，但已存在的工作区必须真实通过。
+ */
+const WORKSPACES = ['apps/api', 'apps/web'];
 
 const C = {
   reset: '\x1b[0m', red: '\x1b[31m', green: '\x1b[32m',

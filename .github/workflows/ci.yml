@@ -95,6 +95,10 @@ jobs:
         working-directory: apps/api
         run: npm ci --no-audit --no-fund
 
+      - name: Install web dependencies (for scanning)
+        working-directory: apps/web
+        run: npm ci --no-audit --no-fund
+
       - name: Run license gate
         run: node tools/license-gate/check-licenses.mjs --json tools/license-gate/report.json
 
@@ -105,3 +109,29 @@ jobs:
           name: license-report
           path: tools/license-gate/report.json
           if-no-files-found: ignore
+
+  web:
+    name: Web · typecheck + build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install dependencies
+        working-directory: apps/web
+        run: npm ci --no-audit --no-fund
+
+      - name: TypeScript typecheck
+        working-directory: apps/web
+        run: npm run typecheck
+
+      - name: Next.js production build
+        working-directory: apps/web
+        run: npm run build
+        env:
+          NEXT_TELEMETRY_DISABLED: '1'
