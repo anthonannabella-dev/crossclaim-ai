@@ -156,6 +156,45 @@ async function audit(
   });
 }
 
+/** 状态跃迁 + 审计（同一服务内成对出现；CHANGE #51 会进一步并入事务） */
+async function setClaimStatus(
+  prisma: PrismaClient,
+  organizationId: string,
+  claimId: string,
+  from: string,
+  to: string,
+): Promise<void> {
+  const current = await prisma.claim.findUniqueOrThrow({ where: { id: claimId }, select: { status: true } });
+  if (current.status !== from) return; // 幂等：已是后续状态则不回退
+  await prisma.claim.update({ where: { id: claimId }, data: { status: to as never } });
+  await audit(prisma, {
+    organizationId,
+    action: 'claim.status_changed',
+    entityType: 'Claim',
+    entityId: claimId,
+    changes: { from, to },
+  });
+}
+
+async function setCaseStatus(
+  prisma: PrismaClient,
+  organizationId: string,
+  caseId: string,
+  from: string,
+  to: string,
+): Promise<void> {
+  const current = await prisma.case.findUniqueOrThrow({ where: { id: caseId }, select: { status: true } });
+  if (current.status !== from) return;
+  await prisma.case.update({ where: { id: caseId }, data: { status: to as never } });
+  await audit(prisma, {
+    organizationId,
+    action: 'case.status_changed',
+    entityType: 'Case',
+    entityId: caseId,
+    changes: { from, to },
+  });
+}
+
 export interface RunClosureInput {
   organizationId: string;
   prisma: PrismaClient;
@@ -327,7 +366,13 @@ export async function runRecoveryClosure(input: RunClosureInput): Promise<Closur
       });
     }
 
-    // 6) Opportunity 状态推进（→ CONVERTED）
+    // 6) Case / Claim 生命周期（CHANGE #48）
+    //    simulateSettlement = false → 停在 READY_TO_CLAIM + DRAFT（Phase 1 半自动边界）
+    //    simulateSettlement = true  → 显式推进到 APPROVED / SETTLED（仅 test/demo 模拟，不调用任何第三方）
+    await setCaseStatus(prisma, organizationId, kase.id, 'OPEN', 'COLLECTING_EVIDENCE');
+    await setCaseStatus(prisma, organizationId, kase.id, 'COLLECTING_EVIDENCE', 'READY_TO_CLAIM');
+
+    // 7) Opportunity 状态推进（QUALIFIED → CONVERTED，人工确认已在上游完成）
     if (opportunity.status !== 'CONVERTED') {
       await prisma.recoveryOpportunity.update({
         where: { id: opportunity.id },
@@ -342,16 +387,46 @@ export async function runRecoveryClosure(input: RunClosureInput): Promise<Closur
       });
     }
 
-    // 7) 仅测试/演示：合成到账 → 账本 → 费用 → 账单（严格顺序）
+    // 8) 仅测试/演示：合成批准 → 到账证据 → 到账 → 账本 → 费用 → 账单（严格顺序）
     if (input.simulateSettlement) {
+      await setClaimStatus(prisma, organizationId, claim.id, 'DRAFT', 'SUBMITTED');
+      await setClaimStatus(prisma, organizationId, claim.id, 'SUBMITTED', 'ACKNOWLEDGED');
+      await setClaimStatus(prisma, organizationId, claim.id, 'ACKNOWLEDGED', 'APPROVED');
+      await setCaseStatus(prisma, organizationId, kase.id, 'READY_TO_CLAIM', 'CLAIMED');
+      await setCaseStatus(prisma, organizationId, kase.id, 'CLAIMED', 'WON');
+
       const existingSettlement = await prisma.settlement.findFirst({
         where: { organizationId, caseId: kase.id },
       });
       if (!existingSettlement) {
+        // CHANGE #49：到账必须有独立到账证据（CREDIT_NOTE），不能拿 INVOICE 冒充
+        const creditTitle = `Synthetic carrier credit confirmation — ${caseNo}`;
+        const existingCredit = await prisma.evidenceArtifact.findFirst({
+          where: { organizationId, title: creditTitle, kind: 'CREDIT_NOTE' },
+        });
+        const credit =
+          existingCredit ??
+          (await prisma.evidenceArtifact.create({
+            data: {
+              organizationId,
+              kind: 'CREDIT_NOTE',
+              title: creditTitle,
+              description: 'synthetic carrier credit confirmation (test/demo only)',
+              capturedAt: new Date(),
+            },
+          }));
+        if (!existingCredit) result.evidenceCreated += 1;
+        await prisma.caseEvidence.upsert({
+          where: { caseId_evidenceId: { caseId: kase.id, evidenceId: credit.id } },
+          update: {},
+          create: { organizationId, caseId: kase.id, evidenceId: credit.id, role: 'CREDIT_NOTE' },
+        });
+
         const settlement = await prisma.settlement.create({
           data: {
             organizationId,
             caseId: kase.id,
+            evidenceId: credit.id,
             status: 'RECEIVED',
             source: 'CARRIER_CREDIT',
             amount: new Decimal(recoverable),
@@ -426,6 +501,7 @@ export async function runRecoveryClosure(input: RunClosureInput): Promise<Closur
           where: { id: kase.id },
           data: { recoveredAmount: new Decimal(settlementAmount) },
         });
+        await setCaseStatus(prisma, organizationId, kase.id, 'WON', 'SETTLED');
       }
     }
 
