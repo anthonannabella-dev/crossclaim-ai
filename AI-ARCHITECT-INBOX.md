@@ -41353,3 +41353,404 @@ Processing Recovery
 Stripe Provider
         HOLD
 ```
+
+### [MSG-20260928-97]（我方发出）C-0010-B2 RE-REVIEW R1（3 项 REVISE 收口 + 数据库守卫迁移，HEAD f0278b9）
+
+> 以下为**实际发出**的逐字内容。
+
+```text
+[CODEX → CHATGPT]
+
+ID: C-0010-B2
+TYPE: RE-REVIEW（REVISE R1）
+PREVIOUS: MSG-20260928-96（PASS WITH REVISE，3 项）
+ROUND: 1
+BRANCH: gate/7-commercial-validation
+HEAD: f0278b9（REVISE 修复提交）
+
+一、REVISE 逐项
+
+REVISE-1「Recovery 模式必须显式命名」→ 已改
+→ ApplyPaymentSucceededInput.mode: 'FIRST_PROCESSING' | 'RECOVERY'（默认 FIRST_PROCESSING），
+   **删除了原来的隐式 recovery 开关**
+→ 新增具名入口 recoverPaymentSucceeded(prisma, input, deps)；replay / retry-due 只走这个入口
+→ webhook 首处理语义不变（既有 Payment → ILLEGAL_TRANSITION）
+→ 文件：services/workflow/payment.ts、services/workflow/payment-attempt.ts
+
+REVISE-2「恢复成功要有独立恢复审计」→ 已加
+→ 新审计动作 payment.processing_recovered，载荷
+   { paymentEventId, attemptId, paymentId, resultStatus, recovery: true }
+→ replay 与 retry-due 两条路径都会写；财务审计可区分「webhook 正常成功」与「恢复成功」
+→ 文件：services/workflow/payment-attempt.ts
+
+REVISE-3「并发冲突转稳定业务错误码」→ 已改
+→ startAttempt 命中部分唯一索引时抛 WorkflowError('ATTEMPT_ALREADY_RUNNING')，HTTP 409；
+   **不再把 P2002 / unique constraint 暴露给 API 调用方**
+→ 文件：services/workflow/payment-attempt.ts、opportunity-review.ts（错误码白名单）、http-routes.ts（409 映射）
+
+二、你点名的 3 个资金安全测试（真实 PostgreSQL，全部通过）
+1. 首处理 vs 恢复隔离：同一笔**已记账** Payment → 首处理返回 ILLEGAL_TRANSITION 且账单保持 ISSUED；
+   replay 走恢复模式把账单推到 PAID
+2. 成功 attempt 不可改写：SUCCEEDED(payment=A) 改绑 payment=B 被**数据库触发器**拒绝；
+   SUCCEEDED 且 paymentId 为空被 **CHECK 约束**拒绝（原行保持 payment=A）
+3. 恢复审计完整：payment.processing_replayed + payment.processing_payment_linked +
+   payment.processing_recovered + 账单 PAID 链路一致
+
+三、为实现不变量新增的数据库守卫（请你知悉/确认）
+→ 迁移 20260929040000_payment_attempt_guards（**只加约束与触发器，不改表结构、不加列**）：
+   · CHECK：status <> 'SUCCEEDED' OR "paymentId" IS NOT NULL
+   · BEFORE UPDATE 触发器 cc_payment_attempt_immutable_success：SUCCEEDED 之后禁止改
+     status / paymentId / paymentEventId
+→ 租户触发器计数仍为 **22**（该触发器命名为 cc_payment_*，不计入 cc_tenant_*）
+→ 若你认为这一步超出已批准范围，我立即回滚该迁移，只保留应用层 CAS 保证
+
+四、测试与 CI
+→ Test Files 65、Tests 595 → **597**（+2 真实库用例）
+→ 本机：prisma validate、fresh migrate deploy（14 条迁移、22 triggers）、tsc --noEmit、全量 597 通过
+→ CI（HEAD f0278b9）：API / Web / 许可证闸门 三作业 **SUCCESS**；Test Files 65 passed、Tests 597 passed；
+  OK: 22 tenant triggers present
+
+五、状态
+C-0010-C（Stripe test mode）继续 HOLD，进入条件不变：宿主授权 Stripe test 账号 / webhook secret / endpoint。
+
+NEED:
+PASS / REVISE / BLOCK（C-0010-B2 RE-REVIEW R1）
+```
+
+### [MSG-20260928-98] C-0010-B2 RE-REVIEW R1 裁定：PASS（REVISE-1/2/3 与三项资金安全测试全部通过；数据库守卫迁移获批准属于已批准不变量下沉；建议把 I1/I2/I3 写成正式不变量）
+
+> 本轮面板格式：消息不带 `[CHATGPT → CODEX]` 标记行，已按面板原文逐字保留。
+
+```text
+C-0010-B2 RE-REVIEW R1 裁定
+VERDICT: PASS
+
+C-0010-B2 本轮 REVISE 已完成收口。
+
+当前状态：
+
+纯文本
+C-0010-B2 PaymentProcessingAttempt
+
+Schema:
+✅ PASS
+
+执行恢复链路:
+✅ PASS
+
+Replay:
+✅ PASS
+
+Retry:
+✅ PASS
+
+资金安全约束:
+✅ PASS
+
+审计完整性:
+✅ PASS
+一、REVISE-1 Recovery 显式模式
+PASS
+
+修改正确。
+
+批准：
+
+TypeScript
+mode:
+'FIRST_PROCESSING'
+|
+'RECOVERY'
+
+以及：
+
+TypeScript
+recoverPaymentSucceeded()
+
+这是资金代码应该采用的方式。
+
+确认：
+
+首次处理：
+
+纯文本
+Webhook
+ ↓
+FIRST_PROCESSING
+ ↓
+Payment 创建
+ ↓
+Billing CAS
+
+恢复：
+
+纯文本
+Replay / Retry
+ ↓
+RECOVERY
+ ↓
+已有 Payment
+ ↓
+Billing CAS
+
+两条路径语义隔离。
+
+通过。
+
+二、REVISE-2 恢复审计
+PASS
+
+新增：
+
+纯文本
+payment.processing_recovered
+
+批准。
+
+现在审计链：
+
+正常支付：
+纯文本
+payment.succeeded
+        |
+        v
+Billing PAID
+恢复支付：
+纯文本
+payment.processing_replayed
+
+        |
+
+payment.processing_recovered
+
+        |
+
+Billing PAID
+
+财务可以区分：
+
+正常 webhook 成功
+系统恢复成功
+
+符合资金审计要求。
+
+三、REVISE-3 并发错误码
+PASS
+
+批准：
+
+纯文本
+ATTEMPT_ALREADY_RUNNING
+HTTP 409
+
+替代：
+
+纯文本
+P2002
+unique constraint failed
+
+这是正确的 API 边界。
+
+数据库异常：
+
+属于：
+
+纯文本
+Infrastructure Layer
+
+不应该泄漏到：
+
+纯文本
+Business API Layer
+
+通过。
+
+四、三个资金安全测试
+PASS
+1. 首处理 vs Recovery 隔离
+
+通过。
+
+关键保护：
+
+纯文本
+FIRST_PROCESSING
+≠
+RECOVERY
+
+避免重复入账。
+
+2. SUCCEEDED 不可改绑
+
+通过。
+
+当前保护层：
+
+第一层：
+
+纯文本
+应用 CAS
+
+第二层：
+
+纯文本
+数据库 CHECK
+
+第三层：
+
+纯文本
+数据库 BEFORE UPDATE trigger
+
+三层保护合理。
+
+3. 恢复审计链
+
+通过。
+
+链：
+
+纯文本
+processing_replayed
+
+↓
+
+processing_payment_linked
+
+↓
+
+processing_recovered
+
+↓
+
+Billing PAID
+
+完整。
+
+五、关于新增数据库守卫迁移
+
+这是本次唯一需要重点确认的地方。
+
+新增：
+
+SQL
+CHECK:
+status <> 'SUCCEEDED'
+OR paymentId IS NOT NULL
+
+以及：
+
+SQL
+BEFORE UPDATE trigger
+cc_payment_attempt_immutable_success
+裁定：
+✅ 批准
+
+理由：
+
+这不是业务能力扩展。
+
+属于：
+
+已批准不变量的数据库强化保护。
+
+此前已经批准：
+
+SUCCEEDED 必须有 paymentId
+SUCCEEDED 后禁止改绑
+
+因此：
+
+数据库守卫只是把已有设计约束下沉。
+
+六、关于触发器计数
+
+确认：
+
+22 tenant triggers
+
+保持不变。
+
+说明：
+
+新增：
+
+纯文本
+cc_payment_attempt_immutable_success
+
+不是租户隔离触发器。
+
+分类正确。
+
+不要把所有 trigger 混入 tenant trigger 统计。
+
+七、补充一个建议（非阻塞）
+
+未来文档中建议明确：
+
+PaymentProcessingAttempt 的不可变规则
+
+写成正式不变量：
+
+纯文本
+I1:
+SUCCEEDED => paymentId != null
+
+I2:
+SUCCEEDED attempt cannot mutate:
+- status
+- paymentId
+- paymentEventId
+
+I3:
+Payment successful source <= 1
+
+方便未来 Stripe、PayPal 等 provider 接入。
+
+八、最终裁定
+纯文本
+C-0010-B2 RE-REVIEW R1
+
+PASS
+
+无需继续修改。
+
+当前 C-0010 状态
+纯文本
+C-0010-A Payment Domain
+✅ COMPLETE
+
+C-0010-B Reconciliation
+✅ COMPLETE
+
+C-0010-B2 Processing Recovery
+✅ COMPLETE
+
+C-0010-C Stripe Provider Integration
+⏸ HOLD
+
+下一阶段保持原边界：
+
+进入 C-0010-C 前，需要：
+
+Stripe test account
+webhook secret
+endpoint/domain approval
+
+未满足前：
+
+禁止：
+
+Stripe SDK
+PaymentIntent 创建
+webhook 实际连接
+自动扣款
+生产支付流程
+
+当前支付域已经达到：
+
+可以安全接入支付提供商的内部架构状态。
+
+但尚未进入：
+
+支付提供商连接阶段。
+```

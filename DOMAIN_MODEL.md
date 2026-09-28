@@ -5,7 +5,7 @@
 
 ---
 
-## 一、模型总览（31 个 = 29 个核心模型 + 2 个联结模型）
+## 一、模型总览（34 个 = 32 个核心模型 + 2 个联结模型）
 
 > **口径统一**：**29 个核心模型**（架构章程 §六 的清单 + C-0006-A 的 `CanonicalFact` + C-0006-B1 的 `RuleEvaluationShadow` + C-0008-A 的 `Session`、`UserInvitation`）**+ 2 个联结模型 `CaseEvidence`、`CanonicalFactSource`**。
 > README、本文、PR 描述、架构契约测试全部按此口径，不允许 29/31 混用。
@@ -313,6 +313,20 @@ BillingInvoice（CrossClaim 向客户开票）
 | `20260929010000_payment_domain` | C-0010-A：Payment / PaymentEvent（客户支付事实；+1 租户触发器） |
 
 ---
+
+## 支付执行不变量（C-0010-B2）
+
+```text
+I1  SUCCEEDED 的执行尝试必须带 paymentId（不允许「成功但没有资金事实」）
+I2  SUCCEEDED 的执行尝试不可改写：status / paymentId / paymentEventId 均不可变更
+I3  一笔 Payment 最多一个成功执行来源（SUCCEEDED + paymentId 上的部分唯一索引）
+```
+
+- 三层保护：应用层 CAS（只收口 RUNNING 的尝试）→ 数据库 CHECK（I1）→ BEFORE UPDATE 触发器（I2）
+- `PaymentEvent`（入站事实）与 `PaymentProcessingAttempt`（执行历史）都是 append-only，职责不重叠：
+  前者回答「provider 说了什么」，后者回答「我们这次执行结果如何」
+- 同一事件同一时刻只允许一个进行中的执行尝试（PENDING / RUNNING 上的部分唯一索引）
+- 上述约束与 provider 无关：未来接入 Stripe / PayPal 等其他支付方时同样适用
 
 ## 角色与权限（C-0008-B1，架构方批准）
 
