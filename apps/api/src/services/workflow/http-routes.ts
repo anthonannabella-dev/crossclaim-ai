@@ -25,11 +25,12 @@ import {
   rotateConnectionCredentialRef,
   setConnectionStatus,
 } from './connection-management';
+import { createCaseForOpportunity } from './case-creation';
 import { REJECT_REASONS, WorkflowError, reviewOpportunity } from './opportunity-review';
 import { ForbiddenError } from './permissions';
 
 const MAX_BODY_BYTES = 16 * 1024;
-const REVIEW_PATH = /^\/opportunities\/([^/]+)\/(qualify|reject)$/;
+const REVIEW_PATH = /^\/opportunities\/([^/]+)\/(qualify|reject|case)$/;
 const CONNECTION_PATH = /^\/connections(?:\/([^/]+)\/(status|credential-ref))?$/;
 
 /** 请求体层面的错误（与领域状态无关），统一映射为 400。 */
@@ -87,6 +88,7 @@ function statusFor(error: unknown): { code: number; error: string } {
         return { code: 404, error: error.code };
       case 'ILLEGAL_TRANSITION':
       case 'DUPLICATE_CONNECTION':
+      case 'SCOPE_NOT_SUPPORTED':
         return { code: 409, error: error.code };
       case 'FORBIDDEN':
         return { code: 403, error: error.code };
@@ -95,7 +97,11 @@ function statusFor(error: unknown): { code: number; error: string } {
       case 'INVALID_INPUT':
       case 'SECRET_NOT_ACCEPTED':
       case 'PLATFORM_NOT_REGISTERED':
+      case 'INVALID_COMMERCIAL_TERMS':
+      case 'INVALID_FIELD':
         return { code: 400, error: error.code };
+      case 'CASE_NOT_CREATED':
+        return { code: 500, error: error.code };
       default:
         return { code: 400, error: 'INVALID_REQUEST' };
     }
@@ -191,6 +197,34 @@ export async function handleWorkflowRequest(
     }
 
     const opportunityId = review?.[1] ?? '';
+    if (review?.[2] === 'case') {
+      const body = await readJsonBody(req);
+      // 裁定 3：收到 simulateSettlement 一律拒绝，绝不静默忽略。
+      if (Object.prototype.hasOwnProperty.call(body, 'simulateSettlement')) {
+        throw new WorkflowError(
+          'INVALID_FIELD',
+          'simulateSettlement 不允许由用户侧请求提交（仅测试/演示环境使用）',
+        );
+      }
+      const created = await createCaseForOpportunity(
+        deps.prisma,
+        {
+          ...actor,
+          opportunityId,
+          commercialTerms: body.commercialTerms,
+        },
+        deps.now,
+      );
+      sendJson(res, 201, {
+        caseId: created.caseId,
+        caseNo: created.caseNo,
+        opportunityId: created.opportunityId,
+        claimId: created.claimId,
+        created: created.created,
+      });
+      return true;
+    }
+
     const decision = review?.[2] === 'reject' ? 'REJECT' : 'QUALIFY';
     let reason: string | undefined;
     if (decision === 'REJECT') {

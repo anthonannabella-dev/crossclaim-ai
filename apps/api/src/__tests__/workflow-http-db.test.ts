@@ -373,4 +373,63 @@ describe('C-0008-B1 — 机会复核端点（真实 HTTP + PostgreSQL）', () =>
     );
     expect(audits.every((row) => row.actorUserId === adminUserId)).toBe(true);
   });
+
+  it('建案端点：QUALIFIED 建案成功且幂等；simulateSettlement 被拒；VIEWER 403', async () => {
+    const opportunity = await prisma.recoveryOpportunity.create({
+      data: {
+        organizationId: ORG,
+        domain: 'LOGISTICS',
+        channel: 'OTHER',
+        status: 'QUALIFIED',
+        opportunityType: 'FREIGHT_RATE_VARIANCE',
+        title: 'HTTP 建案用例',
+        amountExpected: new Prisma.Decimal('17.7500'),
+        amountActual: new Prisma.Decimal('20.4125'),
+        recoverableAmount: new Prisma.Decimal('2.6625'),
+        currency: 'USD',
+        detectedAt: NOW,
+      },
+    });
+    const terms = { successFeeRate: '0.1500', source: 'manual_input' };
+
+    await withServer(async (base) => {
+      const viewerCookie = await login(base, 'viewer-http@example.com');
+      const forbidden = await fetch(`${base}/opportunities/${opportunity.id}/case`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', cookie: viewerCookie },
+        body: JSON.stringify({ commercialTerms: terms }),
+      });
+      expect(forbidden.status).toBe(403);
+
+      const adminCookie = await login(base, 'admin-http@example.com');
+      const simulated = await fetch(`${base}/opportunities/${opportunity.id}/case`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', cookie: adminCookie },
+        body: JSON.stringify({ commercialTerms: terms, simulateSettlement: true }),
+      });
+      expect(simulated.status).toBe(400);
+      expect(((await simulated.json()) as { error: string }).error).toBe('INVALID_FIELD');
+
+      const created = await fetch(`${base}/opportunities/${opportunity.id}/case`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', cookie: adminCookie },
+        body: JSON.stringify({ commercialTerms: terms }),
+      });
+      expect(created.status).toBe(201);
+      const body = (await created.json()) as { caseId: string; caseNo: string; created: boolean };
+      expect(body.created).toBe(true);
+      expect(body.caseNo).toBe(`CASE-${opportunity.id}`);
+
+      const again = await fetch(`${base}/opportunities/${opportunity.id}/case`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', cookie: adminCookie },
+        body: JSON.stringify({ commercialTerms: terms }),
+      });
+      expect(again.status).toBe(201);
+      expect(((await again.json()) as { created: boolean }).created).toBe(false);
+    });
+
+    expect(await prisma.case.count({ where: { organizationId: ORG } })).toBe(1);
+    expect(await prisma.settlement.count()).toBe(0);
+  });
 });

@@ -18,6 +18,8 @@ export interface PermissionMatrix {
   manageConnections: boolean;
   reviewOpportunities: boolean;
   createCase: boolean;
+  /** 建案时填写/修改 successFeeRate（MSG-20260928-53 裁定 1：只有 OWNER / ADMIN 可以） */
+  setCommercialTerms: boolean;
   viewClaimText: boolean;
   viewClaimAmounts: boolean;
   viewBilling: boolean;
@@ -28,6 +30,7 @@ const DENY_ALL: PermissionMatrix = {
   manageConnections: false,
   reviewOpportunities: false,
   createCase: false,
+  setCommercialTerms: false,
   viewClaimText: false,
   viewClaimAmounts: false,
   viewBilling: false,
@@ -39,6 +42,7 @@ export const PERMISSIONS: Record<AppRole, PermissionMatrix> = {
     manageConnections: true,
     reviewOpportunities: true,
     createCase: true,
+    setCommercialTerms: true,
     viewClaimText: true,
     viewClaimAmounts: true,
     viewBilling: true,
@@ -48,6 +52,7 @@ export const PERMISSIONS: Record<AppRole, PermissionMatrix> = {
     manageConnections: true,
     reviewOpportunities: true,
     createCase: true,
+    setCommercialTerms: true,
     viewClaimText: true,
     viewClaimAmounts: true,
     viewBilling: true,
@@ -57,6 +62,7 @@ export const PERMISSIONS: Record<AppRole, PermissionMatrix> = {
     manageConnections: false,
     reviewOpportunities: true,
     createCase: true,
+    setCommercialTerms: false,
     viewClaimText: true,
     viewClaimAmounts: true,
     viewBilling: true,
@@ -66,6 +72,7 @@ export const PERMISSIONS: Record<AppRole, PermissionMatrix> = {
     manageConnections: false,
     reviewOpportunities: false,
     createCase: false,
+    setCommercialTerms: false,
     viewClaimText: false,
     viewClaimAmounts: false,
     viewBilling: true,

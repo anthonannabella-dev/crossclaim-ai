@@ -3,6 +3,11 @@
  */
 
 export {
+  createCaseForOpportunity,
+  type CreateCaseInput,
+  type CreateCaseResult,
+} from './case-creation';
+export {
   APP_ROLES,
   ForbiddenError,
   PERMISSIONS,

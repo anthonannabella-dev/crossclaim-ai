@@ -30,7 +30,11 @@ export type WorkflowErrorCode =
   | 'INVALID_INPUT'
   | 'SECRET_NOT_ACCEPTED'
   | 'PLATFORM_NOT_REGISTERED'
-  | 'DUPLICATE_CONNECTION';
+  | 'DUPLICATE_CONNECTION'
+  | 'INVALID_COMMERCIAL_TERMS'
+  | 'SCOPE_NOT_SUPPORTED'
+  | 'CASE_NOT_CREATED'
+  | 'INVALID_FIELD';
 
 export class WorkflowError extends Error {
   readonly code: WorkflowErrorCode;

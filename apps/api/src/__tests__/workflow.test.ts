@@ -21,21 +21,22 @@ import {
   type PermissionMatrix,
 } from '../services/workflow';
 
-type Row = [boolean, boolean, boolean, boolean, boolean, boolean, boolean];
+type Row = [boolean, boolean, boolean, boolean, boolean, boolean, boolean, boolean];
 
 const EXPECTED: Record<AppRole, Row> = {
-  //            conn  review case  claimText claimAmt billingView billingAdvance
-  OWNER: [true, true, true, true, true, true, true],
-  ADMIN: [true, true, true, true, true, true, true],
-  OPS: [false, true, true, true, true, true, false],
-  FINANCE: [false, false, false, false, false, true, true],
-  VIEWER: [false, false, false, false, false, false, false],
+  //            conn  review case  feeTerms claimText claimAmt billingView billingAdvance
+  OWNER: [true, true, true, true, true, true, true, true],
+  ADMIN: [true, true, true, true, true, true, true, true],
+  OPS: [false, true, true, false, true, true, true, false],
+  FINANCE: [false, false, false, false, false, false, true, true],
+  VIEWER: [false, false, false, false, false, false, false, false],
 };
 
 const DENY_ALL: PermissionMatrix = {
   manageConnections: false,
   reviewOpportunities: false,
   createCase: false,
+  setCommercialTerms: false,
   viewClaimText: false,
   viewClaimAmounts: false,
   viewBilling: false,
@@ -48,6 +49,7 @@ function asRow(role: AppRole): Row {
     p.manageConnections,
     p.reviewOpportunities,
     p.createCase,
+    p.setCommercialTerms,
     p.viewClaimText,
     p.viewClaimAmounts,
     p.viewBilling,
@@ -96,6 +98,10 @@ describe('C-0008-B1 — 角色权限矩阵', () => {
     expect(PERMISSIONS.FINANCE.reviewOpportunities).toBe(false);
     expect(PERMISSIONS.OPS.advanceBilling).toBe(false);
     expect(PERMISSIONS.OPS.viewBilling).toBe(true);
+    // MSG-20260928-53 裁定 1：OPS 可建案但不可填写费率
+    expect(PERMISSIONS.OPS.createCase).toBe(true);
+    expect(PERMISSIONS.OPS.setCommercialTerms).toBe(false);
+    expect(PERMISSIONS.ADMIN.setCommercialTerms).toBe(true);
   });
 
   it('未知 / 空角色 fail closed（全部拒绝）', () => {
