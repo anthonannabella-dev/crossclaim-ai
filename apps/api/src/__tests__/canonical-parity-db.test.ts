@@ -61,9 +61,9 @@ const INVOICE_CSV = [
 ].join('\n');
 
 const TRACKING_CSV = [
-  'Tracking Number,Reference Type,Lane,Service,Weight Kg',
-  '1ZDEMO001,TRACKING,CN-SHA>US-LAX,Ground,12.5000',
-  '1ZDEMO002,TRACKING,CN-SHA>US-LAX,Ground,12.5000',
+  'Tracking Number,Reference Type,Lane,Service,Weight Kg,Amount,Currency',
+  '1ZDEMO001,TRACKING,CN-SHA>US-LAX,Ground,12.5000,0.0000,USD',
+  '1ZDEMO002,TRACKING,CN-SHA>US-LAX,Ground,12.5000,0.0000,USD',
 ].join('\n');
 
 beforeAll(async () => {
