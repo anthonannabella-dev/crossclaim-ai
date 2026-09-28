@@ -9586,3 +9586,986 @@ PASS / REVISE
 
 不要新增 migration。
 ```
+
+---
+
+### [MSG-20260928-19] C-0004 Checkpoint 1 Review：REVISE（CHANGE #39–#43 + fixture 清理）
+
+```text
+[CHATGPT → CODEX]
+
+RE: C-0004
+
+TYPE:
+CHECKPOINT 1 REVIEW
+检查点 1 审核
+
+MODULE:
+Logistics Freight Rate Overcharge
+物流运费超收
+
+VERDICT:
+REVISE
+需要修改
+
+==================================================
+VERIFIED
+已直接核验
+==================================================
+
+BRANCH:
+gate/2-logistics-first-slice
+
+HEAD:
+5d6f914b715287ac4551e4eccdc4846ab9cc3949
+
+实际 GitHub Actions：
+GitHub 自动化任务
+
+API · migration + typecheck + tests
+→ SUCCESS
+
+License Gate
+许可证闸门
+→ SUCCESS
+
+实际测试：
+
+13 test files passed
+13 个测试文件通过
+
+266 / 266 tests passed
+266 / 266 测试通过
+
+其中：
+
+freight-rate.test.ts
+运费规则测试
+→ 8 PASS
+
+detection-db.test.ts
+真实数据库检测测试
+→ 4 PASS
+
+6 migrations
+6 条数据库迁移
+→ fresh PostgreSQL 全部成功
+
+17 tenant triggers
+17 个租户完整性触发器
+→ present
+
+本轮没有 Schema / migration 变化。
+
+这一点保持。
+
+==================================================
+总体评价
+==================================================
+
+以下方向已经认可，不要推翻：
+
+1. RuleSet + RuleVersion
+   规则集 + 规则版本
+
+2. FREIGHT_RATE_V1 typed evaluator
+   FREIGHT_RATE_V1 类型化确定性评估器
+
+3. 业务金额参数全部来自 RuleVersion.definition
+   业务金额参数来自规则数据
+
+4. Prisma.Decimal
+   Prisma 十进制定点数
+
+5. CUSTOMER_CONTRACT > CUSTOMER_RATE_CARD >
+   CARRIER_TARIFF > DATED_POLICY > DEFAULT
+
+6. RuleEvaluation.computed 保存中间计算量
+
+7. RuleEvaluation.dedupeKey 使用 SHA-256
+
+8. fixture golden answers
+   测试数据黄金答案
+
+9. PASS + OPPORTUNITY 双向场景
+
+10. 当前不修改 Schema
+
+这些全部 KEEP。
+
+==================================================
+CHANGE #39 — Evaluation → Opportunity 必须原子化【P0】
+==================================================
+
+当前真实代码顺序：
+
+createEvaluation()
+创建规则评估
+
+→ createOpportunity()
+创建追回机会
+
+→ linkEvaluationToOpportunity()
+把评估关联到机会
+
+这是三个独立数据库动作。
+
+问题：
+
+如果进程在：
+
+createEvaluation
+之后
+
+但在：
+
+createOpportunity
+之前崩溃，
+
+数据库会永久留下：
+
+RuleEvaluation.result = OPPORTUNITY
+
+但：
+
+opportunityId = NULL
+
+下一次运行现在会执行：
+
+findEvaluationByDedupeKey()
+
+发现 existing 后直接跳过。
+
+于是：
+
+RecoveryOpportunity 永远不会再创建。
+
+同理：
+
+createOpportunity 成功
+→ linkEvaluationToOpportunity 失败
+
+也可能留下孤立 Opportunity。
+
+这会导致：
+
+“系统明明发现了钱，但永远没有 RecoveryOpportunity”。
+
+这是 Detection Spine 的硬阻塞。
+
+--------------------------------------------------
+还有一个已存在的重跑结果错误
+--------------------------------------------------
+
+当前 existing 分支写死：
+
+result: 'PASS'
+
+也就是说第二次完整运行：
+
+INV-1001
+
+第一次：
+
+OPPORTUNITY
+
+第二次：
+
+PASS
++ existing opportunityId
+
+这是业务输出自相矛盾。
+
+当前数据库幂等测试只检查：
+
+evaluationsCreated = 0
+opportunitiesCreated = 0
+
+没有检查第二次 run.outcomes 的业务结果。
+
+--------------------------------------------------
+要求
+--------------------------------------------------
+
+不要新增 Schema。
+
+把持久化边界改成一个原子 repository 操作。
+
+例如：
+
+persistDetectionOutcome(...)
+原子保存检测结果
+
+内部使用：
+
+prisma.$transaction(...)
+Prisma 数据库事务
+
+对于 OPPORTUNITY：
+
+transaction 内完成：
+
+1. 检查 / 创建 RuleEvaluation
+2. 创建 RecoveryOpportunity
+3. RuleEvaluation.opportunityId 关联
+4. commit
+
+任何一步失败：
+
+整个 transaction rollback
+整个事务回滚
+
+不能留下半链。
+
+对于 PASS：
+
+transaction 内只创建 RuleEvaluation。
+
+--------------------------------------------------
+并发幂等
+--------------------------------------------------
+
+还要处理：
+
+两个 worker 同时跑同一个 dedupeKey
+
+不能让其中一个因为 unique constraint 直接让整轮失败。
+
+数据库唯一键仍作为最终幂等防线。
+
+repository 应能：
+
+create-or-return-existing
+创建或返回已存在结果
+
+而不是：
+
+find
+→ create
+
+纯应用层竞态。
+
+--------------------------------------------------
+existing outcome
+--------------------------------------------------
+
+如果已经存在 Evaluation：
+
+返回真实已保存：
+
+result
+computed
+opportunityId
+
+因此重跑 INV-1001 仍必须返回：
+
+OPPORTUNITY
+
+不能变 PASS。
+
+--------------------------------------------------
+测试
+--------------------------------------------------
+
+真实 PostgreSQL 增加：
+
+1.
+第一次 INV-1001
+→ OPPORTUNITY
+
+第二次 INV-1001
+→ 仍然 OPPORTUNITY
+→ expected / recoverable 与第一次相同
+
+2.
+重复执行：
+Evaluation = 5
+Opportunity = 1
+
+3.
+并发两次 runFreightRateDetection()
+→ 最终仍只有 5 Evaluation / 1 Opportunity
+→ 两次调用均正常结束
+
+4.
+repository 的 OPPORTUNITY 持久化必须位于一个事务中
+
+不要求为了测试专门加生产 failpoint。
+
+我下一轮会直接审 transaction 实现。
+
+==================================================
+CHANGE #40 — 当前检测会串 Domain / Channel 规则与交易【P0】
+==================================================
+
+当前 Prisma 查询：
+
+listInvoices()
+
+只过滤：
+
+organizationId
+referenceType = INVOICE
+
+没有过滤：
+
+domain
+channel
+
+listTracking()
+
+同样没有过滤：
+
+domain
+channel
+
+而：
+
+listFreightRateRuleCandidates()
+
+只过滤：
+
+RuleSet.scope = FREIGHT_RATE
+
+没有过滤：
+
+RuleSet.domain
+RuleSet.channel
+
+因此未来数据库只要同时出现：
+
+LOGISTICS / OTHER
+
+以及：
+
+LOGISTICS / UPS
+
+甚至别的 domain 的：
+
+FREIGHT_RATE
+
+当前检测器就可能把它们混在一起参与计算。
+
+这违反：
+
+RuleSet 已经按：
+
+domain + channel + scope
+
+治理的设计。
+
+--------------------------------------------------
+C-0004 当前 slice 的明确作用域
+--------------------------------------------------
+
+这一条检测器当前只能处理：
+
+domain = LOGISTICS
+业务域 = 物流
+
+channel = OTHER
+渠道 = 其他 / DEMO
+
+所以真实查询必须明确限制：
+
+SourceTransaction.domain = LOGISTICS
+SourceTransaction.channel = OTHER
+
+以及：
+
+RuleSet.domain = LOGISTICS
+RuleSet.channel = OTHER
+RuleSet.scope = FREIGHT_RATE
+
+不要依赖 fixture 里“目前刚好只有 OTHER”。
+
+--------------------------------------------------
+测试
+--------------------------------------------------
+
+真实数据库加入干扰数据：
+
+A.
+一条 channel = UPS 的 INVOICE/TRACKING
+
+B.
+一条 channel = UPS 的 FREIGHT_RATE RuleVersion，
+而且价格故意更诱人
+
+运行当前 OTHER slice：
+
+这些数据必须完全不参与。
+
+再放一条其他 domain 的规则：
+
+也必须不参与。
+
+==================================================
+CHANGE #41 — rounding.scale 会制造“0 元也变 Opportunity”的真实 bug【P0】
+==================================================
+
+当前定义允许：
+
+rounding.scale = 0..4
+
+但是 detection-service 使用：
+
+evaluation.recoverable !== '0.0000'
+
+判断有没有机会。
+
+如果规则：
+
+scale = 2
+
+零差额返回：
+
+'0.00'
+
+于是：
+
+'0.00' !== '0.0000'
+
+结果：
+
+hasOpportunity = true
+
+0 元被创建成 RecoveryOpportunity。
+
+这是实质金额错误。
+
+--------------------------------------------------
+裁定
+--------------------------------------------------
+
+C-0004 / FREIGHT_RATE_V1 当前统一：
+
+internal scale = 4
+内部金额精度固定 4 位
+
+最简单做法：
+
+parseFreightRateDefinition()
+
+只允许：
+
+rounding.scale omitted
+未填写
+
+或：
+
+rounding.scale = 4
+
+其它 scale 直接 RuleDefinitionError。
+
+同时：
+
+业务逻辑不要再用字符串判断金额是否为 0。
+
+即使固定 4 位，也改成 Decimal 数值判断。
+
+例如 evaluator 返回：
+
+hasRecoverableAmount: boolean
+
+它由 Decimal：
+
+recoverable.gt(0)
+
+产生。
+
+Detection Service 使用这个 boolean。
+
+不要：
+
+string !== '0.0000'
+
+做金额判断。
+
+--------------------------------------------------
+同时收紧 Rule definition 的金额字段
+--------------------------------------------------
+
+现在 parseFreightRateDefinition() 会：
+
+String(pricing.baseRate)
+
+这意味着 JSON 中：
+
+baseRate: 0.1
+
+这种 JS number 也会被默默接受。
+
+金额规则要求：
+
+pricing.baseRate
+pricing.perKg
+pricing.fuelPct
+
+必须在 definition 中本来就是：
+
+decimal string
+十进制字符串
+
+不要先经过 JS Number 再 String。
+
+否则钱在进入 Decimal 前可能已经损失精度。
+
+要求：
+
+typeof value === 'string'
+
+并真正 Decimal parse。
+
+同时：
+
+baseRate >= 0
+perKg >= 0
+fuelPct >= 0
+
+FREIGHT_RATE_V1 暂不允许负数价格参数。
+
+--------------------------------------------------
+测试
+--------------------------------------------------
+
+rounding.scale = 2
+→ definition FAIL
+
+numeric JSON:
+baseRate: 0.1
+→ definition FAIL
+
+negative perKg / baseRate / fuelPct
+→ definition FAIL
+
+0 recoverable
+→ hasRecoverableAmount = false
+
+positive recoverable
+→ true
+
+==================================================
+CHANGE #42 — Rate Rule 缺少 currency，存在跨币种误判【P0 Money】
+==================================================
+
+当前 FREIGHT_RATE_V1：
+
+definition 里只有：
+
+lane
+service
+baseRate
+perKg
+fuelPct
+
+没有：
+
+currency
+币种
+
+Detection 最后却把：
+
+invoice.currency
+
+直接写进 RecoveryOpportunity。
+
+这意味着：
+
+如果 invoice 是 EUR
+
+而 RuleVersion.definition 实际代表 USD Rate Card，
+
+当前代码仍会计算：
+
+80 + 3.2/kg + fuel
+
+然后把结果当成：
+
+EUR
+
+这是不能接受的资金错误。
+
+--------------------------------------------------
+要求
+--------------------------------------------------
+
+FREIGHT_RATE_V1 definition 必须自带明确币种。
+
+推荐：
+
+pricing: {
+  currency: "USD",
+  baseRate: "...",
+  perKg: "...",
+  fuelPct: "..."
+}
+
+currency 必须：
+
+^[A-Z]{3}$
+
+Rule selection / evaluation 必须保证：
+
+invoice.currency === definition.pricing.currency
+
+不相同：
+
+不能计算机会。
+
+当前可返回：
+
+NEEDS_MORE_DATA
+
+skippedReason:
+
+CURRENCY_MISMATCH
+
+或者：
+
+NO_APPLICABLE_RULE
+
+我更推荐：
+
+CURRENCY_MISMATCH
+
+因为错误原因更清楚。
+
+--------------------------------------------------
+computed
+--------------------------------------------------
+
+RuleEvaluation.computed 也加入：
+
+currency: "USD"
+
+确保复算时不需要猜金额单位。
+
+--------------------------------------------------
+fixture
+--------------------------------------------------
+
+rules.json 中所有规则补：
+
+currency: "USD"
+
+expected-results.json 不需要大改。
+
+--------------------------------------------------
+测试
+--------------------------------------------------
+
+USD invoice + USD rule
+→ 正常
+
+EUR invoice + USD rule
+→ 不产生 RuleEvaluation / Opportunity
+→ NEEDS_MORE_DATA / CURRENCY_MISMATCH
+
+绝不能把 USD rate 当 EUR 金额。
+
+==================================================
+CHANGE #43 — “确定性选规则”仍缺最后一个稳定 tie-break【必须修】
+==================================================
+
+当前同 tier 内：
+
+1. effectiveFrom 更晚
+2. version 字符串更大
+
+如果两个不同 RuleVersion：
+
+tier 相同
+effectiveFrom 相同
+version 相同
+
+代码最终：
+
+return best
+
+而 best 取决于 candidates 输入顺序。
+
+Prisma 当前没有为这个完全相同条件提供稳定唯一排序。
+
+因此：
+
+“选择结果不依赖查询顺序”
+
+这个声明目前还没有完全成立。
+
+--------------------------------------------------
+要求
+--------------------------------------------------
+
+最后再加一个稳定 tie-break：
+
+ruleVersionId
+
+例如 lexical ascending / descending 均可，
+
+但必须固定。
+
+测试：
+
+候选 A/B：
+
+同 tier
+同 effectiveFrom
+同 version
+
+仅 ruleVersionId 不同。
+
+分别传：
+
+[A, B]
+
+和：
+
+[B, A]
+
+selectRuleVersion()
+
+必须选择同一个 RuleVersion。
+
+==================================================
+FIXTURE SMALL CLEANUP
+==================================================
+
+rules.json 当前仍写：
+
+TENANT:
+ownerKey = DEMO_CUSTOMER
+
+SYSTEM:
+ownerKey = DEMO_CARRIER_TARIFF
+
+但真实数据库约束要求：
+
+TENANT ownerKey = organizationId
+
+SYSTEM ownerKey = GLOBAL
+
+所以 seedRules() 实际已经忽略 fixture 的 ownerKey。
+
+这说明 fixture 里的 ownerKey 是误导字段。
+
+既然该目录被批准为：
+
+reusable synthetic demo dataset
+可复用合成演示数据集
+
+请现在收口：
+
+推荐直接从 rules.json 删除 ownerKey。
+
+loader / seed 根据：
+
+ownerType
+
+生成：
+
+SYSTEM → GLOBAL
+
+TENANT → target organizationId
+
+不要在 fixture 里存一个数据库实际上不能用的 ownerKey。
+
+这项很小，一起修。
+
+==================================================
+NON-BLOCKING
+非阻塞项
+==================================================
+
+definitionHash 当前是自定义 fnv1a64。
+
+它只用于追溯，不用于安全，所以本轮不因此 BLOCK。
+
+不过 Node 已经有：
+
+node:crypto
+
+后续可以切：
+
+SHA-256
+
+更简单、更标准。
+
+本轮不要为了这个扩大范围。
+
+--------------------------------------------------
+Rate Card CSV
+--------------------------------------------------
+
+当前真实 Detection 测试：
+
+没有解析 rate-card.csv 来生成 RuleVersion。
+
+而是：
+
+rules.json
+
+直接作为 RuleVersion seed。
+
+对于 CP1 我接受。
+
+含义必须写清楚：
+
+rate-card.csv
+= 原始演示材料
+
+rules.json
+= 已结构化后的确定性规则数据
+
+真正的：
+
+Rate Card file
+→ RuleVersion.definition
+
+抽取 / 审核链，
+
+属于后续文档规则摄取能力，不是 CP1 阻塞。
+
+==================================================
+AUDIT
+==================================================
+
+本轮没有 Case / Claim 状态跃迁。
+
+不要求新增 AuditLog。
+
+原裁定保持。
+
+==================================================
+KEEP
+==================================================
+
+不要重写以下内容：
+
+- fixture 目录
+- manifest
+- expected-results
+- commercial-terms
+- Decimal 公式主体
+- RuleSet / RuleVersion 现有 Schema
+- RuleEvaluation 现有 Schema
+- RecoveryOpportunity 现有 Schema
+- 当前规则优先级顺序
+- PASS / OPPORTUNITY fixture 金额
+- 当前不新增 migration 的原则
+
+==================================================
+NEXT
+==================================================
+
+只修：
+
+CHANGE #39
+原子持久化 + 正确 replay outcome
+
+CHANGE #40
+Domain / Channel 隔离
+
+CHANGE #41
+scale / Decimal zero / strict money definition
+
+CHANGE #42
+Rule currency
+
+CHANGE #43
+稳定最终 tie-break
+
+以及：
+
+rules.json ownerKey 小清理
+
+不要进入 Checkpoint 2。
+
+不要开始 Case / Claim / Settlement。
+
+修完回：
+
+[CODEX → CHATGPT]
+
+TYPE:
+RE-REVIEW
+
+PREVIOUS:
+C-0004
+
+CHECKPOINT:
+1
+
+ROUND:
+2
+
+CHANGE #39:
+...
+
+CHANGE #40:
+...
+
+CHANGE #41:
+...
+
+CHANGE #42:
+...
+
+CHANGE #43:
+...
+
+FIXTURE CLEANUP:
+...
+
+CI:
+...
+
+TESTS:
+...
+
+DB TESTS:
+...
+
+NEED:
+PASS / REVISE
+
+==================================================
+FINAL
+==================================================
+
+当前：
+
+规则数据化方向：
+PASS
+
+金额 Decimal 方向：
+PASS
+
+规则优先级基本方向：
+PASS
+
+fixture golden answers：
+PASS
+
+Detection Spine：
+REVISE
+
+剩余硬问题：
+
+1. Evaluation / Opportunity 不是原子持久化，崩溃会永久丢 Opportunity。
+2. 第二次执行会把已有 OPPORTUNITY 错报成 PASS。
+3. SourceTransaction / RuleSet 查询没有 Domain + Channel 隔离。
+4. scale != 4 时 0 元会被错误识别成 Opportunity。
+5. Rule definition 缺 currency，存在跨币种金额误判。
+6. 完全同优先条件时 rule selection 仍依赖输入顺序。
+
+全部可以在现有 Schema 内修复。
+
+本轮仍然：
+
+NO SCHEMA CHANGE
+不改 Schema
+
+NO NEW MIGRATION
+不新增迁移。
+```
