@@ -1,0 +1,389 @@
+/**
+ * Recovery Closure（C-0004 Checkpoint 2）
+ * ---------------------------------------------------------------
+ *   RecoveryOpportunity(DETECTED/QUALIFIED, recoverable>0)
+ *     → Case + CaseOpportunity + RecoveryRoute(CARRIER) + 3×EvidenceArtifact/CaseEvidence
+ *     → Claim DRAFT（模板文本；金额依据只来自 Opportunity）
+ *     → （仅 test/demo）Settlement RECEIVED → RecoveryLedgerEntry RECOVERED
+ *     → FeeCalculation（费率来自数据）→ BillingInvoice DRAFT
+ *
+ * 硬边界：不改 Schema / 不加 migration；Claim 只到 DRAFT；不调用第三方接口；
+ *         合成 Settlement 仅测试/演示；Ledger 金额必须等于 Settlement.amount；
+ *         费率来自数据（Decimal）；Case/Claim 状态跃迁写 AuditLog。
+ */
+
+import { Prisma, type PrismaClient } from '@prisma/client';
+
+const Decimal = Prisma.Decimal;
+const MONEY_SCALE = 4;
+
+const money = (value: string | InstanceType<typeof Decimal>): string =>
+  new Decimal(value).toDecimalPlaces(MONEY_SCALE, Decimal.ROUND_HALF_UP).toFixed(MONEY_SCALE);
+
+export interface CommercialTerms {
+  /** 成功费率（十进制字符串，来自 fixture / 合同数据，禁止硬编码） */
+  successFeeRate: string;
+  /** 费率来源标识，写入 FeeCalculation.computation.source */
+  source: string;
+}
+
+export interface ClosureScope {
+  domain: 'LOGISTICS';
+  channel: 'OTHER';
+}
+
+export const CLOSURE_SCOPE: ClosureScope = { domain: 'LOGISTICS', channel: 'OTHER' };
+
+export interface ClosureRunResult {
+  opportunitiesConsidered: number;
+  casesCreated: number;
+  casesReused: number;
+  claimsCreated: number;
+  evidenceCreated: number;
+  settlementsCreated: number;
+  ledgerEntriesCreated: number;
+  feeCalculationsCreated: number;
+  billingInvoicesCreated: number;
+  cases: Array<{ caseId: string; caseNo: string; opportunityId: string; claimId: string }>;
+}
+
+export class ClosureError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ClosureError';
+  }
+}
+
+const isUniqueViolation = (error: unknown): boolean =>
+  error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
+
+/** 确定性案件号：同租户同一 opportunity 永远得到同一个 caseNo（幂等基础） */
+export function caseNoFor(opportunityId: string): string {
+  return `CASE-${opportunityId}`;
+}
+
+export function billingInvoiceNoFor(caseNo: string): string {
+  return `BILL-${caseNo}`;
+}
+
+/** 确定性 Claim 草稿文本：金额只引用 Opportunity，不重新计算 */
+export function renderClaimDraft(input: {
+  caseNo: string;
+  opportunityType: string;
+  amountExpected: string;
+  amountActual: string;
+  recoverableAmount: string;
+  currency: string;
+}): string {
+  return [
+    `Claim draft (${input.caseNo}) — ${input.opportunityType}`,
+    `Expected charge: ${input.amountExpected} ${input.currency}`,
+    `Invoiced charge: ${input.amountActual} ${input.currency}`,
+    `Recoverable amount: ${input.recoverableAmount} ${input.currency}`,
+    'Basis: carrier invoice vs contracted rate card (FREIGHT_RATE_V1).',
+    'Draft for manual submission — Phase 1 does not auto-submit.',
+  ].join('\n');
+}
+
+async function audit(
+  prisma: PrismaClient,
+  input: {
+    organizationId: string;
+    action: string;
+    entityType: string;
+    entityId: string;
+    changes: Record<string, unknown>;
+  },
+): Promise<void> {
+  await prisma.auditLog.create({
+    data: {
+      organizationId: input.organizationId,
+      actorType: 'SYSTEM',
+      actorRef: 'recovery-closure-service',
+      action: input.action,
+      entityType: input.entityType,
+      entityId: input.entityId,
+      changes: input.changes as Prisma.InputJsonValue,
+    },
+  });
+}
+
+export interface RunClosureInput {
+  organizationId: string;
+  prisma: PrismaClient;
+  commercialTerms: CommercialTerms;
+  scope?: ClosureScope;
+  /** 测试/演示专用：为每条新案件合成“承运商已赔付”的 Settlement */
+  simulateSettlement?: boolean;
+}
+
+export async function runRecoveryClosure(input: RunClosureInput): Promise<ClosureRunResult> {
+  const { organizationId, prisma, commercialTerms } = input;
+  const scope = input.scope ?? CLOSURE_SCOPE;
+
+  const opportunities = await prisma.recoveryOpportunity.findMany({
+    where: {
+      organizationId,
+      domain: scope.domain,
+      channel: scope.channel,
+      status: { in: ['DETECTED', 'QUALIFIED', 'CONVERTED'] },
+      recoverableAmount: { gt: new Decimal(0) },
+    },
+    orderBy: { detectedAt: 'asc' },
+  });
+
+  const result: ClosureRunResult = {
+    opportunitiesConsidered: opportunities.length,
+    casesCreated: 0,
+    casesReused: 0,
+    claimsCreated: 0,
+    evidenceCreated: 0,
+    settlementsCreated: 0,
+    ledgerEntriesCreated: 0,
+    feeCalculationsCreated: 0,
+    billingInvoicesCreated: 0,
+    cases: [],
+  };
+
+  for (const opportunity of opportunities) {
+    const caseNo = caseNoFor(opportunity.id);
+    const recoverable = money(opportunity.recoverableAmount ?? '0');
+
+    // 1) Case（幂等：organizationId + caseNo 唯一）
+    let kase = await prisma.case.findUnique({
+      where: { organizationId_caseNo: { organizationId, caseNo } },
+    });
+    if (kase) {
+      result.casesReused += 1;
+    } else {
+      try {
+        kase = await prisma.case.create({
+          data: {
+            organizationId,
+            caseNo,
+            title: opportunity.title,
+            domain: scope.domain,
+            status: 'OPEN',
+            claimedAmount: new Decimal(recoverable),
+            currency: opportunity.currency,
+          },
+        });
+        result.casesCreated += 1;
+        await audit(prisma, {
+          organizationId,
+          action: 'case.status_changed',
+          entityType: 'Case',
+          entityId: kase.id,
+          changes: { to: 'OPEN', caseNo, opportunityId: opportunity.id },
+        });
+      } catch (error) {
+        if (!isUniqueViolation(error)) throw error;
+        kase = await prisma.case.findUniqueOrThrow({
+          where: { organizationId_caseNo: { organizationId, caseNo } },
+        });
+        result.casesReused += 1;
+      }
+    }
+
+    // 2) CaseOpportunity（复合主键 → upsert 幂等）
+    await prisma.caseOpportunity.upsert({
+      where: { caseId_opportunityId: { caseId: kase.id, opportunityId: opportunity.id } },
+      update: {},
+      create: { organizationId, caseId: kase.id, opportunityId: opportunity.id },
+    });
+
+    // 3) RecoveryRoute → CARRIER（同案件同 target 只留一条）
+    const existingRoute = await prisma.recoveryRoute.findFirst({
+      where: { organizationId, caseId: kase.id, target: 'CARRIER' },
+    });
+    if (!existingRoute) {
+      await prisma.recoveryRoute.create({
+        data: {
+          organizationId,
+          caseId: kase.id,
+          opportunityId: opportunity.id,
+          target: 'CARRIER',
+          status: 'PROPOSED',
+          rationale: `freight rate overcharge vs contracted rate card (${opportunity.opportunityType})`,
+        },
+      });
+    }
+
+    // 4) 三份语义证据（fixture-only：不造假 FileAsset）
+    const evidenceSpecs: Array<{ kind: 'INVOICE' | 'RATE_CARD' | 'TRACKING'; title: string; role: string }> = [
+      { kind: 'INVOICE', title: `Carrier invoice — ${caseNo}`, role: 'INVOICE' },
+      { kind: 'RATE_CARD', title: `Contract rate card — ${caseNo}`, role: 'RATE_CARD' },
+      { kind: 'TRACKING', title: `Tracking / weight evidence — ${caseNo}`, role: 'TRACKING' },
+    ];
+    for (const spec of evidenceSpecs) {
+      const existing = await prisma.evidenceArtifact.findFirst({
+        where: { organizationId, title: spec.title, kind: spec.kind },
+      });
+      const evidence =
+        existing ??
+        (await prisma.evidenceArtifact.create({
+          data: {
+            organizationId,
+            kind: spec.kind,
+            title: spec.title,
+            description: `fixture-derived ${spec.kind} evidence for ${caseNo}`,
+            capturedAt: opportunity.detectedAt,
+          },
+        }));
+      if (!existing) result.evidenceCreated += 1;
+      await prisma.caseEvidence.upsert({
+        where: { caseId_evidenceId: { caseId: kase.id, evidenceId: evidence.id } },
+        update: {},
+        create: { organizationId, caseId: kase.id, evidenceId: evidence.id, role: spec.role },
+      });
+    }
+
+    // 5) Claim DRAFT（第 1 轮；同案件同轮次只留一条）
+    let claim = await prisma.claim.findFirst({ where: { organizationId, caseId: kase.id, round: 1 } });
+    if (!claim) {
+      claim = await prisma.claim.create({
+        data: {
+          organizationId,
+          caseId: kase.id,
+          round: 1,
+          status: 'DRAFT',
+          target: 'CARRIER',
+          aiDraftText: renderClaimDraft({
+            caseNo,
+            opportunityType: opportunity.opportunityType,
+            amountExpected: money(opportunity.amountExpected ?? '0'),
+            amountActual: money(opportunity.amountActual ?? '0'),
+            recoverableAmount: recoverable,
+            currency: opportunity.currency,
+          }),
+        },
+      });
+      result.claimsCreated += 1;
+      await audit(prisma, {
+        organizationId,
+        action: 'claim.created',
+        entityType: 'Claim',
+        entityId: claim.id,
+        changes: { caseId: kase.id, round: 1, target: 'CARRIER', status: 'DRAFT' },
+      });
+      await audit(prisma, {
+        organizationId,
+        action: 'claim.status_changed',
+        entityType: 'Claim',
+        entityId: claim.id,
+        changes: { from: null, to: 'DRAFT', recoverableAmount: recoverable },
+      });
+    }
+
+    // 6) Opportunity 状态推进（→ CONVERTED）
+    if (opportunity.status !== 'CONVERTED') {
+      await prisma.recoveryOpportunity.update({
+        where: { id: opportunity.id },
+        data: { status: 'CONVERTED', qualifiedAt: opportunity.qualifiedAt ?? new Date() },
+      });
+      await audit(prisma, {
+        organizationId,
+        action: 'opportunity.status_changed',
+        entityType: 'RecoveryOpportunity',
+        entityId: opportunity.id,
+        changes: { from: opportunity.status, to: 'CONVERTED' },
+      });
+    }
+
+    // 7) 仅测试/演示：合成到账 → 账本 → 费用 → 账单（严格顺序）
+    if (input.simulateSettlement) {
+      const existingSettlement = await prisma.settlement.findFirst({
+        where: { organizationId, caseId: kase.id },
+      });
+      if (!existingSettlement) {
+        const settlement = await prisma.settlement.create({
+          data: {
+            organizationId,
+            caseId: kase.id,
+            status: 'RECEIVED',
+            source: 'CARRIER_CREDIT',
+            amount: new Decimal(recoverable),
+            currency: opportunity.currency,
+            receivedAt: new Date(),
+            confirmedAt: new Date(),
+            note: 'synthetic settlement (test/demo only)',
+          },
+        });
+        result.settlementsCreated += 1;
+
+        const settlementAmount = money(settlement.amount);
+        await prisma.recoveryLedgerEntry.create({
+          data: {
+            organizationId,
+            caseId: kase.id,
+            opportunityId: opportunity.id,
+            settlementId: settlement.id,
+            entryType: 'RECOVERED',
+            amount: new Decimal(settlementAmount),
+            currency: settlement.currency,
+            counterparty: 'DEMO_CARRIER',
+            reference: `settlement:${settlement.id}`,
+          },
+        });
+        result.ledgerEntriesCreated += 1;
+
+        const rate = new Decimal(commercialTerms.successFeeRate);
+        const base = new Decimal(settlementAmount);
+        const fee = base.times(rate).toDecimalPlaces(MONEY_SCALE, Decimal.ROUND_HALF_UP);
+        const feeAmount = fee.toFixed(MONEY_SCALE);
+
+        const feeCalculation = await prisma.feeCalculation.create({
+          data: {
+            organizationId,
+            settlementId: settlement.id,
+            caseId: kase.id,
+            basis: 'RECOVERED_AMOUNT_PCT',
+            rate,
+            baseAmount: base,
+            feeAmount: fee,
+            currency: settlement.currency,
+            computation: {
+              settlementId: settlement.id,
+              baseAmount: settlementAmount,
+              rate: commercialTerms.successFeeRate,
+              feeAmount,
+              rounding: { scale: MONEY_SCALE, mode: 'HALF_UP' },
+              source: commercialTerms.source,
+            } as Prisma.InputJsonValue,
+          },
+        });
+        result.feeCalculationsCreated += 1;
+
+        const invoiceNo = billingInvoiceNoFor(caseNo);
+        await prisma.billingInvoice.create({
+          data: {
+            organizationId,
+            caseId: kase.id,
+            invoiceNo,
+            status: 'DRAFT',
+            subtotal: fee,
+            taxAmount: new Decimal(0),
+            total: fee,
+            currency: settlement.currency,
+            fees: { connect: { id: feeCalculation.id } },
+          },
+        });
+        result.billingInvoicesCreated += 1;
+
+        await prisma.case.update({
+          where: { id: kase.id },
+          data: { recoveredAmount: new Decimal(settlementAmount) },
+        });
+      }
+    }
+
+    result.cases.push({
+      caseId: kase.id,
+      caseNo,
+      opportunityId: opportunity.id,
+      claimId: claim.id,
+    });
+  }
+
+  return result;
+}
