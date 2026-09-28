@@ -218,6 +218,23 @@ export async function runFreightRateDetection(
       continue;
     }
 
+    // CHANGE #42：规则币种必须与账单币种一致，否则不得计算机会（避免把 USD 费率当 EUR 金额）
+    if (invoice.currency !== selected.definition.pricing.currency) {
+      result.outcomes.push({
+        invoiceExternalId: invoice.externalId,
+        trackingExternalId: trackingRow.externalId,
+        result: 'NEEDS_MORE_DATA',
+        ruleTier: selected.tier,
+        ruleVersionId: selected.ruleVersionId,
+        expected: null,
+        actual: invoice.amount,
+        recoverable: null,
+        opportunityId: null,
+        skippedReason: 'CURRENCY_MISMATCH',
+      });
+      continue;
+    }
+
     const dedupeKey = detectionDedupeKey({
       organizationId,
       ruleVersionId: selected.ruleVersionId,
@@ -248,7 +265,8 @@ export async function runFreightRateDetection(
       weightKg: trackingRow.weightKg,
       actualCharge: invoice.amount,
     });
-    const hasOpportunity = evaluation.recoverable !== '0.0000';
+    // CHANGE #41：用 Decimal 数值判断（evaluator 返回 boolean），禁止字符串比较
+    const hasOpportunity = evaluation.hasRecoverableAmount;
 
     const created = await repository.createEvaluation({
       organizationId,
@@ -260,6 +278,7 @@ export async function runFreightRateDetection(
         definitionHash: definitionHash(selected.definition),
         ruleVersionId: selected.ruleVersionId,
         ruleTier: selected.tier,
+        currency: evaluation.intermediate.currency,
         inputRefs: {
           invoiceTransactionId: invoice.sourceTransactionId,
           trackingTransactionId: trackingRow.sourceTransactionId,

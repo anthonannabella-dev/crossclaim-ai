@@ -33,7 +33,8 @@ export interface FreightRateDefinition {
   schemaVersion: 1;
   kind: 'FREIGHT_RATE_V1';
   match: { lane: string; service: string };
-  pricing: { baseRate: string; perKg: string; fuelPct: string };
+  /** currency 必填：金额单位不能靠 invoice 猜（C-0004 CHANGE #42） */
+  pricing: { currency: string; baseRate: string; perKg: string; fuelPct: string };
   rounding?: { scale?: number; mode?: 'HALF_UP' };
 }
 
@@ -42,8 +43,14 @@ export interface FreightRateEvaluation {
   expected: string;
   /** 可追回金额 = max(actual - expected, 0)（4 位小数字符串） */
   recoverable: string;
+  /**
+   * 是否有真实可追回金额（Decimal 数值判断，禁止用字符串比较判断是否为 0）
+   * C-0004 CHANGE #41
+   */
+  hasRecoverableAmount: boolean;
   /** 中间值，全部为 4 位小数字符串，供复算与审计 */
   intermediate: {
+    currency: string;
     baseRate: string;
     perKg: string;
     fuelPct: string;
@@ -91,6 +98,23 @@ function decimalFrom(value: string, field: string): InstanceType<typeof Decimal>
   }
 }
 
+const CURRENCY_RE = /^[A-Z]{3}$/;
+
+/** 金额参数必须是 definition 里本来就是十进制字符串（不接受 JSON number，避免精度损失） */
+function requireDecimalString(raw: unknown, field: string, allowZero = true): InstanceType<typeof Decimal> {
+  if (typeof raw !== 'string') {
+    throw new RuleDefinitionError(`${field} 必须是十进制字符串（收到 ${typeof raw}）`);
+  }
+  const value = decimalFrom(raw, field);
+  if (!allowZero && value.isZero()) {
+    throw new RuleDefinitionError(`${field} 不能为 0`);
+  }
+  if (value.isNegative()) {
+    throw new RuleDefinitionError(`${field} 不能为负（FREIGHT_RATE_V1 暂不支持负数价格）`);
+  }
+  return value;
+}
+
 /** 定义解析：只接受 FREIGHT_RATE_V1 的明确形状，任何缺失都直接抛错（不猜） */
 export function parseFreightRateDefinition(raw: unknown): FreightRateDefinition {
   if (raw === null || typeof raw !== 'object') {
@@ -104,12 +128,17 @@ export function parseFreightRateDefinition(raw: unknown): FreightRateDefinition 
   const match = def.match as FreightRateDefinition['match'] | undefined;
   const pricing = def.pricing as FreightRateDefinition['pricing'] | undefined;
   if (!match?.lane || !match?.service) throw new RuleDefinitionError('definition.match 缺少 lane/service');
-  if (!pricing?.baseRate || !pricing?.perKg || !pricing?.fuelPct) {
-    throw new RuleDefinitionError('definition.pricing 缺少 baseRate/perKg/fuelPct');
+  if (!pricing) throw new RuleDefinitionError('definition.pricing 缺失');
+  if (typeof pricing.currency !== 'string' || !CURRENCY_RE.test(pricing.currency)) {
+    throw new RuleDefinitionError('definition.pricing.currency 必须是 3 位大写字母币种');
   }
+  requireDecimalString(pricing.baseRate, 'pricing.baseRate');
+  requireDecimalString(pricing.perKg, 'pricing.perKg');
+  requireDecimalString(pricing.fuelPct, 'pricing.fuelPct');
   const scale = def.rounding?.scale ?? MONEY_SCALE;
-  if (!Number.isInteger(scale) || scale < 0 || scale > MONEY_SCALE) {
-    throw new RuleDefinitionError(`definition.rounding.scale 必须在 0..${MONEY_SCALE}`);
+  // CHANGE #41：C-0004 统一内部精度 4 位；其它 scale 会制造“0 元也是 OPPORTUNITY”的错误
+  if (scale !== MONEY_SCALE) {
+    throw new RuleDefinitionError(`definition.rounding.scale 只允许省略或 ${MONEY_SCALE}`);
   }
   if (def.rounding?.mode && def.rounding.mode !== 'HALF_UP') {
     throw new RuleDefinitionError(`暂不支持舍入模式: ${def.rounding.mode}`);
@@ -119,9 +148,10 @@ export function parseFreightRateDefinition(raw: unknown): FreightRateDefinition 
     kind: 'FREIGHT_RATE_V1',
     match: { lane: match.lane, service: match.service },
     pricing: {
-      baseRate: String(pricing.baseRate),
-      perKg: String(pricing.perKg),
-      fuelPct: String(pricing.fuelPct),
+      currency: pricing.currency,
+      baseRate: pricing.baseRate,
+      perKg: pricing.perKg,
+      fuelPct: pricing.fuelPct,
     },
     rounding: { scale, mode: 'HALF_UP' },
   };
@@ -162,7 +192,9 @@ export function evaluateFreightRate(input: {
   return {
     expected: expected.toFixed(scale),
     recoverable: recoverable.toFixed(scale),
+    hasRecoverableAmount: recoverable.gt(0),
     intermediate: {
+      currency: definition.pricing.currency,
       baseRate: fixed(baseRate, scale),
       perKg: fixed(perKg, scale),
       fuelPct: fixed(fuelPct, scale),
@@ -211,7 +243,11 @@ export function selectRuleVersion(
     if (byTier !== 0) return byTier < 0 ? current : best;
     const byDate = current.effectiveFrom.getTime() - best.effectiveFrom.getTime();
     if (byDate !== 0) return byDate > 0 ? current : best;
-    return current.version.localeCompare(best.version) > 0 ? current : best;
+    const byVersion = current.version.localeCompare(best.version);
+    if (byVersion !== 0) return byVersion > 0 ? current : best;
+    // CHANGE #43：最后一道稳定 tie-break —— 完全相同条件下按 ruleVersionId 字典序定序，
+    // 保证结果不依赖查询/输入顺序。
+    return current.ruleVersionId.localeCompare(best.ruleVersionId) < 0 ? current : best;
   });
 }
 
@@ -222,6 +258,7 @@ export function definitionHash(definition: FreightRateDefinition): string {
     definition.kind,
     definition.match.lane,
     definition.match.service,
+    definition.pricing.currency,
     definition.pricing.baseRate,
     definition.pricing.perKg,
     definition.pricing.fuelPct,

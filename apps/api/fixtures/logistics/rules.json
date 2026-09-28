@@ -4,7 +4,6 @@
     {
       "key": "demo-customer-rate-card",
       "ownerType": "TENANT",
-      "ownerKey": "DEMO_CUSTOMER",
       "scope": "FREIGHT_RATE",
       "name": "DEMO Customer Rate Card",
       "description": "合成客户费率表（仅测试/演示）",
@@ -24,6 +23,7 @@
               "service": "Ground"
             },
             "pricing": {
+              "currency": "USD",
               "baseRate": "80.0000",
               "perKg": "3.2000",
               "fuelPct": "12.50"
@@ -49,6 +49,7 @@
               "service": "2Day"
             },
             "pricing": {
+              "currency": "USD",
               "baseRate": "180.0000",
               "perKg": "6.4000",
               "fuelPct": "12.50"
@@ -74,6 +75,7 @@
               "service": "Ground"
             },
             "pricing": {
+              "currency": "USD",
               "baseRate": "88.0000",
               "perKg": "3.4000",
               "fuelPct": "13.00"
@@ -99,6 +101,7 @@
               "service": "NextDay"
             },
             "pricing": {
+              "currency": "USD",
               "baseRate": "260.0000",
               "perKg": "8.0000",
               "fuelPct": "13.00"
@@ -114,7 +117,6 @@
     {
       "key": "demo-carrier-tariff",
       "ownerType": "SYSTEM",
-      "ownerKey": "DEMO_CARRIER_TARIFF",
       "scope": "FREIGHT_RATE",
       "name": "DEMO Carrier Tariff (conflict fixture)",
       "description": "故意与客户费率表冲突，用于验证优先级：同 lane/service 必须选中 CUSTOMER_RATE_CARD",
@@ -134,6 +136,7 @@
               "service": "Ground"
             },
             "pricing": {
+              "currency": "USD",
               "baseRate": "95.0000",
               "perKg": "3.6000",
               "fuelPct": "13.00"

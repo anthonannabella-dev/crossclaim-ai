@@ -78,6 +78,10 @@ describe('FREIGHT_RATE_V1 公式确定性', () => {
       expect(result.expected).toBe(row.expectedCharge);
       expect(result.recoverable).toBe(row.recoverableAmount);
       expect(result.recoverable === '0.0000' ? 'PASS' : 'OPPORTUNITY').toBe(row.result);
+      // CHANGE #41：机会判定必须来自 Decimal 数值判断，而不是字符串比较
+      expect(result.hasRecoverableAmount).toBe(row.result === 'OPPORTUNITY');
+      // CHANGE #42：币种随规则一起带出，避免跨币种误判
+      expect(result.intermediate.currency).toBe('USD');
       // 中间值全部保留 4 位小数，便于独立复算
       expect(result.intermediate.expectedAmount).toBe(row.expectedCharge);
       expect(result.rounding).toEqual({ scale: 4, mode: 'HALF_UP' });
@@ -98,6 +102,7 @@ describe('FREIGHT_RATE_V1 公式确定性', () => {
     expect(result.intermediate.preFuel).toBe('120.0000');
     expect(result.intermediate.fuelAmount).toBe('15.0000');
     expect(result.recoverable).toBe('0.0000');
+    expect(result.hasRecoverableAmount).toBe(false);
   });
 
   it('实际收费低于应收时不产生可追回金额（不为负）', () => {
@@ -107,6 +112,7 @@ describe('FREIGHT_RATE_V1 公式确定性', () => {
     const result = evaluateFreightRate({ definition, weightKg: '8', actualCharge: '54.20' });
     expect(result.expected).toBe('130.1760');
     expect(result.recoverable).toBe('0.0000');
+    expect(result.hasRecoverableAmount).toBe(false);
   });
 });
 
@@ -151,6 +157,18 @@ describe('规则优先级（ARCHITECTURE_CONTRACT 不变量）', () => {
     expect(picked?.ruleVersionId).toBe('v1');
     expect(selectRuleVersion([inactive], new Date('2026-09-01T00:00:00Z'))).toBeNull();
   });
+
+  // CHANGE #43：同 tier / 同 effectiveFrom / 同 version 时，必须按 ruleVersionId 稳定定序
+  it('完全相同的优先条件下，选择结果不依赖输入顺序', () => {
+    const base = toCandidate(seedVersion('CUSTOMER_RATE_CARD', 'CN-SHA>US-LAX', 'Ground'), 'v-a');
+    const other: RuleCandidate = { ...base, ruleVersionId: 'v-b' };
+    const at = new Date('2026-09-01T00:00:00Z');
+
+    const pickAB = selectRuleVersion([base, other], at);
+    const pickBA = selectRuleVersion([other, base], at);
+    expect(pickAB?.ruleVersionId).toBe('v-a');
+    expect(pickBA?.ruleVersionId).toBe('v-a');
+  });
 });
 
 describe('规则定义解析（不猜、错误即抛）', () => {
@@ -162,18 +180,58 @@ describe('规则定义解析（不猜、错误即抛）', () => {
         schemaVersion: 1,
         kind: 'FREIGHT_RATE_V1',
         match: { lane: 'A', service: 'Ground' },
-        pricing: { baseRate: '1' },
+        pricing: { currency: 'USD', baseRate: '1' },
       }),
-    ).toThrow(/缺少 baseRate/);
+    ).toThrow(/perKg/);
     expect(() =>
       parseFreightRateDefinition({
         schemaVersion: 1,
         kind: 'FREIGHT_RATE_V1',
         match: { lane: 'A', service: 'Ground' },
-        pricing: { baseRate: '1', perKg: '1', fuelPct: '1' },
+        pricing: { currency: 'USD', baseRate: '1', perKg: '1', fuelPct: '1' },
         rounding: { scale: 9 },
       }),
     ).toThrow(/rounding.scale/);
+  });
+
+  // CHANGE #41 / #42：金额定义必须自带币种、必须是十进制字符串、不得为负、scale 固定 4
+  it('CHANGE #41/#42：scale≠4 / 数字金额 / 负数金额 / 缺币种 一律拒绝', () => {
+    const base = {
+      schemaVersion: 1,
+      kind: 'FREIGHT_RATE_V1',
+      match: { lane: 'CN-SHA>US-LAX', service: 'Ground' },
+      pricing: { currency: 'USD', baseRate: '80.0000', perKg: '3.2000', fuelPct: '12.50' },
+    };
+    const withScale = (scale: number) => ({ ...base, rounding: { scale } });
+
+    expect(() => parseFreightRateDefinition(withScale(2))).toThrow(/rounding.scale/);
+    expect(() => parseFreightRateDefinition(withScale(0))).toThrow(/rounding.scale/);
+    expect(() => parseFreightRateDefinition(withScale(4))).not.toThrow();
+
+    // JS number 金额：可能在进入 Decimal 前就丢了精度，必须拒绝
+    expect(() =>
+      parseFreightRateDefinition({
+        ...base,
+        pricing: { currency: 'USD', baseRate: 0.1, perKg: '3.2000', fuelPct: '12.50' },
+      }),
+    ).toThrow(/必须是十进制字符串/);
+
+    expect(() =>
+      parseFreightRateDefinition({
+        ...base,
+        pricing: { currency: 'USD', baseRate: '80.0000', perKg: '-3.2000', fuelPct: '12.50' },
+      }),
+    ).toThrow(/不能为负/);
+
+    expect(() =>
+      parseFreightRateDefinition({ ...base, pricing: { baseRate: '80.0000', perKg: '3.2000', fuelPct: '12.50' } }),
+    ).toThrow(/currency/);
+    expect(() =>
+      parseFreightRateDefinition({
+        ...base,
+        pricing: { currency: 'usd', baseRate: '80.0000', perKg: '3.2000', fuelPct: '12.50' },
+      }),
+    ).toThrow(/currency/);
   });
 
   it('非法重量 / 非法金额抛 RuleDataError', () => {
@@ -195,9 +253,15 @@ describe('定义哈希（可追溯）', () => {
       ...definition,
       pricing: { ...definition.pricing, baseRate: '81.0000' },
     };
+    const otherCurrency: FreightRateDefinition = {
+      ...definition,
+      pricing: { ...definition.pricing, currency: 'EUR' },
+    };
 
     expect(definitionHash(definition)).toBe(definitionHash(same));
     expect(definitionHash(definition)).not.toBe(definitionHash(changed));
+    // 币种变化必须体现在哈希里（复算时不能靠猜金额单位）
+    expect(definitionHash(definition)).not.toBe(definitionHash(otherCurrency));
     expect(definitionHash(definition)).toMatch(/^fnv1a64:[0-9a-f]{16}$/);
   });
 });
