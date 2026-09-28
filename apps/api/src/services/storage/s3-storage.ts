@@ -27,7 +27,7 @@ import {
   buildStorageKey,
   sha256Hex,
 } from './keys';
-import { issueSignedUrl, openToken } from './signed-url';
+import { createTokenCodec, issueSignedUrl, type TokenCodec } from './signed-url';
 import { sha256HexOfBuffer, sha256HexOfString, signRequest, type AwsCredentials } from './sigv4';
 
 export interface S3StorageOptions {
@@ -41,6 +41,8 @@ export interface S3StorageOptions {
   publicBaseUrl: string;
   /** 可选：令牌加密专用密钥（未提供则由 secret 派生） */
   tokenKey?: string;
+  /** 可选：默认签发有效期（来自 STORAGE_SIGNED_URL_TTL_SECONDS） */
+  defaultTtlSeconds?: number;
   now?: () => number;
   /** SeaweedFS / MinIO 默认走 path-style；AWS 可设 false */
   forcePathStyle?: boolean;
@@ -51,12 +53,21 @@ export interface S3StorageOptions {
 export class S3CompatibleStorage implements StorageAdapter {
   public readonly driver: StorageDriver = 's3';
   private readonly fetchImpl: typeof fetch;
+  private readonly codec: TokenCodec;
 
   constructor(private readonly options: S3StorageOptions) {
     if (!options.endpoint || !options.bucket || !options.region) {
       throw new StorageAccessError('S3 端点 / 桶 / 区域未配置');
     }
     this.fetchImpl = options.fetchImpl ?? fetch;
+    // 密钥只在此处派生一次（CHANGE #26）
+    this.codec = createTokenCodec({
+      secret: options.secret,
+      // 注意：空字符串也要传进去（由 codec 明确报错），不允许静默回退
+      ...(options.tokenKey !== undefined ? { tokenKey: options.tokenKey } : {}),
+      ...(options.defaultTtlSeconds ? { defaultTtlSeconds: options.defaultTtlSeconds } : {}),
+      ...(options.now ? { now: options.now } : {}),
+    });
   }
 
   private objectUrl(storageKey: string): URL {
@@ -178,8 +189,8 @@ export class S3CompatibleStorage implements StorageAdapter {
     options?: SignedUrlOptions,
   ): Promise<SignedUrl> {
     return issueSignedUrl(
+      this.codec,
       {
-        secret: this.options.secret,
         publicBaseUrl: this.options.publicBaseUrl,
         ...(this.options.now ? { now: this.options.now } : {}),
       },
@@ -195,12 +206,7 @@ export class S3CompatibleStorage implements StorageAdapter {
     disposition: 'inline' | 'attachment';
     filename?: string;
   }> {
-    const payload = openToken(
-      token,
-      this.options.secret,
-      this.options.now ? this.options.now() : Date.now(),
-      this.options.tokenKey,
-    );
+    const payload = this.codec.open(token, this.options.now ? this.options.now() : undefined);
     const { body, metadata } = await this.get(payload.storageKey, payload.organizationId);
     return {
       body,

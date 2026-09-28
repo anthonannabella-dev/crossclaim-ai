@@ -21,6 +21,7 @@ import {
   StorageNotFoundError,
   assertTenantScopedKey,
   buildStorageKey,
+  createTokenCodec,
   issueSignedUrl,
   sanitizeFilename,
   sha256Hex,
@@ -36,6 +37,7 @@ const ORG_B = '22222222-2222-4222-8222-222222222222';
 const ASSET = '33333333-3333-4333-8333-333333333333';
 const OTHER_ASSET = '44444444-4444-4444-8444-444444444444';
 const SECRET = 'test-storage-url-secret-0123456789';
+const DEDICATED = 'test-dedicated-token-key-0123456789';
 const BASE = 'http://localhost:3000';
 
 let tmpRoot: string;
@@ -160,8 +162,10 @@ describe('签名下载令牌', () => {
     expect(() => openToken(expired, SECRET)).toThrow(/过期/);
 
     const now = () => 1_700_000_000_000;
+    const codec = createTokenCodec({ secret: SECRET, now });
     const signed: ReturnType<typeof issueSignedUrl> = issueSignedUrl(
-      { secret: SECRET, publicBaseUrl: BASE, now },
+      codec,
+      { publicBaseUrl: BASE, now },
       { storageKey: payload.storageKey, organizationId: ORG_A, options: { ttlSeconds: 999_999 } },
     );
     expect((new Date(signed.expiresAt).getTime() - now()) / 1000).toBe(900);
@@ -260,6 +264,97 @@ describe('本地磁盘驱动', () => {
 
 // ============================================================
 describe('SigV4 签名（S3 驱动用）', () => {
+  it('配置专用令牌密钥后 issue → open 仍然成功（CHANGE #25）', async () => {
+    const storage = new LocalFileSystemStorage({
+      rootDir: tmpRoot,
+      secret: SECRET,
+      publicBaseUrl: BASE,
+      tokenKey: DEDICATED,
+    });
+    const body = Buffer.from('专用密钥下的内容', 'utf8');
+    const stored = await storage.put({
+      organizationId: ORG_A,
+      fileAssetId: ASSET,
+      body,
+      contentType: 'text/plain',
+    });
+    const signed = await storage.createSignedUrl(stored.storageKey, ORG_A, { ttlSeconds: 60 });
+    const opened = await storage.openSignedUrl(signed.token);
+    expect(opened.body.equals(body)).toBe(true);
+  });
+});
+
+// ============================================================
+describe('令牌密钥生命周期与默认 TTL（CHANGE #25 / #26 / TTL 配置）', () => {
+  function localAdapterWith(extra: Record<string, unknown>): LocalFileSystemStorage {
+    return new LocalFileSystemStorage({
+      rootDir: tmpRoot,
+      secret: SECRET,
+      publicBaseUrl: BASE,
+      ...extra,
+    });
+  }
+
+  it('专用密钥过短 → 构造即失败（fail fast，不静默回退）', () => {
+    expect(() => localAdapterWith({ tokenKey: 'short' })).toThrow(StorageAccessError);
+  });
+
+  it('专用密钥为空字符串 → 明确报错，而不是悄悄用别的密钥', () => {
+    expect(() => localAdapterWith({ tokenKey: '' })).toThrow(StorageAccessError);
+  });
+
+  it('换了一把专用密钥就解不开（说明签发确实用了专用密钥）', async () => {
+    const issuer = localAdapterWith({ tokenKey: DEDICATED });
+    const verifier = localAdapterWith({ tokenKey: `${DEDICATED}-other` });
+    const stored = await issuer.put({
+      organizationId: ORG_A,
+      fileAssetId: ASSET,
+      body: Buffer.from('x'),
+    });
+    const signed = await issuer.createSignedUrl(stored.storageKey, ORG_A, { ttlSeconds: 60 });
+    await expect(verifier.openSignedUrl(signed.token)).rejects.toThrow(StorageAccessError);
+  });
+
+  // CHANGE #26：慢速 KDF 只在构造阶段执行一次，热路径零 KDF
+  it('解开令牌不重复执行 scrypt（100 次失败令牌仍然很快）', async () => {
+    const storage = localAdapterWith({ tokenKey: DEDICATED });
+    const started = Date.now();
+    for (let i = 0; i < 100; i += 1) {
+      await expect(storage.openSignedUrl('AAAA.BBBB.CCCC')).rejects.toThrow(StorageAccessError);
+    }
+    const elapsed = Date.now() - started;
+    // 每次请求都跑 scryptSync 的话，100 次将是数秒级；这里要求远低于此
+    expect(elapsed).toBeLessThan(1000);
+  });
+
+  it('默认 TTL 来自配置，单次调用可覆盖，且始终不超过 900 秒', async () => {
+    const clock = 1_700_000_000_000;
+    const storage = new LocalFileSystemStorage({
+      rootDir: tmpRoot,
+      secret: SECRET,
+      publicBaseUrl: BASE,
+      defaultTtlSeconds: 60,
+      now: () => clock,
+    });
+    const stored = await storage.put({
+      organizationId: ORG_A,
+      fileAssetId: ASSET,
+      body: Buffer.from('ttl'),
+    });
+
+    const byDefault = await storage.createSignedUrl(stored.storageKey, ORG_A);
+    expect((Date.parse(byDefault.expiresAt) - clock) / 1000).toBe(60);
+
+    const overridden = await storage.createSignedUrl(stored.storageKey, ORG_A, { ttlSeconds: 10 });
+    expect((Date.parse(overridden.expiresAt) - clock) / 1000).toBe(10);
+
+    const capped = await storage.createSignedUrl(stored.storageKey, ORG_A, { ttlSeconds: 99_999 });
+    expect((Date.parse(capped.expiresAt) - clock) / 1000).toBe(900);
+  });
+});
+
+// ============================================================
+describe('SigV4 签名的确定性', () => {
   it('生成标准 Authorization 头；同输入稳定、内容变化则签名变化', () => {
     const url = new URL('http://localhost:8333/crossclaim/org/ab/asset');
     const credentials = { accessKeyId: 'AKIATEST', secretAccessKey: 'secret-key-for-test' };
@@ -371,6 +466,28 @@ describe('S3 兼容驱动（对本地假 S3 服务端验证真实请求）', () 
     await expect(storage.get(`${ORG_A}/aa/${ASSET}-not-here`, ORG_A)).rejects.toThrow(
       StorageNotFoundError,
     );
+  });
+
+  it('配置专用令牌密钥时，S3 驱动同样 issue → open 成功（CHANGE #25）', async () => {
+    const storage = new S3CompatibleStorage({
+      endpoint,
+      bucket: 'crossclaim',
+      region: 'us-east-1',
+      credentials: async () => ({ accessKeyId: 'AKIATEST', secretAccessKey: 'secret-key-for-test' }),
+      secret: SECRET,
+      publicBaseUrl: BASE,
+      tokenKey: DEDICATED,
+    });
+    const stored = await storage.put({
+      organizationId: ORG_A,
+      fileAssetId: ASSET,
+      body: Buffer.from('abc'),
+      contentType: 'text/plain',
+    });
+    const signed = await storage.createSignedUrl(stored.storageKey, ORG_A, { ttlSeconds: 60 });
+    const opened = await storage.openSignedUrl(signed.token);
+    expect(opened.body.toString('utf8')).toBe('abc');
+    expect(opened.fileAssetId).toBe(ASSET);
   });
 });
 

@@ -109,7 +109,7 @@ describe('运行时装配（CHANGE #18）', () => {
   it('审计盐值过短 → 启动即失败', () => {
     expect(() =>
       createRuntime({
-        env: makeEnv({ AUDIT_IP_SALT: 'short', STORAGE_URL_SECRET: 'short' }),
+        env: makeEnv({ AUDIT_IP_SALT: 'short' }),
         prisma: stubPrisma([]),
         log: createLogger({ level: 'error', sink: () => undefined }),
       }),

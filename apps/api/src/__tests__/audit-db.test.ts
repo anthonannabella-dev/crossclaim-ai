@@ -161,6 +161,30 @@ describe('CHANGE #16：AuditLog actor 身份', () => {
     ).rejects.toThrow(/membership|cross-tenant|check_violation|violates/i);
   });
 
+  // CHANGE #27：DB 约束必须与应用层规则等价 —— 不允许"无身份"的 actor
+  it('USER 必须带 actorUserId（数据库层拒绝无身份 USER）', async () => {
+    await expect(
+      prisma.$executeRawUnsafe(
+        `INSERT INTO "AuditLog" ("id","organizationId","actorType","actorUserId","actorRef","action","createdAt")
+         VALUES (gen_random_uuid()::text, $1, 'USER', NULL, NULL, 'illegal.actor', now())`,
+        ORG,
+      ),
+    ).rejects.toThrow(/cc_audit_actor_shape_check|check_violation|violates/i);
+  });
+
+  it('SYSTEM / AI / EXTERNAL 必须带 actorRef（数据库层拒绝无身份系统 actor）', async () => {
+    for (const actorType of ['SYSTEM', 'AI', 'EXTERNAL']) {
+      await expect(
+        prisma.$executeRawUnsafe(
+          `INSERT INTO "AuditLog" ("id","organizationId","actorType","actorUserId","actorRef","action","createdAt")
+           VALUES (gen_random_uuid()::text, $1, $2, NULL, NULL, 'illegal.actor', now())`,
+          ORG,
+          actorType,
+        ),
+      ).rejects.toThrow(/cc_audit_actor_shape_check|check_violation|violates/i);
+    }
+  });
+
   it('审计载荷里的敏感值在真实库里仍是脱敏后的形态', async () => {
     const storageKey = `${ORG}/ab/33333333-3333-4333-8333-333333333333`;
     const record = await writer.record({

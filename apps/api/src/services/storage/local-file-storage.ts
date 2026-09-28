@@ -25,7 +25,7 @@ import {
   type StoredObject,
 } from './types';
 import { assertFileAssetId, assertOrganizationId, assertTenantScopedKey, buildStorageKey, sha256Hex } from './keys';
-import { issueSignedUrl, openToken } from './signed-url';
+import { createTokenCodec, issueSignedUrl, type TokenCodec } from './signed-url';
 
 export interface LocalFileStorageOptions {
   rootDir: string;
@@ -33,6 +33,8 @@ export interface LocalFileStorageOptions {
   publicBaseUrl: string;
   /** 可选：令牌加密专用密钥（未提供则由 secret 派生） */
   tokenKey?: string;
+  /** 可选：默认签发有效期（来自 STORAGE_SIGNED_URL_TTL_SECONDS） */
+  defaultTtlSeconds?: number;
   now?: () => number;
 }
 
@@ -44,12 +46,21 @@ interface SidecarMeta {
 export class LocalFileSystemStorage implements StorageAdapter {
   public readonly driver: StorageDriver = 'local';
   private readonly rootDir: string;
+  private readonly codec: TokenCodec;
 
   constructor(private readonly options: LocalFileStorageOptions) {
     if (!options.rootDir || options.rootDir.trim() === '') {
       throw new StorageAccessError('本地存储根目录未配置');
     }
     this.rootDir = path.resolve(options.rootDir);
+    // 密钥只在此处派生一次（CHANGE #26）：请求热路径不再执行 KDF
+    this.codec = createTokenCodec({
+      secret: options.secret,
+      // 注意：空字符串也要传进去（由 codec 明确报错），不允许静默回退
+      ...(options.tokenKey !== undefined ? { tokenKey: options.tokenKey } : {}),
+      ...(options.defaultTtlSeconds ? { defaultTtlSeconds: options.defaultTtlSeconds } : {}),
+      ...(options.now ? { now: options.now } : {}),
+    });
   }
 
   private resolveObjectPath(storageKey: string, organizationId: string): string {
@@ -156,8 +167,8 @@ export class LocalFileSystemStorage implements StorageAdapter {
     options?: SignedUrlOptions,
   ): Promise<SignedUrl> {
     return issueSignedUrl(
+      this.codec,
       {
-        secret: this.options.secret,
         publicBaseUrl: this.options.publicBaseUrl,
         ...(this.options.now ? { now: this.options.now } : {}),
       },
@@ -173,12 +184,7 @@ export class LocalFileSystemStorage implements StorageAdapter {
     disposition: 'inline' | 'attachment';
     filename?: string;
   }> {
-    const payload = openToken(
-      token,
-      this.options.secret,
-      this.options.now ? this.options.now() : Date.now(),
-      this.options.tokenKey,
-    );
+    const payload = this.codec.open(token, this.options.now ? this.options.now() : undefined);
     const { body, metadata } = await this.get(payload.storageKey, payload.organizationId);
     return {
       body,

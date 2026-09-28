@@ -13,7 +13,17 @@ import type { StorageAdapter, StorageDriver } from './types';
 
 export * from './types';
 export { buildStorageKey, assertTenantScopedKey, fileAssetIdFromKey, sha256Hex } from './keys';
-export { sealToken, openToken, issueSignedUrl, sanitizeFilename } from './signed-url';
+export {
+  DEFAULT_TTL_SECONDS,
+  MAX_TTL_SECONDS,
+  createTokenCodec,
+  sealToken,
+  openToken,
+  issueSignedUrl,
+  sanitizeFilename,
+  type TokenCodec,
+  type TokenCodecOptions,
+} from './signed-url';
 export { LocalFileSystemStorage } from './local-file-storage';
 export { S3CompatibleStorage } from './s3-storage';
 export { signRequest, type AwsCredentials } from './sigv4';
@@ -24,6 +34,7 @@ export interface StorageEnvLike {
   STORAGE_PUBLIC_BASE_URL?: string;
   STORAGE_URL_SECRET?: string;
   STORAGE_TOKEN_KEY?: string;
+  STORAGE_SIGNED_URL_TTL_SECONDS?: string;
   S3_ENDPOINT?: string;
   S3_REGION?: string;
   S3_BUCKET?: string;
@@ -43,13 +54,23 @@ export function createStorageAdapter(
   const publicBaseUrl = env.STORAGE_PUBLIC_BASE_URL ?? 'http://localhost:3000';
   const secret = env.STORAGE_URL_SECRET ?? '';
   const tokenKey = env.STORAGE_TOKEN_KEY;
+  // CHANGE #25 / TTL：把 STORAGE_SIGNED_URL_TTL_SECONDS 真正接到适配器上
+  let defaultTtlSeconds: number | undefined;
+  if (env.STORAGE_SIGNED_URL_TTL_SECONDS !== undefined && env.STORAGE_SIGNED_URL_TTL_SECONDS !== '') {
+    const parsed = Number(env.STORAGE_SIGNED_URL_TTL_SECONDS);
+    if (!Number.isFinite(parsed) || parsed <= 0) {
+      throw new Error(`STORAGE_SIGNED_URL_TTL_SECONDS 非法: ${env.STORAGE_SIGNED_URL_TTL_SECONDS}`);
+    }
+    defaultTtlSeconds = Math.floor(parsed);
+  }
 
   if (driver === 'local') {
     return new LocalFileSystemStorage({
       rootDir: env.STORAGE_LOCAL_ROOT ?? './.storage',
       secret,
       publicBaseUrl,
-      ...(tokenKey ? { tokenKey } : {}),
+      ...(tokenKey !== undefined ? { tokenKey } : {}),
+      ...(defaultTtlSeconds ? { defaultTtlSeconds } : {}),
     });
   }
 
@@ -64,7 +85,8 @@ export function createStorageAdapter(
       credentials: deps.credentials,
       secret,
       publicBaseUrl,
-      ...(tokenKey ? { tokenKey } : {}),
+      ...(tokenKey !== undefined ? { tokenKey } : {}),
+      ...(defaultTtlSeconds ? { defaultTtlSeconds } : {}),
       ...(deps.fetchImpl ? { fetchImpl: deps.fetchImpl } : {}),
     });
   }
