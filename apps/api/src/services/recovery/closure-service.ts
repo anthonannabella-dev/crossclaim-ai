@@ -29,8 +29,8 @@ const money = (value: string | InstanceType<typeof Decimal>): string =>
 /** Runtime mode (CHANGE #53): production must never manufacture synthetic money. */
 export type RuntimeMode = 'test' | 'development' | 'production';
 
-export function resolveRuntimeMode(explicit?: RuntimeMode): RuntimeMode {
-  if (explicit) return explicit;
+export function resolveRuntimeMode(): RuntimeMode {
+  // CHANGE #57: no caller override - the trusted process environment is the only source.
   const env = typeof process === 'undefined' ? undefined : process.env.NODE_ENV;
   if (env === 'production') return 'production';
   if (env === 'test') return 'test';
@@ -241,8 +241,6 @@ export interface RunClosureInput {
   commercialTerms: CommercialTerms;
   scope?: ClosureScope;
   simulateSettlement?: boolean;
-  /** CHANGE #53: explicit runtime mode for the synthetic lifecycle simulator. */
-  runtimeMode?: RuntimeMode;
 }
 
 interface CaseOutcome {
@@ -263,8 +261,9 @@ interface CaseOutcome {
 export async function runRecoveryClosure(input: RunClosureInput): Promise<ClosureRunResult> {
   const { organizationId, prisma, commercialTerms } = input;
   const scope = input.scope ?? CLOSURE_SCOPE;
-  const runtimeMode = resolveRuntimeMode(input.runtimeMode);
-  // CHANGE #53: refuse synthetic money in production BEFORE any database access.
+  const runtimeMode = resolveRuntimeMode();
+  // CHANGE #53 / #57: refuse synthetic money in production BEFORE any database access;
+  // the mode comes from the trusted environment and cannot be overridden by callers.
   assertSyntheticSettlementAllowed(runtimeMode, input.simulateSettlement === true);
   const feeRate = input.simulateSettlement ? assertCommercialTerms(commercialTerms) : null;
 
