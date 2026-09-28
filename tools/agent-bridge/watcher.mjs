@@ -71,14 +71,32 @@ async function gh(pathname) {
   return res.json();
 }
 
-/** 解析 [CHATGPT -> CODEX] 回复块 */
+/** 统一箭头与换行，便于识别消息头 */
+function normalizeBody(body) {
+  return String(body || '')
+    .replace(/\r\n/g, '\n')
+    .replace(/[\u2192\u2794\u27A1\u21D2]|-->|->/g, '->');
+}
+
+/**
+ * 解析 [CHATGPT -> CODEX] 回复块。
+ *
+ * 注意两点（曾经的 bug）：
+ *   1. 必须匹配**完整消息头** "[CHATGPT -> CODEX]"。
+ *      只判断 body 里是否含 "CHATGPT" 会把 [HERMES -> CHATGPT] 这类
+ *      **发往** ChatGPT 的消息误判为裁决。
+ *   2. VERDICT 的取值不限于 PASS/REVISE/BLOCK —— 还有 TEST / ACK 等。
+ *      只白名单三者会漏消息（桥路自检就是这样被漏掉的）。
+ */
 function parseVerdict(body) {
-  if (!body || !body.includes('CHATGPT')) return null;
-  const verdictMatch = body.match(/VERDICT\s*:?\s*\n?\s*(PASS|REVISE|BLOCK)/i);
+  const b = normalizeBody(body);
+  if (!/\[\s*CHATGPT\s*->\s*CODEX\s*\]/i.test(b)) return null;
+
+  const verdictMatch = b.match(/VERDICT\s*:?\s*\n?\s*([A-Za-z_]+)/i);
   if (!verdictMatch) return null;
   const grab = (label) => {
     const re = new RegExp(label + '\\s*:?\\s*\\n([\\s\\S]*?)(?=\\n[A-Z_]{3,}\\s*:|$)', 'i');
-    const m = body.match(re);
+    const m = b.match(re);
     return m ? m[1].trim() : null;
   };
   return {
