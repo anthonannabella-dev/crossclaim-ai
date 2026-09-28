@@ -136,15 +136,24 @@ Claim / Appeal 文本草稿        直接对外提交
 
 ## 六、Adapter 契约
 
-每个外部平台一个 Adapter，必须实现：
+每个外部平台一个 Adapter。**Phase 1 的活跃接口是只读的**：
 
 ```
-authenticate()                      获取/刷新凭据（凭据来自密钥引用）
-fetchCapabilities()                 该平台支持哪些追回场景
-pullXxx()                           拉取数据（分页、增量、限流）
-normalize(raw) → SourceTransaction[]  归一化，保留 raw
-submitClaim(claim) → ExternalRef     若支持 API 提交；不支持则返回 NEEDS_MANUAL
+ExternalAdapter（Phase 1 唯一活跃接口，只读）
+  capabilities()                    该平台支持哪些追回场景 / domain / channel / 分页上限
+  authenticate(credentialRef)       获取/刷新凭据（凭据只以引用名出现）
+  pull(request, session)            拉取数据（分页、增量、限流）
+  → 输出规范导入格式（canonical ingest format），保留 raw 作为证据
 ```
+
+**第三方写入不属于 Phase 1 的 ExternalAdapter**：
+
+- `ExternalWriteAdapter`（`submitClaim`）当前**禁止启用**，注册表拒绝注册带写入面的适配器，
+  提交闸门 `submitClaimThroughAdapter()` 永不调用第三方方法，统一返回 `NEEDS_MANUAL`
+- 自动 Claim / Appeal 提交必须重新走架构审计后才能开启
+
+> 2026-09-28 架构方裁定（C-0003 Checkpoint 2 / CHANGE #28、#37）：本节由「每个 Adapter 必须实现
+> `submitClaim`」改为上面的只读接口 + 独立写入面，代码与测试同步。
 
 **Phase 1 策略**：优先 **只读 API + 文件上传**，
 「向平台要钱」这一步保留**半自动卡口**（生成规范文本，人工提交），

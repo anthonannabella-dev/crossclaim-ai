@@ -53,7 +53,9 @@ coverage/
 
 # ----- 本地数据与上传 -----
 uploads/
-storage/
+/storage/
+/.storage/
+apps/api/.storage/
 data/local/
 
 # ----- 编辑器/系统 -----
