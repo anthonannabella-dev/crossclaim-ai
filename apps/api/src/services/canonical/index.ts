@@ -28,3 +28,13 @@ export {
   type InvoiceParityRow,
   type MigrationAuditReport,
 } from './parity';
+export {
+  loadShadowInputs,
+  runCanonicalShadow,
+  shadowDedupeKey,
+  type LoadedShadowInputs,
+  type ShadowEvaluationDraft,
+  type ShadowFactRef,
+  type ShadowRunDeps,
+  type ShadowRunSummary,
+} from './shadow';
