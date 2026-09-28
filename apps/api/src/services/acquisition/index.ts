@@ -25,3 +25,19 @@ export {
   type ApiPullResult,
 } from './api-pull-service';
 export { createPrismaFileAssetPort, createPrismaSourceConnectionPort } from './prisma-ports';
+
+export {
+  CONNECTION_TRANSITIONS,
+  assertTransition,
+  canTransition,
+  createConnection,
+  initialStatusFor,
+  markConnectionError,
+  rotateCredentialRef,
+  transitionConnection,
+  type ConnectionLifecycleDeps,
+  type ConnectionLifecyclePort,
+  type ConnectionRecord,
+  type ConnectionStatus,
+} from './connection-lifecycle';
+export { createPrismaConnectionLifecyclePort } from './connection-lifecycle-prisma';
