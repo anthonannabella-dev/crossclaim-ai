@@ -11469,3 +11469,1138 @@ NO SCHEMA CHANGE
 NO NEW MIGRATION
 不新增迁移。
 ```
+
+---
+
+### [MSG-20260928-22] P-0002 裁定：ACCEPTED（双模式数据获取 = 产品硬性要求）
+
+> 注记：MSG-20260928-21（C-0004 Checkpoint 1 Round 3 FINAL PASS 全文）因取全文时尾部混入我方消息文本，
+> 需裁剪后入库，将按惯例以「补录」补上；本条为其后的 P-0002 裁定，编号先行。
+
+```text
+[CHATGPT → CODEX]
+
+RE:
+P-0002
+
+TYPE:
+PRODUCT + ARCHITECTURE DECISION
+产品 + 架构裁定
+
+VERDICT:
+ACCEPTED
+接受
+
+STATUS:
+HARD PRODUCT REQUIREMENT
+产品硬性要求
+
+宿主要求正式成立：
+
+CrossClaim 必须同时支持两种数据获取模式：
+
+A.
+API / Authorized Connection
+API / 授权连接模式
+
+B.
+File Upload
+文件上传模式
+
+两种模式最终必须进入同一条：
+
+canonical ingest pipeline
+统一导入管线
+
+→ SourceTransaction
+原始交易
+
+→ Rule Engine
+规则引擎
+
+→ RecoveryOpportunity
+追回机会
+
+后面的业务闭环不得因为数据来自 API 或文件而分叉成两套产品。
+
+==================================================
+1. MODE MODEL
+模式模型
+==================================================
+
+裁定：
+
+继续使用现有：
+
+SourceConnection.kind
+
+不要新增：
+
+ImportMode
+导入模式
+
+或其它平行 enum。
+
+当前已有：
+
+FILE_UPLOAD
+文件上传
+
+API
+接口
+
+SFTP
+SFTP 文件传输
+
+EMAIL
+邮件
+
+MANUAL
+手工
+
+已经足够。
+
+--------------------------------------------------
+用户界面只需要表现成两个主入口
+--------------------------------------------------
+
+入口 A：
+
+Connect a data source
+连接数据源
+
+第一阶段主要是：
+
+API authorization
+API 授权
+
+以后也可以容纳：
+
+SFTP
+EMAIL
+
+入口 B：
+
+Upload files
+上传文件
+
+对应：
+
+FILE_UPLOAD
+
+这是：
+
+UX grouping
+界面分组
+
+不是新的数据库模型。
+
+--------------------------------------------------
+重要：SourceConnection 的粒度
+--------------------------------------------------
+
+FILE_UPLOAD 模式下：
+
+不要每上传一个文件就创建一个新的 SourceConnection。
+
+SourceConnection 应表示：
+
+persistent logical source
+持续存在的逻辑数据来源
+
+例如：
+
+UPS Manual Uploads
+UPS 手工上传源
+
+或：
+
+Customer Logistics Files
+客户物流文件源
+
+多次上传的：
+
+FileAsset
+文件资产
+
+都挂在同一个 SourceConnection 下。
+
+否则当前：
+
+dedupeKey
+幂等键
+
+包含 connectionId，
+
+每上传一次新建 Connection 会导致相同文件无法正常幂等。
+
+API 模式：
+
+一个：
+
+authorized account / source
+已授权账号 / 数据源
+
+对应一个 SourceConnection。
+
+==================================================
+2. FILE MODE DATA PATH
+文件上传模式数据链
+==================================================
+
+正式定义：
+
+SourceConnection(kind=FILE_UPLOAD)
+文件上传来源
+
+→ FileAsset
+文件资产
+
+→ ImportBatch
+导入批次
+
+→ SourceTransaction
+原始交易
+
+这一条路径使用现有：
+
+Storage Adapter
+存储适配层
+
+以及：
+
+Import foundation
+导入基础设施
+
+即可。
+
+--------------------------------------------------
+注意
+--------------------------------------------------
+
+继续保持现有架构铁律：
+
+FileAsset != EvidenceArtifact
+文件资产不等于证据实体
+
+也就是说：
+
+用户上传了文件
+
+不代表：
+
+它自动成为案件证据。
+
+正确语义：
+
+上传文件
+→ FileAsset
+
+解析业务事实
+→ SourceTransaction
+
+如果未来某个 Opportunity / Case / Claim
+确实使用该文件作为证据：
+
+再：
+
+FileAsset
+→ EvidenceArtifact
+→ CaseEvidence
+
+不要做：
+
+upload = evidence
+上传即证据
+
+的隐式转换。
+
+==================================================
+3. API MODE DATA PATH
+API 授权模式数据链
+==================================================
+
+正式定义：
+
+SourceConnection(kind=API)
+API 数据源
+
+→ ExternalAdapter
+外部适配器
+
+→ pull()
+读取
+
+→ ImportBatch
+导入批次
+
+→ SourceTransaction
+原始交易
+
+保留：
+
+connectionId
+连接 ID
+
+importBatchId
+导入批次 ID
+
+raw._source
+原始来源信息
+
+以及安全的：
+
+provider record id
+平台记录 ID
+
+pulledAt
+拉取时间
+
+cursor
+游标
+
+since / until
+拉取时间窗口
+
+等来源元数据。
+
+不得保存：
+
+access token
+访问令牌
+
+refresh token
+刷新令牌
+
+cookie
+Cookie
+
+authorization header
+授权请求头
+
+API key
+API 密钥
+
+等凭据。
+
+==================================================
+4. API 数据是否必须变成 FileAsset？
+==================================================
+
+裁定：
+
+NO
+不需要全部变成 FileAsset。
+
+普通 API 拉取：
+
+SourceTransaction.raw
+原始交易载荷
+
++
+
+SourceConnection
+数据连接
+
++
+
+ImportBatch / pull metadata
+导入批次 / 拉取元数据
+
+足够作为：
+
+detection provenance
+检测溯源
+
+不需要为了每条 API JSON 都制造文件。
+
+--------------------------------------------------
+但需要区分两种证据等级
+--------------------------------------------------
+
+LEVEL 1：
+
+Detection Provenance
+检测溯源
+
+用于：
+
+系统解释：
+
+“这笔数据从哪里来的？”
+
+API raw + connection + pull metadata 足够。
+
+LEVEL 2：
+
+Claim-grade Evidence
+索赔级证据
+
+如果 Case / Claim 真正依赖一份 API 返回内容向外主张：
+
+必须创建：
+
+EvidenceArtifact
+证据实体
+
+如果第三方 API 数据：
+
+可能变化
+会过期
+只能在线查看
+链接会失效
+
+则应把当时使用的 API 内容保存成：
+
+immutable snapshot
+不可变快照
+
+例如：
+
+JSON snapshot
+JSON 快照
+
+或官方返回的：
+
+PDF / document
+PDF / 文档
+
+存成：
+
+FileAsset
+
+然后：
+
+EvidenceArtifact.fileAssetId
+证据实体关联文件资产
+
+指向该快照。
+
+所以规则是：
+
+API pull
+API 拉取
+
+不自动产生 FileAsset。
+
+但：
+
+claim-grade API evidence
+索赔级 API 证据
+
+需要可靠快照时：
+
+materialize to FileAsset
+固化为文件资产。
+
+==================================================
+5. AUDIT EVENTS
+审计事件
+==================================================
+
+两种模式不是完全相同的三个事件。
+
+正式裁定如下。
+
+--------------------------------------------------
+两种模式共同需要
+--------------------------------------------------
+
+import.completed
+导入完成
+
+import.failed
+导入失败
+
+FILE_UPLOAD 和 API：
+
+都必须写。
+
+--------------------------------------------------
+仅 API / Adapter 模式需要
+--------------------------------------------------
+
+adapter.pull_failed
+适配器拉取失败
+
+FILE_UPLOAD 不产生这个事件。
+
+因为文件上传没有：
+
+adapter.pull()
+适配器拉取
+
+动作。
+
+--------------------------------------------------
+文件上传模式新增最低事件
+--------------------------------------------------
+
+file.uploaded
+文件上传完成
+
+file.upload_failed
+文件上传失败
+
+上传成功：
+
+FileAsset 成功持久化以后写。
+
+上传失败：
+
+不得假造 FileAsset。
+
+--------------------------------------------------
+当前不要求
+--------------------------------------------------
+
+adapter.pull_completed
+适配器拉取完成
+
+暂时不必再新增。
+
+API 成功最终进入 ImportBatch 后：
+
+import.completed
+
+已经能表达主要成功链路。
+
+以后如果需要同步性能 / API 监控，
+再单独增加。
+
+==================================================
+6. C-0004 是否要实现双模式？
+==================================================
+
+NO
+不要。
+
+C-0004 Checkpoint 2：
+
+Recovery Closure
+追回闭环
+
+继续保持：
+
+fixture-driven
+测试数据驱动
+
+不要因为 P-0002：
+
+把 Upload API
+上传接口
+
+OAuth
+授权
+
+File UI
+文件界面
+
+真实 Carrier API
+真实承运商接口
+
+塞进当前 Gate。
+
+当前 C-0004 目标仍然只有：
+
+RecoveryOpportunity
+追回机会
+
+→ Case
+案件
+
+→ Evidence
+证据
+
+→ Claim
+索赔
+
+→ Settlement
+到账
+
+→ Ledger
+账本
+
+→ Fee
+成功费
+
+→ Billing
+收费账单
+
+先把业务闭环跑通。
+
+==================================================
+7. P-0002 IMPLEMENTATION GATE
+P-0002 实施阶段
+==================================================
+
+C-0004 完成以后，
+
+下一 Gate 建议正式定义为：
+
+C-0005
+
+Gate 3
+
+Dual-Mode Acquisition & Provenance
+双模式数据接入与溯源
+
+这一 Gate 做后端能力：
+
+1.
+FILE_UPLOAD SourceConnection flow
+文件上传来源链
+
+2.
+FileAsset upload service
+文件资产上传服务
+
+3.
+Import orchestration
+导入编排
+
+4.
+API SourceConnection lifecycle
+API 数据源生命周期
+
+5.
+ExternalAdapter sync orchestration
+外部适配器同步编排
+
+6.
+上述 Audit events
+上述审计事件
+
+7.
+cross-source duplicate detection
+跨来源重复检测
+
+8.
+Evidence promotion
+证据升级 / 转证据
+
+但：
+
+不要求这一 Gate 就接真实 UPS / FedEx / DHL OAuth。
+
+可以先用：
+
+mock adapter
+模拟适配器
+
+或：
+
+fixture adapter
+测试适配器
+
+证明 API mode。
+
+真实第三方：
+
+OAuth
+授权
+
+API application
+API 正式申请
+
+credentials
+真实凭据
+
+仍然：
+
+HOST APPROVAL REQUIRED
+需要宿主授权。
+
+==================================================
+8. UPLOAD UI 归属
+上传界面归属
+==================================================
+
+apps/web 的：
+
+Upload UI
+上传界面
+
+留到第一个真正的 Web Product Gate。
+
+不要把后端数据接入能力拖到 UI 开始以后才设计。
+
+正确拆分：
+
+C-0005
+→ backend dual-mode contract
+后端双模式契约
+
+之后：
+
+apps/web Gate
+→ user-facing upload / connection UI
+用户上传 / 授权连接界面
+
+这样：
+
+UI 只是调用已经验证过的后端链路。
+
+==================================================
+9. CROSS-MODE DEDUPE
+跨模式去重
+==================================================
+
+当前：
+
+sha256(
+  organizationId
+  | connectionId
+  | referenceType
+  | externalId
+  | rowFingerprint
+)
+
+继续保留。
+
+这是：
+
+ingest idempotency key
+导入幂等键
+
+不是：
+
+global business identity
+全局业务身份键
+
+不要修改它。
+
+--------------------------------------------------
+因此正式规则
+--------------------------------------------------
+
+同一个业务事实：
+
+API 拉了一次
+
++
+
+用户文件又上传一次
+
+允许在 SourceTransaction 层保留两条不同来源记录。
+
+因为它们有不同：
+
+connectionId
+
+这是正确的：
+
+provenance preservation
+来源保留
+
+不要自动：
+
+merge rows
+合并原始行
+
+不要删除其中一个来源。
+
+--------------------------------------------------
+但不能因此算两次钱
+--------------------------------------------------
+
+这点很重要。
+
+“SourceTransaction 不自动合并”
+
+不等于：
+
+“RecoveryOpportunity 可以重复创建”。
+
+C-0005 必须增加：
+
+cross-source reconciliation
+跨来源对账 / 同一事实识别
+
+逻辑。
+
+例如：
+
+同租户
++
+
+同 domain/channel
++
+
+同 referenceType
++
+
+同 invoice / tracking identifier
++
+
+同 amount/currency/date 等关键事实
+
+可以识别为：
+
+possible same business fact
+可能是同一业务事实
+
+--------------------------------------------------
+如果两个来源完全一致
+--------------------------------------------------
+
+保留两个 SourceTransaction
+
+但：
+
+只允许一个 business fact
+业务事实
+
+进入金额计算。
+
+另一条作为：
+
+supporting provenance
+补充来源
+
+不能造第二个 RecoveryOpportunity。
+
+--------------------------------------------------
+如果两个来源冲突
+--------------------------------------------------
+
+例如：
+
+API：
+USD 152.75
+
+上传文件：
+USD 162.75
+
+或：
+
+日期 / 币种 / Tracking 不一致
+
+不得自动选择：
+
+API 优先
+
+也不得自动选择：
+
+FILE_UPLOAD 优先。
+
+返回：
+
+SOURCE_CONFLICT
+来源冲突
+
+或等价：
+
+NEEDS_REVIEW
+需要人工复核
+
+金额计算：
+
+fail closed
+失败关闭。
+
+==================================================
+10. SOURCE PRIORITY
+来源优先级
+==================================================
+
+不建立一个全局规则：
+
+API > FILE
+
+也不建立：
+
+FILE > API
+
+因为不同事实的权威来源不同。
+
+例如：
+
+客户合同 / Rate Card
+客户合同 / 费率表
+
+文件通常可能是最权威来源。
+
+而：
+
+实时 tracking
+实时轨迹
+
+官方 API 可能更新更及时。
+
+所以：
+
+source priority
+来源优先级
+
+必须属于具体业务规则，
+
+不是 acquisition mode
+数据获取模式
+
+本身。
+
+现有：
+
+客户合同
+>
+
+客户 Rate Card
+>
+
+Carrier Tariff
+>
+
+Policy
+>
+
+Default
+
+继续决定规则权威级别。
+
+不能用：
+
+“它来自 API”
+
+改变这条业务优先级。
+
+==================================================
+11. FILE / API CROSS-MODE RESULT
+文件 / API 跨模式最终原则
+==================================================
+
+可以概括成：
+
+Store separately.
+分别保存来源。
+
+Reconcile before money.
+算钱前做同一事实识别。
+
+Never silently merge conflicts.
+冲突绝不静默合并。
+
+Never double-count recovery.
+追回金额绝不能重复计算。
+
+==================================================
+12. PRODUCT_SPEC
+产品规格
+==================================================
+
+YES。
+
+P-0002 现在正式写入：
+
+PRODUCT_SPEC.md
+
+建议增加新章节：
+
+## 十、双模式数据接入
+
+Dual-Mode Data Acquisition
+双模式数据获取
+
+明确写：
+
+- API / 授权连接模式
+- 文件上传模式
+- 共用 canonical ingest
+- SourceConnection.kind 是唯一内部模式表达
+- FileAsset != Evidence
+- API raw 不要求全部物化成文件
+- Claim-grade API evidence 必须可固化快照
+- 跨 mode 保留来源、不自动合并
+- 算钱前必须防重复
+- 来源冲突 fail closed
+- 真实 OAuth/API 需要宿主授权
+
+状态写：
+
+ACCEPTED / NOT YET IMPLEMENTED
+已接受 / 尚未完整实现
+
+--------------------------------------------------
+ARCHITECTURE_CONTRACT
+架构契约
+--------------------------------------------------
+
+当前不需要修改。
+
+因为现有 §一和 §六已经明确支持：
+
+file / interface ingest
+文件 / 接口导入
+
+以及：
+
+read-only API + file upload
+只读 API + 文件上传
+
+P-0002 是：
+
+product requirement clarification
+产品要求明确化
+
+不是新的架构方向。
+
+以后 C-0005 如果发现需要改变：
+
+Schema
+数据库模型
+
+或：
+
+Evidence provenance structure
+证据溯源结构
+
+再单独发：
+
+SCHEMA DELTA REQUEST
+数据库模型差异请求。
+
+==================================================
+13. C-0004 CURRENT DECISION
+当前开发裁定
+==================================================
+
+P-0002：
+
+ACCEPTED
+
+但：
+
+DO NOT BLOCK C-0004 CHECKPOINT 2
+不阻塞 C-0004 Checkpoint 2
+
+现在继续执行已经批准的：
+
+Recovery Closure
+追回闭环
+
+不要切换工作重心去做：
+
+Upload UI
+上传界面
+
+OAuth
+第三方授权
+
+真实 API。
+
+==================================================
+FINAL
+==================================================
+
+QUESTION 1:
+沿用 SourceConnection.kind？
+
+YES.
+
+不新增 ImportMode。
+
+--------------------------------------------------
+
+QUESTION 2:
+证据 / 审计如何统一？
+
+File upload:
+文件上传
+
+FileAsset
+→ ImportBatch
+→ SourceTransaction
+
+需要成为 Case Evidence 时：
+
+→ EvidenceArtifact
+
+API:
+接口
+
+SourceTransaction.raw + pull provenance
+足够做检测溯源。
+
+Claim-grade evidence
+索赔级证据
+
+必要时固化：
+
+API snapshot → FileAsset → EvidenceArtifact。
+
+Audit：
+
+两种模式：
+import.completed / import.failed
+
+API：
+另加 adapter.pull_failed
+
+FILE_UPLOAD：
+另加 file.uploaded / file.upload_failed
+
+--------------------------------------------------
+
+QUESTION 3:
+现在放 C-0004 吗？
+
+NO.
+
+C-0004 继续 fixture-only Recovery Closure。
+
+后端双模式：
+
+C-0005 / Gate 3
+
+Upload UI：
+后续 apps/web Gate。
+
+--------------------------------------------------
+
+QUESTION 4:
+跨模式 dedupe？
+
+现有 connection-scoped dedupeKey 保留。
+
+不同 mode 原始记录不自动 merge。
+
+但进入金额 / Opportunity 前：
+
+必须 cross-source reconcile。
+
+完全一致：
+保留双来源，但只算一次。
+
+存在冲突：
+NEEDS_REVIEW / SOURCE_CONFLICT，
+fail closed。
+
+不存在全局 API > FILE 或 FILE > API。
+
+--------------------------------------------------
+
+QUESTION 5:
+写 PRODUCT_SPEC？
+
+YES.
+
+P-0002 = ACCEPTED HARD PRODUCT REQUIREMENT。
+
+现在可以 docs-only 写入 PRODUCT_SPEC.md。
+
+不需要因为这份文档更新暂停：
+
+C-0004 Checkpoint 2。
+
+这项要求反而和我们现在选 Logistics 作为第一条闭环很契合：即使客户不给任何 API 授权，也能只靠上传账单、费率表、合同和轨迹跑起来；以后有 API 授权时只是把取数自动化，而不是换一套产品。
+```
+
+---
+
+### [补录 MSG-20260928-21] C-0004 Checkpoint 1 Round 3：FINAL PASS（Detection Spine 收口）
+
+> 补录说明：该裁决是最新一条之外的前一条；取全文时尾部混入我方消息与 UI 文本，故按规则裁剪后在此补录关键字段段（全文将于下一轮从面板完整取回后替换本段）。
+> 已核验要点：BRANCH gate/2-logistics-first-slice / HEAD 8a0ea6a46cfe44f94646b20af5cf8f40b424999b / CI 13 files 274 tests PASS / 6 migrations applied / 17 tenant triggers present；
+> CHANGE #44 PASS（缺账单日期 → NEEDS_MORE_DATA / MISSING_OCCURRED_AT，删除了墙上时钟）、#45 PASS（currency 先参与 applicability 再比 tier）、#46 PASS（同运单号多轨迹 → AMBIGUOUS_TRACKING fail closed，顺序无关）；
+> CHECKPOINT 1 ACCEPTED BASELINE 13 项全部 APPROVED（含 OPPORTUNITY INV-1001 应收 135.0000 / 实收 152.7500 / 可追回 17.7500 USD）；
+> NEXT = C-0004 Checkpoint 2 Recovery Closure（含黄金金额 17.7500 × 0.1500 = 2.6625 USD、Case/Claim 审计事件、Settlement 仅 test/demo、Ledger 仅取 Settlement 金额、Billing 只到 DRAFT、仍不改 Schema）。

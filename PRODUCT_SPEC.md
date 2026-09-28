@@ -155,3 +155,29 @@ Billing（成功费）
    （品牌名与专有名词除外）。
 
 **状态**：需求已登记，**尚未实现**（`apps/web` 尚未开工）。待架构方确认实现 Wave / Gate 与 i18n 方案后执行。
+
+---
+
+## 十、双模式数据接入（Dual-Mode Data Acquisition）
+
+**状态**：ACCEPTED / NOT YET IMPLEMENTED（已接受，尚未完整实现；后端能力归 **C-0005 / Gate 3**，界面归后续 apps/web Gate）
+**来源**：2026-09-28 宿主指定；架构方 P-0002 裁定为**产品硬性要求**。
+
+CrossClaim 必须同时支持两种数据获取模式，且两者进入**同一条** canonical ingest 管线
+（→ SourceTransaction → Rule Engine → RecoveryOpportunity），业务闭环不得因数据来源不同而分叉成两套产品：
+
+| 模式 | 内部表达 | 数据链 |
+|---|---|---|
+| A. API / 授权连接 | `SourceConnection.kind = API` | SourceConnection → ExternalAdapter.pull → ImportBatch → SourceTransaction（保留 connectionId / importBatchId / raw._source / provider record id / pulledAt / cursor / since-until；**不得保存** access/refresh token、cookie、authorization header、API key） |
+| B. 文件上传 | `SourceConnection.kind = FILE_UPLOAD` | SourceConnection → FileAsset → ImportBatch → SourceTransaction（经 Storage Adapter + Import foundation） |
+
+关键约束：
+
+1. **模式只用 `SourceConnection.kind` 表达**，不新增 `ImportMode` 之类的平行枚举；界面上的「连接数据源 / 上传文件」两个入口只是 UX 分组。
+2. **SourceConnection 是持续存在的逻辑来源**：FILE_UPLOAD 下不要每上传一个文件就新建 connection（否则 dedupeKey 含 connectionId，同一文件无法幂等）；API 下「一个已授权账号 = 一个 SourceConnection」。
+3. **FileAsset ≠ EvidenceArtifact**：上传文件只产生 FileAsset，解析业务事实产生 SourceTransaction；只有真的作为证据时才 FileAsset → EvidenceArtifact → CaseEvidence，禁止「上传即证据」。
+4. **API 拉取不必全部物化成文件**：普通拉取以 raw + connection + 拉取元数据作为检测溯源（Level 1）；若 Case/Claim 依赖该 API 内容对外主张，则把当时内容固化为不可变快照（JSON/PDF）存成 FileAsset 再转 EvidenceArtifact（Level 2）。
+5. **审计事件**：两种模式都要 `import.completed` / `import.failed`；API 另加 `adapter.pull_failed`；FILE_UPLOAD 另加 `file.uploaded` / `file.upload_failed`（上传失败不得假造 FileAsset）。
+6. **跨模式去重**：现有 connection-scoped `dedupeKey` 不变（它是导入幂等键，不是全局业务身份键）；不同来源的 SourceTransaction 各自保留（provenance preservation），不自动 merge；但**算钱前必须做 cross-source reconciliation**：完全一致 → 保留双来源、只算一次；存在冲突（金额 / 币种 / 日期 / 单号不一致）→ `SOURCE_CONFLICT` / `NEEDS_REVIEW`，金额计算 fail closed。
+7. **不存在全局 API > FILE 或 FILE > API** 的来源优先级；权威性由具体业务规则决定（客户合同 > 客户 Rate Card > Carrier Tariff > Policy > Default），与数据获取模式无关。
+8. 真实 OAuth / API 正式申请 / 真实凭据仍属 **HOST APPROVAL REQUIRED**；C-0005 可先用 mock / fixture adapter 证明 API 模式。
