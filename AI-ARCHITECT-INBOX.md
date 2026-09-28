@@ -24014,3 +24014,359 @@ Constraints:
 
 可以继续执行。
 ```
+
+### [MSG-20260928-43] C-0007 Phase 2 Review：PASS（Upload Runtime 通过，批准进入 Phase 3）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE:
+PHASE REVIEW
+
+ID:
+C-0007 Phase 2
+
+GATE:
+5
+
+MODULE:
+Upload Runtime
+
+HEAD:
+0e40f76
+
+VERDICT:
+
+PASS ✅
+
+批准进入 Phase 3：API Connector Runtime。
+
+1. Upload Runtime 链路
+PASS
+
+当前链路：
+
+纯文本
+Upload Request
+        ↓
+Content Scan
+        ↓
+Duplicate Check
+        ↓
+Storage Adapter
+        ↓
+FileAsset
+        ↓
+ImportBatch
+        ↓
+SourceTransaction
+        ↓
+CanonicalFact
+
+符合 C-0007 目标。
+
+特别确认：
+
+上传入口没有绕过 Storage Adapter
+SourceTransaction 仍是原始层
+CanonicalFact 双写保持
+Detection identity 未切换
+
+通过。
+
+2. 文件安全扫描
+PASS
+
+方案 A 实现符合裁定。
+
+关键通过：
+
+不信任客户端 MIME
+
+正确。
+
+客户端声明：
+
+纯文本
+Content-Type
+
+只能作为辅助信息。
+
+实际判断来自：
+
+文件头
+字节内容
+扩展名
+可执行检测
+
+覆盖：
+
+ELF
+PE
+Mach-O
+shebang
+
+通过。
+
+压缩/二进制拒绝
+
+覆盖：
+
+ZIP
+gzip
+PDF
+PNG
+JPEG
+NUL byte
+
+符合 CSV-only Gate。
+
+3. Scan 状态设计
+PASS
+
+当前：
+
+纯文本
+PENDING_SCAN
+PASSED
+REJECTED
+
+合理。
+
+虽然当前同步扫描，但保留：
+
+纯文本
+PENDING_SCAN
+
+为未来异步扫描扩展。
+
+接受。
+
+4. 安全审计
+PASS
+
+记录：
+
+纯文本
+scanStatus
+scanReason
+detectedMime
+declaredMime
+sha256
+sizeBytes
+
+符合 Gate 5 安全要求。
+
+拒绝路径：
+
+要求：
+
+上传失败不能覆盖原错误，不能产生半资产
+
+已满足。
+
+5. 重复上传
+PASS
+
+规则：
+
+纯文本
+organizationId + sha256
+
+作为文件资产重复依据。
+
+行为：
+
+第一次：
+
+纯文本
+FileAsset created
+Import executed
+
+第二次：
+
+纯文本
+DUPLICATE
+reuse existing fileAssetId
+no re-import
+
+正确。
+
+6. FileAsset 与 Evidence 边界
+PASS
+
+再次确认：
+
+上传：
+
+不会自动：
+
+纯文本
+FileAsset
+      |
+      v
+EvidenceArtifact
+
+必须：
+
+纯文本
+promoteEvidence()
+
+通过。
+
+这是重要边界。
+
+7. 负向测试
+PASS
+
+覆盖完整：
+
+场景	结果
+空文件	reject
+超大小	reject
+MIME 伪造	reject
+扩展名伪造	reject
+ELF/PE	reject
+shebang	reject
+ZIP/gzip	reject
+NUL binary	reject
+
+并验证：
+
+纯文本
+zero database write
+
+符合 fail closed。
+
+8. 边界检查
+
+确认：
+
+项目	状态
+新依赖	无
+Schema	未改
+Migration	未改
+公网 Upload	未做
+Auth	未做
+OAuth	未做
+外部 API	未做
+Canonical 默认	未切
+Identity Step4	未做
+
+全部通过。
+
+9. Phase 3 前置约束
+
+批准进入：
+
+API Connector Runtime
+
+但保持：
+
+Adapter 只读
+
+必须继续：
+
+纯文本
+authenticate()
+      ↓
+pull()
+      ↓
+canonical ingest
+
+禁止：
+
+纯文本
+submitClaim()
+writeSettlement()
+updateExternalSystem()
+Fixture only
+
+Phase 3：
+
+允许：
+
+mock adapter
+fixture response
+pagination simulation
+retry simulation
+
+不允许：
+
+Amazon SP API
+UPS
+FedEx
+DHL
+OAuth
+必测项目
+
+Phase 3 需要覆盖：
+
+1. Adapter capability 校验
+
+错误：
+
+纯文本
+adapter claims write capability
+
+必须拒绝。
+
+2. 分页
+
+覆盖：
+
+正常分页
+空页
+超页
+cursor 错误
+3. Partial failure
+
+例如：
+
+纯文本
+page1 success
+
+page2 failed
+
+要求：
+
+已获取数据可幂等导入
+failure metadata 保存
+不重复导入
+4. Secret 边界
+
+继续：
+
+只允许：
+
+纯文本
+credentialRef
+
+不允许：
+
+纯文本
+secret value
+
+进入核心层。
+
+最终裁定
+纯文本
+C-0007 Phase 2
+
+STATUS:
+PASS
+
+NEXT:
+Phase 3 API Connector Runtime APPROVED
+
+Constraints:
+- read-only adapter only
+- fixture/mock only
+- zero dependency
+- no OAuth
+- no external platform
+- no public endpoint
+- no canonical default switch
+
+可以继续执行 Phase 3。
+```
