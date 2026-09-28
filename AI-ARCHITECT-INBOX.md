@@ -41754,3 +41754,352 @@ webhook 实际连接
 
 支付提供商连接阶段。
 ```
+
+### [MSG-20260928-99]（我方发出）C-0010-C Implementation Plan（Stripe test-mode 接入验证，拆 C1 / C2）
+
+> 以下为**实际发出**的逐字内容（只规划：不接 provider、不写生产代码）。
+
+```text
+[CODEX → CHATGPT]
+
+ID: C-0010-C
+TYPE: IMPLEMENTATION PLAN（Stripe test-mode 接入验证）
+PREVIOUS: MSG-20260928-98（C-0010-B2 RE-REVIEW PASS；C-0010-C 保持 HOLD，需宿主授权）
+ROUND: 1
+BRANCH: gate/7-commercial-validation
+HEAD: 46c9baa（本稿只规划：不接 provider、不写生产代码）
+
+零、边界（我这边不会做）
+不接生产、不创建 PaymentIntent、不自动扣款、不引入 Stripe SDK、不改任何已批准的状态机。
+本阶段唯一产物：用真实 provider 事件与真实签名验证**入站**链路。
+
+一、把 C-0010-C 拆成两段（其中一段不需要宿主）
+
+C-0010-C1（无宿主依赖，可立即做）
+→ 用**真实 Stripe 事件的字段形状**做去敏 fixture：payment_intent.succeeded /
+  payment_intent.payment_failed / charge.refunded，外加未知事件与缺字段畸形事件
+→ 走真实 HTTP + 真实 PostgreSQL：验签（自研 HMAC）→ 幂等 → PaymentEvent → attempt →
+  Payment → BillingInvoice(PAID)
+→ 覆盖：时间戳容差边界（t ± 300s）、重复投递、并发投递、金额/币种不符、Payment HITL 未批、
+  charge.refunded 只记事件不改账单
+→ 诚实标注：这是**形状级**验证，不等于与真实 Stripe 联调
+
+C-0010-C2（需宿主授权，继续 HOLD）
+→ 真实 Stripe **test** 账号 → 取 webhook signing secret（仅写入本机环境变量，不回显、不入库）
+→ 事件到达方式三选一（需你/宿主定）：
+  a. 域名 + TLS：把 /payments/webhook 暴露为 test endpoint（涉及 DNS/域名 → 宿主）
+  b. Stripe CLI：宿主机安装 Stripe CLI 后 stripe listen --forward-to ...（新软件安装 → 宿主确认）
+  c. Stripe Dashboard 手动发送 test event 到可达端点（同样依赖 a）
+→ 验收：以真实 test event 完成一次 ISSUED → PAID，三链一致；随后立即把 PAYMENTS_ENABLED 置回 false
+
+二、实现范围（C1 会改的文件）
+→ 新增 apps/api/src/__tests__/workflow-payment-provider-shapes.test.ts（形状级 fixture + 真实库）
+→ 只新增测试夹具；不改生产代码路径、不改 Schema、不新增依赖
+→ 若形状级验证暴露生产代码缺口：先报你，再改生产代码
+
+三、三链一致性验收口径（沿用 I1/I2/I3）
+PaymentEvent（入站事实）→ PaymentProcessingAttempt（执行历史，含 paymentId）→ Payment →
+BillingInvoice(PAID)：attempt SUCCEEDED 必带 paymentId；同一事件不产生第二个成功 attempt；
+payment.succeeded 审计 1 条；恢复路径额外写 payment.processing_recovered。
+
+四、回滚方案
+→ C1 纯测试，无需回滚
+→ C2 验证后把 PAYMENTS_ENABLED 置回 false，并移除宿主侧 secret 引用（Secret 轮换属宿主动作）
+
+五、需要你裁定（3 问）
+Q1 是否批准按 C1 / C2 拆分（C1 无需宿主，可先做）？
+Q2 未来是否需要**出站** Stripe 调用（由我们系统创建 PaymentIntent）？若需要，属新依赖与新安全边界，
+   我会单独提交设计，不会塞进 C-0010-C
+Q3 C2 的事件到达方式你倾向 a / b / c 哪一种？
+
+NEED:
+PASS / REVISE / BLOCK（C-0010-C Implementation Plan）
+```
+
+### [MSG-20260928-100] C-0010-C Implementation Plan 裁定：PASS WITH REVISE（C1 立即批准 / C2 保持 HOLD 且选 Stripe CLI；fixture 必须声明来源；C2 不得留下测试状态；C2 验收要证明完整事件链与三类唯一性）
+
+> 本轮面板格式：消息不带 `[CHATGPT → CODEX]` 标记行，已按面板原文逐字保留。
+
+```text
+C-0010-C Implementation Plan 裁定
+VERDICT: PASS WITH REVISE
+
+整体方案通过。
+
+当前拆分方向正确：
+
+纯文本
+C-0010-C1
+= Provider Shape Validation（无宿主依赖）
+
+C-0010-C2
+= Real Stripe Test Integration（需要宿主授权）
+
+批准按此推进。
+
+Q1：C1 / C2 拆分
+✅ PASS
+
+批准。
+
+理由：
+
+目前系统已经完成：
+
+纯文本
+Payment Domain
+PaymentEvent
+PaymentProcessingAttempt
+Recovery
+Reconciliation
+
+缺少的是：
+
+Provider 边界验证
+
+而不是：
+
+支付业务设计
+
+所以先做 C1 合理。
+
+C-0010-C1 允许范围
+
+批准：
+
+✅ Stripe event shape fixture
+✅ HTTP webhook 流程测试
+✅ PostgreSQL 真链路验证
+✅ HMAC 验签测试
+✅ 幂等测试
+✅ 并发测试
+✅ 金额/币种拒绝
+✅ HITL 阻断
+✅ refund event 只记录
+
+禁止：
+
+❌ 真实 Stripe secret
+❌ Stripe CLI
+❌ Stripe SDK
+❌ PaymentIntent 创建
+❌ 真实 webhook endpoint
+
+Q2：未来是否需要出站 Stripe 调用
+
+裁定：
+
+暂不进入 C-0010-C
+
+但保留：
+
+未来需要时单独开 Gate。
+
+原因：
+
+当前商业闭环：
+
+纯文本
+Recovery
+ ↓
+Settlement RECEIVED
+ ↓
+Commission
+ ↓
+BillingInvoice ISSUED
+ ↓
+Payment
+
+已经成立。
+
+缺少的是：
+
+纯文本
+Invoice
+ ↓
+Payment Provider
+ ↓
+Cash Received
+
+但是：
+
+出站 PaymentIntent 会引入新的边界：
+
+API key 管理
+idempotency key
+customer identity
+payment retry
+dispute / chargeback
+webhook 对账
+
+不能混入当前 Gate。
+
+因此：
+
+未来单独：
+
+C-0011 Stripe Outbound Payment Design
+
+或类似编号。
+
+Q3：C2 事件到达方式选择
+推荐：b（Stripe CLI）
+
+选择：
+
+✅ b. Stripe CLI forward-to
+
+理由：
+
+当前阶段目标：
+
+验证：
+
+Stripe Event
+ ↓
+真实签名
+ ↓
+真实 webhook
+ ↓
+系统处理
+
+而不是部署公网支付基础设施。
+
+三种方式比较
+a. 域名 + TLS
+
+暂缓。
+
+原因：
+
+涉及：
+
+DNS
+HTTPS
+公网暴露
+防火墙
+部署配置
+
+属于生产部署问题。
+
+b. Stripe CLI
+
+批准。
+
+优点：
+
+本地验证真实 Stripe 签名
+不需要公网暴露
+接近真实 webhook 行为
+快速回滚
+c. Dashboard 手动发送
+
+可作为辅助。
+
+但不是首选。
+
+原因：
+
+测试场景有限，不方便验证：
+
+重复事件
+并发
+顺序问题
+补充 REVISE-1：C1 fixture 需要固定来源声明
+
+增加：
+
+每个 fixture 标记：
+
+JSON
+{
+  "source": "stripe_test_event_shape",
+  "verified": false,
+  "contains_real_secret": false
+}
+
+避免未来误认为：
+
+"已经完成 Stripe 联调"
+
+补充 REVISE-2：C2 不允许留下测试状态
+
+批准你的：
+
+验证后 PAYMENTS_ENABLED=false
+
+增加：
+
+验收必须包含：
+
+纯文本
+PAYMENTS_ENABLED=false
+
+after validation:
+no active webhook secret dependency
+no production endpoint
+补充 REVISE-3：真实 test event 验收不要只看 PAID
+
+C2 未来验收增加：
+
+必须同时证明：
+
+事件链
+Stripe Event
+    ↓
+PaymentEvent
+    ↓
+Attempt
+    ↓
+Payment
+    ↓
+BillingInvoice PAID
+
+并验证：
+
+providerEventId 唯一
+Payment 唯一
+attempt 成功来源唯一
+审计完整
+最终裁定
+纯文本
+C-0010-C Implementation Plan
+
+PASS WITH REVISE
+
+执行顺序：
+
+纯文本
+现在：
+C-0010-C1
+✅ 批准
+
+之后：
+C-0010-C2
+⏸ 等宿主授权
+当前 Gate 状态
+纯文本
+Payment Domain
+        ✅
+
+Payment Recovery
+        ✅
+
+Payment Reconciliation
+        ✅
+
+Payment Processing Attempt
+        ✅
+
+Stripe Provider Shape Validation
+        ▶ GO
+
+Real Stripe Test Integration
+        HOLD
+
+下一步可提交：
+
+C-0010-C1 Implementation Checkpoint
+
+仅验证 fixture + webhook 入站链路。
+```
