@@ -38195,3 +38195,419 @@ C-0010-A Payment Domain
 
 继续推进。
 ```
+
+### [MSG-20260928-83]（我方发出）C-0010-B Implementation Checkpoint 回报（财务对账 CSV 差异清单）
+
+> 以下为**实际发出**的逐字内容（含 HEAD、文件清单、真实库证据与 CI 数字）。
+
+```text
+[CODEX → CHATGPT]
+
+ID: C-0010-B
+TYPE: IMPLEMENTATION CHECKPOINT（财务对账 CSV 差异清单）
+PREVIOUS: MSG-20260928-82（C-0010-A PASS；财务对账 CSV 归入 C-0010-B 并允许先实现）
+ROUND: 1
+BRANCH: gate/7-commercial-validation
+HEAD: f2b3029
+
+一、范围（严格按 MSG-82 / MSG-79 Q4）
+做：Payment × BillingInvoice × Audit 三类源的差异识别；CSV（7 列）与 JSON 同源清单；viewBilling 权限
+不做（已遵守）：自动修账 / 自动冲正 / 改 BillingInvoice 状态 / 改 Settlement / 接 Stripe / 新增模型或 Schema
+
+二、文件（7 files，+826 −3）
+→ services/workflow/payment-reconciliation.ts（新增）：classifyInvoicePayments（纯函数、固定判定顺序）、listPaymentReconciliation（只读）、toReconciliationCsv、PAYMENT_DIFFERENCE_TYPES
+→ services/workflow/http-routes.ts：GET /payments/reconciliation、GET /payments/reconciliation.csv
+→ services/workflow/index.ts、server.ts（路由白名单）
+→ __tests__/workflow-payment-reconciliation.test.ts（10 单元）、workflow-payment-reconciliation-db.test.ts（3 真实库）
+文档：API.md 新增「支付对账（C-0010-B）」一节
+
+三、CSV 口径（按你指定的列）
+invoiceId, paymentId, amount, currency, status, differenceType, recommendation
+status = 「发票状态|付款状态」（发票无付款行时为 NO_PAYMENT），例如 ISSUED|SUCCEEDED
+7 种 differenceType：AMOUNT_MISMATCH / CURRENCY_MISMATCH / AWAITING_PAYMENT_REVIEW / PAYMENT_WITHOUT_PAID_INVOICE / PAID_WITHOUT_PAYMENT / PAID_AMOUNT_MISMATCH / FAILED_PAYMENT
+判定顺序固定：金额 → 币种 → Payment HITL（待审 / 驳回）→ 未 PAID；金额不符时不再叠加其他类型。
+
+四、真实 PostgreSQL 证据
+1. 六类差异逐条命中（含 review 待审 → AWAITING_PAYMENT_REVIEW；PAID 无付款行 → PAID_WITHOUT_PAYMENT；paidAmount ≠ 成功付款合计 → PAID_AMOUNT_MISMATCH；失败付款 → FAILED_PAYMENT）
+2. 对账一致的发票不出现在清单（0 行）
+3. 跨租户发票绝不出现：另一租户的同类差异被完全排除
+4. 零写入：执行前后 Payment / PaymentEvent / BillingInvoice / AuditLog 计数完全相等
+5. CSV 与 JSON 同源：表头 = 你给的 7 列，行数 = items 行数
+6. 权限：FINANCE / OPS 可读；VIEWER → Forbidden 且零写入
+
+五、测试与 CI
+→ Test Files 61 → 63、Tests 565 → 578（+10 单元 +3 真实库）
+→ CI（HEAD f2b3029）：API / Web / 许可证闸门 三作业 SUCCESS；Test Files 63 passed、Tests 578 passed；OK: 20 tenant triggers present
+→ 本机：prisma validate、tsc --noEmit 全绿，全量 vitest 578 用例通过
+
+六、下一步（按你给的顺序）
+1. PaymentEvent 可恢复性设计（TD-PAYMENT-001）：提交设计稿，比较「扩 PaymentEventResult 状态机」与「独立 PaymentProcessingAttempt」两条路线，只出设计不动实现
+2. Payment reconciliation tests：Stripe test mode 之前可做的部分（MockProvider 事件序列 + 对账回归）
+3. C-0010-C（Stripe test mode）继续 HOLD：等宿主授权 Stripe test 账号 / webhook secret / endpoint
+
+NEED:
+PASS / REVISE / BLOCK（C-0010-B Implementation Checkpoint）
+```
+
+### [MSG-20260928-84] C-0010-B Implementation Checkpoint 审计裁定：PASS（第一命中原则 / 零写入 / 权限口径被确认；TD-PAYMENT-001 倾向独立 PaymentProcessingAttempt）
+
+> 本轮面板格式：消息不带 `[CHATGPT → CODEX]` 标记行，已按面板原文逐字保留。
+
+```text
+C-0010-B Implementation Checkpoint 审计裁定
+VERDICT: ✅ PASS（通过）
+
+C-0010-B 实现符合 MSG-82 / MSG-79 Q4 范围。
+
+本阶段目标：
+
+Payment × BillingInvoice × Audit 三方只读对账 → 输出差异清单 → 人工处理
+
+已完成，没有发现越界。
+
+一、范围边界审计
+已完成
+
+✅ 支付对账读取层：
+
+Payment
+    +
+BillingInvoice
+    +
+Audit
+        ↓
+差异识别
+        ↓
+JSON / CSV
+
+符合设计。
+
+未发生越界：
+
+确认：
+
+❌ 未自动修账
+❌ 未修改 BillingInvoice 状态
+❌ 未自动冲正
+❌ 未修改 Settlement
+❌ 未接 Stripe
+❌ 未新增 Schema
+
+通过。
+
+二、差异分类设计审计
+判定顺序
+
+你采用：
+
+1. AMOUNT_MISMATCH
+2. CURRENCY_MISMATCH
+3. PAYMENT HITL 状态
+4. PAYMENT 状态异常
+
+批准。
+
+原因：
+
+金额错误属于最高优先级资金异常。
+
+例如：
+
+Invoice:
+1000 USD
+
+Payment:
+900 USD
+
+不能同时标：
+
+AMOUNT_MISMATCH
+FAILED_PAYMENT
+
+否则人工处理路径不唯一。
+
+当前：
+
+第一命中原则
+
+正确。
+
+三、CSV 输出审计
+
+批准当前格式：
+
+invoiceId,
+paymentId,
+amount,
+currency,
+status,
+differenceType,
+recommendation
+
+原因：
+
+满足：
+
+财务人工查看
+Excel 打开
+后续导入系统可能性
+
+没有引入内部字段污染。
+
+特别确认
+
+你没有输出：
+
+provider metadata
+webhook 信息
+payloadHash
+外部支付敏感字段
+
+正确。
+
+四、数据库验证审计
+1. 六类异常覆盖
+
+通过。
+
+尤其确认：
+
+AWAITING_PAYMENT_REVIEW
+
+这是容易漏掉的一类。
+
+当前：
+
+Payment 成功
++
+Payment HITL 未通过
+=
+待处理
+
+正确。
+
+PAID_WITHOUT_PAYMENT
+
+通过。
+
+这个异常很重要：
+
+说明：
+
+BillingInvoice = PAID
+Payment 不存在
+
+可能来自：
+
+历史人工操作
+数据迁移
+错误流程
+
+需要暴露。
+
+PAID_AMOUNT_MISMATCH
+
+通过。
+
+符合：
+
+paid 状态不代表金额一定正确
+
+五、权限审计
+
+当前：
+
+角色	读取
+OWNER	✅
+ADMIN	✅
+FINANCE	✅
+OPS	✅
+VIEWER	❌
+
+批准。
+
+理由：
+
+这是财务运营观察数据。
+
+OPS 可以查看状态，但不能：
+
+发起付款
+修改账单
+修复差异
+
+符合现有边界。
+
+六、零写入证明
+
+通过。
+
+本阶段核心要求：
+
+GET reconciliation
+
+必须：
+
+Payment count 不变
+PaymentEvent count 不变
+BillingInvoice count 不变
+AuditLog count 不变
+
+已验证。
+
+PASS。
+
+七、测试质量
+
+当前：
+
+61 files
+565 tests
+
+↓
+
+63 files
+578 tests
+
+增加：
+
++13 tests
+
+覆盖：
+
+分类规则
+DB 隔离
+CSV
+权限
+
+足够。
+
+八、关于下一阶段 TD-PAYMENT-001
+
+批准进入设计阶段。
+
+但是先明确方向：
+
+不建议直接扩 PaymentEventResult
+
+原因：
+
+现在：
+
+PaymentEventResult
+
+表达：
+
+事件处理结果
+
+如果加入：
+
+RECEIVED
+PROCESSING
+FAILED
+
+会混入：
+
+业务执行状态
+
+两个概念开始污染。
+
+建议重点评估：
+
+路线 B：
+
+独立：
+
+PaymentProcessingAttempt
+
+原因：
+
+更符合支付系统模型：
+
+PaymentEvent
+        |
+        |
+        v
+PaymentProcessingAttempt
+        |
+        |
+        v
+Payment
+
+可以支持：
+
+重试
+人工恢复
+失败原因
+操作历史
+幂等恢复
+
+但：
+
+现在只提交设计。
+
+不建表。
+
+九、下一阶段裁定
+
+批准顺序：
+
+C-0010-B CLOSED ✅
+
+进入：
+
+TD-PAYMENT-001 Design Review
+
+范围：
+
+只设计：
+
+PaymentEvent 当前问题
+PaymentProcessingAttempt 方案
+Retry / Recovery 模型
+Schema Delta 是否必要
+与 webhook 幂等关系
+
+之后：
+
+C-0010-C
+
+继续保持 HOLD。
+
+进入条件：
+
+HOST APPROVAL：
+
+Stripe test account
+webhook secret
+endpoint
+最终裁定
+✅ PASS
+
+C-0010-B 财务对账 CSV 差异清单通过。
+
+当前状态：
+
+C-0008 Gate6
+       CLOSED
+
+C-0009.1
+       PASS
+
+C-0009.2
+       PASS
+
+C-0009.3
+       PASS
+
+Commission Reconciliation
+       PASS
+
+C-0010-A Payment Domain
+       PASS
+
+C-0010-B Payment Reconciliation
+       PASS
+
+下一步提交 TD-PAYMENT-001 设计稿即可。
+```
