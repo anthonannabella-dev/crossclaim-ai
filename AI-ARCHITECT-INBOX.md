@@ -21934,3 +21934,336 @@ old dedupeKey 保留周期设计
 
 继续。
 ```
+
+### [MSG-20260928-37] C-0006-B2 Step 3 Change Request Review：PASS（方案批准，实际切换 BLOCK；取消自动 fallback）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE:
+CHANGE REQUEST REVIEW
+
+ID:
+C-0006-B2 Step 3
+
+GATE:
+4
+
+MODULE:
+RuleEvaluation Identity Migration Switch Plan
+
+VERDICT:
+
+PASS（方案批准，不批准立即切换）
+
+当前批准的是：
+
+Step 3 方案设计与准备
+
+不是：
+
+立即开启 canonical identity 生产模式
+
+原因：
+
+当前：
+
+纯文本
+canSwitch = false
+
+DUPLICATE_TARGET = 1
+
+所以不能进入实际切换。
+
+1. Duplicate Resolution
+PASS
+
+批准当前处理方式：
+
+纯文本
+KEEP_EXISTING
+MANUAL_REVIEW
+NO_ACTION
+
+禁止：
+
+❌ 删除历史 RuleEvaluation
+
+❌ 覆盖已有 canonical identity
+
+❌ 自动合并
+
+❌ 强制迁移
+
+对于：
+
+纯文本
+DUPLICATE_TARGET
+
+最终处理规则：
+
+如果确认：
+
+纯文本
+same organization
++
+same ruleVersion
++
+same canonicalFact
++
+same source lineage
+
+则：
+
+纯文本
+KEEP_EXISTING
+
+另一条：
+
+纯文本
+review-only
+
+保留审计记录。
+
+2. DETECTION_IDENTITY_MODE
+PASS
+
+批准：
+
+纯文本
+DETECTION_IDENTITY_MODE
+
+模式：
+
+legacy（默认）
+
+保持当前：
+
+纯文本
+old dedupeKey
++
+new canonicalDedupeKey
+
+双写。
+
+canonical
+
+切换后：
+
+纯文本
+canonicalDedupeKey
+
+作为身份判断。
+
+但是增加一个限制：
+
+你方案里：
+
+canonical identity missing 时退化旧键
+
+这里需要修改。
+
+REVISE
+
+不要自动 fallback。
+
+原因：
+
+身份迁移阶段最危险的问题就是：
+
+纯文本
+canonical identity 缺失
+
+如果自动 fallback：
+
+可能产生：
+
+隐藏覆盖率问题
+身份混用
+parity 假成功
+
+调整为：
+
+canonical 模式：
+
+纯文本
+canonicalFactId missing
+=
+FAIL CLOSED
+
+并输出：
+
+纯文本
+CANONICAL_IDENTITY_REQUIRED
+
+同时计入：
+
+纯文本
+evaluationsWithoutCanonicalIdentity
+
+不能继续生成正式 RuleEvaluation。
+
+3. 灰度方案
+PASS
+
+批准：
+
+顺序：
+
+纯文本
+test
+
+↓
+
+staging
+
+↓
+
+production
+
+验证：
+
+必须：
+
+纯文本
+coverage = 1.0000
+
+parity = OK
+
+duplicates = 0
+
+factLinkMismatch = 0
+4. 观察周期
+
+问题：
+
+你问：
+
+2 个观察周期是否足够？
+
+裁定：
+
+PASS，但定义需要更严格
+
+不按时间。
+
+不要：
+
+2 周
+
+因为业务频率不同。
+
+采用：
+
+纯文本
+2 个完整检测周期
+
+即可。
+
+每个周期必须：
+
+完整输入集
+identity parity report
+shadow parity report
+
+通过。
+
+5. Rollback
+PASS
+
+当前回滚设计正确。
+
+原因：
+
+没有删除：
+
+old dedupeKey
+old unique constraint
+
+所以：
+
+回滚只是：
+
+纯文本
+DETECTION_IDENTITY_MODE=legacy
+
+即可。
+
+6. Schema
+PASS
+
+Step 3 不需要 Schema Delta。
+
+保持：
+
+不新增：
+
+NOT NULL
+DROP
+constraint replacement
+
+原因：
+
+现在还处于验证阶段。
+
+7. DUPLICATE_TARGET 当前阻塞
+必须保持 BLOCK 状态
+
+直到：
+
+纯文本
+DUPLICATE_TARGET=0
+
+才允许 canonical 模式测试。
+
+Step 3 执行前 Checklist
+
+必须全部满足：
+
+纯文本
+[ ] DUPLICATE_TARGET resolved
+
+[ ] unmapped=0
+
+[ ] legacy full parity OK
+
+[ ] canonical dry-run parity OK
+
+[ ] staging canonical mode 2 cycles
+
+[ ] shadow parity OK
+
+[ ] rollback test completed
+FINAL DECISION
+纯文本
+C-0006-B2 Step 3:
+
+PASS（方案批准）
+
+实际切换:
+
+BLOCK（等待条件满足）
+
+下一步允许：
+
+执行：
+
+duplicate resolution 修复/标记流程
+
+canonical 模式 dry-run
+
+parity 证明
+
+但禁止：
+
+生产切换
+删除旧身份
+修改 Closure
+修改 Recovery 链
+
+完成后提交：
+
+C-0006-B2 Step 3 Execution Report
+
+再裁定是否开启 canonical identity。
+```
