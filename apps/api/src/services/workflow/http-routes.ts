@@ -31,6 +31,7 @@ import { getRecoveryReviewStatus, submitRecoveryReview } from './recovery-review
 import { advanceBillingInvoice, listBillingInvoices } from './billing';
 import { getAppealPackageState } from './appeal-package';
 import { reconcilePayoutItems } from './commission-reconciliation';
+import { handlePaymentWebhook } from './payment-webhook';
 import { getCase, getClaimDraft, listCaseEvidence, listCases } from './case-read';
 import {
   getOpportunityInsight,
@@ -38,7 +39,7 @@ import {
   toExportRows,
 } from './opportunity-insight';
 import { REJECT_REASONS, WorkflowError, reviewOpportunity } from './opportunity-review';
-import { ForbiddenError } from './permissions';
+import { ForbiddenError, assertPermission } from './permissions';
 
 const MAX_BODY_BYTES = 16 * 1024;
 const REVIEW_PATH = /^\/opportunities\/([^/]+)\/(qualify|reject|case)$/;
@@ -51,6 +52,8 @@ const RECOVERY_OUTCOME_PATH = /^\/cases\/([^/]+)\/recovery-outcome$/;
 const RECOVERY_REVIEW_PATH = /^\/cases\/([^/]+)\/recovery-review$/;
 const APPEAL_PACKAGE_PATH = /^\/cases\/([^/]+)\/appeal-package$/;
 const COMMISSION_RECONCILE_PATH = /^\/commissions\/reconcile$/;
+const PAYMENTS_PATH = /^\/payments$/;
+const PAYMENT_WEBHOOK_PATH = /^\/payments\/webhook$/;
 const BILLING_PATH = /^\/billing(?:\/([^/]+)\/status)?$/;
 const CASE_LIST_PATH = /^\/cases$/;
 const CASE_DETAIL_PATH = /^\/cases\/([^/]+)$/;
@@ -159,13 +162,45 @@ export async function handleWorkflowRequest(
   const reviewPath = RECOVERY_REVIEW_PATH.exec(path);
   const appealPath = APPEAL_PACKAGE_PATH.exec(path);
   const commissionPath = COMMISSION_RECONCILE_PATH.test(path);
+  const paymentsPath = PAYMENTS_PATH.test(path);
+  const webhookPath = PAYMENT_WEBHOOK_PATH.test(path);
   const billingPath = BILLING_PATH.exec(path);
   const caseListPath = CASE_LIST_PATH.test(path);
   const caseDetail = CASE_DETAIL_PATH.exec(path);
   const caseEvidence = CASE_EVIDENCE_PATH.exec(path);
   const caseClaim = CASE_CLAIM_PATH.exec(path);
-  if (!review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !appealPath && !commissionPath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim) {
+  if (!review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim) {
     return false;
+  }
+
+  // Webhook 不走会话：先验签（原始 body），再决定是否处理
+  if (webhookPath) {
+    if ((req.method ?? 'GET') !== 'POST') {
+      sendJson(res, 405, { error: 'METHOD_NOT_ALLOWED' });
+      return true;
+    }
+    const chunks: Buffer[] = [];
+    let size = 0;
+    for await (const chunk of req) {
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+      size += buffer.length;
+      if (size > 1024 * 1024) {
+        sendJson(res, 413, { error: 'PAYLOAD_TOO_LARGE' });
+        return true;
+      }
+      chunks.push(buffer);
+    }
+    const result = await handlePaymentWebhook(
+      deps.prisma,
+      {
+        rawBody: Buffer.concat(chunks).toString('utf8'),
+        signatureHeader:
+          typeof req.headers['stripe-signature'] === 'string' ? req.headers['stripe-signature'] : undefined,
+      },
+      deps.now ? { now: deps.now } : {},
+    );
+    sendJson(res, result.httpStatus, result);
+    return true;
   }
 
   const method = req.method ?? 'GET';
@@ -198,6 +233,38 @@ export async function handleWorkflowRequest(
   };
 
   try {
+    if (paymentsPath) {
+      // FINANCE 可见范围：发票支付状态 / 金额 / 时间；不含 provider 事件元数据与安全字段
+      assertPermission(context.role, 'viewBilling');
+      const items = await deps.prisma.payment.findMany({
+        where: { organizationId: context.organizationId },
+        orderBy: { createdAt: 'desc' },
+        take: 200,
+        select: {
+          id: true,
+          invoiceId: true,
+          amount: true,
+          currency: true,
+          status: true,
+          createdAt: true,
+          invoice: { select: { invoiceNo: true, status: true } },
+        },
+      });
+      sendJson(res, 200, {
+        items: items.map((row) => ({
+          id: row.id,
+          invoiceId: row.invoiceId,
+          invoiceNo: row.invoice?.invoiceNo ?? null,
+          invoiceStatus: row.invoice?.status ?? null,
+          amount: row.amount.toFixed(4),
+          currency: row.currency,
+          status: row.status,
+          createdAt: row.createdAt,
+        })),
+      });
+      return true;
+    }
+
     if (commissionPath) {
       const body = await readJsonBody(req);
       const summary = await reconcilePayoutItems(
