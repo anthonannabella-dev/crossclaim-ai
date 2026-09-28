@@ -108,6 +108,24 @@ beforeEach(async () => {
     organizationId: ORG,
     repository: createPrismaDetectionRepository(prisma),
   });
+
+  // CHANGE #47：人工确认模拟 —— 检测产出的 DETECTED 不会被闭环自动处理，
+  // 测试准备阶段显式推进到 QUALIFIED 并留审计（Closure Service 本身不做这一步）。
+  const detected = await prisma.recoveryOpportunity.findMany({ where: { organizationId: ORG, status: 'DETECTED' } });
+  for (const opportunity of detected) {
+    await prisma.recoveryOpportunity.update({ where: { id: opportunity.id }, data: { status: 'QUALIFIED' } });
+    await prisma.auditLog.create({
+      data: {
+        organizationId: ORG,
+        actorType: 'SYSTEM',
+        actorRef: 'test-setup-manual-qualification',
+        action: 'opportunity.status_changed',
+        entityType: 'RecoveryOpportunity',
+        entityId: opportunity.id,
+        changes: { from: 'DETECTED', to: 'QUALIFIED' },
+      },
+    });
+  }
 });
 
 const closure = () =>

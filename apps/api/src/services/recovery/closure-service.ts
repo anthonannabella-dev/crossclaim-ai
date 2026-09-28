@@ -57,6 +57,54 @@ export class ClosureError extends Error {
 const isUniqueViolation = (error: unknown): boolean =>
   error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
 
+const CURRENCY_RE = /^[A-Z]{3}$/;
+const DECIMAL_STRING_RE = /^\d+(\.\d+)?$/;
+
+/**
+ * CHANGE #52：金额输入必须 fail closed —— 缺金额绝不静默当 0。
+ * 缺 amountExpected / amountActual / recoverableAmount 或 recoverable <= 0 时直接抛错。
+ */
+function assertClosableOpportunity(opportunity: {
+  id: string;
+  amountExpected: InstanceType<typeof Decimal> | null;
+  amountActual: InstanceType<typeof Decimal> | null;
+  recoverableAmount: InstanceType<typeof Decimal> | null;
+  currency: string;
+}): { recoverable: string } {
+  if (!opportunity.amountExpected) {
+    throw new ClosureError(`机会 ${opportunity.id} 缺 amountExpected：金额未知不得进入闭环`);
+  }
+  if (!opportunity.amountActual) {
+    throw new ClosureError(`机会 ${opportunity.id} 缺 amountActual：金额未知不得进入闭环`);
+  }
+  if (!opportunity.recoverableAmount) {
+    throw new ClosureError(`机会 ${opportunity.id} 缺 recoverableAmount：金额未知不得进入闭环`);
+  }
+  const recoverable = money(opportunity.recoverableAmount);
+  if (!new Decimal(recoverable).gt(0)) {
+    throw new ClosureError(`机会 ${opportunity.id} 的 recoverableAmount 必须 > 0`);
+  }
+  if (!CURRENCY_RE.test(opportunity.currency)) {
+    throw new ClosureError(`机会 ${opportunity.id} 的 currency 非法: ${opportunity.currency}`);
+  }
+  return { recoverable };
+}
+
+/** CHANGE #52：成功费率必须是 0 < rate <= 1 的十进制字符串，且 source 非空 */
+function assertCommercialTerms(terms: CommercialTerms): InstanceType<typeof Decimal> {
+  if (typeof terms.successFeeRate !== 'string' || !DECIMAL_STRING_RE.test(terms.successFeeRate)) {
+    throw new ClosureError('successFeeRate 必须是十进制字符串');
+  }
+  if (!terms.source || terms.source.trim() === '') {
+    throw new ClosureError('commercialTerms.source 不能为空');
+  }
+  const rate = new Decimal(terms.successFeeRate);
+  if (!rate.gt(0) || rate.gt(1)) {
+    throw new ClosureError(`successFeeRate 必须在 (0, 1] 之间，收到 ${terms.successFeeRate}`);
+  }
+  return rate;
+}
+
 /** 确定性案件号：同租户同一 opportunity 永远得到同一个 caseNo（幂等基础） */
 export function caseNoFor(opportunityId: string): string {
   return `CASE-${opportunityId}`;
@@ -121,16 +169,20 @@ export async function runRecoveryClosure(input: RunClosureInput): Promise<Closur
   const { organizationId, prisma, commercialTerms } = input;
   const scope = input.scope ?? CLOSURE_SCOPE;
 
+  // CHANGE #47：人工卡口 —— 闭环只处理已确认（QUALIFIED）与已转案件（CONVERTED）的机会，
+  // 普通 DETECTED 必须保持不动，由人工确认后再进入（DETECTED → QUALIFIED 不由本服务执行）。
   const opportunities = await prisma.recoveryOpportunity.findMany({
     where: {
       organizationId,
       domain: scope.domain,
       channel: scope.channel,
-      status: { in: ['DETECTED', 'QUALIFIED', 'CONVERTED'] },
+      status: { in: ['QUALIFIED', 'CONVERTED'] },
       recoverableAmount: { gt: new Decimal(0) },
     },
     orderBy: { detectedAt: 'asc' },
   });
+
+  const feeRate = input.simulateSettlement ? assertCommercialTerms(commercialTerms) : null;
 
   const result: ClosureRunResult = {
     opportunitiesConsidered: opportunities.length,
@@ -147,7 +199,7 @@ export async function runRecoveryClosure(input: RunClosureInput): Promise<Closur
 
   for (const opportunity of opportunities) {
     const caseNo = caseNoFor(opportunity.id);
-    const recoverable = money(opportunity.recoverableAmount ?? '0');
+    const { recoverable } = assertClosableOpportunity(opportunity);
 
     // 1) Case（幂等：organizationId + caseNo 唯一）
     let kase = await prisma.case.findUnique({
@@ -327,7 +379,7 @@ export async function runRecoveryClosure(input: RunClosureInput): Promise<Closur
         });
         result.ledgerEntriesCreated += 1;
 
-        const rate = new Decimal(commercialTerms.successFeeRate);
+        const rate = feeRate ?? assertCommercialTerms(commercialTerms);
         const base = new Decimal(settlementAmount);
         const fee = base.times(rate).toDecimalPlaces(MONEY_SCALE, Decimal.ROUND_HALF_UP);
         const feeAmount = fee.toFixed(MONEY_SCALE);
