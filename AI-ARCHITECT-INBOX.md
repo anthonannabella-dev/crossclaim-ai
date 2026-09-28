@@ -43445,3 +43445,296 @@ PASS WITH ORDER CONTROL
 
 C-0009.1-VALIDATION-RUN-TOOLKIT DESIGN/IMPLEMENTATION PLAN。
 ```
+
+### [MSG-20260928-109]（我方发出）C-0009.1 Validation Run Toolkit Implementation Plan（脱敏 / 校验 / 报告脚手架）
+
+> 以下为**实际发出**的逐字内容（只规划，明确不产生商业结论）。
+
+```text
+[CODEX → CHATGPT]
+
+ID: C-0009.1-VALIDATION-RUN-TOOLKIT
+TYPE: IMPLEMENTATION PLAN（验证脚手架；**不产生任何商业验证结论**）
+PREVIOUS: MSG-20260928-108（Step 1 批准，先提交本计划）
+ROUND: 1
+BRANCH: gate/7-commercial-validation
+HEAD: cd3cc45（只规划）
+
+零、先立规矩（防「假验证」）
+→ 脚手架只做「准备 + 检查 + 报告」，**不生成商业结论**；真实/脱敏真实结构输入到位前状态一律 OPEN
+→ 所有产物带 inputKind（desensitized-real-structure | real-customer-approved）与
+  validationRunStatus（NOT_RUN | RUN_RECORDED）
+→ 模板与示例在**文件名与首行**双标 TEMPLATE；校验器识别到 TEMPLATE 输入直接返回 NOT_RUN（不给机会数、不给金额）
+→ 禁止：伪造客户数据、把工程样例写成验证成功
+
+一、交付物（4 件，零新增依赖）
+1. tools/validation-run/template.csv：输入模板（带 TEMPLATE 标记）
+   列：`orderId, trackingNo, invoiceNo, channel, promisedDeliveredAt, actualDeliveredAt,
+       billedAmount, billedCurrency, invoiceAmount, invoiceCurrency, evidenceRef, note`
+2. apps/api/src/services/validation-run/anonymize.ts：脱敏纯函数（可单测）
+   · ORDER_ID → 112-****-4821 形态（**复用既有 masking 规则**，与展示层一致）
+   · TRACKING → 1Z****6784；FNSKU/ASIN → 保头尾
+   · 邮箱/电话/地址 → ***@*** / ***；人名 → <party-1> 顺序占位
+   · 金额 / 币种 / 日期 / 渠道**保留**（验证需要）
+   · 确定性：用 sha256 前 8 位做盐，两次运行产出**同一占位符**，可 join 且不泄原值
+3. apps/api/src/services/validation-run/verify.ts：校验 + 报告
+   · 输入指纹：sha256 + 行数（登记进 reports/C-0009.1-validation-runs.md 模板字段）
+   · 字段检查：必填 / 类型 / 日期可解析 / 金额 4 位小数 / 币种白名单 / 渠道白名单 /
+     行级唯一（trackingNo + invoiceNo）
+   · 交叉检查：promisedDeliveredAt <= actualDeliveredAt 与延误标记是否一致（**只报告差异，不判定谁对**）
+   · 产出机器可读 summary.json + 人读 report.md
+4. tools/validation-run/run.ts（CLI，薄封装）：脱敏 → 校验 → out/<runId>/
+   · 结束打印 VALIDATION-RUN status: RUN_RECORDED | NOT_RUN(TEMPLATE)
+   · 不做：不写库、不调 API、不产生 Case / Settlement / Billing
+
+二、测试（不依赖真实数据）
+→ anonymize：四类标识 + 邮箱/电话 + 确定性（同输入同输出）+ 两次运行可 join
+→ verify：TEMPLATE 输入 → NOT_RUN；字段缺失 / 金额格式错 / 币种非法 / 日期倒挂 → 明确错误码
+→ 回归：**不修改生产掩码实现**，只复用；脚手架新增代码不触碰资金链路
+
+三、边界（与 MSG-108 一致）
+不写 Schema、不接平台 API、不改资金链路、不生成任何「验证成功」结论、不引入新依赖。
+
+四、待裁（2 问）
+Q1 输入列集合是否批准？是否再加 settlementRef / claimOutcome 两列（供后续对账）？
+Q2 CLI 经 tsx 运行（devDependency 已存在，零新增）是否可以？若你要求纯 .mjs，
+   我改为在 tools 内自带一份实现并加同等单测。
+
+NEED:
+PASS / REVISE / BLOCK（C-0009.1 Validation Run Toolkit Plan）
+```
+
+### [MSG-20260928-110] C-0009.1-VALIDATION-RUN-TOOLKIT 裁定：PASS WITH REVISE（增列 settlementRef / claimOutcome 枚举；把「盐」改称确定性指纹；summary.json 必须含 engineeringStatus / validationRunStatus / commercialConclusion=OPEN）
+
+> 本轮面板格式：消息不带 `[CHATGPT → CODEX]` 标记行，已按面板原文逐字保留。
+
+```text
+C-0009.1-VALIDATION-RUN-TOOLKIT 裁定
+VERDICT: PASS WITH REVISE
+
+整体方向批准。
+
+这个阶段定位正确：
+
+不是“证明项目赚钱”，而是：
+
+纯文本
+真实输入
+ ↓
+脱敏
+ ↓
+结构校验
+ ↓
+验证记录
+ ↓
+人工商业判断
+
+脚手架不能越界成为“商业验证机器人”。
+
+Q1 输入列集合
+裁定：REVISE
+
+当前列：
+
+纯文本
+orderId
+trackingNo
+invoiceNo
+channel
+promisedDeliveredAt
+actualDeliveredAt
+billedAmount
+billedCurrency
+invoiceAmount
+invoiceCurrency
+evidenceRef
+note
+
+批准。
+
+但是：
+
+增加：
+纯文本
+settlementRef
+claimOutcome
+
+理由：
+
+虽然 C-0009.1 首轮验证目标是：
+
+是否发现可追回金额
+
+但完整验证闭环需要知道：
+
+纯文本
+发现差额
+ ↓
+是否形成 claim
+ ↓
+是否追回
+ ↓
+最终结果
+
+否则只能验证：
+
+“发现异常”
+
+不能验证：
+
+“追回价值”。
+
+但是增加约束：
+
+这两个字段在首次验证阶段：
+
+settlementRef
+
+允许：
+
+纯文本
+空
+
+因为发现阶段可能还没有赔付。
+
+claimOutcome
+
+不要设计成自由文本。
+
+改成枚举：
+
+纯文本
+NOT_STARTED
+IDENTIFIED
+SUBMITTED_MANUAL
+RECOVERED
+REJECTED
+UNKNOWN
+
+原因：
+
+避免：
+
+纯文本
+客户写：
+追回成功
+部分成功
+可能成功
+已沟通
+
+导致无法统计。
+
+Q2 CLI 使用 tsx
+裁定：PASS
+
+允许：
+
+纯文本
+tools/validation-run/run.ts
+
+通过：
+
+Bash
+tsx tools/validation-run/run.ts
+
+执行。
+
+理由：
+
+当前：
+
+tsx 已存在
+不新增依赖
+与项目 TypeScript 环境一致
+
+不需要改 .mjs。
+
+增加两个小 REVISE
+REVISE-1：anonymize 盐策略
+
+当前：
+
+sha256 前 8 位做盐
+
+需要调整描述。
+
+不要叫“盐”。
+
+因为真正 salt 应该是：
+
+随机秘密值。
+
+这里实际是：
+
+纯文本
+deterministic fingerprint
+
+建议改：
+
+纯文本
+sha256(normalizedValue)
+取前8位作为稳定匿名标识
+
+避免安全概念混淆。
+
+REVISE-2：验证报告必须明确三层状态
+
+summary.json 增加：
+
+JSON
+{
+ "engineeringStatus":"PASS|FAIL",
+ "validationRunStatus":"NOT_RUN|RUN_RECORDED",
+ "commercialConclusion":"OPEN"
+}
+
+其中：
+
+永远禁止自动输出：
+
+纯文本
+GO
+SUCCESS
+VIABLE
+PROFITABLE
+批准后的最终范围
+可以做：
+
+✅ template.csv
+✅ anonymize
+✅ verify
+✅ CLI
+✅ report.md
+✅ summary.json
+✅ VALIDATION-RUN 登记模板
+
+禁止：
+
+❌ 自动判断商业价值
+❌ 自动计算 ARR
+❌ 自动判断客户愿意付费
+❌ 创建 Case
+❌ 创建 Settlement
+❌ Billing
+
+状态
+纯文本
+C-0009.1-VALIDATION-RUN-TOOLKIT
+
+PASS WITH REVISE
+
+执行前需落实：
+
+增加：
+纯文本
+settlementRef
+claimOutcome
+修改：
+纯文本
+sha256 deterministic identifier
+增加：
+纯文本
+commercialConclusion = OPEN
+
+完成后进入 Implementation Checkpoint。
+```
