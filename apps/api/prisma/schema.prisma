@@ -964,7 +964,10 @@ model AuditLog {
   id             String         @id @default(uuid())
   organizationId String?
   actorType      AuditActorType
-  actorId        String?
+  /// USER 时的用户 id —— 保数据库引用完整性（FK → User.id）
+  actorUserId    String?
+  /// 非 USER actor 的身份（服务名 / 模型名 / 外部系统名），不指向 User
+  actorRef       String?
   action         String
   entityType     String?
   entityId       String?
@@ -974,9 +977,10 @@ model AuditLog {
   createdAt      DateTime       @default(now())
 
   organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  actor        User?         @relation(fields: [actorId], references: [id])
+  actorUser    User?         @relation(fields: [actorUserId], references: [id])
 
   @@index([organizationId, createdAt])
   @@index([entityType, entityId])
   @@index([action])
+  @@index([actorUserId])
 }

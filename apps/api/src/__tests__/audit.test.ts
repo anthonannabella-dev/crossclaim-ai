@@ -32,6 +32,7 @@ import {
 const ORG_A = '11111111-1111-4111-8111-111111111111';
 const ORG_B = '22222222-2222-4222-8222-222222222222';
 const ASSET = '33333333-3333-4333-8333-333333333333';
+const USER_ID = '55555555-5555-4555-8555-555555555555';
 const SALT = 'audit-ip-salt-0123456789';
 const STORAGE_KEY = `${ORG_A}/ab/${ASSET}`;
 
@@ -126,22 +127,85 @@ describe('审计写入', () => {
     const writer = createAuditWriter(sink, { ipSalt: SALT });
 
     await expect(
-      writer.record({ organizationId: 'not-a-uuid', actorType: 'USER', action: 'file.downloaded' }),
+      writer.record({
+        organizationId: 'not-a-uuid',
+        actorType: 'USER',
+        actorUserId: USER_ID,
+        action: 'file.downloaded',
+      }),
     ).rejects.toThrow(AuditError);
     await expect(
-      writer.record({ organizationId: ORG_A, actorType: 'ROBOT' as never, action: 'file.downloaded' }),
-    ).rejects.toThrow(AuditError);
-    await expect(
-      writer.record({ organizationId: ORG_A, actorType: 'USER', action: 'File Downloaded' }),
+      writer.record({
+        organizationId: ORG_A,
+        actorType: 'ROBOT' as never,
+        actorRef: 'robot',
+        action: 'file.downloaded',
+      }),
     ).rejects.toThrow(AuditError);
     await expect(
       writer.record({
         organizationId: ORG_A,
         actorType: 'USER',
+        actorUserId: USER_ID,
+        action: 'File Downloaded',
+      }),
+    ).rejects.toThrow(AuditError);
+    await expect(
+      writer.record({
+        organizationId: ORG_A,
+        actorType: 'USER',
+        actorUserId: USER_ID,
         action: 'file.downloaded',
         entityId: 'bad\u0000id',
       }),
     ).rejects.toThrow(AuditError);
+  });
+
+  // CHANGE #16：actor 语义拆分 —— 一个字段不再同时承担两种含义
+  it('USER 必须有 actorUserId（UUID），且不得带 actorRef', async () => {
+    const { sink } = memorySink();
+    const writer = createAuditWriter(sink, { ipSalt: SALT });
+
+    await expect(
+      writer.record({ organizationId: ORG_A, actorType: 'USER', action: 'case.opened' }),
+    ).rejects.toThrow(/actorUserId/);
+    await expect(
+      writer.record({
+        organizationId: ORG_A,
+        actorType: 'USER',
+        actorUserId: 'not-a-uuid',
+        action: 'case.opened',
+      }),
+    ).rejects.toThrow(/actorUserId/);
+    await expect(
+      writer.record({
+        organizationId: ORG_A,
+        actorType: 'USER',
+        actorUserId: USER_ID,
+        actorRef: 'also-me',
+        action: 'case.opened',
+      }),
+    ).rejects.toThrow(/actorRef/);
+  });
+
+  it('SYSTEM / AI / EXTERNAL 必须有 actorRef，且不得挂 actorUserId', async () => {
+    const { sink } = memorySink();
+    const writer = createAuditWriter(sink, { ipSalt: SALT });
+
+    for (const actorType of ['SYSTEM', 'AI', 'EXTERNAL'] as const) {
+      await expect(
+        writer.record({ organizationId: ORG_A, actorType, action: 'case.opened' }),
+      ).rejects.toThrow(/actorRef/);
+      await expect(
+        writer.record({
+          organizationId: ORG_A,
+          actorType,
+          actorUserId: USER_ID,
+          actorRef: 'x',
+          action: 'case.opened',
+        }),
+      ).rejects.toThrow(/actorUserId/);
+    }
   });
 
   it('盐值过短直接拒绝构造（避免用弱盐哈希 IP）', () => {
@@ -156,7 +220,7 @@ describe('审计写入', () => {
     const record = await writer.record({
       organizationId: ORG_A,
       actorType: 'USER',
-      actorId: 'user-1',
+      actorUserId: USER_ID,
       action: 'file.downloaded',
       entityType: 'FileAsset',
       entityId: ASSET,
@@ -168,6 +232,8 @@ describe('审计写入', () => {
     expect(record.id).toBe('audit-1');
     const row = inserted[0];
     expect(row.organizationId).toBe(ORG_A);
+    expect(row.actorUserId).toBe(USER_ID);
+    expect(row.actorRef).toBeNull();
     expect(row.changes?.storageKey).toBe(STORAGE_KEY_MASK);
     expect(JSON.stringify(row.changes)).not.toContain('sk-should-not-appear');
     expect(row.ip).toBe(hashIp('203.0.113.7', SALT));
@@ -179,9 +245,15 @@ describe('审计写入', () => {
   it('未提供的字段落 null，而不是 undefined', async () => {
     const { sink, inserted } = memorySink();
     const writer = createAuditWriter(sink, { ipSalt: SALT });
-    await writer.record({ organizationId: ORG_A, actorType: 'SYSTEM', action: 'migration.applied' });
+    await writer.record({
+      organizationId: ORG_A,
+      actorType: 'SYSTEM',
+      actorRef: 'migration-runner',
+      action: 'migration.applied',
+    });
     const row = inserted[0];
-    expect(row.actorId).toBeNull();
+    expect(row.actorUserId).toBeNull();
+    expect(row.actorRef).toBe('migration-runner');
     expect(row.entityType).toBeNull();
     expect(row.changes).toBeNull();
     expect(row.ip).toBeNull();
@@ -193,8 +265,13 @@ describe('审计查询', () => {
   it('永远按租户过滤，两个租户的记录不会互相看见', async () => {
     const { sink } = memorySink();
     const writer = createAuditWriter(sink, { ipSalt: SALT });
-    await writer.record({ organizationId: ORG_A, actorType: 'USER', action: 'case.opened' });
-    await writer.record({ organizationId: ORG_B, actorType: 'USER', action: 'case.opened' });
+    await writer.record({
+      organizationId: ORG_A,
+      actorType: 'USER',
+      actorUserId: USER_ID,
+      action: 'case.opened',
+    });
+    await writer.record({ organizationId: ORG_B, actorType: 'USER', actorUserId: USER_ID, action: 'case.opened' });
 
     const a = await listAuditTrail(sink, { organizationId: ORG_A });
     const b = await listAuditTrail(sink, { organizationId: ORG_B });

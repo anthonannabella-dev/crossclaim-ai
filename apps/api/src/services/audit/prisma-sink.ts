@@ -15,7 +15,8 @@ export function createPrismaAuditSink(prisma: PrismaClient): AuditSink {
         data: {
           organizationId: row.organizationId,
           actorType: row.actorType,
-          actorId: row.actorId,
+          actorUserId: row.actorUserId,
+          actorRef: row.actorRef,
           action: row.action,
           entityType: row.entityType,
           entityId: row.entityId,
@@ -30,6 +31,8 @@ export function createPrismaAuditSink(prisma: PrismaClient): AuditSink {
 
     async query(args: AuditQueryArgs): Promise<AuditLogRow[]> {
       const where: Prisma.AuditLogWhereInput = { organizationId: args.organizationId };
+      if (args.actorUserId) where.actorUserId = args.actorUserId;
+      if (args.actorRef) where.actorRef = args.actorRef;
       if (args.entityType) where.entityType = args.entityType;
       if (args.entityId) where.entityId = args.entityId;
       if (args.action) where.action = args.action;
@@ -45,7 +48,8 @@ export function createPrismaAuditSink(prisma: PrismaClient): AuditSink {
         id: row.id,
         organizationId: row.organizationId ?? '',
         actorType: row.actorType,
-        actorId: row.actorId,
+        actorUserId: row.actorUserId,
+        actorRef: row.actorRef,
         action: row.action,
         entityType: row.entityType,
         entityId: row.entityId,

@@ -12,7 +12,7 @@ import type { AwsCredentials } from './sigv4';
 import type { StorageAdapter, StorageDriver } from './types';
 
 export * from './types';
-export { buildStorageKey, assertTenantScopedKey, sha256Hex } from './keys';
+export { buildStorageKey, assertTenantScopedKey, fileAssetIdFromKey, sha256Hex } from './keys';
 export { signToken, verifyToken, issueSignedUrl, sanitizeFilename } from './signed-url';
 export { LocalFileSystemStorage } from './local-file-storage';
 export { S3CompatibleStorage } from './s3-storage';

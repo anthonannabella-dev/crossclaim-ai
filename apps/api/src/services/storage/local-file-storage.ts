@@ -166,6 +166,8 @@ export class LocalFileSystemStorage implements StorageAdapter {
   async openSignedUrl(token: string): Promise<{
     body: Buffer;
     metadata: ObjectMetadata;
+    organizationId: string;
+    fileAssetId: string;
     disposition: 'inline' | 'attachment';
     filename?: string;
   }> {
@@ -174,6 +176,8 @@ export class LocalFileSystemStorage implements StorageAdapter {
     return {
       body,
       metadata,
+      organizationId: payload.organizationId,
+      fileAssetId: payload.fileAssetId,
       disposition: payload.disposition ?? 'attachment',
       ...(payload.filename ? { filename: payload.filename } : {}),
     };

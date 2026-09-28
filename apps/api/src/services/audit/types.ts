@@ -20,8 +20,10 @@ export interface AuditEventInput {
   /** 必填：审计必须归属到租户 */
   organizationId: string;
   actorType: AuditActorType;
-  /** 触发者 id（用户 id / 服务名 / 模型名等） */
-  actorId?: string;
+  /** actorType = USER 时必填：User.id（数据库 FK，保引用完整性） */
+  actorUserId?: string;
+  /** actorType ≠ USER 时必填：服务名 / 模型名 / 外部系统标识（不指向 User） */
+  actorRef?: string;
   /** 点分小写动作名，如 `file.downloaded`、`case.status_changed` */
   action: string;
   entityType?: string;
@@ -40,6 +42,8 @@ export interface AuditRecord {
 
 export interface AuditTrailQuery {
   organizationId: string;
+  actorUserId?: string;
+  actorRef?: string;
   entityType?: string;
   entityId?: string;
   action?: string;
@@ -53,7 +57,8 @@ export interface AuditTrailQuery {
 export interface AuditLogInsert {
   organizationId: string;
   actorType: AuditActorType;
-  actorId: string | null;
+  actorUserId: string | null;
+  actorRef: string | null;
   action: string;
   entityType: string | null;
   entityId: string | null;
@@ -70,6 +75,8 @@ export interface AuditLogRow extends AuditLogInsert {
 
 export interface AuditQueryArgs {
   organizationId: string;
+  actorUserId?: string;
+  actorRef?: string;
   entityType?: string;
   entityId?: string;
   action?: string;

@@ -54,6 +54,26 @@ function assertOptionalId(value: string | undefined, field: string): void {
   }
 }
 
+/**
+ * actor 语义校验（CHANGE #16）：
+ *   USER            → 必须有 actorUserId（用户 id），且不得带 actorRef
+ *   SYSTEM/AI/EXTERNAL → 必须有 actorRef（服务/模型/外部身份），且不得带 actorUserId
+ * 一个字段不再同时承担两种含义，数据库另有 CHECK 兜底。
+ */
+function assertActorIdentity(event: AuditEventInput): void {
+  if (event.actorType === 'USER') {
+    if (!event.actorUserId) throw new AuditError('USER actor 必须提供 actorUserId');
+    if (!UUID_RE.test(event.actorUserId)) throw new AuditError('actorUserId 必须是 UUID');
+    if (event.actorRef) throw new AuditError('USER actor 不得带 actorRef');
+    return;
+  }
+  if (event.actorUserId) {
+    throw new AuditError('非 USER actor 不得带 actorUserId（避免误挂用户引用）');
+  }
+  if (!event.actorRef) throw new AuditError('非 USER actor 必须提供 actorRef');
+  assertOptionalId(event.actorRef, 'actorRef');
+}
+
 export function createAuditWriter(sink: AuditSink, options: AuditWriterOptions): AuditWriter {
   if (!options.ipSalt || options.ipSalt.length < 16) {
     throw new AuditError('审计 IP 盐值未配置或过短');
@@ -63,8 +83,8 @@ export function createAuditWriter(sink: AuditSink, options: AuditWriterOptions):
     async record(event: AuditEventInput): Promise<AuditRecord> {
       assertOrganizationId(event.organizationId);
       assertActorType(event.actorType);
+      assertActorIdentity(event);
       assertAction(event.action);
-      assertOptionalId(event.actorId, 'actorId');
       assertOptionalId(event.entityType, 'entityType');
       assertOptionalId(event.entityId, 'entityId');
 
@@ -72,7 +92,8 @@ export function createAuditWriter(sink: AuditSink, options: AuditWriterOptions):
       return sink.insert({
         organizationId: event.organizationId,
         actorType: event.actorType,
-        actorId: event.actorId ?? null,
+        actorUserId: event.actorUserId ?? null,
+        actorRef: event.actorRef ?? null,
         action: event.action,
         entityType: event.entityType ?? null,
         entityId: event.entityId ?? null,
@@ -103,6 +124,8 @@ export async function listAuditTrail(
   const args: AuditQueryArgs = {
     organizationId: query.organizationId,
     take: normalizeLimit(query.limit),
+    ...(query.actorUserId ? { actorUserId: query.actorUserId } : {}),
+    ...(query.actorRef ? { actorRef: query.actorRef } : {}),
     ...(query.entityType ? { entityType: query.entityType } : {}),
     ...(query.entityId ? { entityId: query.entityId } : {}),
     ...(query.action ? { action: query.action } : {}),

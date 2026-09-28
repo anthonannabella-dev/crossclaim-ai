@@ -13,10 +13,12 @@
 
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { StorageAccessError, type SignedUrl, type SignedUrlOptions } from './types';
-import { assertTenantScopedKey } from './keys';
+import { assertTenantScopedKey, fileAssetIdFromKey } from './keys';
 
 export interface SignedTokenPayload {
   storageKey: string;
+  /** 直接带上 fileAssetId，避免审计层解析 storageKey */
+  fileAssetId: string;
   organizationId: string;
   expiresAt: number;
   disposition?: 'inline' | 'attachment';
@@ -92,16 +94,21 @@ export function verifyToken(
   const payload = parsed as Partial<SignedTokenPayload>;
   if (
     typeof payload.storageKey !== 'string' ||
+    typeof payload.fileAssetId !== 'string' ||
     typeof payload.organizationId !== 'string' ||
     typeof payload.expiresAt !== 'number'
   ) {
     throw new StorageAccessError('令牌载荷字段缺失');
+  }
+  if (fileAssetIdFromKey(payload.storageKey) !== payload.fileAssetId) {
+    throw new StorageAccessError('令牌载荷与 storageKey 不一致');
   }
   if (payload.expiresAt <= now) {
     throw new StorageAccessError('令牌已过期');
   }
   return {
     storageKey: payload.storageKey,
+    fileAssetId: payload.fileAssetId,
     organizationId: payload.organizationId,
     expiresAt: payload.expiresAt,
     ...(payload.disposition ? { disposition: payload.disposition } : {}),
@@ -127,6 +134,7 @@ export function issueSignedUrl(
   const token = signToken(
     {
       storageKey: input.storageKey,
+      fileAssetId: fileAssetIdFromKey(input.storageKey),
       organizationId: input.organizationId,
       expiresAt,
       ...(input.options?.disposition ? { disposition: input.options.disposition } : {}),

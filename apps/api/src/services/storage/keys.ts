@@ -82,3 +82,17 @@ export function assertTenantScopedKey(storageKey: string, organizationId: string
     throw new StorageAccessError('storageKey 不属于该租户');
   }
 }
+
+/**
+ * 从我们自己的 key 结构里取出 fileAssetId。
+ * 只在**签发令牌时**调用一次，把结果写进令牌载荷；
+ * 审计层不再去解析 storageKey。
+ */
+export function fileAssetIdFromKey(storageKey: string): string {
+  const segments = storageKey.split('/');
+  const candidate = segments[segments.length - 1];
+  if (!candidate || !isUuid(candidate)) {
+    throw new StorageAccessError('storageKey 末段不是合法 fileAssetId');
+  }
+  return candidate;
+}

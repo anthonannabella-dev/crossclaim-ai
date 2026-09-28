@@ -104,6 +104,7 @@ describe('storageKey 的构造与租户校验', () => {
 describe('签名下载令牌', () => {
   const payload = {
     storageKey: `${ORG_A}/ab/${ASSET}`,
+    fileAssetId: ASSET,
     organizationId: ORG_A,
     expiresAt: Date.now() + 60_000,
   };
@@ -125,6 +126,17 @@ describe('签名下载令牌', () => {
     expect(() => verifyToken(`${tamperedPayload}.${signature}`, SECRET)).toThrow(StorageAccessError);
     expect(() => verifyToken(token, `${SECRET}-other`)).toThrow(StorageAccessError);
     expect(() => verifyToken('not-a-token', SECRET)).toThrow(StorageAccessError);
+  });
+
+  it('载荷里的 fileAssetId 必须与 storageKey 一致', () => {
+    const mismatched = signToken({ ...payload, fileAssetId: OTHER_ASSET }, SECRET);
+    expect(() => verifyToken(mismatched, SECRET)).toThrow(/不一致/);
+
+    const missing = signToken(
+      { ...payload, fileAssetId: undefined as unknown as string },
+      SECRET,
+    );
+    expect(() => verifyToken(missing, SECRET)).toThrow(StorageAccessError);
   });
 
   it('过期令牌被拒绝；TTL 有上限', () => {
@@ -222,6 +234,8 @@ describe('本地磁盘驱动', () => {
     const opened = await storage.openSignedUrl(signed.token);
     expect(opened.body.equals(body)).toBe(true);
     expect(opened.filename).toBe('evidence.txt');
+    expect(opened.organizationId).toBe(ORG_A);
+    expect(opened.fileAssetId).toBe(ASSET);
 
     clock += 61_000;
     await expect(storage.openSignedUrl(signed.token)).rejects.toThrow(/过期/);
@@ -394,5 +408,46 @@ describe('HTTP 下载路由（签名 URL 端到端）', () => {
   it('裸 storageKey 不能当下载地址', async () => {
     const response = await fetch(`${base}/files/${ORG_A}/aa/${ASSET}`);
     expect(response.status).toBe(403);
+  });
+
+  // CHANGE #19：畸形百分号编码不得抛异常击穿 handler
+  it('畸形令牌路径返回 400/403，不抛异常', async () => {
+    for (const suffix of ['%', '%ZZ', '%E0%A4%A']) {
+      const response = await fetch(`${base}/files/${suffix}`);
+      expect([400, 403], suffix).toContain(response.status);
+    }
+  });
+
+  // CHANGE #20：中文文件名走 RFC 5987；CR/LF 被剥离
+  it('中文文件名使用 filename*=UTF-8，且 CRLF 注入被剥离', async () => {
+    const body = Buffer.from('发票内容', 'utf8');
+    const stored = await storage.put({
+      organizationId: ORG_A,
+      fileAssetId: OTHER_ASSET,
+      body,
+      contentType: 'application/pdf',
+    });
+
+    const cn = await storage.createSignedUrl(stored.storageKey, ORG_A, {
+      ttlSeconds: 60,
+      filename: '发票 2026.pdf',
+    });
+    const cnResponse = await fetch(cn.url.replace(BASE, base));
+    expect(cnResponse.status).toBe(200);
+    const disposition = cnResponse.headers.get('content-disposition') ?? '';
+    expect(disposition).toContain("filename*=UTF-8''");
+    expect(disposition).toContain('%E5%8F%91%E7%A5%A8'); // "发票"
+    expect(disposition).toContain('filename="');
+
+    const evil = await storage.createSignedUrl(stored.storageKey, ORG_A, {
+      ttlSeconds: 60,
+      filename: 'evil\r\nX-Injected: 1',
+    });
+    const evilResponse = await fetch(evil.url.replace(BASE, base));
+    expect(evilResponse.status).toBe(200);
+    const evilDisposition = evilResponse.headers.get('content-disposition') ?? '';
+    expect(evilDisposition).not.toMatch(/[\r\n]/);
+    // 关键：注入文本不会变成新的响应头
+    expect(evilResponse.headers.get('x-injected')).toBeNull();
   });
 });

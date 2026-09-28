@@ -77,6 +77,10 @@ export interface StorageAdapter {
   openSignedUrl(token: string): Promise<{
     body: Buffer;
     metadata: ObjectMetadata;
+    /** 令牌里带的租户 —— 审计直接用它，避免再解析 */
+    organizationId: string;
+    /** 令牌里带的 fileAssetId —— 供审计直接使用，不必在审计层解析 storageKey */
+    fileAssetId: string;
     disposition: 'inline' | 'attachment';
     filename?: string;
   }>;

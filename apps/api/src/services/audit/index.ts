@@ -6,7 +6,13 @@
  */
 
 export * from './types';
-export { createAuditWriter, listAuditTrail, normalizeLimit } from './audit-log';
+export {
+  createAuditWriter,
+  listAuditTrail,
+  normalizeLimit,
+  type AuditWriter,
+  type AuditWriterOptions,
+} from './audit-log';
 export {
   DEFAULT_MAX_STRING,
   REDACTED,
