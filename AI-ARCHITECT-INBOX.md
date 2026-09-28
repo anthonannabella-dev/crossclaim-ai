@@ -22267,3 +22267,272 @@ C-0006-B2 Step 3 Execution Report
 
 再裁定是否开启 canonical identity。
 ```
+
+### [MSG-20260928-38] C-0006-B2 Step 3 Execution Review：PASS（技术验证通过，切换仍 BLOCK；需 active unmapped=0）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE:
+EXECUTION REVIEW
+
+ID:
+C-0006-B2 Step 3
+
+GATE:
+4
+
+MODULE:
+RuleEvaluation Identity Migration Switch Mechanism
+
+VERDICT:
+
+PASS（验证机制通过，实际切换继续等待条件）
+
+本轮执行符合 Step 3 批准边界。
+
+1. DETECTION_IDENTITY_MODE
+PASS
+
+确认修正已正确实现：
+
+legacy:
+
+纯文本
+旧 dedupeKey
++
+canonicalDedupeKey 双写
+
+canonical:
+
+纯文本
+canonicalDedupeKey
+
+作为唯一身份。
+
+并且：
+
+缺失：
+
+纯文本
+canonicalFactId
+
+直接：
+
+纯文本
+CANONICAL_IDENTITY_REQUIRED
+
+fail closed。
+
+这一点必须保持。
+
+不允许：
+
+纯文本
+canonical → legacy fallback
+
+否则身份迁移会产生隐藏双轨。
+
+2. Checklist 验证
+
+当前结果：
+
+项目	状态
+legacy parity	✅
+canonical dry-run	✅
+canonical 两轮幂等	✅
+shadow parity	✅
+rollback test	✅
+DUPLICATE_TARGET	待确认
+unmapped=0	待确认
+
+整体：
+
+技术切换能力已经证明。
+
+3. DUPLICATE_TARGET 处置
+
+问题：
+
+KEEP_EXISTING + review-only 是否可以记为解决？
+
+裁定：
+
+PASS
+
+可以。
+
+但需要补充一个动作：
+
+不能直接消失。
+
+需要形成：
+
+纯文本
+DUPLICATE_TARGET_RESOLVED
+
+状态。
+
+要求保留：
+
+duplicate report
+原 RuleEvaluation id
+保留对象 id
+被标记对象 id
+resolution=KEEP_EXISTING
+resolver=identity-migration
+
+原因：
+
+身份迁移需要可审计。
+
+因此：
+
+当前：
+
+纯文本
+unmapped = 1
+
+可以变为：
+
+纯文本
+resolved_unmapped = 1
+
+最终：
+
+纯文本
+active unmapped = 0
+
+才满足切换门槛。
+
+4. CI / 本地代替 staging
+
+问题：
+
+无 staging/production 环境，是否接受 CI + 本地真实数据库？
+
+裁定：
+
+PASS（当前阶段接受）
+
+原因：
+
+当前不是生产上线。
+
+目标是：
+
+验证迁移逻辑。
+
+CI PostgreSQL 已覆盖：
+
+migration
+transaction
+constraint
+identity uniqueness
+rollback
+
+足够作为：
+
+纯文本
+pre-production validation
+
+但是：
+
+正式生产切换仍需要：
+
+部署环境验证。
+
+未来生产前必须增加：
+
+纯文本
+production-like dry run
+
+包括：
+
+真实数据规模
+实际连接
+实际调度窗口
+备份确认
+5. 当前是否允许开启 canonical 默认？
+
+裁定：
+
+暂不自动开启
+
+原因：
+
+虽然技术验证通过，但是还需要：
+
+完成：
+
+纯文本
+DUPLICATE_TARGET resolution
+
+并生成：
+
+最终：
+
+identity coverage report
+
+确认：
+
+纯文本
+active unmapped = 0
+
+之后才批准：
+
+纯文本
+DETECTION_IDENTITY_MODE=canonical
+
+默认。
+
+6. 下一步允许动作
+
+允许：
+
+✅ 标记 duplicate resolved
+
+✅ 生成最终 identity coverage report
+
+✅ canonical dry-run 再跑一次
+
+禁止：
+
+❌ 删除 dedupeKey
+
+❌ 删除旧 unique
+
+❌ 修改 Closure
+
+❌ 修改 RecoveryOpportunity
+
+❌ 生产切换
+
+FINAL DECISION
+纯文本
+C-0006-B2 Step 3 Execution:
+
+PASS
+
+状态：
+
+纯文本
+技术方案验证通过
+
+生产身份切换:
+BLOCK（等待 active unmapped=0）
+
+下一提交：
+
+C-0006-B2 Step 3 Final Gate Request
+
+需要包含：
+
+duplicate resolved 证明
+active unmapped=0
+canonical final parity report
+rollback 再验证
+是否申请 canonical 默认开启
+
+完成后再最终裁定。
+```
