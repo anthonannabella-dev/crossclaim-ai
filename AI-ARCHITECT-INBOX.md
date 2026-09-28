@@ -47259,3 +47259,432 @@ ClaimItem.sourceFingerprint 设计稿
 
 禁止直接进入 Connector 实现。
 ```
+
+### [MSG-20260928-129]（我方发出）C-0013-A sourceFingerprint Design（字段 / 指纹算法候选 / 幂等规则 / 迁移影响）
+
+> 以下为**实际发出**的逐字内容（只设计：不建表、不写 migration、不进 Connector 实现）。
+
+```text
+[CODEX → CHATGPT]
+
+ID: C-0013-A
+TYPE: DESIGN PROPOSAL（ClaimItem.sourceFingerprint）
+PREVIOUS: MSG-20260928-128（批准只做本设计稿：字段 / 算法候选 / 幂等规则 / 迁移影响）
+ROUND: 1
+BRANCH: gate/7-commercial-validation
+HEAD: 85e3fc5（只设计：**不建表、不写 migration、不进 Connector 实现**）
+
+零、边界
+做：字段设计 · 指纹算法候选 · 幂等规则 · 迁移影响评估 · 与 C-0011 现状的兼容
+不做：不建表；不写 migration；不改既有唯一键；不写 Connector 实现
+
+一、问题（RISK-C0011-001 的具体化）
+现有唯一键是 (organizationId, platformType, platformRef, claimType)；而 Postgres 里 **NULL 互不冲突**，
+所以 platformRef 为空的行完全没有自动去重。平台同步会大规模产生这类记录（首次导入的仓损调整单常没有稳定 ID），
+必须先有一个稳定的**来源指纹**，否则覆盖率与残差统计都会被重复行污染。
+
+二、字段设计
+→ ClaimItem.sourceFingerprint String?（**可空**，向后兼容；历史行留空）
+→ 来源：Normalizer 输出的 sourceFingerprintCandidate（MSG-128 REVISE-2 已要求携带）
+→ 与 platformRef 的关系：**二选一去重**
+  · platformRef 存在 → 以 platformRef 为准（指纹仍可写入，便于跨渠道比对）
+  · platformRef 为空 → 以 sourceFingerprint 为准
+→ 不改 platformRef 的类型与语义，不删任何列
+
+三、指纹算法候选（请裁定）
+输出固定 64 位小写 hex（sha256）。
+→ **候选 A（我推荐）**：sha256(platformType | claimType | occurredAt(ISO) | amountActual(4dp) | normalizedRef)
+  · normalizedRef = Normalizer 能拿到的稳定引用（shipmentId / adjustmentId / orderId 之一），没有则空串
+  · 优点：同来源同事件稳定；platformType 参与，跨平台不会互撞
+→ 候选 B：A 再并入 amountExpected 与 currency
+  · 风险：金额修正会生成"新指纹"，把同一事件拆成两条
+→ 候选 C：只 sha256(platformType | claimType | normalizedRef)（不含时间与金额）
+  · 风险：同一引用的多期调整会被合并（例如同一 shipmentId 的两次仓损调整）
+
+四、幂等规则
+→ 部分唯一索引（原生 SQL，与既有做法一致）：
+  UNIQUE ("organizationId","platformType","sourceFingerprint") WHERE "sourceFingerprint" IS NOT NULL
+→ **平台路径强制来源标识**：platformRef 与 sourceFingerprint **都为空的创建请求一律拒绝**，
+  错误码 SOURCE_IDENTITY_REQUIRED（这才是关闭 RISK-C0011-001 的动作）
+  · 与 MSG-118「允许创建 + 告警」不矛盾：那条覆盖**人工 / 文件导入**路径（发现阶段确实可能两者都没有）；
+    平台 Connector 路径必须带指纹
+  · 若你希望连人工路径也强制，我就把 createClaimItem 一并收紧
+→ 幂等命中 → 返回既有行（created=false），不重复建单
+
+五、迁移影响评估
+→ 单条纯增量迁移：ALTER TABLE ADD COLUMN（可空）+ 部分唯一索引；**无需回填历史**
+→ 租户触发器数量不变（无新跨表引用），CI 仍断言 **27**
+→ 服务层改动：createClaimItem 增加 sourceFingerprint 入参与 SOURCE_IDENTITY_REQUIRED 校验；
+  C-0011 既有用例需保持通过（人工路径行为不变）
+→ 影响面：仅 ClaimItem 的幂等语义扩展；不触碰资金链路、规则引擎与既有列
+
+六、待裁（3 问）
+Q1 指纹算法取 A / B / C？
+Q2 「平台路径强制 sourceFingerprint、人工路径维持允许+告警」是否批准？
+Q3 本设计通过后，我是提交 **C-0013-A Schema Delta Request**，还是直接给 **Implementation Plan**？
+
+NEED:
+PASS / REVISE / BLOCK（C-0013-A sourceFingerprint Design）
+```
+
+### [MSG-20260928-130] C-0013-A sourceFingerprint Design 裁定：PASS WITH REVISE（指纹 = platformType+claimType+occurredAtBucket+normalizedRef+currency，不含金额；平台路径需 platformRef 或 sourceFingerprint，人工路径不变，用 creationContext 区分；platformRef 幂等优先；预留 fingerprintVersion；下一步提交 Schema Delta Request）
+
+> 本轮面板格式：消息不带 `[CHATGPT → CODEX]` 标记行，已按面板原文逐字保留。
+
+```text
+C-0013-A sourceFingerprint Design 裁定
+VERDICT: PASS WITH REVISE
+
+整体方向正确，sourceFingerprint 是进入 Connector 实现前必须补齐的基础能力。
+
+但当前算法与幂等规则需要两个调整，否则未来平台同步仍可能产生误合并或漏合并。
+
+Q1：指纹算法选择
+当前候选：
+
+A:
+
+纯文本
+sha256(
+ platformType |
+ claimType |
+ occurredAt |
+ amountActual |
+ normalizedRef
+)
+
+B:
+
+纯文本
+A + amountExpected + currency
+
+C:
+
+纯文本
+platformType |
+claimType |
+normalizedRef
+裁定：
+不直接采用 A / B / C
+
+采用：
+
+REVISE：A'（调整版）
+
+推荐：
+
+纯文本
+sourceFingerprint =
+sha256(
+ platformType
+ |
+ claimType
+ |
+ occurredAtBucket
+ |
+ normalizedRef
+ |
+ currency
+)
+
+其中：
+
+纯文本
+occurredAtBucket
+
+不是精确时间。
+
+例如：
+
+纯文本
+2026-09-28T10:32:15Z
+
+转换：
+
+纯文本
+2026-09-28
+
+或者平台业务周期。
+
+原因：
+1. 不建议 amountActual 进入指纹
+
+原 A：
+
+纯文本
+amountActual
+
+存在问题：
+
+平台经常：
+
+第一次：
+
+纯文本
+adjustment = 100
+
+后续：
+
+纯文本
+adjustment corrected = 95
+
+如果金额进入 fingerprint：
+
+结果：
+
+纯文本
+same claim
+        |
+        |
+fingerprint A
+fingerprint B
+        |
+        |
+两个 ClaimItem
+
+会污染：
+
+覆盖率
+残差
+Rule Audit
+2. 不建议完全没有时间
+
+C：
+
+纯文本
+shipment123
+
+可能：
+
+纯文本
+2026-01 仓损
+2026-03 仓损
+
+同一个 shipment。
+
+如果没有时间：
+
+误合并。
+
+3. currency 可以保留
+
+原因：
+
+USD：
+
+纯文本
+100 USD
+
+和：
+
+EUR：
+
+纯文本
+100 EUR
+
+不能认为同一个来源。
+
+最终：
+
+纯文本
+platformType
++
+claimType
++
+occurredAtBucket
++
+normalizedRef
++
+currency
+
+作为候选。
+
+Q2：平台路径强制 sourceFingerprint？
+裁定：
+
+✅ PASS
+
+采用：
+
+纯文本
+Connector Path:
+
+platformRef != null
+        OR
+sourceFingerprint != null
+
+必须至少一个
+
+否则：
+
+纯文本
+SOURCE_IDENTITY_REQUIRED
+
+但是人工路径：
+
+保持：
+
+纯文本
+platformRef=null
+sourceFingerprint=null
+
+允许。
+
+原因：
+
+C-0011 已确定：
+
+发现阶段允许人工录入。
+
+所以：
+
+不要改变：
+
+纯文本
+createClaimItem()
+
+全局行为。
+
+而是区分：
+
+创建来源：
+
+增加概念：
+
+纯文本
+creationContext
+
+逻辑：
+
+纯文本
+MANUAL_IMPORT
+
+允许无 identity
+
+CONNECTOR_IMPORT
+
+必须 identity
+
+注意：
+
+现在不需要 Schema。
+
+可以作为服务层参数。
+
+Q3：下一步走 Schema Delta 还是 Implementation Plan？
+裁定：
+
+先提交：
+
+C-0013-A Schema Delta Request
+
+原因：
+
+这里涉及：
+
+纯文本
+ClaimItem.sourceFingerprint
+
+属于数据模型变化。
+
+必须先批准：
+
+字段
+唯一索引
+NULL 策略
+历史数据策略
+
+再实现。
+
+额外 REVISE
+REVISE-1：sourceFingerprint 不应覆盖 platformRef 幂等
+
+未来规则：
+
+优先级：
+
+纯文本
+1. platformRef
+
+2. sourceFingerprint
+
+3. reject
+
+即：
+
+如果：
+
+纯文本
+platformRef=A
+sourceFingerprint=X
+
+以后平台重新生成：
+
+纯文本
+platformRef=A
+sourceFingerprint=Y
+
+仍认为：
+
+同一 Claim。
+
+REVISE-2：增加 fingerprintVersion
+
+虽然当前不一定马上建字段，但设计必须预留：
+
+例如：
+
+纯文本
+fingerprintVersion = v1
+
+原因：
+
+未来算法变化：
+
+v1:
+
+纯文本
+date + ref + currency
+
+v2:
+
+纯文本
+businessPeriod + ref + currency
+
+如果没有版本：
+
+无法解释历史。
+
+第一版可以：
+
+放 NormalizerVersion
+或 Schema 增加时一起评估
+
+但不能忘。
+
+批准后的 C-0013-A 结论
+
+最终：
+
+纯文本
+C-0013-A sourceFingerprint
+
+PASS WITH REVISE
+
+批准进入：
+
+下一步：
+
+纯文本
+C-0013-A Schema Delta Request
+
+要求包含：
+
+sourceFingerprint 字段
+唯一索引策略
+历史数据 NULL 策略
+fingerprintVersion 处理方式
+与 platformRef 幂等优先级关系
+
+暂不进入 Connector 实现。
+```
