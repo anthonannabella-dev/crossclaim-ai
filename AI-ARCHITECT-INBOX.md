@@ -34809,3 +34809,390 @@ C-0009.3 P0 Implementation（Masking + Locked Delivery State）
 
 Commission Reconciliation Design Proposal。
 ```
+
+### [MSG-20260928-73] C-0009.3 P0 Implementation Checkpoint：PASS（下一步 C-0009-COMMISSION-RECONCILIATION-DESIGN）
+
+> 本轮面板格式：消息不带 `[CHATGPT → CODEX]` 标记行，已按面板原文逐字保留。
+
+```text
+C-0009.3 P0 Implementation Checkpoint 审计裁定
+VERDICT: PASS
+
+本轮实现符合 C-0009.3 P0 批准范围。
+
+核心目标：
+
+标识掩码展示 ✅
+Locked Delivery State ✅
+客户数据访问边界保护 ✅
+不进入支付/平台自动化 ✅
+
+全部满足。
+
+KEEP
+1. 数据访问边界处理正确 ✅
+
+这是本轮最重要的风险点。
+
+确认：
+
+客户自有数据：
+
+原始文件
+Evidence
+Audit Trail
+
+保持：
+
+纯文本
+AVAILABLE
+
+正确。
+
+没有实现：
+
+不付费 → 不给数据
+
+这种模式。
+
+当前设计：
+
+纯文本
+Customer Data
+        ↓
+Always Accessible
+
+
+Commercial Deliverable
+        ↓
+LOCKED
+
+符合之前裁定。
+
+2. Locked 只作用于交付物 ✅
+
+通过。
+
+当前：
+
+纯文本
+APPEAL_PACKAGE
+=
+LOCKED
+
+而不是：
+
+纯文本
+Evidence
+=
+LOCKED
+
+正确。
+
+尤其认可：
+
+返回：
+
+JSON
+customerDataAccess
+
+明确区分：
+
+rawFiles
+evidenceChain
+auditTrail
+
+这降低未来商业争议风险。
+
+3. 掩码实现符合要求 ✅
+
+通过。
+
+要求：
+
+确定性。
+
+当前：
+
+纯文本
+same input
+        ↓
+same output
+
+满足。
+
+覆盖：
+
+Order ID
+FNSKU
+Tracking
+Generic
+
+以及：
+
+null
+empty
+short value
+
+完整。
+
+4. 原值保留策略正确 ✅
+
+确认：
+
+API：
+
+同时提供：
+
+纯文本
+invoiceReference
+invoiceReferenceMasked
+
+而不是覆盖原字段。
+
+正确。
+
+原因：
+
+后续：
+
+权限控制
+审计
+导出
+复算
+
+仍需要原始值。
+
+5. Schema / Dependency 控制 ✅
+
+通过。
+
+确认：
+
+Schema:
+
+纯文本
+10 migrations
+
+无变化。
+
+依赖：
+
+无新增。
+
+符合 C-0009.3 P0。
+
+测试与 CI
+
+通过。
+
+当前：
+
+纯文本
+57 Test Files
+535 Tests
+
+CI：
+
+API ✅
+Web ✅
+License ✅
+
+Migration:
+
+纯文本
+10
+
+Tenant triggers:
+
+纯文本
+19
+
+保持。
+
+REVISE
+
+无阻断 REVISE。
+
+只有两个后续建议。
+
+建议 1：未来不要把 unlock 状态和支付强绑定
+
+当前实现：
+
+纯文本
+unlockAvailable:false
+reason:
+COMMERCIAL_UNLOCK_PENDING
+
+可以。
+
+但是未来商业化设计时：
+
+不要直接演化为：
+
+Payment Success
+        =
+Data Access
+
+建议保持：
+
+Payment / Subscription
+        =
+Commercial Feature Access
+
+而不是：
+
+Payment
+        =
+Evidence Access
+建议 2：Masking 规则未来需要版本化
+
+当前纯函数足够。
+
+但未来不同平台可能不同：
+
+例如：
+
+Amazon：
+
+ORDER-ID
+
+TikTok：
+
+另一种格式。
+
+Walmart：
+
+另一种格式。
+
+未来建议：
+
+增加：
+
+纯文本
+maskingRuleVersion
+
+用于解释：
+
+为什么当时这样展示。
+
+当前不需要改。
+
+C-0009.3 P0 状态
+
+确认：
+
+纯文本
+C-0009.3 P0
+================
+
+Masking:
+PASS
+
+Locked Delivery State:
+PASS
+
+Customer Data Boundary:
+PASS
+下一步批准
+
+进入：
+
+C-0009-COMMISSION-RECONCILIATION-DESIGN
+
+优先级：
+
+✅ 同意。
+
+原因：
+
+相比 Stripe：
+
+佣金归因、重复结算、防漏收，是更核心的业务模型。
+
+设计稿必须覆盖：
+
+Matching Model
+
+至少：
+
+payout reference
+platform order id
+time window
+amount tolerance
+Idempotency
+
+必须回答：
+
+同一赔付：
+
+上传两次怎么办？
+平台重复报表怎么办？
+手工录入与自动匹配冲突怎么办？
+Accounting Boundary
+
+明确：
+
+纯文本
+Platform Recovery
+        ↓
+Commission Calculation
+        ↓
+BillingInvoice
+        ↓
+Payment
+
+不要混淆：
+
+Settlement 与 Billing。
+
+Audit
+
+建议：
+
+纯文本
+commission.calculated
+
+commission.charge_created
+
+commission.reconciliation_failed
+
+commission.reconciled
+Failure Handling
+
+必须有：
+
+未匹配
+金额不一致
+重复赔付
+已收费
+已退款
+
+处理方式。
+
+Stripe Design
+
+排后。
+
+原因：
+
+Stripe 依赖：
+
+商业模式
+授权
+税务
+收款主体
+
+最终裁定：
+
+✅ C-0009.3 P0 = PASS
+
+下一提交：
+
+C-0009-COMMISSION-RECONCILIATION-DESIGN（Design Only）
+
+继续保持：
+
+不写代码、不接支付、不改 Billing 状态。
+```
