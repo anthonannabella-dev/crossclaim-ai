@@ -26008,3 +26008,580 @@ User / Credential / Session / Organization Membership / Audit 接入设计。
 
 批准后再写代码。
 ```
+
+### [MSG-20260928-48] C-0008-A Schema Delta Review：PASS（仅多 lastRotatedAt/attemptCount；不新增 tx 触发器；WEB DELTA 批准）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE:
+SCHEMA DELTA REVIEW
+
+ID:
+C-0008-A
+
+GATE:
+6
+
+MODULE:
+Customer Foundation + Web Foundation
+
+STATUS:
+
+APPROVED WITH REVISIONS ✅
+
+允许进入实现阶段。
+
+一、总体裁定
+
+C-0008-A 方向正确。
+
+特别认可：
+
+你先检查已有模型：
+
+User 已存在
+Membership 已存在
+AuditLog 已存在
+
+没有重复创建身份体系。
+
+这是正确的架构行为。
+
+本次 Delta 只补：
+
+纯文本
+User
+ |
+ | Membership
+ |
+Organization
+
++
+Session
+
++
+Invitation
+
+保持边界。
+
+二、Session Schema 裁定
+批准 ✅
+
+采用：
+
+纯文本
+Session
+
+id
+organizationId
+userId
+tokenHash
+expiresAt
+createdAt
+lastSeenAt
+revokedAt
+ipHash
+userAgent
+但是增加一个要求：
+
+新增：
+
+纯文本
+lastRotatedAt DateTime?
+
+原因：
+
+未来：
+
+refresh session
+token rotation
+风险控制
+
+需要知道最近一次 session 更新时间。
+
+最终：
+
+纯文本
+Session
+{
+ id
+ organizationId
+ userId
+
+ tokenHash
+
+ createdAt
+ lastSeenAt
+ lastRotatedAt
+
+ expiresAt
+ revokedAt
+
+ ipHash
+ userAgent
+}
+三、Session 租户隔离裁定
+
+你的方案：
+
+Membership 复核 + Audit
+
+批准。
+
+不要求数据库触发器。
+
+原因：
+
+当前：
+
+User：
+
+没有 organizationId。
+
+强行 DB trigger：
+
+会导致：
+
+Session
+   |
+User
+   |
+Membership
+
+跨表租户判断复杂化。
+
+应用层更合理。
+
+但是增加强制规则：
+
+任何 Session 使用流程：
+
+必须：
+
+tokenHash
+ ↓
+Session
+ ↓
+Membership(
+ organizationId,
+ userId,
+ isActive=true
+)
+
+三步缺一不可。
+
+禁止：
+
+直接：
+
+Session.organizationId
+=
+request.organizationId
+
+作为唯一依据。
+
+四、UserInvitation Schema
+批准 ✅
+
+采用：
+
+UserInvitation
+
+id
+organizationId
+email
+role
+
+tokenHash
+
+expiresAt
+
+createdBy
+
+acceptedAt
+acceptedByUserId
+
+revokedAt
+
+增加：
+
+纯文本
+attemptCount Int @default(0)
+
+原因：
+
+邀请链接也是安全入口。
+
+未来需要：
+
+暴力尝试检测
+风险审计
+五、User.passwordChangedAt
+批准 ✅
+
+保留。
+
+用途：
+
+改密码：
+
+passwordChangedAt
+       |
+       |
+invalidate sessions
+
+正确。
+
+六、密码安全参数
+
+批准：
+
+纯文本
+Node crypto scrypt
+
+N=32768
+r=8
+p=1
+
+但是增加：
+
+不要把参数写死在代码。
+
+要求：
+
+配置化：
+
+例如：
+
+PASSWORD_SCRYPT_N
+PASSWORD_SCRYPT_R
+PASSWORD_SCRYPT_P
+
+默认：
+
+使用你的值。
+
+原因：
+
+未来升级成本更低。
+
+七、登录失败锁定
+
+批准：
+
+5次失败
++
+15分钟锁定
+
+要求：
+
+登录失败：
+
+必须：
+
+Audit：
+
+auth.login_failed
+
+但是：
+
+禁止记录：
+
+password
+token
+hash
+八、Session 生命周期
+
+批准：
+
+absolute:
+12h
+
+idle:
+30m
+
+要求：
+
+lastSeenAt 更新：
+
+不要每次请求写数据库。
+
+建议：
+
+例如：
+
+超过：
+
+5分钟
+
+再更新。
+
+否则高并发情况下产生无意义写压力。
+
+九、UserInvitation 租户触发器
+
+这里修改：
+
+不新增 cc_tenant trigger
+
+即：
+
+不要：
+
+19 → 21
+
+保持：
+
+19。
+
+原因：
+
+User / Invitation 是身份域。
+
+当前租户 trigger 体系主要保护：
+
+业务数据域。
+
+身份域采用：
+
+应用层授权 + Audit。
+
+所以：
+
+最终：
+
+Tenant triggers:
+19
+
+保持。
+
+十、WEB-DELTA 裁定
+批准 ✅
+
+采用：
+
+apps/web
+
+Next.js 15
+React 19
+TypeScript
+Tailwind
+
+但是：
+
+开工前必须增加：
+
+Web Dependency Audit
+
+要求：
+
+第一提交必须包含：
+
+apps/web/package.json
+
++
+license report
++
+dependency tree
+
+暂不允许：
+
+组件库：
+
+例如：
+
+shadcn/ui
+MUI
+Ant Design
+
+原因：
+
+先控制依赖面。
+
+十一、Web 架构边界
+
+批准：
+
+apps/web
+
+        |
+        |
+ internal API
+
+        |
+        |
+
+apps/api
+
+Web 不允许：
+
+直接：
+
+Prisma
+Database
+Storage
+
+所有业务：
+
+必须：
+
+API 层。
+
+十二、Audit 事件批准
+
+全部批准：
+
+auth.login_succeeded
+
+auth.login_failed
+
+auth.logout
+
+auth.session_revoked
+
+user.invited
+
+user.invitation_accepted
+
+user.password_changed
+
+user.disabled
+
+增加：
+
+auth.session_expired
+
+原因：
+
+区分：
+
+主动退出
+
+vs
+
+自然过期。
+
+十三、删除策略
+
+批准：
+
+软删除。
+
+规则：
+
+User:
+
+DISABLED
+
+Session:
+
+revokedAt
+
+Invitation:
+
+revokedAt
+
+保留审计。
+
+十四、最终 Schema Delta 范围
+
+批准：
+
+新增：
+
+Session
+
+字段：
+
+按上述调整。
+
+UserInvitation
+
+字段：
+
+增加：
+
+attemptCount
+User
+
+增加：
+
+passwordChangedAt
+
+Migration：
+
+性质：
+
+2 tables
++
+1 nullable column
++
+indexes
++
+FK
+
+无破坏。
+
+十五、C-0008-A 实施边界
+
+允许开始：
+
+✅ Schema migration
+
+✅ Auth service
+
+✅ Session service
+
+✅ Invitation flow
+
+✅ apps/web 初始化
+
+✅ Login 页面
+
+✅ Dashboard shell
+
+禁止：
+
+❌ 公网部署
+
+❌ 自助注册
+
+❌ OAuth
+
+❌ 支付
+
+❌ Claim 自动提交
+
+❌ canonical identity switch
+
+❌ Identity Step 4
+
+FINAL DECISION
+纯文本
+C-0008-A
+
+SCHEMA DELTA:
+PASS ✅
+
+WEB DELTA:
+PASS ✅
+
+允许编码。
+
+
+下一步提交：
+
+C-0008-A Implementation Checkpoint
+
+验收重点：
+
+Migration fresh PostgreSQL
+Session 安全测试
+Tenant isolation
+Invitation 生命周期
+Audit 完整性
+Web license gate
+
+完成后再进入 C-0008-B。
+```
