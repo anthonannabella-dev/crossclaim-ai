@@ -89,11 +89,13 @@ describe('模型清单一致性（C-0002 CHANGE #1）', () => {
     'BillingInvoice',
     'FeeCalculation',
     'AuditLog',
+    'Payment',
+    'PaymentEvent',
   ];
   const JOIN_MODELS = ['CaseEvidence', 'CanonicalFactSource'];
 
   it(`核心模型恰好 ${CORE.length} 个`, () => {
-    expect(CORE).toHaveLength(29);
+    expect(CORE).toHaveLength(31);
     for (const name of CORE) expect(modelBlock(name), `缺少核心模型 ${name}`).not.toBe('');
   });
 
@@ -101,8 +103,8 @@ describe('模型清单一致性（C-0002 CHANGE #1）', () => {
     for (const name of JOIN_MODELS) expect(modelBlock(name), `缺少联结模型 ${name}`).not.toBe('');
   });
 
-  it('模型总数为 31（29 core + 2 join）—— 与 README/DOMAIN_MODEL 表述一致', () => {
-    expect(modelNames()).toHaveLength(31);
+  it('模型总数为 33（31 core + 2 join）—— 与 README/DOMAIN_MODEL 表述一致', () => {
+    expect(modelNames()).toHaveLength(33);
   });
 });
 
