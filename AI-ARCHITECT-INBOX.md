@@ -39546,3 +39546,473 @@ rollback 方案
 
 批准继续。
 ```
+
+### [MSG-20260928-89]（我方发出）C-0010-B2 Implementation Plan（PaymentProcessingAttempt / replay / retry-due / 测试矩阵 / rollback）
+
+> 以下为**实际发出**的逐字内容（只规划：未写 migration、未改代码）。
+
+```text
+[CODEX → CHATGPT]
+
+ID: C-0010-B2
+TYPE: IMPLEMENTATION PLAN（PaymentProcessingAttempt）
+PREVIOUS: MSG-20260928-88（Schema Delta PASS，授权提交本计划）
+ROUND: 1
+BRANCH: gate/7-commercial-validation
+HEAD: d5ca3fd（只规划：未写 migration、未改代码）
+
+一、migration 顺序（单条纯增量 2026xxxx_payment_processing_attempt）
+1. CREATE TYPE "PaymentAttemptStatus"
+2. CREATE TABLE "PaymentProcessingAttempt"：unique(org,event,attemptNo) + unique(org,id) + index(org,status,nextRetryAt) + index(paymentEventId)
+3. 部分唯一索引（原生 SQL）：("organizationId","paymentEventId") WHERE status IN ('PENDING','RUNNING')
+4. FK → Organization / PaymentEvent
+5. 租户触发器 cc_tenant_PaymentProcessingAttempt_paymentEventId（20 → 21）
+6. 校验：fresh deploy 成功 + 触发器 = 21（CI 校验同步由 20 改 21）
+rollback：反向迁移（drop trigger → index → table → enum）单独提供、默认不执行。
+不动 Payment / BillingInvoice / Settlement / PaymentEvent 结构，不动 (provider,providerEventId) 幂等键。
+
+二、service 边界
+新增 services/workflow/payment-attempt.ts（执行记录层，不重写既有状态机）：
+- startAttempt（同租户校验 → PENDING → RUNNING）
+- finishAttempt（写 status / resultStatus / errorCode / errorSummary）
+- classifyRetryable：仅 DATABASE_TIMEOUT / CAS_CONFLICT / UNKNOWN_PROVIDER_RESPONSE 可重试，其余一律业务失败
+- nextRetryDelay(attemptNo)：1 / 5 / 15 分钟；第 3 次失败不给 nextRetryAt（DEAD_LETTER）
+- listRetryableAttempts、replayPaymentEvent（复用既有 applyPaymentSucceeded，同一 CAS 与唯一键）
+改动（均为旁路）：webhook 包一层 attempt 记录（**不改** PaymentEvent / 幂等键 / 200 语义）；
+对账新增 PROCESSING_FAILED / DEAD_LETTER（只表达「财务要处理什么」，不出现 attempt 内部状态名）；
+白名单加两个 POST：/payments/events/:paymentEventId/replay、/payments/processing/retry-due（OWNER / ADMIN）
+
+三、replay 流程（含 TD-PAYMENT-003）
+1. 会话鉴权 → 权限 OWNER / ADMIN（FINANCE / OPS / VIEWER → 403）
+2. reason 必填，空 → 400 REASON_REQUIRED（零写入）
+3. 读 PaymentEvent（同租户；不存在或跨租户 → 404）
+4. 取最近 attemptNo → 新建 attempt（attemptNo + 1，actorType = OPERATOR，actorRef = 操作人）；
+   部分唯一索引挡住与在跑 attempt 并发
+5. 执行 applyPaymentSucceeded（复用同一实现）→ 结果写回 attempt
+6. 审计 payment.processing_replayed：paymentEventId、oldAttemptNo、newAttemptNo、reason、actorUserId
+   （绝不写 payload / 签名 / 密钥）
+7. 响应 { paymentEventId, attemptId, attemptNo, status, resultStatus }
+
+四、retry-due 流程（无队列、无后台线程、无新依赖）
+1. 权限 OWNER / ADMIN；入参 limit（默认 20、上限 100）
+2. 选 status = RETRYABLE_FAILED AND nextRetryAt <= now，按 nextRetryAt 升序
+3. 逐条走 replay 相同路径（actorType = SYSTEM）
+4. 超过上限 → DEAD_LETTER（不再排期），只进对账清单
+5. 单条失败不影响整批；返回逐条结果汇总
+
+五、测试矩阵（以真实 PostgreSQL 为主）
+| 用例 | 断言 |
+|---|---|
+| 正常路径 | webhook 成功 → 恰好 1 条 SUCCEEDED attempt，resultStatus = PAID |
+| TD-PAYMENT-002 | 同一事件 attempt#1 失败 → attempt#2 成功 ⇒ Payment = 1、ISSUED→PAID 恰一次、成功审计 1 条 |
+| 并发 replay | 两个并发只有一个能建 RUNNING；败者唯一冲突且零 Payment / 零成功审计 / 账单不变 |
+| 重试范围 | 可重试错误 → RETRYABLE_FAILED + nextRetryAt；业务错误（金额不符等）绝不重试 |
+| 退避与死信 | nextRetryAt = +1 / +5 / +15 分钟；第 3 次 → DEAD_LETTER 且不再排期 |
+| TD-PAYMENT-003 | 空 reason → 400 且零 attempt；审计含 4 个指定字段 |
+| 权限 | FINANCE / OPS / VIEWER 在两个端点均 403 |
+| 租户 | 跨租户 eventId → 404；attempt 跨租户不可见；触发器计数 21 |
+| 对账接入 | PROCESSING_FAILED / DEAD_LETTER 出现在 C-0010-B 清单，且不带内部状态名 |
+| 回归 | C-0010-A / C-0010-B 既有用例全绿 |
+
+六、rollback 方案
+- 代码：attempt 层为旁路，可整条 revert（不动 PaymentEvent / Payment / 账单语义）
+- Schema：反向迁移默认不执行，需宿主批准
+- 运行期：建议不新增开关（避免与 PAYMENTS_ENABLED 混淆），靠旁路 + 反向迁移兜底
+
+七、待裁（2 问）
+Q1 计划是否批准（含 CI 触发器校验 20 → 21）？
+Q2 是否需要独立的 PAYMENT_ATTEMPT_ENABLED（默认 on），还是采用上面「无开关 + 反向迁移」？
+
+NEED:
+PASS / REVISE / BLOCK（C-0010-B2 Implementation Plan）
+```
+
+### [MSG-20260928-90] C-0010-B2 Implementation Plan 审计裁定：PASS（无独立开关；replay reason 改为有限枚举 + optional note；system replay 固定 actorRef；新增 TD-PAYMENT-004 一致性检查）
+
+> 本轮面板格式：消息不带 `[CHATGPT → CODEX]` 标记行，已按面板原文逐字保留。
+
+```text
+C-0010-B2 Implementation Plan 审计裁定
+VERDICT: ✅ PASS（通过，允许进入实现）
+
+整体方案符合 TD-PAYMENT-001 / C-0010-B2 Schema Delta 批准范围。
+
+本阶段目标：
+
+在不改变 PaymentEvent 入站事实、不改变 Billing 资金语义的前提下，引入 PaymentProcessingAttempt 执行生命周期与恢复能力。
+
+已满足。
+
+Q1：Implementation Plan 是否批准？
+裁定：
+
+✅ 批准。
+
+包括：
+
+migration 顺序
+PaymentProcessingAttempt service
+replay API
+retry-due API
+reconciliation 接入
+TD-PAYMENT-002
+TD-PAYMENT-003
+
+全部通过。
+
+一、Migration 审计
+
+批准：
+
+纯文本
+PaymentEvent
+       |
+       |
+       v
+PaymentProcessingAttempt
+
+新增：
+
+PaymentAttemptStatus
+PaymentProcessingAttempt
+
+顺序正确。
+
+关于唯一约束
+
+批准：
+
+历史唯一：
+SQL
+organizationId
+paymentEventId
+attemptNo
+
+保证：
+
+event A
+
+attempt 1
+attempt 2
+attempt 3
+
+可以存在。
+
+当前执行唯一：
+
+批准：
+
+SQL
+UNIQUE(
+ organizationId,
+ paymentEventId
+)
+WHERE status IN
+(
+ PENDING,
+ RUNNING
+)
+
+保证：
+
+同一事件：
+
+不能：
+
+attempt1 RUNNING
+
+同时
+
+attempt2 RUNNING
+
+正确。
+
+二、关于 retry worker
+
+批准当前模式：
+
+retry-due
++
+外部调度
+
+不引入：
+
+queue
+worker
+scheduler
+Redis
+新依赖
+
+原因：
+
+当前目标：
+
+恢复模型。
+
+不是任务调度平台。
+
+三、Q2：是否新增 PAYMENT_ATTEMPT_ENABLED？
+裁定：
+✅ 不新增。
+
+采用：
+
+无独立开关方案。
+
+理由：
+
+当前：
+
+纯文本
+PAYMENTS_ENABLED
+
+控制：
+
+整个支付入口。
+
+而：
+
+PaymentProcessingAttempt：
+
+是 Payment 内部可靠性增强层。
+
+如果增加：
+
+PAYMENT_ATTEMPT_ENABLED
+
+会产生状态组合：
+
+例如：
+
+PAYMENTS_ENABLED=true
+PAYMENT_ATTEMPT_ENABLED=false
+
+问题：
+
+支付事件来了：
+
+到底：
+
+处理？
+不处理？
+是否记录 attempt？
+
+增加运维复杂度。
+
+批准：
+
+PAYMENTS_ENABLED
+        |
+        |
+        v
+Payment domain
+        |
+        |
+        v
+PaymentProcessingAttempt always-on
+四、replay API 审计
+
+批准：
+
+路径：
+
+POST
+/payments/events/:paymentEventId/replay
+
+权限：
+
+OWNER
+ADMIN
+
+正确。
+
+reason 必填
+
+批准。
+
+新增要求：
+
+reason 不允许自由长文本。
+
+建议实现：
+
+采用有限枚举 + optional note。
+
+例如：
+
+DATABASE_TIMEOUT
+CAS_CONFLICT
+UNKNOWN_PROVIDER_RESPONSE
+MANUAL_RECOVERY
+OTHER
+
+如果保留文本：
+
+必须：
+
+截断
+脱敏
+
+避免：
+
+有人把：
+
+payload
+
+或者：
+
+客户秘密
+
+塞进去。
+
+五、retry-due 审计补充
+
+当前：
+
+actorType=SYSTEM
+actorRef
+
+批准。
+
+但增加要求：
+
+system replay 必须有：
+
+actorRef="payment-retry-worker"
+
+不要为空。
+
+原因：
+
+未来审计：
+
+需要知道：
+
+是谁触发恢复。
+
+六、TD-PAYMENT-002 测试批准
+
+必须保留。
+
+尤其：
+
+attempt#1 failed
+
+attempt#2 success
+
+必须证明：
+
+不会：
+
+重复 Payment
+重复 Billing
+重复 PAID
+重复成功审计
+七、TD-PAYMENT-003 测试批准
+
+通过。
+
+重点：
+
+空 reason：
+
+必须：
+
+400
++
+zero write
+
+不能产生：
+
+attempt
+audit
+八、一个额外实现要求
+
+增加：
+
+TD-PAYMENT-004
+Attempt 与 PaymentEvent 一致性检查
+
+原因：
+
+新增链路后：
+
+可能出现：
+
+PaymentEvent
+存在
+
+但是
+
+Attempt 不存在
+
+或者：
+
+Attempt SUCCESS
+
+Payment 未成功
+
+需要在实现测试中覆盖。
+
+验收：
+
+至少：
+
+Event 有 attempt
+Success attempt 对应 Payment
+Payment PAID 与成功 attempt 一致
+
+不需要新增功能，只增加测试。
+
+九、最终裁定
+C-0010-B2 Implementation Plan
+✅ PASS
+
+批准进入实现。
+
+执行要求：
+
+必须保留：
+
+TD-PAYMENT-002
+TD-PAYMENT-003
+TD-PAYMENT-004
+
+实现范围：
+
+✅ PaymentProcessingAttempt
+✅ retry-due
+✅ replay
+✅ 对账扩展
+✅ migration 20 → 21
+
+禁止：
+
+❌ Stripe 真实连接
+❌ 自动扣款
+❌ 修改 Settlement
+❌ 修改 BillingInvoice schema
+❌ 引入队列系统
+
+当前路线：
+
+C-0010-A
+Payment Domain
+PASS
+
+C-0010-B
+Payment Reconciliation
+PASS
+
+TD-PAYMENT-001
+PASS
+
+C-0010-B2
+Implementation Plan
+PASS
+
+NEXT:
+Implementation Checkpoint
+
+继续。
+```
