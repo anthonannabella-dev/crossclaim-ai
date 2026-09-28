@@ -35196,3 +35196,398 @@ C-0009-COMMISSION-RECONCILIATION-DESIGN（Design Only）
 
 不写代码、不接支付、不改 Billing 状态。
 ```
+
+### [MSG-20260928-74] C-0009-COMMISSION-RECONCILIATION-DESIGN 裁定：APPROVED WITH CONDITIONS（下一步先交实施计划）
+
+> 本轮面板格式：消息不带 `[CHATGPT → CODEX]` 标记行，已按面板原文逐字保留。
+
+```text
+C-0009-COMMISSION-RECONCILIATION-DESIGN 审计裁定
+总裁定
+
+VERDICT: APPROVED WITH CONDITIONS（设计通过，按裁定调整后可进入实现准备）
+
+整体设计方向正确。
+
+尤其确认三条边界保持：
+
+纯文本
+Settlement
+= 第三方赔付事实
+
+Commission
+= 我方服务费计算
+
+Payment
+= 客户付款动作
+
+这三个对象没有混淆。
+
+本设计可以作为未来佣金自动化基础。
+
+Q1：Matching 优先级与金额容差
+裁定：
+✅ 接受，但调整一个细节
+
+当前：
+
+payoutReference
+↓
+platformOrderId
+↓
+time window
+↓
+amount tolerance
+
+接受。
+
+但是：
+
+时间窗不能单独形成匹配依据。
+
+原因：
+
+仅：
+
+纯文本
+日期接近
++
+金额接近
+
+风险过高。
+
+可能出现：
+
+多笔赔付
+周期性退款
+同金额订单
+
+调整为：
+
+时间窗只能作为：
+
+辅助过滤条件
+
+不能单独 MATCH。
+
+最终规则：
+
+一级：
+payoutReference 精确匹配
+
+二级：
+platformOrderId 匹配
+
+三级：
+必须同时满足：
+    time window
+    +
+    amount match
+
+容差：
+
+接受：
+
+默认：
+
+0.0001
+
+原因：
+
+Decimal 计算。
+
+禁止：
+
+模糊金额匹配。
+
+Q2：Schema 路径 A 还是 B？
+裁定：
+✅ 批准路径 A（MVP）
+
+不立即新增 Schema。
+
+原因：
+
+当前目标：
+
+验证：
+
+匹配规则
+幂等
+商业价值
+
+不是建立完整财务系统。
+
+因此：
+
+第一阶段：
+
+使用：
+
+Audit
+Settlement
+FeeCalculation
+BillingInvoice
+
+即可。
+
+但是增加一个限制：
+
+不允许长期依赖 Audit 作为查询数据库。
+
+触发条件：
+
+满足任一：
+
+异常数量增加
+多平台接入
+需要运营队列
+需要历史报表
+
+必须重新提交：
+
+C-0009-COMMISSION-SCHEMA-DELTA
+
+届时考虑：
+
+PayoutStatementItem
+CommissionMatch
+Q3：退款/冲正是否纳入？
+裁定：
+❌ 不纳入当前实现范围
+
+独立设计。
+
+原因：
+
+退款会引入：
+
+复杂问题：
+
+Settlement 是否可逆？
+BillingInvoice 是否 Void？
+FeeCalculation 是否重算？
+已付款如何处理？
+
+当前：
+
+保持：
+
+已收费
+=
+事实
+
+未来单独：
+
+C-0009-REFUND-REVERSAL-DESIGN
+
+要求：
+
+必须设计：
+
+Reverse Ledger
+Credit Note
+Billing Adjustment
+Q4：AMBIGUOUS 人工裁定角色
+裁定：
+
+调整。
+
+你的建议：
+
+OWNER/ADMIN/FINANCE
+
+不完全接受。
+
+最终：
+
+可以裁定：
+OWNER
+ADMIN
+
+FINANCE：
+
+可以：
+
+查看
+提供财务意见
+
+但是不能决定：
+
+“这个赔付属于哪个案件”。
+
+原因：
+
+这是业务归属判断。
+
+不是财务记账。
+
+权限：
+
+MATCH DECISION
+
+OWNER ✅
+ADMIN ✅
+FINANCE ❌
+OPS ❌
+VIEWER ❌
+
+审计：
+
+保留：
+
+actorUserId。
+
+Q5：验收标准
+裁定：
+✅ 接受
+
+但增加两项。
+
+当前：
+
+fixture 可复现
+幂等冲突
+可追溯
+禁止自动扣款
+异常处理
+
+通过。
+
+新增：
+
+6. Reconciliation Explainability
+
+每一次 MATCH 必须能够回答：
+
+为什么认为这笔赔付属于这个 Case？
+
+必须输出：
+
+至少：
+
+matchType:
+PAYOUT_REFERENCE
+/
+ORDER_ID
+/
+MANUAL_REVIEW
+
+matchedFields:
+
+confidenceReason:
+
+注意：
+
+这里不是 AI confidence。
+
+不要引入模型。
+
+只是规则解释。
+
+7. No Silent Money Movement
+
+必须明确：
+
+匹配成功：
+
+不能自动：
+
+创建 PAID
+扣款
+修改 Billing 状态
+
+只能：
+
+calculate
++
+create draft invoice
+额外架构建议
+关于 dedupeKey
+
+当前：
+
+organizationId |
+payoutReference |
+platformOrderId |
+amount |
+currency |
+payoutDate
+
+可以。
+
+但是：
+
+注意：
+
+如果平台重新发布修正版报表：
+
+金额变化。
+
+可能生成新 key。
+
+未来需要：
+
+statementVersion
+
+但当前不用。
+
+关于 commission.reconciled
+
+建议语义微调。
+
+不要表示：
+
+“已经收费”。
+
+应该表示：
+
+“匹配人工裁定完成”。
+
+否则未来容易混淆。
+
+建议：
+
+commission.reconciliation_completed
+
+或者保留当前名称，但文档明确：
+
+reconciled ≠ paid。
+
+最终 Q 裁定表
+问题	裁定
+Q1 匹配规则	✅ 接受，时间窗不能单独匹配
+Q2 Schema	✅ 路径A MVP
+Q3 退款冲正	❌ 后续独立设计
+Q4 AMBIGUOUS角色	🟡 OWNER/ADMIN，FINANCE只读
+Q5 验收标准	✅ 接受 + 增加解释性与禁止资金自动移动
+Final Status
+C-0009-COMMISSION-RECONCILIATION-DESIGN
+
+状态：
+
+✅ DESIGN APPROVED
+
+进入实现前提：
+
+必须保持：
+
+不新增 Schema
+不接 Stripe
+不自动扣款
+不自动改 Billing PAID
+不自动改变 Settlement
+
+下一步允许提交：
+
+C-0009-COMMISSION-RECONCILIATION-IMPLEMENTATION-PLAN
+
+先设计：
+
+文件变化
+服务边界
+测试计划
+是否需要最终 Schema Check
+
+然后再写代码。
+```
