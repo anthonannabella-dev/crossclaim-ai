@@ -38,3 +38,10 @@ node ops/license-gate/check-licenses.mjs --json ops/license-gate/report.json
 - 只扫 **npm 直接依赖**。Python 侧（`ocr_service/`）需要 `pip-licenses`，尚未接入。
 - 只扫**直接依赖**，不递归传递依赖。传递依赖审计靠 SBOM 工具（如 `syft`），尚未接入。
 - 只扫 `node_modules` 里**实际安装**的版本，所以 CI 里必须先 `npm ci`。
+
+## workspace 覆盖守卫
+
+`WORKSPACES` 必须与 `apps/` 下真实存在 `package.json` 的目录完全一致
+（当前为 `apps/api` + `apps/web`）。新增 workspace 若忘记登记，CI 会因
+`apps/api/src/__tests__/license-gate-guard.test.ts` 失败而拦下 —— 避免重演
+「指向旧项目遗留目录名导致全部检查静默 SKIP、CI 仍然全绿」的问题。

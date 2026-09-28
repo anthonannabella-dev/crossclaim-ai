@@ -1,0 +1,101 @@
+{
+  "generatedAt": "2026-09-28T14:42:37.230Z",
+  "report": [
+    {
+      "ws": "apps/api",
+      "name": "@prisma/client",
+      "license": "Apache-2.0",
+      "verdict": "PASS"
+    },
+    {
+      "ws": "apps/api",
+      "name": "@types/node",
+      "license": "MIT",
+      "verdict": "PASS"
+    },
+    {
+      "ws": "apps/api",
+      "name": "prisma",
+      "license": "Apache-2.0",
+      "verdict": "PASS"
+    },
+    {
+      "ws": "apps/api",
+      "name": "tsx",
+      "license": "MIT",
+      "verdict": "PASS"
+    },
+    {
+      "ws": "apps/api",
+      "name": "typescript",
+      "license": "Apache-2.0",
+      "verdict": "PASS"
+    },
+    {
+      "ws": "apps/api",
+      "name": "vitest",
+      "license": "MIT",
+      "verdict": "PASS"
+    },
+    {
+      "ws": "apps/web",
+      "name": "@types/node",
+      "license": "MIT",
+      "verdict": "PASS"
+    },
+    {
+      "ws": "apps/web",
+      "name": "@types/react",
+      "license": "MIT",
+      "verdict": "PASS"
+    },
+    {
+      "ws": "apps/web",
+      "name": "@types/react-dom",
+      "license": "MIT",
+      "verdict": "PASS"
+    },
+    {
+      "ws": "apps/web",
+      "name": "autoprefixer",
+      "license": "MIT",
+      "verdict": "PASS"
+    },
+    {
+      "ws": "apps/web",
+      "name": "next",
+      "license": "MIT",
+      "verdict": "PASS"
+    },
+    {
+      "ws": "apps/web",
+      "name": "postcss",
+      "license": "MIT",
+      "verdict": "PASS"
+    },
+    {
+      "ws": "apps/web",
+      "name": "react",
+      "license": "MIT",
+      "verdict": "PASS"
+    },
+    {
+      "ws": "apps/web",
+      "name": "react-dom",
+      "license": "MIT",
+      "verdict": "PASS"
+    },
+    {
+      "ws": "apps/web",
+      "name": "tailwindcss",
+      "license": "MIT",
+      "verdict": "PASS"
+    },
+    {
+      "ws": "apps/web",
+      "name": "typescript",
+      "license": "Apache-2.0",
+      "verdict": "PASS"
+    }
+  ]
+}

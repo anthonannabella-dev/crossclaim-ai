@@ -24,6 +24,22 @@ import {
   type StorageFactoryDeps,
 } from './services/storage';
 import { createAuditWriter, createPrismaAuditSink, type AuditWriter } from './services/audit';
+import {
+  createPrismaConnectionLifecyclePort,
+  createPrismaFileAssetLookup,
+  createPrismaFileAssetPort,
+  createPrismaSourceConnectionPort,
+} from './services/acquisition';
+import { createPrismaImportRepository } from './services/ingest';
+import {
+  createPrismaAuthUserPort,
+  createPrismaMembershipLookup,
+  createPrismaSessionPort,
+  handleAuthRequest,
+  handleDataRequest,
+  handleUploadRequest,
+} from './services/auth';
+import { handleWorkflowRequest } from './services/workflow';
 
 const VERSION = '0.1.0';
 
@@ -34,6 +50,8 @@ export interface ServerDeps {
   storage?: StorageAdapter;
   /** 可选：注入审计写入器后，成功下载会写入 AuditLog */
   audit?: AuditWriter;
+  /** 可选：C-0008-A 内部认证端口（/auth/*）的依赖覆写 */
+  auth?: import('./services/auth').AuthRouteDeps;
 }
 
 /** 只保留文件名，剥掉路径与危险字符（CR/LF/引号/反斜杠/NUL） */
@@ -55,6 +73,10 @@ function asciiFilename(filename: string | undefined): string {
 
 const RFC5987_EXTRA = /[!'()*]/g;
 
+/** C-0008-B1 / B2-1：工作流端点路径（机会复核 qualify|reject、建案 case、连接管理），其余路径走默认 404。 */
+const WORKFLOW_PATH =
+  /^(?:\/opportunities\/[^/]+\/(?:qualify|reject|case)|\/connections(?:\/[^/]+\/(?:status|credential-ref))?|\/cases(?:\/[^/]+\/(?:commercial-terms|recovery-outcome|claim|evidence)|\/[^/]+)?|\/billing(?:\/[^/]+\/status)?)$/;
+
 /** CHANGE #20：Unicode 文件名走 RFC 5987 的 filename*=UTF-8''，同时给 ASCII 回退名 */
 export function buildContentDisposition(
   disposition: 'inline' | 'attachment',
@@ -69,24 +91,112 @@ export function buildContentDisposition(
 
 export function createServer(deps: ServerDeps): http.Server {
   const { prisma, log, storage, audit } = deps;
+  // 审计 IP 盐值只影响“谁”的哈希；缺失时保持空值（不阻塞服务启动）
+  const auditIpSalt = (() => {
+    try {
+      const env = loadEnv();
+      return env.AUDIT_IP_SALT ?? env.STORAGE_URL_SECRET ?? '';
+    } catch {
+      return '';
+    }
+  })();
+  const auth: import('./services/auth').AuthRouteDeps | undefined =
+    deps.auth ??
+    (audit
+      ? {
+          users: createPrismaAuthUserPort(prisma),
+          session: {
+            sessions: createPrismaSessionPort(prisma),
+            memberships: createPrismaMembershipLookup(prisma),
+            audit,
+            ipSalt: auditIpSalt,
+          },
+          audit,
+          // C-0008-A 裁定：未知邮箱失败登录没有租户归属 → 只写结构化安全日志
+          log: (event, fields) => log.warn(event, fields),
+        }
+      : undefined);
 
   return http.createServer((req, res) => {
     const started = Date.now();
     const url = req.url ?? '/';
 
+    // CHANGE #23：/files/<token> 的 token 是短期访问凭证，绝不写进日志。
+    // C-0008-B1：改为在响应结束时统一记录一次，覆盖所有直接写响应的处理器
+    // （/auth/*、/uploads、/imports、/opportunities/*、/connections*）。
+    const logPath = url.startsWith('/files/') ? '/files/[REDACTED]' : url;
+    res.on('finish', () => {
+      log.info('http_request', {
+        method: req.method,
+        path: logPath,
+        status: res.statusCode,
+        ms: Date.now() - started,
+      });
+    });
+
     const send = (code: number, payload: unknown) => {
       const body = JSON.stringify(payload);
       res.writeHead(code, { 'content-type': 'application/json; charset=utf-8' });
       res.end(body);
-      // CHANGE #23：/files/<token> 的 token 是短期访问能力，绝不进运行日志
-      const logPath = url.startsWith('/files/') ? '/files/[REDACTED]' : url;
-      log.info('http_request', {
-        method: req.method,
-        path: logPath,
-        status: code,
-        ms: Date.now() - started,
-      });
     };
+
+    // C-0008-A 内部认证端点：仅服务本地/内部 Web 应用，未做公网暴露
+    if (auth && url.startsWith('/auth/')) {
+      handleAuthRequest(req, res, auth)
+        .then((handled) => {
+          if (!handled) send(404, { error: 'not_found' });
+        })
+        .catch((err) =>
+          send(500, { error: err instanceof Error ? err.message : 'auth_error' }),
+        );
+      return;
+    }
+
+    // C-0008-A 内部上传端点（会话保护；文件字节经内容扫描后进入导入流水线）
+    if (auth && storage && url === '/uploads') {
+      handleUploadRequest(req, res, {
+        prisma,
+        session: auth.session,
+        connectionLifecycle: createPrismaConnectionLifecyclePort(prisma),
+        connections: createPrismaSourceConnectionPort(prisma),
+        fileAssets: createPrismaFileAssetPort(prisma),
+        fileAssetLookup: createPrismaFileAssetLookup(prisma),
+        storage,
+        imports: createPrismaImportRepository(prisma, { audit }),
+        audit: audit as AuditWriter,
+      })
+        .then((handled) => {
+          if (!handled) send(404, { error: 'not_found' });
+        })
+        .catch((err) =>
+          send(500, { error: err instanceof Error ? err.message : 'upload_error' }),
+        );
+      return;
+    }
+
+    // C-0008-A 内部只读数据端点（导入批次 / 追回机会），同样仅面向内部 Web
+    if (auth && (url === '/imports' || url === '/opportunities')) {
+      handleDataRequest(req, res, { prisma, session: auth.session })
+        .then((handled) => {
+          if (!handled) send(404, { error: 'not_found' });
+        })
+        .catch((err) =>
+          send(500, { error: err instanceof Error ? err.message : 'data_error' }),
+        );
+      return;
+    }
+
+    // C-0008-B1 / B2-1 内部工作流端点：机会复核、建案、连接管理；会话与角色矩阵由服务层校验
+    if (auth && WORKFLOW_PATH.test(url.split('?')[0] ?? '')) {
+      handleWorkflowRequest(req, res, { prisma, session: auth.session })
+        .then((handled) => {
+          if (!handled) send(404, { error: 'not_found' });
+        })
+        .catch((err) =>
+          send(500, { error: err instanceof Error ? err.message : 'workflow_error' }),
+        );
+      return;
+    }
 
     if (req.method === 'GET' && (url === '/health' || url === '/healthz')) {
       checkHealth({ db: prisma, version: VERSION })

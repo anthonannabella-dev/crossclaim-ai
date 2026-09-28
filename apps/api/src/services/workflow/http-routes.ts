@@ -1,0 +1,398 @@
+/**
+ * C-0008-B1 — internal workflow HTTP endpoints (human opportunity review).
+ * ---------------------------------------------------------------
+ *   POST /opportunities/:id/qualify   → DETECTED → QUALIFIED
+ *   POST /opportunities/:id/reject    → DETECTED → REJECTED (body.reason required)
+ *
+ * Every request is resolved through the same three-step session check as the
+ * C-0008-A endpoints (cookie → Session tokenHash → Membership). The review
+ * itself is delegated to services/workflow, so the approved permission matrix,
+ * the state machine and the same-transaction AuditLog (actorUserId) are the
+ * single implementation of this transition.
+ *
+ * The endpoints stay internal to this machine; no public exposure in Gate 6.
+ */
+
+import type { IncomingMessage, ServerResponse } from 'node:http';
+
+import type { PrismaClient } from '@prisma/client';
+
+import { parseCookies, SESSION_COOKIE } from '../auth/http-routes';
+import { resolveSession, type SessionContext, type SessionDeps } from '../auth/session';
+import {
+  createManagedConnection,
+  listConnections,
+  rotateConnectionCredentialRef,
+  setConnectionStatus,
+} from './connection-management';
+import { confirmCommercialTerms, createCaseForOpportunity } from './case-creation';
+import { confirmRecoveryOutcome } from './recovery-outcome';
+import { advanceBillingInvoice, listBillingInvoices } from './billing';
+import { getCase, getClaimDraft, listCaseEvidence, listCases } from './case-read';
+import { REJECT_REASONS, WorkflowError, reviewOpportunity } from './opportunity-review';
+import { ForbiddenError } from './permissions';
+
+const MAX_BODY_BYTES = 16 * 1024;
+const REVIEW_PATH = /^\/opportunities\/([^/]+)\/(qualify|reject|case)$/;
+const CONNECTION_PATH = /^\/connections(?:\/([^/]+)\/(status|credential-ref))?$/;
+const COMMERCIAL_TERMS_PATH = /^\/cases\/([^/]+)\/commercial-terms$/;
+const RECOVERY_OUTCOME_PATH = /^\/cases\/([^/]+)\/recovery-outcome$/;
+const BILLING_PATH = /^\/billing(?:\/([^/]+)\/status)?$/;
+const CASE_LIST_PATH = /^\/cases$/;
+const CASE_DETAIL_PATH = /^\/cases\/([^/]+)$/;
+const CASE_EVIDENCE_PATH = /^\/cases\/([^/]+)\/evidence$/;
+const CASE_CLAIM_PATH = /^\/cases\/([^/]+)\/claim$/;
+
+/** 请求体层面的错误（与领域状态无关），统一映射为 400。 */
+class HttpBodyError extends Error {
+  readonly code = 'INVALID_BODY';
+
+  constructor(message: string) {
+    super(message);
+    this.name = 'HttpBodyError';
+  }
+}
+
+export interface WorkflowRouteDeps {
+  prisma: PrismaClient;
+  session: SessionDeps;
+  /** Platforms of the adapters registered in this deployment (API connections only). */
+  registeredPlatforms?: readonly string[];
+  now?: () => Date;
+}
+
+function sendJson(res: ServerResponse, code: number, payload: unknown): void {
+  res.writeHead(code, {
+    'content-type': 'application/json; charset=utf-8',
+    'cache-control': 'no-store',
+  });
+  res.end(JSON.stringify(payload));
+}
+
+async function readJsonBody(req: IncomingMessage): Promise<Record<string, unknown>> {
+  const chunks: Buffer[] = [];
+  let size = 0;
+  for await (const chunk of req) {
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    size += buffer.length;
+    if (size > MAX_BODY_BYTES) throw new HttpBodyError('请求体过大');
+    chunks.push(buffer);
+  }
+  if (size === 0) return {};
+  try {
+    const parsed = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : {};
+  } catch {
+    throw new HttpBodyError('请求体不是合法 JSON');
+  }
+}
+
+function statusFor(error: unknown): { code: number; error: string } {
+  if (error instanceof HttpBodyError) return { code: 400, error: error.code };
+  if (error instanceof ForbiddenError) return { code: 403, error: error.code };
+  if (error instanceof WorkflowError) {
+    switch (error.code) {
+      case 'NOT_FOUND':
+        return { code: 404, error: error.code };
+      case 'ILLEGAL_TRANSITION':
+      case 'DUPLICATE_CONNECTION':
+      case 'SCOPE_NOT_SUPPORTED':
+      case 'COMMERCIAL_TERMS_PENDING':
+      case 'CLAIM_NOT_APPROVED':
+      case 'CURRENCY_MISMATCH':
+        return { code: 409, error: error.code };
+      case 'FORBIDDEN':
+        return { code: 403, error: error.code };
+      case 'REASON_REQUIRED':
+      case 'INVALID_REASON':
+      case 'INVALID_INPUT':
+      case 'SECRET_NOT_ACCEPTED':
+      case 'PLATFORM_NOT_REGISTERED':
+      case 'INVALID_COMMERCIAL_TERMS':
+      case 'INVALID_FIELD':
+      case 'PAYMENT_REFERENCE_REQUIRED':
+        return { code: 400, error: error.code };
+      case 'CASE_NOT_CREATED':
+        return { code: 500, error: error.code };
+      default:
+        return { code: 400, error: 'INVALID_REQUEST' };
+    }
+  }
+  return { code: 500, error: 'WORKFLOW_ERROR' };
+}
+
+function requireString(body: Record<string, unknown>, key: string): string | undefined {
+  const value = body[key];
+  return typeof value === 'string' ? value : undefined;
+}
+
+export async function handleWorkflowRequest(
+  req: IncomingMessage,
+  res: ServerResponse,
+  deps: WorkflowRouteDeps,
+): Promise<boolean> {
+  const path = (req.url ?? '/').split('?')[0];
+  const review = REVIEW_PATH.exec(path);
+  const connection = CONNECTION_PATH.exec(path);
+  const termsPath = COMMERCIAL_TERMS_PATH.exec(path);
+  const outcomePath = RECOVERY_OUTCOME_PATH.exec(path);
+  const billingPath = BILLING_PATH.exec(path);
+  const caseListPath = CASE_LIST_PATH.test(path);
+  const caseDetail = CASE_DETAIL_PATH.exec(path);
+  const caseEvidence = CASE_EVIDENCE_PATH.exec(path);
+  const caseClaim = CASE_CLAIM_PATH.exec(path);
+  if (!review && !connection && !termsPath && !outcomePath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim) {
+    return false;
+  }
+
+  const method = req.method ?? 'GET';
+  const allowed =
+    connection && !connection[2]
+      ? ['GET', 'POST']
+      : billingPath && !billingPath[1]
+        ? ['GET']
+        : caseListPath || caseDetail || caseEvidence || caseClaim
+          ? ['GET']
+          : ['POST'];
+  if (!allowed.includes(method)) {
+    sendJson(res, 405, { error: 'METHOD_NOT_ALLOWED' });
+    return true;
+  }
+
+  const token = parseCookies(req.headers.cookie)[SESSION_COOKIE];
+  const context: SessionContext | null = token ? await resolveSession(token, deps.session) : null;
+  if (!context) {
+    sendJson(res, 401, { error: 'UNAUTHENTICATED' });
+    return true;
+  }
+
+  const actor = {
+    organizationId: context.organizationId,
+    actorUserId: context.userId,
+    role: context.role,
+  };
+
+  try {
+    if (caseListPath) {
+      sendJson(res, 200, {
+        items: await listCases(deps.prisma, { organizationId: context.organizationId, role: context.role }),
+      });
+      return true;
+    }
+    if (caseDetail) {
+      sendJson(
+        res,
+        200,
+        await getCase(deps.prisma, { organizationId: context.organizationId, role: context.role }, caseDetail[1] ?? ''),
+      );
+      return true;
+    }
+    if (caseEvidence) {
+      sendJson(res, 200, {
+        items: await listCaseEvidence(
+          deps.prisma,
+          { organizationId: context.organizationId, role: context.role },
+          caseEvidence[1] ?? '',
+        ),
+      });
+      return true;
+    }
+    if (caseClaim) {
+      // 正文只在此端点返回；列表接口不返回正文（裁定）
+      sendJson(
+        res,
+        200,
+        await getClaimDraft(
+          deps.prisma,
+          { organizationId: context.organizationId, role: context.role },
+          caseClaim[1] ?? '',
+        ),
+      );
+      return true;
+    }
+
+    if (billingPath) {
+      if (!billingPath[1]) {
+        sendJson(res, 200, {
+          items: await listBillingInvoices(deps.prisma, {
+            organizationId: context.organizationId,
+            role: context.role,
+          }),
+        });
+        return true;
+      }
+      const body = await readJsonBody(req);
+      const result = await advanceBillingInvoice(
+        deps.prisma,
+        {
+          ...actor,
+          invoiceId: billingPath[1],
+          to: body.to,
+          paymentReference: body.paymentReference,
+          note: body.note,
+        },
+        deps.now,
+      );
+      sendJson(res, 200, result);
+      return true;
+    }
+
+    if (outcomePath) {
+      const body = await readJsonBody(req);
+      // 裁定：不接受 simulateSettlement（用户侧永不触发合成资金）
+      if (Object.prototype.hasOwnProperty.call(body, 'simulateSettlement')) {
+        throw new WorkflowError(
+          'INVALID_FIELD',
+          'simulateSettlement 不允许由用户侧请求提交（仅测试/演示环境使用）',
+        );
+      }
+      const outcome = await confirmRecoveryOutcome(
+        deps.prisma,
+        {
+          ...actor,
+          caseId: outcomePath[1] ?? '',
+          recoveredAmount: body.recoveredAmount,
+          currency: body.currency,
+          basisReference: body.basisReference,
+          evidenceArtifactId: body.evidenceArtifactId,
+          note: body.note,
+        },
+        deps.now,
+      );
+      sendJson(res, outcome.created ? 201 : 200, outcome);
+      return true;
+    }
+
+    if (termsPath) {
+      const body = await readJsonBody(req);
+      const confirmed = await confirmCommercialTerms(
+        deps.prisma,
+        {
+          ...actor,
+          caseId: termsPath[1] ?? '',
+          commercialTerms: body.commercialTerms,
+        },
+        deps.now,
+      );
+      sendJson(res, 200, { ...confirmed, commercialTermsPending: false });
+      return true;
+    }
+
+    if (connection) {
+      const connectionId = connection[1];
+      const sub = connection[2];
+
+      if (!connectionId) {
+        if (method === 'GET') {
+          sendJson(res, 200, { items: await listConnections(deps.prisma, actor) });
+          return true;
+        }
+        const body = await readJsonBody(req);
+        const created = await createManagedConnection(
+          deps.prisma,
+          {
+            ...actor,
+            label: body.label,
+            kind: body.kind,
+            domain: body.domain,
+            channel: body.channel,
+            platform: body.platform,
+            credentialRef: body.credentialRef,
+          },
+          { ...(deps.registeredPlatforms ? { registeredPlatforms: deps.registeredPlatforms } : {}), ...(deps.now ? { now: deps.now } : {}) },
+        );
+        sendJson(res, 201, created);
+        return true;
+      }
+
+      const body = await readJsonBody(req);
+      if (sub === 'status') {
+        const result = await setConnectionStatus(
+          deps.prisma,
+          { ...actor, connectionId, to: body.to, reason: body.reason },
+          { ...(deps.now ? { now: deps.now } : {}) },
+        );
+        sendJson(res, 200, result);
+        return true;
+      }
+
+      const result = await rotateConnectionCredentialRef(
+        deps.prisma,
+        {
+          ...actor,
+          connectionId,
+          credentialRef: body.credentialRef === undefined ? null : body.credentialRef,
+        },
+        { ...(deps.now ? { now: deps.now } : {}) },
+      );
+      sendJson(res, 200, result);
+      return true;
+    }
+
+    const opportunityId = review?.[1] ?? '';
+    if (review?.[2] === 'case') {
+      const body = await readJsonBody(req);
+      // 裁定 3：收到 simulateSettlement 一律拒绝，绝不静默忽略。
+      if (Object.prototype.hasOwnProperty.call(body, 'simulateSettlement')) {
+        throw new WorkflowError(
+          'INVALID_FIELD',
+          'simulateSettlement 不允许由用户侧请求提交（仅测试/演示环境使用）',
+        );
+      }
+      const created = await createCaseForOpportunity(
+        deps.prisma,
+        {
+          ...actor,
+          opportunityId,
+          commercialTerms: body.commercialTerms,
+        },
+        deps.now,
+      );
+      sendJson(res, 201, {
+        caseId: created.caseId,
+        caseNo: created.caseNo,
+        opportunityId: created.opportunityId,
+        claimId: created.claimId,
+        created: created.created,
+        // 费率是否仍待 OWNER / ADMIN 确认（B2-1 Step 1 业务条件）
+        commercialTermsPending: created.commercialTermsPending,
+      });
+      return true;
+    }
+
+    const decision = review?.[2] === 'reject' ? 'REJECT' : 'QUALIFY';
+    let reason: string | undefined;
+    if (decision === 'REJECT') {
+      const body = await readJsonBody(req);
+      reason = requireString(body, 'reason');
+    }
+
+    const result = await reviewOpportunity(
+      deps.prisma,
+      {
+        ...actor,
+        opportunityId,
+        decision,
+        ...(reason !== undefined ? { reason } : {}),
+      },
+      deps.now,
+    );
+
+    sendJson(res, 200, {
+      opportunityId: result.opportunityId,
+      from: result.from,
+      to: result.to,
+      reason: result.reason,
+    });
+    return true;
+  } catch (error) {
+    const { code, error: name } = statusFor(error);
+    sendJson(res, code, {
+      error: name,
+      ...(code === 400 && review?.[2] === 'reject' ? { allowedReasons: [...REJECT_REASONS] } : {}),
+    });
+    return true;
+  }
+}

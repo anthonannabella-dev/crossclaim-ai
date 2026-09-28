@@ -56,13 +56,15 @@ function enumBlock(name: string): string {
 }
 
 // ============================================================
-// CHANGE #1：模型数量必须与文档一致（27 core + 2 join = 29）
+// CHANGE #1：模型数量必须与文档一致（29 core + 2 join = 31）
 // ============================================================
 describe('模型清单一致性（C-0002 CHANGE #1）', () => {
   const CORE = [
     'Organization',
     'User',
     'Membership',
+    'Session',
+    'UserInvitation',
     'SourceConnection',
     'FileAsset',
     'ImportBatch',
@@ -91,7 +93,7 @@ describe('模型清单一致性（C-0002 CHANGE #1）', () => {
   const JOIN_MODELS = ['CaseEvidence', 'CanonicalFactSource'];
 
   it(`核心模型恰好 ${CORE.length} 个`, () => {
-    expect(CORE).toHaveLength(27);
+    expect(CORE).toHaveLength(29);
     for (const name of CORE) expect(modelBlock(name), `缺少核心模型 ${name}`).not.toBe('');
   });
 
@@ -99,8 +101,8 @@ describe('模型清单一致性（C-0002 CHANGE #1）', () => {
     for (const name of JOIN_MODELS) expect(modelBlock(name), `缺少联结模型 ${name}`).not.toBe('');
   });
 
-  it('模型总数为 29（27 core + 2 join）—— 与 README/DOMAIN_MODEL 表述一致', () => {
-    expect(modelNames()).toHaveLength(29);
+  it('模型总数为 31（29 core + 2 join）—— 与 README/DOMAIN_MODEL 表述一致', () => {
+    expect(modelNames()).toHaveLength(31);
   });
 });
 
