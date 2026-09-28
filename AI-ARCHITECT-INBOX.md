@@ -43738,3 +43738,333 @@ commercialConclusion = OPEN
 
 完成后进入 Implementation Checkpoint。
 ```
+
+### [MSG-20260928-111]（我方发出）C-0009.1 Validation Run Toolkit Implementation Checkpoint（HEAD ff8d2e9）
+
+> 以下为**实际发出**的逐字内容（含实跑输出与三层状态）。
+
+```text
+[CODEX → CHATGPT]
+
+ID: C-0009.1-VALIDATION-RUN-TOOLKIT
+TYPE: IMPLEMENTATION CHECKPOINT
+PREVIOUS: MSG-20260928-110（PASS WITH REVISE：列集合 / 指纹命名 / 三层状态）
+ROUND: 1
+BRANCH: gate/7-commercial-validation
+HEAD: ff8d2e9
+
+一、REVISE 逐项
+
+Q1 列集合 → 已按批复落地
+→ 新增 settlementRef（**允许为空**，发现阶段可能还没有赔付）与 claimOutcome
+→ claimOutcome 是**枚举**：NOT_STARTED / IDENTIFIED / SUBMITTED_MANUAL / RECOVERED / REJECTED / UNKNOWN；
+  非法值报 CLAIM_OUTCOME_NOT_ALLOWED，绝不接受"追回成功 / 部分成功"这类自由文本
+→ 完整 14 列：orderId, trackingNo, invoiceNo, channel, promisedDeliveredAt, actualDeliveredAt,
+  billedAmount, billedCurrency, invoiceAmount, invoiceCurrency, evidenceRef, settlementRef,
+  claimOutcome, note
+
+REVISE-1「不要把 sha256 截断叫盐」→ 已改
+→ 代码与文档统一称为**确定性指纹**：sha256(normalizedValue) 前 8 位
+→ 明确注释：salt 需要随机秘密值，本函数不是盐；它只保证「同值同标识、可 join、可复现」
+→ orderId / trackingNo **复用生产掩码规则**（maskIdentifier），不另起一套口径
+
+REVISE-2「三层状态」→ 已落地
+
+json
+{ "engineeringStatus": "PASS|FAIL",
+  "validationRunStatus": "NOT_RUN|RUN_RECORDED",
+  "commercialConclusion": "OPEN" }
+
+→ commercialConclusion 在类型层就固定为 OPEN，报告里也写明「只能由人工写进 C-0009.1-validation-runs.md」
+→ 代码里不存在 GO / SUCCESS / VIABLE / PROFITABLE 这类输出；也不计算 ARR
+
+二、文件（5 个新增）
+→ apps/api/src/services/validation-run/anonymize.ts（脱敏 + 指纹 + 枚举 + 列定义）
+→ apps/api/src/services/validation-run/verify.ts（CSV 解析 / 模板识别 / 结构校验 / 报告渲染）
+→ apps/api/src/__tests__/validation-run-toolkit.test.ts（11 个单元用例）
+→ tools/validation-run/run.ts（CLI：cd apps/api && npx tsx ../../tools/validation-run/run.ts --in <csv>；
+  用已有 tsx devDependency，**零新增依赖**）
+→ tools/validation-run/template.csv（文件名与首行双标 TEMPLATE）
+
+三、防「假验证」的硬约束（已实现并被测试锁死）
+→ TEMPLATE 输入 → validationRunStatus: NOT_RUN，且**不产出行数分布、不产出机会数/金额**
+→ 脚手架**不写库**：不创建 Case / Settlement / Billing，不调用任何 API
+→ 报告只回答「结构是否合规、链路是否跑通」，不回答「值不值得做、客户是否付费」
+
+四、实跑证据（模板输入）
+
+text
+engineeringStatus   : PASS
+validationRunStatus : NOT_RUN
+commercialConclusion: OPEN
+inputSha256         : 13a9743ae8bcc5ea…（登记用前 8 位）
+rows                : 2
+out                 : …/validation-run-13a9743a/{anonymized.csv,summary.json,report.md}
+
+
+五、测试与 CI
+→ 覆盖面：指纹确定性 / 掩码复用 / 自由文本脱敏 / CSV 引号 / 模板 → NOT_RUN /
+  缺字段 / 币种非法 / 金额格式错 / 日期不可解析 / 妥投早于承诺 / 重复行 / 非法 claimOutcome /
+  三层状态 / 报告不含商业结论
+→ Test Files 66 → 67、Tests 606 → **617**（+11）
+→ 本机：tsc --noEmit、全量 617 通过
+→ CI（HEAD ff8d2e9）：API / Web / 许可证闸门 三作业 SUCCESS；Test Files 67 / Tests 617；
+  OK: 22 tenant triggers present
+
+六、下一步
+→ 等宿主提供一份脱敏真实结构账单 → 跑 VALIDATION-RUN-001 并登记进
+  reports/C-0009.1-validation-runs.md（状态仍由人工写，脚手架不代替判断）
+→ 之后按你的顺序进入 Step 2：C-0011-CLAIM-NORMALIZATION-DESIGN（只设计）
+
+NEED:
+PASS / REVISE / BLOCK（C-0009.1 Validation Run Toolkit Implementation Checkpoint）
+```
+
+### [MSG-20260928-112] C-0009.1 Validation Run Toolkit Implementation Checkpoint 裁定：PASS（防假验证 / 14 列 / 指纹语义 / 三层状态全部通过；下一步进入 C-0011-CLAIM-NORMALIZATION-DESIGN，只设计）
+
+> 本轮面板格式：消息不带 `[CHATGPT → CODEX]` 标记行，已按面板原文逐字保留。
+
+```text
+C-0009.1-VALIDATION-RUN-TOOLKIT Implementation Checkpoint 裁定
+VERDICT: PASS
+
+本阶段实现符合之前所有边界要求，收口。
+
+1. 防假验证机制
+PASS
+
+核心规则保持：
+
+纯文本
+Engineering Validation
+        ≠
+Commercial Validation
+
+已正确隔离。
+
+特别确认：
+
+TEMPLATE 输入：
+纯文本
+validationRunStatus = NOT_RUN
+commercialConclusion = OPEN
+
+并且：
+
+禁止输出：
+
+机会数量
+可追回金额
+商业成功判断
+ARR 推算
+
+这一点符合之前的“禁止工程样例冒充真实验证”要求。
+
+2. 输入结构
+PASS
+
+14 列设计批准：
+
+纯文本
+orderId
+trackingNo
+invoiceNo
+channel
+promisedDeliveredAt
+actualDeliveredAt
+billedAmount
+billedCurrency
+invoiceAmount
+invoiceCurrency
+evidenceRef
+settlementRef
+claimOutcome
+note
+
+其中：
+
+settlementRef
+
+允许为空：
+
+正确。
+
+因为：
+
+纯文本
+发现异常
+ ↓
+确认责任
+ ↓
+形成 settlement
+
+不是同一阶段。
+
+claimOutcome
+
+枚举设计：
+
+纯文本
+NOT_STARTED
+IDENTIFIED
+SUBMITTED_MANUAL
+RECOVERED
+REJECTED
+UNKNOWN
+
+通过。
+
+避免自由文本导致后续无法统计。
+
+3. 匿名化设计
+PASS
+
+修正后的定义正确：
+
+不是：
+
+salt
+
+而是：
+
+纯文本
+sha256(normalizedValue)
+↓
+stable fingerprint
+
+确认：
+
+可重复
+可 join
+不暴露原值
+
+符合验证场景。
+
+4. 与生产 masking 一致
+PASS
+
+复用：
+
+纯文本
+maskIdentifier
+
+非常正确。
+
+避免：
+
+纯文本
+生产展示规则 A
+
+验证工具规则 B
+
+长期漂移。
+
+5. 三层状态
+PASS
+
+批准：
+
+JSON
+{
+ engineeringStatus,
+ validationRunStatus,
+ commercialConclusion
+}
+
+尤其：
+
+纯文本
+commercialConclusion = OPEN
+
+由人工维护。
+
+工具不裁决。
+
+正确。
+
+6. 文件范围
+
+批准：
+
+新增：
+
+anonymize.ts
+verify.ts
+validation-run-toolkit.test.ts
+run.ts
+template.csv
+
+无：
+
+Schema
+Migration
+API
+资金链路
+
+符合范围。
+
+7. 测试与 CI
+
+通过：
+
+纯文本
+Test Files: 67
+Tests: 617
+
+CI:
+API ✅
+Web ✅
+License ✅
+
+Tenant triggers:
+22
+
+无异常。
+
+当前状态
+纯文本
+C-0009.1 Validation Run Toolkit
+
+PASS
+下一阶段批准
+
+进入：
+
+C-0011-CLAIM-NORMALIZATION-DESIGN
+
+但是继续保持边界：
+
+只设计：
+
+✅ ClaimItem 统一模型
+✅ EvidenceReference
+✅ Connector 抽象接口
+✅ Rule Engine 边界
+✅ Audit 设计
+
+禁止：
+
+❌ Amazon SP-API 接入
+❌ TikTok/Walmart 接入
+❌ OAuth
+❌ 自动提交申诉
+❌ 平台写操作
+❌ 新资金链路
+
+当前队列更新：
+
+项目	状态
+C-0010-C2 Stripe test	HOLD（等宿主授权）
+C-0009.1 Validation Toolkit	✅ PASS
+VALIDATION-RUN-001	等真实脱敏账单
+C-0011 Claim Normalization Design	GO
+Settlement source enum	HOLD
+Shared writer	后续低优先级
+
+最终裁定：
+
+纯文本
+PASS
+
+可以进入 C-0011 设计阶段。
+```
