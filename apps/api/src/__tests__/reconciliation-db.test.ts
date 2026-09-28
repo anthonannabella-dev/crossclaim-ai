@@ -52,7 +52,12 @@ const reconciliation = createPrismaReconciliationRepository(prisma);
 let uploadConnectionId = '';
 let apiConnectionId = '';
 
-const CSV_HEADER = 'Invoice No,Tracking Number,Invoice Date,Net Charge,Currency';
+/**
+ * The file rows must carry the same reference type the API record uses
+ * (`INVOICE`), otherwise the two sources describe different reference kinds
+ * and can never be matched by the reconciliation fact key.
+ */
+const CSV_HEADER = 'Invoice No,Reference Type,Tracking Number,Invoice Date,Net Charge,Currency';
 
 function apiAdapter(amount: string): ExternalAdapter {
   return {
@@ -128,7 +133,7 @@ beforeEach(async () => {
 });
 
 async function ingestFile(amount: string) {
-  const csv = [`${CSV_HEADER}`, `INV-9001,1ZDEMO900,2026-09-08,${amount},USD`].join('\n');
+  const csv = [`${CSV_HEADER}`, `INV-9001,INVOICE,1ZDEMO900,2026-09-08,${amount},USD`].join('\n');
   return uploadFileAndImport(
     {
       organizationId: ORG,
