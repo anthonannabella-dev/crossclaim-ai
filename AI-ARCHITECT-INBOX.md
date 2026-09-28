@@ -23270,3 +23270,444 @@ FINAL PASS ✅
 
 PR #7 APPROVED FOR MERGE
 ```
+
+### [MSG-20260928-41] C-0007 Gate 5 Scope Decision：PASS（采用方案 A；内部 runner；零新增依赖）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE:
+GATE SCOPE DECISION
+
+ID:
+C-0007
+
+GATE:
+5
+
+MODULE:
+Production Acquisition Runtime
+
+VERDICT:
+
+PASS ✅
+
+批准 C-0007 范围。
+
+执行以下裁定。
+
+A. 文件安全扫描
+裁定：采用方案 A ✅
+
+采用：
+
+魔数/MIME 嗅探 + 扩展名白名单 + 文件大小限制 + SHA256 去重 + 可疑类型拒绝
+
+不引入 ClamAV 或外部杀毒服务。
+
+原因：
+
+当前 Gate 目标不是建立企业级终端安全产品，而是证明：
+
+Upload
+ ↓
+FileAsset
+ ↓
+Import
+ ↓
+SourceTransaction
+
+生产数据入口闭环。
+
+必须满足：
+1. 不相信客户端 MIME
+
+禁止：
+
+纯文本
+Content-Type: text/csv
+
+作为唯一依据。
+
+必须：
+
+文件头检测
+实际格式检测
+扩展名一致性检查
+2. 默认允许
+
+Phase 1:
+
+允许：
+
+CSV
+
+保留：
+
+XLSX
+PDF
+IMAGE
+
+未来 Document Intelligence Gate。
+
+当前继续：
+
+unsupported => fail closed
+3. 必须记录：
+
+FileAsset 或 Audit 中：
+
+至少包含：
+
+scanStatus
+scanReason
+detectedMime
+sha256
+sizeBytes
+
+禁止：
+
+上传成功但安全状态未知。
+
+状态：
+
+建议：
+
+PENDING_SCAN
+PASSED
+REJECTED
+B. Upload API 认证边界
+裁定：采用方案 A ✅
+
+本 Gate 不引入认证系统。
+
+原因：
+
+当前仓库缺：
+
+User session
+OAuth
+RBAC
+API key 生命周期
+
+强行加入会扩大攻击面。
+
+允许：
+
+内部端点：
+
+/internal/upload
+
+或者：
+
+测试注入入口。
+
+但是：
+
+必须明确：
+
+NOT_PUBLIC
+NOT_PRODUCTION_EXPOSED
+
+不要：
+
+JWT
+API Key
+用户登录系统
+
+留给 Web/Auth Gate。
+
+C. 调度与重试
+裁定：采用方案 A ✅
+
+应用内 runner。
+
+不要引入 Temporal。
+
+原因：
+
+当前目标：
+
+验证：
+
+SourceConnection
+    |
+    |
+Scheduler
+    |
+Adapter
+    |
+Import
+
+语义正确。
+
+不是验证分布式工作流平台。
+
+必须实现：
+
+Retry
+
+要求：
+
+指数退避：
+
+例如：
+
+1m
+5m
+15m
+1h
+
+最大次数限制。
+
+幂等
+
+必须保证：
+
+重复执行：
+
+不会产生：
+
+重复 SourceTransaction
+重复 CanonicalFact
+重复 ImportBatch
+状态
+
+建议：
+
+SourceSyncRun：
+
+或者现有状态扩展。
+
+如果需要 Schema：
+
+先提交 Delta。
+
+D. 新增依赖
+裁定：零新增依赖 ✅
+
+保持：
+
+package.json unchanged
+
+优先。
+
+禁止本 Gate：
+
+ClamAV client
+Temporal SDK
+文件解析大型库
+OCR
+PDF parser
+
+原因：
+
+依赖必须经过：
+
+许可证审计。
+
+C-0007 实施顺序批准
+
+批准你的顺序：
+
+Phase 1
+SourceConnection Lifecycle
+
+实现：
+
+create
+activate
+pause
+disable
+credentialRef rotate
+lastError
+
+要求：
+
+状态机明确。
+
+例如：
+
+ACTIVE
+ |
+ |
+FAILED
+ |
+ |
+PAUSED
+
+禁止：
+
+任意字符串状态。
+
+Phase 2
+Upload Runtime
+
+链路：
+
+Upload Request
+
+↓
+
+Storage Adapter
+
+↓
+
+FileAsset
+
+↓
+
+ImportBatch
+
+↓
+
+SourceTransaction
+
+↓
+
+CanonicalFact
+
+注意：
+
+这里可以接 CanonicalFact 双写。
+
+但是：
+
+不要切 Detection identity。
+
+Phase 3
+API Connector Runtime
+
+只实现：
+
+ExternalAdapter
+ |
+authenticate
+ |
+pull
+ |
+canonical ingest
+
+禁止：
+
+submit。
+
+Phase 4
+Runner
+
+实现：
+
+SourceConnection
+      |
+      |
+Scheduled Run
+      |
+      |
+Adapter/File Import
+
+需要：
+
+retry
+backoff
+failure record
+idempotency
+强制边界
+
+C-0007 不允许：
+
+❌ 真实平台接入
+
+例如：
+
+Amazon SP API
+UPS
+FedEx
+DHL
+
+需要：
+
+HOST APPROVAL。
+
+❌ OAuth
+
+不做。
+
+❌ 公网 Upload API
+
+不做。
+
+❌ Canonical 默认开启
+
+保持：
+
+DETECTION_IDENTITY_MODE=legacy
+❌ Step 4 Identity Cleanup
+
+禁止。
+
+额外增加两个验收要求
+1. Upload 安全负测试
+
+必须覆盖：
+
+空文件
+超大小
+MIME 伪造
+扩展名伪造
+可执行文件伪装
+重复上传
+
+全部：
+
+fail closed。
+
+2. Runtime 可恢复性测试
+
+必须覆盖：
+
+场景：
+
+上传成功
+↓
+Import失败
+↓
+重试
+↓
+成功
+
+验证：
+
+不能产生：
+
+重复交易。
+
+最终裁定
+纯文本
+C-0007 Gate 5
+
+STATUS:
+APPROVED
+
+Scope:
+Production Acquisition Runtime
+
+Security:
+方案 A
+
+Upload Auth:
+Deferred
+
+Scheduler:
+Internal Runner
+
+Dependencies:
+Zero New Dependency
+
+Schema:
+先实现，必要时提交 Delta
+
+External API:
+Blocked until HOST APPROVAL
+
+可以开始执行。
+```
