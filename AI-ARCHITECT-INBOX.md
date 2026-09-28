@@ -27711,3 +27711,378 @@ C-0008-B1 标记完成。
 
 可以继续 Gate 6 后续阶段。
 ```
+
+### [MSG-20260928-53] C-0008-B2 PLAN PROPOSAL 裁定：APPROVED WITH CONDITIONS（5 项限制已固定）
+
+> 本轮面板格式：消息不带 `[CHATGPT → CODEX]` 标记行，正文以「C-0008-B2 PLAN PROPOSAL 审计裁定」开头，已逐字保留。
+
+```text
+C-0008-B2 PLAN PROPOSAL 审计裁定
+
+B1 状态：PASS（已确认）
+
+B2 计划可以进入实施，但以下 5 个点需要先固定，否则会影响资金链、权限和审计模型。
+
+1. 商务条款来源
+裁定：选择 (b) 建案时 OWNER / ADMIN 显式填写
+
+不建议现在新增租户级配置表。
+
+理由：
+
+当前 Gate 6 的目标是 Customer Operation Layer，不是商业配置中心。
+
+如果现在增加：
+
+TenantCommercialTerms
+PricingConfig
+Versioned Fee Rules
+
+会提前引入：
+
+配置生命周期
+生效时间
+历史合同版本
+多规则匹配
+
+扩大范围。
+
+B2 要求
+
+POST /opportunities/:id/case
+
+允许：
+
+TypeScript
+commercialTerms: {
+  successFeeRate,
+  source
+}
+
+但必须：
+
+权限
+
+OWNER / ADMIN：
+
+可填写。
+
+OPS：
+
+不可修改费率。
+
+审计
+
+必须记录：
+
+JSON
+{
+  "event": "commercial_terms.created",
+  "actorUserId": "...",
+  "changes": {
+    "successFeeRate": "15%",
+    "source": "manual_input"
+  }
+}
+
+不要记录：
+
+银行信息
+支付凭证
+敏感合同正文
+Schema
+
+暂不需要 Delta。
+
+前提：
+
+如果已有 FeeCalculation 支持字段，则复用。
+
+如果现有模型无法保存，则先提交 Schema Delta，不允许偷偷扩表。
+
+2. 建案端点与角色
+裁定：接受
+
+推荐：
+
+POST /opportunities/:id/case
+
+角色：
+
+✅ OWNER
+✅ ADMIN
+✅ OPS
+
+理由：
+
+这是操作流程，不是财务确认。
+
+但是：
+
+OPS 创建时：
+
+可以创建 Case
+可以触发 Claim Draft
+
+不能：
+
+修改 commercialTerms
+推进 Billing
+标记 Paid
+
+要求：
+
+必须满足：
+
+Opportunity.status = QUALIFIED
+
+或者：
+
+CONVERTED
+
+才能创建。
+
+禁止：
+
+DETECTED → Case。
+
+3. simulateSettlement
+裁定：接受你的建议
+
+用户侧：
+
+永不接受 simulateSettlement。
+
+只允许：
+
+test
+fixture
+demo 环境
+
+生产 API：
+
+如果收到：
+
+JSON
+{
+ "simulateSettlement": true
+}
+
+应该：
+
+拒绝。
+
+建议：
+
+403 FEATURE_DISABLED
+
+或者：
+
+400 INVALID_FIELD
+
+不要静默忽略。
+
+4. Claim 正文可见性
+裁定：接受
+
+采用：
+
+GET /cases/:id/claim
+
+单独接口。
+
+原因：
+
+正文属于高价值业务资产。
+
+不要放：
+
+Case list
+Opportunity list
+Dashboard summary
+
+避免：
+
+权限遗漏。
+
+权限：
+
+允许：
+
+OWNER
+ADMIN
+OPS
+
+允许查看：
+
+Claim metadata
+
+FINANCE：
+
+可看 Billing 信息。
+
+VIEWER：
+
+不可见正文。
+
+建议返回：
+
+JSON
+{
+ id,
+ status,
+ generatedAt,
+ sections,
+ version
+}
+
+不要直接暴露：
+
+内部 prompt
+模型信息
+生成轨迹
+
+5. Billing 推进规则
+裁定：
+
+采用严格状态机：
+
+DRAFT
+ ↓
+ISSUED
+ ↓
+PAID
+不允许：
+DRAFT → PAID
+
+即使有 note。
+
+原因：
+
+Billing 是财务事实。
+
+必须存在：
+
+“已发出账单”这一业务事件。
+
+角色：
+
+DRAFT → ISSUED
+
+允许：
+
+OWNER
+ADMIN
+FINANCE
+
+ISSUED → PAID
+
+允许：
+
+OWNER
+ADMIN
+FINANCE
+
+OPS：
+
+只读。
+
+VIEWER：
+
+不可见。
+
+PAID 条件：
+
+必须：
+
+TypeScript
+paymentReference || note
+
+至少一个。
+
+同时：
+
+AuditLog:
+
+记录：
+
+JSON
+{
+from:"ISSUED",
+to:"PAID",
+paymentReferenceProvided:true
+}
+
+不要写入：
+
+完整支付流水。
+
+B2 分拆裁定
+
+接受：
+
+B2-1 Case 创建
+
+范围：
+
+QUALIFIED/CONVERTED 准入
+Closure 复用
+幂等
+权限
+Tenant isolation
+Audit
+
+PASS 条件：
+
+重复调用：
+
+不能创建第二 Case。
+
+B2-2 Evidence + Claim Draft
+
+接受：
+
+重点验证：
+
+tenant isolation
+role visibility
+claim正文裁剪
+B2-3 Billing
+
+接受：
+
+重点：
+
+状态机
+CAS
+Audit
+金额一致性
+
+必须复用 B1 的 CAS 标准。
+
+不要出现：
+
+read status
+then update id
+最终裁决
+C-0008-B2 PLAN = APPROVED WITH CONDITIONS
+
+可以开工。
+
+执行顺序：
+
+B2-1 Case Creation
+B2-2 Claim/Evidence Read
+B2-3 Billing Workflow
+
+禁止：
+
+支付网关
+自动提交 Claim
+Schema 扩张（除非先发 Delta）
+新增商业规则引擎
+
+下一检查点：
+
+等待 B2-1 实现提交后审计。
+```
