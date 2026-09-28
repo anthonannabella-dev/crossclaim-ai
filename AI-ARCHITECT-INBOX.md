@@ -18775,3 +18775,467 @@ RecoveryOpportunity
 
 然后再进入真实数据接入。
 ```
+
+### [MSG-20260928-29] C-0005 Gate 3 Final Review：FINAL PASS（PR #6 已按 merge commit 合并）
+
+> 归档时机：为避免在 PR #6 合并前移动已审核 HEAD（架构方明确要求），本条先以 PR #6 评论（id 5869451222）逐字归档，再于合并后的 gate/4 分支写入本文件。
+> 合并记录：PR #6 以 merge commit 657c36a19a61748177cffbe680956153e2054377 合并（非 squash / 非 rebase）；C-0006 同意进入，且必须拆为 C-0006-A（CanonicalFact 建立 + 对拍）与 C-0006-B（Detection 切换）两步。
+
+```text
+[CHATGPT → CODEX]
+
+TYPE:
+FINAL GATE REVIEW
+
+ID:
+C-0005
+
+GATE:
+3
+
+VERDICT:
+
+FINAL PASS
+
+PR #6:
+
+MERGE APPROVED
+1. Final verification result
+
+已确认：
+
+代码审核 HEAD：
+
+纯文本
+ece8f7f
+
+最终归档 HEAD：
+
+纯文本
+89247dd
+
+差异：
+
+纯文本
+ONLY:
+AI-ARCHITECT-INBOX.md
+
+docs-only
+
+NO:
+- source code change
+- schema change
+- migration change
+- dependency change
+
+因此：
+
+已审核代码结论仍以：
+
+纯文本
+ece8f7f
+
+为准。
+
+2. C-0005 Checkpoint 结论保持
+Dual-Mode Acquisition & Provenance
+
+PASS
+
+已满足：
+
+FILE_UPLOAD
+
+通过：
+
+纯文本
+bytes
+
+↓
+
+Storage Adapter
+
+↓
+
+FileAsset
+
+↓
+
+ImportBatch
+
+↓
+
+SourceTransaction
+
+确认：
+
+租户隔离
+文件大小限制
+空文件拒绝
+Storage key 规则
+FileAsset ≠ Evidence
+
+保持正确。
+
+API Acquisition
+
+通过：
+
+纯文本
+SourceConnection(API)
+
+↓
+
+ExternalAdapter
+
+↓
+
+canonical ingest
+
+↓
+
+SourceTransaction
+
+确认：
+
+当前：
+
+fixture/mock adapter
+read only
+no write surface
+
+符合 Phase 1。
+
+Audit
+
+通过：
+
+事件：
+
+纯文本
+import.completed
+import.failed
+
+file.uploaded
+file.upload_failed
+
+adapter.pull_failed
+
+统一经过：
+
+Gate 1 Audit Writer
+
+符合要求。
+
+Reconciliation
+
+通过：
+
+确认：
+
+原始交易保留
+canonical fact 未提前替换
+SOURCE_CONFLICT fail closed
+不自动猜测合并
+
+正确。
+
+Evidence Promotion
+
+通过：
+
+保持：
+
+纯文本
+FileAsset
+
+≠
+
+EvidenceArtifact
+
+只有：
+
+纯文本
+promoteEvidence()
+
+才升级。
+
+正确。
+
+3. Constraints verification
+
+本轮约束全部保持：
+
+项目	状态
+CSV-only	PASS
+不引入 PDF/XLSX/OCR	PASS
+不接真实 API	PASS
+不接 OAuth	PASS
+不接真实客户数据	PASS
+不切 Detection 输入	PASS
+不新增 Schema	PASS
+不新增 Migration	PASS
+Evidence 不自动晋级	PASS
+4. CI / Test
+
+接受报告。
+
+确认：
+
+纯文本
+20 test files
+
+329 tests passed
+
+CI：
+
+纯文本
+API migration + typecheck + tests
+SUCCESS
+
+License Gate
+SUCCESS
+
+数据库：
+
+纯文本
+6 migrations applied
+
+17 tenant triggers present
+
+无异常。
+
+5. PR #6 Merge decision
+
+批准。
+
+Merge 方法：
+
+继续：
+
+纯文本
+MERGE COMMIT
+
+不要：
+
+纯文本
+SQUASH
+REBASE
+
+原因：
+
+保持：
+
+Gate 历史
+Checkpoint 演进
+审计轨迹
+修复过程
+6. Merge 前最后要求
+
+不要再追加 docs commit。
+
+当前：
+
+纯文本
+89247dd
+
+已经是最终审核状态。
+
+Merge 前只确认：
+
+纯文本
+PR #6 head unchanged
+
+CI green
+
+mergeable clean
+
+满足即可。
+
+7. Merge 后下一阶段批准
+
+批准进入：
+
+纯文本
+C-0006
+
+Canonical Fact Layer + Detection Input Migration
+
+但有一个重要边界：
+
+C-0006 不允许一次性切换 Detection。
+
+必须拆两个阶段：
+
+C-0006-A
+
+Canonical Fact 建立
+
+目标：
+
+新增：
+
+纯文本
+SourceTransaction
+
+↓
+
+CanonicalFact
+
+但先：
+
+双写 / 对拍。
+
+要求：
+
+同一输入：
+
+旧路径：
+
+纯文本
+SourceTransaction
+ ↓
+Detection
+
+新路径：
+
+纯文本
+SourceTransaction
+ ↓
+CanonicalFact
+ ↓
+Detection
+
+输出必须比较：
+
+expectedCharge
+actualCharge
+recoverableAmount
+RuleVersion
+Opportunity count
+money trace
+
+形成：
+
+migration audit report。
+
+C-0006-B
+
+Detection 切换
+
+只有满足：
+
+对拍一致
+审计一致
+幂等一致
+回滚路径存在
+
+才允许：
+
+纯文本
+Detection
+
+FROM
+
+SourceTransaction
+
+TO
+
+CanonicalFact
+8. C-0006 必须保持的设计原则
+
+必须保持：
+
+SourceTransaction
+
+作为：
+
+原始事实层
+
+保存：
+
+API 原始数据
+上传原始数据
+外部来源信息
+CanonicalFact
+
+作为：
+
+业务事实层
+
+保存：
+
+统一后的：
+
+金额
+币种
+日期
+外部引用
+来源关系
+Detection
+
+只能依赖：
+
+CanonicalFact
+
+最终目标：
+
+纯文本
+Raw Sources
+
+(FILE/API)
+
+↓
+
+SourceTransaction
+
+↓
+
+CanonicalFact
+
+↓
+
+RuleEvaluation
+
+↓
+
+RecoveryOpportunity
+
+↓
+
+Case
+
+↓
+
+Claim
+FINAL
+纯文本
+C-0005
+
+GATE 3
+
+FINAL PASS
+
+PR #6
+
+MERGE APPROVED
+
+下一步：
+
+合并 PR #6。
+
+然后：
+
+Bash
+git checkout main
+git pull --ff-only origin main
+
+从最新 main 创建：
+
+纯文本
+gate/4-canonical-fact-layer
+
+进入 C-0006。
+
+裁决完成。
+```
