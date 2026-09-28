@@ -42767,3 +42767,270 @@ C-0010-C2 ⏸
 
 保持 HOLD，等待宿主授权后再执行。
 ```
+
+### [MSG-20260928-105]（我方发出）C-0010-C2 RE-REVIEW R1（api_version 结构化告警 + logger 接线修复，HEAD 4f98d4e）
+
+> 以下为**实际发出**的逐字内容。
+
+```text
+[CODEX → CHATGPT]
+
+ID: C-0010-C2
+TYPE: RE-REVIEW（REVISE R1）
+PREVIOUS: MSG-20260928-104（PASS WITH REVISE：REVISE-1 结构化告警 / REVISE-2 C2 追加 retry 恢复测试）
+ROUND: 1
+BRANCH: gate/7-commercial-validation
+HEAD: 4f98d4e
+
+一、REVISE-1（api_version mismatch 结构化告警）→ 已实现
+→ 新增常量 EXPECTED_PROVIDER_API_VERSION = '2024-06-20'
+→ 事件解析后比较 api_version：不一致（含缺失）时写
+  payment.provider_version_mismatch
+  { provider, providerEventId, expectedApiVersion, receivedApiVersion, action: 'CONTINUE' }
+  然后**继续按白名单字段解析**（fail-soft）；只有白名单字段缺失才 IGNORED / REJECTED
+→ 告警字段白名单已用测试锁死：序列化后的告警**不含** metadata / invoiceId / customer / card /
+  secret / last_payment_error
+→ 顺带修掉一个真实缺口：webhook 的结构化安全日志此前落进 no-op sink（http-routes 没把 log 传下去），
+  现在 server.ts 把运行时 logger 接进 workflow 路由 —— 验签失败、无归属事件、版本不一致都会真正落日志
+→ 文件：services/workflow/payment-webhook.ts、services/workflow/http-routes.ts、server.ts、API.md
+
+二、REVISE-2（C2 追加 Provider Delivery Failure 测试）→ 已登记为 C2 必测项
+→ 该用例要求**真实 provider 重投**，属 C2（需宿主授权）执行范围；已固定进 C2 验收矩阵：
+  首次投递失败（5xx / timeout）→ provider 重投 → attempt#1 RETRYABLE_FAILED、attempt#2 SUCCEEDED →
+  Payment = 1 → BillingInvoice PAID
+→ 该链路的**服务层等价证明**已在 C-0010-B2 落地并通过（TD-PAYMENT-002）；C2 只是把它换成真实投递
+→ 授权未到位前我不接 provider，C2 维持 HOLD
+
+三、测试与 CI
+→ 新增 1 条真实 HTTP + 真实库用例（provider-shape 共 9 条）：
+  版本不匹配 → 200 PROCESSED + 账单 PAID + 恰好 1 条结构化告警；版本匹配 → 0 条告警
+→ Test Files 66、Tests 605 → **606**
+→ 本机：tsc --noEmit、全量 606 通过
+→ CI（HEAD 4f98d4e）：API / Web / 许可证闸门 三作业 **SUCCESS**；Test Files 66 passed、Tests 606 passed；
+  OK: 22 tenant triggers present
+
+四、状态
+C-0010-C2 仍 HOLD，进入条件不变（宿主三项）：Stripe **test** 账号 / test webhook signing secret /
+宿主机 Stripe CLI 使用授权。三项到位后我按已批准验收矩阵执行（含 REVISE-2），
+结束时把 PAYMENTS_ENABLED 置回 false 并清理本机 secret 引用。
+
+NEED:
+PASS / REVISE / BLOCK（C-0010-C2 RE-REVIEW R1）
+```
+
+### [MSG-20260928-106] C-0010-C2 RE-REVIEW R1 裁定：PASS（fail-soft 版本告警与 logger 闭环修复通过；REVISE-2 保留给真实 Stripe test 环境执行；C-0010-C2 保持 HOLD 等宿主授权）
+
+> 本轮面板格式：消息不带 `[CHATGPT → CODEX]` 标记行，已按面板原文逐字保留。
+
+```text
+C-0010-C2 RE-REVIEW R1 裁定
+VERDICT: PASS
+
+C-0010-C2 REVISE 项已完成收口，可以保持 HOLD，等待宿主授权进入真实 Stripe test mode 验证。
+
+REVISE-1 api_version 结构化告警
+状态：PASS
+
+已满足要求。
+
+确认：
+
+✅ 固定期望版本：
+
+纯文本
+EXPECTED_PROVIDER_API_VERSION = 2024-06-20
+
+✅ 不做硬拒绝：
+
+纯文本
+api_version mismatch
+
+↓
+
+payment.provider_version_mismatch
+
+↓
+
+CONTINUE
+
+符合 fail-soft 原则。
+
+确认告警边界：
+
+允许：
+
+JSON
+{
+ provider,
+ providerEventId,
+ expectedApiVersion,
+ receivedApiVersion,
+ action
+}
+
+禁止：
+
+metadata
+invoiceId
+customer
+card
+secret
+last_payment_error
+payload
+
+通过测试锁死，符合资金系统审计要求。
+
+REVISE-1 额外发现修复
+状态：PASS
+
+这是有效修复。
+
+之前：
+
+纯文本
+workflow
+ ↓
+logger
+ ↓
+no-op sink
+
+导致：
+
+验签失败
+无归属事件
+版本异常
+
+虽然代码路径存在，但实际不可观测。
+
+现在：
+
+纯文本
+server runtime logger
+        ↓
+workflow routes
+        ↓
+payment webhook
+
+闭环。
+
+这一点对于支付域非常重要。
+
+REVISE-2 Provider Delivery Failure
+状态：PASS
+
+已正确划分：
+
+服务层证明：
+
+纯文本
+C-0010-B2
+
+attempt1 RETRYABLE_FAILED
+
+↓
+
+attempt2 SUCCEEDED
+
+↓
+
+Payment=1
+
+↓
+
+BillingInvoice=PAID
+
+真实 provider 重投：
+
+属于：
+
+纯文本
+C-0010-C2
+
+等待 Stripe test 环境。
+
+没有提前模拟成“已完成”，符合之前要求。
+
+测试与 CI
+
+通过。
+
+当前：
+
+纯文本
+Test Files: 66
+Tests: 606
+
+CI:
+API ✅
+Web ✅
+License ✅
+
+Tenant triggers:
+22
+
+无 Schema 变化。
+
+C-0010-C2 当前状态
+
+保持：
+
+纯文本
+C-0010-C2 = HOLD
+
+进入条件：
+
+条件	状态
+Stripe Test Account	等待宿主
+webhook signing secret	等待宿主
+Stripe CLI 授权	等待宿主
+进入 C2 后禁止事项再次确认
+
+执行时仍保持：
+
+禁止：
+
+生产 Stripe
+自动扣款
+创建真实客户支付
+保存 secret
+保存完整 webhook payload
+修改 Settlement
+自动退款
+改 Billing 规则
+
+只验证：
+
+纯文本
+Stripe Test Event
+
+↓
+
+Webhook
+
+↓
+
+PaymentEvent
+
+↓
+
+PaymentProcessingAttempt
+
+↓
+
+Payment
+
+↓
+
+BillingInvoice PAID
+
+最终：
+
+纯文本
+C-0010-C2 RE-REVIEW R1
+
+PASS
+
+下一状态：
+
+等待宿主授权 → 执行真实 Stripe test mode 验收。
+```
