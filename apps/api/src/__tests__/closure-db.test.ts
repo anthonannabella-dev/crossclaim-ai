@@ -142,7 +142,8 @@ describe('C-0004 CP2 · Recovery Closure（真实 PostgreSQL）', () => {
 
     expect(run.casesCreated).toBe(1);
     expect(run.claimsCreated).toBe(1);
-    expect(run.evidenceCreated).toBe(3);
+    // 3 份索赔前证据（INVOICE / RATE_CARD / TRACKING）+ 1 份到账证据（CREDIT_NOTE）
+    expect(run.evidenceCreated).toBe(4);
     expect(run.settlementsCreated).toBe(1);
     expect(run.ledgerEntriesCreated).toBe(1);
     expect(run.feeCalculationsCreated).toBe(1);
