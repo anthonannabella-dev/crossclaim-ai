@@ -29,6 +29,7 @@ import { confirmCommercialTerms, createCaseForOpportunity } from './case-creatio
 import { confirmRecoveryOutcome } from './recovery-outcome';
 import { getRecoveryReviewStatus, submitRecoveryReview } from './recovery-review';
 import { advanceBillingInvoice, listBillingInvoices } from './billing';
+import { getAppealPackageState } from './appeal-package';
 import { getCase, getClaimDraft, listCaseEvidence, listCases } from './case-read';
 import {
   getOpportunityInsight,
@@ -47,6 +48,7 @@ const CONNECTION_PATH = /^\/connections(?:\/([^/]+)\/(status|credential-ref))?$/
 const COMMERCIAL_TERMS_PATH = /^\/cases\/([^/]+)\/commercial-terms$/;
 const RECOVERY_OUTCOME_PATH = /^\/cases\/([^/]+)\/recovery-outcome$/;
 const RECOVERY_REVIEW_PATH = /^\/cases\/([^/]+)\/recovery-review$/;
+const APPEAL_PACKAGE_PATH = /^\/cases\/([^/]+)\/appeal-package$/;
 const BILLING_PATH = /^\/billing(?:\/([^/]+)\/status)?$/;
 const CASE_LIST_PATH = /^\/cases$/;
 const CASE_DETAIL_PATH = /^\/cases\/([^/]+)$/;
@@ -153,12 +155,13 @@ export async function handleWorkflowRequest(
   const termsPath = COMMERCIAL_TERMS_PATH.exec(path);
   const outcomePath = RECOVERY_OUTCOME_PATH.exec(path);
   const reviewPath = RECOVERY_REVIEW_PATH.exec(path);
+  const appealPath = APPEAL_PACKAGE_PATH.exec(path);
   const billingPath = BILLING_PATH.exec(path);
   const caseListPath = CASE_LIST_PATH.test(path);
   const caseDetail = CASE_DETAIL_PATH.exec(path);
   const caseEvidence = CASE_EVIDENCE_PATH.exec(path);
   const caseClaim = CASE_CLAIM_PATH.exec(path);
-  if (!review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim) {
+  if (!review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !appealPath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim) {
     return false;
   }
 
@@ -170,7 +173,7 @@ export async function handleWorkflowRequest(
         ? ['GET', 'POST']
         : billingPath && !billingPath[1]
           ? ['GET']
-          : insightList || insightCsv || insight || caseListPath || caseDetail || caseEvidence || caseClaim
+        : insightList || insightCsv || insight || appealPath || caseListPath || caseDetail || caseEvidence || caseClaim
             ? ['GET']
             : ['POST'];
   if (!allowed.includes(method)) {
@@ -192,6 +195,19 @@ export async function handleWorkflowRequest(
   };
 
   try {
+    if (appealPath) {
+      sendJson(
+        res,
+        200,
+        await getAppealPackageState(
+          deps.prisma,
+          { organizationId: context.organizationId, role: context.role },
+          appealPath[1] ?? '',
+        ),
+      );
+      return true;
+    }
+
     if (reviewPath) {
       const caseId = reviewPath[1] ?? '';
       if ((req.method ?? 'GET') === 'GET') {

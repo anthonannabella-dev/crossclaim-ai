@@ -3,6 +3,17 @@
  */
 
 export {
+  MASK_TOKEN,
+  maskIdentifier,
+  type MaskKind,
+} from './masking';
+export {
+  getAppealPackageState,
+  type AppealPackageState,
+  type CustomerDataAccess,
+  type DeliverableState,
+} from './appeal-package';
+export {
   DEFAULT_HIGH_VALUE_THRESHOLD,
   REVIEW_ACTIONS,
   assertHighValueReviewCleared,

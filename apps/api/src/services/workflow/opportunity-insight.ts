@@ -13,6 +13,7 @@ import { Prisma, type PrismaClient } from '@prisma/client';
 
 import { WorkflowError } from './opportunity-review';
 import { assertPermission } from './permissions';
+import { maskIdentifier } from './masking';
 
 const money = (value: InstanceType<typeof Prisma.Decimal> | null): string | null =>
   value === null
@@ -31,12 +32,15 @@ export interface OpportunityInsight {
   /** D1：客户/运营可直接读懂的三行摘要 */
   summary: {
     invoiceReference: string | null;
+    /** 打码后的展示值（C-0009.3 P0）；客户仍可在原始视图/文件中看到完整值。 */
+    invoiceReferenceMasked: string | null;
     amountDifference: string | null;
     basis: string;
   };
   /** D2：复算证据块（验收 #7） */
   calculation: {
     invoiceReference: string | null;
+    invoiceReferenceMasked: string | null;
     ruleVersion: string | null;
     rateSource: string | null;
     calculationDetail: string | null;
@@ -107,11 +111,13 @@ function toInsight(row: OpportunityRow): OpportunityInsight {
     recoverableAmount: money(row.recoverableAmount),
     summary: {
       invoiceReference,
+      invoiceReferenceMasked: maskIdentifier(invoiceReference, 'ORDER_ID'),
       amountDifference: money(row.recoverableAmount),
       basis,
     },
     calculation: {
       invoiceReference,
+      invoiceReferenceMasked: maskIdentifier(invoiceReference, 'ORDER_ID'),
       ruleVersion: latest?.ruleVersion
         ? `${latest.ruleVersion.version} (${latest.ruleVersion.tier})`
         : null,

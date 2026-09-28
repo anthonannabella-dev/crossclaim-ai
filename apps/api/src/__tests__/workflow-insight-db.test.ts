@@ -126,11 +126,12 @@ describe('C-0009.1 — D1/D2 洞察（真实 PostgreSQL 样例）', () => {
 
     // —— 检查点用样例输出（D1/D2）——
     expect(insight.summary).toEqual({
-      invoiceReference: 'INSIGHT-1',
+      invoiceReference: 'INSIGHT-845234-4821',
+      invoiceReferenceMasked: 'INSIGHT-****-4821',
       amountDifference: '2.6625',
       basis: 'FREIGHT_RATE_V1（CUSTOMER_CONTRACT）· 来源 contract-2026',
     });
-    expect(insight.calculation.invoiceReference).toBe('INSIGHT-1');
+    expect(insight.calculation.invoiceReference).toBe('INSIGHT-845234-4821');
     expect(insight.calculation.ruleVersion).toBe('FREIGHT_RATE_V1 (CUSTOMER_CONTRACT)');
     expect(insight.calculation.rateSource).toBe('contract-2026');
     expect(insight.calculation.calculationDetail).toContain('expected=17.7500');

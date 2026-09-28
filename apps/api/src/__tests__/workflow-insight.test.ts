@@ -36,7 +36,11 @@ function stubPrisma(hasEvaluation = true) {
             computed: { definitionHash: 'abc123' },
             evaluatedAt: new Date('2026-09-28T18:00:00Z'),
             ruleVersion: { version: 'FREIGHT_RATE_V1', tier: 'CONTRACT', source: 'contract-2026', definition: {} },
-            canonicalFact: { factKey: 'INVOICE:INV-1', externalId: 'INV-1', referenceType: 'INVOICE' },
+            canonicalFact: {
+              factKey: 'INVOICE:INV-845234-4821',
+              externalId: 'INV-845234-4821',
+              referenceType: 'INVOICE',
+            },
           },
         ]
       : [],
@@ -73,13 +77,22 @@ describe('C-0009.1 — 机会人话版摘要与复算证据（单元）', () => 
       const insight = await getOpportunityInsight(prisma, { organizationId: ORG, role }, OPP);
 
       expect(Object.keys(insight.summary).sort()).toEqual(
-        ['amountDifference', 'basis', 'invoiceReference'].sort(),
+        ['amountDifference', 'basis', 'invoiceReference', 'invoiceReferenceMasked'].sort(),
       );
       expect(Object.keys(insight.calculation).sort()).toEqual(
-        ['calculationDetail', 'calculationTimestamp', 'invoiceReference', 'rateSource', 'ruleVersion'].sort(),
+        [
+          'calculationDetail',
+          'calculationTimestamp',
+          'invoiceReference',
+          'invoiceReferenceMasked',
+          'rateSource',
+          'ruleVersion',
+        ].sort(),
       );
       // D1：发票 / 差多少钱 / 依据
-      expect(insight.summary.invoiceReference).toBe('INV-1');
+      expect(insight.summary.invoiceReference).toBe('INV-845234-4821');
+      // C-0009.3 P0：展示用掩码值（客户仍可在原始文件/完整视图看到真值）
+      expect(insight.summary.invoiceReferenceMasked).toBe('INV-****-4821');
       expect(insight.summary.amountDifference).toBe('2.6625');
       expect(insight.summary.basis).toContain('FREIGHT_RATE_V1');
       // D2：四要素 + 时间戳
@@ -111,9 +124,15 @@ describe('C-0009.1 — 机会人话版摘要与复算证据（单元）', () => 
       amountExpected: '17.7500',
       amountActual: '20.4125',
       recoverableAmount: '2.6625',
-      summary: { invoiceReference: 'INV-1', amountDifference: '2.6625', basis: 'FREIGHT_RATE_V1 · contract-2026' },
+      summary: {
+        invoiceReference: 'INV-845234-4821',
+        invoiceReferenceMasked: 'INV-****-4821',
+        amountDifference: '2.6625',
+        basis: 'FREIGHT_RATE_V1 · contract-2026',
+      },
       calculation: {
-        invoiceReference: 'INV-1',
+        invoiceReference: 'INV-845234-4821',
+        invoiceReferenceMasked: 'INV-****-4821',
         ruleVersion: 'FREIGHT_RATE_V1 (CONTRACT)',
         rateSource: 'contract-2026',
         calculationDetail: 'expected=17.7500; actual=20.4125; recoverable=2.6625; currency=USD',
