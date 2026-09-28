@@ -96,6 +96,11 @@ async function main(): Promise<void> {
       activeFactTransactions: invoiceRows.length + trackingRows.length,
       excludedTransactions: 0,
     },
+    coverage: {
+      sourceTransactions: invoiceRows.length + trackingRows.length,
+      activeFactTransactions: invoiceRows.length + trackingRows.length,
+      conflictFactTransactions: 0,
+    },
     generatedAt: new Date(process.env.PARITY_REPORT_TIME ?? Date.now()),
   });
 

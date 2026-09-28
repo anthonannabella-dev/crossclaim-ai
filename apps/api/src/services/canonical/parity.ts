@@ -120,6 +120,13 @@ export interface MigrationAuditReport {
   legacy: { evaluationsCreated: number; opportunitiesCreated: number; unmatchedTracking: number };
   shadow: { evaluationsCreated: number; opportunitiesCreated: number; unmatchedTracking: number };
   moneyTrace: { legacyRecoverableTotal: string; shadowRecoverableTotal: string };
+  coverage: {
+    sourceTransactions: number;
+    activeFactTransactions: number;
+    conflictFactTransactions: number;
+    /** activeFactTransactions / sourceTransactions，4 位小数；1.0000 = 全量覆盖 */
+    factCoverageRatio: string;
+  };
   rows: InvoiceParityRow[];
   mismatches: string[];
   parity: 'OK' | 'MISMATCH';
@@ -177,6 +184,12 @@ export interface BuildParityReportInput {
   counts: {
     activeFactTransactions: number;
     excludedTransactions: number;
+  };
+  /** 事实覆盖率（B1 要求：避免"规则一样，但漏算了一批事实"）。 */
+  coverage?: {
+    sourceTransactions?: number;
+    activeFactTransactions?: number;
+    conflictFactTransactions?: number;
   };
   generatedAt?: Date;
 }
@@ -252,6 +265,23 @@ export async function buildDetectionParityReport(
     );
   }
 
+  const defaultSource = input.legacyInputs.invoices.length + input.legacyInputs.tracking.length;
+  const defaultActive = input.shadowInputs.invoices.length + input.shadowInputs.tracking.length;
+  const sourceTransactions = input.coverage?.sourceTransactions ?? defaultSource;
+  const activeFactTransactions = input.coverage?.activeFactTransactions ?? defaultActive;
+  const conflictFactTransactions =
+    input.coverage?.conflictFactTransactions ?? Math.max(0, defaultSource - defaultActive);
+  const coverageRatio =
+    sourceTransactions === 0
+      ? '1.0000'
+      : formatScaled((BigInt(activeFactTransactions) * 10_000n) / BigInt(sourceTransactions));
+
+  if (activeFactTransactions < sourceTransactions) {
+    mismatches.push(
+      `fact coverage 不完整：SourceTransaction=${sourceTransactions} > ACTIVE 事实行=${activeFactTransactions}（CONFLICT=${conflictFactTransactions}），存在被排除的事实`,
+    );
+  }
+
   return {
     engineVersion: DETECTION_ENGINE_VERSION,
     generatedAt: (input.generatedAt ?? new Date()).toISOString(),
@@ -276,6 +306,12 @@ export async function buildDetectionParityReport(
       unmatchedTracking: shadowResult.unmatchedTracking,
     },
     moneyTrace: { legacyRecoverableTotal: legacyMoney, shadowRecoverableTotal: shadowMoney },
+    coverage: {
+      sourceTransactions,
+      activeFactTransactions,
+      conflictFactTransactions,
+      factCoverageRatio: coverageRatio,
+    },
     rows,
     mismatches,
     parity: mismatches.length === 0 ? 'OK' : 'MISMATCH',
@@ -300,6 +336,13 @@ export function renderMigrationAuditReport(report: MigrationAuditReport): string
   lines.push(`- shadow tracking: ${report.counts.shadowTracking}`);
   lines.push(`- ACTIVE fact transactions: ${report.counts.activeFactTransactions}`);
   lines.push(`- excluded transactions: ${report.counts.excludedTransactions}`);
+  lines.push('');
+  lines.push('## Fact coverage');
+  lines.push('');
+  lines.push(`- SourceTransaction rows: ${report.coverage.sourceTransactions}`);
+  lines.push(`- ACTIVE fact transactions: ${report.coverage.activeFactTransactions}`);
+  lines.push(`- CONFLICT fact transactions: ${report.coverage.conflictFactTransactions}`);
+  lines.push(`- coverage ratio: ${report.coverage.factCoverageRatio}`);
   lines.push('');
   lines.push('## Detection comparison');
   lines.push('');

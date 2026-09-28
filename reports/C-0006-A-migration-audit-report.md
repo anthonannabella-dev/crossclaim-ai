@@ -15,6 +15,13 @@
 - ACTIVE fact transactions: 10
 - excluded transactions: 0
 
+## Fact coverage
+
+- SourceTransaction rows: 10
+- ACTIVE fact transactions: 10
+- CONFLICT fact transactions: 0
+- coverage ratio: 1.0000
+
 ## Detection comparison
 
 - legacy: evaluations=5 opportunities=1 unmatchedTracking=0

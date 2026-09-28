@@ -85,6 +85,10 @@ describe('C-0006-A — shadow detection parity', () => {
     expect(first.equal).toBe(true);
 
     expect(report.moneyTrace.legacyRecoverableTotal).toBe(report.moneyTrace.shadowRecoverableTotal);
+    expect(report.coverage.sourceTransactions).toBe(4);
+    expect(report.coverage.activeFactTransactions).toBe(4);
+    expect(report.coverage.conflictFactTransactions).toBe(0);
+    expect(report.coverage.factCoverageRatio).toBe('1.0000');
   });
 
   it('reports MISMATCH and names the excluded invoice when the shadow path sees fewer rows', async () => {
@@ -107,6 +111,8 @@ describe('C-0006-A — shadow detection parity', () => {
     expect(report.counts.excludedTransactions).toBe(2);
     expect(report.shadow.opportunitiesCreated).toBe(1);
     expect(report.moneyTrace.shadowRecoverableTotal).not.toBe(report.moneyTrace.legacyRecoverableTotal);
+    expect(report.coverage.factCoverageRatio).toBe('0.5000');
+    expect(report.mismatches.some((line) => line.includes('fact coverage 不完整'))).toBe(true);
   });
 
   it('renders the audit report with the required comparison fields', async () => {
@@ -122,6 +128,7 @@ describe('C-0006-A — shadow detection parity', () => {
 
     expect(markdown).toContain('# C-0006-A Migration Audit Report');
     expect(markdown).toContain('Detection comparison');
+    expect(markdown).toContain('Fact coverage');
     expect(markdown).toContain('money trace');
     expect(markdown).toContain('INV-1001');
     expect(markdown).toContain('17.7500');
