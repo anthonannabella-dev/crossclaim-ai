@@ -238,6 +238,8 @@ export async function handleWorkflowRequest(
         opportunityId: created.opportunityId,
         claimId: created.claimId,
         created: created.created,
+        // 费率是否仍待 OWNER / ADMIN 确认（B2-1 Step 1 业务条件）
+        commercialTermsPending: created.commercialTermsPending,
       });
       return true;
     }
