@@ -227,6 +227,9 @@ C-0008-B2（Case / Evidence / Claim Draft / Billing）的端点尚未实现。
 - 高额卡口 `PAYMENT_REVIEW_THRESHOLD`（默认 `1000.0000`）与 Recovery 卡口**完全独立**；动作域 `payment.review_*`，审批仅 OWNER / ADMIN，FINANCE 只读
 - 只保存事件元数据（`eventId` / `eventType` / `payloadHash` / `receivedAt` / `processingResult`）：**不保存 payload 原文、卡数据或 provider 机密**
 - 无法归属租户的事件不落库，只写结构化安全日志
+- 事件容器的 `api_version` 期望值为 `2024-06-20`，但**不做硬闸**（fail-soft）：不匹配时写结构化告警
+  `payment.provider_version_mismatch`（字段：`provider` / `providerEventId` / `expectedApiVersion` /
+  `receivedApiVersion` / `action: CONTINUE`），仍按白名单字段解析；只有白名单字段缺失才 IGNORED / REJECTED
 
 ## 支付对账（C-0010-B）
 

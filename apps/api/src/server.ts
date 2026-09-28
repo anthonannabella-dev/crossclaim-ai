@@ -188,7 +188,12 @@ export function createServer(deps: ServerDeps): http.Server {
 
     // C-0008-B1 / B2-1 内部工作流端点：机会复核、建案、连接管理；会话与角色矩阵由服务层校验
     if (auth && WORKFLOW_PATH.test(url.split('?')[0] ?? '')) {
-      handleWorkflowRequest(req, res, { prisma, session: auth.session })
+      handleWorkflowRequest(req, res, {
+        prisma,
+        session: auth.session,
+        // C-0010-C2：webhook 的结构化安全日志（验签失败 / 版本不一致）必须落到运行时 logger
+        log: (event, fields) => log.warn(event, fields),
+      })
         .then((handled) => {
           if (!handled) send(404, { error: 'not_found' });
         })

@@ -25,6 +25,12 @@ import { paymentsEnabled } from './payment';
 import { executeAttempt } from './payment-attempt';
 
 export const DEFAULT_TOLERANCE_SECONDS = 300;
+/**
+ * C-0010-C2 REVISE-1：期望的 provider 事件容器版本。
+ * 版本**不做硬闸**（fail-soft）：不匹配时只写结构化告警，仍按字段解析；
+ * 只有白名单字段缺失才 IGNORED / REJECTED。
+ */
+export const EXPECTED_PROVIDER_API_VERSION = '2024-06-20';
 export const WEBHOOK_WHITELIST = [
   'payment_intent.succeeded',
   'payment_intent.payment_failed',
@@ -126,6 +132,7 @@ export interface WebhookDeps {
 interface ProviderEvent {
   id?: unknown;
   type?: unknown;
+  api_version?: unknown;
   data?: { object?: { id?: unknown; amount?: unknown; currency?: unknown; metadata?: Record<string, unknown> } };
 }
 
@@ -162,6 +169,21 @@ export async function handlePaymentWebhook(
 
   const providerEventId = typeof event.id === 'string' ? event.id : '';
   const eventType = typeof event.type === 'string' ? event.type : '';
+
+  // C-0010-C2 REVISE-1：版本不一致只告警，不阻断（结构化字段白名单：
+  // provider / providerEventId / expectedApiVersion / receivedApiVersion / action；
+  // 绝不含 payload、客户、支付方式、密钥或卡信息）
+  const receivedApiVersion = typeof event.api_version === 'string' ? event.api_version : null;
+  if (receivedApiVersion !== EXPECTED_PROVIDER_API_VERSION) {
+    log('payment.provider_version_mismatch', {
+      provider,
+      providerEventId,
+      expectedApiVersion: EXPECTED_PROVIDER_API_VERSION,
+      receivedApiVersion: receivedApiVersion ?? 'MISSING',
+      action: 'CONTINUE',
+    });
+  }
+
   const object = event.data?.object ?? {};
   const metadataInvoiceId =
     object.metadata && typeof object.metadata.invoiceId === 'string' ? object.metadata.invoiceId : '';

@@ -82,6 +82,8 @@ export interface WorkflowRouteDeps {
   /** Platforms of the adapters registered in this deployment (API connections only). */
   registeredPlatforms?: readonly string[];
   now?: () => Date;
+  /** C-0010-C2：结构化安全日志出口（webhook 验签失败、版本不一致等） */
+  log?: (event: string, fields: Record<string, unknown>) => void;
 }
 
 function sendJson(res: ServerResponse, code: number, payload: unknown): void {
@@ -209,7 +211,10 @@ export async function handleWorkflowRequest(
         signatureHeader:
           typeof req.headers['stripe-signature'] === 'string' ? req.headers['stripe-signature'] : undefined,
       },
-      deps.now ? { now: deps.now } : {},
+      {
+        ...(deps.now ? { now: deps.now } : {}),
+        ...(deps.log ? { log: deps.log } : {}),
+      },
     );
     sendJson(res, result.httpStatus, result);
     return true;

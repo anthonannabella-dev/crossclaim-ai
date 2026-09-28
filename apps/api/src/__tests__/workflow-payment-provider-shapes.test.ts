@@ -34,7 +34,12 @@ const SECRET = 'whsec_shape_proof_not_a_real_secret';
 const NOW = new Date('2026-09-28T18:00:00Z');
 
 const audit = createAuditWriter(createPrismaAuditSink(prisma), { ipSalt: SALT });
-const log = createLogger({ level: 'error', sink: () => undefined });
+/** C-0010-C2 REVISE-1：捕获结构化日志，用于断言版本不一致告警确实被写出 */
+const capturedLogs: Array<Record<string, unknown>> = [];
+const log = createLogger({
+  level: 'warn',
+  sink: (line) => capturedLogs.push(JSON.parse(line) as Record<string, unknown>),
+});
 const storageRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'crossclaim-provider-shape-'));
 const storage = new LocalFileSystemStorage({
   rootDir: storageRoot,
@@ -55,6 +60,7 @@ interface StripeShapeOverrides {
   created?: number;
   livemode?: boolean;
   object?: Record<string, unknown>;
+  apiVersion?: string;
 }
 
 /** 真实 Stripe Event 的信封形状（去敏），data.object 由用例给出。 */
@@ -62,7 +68,7 @@ function stripeEvent(overrides: StripeShapeOverrides = {}) {
   return {
     id: overrides.id ?? 'evt_shape_1',
     object: 'event',
-    api_version: '2024-06-20',
+    api_version: overrides.apiVersion ?? '2024-06-20',
     created: overrides.created ?? Math.floor(NOW.getTime() / 1000),
     data: { object: overrides.object ?? {} },
     livemode: overrides.livemode ?? false,
@@ -324,6 +330,44 @@ describe('C-0010-C1 — provider 事件形状验证（真实 HTTP + PostgreSQL�
     expect(await prisma.payment.count({ where: { organizationId: ORG } })).toBe(0);
     expect(await prisma.paymentProcessingAttempt.count({ where: { organizationId: ORG } })).toBe(0);
     expect((await invoiceRow()).status).toBe('ISSUED');
+  });
+
+  it('MSG-104 REVISE-1：api_version 不一致 → 结构化告警但继续处理（fail-soft）', async () => {
+    capturedLogs.length = 0;
+    await withServer(async (base) => {
+      const mismatch = await deliver(
+        base,
+        stripeEvent({ id: 'evt_version_mismatch', apiVersion: '2019-01-01', object: paymentIntentSucceeded() }),
+      );
+      expect(mismatch.status).toBe(200);
+      expect(mismatch.json.processingResult).toBe('PROCESSED');
+    });
+
+    // 版本不匹配不阻断：字段齐全就照常推进
+    expect((await invoiceRow()).status).toBe('PAID');
+
+    const warnings = capturedLogs.filter((row) => row.msg === 'payment.provider_version_mismatch');
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatchObject({
+      provider: 'STRIPE',
+      providerEventId: 'evt_version_mismatch',
+      expectedApiVersion: '2024-06-20',
+      receivedApiVersion: '2019-01-01',
+      action: 'CONTINUE',
+    });
+    // 告警字段白名单：不得带出 payload / 客户 / 支付方式 / 密钥 / 卡信息
+    const serialized = JSON.stringify(warnings[0]);
+    for (const forbidden of ['metadata', INVOICE, 'card', 'secret', 'customer', 'last_payment_error']) {
+      expect(serialized).not.toContain(forbidden);
+    }
+
+    // 版本匹配时不产生该告警
+    capturedLogs.length = 0;
+    await withServer(async (base) => {
+      const ok = await deliver(base, stripeEvent({ id: 'evt_version_ok', object: paymentIntentSucceeded(90000) }));
+      expect(ok.status).toBe(200);
+    });
+    expect(capturedLogs.filter((row) => row.msg === 'payment.provider_version_mismatch')).toHaveLength(0);
   });
 
   it('金额不符与人工卡口：形状合法也不推进 PAID', async () => {
