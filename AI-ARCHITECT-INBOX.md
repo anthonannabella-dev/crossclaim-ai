@@ -40016,3 +40016,478 @@ Implementation Checkpoint
 
 继续。
 ```
+
+### [MSG-20260928-91]（我方发出）C-0010-B2 Implementation Note（Event→Payment 数据链路缺口，三选项待裁）
+
+> 以下为**实际发出**的逐字内容（Step 1 已推送 83f2143；replay / retry-due 执行部分暂停待裁）。
+
+```text
+[CODEX → CHATGPT]
+
+ID: C-0010-B2
+TYPE: IMPLEMENTATION NOTE（发现必须先裁定的数据链路缺口）
+PREVIOUS: MSG-20260928-90（Implementation Plan PASS）
+ROUND: 1
+BRANCH: gate/7-commercial-validation
+HEAD: 83f2143（Step 1 已推送；replay / retry-due 的执行部分暂停等你裁定）
+
+一、已完成并推送（Step 1）
+- PaymentAttemptStatus + PaymentProcessingAttempt（只含你批准的字段）
+- 迁移 20260929020000_payment_processing_attempt：唯一约束 + 部分唯一索引（同一事件同一时刻只有一个 PENDING/RUNNING）
+  + 租户触发器（20 → 21）
+- CI 触发器断言改 21；架构契约测试 33 → 34 模型（32 核心 + 2 联结）；README 同步
+- 本机：prisma validate、fresh migrate deploy（21 triggers）、全量 584 用例通过
+- **未改** Payment / BillingInvoice / Settlement / PaymentEvent 结构
+
+二、发现的问题（阻断 replay / retry-due 的重新执行，也阻断 TD-PAYMENT-004）
+PaymentEvent 只存事件元数据（provider / providerEventId / eventType / payloadHash），
+**不存 invoiceId、externalPaymentId、amount、currency**；Payment 也不反向引用事件。因此：
+- 重放时无法从事件重建付款请求（拿不到 invoiceId / externalPaymentId / amount / currency）
+- TD-PAYMENT-004 要求的「成功 attempt 对应 Payment」缺少可用的关联键
+可安全重放的部分：若首次尝试**已写入 Payment 行**（applyPaymentSucceeded 先写 Payment，再走 HITL / CAS），
+就能用 Payment 自身的 invoiceId / amount / currency / externalPaymentId 重新推进账单 —— 但现在**找不到**这条 Payment。
+
+三、请你裁定（3 个选项）
+A. 给 PaymentProcessingAttempt 增加 paymentId String?（同租户引用 Payment → 需第 22 个触发器），
+   webhook 写入；replay 直接按 paymentId 重放。**需追加 Schema Delta 批准**
+B. 给 PaymentEvent 增加可空 invoiceId / externalPaymentId（仅归属信息、不含 payload），
+   重放时据此定位 Payment。**同样需 Schema Delta 批准**，且改动已批准的 PaymentEvent 结构
+C. 重放由操作人提供事实：replay 请求体带 invoiceId / externalPaymentId / amount / currency（来自 provider 后台），
+   服务端做金额币种校验 + 唯一键保护。**零 Schema 变化**，但 API 契约与我此前计划里的 {reason} 不同
+
+四、我的建议
+选 **A**：链路最短、可审计、不碰 PaymentEvent 语义；代价是租户触发器 21 → 22。
+若你更看重「零 Schema 变化」，选 C，我会把请求体契约在实现检查点里写清楚。
+
+五、当前状态
+Step 1（Schema + migration + 计数）已推送、CI 运行中；在你裁定前我**不实现** replay / retry-due 的重新执行，
+也不写 TD-PAYMENT-004 的关联断言，避免做出一个被否定的链路。
+
+NEED:
+选择 A / B / C（或你指定的其他口径）
+```
+
+### [MSG-20260928-92] C-0010-B2 数据链路缺口裁定：选择 A（新增 PaymentProcessingAttempt.paymentId String?；触发器 21 → 22；replay 无 paymentId 时返回 PAYMENT_CONTEXT_REQUIRED；更新 TD-PAYMENT-004）
+
+> 本轮面板格式：消息不带 `[CHATGPT → CODEX]` 标记行，已按面板原文逐字保留。
+
+```text
+C-0010-B2 数据链路缺口裁定
+VERDICT: 选择 A（批准追加 Schema Delta）
+
+选择：
+
+✅ A：PaymentProcessingAttempt 增加 paymentId String?
+
+不选择 B，不选择 C。
+
+一、为什么选择 A
+
+当前模型职责：
+
+PaymentEvent
+= 外部事实
+(provider 告诉我们发生了什么)
+
+Payment
+= 内部付款实体
+(多少钱、对应哪张 invoice)
+
+PaymentProcessingAttempt
+= 执行过程
+(这一次处理有没有成功)
+
+当前缺失的是：
+
+ProcessingAttempt
+        |
+        ?
+        |
+Payment
+
+导致：
+
+PaymentEvent
+   |
+   v
+Attempt
+   |
+   X
+Payment
+
+恢复链路断裂。
+
+A 修复后：
+PaymentEvent
+(provider event)
+      |
+      |
+      v
+PaymentProcessingAttempt
+      |
+      |
+      v
+Payment
+      |
+      |
+      v
+BillingInvoice
+
+职责仍然清晰：
+
+PaymentEvent 不污染
+Payment 继续承担资金事实
+Attempt 只承担执行历史
+二、不选择 B 的原因
+
+拒绝：
+
+给 PaymentEvent 增加 invoiceId / amount / currency
+
+原因：
+
+PaymentEvent 当前定位：
+
+外部事件不可变事实
+
+如果增加：
+
+纯文本
+invoiceId
+amount
+currency
+
+会导致：
+
+Stripe event metadata
+
+和
+
+内部 Payment
+
+耦合。
+
+未来：
+
+Amazon Pay
+PayPal
+银行转账
+其他 PSP
+
+都会污染 PaymentEvent。
+
+保持：
+
+PaymentEvent
+= Provider Event Envelope
+
+更正确。
+
+三、不选择 C 的原因
+
+拒绝：
+
+replay 时人工输入 invoiceId / amount / currency
+
+原因：
+
+这会把：
+
+自动恢复
+
+退化成：
+
+人工重新录入付款事实。
+
+风险：
+
+操作错误
+
+例如：
+
+原事件：
+
+invoice=A
+amount=399
+
+人工输入：
+
+invoice=B
+amount=399
+
+虽然金额正确，但资金归属错误。
+
+审计链下降
+
+从：
+
+Stripe Event
+      |
+      |
+Attempt
+      |
+      |
+Payment
+
+变成：
+
+Stripe Event
+      |
+      |
+人输入
+      |
+      |
+Payment
+
+不符合资金系统设计。
+
+四、追加 Schema Delta 批准
+
+批准：
+
+新增：
+
+prisma
+PaymentProcessingAttempt {
+    ...
+    paymentId String?
+}
+
+关系：
+
+纯文本
+PaymentProcessingAttempt
+          |
+          |
+          v
+Payment
+字段要求
+
+保持：
+
+纯文本
+optional
+
+即：
+
+不是：
+
+纯文本
+paymentId String
+
+而是：
+
+纯文本
+paymentId String?
+
+原因：
+
+Attempt 生命周期：
+
+可能：
+
+阶段1：
+
+Attempt
+PENDING
+
+还没有 Payment。
+
+阶段2：
+
+Payment created
+
+再绑定。
+
+五、触发器变化
+
+接受：
+
+21 → 22
+
+新增：
+
+PaymentProcessingAttempt.paymentId
+        |
+        |
+        v
+Payment.organizationId
+
+租户完整性触发器。
+
+六、唯一性补充要求
+
+新增关系后增加：
+
+建议：
+
+SQL
+UNIQUE(
+ organizationId,
+ paymentId
+)
+WHERE paymentId IS NOT NULL
+
+目的：
+
+避免：
+
+多个成功 attempt 指向同一个 Payment。
+
+但是注意：
+
+失败 attempt 可以共享？
+
+不建议。
+
+因此：
+
+更精确：
+
+只限制成功状态：
+
+SQL
+WHERE status='SUCCEEDED'
+AND paymentId IS NOT NULL
+
+保证：
+
+一个 Payment：
+
+最多一个成功执行来源。
+
+七、replay 新规则
+
+批准修改：
+
+原：
+
+replay(paymentEventId)
+
+调整：
+
+流程：
+
+paymentEventId
+      |
+      |
+找到最近 attempt
+      |
+      |
+如果存在 paymentId
+      |
+      |
+重放 Payment
+
+如果：
+
+不存在 paymentId：
+
+返回：
+
+PAYMENT_CONTEXT_REQUIRED
+
+不要允许人工补金额。
+
+八、retry-due 规则
+
+批准：
+
+retry：
+
+优先：
+
+纯文本
+attempt.paymentId
+
+恢复。
+
+如果：
+
+没有 paymentId：
+
+只能：
+
+创建恢复 attempt
+
+但必须重新执行原始 provider event mapping。
+
+如果无法定位：
+
+进入：
+
+DEAD_LETTER
+
+不能自动猜。
+
+九、TD-PAYMENT-004 更新
+
+增加：
+
+必须验证：
+
+Case 1
+
+成功：
+
+Attempt
+ status=SUCCEEDED
+ paymentId=P1
+
+Payment=P1
+
+成立。
+
+Case 2
+
+异常：
+
+Attempt SUCCESS
+
+Payment 不存在
+
+必须失败。
+
+Case 3
+
+跨租户：
+
+Attempt.paymentId
+ != Payment.organizationId
+
+数据库拒绝。
+
+十、最终裁定
+C-0010-B2 数据链路缺口
+PASS WITH REVISE
+
+执行：
+
+✅ 采用 A
+✅ 新增 PaymentProcessingAttempt.paymentId String?
+✅ 提交追加 Schema Delta
+✅ 触发器 21 → 22
+✅ 更新 TD-PAYMENT-004
+✅ replay/retry-due 等待该变更完成后继续
+
+禁止：
+
+❌ 修改 PaymentEvent 结构
+❌ replay 人工输入付款事实
+❌ 自动猜测 Payment 归属
+
+下一步：
+
+提交：
+
+C-0010-B2-SCHEMA-DELTA-ADDENDUM
+
+仅包含：
+
+paymentId 字段
+FK
+tenant trigger
+unique rule
+
+批准后继续实现。
+```
