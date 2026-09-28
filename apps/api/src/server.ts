@@ -24,6 +24,12 @@ import {
   type StorageFactoryDeps,
 } from './services/storage';
 import { createAuditWriter, createPrismaAuditSink, type AuditWriter } from './services/audit';
+import {
+  createPrismaAuthUserPort,
+  createPrismaMembershipLookup,
+  createPrismaSessionPort,
+  handleAuthRequest,
+} from './services/auth';
 
 const VERSION = '0.1.0';
 
@@ -34,6 +40,8 @@ export interface ServerDeps {
   storage?: StorageAdapter;
   /** 可选：注入审计写入器后，成功下载会写入 AuditLog */
   audit?: AuditWriter;
+  /** 可选：C-0008-A 内部认证端口（/auth/*）的依赖覆写 */
+  auth?: import('./services/auth').AuthRouteDeps;
 }
 
 /** 只保留文件名，剥掉路径与危险字符（CR/LF/引号/反斜杠/NUL） */
@@ -69,6 +77,29 @@ export function buildContentDisposition(
 
 export function createServer(deps: ServerDeps): http.Server {
   const { prisma, log, storage, audit } = deps;
+  // 审计 IP 盐值只影响“谁”的哈希；缺失时保持空值（不阻塞服务启动）
+  const auditIpSalt = (() => {
+    try {
+      const env = loadEnv();
+      return env.AUDIT_IP_SALT ?? env.STORAGE_URL_SECRET ?? '';
+    } catch {
+      return '';
+    }
+  })();
+  const auth: import('./services/auth').AuthRouteDeps | undefined =
+    deps.auth ??
+    (audit
+      ? {
+          users: createPrismaAuthUserPort(prisma),
+          session: {
+            sessions: createPrismaSessionPort(prisma),
+            memberships: createPrismaMembershipLookup(prisma),
+            audit,
+            ipSalt: auditIpSalt,
+          },
+          audit,
+        }
+      : undefined);
 
   return http.createServer((req, res) => {
     const started = Date.now();
@@ -87,6 +118,18 @@ export function createServer(deps: ServerDeps): http.Server {
         ms: Date.now() - started,
       });
     };
+
+    // C-0008-A 内部认证端点：仅服务本地/内部 Web 应用，未做公网暴露
+    if (auth && url.startsWith('/auth/')) {
+      handleAuthRequest(req, res, auth)
+        .then((handled) => {
+          if (!handled) send(404, { error: 'not_found' });
+        })
+        .catch((err) =>
+          send(500, { error: err instanceof Error ? err.message : 'auth_error' }),
+        );
+      return;
+    }
 
     if (req.method === 'GET' && (url === '/health' || url === '/healthz')) {
       checkHealth({ db: prisma, version: VERSION })
