@@ -177,13 +177,24 @@ describe('C-0011 — ClaimItem（真实 PostgreSQL）', () => {
   it('并发迁移同一 ClaimItem：只有一个成功（CAS）', async () => {
     const created = await create();
     await transitionClaimItem(prisma, { ...base(), claimItemId: created.id, to: 'VERIFIED' }, { now: () => NOW });
+    // 两个**相同目标**的并发迁移：串行化时后者会因「已是该状态」被拒，
+    // 真并发时后者会被 CAS 拒绝 —— 两种时序下都只能有一个成功。
     const settled = await Promise.allSettled([
       transitionClaimItem(prisma, { ...base(), claimItemId: created.id, to: 'REVIEW_REQUIRED', caseId }, { now: () => NOW }),
-      transitionClaimItem(prisma, { ...base(), claimItemId: created.id, to: 'CLOSED', closedReason: 'REJECTED' }, { now: () => NOW }),
+      transitionClaimItem(prisma, { ...base(), claimItemId: created.id, to: 'REVIEW_REQUIRED', caseId }, { now: () => NOW }),
     ]);
-    expect(settled.filter((entry) => entry.status === 'fulfilled')).toHaveLength(1);
+    const fulfilled = settled.filter((entry) => entry.status === 'fulfilled');
+    const rejected = settled.filter((entry) => entry.status === 'rejected');
+    expect(fulfilled).toHaveLength(1);
+    expect(rejected).toHaveLength(1);
     const row = await prisma.claimItem.findUniqueOrThrow({ where: { id: created.id } });
-    expect(['REVIEW_REQUIRED', 'CLOSED']).toContain(row.status);
+    expect(row.status).toBe('REVIEW_REQUIRED');
+    // 只留一条迁移审计（没有重复迁移）
+    expect(
+      await prisma.auditLog.count({
+        where: { organizationId: ORG, action: 'claim.verified_to_review_required' },
+      }),
+    ).toBe(1);
   });
 
   it('跨租户 caseId 被数据库触发器拒绝（不落脏数据）', async () => {
