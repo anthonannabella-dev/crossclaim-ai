@@ -41,6 +41,24 @@ export {
 } from './login';
 export {
   createPrismaAuthUserPort,
+  createPrismaInvitationMembershipPort,
+  createPrismaInvitationPort,
+  createPrismaInvitationUserPort,
   createPrismaMembershipLookup,
   createPrismaSessionPort,
 } from './auth-prisma';
+export {
+  INVITATION_TTL_MS,
+  InvitationError,
+  MAX_INVITATION_ATTEMPTS,
+  acceptInvitation,
+  createInvitation,
+  hashInvitationToken,
+  newInvitationToken,
+  type InvitationDeps,
+  type InvitationErrorCode,
+  type InvitationMembershipPort,
+  type InvitationPort,
+  type InvitationRow,
+  type InvitationUserPort,
+} from './invitation';
