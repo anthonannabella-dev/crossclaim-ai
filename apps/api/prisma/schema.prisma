@@ -1,0 +1,981 @@
+// ============================================================
+// CrossClaim AI · 领域模型（Gate 0）
+// ------------------------------------------------------------
+// 本文件是 CrossClaim 的**架构基准**。模型清单来自架构章程 §六，
+// 不可违反的领域规则来自 §七，每条规则都以注释形式钉在对应模型上。
+//
+// 阅读顺序建议：Organization → SourceConnection → FileAsset → ImportBatch
+//   → SourceTransaction → RecoveryOpportunity → RecoveryGraph*
+//   → EvidenceArtifact/EvidenceEdge → Case → RecoveryRoute → Claim/Appeal
+//   → RuleSet/RuleVersion/RuleEvaluation → Settlement → RecoveryLedgerEntry
+//   → BillingInvoice/FeeCalculation → AuditLog
+// ============================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================================
+// 枚举
+// ============================================================
+
+/// 章程 §四：三个追回域
+enum RecoveryDomain {
+  PLATFORM   // 平台资金追回（Amazon FBA 等）
+  LOGISTICS  // 物流资金追回（UPS / FedEx / DHL / 货代）
+  CUSTOMS    // 关税 / 贸易资金追回（需持牌 Broker 协作）
+}
+
+/// 具体渠道。外部平台一律经 Adapter 接入（§七.14），本枚举只用于归类。
+enum Channel {
+  AMAZON_FBA
+  AMAZON_OTHER
+  UPS
+  FEDEX
+  DHL
+  FREIGHT_FORWARDER
+  CUSTOMS_BROKER
+  OTHER
+}
+
+enum MembershipRole {
+  OWNER
+  ADMIN
+  OPS
+  FINANCE
+  VIEWER
+}
+
+enum SourceConnectionKind {
+  FILE_UPLOAD     // 客户上传（第一阶段主路径）
+  API             // 官方 API（SP-API / Carrier API 等）
+  SFTP
+  EMAIL
+  MANUAL
+}
+
+enum SourceConnectionStatus {
+  ACTIVE
+  PAUSED
+  NEEDS_AUTH
+  ERROR
+  REVOKED
+}
+
+enum FileKind {
+  PDF
+  XLSX
+  CSV
+  DOCX
+  IMAGE
+  XML
+  OTHER
+}
+
+enum ImportStatus {
+  PENDING
+  PARSING
+  IMPORTED
+  PARTIAL
+  FAILED
+}
+
+/// 追回机会的处置状态
+enum OpportunityStatus {
+  DETECTED    // 已发现，未评估
+  QUALIFIED   // 规则评估通过，值得追
+  REJECTED    // 判定不值得追（须有理由）
+  CONVERTED   // 已升级为 Case
+  EXPIRED     // 超过时效
+}
+
+enum CaseStatus {
+  OPEN
+  COLLECTING_EVIDENCE
+  READY_TO_CLAIM
+  CLAIMED
+  APPEALING
+  WON
+  PARTIALLY_WON
+  LOST
+  SETTLED
+  CLOSED
+}
+
+/// 首次申诉 / 索赔
+enum ClaimStatus {
+  DRAFT
+  SUBMITTED
+  ACKNOWLEDGED
+  APPROVED
+  PARTIALLY_APPROVED
+  REJECTED
+  NO_RESPONSE
+  WITHDRAWN
+}
+
+/// 复议
+enum AppealStatus {
+  DRAFT
+  SUBMITTED
+  UNDER_REVIEW
+  UPHELD
+  OVERTURNED
+  REJECTED
+  WITHDRAWN
+}
+
+enum EvidenceKind {
+  CONTRACT
+  RATE_CARD
+  INVOICE
+  CREDIT_NOTE
+  TRACKING
+  POD
+  EMAIL
+  CUSTOMS_DOC
+  BROKER_CORRESPONDENCE
+  OTHER
+}
+
+/// 图节点类型（§七.9：第一版用 PostgreSQL Node + Edge 表，§七.10：不引入 Neo4j）
+enum GraphNodeType {
+  ORGANIZATION
+  CHANNEL
+  ACCOUNT
+  SHIPMENT
+  INVOICE
+  OPPORTUNITY
+  CASE
+  CLAIM
+  SETTLEMENT
+  OTHER
+}
+
+/// 图关系类型
+enum GraphEdgeType {
+  CAUSES          // A 导致 B（如 重量差异 → 多收运费）
+  RELATED_TO
+  DUPLICATES      // 重复计费
+  DERIVED_FROM    // 由某原始数据推导
+  RESPONSIBLE_FOR // 责任方
+  SAME_SHIPMENT
+  OTHER
+}
+
+enum EvidenceEdgeType {
+  SUPPORTS
+  REFUTES
+  CONTEXT_FOR
+  DUPLICATES
+  OTHER
+}
+
+/// 追回路由：这条机会该找谁要钱
+enum RouteTarget {
+  PLATFORM
+  CARRIER
+  FREIGHT_FORWARDER
+  INSURER
+  CUSTOMS_BROKER
+  CUSTOMER_SELF
+  NONE
+}
+
+enum RouteStatus {
+  PROPOSED
+  CONFIRMED
+  EXECUTED
+  FAILED
+  ABANDONED
+}
+
+/// 规则作用域
+enum RuleScope {
+  PLATFORM_FEE
+  FREIGHT_RATE
+  SLA
+  DIM_WEIGHT
+  FUEL_SURCHARGE
+  ACCESSORIAL
+  DUPLICATE_CHARGE
+  INSURANCE
+  CUSTOMS_DUTY
+  OTHER
+}
+
+/// §七.17 规则优先级：客户合同 > Rate Card > 官方 Tariff > 日期政策 > 默认规则
+enum RuleTier {
+  CUSTOMER_CONTRACT   // 1
+  CUSTOMER_RATE_CARD  // 2
+  CARRIER_TARIFF      // 3
+  DATED_POLICY        // 4
+  DEFAULT             // 5
+}
+
+enum RuleEvaluationResult {
+  PASS              // 无异常
+  OPPORTUNITY       // 发现可追回
+  NEEDS_MORE_DATA
+  ERROR
+}
+
+/// §七.4：Settlement 只表示客户**实际收到**的退款 / Credit / 补偿
+enum SettlementStatus {
+  EXPECTED
+  RECEIVED
+  PARTIAL
+  DISPUTED
+  VOID
+}
+
+enum SettlementSource {
+  PLATFORM_CREDIT
+  CARRIER_CREDIT
+  BANK_TRANSFER
+  CHECK
+  OFFSET
+  OTHER
+}
+
+/// 账本分录类型。§七.2/§七.3：与 SourceTransaction 严格分离
+enum LedgerEntryType {
+  DISCOVERED   // 发现漏损（潜在）
+  RECOVERED    // 实际追回
+  ADJUSTMENT
+  REVERSAL
+  WRITE_OFF
+}
+
+/// §七.5/§七.6：CrossClaim 向客户收费属于 Billing，与 Settlement 分开
+enum BillingStatus {
+  DRAFT
+  ISSUED
+  PAID
+  PARTIALLY_PAID
+  VOID
+  WRITTEN_OFF
+}
+
+enum FeeBasis {
+  RECOVERED_AMOUNT_PCT  // 按追回金额百分比（成功费）
+  FIXED
+  TIERED
+  NONE
+}
+
+enum AuditActorType {
+  USER
+  SYSTEM
+  AI
+  EXTERNAL
+}
+
+// ============================================================
+// 一、组织与用户（§六 Organization / User / Membership）
+// ============================================================
+
+/// 企业（多租户根）。所有业务表都必须挂 tenantId 以强制隔离。
+model Organization {
+  id          String   @id @default(uuid())
+  name        String
+  slug        String   @unique
+  status      String   @default("ACTIVE") // ACTIVE | TRIAL | SUSPENDED | CLOSED
+  plan        String   @default("TRIAL")
+  locale      String   @default("zh-CN")
+  timezone    String   @default("Asia/Shanghai")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  memberships      Membership[]
+  connections      SourceConnection[]
+  fileAssets       FileAsset[]
+  importBatches    ImportBatch[]
+  transactions     SourceTransaction[]
+  opportunities    RecoveryOpportunity[]
+  graphNodes       RecoveryGraphNode[]
+  evidence         EvidenceArtifact[]
+  cases            Case[]
+  routes           RecoveryRoute[]
+  ruleSets         RuleSet[]
+  settlements      Settlement[]
+  ledgerEntries    RecoveryLedgerEntry[]
+  billingInvoices  BillingInvoice[]
+  auditLogs        AuditLog[]
+
+  @@index([status])
+}
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  passwordHash  String?
+  displayName   String
+  status        String    @default("ACTIVE")
+  emailVerified Boolean   @default(false)
+  lastLoginAt   DateTime?
+  failedLogins  Int       @default(0)
+  lockedUntil   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  memberships   Membership[]
+  auditLogs     AuditLog[]
+
+  @@index([status])
+}
+
+model Membership {
+  id             String         @id @default(uuid())
+  organizationId String
+  userId         String
+  role           MembershipRole @default(VIEWER)
+  isActive       Boolean        @default(true)
+  invitedBy      String?
+  joinedAt       DateTime       @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId])
+  @@index([organizationId, role])
+}
+
+// ============================================================
+// 二、数据进入系统（§六 SourceConnection / FileAsset / ImportBatch / SourceTransaction）
+// ============================================================
+
+/// 数据源连接。§七.14：外部平台必须通过 Adapter 接入。
+/// 注意：只存"凭据引用"，**绝不存明文密钥**。
+model SourceConnection {
+  id             String                 @id @default(uuid())
+  organizationId String
+  domain         RecoveryDomain
+  channel        Channel
+  kind           SourceConnectionKind
+  status         SourceConnectionStatus @default(NEEDS_AUTH)
+  label          String
+  /// 指向密钥管理中的条目名（如密钥库 key / 环境变量名），不是密钥本身
+  credentialRef  String?
+  config         Json?
+  lastSyncAt     DateTime?
+  lastErrorAt    DateTime?
+  lastError      String?
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  fileAssets   FileAsset[]
+  batches      ImportBatch[]
+  transactions SourceTransaction[]
+  evidence     EvidenceArtifact[]
+
+  @@unique([organizationId, channel, label])
+  @@index([organizationId, status])
+}
+
+/// §七.7：FileAsset **不等于** Evidence。
+/// FileAsset 是"字节 + 元数据"；EvidenceArtifact 是"这份字节在某个案件里意味着什么"。
+model FileAsset {
+  id             String   @id @default(uuid())
+  organizationId String
+  connectionId   String?
+  kind           FileKind
+  storageKey     String   // 对象存储 key
+  originalName   String
+  mimeType       String?
+  sizeBytes      Int?
+  sha256         String?  // 指纹：去重 + 防篡改
+  uploadedBy     String?
+  sourceRef      String?  // 渠道侧文件 ID
+  createdAt      DateTime @default(now())
+
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  connection   SourceConnection?  @relation(fields: [connectionId], references: [id])
+  batches      ImportBatch[]
+  evidence     EvidenceArtifact[]
+
+  @@index([organizationId, sha256])
+  @@index([organizationId, createdAt])
+}
+
+/// 导入批次：每次文件导入留痕（行级失败不阻断整批）。
+model ImportBatch {
+  id             String       @id @default(uuid())
+  organizationId String
+  connectionId   String?
+  fileAssetId    String?
+  domain         RecoveryDomain
+  channel        Channel
+  status         ImportStatus @default(PENDING)
+  rowsTotal      Int          @default(0)
+  rowsOk         Int          @default(0)
+  rowsFailed     Int          @default(0)
+  /// 字段映射快照：客户表头千奇百怪，映射必须落在数据里而不是代码里
+  columnMapping  Json?
+  errorReport    Json?
+  startedAt      DateTime     @default(now())
+  finishedAt     DateTime?
+  createdBy      String?
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  connection   SourceConnection? @relation(fields: [connectionId], references: [id])
+  fileAsset    FileAsset?        @relation(fields: [fileAssetId], references: [id])
+  transactions SourceTransaction[]
+
+  @@index([organizationId, channel, startedAt])
+}
+
+/// 原始业务交易（账单行 / 订单行 / 运单行）。
+/// §七.2：**SourceTransaction 与 RecoveryLedger 严格分离。**
+/// §七.3：原始账单、订单、Invoice 不允许直接变成 RecoveryLedger —— 本表**没有任何**
+///         指向 RecoveryLedgerEntry 的字段，这是刻意为之。
+/// 溯源路径（只能走这条链，不能直连）：
+///   SourceTransaction → RuleEvaluation → RecoveryOpportunity
+///   → CaseOpportunity → Case → Claim → Settlement → RecoveryLedgerEntry
+model SourceTransaction {
+  id             String           @id @default(uuid())
+  organizationId String
+  connectionId   String?
+  importBatchId  String?
+  domain         RecoveryDomain
+  channel        Channel
+  /// 渠道侧单号：运单号 / 发票号 / 订单号 / 入库单号
+  externalId     String?
+  referenceType  String?          // TRACKING | INVOICE | ORDER | SHIPMENT | OTHER
+  occurredAt     DateTime?
+  amount         Decimal?         @db.Decimal(18, 4)
+  currency       String           @default("USD")
+  /// 原始行完整保留，便于追溯与重跑规则
+  raw            Json
+  createdAt      DateTime         @default(now())
+
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  connection   SourceConnection?  @relation(fields: [connectionId], references: [id])
+  importBatch  ImportBatch?       @relation(fields: [importBatchId], references: [id])
+  evaluations  RuleEvaluation[]
+
+  @@index([organizationId, channel, occurredAt])
+  @@index([organizationId, externalId])
+}
+
+// ============================================================
+// 三、核心业务实体（§六 RecoveryOpportunity）
+// ============================================================
+
+/// §七.1：**RecoveryOpportunity 是系统核心业务实体。**
+/// 它表示"这里可能有一笔钱可以追"，是 RuleEvaluation 的产物，也是 Case 的来源。
+model RecoveryOpportunity {
+  id             String            @id @default(uuid())
+  organizationId String
+  domain         RecoveryDomain
+  channel        Channel
+  status         OpportunityStatus @default(DETECTED)
+  /// 确定性代码生成的类型码（如 DIM_WEIGHT_MISMATCH / FUEL_SURCHARGE_MISBILL）
+  opportunityType String
+  title          String
+  description    String?
+
+  /// §七.11/§七.12：金额必须来自确定性计算，**不得由 LLM 决定**
+  amountExpected Decimal?          @db.Decimal(18, 4)
+  amountActual   Decimal?          @db.Decimal(18, 4)
+  recoverableAmount Decimal?       @db.Decimal(18, 4)
+  currency       String            @default("USD")
+
+  /// 确定性计算给出的置信度（非 LLM）
+  confidence     Float?
+  /// 时效：超过则机会作废
+  claimDeadline  DateTime?
+  detectedAt     DateTime          @default(now())
+  qualifiedAt    DateTime?
+  rejectedReason String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  /// 该机会由哪些原始交易/规则评估推导而来
+  evaluations  RuleEvaluation[]
+  caseLinks    CaseOpportunity[]
+  routes       RecoveryRoute[]
+  ledgerEntries RecoveryLedgerEntry[]
+
+  @@index([organizationId, status])
+  @@index([organizationId, channel, detectedAt])
+  @@index([organizationId, claimDeadline])
+}
+
+// ============================================================
+// 四、图（§七.9 PostgreSQL Node + Edge；§七.10 不引入 Neo4j）
+// ============================================================
+
+model RecoveryGraphNode {
+  id             String        @id @default(uuid())
+  organizationId String
+  nodeType       GraphNodeType
+  /// 指向任意实体的多态引用（如 opportunityId / caseId / transactionId）
+  refId          String?
+  label          String
+  properties     Json?
+  createdAt      DateTime      @default(now())
+
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  outEdges RecoveryGraphEdge[] @relation("GraphFrom")
+  inEdges  RecoveryGraphEdge[] @relation("GraphTo")
+
+  @@index([organizationId, nodeType])
+  @@index([organizationId, refId])
+}
+
+model RecoveryGraphEdge {
+  id             String        @id @default(uuid())
+  organizationId String
+  fromNodeId     String
+  toNodeId       String
+  edgeType       GraphEdgeType
+  weight         Float?
+  properties     Json?
+  createdAt      DateTime      @default(now())
+
+  fromNode RecoveryGraphNode @relation("GraphFrom", fields: [fromNodeId], references: [id], onDelete: Cascade)
+  toNode   RecoveryGraphNode @relation("GraphTo", fields: [toNodeId], references: [id], onDelete: Cascade)
+
+  @@unique([fromNodeId, toNodeId, edgeType])
+  @@index([organizationId, edgeType])
+}
+
+// ============================================================
+// 五、证据（§七.7 FileAsset ≠ Evidence；§七.8 一份证据可服务多个 Case）
+// ============================================================
+
+/// 证据材料：某份 FileAsset（或外部链接）在证据语境下的语义。
+model EvidenceArtifact {
+  id             String       @id @default(uuid())
+  organizationId String
+  kind           EvidenceKind
+  fileAssetId    String?
+  connectionId   String?
+  /// 非文件型证据（如平台回执链接）
+  externalUrl    String?
+  title          String
+  description    String?
+  /// 证据可信度（确定性评估，不是 LLM 打分）
+  reliability    Float?
+  capturedAt     DateTime?
+  createdAt      DateTime     @default(now())
+
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  fileAsset    FileAsset?         @relation(fields: [fileAssetId], references: [id])
+  connection   SourceConnection?  @relation(fields: [connectionId], references: [id])
+  caseLinks    CaseEvidence[]
+  outEdges     EvidenceEdge[]     @relation("EvidenceFrom")
+  inEdges      EvidenceEdge[]     @relation("EvidenceTo")
+
+  @@index([organizationId, kind])
+  @@index([organizationId, fileAssetId])
+}
+
+model EvidenceEdge {
+  id         String           @id @default(uuid())
+  fromId     String
+  toId       String
+  edgeType   EvidenceEdgeType
+  note       String?
+  createdAt  DateTime         @default(now())
+
+  from EvidenceArtifact @relation("EvidenceFrom", fields: [fromId], references: [id], onDelete: Cascade)
+  to   EvidenceArtifact @relation("EvidenceTo", fields: [toId], references: [id], onDelete: Cascade)
+
+  @@unique([fromId, toId, edgeType])
+}
+
+/// §七.8：一份证据可以服务多个 Case —— 所以是多对多，不是挂在 Case 下的从属表。
+model CaseEvidence {
+  caseId     String
+  evidenceId String
+  /// 这份证据在本案中的作用（确定性标注）
+  role       String?
+  addedBy    String?
+  addedAt    DateTime @default(now())
+
+  case     Case             @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  evidence EvidenceArtifact @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+
+  @@id([caseId, evidenceId])
+}
+
+// ============================================================
+// 六、案件（§六 Case / CaseOpportunity / RecoveryRoute）
+// ============================================================
+
+model Case {
+  id             String     @id @default(uuid())
+  organizationId String
+  caseNo         String
+  title          String
+  domain         RecoveryDomain
+  status         CaseStatus @default(OPEN)
+
+  /// 主张金额（确定性计算）
+  claimedAmount   Decimal?  @db.Decimal(18, 4)
+  recoveredAmount Decimal   @default(0) @db.Decimal(18, 4)
+  currency        String    @default("USD")
+
+  ownerUserId    String?
+  openedAt       DateTime  @default(now())
+  closedAt       DateTime?
+  dueAt          DateTime?
+
+  /// 长期工作流引用（Temporal）。§十一：跨天流程由 Temporal 承载，不靠 cron + 字段
+  workflowId     String?
+  workflowRunId  String?
+  nextActionAt   DateTime?
+
+  /// §七.13：AI 只产出"建议/总结/文本"，写在这里，不参与金额与状态机
+  aiSummary      Json?
+
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  opportunities CaseOpportunity[]
+  evidence      CaseEvidence[]
+  routes        RecoveryRoute[]
+  claims        Claim[]
+  appeals       Appeal[]
+  settlements   Settlement[]
+  ledgerEntries RecoveryLedgerEntry[]
+  billingInvoices BillingInvoice[]
+
+  @@unique([organizationId, caseNo])
+  @@index([organizationId, status])
+  @@index([organizationId, nextActionAt])
+  @@index([workflowId])
+}
+
+/// 案件与机会的关联（一个案件可以合并多条同类机会）
+model CaseOpportunity {
+  caseId        String
+  opportunityId String
+  note          String?
+
+  case        Case                @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  opportunity RecoveryOpportunity @relation(fields: [opportunityId], references: [id], onDelete: Cascade)
+
+  @@id([caseId, opportunityId])
+}
+
+/// §六 RecoveryRoute / §五 RecoveryRouting：这笔钱该向谁要
+model RecoveryRoute {
+  id             String      @id @default(uuid())
+  organizationId String
+  caseId         String?
+  opportunityId  String?
+  target         RouteTarget
+  status         RouteStatus @default(PROPOSED)
+  /// 决策依据（确定性）：如"客户合同第 7 条约定货代承担滞港费"
+  rationale      String?
+  /// 依据的规则版本
+  ruleVersionId  String?
+  decidedAt      DateTime?
+  createdAt      DateTime    @default(now())
+
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  case         Case?               @relation(fields: [caseId], references: [id])
+  opportunity  RecoveryOpportunity? @relation(fields: [opportunityId], references: [id])
+  ruleVersion  RuleVersion?        @relation(fields: [ruleVersionId], references: [id])
+
+  @@index([organizationId, status])
+  @@index([caseId])
+}
+
+// ============================================================
+// 七、申诉与复议（§六 Claim / Appeal）
+// ============================================================
+
+model Claim {
+  id             String      @id @default(uuid())
+  caseId         String
+  /// 首次申诉
+  round          Int         @default(1)
+  status         ClaimStatus @default(DRAFT)
+  target         RouteTarget
+  /// 提交给谁（外部受理号）
+  externalRef    String?
+  submittedAt    DateTime?
+  submittedBy    String?
+  dueAt          DateTime?
+  respondedAt    DateTime?
+  responseAmount Decimal?    @db.Decimal(18, 4)
+  responseNote   String?
+  /// §七.13：申诉正文由 AI 起草，但**必须经人工确认后**才提交（半自动卡口）
+  aiDraftText    String?
+  finalText      String?
+  attachmentKey  String?
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+
+  case    Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  appeals Appeal[]
+
+  @@index([caseId, round])
+  @@index([dueAt, respondedAt])
+}
+
+model Appeal {
+  id             String       @id @default(uuid())
+  claimId        String
+  caseId         String
+  round          Int          @default(2)
+  status         AppealStatus @default(DRAFT)
+  submittedAt    DateTime?
+  externalRef    String?
+  dueAt          DateTime?
+  respondedAt    DateTime?
+  outcomeAmount  Decimal?     @db.Decimal(18, 4)
+  responseNote   String?
+  aiDraftText    String?
+  finalText      String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  claim Claim @relation(fields: [claimId], references: [id], onDelete: Cascade)
+  case  Case  @relation(fields: [caseId], references: [id], onDelete: Cascade)
+
+  @@index([claimId, round])
+}
+
+// ============================================================
+// 八、规则引擎（§六 RuleSet / RuleVersion / RuleEvaluation）
+// ============================================================
+
+model RuleSet {
+  id             String    @id @default(uuid())
+  organizationId String
+  domain         RecoveryDomain
+  channel        Channel
+  scope          RuleScope
+  name           String
+  description    String?
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  versions     RuleVersion[]
+
+  @@unique([organizationId, channel, scope, name])
+  @@index([organizationId, isActive])
+}
+
+/// §七.16：RuleVersion 至少包含 source / version / effective_from / effective_to / last_verified
+/// §七.15：平台规则不得硬编码在业务逻辑 —— 规则是**数据**，可版本化、可回溯
+model RuleVersion {
+  id             String    @id @default(uuid())
+  ruleSetId      String
+  /// §七.17 规则优先级
+  tier           RuleTier
+  /// 来源：客户合同 / Rate Card / 官方 Carrier Tariff / 公告 / 默认
+  source         String
+  /// 版本标识（如 "2026.03" 或合同编号）
+  version        String
+  effectiveFrom  DateTime
+  effectiveTo    DateTime?
+  /// 最近一次人工核实时间（规则会过期，必须能看出来）
+  lastVerified   DateTime?
+  verifiedBy     String?
+
+  /// 规则体（确定性表达式 / 参数表），不是自然语言
+  definition     Json
+  /// 规则说明与法规依据（可追溯，供人工审阅）
+  legalBasis     String?
+  notes          String?
+  isActive       Boolean   @default(true)
+  createdAt      DateTime  @default(now())
+
+  ruleSet     RuleSet          @relation(fields: [ruleSetId], references: [id], onDelete: Cascade)
+  evaluations RuleEvaluation[]
+  routes      RecoveryRoute[]
+
+  @@unique([ruleSetId, version, tier])
+  @@index([effectiveFrom, effectiveTo])
+}
+
+/// 规则计算结果：把"原始交易 + 规则版本 → 机会"这件事留痕
+model RuleEvaluation {
+  id                String              @id @default(uuid())
+  ruleVersionId     String
+  sourceTransactionId String?
+  opportunityId     String?
+  result            RuleEvaluationResult
+  /// 确定性计算出的差额与中间量（便于复算与审计）
+  computed          Json
+  message           String?
+  evaluatedAt       DateTime            @default(now())
+  /// 幂等键：同一交易 + 同一规则版本不应重复产出机会
+  dedupeKey         String?
+
+  ruleVersion       RuleVersion         @relation(fields: [ruleVersionId], references: [id], onDelete: Cascade)
+  sourceTransaction SourceTransaction?  @relation(fields: [sourceTransactionId], references: [id])
+  opportunity       RecoveryOpportunity? @relation(fields: [opportunityId], references: [id])
+
+  @@unique([dedupeKey])
+  @@index([ruleVersionId, evaluatedAt])
+  @@index([opportunityId])
+}
+
+// ============================================================
+// 九、到账与账本（§六 Settlement / RecoveryLedgerEntry）
+// ============================================================
+
+/// §七.4：Settlement **只表示客户实际收到的**退款 / Credit / 补偿 / 到账。
+/// §七.6：Billing 与 Settlement 分开 —— 本表是"平台→客户"的钱，
+///         BillingInvoice 是"客户→CrossClaim"的钱，两者无外键关系。
+model Settlement {
+  id             String            @id @default(uuid())
+  organizationId String
+  caseId         String?
+  status         SettlementStatus  @default(EXPECTED)
+  source         SettlementSource
+  amount         Decimal           @db.Decimal(18, 4)
+  currency       String            @default("USD")
+  receivedAt     DateTime?
+  /// 外部凭据：平台 credit 单号 / 银行流水号 / 支票号
+  externalRef    String?
+  evidenceId     String?
+  confirmedBy    String?
+  confirmedAt    DateTime?
+  note           String?
+  createdAt      DateTime          @default(now())
+  updatedAt      DateTime          @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  case         Case?        @relation(fields: [caseId], references: [id])
+  ledgerEntries RecoveryLedgerEntry[] @relation("LedgerFromSettlement")
+
+  @@index([organizationId, status, receivedAt])
+  @@index([caseId])
+}
+
+/// 追回账本分录。**只增不改**：纠错靠 REVERSAL 反向分录。
+/// §七.2/§七.3：与 SourceTransaction 严格分离；原始账单不会直接落到这里。
+model RecoveryLedgerEntry {
+  id             String          @id @default(uuid())
+  organizationId String
+  caseId         String?
+  opportunityId  String?
+  settlementId   String?
+  entryType      LedgerEntryType
+  /// 正负号有含义
+  amount         Decimal         @db.Decimal(18, 4)
+  currency       String          @default("USD")
+  occurredAt     DateTime        @default(now())
+  counterparty   String?
+  reference      String?
+  /// 作废靠反向分录，不修改原条目
+  voidsEntryId   String?
+  voidedAt       DateTime?
+  voidedBy       String?
+  voidReason     String?
+  createdBy      String?
+  createdAt      DateTime        @default(now())
+
+  organization      Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  case              Case?              @relation(fields: [caseId], references: [id])
+  opportunity       RecoveryOpportunity? @relation(fields: [opportunityId], references: [id])
+  settlement        Settlement?        @relation("LedgerFromSettlement", fields: [settlementId], references: [id])
+  voids             RecoveryLedgerEntry?  @relation("LedgerVoids", fields: [voidsEntryId], references: [id])
+  voidedByEntries   RecoveryLedgerEntry[] @relation("LedgerVoids")
+
+  @@index([organizationId, occurredAt])
+  @@index([organizationId, entryType])
+  @@index([caseId])
+}
+
+// ============================================================
+// 十、收费（§六 BillingInvoice / FeeCalculation）
+// ============================================================
+
+/// §七.5：CrossClaim 向客户收费。与 Settlement 分离。
+model BillingInvoice {
+  id             String        @id @default(uuid())
+  organizationId String
+  caseId         String?
+  invoiceNo      String
+  status         BillingStatus @default(DRAFT)
+  subtotal       Decimal       @db.Decimal(18, 4)
+  taxAmount      Decimal       @default(0) @db.Decimal(18, 4)
+  total          Decimal       @db.Decimal(18, 4)
+  currency       String        @default("USD")
+  issuedAt       DateTime?
+  dueAt          DateTime?
+  paidAt         DateTime?
+  paidAmount     Decimal       @default(0) @db.Decimal(18, 4)
+  /// 外部支付渠道引用（Stripe invoice / payment intent），只存引用不存凭据
+  externalRef    String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  case         Case?            @relation(fields: [caseId], references: [id])
+  fees         FeeCalculation[]
+
+  @@unique([organizationId, invoiceNo])
+  @@index([organizationId, status, dueAt])
+}
+
+/// 成功费计算：把"哪笔 Settlement 产生了多少钱的费"钉死，可复算
+model FeeCalculation {
+  id             String    @id @default(uuid())
+  billingInvoiceId String?
+  settlementId   String?
+  caseId         String?
+  basis          FeeBasis
+  /// 费率快照（如 0.18 = 18%），与计算时点绑定
+  rate           Decimal?  @db.Decimal(9, 6)
+  baseAmount     Decimal   @db.Decimal(18, 4)
+  feeAmount      Decimal   @db.Decimal(18, 4)
+  currency       String    @default("USD")
+  /// 计算依据与中间量（可复算）
+  computation    Json
+  calculatedAt   DateTime  @default(now())
+
+  billingInvoice BillingInvoice? @relation(fields: [billingInvoiceId], references: [id], onDelete: Cascade)
+
+  @@index([billingInvoiceId])
+  @@index([settlementId])
+}
+
+// ============================================================
+// 十一、审计（§六 AuditLog）
+// ============================================================
+
+/// 全链路留痕。金额、状态、路由、证据、账本的关键变更都必须落这里。
+model AuditLog {
+  id             String         @id @default(uuid())
+  organizationId String?
+  actorType      AuditActorType
+  actorId        String?
+  /// 动作码：CASE_OPENED / CLAIM_SUBMITTED / SETTLEMENT_CONFIRMED / LEDGER_REVERSED ...
+  action         String
+  /// 关联实体（多态）
+  entityType     String?
+  entityId       String?
+  /// 变更前后（敏感字段须脱敏后再写入）
+  changes        Json?
+  ip             String?
+  userAgent      String?
+  createdAt      DateTime       @default(now())
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  actor        User?         @relation(fields: [actorId], references: [id])
+
+  @@index([organizationId, createdAt])
+  @@index([entityType, entityId])
+  @@index([action])
+}

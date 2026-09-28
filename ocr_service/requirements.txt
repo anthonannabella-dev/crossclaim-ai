@@ -1,7 +1,0 @@
-# FastAPI deps (in requirements-base.txt)
-# PaddlePaddle + PaddleOCR (in Dockerfile layers)
-# This combined file is kept for reference; Dockerfile uses
-# requirements-base.txt internally for layer caching.
--include requirements-base.txt
-paddlepaddle>=3.0.0
-paddleocr>=2.9.0

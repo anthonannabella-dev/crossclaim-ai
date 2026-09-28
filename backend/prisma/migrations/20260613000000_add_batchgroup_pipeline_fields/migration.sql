@@ -1,8 +1,0 @@
--- Add pipeline fields to BatchGroup table
-ALTER TABLE "BatchGroup" ADD COLUMN IF NOT EXISTS "declarationId" TEXT;
-ALTER TABLE "BatchGroup" ADD COLUMN IF NOT EXISTS "preCheckResult" TEXT;
-ALTER TABLE "BatchGroup" ADD COLUMN IF NOT EXISTS "preCheckPassed" BOOLEAN;
-ALTER TABLE "BatchGroup" ADD COLUMN IF NOT EXISTS "declaredAt" TIMESTAMPTZ;
-ALTER TABLE "BatchGroup" ADD COLUMN IF NOT EXISTS "taxRebateValue" DOUBLE PRECISION;
-ALTER TABLE "BatchGroup" ADD COLUMN IF NOT EXISTS "taxRebateStatus" TEXT;
-ALTER TABLE "BatchGroup" ADD COLUMN IF NOT EXISTS "taxRebateEstimatedAt" TIMESTAMPTZ;

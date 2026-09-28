@@ -1,5 +1,0 @@
-FROM customs-saas-backend:latest AS base
-# 替换修复后的文件
-COPY dist/services/groupPipelineService.js /app/dist/services/groupPipelineService.js
-COPY dist/routes/routes/document.js /app/dist/routes/routes/document.js
-CMD ["sh", "-c", "npx prisma migrate deploy --skip-generate 2>/dev/null; npm start"]
