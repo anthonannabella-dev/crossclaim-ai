@@ -147,6 +147,44 @@ export async function confirmRecoveryOutcome(
     );
   }
 
+  const claimedAmount = kase.claimedAmount ? money(kase.claimedAmount) : new Prisma.Decimal(0);
+  const exceedsClaim = recoveredAmount.gt(claimedAmount);
+
+  // 幂等优先：该案件已有 Settlement 时，重复确认返回既有资金对象，
+  // 不重复计费，也不因「案件已 SETTLED」而报错（下方守卫只约束首次确认）。
+  const existingSettlement = await prisma.settlement.findFirst({
+    where: { organizationId: input.organizationId, caseId: kase.id },
+    select: { id: true, amount: true, currency: true },
+  });
+  if (existingSettlement) {
+    const [ledger, fee, billing] = await Promise.all([
+      prisma.recoveryLedgerEntry.findFirst({
+        where: { organizationId: input.organizationId, settlementId: existingSettlement.id },
+        select: { id: true },
+      }),
+      prisma.feeCalculation.findFirst({
+        where: { organizationId: input.organizationId, settlementId: existingSettlement.id },
+        select: { id: true, feeAmount: true },
+      }),
+      prisma.billingInvoice.findFirst({
+        where: { organizationId: input.organizationId, caseId: kase.id },
+        select: { id: true },
+      }),
+    ]);
+    return {
+      caseId: kase.id,
+      caseNo: kase.caseNo,
+      settlementId: existingSettlement.id,
+      ledgerEntryId: ledger?.id ?? '',
+      feeCalculationId: fee?.id ?? '',
+      billingInvoiceId: billing?.id ?? '',
+      recoveredAmount: money(existingSettlement.amount).toFixed(MONEY_SCALE),
+      feeAmount: (fee?.feeAmount ? money(fee.feeAmount) : new Prisma.Decimal(0)).toFixed(MONEY_SCALE),
+      created: false,
+      exceedsClaim,
+    };
+  }
+
   // 人工事实必须已经存在：绝不自动推进（Q3）
   if (kase.status !== 'WON') {
     throw new WorkflowError(
@@ -180,46 +218,10 @@ export async function confirmRecoveryOutcome(
     }
   }
 
-  const claimedAmount = kase.claimedAmount ? money(kase.claimedAmount) : new Prisma.Decimal(0);
-  const exceedsClaim = recoveredAmount.gt(claimedAmount);
   const feeAmount = money(recoveredAmount.times(new Prisma.Decimal(terms.successFeeRate)));
   const at = now();
 
   return prisma.$transaction(async (tx) => {
-    // 幂等：一个案件只允许一条 Settlement（分批赔付留待未来 Schema Delta）
-    const existing = await tx.settlement.findFirst({
-      where: { organizationId: input.organizationId, caseId: kase.id },
-      select: { id: true, amount: true },
-    });
-    if (existing) {
-      const [ledger, fee, billing] = await Promise.all([
-        tx.recoveryLedgerEntry.findFirst({
-          where: { organizationId: input.organizationId, settlementId: existing.id },
-          select: { id: true },
-        }),
-        tx.feeCalculation.findFirst({
-          where: { organizationId: input.organizationId, settlementId: existing.id },
-          select: { id: true, feeAmount: true },
-        }),
-        tx.billingInvoice.findFirst({
-          where: { organizationId: input.organizationId, caseId: kase.id },
-          select: { id: true },
-        }),
-      ]);
-      return {
-        caseId: kase.id,
-        caseNo: kase.caseNo,
-        settlementId: existing.id,
-        ledgerEntryId: ledger?.id ?? '',
-        feeCalculationId: fee?.id ?? '',
-        billingInvoiceId: billing?.id ?? '',
-        recoveredAmount: money(existing.amount).toFixed(MONEY_SCALE),
-        feeAmount: (fee?.feeAmount ? money(fee.feeAmount) : new Prisma.Decimal(0)).toFixed(MONEY_SCALE),
-        created: false,
-        exceedsClaim,
-      };
-    }
-
     // 凭证：优先使用用户指定的 EvidenceArtifact，否则为本次人工确认留一条可追溯凭证
     let evidenceId = requestedEvidenceId;
     if (!evidenceId) {

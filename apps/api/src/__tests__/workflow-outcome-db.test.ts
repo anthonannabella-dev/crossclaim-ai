@@ -156,7 +156,7 @@ describe('C-0008-B2-3a — 人工确认回收结果（真实 PostgreSQL）', () 
 
     const fee = await prisma.feeCalculation.findUniqueOrThrow({ where: { id: result.feeCalculationId } });
     expect(fee).toMatchObject({ basis: 'RECOVERED_AMOUNT_PCT' });
-    expect(fee.rate?.toString()).toBe(RATE);
+    expect(fee.rate?.toFixed(4)).toBe(RATE);
     expect(fee.baseAmount.toFixed(4)).toBe('2.6625');
     expect(fee.feeAmount.toFixed(4)).toBe('0.3994');
     expect(fee.computation).toMatchObject({ basisReference: 'carrier-email-20260928', source: 'manual_input' });
@@ -220,7 +220,8 @@ describe('C-0008-B2-3a — 人工确认回收结果（真实 PostgreSQL）', () 
     await expect(confirm(kase.id, { basisReference: '  ' })).rejects.toMatchObject({ code: 'INVALID_INPUT' });
     await expect(confirm(kase.id, {}, 'OPS', opsId)).rejects.toThrow(ForbiddenError);
 
-    const foreign = await seedSettledCase({ organizationId: ORG_B });
+    // 外部租户的机会/案件无需商务确认审计（跨租户在更早的守卫处即被拒）
+    const foreign = await seedSettledCase({ organizationId: ORG_B, withTerms: false });
     await expect(confirm(foreign.kase.id)).rejects.toMatchObject({ code: 'NOT_FOUND' });
 
     expect(await prisma.settlement.count()).toBe(0);
