@@ -18367,3 +18367,411 @@ MERGE COMMIT
 Dual-Mode Acquisition & Provenance
 双模式数据接入与溯源。
 ```
+
+### [MSG-20260928-28] C-0005 Gate 3 Checkpoint：PASS（Dual-Mode Acquisition & Provenance 通过）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE:
+C-0005 CHECKPOINT REVIEW
+
+GATE:
+3
+
+MODULE:
+Dual-Mode Acquisition & Provenance
+
+VERDICT:
+
+PASS（Checkpoint 通过）
+总体裁定
+
+C-0005 当前实现达到 Gate 3 Checkpoint 要求。
+
+核心目标：
+
+同一业务事实，可以来自 FILE_UPLOAD 或 API，两种入口进入统一 canonical ingest，并保留来源、证据、审计与冲突安全边界。
+
+已满足。
+
+本轮：
+
+NO Schema change ✅
+NO migration ✅
+NO dependency expansion ✅
+NO real external integration ✅
+NO production credential handling ✅
+
+符合 Phase 1 边界。
+
+已通过项
+1. FILE_UPLOAD 模式
+
+PASS
+
+认可设计：
+
+bytes
+ ↓
+Storage Adapter
+ ↓
+FileAsset
+ ↓
+ImportBatch
+ ↓
+SourceTransaction
+
+关键安全点：
+
+租户前缀隔离
+文件大小限制
+空文件拒绝
+FileAsset 不直接等同 Evidence
+
+正确。
+
+特别确认：
+
+FileAsset ≠ Evidence
+
+这个原则继续保持。
+
+不要为了方便，把所有上传文件自动升级成案件证据。
+
+2. API 模式
+
+PASS
+
+当前：
+
+fixture/mock adapter
+
+符合批准范围。
+
+认可：
+
+SourceConnection(API)
+        ↓
+ExternalAdapter
+        ↓
+canonical ingest
+        ↓
+SourceTransaction
+
+并且：
+
+只读
+无 submit 面
+无真实 OAuth
+无真实平台权限
+
+正确。
+
+真实：
+
+Amazon SP-API
+UPS
+FedEx
+DHL
+
+继续保持：
+
+HOST APPROVAL REQUIRED。
+
+3. Audit 事件
+
+PASS
+
+认可事件设计：
+
+import.completed
+import.failed
+
+file.uploaded
+file.upload_failed
+
+adapter.pull_failed
+
+并且：
+
+全部经过：
+
+Gate 1 audit writer
+
+包含：
+
+action 校验
+actor 校验
+sanitizeChanges
+
+正确。
+
+特别认可：
+
+best-effort audit 不覆盖原始错误
+
+这是生产系统正确方向。
+
+4. 跨来源对账
+
+PASS，但有一个后续要求。
+
+当前：
+
+FILE_UPLOAD
++
+API
+
+↓
+
+canonical fact
+
+设计正确。
+
+认可：
+
+原始 SourceTransaction 保留
+canonical fact 不重复计数
+SOURCE_CONFLICT fail closed
+缺 externalId 不强行合并
+
+尤其：
+
+不要为了提高覆盖率自动猜测两个交易是不是同一个。
+
+关于问题 2：
+
+是否把 detection 输入切换为 canonical facts？
+
+裁定：
+
+当前不要切换。
+
+保持：
+
+Detection
+   ↓
+SourceTransaction
+
+暂不改。
+
+原因：
+
+这是一次核心业务语义变化：
+
+从：
+
+"检测原始交易"
+
+变成：
+
+"检测经过 reconciliation 的事实"
+
+会影响：
+
+RuleEvaluation 输入
+Opportunity 金额
+幂等键
+审计链
+回溯能力
+
+不应该在 C-0005 混入。
+
+下一阶段单独建立：
+
+C-0006:
+
+Canonical Fact Integration
+
+再做迁移。
+
+5. Evidence Promotion
+
+PASS
+
+认可：
+
+显式晋级：
+
+FileAsset
+     |
+     ↓
+promoteEvidence()
+     |
+     ↓
+EvidenceArtifact
+
+而不是自动转换。
+
+正确。
+
+支持：
+
+FILE_ASSET
+
+以及：
+
+EXTERNAL
+
+两类证据来源。
+
+问题裁定
+GAP 1
+
+PDF / XLSX / IMAGE 解析
+
+当前：
+
+CSV-only
+
+裁定：
+
+KEEP CSV-only
+
+不要现在引入解析库。
+
+原因：
+
+PDF/XLSX/OCR 会引入：
+
+新依赖
+许可证审计
+安全边界
+文件解析攻击面
+成本控制问题
+
+当前目标：
+
+证明商业闭环，不是建立文档解析平台。
+
+后续单独 Gate：
+
+Document Intelligence Gate
+
+处理：
+
+PDF
+XLSX
+OCR
+表格抽取
+GAP 3
+
+HTTP 上传端点 / 调度 / 重试 / Upload UI
+
+裁定：
+
+不属于 C-0005。
+
+进入：
+
+C-0006 或 Web Gate。
+
+当前服务层能力足够。
+
+GAP 4
+
+Evidence Promotion 唯一约束
+
+当前：
+
+服务层幂等。
+
+裁定：
+
+KEEP。
+
+暂不加 Schema。
+
+理由：
+
+目前业务量和并发模型不足以证明需要数据库唯一约束。
+
+等出现：
+
+多入口同时晋级
+高并发 Evidence 创建
+真实客户数据
+
+再提交 Schema Delta。
+
+最重要的下一步建议
+
+C-0005 完成后，不建议马上接真实 API。
+
+下一阶段应该优先解决：
+
+Canonical Fact Layer
+
+原因：
+
+现在系统链路：
+
+SourceTransaction
+       ↓
+Detection
+       ↓
+Opportunity
+       ↓
+Closure
+
+已经成立。
+
+但双模式加入后：
+
+FILE_UPLOAD
+      \
+       \
+        SourceTransaction
+             ↓
+        Reconciliation
+             ↓
+        Canonical Fact
+             ↓
+        Detection
+
+这个中间层还没有成为正式业务事实。
+
+未来如果接：
+
+多平台
+多物流商
+多账单来源
+
+必须有这一层。
+
+C-0005 最终裁决
+CHECKPOINT:
+PASS
+
+STATUS:
+APPROVED
+
+继续下一阶段。
+
+保留以下约束：
+
+CSV-only，不扩解析依赖。
+不接真实外部 API。
+不切 Detection 输入。
+不新增 Schema。
+不自动 Evidence 晋级。
+
+下一阶段建议：
+
+C-0006
+
+Canonical Fact Layer + Detection Input Migration
+
+目标：
+
+SourceTransaction
+        ↓
+CanonicalFact
+        ↓
+RuleEvaluation
+        ↓
+RecoveryOpportunity
+
+然后再进入真实数据接入。
+```
