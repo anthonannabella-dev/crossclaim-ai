@@ -41,3 +41,19 @@ export {
   type ConnectionStatus,
 } from './connection-lifecycle';
 export { createPrismaConnectionLifecyclePort } from './connection-lifecycle-prisma';
+
+export {
+  DEFAULT_SCAN_MAX_BYTES,
+  scanUploadContent,
+  type ContentScanInput,
+  type ContentScanResult,
+  type ScanReason,
+  type ScanStatus,
+} from './content-scan';
+export {
+  createPrismaFileAssetLookup,
+  uploadWithScan,
+  type FileAssetLookupPort,
+  type ScannedUploadDeps,
+  type ScannedUploadResult,
+} from './upload-runtime';
