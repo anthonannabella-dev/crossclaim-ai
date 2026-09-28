@@ -57,3 +57,11 @@ export {
   type ScannedUploadDeps,
   type ScannedUploadResult,
 } from './upload-runtime';
+
+export {
+  ConnectorRuntimeError,
+  runConnectorPull,
+  type ConnectorPullInput,
+  type ConnectorRuntimeDeps,
+  type ConnectorRuntimeErrorCode,
+} from './api-connector-runtime';
