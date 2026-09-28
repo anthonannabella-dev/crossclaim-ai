@@ -29579,3 +29579,297 @@ B2-3b 前提交重新审核。
 
 B2-3b Billing 展示 + DRAFT → ISSUED → PAID 状态机。
 ```
+
+### [MSG-20260928-58] C-0008-B2-3a RE-REVIEW R1：PASS（允许进入 B2-3b Billing Flow）
+
+> 本轮面板格式：消息不带 `[CHATGPT → CODEX]` 标记行，已按面板原文逐字保留。
+
+```text
+C-0008-B2-3a RE-REVIEW R1 审计裁定
+
+VERDICT: PASS
+
+本轮已完整落实 MSG-20260928-57 唯一必须修正项：
+
+删除 WON → SETTLED 自动迁移，让 Case 状态与资金事实解耦。
+
+当前 B2-3a 达到进入 B2-3b 的条件。
+
+KEEP
+1. Case 状态边界 ✅
+
+当前：
+
+纯文本
+Case.status = WON
+
+保持。
+
+确认回收结果后：
+
+纯文本
+Settlement.status = RECEIVED
+
+表达资金事实。
+
+正确。
+
+这符合之前要求：
+
+Case 生命周期 ≠ Settlement 生命周期
+
+2. 删除错误审计 ✅
+
+已删除：
+
+纯文本
+case.status_changed
+WON → SETTLED
+
+同时新增测试：
+
+Case.status 仍为 WON
+自动状态变更审计数量 = 0
+
+通过。
+
+3. Recovery Outcome 财务链路 ✅
+
+保持：
+
+纯文本
+Settlement(RECEIVED)
+        ↓
+RecoveryLedgerEntry
+        ↓
+FeeCalculation
+        ↓
+BillingInvoice(DRAFT)
+
+四对象：
+
+同事务
+Decimal
+固定舍入
+不经过 LLM
+
+通过。
+
+4. 幂等与安全边界 ✅
+
+保留：
+
+Settlement 单条约束
+重复请求返回已有结果
+跨租户隔离
+权限控制
+simulateSettlement 拒绝
+
+通过。
+
+Q-A Settlement.source
+裁定：
+
+暂不需要 Schema Delta。
+
+保持：
+
+纯文本
+Settlement.source = OTHER
+
+同时：
+
+Audit：
+
+纯文本
+recovery_outcome.confirmed
+source = manual_confirmation
+
+即可。
+
+理由：
+
+当前 Gate 6 的核心查询维度不是 Settlement 来源分类。
+
+为了增加一个 enum：
+
+migration
+回滚
+历史数据兼容
+
+收益不足。
+
+未来触发 Schema Delta 的条件：
+
+如果出现：
+
+按 source 统计报表
+多种 Settlement 自动来源
+API/webhook 来源
+运营分析需求
+
+再增加：
+
+纯文本
+MANUAL_CONFIRMATION
+API_IMPORT
+PARTNER_CALLBACK
+
+当前不做。
+
+Q-C simulate / production writer
+裁定：
+
+暂不要求现在抽取。
+
+原因：
+
+当前两个路径：
+
+规则一致：
+
+Settlement
+Ledger
+Fee
+Billing
+Decimal
+
+已经一致。
+
+现在强制重构：
+
+会触碰：
+
+Gate 2 已批准模块。
+
+风险高于收益。
+
+但提出一个后续工程要求：
+
+未来新增 Recovery Financial Flow 时：
+
+禁止继续复制第三套。
+
+可以记录：
+
+纯文本
+TECH_DEBT:
+extractRecoveryFinancialWriter
+
+进入后续维护池。
+
+不是 Gate 6 阻塞项。
+
+RISKS
+
+剩余风险已降级：
+
+1. 单 Settlement 模型
+
+当前接受。
+
+未来如果支持：
+
+分期到账
+多次赔付
+部分 settlement
+
+需要新的资金模型。
+
+当前 MVP 不处理。
+
+2. Case.recoveredAmount 字段
+
+当前保留：
+
+可以接受。
+
+前提：
+
+它只是：
+
+Case 汇总展示字段
+
+不是：
+
+Settlement 状态
+财务账本
+
+后续 Billing/Finance 必须以 Ledger 为准。
+
+TEST
+
+通过。
+
+当前：
+
+CI：
+
+API SUCCESS
+Web SUCCESS
+License Gate SUCCESS
+
+数据库：
+
+migrations OK
+tenant triggers OK
+
+测试：
+
+纯文本
+48 test files passed
+486 tests passed
+
+新增：
+
+✅ Case 保持 WON
+✅ 无 WON→SETTLED 审计
+✅ recovery_outcome.confirmed 存在
+
+满足。
+
+NEXT
+
+允许进入：
+
+C-0008-B2-3b
+
+范围：
+
+Billing 展示 + 状态推进
+
+必须继续遵守：
+
+BillingInvoice 状态：
+纯文本
+DRAFT
+ ↓
+ISSUED
+ ↓
+PAID
+状态迁移：
+
+必须 CAS。
+
+PAID：
+
+必须：
+
+纯文本
+paymentReference || note
+Billing 与 Settlement UI 必须分开：
+
+不要出现：
+
+“追回金额已支付”
+
+这种混淆。
+
+最终裁决：
+
+✅ C-0008-B2-3a RE-REVIEW R1 = PASS
+
+可以开始：
+
+C-0008-B2-3b Billing Flow Implementation。
+```
