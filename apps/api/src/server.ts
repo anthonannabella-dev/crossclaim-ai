@@ -29,6 +29,7 @@ import {
   createPrismaMembershipLookup,
   createPrismaSessionPort,
   handleAuthRequest,
+  handleDataRequest,
 } from './services/auth';
 
 const VERSION = '0.1.0';
@@ -127,6 +128,18 @@ export function createServer(deps: ServerDeps): http.Server {
         })
         .catch((err) =>
           send(500, { error: err instanceof Error ? err.message : 'auth_error' }),
+        );
+      return;
+    }
+
+    // C-0008-A 内部只读数据端点（导入批次 / 追回机会），同样仅面向内部 Web
+    if (auth && (url === '/imports' || url === '/opportunities')) {
+      handleDataRequest(req, res, { prisma, session: auth.session })
+        .then((handled) => {
+          if (!handled) send(404, { error: 'not_found' });
+        })
+        .catch((err) =>
+          send(500, { error: err instanceof Error ? err.message : 'data_error' }),
         );
       return;
     }

@@ -71,3 +71,4 @@ export {
   sessionCookieHeader,
   type AuthRouteDeps,
 } from './http-routes';
+export { handleDataRequest, type DataRouteDeps } from './data-routes';
