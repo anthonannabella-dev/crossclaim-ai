@@ -13,7 +13,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 import { Prisma, PrismaClient } from '@prisma/client';
-import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { parseCsv } from '../services/ingest';
 import { runRecoveryClosure } from '../services/recovery';
@@ -311,18 +311,16 @@ describe('C-0004 CP2 · Recovery Closure（真实 PostgreSQL）', () => {
   });
 
   // CHANGE #53: production runtime must refuse synthetic settlement before any write.
-  it('CHANGE #53: production runtime refuses synthetic settlement and writes nothing', async () => {
+  it('CHANGE #53/#57: a production NODE_ENV refuses synthetic settlement and writes nothing', async () => {
     const opportunity = await prisma.recoveryOpportunity.findFirstOrThrow({ where: { organizationId: ORG } });
 
-    await expect(
-      runRecoveryClosure({
-        organizationId: ORG,
-        prisma,
-        commercialTerms: { successFeeRate: terms.terms[0].successFeeRate, source: terms.terms[0].source },
-        simulateSettlement: true,
-        runtimeMode: 'production',
-      }),
-    ).rejects.toThrow(/production/);
+    vi.stubEnv('NODE_ENV', 'production');
+    try {
+      // CHANGE #57: runRecoveryClosure takes no runtime mode; the trusted environment decides.
+      await expect(closure()).rejects.toThrow(/production/);
+    } finally {
+      vi.unstubAllEnvs();
+    }
 
     expect(await prisma.case.count({ where: { organizationId: ORG } })).toBe(0);
     expect(await prisma.claim.count({ where: { organizationId: ORG } })).toBe(0);

@@ -8,7 +8,7 @@
  */
 
 import { Prisma } from '@prisma/client';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { REDACTED } from '../services/audit';
 import {
@@ -19,7 +19,12 @@ import {
   buildClosureAuditRow,
   isOpportunityClosable,
   resolveRuntimeMode,
+  type RunClosureInput,
 } from '../services/recovery';
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 const ORG = '44444444-4444-4444-8444-444444444444';
 const moneyField = (value: string | null) => (value === null ? null : new Prisma.Decimal(value));
@@ -41,10 +46,24 @@ describe('C-0004 CP2 R2 - CHANGE #53 runtime guard', () => {
     expect(() => assertSyntheticSettlementAllowed('development', true)).not.toThrow();
   });
 
-  it('resolves the runtime mode from an explicit value first', () => {
-    expect(resolveRuntimeMode('production')).toBe('production');
-    expect(resolveRuntimeMode('test')).toBe('test');
-    expect(['test', 'development', 'production']).toContain(resolveRuntimeMode());
+  it('reads the runtime mode from the trusted environment only (CHANGE #57)', () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    expect(resolveRuntimeMode()).toBe('production');
+    vi.stubEnv('NODE_ENV', 'test');
+    expect(resolveRuntimeMode()).toBe('test');
+    vi.stubEnv('NODE_ENV', '');
+    expect(resolveRuntimeMode()).toBe('development');
+  });
+
+  it('no longer accepts a caller supplied runtime mode (CHANGE #57)', () => {
+    const input: RunClosureInput = {
+      organizationId: ORG,
+      prisma: null as never,
+      commercialTerms: { successFeeRate: '0.1500', source: 'fixtures/logistics/commercial-terms.json' },
+      // @ts-expect-error runtimeMode was removed from the public closure input
+      runtimeMode: 'test',
+    };
+    expect(input.simulateSettlement).toBeUndefined();
   });
 });
 
