@@ -47,7 +47,9 @@ export type WorkflowErrorCode =
   /** C-0011：REVIEW_REQUIRED 起必须入案（状态机不变量，不是数据库 CHECK） */
   | 'CLAIM_ITEM_CASE_REQUIRED'
   /** C-0012：人工复核提交的 ruleAmount 与历史规则输出不一致 */
-  | 'RULE_AMOUNT_MISMATCH';
+  | 'RULE_AMOUNT_MISMATCH'
+  /** C-0013-A：Connector 路径必须至少带 platformRef 或 sourceFingerprint */
+  | 'SOURCE_IDENTITY_REQUIRED';
 
 export class WorkflowError extends Error {
   readonly code: WorkflowErrorCode;

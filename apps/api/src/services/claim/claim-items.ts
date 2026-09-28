@@ -18,6 +18,7 @@ import { Prisma, type PrismaClient } from '@prisma/client';
 import { prepareAuditInsert } from '../audit';
 import { WorkflowError } from '../workflow/opportunity-review';
 import { assertPermission } from '../workflow/permissions';
+import { FINGERPRINT_VERSION, sourceFingerprintV1 } from './source-fingerprint';
 
 export const CLAIM_ITEM_STATUSES = [
   'DISCOVERED',
@@ -147,6 +148,13 @@ export interface CreateClaimItemInput {
   platformType: ClaimPlatformType;
   claimType: string;
   platformRef?: string | null;
+  /** C-0013-A：来源指纹；缺省且给了 normalizedRef 时由服务计算 */
+  sourceFingerprint?: string | null;
+  fingerprintVersion?: string | null;
+  /** C-0013-A：指纹里参与计算的稳定引用（Normalizer 提供） */
+  normalizedRef?: string | null;
+  /** C-0013-A：创建来源。CONNECTOR_IMPORT 必须至少带 platformRef 或 sourceFingerprint */
+  creationContext?: 'MANUAL_IMPORT' | 'CONNECTOR_IMPORT';
   occurredAt: Date;
   amountExpected?: string | null;
   amountActual?: string | null;
@@ -162,8 +170,11 @@ export interface CreateClaimItemInput {
 export interface CreateClaimItemResult {
   id: string;
   created: boolean;
-  /** PLATFORM_REF = 平台引用幂等；UNAVAILABLE = 无 platformRef，无法自动去重（会写告警审计） */
-  idempotency: 'PLATFORM_REF' | 'UNAVAILABLE';
+  /**
+   * PLATFORM_REF = 平台引用幂等；SOURCE_FINGERPRINT = 指纹幂等；
+   * UNAVAILABLE = 两者都没有（仅 MANUAL_IMPORT，会写告警审计）
+   */
+  idempotency: 'PLATFORM_REF' | 'SOURCE_FINGERPRINT' | 'UNAVAILABLE';
 }
 
 const money = (value: string | null | undefined): Prisma.Decimal | null =>
@@ -183,8 +194,41 @@ export async function createClaimItem(
   }
   const at = (deps.now ?? (() => new Date()))();
   const platformRef = input.platformRef?.trim() ? input.platformRef.trim() : null;
+  const creationContext = input.creationContext ?? 'MANUAL_IMPORT';
 
-  // 幂等：只在 platformRef 存在时成立（空引用不参与唯一键）
+  // C-0013-A：指纹来源（显式传入优先；否则由 normalizedRef 计算）
+  const computed =
+    input.sourceFingerprint || !input.normalizedRef
+      ? null
+      : sourceFingerprintV1({
+          platformType: input.platformType,
+          claimType: input.claimType,
+          occurredAt: input.occurredAt,
+          normalizedRef: input.normalizedRef,
+          currency: input.currency ?? 'USD',
+        });
+  const sourceFingerprint = input.sourceFingerprint?.trim() ? input.sourceFingerprint.trim() : (computed?.fingerprint ?? null);
+  const fingerprintVersion = sourceFingerprint
+    ? (input.fingerprintVersion ?? computed?.version ?? FINGERPRINT_VERSION)
+    : null;
+
+  // REVISE-2（MSG-134）：sourceFingerprint 非空 ⇒ fingerprintVersion 必须等于当前版本
+  if (sourceFingerprint && fingerprintVersion !== FINGERPRINT_VERSION) {
+    throw new WorkflowError(
+      'INVALID_INPUT',
+      `fingerprintVersion 必须是 ${FINGERPRINT_VERSION}（收到 ${fingerprintVersion}）`,
+    );
+  }
+
+  // NULL 契约（MSG-132 REVISE-2）：Connector 路径必须至少带一个来源标识
+  if (!platformRef && !sourceFingerprint && creationContext === 'CONNECTOR_IMPORT') {
+    throw new WorkflowError(
+      'SOURCE_IDENTITY_REQUIRED',
+      'CONNECTOR_IMPORT 必须带 platformRef 或 sourceFingerprint',
+    );
+  }
+
+  // 幂等优先级（MSG-130 REVISE-1）：platformRef → sourceFingerprint → （人工路径）允许但告警
   if (platformRef) {
     const existing = await prisma.claimItem.findFirst({
       where: {
@@ -197,9 +241,19 @@ export async function createClaimItem(
     });
     if (existing) return { id: existing.id, created: false, idempotency: 'PLATFORM_REF' };
   }
+  if (sourceFingerprint) {
+    const byFingerprint = await prisma.claimItem.findFirst({
+      where: { organizationId: input.organizationId, platformType: input.platformType, sourceFingerprint },
+      select: { id: true },
+    });
+    if (byFingerprint) {
+      return { id: byFingerprint.id, created: false, idempotency: 'SOURCE_FINGERPRINT' };
+    }
+  }
 
-  const created = await prisma.$transaction(async (tx) => {
-    const item = await tx.claimItem.create({
+  try {
+    const created = await prisma.$transaction(async (tx) => {
+      const item = await tx.claimItem.create({
       data: {
         organizationId: input.organizationId,
         caseId: input.caseId ?? null,
@@ -207,6 +261,8 @@ export async function createClaimItem(
         platformType: input.platformType,
         claimType: input.claimType.trim(),
         platformRef,
+        sourceFingerprint,
+        fingerprintVersion,
         occurredAt: input.occurredAt,
         amountExpected: money(input.amountExpected),
         amountActual: money(input.amountActual),
@@ -229,11 +285,14 @@ export async function createClaimItem(
         claimType: input.claimType,
         platformRef,
         normalizerVersion: input.normalizerVersion,
-        idempotency: platformRef ? 'PLATFORM_REF' : 'UNAVAILABLE',
+        // MSG-134 REVISE：审计**不写指纹值**，只写"有没有"与版本
+        fingerprintVersion,
+        fingerprintPresent: sourceFingerprint !== null,
+        idempotency: platformRef ? 'PLATFORM_REF' : sourceFingerprint ? 'SOURCE_FINGERPRINT' : 'UNAVAILABLE',
       },
       at,
     });
-    if (!platformRef) {
+    if (!platformRef && !sourceFingerprint) {
       // REVISE-1：无平台引用 → 允许创建，但必须可见（告警审计，不是失败）
       await writeClaimAudit(tx, {
         organizationId: input.organizationId,
@@ -243,6 +302,7 @@ export async function createClaimItem(
         changes: {
           reason: 'PLATFORM_REF_MISSING',
           idempotency: 'UNAVAILABLE',
+          fingerprintPresent: false,
           platformType: input.platformType,
           claimType: input.claimType,
         },
@@ -250,13 +310,41 @@ export async function createClaimItem(
       });
     }
     return item;
-  });
+    });
 
-  return {
-    id: created.id,
-    created: true,
-    idempotency: platformRef ? 'PLATFORM_REF' : 'UNAVAILABLE',
-  };
+    return {
+      id: created.id,
+      created: true,
+      idempotency: platformRef ? 'PLATFORM_REF' : sourceFingerprint ? 'SOURCE_FINGERPRINT' : 'UNAVAILABLE',
+    };
+  } catch (error) {
+    // MSG-134 REVISE-1：唯一冲突必须分类，不能一律吞掉
+    if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      // A) 并发/重放：按同一优先级再查一次，命中就返回既有行
+      if (platformRef) {
+        const existing = await prisma.claimItem.findFirst({
+          where: {
+            organizationId: input.organizationId,
+            platformType: input.platformType,
+            platformRef,
+            claimType: input.claimType,
+          },
+          select: { id: true },
+        });
+        if (existing) return { id: existing.id, created: false, idempotency: 'PLATFORM_REF' };
+      }
+      if (sourceFingerprint) {
+        const existing = await prisma.claimItem.findFirst({
+          where: { organizationId: input.organizationId, platformType: input.platformType, sourceFingerprint },
+          select: { id: true },
+        });
+        if (existing) return { id: existing.id, created: false, idempotency: 'SOURCE_FINGERPRINT' };
+      }
+      // C) 与本次创建无关的唯一约束 → 原样抛出，绝不静默吞掉
+      throw error;
+    }
+    throw error;
+  }
 }
 
 export interface TransitionClaimItemInput {

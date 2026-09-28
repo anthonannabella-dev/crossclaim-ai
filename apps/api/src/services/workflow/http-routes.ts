@@ -143,6 +143,7 @@ function statusFor(error: unknown): { code: number; error: string } {
       case 'INVALID_FIELD':
       case 'PAYMENT_REFERENCE_REQUIRED':
       case 'RULE_AMOUNT_MISMATCH':
+      case 'SOURCE_IDENTITY_REQUIRED':
         return { code: 400, error: error.code };
       case 'CASE_NOT_CREATED':
         return { code: 500, error: error.code };

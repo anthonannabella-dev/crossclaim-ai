@@ -1317,6 +1317,10 @@ model ClaimItem {
   claimType        String
   /// 平台侧唯一引用；为空时该行不享受自动幂等（未来由 sourceFingerprint 关闭缺口）
   platformRef      String?
+  /// C-0013-A：来源指纹（与 platformRef 二选一去重；**不含金额**，平台更正不会拆单）
+  sourceFingerprint String?
+  /// 指纹算法版本（当前恒为 v1）；sourceFingerprint 非空时必须非空
+  fingerprintVersion String?
   occurredAt       DateTime
   amountExpected   Decimal? @db.Decimal(18, 4)
   amountActual     Decimal? @db.Decimal(18, 4)
