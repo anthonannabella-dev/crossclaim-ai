@@ -25,13 +25,14 @@ import {
   rotateConnectionCredentialRef,
   setConnectionStatus,
 } from './connection-management';
-import { createCaseForOpportunity } from './case-creation';
+import { confirmCommercialTerms, createCaseForOpportunity } from './case-creation';
 import { REJECT_REASONS, WorkflowError, reviewOpportunity } from './opportunity-review';
 import { ForbiddenError } from './permissions';
 
 const MAX_BODY_BYTES = 16 * 1024;
 const REVIEW_PATH = /^\/opportunities\/([^/]+)\/(qualify|reject|case)$/;
 const CONNECTION_PATH = /^\/connections(?:\/([^/]+)\/(status|credential-ref))?$/;
+const COMMERCIAL_TERMS_PATH = /^\/cases\/([^/]+)\/commercial-terms$/;
 
 /** 请求体层面的错误（与领域状态无关），统一映射为 400。 */
 class HttpBodyError extends Error {
@@ -122,7 +123,8 @@ export async function handleWorkflowRequest(
   const path = (req.url ?? '/').split('?')[0];
   const review = REVIEW_PATH.exec(path);
   const connection = CONNECTION_PATH.exec(path);
-  if (!review && !connection) return false;
+  const termsPath = COMMERCIAL_TERMS_PATH.exec(path);
+  if (!review && !connection && !termsPath) return false;
 
   const method = req.method ?? 'GET';
   const allowed = connection && !connection[2] ? ['GET', 'POST'] : ['POST'];
@@ -145,6 +147,21 @@ export async function handleWorkflowRequest(
   };
 
   try {
+    if (termsPath) {
+      const body = await readJsonBody(req);
+      const confirmed = await confirmCommercialTerms(
+        deps.prisma,
+        {
+          ...actor,
+          caseId: termsPath[1] ?? '',
+          commercialTerms: body.commercialTerms,
+        },
+        deps.now,
+      );
+      sendJson(res, 200, { ...confirmed, commercialTermsPending: false });
+      return true;
+    }
+
     if (connection) {
       const connectionId = connection[1];
       const sub = connection[2];

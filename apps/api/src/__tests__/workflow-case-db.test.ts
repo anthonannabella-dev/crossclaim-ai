@@ -12,7 +12,7 @@
 import { Prisma, PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
-import { createCaseForOpportunity } from '../services/workflow';
+import { confirmCommercialTerms, createCaseForOpportunity } from '../services/workflow';
 import { ForbiddenError } from '../services/workflow';
 
 const prisma = new PrismaClient();
@@ -212,5 +212,66 @@ describe('C-0008-B2-1 — Case 创建（真实 PostgreSQL）', () => {
 
     expect(await prisma.case.count()).toBe(0);
     expect(await prisma.auditLog.count({ where: { organizationId: ORG } })).toBe(0);
+  });
+
+  it('OPS 建案不带费率 → pending；OWNER 事后商务确认后完成（不产生资金记录）', async () => {
+    const opportunity = await seedOpportunity();
+    const created = await createCaseForOpportunity(
+      prisma,
+      {
+        organizationId: ORG,
+        actorUserId: opsId,
+        role: 'OPS',
+        opportunityId: opportunity.id,
+      },
+      () => NOW,
+    );
+
+    expect(created.created).toBe(true);
+    expect(created.commercialTermsPending).toBe(true);
+    expect(created.commercialTerms).toBeNull();
+
+    const caseCreated = await prisma.auditLog.findMany({
+      where: { organizationId: ORG, action: 'case.created' },
+    });
+    expect(caseCreated).toHaveLength(1);
+    expect(caseCreated[0]).toMatchObject({
+      actorType: 'USER',
+      actorUserId: opsId,
+      entityType: 'Case',
+      entityId: created.caseId,
+    });
+    expect(caseCreated[0].changes).toMatchObject({ commercialTermsPending: true });
+    expect(await prisma.auditLog.count({ where: { action: 'commercial_terms.created' } })).toBe(0);
+
+    const confirmed = await confirmCommercialTerms(
+      prisma,
+      {
+        organizationId: ORG,
+        actorUserId: adminId,
+        role: 'ADMIN',
+        caseId: created.caseId,
+        commercialTerms: TERMS,
+      },
+      () => NOW,
+    );
+    expect(confirmed).toEqual({
+      caseId: created.caseId,
+      caseNo: created.caseNo,
+      confirmed: true,
+      alreadyConfirmed: false,
+    });
+
+    const termsAudits = await prisma.auditLog.findMany({
+      where: { organizationId: ORG, action: 'commercial_terms.created' },
+    });
+    expect(termsAudits).toHaveLength(1);
+    expect(termsAudits[0]).toMatchObject({ actorType: 'USER', actorUserId: adminId, entityId: created.caseId });
+    expect(termsAudits[0].changes).toMatchObject({ reConfirmed: false });
+
+    // 商务确认本身不产生任何资金记录（Billing 触发模型待架构方裁定）
+    expect(await prisma.feeCalculation.count()).toBe(0);
+    expect(await prisma.billingInvoice.count()).toBe(0);
+    expect(await prisma.settlement.count()).toBe(0);
   });
 });

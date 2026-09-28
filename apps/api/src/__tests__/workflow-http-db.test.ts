@@ -432,4 +432,70 @@ describe('C-0008-B1 — 机会复核端点（真实 HTTP + PostgreSQL）', () =>
     expect(await prisma.case.count({ where: { organizationId: ORG } })).toBe(1);
     expect(await prisma.settlement.count()).toBe(0);
   });
+
+  it('OPS 建案（费率 pending）+ ADMIN 商务确认端点；OPS 自行确认被拒', async () => {
+    const opportunity = await prisma.recoveryOpportunity.create({
+      data: {
+        organizationId: ORG,
+        domain: 'LOGISTICS',
+        channel: 'OTHER',
+        status: 'QUALIFIED',
+        opportunityType: 'FREIGHT_RATE_VARIANCE',
+        title: 'HTTP 商务确认用例',
+        amountExpected: new Prisma.Decimal('17.7500'),
+        amountActual: new Prisma.Decimal('20.4125'),
+        recoverableAmount: new Prisma.Decimal('2.6625'),
+        currency: 'USD',
+        detectedAt: NOW,
+      },
+    });
+    const terms = { successFeeRate: '0.1500', source: 'manual_input' };
+
+    await withServer(async (base) => {
+      const opsCookie = await login(base, 'ops-http@example.com');
+      const created = await fetch(`${base}/opportunities/${opportunity.id}/case`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', cookie: opsCookie },
+        body: JSON.stringify({}),
+      });
+      expect(created.status).toBe(201);
+      const createdBody = (await created.json()) as {
+        caseId: string;
+        caseNo: string;
+        commercialTermsPending: boolean;
+      };
+      expect(createdBody.commercialTermsPending).toBe(true);
+      expect(createdBody.caseNo).toBe(`CASE-${opportunity.id}`);
+
+      const opsConfirm = await fetch(`${base}/cases/${createdBody.caseId}/commercial-terms`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', cookie: opsCookie },
+        body: JSON.stringify({ commercialTerms: terms }),
+      });
+      expect(opsConfirm.status).toBe(403);
+
+      const adminCookie = await login(base, 'admin-http@example.com');
+      const adminConfirm = await fetch(`${base}/cases/${createdBody.caseId}/commercial-terms`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', cookie: adminCookie },
+        body: JSON.stringify({ commercialTerms: terms }),
+      });
+      expect(adminConfirm.status).toBe(200);
+      expect(await adminConfirm.json()).toEqual({
+        caseId: createdBody.caseId,
+        caseNo: createdBody.caseNo,
+        confirmed: true,
+        alreadyConfirmed: false,
+        commercialTermsPending: false,
+      });
+
+      const again = await fetch(`${base}/cases/${createdBody.caseId}/commercial-terms`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', cookie: adminCookie },
+        body: JSON.stringify({ commercialTerms: terms }),
+      });
+      expect(again.status).toBe(200);
+      expect(((await again.json()) as { alreadyConfirmed: boolean }).alreadyConfirmed).toBe(true);
+    });
+  });
 });

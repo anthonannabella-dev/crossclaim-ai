@@ -116,6 +116,15 @@ export function assertCommercialTerms(terms: CommercialTerms): InstanceType<type
   return rate;
 }
 
+/**
+ * C-0008-B2-1：合成 Settlement 路径必须显式给出费率；
+ * 非合成路径（用户建案）不需要费率 —— 商务确认由 OWNER/ADMIN 事后完成。
+ */
+export function requireCommercialTerms(terms: CommercialTerms | null | undefined): CommercialTerms {
+  if (!terms) throw new ClosureError('commercialTerms is required for the synthetic settlement path');
+  return terms;
+}
+
 export function caseNoFor(opportunityId: string): string {
   return `CASE-${opportunityId}`;
 }
@@ -238,7 +247,8 @@ async function setCaseStatus(tx: Tx, organizationId: string, caseId: string, fro
 export interface RunClosureInput {
   organizationId: string;
   prisma: PrismaClient;
-  commercialTerms: CommercialTerms;
+  /** 合成 Settlement 路径必需；用户建案路径允许为 null（费率待商务确认）。 */
+  commercialTerms: CommercialTerms | null;
   scope?: ClosureScope;
   simulateSettlement?: boolean;
 }
@@ -265,7 +275,9 @@ export async function runRecoveryClosure(input: RunClosureInput): Promise<Closur
   // CHANGE #53 / #57: refuse synthetic money in production BEFORE any database access;
   // the mode comes from the trusted environment and cannot be overridden by callers.
   assertSyntheticSettlementAllowed(runtimeMode, input.simulateSettlement === true);
-  const feeRate = input.simulateSettlement ? assertCommercialTerms(commercialTerms) : null;
+  const feeRate = input.simulateSettlement
+    ? assertCommercialTerms(requireCommercialTerms(commercialTerms))
+    : null;
 
   const opportunities = await prisma.recoveryOpportunity.findMany({
     where: {
@@ -535,7 +547,8 @@ export async function runRecoveryClosure(input: RunClosureInput): Promise<Closur
           });
           local.ledgerEntriesCreated += 1;
 
-          const rate = feeRate ?? assertCommercialTerms(commercialTerms);
+          const terms = requireCommercialTerms(commercialTerms);
+          const rate = feeRate ?? assertCommercialTerms(terms);
           const base = new Decimal(settlementAmount);
           const fee = base.times(rate).toDecimalPlaces(MONEY_SCALE, Decimal.ROUND_HALF_UP);
           const feeCalculation = await tx.feeCalculation.create({
@@ -551,10 +564,10 @@ export async function runRecoveryClosure(input: RunClosureInput): Promise<Closur
               computation: {
                 settlementId: settlement.id,
                 baseAmount: settlementAmount,
-                rate: commercialTerms.successFeeRate,
+                rate: terms.successFeeRate,
                 feeAmount: fee.toFixed(MONEY_SCALE),
                 rounding: { scale: MONEY_SCALE, mode: 'HALF_UP' },
-                source: commercialTerms.source,
+                source: terms.source,
               } as Prisma.InputJsonValue,
             },
           });

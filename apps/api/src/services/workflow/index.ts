@@ -3,7 +3,10 @@
  */
 
 export {
+  confirmCommercialTerms,
   createCaseForOpportunity,
+  type ConfirmCommercialTermsInput,
+  type ConfirmCommercialTermsResult,
   type CreateCaseInput,
   type CreateCaseResult,
 } from './case-creation';
