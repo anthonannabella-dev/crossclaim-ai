@@ -267,6 +267,11 @@ C-0008-B2（Case / Evidence / Claim Draft / Billing）的端点尚未实现。
 - 首次把 paymentId 写到尝试上会写审计 `payment.processing_payment_linked`；人工重放写 `payment.processing_replayed`
   （含 `paymentEventId` / `oldAttemptNo` / `newAttemptNo` / `reason` / `actorUserId`）；审计**不含** payload、签名与密钥
 - 无队列、无后台线程：`retry-due` 由宿主侧调度调用；第一版不引入任何调度依赖
+- 恢复成功**额外**写审计 `payment.processing_recovered`（`paymentEventId` / `attemptId` / `paymentId` / `resultStatus` / `recovery: true`），
+  与 webhook 的正常成功在审计上可区分
+- 并发的执行冲突返回稳定错误码 **409 `ATTEMPT_ALREADY_RUNNING`**，不把数据库唯一约束错误暴露给调用方
+- 成功（`SUCCEEDED`）的执行尝试**不可改写**：改绑 `paymentId`、改状态或换事件都会被数据库触发器拒绝；
+  成功但 `paymentId` 为空会被 CHECK 约束拒绝
 
 ## 权限矩阵
 

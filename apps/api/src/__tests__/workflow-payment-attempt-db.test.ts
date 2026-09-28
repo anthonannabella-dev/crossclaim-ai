@@ -15,6 +15,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import {
   ForbiddenError,
   WorkflowError,
+  applyPaymentSucceeded,
   handlePaymentWebhook,
   replayPaymentEvent,
   runDueRetries,
@@ -137,6 +138,28 @@ const eventBody = (amountCents = 90000) =>
 const auditCount = (action: string) => prisma.auditLog.count({ where: { organizationId: ORG, action } });
 const invoiceRow = () => prisma.billingInvoice.findUniqueOrThrow({ where: { id: INVOICE } });
 
+/** 首处理模式（webhook 语义）的探针：既有 Payment 时必须返回 ILLEGAL_TRANSITION。 */
+async function applyPaymentSucceededProbe(payment: {
+  invoiceId: string;
+  externalPaymentId: string;
+  amount: Prisma.Decimal;
+  currency: string;
+}): Promise<string> {
+  const result = await applyPaymentSucceeded(
+    prisma,
+    {
+      organizationId: ORG,
+      provider: 'STRIPE',
+      externalPaymentId: payment.externalPaymentId,
+      invoiceId: payment.invoiceId,
+      amount: payment.amount.toFixed(4),
+      currency: payment.currency,
+    },
+    { now: () => NOW },
+  );
+  return result.status;
+}
+
 describe('C-0010-B2 — 执行尝试（真实 PostgreSQL）', () => {
   it('webhook 成功路径：一条 SUCCEEDED attempt（带 paymentId）+ 链接审计', async () => {
     await seedInvoice();
@@ -234,6 +257,95 @@ describe('C-0010-B2 — 执行尝试（真实 PostgreSQL）', () => {
       reason: 'MANUAL_RECOVERY',
     });
     expect(audits[0].actorUserId).toBe(base.actorUserId);
+
+    // MSG-96 REVISE-2：恢复成功要有独立审计标识，且链路三段齐全
+    const recovered = await prisma.auditLog.findMany({
+      where: { organizationId: ORG, action: 'payment.processing_recovered' },
+    });
+    expect(recovered).toHaveLength(1);
+    expect(recovered[0].changes).toMatchObject({
+      paymentEventId: event.id,
+      paymentId: payment.id,
+      resultStatus: 'PAID',
+      recovery: true,
+    });
+    expect(await auditCount('payment.processing_payment_linked')).toBeGreaterThanOrEqual(1);
+    expect((await invoiceRow()).status).toBe('PAID');
+  });
+
+  it('MSG-96 REVISE：首处理与恢复语义隔离（同一笔已记账付款）', async () => {
+    await seedInvoice();
+    const event = await seedEvent();
+    const payment = await seedPayment();
+    // 应用的真实形态：事件已处理、Payment 已记账、账单推进失败 → attempt#1 记下 paymentId
+    await seedFailedAttempt(event.id, payment.id);
+
+    // 首处理（webhook 语义）：既有 Payment → ILLEGAL_TRANSITION，账单不动
+    const first = await applyPaymentSucceededProbe(payment);
+    expect(first).toBe('ILLEGAL_TRANSITION');
+    expect((await invoiceRow()).status).toBe('ISSUED');
+
+    // 恢复（replay）：同一笔 Payment 继续把账单推到终态
+    const replayed = await replayPaymentEvent(
+      prisma,
+      { organizationId: ORG, actorUserId: ownerId, role: 'OWNER', paymentEventId: event.id, reason: 'MANUAL_RECOVERY' },
+      { now: () => NOW },
+    );
+    expect(replayed.resultStatus).toBe('PAID');
+    expect((await invoiceRow()).status).toBe('PAID');
+  });
+
+  it('MSG-96 REVISE：成功 attempt 不可改写（paymentId 改绑 / 成功但无 paymentId 都被数据库拒绝）', async () => {
+    await seedInvoice();
+    const event = await seedEvent();
+    const payment = await seedPayment();
+    const other = await prisma.payment.create({
+      data: {
+        organizationId: ORG,
+        invoiceId: INVOICE,
+        provider: 'STRIPE',
+        externalPaymentId: 'pi_other',
+        amount: new Prisma.Decimal('900.0000'),
+        currency: 'USD',
+        status: 'SUCCEEDED',
+        idempotencyKey: 'pi_other',
+      },
+    });
+
+    const attempt = await prisma.paymentProcessingAttempt.create({
+      data: {
+        organizationId: ORG,
+        paymentEventId: event.id,
+        attemptNo: 1,
+        status: 'SUCCEEDED',
+        resultStatus: 'PAID',
+        actorType: 'EXTERNAL',
+        actorRef: 'STRIPE',
+        paymentId: payment.id,
+        startedAt: NOW,
+        finishedAt: NOW,
+      },
+    });
+
+    // 改绑被触发器拒绝
+    await expect(
+      prisma.paymentProcessingAttempt.update({ where: { id: attempt.id }, data: { paymentId: other.id } }),
+    ).rejects.toThrow();
+    // 成功但无 paymentId 被 CHECK 拒绝
+    await expect(
+      prisma.paymentProcessingAttempt.create({
+        data: {
+          organizationId: ORG,
+          paymentEventId: event.id,
+          attemptNo: 2,
+          status: 'SUCCEEDED',
+          actorType: 'EXTERNAL',
+          actorRef: 'STRIPE',
+        },
+      }),
+    ).rejects.toThrow();
+    const unchanged = await prisma.paymentProcessingAttempt.findUniqueOrThrow({ where: { id: attempt.id } });
+    expect(unchanged.paymentId).toBe(payment.id);
   });
 
   it('并发保护：同一事件同一时刻只允许一个进行中的 attempt；跨租户 paymentId 被拒', async () => {
@@ -256,7 +368,7 @@ describe('C-0010-B2 — 执行尝试（真实 PostgreSQL）', () => {
         actorType: 'OPERATOR',
         actorRef: 'u-2',
       }),
-    ).rejects.toThrow(WorkflowError);
+    ).rejects.toMatchObject({ code: 'ATTEMPT_ALREADY_RUNNING' });
 
     // 并发 replay：不变量必须仍然成立
     await prisma.paymentProcessingAttempt.updateMany({

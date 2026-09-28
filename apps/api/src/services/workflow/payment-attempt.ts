@@ -18,7 +18,11 @@
 import { Prisma, type PrismaClient } from '@prisma/client';
 
 import { prepareAuditInsert } from '../audit';
-import { applyPaymentSucceeded, type ApplyPaymentSucceededResult } from './payment';
+import {
+  applyPaymentSucceeded,
+  recoverPaymentSucceeded,
+  type ApplyPaymentSucceededResult,
+} from './payment';
 import { WorkflowError } from './opportunity-review';
 import { assertPermission } from './permissions';
 
@@ -57,6 +61,7 @@ export const ATTEMPT_AUDIT = {
   failed: 'payment.processing_failed',
   linked: 'payment.processing_payment_linked',
   replayed: 'payment.processing_replayed',
+  recovered: 'payment.processing_recovered',
 } as const;
 
 /** 第 N 次失败之后的下一次重试延迟；超过上限返回 null（DEAD_LETTER）。 */
@@ -192,7 +197,8 @@ export async function startAttempt(
     return created;
   } catch (error) {
     if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-      throw new WorkflowError('ILLEGAL_TRANSITION', 'ATTEMPT_IN_PROGRESS：该事件已有进行中的执行尝试');
+      // REVISE-3：并发冲突转成稳定业务错误码，绝不把 P2002 / unique constraint 暴露给调用方
+      throw new WorkflowError('ATTEMPT_ALREADY_RUNNING', 'ATTEMPT_ALREADY_RUNNING：该事件已有进行中的执行尝试');
     }
     throw error;
   }
@@ -429,7 +435,7 @@ export async function replayPaymentEvent(
     { now: () => at },
   );
 
-  const outcome = await applyPaymentSucceeded(
+  const outcome = await recoverPaymentSucceeded(
     prisma,
     {
       organizationId: input.organizationId,
@@ -441,7 +447,6 @@ export async function replayPaymentEvent(
     },
     {
       now: () => at,
-        recovery: true,
       onPaymentRecorded: async (tx, paymentId) => {
         await tx.paymentProcessingAttempt.updateMany({
           where: { id: attempt.id, status: 'RUNNING' },
@@ -480,6 +485,23 @@ export async function replayPaymentEvent(
         newAttemptNo: attempt.attemptNo,
         reason,
         ...(note ? { note } : {}),
+      },
+      at,
+    });
+    // REVISE-2：恢复成功要有独立标识，财务审计能区分「webhook 正常成功」与「恢复成功」
+    await writeAttemptAudit(tx, {
+      organizationId: input.organizationId,
+      actorType: 'SYSTEM',
+      actorRef: input.actorUserId,
+      actorUserId: input.actorUserId,
+      action: ATTEMPT_AUDIT.recovered,
+      paymentEventId: event.id,
+      changes: {
+        paymentEventId: event.id,
+        attemptId: attempt.id,
+        paymentId: payment.id,
+        resultStatus: outcome.status,
+        recovery: true,
       },
       at,
     });
@@ -571,7 +593,7 @@ export async function runDueRetries(
       { now: () => at },
     );
     try {
-      const outcome = await applyPaymentSucceeded(
+      const outcome = await recoverPaymentSucceeded(
         prisma,
         {
           organizationId: input.organizationId,
@@ -583,7 +605,6 @@ export async function runDueRetries(
         },
         {
           now: () => at,
-          recovery: true,
           onPaymentRecorded: async (tx, paymentId) => {
             await tx.paymentProcessingAttempt.updateMany({
               where: { id: next.id, status: 'RUNNING' },
@@ -606,6 +627,23 @@ export async function runDueRetries(
         { attemptId: next.id, status: 'SUCCEEDED', resultStatus: outcome.status },
         { now: () => at },
       );
+      await prisma.$transaction(async (tx) => {
+        await writeAttemptAudit(tx, {
+          organizationId: input.organizationId,
+          actorType: 'SYSTEM',
+          actorRef: SYSTEM_RETRY_ACTOR_REF,
+          action: ATTEMPT_AUDIT.recovered,
+          paymentEventId: event.id,
+          changes: {
+            paymentEventId: event.id,
+            attemptId: next.id,
+            paymentId: payment.id,
+            resultStatus: outcome.status,
+            recovery: true,
+          },
+          at,
+        });
+      });
       retried.push({
         paymentEventId: event.id,
         attemptId: next.id,

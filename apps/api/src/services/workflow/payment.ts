@@ -126,7 +126,16 @@ export interface ApplyPaymentSucceededInput {
   amount: string;
   currency: string;
   idempotencyKey?: string;
+  /**
+   * C-0010-B2 REVISE-1：**显式**处理模式，禁止隐式开关。
+   *   FIRST_PROCESSING（默认）：首处理；同一笔付款重复投递 → ILLEGAL_TRANSITION，不推进状态。
+   *   RECOVERY：恢复收口（replay / retry-due）；Payment 已记账时继续走 HITL + CAS 把账单推到终态，
+   *             账单已是 PAID 则直接返回、不写无意义的失败审计。
+   */
+  mode?: PaymentSucceededMode;
 }
+
+export type PaymentSucceededMode = 'FIRST_PROCESSING' | 'RECOVERY';
 
 export interface ApplyPaymentSucceededResult {
   paymentId: string;
@@ -145,15 +154,10 @@ export async function applyPaymentSucceeded(
      * 并写 `payment.processing_payment_linked` 审计（链接与资金事实同生共死）。
      */
     onPaymentRecorded?: (tx: Prisma.TransactionClient, paymentId: string) => Promise<void>;
-    /**
-     * C-0010-B2 恢复收口：Payment 已经记账（attempt#1 留下的事实）时，replay / retry-due
-     * 必须继续把账单推到终态，而不是把它当成「重复事件」。
-     * webhook 首处理保持原有语义（既有 Payment → ILLEGAL_TRANSITION）。
-     */
-    recovery?: boolean;
   } = {},
 ): Promise<ApplyPaymentSucceededResult> {
   const at = (deps.now ?? (() => new Date()))();
+  const mode: PaymentSucceededMode = input.mode ?? 'FIRST_PROCESSING';
 
   const invoice = await prisma.billingInvoice.findFirst({
     where: { id: input.invoiceId, organizationId: input.organizationId },
@@ -196,7 +200,7 @@ export async function applyPaymentSucceeded(
 
     if (existing) {
       // 首处理：同一笔付款重复投递 → 不推进任何状态
-      if (!deps.recovery) {
+      if (mode === 'FIRST_PROCESSING') {
         return { paymentId: payment.id, invoiceId: invoice.id, status: 'ILLEGAL_TRANSITION' as const };
       }
       // 恢复收口：账单已经终态 → 同样无事可做，且不写无意义的失败审计
@@ -329,6 +333,18 @@ export async function applyPaymentSucceeded(
 
     return { paymentId: payment.id, invoiceId: invoice.id, status: 'PAID' as const };
   });
+}
+
+/**
+ * C-0010-B2 REVISE-1：恢复收口的**具名入口**。
+ * 调用点必须显式选择恢复语义（replay / retry-due），不允许靠隐式开关改变资金代码行为。
+ */
+export async function recoverPaymentSucceeded(
+  prisma: PrismaClient,
+  input: ApplyPaymentSucceededInput,
+  deps: Parameters<typeof applyPaymentSucceeded>[2] = {},
+): Promise<ApplyPaymentSucceededResult> {
+  return applyPaymentSucceeded(prisma, { ...input, mode: 'RECOVERY' }, deps);
 }
 
 /** Payment HITL：OWNER/ADMIN 复核（与 Recovery HITL 同角色口径，但审计域独立）。 */

@@ -7,12 +7,14 @@ export {
   PAYMENT_REVIEW_ACTIONS,
   applyPaymentSucceeded,
   paymentsEnabled,
+  recoverPaymentSucceeded,
   requiresPaymentReview,
   resolvePaymentReviewState,
   resolvePaymentReviewThreshold,
   submitPaymentReview,
   type ApplyPaymentSucceededInput,
   type ApplyPaymentSucceededResult,
+  type PaymentSucceededMode,
   type PaymentReviewState,
 } from './payment';
 export {
