@@ -189,7 +189,9 @@ describe('C-0006-B2 Step 2 — dual write + identity parity（真实 PostgreSQL�
 
   it('可映射的历史行被回填；与已有身份冲突的历史行被拒绝（不覆盖、不猜测）', async () => {
     await detect();
-    const ruleVersion = await prisma.ruleVersion.findFirstOrThrow({ where: { organizationId: ORG } });
+    const mappedRow = await prisma.ruleEvaluation.findFirstOrThrow({
+      where: { organizationId: ORG, canonicalFactId: { not: null } },
+    });
 
     // 新的历史行：新增一张未跑过检测的发票（有 ACTIVE 事实），再补一条旧格式评估
     await importCsv(
@@ -212,7 +214,7 @@ describe('C-0006-B2 Step 2 — dual write + identity parity（真实 PostgreSQL�
     const backfillable = await prisma.ruleEvaluation.create({
       data: {
         organizationId: ORG,
-        ruleVersionId: ruleVersion.id,
+        ruleVersionId: mappedRow.ruleVersionId,
         sourceTransactionId: extraInvoice.id,
         result: 'OPPORTUNITY',
         computed: { intermediate: { recoverableAmount: '65.0000' } },
@@ -220,14 +222,11 @@ describe('C-0006-B2 Step 2 — dual write + identity parity（真实 PostgreSQL�
       },
     });
 
-    // 冲突的历史行：同一事实已有新身份行（模拟旧格式重复评估）
-    const mappedRow = await prisma.ruleEvaluation.findFirstOrThrow({
-      where: { organizationId: ORG, canonicalFactId: { not: null } },
-    });
+    // 冲突的历史行：同一事实 + 同一规则版本已有新身份行（模拟旧格式重复评估）
     const conflicting = await prisma.ruleEvaluation.create({
       data: {
         organizationId: ORG,
-        ruleVersionId: ruleVersion.id,
+        ruleVersionId: mappedRow.ruleVersionId,
         sourceTransactionId: mappedRow.sourceTransactionId,
         result: 'OPPORTUNITY',
         computed: {},
