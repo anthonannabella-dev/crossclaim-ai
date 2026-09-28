@@ -217,6 +217,8 @@ async function importNormalizedRows(
   try {
     const issues: RowIssue[] = [];
     const inserts: TransactionInsert[] = [];
+    const failedRows = new Set<number>();
+    let emptyRowsSkipped = 0;
 
     rows.forEach((raw, index) => {
       const rowNumber = index + 1;
@@ -227,25 +229,31 @@ async function importNormalizedRows(
         );
       }
       for (const issue of result.issues) {
-        // 空行不算失败：直接跳过，不污染 errorReport
-        if (issue.code === 'EMPTY_ROW') return;
+        // 空行不算失败：既不进 issues，也不计入 rowsTotal（CHANGE #36）
+        if (issue.code === 'EMPTY_ROW') {
+          emptyRowsSkipped += 1;
+          return;
+        }
         issues.push(issue);
+        failedRows.add(rowNumber);
       }
     });
 
     stage = 'persist';
-    const rowsTotal = rows.length;
+    // CHANGE #36：rowsTotal 不含被忽略的空行；rowsFailed 是"失败的数据行数"，不是 issue 数量
+    const rowsTotal = rows.length - emptyRowsSkipped;
     let inserted = 0;
     if (inserts.length > 0) {
       const writeResult = await repository.insertTransactions(inserts);
       inserted = writeResult.inserted;
     }
-    const rowsFailed = issues.length;
+    const rowsFailed = failedRows.size;
     const rowsOk = inserted;
     const duplicates = inserts.length - inserted;
+    const acceptedRows = rowsOk + duplicates;
 
     const status: ImportResult['status'] =
-      rowsFailed === 0 ? 'IMPORTED' : rowsOk > 0 ? 'PARTIAL' : 'FAILED';
+      rowsTotal === 0 ? 'FAILED' : rowsFailed === 0 ? 'IMPORTED' : acceptedRows > 0 ? 'PARTIAL' : 'FAILED';
 
     stage = 'finalize';
     await repository.updateBatch(input.batchId, {
@@ -259,6 +267,7 @@ async function importNormalizedRows(
         issues: issues.slice(0, maxReportedIssues),
         issuesTruncated: Math.max(0, issues.length - maxReportedIssues),
         duplicates,
+        emptyRowsSkipped,
       },
     });
 

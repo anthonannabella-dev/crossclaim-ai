@@ -1,11 +1,15 @@
 /**
- * 平台来源载荷边界校验（C-0003 Checkpoint 2 Round 1 / CHANGE #30）
+ * 平台来源载荷边界校验（C-0003 Checkpoint 2 · CHANGE #30 / #33）
  * ---------------------------------------------------------------
- * `AdapterRecord.source` 会被写进 `SourceTransaction.raw`（长期证据），因此必须在入库前
- * 强制而不是"文档约定"：
- *   1. 必须能安全 JSON 序列化（拒绝 BigInt / function / Symbol / 循环引用 / 非有限数字）
- *   2. 疑似凭据字段一律拒绝（authorization / token / cookie / apiKey / password …）
- *   3. 单条大小上限 256 KiB；超过不截断、直接失败（大体积原始数据应进 FileAsset）
+ * `AdapterRecord.source` 会被写进 `SourceTransaction.raw`（长期证据），因此它必须是
+ * **严格 JSON-safe value**：校验通过 == Prisma 一定能原样保存，不做隐式转换。
+ *
+ * 只允许：null / string / finite number / boolean / array / plain object。
+ * 一律拒绝：Date、BigInt、function、Symbol、Map、Set、custom class、循环引用，
+ *          以及对象属性值为 undefined（JSON 会丢字段，落库内容会与校验内容不一致）。
+ * 另外：疑似凭据键名直接拒绝；单条序列化后不得超过 256 KiB。
+ *
+ * 平台 HTTP API 的原始 JSON 本来就只有字符串日期，因此 source 不需要 Date 支持。
  */
 
 import { AdapterSourceError } from './types';
@@ -39,7 +43,7 @@ const CREDENTIAL_KEYS = [
   'accesskey',
   'secretkey',
   'bearer',
-  'signature', 
+  'signature',
   'auth',
 ];
 
@@ -49,7 +53,16 @@ function normalizeKey(key: string): string {
 
 function isCredentialKey(key: string): boolean {
   const normalized = normalizeKey(key);
-  return CREDENTIAL_KEYS.includes(normalized) || normalized.endsWith('token') || normalized.endsWith('secret');
+  return (
+    CREDENTIAL_KEYS.includes(normalized) ||
+    normalized.endsWith('token') ||
+    normalized.endsWith('secret')
+  );
+}
+
+function isPlainObject(value: object): boolean {
+  const proto = Object.getPrototypeOf(value) as object | null;
+  return proto === Object.prototype || proto === null;
 }
 
 export interface SourceGuardContext {
@@ -60,18 +73,23 @@ export interface SourceGuardContext {
 
 /**
  * 校验单条平台载荷；不安全直接抛 AdapterSourceError（调用方不要捕获后继续落库）。
- * `source === undefined` 视为"未提供载荷"，放行。
+ * 仅**顶层** `undefined` 视为"未提供载荷"放行；对象 / 数组内部的 undefined 一律拒绝。
  */
 export function assertSafeSource(source: unknown, context: SourceGuardContext): void {
   if (source === undefined) return;
   const where = `适配器 ${context.platform} 第 ${context.rowNumber ?? '-'} 条`;
   const seen = new Set<object>();
 
-  const walk = (value: unknown, path: string, depth: number): void => {
-    if (value === undefined) return; // JSON 会丢字段，属可接受语义
+  const walk = (value: unknown, path: string, depth: number, allowUndefined: boolean): void => {
+    if (value === undefined) {
+      if (allowUndefined) return;
+      throw new AdapterSourceError(`${where} 的 source 含 undefined（JSON 会丢字段）：${path}`);
+    }
     if (depth > MAX_DEPTH) {
       throw new AdapterSourceError(`${where} 的 source 嵌套过深（> ${MAX_DEPTH}）：${path}`);
     }
+    if (value === null) return;
+
     switch (typeof value) {
       case 'string':
       case 'boolean':
@@ -82,7 +100,7 @@ export function assertSafeSource(source: unknown, context: SourceGuardContext): 
         }
         return;
       case 'bigint':
-        throw new AdapterSourceError(`${where} 的 source 含 BigInt，无法安全 JSON 序列化：${path}`);
+        throw new AdapterSourceError(`${where} 的 source 含 BigInt，不是 JSON-safe：${path}`);
       case 'function':
         throw new AdapterSourceError(`${where} 的 source 含 function：${path}`);
       case 'symbol':
@@ -93,12 +111,14 @@ export function assertSafeSource(source: unknown, context: SourceGuardContext): 
           throw new AdapterSourceError(`${where} 的 source 存在循环引用：${path}`);
         }
         seen.add(object);
-        if (value instanceof Date) {
-          if (Number.isNaN(value.getTime())) {
-            throw new AdapterSourceError(`${where} 的 source 含非法日期：${path}`);
-          }
-        } else if (Array.isArray(value)) {
-          value.forEach((item, index) => walk(item, `${path}[${index}]`, depth + 1));
+        if (Array.isArray(value)) {
+          value.forEach((item, index) => walk(item, `${path}[${index}]`, depth + 1, false));
+        } else if (!isPlainObject(object)) {
+          const typeName = (object as { constructor?: { name?: string } }).constructor?.name;
+          throw new AdapterSourceError(
+            `${where} 的 source 含非纯 JSON 对象（${typeName ?? 'non-plain object'}）：${path}；` +
+              'Date / Map / Set / class 实例一律拒绝',
+          );
         } else {
           for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
             if (isCredentialKey(key)) {
@@ -106,7 +126,7 @@ export function assertSafeSource(source: unknown, context: SourceGuardContext): 
                 `${where} 的 source 含疑似凭据字段 "${key}"：拒绝入库（凭据只允许以引用名出现）`,
               );
             }
-            walk(item, `${path}.${key}`, depth + 1);
+            walk(item, `${path}.${key}`, depth + 1, false);
           }
         }
         seen.delete(object);
@@ -117,16 +137,10 @@ export function assertSafeSource(source: unknown, context: SourceGuardContext): 
     }
   };
 
-  walk(source, '$', 0);
+  walk(source, '$', 0, true);
 
-  let serialized: string;
-  try {
-    serialized = JSON.stringify(source) ?? '';
-  } catch (err) {
-    throw new AdapterSourceError(
-      `${where} 的 source 无法 JSON 序列化：${err instanceof Error ? err.message : '未知错误'}`,
-    );
-  }
+  // 到这里内容已是纯 JSON 类型；再做一次序列化验证 + 体积上限
+  const serialized = JSON.stringify(source) ?? '';
   const bytes = Buffer.byteLength(serialized, 'utf8');
   if (bytes > MAX_SOURCE_BYTES) {
     throw new AdapterSourceError(

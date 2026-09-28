@@ -16,9 +16,14 @@ const AMOUNT_RE = /^-?\d+(\.\d{1,4})?$/;
 const CURRENCY_RE = /^[A-Z]{3}$/;
 /** 只认 YYYY-MM-DD / YYYY/MM/DD，且必须做年月日往返校验 */
 const DATE_ONLY_RE = /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/;
-/** 时间戳只认带明确时区（Z 或 ±HH:MM）的 ISO 8601 */
+/** 时间戳只认带明确时区（Z 或 ±HH:MM）的 ISO 8601；分组用于**日历合法性**校验 */
 const ISO_WITH_ZONE_RE =
-  /^\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}(:\d{2}(\.\d{1,9})?)?([Zz]|[+-]\d{2}:\d{2})$/;
+  /^(\d{4})-(\d{2})-(\d{2})[Tt](\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,9}))?)?([Zz]|([+-])(\d{2}):(\d{2}))$/;
+
+function daysInMonth(year: number, month: number): number {
+  const leap = (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+  return [31, leap ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31][month - 1];
+}
 
 export interface NormalizeResult {
   transaction?: NormalizedTransaction;
@@ -57,7 +62,22 @@ export function parseOccurredAt(value: string): Date | null {
   }
 
   // 不猜业务日期：无时区的自由格式（09/01/2026 这类）一律拒绝
-  if (!ISO_WITH_ZONE_RE.test(trimmed)) return null;
+  const iso = ISO_WITH_ZONE_RE.exec(trimmed);
+  if (!iso) return null;
+  const [, tsYear, tsMonth, tsDay, tsHour, tsMinute, tsSecond, , tsZone, , offsetHour, offsetMinute] =
+    iso;
+  const tsYearNum = Number(tsYear);
+  const tsMonthNum = Number(tsMonth);
+  const tsDayNum = Number(tsDay);
+  // CHANGE #34：JS Date 会把 2026-02-30T10:00:00Z 静默滚成 2026-03-02，
+  // 因此必须在 new Date() 之前按原字符串校验日历合法性，不能只靠 Date 判断。
+  if (tsMonthNum < 1 || tsMonthNum > 12) return null;
+  if (tsDayNum < 1 || tsDayNum > daysInMonth(tsYearNum, tsMonthNum)) return null;
+  if (Number(tsHour) > 23 || Number(tsMinute) > 59) return null;
+  if (tsSecond !== undefined && Number(tsSecond) > 59) return null;
+  if (tsZone.toUpperCase() !== 'Z' && (Number(offsetHour) > 23 || Number(offsetMinute) > 59)) {
+    return null;
+  }
   const parsed = new Date(trimmed);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }

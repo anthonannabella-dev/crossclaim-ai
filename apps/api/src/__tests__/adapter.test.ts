@@ -89,6 +89,8 @@ interface FakeAdapterOptions {
   /** 按调用次序返回分页；返回 AdapterError 表示该次拉取失败 */
   pages?: Array<AdapterPullPage | (() => never)>;
   supportsClaimSubmission?: boolean;
+  /** 故意返回与适配器不一致的 session 平台，用于验证 session 检查 */
+  sessionPlatform?: string;
 }
 
 interface FakeAdapter extends ExternalAdapter {
@@ -128,7 +130,7 @@ function fakeAdapter(options: FakeAdapterOptions = {}): FakeAdapter {
     },
     async authenticate() {
       authCalls += 1;
-      return SESSION;
+      return options.sessionPlatform ? { ...SESSION, platform: options.sessionPlatform } : SESSION;
     },
     async pull(request) {
       pullRequests.push(request);
@@ -600,6 +602,49 @@ describe('适配器 → 导入桥', () => {
     expect((memory.batches[0].errorReport as { stage: string }).stage).toBe('persist');
     expect(memory.transactions).toHaveLength(0);
   });
+
+  it('每页到达即校验 source：后面的坏页不会让好页先落库（CHANGE #33）', async () => {
+    const adapter = fakeAdapter({
+      pages: [
+        { records: [records[0]], nextCursor: 'c1', hasMore: true },
+        { records: [{ externalId: 'X', amount: '1', source: { cookie: 'x' } }], nextCursor: null, hasMore: false },
+      ],
+    });
+    const { repository, transactions } = memoryRepo();
+
+    await expect(
+      runAdapterImport({ adapter, credentials: CREDENTIALS, context: CONTEXT, repository }),
+    ).rejects.toBeInstanceOf(AdapterSourceError);
+    expect(transactions).toHaveLength(0);
+  });
+
+  it('直接调用 runAdapterImport 也做能力体检：maxPageSize=NaN / 写入面 / session 不匹配（CHANGE #35）', async () => {
+    const nan = fakeAdapter({ maxPageSize: 10 });
+    nan.capabilities = () => ({ ...fakeAdapter().capabilities(), maxPageSize: Number.NaN });
+    const first = memoryRepo();
+    await expect(
+      runAdapterImport({ adapter: nan, credentials: CREDENTIALS, context: CONTEXT, repository: first.repository }),
+    ).rejects.toThrow(/maxPageSize/);
+    expect(first.batches).toHaveLength(0);
+
+    const { adapter: writer, calls } = writeCapableAdapter();
+    const second = memoryRepo();
+    await expect(
+      runAdapterImport({ adapter: writer, credentials: CREDENTIALS, context: CONTEXT, repository: second.repository }),
+    ).rejects.toBeInstanceOf(AdapterCapabilityError);
+    expect(calls.submit).toBe(0);
+    expect(second.batches).toHaveLength(0);
+
+    const wrongSession = fakeAdapter({
+      pages: [{ records: [], nextCursor: null, hasMore: false }],
+      sessionPlatform: 'someone-else',
+    });
+    const third = memoryRepo();
+    await expect(
+      runAdapterImport({ adapter: wrongSession, credentials: CREDENTIALS, context: CONTEXT, repository: third.repository }),
+    ).rejects.toBeInstanceOf(AdapterResponseError);
+    expect(wrongSession.pullRequests).toHaveLength(0);
+  });
 });
 
 // ============================================================
@@ -614,17 +659,23 @@ describe('来源载荷边界（CHANGE #30）', () => {
 
     expect(() => assertSafeSource({ n: 10n }, { platform: 't' })).toThrow(/BigInt/);
     expect(() => assertSafeSource({ f: () => 1 }, { platform: 't' })).toThrow(/function/);
-    expect(() => assertSafeSource({ d: new Date('nope') }, { platform: 't' })).toThrow(/非法日期/);
+    expect(() => assertSafeSource({ d: new Date('2026-09-28T00:00:00Z') }, { platform: 't' })).toThrow(
+      /非纯 JSON 对象/,
+    );
     expect(() => assertSafeSource({ blob: 'x'.repeat(300 * 1024) }, { platform: 't' })).toThrow(
       /超过单条上限/,
     );
+    expect(() => assertSafeSource({ m: new Map() }, { platform: 't' })).toThrow(/非纯 JSON 对象/);
+    expect(() => assertSafeSource({ s: new Set([1]) }, { platform: 't' })).toThrow(/非纯 JSON 对象/);
+    expect(() => assertSafeSource({ missing: undefined }, { platform: 't' })).toThrow(/undefined/);
+    expect(() => assertSafeSource({ list: [1, undefined] }, { platform: 't' })).toThrow(/undefined/);
   });
 
-  it('普通 JSON 载荷（含共享引用与 Date）放行', () => {
+  it('严格 JSON-safe 载荷放行（含共享引用），顶层 undefined 视为未提供', () => {
     const shared = { a: 1 };
     expect(() =>
       assertSafeSource(
-        { list: [shared, shared], when: new Date('2026-09-28T00:00:00Z'), n: 1.5, ok: true },
+        { list: [shared, shared], when: '2026-09-28T00:00:00Z', n: 1.5, ok: true, nil: null },
         { platform: 't' },
       ),
     ).not.toThrow();

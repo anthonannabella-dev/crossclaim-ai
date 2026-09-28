@@ -267,7 +267,74 @@ describe('导入编排', () => {
     const { repository } = memoryRepo();
     const result = await runImport({ context: CONTEXT, csvText: 'Net Charge\n', repository });
     expect(result.rowsTotal).toBe(0);
-    expect(result.status).toBe('IMPORTED');
+    expect(result.status).toBe('FAILED');
+  });
+
+  // CHANGE #36：rowsFailed 是"失败的数据行数"，不是 issue 数量；空行不占 rowsTotal
+  it('一行多个校验问题只算一行失败；恒等式 rowsTotal = rowsOk + duplicates + rowsFailed', async () => {
+    const { repository, batches } = memoryRepo();
+    const result = await runImportRows({
+      context: CONTEXT,
+      header: ['amount', 'currency', 'occurredAt'],
+      rows: [{ amount: 'abc', currency: 'US', occurredAt: 'oops' }],
+      mapping: { amount: 'amount', currency: 'currency', occurredAt: 'occurredAt' },
+      repository,
+    });
+
+    expect(result.rowsTotal).toBe(1);
+    expect(result.rowsFailed).toBe(1);
+    expect(result.issues).toHaveLength(3);
+    expect(result.rowsTotal).toBe(result.rowsOk + result.duplicates + result.rowsFailed);
+    expect(batches[0].status).toBe('FAILED');
+  });
+
+  it('空行不占 rowsTotal（全是空行 → FAILED，不是假成功）', async () => {
+    const { repository, batches } = memoryRepo();
+    const result = await runImportRows({
+      context: CONTEXT,
+      header: ['amount'],
+      rows: [{ amount: '   ' }, { amount: '' }],
+      mapping: { amount: 'amount' },
+      repository,
+    });
+    expect(result.rowsTotal).toBe(0);
+    expect(result.rowsFailed).toBe(0);
+    expect(result.status).toBe('FAILED');
+    expect((batches[0].errorReport as { emptyRowsSkipped: number }).emptyRowsSkipped).toBe(2);
+  });
+
+  it('合法行全部是重复 + 另有失败行 → PARTIAL（不是 FAILED）', async () => {
+    const { repository } = memoryRepo();
+    await runImportRows({
+      context: CONTEXT,
+      header: ['amount'],
+      rows: [{ amount: '10' }],
+      mapping: { amount: 'amount' },
+      repository,
+    });
+    const second = await runImportRows({
+      context: CONTEXT,
+      header: ['amount'],
+      rows: [{ amount: '10' }, { amount: 'bad' }],
+      mapping: { amount: 'amount' },
+      repository,
+    });
+    expect(second.rowsOk).toBe(0);
+    expect(second.duplicates).toBe(1);
+    expect(second.rowsFailed).toBe(1);
+    expect(second.status).toBe('PARTIAL');
+  });
+
+  // CHANGE #34：时间戳同样要做日历合法性校验，不能只靠 JS Date
+  it('非法 ISO 时间戳一律拒绝（不得被 JS 滚成另一天）', () => {
+    expect(parseOccurredAt('2026-02-30T10:00:00Z')).toBeNull();
+    expect(parseOccurredAt('2026-09-31T10:00:00+08:00')).toBeNull();
+    expect(parseOccurredAt('2026-13-01T10:00:00Z')).toBeNull();
+    expect(parseOccurredAt('2026-09-28T25:00:00Z')).toBeNull();
+    expect(parseOccurredAt('2026-09-28T10:60:00Z')).toBeNull();
+    expect(parseOccurredAt('2026-09-28T10:00:00+99:00')).toBeNull();
+    expect(parseOccurredAt('2026-09-28T10:00:00Z')?.toISOString()).toBe('2026-09-28T10:00:00.000Z');
+    expect(parseOccurredAt('2026-09-28T10:00:00+08:00')?.toISOString()).toBe('2026-09-28T02:00:00.000Z');
   });
 
   // CHANGE #29：PARSING 之后的预期外失败必须尽力进入 FAILED 终态，不允许死批次

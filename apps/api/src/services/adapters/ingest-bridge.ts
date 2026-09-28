@@ -32,6 +32,7 @@ import {
 } from './types';
 import { toCanonicalRows, withSourceEvidence } from './canonical';
 import { assertSafeSource } from './source-guard';
+import { assertAdapterCapabilities } from './registry';
 import { runImportRows, type ImportContext, type ImportRepository, type ImportResult } from '../ingest';
 
 export interface AdapterImportInput {
@@ -88,7 +89,8 @@ export async function runAdapterImport(input: AdapterImportInput): Promise<Adapt
   const now = input.now ?? (() => new Date());
   const maxPages = input.maxPages ?? 20;
   const maxRecords = input.maxRecords ?? 50_000;
-  const caps = adapter.capabilities();
+  // CHANGE #35：公共执行函数本身必须安全 —— 直接调用也要过完整能力体检（不能只依赖 Registry）
+  const caps = assertAdapterCapabilities(adapter);
 
   if (!caps.domains.includes(context.domain) || !caps.channels.includes(context.channel)) {
     throw new AdapterCapabilityError(
@@ -115,6 +117,11 @@ export async function runAdapterImport(input: AdapterImportInput): Promise<Adapt
 
   try {
     const session: AdapterSession = await adapter.authenticate(credentials);
+    if (session.platform !== caps.platform) {
+      throw new AdapterResponseError(
+        `session.platform=${session.platform} 与适配器 ${caps.platform} 不一致；拒绝继续拉取`,
+      );
+    }
 
     for (;;) {
       if (pages >= maxPages || records.length >= maxRecords) break;
@@ -142,6 +149,13 @@ export async function runAdapterImport(input: AdapterImportInput): Promise<Adapt
           `适配器 ${caps.platform} 单页返回 ${page.records.length} 条，超过声明上限 ${effectivePageSize}；拒绝累积`,
         );
       }
+      // CHANGE #33：每页到达即校验 source 边界，通过以后才累计进内存
+      page.records.forEach((record, index) => {
+        assertSafeSource(record.source, {
+          platform: caps.platform,
+          rowNumber: records.length + index + 1,
+        });
+      });
       records.push(...page.records);
 
       if (!page.hasMore) {
@@ -162,11 +176,6 @@ export async function runAdapterImport(input: AdapterImportInput): Promise<Adapt
     if (records.length === 0) throw err;
     pullError = describePullFailure(err);
   }
-
-  // CHANGE #30：来源载荷边界校验（凭据 / JSON 安全 / 大小），失败即拒绝整批，不留半批数据
-  records.forEach((record, index) => {
-    assertSafeSource(record.source, { platform: caps.platform, rowNumber: index + 1 });
-  });
 
   const canonical = toCanonicalRows(records);
   const provenance: Record<string, unknown> = {
