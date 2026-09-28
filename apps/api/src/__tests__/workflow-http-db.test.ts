@@ -498,4 +498,99 @@ describe('C-0008-B1 — 机会复核端点（真实 HTTP + PostgreSQL）', () =>
       expect(((await again.json()) as { alreadyConfirmed: boolean }).alreadyConfirmed).toBe(true);
     });
   });
+
+  it('案件读取端点：列表不含正文；正文仅 OWNER/ADMIN/OPS；VIEWER 403；跨租户 404', async () => {
+    const opportunity = await prisma.recoveryOpportunity.create({
+      data: {
+        organizationId: ORG,
+        domain: 'LOGISTICS',
+        channel: 'OTHER',
+        status: 'CONVERTED',
+        opportunityType: 'FREIGHT_RATE_VARIANCE',
+        title: '读取端点用例',
+        amountExpected: new Prisma.Decimal('17.7500'),
+        amountActual: new Prisma.Decimal('20.4125'),
+        recoverableAmount: new Prisma.Decimal('2.6625'),
+        currency: 'USD',
+        detectedAt: NOW,
+      },
+    });
+    const kase = await prisma.case.create({
+      data: {
+        organizationId: ORG,
+        caseNo: `CASE-${opportunity.id}`,
+        title: '读取端点案件',
+        domain: 'LOGISTICS',
+        status: 'WON',
+        claimedAmount: new Prisma.Decimal('2.6625'),
+        currency: 'USD',
+      },
+    });
+    await prisma.claim.create({
+      data: {
+        organizationId: ORG,
+        caseId: kase.id,
+        round: 1,
+        status: 'DRAFT',
+        target: 'CARRIER',
+        aiDraftText: 'Claim draft (CASE-1) — FRT\nRecoverable amount: 2.6625 USD',
+      },
+    });
+    const foreignOpportunity = await prisma.recoveryOpportunity.create({
+      data: {
+        organizationId: ORG_B,
+        domain: 'LOGISTICS',
+        channel: 'OTHER',
+        status: 'CONVERTED',
+        opportunityType: 'FREIGHT_RATE_VARIANCE',
+        title: '外部机会',
+        amountExpected: new Prisma.Decimal('1.0000'),
+        amountActual: new Prisma.Decimal('2.0000'),
+        recoverableAmount: new Prisma.Decimal('1.0000'),
+        currency: 'USD',
+        detectedAt: NOW,
+      },
+    });
+    const foreignCase = await prisma.case.create({
+      data: {
+        organizationId: ORG_B,
+        caseNo: `CASE-${foreignOpportunity.id}`,
+        title: '外部案件',
+        domain: 'LOGISTICS',
+        status: 'WON',
+        claimedAmount: new Prisma.Decimal('1.0000'),
+        currency: 'USD',
+      },
+    });
+
+    await withServer(async (base) => {
+      const opsCookie = await login(base, 'ops-http@example.com');
+      const list = await fetch(`${base}/cases`, { headers: { cookie: opsCookie } });
+      expect(list.status).toBe(200);
+      const listBody = await list.text();
+      expect(listBody).toContain('读取端点案件');
+      expect(listBody).not.toContain('Claim draft');
+
+      const detail = await fetch(`${base}/cases/${kase.id}`, { headers: { cookie: opsCookie } });
+      expect(detail.status).toBe(200);
+      expect(await detail.text()).not.toContain('Claim draft');
+
+      const opsClaim = await fetch(`${base}/cases/${kase.id}/claim`, { headers: { cookie: opsCookie } });
+      expect(opsClaim.status).toBe(200);
+      const claimView = (await opsClaim.json()) as { sections: string[]; version: number };
+      expect(claimView.version).toBe(1);
+      expect(claimView.sections[0]).toContain('Claim draft');
+
+      const viewerCookie = await login(base, 'viewer-http@example.com');
+      const viewerClaim = await fetch(`${base}/cases/${kase.id}/claim`, { headers: { cookie: viewerCookie } });
+      expect(viewerClaim.status).toBe(403);
+      const viewerCase = await fetch(`${base}/cases/${kase.id}`, { headers: { cookie: viewerCookie } });
+      expect(viewerCase.status).toBe(403);
+
+      const crossTenant = await fetch(`${base}/cases/${foreignCase.id}/claim`, {
+        headers: { cookie: opsCookie },
+      });
+      expect(crossTenant.status).toBe(404);
+    });
+  });
 });

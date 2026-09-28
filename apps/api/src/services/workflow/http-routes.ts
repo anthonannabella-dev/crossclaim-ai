@@ -28,6 +28,7 @@ import {
 import { confirmCommercialTerms, createCaseForOpportunity } from './case-creation';
 import { confirmRecoveryOutcome } from './recovery-outcome';
 import { advanceBillingInvoice, listBillingInvoices } from './billing';
+import { getCase, getClaimDraft, listCaseEvidence, listCases } from './case-read';
 import { REJECT_REASONS, WorkflowError, reviewOpportunity } from './opportunity-review';
 import { ForbiddenError } from './permissions';
 
@@ -37,6 +38,10 @@ const CONNECTION_PATH = /^\/connections(?:\/([^/]+)\/(status|credential-ref))?$/
 const COMMERCIAL_TERMS_PATH = /^\/cases\/([^/]+)\/commercial-terms$/;
 const RECOVERY_OUTCOME_PATH = /^\/cases\/([^/]+)\/recovery-outcome$/;
 const BILLING_PATH = /^\/billing(?:\/([^/]+)\/status)?$/;
+const CASE_LIST_PATH = /^\/cases$/;
+const CASE_DETAIL_PATH = /^\/cases\/([^/]+)$/;
+const CASE_EVIDENCE_PATH = /^\/cases\/([^/]+)\/evidence$/;
+const CASE_CLAIM_PATH = /^\/cases\/([^/]+)\/claim$/;
 
 /** 请求体层面的错误（与领域状态无关），统一映射为 400。 */
 class HttpBodyError extends Error {
@@ -134,7 +139,13 @@ export async function handleWorkflowRequest(
   const termsPath = COMMERCIAL_TERMS_PATH.exec(path);
   const outcomePath = RECOVERY_OUTCOME_PATH.exec(path);
   const billingPath = BILLING_PATH.exec(path);
-  if (!review && !connection && !termsPath && !outcomePath && !billingPath) return false;
+  const caseListPath = CASE_LIST_PATH.test(path);
+  const caseDetail = CASE_DETAIL_PATH.exec(path);
+  const caseEvidence = CASE_EVIDENCE_PATH.exec(path);
+  const caseClaim = CASE_CLAIM_PATH.exec(path);
+  if (!review && !connection && !termsPath && !outcomePath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim) {
+    return false;
+  }
 
   const method = req.method ?? 'GET';
   const allowed =
@@ -142,7 +153,9 @@ export async function handleWorkflowRequest(
       ? ['GET', 'POST']
       : billingPath && !billingPath[1]
         ? ['GET']
-        : ['POST'];
+        : caseListPath || caseDetail || caseEvidence || caseClaim
+          ? ['GET']
+          : ['POST'];
   if (!allowed.includes(method)) {
     sendJson(res, 405, { error: 'METHOD_NOT_ALLOWED' });
     return true;
@@ -162,6 +175,44 @@ export async function handleWorkflowRequest(
   };
 
   try {
+    if (caseListPath) {
+      sendJson(res, 200, {
+        items: await listCases(deps.prisma, { organizationId: context.organizationId, role: context.role }),
+      });
+      return true;
+    }
+    if (caseDetail) {
+      sendJson(
+        res,
+        200,
+        await getCase(deps.prisma, { organizationId: context.organizationId, role: context.role }, caseDetail[1] ?? ''),
+      );
+      return true;
+    }
+    if (caseEvidence) {
+      sendJson(res, 200, {
+        items: await listCaseEvidence(
+          deps.prisma,
+          { organizationId: context.organizationId, role: context.role },
+          caseEvidence[1] ?? '',
+        ),
+      });
+      return true;
+    }
+    if (caseClaim) {
+      // 正文只在此端点返回；列表接口不返回正文（裁定）
+      sendJson(
+        res,
+        200,
+        await getClaimDraft(
+          deps.prisma,
+          { organizationId: context.organizationId, role: context.role },
+          caseClaim[1] ?? '',
+        ),
+      );
+      return true;
+    }
+
     if (billingPath) {
       if (!billingPath[1]) {
         sendJson(res, 200, {
