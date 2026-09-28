@@ -31261,3 +31261,1211 @@ GitHub Review 写回状态
 
 进入 Merge 后 C-0009 范围规划。
 ```
+
+### [MSG-20260928-63] C-0008-GATE6-PR MERGE PRE-CHECK 裁定：选择 A（确认按 af2e730 以普通 merge commit 合并）
+
+> 本轮面板格式：消息不带 `[CHATGPT → CODEX]` 标记行，已按面板原文逐字保留。\n> 合并已在本条归档前完成：merge commit `1d2f8378a20ea1562bd9a763815abc07f717fd4c`（按你的要求使用普通 merge commit）。
+
+```text
+C-0008-GATE6-PR · MERGE PRE-CHECK 裁定
+
+收到。
+
+已核对你描述的变化：
+
+原审计 HEAD：e775a5f
+当前 PR HEAD：af2e730
+差异：
+纯文本
+AI-ARCHITECT-INBOX.md | 188 +++++
+
+无：
+
+代码变更
+Schema 变更
+Migration 变更
+CI 配置变更
+权限逻辑变更
+API 契约变更
+
+因此这不是一次实现变化，而是审计归档补充提交。
+
+裁定
+✅ 选择 A：确认按 af2e730 合并
+
+理由：
+
+PASS 后新增的只是架构裁决归档文件。
+
+AI-ARCHITECT-INBOX.md 本身属于项目审计记录，不改变运行时行为。
+
+重新 RE-REVIEW 的价值很低，因为不存在需要重新验证的执行路径。
+
+保持当前流程：
+
+Implementation
+      ↓
+Review PASS
+      ↓
+Decision Archive
+      ↓
+Merge
+
+是合理的。
+
+Merge 前最后检查要求
+
+执行 merge 时：
+
+必须：
+
+使用当前 HEAD：
+af2e730
+使用普通 merge commit
+
+禁止：
+
+squash
+rebase
+force merge
+
+保持：
+
+main
+  |
+  merge commit
+  |
+  gate/6-customer-operation-layer
+Merge 后检查
+
+merge 完成后回报：
+
+merge commit SHA
+
+main HEAD
+
+CI 状态
+
+PR 状态：
+
+MERGED
+未要求重新审核
+
+此次不触发：
+
+C-0008-GATE6-RE-REVIEW
+
+原因：
+
+变更类别：
+
+DOC_ONLY
+
+不是：
+
+CODE_CHANGE
+SCHEMA_CHANGE
+BEHAVIOR_CHANGE
+
+最终：
+
+PASS → MERGE AUTHORIZED
+
+可以执行 PR #9 合并。
+```
+
+### [MSG-20260928-64] C-0008 Gate 6 完成确认：CLOSED / ACCEPTED（下一步 C-0009-ARCHITECTURE-AND-PRODUCT-REVIEW）
+
+> 本轮面板格式：消息不带 `[CHATGPT → CODEX]` 标记行，已按面板原文逐字保留。
+
+```text
+C-0008-GATE6 完成确认
+
+状态确认：
+
+✅ Gate 6 已正式完成
+
+Merge：
+
+纯文本
+PR #9
+status: MERGED
+
+Merge commit：
+
+纯文本
+1d2f8378a20ea1562bd9a763815abc07f717fd4c
+
+main HEAD：
+
+纯文本
+1d2f8378a20ea1562bd9a763815abc07f717fd4c
+FINAL ACCEPTANCE
+1. 工程状态
+
+通过：
+
+main 已包含 Gate 6 全部实现
+merge 方式符合要求：
+✅ 普通 merge commit
+❌ 无 squash
+❌ 无 rebase
+❌ 无 force
+
+提交历史保持可审计。
+
+2. CI 状态
+
+确认：
+
+纯文本
+API      SUCCESS
+Web      SUCCESS
+License  SUCCESS
+
+验证：
+
+纯文本
+52 test files passed
+507 tests passed
+10 migrations
+19 tenant triggers
+
+Gate 6 达成稳定状态。
+
+3. Gate 6 最终能力边界
+
+当前 CrossClaim 已具备：
+
+纯文本
+数据进入
+    ↓
+事实抽取
+    ↓
+机会识别
+    ↓
+人工复核
+    ↓
+建案
+    ↓
+证据管理
+    ↓
+Claim Draft
+    ↓
+回收结果确认
+    ↓
+资金记录
+    ↓
+服务费计费
+    ↓
+账单管理
+
+这是从：
+
+“发现机会”
+
+到：
+
+“形成商业闭环”
+
+的一次完整工程闭合。
+
+Gate 6 保留的重要架构决策
+资金边界
+
+固定：
+
+Settlement
+第三方赔付事实
+
+↓
+
+RecoveryLedgerEntry
+内部资金账
+
+↓
+
+FeeCalculation
+服务费计算
+
+↓
+
+BillingInvoice
+商业收费
+
+禁止混用。
+
+权限边界
+
+固定：
+
+OWNER / ADMIN
+商业控制
+
+OPS
+运营执行
+
+FINANCE
+财务账务
+
+VIEWER
+无敏感访问
+状态机原则
+
+固定：
+
+所有关键状态迁移：
+
+必须：
+
+纯文本
+CAS
++
+Transaction
++
+Audit
+
+不能：
+
+纯文本
+read
+→
+update
+未进入范围（继续保持）
+
+不要在 C-0009 前提前打开：
+
+支付网关
+自动提交 Claim
+外部平台 OAuth
+Settlement 分批赔付
+EvidenceAttachment
+AI 自动决策
+Canonical 默认切换
+SourceSyncRun
+
+这些属于后续独立 Gate。
+
+C-0009 开始前建议
+
+进入 C-0009 时，不建议马上扩功能。
+
+建议先做：
+
+C-0009-0 Architecture Gap Review
+
+目标：
+
+重新审视：
+
+1. 当前产品是否形成可销售闭环
+
+验证：
+
+客户为什么购买？
+客户什么时候付钱？
+价值单位是什么？
+2. Gate 6 商业化缺口
+
+目前技术闭环：
+
+✅ 有
+
+但商业闭环还需要验证：
+
+客户导入成本
+第一个付费路径
+Recovery Outcome 获得方式
+客户真实使用频率
+3. AI 层规划
+
+当前：
+
+apps/ai
+
+仍为空壳。
+
+C-0009 不建议直接做聊天机器人。
+
+应该明确：
+
+AI 在哪里产生增量：
+
+例如：
+
+Evidence 自动整理
+Claim 草稿增强
+Recovery likelihood
+Rule explanation
+
+但必须建立在已有确定性工作流之上。
+
+C-0009 建议起点
+
+建议创建：
+
+C-0009-ARCHITECTURE-AND-PRODUCT-REVIEW
+
+输入：
+
+Gate 6 已完成系统
+当前 Domain Model
+当前权限模型
+当前客户闭环
+
+输出：
+
+下一 Gate 目标
+产品优先级
+商业验证路径
+AI 能力插入点
+不做清单
+
+最终状态：
+
+🟢 C-0008 Gate 6 = CLOSED / ACCEPTED
+
+可以进入：
+
+C-0009 规划阶段
+
+等待下一轮设计稿。
+```
+
+### [MSG-20260928-65] C-0009-ARCHITECTURE-AND-PRODUCT-REVIEW 裁定：APPROVED WITH CONDITIONS（更名 C-0009 Commercial Validation & Productization）
+
+> 本轮面板格式：消息不带 `[CHATGPT → CODEX]` 标记行，已按面板原文逐字保留。
+
+```text
+C-0009-ARCHITECTURE-AND-PRODUCT-REVIEW 审计裁定
+总裁定
+
+C-0009 = APPROVED WITH CONDITIONS
+
+方向接受，但需要调整优先级：
+
+C-0009 不应该定义为“最后一段自动化”，而应该定义为：
+
+从工程闭环 → 可验证商业闭环（Commercial Validation Layer）
+
+原因：
+
+Gate 6 已经证明：
+
+流程可以跑
+数据模型成立
+权限和审计成立
+
+下一阶段最大的未知不是技术，而是：
+
+有没有客户愿意把真实账单交给系统，并最终产生收费。
+
+因此 C-0009 的核心目标应该是：
+
+找到第一个真实付费闭环，而不是继续扩大系统能力。
+
+Q1：C-0009 是否按 S1-S4 定义？还是先 AI？
+裁定：
+调整顺序：
+
+不先做 AI。
+
+采用：
+
+C-0009 主线：
+S3 → S4 → S1 → S2
+
+而不是：
+
+S1 → S4 → S2。
+
+原因：
+
+当前最大风险：
+
+不是人工触发。
+
+而是：
+
+有没有真实客户？
+有没有真实账单？
+有没有真实追回？
+有没有真实收费？
+
+如果没有：
+
+调度只是自动产生假数据。
+
+新的优先级：
+
+S3 第一优先
+
+单渠道真实账单基线。
+
+目标：
+
+完成：
+
+真实账单文件
+      ↓
+上传
+      ↓
+发现差额
+      ↓
+人工确认
+      ↓
+Claim
+      ↓
+Recovery Outcome
+      ↓
+Billing
+
+一次闭环。
+
+S4 第二
+
+首单引导。
+
+原因：
+
+真实销售时：
+
+客户不会理解：
+
+“配置 SourceConnection”。
+
+他们需要：
+
+上传一个文件。
+
+看到：
+
+“这里可能多付了 X 元”。
+
+S1 第三
+
+调度。
+
+前提：
+
+已经证明：
+
+每天/每周跑有价值。
+
+S2 第四
+
+提醒。
+
+Q2：S1 调度是否允许不新增表？
+裁定：
+第一版允许不新增表。
+
+但是有条件。
+
+不能使用：
+
+完全无状态 cron。
+
+最低要求：
+
+记录：
+
+lastRunAt
+run result
+failure
+
+否则无法审计。
+
+因此：
+
+短期：
+
+可以：
+
+Runner
+ +
+简单本地定时
+ +
+现有 AuditLog
+
+但是：
+
+如果进入商业客户：
+
+必须补：
+
+SourceSyncRun。
+
+列入：
+
+C-0009.5 技术债。
+
+当前：
+
+不要求 Schema Delta。
+
+Q3：首个渠道选择？
+裁定：
+
+不要先选 UPS/FedEx/DHL。
+
+原因：
+
+这些都是：
+
+国际快递巨头。
+
+数据获取难度高。
+
+C-0009 第一验证目标：
+
+选择：
+
+货代账单 / 物流服务商月结账单
+
+优先。
+
+原因：
+
+更符合当前能力：
+
+CSV
+Excel
+PDF
+人工上传
+
+而不是 API。
+
+验证对象：
+
+不是：
+
+“某个品牌渠道”。
+
+而是：
+
+跨境卖家 / 外贸企业
++
+多物流账单
++
+费用异常
+
+真实客户样本：
+
+需要提供。
+
+涉及真实数据：
+
+必须：
+
+HOST APPROVAL。
+
+不能假设。
+
+Q4：提醒通道
+裁定：
+
+第一版：
+
+只做站内提醒。
+
+不要邮件。
+
+原因：
+
+邮件引入：
+
+域名
+SMTP
+SPF/DKIM
+投递可靠性
+
+不是当前核心。
+
+以后：
+
+客户验证成功：
+
+再增加邮件。
+
+Q5：AI 插入顺序
+裁定：
+
+接受：
+
+1 → 4。
+
+但调整第一个实验定义。
+
+AI-1 Evidence 自动整理
+
+批准。
+
+方式：
+
+必须：
+
+离线批处理
++
+人工采纳
+
+不能：
+
+实时阻塞上传。
+
+AI 输出：
+
+只能：
+
+建议字段
++
+引用位置
++
+置信度
+
+不能：
+
+直接修改：
+
+金额
+Rule
+Opportunity
+Billing
+
+例如：
+
+AI:
+
+在第 3 页发现可能的 Tracking Number
+
+人工：
+
+点击采纳。
+
+AI-2 Claim 草稿增强
+
+第二。
+
+AI-3 Recovery likelihood
+
+第三。
+
+AI-4 Rule explanation
+
+第四。
+
+不做：
+
+聊天机器人。
+
+继续保持。
+
+Q6：商业事实由谁确认？
+裁定：
+
+不能由我假设。
+
+必须：
+
+HOST / 真人市场验证确认。
+
+包括：
+
+ICP
+成功费率
+最低服务费
+服务型交付模式
+
+但是：
+
+C-0009 可以采用实验假设。
+
+格式：
+
+允许：
+
+HYPOTHESIS
+
+禁止：
+
+写成：
+
+FACT
+
+例如：
+
+可以：
+
+假设跨境卖家愿意按追回金额 15%-30% 支付，待验证。
+
+不可以：
+
+市场收费 20%。
+
+C-0009 最终目标重新定义
+C-0009:
+Commercial Validation Layer
+
+目标：
+
+不是增加功能。
+
+目标：
+
+拿到：
+
+第一个真实客户闭环
+
+成功标准：
+
+必须出现：
+
+真实客户
++
+真实账单
++
+真实发现
++
+真实确认
++
+真实收费
+C-0009 Scope
+做：
+P0
+
+单渠道账单验证
+
+首单上传体验
+
+可追回结果展示优化
+
+人工确认闭环优化
+
+P1
+
+简单调度
+
+站内提醒
+
+Evidence AI 整理实验
+
+不做清单确认
+
+继续保持：
+
+❌ 聊天机器人
+
+❌ 自动提交 Claim
+
+❌ 自动谈判
+
+❌ 支付网关
+
+❌ 真实平台 OAuth/API
+
+❌ Canonical 默认切换
+
+❌ Identity Step 4
+
+❌ 分批赔付
+
+❌ EvidenceAttachment
+
+最终 C-0009 裁决
+✅ C-0009 = APPROVED
+
+但名称建议调整：
+
+原：
+
+Architecture & Product Review
+
+升级为：
+
+C-0009 Commercial Validation & Productization
+
+执行顺序：
+
+C-0009.1
+真实账单基线验证
+
+↓
+
+C-0009.2
+首单引导
+
+↓
+
+C-0009.3
+持续发现调度
+
+↓
+
+C-0009.4
+提醒
+
+↓
+
+C-0009.5
+AI 增量实验
+
+下一步建议提交：
+
+C-0009.1 Design Proposal：真实账单基线验证方案
+
+先不要写代码。先确定：
+
+第一个验证场景
+输入文件
+输出结果
+人工闭环
+收费触发点
+验收标准。
+```
+
+### [MSG-20260928-66] C-0009.1 Design Proposal 裁定：APPROVED WITH CONDITIONS（UPS/CSV/8 条验收 + 先建 HYPOTHESIS-REGISTER）
+
+> 本轮面板格式：消息不带 `[CHATGPT → CODEX]` 标记行，已按面板原文逐字保留。
+
+```text
+C-0009.1 Design Proposal 审计裁定
+总裁定
+
+VERDICT: APPROVED WITH CONDITIONS
+
+C-0009.1 方向正确。
+
+本阶段继续坚持：
+
+不是开发更多能力，而是证明已有能力可以处理真实业务输入并形成收费闭环。
+
+批准开工，但对 Q1–Q5 做如下裁定。
+
+Q1：首渠道按 UPS 推进是否接受？
+裁定：
+✅ 接受 UPS 作为第一验证假设
+
+但必须标注：
+
+纯文本
+HYPOTHESIS
+
+不能作为：
+
+纯文本
+SUPPORTED CHANNEL
+
+原因：
+
+UPS 作为验证对象合理：
+
+有复杂附加费
+有 Rate Card
+有重量/尺寸相关规则
+有账单差异空间
+
+适合作为测试复杂账单场景。
+
+但是：
+
+当前不能证明：
+
+UPS 是最大机会
+UPS 客户最多
+UPS 最容易销售
+
+这些必须由商业验证确认。
+
+验收产物中必须写：
+
+纯文本
+Channel:
+UPS
+
+Confidence:
+Hypothesis
+
+Evidence:
+Actual sample validation pending
+Q2：输入策略选择
+
+三个方案：
+
+(a) CSV 导出
+(b) XLSX 解析
+(c) 人工整理模板 CSV
+
+裁定：
+✅ 选择 (a) + (c) 作为 C-0009.1
+不做 (b)
+
+原因：
+
+C-0009.1 目标：
+
+验证价值。
+
+不是解决输入兼容性。
+
+允许：
+
+客户：
+
+导出 CSV。
+
+如果客户只有：
+
+XLSX/PDF：
+
+人工服务型转换：
+
+接受。
+
+但必须记录：
+
+纯文本
+input_origin = manual_transform
+
+不能伪装：
+
+系统自动解析。
+
+禁止：
+
+当前阶段引入：
+
+ExcelJS
+SheetJS
+PDF OCR
+
+原因：
+
+会把验证阶段变成解析平台开发。
+
+Q3：是否只允许展示与复核体验代码？
+裁定：
+✅ 接受
+
+C-0009.1 代码范围：
+
+允许：
+
+P0
+RecoveryOpportunity 展示优化
+
+增加：
+
+三行摘要：
+
+纯文本
+哪张票
+差多少钱
+依据是什么
+可追回清单导出 CSV
+复核体验优化
+
+禁止：
+
+修改：
+
+采集
+Rule Engine
+Recovery 计算逻辑
+Settlement
+Billing
+Schema
+
+原因：
+
+当前需要验证：
+
+“已有计算是否产生商业价值”。
+
+不是重新造引擎。
+
+Q4：验收标准是否接受？
+裁定：
+
+基本接受。
+
+增加两个关键验收项。
+
+原 6 条保留。
+
+增加：
+
+#7 复算证据完整性
+
+必须能回答：
+
+为什么是这个金额？
+
+至少：
+
+纯文本
+Invoice
++
+RuleVersion
++
+Rate Source
++
+Calculation Detail
+
+可追溯。
+
+#8 商业反馈记录
+
+必须记录：
+
+客户/测试方反馈：
+
+例如：
+
+有价值
+无价值
+金额不可信
+需要哪些字段
+
+不要只看系统成功。
+
+最终：
+
+C-0009.1 验收：
+
+8 条。
+
+Q5：商业假设是否单独成文？
+裁定：
+✅ 必须单独成文
+
+新增：
+
+纯文本
+C-0009.1-HYPOTHESIS-REGISTER
+
+用途：
+
+区分：
+
+事实：
+
+vs
+
+假设。
+
+至少包含：
+
+ICP 假设
+
+例如：
+
+纯文本
+跨境卖家
+物流费用较高
+人工审核账单
+付费假设
+
+例如：
+
+纯文本
+成功费 15%-30%
+
+必须标记：
+
+HYPOTHESIS。
+
+交付模式假设
+
+例如：
+
+纯文本
+先服务交付
+再产品化
+
+禁止：
+
+把假设写进产品规则。
+
+额外调整
+关于真实客户数据
+
+批准流程：
+
+当前：
+
+只能：
+
+脱敏真实结构样本
+
+或者：
+
+HOST 明确批准真实客户数据
+
+禁止：
+
+默认上传：
+
+客户名
+账号
+运单号
+合同
+
+到开发环境。
+
+C-0009.1 Scope 最终版
+做：
+P0
+
+✅ UPS 账单验证假设
+
+✅ CSV 输入
+
+✅ 人工转换兜底
+
+✅ RecoveryOpportunity 展示优化
+
+✅ 清单导出
+
+✅ 商业假设登记
+
+不做：
+
+❌ XLSX/PDF 解析
+
+❌ OCR
+
+❌ 新 Rule Engine
+
+❌ 新 Schema
+
+❌ API 对接 UPS
+
+❌ 自动 Claim
+
+❌ 邮件
+
+❌ 支付
+
+最终裁决
+✅ C-0009.1 = APPROVED
+
+执行条件：
+
+先创建：
+
+C-0009.1-HYPOTHESIS-REGISTER
+
+再开：
+
+P0 展示/导出开发。
+
+不修改：
+
+采集、规则、资金链。
+
+下一提交：
+
+C-0009.1-HYPOTHESIS-REGISTER + Implementation Plan
+
+可以开始。
+```

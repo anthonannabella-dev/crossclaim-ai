@@ -93,5 +93,6 @@ AI 负责文档理解、字段抽取、异常解释、证据推荐、案件总�
 | `LEGACY_MIGRATION_AUDIT.md` | 旧项目只读审计报告 |
 | `AGENTS.md` | AI Agent 协作规则 |
 | `MODEL_LICENSES.md` | 模型权重许可证登记 |
+| `API.md` | 内部 HTTP 端点参考（含角色矩阵与错误码） |
 
-*（`DEPLOYMENT.md` / `SECURITY.md` / `OPERATIONS.md` / `API.md` 待补，未完成的文档不代写。）*
+*（`DEPLOYMENT.md` / `SECURITY.md` / `OPERATIONS.md` 待补，未完成的文档不代写。）*
