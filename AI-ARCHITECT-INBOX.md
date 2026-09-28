@@ -20717,3 +20717,304 @@ Final Detection switch
 
 继续推进。
 ```
+
+### [MSG-20260928-33] C-0006-B1 Checkpoint Review：PASS（影子评估隔离通过，允许进入 B2 Schema Delta）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE:
+CHECKPOINT REVIEW
+
+ID:
+C-0006-B1
+
+GATE:
+4
+
+MODULE:
+CanonicalFact → Detection Shadow
+
+VERDICT:
+
+PASS
+
+C-0006-B1 按批准边界完成。
+
+1. RuleEvaluationShadow 独立隔离
+
+PASS。
+
+确认符合架构要求：
+
+纯文本
+CanonicalFact
+        |
+        v
+RuleEvaluationShadow
+        |
+        X
+RecoveryOpportunity
+
+本阶段没有污染正式业务链。
+
+满足：
+
+不创建 Opportunity
+不创建 Case
+不创建 Claim
+不创建 Settlement
+不创建 Billing
+
+保持资金链安全。
+
+2. Schema Delta
+
+PASS。
+
+本次变更符合批准范围：
+
+新增：
+
+RuleEvaluationShadow
+indexes
+FK
+tenant trigger
+
+未发生：
+
+RuleEvaluation 修改
+dedupeKey 修改
+sourceTransactionId 删除
+Opportunity 结构变化
+3. runId / engineVersion
+
+PASS。
+
+两个字段批准落地。
+
+评价：
+
+这是必要补充。
+
+原因：
+
+未来必须区分：
+
+业务规则变化：
+
+纯文本
+RuleVersion
+
+和
+
+执行器变化：
+
+纯文本
+engineVersion
+
+否则无法回答：
+
+为什么同一个规则版本，在不同时间产生不同结果？
+
+当前设计正确。
+
+4. Shadow 输入来源
+
+PASS。
+
+关键点：
+
+你没有重新复制检测逻辑。
+
+而是：
+
+纯文本
+SourceTransaction
+
+↓
+
+CanonicalFact
+
+↓
+
+同一检测引擎
+
+↓
+
+RuleEvaluationShadow
+
+这是正确迁移方式。
+
+避免：
+
+两个检测器长期漂移。
+
+5. CONFLICT 处理
+
+PASS。
+
+符合之前裁定：
+
+冲突事实：
+
+保留：
+
+纯文本
+CanonicalFact.status=CONFLICT
+
+但：
+
+不进入检测。
+
+同时：
+
+记录：
+
+纯文本
+canonical_fact.conflict_detected
+
+正确。
+
+6. Audit 设计
+
+PASS。
+
+双层审计保持：
+
+事实级
+纯文本
+canonical_fact.conflict_detected
+
+回答：
+
+哪个事实被排除？
+
+运行级
+纯文本
+rule_evaluation.shadow_completed
+
+回答：
+
+这次迁移整体表现如何？
+
+两者不能互相替代。
+
+当前实现正确。
+
+7. Parity Report
+
+PASS。
+
+新增：
+
+Fact coverage
+
+非常关键。
+
+批准。
+
+因为迁移最大风险不是：
+
+“规则算错”
+
+而是：
+
+“少算了一部分数据”。
+
+当前比较：
+
+SourceTransaction count
+ACTIVE CanonicalFact count
+CONFLICT count
+coverage ratio
+
+正确。
+
+8. 数据库验证
+
+PASS。
+
+重点确认：
+
+正常：
+
+纯文本
+RuleEvaluation = 0
+
+RecoveryOpportunity = 0
+
+Case = 0
+
+这是本阶段最重要的安全证明。
+
+CONFLICT：
+
+纯文本
+shadow excluded
+
+conflict audit exists
+
+符合 fail closed。
+
+9. 边界检查
+
+全部通过：
+
+✅ 未切换 Detection 默认入口
+
+✅ 未修改 RuleEvaluation identity
+
+✅ 未修改 dedupeKey
+
+✅ 未进入 Closure
+
+✅ 未修改资金链
+
+✅ 未接真实 API
+
+FINAL DECISION
+纯文本
+C-0006-B1:
+
+PASS
+
+允许进入：
+
+C-0006-B2 Schema Delta Request
+
+但提醒：
+
+B2 是高风险阶段。
+
+涉及：
+
+RuleEvaluation identity
+幂等语义
+历史数据映射
+Opportunity 关联稳定性
+
+必须继续保持：
+
+先提交 Schema Delta + migration plan → 再执行。
+
+下一步请提交：
+
+C-0006-B2：
+
+必须包含：
+
+canonicalDedupeKey 设计
+
+历史 RuleEvaluation → CanonicalFact 映射策略
+
+无法映射数据处理
+
+双写周期
+
+唯一约束切换顺序
+
+回滚方案
+
+收到后再裁定。
+```
