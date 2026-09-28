@@ -208,14 +208,136 @@ describe('C-0004 CP1 · Detection Spine（真实 PostgreSQL）', () => {
   it('幂等：重复执行不新增 RuleEvaluation / RecoveryOpportunity', async () => {
     const first = await runFreightRateDetection({ organizationId: ORG, repository });
     expect(first.evaluationsCreated).toBe(5);
+    const firstInv1001 = first.outcomes.find((o) => o.invoiceExternalId === 'INV-1001')!;
+    expect(firstInv1001.result).toBe('OPPORTUNITY');
 
     const second = await runFreightRateDetection({ organizationId: ORG, repository });
     expect(second.evaluationsCreated).toBe(0);
     expect(second.opportunitiesCreated).toBe(0);
     expect(second.skippedExisting).toBe(5);
 
+    // CHANGE #39：重跑必须返回数据库真实保存的结果，INV-1001 不能变回 PASS，金额必须一致
+    const secondInv1001 = second.outcomes.find((o) => o.invoiceExternalId === 'INV-1001')!;
+    expect(secondInv1001.result).toBe('OPPORTUNITY');
+    expect(secondInv1001.expected).toBe(firstInv1001.expected);
+    expect(secondInv1001.recoverable).toBe(firstInv1001.recoverable);
+    expect(secondInv1001.opportunityId).toBe(firstInv1001.opportunityId);
+
     expect(await prisma.ruleEvaluation.count({ where: { organizationId: ORG } })).toBe(5);
     expect(await prisma.recoveryOpportunity.count({ where: { organizationId: ORG } })).toBe(1);
+  });
+
+  // CHANGE #39：并发执行同一批数据，唯一键兜底，不能出现重复机会或整轮失败
+  it('并发两次检测：结果仍为 5 Evaluation / 1 Opportunity，两次调用均正常结束', async () => {
+    const [a, b] = await Promise.all([
+      runFreightRateDetection({ organizationId: ORG, repository }),
+      runFreightRateDetection({ organizationId: ORG, repository }),
+    ]);
+
+    expect(a.invoicesConsidered).toBe(5);
+    expect(b.invoicesConsidered).toBe(5);
+    expect(await prisma.ruleEvaluation.count({ where: { organizationId: ORG } })).toBe(5);
+    expect(await prisma.recoveryOpportunity.count({ where: { organizationId: ORG } })).toBe(1);
+  });
+
+  // CHANGE #40：Domain / Channel 隔离——UPS 渠道与其他 domain 的数据必须完全不参与本 slice
+  it('Domain/Channel 隔离：UPS 渠道与其他 domain 的账单、轨迹、规则完全不参与', async () => {
+    // 干扰 1：UPS 渠道的账单 + 轨迹（同运单号），金额巨大
+    await prisma.sourceTransaction.create({
+      data: {
+        organizationId: ORG, domain: 'LOGISTICS', channel: 'UPS', referenceType: 'INVOICE',
+        externalId: 'INV-UPS-1', occurredAt: new Date('2026-09-01T00:00:00Z'),
+        amount: new Prisma.Decimal('9999.0000'), currency: 'USD',
+        dedupeKey: 'fixture-ups-invoice', raw: { 'Tracking Number': '1ZUPS001' } as Prisma.InputJsonValue,
+      },
+    });
+    await prisma.sourceTransaction.create({
+      data: {
+        organizationId: ORG, domain: 'LOGISTICS', channel: 'UPS', referenceType: 'TRACKING',
+        externalId: '1ZUPS001', occurredAt: new Date('2026-09-01T00:00:00Z'), currency: 'USD',
+        dedupeKey: 'fixture-ups-tracking',
+        raw: { Lane: 'CN-SHA>US-LAX', Service: 'Ground', 'Weight Kg': '12.5000' } as Prisma.InputJsonValue,
+      },
+    });
+    // 干扰 2：UPS 渠道的费率规则，价格故意更诱人（base 1.0000），若被串用 INV-UPS-1 会变成巨额机会
+    const upsSet = await prisma.ruleSet.create({
+      data: {
+        ownerType: 'SYSTEM', ownerKey: 'GLOBAL', organizationId: null,
+        domain: 'LOGISTICS', channel: 'UPS', scope: 'FREIGHT_RATE', name: 'DEMO UPS Tariff',
+      },
+    });
+    await prisma.ruleVersion.create({
+      data: {
+        ruleSetId: upsSet.id, organizationId: null, tier: 'CARRIER_TARIFF', source: 'fixture-ups',
+        version: 'v1-ups', effectiveFrom: new Date('2026-01-01T00:00:00Z'),
+        definition: {
+          schemaVersion: 1, kind: 'FREIGHT_RATE_V1',
+          match: { lane: 'CN-SHA>US-LAX', service: 'Ground' },
+          pricing: { currency: 'USD', baseRate: '1.0000', perKg: '0.1000', fuelPct: '1.00' },
+        } as Prisma.InputJsonValue,
+      },
+    });
+    // 干扰 3：其他 domain 的 FREIGHT_RATE 规则（CUSTOMS / OTHER），也必须不参与
+    const customsSet = await prisma.ruleSet.create({
+      data: {
+        ownerType: 'SYSTEM', ownerKey: 'GLOBAL', organizationId: null,
+        domain: 'CUSTOMS', channel: 'OTHER', scope: 'FREIGHT_RATE', name: 'DEMO Customs Tariff',
+      },
+    });
+    await prisma.ruleVersion.create({
+      data: {
+        ruleSetId: customsSet.id, organizationId: null, tier: 'CARRIER_TARIFF', source: 'fixture-customs',
+        version: 'v1-customs', effectiveFrom: new Date('2026-01-01T00:00:00Z'),
+        definition: {
+          schemaVersion: 1, kind: 'FREIGHT_RATE_V1',
+          match: { lane: 'CN-SHA>US-LAX', service: 'Ground' },
+          pricing: { currency: 'USD', baseRate: '2.0000', perKg: '0.2000', fuelPct: '1.00' },
+        } as Prisma.InputJsonValue,
+      },
+    });
+
+    const run = await runFreightRateDetection({ organizationId: ORG, repository });
+
+    // 只处理 OTHER 的 5 张账单；UPS 账单不进入视野
+    expect(run.invoicesConsidered).toBe(5);
+    expect(run.evaluationsCreated).toBe(5);
+    expect(run.opportunitiesCreated).toBe(1);
+    expect(run.outcomes.some((o) => o.invoiceExternalId === 'INV-UPS-1')).toBe(false);
+
+    // 库里仍然只有 5 条评估 / 1 条机会（UPS 那张没有被评估）
+    expect(await prisma.ruleEvaluation.count({ where: { organizationId: ORG } })).toBe(5);
+    const opportunities = await prisma.recoveryOpportunity.findMany({ where: { organizationId: ORG } });
+    expect(opportunities).toHaveLength(1);
+    expect(opportunities[0].channel).toBe('OTHER');
+    expect(opportunities[0].recoverableAmount?.toFixed(4)).toBe('17.7500');
+    const upsInvoice = await prisma.sourceTransaction.findFirstOrThrow({
+      where: { organizationId: ORG, externalId: 'INV-UPS-1' },
+    });
+    expect(
+      await prisma.ruleEvaluation.count({ where: { organizationId: ORG, sourceTransactionId: upsInvoice.id } }),
+    ).toBe(0);
+  });
+
+  // CHANGE #42：账单币种与规则币种不一致时不得计算机会
+  it('跨币种不计算：EUR 账单 + USD 规则 → NEEDS_MORE_DATA / CURRENCY_MISMATCH', async () => {
+    await prisma.sourceTransaction.updateMany({
+      where: { organizationId: ORG, externalId: 'INV-1001' },
+      data: { currency: 'EUR' },
+    });
+
+    const run = await runFreightRateDetection({ organizationId: ORG, repository });
+    const inv1001 = run.outcomes.find((o) => o.invoiceExternalId === 'INV-1001')!;
+    expect(inv1001.result).toBe('NEEDS_MORE_DATA');
+    expect(inv1001.skippedReason).toBe('CURRENCY_MISMATCH');
+    expect(inv1001.recoverable).toBeNull();
+
+    expect(await prisma.recoveryOpportunity.count({ where: { organizationId: ORG } })).toBe(0);
+    const invoice = await prisma.sourceTransaction.findFirstOrThrow({
+      where: { organizationId: ORG, externalId: 'INV-1001' },
+    });
+    expect(
+      await prisma.ruleEvaluation.count({ where: { organizationId: ORG, sourceTransactionId: invoice.id } }),
+    ).toBe(0);
   });
 
   it('缺少轨迹时不产出评估：记为 NEEDS_MORE_DATA，不写 RuleEvaluation', async () => {
