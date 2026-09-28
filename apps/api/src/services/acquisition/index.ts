@@ -65,3 +65,16 @@ export {
   type ConnectorRuntimeDeps,
   type ConnectorRuntimeErrorCode,
 } from './api-connector-runtime';
+
+export {
+  DEFAULT_MAX_ATTEMPTS,
+  RETRY_BACKOFF_MS,
+  backoffForAttempt,
+  nextAttemptAt,
+  runScheduledSync,
+  shouldRetry,
+  type SyncRunInput,
+  type SyncRunOutcome,
+  type SyncRunStatus,
+  type SyncRunnerDeps,
+} from './sync-runner';
