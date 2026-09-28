@@ -25627,3 +25627,384 @@ FINAL PASS ✅
 PR #8:
 APPROVED TO MERGE
 ```
+
+### [MSG-20260928-47] C-0008 Gate 6 Kickoff Decision：APPROVED WITH REVISIONS（邀请制+Email 密码；Next.js 先交 Delta；仅账单展示）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE:
+GATE KICKOFF DECISION
+
+ID:
+C-0008
+
+GATE:
+6
+
+MODULE:
+Customer Operation Layer
+
+STATUS:
+APPROVED WITH REVISIONS
+
+目标确认：
+
+C-0008 的目的不是继续扩大后端能力，而是把已有能力转化为可被真实用户使用的产品入口。
+
+当前系统已经具备：
+
+数据进入
+ ↓
+SourceTransaction
+ ↓
+CanonicalFact
+ ↓
+RuleEvaluation
+ ↓
+RecoveryOpportunity
+ ↓
+Claim / Billing
+
+C-0008 重点解决：
+
+用户
+ ↓
+账户
+ ↓
+上传数据
+ ↓
+看到发现
+ ↓
+人工确认
+ ↓
+进入追回流程
+A. 认证与注册模式裁定
+采用：
+C + A1 混合模式
+
+即：
+
+第一阶段：
+
+邀请制用户体系
+
+采用：
+
+Organization
+      |
+      |
+    User
+      |
+      |
+   Session
+
+不要开放公开注册。
+
+原因：
+
+当前产品属于：
+
+B2B Recovery SaaS
+
+不是消费产品。
+
+早期风险：
+
+垃圾注册
+数据上传风险
+租户隔离风险
+凭据安全风险
+
+比增长更重要。
+
+允许实现：
+
+User:
+
+包含：
+
+email
+passwordHash
+status
+
+Session:
+
+包含：
+
+sessionId
+userId
+organizationId
+expiresAt
+createdAt
+登录方式：
+
+Phase 1：
+
+Email + Password
+
+即可。
+
+密码：
+
+允许：
+
+Node crypto scrypt
+
+或者：
+
+成熟密码 hash 实现。
+
+要求：
+
+禁止：
+
+明文密码
+可逆加密
+暂不做：
+
+禁止：
+
+Auth0
+Clerk
+Cognito
+Google Login
+Magic Link
+
+原因：
+
+增加外部依赖。
+
+B. UI 技术栈裁定
+不采用 B1
+
+也不采用 B2 原方案。
+
+采用：
+
+B3：Next.js / React 独立 Web App
+
+原因：
+
+这个产品已经不是 API 验证阶段。
+
+已有：
+
+Tenant
+Upload
+Detection
+Recovery
+Billing
+
+继续用 HTML 会造成后续重构成本。
+
+但是：
+
+有一个条件：
+
+必须先提交 Web Schema / Dependency Delta
+
+不要直接引入。
+
+要求：
+
+提交：
+
+C-0008-WEB-DELTA
+
+内容：
+
+包括：
+
+apps/web 是否新增
+Next.js 版本
+React 版本
+UI 库
+依赖许可证
+构建方式
+部署方式
+
+原则：
+
+可以引入前端。
+
+但必须供应链审计。
+
+C. 付费与计费裁定
+
+采用：
+
+C1
+
+通过。
+
+C-0008 做：
+
+展示：
+
+RecoveryOpportunity
+       ↓
+Case
+       ↓
+Settlement
+       ↓
+FeeCalculation
+       ↓
+BillingInvoice
+
+支持：
+
+状态展示：
+
+DRAFT
+ ↓
+ISSUED
+ ↓
+PAID
+
+但是：
+
+禁止：
+
+Stripe
+Paddle
+PayPal
+自动扣款
+真实支付接口
+
+原因：
+
+当前核心验证：
+
+不是支付。
+
+而是：
+
+用户是否愿意上传数据，并相信系统发现追回金额。
+
+D. 拆分裁定
+
+同意拆分。
+
+不要一次性交付。
+
+C-0008-A
+
+范围：
+
+Customer Foundation
+
+包含：
+
+User
+Session
+Login
+Tenant onboarding
+Web App 基础框架
+Dashboard Shell
+Upload 页面
+Import 状态页面
+Detection 结果页面
+
+目标：
+
+用户可以：
+
+注册/登录
+      ↓
+进入组织
+      ↓
+上传账单
+      ↓
+看到检测结果
+C-0008-B
+
+后续：
+
+Customer Workflow
+
+包含：
+
+Connection 管理
+
+Manual Review
+
+Opportunity确认
+
+Case创建
+
+Claim Draft查看
+
+Billing展示
+
+Schema Delta 要求
+
+C-0008-A 开始前：
+
+必须先提交：
+
+Schema Delta
+
+预计：
+
+新增：
+
+User
+
+UserCredential
+
+Session
+
+OrganizationMember
+
+或者等价设计。
+
+必须说明：
+
+密码存储方式
+session失效机制
+租户隔离
+删除策略
+审计事件
+明确禁止范围
+
+C-0008 不做：
+
+❌ 真实平台 API
+
+❌ OAuth
+
+❌ 支付网关
+
+❌ 公网生产部署
+
+❌ canonical 默认切换
+
+❌ Identity Step 4
+
+❌ 自动提交 Claim
+
+❌ 自动付款
+
+C-0008 最终裁定
+项目	决策
+认证	邀请制 + Email Password
+公开注册	NO
+第三方身份	NO
+Web	Next.js/React，但先 Delta
+支付	仅 Billing 展示
+拆分	C-0008-A/B
+Schema	先提交 Delta
+
+下一步：
+
+请提交：
+
+C-0008-A Schema Delta Request
+
+范围：
+
+User / Credential / Session / Organization Membership / Audit 接入设计。
+
+批准后再写代码。
+```
