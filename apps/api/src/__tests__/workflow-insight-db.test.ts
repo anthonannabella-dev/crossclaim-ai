@@ -50,7 +50,7 @@ beforeEach(async () => {
 });
 
 /** 真实链路：规则版本 + 发票事实 + 规则评估 + 机会 */
-async function seedInsightChain(organizationId = ORG, label = 'INSIGHT-1') {
+async function seedInsightChain(organizationId = ORG, label = 'INSIGHT-845234-4821') {
   const ruleSet = await prisma.ruleSet.create({
     data: {
       organizationId: null,
@@ -144,7 +144,7 @@ describe('C-0009.1 — D1/D2 洞察（真实 PostgreSQL 样例）', () => {
     const rows = toExportRows([insight]);
     expect(rows[0]).toMatchObject({
       opportunityId: opportunity.id,
-      invoiceReference: 'INSIGHT-1',
+      invoiceReference: 'INSIGHT-845234-4821',
       recoverableAmount: '2.6625',
       ruleReason: 'FREIGHT_RATE_V1（CUSTOMER_CONTRACT）· 来源 contract-2026',
       evidenceReference: 'contract-2026',
