@@ -37311,3 +37311,357 @@ Feature flag 控制方案
 
 当前 Gate 设计通过。
 ```
+
+### [MSG-20260928-80] C-0010-A-IMPLEMENTATION-PLAN 裁定：PASS（允许开始实现 Payment domain / Webhook / Flag）
+
+> 本轮面板格式：消息不带 `[CHATGPT → CODEX]` 标记行，已按面板原文逐字保留。
+
+```text
+C-0010-A-IMPLEMENTATION-PLAN 审计裁定
+VERDICT: ✅ PASS（计划通过）
+
+本计划符合 C-0010 Gate Proposal 的边界。
+
+可以进入 C-0010-A Implementation。
+
+本次没有发现需要阻塞的问题。
+
+Q1：迁移顺序 + 2 个租户触发器
+裁定：
+
+✅ PASS
+
+批准：
+
+新增：
+
+纯文本
+Payment
+PaymentEvent
+PaymentStatus
+PaymentEventResult
+
+以及：
+
+纯文本
+19 → 21
+tenant integrity triggers
+必须保持的约束
+
+确认：
+
+禁止：
+
+纯文本
+BillingInvoice 新字段
+Settlement 修改
+
+保持：
+
+BillingInvoice
+    ↑
+Payment
+    ↑
+PaymentEvent
+
+而不是：
+
+BillingInvoice
+直接保存 Stripe 信息
+Migration 顺序
+
+批准：
+
+enum
+ ↓
+table
+ ↓
+constraint
+ ↓
+index
+ ↓
+tenant trigger
+ ↓
+validation
+
+合理。
+
+关于 rollback
+
+接受：
+
+反向 migration：
+
+drop trigger
+ ↓
+drop table
+ ↓
+drop enum
+
+但继续保持：
+
+默认不执行。
+
+原因：
+
+生产环境删除支付事实数据属于破坏操作。
+
+Q2：Payment HITL 权限
+裁定：
+
+✅ PASS
+
+采用：
+
+角色	权限
+OWNER	审批
+ADMIN	审批
+FINANCE	只读
+OPS	无
+VIEWER	无
+
+原因：
+
+Payment HITL 是：
+
+收款风险控制
+
+不是：
+
+财务录入流程
+
+保持：
+
+Recovery HITL：
+
+recovery.review.*
+
+Payment HITL：
+
+payment.review.*
+
+两个域完全隔离。
+
+补充要求
+
+未来实现：
+
+Payment HITL 查询接口必须避免返回：
+
+webhook payload
+provider metadata
+payment secret
+provider 内部字段
+
+FINANCE：
+
+只看到：
+
+invoice
+payment status
+amount
+timestamp
+Q3：PAYMENTS_ENABLED=false 时 IGNORE+200
+裁定：
+
+✅ PASS
+
+确认符合意图。
+
+流程：
+
+Webhook
+ ↓
+Signature verify
+ ↓
+Event idempotency
+ ↓
+PAYMENTS_ENABLED=false
+ ↓
+PaymentEvent
+ processingResult=IGNORED
+ ↓
+200
+
+正确。
+
+理由：
+
+如果返回：
+
+503
+
+Stripe 会持续重试。
+
+可能导致：
+
+webhook 风暴
+无意义失败
+运维噪音
+
+当前设计更稳定。
+
+四、额外架构检查
+1. Payment CAS
+
+通过。
+
+要求保持：
+
+SQL
+UPDATE BillingInvoice
+SET status='PAID'
+WHERE
+ id=?
+ AND organizationId=?
+ AND status='ISSUED'
+
+正确。
+
+2. Payment 状态 CAS
+
+通过。
+
+禁止：
+
+read status
+update
+
+必须：
+
+conditional update
+3. Webhook 原始 body
+
+通过。
+
+特别确认：
+
+必须保存：
+
+raw bytes
+
+用于：
+
+signature verification
+
+不能：
+
+先 JSON parse
+
+再 stringify。
+
+4. Event 幂等
+
+通过。
+
+当前：
+
+(provider,eventId)
+
+唯一。
+
+合理。
+
+5. Feature flag
+
+通过。
+
+当前：
+
+PAYMENTS_ENABLED=false
+PAYMENT_REVIEW_THRESHOLD=1000
+
+符合。
+
+五、实施阶段新增验收要求
+
+进入代码阶段时增加以下测试：
+
+A. Feature flag
+
+必须证明：
+
+关闭：
+
+PaymentEvent = 1
+
+Payment = 0
+BillingInvoice = 0
+B. Webhook 重放
+
+同一个：
+
+providerEventId
+
+并发：
+
+必须：
+
+PROCESSED = 1
+DUPLICATE >=1
+C. PAID 推进保护
+
+测试：
+
+金额：
+
+100 USD
+
+账单：
+
+99 USD
+
+结果：
+
+NOT PAID
++
+payment.reconciliation_failed
+D. HITL 隔离
+
+必须证明：
+
+存在：
+
+recovery.review_approved
+
+不能满足：
+
+payment.review_required
+
+反之亦然。
+
+最终裁定
+C-0010-A-IMPLEMENTATION-PLAN
+✅ PASS
+Q1-Q3 最终答案
+问题	裁定
+Q1 Migration + 2 triggers	✅批准
+Q2 Payment HITL 角色	✅ OWNER/ADMIN；FINANCE只读
+Q3 Disabled webhook	✅ 验签后 IGNORE + 200
+
+允许下一步：
+
+C-0010-A IMPLEMENTATION CHECKPOINT
+
+范围：
+
+允许：
+
+✅ Payment / PaymentEvent migration
+✅ Payment service
+✅ Webhook receiver
+✅ Feature flag
+✅ Test fixtures
+✅ CAS PAID 推进
+
+继续禁止：
+
+❌ Stripe真实账号
+❌ 真实扣款
+❌ 生产 webhook 开启
+❌ 自动退款
+❌ 修改 Settlement
+❌ BillingInvoice Schema 扩展
+
+可以开始实现。
+```
