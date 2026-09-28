@@ -153,20 +153,47 @@ describe('C-0004 CP2 · Recovery Closure（真实 PostgreSQL）', () => {
     expect(kase.currency).toBe('USD');
 
     const claim = await prisma.claim.findFirstOrThrow({ where: { organizationId: ORG } });
-    expect(claim.status).toBe('DRAFT');
+    // CHANGE #48：simulateSettlement=true 是 test/demo 生命周期模拟，必须走到 APPROVED
+    expect(claim.status).toBe('APPROVED');
     expect(claim.target).toBe('CARRIER');
     expect(claim.aiDraftText).toContain('17.7500');
+
+    // CHANGE #48：到账案件不能停留在 OPEN，必须推进到 SETTLED
+    expect(kase.status).toBe('SETTLED');
+    const caseAudits = await prisma.auditLog.findMany({
+      where: { organizationId: ORG, entityType: 'Case', entityId: kase.id },
+    });
+    const caseFlow = caseAudits.map((row) => `${(row.changes as { from: string }).from}->${(row.changes as { to: string }).to}`);
+    expect(caseFlow).toEqual(
+      expect.arrayContaining(['OPEN->COLLECTING_EVIDENCE', 'COLLECTING_EVIDENCE->READY_TO_CLAIM', 'READY_TO_CLAIM->CLAIMED', 'CLAIMED->WON', 'WON->SETTLED']),
+    );
+    const claimAudits = await prisma.auditLog.findMany({
+      where: { organizationId: ORG, entityType: 'Claim' },
+    });
+    const claimFlow = claimAudits.map((row) => `${(row.changes as { from: string }).from}->${(row.changes as { to: string }).to}`);
+    expect(claimFlow).toEqual(
+      expect.arrayContaining(['DRAFT->SUBMITTED', 'SUBMITTED->ACKNOWLEDGED', 'ACKNOWLEDGED->APPROVED']),
+    );
 
     const route = await prisma.recoveryRoute.findFirstOrThrow({ where: { organizationId: ORG } });
     expect(route.target).toBe('CARRIER');
     expect(route.status).toBe('PROPOSED');
 
-    expect(await prisma.caseEvidence.count({ where: { organizationId: ORG, caseId: kase.id } })).toBe(3);
+    // 3 份索赔前证据 + 1 份到账证据（CREDIT_NOTE）
+    expect(await prisma.caseEvidence.count({ where: { organizationId: ORG, caseId: kase.id } })).toBe(4);
     expect(await prisma.caseOpportunity.count({ where: { organizationId: ORG, caseId: kase.id } })).toBe(1);
 
     const settlement = await prisma.settlement.findFirstOrThrow({ where: { organizationId: ORG, caseId: kase.id } });
     expect(settlement.status).toBe('RECEIVED');
     expect(settlement.amount.toFixed(4)).toBe('17.7500');
+    // CHANGE #49：到账必须挂 CREDIT_NOTE 到账证据，且该证据也挂在案件上
+    expect(settlement.evidenceId).not.toBeNull();
+    const credit = await prisma.evidenceArtifact.findUniqueOrThrow({ where: { id: settlement.evidenceId! } });
+    expect(credit.kind).toBe('CREDIT_NOTE');
+    expect(credit.organizationId).toBe(ORG);
+    expect(
+      await prisma.caseEvidence.count({ where: { organizationId: ORG, caseId: kase.id, evidenceId: credit.id } }),
+    ).toBe(1);
 
     const ledger = await prisma.recoveryLedgerEntry.findMany({ where: { organizationId: ORG } });
     expect(ledger).toHaveLength(1);
@@ -223,5 +250,40 @@ describe('C-0004 CP2 · Recovery Closure（真实 PostgreSQL）', () => {
     expect(invoice.status).not.toBe('PAID');
     expect(invoice.paidAt).toBeNull();
     expect(invoice.total.toFixed(4)).not.toBe(kase.recoveredAmount.toFixed(4));
+  });
+
+  // CHANGE #47：普通 DETECTED 不得被闭环自动处理（人工卡口）
+  it('DETECTED 不被自动处理：不会建 Case/Claim，状态保持 DETECTED', async () => {
+    const detected = await prisma.recoveryOpportunity.findFirstOrThrow({ where: { organizationId: ORG } });
+    await prisma.recoveryOpportunity.update({ where: { id: detected.id }, data: { status: 'DETECTED' } });
+    await prisma.case.deleteMany({ where: { organizationId: ORG } });
+
+    const run = await closure();
+    expect(run.opportunitiesConsidered).toBe(0);
+    expect(await prisma.case.count({ where: { organizationId: ORG } })).toBe(0);
+    expect(await prisma.claim.count({ where: { organizationId: ORG } })).toBe(0);
+    const after = await prisma.recoveryOpportunity.findUniqueOrThrow({ where: { id: detected.id } });
+    expect(after.status).toBe('DETECTED');
+  });
+
+  // CHANGE #48：不模拟到账时，Phase 1 半自动边界必须停在 READY_TO_CLAIM + DRAFT
+  it('不模拟到账：Case=READY_TO_CLAIM、Claim=DRAFT，且 Settlement/Ledger/Fee/Billing 全为 0', async () => {
+    const run = await runRecoveryClosure({
+      organizationId: ORG,
+      prisma,
+      commercialTerms: { successFeeRate: terms.terms[0].successFeeRate, source: terms.terms[0].source },
+      simulateSettlement: false,
+    });
+    expect(run.casesCreated).toBe(1);
+
+    const kase = await prisma.case.findFirstOrThrow({ where: { organizationId: ORG } });
+    expect(kase.status).toBe('READY_TO_CLAIM');
+    const claim = await prisma.claim.findFirstOrThrow({ where: { organizationId: ORG } });
+    expect(claim.status).toBe('DRAFT');
+
+    expect(await prisma.settlement.count({ where: { organizationId: ORG } })).toBe(0);
+    expect(await prisma.recoveryLedgerEntry.count({ where: { organizationId: ORG } })).toBe(0);
+    expect(await prisma.feeCalculation.count({ where: { organizationId: ORG } })).toBe(0);
+    expect(await prisma.billingInvoice.count({ where: { organizationId: ORG } })).toBe(0);
   });
 });
