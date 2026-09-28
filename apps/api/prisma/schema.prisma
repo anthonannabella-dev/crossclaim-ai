@@ -321,6 +321,8 @@ model Organization {
   payments          Payment[]
   paymentEvents     PaymentEvent[]
   paymentAttempts   PaymentProcessingAttempt[]
+  claimItems        ClaimItem[]
+  claimItemEvidences ClaimItemEvidence[]
 
   @@index([status])
 }
@@ -641,6 +643,7 @@ model RecoveryOpportunity {
   organization  Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   evaluations   RuleEvaluation[]
   caseLinks     CaseOpportunity[]
+  claimItems    ClaimItem[]
   routes        RecoveryRoute[]
   ledgerEntries RecoveryLedgerEntry[]
 
@@ -718,6 +721,7 @@ model EvidenceArtifact {
   settlements  Settlement[]
   outEdges     EvidenceEdge[]    @relation("EvidenceFrom")
   inEdges      EvidenceEdge[]    @relation("EvidenceTo")
+  claimLinks   ClaimItemEvidence[]
 
   @@unique([organizationId, id])
   @@index([organizationId, kind])
@@ -794,6 +798,7 @@ model Case {
   ledgerEntries   RecoveryLedgerEntry[]
   billingInvoices BillingInvoice[]
   feeCalculations FeeCalculation[]
+  claimItems      ClaimItem[]
 
   @@unique([organizationId, caseNo])
   @@unique([organizationId, id])
@@ -951,6 +956,7 @@ model RuleVersion {
   evaluations  RuleEvaluation[]
   shadowEvaluations RuleEvaluationShadow[]
   routes       RecoveryRoute[]
+  claimItems   ClaimItem[]
 
   @@unique([ruleSetId, version, tier])
   @@unique([organizationId, id])
@@ -1249,4 +1255,111 @@ model PaymentProcessingAttempt {
   @@unique([organizationId, id])
   @@index([organizationId, status, nextRetryAt])
   @@index([paymentEventId])
+}
+
+// ============================================================
+// C-0011 — 损失事件归一化（ClaimItem）与证据联结（ClaimItemEvidence）
+// 约束（MSG-20260928-116 / -118）：
+//   · 一个 Case 聚合多条 ClaimItem（方案 B）；caseId 在 REVIEW_REQUIRED 之后必须存在，
+//     但这是**状态机不变量**，刻意不加数据库 CHECK。
+//   · 不复制证据文件：只建 ClaimItem ↔ EvidenceArtifact 联结。
+//   · Schema 内不出现任何平台写权限字段（token / credential / oauth）——凭据只属于 SourceConnection。
+// ============================================================
+
+enum ClaimItemStatus {
+  DISCOVERED
+  VERIFIED
+  REVIEW_REQUIRED
+  READY_TO_APPEAL
+  SUBMITTED_MANUAL
+  RECOVERED
+  CLOSED
+}
+
+/// 关闭用原因表达，不增加状态数量（MSG-20260928-114 REVISE-1）。
+enum ClaimItemClosedReason {
+  RECOVERED
+  REJECTED
+  NOT_WORTH_PURSUING
+  CUSTOMER_DECLINED
+}
+
+enum ClaimResponsibleParty {
+  CARRIER
+  PLATFORM
+  PLATFORM_WAREHOUSE
+  SELLER
+  BUYER
+  THIRD_PARTY
+  UNKNOWN
+}
+
+enum ClaimEvidenceType {
+  POD
+  INVOICE
+  LEDGER_EXPORT
+  ADJUSTMENT_REPORT
+  TRACKING
+  PLATFORM_DECISION
+  CLAIM_RESPONSE
+  CONTRACT_TERM
+  OTHER
+}
+
+model ClaimItem {
+  id               String   @id @default(uuid())
+  organizationId   String
+  /// REVIEW_REQUIRED 起必须存在（服务层不变量，不用数据库 CHECK）
+  caseId           String?
+  opportunityId    String?
+  /// AMAZON | TIKTOK | WALMART | UNKNOWN（应用层白名单）
+  platformType     String
+  claimType        String
+  /// 平台侧唯一引用；为空时该行不享受自动幂等（未来由 sourceFingerprint 关闭缺口）
+  platformRef      String?
+  occurredAt       DateTime
+  amountExpected   Decimal? @db.Decimal(18, 4)
+  amountActual     Decimal? @db.Decimal(18, 4)
+  currency         String   @default("USD")
+  /// 由既有 Rule Engine 产出，本模型不定义算法
+  recoverableAmount Decimal? @db.Decimal(18, 4)
+  responsibleParty ClaimResponsibleParty @default(UNKNOWN)
+  status           ClaimItemStatus @default(DISCOVERED)
+  closedReason     ClaimItemClosedReason?
+  closedAt         DateTime?
+  /// 归一化器版本，用于回溯「当时是谁归一化的」
+  normalizerVersion String
+  /// 规则版本，用于回溯「当时用哪版规则算出的可追回金额」
+  ruleVersionId    String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  case         Case?               @relation(fields: [caseId], references: [id])
+  opportunity  RecoveryOpportunity? @relation(fields: [opportunityId], references: [id])
+  ruleVersion  RuleVersion?        @relation(fields: [ruleVersionId], references: [id])
+  evidenceLinks ClaimItemEvidence[]
+
+  @@unique([organizationId, platformType, platformRef, claimType])
+  @@unique([organizationId, id])
+  @@index([organizationId, status, occurredAt])
+  @@index([caseId])
+}
+
+model ClaimItemEvidence {
+  id             String   @id @default(uuid())
+  organizationId String
+  claimItemId    String
+  evidenceId     String
+  evidenceType   ClaimEvidenceType @default(OTHER)
+  note           String?
+  createdAt      DateTime @default(now())
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  claimItem    ClaimItem       @relation(fields: [claimItemId], references: [id], onDelete: Cascade)
+  evidence     EvidenceArtifact @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, claimItemId, evidenceId])
+  @@unique([organizationId, id])
+  @@index([claimItemId])
 }

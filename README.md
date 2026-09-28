@@ -60,7 +60,7 @@ AI 负责文档理解、字段抽取、异常解释、证据推荐、案件总�
 
 已完成：
 
-- Gate 0 领域模型 **34 个（32 核心 + 2 联结）**：`apps/api/prisma/schema.prisma`
+- Gate 0 领域模型 **36 个（33 核心 + 3 联结）**：`apps/api/prisma/schema.prisma`
 - 数据库迁移（10 个）+ **20 个租户完整性触发器**（业务数据域）
 - Gate 1 运行时地基（Storage Adapter / Audit / Import foundation / Adapter interface）
 - Gate 2 物流首个纵向闭环（Detection Spine + Recovery Closure）

@@ -92,11 +92,12 @@ describe('模型清单一致性（C-0002 CHANGE #1）', () => {
     'Payment',
     'PaymentEvent',
     'PaymentProcessingAttempt',
+    'ClaimItem',
   ];
-  const JOIN_MODELS = ['CaseEvidence', 'CanonicalFactSource'];
+  const JOIN_MODELS = ['CaseEvidence', 'CanonicalFactSource', 'ClaimItemEvidence'];
 
   it(`核心模型恰好 ${CORE.length} 个`, () => {
-    expect(CORE).toHaveLength(32);
+    expect(CORE).toHaveLength(33);
     for (const name of CORE) expect(modelBlock(name), `缺少核心模型 ${name}`).not.toBe('');
   });
 
@@ -104,8 +105,8 @@ describe('模型清单一致性（C-0002 CHANGE #1）', () => {
     for (const name of JOIN_MODELS) expect(modelBlock(name), `缺少联结模型 ${name}`).not.toBe('');
   });
 
-  it('模型总数为 34（32 core + 2 join）—— 与 README/DOMAIN_MODEL 表述一致', () => {
-    expect(modelNames()).toHaveLength(34);
+  it('模型总数为 36（33 core + 3 join）—— 与 README/DOMAIN_MODEL 表述一致', () => {
+    expect(modelNames()).toHaveLength(36);
   });
 });
 
@@ -138,6 +139,8 @@ describe('租户归属（C-0002 CHANGE #2）', () => {
     'Payment',
     'PaymentEvent',
     'PaymentProcessingAttempt',
+    'ClaimItem',
+    'ClaimItemEvidence',
   ];
 
   it.each(TENANT_OWNED)('%s 带 organizationId', (name) => {

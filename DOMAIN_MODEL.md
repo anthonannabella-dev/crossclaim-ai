@@ -5,7 +5,7 @@
 
 ---
 
-## 一、模型总览（34 个 = 32 个核心模型 + 2 个联结模型）
+## 一、模型总览（36 个 = 33 个核心模型 + 3 个联结模型）
 
 > **口径统一**：**29 个核心模型**（架构章程 §六 的清单 + C-0006-A 的 `CanonicalFact` + C-0006-B1 的 `RuleEvaluationShadow` + C-0008-A 的 `Session`、`UserInvitation`）**+ 2 个联结模型 `CaseEvidence`、`CanonicalFactSource`**。
 > README、本文、PR 描述、架构契约测试全部按此口径，不允许 29/31 混用。
@@ -80,6 +80,21 @@
 | `Claim` | 首次申诉 / 索赔 |
 | `Appeal` | 复议 |
 
+### 支付与执行恢复（C-0010）
+
+| 模型 | 说明 |
+|---|---|
+| `Payment` | 客户实际支付的资金事实（provider / amount / currency / status），append-only |
+| `PaymentEvent` | provider 入站事件（**不可变**；只存事件元数据与 `payloadHash`，不存 payload 原文） |
+| `PaymentProcessingAttempt` | 执行历史（append-only）：attemptNo / status / resultStatus / errorCode / nextRetryAt / actorType；`SUCCEEDED` 之后不可改写 |
+
+### 损失事件归一化（C-0011）
+
+| 模型 | 说明 |
+|---|---|
+| `ClaimItem` | 跨平台归一化后的损失事件（生命周期 `DISCOVERED → … → CLOSED`，**没有 AUTO_SUBMITTED**；关闭用 `closedReason` 表达） |
+| `ClaimItemEvidence` | `ClaimItem` ↔ `EvidenceArtifact` 联结（只引用**不复制**文件；对 FINANCE 不可读） |
+
 ### 规则引擎
 
 | 模型 | 说明 |
@@ -114,6 +129,8 @@
 | 模型 | 说明 |
 |---|---|
 | `CaseEvidence` | 案件 ↔ 证据的多对多联结（复合主键） |
+| `CanonicalFactSource` | 业务事实 ↔ 原始来源的联结（C-0006-A） |
+| `ClaimItemEvidence` | 归一化损失事件 ↔ 证据的联结（C-0011） |
 
 ---
 
@@ -294,7 +311,7 @@ BillingInvoice（CrossClaim 向客户开票）
 - 所有迁移**必须可重复执行**，破坏性 DDL 必须显式说明
 - 每次 schema 变更必须同步更新本文件
 - fresh clone 必须能跑通：`apps/api` → `npm ci` → `npx prisma migrate deploy`
-- **CI 会在全新 PostgreSQL 上真实执行迁移**，并校验 20 个租户触发器存在
+- **CI 会在全新 PostgreSQL 上真实执行迁移**，并校验 27 个租户触发器存在
 
 当前迁移：
 
@@ -311,6 +328,10 @@ BillingInvoice（CrossClaim 向客户开票）
 | `20260928140000_rule_evaluation_identity_prepare` | C-0006-B2 Step 1：canonicalDedupeKey + 可空唯一约束 |
 | `20260928150000_customer_foundation_auth` | C-0008-A：Session / UserInvitation / User.passwordChangedAt |
 | `20260929010000_payment_domain` | C-0010-A：Payment / PaymentEvent（客户支付事实；+1 租户触发器） |
+| `20260929020000_payment_processing_attempt` | C-0010-B2：PaymentProcessingAttempt（+1 租户触发器 → 21） |
+| `20260929030000_payment_attempt_payment_link` | C-0010-B2 追加：`paymentId` 链路（+1 → 22） |
+| `20260929040000_payment_attempt_guards` | C-0010-B2 REVISE：`SUCCEEDED` 必须有 paymentId（CHECK）+ 成功后不可改写（BEFORE UPDATE 触发器；非租户触发器，计数不变） |
+| `20260929050000_claim_item` | C-0011：ClaimItem / ClaimItemEvidence（+5 → 27） |
 
 ---
 
