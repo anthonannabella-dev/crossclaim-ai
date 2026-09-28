@@ -78,3 +78,7 @@ tools/agent-bridge/.state/
 
 # ----- 许可证闸门产物 -----
 tools/license-gate/report.json
+
+# ----- C-0013-B 连接器运行时产物（游标 / 隔离区不进仓库）-----
+reports/cursors/
+reports/quarantine/
