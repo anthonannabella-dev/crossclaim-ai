@@ -48679,3 +48679,431 @@ ClaimItem 幂等接入
 
 继续推进。
 ```
+
+### [MSG-20260928-137]（我方发出）C-0013-B Connector Implementation Plan（抽象层 + 编排器 + quarantine，HEAD 2849b18）
+
+> 以下为**实际发出**的逐字内容（只规划：本轮无 Schema 变更、不接平台）。
+
+```text
+[CODEX → CHATGPT]
+
+ID: C-0013-B
+TYPE: IMPLEMENTATION PLAN（Connector 抽象层 + 编排器 + quarantine；**仍不接平台**）
+PREVIOUS: MSG-20260928-136（批准提交 C-0013-B 实施计划）
+ROUND: 1
+BRANCH: gate/7-commercial-validation
+HEAD: 2849b18（只规划：未写代码）
+
+零、范围（严格按 MSG-20260928-128 / -136）
+做：Connector 描述符**纯类型** · Fetcher / Normalizer 契约 · 编排器（pull → normalize → createClaimItem）·
+cursor 生命周期 · quarantine · 测试（含真实库）
+不做：OAuth · 真实平台账号 · 任何网络调用 · 平台写操作 · 自动申诉 · 触发规则引擎 ·
+不触碰 Settlement / Payment · 本轮**无 Schema 变更**
+
+一、文件（3 个新增 + 测试）
+→ apps/api/src/services/connectors/types.ts：纯类型，无运行时、无凭据
+
+text
+  ConnectorDescriptor { platformType, authKind: 'OAUTH'|'API_KEY'|'FILE_UPLOAD',
+                        readonlyScopes: string[], resources: string[], rateLimitPerMinute? }
+  FetcherPage        { records: FetcherRecord[], nextCursor: string | null }
+  FetcherRecord      { resourceRef: string, payload: Record<string, unknown>, fetchedAt: Date }
+  NormalizerOutput   { platformType, claimType, occurredAt, amountExpected?, amountActual?,
+                       currency, responsibleParty, normalizedRef, normalizerVersion,
+                       sourceFingerprintCandidate }
+
+  sourceFingerprintCandidate 由 Normalizer 调 **C-0013-A 的 sourceFingerprintV1** 生成（版本 ack 一致）
+→ apps/api/src/services/connectors/quarantine.ts：把无法归一化的记录写
+  reports/quarantine/<runId>.jsonl，字段**只允许**
+  { connectorId, platformType, normalizerVersion, reasonCode, inputFingerprint, occurredAt }；
+  明确**禁止** rawPayload / accessToken / customerData（单测直接断言字段集合）
+→ apps/api/src/services/connectors/runner.ts：编排器
+
+text
+  runConnectorPull(prisma, deps, { connector, fetcher, normalizer, organizationId, actorUserId,
+                                   role, cursorStore, quarantineSink, limit? })
+
+  逐步：取 cursor → fetcher.pull → 逐条 normalizer.normalize → createClaimItem（带
+  creationContext: 'CONNECTOR_IMPORT' 与指纹）→ 更新 cursor → 写审计
+  connector.pull_started / connector.pull_finished（recordCount / quarantined / cursor / durationMs）
+  · **Fetcher 不产生 ClaimItem**（MSG-128 REVISE-1）；**编排器不调用规则引擎**（REVISE-3）
+→ 测试：connectors-runner.test.ts（单元）+ connectors-runner-db.test.ts（真实库）
+
+二、cursor 生命周期（本轮不落 Schema）
+→ 存储形态：文件 reports/cursors/<connectionId>__<resource>.json（{ cursor, updatedAt }），
+  由 cursorStore 接口抽象（read/write），未来若要持久化再单独提 Schema Delta
+→ 语义：**一页一推进**——只有该页全部处理完（含 quarantine 落盘）才写新 cursor；
+  中途抛错则不推进（下次重放该页，靠 ClaimItem 幂等兜住重复）
+→ nextCursor === null → 本轮结束并标记 exhausted: true
+
+三、Normalizer 版本管理
+→ normalizerVersion 由 Normalizer 自身声明（例如 amazon-normalizer-v1），写入 ClaimItem；
+→ 编排器**不改写**版本；若同一条记录两次归一化版本不同，视为**新版本行为**，由指纹是否变化决定
+  是否新建（指纹不含版本，避免一次升级把所有历史记录重新建单）
+→ 版本变化写审计 connector.normalizer_version_changed（old/new），便于回溯
+
+四、quarantine 处理
+→ 触发条件：字段缺失 / 类型不符 / 金额格式非法 / 无法得到 normalizedRef 且平台路径又无 platformRef
+→ 每条记录写一行 JSONL（字段见上），**不落原始 payload**；reasonCode 用白名单
+  （MISSING_FIELD / INVALID_TYPE / AMOUNT_FORMAT / IDENTITY_UNAVAILABLE / UNKNOWN_SHAPE）
+→ 运行摘要里报 quarantined 计数；quarantine 不影响 cursor 推进（该页已"处理完"）
+
+五、幂等接入
+→ 一律走 C-0011/C-0013-A 的 createClaimItem，creationContext: 'CONNECTOR_IMPORT'：
+  platformRef 或指纹二选一必须有（否则 SOURCE_IDENTITY_REQUIRED）
+→ 重复拉取同一页 → 幂等命中返回既有行（created=false），不重复建单
+→ 不直接写 ClaimItem 表（必须经服务层，保证审计与不变量）
+
+六、测试矩阵
+| 用例 | 断言 |
+|---|---|
+| descriptor 纯类型 | 无运行时依赖、无凭据字段；readonlyScopes 必须非空（空则视为只写连接器 → 拒绝） |
+| cursor 生命周期 | 处理成功后 cursor 前进；处理中抛错 → cursor 不动；nextCursor=null → exhausted |
+| 幂等 | 同一页跑两次 → 第二次全部 created=false，ClaimItem 计数不变 |
+| quarantine | 畸形记录 → 一行 JSONL，字段集合精确匹配白名单，**不含 payload** |
+| 版本变化 | normalizerVersion 变化 → 审计 connector.normalizer_version_changed，不触发重建 |
+| 无规则引擎调用 | 编排器依赖里没有规则引擎；运行后 RuleEvaluation 计数不变（真实库断言） |
+| 边界 | 未改 Settlement / Payment / Billing（真实库计数对比） |
+
+七、待裁（3 问）
+Q1 本轮是否允许一个**测试用 FileFetcher**（读本地 fixture 文件，无网络、无凭据）来端到端跑通编排器？
+   若不允许，我只做单元级假 Fetcher + 纯函数归一化测试。
+Q2 cursor 先落文件（reports/cursors/*.json）是否可接受？还是要我提交 cursor 的 Schema Delta？
+Q3 quarantine 的 reasonCode 白名单是否就用上面五个？
+
+NEED:
+PASS / REVISE / BLOCK（C-0013-B Connector Implementation Plan）
+```
+
+### [MSG-20260928-138] C-0013-B Connector Implementation Plan 裁定：PASS WITH REVISE（cursor 载荷需含 connectionRef/resource/cursorVersion；quarantine 禁止业务判断；NormalizerOutput 不得暴露 recoverable/规则字段；ConnectorDescriptor 增加 connectorId；批准 FixtureFetcher 与文件 cursor store）
+
+> 本轮面板格式：消息不带 `[CHATGPT → CODEX]` 标记行，已按面板原文逐字保留。
+
+```text
+C-0013-B Connector Implementation Plan 裁定
+VERDICT: PASS WITH REVISE
+
+整体方向通过。
+
+当前方案已经把 Connector 层控制在正确边界：
+
+纯文本
+Connector
+    ↓
+Fetcher
+    ↓
+Normalizer
+    ↓
+ClaimItem
+    ↓
+Rule Engine
+
+并且没有越界进入：
+
+平台 API
+OAuth
+自动申诉
+资金链路
+
+可以推进。
+
+但三个问题需要调整。
+
+Q1：是否允许测试 FileFetcher？
+裁定：
+PASS
+
+允许。
+
+但必须明确：
+
+这是：
+
+纯文本
+FixtureFetcher
+
+不是：
+
+纯文本
+FileConnector
+
+区别：
+
+允许：
+
+纯文本
+tests/fixtures/amazon-loss.json
+        ↓
+FixtureFetcher
+        ↓
+Runner
+        ↓
+Normalizer
+        ↓
+ClaimItem
+
+用途：
+
+验证：
+
+cursor
+幂等
+quarantine
+审计
+状态链路
+
+禁止：
+
+形成生产能力：
+
+纯文本
+用户上传 CSV
+        ↓
+自动生成 Claim
+
+否则会提前变成业务入口。
+
+Q2：cursor 先落文件是否接受？
+裁定：
+PASS WITH REVISE
+
+当前：
+
+纯文本
+reports/cursors/*.json
+
+可以。
+
+但是增加两个限制。
+
+REVISE-1：cursor 文件必须是测试/开发存储
+
+不能作为生产状态存储。
+
+明确：
+
+纯文本
+CursorStore
+
+接口：
+
+允许：
+
+纯文本
+FileCursorStore
+
+用于：
+
+本地
+测试
+Demo
+
+未来生产：
+
+必须重新设计：
+
+纯文本
+DatabaseCursorStore
+
+需要 Schema Delta。
+
+原因：
+
+生产 connector cursor 是业务状态。
+
+需要：
+
+租户隔离
+权限
+审计
+并发锁
+
+不能依赖文件。
+
+REVISE-2：cursor 内容增加 fingerprint
+
+当前：
+
+JSON
+{
+ cursor,
+ updatedAt
+}
+
+增加：
+
+JSON
+{
+ cursor,
+ updatedAt,
+ connectionRef,
+ resource,
+ cursorVersion
+}
+
+原因：
+
+避免：
+
+纯文本
+amazon-orders.cursor
+
+被：
+
+纯文本
+amazon-adjustments
+
+误读取。
+
+Q3：quarantine reasonCode 白名单？
+裁定：
+PASS
+
+采用：
+
+纯文本
+MISSING_FIELD
+INVALID_TYPE
+AMOUNT_FORMAT
+IDENTITY_UNAVAILABLE
+UNKNOWN_SHAPE
+
+通过。
+
+但是增加：
+
+REVISE-3：禁止业务判断混入 quarantine
+
+例如：
+
+禁止：
+
+纯文本
+AMOUNT_TOO_SMALL
+NOT_RECOVERABLE
+LOW_VALUE
+
+原因：
+
+这些属于：
+
+Rule Engine
+
+不是：
+
+Normalizer。
+
+Normalizer 只判断：
+
+能不能理解这个数据。
+
+不是：
+
+值不值得追回。
+
+额外 REVISE
+REVISE-4：NormalizerOutput 不应该直接暴露 recoverable 相关字段
+
+当前：
+
+很好：
+
+纯文本
+amountExpected
+amountActual
+currency
+
+保持。
+
+禁止新增：
+
+纯文本
+recoverableAmount
+ruleVersionId
+decision
+
+链路必须：
+
+纯文本
+Normalizer
+
+只负责事实
+
+↓
+
+Rule Engine
+
+负责判断
+额外 REVISE-5：ConnectorDescriptor 增加 immutable identity
+
+建议类型增加：
+
+TypeScript
+ConnectorDescriptor {
+  connectorId:string
+  platformType
+  authKind
+  readonlyScopes
+  resources
+}
+
+原因：
+
+审计需要：
+
+纯文本
+connector.pull_started
+
+知道：
+
+哪个 connector。
+
+不要依赖运行时对象名称。
+
+批准后的 C-0013-B 范围
+
+允许实现：
+
+可以做
+
+✅ 类型定义
+✅ FixtureFetcher
+✅ Runner
+✅ cursor interface
+✅ FileCursorStore（测试/开发）
+✅ quarantine writer
+✅ ClaimItem 接入
+✅ 审计
+✅ 测试
+
+不允许
+
+❌ OAuth
+❌ 平台 API
+❌ Token 管理
+❌ 自动提交申诉
+❌ Rule Engine 调用
+❌ Settlement 修改
+❌ Payment 修改
+
+最终状态
+纯文本
+C-0013-B Connector Implementation Plan
+
+PASS WITH REVISE
+
+允许进入：
+
+C-0013-B Implementation Checkpoint
+
+验收重点：
+
+FixtureFetcher 不演变成生产 Connector
+cursor 可恢复且不污染业务状态
+Runner 不调用 Rule Engine
+quarantine 不存 payload
+ClaimItem 幂等仍由 sourceFingerprint/platformRef 控制
+27 tenant triggers 不变化
+
+可以继续。
+```
