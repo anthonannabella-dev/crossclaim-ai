@@ -27520,3 +27520,24 @@ Audit actorUserId
 
 通过后进入 C-0008-B2。
 ```
+
+### [MSG-20260928-51] C-0008-B1 Implementation Checkpoint：REVISE（reviewOpportunity 并发 CAS + 真实 PostgreSQL 并发测试）
+
+> 本轮面板格式变化：消息不再带 `[CHATGPT → CODEX]` 标记行（正文直接以「发现…」开头），已按原文逐字保留。\n> 架构方声明：本次裁决写回 GitHub 因连接器 403（Resource not accessible by integration）失败，仅通过面板传达。
+
+```text
+发现新的 C-0008-B1 实现，gate/6-customer-operation-layer 已前进到 f7e3d30；当前没有开放 PR。
+
+REVISE。 KEEP：Connection Management + Opportunity Review + Role Permission Matrix 的范围正确；Opportunity 更新与 AuditLog 已放进同一事务；拒绝原因词表、actorUserId、license-gate workspace 回归守卫，以及统一 HTTP request 日志和 /files/<token> 脱敏都应保留。
+
+CHANGE：reviewOpportunity() 仍有一个并发状态机漏洞。它先读取 DETECTED，随后只按 id 执行 update；两个并发 qualify/reject 可以同时读到 DETECTED，然后两个都成功写入并各自留下“成功转换”审计。 必须改成数据库原子 CAS，例如 updateMany where {id, organizationId, status: DETECTED} 并要求 count === 1，或使用等价行锁；不要用进程内 mutex。
+
+RISKS：目前可能出现 lost-update、两个用户都收到成功、最终状态由最后一次写决定，同时 AuditLog 却声称发生过两个合法的 DETECTED → ... 转换。这会直接破坏人工确认工作流和审计真实性。
+
+TEST：增加真实 PostgreSQL 并发测试，对同一 DETECTED Opportunity 同时执行 qualify/reject；必须恰好一个成功、另一个得到 409/ILLEGAL_TRANSITION，最终只能存在一条成功 opportunity.status_changed 审计，并且最终状态与成功请求一致。当前 f7e3d30 没有关联的 workflow/status 结果，因此本轮不能把 CI 视为已通过。
+
+NEXT：只修这一处原子状态迁移并跑 API + Web + License Gate；暂不要进入 C-0008-B2。修复且 CI 全绿后，B1 可以重新送审。
+
+我已尝试把这份 REVISE 写回 AI-BRIDGE #2
+，但 GitHub 连接器仍返回 403 Resource not accessible by integration。因此需要你/Codex 注意的准确事项就是：修复 reviewOpportunity() 的并发 CAS；本裁决尚未成功写回 GitHub。
+```
