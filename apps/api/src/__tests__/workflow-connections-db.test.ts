@@ -338,4 +338,53 @@ describe('C-0008-B1 — 连接管理（真实 PostgreSQL）', () => {
     expect(row.status).toBe('ACTIVE');
     expect(await auditRows(created.id)).toHaveLength(1);
   });
+
+  it('并发状态迁移：CAS 只放行一个互斥目标，审计只留一条', async () => {
+    const created = await createManagedConnection(
+      prisma,
+      {
+        organizationId: ORG,
+        actorUserId: adminId,
+        role: 'ADMIN',
+        label: '并发连接',
+        kind: 'FILE_UPLOAD',
+        domain: 'LOGISTICS',
+        channel: 'UPS',
+      },
+      deps,
+    );
+
+    // ACTIVE → PAUSED 与 ACTIVE → NEEDS_AUTH 各自都合法，但互为互斥结果：
+    // 同一初始状态上并发执行时，只能有一个成功。
+    const [first, second] = await Promise.allSettled([
+      setConnectionStatus(
+        prisma,
+        { organizationId: ORG, actorUserId: adminId, role: 'ADMIN', connectionId: created.id, to: 'PAUSED' },
+        deps,
+      ),
+      setConnectionStatus(
+        prisma,
+        { organizationId: ORG, actorUserId: adminId, role: 'ADMIN', connectionId: created.id, to: 'NEEDS_AUTH' },
+        deps,
+      ),
+    ]);
+
+    const winners = [first, second].filter((result) => result.status === 'fulfilled');
+    const losers = [first, second].filter((result) => result.status === 'rejected');
+    expect(winners).toHaveLength(1);
+    expect(losers).toHaveLength(1);
+    expect((losers[0] as PromiseRejectedResult).reason).toMatchObject({
+      code: 'ILLEGAL_TRANSITION',
+    });
+
+    const winner = (winners[0] as PromiseFulfilledResult<{ to: string }>).value;
+    const row = await prisma.sourceConnection.findUniqueOrThrow({ where: { id: created.id } });
+    expect(row.status).toBe(winner.to);
+
+    const statusAudits = (await auditRows(created.id)).filter(
+      (r) => r.action === 'source_connection.status_changed',
+    );
+    expect(statusAudits).toHaveLength(1);
+    expect(statusAudits[0].changes).toMatchObject({ from: 'ACTIVE', to: winner.to });
+  });
 });

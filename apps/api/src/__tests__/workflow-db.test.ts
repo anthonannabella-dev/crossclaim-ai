@@ -248,4 +248,47 @@ describe('C-0008-B1 — 机会人工复核（真实 PostgreSQL）', () => {
     expect(row.qualifiedAt).toBeNull();
     expect(await auditRows(opportunity.id)).toHaveLength(0);
   });
+
+  it('并发 qualify/reject：恰好一个成功、另一个 ILLEGAL_TRANSITION，且只有一条成功审计', async () => {
+    const opportunity = await seedOpportunity();
+    const base = {
+      organizationId: ORG,
+      opportunityId: opportunity.id,
+      actorUserId,
+      role: 'OPS',
+    } as const;
+
+    // 同一 DETECTED 机会上同时发起两个复核；数据库必须用原子 CAS 只放行一个。
+    const [first, second] = await Promise.allSettled([
+      reviewOpportunity(prisma, { ...base, decision: 'QUALIFY' }, () => NOW),
+      reviewOpportunity(prisma, { ...base, decision: 'REJECT', reason: 'duplicate' }, () => NOW),
+    ]);
+
+    const settled = [first, second];
+    const winners = settled.filter((result) => result.status === 'fulfilled');
+    const losers = settled.filter((result) => result.status === 'rejected');
+    expect(winners).toHaveLength(1);
+    expect(losers).toHaveLength(1);
+    expect((losers[0] as PromiseRejectedResult).reason).toMatchObject({
+      code: 'ILLEGAL_TRANSITION',
+    });
+
+    const winner = (
+      winners[0] as PromiseFulfilledResult<{ to: 'QUALIFIED' | 'REJECTED'; reason: string | null }>
+    ).value;
+    const row = await prisma.recoveryOpportunity.findUniqueOrThrow({ where: { id: opportunity.id } });
+    expect(row.status).toBe(winner.to);
+    if (winner.to === 'QUALIFIED') {
+      expect(row.qualifiedAt?.getTime()).toBe(NOW.getTime());
+      expect(row.rejectedReason).toBeNull();
+    } else {
+      expect(row.rejectedReason).toBe('duplicate');
+    }
+
+    // 审计真实性：只有成功的那一次转换留下记录，且与最终状态一致。
+    const audits = await auditRows(opportunity.id);
+    expect(audits).toHaveLength(1);
+    expect(audits[0]).toMatchObject({ actorType: 'USER', actorUserId, action: 'opportunity.status_changed' });
+    expect(audits[0].changes).toMatchObject({ from: 'DETECTED', to: winner.to });
+  });
 });

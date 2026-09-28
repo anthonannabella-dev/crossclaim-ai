@@ -57,19 +57,21 @@ function asRow(role: AppRole): Row {
 
 interface FakeTx {
   recoveryOpportunity: {
+    updateMany: ReturnType<typeof vi.fn>;
     findFirst: ReturnType<typeof vi.fn>;
-    update: ReturnType<typeof vi.fn>;
   };
   auditLog: { create: ReturnType<typeof vi.fn> };
 }
 
-function fakePrisma(status: string | null) {
+/**
+ * `status` 是"数据库里现在是什么"；`casHits` 决定原子 CAS 是否命中
+ * （命中 = 该行当时确实是 DETECTED）。
+ */
+function fakePrisma(status: string | null, casHits = status !== null) {
   const tx: FakeTx = {
     recoveryOpportunity: {
-      findFirst: vi.fn(async () =>
-        status === null ? null : { id: 'opp-1', status },
-      ),
-      update: vi.fn(async () => ({ id: 'opp-1' })),
+      updateMany: vi.fn(async () => ({ count: casHits ? 1 : 0 })),
+      findFirst: vi.fn(async () => (status === null ? null : { status })),
     },
     auditLog: { create: vi.fn(async () => ({ id: 'audit-1' })) },
   };
@@ -157,13 +159,17 @@ describe('C-0008-B1 — reviewOpportunity 状态迁移与审计', () => {
     );
 
     expect(result).toEqual({
-      opportunityId: 'opp-1',
+      opportunityId: baseInput.opportunityId,
       from: 'DETECTED',
       to: 'QUALIFIED',
       reason: null,
     });
-    expect(tx.recoveryOpportunity.update).toHaveBeenCalledWith({
-      where: { id: 'opp-1' },
+    expect(tx.recoveryOpportunity.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: baseInput.opportunityId,
+        organizationId: baseInput.organizationId,
+        status: 'DETECTED',
+      },
       data: { status: 'QUALIFIED', qualifiedAt: NOW, rejectedReason: null },
     });
     const audit = tx.auditLog.create.mock.calls[0][0].data;
@@ -172,7 +178,7 @@ describe('C-0008-B1 — reviewOpportunity 状态迁移与审计', () => {
       actorUserId: baseInput.actorUserId,
       action: 'opportunity.status_changed',
       entityType: 'RecoveryOpportunity',
-      entityId: 'opp-1',
+      entityId: baseInput.opportunityId,
       changes: { from: 'DETECTED', to: 'QUALIFIED', decision: 'QUALIFY' },
       createdAt: NOW,
     });
@@ -189,8 +195,12 @@ describe('C-0008-B1 — reviewOpportunity 状态迁移与审计', () => {
 
     expect(result.to).toBe('REJECTED');
     expect(result.reason).toBe('duplicate');
-    expect(tx.recoveryOpportunity.update).toHaveBeenCalledWith({
-      where: { id: 'opp-1' },
+    expect(tx.recoveryOpportunity.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: baseInput.opportunityId,
+        organizationId: baseInput.organizationId,
+        status: 'DETECTED',
+      },
       data: { status: 'REJECTED', rejectedReason: 'duplicate' },
     });
     expect(tx.auditLog.create.mock.calls[0][0].data.changes).toEqual({
@@ -203,24 +213,40 @@ describe('C-0008-B1 — reviewOpportunity 状态迁移与审计', () => {
 
   it('非 DETECTED 状态 → ILLEGAL_TRANSITION，且零写入', async () => {
     for (const status of ['QUALIFIED', 'REJECTED', 'CONVERTED', 'EXPIRED']) {
-      const { prisma, tx } = fakePrisma(status);
+      const { prisma, tx } = fakePrisma(status, false);
       await expect(
         reviewOpportunity(prisma, { ...baseInput, decision: 'QUALIFY' }, () => NOW),
       ).rejects.toMatchObject({ code: 'ILLEGAL_TRANSITION' });
-      expect(tx.recoveryOpportunity.update).not.toHaveBeenCalled();
+      expect(tx.recoveryOpportunity.updateMany).toHaveBeenCalled();
       expect(tx.auditLog.create).not.toHaveBeenCalled();
     }
   });
 
   it('机会不存在（或跨租户）→ NOT_FOUND，且零写入', async () => {
-    const { prisma, tx } = fakePrisma(null);
+    const { prisma, tx } = fakePrisma(null, false);
     await expect(
       reviewOpportunity(prisma, { ...baseInput, decision: 'QUALIFY' }, () => NOW),
     ).rejects.toMatchObject({ code: 'NOT_FOUND' });
+    expect(tx.recoveryOpportunity.updateMany).toHaveBeenCalledWith({
+      where: {
+        id: baseInput.opportunityId,
+        organizationId: baseInput.organizationId,
+        status: 'DETECTED',
+      },
+      data: { status: 'QUALIFIED', qualifiedAt: NOW, rejectedReason: null },
+    });
     expect(tx.recoveryOpportunity.findFirst).toHaveBeenCalledWith({
       where: { id: baseInput.opportunityId, organizationId: baseInput.organizationId },
-      select: { id: true, status: true },
+      select: { status: true },
     });
+    expect(tx.auditLog.create).not.toHaveBeenCalled();
+  });
+
+  it('CAS 未命中时绝不写审计（并发竞争者视角）', async () => {
+    const { prisma, tx } = fakePrisma('QUALIFIED', false);
+    await expect(
+      reviewOpportunity(prisma, { ...baseInput, decision: 'REJECT', reason: 'duplicate' }, () => NOW),
+    ).rejects.toMatchObject({ code: 'ILLEGAL_TRANSITION' });
     expect(tx.auditLog.create).not.toHaveBeenCalled();
   });
 

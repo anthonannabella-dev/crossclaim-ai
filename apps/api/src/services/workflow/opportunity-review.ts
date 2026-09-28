@@ -85,27 +85,35 @@ export async function reviewOpportunity(
   const to = input.decision === 'QUALIFY' ? 'QUALIFIED' : 'REJECTED';
 
   return prisma.$transaction(async (tx) => {
-    const opportunity = await tx.recoveryOpportunity.findFirst({
-      where: { id: input.opportunityId, organizationId: input.organizationId },
-      select: { id: true, status: true },
-    });
-    if (!opportunity) {
-      throw new WorkflowError('NOT_FOUND', `机会 ${input.opportunityId} 不存在或不属于该租户`);
-    }
-    if (opportunity.status !== REVIEWABLE_STATUS) {
-      throw new WorkflowError(
-        'ILLEGAL_TRANSITION',
-        `机会状态 ${opportunity.status} 不允许人工复核（只有 DETECTED 可以）`,
-      );
-    }
-
-    await tx.recoveryOpportunity.update({
-      where: { id: opportunity.id },
+    // C-0008-B1 REVISE（MSG-20260928-51）：必须用数据库原子 CAS，
+    // 不能「先读 DETECTED 再按 id 更新」——否则两个并发 qualify/reject
+    // 会同时读到 DETECTED 并双双成功，造成 lost update 与虚假审计。
+    const updated = await tx.recoveryOpportunity.updateMany({
+      where: {
+        id: input.opportunityId,
+        organizationId: input.organizationId,
+        status: REVIEWABLE_STATUS,
+      },
       data:
         to === 'QUALIFIED'
           ? { status: to, qualifiedAt: at, rejectedReason: null }
           : { status: to, rejectedReason: reason },
     });
+
+    if (updated.count === 0) {
+      // 区分「不存在/跨租户」与「状态已不是 DETECTED」；此处只读，不再写。
+      const current = await tx.recoveryOpportunity.findFirst({
+        where: { id: input.opportunityId, organizationId: input.organizationId },
+        select: { status: true },
+      });
+      if (!current) {
+        throw new WorkflowError('NOT_FOUND', `机会 ${input.opportunityId} 不存在或不属于该租户`);
+      }
+      throw new WorkflowError(
+        'ILLEGAL_TRANSITION',
+        `机会状态 ${current.status} 不允许人工复核（只有 DETECTED 可以）`,
+      );
+    }
 
     // Same transaction as the state change (C-0008-B1 ruling).
     const row = prepareAuditInsert(
@@ -115,9 +123,10 @@ export async function reviewOpportunity(
         actorUserId: input.actorUserId,
         action: 'opportunity.status_changed',
         entityType: 'RecoveryOpportunity',
-        entityId: opportunity.id,
+        entityId: input.opportunityId,
         changes: {
-          from: opportunity.status,
+          // CAS 命中即代表迁移前状态就是 DETECTED。
+          from: REVIEWABLE_STATUS,
           to,
           decision: input.decision,
           ...(reason ? { reason } : {}),
@@ -141,6 +150,6 @@ export async function reviewOpportunity(
       },
     });
 
-    return { opportunityId: opportunity.id, from: REVIEWABLE_STATUS, to, reason };
+    return { opportunityId: input.opportunityId, from: REVIEWABLE_STATUS, to, reason };
   });
 }

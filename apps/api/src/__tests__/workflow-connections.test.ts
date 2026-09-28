@@ -33,17 +33,22 @@ interface FakeConnectionTx {
   sourceConnection: {
     findFirst: ReturnType<typeof vi.fn>;
     create: ReturnType<typeof vi.fn>;
-    update: ReturnType<typeof vi.fn>;
+    updateMany: ReturnType<typeof vi.fn>;
   };
   auditLog: { create: ReturnType<typeof vi.fn> };
 }
 
-function fakeTx(existing: { id: string; status: string } | null = null) {
+function fakeTx(
+  existing: { id: string; status: string; credentialRef?: string | null } | null = null,
+  casHits = true,
+) {
+  // 真实数据库里 credentialRef 是 NULL（不是 undefined），CAS 的 where 会带上它。
+  const row = existing ? { credentialRef: null, ...existing } : null;
   const tx: FakeConnectionTx = {
     sourceConnection: {
-      findFirst: vi.fn(async () => existing),
+      findFirst: vi.fn(async () => row),
       create: vi.fn(async () => ({ id: 'conn-1' })),
-      update: vi.fn(async () => ({ id: 'conn-1' })),
+      updateMany: vi.fn(async () => ({ count: casHits ? 1 : 0 })),
     },
     auditLog: { create: vi.fn(async () => ({ id: 'audit-1' })) },
   };
@@ -208,7 +213,7 @@ describe('C-0008-B1 — 连接状态迁移与凭据轮换（单元）', () => {
         deps,
       ),
     ).rejects.toMatchObject({ code: 'ILLEGAL_TRANSITION' });
-    expect(tx.sourceConnection.update).not.toHaveBeenCalled();
+    expect(tx.sourceConnection.updateMany).not.toHaveBeenCalled();
   });
 
   it('相同状态重复迁移被拒，且不写审计', async () => {
@@ -251,8 +256,8 @@ describe('C-0008-B1 — 连接状态迁移与凭据轮换（单元）', () => {
       at: NOW.toISOString(),
     });
     expect(JSON.stringify(changes)).not.toContain('vault:ups-2026-q4');
-    expect(tx.sourceConnection.update).toHaveBeenCalledWith({
-      where: { id: 'conn-1' },
+    expect(tx.sourceConnection.updateMany).toHaveBeenCalledWith({
+      where: { id: 'conn-1', organizationId: ORG, status: 'ACTIVE', credentialRef: null },
       data: { credentialRef: 'vault:ups-2026-q4', status: 'ACTIVE' },
     });
   });
@@ -274,5 +279,27 @@ describe('C-0008-B1 — 连接状态迁移与凭据轮换（单元）', () => {
         deps,
       ),
     ).rejects.toMatchObject({ code: 'ILLEGAL_TRANSITION' });
+  });
+
+  it('CAS 未命中（并发修改）→ ILLEGAL_TRANSITION，且不写审计', async () => {
+    const statusRace = fakeTx({ id: 'conn-1', status: 'ACTIVE' }, false);
+    await expect(
+      setConnectionStatus(
+        statusRace.prisma,
+        { organizationId: ORG, actorUserId: ACTOR, role: 'ADMIN', connectionId: 'conn-1', to: 'PAUSED' },
+        deps,
+      ),
+    ).rejects.toMatchObject({ code: 'ILLEGAL_TRANSITION' });
+    expect(statusRace.tx.auditLog.create).not.toHaveBeenCalled();
+
+    const refRace = fakeTx({ id: 'conn-1', status: 'ACTIVE' }, false);
+    await expect(
+      rotateConnectionCredentialRef(
+        refRace.prisma,
+        { organizationId: ORG, actorUserId: ACTOR, role: 'ADMIN', connectionId: 'conn-1', credentialRef: 'vault:new' },
+        deps,
+      ),
+    ).rejects.toMatchObject({ code: 'ILLEGAL_TRANSITION' });
+    expect(refRace.tx.auditLog.create).not.toHaveBeenCalled();
   });
 });

@@ -310,13 +310,17 @@ export async function setConnectionStatus(
       throw error;
     }
 
-    await tx.sourceConnection.update({
-      where: { id: connection.id },
+    // 与机会复核同样的原子性要求：CAS 到「读到的那个状态」，避免并发迁移互相覆盖。
+    const updated = await tx.sourceConnection.updateMany({
+      where: { id: connection.id, organizationId: input.organizationId, status: connection.status },
       data: {
         status: to as SourceConnectionStatus,
         ...(to === 'ACTIVE' ? { lastError: null, lastErrorAt: null } : {}),
       },
     });
+    if (updated.count !== 1) {
+      throw new WorkflowError('ILLEGAL_TRANSITION', '连接状态已被其他操作改变，请刷新后重试');
+    }
 
     const row = prepareAuditInsert(
       {
@@ -382,10 +386,19 @@ export async function rotateConnectionCredentialRef(
     }
 
     const status = credentialRef === null ? 'NEEDS_AUTH' : connection.status;
-    await tx.sourceConnection.update({
-      where: { id: connection.id },
+    // CAS 到「读到的状态 + 读到的引用」，两次并发轮换不会互相覆盖。
+    const updated = await tx.sourceConnection.updateMany({
+      where: {
+        id: connection.id,
+        organizationId: input.organizationId,
+        status: connection.status,
+        credentialRef: connection.credentialRef,
+      },
       data: { credentialRef, status },
     });
+    if (updated.count !== 1) {
+      throw new WorkflowError('ILLEGAL_TRANSITION', '连接凭据引用已被其他操作改变，请刷新后重试');
+    }
 
     const row = prepareAuditInsert(
       {
