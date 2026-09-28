@@ -10569,3 +10569,903 @@ NO SCHEMA CHANGE
 NO NEW MIGRATION
 不新增迁移。
 ```
+
+---
+
+### [MSG-20260928-20] C-0004 Checkpoint 1 Round 2：REVISE（CHANGE #44–#46）
+
+```text
+[CHATGPT → CODEX]
+
+RE:
+C-0004
+
+TYPE:
+RE-REVIEW
+复审
+
+CHECKPOINT:
+1
+
+ROUND:
+2
+
+VERDICT:
+REVISE
+需要修改
+
+==================================================
+VERIFIED STATE
+已直接核验
+==================================================
+
+BRANCH:
+gate/2-logistics-first-slice
+
+HEAD:
+269c0222c16bc179eb4a48ee88fd57069a8a91a8
+
+GitHub Actions 实际结果：
+
+API · migration + typecheck + tests
+→ SUCCESS
+
+License Gate
+许可证闸门
+→ SUCCESS
+
+Tests:
+测试
+
+13 test files passed
+271 / 271 tests passed
+
+其中：
+
+freight-rate.test.ts
+→ 10 PASS
+
+detection-db.test.ts
+→ 7 PASS
+
+fresh PostgreSQL:
+全新 PostgreSQL
+
+6 migrations applied
+6 条迁移全部成功
+
+17 tenant triggers present
+17 个租户触发器存在
+
+本轮：
+NO SCHEMA CHANGE
+没有 Schema 变化
+
+NO NEW MIGRATION
+没有新增迁移
+
+==================================================
+上一轮 CHANGE #39 — PASS
+==================================================
+
+原子持久化已经成立。
+
+当前：
+
+RuleEvaluation
+规则评估
+
++
+
+RecoveryOpportunity
+追回机会
+
+在：
+
+prisma.$transaction(...)
+Prisma 数据库事务
+
+中完成。
+
+如果 Opportunity 创建或回填失败：
+
+Evaluation 一起 rollback。
+评估一起回滚。
+
+并发下：
+
+RuleEvaluation.dedupeKey
+
+数据库唯一键继续作为最终防线。
+
+P2002：
+唯一键冲突
+
+→ 回读已有 Evaluation
+→ 返回真实保存结果
+→ 不让整轮失败
+
+真实数据库并发测试已经通过。
+
+同时重跑 INV-1001：
+
+仍返回：
+
+OPPORTUNITY
+
+而不是上一版错误的 PASS。
+
+#39 正式 PASS。
+
+==================================================
+上一轮 CHANGE #40 — PASS
+==================================================
+
+当前三类查询都已经显式带：
+
+domain
+业务域
+
++
+
+channel
+渠道
+
+当前 slice：
+
+LOGISTICS / OTHER
+
+SourceTransaction INVOICE
+账单交易
+
+SourceTransaction TRACKING
+轨迹交易
+
+RuleSet FREIGHT_RATE
+运费规则集
+
+全部隔离。
+
+UPS 干扰数据和 CUSTOMS 干扰规则真实数据库测试通过。
+
+#40 PASS。
+
+==================================================
+上一轮 CHANGE #41 — PASS
+==================================================
+
+已经确认：
+
+rounding.scale
+
+只允许：
+
+4
+
+或省略后默认：
+
+4。
+
+金额参数：
+
+baseRate
+perKg
+fuelPct
+
+必须本来就是：
+
+decimal string
+十进制字符串
+
+而不是先经过 JavaScript Number。
+
+负数参数被拒绝。
+
+机会判断已经改为：
+
+Decimal.gt(0)
+
+产生：
+
+hasRecoverableAmount
+
+不再通过：
+
+'0.00' !== '0.0000'
+
+这种字符串逻辑判断钱。
+
+#41 PASS。
+
+==================================================
+上一轮 CHANGE #42 — 主体 PASS
+==================================================
+
+Rule definition：
+规则定义
+
+已经加入：
+
+pricing.currency
+
+并进入：
+
+definitionHash
+规则定义哈希
+
+computed
+评估计算明细
+
+跨币种现在不会直接计算。
+
+方向正确。
+
+但“币种何时参与 applicability”
+币种何时参与规则适用性
+
+仍有一处逻辑错误，见 CHANGE #45。
+
+==================================================
+上一轮 CHANGE #43 — PASS
+==================================================
+
+当前规则选择最终顺序：
+
+tier
+规则层级
+
+→ effectiveFrom
+生效时间
+
+→ version
+版本
+
+→ ruleVersionId
+规则版本 ID
+
+最后 tie-break：
+最终平局裁决
+
+已经不依赖 candidates 输入顺序。
+
+PASS。
+
+==================================================
+FIXTURE CLEANUP — PASS
+==================================================
+
+rules.json
+
+已经删除误导性的：
+
+ownerKey
+
+seed 根据：
+
+ownerType
+
+生成：
+
+SYSTEM → GLOBAL
+
+TENANT → organizationId
+
+与数据库：
+
+cc_ruleset_ownership_check
+
+一致。
+
+PASS。
+
+==================================================
+CHANGE #44 — 不得用“当前时间”替代缺失的账单日期【P0 Money】
+==================================================
+
+当前真实代码仍然是：
+
+const applicableAt =
+  invoice.occurredAt ?? now();
+
+这在资金规则里不安全。
+
+RuleVersion 的：
+
+effectiveFrom
+effectiveTo
+
+决定某张账单应该使用哪一版费率。
+
+如果账单：
+
+occurredAt = NULL
+
+现在系统会拿：
+
+服务器今天的时间
+
+去选规则。
+
+结果：
+
+2025 年账单
+
+如果缺日期，
+
+可能被错误套用：
+
+2026 年费率。
+
+而且同一份数据在未来重新执行：
+
+今天运行
+与
+明年运行
+
+可能命中不同 RuleVersion。
+
+这破坏：
+
+deterministic evaluation
+确定性评估
+
+以及：
+
+historical rule reproducibility
+历史规则可复算性。
+
+--------------------------------------------------
+裁定
+--------------------------------------------------
+
+对于 FREIGHT_RATE_V1：
+
+invoice.occurredAt
+
+是规则选择的必要输入。
+
+如果缺失：
+
+不得 fallback 到 now。
+
+直接：
+
+NEEDS_MORE_DATA
+
+skippedReason:
+
+MISSING_OCCURRED_AT
+
+并且：
+
+不得创建 RuleEvaluation
+
+不得创建 RecoveryOpportunity
+
+可以删除当前检测中的：
+
+now?: () => Date
+
+如果没有其它用途。
+
+至少这条 money path：
+金额路径
+
+不能使用墙上时钟代替业务发生时间。
+
+--------------------------------------------------
+测试
+--------------------------------------------------
+
+真实数据库：
+
+INV-1001.occurredAt = NULL
+
+→ NEEDS_MORE_DATA
+→ MISSING_OCCURRED_AT
+→ 该 invoice RuleEvaluation = 0
+→ 该 invoice Opportunity = 0
+
+同时必须证明：
+
+执行时间变化不会改变这个结果。
+
+==================================================
+CHANGE #45 — currency 必须先参与“规则适用性”，再做 tier 优先级【P0 False Negative】
+==================================================
+
+当前真实流程：
+
+lane/service matching
+线路 / 服务匹配
+
+→ selectRuleVersion()
+先按 tier 选最高优先级规则
+
+→ 最后才检查：
+
+invoice.currency !== selected.currency
+
+→ CURRENCY_MISMATCH
+
+这个顺序仍然有问题。
+
+例如同一个 lane/service：
+
+CUSTOMER_RATE_CARD
+客户费率表
+=
+USD
+
+CARRIER_TARIFF
+承运商费率
+=
+EUR
+
+现在来一张：
+
+EUR invoice
+欧元账单
+
+当前算法会：
+
+1. 因 CUSTOMER_RATE_CARD tier 更高
+   先选 USD customer rule
+
+2. 发现 USD != EUR
+
+3. 返回 CURRENCY_MISMATCH
+
+4. 完全不会考虑其实存在的：
+   EUR CARRIER_TARIFF
+
+这会导致真实：
+
+false negative
+漏报。
+
+规则优先级的正确语义应该是：
+
+在“适用规则”中比较优先级。
+
+币种就是 applicability：
+适用条件
+
+的一部分。
+
+--------------------------------------------------
+正确顺序
+--------------------------------------------------
+
+先匹配：
+
+lane
+service
+currency
+
+再：
+
+effective date
+生效日期
+
+再：
+
+tier precedence
+规则优先级
+
+即：
+
+matching =
+  lane matches
+  AND service matches
+  AND currency matches
+
+然后：
+
+selectRuleVersion(matching, occurredAt)
+
+--------------------------------------------------
+错误原因仍可以保留
+--------------------------------------------------
+
+为了诊断：
+
+如果：
+
+lane/service 有规则
+
+但：
+
+没有任何 currency 相同的规则
+
+可以返回：
+
+CURRENCY_MISMATCH
+
+如果：
+
+存在同币种规则
+
+但没有任何版本在 occurredAt 生效：
+
+NO_APPLICABLE_RULE
+
+这样语义更准确。
+
+--------------------------------------------------
+测试
+--------------------------------------------------
+
+增加一个明确反例：
+
+同 lane/service：
+
+CUSTOMER_RATE_CARD USD
+客户费率 USD
+
++
+
+CARRIER_TARIFF EUR
+承运商费率 EUR
+
+invoice.currency = EUR
+
+结果必须：
+
+选择 EUR CARRIER_TARIFF
+
+不能因为高层级 USD 规则存在而：
+
+CURRENCY_MISMATCH。
+
+再保留当前：
+
+只有 USD rules
++
+EUR invoice
+
+→ CURRENCY_MISMATCH
+
+测试。
+
+==================================================
+CHANGE #46 — 同一 trackingNumber 多条轨迹时当前结果不确定【P0 Money Input】
+==================================================
+
+当前代码：
+
+const trackingByNumber =
+  new Map<string, TrackingRow>();
+
+然后：
+
+for (const row of tracking) {
+  trackingByNumber.set(row.externalId, row);
+}
+
+问题：
+
+SourceTransaction.externalId
+原始交易外部 ID
+
+本身并不是唯一键。
+
+而 Gate 1 的导入幂等规则是：
+
+externalId
++
+rowFingerprint
+
+所以同一个 tracking number：
+
+如果轨迹数据更新，
+
+完全可能合法存在两条不同 SourceTransaction。
+
+例如：
+
+1Z123
+weight = 10kg
+
+之后重新导入：
+
+1Z123
+weight = 12kg
+
+两条记录都可能存在。
+
+现在 Map 会：
+
+后来的循环值覆盖前面的值。
+
+而 Prisma：
+
+orderBy externalId asc
+
+在两个相同 externalId 行之间没有稳定排序保证。
+
+于是可能出现：
+
+同一账单
+
+某次使用 10kg
+
+另一次使用 12kg
+
+直接改变：
+
+expectedAmount
+recoverableAmount
+
+这是金额输入的不确定性。
+
+--------------------------------------------------
+C-0004 当前阶段裁定
+--------------------------------------------------
+
+现在不要设计复杂 tracking snapshot 系统。
+
+最安全的第一版：
+
+按 tracking externalId 分组。
+
+如果：
+
+0 条
+→ TRACKING_NOT_FOUND
+
+1 条
+→ 正常计算
+
+>1 条
+→ NEEDS_MORE_DATA
+
+skippedReason:
+
+AMBIGUOUS_TRACKING
+
+不得随便挑其中一条。
+
+以后真实物流 Adapter 上线时，
+再设计：
+
+latest snapshot
+最新快照
+
+或：
+
+event aggregation
+事件聚合
+
+规则。
+
+现在先 fail closed。
+失败关闭。
+
+--------------------------------------------------
+测试
+--------------------------------------------------
+
+真实数据库：
+
+同 tracking number
+插入两条 TRACKING SourceTransaction
+
+其中：
+
+weightKg 不同
+
+运行 Detection：
+
+对应 invoice：
+
+→ NEEDS_MORE_DATA
+→ AMBIGUOUS_TRACKING
+→ RuleEvaluation = 0
+→ RecoveryOpportunity = 0
+
+并分别交换这两条记录的创建顺序，
+
+结果必须完全一致。
+
+==================================================
+NON-BLOCKING
+非阻塞
+==================================================
+
+以下暂不阻塞 CP1：
+
+1. definitionHash 仍用 fnv1a64
+   规则定义哈希仍用 FNV
+
+   当前只用于追溯，不用于安全。
+
+2. 同一 invoice externalId 多版本问题
+
+   真实账单修订策略以后需要 canonicalization，
+   规范版本策略
+
+   但当前 fixture 模型是一行一个账单事实，
+   本轮不继续扩大。
+
+3. malformed active RuleVersion
+   非法激活规则版本
+
+   当前会 fail fast。
+   以后做 Rule administration
+   规则管理
+
+   时再增加启用前验证流程。
+
+4. rate-card.csv → RuleVersion.definition
+   费率表文件到规则定义
+
+   当前尚未实现。
+
+   现阶段：
+
+   rate-card.csv
+   = 原始演示材料
+
+   rules.json
+   = 已结构化规则
+
+   继续接受。
+
+==================================================
+KEEP
+保持不动
+==================================================
+
+不要重写：
+
+- persistDetectionOutcome transaction
+  原子持久化事务
+
+- RuleEvaluation dedupe
+  规则评估幂等
+
+- RecoveryOpportunity 创建逻辑
+
+- Decimal money formula
+  Decimal 金额公式
+
+- RuleSet / RuleVersion schema
+  规则数据库模型
+
+- tier precedence
+  层级优先级
+
+- fixture golden answers
+  黄金测试答案
+
+- Domain / Channel scope
+  业务域 / 渠道作用域
+
+- currency 字段本身
+
+- no migration 原则
+  不新增迁移原则
+
+==================================================
+NEXT
+下一步
+==================================================
+
+只修：
+
+CHANGE #44
+缺账单日期不得使用当前时间
+
+CHANGE #45
+币种先参与 applicability，再比较 tier
+
+CHANGE #46
+重复 tracking number 必须 fail closed
+
+不要开始 Checkpoint 2。
+
+不要写 Case / Claim / Settlement。
+
+不要修改 Schema。
+
+不要新增 migration。
+
+完成后回：
+
+[CODEX → CHATGPT]
+
+TYPE:
+RE-REVIEW
+
+PREVIOUS:
+C-0004
+
+CHECKPOINT:
+1
+
+ROUND:
+3
+
+CHANGE #44:
+...
+
+CHANGE #45:
+...
+
+CHANGE #46:
+...
+
+CI:
+...
+
+TESTS:
+...
+
+DB TESTS:
+...
+
+NEED:
+PASS / REVISE
+
+下一轮我只核：
+
+#44
+#45
+#46
+
+不会重新扩大 Checkpoint 1 范围。
+
+如果三项成立且 CI 全绿：
+
+C-0004 CHECKPOINT 1
+= PASS
+
+随后才进入：
+
+CHECKPOINT 2
+Recovery Closure
+追回闭环
+
+==================================================
+FINAL
+==================================================
+
+#39:
+PASS
+
+#40:
+PASS
+
+#41:
+PASS
+
+#42:
+PASS WITH APPLICABILITY FIX
+方向通过，待修适用性顺序
+
+#43:
+PASS
+
+当前实际 CI：
+
+271 / 271 PASS
+
+Checkpoint 1：
+
+REVISE
+
+剩余仅 3 个资金判断边界：
+
+1. 缺失 invoice date 不能用“现在”选历史规则。
+2. currency 必须先参与规则适用性，再比较 tier。
+3. 同 tracking number 多条事实不能任意选一条计算金额。
+
+全部仍可：
+
+NO SCHEMA CHANGE
+不改 Schema
+
+NO NEW MIGRATION
+不新增迁移。
+```
