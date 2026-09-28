@@ -52,3 +52,9 @@ export {
   buildIdentityParityReport,
   type IdentityParityReport,
 } from './identity-parity';
+export {
+  buildDuplicateResolutionReport,
+  type DuplicateResolutionEntry,
+  type DuplicateResolutionRecommendation,
+  type DuplicateResolutionReport,
+} from './duplicate-resolution';

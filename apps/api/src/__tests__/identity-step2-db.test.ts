@@ -19,6 +19,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import {
   applyIdentityBackfill,
+  buildDuplicateResolutionReport,
   buildIdentityParityReport,
   planIdentityBackfill,
 } from '../services/canonical';
@@ -275,5 +276,44 @@ describe('C-0006-B2 Step 2 — dual write + identity parity（真实 PostgreSQL�
     expect(parity.withCanonicalIdentity).toBe(1);
     expect(parity.withoutCanonicalIdentity).toBe(1);
     expect(parity.coverageRate).toBe('0.5000');
+  });
+
+  it('duplicate-resolution-report 说明重复来源与处置建议（只读，不改数据）', async () => {
+    await detect();
+    const mappedRow = await prisma.ruleEvaluation.findFirstOrThrow({
+      where: { organizationId: ORG, canonicalFactId: { not: null } },
+    });
+    const conflicting = await prisma.ruleEvaluation.create({
+      data: {
+        organizationId: ORG,
+        ruleVersionId: mappedRow.ruleVersionId,
+        sourceTransactionId: mappedRow.sourceTransactionId,
+        result: 'OPPORTUNITY',
+        computed: {},
+        dedupeKey: 'legacy-key-duplicate-report',
+      },
+    });
+
+    const report = await buildDuplicateResolutionReport(prisma, {
+      organizationId: ORG,
+      generatedAt: new Date('2026-09-28T13:10:00Z'),
+    });
+
+    expect(report.resolution).toBe('NEEDS_REVIEW');
+    expect(report.totals.DUPLICATE_TARGET).toBe(1);
+    expect(report.entries).toHaveLength(1);
+    const entry = report.entries[0];
+    expect(entry.ruleEvaluationId).toBe(conflicting.id);
+    expect(entry.reason).toBe('DUPLICATE_TARGET');
+    expect(entry.targetCanonicalFactId).toBe(mappedRow.canonicalFactId);
+    expect(entry.existingRuleEvaluationIds).toEqual([mappedRow.id]);
+    expect(entry.equivalent).toBe(true);
+    expect(entry.recommendation).toBe('KEEP_EXISTING');
+    expect(report.unresolved).toBe(0);
+
+    // 报告只读：未映射行仍然保持 NULL
+    const stillNull = await prisma.ruleEvaluation.findUniqueOrThrow({ where: { id: conflicting.id } });
+    expect(stillNull.canonicalFactId).toBeNull();
+    expect(stillNull.canonicalDedupeKey).toBeNull();
   });
 });

@@ -35,6 +35,8 @@ export interface IdentityBackfillPlan {
   updates: IdentityBackfillUpdate[];
   unmapped: Record<IdentityUnmappedReason, number>;
   unmappedSamples: Array<{ ruleEvaluationId: string; reason: IdentityUnmappedReason }>;
+  /** 全部未映射行（不截断），用于重复来源分析报告。 */
+  unmappedEntries: Array<{ ruleEvaluationId: string; reason: IdentityUnmappedReason }>;
   /** true 只有当 unmapped 全为 0 且没有重复目标（架构方要求 unmapped = 0% 才可切换）。 */
   canSwitch: boolean;
 }
@@ -78,6 +80,7 @@ export async function planIdentityBackfill(
     updates: [],
     unmapped: EMPTY_UNMAPPED(),
     unmappedSamples: [],
+    unmappedEntries: [],
     canSwitch: false,
   };
 
@@ -183,7 +186,10 @@ export async function planIdentityBackfill(
 
   for (const row of rows) {
     const reason = reasons.get(row.id);
-    if (reason) claim(row, reason);
+    if (reason) {
+      plan.unmappedEntries.push({ ruleEvaluationId: row.id, reason });
+      claim(row, reason);
+    }
   }
 
   const unmappedTotal = Object.values(plan.unmapped).reduce((sum, value) => sum + value, 0);
