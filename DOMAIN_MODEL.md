@@ -294,12 +294,36 @@ BillingInvoice（CrossClaim 向客户开票）
 - 所有迁移**必须可重复执行**，破坏性 DDL 必须显式说明
 - 每次 schema 变更必须同步更新本文件
 - fresh clone 必须能跑通：`apps/api` → `npm ci` → `npx prisma migrate deploy`
-- **CI 会在全新 PostgreSQL 上真实执行迁移**，并校验 17 个租户触发器存在
+- **CI 会在全新 PostgreSQL 上真实执行迁移**，并校验 19 个租户触发器存在
 
 当前迁移：
 
 | 迁移 | 内容 |
 |---|---|
-| `20260928055802_init` | 26 个模型的结构 |
+| `20260928055802_init` | Gate 0 领域模型结构（31 = 29 核心 + 2 联结） |
 | `20260928060000_tenant_integrity` | 租户完整性触发器（16 张表） |
-| `20260928070000_tenant_integrity_fixes` | BillingInvoice 租户触发器（+1 → 17）+ 规则所有权约束 |
+| `20260928070000_tenant_integrity_fixes` | C-0002 CHANGE #13/#14：BillingInvoice 租户触发器 + RuleSet/RuleVersion 所有权约束 |
+| `20260928080000_audit_actor_identity` | C-0003 CHANGE #16：审计 actor 身份拆分（actorType / actorUserId / actorRef） |
+| `20260928090000_audit_tenant_closure` | C-0003 CHANGE #24：审计租户闭合（actor 必须是该租户的成员） |
+| `20260928100000_audit_actor_identity_required` | C-0003 CHANGE #27：actor 身份必填（触发器总数为 19） |
+| `20260928120000_canonical_fact_layer` | C-0006-A：CanonicalFact / CanonicalFactSource（纯增量） |
+| `20260928130000_rule_evaluation_shadow` | C-0006-B1：RuleEvaluationShadow（runId + engineVersion） |
+| `20260928140000_rule_evaluation_identity_prepare` | C-0006-B2 Step 1：canonicalDedupeKey + 可空唯一约束 |
+| `20260928150000_customer_foundation_auth` | C-0008-A：Session / UserInvitation / User.passwordChangedAt |
+
+---
+
+## 角色与权限（C-0008-B1，架构方批准）
+
+| 角色 | 连接写 | 机会复核 | 建案 | Claim 正文 | Claim 金额 | Billing 查看 | Billing 推进 |
+|---|---|---|---|---|---|---|---|
+| OWNER | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| ADMIN | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
+| OPS | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
+| FINANCE | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ |
+| VIEWER | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+
+- 唯一实现：`apps/api/src/services/workflow/permissions.ts`；未知 / 空角色 fail closed（全部拒绝）。
+- 连接**读取**当前与「连接写」同权限（OWNER / ADMIN）；是否给 OPS 只读仍待架构方裁定（已列入 C-0008-B1 Checkpoint 的 QUESTIONS）。
+- 用户触发的一切状态变化必须与 AuditLog 同事务写入（`actorType=USER` + `actorUserId`）；Web 层不做本地授权。
+- 机会人工复核只允许 `DETECTED → QUALIFIED` 与 `DETECTED → REJECTED`（拒绝必须带批准词表的 reason）；`DETECTED → CONVERTED` 只能由 Recovery Closure 建案流程触发。

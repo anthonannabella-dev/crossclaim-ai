@@ -56,19 +56,23 @@ AI 负责文档理解、字段抽取、异常解释、证据推荐、案件总�
 
 ## 状态
 
-**NOT COMPLETE** —— 当前处于 Gate 0（工程地基）。
+**进行中（Gate 6 未收口）** —— Gate 0–5 已按 merge commit 合并；Gate 6 / C-0008 客户运营层进行中。
 
 已完成：
 
-- 领域模型 **31 个（29 核心 + 2 联结）**：`apps/api/prisma/schema.prisma`
-- 架构契约与领域规则（`ARCHITECTURE_CONTRACT.md` / `DOMAIN_MODEL.md`）
+- Gate 0 领域模型 **31 个（29 核心 + 2 联结）**：`apps/api/prisma/schema.prisma`
 - 数据库迁移（10 个）+ **19 个租户完整性触发器**（业务数据域）
-- 测试：架构契约 + 真实数据库租户隔离，共 **95 项**
-- Agent 协作规则（`AGENTS.md`）+ AI-ARCHITECT-INBOX + 本地 Watcher
-- CI（在全新 PostgreSQL 上真实执行迁移并跑全部测试）+ 许可证闸门
+- Gate 1 运行时地基（Storage Adapter / Audit / Import foundation / Adapter interface）
+- Gate 2 物流首个纵向闭环（Detection Spine + Recovery Closure）
+- Gate 3 双模式采集与证据晋级（FILE_UPLOAD + 只读 API Connector + 跨来源对账）
+- Gate 4 Canonical Fact 层 + 检测身份迁移（`DETECTION_IDENTITY_MODE` 默认 legacy，canonical 未启用）
+- Gate 5 生产采集运行时（SourceConnection 生命周期 / 上传运行时 / 只读连接器 / 有界重试 Runner）
+- Gate 6 / C-0008-A：邀请制认证 + 会话 + 内部 HTTP + Next.js Web 基线（`apps/web`，不含组件库）
+- Gate 6 / C-0008-B1：连接管理 + 机会人工复核（DETECTED → QUALIFIED / REJECTED）+ 已批准角色矩阵（等待架构方 Checkpoint 裁决）
+- CI：在全新 PostgreSQL 上真实执行迁移并跑 **42 文件 / 439 用例**，另含 Web typecheck/build 与许可证闸门（`apps/api` + `apps/web` 双 workspace 真实扫描）
 
-尚未完成：Wave 0 余项（Logging / Health Check / Storage Adapter / Audit 基础逻辑）、
-`apps/web`、`apps/ai`、端到端返钱闭环、部署与安全文档。
+尚未完成：Gate 6 / C-0008-B2（Case / Evidence 查看 / Claim Draft / Billing 展示）、`apps/ai`、
+完整端到端返钱闭环（当前只有测试/演示级 Settlement 注入）、生产部署与安全/运维文档。
 
 > **本地跑测试需要数据库**：
 > `docker run -d --name crossclaim-postgres -e POSTGRES_USER=crossclaim -e POSTGRES_PASSWORD=ccdevpass -e POSTGRES_DB=crossclaim -p 127.0.0.1:55432:5432 postgres:16-alpine`
