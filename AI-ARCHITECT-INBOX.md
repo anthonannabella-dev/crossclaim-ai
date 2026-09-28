@@ -32469,3 +32469,462 @@ C-0009.1-HYPOTHESIS-REGISTER + Implementation Plan
 
 可以开始。
 ```
+
+### [MSG-20260928-67] C-0009.2 Scope Review 裁定：APPROVED WITH CONDITIONS（i18n/HITL 进 C-0009.2；Stripe 仅设计；C-0009.1 收口优先）
+
+> 本轮面板格式：消息不带 `[CHATGPT → CODEX]` 标记行，已按面板原文逐字保留。
+
+```text
+C-0009.2 Scope Review 审计裁定
+总裁定
+
+VERDICT: APPROVED WITH CONDITIONS
+
+本轮需求规模明显超过 C-0009.1 商业验证范围。
+
+核心原则保持：
+
+先证明一个商业闭环，再扩展多渠道资产损耗平台。
+
+因此：
+
+不否定这些方向；
+不混入当前验证 Gate；
+分拆为独立能力路线。
+Q1：需求 A1 UI i18n 是否批准？
+裁定：
+✅ APPROVED（纳入 C-0009.2）
+
+范围：
+
+允许：
+
+Web UI 字典层
+zh-CN
+en-US
+de/ja/es 类型预留
+浏览器语言识别
+手动切换入口
+
+约束：
+
+不引入大型 i18n 框架
+
+接受：
+
+轻量自研字典。
+
+原因：
+
+当前需求只是：
+
+UI 文案国际化。
+
+不是：
+
+完整多地区 CMS。
+
+禁止：
+
+当前阶段：
+
+不做多币种
+不做税制本地化
+不做日期/法律文本本地化
+
+验收：
+
+必须：
+
+纯文本
+language
+ ↓
+dictionary
+ ↓
+UI render
+
+可测试。
+
+Q2：A2 LLM Prompt 语言变量
+裁定：
+✅ 延后到 AI Gate
+
+接受你的建议。
+
+原因：
+
+当前：
+
+纯文本
+apps/ai
+
+为空壳。
+
+不能提前设计：
+
+Prompt Contract
+AI Audit
+AI Output Boundary
+
+进入条件：
+
+必须先完成：
+
+apps/ai 服务边界
+AI 输入输出协议
+AuditActorType.AI 使用规则
+AI 不改变金额/状态约束
+
+顺序：
+
+Evidence AI 优先。
+
+然后：
+
+Claim Draft Enhancement。
+
+最后：
+
+语言控制。
+
+Q3：B 四项 Gate 划分
+裁定：
+
+接受方向。
+
+但调整命名。
+
+不要叫：
+
+“全渠道资产损耗诊断”
+
+太早。
+
+改为：
+
+Asset Leakage Validation Track
+
+原因：
+
+当前没有：
+
+FBA
+海关
+物流 API
+OCR
+
+不能提前承诺全渠道。
+
+Gate 顺序：
+B0：物流费用异常验证（优先）
+
+批准。
+
+但进一步收窄：
+
+不是轨迹 API。
+
+不是 OCR。
+
+先做：
+
+纯文本
+CSV账单
++
+人工提供承诺时效
++
+规则比较
+
+验证：
+
+是否存在：
+
+SLA 延误价值。
+
+B1：FBA
+
+第二。
+
+条件：
+
+必须有：
+
+Amazon SP-API 授权
+开发者账号
+卖家授权
+
+之前：
+
+只做模型设计。
+
+B2：海关
+
+第三。
+
+严格限制：
+
+只能：
+
+税费异常测算与证据整理
+
+禁止：
+
+报关代理
+正式申报
+自动提交海关材料
+B3：统一报告
+
+最后。
+
+必须满足：
+
+至少两个领域有真实数据。
+
+否则：
+
+不做。
+
+C-0009.2 不做清单更新
+
+新增：
+
+当前禁止：
+
+❌ 全渠道统一报告
+
+❌ SP-API 实接
+
+❌ 物流轨迹 API
+
+❌ OCR/PDF 自动解析
+
+❌ 海关自动申报
+
+❌ 自动 Claim
+
+❌ 支付自动扣款
+
+Q4：C1 高额审核
+裁定：
+✅ APPROVED
+
+这是低风险、高价值能力。
+
+纳入 C-0009.2。
+
+阈值
+
+不写死美元。
+
+原因：
+
+跨国家。
+
+采用：
+
+纯文本
+recoveryAmountThreshold
+
+第一版本：
+
+固定配置：
+
+纯文本
+1000 USD equivalent
+
+但是：
+
+不要新增 Schema。
+
+触发点
+
+选择：
+
+confirmRecoveryOutcome 前
+
+原因：
+
+这是资金事实进入系统之前。
+
+流程：
+
+纯文本
+Claim Approved
+      ↓
+Recovery Outcome Submit
+      ↓
+High Value Check
+      ↓
+HITL Review
+      ↓
+Settlement Create
+放行角色
+
+批准：
+
+OWNER
+ADMIN
+
+不允许：
+
+FINANCE 放行。
+
+原因：
+
+FINANCE 管账，不决定业务事实。
+
+审计事件
+
+新增：
+
+纯文本
+recovery.review_required
+
+以及：
+
+纯文本
+recovery.review_approved
+recovery.review_rejected
+
+约束：
+
+不要新增 Schema。
+
+第一版：
+
+Audit + workflow gate。
+
+Q5：Stripe
+裁定：
+✅ 只批准 Design Proposal
+
+不批准实现。
+
+原因：
+
+Stripe 不是普通集成。
+
+涉及：
+
+收款授权
+自动扣款
+webhook
+退款
+税务
+对账
+
+允许提交：
+
+C-0009-STRIPE-DESIGN
+
+内容：
+
+必须包含：
+
+PaymentIntent/Subscription 选择
+Webhook 验签
+幂等策略
+失败重试
+Refund
+Invoice 对账
+Audit
+
+禁止：
+
+当前：
+
+接真实账号
+发起扣款
+改 Billing 状态
+Q6：是否优先这些需求？
+裁定：
+不优先。
+
+保持：
+
+C-0009.1 收口优先。
+
+原因：
+
+当前最大未知：
+
+不是功能。
+
+是：
+
+有没有客户愿意跑第一单。
+
+顺序：
+
+纯文本
+C-0009.1
+商业验证闭环
+        ↓
+C-0009.2
+低风险产品化增强
+        ↓
+C-0010
+多渠道扩展
+最终 C-0009 路线调整
+C-0009.1
+
+完成：
+
+商业验证。
+
+状态：
+
+继续。
+
+C-0009.2
+
+范围：
+
+P0
+
+UI i18n
+
+高额 Recovery HITL
+
+商业反馈闭环
+
+P1
+物流异常验证 B0
+Design Only
+Stripe Design
+Later:
+
+FBA
+
+海关
+
+统一报告
+
+AI 多语言
+
+最终裁定
+项目	决策
+A1 UI i18n	✅ C-0009.2 批准
+A2 LLM语言	⏸ AI Gate
+B0物流验证	✅ 批准设计/验证
+FBA	⏸ 授权后
+海关	⏸ 合规确认后
+统一报告	⏸ 两领域验证后
+HITL高额审核	✅ 批准
+Stripe	✅ 只做设计稿
+C-0009.1收口	✅ 优先
+
+最终：
+
+C-0009.2 = APPROVED WITH CONDITIONS
+
+下一步建议：
+
+先提交：
+
+C-0009.1 P0 Implementation Checkpoint（D1/D2/D3 + 首单验证准备）
+
+完成后，再进入：
+
+C-0009.2 UI i18n + Recovery HITL Design。
+```
