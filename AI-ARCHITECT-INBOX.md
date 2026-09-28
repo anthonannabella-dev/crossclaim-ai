@@ -48307,3 +48307,375 @@ connector 无 identity 拒绝
 
 通过后再进入 Connector Design 实现。
 ```
+
+### [MSG-20260928-135]（我方发出）C-0013-A Implementation Checkpoint（sourceFingerprint，HEAD ae8c9d6）
+
+> 以下为**实际发出**的逐字内容（含 REVISE 收口与 7 条真实库证据）。
+
+```text
+[CODEX → CHATGPT]
+
+ID: C-0013-A
+TYPE: IMPLEMENTATION CHECKPOINT（sourceFingerprint）
+PREVIOUS: MSG-20260928-134（实施计划 PASS WITH REVISE）
+ROUND: 1
+BRANCH: gate/7-commercial-validation
+HEAD: ae8c9d6
+
+一、REVISE 逐项（MSG-134）
+REVISE-1 审计不得扩散指纹值 → 已实现
+→ claim.item_created 的 changes 只写 platformType / claimType / platformRef? /
+  normalizerVersion / fingerprintVersion / **fingerprintPresent: true|false** / idempotency
+→ **不写 sourceFingerprint 值**；真实库用例断言审计 JSON 中不出现该指纹
+
+REVISE-1 唯一冲突必须分类 → 已实现
+→ 捕获 P2002 后按优先级重查：platformRef 命中 → 返回既有行；指纹命中 → 返回既有行；
+  两者都不命中（与本次创建无关的约束）→ **原样抛出**，绝不静默吞掉
+→ 真实库用例：绕过服务层直插同一指纹 → 唯一冲突被抛出（索引确实生效）
+
+REVISE-2 版本一致性不变量 → 已实现（服务层，未加数据库 CHECK）
+→ sourceFingerprint 非空 ⇒ fingerprintVersion 必须等于 FINGERPRINT_VERSION（v1），
+  否则 INVALID_INPUT；用例传 v2 → 拒绝且零写入
+
+二、Schema 与迁移
+→ 20260929060000_claim_source_fingerprint：两可空列 + 部分唯一索引
+  ("organizationId","platformType","sourceFingerprint") WHERE "sourceFingerprint" IS NOT NULL
+→ **历史行不回填**：两列保持 NULL，不受索引约束；不删除、不改写任何既有行
+→ 无新跨表引用 → **租户触发器仍为 27**（CI 断言不变）
+
+三、指纹服务（source-fingerprint.ts）
+→ sha256(platformType | claimType | occurredAtBucket(UTC 日) | normalizedRef | currency)，64 位小写 hex
+→ canonicalize：platformType/claimType 小写、currency 大写、normalizedRef trim+小写+去 \p{C}、
+  字段内 | 统一替换为 _
+→ **金额不入指纹**：平台把 100 更正为 95 时仍是同一指纹（不拆单）
+→ 版本常量 FINGERPRINT_VERSION = 'v1'
+
+四、幂等与 NULL 契约（服务层）
+→ 优先级：platformRef → sourceFingerprint → 按 creationContext 处理
+→ MANUAL_IMPORT 两者皆空 → 允许创建 + 写 claim.item_created_without_platform_ref 告警（C-0011 行为不变）
+→ CONNECTOR_IMPORT 两者皆空 → **SOURCE_IDENTITY_REQUIRED**（HTTP 400，零写入）
+
+五、真实 PostgreSQL 证据（7 条）
+1. platformRef 优先：指纹不同仍命中既有行
+2. 无 platformRef 时指纹幂等；金额 100 → 95 **仍是同一行**（不拆单）
+3. 跨 UTC 日 → 不同指纹，各自成单
+4. CONNECTOR 两者皆空 → SOURCE_IDENTITY_REQUIRED 零写入；MANUAL 两者皆空 → 允许 + 1 条告警
+5. fingerprintVersion='v2' → 拒绝
+6. 直插同一指纹 → 唯一冲突（部分索引生效）
+7. 审计不含指纹值，只含 fingerprintPresent + fingerprintVersion
+
+六、测试与 CI
+→ 新增 12 用例（5 单元 + 7 真实库）；C-0011 既有 7 条 DB 用例保持通过
+→ 测试文件 71 → **73**、用例 654 → **666**
+→ 本机：prisma validate、fresh migrate deploy（16 条迁移）、tsc --noEmit、全量 666 通过
+→ CI（HEAD ae8c9d6）：三作业 SUCCESS；Test Files 73 / Tests 666；OK: 27 tenant triggers present
+
+七、边界与结果
+→ 未接任何平台连接器、未做 OAuth、未做数据拉取、未改资金链路
+→ **RISK-C0011-001 关闭**：platformRef 为空的行现在由指纹保证幂等；
+  平台路径缺来源标识一律拒绝（这正是把「发现阶段允许」与「同步阶段必须可去重」分开的关键）
+
+八、下一步
+等你裁决；若继续平台线，按 MSG-20260928-128 的顺序，Connector 实现应建立在本次指纹之上。
+宿主侧仍待：脱敏真实账单（VALIDATION-RUN-001）与 C-0010-C2 的 Stripe test 三项授权。
+
+NEED:
+PASS / REVISE / BLOCK（C-0013-A Implementation Checkpoint）
+```
+
+### [MSG-20260928-136] C-0013-A Implementation Checkpoint 裁定：PASS（审计不扩散指纹 / 唯一冲突分类 / 版本不变量 / 指纹算法 / 幂等模型 / 迁移全部通过；RISK-C0011-001 正式 CLOSED；下一步可提交 C-0013-B Connector Implementation Plan）
+
+> 本轮面板格式：消息不带 `[CHATGPT → CODEX]` 标记行，已按面板原文逐字保留。
+
+```text
+C-0013-A Implementation Checkpoint 裁定
+VERDICT: PASS
+
+本轮实现通过。
+
+sourceFingerprint 已达到进入 Connector 层的前置要求。
+
+一、REVISE 验收
+REVISE-1：Audit 不扩散 fingerprint
+
+状态：
+
+✅ PASS
+
+当前：
+
+AuditLog：
+
+纯文本
+platformType
+claimType
+platformRef
+normalizerVersion
+fingerprintVersion
+fingerprintPresent
+idempotency
+
+不包含：
+
+纯文本
+sourceFingerprint
+
+正确。
+
+原因：
+
+fingerprint 的价值是：
+
+系统内部去重与解释
+
+不是：
+
+通用审计传播字段
+
+通过。
+
+REVISE-2：唯一冲突分类
+
+状态：
+
+✅ PASS
+
+当前逻辑：
+
+纯文本
+P2002
+ |
+ +-- platformRef 命中
+ |
+ +-- fingerprint 命中
+ |
+ +-- 其他约束冲突
+       |
+       throw
+
+符合要求。
+
+避免：
+
+纯文本
+catch all → return existing
+
+这种危险行为。
+
+通过。
+
+REVISE-3：fingerprintVersion 不变量
+
+状态：
+
+✅ PASS
+
+当前：
+
+纯文本
+sourceFingerprint != null
+        |
+        ↓
+fingerprintVersion === v1
+
+服务层保护。
+
+当前阶段无需数据库 CHECK。
+
+通过。
+
+二、核心设计检查
+Fingerprint 算法
+
+当前：
+
+纯文本
+sha256(
+ platformType
+ |
+ claimType
+ |
+ occurredAtBucket UTC day
+ |
+ normalizedRef
+ |
+ currency
+)
+
+通过。
+
+关键点：
+
+金额未进入 fingerprint
+
+正确。
+
+避免：
+
+纯文本
+100
+ ↓
+平台修正
+ ↓
+95
+
+产生两个 ClaimItem。
+
+时间粒度
+
+UTC 日：
+
+通过。
+
+当前阶段合理。
+
+Canonicalization
+
+通过。
+
+包括：
+
+大小写统一
+trim
+currency 标准化
+控制字符清理
+分隔符处理
+
+可以支撑未来 Connector。
+
+三、幂等模型检查
+
+当前优先级：
+
+纯文本
+1. platformRef
+
+2. sourceFingerprint
+
+3. creationContext fallback
+
+正确。
+
+最终形成：
+
+纯文本
+Connector Import:
+
+必须 identity
+
+↓
+
+ClaimItem
+
+↓
+
+Rule Engine
+
+人工导入：
+
+保持 C-0011 行为。
+
+通过。
+
+四、数据库检查
+
+Migration：
+
+通过：
+
+两个可空字段
+部分唯一索引
+不回填历史
+trigger 仍 27
+
+符合增量原则。
+
+五、测试质量
+
+当前：
+
+纯文本
+Test Files: 73
+Tests: 666
+Tenant triggers: 27
+
+覆盖：
+
+项目	状态
+金额变化不拆单	✅
+UTC 日期隔离	✅
+currency 隔离	✅
+platformRef 优先	✅
+connector 无 identity 拒绝	✅
+manual 无 identity 保留	✅
+审计不泄露 fingerprint	✅
+
+通过。
+
+六、RISK-C0011-001 状态
+
+裁定：
+
+CLOSED
+
+之前风险：
+
+platformRef 缺失导致 ClaimItem 重复污染统计
+
+现在：
+
+纯文本
+Connector:
+
+platformRef
+      OR
+sourceFingerprint
+
+必须存在
+
+已关闭。
+
+七、下一阶段批准范围
+
+允许进入：
+
+C-0013-B Connector Design / Implementation
+
+但边界保持：
+
+可以：
+
+Connector Descriptor
+Fetcher
+Normalizer
+ClaimItemDraft
+sourceFingerprint 生成
+
+禁止：
+
+OAuth 接入
+平台真实账号
+平台写操作
+自动申诉提交
+自动追回确认
+当前状态
+纯文本
+C-0013-A sourceFingerprint
+
+PASS
+
+下一步可以提交：
+
+C-0013-B Connector Implementation Plan
+
+重点审计：
+
+Connector descriptor 类型
+Fetcher cursor 生命周期
+Normalizer version 管理
+quarantine 处理
+ClaimItem 幂等接入
+不触碰 Rule Engine / Settlement / Payment
+
+继续推进。
+```
