@@ -287,4 +287,26 @@ describe('C-0004 CP2 · Recovery Closure（真实 PostgreSQL）', () => {
     expect(await prisma.feeCalculation.count({ where: { organizationId: ORG } })).toBe(0);
     expect(await prisma.billingInvoice.count({ where: { organizationId: ORG } })).toBe(0);
   });
+
+  // CHANGE #50：并发两次闭环 —— 事务级 advisory lock 串行化，两次调用都必须正常结束，且不产生重复资金记录
+  it('并发两次闭环：两次均正常结束，最终各表仍为 1 条', async () => {
+    const [a, b] = await Promise.all([closure(), closure()]);
+    expect(a.opportunitiesConsidered).toBe(1);
+    expect(b.opportunitiesConsidered).toBe(1);
+    // 两次调用合起来只创建一份
+    expect(a.casesCreated + b.casesCreated).toBe(1);
+
+    const kase = await prisma.case.findFirstOrThrow({ where: { organizationId: ORG } });
+    expect(await prisma.case.count({ where: { organizationId: ORG } })).toBe(1);
+    expect(await prisma.caseOpportunity.count({ where: { organizationId: ORG, caseId: kase.id } })).toBe(1);
+    expect(await prisma.recoveryRoute.count({ where: { organizationId: ORG, caseId: kase.id, target: 'CARRIER' } })).toBe(1);
+    expect(await prisma.claim.count({ where: { organizationId: ORG, caseId: kase.id, round: 1 } })).toBe(1);
+    expect(await prisma.settlement.count({ where: { organizationId: ORG, caseId: kase.id } })).toBe(1);
+    expect(await prisma.recoveryLedgerEntry.count({ where: { organizationId: ORG, entryType: 'RECOVERED' } })).toBe(1);
+    expect(await prisma.feeCalculation.count({ where: { organizationId: ORG } })).toBe(1);
+    expect(await prisma.billingInvoice.count({ where: { organizationId: ORG } })).toBe(1);
+    expect(
+      await prisma.evidenceArtifact.count({ where: { organizationId: ORG, kind: 'CREDIT_NOTE' } }),
+    ).toBe(1);
+  });
 });
