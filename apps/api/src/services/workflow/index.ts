@@ -3,6 +3,13 @@
  */
 
 export {
+  getOpportunityInsight,
+  listOpportunityInsights,
+  toExportRows,
+  type OpportunityExportRow,
+  type OpportunityInsight,
+} from './opportunity-insight';
+export {
   getCase,
   getClaimDraft,
   listCaseEvidence,

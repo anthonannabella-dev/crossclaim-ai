@@ -29,11 +29,19 @@ import { confirmCommercialTerms, createCaseForOpportunity } from './case-creatio
 import { confirmRecoveryOutcome } from './recovery-outcome';
 import { advanceBillingInvoice, listBillingInvoices } from './billing';
 import { getCase, getClaimDraft, listCaseEvidence, listCases } from './case-read';
+import {
+  getOpportunityInsight,
+  listOpportunityInsights,
+  toExportRows,
+} from './opportunity-insight';
 import { REJECT_REASONS, WorkflowError, reviewOpportunity } from './opportunity-review';
 import { ForbiddenError } from './permissions';
 
 const MAX_BODY_BYTES = 16 * 1024;
 const REVIEW_PATH = /^\/opportunities\/([^/]+)\/(qualify|reject|case)$/;
+const INSIGHT_LIST_PATH = /^\/opportunities\/insights$/;
+const INSIGHT_CSV_PATH = /^\/opportunities\/insights\.csv$/;
+const INSIGHT_PATH = /^\/opportunities\/([^/]+)\/basis$/;
 const CONNECTION_PATH = /^\/connections(?:\/([^/]+)\/(status|credential-ref))?$/;
 const COMMERCIAL_TERMS_PATH = /^\/cases\/([^/]+)\/commercial-terms$/;
 const RECOVERY_OUTCOME_PATH = /^\/cases\/([^/]+)\/recovery-outcome$/;
@@ -135,6 +143,9 @@ export async function handleWorkflowRequest(
 ): Promise<boolean> {
   const path = (req.url ?? '/').split('?')[0];
   const review = REVIEW_PATH.exec(path);
+  const insightList = INSIGHT_LIST_PATH.test(path);
+  const insightCsv = INSIGHT_CSV_PATH.test(path);
+  const insight = INSIGHT_PATH.exec(path);
   const connection = CONNECTION_PATH.exec(path);
   const termsPath = COMMERCIAL_TERMS_PATH.exec(path);
   const outcomePath = RECOVERY_OUTCOME_PATH.exec(path);
@@ -143,7 +154,7 @@ export async function handleWorkflowRequest(
   const caseDetail = CASE_DETAIL_PATH.exec(path);
   const caseEvidence = CASE_EVIDENCE_PATH.exec(path);
   const caseClaim = CASE_CLAIM_PATH.exec(path);
-  if (!review && !connection && !termsPath && !outcomePath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim) {
+  if (!review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim) {
     return false;
   }
 
@@ -153,7 +164,7 @@ export async function handleWorkflowRequest(
       ? ['GET', 'POST']
       : billingPath && !billingPath[1]
         ? ['GET']
-        : caseListPath || caseDetail || caseEvidence || caseClaim
+        : insightList || insightCsv || insight || caseListPath || caseDetail || caseEvidence || caseClaim
           ? ['GET']
           : ['POST'];
   if (!allowed.includes(method)) {
@@ -175,6 +186,52 @@ export async function handleWorkflowRequest(
   };
 
   try {
+    if (insightCsv) {
+      // D3：导出清单（架构方指定的 5 列；不含任何凭据/内部信息）
+      const insights = await listOpportunityInsights(deps.prisma, {
+        organizationId: context.organizationId,
+        role: context.role,
+      });
+      const rows = toExportRows(insights);
+      const header = ['opportunity_id', 'invoice_reference', 'recoverable_amount', 'rule_reason', 'evidence_reference'];
+      const csv = [
+        header.join(','),
+        ...rows.map((row) =>
+          [row.opportunityId, row.invoiceReference, row.recoverableAmount, row.ruleReason, row.evidenceReference]
+            .map((cell) => `"${String(cell).replace(/"/g, '""')}"`)
+            .join(','),
+        ),
+      ].join('\n');
+      res.writeHead(200, {
+        'content-type': 'text/csv; charset=utf-8',
+        'content-disposition': 'attachment; filename="opportunities.csv"',
+        'cache-control': 'no-store',
+      });
+      res.end(csv);
+      return true;
+    }
+    if (insightList) {
+      sendJson(res, 200, {
+        items: await listOpportunityInsights(deps.prisma, {
+          organizationId: context.organizationId,
+          role: context.role,
+        }),
+      });
+      return true;
+    }
+    if (insight) {
+      sendJson(
+        res,
+        200,
+        await getOpportunityInsight(
+          deps.prisma,
+          { organizationId: context.organizationId, role: context.role },
+          insight[1] ?? '',
+        ),
+      );
+      return true;
+    }
+
     if (caseListPath) {
       sendJson(res, 200, {
         items: await listCases(deps.prisma, { organizationId: context.organizationId, role: context.role }),
