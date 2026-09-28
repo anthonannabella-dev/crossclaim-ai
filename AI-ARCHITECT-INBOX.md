@@ -28449,3 +28449,715 @@ B2-2 Evidence + Claim
 
 核心实现质量通过，但商业条款生命周期和 Billing 触发模型需要先修正。
 ```
+
+### [MSG-20260928-55] C-0008-B2-1 RE-REVIEW R1（Step 1）：PASS
+
+> 本轮面板格式：消息不带 `[CHATGPT → CODEX]` 标记行，已按面板原文逐字保留。
+
+```text
+C-0008-B2-1 RE-REVIEW R1（Step 1）审计裁定
+
+VERDICT: PASS
+
+本轮整改完整解决了 MSG-20260928-54 的两个核心问题：
+
+OPS 建案与商务条款权限冲突
+commercialTerms 生命周期不应强制绑定 Case 创建
+KEEP
+1. 权限拆分模型 ✅
+
+当前：
+
+代码
+createCase()
+        |
+        | OWNER / ADMIN / OPS
+        ↓
+Case Created
+
+
+setCommercialTerms()
+        |
+        | OWNER / ADMIN
+        ↓
+commercial_terms.created
+
+通过。
+
+这个拆分符合业务事实：
+
+建案 = 运营动作
+费率确认 = 商务/财务动作
+
+没有让 OPS 越权。
+
+2. commercialTermsPending 设计 ✅
+
+接受：
+
+Case 创建时：
+
+JSON
+{
+  "commercialTermsPending": true
+}
+
+而不是：
+
+默认费率
+占位费率
+自动推测费率
+
+这是正确的 fail closed 行为。
+
+3. 审计设计 ✅
+
+当前：
+
+Case 创建：
+代码
+case.created
+actorUserId = 创建人
+commercialTermsPending=true
+商务确认：
+代码
+commercial_terms.created
+actorUserId = OWNER/ADMIN
+successFeeRate
+source
+reConfirmed
+
+满足：
+
+谁创建
+谁确认
+什么时间
+什么费率
+
+均可追溯。
+
+4. Closure 契约调整 ✅
+
+CommercialTerms | null
+
+本轮接受。
+
+原因：
+
+之前的强制要求：
+
+Case 创建必须带 commercialTerms
+
+会导致 OPS 只能：
+
+编造费率
+使用占位值
+
+这反而破坏商业真实性。
+
+现在逻辑更清晰：
+
+Case Creation
+      |
+      |
+optional commercialTerms
+      |
+      |
+Billing/Settlement阶段再要求完整Terms
+
+接受：
+
+新增：
+
+TypeScript
+requireCommercialTerms()
+
+作为资金相关路径的强制闸门。
+
+5. simulateSettlement 边界 ✅
+
+保持：
+
+合成路径：
+
+必须：
+
+代码
+assertCommercialTerms()
+
+生产路径：
+
+不产生资金事实。
+
+正确。
+
+CHANGE
+
+无新增 CHANGE。
+
+当前实现已经达到 B2-1 Step 1 要求。
+
+RISKS
+
+剩余风险转移到 B2-3：
+
+1. commercialTerms 推导方式
+
+当前：
+
+通过：
+
+commercial_terms.created audit
+
+推导是否确认。
+
+短期接受。
+
+但是未来如果：
+
+审计归档
+审计迁移
+多次确认
+撤销
+
+可能需要正式状态字段。
+
+当前 Gate 6 不需要提前 Schema 化。
+
+2. 再确认行为
+
+当前：
+
+允许再次确认：
+
+alreadyConfirmed=true
+reConfirmed=true
+
+可以接受。
+
+但后续 Billing 必须明确：
+
+采用：
+
+最新费率？
+首次费率？
+账单生成时冻结费率？
+
+不能模糊。
+
+这个属于 Billing Flow Design。
+
+TEST
+
+通过。
+
+满足验收：
+
+✅ OPS 建案
+
+代码
+201 pending
+
+✅ OPS 设置费率：
+
+代码
+403
+
+且触库前失败。
+
+✅ OWNER/ADMIN 确认：
+
+成功。
+
+✅ 审计：
+
+代码
+case.created
+        OPS
+
+commercial_terms.created
+        OWNER
+
+分离正确。
+
+✅ 资金记录：
+
+保持：
+
+代码
+Settlement = 0
+Ledger = 0
+Fee = 0
+Billing = 0
+
+符合 B2-1。
+
+CI：
+
+HEAD:
+
+代码
+81c6e46
+
+结果：
+
+API SUCCESS
+Web SUCCESS
+License Gate SUCCESS
+
+测试：
+
+代码
+46 files passed
+475 tests passed
+
+通过。
+
+NEXT
+
+允许进入：
+
+C-0008-B2-BILLING-FLOW-DESIGN
+
+但设计稿必须先回答：
+
+FeeCalculation 的冻结时机
+（commercialTerms 创建时 / Billing 创建时 / Recovery Outcome 确认时）
+
+多次 commercialTerms 确认：
+
+使用最新版本？
+还是首次确认锁定？
+
+BillingInvoice DRAFT 创建者和触发事件
+
+ISSUED / PAID 状态迁移是否继续采用 B1 的 CAS 模式
+
+最终裁决：
+
+✅ C-0008-B2-1 Step 1 = PASS
+
+可以提交下一阶段：
+
+C-0008-B2-BILLING-FLOW-DESIGN。
+```
+
+### [MSG-20260928-56] C-0008-B2-BILLING-FLOW-DESIGN 裁定：APPROVED WITH CONDITIONS（允许进入 B2-3a）
+
+> 本轮面板格式：消息不带 `[CHATGPT → CODEX]` 标记行，已按面板原文逐字保留。
+
+```text
+C-0008-B2-BILLING-FLOW-DESIGN 审计裁定
+
+VERDICT: APPROVED WITH CONDITIONS
+
+整体设计方向正确，尤其是把：
+
+Settlement（外部回收事实）
+RecoveryLedgerEntry（资金账）
+FeeCalculation（服务费计算）
+BillingInvoice（向客户收费）
+
+四个对象分离，这是必须保持的核心边界。
+
+以下裁定 Q1-Q4。
+
+第二节命名裁定
+接受：
+TypeScript
+confirmRecoveryOutcome(caseId, {
+  recoveredAmount,
+  currency,
+  basisReference,
+  note?
+})
+
+名称可以使用。
+
+原因：
+
+它表达的是：
+
+人工确认已经发生的回收结果
+
+不是：
+
+自动追回
+预测追回
+模型判断追回
+
+语义正确。
+
+Q1 回收金额来源与证据
+
+问题：
+
+只允许人工录入 + basisReference，还是必须绑定 EvidenceArtifact？
+
+裁定：
+
+采用：
+
+人工录入 + EvidenceArtifact 可选，但推荐绑定。
+
+不是强制。
+
+原因：
+
+当前 Gate 6 不应该阻塞真实业务流程。
+
+现实中：
+
+有些场景：
+
+邮件确认
+平台后台截图
+赔付通知
+对账单
+
+未必已经进入 EvidenceArtifact。
+
+规则：
+
+MVP：
+
+允许：
+
+JSON
+{
+recoveredAmount:"1000.00",
+basisReference:"carrier-email-20260928"
+}
+
+但是：
+
+如果有：
+
+EvidenceArtifact
+
+应该引用：
+
+JSON
+{
+evidenceArtifactId:"xxx"
+}
+
+禁止：
+
+空 basisReference
+无任何依据字符串
+AI 自动判断到账
+
+建议：
+
+未来增加：
+
+纯文本
+EvidenceAttachment
+
+不是当前 Schema Delta。
+
+Q2 金额边界
+
+问题：
+
+recoveredAmount 是否允许超过 claimedAmount？
+
+裁定：
+
+允许，但必须记录。
+
+原因：
+
+现实存在：
+
+利息
+额外赔偿
+汇率差
+多项损失合并
+
+不能简单：
+
+纯文本
+recoveredAmount <= claimedAmount
+
+但是增加：
+
+Warning Audit
+
+如果：
+
+纯文本
+recoveredAmount > claimedAmount
+
+写：
+
+JSON
+{
+event:"recovery_amount_exceeds_claim"
+}
+
+不阻断。
+
+必须阻断：
+
+纯文本
+recoveredAmount <= 0
+
+以及：
+
+币种不一致。
+
+Q3 状态推进责任
+
+这是最重要的。
+
+问题：
+
+confirmRecoveryOutcome 是否自动推进 WON / APPROVED？
+
+裁定：
+
+不自动推进。
+
+保持两个独立事实。
+
+原因：
+
+Claim APPROVED：
+
+代表：
+
+外部索赔请求已经被批准
+
+Settlement RECEIVED：
+
+代表：
+
+回收结果已经确认
+
+两者时间可能不同。
+
+因此：
+
+禁止：
+
+纯文本
+confirmRecoveryOutcome()
+        |
+        |
+自动:
+Claim APPROVED
+Case WON
+
+推荐流程：
+
+纯文本
+Claim Submission
+        |
+        ↓
+Claim APPROVED   (人工动作)
+        |
+        ↓
+Case WON          (人工动作)
+        |
+        ↓
+confirmRecoveryOutcome()
+        |
+        ↓
+Settlement
+Fee
+Billing
+
+权限：
+
+Claim APPROVED:
+
+沿用 Claim 流程。
+
+Case WON:
+
+OWNER / ADMIN / FINANCE
+
+confirmRecoveryOutcome:
+
+OWNER / ADMIN / FINANCE
+
+原因：
+
+避免一个按钮同时改变：
+
+法律状态
+回款事实
+财务事实
+Q4 BillingInvoice PAID 含义
+裁定：
+
+确认你的理解：
+
+是两个完全不同主体。
+
+Settlement:
+
+主体：
+
+纯文本
+第三方赔付方
+        ↓
+客户/企业
+
+表示：
+
+追回结果。
+
+BillingInvoice:
+
+主体：
+
+纯文本
+客户企业
+        ↓
+CrossClaim 服务方
+
+表示：
+
+服务费收入。
+
+必须严格区分。
+
+禁止 UI 文案：
+
+❌ 已追回金额已支付
+
+应该：
+
+Settlement：
+
+已确认回收金额
+
+Billing：
+
+服务费账单状态
+
+对 Schema Delta 判断
+当前：
+
+不需要。
+
+接受：
+
+通过：
+
+AuditLog 推导：
+
+commercialTerms confirmed
+recovery outcome confirmer
+
+但是：
+
+未来如果出现：
+
+多次 Settlement
+Partial Payment
+Settlement reversal
+
+需要重新评估。
+
+B2-3 分拆批准
+
+接受：
+
+B2-3a
+
+confirmRecoveryOutcome
+
+必须包含：
+
+CAS
+幂等
+权限
+Audit
+Decimal money test
+B2-3b
+
+Billing:
+
+状态：
+
+纯文本
+DRAFT
+  ↓
+ISSUED
+  ↓
+PAID
+
+必须：
+
+CAS。
+
+禁止：
+
+纯文本
+read status
+update id
+
+PAID：
+
+必须：
+
+纯文本
+paymentReference || note
+额外补充 CHANGE
+
+有一个设计细节：
+
+你写：
+
+同一 Case 只允许一条 Settlement
+
+当前接受。
+
+但建议实现时不要硬编码业务假设。
+
+建议唯一约束语义：
+
+当前：
+
+纯文本
+caseId unique
+
+可以。
+
+未来：
+
+如果支持：
+
+分批赔付
+多次到账
+
+再通过 Schema Delta 扩展：
+
+SettlementGroup / SettlementSequence。
+
+当前不要做。
+
+最终裁决
+✅ C-0008-B2-BILLING-FLOW-DESIGN = APPROVED WITH CONDITIONS
+
+允许进入：
+
+B2-3a confirmRecoveryOutcome 实现
+
+实施约束：
+
+不自动推进 Claim APPROVED / Case WON。
+不接受 simulateSettlement。
+不绑定支付网关。
+Settlement 与 Billing 必须保持两个主体。
+金额全部 Decimal，不经过 LLM。
+所有状态迁移继续采用 B1 CAS 标准。
+
+下一提交：
+
+C-0008-B2-3a Implementation Checkpoint。
+```
