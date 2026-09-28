@@ -24812,3 +24812,351 @@ Constraints:
 
 可以继续执行 Phase 4。
 ```
+
+### [MSG-20260928-45] C-0007 Phase 4 Review：PASS（Gate 5 四阶段全部通过，批准提交 Gate Final Review + PR）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE:
+PHASE REVIEW
+
+ID:
+C-0007 Phase 4
+
+GATE:
+5
+
+MODULE:
+Runner Runtime
+
+HEAD:
+043d6bc
+
+VERDICT:
+
+PASS ✅
+
+批准 C-0007 Gate 5 Final Review。
+
+1. Runner 架构裁定
+PASS
+
+当前实现：
+
+纯文本
+SourceConnection
+        |
+        v
+Runner
+        |
+        +----------------+
+        |                |
+   FILE_UPLOAD        API
+        |                |
+        v                v
+ Import Runtime     Adapter Runtime
+        |
+        v
+Canonical Ingest
+        |
+        v
+CanonicalFact
+
+符合 C-0007 目标。
+
+2. 不新增 SourceSyncRun
+PASS
+
+保持：
+
+不新增 Schema
+不引入调度系统
+不扩大数据模型
+
+批准。
+
+但确认当前语义：
+
+纯文本
+lastSyncAt
+lastError
+lastErrorAt
+
+只是：
+
+当前连接状态快照
+
+不是：
+
+历史运行记录
+
+这一点已经通过：
+
+纯文本
+historyPersisted=false
+
+显式表达。
+
+正确。
+
+未来如果需要：
+
+运行历史查询
+SLA
+运维 Dashboard
+失败趋势分析
+
+再提交：
+
+纯文本
+SourceSyncRun Schema Delta
+
+不属于 C-0007。
+
+3. Retry / Backoff
+PASS
+
+当前：
+
+纯文本
+Attempt 1 -> 1m
+Attempt 2 -> 5m
+Attempt 3 -> 15m
+Attempt 4 -> 1h
+Attempt 5 -> stop
+
+满足：
+
+有界
+可预测
+可测试
+
+特别认可：
+
+使用：
+
+纯文本
+注入时钟
+
+而不是：
+
+真实等待。
+
+这是正确测试方式。
+
+4. 幂等验证
+PASS
+
+核心目标：
+
+重复执行不能产生：
+
+重复 ImportBatch
+重复 SourceTransaction
+重复 CanonicalFact
+
+已证明。
+
+FILE：
+
+第一次：
+
+纯文本
+FileAsset=1
+Import FAILED
+SourceTransaction=0
+CanonicalFact=0
+
+第二次：
+
+纯文本
+Import SUCCESS
+SourceTransaction=2
+CanonicalFact=2
+
+第三次：
+
+纯文本
+SKIPPED
+
+符合。
+
+5. 最关键恢复链测试
+PASS
+
+批准。
+
+这是 C-0007 Phase 4 最重要验收。
+
+实际证明：
+
+纯文本
+上传成功
+
+↓
+
+导入失败
+
+↓
+
+重试
+
+↓
+
+成功
+
+没有产生：
+
+纯文本
+重复交易
+重复事实
+重复资金输入
+
+通过。
+
+6. API Partial Failure
+PASS
+
+场景：
+
+纯文本
+page1 success
+
+page2 fail
+
+处理：
+
+已获取数据保留
+pullError 保存
+retry 后幂等
+
+符合 Adapter Contract。
+
+7. 状态守卫
+PASS
+
+覆盖：
+
+非 ACTIVE connection
+
+拒绝。
+
+无 FileAsset
+纯文本
+SKIPPED
+
+正确。
+
+已成功导入
+纯文本
+ALREADY_IMPORTED
+
+正确。
+
+8. Audit
+PASS
+
+新增：
+
+纯文本
+sync_run.completed
+
+sync_run.failed
+
+import.retry_completed
+
+合理。
+
+并且保留：
+
+纯文本
+historyPersisted=false
+
+避免误解。
+
+通过。
+
+9. 边界检查
+
+确认：
+
+项目	状态
+Temporal	未引入
+新依赖	无
+Schema	未改
+Migration	未改
+SourceSyncRun	未建
+公网调度	未做
+认证系统	未做
+OAuth	未做
+真实平台 API	未接
+Canonical 默认切换	未做
+Identity Step 4	未做
+
+全部符合。
+
+10. C-0007 Gate 5 总结批准
+
+四个 Phase：
+
+Phase	模块	状态
+Phase 1	SourceConnection Lifecycle	PASS
+Phase 2	Upload Runtime	PASS
+Phase 3	API Connector Runtime	PASS
+Phase 4	Runner Runtime	PASS
+
+最终架构：
+
+纯文本
+                 SourceConnection
+                       |
+                       v
+                 Acquisition Runtime
+                       |
+        +--------------+--------------+
+        |                             |
+   File Upload                  API Connector
+        |                             |
+        +--------------+--------------+
+                       |
+                       v
+              Import Foundation
+                       |
+                       v
+             SourceTransaction
+                       |
+                       v
+              CanonicalFact
+                       |
+                       v
+              RuleEvaluation
+                       |
+                       v
+          Recovery Opportunity
+                       |
+                       v
+              Recovery Closure
+FINAL DECISION
+纯文本
+C-0007 Gate 5
+
+STATUS:
+FINAL PASS ✅
+
+APPROVED:
+- Merge preparation
+- Gate Final Review
+- PR preparation
+
+NOT APPROVED:
+- Production deployment
+- Real platform connection
+- OAuth enablement
+- Public upload exposure
+- Canonical identity default switch
+
+可以提交：
+
+C-0007 Gate Final Review + PR 材料。
+```
