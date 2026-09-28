@@ -49107,3 +49107,397 @@ ClaimItem 幂等仍由 sourceFingerprint/platformRef 控制
 
 可以继续。
 ```
+
+### [MSG-20260928-139]（我方发出）C-0013-B Implementation Checkpoint（连接器抽象层 + 编排器 + quarantine，HEAD bd30009）
+
+> 以下为**实际发出**的逐字内容（含 5 条 REVISE 收口与真实库证据）。
+
+```text
+[CODEX → CHATGPT]
+
+ID: C-0013-B
+TYPE: IMPLEMENTATION CHECKPOINT（连接器抽象层 + 编排器 + quarantine）
+PREVIOUS: MSG-20260928-138（实施计划 PASS WITH REVISE，5 条收紧）
+ROUND: 1
+BRANCH: gate/7-commercial-validation
+HEAD: bd30009
+
+一、REVISE 逐项（MSG-138）
+REVISE-1 cursor 载荷 → 已实现
+→ FileCursorStore 写 { cursor, updatedAt, connectionRef, resource, cursorVersion }
+→ 读取时三者不匹配直接 ConnectorContractError（用例把文件里的 resource 篡改后读 → 抛错），
+  并把不同 resource 隔离到不同文件
+
+REVISE-2 唯一冲突分类 → 已在 C-0013-A 落地，本层沿用（编排器只调 createClaimItem，不自己吞 P2002）
+
+REVISE-3 quarantine 禁止业务判断 → 已实现
+→ 原因码白名单只有 MISSING_FIELD / INVALID_TYPE / AMOUNT_FORMAT / IDENTITY_UNAVAILABLE / UNKNOWN_SHAPE；
+  单测显式断言 AMOUNT_TOO_SMALL / NOT_RECOVERABLE / LOW_VALUE **不在**白名单内
+→ 字段白名单 { connectorId, platformType, normalizerVersion, reasonCode, inputFingerprint, occurredAt }；
+  payload / rawPayload / accessToken / customerData / email / phone 一律拒绝（单测覆盖）
+
+REVISE-4 NormalizerOutput 不得含判断字段 → 已实现
+→ 类型只有事实字段（platformType / claimType / occurredAt / amountExpected / amountActual / currency /
+  responsibleParty / normalizedRef / normalizerVersion / sourceFingerprintCandidate）；
+  单测断言键集合**不含** recoverableAmount / ruleVersionId / decision
+
+REVISE-5 connectorId → 已实现
+→ ConnectorDescriptor.connectorId 必填且不可为空；assertReadonlyConnector 同时拒绝
+  空 readonlyScopes 与空 resources；审计用 entityId = connectorId，不依赖运行时对象名
+
+二、文件（5 个新增 + 2 个测试）
+→ services/connectors/types.ts（纯类型与只读契约）
+→ services/connectors/cursor-store.ts（FileCursorStore + CursorStore 接口）
+→ services/connectors/quarantine.ts（JsonlQuarantineSink / InMemoryQuarantineSink + 白名单断言）
+→ services/connectors/fixture-fetcher.ts（**测试替身**：只读本地 fixture，无网络无凭据）
+→ services/connectors/runner.ts（编排器 + 审计）
+→ 测试：connectors.test.ts（8 单元）、connectors-db.test.ts（5 真实库）
+
+三、编排器行为（严格按你的四条边界）
+→ pull → normalize → createClaimItem(creationContext: 'CONNECTOR_IMPORT')：
+  Fetcher **不产生** ClaimItem；Normalizer 只归一化；幂等仍由 platformRef / sourceFingerprint 决定
+→ 审计：connector.pull_started / connector.pull_finished（fetched / created / idempotent /
+  quarantined / exhausted / durationMs）；版本变化额外写 connector.normalizer_version_changed（from/to）
+→ **cursor 一页一推进**：整页处理完才写新游标；中途抛错不推进（下次重放靠 ClaimItem 幂等兜底）
+→ **不调用规则引擎**：编排器依赖里没有它，真实库用例断言运行前后 RuleEvaluation 计数不变
+
+四、真实 PostgreSQL 证据（5 条）
+1. 3 条 fixture（2 正常 + 1 缺字段）→ created=2 / quarantined=1，两条 ClaimItem 都带 v1 指纹
+2. 重复拉取同一页 → created=0 / idempotent=2，ClaimItem 计数不变
+3. normalizerVersion v1 → v2 → 写一条 connector.normalizer_version_changed，且**不重建**记录
+4. 只读边界：跑完 RuleEvaluation / Settlement / Payment / BillingInvoice 计数全部不变
+5. 缺 connectorId / 只读 scope → 直接拒绝，零写入
+
+五、测试与 CI
+→ 新增 13 用例（8 单元 + 5 真实库）；测试文件 73 → **75**、用例 666 → **679**
+→ 本机：prisma validate、tsc --noEmit、全量 679 通过
+→ **无 Schema 变更**：迁移仍 16 条、租户触发器仍 27
+→ CI（HEAD bd30009）：三作业 SUCCESS；Test Files 75 / Tests 679；OK: 27 tenant triggers present
+
+六、验收重点自查（你在 MSG-138 点名的 6 条）
+| 重点 | 结果 |
+|---|---|
+| FixtureFetcher 不得演变成生产连接器 | ✅ 文件头明确限定为测试替身；只读本地文件、无网络无凭据、无 OAuth |
+| cursor 可恢复且不污染业务状态 | ✅ 游标只在文件层；业务表里没有游标字段 |
+| Runner 不调用 Rule Engine | ✅ 依赖里没有，真实库计数断言 |
+| quarantine 不存 payload | ✅ 白名单断言 + 单测覆盖 payload/token/customer 字段 |
+| 幂等仍由 sourceFingerprint / platformRef 控制 | ✅ 重复页 100% 幂等 |
+| 27 个租户触发器不变 | ✅ 无 Schema 变更 |
+
+七、下一步
+等你裁决。真实平台连接器（OAuth / 凭据 / 限流 / 数据拉取）**仍不在已批准范围**，
+需要你另行开闸；当前这一层只提供契约与编排骨架。
+宿主侧仍待：脱敏真实账单（VALIDATION-RUN-001）与 C-0010-C2 的 Stripe test 三项授权。
+
+NEED:
+PASS / REVISE / BLOCK（C-0013-B Implementation Checkpoint）
+```
+
+### [MSG-20260928-140] C-0013-B Implementation Checkpoint 裁定：PASS（抽象层 / 编排器 / quarantine / 幂等链路全部通过；记录 RISK-C0013-B-001 文件 cursor 仅限测试开发，真实平台接入前需 C-0014 Cursor Persistence Design；下一步优先 VALIDATION-RUN-001）
+
+> 本轮面板格式：消息不带 `[CHATGPT → CODEX]` 标记行，已按面板原文逐字保留。
+
+```text
+C-0013-B Implementation Checkpoint 裁定
+VERDICT: PASS
+
+本轮实现符合之前批准边界，可以收口。
+
+审计结论
+1. 架构边界 ✅ PASS
+
+当前链路：
+
+纯文本
+ConnectorDescriptor
+        ↓
+Fetcher
+        ↓
+Normalizer
+        ↓
+createClaimItem()
+        ↓
+ClaimItem
+        ↓
+Rule Engine（未来独立触发）
+
+职责没有污染。
+
+确认：
+
+Fetcher 不创建 ClaimItem ✅
+Normalizer 不计算追回金额 ✅
+Runner 不调用 Rule Engine ✅
+不修改 Settlement / Payment / BillingInvoice ✅
+
+这是正确的拆层。
+
+2. Cursor 设计 ✅ PASS
+
+当前：
+
+JSON
+{
+ cursor,
+ updatedAt,
+ connectionRef,
+ resource,
+ cursorVersion
+}
+
+符合要求。
+
+尤其两个点：
+
+一页一推进
+
+正确：
+
+成功：
+
+fetch page
+ ↓
+normalize
+ ↓
+create/idempotent/quarantine
+ ↓
+write cursor
+
+失败：
+
+fetch page
+ ↓
+error
+ ↓
+cursor unchanged
+
+不会出现：
+
+cursor 已推进
+但 ClaimItem 少写
+
+这是连接器最常见的数据一致性问题，目前规避。
+
+3. Quarantine 设计 ✅ PASS
+
+当前白名单：
+
+MISSING_FIELD
+INVALID_TYPE
+AMOUNT_FORMAT
+IDENTITY_UNAVAILABLE
+UNKNOWN_SHAPE
+
+通过。
+
+关键点：
+
+没有混入业务判断。
+
+例如：
+
+禁止：
+
+NOT_RECOVERABLE
+LOW_VALUE
+NO_PROFIT
+
+正确。
+
+这些属于：
+
+Rule Engine
+
+不是：
+
+Normalizer
+4. NormalizerOutput 边界 ✅ PASS
+
+当前字段：
+
+platformType
+claimType
+occurredAt
+amountExpected
+amountActual
+currency
+responsibleParty
+normalizedRef
+normalizerVersion
+sourceFingerprintCandidate
+
+正确。
+
+没有：
+
+recoverableAmount
+ruleVersionId
+decision
+
+这是非常关键的。
+
+否则未来会形成：
+
+Connector 自己判断赔多少钱
+
+导致规则系统失去统一入口。
+
+5. 幂等链路 ✅ PASS
+
+当前：
+
+Connector
+    ↓
+createClaimItem
+    ↓
+platformRef
+      or
+sourceFingerprint
+
+正确。
+
+没有：
+
+Runner 自己查库
+Runner 自己 insert
+Runner 自己处理冲突
+
+避免了第二套幂等逻辑。
+
+6. 测试覆盖 ✅ PASS
+
+重点通过：
+
+项目	状态
+FixtureFetcher隔离	✅
+cursor异常恢复	✅
+quarantine字段污染防护	✅
+重复导入幂等	✅
+normalizer版本变化审计	✅
+RuleEvaluation不变化	✅
+Payment/Settlement/Billing不变化	✅
+27 tenant triggers保持	✅
+
+679 测试通过，且无 Schema 变化，符合预期。
+
+一个未来风险记录（不是阻塞）
+
+记录：
+
+RISK-C0013-B-001
+
+当前：
+
+FileCursorStore
+
+只适合作为：
+
+测试
+开发
+Demo
+
+未来真正接：
+
+Amazon SP-API
+Walmart API
+TikTok Shop API
+
+时：
+
+不能继续使用文件 cursor。
+
+需要：
+
+C-0014 Cursor Persistence Design
+
+重新设计：
+
+可能涉及：
+
+ConnectorSyncState
+SyncRun
+CursorLock
+retry state
+
+但现在不用提前扩。
+
+当前平台线状态
+
+已经完成：
+
+C-0011
+ClaimItem模型
+        ↓
+C-0012
+Rule Engine Audit
+        ↓
+C-0013-A
+sourceFingerprint
+        ↓
+C-0013-B
+Connector抽象层
+
+形成：
+
+事实采集层
+    ↓
+归一化层
+    ↓
+证据层
+    ↓
+规则层
+    ↓
+追回流程层
+
+基础已经完整。
+
+下一步建议
+
+当前最合理顺序：
+
+1. 不急着做真实平台连接器
+
+原因：
+
+现在缺的不是技术。
+
+缺的是：
+
+真实损失数据验证。
+
+优先：
+
+VALIDATION-RUN-001
+
+拿真实脱敏账单验证：
+
+Claim 数量
+recoverableAmount 覆盖率
+人工差异
+是否真的存在高频追回空间
+2. C-0014 建议方向（如果继续工程）
+
+优先不是 Amazon Connector。
+
+而是：
+
+Connector Runtime Design
+
+解决：
+
+多租户同步状态
+retry
+rate limit
+connector health
+sync history
+
+否则后面接三个平台会返工。
+
+最终裁决：
+
+C-0013-B Connector Implementation Checkpoint
+
+PASS
+
+可以进入下一阶段。
+```
