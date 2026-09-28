@@ -24,9 +24,22 @@ interface OpportunityItem {
   id: string;
   status: string;
   title: string;
-  recoverableAmount: string | null;
   currency: string;
-  detectedAt: string;
+  amountExpected: string | null;
+  amountActual: string | null;
+  recoverableAmount: string | null;
+  summary: {
+    invoiceReference: string | null;
+    amountDifference: string | null;
+    basis: string;
+  };
+  calculation: {
+    invoiceReference: string | null;
+    ruleVersion: string | null;
+    rateSource: string | null;
+    calculationDetail: string | null;
+    calculationTimestamp: string | null;
+  };
 }
 
 async function apiGet<T>(path: string): Promise<{ ok: boolean; status: number; body: T | null }> {
@@ -58,7 +71,7 @@ export default async function DashboardPage() {
 
   const [imports, opportunities] = await Promise.all([
     apiGet<{ items: ImportBatchItem[] }>('/imports'),
-    apiGet<{ items: OpportunityItem[] }>('/opportunities'),
+    apiGet<{ items: OpportunityItem[] }>('/opportunities/insights'),
   ]);
 
   return (
@@ -123,27 +136,61 @@ export default async function DashboardPage() {
       </section>
 
       <section className="rounded-lg border bg-white p-6">
-        <h2 className="text-lg font-medium">检测到的可追回机会</h2>
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h2 className="text-lg font-medium">检测到的可追回机会</h2>
+            <p className="mt-1 text-xs text-slate-500">
+              每条机会给出「哪张发票 / 差多少钱 / 依据是什么」，并附可复核的复算证据（发票 · 规则版本 · 费率来源 · 计算细节 · 计算时间）。
+            </p>
+          </div>
+          <a
+            href="/api/opportunities/insights.csv"
+            className="whitespace-nowrap rounded border px-3 py-1 text-sm"
+          >
+            导出清单（CSV）
+          </a>
+        </div>
         {opportunities.ok && opportunities.body && opportunities.body.items.length > 0 ? (
           <table className="mt-3 w-full text-sm">
             <thead className="text-left text-slate-500">
               <tr>
-                <th className="py-2">类型</th>
+                <th className="py-2">发票 / 摘要</th>
+                <th>差额</th>
+                <th>依据</th>
+                <th>复算证据</th>
                 <th>状态</th>
-                <th>可追回</th>
-                <th>检测时间</th>
                 <th>复核</th>
               </tr>
             </thead>
             <tbody>
               {opportunities.body.items.map((item) => (
-                <tr key={item.id} className="border-t">
-                  <td className="py-2">{item.title || item.id.slice(0, 8)}</td>
-                  <td>{item.status}</td>
-                  <td>
-                    {item.recoverableAmount ?? '-'} {item.currency}
+                <tr key={item.id} className="border-t align-top">
+                  <td className="py-2">
+                    <div className="font-mono text-xs">{item.calculation.invoiceReference ?? '—'}</div>
+                    <div className="text-xs text-slate-500">{item.title || item.id.slice(0, 8)}</div>
                   </td>
-                  <td className="text-slate-500">{new Date(item.detectedAt).toLocaleString('zh-CN')}</td>
+                  <td>
+                    {item.summary.amountDifference ?? item.recoverableAmount ?? '—'} {item.currency}
+                  </td>
+                  <td className="text-xs">{item.summary.basis}</td>
+                  <td className="text-xs text-slate-600">
+                    <details>
+                      <summary className="cursor-pointer text-slate-500">展开</summary>
+                      <div className="mt-1 space-y-0.5">
+                        <div>发票：{item.calculation.invoiceReference ?? '—'}</div>
+                        <div>规则版本：{item.calculation.ruleVersion ?? '—'}</div>
+                        <div>费率来源：{item.calculation.rateSource ?? '—'}</div>
+                        <div>计算细节：{item.calculation.calculationDetail ?? '—'}</div>
+                        <div>
+                          计算时间：
+                          {item.calculation.calculationTimestamp
+                            ? new Date(item.calculation.calculationTimestamp).toLocaleString('zh-CN')
+                            : '—'}
+                        </div>
+                      </div>
+                    </details>
+                  </td>
+                  <td>{item.status}</td>
                   <td>
                     {item.status === 'DETECTED' ? (
                       <OpportunityActions opportunityId={item.id} />
