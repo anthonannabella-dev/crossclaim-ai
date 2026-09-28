@@ -318,6 +318,8 @@ model Organization {
   billingInvoices   BillingInvoice[]
   feeCalculations   FeeCalculation[]
   auditLogs         AuditLog[]
+  payments          Payment[]
+  paymentEvents     PaymentEvent[]
 
   @@index([status])
 }
@@ -1080,6 +1082,7 @@ model BillingInvoice {
   organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   case         Case?            @relation(fields: [caseId], references: [id])
   fees         FeeCalculation[]
+  payments     Payment[]
 
   @@unique([organizationId, invoiceNo])
   @@unique([organizationId, id])
@@ -1139,4 +1142,65 @@ model AuditLog {
   @@index([entityType, entityId])
   @@index([action])
   @@index([actorUserId])
+}
+
+// ============================================================
+// C-0010 Payment Integration（客户向我方支付服务费的事实）
+// ------------------------------------------------------------
+// 与 Settlement（第三方赔付给客户）严格分离；BillingInvoice 不承载支付语义。
+// ============================================================
+
+enum PaymentStatus {
+  CREATED
+  SUCCEEDED
+  FAILED
+  REFUNDED
+  PARTIALLY_REFUNDED
+}
+
+enum PaymentEventResult {
+  PROCESSED
+  IGNORED
+  REJECTED
+  DUPLICATE
+}
+
+model Payment {
+  id                String        @id @default(uuid())
+  organizationId    String
+  invoiceId         String
+  provider          String
+  externalPaymentId String
+  amount            Decimal       @db.Decimal(18, 4)
+  currency          String        @default("USD")
+  status            PaymentStatus @default(CREATED)
+  idempotencyKey    String
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invoice      BillingInvoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, provider, externalPaymentId])
+  @@unique([organizationId, id])
+  @@index([organizationId, status])
+  @@index([invoiceId])
+}
+
+/// 只保存事件元数据（eventId/type/payloadHash/结果）；绝不存完整 payload 或卡数据。
+model PaymentEvent {
+  id               String             @id @default(uuid())
+  organizationId   String
+  provider         String
+  providerEventId  String
+  eventType        String
+  payloadHash      String
+  receivedAt       DateTime           @default(now())
+  processingResult PaymentEventResult
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerEventId])
+  @@unique([organizationId, id])
+  @@index([organizationId, receivedAt])
 }

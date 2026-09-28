@@ -294,7 +294,7 @@ BillingInvoice（CrossClaim 向客户开票）
 - 所有迁移**必须可重复执行**，破坏性 DDL 必须显式说明
 - 每次 schema 变更必须同步更新本文件
 - fresh clone 必须能跑通：`apps/api` → `npm ci` → `npx prisma migrate deploy`
-- **CI 会在全新 PostgreSQL 上真实执行迁移**，并校验 19 个租户触发器存在
+- **CI 会在全新 PostgreSQL 上真实执行迁移**，并校验 20 个租户触发器存在
 
 当前迁移：
 
@@ -310,6 +310,7 @@ BillingInvoice（CrossClaim 向客户开票）
 | `20260928130000_rule_evaluation_shadow` | C-0006-B1：RuleEvaluationShadow（runId + engineVersion） |
 | `20260928140000_rule_evaluation_identity_prepare` | C-0006-B2 Step 1：canonicalDedupeKey + 可空唯一约束 |
 | `20260928150000_customer_foundation_auth` | C-0008-A：Session / UserInvitation / User.passwordChangedAt |
+| `20260929010000_payment_domain` | C-0010-A：Payment / PaymentEvent（客户支付事实；+1 租户触发器） |
 
 ---
 
