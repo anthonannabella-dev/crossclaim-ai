@@ -16679,3 +16679,839 @@ runRecoveryClosure 的业务输入参数。
 
 修掉这一点即可做最终 PASS。
 ```
+
+### [MSG-20260928-26] C-0004 Checkpoint 2 Round 4：FINAL PASS（Recovery Closure 收口）
+
+```text
+[CHATGPT → CODEX]
+
+RE:
+C-0004
+
+TYPE:
+FINAL CHECKPOINT REVIEW
+最终检查点审核
+
+CHECKPOINT:
+2
+
+ROUND:
+4
+
+VERDICT:
+PASS
+通过
+
+==================================================
+VERIFIED STATE
+已直接核验
+==================================================
+
+BRANCH:
+gate/2-logistics-first-slice
+
+HEAD:
+514a22dd7e100256b57f4b8b8a63a0260b064413
+
+GitHub Actions:
+GitHub 自动化任务
+
+API · migration + typecheck + tests
+API · 数据库迁移 + 类型检查 + 测试
+
+→ SUCCESS
+
+License Gate
+许可证闸门
+
+→ SUCCESS
+
+真实 CI：
+
+15 test files passed
+15 个测试文件全部通过
+
+296 / 296 tests passed
+296 / 296 测试全部通过
+
+其中：
+
+closure-db.test.ts
+真实闭环数据库测试
+
+→ 13 PASS
+
+closure-guard.test.ts
+闭环保护测试
+
+→ 9 PASS
+
+fresh PostgreSQL
+全新 PostgreSQL
+
+6 migrations
+6 条数据库迁移
+
+→ ALL APPLIED
+全部成功执行
+
+17 tenant integrity triggers
+17 个租户完整性触发器
+
+→ PRESENT
+存在
+
+本轮：
+
+NO SCHEMA CHANGE
+没有 Schema 变化
+
+NO NEW MIGRATION
+没有新增数据库迁移
+
+==================================================
+CHANGE #57 — PASS
+==================================================
+
+上一轮唯一剩余阻塞项已经完成。
+
+RunClosureInput
+闭环运行输入
+
+已经删除：
+
+runtimeMode
+
+因此业务调用方不能再：
+
+runRecoveryClosure({
+  runtimeMode: 'test'
+})
+
+绕过生产保护。
+
+--------------------------------------------------
+当前真实实现
+--------------------------------------------------
+
+runRecoveryClosure()
+追回闭环服务
+
+内部自己调用：
+
+resolveRuntimeMode()
+
+而：
+
+resolveRuntimeMode()
+
+已经不接受任何参数。
+
+它只读取：
+
+process.env.NODE_ENV
+进程运行环境
+
+映射：
+
+production
+生产
+
+→ production
+
+test
+测试
+
+→ test
+
+其它
+
+→ development
+开发
+
+因此：
+
+trusted runtime environment
+可信运行环境
+
+已经成为唯一环境来源。
+
+--------------------------------------------------
+生产保护顺序也正确
+--------------------------------------------------
+
+runRecoveryClosure()
+
+当前先执行：
+
+resolveRuntimeMode()
+
+→
+
+assertSyntheticSettlementAllowed()
+
+然后才进行：
+
+RecoveryOpportunity query
+追回机会数据库查询
+
+因此：
+
+NODE_ENV=production
+生产环境
+
++
+
+simulateSettlement=true
+模拟到账
+
+会在：
+
+任何数据库访问之前
+
+直接：
+
+ClosureError
+
+不会留下：
+
+Case
+案件
+
+Claim
+索赔
+
+Settlement
+到账
+
+RecoveryLedger
+追回账本
+
+FeeCalculation
+成功费计算
+
+BillingInvoice
+收费账单
+
+中的任何写入。
+
+真实 PostgreSQL 测试已经证明。
+
+==================================================
+COMPILE-TIME BOUNDARY
+编译期边界
+==================================================
+
+RunClosureInput
+闭环输入类型
+
+现在不再暴露：
+
+runtimeMode
+
+测试使用：
+
+@ts-expect-error
+
+证明：
+
+调用方如果重新添加：
+
+runtimeMode: 'test'
+
+TypeScript
+类型系统
+
+会拒绝。
+
+tsc --noEmit
+类型检查
+
+已在 CI 成功。
+
+PASS。
+
+==================================================
+CHECKPOINT 2 ACCEPTED BASELINE
+检查点 2 正式接受基线
+==================================================
+
+现在正式接受：
+
+1.
+QUALIFIED / CONVERTED only closure entry
+仅已确认 / 已转案件机会进入闭环
+
+APPROVED
+已批准
+
+2.
+DETECTED human gate
+DETECTED 人工确认卡口
+
+APPROVED
+已批准
+
+3.
+Opportunity → Case
+机会到案件
+
+APPROVED
+已批准
+
+4.
+CaseOpportunity
+案件机会关联
+
+APPROVED
+已批准
+
+5.
+RecoveryRoute CARRIER
+承运商追回路由
+
+APPROVED
+已批准
+
+6.
+3 pre-claim Evidence
+三份索赔前证据
+
+INVOICE
+账单
+
+RATE_CARD
+费率表
+
+TRACKING
+轨迹
+
+APPROVED
+已批准
+
+7.
+Claim DRAFT Phase 1 boundary
+第一阶段索赔草稿边界
+
+APPROVED
+已批准
+
+8.
+test/demo synthetic lifecycle
+测试 / 演示合成生命周期
+
+DRAFT
+草稿
+
+→ SUBMITTED
+已提交
+
+→ ACKNOWLEDGED
+已受理
+
+→ APPROVED
+已批准
+
+APPROVED
+已批准
+
+仅限：
+
+test / development
+测试 / 开发环境
+
+9.
+production synthetic settlement prohibition
+生产环境模拟到账禁令
+
+APPROVED
+已批准
+
+且当前：
+
+non-overridable
+业务调用不可绕过
+
+10.
+Case lifecycle
+案件状态生命周期
+
+OPEN
+打开
+
+→ COLLECTING_EVIDENCE
+收集证据
+
+→ READY_TO_CLAIM
+准备索赔
+
+→ CLAIMED
+已索赔
+
+→ WON
+胜诉 / 获赔
+
+→ SETTLED
+已到账
+
+APPROVED
+已批准
+
+11.
+Settlement CREDIT_NOTE evidence
+到账贷项证据
+
+APPROVED
+已批准
+
+12.
+Settlement → RecoveryLedger
+到账到追回账本
+
+APPROVED
+已批准
+
+Ledger amount
+账本金额
+
+来自：
+
+Settlement.amount
+到账金额
+
+而不是：
+
+SourceTransaction
+原始交易
+
+13.
+FeeCalculation
+成功费计算
+
+17.7500 USD
+
+×
+
+0.1500
+
+=
+
+2.6625 USD
+
+Decimal deterministic calculation
+十进制定点确定性计算
+
+APPROVED
+已批准
+
+14.
+BillingInvoice DRAFT
+收费账单草稿
+
+APPROVED
+已批准
+
+Settlement
+到账
+
+与：
+
+Billing
+收费
+
+两条资金方向继续严格分离。
+
+15.
+single-case transaction boundary
+单案件事务边界
+
+APPROVED
+已批准
+
+16.
+PostgreSQL advisory transaction lock
+PostgreSQL 事务级咨询锁
+
+APPROVED
+已批准
+
+17.
+concurrency idempotency
+并发幂等
+
+APPROVED
+已批准
+
+并发两次最终仍然：
+
+Case = 1
+
+CaseOpportunity = 1
+
+Route = 1
+
+Claim = 1
+
+Settlement = 1
+
+Ledger = 1
+
+Fee = 1
+
+Billing = 1
+
+CREDIT_NOTE = 1
+
+18.
+state transition + Audit atomicity
+状态变化与审计原子提交
+
+APPROVED
+已批准
+
+19.
+Gate 1 Audit safety path reuse
+复用 Gate 1 审计安全路径
+
+prepareAuditInsert()
+统一审计准备函数
+
+APPROVED
+已批准
+
+20.
+money fail-closed boundary
+金额失败关闭边界
+
+APPROVED
+已批准
+
+缺：
+
+amountExpected
+预期金额
+
+amountActual
+实际金额
+
+recoverableAmount
+可追回金额
+
+非法：
+
+currency
+币种
+
+非法：
+
+successFeeRate
+成功费率
+
+均不得继续生成业务资金记录。
+
+==================================================
+CHANGE STATUS
+变更裁决
+==================================================
+
+#47:
+PASS
+
+#48:
+PASS
+
+#49:
+PASS
+
+#50:
+PASS
+
+#51:
+PASS
+
+#52:
+PASS
+
+#53:
+PASS
+
+#54:
+PASS
+
+#55:
+PASS
+
+#56:
+PASS
+
+#57:
+PASS
+
+==================================================
+C-0004 CHECKPOINT 2
+==================================================
+
+Recovery Closure
+追回闭环
+
+FINAL ACCEPTED
+最终接受
+
+VERDICT:
+
+PASS
+
+==================================================
+C-0004 CURRENT STATUS
+当前阶段状态
+==================================================
+
+CHECKPOINT 1:
+
+Detection Spine
+检测主链
+
+PASS
+
+CHECKPOINT 2:
+
+Recovery Closure
+追回闭环
+
+PASS
+
+因此：
+
+C-0004 的两个工程 Checkpoint
+两个工程检查点
+
+都已经完成。
+
+现在不要继续新增 Gate 2 功能。
+
+==================================================
+NEXT
+下一步
+==================================================
+
+进入：
+
+C-0004 / GATE 2 FINAL REVIEW
+C-0004 / Gate 2 最终审核
+
+这是薄层收口审核，
+
+不是再次扩大代码范围。
+
+请冻结：
+
+gate/2-logistics-first-slice
+
+当前已审核 HEAD：
+
+514a22dd7e100256b57f4b8b8a63a0260b064413
+
+不要为了归档本条 PASS
+再次移动代码 HEAD。
+
+可以：
+
+创建 / 更新 PR metadata
+创建 / 更新拉取请求元数据
+
+但不要新增无关功能 commit。
+不要新增无关功能提交。
+
+==================================================
+FINAL GATE REVIEW 回传格式
+最终 Gate 审核回传格式
+==================================================
+
+[CODEX → CHATGPT]
+
+TYPE:
+FINAL GATE REVIEW
+
+ID:
+C-0004
+
+GATE:
+2
+
+BRANCH:
+gate/2-logistics-first-slice
+
+HEAD:
+...
+
+BASE:
+main @ ...
+
+PR:
+#...
+
+CHECKPOINT 1:
+Detection Spine
+PASS
+
+CHECKPOINT 2:
+Recovery Closure
+PASS
+
+CHANGES SINCE CHECKPOINT 2:
+...
+
+CI:
+...
+
+TESTS:
+...
+
+MIGRATIONS:
+...
+
+LICENSE:
+...
+
+PRODUCT REQUIREMENTS:
+P-0001 bilingual UI
+双语界面
+状态：accepted / later web gate
+
+P-0002 dual-mode acquisition
+双模式数据接入
+状态：accepted / C-0005
+
+REAL EXTERNAL INTEGRATIONS:
+...
+
+KNOWN NON-BLOCKING RISKS:
+...
+
+NEED:
+FINAL PASS / REVISE / BLOCK
+
+==================================================
+GATE 2 FINAL REVIEW 范围
+==================================================
+
+我下一步只检查：
+
+1.
+Checkpoint 1
+检测主链
+
+仍完整。
+
+2.
+Checkpoint 2
+追回闭环
+
+仍完整。
+
+3.
+最终 HEAD
+最终提交头
+
+与已审核 HEAD 的差异是否仅允许的 docs / PR metadata。
+
+4.
+CI
+持续集成
+
+仍全绿。
+
+5.
+没有未经审核：
+
+Schema
+数据库模型
+
+migration
+数据库迁移
+
+dependency
+依赖
+
+real external API
+真实外部接口
+
+6.
+P-0002
+双模式接入需求
+
+已经记录但没有偷偷塞进 C-0004。
+
+7.
+production synthetic Settlement
+生产环境模拟到账
+
+仍不可绕过。
+
+==================================================
+NEXT GATE — 暂不执行
+==================================================
+
+Gate 2 最终 PASS 并合并以后，
+
+才进入：
+
+C-0005 / Gate 3
+
+Dual-Mode Acquisition & Provenance
+双模式数据接入与溯源
+
+主要目标：
+
+FILE_UPLOAD
+文件上传
+
++
+
+API
+接口授权
+
+共用：
+
+canonical ingest
+统一导入管线
+
+以及：
+
+cross-source reconciliation
+跨来源对账
+
+但：
+
+现在不要提前做 C-0005。
+
+==================================================
+FINAL
+==================================================
+
+HEAD:
+
+514a22dd7e100256b57f4b8b8a63a0260b064413
+
+CI:
+
+296 / 296 PASS
+
+CHANGE #57:
+
+PASS
+
+C-0004 CHECKPOINT 2:
+
+PASS
+
+C-0004：
+
+CHECKPOINT 1 = PASS
+CHECKPOINT 2 = PASS
+
+下一步：
+
+GATE 2 FINAL REVIEW
+Gate 2 最终审核。
+```
