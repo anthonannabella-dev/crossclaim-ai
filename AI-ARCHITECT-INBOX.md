@@ -21389,3 +21389,260 @@ unmapped 分类统计
 
 继续。
 ```
+
+### [MSG-20260928-35] C-0006-B2 Step 1 Checkpoint Review：PASS（允许进入 Step 2 双写+回填）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE:
+CHECKPOINT REVIEW
+
+ID:
+C-0006-B2 Step 1
+
+GATE:
+4
+
+MODULE:
+RuleEvaluation Identity Prepare
+
+VERDICT:
+
+PASS
+
+Step 1 Schema Prepare 达到批准要求，可以进入 Step 2。
+
+1. Migration 范围
+
+PASS。
+
+确认本次只完成：
+
+canonicalDedupeKey nullable column
+nullable unique constraints
+index
+
+没有触碰：
+
+old dedupeKey
+old unique constraint
+Detection 输入
+Closure
+Opportunity
+Recovery 链路
+
+符合批准边界。
+
+2. 双身份并存设计
+
+PASS。
+
+当前状态：
+
+旧身份：
+
+纯文本
+dedupeKey
+
+organization
++
+ruleVersion
++
+invoiceTransaction
++
+trackingTransaction
+
+新身份：
+
+纯文本
+canonicalDedupeKey
+
+organization
++
+ruleVersion
++
+canonicalFact
+
+两者并存。
+
+这是正确迁移状态。
+
+3. 唯一约束设计
+
+PASS。
+
+保持之前裁定：
+
+核心业务身份：
+
+纯文本
+@@unique([
+ organizationId,
+ ruleVersionId,
+ canonicalFactId
+])
+
+二级完整性：
+
+纯文本
+@@unique(canonicalDedupeKey)
+
+当前定位正确。
+
+4. Dry-run 回填工具
+
+PASS。
+
+这是本阶段最重要验证。
+
+通过：
+
+可映射：
+纯文本
+ACTIVE CanonicalFact
+=
+1:1
+
+允许更新。
+
+不可映射：
+
+保持 NULL：
+
+CONFLICT_FACT
+NO_ACTIVE_FACT
+AMBIGUOUS
+
+正确。
+
+没有为了提高覆盖率污染身份。
+
+5. unmapped 分类
+
+PASS。
+
+分类合理：
+
+纯文本
+NO_SOURCE_TRANSACTION
+
+NO_ACTIVE_FACT
+
+CONFLICT_FACT
+
+AMBIGUOUS_FACTS
+
+DUPLICATE_TARGET
+
+尤其保留：
+
+CONFLICT_FACT
+
+非常重要。
+
+因为：
+
+冲突不是缺数据，而是数据不可确定。
+
+6. canSwitch 条件
+
+PASS。
+
+当前：
+
+纯文本
+unmapped = 0
+
+才允许进入 Step 3。
+
+保持之前严格策略。
+
+7. 发现一个需要 Step 2 注意的事项
+
+非阻塞提醒：
+
+Step 2 双写时，需要额外验证：
+
+新产生 RuleEvaluation：
+
+必须保证：
+
+纯文本
+canonicalFactId != NULL
+
+否则：
+
+不能生成 canonicalDedupeKey。
+
+建议 Step 2 增加：
+
+纯文本
+new evaluation without canonical identity
+=
+metric + warning
+
+不要静默回退。
+
+8. Step 2 前置条件
+
+批准进入，但必须保持：
+
+Step 2:
+
+允许：
+
+✅ 双写 canonicalDedupeKey
+
+✅ apply 回填
+
+✅ identity parity report
+
+必须完成：
+
+纯文本
+Run #1
+old identity == new identity
+
+Run #2
+repeat execution:
+no unexpected delta
+
+禁止：
+
+❌ 切 Detection
+
+❌ 删除 old key
+
+❌ 修改 Closure
+
+❌ 删除 sourceTransactionId
+
+❌ 修改 Opportunity identity
+
+FINAL DECISION
+纯文本
+C-0006-B2 Step 1:
+
+PASS
+
+可以进入：
+
+C-0006-B2 Step 2
+
+提交内容要求：
+
+双写实现方案
+
+backfill apply 实测结果
+
+两轮 identity parity report
+
+新旧 dedupeKey 一致性证明
+
+新数据写入覆盖率
+
+unmapped 最终统计
+
+完成后再申请 Step 3。
+```
