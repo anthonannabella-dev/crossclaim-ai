@@ -21,7 +21,9 @@ import {
   applyIdentityBackfill,
   buildDuplicateResolutionReport,
   buildIdentityParityReport,
+  buildIdentitySwitchGate,
   planIdentityBackfill,
+  resolveEquivalentDuplicates,
 } from '../services/canonical';
 import {
   createPrismaFileAssetPort,
@@ -383,5 +385,52 @@ describe('C-0006-B2 Step 2 — dual write + identity parity（真实 PostgreSQL�
 
     const rows = await prisma.ruleEvaluation.findMany({ where: { organizationId: ORG } });
     expect(rows.every((row) => row.dedupeKey !== null && row.canonicalDedupeKey !== null)).toBe(true);
+  });
+
+  it('duplicate resolution：等价重复被标记 resolved（不删除），active unmapped 归零后 canSwitch=true', async () => {
+    await detect();
+    const mappedRow = await prisma.ruleEvaluation.findFirstOrThrow({
+      where: { organizationId: ORG, canonicalFactId: { not: null } },
+    });
+    const conflicting = await prisma.ruleEvaluation.create({
+      data: {
+        organizationId: ORG,
+        ruleVersionId: mappedRow.ruleVersionId,
+        sourceTransactionId: mappedRow.sourceTransactionId,
+        result: 'OPPORTUNITY',
+        computed: {},
+        dedupeKey: 'legacy-key-resolution',
+      },
+    });
+
+    const before = await buildIdentitySwitchGate(prisma, { organizationId: ORG });
+    expect(before.unmapped.DUPLICATE_TARGET).toBe(1);
+    expect(before.activeUnmapped).toBe(1);
+    expect(before.canSwitch).toBe(false);
+
+    const outcome = await resolveEquivalentDuplicates(prisma, audit, { organizationId: ORG });
+    expect(outcome.resolved).toBe(1);
+    expect(outcome.resolvedRuleEvaluationIds).toEqual([conflicting.id]);
+
+    const auditRow = await prisma.auditLog.findFirstOrThrow({
+      where: { organizationId: ORG, action: 'identity.duplicate_resolved' },
+    });
+    const changes = auditRow.changes as Record<string, unknown>;
+    expect(changes.resolution).toBe('KEEP_EXISTING');
+    expect(changes.resolver).toBe('identity-migration');
+    expect(changes.originalRuleEvaluationId).toBe(conflicting.id);
+    expect(changes.retainedRuleEvaluationId).toBe(mappedRow.id);
+    expect(changes.markedRuleEvaluationId).toBe(conflicting.id);
+
+    // 重复行仍存在且未被覆盖（review-only）
+    const stillThere = await prisma.ruleEvaluation.findUniqueOrThrow({ where: { id: conflicting.id } });
+    expect(stillThere.canonicalFactId).toBeNull();
+    expect(stillThere.dedupeKey).toBe('legacy-key-resolution');
+
+    const after = await buildIdentitySwitchGate(prisma, { organizationId: ORG });
+    expect(after.resolvedUnmapped).toBe(1);
+    expect(after.activeUnmapped).toBe(0);
+    expect(after.canSwitch).toBe(true);
+    expect(after.pendingEntries).toHaveLength(0);
   });
 });

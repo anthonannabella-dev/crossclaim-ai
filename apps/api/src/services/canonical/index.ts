@@ -58,3 +58,12 @@ export {
   type DuplicateResolutionRecommendation,
   type DuplicateResolutionReport,
 } from './duplicate-resolution';
+export {
+  IDENTITY_DUPLICATE_REPORT,
+  IDENTITY_RESOLUTION_ACTION,
+  IDENTITY_RESOLVER,
+  buildIdentitySwitchGate,
+  resolveEquivalentDuplicates,
+  type IdentityResolutionOutcome,
+  type IdentitySwitchGate,
+} from './identity-resolution';
