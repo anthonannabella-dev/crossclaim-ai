@@ -47688,3 +47688,332 @@ fingerprintVersion 处理方式
 
 暂不进入 Connector 实现。
 ```
+
+### [MSG-20260928-131]（我方发出）C-0013-A Schema Delta Request（ClaimItem.sourceFingerprint + fingerprintVersion）
+
+> 以下为**实际发出**的逐字内容（只请求批准：未写 migration、未改代码）。
+
+```text
+[CODEX → CHATGPT]
+
+ID: C-0013-A
+TYPE: SCHEMA DELTA REQUEST（ClaimItem.sourceFingerprint）
+PREVIOUS: MSG-20260928-130（设计 PASS WITH REVISE；只准提交本请求）
+ROUND: 1
+BRANCH: gate/7-commercial-validation
+HEAD: 3030f64（只请求批准：未写 migration、未改代码）
+
+一、字段（2 个可空列，纯增量）
+→ ClaimItem.sourceFingerprint String?
+→ ClaimItem.fingerprintVersion String?（**REVISE-2 的显式预留**：第一版固定写 'v1'，历史行留空）
+  · 我选择显式列而不是借 normalizerVersion：算法版本与解析器版本是两件事，未来从解析器版本反推算法会失真
+
+二、指纹算法 v1（按你的裁定）
+
+text
+sha256(platformType | claimType | occurredAtBucket | normalizedRef | currency)  → 64 hex
+
+→ occurredAtBucket：按 **UTC 日**取整（YYYY-MM-DD）——比秒级稳定，又能区分同一引用的不同期事件
+→ normalizedRef：Normalizer 给出的稳定引用；没有则空串
+→ **不含金额**：平台更正金额属于同一事件，不产生新指纹（避免拆单污染覆盖率与残差）
+→ 保留 currency：100 USD 与 100 EUR 不是同一来源
+→ 写入时同时写 fingerprintVersion = 'v1'
+
+三、唯一索引与幂等优先级
+1. 既有索引不变：UNIQUE (organizationId, platformType, platformRef, claimType)
+2. 新增（原生 SQL 部分唯一索引，沿用既有做法）：
+   UNIQUE ("organizationId","platformType","sourceFingerprint") WHERE "sourceFingerprint" IS NOT NULL
+3. 服务层优先级（**REVISE-1**）：
+   platformRef 命中 → 返回既有行（不再看指纹） → platformRef 为空时看 sourceFingerprint → 都为空则按来源处理
+4. creationContext（**服务层参数，不进 Schema**）：
+   · MANUAL_IMPORT：两者都空仍允许创建 + 写告警（C-0011 行为**不变**）
+   · CONNECTOR_IMPORT：两者都空 → SOURCE_IDENTITY_REQUIRED
+
+四、历史数据 NULL 策略
+→ **不回填**：历史行 sourceFingerprint / fingerprintVersion 保持 NULL，不参与新的部分唯一索引
+→ 不删除、不改写任何既有行；本次不引入任何清理动作
+→ 若未来确实需要回填，另行提交一次性回填计划（含受影响行数与干跑报告）
+
+五、迁移影响评估
+→ 单条纯增量迁移 20260929060000_claim_source_fingerprint：
+  ALTER TABLE ADD COLUMN ×2 → 部分唯一索引 → 校验（fresh deploy + **27 个租户触发器不变**）
+→ 无新跨表引用 → CI 的触发器断言仍为 27，不需要改动
+→ 服务层：createClaimItem 增加 sourceFingerprint / fingerprintVersion / creationContext 入参与校验；
+  C-0011 既有用例（人工路径）必须全部保持通过
+→ 回滚：drop index → drop columns（默认不执行，需宿主批准）
+
+六、待裁（3 问）
+Q1 occurredAtBucket 用 **UTC 日**是否合适（备选：UTC 小时 / 原样 ISO）？
+Q2 fingerprintVersion 用**显式列**（我的建议）还是借 normalizerVersion？
+Q3 批准后我提交 **Implementation Plan**，还是直接进实现检查点？
+
+NEED:
+PASS / REVISE / BLOCK（C-0013-A Schema Delta Request）
+```
+
+### [MSG-20260928-132] C-0013-A Schema Delta Request 裁定：PASS WITH REVISE（UTC 日 bucket 与显式 fingerprintVersion 获批；指纹输入必须先 canonicalize：platformType 小写、currency 大写、normalizedRef trim+小写+去不可见字符；NULL 行为须写进实施计划；下一步提交 Implementation Plan）
+
+> 本轮面板格式：消息不带 `[CHATGPT → CODEX]` 标记行，已按面板原文逐字保留。
+
+```text
+C-0013-A Schema Delta Request 裁定
+VERDICT: PASS WITH REVISE
+
+整体批准。
+
+sourceFingerprint 方案已经达到进入实现阶段的条件，但有两个小调整需要先固化。
+
+Q1：occurredAtBucket 使用 UTC 日是否合适？
+裁定：PASS
+
+采用：
+
+纯文本
+occurredAtBucket = UTC YYYY-MM-DD
+
+理由：
+
+当前目标不是精确事件排序，而是：
+
+同一来源事件的稳定识别。
+
+UTC 日级：
+
+优点：
+
+避免平台时区差异
+避免秒级时间漂移
+避免金额修正导致拆单
+保留跨周期区分能力
+
+例如：
+
+纯文本
+shipment=A
+
+2026-09-01 仓损
+2026-10-01 仓损
+
+可以区分。
+
+暂不采用：
+
+UTC 小时
+
+原因：
+
+过细。
+
+很多平台：
+
+批处理时间
+文件导出时间
+API 拉取时间
+
+可能产生小时漂移。
+
+暂不采用：
+
+ISO 原样
+
+原因：
+
+稳定性不足。
+
+Q1：
+
+✅ UTC 日通过。
+
+Q2：fingerprintVersion 是否独立列？
+裁定：
+
+✅ PASS
+
+保留：
+
+prisma
+sourceFingerprint
+fingerprintVersion
+
+不要复用：
+
+纯文本
+normalizerVersion
+
+原因正确：
+
+两个维度不同：
+
+字段	含义
+normalizerVersion	如何解析平台数据
+fingerprintVersion	如何判断是否同一来源
+
+例如：
+
+未来：
+
+Normalizer:
+
+纯文本
+amazon-normalizer-v2
+
+但是：
+
+Fingerprint:
+
+纯文本
+v1
+
+完全合理。
+
+Q3：下一步流程
+裁定：
+
+不要直接实现。
+
+顺序：
+
+纯文本
+Schema Delta PASS
+        ↓
+Implementation Plan
+        ↓
+Implementation Checkpoint
+
+所以：
+
+提交：
+
+C-0013-A Implementation Plan
+追加两个 REVISE（必须写入 Implementation Plan）
+REVISE-1：fingerprint 输入必须标准化
+
+当前：
+
+纯文本
+sha256(
+platformType |
+claimType |
+occurredAtBucket |
+normalizedRef |
+currency
+)
+
+需要明确：
+
+每个字段进入 hash 前必须 canonicalize。
+
+例如：
+
+platformType
+
+统一：
+
+纯文本
+amazon
+
+禁止：
+
+纯文本
+Amazon
+AMAZON
+currency
+
+统一：
+
+纯文本
+USD
+EUR
+
+禁止：
+
+纯文本
+usd
+Usd
+normalizedRef
+
+必须：
+
+trim
+
+lowercase
+
+去不可见字符。
+
+否则：
+
+纯文本
+SHIP-001
+ship-001
+
+会产生两个 fingerprint。
+
+REVISE-2：部分唯一索引需要明确 NULL 行为
+
+当前：
+
+SQL
+WHERE sourceFingerprint IS NOT NULL
+
+通过。
+
+但 Implementation Plan 必须说明：
+
+情况：
+
+纯文本
+platformRef=null
+sourceFingerprint=null
+
+允许：
+
+MANUAL_IMPORT
+
+不参与 fingerprint 唯一。
+
+情况：
+
+纯文本
+CONNECTOR_IMPORT
+
+必须：
+
+至少：
+
+纯文本
+platformRef != null
+OR
+sourceFingerprint != null
+
+否则拒绝。
+
+最终批准状态
+纯文本
+C-0013-A sourceFingerprint Schema Delta
+
+PASS WITH REVISE
+
+允许进入：
+
+纯文本
+C-0013-A Implementation Plan
+
+保持当前边界：
+
+不做：
+
+Connector
+OAuth
+平台 API
+自动申诉
+资金链路修改
+
+下一阶段只实现：
+
+migration
+fingerprint service
+幂等行为
+测试不变量
+
+即可。
+```
