@@ -171,14 +171,79 @@ C-0008-B2（Case / Evidence / Claim Draft / Billing）的端点尚未实现。
 - 证据只返回元数据：文件字节必须走既有签名 URL 通道（`/files/<token>`，租户绑定）
 - 跨租户案件 → 404
 
+## 处置洞察与导出（C-0009.1）
+
+| 方法 | 路径 | 成功 | 权限 |
+|---|---|---|---|
+| GET | `/opportunities/insights` | 200 `{ items: [ 洞察对象 ] }` | OWNER / ADMIN / OPS |
+| GET | `/opportunities/insights.csv` | 200 `text/csv`（固定 5 列：`opportunity_id, invoice_reference, recoverable_amount, rule_reason, evidence_reference`） | OWNER / ADMIN / OPS |
+| GET | `/opportunities/:opportunityId/basis` | 200 单条洞察（含复算证据块与 `calculationTimestamp`） | OWNER / ADMIN / OPS |
+
+- 掩码只是**展示字段**：同一响应同时返回原始值与 `*Masked` 版本，客户自有数据永不隐藏
+- CSV 只含上述 5 列，不含凭据或内部信息；FINANCE / VIEWER → 403
+
+## 高额回收人工卡口（C-0009.2）
+
+| 方法 | 路径 | 请求 | 成功 | 权限 |
+|---|---|---|---|---|
+| GET | `/cases/:caseId/recovery-review` | — | 200 `{ caseId, state, threshold, lastEventAt, lastActorUserId }` | OWNER / ADMIN / OPS |
+| POST | `/cases/:caseId/recovery-review` | `{ decision: 'REQUEST' \| 'APPROVE' \| 'REJECT', reason?, recoveredAmount?, currency? }` | 200 `{ caseId, state, decision }` | REQUEST：OWNER / ADMIN / FINANCE；APPROVE / REJECT：**仅 OWNER / ADMIN** |
+
+- 阈值 `HITL_RECOVERY_THRESHOLD`（默认 `1000.0000`）：USD **严格大于**才卡口，非 USD 一律卡口
+- 状态由审计推导（`recovery.review_required` / `approved` / `rejected`）；`approved` 必须晚于 `required`
+- 未获批就确认回收结果 → **409 `REVIEW_REQUIRED`**，且零资金写入
+
+## 申诉包交付物状态（C-0009.3）
+
+| 方法 | 路径 | 成功 | 权限 |
+|---|---|---|---|
+| GET | `/cases/:caseId/appeal-package` | 200 `{ deliverable, customerDataAccess }` | OWNER / ADMIN / OPS |
+
+- `deliverable.state = LOCKED`、`unlockAvailable: false`（解锁能力留待商业化 Gate 单独设计）
+- `customerDataAccess` 的 `rawFiles` / `evidenceChain` / `auditTrail` 始终 `AVAILABLE`：**不得以支付绑定作为数据访问条件**
+
+## 佣金对账（C-0009）
+
+| 方法 | 路径 | 请求 | 成功 | 权限 |
+|---|---|---|---|---|
+| POST | `/commissions/reconcile` | `{ items: [{ payoutReference?, platformOrderId?, amount, currency, payoutDate? }], dryRun? }` | 200 `{ dryRun, results: [{ reconciliationStatus, billingStatus, matchType, matchedFields, confidenceReason, feeAmount }] }` | OWNER / ADMIN（FINANCE → 403） |
+
+- `dryRun` 默认 `true`（零写入）；执行时只建 `FeeCalculation` + `BillingInvoice(DRAFT)`
+- `Settlement` 状态不变，账单**永不**直接置 `PAID`；重复执行 → `ALREADY_CHARGED`
+- 匹配只认 `payoutReference` / `platformOrderId`；**仅时间窗一律不匹配**
+- `confidenceReason` 是规则理由，不是 AI 置信度
+
+## 支付（C-0010-A）
+
+| 方法 | 路径 | 请求 / 头 | 成功 | 权限 |
+|---|---|---|---|---|
+| GET | `/payments` | — | 200 `{ items: [{ id, invoiceId, invoiceNo, invoiceStatus, amount, currency, status, createdAt }] }` | OWNER / ADMIN / OPS / FINANCE（`viewBilling`） |
+| POST | `/payments/webhook` | 原始 body + `Stripe-Signature: t=…,v1=…` | 200 `{ httpStatus, processingResult, reason, invoiceId? }`；验签失败 → 400 | 不走会话：验签即鉴权 |
+
+- 开关 `PAYMENTS_ENABLED` 默认 `false`：关闭时**验签通过后**写 `IGNORED` 事件并返回 200（不返回 503，避免 provider 重试风暴）
+- 幂等：`(provider, providerEventId)` 唯一；重复或并发重放 → `DUPLICATE` + 200
+- 金额与币种必须与账单**完全相等**，否则不推进 PAID 并写 `payment.reconciliation_failed`
+- 推进用 CAS：`UPDATE … WHERE id = ? AND organizationId = ? AND status = 'ISSUED'`
+- 高额卡口 `PAYMENT_REVIEW_THRESHOLD`（默认 `1000.0000`）与 Recovery 卡口**完全独立**；动作域 `payment.review_*`，审批仅 OWNER / ADMIN，FINANCE 只读
+- 只保存事件元数据（`eventId` / `eventType` / `payloadHash` / `receivedAt` / `processingResult`）：**不保存 payload 原文、卡数据或 provider 机密**
+- 无法归属租户的事件不落库，只写结构化安全日志
+
 ## 权限矩阵
 
 见 [DOMAIN_MODEL.md](./DOMAIN_MODEL.md#角色与权限c-0008-b1架构方批准)。
 实现唯一位置：`apps/api/src/services/workflow/permissions.ts`；未知角色 fail closed。
 
-## 尚未实现（C-0008-B2）
+## 尚未实现 / 未启用（截至 C-0010-A）
 
-Case 创建、Evidence 查看、Claim Draft 查看、Billing 展示与状态推进 —— 均未实现，也没有对应的 HTTP 端点。
+已有端点（见上文各节）：机会复核、采集连接管理、建案与商务确认、回收结果确认与高额卡口、
+处置洞察与导出、申诉包交付物状态、佣金对账、账单展示与推进、案件 / 证据 / Claim 正文、
+支付只读视图与 webhook 接收器。
+
+仍未启用：
+
+- **真实支付**：`PAYMENTS_ENABLED` 默认 `false`；生产 webhook、Stripe 账号、域名与 TLS 属 C-0010-C / D，需宿主授权
+- **自动提交 Claim / Appeal**：禁止（对外动作必须单独走 Gate）
+- **多平台（Amazon SP-API / TikTok Shop / Walmart）与海关 / OCR 线**：HOLD
 
 ## 相关文档
 
