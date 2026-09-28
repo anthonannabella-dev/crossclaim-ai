@@ -46864,3 +46864,398 @@ C-0010-C2 Stripe test mode
 
 当前代码状态可以继续推进。
 ```
+
+### [MSG-20260928-127]（我方发出）C-0013 Connector Design（Connector 抽象 / Fetcher / Normalizer / 规则输入，Design Only）
+
+> 以下为**实际发出**的逐字内容（只设计：不接平台、不写 OAuth、不做数据拉取）。
+
+```text
+[CODEX → CHATGPT]
+
+ID: C-0013
+TYPE: DESIGN PROPOSAL（Connector 抽象 / Fetcher / Normalizer / 规则输入 · **Design Only**）
+PREVIOUS: MSG-20260928-126（下一优先级含 C-0013 Connector Design，仅抽象层）
+ROUND: 1
+BRANCH: gate/7-commercial-validation
+HEAD: 4135899（只设计：不接平台、不写 OAuth、不做数据拉取）
+
+零、边界（严格遵守）
+做：Connector 描述符 + Fetcher / Normalizer 契约 + 与既有 Rule Engine 的输入边界 + 失败可见性设计
+不做：OAuth 实现 · 真实平台账号 · 数据拉取 · 平台写操作 · 自动申诉 · 新资金链路 · 本阶段不写实现
+
+一、四段链路（沿用 C-0011 的职责隔离）
+Connector（描述符）→ Fetcher（只读拉取）→ Normalizer（形状 → ClaimItem）→ Rule Engine（既有执行器）
+→ **Connector 只声明**：platformType / authKind（OAUTH | API_KEY | FILE_UPLOAD）/ 所需 scope / 速率上限
+  · 凭据永远只存在于 SourceConnection.credentialRef；Connector 描述符与 ClaimItem **都不存 token**
+→ **Fetcher**：pull(cursor) → { records, nextCursor }；游标按 (connectionId, resource) 持久化；
+  只申请**只读 scope**；失败按退避重试；**不做业务解析**
+→ **Normalizer**：normalize(record) → ClaimItemDraft；纯函数 + normalizerVersion；
+  **不做金额判断、不调用规则引擎**；未知/缺字段形状 → 进 **quarantine**（绝不静默丢弃）
+→ **规则输入**：ClaimItemDraft 经 C-0011 的 createClaimItem 落库后，由**既有**规则执行器评估出
+  recoverableAmount；连接器不直接写金额
+
+二、必须先解决的依赖（RISK-C0011-001 的具体化）
+→ 平台同步会产生大量记录，而 platformRef 未必每次都有（例如首次导入的仓损调整单）；
+  没有稳定去重键会重复建 ClaimItem，直接破坏覆盖率与残差统计
+→ 建议把 **C-0013-A：Schema Delta（ClaimItem.sourceFingerprint）** 作为连接器实现的**前置**：
+  来源指纹 = sha256(platformType|claimType|occurredAt|amountActual|normalizedRef)；
+  platformRef 存在时用 platformRef 去重，否则用 sourceFingerprint（两者共同构成幂等候选键）
+→ 本设计**不实现**这一步，只提出依赖顺序，等你裁定
+
+三、失败可见性与审计（不落原始 payload）
+→ 拉取：connector.pull_started / connector.pull_finished（recordCount / cursor / durationMs）
+→ 归一化：normalizer.record_normalized（批量计数）/ normalizer.record_quarantined
+  （原因码 + 输入指纹；**不落原始 payload**）
+→ 规则：沿用既有执行器审计（engineVersion / ruleVersionId），与 C-0012 的审计口径一致
+→ 摘要报告只读、可复算、**不含商业结论**
+
+四、平台映射（只给形状，不在本阶段实现）
+| 平台 | 只读数据源 | 归一化 claimType | 责任方默认值 |
+|---|---|---|---|
+| Amazon | Inventory Ledger / Adjustments / Reimbursements | FBA_LOSS（盘亏·损毁·入库少件） | PLATFORM_WAREHOUSE |
+| Walmart | WFS 仓储变动 / OTIF 绩效 | WAREHOUSE_LOSS · OTIF_PENALTY | PLATFORM_WAREHOUSE · CARRIER |
+| TikTok | FBT 入库变动 / 退款·DNR | FBT_LOSS · BUYER_REFUND_DNR | PLATFORM_WAREHOUSE · BUYER |
+（字段级映射表在执行前单独评审；本阶段不产出实现）
+
+五、待裁（3 问）
+Q1 是否把 **C-0013-A（sourceFingerprint Schema Delta）** 列为连接器实现的前置？
+Q2 quarantine 形态：先落**文件**（reports/quarantine/*.jsonl）还是落库（需要新模型）？
+   我倾向先文件，避免过早扩 Schema
+Q3 连接器描述符是否先以**纯 TypeScript 类型**落地（无运行时、无凭据、可单测），
+   还是连类型也等到 C-0013-A 之后？
+
+NEED:
+PASS / REVISE / BLOCK（C-0013 Connector Design）
+```
+
+### [MSG-20260928-128] C-0013 Connector Design 裁定：PASS WITH REVISE（Fetcher 不得直接产生 ClaimItem；Normalizer 输出必须带 platformType/normalizerVersion/sourceFingerprintCandidate；Connector 无规则引擎调用权；下一步只做 C-0013-A sourceFingerprint 设计稿）
+
+> 本轮面板格式：消息不带 `[CHATGPT → CODEX]` 标记行，已按面板原文逐字保留。
+
+```text
+C-0013 Connector Design 裁定
+VERDICT: PASS WITH REVISE
+
+设计方向正确，可以进入下一阶段，但有三个边界需要收紧。
+
+Q1：C-0013-A sourceFingerprint 是否作为连接器实现前置？
+裁定：PASS（作为实现前置，但暂不立即改 Schema）
+
+原因：
+
+你识别的风险是成立的：
+
+目前：
+
+纯文本
+platformRef 有值
+        ↓
+唯一键
+        ↓
+ClaimItem 幂等
+
+但是：
+
+纯文本
+首次导入
+仓损调整
+平台导出文件
+历史补偿记录
+
+可能出现：
+
+纯文本
+platformRef = NULL
+
+而当前行为：
+
+纯文本
+NULL != NULL
+
+→ PostgreSQL 允许重复
+
+这会导致：
+
+重复 ClaimItem
+错误覆盖率
+错误残差统计
+错误 Rule Engine 审计
+
+所以：
+
+C-0013-A 应作为 Connector 实现 Gate
+
+但是：
+
+不要马上加入 Schema。
+
+顺序：
+
+纯文本
+C-0013 Design
+        ↓
+C-0013-A Fingerprint Design
+        ↓
+真实平台样本验证
+        ↓
+Schema Delta
+        ↓
+Connector Implementation
+
+原因：
+
+现在还不知道：
+
+Amazon / Walmart / TikTok
+
+实际稳定字段组合是什么。
+
+不要提前锁死：
+
+纯文本
+sha256(
+platformType|
+claimType|
+occurredAt|
+amountActual|
+normalizedRef
+)
+
+这个只是候选，不是最终协议。
+
+Q2：quarantine 文件还是落库？
+裁定：PASS（第一阶段文件）
+
+采用：
+
+纯文本
+reports/quarantine/*.jsonl
+
+不要建表。
+
+理由：
+
+当前阶段目标：
+
+验证：
+
+纯文本
+Fetcher
+ ↓
+Normalizer
+ ↓
+ClaimItemDraft
+
+而不是建立异常管理系统。
+
+如果现在建：
+
+纯文本
+ClaimNormalizationError
+ConnectorError
+QuarantineRecord
+
+会提前进入平台运维系统。
+
+暂不需要。
+
+但是增加一个要求：
+
+文件必须包含：
+
+JSON
+{
+ connectorId,
+ platformType,
+ normalizerVersion,
+ reasonCode,
+ inputFingerprint,
+ occurredAt
+}
+
+禁止：
+
+JSON
+rawPayload
+accessToken
+customerData
+
+保留：
+
+可复算。
+
+Q3：Connector descriptor 是否先 TypeScript 类型？
+裁定：PASS
+
+采用：
+
+纯类型。
+
+例如：
+
+TypeScript
+ConnectorDescriptor {
+ platformType
+ authKind
+ readonlyScopes[]
+ rateLimit
+ resources[]
+}
+
+不要：
+
+runtime registry
+database table
+plugin loader
+connector marketplace
+
+原因：
+
+现在只是定义边界。
+
+额外 REVISE（新增）
+REVISE-1：Fetcher 不允许直接产生 ClaimItem
+
+当前：
+
+纯文本
+Fetcher
+ ↓
+Normalizer
+ ↓
+ClaimItemDraft
+ ↓
+createClaimItem
+
+保持。
+
+禁止：
+
+纯文本
+Fetcher
+ ↓
+ClaimItem
+
+否则以后 Amazon API 字段变化，会直接污染业务模型。
+
+REVISE-2：Normalizer 必须版本化
+
+你已经有：
+
+纯文本
+normalizerVersion
+
+保留。
+
+但要求：
+
+Normalizer 输出必须携带：
+
+JSON
+{
+ platformType,
+ normalizerVersion,
+ sourceFingerprintCandidate
+}
+
+即使暂时不上 Schema。
+
+原因：
+
+未来 C-0012 需要解释：
+
+这个追回机会为什么这样生成？
+
+必须知道：
+
+哪一个解析器产生。
+
+REVISE-3：Connector 不拥有 Rule Engine 调用权
+
+保持：
+
+错误：
+
+纯文本
+Connector
+    |
+    ↓
+计算 recoverableAmount
+
+正确：
+
+纯文本
+Connector
+ |
+ ↓
+ClaimItemDraft
+ |
+ ↓
+ClaimItem
+ |
+ ↓
+Rule Engine
+ |
+ ↓
+recoverableAmount
+
+这样：
+
+平台变化不会污染规则
+规则变化不会污染采集
+审计链完整
+批准后的 C-0013 边界
+
+最终架构：
+
+纯文本
+              SourceConnection
+                    |
+                    |
+              Connector Descriptor
+                    |
+                    |
+                 Fetcher
+              (只读/游标)
+                    |
+                    |
+              Normalizer
+          (纯函数/版本化)
+                    |
+                    |
+             ClaimItemDraft
+                    |
+                    |
+             createClaimItem
+                    |
+                    |
+             Rule Engine
+                    |
+                    |
+          recoverableAmount
+                    |
+                    |
+             C-0012 Audit
+当前状态
+纯文本
+C-0013 Connector Design
+
+PASS WITH REVISE
+
+允许下一步：
+
+C-0013-A Design：
+
+ClaimItem.sourceFingerprint 设计稿
+
+只做：
+
+字段设计
+指纹算法候选
+幂等规则
+迁移影响评估
+
+暂不建表。
+
+禁止直接进入 Connector 实现。
+```
