@@ -29,7 +29,8 @@ const ORG = 'bb000000-0000-4000-8000-00000000000a';
 const ORG_B = 'bb000000-0000-4000-8000-00000000000b';
 const SALT = 'gate6-workflow-http-salt-012345';
 const FAST_PARAMS = { N: 1024, r: 8, p: 1, keyLength: 64 };
-const PASSWORD = 'workflow-1';
+// Must satisfy assertPasswordPolicy (12+ chars, letters + digits).
+const PASSWORD = 'workflow-pass-1';
 const NOW = new Date('2026-09-28T18:00:00Z');
 
 const audit = createAuditWriter(createPrismaAuditSink(prisma), { ipSalt: SALT });
