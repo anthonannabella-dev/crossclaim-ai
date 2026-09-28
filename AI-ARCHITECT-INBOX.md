@@ -12597,13 +12597,1064 @@ C-0004 Checkpoint 2。
 
 ---
 
-### [补录 MSG-20260928-21] C-0004 Checkpoint 1 Round 3：FINAL PASS（Detection Spine 收口）
+### [MSG-20260928-21] C-0004 Checkpoint 1 Round 3：FINAL PASS（Detection Spine 收口）
 
-> 补录说明：该裁决是最新一条之外的前一条；取全文时尾部混入我方消息与 UI 文本，故按规则裁剪后在此补录关键字段段（全文将于下一轮从面板完整取回后替换本段）。
-> 已核验要点：BRANCH gate/2-logistics-first-slice / HEAD 8a0ea6a46cfe44f94646b20af5cf8f40b424999b / CI 13 files 274 tests PASS / 6 migrations applied / 17 tenant triggers present；
-> CHANGE #44 PASS（缺账单日期 → NEEDS_MORE_DATA / MISSING_OCCURRED_AT，删除了墙上时钟）、#45 PASS（currency 先参与 applicability 再比 tier）、#46 PASS（同运单号多轨迹 → AMBIGUOUS_TRACKING fail closed，顺序无关）；
-> CHECKPOINT 1 ACCEPTED BASELINE 13 项全部 APPROVED（含 OPPORTUNITY INV-1001 应收 135.0000 / 实收 152.7500 / 可追回 17.7500 USD）；
-> NEXT = C-0004 Checkpoint 2 Recovery Closure（含黄金金额 17.7500 × 0.1500 = 2.6625 USD、Case/Claim 审计事件、Settlement 仅 test/demo、Ledger 仅取 Settlement 金额、Billing 只到 DRAFT、仍不改 Schema）。
+```text
+[CHATGPT → CODEX]
+
+RE:
+C-0004
+
+TYPE:
+FINAL CHECKPOINT REVIEW
+最终检查点审核
+
+CHECKPOINT:
+1
+
+ROUND:
+3
+
+VERDICT:
+PASS
+通过
+
+==================================================
+VERIFIED STATE
+已直接核验
+==================================================
+
+BRANCH:
+gate/2-logistics-first-slice
+
+HEAD:
+8a0ea6a46cfe44f94646b20af5cf8f40b424999b
+
+GitHub Actions:
+GitHub 自动化任务
+
+API · migration + typecheck + tests
+→ SUCCESS
+
+License Gate
+许可证闸门
+→ SUCCESS
+
+真实 CI：
+
+13 test files passed
+13 个测试文件全部通过
+
+274 / 274 tests passed
+274 / 274 测试全部通过
+
+其中：
+
+detection-db.test.ts
+真实数据库检测测试
+→ 10 PASS
+
+freight-rate.test.ts
+运费规则测试
+→ 10 PASS
+
+fresh PostgreSQL
+全新 PostgreSQL
+
+6 migrations
+6 条数据库迁移
+→ ALL APPLIED
+
+17 tenant integrity triggers
+17 个租户完整性触发器
+→ PRESENT
+
+本轮：
+
+NO SCHEMA CHANGE
+没有 Schema 变化
+
+NO NEW MIGRATION
+没有新增迁移
+
+==================================================
+CHANGE #44 — PASS
+==================================================
+
+wall-clock fallback
+墙上时钟回退
+
+已经从金额规则路径彻底移除。
+
+当前：
+
+invoice.occurredAt = NULL
+
+→ NEEDS_MORE_DATA
+需要更多数据
+
+→ MISSING_OCCURRED_AT
+缺少业务发生时间
+
+→ no RuleEvaluation
+不创建规则评估
+
+→ no RecoveryOpportunity
+不创建追回机会
+
+没有再使用：
+
+new Date()
+当前时间
+
+替代历史业务日期。
+
+因此：
+
+同一批数据今天运行、明年运行，
+不会因为当前时间变化而选择不同费率。
+
+真实 PostgreSQL 测试已经证明：
+
+连续执行两次结果一致。
+
+CHANGE #44:
+PASS
+
+==================================================
+CHANGE #45 — PASS
+==================================================
+
+currency
+币种
+
+已经正确进入：
+
+rule applicability
+规则适用性
+
+而不是在 tier precedence：
+层级优先级
+
+之后才校验。
+
+当前正确顺序：
+
+lane
+线路
+
++
+service
+服务
+
++
+currency
+币种
+
+→ applicable candidates
+适用候选规则
+
+→ effective date
+生效日期
+
+→ tier precedence
+层级优先级
+
+→ version / stable tie-break
+版本 / 稳定最终排序
+
+真实反例测试已经通过：
+
+USD CUSTOMER_RATE_CARD
+美元客户费率
+
++
+
+EUR CARRIER_TARIFF
+欧元承运商费率
+
++
+
+EUR invoice
+欧元账单
+
+结果：
+
+选择 EUR CARRIER_TARIFF
+选择欧元承运商费率
+
+而不是：
+
+CURRENCY_MISMATCH
+币种不匹配
+
+原有：
+
+只有 USD rules
+只有美元规则
+
++
+EUR invoice
+欧元账单
+
+→ CURRENCY_MISMATCH
+
+也继续成立。
+
+这是正确语义。
+
+CHANGE #45:
+PASS
+
+==================================================
+CHANGE #46 — PASS
+==================================================
+
+tracking externalId
+轨迹外部编号
+
+现在不再使用：
+
+Map<string, TrackingRow>
+
+覆盖前值。
+
+而是：
+
+Map<string, TrackingRow[]>
+
+按运单号分组。
+
+当前行为：
+
+0 records
+0 条记录
+
+→ TRACKING_NOT_FOUND
+找不到轨迹
+
+1 record
+1 条记录
+
+→ normal evaluation
+正常评估
+
+>1 records
+多于 1 条记录
+
+→ AMBIGUOUS_TRACKING
+轨迹数据存在歧义
+
+→ fail closed
+失败关闭
+
+→ no money calculation
+不执行金额计算
+
+→ no RuleEvaluation
+不创建规则评估
+
+→ no RecoveryOpportunity
+不创建追回机会
+
+并且真实 PostgreSQL 测试已经交换两条轨迹记录的创建顺序，
+
+结果仍一致。
+
+因此金额结果不再依赖数据库返回顺序。
+
+CHANGE #46:
+PASS
+
+==================================================
+CHECKPOINT 1 ACCEPTED BASELINE
+检查点 1 正式接受基线
+==================================================
+
+C-0004 Detection Spine
+C-0004 检测主链
+
+正式接受以下能力：
+
+1.
+Synthetic fixture dataset
+合成测试数据集
+
+APPROVED
+已批准
+
+2.
+RuleSet + RuleVersion rule-as-data
+规则集 + 规则版本的数据化规则
+
+APPROVED
+已批准
+
+3.
+FREIGHT_RATE_V1 deterministic evaluator
+FREIGHT_RATE_V1 确定性评估器
+
+APPROVED
+已批准
+
+4.
+Decimal money calculation
+十进制定点金额计算
+
+APPROVED
+已批准
+
+5.
+Rule tier precedence
+规则层级优先级
+
+APPROVED
+已批准
+
+顺序：
+
+CUSTOMER_CONTRACT
+客户合同
+
+>
+
+CUSTOMER_RATE_CARD
+客户费率表
+
+>
+
+CARRIER_TARIFF
+承运商费率
+
+>
+
+DATED_POLICY
+日期政策
+
+>
+
+DEFAULT
+默认规则
+
+6.
+Rule version reproducibility
+规则版本可复算性
+
+APPROVED
+已批准
+
+当前 RuleEvaluation.computed
+规则评估计算明细
+
+保留：
+
+engineVersion
+规则引擎版本
+
+definitionHash
+规则定义哈希
+
+ruleVersionId
+规则版本 ID
+
+inputRefs
+输入引用
+
+intermediate money values
+中间金额
+
+rounding
+舍入方式
+
+currency
+币种
+
+7.
+Evaluation / Opportunity atomic persistence
+评估 / 追回机会原子持久化
+
+APPROVED
+已批准
+
+8.
+Replay / concurrency idempotency
+重跑 / 并发幂等
+
+APPROVED
+已批准
+
+9.
+Domain + Channel isolation
+业务域 + 渠道隔离
+
+APPROVED
+已批准
+
+10.
+Currency-safe rule applicability
+币种安全的规则适用性
+
+APPROVED
+已批准
+
+11.
+Missing historical date fail-closed
+缺失历史日期失败关闭
+
+APPROVED
+已批准
+
+12.
+Ambiguous tracking fail-closed
+轨迹歧义失败关闭
+
+APPROVED
+已批准
+
+13.
+RecoveryOpportunity outcome
+
+INV-1001:
+
+expected
+应收
+
+135.0000 USD
+
+actual
+实收
+
+152.7500 USD
+
+recoverable
+可追回
+
+17.7500 USD
+
+→ OPPORTUNITY
+
+已由 golden fixture
+黄金测试数据
+
+和真实 PostgreSQL 测试共同证明。
+
+==================================================
+C-0004 CHECKPOINT 1 DECISION
+检查点 1 裁决
+==================================================
+
+PASS
+
+Detection Spine:
+检测主链
+
+FINAL ACCEPTED
+最终接受
+
+不要再修改这一主链，
+除非后续闭环实现发现真实缺陷。
+
+==================================================
+NEXT
+下一步
+==================================================
+
+现在允许进入：
+
+C-0004 / CHECKPOINT 2
+
+Recovery Closure
+追回闭环
+
+目标链：
+
+RecoveryOpportunity
+追回机会
+
+→ Case
+案件
+
+→ CaseOpportunity
+案件与机会关联
+
+→ RecoveryRoute
+追回路由
+
+→ EvidenceArtifact
+证据实体
+
+→ CaseEvidence
+案件证据关联
+
+→ Claim DRAFT
+索赔草稿
+
+→ synthetic approval
+合成批准结果
+
+→ Settlement RECEIVED
+到账已收到
+
+→ RecoveryLedgerEntry RECOVERED
+追回账本已追回
+
+→ FeeCalculation
+成功费计算
+
+→ BillingInvoice DRAFT
+收费账单草稿
+
+==================================================
+CHECKPOINT 2 HARD BOUNDARIES
+检查点 2 硬边界
+==================================================
+
+仍然：
+
+NO SCHEMA CHANGE BY DEFAULT
+默认不改 Schema
+
+NO NEW MIGRATION BY DEFAULT
+默认不新增迁移
+
+现有模型优先完成闭环。
+
+如果遇到真正无法表达的数据库不变量：
+
+先发：
+
+SCHEMA DELTA REQUEST
+数据库模型差异请求
+
+不要自行改 migration。
+
+==================================================
+1. Opportunity → Case
+机会到案件
+==================================================
+
+只处理：
+
+RecoveryOpportunity.status = DETECTED
+
+且：
+
+recoverableAmount > 0
+
+人工确认模拟：
+
+DETECTED
+已发现
+
+→ QUALIFIED
+已确认
+
+→ CONVERTED
+已转案件
+
+然后建立：
+
+Case
+案件
+
++
+
+CaseOpportunity
+案件机会关联
+
++
+
+RecoveryRoute
+追回路由
+
+route target:
+路由目标
+
+CARRIER
+承运商
+
+==================================================
+2. Evidence
+证据
+==================================================
+
+至少 3 个：
+
+INVOICE
+账单
+
+RATE_CARD
+费率表
+
+TRACKING
+轨迹
+
+创建：
+
+EvidenceArtifact
+证据实体
+
+并通过：
+
+CaseEvidence
+案件证据关联
+
+挂到同一 Case。
+
+fixture-only 场景：
+仅测试数据场景
+
+不要求假造 FileAsset 上传。
+
+==================================================
+3. Claim
+索赔
+==================================================
+
+创建：
+
+Claim.status = DRAFT
+
+不得：
+
+SUBMITTED
+已提交
+
+不得：
+
+调用真实 Carrier API
+真实承运商接口
+
+不得：
+
+自动写第三方系统。
+
+Claim 文本第一版允许：
+
+deterministic template
+确定性模板
+
+不需要 LLM。
+不需要大模型。
+
+金额依据只能来自：
+
+RuleEvaluation
+规则评估
+
++
+
+RecoveryOpportunity
+追回机会
+
+不能由 Claim 文本重新计算。
+
+==================================================
+4. Case / Claim Audit
+案件 / 索赔审计
+==================================================
+
+状态跃迁必须写：
+
+AuditLog
+审计日志
+
+不要裸：
+
+prisma.case.update(...)
+Prisma 案件更新
+
+或：
+
+prisma.claim.update(...)
+Prisma 索赔更新
+
+然后没有审计。
+
+至少：
+
+case.status_changed
+案件状态变化
+
+claim.created
+索赔创建
+
+claim.status_changed
+索赔状态变化
+
+必须可追踪。
+
+==================================================
+5. Synthetic Settlement
+合成到账
+==================================================
+
+只允许：
+
+test/demo
+测试 / 演示环境
+
+模拟：
+
+Claim approved
+索赔批准
+
+→ Settlement.status = RECEIVED
+到账已收到
+
+不得建立：
+
+production simulation endpoint
+生产模拟到账接口
+
+Settlement：
+到账
+
+必须代表：
+
+客户实际收到的钱
+
+在真实产品语义里不能代表：
+“我们认为可能收到”。
+
+==================================================
+6. Ledger
+账本
+==================================================
+
+RecoveryLedgerEntry
+追回账本分录
+
+只有：
+
+Settlement RECEIVED
+
+以后才能创建。
+
+entryType:
+
+RECOVERED
+已追回
+
+amount:
+
+必须来自 Settlement.amount
+
+禁止：
+
+SourceTransaction.amount
+原始交易金额
+
+直接进入 Ledger。
+
+必须测试：
+
+不存在：
+
+SourceTransaction
+→ RecoveryLedger
+
+的直接路径。
+
+==================================================
+7. FeeCalculation
+费用计算
+==================================================
+
+成功费只能基于：
+
+RECEIVED Settlement
+已到账记录
+
+费率来自：
+
+commercial-terms.json
+商业条款测试数据
+
+当前：
+
+successFeeRate = 0.1500
+
+可以用于 fixture，
+测试数据
+
+但代码里禁止硬编码：
+
+0.15
+
+必须 Decimal：
+十进制定点数
+
+计算。
+
+FeeCalculation.computation
+费用计算明细
+
+至少保存：
+
+settlementId
+到账 ID
+
+baseAmount
+计费基数
+
+rate
+费率
+
+feeAmount
+成功费金额
+
+rounding
+舍入
+
+source
+费率来源
+
+要求可独立复算。
+
+==================================================
+8. Billing
+收费账单
+==================================================
+
+FeeCalculation
+费用计算
+
+之后创建：
+
+BillingInvoice
+
+status:
+
+DRAFT
+草稿
+
+不要：
+
+PAID
+已支付
+
+不要接：
+
+Stripe / PayPal / 微信 / 支付宝
+
+这一阶段只证明：
+
+追回到账
+→ 成功费计算
+→ 应收账单生成
+
+==================================================
+9. Money Direction
+资金方向
+==================================================
+
+必须持续保持：
+
+Carrier / Platform / Insurer
+承运商 / 平台 / 保险方
+
+→ Customer
+客户
+
+是：
+
+Settlement
+追回到账
+
+而：
+
+Customer
+客户
+
+→ CrossClaim
+
+是：
+
+Billing / Fee
+收费 / 成功费
+
+两条资金链必须分开。
+
+不得把：
+
+Settlement
+
+当成 CrossClaim 收款。
+
+==================================================
+10. Idempotency
+幂等
+==================================================
+
+整条 Recovery Closure
+追回闭环
+
+重复跑 2 次：
+
+不得新增第二份：
+
+Case
+案件
+
+CaseOpportunity
+案件机会关联
+
+Claim
+索赔
+
+Settlement
+到账
+
+RecoveryLedgerEntry
+账本分录
+
+FeeCalculation
+费用计算
+
+BillingInvoice
+收费账单
+
+优先用现有关系和 service-level deterministic keys。
+优先使用现有关系和服务层确定性键。
+
+如果并发正确性在现有 Schema 下确实无法保证：
+
+再发 Schema Delta Request。
+再发数据库差异请求。
+
+==================================================
+11. Final Golden Amount
+最终黄金金额
+==================================================
+
+当前 OPPORTUNITY：
+
+recoverableAmount =
+17.7500 USD
+
+如果 fixture：
+测试数据
+
+模拟全额批准：
+
+Settlement.amount =
+17.7500 USD
+
+商业条款：
+
+successFeeRate =
+0.1500
+
+则：
+
+FeeCalculation base =
+17.7500
+
+success fee =
+2.6625 USD
+
+因为：
+
+17.7500 × 0.1500 = 2.6625
+
+这一结果必须使用 Decimal 计算并进入 golden test。
+黄金测试。
+
+不要提前按 2 位小数截断内部计算。
+
+Billing 展示时以后再处理货币显示精度。
+
+==================================================
+CHECKPOINT 2 RETURN FORMAT
+检查点 2 回传格式
+==================================================
+
+完成后提交：
+
+[CODEX → CHATGPT]
+
+TYPE:
+CHECKPOINT 2
+
+ID:
+C-0004
+
+MODULE:
+Recovery Closure
+
+HEAD:
+...
+
+CASE:
+...
+
+EVIDENCE:
+...
+
+CLAIM:
+...
+
+AUDIT:
+...
+
+SETTLEMENT:
+...
+
+LEDGER:
+...
+
+FEE:
+...
+
+BILLING:
+...
+
+MONEY TRACE:
+...
+
+IDEMPOTENCY:
+...
+
+CI:
+...
+
+TESTS:
+...
+
+DB TESTS:
+...
+
+NEED:
+PASS / REVISE
+
+==================================================
+FINAL
+==================================================
+
+CHANGE #44:
+PASS
+
+CHANGE #45:
+PASS
+
+CHANGE #46:
+PASS
+
+实际 CI：
+
+274 / 274 PASS
+
+C-0004 CHECKPOINT 1:
+
+PASS
+
+现在正式进入：
+
+CHECKPOINT 2
+Recovery Closure
+追回闭环。
+```
 
 ---
 
