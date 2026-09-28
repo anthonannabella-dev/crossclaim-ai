@@ -19791,3 +19791,410 @@ PASS
 
 Proceed.
 ```
+
+### [MSG-20260928-31] C-0006-A Checkpoint Review：PASS（事实层建立+双写+对拍通过）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE:
+CHECKPOINT REVIEW
+
+ID:
+C-0006-A
+
+GATE:
+4
+
+MODULE:
+Canonical Fact Layer
+事实层建立 + 双写 + 对拍
+
+VERDICT:
+
+PASS
+
+C-0006-A 已通过。
+
+可以进入：
+
+C-0006-B
+
+但必须先提交新的 Schema Delta Request。
+
+不要直接改 RuleEvaluation identity。
+
+1. C-0006-A 总体评价
+
+本阶段目标：
+
+建立 CanonicalFact 业务事实层，但不改变 Detection 主链。
+
+已完成。
+
+确认：
+
+纯文本
+SourceTransaction
+        |
+        |
+        v
+CanonicalFact
+        |
+        |
+CanonicalFactSource
+
+成立。
+
+并且：
+
+旧链路：
+
+纯文本
+SourceTransaction
+        |
+        v
+Detection
+
+仍然存在。
+
+新链路：
+
+纯文本
+SourceTransaction
+        |
+        v
+CanonicalFact
+        |
+        v
+Shadow Detection
+
+仅作为对拍。
+
+符合批准边界。
+
+2. Schema Delta 执行确认
+
+批准。
+
+已满足之前要求：
+
+CanonicalFact
+
+包含：
+
+firstSeenAt
+lastUpdatedAt
+
+PASS。
+
+CanonicalFactSource
+
+包含：
+
+observedAt
+
+PASS。
+
+RuleEvaluation
+
+新增：
+
+纯文本
+canonicalFactId nullable
+
+PASS。
+
+重要：
+
+以下保持不动：
+
+纯文本
+sourceTransactionId
+
+dedupeKey
+
+PASS。
+
+3. Migration 安全性
+
+通过。
+
+确认：
+
+纯增量 migration
+无 DROP
+无数据破坏
+无 destructive change
+
+PASS。
+
+租户完整性：
+
+17 → 18
+
+符合预期。
+
+4. 双写事务
+
+PASS。
+
+这是本轮最重要部分。
+
+批准：
+
+纯文本
+transaction {
+
+ SourceTransaction
+
+ CanonicalFact
+
+ CanonicalFactSource
+
+}
+
+同事务。
+
+正确。
+
+不接受：
+
+异步补 Fact。
+
+当前实现符合。
+
+5. CONFLICT 处理
+
+PASS。
+
+当前设计：
+
+纯文本
+CanonicalFact
+
+ACTIVE
+
+CONFLICT
+
+正确。
+
+特别确认：
+
+CONFLICT:
+
+不会进入：
+
+纯文本
+RuleEvaluation
+
+RecoveryOpportunity
+
+Closure
+
+这是必须保持的。
+
+6. 对拍系统
+
+PASS。
+
+这是进入 B 阶段的必要前置条件。
+
+认可：
+
+migration audit report：
+
+包含：
+
+expectedCharge
+actualCharge
+recoverableAmount
+RuleVersion
+Opportunity count
+money trace
+
+满足要求。
+
+7. 发现一个需要记录但不阻塞的问题
+canonical_fact.conflict 审计
+
+当前：
+
+事务提交后 best-effort 写 audit
+
+可以接受。
+
+但是进入 C-0006-B 后：
+
+如果 CONFLICT 影响 Detection 输入：
+
+需要保证：
+
+Conflict → Detection exclusion
+
+这个动作本身需要 Audit。
+
+建议事件：
+
+纯文本
+canonical_fact.conflict_detected
+
+字段：
+
+纯文本
+canonicalFactId
+
+factKey
+
+conflictType
+
+sourceTransactionIds
+
+organizationId
+
+现在不阻塞。
+
+C-0006-B 接入时处理。
+
+8. C-0006-B 进入条件
+
+批准进入。
+
+但是：
+
+不允许直接切换 Detection。
+
+C-0006-B 必须继续拆：
+
+C-0006-B1
+
+CanonicalFact Detection Shadow
+
+目标：
+
+正式运行：
+
+纯文本
+CanonicalFact
+        |
+        v
+Detection
+
+但是：
+
+旧路径继续运行。
+
+双跑：
+
+旧：
+
+纯文本
+SourceTransaction
+→ RuleEvaluation(old)
+
+新：
+
+纯文本
+CanonicalFact
+→ RuleEvaluation(shadow)
+
+比较：
+
+Opportunity 数量
+金额
+RuleVersion
+money trace
+Audit
+
+生成：
+
+B1 parity report。
+
+C-0006-B2
+
+Identity Migration
+
+单独提交。
+
+涉及：
+
+RuleEvaluation:
+
+当前：
+
+纯文本
+dedupeKey =
+org
++
+ruleVersion
++
+invoiceTransaction
++
+trackingTransaction
+
+未来可能：
+
+纯文本
+org
++
+ruleVersion
++
+canonicalFact
+
+这个影响：
+
+幂等
+重算
+历史数据
+RuleEvaluation 唯一约束
+
+必须：
+
+单独 Schema Delta。
+
+9. C-0006-B 当前禁止事项
+
+在没有批准前：
+
+禁止：
+
+❌ 删除 sourceTransactionId
+
+❌ 修改 dedupeKey
+
+❌ 删除旧 Detection 路径
+
+❌ 修改 Opportunity 唯一逻辑
+
+❌ 修改 Closure
+
+❌ 修改资金链
+
+FINAL DECISION
+纯文本
+C-0006-A:
+
+PASS
+
+STATUS:
+APPROVED
+
+NEXT:
+Prepare C-0006-B Schema Delta Request
+
+进入下一阶段：
+
+纯文本
+CanonicalFact
+        |
+        v
+Detection Migration
+
+但保持：
+
+先影子，
+后切换，
+最后身份迁移。
+
+裁决完成。
+```
