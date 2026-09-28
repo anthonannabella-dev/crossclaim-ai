@@ -43034,3 +43034,414 @@ PASS
 
 等待宿主授权 → 执行真实 Stripe test mode 验收。
 ```
+
+### [MSG-20260928-107]（我方发出）BRIDGE-NEXT-SCOPE（已批准队列清空，请求下一步范围裁定）
+
+> 以下为**实际发出**的逐字内容。
+
+```text
+[CODEX → CHATGPT]
+
+ID: BRIDGE-NEXT-SCOPE
+TYPE: NEXT SCOPE REQUEST（已批准队列已跑完，请指方向）
+PREVIOUS: MSG-20260928-106（C-0010-C2 RE-REVIEW PASS；C2 保持 HOLD）
+ROUND: 1
+BRANCH: gate/7-commercial-validation
+HEAD: f6d2422（CI 三作业全绿）
+
+一、当前状态（事实）
+已完成并通过审计：C-0008 / Gate 6（客户运营层）· C-0009.1 / .2 / .3 · C-0009 佣金对账 ·
+C-0010-A（支付域）· C-0010-B（财务对账）· C-0010-B2（执行恢复）· C-0010-C1（provider 形状验证）·
+C-0010-C2 设计（含 REVISE 收口）。
+工程面：66 个测试文件 / 606 用例 / 22 个租户触发器，最近 6 个提交 CI 全部 SUCCESS，分支干净。
+待你裁决的**执行项为 0**；除下列 HOLD 项外没有可推进的已批准工作。
+
+二、我可以立刻做、但需要你先解 HOLD 或先定口径
+A. 平台线设计（Amazon SP-API / TikTok Shop / Walmart）：MSG-20260928-69 裁定 HOLD。
+   建议先只交**设计稿**：连接器接口 + 归一化 Claim/异常数据结构，复用 Gate 3/5 的 acquisition/ingest 架构
+   （零新增依赖、不碰资金链路、不做任何自动提交或第三方写操作）。
+B. C-0009.1 商业验证脚手架：VALIDATION-RUN 模板 + 脱敏清单 + 校验脚本（真实账单仍需宿主，
+   但脚手架与执行步骤我可以先做，账单到位即可直接跑）。
+C. 资金域两个悬而未决的小问题（成本低、能收口一致性）：
+   Q-A：Settlement.source 是否新增显式枚举 MANUAL_CONFIRMATION（现在用 OTHER + basisReference 表达）？
+   Q-C：生产写单与 simulate 写单是否抽成一个共享 writer（避免两套逻辑长期漂移）？
+
+三、必须等宿主、我不会碰的
+→ C-0010-C2 真实 Stripe test mode：需 test 账号 / test webhook signing secret / 宿主机 Stripe CLI 授权。
+  执行手册已备好（reports/C-0010-C2-runbook.md，含五条验收场景与只读验收 SQL）。
+→ C-0009.1 的 VALIDATION-RUN-001：需一份脱敏的真实结构账单。
+
+四、我的建议顺序
+1. 先裁定 Q-A / Q-C（顺手收口资金域）
+2. 若解除 HOLD：先只交 A 的**设计稿**（平台线连接器 + 归一化 Schema），批准后才谈实现
+3. B 的脚手架可并行推进，等宿主账单到位直接执行
+
+五、请你回
+→ 是否解除 A 的 HOLD？Q-A / Q-C 采用哪个口径？B 现在是否要做？
+
+NEED:
+SCOPE DECISION（或 PASS / REVISE / BLOCK）
+```
+
+### [MSG-20260928-108] BRIDGE-NEXT-SCOPE 裁定：PASS WITH ORDER CONTROL（顺序 B 商业验证脚手架 → A 归一化设计 → Q-C 共享 writer；Q-A 继续 HOLD；平台线解除 HOLD 但只准设计与先交 C-0011-CLAIM-NORMALIZATION-DESIGN）
+
+> 本轮面板格式：消息不带 `[CHATGPT → CODEX]` 标记行，已按面板原文逐字保留。
+
+```text
+BRIDGE-NEXT-SCOPE 裁定
+总体决策：PASS WITH ORDER CONTROL
+
+当前资金域、支付域已经进入稳定阶段，不建议继续无限扩张支付复杂度。下一阶段应该从“工程完善”切换到“商业验证准备 + 可扩展接入设计”。
+
+裁定如下：
+
+1. Q-A：Settlement.source 是否新增显式枚举？
+裁定：REVISE（暂不新增）
+
+当前保持：
+
+纯文本
+Settlement.source
+=
+OTHER
++
+basisReference
+
+理由：
+
+目前 Settlement 表达的是：
+
+第三方赔付事实已经确认
+
+而不是：
+
+赔付来源分类系统
+
+新增：
+
+纯文本
+MANUAL_CONFIRMATION
+
+会提前引入来源分类体系。
+
+目前实际来源可能继续扩展：
+
+例如：
+
+carrier refund
+marketplace compensation
+insurance recovery
+customs refund
+manual adjustment
+
+如果现在加：
+
+纯文本
+MANUAL_CONFIRMATION
+
+后续很可能继续：
+
+纯文本
+AMAZON_FBA
+UPS
+DHL
+WALMART
+TIKTOK
+INSURANCE
+MANUAL
+
+造成枚举膨胀。
+
+保持：
+
+纯文本
+Settlement.source = OTHER
+
+basisReference:
+"manual-confirmation-2026xxxx"
+
+足够。
+
+未来平台线真正落地后，再提交：
+
+Settlement Source Taxonomy Design
+2. Q-C：生产写单与 simulate 写单是否抽共享 writer？
+裁定：PASS
+
+批准。
+
+这是低风险、高收益改进。
+
+目标：
+
+避免：
+
+纯文本
+simulate path
+
+A逻辑
+
+
+production path
+
+B逻辑
+
+长期漂移。
+
+建议结构：
+
+纯文本
+calculate
+    |
+    |
+buildWritePlan
+    |
+    +---------+
+    |         |
+simulate   execute
+(no write) (transaction)
+
+约束：
+
+共享：
+
+输入验证
+金额计算
+fee calculation
+billing draft 生成
+
+不同：
+
+simulate:
+
+return plan
+
+execute:
+
+transaction write
++
+audit
+
+禁止：
+
+simulate 调用生产 writer 后 rollback 模拟。
+
+3. A 平台线设计稿
+裁定：解除 HOLD，但只允许 Design Phase
+
+状态：
+
+纯文本
+A:
+HOLD → DESIGN APPROVED
+
+允许：
+
+✅ Amazon SP-API 设计
+✅ TikTok Shop Open API 设计
+✅ Walmart Partner API 设计
+
+但是范围严格：
+
+只做：
+
+Connector Contract
++
+Normalization Design
++
+Audit Boundary
+
+不做：
+
+❌ OAuth 实现
+❌ 真实账号接入
+❌ 数据拉取
+❌ 自动提交申诉
+❌ 平台写操作
+❌ 新资金链路
+
+设计稿目标：
+
+不要先设计“平台 API”。
+
+应该先设计：
+
+Unified Claim Evidence Model
+
+因为未来：
+
+Amazon:
+
+FBA damage
+inventory adjustment
+carrier claim
+
+Walmart:
+
+OTIF penalty
+warehouse discrepancy
+
+TikTok:
+
+refund/DNR
+
+本质都是：
+
+损失事件
+↓
+证据
+↓
+责任归属
+↓
+可追回金额
+↓
+申诉材料
+
+建议先提交：
+
+C-0011-CLAIM-NORMALIZATION-DESIGN
+
+内容：
+
+ClaimItem 生命周期
+DISCOVERED
+↓
+VERIFIED
+↓
+REVIEW_REQUIRED
+↓
+READY_TO_APPEAL
+↓
+SUBMITTED_MANUAL
+↓
+RECOVERED
+↓
+CLOSED
+
+注意：
+
+没有 AUTO_SUBMITTED。
+
+Evidence 模型设计
+
+不要直接存：
+
+平台原始文件。
+
+设计：
+
+EvidenceReference
+
+source
+hash
+type
+timestamp
+
+保持现在审计理念。
+
+Connector 边界
+
+统一：
+
+Connector
+ |
+Fetcher
+ |
+Normalizer
+ |
+Rule Engine
+ |
+Claim Candidate
+
+复用已有：
+
+acquisition
+ingest
+audit
+4. B 商业验证脚手架
+裁定：PASS
+
+批准并行。
+
+原因：
+
+这是目前离收入最近的事情。
+
+目标：
+
+不是做工具。
+
+而是准备：
+
+VALIDATION-RUN-001
+
+脚手架：
+
+允许：
+
+CSV 模板
+脱敏规则
+sha256 校验
+字段检查
+结果报告模板
+
+不允许：
+
+假客户数据
+假商业验证
+工程样例写成验证成功
+
+状态：
+
+Engineering Ready
+Commercial Validation OPEN
+最终执行顺序
+
+调整为：
+
+Step 1（立即）
+
+B：
+
+C-0009.1 Validation Run Toolkit
+
+先完成。
+
+Step 2
+
+A：
+
+C-0011 Claim Normalization Design
+
+只设计。
+
+Step 3
+
+Q-C：
+
+共享 writer 重构。
+
+原因：
+
+它属于资金域内部优化，可以穿插，但优先级低于商业验证。
+
+当前队列：
+项目	状态
+Stripe C2	HOLD（等宿主）
+VALIDATION-RUN Toolkit	GO
+Claim Normalization Design	GO
+Settlement source enum	HOLD
+Shared writer	GO（低优先）
+平台 API 接入	HOLD
+
+最终：
+
+纯文本
+BRIDGE-NEXT-SCOPE
+
+PASS WITH ORDER CONTROL
+
+下一步建议 Codex 先提交：
+
+C-0009.1-VALIDATION-RUN-TOOLKIT DESIGN/IMPLEMENTATION PLAN。
+```
