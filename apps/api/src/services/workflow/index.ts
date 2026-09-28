@@ -25,3 +25,15 @@ export {
   handleWorkflowRequest,
   type WorkflowRouteDeps,
 } from './http-routes';
+export {
+  createManagedConnection,
+  listConnections,
+  rotateConnectionCredentialRef,
+  setConnectionStatus,
+  type ConnectionActor,
+  type ConnectionManagementDeps,
+  type ConnectionView,
+  type CreateManagedConnectionInput,
+  type RotateCredentialRefInput,
+  type SetConnectionStatusInput,
+} from './connection-management';

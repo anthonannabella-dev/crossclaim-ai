@@ -43,6 +43,7 @@ const storage = new LocalFileSystemStorage({
 });
 
 let opsUserId = '';
+let adminUserId = '';
 
 beforeAll(async () => {
   await prisma.$connect();
@@ -82,10 +83,21 @@ beforeEach(async () => {
       emailVerified: true,
     },
   });
+  const admin = await prisma.user.create({
+    data: {
+      email: 'admin-http@example.com',
+      passwordHash: hashPassword(PASSWORD, FAST_PARAMS),
+      displayName: '管理员',
+      status: 'ACTIVE',
+      emailVerified: true,
+    },
+  });
+  adminUserId = admin.id;
   await prisma.membership.createMany({
     data: [
       { organizationId: ORG, userId: ops.id, role: 'OPS', isActive: true },
       { organizationId: ORG, userId: viewer.id, role: 'VIEWER', isActive: true },
+      { organizationId: ORG, userId: admin.id, role: 'ADMIN', isActive: true },
     ],
   });
 });
@@ -246,5 +258,91 @@ describe('C-0008-B1 — 机会复核端点（真实 HTTP + PostgreSQL）', () =>
     expect(row.qualifiedAt).not.toBeNull();
     const foreignRow = await prisma.recoveryOpportunity.findUniqueOrThrow({ where: { id: foreign.id } });
     expect(foreignRow.status).toBe('DETECTED');
+  });
+
+  it('连接管理端点：ADMIN 创建/列表/暂停/轮换；OPS 无权限；真实密钥被拒', async () => {
+    await withServer(async (base) => {
+      const anonymous = await fetch(`${base}/connections`);
+      expect(anonymous.status).toBe(401);
+
+      const opsCookie = await login(base, 'ops-http@example.com');
+      expect((await fetch(`${base}/connections`, { headers: { cookie: opsCookie } })).status).toBe(403);
+
+      const adminCookie = await login(base, 'admin-http@example.com');
+      const empty = await fetch(`${base}/connections`, { headers: { cookie: adminCookie } });
+      expect(empty.status).toBe(200);
+      expect(await empty.json()).toEqual({ items: [] });
+
+      const created = await fetch(`${base}/connections`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', cookie: adminCookie },
+        body: JSON.stringify({
+          label: 'UPS 月度账单',
+          kind: 'FILE_UPLOAD',
+          domain: 'LOGISTICS',
+          channel: 'UPS',
+        }),
+      });
+      expect(created.status).toBe(201);
+      const connection = (await created.json()) as { id: string; status: string };
+      expect(connection.status).toBe('ACTIVE');
+
+      const withSecret = await fetch(`${base}/connections`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', cookie: adminCookie },
+        body: JSON.stringify({
+          label: '带密钥的连接',
+          kind: 'FILE_UPLOAD',
+          domain: 'LOGISTICS',
+          channel: 'FEDEX',
+          credentialRef: 'AKIAIOSFODNN7EXAMPLE',
+        }),
+      });
+      expect(withSecret.status).toBe(400);
+      expect(((await withSecret.json()) as { error: string }).error).toBe('SECRET_NOT_ACCEPTED');
+
+      const badStatus = await fetch(`${base}/connections/${connection.id}/status`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', cookie: adminCookie },
+        body: JSON.stringify({ to: 'DELETED' }),
+      });
+      expect(badStatus.status).toBe(400);
+
+      const paused = await fetch(`${base}/connections/${connection.id}/status`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', cookie: adminCookie },
+        body: JSON.stringify({ to: 'PAUSED', reason: '维护中' }),
+      });
+      expect(paused.status).toBe(200);
+      expect(await paused.json()).toEqual({ from: 'ACTIVE', to: 'PAUSED' });
+
+      const rotated = await fetch(`${base}/connections/${connection.id}/credential-ref`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', cookie: adminCookie },
+        body: JSON.stringify({ credentialRef: 'vault:ups-2026' }),
+      });
+      expect(rotated.status).toBe(200);
+      expect(await rotated.json()).toEqual({ hasCredentialRef: true, status: 'PAUSED' });
+
+      const listed = await fetch(`${base}/connections`, { headers: { cookie: adminCookie } });
+      const items = ((await listed.json()) as { items: Array<Record<string, unknown>> }).items;
+      expect(items).toHaveLength(1);
+      expect(items[0]).toMatchObject({ status: 'PAUSED', hasCredentialRef: true, platform: null });
+      expect(JSON.stringify(items)).not.toContain('vault:ups-2026');
+    });
+
+    // 用户触发：写入与审计同事务，actor 就是登录用户
+    const audits = await prisma.auditLog.findMany({
+      where: { entityType: 'SourceConnection' },
+      orderBy: { createdAt: 'asc' },
+    });
+    expect(audits.map((row) => row.action).sort()).toEqual(
+      [
+        'source_connection.created',
+        'source_connection.status_changed',
+        'source_connection.credential_rotated',
+      ].sort(),
+    );
+    expect(audits.every((row) => row.actorUserId === adminUserId)).toBe(true);
   });
 });

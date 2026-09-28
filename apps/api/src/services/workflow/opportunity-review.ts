@@ -26,7 +26,11 @@ export type WorkflowErrorCode =
   | 'ILLEGAL_TRANSITION'
   | 'REASON_REQUIRED'
   | 'INVALID_REASON'
-  | 'FORBIDDEN';
+  | 'FORBIDDEN'
+  | 'INVALID_INPUT'
+  | 'SECRET_NOT_ACCEPTED'
+  | 'PLATFORM_NOT_REGISTERED'
+  | 'DUPLICATE_CONNECTION';
 
 export class WorkflowError extends Error {
   readonly code: WorkflowErrorCode;
