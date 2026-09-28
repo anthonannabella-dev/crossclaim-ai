@@ -38,7 +38,8 @@ export type WorkflowErrorCode =
   | 'COMMERCIAL_TERMS_PENDING'
   | 'CLAIM_NOT_APPROVED'
   | 'CURRENCY_MISMATCH'
-  | 'PAYMENT_REFERENCE_REQUIRED';
+  | 'PAYMENT_REFERENCE_REQUIRED'
+  | 'REVIEW_REQUIRED';
 
 export class WorkflowError extends Error {
   readonly code: WorkflowErrorCode;

@@ -27,6 +27,7 @@ import { prepareAuditInsert } from '../audit';
 import { billingInvoiceNoFor, type CommercialTerms } from '../recovery';
 import { WorkflowError } from './opportunity-review';
 import { assertPermission } from './permissions';
+import { assertHighValueReviewCleared } from './recovery-review';
 
 const MONEY_SCALE = 4;
 const REFERENCE_MAX = 256;
@@ -207,6 +208,21 @@ export async function confirmRecoveryOutcome(
   }
 
   const terms = await loadConfirmedTerms(prisma, input.organizationId, kase.id);
+
+  // C-0009.2 Step 2：高额回收必须先通过人工复核（OWNER/ADMIN），
+  // 未通过时写 review_required 审计并 409，且**不写任何资金记录**。
+  await assertHighValueReviewCleared(
+    prisma,
+    {
+      organizationId: input.organizationId,
+      actorUserId: input.actorUserId,
+      caseId: kase.id,
+      caseNo: kase.caseNo,
+      recoveredAmount,
+      currency,
+    },
+    now,
+  );
 
   if (requestedEvidenceId) {
     const evidence = await prisma.evidenceArtifact.findFirst({

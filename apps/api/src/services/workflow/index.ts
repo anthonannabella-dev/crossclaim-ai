@@ -3,6 +3,21 @@
  */
 
 export {
+  DEFAULT_HIGH_VALUE_THRESHOLD,
+  REVIEW_ACTIONS,
+  assertHighValueReviewCleared,
+  getRecoveryReviewStatus,
+  requiresHighValueReview,
+  resolveHighValueReviewState,
+  resolveHighValueThreshold,
+  submitRecoveryReview,
+  type HighValueReviewState,
+  type RecoveryReviewStatus,
+  type ReviewEvent,
+  type SubmitRecoveryReviewInput,
+  type SubmitRecoveryReviewResult,
+} from './recovery-review';
+export {
   getOpportunityInsight,
   listOpportunityInsights,
   toExportRows,

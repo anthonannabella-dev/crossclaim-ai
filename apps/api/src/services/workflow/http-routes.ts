@@ -27,6 +27,7 @@ import {
 } from './connection-management';
 import { confirmCommercialTerms, createCaseForOpportunity } from './case-creation';
 import { confirmRecoveryOutcome } from './recovery-outcome';
+import { getRecoveryReviewStatus, submitRecoveryReview } from './recovery-review';
 import { advanceBillingInvoice, listBillingInvoices } from './billing';
 import { getCase, getClaimDraft, listCaseEvidence, listCases } from './case-read';
 import {
@@ -45,6 +46,7 @@ const INSIGHT_PATH = /^\/opportunities\/([^/]+)\/basis$/;
 const CONNECTION_PATH = /^\/connections(?:\/([^/]+)\/(status|credential-ref))?$/;
 const COMMERCIAL_TERMS_PATH = /^\/cases\/([^/]+)\/commercial-terms$/;
 const RECOVERY_OUTCOME_PATH = /^\/cases\/([^/]+)\/recovery-outcome$/;
+const RECOVERY_REVIEW_PATH = /^\/cases\/([^/]+)\/recovery-review$/;
 const BILLING_PATH = /^\/billing(?:\/([^/]+)\/status)?$/;
 const CASE_LIST_PATH = /^\/cases$/;
 const CASE_DETAIL_PATH = /^\/cases\/([^/]+)$/;
@@ -110,6 +112,7 @@ function statusFor(error: unknown): { code: number; error: string } {
       case 'COMMERCIAL_TERMS_PENDING':
       case 'CLAIM_NOT_APPROVED':
       case 'CURRENCY_MISMATCH':
+      case 'REVIEW_REQUIRED':
         return { code: 409, error: error.code };
       case 'FORBIDDEN':
         return { code: 403, error: error.code };
@@ -149,12 +152,13 @@ export async function handleWorkflowRequest(
   const connection = CONNECTION_PATH.exec(path);
   const termsPath = COMMERCIAL_TERMS_PATH.exec(path);
   const outcomePath = RECOVERY_OUTCOME_PATH.exec(path);
+  const reviewPath = RECOVERY_REVIEW_PATH.exec(path);
   const billingPath = BILLING_PATH.exec(path);
   const caseListPath = CASE_LIST_PATH.test(path);
   const caseDetail = CASE_DETAIL_PATH.exec(path);
   const caseEvidence = CASE_EVIDENCE_PATH.exec(path);
   const caseClaim = CASE_CLAIM_PATH.exec(path);
-  if (!review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim) {
+  if (!review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim) {
     return false;
   }
 
@@ -162,11 +166,13 @@ export async function handleWorkflowRequest(
   const allowed =
     connection && !connection[2]
       ? ['GET', 'POST']
-      : billingPath && !billingPath[1]
-        ? ['GET']
-        : insightList || insightCsv || insight || caseListPath || caseDetail || caseEvidence || caseClaim
+      : reviewPath
+        ? ['GET', 'POST']
+        : billingPath && !billingPath[1]
           ? ['GET']
-          : ['POST'];
+          : insightList || insightCsv || insight || caseListPath || caseDetail || caseEvidence || caseClaim
+            ? ['GET']
+            : ['POST'];
   if (!allowed.includes(method)) {
     sendJson(res, 405, { error: 'METHOD_NOT_ALLOWED' });
     return true;
@@ -186,6 +192,37 @@ export async function handleWorkflowRequest(
   };
 
   try {
+    if (reviewPath) {
+      const caseId = reviewPath[1] ?? '';
+      if ((req.method ?? 'GET') === 'GET') {
+        sendJson(
+          res,
+          200,
+          await getRecoveryReviewStatus(
+            deps.prisma,
+            { organizationId: context.organizationId, role: context.role },
+            caseId,
+          ),
+        );
+        return true;
+      }
+      const body = await readJsonBody(req);
+      const result = await submitRecoveryReview(
+        deps.prisma,
+        {
+          ...actor,
+          caseId,
+          decision: body.decision,
+          reason: body.reason,
+          recoveredAmount: body.recoveredAmount,
+          currency: body.currency,
+        },
+        deps.now,
+      );
+      sendJson(res, 200, result);
+      return true;
+    }
+
     if (insightCsv) {
       // D3：导出清单（架构方指定的 5 列；不含任何凭据/内部信息）
       const insights = await listOpportunityInsights(deps.prisma, {
