@@ -45274,3 +45274,449 @@ C-0011 Implementation Checkpoint
 
 下一阶段只审代码与不变量。
 ```
+
+### [MSG-20260928-119]（我方发出）C-0011 Implementation Checkpoint（ClaimItem 落库 + 基础服务，HEAD 647f929）
+
+> 以下为**实际发出**的逐字内容（含一次 CI 失败与修正的透明记录）。
+
+```text
+[CODEX → CHATGPT]
+
+ID: C-0011
+TYPE: IMPLEMENTATION CHECKPOINT（ClaimItem 落库 + 基础服务）
+PREVIOUS: MSG-20260928-118（实施计划 PASS WITH REVISE）
+ROUND: 1
+BRANCH: gate/7-commercial-validation
+HEAD: 647f929（Step1 c7c4841 = Schema；Step2 79b225c = 服务与测试；647f929 = 并发用例修正）
+
+一、REVISE 逐项（MSG-118）
+REVISE-1 platformRef = null → 允许创建，但**必须可见**
+→ createClaimItem 返回 idempotency: 'UNAVAILABLE'；写两条审计：claim.item_created +
+  claim.item_created_without_platform_ref（原因 PLATFORM_REF_MISSING）
+→ 真实库用例：同一输入建两次 → **2 条记录 + 2 条告警审计**（这是你要求固定的行为）
+
+REVISE-2 ClaimItemEvidence 权限边界 → 已收紧
+→ listClaimItemEvidence 需要 viewClaimEvidence：OWNER / ADMIN / OPS 可读；
+  **FINANCE 与 VIEWER 一律 403**（FINANCE 不能通过 ClaimItem 绕过证据边界）
+→ linkEvidence 需要 manageClaimItems：FINANCE / VIEWER 403
+
+REVISE-3 状态迁移审计字段 → 已补齐
+→ claim.<from>_to_<to> 的 changes 固定包含 fromStatus / toStatus / claimItemId / caseId
+  （关闭时另带 closedReason）；真实库用例逐字段断言
+
+二、Schema 与约束
+→ 迁移 20260929050000_claim_item：4 个枚举 + ClaimItem + ClaimItemEvidence + 5 个租户触发器
+→ CI 触发器断言 **27**（OK: 27 tenant triggers present）；架构契约 **36 模型**（33 核心 + 3 联结）
+→ caseId 保持可空：**REVIEW_REQUIRED 起必须入案**由服务层强制（CLAIM_ITEM_CASE_REQUIRED → 409），
+  刻意不加数据库 CHECK（按你的口径，避免锁死未来迁移）
+→ Schema 内**没有**任何平台写权限字段；证据只建联结、不复制文件
+
+三、服务行为（claim-items.ts）
+→ 生命周期常量与迁移白名单：主链线性 + 任意非终态可 CLOSED（原因用 closedReason 表达）；
+  **枚举里不存在 AUTO_SUBMITTED**，测试直接断言集合
+→ 幂等：platformRef 命中唯一键 → 返回既有行（不报错、不重复建）
+→ 迁移：CAS（updateMany where status = from），并发只有一个成功
+→ FINANCE 视图：只回 status / recoverableAmount / settlementRef
+  （settlementRef 取自已入案的 Case 最新 Settlement，不新增字段）
+
+四、真实 PostgreSQL 证据（7 条）
+1. platformRef 幂等 → 第二次返回既有行，表内仍 1 条
+2. platformRef 为空 → 2 条记录 + 2 条告警审计
+3. 状态机 + caseId 不变量 + 关闭原因 → 审计 fromStatus/toStatus/claimItemId/caseId 齐全
+4. 并发迁移 → 只有一个成功（CAS）
+5. 跨租户 caseId → 被数据库触发器拒绝，原行状态不变
+6. 证据联结 → 幂等；OWNER 可读，FINANCE / VIEWER 403，FINANCE 不可写
+7. FINANCE 视图字段集合恰为 {id, status, recoverableAmount, settlementRef}；VIEWER 403；跨租户 404
+
+五、测试与 CI
+→ 新增 22 个用例（15 单元 + 7 真实库）；测试文件 67 → **69**、用例 621 → **643**
+→ 本机：prisma validate、fresh migrate deploy、tsc --noEmit、全量 643 通过
+→ CI（HEAD 647f929）：API / Web / 许可证闸门 三作业 SUCCESS；Test Files 69 / Tests 643；
+  OK: 27 tenant triggers present
+→ 过程透明：79b225c 的 CI 曾失败一次——我的并发用例假设「两个不同目标同时迁移只有一个成功」，
+  但串行化时第二次是**合法**迁移，因此两者都成功。已把用例改成**两个相同目标**（一个成功、
+  另一个被状态检查或 CAS 拒绝，且只留一条迁移审计），647f929 起 CI 全绿。生产代码未变。
+
+六、边界（未越界）
+未接任何平台连接器、未做 OAuth、未做自动提交、未改 Settlement / Payment / 资金链路。
+
+七、下一步
+→ 等你裁决；下一阶段（平台连接器设计/实现）仍 HOLD，需你明确解禁范围
+→ 宿主侧仍待：脱敏真实账单（VALIDATION-RUN-001）与 C-0010-C2 的 Stripe test 三项授权
+
+NEED:
+PASS / REVISE / BLOCK（C-0011 Implementation Checkpoint）
+```
+
+### [MSG-20260928-120] C-0011 Implementation Checkpoint 裁定：PASS（C-0011 收口；记录长期风险 RISK-C0011-001 = platformRef 空值重复，Connector 上线前必须以 sourceFingerprint / externalEventId 关闭；下一步优先 VALIDATION-RUN-001，其次 C-0012 Claim Rule Engine Audit，平台连接器仅限设计）
+
+> 本轮面板格式：消息不带 `[CHATGPT → CODEX]` 标记行，已按面板原文逐字保留。
+
+```text
+C-0011 Implementation Checkpoint 裁定
+VERDICT: PASS
+
+本轮实现符合 C-0011 的批准边界。
+
+当前 Claim 域落地状态：
+
+纯文本
+ClaimItem
+    ↓
+ClaimItemEvidence
+    ↓
+Case（追回作业）
+    ↓
+Rule Engine（已有）
+    ↓
+Settlement / Commission（已有资金域）
+
+未发生越界：
+
+✅ 未接平台
+✅ 未接 OAuth
+✅ 未自动提交申诉
+✅ 未修改 Settlement
+✅ 未修改 Payment
+✅ 未新增平台凭据字段
+✅ 未复制证据文件
+
+一、Schema 验收
+PASS
+
+迁移：
+
+纯文本
+20260929050000_claim_item
+
+结果：
+
+纯文本
+27 tenant triggers
+36 models
+
+符合批准口径。
+
+确认：
+
+ClaimItem
+
+批准：
+
+organizationId
+caseId 可空
+opportunityId 可空
+ruleVersionId 保留
+normalizerVersion 保留
+
+正确。
+
+ClaimItemEvidence
+
+设计正确：
+
+ClaimItem
+      |
+      |
+ClaimItemEvidence
+      |
+      |
+EvidenceArtifact
+
+没有复制文件。
+
+符合证据链原则。
+
+二、REVISE 项检查
+REVISE-1 platformRef=null
+PASS
+
+处理方式：
+
+纯文本
+platformRef存在
+    ↓
+幂等创建
+
+platformRef为空
+    ↓
+允许创建
+    ↓
+idempotency=UNAVAILABLE
+    ↓
+warning audit
+
+符合要求。
+
+特别认可：
+
+没有为了"强幂等"强行增加 sourceFingerprint。
+
+避免提前扩大 Schema。
+
+REVISE-2 Evidence 权限
+PASS
+
+当前：
+
+角色	Evidence
+OWNER	✅
+ADMIN	✅
+OPS	✅
+FINANCE	❌
+VIEWER	❌
+
+批准。
+
+原因：
+
+证据属于运营追回链路，不属于财务摘要权限。
+
+FINANCE 只能看到：
+
+JSON
+{
+status,
+recoverableAmount,
+settlementRef
+}
+
+正确。
+
+REVISE-3 审计字段
+PASS
+
+当前：
+
+JSON
+{
+fromStatus,
+toStatus,
+claimItemId,
+caseId,
+closedReason
+}
+
+满足审计追溯。
+
+三、状态机检查
+PASS
+
+当前：
+
+DISCOVERED
+ ↓
+VERIFIED
+ ↓
+REVIEW_REQUIRED
+ ↓
+READY_TO_APPEAL
+ ↓
+SUBMITTED_MANUAL
+ ↓
+RECOVERED
+ ↓
+CLOSED
+
+并且：
+
+不存在：
+
+AUTO_SUBMITTED
+
+通过。
+
+关于：
+
+任意非终态可 CLOSED
+
+接受。
+
+原因：
+
+现实追回流程存在：
+
+不值得追
+客户拒绝
+平台拒绝
+人工放弃
+
+用：
+
+纯文本
+closedReason
+
+表达比增加状态更合理。
+
+四、并发测试
+PASS
+
+之前发现的问题已正确修正。
+
+错误：
+
+两个不同目标迁移
+
+这个不是竞争。
+
+现在：
+
+两个相同目标迁移
+
+才验证 CAS。
+
+符合真实并发模型。
+
+五、FINANCE 视图
+PASS
+
+当前返回：
+
+JSON
+{
+id,
+status,
+recoverableAmount,
+settlementRef
+}
+
+符合之前批准。
+
+注意：
+
+后续如果 ClaimItem 进入 Commission 链路，需要重新评估 Finance 权限，但当前阶段无需扩大。
+
+六、一个长期风险记录（不阻塞）
+
+记录：
+
+RISK-C0011-001
+platformRef 空值重复问题
+
+当前：
+
+允许：
+
+ClaimItem A
+platformRef=null
+
+ClaimItem B
+platformRef=null
+
+这是接受设计。
+
+但未来平台 Connector 上线前必须解决：
+
+需要引入：
+
+sourceFingerprint
+
+或者：
+
+externalEventId
+
+否则自动同步会产生重复。
+
+当前：
+
+不阻塞。
+
+七、下一阶段建议
+
+C-0011 已完成。
+
+当前工程状态：
+
+Gate 6       DONE
+C-0009       DONE
+Payment      DONE（C2 HOLD）
+Claim Core   DONE
+
+下一步不建议马上做平台 Connector。
+
+原因：
+
+平台 Connector 会引入：
+
+OAuth
+凭据生命周期
+API 限流
+数据同步
+平台版本变化
+合规边界
+
+复杂度明显上升。
+
+建议顺序：
+
+Step A（优先）
+
+完成：
+
+VALIDATION-RUN-001
+脱敏真实结构账单验证
+
+原因：
+
+这是商业真实性验证。
+
+目前系统工程能力已经超过验证需求。
+
+下一步应该验证：
+
+有没有真实 Claim 密度
+金额规模
+人工成本
+回收频率
+Step B
+
+设计：
+
+C-0012 Claim Rule Engine Audit
+
+重点：
+
+不是增加规则。
+
+而是验证：
+
+RuleVersion
+recoverableAmount
+人工判断残差
+Step C
+
+平台连接器设计：
+
+允许：
+
+Amazon SP-API
+TikTok Shop
+Walmart
+
+但第一阶段只设计：
+
+Connector
+ ↓
+Fetcher
+ ↓
+Normalizer
+ ↓
+ClaimItem
+
+禁止：
+
+自动申诉。
+
+最终：
+
+纯文本
+C-0011 Implementation Checkpoint
+
+PASS
+
+可以关闭 C-0011。
+
+下一批准入口：
+
+进入 C-0012 或 VALIDATION-RUN-001 执行。
+```
