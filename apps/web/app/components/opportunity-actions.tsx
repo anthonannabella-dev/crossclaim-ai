@@ -13,7 +13,20 @@ const LABELS: Record<(typeof REJECT_REASONS)[number], string> = {
   other: '其他',
 };
 
-export default function OpportunityActions({ opportunityId }: { opportunityId: string }) {
+export interface OpportunityActionLabels {
+  qualify: string;
+  reject: string;
+  reasonLabel: string;
+  reasons: Record<string, string>;
+}
+
+export default function OpportunityActions({
+  opportunityId,
+  labels,
+}: {
+  opportunityId: string;
+  labels: OpportunityActionLabels;
+}) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -49,17 +62,17 @@ export default function OpportunityActions({ opportunityId }: { opportunityId: s
         onClick={() => void post('qualify')}
         className="rounded bg-slate-900 px-3 py-1 text-xs text-white disabled:opacity-60"
       >
-        确认
+        {labels.qualify}
       </button>
       <select
         value={reason}
         onChange={(event) => setReason(event.target.value as (typeof REJECT_REASONS)[number])}
         className="rounded border px-2 py-1 text-xs"
-        aria-label="拒绝原因"
+        aria-label={labels.reasonLabel}
       >
         {REJECT_REASONS.map((value) => (
           <option key={value} value={value}>
-            {LABELS[value]}
+            {labels.reasons[value] ?? LABELS[value]}
           </option>
         ))}
       </select>
@@ -69,7 +82,7 @@ export default function OpportunityActions({ opportunityId }: { opportunityId: s
         onClick={() => void post('reject')}
         className="rounded border border-red-300 px-3 py-1 text-xs text-red-700 disabled:opacity-60"
       >
-        拒绝
+        {labels.reject}
       </button>
       {error ? <span className="text-xs text-red-600">{error}</span> : null}
     </div>

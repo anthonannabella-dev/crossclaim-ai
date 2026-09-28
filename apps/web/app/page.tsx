@@ -204,7 +204,15 @@ export default async function DashboardPage() {
                   <td>{item.status}</td>
                   <td>
                     {item.status === 'DETECTED' ? (
-                      <OpportunityActions opportunityId={item.id} />
+                      <OpportunityActions
+                        opportunityId={item.id}
+                        labels={{
+                          qualify: t.dashboard.reviewQualify,
+                          reject: t.dashboard.reviewReject,
+                          reasonLabel: t.dashboard.rejectReason,
+                          reasons: t.dashboard.rejectReasons as unknown as Record<string, string>,
+                        }}
+                      />
                     ) : (
                       <span className="text-xs text-slate-400">—</span>
                     )}

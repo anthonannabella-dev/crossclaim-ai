@@ -65,3 +65,34 @@ export function getDictionary(locale: Locale): Messages {
 export function rawDictionary(locale: Locale): Messages {
   return DICTIONARIES[locale];
 }
+
+/** 展平字典键（用于一致性不变量）。 */
+export function flattenKeys(value: unknown, prefix = ''): string[] {
+  if (typeof value === 'string') return [prefix];
+  return Object.entries(value as Record<string, unknown>).flatMap(([key, nested]) =>
+    flattenKeys(nested, prefix === '' ? key : `${prefix}.${key}`),
+  );
+}
+
+/**
+ * 构建期不变量（`next build` 与运行时都会执行）：
+ * 1. 所有语言的键集合必须与 zh-CN 完全一致；
+ * 2. de / ja / es 必须保持占位（不得混入真实翻译）。
+ * 这样"i18n 键一致性"由 CI 强制，而不是靠人工检查。
+ */
+function assertDictionaryIntegrity(): void {
+  const base = flattenKeys(DICTIONARIES[DEFAULT_LOCALE]).join('|');
+  for (const locale of SUPPORTED_LOCALES) {
+    const keys = flattenKeys(DICTIONARIES[locale]).join('|');
+    if (keys !== base) {
+      throw new Error(`[i18n] 字典键与 ${DEFAULT_LOCALE} 不一致：${locale}`);
+    }
+  }
+  for (const locale of ['de', 'ja', 'es'] as const) {
+    if (!isPlaceholder(DICTIONARIES[locale])) {
+      throw new Error(`[i18n] 预留语言 ${locale} 应保持占位（值为空），不能混入半成品翻译`);
+    }
+  }
+}
+
+assertDictionaryIntegrity();
