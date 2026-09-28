@@ -1,4 +1,4 @@
-﻿services:
+services:
   postgres:
     image: postgres:16-alpine
     container_name: customs-postgres
@@ -96,6 +96,8 @@
       MINIO_SECRET_KEY: ${MINIO_PASSWORD:?MINIO_PASSWORD is required}
       JWT_SECRET: "${JWT_SECRET:?JWT_SECRET is required. Generate: openssl rand -base64 48}"
       OCR_SERVICE_URL: http://ocr:8002
+      TEMPORAL_ADDRESS: "${TEMPORAL_ADDRESS:-temporal:7233}"
+      AI_SERVICE_URL: "${AI_SERVICE_URL:-http://ai:8003}"
 
       ALIYUN_OCR_ACCESS_KEY_ID: ${ALIYUN_OCR_ACCESS_KEY_ID:-}
 
@@ -173,6 +175,52 @@
       - backend
     volumes:
       - ./frontend/dist:/usr/share/nginx/html
+
+  # ===== CrossClaim：持久化长流程引擎（阶段 2）=====
+  # auto-setup 会自动在 postgres 里创建 temporal / temporal_visibility 两个库并建表。
+  # 需要 POSTGRES_USER 具备建库权限（官方 postgres 镜像的超级用户默认满足）。
+  temporal:
+    image: temporalio/auto-setup:1.25.2
+    container_name: customs-temporal
+    restart: unless-stopped
+    environment:
+      DB: postgres12
+      DB_PORT: 5432
+      POSTGRES_USER: ${POSTGRES_USER:-customs}
+      POSTGRES_PWD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      POSTGRES_SEEDS: postgres
+    ports:
+      - "127.0.0.1:7233:7233"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # Temporal Web UI（dev 用；生产可关掉）
+  temporal-ui:
+    image: temporalio/ui:2.32.0
+    container_name: customs-temporal-ui
+    restart: unless-stopped
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+    ports:
+      - "127.0.0.1:8088:8080"
+    depends_on:
+      - temporal
+
+  # ===== CrossClaim：Python AI 服务面（阶段 1–2，默认不启动）=====
+  # 启用: docker compose --profile ai up -d ai
+  # ⚠️ 首次构建会拉取 PyTorch 等重依赖，预留数 GB 磁盘
+  ai:
+    build: ./ai_service
+    container_name: customs-ai
+    restart: unless-stopped
+    profiles: ["ai"]
+    environment:
+      PORT: 8003
+      LOG_LEVEL: INFO
+    ports:
+      - "127.0.0.1:8003:8003"
+
 
 volumes:
   postgres_data:
