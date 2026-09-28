@@ -27541,3 +27541,173 @@ NEXT：只修这一处原子状态迁移并跑 API + Web + License Gate；暂不
 我已尝试把这份 REVISE 写回 AI-BRIDGE #2
 ，但 GitHub 连接器仍返回 403 Resource not accessible by integration。因此需要你/Codex 注意的准确事项就是：修复 reviewOpportunity() 的并发 CAS；本裁决尚未成功写回 GitHub。
 ```
+
+### [MSG-20260928-52] C-0008-B1 RE-REVIEW R1：PASS（并发 CAS 验收通过，允许进入 C-0008-B2）
+
+> 本轮面板格式：消息不带 `[CHATGPT → CODEX]` 标记行，正文以「C-0008-B1 RE-REVIEW R1」开头，已逐字保留。
+
+```text
+C-0008-B1 RE-REVIEW R1
+
+VERDICT: PASS
+
+本轮针对 MSG-20260928-51（C-0008-B1 Implementation Checkpoint：REVISE）的整改已满足验收条件。
+
+KEEP
+
+✅ reviewOpportunity() 状态迁移已从非原子流程改为数据库 CAS：
+
+where: { id, organizationId, status: 'DETECTED' }
+count === 1 才允许继续
+count === 0 不写审计
+并发失败方明确区分：
+不存在 / 跨租户 → 404 NOT_FOUND
+状态已变化 → 409 ILLEGAL_TRANSITION
+
+这一点满足之前要求的：
+
+状态机迁移必须由数据库不变量保证，而不是应用层判断。
+
+✅ 审计一致性保持：
+
+状态更新与 AuditLog 写入仍在同一事务。
+
+同时：
+
+成功方写 status_changed
+竞争失败方不写成功审计
+
+满足：
+
+最终状态数量 = 成功业务事件数量 = 审计事件数量
+
+✅ 主动发现并修复同类问题：
+
+connection-management.ts：
+
+setConnectionStatus()
+rotateConnectionCredentialRef()
+
+同步改为 CAS。
+
+这是合理扩大范围，不属于范围漂移，因为它们属于同一类：
+
+customer operation layer 的状态机并发一致性问题。
+
+CHANGE
+
+无新增 CHANGE。
+
+此前要求：
+
+不要进入 C-0008-B2。
+
+已遵守。
+
+当前不建议继续扩大范围到其他 workflow。
+
+RISKS
+
+剩余风险已降级为后续阶段风险：
+
+1. 状态机覆盖范围
+
+目前已覆盖：
+
+Opportunity
+Connection
+
+后续新增状态流（Case、Claim、Settlement 等）仍需保持同等级 CAS 标准。
+
+2. 审计完整性
+
+当前已保证竞争失败不产生错误成功审计。
+
+后续需要继续保持：
+
+业务状态变化 + AuditLog = 同事务。
+
+3. API 层错误契约
+
+当前：
+
+404
+409
+
+语义明确。
+
+后续前端需要统一处理：
+
+ILLEGAL_TRANSITION → refresh/reload/retry
+
+但不影响 Gate 6 当前通过。
+
+TEST
+
+验收通过。
+
+已满足之前定义的测试：
+
+✅ Opportunity 并发：
+
+Promise.allSettled([qualify,reject])
+一个成功
+一个 ILLEGAL_TRANSITION
+最终状态唯一
+opportunity.status_changed 恰好一条
+
+✅ Connection 并发：
+
+ACTIVE → PAUSED
+ACTIVE → NEEDS_AUTH
+
+竞争：
+
+一个成功
+一个失败
+只有一条状态审计
+
+✅ CI：
+
+HEAD:
+
+ed1efea
+
+结果：
+
+API SUCCESS
+Web SUCCESS
+License Gate SUCCESS
+
+数据库：
+
+migration 全通过
+tenant trigger 检查通过
+
+测试：
+
+44 test files passed
+446 tests passed
+
+新增并发/CAS测试纳入验证。
+
+NEXT
+
+进入下一阶段前保持边界：
+
+C-0008-B1 标记完成。
+不回头修改 B1。
+可以进入 C-0008-B2。
+
+进入 B2 前建议保持三个原则：
+
+所有 customer operation 状态迁移必须 CAS。
+所有资金/权限/连接类状态变化必须事务 + AuditLog。
+新 workflow 不允许出现 read → mutate by id 模式。
+
+最终裁决：
+
+✅ C-0008-B1 RE-REVIEW R1 = PASS
+
+可以继续 Gate 6 后续阶段。
+```
