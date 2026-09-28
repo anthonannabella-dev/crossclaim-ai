@@ -126,6 +126,8 @@ describe('C-0010-B — CSV 形状', () => {
         PAID_WITHOUT_PAYMENT: 0,
         PAID_AMOUNT_MISMATCH: 0,
         FAILED_PAYMENT: 0,
+        PROCESSING_FAILED: 0,
+        DEAD_LETTER: 0,
       },
       items: [
         {
@@ -154,11 +156,13 @@ describe('C-0010-B — CSV 形状', () => {
 function fakePrisma(invoices: unknown[]) {
   const findMany = vi.fn(async () => invoices);
   const auditFindMany = vi.fn(async () => []);
+  const attemptFindMany = vi.fn(async () => []);
   const prisma = {
     billingInvoice: { findMany },
     auditLog: { findMany: auditFindMany },
+    paymentProcessingAttempt: { findMany: attemptFindMany },
   } as unknown as PrismaClient;
-  return { prisma, findMany, auditFindMany };
+  return { prisma, findMany, auditFindMany, attemptFindMany };
 }
 
 describe('C-0010-B — 权限与只读性', () => {
@@ -205,6 +209,6 @@ describe('C-0010-B — 权限与只读性', () => {
     });
     expect(report.counts.PAYMENT_WITHOUT_PAID_INVOICE).toBe(1);
     expect(auditFindMany).toHaveBeenCalledTimes(1);
-    expect(Object.keys(prisma as never)).toEqual(['billingInvoice', 'auditLog']);
+    expect(Object.keys(prisma as never)).toEqual(['billingInvoice', 'auditLog', 'paymentProcessingAttempt']);
   });
 });

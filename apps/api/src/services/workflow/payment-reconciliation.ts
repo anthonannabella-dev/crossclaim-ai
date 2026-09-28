@@ -26,6 +26,9 @@ export const PAYMENT_DIFFERENCE_TYPES = [
   'PAID_WITHOUT_PAYMENT',
   'PAID_AMOUNT_MISMATCH',
   'FAILED_PAYMENT',
+  // C-0010-B2：执行尝试层面的「需要人处理」问题（不暴露内部状态机）
+  'PROCESSING_FAILED',
+  'DEAD_LETTER',
 ] as const;
 
 export type PaymentDifferenceType = (typeof PAYMENT_DIFFERENCE_TYPES)[number];
@@ -267,6 +270,50 @@ export async function listPaymentReconciliation(
         recommendation: verdict.recommendation,
         detectedAt: generatedAt,
       });
+    });
+  }
+
+  // C-0010-B2：执行尝试层面的异常 —— 该事件有 RETRYABLE_FAILED / DEAD_LETTER 且从未成功执行
+  const stuckAttempts = await prisma.paymentProcessingAttempt.findMany({
+    where: {
+      organizationId: actor.organizationId,
+      status: { in: ['RETRYABLE_FAILED', 'DEAD_LETTER'] },
+    },
+    orderBy: { createdAt: 'asc' },
+    take: 200,
+    select: {
+      paymentEventId: true,
+      attemptNo: true,
+      status: true,
+      paymentId: true,
+      payment: {
+        select: { invoiceId: true, externalPaymentId: true, amount: true, currency: true },
+      },
+    },
+  });
+  const succeededEvents = new Set(
+    (
+      await prisma.paymentProcessingAttempt.findMany({
+        where: { organizationId: actor.organizationId, status: 'SUCCEEDED' },
+        select: { paymentEventId: true },
+      })
+    ).map((row) => row.paymentEventId),
+  );
+  for (const attempt of stuckAttempts) {
+    if (succeededEvents.has(attempt.paymentEventId)) continue;
+    items.push({
+      invoiceId: attempt.payment?.invoiceId ?? '',
+      invoiceNo: '',
+      paymentId: attempt.paymentId ?? null,
+      externalPaymentId: attempt.payment?.externalPaymentId ?? null,
+      amount: attempt.payment ? money(attempt.payment.amount) : '0.0000',
+      currency: attempt.payment?.currency ?? 'USD',
+      status: `ATTEMPT#${attempt.attemptNo}|${attempt.status}`,
+      differenceType: attempt.status === 'DEAD_LETTER' ? 'DEAD_LETTER' : 'PROCESSING_FAILED',
+      recommendation: attempt.paymentId
+        ? 'replay_the_event_with_the_recorded_payment_context'
+        : 'resolve_manually_no_payment_context_available',
+      detectedAt: generatedAt,
     });
   }
 

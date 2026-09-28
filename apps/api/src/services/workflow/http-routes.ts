@@ -33,6 +33,7 @@ import { getAppealPackageState } from './appeal-package';
 import { reconcilePayoutItems } from './commission-reconciliation';
 import { handlePaymentWebhook } from './payment-webhook';
 import { listPaymentReconciliation, toReconciliationCsv } from './payment-reconciliation';
+import { replayPaymentEvent, runDueRetries } from './payment-attempt';
 import { getCase, getClaimDraft, listCaseEvidence, listCases } from './case-read';
 import {
   getOpportunityInsight,
@@ -57,6 +58,8 @@ const PAYMENTS_PATH = /^\/payments$/;
 const PAYMENT_WEBHOOK_PATH = /^\/payments\/webhook$/;
 const PAYMENTS_RECONCILIATION_PATH = /^\/payments\/reconciliation$/;
 const PAYMENTS_RECONCILIATION_CSV_PATH = /^\/payments\/reconciliation\.csv$/;
+const PAYMENT_REPLAY_PATH = /^\/payments\/events\/([^/]+)\/replay$/;
+const PAYMENT_RETRY_DUE_PATH = /^\/payments\/processing\/retry-due$/;
 const BILLING_PATH = /^\/billing(?:\/([^/]+)\/status)?$/;
 const CASE_LIST_PATH = /^\/cases$/;
 const CASE_DETAIL_PATH = /^\/cases\/([^/]+)$/;
@@ -123,6 +126,7 @@ function statusFor(error: unknown): { code: number; error: string } {
       case 'CLAIM_NOT_APPROVED':
       case 'CURRENCY_MISMATCH':
       case 'REVIEW_REQUIRED':
+      case 'PAYMENT_CONTEXT_REQUIRED':
         return { code: 409, error: error.code };
       case 'FORBIDDEN':
         return { code: 403, error: error.code };
@@ -169,12 +173,14 @@ export async function handleWorkflowRequest(
   const webhookPath = PAYMENT_WEBHOOK_PATH.test(path);
   const reconciliationPath = PAYMENTS_RECONCILIATION_PATH.test(path);
   const reconciliationCsvPath = PAYMENTS_RECONCILIATION_CSV_PATH.test(path);
+  const replayPath = PAYMENT_REPLAY_PATH.exec(path);
+  const retryDuePath = PAYMENT_RETRY_DUE_PATH.test(path);
   const billingPath = BILLING_PATH.exec(path);
   const caseListPath = CASE_LIST_PATH.test(path);
   const caseDetail = CASE_DETAIL_PATH.exec(path);
   const caseEvidence = CASE_EVIDENCE_PATH.exec(path);
   const caseClaim = CASE_CLAIM_PATH.exec(path);
-  if (!review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim) {
+  if (!review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !replayPath && !retryDuePath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim) {
     return false;
   }
 
@@ -238,6 +244,41 @@ export async function handleWorkflowRequest(
   };
 
   try {
+    if (replayPath) {
+      // C-0010-B2：重放（TD-PAYMENT-003：必须给出白名单原因；无 paymentId → 409）
+      const body = await readJsonBody(req);
+      const result = await replayPaymentEvent(
+        deps.prisma,
+        {
+          organizationId: context.organizationId,
+          actorUserId: context.userId,
+          role: context.role,
+          paymentEventId: replayPath[1] ?? '',
+          reason: body.reason,
+          note: body.note,
+        },
+        deps.now ? { now: deps.now } : {},
+      );
+      sendJson(res, 200, result);
+      return true;
+    }
+
+    if (retryDuePath) {
+      // C-0010-B2：自动重放到期 attempt（无队列 / 无后台线程；由宿主侧调度调用）
+      const body = await readJsonBody(req);
+      const result = await runDueRetries(
+        deps.prisma,
+        {
+          organizationId: context.organizationId,
+          role: context.role,
+          ...(typeof body.limit === 'number' ? { limit: body.limit } : {}),
+        },
+        deps.now ? { now: deps.now } : {},
+      );
+      sendJson(res, 200, result);
+      return true;
+    }
+
     if (reconciliationPath || reconciliationCsvPath) {
       // C-0010-B：财务对账差异清单（只读；不做任何自动修账）
       const report = await listPaymentReconciliation(

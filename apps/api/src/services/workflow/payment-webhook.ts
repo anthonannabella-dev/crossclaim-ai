@@ -21,7 +21,8 @@ import { createHash } from 'node:crypto';
 
 import { Prisma, type PrismaClient } from '@prisma/client';
 
-import { applyPaymentSucceeded, paymentsEnabled } from './payment';
+import { paymentsEnabled } from './payment';
+import { executeAttempt } from './payment-attempt';
 
 export const DEFAULT_TOLERANCE_SECONDS = 300;
 export const WEBHOOK_WHITELIST = [
@@ -98,12 +99,12 @@ async function recordPaymentEvent(
     receivedAt: Date;
     processingResult: 'IGNORED' | 'PROCESSED';
   },
-): Promise<'CREATED' | 'DUPLICATE'> {
+): Promise<{ outcome: 'CREATED' | 'DUPLICATE'; id: string | null }> {
   try {
-    await prisma.paymentEvent.create({ data });
-    return 'CREATED';
+    const row = await prisma.paymentEvent.create({ data, select: { id: true } });
+    return { outcome: 'CREATED', id: row.id };
   } catch (error) {
-    if (isUniqueViolation(error)) return 'DUPLICATE';
+    if (isUniqueViolation(error)) return { outcome: 'DUPLICATE', id: null };
     throw error;
   }
 }
@@ -197,7 +198,7 @@ export async function handlePaymentWebhook(
     receivedAt: at,
     processingResult,
   });
-  if (recorded === 'DUPLICATE') {
+  if (recorded.outcome === 'DUPLICATE') {
     // 并发重放：唯一约束拦下的那一侧不推进任何资金状态
     log('payment_webhook_duplicate', { providerEventId, eventType, payloadHash });
     return { httpStatus: 200, processingResult: 'DUPLICATE', reason: 'duplicate_event' };
@@ -217,27 +218,24 @@ export async function handlePaymentWebhook(
             ? object.amount
             : '0.0000';
       const currency = typeof object.currency === 'string' ? object.currency.toUpperCase() : 'USD';
-      try {
-        await applyPaymentSucceeded(
-          prisma,
-          {
-            organizationId: invoice.organizationId,
-            provider,
-            externalPaymentId,
-            invoiceId: invoice.id,
-            amount,
-            currency,
-          },
-          { now: () => at, env },
-        );
-      } catch (error) {
-        // 同一笔 provider 付款已入账 → 语义上就是重复事件
-        if (isUniqueViolation(error)) {
-          log('payment_webhook_duplicate', { providerEventId, eventType, payloadHash, scope: 'payment' });
-          return { httpStatus: 200, processingResult: 'DUPLICATE', reason: 'duplicate_payment', invoiceId: invoice.id };
-        }
-        throw error;
-      }
+      // C-0010-B2：把这次处理记成一条执行尝试（含 paymentId 链接与失败分类）；
+      // 执行失败不再让 webhook 抛错 —— 结论落在 attempt 上，由 replay / retry-due 恢复。
+      await executeAttempt(
+        prisma,
+        {
+          organizationId: invoice.organizationId,
+          paymentEventId: recorded.id ?? '',
+          provider,
+          externalPaymentId,
+          invoiceId: invoice.id,
+          amount,
+          currency,
+          actorType: 'EXTERNAL',
+          actorRef: provider,
+          env,
+        },
+        { now: () => at },
+      );
     }
   }
 

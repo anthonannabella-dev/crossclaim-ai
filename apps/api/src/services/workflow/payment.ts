@@ -137,7 +137,21 @@ export interface ApplyPaymentSucceededResult {
 export async function applyPaymentSucceeded(
   prisma: PrismaClient,
   input: ApplyPaymentSucceededInput,
-  deps: { now?: () => Date; env?: Record<string, string | undefined> } = {},
+  deps: {
+    now?: () => Date;
+    env?: Record<string, string | undefined>;
+    /**
+     * C-0010-B2：Payment 行被记入的**同一个事务**里回调，用于把执行尝试链接到 Payment
+     * 并写 `payment.processing_payment_linked` 审计（链接与资金事实同生共死）。
+     */
+    onPaymentRecorded?: (tx: Prisma.TransactionClient, paymentId: string) => Promise<void>;
+    /**
+     * C-0010-B2 恢复收口：Payment 已经记账（attempt#1 留下的事实）时，replay / retry-due
+     * 必须继续把账单推到终态，而不是把它当成「重复事件」。
+     * webhook 首处理保持原有语义（既有 Payment → ILLEGAL_TRANSITION）。
+     */
+    recovery?: boolean;
+  } = {},
 ): Promise<ApplyPaymentSucceededResult> {
   const at = (deps.now ?? (() => new Date()))();
 
@@ -178,8 +192,17 @@ export async function applyPaymentSucceeded(
         select: { id: true },
       }));
 
+    if (deps.onPaymentRecorded) await deps.onPaymentRecorded(tx, payment.id);
+
     if (existing) {
-      return { paymentId: payment.id, invoiceId: invoice.id, status: 'ILLEGAL_TRANSITION' as const };
+      // 首处理：同一笔付款重复投递 → 不推进任何状态
+      if (!deps.recovery) {
+        return { paymentId: payment.id, invoiceId: invoice.id, status: 'ILLEGAL_TRANSITION' as const };
+      }
+      // 恢复收口：账单已经终态 → 同样无事可做，且不写无意义的失败审计
+      if (invoice.status === 'PAID') {
+        return { paymentId: payment.id, invoiceId: invoice.id, status: 'ILLEGAL_TRANSITION' as const };
+      }
     }
 
     if (!amountMatches || !currencyMatches) {

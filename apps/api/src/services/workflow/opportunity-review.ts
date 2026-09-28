@@ -39,7 +39,9 @@ export type WorkflowErrorCode =
   | 'CLAIM_NOT_APPROVED'
   | 'CURRENCY_MISMATCH'
   | 'PAYMENT_REFERENCE_REQUIRED'
-  | 'REVIEW_REQUIRED';
+  | 'REVIEW_REQUIRED'
+  /** C-0010-B2：重放缺少 attempt.paymentId 上下文时 fail closed（不允许人工补金额） */
+  | 'PAYMENT_CONTEXT_REQUIRED';
 
 export class WorkflowError extends Error {
   readonly code: WorkflowErrorCode;

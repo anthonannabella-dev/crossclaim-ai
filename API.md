@@ -250,6 +250,24 @@ C-0008-B2（Case / Evidence / Claim Draft / Billing）的端点尚未实现。
 - 扫描范围为最近 200 张发票（上限 500）；**跨租户发票绝不出现**
 - CSV 与 JSON 同源；导出不含凭据、签名与 provider 机密
 
+## 支付执行与恢复（C-0010-B2）
+
+| 方法 | 路径 | 请求 | 成功 | 权限 |
+|---|---|---|---|---|
+| POST | `/payments/events/:paymentEventId/replay` | `{ reason, note? }` | 200 `{ paymentEventId, attemptId, attemptNo, status, resultStatus }` | **仅 OWNER / ADMIN** |
+| POST | `/payments/processing/retry-due` | `{ limit? }`（默认 20，上限 100） | 200 `{ scanned, retried: [...], deadLettered: [...] }` | **仅 OWNER / ADMIN** |
+
+- `reason` 是白名单枚举：`DATABASE_TIMEOUT` / `CAS_CONFLICT` / `UNKNOWN_PROVIDER_RESPONSE` / `MANUAL_RECOVERY` / `OTHER`；缺失或非白名单 → 400，零写入
+- 重放只能沿执行尝试记录下来的 `attempt.paymentId` 回到**同一条** Payment 事实重新推进账单；
+  没有该上下文 → **409 `PAYMENT_CONTEXT_REQUIRED`**（绝不接受人工补金额 / 人工改归属）
+- 执行尝试（`PaymentProcessingAttempt`）与入站事件（`PaymentEvent`）同为 append-only：同一事件同一时刻只允许一个进行中的尝试；
+  一个 Payment 最多一个成功执行来源；成功之后不允许改绑（CAS 只收口 RUNNING）
+- 自动重试**只限技术失败**（数据库瞬断 / 写冲突等），退避 1 / 5 / 15 分钟、上限 3 次；超限 → `DEAD_LETTER`，进入下方对账清单
+- 业务结论（金额不符 / 币种不符 / 人工卡口未通过 / 非法状态）不自动重试，由人工裁定
+- 首次把 paymentId 写到尝试上会写审计 `payment.processing_payment_linked`；人工重放写 `payment.processing_replayed`
+  （含 `paymentEventId` / `oldAttemptNo` / `newAttemptNo` / `reason` / `actorUserId`）；审计**不含** payload、签名与密钥
+- 无队列、无后台线程：`retry-due` 由宿主侧调度调用；第一版不引入任何调度依赖
+
 ## 权限矩阵
 
 见 [DOMAIN_MODEL.md](./DOMAIN_MODEL.md#角色与权限c-0008-b1架构方批准)。
