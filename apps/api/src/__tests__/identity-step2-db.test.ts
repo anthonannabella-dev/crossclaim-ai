@@ -356,4 +356,32 @@ describe('C-0006-B2 Step 2 — dual write + identity parity（真实 PostgreSQL�
     });
     expect(rows.some((row) => row.sourceTransactionId === conflictInvoice.id)).toBe(false);
   });
+
+  it('回滚测试：canonical → legacy 只需切开关，无需数据修复', async () => {
+    const canonicalRepo = createPrismaDetectionRepository(prisma, { identityMode: 'canonical' });
+    const canonicalRun = await runFreightRateDetection({
+      organizationId: ORG,
+      scope: SCOPE,
+      repository: canonicalRepo,
+    });
+    expect(canonicalRun.evaluationsCreated).toBe(2);
+
+    const parityAfterCanonical = await buildIdentityParityReport(prisma, { organizationId: ORG });
+    expect(parityAfterCanonical.parity).toBe('OK');
+    expect(parityAfterCanonical.coverageRate).toBe('1.0000');
+
+    // 回滚：仅切回 legacy 模式（旧键从未删除，旧唯一约束仍在）
+    const legacyRepo = createPrismaDetectionRepository(prisma, { identityMode: 'legacy' });
+    const legacyRun = await runFreightRateDetection({
+      organizationId: ORG,
+      scope: SCOPE,
+      repository: legacyRepo,
+    });
+    expect(legacyRun.evaluationsCreated).toBe(0);
+    expect(legacyRun.skippedExisting).toBe(2);
+    expect(await prisma.ruleEvaluation.count({ where: { organizationId: ORG } })).toBe(2);
+
+    const rows = await prisma.ruleEvaluation.findMany({ where: { organizationId: ORG } });
+    expect(rows.every((row) => row.dedupeKey !== null && row.canonicalDedupeKey !== null)).toBe(true);
+  });
 });
