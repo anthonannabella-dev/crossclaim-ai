@@ -3,6 +3,19 @@
  */
 
 export {
+  TIME_WINDOW_DAYS,
+  normalizePayoutItem,
+  reconcilePayoutItems,
+  type BillingStatus,
+  type MatchType,
+  type NormalizedPayoutItem,
+  type PayoutItemInput,
+  type ReconcileInput,
+  type ReconcileSummary,
+  type ReconciliationResult,
+  type ReconciliationStatus,
+} from './commission-reconciliation';
+export {
   MASK_TOKEN,
   maskIdentifier,
   type MaskKind,

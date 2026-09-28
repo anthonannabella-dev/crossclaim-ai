@@ -30,6 +30,7 @@ import { confirmRecoveryOutcome } from './recovery-outcome';
 import { getRecoveryReviewStatus, submitRecoveryReview } from './recovery-review';
 import { advanceBillingInvoice, listBillingInvoices } from './billing';
 import { getAppealPackageState } from './appeal-package';
+import { reconcilePayoutItems } from './commission-reconciliation';
 import { getCase, getClaimDraft, listCaseEvidence, listCases } from './case-read';
 import {
   getOpportunityInsight,
@@ -49,6 +50,7 @@ const COMMERCIAL_TERMS_PATH = /^\/cases\/([^/]+)\/commercial-terms$/;
 const RECOVERY_OUTCOME_PATH = /^\/cases\/([^/]+)\/recovery-outcome$/;
 const RECOVERY_REVIEW_PATH = /^\/cases\/([^/]+)\/recovery-review$/;
 const APPEAL_PACKAGE_PATH = /^\/cases\/([^/]+)\/appeal-package$/;
+const COMMISSION_RECONCILE_PATH = /^\/commissions\/reconcile$/;
 const BILLING_PATH = /^\/billing(?:\/([^/]+)\/status)?$/;
 const CASE_LIST_PATH = /^\/cases$/;
 const CASE_DETAIL_PATH = /^\/cases\/([^/]+)$/;
@@ -156,12 +158,13 @@ export async function handleWorkflowRequest(
   const outcomePath = RECOVERY_OUTCOME_PATH.exec(path);
   const reviewPath = RECOVERY_REVIEW_PATH.exec(path);
   const appealPath = APPEAL_PACKAGE_PATH.exec(path);
+  const commissionPath = COMMISSION_RECONCILE_PATH.test(path);
   const billingPath = BILLING_PATH.exec(path);
   const caseListPath = CASE_LIST_PATH.test(path);
   const caseDetail = CASE_DETAIL_PATH.exec(path);
   const caseEvidence = CASE_EVIDENCE_PATH.exec(path);
   const caseClaim = CASE_CLAIM_PATH.exec(path);
-  if (!review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !appealPath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim) {
+  if (!review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !appealPath && !commissionPath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim) {
     return false;
   }
 
@@ -195,6 +198,21 @@ export async function handleWorkflowRequest(
   };
 
   try {
+    if (commissionPath) {
+      const body = await readJsonBody(req);
+      const summary = await reconcilePayoutItems(
+        deps.prisma,
+        {
+          ...actor,
+          items: Array.isArray(body.items) ? (body.items as never[]) : [],
+          dryRun: body.dryRun !== false,
+        },
+        { ...(deps.now ? { now: deps.now } : {}) },
+      );
+      sendJson(res, 200, summary);
+      return true;
+    }
+
     if (appealPath) {
       sendJson(
         res,
