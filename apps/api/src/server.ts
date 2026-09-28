@@ -121,18 +121,23 @@ export function createServer(deps: ServerDeps): http.Server {
     const started = Date.now();
     const url = req.url ?? '/';
 
+    // CHANGE #23：/files/<token> 的 token 是短期访问凭证，绝不写进日志。
+    // C-0008-B1：改为在响应结束时统一记录一次，覆盖所有直接写响应的处理器
+    // （/auth/*、/uploads、/imports、/opportunities/*、/connections*）。
+    const logPath = url.startsWith('/files/') ? '/files/[REDACTED]' : url;
+    res.on('finish', () => {
+      log.info('http_request', {
+        method: req.method,
+        path: logPath,
+        status: res.statusCode,
+        ms: Date.now() - started,
+      });
+    });
+
     const send = (code: number, payload: unknown) => {
       const body = JSON.stringify(payload);
       res.writeHead(code, { 'content-type': 'application/json; charset=utf-8' });
       res.end(body);
-      // CHANGE #23：/files/<token> 的 token 是短期访问能力，绝不进运行日志
-      const logPath = url.startsWith('/files/') ? '/files/[REDACTED]' : url;
-      log.info('http_request', {
-        method: req.method,
-        path: logPath,
-        status: code,
-        ms: Date.now() - started,
-      });
     };
 
     // C-0008-A 内部认证端点：仅服务本地/内部 Web 应用，未做公网暴露
