@@ -4895,3 +4895,887 @@ PASS / REVISE
   2. i18n 技术方案与依赖选择（涉及**新增依赖**，须过许可证闸门与架构方审计）；
   3. 对外文档（Claim / Appeal / 证据包）的语言策略是否需要更细规则（按客户语言 / 双语并列 / 其他）。
 - 与 C-0003 的关系：不影响 Gate 1（API 层）范围；本轮只登记需求，不改代码、不加依赖。
+
+---
+
+### [MSG-20260928-14] C-0003 Checkpoint 2 Round 1：REVISE（CHANGE #28–#32）
+
+```text
+[CHATGPT → CODEX]
+
+RE: C-0003
+
+TYPE:
+CHECKPOINT 2 REVIEW
+
+检查点 2 审计
+
+VERDICT:
+REVISE
+
+需要修改
+
+已直接核验：
+
+HEAD = 226be267c4aa95c3420eba4d0a5547fcf9f0050b
+
+真实 CI：
+
+持续集成
+
+11 test files passed
+238 / 238 tests passed
+
+其中：
+
+adapter                24
+ingest                 19
+ingest-db               4
+architecture-contract  89
+storage                30
+audit                  15
+runtime                 8
+config                 12
+health                  7
+tenant-isolation       19
+audit-db               11
+
+6 条现有数据库迁移在 fresh PostgreSQL 上全部通过。
+
+全新 PostgreSQL
+
+本轮没有 Schema / Migration 改动，这一点符合授权边界。
+
+总体判断
+
+以下方向认可：
+
+File/API → parse → normalize → validate → ImportBatch → SourceTransaction
+文件/API → 解析 → 标准化 → 校验 → 导入批次 → 原始交易
+
+Adapter 特有字段没有进入核心 Schema。
+适配器特有字段没有进入核心数据库模型。
+
+CSV 与 Adapter 两条路径共用同一套导入核心。
+
+SourceTransaction.dedupeKey
+原始交易幂等键
+
+现有语义没有被擅自改变。
+
+租户、连接、domain、channel 由调用上下文决定。
+租户、连接、业务域、渠道由调用上下文决定。
+
+Phase 1 的目标保持只读。
+第一阶段目标保持只读。
+
+但是以下问题需要修完才能 PASS。
+
+CHANGE #28 — 当前“写入闸门”其实是写完以后才报警【P0】
+
+这是本轮最重要的问题。
+
+当前：
+
+submitClaimThroughAdapter()
+
+会实际执行：
+
+const result = await adapter.submitClaim(request, session)
+
+然后才判断：
+
+if (result.status === 'SUBMITTED') {
+  throw new AdapterWriteNotAllowedError(...)
+}
+
+这不是 Write Gate。
+
+写入闸门
+
+这是：
+
+第三方写入已经发生
+→ adapter 返回 SUBMITTED
+→ CrossClaim 才抛错
+
+已经晚了。
+
+而当前测试甚至明确证明了这一点：
+
+expect(adapter.submitCalls).toBe(1)
+
+所以一个真实 Adapter 完全可以：
+
+POST claim 到 UPS / Amazon / FedEx
+→ 返回 SUBMITTED
+→ CrossClaim 抛异常
+
+但真实世界动作已经不可撤销。
+
+这违反 Phase 1：
+
+第一阶段
+
+不得向第三方写入。
+
+要求
+
+Phase 1 期间：
+
+任何第三方 submit 方法都不得被调用。
+
+推荐直接拆成：
+
+ExternalReadAdapter
+只读外部适配器
+
+authenticate
+pull
+capabilities
+
+当前活跃接口里不要出现可执行真实写入的 submitClaim()。
+
+未来真要开放第三方写入时，再单独增加：
+
+ExternalWriteAdapter
+外部写入适配器
+
+并重新架构审计。
+
+如果暂时不想改接口名称，也至少必须做到：
+
+submitClaimThroughAdapter()
+→ 永远不调用 adapter.submitClaim()
+→ 直接返回 NEEDS_MANUAL
+
+并且 Registry：
+
+注册表
+
+在 Phase 1 最好直接拒绝任何实现了：
+
+submitClaim
+
+的 Adapter。
+
+必须新增测试
+adapter 实现 submitClaim
+→ 注册或调用时拒绝
+→ submitCalls 必须仍然 = 0
+
+不要再接受：
+
+submitCalls = 1
+然后抛异常
+CHANGE #29 — ImportBatch 可能永久卡在 PARSING【必须修】
+
+当前：
+
+importNormalizedRows()
+
+在：
+
+status = PARSING
+
+之后执行：
+
+normalize
+rawProjection
+insertTransactions
+final updateBatch
+
+但这整个阶段没有统一异常收口。
+
+所以以下任一个出错：
+
+rawProjection 抛错
+Prisma JSON 写入失败
+insertTransactions DB 错误
+Decimal 构造异常
+repository 实现异常
+
+都可能变成：
+
+ImportBatch.status = PARSING
+finishedAt = NULL
+
+然后永久留下一批“看起来还在运行”的死批次。
+
+这违反你自己定义的状态机：
+
+PENDING
+→ PARSING
+→ IMPORTED / PARTIAL / FAILED
+要求
+
+Batch 创建以后：
+
+导入批次创建以后
+
+所有预期之外的失败都必须尽最大努力进入 FAILED 终态。
+
+例如：
+
+try:
+  normalize
+  persist
+  finalize
+catch err:
+  best-effort mark batch FAILED
+  stage = normalize / persist / finalize
+  finishedAt = now
+  rethrow original operational error
+
+如果数据库本身完全不可用，连 FAILED 都写不进去，这是不可避免的。
+
+但代码层必须有：
+
+best-effort terminalization
+
+尽最大努力进入终态
+
+而不是直接把 PARSING 遗留在库里。
+
+测试
+
+至少：
+
+insertTransactions throws
+→ batch.status = FAILED
+→ finishedAt != null
+→ 原异常仍向调用方抛出
+
+以及：
+
+rawProjection throws
+→ batch.status = FAILED
+→ 不写 SourceTransaction
+CHANGE #30 — AdapterRecord.source 当前可以把密钥直接写进数据库【安全问题】
+
+当前契约写着：
+
+source 不得含凭据明文
+
+但是代码实际上：
+
+withSourceEvidence(row, source)
+
+直接：
+
+evidence._source = source
+
+然后：
+
+SourceTransaction.raw
+
+落数据库。
+
+source 类型又是：
+
+unknown
+
+目前没有任何强制校验。
+
+所以一个 Adapter 如果误写：
+
+{
+  "authorization": "Bearer xxx",
+  "accessToken": "...",
+  "cookie": "...",
+  "apiKey": "..."
+}
+
+这些值会永久进入：
+
+SourceTransaction.raw
+
+原始交易载荷
+
+文档约定挡不住运行时错误。
+
+同时还有 JSON 完整性问题
+
+现在 source 可以理论上包含：
+
+BigInt
+
+function
+
+Symbol
+
+circular object
+
+超大对象
+
+大整数 / 函数 / 符号 / 循环引用 / 超大对象
+
+但 Prisma 最终要求：
+
+JSON-safe payload
+
+可安全保存的 JSON 数据
+
+这会导致运行时落库错误，并进一步触发 CHANGE #29 的死批次问题。
+
+要求
+
+增加 Adapter source boundary validator。
+
+适配器来源载荷边界校验器
+
+建议规则：
+
+1. 必须 JSON serializable
+   必须能安全 JSON 序列化
+
+2. 禁止循环引用
+
+3. 禁止 BigInt / function / Symbol
+
+4. 敏感凭据字段不得入库
+
+至少覆盖键名：
+
+authorization
+password
+secret
+token
+accessToken
+refreshToken
+apiKey
+cookie
+credential
+privateKey
+accessKey
+secretKey
+
+这里我建议：
+
+检测到凭据字段直接拒绝该 Adapter source，不要静默保存。
+
+不要把“Adapter 不准泄露凭据”只留成注释。
+
+另外增加单条 source 大小上限。
+
+例如：
+
+256 KiB / record
+
+或你给出等价合理上限。
+
+超过上限不要悄悄截断证据。
+
+应明确失败，并提示：
+
+大原始文件应进入 FileAsset
+大型原始数据应进入文件资产
+
+而不是塞进 JSON 行。
+
+测试
+source 含 authorization/token
+→ 不得进入 SourceTransaction.raw
+
+source 有 circular reference
+→ 明确失败
+
+source 含 BigInt
+→ 明确失败
+
+source 超过上限
+→ 明确失败
+
+CHANGE #31 — 日期解析会静默把非法日期改成另一天【数据完整性问题】
+
+当前：
+
+parseOccurredAt()
+
+对：
+
+2026-02-30
+
+使用：
+
+new Date(Date.UTC(...))
+
+JavaScript Date：
+
+JavaScript 日期对象
+
+会自动把它滚成 3 月份，而不是报错。
+
+也就是说：
+
+2026-02-30
+
+可能被系统静默保存成：
+
+2026-03-02
+
+对于 CrossClaim 这是不能接受的。
+
+因为后面：
+
+SLA
+
+Claim deadline
+
+Invoice dispute window
+
+服务等级期限 / 索赔期限 / 发票争议窗口
+
+都可能依赖 SourceTransaction 的日期。
+
+错误日期以后会直接污染 Deadline Engine。
+
+截止日期引擎
+
+另外一个问题
+
+当前 fallback：
+
+new Date(trimmed)
+
+会接受很多运行环境相关的模糊格式。
+
+例如：
+
+09/01/2026
+
+这违背：
+
+不猜业务日期
+
+的原则。
+
+要求
+
+日期解析收紧为确定性格式。
+
+至少接受：
+
+YYYY-MM-DD
+YYYY/MM/DD
+
+并验证：
+
+year/month/day round-trip
+年月日往返校验
+
+即构造 Date 后必须确认年月日没有发生滚动。
+
+时间戳只接受明确 ISO 8601。
+
+ISO 8601 标准时间格式
+
+建议要求带：
+
+Z
+
+或明确：
+
++08:00 / -05:00
+
+的 timezone offset。
+
+时区偏移
+
+不要接受无法判断时区的自由格式日期字符串。
+
+测试
+2026-02-30 → INVALID_DATE
+2026-13-01 → INVALID_DATE
+2026-00-10 → INVALID_DATE
+2026-09-31 → INVALID_DATE
+
+2026-09-28 → PASS
+2026/09/28 → PASS
+2026-09-28T10:00:00Z → PASS
+2026-09-28T10:00:00+08:00 → PASS
+
+CHANGE #32 — Adapter 分页上限目前只是“自报”，没有执行【必须修】
+
+当前 Registry：
+
+注册表
+
+会检查：
+
+maxPageSize = 1..1000
+
+但是：
+
+runAdapterImport()
+
+没有真正强制：
+
+input.pageSize <= caps.maxPageSize
+
+也没有检查平台实际返回：
+
+page.records.length <= maxPageSize
+
+所以一个有 bug 的 Adapter 可以声明：
+
+maxPageSize = 100
+
+实际一次返回：
+
+500000 records
+
+当前：
+
+records.push(...page.records)
+
+会全部吃进内存。
+
+因此 maxRecords=50000 所谓软上限，实际上无法保护这类错误响应。
+
+要求
+
+进入 pull loop 前：
+
+拉取循环前
+
+校验：
+
+maxPages
+→ positive integer
+
+maxRecords
+→ positive integer
+
+pageSize
+→ positive integer
+→ <= caps.maxPageSize
+
+每页返回后再校验：
+
+page.records.length <= effectivePageSize
+
+或者至少：
+
+<= caps.maxPageSize
+
+超出：
+
+AdapterResponseError
+
+不要直接接受。
+
+这样之后：
+
+“maxRecords 是软上限，允许多出完整一页”
+
+这个设计我接受。
+
+因为最大超出量会被严格限制在一个合法页面内。
+
+AUDIT — 本轮不作为 Checkpoint 2 阻塞项，但事件合同现在定下来
+
+你申报：
+
+Import / Adapter 目前没有写 AuditLog
+
+这一点我不要求现在为了补 Audit 而破坏导入事务设计。
+
+原因是：
+
+SourceTransaction 已写成功
+→ AuditLog 又失败
+
+如果现在简单在最后追加：
+
+audit.record()
+
+反而会制造新的半完成状态。
+
+因此：
+
+Checkpoint 2 本轮不强制立即接 AuditLog。
+
+但事件合同正式定为：
+
+import.completed
+
+导入完成
+
+用于：
+
+IMPORTED
+PARTIAL
+
+建议：
+
+entityType = ImportBatch
+entityId = batchId
+
+changes:
+source
+domain
+channel
+connectionId
+fileAssetId
+rowsTotal
+rowsOk
+rowsFailed
+duplicates
+status
+
+禁止放：
+
+raw rows
+credentials
+token
+storageKey
+import.failed
+
+导入失败
+
+用于已有 ImportBatch 且最终 FAILED。
+
+字段：
+
+entityType = ImportBatch
+entityId = batchId
+
+changes:
+source
+stage
+safeErrorCode
+rowsTotal
+rowsOk
+rowsFailed
+
+错误内容必须是安全摘要，不直接把第三方原始响应塞入 Audit。
+
+adapter.pull_failed
+
+适配器拉取失败
+
+如果：
+
+第一条记录都还没有拉到
+→ 根本没有 ImportBatch
+
+则这个事件应该属于后面的：
+
+SourceConnection sync orchestration
+
+来源连接同步编排层
+
+而不是硬塞进 Import foundation。
+
+导入基础层
+
+在第一个真实 Adapter 或用户导入 API 接上线以前，把这三个事件接上。
+
+本 Checkpoint 暂不阻塞。
+
+KEEP
+
+以下不要重写：
+
+CSV parser
+CSV 解析器
+
+总体方向保留。
+
+Mapping snapshot
+映射快照
+
+保留。
+
+runImport() / runImportRows()
+两个入口共用核心
+
+保留。
+
+SourceTransaction.dedupeKey
+原始交易幂等键
+
+本轮不要重新设计。
+
+平台 source 不参与幂等指纹。
+
+平台字段只进入 _source，不进入核心列。
+
+maxRecords 继续允许整页保留，但必须先完成 #32。
+
+Partial import
+部分导入
+
+保留。
+
+第一页即失败不创建空批次。
+
+中途拉取失败时已拉数据允许幂等落库。
+
+关于真实平台 Adapter
+
+真实平台适配器
+
+本轮仍然：
+
+不要实现 Amazon / UPS / FedEx / DHL 的真实授权。
+
+因为会涉及：
+
+第三方账号
+
+API key
+
+OAuth
+
+真实客户数据
+
+第三方账号 / API 密钥 / 授权 / 真实客户数据
+
+这些仍属于 HOST APPROVAL REQUIRED。
+
+宿主批准后再接。
+
+Checkpoint 2 当前只需要把基础接口做到正确。
+
+REQUIRED TESTS
+
+修完至少新增：
+
+1. Phase 1 调用提交闸门
+   → submitClaim 从未被执行
+   → submitCalls = 0
+
+2. adapter 带 submitClaim 实现
+   → Phase 1 registry / gate 拒绝
+
+3. insertTransactions 抛错
+   → ImportBatch 尽最大努力进入 FAILED
+
+4. rawProjection 抛错
+   → ImportBatch 进入 FAILED
+
+5. source 含 credential/token
+   → 不得持久化
+
+6. source 非 JSON-safe
+   → 明确拒绝
+
+7. source 超过大小上限
+   → 明确拒绝
+
+8. 2026-02-30
+   → INVALID_DATE
+
+9. 模糊非 ISO 时间
+   → INVALID_DATE
+
+10. pageSize > adapter maxPageSize
+    → FAIL
+
+11. adapter 返回超大 page
+    → FAIL before accumulation
+
+12. maxPages/maxRecords 非法
+    → FAIL
+
+13. 原有 238 项无回归
+
+14. fresh PostgreSQL
+    → PASS
+
+15. CI
+    → GREEN
+NEXT
+
+只修：
+
+CHANGE #28
+CHANGE #29
+CHANGE #30
+CHANGE #31
+CHANGE #32
+
+不要开始真实平台授权。
+
+不要开始 Rule Engine。
+
+规则引擎
+
+不要开始 RecoveryOpportunity detection。
+
+追回机会识别
+
+修完回：
+
+[CODEX → CHATGPT]
+
+TYPE: RE-REVIEW
+PREVIOUS: C-0003
+CHECKPOINT: 2
+ROUND: 2
+
+CHANGE #28:
+...
+
+CHANGE #29:
+...
+
+CHANGE #30:
+...
+
+CHANGE #31:
+...
+
+CHANGE #32:
+...
+
+AUDIT CONTRACT:
+ACK
+
+CI:
+...
+
+TESTS:
+...
+
+NEED:
+PASS / REVISE
+
+下一轮只检查上述 5 项。
+
+FINAL:
+
+Import foundation：
+
+导入基础设施
+
+REVISE
+
+Adapter interface：
+
+外部适配器接口
+
+REVISE
+
+主要架构方向：
+
+APPROVED
+
+已经认可
+
+当前硬阻塞：
+
+第三方写入闸门现在是“写完才报警”。
+
+异常可能让 ImportBatch 永久卡在 PARSING。
+
+AdapterRecord.source 缺少凭据/JSON/大小边界。
+
+非法日期可能被 JavaScript 静默修正成另一天。
+
+Adapter 的分页容量声明目前没有真正执行。
+
+修完这 5 点，Checkpoint 2 可以进入最终收口。
+```
