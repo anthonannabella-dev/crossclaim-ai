@@ -294,6 +294,9 @@ model Organization {
   fileAssets        FileAsset[]
   importBatches     ImportBatch[]
   transactions      SourceTransaction[]
+  canonicalFacts    CanonicalFact[]
+  canonicalFactSources CanonicalFactSource[]
+  ruleEvaluationShadows RuleEvaluationShadow[]
   opportunities     RecoveryOpportunity[]
   graphNodes        RecoveryGraphNode[]
   graphEdges        RecoveryGraphEdge[]
@@ -459,6 +462,8 @@ model SourceTransaction {
   connection   SourceConnection? @relation(fields: [connectionId], references: [id])
   importBatch  ImportBatch?      @relation(fields: [importBatchId], references: [id])
   evaluations  RuleEvaluation[]
+  canonicalFactSources CanonicalFactSource[]
+  shadowEvaluations    RuleEvaluationShadow[]
 
   @@unique([organizationId, dedupeKey])
   @@unique([organizationId, id])
@@ -469,6 +474,93 @@ model SourceTransaction {
 // ============================================================
 // 三、核心业务实体
 // ============================================================
+
+/// 业务事实层（C-0006-A）：同一事实可以来自 FILE_UPLOAD 或 API，
+/// 由 SourceTransaction 派生，Detection 未来只依赖这一层。
+/// ACTIVE 可进入检测；CONFLICT 只进审计与对账复核，绝不进入 Detection / Opportunity。
+model CanonicalFact {
+  id                   String              @id @default(uuid())
+  organizationId       String
+  domain               RecoveryDomain
+  channel              Channel
+  /// REFERENCETYPE:EXTERNALID（统一大写），与 reconciliation 的事实键一致
+  factKey              String
+  referenceType        String?
+  externalId           String?
+  occurredAt           DateTime?
+  amount               Decimal?            @db.Decimal(18, 4)
+  currency             String              @default("USD")
+  status               CanonicalFactStatus @default(ACTIVE)
+  sourceCount          Int                 @default(0)
+  confirmedAcrossModes Boolean             @default(false)
+  firstSeenAt          DateTime            @default(now())
+  lastUpdatedAt        DateTime            @updatedAt
+
+  organization Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  sources      CanonicalFactSource[]
+  evaluations  RuleEvaluation[]
+  shadowEvaluations RuleEvaluationShadow[]
+
+  @@unique([organizationId, factKey])
+  @@unique([organizationId, id])
+  @@index([organizationId, domain, channel, occurredAt])
+  @@index([organizationId, status])
+}
+
+/// 事实 ↔ 原始行（溯源不被销毁）：原始数据永远保留在 SourceTransaction。
+model CanonicalFactSource {
+  id                  String                @id @default(uuid())
+  organizationId      String
+  canonicalFactId     String
+  sourceTransactionId String
+  /// 观测时的来源类型快照（连接被删除后仍可解释来源）
+  connectionKind      SourceConnectionKind?
+  /// 该来源什么时候观察到该事实（不使用 SourceTransaction.createdAt）
+  observedAt          DateTime
+  createdAt           DateTime              @default(now())
+
+  organization      Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  canonicalFact     CanonicalFact     @relation(fields: [canonicalFactId], references: [id], onDelete: Cascade)
+  sourceTransaction SourceTransaction @relation(fields: [sourceTransactionId], references: [id], onDelete: Cascade)
+
+  @@unique([canonicalFactId, sourceTransactionId])
+  @@index([organizationId, sourceTransactionId])
+}
+
+enum CanonicalFactStatus {
+  ACTIVE
+  CONFLICT
+}
+
+/// C-0006-B1 影子评估（只写结论，绝不进入 Opportunity / 资金链）
+model RuleEvaluationShadow {
+  id                          String               @id @default(uuid())
+  organizationId              String
+  /// 一次影子运行的标识，例如 shadow-run-20260928-001
+  runId                       String
+  /// 执行器版本（与业务规则版本 RuleVersion 区分）
+  engineVersion               String
+  ruleVersionId               String
+  canonicalFactId             String
+  /// 代表原始行，仅用于溯源；真正的身份键留到 B2
+  representativeTransactionId String?
+  result                      RuleEvaluationResult
+  computed                    Json
+  message                     String?
+  evaluatedAt                 DateTime             @default(now())
+  dedupeKeyShadow             String
+
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  ruleVersion    RuleVersion        @relation(fields: [ruleVersionId], references: [id], onDelete: Cascade)
+  canonicalFact  CanonicalFact      @relation(fields: [canonicalFactId], references: [id], onDelete: Cascade)
+  representative SourceTransaction? @relation(fields: [representativeTransactionId], references: [id])
+
+  @@unique([dedupeKeyShadow])
+  @@unique([organizationId, id])
+  @@index([organizationId, runId])
+  @@index([organizationId, ruleVersionId, evaluatedAt])
+  @@index([organizationId, canonicalFactId])
+}
 
 model RecoveryOpportunity {
   id                String            @id @default(uuid())
@@ -802,6 +894,7 @@ model RuleVersion {
   organization Organization?    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   ruleSet      RuleSet          @relation(fields: [ruleSetId], references: [id], onDelete: Cascade)
   evaluations  RuleEvaluation[]
+  shadowEvaluations RuleEvaluationShadow[]
   routes       RecoveryRoute[]
 
   @@unique([ruleSetId, version, tier])
@@ -815,22 +908,32 @@ model RuleEvaluation {
   organizationId      String
   ruleVersionId       String
   sourceTransactionId String?
+  canonicalFactId     String?
   opportunityId       String?
   result              RuleEvaluationResult
   computed            Json
   message             String?
   evaluatedAt         DateTime             @default(now())
   dedupeKey           String?
+  /// C-0006-B2 业务事实身份键 = sha256(organizationId | ruleVersionId | canonicalFactId)；未映射历史行为 NULL
+  canonicalDedupeKey  String?
 
   organization      Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   ruleVersion       RuleVersion          @relation(fields: [ruleVersionId], references: [id], onDelete: Cascade)
   sourceTransaction SourceTransaction?   @relation(fields: [sourceTransactionId], references: [id])
   opportunity       RecoveryOpportunity? @relation(fields: [opportunityId], references: [id])
+  canonicalFact     CanonicalFact?       @relation(fields: [canonicalFactId], references: [id])
 
   @@unique([dedupeKey])
   @@unique([organizationId, id])
+  /// 业务事实身份（长期唯一表达）；canonicalFactId 为 NULL 表示"无法建立业务事实身份"
+  @@unique([organizationId, ruleVersionId, canonicalFactId])
+  /// 二级完整性约束（hash 单列唯一，便于快速查询，不是核心身份）
+  @@unique([canonicalDedupeKey])
   @@index([organizationId, ruleVersionId, evaluatedAt])
   @@index([organizationId, opportunityId])
+  @@index([organizationId, canonicalFactId])
+  @@index([organizationId, canonicalDedupeKey])
 }
 
 // ============================================================

@@ -84,6 +84,8 @@ export interface DetectionPersistenceResult {
   result: 'PASS' | 'OPPORTUNITY';
   computed: unknown;
   opportunityId: string | null;
+  /** C-0006-B2：本次是否写入了业务事实身份（MISSING = 只能靠旧键识别，需要告警而非静默回退）。 */
+  canonicalIdentity?: 'MAPPED' | 'MISSING';
 }
 
 /** 检测端口：实现可以是 Prisma，也可以是测试内存实现 */
@@ -126,6 +128,8 @@ export interface DetectionRunResult {
   opportunitiesCreated: number;
   skippedExisting: number;
   unmatchedTracking: number;
+  /** C-0006-B2：新写入但没有业务事实身份（canonicalFactId 为空）的评估数量。 */
+  evaluationsWithoutCanonicalIdentity: number;
   outcomes: DetectionRowOutcome[];
 }
 
@@ -204,6 +208,7 @@ export async function runFreightRateDetection(
     opportunitiesCreated: 0,
     skippedExisting: 0,
     unmatchedTracking: 0,
+    evaluationsWithoutCanonicalIdentity: 0,
     outcomes: [],
   };
 
@@ -318,6 +323,9 @@ export async function runFreightRateDetection(
         : null,
     });
 
+    if (persisted.created && persisted.canonicalIdentity === 'MISSING') {
+      result.evaluationsWithoutCanonicalIdentity += 1;
+    }
     if (persisted.created) {
       result.evaluationsCreated += 1;
       if (persisted.opportunityId) result.opportunitiesCreated += 1;

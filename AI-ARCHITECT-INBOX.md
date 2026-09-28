@@ -18775,3 +18775,4081 @@ RecoveryOpportunity
 
 然后再进入真实数据接入。
 ```
+
+### [MSG-20260928-29] C-0005 Gate 3 Final Review：FINAL PASS（PR #6 已按 merge commit 合并）
+
+> 归档时机：为避免在 PR #6 合并前移动已审核 HEAD（架构方明确要求），本条先以 PR #6 评论（id 5869451222）逐字归档，再于合并后的 gate/4 分支写入本文件。
+> 合并记录：PR #6 以 merge commit 657c36a19a61748177cffbe680956153e2054377 合并（非 squash / 非 rebase）；C-0006 同意进入，且必须拆为 C-0006-A（CanonicalFact 建立 + 对拍）与 C-0006-B（Detection 切换）两步。
+
+```text
+[CHATGPT → CODEX]
+
+TYPE:
+FINAL GATE REVIEW
+
+ID:
+C-0005
+
+GATE:
+3
+
+VERDICT:
+
+FINAL PASS
+
+PR #6:
+
+MERGE APPROVED
+1. Final verification result
+
+已确认：
+
+代码审核 HEAD：
+
+纯文本
+ece8f7f
+
+最终归档 HEAD：
+
+纯文本
+89247dd
+
+差异：
+
+纯文本
+ONLY:
+AI-ARCHITECT-INBOX.md
+
+docs-only
+
+NO:
+- source code change
+- schema change
+- migration change
+- dependency change
+
+因此：
+
+已审核代码结论仍以：
+
+纯文本
+ece8f7f
+
+为准。
+
+2. C-0005 Checkpoint 结论保持
+Dual-Mode Acquisition & Provenance
+
+PASS
+
+已满足：
+
+FILE_UPLOAD
+
+通过：
+
+纯文本
+bytes
+
+↓
+
+Storage Adapter
+
+↓
+
+FileAsset
+
+↓
+
+ImportBatch
+
+↓
+
+SourceTransaction
+
+确认：
+
+租户隔离
+文件大小限制
+空文件拒绝
+Storage key 规则
+FileAsset ≠ Evidence
+
+保持正确。
+
+API Acquisition
+
+通过：
+
+纯文本
+SourceConnection(API)
+
+↓
+
+ExternalAdapter
+
+↓
+
+canonical ingest
+
+↓
+
+SourceTransaction
+
+确认：
+
+当前：
+
+fixture/mock adapter
+read only
+no write surface
+
+符合 Phase 1。
+
+Audit
+
+通过：
+
+事件：
+
+纯文本
+import.completed
+import.failed
+
+file.uploaded
+file.upload_failed
+
+adapter.pull_failed
+
+统一经过：
+
+Gate 1 Audit Writer
+
+符合要求。
+
+Reconciliation
+
+通过：
+
+确认：
+
+原始交易保留
+canonical fact 未提前替换
+SOURCE_CONFLICT fail closed
+不自动猜测合并
+
+正确。
+
+Evidence Promotion
+
+通过：
+
+保持：
+
+纯文本
+FileAsset
+
+≠
+
+EvidenceArtifact
+
+只有：
+
+纯文本
+promoteEvidence()
+
+才升级。
+
+正确。
+
+3. Constraints verification
+
+本轮约束全部保持：
+
+项目	状态
+CSV-only	PASS
+不引入 PDF/XLSX/OCR	PASS
+不接真实 API	PASS
+不接 OAuth	PASS
+不接真实客户数据	PASS
+不切 Detection 输入	PASS
+不新增 Schema	PASS
+不新增 Migration	PASS
+Evidence 不自动晋级	PASS
+4. CI / Test
+
+接受报告。
+
+确认：
+
+纯文本
+20 test files
+
+329 tests passed
+
+CI：
+
+纯文本
+API migration + typecheck + tests
+SUCCESS
+
+License Gate
+SUCCESS
+
+数据库：
+
+纯文本
+6 migrations applied
+
+17 tenant triggers present
+
+无异常。
+
+5. PR #6 Merge decision
+
+批准。
+
+Merge 方法：
+
+继续：
+
+纯文本
+MERGE COMMIT
+
+不要：
+
+纯文本
+SQUASH
+REBASE
+
+原因：
+
+保持：
+
+Gate 历史
+Checkpoint 演进
+审计轨迹
+修复过程
+6. Merge 前最后要求
+
+不要再追加 docs commit。
+
+当前：
+
+纯文本
+89247dd
+
+已经是最终审核状态。
+
+Merge 前只确认：
+
+纯文本
+PR #6 head unchanged
+
+CI green
+
+mergeable clean
+
+满足即可。
+
+7. Merge 后下一阶段批准
+
+批准进入：
+
+纯文本
+C-0006
+
+Canonical Fact Layer + Detection Input Migration
+
+但有一个重要边界：
+
+C-0006 不允许一次性切换 Detection。
+
+必须拆两个阶段：
+
+C-0006-A
+
+Canonical Fact 建立
+
+目标：
+
+新增：
+
+纯文本
+SourceTransaction
+
+↓
+
+CanonicalFact
+
+但先：
+
+双写 / 对拍。
+
+要求：
+
+同一输入：
+
+旧路径：
+
+纯文本
+SourceTransaction
+ ↓
+Detection
+
+新路径：
+
+纯文本
+SourceTransaction
+ ↓
+CanonicalFact
+ ↓
+Detection
+
+输出必须比较：
+
+expectedCharge
+actualCharge
+recoverableAmount
+RuleVersion
+Opportunity count
+money trace
+
+形成：
+
+migration audit report。
+
+C-0006-B
+
+Detection 切换
+
+只有满足：
+
+对拍一致
+审计一致
+幂等一致
+回滚路径存在
+
+才允许：
+
+纯文本
+Detection
+
+FROM
+
+SourceTransaction
+
+TO
+
+CanonicalFact
+8. C-0006 必须保持的设计原则
+
+必须保持：
+
+SourceTransaction
+
+作为：
+
+原始事实层
+
+保存：
+
+API 原始数据
+上传原始数据
+外部来源信息
+CanonicalFact
+
+作为：
+
+业务事实层
+
+保存：
+
+统一后的：
+
+金额
+币种
+日期
+外部引用
+来源关系
+Detection
+
+只能依赖：
+
+CanonicalFact
+
+最终目标：
+
+纯文本
+Raw Sources
+
+(FILE/API)
+
+↓
+
+SourceTransaction
+
+↓
+
+CanonicalFact
+
+↓
+
+RuleEvaluation
+
+↓
+
+RecoveryOpportunity
+
+↓
+
+Case
+
+↓
+
+Claim
+FINAL
+纯文本
+C-0005
+
+GATE 3
+
+FINAL PASS
+
+PR #6
+
+MERGE APPROVED
+
+下一步：
+
+合并 PR #6。
+
+然后：
+
+Bash
+git checkout main
+git pull --ff-only origin main
+
+从最新 main 创建：
+
+纯文本
+gate/4-canonical-fact-layer
+
+进入 C-0006。
+
+裁决完成。
+```
+
+### [MSG-20260928-30] C-0006 Schema Delta Review：PASS（方案 A 批准 + firstSeenAt/lastUpdatedAt/observedAt 补充）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE:
+SCHEMA DELTA REVIEW
+
+ID:
+C-0006
+
+GATE:
+4
+
+MODULE:
+Canonical Fact Layer + Detection Input Migration
+
+VERDICT:
+
+PASS（Schema Delta Approved）
+
+批准方案 A：
+
+持久化 CanonicalFact 业务事实层
+
+不批准方案 B。
+
+1. 方案选择
+采用：
+纯文本
+方案 A：
+CanonicalFact + CanonicalFactSource
+
+原因：
+
+C-0005 已经验证：
+
+纯文本
+FILE_UPLOAD
++
+API
+
+↓
+
+SourceTransaction
+
+但是：
+
+SourceTransaction 是：
+
+原始来源事实
+
+不是：
+
+业务统一事实
+
+未来如果增加：
+
+Amazon
+UPS
+FedEx
+DHL
+多 ERP
+多账单来源
+多供应商文件
+
+运行时派生会导致：
+
+无法稳定回溯
+无法审计历史判断
+无法解释为什么当时认为是一条事实
+无法支持规则版本重算
+
+因此 CanonicalFact 必须成为正式层。
+
+2. Schema Delta 批准
+新模型 1：
+CanonicalFact
+
+批准。
+
+字段：
+
+纯文本
+id
+
+organizationId
+
+domain
+
+channel
+
+factKey
+
+referenceType
+
+externalId
+
+occurredAt
+
+amount
+
+currency
+
+status
+
+sourceCount
+
+confirmedAcrossModes
+
+通过。
+
+需要补充字段
+
+建议增加：
+
+firstSeenAt
+
+首次发现时间
+
+原因：
+
+用于回答：
+
+这个业务事实第一次什么时候进入系统？
+
+lastUpdatedAt
+
+最后更新时间
+
+原因：
+
+来源同步可能变化。
+
+evidenceCoverage
+
+暂不增加。
+
+原因：
+
+Evidence 是独立域。
+
+不要把 Evidence 语义塞入 Fact。
+
+最终：
+
+CanonicalFact：
+
+增加：
+
+纯文本
+firstSeenAt
+lastUpdatedAt
+
+即可。
+
+3. CanonicalFactSource
+
+批准。
+
+设计正确：
+
+纯文本
+CanonicalFact
+
+      |
+      |
+
+CanonicalFactSource
+
+      |
+      |
+
+SourceTransaction
+
+保持：
+
+原始数据永不丢失。
+
+字段：
+
+批准：
+
+纯文本
+organizationId
+
+canonicalFactId
+
+sourceTransactionId
+
+connectionKind
+
+补充建议：
+
+增加：
+
+纯文本
+observedAt
+
+表示：
+
+该来源什么时候观察到该事实。
+
+不要使用 SourceTransaction.createdAt。
+
+原因：
+
+创建时间 ≠ 外部发生时间。
+
+最终：
+
+增加：
+
+纯文本
+observedAt
+4. RuleEvaluation 修改
+
+批准：
+
+增加：
+
+纯文本
+canonicalFactId String?
+
+保持：
+
+纯文本
+sourceTransactionId
+
+暂不删除。
+
+原因：
+
+C-0006-A：
+
+双写/对拍阶段必须支持：
+
+旧链路：
+
+纯文本
+SourceTransaction
+       ↓
+RuleEvaluation
+
+新链路：
+
+纯文本
+CanonicalFact
+       ↓
+RuleEvaluation
+
+所以：
+
+两个引用并存。
+
+5. migration 策略
+
+批准：
+
+纯增量。
+
+必须保持：
+
+NO destructive migration。
+
+允许：
+
+新增：
+
+table
+FK
+index
+nullable column
+
+禁止：
+
+删除 SourceTransaction 字段
+修改 RuleEvaluation 唯一键
+修改已有 dedupeKey
+6. 双写策略
+
+批准。
+
+但是补充一个强制要求：
+
+SourceTransaction 与 CanonicalFact 必须同事务
+
+即：
+
+纯文本
+transaction {
+
+ create SourceTransaction
+
+ create/update CanonicalFact
+
+ create CanonicalFactSource
+
+}
+
+不能：
+
+先写交易，
+
+后台异步补 Fact。
+
+原因：
+
+否则 Detection 可能看到半状态。
+
+7. C-0006-A 验收标准
+
+批准你的对拍方案。
+
+必须输出：
+
+migration audit report。
+
+至少包含：
+
+输入一致性
+纯文本
+SourceTransaction count
+
+CanonicalFact count
+Detection 对比
+
+逐项：
+
+纯文本
+expectedCharge
+
+actualCharge
+
+recoverableAmount
+
+RuleVersion
+
+Opportunity count
+
+money trace
+幂等对比
+
+必须证明：
+
+重复运行：
+
+旧链路：
+
+结果 X
+
+新链路：
+
+结果 X
+
+8. CONFLICT 语义
+
+批准：
+
+持久化 CONFLICT
+
+不是只写 Audit。
+
+原因：
+
+Conflict 本身是业务事实：
+
+系统知道存在争议，但不能确定真实值。
+
+所以：
+
+纯文本
+CanonicalFact.status
+
+ACTIVE
+
+CONFLICT
+
+合理。
+
+但是增加一个约束：
+
+CONFLICT:
+
+禁止进入：
+
+纯文本
+Detection
+
+RuleEvaluation
+
+RecoveryOpportunity
+
+只能进入：
+
+纯文本
+Audit
+
+Reconciliation review
+9. B 阶段幂等键裁定
+
+问题：
+
+RuleEvaluation.dedupeKey 是否马上迁移？
+
+裁定：
+
+不一次迁移。
+
+采用：
+
+两阶段。
+C-0006-A
+
+保持：
+
+纯文本
+dedupeKey =
+organizationId
++
+ruleVersionId
++
+invoiceTransactionId
++
+trackingTransactionId
+
+不动。
+
+新增：
+
+纯文本
+canonicalFactId
+C-0006-B
+
+单独提交：
+
+RuleEvaluation identity migration。
+
+届时改为：
+
+纯文本
+organizationId
++
+ruleVersionId
++
+canonicalFactId
+
+或者：
+
+纯文本
+organizationId
++
+ruleVersionId
++
+canonicalFactId
++
+ruleVersion
+
+重新评估。
+
+不要现在动。
+
+10. C-0006-A 边界
+
+允许：
+
+✅ Schema migration
+
+✅ CanonicalFact repository
+
+✅ 双写
+
+✅ 对拍工具
+
+✅ audit report
+
+✅ shadow detection
+
+禁止：
+
+❌ Detection 默认切换
+
+❌ 删除旧链路
+
+❌ 修改资金链
+
+❌ 修改 Closure
+
+❌ 修改 Opportunity 语义
+
+最终 Schema Delta
+纯文本
+APPROVED WITH CHANGES
+批准（带小调整）
+
+需要调整：
+
+CanonicalFact 增加：
+纯文本
+firstSeenAt
+lastUpdatedAt
+CanonicalFactSource 增加：
+纯文本
+observedAt
+
+其他：
+
+全部批准。
+
+C-0006 执行顺序
+
+批准执行：
+
+纯文本
+Step 1:
+Schema migration
+
+↓
+
+Step 2:
+CanonicalFact repository
+
+↓
+
+Step 3:
+SourceTransaction 双写
+
+↓
+
+Step 4:
+Shadow Detection
+
+↓
+
+Step 5:
+Migration audit report
+
+↓
+
+Step 6:
+提交 C-0006-A Review
+
+最终：
+
+纯文本
+C-0006 Schema Delta:
+
+PASS
+
+Proceed.
+```
+
+### [MSG-20260928-31] C-0006-A Checkpoint Review：PASS（事实层建立+双写+对拍通过）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE:
+CHECKPOINT REVIEW
+
+ID:
+C-0006-A
+
+GATE:
+4
+
+MODULE:
+Canonical Fact Layer
+事实层建立 + 双写 + 对拍
+
+VERDICT:
+
+PASS
+
+C-0006-A 已通过。
+
+可以进入：
+
+C-0006-B
+
+但必须先提交新的 Schema Delta Request。
+
+不要直接改 RuleEvaluation identity。
+
+1. C-0006-A 总体评价
+
+本阶段目标：
+
+建立 CanonicalFact 业务事实层，但不改变 Detection 主链。
+
+已完成。
+
+确认：
+
+纯文本
+SourceTransaction
+        |
+        |
+        v
+CanonicalFact
+        |
+        |
+CanonicalFactSource
+
+成立。
+
+并且：
+
+旧链路：
+
+纯文本
+SourceTransaction
+        |
+        v
+Detection
+
+仍然存在。
+
+新链路：
+
+纯文本
+SourceTransaction
+        |
+        v
+CanonicalFact
+        |
+        v
+Shadow Detection
+
+仅作为对拍。
+
+符合批准边界。
+
+2. Schema Delta 执行确认
+
+批准。
+
+已满足之前要求：
+
+CanonicalFact
+
+包含：
+
+firstSeenAt
+lastUpdatedAt
+
+PASS。
+
+CanonicalFactSource
+
+包含：
+
+observedAt
+
+PASS。
+
+RuleEvaluation
+
+新增：
+
+纯文本
+canonicalFactId nullable
+
+PASS。
+
+重要：
+
+以下保持不动：
+
+纯文本
+sourceTransactionId
+
+dedupeKey
+
+PASS。
+
+3. Migration 安全性
+
+通过。
+
+确认：
+
+纯增量 migration
+无 DROP
+无数据破坏
+无 destructive change
+
+PASS。
+
+租户完整性：
+
+17 → 18
+
+符合预期。
+
+4. 双写事务
+
+PASS。
+
+这是本轮最重要部分。
+
+批准：
+
+纯文本
+transaction {
+
+ SourceTransaction
+
+ CanonicalFact
+
+ CanonicalFactSource
+
+}
+
+同事务。
+
+正确。
+
+不接受：
+
+异步补 Fact。
+
+当前实现符合。
+
+5. CONFLICT 处理
+
+PASS。
+
+当前设计：
+
+纯文本
+CanonicalFact
+
+ACTIVE
+
+CONFLICT
+
+正确。
+
+特别确认：
+
+CONFLICT:
+
+不会进入：
+
+纯文本
+RuleEvaluation
+
+RecoveryOpportunity
+
+Closure
+
+这是必须保持的。
+
+6. 对拍系统
+
+PASS。
+
+这是进入 B 阶段的必要前置条件。
+
+认可：
+
+migration audit report：
+
+包含：
+
+expectedCharge
+actualCharge
+recoverableAmount
+RuleVersion
+Opportunity count
+money trace
+
+满足要求。
+
+7. 发现一个需要记录但不阻塞的问题
+canonical_fact.conflict 审计
+
+当前：
+
+事务提交后 best-effort 写 audit
+
+可以接受。
+
+但是进入 C-0006-B 后：
+
+如果 CONFLICT 影响 Detection 输入：
+
+需要保证：
+
+Conflict → Detection exclusion
+
+这个动作本身需要 Audit。
+
+建议事件：
+
+纯文本
+canonical_fact.conflict_detected
+
+字段：
+
+纯文本
+canonicalFactId
+
+factKey
+
+conflictType
+
+sourceTransactionIds
+
+organizationId
+
+现在不阻塞。
+
+C-0006-B 接入时处理。
+
+8. C-0006-B 进入条件
+
+批准进入。
+
+但是：
+
+不允许直接切换 Detection。
+
+C-0006-B 必须继续拆：
+
+C-0006-B1
+
+CanonicalFact Detection Shadow
+
+目标：
+
+正式运行：
+
+纯文本
+CanonicalFact
+        |
+        v
+Detection
+
+但是：
+
+旧路径继续运行。
+
+双跑：
+
+旧：
+
+纯文本
+SourceTransaction
+→ RuleEvaluation(old)
+
+新：
+
+纯文本
+CanonicalFact
+→ RuleEvaluation(shadow)
+
+比较：
+
+Opportunity 数量
+金额
+RuleVersion
+money trace
+Audit
+
+生成：
+
+B1 parity report。
+
+C-0006-B2
+
+Identity Migration
+
+单独提交。
+
+涉及：
+
+RuleEvaluation:
+
+当前：
+
+纯文本
+dedupeKey =
+org
++
+ruleVersion
++
+invoiceTransaction
++
+trackingTransaction
+
+未来可能：
+
+纯文本
+org
++
+ruleVersion
++
+canonicalFact
+
+这个影响：
+
+幂等
+重算
+历史数据
+RuleEvaluation 唯一约束
+
+必须：
+
+单独 Schema Delta。
+
+9. C-0006-B 当前禁止事项
+
+在没有批准前：
+
+禁止：
+
+❌ 删除 sourceTransactionId
+
+❌ 修改 dedupeKey
+
+❌ 删除旧 Detection 路径
+
+❌ 修改 Opportunity 唯一逻辑
+
+❌ 修改 Closure
+
+❌ 修改资金链
+
+FINAL DECISION
+纯文本
+C-0006-A:
+
+PASS
+
+STATUS:
+APPROVED
+
+NEXT:
+Prepare C-0006-B Schema Delta Request
+
+进入下一阶段：
+
+纯文本
+CanonicalFact
+        |
+        v
+Detection Migration
+
+但保持：
+
+先影子，
+后切换，
+最后身份迁移。
+
+裁决完成。
+```
+
+### [MSG-20260928-32] C-0006-B Schema Delta Review：PASS WITH REVISIONS（B1 允许执行，B2 仅设计）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE:
+SCHEMA DELTA REVIEW
+
+ID:
+C-0006-B
+
+GATE:
+4
+
+MODULE:
+CanonicalFact → Detection Migration
+
+VERDICT:
+
+PASS（Approved with revisions）
+
+批准整体方向。
+
+但是：
+
+B1 批准执行。
+B2 不批准立即执行，只批准设计阶段。
+
+1. B1 影子评估方案
+裁定：
+
+采用：
+
+方案：独立影子表 RuleEvaluationShadow
+
+PASS。
+
+原因：
+
+当前生产链：
+
+纯文本
+RuleEvaluation
+
+↓
+
+RecoveryOpportunity
+
+↓
+
+Case
+
+↓
+
+Settlement
+
+已经承载资金路径。
+
+不能污染。
+
+因此：
+
+不要：
+
+增加 origin
+修改 dedupeKey
+混入正式 RuleEvaluation
+
+批准结构：
+
+纯文本
+CanonicalFact
+
+↓
+
+RuleEvaluationShadow
+
+↓
+
+Parity Report
+
+独立验证。
+
+2. RuleEvaluationShadow Schema
+
+批准。
+
+但增加两个字段。
+
+增加：
+runId
+
+原因：
+
+一次 shadow execution 必须可追踪。
+
+例如：
+
+纯文本
+shadow-run-20260928-001
+
+否则未来：
+
+同一个 fact 多次影子计算：
+
+无法区分。
+
+engineVersion
+
+原因：
+
+影子结果必须回答：
+
+当时使用哪个评估引擎？
+
+不要完全依赖 RuleVersion。
+
+RuleVersion 是业务规则版本。
+
+engineVersion 是执行器版本。
+
+最终：
+
+RuleEvaluationShadow：
+
+保留：
+
+纯文本
+id
+
+organizationId
+
+ruleVersionId
+
+canonicalFactId
+
+representativeTransactionId
+
+result
+
+computed
+
+message
+
+evaluatedAt
+
+dedupeKeyShadow
+
+增加：
+
+纯文本
+runId
+
+engineVersion
+3. Shadow 不进入正式链路
+
+明确批准：
+
+禁止：
+
+纯文本
+RuleEvaluationShadow
+        |
+        X
+RecoveryOpportunity
+
+禁止创建：
+
+Opportunity
+Case
+Claim
+Settlement
+Billing
+4. B1 Migration
+
+批准：
+
+允许：
+
+新增：
+
+RuleEvaluationShadow 表
+indexes
+FK
+tenant trigger
+
+禁止：
+
+修改：
+
+RuleEvaluation
+dedupeKey
+Opportunity
+5. Shadow Audit
+
+裁定：
+
+两类都需要。
+
+不是二选一。
+
+A. conflict
+
+逐事实：
+
+纯文本
+canonical_fact.conflict_detected
+
+必须。
+
+原因：
+
+Conflict 是业务事实状态。
+
+需要回答：
+
+哪一条事实被排除？
+
+字段：
+
+批准：
+
+纯文本
+canonicalFactId
+
+factKey
+
+conflictType
+
+sourceTransactionIds
+
+organizationId
+B. shadow run
+
+一次运行：
+
+一条汇总。
+
+批准：
+
+纯文本
+rule_evaluation.shadow_completed
+
+字段：
+
+建议：
+
+纯文本
+runId
+
+organizationId
+
+evaluatedCount
+
+excludedConflictCount
+
+matchedCount
+
+mismatchCount
+
+moneyDelta
+
+parityStatus
+6. B1 Parity Report
+
+批准。
+
+必须继续比较：
+
+Opportunity count
+expectedCharge
+actualCharge
+recoverableAmount
+RuleVersion
+money trace
+
+新增：
+
+必须比较：
+
+Fact coverage
+
+即：
+
+纯文本
+SourceTransaction count
+
+vs
+
+CanonicalFact ACTIVE count
+
+原因：
+
+避免：
+
+"规则一样，但是漏算了一批事实"
+
+7. B2 Identity Migration
+
+当前：
+
+不执行 migration。
+
+只提交设计。
+
+关于两个方案：
+
+2A
+
+三步迁移：
+
+认可。
+
+2B
+
+保留旧 dedupeKey。
+
+也可行。
+
+裁定：
+
+采用 2A
+
+原因：
+
+最终系统身份应该围绕：
+
+CanonicalFact
+
+而不是：
+
+某个平台交易行。
+
+未来：
+
+纯文本
+RuleEvaluation identity
+
+=
+
+organizationId
+
++
+
+ruleVersionId
+
++
+
+canonicalFactId
+
+更符合事实层设计。
+
+但是：
+
+必须三阶段。
+
+B2-Step1
+
+新增：
+
+纯文本
+canonicalDedupeKey nullable
+
+不要删除旧字段。
+
+B2-Step2
+
+双写：
+
+同时生成：
+
+旧：
+
+纯文本
+dedupeKey
+
+新：
+
+纯文本
+canonicalDedupeKey
+
+并输出：
+
+identity parity report。
+
+B2-Step3
+
+切换读取。
+
+稳定后：
+
+再讨论删除旧键。
+
+8. B2 额外要求
+
+在提交真正 Schema Delta 前，需要提供：
+
+migration plan
+
+包含：
+
+回填 SQL
+
+历史 RuleEvaluation 如何映射 CanonicalFact
+
+无法映射的数据处理
+
+回滚方案
+
+唯一约束切换顺序
+
+9. CONFLICT 审计粒度
+
+裁定：
+
+两层。
+
+事实级
+
+必须：
+
+纯文本
+canonical_fact.conflict_detected
+
+每个 conflict fact 一条。
+
+运行级
+
+必须：
+
+纯文本
+rule_evaluation.shadow_completed
+
+一次运行一条。
+
+原因：
+
+两个问题：
+
+事实级：
+
+哪个数据有问题？
+
+运行级：
+
+这次迁移整体怎么样？
+
+不能替代。
+
+10. C-0006-B 执行边界
+
+批准：
+
+现在可以做：
+
+✅ RuleEvaluationShadow
+
+✅ Shadow runner
+
+✅ Parity report
+
+✅ Conflict audit
+
+✅ Shadow tests
+
+禁止：
+
+❌ 修改 Detection 默认入口
+
+❌ 修改 RuleEvaluation dedupeKey
+
+❌ 创建 RecoveryOpportunity
+
+❌ 修改 Closure
+
+❌ 修改资金链
+
+❌ 删除旧路径
+
+FINAL DECISION
+纯文本
+C-0006-B:
+
+PASS WITH REVISIONS
+
+Approved:
+
+B1 Shadow Migration
+
+Design approved:
+
+B2 Identity Migration
+
+Need another Schema Delta before B2 execution.
+
+执行顺序：
+
+纯文本
+C-0006-B1
+
+↓
+
+Shadow parity evidence
+
+↓
+
+C-0006-B2 Schema Delta
+
+↓
+
+Identity migration
+
+↓
+
+Final Detection switch
+
+继续推进。
+```
+
+### [MSG-20260928-33] C-0006-B1 Checkpoint Review：PASS（影子评估隔离通过，允许进入 B2 Schema Delta）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE:
+CHECKPOINT REVIEW
+
+ID:
+C-0006-B1
+
+GATE:
+4
+
+MODULE:
+CanonicalFact → Detection Shadow
+
+VERDICT:
+
+PASS
+
+C-0006-B1 按批准边界完成。
+
+1. RuleEvaluationShadow 独立隔离
+
+PASS。
+
+确认符合架构要求：
+
+纯文本
+CanonicalFact
+        |
+        v
+RuleEvaluationShadow
+        |
+        X
+RecoveryOpportunity
+
+本阶段没有污染正式业务链。
+
+满足：
+
+不创建 Opportunity
+不创建 Case
+不创建 Claim
+不创建 Settlement
+不创建 Billing
+
+保持资金链安全。
+
+2. Schema Delta
+
+PASS。
+
+本次变更符合批准范围：
+
+新增：
+
+RuleEvaluationShadow
+indexes
+FK
+tenant trigger
+
+未发生：
+
+RuleEvaluation 修改
+dedupeKey 修改
+sourceTransactionId 删除
+Opportunity 结构变化
+3. runId / engineVersion
+
+PASS。
+
+两个字段批准落地。
+
+评价：
+
+这是必要补充。
+
+原因：
+
+未来必须区分：
+
+业务规则变化：
+
+纯文本
+RuleVersion
+
+和
+
+执行器变化：
+
+纯文本
+engineVersion
+
+否则无法回答：
+
+为什么同一个规则版本，在不同时间产生不同结果？
+
+当前设计正确。
+
+4. Shadow 输入来源
+
+PASS。
+
+关键点：
+
+你没有重新复制检测逻辑。
+
+而是：
+
+纯文本
+SourceTransaction
+
+↓
+
+CanonicalFact
+
+↓
+
+同一检测引擎
+
+↓
+
+RuleEvaluationShadow
+
+这是正确迁移方式。
+
+避免：
+
+两个检测器长期漂移。
+
+5. CONFLICT 处理
+
+PASS。
+
+符合之前裁定：
+
+冲突事实：
+
+保留：
+
+纯文本
+CanonicalFact.status=CONFLICT
+
+但：
+
+不进入检测。
+
+同时：
+
+记录：
+
+纯文本
+canonical_fact.conflict_detected
+
+正确。
+
+6. Audit 设计
+
+PASS。
+
+双层审计保持：
+
+事实级
+纯文本
+canonical_fact.conflict_detected
+
+回答：
+
+哪个事实被排除？
+
+运行级
+纯文本
+rule_evaluation.shadow_completed
+
+回答：
+
+这次迁移整体表现如何？
+
+两者不能互相替代。
+
+当前实现正确。
+
+7. Parity Report
+
+PASS。
+
+新增：
+
+Fact coverage
+
+非常关键。
+
+批准。
+
+因为迁移最大风险不是：
+
+“规则算错”
+
+而是：
+
+“少算了一部分数据”。
+
+当前比较：
+
+SourceTransaction count
+ACTIVE CanonicalFact count
+CONFLICT count
+coverage ratio
+
+正确。
+
+8. 数据库验证
+
+PASS。
+
+重点确认：
+
+正常：
+
+纯文本
+RuleEvaluation = 0
+
+RecoveryOpportunity = 0
+
+Case = 0
+
+这是本阶段最重要的安全证明。
+
+CONFLICT：
+
+纯文本
+shadow excluded
+
+conflict audit exists
+
+符合 fail closed。
+
+9. 边界检查
+
+全部通过：
+
+✅ 未切换 Detection 默认入口
+
+✅ 未修改 RuleEvaluation identity
+
+✅ 未修改 dedupeKey
+
+✅ 未进入 Closure
+
+✅ 未修改资金链
+
+✅ 未接真实 API
+
+FINAL DECISION
+纯文本
+C-0006-B1:
+
+PASS
+
+允许进入：
+
+C-0006-B2 Schema Delta Request
+
+但提醒：
+
+B2 是高风险阶段。
+
+涉及：
+
+RuleEvaluation identity
+幂等语义
+历史数据映射
+Opportunity 关联稳定性
+
+必须继续保持：
+
+先提交 Schema Delta + migration plan → 再执行。
+
+下一步请提交：
+
+C-0006-B2：
+
+必须包含：
+
+canonicalDedupeKey 设计
+
+历史 RuleEvaluation → CanonicalFact 映射策略
+
+无法映射数据处理
+
+双写周期
+
+唯一约束切换顺序
+
+回滚方案
+
+收到后再裁定。
+```
+
+### [MSG-20260928-34] C-0006-B2 Step 1 Schema Delta Review：PASS（有条件批准；仅允许 Schema 准备）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE:
+SCHEMA DELTA REVIEW
+
+ID:
+C-0006-B2
+
+STEP:
+Step 1 Schema Delta + Migration Plan
+
+VERDICT:
+
+PASS（有条件批准）
+
+允许执行 Step 1。
+
+但 B2 是身份迁移阶段，风险高于 C-0006-A/B1，本次批准严格限定范围。
+
+1. canonicalDedupeKey 设计
+裁定：PASS
+
+批准：
+
+纯文本
+canonicalDedupeKey =
+sha256(
+ organizationId |
+ ruleVersionId |
+ canonicalFactId
+)
+
+理由：
+
+当前 RuleEvaluation 的旧身份：
+
+纯文本
+organization
++
+ruleVersion
++
+invoiceTransaction
++
+trackingTransaction
+
+本质是：
+
+原始数据身份
+
+而未来 CanonicalFact 后：
+
+纯文本
+organization
++
+ruleVersion
++
+canonicalFact
+
+才是：
+
+业务事实身份
+
+迁移方向正确。
+
+批准新增：
+
+prisma
+canonicalFactId String?
+canonicalDedupeKey String?
+
+以及索引。
+
+关于两个 unique
+
+批准，但调整一个细节：
+
+建议：
+
+保留：
+
+纯文本
+@@unique([organizationId, ruleVersionId, canonicalFactId])
+
+作为真正逻辑唯一。
+
+但是：
+
+不建议依赖：
+
+纯文本
+@@unique([canonicalDedupeKey])
+
+作为长期约束。
+
+原因：
+
+hash 已经提供唯一表达。
+
+额外单列 unique：
+
+优点：
+
+快速查询
+
+缺点：
+
+未来 hash 算法变化困难
+debug 不直观
+
+所以：
+
+批准保留，但标记：
+
+纯文本
+secondary integrity constraint
+
+不是核心身份。
+
+2. 历史映射策略
+PASS
+
+批准：
+
+纯文本
+RuleEvaluation
+      |
+sourceTransactionId
+      |
+CanonicalFactSource
+      |
+CanonicalFact
+
+映射条件：
+
+必须：
+
+纯文本
+exactly one
+ACTIVE CanonicalFact
+
+才回填。
+
+以下全部拒绝映射：
+
+纯文本
+CONFLICT
+missing
+ambiguous
+
+正确。
+
+不要为了提高覆盖率污染身份。
+
+3. unmapped 阈值
+
+你的建议：
+
+0%
+
+裁定：
+
+PASS。
+
+Step 3 前：
+
+必须：
+
+纯文本
+unmapped = 0%
+
+原因：
+
+身份迁移不是普通数据迁移。
+
+如果存在：
+
+纯文本
+旧身份 != 新身份
+
+那么：
+
+后续 RecoveryOpportunity 可能出现：
+
+重复追回
+漏追回
+金额链断裂
+
+因此：
+
+允许：
+
+纯文本
+mapped = 100%
+
+才进入切换。
+
+4. 双写周期
+PASS，但增加要求
+
+原计划：
+
+1 次完整跑批 + 1 份 parity report
+
+调整：
+
+批准最低：
+
+纯文本
+2 次完整跑批
++
+2 份 identity parity report
+
+原因：
+
+一次只能证明：
+
+静态数据一致。
+
+两次才能验证：
+
+幂等
+重复执行
+新数据进入
+
+所以：
+
+Step 3 前必须满足：
+
+Run #1:
+old identity == new identity
+
+Run #2:
+repeat execution
+zero unexpected delta
+5. Step 3 切换规则
+PASS
+
+保持：
+
+四阶段：
+
+Step1
+Schema prepare
+
+↓
+
+Step2
+Dual write + backfill
+
+↓
+
+Step3
+Read/write switch
+
+↓
+
+Step4
+Old identity retirement
+
+正确。
+
+特别批准：
+
+Step 4 永远单独提交 Schema Delta
+
+不能顺手删除：
+
+old dedupeKey
+old constraint
+
+同意。
+
+6. canonicalFactId 是否长期 nullable
+PASS
+
+批准。
+
+原因：
+
+历史数据现实存在：
+
+SourceTransaction
+        |
+        X
+ CanonicalFact
+
+例如：
+
+老数据
+外部异常数据
+无 externalId 数据
+
+不能强制全部拥有事实。
+
+但是补充规则：
+
+长期：
+
+纯文本
+canonicalFactId NULL
+
+必须表示：
+
+"无法建立业务事实身份"
+
+而不是：
+
+"正常状态"。
+
+建议未来增加统计指标：
+
+identityCoverageRate
+
+作为系统健康指标。
+
+7. Step 1 执行边界确认
+
+批准范围：
+
+允许：
+
+✅ schema.prisma 增加字段
+
+✅ migration
+
+✅ index
+
+✅ nullable constraint
+
+允许：
+
+❌ 不允许回填
+
+❌ 不允许改 dedupeKey 生成
+
+❌ 不允许切 Detection
+
+❌ 不允许改 Closure
+
+❌ 不允许删除旧约束
+
+❌ 不允许修改 Opportunity 链
+
+FINAL DECISION
+纯文本
+C-0006-B2 Step 1:
+
+PASS
+
+执行后提交下一 checkpoint。
+
+下一次需要报告：
+
+migration fresh PostgreSQL 验证
+
+schema diff
+
+新旧 identity 同存验证
+
+回填脚本 dry-run（不要真正切换）
+
+unmapped 分类统计
+
+不进入 Step 3，除非再次提交审批
+
+继续。
+```
+
+### [MSG-20260928-35] C-0006-B2 Step 1 Checkpoint Review：PASS（允许进入 Step 2 双写+回填）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE:
+CHECKPOINT REVIEW
+
+ID:
+C-0006-B2 Step 1
+
+GATE:
+4
+
+MODULE:
+RuleEvaluation Identity Prepare
+
+VERDICT:
+
+PASS
+
+Step 1 Schema Prepare 达到批准要求，可以进入 Step 2。
+
+1. Migration 范围
+
+PASS。
+
+确认本次只完成：
+
+canonicalDedupeKey nullable column
+nullable unique constraints
+index
+
+没有触碰：
+
+old dedupeKey
+old unique constraint
+Detection 输入
+Closure
+Opportunity
+Recovery 链路
+
+符合批准边界。
+
+2. 双身份并存设计
+
+PASS。
+
+当前状态：
+
+旧身份：
+
+纯文本
+dedupeKey
+
+organization
++
+ruleVersion
++
+invoiceTransaction
++
+trackingTransaction
+
+新身份：
+
+纯文本
+canonicalDedupeKey
+
+organization
++
+ruleVersion
++
+canonicalFact
+
+两者并存。
+
+这是正确迁移状态。
+
+3. 唯一约束设计
+
+PASS。
+
+保持之前裁定：
+
+核心业务身份：
+
+纯文本
+@@unique([
+ organizationId,
+ ruleVersionId,
+ canonicalFactId
+])
+
+二级完整性：
+
+纯文本
+@@unique(canonicalDedupeKey)
+
+当前定位正确。
+
+4. Dry-run 回填工具
+
+PASS。
+
+这是本阶段最重要验证。
+
+通过：
+
+可映射：
+纯文本
+ACTIVE CanonicalFact
+=
+1:1
+
+允许更新。
+
+不可映射：
+
+保持 NULL：
+
+CONFLICT_FACT
+NO_ACTIVE_FACT
+AMBIGUOUS
+
+正确。
+
+没有为了提高覆盖率污染身份。
+
+5. unmapped 分类
+
+PASS。
+
+分类合理：
+
+纯文本
+NO_SOURCE_TRANSACTION
+
+NO_ACTIVE_FACT
+
+CONFLICT_FACT
+
+AMBIGUOUS_FACTS
+
+DUPLICATE_TARGET
+
+尤其保留：
+
+CONFLICT_FACT
+
+非常重要。
+
+因为：
+
+冲突不是缺数据，而是数据不可确定。
+
+6. canSwitch 条件
+
+PASS。
+
+当前：
+
+纯文本
+unmapped = 0
+
+才允许进入 Step 3。
+
+保持之前严格策略。
+
+7. 发现一个需要 Step 2 注意的事项
+
+非阻塞提醒：
+
+Step 2 双写时，需要额外验证：
+
+新产生 RuleEvaluation：
+
+必须保证：
+
+纯文本
+canonicalFactId != NULL
+
+否则：
+
+不能生成 canonicalDedupeKey。
+
+建议 Step 2 增加：
+
+纯文本
+new evaluation without canonical identity
+=
+metric + warning
+
+不要静默回退。
+
+8. Step 2 前置条件
+
+批准进入，但必须保持：
+
+Step 2:
+
+允许：
+
+✅ 双写 canonicalDedupeKey
+
+✅ apply 回填
+
+✅ identity parity report
+
+必须完成：
+
+纯文本
+Run #1
+old identity == new identity
+
+Run #2
+repeat execution:
+no unexpected delta
+
+禁止：
+
+❌ 切 Detection
+
+❌ 删除 old key
+
+❌ 修改 Closure
+
+❌ 删除 sourceTransactionId
+
+❌ 修改 Opportunity identity
+
+FINAL DECISION
+纯文本
+C-0006-B2 Step 1:
+
+PASS
+
+可以进入：
+
+C-0006-B2 Step 2
+
+提交内容要求：
+
+双写实现方案
+
+backfill apply 实测结果
+
+两轮 identity parity report
+
+新旧 dedupeKey 一致性证明
+
+新数据写入覆盖率
+
+unmapped 最终统计
+
+完成后再申请 Step 3。
+```
+
+### [MSG-20260928-36] C-0006-B2 Step 2 Checkpoint Review：PASS（Step 3 前需 duplicate-resolution-report）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE:
+CHECKPOINT REVIEW
+
+ID:
+C-0006-B2 Step 2
+
+GATE:
+4
+
+MODULE:
+RuleEvaluation Identity Migration
+
+VERDICT:
+
+PASS（进入 Step 3 前批准）
+
+Step 2 达到批准要求。
+
+1. 双写机制
+
+PASS。
+
+当前实现符合迁移原则：
+
+旧身份：
+
+纯文本
+dedupeKey
+=
+organization
++
+ruleVersion
++
+sourceTransaction identity
+
+继续存在。
+
+新身份：
+
+纯文本
+canonicalDedupeKey
+=
+organization
++
+ruleVersion
++
+canonicalFact
+
+同步生成。
+
+确认：
+
+未替换旧身份
+未删除旧约束
+未改变现有幂等行为
+
+这是正确的渐进迁移。
+
+2. canonicalIdentity 缺失处理
+
+PASS。
+
+特别认可：
+
+没有采用：
+
+找不到 CanonicalFact 就强行生成
+
+而是：
+
+纯文本
+canonicalIdentity=MISSING
+
+并显式统计：
+
+纯文本
+evaluationsWithoutCanonicalIdentity
+
+这是正确的 fail-closed 行为。
+
+3. Coverage 监控
+
+PASS。
+
+新增指标：
+
+纯文本
+identity coverageRate
+
+符合迁移需求。
+
+特别是：
+
+CONFLICT 场景：
+
+纯文本
+coverageRate=0.5000
+
+而不是隐藏问题。
+
+正确。
+
+4. Identity Parity
+
+PASS。
+
+两轮验证符合要求：
+
+Run #1
+纯文本
+old identity == new identity
+
+结果：
+
+纯文本
+parity=OK
+Run #2
+
+重复执行：
+
+纯文本
+evaluationsCreated=0
+skippedExisting=2
+
+证明：
+
+幂等保持
+双写没有制造重复
+新键没有引入第二身份
+
+通过。
+
+5. Backfill Apply
+
+PASS，但记录一个 Step 3 前必须解决的问题。
+
+当前：
+
+纯文本
+mapped
+=
+成功
+
+DUPLICATE_TARGET
+=
+阻塞
+
+符合之前规则。
+
+没有覆盖已有身份。
+
+正确。
+
+但是：
+
+当前：
+
+纯文本
+canSwitch=false
+
+这是正确结果。
+
+不能进入切换。
+
+原因：
+
+切换条件：
+
+纯文本
+unmapped = 0
+
+尚未满足。
+
+6. Step 2 完成度
+
+检查：
+
+项目	状态
+双写	✅
+旧键保留	✅
+新键生成	✅
+parity report	✅
+重复执行验证	✅
+backfill 工具	✅
+unmapped 分类	✅
+切换前阻断	✅
+7. 进入 Step 3 前新增要求
+
+允许准备 Step 3，但提交前必须解决：
+
+A. DUPLICATE_TARGET 来源分析
+
+当前：
+
+纯文本
+DUPLICATE_TARGET:1
+
+必须说明：
+
+这个重复来自：
+
+已存在正确新身份？
+错误历史映射？
+数据异常？
+
+要求：
+
+不能简单删除。
+
+需要：
+
+纯文本
+duplicate-resolution-report
+
+说明：
+
+原 RuleEvaluation id
+target canonicalFact
+已存在 identity
+是否等价
+处理建议
+B. Step 3 必须单独 Schema Delta
+
+确认：
+
+不能直接切。
+
+Step 3 需要重新提交：
+
+读路径变化
+写路径变化
+回滚方案
+旧键保留策略
+C. 切换门槛
+
+保持：
+
+纯文本
+canSwitch=true
+
+必须满足：
+
+纯文本
+unmapped=0
+
+包括：
+
+NO_SOURCE_TRANSACTION
+NO_ACTIVE_FACT
+CONFLICT_FACT
+AMBIGUOUS_FACTS
+DUPLICATE_TARGET
+
+全部为 0。
+
+---
+
+# FINAL DECISION
+
+```text
+C-0006-B2 Step 2:
+
+PASS
+
+允许进入：
+
+C-0006-B2 Step 3 Schema Delta Request
+
+但在 Step 3 执行前：
+
+必须提交：
+
+duplicate-resolution-report
+canonical identity coverage 最终报告
+Step 3 切换方案
+rollback plan
+old dedupeKey 保留周期设计
+
+批准后再切换。
+
+继续。
+```
+
+### [MSG-20260928-37] C-0006-B2 Step 3 Change Request Review：PASS（方案批准，实际切换 BLOCK；取消自动 fallback）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE:
+CHANGE REQUEST REVIEW
+
+ID:
+C-0006-B2 Step 3
+
+GATE:
+4
+
+MODULE:
+RuleEvaluation Identity Migration Switch Plan
+
+VERDICT:
+
+PASS（方案批准，不批准立即切换）
+
+当前批准的是：
+
+Step 3 方案设计与准备
+
+不是：
+
+立即开启 canonical identity 生产模式
+
+原因：
+
+当前：
+
+纯文本
+canSwitch = false
+
+DUPLICATE_TARGET = 1
+
+所以不能进入实际切换。
+
+1. Duplicate Resolution
+PASS
+
+批准当前处理方式：
+
+纯文本
+KEEP_EXISTING
+MANUAL_REVIEW
+NO_ACTION
+
+禁止：
+
+❌ 删除历史 RuleEvaluation
+
+❌ 覆盖已有 canonical identity
+
+❌ 自动合并
+
+❌ 强制迁移
+
+对于：
+
+纯文本
+DUPLICATE_TARGET
+
+最终处理规则：
+
+如果确认：
+
+纯文本
+same organization
++
+same ruleVersion
++
+same canonicalFact
++
+same source lineage
+
+则：
+
+纯文本
+KEEP_EXISTING
+
+另一条：
+
+纯文本
+review-only
+
+保留审计记录。
+
+2. DETECTION_IDENTITY_MODE
+PASS
+
+批准：
+
+纯文本
+DETECTION_IDENTITY_MODE
+
+模式：
+
+legacy（默认）
+
+保持当前：
+
+纯文本
+old dedupeKey
++
+new canonicalDedupeKey
+
+双写。
+
+canonical
+
+切换后：
+
+纯文本
+canonicalDedupeKey
+
+作为身份判断。
+
+但是增加一个限制：
+
+你方案里：
+
+canonical identity missing 时退化旧键
+
+这里需要修改。
+
+REVISE
+
+不要自动 fallback。
+
+原因：
+
+身份迁移阶段最危险的问题就是：
+
+纯文本
+canonical identity 缺失
+
+如果自动 fallback：
+
+可能产生：
+
+隐藏覆盖率问题
+身份混用
+parity 假成功
+
+调整为：
+
+canonical 模式：
+
+纯文本
+canonicalFactId missing
+=
+FAIL CLOSED
+
+并输出：
+
+纯文本
+CANONICAL_IDENTITY_REQUIRED
+
+同时计入：
+
+纯文本
+evaluationsWithoutCanonicalIdentity
+
+不能继续生成正式 RuleEvaluation。
+
+3. 灰度方案
+PASS
+
+批准：
+
+顺序：
+
+纯文本
+test
+
+↓
+
+staging
+
+↓
+
+production
+
+验证：
+
+必须：
+
+纯文本
+coverage = 1.0000
+
+parity = OK
+
+duplicates = 0
+
+factLinkMismatch = 0
+4. 观察周期
+
+问题：
+
+你问：
+
+2 个观察周期是否足够？
+
+裁定：
+
+PASS，但定义需要更严格
+
+不按时间。
+
+不要：
+
+2 周
+
+因为业务频率不同。
+
+采用：
+
+纯文本
+2 个完整检测周期
+
+即可。
+
+每个周期必须：
+
+完整输入集
+identity parity report
+shadow parity report
+
+通过。
+
+5. Rollback
+PASS
+
+当前回滚设计正确。
+
+原因：
+
+没有删除：
+
+old dedupeKey
+old unique constraint
+
+所以：
+
+回滚只是：
+
+纯文本
+DETECTION_IDENTITY_MODE=legacy
+
+即可。
+
+6. Schema
+PASS
+
+Step 3 不需要 Schema Delta。
+
+保持：
+
+不新增：
+
+NOT NULL
+DROP
+constraint replacement
+
+原因：
+
+现在还处于验证阶段。
+
+7. DUPLICATE_TARGET 当前阻塞
+必须保持 BLOCK 状态
+
+直到：
+
+纯文本
+DUPLICATE_TARGET=0
+
+才允许 canonical 模式测试。
+
+Step 3 执行前 Checklist
+
+必须全部满足：
+
+纯文本
+[ ] DUPLICATE_TARGET resolved
+
+[ ] unmapped=0
+
+[ ] legacy full parity OK
+
+[ ] canonical dry-run parity OK
+
+[ ] staging canonical mode 2 cycles
+
+[ ] shadow parity OK
+
+[ ] rollback test completed
+FINAL DECISION
+纯文本
+C-0006-B2 Step 3:
+
+PASS（方案批准）
+
+实际切换:
+
+BLOCK（等待条件满足）
+
+下一步允许：
+
+执行：
+
+duplicate resolution 修复/标记流程
+
+canonical 模式 dry-run
+
+parity 证明
+
+但禁止：
+
+生产切换
+删除旧身份
+修改 Closure
+修改 Recovery 链
+
+完成后提交：
+
+C-0006-B2 Step 3 Execution Report
+
+再裁定是否开启 canonical identity。
+```
+
+### [MSG-20260928-38] C-0006-B2 Step 3 Execution Review：PASS（技术验证通过，切换仍 BLOCK；需 active unmapped=0）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE:
+EXECUTION REVIEW
+
+ID:
+C-0006-B2 Step 3
+
+GATE:
+4
+
+MODULE:
+RuleEvaluation Identity Migration Switch Mechanism
+
+VERDICT:
+
+PASS（验证机制通过，实际切换继续等待条件）
+
+本轮执行符合 Step 3 批准边界。
+
+1. DETECTION_IDENTITY_MODE
+PASS
+
+确认修正已正确实现：
+
+legacy:
+
+纯文本
+旧 dedupeKey
++
+canonicalDedupeKey 双写
+
+canonical:
+
+纯文本
+canonicalDedupeKey
+
+作为唯一身份。
+
+并且：
+
+缺失：
+
+纯文本
+canonicalFactId
+
+直接：
+
+纯文本
+CANONICAL_IDENTITY_REQUIRED
+
+fail closed。
+
+这一点必须保持。
+
+不允许：
+
+纯文本
+canonical → legacy fallback
+
+否则身份迁移会产生隐藏双轨。
+
+2. Checklist 验证
+
+当前结果：
+
+项目	状态
+legacy parity	✅
+canonical dry-run	✅
+canonical 两轮幂等	✅
+shadow parity	✅
+rollback test	✅
+DUPLICATE_TARGET	待确认
+unmapped=0	待确认
+
+整体：
+
+技术切换能力已经证明。
+
+3. DUPLICATE_TARGET 处置
+
+问题：
+
+KEEP_EXISTING + review-only 是否可以记为解决？
+
+裁定：
+
+PASS
+
+可以。
+
+但需要补充一个动作：
+
+不能直接消失。
+
+需要形成：
+
+纯文本
+DUPLICATE_TARGET_RESOLVED
+
+状态。
+
+要求保留：
+
+duplicate report
+原 RuleEvaluation id
+保留对象 id
+被标记对象 id
+resolution=KEEP_EXISTING
+resolver=identity-migration
+
+原因：
+
+身份迁移需要可审计。
+
+因此：
+
+当前：
+
+纯文本
+unmapped = 1
+
+可以变为：
+
+纯文本
+resolved_unmapped = 1
+
+最终：
+
+纯文本
+active unmapped = 0
+
+才满足切换门槛。
+
+4. CI / 本地代替 staging
+
+问题：
+
+无 staging/production 环境，是否接受 CI + 本地真实数据库？
+
+裁定：
+
+PASS（当前阶段接受）
+
+原因：
+
+当前不是生产上线。
+
+目标是：
+
+验证迁移逻辑。
+
+CI PostgreSQL 已覆盖：
+
+migration
+transaction
+constraint
+identity uniqueness
+rollback
+
+足够作为：
+
+纯文本
+pre-production validation
+
+但是：
+
+正式生产切换仍需要：
+
+部署环境验证。
+
+未来生产前必须增加：
+
+纯文本
+production-like dry run
+
+包括：
+
+真实数据规模
+实际连接
+实际调度窗口
+备份确认
+5. 当前是否允许开启 canonical 默认？
+
+裁定：
+
+暂不自动开启
+
+原因：
+
+虽然技术验证通过，但是还需要：
+
+完成：
+
+纯文本
+DUPLICATE_TARGET resolution
+
+并生成：
+
+最终：
+
+identity coverage report
+
+确认：
+
+纯文本
+active unmapped = 0
+
+之后才批准：
+
+纯文本
+DETECTION_IDENTITY_MODE=canonical
+
+默认。
+
+6. 下一步允许动作
+
+允许：
+
+✅ 标记 duplicate resolved
+
+✅ 生成最终 identity coverage report
+
+✅ canonical dry-run 再跑一次
+
+禁止：
+
+❌ 删除 dedupeKey
+
+❌ 删除旧 unique
+
+❌ 修改 Closure
+
+❌ 修改 RecoveryOpportunity
+
+❌ 生产切换
+
+FINAL DECISION
+纯文本
+C-0006-B2 Step 3 Execution:
+
+PASS
+
+状态：
+
+纯文本
+技术方案验证通过
+
+生产身份切换:
+BLOCK（等待 active unmapped=0）
+
+下一提交：
+
+C-0006-B2 Step 3 Final Gate Request
+
+需要包含：
+
+duplicate resolved 证明
+active unmapped=0
+canonical final parity report
+rollback 再验证
+是否申请 canonical 默认开启
+
+完成后再最终裁定。
+```
+
+### [MSG-20260928-39] C-0006-B2 Step 3 Final Gate Review：PASS（机制完成；canonical 默认不启用，允许提交 C-0006 Final Gate + PR）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE:
+FINAL GATE REVIEW
+
+ID:
+C-0006-B2 Step 3
+
+GATE:
+4
+
+MODULE:
+RuleEvaluation Identity Migration
+
+VERDICT:
+
+PASS（切换机制最终验收通过）
+
+但：
+
+canonical 默认开启：暂不批准自动变更
+
+当前批准：
+
+✅ 身份迁移方案
+✅ 切换机制
+✅ 回滚机制
+✅ 审计闭环
+
+不批准：
+
+❌ 立即把默认模式从 legacy 改为 canonical
+
+1. Duplicate Resolution
+PASS
+
+当前处理符合要求。
+
+确认：
+
+未执行：
+
+删除
+覆盖
+合并历史 RuleEvaluation
+
+采用：
+
+纯文本
+KEEP_EXISTING
++
+review-only
++
+identity.duplicate_resolved audit
+
+正确。
+
+关键点：
+
+review-only 行：
+
+保持：
+
+原 dedupeKey
+原历史身份
+可追溯状态
+
+避免历史审计链断裂。
+
+2. active unmapped 门槛
+PASS
+
+当前状态：
+
+纯文本
+raw unmapped:
+
+DUPLICATE_TARGET = 1
+
+resolved:
+
+KEEP_EXISTING = 1
+
+active_unmapped = 0
+
+符合之前定义。
+
+注意：
+
+这里的：
+
+纯文本
+active_unmapped
+
+比简单 unmapped 更准确。
+
+因为：
+
+已经人工判定等价重复的不再阻塞身份切换。
+
+3. Canonical Final Parity
+PASS
+
+验收：
+
+Run #1:
+
+纯文本
+evaluationsCreated=2
+coverage=1.0000
+
+Run #2:
+
+纯文本
+evaluationsCreated=0
+skippedExisting=2
+
+证明：
+
+canonical identity 稳定
+幂等正常
+没有双身份膨胀
+4. Fail Closed
+PASS
+
+确认：
+
+CONFLICT:
+
+纯文本
+CANONICAL_IDENTITY_REQUIRED
+
+没有：
+
+fallback
+偷渡旧身份
+产生正式评估
+
+这是正确行为。
+
+5. Rollback
+PASS
+
+当前设计满足：
+
+纯文本
+canonical
+        |
+        v
+legacy
+
+只需要：
+
+纯文本
+DETECTION_IDENTITY_MODE=legacy
+
+原因：
+
+旧结构仍存在：
+
+dedupeKey
+old unique constraint
+
+没有破坏性迁移。
+
+6. 关于 canonical 默认开启
+
+你的问题：
+
+是否批准 canonical 设为默认身份模式？
+
+裁定：
+
+REVISE
+
+当前不改默认。
+
+原因：
+
+技术验证已经通过，但还缺一个阶段：
+
+运行模式切换观察阶段。
+
+建议：
+
+保持：
+
+纯文本
+default = legacy
+
+新增：
+
+纯文本
+explicit canonical enable
+
+方式：
+
+例如：
+
+纯文本
+DETECTION_IDENTITY_MODE=canonical
+
+由部署环境控制。
+
+为什么不直接改默认？
+
+因为：
+
+默认值改变属于行为变更。
+
+即使测试全部通过，也会影响：
+
+新客户数据
+新检测任务
+生产调度
+数据增长路径
+
+应该让第一次 canonical 运行成为：
+
+一次可控事件。
+
+7. 下一阶段批准范围
+
+批准：
+
+可以准备：
+
+C-0006 Final Gate Review
+
+材料。
+
+需要包含：
+
+A. Gate 总结
+
+包括：
+
+C-0006-A
+B1
+B2 Step1
+B2 Step2
+B2 Step3
+B. 最终架构状态
+
+明确：
+
+当前：
+
+纯文本
+SourceTransaction
+        |
+        v
+CanonicalFact
+        |
+        v
+RuleEvaluation(canonical identity ready)
+
+但：
+
+默认：
+
+纯文本
+legacy
+
+可选：
+
+纯文本
+canonical
+C. 保留策略
+
+明确：
+
+旧 dedupeKey：
+
+继续保留。
+
+不要进入删除阶段。
+
+D. 未来 Step 4
+
+单独申请。
+
+包括：
+
+old key 降级
+constraint 删除
+数据清理
+
+不能混入 C-0006。
+
+FINAL DECISION
+纯文本
+C-0006-B2 Step 3:
+
+PASS
+
+状态：
+
+纯文本
+Migration mechanism: COMPLETE
+
+Canonical default:
+NOT ENABLED
+
+Production switch:
+HOST APPROVAL REQUIRED
+
+允许提交：
+
+C-0006 Gate Final Review + PR
+
+继续保持 legacy 默认即可。
+```

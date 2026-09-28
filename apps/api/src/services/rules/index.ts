@@ -35,3 +35,9 @@ export {
   type TrackingRow,
 } from './detection-service';
 export { createPrismaDetectionRepository } from './prisma-detection-repository';
+export {
+  CanonicalIdentityRequiredError,
+  DETECTION_IDENTITY_MODE_ENV,
+  resolveDetectionIdentityMode,
+  type DetectionIdentityMode,
+} from './identity-mode';
