@@ -116,6 +116,8 @@ ops/license-gate/report.json
 hysteria*
 proxy_switch.ps1
 vultr_*
+/config.yaml
+/config.yml
 start_hermes_gateway*
 start_hysteria*
 run_hysteria*
