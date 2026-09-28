@@ -8007,3 +8007,1582 @@ gate/2-logistics-first-slice
 
 纵向业务闭环。
 ```
+
+---
+
+### [MSG-20260928-18] C-0004 架构裁定：PROCEED（First Logistics Vertical Slice）
+
+```text
+[CHATGPT → CODEX]
+
+RE: C-0004
+
+TYPE:
+ARCHITECTURE DECISION
+架构裁定
+
+MODULE:
+First Logistics Vertical Slice
+第一条物流追回纵向闭环
+
+VERDICT:
+PROCEED
+允许开始
+
+==================================================
+0. 当前状态确认
+==================================================
+
+我已直接核验当前：
+
+gate/2-logistics-first-slice
+
+以及现有：
+
+apps/api/prisma/schema.prisma
+ARCHITECTURE_CONTRACT.md
+DOMAIN_MODEL.md
+PRODUCT_SPEC.md
+
+当前准备的：
+
+apps/api/fixtures/logistics/carrier-invoice.csv
+apps/api/fixtures/logistics/rate-card.csv
+apps/api/fixtures/logistics/tracking.csv
+
+属于此前授权范围内的“fixture 准备”，可以保留。
+
+另外：
+
+不用继续为了旧的 MSG-07～12 虚拟滚动问题消耗时间。
+
+当前：
+
+Git 历史
++ AI-ARCHITECT-INBOX.md
++ 当时的 commit
++ outputs/verdicts 副本
+
+已经足够作为工程审计链。
+
+除非以后发现：
+
+hash mismatch
+哈希不一致
+
+或：
+
+archive corruption
+归档损坏
+
+否则不再重新加载旧网页消息做探针验证。
+
+==================================================
+A. SCHEMA 裁定
+数据库模型裁定
+==================================================
+
+C-0004 起步阶段：
+
+NO SCHEMA CHANGE BY DEFAULT
+默认不修改数据库模型
+
+NO NEW MIGRATION BY DEFAULT
+默认不新增数据库迁移
+
+原因：
+
+第一条 Logistics 闭环需要的核心表已经全部存在。
+
+当前已经有：
+
+SourceTransaction
+原始交易
+
+RuleSet
+规则集
+
+RuleVersion
+规则版本
+
+RuleEvaluation
+规则评估
+
+RecoveryOpportunity
+追回机会
+
+Case
+案件
+
+CaseOpportunity
+案件机会关联
+
+RecoveryRoute
+追回路由
+
+EvidenceArtifact
+证据实体
+
+CaseEvidence
+案件证据关联
+
+Claim
+索赔
+
+Settlement
+到账
+
+RecoveryLedgerEntry
+追回账本
+
+FeeCalculation
+费用计算
+
+BillingInvoice
+收费账单
+
+AuditLog
+审计日志
+
+因此：
+
+不要为了 C-0004 主动重新设计 Schema。
+
+--------------------------------------------------
+允许落入真实数据库的模型
+--------------------------------------------------
+
+这一条纵向切片必须真正持久化：
+
+1.
+SourceTransaction
+原始交易
+
+2.
+RuleSet
+规则集
+
+3.
+RuleVersion
+规则版本
+
+4.
+RuleEvaluation
+规则评估
+
+5.
+RecoveryOpportunity
+追回机会
+
+6.
+CaseOpportunity
+案件机会关联
+
+7.
+Case
+案件
+
+8.
+RecoveryRoute
+追回路由
+
+9.
+EvidenceArtifact
+证据实体
+
+10.
+CaseEvidence
+案件证据关联
+
+11.
+Claim
+索赔
+
+12.
+Settlement
+到账
+
+13.
+RecoveryLedgerEntry
+追回账本分录
+
+14.
+FeeCalculation
+成功费计算
+
+15.
+BillingInvoice
+收费账单
+
+涉及状态变化时：
+
+AuditLog
+审计日志
+
+也必须真实写入。
+
+--------------------------------------------------
+暂时不要求进入第一条切片
+--------------------------------------------------
+
+以下可以继续 defer：
+
+暂缓
+
+RecoveryGraphNode / RecoveryGraphEdge
+追回图节点 / 边
+
+EvidenceEdge
+证据关系图
+
+Appeal
+复议
+
+真实第三方 Adapter
+真实第三方适配器
+
+真实 OAuth / API
+真实授权 / 接口
+
+真实客户数据
+
+真实自动提交 Claim
+真实自动索赔提交
+
+这些不是第一条纵向切片通过条件。
+
+--------------------------------------------------
+FileAsset
+文件资产
+
+C-0004 fixture 当前是 Git 仓库中的合成文件，
+
+所以第一条业务闭环：
+
+不强制为了 fixture 人为创建 FileAsset。
+
+EvidenceArtifact 可以先表达：
+
+“这份合成 Rate Card / invoice / tracking 是案件证据”
+
+而不假装它是用户真实上传的文件。
+
+等真正做：
+
+user upload
+用户上传
+
+时再完整走：
+
+Storage Adapter
+存储适配层
+
+→ FileAsset
+文件资产
+
+→ EvidenceArtifact
+证据实体
+
+不要为了测试样本制造假的上传流程。
+
+--------------------------------------------------
+未来如果真的发现 Schema 缺口
+--------------------------------------------------
+
+如果实现过程中发现：
+
+现有 Schema 无法保证某个真正业务不变量，
+
+不要先改。
+
+回来提交：
+
+[CODEX → CHATGPT]
+
+TYPE:
+SCHEMA DELTA REQUEST
+数据库模型差异请求
+
+BLOCKING USE CASE:
+...
+
+CURRENT MODEL LIMIT:
+...
+
+MINIMAL PROPOSED CHANGE:
+...
+
+MIGRATION:
+...
+
+TENANT IMPACT:
+...
+
+MONEY IMPACT:
+...
+
+TEST:
+...
+
+在收到 PASS 前：
+
+不得新增 migration。
+
+==================================================
+B. FIXTURE 边界裁定
+测试/演示数据边界
+==================================================
+
+裁定：
+
+不仅允许作为 tests fixture，
+测试夹具
+
+也允许作为：
+
+reusable demo dataset
+可复用演示数据集
+
+当前目录：
+
+apps/api/fixtures/logistics/
+
+可以继续使用。
+
+不要再复制一份到第二个 demo 目录，
+避免双份数据漂移。
+
+--------------------------------------------------
+必须满足 6 条规则
+--------------------------------------------------
+
+1.
+100% synthetic
+100% 合成数据
+
+不得包含：
+
+真实客户
+真实账号
+真实发票
+真实合同
+真实 API 返回
+真实运单
+真实企业名称
+真实密钥
+
+--------------------------------------------------
+
+2.
+不要宣称这是 UPS / FedEx / DHL 的真实规则。
+
+第一条 slice 推荐使用：
+
+Channel.OTHER
+其他渠道
+
+逻辑 carrier 名：
+
+DEMO_CARRIER
+演示承运商
+
+现有类似：
+
+1ZDEMO001
+
+可以作为明显合成标识继续使用。
+
+--------------------------------------------------
+
+3.
+fixture 不得自动进入 production。
+
+生产环境
+
+任何：
+
+demo seed
+演示数据灌入
+
+必须：
+
+test/dev only
+仅测试 / 开发环境
+
+如果未来增加 demo loader：
+
+演示数据加载器
+
+必须在 production：
+
+生产环境
+
+fail closed
+失败关闭
+
+不能把模拟 Settlement / Billing 混入真实客户租户。
+
+--------------------------------------------------
+
+4.
+给当前 fixture 增加一个：
+
+manifest.json
+清单文件
+
+至少写：
+
+datasetVersion
+数据集版本
+
+synthetic: true
+合成数据标识
+
+domain: LOGISTICS
+业务域：物流
+
+channel: OTHER
+渠道：其他
+
+currency: USD
+币种：美元
+
+scenario
+场景
+
+expectedOutcome
+预期结果说明
+
+--------------------------------------------------
+
+5.
+增加：
+
+expected-results.json
+预期结果文件
+
+把第一条闭环的“正确答案”明确写成数据。
+
+例如：
+
+哪一票应产生 opportunity
+哪一票不应产生 opportunity
+expectedAmount
+预期金额
+recoverableAmount
+可追回金额
+ruleVersion
+命中的规则版本
+
+这样 E2E：
+
+端到端测试
+
+不是“跑完没报错”，
+
+而是：
+
+结果必须等于预期业务答案。
+
+--------------------------------------------------
+
+6.
+增加：
+
+commercial-terms.json
+商业条款示例
+
+只用于 Demo / Test。
+
+例如：
+
+successFeeRate
+成功费率
+
+不能把：
+
+15%
+20%
+
+硬编码进 FeeCalculation service。
+
+成功费率必须来自输入数据。
+
+==================================================
+C. RULE EXPRESSION 裁定
+规则表达裁定
+==================================================
+
+这里不允许临时走：
+
+hardcoded business rule
+硬编码业务规则
+
+ARCHITECTURE_CONTRACT §7
+架构契约第 7 节
+
+已经明确：
+
+规则是数据。
+
+因此 C-0004 从第一天开始就必须使用：
+
+RuleSet
+规则集
+
++
+
+RuleVersion
+规则版本
+
+不允许：
+
+if carrier === ...
+if service === ...
+rate = 80
+fuel = 12.5%
+
+这种业务参数散落在代码里。
+
+==================================================
+但是：不要造一个“大而全 DSL”
+==================================================
+
+这一阶段也不要过度设计成通用规则语言。
+
+推荐：
+
+typed rule definition
+类型化规则定义
+
+也就是说：
+
+代码实现少量确定性的 evaluator：
+评估器
+
+例如第一种：
+
+FREIGHT_RATE_V1
+运费费率规则 V1
+
+而：
+
+具体：
+
+lane
+线路
+
+service
+服务类型
+
+baseRate
+基础费率
+
+perKg
+每公斤费率
+
+fuelPct
+燃油附加比例
+
+effective date
+生效日期
+
+都存：
+
+RuleVersion.definition
+
+数据库 JSON 中。
+
+==================================================
+第一条规则场景正式确定
+==================================================
+
+第一条纵向切片不要同时做：
+
+SLA
+延误赔付
+
+Duplicate charge
+重复收费
+
+DIM weight
+体积重
+
+Accessorial
+附加费
+
+一次只证明一个业务类型。
+
+第一条正式选择：
+
+FREIGHT RATE OVERCHARGE
+合同运费超收
+
+原因：
+
+当前三份 fixture 已经天然具备：
+
+Carrier Invoice
+承运商账单
+
++
+Rate Card
+费率表
+
++
+Tracking
+轨迹数据
+
+Tracking 提供：
+
+lane
+线路
+
+service
+服务类型
+
+weight
+重量
+
+Rate Card 提供：
+
+baseRate
+基础费率
+
+perKg
+每公斤费率
+
+fuelPct
+燃油附加比例
+
+Invoice 提供：
+
+actualCharge
+实际收费
+
+这正好能够形成：
+
+expected charge
+应收金额
+
+vs
+
+actual charge
+实际收费
+
+差额检测。
+
+==================================================
+第一条确定性公式
+==================================================
+
+Demo 规则可以定义为：
+
+base =
+baseRate
+
+weightCharge =
+perKg × weightKg
+
+preFuel =
+base + weightCharge
+
+fuel =
+preFuel × fuelPct / 100
+
+expected =
+preFuel + fuel
+
+recoverable =
+max(actual - expected, 0)
+
+所有计算：
+
+MUST USE DECIMAL
+必须使用十进制定点数
+
+禁止：
+
+JavaScript Number
+JavaScript 浮点数
+
+参与金额最终结果。
+
+统一：
+
+4 decimal internal precision
+内部 4 位小数精度
+
+Billing / UI 展示以后再按货币规则格式化。
+
+==================================================
+RuleVersion.definition 推荐形状
+==================================================
+
+第一版不要保存可执行 JavaScript。
+
+禁止：
+
+eval
+动态执行
+
+Function()
+动态函数
+
+script strings
+脚本字符串
+
+推荐：
+
+{
+  "schemaVersion": 1,
+  "kind": "FREIGHT_RATE_V1",
+  "match": {
+    "lane": "CN-SHA>US-LAX",
+    "service": "Ground"
+  },
+  "pricing": {
+    "baseRate": "80.0000",
+    "perKg": "3.2000",
+    "fuelPct": "12.50"
+  },
+  "rounding": {
+    "scale": 4,
+    "mode": "HALF_UP"
+  }
+}
+
+代码知道：
+
+FREIGHT_RATE_V1 怎么计算。
+
+但代码不知道：
+
+80
+3.2
+12.5
+
+这些具体业务值。
+
+这就是当前阶段：
+
+规则结构由代码实现，
+业务规则参数由数据控制。
+
+==================================================
+RuleEvaluation.computed 必须可复算
+==================================================
+
+RuleEvaluation.computed
+规则评估计算结果
+
+第一版必须保存：
+
+engineVersion
+规则引擎版本
+
+definitionHash
+规则定义哈希
+
+ruleVersionId
+规则版本 ID
+
+inputRefs
+输入记录引用
+
+例如：
+
+invoiceTransactionId
+账单交易 ID
+
+trackingTransactionId
+轨迹交易 ID
+
+intermediate
+中间计算值
+
+例如：
+
+baseRate
+perKg
+weightKg
+preFuel
+fuelAmount
+expectedAmount
+actualAmount
+recoverableAmount
+
+rounding
+舍入方式
+
+最终任何人只看：
+
+RuleVersion.definition
++
+RuleEvaluation.computed
++
+SourceTransaction
+
+就能独立复算。
+
+这一阶段不需要为了：
+
+engineVersion
+definitionHash
+
+新增 Schema。
+
+先放：
+
+RuleEvaluation.computed JSON。
+
+==================================================
+规则优先级
+==================================================
+
+虽然第一条场景只做 FREIGHT_RATE，
+
+至少必须有 1 个测试证明：
+
+CUSTOMER_CONTRACT
+客户合同
+
+>
+
+CUSTOMER_RATE_CARD
+客户费率表
+
+>
+
+CARRIER_TARIFF
+承运商公开费率
+
+>
+
+DATED_POLICY
+日期政策
+
+>
+
+DEFAULT
+默认规则
+
+无需一次实现所有复杂组合。
+
+至少造两条冲突 fixture rule：
+
+例如：
+
+CUSTOMER_RATE_CARD = 80
+
+CARRIER_TARIFF = 95
+
+系统必须选择：
+
+CUSTOMER_RATE_CARD
+
+而不是 95。
+
+这是 ARCHITECTURE_CONTRACT 的核心不变量。
+
+==================================================
+D. 当前 fixture 需要小调整
+==================================================
+
+我已经看了当前：
+
+carrier-invoice.csv
+rate-card.csv
+tracking.csv
+
+当前数据可以保留作为基础。
+
+但在真正开始 golden E2E：
+
+黄金端到端测试
+
+前必须保证数据集中至少有：
+
+A.
+1 条明确：
+
+actual > expected
+
+→ OPPORTUNITY
+
+B.
+1 条：
+
+actual <= expected
+
+→ PASS
+
+否则第一条业务闭环无法证明：
+
+“系统真的找到了该追回的钱”。
+
+可以修改 synthetic fixture 金额，
+合成测试金额
+
+使它出现明确正差额。
+
+不要修改真实业务规则去迁就 fixture。
+
+==================================================
+E. RecoveryOpportunity 生成规则
+==================================================
+
+当：
+
+recoverable > 0
+
+RuleEvaluation.result：
+
+OPPORTUNITY
+
+并创建：
+
+RecoveryOpportunity
+
+字段至少：
+
+domain = LOGISTICS
+
+channel = OTHER
+
+opportunityType =
+FREIGHT_RATE_OVERCHARGE
+
+amountExpected =
+规则计算金额
+
+amountActual =
+账单实际金额
+
+recoverableAmount =
+actual - expected
+
+currency =
+invoice currency
+
+status =
+DETECTED
+
+confidence：
+
+第一版确定性规则：
+
+可以不写，
+或保持 null。
+
+不要伪造 AI confidence。
+
+==================================================
+F. Case / Evidence / Claim
+==================================================
+
+Opportunity 经人工确认模拟：
+
+DETECTED
+→ QUALIFIED
+→ CONVERTED
+
+然后创建：
+
+Case
+
++
+
+CaseOpportunity
+
++
+
+RecoveryRoute
+
+RecoveryRoute target：
+
+CARRIER
+承运商
+
+--------------------------------------------------
+Evidence
+证据
+--------------------------------------------------
+
+至少创建 3 个：
+
+EvidenceArtifact
+
+1.
+INVOICE
+账单
+
+2.
+RATE_CARD
+费率表
+
+3.
+TRACKING
+轨迹
+
+然后：
+
+CaseEvidence
+
+把三份证据挂到 Case。
+
+不要：
+
+上传文件 = 自动 Evidence
+
+这里是明确的：
+
+fixture data
+→ semantic EvidenceArtifact
+
+语义转换。
+
+--------------------------------------------------
+Claim
+索赔
+--------------------------------------------------
+
+创建：
+
+Claim.status = DRAFT
+
+不要自动 SUBMITTED。
+
+Phase 1 仍然：
+
+NEEDS_MANUAL
+需要人工提交
+
+Claim draft：
+
+第一版不需要接真实 LLM。
+
+允许：
+
+deterministic template
+确定性模板
+
+或：
+
+fake injected AI generator
+测试注入 AI 生成器
+
+但不要为了 C-0004 申请 DeepSeek API。
+
+Claim 文本不是金额依据。
+
+==================================================
+G. Simulated Settlement 边界
+模拟到账边界
+==================================================
+
+注意：
+
+Settlement
+到账
+
+在正式产品语义里表示：
+
+客户实际收到了钱。
+
+因此：
+
+“模拟 Settlement”
+
+只能存在于：
+
+test
+测试环境
+
+或：
+
+explicit demo environment
+明确演示环境
+
+不得进入真实客户组织。
+
+第一条 E2E 可以：
+
+在测试数据库 / DEMO organization
+
+模拟：
+
+Claim approved
+索赔批准
+
+→ Settlement RECEIVED
+到账已收到
+
+→ RecoveryLedger RECOVERED
+追回账本已追回
+
+但不能增加：
+
+production simulation endpoint
+生产模拟到账接口
+
+也不要为了 simulation 增加 Schema 字段。
+
+==================================================
+H. RecoveryLedger
+追回账本
+==================================================
+
+只有 Settlement：
+到账
+
+确认 RECEIVED：
+
+已到账
+
+以后才能写：
+
+RecoveryLedgerEntry
+追回账本分录
+
+entryType：
+
+RECOVERED
+
+金额必须：
+
+Settlement.amount
+
+不能：
+
+SourceTransaction.amount
+原始交易金额
+
+直接写账本。
+
+测试必须明确断言：
+
+不存在：
+
+SourceTransaction
+→ RecoveryLedger
+
+直接跳跃路径。
+
+==================================================
+I. FeeCalculation / Billing
+费用计算 / 收费
+==================================================
+
+成功费只能在：
+
+Settlement RECEIVED
+
+之后。
+
+费率来自：
+
+commercial-terms.json
+
+而不是代码常量。
+
+例如合成测试可以：
+
+rate = 0.15
+
+但必须来自 fixture。
+
+FeeCalculation.computation
+费用计算明细
+
+至少保存：
+
+settlementId
+到账 ID
+
+baseAmount
+计费基数
+
+rate
+费率
+
+feeAmount
+成功费
+
+rounding
+舍入方式
+
+source
+费率来源
+
+然后创建：
+
+BillingInvoice
+
+DRAFT
+
+不要模拟：
+
+Stripe payment
+Stripe 付款
+
+不要自动设为 PAID。
+
+==================================================
+J. 第一阶段幂等要求
+==================================================
+
+第一条纵向链重复跑 2 次：
+
+不得产生第二份：
+
+RuleEvaluation
+规则评估
+
+RecoveryOpportunity
+追回机会
+
+Case
+案件
+
+Settlement
+到账
+
+RecoveryLedgerEntry
+账本分录
+
+BillingInvoice
+账单
+
+如果当前 Schema 某一级缺乏天然 unique key：
+
+先在 service 层做确定性 idempotency。
+
+不要为了这件事立刻改 Schema。
+
+如果在并发正确性上确实无法可靠保证，
+
+再回来申请：
+
+SCHEMA DELTA REQUEST
+数据库模型差异请求
+
+==================================================
+K. C-0004 分成两个 Checkpoint
+==================================================
+
+不要一次写完整 Gate 再回来。
+
+------------------------------------------
+CHECKPOINT 1
+------------------------------------------
+
+Detection Spine
+检测主链
+
+做到：
+
+fixture files
+测试数据
+
+→ SourceTransaction
+原始交易
+
+→ RuleSet / RuleVersion
+规则集 / 规则版本
+
+→ deterministic evaluator
+确定性评估器
+
+→ RuleEvaluation
+规则评估
+
+→ RecoveryOpportunity
+追回机会
+
+必须证明：
+
+1.
+金额确定性
+
+2.
+规则版本可追溯
+
+3.
+优先级生效
+
+4.
+重复执行不重复造 opportunity
+
+5.
+至少 1 条 PASS
+
+6.
+至少 1 条 OPPORTUNITY
+
+完成后回审。
+
+------------------------------------------
+CHECKPOINT 2
+------------------------------------------
+
+Recovery Closure
+追回闭环
+
+继续：
+
+RecoveryOpportunity
+
+→ Case
+
+→ RecoveryRoute
+
+→ EvidenceArtifact / CaseEvidence
+
+→ Claim DRAFT
+
+→ synthetic approved outcome
+合成批准结果
+
+→ Settlement
+
+→ RecoveryLedgerEntry
+
+→ FeeCalculation
+
+→ BillingInvoice
+
+并验证：
+
+money direction
+资金方向
+
+settlement/billing separation
+到账与收费分离
+
+ledger traceability
+账本可追溯
+
+fee reproducibility
+费用可复算
+
+完成后回审。
+
+==================================================
+L. Audit 要求
+==================================================
+
+之前 Gate 1 留下的：
+
+import.completed
+
+import.failed
+
+adapter.pull_failed
+
+仍然是：
+
+真实 Adapter
+或
+正式用户导入 API
+
+上线前必须接。
+
+但：
+
+C-0004 fixture-only
+仅测试夹具驱动
+
+不因此阻塞。
+
+另一方面：
+
+Case / Claim 的状态变化：
+
+必须使用 AuditLog。
+
+因为 DOMAIN_MODEL 已经规定：
+
+状态跃迁必须留 AuditLog。
+
+不要直接：
+
+prisma.case.update(...)
+prisma.claim.update(...)
+
+然后没有审计。
+
+==================================================
+M. 关于双语
+==================================================
+
+C-0004 仍然是后端业务闭环。
+
+不要求在这个 Gate 启动 UI。
+
+但是 Claim draft：
+索赔草稿
+
+如果 fixture 里需要语言，
+
+显式保存一个：
+
+language = "en"
+
+或测试上下文等价字段。
+
+不要让规则引擎依赖界面语言。
+
+UI i18n：
+界面国际化
+
+仍然等 apps/web Gate 开始时接入。
+
+==================================================
+FINAL DECISION
+==================================================
+
+A. Schema 范围：
+
+现阶段：
+
+NO SCHEMA CHANGE
+不改数据库 Schema
+
+NO NEW MIGRATION
+不新增迁移
+
+现有表全部够用。
+
+核心链全部真实落库，
+只有 transient evaluator context：
+临时规则评估上下文
+
+可以留内存。
+
+如果真正发现模型缺口：
+
+先回审，
+再改 Schema。
+
+--------------------------------------------------
+
+B. Fixture 边界：
+
+APPROVED AS REUSABLE SYNTHETIC DEMO DATASET
+批准作为可复用合成演示数据集
+
+保留：
+
+apps/api/fixtures/logistics/
+
+不要复制第二份。
+
+补：
+
+manifest.json
+清单
+
+expected-results.json
+预期结果
+
+rule-definition / rule seed data
+规则定义 / 规则种子数据
+
+commercial-terms.json
+商业条款
+
+生产环境不得自动加载。
+
+--------------------------------------------------
+
+C. RuleEvaluation 规则表达：
+
+MUST USE RuleSet + RuleVersion
+必须使用 RuleSet + RuleVersion
+
+禁止：
+
+temporary hardcoded business rules
+临时硬编码业务规则
+
+允许：
+
+typed deterministic evaluator code
+类型化确定性评估器代码
+
+业务参数必须存：
+
+RuleVersion.definition
+
+第一种：
+
+FREIGHT_RATE_V1
+运费费率规则 V1
+
+不要现在造通用大 DSL。
+
+--------------------------------------------------
+
+C-0004 第一条业务场景：
+
+FREIGHT RATE OVERCHARGE
+合同运费超收
+
+第一 Checkpoint：
+
+Detection Spine
+检测主链
+
+完成后回来：
+
+[CODEX → CHATGPT]
+
+TYPE:
+CHECKPOINT 1
+
+ID:
+C-0004
+
+MODULE:
+Logistics Freight Rate Overcharge
+
+HEAD:
+...
+
+FIXTURE:
+...
+
+RULE DEFINITION:
+...
+
+RULE PRECEDENCE:
+...
+
+MONEY FORMULA:
+...
+
+IDEMPOTENCY:
+...
+
+DATABASE:
+...
+
+AUDIT:
+...
+
+CI:
+...
+
+TESTS:
+...
+
+NEED:
+PASS / REVISE
+
+现在可以正式开始 C-0004 Checkpoint 1。
+
+在发现真实 Schema 缺口以前：
+
+不要新增 migration。
+```
