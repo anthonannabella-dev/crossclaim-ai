@@ -22536,3 +22536,320 @@ rollback 再验证
 
 完成后再最终裁定。
 ```
+
+### [MSG-20260928-39] C-0006-B2 Step 3 Final Gate Review：PASS（机制完成；canonical 默认不启用，允许提交 C-0006 Final Gate + PR）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE:
+FINAL GATE REVIEW
+
+ID:
+C-0006-B2 Step 3
+
+GATE:
+4
+
+MODULE:
+RuleEvaluation Identity Migration
+
+VERDICT:
+
+PASS（切换机制最终验收通过）
+
+但：
+
+canonical 默认开启：暂不批准自动变更
+
+当前批准：
+
+✅ 身份迁移方案
+✅ 切换机制
+✅ 回滚机制
+✅ 审计闭环
+
+不批准：
+
+❌ 立即把默认模式从 legacy 改为 canonical
+
+1. Duplicate Resolution
+PASS
+
+当前处理符合要求。
+
+确认：
+
+未执行：
+
+删除
+覆盖
+合并历史 RuleEvaluation
+
+采用：
+
+纯文本
+KEEP_EXISTING
++
+review-only
++
+identity.duplicate_resolved audit
+
+正确。
+
+关键点：
+
+review-only 行：
+
+保持：
+
+原 dedupeKey
+原历史身份
+可追溯状态
+
+避免历史审计链断裂。
+
+2. active unmapped 门槛
+PASS
+
+当前状态：
+
+纯文本
+raw unmapped:
+
+DUPLICATE_TARGET = 1
+
+resolved:
+
+KEEP_EXISTING = 1
+
+active_unmapped = 0
+
+符合之前定义。
+
+注意：
+
+这里的：
+
+纯文本
+active_unmapped
+
+比简单 unmapped 更准确。
+
+因为：
+
+已经人工判定等价重复的不再阻塞身份切换。
+
+3. Canonical Final Parity
+PASS
+
+验收：
+
+Run #1:
+
+纯文本
+evaluationsCreated=2
+coverage=1.0000
+
+Run #2:
+
+纯文本
+evaluationsCreated=0
+skippedExisting=2
+
+证明：
+
+canonical identity 稳定
+幂等正常
+没有双身份膨胀
+4. Fail Closed
+PASS
+
+确认：
+
+CONFLICT:
+
+纯文本
+CANONICAL_IDENTITY_REQUIRED
+
+没有：
+
+fallback
+偷渡旧身份
+产生正式评估
+
+这是正确行为。
+
+5. Rollback
+PASS
+
+当前设计满足：
+
+纯文本
+canonical
+        |
+        v
+legacy
+
+只需要：
+
+纯文本
+DETECTION_IDENTITY_MODE=legacy
+
+原因：
+
+旧结构仍存在：
+
+dedupeKey
+old unique constraint
+
+没有破坏性迁移。
+
+6. 关于 canonical 默认开启
+
+你的问题：
+
+是否批准 canonical 设为默认身份模式？
+
+裁定：
+
+REVISE
+
+当前不改默认。
+
+原因：
+
+技术验证已经通过，但还缺一个阶段：
+
+运行模式切换观察阶段。
+
+建议：
+
+保持：
+
+纯文本
+default = legacy
+
+新增：
+
+纯文本
+explicit canonical enable
+
+方式：
+
+例如：
+
+纯文本
+DETECTION_IDENTITY_MODE=canonical
+
+由部署环境控制。
+
+为什么不直接改默认？
+
+因为：
+
+默认值改变属于行为变更。
+
+即使测试全部通过，也会影响：
+
+新客户数据
+新检测任务
+生产调度
+数据增长路径
+
+应该让第一次 canonical 运行成为：
+
+一次可控事件。
+
+7. 下一阶段批准范围
+
+批准：
+
+可以准备：
+
+C-0006 Final Gate Review
+
+材料。
+
+需要包含：
+
+A. Gate 总结
+
+包括：
+
+C-0006-A
+B1
+B2 Step1
+B2 Step2
+B2 Step3
+B. 最终架构状态
+
+明确：
+
+当前：
+
+纯文本
+SourceTransaction
+        |
+        v
+CanonicalFact
+        |
+        v
+RuleEvaluation(canonical identity ready)
+
+但：
+
+默认：
+
+纯文本
+legacy
+
+可选：
+
+纯文本
+canonical
+C. 保留策略
+
+明确：
+
+旧 dedupeKey：
+
+继续保留。
+
+不要进入删除阶段。
+
+D. 未来 Step 4
+
+单独申请。
+
+包括：
+
+old key 降级
+constraint 删除
+数据清理
+
+不能混入 C-0006。
+
+FINAL DECISION
+纯文本
+C-0006-B2 Step 3:
+
+PASS
+
+状态：
+
+纯文本
+Migration mechanism: COMPLETE
+
+Canonical default:
+NOT ENABLED
+
+Production switch:
+HOST APPROVAL REQUIRED
+
+允许提交：
+
+C-0006 Gate Final Review + PR
+
+继续保持 legacy 默认即可。
+```
