@@ -9,6 +9,14 @@
  *   VIEWER        no                 no                 no           no            no             no             no
  *
  * Unknown roles fail closed (everything false).
+ *
+ * C-0011 追加（MSG-20260928-118）：
+ *   role     claim item summary  claim evidence  claim item manage
+ *   OWNER/ADMIN    yes                yes              yes
+ *   OPS            yes                yes              yes
+ *   FINANCE        yes（受限字段）      no               no
+ *   VIEWER         no                 no               no
+ *   —— FINANCE 只看 status / recoverableAmount / settlementRef，不得绕过证据边界。
  */
 
 export const APP_ROLES = ['OWNER', 'ADMIN', 'OPS', 'FINANCE', 'VIEWER'] as const;
@@ -24,6 +32,12 @@ export interface PermissionMatrix {
   viewClaimAmounts: boolean;
   viewBilling: boolean;
   advanceBilling: boolean;
+  /** C-0011：ClaimItem 汇总（FINANCE 受限字段可见） */
+  viewClaimItemSummary: boolean;
+  /** C-0011：证据联结元数据（FINANCE / VIEWER 不可见） */
+  viewClaimEvidence: boolean;
+  /** C-0011：建单 / 状态迁移 / 证据联结 */
+  manageClaimItems: boolean;
 }
 
 const DENY_ALL: PermissionMatrix = {
@@ -35,6 +49,9 @@ const DENY_ALL: PermissionMatrix = {
   viewClaimAmounts: false,
   viewBilling: false,
   advanceBilling: false,
+  viewClaimItemSummary: false,
+  viewClaimEvidence: false,
+  manageClaimItems: false,
 };
 
 export const PERMISSIONS: Record<AppRole, PermissionMatrix> = {
@@ -47,6 +64,9 @@ export const PERMISSIONS: Record<AppRole, PermissionMatrix> = {
     viewClaimAmounts: true,
     viewBilling: true,
     advanceBilling: true,
+    viewClaimItemSummary: true,
+    viewClaimEvidence: true,
+    manageClaimItems: true,
   },
   ADMIN: {
     manageConnections: true,
@@ -57,6 +77,9 @@ export const PERMISSIONS: Record<AppRole, PermissionMatrix> = {
     viewClaimAmounts: true,
     viewBilling: true,
     advanceBilling: true,
+    viewClaimItemSummary: true,
+    viewClaimEvidence: true,
+    manageClaimItems: true,
   },
   OPS: {
     manageConnections: false,
@@ -67,6 +90,9 @@ export const PERMISSIONS: Record<AppRole, PermissionMatrix> = {
     viewClaimAmounts: true,
     viewBilling: true,
     advanceBilling: false,
+    viewClaimItemSummary: true,
+    viewClaimEvidence: true,
+    manageClaimItems: true,
   },
   FINANCE: {
     manageConnections: false,
@@ -77,6 +103,9 @@ export const PERMISSIONS: Record<AppRole, PermissionMatrix> = {
     viewClaimAmounts: false,
     viewBilling: true,
     advanceBilling: true,
+    viewClaimItemSummary: true,
+    viewClaimEvidence: false,
+    manageClaimItems: false,
   },
   VIEWER: { ...DENY_ALL },
 };

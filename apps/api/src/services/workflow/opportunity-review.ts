@@ -43,7 +43,9 @@ export type WorkflowErrorCode =
   /** C-0010-B2：重放缺少 attempt.paymentId 上下文时 fail closed（不允许人工补金额） */
   | 'PAYMENT_CONTEXT_REQUIRED'
   /** C-0010-B2 REVISE-3：并发的执行尝试冲突（绝不把数据库 P2002 暴露给 API 调用方） */
-  | 'ATTEMPT_ALREADY_RUNNING';
+  | 'ATTEMPT_ALREADY_RUNNING'
+  /** C-0011：REVIEW_REQUIRED 起必须入案（状态机不变量，不是数据库 CHECK） */
+  | 'CLAIM_ITEM_CASE_REQUIRED';
 
 export class WorkflowError extends Error {
   readonly code: WorkflowErrorCode;

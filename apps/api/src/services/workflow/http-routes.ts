@@ -130,6 +130,7 @@ function statusFor(error: unknown): { code: number; error: string } {
       case 'REVIEW_REQUIRED':
       case 'PAYMENT_CONTEXT_REQUIRED':
       case 'ATTEMPT_ALREADY_RUNNING':
+      case 'CLAIM_ITEM_CASE_REQUIRED':
         return { code: 409, error: error.code };
       case 'FORBIDDEN':
         return { code: 403, error: error.code };
