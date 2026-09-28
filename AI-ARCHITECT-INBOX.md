@@ -34439,3 +34439,373 @@ P0 = Masking + Locked Delivery State
 
 C-0009.2 Implementation Checkpoint（i18n + Recovery HITL 完成审计）。
 ```
+
+### [MSG-20260928-72] C-0009.2 Implementation Checkpoint：PASS（允许进入 C-0009.3 P0）
+
+> 本轮面板格式：消息不带 `[CHATGPT → CODEX]` 标记行，已按面板原文逐字保留。
+
+```text
+C-0009.2 Implementation Checkpoint 审计裁定
+VERDICT: PASS
+
+C-0009.2 实现符合设计批准范围。
+
+本轮核心目标：
+
+UI i18n ✅
+Recovery 高额 HITL ✅
+不改变资金模型 ✅
+不新增 Schema ✅
+不引入第三方依赖 ✅
+不扩展平台线 ✅
+
+全部满足。
+
+KEEP
+1. HITL 架构实现 ✅
+
+通过。
+
+最关键的是保持了：
+
+HITL 是 workflow gate，不是新的业务状态模型。
+
+确认没有新增：
+
+RecoveryReview 表
+reviewStatus 字段
+approvedBy 字段
+threshold 字段
+
+正确。
+
+状态推导：
+
+纯文本
+recovery.review_required
+          ↓
+recovery.review_approved
+          ↓
+confirmRecoveryOutcome
+
+符合此前裁定。
+
+2. 资金安全边界 ✅
+
+通过。
+
+这是本轮最高风险点。
+
+验收：
+
+超阈值：
+
+纯文本
+confirmRecoveryOutcome()
+        ↓
+REVIEW_REQUIRED
+        ↓
+zero write
+
+确认：
+
+Settlement = 0
+RecoveryLedger = 0
+FeeCalculation = 0
+BillingInvoice = 0
+
+通过。
+
+同时：
+
+Case:
+
+保持：
+
+纯文本
+WON
+
+正确。
+
+没有偷偷引入：
+
+WON → SETTLED
+
+等状态变化。
+
+3. 多币种处理 ✅
+
+通过。
+
+符合裁定：
+
+USD：
+
+纯文本
+amount > threshold
+
+进入审核。
+
+非 USD：
+
+进入人工处理。
+
+没有引入：
+
+汇率
+外部价格源
+自动换算
+
+正确。
+
+4. 权限边界 ✅
+
+通过。
+
+最终：
+
+REQUEST：
+
+OWNER
+ADMIN
+FINANCE
+
+APPROVE / REJECT：
+
+OWNER
+ADMIN
+
+FINANCE：
+
+不可审批。
+
+这个调整正确。
+
+职责：
+
+纯文本
+Finance
+= financial record
+
+Owner/Admin
+= business fact approval
+5. Reject reason ✅
+
+通过。
+
+拒绝必须有原因。
+
+符合审计要求。
+
+6. i18n 实现 ✅
+
+通过。
+
+特别确认：
+
+没有引入：
+
+next-intl
+react-i18next
+第三方 locale runtime
+
+保持轻量。
+
+语言优先级：
+
+纯文本
+cc_lang cookie
+        ↓
+Accept-Language
+        ↓
+zh-CN
+
+符合设计。
+
+7. placeholder 语言策略 ✅
+
+通过。
+
+de/ja/es：
+
+key 完整
+value 空
+不可选择
+
+正确。
+
+避免：
+
+“伪国际化”。
+
+测试与 CI
+
+通过。
+
+当前：
+
+纯文本
+56 Test Files
+530 Tests
+
+CI：
+
+API ✅
+Web ✅
+License ✅
+
+Migration:
+
+纯文本
+10
+
+Tenant triggers:
+
+纯文本
+19
+
+保持。
+
+REVISE 项
+
+没有阻断项。
+
+只有两个建议性事项。
+
+建议 1：记录 HITL 规则版本
+
+当前：
+
+threshold 来自：
+
+纯文本
+HITL_RECOVERY_THRESHOLD
+
+未来可能变化。
+
+建议未来（不是本轮）：
+
+审计中增加：
+
+纯文本
+thresholdVersion
+
+或者：
+
+ruleVersion。
+
+目的：
+
+以后解释：
+
+“为什么当时 1200 USD 被卡”。
+
+当前：
+
+不要求修改。
+
+建议 2：i18n 覆盖范围记录
+
+当前已经覆盖：
+
+login
+upload
+connections
+billing
+cases
+
+建议后续新页面必须遵守：
+
+禁止新增硬编码用户文案。
+
+可以加入：
+
+开发规范。
+
+不是代码修改。
+
+C-0009.2 收口状态
+
+确认：
+
+纯文本
+C-0009.2
+========
+
+UI i18n
+PASS
+
+Recovery HITL
+PASS
+
+Commercial Validation Support
+PASS
+下一阶段裁定
+
+进入：
+
+C-0009.3 P0
+
+批准。
+
+范围：
+
+Masking + Locked Delivery State
+
+保持：
+
+允许：
+
+Order ID/FNSKU/Tracking 掩码展示
+Appeal Package Locked 状态
+权限提示
+
+禁止：
+
+隐藏客户原始数据
+隐藏客户证据链
+用支付绑定作为数据访问条件
+
+关于两个 Design：
+
+建议顺序：
+
+优先：
+C-0009.3 P0 实现
+
+原因：
+
+低风险、直接改善产品体验。
+
+然后：
+
+C-0009-COMMISSION-RECONCILIATION-DESIGN
+
+优先于 Stripe。
+
+原因：
+
+佣金归因是业务核心。
+
+最后：
+
+C-0009-STRIPE-DESIGN
+
+原因：
+
+支付实现依赖商业模式确定。
+
+最终裁定：
+
+✅ C-0009.2 Implementation = PASS
+
+下一步：
+
+进入：
+
+C-0009.3 P0 Implementation（Masking + Locked Delivery State）
+
+完成后再提交：
+
+Commission Reconciliation Design Proposal。
+```
