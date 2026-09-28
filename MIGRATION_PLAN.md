@@ -67,11 +67,13 @@ Activepieces、代理/VPS 工具链、AGPL 的 `claudecodeui`、三层交付包�
 
 ### Wave 0 · 工程地基 ✅ 进行中
 
-- [x] 领域模型（`apps/api/prisma/schema.prisma`）
+- [x] 领域模型（26 个 = 25 核心 + 1 联结）
 - [x] 架构契约与领域规则（`ARCHITECTURE_CONTRACT.md` / `DOMAIN_MODEL.md`）
 - [x] Agent 协作规则（`AGENTS.md`）+ Watcher（`tools/agent-bridge/`）
 - [x] 许可证闸门迁入（`tools/license-gate/`）
-- [x] CI 骨架
+- [x] 数据库迁移（init + 租户完整性触发器）并在真实 PostgreSQL 上验证
+- [x] 架构契约测试 + 数据库级租户隔离/幂等测试（95 项）
+- [x] CI（全新 PostgreSQL 上跑迁移 + 全量测试 + 触发器校验）
 - [ ] Logging
 - [ ] Health Check
 - [ ] Storage Adapter

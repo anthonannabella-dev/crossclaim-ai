@@ -3,6 +3,10 @@ name: CI
 # CrossClaim 持续集成。
 # 注意：main 历史上曾包含旧项目内容（见 LEGACY_MIGRATION_AUDIT.md）。
 # 本工作流只针对 CrossClaim 正式工程结构。
+#
+# 关键点：CI 会对一个**全新 PostgreSQL** 执行 prisma migrate deploy，
+# 并在该库上跑完整测试（含跨租户隔离等数据库级断言）。
+# 「本地通过但 CI 红」不作为完成依据。
 
 on:
   push:
@@ -15,8 +19,27 @@ env:
 
 jobs:
   api:
-    name: API typecheck and tests
+    name: API · migration + typecheck + tests
     runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: crossclaim
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: crossclaim
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U crossclaim -d crossclaim"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+
+    env:
+      DATABASE_URL: postgresql://crossclaim:ci@localhost:5432/crossclaim
+
     steps:
       - uses: actions/checkout@v4
 
@@ -33,27 +56,33 @@ jobs:
       - name: Validate Prisma schema
         working-directory: apps/api
         run: npx prisma validate
-        env:
-          DATABASE_URL: postgresql://crossclaim:ci@localhost:5432/crossclaim
+
+      - name: Apply migrations to a fresh database
+        working-directory: apps/api
+        run: npx prisma migrate deploy
 
       - name: Generate Prisma Client
         working-directory: apps/api
         run: npx prisma generate
-        env:
-          DATABASE_URL: postgresql://crossclaim:ci@localhost:5432/crossclaim
+
+      - name: Verify tenant-integrity triggers exist
+        run: |
+          PGPASSWORD=ci psql -h localhost -U crossclaim -d crossclaim -t -c \
+            "select count(*) from pg_trigger where tgname like 'cc_tenant%'" \
+            | grep -qE '[[:space:]]*16[[:space:]]*' \
+            && echo "OK: 16 tenant triggers present" \
+            || (echo "FAIL: tenant triggers missing" && exit 1)
 
       - name: TypeScript typecheck
         working-directory: apps/api
         run: npx tsc --noEmit
 
-      - name: Unit tests
+      - name: Unit + database integration tests
         working-directory: apps/api
         run: npm test
-        env:
-          DATABASE_URL: postgresql://crossclaim:ci@localhost:5432/crossclaim
 
   license-gate:
-    name: License gate
+    name: 许可证闸门
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

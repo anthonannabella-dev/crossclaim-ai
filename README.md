@@ -60,13 +60,19 @@ AI 负责文档理解、字段抽取、异常解释、证据推荐、案件总�
 
 已完成：
 
-- 领域模型（`apps/api/prisma/schema.prisma`）
+- 领域模型 **26 个（25 核心 + 1 联结）**：`apps/api/prisma/schema.prisma`
 - 架构契约与领域规则（`ARCHITECTURE_CONTRACT.md` / `DOMAIN_MODEL.md`）
-- Agent 协作规则（`AGENTS.md`）+ 本地 Watcher（`tools/agent-bridge/`）
-- CI 骨架 + 许可证闸门接入
+- 数据库迁移（2 个）+ **16 个租户完整性触发器**（数据库级租户隔离）
+- 测试：架构契约 + 真实数据库租户隔离，共 **95 项**
+- Agent 协作规则（`AGENTS.md`）+ AI-ARCHITECT-INBOX + 本地 Watcher
+- CI（在全新 PostgreSQL 上真实执行迁移并跑全部测试）+ 许可证闸门
 
-尚未完成：Wave 0 实现（Logging / Health Check / Storage Adapter / Audit）、
-apps/web、apps/ai、数据库迁移、端到端链路、部署与安全文档。
+尚未完成：Wave 0 余项（Logging / Health Check / Storage Adapter / Audit 基础逻辑）、
+`apps/web`、`apps/ai`、端到端返钱闭环、部署与安全文档。
+
+> **本地跑测试需要数据库**：
+> `docker run -d --name crossclaim-postgres -e POSTGRES_USER=crossclaim -e POSTGRES_PASSWORD=ccdevpass -e POSTGRES_DB=crossclaim -p 127.0.0.1:55432:5432 postgres:16-alpine`
+> 然后 `DATABASE_URL=postgresql://crossclaim:ccdevpass@localhost:55432/crossclaim npx prisma migrate deploy && npm test`
 
 详见 [MIGRATION_PLAN.md](./MIGRATION_PLAN.md)。
 

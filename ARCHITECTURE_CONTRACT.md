@@ -86,12 +86,46 @@ Claim / Appeal 文本草稿        直接对外提交
 
 ---
 
-## 五、多租户隔离
+## 五、多租户隔离（两层强制）
 
-- 所有业务表必须带 `organizationId`
+### 5.1 应用层
+
+- 所有 tenant-owned 表必须显式带 `organizationId`
 - 查询层必须强制注入租户过滤，禁止"先查再判"
 - 任何跨租户的读取都是 P0 缺陷
 - 文件访问必须经签名 URL + 租户校验，禁止裸 `storageKey` 外泄
+- `RuleSet` 的全局规则（`SYSTEM`）普通租户**不可修改**，只能被继承或被租户级规则覆盖
+
+### 5.2 数据库层（不可绕过）
+
+**"引用对象必须属于同一租户"由数据库强制，不只靠应用层约定。**
+
+实现方式（为什么不是 Prisma 复合外键）：
+
+- Prisma 的复合外键要求 FK 字段全部可空，而 `organizationId` 不可空 —— 二者冲突
+- 因此采用**等价数据库级约束**：一个通用触发器函数 + 按表挂触发器
+
+| 对象 | 位置 |
+|---|---|
+| 校验函数 | `crossclaim_assert_tenant_integrity()` |
+| 迁移 | `apps/api/prisma/migrations/20260928060000_tenant_integrity/migration.sql` |
+| 覆盖范围 | 16 张有跨表引用的 tenant-owned 表 |
+
+规则：行的 `organizationId` 必须与被引用行的 `organizationId` 相同，否则抛 `check_violation`。
+
+**维护要求**：新增 tenant 相关外键时，必须同步在对应 trigger 的 `TG_ARGV` 中补一对参数，
+否则该外键不受保护。架构契约测试会校验触发器覆盖的清单。
+
+### 5.3 幂等
+
+- `SourceTransaction.dedupeKey` + `@@unique([organizationId, dedupeKey])`：
+  同一行重复导入不得产生第二条交易，进而不得重复产出机会
+- `RuleEvaluation.dedupeKey`：同一交易 + 同一规则版本不得重复评估
+
+### 5.4 验证方式
+
+租户隔离与幂等属于**数据库行为**，必须由真实数据库测试证明，
+不能用 schema 文本检查代替。见 `apps/api/src/__tests__/tenant-isolation.test.ts`。
 
 ---
 
