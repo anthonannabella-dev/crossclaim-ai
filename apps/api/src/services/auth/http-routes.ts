@@ -24,6 +24,8 @@ export interface AuthRouteDeps {
   users: AuthUserPort;
   session: SessionDeps;
   audit: AuditWriter;
+  /** 应用安全日志端口（不得写 email / password / token 明文） */
+  log?: (event: string, fields: Record<string, unknown>) => void;
   now?: () => Date;
 }
 
@@ -121,6 +123,7 @@ export async function handleAuthRequest(
           users: deps.users,
           session: deps.session,
           audit: deps.audit,
+          ...(deps.log ? { log: deps.log } : {}),
           ...(deps.now ? { now: deps.now } : {}),
         },
       );

@@ -302,4 +302,31 @@ describe('C-0008-A — login', () => {
     );
     expect(pinned.organizationId).toBe(ORG_B);
   });
+
+  it('writes a structured security log for failed logins without email or password', async () => {
+    const fixture = sessionFixture();
+    const user = userFixture();
+    const events: Array<{ event: string; fields: Record<string, unknown> }> = [];
+
+    await expect(
+      loginWithPassword(
+        { email: 'nobody@example.com', password: 'super-secret-9999' },
+        {
+          users: user.port,
+          session: fixture.deps,
+          audit: fixture.deps.audit,
+          log: (event, fields) => events.push({ event, fields }),
+        },
+      ),
+    ).rejects.toThrow(AuthError);
+
+    expect(events).toHaveLength(1);
+    expect(events[0].event).toBe('auth_login_failed');
+    expect(events[0].fields.reason).toBe('NO_SUCH_USER');
+    const serialized = JSON.stringify(events);
+    expect(serialized).not.toContain('nobody@example.com');
+    expect(serialized).not.toContain('super-secret-9999');
+    // 未知邮箱没有租户归属 → 不写 AuditLog
+    expect(fixture.sink.rows).toHaveLength(0);
+  });
 });

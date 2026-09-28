@@ -107,6 +107,8 @@ export function createServer(deps: ServerDeps): http.Server {
             ipSalt: auditIpSalt,
           },
           audit,
+          // C-0008-A 裁定：未知邮箱失败登录没有租户归属 → 只写结构化安全日志
+          log: (event, fields) => log.warn(event, fields),
         }
       : undefined);
 

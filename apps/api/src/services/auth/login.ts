@@ -49,6 +49,11 @@ export interface LoginDeps {
   users: AuthUserPort;
   session: SessionDeps;
   audit: AuditWriter;
+  /**
+   * 可选应用安全日志（C-0008-A 裁定）：未知邮箱没有租户归属、无法写 AuditLog，
+   * 但可以有结构化安全日志 —— 只允许写 reason / failedLogins，禁止 email/password/token。
+   */
+  log?: (event: string, fields: Record<string, unknown>) => void;
   now?: () => Date;
 }
 
@@ -61,6 +66,12 @@ async function auditLoginFailed(
   deps: LoginDeps,
   input: { organizationId?: string; userId?: string; reason: string; failedLogins?: number },
 ): Promise<void> {
+  // 结构化安全日志先写：未知邮箱没有租户归属，仍然要留下可观测记录。
+  deps.log?.('auth_login_failed', {
+    reason: input.reason,
+    ...(input.failedLogins !== undefined ? { failedLogins: input.failedLogins } : {}),
+  });
+
   // AuditLog is tenant-scoped, so a failure can only be recorded once a tenant is
   // known: either the caller supplied it, or the user has an active membership.
   // An unknown email therefore has no tenant context and stays unlogged here

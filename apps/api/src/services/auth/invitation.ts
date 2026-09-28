@@ -184,10 +184,11 @@ export async function acceptInvitation(
     throw new InvitationError(code, message);
   };
 
-  if (invitation.revokedAt) await rejected('INVITATION_REVOKED', '邀请已被吊销', 'REVOKED');
-  if (invitation.acceptedAt) await rejected('INVITATION_ALREADY_ACCEPTED', '邀请已被使用', 'ALREADY_ACCEPTED');
+  // 审计 reason 采用架构方批准的词表：expired / revoked / attempt_limit / invalid
+  if (invitation.revokedAt) await rejected('INVITATION_REVOKED', '邀请已被吊销', 'revoked');
+  if (invitation.acceptedAt) await rejected('INVITATION_ALREADY_ACCEPTED', '邀请已被使用', 'invalid');
   if (invitation.expiresAt.getTime() <= at.getTime()) {
-    await rejected('INVITATION_EXPIRED', '邀请已过期', 'EXPIRED');
+    await rejected('INVITATION_EXPIRED', '邀请已过期', 'expired');
   }
 
   assertPasswordPolicy(input.password);
@@ -197,7 +198,7 @@ export async function acceptInvitation(
     ? await deps.memberships.findActive(invitation.organizationId, existingUser.id)
     : null;
   if (membership) {
-    await rejected('USER_ALREADY_MEMBER', '该用户已是组织成员', 'ALREADY_MEMBER');
+    await rejected('USER_ALREADY_MEMBER', '该用户已是组织成员', 'invalid');
   }
 
   const passwordHash = hashPassword(input.password, deps.scrypt ?? DEFAULT_SCRYPT_PARAMS);
