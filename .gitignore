@@ -103,6 +103,9 @@ data_fetcher/output/
 # ----- 本仓库自身的配置备份 -----
 .gitignore.bak_*
 
+# ----- 许可证闸门生成物 -----
+ops/license-gate/report.json
+
 # ----- 代理 / VPS 运维工具链（与产品无关）-----
 hysteria*
 proxy_switch.ps1

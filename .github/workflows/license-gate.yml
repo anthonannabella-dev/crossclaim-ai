@@ -1,0 +1,41 @@
+name: License Gate
+
+# 依赖许可证闸门：命中 GPL/AGPL/SSPL/BSL/Elastic/Sustainable Use 等
+# 强 copyleft 或 source-available 许可时直接失败。
+# 规则与例外表见 ops/license-gate/allowlist.json
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  license-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install backend dependencies
+        working-directory: ./backend
+        run: npm ci --ignore-scripts
+
+      - name: Install frontend dependencies
+        working-directory: ./frontend
+        run: npm ci --ignore-scripts
+
+      - name: Run license gate
+        run: node ops/license-gate/check-licenses.mjs --json ops/license-gate/report.json
+
+      - name: Upload license report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: license-report
+          path: ops/license-gate/report.json
+          if-no-files-found: ignore

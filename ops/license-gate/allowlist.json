@@ -1,0 +1,161 @@
+{
+  "$comment": "CrossClaim AI License Gate — 依赖许可证准入清单。供 pre-commit / CI 脚本读取，做机器判定，不靠人记。",
+  "version": 1,
+  "updated": "2026-09-28",
+  "scope": {
+    "project": "CrossClaim AI (Recovery OS)",
+    "repository": "E:\\zhuihuiweikuan-saas",
+    "note": "核心业务代码为自有；第三方基座只允许商业友好的宽松许可证。"
+  },
+
+  "policy": {
+    "allow": [
+      "MIT",
+      "MIT-0",
+      "ISC",
+      "BSD-2-Clause",
+      "BSD-3-Clause",
+      "Apache-2.0",
+      "PostgreSQL",
+      "0BSD",
+      "Unlicense",
+      "BlueOak-1.0.0",
+      "CC0-1.0",
+      "Python-2.0",
+      "Zlib"
+    ],
+    "review": [
+      "MPL-2.0",
+      "LGPL-2.1-only",
+      "LGPL-2.1-or-later",
+      "LGPL-3.0-only",
+      "LGPL-3.0-or-later",
+      "EPL-2.0",
+      "CC-BY-SA-4.0",
+      "Artistic-2.0",
+      "UNKNOWN",
+      "custom",
+      "SEE LICENSE IN"
+    ],
+    "deny": [
+      "GPL-2.0",
+      "GPL-2.0-only",
+      "GPL-2.0-or-later",
+      "GPL-3.0",
+      "GPL-3.0-only",
+      "GPL-3.0-or-later",
+      "AGPL-1.0",
+      "AGPL-3.0",
+      "AGPL-3.0-only",
+      "AGPL-3.0-or-later",
+      "SSPL-1.0",
+      "BUSL-1.1",
+      "Elastic-2.0",
+      "Sustainable Use License",
+      "Commons Clause",
+      "RSALv2",
+      "n8n Sustainable Use License"
+    ],
+    "behavior": {
+      "denyMatch": "fail",
+      "reviewMatch": "failUnlessExceptionRecorded",
+      "unknownMatch": "fail",
+      "dualLicense": "resolveToAllowedBranchAndRecordException",
+      "requireNoticeFile": true,
+      "requireSbomOnRelease": true
+    }
+  },
+
+  "resolvedDualLicenses": [
+    {
+      "package": "jszip",
+      "declared": "(MIT OR GPL-3.0-or-later)",
+      "resolved": "MIT",
+      "scope": "backend",
+      "reason": "双许可，选择 MIT 分支。必须在依赖清单中锁定，禁止按 GPL 分支解释。"
+    }
+  ],
+
+  "approvedExceptions": [
+    {
+      "package": "minio",
+      "scope": "backend",
+      "license": "Apache-2.0",
+      "reason": "npm 客户端实测 Apache-2.0，可用。注意：MinIO 服务端本体是 AGPL-3.0。",
+      "constraint": "对象存储服务端必须继续使用 SeaweedFS（Apache-2.0），禁止部署 MinIO 服务端。"
+    },
+    {
+      "package": "xlsx",
+      "scope": "backend",
+      "license": "Apache-2.0",
+      "version": "0.18.5",
+      "reason": "当前版本仍为 Apache-2.0，可用；但 SheetJS 后续版本不在 npm 上以宽松许可发布。",
+      "constraint": "禁止升级 xlsx 大版本；计划迁移到 ExcelJS（MIT）。"
+    },
+    {
+      "package": "tradeflow/activepieces-main",
+      "scope": "external-tool",
+      "license": "MIT Expat (core) + separate license (packages/ee/)",
+      "reason": "MIT Expat 核心 + packages/ee/ 另授权。",
+      "constraint": "仅允许作为独立外部进程的可选工作流外挂，禁止成为 CrossClaim 的运行时依赖或代码依赖。"
+    },
+    {
+      "package": "redis",
+      "scope": "infra-image",
+      "license": "BSD-3-Clause",
+      "version": "7.x",
+      "reason": "Redis 7 为 BSD-3-Clause。",
+      "constraint": "镜像钉住 7.x，禁止升级到 Redis 8+（AGPLv3 / RSALv2）。"
+    },
+    {
+      "package": "paddleocr",
+      "scope": "ocr_service",
+      "license": "Apache-2.0",
+      "reason": "Apache-2.0，可商用。第一版仅作为中文扫描件的补充手段。",
+      "constraint": "优先使用 Docling；仅在中文扫描件效果不足时启用。"
+    }
+  ],
+
+  "notAdopted": [
+    {
+      "package": "n8n",
+      "license": "Sustainable Use License",
+      "reason": "source-available，非传统开源许可。核心业务不得依赖。"
+    },
+    {
+      "package": "supabase",
+      "license": "Apache-2.0",
+      "reason": "许可证本身可用；本项目不采用，用 PostgreSQL + 现有自研认证体系。"
+    },
+    {
+      "package": "graphile-worker",
+      "license": "MIT",
+      "reason": "许可证可用；架构上不引入，避免队列重复建设（现有 BullMQ + Redis 已够）。"
+    },
+    {
+      "package": "sqlalchemy",
+      "license": "MIT",
+      "reason": "许可证可用；架构上不引入，避免与 Prisma 形成双 ORM 双模型定义。"
+    }
+  ],
+
+  "plannedAdditions": [
+    { "package": "temporal", "license": "MIT", "layer": "workflow" },
+    { "package": "langgraph", "license": "MIT", "layer": "ai" },
+    { "package": "docling", "license": "MIT (code only)", "layer": "doc-parsing", "note": "模型许可证另见 MODEL_LICENSES.md" },
+    { "package": "fastapi", "license": "MIT", "layer": "ai-service" },
+    { "package": "pydantic", "license": "MIT", "layer": "ai-service" },
+    { "package": "exceljs", "license": "MIT", "layer": "import" },
+    { "package": "papaparse", "license": "MIT", "layer": "import" },
+    { "package": "@tanstack/react-query", "license": "MIT", "layer": "frontend" },
+    { "package": "react-hook-form", "license": "MIT", "layer": "frontend" },
+    { "package": "recharts", "license": "MIT", "layer": "frontend" },
+    { "package": "stagehand", "license": "MIT", "layer": "browser-agent", "note": "阶段 3 才引入" }
+  ],
+
+  "gateTooling": [
+    { "name": "license-checker-rseidelsohn", "ecosystem": "npm", "license": "BSD-3-Clause (待实测确认)" },
+    { "name": "pip-licenses", "ecosystem": "pypi", "license": "MIT (待实测确认)" },
+    { "name": "syft", "ecosystem": "sbom", "license": "Apache-2.0 (待实测确认)" }
+  ]
+}

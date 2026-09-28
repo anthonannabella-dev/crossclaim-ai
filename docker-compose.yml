@@ -84,8 +84,8 @@
     container_name: customs-backend
     restart: unless-stopped
     environment:
-      HTTP_PROXY: http://host.docker.internal:7890
-      HTTPS_PROXY: http://host.docker.internal:7890
+      HTTP_PROXY: ${HTTP_PROXY_URL-http://host.docker.internal:7890}
+      HTTPS_PROXY: ${HTTPS_PROXY_URL-http://host.docker.internal:7890}
       NO_PROXY: localhost,127.0.0.1,postgres,redis,seaweedfs,ocr,backend,bots
       NODE_ENV: production
       DATABASE_URL: postgresql://${POSTGRES_USER:-customs}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@postgres:5432/${POSTGRES_DB:-customs_saas}
@@ -146,8 +146,8 @@
     container_name: customs-bots
     restart: unless-stopped
     environment:
-      HTTP_PROXY: http://host.docker.internal:7890
-      HTTPS_PROXY: http://host.docker.internal:7890
+      HTTP_PROXY: ${HTTP_PROXY_URL-http://host.docker.internal:7890}
+      HTTPS_PROXY: ${HTTP_PROXY_URL-http://host.docker.internal:7890}
       NO_PROXY: localhost,127.0.0.1,backend
       BACKEND_API_URL: http://backend:3000
       FEISHU_WEBHOOK_URL: ${FEISHU_WEBHOOK_URL:-}
