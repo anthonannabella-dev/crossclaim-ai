@@ -31,11 +31,13 @@ interface OpportunityItem {
   recoverableAmount: string | null;
   summary: {
     invoiceReference: string | null;
+    invoiceReferenceMasked: string | null;
     amountDifference: string | null;
     basis: string;
   };
   calculation: {
     invoiceReference: string | null;
+    invoiceReferenceMasked: string | null;
     ruleVersion: string | null;
     rateSource: string | null;
     calculationDetail: string | null;
@@ -169,7 +171,21 @@ export default async function DashboardPage() {
               {opportunities.body.items.map((item) => (
                 <tr key={item.id} className="border-t align-top">
                   <td className="py-2">
-                    <div className="font-mono text-xs">{item.calculation.invoiceReference ?? '—'}</div>
+                    {/* C-0009.3 P0：默认掩码展示；客户自有数据可展开查看完整值 */}
+                    <div className="font-mono text-xs">
+                      {item.calculation.invoiceReferenceMasked ?? item.calculation.invoiceReference ?? '—'}
+                    </div>
+                    {item.calculation.invoiceReference &&
+                    item.calculation.invoiceReferenceMasked !== item.calculation.invoiceReference ? (
+                      <details className="mt-1">
+                        <summary className="cursor-pointer text-xs text-slate-500">
+                          {t.dashboard.showFull}
+                        </summary>
+                        <div className="mt-1 font-mono text-xs">
+                          {item.calculation.invoiceReference}
+                        </div>
+                      </details>
+                    ) : null}
                     <div className="text-xs text-slate-500">{item.title || item.id.slice(0, 8)}</div>
                   </td>
                   <td>

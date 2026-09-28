@@ -37,6 +37,18 @@ interface ClaimDraft {
   sections: string[];
 }
 
+interface AppealPackageState {
+  caseId: string;
+  caseNo: string;
+  deliverable: { kind: string; state: string; reason: string; unlockAvailable: boolean; note: string };
+  customerDataAccess: {
+    rawFiles: string;
+    evidenceChain: string;
+    auditTrail: string;
+    note: string;
+  };
+}
+
 async function apiGet<T>(path: string): Promise<{ ok: boolean; status: number; body: T | null }> {
   const cookieStore = await cookies();
   const cookie = cookieStore.toString();
@@ -69,9 +81,10 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
     );
   }
 
-  const [evidence, claim] = await Promise.all([
+  const [evidence, claim, appealPackage] = await Promise.all([
     apiGet<{ items: EvidenceItem[] }>(`/cases/${id}/evidence`),
     apiGet<ClaimDraft>(`/cases/${id}/claim`),
+    apiGet<AppealPackageState>(`/cases/${id}/appeal-package`),
   ]);
   const body = detail.body;
 
@@ -107,6 +120,40 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
             </li>
           ))}
         </ul>
+      </section>
+
+      <section className="rounded-lg border bg-white p-6">
+        <h2 className="text-lg font-medium">{t.caseDetail.appealPackage}</h2>
+        {appealPackage.ok && appealPackage.body ? (
+          <div className="mt-3 space-y-2 text-sm">
+            <p>
+              <span className="rounded bg-amber-100 px-2 py-0.5 text-xs text-amber-800">
+                {t.caseDetail.deliverableLocked}
+              </span>{' '}
+              <span className="text-slate-600">{appealPackage.body.deliverable.kind}</span>
+            </p>
+            <p className="text-xs text-slate-500">{t.caseDetail.deliverableNote}</p>
+            <div className="mt-3 rounded bg-slate-50 p-3 text-xs text-slate-700">
+              <p className="font-medium">{t.caseDetail.customerDataTitle}</p>
+              <ul className="mt-1 space-y-0.5">
+                <li>
+                  {t.caseDetail.rawFiles}：{t.caseDetail.available}
+                </li>
+                <li>
+                  {t.caseDetail.evidenceChain}：{t.caseDetail.available}
+                </li>
+                <li>
+                  {t.caseDetail.auditTrail}：{t.caseDetail.available}
+                </li>
+              </ul>
+              <p className="mt-2 text-slate-500">{t.caseDetail.customerDataNote}</p>
+            </div>
+          </div>
+        ) : (
+          <p className="mt-3 text-sm text-red-600">
+            {t.common.loadFailed}（HTTP {appealPackage.status}）。
+          </p>
+        )}
       </section>
 
       <section className="rounded-lg border bg-white p-6">

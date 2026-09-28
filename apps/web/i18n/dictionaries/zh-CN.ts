@@ -45,6 +45,8 @@ const zhCN = {
     colEvidence: '复算证据',
     colReview: '复核',
     evidenceExpand: '展开',
+    showFull: '显示完整值',
+    maskedHint: '默认掩码展示（客户自有数据仍可展开查看完整值）',
     evidenceInvoice: '发票',
     evidenceRuleVersion: '规则版本',
     evidenceRateSource: '费率来源',
@@ -160,6 +162,17 @@ const zhCN = {
     claimDenied: '当前角色无权查看 Claim 正文（403）。财务与只读角色请改用账单页面查看服务费事实。',
     claimDraft: '草稿文本',
     claimFinal: '最终文本',
+    appealPackage: '对外交付物（申诉包）',
+    deliverableLocked: '未解锁',
+    deliverableNote:
+      '对外交付物当前处于未解锁状态；解锁能力将在商业化 Gate 中单独设计（本轮不提供支付绑定解锁）。',
+    customerDataTitle: '客户自有数据访问状态',
+    customerDataNote:
+      '原始文件、证据链与审计记录始终可访问，与交付物状态无关；不得以支付绑定作为数据访问条件。',
+    rawFiles: '原始文件',
+    evidenceChain: '证据链',
+    auditTrail: '审计记录',
+    available: '可访问',
   },
   recoveryReview: {
     title: '高额回收复核',

@@ -44,6 +44,8 @@ const enUS: Messages = {
     colEvidence: 'Recomputation evidence',
     colReview: 'Review',
     evidenceExpand: 'Expand',
+    showFull: 'Show full value',
+    maskedHint: 'Masked by default (you can expand to see the full value of your own data)',
     evidenceInvoice: 'Invoice',
     evidenceRuleVersion: 'Rule version',
     evidenceRateSource: 'Rate source',
@@ -163,6 +165,17 @@ const enUS: Messages = {
       'Your role cannot view the claim text (403). Finance and read-only roles should use the billing page for service-fee facts.',
     claimDraft: 'Draft text',
     claimFinal: 'Final text',
+    appealPackage: 'Outbound deliverable (appeal package)',
+    deliverableLocked: 'Locked',
+    deliverableNote:
+      'The outbound deliverable is currently locked; unlocking will be designed in a separate commercial gate (no payment binding in this phase).',
+    customerDataTitle: 'Customer data access',
+    customerDataNote:
+      'Raw files, evidence chain and audit trail stay accessible regardless of the deliverable state; payment binding must never gate data access.',
+    rawFiles: 'Raw files',
+    evidenceChain: 'Evidence chain',
+    auditTrail: 'Audit trail',
+    available: 'Available',
   },
   recoveryReview: {
     title: 'High-value recovery review',
