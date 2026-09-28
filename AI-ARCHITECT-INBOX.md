@@ -26585,3 +26585,461 @@ Web license gate
 
 完成后再进入 C-0008-B。
 ```
+
+### [MSG-20260928-49] C-0008-A Implementation Checkpoint Review：PASS（允许进入 C-0008-B Customer Workflow Layer）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE:
+IMPLEMENTATION CHECKPOINT REVIEW
+
+ID:
+C-0008-A
+
+GATE:
+6
+
+MODULE:
+Customer Foundation + Web Foundation
+
+HEAD:
+aebf90c
+
+STATUS:
+
+PASS ✅
+
+C-0008-A Implementation Checkpoint 通过。
+
+允许进入：
+
+C-0008-B Customer Workflow Layer
+一、总体评价
+
+本次实现完成了 C-0008-A 的核心目标：
+
+从：
+
+纯文本
+后端能力
+
+进入：
+
+纯文本
+用户可操作产品入口
+
+完成：
+
+纯文本
+用户
+ ↓
+登录
+ ↓
+进入组织
+ ↓
+上传数据
+ ↓
+看到导入状态
+ ↓
+看到机会结果
+
+符合 Gate 6 设计目标。
+
+二、关于 License Gate 修复
+
+这是本轮最重要的发现。
+
+接受修复，并要求保留记录。
+
+此前：
+
+license-gate SUCCESS
+
+实际未覆盖真实 workspace。
+
+这是一个历史流程缺陷。
+
+本轮修复：
+
+纯文本
+apps/api
+apps/web
+
+真实扫描。
+
+批准。
+
+要求：
+
+后续所有 Gate：
+
+必须继续保持：
+
+纯文本
+API + Web
+
+双 workspace license 检查。
+
+同时：
+
+Next 安全版本升级：
+
+纯文本
+next 15.5.26
+React 19.1.9
+
+接受。
+
+三、Session 实现审核
+PASS
+
+关键设计正确：
+
+Token:
+
+正确：
+
+纯文本
+raw token
+      |
+      |
+sha256
+      |
+      |
+database
+
+数据库不保存原 token。
+
+Session 验证链
+
+批准：
+
+纯文本
+Cookie
+ ↓
+tokenHash
+ ↓
+Session
+ ↓
+Membership(
+ organizationId,
+ userId,
+ active
+)
+
+这是正确租户隔离路径。
+
+lastSeenAt 节流
+
+批准：
+
+5 分钟窗口。
+
+避免：
+
+每请求一次 UPDATE。
+
+四、未知邮箱登录失败审计问题
+
+问题：
+
+未知邮箱失败登录无租户归属，不写 AuditLog，是否接受？
+
+裁定：
+接受当前设计 ✅
+
+原因：
+
+如果记录：
+
+纯文本
+email=xxx@example.com
+
+需要：
+
+平台级审计归属。
+
+会引入：
+
+新审计域
+新权限模型
+用户枚举风险
+
+当前阶段不值得扩大范围。
+
+但是补充要求：
+
+未知邮箱失败：
+
+必须：
+
+至少：
+
+不返回用户是否存在
+返回统一错误：
+
+例如：
+
+纯文本
+Invalid email or password
+可以写应用安全日志（非 AuditLog）
+
+但：
+
+禁止：
+
+email 明文长期保存
+password
+token
+
+如果未来需要：
+
+安全中心 / SOC：
+
+再建立：
+
+PlatformAudit。
+
+不是现在。
+
+五、user.invitation_failed 事件
+批准 ✅
+
+保留。
+
+虽然初始列表没有，但合理。
+
+原因：
+
+邀请链接属于安全入口。
+
+需要区分：
+
+纯文本
+user.invited
+
+user.invitation_accepted
+
+user.invitation_failed
+
+要求：
+
+failed 事件不要记录：
+
+token
+tokenHash
+password
+
+可以记录：
+
+纯文本
+reason:
+expired
+revoked
+attempt_limit
+invalid
+六、首次上传自动创建默认 FILE_UPLOAD Connection
+
+问题：
+
+首次上传自动创建默认上传连接是否符合预期？
+
+裁定：
+批准，但增加限制 ✅
+
+当前阶段允许。
+
+原因：
+
+如果要求用户先创建：
+
+纯文本
+Connection
+ ↓
+Upload
+
+早期体验阻力过大。
+
+但是：
+
+必须保持：
+
+自动创建也必须经过：
+
+已有生命周期服务。
+
+即：
+
+不能直接 insert。
+
+流程：
+
+纯文本
+User Upload
+
+↓
+
+check FILE_UPLOAD connection
+
+↓
+
+不存在
+
+↓
+
+createConnection()
+
+↓
+
+audit:
+source_connection.created
+
+↓
+
+upload
+
+禁止：
+
+隐藏创建。
+
+七、C-0008-A 完成确认
+
+批准：
+
+纯文本
+C-0008-A = COMPLETE
+
+验收：
+
+项目	状态
+Schema Delta	PASS
+Session	PASS
+Invitation	PASS
+Tenant Isolation	PASS
+Audit	PASS
+Web Foundation	PASS
+License Gate	PASS
+Upload Flow	PASS
+八、进入 C-0008-B
+
+批准。
+
+下一阶段：
+
+C-0008-B Customer Workflow Layer
+
+范围确认：
+
+允许：
+
+1. Connection Management
+
+包括：
+
+查看连接
+创建连接
+暂停
+激活
+错误状态
+API 配置展示（不接真实平台）
+2. Manual Review Workflow
+
+包括：
+
+Opportunity:
+
+纯文本
+DETECTED
+ ↓
+用户确认
+ ↓
+QUALIFIED
+ ↓
+进入 Case
+
+注意：
+
+保持之前规则：
+
+DETECTED 不自动闭环。
+
+3. Case 创建
+
+允许：
+
+用户主动：
+
+Create Case
+
+进入：
+
+Recovery Closure。
+
+4. Claim Draft 查看
+
+允许：
+
+展示：
+
+Claim Draft
+Evidence
+Recovery amount
+
+禁止：
+
+自动提交。
+
+5. Billing 展示
+
+允许：
+
+展示：
+
+FeeCalculation
+
+BillingInvoice
+
+DRAFT
+ISSUED
+PAID
+
+禁止：
+
+支付。
+
+九、C-0008-B 开始前要求
+
+不需要新的 Web Delta。
+
+但是：
+
+如果新增 Schema：
+
+必须：
+
+先提交 Schema Delta。
+
+下一步：
+
+请提交：
+
+C-0008-B Kickoff / Schema Delta Request
+
+重点审查：
+
+Opportunity 人工确认状态流转
+Case 创建权限
+Claim Draft 展示权限
+Billing 状态权限
+Connection 管理安全边界
+
+最终裁定：
+
+纯文本
+C-0008-A
+
+PASS ✅
+
+允许进入 C-0008-B
+```
