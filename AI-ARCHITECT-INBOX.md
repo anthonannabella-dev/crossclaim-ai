@@ -24370,3 +24370,445 @@ Constraints:
 
 可以继续执行 Phase 3。
 ```
+
+### [MSG-20260928-44] C-0007 Phase 3 Review：PASS（批准 Phase 4 Runner；暂不新增 SourceSyncRun）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE:
+PHASE REVIEW
+
+ID:
+C-0007 Phase 3
+
+GATE:
+5
+
+MODULE:
+API Connector Runtime
+
+HEAD:
+42193e2
+
+VERDICT:
+
+PASS ✅
+
+批准进入 Phase 4：Runner。
+
+1. API Connector Runtime 架构
+PASS
+
+当前链路：
+
+纯文本
+SourceConnection(API)
+        |
+        v
+Adapter Registry
+        |
+        v
+authenticate()
+        |
+        v
+pull()
+        |
+        v
+canonical ingest
+        |
+        v
+SourceTransaction
+        |
+        v
+CanonicalFact
+
+符合 Gate 5 目标。
+
+确认：
+
+API 与 FILE_UPLOAD 共用 ingest 核心
+不产生第二套数据路径
+不绕过 CanonicalFact 双写
+
+通过。
+
+2. 安全边界
+PASS
+
+以下守卫全部批准。
+
+租户隔离
+
+必须：
+
+纯文本
+organizationId
++
+connectionId
+
+共同确定连接。
+
+通过。
+
+Connection 状态
+
+当前：
+
+纯文本
+ACTIVE
+
+才允许执行。
+
+拒绝：
+
+NEEDS_AUTH
+PAUSED
+ERROR
+REVOKED
+
+正确。
+
+平台来源
+
+批准：
+
+平台只能来自：
+
+纯文本
+SourceConnection.config.platform
+
+禁止调用方传：
+
+纯文本
+platform="xxx"
+
+避免：
+
+租户绕过
+错误 Adapter 路由
+
+通过。
+
+Credential
+
+继续保持：
+
+核心层只接收：
+
+纯文本
+credentialRef
+
+禁止：
+
+secret
+token
+apiKey
+
+进入业务对象。
+
+通过。
+
+3. Write Surface 防护
+PASS
+
+二次保护：
+
+即使 Adapter 自称：
+
+纯文本
+submitClaim()
+
+也拒绝。
+
+符合：
+
+C-0007 / Gate 1 / Adapter Contract。
+
+当前状态：
+
+纯文本
+ExternalAdapter
+=
+READ ONLY
+
+保持。
+
+4. 审计设计
+PASS
+
+新增：
+
+纯文本
+adapter.pull_completed
+
+合理。
+
+字段：
+
+platform
+pages
+recordsPulled
+importStatus
+rowsOk
+rowsFailed
+duplicates
+nextCursor
+pullErrorCode
+
+满足运行可观察性。
+
+保持：
+
+纯文本
+adapter.pull_failed
+import.completed
+import.failed
+
+形成：
+
+纯文本
+Pull
+ |
+ |
+Import
+ |
+ |
+Result
+
+完整链路。
+
+5. Fail Closed
+PASS
+
+重要点：
+
+所有拒绝发生在：
+
+网络请求之前 + 数据写入之前
+
+批准。
+
+尤其：
+
+connection 校验
+capability 校验
+credential 校验
+
+提前失败。
+
+6. 测试覆盖
+PASS
+
+覆盖：
+
+场景	结果
+缺连接	reject
+非 API	reject
+非 ACTIVE	reject
+缺 platform	reject
+缺 credentialRef	reject
+Adapter 不存在	reject
+Adapter 写面	reject
+正常 pull	PASS
+
+并验证：
+
+SourceTransaction 写入
+CanonicalFact 双写
+Audit 存在
+secret 不泄露
+
+通过。
+
+7. 边界检查
+
+确认：
+
+项目	状态
+真实平台 API	未接
+OAuth	未接
+外部凭据	未接
+公网端点	未做
+新依赖	无
+Schema	未改
+Migration	未改
+Canonical 默认	未切
+Identity Step4	未做
+
+全部符合。
+
+8. Phase 4 前置裁定
+
+批准进入：
+
+Runner Runtime
+
+但增加以下要求。
+
+A. 是否新增 SourceSyncRun
+
+当前你提出：
+
+先使用 SourceConnection 字段
+
+批准：
+
+Phase 4 可以先不新增 Schema。
+
+原因：
+
+先证明：
+
+调度语义
+重试语义
+幂等语义
+
+不要过早扩表。
+
+但是必须限制：
+
+现有字段：
+
+纯文本
+lastSyncAt
+lastError
+lastErrorAt
+
+只能表示：
+
+当前状态。
+
+不能假装它是完整执行历史。
+
+因此：
+
+Phase 4 需要明确：
+
+当前 runner history = non-persistent execution evidence
+
+如果未来需要：
+
+多次运行查询
+SLA
+调度统计
+运维界面
+
+再提交：
+
+SourceSyncRun Schema Delta。
+
+9. Phase 4 必测项目
+① Retry
+
+必须覆盖：
+
+纯文本
+Attempt 1
+失败
+
+↓
+
+5分钟策略计算
+
+↓
+
+Attempt 2
+成功
+
+无需真实等待。
+
+测试中允许：
+
+fake clock。
+
+② Backoff
+
+验证：
+
+例如：
+
+纯文本
+1m
+5m
+15m
+1h
+
+不允许：
+
+无限重试。
+
+③ Idempotency
+
+必须证明：
+
+重复 runner：
+
+不会新增：
+
+ImportBatch
+SourceTransaction
+CanonicalFact
+④ Recovery Scenario
+
+你提出的：
+
+上传成功 → 导入失败 → 重试 → 成功
+
+必须覆盖。
+
+期望：
+
+第一次：
+
+纯文本
+FileAsset = 1
+Import FAILED
+SourceTransaction = 0
+
+第二次：
+
+纯文本
+Import SUCCESS
+SourceTransaction = N
+CanonicalFact = N
+
+不能：
+
+纯文本
+2N
+⑤ Partial Failure
+
+API：
+
+纯文本
+page1 success
+
+page2 failed
+
+要求：
+
+已成功数据保留
+cursor/error 保存
+重试不重复
+最终裁定
+纯文本
+C-0007 Phase 3
+
+STATUS:
+PASS
+
+NEXT:
+Phase 4 Runner APPROVED
+
+Constraints:
+- internal runner only
+- zero dependency
+- no SourceSyncRun schema yet
+- no real scheduler deployment
+- no external API
+- no OAuth
+- no canonical default switch
+
+可以继续执行 Phase 4。
+```
