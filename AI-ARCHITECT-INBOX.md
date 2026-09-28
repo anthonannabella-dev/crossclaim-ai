@@ -32928,3 +32928,704 @@ C-0009.1 P0 Implementation Checkpoint（D1/D2/D3 + 首单验证准备）
 
 C-0009.2 UI i18n + Recovery HITL Design。
 ```
+
+### [MSG-20260928-68] C-0009.1 P0 Implementation Checkpoint：PASS WITH OPEN VALIDATION ITEMS（工程 PASS / 商业验证待 VALIDATION-RUN-001）
+
+> 本轮面板格式：消息不带 `[CHATGPT → CODEX]` 标记行，已按面板原文逐字保留。
+
+```text
+C-0009.1 P0 Implementation Checkpoint 审计裁定
+VERDICT: PASS WITH OPEN VALIDATION ITEMS
+
+本轮代码实现通过。
+
+但 C-0009.1 商业验证尚未完成，原因不是工程问题，而是缺少真实业务输入和真实反馈。
+
+因此状态：
+
+工程实现：✅ PASS
+商业验证：⏳ OPEN
+KEEP
+1. Scope 控制 ✅
+
+本轮严格遵守：
+
+只做只读聚合 + 展示 + 导出。
+
+确认没有扩大：
+
+未修改：
+
+Rule Engine
+Import Pipeline
+Recovery Calculation
+Settlement
+Billing
+Schema
+
+正确。
+
+2. Schema / Dependency 控制 ✅
+
+通过。
+
+确认：
+
+纯文本
+schema.prisma
+NO CHANGE
+
+Migration:
+
+纯文本
+10
+
+保持。
+
+依赖：
+
+纯文本
+package.json
+NO CHANGE
+
+符合 C-0009.1 约束。
+
+3. D1 Opportunity Insight ✅
+
+通过。
+
+输出满足商业验证需求：
+
+纯文本
+哪张票
+差多少钱
+为什么
+
+当前：
+
+JSON
+invoiceReference
+amountDifference
+basis
+
+符合。
+
+4. D2 复算证据块 ✅
+
+这是本轮核心验收。
+
+通过。
+
+必须保留：
+
+纯文本
+Invoice
++
+RuleVersion
++
+Rate Source
++
+Calculation Detail
++
+Timestamp
+
+当前包含：
+
+ruleVersion
+rateSource
+definitionHash
+calculationTimestamp
+
+通过。
+
+特别认可：
+
+加入：
+
+纯文本
+definitionHash
+
+有助于未来解释：
+
+“为什么当时算出这个金额”。
+
+5. D3 导出 CSV ✅
+
+通过。
+
+列：
+
+纯文本
+opportunity_id
+invoice_reference
+recoverable_amount
+rule_reason
+evidence_reference
+
+符合。
+
+安全检查：
+
+未包含：
+
+token
+credential
+secret
+
+通过。
+
+测试与 CI
+
+通过。
+
+当前：
+
+纯文本
+54 Test Files
+513 Tests
+
+CI：
+
+API ✅
+Web ✅
+License ✅
+
+数据库：
+
+migrations OK
+tenant trigger OK
+验收 8 条复核
+#	项目	裁定
+1	真实结构账单导入	OPEN
+2	机会金额复算	PASS（样例）/ OPEN（真实）
+3	人工复核→Case→Claim	PASS
+4	Recovery→Billing	PASS
+5	Audit追踪	PASS
+6	CI/Schema/依赖	PASS
+7	复算证据完整	PASS
+8	商业反馈	OPEN
+REVISE 项（非代码）
+
+有两个地方需要补充记录。
+
+REVISE-1：不要把样例称为真实验证
+
+当前：
+
+DB 样例通过。
+
+但是验收 #2 仍只能：
+
+纯文本
+Engineering Validation
+
+不能写：
+
+纯文本
+Commercial Validation Passed
+
+直到：
+
+收到：
+
+脱敏真实结构账单
+或者
+真实客户授权样本
+REVISE-2：增加 Validation Run 编号
+
+建议下一步验证时生成：
+
+例如：
+
+纯文本
+VALIDATION-RUN-001
+
+记录：
+
+输入文件 hash
+时间
+渠道
+客户类型
+输出机会数量
+客户反馈
+
+不要新增 Schema。
+
+可以先：
+
+Markdown / Report 形式。
+
+关于下一步 C-0009.2
+
+当前可以进入设计。
+
+但提醒：
+
+不要因为 C-0009.2 新需求，把真实验证延期。
+
+优先级仍然：
+
+纯文本
+真实账单验证
+        ↓
+真实价值反馈
+        ↓
+产品化增强
+C-0009.2 准入
+
+批准继续：
+
+UI i18n
+
+可以开始。
+
+Recovery HITL
+
+可以开始。
+
+限制：
+
+只做：
+
+Audit + workflow gate。
+
+不要：
+
+新资金模型
+新 Schema
+自动放款/扣款
+Stripe
+
+继续：
+
+Design Only。
+
+最终裁定
+✅ C-0009.1 P0 Implementation = PASS
+
+状态：
+
+纯文本
+ENGINEERING: PASSED
+
+COMMERCIAL VALIDATION: WAITING FOR VALIDATION-RUN-001
+
+下一步：
+
+可以提交：
+
+C-0009.2 UI i18n + Recovery HITL Design Proposal
+
+同时等待：
+
+VALIDATION-RUN-001（真实/脱敏真实结构账单验证）。
+```
+
+### [MSG-20260928-69] C-0009.1 RE-REVIEW + SCOPE ADDENDUM 裁定：REVISE 已闭合；多平台扩展 HOLD；C-0009.2 批准设计
+
+> 本轮面板格式：消息不带 `[CHATGPT → CODEX]` 标记行，已按面板原文逐字保留。
+
+```text
+C-0009.1 RE-REVIEW + SCOPE ADDENDUM 审计裁定
+总裁定
+
+VERDICT: PASS（REVISE 已关闭） + SCOPE HOLD
+
+本次分两部分：
+
+C-0009.1 P0 两项 REVISE：
+✅ 已关闭
+多平台扩展：
+⏸ 暂不进入实现
+按独立 Gate 管理
+一、REVISE-1 / REVISE-2 收口
+REVISE-1：工程验证 ≠ 商业验证
+✅ PASS
+
+当前处理正确。
+
+接受：
+
+明确区分：
+
+纯文本
+Engineering Validation
+
+和：
+
+纯文本
+Commercial Validation
+
+保持规则：
+
+禁止：
+
+测试数据跑通 = 商业验证成功
+
+当前状态：
+
+纯文本
+Commercial Validation:
+OPEN
+
+正确。
+
+REVISE-2：Validation Run 编号
+✅ PASS
+
+接受：
+
+纯文本
+VALIDATION-RUN-NNN
+
+模板。
+
+尤其认可：
+
+记录：
+
+sha256
+行数
+inputKind
+渠道
+客户类型
+机会数量
+金额
+反馈
+决策
+
+但不记录：
+
+客户名称
+账号
+运单原文
+合同全文
+
+正确。
+
+不需要 Schema。
+
+保持：
+
+Report / Markdown 记录即可。
+
+二、多平台 Scope Addendum 裁定
+总原则
+
+宿主提出方向：
+
+多平台资产损耗诊断平台
+
+长期方向可以保留。
+
+但当前阶段不能进入开发。
+
+原因：
+
+这已经不是 C-0009 产品化增强。
+
+而是：
+
+新产品域扩展
+
+涉及：
+
+新数据源
+新规则
+新权限
+新证据模型
+新合规边界
+1. Amazon SP-API
+裁定：
+⏸ HOLD（与此前一致）
+
+进入条件：
+
+必须先完成：
+
+HOST APPROVAL：
+
+Amazon Developer
+Seller Authorization
+API 权限范围
+
+第一阶段只允许：
+
+纯文本
+READ ONLY
+
+禁止：
+
+修改库存
+提交申诉
+操作 Seller Central
+2. TikTok Shop Open API
+裁定：
+⏸ HOLD
+
+与 Amazon 同级。
+
+原因：
+
+需要：
+
+商家授权
+API scope
+平台条款确认
+
+暂不进入：
+
+DNR 自动申诉。
+
+3. Walmart Partner API
+裁定：
+⏸ HOLD
+
+同样：
+
+需要：
+
+Partner API 授权
+商家授权
+
+你的顺序建议：
+
+Amazon → Walmart → TikTok
+
+可以作为未来验证顺序。
+
+但不是当前 Gate。
+
+三、申诉包边界裁定
+
+这是重要边界。
+
+裁定：
+
+允许：
+
+✅ 生成申诉草稿
+
+禁止：
+
+❌ 自动提交
+
+允许输出：
+
+例如：
+
+纯文本
+Appeal Draft
++
+Evidence Reference
++
+Reason Explanation
+
+禁止：
+
+系统执行：
+
+平台账号登录
+点击提交
+修改平台状态
+发送外部请求
+
+原因：
+
+一旦自动提交：
+
+系统从：
+
+“辅助工具”
+
+变成：
+
+“代表客户对外行动”。
+
+风险明显提高。
+
+四、统一 Claim Item Schema
+裁定：
+⏸ 不立即设计统一 Schema
+
+先做：
+
+Domain Discovery。
+
+原因：
+
+当前已经有：
+
+RecoveryOpportunity
+Case
+Evidence
+Claim
+
+贸然增加：
+
+纯文本
+NormalizedClaimItem
+
+容易过早抽象。
+
+未来流程：
+
+必须：
+
+先提交：
+
+C-PLATFORM-DATA-MODEL-DESIGN
+
+内容：
+
+Amazon Item
+Walmart Item
+TikTok Item
+Logistics Item
+Customs Item
+
+共同字段。
+
+通过后：
+
+才：
+
+Schema Delta Request。
+
+五、OCR / 17TRACK / 海关
+OCR
+
+裁定：
+
+⏸ HOLD
+
+原因：
+
+涉及：
+
+新依赖
+License
+成本
+17TRACK 等轨迹 API
+
+裁定：
+
+⏸ HOLD
+
+需要：
+
+API 条款
+费用
+数据权限
+海关 C88/7501
+
+裁定：
+
+⏸ HOLD + 合规专项
+
+原因：
+
+这里不仅是技术问题。
+
+涉及：
+
+税务解释
+海关规则
+正式申报边界
+
+允许未来：
+
+“异常测算 + 证据整理”。
+
+禁止：
+
+“代客户申报”。
+
+六、《全渠道资产损耗诊断报告》
+裁定：
+
+继续 HOLD。
+
+条件：
+
+至少满足：
+
+纯文本
+两个独立领域
++
+真实数据验证
++
+真实反馈
+
+之后才抽象。
+
+七、C-0009.2 下一步确认
+进入：
+✅ C-0009.2 Design
+
+范围：
+
+A1 UI i18n
+
+批准。
+
+范围：
+
+zh-CN
+en-US
+de/ja/es placeholder
+C1 Recovery HITL
+
+批准。
+
+范围：
+
+threshold
+workflow gate
+audit
+
+限制：
+
+不新增 Schema。
+
+C-0009.2 不包含：
+
+❌ SP-API
+
+❌ TikTok
+
+❌ Walmart
+
+❌ OCR
+
+❌ 物流 API
+
+❌ 海关
+
+❌ Stripe 实现
+
+最终裁定表
+项目	决策
+REVISE-1	✅ CLOSED
+REVISE-2	✅ CLOSED
+Amazon SP-API	⏸ HOLD
+TikTok Shop API	⏸ HOLD
+Walmart API	⏸ HOLD
+申诉包	✅ 仅草稿生成
+自动提交申诉	❌ 禁止
+Unified Claim Schema	⏸ 先设计后 Schema
+OCR	⏸ HOLD
+17TRACK	⏸ HOLD
+海关	⏸ 合规专项
+全渠道报告	⏸ HOLD
+C-0009.2	✅ 开始设计
+
+最终：
+
+✅ C-0009.1 = CLOSED
+🟡 C-0009.2 = APPROVED TO DESIGN
+
+下一提交：
+
+C-0009.2 Design Proposal（UI i18n + Recovery HITL）。
+```
