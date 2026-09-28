@@ -36949,3 +36949,365 @@ Stripe 测试环境方案
 
 当前架构路线保持正确。
 ```
+
+### [MSG-20260928-79] C-0010-PAYMENT-INTEGRATION-GATE-PROPOSAL 裁定：PASS（Schema Delta 批准；webhook 拆 C-0010-A~D）
+
+> 本轮面板格式：消息不带 `[CHATGPT → CODEX]` 标记行，已按面板原文逐字保留。
+
+```text
+C-0010-PAYMENT-INTEGRATION-GATE-PROPOSAL 审计裁定
+VERDICT: ✅ PASS（有前置条件）
+
+整体 Gate 设计符合此前约束，可以进入 C-0010 Implementation Planning。
+
+但需要记录 3 个非阻塞 REVISE 点，进入实施前必须补齐。
+
+Q1：Schema Delta（Payment / PaymentEvent + 租户触发器）
+裁定：
+
+✅ 批准进入 Schema Delta 流程
+
+批准范围：
+
+新增：
+
+纯文本
+Payment
+
+PaymentEvent
+
+不批准：
+
+纯文本
+BillingInvoice 修改
+Settlement 修改
+必须补充的实现约束
+1. Payment 必须校验 invoice 租户归属
+
+未来写入必须满足：
+
+纯文本
+Payment.organizationId
+=
+BillingInvoice.organizationId
+
+禁止：
+
+跨租户 invoice 引用。
+
+2. PaymentEvent 唯一键建议调整
+
+当前：
+
+SQL
+@@unique([provider, providerEventId])
+
+接受。
+
+但建议实施时改为：
+
+SQL
+@@unique([provider, providerEventId])
+
+保持全局唯一。
+
+原因：
+
+Stripe event id 本身全局唯一。
+
+无需增加 organizationId。
+
+3. 两个租户触发器
+
+批准。
+
+但要求：
+
+触发器只负责：
+
+纯文本
+Payment.organizationId
+存在
+PaymentEvent.organizationId
+存在
+
+不要把业务状态机放数据库 trigger。
+
+状态迁移仍由应用层控制。
+
+Q2：Payment HITL 阈值
+裁定：
+
+⚠️ REVISE（小调整）
+
+不要直接复用 Recovery HITL。
+
+原因：
+
+两个风险不同。
+
+Recovery HITL：
+
+纯文本
+客户追回多少钱？
+
+风险：
+
+错误追回
+金额确认
+
+Payment HITL：
+
+纯文本
+客户是否付款？
+
+风险：
+
+欺诈
+支付异常
+大额付款
+
+因此：
+
+第一版不要绑定：
+
+纯文本
+HITL_RECOVERY_THRESHOLD
+
+应独立：
+
+纯文本
+PAYMENT_REVIEW_THRESHOLD
+
+默认：
+
+纯文本
+USD 1000
+
+非 USD：
+
+继续：
+
+纯文本
+人工复核
+
+通过。
+
+审计保持：
+
+纯文本
+payment.review_required
+payment.review_approved
+payment.review_rejected
+
+不能复用：
+
+纯文本
+recovery.review.*
+Q3：回滚方案
+裁定：
+
+✅ 批准
+
+采用：
+
+纯文本
+功能开关
++
+数据只增不删
+
+正确。
+
+确认：
+
+默认：
+
+env
+PAYMENTS_ENABLED=false
+
+批准。
+
+但是：
+
+关于：
+
+webhook 返回 503
+
+建议实施时改：
+
+已验证签名事件：
+
+返回：
+
+http
+200
+
+但：
+
+纯文本
+processingResult=IGNORED
+
+原因：
+
+支付平台通常会重试 webhook。
+
+如果长期 503：
+
+可能造成：
+
+重复投递
+噪声
+无意义重试
+
+所以：
+
+建议：
+
+关闭功能：
+
+收到 webhook
+↓
+验签
+↓
+记录事件
+↓
+IGNORED
+↓
+200
+
+而不是拒绝。
+
+这是非阻塞 REVISE。
+
+Q4：财务对账输出
+裁定：
+
+✅ 批准
+
+第一阶段：
+
+CSV 差异清单 + Audit。
+
+格式：
+
+建议：
+
+纯文本
+invoiceId
+paymentId
+externalPaymentId
+amount
+currency
+differenceType
+detectedAt
+suggestedAction
+
+通过。
+
+禁止：
+
+自动修账。
+
+必须：
+
+纯文本
+发现差异
+↓
+人工裁定
+↓
+审计
+Q5：Webhook 是否 C-0010 实现
+裁定：
+
+✅ 纳入 C-0010
+
+但拆成子阶段。
+
+建议：
+
+C-0010-A
+
+Schema + Payment domain
+
+↓
+
+C-0010-B
+
+Webhook Receiver
+
+↓
+
+C-0010-C
+
+Test mode 验证
+
+↓
+
+C-0010-D
+
+Production enablement
+
+其中：
+
+C-0010-D：
+
+必须等待：
+
+Stripe账号
+域名
+TLS
+收款主体
+税务确认
+
+所以：
+
+Webhook 代码可以在 C-0010 实现。
+
+但：
+
+生产启用独立 Gate。
+
+最终裁定
+C-0010-PAYMENT-INTEGRATION-GATE-PROPOSAL
+✅ PASS
+Q1-Q5 最终裁定表
+问题	裁定
+Q1 Schema Delta	✅批准 Payment / PaymentEvent；不改 BillingInvoice/Settlement
+Q2 Payment HITL	⚠️独立阈值 PAYMENT_REVIEW_THRESHOLD，默认 USD1000，非USD人工
+Q3 回滚	✅功能开关 + 数据只增；关闭时建议 webhook 验签后 IGNORE+200
+Q4 财务对账	✅CSV差异清单 + Audit
+Q5 Webhook	✅进入 C-0010，但生产启用拆独立 Gate
+C-0010 实施前必须保持
+
+允许：
+
+✅ Schema migration
+✅ Payment domain
+✅ Webhook receiver
+✅ Test fixture
+✅ CAS PAID 推进
+
+禁止：
+
+❌ Stripe 生产账号接入
+❌ 真实扣款
+❌ 自动退款
+❌ 自动冲正
+❌ 修改 Settlement
+❌ 修改 BillingInvoice 结构
+
+下一步可以提交：
+
+C-0010-A IMPLEMENTATION PLAN
+
+内容范围：
+
+Schema migration 顺序
+Payment 服务边界
+Webhook handler 流程
+CAS 状态迁移
+测试矩阵
+Feature flag 控制方案
+
+当前 Gate 设计通过。
+```
