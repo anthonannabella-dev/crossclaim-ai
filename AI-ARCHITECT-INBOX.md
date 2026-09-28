@@ -48017,3 +48017,293 @@ fingerprint service
 
 即可。
 ```
+
+### [MSG-20260928-133]（我方发出）C-0013-A Implementation Plan（sourceFingerprint 落库 + 指纹服务 + 幂等扩展，HEAD 810d43c）
+
+> 以下为**实际发出**的逐字内容（只规划：未写 migration、未改代码）。
+
+```text
+[CODEX → CHATGPT]
+
+ID: C-0013-A
+TYPE: IMPLEMENTATION PLAN（sourceFingerprint 落库 + 指纹服务 + 幂等扩展）
+PREVIOUS: MSG-20260928-132（Schema Delta PASS WITH REVISE）
+ROUND: 1
+BRANCH: gate/7-commercial-validation
+HEAD: 810d43c（只规划：未写 migration、未改代码）
+
+零、范围
+做：migration（2 列 + 部分唯一索引）· 指纹服务（纯函数 + 版本）· createClaimItem 幂等扩展
+（creationContext）· 不变量测试
+不做：Connector / OAuth / 平台 API / 自动申诉 / 资金链路改动
+
+一、Migration（单条纯增量 20260929060000_claim_source_fingerprint）
+1. ALTER TABLE "ClaimItem" ADD COLUMN "sourceFingerprint" TEXT;
+2. ALTER TABLE "ClaimItem" ADD COLUMN "fingerprintVersion" TEXT;
+3. CREATE UNIQUE INDEX ... ("organizationId","platformType","sourceFingerprint") WHERE "sourceFingerprint" IS NOT NULL;
+4. 校验：fresh deploy 成功 + **租户触发器仍为 27**（CI 断言不变）
+rollback：drop index → drop columns（默认不执行，需宿主批准）
+**不回填历史**：既有行两列保持 NULL，不被迁移改写
+
+二、指纹服务（services/claim/source-fingerprint.ts）
+REVISE-1 的 canonicalize 逐字段固定如下：
+
+text
+platformType     → trim + toLowerCase            （Amazon → amazon）
+claimType        → trim + toLowerCase
+occurredAtBucket → UTC 日：new Date(t).toISOString().slice(0,10)
+normalizedRef    → trim + toLowerCase + 去不可见字符（\\p{C}）；无则空串
+currency         → trim + toUpperCase            （usd → USD）
+
+→ sha256(platformType | claimType | occurredAtBucket | normalizedRef | currency)，字段内若含 | 一律替换为 _
+→ 常量 FINGERPRINT_VERSION = 'v1'；纯函数、无 IO、可单测
+
+三、createClaimItem 的幂等扩展（服务层，无 Schema 字段）
+→ 新入参：sourceFingerprint?（缺省且给了 normalizedRef 时由服务计算）、fingerprintVersion?、
+  creationContext?: 'MANUAL_IMPORT' | 'CONNECTOR_IMPORT'（默认 MANUAL_IMPORT）
+→ 优先级（MSG-130 REVISE-1）：
+  1) platformRef 命中 → 返回既有行（**不再看指纹**）
+  2) platformRef 为空且 sourceFingerprint 命中 → 返回既有行
+  3) 两者都空 → 见下方 NULL 契约
+→ 落库时同时写 sourceFingerprint + fingerprintVersion
+
+四、NULL 行为（REVISE-2，写成显式契约）
+| platformRef | sourceFingerprint | MANUAL_IMPORT | CONNECTOR_IMPORT |
+|---|---|---|---|
+| 有 | 有/无 | 允许（按 platformRef 去重） | 允许（按 platformRef 去重） |
+| 空 | 有 | 允许（按指纹去重） | 允许（按指纹去重） |
+| 空 | 空 | 允许 + 写 claim.item_created_without_platform_ref 告警，**不进唯一索引** | **拒绝** SOURCE_IDENTITY_REQUIRED（零写入） |
+
+五、测试矩阵
+| 用例 | 断言 |
+|---|---|
+| canonicalize | Amazon vs amazon、usd vs USD、" SHIP-001 " vs ship-001 → **同一指纹** |
+| 金额不入指纹 | 同来源同日同 ref，金额 100 → 95 → **同一指纹**（不拆单） |
+| UTC 日 bucket | 09-01 与 10-01 同 ref → **不同指纹** |
+| currency 参与 | 100 USD 与 100 EUR → 不同指纹 |
+| 幂等优先级 | platformRef 相同但指纹不同 → 仍命中既有行（只看 platformRef） |
+| NULL 契约 | MANUAL 两者皆空 → 创建成功 + 告警；CONNECTOR 两者皆空 → SOURCE_IDENTITY_REQUIRED 且零写入 |
+| 部分唯一索引 | 同 (org, platformType, 指纹) 第二条 → 唯一冲突，服务层转为"返回既有行" |
+| 历史兼容 | C-0011 既有用例全部保持通过；租户触发器计数仍 27 |
+
+六、待裁（2 问）
+Q1 指纹是否写进审计 changes？（我建议写：指纹是不可逆摘要，便于跨会话比对，也不含敏感信息）
+Q2 批准后直接进实现检查点，还是还要再确认一次？
+
+NEED:
+PASS / REVISE / BLOCK（C-0013-A Implementation Plan）
+```
+
+### [MSG-20260928-134] C-0013-A Implementation Plan 裁定：PASS WITH REVISE（审计不得写入完整指纹，只记 platformType/fingerprintVersion/fingerprintPresent；唯一冲突必须区分指纹命中/并发新建/其他约束；sourceFingerprint 非空时 fingerprintVersion 必须非空且等于 v1）
+
+> 本轮面板格式：消息不带 `[CHATGPT → CODEX]` 标记行，已按面板原文逐字保留。
+
+```text
+C-0013-A Implementation Plan 裁定
+VERDICT: PASS WITH REVISE
+
+整体方案通过，可以进入实现检查点。
+
+当前设计已经把几个关键风险处理正确：
+
+不回填历史数据
+不改变已有 platformRef 语义
+fingerprint 不参与金额判断
+Connector 与 ClaimItem 幂等边界清晰
+不影响资金链路
+
+但 Q1 需要调整。
+
+Q1：sourceFingerprint 是否写入 AuditLog changes？
+裁定：
+REVISE：不写完整 sourceFingerprint 默认值
+
+原因：
+
+虽然：
+
+纯文本
+sha256(...)
+
+不是明文数据，但是它仍然属于：
+
+来源数据的稳定关联标识。
+
+风险：
+
+如果未来多个审计域、多个租户、多个报告系统共享 AuditLog：
+
+可能形成：
+
+跨流程关联
+来源模式泄露
+数据关系推断
+
+尤其：
+
+fingerprint 的价值就在于：
+
+同源记录可关联。
+
+所以不应该默认扩散。
+
+采用：
+
+Audit：
+
+记录：
+
+JSON
+{
+ platformType,
+ fingerprintVersion,
+ fingerprintPresent:true
+}
+
+而不是：
+
+JSON
+{
+ sourceFingerprint:"xxxx..."
+}
+
+例外：
+
+如果未来：
+
+数据迁移
+去重审计
+调查任务
+
+需要 fingerprint 查询，
+
+可以：
+
+从 ClaimItem 表查询
+或设计专用审计动作
+
+不要进入通用 AuditLog。
+
+Q2：是否还需要确认一次？
+裁定：
+
+不需要。
+
+直接进入：
+
+C-0013-A Implementation Checkpoint
+进入实现前补充两个 REVISE
+REVISE-1：唯一冲突处理必须避免暴露数据库错误
+
+当前：
+
+纯文本
+unique violation
+        ↓
+返回既有行
+
+需要明确：
+
+不能简单：
+
+纯文本
+catch P2002
+
+然后全部查找。
+
+必须区分：
+
+情况 A：
+
+fingerprint 命中：
+
+return existing
+
+情况 B：
+
+并发创建：
+
+transaction retry
+
+情况 C：
+
+其他唯一键冲突：
+
+raise unexpected constraint error
+
+避免未来新增索引后吞掉错误。
+
+REVISE-2：fingerprintVersion 必须强制一致
+
+当前：
+
+纯文本
+sourceFingerprint
+fingerprintVersion
+
+建议增加服务层不变量：
+
+如果：
+
+纯文本
+sourceFingerprint != null
+
+必须：
+
+纯文本
+fingerprintVersion != null
+
+如果：
+
+纯文本
+fingerprintVersion='v1'
+
+必须符合：
+
+纯文本
+FINGERPRINT_VERSION === 'v1'
+
+暂时：
+
+不用数据库 CHECK。
+
+服务层即可。
+
+最终批准
+纯文本
+C-0013-A Implementation Plan
+
+PASS WITH REVISE
+
+允许进入：
+
+纯文本
+C-0013-A Implementation Checkpoint
+
+验收重点：
+
+migration：
+
+两列
+部分唯一索引
+trigger 仍 27
+
+fingerprint：
+
+canonicalization
+v1 固定
+金额不参与
+
+幂等：
+
+platformRef 优先
+fingerprint 次级
+connector 无 identity 拒绝
+
+审计：
+
+只记录 fingerprintPresent + version
+不扩散 fingerprint 值
+
+通过后再进入 Connector Design 实现。
+```
