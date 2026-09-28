@@ -13,7 +13,8 @@
 import { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
-import { createPrismaImportRepository, runImport } from '../services/ingest';
+import { assertSafeSource, withSourceEvidence } from '../services/adapters';
+import { createPrismaImportRepository, runImport, runImportRows } from '../services/ingest';
 
 const prisma = new PrismaClient();
 const repository = createPrismaImportRepository(prisma);
@@ -116,5 +117,45 @@ describe('导入层 · 真实数据库', () => {
     expect(report.issues[0]).toMatchObject({ row: 2, code: 'INVALID_AMOUNT' });
 
     expect(await prisma.sourceTransaction.count({ where: { organizationId: ORG_A } })).toBe(1);
+  });
+
+  // CHANGE #33 / #38：guard 通过的 source 必须能被真实 Prisma 原样保存并回读（不只内存仓库）
+  it('guard 通过的 JSON-safe source → 真实 SourceTransaction.raw 落库并原样回读', async () => {
+    const source = {
+      shipmentId: 'SHIP-1',
+      platformFee: '3.20',
+      nested: { flags: [true, false, null], note: '平台附加费' },
+    };
+    expect(() => assertSafeSource(source, { platform: 'ups-test', rowNumber: 1 })).not.toThrow();
+
+    const result = await runImportRows({
+      context: context(ORG_A),
+      header: ['externalId', 'referenceType', 'occurredAt', 'amount', 'currency'],
+      rows: [
+        {
+          externalId: 'DB-1',
+          referenceType: 'INVOICE',
+          occurredAt: '2026-09-28',
+          amount: '12.34',
+          currency: 'USD',
+        },
+      ],
+      mapping: {
+        externalId: 'externalId',
+        referenceType: 'referenceType',
+        occurredAt: 'occurredAt',
+        amount: 'amount',
+        currency: 'currency',
+      },
+      repository,
+      rawProjection: (row) => withSourceEvidence(row, source),
+    });
+
+    expect(result.status).toBe('IMPORTED');
+    const stored = await prisma.sourceTransaction.findFirstOrThrow({
+      where: { organizationId: ORG_A, externalId: 'DB-1' },
+    });
+    expect(stored.raw).toMatchObject({ externalId: 'DB-1', amount: '12.34' });
+    expect((stored.raw as { _source: unknown })._source).toEqual(source);
   });
 });
