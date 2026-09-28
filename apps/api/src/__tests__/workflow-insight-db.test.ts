@@ -55,7 +55,8 @@ async function seedInsightChain(organizationId = ORG, label = 'INSIGHT-1') {
     data: {
       organizationId: null,
       ownerType: 'SYSTEM',
-      ownerKey: 'SYSTEM',
+      // 数据库约束：SYSTEM 规则的 ownerKey 必须是 'GLOBAL'（cc_ruleset_ownership_check）
+      ownerKey: 'GLOBAL',
       domain: 'LOGISTICS',
       channel: 'OTHER',
       scope: 'FREIGHT_RATE',
