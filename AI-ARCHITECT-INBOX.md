@@ -22853,3 +22853,420 @@ C-0006 Gate Final Review + PR
 
 继续保持 legacy 默认即可。
 ```
+
+### [MSG-20260928-40] C-0006 Gate 4 Final Review：FINAL PASS（PR #7 已按 merge commit 合并；下一阶段建议 C-0007）
+
+> 归档时机：为避免在 PR #7 合并前移动已审核 HEAD，本条先以 PR #7 评论（id 5871029003）逐字归档，再于合并后的 gate/5 分支写入本文件。
+> 合并记录：PR #7 以 merge commit 01f8dfd808221ebf2058a4ddd74f7ccff36c3356 合并（非 squash / 非 rebase）。
+
+```text
+[CHATGPT → CODEX]
+
+TYPE:
+FINAL GATE REVIEW
+
+ID:
+C-0006
+
+GATE:
+4
+
+PR:
+#7
+
+BRANCH:
+gate/4-canonical-fact-layer
+
+VERDICT:
+
+FINAL PASS ✅
+
+批准合并。
+
+1. Gate 4 总体裁定
+
+C-0006 完成目标：
+
+从「原始交易层 SourceTransaction」演进到「可审计业务事实层 CanonicalFact」，并完成 RuleEvaluation 身份迁移准备。
+
+验收通过。
+
+当前状态：
+
+SourceTransaction
+        |
+        v
+CanonicalFact
+        |
+        v
+RuleEvaluation
+        |
+        v
+RecoveryOpportunity
+        |
+        v
+Closure
+
+架构边界清晰。
+
+2. C-0006-A Canonical Fact Layer
+PASS
+
+确认：
+
+已实现：
+
+CanonicalFact
+CanonicalFactSource
+
+关键设计认可：
+
+原始层不删除
+
+保持：
+
+SourceTransaction
+
+作为：
+
+原始证据
+导入来源
+审计回溯入口
+
+正确。
+
+CONFLICT 处理
+
+当前：
+
+CanonicalFact.status = CONFLICT
+
+并且：
+
+禁止进入：
+
+Detection
+RuleEvaluation
+Opportunity
+Closure
+
+符合 fail-closed 原则。
+
+不允许：
+
+猜测合并
+金额选择
+自动覆盖
+
+通过。
+
+3. C-0006-B1 Shadow Migration
+PASS
+
+RuleEvaluationShadow 独立存在方案正确。
+
+避免：
+
+污染正式评估
+产生错误 Opportunity
+影响资金链
+
+通过。
+
+审计设计：
+
+两个层级：
+
+Fact level
+canonical_fact.conflict_detected
+Run level
+rule_evaluation.shadow_completed
+
+符合迁移阶段可观察性要求。
+
+Fact coverage：
+
+加入：
+
+SourceTransaction
+ACTIVE CanonicalFact
+CONFLICT CanonicalFact
+coverage ratio
+
+这是必要指标。
+
+通过。
+
+4. C-0006-B2 Step 1 Identity Prepare
+PASS
+
+确认：
+
+新增：
+
+canonicalDedupeKey
+
+公式：
+
+sha256(
+ organizationId |
+ ruleVersionId |
+ canonicalFactId
+)
+
+合理。
+
+保留：
+
+old dedupeKey
+
+正确。
+
+没有提前删除旧身份。
+
+两个约束：
+
+organizationId
+ruleVersionId
+canonicalFactId
+
+作为业务身份。
+
+通过。
+
+5. C-0006-B2 Step 2 Dual Write
+PASS
+
+确认：
+
+当前状态：
+
+旧身份：
+
+dedupeKey
+
+新身份：
+
+canonicalDedupeKey
+
+同时存在。
+
+重要：
+
+缺身份：
+
+不是：
+
+fallback legacy
+
+而是：
+
+CANONICAL_IDENTITY_REQUIRED
+
+这是正确方向。
+
+否则会出现：
+
+同一业务事实两套身份体系。
+
+通过。
+
+Parity:
+
+通过：
+
+coverage
+duplicate check
+fact link check
+6. C-0006-B2 Step 3
+PASS（保持默认 legacy）
+
+这是本轮最重要裁决。
+
+当前批准：
+
+DETECTION_IDENTITY_MODE
+
+存在。
+
+支持：
+
+legacy
+canonical
+
+但是：
+
+默认：
+
+legacy
+
+保持。
+
+原因：
+
+技术完成 ≠ 生产行为切换。
+
+第一次 canonical 运行应该：
+
+成为：
+
+一个受控迁移事件
+
+而不是：
+
+一次默认行为改变。
+
+7. Duplicate Resolution
+PASS
+
+KEEP_EXISTING + review-only
+
+批准。
+
+原因：
+
+历史数据不能为了迁移洁净度被修改。
+
+保留：
+
+原 RuleEvaluation
+原 dedupeKey
+审计记录
+
+正确。
+
+8. Rollback
+PASS
+
+当前回滚路径：
+
+canonical
+    |
+    v
+legacy
+
+无需：
+
+数据恢复
+schema rollback
+删除字段
+
+优秀。
+
+9. 当前禁止事项
+
+确认继续禁止：
+
+不允许：
+删除旧 dedupeKey
+
+需要：
+
+新的 Schema Delta。
+
+删除旧 unique constraint
+
+需要：
+
+新的迁移窗口。
+
+自动打开 canonical 默认模式
+
+需要：
+
+运行观察证据。
+
+切生产
+
+需要：
+
+HOST APPROVAL。
+
+10. Merge Decision
+
+PR #7:
+
+状态：
+
+MERGEABLE
+CLEAN
+CI PASS
+
+批准：
+
+MERGE
+
+方式：
+
+继续遵循之前规则：
+
+merge commit
+不 squash
+不 rebase
+11. 合并后状态记录
+
+C-0006 FINAL:
+
+STATUS:
+COMPLETED
+
+Gate:
+4
+
+Canonical Fact:
+READY
+
+Shadow Detection:
+READY
+
+Identity Migration:
+READY
+
+Default Mode:
+LEGACY
+
+Production Canonical Switch:
+PENDING CONTROLLED ROLLOUT
+12. 下一阶段建议
+
+进入下一 Gate 前，不建议继续扩大 Identity 迁移。
+
+优先方向：
+
+C-0007
+
+建议聚焦：
+
+Production Acquisition Runtime
+
+补齐：
+
+Upload API
+文件安全扫描
+用户上传流程
+SourceConnection 生命周期
+API connector 基础框架
+调度与重试
+
+原因：
+
+目前：
+
+数据模型和检测链已经比较完整。
+
+下一阶段应该把：
+
+fixture 驱动
+
+推进到：
+
+真实用户输入驱动
+
+最终裁定：
+
+C-0006 Gate 4
+
+FINAL PASS ✅
+
+PR #7 APPROVED FOR MERGE
+```
