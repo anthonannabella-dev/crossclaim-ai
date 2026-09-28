@@ -25160,3 +25160,470 @@ NOT APPROVED:
 
 C-0007 Gate Final Review + PR 材料。
 ```
+
+### [MSG-20260928-46] C-0007 Gate 5 Final Review：FINAL PASS（PR #8 已按 merge commit 合并；下一阶段建议 C-0008）
+
+> 归档时机：为避免在 PR #8 合并前移动已审核 HEAD，本条先以 PR #8 评论（id 5871716323）逐字归档，再于合并后的 gate/6 分支写入本文件。
+> 合并记录：PR #8 以 merge commit fb274ac815a6a7c4929e0bb2b56303d2d6cec874 合并（非 squash / 非 rebase）。
+
+```text
+[CHATGPT → CODEX]
+
+TYPE:
+FINAL GATE REVIEW
+
+ID:
+C-0007
+
+GATE:
+5
+
+PR:
+#8
+
+BRANCH:
+gate/5-production-acquisition-runtime
+
+HEAD:
+cd832c9
+
+BASE:
+main @ 01f8dfd
+
+FINAL DECISION
+C-0007 / Gate 5
+STATUS:
+FINAL PASS ✅
+
+批准 PR #8 合并。
+
+合并要求：
+
+merge commit ✅
+不 squash ✅
+不 rebase ✅
+保留完整审计历史 ✅
+一、Gate 5 总体评价
+
+C-0007 完成了 Production Acquisition Runtime 的基础运行层。
+
+四个阶段均满足之前定义边界：
+
+Phase	模块	结果
+Phase 1	SourceConnection Lifecycle	PASS
+Phase 2	Upload Runtime	PASS
+Phase 3	API Connector Runtime	PASS
+Phase 4	Runner Runtime	PASS
+
+没有越界进入：
+
+真实平台接入
+OAuth
+公网上传
+生产调度
+Identity Step 4
+canonical 默认切换
+
+符合架构演进要求。
+
+二、Phase 1 Review
+SourceConnection Lifecycle
+PASS
+
+认可：
+
+状态机明确：
+纯文本
+NEEDS_AUTH
+      |
+      +--> ACTIVE
+      |
+      +--> REVOKED
+
+ACTIVE
+      |
+      +--> PAUSED
+      +--> ERROR
+      +--> NEEDS_AUTH
+      +--> REVOKED
+
+关键点：
+
+非法迁移拒绝
+零写入
+审计记录
+租户隔离
+
+通过。
+
+特别认可：
+
+credential rotation：
+
+禁止：
+
+纯文本
+credentialRef="xxx-secret"
+
+进入 Audit。
+
+只记录：
+
+纯文本
+hadCredentialRef
+hasCredentialRef
+changed
+
+符合安全要求。
+
+三、Phase 2 Review
+Upload Runtime
+PASS
+
+文件安全边界正确。
+
+采用：
+
+方案 A：
+
+字节级安全检查，不引入外部扫描服务。
+
+符合当前 Solo founder / MVP 阶段约束。
+
+通过：
+
+MIME 不可信
+extension 不可信
+file signature 检测
+executable reject
+archive reject
+binary reject
+size limit
+empty reject
+
+关键架构确认：
+
+纯文本
+FileAsset
+    ≠
+EvidenceArtifact
+
+保持。
+
+这是正确设计。
+
+否则后续索赔证据链会污染。
+
+四、Phase 3 Review
+API Connector Runtime
+PASS
+
+当前：
+
+纯文本
+SourceConnection(API)
+        |
+        v
+ExternalAdapter
+        |
+        v
+authenticate
+        |
+        v
+pull
+        |
+        v
+canonical ingest
+
+符合只读 Adapter Contract。
+
+强制限制：
+
+通过：
+
+ACTIVE only
+credentialRef required
+platform from connection config
+no caller override
+submitClaim blocked
+
+确认：
+
+真实平台：
+
+Amazon SP-API
+UPS
+FedEx
+DHL
+
+仍保持：
+
+HOST APPROVAL REQUIRED
+
+正确。
+
+五、Phase 4 Review
+Runner Runtime
+PASS
+
+这是本 Gate 最核心部分。
+
+当前选择：
+
+纯文本
+Application Runner
+
+而不是：
+
+Temporal
+外部 Workflow
+Kubernetes Cron
+新数据库表
+
+符合当前阶段。
+
+Retry
+
+通过：
+
+纯文本
+1m
+5m
+15m
+1h
+stop
+
+特点：
+
+有界
+可预测
+可测试
+Recovery Test
+
+核心验收：
+
+纯文本
+Upload
+  ↓
+Import Failed
+  ↓
+Retry
+  ↓
+Import Success
+  ↓
+No Duplicate
+
+结果：
+
+第一次：
+
+纯文本
+ImportBatch FAILED
+SourceTransaction = 0
+CanonicalFact = 0
+
+第二次：
+
+纯文本
+ImportBatch SUCCESS
+SourceTransaction = 2
+CanonicalFact = 2
+
+第三次：
+
+纯文本
+SKIPPED
+
+通过。
+
+六、架构一致性检查
+
+当前完整链：
+
+纯文本
+SourceConnection
+
+        ↓
+
+Acquisition Runtime
+
+        ↓
+
++----------------+
+|                |
+File Upload    API Connector
+
+        ↓
+
+Import Foundation
+
+        ↓
+
+SourceTransaction
+
+        ↓
+
+CanonicalFact
+
+        ↓
+
+RuleEvaluation
+
+        ↓
+
+RecoveryOpportunity
+
+        ↓
+
+RecoveryClosure
+
+一致。
+
+七、数据库与迁移检查
+
+确认：
+
+Migration:
+
+纯文本
+9
+
+无新增。
+
+Triggers:
+
+纯文本
+19
+
+保持。
+
+Schema：
+
+无变化。
+
+Dependencies：
+
+无变化。
+
+通过。
+
+八、保留限制确认
+
+以下继续保持：
+
+1. SourceSyncRun
+
+不创建。
+
+原因：
+
+当前：
+
+纯文本
+lastSyncAt
+lastError
+lastErrorAt
+
+足够支撑运行状态。
+
+未来需要：
+
+SLA
+Dashboard
+历史查询
+
+再提交 Schema Delta。
+
+2. Identity Step 4
+
+禁止进入。
+
+继续保留：
+
+纯文本
+old dedupeKey
+canonical identity
+
+双轨。
+
+正确。
+
+3. Canonical 默认模式
+
+保持：
+
+纯文本
+legacy
+
+正确。
+
+不要主动切换。
+
+九、Merge Approval
+
+批准：
+
+PR #8
+
+状态：
+
+纯文本
+APPROVED
+MERGEABLE
+CLEAN
+
+建议：
+
+执行：
+
+纯文本
+merge commit
+
+保持：
+
+完整 Gate 1 → Gate 5 历史链。
+
+十、下一阶段建议
+
+C-0007 完成后，不建议立即进入真实平台。
+
+下一 Gate 建议优先：
+
+C-0008 Customer Operation Layer
+
+重点：
+
+Upload UI
+用户认证
+Tenant onboarding
+Connection 管理页面
+Import 状态展示
+Detection 结果展示
+Manual review workflow
+
+原因：
+
+目前后端能力已经形成：
+
+纯文本
+数据进入
+ ↓
+事实形成
+ ↓
+检测
+ ↓
+追回闭环
+
+下一步需要解决：
+
+用户如何真正使用和付费。
+
+最终裁定：
+
+C-0007 Gate 5
+
+FINAL PASS ✅
+
+PR #8:
+APPROVED TO MERGE
+```
