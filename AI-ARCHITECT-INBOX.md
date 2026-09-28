@@ -21646,3 +21646,291 @@ unmapped 最终统计
 
 完成后再申请 Step 3。
 ```
+
+### [MSG-20260928-36] C-0006-B2 Step 2 Checkpoint Review：PASS（Step 3 前需 duplicate-resolution-report）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE:
+CHECKPOINT REVIEW
+
+ID:
+C-0006-B2 Step 2
+
+GATE:
+4
+
+MODULE:
+RuleEvaluation Identity Migration
+
+VERDICT:
+
+PASS（进入 Step 3 前批准）
+
+Step 2 达到批准要求。
+
+1. 双写机制
+
+PASS。
+
+当前实现符合迁移原则：
+
+旧身份：
+
+纯文本
+dedupeKey
+=
+organization
++
+ruleVersion
++
+sourceTransaction identity
+
+继续存在。
+
+新身份：
+
+纯文本
+canonicalDedupeKey
+=
+organization
++
+ruleVersion
++
+canonicalFact
+
+同步生成。
+
+确认：
+
+未替换旧身份
+未删除旧约束
+未改变现有幂等行为
+
+这是正确的渐进迁移。
+
+2. canonicalIdentity 缺失处理
+
+PASS。
+
+特别认可：
+
+没有采用：
+
+找不到 CanonicalFact 就强行生成
+
+而是：
+
+纯文本
+canonicalIdentity=MISSING
+
+并显式统计：
+
+纯文本
+evaluationsWithoutCanonicalIdentity
+
+这是正确的 fail-closed 行为。
+
+3. Coverage 监控
+
+PASS。
+
+新增指标：
+
+纯文本
+identity coverageRate
+
+符合迁移需求。
+
+特别是：
+
+CONFLICT 场景：
+
+纯文本
+coverageRate=0.5000
+
+而不是隐藏问题。
+
+正确。
+
+4. Identity Parity
+
+PASS。
+
+两轮验证符合要求：
+
+Run #1
+纯文本
+old identity == new identity
+
+结果：
+
+纯文本
+parity=OK
+Run #2
+
+重复执行：
+
+纯文本
+evaluationsCreated=0
+skippedExisting=2
+
+证明：
+
+幂等保持
+双写没有制造重复
+新键没有引入第二身份
+
+通过。
+
+5. Backfill Apply
+
+PASS，但记录一个 Step 3 前必须解决的问题。
+
+当前：
+
+纯文本
+mapped
+=
+成功
+
+DUPLICATE_TARGET
+=
+阻塞
+
+符合之前规则。
+
+没有覆盖已有身份。
+
+正确。
+
+但是：
+
+当前：
+
+纯文本
+canSwitch=false
+
+这是正确结果。
+
+不能进入切换。
+
+原因：
+
+切换条件：
+
+纯文本
+unmapped = 0
+
+尚未满足。
+
+6. Step 2 完成度
+
+检查：
+
+项目	状态
+双写	✅
+旧键保留	✅
+新键生成	✅
+parity report	✅
+重复执行验证	✅
+backfill 工具	✅
+unmapped 分类	✅
+切换前阻断	✅
+7. 进入 Step 3 前新增要求
+
+允许准备 Step 3，但提交前必须解决：
+
+A. DUPLICATE_TARGET 来源分析
+
+当前：
+
+纯文本
+DUPLICATE_TARGET:1
+
+必须说明：
+
+这个重复来自：
+
+已存在正确新身份？
+错误历史映射？
+数据异常？
+
+要求：
+
+不能简单删除。
+
+需要：
+
+纯文本
+duplicate-resolution-report
+
+说明：
+
+原 RuleEvaluation id
+target canonicalFact
+已存在 identity
+是否等价
+处理建议
+B. Step 3 必须单独 Schema Delta
+
+确认：
+
+不能直接切。
+
+Step 3 需要重新提交：
+
+读路径变化
+写路径变化
+回滚方案
+旧键保留策略
+C. 切换门槛
+
+保持：
+
+纯文本
+canSwitch=true
+
+必须满足：
+
+纯文本
+unmapped=0
+
+包括：
+
+NO_SOURCE_TRANSACTION
+NO_ACTIVE_FACT
+CONFLICT_FACT
+AMBIGUOUS_FACTS
+DUPLICATE_TARGET
+
+全部为 0。
+
+---
+
+# FINAL DECISION
+
+```text
+C-0006-B2 Step 2:
+
+PASS
+
+允许进入：
+
+C-0006-B2 Step 3 Schema Delta Request
+
+但在 Step 3 执行前：
+
+必须提交：
+
+duplicate-resolution-report
+canonical identity coverage 最终报告
+Step 3 切换方案
+rollback plan
+old dedupeKey 保留周期设计
+
+批准后再切换。
+
+继续。
+```
