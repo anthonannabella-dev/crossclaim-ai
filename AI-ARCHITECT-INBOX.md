@@ -94,7 +94,7 @@ MODULE:
   Gate 0 · 工程地基 / 领域模型 / Agent 协作
 
 PR:
-  #2
+  #3
 
 STATUS:
   Gate 0 骨架已落地，等待架构审计。
