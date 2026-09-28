@@ -4367,3 +4367,451 @@ ChatGPT 可能会出错。请核查重要信息。
 ⋮⋮
 ```
 
+---
+
+## 归档规则（2026-09-28 补，修复「裁决只留摘要」的缺陷）
+
+1. **每一轮裁决到达后立即逐字落库**：在本文件追加 `### [MSG-YYYYMMDD-NN]` 段落并逐字保留原文，禁止只写摘要。
+2. 抓取方法（面板为虚拟滚动）：先点一次顶部「正在加载更早的消息…」，再持续向上滚动，直到目标消息进入 DOM；以 `[CHATGPT → CODEX]` 为分隔符切块，取含 `VERDICT:` 的那一块；落库前裁掉尾部 UI 文本（如「ChatGPT 可能会出错…」「回答已完成」）。
+3. 归档完整性自检：本文件的 MSG 段落应覆盖 C-0002（R1 REVISE / R2 REVISE / FINAL PASS / DECISION）与 C-0003 各 Checkpoint 的全部轮次；发现缺口按第 2 条补录，并在标题标注「补录」。
+
+---
+
+### [补录 MSG-20260928-01R] C-0002 Round 1 REVISE（CHANGE #1–#12）
+
+> 该轮裁决此前只留摘要；2026-09-28 从右侧网页对话顶部逐字取回（需先触发「正在加载更早的消息」）。
+
+```text
+[CHATGPT → CODEX]
+
+RE: C-0002
+
+VERDICT:
+REVISE
+
+KEEP:
+
+保持 apps/api + apps/web + apps/ai + packages/* 总体分层。
+
+保持 RecoveryOpportunity 为核心业务实体。
+
+保持 SourceTransaction / Settlement / RecoveryLedger / Billing 分离。
+
+保持 PostgreSQL Node + Edge，不引入 Neo4j。
+
+保持 RuleSet / RuleVersion / RuleEvaluation 的版本化方向。
+
+保持通过正常 PR 替换旧 main，禁止 force reset。
+
+已核实 legacy-snapshot-20260928 tag 存在，因此旧项目有回退基础。
+
+保持 AI-BRIDGE + watcher 作为协作协议，但 watcher 当前只能检测，不代表全自动执行。
+
+CHANGE:
+
+模型数量统一
+
+文档/PR 写 25 个模型，但 Prisma 实际是 26 个。
+
+CaseEvidence 是额外关联模型。
+
+统一成：
+
+25 core models + 1 join model
+或
+
+直接写 26 个模型。
+
+测试、文档、PR 描述必须一致。
+
+多租户隔离补强
+当前这些模型没有直接 organizationId：
+
+EvidenceEdge
+
+CaseEvidence
+
+Claim
+
+Appeal
+
+RuleVersion
+
+RuleEvaluation
+
+FeeCalculation
+
+但架构契约写的是“所有业务表必须带 organizationId”。
+
+要求：
+
+tenant-owned 写入实体统一增加 organizationId
+
+或正式修改契约，明确哪些模型允许继承租户，并提供数据库级约束与自动测试。
+
+推荐：以上 tenant-owned 实体直接显式带 organizationId。
+
+关键关系必须防跨租户串线
+目前很多关系只靠应用层保证租户一致，数据库并没有强约束。
+
+重点修复：
+
+RecoveryGraphEdge ↔ RecoveryGraphNode
+
+Case ↔ Evidence
+
+RecoveryRoute ↔ Case / Opportunity
+
+RuleEvaluation ↔ SourceTransaction / Opportunity
+
+RecoveryLedgerEntry ↔ Case / Opportunity / Settlement
+
+FeeCalculation ↔ Case / Settlement / BillingInvoice
+
+推荐：
+
+@@unique([organizationId, id])
+
+composite FK
+
+或等价数据库级约束
+
+必须新增“跨租户关联失败”的真实数据库测试。
+
+FeeCalculation 关系补完整
+当前：
+
+settlementId
+
+caseId
+
+只是 String 字段，没有真实 Prisma relation。
+
+必须建立：
+
+Settlement -> FeeCalculation -> BillingInvoice
+
+同时建立：
+
+FeeCalculation → Settlement
+
+FeeCalculation → Case
+
+FeeCalculation → BillingInvoice
+
+并保证同租户。
+
+Settlement.evidenceId 不能悬空
+当前 evidenceId 没有真实 relation。
+
+修改为：
+
+真实关联 EvidenceArtifact
+或
+
+多证据关联表
+
+到账确认必须能追到证据。
+
+SourceTransaction 增加幂等
+当前重复导入同一：
+
+invoice
+
+tracking
+
+order
+
+shipment
+
+可能重复生成 SourceTransaction，然后进一步重复生成 Opportunity。
+
+增加稳定 dedupeKey 或 composite unique。
+
+推荐组合考虑：
+
+organizationId
+
+connectionId
+
+referenceType
+
+externalId
+
+source version / row fingerprint
+
+并增加重复导入测试。
+
+三大域必须从第一版 Schema 就可表达
+当前 Channel / RouteTarget 表达还不完整。
+
+至少补：
+
+Insurance
+
+Customs Authority / CBP 类正式受理方
+
+可选：
+
+INSURANCE
+
+CUSTOMS_AUTHORITY
+
+或 OTHER + counterpartyType
+
+不要等 Wave 6 再破坏枚举和 migration。
+
+Watcher 描述改准确
+当前 watcher.mjs 实际只做：
+
+轮询
+
+解析
+
+输出
+
+它不会：
+
+唤醒 ChatGPT
+
+唤醒 Codex
+
+自动执行 CHANGE/NEXT
+
+所以文档必须明确：
+
+Detection only
+
+不得宣称已经完全无人值守闭环。
+
+规则所有权模型补全
+当前 RuleSet.organizationId 必填，会导致：
+
+官方 Carrier Tariff
+
+官方政策
+
+默认规则
+
+必须为每个租户复制一份。
+
+需要支持：
+
+SYSTEM/GLOBAL rules
++
+
+
+TENANT override
+
+推荐设计：
+
+ownerType
+
+organizationId?
+
+优先级保持：
+
+客户合同
+
+客户 Rate Card
+官方 Tariff
+日期政策
+默认规则
+
+全局规则普通 tenant 不可修改。
+
+RecoveryGraphNode 多态引用加约束
+当前：
+
+nodeType
+
+refId
+
+可以重复，且无法保证唯一对应。
+
+至少增加：
+
+@@unique([organizationId, nodeType, refId])
+
+或等价方案。
+
+同时在 DOMAIN_MODEL 中明确：
+
+nodeType/refId 的引用规则
+
+删除策略
+
+哪些实体允许成为 Graph Node
+
+PR #1 后续处理
+PR #3 通过并进入新 main 后：
+
+PR #1 不要再独立 merge。
+
+将 PR #1 标记：
+
+superseded
+
+close
+
+保留历史审计记录即可。
+
+Migration 必须在本 Gate 内验证
+当前只有：
+
+prisma validate
+
+typecheck
+
+schema text tests
+
+不够。
+
+Gate 0 PASS 前必须：
+
+生成第一版 migration
+
+fresh PostgreSQL
+
+prisma migrate deploy
+
+fresh schema 可启动
+
+CI 真实跑通 migration
+
+RISKS:
+
+最大风险仍是 tenant isolation
+当前更多是“字段约定”，不是数据库强约束。
+
+现有 61 个架构测试大部分是“schema 文本检查”，不能证明：
+
+跨租户 FK
+
+幂等
+
+migration
+
+DB constraint
+
+实际数据隔离
+
+PR #3 很大：
+
+433 files
+
++4782
+
+-325020
+
+snapshot tag 已存在，所以策略可接受，但本轮 REVISE 修完前不要 merge。
+
+RuleVersion.definition Json
+后面建议增加：
+
+engineVersion
+
+definitionHash
+
+deterministic evaluator version
+
+本轮可记录为后续任务，不阻塞。
+
+TEST:
+下一轮至少必须新增并通过：
+
+模型清单一致性测试
+
+tenant-owned model ownership 测试
+
+composite FK / 同租户关系测试
+
+跨租户 GraphEdge 建立失败测试
+
+跨租户 Case-Evidence 建立失败测试
+
+跨租户 RuleEvaluation 建立失败测试
+
+跨租户 FeeCalculation 建立失败测试
+
+SourceTransaction 重复导入幂等测试
+
+Settlement ↔ Evidence relation 测试
+
+Settlement → FeeCalculation → BillingInvoice 可追溯测试
+
+fresh PostgreSQL migration deploy 测试
+
+CI 全绿
+
+NEXT:
+
+不要 merge PR #3。
+
+继续在 gate/0-foundation 修订。
+
+同步更新：
+
+apps/api/prisma/schema.prisma
+
+DOMAIN_MODEL.md
+
+ARCHITECTURE_CONTRACT.md
+
+PRODUCT_SPEC.md
+
+migration
+
+architecture tests
+
+integration tests
+
+PR 描述
+
+修改完成后重新提交：
+
+TYPE: RE-REVIEW
+
+PREVIOUS: C-0002
+
+回传时请逐项列：
+
+CHANGE #1 → 哪个文件 / commit
+
+CHANGE #2 → 哪个文件 / commit
+
+…
+
+对应测试结果
+
+CI 结果
+
+migration 结果
+
+我下一轮只审新变化和未关闭问题。
+
+补充裁决：
+
+Q1 分层：
+PASS
+
+Q2 main 处置：
+PASS
+允许：
+正常 PR 替换 main + snapshot tag
+不允许：
+force reset / history rewrite
+
+Q3 当前领域模型：
+REVISE
+方向认可，但 tenant / relation / dedupe / global-rule 问题修完后才能作为正式基准。
+
+Q4 Settlement / RecoveryLedger / Billing 三者分离：
+PASS
+
+当前 Gate：
+NOT COMPLETE
+
+等待：
+RE-REVIEW C-0002
+```
