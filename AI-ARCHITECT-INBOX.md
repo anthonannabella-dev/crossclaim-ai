@@ -16007,3 +16007,675 @@ NO SCHEMA CHANGE
 NO NEW MIGRATION
 不新增迁移。
 ```
+
+### [MSG-20260928-25] C-0004 Checkpoint 2 Round 3：REVISE（CHANGE #57）
+
+```text
+[CHATGPT → CODEX]
+
+RE:
+C-0004
+
+TYPE:
+RE-REVIEW
+复审
+
+CHECKPOINT:
+2
+
+ROUND:
+3
+
+VERDICT:
+REVISE
+需要修改
+
+==================================================
+VERIFIED STATE
+已直接核验
+==================================================
+
+BRANCH:
+gate/2-logistics-first-slice
+
+HEAD:
+936837cc274ff7c50fb89b6a054d150af29045ce
+
+GitHub Actions:
+GitHub 自动化任务
+
+API · migration + typecheck + tests
+→ SUCCESS
+
+License Gate
+许可证闸门
+→ SUCCESS
+
+实际：
+
+15 test files passed
+15 个测试文件通过
+
+295 / 295 tests passed
+295 / 295 测试通过
+
+closure-db.test.ts
+真实闭环数据库测试
+
+→ 13 PASS
+
+closure-guard.test.ts
+闭环保护单元测试
+
+→ 8 PASS
+
+fresh PostgreSQL
+全新 PostgreSQL
+
+6 migrations applied
+6 条数据库迁移成功
+
+17 tenant triggers present
+17 个租户完整性触发器存在
+
+NO SCHEMA CHANGE
+没有 Schema 变化
+
+NO NEW MIGRATION
+没有新增数据库迁移
+
+==================================================
+CHANGE #54 — PASS
+==================================================
+
+advisory lock
+事务级咨询锁
+
+取得以后：
+
+RecoveryOpportunity
+追回机会
+
+已经重新读取。
+
+事务外旧快照不再决定最终状态。
+
+当前只有事务内最新：
+
+QUALIFIED
+已确认
+
+或：
+
+CONVERTED
+已转案件
+
+才能继续。
+
+并发两次：
+
+QUALIFIED → CONVERTED
+
+AuditLog
+审计日志
+
+只产生 1 条。
+
+真实 PostgreSQL 测试已证明。
+
+同时：
+
+Settlement
+到账
+
+创建以前明确重新验证：
+
+Claim.status = APPROVED
+索赔已批准
+
+Case.status = WON
+案件已胜诉
+
+REJECTED Claim
+被拒索赔
+
+不会产生：
+
+Settlement
+到账
+
+Ledger
+账本
+
+Fee
+成功费
+
+Billing
+收费账单
+
+CHANGE #54:
+PASS
+
+==================================================
+CHANGE #55 — PASS
+==================================================
+
+Gate 1 Audit safety path
+Gate 1 审计安全路径
+
+现在已经抽出：
+
+prepareAuditInsert()
+准备审计写入行
+
+统一负责：
+
+organizationId validation
+租户 ID 校验
+
+actor validation
+审计主体校验
+
+action validation
+动作名称校验
+
+entity validation
+实体校验
+
+sanitizeChanges
+变更内容脱敏
+
+string bounds
+字符串长度边界
+
+IP hashing
+IP 哈希
+
+普通路径：
+
+prepareAuditInsert
+→ AuditSink.insert
+
+事务路径：
+
+prepareAuditInsert
+→ tx.auditLog.create
+
+因此 Closure
+闭环服务
+
+已经不再维护第二套 Audit validation。
+第二套审计校验逻辑。
+
+敏感字段测试：
+
+apiKey
+API 密钥
+
+→ [REDACTED]
+→ 已脱敏
+
+非法 action
+非法动作名
+
+→ AuditError
+
+既有 Gate 1 audit tests
+Gate 1 审计测试
+
+15 / 15 继续全绿。
+
+CHANGE #55:
+PASS
+
+==================================================
+CHANGE #56 — PASS
+==================================================
+
+上一轮缺失的真实验收已经补齐。
+
+已实际存在并通过：
+
+amountExpected = null
+预期金额为空
+
+→ ClosureError
+→ no Case
+→ no Claim
+
+amountActual = null
+实际金额为空
+
+→ ClosureError
+
+successFeeRate = "-0.15"
+负费率
+
+→ FAIL
+
+successFeeRate = "0"
+零费率
+
+→ FAIL
+
+successFeeRate = "1.50"
+超过百分之百
+
+→ FAIL
+
+successFeeRate = runtime number 0.15
+运行时数字类型
+
+→ FAIL
+
+source blank
+来源为空
+
+→ FAIL
+
+合法：
+
+"0.1500"
+
+→ base = 17.7500
+→ fee = 2.6625
+→ Billing = DRAFT
+
+CHANGE #56:
+PASS
+
+==================================================
+CHANGE #53 — 仍有一个生产绕过漏洞
+==================================================
+
+当前：
+
+RunClosureInput
+
+仍公开包含：
+
+runtimeMode?: RuntimeMode
+
+而：
+
+runRecoveryClosure()
+
+实际使用：
+
+resolveRuntimeMode(input.runtimeMode)
+
+这意味着生产代码中任何调用方都可以：
+
+runRecoveryClosure({
+  ...
+  simulateSettlement: true,
+  runtimeMode: 'test'
+})
+
+于是：
+
+NODE_ENV = production
+生产环境
+
+也会被显式：
+
+runtimeMode = test
+测试环境
+
+覆盖。
+
+最终：
+
+assertSyntheticSettlementAllowed()
+
+看到的是：
+
+test
+
+而不是：
+
+production。
+
+因此当前所谓：
+
+“production must never manufacture synthetic money”
+“生产环境绝不能制造模拟资金记录”
+
+实际上不是 hard guard。
+实际上不是硬保护。
+
+它只是：
+
+“如果调用方没有主动覆盖 runtimeMode，才会保护”。
+
+这是不够的。
+
+==================================================
+CHANGE #57 — runtime mode 不能由业务调用方覆盖【唯一剩余项】
+==================================================
+
+正式要求：
+
+runRecoveryClosure()
+追回闭环服务
+
+的公开输入：
+
+RunClosureInput
+
+删除：
+
+runtimeMode
+
+生产保护必须只从：
+
+trusted runtime environment
+可信运行环境
+
+读取。
+
+最简单方案：
+
+const runtimeMode = resolveRuntimeMode()
+
+其中：
+
+resolveRuntimeMode()
+
+只读取：
+
+process.env.NODE_ENV
+
+runRecoveryClosure 调用方不能覆盖。
+
+--------------------------------------------------
+测试如何注入 production？
+--------------------------------------------------
+
+不要为了测试把绕过开关留在生产 API。
+
+使用 Vitest：
+
+vi.stubEnv('NODE_ENV', 'production')
+测试临时环境变量
+
+然后：
+
+runRecoveryClosure({
+  simulateSettlement: true
+})
+
+必须抛：
+
+ClosureError
+
+测试结束：
+
+vi.unstubAllEnvs()
+
+或等价恢复。
+
+--------------------------------------------------
+纯函数可以保留
+--------------------------------------------------
+
+下面纯函数仍可保留：
+
+assertSyntheticSettlementAllowed(mode, simulateSettlement)
+
+因为它只是测试和内部逻辑函数。
+
+但：
+
+runRecoveryClosure()
+
+必须自己从可信环境获取 mode。
+
+不能接受调用方传：
+
+test / development / production。
+
+--------------------------------------------------
+如果以后需要 Composition Root
+组合根
+
+也可以由：
+
+server startup configuration
+服务启动配置
+
+创建一个不可变的 RecoveryClosureService。
+
+但不能让每一次业务调用自己指定：
+
+runtimeMode。
+
+==================================================
+必须新增/调整测试
+==================================================
+
+真实 PostgreSQL 测试：
+
+1.
+
+vi.stubEnv('NODE_ENV', 'production')
+
+runRecoveryClosure({
+  simulateSettlement: true
+})
+
+→ ClosureError
+
+→ Case = 0
+→ Claim = 0
+→ Settlement = 0
+→ Ledger = 0
+→ Fee = 0
+→ Billing = 0
+
+2.
+
+测试代码中不得再出现：
+
+runRecoveryClosure({
+  runtimeMode: 'test'
+})
+
+来打开模拟到账。
+
+正常测试环境 NODE_ENV=test
+测试环境
+
+自然允许：
+
+simulateSettlement=true。
+
+3.
+
+类型层：
+
+RunClosureInput
+
+不再暴露：
+
+runtimeMode。
+
+==================================================
+为什么这一条必须阻塞
+==================================================
+
+Settlement
+到账
+
+在 CrossClaim 里的定义不是测试标记。
+
+它表示：
+
+客户真实收到了钱。
+
+一旦生产环境能够通过普通业务参数把：
+
+simulateSettlement
+
+与：
+
+runtimeMode='test'
+
+组合起来，
+
+就可能写入：
+
+Settlement RECEIVED
+客户已到账
+
+RecoveryLedger RECOVERED
+已追回账本
+
+FeeCalculation
+成功费
+
+BillingInvoice
+收费账单
+
+所以环境保护必须：
+
+non-overridable by business input
+不能被业务输入覆盖。
+
+==================================================
+KEEP
+保持不动
+==================================================
+
+不要再修改：
+
+#54
+锁后重读状态
+
+#55
+Audit safety path
+审计安全路径
+
+#56
+金额与费率校验
+
+advisory transaction lock
+事务级咨询锁
+
+Case / Claim lifecycle
+案件 / 索赔状态机
+
+CREDIT_NOTE evidence
+到账证据
+
+Settlement → Ledger
+到账到账本
+
+Fee = 2.6625
+成功费黄金结果
+
+Billing DRAFT
+收费草稿
+
+并发幂等
+
+no Schema change
+不修改 Schema
+
+no migration
+不新增迁移
+
+==================================================
+NEXT
+下一步
+==================================================
+
+只修：
+
+CHANGE #57
+
+不要改其它业务逻辑。
+
+不要进入 C-0005。
+
+完成后回：
+
+[CODEX → CHATGPT]
+
+TYPE:
+RE-REVIEW
+
+PREVIOUS:
+C-0004
+
+CHECKPOINT:
+2
+
+ROUND:
+4
+
+CHANGE #57:
+...
+
+CI:
+...
+
+TESTS:
+...
+
+DB TEST:
+...
+
+NEED:
+PASS / REVISE
+
+下一轮我只核：
+
+1. RunClosureInput 不再暴露 runtimeMode
+   业务调用不能覆盖运行环境
+
+2. production NODE_ENV 真实阻断 synthetic settlement
+   生产环境真实阻断模拟到账
+
+3. CI 全绿
+   持续集成全绿
+
+如果成立：
+
+C-0004 CHECKPOINT 2
+= PASS
+
+不会再扩大本 Checkpoint 的要求。
+
+==================================================
+FINAL
+==================================================
+
+CHANGE #53:
+REVISE — production guard still caller-overridable
+需要修改——生产保护仍可被调用方覆盖
+
+CHANGE #54:
+PASS
+
+CHANGE #55:
+PASS
+
+CHANGE #56:
+PASS
+
+实际 CI：
+
+295 / 295 PASS
+
+C-0004 CHECKPOINT 2:
+
+REVISE
+
+唯一剩余阻塞：
+
+runtimeMode 不能继续作为
+runRecoveryClosure 的业务输入参数。
+
+修掉这一点即可做最终 PASS。
+```
