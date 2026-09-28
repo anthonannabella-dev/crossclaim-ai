@@ -14,6 +14,11 @@ import type { ColumnMapping, ImportContext, NormalizedTransaction, RawRow, RowIs
 
 const AMOUNT_RE = /^-?\d+(\.\d{1,4})?$/;
 const CURRENCY_RE = /^[A-Z]{3}$/;
+/** 只认 YYYY-MM-DD / YYYY/MM/DD，且必须做年月日往返校验 */
+const DATE_ONLY_RE = /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/;
+/** 时间戳只认带明确时区（Z 或 ±HH:MM）的 ISO 8601 */
+const ISO_WITH_ZONE_RE =
+  /^\d{4}-\d{2}-\d{2}[Tt]\d{2}:\d{2}(:\d{2}(\.\d{1,9})?)?([Zz]|[+-]\d{2}:\d{2})$/;
 
 export interface NormalizeResult {
   transaction?: NormalizedTransaction;
@@ -30,12 +35,29 @@ export function parseOccurredAt(value: string): Date | null {
   const trimmed = value.trim();
   if (trimmed === '') return null;
 
-  const dateOnly = /^(\d{4})[-/](\d{1,2})[-/](\d{1,2})$/.exec(trimmed);
+  const dateOnly = DATE_ONLY_RE.exec(trimmed);
   if (dateOnly) {
     const [, y, m, d] = dateOnly;
-    const date = new Date(Date.UTC(Number(y), Number(m) - 1, Number(d)));
-    return Number.isNaN(date.getTime()) ? null : date;
+    const year = Number(y);
+    const month = Number(m);
+    const day = Number(d);
+    if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+    const date = new Date(Date.UTC(year, month - 1, day));
+    if (Number.isNaN(date.getTime())) return null;
+    // 往返校验：JS Date 会把 2026-02-30 静默滚成 2026-03-02，这类"悄悄换一天"必须拒绝，
+    // 否则错误日期会污染 SLA / Claim deadline / 争议窗口。
+    if (
+      date.getUTCFullYear() !== year ||
+      date.getUTCMonth() !== month - 1 ||
+      date.getUTCDate() !== day
+    ) {
+      return null;
+    }
+    return date;
   }
+
+  // 不猜业务日期：无时区的自由格式（09/01/2026 这类）一律拒绝
+  if (!ISO_WITH_ZONE_RE.test(trimmed)) return null;
   const parsed = new Date(trimmed);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
 }

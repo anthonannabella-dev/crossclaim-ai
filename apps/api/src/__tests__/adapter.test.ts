@@ -16,19 +16,21 @@ import {
   AdapterRateLimitError,
   AdapterRegistryError,
   AdapterResponseError,
-  AdapterWriteNotAllowedError,
+  AdapterSourceError,
   CANONICAL_COLUMNS,
+  assertSafeSource,
   canonicalAmount,
   canonicalDate,
   createAdapterRegistry,
+  implementsWriteSurface,
   runAdapterImport,
   submitClaimThroughAdapter,
   toCanonicalRows,
   withSourceEvidence,
   type AdapterCapabilities,
-  type AdapterRecord,
   type AdapterPullPage,
   type AdapterPullRequest,
+  type AdapterRecord,
   type AdapterSession,
   type ExternalAdapter,
 } from '../services/adapters';
@@ -86,14 +88,12 @@ interface FakeAdapterOptions {
   maxPageSize?: number;
   /** 按调用次序返回分页；返回 AdapterError 表示该次拉取失败 */
   pages?: Array<AdapterPullPage | (() => never)>;
-  hasSubmitClaim?: 'none' | 'manual' | 'submitted';
   supportsClaimSubmission?: boolean;
 }
 
 interface FakeAdapter extends ExternalAdapter {
   readonly pullRequests: AdapterPullRequest[];
   readonly authCalls: number;
-  readonly submitCalls: number;
 }
 
 function fakeAdapter(options: FakeAdapterOptions = {}): FakeAdapter {
@@ -101,7 +101,6 @@ function fakeAdapter(options: FakeAdapterOptions = {}): FakeAdapter {
   const pages = options.pages ?? [];
   const pullRequests: AdapterPullRequest[] = [];
   let authCalls = 0;
-  let submitCalls = 0;
 
   const capabilities: AdapterCapabilities = {
     platform,
@@ -119,9 +118,6 @@ function fakeAdapter(options: FakeAdapterOptions = {}): FakeAdapter {
     pullRequests,
     get authCalls() {
       return authCalls;
-    },
-    get submitCalls() {
-      return submitCalls;
     },
     capabilities() {
       if (options.supportsClaimSubmission) {
@@ -143,17 +139,24 @@ function fakeAdapter(options: FakeAdapterOptions = {}): FakeAdapter {
     },
   };
 
-  if (options.hasSubmitClaim && options.hasSubmitClaim !== 'none') {
-    adapter.submitClaim = async () => {
-      submitCalls += 1;
-      if (options.hasSubmitClaim === 'submitted') {
-        return { status: 'SUBMITTED', externalRef: 'EXT-1' } as never;
-      }
-      return { status: 'NEEDS_MANUAL', reason: '该平台只支持文件导出' };
-    };
-  }
-
   return adapter;
+}
+
+/**
+ * 模拟"实现了第三方写入面"的适配器（非类型化路径）。
+ * Phase 1 必须在**调用前**挡住：注册被拒 + 闸门永不调用 submitClaim。
+ */
+function writeCapableAdapter(options: FakeAdapterOptions = {}) {
+  const base = fakeAdapter(options);
+  const calls = { submit: 0 };
+  const rogue = {
+    ...base,
+    async submitClaim() {
+      calls.submit += 1;
+      return { status: 'SUBMITTED' as const, externalRef: 'EXT-1' };
+    },
+  };
+  return { adapter: rogue as unknown as ExternalAdapter, calls };
 }
 
 // ============================================================
@@ -524,35 +527,138 @@ describe('适配器 → 导入桥', () => {
     ).rejects.toBeInstanceOf(AdapterCapabilityError);
     expect(transactions).toHaveLength(0);
   });
+
+  it('pageSize 超过适配器自报上限 / 非法 maxPages / 非法 maxRecords → 拒绝（CHANGE #32）', async () => {
+    const adapter = fakeAdapter({ maxPageSize: 50, pages: [{ records: [], nextCursor: null, hasMore: false }] });
+    const { repository } = memoryRepo();
+
+    await expect(
+      runAdapterImport({ adapter, credentials: CREDENTIALS, context: CONTEXT, repository, pageSize: 500 }),
+    ).rejects.toBeInstanceOf(AdapterCapabilityError);
+    await expect(
+      runAdapterImport({ adapter, credentials: CREDENTIALS, context: CONTEXT, repository, maxPages: 0 }),
+    ).rejects.toBeInstanceOf(AdapterCapabilityError);
+    await expect(
+      runAdapterImport({ adapter, credentials: CREDENTIALS, context: CONTEXT, repository, maxRecords: -1 }),
+    ).rejects.toBeInstanceOf(AdapterCapabilityError);
+  });
+
+  it('适配器单页超出声明上限 → 累积进内存之前就失败（CHANGE #32）', async () => {
+    const oversized: AdapterRecord[] = Array.from({ length: 11 }, (_, index) => ({
+      externalId: `X-${index}`,
+      amount: '1',
+      currency: 'USD',
+    }));
+    const adapter = fakeAdapter({
+      maxPageSize: 10,
+      pages: [{ records: oversized, nextCursor: null, hasMore: false }],
+    });
+    const { repository, transactions } = memoryRepo();
+
+    await expect(
+      runAdapterImport({ adapter, credentials: CREDENTIALS, context: CONTEXT, repository }),
+    ).rejects.toBeInstanceOf(AdapterResponseError);
+    expect(transactions).toHaveLength(0);
+  });
+
+  it('source 含凭据字段 → 拒绝整批，不写任何交易（CHANGE #30）', async () => {
+    const adapter = fakeAdapter({
+      pages: [
+        {
+          records: [
+            { externalId: 'INV-A', amount: '10', currency: 'USD', source: { authorization: 'Bearer xxx' } },
+          ],
+          nextCursor: null,
+          hasMore: false,
+        },
+      ],
+    });
+    const { repository, transactions } = memoryRepo();
+
+    await expect(
+      runAdapterImport({ adapter, credentials: CREDENTIALS, context: CONTEXT, repository }),
+    ).rejects.toBeInstanceOf(AdapterSourceError);
+    expect(transactions).toHaveLength(0);
+  });
+
+  it('insertTransactions 抛错 → 批次尽力进入 FAILED，异常继续向上抛（CHANGE #29）', async () => {
+    const adapter = fakeAdapter({ pages: [{ records, nextCursor: null, hasMore: false }] });
+    const memory = memoryRepo();
+    const failing: ImportRepository = {
+      ...memory.repository,
+      async insertTransactions() {
+        throw new Error('boom');
+      },
+    };
+
+    await expect(
+      runAdapterImport({ adapter, credentials: CREDENTIALS, context: CONTEXT, repository: failing }),
+    ).rejects.toThrow('boom');
+
+    expect(memory.batches[0].status).toBe('FAILED');
+    expect(memory.batches[0].finishedAt).not.toBeNull();
+    expect((memory.batches[0].errorReport as { stage: string }).stage).toBe('persist');
+    expect(memory.transactions).toHaveLength(0);
+  });
 });
 
 // ============================================================
-describe('提交闸门（Phase 1 只读）', () => {
-  it('未实现 API 提交 → NEEDS_MANUAL', async () => {
-    const adapter = fakeAdapter({ hasSubmitClaim: 'none' });
-    const result = await submitClaimThroughAdapter(
-      adapter,
-      { organizationId: ORG, claimId: 'claim-1', payload: { amount: '10' } },
-      SESSION,
+describe('来源载荷边界（CHANGE #30）', () => {
+  it('凭据字段 / 循环引用 / BigInt / function / 非法日期 / 超限 一律拒绝', () => {
+    expect(() => assertSafeSource({ token: 'x' }, { platform: 't' })).toThrow(/疑似凭据字段/);
+    expect(() => assertSafeSource({ nested: { apiKey: 'x' } }, { platform: 't' })).toThrow(/apiKey/);
+
+    const circular: Record<string, unknown> = { a: 1 };
+    circular.self = circular;
+    expect(() => assertSafeSource(circular, { platform: 't' })).toThrow(/循环引用/);
+
+    expect(() => assertSafeSource({ n: 10n }, { platform: 't' })).toThrow(/BigInt/);
+    expect(() => assertSafeSource({ f: () => 1 }, { platform: 't' })).toThrow(/function/);
+    expect(() => assertSafeSource({ d: new Date('nope') }, { platform: 't' })).toThrow(/非法日期/);
+    expect(() => assertSafeSource({ blob: 'x'.repeat(300 * 1024) }, { platform: 't' })).toThrow(
+      /超过单条上限/,
     );
+  });
+
+  it('普通 JSON 载荷（含共享引用与 Date）放行', () => {
+    const shared = { a: 1 };
+    expect(() =>
+      assertSafeSource(
+        { list: [shared, shared], when: new Date('2026-09-28T00:00:00Z'), n: 1.5, ok: true },
+        { platform: 't' },
+      ),
+    ).not.toThrow();
+    expect(() => assertSafeSource(undefined, { platform: 't' })).not.toThrow();
+  });
+});
+
+// ============================================================
+describe('提交闸门（Phase 1 只读 / CHANGE #28）', () => {
+  it('闸门永不调用第三方 submit：直接返回 NEEDS_MANUAL，submit 调用数 = 0', async () => {
+    const { adapter, calls } = writeCapableAdapter();
+    expect(implementsWriteSurface(adapter)).toBe(true);
+
+    const result = await submitClaimThroughAdapter(adapter, {
+      organizationId: ORG,
+      claimId: 'claim-1',
+      payload: { amount: '10' },
+    });
+
     expect(result.status).toBe('NEEDS_MANUAL');
+    if (result.status !== 'NEEDS_MANUAL') throw new Error('unreachable');
+    expect(result.reason).toContain('只读通道');
+    // 关键：真实写入方法一次都没有被执行（不是"写完才报警"）
+    expect(calls.submit).toBe(0);
   });
 
-  it('适配器返回 NEEDS_MANUAL → 原样透传', async () => {
-    const adapter = fakeAdapter({ hasSubmitClaim: 'manual' });
-    const result = await submitClaimThroughAdapter(
-      adapter,
-      { organizationId: ORG, claimId: 'claim-1', payload: {} },
-      SESSION,
-    );
-    expect(result).toMatchObject({ status: 'NEEDS_MANUAL', reason: '该平台只支持文件导出' });
+  it('实现了 submitClaim 的适配器不允许注册（调用前拒绝）', () => {
+    const { adapter, calls } = writeCapableAdapter({ platform: 'rogue-writer' });
+    expect(() => createAdapterRegistry([adapter])).toThrow(AdapterCapabilityError);
+    expect(calls.submit).toBe(0);
   });
 
-  it('适配器声称已真实提交 → 一律拒绝（第三方写入需先回架构方审计）', async () => {
-    const adapter = fakeAdapter({ hasSubmitClaim: 'submitted' });
-    await expect(
-      submitClaimThroughAdapter(adapter, { organizationId: ORG, claimId: 'claim-1', payload: {} }, SESSION),
-    ).rejects.toBeInstanceOf(AdapterWriteNotAllowedError);
-    expect(adapter.submitCalls).toBe(1);
+  it('只读适配器正常注册', () => {
+    const registry = createAdapterRegistry([fakeAdapter({ platform: 'readonly-ok' })]);
+    expect(registry.get('readonly-ok').platform).toBe('readonly-ok');
   });
 });

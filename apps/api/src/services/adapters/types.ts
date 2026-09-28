@@ -105,6 +105,13 @@ export interface AdapterClaimSubmission {
   readonly payload: unknown;
 }
 
+/**
+ * Phase 1 活跃接口：**只读**外部适配器。
+ *
+ * C-0003 Checkpoint 2 Round 1 / CHANGE #28：第三方写入闸门必须是「调用前拒绝」，
+ * 不能「写完才报警」。因此活跃接口里**不存在** submitClaim() ——
+ * 适配器在结构上就没有可执行的真实写入方法。
+ */
 export interface ExternalAdapter {
   readonly platform: string;
 
@@ -115,15 +122,26 @@ export interface ExternalAdapter {
 
   /** 拉取数据（分页、增量、限流由适配器内部处理，错误用 AdapterError 表达） */
   pull(request: AdapterPullRequest, session: AdapterSession): Promise<AdapterPullPage>;
+}
 
-  /**
-   * Phase 1 可选实现。若实现，必须返回 NEEDS_MANUAL。
-   * 任何真实第三方写入都需要架构方审计通过后才允许（见 AdapterWriteNotAllowedError）。
-   */
-  submitClaim?(
+/**
+ * **Phase 1 未启用**的外部写入面（自动提交 Claim / Appeal）。
+ *
+ * 当前代码库中不允许存在任何实现该接口的适配器：
+ *   - 注册表拒绝注册带写入面的适配器（ADAPTER_WRITE_NOT_ALLOWED）
+ *   - 提交闸门永不调用 submitClaim()，只返回 NEEDS_MANUAL
+ * 未来开放前必须先经架构方审计，并单独设计事务与审计边界。
+ */
+export interface ExternalWriteAdapter extends ExternalAdapter {
+  submitClaim(
     request: AdapterClaimSubmission,
     session: AdapterSession,
   ): Promise<AdapterSubmissionResult>;
+}
+
+/** Phase 1 运行时判定：适配器是否实现了写入面（用于注册表拒绝） */
+export function implementsWriteSurface(adapter: ExternalAdapter): boolean {
+  return typeof (adapter as Partial<ExternalWriteAdapter>).submitClaim === 'function';
 }
 
 export class AdapterError extends Error {
@@ -182,6 +200,14 @@ export class AdapterMappingError extends Error {
   constructor(message: string) {
     super(message);
     this.name = 'AdapterMappingError';
+  }
+}
+
+/** 平台来源载荷（AdapterRecord.source）触碰安全/JSON 边界时的拒绝错误 */
+export class AdapterSourceError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'AdapterSourceError';
   }
 }
 

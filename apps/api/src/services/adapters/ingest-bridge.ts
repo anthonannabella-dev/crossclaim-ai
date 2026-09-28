@@ -29,9 +29,9 @@ import {
   AdapterCapabilityError,
   AdapterRateLimitError,
   AdapterResponseError,
-  AdapterWriteNotAllowedError,
 } from './types';
 import { toCanonicalRows, withSourceEvidence } from './canonical';
+import { assertSafeSource } from './source-guard';
 import { runImportRows, type ImportContext, type ImportRepository, type ImportResult } from '../ingest';
 
 export interface AdapterImportInput {
@@ -77,6 +77,12 @@ function describePullFailure(err: AdapterError): AdapterPullFailure {
   return failure;
 }
 
+function assertPositiveInt(name: string, value: number): void {
+  if (!Number.isInteger(value) || value < 1) {
+    throw new AdapterCapabilityError(`${name} 必须是正整数（收到 ${String(value)}）`);
+  }
+}
+
 export async function runAdapterImport(input: AdapterImportInput): Promise<AdapterImportResult> {
   const { adapter, credentials, context, repository } = input;
   const now = input.now ?? (() => new Date());
@@ -89,6 +95,18 @@ export async function runAdapterImport(input: AdapterImportInput): Promise<Adapt
       `适配器 ${caps.platform} 不支持 domain=${context.domain} / channel=${context.channel}`,
     );
   }
+  // CHANGE #32：分页容量必须真正执行，而不是只信适配器自报
+  assertPositiveInt('maxPages', maxPages);
+  assertPositiveInt('maxRecords', maxRecords);
+  if (input.pageSize !== undefined) {
+    assertPositiveInt('pageSize', input.pageSize);
+    if (input.pageSize > caps.maxPageSize) {
+      throw new AdapterCapabilityError(
+        `pageSize=${input.pageSize} 超过适配器 ${caps.platform} 自报上限 ${caps.maxPageSize}`,
+      );
+    }
+  }
+  const effectivePageSize = Math.min(input.pageSize ?? caps.maxPageSize, caps.maxPageSize);
 
   const records: AdapterRecord[] = [];
   let pages = 0;
@@ -115,6 +133,15 @@ export async function runAdapterImport(input: AdapterImportInput): Promise<Adapt
         session,
       );
       pages += 1;
+      if (!Array.isArray(page.records)) {
+        throw new AdapterResponseError(`适配器 ${caps.platform} 返回的 records 不是数组`);
+      }
+      // 超页必须先拒绝，不能先 push 进内存（否则声明 maxPageSize 形同虚设）
+      if (page.records.length > effectivePageSize) {
+        throw new AdapterResponseError(
+          `适配器 ${caps.platform} 单页返回 ${page.records.length} 条，超过声明上限 ${effectivePageSize}；拒绝累积`,
+        );
+      }
       records.push(...page.records);
 
       if (!page.hasMore) {
@@ -135,6 +162,11 @@ export async function runAdapterImport(input: AdapterImportInput): Promise<Adapt
     if (records.length === 0) throw err;
     pullError = describePullFailure(err);
   }
+
+  // CHANGE #30：来源载荷边界校验（凭据 / JSON 安全 / 大小），失败即拒绝整批，不留半批数据
+  records.forEach((record, index) => {
+    assertSafeSource(record.source, { platform: caps.platform, rowNumber: index + 1 });
+  });
 
   const canonical = toCanonicalRows(records);
   const provenance: Record<string, unknown> = {
@@ -168,28 +200,22 @@ export async function runAdapterImport(input: AdapterImportInput): Promise<Adapt
 }
 
 /**
- * 通过适配器提交（Phase 1 硬闸门）。
- * 未实现 API 提交、或适配器自报 NEEDS_MANUAL 时，返回人工提交卡口；
- * 任何声称已经真实提交（SUBMITTED）的实现都会被拒绝 ——
- * 第三方写入必须先过架构方审计（ARCHITECTURE_CONTRACT §6）。
+ * 提交闸门（Phase 1 硬闸门 / CHANGE #28）。
+ *
+ * **永不调用任何第三方写入方法**：Phase 1 期间 `adapter.submitClaim` 一律不执行，
+ * 直接返回 NEEDS_MANUAL 人工卡口。这里曾经是"写完才报警"（先调用、再对 SUBMITTED 抛错），
+ * 那样真实世界的提交动作已经不可撤销，属于安全缺陷。
+ *
+ * 未来开放第三方写入时，必须新增 ExternalWriteAdapter 并先经架构方审计。
  */
-export async function submitClaimThroughAdapter(
+export function submitClaimThroughAdapter(
   adapter: ExternalAdapter,
-  request: AdapterClaimSubmission,
-  session: AdapterSession,
+  _request: AdapterClaimSubmission,
 ): Promise<AdapterSubmissionResult> {
-  if (!adapter.submitClaim) {
-    return {
-      status: 'NEEDS_MANUAL',
-      reason: `${adapter.platform} 未实现 API 提交（Phase 1 默认半自动卡口）`,
-    };
-  }
-
-  const result = await adapter.submitClaim(request, session);
-  if (result.status === 'SUBMITTED') {
-    throw new AdapterWriteNotAllowedError(
-      `适配器 ${adapter.platform} 执行了第三方写入：Phase 1 未开启，需先回架构方审计`,
-    );
-  }
-  return result;
+  return Promise.resolve({
+    status: 'NEEDS_MANUAL',
+    reason:
+      `${adapter.platform}：Phase 1 为只读通道，第三方提交（Claim / Appeal）一律走人工卡口；` +
+      '自动化写入必须先经架构方审计并通过 ExternalWriteAdapter 单独设计',
+  });
 }

@@ -16,6 +16,7 @@ import {
   parseOccurredAt,
   rowFingerprint,
   runImport,
+  runImportRows,
   validateMapping,
   type ImportBatchDraft,
   type ImportRepository,
@@ -123,6 +124,28 @@ describe('归一化与校验', () => {
     expect(parseOccurredAt('2026/09/28')?.toISOString()).toBe('2026-09-28T00:00:00.000Z');
     expect(parseOccurredAt('2026-09-28T10:00:00Z')?.toISOString()).toBe('2026-09-28T10:00:00.000Z');
     expect(parseOccurredAt('not-a-date')).toBeNull();
+  });
+
+  // CHANGE #31：JS Date 会把 2026-02-30 静默滚成 2026-03-02，必须拒绝，不能"悄悄换一天"
+  it('非法日历日期一律 INVALID_DATE（往返校验）', () => {
+    expect(parseOccurredAt('2026-02-30')).toBeNull();
+    expect(parseOccurredAt('2026-13-01')).toBeNull();
+    expect(parseOccurredAt('2026-00-10')).toBeNull();
+    expect(parseOccurredAt('2026-09-31')).toBeNull();
+    expect(parseOccurredAt('2026/02/29')).toBeNull();
+  });
+
+  // CHANGE #31：不猜业务日期 —— 无时区的自由格式不接受
+  it('时间戳只接受带明确时区的 ISO 8601，模糊格式一律拒绝', () => {
+    expect(parseOccurredAt('2026-09-28T10:00:00+08:00')?.toISOString()).toBe(
+      '2026-09-28T02:00:00.000Z',
+    );
+    expect(parseOccurredAt('2026-09-28T10:00:00.500Z')?.toISOString()).toBe(
+      '2026-09-28T10:00:00.500Z',
+    );
+    expect(parseOccurredAt('09/01/2026')).toBeNull();
+    expect(parseOccurredAt('2026-09-28 10:00')).toBeNull();
+    expect(parseOccurredAt('2026-09-28T10:00:00')).toBeNull();
   });
 
   it('缺金额 / 非法币种 / 非法日期都产生行级问题，且不产出交易', () => {
@@ -245,5 +268,28 @@ describe('导入编排', () => {
     const result = await runImport({ context: CONTEXT, csvText: 'Net Charge\n', repository });
     expect(result.rowsTotal).toBe(0);
     expect(result.status).toBe('IMPORTED');
+  });
+
+  // CHANGE #29：PARSING 之后的预期外失败必须尽力进入 FAILED 终态，不允许死批次
+  it('导入阶段抛错 → 批次尽力进入 FAILED 且异常继续向上抛', async () => {
+    const { repository, batches, transactions } = memoryRepo();
+
+    await expect(
+      runImportRows({
+        context: CONTEXT,
+        header: ['amount'],
+        rows: [{ amount: '10' }],
+        mapping: { amount: 'amount' },
+        repository,
+        rawProjection: () => {
+          throw new Error('projection failed');
+        },
+      }),
+    ).rejects.toThrow('projection failed');
+
+    expect(batches[0].status).toBe('FAILED');
+    expect(batches[0].finishedAt).not.toBeNull();
+    expect((batches[0].errorReport as { stage: string }).stage).toBe('normalize');
+    expect(transactions).toHaveLength(0);
   });
 });

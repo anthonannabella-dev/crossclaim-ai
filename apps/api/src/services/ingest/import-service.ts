@@ -211,50 +211,82 @@ async function importNormalizedRows(
   }
   await repository.updateBatch(input.batchId, { status: 'PARSING', columnMapping: mapping });
 
-  const issues: RowIssue[] = [];
-  const inserts: TransactionInsert[] = [];
+  // CHANGE #29：PARSING 之后的任何预期外失败都必须尽最大努力进入 FAILED 终态，
+  // 不允许把批次永久留在 PARSING（否则库里会留下"看起来还在跑"的死批次）。
+  let stage: 'normalize' | 'persist' | 'finalize' = 'normalize';
+  try {
+    const issues: RowIssue[] = [];
+    const inserts: TransactionInsert[] = [];
 
-  rows.forEach((raw, index) => {
-    const rowNumber = index + 1;
-    const result = normalizeRow(raw, mapping, context, rowNumber);
-    if (result.transaction) {
-      inserts.push(buildInsertRow(context, input.batchId, result.transaction, rawProjection(raw, index)));
-    }
-    for (const issue of result.issues) {
-      // 空行不算失败：直接跳过，不污染 errorReport
-      if (issue.code === 'EMPTY_ROW') return;
-      issues.push(issue);
-    }
-  });
+    rows.forEach((raw, index) => {
+      const rowNumber = index + 1;
+      const result = normalizeRow(raw, mapping, context, rowNumber);
+      if (result.transaction) {
+        inserts.push(
+          buildInsertRow(context, input.batchId, result.transaction, rawProjection(raw, index)),
+        );
+      }
+      for (const issue of result.issues) {
+        // 空行不算失败：直接跳过，不污染 errorReport
+        if (issue.code === 'EMPTY_ROW') return;
+        issues.push(issue);
+      }
+    });
 
-  const rowsTotal = rows.length;
-  let inserted = 0;
-  if (inserts.length > 0) {
-    const writeResult = await repository.insertTransactions(inserts);
-    inserted = writeResult.inserted;
+    stage = 'persist';
+    const rowsTotal = rows.length;
+    let inserted = 0;
+    if (inserts.length > 0) {
+      const writeResult = await repository.insertTransactions(inserts);
+      inserted = writeResult.inserted;
+    }
+    const rowsFailed = issues.length;
+    const rowsOk = inserted;
+    const duplicates = inserts.length - inserted;
+
+    const status: ImportResult['status'] =
+      rowsFailed === 0 ? 'IMPORTED' : rowsOk > 0 ? 'PARTIAL' : 'FAILED';
+
+    stage = 'finalize';
+    await repository.updateBatch(input.batchId, {
+      status,
+      rowsTotal,
+      rowsOk,
+      rowsFailed,
+      finishedAt: now(),
+      errorReport: {
+        ...(input.provenance ?? {}),
+        issues: issues.slice(0, maxReportedIssues),
+        issuesTruncated: Math.max(0, issues.length - maxReportedIssues),
+        duplicates,
+      },
+    });
+
+    return { batchId: input.batchId, status, rowsTotal, rowsOk, rowsFailed, duplicates, issues };
+  } catch (err) {
+    await bestEffortMarkFailed(repository, input.batchId, stage, err, now);
+    throw err;
   }
-  const rowsFailed = issues.length;
-  const rowsOk = inserted;
-  const duplicates = inserts.length - inserted;
+}
 
-  const status: ImportResult['status'] =
-    rowsFailed === 0 ? 'IMPORTED' : rowsOk > 0 ? 'PARTIAL' : 'FAILED';
-
-  await repository.updateBatch(input.batchId, {
-    status,
-    rowsTotal,
-    rowsOk,
-    rowsFailed,
-    finishedAt: now(),
-    errorReport: {
-      ...(input.provenance ?? {}),
-      issues: issues.slice(0, maxReportedIssues),
-      issuesTruncated: Math.max(0, issues.length - maxReportedIssues),
-      duplicates,
-    },
-  });
-
-  return { batchId: input.batchId, status, rowsTotal, rowsOk, rowsFailed, duplicates, issues };
+/** 尽力把批次推进到 FAILED 终态；连终态都写不进（数据库不可用）时不掩盖原始异常 */
+async function bestEffortMarkFailed(
+  repository: ImportRepository,
+  batchId: string,
+  stage: 'normalize' | 'persist' | 'finalize',
+  err: unknown,
+  now: () => Date,
+): Promise<void> {
+  const message = err instanceof Error ? err.message : '未知错误';
+  try {
+    await repository.updateBatch(batchId, {
+      status: 'FAILED',
+      finishedAt: now(),
+      errorReport: { stage, message: message.slice(0, 500), terminalized: 'best-effort' },
+    });
+  } catch {
+    // 数据库不可用时无解；原始异常仍然向上抛出
+  }
 }
 
 export async function runImport(input: RunImportInput): Promise<ImportResult> {

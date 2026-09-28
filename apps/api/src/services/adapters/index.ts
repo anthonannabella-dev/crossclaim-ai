@@ -19,6 +19,7 @@ export {
   assertAdapterCapabilities,
   type AdapterRegistry,
 } from './registry';
+export { assertSafeSource, MAX_SOURCE_BYTES, type SourceGuardContext } from './source-guard';
 export {
   runAdapterImport,
   submitClaimThroughAdapter,

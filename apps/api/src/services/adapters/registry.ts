@@ -14,6 +14,7 @@ import {
   AdapterCapabilityError,
   AdapterNotFoundError,
   AdapterRegistryError,
+  implementsWriteSurface,
   type AdapterCapabilities,
   type ExternalAdapter,
 } from './types';
@@ -61,6 +62,12 @@ export function assertAdapterCapabilities(adapter: ExternalAdapter): AdapterCapa
   if ((caps as { supportsClaimSubmission?: unknown }).supportsClaimSubmission !== false) {
     throw new AdapterCapabilityError(
       `适配器 ${caps.platform} 声称具备第三方写入能力：Phase 1 未开启，需先回架构方审计`,
+    );
+  }
+  // CHANGE #28：只要实现了写入面就拒绝注册 —— 闸门必须在**调用前**生效，不是写完才报警
+  if (implementsWriteSurface(adapter)) {
+    throw new AdapterCapabilityError(
+      `适配器 ${caps.platform} 实现了 submitClaim（第三方写入面）：Phase 1 只读通道不允许注册，需先回架构方审计`,
     );
   }
   return caps;
