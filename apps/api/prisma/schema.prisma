@@ -320,6 +320,7 @@ model Organization {
   auditLogs         AuditLog[]
   payments          Payment[]
   paymentEvents     PaymentEvent[]
+  paymentAttempts   PaymentProcessingAttempt[]
 
   @@index([status])
 }
@@ -1199,8 +1200,49 @@ model PaymentEvent {
   processingResult PaymentEventResult
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  attempts     PaymentProcessingAttempt[]
 
   @@unique([provider, providerEventId])
   @@unique([organizationId, id])
   @@index([organizationId, receivedAt])
+}
+
+enum PaymentAttemptStatus {
+  PENDING
+  RUNNING
+  SUCCEEDED
+  RETRYABLE_FAILED
+  DEAD_LETTER
+}
+
+/// C-0010-B2：一次「执行尝试」= 把不可变的 PaymentEvent 变成 Payment / 账单状态的尝试
+/// 与 PaymentEvent 同为 append-only；不变量由部分唯一索引与 Payment 唯一键保证。
+model PaymentProcessingAttempt {
+  id             String   @id @default(uuid())
+  organizationId String
+  paymentEventId String
+  attemptNo      Int
+  status         PaymentAttemptStatus @default(PENDING)
+  /// 与 applyPaymentSucceeded 返回对齐：PAID / PENDING_REVIEW / AMOUNT_MISMATCH / ILLEGAL_TRANSITION
+  resultStatus   String?
+  /// 仅白名单：DATABASE_TIMEOUT / CAS_CONFLICT / UNKNOWN_PROVIDER_RESPONSE
+  errorCode      String?
+  /// 只允许白名单代码与短句；禁止 payload / 签名 / token / 卡数据 / 客户机密
+  errorSummary   String?
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  /// 退避用「下次可重试时间」表达，不需要守护进程
+  nextRetryAt    DateTime?
+  /// EXTERNAL / SYSTEM / OPERATOR（应用层白名单）
+  actorType      String
+  actorRef       String?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  paymentEvent PaymentEvent @relation(fields: [paymentEventId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, paymentEventId, attemptNo])
+  @@unique([organizationId, id])
+  @@index([organizationId, status, nextRetryAt])
+  @@index([paymentEventId])
 }
