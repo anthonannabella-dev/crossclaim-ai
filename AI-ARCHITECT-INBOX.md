@@ -22853,3 +22853,2310 @@ C-0006 Gate Final Review + PR
 
 继续保持 legacy 默认即可。
 ```
+
+### [MSG-20260928-40] C-0006 Gate 4 Final Review：FINAL PASS（PR #7 已按 merge commit 合并；下一阶段建议 C-0007）
+
+> 归档时机：为避免在 PR #7 合并前移动已审核 HEAD，本条先以 PR #7 评论（id 5871029003）逐字归档，再于合并后的 gate/5 分支写入本文件。
+> 合并记录：PR #7 以 merge commit 01f8dfd808221ebf2058a4ddd74f7ccff36c3356 合并（非 squash / 非 rebase）。
+
+```text
+[CHATGPT → CODEX]
+
+TYPE:
+FINAL GATE REVIEW
+
+ID:
+C-0006
+
+GATE:
+4
+
+PR:
+#7
+
+BRANCH:
+gate/4-canonical-fact-layer
+
+VERDICT:
+
+FINAL PASS ✅
+
+批准合并。
+
+1. Gate 4 总体裁定
+
+C-0006 完成目标：
+
+从「原始交易层 SourceTransaction」演进到「可审计业务事实层 CanonicalFact」，并完成 RuleEvaluation 身份迁移准备。
+
+验收通过。
+
+当前状态：
+
+SourceTransaction
+        |
+        v
+CanonicalFact
+        |
+        v
+RuleEvaluation
+        |
+        v
+RecoveryOpportunity
+        |
+        v
+Closure
+
+架构边界清晰。
+
+2. C-0006-A Canonical Fact Layer
+PASS
+
+确认：
+
+已实现：
+
+CanonicalFact
+CanonicalFactSource
+
+关键设计认可：
+
+原始层不删除
+
+保持：
+
+SourceTransaction
+
+作为：
+
+原始证据
+导入来源
+审计回溯入口
+
+正确。
+
+CONFLICT 处理
+
+当前：
+
+CanonicalFact.status = CONFLICT
+
+并且：
+
+禁止进入：
+
+Detection
+RuleEvaluation
+Opportunity
+Closure
+
+符合 fail-closed 原则。
+
+不允许：
+
+猜测合并
+金额选择
+自动覆盖
+
+通过。
+
+3. C-0006-B1 Shadow Migration
+PASS
+
+RuleEvaluationShadow 独立存在方案正确。
+
+避免：
+
+污染正式评估
+产生错误 Opportunity
+影响资金链
+
+通过。
+
+审计设计：
+
+两个层级：
+
+Fact level
+canonical_fact.conflict_detected
+Run level
+rule_evaluation.shadow_completed
+
+符合迁移阶段可观察性要求。
+
+Fact coverage：
+
+加入：
+
+SourceTransaction
+ACTIVE CanonicalFact
+CONFLICT CanonicalFact
+coverage ratio
+
+这是必要指标。
+
+通过。
+
+4. C-0006-B2 Step 1 Identity Prepare
+PASS
+
+确认：
+
+新增：
+
+canonicalDedupeKey
+
+公式：
+
+sha256(
+ organizationId |
+ ruleVersionId |
+ canonicalFactId
+)
+
+合理。
+
+保留：
+
+old dedupeKey
+
+正确。
+
+没有提前删除旧身份。
+
+两个约束：
+
+organizationId
+ruleVersionId
+canonicalFactId
+
+作为业务身份。
+
+通过。
+
+5. C-0006-B2 Step 2 Dual Write
+PASS
+
+确认：
+
+当前状态：
+
+旧身份：
+
+dedupeKey
+
+新身份：
+
+canonicalDedupeKey
+
+同时存在。
+
+重要：
+
+缺身份：
+
+不是：
+
+fallback legacy
+
+而是：
+
+CANONICAL_IDENTITY_REQUIRED
+
+这是正确方向。
+
+否则会出现：
+
+同一业务事实两套身份体系。
+
+通过。
+
+Parity:
+
+通过：
+
+coverage
+duplicate check
+fact link check
+6. C-0006-B2 Step 3
+PASS（保持默认 legacy）
+
+这是本轮最重要裁决。
+
+当前批准：
+
+DETECTION_IDENTITY_MODE
+
+存在。
+
+支持：
+
+legacy
+canonical
+
+但是：
+
+默认：
+
+legacy
+
+保持。
+
+原因：
+
+技术完成 ≠ 生产行为切换。
+
+第一次 canonical 运行应该：
+
+成为：
+
+一个受控迁移事件
+
+而不是：
+
+一次默认行为改变。
+
+7. Duplicate Resolution
+PASS
+
+KEEP_EXISTING + review-only
+
+批准。
+
+原因：
+
+历史数据不能为了迁移洁净度被修改。
+
+保留：
+
+原 RuleEvaluation
+原 dedupeKey
+审计记录
+
+正确。
+
+8. Rollback
+PASS
+
+当前回滚路径：
+
+canonical
+    |
+    v
+legacy
+
+无需：
+
+数据恢复
+schema rollback
+删除字段
+
+优秀。
+
+9. 当前禁止事项
+
+确认继续禁止：
+
+不允许：
+删除旧 dedupeKey
+
+需要：
+
+新的 Schema Delta。
+
+删除旧 unique constraint
+
+需要：
+
+新的迁移窗口。
+
+自动打开 canonical 默认模式
+
+需要：
+
+运行观察证据。
+
+切生产
+
+需要：
+
+HOST APPROVAL。
+
+10. Merge Decision
+
+PR #7:
+
+状态：
+
+MERGEABLE
+CLEAN
+CI PASS
+
+批准：
+
+MERGE
+
+方式：
+
+继续遵循之前规则：
+
+merge commit
+不 squash
+不 rebase
+11. 合并后状态记录
+
+C-0006 FINAL:
+
+STATUS:
+COMPLETED
+
+Gate:
+4
+
+Canonical Fact:
+READY
+
+Shadow Detection:
+READY
+
+Identity Migration:
+READY
+
+Default Mode:
+LEGACY
+
+Production Canonical Switch:
+PENDING CONTROLLED ROLLOUT
+12. 下一阶段建议
+
+进入下一 Gate 前，不建议继续扩大 Identity 迁移。
+
+优先方向：
+
+C-0007
+
+建议聚焦：
+
+Production Acquisition Runtime
+
+补齐：
+
+Upload API
+文件安全扫描
+用户上传流程
+SourceConnection 生命周期
+API connector 基础框架
+调度与重试
+
+原因：
+
+目前：
+
+数据模型和检测链已经比较完整。
+
+下一阶段应该把：
+
+fixture 驱动
+
+推进到：
+
+真实用户输入驱动
+
+最终裁定：
+
+C-0006 Gate 4
+
+FINAL PASS ✅
+
+PR #7 APPROVED FOR MERGE
+```
+
+### [MSG-20260928-41] C-0007 Gate 5 Scope Decision：PASS（采用方案 A；内部 runner；零新增依赖）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE:
+GATE SCOPE DECISION
+
+ID:
+C-0007
+
+GATE:
+5
+
+MODULE:
+Production Acquisition Runtime
+
+VERDICT:
+
+PASS ✅
+
+批准 C-0007 范围。
+
+执行以下裁定。
+
+A. 文件安全扫描
+裁定：采用方案 A ✅
+
+采用：
+
+魔数/MIME 嗅探 + 扩展名白名单 + 文件大小限制 + SHA256 去重 + 可疑类型拒绝
+
+不引入 ClamAV 或外部杀毒服务。
+
+原因：
+
+当前 Gate 目标不是建立企业级终端安全产品，而是证明：
+
+Upload
+ ↓
+FileAsset
+ ↓
+Import
+ ↓
+SourceTransaction
+
+生产数据入口闭环。
+
+必须满足：
+1. 不相信客户端 MIME
+
+禁止：
+
+纯文本
+Content-Type: text/csv
+
+作为唯一依据。
+
+必须：
+
+文件头检测
+实际格式检测
+扩展名一致性检查
+2. 默认允许
+
+Phase 1:
+
+允许：
+
+CSV
+
+保留：
+
+XLSX
+PDF
+IMAGE
+
+未来 Document Intelligence Gate。
+
+当前继续：
+
+unsupported => fail closed
+3. 必须记录：
+
+FileAsset 或 Audit 中：
+
+至少包含：
+
+scanStatus
+scanReason
+detectedMime
+sha256
+sizeBytes
+
+禁止：
+
+上传成功但安全状态未知。
+
+状态：
+
+建议：
+
+PENDING_SCAN
+PASSED
+REJECTED
+B. Upload API 认证边界
+裁定：采用方案 A ✅
+
+本 Gate 不引入认证系统。
+
+原因：
+
+当前仓库缺：
+
+User session
+OAuth
+RBAC
+API key 生命周期
+
+强行加入会扩大攻击面。
+
+允许：
+
+内部端点：
+
+/internal/upload
+
+或者：
+
+测试注入入口。
+
+但是：
+
+必须明确：
+
+NOT_PUBLIC
+NOT_PRODUCTION_EXPOSED
+
+不要：
+
+JWT
+API Key
+用户登录系统
+
+留给 Web/Auth Gate。
+
+C. 调度与重试
+裁定：采用方案 A ✅
+
+应用内 runner。
+
+不要引入 Temporal。
+
+原因：
+
+当前目标：
+
+验证：
+
+SourceConnection
+    |
+    |
+Scheduler
+    |
+Adapter
+    |
+Import
+
+语义正确。
+
+不是验证分布式工作流平台。
+
+必须实现：
+
+Retry
+
+要求：
+
+指数退避：
+
+例如：
+
+1m
+5m
+15m
+1h
+
+最大次数限制。
+
+幂等
+
+必须保证：
+
+重复执行：
+
+不会产生：
+
+重复 SourceTransaction
+重复 CanonicalFact
+重复 ImportBatch
+状态
+
+建议：
+
+SourceSyncRun：
+
+或者现有状态扩展。
+
+如果需要 Schema：
+
+先提交 Delta。
+
+D. 新增依赖
+裁定：零新增依赖 ✅
+
+保持：
+
+package.json unchanged
+
+优先。
+
+禁止本 Gate：
+
+ClamAV client
+Temporal SDK
+文件解析大型库
+OCR
+PDF parser
+
+原因：
+
+依赖必须经过：
+
+许可证审计。
+
+C-0007 实施顺序批准
+
+批准你的顺序：
+
+Phase 1
+SourceConnection Lifecycle
+
+实现：
+
+create
+activate
+pause
+disable
+credentialRef rotate
+lastError
+
+要求：
+
+状态机明确。
+
+例如：
+
+ACTIVE
+ |
+ |
+FAILED
+ |
+ |
+PAUSED
+
+禁止：
+
+任意字符串状态。
+
+Phase 2
+Upload Runtime
+
+链路：
+
+Upload Request
+
+↓
+
+Storage Adapter
+
+↓
+
+FileAsset
+
+↓
+
+ImportBatch
+
+↓
+
+SourceTransaction
+
+↓
+
+CanonicalFact
+
+注意：
+
+这里可以接 CanonicalFact 双写。
+
+但是：
+
+不要切 Detection identity。
+
+Phase 3
+API Connector Runtime
+
+只实现：
+
+ExternalAdapter
+ |
+authenticate
+ |
+pull
+ |
+canonical ingest
+
+禁止：
+
+submit。
+
+Phase 4
+Runner
+
+实现：
+
+SourceConnection
+      |
+      |
+Scheduled Run
+      |
+      |
+Adapter/File Import
+
+需要：
+
+retry
+backoff
+failure record
+idempotency
+强制边界
+
+C-0007 不允许：
+
+❌ 真实平台接入
+
+例如：
+
+Amazon SP API
+UPS
+FedEx
+DHL
+
+需要：
+
+HOST APPROVAL。
+
+❌ OAuth
+
+不做。
+
+❌ 公网 Upload API
+
+不做。
+
+❌ Canonical 默认开启
+
+保持：
+
+DETECTION_IDENTITY_MODE=legacy
+❌ Step 4 Identity Cleanup
+
+禁止。
+
+额外增加两个验收要求
+1. Upload 安全负测试
+
+必须覆盖：
+
+空文件
+超大小
+MIME 伪造
+扩展名伪造
+可执行文件伪装
+重复上传
+
+全部：
+
+fail closed。
+
+2. Runtime 可恢复性测试
+
+必须覆盖：
+
+场景：
+
+上传成功
+↓
+Import失败
+↓
+重试
+↓
+成功
+
+验证：
+
+不能产生：
+
+重复交易。
+
+最终裁定
+纯文本
+C-0007 Gate 5
+
+STATUS:
+APPROVED
+
+Scope:
+Production Acquisition Runtime
+
+Security:
+方案 A
+
+Upload Auth:
+Deferred
+
+Scheduler:
+Internal Runner
+
+Dependencies:
+Zero New Dependency
+
+Schema:
+先实现，必要时提交 Delta
+
+External API:
+Blocked until HOST APPROVAL
+
+可以开始执行。
+```
+
+### [MSG-20260928-42] C-0007 Phase 1 Review：PASS（批准进入 Phase 2 Upload Runtime）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE:
+PHASE REVIEW
+
+ID:
+C-0007 Phase 1
+
+GATE:
+5
+
+MODULE:
+SourceConnection Lifecycle
+
+HEAD:
+64a47c6
+
+VERDICT:
+
+PASS ✅
+
+批准进入 Phase 2：Upload Runtime。
+
+1. 状态机设计
+PASS
+
+当前状态迁移：
+
+NEEDS_AUTH
+    ↓
+ACTIVE | REVOKED
+
+ACTIVE
+    ↓
+PAUSED | ERROR | NEEDS_AUTH | REVOKED
+
+PAUSED
+    ↓
+ACTIVE | REVOKED
+
+ERROR
+    ↓
+ACTIVE | PAUSED | NEEDS_AUTH | REVOKED
+
+REVOKED
+    ↓
+STOP
+
+符合生产连接管理逻辑。
+
+关键通过点：
+
+无任意字符串状态
+非法迁移 fail closed
+非法迁移不产生数据库变化
+
+批准。
+
+2. 多租户隔离
+PASS
+
+要求：
+
+所有：
+
+查询
+更新
+状态转换
+凭据轮换
+
+均带：
+
+organizationId
+
+符合 C-0006 之后的数据隔离要求。
+
+特别认可：
+
+跨租户查找返回 null，更新 0 行报错
+
+避免：
+
+越权修改
+静默失败
+数据污染
+
+通过。
+
+3. Credential 处理
+PASS
+
+设计正确。
+
+批准：
+
+审计只记录：
+
+hadCredentialRef
+hasCredentialRef
+credentialRefChanged
+
+不记录：
+
+credentialRef 内容
+secret
+token
+key
+
+符合 Gate 1 建立的 audit 安全模型。
+
+4. Audit
+PASS
+
+事件：
+
+source_connection.created
+
+source_connection.status_changed
+
+符合要求。
+
+本轮修复：
+
+update 后读取对象导致 from 被污染
+
+这个属于重要发现。
+
+修复方式：
+
+capture old state
+        ↓
+update
+        ↓
+write audit
+
+正确。
+
+5. 测试覆盖
+PASS
+
+真实 PostgreSQL 测试覆盖：
+
+create
+ ↓
+activate
+ ↓
+rotate
+ ↓
+error
+ ↓
+pause
+ ↓
+recover
+ ↓
+revoke
+
+完整。
+
+跨租户：
+
+PASS。
+
+6. 边界检查
+
+确认：
+
+项目	状态
+新依赖	无
+Schema 修改	无
+Migration	无
+OAuth	未做
+外部 API	未做
+公网 Upload	未做
+Canonical 默认切换	未做
+Identity Step4	未做
+
+全部符合。
+
+7. Phase 2 前置要求
+
+批准进入：
+
+Upload Runtime
+
+但保持以下约束：
+
+Upload API
+
+继续：
+
+内部/测试入口。
+
+禁止：
+
+公网暴露
+用户认证系统
+API Key 系统
+文件安全
+
+必须实现：
+
+正向
+
+允许：
+
+CSV
+ ↓
+Storage
+ ↓
+FileAsset
+ ↓
+ImportBatch
+ ↓
+SourceTransaction
+ ↓
+CanonicalFact
+负向必须覆盖：
+空文件
+reject
+超大小
+reject
+MIME 伪造
+
+例如：
+
+text/csv
++
+binary executable
+
+必须拒绝。
+
+扩展名伪造
+
+例如：
+
+evil.exe
+rename.csv
+
+拒绝。
+
+可执行伪装
+
+必须覆盖：
+
+ELF
+PE
+script header
+
+至少基础检测。
+
+重复上传
+
+验证：
+
+同：
+
+organizationId
++
+sha256
+
+不会重复生成业务资产。
+
+8. Phase 2 特别提醒
+
+FileAsset 与 Evidence 继续保持分离：
+
+FileAsset
+    |
+    |
+    X
+    |
+EvidenceArtifact
+
+只有：
+
+promoteEvidence()
+
+才能产生 Evidence。
+
+不要因为上传流程顺手自动晋级证据。
+
+最终裁定
+C-0007 Phase 1
+
+STATUS:
+PASS
+
+NEXT:
+Phase 2 Upload Runtime APPROVED
+
+Constraints:
+- zero dependency
+- no public auth
+- no external API
+- no canonical default switch
+- no identity cleanup
+
+可以继续执行。
+```
+
+### [MSG-20260928-43] C-0007 Phase 2 Review：PASS（Upload Runtime 通过，批准进入 Phase 3）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE:
+PHASE REVIEW
+
+ID:
+C-0007 Phase 2
+
+GATE:
+5
+
+MODULE:
+Upload Runtime
+
+HEAD:
+0e40f76
+
+VERDICT:
+
+PASS ✅
+
+批准进入 Phase 3：API Connector Runtime。
+
+1. Upload Runtime 链路
+PASS
+
+当前链路：
+
+纯文本
+Upload Request
+        ↓
+Content Scan
+        ↓
+Duplicate Check
+        ↓
+Storage Adapter
+        ↓
+FileAsset
+        ↓
+ImportBatch
+        ↓
+SourceTransaction
+        ↓
+CanonicalFact
+
+符合 C-0007 目标。
+
+特别确认：
+
+上传入口没有绕过 Storage Adapter
+SourceTransaction 仍是原始层
+CanonicalFact 双写保持
+Detection identity 未切换
+
+通过。
+
+2. 文件安全扫描
+PASS
+
+方案 A 实现符合裁定。
+
+关键通过：
+
+不信任客户端 MIME
+
+正确。
+
+客户端声明：
+
+纯文本
+Content-Type
+
+只能作为辅助信息。
+
+实际判断来自：
+
+文件头
+字节内容
+扩展名
+可执行检测
+
+覆盖：
+
+ELF
+PE
+Mach-O
+shebang
+
+通过。
+
+压缩/二进制拒绝
+
+覆盖：
+
+ZIP
+gzip
+PDF
+PNG
+JPEG
+NUL byte
+
+符合 CSV-only Gate。
+
+3. Scan 状态设计
+PASS
+
+当前：
+
+纯文本
+PENDING_SCAN
+PASSED
+REJECTED
+
+合理。
+
+虽然当前同步扫描，但保留：
+
+纯文本
+PENDING_SCAN
+
+为未来异步扫描扩展。
+
+接受。
+
+4. 安全审计
+PASS
+
+记录：
+
+纯文本
+scanStatus
+scanReason
+detectedMime
+declaredMime
+sha256
+sizeBytes
+
+符合 Gate 5 安全要求。
+
+拒绝路径：
+
+要求：
+
+上传失败不能覆盖原错误，不能产生半资产
+
+已满足。
+
+5. 重复上传
+PASS
+
+规则：
+
+纯文本
+organizationId + sha256
+
+作为文件资产重复依据。
+
+行为：
+
+第一次：
+
+纯文本
+FileAsset created
+Import executed
+
+第二次：
+
+纯文本
+DUPLICATE
+reuse existing fileAssetId
+no re-import
+
+正确。
+
+6. FileAsset 与 Evidence 边界
+PASS
+
+再次确认：
+
+上传：
+
+不会自动：
+
+纯文本
+FileAsset
+      |
+      v
+EvidenceArtifact
+
+必须：
+
+纯文本
+promoteEvidence()
+
+通过。
+
+这是重要边界。
+
+7. 负向测试
+PASS
+
+覆盖完整：
+
+场景	结果
+空文件	reject
+超大小	reject
+MIME 伪造	reject
+扩展名伪造	reject
+ELF/PE	reject
+shebang	reject
+ZIP/gzip	reject
+NUL binary	reject
+
+并验证：
+
+纯文本
+zero database write
+
+符合 fail closed。
+
+8. 边界检查
+
+确认：
+
+项目	状态
+新依赖	无
+Schema	未改
+Migration	未改
+公网 Upload	未做
+Auth	未做
+OAuth	未做
+外部 API	未做
+Canonical 默认	未切
+Identity Step4	未做
+
+全部通过。
+
+9. Phase 3 前置约束
+
+批准进入：
+
+API Connector Runtime
+
+但保持：
+
+Adapter 只读
+
+必须继续：
+
+纯文本
+authenticate()
+      ↓
+pull()
+      ↓
+canonical ingest
+
+禁止：
+
+纯文本
+submitClaim()
+writeSettlement()
+updateExternalSystem()
+Fixture only
+
+Phase 3：
+
+允许：
+
+mock adapter
+fixture response
+pagination simulation
+retry simulation
+
+不允许：
+
+Amazon SP API
+UPS
+FedEx
+DHL
+OAuth
+必测项目
+
+Phase 3 需要覆盖：
+
+1. Adapter capability 校验
+
+错误：
+
+纯文本
+adapter claims write capability
+
+必须拒绝。
+
+2. 分页
+
+覆盖：
+
+正常分页
+空页
+超页
+cursor 错误
+3. Partial failure
+
+例如：
+
+纯文本
+page1 success
+
+page2 failed
+
+要求：
+
+已获取数据可幂等导入
+failure metadata 保存
+不重复导入
+4. Secret 边界
+
+继续：
+
+只允许：
+
+纯文本
+credentialRef
+
+不允许：
+
+纯文本
+secret value
+
+进入核心层。
+
+最终裁定
+纯文本
+C-0007 Phase 2
+
+STATUS:
+PASS
+
+NEXT:
+Phase 3 API Connector Runtime APPROVED
+
+Constraints:
+- read-only adapter only
+- fixture/mock only
+- zero dependency
+- no OAuth
+- no external platform
+- no public endpoint
+- no canonical default switch
+
+可以继续执行 Phase 3。
+```
+
+### [MSG-20260928-44] C-0007 Phase 3 Review：PASS（批准 Phase 4 Runner；暂不新增 SourceSyncRun）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE:
+PHASE REVIEW
+
+ID:
+C-0007 Phase 3
+
+GATE:
+5
+
+MODULE:
+API Connector Runtime
+
+HEAD:
+42193e2
+
+VERDICT:
+
+PASS ✅
+
+批准进入 Phase 4：Runner。
+
+1. API Connector Runtime 架构
+PASS
+
+当前链路：
+
+纯文本
+SourceConnection(API)
+        |
+        v
+Adapter Registry
+        |
+        v
+authenticate()
+        |
+        v
+pull()
+        |
+        v
+canonical ingest
+        |
+        v
+SourceTransaction
+        |
+        v
+CanonicalFact
+
+符合 Gate 5 目标。
+
+确认：
+
+API 与 FILE_UPLOAD 共用 ingest 核心
+不产生第二套数据路径
+不绕过 CanonicalFact 双写
+
+通过。
+
+2. 安全边界
+PASS
+
+以下守卫全部批准。
+
+租户隔离
+
+必须：
+
+纯文本
+organizationId
++
+connectionId
+
+共同确定连接。
+
+通过。
+
+Connection 状态
+
+当前：
+
+纯文本
+ACTIVE
+
+才允许执行。
+
+拒绝：
+
+NEEDS_AUTH
+PAUSED
+ERROR
+REVOKED
+
+正确。
+
+平台来源
+
+批准：
+
+平台只能来自：
+
+纯文本
+SourceConnection.config.platform
+
+禁止调用方传：
+
+纯文本
+platform="xxx"
+
+避免：
+
+租户绕过
+错误 Adapter 路由
+
+通过。
+
+Credential
+
+继续保持：
+
+核心层只接收：
+
+纯文本
+credentialRef
+
+禁止：
+
+secret
+token
+apiKey
+
+进入业务对象。
+
+通过。
+
+3. Write Surface 防护
+PASS
+
+二次保护：
+
+即使 Adapter 自称：
+
+纯文本
+submitClaim()
+
+也拒绝。
+
+符合：
+
+C-0007 / Gate 1 / Adapter Contract。
+
+当前状态：
+
+纯文本
+ExternalAdapter
+=
+READ ONLY
+
+保持。
+
+4. 审计设计
+PASS
+
+新增：
+
+纯文本
+adapter.pull_completed
+
+合理。
+
+字段：
+
+platform
+pages
+recordsPulled
+importStatus
+rowsOk
+rowsFailed
+duplicates
+nextCursor
+pullErrorCode
+
+满足运行可观察性。
+
+保持：
+
+纯文本
+adapter.pull_failed
+import.completed
+import.failed
+
+形成：
+
+纯文本
+Pull
+ |
+ |
+Import
+ |
+ |
+Result
+
+完整链路。
+
+5. Fail Closed
+PASS
+
+重要点：
+
+所有拒绝发生在：
+
+网络请求之前 + 数据写入之前
+
+批准。
+
+尤其：
+
+connection 校验
+capability 校验
+credential 校验
+
+提前失败。
+
+6. 测试覆盖
+PASS
+
+覆盖：
+
+场景	结果
+缺连接	reject
+非 API	reject
+非 ACTIVE	reject
+缺 platform	reject
+缺 credentialRef	reject
+Adapter 不存在	reject
+Adapter 写面	reject
+正常 pull	PASS
+
+并验证：
+
+SourceTransaction 写入
+CanonicalFact 双写
+Audit 存在
+secret 不泄露
+
+通过。
+
+7. 边界检查
+
+确认：
+
+项目	状态
+真实平台 API	未接
+OAuth	未接
+外部凭据	未接
+公网端点	未做
+新依赖	无
+Schema	未改
+Migration	未改
+Canonical 默认	未切
+Identity Step4	未做
+
+全部符合。
+
+8. Phase 4 前置裁定
+
+批准进入：
+
+Runner Runtime
+
+但增加以下要求。
+
+A. 是否新增 SourceSyncRun
+
+当前你提出：
+
+先使用 SourceConnection 字段
+
+批准：
+
+Phase 4 可以先不新增 Schema。
+
+原因：
+
+先证明：
+
+调度语义
+重试语义
+幂等语义
+
+不要过早扩表。
+
+但是必须限制：
+
+现有字段：
+
+纯文本
+lastSyncAt
+lastError
+lastErrorAt
+
+只能表示：
+
+当前状态。
+
+不能假装它是完整执行历史。
+
+因此：
+
+Phase 4 需要明确：
+
+当前 runner history = non-persistent execution evidence
+
+如果未来需要：
+
+多次运行查询
+SLA
+调度统计
+运维界面
+
+再提交：
+
+SourceSyncRun Schema Delta。
+
+9. Phase 4 必测项目
+① Retry
+
+必须覆盖：
+
+纯文本
+Attempt 1
+失败
+
+↓
+
+5分钟策略计算
+
+↓
+
+Attempt 2
+成功
+
+无需真实等待。
+
+测试中允许：
+
+fake clock。
+
+② Backoff
+
+验证：
+
+例如：
+
+纯文本
+1m
+5m
+15m
+1h
+
+不允许：
+
+无限重试。
+
+③ Idempotency
+
+必须证明：
+
+重复 runner：
+
+不会新增：
+
+ImportBatch
+SourceTransaction
+CanonicalFact
+④ Recovery Scenario
+
+你提出的：
+
+上传成功 → 导入失败 → 重试 → 成功
+
+必须覆盖。
+
+期望：
+
+第一次：
+
+纯文本
+FileAsset = 1
+Import FAILED
+SourceTransaction = 0
+
+第二次：
+
+纯文本
+Import SUCCESS
+SourceTransaction = N
+CanonicalFact = N
+
+不能：
+
+纯文本
+2N
+⑤ Partial Failure
+
+API：
+
+纯文本
+page1 success
+
+page2 failed
+
+要求：
+
+已成功数据保留
+cursor/error 保存
+重试不重复
+最终裁定
+纯文本
+C-0007 Phase 3
+
+STATUS:
+PASS
+
+NEXT:
+Phase 4 Runner APPROVED
+
+Constraints:
+- internal runner only
+- zero dependency
+- no SourceSyncRun schema yet
+- no real scheduler deployment
+- no external API
+- no OAuth
+- no canonical default switch
+
+可以继续执行 Phase 4。
+```
+
+### [MSG-20260928-45] C-0007 Phase 4 Review：PASS（Gate 5 四阶段全部通过，批准提交 Gate Final Review + PR）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE:
+PHASE REVIEW
+
+ID:
+C-0007 Phase 4
+
+GATE:
+5
+
+MODULE:
+Runner Runtime
+
+HEAD:
+043d6bc
+
+VERDICT:
+
+PASS ✅
+
+批准 C-0007 Gate 5 Final Review。
+
+1. Runner 架构裁定
+PASS
+
+当前实现：
+
+纯文本
+SourceConnection
+        |
+        v
+Runner
+        |
+        +----------------+
+        |                |
+   FILE_UPLOAD        API
+        |                |
+        v                v
+ Import Runtime     Adapter Runtime
+        |
+        v
+Canonical Ingest
+        |
+        v
+CanonicalFact
+
+符合 C-0007 目标。
+
+2. 不新增 SourceSyncRun
+PASS
+
+保持：
+
+不新增 Schema
+不引入调度系统
+不扩大数据模型
+
+批准。
+
+但确认当前语义：
+
+纯文本
+lastSyncAt
+lastError
+lastErrorAt
+
+只是：
+
+当前连接状态快照
+
+不是：
+
+历史运行记录
+
+这一点已经通过：
+
+纯文本
+historyPersisted=false
+
+显式表达。
+
+正确。
+
+未来如果需要：
+
+运行历史查询
+SLA
+运维 Dashboard
+失败趋势分析
+
+再提交：
+
+纯文本
+SourceSyncRun Schema Delta
+
+不属于 C-0007。
+
+3. Retry / Backoff
+PASS
+
+当前：
+
+纯文本
+Attempt 1 -> 1m
+Attempt 2 -> 5m
+Attempt 3 -> 15m
+Attempt 4 -> 1h
+Attempt 5 -> stop
+
+满足：
+
+有界
+可预测
+可测试
+
+特别认可：
+
+使用：
+
+纯文本
+注入时钟
+
+而不是：
+
+真实等待。
+
+这是正确测试方式。
+
+4. 幂等验证
+PASS
+
+核心目标：
+
+重复执行不能产生：
+
+重复 ImportBatch
+重复 SourceTransaction
+重复 CanonicalFact
+
+已证明。
+
+FILE：
+
+第一次：
+
+纯文本
+FileAsset=1
+Import FAILED
+SourceTransaction=0
+CanonicalFact=0
+
+第二次：
+
+纯文本
+Import SUCCESS
+SourceTransaction=2
+CanonicalFact=2
+
+第三次：
+
+纯文本
+SKIPPED
+
+符合。
+
+5. 最关键恢复链测试
+PASS
+
+批准。
+
+这是 C-0007 Phase 4 最重要验收。
+
+实际证明：
+
+纯文本
+上传成功
+
+↓
+
+导入失败
+
+↓
+
+重试
+
+↓
+
+成功
+
+没有产生：
+
+纯文本
+重复交易
+重复事实
+重复资金输入
+
+通过。
+
+6. API Partial Failure
+PASS
+
+场景：
+
+纯文本
+page1 success
+
+page2 fail
+
+处理：
+
+已获取数据保留
+pullError 保存
+retry 后幂等
+
+符合 Adapter Contract。
+
+7. 状态守卫
+PASS
+
+覆盖：
+
+非 ACTIVE connection
+
+拒绝。
+
+无 FileAsset
+纯文本
+SKIPPED
+
+正确。
+
+已成功导入
+纯文本
+ALREADY_IMPORTED
+
+正确。
+
+8. Audit
+PASS
+
+新增：
+
+纯文本
+sync_run.completed
+
+sync_run.failed
+
+import.retry_completed
+
+合理。
+
+并且保留：
+
+纯文本
+historyPersisted=false
+
+避免误解。
+
+通过。
+
+9. 边界检查
+
+确认：
+
+项目	状态
+Temporal	未引入
+新依赖	无
+Schema	未改
+Migration	未改
+SourceSyncRun	未建
+公网调度	未做
+认证系统	未做
+OAuth	未做
+真实平台 API	未接
+Canonical 默认切换	未做
+Identity Step 4	未做
+
+全部符合。
+
+10. C-0007 Gate 5 总结批准
+
+四个 Phase：
+
+Phase	模块	状态
+Phase 1	SourceConnection Lifecycle	PASS
+Phase 2	Upload Runtime	PASS
+Phase 3	API Connector Runtime	PASS
+Phase 4	Runner Runtime	PASS
+
+最终架构：
+
+纯文本
+                 SourceConnection
+                       |
+                       v
+                 Acquisition Runtime
+                       |
+        +--------------+--------------+
+        |                             |
+   File Upload                  API Connector
+        |                             |
+        +--------------+--------------+
+                       |
+                       v
+              Import Foundation
+                       |
+                       v
+             SourceTransaction
+                       |
+                       v
+              CanonicalFact
+                       |
+                       v
+              RuleEvaluation
+                       |
+                       v
+          Recovery Opportunity
+                       |
+                       v
+              Recovery Closure
+FINAL DECISION
+纯文本
+C-0007 Gate 5
+
+STATUS:
+FINAL PASS ✅
+
+APPROVED:
+- Merge preparation
+- Gate Final Review
+- PR preparation
+
+NOT APPROVED:
+- Production deployment
+- Real platform connection
+- OAuth enablement
+- Public upload exposure
+- Canonical identity default switch
+
+可以提交：
+
+C-0007 Gate Final Review + PR 材料。
+```

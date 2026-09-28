@@ -25,3 +25,56 @@ export {
   type ApiPullResult,
 } from './api-pull-service';
 export { createPrismaFileAssetPort, createPrismaSourceConnectionPort } from './prisma-ports';
+
+export {
+  CONNECTION_TRANSITIONS,
+  assertTransition,
+  canTransition,
+  createConnection,
+  initialStatusFor,
+  markConnectionError,
+  rotateCredentialRef,
+  transitionConnection,
+  type ConnectionLifecycleDeps,
+  type ConnectionLifecyclePort,
+  type ConnectionRecord,
+  type ConnectionStatus,
+} from './connection-lifecycle';
+export { createPrismaConnectionLifecyclePort } from './connection-lifecycle-prisma';
+
+export {
+  DEFAULT_SCAN_MAX_BYTES,
+  scanUploadContent,
+  type ContentScanInput,
+  type ContentScanResult,
+  type ScanReason,
+  type ScanStatus,
+} from './content-scan';
+export {
+  createPrismaFileAssetLookup,
+  uploadWithScan,
+  type FileAssetLookupPort,
+  type ScannedUploadDeps,
+  type ScannedUploadResult,
+} from './upload-runtime';
+
+export {
+  ConnectorRuntimeError,
+  runConnectorPull,
+  type ConnectorPullInput,
+  type ConnectorRuntimeDeps,
+  type ConnectorRuntimeErrorCode,
+} from './api-connector-runtime';
+
+export {
+  DEFAULT_MAX_ATTEMPTS,
+  RETRY_BACKOFF_MS,
+  backoffForAttempt,
+  nextAttemptAt,
+  runScheduledSync,
+  shouldRetry,
+  type SyncRunInput,
+  type SyncRunOutcome,
+  type SyncRunStatus,
+  type SyncRunnerDeps,
+} from './sync-runner';
