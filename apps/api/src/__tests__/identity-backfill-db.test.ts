@@ -259,5 +259,22 @@ describe('C-0006-B2 — identity backfill planner（真实 PostgreSQL）', () =>
     const after = await planIdentityBackfill(prisma, { organizationId: ORG });
     expect(after.alreadyMapped).toBe(2);
     expect(after.updates).toHaveLength(0);
+
+    // 新旧身份同存：旧 dedupeKey 唯一约束未动，新 canonicalDedupeKey 唯一约束生效
+    const alreadyUsed = rows.find((row) => row.id === first)!;
+    await expect(
+      prisma.ruleEvaluation.create({
+        data: {
+          organizationId: ORG,
+          ruleVersionId,
+          sourceTransactionId: alreadyUsed.sourceTransactionId,
+          canonicalFactId: alreadyUsed.canonicalFactId,
+          canonicalDedupeKey: alreadyUsed.canonicalDedupeKey,
+          result: 'PASS',
+          computed: {},
+          dedupeKey: 'legacy-key-duplicate-identity',
+        },
+      }),
+    ).rejects.toThrow();
   });
 });
