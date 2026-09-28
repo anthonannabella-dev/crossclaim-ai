@@ -309,4 +309,128 @@ describe('C-0004 CP2 · Recovery Closure（真实 PostgreSQL）', () => {
       await prisma.evidenceArtifact.count({ where: { organizationId: ORG, kind: 'CREDIT_NOTE' } }),
     ).toBe(1);
   });
+
+  // CHANGE #53: production runtime must refuse synthetic settlement before any write.
+  it('CHANGE #53: production runtime refuses synthetic settlement and writes nothing', async () => {
+    const opportunity = await prisma.recoveryOpportunity.findFirstOrThrow({ where: { organizationId: ORG } });
+
+    await expect(
+      runRecoveryClosure({
+        organizationId: ORG,
+        prisma,
+        commercialTerms: { successFeeRate: terms.terms[0].successFeeRate, source: terms.terms[0].source },
+        simulateSettlement: true,
+        runtimeMode: 'production',
+      }),
+    ).rejects.toThrow(/production/);
+
+    expect(await prisma.case.count({ where: { organizationId: ORG } })).toBe(0);
+    expect(await prisma.claim.count({ where: { organizationId: ORG } })).toBe(0);
+    expect(await prisma.settlement.count({ where: { organizationId: ORG } })).toBe(0);
+    expect(await prisma.recoveryLedgerEntry.count({ where: { organizationId: ORG } })).toBe(0);
+    expect(await prisma.feeCalculation.count({ where: { organizationId: ORG } })).toBe(0);
+    expect(await prisma.billingInvoice.count({ where: { organizationId: ORG } })).toBe(0);
+
+    const after = await prisma.recoveryOpportunity.findUniqueOrThrow({ where: { id: opportunity.id } });
+    expect(after.status).toBe('QUALIFIED');
+  });
+
+  // CHANGE #54: the in-transaction re-read keeps the status transition unique.
+  it('CHANGE #54: concurrent closure writes exactly one QUALIFIED->CONVERTED audit row', async () => {
+    const opportunity = await prisma.recoveryOpportunity.findFirstOrThrow({ where: { organizationId: ORG } });
+
+    await Promise.all([closure(), closure()]);
+
+    const conversions = await prisma.auditLog.count({
+      where: {
+        organizationId: ORG,
+        action: 'opportunity.status_changed',
+        entityId: opportunity.id,
+        changes: { path: ['from'], equals: 'QUALIFIED' },
+      },
+    });
+    expect(conversions).toBe(1);
+
+    const after = await prisma.recoveryOpportunity.findUniqueOrThrow({ where: { id: opportunity.id } });
+    expect(after.status).toBe('CONVERTED');
+  });
+
+  // CHANGE #54: money may only follow an APPROVED claim on a WON case.
+  it('CHANGE #54: a REJECTED claim blocks settlement, ledger, fee and billing', async () => {
+    await runRecoveryClosure({
+      organizationId: ORG,
+      prisma,
+      commercialTerms: { successFeeRate: terms.terms[0].successFeeRate, source: terms.terms[0].source },
+      simulateSettlement: false,
+    });
+    const claim = await prisma.claim.findFirstOrThrow({ where: { organizationId: ORG } });
+    await prisma.claim.update({ where: { id: claim.id }, data: { status: 'REJECTED' } });
+
+    await expect(closure()).rejects.toThrow(/APPROVED/);
+
+    expect(await prisma.settlement.count({ where: { organizationId: ORG } })).toBe(0);
+    expect(await prisma.recoveryLedgerEntry.count({ where: { organizationId: ORG } })).toBe(0);
+    expect(await prisma.feeCalculation.count({ where: { organizationId: ORG } })).toBe(0);
+    expect(await prisma.billingInvoice.count({ where: { organizationId: ORG } })).toBe(0);
+
+    const after = await prisma.claim.findUniqueOrThrow({ where: { id: claim.id } });
+    expect(after.status).toBe('REJECTED');
+  });
+
+  // CHANGE #56: a missing expected amount fails closed instead of becoming 0.
+  it('CHANGE #56: missing amountExpected fails closed with no Case and no Claim', async () => {
+    const opportunity = await prisma.recoveryOpportunity.findFirstOrThrow({ where: { organizationId: ORG } });
+    await prisma.recoveryOpportunity.update({ where: { id: opportunity.id }, data: { amountExpected: null } });
+
+    await expect(closure()).rejects.toThrow(/amountExpected/);
+
+    expect(await prisma.case.count({ where: { organizationId: ORG } })).toBe(0);
+    expect(await prisma.claim.count({ where: { organizationId: ORG } })).toBe(0);
+  });
+
+  // CHANGE #56: a missing invoiced amount fails closed instead of becoming 0.
+  it('CHANGE #56: missing amountActual fails closed with no Case and no Claim', async () => {
+    const opportunity = await prisma.recoveryOpportunity.findFirstOrThrow({ where: { organizationId: ORG } });
+    await prisma.recoveryOpportunity.update({ where: { id: opportunity.id }, data: { amountActual: null } });
+
+    await expect(closure()).rejects.toThrow(/amountActual/);
+
+    expect(await prisma.case.count({ where: { organizationId: ORG } })).toBe(0);
+    expect(await prisma.claim.count({ where: { organizationId: ORG } })).toBe(0);
+  });
+
+  // CHANGE #56: an out-of-range fee rate fails closed instead of billing.
+  it('CHANGE #56: success fee rate outside (0, 1] fails closed with no Fee and no Billing', async () => {
+    for (const rate of ['-0.15', '0', '1.50', 0.15 as unknown as string]) {
+      await expect(
+        runRecoveryClosure({
+          organizationId: ORG,
+          prisma,
+          commercialTerms: { successFeeRate: rate, source: 'fixtures/logistics/commercial-terms.json' },
+          simulateSettlement: true,
+        }),
+      ).rejects.toThrow(/successFeeRate/);
+    }
+
+    expect(await prisma.feeCalculation.count({ where: { organizationId: ORG } })).toBe(0);
+    expect(await prisma.billingInvoice.count({ where: { organizationId: ORG } })).toBe(0);
+  });
+
+  // CHANGE #56: the legal rate keeps the golden fee.
+  it('CHANGE #56: the legal rate 0.1500 still yields the golden fee 2.6625', async () => {
+    await runRecoveryClosure({
+      organizationId: ORG,
+      prisma,
+      commercialTerms: { successFeeRate: '0.1500', source: 'fixtures/logistics/commercial-terms.json' },
+      simulateSettlement: true,
+    });
+
+    const fee = await prisma.feeCalculation.findFirstOrThrow({ where: { organizationId: ORG } });
+    expect(fee.baseAmount.toFixed(4)).toBe('17.7500');
+    expect(fee.feeAmount.toFixed(4)).toBe('2.6625');
+    const invoice = await prisma.billingInvoice.findFirstOrThrow({ where: { organizationId: ORG } });
+    expect(invoice.status).toBe('DRAFT');
+    expect(invoice.total.toFixed(4)).toBe('2.6625');
+  });
+
 });
