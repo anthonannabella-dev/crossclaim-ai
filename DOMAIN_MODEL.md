@@ -5,10 +5,10 @@
 
 ---
 
-## 一、模型总览（28 个 = 26 个核心模型 + 2 个联结模型）
+## 一、模型总览（29 个 = 27 个核心模型 + 2 个联结模型）
 
-> **口径统一**：**26 个核心模型**（架构章程 §六 的清单 + C-0006-A 的 `CanonicalFact`）**+ 2 个联结模型 `CaseEvidence`、`CanonicalFactSource`**。
-> README、本文、PR 描述、架构契约测试全部按此口径，不允许 26/28 混用。
+> **口径统一**：**27 个核心模型**（架构章程 §六 的清单 + C-0006-A 的 `CanonicalFact` + C-0006-B1 的 `RuleEvaluationShadow`）**+ 2 个联结模型 `CaseEvidence`、`CanonicalFactSource`**。
+> README、本文、PR 描述、架构契约测试全部按此口径，不允许 27/29 混用。
 
 ### 组织与用户
 
@@ -83,6 +83,7 @@
 | `RuleSet` | 规则集（按域 + 渠道 + 作用域；支持全局与租户两种所有权） |
 | `RuleVersion` | 规则版本（tier / source / version / effective / last_verified / definition） |
 | `RuleEvaluation` | 规则计算结果（含 `dedupeKey` 幂等键） |
+| `RuleEvaluationShadow` | C-0006-B 影子评估结果（`runId` + `engineVersion`，绑 `CanonicalFact`）。**只写结论**，不创建 Opportunity / Case / Settlement，绝不进入资金链 |
 
 ### 到账与账本
 

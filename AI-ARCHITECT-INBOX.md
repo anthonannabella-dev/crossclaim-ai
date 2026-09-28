@@ -20198,3 +20198,522 @@ Detection Migration
 
 裁决完成。
 ```
+
+### [MSG-20260928-32] C-0006-B Schema Delta Review：PASS WITH REVISIONS（B1 允许执行，B2 仅设计）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE:
+SCHEMA DELTA REVIEW
+
+ID:
+C-0006-B
+
+GATE:
+4
+
+MODULE:
+CanonicalFact → Detection Migration
+
+VERDICT:
+
+PASS（Approved with revisions）
+
+批准整体方向。
+
+但是：
+
+B1 批准执行。
+B2 不批准立即执行，只批准设计阶段。
+
+1. B1 影子评估方案
+裁定：
+
+采用：
+
+方案：独立影子表 RuleEvaluationShadow
+
+PASS。
+
+原因：
+
+当前生产链：
+
+纯文本
+RuleEvaluation
+
+↓
+
+RecoveryOpportunity
+
+↓
+
+Case
+
+↓
+
+Settlement
+
+已经承载资金路径。
+
+不能污染。
+
+因此：
+
+不要：
+
+增加 origin
+修改 dedupeKey
+混入正式 RuleEvaluation
+
+批准结构：
+
+纯文本
+CanonicalFact
+
+↓
+
+RuleEvaluationShadow
+
+↓
+
+Parity Report
+
+独立验证。
+
+2. RuleEvaluationShadow Schema
+
+批准。
+
+但增加两个字段。
+
+增加：
+runId
+
+原因：
+
+一次 shadow execution 必须可追踪。
+
+例如：
+
+纯文本
+shadow-run-20260928-001
+
+否则未来：
+
+同一个 fact 多次影子计算：
+
+无法区分。
+
+engineVersion
+
+原因：
+
+影子结果必须回答：
+
+当时使用哪个评估引擎？
+
+不要完全依赖 RuleVersion。
+
+RuleVersion 是业务规则版本。
+
+engineVersion 是执行器版本。
+
+最终：
+
+RuleEvaluationShadow：
+
+保留：
+
+纯文本
+id
+
+organizationId
+
+ruleVersionId
+
+canonicalFactId
+
+representativeTransactionId
+
+result
+
+computed
+
+message
+
+evaluatedAt
+
+dedupeKeyShadow
+
+增加：
+
+纯文本
+runId
+
+engineVersion
+3. Shadow 不进入正式链路
+
+明确批准：
+
+禁止：
+
+纯文本
+RuleEvaluationShadow
+        |
+        X
+RecoveryOpportunity
+
+禁止创建：
+
+Opportunity
+Case
+Claim
+Settlement
+Billing
+4. B1 Migration
+
+批准：
+
+允许：
+
+新增：
+
+RuleEvaluationShadow 表
+indexes
+FK
+tenant trigger
+
+禁止：
+
+修改：
+
+RuleEvaluation
+dedupeKey
+Opportunity
+5. Shadow Audit
+
+裁定：
+
+两类都需要。
+
+不是二选一。
+
+A. conflict
+
+逐事实：
+
+纯文本
+canonical_fact.conflict_detected
+
+必须。
+
+原因：
+
+Conflict 是业务事实状态。
+
+需要回答：
+
+哪一条事实被排除？
+
+字段：
+
+批准：
+
+纯文本
+canonicalFactId
+
+factKey
+
+conflictType
+
+sourceTransactionIds
+
+organizationId
+B. shadow run
+
+一次运行：
+
+一条汇总。
+
+批准：
+
+纯文本
+rule_evaluation.shadow_completed
+
+字段：
+
+建议：
+
+纯文本
+runId
+
+organizationId
+
+evaluatedCount
+
+excludedConflictCount
+
+matchedCount
+
+mismatchCount
+
+moneyDelta
+
+parityStatus
+6. B1 Parity Report
+
+批准。
+
+必须继续比较：
+
+Opportunity count
+expectedCharge
+actualCharge
+recoverableAmount
+RuleVersion
+money trace
+
+新增：
+
+必须比较：
+
+Fact coverage
+
+即：
+
+纯文本
+SourceTransaction count
+
+vs
+
+CanonicalFact ACTIVE count
+
+原因：
+
+避免：
+
+"规则一样，但是漏算了一批事实"
+
+7. B2 Identity Migration
+
+当前：
+
+不执行 migration。
+
+只提交设计。
+
+关于两个方案：
+
+2A
+
+三步迁移：
+
+认可。
+
+2B
+
+保留旧 dedupeKey。
+
+也可行。
+
+裁定：
+
+采用 2A
+
+原因：
+
+最终系统身份应该围绕：
+
+CanonicalFact
+
+而不是：
+
+某个平台交易行。
+
+未来：
+
+纯文本
+RuleEvaluation identity
+
+=
+
+organizationId
+
++
+
+ruleVersionId
+
++
+
+canonicalFactId
+
+更符合事实层设计。
+
+但是：
+
+必须三阶段。
+
+B2-Step1
+
+新增：
+
+纯文本
+canonicalDedupeKey nullable
+
+不要删除旧字段。
+
+B2-Step2
+
+双写：
+
+同时生成：
+
+旧：
+
+纯文本
+dedupeKey
+
+新：
+
+纯文本
+canonicalDedupeKey
+
+并输出：
+
+identity parity report。
+
+B2-Step3
+
+切换读取。
+
+稳定后：
+
+再讨论删除旧键。
+
+8. B2 额外要求
+
+在提交真正 Schema Delta 前，需要提供：
+
+migration plan
+
+包含：
+
+回填 SQL
+
+历史 RuleEvaluation 如何映射 CanonicalFact
+
+无法映射的数据处理
+
+回滚方案
+
+唯一约束切换顺序
+
+9. CONFLICT 审计粒度
+
+裁定：
+
+两层。
+
+事实级
+
+必须：
+
+纯文本
+canonical_fact.conflict_detected
+
+每个 conflict fact 一条。
+
+运行级
+
+必须：
+
+纯文本
+rule_evaluation.shadow_completed
+
+一次运行一条。
+
+原因：
+
+两个问题：
+
+事实级：
+
+哪个数据有问题？
+
+运行级：
+
+这次迁移整体怎么样？
+
+不能替代。
+
+10. C-0006-B 执行边界
+
+批准：
+
+现在可以做：
+
+✅ RuleEvaluationShadow
+
+✅ Shadow runner
+
+✅ Parity report
+
+✅ Conflict audit
+
+✅ Shadow tests
+
+禁止：
+
+❌ 修改 Detection 默认入口
+
+❌ 修改 RuleEvaluation dedupeKey
+
+❌ 创建 RecoveryOpportunity
+
+❌ 修改 Closure
+
+❌ 修改资金链
+
+❌ 删除旧路径
+
+FINAL DECISION
+纯文本
+C-0006-B:
+
+PASS WITH REVISIONS
+
+Approved:
+
+B1 Shadow Migration
+
+Design approved:
+
+B2 Identity Migration
+
+Need another Schema Delta before B2 execution.
+
+执行顺序：
+
+纯文本
+C-0006-B1
+
+↓
+
+Shadow parity evidence
+
+↓
+
+C-0006-B2 Schema Delta
+
+↓
+
+Identity migration
+
+↓
+
+Final Detection switch
+
+继续推进。
+```

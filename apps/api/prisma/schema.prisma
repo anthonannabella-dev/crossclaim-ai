@@ -296,6 +296,7 @@ model Organization {
   transactions      SourceTransaction[]
   canonicalFacts    CanonicalFact[]
   canonicalFactSources CanonicalFactSource[]
+  ruleEvaluationShadows RuleEvaluationShadow[]
   opportunities     RecoveryOpportunity[]
   graphNodes        RecoveryGraphNode[]
   graphEdges        RecoveryGraphEdge[]
@@ -462,6 +463,7 @@ model SourceTransaction {
   importBatch  ImportBatch?      @relation(fields: [importBatchId], references: [id])
   evaluations  RuleEvaluation[]
   canonicalFactSources CanonicalFactSource[]
+  shadowEvaluations    RuleEvaluationShadow[]
 
   @@unique([organizationId, dedupeKey])
   @@unique([organizationId, id])
@@ -497,6 +499,7 @@ model CanonicalFact {
   organization Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   sources      CanonicalFactSource[]
   evaluations  RuleEvaluation[]
+  shadowEvaluations RuleEvaluationShadow[]
 
   @@unique([organizationId, factKey])
   @@unique([organizationId, id])
@@ -527,6 +530,36 @@ model CanonicalFactSource {
 enum CanonicalFactStatus {
   ACTIVE
   CONFLICT
+}
+
+/// C-0006-B1 影子评估（只写结论，绝不进入 Opportunity / 资金链）
+model RuleEvaluationShadow {
+  id                          String               @id @default(uuid())
+  organizationId              String
+  /// 一次影子运行的标识，例如 shadow-run-20260928-001
+  runId                       String
+  /// 执行器版本（与业务规则版本 RuleVersion 区分）
+  engineVersion               String
+  ruleVersionId               String
+  canonicalFactId             String
+  /// 代表原始行，仅用于溯源；真正的身份键留到 B2
+  representativeTransactionId String?
+  result                      RuleEvaluationResult
+  computed                    Json
+  message                     String?
+  evaluatedAt                 DateTime             @default(now())
+  dedupeKeyShadow             String
+
+  organization   Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  ruleVersion    RuleVersion        @relation(fields: [ruleVersionId], references: [id], onDelete: Cascade)
+  canonicalFact  CanonicalFact      @relation(fields: [canonicalFactId], references: [id], onDelete: Cascade)
+  representative SourceTransaction? @relation(fields: [representativeTransactionId], references: [id])
+
+  @@unique([dedupeKeyShadow])
+  @@unique([organizationId, id])
+  @@index([organizationId, runId])
+  @@index([organizationId, ruleVersionId, evaluatedAt])
+  @@index([organizationId, canonicalFactId])
 }
 
 model RecoveryOpportunity {
@@ -861,6 +894,7 @@ model RuleVersion {
   organization Organization?    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   ruleSet      RuleSet          @relation(fields: [ruleSetId], references: [id], onDelete: Cascade)
   evaluations  RuleEvaluation[]
+  shadowEvaluations RuleEvaluationShadow[]
   routes       RecoveryRoute[]
 
   @@unique([ruleSetId, version, tier])

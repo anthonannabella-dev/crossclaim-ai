@@ -69,8 +69,8 @@ jobs:
         run: |
           PGPASSWORD=ci psql -h localhost -U crossclaim -d crossclaim -t -c \
             "select count(*) from pg_trigger where tgname like 'cc_tenant%'" \
-            | grep -qE '[[:space:]]*18[[:space:]]*' \
-            && echo "OK: 18 tenant triggers present" \
+            | grep -qE '[[:space:]]*19[[:space:]]*' \
+            && echo "OK: 19 tenant triggers present" \
             || (echo "FAIL: tenant triggers missing" && exit 1)
 
       - name: TypeScript typecheck
