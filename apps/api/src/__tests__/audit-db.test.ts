@@ -177,7 +177,7 @@ describe('CHANGE #16：AuditLog actor 身份', () => {
       await expect(
         prisma.$executeRawUnsafe(
           `INSERT INTO "AuditLog" ("id","organizationId","actorType","actorUserId","actorRef","action","createdAt")
-           VALUES (gen_random_uuid()::text, $1, $2, NULL, NULL, 'illegal.actor', now())`,
+           VALUES (gen_random_uuid()::text, $1, $2::"AuditActorType", NULL, NULL, 'illegal.actor', now())`,
           ORG,
           actorType,
         ),
