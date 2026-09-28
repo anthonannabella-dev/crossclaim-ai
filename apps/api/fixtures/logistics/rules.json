@@ -11,7 +11,7 @@
       "versions": [
         {
           "tier": "CUSTOMER_RATE_CARD",
-          "version": "v1",
+          "version": "v1-cn-sha-us-lax-ground",
           "source": "fixtures/logistics/rate-card.csv",
           "effectiveFrom": "2026-01-01T00:00:00Z",
           "lastVerified": "2026-09-28T00:00:00Z",
@@ -19,14 +19,24 @@
           "definition": {
             "schemaVersion": 1,
             "kind": "FREIGHT_RATE_V1",
-            "match": { "lane": "CN-SHA>US-LAX", "service": "Ground" },
-            "pricing": { "baseRate": "80.0000", "perKg": "3.2000", "fuelPct": "12.50" },
-            "rounding": { "scale": 4, "mode": "HALF_UP" }
+            "match": {
+              "lane": "CN-SHA>US-LAX",
+              "service": "Ground"
+            },
+            "pricing": {
+              "baseRate": "80.0000",
+              "perKg": "3.2000",
+              "fuelPct": "12.50"
+            },
+            "rounding": {
+              "scale": 4,
+              "mode": "HALF_UP"
+            }
           }
         },
         {
           "tier": "CUSTOMER_RATE_CARD",
-          "version": "v1",
+          "version": "v1-cn-sha-us-lax-2day",
           "source": "fixtures/logistics/rate-card.csv",
           "effectiveFrom": "2026-01-01T00:00:00Z",
           "lastVerified": "2026-09-28T00:00:00Z",
@@ -34,14 +44,24 @@
           "definition": {
             "schemaVersion": 1,
             "kind": "FREIGHT_RATE_V1",
-            "match": { "lane": "CN-SHA>US-LAX", "service": "2Day" },
-            "pricing": { "baseRate": "180.0000", "perKg": "6.4000", "fuelPct": "12.50" },
-            "rounding": { "scale": 4, "mode": "HALF_UP" }
+            "match": {
+              "lane": "CN-SHA>US-LAX",
+              "service": "2Day"
+            },
+            "pricing": {
+              "baseRate": "180.0000",
+              "perKg": "6.4000",
+              "fuelPct": "12.50"
+            },
+            "rounding": {
+              "scale": 4,
+              "mode": "HALF_UP"
+            }
           }
         },
         {
           "tier": "CUSTOMER_RATE_CARD",
-          "version": "v1",
+          "version": "v1-cn-sha-us-ord-ground",
           "source": "fixtures/logistics/rate-card.csv",
           "effectiveFrom": "2026-01-01T00:00:00Z",
           "lastVerified": "2026-09-28T00:00:00Z",
@@ -49,14 +69,24 @@
           "definition": {
             "schemaVersion": 1,
             "kind": "FREIGHT_RATE_V1",
-            "match": { "lane": "CN-SHA>US-ORD", "service": "Ground" },
-            "pricing": { "baseRate": "88.0000", "perKg": "3.4000", "fuelPct": "13.00" },
-            "rounding": { "scale": 4, "mode": "HALF_UP" }
+            "match": {
+              "lane": "CN-SHA>US-ORD",
+              "service": "Ground"
+            },
+            "pricing": {
+              "baseRate": "88.0000",
+              "perKg": "3.4000",
+              "fuelPct": "13.00"
+            },
+            "rounding": {
+              "scale": 4,
+              "mode": "HALF_UP"
+            }
           }
         },
         {
           "tier": "CUSTOMER_RATE_CARD",
-          "version": "v1",
+          "version": "v1-cn-sha-us-ord-nextday",
           "source": "fixtures/logistics/rate-card.csv",
           "effectiveFrom": "2026-01-01T00:00:00Z",
           "lastVerified": "2026-09-28T00:00:00Z",
@@ -64,9 +94,19 @@
           "definition": {
             "schemaVersion": 1,
             "kind": "FREIGHT_RATE_V1",
-            "match": { "lane": "CN-SHA>US-ORD", "service": "NextDay" },
-            "pricing": { "baseRate": "260.0000", "perKg": "8.0000", "fuelPct": "13.00" },
-            "rounding": { "scale": 4, "mode": "HALF_UP" }
+            "match": {
+              "lane": "CN-SHA>US-ORD",
+              "service": "NextDay"
+            },
+            "pricing": {
+              "baseRate": "260.0000",
+              "perKg": "8.0000",
+              "fuelPct": "13.00"
+            },
+            "rounding": {
+              "scale": 4,
+              "mode": "HALF_UP"
+            }
           }
         }
       ]
@@ -81,7 +121,7 @@
       "versions": [
         {
           "tier": "CARRIER_TARIFF",
-          "version": "v1",
+          "version": "v1-carrier-tariff-cn-sha-us-lax-ground",
           "source": "fixtures/logistics/rate-card.csv#tariff",
           "effectiveFrom": "2026-01-01T00:00:00Z",
           "lastVerified": "2026-09-28T00:00:00Z",
@@ -89,9 +129,19 @@
           "definition": {
             "schemaVersion": 1,
             "kind": "FREIGHT_RATE_V1",
-            "match": { "lane": "CN-SHA>US-LAX", "service": "Ground" },
-            "pricing": { "baseRate": "95.0000", "perKg": "3.6000", "fuelPct": "13.00" },
-            "rounding": { "scale": 4, "mode": "HALF_UP" }
+            "match": {
+              "lane": "CN-SHA>US-LAX",
+              "service": "Ground"
+            },
+            "pricing": {
+              "baseRate": "95.0000",
+              "perKg": "3.6000",
+              "fuelPct": "13.00"
+            },
+            "rounding": {
+              "scale": 4,
+              "mode": "HALF_UP"
+            }
           }
         }
       ]

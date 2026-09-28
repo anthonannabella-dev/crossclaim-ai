@@ -16,3 +16,19 @@ export {
   type RuleCandidate,
   type RuleTierName,
 } from './freight-rate';
+export {
+  DETECTION_ENGINE_VERSION,
+  FREIGHT_RATE_OVERCHARGE,
+  detectionDedupeKey,
+  runFreightRateDetection,
+  toRuleCandidate,
+  type DetectionRepository,
+  type DetectionRowOutcome,
+  type DetectionRunResult,
+  type EvaluationDraft,
+  type InvoiceRow,
+  type OpportunityDraft,
+  type RunDetectionInput,
+  type TrackingRow,
+} from './detection-service';
+export { createPrismaDetectionRepository } from './prisma-detection-repository';

@@ -1,0 +1,236 @@
+/**
+ * Wave 2 · C-0004 Checkpoint 1 · Detection Spine（真实 PostgreSQL）
+ * ---------------------------------------------------------------
+ * 证明（架构方 CHECKPOINT 1 要求）：
+ *   1. 金额确定性：INV-1001 应收 135.0000、可追回 17.7500
+ *   2. 规则版本可追溯：评估行指向具体 RuleVersion，computed 里带 definitionHash / 中间值
+ *   3. 优先级生效：同 lane/service 必须选中 CUSTOMER_RATE_CARD 而不是 CARRIER_TARIFF
+ *   4. 幂等：重复执行不新增 RuleEvaluation / RecoveryOpportunity
+ *   5. 至少 1 条 PASS（INV-1002，差额 0）
+ *   6. 至少 1 条 OPPORTUNITY（INV-1001）
+ * 数据全部来自 apps/api/fixtures/logistics（100% 合成）。
+ */
+
+import fs from 'node:fs';
+import path from 'node:path';
+
+import { Prisma, PrismaClient } from '@prisma/client';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+
+import { parseCsv } from '../services/ingest';
+import {
+  createPrismaDetectionRepository,
+  runFreightRateDetection,
+} from '../services/rules';
+
+const prisma = new PrismaClient();
+const repository = createPrismaDetectionRepository(prisma);
+
+const ORG = '33333333-3333-4333-8333-333333333333';
+const fixtures = path.join(__dirname, '..', '..', 'fixtures', 'logistics');
+
+const readJson = (name: string) => JSON.parse(fs.readFileSync(path.join(fixtures, name), 'utf8'));
+const rowsOf = (name: string) => {
+  const parsed = parseCsv(fs.readFileSync(path.join(fixtures, name), 'utf8'));
+  return parsed.rows.map((cells) =>
+    Object.fromEntries(parsed.header.map((h, i) => [h, (cells[i] ?? '').trim()])),
+  );
+};
+
+const expected = readJson('expected-results.json') as {
+  rows: Array<{
+    invoiceExternalId: string;
+    expectedCharge: string;
+    actualCharge: string;
+    recoverableAmount: string;
+    result: string;
+  }>;
+};
+const ruleSeed = readJson('rules.json') as {
+  ruleSets: Array<{
+    key: string;
+    ownerType: 'SYSTEM' | 'TENANT';
+    ownerKey: string;
+    scope: string;
+    name: string;
+    description?: string;
+    versions: Array<{
+      tier: string;
+      version: string;
+      source: string;
+      effectiveFrom: string;
+      lastVerified?: string;
+      verifiedBy?: string;
+      definition: unknown;
+    }>;
+  }>;
+};
+
+beforeAll(async () => {
+  await prisma.$connect();
+});
+
+afterAll(async () => {
+  await prisma.$disconnect();
+});
+
+async function seedRules(): Promise<void> {
+  for (const set of ruleSeed.ruleSets) {
+    const created = await prisma.ruleSet.create({
+      data: {
+        ownerType: set.ownerType,
+        ownerKey: set.ownerKey,
+        organizationId: set.ownerType === 'TENANT' ? ORG : null,
+        domain: 'LOGISTICS',
+        channel: 'OTHER',
+        scope: 'FREIGHT_RATE',
+        name: set.name,
+        description: set.description ?? null,
+      },
+    });
+    for (const version of set.versions) {
+      await prisma.ruleVersion.create({
+        data: {
+          ruleSetId: created.id,
+          organizationId: set.ownerType === 'TENANT' ? ORG : null,
+          tier: version.tier as Prisma.RuleVersionCreateInput['tier'],
+          source: version.source,
+          version: version.version,
+          effectiveFrom: new Date(version.effectiveFrom),
+          lastVerified: version.lastVerified ? new Date(version.lastVerified) : null,
+          verifiedBy: version.verifiedBy ?? null,
+          definition: version.definition as Prisma.InputJsonValue,
+        },
+      });
+    }
+  }
+}
+
+async function seedTransactions(): Promise<void> {
+  const invoices = rowsOf('carrier-invoice.csv');
+  const tracking = rowsOf('tracking.csv');
+
+  for (const row of invoices) {
+    await prisma.sourceTransaction.create({
+      data: {
+        organizationId: ORG,
+        domain: 'LOGISTICS',
+        channel: 'OTHER',
+        referenceType: 'INVOICE',
+        externalId: row['Invoice No'],
+        occurredAt: new Date(`${row['Invoice Date']}T00:00:00Z`),
+        amount: new Prisma.Decimal(row['Net Charge']),
+        currency: row.Currency,
+        dedupeKey: `fixture-invoice-${row['Invoice No']}`,
+        raw: row as Prisma.InputJsonValue,
+      },
+    });
+  }
+  for (const row of tracking) {
+    await prisma.sourceTransaction.create({
+      data: {
+        organizationId: ORG,
+        domain: 'LOGISTICS',
+        channel: 'OTHER',
+        referenceType: 'TRACKING',
+        externalId: row['Tracking Number'],
+        occurredAt: new Date(`${row['Pickup Date']}T00:00:00Z`),
+        currency: 'USD',
+        dedupeKey: `fixture-tracking-${row['Tracking Number']}`,
+        raw: row as Prisma.InputJsonValue,
+      },
+    });
+  }
+}
+
+beforeEach(async () => {
+  await prisma.$executeRawUnsafe(
+    'TRUNCATE TABLE "RuleEvaluation", "RecoveryOpportunity", "RuleVersion", "RuleSet", "SourceTransaction", "ImportBatch", "Organization" CASCADE;',
+  );
+  await prisma.organization.create({ data: { id: ORG, name: '检测租户', slug: 'detect-org' } });
+  await seedRules();
+  await seedTransactions();
+});
+
+describe('C-0004 CP1 · Detection Spine（真实 PostgreSQL）', () => {
+  it('产出 1 条 OPPORTUNITY + 4 条 PASS，金额与 fixture 预期完全一致', async () => {
+    const run = await runFreightRateDetection({ organizationId: ORG, repository });
+
+    expect(run.invoicesConsidered).toBe(5);
+    expect(run.evaluationsCreated).toBe(5);
+    expect(run.opportunitiesCreated).toBe(1);
+
+    for (const row of expected.rows) {
+      const outcome = run.outcomes.find((o) => o.invoiceExternalId === row.invoiceExternalId);
+      expect(outcome, `缺少 ${row.invoiceExternalId} 的检测结果`).toBeDefined();
+      expect(outcome!.result).toBe(row.result);
+      expect(outcome!.expected).toBe(row.expectedCharge);
+      expect(outcome!.actual).toBe(row.actualCharge);
+      expect(outcome!.recoverable).toBe(row.recoverableAmount);
+    }
+
+    expect(await prisma.ruleEvaluation.count({ where: { organizationId: ORG } })).toBe(5);
+    const opportunities = await prisma.recoveryOpportunity.findMany({ where: { organizationId: ORG } });
+    expect(opportunities).toHaveLength(1);
+    expect(opportunities[0].opportunityType).toBe('FREIGHT_RATE_OVERCHARGE');
+    expect(opportunities[0].channel).toBe('OTHER');
+    expect(opportunities[0].status).toBe('DETECTED');
+    expect(opportunities[0].amountExpected?.toFixed(4)).toBe('135.0000');
+    expect(opportunities[0].amountActual?.toFixed(4)).toBe('152.7500');
+    expect(opportunities[0].recoverableAmount?.toFixed(4)).toBe('17.7500');
+    expect(opportunities[0].currency).toBe('USD');
+  });
+
+  it('优先级生效：INV-1001 命中的是 CUSTOMER_RATE_CARD 而不是 CARRIER_TARIFF', async () => {
+    const run = await runFreightRateDetection({ organizationId: ORG, repository });
+    const inv1001 = run.outcomes.find((o) => o.invoiceExternalId === 'INV-1001')!;
+    expect(inv1001.ruleTier).toBe('CUSTOMER_RATE_CARD');
+
+    const invoice = await prisma.sourceTransaction.findFirstOrThrow({
+      where: { organizationId: ORG, externalId: 'INV-1001' },
+    });
+    const linked = await prisma.ruleEvaluation.findFirstOrThrow({
+      where: { organizationId: ORG, sourceTransactionId: invoice.id },
+      include: { ruleVersion: true },
+    });
+    expect(linked.ruleVersion.tier).toBe('CUSTOMER_RATE_CARD');
+    const computed = linked.computed as { ruleTier: string; definitionHash: string; intermediate: Record<string, string> };
+    expect(computed.ruleTier).toBe('CUSTOMER_RATE_CARD');
+    expect(computed.definitionHash).toMatch(/^fnv1a64:[0-9a-f]{16}$/);
+    expect(computed.intermediate.expectedAmount).toBe('135.0000');
+    expect(computed.intermediate.recoverableAmount).toBe('17.7500');
+    expect(linked.opportunityId).not.toBeNull();
+  });
+
+  it('幂等：重复执行不新增 RuleEvaluation / RecoveryOpportunity', async () => {
+    const first = await runFreightRateDetection({ organizationId: ORG, repository });
+    expect(first.evaluationsCreated).toBe(5);
+
+    const second = await runFreightRateDetection({ organizationId: ORG, repository });
+    expect(second.evaluationsCreated).toBe(0);
+    expect(second.opportunitiesCreated).toBe(0);
+    expect(second.skippedExisting).toBe(5);
+
+    expect(await prisma.ruleEvaluation.count({ where: { organizationId: ORG } })).toBe(5);
+    expect(await prisma.recoveryOpportunity.count({ where: { organizationId: ORG } })).toBe(1);
+  });
+
+  it('缺少轨迹时不产出评估：记为 NEEDS_MORE_DATA，不写 RuleEvaluation', async () => {
+    await prisma.sourceTransaction.deleteMany({
+      where: { organizationId: ORG, referenceType: 'TRACKING', externalId: '1ZDEMO001' },
+    });
+
+    const run = await runFreightRateDetection({ organizationId: ORG, repository });
+    const inv1001 = run.outcomes.find((o) => o.invoiceExternalId === 'INV-1001')!;
+    expect(inv1001.result).toBe('NEEDS_MORE_DATA');
+    expect(inv1001.skippedReason).toBe('TRACKING_NOT_FOUND');
+
+    const invoice = await prisma.sourceTransaction.findFirstOrThrow({
+      where: { organizationId: ORG, externalId: 'INV-1001' },
+    });
+    expect(
+      await prisma.ruleEvaluation.count({ where: { organizationId: ORG, sourceTransactionId: invoice.id } }),
+    ).toBe(0);
+    expect(await prisma.recoveryOpportunity.count({ where: { organizationId: ORG } })).toBe(0);
+  });
+});
