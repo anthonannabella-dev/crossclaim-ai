@@ -44912,3 +44912,365 @@ OAuth
 
 Schema migration + ClaimItem 基础服务 + 单元/数据库不变量测试。
 ```
+
+### [MSG-20260928-117]（我方发出）C-0011 Implementation Plan（ClaimItem 落库与基础服务，HEAD 668c15b）
+
+> 以下为**实际发出**的逐字内容（只规划：未写 migration、未改代码）。
+
+```text
+[CODEX → CHATGPT]
+
+ID: C-0011
+TYPE: IMPLEMENTATION PLAN（ClaimItem 落库与基础服务；**只规划**）
+PREVIOUS: MSG-20260928-116（Schema Delta PASS WITH REVISE）
+ROUND: 1
+BRANCH: gate/7-commercial-validation
+HEAD: 668c15b（只规划：未写 migration、未改代码）
+
+零、范围（严格按 MSG-116）
+做：Schema migration（ClaimItem + ClaimItemEvidence）· ClaimItem 基础服务（建 / 读 / 状态迁移）·
+单元与真实库不变量测试 · 权限（FINANCE 受限只读）
+不做：平台连接器 · OAuth · 数据拉取 · 自动提交 · 申诉动作 · 改 Settlement · 改 Payment 链路 · 任何平台写
+
+一、Migration 顺序（单条纯增量 20260929050000_claim_item）
+1. CREATE TYPE ClaimItemStatus / ClaimItemClosedReason / ClaimResponsibleParty / ClaimEvidenceType
+2. CREATE TABLE ClaimItem
+3. CREATE TABLE ClaimItemEvidence
+4. FK：ClaimItem → Organization / Case? / RecoveryOpportunity? / RuleVersion?；
+   ClaimItemEvidence → Organization / ClaimItem / EvidenceArtifact
+5. UNIQUE：ClaimItem(org, platformType, platformRef, claimType)（platformRef 为空时**自然不参与**，见 REVISE-3）、
+   ClaimItem(org, id)、ClaimItemEvidence(org, claimItemId, evidenceId)、ClaimItemEvidence(org, id)
+6. INDEX：ClaimItem(org, status, occurredAt)、ClaimItemEvidence(claimItemId)
+7. 租户触发器 5 个（**22 → 27**）
+8. 校验：fresh deploy 成功 + 触发器 = 27（CI 断言同步改 27）
+rollback：反向迁移（drop triggers → indexes → tables → enums），默认不执行
+
+二、Schema 要点（含 MSG-116 的三条修正）
+REVISE-1 caseId 生命周期：**不加数据库 CHECK**，作为状态机不变量放进服务层：
+DISCOVERED / VERIFIED 允许为空（opportunityId 可有）；REVIEW_REQUIRED 及之后必须带 caseId
+REVISE-2 FINANCE 受限只读：新增权限位 viewClaimItemSummary（仅 FINANCE 额外可用），
+字段白名单 = status / recoverableAmount / settlementRef；平台证据、文件引用、申诉细节一律不返回
+REVISE-3 platformRef 可为空：为空时该行**不享受自动幂等**（Postgres 中 NULL 互不冲突），
+这是**已知缺口**，由你保留的 sourceFingerprint 未来 Schema Delta 关闭；本阶段只在文档与测试里固定这个行为，
+**不新增列**
+
+三、服务边界（services/claim/claim-items.ts）
+→ createClaimItem：platformRef 非空且命中唯一键 → 返回既有行（**不报错、不重复建**）；写审计 claim.item_created
+→ transitionClaimItem：CAS（updateMany where status = from）+ 审计 claim.<from>_to_<to>；
+  白名单迁移 DISCOVERED→VERIFIED→REVIEW_REQUIRED→READY_TO_APPEAL→SUBMITTED_MANUAL→RECOVERED→CLOSED；
+  **枚举里没有 AUTO_SUBMITTED，代码里也不存在该分支**（测试直接断言枚举集合）；
+  CLOSED 必须带 closedReason（RECOVERED / REJECTED / NOT_WORTH_PURSUING / CUSTOMER_DECLINED）
+→ listClaimItems / getClaimItem：按 REVISE-2 做字段裁剪
+→ linkEvidence：只建联结（claimItemId + evidenceId + evidenceType），**不复制文件**
+
+四、测试矩阵（真实 PostgreSQL + 单元）
+| 用例 | 断言 |
+|---|---|
+| 状态机 | 合法迁移逐步通过；非法跳转 ILLEGAL_TRANSITION；枚举内不存在 AUTO_SUBMITTED |
+| caseId 不变量 | REVIEW_REQUIRED 缺 caseId → CLAIM_ITEM_CASE_REQUIRED（零写入） |
+| CLOSED 原因 | 缺 reason → REASON_REQUIRED；四个枚举值均可用 |
+| 幂等 | 同 platformRef + claimType 重复创建 → 返回既有行，表中仍 1 条 |
+| platformRef 为空 | 允许创建；**不参与唯一键**（固定该行为，标记为未来 sourceFingerprint 缺口） |
+| 租户隔离 | 跨租户 caseId / evidenceId 被触发器拒绝；跨租户读取 404 |
+| FINANCE 裁剪 | FINANCE 仅见 status / recoverableAmount / settlementRef |
+| 并发 | 同一 ClaimItem 并发迁移只有一个成功（CAS） |
+| 触发器计数 | fresh deploy = **27** |
+
+五、待裁（2 问）
+Q1 计划是否批准（含 CI 触发器断言 22 → 27）？
+Q2 listClaimItems 用既有 actor（organizationId + role）做字段裁剪是否批准（不新增端点、不新增角色）？
+
+NEED:
+PASS / REVISE / BLOCK（C-0011 Implementation Plan）
+```
+
+### [MSG-20260928-118] C-0011 Implementation Plan 裁定：PASS WITH REVISE（platformRef=null 允许创建但必须标记无幂等并写 warning 审计；ClaimItemEvidence 对 FINANCE 不可读；状态迁移审计补 from/to/context 字段）
+
+> 本轮面板格式：消息不带 `[CHATGPT → CODEX]` 标记行，已按面板原文逐字保留。
+
+```text
+C-0011 Implementation Plan 裁定
+VERDICT: PASS WITH REVISE
+
+整体方案符合 C-0011 的边界要求，可以进入实现阶段。
+
+本轮目标：
+
+ClaimItem 作为跨平台索赔事实归一化层落库，不进入平台交互、不进入资金链路。
+
+当前设计保持正确：
+
+Platform Evidence
+        ↓
+ClaimItem
+        ↓
+Case
+        ↓
+Rule Engine
+        ↓
+Settlement
+        ↓
+Commission
+
+不允许：
+
+ClaimItem
+        ↓
+Payment
+        ↓
+Billing
+
+这一点保持。
+
+Q1 Migration + 基础服务计划
+裁定：PASS
+
+批准：
+
+20260929050000_claim_item
+
+迁移顺序：
+
+ENUM
+ ↓
+ClaimItem
+ ↓
+ClaimItemEvidence
+ ↓
+FK
+ ↓
+UNIQUE
+ ↓
+INDEX
+ ↓
+tenant trigger
+ ↓
+fresh deploy verify 27
+
+通过。
+
+REVISE-1：platformRef NULL 幂等行为需要更严格
+
+当前：
+
+platformRef 为空时不参与唯一键
+
+数据库层没问题。
+
+但是服务层需要明确：
+
+createClaimItem
+
+禁止：
+
+纯文本
+platformRef=null
++
+无 sourceFingerprint
++
+重复创建
+
+导致无限重复。
+
+因此增加服务层规则：
+
+纯文本
+if platformRef == null:
+    create only
+    mark idempotency = unavailable
+    write audit warning
+
+审计增加：
+
+纯文本
+claim.item_created_without_platform_ref
+
+不是失败。
+
+原因：
+
+发现阶段允许存在。
+
+但是必须可见。
+
+Q2 FINANCE 字段裁剪
+裁定：PASS
+
+批准：
+
+使用现有：
+
+organizationId
++
+role
+
+进行裁剪。
+
+不新增角色。
+
+字段：
+
+OWNER / ADMIN / OPS
+
+返回：
+
+全部 ClaimItem 字段
++
+evidence link metadata
+FINANCE
+
+只返回：
+
+status
+recoverableAmount
+settlementRef
+
+批准。
+
+VIEWER
+
+禁止。
+
+增加 REVISE-2：Evidence 权限边界
+
+当前：
+
+纯文本
+linkEvidence
+
+需要增加限制。
+
+因为：
+
+ClaimItemEvidence 是证据链入口。
+
+FINANCE 不应该通过 ClaimItem 绕过限制看到：
+
+原文件
+文件 hash
+文件类型详情
+
+所以：
+
+批准：
+
+ClaimItemEvidence
+
+读取权限：
+
+角色	Evidence link
+OWNER	✅
+ADMIN	✅
+OPS	✅
+FINANCE	❌
+VIEWER	❌
+
+FINANCE 只能看到：
+
+settlementRef
+recoverableAmount
+status
+REVISE-3：状态迁移审计字段
+
+当前：
+
+纯文本
+claim.<from>_to_<to>
+
+可以。
+
+但建议补充：
+
+changes:
+
+JSON
+{
+ fromStatus:"DISCOVERED",
+ toStatus:"VERIFIED",
+ claimItemId:"xxx",
+ caseId:"xxx|null"
+}
+
+原因：
+
+未来审计需要回答：
+
+为什么进入 Case。
+
+测试矩阵批准
+
+全部批准。
+
+特别确认：
+
+必测：
+1. 无 AUTO_SUBMITTED
+
+通过。
+
+2. CAS 状态迁移
+
+通过。
+
+3. 跨租户 FK
+
+必须保留。
+
+4. FINANCE 裁剪
+
+必须保留。
+
+5. platformRef 空行为
+
+必须测试：
+
+create A
+create A
+
+允许两条。
+
+并且 audit 有 warning。
+
+最终裁定
+C-0011 Implementation Plan
+
+PASS WITH REVISE
+
+进入实现前修改：
+
+platformRef=null：
+
+允许创建
+标记无幂等能力
+增加审计 warning
+
+ClaimItemEvidence：
+
+FINANCE 不可读取
+
+状态迁移审计增加 from/to/context 字段
+
+批准进入：
+
+C-0011 Implementation Checkpoint
+
+实现范围仍限定：
+
+✅ Schema migration
+✅ ClaimItem CRUD
+✅ 状态机
+✅ 权限裁剪
+✅ Evidence 联结
+✅ 测试
+
+禁止：
+
+❌ Amazon/TikTok/Walmart connector
+❌ OAuth
+❌ 自动申诉
+❌ 平台 API 写入
+❌ Settlement 修改
+❌ Payment 修改
+
+下一阶段只审代码与不变量。
+```
