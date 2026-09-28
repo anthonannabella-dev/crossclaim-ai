@@ -3,6 +3,15 @@
  */
 
 export {
+  BILLING_TRANSITIONS,
+  advanceBillingInvoice,
+  canAdvanceBilling,
+  listBillingInvoices,
+  type AdvanceBillingInput,
+  type AdvanceBillingResult,
+  type BillingInvoiceView,
+} from './billing';
+export {
   confirmRecoveryOutcome,
   type ConfirmRecoveryOutcomeInput,
   type ConfirmRecoveryOutcomeResult,

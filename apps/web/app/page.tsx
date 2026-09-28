@@ -76,6 +76,9 @@ export default async function DashboardPage() {
           <Link href="/connections" className="rounded border px-4 py-2 text-sm">
             采集连接
           </Link>
+          <Link href="/billing" className="rounded border px-4 py-2 text-sm">
+            账单（服务费）
+          </Link>
           <form action="/logout" method="post">
             <button className="rounded border px-4 py-2 text-sm" type="submit">
               退出登录

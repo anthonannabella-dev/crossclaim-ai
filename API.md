@@ -143,6 +143,19 @@ C-0008-B2（Case / Evidence / Claim Draft / Billing）的端点尚未实现。
 - 审计：`recovery_outcome.confirmed`（含 caseId / recoveredAmount / currency / basisReference / evidenceArtifactId）、`case.status_changed`（WON → SETTLED），均带 `actorUserId`
 - Settlement（第三方赔付）与 BillingInvoice（向客户收费）是**两个不同主体**，不得合并
 
+## 账单（服务费，C-0008-B2-3b）
+
+| 方法 | 路径 | 请求体 | 成功 | 权限 |
+|---|---|---|---|---|
+| GET | `/billing` | — | 200 `{ items: [{ id, invoiceNo, status, caseNo, subtotal, total, paidAmount, currency, issuedAt, paidAt, reference, serviceFee }] }` | OWNER / ADMIN / OPS / FINANCE |
+| POST | `/billing/:invoiceId/status` | `{ to, paymentReference?, note? }` | 200 `{ invoiceId, from, to, paymentReferenceProvided }` | OWNER / ADMIN / FINANCE |
+
+- 状态机：**只允许 `DRAFT → ISSUED → PAID`**；`DRAFT → PAID` 直接跳转一律 409（即便带 note）
+- 每次迁移都是 **CAS**（按当前状态条件更新，`count === 1`）；并发推进只有一个能成功，另一个 409
+- `PAID` 必须提供 `paymentReference` 或 `note`，否则 400 `PAYMENT_REFERENCE_REQUIRED`
+- 审计 `billing.status_changed`：记录 from/to、金额、货币、`paymentReferenceProvided` 与 note（截断）；**绝不写入支付流水原文**
+- **主体边界**：BillingInvoice = 我方向客户收取的服务费；Settlement = 第三方（承运商/平台/保险）赔付给客户的回收款。两者是不同对象，UI 上必须分开，不得出现「追回金额已支付」这类混淆表述
+
 ## 权限矩阵
 
 见 [DOMAIN_MODEL.md](./DOMAIN_MODEL.md#角色与权限c-0008-b1架构方批准)。

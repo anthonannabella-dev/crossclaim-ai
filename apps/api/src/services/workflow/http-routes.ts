@@ -27,6 +27,7 @@ import {
 } from './connection-management';
 import { confirmCommercialTerms, createCaseForOpportunity } from './case-creation';
 import { confirmRecoveryOutcome } from './recovery-outcome';
+import { advanceBillingInvoice, listBillingInvoices } from './billing';
 import { REJECT_REASONS, WorkflowError, reviewOpportunity } from './opportunity-review';
 import { ForbiddenError } from './permissions';
 
@@ -35,6 +36,7 @@ const REVIEW_PATH = /^\/opportunities\/([^/]+)\/(qualify|reject|case)$/;
 const CONNECTION_PATH = /^\/connections(?:\/([^/]+)\/(status|credential-ref))?$/;
 const COMMERCIAL_TERMS_PATH = /^\/cases\/([^/]+)\/commercial-terms$/;
 const RECOVERY_OUTCOME_PATH = /^\/cases\/([^/]+)\/recovery-outcome$/;
+const BILLING_PATH = /^\/billing(?:\/([^/]+)\/status)?$/;
 
 /** 请求体层面的错误（与领域状态无关），统一映射为 400。 */
 class HttpBodyError extends Error {
@@ -105,6 +107,7 @@ function statusFor(error: unknown): { code: number; error: string } {
       case 'PLATFORM_NOT_REGISTERED':
       case 'INVALID_COMMERCIAL_TERMS':
       case 'INVALID_FIELD':
+      case 'PAYMENT_REFERENCE_REQUIRED':
         return { code: 400, error: error.code };
       case 'CASE_NOT_CREATED':
         return { code: 500, error: error.code };
@@ -130,10 +133,16 @@ export async function handleWorkflowRequest(
   const connection = CONNECTION_PATH.exec(path);
   const termsPath = COMMERCIAL_TERMS_PATH.exec(path);
   const outcomePath = RECOVERY_OUTCOME_PATH.exec(path);
-  if (!review && !connection && !termsPath && !outcomePath) return false;
+  const billingPath = BILLING_PATH.exec(path);
+  if (!review && !connection && !termsPath && !outcomePath && !billingPath) return false;
 
   const method = req.method ?? 'GET';
-  const allowed = connection && !connection[2] ? ['GET', 'POST'] : ['POST'];
+  const allowed =
+    connection && !connection[2]
+      ? ['GET', 'POST']
+      : billingPath && !billingPath[1]
+        ? ['GET']
+        : ['POST'];
   if (!allowed.includes(method)) {
     sendJson(res, 405, { error: 'METHOD_NOT_ALLOWED' });
     return true;
@@ -153,6 +162,32 @@ export async function handleWorkflowRequest(
   };
 
   try {
+    if (billingPath) {
+      if (!billingPath[1]) {
+        sendJson(res, 200, {
+          items: await listBillingInvoices(deps.prisma, {
+            organizationId: context.organizationId,
+            role: context.role,
+          }),
+        });
+        return true;
+      }
+      const body = await readJsonBody(req);
+      const result = await advanceBillingInvoice(
+        deps.prisma,
+        {
+          ...actor,
+          invoiceId: billingPath[1],
+          to: body.to,
+          paymentReference: body.paymentReference,
+          note: body.note,
+        },
+        deps.now,
+      );
+      sendJson(res, 200, result);
+      return true;
+    }
+
     if (outcomePath) {
       const body = await readJsonBody(req);
       // 裁定：不接受 simulateSettlement（用户侧永不触发合成资金）
