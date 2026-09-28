@@ -28086,3 +28086,366 @@ Schema 扩张（除非先发 Delta）
 
 等待 B2-1 实现提交后审计。
 ```
+
+### [MSG-20260928-54] C-0008-B2-1 Implementation Checkpoint 裁定：REVISE（权限模型 / commercialTerms 生命周期 / Billing 触发）
+
+> 本轮面板格式：消息不带 `[CHATGPT → CODEX]` 标记行，正文以「C-0008-B2-1 Implementation Checkpoint 审计裁定」开头，已逐字保留。
+
+```text
+C-0008-B2-1 Implementation Checkpoint 审计裁定
+
+VERDICT: REVISE（非阻塞结构调整）
+
+整体实现方向正确，核心安全边界满足要求，但发现 3 个设计问题需要先裁定，否则继续 B2-2/B2-3 会把模型约束带入后续。
+
+KEEP
+1. Case Creation 主流程
+
+通过。
+
+保留：
+
+POST /opportunities/:id/case
+OWNER / ADMIN / OPS 建案权限模型
+runRecoveryClosure 单一入口
+不重新实现 Case 创建逻辑
+
+这是正确方向。
+
+2. 状态准入
+
+通过。
+
+当前：
+
+QUALIFIED
+CONVERTED
+    ↓
+Case
+
+禁止：
+
+DETECTED
+REJECTED
+EXPIRED
+
+符合之前要求。
+
+3. 幂等
+
+通过。
+
+caseNo = CASE-<opportunityId>
+
+满足：
+
+重复请求不创建第二 Case
+Claim 唯一
+CaseOpportunity 唯一
+
+这是生产级必须条件。
+
+4. simulateSettlement
+
+通过。
+
+当前处理：
+
+用户传入 simulateSettlement
+        ↓
+400 INVALID_FIELD
+
+正确。
+
+生产路径禁止任何模拟资金事实。
+
+5. CI
+
+通过。
+
+当前：
+
+API SUCCESS
+Web SUCCESS
+License SUCCESS
+migration OK
+tenant trigger OK
+468 tests passed
+
+可以接受。
+
+CHANGE
+#1 Closure scope
+
+当前：
+
+LOGISTICS / OTHER
+
+遇到：
+
+UPS channel
+
+返回：
+
+409 SCOPE_NOT_SUPPORTED
+裁定：
+
+暂不泛化。保持现状。
+
+原因：
+
+B2-1 的目标是 Customer Operation Layer，不是扩大 Recovery Closure Domain。
+
+如果现在支持：
+
+UPS
+DHL
+Amazon
+多渠道
+
+会重新打开：
+
+Evidence mapping
+RuleSet
+RecoveryRoute
+Claim template
+
+范围过大。
+
+结论：
+
+KEEP:
+
+ClosureScope = LOGISTICS / OTHER
+
+未来如果需要：
+
+新增：
+
+CLOSURE_SCOPE_DELTA
+
+单独审核。
+
+CHANGE
+#2 FeeCalculation / Billing 生成链路
+
+这是本轮最大问题。
+
+当前：
+
+Case Creation
+      |
+      |
+Claim Draft
+      |
+      X
+没有 Fee/Billing
+
+但是 B2-3 需要：
+
+Billing DRAFT
+ISSUED
+PAID
+
+所以当前模型缺少中间节点。
+
+裁定：
+
+不要让 Case Creation 创建 Billing。
+
+也不要恢复 simulateSettlement。
+
+新增独立业务事件：
+
+Case
+ |
+ | recovery_result_confirmed
+ |
+FeeCalculation
+ |
+BillingInvoice(DRAFT)
+
+也就是说：
+
+Billing 不代表：
+
+“追回到账”。
+
+Billing 代表：
+
+“服务费计算完成，可以开票/收费”。
+
+建议链路：
+
+Case CREATED
+       |
+       |
+Claim prepared
+       |
+       |
+Recovery outcome confirmed
+       |
+       |
+create FeeCalculation
+       |
+       |
+create BillingInvoice(DRAFT)
+
+因此：
+
+B2-3 前需要新增一个明确触发点。
+
+不是 Schema Delta。
+
+优先：
+
+Service Layer Event。
+
+例如：
+
+confirmRecoveryOutcome(caseId)
+
+或者：
+
+finalizeRecoveryResult(caseId)
+
+由 OWNER/ADMIN/FINANCE 触发。
+
+CHANGE
+#3 OPS 建案不可达
+
+这里发现的是权限模型冲突。
+
+当前：
+
+允许：
+
+OPS createCase
+
+但是：
+
+需要：
+
+commercialTerms
+
+且：
+
+OPS 无权填写。
+
+导致：
+
+OPS createCase
+        |
+        |
+需要费率
+        |
+        |
+403
+
+这是设计矛盾。
+
+裁定：
+
+保留 OPS 建案。
+
+但拆开两个动作：
+
+Action 1:
+
+OPS:
+
+createCase()
+
+只能创建 Case。
+
+Action 2:
+
+OWNER/ADMIN:
+
+setCommercialTerms()
+
+完成商务确认。
+
+因此：
+
+Case 状态增加一个业务条件即可：
+
+不是 Schema：
+
+Case created
+      |
+      |
+awaiting commercial terms
+      |
+      |
+ready for billing
+
+禁止：
+
+OPS 填费率。
+
+禁止：
+
+自动推测费率。
+
+禁止：
+
+默认费率。
+
+B2-1 最终状态
+C-0008-B2-1 = REVISE
+
+但不是推翻。
+
+需要修改：
+
+项	裁定
+Case 创建	PASS
+Closure复用	PASS
+幂等	PASS
+权限模型	REVISE
+commercialTerms	REVISE
+Billing生成	REVISE
+Scope泛化	HOLD
+NEXT
+
+按以下顺序修改：
+
+Step 1
+
+修正 OPS 建案流程：
+
+OPS createCase
+        ↓
+commercialTerms = pending
+        ↓
+OWNER/ADMIN confirm
+Step 2
+
+新增 Billing 前置业务动作设计。
+
+不要写代码。
+
+先提交：
+
+C-0008-B2-BILLING-FLOW-DESIGN
+
+说明：
+
+谁触发
+什么状态
+Audit
+权限
+是否需要 Schema
+Step 3
+
+完成后再进入：
+
+B2-2 Evidence + Claim
+
+最终裁定：
+
+🟡 C-0008-B2-1 = REVISE
+
+核心实现质量通过，但商业条款生命周期和 Billing 触发模型需要先修正。
+```
