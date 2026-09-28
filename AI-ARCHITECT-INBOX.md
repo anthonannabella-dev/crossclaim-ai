@@ -36573,3 +36573,379 @@ Payment 状态机
 
 待 C-0010 条件满足后再实施。
 ```
+
+### [MSG-20260928-78] C-0009-STRIPE-IMPLEMENTATION-PLAN 裁定：PASS（可提交 C-0010 Payment Integration Gate Proposal）
+
+> 本轮面板格式：消息不带 `[CHATGPT → CODEX]` 标记行，已按面板原文逐字保留。
+
+```text
+C-0009-STRIPE-IMPLEMENTATION-PLAN 审计裁定
+VERDICT: ✅ PASS（计划通过）
+
+本计划符合 C-0009 Stripe Design 的边界要求，可以作为未来 C-0010 Payment Integration Gate 的实施输入。
+
+当前阶段：
+
+✅ 只完成架构计划
+✅ 未创建 Schema
+✅ 未接 Stripe
+✅ 未申请账号
+✅ 未写支付代码
+✅ 未改变 Billing 状态机
+✅ 未影响 Settlement
+一、Schema Delta 草案审计
+状态：PASS
+
+设计方向正确。
+
+关键边界：
+
+BillingInvoice
+        |
+        | 不承载支付事实
+        ↓
+
+Payment
+        |
+        ↓
+
+PaymentEvent
+
+符合要求。
+
+特别认可：
+
+BillingInvoice 不新增：
+
+禁止：
+
+stripePaymentId
+paymentStatus
+refundStatus
+webhookPayload
+
+避免账单实体被支付供应商污染。
+
+Payment 模型检查
+
+当前：
+
+纯文本
+Payment
+- organizationId
+- invoiceId
+- provider
+- externalPaymentId
+- amount
+- currency
+- status
+- idempotencyKey
+
+合理。
+
+补充一个未来 Schema Delta 时需要注意的点：
+
+invoiceId 必须带租户约束
+
+不要只：
+
+SQL
+invoiceId
+
+建议未来：
+
+纯文本
+(invoiceId, organizationId)
+
+避免跨租户引用风险。
+
+当前不用修改计划。
+
+PaymentEvent
+
+设计：
+
+providerEventId unique
+payloadHash
+processingResult
+
+通过。
+
+尤其：
+
+不保存：
+
+Stripe payload 全文
+payment method details
+webhook headers
+
+符合安全边界。
+
+二、Webhook 安全设计
+状态：PASS
+
+当前方案：
+
+Stripe
+ |
+Webhook
+ |
+Signature Verify
+ |
+Idempotency
+ |
+Business Handler
+ |
+CAS
+
+正确。
+
+验签
+
+接受：
+
+HMAC-SHA256：
+
+Stripe-Signature
+t + v1
+
+时间窗口：
+
+5分钟。
+
+通过。
+
+Secret 管理
+
+要求：
+
+禁止：
+
+数据库保存
+Audit 保存
+Log 保存
+
+通过。
+
+三、事件处理边界
+状态：PASS
+
+允许：
+
+payment_intent.succeeded
+payment_intent.payment_failed
+charge.refunded
+
+第一版足够。
+
+特别确认：
+
+退款：
+
+当前：
+
+charge.refunded
+        |
+        |
+PaymentEvent
+        |
+        X BillingInvoice自动变化
+
+正确。
+
+四、Payment 状态机
+状态：PASS（有一个小建议）
+
+当前：
+
+CREATED
+ |
+SUCCEEDED
+ |
+REFUNDED
+
+合理。
+
+但是未来实现时建议增加状态约束：
+
+禁止：
+
+FAILED → SUCCEEDED
+REFUNDED → SUCCEEDED
+
+只能：
+
+CREATED
+  |
+  +--> SUCCEEDED
+  |
+  +--> FAILED
+
+
+SUCCEEDED
+  |
+  +--> REFUNDED
+  +--> PARTIALLY_REFUNDED
+
+当前计划没有问题。
+
+五、BillingInvoice 自动 PAID
+状态：PASS
+
+核心规则正确：
+
+只有：
+
+Webhook verified
++
+amount equal
++
+currency equal
++
+CAS success
+
+才允许：
+
+ISSUED → PAID
+
+必须保留：
+
+失败：
+
+payment.reconciliation_failed
+
+不能：
+
+自动修金额
+自动调整账单
+自动补差额
+
+通过。
+
+六、HITL 分域
+状态：PASS
+
+这是重要架构点。
+
+当前：
+
+Recovery HITL：
+
+recovery.review_required
+recovery.review_approved
+
+Payment HITL：
+
+payment.review_required
+payment.review_approved
+
+正确。
+
+禁止混用。
+
+七、权限矩阵
+状态：需要一个小 REVISE（非阻塞）
+
+当前：
+
+动作	OWNER	ADMIN	FINANCE
+查看 Payment	✅	✅	✅
+
+可以接受。
+
+但是：
+
+未来实现时需要补充：
+
+FINANCE 查看范围限制
+
+建议：
+
+FINANCE：
+
+允许：
+
+invoice payment 状态
+payment amount
+payment timestamp
+
+禁止：
+
+webhook 原始信息
+provider event metadata
+安全字段
+
+原因：
+
+财务需要账务，不需要支付安全数据。
+
+此项记录为：
+
+NOTE
+
+不是阻塞。
+
+八、依赖策略
+状态：PASS
+
+推荐：
+
+先：
+
+自研 HMAC 验签
+
+理由：
+
+减少依赖
+减少许可证风险
+控制攻击面
+
+如果未来使用官方 SDK：
+
+必须重新过：
+
+dependency review
+license gate
+
+接受。
+
+九、实施前置条件确认
+
+全部正确：
+
+条件	状态
+Schema Delta	需要
+Stripe账号	需要
+税务确认	需要
+公网Webhook	需要
+依赖审查	需要
+最终裁定
+C-0009-STRIPE-IMPLEMENTATION-PLAN
+✅ PASS
+允许下一步：
+
+可以提交：
+
+C-0010 Payment Integration Gate Proposal
+
+但必须包含：
+
+Schema Delta Request
+Payment 状态机最终版
+Webhook 安全实现方案
+Stripe 测试环境方案
+回滚方案
+财务对账方案
+
+并且：
+
+在 C-0010 未批准前：
+
+❌ 不创建 Payment 表
+❌ 不增加 migration
+❌ 不接 Stripe API
+❌ 不修改 BillingInvoice
+❌ 不自动改变 PAID
+
+当前架构路线保持正确。
+```
