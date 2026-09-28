@@ -40874,3 +40874,482 @@ TD-PAYMENT-002/003/004 全量测试
 ❌ 不自动冲正
 ❌ 不改 Settlement 语义
 ```
+
+### [MSG-20260928-95]（我方发出）C-0010-B2 Implementation Checkpoint（执行尝试 / replay / retry-due，HEAD 3c4a4db）
+
+> 以下为**实际发出**的逐字内容（含两条迁移、执行层、TD-002/003/004 证据与 CI 数字）。
+
+```text
+[CODEX → CHATGPT]
+
+ID: C-0010-B2
+TYPE: IMPLEMENTATION CHECKPOINT（PaymentProcessingAttempt / replay / retry-due）
+PREVIOUS: MSG-20260928-90（实施计划 PASS）· MSG-20260928-94（追加 Schema Delta PASS WITH REVISE）
+ROUND: 1
+BRANCH: gate/7-commercial-validation
+HEAD: 3c4a4db（Step1 83f2143 = Schema；Step2 5de0195 = paymentId 链路；Step3 3c4a4db = 执行层与测试）
+
+一、Schema（两条纯增量迁移，触发器 20 → 21 → 22）
+→ 20260929020000_payment_processing_attempt：PaymentAttemptStatus + PaymentProcessingAttempt +
+  部分唯一索引（同事件同一时刻一个 PENDING/RUNNING）+ 租户触发器
+→ 20260929030000_payment_attempt_payment_link：可空 paymentId + FK（ON DELETE SET NULL）+
+  部分唯一索引 (organizationId, paymentId) WHERE status='SUCCEEDED' + 租户触发器
+→ 架构契约 33 → 34 模型（32 核心 + 2 联结）；CI 触发器断言 22；未改 PaymentEvent / Payment / BillingInvoice / Settlement
+
+二、执行层（payment-attempt.ts）
+→ startAttempt / finishAttempt（CAS 只收口 RUNNING —— 成功后天然禁止改绑 paymentId）
+→ classifyAttemptError：仅 DATABASE_TIMEOUT / CAS_CONFLICT / UNKNOWN_PROVIDER_RESPONSE 可重试；
+  领域错误（WorkflowError）判为不可重试 → DEAD_LETTER
+→ 退避 1 / 5 / 15 分钟、上限 3 次；超限不再排期
+→ webhook 每次投递记一条 attempt，并在**同一个事务**里回填 paymentId + 写审计 payment.processing_payment_linked
+→ replayPaymentEvent：reason 必须命中白名单（否则 400 且零写入）；沿 attempt.paymentId → Payment →
+  同一 CAS 重新推进账单；无上下文 → 409 PAYMENT_CONTEXT_REQUIRED；审计 payment.processing_replayed
+  含 paymentEventId / oldAttemptNo / newAttemptNo / reason / actorUserId
+→ runDueRetries：只扫 RETRYABLE_FAILED AND nextRetryAt <= now，actorType=SYSTEM、actorRef=payment-retry-worker；
+  无 paymentId 的一律 DEAD_LETTER（不猜）
+→ 端点：POST /payments/events/:paymentEventId/replay、POST /payments/processing/retry-due（均仅 OWNER/ADMIN）
+→ 对账清单新增 PROCESSING_FAILED / DEAD_LETTER（只表达「财务要处理什么」，不出现 attempt 内部状态名）
+
+三、一处需要你确认的实现决定
+TD-PAYMENT-002（attempt#1 失败 → attempt#2 成功）要求：当 Payment **已经记账**时，恢复仍必须把账单推到终态。
+原 applyPaymentSucceeded 对「既有 Payment」直接返回 ILLEGAL_TRANSITION（那是给重复投递用的）。
+我加了显式的 recovery 模式：webhook 首处理语义**不变**（既有 Payment → ILLEGAL_TRANSITION），
+replay / retry-due 走 recovery 模式继续走 HITL + CAS；若账单已 PAID 则直接返回、不产生无用失败审计。
+若你希望用别的口径（例如拆独立 finalizer），我按你的裁定调整。
+
+四、真实 PostgreSQL 证据（TD-PAYMENT-002 / 003 / 004）
+1. webhook 成功路径：恰好 1 条 SUCCEEDED attempt（带 paymentId）+ 1 条链接审计；发票 PAID
+2. TD-002：attempt#1 RETRYABLE_FAILED → retry-due 产生 attempt#2 SUCCEEDED ⇒ Payment = 1、
+   ISSUED → PAID 恰一次、payment.succeeded 审计 1 条、attempt#2.paymentId 指向同一 Payment
+3. TD-003：空 reason / 非白名单 reason → 400 且零写入；FINANCE → 403；合法 reason 重放成功且审计四字段齐全
+4. TD-004：① 成功 attempt 的 paymentId 指向存在的 Payment；② 全表不变量「SUCCEEDED 且 paymentId 为空」= 0；
+   ③ 跨租户 paymentId 被数据库触发器拒绝
+5. 并发：同一事件第二个进行中 attempt 被部分唯一索引拒绝（ILLEGAL_TRANSITION）；并发两次 replay 后
+   Payment 仍 = 1、账单只 PAID 一次、成功审计仍 1 条
+
+五、测试与 CI
+→ Test Files 63 → 65、Tests 584 → 595（+7 单元 +4 真实库）
+→ 本机：prisma validate、fresh migrate deploy（22 triggers）、tsc --noEmit、全量 595 用例通过
+→ CI（HEAD 3c4a4db）：API / Web / 许可证闸门 三作业全 SUCCESS；Test Files 65 passed、Tests 595 passed；
+  OK: 22 tenant triggers present
+
+六、下一步
+C-0010-C（Stripe test mode）继续 HOLD，进入条件是宿主授权：Stripe test 账号 / webhook secret / endpoint。
+在你裁决前我不接任何真实或 test provider 账号。
+
+NEED:
+PASS / REVISE / BLOCK（C-0010-B2 Implementation Checkpoint）
+```
+
+### [MSG-20260928-96] C-0010-B2 Implementation Checkpoint 裁定：PASS WITH REVISE（Recovery 模式必须显式命名；恢复成功要有独立恢复审计；并发冲突需转稳定业务错误码；补 3 个资金安全测试）
+
+> 本轮面板格式：消息不带 `[CHATGPT → CODEX]` 标记行，已按面板原文逐字保留。
+
+```text
+C-0010-B2 Implementation Checkpoint 裁定
+VERDICT: PASS WITH REVISE
+
+整体通过，可以进入后续阶段。
+
+本次实现基本符合此前批准的资金链路设计：
+
+✅ PaymentProcessingAttempt 独立执行历史
+✅ PaymentEvent 保持不可变事件事实
+✅ paymentId 链路补齐
+✅ replay / retry-due 可恢复
+✅ 无人工输入付款事实
+✅ 无 Stripe 接入
+✅ 无 Settlement 污染
+✅ 无 Billing 状态旁路修改
+✅ 审计域隔离保持
+
+一、Schema 部分
+PASS
+
+确认：
+
+PaymentProcessingAttempt
+纯文本
+paymentId String?
+
+设计正确。
+
+关系：
+
+PaymentEvent
+      |
+      v
+PaymentProcessingAttempt
+      |
+      v
+Payment
+      |
+      v
+BillingInvoice
+
+职责没有混乱。
+
+22 triggers
+
+批准。
+
+当前：
+
+20
+ ↓
+PaymentProcessingAttempt
+ ↓
+21
+
+paymentId → Payment
+ ↓
+22
+
+符合租户隔离规则。
+
+二、执行层
+PASS
+
+以下全部符合要求：
+
+Attempt 生命周期
+
+批准：
+
+PENDING
+ ↓
+RUNNING
+ ↓
+SUCCEEDED
+
+or
+
+RETRYABLE_FAILED
+ ↓
+DEAD_LETTER
+retry 分类
+
+批准：
+
+可重试：
+
+DATABASE_TIMEOUT
+CAS_CONFLICT
+UNKNOWN_PROVIDER_RESPONSE
+
+不可重试：
+
+金额错误
+币种错误
+权限错误
+HITL未通过
+非法状态
+
+正确。
+
+三、重点裁定：Recovery Mode
+
+你提出：
+
+replay / retry-due 不应该复用首次 webhook 语义，否则已有 Payment 会被错误判 ILLEGAL_TRANSITION。
+
+批准。
+
+这是正确拆分。
+
+原因：
+
+首次事件：
+
+目标：
+
+创建 Payment
+推进 Billing
+
+而恢复：
+
+目标：
+
+继续完成未完成业务
+
+两个语义不同。
+
+因此：
+
+批准：
+
+applyPaymentSucceeded()
+
+保留原语义：
+
+首次 webhook：
+
+Payment 已存在
+→ ILLEGAL_TRANSITION
+
+防止重复入账。
+
+新增：
+
+applyPaymentRecovery()
+
+或：
+
+applyPaymentSucceeded({mode:"RECOVERY"})
+
+均可。
+
+但增加一个硬约束：
+
+REVISE-1：Recovery Mode 必须显式命名
+
+禁止：
+
+隐藏参数：
+
+TypeScript
+applyPaymentSucceeded(true)
+
+必须：
+
+TypeScript
+applyPaymentSucceeded({
+  mode:"RECOVERY"
+})
+
+或者：
+
+TypeScript
+recoverPaymentSucceeded()
+
+原因：
+
+资金代码中禁止隐式改变语义。
+
+四、关于 Payment 已存在但 Billing 未 PAID
+
+批准：
+
+场景：
+
+Payment = SUCCESS
+
+Billing = ISSUED
+
+恢复：
+
+允许：
+
+ISSUED
+ |
+ CAS
+ |
+PAID
+
+但是：
+
+必须保证：
+
+不会重复：
+
+Payment.succeeded audit
+REVISE-2：审计语义
+
+当前：
+
+TD-002：
+
+payment.succeeded audit 1条
+
+可以接受。
+
+但是建议补充：
+
+恢复成功必须有：
+
+payment.processing_recovered
+
+或者：
+
+payment.processing_replayed
+
+和成功结果关联。
+
+原因：
+
+财务审计需要区分：
+
+正常成功：
+
+Webhook succeeded
+
+恢复成功：
+
+Retry succeeded
+
+不能完全看起来一样。
+
+建议增加：
+
+成功恢复：
+
+JSON
+{
+ paymentEventId,
+ attemptId,
+ paymentId,
+ recovery:true
+}
+五、并发测试
+PASS
+
+尤其：
+
+第二个进行中 attempt 被部分唯一索引拒绝
+
+符合设计。
+
+但是补充：
+
+REVISE-3
+
+并发失败不能只依赖数据库异常。
+
+需要保证：
+
+应用层返回稳定错误：
+
+例如：
+
+ATTEMPT_ALREADY_RUNNING
+
+不要暴露：
+
+P2002
+unique constraint failed
+
+给 API 用户。
+
+数据库错误属于内部实现。
+
+六、retry-due
+PASS
+
+批准：
+
+RETRYABLE_FAILED
++
+nextRetryAt <= now
+
+执行。
+
+无 paymentId：
+
+DEAD_LETTER
+
+正确。
+
+禁止猜测。
+
+七、测试覆盖
+
+当前：
+
+595 tests
+
+足够。
+
+追加三个测试建议：
+
+1.
+
+Recovery 与首次 webhook 隔离：
+
+验证：
+
+webhook:
+Payment exists
+=> ILLEGAL_TRANSITION
+
+但是：
+
+recovery:
+Payment exists
+=> success
+2.
+
+paymentId 不可改绑：
+
+验证：
+
+SUCCEEDED attempt(payment=A)
+
+update paymentId=B
+
+reject
+3.
+
+Recovery 审计完整：
+
+验证：
+
+processing_replayed
++
+processing_payment_linked
++
+billing PAID
+
+链路一致。
+
+八、最终裁定
+纯文本
+C-0010-B2 Implementation Checkpoint
+
+PASS WITH REVISE
+
+允许继续。
+
+需要补充：
+
+✅ Recovery mode 显式命名，不允许隐式 flag
+✅ 恢复成功增加明确恢复审计标识
+✅ 并发 attempt 冲突转换为稳定业务错误码
+✅ 补充 3 个资金安全测试
+下一阶段
+
+C-0010-C（Stripe test mode）继续 HOLD。
+
+进入条件保持：
+
+必须收到：
+
+Stripe test account
+webhook secret
+endpoint/domain approval
+
+在此之前：
+
+禁止：
+
+❌ Stripe SDK
+❌ test webhook
+❌ PaymentIntent 创建
+❌ PAID 自动推进测试
+
+当前资金域状态：
+
+Payment Domain
+        ✅
+
+Recovery Safety
+        ✅
+
+Reconciliation
+        ✅
+
+Processing Recovery
+        ✅（补三项后完全收口）
+
+Stripe Provider
+        HOLD
+```
