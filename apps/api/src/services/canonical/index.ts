@@ -40,7 +40,6 @@ export {
 } from './shadow';
 export {
   applyIdentityBackfill,
-  canonicalDedupeKeyFor,
   planIdentityBackfill,
   type ApplyIdentityBackfillResult,
   type IdentityBackfillPlan,
@@ -48,3 +47,8 @@ export {
   type IdentityUnmappedReason,
   type PlanIdentityBackfillInput,
 } from './identity-backfill';
+export { canonicalDedupeKeyFor } from './identity-key';
+export {
+  buildIdentityParityReport,
+  type IdentityParityReport,
+} from './identity-parity';

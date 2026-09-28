@@ -11,6 +11,7 @@
 
 import { Prisma, type PrismaClient } from '@prisma/client';
 
+import { canonicalDedupeKeyFor } from '../canonical/identity-key';
 import { parseFreightRateDefinition, type RuleCandidate } from './freight-rate';
 import type {
   DetectionPersistenceInput,
@@ -33,6 +34,35 @@ const pickString = (raw: unknown, keys: string[]): string | null => {
 
 const isUniqueViolation = (error: unknown): boolean =>
   error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
+
+/**
+ * C-0006-B2 Step 2：解析"业务事实身份"。
+ * 只有恰好一条 ACTIVE CanonicalFact 通过 CanonicalFactSource 关联到该原始行时才给出身份；
+ * 否则返回 null（调用方必须计数/告警，不得静默回退）。
+ */
+async function resolveCanonicalIdentity(
+  tx: Prisma.TransactionClient,
+  input: { organizationId: string; ruleVersionId: string; sourceTransactionId: string | null },
+): Promise<{ canonicalFactId: string; canonicalDedupeKey: string } | null> {
+  if (!input.sourceTransactionId) return null;
+  const link = await tx.canonicalFactSource.findFirst({
+    where: {
+      organizationId: input.organizationId,
+      sourceTransactionId: input.sourceTransactionId,
+      canonicalFact: { status: 'ACTIVE' },
+    },
+    select: { canonicalFactId: true },
+  });
+  if (!link) return null;
+  return {
+    canonicalFactId: link.canonicalFactId,
+    canonicalDedupeKey: canonicalDedupeKeyFor({
+      organizationId: input.organizationId,
+      ruleVersionId: input.ruleVersionId,
+      canonicalFactId: link.canonicalFactId,
+    }),
+  };
+}
 
 export function createPrismaDetectionRepository(prisma: PrismaClient): DetectionRepository {
   const readExisting = async (
@@ -133,7 +163,13 @@ export function createPrismaDetectionRepository(prisma: PrismaClient): Detection
         return await prisma.$transaction(async (tx) => {
           const existing = await tx.ruleEvaluation.findUnique({
             where: { dedupeKey: input.dedupeKey },
-            select: { id: true, result: true, computed: true, opportunityId: true },
+            select: {
+              id: true,
+              result: true,
+              computed: true,
+              opportunityId: true,
+              canonicalDedupeKey: true,
+            },
           });
           if (existing) {
             return {
@@ -142,8 +178,15 @@ export function createPrismaDetectionRepository(prisma: PrismaClient): Detection
               result: existing.result === 'OPPORTUNITY' ? 'OPPORTUNITY' : 'PASS',
               computed: existing.computed,
               opportunityId: existing.opportunityId,
+              canonicalIdentity: existing.canonicalDedupeKey ? 'MAPPED' : 'MISSING',
             } satisfies DetectionPersistenceResult;
           }
+
+          const canonicalIdentity = await resolveCanonicalIdentity(tx, {
+            organizationId: input.organizationId,
+            ruleVersionId: input.ruleVersionId,
+            sourceTransactionId: input.sourceTransactionId,
+          });
 
           const evaluation = await tx.ruleEvaluation.create({
             data: {
@@ -154,6 +197,12 @@ export function createPrismaDetectionRepository(prisma: PrismaClient): Detection
               computed: input.computed as Prisma.InputJsonValue,
               message: input.message,
               dedupeKey: input.dedupeKey,
+              ...(canonicalIdentity
+                ? {
+                    canonicalFactId: canonicalIdentity.canonicalFactId,
+                    canonicalDedupeKey: canonicalIdentity.canonicalDedupeKey,
+                  }
+                : {}),
             },
             select: { id: true },
           });
@@ -189,6 +238,7 @@ export function createPrismaDetectionRepository(prisma: PrismaClient): Detection
             result: input.result,
             computed: input.computed,
             opportunityId,
+            canonicalIdentity: canonicalIdentity ? 'MAPPED' : 'MISSING',
           } satisfies DetectionPersistenceResult;
         });
       } catch (error) {

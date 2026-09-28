@@ -11,22 +11,9 @@
  * we never guess an identity for money-affecting records.
  */
 
-import { createHash } from 'node:crypto';
-
 import type { PrismaClient } from '@prisma/client';
 
-export function canonicalDedupeKeyFor(input: {
-  organizationId: string;
-  ruleVersionId: string;
-  canonicalFactId: string;
-}): string {
-  return createHash('sha256')
-    .update(
-      [input.organizationId, input.ruleVersionId, input.canonicalFactId].join('|'),
-      'utf8',
-    )
-    .digest('hex');
-}
+import { canonicalDedupeKeyFor } from './identity-key';
 
 export type IdentityUnmappedReason =
   | 'NO_SOURCE_TRANSACTION'
@@ -167,9 +154,26 @@ export async function planIdentityBackfill(
   for (const update of plan.updates) {
     targetCount.set(update.canonicalDedupeKey, (targetCount.get(update.canonicalDedupeKey) ?? 0) + 1);
   }
+
+  // A canonical identity that is already persisted elsewhere means the legacy
+  // row would become a duplicate of an existing evaluation: never overwrite it.
+  const existingKeys = await prisma.ruleEvaluation.findMany({
+    where: {
+      ...(input.organizationId ? { organizationId: input.organizationId } : {}),
+      canonicalDedupeKey: { not: null },
+    },
+    select: { canonicalDedupeKey: true },
+  });
+  const alreadyPersisted = new Set(
+    existingKeys.map((row) => row.canonicalDedupeKey).filter((key): key is string => key !== null),
+  );
+
   const kept: IdentityBackfillUpdate[] = [];
   for (const update of plan.updates) {
-    if ((targetCount.get(update.canonicalDedupeKey) ?? 0) > 1) {
+    if (
+      (targetCount.get(update.canonicalDedupeKey) ?? 0) > 1 ||
+      alreadyPersisted.has(update.canonicalDedupeKey)
+    ) {
       reasons.set(update.ruleEvaluationId, 'DUPLICATE_TARGET');
       continue;
     }
