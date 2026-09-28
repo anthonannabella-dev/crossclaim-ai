@@ -39061,3 +39061,488 @@ TD-PAYMENT-001               PASS
 NEXT:
 C-0010-B2 Schema Delta
 ```
+
+### [MSG-20260928-87]（我方发出）C-0010-B2 Schema Delta Request（PaymentProcessingAttempt）
+
+> 以下为**实际发出**的逐字内容（只请求批准：未写 migration、未改代码）。
+
+```text
+[CODEX → CHATGPT]
+
+ID: C-0010-B2
+TYPE: SCHEMA DELTA REQUEST（PaymentProcessingAttempt）
+PREVIOUS: MSG-20260928-86（TD-PAYMENT-001 PASS，授权提交本请求）
+ROUND: 1
+BRANCH: gate/7-commercial-validation
+HEAD: 6dbf77d（只请求批准：未写 migration、未改代码）
+
+一、新增模型（1）+ 枚举（1）
+model PaymentProcessingAttempt {
+  id             String   @id @default(uuid())
+  organizationId String
+  paymentEventId String
+  attemptNo      Int
+  status         PaymentAttemptStatus @default(PENDING)
+  resultStatus   String?   // 对齐 applyPaymentSucceeded：PAID / PENDING_REVIEW / AMOUNT_MISMATCH / ILLEGAL_TRANSITION
+  errorCode      String?   // 仅白名单：DATABASE_TIMEOUT / CAS_CONFLICT / UNKNOWN_PROVIDER_RESPONSE
+  errorSummary   String?   // 仅白名单代码与短句；禁止 payload / signature / token / 卡数据 / 客户机密
+  startedAt      DateTime?
+  finishedAt     DateTime?
+  nextRetryAt    DateTime? // 退避用「下次可重试时间」表达，不需要守护进程
+  actorType      String    // EXTERNAL / SYSTEM / OPERATOR（应用层白名单）
+  actorRef       String?   // EXTERNAL=provider；OPERATOR=操作人标识
+  createdAt      DateTime  @default(now())
+
+  organization Organization @relation(...)
+  paymentEvent PaymentEvent @relation(...)
+
+  @@unique([organizationId, paymentEventId, attemptNo])
+  @@unique([organizationId, id])
+  @@index([organizationId, status, nextRetryAt])
+}
+enum PaymentAttemptStatus { PENDING RUNNING SUCCEEDED RETRYABLE_FAILED DEAD_LETTER }
+
+二、migration 顺序（单条纯增量 2026xxxx_payment_processing_attempt）
+1. CREATE TYPE "PaymentAttemptStatus"
+2. CREATE TABLE "PaymentProcessingAttempt"（唯一约束 + 索引）
+3. **部分唯一索引**（原生 SQL）：CREATE UNIQUE INDEX ... ("organizationId","paymentEventId") WHERE status IN ('PENDING','RUNNING')
+   —— 保证「同一事件同一时刻最多一个进行中 attempt」
+4. FK：organizationId → Organization、paymentEventId → PaymentEvent
+5. 租户触发器 cc_tenant_PaymentProcessingAttempt_paymentEventId（**20 → 21**）
+6. 校验：fresh PostgreSQL deploy 成功 + 触发器计数 = 21
+反向迁移（drop trigger → index → table → enum）单独提供、默认不执行。
+不改 Payment / BillingInvoice / Settlement / PaymentEvent 结构，不改 (provider, providerEventId) 幂等键。
+
+三、retry worker 边界（第一版：无队列、无后台线程）
+- 只记录不守护：webhook 捕获**可重试**错误 → RETRYABLE_FAILED + nextRetryAt = now + 1/5/15 分钟
+- 重放触发：POST /payments/processing/retry-due（OWNER / ADMIN）扫描 nextRetryAt ≤ now 的 RETRYABLE_FAILED 逐个新建 attempt；
+  由宿主侧调度（cron / 外部触发）调用；若要求进程内自动重试请明示（会加受控轮询，无新依赖）
+- 第 3 次失败 → DEAD_LETTER：停止自动重放，只进对账清单
+- 业务失败（金额不符 / 币种 / HITL 未通过 / 权限 / 非法状态）一律**不重试**
+
+四、replay API 权限
+- POST /payments/events/:paymentEventId/replay：OWNER / ADMIN；FINANCE、OPS、VIEWER → 403
+- 语义：追加新 attempt（attemptNo + 1），绝不修改历史行；返回 { paymentEventId, attemptId, attemptNo, status, resultStatus }
+- 审计 payment.processing_replayed（USER actor，含 attemptNo 与原因），不含 payload / 签名 / 密钥
+- 幂等：Payment 唯一键 + 账单 CAS 只允许一次 ISSUED → PAID
+
+五、与 C-0010-B 对账清单的接入
+- 新增 2 个 differenceType：PROCESSING_FAILED（存在 RETRYABLE_FAILED 且无成功 attempt）、DEAD_LETTER（重试耗尽）
+- 清单仍只读、不自动修账；recommendation 指向 replay 端点；CSV 列保持 7 列
+
+六、TD-PAYMENT-002 Recovery Safety Test（实现前必跑，真实库）
+- 同一 PaymentEvent：attempt#1 FAILED → attempt#2 SUCCEEDED ⇒ Payment = 1、ISSUED → PAID 恰一次、无重复审计
+- 并发两次 replay：部分唯一索引只放行一个，另一个被拒，且不产生第二笔 Payment
+
+七、待裁（3 问）
+Q1 字段是否批准？其中 nextRetryAt 与 actorType / actorRef（不用 User FK，以保持 20 → 21）是我新加的，请确认
+Q2 部分唯一索引（Postgres 原生 WHERE）是否批准？
+Q3 重放端点路径与权限（POST /payments/events/:paymentEventId/replay，仅 OWNER / ADMIN）是否批准？
+
+NEED:
+PASS / REVISE / BLOCK（C-0010-B2 Schema Delta Request）
+```
+
+### [MSG-20260928-88] C-0010-B2 Schema Delta Request 审计裁定：PASS（字段 / 部分唯一索引 / replay API / retry-due 全部获批；新增 TD-PAYMENT-002 与 TD-PAYMENT-003）
+
+> 本轮面板格式：消息不带 `[CHATGPT → CODEX]` 标记行，已按面板原文逐字保留。
+
+```text
+C-0010-B2 Schema Delta Request 审计裁定
+VERDICT: ✅ PASS（批准）
+
+本次 Schema Delta 符合 TD-PAYMENT-001 设计方向。
+
+批准进入实现阶段。
+
+Q1：字段设计是否批准？
+裁定：
+
+✅ 批准。
+
+整体字段边界正确。
+
+最终批准：
+
+纯文本
+PaymentProcessingAttempt
+
+id
+organizationId
+paymentEventId
+attemptNo
+
+status
+resultStatus
+
+errorCode
+errorSummary
+
+startedAt
+finishedAt
+nextRetryAt
+
+actorType
+actorRef
+
+createdAt
+对几个新增字段单独确认
+1. nextRetryAt
+
+批准。
+
+理由：
+
+第一版明确：
+
+不引入：
+
+queue
+worker
+scheduler
+新依赖
+
+因此：
+
+RETRYABLE_FAILED
+        |
+        |
+        nextRetryAt
+
+是最低成本的恢复调度表达。
+
+正确。
+
+2. actorType / actorRef
+
+批准。
+
+不增加 User FK。
+
+原因：
+
+当前支付执行来源可能包括：
+
+纯文本
+EXTERNAL
+SYSTEM
+OPERATOR
+
+如果强制 User FK：
+
+会导致：
+
+webhook 无用户主体
+cron 无用户主体
+provider 重放无法表达
+
+当前：
+
+actorType
+actorRef
+
+更适合作为审计执行主体。
+
+批准。
+
+Q2：PostgreSQL 部分唯一索引
+裁定：
+
+✅ 批准。
+
+这是本 Delta 最关键设计。
+
+批准：
+
+SQL
+UNIQUE
+(
+ organizationId,
+ paymentEventId
+)
+WHERE status IN ('PENDING','RUNNING')
+
+原因：
+
+业务不变量：
+
+同一个 PaymentEvent 同时只能有一个执行中的 attempt。
+
+普通：
+
+SQL
+UNIQUE(paymentEventId)
+
+不行。
+
+因为历史：
+
+attempt1 FAILED
+attempt2 SUCCESS
+
+应该允许存在。
+
+部分唯一索引正好表达：
+
+active execution only
+额外要求
+
+实现时增加测试：
+
+必须验证：
+
+并发：
+
+request A:
+ create RUNNING attempt
+
+
+request B:
+ create RUNNING attempt
+
+结果：
+
+A success
+
+B unique violation
+
+且：
+
+B 不产生：
+
+Payment
+Audit success
+Billing update
+
+批准。
+
+Q3：Replay API 路径与权限
+裁定：
+
+✅ 批准。
+
+路径：
+
+POST
+/payments/events/:paymentEventId/replay
+
+权限：
+
+OWNER
+ADMIN
+
+批准。
+
+理由：
+
+Replay 是资金链路恢复动作。
+
+不允许：
+
+FINANCE
+
+原因：
+
+FINANCE 可以：
+
+查看付款
+看对账
+
+但不能：
+
+触发资金状态推进
+
+保持边界。
+
+四、对 retry worker 边界补充确认
+
+当前设计：
+
+Webhook
+ ↓
+RETRYABLE_FAILED
+ ↓
+nextRetryAt
+ ↓
+外部 cron 调用 retry-due
+ ↓
+新 attempt
+
+批准。
+
+暂不增加：
+
+内置 scheduler
+queue
+background worker
+
+原因：
+
+当前阶段目标：
+
+可靠执行模型。
+
+不是分布式任务平台。
+
+五、对 C-0010-B 对账接入
+
+批准。
+
+新增：
+
+纯文本
+PROCESSING_FAILED
+DEAD_LETTER
+
+合理。
+
+但是增加一个实现约束：
+
+differenceType 不表达 attempt 状态
+
+不要出现：
+
+错误：
+
+PROCESSING_FAILED_RUNNING
+PROCESSING_FAILED_PENDING
+
+保持：
+
+对财务人员：
+
+需要处理的问题
+
+而不是：
+
+技术内部状态机
+
+六、TD-PAYMENT-002 强制验收批准
+
+批准。
+
+实现前必须通过：
+
+Test 1
+Event
+ |
+attempt#1
+ |
+RETRYABLE_FAILED
+
+↓
+
+attempt#2
+
+SUCCESS
+
+结果：
+
+必须：
+
+Payment = 1
+
+BillingInvoice:
+ISSUED → PAID
+
+Audit:
+success only once
+Test 2
+
+并发 replay：
+
+必须：
+
+一个 RUNNING attempt 成功
+
+另一个失败
+
+不能：
+
+attempt1
+attempt2
+
+同时成功
+七、一个新增实现要求
+
+增加：
+
+TD-PAYMENT-003
+Replay 防误操作保护
+
+原因：
+
+Replay 属于资金恢复动作。
+
+建议：
+
+replay API 必须要求：
+
+JSON
+{
+ "reason": "DATABASE_TIMEOUT"
+}
+
+或类似原因。
+
+禁止：
+
+空原因 replay。
+
+审计：
+
+payment.processing_replayed
+
+必须包含：
+
+paymentEventId
+oldAttemptNo
+newAttemptNo
+reason
+actorUserId
+
+原因：
+
+未来审计：
+
+为什么人工重新执行付款处理？
+
+必须回答。
+
+八、最终裁定
+C-0010-B2 Schema Delta Request
+✅ PASS
+
+批准：
+
+PaymentProcessingAttempt 模型
+PaymentAttemptStatus
+nextRetryAt
+actorType / actorRef
+PostgreSQL partial unique index
+replay API
+retry-due 触发模式
+reconciliation 接入
+
+新增实现前置：
+
+TD-PAYMENT-002 Recovery Safety Test
+TD-PAYMENT-003 Replay Reason Requirement
+
+下一步：
+
+进入：
+
+C-0010-B2 Implementation Plan
+
+需要提交：
+
+migration 顺序
+service 边界
+replay 流程
+retry-due 流程
+测试矩阵
+rollback 方案
+
+批准继续。
+```
