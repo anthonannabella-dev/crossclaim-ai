@@ -5,10 +5,10 @@
 
 ---
 
-## 一、模型总览（26 个 = 25 个核心模型 + 1 个联结模型）
+## 一、模型总览（28 个 = 26 个核心模型 + 2 个联结模型）
 
-> **口径统一**：**25 个核心模型**（架构章程 §六 的清单）**+ 1 个联结模型 `CaseEvidence`**。
-> README、本文、PR 描述、架构契约测试全部按此口径，不允许 25/26 混用。
+> **口径统一**：**26 个核心模型**（架构章程 §六 的清单 + C-0006-A 的 `CanonicalFact`）**+ 2 个联结模型 `CaseEvidence`、`CanonicalFactSource`**。
+> README、本文、PR 描述、架构契约测试全部按此口径，不允许 26/28 混用。
 
 ### 组织与用户
 
@@ -26,6 +26,16 @@
 | `FileAsset` | 原始文件资产（字节 + 元数据 + sha256）。**不是 Evidence** |
 | `ImportBatch` | 每次导入的批次留痕，含字段映射快照 |
 | `SourceTransaction` | 原始业务交易（账单行 / 订单行 / 运单行）。**只读事实** |
+
+### 业务事实层（C-0006-A）
+
+| 模型 | 说明 |
+|---|---|
+| `CanonicalFact` | 统一后的业务事实（金额 / 币种 / 日期 / 外部引用 + 来源计数）。`status=ACTIVE` 才能进入检测；`CONFLICT` 只进审计与对账复核 |
+| `CanonicalFactSource` | 事实 ↔ 原始行（`SourceTransaction`）的联结，保存来源类型快照与 `observedAt`；原始数据永不丢失 |
+
+> 相同业务事实可以同时来自 FILE_UPLOAD 与 API：两条原始行都保留，只计 1 个 ACTIVE 事实；
+> 数值冲突 → `CONFLICT` fail closed，禁止进入 Detection / RuleEvaluation / RecoveryOpportunity。
 
 ### 核心业务实体
 
