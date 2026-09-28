@@ -27043,3 +27043,480 @@ PASS ✅
 
 允许进入 C-0008-B
 ```
+
+### [MSG-20260928-50] C-0008-B Kickoff Review：APPROVED WITH REVISIONS（无 Schema Delta；拆分为 C-0008-B1/B2）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE:
+GATE KICKOFF REVIEW
+
+ID:
+C-0008-B
+
+GATE:
+6
+
+MODULE:
+Customer Workflow Layer
+
+STATUS:
+
+APPROVED WITH REVISIONS ✅
+
+允许进入实现。
+
+一、总体裁定
+
+C-0008-B 方向正确。
+
+确认：
+
+本阶段不需要 Schema Delta。
+
+原因：
+
+现有模型已经覆盖：
+
+纯文本
+SourceConnection
+
+Opportunity
+
+Case
+
+CaseOpportunity
+
+RecoveryRoute
+
+CaseEvidence
+
+Claim
+
+FeeCalculation
+
+BillingInvoice
+
+新增字段不是当前瓶颈。
+
+二、关于"确认人/创建人"
+
+你的方案：
+
+使用 AuditLog.actorUserId，不新增 qualifiedByUserId / createdByUserId
+
+批准 ✅
+
+当前阶段保持。
+
+原因：
+
+AuditLog 已经承担：
+
+谁
+什么时间
+什么动作
+前后状态
+
+例如：
+
+纯文本
+DETECTED
+ |
+ | actorUserId=user-A
+ |
+QUALIFIED
+
+足够。
+
+但是：
+
+要求：
+
+所有用户触发状态变化必须：
+
+同事务：
+
+纯文本
+UPDATE
+
++
+
+AuditLog
+
+不能：
+
+先更新，再写审计。
+
+三、Opportunity 人工确认流转
+批准 ✅
+
+保持：
+
+纯文本
+DETECTED
+
+   |
+   +------ QUALIFIED
+
+   |
+   +------ REJECTED
+
+禁止：
+
+纯文本
+DETECTED
+      |
+      |
+    CONVERTED
+
+确认：
+
+QUALIFIED → CONVERTED
+
+只允许：
+
+Case 创建流程。
+
+端点批准：
+纯文本
+POST /opportunities/:id/qualify
+
+POST /opportunities/:id/reject
+
+要求增加：
+
+Reject 必须要求：
+
+reason。
+
+例如：
+
+纯文本
+reason:
+- wrong_amount
+- duplicate
+- not_recoverable
+- other
+
+不要允许空拒绝原因。
+
+四、Case 创建权限
+批准，但调整一点。
+
+你的角色：
+
+OWNER / ADMIN / OPS
+
+批准：
+
+纯文本
+OWNER
+ADMIN
+OPS
+
+可以：
+
+qualify
+create case
+
+FINANCE：
+
+保持：
+
+只读。
+
+VIEWER：
+
+只读。
+
+Case 创建：
+
+必须：
+
+复用：
+
+Recovery Closure。
+
+禁止重新实现第二套逻辑。
+
+流程：
+
+纯文本
+Qualified Opportunity
+
+        ↓
+
+Case Service
+
+        ↓
+
+Case
+
+        ↓
+
+Evidence
+
+        ↓
+
+Claim Draft
+五、Claim Draft 权限
+
+这里做一个调整。
+
+你的设计：
+
+OPS 可以看全文。
+
+批准。
+
+但是：
+
+FINANCE：
+
+不能看 Claim 正文。
+
+批准。
+
+最终：
+
+角色	Claim正文	金额	Billing
+OWNER	✅	✅	✅
+ADMIN	✅	✅	✅
+OPS	✅	✅	查看
+FINANCE	❌	Billing金额	✅
+VIEWER	❌	❌	❌
+
+原因：
+
+Claim 是业务执行资料。
+
+Billing 是财务资料。
+
+分离正确。
+
+六、Billing 状态推进
+批准 C-0008-B 范围
+
+允许：
+
+纯文本
+DRAFT
+ ↓
+ISSUED
+ ↓
+PAID
+
+权限调整：
+
+允许：
+
+OWNER
+
+ADMIN
+
+FINANCE
+
+OPS：
+
+只读。
+
+增加限制：
+
+PAID：
+
+必须要求：
+
+paymentReference 或 note。
+
+不要允许：
+
+无说明直接 PAID。
+
+例如：
+
+纯文本
+{
+status:"PAID",
+note:"bank transfer #xxx"
+}
+
+禁止：
+
+支付接口。
+
+七、Connection 管理
+批准 ✅
+
+角色：
+
+OWNER / ADMIN：
+
+写。
+
+OPS：
+
+读。
+
+但是增加：
+
+credentialRef 轮换：
+
+必须：
+
+不能接受前端输入真实 secret。
+
+即：
+
+允许：
+
+纯文本
+credentialRef:
+"aws-prod-key-01"
+
+禁止：
+
+纯文本
+secret:
+"AKIA..."
+
+API platform：
+
+批准：
+
+只能：
+
+registered adapter。
+
+禁止：
+
+自由字符串。
+
+八、C-0008-B 是否拆分
+建议拆。
+
+原因：
+
+B 阶段涉及：
+
+权限 + 工作流 + 财务。
+
+一次过大。
+
+采用：
+
+C-0008-B1
+
+范围：
+
+Operations Foundation
+
+包括：
+
+Connection Management
+
+Opportunity Review
+
+Role Permission Matrix
+
+目标：
+
+用户可以：
+
+纯文本
+登录
+
+↓
+
+管理连接
+
+↓
+
+查看机会
+
+↓
+
+确认/拒绝
+C-0008-B2
+
+范围：
+
+Recovery Workflow UI
+
+包括：
+
+Case 创建
+
+Evidence 查看
+
+Claim Draft
+
+Billing 展示
+
+Billing 状态
+
+九、测试要求
+
+C-0008-B1：
+
+必须包含：
+
+权限矩阵
+
+至少：
+
+角色	Connection写	Opportunity确认
+OWNER	YES	YES
+ADMIN	YES	YES
+OPS	NO	YES
+FINANCE	NO	NO
+VIEWER	NO	NO
+状态测试
+
+必须：
+
+DETECTED→QUALIFIED
+DETECTED→REJECTED
+非法迁移409
+审计：
+
+必须：
+
+actorUserId
+
+存在。
+
+十、最终裁定
+纯文本
+C-0008-B Kickoff
+
+PASS ✅
+
+批准：
+
+无 Schema Delta
+规则通过
+拆分 B1/B2
+
+下一步：
+
+提交：
+
+C-0008-B1 Implementation Checkpoint
+
+范围：
+
+Connection Management + Opportunity Review + Role Permission Matrix
+
+验收重点：
+
+API + Web 双 workspace license gate
+角色矩阵测试
+状态机事务一致性
+Audit actorUserId
+租户隔离
+不影响 Recovery Closure 资金链
+
+通过后进入 C-0008-B2。
+```
