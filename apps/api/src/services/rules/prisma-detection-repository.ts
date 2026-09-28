@@ -1,0 +1,204 @@
+/**
+ * DetectionRepository 的 Prisma 实现（C-0004 Checkpoint 1）
+ * ---------------------------------------------------------------
+ * 两点关键（架构方 CHANGE #39 / #40）：
+ *   1. #40：账单 / 轨迹 / 规则三类查询全部显式限定 domain + channel（当前 slice = LOGISTICS / OTHER），
+ *      不依赖“数据库里目前刚好只有 OTHER”。
+ *   2. #39：Evaluation 与 Opportunity 在同一事务内落库；dedupeKey 已存在（重跑或并发）时返回
+ *      数据库中**真实保存**的 result / computed / opportunityId，而不是把 OPPORTUNITY 报成 PASS。
+ *      数据库唯一键 `RuleEvaluation.dedupeKey` 仍是最终幂等防线（P2002 → 回读已存在行）。
+ */
+
+import { Prisma, type PrismaClient } from '@prisma/client';
+
+import { parseFreightRateDefinition, type RuleCandidate } from './freight-rate';
+import type {
+  DetectionPersistenceInput,
+  DetectionPersistenceResult,
+  DetectionRepository,
+  DetectionScope,
+  InvoiceRow,
+  TrackingRow,
+} from './detection-service';
+
+const pickString = (raw: unknown, keys: string[]): string | null => {
+  if (!raw || typeof raw !== 'object') return null;
+  const record = raw as Record<string, unknown>;
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === 'string' && value.trim() !== '') return value.trim();
+  }
+  return null;
+};
+
+const isUniqueViolation = (error: unknown): boolean =>
+  error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
+
+export function createPrismaDetectionRepository(prisma: PrismaClient): DetectionRepository {
+  const readExisting = async (
+    dedupeKey: string,
+  ): Promise<DetectionPersistenceResult | null> => {
+    const existing = await prisma.ruleEvaluation.findUnique({
+      where: { dedupeKey },
+      select: { id: true, result: true, computed: true, opportunityId: true },
+    });
+    if (!existing) return null;
+    return {
+      evaluationId: existing.id,
+      created: false,
+      result: existing.result === 'OPPORTUNITY' ? 'OPPORTUNITY' : 'PASS',
+      computed: existing.computed,
+      opportunityId: existing.opportunityId,
+    };
+  };
+
+  return {
+    async listInvoices(organizationId, scope: DetectionScope, connectionId = null): Promise<InvoiceRow[]> {
+      const rows = await prisma.sourceTransaction.findMany({
+        where: {
+          organizationId,
+          domain: scope.domain,
+          channel: scope.channel,
+          referenceType: 'INVOICE',
+          ...(connectionId ? { connectionId } : {}),
+        },
+        orderBy: { externalId: 'asc' },
+      });
+      return rows.map((row) => ({
+        sourceTransactionId: row.id,
+        externalId: row.externalId,
+        occurredAt: row.occurredAt,
+        amount: row.amount ? row.amount.toFixed(4) : null,
+        currency: row.currency,
+        trackingNumber: pickString(row.raw, ['Tracking Number', 'trackingNumber', 'tracking']),
+      }));
+    },
+
+    async listTracking(organizationId, scope: DetectionScope, connectionId = null): Promise<TrackingRow[]> {
+      const rows = await prisma.sourceTransaction.findMany({
+        where: {
+          organizationId,
+          domain: scope.domain,
+          channel: scope.channel,
+          referenceType: 'TRACKING',
+          ...(connectionId ? { connectionId } : {}),
+        },
+        orderBy: { externalId: 'asc' },
+      });
+      return rows.map((row) => ({
+        sourceTransactionId: row.id,
+        externalId: row.externalId,
+        lane: pickString(row.raw, ['Lane', 'lane']),
+        service: pickString(row.raw, ['Service', 'service']),
+        weightKg: pickString(row.raw, ['Weight Kg', 'weightKg', 'weight']),
+      }));
+    },
+
+    async listFreightRateRuleCandidates(
+      organizationId,
+      scope: DetectionScope,
+    ): Promise<RuleCandidate[]> {
+      const versions = await prisma.ruleVersion.findMany({
+        where: {
+          isActive: true,
+          ruleSet: {
+            scope: 'FREIGHT_RATE',
+            domain: scope.domain,
+            channel: scope.channel,
+            isActive: true,
+            OR: [{ organizationId }, { organizationId: null }],
+          },
+        },
+        orderBy: [{ tier: 'asc' }, { effectiveFrom: 'desc' }],
+      });
+      const candidates: RuleCandidate[] = [];
+      for (const version of versions) {
+        candidates.push({
+          ruleVersionId: version.id,
+          tier: version.tier,
+          version: version.version,
+          effectiveFrom: version.effectiveFrom,
+          effectiveTo: version.effectiveTo,
+          isActive: version.isActive,
+          definition: parseFreightRateDefinition(version.definition),
+        });
+      }
+      return candidates;
+    },
+
+    async persistDetectionOutcome(
+      input: DetectionPersistenceInput,
+    ): Promise<DetectionPersistenceResult> {
+      try {
+        return await prisma.$transaction(async (tx) => {
+          const existing = await tx.ruleEvaluation.findUnique({
+            where: { dedupeKey: input.dedupeKey },
+            select: { id: true, result: true, computed: true, opportunityId: true },
+          });
+          if (existing) {
+            return {
+              evaluationId: existing.id,
+              created: false,
+              result: existing.result === 'OPPORTUNITY' ? 'OPPORTUNITY' : 'PASS',
+              computed: existing.computed,
+              opportunityId: existing.opportunityId,
+            } satisfies DetectionPersistenceResult;
+          }
+
+          const evaluation = await tx.ruleEvaluation.create({
+            data: {
+              organizationId: input.organizationId,
+              ruleVersionId: input.ruleVersionId,
+              sourceTransactionId: input.sourceTransactionId,
+              result: input.result,
+              computed: input.computed as Prisma.InputJsonValue,
+              message: input.message,
+              dedupeKey: input.dedupeKey,
+            },
+            select: { id: true },
+          });
+
+          let opportunityId: string | null = null;
+          if (input.opportunity) {
+            const opportunity = await tx.recoveryOpportunity.create({
+              data: {
+                organizationId: input.opportunity.organizationId,
+                domain: input.opportunity.domain,
+                channel: input.opportunity.channel,
+                opportunityType: input.opportunity.opportunityType,
+                title: input.opportunity.title,
+                description: input.opportunity.description,
+                amountExpected: new Prisma.Decimal(input.opportunity.amountExpected),
+                amountActual: new Prisma.Decimal(input.opportunity.amountActual),
+                recoverableAmount: new Prisma.Decimal(input.opportunity.recoverableAmount),
+                currency: input.opportunity.currency,
+                status: 'DETECTED',
+              },
+              select: { id: true },
+            });
+            await tx.ruleEvaluation.update({
+              where: { id: evaluation.id },
+              data: { opportunityId: opportunity.id },
+            });
+            opportunityId = opportunity.id;
+          }
+
+          return {
+            evaluationId: evaluation.id,
+            created: true,
+            result: input.result,
+            computed: input.computed,
+            opportunityId,
+          } satisfies DetectionPersistenceResult;
+        });
+      } catch (error) {
+        // 并发下另一个事务先写入同一 dedupeKey：唯一键兜底，回读真实结果
+        if (isUniqueViolation(error)) {
+          const existing = await readExisting(input.dedupeKey);
+          if (existing) return existing;
+        }
+        throw error;
+      }
+    },
+  };
+}

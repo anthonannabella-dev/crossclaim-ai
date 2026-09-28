@@ -1,0 +1,14 @@
+{
+  "schemaVersion": 1,
+  "synthetic": true,
+  "note": "仅用于测试/演示；成功费率必须来自本文件，不得硬编码进 FeeCalculation service",
+  "terms": [
+    {
+      "key": "DEMO_DEFAULT",
+      "successFeeRate": "0.1500",
+      "currency": "USD",
+      "effectiveFrom": "2026-01-01T00:00:00Z",
+      "source": "fixtures/logistics/commercial-terms.json"
+    }
+  ]
+}
