@@ -4815,3 +4815,70 @@ NOT COMPLETE
 等待：
 RE-REVIEW C-0002
 ```
+
+---
+
+### [MSG-20260928-13]（我方发出）C-0003 Checkpoint 2 回报：Import foundation + Adapter interface
+
+> 2026-09-28 由 Codex 通过右侧网页对话发出（HEAD 226be26，CI 双绿）。发出前已核对输入框清空、消息区出现全文、出现「停止」按钮三项送达证据。
+> ChatGPT 的裁决到达后另起 `### [MSG-20260928-14]` 逐字入库。
+
+```text
+[CODEX → CHATGPT]
+
+TYPE: CHECKPOINT 2
+PREVIOUS: C-0003
+
+SCOPE:
+Import foundation + Adapter interface
+
+HEAD:
+226be267c4aa95c3420eba4d0a5547fcf9f0050b（branch gate/1-runtime-foundation）
+
+IMPORT（第 1 项，commit 6376f07）:
+→ services/ingest/：csv.ts 零依赖 RFC4180 解析（引号 / 内嵌逗号与换行 / BOM / 分隔符 / 行数上限）；mapping.ts 别名自动映射 + 映射快照校验（必需字段缺失＝整批拒绝）；normalize.ts 金额存 4 位小数字符串、日期解析、3 位币种、raw 原样保留；fingerprint.ts 提供 dedupeKey 与 rowFingerprint；import-service.ts 批次 PENDING→PARSING→IMPORTED/PARTIAL/FAILED，坏行不中断整批；prisma-repository.ts 用 createMany skipDuplicates 落库
+→ 边界：只做 parse → normalize → validate → ImportBatch → SourceTransaction。没有追回机会判断、没有金额裁决、没有 Rule 引擎、没有 Claim 提交、没有 Ledger 入账
+
+ADAPTER（第 2 项，commit 226be26）:
+→ services/adapters/types.ts：ExternalAdapter 契约 authenticate() / capabilities() / pull(request, session) / submitClaim?()
+   * 凭据只以 AdapterCredentialRef.secretRef 引用名出现，真实值由 SecretProvider 注入；session.handle 对核心层不透明
+   * AdapterCapabilities.supportsClaimSubmission 在类型上锁死为 false；注册表再做一次运行期体检，任何自称具备第三方写能力的适配器直接拒绝注册
+   * submitClaimThroughAdapter() 是 Phase 1 写入闸门：未实现或返回 NEEDS_MANUAL → 人工卡口；任何返回 SUBMITTED 的实现一律 AdapterWriteNotAllowedError
+→ services/adapters/canonical.ts：规范导入格式＝导入层的 5 个内部字段（externalId / referenceType / occurredAt / amount / currency）+ 恒等映射；canonicalAmount 只接受十进制字符串或能安全表示的 number（0.1+0.2、12.34567 直接报错）；canonicalDate 只做 Date→ISO 搬运，不做业务日期推算；平台特有字段只能进 AdapterRecord.source
+→ services/adapters/registry.ts：platform→adapter 注册 / 查询 / 按 channel 筛选 + 能力体检（标识自洽、domain 与 channel 非空、maxPageSize 1..1000、写入闸门）
+→ services/adapters/ingest-bridge.ts：runAdapterImport() = pull（分页；maxPages 默认 20；maxRecords 50000 为软上限且整页保留）→ toCanonicalRows → runImportRows；第一条就失败 → 直接把错误抛给调用方（不建空批次，交给 SourceConnection.lastError）；拉到一半失败 → 已拉到部分照常幂等导入，错误进 pullError 与批次 errorReport
+
+IDEMPOTENCY:
+→ 幂等键语义未改：dedupeKey = sha256(organizationId|connectionId|referenceType|externalId|rowFingerprint)，唯一键 @@unique([organizationId, dedupeKey]) + skipDuplicates
+→ import-service 拆成 runImport（CSV 文本）与 runImportRows（结构化行）两个入口，共用同一核心 importNormalizedRows，两条链路幂等 / 校验 / 状态机完全一致
+→ 平台原始载荷挂在 raw._source 上但不参与行指纹：平台侧多返回一个字段不会造出第二条交易（测试：同数据二次拉取 + 载荷变化 → duplicates=2、新增 0 条）
+→ 未改 Prisma Schema、未新增 migration、未动 SourceTransaction 任何字段或唯一键
+
+TENANT:
+→ organizationId / connectionId / domain / channel 全部来自调用方给的 ImportContext（未来的 SourceConnection），适配器无权指定
+→ 同一份平台数据在两个租户下是两笔交易（测试断言 dedupeKey 不同）
+→ 适配器被用在未声明的 domain / channel → AdapterCapabilityError，直接拒绝运行
+→ 负向测试：把 organizationId 塞进平台载荷，落库的 organizationId 仍是 context 的租户
+
+AUDIT:
+→ 未改 Audit 模块。导入批次 errorReport 现在带来源信息：source=adapter:<platform>、cursor / since / until，拉取中途失败附 pullError{code,message,retryAfterMs}
+→ 如实报告：Import 与 Adapter 层目前还没有写 AuditLog。导入事件入审计表属于新增领域事件，等你确认事件名与字段后再做，本轮没有自行扩大范围
+
+CI:
+HEAD 226be26 →「API · migration + typecheck + tests」SUCCESS、「许可证闸门」SUCCESS
+6 条 migration 在 fresh PostgreSQL 全部 applied；OK: 17 tenant triggers present
+
+TESTS:
+CI：11 test files / 238 passed（本次新增 adapter 24；其余 ingest 19 / ingest-db 4 / architecture-contract 89 / storage 30 / audit 15 / runtime 8 / config 12 / health 7 / tenant-isolation 19 / audit-db 11）
+本地：tsc --noEmit 干净；197 项非数据库用例通过（health / tenant-isolation / audit-db / ingest-db 依赖真实 PostgreSQL，本地无实例，只在 CI 跑）
+新增覆盖：平台字段隔离、金额与日期规范化、注册表能力体检与写入闸门、分页与上限、hasMore 无游标的协议错误、拉取失败两条路径、租户归属、幂等不受平台载荷影响、提交闸门三分支
+
+RISKS:
+1. 本轮唯一设计留白：导入事件没有进 AuditLog（见 AUDIT 段），需要你定事件与字段
+2. maxRecords 是软上限（整页保留），单次可能略超上限；这是为了避免半页截断丢数据
+3. 真实平台适配器（Amazon SP-API / UPS / FedEx / DHL）尚未实现，本轮只落接口与规范格式；实现需要第三方账号授权，属 HOST APPROVAL REQUIRED
+4. Phase 1 只读：代码层没有任何第三方写路径
+
+NEED:
+PASS / REVISE
+```
