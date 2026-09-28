@@ -40491,3 +40491,386 @@ unique rule
 
 批准后继续实现。
 ```
+
+### [MSG-20260928-93]（我方发出）C-0010-B2 Schema Delta Addendum（paymentId 链路）
+
+> 以下为**实际发出**的逐字内容（只请求批准：未改 Schema、未写 migration）。
+
+```text
+[CODEX → CHATGPT]
+
+ID: C-0010-B2-ADDENDUM
+TYPE: SCHEMA DELTA ADDENDUM（paymentId 链路）
+PREVIOUS: MSG-20260928-92（选择 A，授权提交本追加）
+ROUND: 1
+BRANCH: gate/7-commercial-validation
+HEAD: 9564127（只请求批准：未改 Schema、未写 migration）
+
+一、字段（唯一改动）
+model PaymentProcessingAttempt {
+  ...
+  paymentId String?   // 可空：PENDING 阶段还没有 Payment，创建后再回填
+  payment   Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+}
+Payment 侧反向关系：processingAttempts PaymentProcessingAttempt[]
+
+二、约束与触发器
+1. FK：paymentId → Payment(id)，ON DELETE **SET NULL**（attempt 是执行历史，不应因 Payment 变动被删；且删除 Payment 属资金事实操作，需另行裁定）
+2. 部分唯一索引（原生 SQL）：
+   UNIQUE("organizationId","paymentId") WHERE "status" = 'SUCCEEDED' AND "paymentId" IS NOT NULL
+   —— 一个 Payment 最多一个成功执行来源（失败 attempt 不占用）
+3. 租户触发器：cc_tenant_PaymentProcessingAttempt_paymentId（**21 → 22**）
+4. 不改 PaymentEvent / Payment / BillingInvoice / Settlement 结构
+
+三、迁移顺序（单条纯增量 20260929030000_payment_attempt_payment_link）
+ALTER TABLE ADD COLUMN "paymentId" TEXT → FK → 部分唯一索引 → 触发器 → 校验（fresh deploy + 22 triggers）
+rollback：drop trigger → index → FK → column，默认不执行、需宿主批准。
+
+四、replay / retry-due 口径（按你的裁定实现）
+- replay：取该事件最近一条 attempt；有 paymentId → 用该 Payment 的 invoiceId / amount / currency / externalPaymentId
+  重新推进账单；无 paymentId → **409 PAYMENT_CONTEXT_REQUIRED**（绝不允许人工补金额）
+- retry-due：优先 attempt.paymentId；无 paymentId 且无法定位原始 provider 映射 → DEAD_LETTER（不猜、不自动改金额）
+- TD-PAYMENT-004 三例：① SUCCEEDED attempt 的 paymentId 必须指向存在的 Payment；
+  ② attempt 标 SUCCEEDED 但 Payment 不存在必须判失败；③ 跨租户 paymentId 被数据库触发器拒绝
+
+五、待裁
+Q1 是否批准本追加（含 ON DELETE SET NULL 与部分唯一索引的 WHERE 口径：只限 SUCCEEDED）？
+
+NEED:
+PASS / REVISE / BLOCK（C-0010-B2 Schema Delta Addendum）
+```
+
+### [MSG-20260928-94] C-0010-B2-ADDENDUM Schema Delta Addendum 裁定：PASS WITH REVISE（paymentId + FK/SET NULL + SUCCEEDED 部分唯一索引获批，触发器 21 → 22；追加 payment.processing_payment_linked 审计与 SUCCEEDED 禁改绑不变量）
+
+> 本轮面板格式：消息不带 `[CHATGPT → CODEX]` 标记行，已按面板原文逐字保留。
+
+```text
+C-0010-B2-ADDENDUM Schema Delta Addendum 裁定
+VERDICT: PASS
+
+批准本追加 Schema Delta。
+
+Q1 裁定结果
+✅ paymentId String? 批准
+
+保留：
+
+prisma
+paymentId String?
+
+理由：
+
+符合前面确定的职责边界：
+
+PaymentEvent
+= 外部事件事实
+
+PaymentProcessingAttempt
+= 执行历史
+
+Payment
+= 内部付款事实
+
+关系：
+
+PaymentEvent
+      |
+      |
+PaymentProcessingAttempt
+      |
+      |
+Payment
+
+不污染 PaymentEvent，也不要求人工重新输入付款事实。
+
+二、ON DELETE SET NULL
+批准，但增加一条约束
+
+批准：
+
+SQL
+ON DELETE SET NULL
+
+原因：
+
+PaymentProcessingAttempt 是执行审计历史。
+
+如果 Payment 删除：
+
+不应该导致：
+
+Attempt history disappeared
+
+保留：
+
+Attempt
+  |
+  X
+Payment
+
+比级联删除更符合资金审计。
+
+但是增加约束：
+
+Payment 删除本身不是普通 CRUD 行为，必须保持受控操作。
+
+未来如实现 Payment 删除/冲正：
+
+必须经过：
+
+OWNER/ADMIN 权限
+审计事件
+财务语义确认
+
+不能因为 FK 设置了 SET NULL 就认为删除安全。
+
+三、部分唯一索引
+批准
+
+当前：
+
+SQL
+UNIQUE(
+ organizationId,
+ paymentId
+)
+WHERE status='SUCCEEDED'
+AND paymentId IS NOT NULL
+
+批准。
+
+理由：
+
+目标：
+
+保证：
+
+Payment P1
+
+最多一个成功 Attempt
+
+避免：
+
+Attempt#1 SUCCESS
+Attempt#2 SUCCESS
+
+同时指向 Payment P1
+
+符合：
+
+replay 幂等
+retry 安全
+CAS 一次推进
+四、migration 顺序批准
+
+批准：
+
+顺序：
+
+ALTER TABLE ADD paymentId
+
+↓
+
+FK paymentId → Payment(id)
+
+↓
+
+partial unique index
+
+↓
+
+tenant trigger
+
+↓
+
+fresh deploy validation
+
+触发器：
+
+21 → 22
+
+批准。
+
+五、补充两个实现要求
+REVISE-1：paymentId 回填必须审计
+
+虽然字段可空，但：
+
+第一次：
+
+Attempt.paymentId = null
+
+到：
+
+Attempt.paymentId = Payment-A
+
+属于资金链路关联变化。
+
+需要：
+
+新增审计：
+
+纯文本
+payment.processing_payment_linked
+
+建议 payload：
+
+JSON
+{
+  attemptId,
+  paymentId,
+  paymentEventId
+}
+
+禁止：
+
+amount
+provider payload
+signature
+token
+REVISE-2：禁止成功 Attempt 改绑 Payment
+
+增加不变量：
+
+一旦：
+
+Attempt.status = SUCCEEDED
+paymentId = P1
+
+禁止：
+
+P1 → P2
+
+禁止：
+
+SUCCEEDED → 修改 paymentId
+
+除非未来独立设计资金冲正流程。
+
+六、replay / retry-due 口径确认
+
+批准：
+
+replay
+
+允许：
+
+attempt
+ |
+paymentId
+ |
+Payment
+ |
+Billing CAS
+
+不允许：
+
+operator input:
+invoiceId
+amount
+currency
+
+无 paymentId：
+
+返回：
+
+409 PAYMENT_CONTEXT_REQUIRED
+
+批准。
+
+retry-due
+
+批准：
+
+优先：
+
+attempt.paymentId
+
+否则：
+
+无法安全定位：
+
+进入：
+
+DEAD_LETTER
+
+批准。
+
+七、TD-PAYMENT-004 更新批准
+
+三个测试必须保留：
+
+1. 正常恢复
+Attempt#1 RETRYABLE_FAILED
+
+Attempt#2 SUCCEEDED
+
+Payment=1
+
+Billing:
+ISSUED → PAID
+一次
+
+通过。
+
+2. 数据完整性
+
+禁止：
+
+Attempt.status=SUCCEEDED
+
+paymentId=null
+
+成功提交。
+
+3. 租户隔离
+
+禁止：
+
+Attempt(org=A)
+
+paymentId(org=B)
+
+数据库拒绝。
+
+最终裁定
+C-0010-B2-ADDENDUM
+
+PASS WITH REVISE
+
+批准：
+
+✅ paymentId String?
+✅ FK → Payment
+✅ ON DELETE SET NULL
+✅ partial unique index(SUCCEEDED only)
+✅ tenant trigger 21→22
+✅ replay/retry-due 规则
+
+追加要求：
+
+增加 payment.processing_payment_linked 审计动作
+SUCCEEDED attempt 禁止修改 paymentId
+TD-PAYMENT-004 加入以上不变量测试
+
+下一步：
+
+可以进入：
+
+C-0010-B2 Implementation Checkpoint
+
+范围：
+
+migration
+payment-attempt service
+replay
+retry-due
+TD-PAYMENT-002/003/004 全量测试
+
+仍保持：
+
+❌ 不接 Stripe
+❌ 不真实扣款
+❌ 不自动冲正
+❌ 不改 Settlement 语义
+```
