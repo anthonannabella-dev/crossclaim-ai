@@ -5,7 +5,7 @@
  * 本模块**不提供** update / delete —— 审计记录只增不改。
  */
 
-import { AuditError, AUDIT_ACTOR_TYPES, type AuditActorType, type AuditEventInput, type AuditQueryArgs, type AuditRecord, type AuditSink, type AuditTrailQuery } from './types';
+import { AuditError, AUDIT_ACTOR_TYPES, type AuditActorType, type AuditEventInput, type AuditLogInsert, type AuditQueryArgs, type AuditRecord, type AuditSink, type AuditTrailQuery } from './types';
 import { hashIp, sanitizeChanges, truncate } from './sanitize';
 
 const ACTION_RE = /^[a-z][a-z0-9_.]{2,63}$/;
@@ -74,6 +74,58 @@ function assertActorIdentity(event: AuditEventInput): void {
   assertOptionalId(event.actorRef, 'actorRef');
 }
 
+/**
+ * Audit row preparation (CHANGE #55)
+ * ---------------------------------------------------------------
+ * Single safety path shared by every audit writer: validation + sanitize ->
+ * AuditLogInsert row. Keeps exactly one implementation of the Gate 1 contract.
+ *   non-transactional : prepareAuditInsert -> AuditSink.insert
+ *   transactional     : prepareAuditInsert -> tx.auditLog.create
+ */
+export interface PrepareAuditOptions {
+  /** Required only when raw ip is supplied; it is never stored in clear. */
+  ipSalt?: string;
+  now?: () => Date;
+  maxStringLength?: number;
+}
+
+export function prepareAuditInsert(
+  event: AuditEventInput,
+  options: PrepareAuditOptions = {},
+): AuditLogInsert {
+  assertOrganizationId(event.organizationId);
+  assertActorType(event.actorType);
+  assertActorIdentity(event);
+  assertAction(event.action);
+  assertOptionalId(event.entityType, 'entityType');
+  assertOptionalId(event.entityId, 'entityId');
+
+  let ip: string | null = null;
+  if (event.ip) {
+    const salt = options.ipSalt;
+    if (!salt || salt.length < 16) {
+      throw new AuditError('audit ip salt missing or too short for ip hashing');
+    }
+    ip = hashIp(event.ip, salt);
+  }
+
+  return {
+    organizationId: event.organizationId,
+    actorType: event.actorType,
+    actorUserId: event.actorUserId ?? null,
+    actorRef: event.actorRef ?? null,
+    action: event.action,
+    entityType: event.entityType ?? null,
+    entityId: event.entityId ?? null,
+    changes: event.changes
+      ? sanitizeChanges(event.changes, { maxString: options.maxStringLength ?? 512 })
+      : null,
+    ip,
+    userAgent: event.userAgent ? truncate(event.userAgent, MAX_USER_AGENT) : null,
+    createdAt: options.now ? options.now() : new Date(),
+  };
+}
+
 export function createAuditWriter(sink: AuditSink, options: AuditWriterOptions): AuditWriter {
   if (!options.ipSalt || options.ipSalt.length < 16) {
     throw new AuditError('审计 IP 盐值未配置或过短');
@@ -81,30 +133,7 @@ export function createAuditWriter(sink: AuditSink, options: AuditWriterOptions):
 
   return {
     async record(event: AuditEventInput): Promise<AuditRecord> {
-      assertOrganizationId(event.organizationId);
-      assertActorType(event.actorType);
-      assertActorIdentity(event);
-      assertAction(event.action);
-      assertOptionalId(event.entityType, 'entityType');
-      assertOptionalId(event.entityId, 'entityId');
-
-      const createdAt = options.now ? options.now() : new Date();
-      return sink.insert({
-        organizationId: event.organizationId,
-        actorType: event.actorType,
-        actorUserId: event.actorUserId ?? null,
-        actorRef: event.actorRef ?? null,
-        action: event.action,
-        entityType: event.entityType ?? null,
-        entityId: event.entityId ?? null,
-        changes: event.changes
-          ? sanitizeChanges(event.changes, { maxString: options.maxStringLength ?? 512 })
-          : null,
-        // 原始 IP 永不落库
-        ip: event.ip ? hashIp(event.ip, options.ipSalt) : null,
-        userAgent: event.userAgent ? truncate(event.userAgent, MAX_USER_AGENT) : null,
-        createdAt,
-      });
+      return sink.insert(prepareAuditInsert(event, options));
     },
   };
 }

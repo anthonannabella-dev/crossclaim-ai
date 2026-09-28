@@ -18,13 +18,40 @@
 
 import { Prisma, type PrismaClient } from '@prisma/client';
 
-import { sanitizeChanges } from '../audit/sanitize';
+import { prepareAuditInsert } from '../audit';
 
 const Decimal = Prisma.Decimal;
 const MONEY_SCALE = 4;
 
 const money = (value: string | InstanceType<typeof Decimal>): string =>
   new Decimal(value).toDecimalPlaces(MONEY_SCALE, Decimal.ROUND_HALF_UP).toFixed(MONEY_SCALE);
+
+/** Runtime mode (CHANGE #53): production must never manufacture synthetic money. */
+export type RuntimeMode = 'test' | 'development' | 'production';
+
+export function resolveRuntimeMode(explicit?: RuntimeMode): RuntimeMode {
+  if (explicit) return explicit;
+  const env = typeof process === 'undefined' ? undefined : process.env.NODE_ENV;
+  if (env === 'production') return 'production';
+  if (env === 'test') return 'test';
+  return 'development';
+}
+
+/**
+ * CHANGE #53: a synthetic Settlement claims real money was received. It is a
+ * test/demo lifecycle simulator only and must fail closed in production,
+ * before any database access.
+ */
+export function assertSyntheticSettlementAllowed(mode: RuntimeMode, simulateSettlement: boolean): void {
+  if (simulateSettlement && mode === 'production') {
+    throw new ClosureError('synthetic settlement is forbidden in production runtime');
+  }
+}
+
+/** CHANGE #54: only these persisted states may enter the closure. */
+export function isOpportunityClosable(status: string): boolean {
+  return status === 'QUALIFIED' || status === 'CONVERTED';
+}
 
 export interface CommercialTerms {
   successFeeRate: string;
@@ -47,6 +74,7 @@ export interface ClosureRunResult {
   ledgerEntriesCreated: number;
   feeCalculationsCreated: number;
   billingInvoicesCreated: number;
+  opportunitiesSkipped: number;
   cases: Array<{ caseId: string; caseNo: string; opportunityId: string; claimId: string }>;
 }
 
@@ -60,7 +88,7 @@ export class ClosureError extends Error {
 const CURRENCY_RE = /^[A-Z]{3}$/;
 const DECIMAL_STRING_RE = /^\d+(\.\d+)?$/;
 
-function assertClosableOpportunity(opportunity: {
+export function assertClosableOpportunity(opportunity: {
   id: string;
   amountExpected: InstanceType<typeof Decimal> | null;
   amountActual: InstanceType<typeof Decimal> | null;
@@ -78,7 +106,7 @@ function assertClosableOpportunity(opportunity: {
   return { recoverable, amountExpected: opportunity.amountExpected, amountActual: opportunity.amountActual };
 }
 
-function assertCommercialTerms(terms: CommercialTerms): InstanceType<typeof Decimal> {
+export function assertCommercialTerms(terms: CommercialTerms): InstanceType<typeof Decimal> {
   if (typeof terms.successFeeRate !== 'string' || !DECIMAL_STRING_RE.test(terms.successFeeRate)) {
     throw new ClosureError('successFeeRate 必须是十进制字符串');
   }
@@ -113,6 +141,36 @@ export function renderClaimDraft(input: {
   ].join('\n');
 }
 
+export interface ClosureAuditEvent {
+  organizationId: string;
+  actorType?: 'SYSTEM' | 'AI' | 'EXTERNAL';
+  actorRef?: string;
+  action: string;
+  entityType: string;
+  entityId: string;
+  changes: Record<string, unknown>;
+}
+
+/**
+ * CHANGE #55: closure audits MUST reuse the Gate 1 audit safety path
+ * (action validation, actor identity validation, entity validation, string
+ * bounds, sanitizeChanges). No second, raw AuditLog writer is allowed.
+ */
+export function buildClosureAuditRow(event: ClosureAuditEvent) {
+  return prepareAuditInsert(
+    {
+      organizationId: event.organizationId,
+      actorType: event.actorType ?? 'SYSTEM',
+      actorRef: event.actorRef ?? CLOSURE_ACTOR_REF,
+      action: event.action,
+      entityType: event.entityType,
+      entityId: event.entityId,
+      changes: event.changes,
+    },
+    { maxStringLength: 512 },
+  );
+}
+
 async function auditTx(
   tx: Prisma.TransactionClient,
   input: {
@@ -124,17 +182,27 @@ async function auditTx(
     actorRef?: string;
   },
 ): Promise<void> {
-  const actorRef = input.actorRef ?? CLOSURE_ACTOR_REF;
-  if (!actorRef) throw new ClosureError('审计 actorRef 不能为空');
+  const row = buildClosureAuditRow({
+    organizationId: input.organizationId,
+    actorRef: input.actorRef ?? CLOSURE_ACTOR_REF,
+    action: input.action,
+    entityType: input.entityType,
+    entityId: input.entityId,
+    changes: input.changes,
+  });
   await tx.auditLog.create({
     data: {
-      organizationId: input.organizationId,
-      actorType: 'SYSTEM',
-      actorRef,
-      action: input.action,
-      entityType: input.entityType,
-      entityId: input.entityId,
-      changes: sanitizeChanges(input.changes) as Prisma.InputJsonValue,
+      organizationId: row.organizationId,
+      actorType: row.actorType,
+      actorUserId: row.actorUserId,
+      actorRef: row.actorRef,
+      action: row.action,
+      entityType: row.entityType,
+      entityId: row.entityId,
+      changes: (row.changes ?? undefined) as Prisma.InputJsonValue | undefined,
+      ip: row.ip,
+      userAgent: row.userAgent,
+      createdAt: row.createdAt,
     },
   });
 }
@@ -173,6 +241,8 @@ export interface RunClosureInput {
   commercialTerms: CommercialTerms;
   scope?: ClosureScope;
   simulateSettlement?: boolean;
+  /** CHANGE #53: explicit runtime mode for the synthetic lifecycle simulator. */
+  runtimeMode?: RuntimeMode;
 }
 
 interface CaseOutcome {
@@ -187,11 +257,15 @@ interface CaseOutcome {
   ledgerEntriesCreated: number;
   feeCalculationsCreated: number;
   billingInvoicesCreated: number;
+  skipped: boolean;
 }
 
 export async function runRecoveryClosure(input: RunClosureInput): Promise<ClosureRunResult> {
   const { organizationId, prisma, commercialTerms } = input;
   const scope = input.scope ?? CLOSURE_SCOPE;
+  const runtimeMode = resolveRuntimeMode(input.runtimeMode);
+  // CHANGE #53: refuse synthetic money in production BEFORE any database access.
+  assertSyntheticSettlementAllowed(runtimeMode, input.simulateSettlement === true);
   const feeRate = input.simulateSettlement ? assertCommercialTerms(commercialTerms) : null;
 
   const opportunities = await prisma.recoveryOpportunity.findMany({
@@ -215,15 +289,19 @@ export async function runRecoveryClosure(input: RunClosureInput): Promise<Closur
     ledgerEntriesCreated: 0,
     feeCalculationsCreated: 0,
     billingInvoicesCreated: 0,
+    opportunitiesSkipped: 0,
     cases: [],
   };
 
   for (const opportunity of opportunities) {
-    const { recoverable, amountExpected, amountActual } = assertClosableOpportunity(opportunity);
     const caseNo = caseNoFor(opportunity.id);
 
     const outcome = await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`closure:${organizationId}:${caseNo}`}))`;
+
+      // CHANGE #54: the candidate list was read outside the transaction. After the
+      // advisory lock the row is re-read and only the in-transaction state decides.
+      const fresh = await tx.recoveryOpportunity.findUnique({ where: { id: opportunity.id } });
 
       const local: CaseOutcome = {
         caseId: '',
@@ -237,7 +315,14 @@ export async function runRecoveryClosure(input: RunClosureInput): Promise<Closur
         ledgerEntriesCreated: 0,
         feeCalculationsCreated: 0,
         billingInvoicesCreated: 0,
+        skipped: false,
       };
+
+      if (!fresh || !isOpportunityClosable(fresh.status)) {
+        local.skipped = true;
+        return local;
+      }
+      const { recoverable, amountExpected, amountActual } = assertClosableOpportunity(fresh);
 
       let kase = await tx.case.findUnique({ where: { organizationId_caseNo: { organizationId, caseNo } } });
       if (!kase) {
@@ -245,11 +330,11 @@ export async function runRecoveryClosure(input: RunClosureInput): Promise<Closur
           data: {
             organizationId,
             caseNo,
-            title: opportunity.title,
+            title: fresh.title,
             domain: scope.domain,
             status: 'OPEN',
             claimedAmount: new Decimal(recoverable),
-            currency: opportunity.currency,
+            currency: fresh.currency,
           },
         });
         local.createdCase = true;
@@ -280,7 +365,7 @@ export async function runRecoveryClosure(input: RunClosureInput): Promise<Closur
             opportunityId: opportunity.id,
             target: 'CARRIER',
             status: 'PROPOSED',
-            rationale: `freight rate overcharge vs contracted rate card (${opportunity.opportunityType})`,
+            rationale: `freight rate overcharge vs contracted rate card (${fresh.opportunityType})`,
           },
         });
       }
@@ -302,7 +387,7 @@ export async function runRecoveryClosure(input: RunClosureInput): Promise<Closur
               kind: spec.kind,
               title: spec.title,
               description: `fixture-derived ${spec.kind} evidence for ${caseNo}`,
-              capturedAt: opportunity.detectedAt,
+              capturedAt: fresh.detectedAt,
             },
           }));
         if (!existing) local.evidenceCreated += 1;
@@ -324,11 +409,11 @@ export async function runRecoveryClosure(input: RunClosureInput): Promise<Closur
             target: 'CARRIER',
             aiDraftText: renderClaimDraft({
               caseNo,
-              opportunityType: opportunity.opportunityType,
+              opportunityType: fresh.opportunityType,
               amountExpected: money(amountExpected),
               amountActual: money(amountActual),
               recoverableAmount: recoverable,
-              currency: opportunity.currency,
+              currency: fresh.currency,
             }),
           },
         });
@@ -353,10 +438,10 @@ export async function runRecoveryClosure(input: RunClosureInput): Promise<Closur
       await setCaseStatus(tx, organizationId, kase.id, 'OPEN', 'COLLECTING_EVIDENCE');
       await setCaseStatus(tx, organizationId, kase.id, 'COLLECTING_EVIDENCE', 'READY_TO_CLAIM');
 
-      if (opportunity.status === 'QUALIFIED') {
+      if (fresh.status === 'QUALIFIED') {
         await tx.recoveryOpportunity.update({
           where: { id: opportunity.id },
-          data: { status: 'CONVERTED', qualifiedAt: opportunity.qualifiedAt ?? new Date() },
+          data: { status: 'CONVERTED', qualifiedAt: fresh.qualifiedAt ?? new Date() },
         });
         await auditTx(tx, {
           organizationId,
@@ -378,6 +463,25 @@ export async function runRecoveryClosure(input: RunClosureInput): Promise<Closur
           where: { organizationId, caseId: kase.id },
         });
         if (!existingSettlement) {
+          // CHANGE #54: money may only follow an APPROVED claim on a WON case.
+          const settledClaim = await tx.claim.findUniqueOrThrow({
+            where: { id: claim.id },
+            select: { status: true },
+          });
+          if (settledClaim.status !== 'APPROVED') {
+            throw new ClosureError(
+              `refusing settlement: claim ${claim.id} status=${settledClaim.status}, APPROVED required`,
+            );
+          }
+          const settledCase = await tx.case.findUniqueOrThrow({
+            where: { id: kase.id },
+            select: { status: true },
+          });
+          if (settledCase.status !== 'WON') {
+            throw new ClosureError(
+              `refusing settlement: case ${kase.id} status=${settledCase.status}, WON required`,
+            );
+          }
           const creditTitle = `Synthetic carrier credit confirmation — ${caseNo}`;
           const existingCredit = await tx.evidenceArtifact.findFirst({
             where: { organizationId, title: creditTitle, kind: 'CREDIT_NOTE' },
@@ -408,7 +512,7 @@ export async function runRecoveryClosure(input: RunClosureInput): Promise<Closur
               status: 'RECEIVED',
               source: 'CARRIER_CREDIT',
               amount: new Decimal(recoverable),
-              currency: opportunity.currency,
+              currency: fresh.currency,
               receivedAt: new Date(),
               confirmedAt: new Date(),
               note: 'synthetic settlement (test/demo only)',
@@ -483,6 +587,10 @@ export async function runRecoveryClosure(input: RunClosureInput): Promise<Closur
       return local;
     });
 
+    if (outcome.skipped) {
+      result.opportunitiesSkipped += 1;
+      continue;
+    }
     if (outcome.createdCase) result.casesCreated += 1;
     else result.casesReused += 1;
     if (outcome.createdClaim) result.claimsCreated += 1;

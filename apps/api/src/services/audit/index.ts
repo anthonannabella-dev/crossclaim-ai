@@ -10,6 +10,8 @@ export {
   createAuditWriter,
   listAuditTrail,
   normalizeLimit,
+  prepareAuditInsert,
+  type PrepareAuditOptions,
   type AuditWriter,
   type AuditWriterOptions,
 } from './audit-log';
