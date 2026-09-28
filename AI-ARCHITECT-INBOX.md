@@ -29873,3 +29873,373 @@ Billing 与 Settlement UI 必须分开：
 
 C-0008-B2-3b Billing Flow Implementation。
 ```
+
+### [MSG-20260928-59] C-0008-B2-3b Implementation Checkpoint：PASS（允许进入 B2-2 Evidence + Claim Draft Read-only）
+
+> 本轮面板格式：消息不带 `[CHATGPT → CODEX]` 标记行，已按面板原文逐字保留。
+
+```text
+C-0008-B2-3b Implementation Checkpoint 审计裁定
+
+VERDICT: PASS
+
+本轮 Billing Flow 实现符合此前 MSG-20260928-58 的约束。
+
+核心确认：
+
+BillingInvoice 与 Settlement 主体完全分离 ✅
+DRAFT → ISSUED → PAID 状态机正确 ✅
+CAS 并发保护正确 ✅
+PAID 证据要求正确 ✅
+权限边界正确 ✅
+审计不泄露支付敏感信息 ✅
+KEEP
+1. Billing 状态机 ✅
+
+当前：
+
+纯文本
+DRAFT
+  ↓
+ISSUED
+  ↓
+PAID
+
+接受。
+
+特别确认：
+
+禁止：
+
+纯文本
+DRAFT → PAID
+
+即使：
+
+纯文本
+paymentReference
+note
+
+存在，也拒绝。
+
+这是正确的财务事实约束。
+
+终态：
+
+纯文本
+PAID
+VOID
+WRITTEN_OFF
+
+保留。
+
+PARTIALLY_PAID → PAID
+
+作为未来扩展路径存在，不影响当前 MVP。
+
+2. CAS 状态迁移 ✅
+
+满足要求：
+
+禁止：
+
+纯文本
+read status
+update id
+
+当前：
+
+TypeScript
+updateMany({
+ where:{
+   id,
+   organizationId,
+   status:currentStatus
+ }
+})
+
+并要求：
+
+纯文本
+count === 1
+
+正确。
+
+并发测试：
+
+同一 DRAFT：
+
+两个 ISSUED：
+
+结果：
+
+一个成功
+一个 409
+一条 billing.status_changed
+
+通过。
+
+3. PAID 证据规则 ✅
+
+接受：
+
+要求：
+
+纯文本
+paymentReference || note
+
+至少一个。
+
+触库前失败。
+
+正确。
+
+同时：
+
+支付引用：
+
+进入：
+
+纯文本
+BillingInvoice.externalRef
+
+无需新增 Schema。
+
+审计：
+
+不写完整 paymentReference。
+
+正确。
+
+4. 权限模型 ✅
+
+当前：
+
+推进：
+
+OWNER
+ADMIN
+FINANCE
+
+只读：
+
+OPS
+
+禁止：
+
+VIEWER
+
+符合之前矩阵。
+
+5. AuditLog ✅
+
+当前：
+
+纯文本
+billing.status_changed
+
+包含：
+
+from
+to
+invoiceNo
+caseId
+amount
+currency
+paymentReferenceProvided
+
+正确。
+
+注意：
+
+金额进入审计可以接受。
+
+支付凭证全文不能进入。
+
+当前符合。
+
+6. Settlement / Billing 边界 ✅
+
+这是本轮最重要验收点。
+
+通过：
+
+Settlement:
+
+表示：
+
+第三方赔付形成的回收事实
+
+Billing:
+
+表示：
+
+CrossClaim 向客户收取的服务费
+
+页面文案：
+
+明确：
+
+两者不同主体，金额和状态不代表同一事实
+
+接受。
+
+CHANGE
+
+无阻塞 CHANGE。
+
+关于旧问题
+Q-A Settlement.source
+
+再次确认：
+
+保持：
+
+纯文本
+OTHER
++
+Audit source=manual_confirmation
+
+即可。
+
+不需要 Schema Delta。
+
+Q-C simulate / production writer
+
+保持：
+
+暂不抽取。
+
+原因：
+
+当前：
+
+规则一致
+测试覆盖
+风险可控
+
+不值得为了代码重构扩大 Gate 6。
+
+记录为：
+
+纯文本
+TECH_DEBT:
+extractRecoveryFinancialWriter
+
+即可。
+
+RISKS
+
+剩余风险：
+
+1. Billing 状态扩展
+
+未来如果开放：
+
+partial payment
+refund
+credit note
+
+需要重新设计状态机。
+
+当前不处理。
+
+2. Billing 与 Case 的关联
+
+当前：
+
+invoice → case
+
+正确。
+
+但未来：
+
+一个 Case 多次收费：
+
+需要新的 Billing Domain 设计。
+
+3. UI 权限隐藏
+
+后续继续保持：
+
+API 是最终权限边界。
+
+不能只依赖 Web 隐藏按钮。
+
+TEST
+
+通过。
+
+CI：
+
+API SUCCESS
+Web SUCCESS
+License Gate SUCCESS
+
+数据库：
+
+migration OK
+tenant trigger OK
+
+测试：
+
+纯文本
+50 test files passed
+497 tests passed
+
+新增覆盖：
+
+✅ 非法状态迁移
+✅ DRAFT→PAID 拒绝
+✅ PAID 缺证据拒绝
+✅ 并发 CAS
+✅ OPS 只读
+✅ VIEWER 禁止
+✅ 跨租户隔离
+
+NEXT
+
+允许进入：
+
+C-0008-B2-2 Evidence + Claim Draft Read-only
+
+下一阶段重点：
+
+Claim 正文单独端点：
+纯文本
+GET /cases/:id/claim
+权限：
+
+允许：
+
+OWNER
+ADMIN
+OPS
+
+禁止：
+
+FINANCE
+VIEWER
+
+（按之前裁定）
+
+列表接口：
+
+禁止返回 Claim 正文。
+
+Evidence：
+
+验证：
+
+tenant isolation
+role visibility
+artifact access control
+
+最终裁决：
+
+✅ C-0008-B2-3b = PASS
+
+可以进入：
+
+C-0008-B2-2 Evidence / Claim Draft Read-only Implementation。
+```
