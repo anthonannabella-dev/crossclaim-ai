@@ -1,6 +1,8 @@
 import { cookies } from 'next/headers';
 import Link from 'next/link';
 
+import OpportunityActions from './components/opportunity-actions';
+
 const API_BASE = process.env.CROSSCLAIM_API_URL ?? 'http://127.0.0.1:3000';
 
 interface Me {
@@ -71,6 +73,9 @@ export default async function DashboardPage() {
           <Link href="/upload" className="rounded border px-4 py-2 text-sm">
             上传账单
           </Link>
+          <Link href="/connections" className="rounded border px-4 py-2 text-sm">
+            采集连接
+          </Link>
           <form action="/logout" method="post">
             <button className="rounded border px-4 py-2 text-sm" type="submit">
               退出登录
@@ -121,6 +126,7 @@ export default async function DashboardPage() {
                 <th>状态</th>
                 <th>可追回</th>
                 <th>检测时间</th>
+                <th>复核</th>
               </tr>
             </thead>
             <tbody>
@@ -132,6 +138,13 @@ export default async function DashboardPage() {
                     {item.recoverableAmount ?? '-'} {item.currency}
                   </td>
                   <td className="text-slate-500">{new Date(item.detectedAt).toLocaleString('zh-CN')}</td>
+                  <td>
+                    {item.status === 'DETECTED' ? (
+                      <OpportunityActions opportunityId={item.id} />
+                    ) : (
+                      <span className="text-xs text-slate-400">—</span>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
