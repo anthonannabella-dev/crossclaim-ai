@@ -66,6 +66,7 @@ if (!fs.existsSync(sourcePath)) {
 if (!fs.existsSync(archivePath)) {
   console.error(`归档文件不存在: ${archivePath}`);
   process.exit(1);
+}
 
 const source = normalize(fs.readFileSync(sourcePath, 'utf8'));
 const archived = readArchiveBody(archivePath, selector);
