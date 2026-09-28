@@ -1181,6 +1181,7 @@ model Payment {
 
   organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   invoice      BillingInvoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  attempts     PaymentProcessingAttempt[]
 
   @@unique([organizationId, provider, externalPaymentId])
   @@unique([organizationId, id])
@@ -1237,9 +1238,12 @@ model PaymentProcessingAttempt {
   actorType      String
   actorRef       String?
   createdAt      DateTime @default(now())
+  paymentId      String?
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   paymentEvent PaymentEvent @relation(fields: [paymentEventId], references: [id], onDelete: Cascade)
+  /// C-0010-B2 addendum：执行成功时回填；PENDING 阶段为 null
+  payment      Payment?     @relation(fields: [paymentId], references: [id], onDelete: SetNull)
 
   @@unique([organizationId, paymentEventId, attemptNo])
   @@unique([organizationId, id])
