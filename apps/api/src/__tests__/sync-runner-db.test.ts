@@ -164,6 +164,8 @@ describe('C-0007 Phase 4 — recoverability（真实 PostgreSQL）', () => {
     ).map((entry) => entry.action);
     expect(actions).toContain('import.retry_completed');
     expect(actions).toContain('sync_run.completed');
-    expect(actions).toContain('sync_run.failed');
+    // the failed attempt came from the upload path, so it is audited as import.failed
+    // (a failing *runner* attempt is covered by sync-runner.test.ts with a fake clock)
+    expect(actions).toContain('import.failed');
   });
 });
