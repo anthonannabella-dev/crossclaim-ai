@@ -56,23 +56,32 @@ AI 负责文档理解、字段抽取、异常解释、证据推荐、案件总�
 
 ## 状态
 
-**进行中（Gate 6 未收口）** —— Gate 0–5 已按 merge commit 合并；Gate 6 / C-0008 客户运营层进行中。
+**工程层已到 Gate 7（商业化验证）** —— Gate 0–6 已按 merge commit 合并；Gate 7 的工程能力已建成，
+**商业验证仍 OPEN**（等待真实/脱敏真实结构账单 `VALIDATION-RUN-001`）。
 
 已完成：
 
-- Gate 0 领域模型 **36 个（33 核心 + 3 联结）**：`apps/api/prisma/schema.prisma`
-- 数据库迁移（10 个）+ **20 个租户完整性触发器**（业务数据域）
+- 领域模型 **36 个（33 核心 + 3 联结）**、**16 条迁移**、**27 个租户完整性触发器**：`apps/api/prisma`
 - Gate 1 运行时地基（Storage Adapter / Audit / Import foundation / Adapter interface）
 - Gate 2 物流首个纵向闭环（Detection Spine + Recovery Closure）
 - Gate 3 双模式采集与证据晋级（FILE_UPLOAD + 只读 API Connector + 跨来源对账）
-- Gate 4 Canonical Fact 层 + 检测身份迁移（`DETECTION_IDENTITY_MODE` 默认 legacy，canonical 未启用）
+- Gate 4 Canonical Fact 层 + 检测身份迁移（`DETECTION_IDENTITY_MODE` 默认 legacy）
 - Gate 5 生产采集运行时（SourceConnection 生命周期 / 上传运行时 / 只读连接器 / 有界重试 Runner）
-- Gate 6 / C-0008-A：邀请制认证 + 会话 + 内部 HTTP + Next.js Web 基线（`apps/web`，不含组件库）
-- Gate 6 / C-0008-B1：连接管理 + 机会人工复核（DETECTED → QUALIFIED / REJECTED）+ 已批准角色矩阵（等待架构方 Checkpoint 裁决）
-- CI：在全新 PostgreSQL 上真实执行迁移并跑 **42 文件 / 439 用例**，另含 Web typecheck/build 与许可证闸门（`apps/api` + `apps/web` 双 workspace 真实扫描）
+- Gate 6 客户运营层（认证 / 连接管理 / 机会复核 / 建案 / 回收结果 / 账单 / 案件与证据读取）
+- Gate 7 工程能力：处置洞察与导出、**高额回收人工卡口**、掩码与交付物状态、**佣金对账**
+  （dry-run 默认、只建 DRAFT、永不自动置 PAID）、**支付域**（Payment / PaymentEvent /
+  PaymentProcessingAttempt + 执行恢复 + 财务对账差异清单）、**Claim 归一化**（ClaimItem /
+  证据联结 / 来源指纹）、**规则引擎审计**（残差分类 / 版本漂移 / 新鲜度，仅只读）、
+  **平台连接器抽象层**（Connector 契约 / 编排器 / quarantine，不含任何真实平台接入）
+- CI：全新 PostgreSQL 上真实执行迁移并跑 **75 文件 / 679 用例**（含真实库不变量与租户隔离），
+  另有 Web typecheck/build 与双 workspace 许可证闸门
 
-尚未完成：Gate 6 / C-0008-B2（Case / Evidence 查看 / Claim Draft / Billing 展示）、`apps/ai`、
-完整端到端返钱闭环（当前只有测试/演示级 Settlement 注入）、生产部署与安全/运维文档。
+尚未完成 / 明确 HOLD：
+
+- `VALIDATION-RUN-001`（商业验证唯一缺口，需要一份脱敏真实结构账单；脚手架已就绪）
+- C-0010-C2 真实 Stripe **test mode** 联调（需宿主授权：test 账号 / webhook signing secret / Stripe CLI）
+- 真实平台连接器（OAuth / 凭据 / 限流 / 游标持久化）——抽象层已就绪，接入需另行开闸
+- `apps/ai`、生产部署与安全/运维文档
 
 > **本地跑测试需要数据库**：
 > `docker run -d --name crossclaim-postgres -e POSTGRES_USER=crossclaim -e POSTGRES_PASSWORD=ccdevpass -e POSTGRES_DB=crossclaim -p 127.0.0.1:55432:5432 postgres:16-alpine`
