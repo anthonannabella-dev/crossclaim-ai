@@ -56,7 +56,7 @@ beforeEach(async () => {
 });
 
 /** 具备确认回收前置条件的案件：WON + Claim APPROVED + 已确认费率。 */
-async function seedReadyCase(claimedAmount = '5000.0000') {
+async function seedReadyCase(claimedAmount = '5000.0000', currency = 'USD') {
   const kase = await prisma.case.create({
     data: {
       organizationId: ORG,
@@ -65,7 +65,7 @@ async function seedReadyCase(claimedAmount = '5000.0000') {
       domain: 'LOGISTICS',
       status: 'WON',
       claimedAmount: new Prisma.Decimal(claimedAmount),
-      currency: 'USD',
+      currency,
     },
   });
   await prisma.claim.create({
@@ -139,7 +139,8 @@ describe('C-0009.2 — 高额回收人工卡口（真实 PostgreSQL）', () => {
     // 案件与资金状态均未被改动
     const row = await prisma.case.findUniqueOrThrow({ where: { id: kase.id } });
     expect(row.status).toBe('WON');
-    expect(row.recoveredAmount).toBeNull();
+    // 未被写入：保持 schema 默认的 0（不是 null）
+    expect(row.recoveredAmount?.toFixed(4)).toBe('0.0000');
   });
 
   it('ADMIN 复核通过后可确认；状态由审计推导为 APPROVED', async () => {
@@ -225,7 +226,8 @@ describe('C-0009.2 — 高额回收人工卡口（真实 PostgreSQL）', () => {
   });
 
   it('非 USD 金额一律卡口（金额很小也卡）', async () => {
-    const kase = await seedReadyCase();
+    // 币种必须与案件一致，因此这里建一个 EUR 案件来验证"非 USD 一律卡口"
+    const kase = await seedReadyCase('5000.0000', 'EUR');
     await expect(confirm(kase.id, { recoveredAmount: '10.0000', currency: 'EUR' })).rejects.toMatchObject({
       code: 'REVIEW_REQUIRED',
     });
