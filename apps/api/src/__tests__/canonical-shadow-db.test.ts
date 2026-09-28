@@ -170,13 +170,13 @@ describe('C-0006-B1 — canonical shadow run（真实 PostgreSQL）', () => {
       expect(shadow.engineVersion).toBe('FREIGHT_RATE_V1@1');
       expect(shadow.representativeTransactionId).not.toBeNull();
     }
-    const opportunity = shadows.find((shadow) => shadow.result === 'OPPORTUNITY');
-    expect(opportunity).toBeDefined();
     const fact = await prisma.canonicalFact.findFirstOrThrow({
       where: { organizationId: ORG, factKey: 'INVOICE:INV-1001' },
     });
-    expect(opportunity?.canonicalFactId).toBe(fact.id);
-    const computed = opportunity?.computed as unknown as { intermediate: { recoverableAmount: string } };
+    const shadowForInvoice = shadows.find((shadow) => shadow.canonicalFactId === fact.id);
+    expect(shadowForInvoice).toBeDefined();
+    expect(shadowForInvoice?.result).toBe('OPPORTUNITY');
+    const computed = shadowForInvoice?.computed as unknown as { intermediate: { recoverableAmount: string } };
     expect(computed.intermediate.recoverableAmount).toBe('17.7500');
 
     // 影子运行不得污染正式链路
