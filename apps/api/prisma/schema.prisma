@@ -915,6 +915,8 @@ model RuleEvaluation {
   message             String?
   evaluatedAt         DateTime             @default(now())
   dedupeKey           String?
+  /// C-0006-B2 业务事实身份键 = sha256(organizationId | ruleVersionId | canonicalFactId)；未映射历史行为 NULL
+  canonicalDedupeKey  String?
 
   organization      Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   ruleVersion       RuleVersion          @relation(fields: [ruleVersionId], references: [id], onDelete: Cascade)
@@ -924,9 +926,14 @@ model RuleEvaluation {
 
   @@unique([dedupeKey])
   @@unique([organizationId, id])
+  /// 业务事实身份（长期唯一表达）；canonicalFactId 为 NULL 表示"无法建立业务事实身份"
+  @@unique([organizationId, ruleVersionId, canonicalFactId])
+  /// 二级完整性约束（hash 单列唯一，便于快速查询，不是核心身份）
+  @@unique([canonicalDedupeKey])
   @@index([organizationId, ruleVersionId, evaluatedAt])
   @@index([organizationId, opportunityId])
   @@index([organizationId, canonicalFactId])
+  @@index([organizationId, canonicalDedupeKey])
 }
 
 // ============================================================
