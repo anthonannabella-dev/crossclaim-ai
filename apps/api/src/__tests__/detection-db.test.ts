@@ -340,6 +340,153 @@ describe('C-0004 CP1 · Detection Spine（真实 PostgreSQL）', () => {
     ).toBe(0);
   });
 
+  // CHANGE #44：账单缺日期时不得用“现在”选历史规则（否则不可复算）
+  it('缺账单日期：MISSING_OCCURRED_AT 且不产生评估/机会，且与执行时刻无关', async () => {
+    await prisma.sourceTransaction.updateMany({
+      where: { organizationId: ORG, externalId: 'INV-1001' },
+      data: { occurredAt: null },
+    });
+
+    const first = await runFreightRateDetection({ organizationId: ORG, repository });
+    const second = await runFreightRateDetection({ organizationId: ORG, repository });
+
+    for (const run of [first, second]) {
+      const inv1001 = run.outcomes.find((o) => o.invoiceExternalId === 'INV-1001')!;
+      expect(inv1001.result).toBe('NEEDS_MORE_DATA');
+      expect(inv1001.skippedReason).toBe('MISSING_OCCURRED_AT');
+      expect(inv1001.recoverable).toBeNull();
+    }
+
+    const invoice = await prisma.sourceTransaction.findFirstOrThrow({
+      where: { organizationId: ORG, externalId: 'INV-1001' },
+    });
+    expect(
+      await prisma.ruleEvaluation.count({ where: { organizationId: ORG, sourceTransactionId: invoice.id } }),
+    ).toBe(0);
+    expect(await prisma.recoveryOpportunity.count({ where: { organizationId: ORG } })).toBe(0);
+  });
+
+  // CHANGE #45：currency 先参与 applicability，再比 tier —— 存在同币种的低层级规则时必须用它
+  it('币种参与适用性：EUR 账单必须命中 EUR CARRIER_TARIFF，而不是被 USD 高层级规则判成 CURRENCY_MISMATCH', async () => {
+    const tariffSet = await prisma.ruleSet.create({
+      data: {
+        ownerType: 'SYSTEM', ownerKey: 'GLOBAL', organizationId: null,
+        domain: 'LOGISTICS', channel: 'OTHER', scope: 'FREIGHT_RATE', name: 'DEMO EUR Tariff',
+      },
+    });
+    await prisma.ruleVersion.create({
+      data: {
+        ruleSetId: tariffSet.id, organizationId: null, tier: 'CARRIER_TARIFF', source: 'fixture-eur-tariff',
+        version: 'v1-eur-lax-ground', effectiveFrom: new Date('2026-01-01T00:00:00Z'),
+        definition: {
+          schemaVersion: 1, kind: 'FREIGHT_RATE_V1',
+          match: { lane: 'CN-SHA>US-LAX', service: 'Ground' },
+          pricing: { currency: 'EUR', baseRate: '95.0000', perKg: '3.6000', fuelPct: '13.00' },
+        } as Prisma.InputJsonValue,
+      },
+    });
+    await prisma.sourceTransaction.updateMany({
+      where: { organizationId: ORG, externalId: 'INV-1001' },
+      data: { currency: 'EUR' },
+    });
+
+    const run = await runFreightRateDetection({ organizationId: ORG, repository });
+    const inv1001 = run.outcomes.find((o) => o.invoiceExternalId === 'INV-1001')!;
+
+    // 必须落到 EUR 的 CARRIER_TARIFF（预期应收按 EUR 费率算出），而不是 CURRENCY_MISMATCH
+    expect(inv1001.skippedReason).toBeUndefined();
+    expect(inv1001.ruleTier).toBe('CARRIER_TARIFF');
+    expect(inv1001.expected).toBe('158.2000');
+    expect(inv1001.actual).toBe('152.7500');
+
+    const currency = await prisma.ruleEvaluation.findFirstOrThrow({
+      where: { organizationId: ORG },
+      orderBy: { evaluatedAt: 'desc' },
+      include: { ruleVersion: true },
+    });
+    expect(currency.ruleVersion.tier).toBeDefined();
+    const linked = await prisma.sourceTransaction.findFirstOrThrow({
+      where: { organizationId: ORG, externalId: 'INV-1001' },
+    });
+    const evaluation = await prisma.ruleEvaluation.findFirstOrThrow({
+      where: { organizationId: ORG, sourceTransactionId: linked.id },
+      include: { ruleVersion: true },
+    });
+    expect(evaluation.ruleVersion.tier).toBe('CARRIER_TARIFF');
+    expect(
+      (evaluation.computed as { currency: string }).currency,
+    ).toBe('EUR');
+  });
+
+  // CHANGE #46：同运单号多条轨迹必须 fail closed，且与创建顺序无关
+  it('轨迹歧义：同运单号两条事实 → AMBIGUOUS_TRACKING 且不产生评估/机会（与顺序无关）', async () => {
+    const trackingRows = await prisma.sourceTransaction.findMany({
+      where: { organizationId: ORG, referenceType: 'TRACKING' },
+      orderBy: { externalId: 'asc' },
+    });
+    const first = trackingRows.find((row) => row.externalId === '1ZDEMO001')!;
+    const duplicate = {
+      organizationId: ORG,
+      domain: 'LOGISTICS' as const,
+      channel: 'OTHER' as const,
+      referenceType: 'TRACKING',
+      externalId: '1ZDEMO001',
+      occurredAt: new Date('2026-08-25T00:00:00Z'),
+      currency: 'USD',
+      dedupeKey: 'fixture-tracking-1ZDEMO001-r2',
+      raw: { Lane: 'CN-SHA>US-LAX', Service: 'Ground', 'Weight Kg': '12.0000' } as Prisma.InputJsonValue,
+    };
+
+    const runOnce = async (createDuplicateFirst: boolean) => {
+      await prisma.sourceTransaction.deleteMany({
+        where: { organizationId: ORG, referenceType: 'TRACKING' },
+      });
+      if (createDuplicateFirst) {
+        await prisma.sourceTransaction.create({ data: duplicate });
+        await prisma.sourceTransaction.create({
+          data: {
+            organizationId: ORG, domain: 'LOGISTICS', channel: 'OTHER', referenceType: 'TRACKING',
+            externalId: first.externalId!, occurredAt: first.occurredAt, currency: 'USD',
+            dedupeKey: first.dedupeKey,
+            raw: first.raw as Prisma.InputJsonValue,
+          },
+        });
+      } else {
+        await prisma.sourceTransaction.create({
+          data: {
+            organizationId: ORG, domain: 'LOGISTICS', channel: 'OTHER', referenceType: 'TRACKING',
+            externalId: first.externalId!, occurredAt: first.occurredAt, currency: 'USD',
+            dedupeKey: first.dedupeKey,
+            raw: first.raw as Prisma.InputJsonValue,
+          },
+        });
+        await prisma.sourceTransaction.create({ data: duplicate });
+      }
+      return runFreightRateDetection({ organizationId: ORG, repository });
+    };
+
+    const runA = await runOnce(false);
+    const invA = runA.outcomes.find((o) => o.invoiceExternalId === 'INV-1001')!;
+    expect(invA.result).toBe('NEEDS_MORE_DATA');
+    expect(invA.skippedReason).toBe('AMBIGUOUS_TRACKING');
+
+    // 清掉本轮产生的评估，交换插入顺序再跑一次，结果必须一致
+    await prisma.ruleEvaluation.deleteMany({ where: { organizationId: ORG } });
+    await prisma.recoveryOpportunity.deleteMany({ where: { organizationId: ORG } });
+    const runB = await runOnce(true);
+    const invB = runB.outcomes.find((o) => o.invoiceExternalId === 'INV-1001')!;
+    expect(invB.result).toBe('NEEDS_MORE_DATA');
+    expect(invB.skippedReason).toBe('AMBIGUOUS_TRACKING');
+
+    const invoice = await prisma.sourceTransaction.findFirstOrThrow({
+      where: { organizationId: ORG, externalId: 'INV-1001' },
+    });
+    expect(
+      await prisma.ruleEvaluation.count({ where: { organizationId: ORG, sourceTransactionId: invoice.id } }),
+    ).toBe(0);
+    expect(await prisma.recoveryOpportunity.count({ where: { organizationId: ORG } })).toBe(0);
+  });
+
   it('缺少轨迹时不产出评估：记为 NEEDS_MORE_DATA，不写 RuleEvaluation', async () => {
     await prisma.sourceTransaction.deleteMany({
       where: { organizationId: ORG, referenceType: 'TRACKING', externalId: '1ZDEMO001' },

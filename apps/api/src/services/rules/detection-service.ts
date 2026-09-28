@@ -154,8 +154,6 @@ export interface RunDetectionInput {
   /** 默认 LOGISTICS / OTHER；调用方可显式传入以收紧作用域 */
   scope?: DetectionScope;
   connectionId?: string | null;
-  /** 评估基准时间，用于规则生效期判断 */
-  now?: () => Date;
 }
 
 const needsMoreData = (
@@ -181,7 +179,6 @@ export async function runFreightRateDetection(
 ): Promise<DetectionRunResult> {
   const { organizationId, repository } = input;
   const scope = input.scope ?? DETECTION_SCOPE;
-  const now = input.now ?? (() => new Date());
 
   const [invoices, tracking, candidates] = await Promise.all([
     repository.listInvoices(organizationId, scope, input.connectionId ?? null),
@@ -189,9 +186,14 @@ export async function runFreightRateDetection(
     repository.listFreightRateRuleCandidates(organizationId, scope),
   ]);
 
-  const trackingByNumber = new Map<string, TrackingRow>();
+  // CHANGE #46：同一运单号可能合法存在多条轨迹事实（Gate 1 幂等键含 rowFingerprint），
+  // 因此按 externalId 分组：0 条 → 缺数据；>1 条 → 歧义 → fail closed，绝不任选一条算钱。
+  const trackingByNumber = new Map<string, TrackingRow[]>();
   for (const row of tracking) {
-    if (row.externalId) trackingByNumber.set(row.externalId, row);
+    if (!row.externalId) continue;
+    const bucket = trackingByNumber.get(row.externalId);
+    if (bucket) bucket.push(row);
+    else trackingByNumber.set(row.externalId, [row]);
   }
 
   const result: DetectionRunResult = {
@@ -206,23 +208,50 @@ export async function runFreightRateDetection(
   };
 
   for (const invoice of invoices) {
-    const trackingRow = invoice.trackingNumber
-      ? trackingByNumber.get(invoice.trackingNumber) ?? null
-      : null;
+    const bucket = invoice.trackingNumber ? trackingByNumber.get(invoice.trackingNumber) ?? [] : [];
 
-    if (!trackingRow) {
+    if (bucket.length === 0) {
       result.unmatchedTracking += 1;
       result.outcomes.push(needsMoreData(invoice, invoice.trackingNumber, 'TRACKING_NOT_FOUND'));
       continue;
     }
+    if (bucket.length > 1) {
+      result.outcomes.push(
+        needsMoreData(invoice, invoice.trackingNumber, 'AMBIGUOUS_TRACKING', {
+          actual: null,
+        }),
+      );
+      continue;
+    }
+    const trackingRow = bucket[0];
 
-    const applicableAt = invoice.occurredAt ?? now();
-    const matching = candidates.filter(
+    // CHANGE #44：账单日期是规则适用性的必要输入，缺失时不得用“现在”代替（会套错历史费率且不可复算）
+    if (!invoice.occurredAt) {
+      result.outcomes.push(
+        needsMoreData(invoice, trackingRow.externalId, 'MISSING_OCCURRED_AT'),
+      );
+      continue;
+    }
+    const applicableAt = invoice.occurredAt;
+
+    // CHANGE #45：currency 属于 applicability —— 先按 lane/service/currency 过滤，再比 tier 优先级
+    const laneServiceMatches = candidates.filter(
       (candidate) =>
         candidate.definition.match.lane === trackingRow.lane &&
         candidate.definition.match.service === trackingRow.service,
     );
-    const selected = selectRuleVersion(matching, applicableAt);
+    if (laneServiceMatches.length === 0) {
+      result.outcomes.push(needsMoreData(invoice, trackingRow.externalId, 'NO_APPLICABLE_RULE'));
+      continue;
+    }
+    const currencyMatches = laneServiceMatches.filter(
+      (candidate) => candidate.definition.pricing.currency === invoice.currency,
+    );
+    if (currencyMatches.length === 0) {
+      result.outcomes.push(needsMoreData(invoice, trackingRow.externalId, 'CURRENCY_MISMATCH'));
+      continue;
+    }
+    const selected = selectRuleVersion(currencyMatches, applicableAt);
     if (!selected) {
       result.outcomes.push(needsMoreData(invoice, trackingRow.externalId, 'NO_APPLICABLE_RULE'));
       continue;
@@ -231,17 +260,6 @@ export async function runFreightRateDetection(
     if (!invoice.amount || !trackingRow.weightKg) {
       result.outcomes.push(
         needsMoreData(invoice, trackingRow.externalId, 'MISSING_AMOUNT_OR_WEIGHT', {
-          ruleTier: selected.tier,
-          ruleVersionId: selected.ruleVersionId,
-        }),
-      );
-      continue;
-    }
-
-    // CHANGE #42：规则币种必须与账单币种一致，否则不得计算机会
-    if (invoice.currency !== selected.definition.pricing.currency) {
-      result.outcomes.push(
-        needsMoreData(invoice, trackingRow.externalId, 'CURRENCY_MISMATCH', {
           ruleTier: selected.tier,
           ruleVersionId: selected.ruleVersionId,
         }),
