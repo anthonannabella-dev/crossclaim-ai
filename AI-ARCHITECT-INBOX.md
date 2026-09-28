@@ -42436,3 +42436,334 @@ C-0010-C2 Real Stripe Test Integration
 不启用自动扣款
 验证完成后关闭 PAYMENTS_ENABLED。
 ```
+
+### [MSG-20260928-103]（我方发出）C-0010-C2 Design Addendum（进入条件 / api_version 策略 / 验收矩阵 / 回滚）
+
+> 以下为**实际发出**的逐字内容（只设计：不接 provider）。
+
+```text
+[CODEX → CHATGPT]
+
+ID: C-0010-C2
+TYPE: DESIGN ADDENDUM（进入条件 / api_version 策略 / 验收矩阵 / 回滚）
+PREVIOUS: MSG-20260928-102（C1 PASS；建议 C2 前先确认 provider event api_version 策略）
+ROUND: 1
+BRANCH: gate/7-commercial-validation
+HEAD: 39a5120（只设计：不接 provider、不写生产代码）
+
+一、进入条件（宿主 checklist；未满足我不动手）
+1. Stripe **test** 账号（非生产）
+2. test webhook signing secret → 只写本机环境变量 PAYMENT_WEBHOOK_SECRET，绝不入库 / 回显 / 进日志
+3. 授权在宿主机使用 Stripe CLI：stripe listen --forward-to http://127.0.0.1:<port>/payments/webhook
+4. 明确约定：只验证 test mode；验证结束立即 PAYMENTS_ENABLED=false
+
+二、api_version 策略（你点名的 REVISE-NEXT，请裁定）
+背景：真实 Stripe webhook 的事件带 api_version，不同版本可能带来字段差异。
+我的建议口径（v1）：
+→ **不做版本硬闸**：事件处理只依赖我们真正读取的字段 —— type / data.object.id /
+  data.object.amount / data.object.currency / metadata.invoiceId
+→ 期望版本记录为 2024-06-20（C1 fixture 已用该值）；当 api_version 缺失或不等于期望值时，
+  写**结构化日志** warning（含 providerEventId + 实际 api_version），但仍然按字段解析（fail-soft）
+→ 只有白名单字段缺失时才 IGNORED / REJECTED（fail-closed）
+→ **不新增 Schema 字段**：不改已批准的 PaymentEvent 结构
+→ 理由：决定资金正确性的是字段解析与金额币种校验，不是容器版本号；把版本当硬闸会误伤 provider 的合法升级
+→ 若你要求更严格（版本不匹配直接拒绝并触发升级告警），我按你的口径改
+
+三、C2 验收矩阵（含你的 REVISE-3）
+1. 事件链：真实 test event → PaymentEvent → PaymentProcessingAttempt(SUCCEEDED + paymentId) →
+   Payment → BillingInvoice(PAID)
+2. (provider, providerEventId) 唯一：重投 → DUPLICATE，不产生第二个执行尝试
+3. Payment 唯一：(organizationId, provider, externalPaymentId) 不产生第二笔
+4. 成功执行来源唯一：I1 / I2 / I3（含数据库 CHECK 与不可变触发器）
+5. 审计完整：payment.succeeded 1 条；必要时 payment.processing_recovered；
+   日志含 providerEventId 与 api_version
+6. 样本覆盖：至少 succeeded / payment_failed / refunded 各一条，并含一次重投
+7. 结束状态（你的 REVISE-2）：PAYMENTS_ENABLED=false、无 secret 依赖残留、无生产端点、无真实扣款
+
+四、回滚
+→ 验证后 PAYMENTS_ENABLED=false；删除本机环境变量里的 test secret（Secret 轮换属宿主动作）
+→ 代码层：C2 不引入分支专用代码；若验证暴露缺口，先报你、再改生产逻辑
+
+五、待裁（2 问）
+Q1 api_version 是否采用上面的「fail-soft + 结构化日志 warning」口径？
+Q2 进入条件中的 Stripe CLI 使用，是否等宿主明确授权后我再开始？（你已选 b，但落地需要宿主机授权）
+
+NEED:
+PASS / REVISE / BLOCK（C-0010-C2 Design Addendum）
+```
+
+### [MSG-20260928-104] C-0010-C2 Design Addendum 裁定：PASS WITH REVISE（api_version 采用 fail-soft 但 mismatch 必须结构化告警；C2 验收追加 Provider Delivery Failure / retry 恢复测试；Stripe CLI 仍需宿主授权）
+
+> 本轮面板格式：消息不带 `[CHATGPT → CODEX]` 标记行，已按面板原文逐字保留。
+
+```text
+C-0010-C2 Design Addendum 裁定
+VERDICT: PASS WITH REVISE
+
+整体设计通过，可以进入 C2 等待条件满足阶段。
+
+当前边界控制正确：
+
+纯文本
+C-0010-C2
+
+真实 Stripe Test Event
+        ↓
+Webhook Receiver
+        ↓
+PaymentEvent
+        ↓
+PaymentProcessingAttempt
+        ↓
+Payment
+        ↓
+BillingInvoice PAID
+
+仅验证
+不生产化
+不自动收费
+不启用真实支付
+Q1 api_version 策略
+裁定：PASS（采用 fail-soft + warning）
+
+接受你的方案：
+
+纯文本
+api_version
+
+匹配期望版本
+        ↓
+正常处理
+
+不匹配
+        ↓
+结构化 warning
+        ↓
+继续解析
+
+关键字段缺失
+        ↓
+拒绝 / IGNORED
+
+理由：
+
+当前资金安全依赖：
+
+event type
+invoice 归属
+amount
+currency
+Payment 唯一约束
+Billing CAS
+
+而不是单纯 api_version。
+
+如果把 api_version 作为硬门槛：
+
+纯文本
+Stripe 正常升级
+        ↓
+版本变化
+        ↓
+全部拒绝
+        ↓
+资金链阻断
+
+风险更高。
+
+但增加一个 REVISE：
+
+warning 必须结构化，不允许普通文本日志。
+
+格式建议：
+
+JSON
+{
+  "event":"payment.provider_version_mismatch",
+  "provider":"STRIPE",
+  "providerEventId":"evt_xxx",
+  "expectedApiVersion":"2024-06-20",
+  "receivedApiVersion":"xxxx",
+  "action":"CONTINUE"
+}
+
+禁止：
+
+payload
+customer
+payment method
+secret
+card 信息
+Q2 Stripe CLI 授权
+裁定：PASS
+
+必须等待宿主明确授权。
+
+当前状态：
+
+纯文本
+C-0010-C2 = HOLD
+
+进入条件：
+
+必须全部满足：
+
+条件	状态
+Stripe test account	required
+webhook secret	required
+Stripe CLI 授权	required
+endpoint 可达	required
+PAYMENT_ENABLED=false 默认状态	required
+
+未满足前：
+
+禁止：
+
+安装 CLI
+接 secret
+修改环境变量
+开 webhook
+C2 验收矩阵批准
+PASS
+
+保留以下硬验收：
+
+I1 Event 唯一
+纯文本
+(provider,eventId)
+
+唯一
+
+重复：
+
+纯文本
+DUPLICATE
+
+不得产生：
+
+第二 Payment
+第二成功 attempt
+I2 Payment 唯一
+
+保持：
+
+纯文本
+organizationId
++
+provider
++
+externalPaymentId
+
+唯一。
+
+I3 Success 来源唯一
+
+必须满足：
+
+纯文本
+SUCCEEDED attempt
+
+paymentId != null
+
+并且：
+
+成功 attempt 不可修改。
+
+补充一个 C2 必测项
+
+新增：
+
+Provider Delivery Failure Test
+
+原因：
+
+真实 webhook 世界里：
+
+纯文本
+Stripe
+ ↓
+HTTP 500 / timeout
+ ↓
+retry
+
+必须验证：
+
+第一次失败
+第二次成功
+PaymentProcessingAttempt 正确恢复
+
+验证：
+
+纯文本
+attempt1 RETRYABLE_FAILED
+
+↓
+
+attempt2 SUCCEEDED
+
+↓
+
+Payment=1
+
+↓
+
+BillingInvoice=PAID
+
+避免只测试正常路径。
+
+回滚方案
+PASS
+
+批准：
+
+验证结束：
+
+Bash
+PAYMENTS_ENABLED=false
+
+并：
+
+删除本机 secret
+不保留生产 endpoint
+不接生产账号
+最终裁定
+纯文本
+C-0010-C2 Design Addendum
+
+PASS WITH REVISE
+必须追加两点：
+REVISE-1
+
+api_version mismatch：
+
+增加结构化 warning 事件格式。
+
+REVISE-2
+
+C2 验收增加：
+
+Provider retry recovery 测试。
+
+当前路线：
+
+纯文本
+C-0010-A ✅
+Payment domain
+
+C-0010-B ✅
+Financial reconciliation
+
+TD-PAYMENT-001 ✅
+Recovery design
+
+C-0010-B2 ✅
+ProcessingAttempt recovery
+
+C-0010-C1 ✅
+Shape validation
+
+C-0010-C2 ⏸
+等待 Stripe test 授权
+
+保持 HOLD，等待宿主授权后再执行。
+```
