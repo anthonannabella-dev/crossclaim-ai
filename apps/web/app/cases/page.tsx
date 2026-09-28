@@ -1,6 +1,8 @@
 import { cookies } from 'next/headers';
 import Link from 'next/link';
 
+import { getServerMessages } from '../../i18n/server';
+
 const API_BASE = process.env.CROSSCLAIM_API_URL ?? 'http://127.0.0.1:3000';
 
 interface Me {
@@ -32,13 +34,14 @@ async function apiGet<T>(path: string): Promise<{ ok: boolean; status: number; b
 }
 
 export default async function CasesPage() {
+  const t = await getServerMessages();
   const me = await apiGet<Me>('/auth/me');
   if (!me.ok || !me.body) {
     return (
       <div className="rounded-lg border bg-white p-6">
-        <h1 className="text-xl font-semibold">需要登录</h1>
+        <h1 className="text-xl font-semibold">{t.common.loginRequired}</h1>
         <Link href="/login" className="mt-4 inline-block rounded bg-slate-900 px-4 py-2 text-white">
-          前往登录
+          {t.common.goToLogin}
         </Link>
       </div>
     );
@@ -49,35 +52,32 @@ export default async function CasesPage() {
   return (
     <div className="space-y-6">
       <section className="rounded-lg border bg-white p-6">
-        <h1 className="text-xl font-semibold">案件</h1>
-        <p className="mt-2 text-sm text-slate-600">
-          案件与证据的可见范围：OWNER / ADMIN / OPS。Claim 正文只在案件详情里单独获取，
-          列表接口一律不返回正文。
-        </p>
+        <h1 className="text-xl font-semibold">{t.casesPage.title}</h1>
+        <p className="mt-2 text-sm text-slate-600">{t.casesPage.description}</p>
         <Link href="/" className="mt-4 inline-block text-sm text-slate-600 underline">
-          返回工作台
+          {t.common.backToDashboard}
         </Link>
       </section>
 
       {cases.status === 403 ? (
         <section className="rounded-lg border bg-white p-6 text-sm text-slate-600">
-          当前角色无权查看案件（403）。
+          {t.casesPage.noAccess}
         </section>
       ) : cases.ok && cases.body ? (
         <section className="rounded-lg border bg-white p-6">
-          <h2 className="text-lg font-medium">案件列表</h2>
+          <h2 className="text-lg font-medium">{t.casesPage.title}</h2>
           {cases.body.items.length === 0 ? (
-            <p className="mt-3 text-sm text-slate-500">暂无案件。</p>
+            <p className="mt-3 text-sm text-slate-500">{t.casesPage.empty}</p>
           ) : (
             <table className="mt-3 w-full text-sm">
               <thead className="text-left text-slate-500">
                 <tr>
-                  <th className="py-2">案件号</th>
-                  <th>标题</th>
-                  <th>状态</th>
-                  <th>索赔金额</th>
-                  <th>已回收</th>
-                  <th>Claim 轮次</th>
+                  <th className="py-2">{t.casesPage.colCaseNo}</th>
+                  <th>{t.casesPage.colTitle}</th>
+                  <th>{t.casesPage.colStatus}</th>
+                  <th>{t.casesPage.colClaimed}</th>
+                  <th>{t.casesPage.colRecovered}</th>
+                  <th>{t.casesPage.colRounds}</th>
                   <th />
                 </tr>
               </thead>
@@ -96,7 +96,7 @@ export default async function CasesPage() {
                     <td>{item.claimRounds}</td>
                     <td>
                       <Link href={`/cases/${item.id}`} className="text-slate-600 underline">
-                        详情
+                        {t.casesPage.detail}
                       </Link>
                     </td>
                   </tr>
@@ -107,7 +107,7 @@ export default async function CasesPage() {
         </section>
       ) : (
         <section className="rounded-lg border bg-white p-6 text-sm text-red-600">
-          读取案件失败（HTTP {cases.status}）。
+          {t.common.loadFailed}（HTTP {cases.status}）。
         </section>
       )}
     </div>

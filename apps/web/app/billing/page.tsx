@@ -2,6 +2,7 @@ import { cookies } from 'next/headers';
 import Link from 'next/link';
 
 import BillingActions from '../components/billing-actions';
+import { getServerMessages } from '../../i18n/server';
 
 const API_BASE = process.env.CROSSCLAIM_API_URL ?? 'http://127.0.0.1:3000';
 
@@ -37,13 +38,14 @@ async function apiGet<T>(path: string): Promise<{ ok: boolean; status: number; b
 }
 
 export default async function BillingPage() {
+  const t = await getServerMessages();
   const me = await apiGet<Me>('/auth/me');
   if (!me.ok || !me.body) {
     return (
       <div className="rounded-lg border bg-white p-6">
-        <h1 className="text-xl font-semibold">需要登录</h1>
+        <h1 className="text-xl font-semibold">{t.common.loginRequired}</h1>
         <Link href="/login" className="mt-4 inline-block rounded bg-slate-900 px-4 py-2 text-white">
-          前往登录
+          {t.common.goToLogin}
         </Link>
       </div>
     );
@@ -54,38 +56,37 @@ export default async function BillingPage() {
   return (
     <div className="space-y-6">
       <section className="rounded-lg border bg-white p-6">
-        <h1 className="text-xl font-semibold">账单（服务费）</h1>
-        <p className="mt-2 text-sm text-slate-600">
-          这里展示的是<strong>我方对客户的服务费账单</strong>（BillingInvoice）。它与
-          「第三方赔付给客户的回收款」（Settlement）是<strong>两个不同主体</strong>，金额与状态互不代表。
+        <h1 className="text-xl font-semibold">{t.billingPage.title}</h1>
+        <p className="mt-2 text-sm text-slate-600">{t.billingPage.description}</p>
+        <p className="mt-1 text-xs text-slate-500">
+          {t.common.role}：{me.body.role}（{t.billingPage.advanceHint}）
         </p>
-        <p className="mt-1 text-xs text-slate-500">当前角色：{me.body.role}（推进账单：OWNER / ADMIN / FINANCE）</p>
         <Link href="/" className="mt-4 inline-block text-sm text-slate-600 underline">
-          返回工作台
+          {t.common.backToDashboard}
         </Link>
       </section>
 
       {billing.status === 403 ? (
         <section className="rounded-lg border bg-white p-6 text-sm text-slate-600">
-          当前角色无权查看账单（403）。
+          {t.billingPage.noAccess}
         </section>
       ) : billing.ok && billing.body ? (
         <section className="rounded-lg border bg-white p-6">
-          <h2 className="text-lg font-medium">账单列表</h2>
+          <h2 className="text-lg font-medium">{t.billingPage.title}</h2>
           {billing.body.items.length === 0 ? (
-            <p className="mt-3 text-sm text-slate-500">暂无账单。</p>
+            <p className="mt-3 text-sm text-slate-500">{t.billingPage.empty}</p>
           ) : (
             <table className="mt-3 w-full text-sm">
               <thead className="text-left text-slate-500">
                 <tr>
-                  <th className="py-2">发票号</th>
-                  <th>案件</th>
-                  <th>状态</th>
-                  <th>服务费</th>
-                  <th>总额</th>
-                  <th>已收</th>
-                  <th>开票 / 收款时间</th>
-                  <th>操作</th>
+                  <th className="py-2">{t.billingPage.colInvoiceNo}</th>
+                  <th>{t.billingPage.colCase}</th>
+                  <th>{t.billingPage.colStatus}</th>
+                  <th>{t.billingPage.colFee}</th>
+                  <th>{t.billingPage.colTotal}</th>
+                  <th>{t.billingPage.colPaid}</th>
+                  <th>{t.billingPage.colDates}</th>
+                  <th>{t.billingPage.colActions}</th>
                 </tr>
               </thead>
               <tbody>
@@ -106,7 +107,16 @@ export default async function BillingPage() {
                       {item.paidAt ? new Date(item.paidAt).toLocaleString('zh-CN') : '—'}
                     </td>
                     <td>
-                      <BillingActions invoiceId={item.id} status={item.status} />
+                      <BillingActions
+                        invoiceId={item.id}
+                        status={item.status}
+                        labels={{
+                          issue: t.billingPage.issue,
+                          markPaid: t.billingPage.markPaid,
+                          paymentReference: t.billingPage.paymentReference,
+                          note: t.billingPage.note,
+                        }}
+                      />
                     </td>
                   </tr>
                 ))}
@@ -116,7 +126,7 @@ export default async function BillingPage() {
         </section>
       ) : (
         <section className="rounded-lg border bg-white p-6 text-sm text-red-600">
-          读取账单失败（HTTP {billing.status}）。
+          {t.common.loadFailed}（HTTP {billing.status}）。
         </section>
       )}
     </div>

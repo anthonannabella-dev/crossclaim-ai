@@ -13,7 +13,22 @@ const NEXT: Record<string, string[]> = {
   WRITTEN_OFF: [],
 };
 
-export default function BillingActions({ invoiceId, status }: { invoiceId: string; status: string }) {
+export interface BillingActionLabels {
+  issue: string;
+  markPaid: string;
+  paymentReference: string;
+  note: string;
+}
+
+export default function BillingActions({
+  invoiceId,
+  status,
+  labels,
+}: {
+  invoiceId: string;
+  status: string;
+  labels: BillingActionLabels;
+}) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -61,7 +76,7 @@ export default function BillingActions({ invoiceId, status }: { invoiceId: strin
             onClick={() => void advance(to)}
             className="rounded bg-slate-900 px-3 py-1 text-xs text-white disabled:opacity-60"
           >
-            {to === 'ISSUED' ? '开票（ISSUED）' : '标记已收款（PAID）'}
+            {to === 'ISSUED' ? labels.issue : labels.markPaid}
           </button>
         ))}
       </div>
@@ -70,13 +85,13 @@ export default function BillingActions({ invoiceId, status }: { invoiceId: strin
           <input
             value={paymentReference}
             onChange={(event) => setPaymentReference(event.target.value)}
-            placeholder="paymentReference（或填备注）"
+            placeholder={labels.paymentReference}
             className="w-48 rounded border px-2 py-1 text-xs"
           />
           <input
             value={note}
             onChange={(event) => setNote(event.target.value)}
-            placeholder="note（可选）"
+            placeholder={labels.note}
             className="w-40 rounded border px-2 py-1 text-xs"
           />
         </div>
