@@ -38,3 +38,13 @@ export {
   type ShadowRunDeps,
   type ShadowRunSummary,
 } from './shadow';
+export {
+  applyIdentityBackfill,
+  canonicalDedupeKeyFor,
+  planIdentityBackfill,
+  type ApplyIdentityBackfillResult,
+  type IdentityBackfillPlan,
+  type IdentityBackfillUpdate,
+  type IdentityUnmappedReason,
+  type PlanIdentityBackfillInput,
+} from './identity-backfill';
