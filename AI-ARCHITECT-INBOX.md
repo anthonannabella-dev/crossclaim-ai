@@ -30631,3 +30631,445 @@ Billing
 
 C-0008-GATE6-FINAL-REVIEW。
 ```
+
+### [MSG-20260928-61] C-0008-GATE6-FINAL-REVIEW：PASS（授权创建 Gate 6 PR，不含 merge）
+
+> 本轮面板格式：消息不带 `[CHATGPT → CODEX]` 标记行，已按面板原文逐字保留。
+
+```text
+C-0008-GATE6-FINAL-REVIEW 审计裁定
+VERDICT: PASS
+
+Gate 6 Customer Operation Layer 达到关闭条件。
+
+本轮不是单个模块审计，而是对完整客户操作闭环、资金边界、权限模型、审计链、租户隔离和 CI 状态进行最终复核。
+
+结论：
+
+C-0008 Gate 6 = PASS，可进入 PR 阶段。
+
+KEEP
+1. Customer Operation 闭环 ✅
+
+当前闭环：
+
+纯文本
+Opportunity
+    ↓
+Qualification
+    ↓
+Case
+    ↓
+Evidence
+    ↓
+Claim
+    ↓
+Recovery Outcome
+    ↓
+Settlement
+    ↓
+Ledger
+    ↓
+Fee
+    ↓
+Billing
+
+边界清晰。
+
+尤其保持：
+
+Opportunity ≠ Case
+Claim ≠ Settlement
+Settlement ≠ Billing
+Billing ≠ Recovery Amount
+
+这是 CrossClaim 最重要的领域模型约束。
+
+2. 资金模型 ✅
+
+最终确认：
+
+Settlement
+
+含义：
+
+第三方赔付产生的回收事实。
+
+RecoveryLedgerEntry
+
+含义：
+
+内部资金记录。
+
+FeeCalculation
+
+含义：
+
+服务费计算。
+
+BillingInvoice
+
+含义：
+
+我方向客户收费。
+
+当前没有出现：
+
+把追回金额当收入
+把服务费当追回金额
+自动生成虚假资金事实
+
+通过。
+
+3. 状态机设计 ✅
+
+通过：
+
+Opportunity
+
+CAS。
+
+Case
+
+保持：
+
+纯文本
+WON
+
+不承担 Settlement 状态。
+
+Billing
+
+严格：
+
+纯文本
+DRAFT
+ ↓
+ISSUED
+ ↓
+PAID
+
+并且：
+
+CAS。
+
+4. 权限矩阵 ✅
+
+最终版本接受。
+
+特别确认两个容易产生争议的地方：
+
+FINANCE 不访问 Case/Evidence
+
+接受。
+
+理由：
+
+FINANCE 当前职责：
+
+Billing 财务事实。
+
+不是：
+
+案件运营。
+
+避免：
+
+财务角色看到：
+
+客户证据
+索赔材料
+运营过程
+OPS 可建案但不能填费率
+
+接受。
+
+这是正确职责拆分：
+
+OPS:
+
+执行流程。
+
+OWNER/ADMIN:
+
+商业确认。
+
+5. Audit 设计 ✅
+
+通过。
+
+要求满足：
+
+用户动作：
+
+纯文本
+actorType=USER
+actorUserId
+
+并且：
+
+业务变化 + Audit 同事务。
+
+脱敏：
+
+通过。
+
+没有发现：
+
+password
+token
+credential
+payment raw data
+
+泄露风险。
+
+6. Schema 控制 ✅
+
+通过。
+
+Gate 6 最大优点：
+
+没有为了方便开发乱加字段。
+
+尤其：
+
+费率确认：
+
+采用：
+
+纯文本
+commercial_terms.created
+
+业务条件。
+
+没有提前增加：
+
+commercialTermsStatus
+BillingStatusShadow
+RecoveryStatus
+
+保持模型干净。
+
+技术债裁定
+
+以下记录，不阻塞 Gate 6。
+
+1. Settlement.source
+
+状态：
+
+HOLD。
+
+裁定：
+
+继续：
+
+纯文本
+OTHER
++
+manual_confirmation audit
+
+不做 Schema Delta。
+
+2. simulate / production writer
+
+状态：
+
+HOLD。
+
+不要求现在抽。
+
+记录：
+
+技术债：
+
+extractRecoveryFinancialWriter
+
+3. Closure scope
+
+状态：
+
+HOLD。
+
+保持：
+
+纯文本
+LOGISTICS / OTHER
+
+其它 channel：
+
+继续：
+
+纯文本
+409 SCOPE_NOT_SUPPORTED
+
+正确。
+
+4. FINANCE 查看案件
+
+裁定：
+
+保持当前设计。
+
+不要开放。
+
+5. OPS 连接读取
+
+当前：
+
+OWNER/ADMIN。
+
+暂不修改。
+
+原因：
+
+Connection 包含：
+
+credential 状态
+外部数据源信息
+
+OPS 不需要。
+
+6. credentialRef 脱敏副作用
+
+这是唯一建议后续修的小项。
+
+当前：
+
+安全优先正确。
+
+但是：
+
+hasCredentialRef
+
+这种字段被误脱敏，会影响诊断。
+
+建议未来：
+
+调整脱敏规则：
+
+从：
+
+纯文本
+包含 credentialref 字符串
+
+改成：
+
+纯文本
+敏感值字段白名单
+
+例如：
+
+允许：
+
+JSON
+{
+hasCredentialRef:true
+}
+
+禁止：
+
+JSON
+{
+credentialRef:"xxx"
+}
+
+不进入 Gate 6 修复。
+
+7. SourceSyncRun
+
+保持。
+
+Gate 5 遗留。
+
+不影响当前客户闭环。
+
+TEST
+
+通过。
+
+证据：
+
+HEAD:
+
+纯文本
+0c76d89
+
+CI：
+
+API SUCCESS
+Web SUCCESS
+License Gate SUCCESS
+
+测试：
+
+纯文本
+52 Test Files Passed
+507 Tests Passed
+
+数据库：
+
+10 migrations
+19 tenant triggers
+
+本地：
+
+prisma validate
+api tsc
+web tsc
+next build
+
+通过。
+
+FINAL DECISION
+✅ C-0008-GATE6-FINAL-REVIEW = PASS
+PR 创建授权
+
+授权。
+
+可以创建：
+
+纯文本
+PR:
+gate/6-customer-operation-layer
+        ↓
+main
+
+目标：
+
+只创建 PR。
+
+允许：
+
+push 当前分支已有提交
+创建 Pull Request
+填写审计摘要
+
+不允许：
+
+merge
+修改 main
+删除 branch
+改 secrets
+改生产环境
+
+Merge 决策：
+
+仍需要后续人工确认。
+
+如果 GitHub 分支保护阻止：
+
+仅报告：
+
+MERGE TECHNICALLY BLOCKED BY GITHUB PROTECTION
+
+不要绕过。
+
+下一阶段：
+
+创建 Gate 6 PR 后，进入：
+
+PR Review / Merge Readiness Check
+
+然后再决定 C-0009。
+```
