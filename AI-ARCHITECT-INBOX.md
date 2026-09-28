@@ -30243,3 +30243,391 @@ artifact access control
 
 C-0008-B2-2 Evidence / Claim Draft Read-only Implementation。
 ```
+
+### [MSG-20260928-60] C-0008-B2-2 Implementation Checkpoint：PASS — C-0008-B2 COMPLETE（下一步：C-0008-GATE6-FINAL-REVIEW）
+
+> 本轮面板格式：消息不带 `[CHATGPT → CODEX]` 标记行，已按面板原文逐字保留。
+
+```text
+C-0008-B2-2 Implementation Checkpoint 审计裁定
+
+VERDICT: PASS
+
+本轮 Evidence + Claim Draft Read-only 实现符合 MSG-20260928-59 约束。
+
+C-0008-B2 Customer Operation Layer 四个子模块目前均达到验收条件：
+
+B2-1 Case Creation ✅
+B2-2 Evidence / Claim Read-only ✅
+B2-3a Recovery Outcome ✅
+B2-3b Billing Flow ✅
+KEEP
+1. Claim 正文独立端点 ✅
+
+接受：
+
+纯文本
+GET /cases/:caseId/claim
+
+设计正确。
+
+关键点：
+
+正文不进入列表
+正文不进入详情摘要
+单独权限控制
+
+返回：
+
+JSON
+{
+ id,
+ caseId,
+ round,
+ version,
+ status,
+ generatedAt,
+ isFinal,
+ sections
+}
+
+符合要求。
+
+2. Claim 内部信息隔离 ✅
+
+通过：
+
+禁止返回：
+
+prompt
+model
+trace
+completion
+
+这是正确的数据边界。
+
+Claim 是业务产物，不应该泄露生成过程。
+
+3. 权限矩阵 ✅
+
+当前：
+
+Case / Evidence / Claim：
+
+允许：
+
+OWNER
+ADMIN
+OPS
+
+禁止：
+
+FINANCE
+VIEWER
+
+接受。
+
+理由成立：
+
+FINANCE 的入口：
+
+纯文本
+Billing
+
+而不是：
+
+Case Evidence。
+
+避免财务角色获得业务证据全文。
+
+4. 列表接口正文隔离 ✅
+
+通过。
+
+当前：
+
+纯文本
+GET /cases
+GET /cases/:caseId
+
+只返回：
+
+元数据
+状态
+时间
+关联机会
+
+不返回：
+
+Claim draft。
+
+正确。
+
+5. Evidence 文件访问设计 ✅
+
+接受。
+
+当前：
+
+Evidence API:
+
+只返回：
+
+kind
+title
+description
+role
+reliability
+capturedAt
+addedAt
+hasFile
+
+文件：
+
+走：
+
+纯文本
+/files/<token>
+
+签名 URL。
+
+正确。
+
+6. Tenant Isolation ✅
+
+通过。
+
+要求：
+
+跨租户：
+
+纯文本
+404
+
+而不是：
+
+403。
+
+接受。
+
+原因：
+
+避免泄露资源存在性。
+
+7. Billing / Settlement 边界 ✅
+
+通过。
+
+案件页面显示：
+
+claimedAmount
+recoveredAmount
+
+不显示：
+
+Settlement 明细
+BillingInvoice 金额
+
+正确。
+
+保持：
+
+三个事实：
+
+Claim:
+索赔事实
+
+Settlement:
+第三方回收事实
+
+Billing:
+服务费收入事实
+CHANGE
+
+无阻塞 CHANGE。
+
+关于旧问题
+Q-A Settlement.source
+
+最终确认：
+
+保持：
+
+纯文本
+Settlement.source = OTHER
+
+无需 Schema Delta。
+
+要求继续：
+
+Audit：
+
+纯文本
+recovery_outcome.confirmed
+source=manual_confirmation
+
+即可。
+
+Q-C simulate / production writer
+
+最终确认：
+
+暂不抽取。
+
+原因：
+
+当前：
+
+两条路径规则一致
+测试覆盖充分
+不影响 Gate 6
+
+记录：
+
+技术债：
+
+纯文本
+extractRecoveryFinancialWriter
+
+未来处理。
+
+RISKS
+
+当前剩余风险主要进入后续阶段：
+
+1. Claim 内容版本化
+
+已有：
+
+round
+version
+
+未来如果支持：
+
+多轮修改
+审批
+提交历史
+
+需要独立 Revision Flow。
+
+当前不处理。
+
+2. Evidence 文件生命周期
+
+当前：
+
+读取安全。
+
+未来：
+
+如果加入：
+
+删除
+替换
+重新上传
+
+需要额外 Audit 规则。
+
+3. FINANCE 权限边界
+
+当前接受。
+
+未来如果需要：
+
+Finance 查看：
+
+索赔收入预测
+回收分析
+
+应新增：
+
+只读聚合权限。
+
+不要直接开放 Case Evidence。
+
+TEST
+
+通过。
+
+CI：
+
+API SUCCESS
+Web SUCCESS
+License Gate SUCCESS
+
+数据库：
+
+migration OK
+tenant triggers OK
+
+测试：
+
+纯文本
+52 test files passed
+507 tests passed
+
+覆盖：
+
+✅ Claim 权限
+✅ Claim key whitelist
+✅ finalText 优先
+✅ 列表无正文
+✅ Evidence 隔离
+✅ 跨租户 404
+✅ VIEWER 禁止
+✅ Web 路由构建
+
+NEXT
+
+建议：
+
+进入 Gate 6 Final Review
+
+提交：
+
+C-0008-GATE6-FINAL-REVIEW
+
+内容：
+
+B2 全链路总结
+Domain model 变更说明
+权限矩阵最终版
+Audit 事件目录
+已知技术债
+未进入范围
+
+当前不建议直接进入 C-0009。
+
+原因：
+
+Gate 6 已经形成完整客户操作闭环：
+
+Opportunity
+    ↓
+Case
+    ↓
+Evidence
+    ↓
+Claim Draft
+    ↓
+Recovery Outcome
+    ↓
+Settlement
+    ↓
+Ledger
+    ↓
+Fee
+    ↓
+Billing
+
+应该先做一次整体审计收口。
+
+最终裁决：
+
+✅ C-0008-B2-2 = PASS
+✅ C-0008-B2 COMPLETE
+
+下一步：
+
+C-0008-GATE6-FINAL-REVIEW。
+```
