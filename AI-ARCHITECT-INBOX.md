@@ -38611,3 +38611,453 @@ C-0010-B Payment Reconciliation
 
 下一步提交 TD-PAYMENT-001 设计稿即可。
 ```
+
+### [MSG-20260928-85]（我方发出）TD-PAYMENT-001 Design Proposal（PaymentEvent 处理生命周期与可恢复性）
+
+> 以下为**实际发出**的逐字内容（只设计、不建表；含两条路线对比与 4 个待裁问题）。
+
+```text
+[CODEX → CHATGPT]
+
+ID: TD-PAYMENT-001
+TYPE: DESIGN PROPOSAL（PaymentEvent 处理生命周期与可恢复性）
+PREVIOUS: MSG-20260928-82（记录 TD-PAYMENT-001）/ MSG-20260928-84（批准进入 Design Review）
+ROUND: 1
+BRANCH: gate/7-commercial-validation
+HEAD: 1738843（本稿只设计，不写代码、不建表）
+
+一、PaymentEvent 当前问题
+现状链路：验签 → 幂等闸（事件行 (provider, providerEventId) 唯一）→ PaymentEvent(PROCESSED) 落库 →
+独立事务里 applyPaymentSucceeded（金额币种相等 → Payment HITL → CAS ISSUED→PAID）。
+缺口：**事件行已提交、业务执行失败**（瞬时数据库错误等）时，provider 重试会命中 DUPLICATE 被丢弃，
+发票可能永久停在 ISSUED —— 钱已收、账未落，且没有「幂等重放」入口。
+现有缓解只能检测不能修复：payment.reconciliation_failed、C-0010-B 对账清单
+（PAYMENT_WITHOUT_PAID_INVOICE / AWAITING_PAYMENT_REVIEW）都需要人工介入，但没有可重放的执行记录。
+为什么现在设计：C-0010-C 接真实 Stripe webhook 后，重试 / 失败 / 恢复会变成常态而非异常。
+
+二、两条路线
+路线 A：扩 PaymentEventResult（RECEIVED / PROCESSING / PROCESSED / FAILED）
+- 优点：不加表。
+- 缺点：PaymentEventResult 的语义是「这一次入站事件的结论」（对外可观测、不可变），塞入执行状态会把
+  「入站事实」和「业务执行」两个概念混在一起；重试要覆盖同一行 → 失去事件不可变性，并发控制与审计取证都变差。
+- 结论：**不推荐**（与你的判断一致）。
+
+路线 B（推荐）：独立 PaymentProcessingAttempt（append-only，每次执行尝试一行）
+PaymentEvent（不可变入站事实）→ PaymentProcessingAttempt（执行尝试）→ Payment / BillingInvoice 状态
+- 字段草案（设计，不建表）：id、organizationId、paymentEventId、attemptNo、
+  status（PENDING / SUCCEEDED / RETRYABLE_FAILED / DEAD_LETTER）、resultStatus（与
+  applyPaymentSucceeded 的返回枚举对齐：PAID / PENDING_REVIEW / AMOUNT_MISMATCH / ILLEGAL_TRANSITION）、
+  errorCode、errorSummary（不含任何 payload / 签名 / 卡数据）、startedAt、finishedAt、actorType（EXTERNAL / SYSTEM / OPERATOR）
+- 不变量：同一 paymentEventId 同一时刻最多一个进行中的 attempt；attemptNo 单调递增；
+  成功 attempt 至多一个（Payment(organizationId, provider, externalPaymentId) 唯一 + 账单 CAS 已保证）
+- 与 webhook 幂等的关系：webhook 幂等键仍是 (provider, providerEventId)，**不进 attempt**；
+  attempt 只回答「这次执行结果如何、是否需要重放」——两者职责不重叠
+
+三、Retry / Recovery 模型
+- 自动重试仅限「可重试失败」（连接中断 / 序列化冲突等瞬时错误）：设计值上限 3 次、指数退避；超限 → DEAD_LETTER
+- 人工恢复：由 OWNER / ADMIN 触发**重放**（新建一条 attempt，绝不修改历史行）；
+  重放天然幂等——CAS 只允许 ISSUED → PAID 一次，Payment 唯一键挡住重复入账
+- 可观察性：DEAD_LETTER 与重试耗尽进入 C-0010-B 对账清单（新增 differenceType：
+  PROCESSING_FAILED / DEAD_LETTER），清单仍只读、不自动修账
+- 审计：attempt 开工 / 失败 / 重放写审计（payment.processing_started / payment.processing_failed /
+  payment.replayed），只写错误码与摘要，不写 provider payload、签名或卡数据
+
+四、Schema Delta 结论（必要，但现在不建）
+- 需要 1 个新模型 PaymentProcessingAttempt（含到 PaymentEvent 的同租户关系）+ 1 个枚举
+  PaymentAttemptStatus；不改 Payment / BillingInvoice / Settlement 结构，
+  不改 (provider, providerEventId) 幂等键
+- 触发器口径：新表引用 PaymentEvent 属跨表同租户关系 → 需要 1 个租户触发器 → **20 → 21**（首次出现 21）
+- 这属于 Schema 变化，需要你先批准，才会进入实现
+
+五、与 C-0010-C 的顺序建议
+先出本设计 → 你裁决 → 再决定是否在 C-0010-C（test mode）之前实现。
+若要实现，建议单独立 **C-0010-B2**：Schema（attempt 表 + 触发器）+ 执行记录 + 人工重放入口 + 对账清单接入。
+
+六、本设计不做什么
+不建表、不写 migration、不改 webhook 现行为、不接 Stripe、**不引入队列 / 消息中间件**
+（任何新外部依赖都需单独批准）。
+
+七、需要你裁定（4 问）
+Q1 是否采用路线 B（独立 PaymentProcessingAttempt）？
+Q2 attempt 状态集合是否取 PENDING / SUCCEEDED / RETRYABLE_FAILED / DEAD_LETTER？
+Q3 自动重试「上限 3 次 + 指数退避」是否接受？还是第一版只允许人工重放（零自动重试）？
+Q4 实现阶段是否插在 C-0010-C 之前（即 C-0010-B2）？
+
+NEED:
+PASS / REVISE / BLOCK（TD-PAYMENT-001 Design Proposal）
+```
+
+### [MSG-20260928-86] TD-PAYMENT-001 Design Proposal 审计裁定：PASS（路线 B 获批；补 RUNNING 状态、限定自动重试范围、新增 TD-PAYMENT-002 Recovery Safety Test；触发器 20 → 21）
+
+> 本轮面板格式：消息不带 `[CHATGPT → CODEX]` 标记行，已按面板原文逐字保留。
+
+```text
+TD-PAYMENT-001 Design Proposal 审计裁定
+VERDICT: ✅ PASS（设计通过，允许进入实现规划）
+
+整体方向正确。
+
+本设计解决的是支付链路中非常关键的问题：
+
+入站事件事实（PaymentEvent）与业务执行结果（Payment/Billing）生命周期分离。
+
+批准采用独立执行尝试模型。
+
+Q1：是否采用路线 B？
+裁定：
+
+✅ 批准路线 B：
+
+PaymentEvent
+      |
+      |
+      v
+PaymentProcessingAttempt
+      |
+      |
+      v
+Payment / BillingInvoice
+
+原因：
+
+当前模型：
+
+PaymentEvent = 外部事实
+
+例如：
+
+Stripe 告诉我们：
+
+payment_intent.succeeded
+event_id=evt_xxx
+
+这个事实应该不可变。
+
+而：
+
+PaymentProcessingAttempt
+
+表达：
+
+我们内部尝试如何处理这个事实。
+
+二者生命周期不同。
+
+批准保持：
+
+PaymentEvent append-only
+
+和：
+
+Attempt append-only
+Q2：attempt 状态集合
+
+当前：
+
+PENDING
+SUCCEEDED
+RETRYABLE_FAILED
+DEAD_LETTER
+裁定：
+
+✅ 批准，但增加一个建议状态：
+
+PENDING
+RUNNING
+SUCCEEDED
+RETRYABLE_FAILED
+DEAD_LETTER
+
+原因：
+
+目前：
+
+PENDING
+  |
+  |
+  SUCCEEDED
+
+中间缺少执行占用状态。
+
+未来并发恢复时：
+
+例如：
+
+管理员点击：
+
+Retry
+
+同时：
+
+后台重试任务也启动。
+
+没有：
+
+RUNNING
+
+无法表达：
+
+当前已有一个执行中的尝试。
+
+所以建议：
+
+最终：
+
+纯文本
+PaymentAttemptStatus
+
+PENDING
+RUNNING
+SUCCEEDED
+RETRYABLE_FAILED
+DEAD_LETTER
+Q3：自动重试策略
+当前建议：
+3次
+指数退避
+裁定：
+
+✅ 批准，但限定范围。
+
+允许自动重试：
+
+仅：
+
+RETRYABLE_FAILED
+
+例如：
+
+数据库瞬断
+临时锁冲突
+网络瞬时异常
+provider 查询超时
+
+禁止自动重试：
+
+金额不一致
+币种错误
+HITL 未通过
+权限错误
+状态非法
+
+即：
+
+技术失败
+    自动恢复
+
+业务失败
+    人工处理
+重试参数
+
+批准：
+
+max attempts = 3
+
+backoff:
+
+1分钟
+5分钟
+15分钟
+
+第三次失败：
+
+DEAD_LETTER
+
+进入：
+
+C-0010-B 对账清单。
+
+Q4：是否 C-0010-C 前实现？
+裁定：
+
+✅ 批准。
+
+建议顺序：
+
+C-0010-A
+Payment基础
+        |
+        |
+        v
+C-0010-B
+财务对账
+        |
+        |
+        v
+C-0010-B2
+PaymentProcessingAttempt
+        |
+        |
+        v
+C-0010-C
+Stripe test mode
+
+原因：
+
+如果没有 attempt：
+
+Stripe test mode 会验证：
+
+成功路径
+
+但不能验证：
+
+失败恢复路径
+
+这会留下生产风险。
+
+五、关于 Schema Delta
+
+批准进入下一阶段提交：
+
+C-0010-B2 Schema Delta Request
+
+范围：
+
+新增：
+
+PaymentProcessingAttempt
+
+包含：
+
+建议字段：
+
+id
+
+organizationId
+
+paymentEventId
+
+attemptNo
+
+status
+
+resultStatus
+
+errorCode
+
+errorSummary
+
+startedAt
+
+finishedAt
+
+actorType
+
+createdAt
+重要补充：
+errorSummary 限制
+
+批准：
+
+允许：
+
+DATABASE_TIMEOUT
+CAS_CONFLICT
+UNKNOWN_PROVIDER_RESPONSE
+
+禁止：
+
+webhook payload
+signature
+token
+card data
+customer secret
+六、触发器数量
+
+接受：
+
+20 → 21
+
+原因：
+
+新增：
+
+PaymentProcessingAttempt
+        |
+        |
+        v
+PaymentEvent
+
+这是业务数据跨表租户关系。
+
+需要：
+
+tenant integrity trigger。
+
+七、增加一个实现前要求
+
+新增：
+
+TD-PAYMENT-002
+
+在实现 B2 前加入：
+
+Recovery Safety Test
+
+必须证明：
+
+同一个 PaymentEvent：
+
+第一次：
+
+attempt #1
+FAILED
+
+第二次：
+
+attempt #2
+SUCCESS
+
+结果：
+
+只能：
+
+Payment = 1
+
+BillingInvoice:
+ISSUED → PAID
+
+不能：
+
+Payment = 2
+BillingInvoice duplicate
+八、最终裁定
+TD-PAYMENT-001 Design Proposal
+✅ PASS
+
+批准：
+
+路线 B
+PaymentProcessingAttempt
+独立执行生命周期
+自动重试（限定技术失败）
+C-0010-B2 实现
+C-0010-C 前完成
+
+下一步：
+
+提交：
+
+C-0010-B2 Schema Delta Request
+
+内容：
+
+PaymentProcessingAttempt schema
+migration 顺序
+tenant trigger
+retry worker 边界
+replay API 权限
+与 C-0010-B reconciliation 的差异类型接入
+
+当前主线状态：
+
+C-0010-A Payment Domain       PASS
+
+C-0010-B Reconciliation       PASS
+
+TD-PAYMENT-001               PASS
+
+NEXT:
+C-0010-B2 Schema Delta
+```
