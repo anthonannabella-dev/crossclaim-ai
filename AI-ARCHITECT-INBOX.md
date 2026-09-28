@@ -45720,3 +45720,355 @@ PASS
 
 进入 C-0012 或 VALIDATION-RUN-001 执行。
 ```
+
+### [MSG-20260928-121]（我方发出）C-0012 Claim Rule Engine Audit Design（只读可审计性验证；Design Only）
+
+> 以下为**实际发出**的逐字内容（只设计：不改算法、不加规则、不改 Schema）。
+
+```text
+[CODEX → CHATGPT]
+
+ID: C-0012
+TYPE: DESIGN PROPOSAL（Claim Rule Engine Audit · **只验证可审计性，不增加规则**）
+PREVIOUS: MSG-20260928-120（C-0011 PASS；下一批准入口 = C-0012 或 VALIDATION-RUN-001）
+ROUND: 1
+BRANCH: gate/7-commercial-validation
+HEAD: 0dfccab（只设计：不改算法、不加规则、不改 Schema）
+
+零、边界（严格遵守你的口径）
+做：只读审计 —— 验证 RuleVersion / recoverableAmount / 人工判断残差 三者能不能被解释
+不做：不新增规则、不改现有算法、不改优先级、不改执行器、不自动调金额、不写资金链路、不改 Schema
+
+一、要回答的四个问题（审计指标）
+1. **覆盖率**：ClaimItem 中有多少比例拿到了规则给出的 recoverableAmount
+2. **残差**：规则金额与人工判断金额的差异分布（中位 / P90 / 绝对值总量）
+3. **版本漂移**：同一 (platformType, claimType) 在不同 RuleVersion 下结果是否变化，
+   变化是否能追溯到规则版本（RuleEvaluation 历史 + RuleVersion.effectiveFrom/To）
+4. **新鲜度**：仍在生效但 RuleVersion.lastVerified 超过阈值（建议 180 天）未复核的规则占比
+
+二、人工真值的来源（这是本设计的核心分歧点，见待裁 Q1）
+→ ClaimItem 目前只有规则算出的 recoverableAmount，没有人字段位；
+  为避免动 Schema，我建议**用审计表达人工修正**：
+  新增动作 claim.recoverable_amount_overridden，载荷 { claimItemId, fromAmount, toAmount, reason, ruleVersionId }
+→ 审计即真值来源：残差 = overridden.toAmount 与「当时规则结果」的差
+→ 若你更倾向用 Case.claimedAmount / recoveredAmount 作为事后真值，我就不引入任何新写路径（纯只读）
+
+三、数据源与产出（全部只读）
+→ 读：RuleEvaluation / RuleVersion / RuleSet / ClaimItem / AuditLog
+→ 产出（沿用验证工具的三层状态口径）：
+  engineeringStatus / auditRunStatus(RUN_RECORDED|NOT_RUN) / commercialConclusion=OPEN
+→ 报告落盘：reports/C-0012-rule-engine-audit.md + 机器可读 reports/C-0012-rule-engine-audit.json
+→ 不产生任何「规则该改成什么样」的建议——那是你的决策范围
+
+四、实现边界（若批准进入实现）
+→ 新增 services/audit/rule-engine-audit.ts（只读聚合）+ 一个 CLI/端点在 OWNER/ADMIN 之下
+→ 复用 C-0009.1 的三层状态与「不产生商业结论」约束
+→ 若采纳 Q1 的审计动作：仅新增一个**审计动作名**（无 Schema 变化），写入路径挂在 ClaimItem 服务上
+→ 测试：纯函数聚合（残差分位、漂移判定）+ 真实库用例（两个 RuleVersion 下结果不同、人工覆盖可追溯）
+
+五、待裁（3 问）
+Q1 人工真值来源：采用「审计动作 claim.recoverable_amount_overridden」还是「只用 Case 金额、纯只读」？
+Q2 新鲜度阈值是否用 180 天（RuleVersion.lastVerified）？
+Q3 报告是否就落在 reports/C-0012-rule-engine-audit.md（与 C-0009.1 的验证报告分开）？
+
+NEED:
+PASS / REVISE / BLOCK（C-0012 Claim Rule Engine Audit Design）
+```
+
+### [MSG-20260928-122] C-0012 Claim Rule Engine Audit Design 裁定：PASS WITH REVISE（审计动作改为 claim.recoverable_amount_reviewed；180 天只输出 stale 不判失效；残差拆 NO_HUMAN_REVIEW / CONFIRMED / ADJUSTED；版本漂移只读真实历史、禁止规则回测）
+
+> 本轮面板格式：消息不带 `[CHATGPT → CODEX]` 标记行，已按面板原文逐字保留。
+
+```text
+C-0012 Claim Rule Engine Audit Design 裁定
+VERDICT: PASS WITH REVISE
+
+整体方向批准。
+
+这个阶段定位正确：
+
+不是优化 Rule Engine。
+
+不是增加规则。
+
+而是回答：
+
+现在系统算出来的 recoverableAmount，未来能不能解释、复盘、审计。
+
+这一步非常重要，因为后续如果进入真实平台 Claim 数据，没有审计能力会直接失去可信度。
+
+Q1 人工真值来源
+裁定：采用「审计动作 claim.recoverable_amount_overridden」
+PASS WITH REVISE
+
+不采用：
+
+Case.claimedAmount / recoveredAmount 纯读取
+
+原因：
+
+Case 是业务流程对象，不一定代表人工最终判断。
+
+例如：
+
+Rule Engine:
+recoverableAmount = 800
+
+OPS人工判断:
+实际只能追回 500
+
+Case:
+可能记录:
+- 申请金额
+- 追回金额
+- 最终到账
+
+三个金额语义不同。
+
+因此需要明确：
+
+纯文本
+Rule Result
+      |
+      |
+Human Override
+      |
+      |
+Settlement Reality
+
+三层不要混。
+
+批准审计动作：
+
+JSON
+{
+ claimItemId,
+ fromAmount,
+ toAmount,
+ reason,
+ ruleVersionId
+}
+
+但是增加 REVISE：
+
+不允许叫 override 等同于真值
+
+因为：
+
+人工修改 ≠ 最终正确。
+
+所以语义改为：
+
+纯文本
+claim.recoverable_amount_adjusted
+
+更准确。
+
+或者：
+
+纯文本
+claim.recoverable_amount_reviewed
+
+建议：
+
+采用：
+
+claim.recoverable_amount_reviewed
+
+原因：
+
+reviewed 包含：
+
+认可规则结果
+修改规则结果
+
+更适合作为审计事实。
+
+Q2 新鲜度阈值
+裁定：PASS
+
+180 天批准。
+
+原因：
+
+Claim 规则具有明显时效：
+
+平台政策变化
+赔付标准变化
+物流规则变化
+
+180 天作为提醒阈值合理。
+
+但是：
+
+增加 REVISE：
+
+不要定义：
+
+expired
+
+只定义：
+
+stale
+
+原因：
+
+规则超过 180 天未验证：
+
+不代表错误。
+
+所以：
+
+输出：
+
+JSON
+{
+ staleRuleCount: xx,
+ thresholdDays:180
+}
+
+不要：
+
+invalidRules
+Q3 报告位置
+裁定：PASS
+
+批准：
+
+reports/C-0012-rule-engine-audit.md
+
+reports/C-0012-rule-engine-audit.json
+
+并保持：
+
+三层状态：
+
+JSON
+{
+ engineeringStatus:"PASS|FAIL",
+ auditRunStatus:"RUN_RECORDED|NOT_RUN",
+ commercialConclusion:"OPEN"
+}
+
+禁止：
+
+GO
+FAIL MARKET
+VIABLE
+PROFITABLE
+实现边界批准
+
+进入实现后：
+
+允许：
+
+✅ 只读聚合
+✅ RuleEvaluation 查询
+✅ RuleVersion 查询
+✅ ClaimItem 查询
+✅ AuditLog 查询
+✅ 报告生成
+
+禁止：
+
+❌ 修改 RuleVersion
+❌ 修改 RuleEvaluation
+❌ 自动调整 recoverableAmount
+❌ 修改 ClaimItem
+❌ 修改 Settlement
+❌ 修改 Commission
+
+增加两个实现要求
+REVISE-2：残差必须区分三类
+
+不要只输出：
+
+ruleAmount - humanAmount
+
+需要拆：
+
+A. 无人工复核
+纯文本
+NO_HUMAN_REVIEW
+B. 人工确认规则
+纯文本
+CONFIRMED
+C. 人工修改
+纯文本
+ADJUSTED
+
+否则：
+
+P90 残差会混入未判断数据。
+
+REVISE-3：版本漂移不要做模拟计算
+
+只允许：
+
+真实历史：
+
+ClaimItem
+ |
+RuleEvaluation
+ |
+RuleVersion
+
+例如：
+
+Claim A
+Rule V1
+recoverable=100
+
+Claim A
+Rule V2
+recoverable=80
+
+可以报告：
+
+变化。
+
+禁止：
+
+重新跑旧规则模拟。
+
+原因：
+
+那会变成规则回测系统，不属于 C-0012。
+
+最终裁定
+纯文本
+C-0012 Claim Rule Engine Audit Design
+
+PASS WITH REVISE
+
+进入实现前修改：
+
+claim.recoverable_amount_overridden
+→ 改为：
+claim.recoverable_amount_reviewed
+
+新鲜度：
+
+180 天
+输出 stale
+不判失效
+
+残差拆分：
+
+NO_HUMAN_REVIEW
+CONFIRMED
+ADJUSTED
+
+版本漂移：
+
+只读历史
+不做规则模拟
+
+批准进入：
+
+C-0012 Implementation Plan
+
+实现仍限定：
+
+Audit Only，不改变任何业务结果。
+```
