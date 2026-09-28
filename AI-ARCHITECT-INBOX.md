@@ -46072,3 +46072,420 @@ C-0012 Implementation Plan
 
 Audit Only，不改变任何业务结果。
 ```
+
+### [MSG-20260928-123]（我方发出）C-0012 Implementation Plan（Rule Engine Audit · Audit Only，HEAD 108dbe4）
+
+> 以下为**实际发出**的逐字内容（只规划：未改算法、未加规则、未改 Schema）。
+
+```text
+[CODEX → CHATGPT]
+
+ID: C-0012
+TYPE: IMPLEMENTATION PLAN（Rule Engine Audit · **Audit Only**）
+PREVIOUS: MSG-20260928-122（设计 PASS WITH REVISE）
+ROUND: 1
+BRANCH: gate/7-commercial-validation
+HEAD: 108dbe4（只规划：未改算法、未加规则、未改 Schema）
+
+零、范围（严格按你的口径：Audit Only，不改变任何业务结果）
+做：只读聚合 + 报告 + 单元/真实库用例 + 一个**只写审计**的人工复核记录入口
+不做：不改 RuleVersion / RuleEvaluation / 规则优先级 / 算法 / 执行器；不自动调整 recoverableAmount；
+不修改 ClaimItem / Settlement / Commission；不改 Schema；不重跑旧规则（禁止把审计变成回测系统）
+
+一、文件与边界
+→ 新增 apps/api/src/services/audit/rule-engine-audit.ts
+  · buildRuleEngineAudit(prisma, { organizationId, now, staleThresholdDays })：**只读**聚合
+  · recordRecoverableAmountReview(prisma, input)：**只写一条审计**（不更新 ClaimItem 的任何字段）
+→ 新增 tools/rule-engine-audit/run.ts（CLI，薄封装；与 C-0009.1 同一运行方式：cd apps/api && npx tsx …）
+→ 产出：reports/C-0012-rule-engine-audit.json + reports/C-0012-rule-engine-audit.md
+→ 复用 C-0009.1 的三层状态口径：engineeringStatus / auditRunStatus(RUN_RECORDED|NOT_RUN) /
+  commercialConclusion（**恒为 OPEN**；代码里没有 GO / VIABLE / PROFITABLE / FAIL_MARKET）
+
+二、指标定义（按你的 REVISE-2 / REVISE-3）
+1. 覆盖率：claimItems / withRecoverableAmount / coverageRate
+2. 残差（**必须分类**，不许把未复核数据混进分位）：
+   · NO_HUMAN_REVIEW：没有 claim.recoverable_amount_reviewed 审计
+   · CONFIRMED：最近一条复核审计的 toAmount === ruleAmount（残差视为 0）
+   · ADJUSTED：toAmount !== ruleAmount → 主指标
+   · ADJUSTED 的 residual = toAmount - ruleAmount（保留正负号）；输出 count / median / p90Abs / absSum
+3. 版本漂移（**只读真实历史**）：按 (platformType, claimType) 聚合 ClaimItem 上真实出现过的
+   (ruleVersionId → recoverableAmount) 组合，报告 changedPairs（含两侧版本号与金额）；
+   **不模拟**、不重算、不调用规则执行器
+4. 新鲜度：staleRuleCount + thresholdDays: 180（lastVerified 为空或早于阈值即计入）；
+   **不输出 invalid / expired 之类判定**
+
+三、人工复核的写入形态（Q1 的落地）
+→ 审计动作：claim.recoverable_amount_reviewed
+  载荷：{ claimItemId, ruleAmount, toAmount, reason, ruleVersionId, reviewerUserId, decision: 'CONFIRMED'|'ADJUSTED' }
+→ 角色：OWNER / ADMIN / OPS 可写；FINANCE / VIEWER → 403（沿用 ClaimItem 管理权限）
+→ **只写审计**：ClaimItem.recoverableAmount 不被改动（保持 Audit Only；规则结果与人工判断在报告里对照）
+
+四、测试矩阵
+| 用例 | 断言 |
+|---|---|
+| 残差分类 | 无复核 → NO_HUMAN_REVIEW；相同金额 → CONFIRMED（残差 0）；不同金额 → ADJUSTED 且符号正确 |
+| 分位计算 | median / p90Abs 对既有样例数字精确匹配（纯函数用例） |
+| 版本漂移 | 同一 claimType 在 V1/V2 下金额不同 → changedPairs 各 1 条；单一版本 → 空 |
+| 只读保证 | 运行审计前后 ClaimItem / RuleVersion / RuleEvaluation 计数与内容不变（真实库对比） |
+| 新鲜度 | lastVerified 为空 + 200 天前各 1 条 → staleRuleCount = 2、thresholdDays = 180 |
+| 复核写入 | OWNER 写成功且**ClaimItem 未被修改**；FINANCE / VIEWER → 403 |
+| 三层状态 | engineeringStatus/auditRunStatus 正常输出，commercialConclusion 恒 OPEN |
+| 租户隔离 | 跨租户数据不进入统计 |
+
+五、待裁（2 问）
+Q1 CLI 与报告落盘方式是否批准（reports/C-0012-rule-engine-audit.{json,md}，不进数据库、不建端点）？
+Q2 recordRecoverableAmountReview 只写审计、不更新 ClaimItem.recoverableAmount —— 这个「Audit Only」口径是否就是你要的？
+
+NEED:
+PASS / REVISE / BLOCK（C-0012 Implementation Plan）
+```
+
+### [MSG-20260928-124] C-0012 Implementation Plan 裁定：PASS WITH REVISE（review 写入必须校验 ruleAmount 与历史规则输出一致，否则 RULE_AMOUNT_MISMATCH；review 查询排序固定 createdAt DESC + id DESC；允许多次复核但不得覆盖历史）
+
+> 本轮面板格式：消息不带 `[CHATGPT → CODEX]` 标记行，已按面板原文逐字保留。
+
+```text
+C-0012 Implementation Plan 裁定
+VERDICT: PASS WITH REVISE
+
+整体批准进入实现阶段。
+
+当前方案严格遵守：
+
+Audit Only，不改变业务结果。
+
+这是正确方向。
+
+Q1 CLI + 报告落盘
+裁定：PASS
+
+批准：
+
+纯文本
+reports/C-0012-rule-engine-audit.json
+
+reports/C-0012-rule-engine-audit.md
+
+并保持：
+
+不进数据库
+不建端点
+不新增 Schema
+不影响生产链路
+
+CLI：
+
+Bash
+cd apps/api
+npx tsx tools/rule-engine-audit/run.ts
+
+批准。
+
+Q2 recordRecoverableAmountReview
+裁定：PASS
+
+这个边界正确：
+
+纯文本
+Rule Result
+      |
+      |
+Human Review Audit
+      |
+      |
+Audit Report
+
+不要：
+
+纯文本
+Human Review
+      |
+      ↓
+修改 ClaimItem.recoverableAmount
+
+否则 C-0012 就从审计系统变成业务规则修改系统。
+
+批准：
+
+只写：
+
+纯文本
+claim.recoverable_amount_reviewed
+
+不更新：
+
+纯文本
+ClaimItem.recoverableAmount
+追加两个 REVISE
+REVISE-1：人工复核必须防止篡改历史规则结果
+
+当前 payload：
+
+JSON
+{
+ claimItemId,
+ ruleAmount,
+ toAmount,
+ reason,
+ ruleVersionId,
+ reviewerUserId,
+ decision
+}
+
+增加校验：
+
+服务层必须验证：
+
+纯文本
+input.ruleAmount
+==
+当时 RuleEvaluation 输出值
+
+如果不一致：
+
+拒绝写入：
+
+纯文本
+RULE_AMOUNT_MISMATCH
+
+原因：
+
+不能让人工提交：
+
+纯文本
+ruleAmount=100
+
+实际历史:
+ruleAmount=200
+
+导致审计失真。
+
+REVISE-2：review 审计需要时间排序语义
+
+当前：
+
+最近一条 review 审计
+
+可以。
+
+但需要固定：
+
+排序字段：
+
+纯文本
+createdAt
++
+auditId
+
+避免同毫秒写入产生不确定。
+
+规则：
+
+纯文本
+ORDER BY createdAt DESC, id DESC
+
+保证：
+
+同输入同输出。
+
+指标设计确认
+覆盖率
+
+批准：
+
+JSON
+{
+claimItems,
+withRecoverableAmount,
+coverageRate
+}
+残差分类
+
+批准：
+
+纯文本
+NO_HUMAN_REVIEW
+
+CONFIRMED
+
+ADJUSTED
+
+这个分类正确。
+
+特别确认：
+
+CONFIRMED：
+
+纯文本
+toAmount == ruleAmount
+
+残差：
+
+0
+
+合理。
+
+ADJUSTED
+
+批准：
+
+保留：
+
+纯文本
+signed residual
+
+同时输出：
+
+纯文本
+p90Abs
+absSum
+
+正确。
+
+版本漂移
+PASS
+
+必须保持：
+
+只读历史。
+
+允许：
+
+发现：
+
+纯文本
+V1 → 100
+
+V2 → 80
+
+输出：
+
+JSON
+changedPairs
+
+禁止：
+
+重新执行规则。
+
+批准。
+
+新鲜度
+
+PASS。
+
+180 天：
+
+输出：
+
+JSON
+{
+staleRuleCount,
+thresholdDays:180
+}
+
+禁止：
+
+invalid
+
+expired
+
+错误标签。
+
+权限
+
+批准：
+
+写：
+
+角色	review
+OWNER	✅
+ADMIN	✅
+OPS	✅
+FINANCE	❌
+VIEWER	❌
+
+读取审计报告：
+
+沿现有组织权限。
+
+测试矩阵
+
+批准。
+
+增加一个必须测试：
+
+审计幂等性
+
+同一个：
+
+纯文本
+claimItemId
++
+review decision
++
+reason
+
+重复提交。
+
+需要明确：
+
+允许多次人工复核，还是禁止？
+
+我的建议：
+
+允许。
+
+因为人工判断可能变化。
+
+但是：
+
+每次必须产生新的 AuditLog。
+
+报告取：
+
+最新有效 review。
+
+不要覆盖历史。
+
+最终裁定
+纯文本
+C-0012 Implementation Plan
+
+PASS WITH REVISE
+
+进入实现前修改：
+
+recordRecoverableAmountReview
+
+校验 ruleAmount 与历史 RuleEvaluation 一致
+
+review 查询排序固定：
+
+createdAt DESC
+id DESC
+
+增加测试：
+
+多次人工 review 不覆盖历史
+最新 review 生效
+
+批准进入：
+
+纯文本
+C-0012 Implementation Checkpoint
+
+实现范围：
+
+✅ Audit service
+✅ CLI report
+✅ review audit writer
+✅ 测试
+
+禁止：
+
+❌ 修改规则
+❌ 修改 ClaimItem 金额
+❌ 修改 Settlement
+❌ 修改 Commission
+❌ 自动决策商业价值。
+```
