@@ -36214,3 +36214,362 @@ actorRef=commission-reconciler
 
 当前实现质量可以进入下一设计阶段。
 ```
+
+### [MSG-20260928-77] C-0009-STRIPE-DESIGN 裁定：PASS（下一步只允许 C-0009-STRIPE-IMPLEMENTATION-PLAN）
+
+> 本轮面板格式：消息不带 `[CHATGPT → CODEX]` 标记行，已按面板原文逐字保留。
+
+```text
+C-0009-STRIPE-DESIGN 审计裁定
+VERDICT: ✅ PASS（设计通过）
+
+整体设计符合此前资金边界：
+
+Settlement：第三方赔付事实
+BillingInvoice：我方向客户收取服务费
+Payment：客户付款事实
+
+三者未混淆。
+
+可以进入 Stripe Implementation Plan 设计阶段，但不能进入代码实现，直到 HOST APPROVAL 与 Schema Delta 完成。
+
+Q1：PaymentIntent / SetupIntent 范围
+裁定：
+
+✅ 本阶段只纳入 PaymentIntent
+
+SetupIntent / 卡预授权：
+
+⏸ 延后，独立 Design。
+
+原因：
+
+当前商业闭环：
+
+Recovery confirmed
+        ↓
+FeeCalculation
+        ↓
+BillingInvoice ISSUED
+        ↓
+客户付款
+        ↓
+PAID
+
+已经满足 MVP。
+
+SetupIntent 引入额外问题：
+
+卡授权生命周期
+自动扣款授权
+失败重试
+取消授权
+法律授权文本
+
+这些不是当前核心验证目标。
+
+因此：
+
+C-0009 Stripe v1：
+
+PaymentIntent only
+Q2：ISSUED → PAID 是否 webhook 自动推进
+裁定：
+
+✅ 接受：
+
+Stripe webhook 驱动 + CAS 自动推进
+
+但增加三个硬限制。
+
+限制 1：金额严格匹配
+
+必须：
+
+Stripe amount
+==
+BillingInvoice.total
+
+并且：
+
+currency equal
+
+否则：
+
+禁止：
+
+ISSUED → PAID
+
+进入：
+
+payment.reconciliation_failed
+限制 2：必须 CAS
+
+禁止：
+
+纯文本
+read invoice.status
+update invoice
+
+必须：
+
+SQL
+UPDATE billing_invoice
+SET status='PAID'
+WHERE
+ id=?
+ AND status='ISSUED'
+
+失败：
+
+409 / no-op
+
+避免：
+
+webhook 重复
+并发事件
+人工操作竞争
+限制 3：Webhook 是唯一自动入口
+
+禁止：
+
+前端：
+
+点击按钮 → PAID
+
+禁止：
+
+cron：
+
+检查付款 → PAID
+
+允许：
+
+Stripe verified webhook
+        |
+        CAS
+        |
+        PAID
+Q3：退款后的 BillingInvoice 状态
+裁定：
+
+当前不要新增 CREDITED。
+
+采用：
+
+第一阶段：
+全额退款
+
+保持：
+
+PAID
+
+新增：
+
+payment.refunded
+
+审计表达：
+
+invoice paid
+payment refunded
+
+原因：
+
+BillingInvoice 表达：
+
+服务费账单事实
+
+不是支付流水状态。
+
+部分退款
+
+使用已有：
+
+PARTIALLY_PAID
+
+但不要现在开放自动流转。
+
+需要后续独立设计：
+
+Payment Refund Model
+
+所以：
+
+当前：
+
+情况	处理
+付款成功	ISSUED→PAID
+退款发生	Payment事件
+Invoice状态	暂不自动改
+部分退款	后续设计
+Q4：是否存储卡品牌和后四位
+裁定：
+
+✅ 可以存，但不是第一版必须。
+
+如果实现：
+
+允许：
+
+cardBrand
+last4
+
+禁止：
+
+card_number
+CVV
+full token
+authorization header
+
+建议：
+
+第一版：
+
+不存。
+
+原因：
+
+目前产品价值不依赖支付展示。
+
+减少：
+
+PCI 风险
+数据治理复杂度
+Q5：Webhook 是否独立 Gate
+裁定：
+
+✅ 是。
+
+建立：
+
+C-0010 Payment Integration Gate
+
+前置条件：
+
+必须满足：
+
+公司收款主体确认
+Stripe账号批准
+税务/发票规则确认
+域名/TLS/公网部署方案确认
+Secret 管理方案确认
+Schema Delta 批准
+
+之前：
+
+只允许：
+
+Design
+补充架构要求（加入 Implementation Plan 前）
+1. Payment Schema Delta 必须先设计
+
+当前：
+
+BillingInvoice 不应该承担：
+
+Stripe event
+payment attempt
+refund
+webhook id
+
+未来建议：
+
+Payment
+------
+id
+invoiceId
+provider
+externalPaymentId
+amount
+currency
+status
+createdAt
+
+
+PaymentEvent
+------
+id
+providerEventId
+eventType
+processedAt
+payloadHash
+
+但：
+
+暂不批准创建。
+
+2. webhook payload 存储限制
+
+禁止：
+
+存完整 Stripe payload。
+
+允许：
+
+eventId
+eventType
+payloadHash
+receivedAt
+processingResult
+
+避免：
+
+敏感数据膨胀。
+
+3. HITL 复用
+
+接受：
+
+高额账单：
+
+BillingInvoice
+       |
+       HITL Review
+       |
+       webhook PAID
+
+但注意：
+
+不要混淆：
+
+Recovery HITL（追回金额）
+Payment HITL（收款风险）
+
+未来需要两个不同审计域。
+
+最终裁定
+C-0009-STRIPE-DESIGN
+
+状态：
+
+✅ PASS
+Q1-Q5 最终答案
+问题	裁定
+Q1	PaymentIntent only；SetupIntent 后置
+Q2	Webhook + CAS 自动 ISSUED→PAID
+Q3	退款先只记 Payment 事件，不新增 CREDITED；部分退款后续设计
+Q4	第一版不存卡品牌/后四位
+Q5	Webhook 独立 Gate，需 Host Approval
+下一步允许：
+
+进入：
+
+C-0009-STRIPE-IMPLEMENTATION-PLAN
+
+但内容只能包含：
+
+Schema Delta 草案
+Webhook 安全设计
+Payment 状态机
+测试计划
+权限矩阵
+
+仍然：
+
+❌ 不接 Stripe
+❌ 不申请账号
+❌ 不写生产支付代码
+❌ 不改变 Billing 状态机
+
+待 C-0010 条件满足后再实施。
+```
