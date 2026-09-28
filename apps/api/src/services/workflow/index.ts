@@ -25,6 +25,18 @@ export {
   type WebhookResult,
 } from './payment-webhook';
 export {
+  PAYMENT_DIFFERENCE_TYPES,
+  RECONCILIATION_CSV_HEADER,
+  classifyInvoicePayments,
+  listPaymentReconciliation,
+  toReconciliationCsv,
+  type PaymentDifferenceType,
+  type PaymentReconciliationItem,
+  type PaymentReconciliationReport,
+  type ReconciliationInvoiceFacts,
+  type ReconciliationVerdict,
+} from './payment-reconciliation';
+export {
   TIME_WINDOW_DAYS,
   normalizePayoutItem,
   reconcilePayoutItems,

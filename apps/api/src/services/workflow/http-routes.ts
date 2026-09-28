@@ -32,6 +32,7 @@ import { advanceBillingInvoice, listBillingInvoices } from './billing';
 import { getAppealPackageState } from './appeal-package';
 import { reconcilePayoutItems } from './commission-reconciliation';
 import { handlePaymentWebhook } from './payment-webhook';
+import { listPaymentReconciliation, toReconciliationCsv } from './payment-reconciliation';
 import { getCase, getClaimDraft, listCaseEvidence, listCases } from './case-read';
 import {
   getOpportunityInsight,
@@ -54,6 +55,8 @@ const APPEAL_PACKAGE_PATH = /^\/cases\/([^/]+)\/appeal-package$/;
 const COMMISSION_RECONCILE_PATH = /^\/commissions\/reconcile$/;
 const PAYMENTS_PATH = /^\/payments$/;
 const PAYMENT_WEBHOOK_PATH = /^\/payments\/webhook$/;
+const PAYMENTS_RECONCILIATION_PATH = /^\/payments\/reconciliation$/;
+const PAYMENTS_RECONCILIATION_CSV_PATH = /^\/payments\/reconciliation\.csv$/;
 const BILLING_PATH = /^\/billing(?:\/([^/]+)\/status)?$/;
 const CASE_LIST_PATH = /^\/cases$/;
 const CASE_DETAIL_PATH = /^\/cases\/([^/]+)$/;
@@ -164,12 +167,14 @@ export async function handleWorkflowRequest(
   const commissionPath = COMMISSION_RECONCILE_PATH.test(path);
   const paymentsPath = PAYMENTS_PATH.test(path);
   const webhookPath = PAYMENT_WEBHOOK_PATH.test(path);
+  const reconciliationPath = PAYMENTS_RECONCILIATION_PATH.test(path);
+  const reconciliationCsvPath = PAYMENTS_RECONCILIATION_CSV_PATH.test(path);
   const billingPath = BILLING_PATH.exec(path);
   const caseListPath = CASE_LIST_PATH.test(path);
   const caseDetail = CASE_DETAIL_PATH.exec(path);
   const caseEvidence = CASE_EVIDENCE_PATH.exec(path);
   const caseClaim = CASE_CLAIM_PATH.exec(path);
-  if (!review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim) {
+  if (!review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim) {
     return false;
   }
 
@@ -211,7 +216,7 @@ export async function handleWorkflowRequest(
         ? ['GET', 'POST']
         : billingPath && !billingPath[1]
           ? ['GET']
-        : insightList || insightCsv || insight || appealPath || caseListPath || caseDetail || caseEvidence || caseClaim
+        : insightList || insightCsv || insight || appealPath || caseListPath || caseDetail || caseEvidence || caseClaim || reconciliationPath || reconciliationCsvPath
             ? ['GET']
             : ['POST'];
   if (!allowed.includes(method)) {
@@ -233,6 +238,26 @@ export async function handleWorkflowRequest(
   };
 
   try {
+    if (reconciliationPath || reconciliationCsvPath) {
+      // C-0010-B：财务对账差异清单（只读；不做任何自动修账）
+      const report = await listPaymentReconciliation(
+        deps.prisma,
+        { organizationId: context.organizationId, role: context.role },
+        deps.now ? { now: deps.now } : {},
+      );
+      if (reconciliationCsvPath) {
+        res.writeHead(200, {
+          'content-type': 'text/csv; charset=utf-8',
+          'content-disposition': 'attachment; filename="payment-reconciliation.csv"',
+          'cache-control': 'no-store',
+        });
+        res.end(toReconciliationCsv(report));
+        return true;
+      }
+      sendJson(res, 200, report);
+      return true;
+    }
+
     if (paymentsPath) {
       // FINANCE 可见范围：发票支付状态 / 金额 / 时间；不含 provider 事件元数据与安全字段
       assertPermission(context.role, 'viewBilling');

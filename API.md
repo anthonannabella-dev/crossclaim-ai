@@ -228,6 +228,28 @@ C-0008-B2（Case / Evidence / Claim Draft / Billing）的端点尚未实现。
 - 只保存事件元数据（`eventId` / `eventType` / `payloadHash` / `receivedAt` / `processingResult`）：**不保存 payload 原文、卡数据或 provider 机密**
 - 无法归属租户的事件不落库，只写结构化安全日志
 
+## 支付对账（C-0010-B）
+
+| 方法 | 路径 | 成功 | 权限 |
+|---|---|---|---|
+| GET | `/payments/reconciliation` | 200 `{ generatedAt, scannedInvoices, items: [...], counts: {...} }` | OWNER / ADMIN / OPS / FINANCE（`viewBilling`） |
+| GET | `/payments/reconciliation.csv` | 200 `text/csv`（固定 7 列：`invoiceId, paymentId, amount, currency, status, differenceType, recommendation`） | 同上 |
+
+- **只读**：本模块零写入 —— 差异只出清单，由 OWNER / ADMIN 人工裁定；**不允许自动修账 / 自动冲正**
+- 数据源：`Payment` × `BillingInvoice` × `AuditLog`（Payment HITL 事件）
+- `status` 列形如 `ISSUED|SUCCEEDED`（发票状态|付款状态），发票没有付款行时为 `NO_PAYMENT`
+- `differenceType` 取值：
+  - `AMOUNT_MISMATCH`：成功付款金额 ≠ 发票 total
+  - `CURRENCY_MISMATCH`：币种与发票不一致
+  - `AWAITING_PAYMENT_REVIEW`：钱已到但被 Payment 人工卡口拦住（`payment.review_required` 未获批）
+  - `PAYMENT_WITHOUT_PAID_INVOICE`：钱已到但发票未 PAID（含卡口被驳回的情况）
+  - `PAID_WITHOUT_PAYMENT`：发票 PAID 但没有任何付款行（人工 / 银行到账需补录引用）
+  - `PAID_AMOUNT_MISMATCH`：发票 `paidAmount` ≠ 成功付款合计
+  - `FAILED_PAYMENT`：provider 报失败，仅留痕，不需要动作
+- 判定顺序固定：金额 → 币种 → 卡口 → 未 PAID；金额不符时不再叠加其他类型
+- 扫描范围为最近 200 张发票（上限 500）；**跨租户发票绝不出现**
+- CSV 与 JSON 同源；导出不含凭据、签名与 provider 机密
+
 ## 权限矩阵
 
 见 [DOMAIN_MODEL.md](./DOMAIN_MODEL.md#角色与权限c-0008-b1架构方批准)。
