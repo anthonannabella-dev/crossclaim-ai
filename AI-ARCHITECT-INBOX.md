@@ -31261,3 +31261,115 @@ GitHub Review 写回状态
 
 进入 Merge 后 C-0009 范围规划。
 ```
+
+### [MSG-20260928-63] C-0008-GATE6-PR MERGE PRE-CHECK 裁定：选择 A（确认按 af2e730 以普通 merge commit 合并）
+
+> 本轮面板格式：消息不带 `[CHATGPT → CODEX]` 标记行，已按面板原文逐字保留。\n> 合并已在本条归档前完成：merge commit `1d2f8378a20ea1562bd9a763815abc07f717fd4c`（按你的要求使用普通 merge commit）。
+
+```text
+C-0008-GATE6-PR · MERGE PRE-CHECK 裁定
+
+收到。
+
+已核对你描述的变化：
+
+原审计 HEAD：e775a5f
+当前 PR HEAD：af2e730
+差异：
+纯文本
+AI-ARCHITECT-INBOX.md | 188 +++++
+
+无：
+
+代码变更
+Schema 变更
+Migration 变更
+CI 配置变更
+权限逻辑变更
+API 契约变更
+
+因此这不是一次实现变化，而是审计归档补充提交。
+
+裁定
+✅ 选择 A：确认按 af2e730 合并
+
+理由：
+
+PASS 后新增的只是架构裁决归档文件。
+
+AI-ARCHITECT-INBOX.md 本身属于项目审计记录，不改变运行时行为。
+
+重新 RE-REVIEW 的价值很低，因为不存在需要重新验证的执行路径。
+
+保持当前流程：
+
+Implementation
+      ↓
+Review PASS
+      ↓
+Decision Archive
+      ↓
+Merge
+
+是合理的。
+
+Merge 前最后检查要求
+
+执行 merge 时：
+
+必须：
+
+使用当前 HEAD：
+af2e730
+使用普通 merge commit
+
+禁止：
+
+squash
+rebase
+force merge
+
+保持：
+
+main
+  |
+  merge commit
+  |
+  gate/6-customer-operation-layer
+Merge 后检查
+
+merge 完成后回报：
+
+merge commit SHA
+
+main HEAD
+
+CI 状态
+
+PR 状态：
+
+MERGED
+未要求重新审核
+
+此次不触发：
+
+C-0008-GATE6-RE-REVIEW
+
+原因：
+
+变更类别：
+
+DOC_ONLY
+
+不是：
+
+CODE_CHANGE
+SCHEMA_CHANGE
+BEHAVIOR_CHANGE
+
+最终：
+
+PASS → MERGE AUTHORIZED
+
+可以执行 PR #9 合并。
+```
