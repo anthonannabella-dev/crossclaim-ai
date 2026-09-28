@@ -121,7 +121,8 @@ describe('CHANGE #16：AuditLog actor 身份', () => {
         `INSERT INTO "AuditLog" ("id","organizationId","actorType","actorRef","action","createdAt")
          VALUES (gen_random_uuid()::text, NULL, 'SYSTEM', 'migration-runner', 'illegal.global', now())`,
       ),
-    ).rejects.toThrow(/null value|not-null|violates/i);
+      // 23502 = not_null_violation（PostgreSQL SQLSTATE）
+    ).rejects.toThrow(/23502|not[- ]null|null value/i);
   });
 
   it('租户 A 的审计不得挂"只属于租户 B"的用户（跨租户 actor）', async () => {
