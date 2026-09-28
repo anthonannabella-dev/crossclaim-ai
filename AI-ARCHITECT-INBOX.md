@@ -45,7 +45,7 @@ TARGET:
   D:\crossclaim-ai
 
 PR:
-  #<PR_NUMBER>
+  #1
 
 STATUS:
   Legacy project audit completed.
