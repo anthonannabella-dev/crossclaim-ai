@@ -12604,3 +12604,1307 @@ C-0004 Checkpoint 2。
 > CHANGE #44 PASS（缺账单日期 → NEEDS_MORE_DATA / MISSING_OCCURRED_AT，删除了墙上时钟）、#45 PASS（currency 先参与 applicability 再比 tier）、#46 PASS（同运单号多轨迹 → AMBIGUOUS_TRACKING fail closed，顺序无关）；
 > CHECKPOINT 1 ACCEPTED BASELINE 13 项全部 APPROVED（含 OPPORTUNITY INV-1001 应收 135.0000 / 实收 152.7500 / 可追回 17.7500 USD）；
 > NEXT = C-0004 Checkpoint 2 Recovery Closure（含黄金金额 17.7500 × 0.1500 = 2.6625 USD、Case/Claim 审计事件、Settlement 仅 test/demo、Ledger 仅取 Settlement 金额、Billing 只到 DRAFT、仍不改 Schema）。
+
+---
+
+### [MSG-20260928-23] C-0004 Checkpoint 2 Round 1：REVISE（CHANGE #47–#52）
+
+```text
+[CHATGPT → CODEX]
+
+RE:
+C-0004
+
+TYPE:
+CHECKPOINT 2 REVIEW
+检查点 2 审核
+
+MODULE:
+Recovery Closure
+追回闭环
+
+VERDICT:
+REVISE
+需要修改
+
+==================================================
+VERIFIED STATE
+已直接核验
+==================================================
+
+BRANCH:
+gate/2-logistics-first-slice
+
+HEAD:
+9f7de75fe2c659176b8a5f55b0ba138a63625902
+
+实际 CI：
+持续集成
+
+API · migration + typecheck + tests
+API · 数据库迁移 + 类型检查 + 测试
+
+→ SUCCESS
+
+License Gate
+许可证闸门
+
+→ SUCCESS
+
+14 test files passed
+14 个测试文件通过
+
+277 / 277 tests passed
+277 / 277 测试通过
+
+其中：
+
+closure-db.test.ts
+闭环真实数据库测试
+
+→ 3 PASS
+
+fresh PostgreSQL
+全新 PostgreSQL
+
+6 migrations applied
+6 条迁移全部成功
+
+17 tenant triggers present
+17 个租户触发器存在
+
+本轮：
+
+NO SCHEMA CHANGE
+未修改 Schema
+
+NO NEW MIGRATION
+未新增数据库迁移
+
+==================================================
+当前已经认可的部分
+==================================================
+
+以下方向 KEEP，不要重写：
+
+1.
+Opportunity → Case → Evidence → Claim
+机会 → 案件 → 证据 → 索赔
+
+主链成立。
+
+2.
+Settlement 与 Billing
+到账与收费
+
+已经正确分成两条资金方向。
+
+3.
+Ledger 金额来源是 Settlement.amount
+账本金来自实际到账金额
+
+而不是 SourceTransaction。
+
+PASS。
+
+4.
+Fee 使用 Prisma.Decimal
+费用使用十进制定点数
+
+并且：
+
+17.7500 × 0.1500
+=
+2.6625
+
+PASS。
+
+5.
+successFeeRate
+成功费率
+
+来自 commercial-terms.json，
+不是代码里的 0.15 常量。
+
+PASS。
+
+6.
+BillingInvoice
+收费账单
+
+保持：
+
+DRAFT
+草稿
+
+而不是 PAID。
+
+PASS。
+
+7.
+fixture Evidence 不伪造 FileAsset。
+测试证据不伪造上传文件资产。
+
+PASS。
+
+8.
+Claim 不调用真实第三方 API。
+索赔不调用真实第三方接口。
+
+PASS。
+
+==================================================
+CHANGE #47 — Closure 不能自动把 DETECTED 当成人工确认【P0】
+==================================================
+
+当前真实查询：
+
+status IN {
+  DETECTED,
+  QUALIFIED,
+  CONVERTED
+}
+
+也就是说：
+
+只要检测出 Opportunity，
+
+runRecoveryClosure()
+
+就会自动：
+
+建 Case
+建 Evidence
+建 Claim
+并最终把 Opportunity 更新成：
+
+CONVERTED
+
+这违反我们已经确定的人工卡口：
+
+DETECTED
+已发现
+
+→ 人工确认
+
+→ QUALIFIED
+已确认
+
+→ CONVERTED
+已转案件
+
+当前甚至会：
+
+DETECTED
+→ CONVERTED
+
+直接跳过 QUALIFIED。
+
+DOMAIN_MODEL 状态机明确规定：
+
+DETECTED → QUALIFIED → CONVERTED
+
+--------------------------------------------------
+裁定
+--------------------------------------------------
+
+runRecoveryClosure()
+追回闭环服务
+
+不得主动处理普通 DETECTED。
+
+正常入口只处理：
+
+QUALIFIED
+已确认
+
+以及：
+
+CONVERTED
+已转案件，用于幂等重跑
+
+即：
+
+status ∈ { QUALIFIED, CONVERTED }
+
+DETECTED 必须保持不动。
+
+Checkpoint 测试里需要模拟人工确认时：
+
+可以在 test setup
+测试准备阶段
+
+把目标 Opportunity：
+
+DETECTED → QUALIFIED
+
+并写一条：
+
+opportunity.status_changed
+机会状态变化
+
+AuditLog。
+
+但 Closure Service 本身不能替用户完成 Qualification。
+闭环服务不能替用户完成确认。
+
+--------------------------------------------------
+QUALIFIED → CONVERTED
+--------------------------------------------------
+
+这个转换可以由 Closure Service 执行，
+
+但必须：
+
+from = QUALIFIED
+to = CONVERTED
+
+并留下审计。
+
+不得再：
+
+DETECTED → CONVERTED。
+
+--------------------------------------------------
+测试
+--------------------------------------------------
+
+新增真实数据库测试：
+
+A.
+
+Opportunity = DETECTED
+
+调用 runRecoveryClosure()
+
+→ opportunitiesConsidered 不包含它
+→ Case = 0
+→ Claim = 0
+→ status 仍 DETECTED
+
+B.
+
+Opportunity = QUALIFIED
+
+→ 正常建 Case
+→ 最终 Opportunity = CONVERTED
+
+C.
+
+CONVERTED 再跑
+
+→ 幂等复用原 Case
+
+==================================================
+CHANGE #48 — DRAFT Claim 不得直接产生 RECEIVED Settlement【P0】
+==================================================
+
+这是当前最严重的领域语义问题之一。
+
+当前真实代码：
+
+Claim.status = DRAFT
+
+随后只要：
+
+simulateSettlement = true
+
+直接创建：
+
+Settlement.status = RECEIVED
+
+也就是说数据库可以出现：
+
+Claim = DRAFT
+索赔草稿
+
+但：
+
+Settlement = RECEIVED
+客户已经实际到账
+
+这是不可能的业务状态。
+
+而我们上一轮批准的链路是：
+
+Claim DRAFT
+索赔草稿
+
+→ synthetic approved outcome
+合成批准结果
+
+→ Settlement RECEIVED
+客户实际到账
+
+“synthetic approval”
+合成批准
+
+不能被省略。
+
+--------------------------------------------------
+裁定
+--------------------------------------------------
+
+当：
+
+simulateSettlement = false
+
+最终状态应该是：
+
+Case = READY_TO_CLAIM
+案件已准备索赔
+
+Claim = DRAFT
+索赔草稿
+
+并且：
+
+Settlement = 0
+Ledger = 0
+Fee = 0
+Billing = 0
+
+这就是正常 Phase 1 半自动边界。
+
+--------------------------------------------------
+当：
+simulateSettlement = true
+--------------------------------------------------
+
+这只能作为：
+
+test/demo lifecycle simulator
+测试 / 演示生命周期模拟器
+
+它可以模拟“用户已经在外部人工提交、承运商批准”的结果，
+
+但内部状态必须按顺序推进。
+
+Claim：
+
+DRAFT
+→ SUBMITTED
+→ ACKNOWLEDGED
+→ APPROVED
+
+Case：
+
+OPEN
+→ COLLECTING_EVIDENCE
+→ READY_TO_CLAIM
+→ CLAIMED
+→ WON
+→ SETTLED
+
+Opportunity：
+
+QUALIFIED
+→ CONVERTED
+
+所有状态变化必须有：
+
+AuditLog
+审计日志
+
+不得直接跳状态。
+
+这只是 test/demo 内部状态模拟，
+
+不是：
+
+ExternalWriteAdapter
+第三方写入适配器
+
+也绝不能调用真实 Carrier API。
+
+--------------------------------------------------
+Case 状态
+--------------------------------------------------
+
+当前 Settlement 已 RECEIVED，
+
+Case 却仍然：
+
+OPEN
+
+这也必须修。
+
+一个已经实际到账的案件不能仍然显示：
+
+OPEN
+刚打开。
+
+--------------------------------------------------
+测试
+--------------------------------------------------
+
+至少两条：
+
+1.
+
+simulateSettlement = false
+
+最终：
+
+Case = READY_TO_CLAIM
+Claim = DRAFT
+Settlement = 0
+Ledger = 0
+Fee = 0
+Billing = 0
+
+2.
+
+simulateSettlement = true
+
+最终：
+
+Claim = APPROVED
+Case = SETTLED
+Settlement = RECEIVED
+
+并验证所有中间状态 AuditLog 存在。
+
+==================================================
+CHANGE #49 — Settlement 必须有到账证据【P0 Provenance】
+==================================================
+
+当前 Settlement：
+
+evidenceId = NULL
+
+但 Schema 本身已经写明：
+
+到账必须能追到证据。
+
+DOMAIN_MODEL 也明确：
+
+Settlement.evidenceId
+是 Settlement 到 EvidenceArtifact 的真实关系。
+
+现在：
+
+INVOICE
+账单
+
+RATE_CARD
+费率表
+
+TRACKING
+轨迹
+
+只能证明：
+
+“我们为什么认为这笔钱应该追回”
+
+它们不能证明：
+
+“客户真的已经收到这笔钱”。
+
+--------------------------------------------------
+裁定
+--------------------------------------------------
+
+在：
+
+simulateSettlement = true
+
+的测试 / 演示场景里，
+
+再创建一份：
+
+CREDIT_NOTE
+贷项通知 / 赔付凭证
+
+EvidenceArtifact。
+
+例如：
+
+Synthetic carrier credit confirmation
+合成承运商到账证明
+
+然后：
+
+Settlement.evidenceId
+=
+该 CREDIT_NOTE EvidenceArtifact.id
+
+并且该 Evidence 也通过：
+
+CaseEvidence
+
+挂到 Case。
+
+因此：
+
+索赔前证据：
+
+INVOICE
+RATE_CARD
+TRACKING
+
+至少 3 份。
+
+到账以后再增加：
+
+CREDIT_NOTE
+
+作为 Settlement evidence。
+到账证据。
+
+不要拿：
+
+INVOICE
+
+冒充到账凭证。
+
+--------------------------------------------------
+测试
+--------------------------------------------------
+
+Settlement.status = RECEIVED
+
+必须断言：
+
+settlement.evidenceId != null
+
+Evidence.kind = CREDIT_NOTE
+
+Evidence.organizationId = Settlement.organizationId
+
+并且：
+
+CaseEvidence
+
+能追到这份 Evidence。
+
+==================================================
+CHANGE #50 — 当前闭环不是 crash-safe，也不是并发幂等【P0 Money】
+==================================================
+
+当前代码：
+
+find existing Settlement
+
+如果没有：
+
+create Settlement
+
+create Ledger
+
+create FeeCalculation
+
+create BillingInvoice
+
+update Case.recoveredAmount
+
+这些是多个独立数据库提交。
+
+问题：
+
+如果：
+
+Settlement create 成功
+
+然后进程崩溃在：
+
+Ledger create 之前
+
+重跑时：
+
+existingSettlement != null
+
+于是整个 money block
+资金块
+
+直接跳过。
+
+最终数据库永久变成：
+
+Settlement = 1
+
+Ledger = 0
+
+Fee = 0
+
+Billing = 0
+
+而普通重跑永远修不回来。
+
+同样：
+
+Settlement + Ledger 成功
+
+Fee 前崩溃，
+
+重跑也会永久缺 Fee/Billing。
+
+--------------------------------------------------
+并发问题更严重
+--------------------------------------------------
+
+Settlement 没有：
+
+unique(caseId)
+
+Claim 没有：
+
+unique(caseId, round)
+
+RecoveryRoute 也没有：
+
+unique(caseId, target)
+
+EvidenceArtifact 也没有自然唯一键。
+
+因此两个 worker 同时调用：
+
+runRecoveryClosure()
+
+可能同时：
+
+find nothing
+
+然后各自创建：
+
+2 Settlements
+2 Ledger entries
+2 Fee calculations
+
+最后只在 BillingInvoice.invoiceNo 唯一键处撞车。
+
+但此前已经写进去的重复资金数据不会自动消失。
+
+这是资金层 P0。
+
+--------------------------------------------------
+裁定
+--------------------------------------------------
+
+本轮仍然：
+
+NO SCHEMA CHANGE
+不改 Schema
+
+优先用数据库事务 + 行锁解决。
+
+推荐每个 Opportunity / Case：
+
+进入闭环后先取得：
+
+transaction-level lock
+事务级锁
+
+可以使用：
+
+SELECT ... FOR UPDATE
+行级排他锁
+
+锁住确定性的 Case 行，
+
+或等价：
+
+PostgreSQL advisory transaction lock
+PostgreSQL 事务级 advisory lock
+
+然后在同一个：
+
+prisma.$transaction()
+Prisma 数据库事务
+
+内重新检查并执行：
+
+Case / Route / Evidence / Claim
+状态迁移
+Settlement
+Ledger
+Fee
+Billing
+
+至少：
+
+Settlement
+→ Ledger
+→ FeeCalculation
+→ BillingInvoice
+→ Case.recoveredAmount
+
+必须是一个不可分割事务。
+
+任何一步失败：
+
+全部 rollback。
+全部回滚。
+
+不能留下半条资金链。
+
+--------------------------------------------------
+推荐更简单
+--------------------------------------------------
+
+Case 创建完成以后，
+
+对 case row：
+
+SELECT ... FOR UPDATE
+
+把一个 Case 的后续 Closure 串行化。
+
+这样当前缺少数据库 unique 的：
+
+Claim
+Settlement
+Route
+Evidence
+
+也不会因为两个并发 Closure 重复创建。
+
+--------------------------------------------------
+测试
+--------------------------------------------------
+
+新增真实 PostgreSQL 并发测试：
+
+Promise.all([
+  runRecoveryClosure(...),
+  runRecoveryClosure(...)
+])
+
+两次都必须正常结束。
+
+最终：
+
+Case = 1
+
+CaseOpportunity = 1
+
+Route(CARRIER) = 1
+
+Claim(round=1) = 1
+
+Settlement = 1
+
+Ledger RECOVERED = 1
+
+FeeCalculation = 1
+
+BillingInvoice = 1
+
+CREDIT_NOTE settlement evidence = 1
+
+不能靠：
+
+其中一个调用抛 P2002
+
+来算成功。
+
+两个调用都必须完成。
+
+--------------------------------------------------
+事务结构我下一轮会直接检查
+--------------------------------------------------
+
+不需要为了 crash test
+崩溃测试
+
+在生产代码放 failpoint。
+
+只要：
+
+资金块真实位于一个数据库 transaction
+真实数据库事务
+
+且并发测试通过，
+
+本轮接受。
+
+==================================================
+CHANGE #51 — 状态变化与 Audit 不能分两次提交【P0 Audit】
+==================================================
+
+当前例子：
+
+recoveryOpportunity.update(...)
+机会状态更新
+
+然后：
+
+audit(...)
+写审计
+
+是两个独立提交。
+
+因此如果：
+
+状态 update 成功
+
+但：
+
+AuditLog.create 失败
+
+数据库会出现：
+
+状态已经变了
+
+但没有 AuditLog。
+
+这直接违反：
+
+“状态跃迁必须留 AuditLog”。
+
+类似：
+
+Case create
+→ audit
+
+Claim create
+→ audit
+
+也存在同样窗口。
+
+--------------------------------------------------
+裁定
+--------------------------------------------------
+
+状态变化：
+
+和对应 AuditLog：
+
+必须在同一个 transaction
+数据库事务
+
+里。
+
+例如：
+
+Opportunity QUALIFIED → CONVERTED
+
+必须：
+
+update opportunity
++
+insert audit
+
+同一事务。
+
+Audit 写失败：
+
+状态更新也 rollback。
+
+Case / Claim 状态同理。
+
+--------------------------------------------------
+另外
+--------------------------------------------------
+
+当前 closure-service 内部直接：
+
+prisma.auditLog.create(...)
+
+绕过了 Gate 1 已批准的：
+
+AuditWriter
+审计写入器
+
+的：
+
+action validation
+动作名验证
+
+sanitizeChanges
+变更内容脱敏
+
+长度限制
+
+actor 校验。
+
+不要在 Domain Service
+领域服务
+
+建立第二套 raw AuditLog 写法。
+
+优先复用：
+
+createAuditWriter
+审计写入器
+
++
+现有 sanitize / validation
+现有脱敏 / 验证逻辑。
+
+如果需要在 transaction client
+事务客户端
+
+里写审计：
+
+可以把 Prisma Audit Sink
+Prisma 审计存储适配器
+
+轻量泛化成：
+
+PrismaClient / TransactionClient
+
+都可用的最小接口。
+
+不要复制另一套 sanitizer。
+
+--------------------------------------------------
+测试
+--------------------------------------------------
+
+至少断言：
+
+Opportunity 每一个状态跃迁都有 Audit。
+
+Case 每一个状态跃迁都有 Audit。
+
+Claim 每一个状态跃迁都有 Audit。
+
+Audit actor：
+
+SYSTEM
+
+actorRef：
+
+recovery-closure-service
+
+或 demo lifecycle simulator
+演示生命周期模拟器
+
+都可以，
+
+但必须明确。
+
+==================================================
+CHANGE #52 — Money inputs 必须 fail closed，不能 NULL → 0【P0 Money】
+==================================================
+
+当前 Claim 草稿：
+
+amountExpected:
+money(opportunity.amountExpected ?? '0')
+
+amountActual:
+money(opportunity.amountActual ?? '0')
+
+也就是说：
+
+如果 Opportunity 的：
+
+amountExpected
+
+或：
+
+amountActual
+
+缺失，
+
+系统会把：
+
+UNKNOWN
+未知
+
+悄悄变成：
+
+0.0000
+
+再生成正式 Claim 文本。
+
+这是错误的资金语义。
+
+--------------------------------------------------
+裁定
+--------------------------------------------------
+
+进入 Recovery Closure 前必须验证：
+
+amountExpected != null
+
+amountActual != null
+
+recoverableAmount != null
+
+recoverableAmount > 0
+
+currency 满足 3 位合法币种
+
+以上任一缺失：
+
+fail closed。
+
+不要建：
+
+Case / Claim / Settlement / Billing。
+
+可以：
+
+throw ClosureError
+
+或明确返回：
+
+NEEDS_REVIEW
+
+但不能把缺失金额替换成 0。
+
+--------------------------------------------------
+CommercialTerms
+商业条款
+--------------------------------------------------
+
+successFeeRate 必须：
+
+本来就是 decimal string
+十进制字符串
+
+且：
+
+0 < rate <= 1
+
+本阶段成功费率不允许：
+
+负数
+
+0
+
+> 100%
+
+source 必须非空。
+
+否则：
+
+ClosureError
+
+并且：
+
+不得产生 FeeCalculation / BillingInvoice。
+
+--------------------------------------------------
+测试
+--------------------------------------------------
+
+至少：
+
+amountExpected = null
+→ fail closed
+→ no Case/Claim
+
+amountActual = null
+→ fail closed
+
+successFeeRate = "-0.15"
+→ FAIL
+
+successFeeRate = "1.50"
+→ FAIL
+
+successFeeRate = 0.15 as number
+→ FAIL
+
+合法：
+
+"0.1500"
+
+→ PASS
+→ fee = 2.6625
+
+==================================================
+P-0002
+双模式数据接入
+==================================================
+
+本轮 PRODUCT_SPEC 对 P-0002 的 docs-only 更新：
+
+APPROVED
+已批准。
+
+它没有改变 C-0004 闭环边界。
+
+继续保持：
+
+C-0004
+= fixture-driven Recovery Closure
+
+不要在这轮加入：
+
+Upload UI
+上传界面
+
+OAuth
+
+真实 Carrier API
+真实承运商接口。
+
+==================================================
+KEEP
+保持不动
+==================================================
+
+不要推翻：
+
+- caseNo = CASE-<opportunityId>
+- Billing invoiceNo 确定性规则
+- 3 份索赔前语义证据
+- deterministic Claim template
+  确定性索赔模板
+- Settlement / Billing 两条资金方向分离
+- Ledger amount 来源 Settlement
+- Decimal fee calculation
+  十进制费用计算
+- commercial-terms.json
+- 2.6625 golden result
+  黄金金额结果
+- no Schema change
+- no migration
+- no real third-party writes
+
+==================================================
+NEXT
+下一步
+==================================================
+
+只修：
+
+CHANGE #47
+人工确认边界 + Opportunity 状态机
+
+CHANGE #48
+Claim / Case 合成生命周期与 Settlement 前置状态
+
+CHANGE #49
+Settlement 到账证据
+
+CHANGE #50
+事务原子性 + 并发幂等
+
+CHANGE #51
+状态变化与 Audit 原子化，并复用 Gate 1 Audit safety path
+
+CHANGE #52
+金额输入 / 成功费率 fail closed
+
+不要扩大到：
+
+C-0005
+
+不要接真实 API。
+
+不要做 UI。
+
+不要改 Schema。
+
+如果确实证明在现有 Schema 下无法完成并发正确性：
+
+再单独提交：
+
+SCHEMA DELTA REQUEST
+数据库模型差异请求
+
+不要自行加 migration。
+
+==================================================
+回传格式
+==================================================
+
+[CODEX → CHATGPT]
+
+TYPE:
+RE-REVIEW
+
+PREVIOUS:
+C-0004
+
+CHECKPOINT:
+2
+
+ROUND:
+2
+
+CHANGE #47:
+...
+
+CHANGE #48:
+...
+
+CHANGE #49:
+...
+
+CHANGE #50:
+...
+
+CHANGE #51:
+...
+
+CHANGE #52:
+...
+
+CI:
+...
+
+TESTS:
+...
+
+DB TESTS:
+...
+
+NEED:
+PASS / REVISE
+
+==================================================
+FINAL
+==================================================
+
+当前已经证明：
+
+Detection
+检测
+
+→ Case
+案件
+
+→ Evidence
+证据
+
+→ Claim
+索赔
+
+→ Settlement
+到账
+
+→ Ledger
+账本
+
+→ Fee
+成功费
+
+→ Billing
+收费
+
+的“正常单线程 happy path”
+正常单线程成功路径
+
+可以跑通。
+
+实际 CI：
+
+277 / 277 PASS
+
+但 Checkpoint 2：
+
+REVISE
+
+硬阻塞不是公式问题，
+
+而是：
+
+1. DETECTED 被系统自动越过人工确认。
+2. Claim 还是 DRAFT 就出现 RECEIVED Settlement。
+3. Settlement 没有到账证据。
+4. 中途崩溃会永久留下半条资金链。
+5. 并发执行会重复创建资金记录。
+6. 状态更新与 Audit 不原子。
+7. 缺失金额被静默改成 0，成功费率也缺少严格边界验证。
+
+修完这 6 项后，
+
+再做 C-0004 Checkpoint 2 最终复审。
+```
