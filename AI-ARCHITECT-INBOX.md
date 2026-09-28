@@ -35591,3 +35591,294 @@ C-0009-COMMISSION-RECONCILIATION-IMPLEMENTATION-PLAN
 
 然后再写代码。
 ```
+
+### [MSG-20260928-75] C-0009-COMMISSION-RECONCILIATION-IMPLEMENTATION-PLAN 裁定：PASS（允许进入实现）
+
+> 本轮面板格式：消息不带 `[CHATGPT → CODEX]` 标记行，已按面板原文逐字保留。
+
+```text
+C-0009-COMMISSION-RECONCILIATION-IMPLEMENTATION-PLAN 审计裁定
+VERDICT: PASS
+
+实施计划符合已批准 Design。
+
+可以进入实现。
+
+KEEP
+1. 匹配边界 ✅
+
+确认保留：
+
+纯文本
+payoutReference
+        OR
+platformOrderId
+        +
+必要时辅助：
+time window
+amount check
+
+正确。
+
+再次强调：
+
+禁止：
+
+纯文本
+仅时间接近
++
+金额接近
+=
+自动匹配
+2. No Silent Money Movement ✅
+
+这是本阶段最高优先级约束。
+
+保持：
+
+匹配成功：
+
+允许：
+
+纯文本
+calculate
++
+create DRAFT invoice
+
+禁止：
+
+Settlement 修改
+Billing → PAID
+Stripe 调用
+自动扣款
+
+通过。
+
+3. 服务边界设计 ✅
+
+计划：
+
+纯文本
+commission-reconciliation.ts
+
+负责：
+
+匹配
+规则解释
+决策结果
+
+合理。
+
+纯文本
+commission-billing.ts
+
+负责：
+
+FeeCalculation
+BillingInvoice DRAFT
+
+合理。
+
+注意保持：
+
+不要把：
+
+匹配逻辑
+
+和：
+
+收费逻辑
+
+混在一个事务。
+
+4. dryRun 默认开启 ✅
+
+批准。
+
+这是正确的上线策略。
+
+默认：
+
+纯文本
+dryRun=true
+
+原因：
+
+首次运行：
+
+必须观察：
+
+匹配率
+异常率
+重复率
+
+避免直接影响财务数据。
+
+5. Schema 路径 A ✅
+
+接受。
+
+当前：
+
+不新增：
+
+PayoutStatementItem
+CommissionMatch
+
+正确。
+
+但是保持触发条件：
+
+未来出现：
+
+多平台
+多批次
+运营异常队列
+对账历史查询需求
+
+重新提交 Schema Delta。
+
+测试计划审核
+必须保留：
+匹配：
+
+✅
+
+PAYOUT_REFERENCE
+ORDER_ID
+MANUAL_REVIEW
+UNMATCHED
+AMBIGUOUS
+幂等：
+
+✅
+
+覆盖：
+
+重复文件
+重复条目
+已收费
+权限：
+
+✅
+
+最终：
+
+动作	角色
+执行 reconcile	OWNER/ADMIN
+FINANCE	只读
+OPS	禁止
+VIEWER	禁止
+解释性：
+
+必须包含：
+
+纯文本
+matchType
+
+matchedFields
+
+confidenceReason
+
+注意：
+
+confidenceReason 不是 AI confidence。
+
+应表达：
+
+例如：
+
+纯文本
+"matched by exact payoutReference"
+
+而不是：
+
+纯文本
+0.97 confidence
+
+避免误导。
+
+增加一个验收要求
+
+虽然计划已覆盖大部分，但补充：
+
+Reconciliation Result 必须区分三个状态层
+
+不要混淆：
+
+纯文本
+MATCH RESULT
+
+和：
+
+纯文本
+BILLING RESULT
+
+例如：
+
+匹配：
+
+纯文本
+MATCHED
+
+不代表：
+
+已经收费。
+
+建议输出：
+
+纯文本
+reconciliationStatus
+
+billingStatus
+
+例如：
+
+纯文本
+MATCHED
++
+DRAFT_CREATED
+实现禁止项再次确认
+
+本阶段禁止：
+
+❌ 新 Schema
+
+❌ 新支付依赖
+
+❌ Stripe
+
+❌ Webhook
+
+❌ 自动扣款
+
+❌ Billing PAID
+
+❌ Settlement 状态变化
+
+❌ 自动退款冲正
+
+最终裁定
+C-0009-COMMISSION-RECONCILIATION-IMPLEMENTATION-PLAN
+
+状态：
+
+✅ PASS
+
+允许进入：
+
+Implementation Checkpoint
+
+完成后提交：
+
+文件变化
+Schema/依赖确认
+测试数量
+CI
+dryRun 零写入证明
+MATCH → DRAFT Billing 证明
+权限矩阵
+审计完整性
+
+继续保持当前边界。
+```
