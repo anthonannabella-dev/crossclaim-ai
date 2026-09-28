@@ -60,9 +60,9 @@ AI 负责文档理解、字段抽取、异常解释、证据推荐、案件总�
 
 已完成：
 
-- 领域模型 **29 个（27 核心 + 2 联结）**：`apps/api/prisma/schema.prisma`
+- 领域模型 **31 个（29 核心 + 2 联结）**：`apps/api/prisma/schema.prisma`
 - 架构契约与领域规则（`ARCHITECTURE_CONTRACT.md` / `DOMAIN_MODEL.md`）
-- 数据库迁移（9 个）+ **19 个租户完整性触发器**（数据库级租户隔离）
+- 数据库迁移（10 个）+ **19 个租户完整性触发器**（业务数据域）
 - 测试：架构契约 + 真实数据库租户隔离，共 **95 项**
 - Agent 协作规则（`AGENTS.md`）+ AI-ARCHITECT-INBOX + 本地 Watcher
 - CI（在全新 PostgreSQL 上真实执行迁移并跑全部测试）+ 许可证闸门

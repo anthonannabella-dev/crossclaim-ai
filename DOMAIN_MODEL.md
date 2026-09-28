@@ -5,10 +5,12 @@
 
 ---
 
-## 一、模型总览（29 个 = 27 个核心模型 + 2 个联结模型）
+## 一、模型总览（31 个 = 29 个核心模型 + 2 个联结模型）
 
-> **口径统一**：**27 个核心模型**（架构章程 §六 的清单 + C-0006-A 的 `CanonicalFact` + C-0006-B1 的 `RuleEvaluationShadow`）**+ 2 个联结模型 `CaseEvidence`、`CanonicalFactSource`**。
-> README、本文、PR 描述、架构契约测试全部按此口径，不允许 27/29 混用。
+> **口径统一**：**29 个核心模型**（架构章程 §六 的清单 + C-0006-A 的 `CanonicalFact` + C-0006-B1 的 `RuleEvaluationShadow` + C-0008-A 的 `Session`、`UserInvitation`）**+ 2 个联结模型 `CaseEvidence`、`CanonicalFactSource`**。
+> README、本文、PR 描述、架构契约测试全部按此口径，不允许 29/31 混用。
+>
+> 身份域（`Session` / `UserInvitation`）**不挂 cc_tenant_* 数据库触发器**：租户边界由应用层 Membership 复核 + 审计承担（C-0008-A 裁定）。
 
 ### 组织与用户
 
@@ -17,6 +19,8 @@
 | `Organization` | 企业（多租户根）。所有 tenant-owned 表挂 `organizationId` |
 | `User` | 用户（登录主体） |
 | `Membership` | 用户 ↔ 企业的成员关系与角色 |
+| `Session` | C-0008-A 服务端会话（只存 tokenHash；绝对 12h + 空闲 30m；租户边界靠 Membership 复核） |
+| `UserInvitation` | C-0008-A 邀请制入口（无公开注册；tokenHash + expiresAt + attemptCount） |
 
 ### 数据进入系统
 

@@ -290,6 +290,8 @@ model Organization {
   updatedAt DateTime @updatedAt
 
   memberships       Membership[]
+  sessions          Session[]
+  invitations       UserInvitation[]
   connections       SourceConnection[]
   fileAssets        FileAsset[]
   importBatches     ImportBatch[]
@@ -330,10 +332,13 @@ model User {
   lastLoginAt   DateTime?
   failedLogins  Int       @default(0)
   lockedUntil   DateTime?
+  /// C-0008-A：改密后以此时间作废既有会话
+  passwordChangedAt DateTime?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
   memberships Membership[]
+  sessions    Session[]
   auditLogs   AuditLog[]
 
   @@index([status])
@@ -474,6 +479,53 @@ model SourceTransaction {
 // ============================================================
 // 三、核心业务实体
 // ============================================================
+
+/// C-0008-A 服务端会话：只存 tokenHash，租户边界由 Membership 复核 + 审计承担（不加 DB 触发器）
+model Session {
+  id             String    @id @default(uuid())
+  organizationId String
+  userId         String
+  tokenHash      String    @unique
+  createdAt      DateTime  @default(now())
+  lastSeenAt     DateTime  @default(now())
+  /// 最近一次令牌轮换时间（refresh / rotation 审计用）
+  lastRotatedAt  DateTime?
+  expiresAt      DateTime
+  revokedAt      DateTime?
+  /// 原始 IP 永不落库，仅存哈希
+  ipHash         String?
+  userAgent      String?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, id])
+  @@index([organizationId, userId])
+  @@index([expiresAt])
+  @@index([userId, revokedAt])
+}
+
+/// C-0008-A 邀请制入口（无公开注册）：令牌只存 hash，attemptCount 用于暴力尝试检测
+model UserInvitation {
+  id               String         @id @default(uuid())
+  organizationId   String
+  email            String
+  role             MembershipRole @default(VIEWER)
+  tokenHash        String         @unique
+  expiresAt        DateTime
+  createdBy        String
+  acceptedAt       DateTime?
+  acceptedByUserId String?
+  revokedAt        DateTime?
+  attemptCount     Int            @default(0)
+  createdAt        DateTime       @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, email])
+  @@unique([organizationId, id])
+  @@index([expiresAt])
+}
 
 /// 业务事实层（C-0006-A）：同一事实可以来自 FILE_UPLOAD 或 API，
 /// 由 SourceTransaction 派生，Detection 未来只依赖这一层。
