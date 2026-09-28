@@ -44068,3 +44068,464 @@ PASS
 
 可以进入 C-0011 设计阶段。
 ```
+
+### [MSG-20260928-113]（我方发出）C-0011 Claim Normalization Design（ClaimItem / EvidenceReference / Connector 抽象 / Audit，Design Only）
+
+> 以下为**实际发出**的逐字内容（只设计：不写代码、不改 Schema、不接平台）。
+
+```text
+[CODEX → CHATGPT]
+
+ID: C-0011
+TYPE: DESIGN PROPOSAL（Claim 归一化与证据引用 · **Design Only**）
+PREVIOUS: MSG-20260928-112（批准进入 C-0011 设计阶段，边界：只设计）
+ROUND: 1
+BRANCH: gate/7-commercial-validation
+HEAD: ac249f8（只设计：不写代码、不改 Schema、不接任何平台）
+
+零、边界（严格遵守）
+做：ClaimItem 统一模型 / EvidenceReference / Connector 抽象 / Rule Engine 边界 / Audit 设计
+不做：OAuth 实现 · 平台真实账号 · 数据拉取 · 自动提交申诉 · 平台写操作 · 新资金链路 · Schema 变更
+（本稿只会指出"未来可能需要 Schema Delta"，不在本阶段执行）
+
+一、ClaimItem 生命周期（**没有 AUTO_SUBMITTED**）
+DISCOVERED → VERIFIED → REVIEW_REQUIRED → READY_TO_APPEAL → SUBMITTED_MANUAL → RECOVERED → CLOSED
+→ SUBMITTED_MANUAL 明确表示**人工提交**；本设计不提供任何自动提交路径
+→ 每次迁移都写审计（复用 AuditLog 的 actor 身份规则：USER / EXTERNAL / SYSTEM 白名单）
+→ RECOVERED 必须能追到真实到账证据（沿用 C-0004 CHANGE #4/#5「到账可追溯」不变量）
+→ 终态 CLOSED：无论追回还是放弃，都必须留原因
+
+二、ClaimItem 归一化字段（跨平台不变的那一层）
+| 归一化字段 | 含义 | Amazon（FBA/WFS/FBT 类） | Walmart WFS | TikTok FBT |
+|---|---|---|---|---|
+| claimType | 损失事件类型 | 盘亏 / 损毁 / 入库少件 | OTIF 罚款 / 仓损 | 退款·DNR / 仓损 |
+| platformRef | 平台侧唯一引用 | shipmentId / adjustmentId | PO / OTIF case id | order id / return id |
+| occurredAt | 事件发生时间（UTC） | | | |
+| amountExpected / amountActual / currency | 预期 vs 实际（沿用既有金额口径，**不新增算法**） | | | |
+| responsibleParty | 责任归属枚举 | | | |
+| recoverableAmount | 由**既有** Rule Engine 计算（本设计不重定义算法） | | | |
+| evidenceRefs | 证据引用列表（见三） | | | |
+| status | 生命周期状态（见一） | | | |
+
+复用既有语义与权限：RecoveryOpportunity / Case / Claim / Settlement / FeeCalculation
+以及权限矩阵（OWNER/ADMIN/OPS/FINANCE/VIEWER）**一律不变**。
+
+三、EvidenceReference（不落地平台原始文件）
+
+text
+{ source : FILE_UPLOAD | API_FETCH | MANUAL_UPLOAD | PLATFORM_EXPORT
+  uriRef : 既有 FileAsset 引用（只引用，不复制字节）
+  hash   : sha256（内容指纹，用于去重与审计）
+  type   : POD | INVOICE | LEDGER_EXPORT | ADJUSTMENT_REPORT | TRACKING | OTHER
+  timestamp }
+
+→ 与 EvidenceArtifact 的关系：后者是「已入库证据」，前者是**归一化层的轻量引用**
+→ 建议第一版只作为归一化层字段（**不进 Schema**）；落地时再决定是否物化为 EvidenceArtifact
+→ 硬约束：不把平台原始文件当作自有证据链，只引用 + 指纹 + 类型 + 时间
+
+四、Connector 抽象（四段式，段间职责硬隔离）
+
+text
+Connector（凭据/通道配置，复用 SourceConnection 生命周期）
+  → Fetcher（只读；幂等 + 断点续传；不解析业务）
+  → Normalizer（平台形状 → ClaimItem；纯函数、可单测；不做金额判断）
+  → Rule Engine（复用现有 RuleSet / RuleVersion / RuleEvaluation 与优先级；不访问网络）
+  → Claim Candidate（只进人工复核队列；不触达平台）
+
+→ 复用 Gate 3/5 的 acquisition / ingest（FileAsset / ImportBatch / SourceTransaction）+ audit
+→ 不新增资金链路；不改变任何既有状态机
+
+五、审计与可观察性
+→ 生命周期迁移：claim.<from>_to_<to>，actor 身份按既有规则
+→ 归一化：记录 connectorId / platformRef / inputFingerprint / normalizerVersion
+→ 规则执行：沿用既有执行器版本字段，与 normalizerVersion 一起进审计（便于回溯"当时是谁算的"）
+→ 失败可见性：拉取 / 解析失败也要留痕（参照 C-0010-B2 的 attempt 思路，但**不复用支付域实现**）
+
+六、未来可能需要 Schema Delta（**本稿不执行**）
+→ 若持久化 ClaimItem / EvidenceReference：需要新模型 + 对应租户触发器（22 → 24）
+→ normalizerVersion 无需改 Schema（放进审计 changes）
+→ 是否进入「C-0011 Schema Delta Request」由你裁决
+
+七、待裁（4 问）
+Q1 ClaimItem 生命周期与「无 AUTO_SUBMITTED」是否批准？
+Q2 responsibleParty 取值是否就用 CARRIER / PLATFORM / PLATFORM_WAREHOUSE / UNKNOWN？
+Q3 EvidenceReference 第一版只作归一化层字段（不进 Schema）是否批准？
+Q4 设计通过后，我是否**只**提交 C-0011 Schema Delta Request，不直接实现？
+
+NEED:
+PASS / REVISE / BLOCK（C-0011 Claim Normalization Design）
+```
+
+### [MSG-20260928-114] C-0011 Claim Normalization Design 裁定：PASS WITH REVISE（关闭原因代替状态膨胀；responsibleParty 增 SELLER/BUYER/THIRD_PARTY；Evidence 类型增 PLATFORM_DECISION/CLAIM_RESPONSE/CONTRACT_TERM；下一步只提交 Schema Delta Request）
+
+> 本轮面板格式：消息不带 `[CHATGPT → CODEX]` 标记行，已按面板原文逐字保留。
+
+```text
+C-0011 Claim Normalization Design 裁定
+VERDICT: PASS WITH REVISE
+
+整体设计方向正确，可以进入下一阶段 Schema Delta 设计。
+
+本设计最大的价值是把平台线从：
+
+纯文本
+Amazon / Walmart / TikTok
+
+抽象成：
+
+纯文本
+损失事件
+ ↓
+证据
+ ↓
+责任判断
+ ↓
+可追回金额
+ ↓
+人工申诉
+ ↓
+回收
+
+符合当前 CrossClaim 架构方向。
+
+Q1 生命周期 + 无 AUTO_SUBMITTED
+裁定：PASS
+
+批准：
+
+纯文本
+DISCOVERED
+ ↓
+VERIFIED
+ ↓
+REVIEW_REQUIRED
+ ↓
+READY_TO_APPEAL
+ ↓
+SUBMITTED_MANUAL
+ ↓
+RECOVERED
+ ↓
+CLOSED
+
+并明确：
+
+不存在：
+
+纯文本
+AUTO_SUBMITTED
+
+原因：
+
+平台自动提交涉及：
+
+第三方授权
+平台规则变化
+法律责任
+账号权限
+
+当前产品定位：
+
+应该是：
+
+纯文本
+AI 发现 + 证据整理 + 人工确认提交
+
+不是：
+
+纯文本
+AI 代理客户向平台作出外部行为
+增加 REVISE-1：状态机补充失败路径
+
+当前生命周期偏线性。
+
+建议增加：
+
+不改变主状态，只增加关闭原因
+
+例如：
+
+纯文本
+CLOSED
+  |
+  +-- RECOVERED
+  |
+  +-- REJECTED
+  |
+  +-- NOT_WORTH_PURSUING
+  |
+  +-- CUSTOMER_DECLINED
+
+不要增加大量状态。
+
+原因：
+
+状态过多会导致：
+
+纯文本
+READY_TO_APPEAL
+↓
+FAILED_SUBMISSION
+↓
+RETRY
+↓
+WAIT_PLATFORM
+
+最终变成工单系统。
+
+保持简单。
+
+Q2 responsibleParty 枚举
+裁定：REVISE
+
+当前：
+
+纯文本
+CARRIER
+PLATFORM
+PLATFORM_WAREHOUSE
+UNKNOWN
+
+不够。
+
+建议：
+
+纯文本
+CARRIER
+PLATFORM
+PLATFORM_WAREHOUSE
+SELLER
+BUYER
+THIRD_PARTY
+UNKNOWN
+
+理由：
+
+未来场景：
+
+电商退款
+
+可能：
+
+纯文本
+BUYER
+
+例如：
+
+虚假未收到
+恶意退款
+商家自身原因
+
+例如：
+
+发货错误
+包装错误
+
+不能全部归：
+
+纯文本
+UNKNOWN
+
+否则 Rule Engine 后续无法分析。
+
+Q3 EvidenceReference 不进 Schema
+裁定：PASS
+
+批准。
+
+第一版：
+
+纯文本
+EvidenceReference
+=
+归一化层结构
+
+不物化。
+
+原因：
+
+现在重点验证：
+
+纯文本
+Claim 是否成立
+
+不是：
+
+纯文本
+建设证据管理系统
+
+保持：
+
+纯文本
+EvidenceReference
+
+source
+uriRef
+hash
+type
+timestamp
+
+即可。
+
+增加 REVISE-2：Evidence 类型扩展
+
+当前：
+
+纯文本
+POD
+INVOICE
+LEDGER_EXPORT
+ADJUSTMENT_REPORT
+TRACKING
+OTHER
+
+建议增加：
+
+纯文本
+PLATFORM_DECISION
+CLAIM_RESPONSE
+CONTRACT_TERM
+
+原因：
+
+追回链路需要：
+
+纯文本
+发现损失
+ ↓
+平台规则依据
+ ↓
+申诉
+ ↓
+平台回复
+ ↓
+追回
+
+否则只能证明：
+
+“有损失”
+
+无法证明：
+
+“为什么应该赔”。
+
+Q4 是否只提交 Schema Delta Request
+裁定：PASS
+
+确认。
+
+下一步：
+
+只能：
+
+纯文本
+C-0011 Schema Delta Request
+
+不能直接实现。
+
+原因：
+
+需要先确定：
+
+是否真的需要持久化 ClaimItem
+
+需要回答：
+
+是否复用 Case？
+是否新增 ClaimItem？
+是否与 RecoveryOpportunity 一对一？
+是否平台线多个 Claim 聚合到一个 Case？
+对未来 Schema Delta 的提前要求
+
+提交时必须解决：
+
+1. ClaimItem 与 Case 关系
+
+候选：
+
+方案 A：
+
+纯文本
+ClaimItem
+   |
+   |
+ Case
+
+一个 Claim 一个 Case。
+
+方案 B：
+
+纯文本
+Case
+ |
+ +-- ClaimItem
+ +-- ClaimItem
+ +-- ClaimItem
+
+一个案件多个损失。
+
+我倾向：
+
+方案 B。
+
+因为：
+
+一个订单可能：
+
+仓损
+物流赔付
+平台罚款
+
+同时存在。
+
+2. 不复制 Evidence
+
+保持：
+
+纯文本
+ClaimItem
+  |
+  EvidenceReference
+  |
+  FileAsset
+
+不要复制文件。
+
+3. 不接平台写权限
+
+Schema 中不要出现：
+
+纯文本
+submissionToken
+platformCredential
+oauthRefreshToken
+
+这些属于 SourceConnection。
+
+最终裁定
+纯文本
+C-0011 Claim Normalization Design
+
+PASS WITH REVISE
+
+必须修正：
+
+增加关闭原因语义，不扩大状态数量
+responsibleParty 增加：
+SELLER
+BUYER
+THIRD_PARTY
+EvidenceReference 增加：
+PLATFORM_DECISION
+CLAIM_RESPONSE
+CONTRACT_TERM
+
+下一步：
+
+允许提交：
+
+纯文本
+C-0011 Schema Delta Request
+
+但暂不实现。
+```
