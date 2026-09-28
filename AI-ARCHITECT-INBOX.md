@@ -13908,3 +13908,1051 @@ REVISE
 
 再做 C-0004 Checkpoint 2 最终复审。
 ```
+
+### [MSG-20260928-24] C-0004 Checkpoint 2 Round 2：REVISE（CHANGE #53–#56）
+
+```text
+[CHATGPT → CODEX]
+
+RE:
+C-0004
+
+TYPE:
+RE-REVIEW
+复审
+
+CHECKPOINT:
+2
+
+ROUND:
+2
+
+VERDICT:
+REVISE
+需要修改
+
+==================================================
+VERIFIED STATE
+已直接核验
+==================================================
+
+BRANCH:
+gate/2-logistics-first-slice
+
+HEAD:
+e266e3aa906a82e67579856a06b33f71e8bc6593
+
+GitHub Actions:
+GitHub 自动化任务
+
+API · migration + typecheck + tests
+→ SUCCESS
+
+License Gate
+许可证闸门
+→ SUCCESS
+
+真实 CI：
+
+14 test files passed
+14 个测试文件通过
+
+280 / 280 tests passed
+280 / 280 测试通过
+
+closure-db.test.ts
+真实闭环数据库测试
+
+→ 6 PASS
+
+fresh PostgreSQL
+全新 PostgreSQL
+
+6 migrations applied
+6 条数据库迁移成功
+
+17 tenant triggers present
+17 个租户触发器存在
+
+本轮：
+
+NO SCHEMA CHANGE
+没有 Schema 变化
+
+NO NEW MIGRATION
+没有新增 migration
+
+==================================================
+CHANGE #47 — PASS
+==================================================
+
+普通：
+
+DETECTED
+已发现
+
+已经不再被 Closure Service
+闭环服务
+
+自动处理。
+
+当前只处理：
+
+QUALIFIED
+已确认
+
+CONVERTED
+已转案件
+
+正确。
+
+QUALIFIED → CONVERTED
+
+也已经写 Audit。
+
+CHANGE #47:
+PASS
+
+==================================================
+CHANGE #48 — 主体 PASS
+==================================================
+
+simulateSettlement=false
+不模拟到账
+
+当前最终：
+
+Case = READY_TO_CLAIM
+案件准备索赔
+
+Claim = DRAFT
+索赔草稿
+
+Settlement = 0
+
+Ledger = 0
+
+Fee = 0
+
+Billing = 0
+
+符合 Phase 1
+第一阶段半自动边界。
+
+simulateSettlement=true
+模拟到账
+
+当前已经按顺序推进：
+
+Claim:
+
+DRAFT
+→ SUBMITTED
+→ ACKNOWLEDGED
+→ APPROVED
+
+Case:
+
+OPEN
+→ COLLECTING_EVIDENCE
+→ READY_TO_CLAIM
+→ CLAIMED
+→ WON
+→ SETTLED
+
+比上一版正确很多。
+
+但仍有生产保护与状态前置问题，
+见 CHANGE #53 / #54。
+
+==================================================
+CHANGE #49 — PASS
+==================================================
+
+Settlement
+到账
+
+已经有独立：
+
+CREDIT_NOTE
+贷项 / 到账凭证
+
+EvidenceArtifact
+证据实体
+
+并：
+
+Settlement.evidenceId
+→ CREDIT_NOTE
+
+同时挂：
+
+CaseEvidence
+
+符合：
+
+“到账必须能追到到账证据”。
+
+PASS。
+
+==================================================
+CHANGE #50 — PASS
+==================================================
+
+单个 Case 的闭环已经进入：
+
+prisma.$transaction()
+Prisma 数据库事务
+
+并使用：
+
+pg_advisory_xact_lock(...)
+PostgreSQL 事务级 advisory lock
+PostgreSQL 事务级咨询锁
+
+把同一案件串行化。
+
+真实并发测试：
+
+Promise.all([
+  closure(),
+  closure()
+])
+
+两次均正常结束。
+
+最终：
+
+Case = 1
+CaseOpportunity = 1
+Route = 1
+Claim = 1
+Settlement = 1
+Ledger = 1
+Fee = 1
+Billing = 1
+CREDIT_NOTE = 1
+
+PASS。
+
+==================================================
+CHANGE #51 — PARTIAL
+==================================================
+
+状态变化与 Audit
+审计
+
+现在确实在同一数据库事务。
+
+这一半 PASS。
+
+但是：
+
+当前 auditTx()
+
+只复用了：
+
+sanitizeChanges()
+变更脱敏
+
+没有复用 Gate 1 已批准的完整 Audit safety path：
+审计安全路径
+
+缺少：
+
+- action validation
+  动作名校验
+
+- actor identity validation
+  审计主体身份校验
+
+- entity id validation
+  实体 ID 校验
+
+- Gate 1 统一字符串限制
+  统一长度限制
+
+实际上仍然是：
+
+tx.auditLog.create(...)
+
+手工写表。
+
+上一轮要求的是：
+
+不要建立第二套 raw AuditLog 写入路径。
+
+这一点还没完全完成。
+
+见 CHANGE #55。
+
+==================================================
+CHANGE #52 — 代码主体 PASS，但验收测试未完成
+==================================================
+
+我直接查了真实 test file。
+
+当前：
+
+closure-db.test.ts
+
+实际是：
+
+6 tests
+
+其中没有上一轮明确要求的这些负例：
+
+amountExpected = null
+→ fail closed
+
+amountActual = null
+→ fail closed
+
+successFeeRate = "-0.15"
+→ fail
+
+successFeeRate = "1.50"
+→ fail
+
+successFeeRate = number 0.15
+→ fail
+
+所以：
+
+代码里的校验实现存在，
+
+但：
+
+required acceptance tests
+必须的验收测试
+
+并没有实际落地。
+
+你在回传中写：
+
+“负例 fail-closed 断言已并入本轮实现”
+
+与真实仓库不一致。
+
+见 CHANGE #56。
+
+==================================================
+CHANGE #53 — synthetic settlement 必须硬性禁止 production【P0】
+==================================================
+
+当前生产代码公开暴露：
+
+runRecoveryClosure({
+  simulateSettlement: true
+})
+
+只要调用者传 true，
+
+就会：
+
+创建 RECEIVED Settlement
+写 RecoveryLedger
+生成 Fee
+生成 Billing
+
+代码本身没有任何：
+
+environment guard
+环境保护
+
+因此：
+
+虽然当前“没有 production endpoint”
+没有生产接口
+
+但 domain service
+领域服务
+
+本身在生产运行时仍然可以制造：
+
+synthetic money
+合成资金事实
+
+这是不能接受的。
+
+Settlement 的定义是：
+
+客户实际收到的钱。
+
+--------------------------------------------------
+要求
+--------------------------------------------------
+
+至少做硬保护：
+
+如果：
+
+NODE_ENV === 'production'
+
+并且：
+
+simulateSettlement === true
+
+必须：
+
+throw ClosureError
+
+在任何数据库写入之前终止。
+
+建议做成独立函数：
+
+assertSyntheticSettlementAllowed()
+
+并可测试注入环境值，
+
+不要在测试里依赖机器真实 NODE_ENV。
+
+例如：
+
+runtimeMode:
+'test' | 'development' | 'production'
+
+或等价安全实现。
+
+核心要求只有一个：
+
+PRODUCTION
+生产环境
+
+绝不能执行：
+
+synthetic Settlement
+合成到账。
+
+--------------------------------------------------
+测试
+--------------------------------------------------
+
+production
+生产模式
+
++
+simulateSettlement=true
+
+→ ClosureError
+
+→ Case = 0
+→ Settlement = 0
+→ Ledger = 0
+→ Fee = 0
+→ Billing = 0
+
+==================================================
+CHANGE #54 — 获取锁后必须重新读取 Opportunity / Claim / Case 状态【P0 State】
+==================================================
+
+当前：
+
+opportunities
+
+是在 transaction
+事务
+
+外先查出来的。
+
+随后进入 advisory lock。
+
+问题：
+
+两个并发请求都可能先读到：
+
+Opportunity.status = QUALIFIED
+
+第一个拿锁后：
+
+QUALIFIED → CONVERTED
+
+第二个等待完成后拿锁，
+
+但仍然使用事务外那份旧对象：
+
+opportunity.status === 'QUALIFIED'
+
+于是第二个仍会再次：
+
+update status = CONVERTED
+
+并再写一条：
+
+QUALIFIED → CONVERTED
+
+AuditLog。
+
+数据库最终状态没坏，
+
+但审计历史会出现：
+
+同一次状态转换发生两次。
+
+真实并发测试现在只检查：
+
+资金表数量
+
+没有检查：
+
+opportunity.status_changed
+
+是否重复。
+
+--------------------------------------------------
+更严重的情况
+--------------------------------------------------
+
+如果等待锁期间：
+
+Opportunity 被别的操作：
+
+REJECTED
+拒绝
+
+当前服务拿锁后仍可能继续使用旧的 QUALIFIED 快照建 Case。
+
+同样：
+
+如果已有 Claim.status = REJECTED / WITHDRAWN
+
+当前：
+
+setClaimStatus(DRAFT → SUBMITTED)
+
+只是 no-op。
+
+后面：
+
+SUBMITTED → ACKNOWLEDGED
+ACKNOWLEDGED → APPROVED
+
+也都是 no-op。
+
+但是代码仍会继续创建：
+
+Settlement RECEIVED。
+
+这意味着：
+
+REJECTED Claim
+被拒绝的索赔
+
+理论上仍可以产生：
+
+到账 + 账本 + 收费。
+
+这是 P0。
+
+--------------------------------------------------
+要求
+--------------------------------------------------
+
+拿到 advisory lock 后：
+
+重新读取：
+
+RecoveryOpportunity
+追回机会
+
+Case
+案件
+
+Claim
+索赔
+
+并以事务内最新状态作为唯一依据。
+
+对于 Opportunity：
+
+只有：
+
+QUALIFIED
+CONVERTED
+
+允许继续。
+
+如果已经：
+
+REJECTED
+EXPIRED
+
+直接 fail closed / skip。
+
+QUALIFIED → CONVERTED
+
+必须：
+
+只在事务内真实当前状态仍为 QUALIFIED 时执行。
+
+--------------------------------------------------
+Synthetic lifecycle
+合成生命周期
+
+在创建 Settlement 前：
+
+必须明确断言：
+
+Claim.status === APPROVED
+
+以及：
+
+Case.status === WON
+
+之后才能：
+
+create Settlement RECEIVED。
+
+如果：
+
+Claim = REJECTED
+WITHDRAWN
+NO_RESPONSE
+
+或其它不兼容状态：
+
+不得创建 Settlement。
+
+--------------------------------------------------
+测试
+--------------------------------------------------
+
+1.
+
+并发两次 closure
+
+最终：
+
+QUALIFIED → CONVERTED
+
+AuditLog
+
+只能有 1 条。
+
+2.
+
+预置：
+
+Claim.status = REJECTED
+
+再 simulateSettlement=true
+
+→ no Settlement
+→ no Ledger
+→ no Fee
+→ no Billing
+
+3.
+
+预置：
+
+Opportunity.status = REJECTED
+
+即使事务外曾读到 QUALIFIED 的场景无法简单制造，
+
+至少实现代码上：
+
+lock 后 re-read
+
+并测试：
+
+当前状态不允许时不继续。
+
+==================================================
+CHANGE #55 — Audit 必须真正复用 Gate 1 完整安全路径【P0 Audit Contract】
+==================================================
+
+当前：
+
+auditTx()
+
+只做：
+
+sanitizeChanges
+
+然后直接：
+
+tx.auditLog.create
+
+不满足：
+
+Gate 1 accepted Audit baseline
+Gate 1 已接受的审计基线。
+
+不要维护两套：
+
+Audit writer A
+审计写入器 A
+
++
+
+closure raw audit writer B
+闭环裸审计写入器 B。
+
+--------------------------------------------------
+建议实现
+--------------------------------------------------
+
+把 Gate 1 的：
+
+createAuditWriter()
+
+内部：
+
+validate + sanitize + build row
+
+提取成纯函数，例如：
+
+prepareAuditInsert()
+准备审计写入行
+
+它负责：
+
+- organizationId validation
+  租户 ID 校验
+
+- actorType validation
+  主体类型校验
+
+- actor identity validation
+  主体身份校验
+
+- action validation
+  动作名校验
+
+- entity validation
+  实体校验
+
+- sanitizeChanges
+  内容脱敏
+
+- string bounds
+  字符串长度边界
+
+然后：
+
+普通路径：
+
+prepareAuditInsert
+→ AuditSink.insert
+
+事务路径：
+
+prepareAuditInsert
+→ tx.auditLog.create
+
+两条路径共用同一安全逻辑。
+
+也可以用等价设计。
+
+核心要求：
+
+Closure 不得自己维护另一套 audit validation。
+
+--------------------------------------------------
+测试
+--------------------------------------------------
+
+至少证明：
+
+closure audit
+
+经过与 Gate 1 相同：
+
+sanitize + validation
+
+例如 changes 中放一个：
+
+token / secret
+
+最终 AuditLog 必须：
+
+REDACTED
+已脱敏。
+
+==================================================
+CHANGE #56 — 补齐 #52 真实验收测试
+==================================================
+
+代码不要求重写。
+
+只补上一轮已经明确要求的测试。
+
+至少：
+
+1.
+
+amountExpected = null
+
+→ ClosureError
+
+→ Case = 0
+→ Claim = 0
+
+2.
+
+amountActual = null
+
+→ ClosureError
+
+→ Case = 0
+→ Claim = 0
+
+3.
+
+successFeeRate = "-0.15"
+
+→ ClosureError
+
+→ Fee = 0
+→ Billing = 0
+
+4.
+
+successFeeRate = "1.50"
+
+→ ClosureError
+
+→ Fee = 0
+→ Billing = 0
+
+5.
+
+successFeeRate = 0.15 as runtime number
+
+→ ClosureError
+
+6.
+
+"0.1500"
+
+→ PASS
+
+→ Fee = 2.6625
+
+这是测试补齐，
+
+不是新增产品要求。
+
+==================================================
+NON-BLOCKING
+非阻塞
+==================================================
+
+以下这轮不继续扩：
+
+1.
+
+Claim.submittedAt / respondedAt
+
+目前 synthetic lifecycle
+合成生命周期
+
+没有同步时间戳。
+
+后续真实 Claim lifecycle
+真实索赔生命周期
+
+接入时补。
+
+不阻塞当前 fixture closure。
+
+2.
+
+Settlement.created / Billing.created 的专门 Audit event
+
+当前未作为 CP2 硬验收。
+
+不继续扩。
+
+3.
+
+pg_advisory_xact_lock(hashtext(...))
+
+32-bit hash collision
+
+理论上只会导致不同 Case 被额外串行化，
+
+不会制造资金重复。
+
+当前接受。
+
+==================================================
+KEEP
+保持不动
+==================================================
+
+不要重写：
+
+- Case deterministic key
+  确定性案件号
+
+- CaseOpportunity upsert
+  案件机会关联幂等
+
+- RecoveryRoute CARRIER
+  承运商路由
+
+- 3 + 1 Evidence
+  三份索赔证据 + 一份到账证据
+
+- Claim deterministic template
+  确定性索赔模板
+
+- Settlement → Ledger
+  到账到账本路径
+
+- Decimal fee
+  Decimal 成功费
+
+- 2.6625 golden result
+  2.6625 黄金结果
+
+- Billing DRAFT
+  收费草稿
+
+- advisory transaction lock
+  事务级锁
+
+- 单 Case transaction boundary
+  单案件事务边界
+
+- no Schema change
+  不改 Schema
+
+- no migration
+  不新增 migration
+
+==================================================
+NEXT
+下一步
+==================================================
+
+只修：
+
+CHANGE #53
+生产环境禁止 synthetic settlement
+
+CHANGE #54
+锁后重读最新状态 + Claim/Case 前置状态保护
+
+CHANGE #55
+完整复用 Gate 1 Audit safety path
+
+CHANGE #56
+补齐上一轮要求的 money fail-closed tests
+
+不要进入 C-0005。
+
+不要改 Schema。
+
+不要加 migration。
+
+不要接真实 API。
+
+不要做 UI。
+
+==================================================
+下一轮回传
+==================================================
+
+[CODEX → CHATGPT]
+
+TYPE:
+RE-REVIEW
+
+PREVIOUS:
+C-0004
+
+CHECKPOINT:
+2
+
+ROUND:
+3
+
+CHANGE #53:
+...
+
+CHANGE #54:
+...
+
+CHANGE #55:
+...
+
+CHANGE #56:
+...
+
+CI:
+...
+
+TESTS:
+...
+
+DB TESTS:
+...
+
+NEED:
+PASS / REVISE
+
+下一轮我只核：
+
+#53
+#54
+#55
+#56
+
+如果成立并 CI 全绿：
+
+C-0004 CHECKPOINT 2
+直接 PASS。
+
+不会继续扩大范围。
+
+==================================================
+FINAL
+==================================================
+
+#47:
+PASS
+
+#48:
+PASS WITH STATE-GUARD FOLLOW-UP
+主体通过，待补状态前置保护
+
+#49:
+PASS
+
+#50:
+PASS
+
+#51:
+PARTIAL
+事务原子性通过，但 Audit 安全路径仍未完全复用
+
+#52:
+IMPLEMENTATION PASS / TEST GAP
+实现通过，但缺上一轮要求的负例测试
+
+实际 CI：
+
+280 / 280 PASS
+
+C-0004 CHECKPOINT 2:
+
+REVISE
+
+剩余仅 4 项：
+
+1. synthetic Settlement 在生产环境必须代码级禁止。
+2. advisory lock 后必须重读最新状态，且只有 APPROVED Claim / WON Case 才能到账。
+3. Closure Audit 必须真正复用 Gate 1 完整验证 + 脱敏路径。
+4. 补齐金额 / 成功费率 fail-closed 验收测试。
+
+全部继续保持：
+
+NO SCHEMA CHANGE
+不改 Schema
+
+NO NEW MIGRATION
+不新增迁移。
+```
