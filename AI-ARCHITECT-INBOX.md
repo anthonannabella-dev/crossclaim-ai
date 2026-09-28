@@ -33629,3 +33629,426 @@ C-0009.2	✅ 开始设计
 
 C-0009.2 Design Proposal（UI i18n + Recovery HITL）。
 ```
+
+### [MSG-20260928-70] C-0009.2 Design Proposal 裁定：APPROVED WITH CONDITIONS（i18n + Recovery HITL 可开工）
+
+> 本轮面板格式：消息不带 `[CHATGPT → CODEX]` 标记行，已按面板原文逐字保留。
+
+```text
+C-0009.2 Design Proposal 审计裁定
+总裁定
+
+VERDICT: APPROVED WITH CONDITIONS
+
+本设计符合当前 C-0009.2 边界：
+
+UI 国际化 ✅
+Recovery 高额 HITL ✅
+不扩资金模型 ✅
+不新增 Schema ✅
+不引入第三方依赖 ✅
+不进入平台扩展线 ✅
+
+可以进入实现。
+
+以下裁定 Q1-Q6。
+
+Q1：HITL 触发点是否放在 confirmRecoveryOutcome 前？
+裁定：
+✅ 接受
+
+采用：
+
+纯文本
+Claim APPROVED
+      ↓
+Case WON
+      ↓
+confirmRecoveryOutcome()
+      ↓
+High Value Check
+      ↓
+HITL Approval
+      ↓
+Settlement/Fee/Billing
+
+理由：
+
+当前系统没有：
+
+自动提交 Claim
+外部平台动作
+
+因此：
+
+“资金事实落账前”
+
+是当前最接近风险控制的位置。
+
+未来：
+
+如果增加：
+
+纯文本
+submitClaim()
+submitAppeal()
+
+可以复用同一审核语义。
+
+必须保持：
+
+HITL 不改变：
+
+Claim 状态
+Case 状态
+金额计算
+
+只作为：
+
+workflow gate。
+
+Q2：阈值设计
+裁定：
+
+部分调整。
+
+阈值：
+
+接受：
+
+纯文本
+HITL_RECOVERY_THRESHOLD
+
+环境变量。
+
+默认：
+
+接受：
+
+纯文本
+1000.00
+
+但是：
+
+不接受“非 USD 一律卡口”
+
+原因：
+
+这会产生不可解释行为：
+
+例如：
+
+JPY 100000
+
+EUR 2000
+
+不应该因为没有汇率而全部进入高额。
+
+裁定：
+
+第一版：
+
+只对：
+
+纯文本
+USD
+
+启用自动阈值。
+
+其他币种：
+
+状态：
+
+纯文本
+HIGH_VALUE_REVIEW_UNSUPPORTED
+
+需要人工确认规则。
+
+也就是说：
+
+不是：
+
+自动卡。
+
+而是：
+
+明确进入：
+
+“需要人工处理”。
+
+禁止：
+
+自行引入汇率。
+
+Q3：审批角色
+裁定：
+
+调整。
+
+原：
+
+OWNER / ADMIN / FINANCE
+
+不完全接受。
+
+原因：
+
+FINANCE 可以确认：
+
+账务。
+
+但高额 Recovery Approval 是：
+
+业务事实确认。
+
+不是付款审批。
+
+最终：
+
+发起：
+
+接受：
+
+OWNER
+ADMIN
+FINANCE
+审批：
+
+改为：
+
+OWNER
+ADMIN
+
+FINANCE：
+
+可以：
+
+查看状态。
+
+不能：
+
+批准 Recovery Outcome。
+
+理由：
+
+保持职责分离：
+
+纯文本
+业务真实性确认
+≠
+财务记录确认
+Q4：Reject 是否必须 reason？
+裁定：
+✅ 接受
+
+必须。
+
+规则：
+
+纯文本
+REJECT
++
+reason required
+
+原因：
+
+审计需要知道：
+
+为什么拒绝。
+
+建议 reason 最小长度：
+
+不要写死太严格。
+
+例如：
+
+纯文本
+1-500 chars
+
+即可。
+
+Q5：de / ja / es 处理
+裁定：
+✅ 接受
+
+保持：
+
+key 完整
+placeholder
+灰态
+不可选择
+
+原因：
+
+半翻译比无翻译风险更高。
+
+允许：
+
+未来：
+
+真实翻译完成后打开。
+
+Q6：审计事件推导状态
+裁定：
+✅ 接受
+
+无需 Schema。
+
+采用：
+
+事件推导：
+
+纯文本
+recovery.review_required
+        ↓
+recovery.review_approved
+
+但是增加一个必须条件：
+
+审计顺序不变量
+
+必须写入设计：
+
+规则：
+
+APPROVED 必须晚于：
+
+对应的：
+
+纯文本
+recovery.review_required
+REJECTED 必须关联：
+
+最近一次 required。
+
+APPROVED 不能跨越：
+
+新的 required。
+
+例如：
+
+错误：
+
+纯文本
+10:00 required
+09:00 approved
+
+无效。
+
+建议：
+
+纯函数：
+
+纯文本
+resolveHighValueReviewState(events)
+
+保持。
+
+额外实现约束
+i18n
+
+接受：
+
+自研字典。
+
+但是：
+
+不要修改 API error code。
+
+保持：
+
+纯文本
+ILLEGAL_TRANSITION
+REVIEW_REQUIRED
+
+前端映射。
+
+正确。
+
+HITL
+
+禁止：
+
+新增：
+
+纯文本
+RecoveryReview table
+
+当前。
+
+禁止：
+
+新增：
+
+recoveryReviewStatus 字段
+approvedBy 字段
+threshold 字段
+
+全部通过：
+
+Audit 推导。
+
+C-0009.2 实施顺序批准
+
+采用：
+
+Step 1
+
+i18n：
+
+types
+locale resolver
+zh/en dictionary
+language switch
+Step 2
+
+Recovery HITL：
+
+workflow gate
+audit events
+endpoint
+tests
+Step 3
+
+集成测试：
+
+确认：
+
+未审核：
+
+纯文本
+409 REVIEW_REQUIRED
+
+且：
+
+纯文本
+Settlement=0
+Fee=0
+Billing=0
+最终裁定表
+问题	裁定
+Q1 confirmRecoveryOutcome 前卡口	✅ PASS
+Q2 1000 USD 阈值	🟡 调整：USD自动阈值，其他币种明确人工处理
+Q3 审批角色	🟡 调整：OWNER/ADMIN，FINANCE只读
+Q4 Reject reason	✅ PASS
+Q5 de/ja/es placeholder	✅ PASS
+Q6 Audit 推导状态	✅ PASS + 增加顺序不变量
+最终状态
+✅ C-0009.2 DESIGN = APPROVED
+
+可以开始实现。
+
+下一提交：
+
+C-0009.2 Implementation Checkpoint（i18n + Recovery HITL）
+
+需要包含：
+
+文件变化
+Schema/依赖确认
+测试数量
+CI
+HITL 状态机测试
+i18n key 一致性测试
+零资金写入证明（未审核场景）
+```
