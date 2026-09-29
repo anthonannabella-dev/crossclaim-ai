@@ -68095,3 +68095,231 @@ KILL-SWITCH-SCHEMA-MIGRATION-REQUEST
 
 可以提交 Schema Migration Request。
 ```
+
+### [MSG-20260929-59] KILL-SWITCH-SCHEMA-MIGRATION-REQUEST 裁决：RESULT: GO / STATUS: MIGRATION APPROVED / NEXT: EXECUTE MIGRATION + VALIDATION（A1 APPROVED：新增 KillSwitchTarget / KillSwitchRequestState / KillSwitchRequest + 新表/新枚举/新索引/新租户触发器/Organization 反向关系，禁止扩展 Claim/Settlement/Billing/Submission/自动动作；A2 APPROVED：CI 触发器 27→28、模型 37→38、枚举 39→41、迁移 18→19，同步 ARCHITECTURE_CONTRACT.md / DOMAIN_MODEL.md / PRODUCTION-READINESS-CHECKLIST.md；A3 APPROVED_WITH_NOTE：DROP 顺序正确，未来生产启用后回滚须升级为 disable code path → export pending requests → migration rollback；6a433e9 允许 fast-forward 合并）
+
+```text
+裁决：
+
+纯文本
+KILL-SWITCH-SCHEMA-MIGRATION-REQUEST
+
+RESULT: GO
+STATUS: MIGRATION APPROVED
+NEXT: EXECUTE MIGRATION + VALIDATION
+
+本次 Schema Delta 已满足前置设计要求，可以执行迁移。
+
+A1 执行迁移
+
+裁决：
+
+纯文本
+APPROVED
+
+批准：
+
+新增：
+
+KillSwitchTarget
+KillSwitchRequestState
+KillSwitchRequest
+
+批准范围：
+
+✅ 新表
+✅ 新枚举
+✅ 新索引
+✅ 新租户触发器
+✅ Organization 反向关系
+
+不允许扩展：
+
+❌ 不修改 Claim
+❌ 不修改 Settlement
+❌ 不修改 Billing
+❌ 不修改 Submission
+❌ 不新增自动动作
+
+A2 CI / 文档同步
+
+裁决：
+
+纯文本
+APPROVED
+
+同步：
+
+CI
+
+触发器：
+
+纯文本
+27 → 28
+
+模型：
+
+纯文本
+37 → 38
+
+枚举：
+
+纯文本
+39 → 41
+
+迁移：
+
+纯文本
+18 → 19
+
+同时更新：
+
+ARCHITECTURE_CONTRACT.md
+DOMAIN_MODEL.md
+PRODUCTION-READINESS-CHECKLIST.md
+A3 回滚方案
+
+裁决：
+
+纯文本
+APPROVED_WITH_NOTE
+
+当前 DROP 顺序正确：
+
+纯文本
+DROP TRIGGER
+↓
+DROP TABLE
+↓
+DROP TYPE
+
+但补充：
+
+迁移报告必须记录：
+
+当前 migration 尚未被运行时调用，因此 rollback 不影响业务事实。
+
+未来一旦：
+
+POST /admin/kill-switch
+幂等请求
+审批流程
+
+进入生产使用，
+
+回滚策略必须升级为：
+
+纯文本
+disable code path
+↓
+export pending requests
+↓
+migration rollback
+
+不能直接 DROP。
+
+6a433e9 合并
+
+裁决：
+
+纯文本
+APPROVED
+
+允许：
+
+fast-forward merge。
+
+条件：
+
+不 force
+不绕过保护
+CI PASS
+
+原因：
+
+当前只是 Migration Request 文档，不改变运行行为。
+
+执行阶段验收要求
+
+Migration Applied 报告必须包含：
+
+Schema
+
+确认：
+
+migrate deploy 成功
+全新库成功
+已有库成功
+Tenant Isolation
+
+确认：
+
+存在：
+
+纯文本
+cc_tenant_kill_switch_request
+
+并且：
+
+纯文本
+trigger count = 28
+索引
+
+特别验证：
+
+SQL
+kill_switch_request_pending_unique
+
+存在。
+
+回归
+
+必须通过：
+
+纯文本
+prisma validate
+
+prisma generate
+
+tsc
+
+full test suite
+
+API contract check
+
+audit coverage check
+注意
+
+这一步只是：
+
+纯文本
+Schema Enablement
+
+不是：
+
+纯文本
+Production Enablement
+
+完成迁移后：
+
+仍保持：
+
+纯文本
+Kill Switch Change Entry = 未上线
+POST /admin/kill-switch = 未开放
+真实外部动作 = 未开启
+
+当前状态更新：
+
+纯文本
+Kill Switch Read                  PASS
+Kill Switch Implementation        PASS
+Change Entry Design               PASS
+Idempotency Design R2             PASS
+Schema Migration Request          APPROVED
+
+NEXT:
+MIGRATION APPLIED CHECKPOINT
+
+可以执行迁移。
+```
