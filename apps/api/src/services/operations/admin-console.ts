@@ -25,6 +25,7 @@ export const ADMIN_MODULES = [
   'auditExplorer',
   'importValidation',
   'recoveryReview',
+  'userMembership',
   'systemHealth',
 ] as const;
 export type AdminModule = (typeof ADMIN_MODULES)[number];
@@ -39,6 +40,7 @@ export const ADMIN_MODULE_ROLES: Record<AdminModule, readonly string[]> = {
   auditExplorer: ['OWNER', 'ADMIN'],
   importValidation: ['OWNER', 'ADMIN', 'OPS'],
   recoveryReview: ['OWNER', 'ADMIN'],
+  userMembership: ['OWNER', 'ADMIN'],
   systemHealth: ['OWNER', 'ADMIN', 'OPS'],
 };
 

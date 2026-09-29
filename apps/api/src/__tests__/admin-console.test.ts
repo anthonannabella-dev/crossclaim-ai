@@ -53,6 +53,7 @@ describe('MSG-34 · D1 角色分层（最小权限）', () => {
       auditExplorer: false,
       importValidation: true,
       recoveryReview: false,
+      userMembership: false,
       systemHealth: true,
     });
   });
