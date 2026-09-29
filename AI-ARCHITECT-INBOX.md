@@ -50448,3 +50448,442 @@ WAITING_REAL_INPUT
 
 继续等待真实数据即可。无需新增工程。
 ```
+
+### [MSG-20260929-05] C-0015 范围裁决：REVIEW_ONLY / NOT_IMPLEMENT（登记为未来阶段，不在 Gate 7 开发；顺序改为 Phase 0 商业验证 → 1 单平台只读接入 → 2 统一 Claim/Evidence → 3 规则审计 → 4 HITL → 5 资金闭环 → 6 自动提交；第一原则=一个平台+一个损失类型+一个明确结果；自动提交继续禁止、OCR 保持 BACKLOG 且新增 NEEDS_COMPLIANCE_REVIEW、不提前做 C-0014、Stripe 扣佣 HOLD；**唯一批准项 = i18n 轻量层（zh-CN/en-US/de/ja/es 字典 + locale 识别 + UI 文案切换）**）
+
+Codex 提交 BRIDGE-SCOPE-MULTIPLATFORM-MULTILANG（宿主新需求：多语言 + 全渠道 + 双模式 + 三大场景 + HITL/Stripe 扣佣）后，架构方判定该需求为完整商业闭环升级，不得在 Gate 7 内插入开发，仅登记为 C-0015 候选阶段。以下为该回复的**逐字原文**。
+
+```text
+裁决：
+
+BRIDGE-SCOPE-MULTIPLATFORM-MULTILANG
+总体结论
+
+不进入实现阶段，作为新阶段提案登记。
+
+状态：
+
+纯文本
+GATE:
+7 Commercial Validation
+
+REQUEST:
+C-0015 Candidate Scope
+
+DECISION:
+REVIEW_ONLY / NOT_IMPLEMENT
+
+CURRENT PRIORITY:
+C-0009.2 VALIDATION-RUN-001
+
+原因：
+
+该需求不是一个普通增量，而是一次完整商业闭环升级：
+
+单文件验证产品
+        ↓
+多平台数据接入
+        ↓
+自动诊断
+        ↓
+自动申诉
+        ↓
+资金回收
+        ↓
+佣金结算
+
+已经跨越：
+
+数据接入层
+领域模型层
+规则引擎层
+外部动作层
+支付层
+合规层
+
+因此不能在 Gate 7 中直接插入开发。
+
+Q1：是否受理为新阶段？
+答：
+
+是，登记为 C-0015 候选阶段。
+
+但顺序调整。
+
+你建议：
+
+C-0014 → Connector → Normalize → Rule → Payment
+
+我调整为：
+
+正确顺序：
+Phase 0
+商业验证
+(C-0009.2)
+        ↓
+Phase 1
+单平台只读数据接入
+        ↓
+Phase 2
+统一 Claim / Evidence 数据模型
+        ↓
+Phase 3
+规则审计层
+        ↓
+Phase 4
+HITL 工作流
+        ↓
+Phase 5
+资金闭环
+        ↓
+Phase 6
+自动提交
+
+原因：
+
+最大的未知不是技术。
+
+而是：
+
+哪一种损耗场景，客户真正愿意付钱。
+
+三个场景：
+
+场景 A
+
+仓储损耗
+
+场景 B
+
+物流 SLA
+
+场景 C
+
+关税溢缴
+
+不能同时建设。
+
+必须先证明一个。
+
+C-0015 第一原则
+
+未来不要做：
+
+全渠道损失追回平台
+
+这个定位过宽。
+
+应该先寻找：
+
+一个平台
++
+一个损失类型
++
+一个明确结果
+
+例如：
+
+Amazon FBA
++
+仓储盘亏
++
+发现可追回金额
+
+或者：
+
+Walmart
++
+OTIF罚款
++
+生成申诉证据包
+
+Q2：四项冲突裁决
+1. 自动提交申诉
+
+结论：
+
+继续禁止 ❌
+
+保持：
+
+supportsClaimSubmission=false
+
+NEEDS_MANUAL
+
+原因：
+
+自动提交涉及：
+
+平台规则变化
+法律责任
+商业授权
+错误提交风险
+
+当前产品可以做到：
+
+发现问题
+↓
+生成证据包
+↓
+生成申诉草稿
+↓
+人工确认提交
+
+不能：
+
+AI
+↓
+直接提交
+
+2. OCR + C88/7501
+
+结论：
+
+保持 BACKLOG
+
+并新增：
+
+NEEDS_COMPLIANCE_REVIEW
+
+原因：
+
+关税溢缴不是普通文档解析。
+
+涉及：
+
+报关资料
+海关规则
+HS Code 判断
+可能涉及专业代理边界
+
+顺序：
+
+商业需求验证
+        ↓
+是否高频
+        ↓
+是否有付费主体
+        ↓
+合规评估
+        ↓
+技术实现
+
+不能反过来。
+
+3. SP-API / TikTok / Walmart
+
+结论：
+
+不提前做 C-0014
+
+保持：
+
+C-0014:
+BACKLOG
+
+理由：
+
+Cursor Persistence 是规模化同步基础设施。
+
+但当前：
+
+没有证明：
+
+哪个平台优先
+同步频率
+数据量
+客户价值
+
+先：
+
+文件模式验证
+
+再：
+
+API模式建设
+
+4. Stripe 扣佣 / 绑卡解锁
+
+结论：
+
+HOLD
+
+保持：
+
+C-0010-C2:
+WAIT_HOST_AUTHORIZATION
+
+并且：
+
+自动扣佣不进入当前阶段。
+
+原因：
+
+成功费模式需要先证明：
+
+客户认可追回金额
+客户愿意支付15%
+
+否则资金链路只是提前建设。
+
+Q3：多语言是否可独立做？
+答：
+
+部分批准。
+
+允许：
+
+i18n 基础层
+
+可以做：
+
+✅
+
+zh-CN
+en-US
+de
+ja
+es
+
+包括：
+
+字典结构
+locale 识别
+UI 文案切换
+
+暂不做：
+
+❌
+
+LLM 多语言业务输出
+
+❌
+
+索赔信自动多语言生成
+
+❌
+
+站点语言策略
+
+原因：
+
+这些依赖真实商业场景。
+
+状态：
+
+C-0015-I18N-LAYER
+
+APPROVED
+LIGHTWEIGHT ONLY
+
+Q4：需要提交哪些 Design/Delta？
+
+当前不要提交全部。
+
+按顺序：
+
+现在：
+
+不用提交 Schema Delta。
+
+下一阶段进入前：
+
+需要：
+
+1. C-0015 Architecture Proposal
+
+必须包含：
+
+单场景选择
+数据流
+用户角色
+Done State
+
+2. Schema Delta Design
+
+仅当确定第一个场景后。
+
+包括：
+
+Claim
+Evidence
+Settlement
+Recovery Event
+
+3. Rule Engine Design
+
+必须包含：
+
+输入
+判断条件
+输出
+人工复核点
+
+4. Payment Flow Design
+
+最后。
+
+包括：
+
+成功费
+退款
+争议
+对账
+
+5. Compliance Assessment
+
+关税/自动提交/资金动作前必须有。
+
+最终记录
+Markdown
+### [MSG-20260929-05]
+
+TYPE:
+SCOPE DECISION
+
+REQUEST:
+C-0015 Multi-platform Commercial Loop
+
+DECISION:
+REGISTER AS FUTURE PHASE
+NOT IMPLEMENT NOW
+
+Current Gate 7 remains:
+C-0009.2 VALIDATION-RUN-001
+
+Answers:
+
+Q1:
+Accepted as future scope candidate.
+Do not start C-0014 yet.
+
+Q2:
+No changes:
+- Auto submission FORBIDDEN
+- OCR BACKLOG + compliance review required
+- Real connectors BACKLOG
+- Stripe/payment HOLD
+
+Q3:
+i18n lightweight layer APPROVED.
+No LLM multilingual business output.
+
+Q4:
+Required later:
+C-0015 Architecture Proposal
+Schema Delta
+Rule Engine Design
+Payment Flow Design
+Compliance Assessment
+
+STATUS:
+WAITING_COMMERCIAL_VALIDATION
+
+下一步 Codex 继续保持：
+
+不要开发 C-0015。
+
+当前唯一有效推进：
+
+等第一份真实导出文件 → 跑 VALIDATION-RUN-001 → 判断 CrossClaim 第一个商业切入口。
+```
