@@ -49738,3 +49738,253 @@ WAITING_EXTERNAL_INPUT
 VALIDATION-RUN-001 数据输入；
 或宿主授权 Stripe test mode 联调。
 ```
+
+### [MSG-20260929-02] 非 API 下一项裁决：APPROVE A（文件上传平台导出适配器；无 API/无凭据；加速 VALIDATION-RUN-001；附验收报告要求与禁止范围）
+
+> 宿主约束「需要 API 的先放着，后面再接，继续往下走」后，Codex 提交 BRIDGE-NEXT-NONAPI（A 文件适配器 / B Cursor Persistence / C 其它）。架构方选 A 并给出批准边界（CSV/XLSX/JSON 解析、字段映射、规范化、quarantine、验证报告；禁止业务判断、自动生成索赔、平台连接器、未经 Delta 评审的 Schema 扩张）。以下为该回复的**逐字原文**。
+
+```text
+裁决：
+
+选择：A —— 文件上传模式：平台导出文件适配器
+
+状态：
+
+纯文本
+GATE 7
+NEXT_SCOPE:
+APPROVED
+
+SCOPE:
+File Upload Adapter Layer
+
+DECISION:
+GO
+原因
+
+当前 Gate 7 的核心目标仍然是：
+
+在没有 API、没有深度集成、没有复杂部署情况下，证明客户愿意提供真实数据，并且系统能产生可交付价值。
+
+A 是三个方案里唯一同时满足：
+
+要求	A 文件适配器	B Cursor Persistence	C 其它
+无需 API	✅	✅	未知
+无需账号授权	✅	✅	未知
+直接推进商业验证	✅	❌	未知
+能接真实客户数据	✅	❌	未知
+减少 VALIDATION-RUN 阻塞	✅	❌	未知
+符合产品未来形态	✅	部分	未知
+
+所以 A 优先级最高。
+
+A 的批准边界
+
+批准：
+
+1. 输入层
+
+支持：
+
+平台导出文件
+        |
+        ↓
+File Upload Adapter
+        |
+        ↓
+Normalized Validation Input
+        |
+        ↓
+VALIDATION-RUN-001
+
+支持类型：
+
+CSV
+XLSX
+JSON（如果平台导出）
+PDF（仅保留结构识别，不进入 OCR 自动化）
+2. 字段映射
+
+目标：
+
+把不同来源转换为统一结构。
+
+例如：
+
+source_platform
+transaction_id
+transaction_date
+order_id
+sku/reference
+fee_type
+amount
+currency
+direction
+description
+settlement_period
+raw_source_hash
+row_number
+
+14 列规范输入继续沿用。
+
+3. 必须保留的数据治理
+
+沿用 C-0013-B 原则：
+
+必须：
+
+whitelist 字段
+quarantine 未识别字段
+原始行号保留
+source fingerprint 保留
+不覆盖原始数据
+明确禁止范围
+
+本轮不要做：
+
+❌ 不做
+1. 金额判断
+
+例如：
+
+“不合理费用”
+
+“不应该扣除”
+
+“可追回金额”
+
+全部禁止。
+
+原因：
+
+这是商业规则层，不是输入适配层。
+
+2. 自动 Claim 生成
+
+不要：
+
+文件上传
+ ↓
+自动生成索赔
+
+当前阶段只验证：
+
+文件
+ ↓
+结构化
+ ↓
+分析准备
+3. 平台连接器
+
+禁止：
+
+Amazon API
+TikTok API
+Walmart API
+物流 API
+4. Schema 扩张
+
+如果现有模型可以承载：
+
+优先复用。
+
+只有出现：
+
+无法表达输入结构
+
+才提交 Schema Delta。
+
+新增验收标准
+
+A 完成后，需要提交：
+
+VALIDATION-INPUT-ADAPTER-REPORT.md
+
+包含：
+
+1. 支持格式
+
+例如：
+
+Amazon CSV
+PASS
+
+Walmart XLSX
+PASS
+
+Unknown CSV
+QUARANTINE
+2. 字段覆盖率
+
+例如：
+
+Required fields:
+12/14 matched
+
+Optional fields:
+8/20 matched
+3. 不确定项
+
+必须列出：
+
+UNKNOWN:
+fee_type mapping ambiguous
+
+ACTION:
+manual confirmation required
+
+不要自行猜。
+
+下一步执行顺序
+
+批准路线：
+
+A 文件适配器
+        ↓
+宿主提供任意真实导出文件
+        ↓
+VALIDATION-RUN-001
+        ↓
+商业价值审计
+        ↓
+决定是否进入：
+    - C-0014
+    - Connector
+    - Payment
+    - Rule Engine
+
+可写入：
+
+Markdown
+### [MSG-20260929-02]
+
+GATE:
+7 Commercial Validation
+
+DECISION:
+APPROVE A
+
+NEXT SCOPE:
+File Upload Platform Export Adapter
+
+RATIONALE:
+No API dependency. Directly accelerates VALIDATION-RUN-001 commercial validation.
+
+APPROVED:
+- file parsing
+- field mapping
+- normalization
+- quarantine
+- validation report
+
+NOT APPROVED:
+- business judgment
+- claim generation
+- platform connectors
+- schema expansion without delta review
+
+STATUS:
+READY FOR IMPLEMENTATION
+
+Codex 可以开始 A，但保持“验证加速层”定位，不进入产品平台化建设。
+```
