@@ -60144,3 +60144,357 @@ Notification 表
 外部发送
 自动联系客户/平台。
 ```
+
+### [MSG-20260929-33] NOTIFICATION-IMPLEMENTATION-CHECKPOINT 裁决：PASS ✅（PASS_CLOSE / NOTIFICATION_LAYER_READY）——Notification 只读投影通过（不成事实源、不新增表、无外部发送、不改 Claim/Settlement/Recovery 状态）；设计 R1 逐项通过：D1 事件目录 N1–N5 启用且 N6 claim.overdue 继续关闭（属 deadline approaching 的升级语义，避免重复轰炸）、D2 幂等（事件型 event|entity|transition、状态型 event|entity|UTC date，不引入 reminder policy/escalation/quiet period）、D3 保持无状态（无 Notification 表 / readAt / Inbox）、D4 聚合摘要「四个同」+ summary only（totalCount + sample ≤5，不隐藏总数）；权限映射与 VIEWER 永不收件通过；金额裁剪（viewBilling + recoveryPayoutRecord 才有 amounts 键）通过；注入式 Kill Switch 通过（未来持久化需 Schema Delta + 权限 + 审计）；97 files / 898 tests PASS；NEXT = ADMIN-CONSOLE-DESIGN（DESIGN-FIRST，范围受限：v1 不做权限编辑中心 / 平台配置 / API Key 管理 / 自动化开关管理 / 资金操作后台；建议先设计 Tenant Overview、User/Membership View、Audit Explorer、Import/Validation Operations、Recovery Review Queue、System Health；Admin 是运营可观测层，不是超级管理员危险入口）
+
+本轮为通知实现检查点裁决（PASS_CLOSE / NOTIFICATION_LAYER_READY），并指定下一模块 Admin Console Design（受限范围）。
+
+```text
+NOTIFICATION-IMPLEMENTATION-CHECKPOINT 裁决
+结论：PASS ✅
+
+状态：
+
+纯文本
+
+GATE:
+7 Commercial Validation
+
+TARGET:
+Notification Projection
+
+DECISION:
+PASS_CLOSE
+
+STATUS:
+NOTIFICATION_LAYER_READY
+一、总体审计
+
+通过。
+
+本轮实现符合 MSG-20260929-32：
+
+Notification = 只读投影
+不成为事实源
+不新增 Notification 表
+不产生外部发送
+不改变 Claim / Settlement / Recovery 状态
+
+方向正确。
+
+二、设计 R1 修订审计
+D1：事件目录
+
+结论：PASS ✅
+
+当前：
+
+纯文本
+
+N1 deadline_approaching
+N2 response_received
+N3 confirmation_required
+N4 payout_discrepancy
+N5 high_value_review
+
+保持启用。
+
+N6：
+
+纯文本
+
+claim.overdue
+
+继续关闭。
+
+认可：
+
+overdue 是 deadline approaching 的升级语义。
+
+避免：
+
+同一事件链：
+
+纯文本
+临近截止
+
+↓
+
+逾期
+
+
+造成重复轰炸。
+
+三、D2：幂等策略
+
+结论：PASS ✅
+
+当前：
+
+事件型：
+
+纯文本
+event|entity|transition
+
+状态型：
+
+纯文本
+event|entity|UTC date
+
+符合批准。
+
+不引入：
+
+reminder policy
+escalation
+quiet period
+
+正确。
+
+四、D3：无状态投影
+
+结论：PASS ✅
+
+保持：
+
+没有：
+
+Notification 表
+readAt
+Inbox
+
+正确。
+
+当前阶段：
+
+Notification 是：
+
+纯文本
+Fact
+
+↓
+
+Notification Projection
+
+↓
+
+Consumer
+
+不是：
+
+消息中心产品。
+
+五、D4：聚合摘要实现
+
+结论：PASS ✅
+
+本次调整符合要求。
+
+特别认可：
+
+“四个同”：
+
+纯文本
+同租户
+
+同事件
+
+同权限范围
+
+同时间窗口
+
+以及：
+
+summary only，不隐藏总数。
+
+这是关键。
+
+正确：
+
+错误做法：
+
+显示5条
+隐藏还有100条
+
+会误导运营。
+
+当前：
+
+totalCount
++
+sample <=5
+
+合理。
+
+六、权限审计
+
+通过 ✅
+
+当前映射：
+
+事件	权限
+N1/N3/N5	claimTrackingApprove
+N2	claimTrackingReceive
+N4	recoveryPayoutRecord
+
+保持正确。
+
+特别认可：
+
+VIEWER 永不收件。
+
+七、金额裁剪
+
+通过 ✅
+
+规则：
+
+纯文本
+
+viewBilling
++
+recoveryPayoutRecord
+
+↓
+
+amounts
+
+否则：
+
+字段不存在。
+
+正确。
+
+八、Kill Switch
+
+通过 ✅
+
+当前：
+
+注入式：
+
+纯文本
+killSwitchEnabled
+
+不新增存储。
+
+符合当前阶段。
+
+未来如果持久化：
+
+需要：
+
+Schema Delta
+权限
+审计
+
+保持。
+
+九、实现测试审计
+
+通过：
+
+纯文本
+
+97 files
+
+898 tests
+
+PASS
+
+新增覆盖：
+
+事件派生
+幂等
+收件人
+权限裁剪
+聚合限制
+unroutable
+租户隔离
+无写路径
+Kill Switch
+
+完整。
+
+十、下一模块裁决
+
+Notification 收口后：
+
+进入：
+
+Admin Console Design
+
+状态：
+
+纯文本
+
+GO_DESIGN_FIRST
+
+但范围需要控制。
+
+Admin v1 不做：
+
+❌ 权限编辑中心
+❌ 平台配置
+❌ API Key 管理
+❌ 自动化开关管理
+❌ 资金操作后台
+
+建议先设计：
+
+纯文本
+
+1. Tenant Overview
+
+2. User/Membership View
+
+3. Audit Explorer
+
+4. Import/Validation Operations
+
+5. Recovery Review Queue
+
+6. System Health
+
+重点：
+
+Admin 是运营可观测层，不是超级管理员危险入口。
+
+最终归档
+Markdown
+
+### [MSG-20260929-33]
+
+TYPE:
+IMPLEMENTATION CHECKPOINT DECISION
+
+TARGET:
+NOTIFICATION-IMPLEMENTATION
+
+DECISION:
+PASS_CLOSE
+
+
+Validated:
+- N1-N5 events
+- N6 disabled
+- event/state idempotency
+- permission routing
+- amount filtering
+- summary aggregation rules
+- kill switch
+- no write path
+- no external delivery
+
+
+STATUS:
+NOTIFICATION_LAYER_READY
+
+
+NEXT:
+ADMIN-CONSOLE-DESIGN
+
+Notification 模块收口。
+
+下一步进入 Admin Console Design（DESIGN-FIRST）。
+```
