@@ -128,12 +128,27 @@ user.invited
 
 ---
 
-## 6. 批量与性能基线（待补测）
+## 6. 批量与性能基线（实测）
 
-当前无正式基准。离线可用 `tools/validation-run` 生成大批量 CSV 后跑导入链路，观察：
-导入耗时、批次行数分布、失败行比例、内存峰值。该项记入 `CODE_COMPLETE_REPORT` 工作清单 O6。
+环境：本地 PostgreSQL 16 容器（Windows 主机，2026-09-29）；CI 为 GitHub Actions ubuntu-latest。
 
----
+| 场景 | 规模 | 结果 | 证据 |
+|---|---|---|---|
+| 适配层解析（纯内存：CSV → canonical input） | 10,000 行 | PASS，行数一致；该文件 14 个场景合计 130ms | `validation-run-scenarios.test.ts` #11 |
+| 数据库导入链路（parse → ImportBatch → SourceTransaction + CanonicalFact 双写） | 10,000 行 | IMPORTED，10,000 行全部落库，耗时 ≈ 59s | `ingest-bulk-db.test.ts` |
+| 同一文件重复导入（幂等） | 2,000 行 ×2 | 第二次 0 新增、2,000 条记为重复，批次记录仍留痕 | 同上 |
+| 行级失败不中断整批 | 2,000 行含 1 坏行 | PARTIAL，1,999 行入库，失败行号精确 | 同上 |
+
+运维结论：
+
+1. **单次导入会超过 Prisma 交互事务默认 5s 上限**。修复前 1 万行必然报
+   `Transaction already closed: A query cannot be executed on an expired transaction.`
+   现按 `chunkSize=1000` 分块写入，每块一个显式 `timeout=60s` 事务
+   （`apps/api/src/services/ingest/prisma-repository.ts`）。
+2. 当前吞吐 ≈ 170 行/秒，瓶颈在事实层：每个事实 2 次 upsert 往返（技术债 **TD-8**）。
+   1 万行 ≈ 59s 可接受；若真实文件到 10 万行量级，必须先做事实层批量写入优化。
+3. 分块的原子性粒度是「块」：第 N 块失败时前 N-1 块的行会保留，但批次会被导入层推进到
+   FAILED/PARTIAL，行仍带 importBatchId 且受 dedupeKey 幂等保护 —— 重跑同一文件不会重复计数。
 
 ## 7. 事件响应清单（上线后）
 

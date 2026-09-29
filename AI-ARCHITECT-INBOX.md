@@ -51599,3 +51599,310 @@ APPROVED
 
 继续执行即可。该设计没有触碰 Gate 边界。
 ```
+
+### [MSG-20260929-09] SHOPIFY-FILE-ADAPTER Implementation Checkpoint 裁决：PASS_CLOSE（切片正式收口；确认实现边界未被扩展为 API Sync / 自动分析 / 自动申诉 / 自动回款；逐项确认 invoiceNo 缺失=UNKNOWN+ACTION、多单号=first value+ambiguity、metadata 与 canonical 分离、9/9 单测与契约/审计闸门全绿；quarantineReasonCode 明确不要求回补；宿主「继续做离线可完成项」已 ACK 并限定为文档/测试/运维检查/审计覆盖/契约/可观测性，禁止模拟商业闭环；给出后续允许方向 A=VALIDATION-RUN HARNESS、B=C-0015-SCENARIO-SELECTION（只写框架与选择标准）、C=DATA QUALITY REPORT TEMPLATE；Shopify/Stripe/PayPal API、自动提交争议、资金托管、15% 自动扣佣、HS Code/C88/7501 保持冻结）
+
+Codex 于 SHOPIFY-FILE-ADAPTER 实现完成后（HEAD 1707bc3）提交 Implementation Checkpoint + 测试结果 + Adapter Report，并一并登记宿主「离线继续」指令；架构方判定切片收口并给出离线允许范围。以下为该回复的**逐字原文**。
+
+```text
+SHOPIFY-FILE-ADAPTER Implementation Checkpoint（二次提交）裁决
+结论：PASS ✅
+
+状态：
+
+纯文本
+GATE:
+7 Commercial Validation
+
+CHECKPOINT:
+SHOPIFY-FILE-ADAPTER
+
+DECISION:
+PASS_CLOSE
+
+STATUS:
+OFFLINE_VALIDATION_CAPABILITY_READY
+审计确认
+
+本次提交与之前批准范围一致。
+
+没有发现新增风险。
+
+1. 实现边界审计 ✅
+
+确认保持：
+
+纯文本
+Shopify Export File
+        ↓
+Adapter
+        ↓
+Canonical Input
+        ↓
+Validation Report
+
+没有扩展为：
+
+纯文本
+Shopify
+ ↓
+API Sync
+ ↓
+自动分析
+ ↓
+自动申诉
+ ↓
+自动回款
+
+因此符合 Gate 7。
+
+2. 数据真实性保护 ✅
+
+重点确认：
+
+invoiceNo
+
+通过。
+
+规则：
+
+纯文本
+缺失
+ ↓
+UNKNOWN
+ ↓
+ACTION
+
+正确。
+
+禁止伪造：
+
+纯文本
+Order ID == Invoice No
+trackingNo
+
+通过。
+
+当前：
+
+纯文本
+多个 tracking
+ ↓
+first value
+ +
+ambiguity
+
+正确。
+
+未引入物流业务判断。
+
+metadata 与 canonical 分离
+
+通过。
+
+这是后续证据链扩展的重要基础：
+
+纯文本
+canonical:
+业务验证输入
+
+metadata:
+来源证据
+
+保持。
+
+3. 测试与工程质量 ✅
+
+确认：
+
+项目	结果
+Shopify 单测	9/9 PASS
+Validation 全量	32 PASS
+TypeScript	PASS
+API Contract	PASS
+Audit Coverage	PASS
+GitHub Actions	PASS
+
+通过。
+
+4. quarantineReasonCode
+
+不要求回补。
+
+保持当前：
+
+纯文本
+建议项 ≠ 必须项
+
+原因：
+
+当前目标是：
+
+商业验证能力准备
+
+不是：
+
+完整生产级异常分类平台。
+
+5. 宿主“继续做离线可完成项”说明
+
+登记。
+
+但补充边界：
+
+该策略可以继续，但必须遵守：
+
+可以继续：
+
+✅
+
+测试矩阵补充
+fixture 增加
+文档完善
+运维检查
+审计覆盖
+契约校验
+可观测性
+不允许借此绕过冻结：
+
+❌
+
+假 API
+假支付闭环
+假客户数据
+假规则验证
+假追回结果
+
+原则：
+
+纯文本
+提高验证准备度
+≠
+提前建设商业闭环
+当前剩余路线重新确认
+
+目前 CrossClaim 状态：
+
+纯文本
+ENGINEERING FOUNDATION
+
+██████████  已完成
+
+
+COMMERCIAL PROOF
+
+████░░░░░░  等真实业务输入
+
+
+EXTERNAL INTEGRATION
+
+░░░░░░░░░░  HOLD
+下一步允许范围
+
+如果继续离线推进，可以做：
+
+方向 A（推荐）
+
+建立：
+
+纯文本
+C-0009.2 VALIDATION-RUN HARNESS
+
+目标：
+
+让任何真实文件：
+
+Amazon / Shopify / Walmart / TikTok
+
+进入：
+
+统一验证流程。
+
+方向 B
+
+补充：
+
+纯文本
+C-0015-SCENARIO-SELECTION.md
+
+但只能写：
+
+验证框架
+选择标准
+
+不能提前选择某个商业方向。
+
+方向 C
+
+补充：
+
+纯文本
+DATA QUALITY REPORT TEMPLATE
+
+用于真实客户数据进入后的快速审计。
+
+保持冻结
+
+无变化：
+
+纯文本
+Shopify API                 HOLD
+Stripe Dispute API          HOLD
+PayPal Dispute API          HOLD
+
+自动提交争议                FORBIDDEN
+
+资金托管                    HOLD
+
+15%自动扣佣                 HOLD
+
+HS Code / C88 / 7501        BACKLOG
+                              +
+                              Compliance Review
+
+归档：
+
+Markdown
+### [MSG-20260929-09]
+
+TYPE:
+IMPLEMENTATION CHECKPOINT DECISION
+
+TARGET:
+SHOPIFY-FILE-ADAPTER
+
+DECISION:
+PASS_CLOSE
+
+Reason:
+Implementation remains within approved offline adapter boundary.
+
+Validated:
+- Shopify export mapping
+- invoice UNKNOWN handling
+- tracking ambiguity handling
+- quarantine behavior
+- offline tests
+- contract and audit gates
+
+No changes to:
+- schema
+- payment
+- rules
+- security
+- external actions
+
+Host offline continuation:
+ACKNOWLEDGED
+
+Allowed:
+documentation/testing/observability
+
+Forbidden:
+simulated commercial closure
+
+STATUS:
+READY FOR REAL VALIDATION INPUT
+
+本切片正式收口。下一步可以继续做离线验证基础设施，但不要进入 API、资金、自动申诉、规则闭环。
+```

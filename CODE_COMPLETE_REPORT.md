@@ -9,7 +9,7 @@
 
 ## 0. 当前结论（一句话）
 
-**尚未 CODE COMPLETE。** 已确认存在**离线可完成**的工程缺口（见 §I 工作清单），本轮起逐项执行；
+**尚未 CODE COMPLETE。** 本轮（offline-completion-7）已清空 §I 的 O6 / O10；剩余离线可完成项来自架构方 MSG-20260929-09 允许的离线范围：方向 A（VALIDATION-RUN HARNESS）、方向 B（C-0015 场景选择框架，只写选择标准）、方向 C（数据质量报告模板），下一轮继续；
 真实依赖项（§D）与需架构方裁决项（§B 末两行）不算缺口，但必须留档。
 
 ---
@@ -26,7 +26,7 @@
 | Gate 6 | 客户运营层 | 邀请制认证（Email/密码 + HttpOnly 会话）、连接管理、机会复核、建案、回收结果、账单、案件与证据读取 | HTTP + DB 测试 |
 | Gate 7 | 工程能力 | 处置洞察与 CSV 导出、高额回收人工卡口（默认 $1000）、掩码与交付物 LOCKED、佣金对账（dry-run/仅 DRAFT）、支付域（Payment/PaymentEvent/PaymentProcessingAttempt + 执行恢复 + 对账差异）、Claim 归一化（ClaimItem + 证据联结 + 来源指纹 v1）、规则引擎审计（Audit Only）、平台连接器抽象层、验证脚手架、i18n 五语层 | 单元 + DB + HTTP 测试 |
 
-**规模（实测）**：36 模型（33 核心 + 3 联结）· 16 条迁移 · 27 个租户完整性触发器 · 76 个测试文件 ·
+**规模（实测）**：36 模型（33 核心 + 3 联结）· 16 条迁移 · 27 个租户完整性触发器 · 81 个测试文件 ·
 CI 三作业（api / web / license-gate）。
 
 ---
@@ -45,20 +45,21 @@ CI 三作业（api / web / license-gate）。
 
 ## C. 测试覆盖情况（实测）
 
-- 测试文件 **76**，用例 **611+**（`it|test(` 计数；含 `it.each` 展开后 CI 口径为 688）。
-- 失败路径断言（`rejects|toThrow|4xx|5xx`）**425** 处。
-- 重试 / 超时 / 限流相关断言 **64** 处。
-- 幂等 / 重复处理断言（`idempot|DUPLICATE`）**93** 处。
-- 租户隔离相关断言（`tenant|organizationId`）**973** 处；另有独立 `tenant-isolation.test.ts` 跑真实数据库触发器。
-- 覆盖密度：`apps/api/src/services` 103 个文件 ↔ 76 个测试文件；**未发现 TODO/FIXME/HACK**。
+- 测试文件 **81**，用例声明 **654**（`it|test(` 计数；含 `it.each` 展开后 CI 口径为 **719**，全绿）。
+- 失败路径断言（`rejects|toThrow|4xx|5xx`）**643** 处。
+- 重试 / 超时 / 限流相关断言 **77** 处。
+- 幂等 / 重复处理断言（`idempot|DUPLICATE|dedupe`）**185** 处。
+- 租户隔离相关断言（`tenant|organizationId`）**1,034** 处；另有独立 `tenant-isolation.test.ts` 跑真实数据库触发器。
+- 覆盖密度：`apps/api/src/services` 104 个文件 ↔ 81 个测试文件；**未发现 TODO/FIXME/HACK**。
 - CI 每次在**全新 PostgreSQL** 上执行 `prisma validate → migrate deploy → generate → 触发器校验 → tsc --noEmit → vitest run`。
 
-已知薄弱点（本轮起补）：
+已知薄弱点（offline-completion 各轮已处理，见 §I）：
 
-1. 失败模式**矩阵化**不足：限流(429)、超时、部分成功、重试耗尽的用例分散，缺少统一 fixture 场景包。
-2. 缺少可复用**合成数据包**（fixtures 目前只有物流域 8 个文件）。
-3. 缺少**批量/性能**场景测试（如 1 万行导入）。
-4. 缺少 `db:seed`，新环境无法一键起可操作数据。
+1. ~~失败模式矩阵化不足~~ → **已补**：`apps/api/fixtures/scenarios/`（8 个 fixture + README）+ 14 用例矩阵。
+2. ~~缺少合成数据包~~ → **已补**：同上 + `prisma/seed.ts`（幂等、禁生产）。
+3. ~~缺少批量/性能场景~~ → **已补**：适配层 1 万行（内存）+ 落库链路 1 万行（`ingest-bulk-db.test.ts`，含事务超时回归）。
+4. ~~缺少 `db:seed`~~ → **已补**：`npm run db:seed`。
+5. 仍薄弱：真实文件规模未知；若单文件达 10 万行量级，需先做事实层批量写入优化（TD-8）。
 
 ---
 
@@ -106,9 +107,10 @@ CI 三作业（api / web / license-gate）。
 | TD-1 | 文件 cursor 仅限测试/开发（RISK-C0013-B-001） | 真实平台同步前无法持久化游标 | 待架构方批 C-0014 |
 | TD-2 | `apps/ai` 未建立 | LLM 多语言输出、文档理解不可用 | 待立项（Gate 级） |
 | TD-3 | 交付物解锁（支付绑定）未实现 | 申诉包保持 LOCKED | 架构方 MSG-05：HOLD |
-| TD-4 | 失败模式 fixture 未矩阵化 | 回归面依赖零散用例 | 本轮起补 |
-| TD-5 | 无 `db:seed` | 新环境冷启动慢 | 本轮起补 |
-| TD-6 | 缺 DEPLOYMENT / SECURITY / OPERATIONS 文档 | 运维交接依赖口头 | 本轮起补 |
+| TD-4 | ~~失败模式 fixture 未矩阵化~~ | — | **已解决**（合成 fixture 场景包 + 14 用例矩阵） |
+| TD-5 | ~~无 `db:seed`~~ | — | **已解决**（幂等 `npm run db:seed`） |
+| TD-6 | ~~缺 DEPLOYMENT / SECURITY / OPERATIONS 文档~~ | — | **已解决**（三份文档已入库） |
+| TD-8 | 事实层逐条 upsert（每个事实 2 次往返） | 1 万行导入 ≈ 59s；再大一个数量级会明显拖慢 | 待真实文件规模确认后优化；现有 1 万行回归闸门兜底 |
 | TD-7 | ~~无 metrics 端点~~ | — | **已解决**（`/metrics` 端点 + 文档 + 测试，默认关闭） |
 
 ---
@@ -133,10 +135,10 @@ CI 三作业（api / web / license-gate）。
 | O3 | 新增 `prisma/seed.ts` + `db:seed`（合成数据，幂等，禁生产） | 数据/开发环境 | 本轮完成 |
 | O4 | 合成 fixture 场景包（失败/边界 14 类） | 测试数据 | **完成**：`apps/api/fixtures/scenarios/`（8 个 fixture + README） |
 | O5 | 失败模式矩阵测试（429 / 超时 / 部分成功 / 重试耗尽 / 超大文件） | 测试 | **完成**：`validation-run-scenarios.test.ts` 14 用例全绿；connector 侧复核 RATE_LIMITED / retry+backoff / partial pull / DATABASE_TIMEOUT 已由 `acquisition`、`adapter`、`sync-runner`、`workflow-payment-attempt` 覆盖 |
-| O6 | 批量与性能场景测试（1 万行导入） | 测试 | **部分完成**：适配层 1 万行 smoke（阈值 20s）已绿；DB 导入链路的 1 万行基准仍待补 |
+| O6 | 批量与性能场景测试（1 万行导入） | 测试 | **完成**：适配层 1 万行（内存）+ 落库链路 1 万行（`ingest-bulk-db.test.ts`，3 用例）；并修复由此暴露的事务超时缺陷（分块 + 显式 timeout）；基线见 `OPERATIONS.md` §6 |
 | O7 | HTTP 契约测试与 `API.md` 对齐核查 | 测试 | **完成**：新增 `tools/api-contract/check-routes.mjs`（双向比对，已接入 CI，本地 `API_CONTRACT_OK`） |
 | O8 | 审计动作覆盖率核查（关键动作是否都有审计） | 审计 | **完成**：新增 `tools/audit-coverage/check-audit-actions.mjs`（代码 ↔ OPERATIONS.md 双向核对，已接入 CI）；核对中发现文档里 `case.opened` 实际只在测试中使用，已从运维清单移除，并补齐 17 个真实动作 |
 | O9 | 可观测性补强评估（metrics 端点 / job 状态） | 运维 | **完成**：`GET /metrics`（Prometheus 文本，默认关闭，`METRICS_ENABLED=true` 才暴露）+ 单测/HTTP 测试 |
-| O10 | 管理后台异常处置能力核查（真实上线后运维视角） | 产品/运维 | 待办 |
+| O10 | 管理后台异常处置能力核查（真实上线后运维视角） | 产品/运维 | **完成**：核查报告见 `reports/ADMIN-BACKOFFICE-AUDIT.md`；补齐两个运维关键端点的 HTTP 层测试（`payment-admin-http-db.test.ts`，6 用例：401 / 403 / 400 / 409 / 200 / 越界夹取） |
 
 > 更新规则：每完成一项 → 更新本表状态 → 提交并跑 CI；全部完成且无新增项时，本文档 §0 改写为 CODE COMPLETE。
