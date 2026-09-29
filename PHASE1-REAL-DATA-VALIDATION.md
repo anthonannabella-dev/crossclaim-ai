@@ -1,42 +1,101 @@
 # PHASE 1 — REAL DATA VALIDATION（受控启动）
 
-> 依据架构方 **MSG-20260929-43**：Phase 1 = GO（受控启动）。原则：**只验证「发现真实追回机会」的能力**，不验证自动化资金与自动提交链路。
-> 状态：`WAITING_FOR_HOST_DATA`。宿主提供「真实/脱敏」文件之前，本阶段不产生任何商业结论。
+> 依据架构方 **MSG-20260929-43**（Phase 1 = GO 受控启动）与 **MSG-20260929-44**（补充最小数据规模与三段验收）。
+> 目标：验证产品**能否从真实业务数据中发现可验证线索**。不是验证：自动追回、自动提交、自动收费。
+> 状态：`WAITING_FOR_HOST_DATA`（宿主提供真实/脱敏文件前，不产生任何商业结论）。
 
-## 1. 本批验证范围（三项，均为文件路径，无需 API）
+## 1. 范围与优先顺序
 
-| ID | 数据源 | 输入 | 验证目标 | 通过标准 | 不做事项 |
-|---|---|---|---|---|---|
-| RD-01 | Shopify 独立站（**首批优先**） | Orders Export（CSV/XLSX） | 能否从真实订单/履约导出中发现**运费与履约异常**（超收运费、承诺时效未达、缺件/拒收线索） | 导入无崩溃；异常行可定位到 行号 + 列名；产出的候选损失经人工确认≥1 条**真实**可追回线索 | 不自动提交；不触碰资金；不采集真实客户联系方式 |
-| RD-02 | Amazon 卖家平台 | 结算/库存导出 | FNSKU / 赔偿 / 仓储费字段能否正确落位到事实层 | 字段映射与人工抽样一致；未识别字段一律 `UNKNOWN`（不猜测） | 不调用 SP-API；不做自动 Case |
-| RD-04 | 承运商运费账单 | FedEx / UPS / DHL / 专线账单 | 燃油附加费 / DAS / SLA 赔付等字段能否定位与归一化 | 账单可结构化解析；金额与币种无歧义；解析失败件数进 `QUARANTINE` 并有原因码 | 不自动索赔；不修改账单 |
+| 顺序 | ID | 数据源 | 输入 |
+|---|---|---|---|
+| 1 | RD-01 | Shopify 独立站 | Orders Export（CSV/XLSX） |
+| 2 | RD-02 | Amazon 卖家平台 | 结算 / 库存导出 |
+| 3 | RD-04 | 承运商运费账单 | FedEx / UPS / DHL / 专线账单 |
 
-## 2. 宿主需提供的文件（HOST APPROVAL REQUIRED）
+RD-01 优先原因：文件易得、无需 API、结构清晰，可最快验证 Adapter → Evidence 链路。
 
-### RD-01 Shopify Orders Export（首批）
+## 2. 最小数据规模（RD-01）
 
-**必须字段**：`Order ID`、`Order Name`、`Created At`、`Fulfillment Status`、`Financial Status`、`Tracking Number`、`Fulfilled At`、`Currency`、`Total Price`
+- **最低**：订单数 ≥ 500（几十单易被偶然性误导）
+- **推荐**：1,000 – 10,000 orders（足以观察退款、履约、物流异常、拒付线索）
+- **时间范围**：优先最近 3 个月；数据允许时可扩至 6–12 个月
+- 脱敏允许：姓名/地址/邮箱/电话可整列占位；订单号可哈希但需同单一致
 
-**可选字段**：`Refund Subtotal`、`Shipping`、`Shipping Method`、`Destination Country`、`Weight`
+## 3. 三段验收（必须全部通过）
 
-**格式**：CSV 或 XLSX；建议 1–3 个月窗口；**可脱敏**（客户姓名/地址/邮箱/电话可整列替换为占位符，订单号可哈希，但请保持同一订单内一致）。
+### Stage A — 数据可用性
 
-**交付方式**：宿主自行放入本地目录（不通过聊天上传真实客户数据）。放入后告知路径，Codex 侧只做本地导入与验证。
+必须输出：`Import PASS`、字段覆盖率报告、`UNKNOWN` 字段报告、`Quarantine` 报告。
 
-## 3. 执行步骤（收到文件后）
+要求：无大规模未知字段；无静默丢数据；`row trace` 保留（行号 + 列名可定位）。
 
-1. 用现有 Validation Harness 跑 `文件 → Import → Normalization → Validation → Quarantine`，产出导入质量报告（成功/失败/隔离计数与原因码）。
-2. 生成「候选追回线索」列表（仅事实与依据，**不含金额承诺**）。
-3. 人工（宿主/架构方）逐条确认：是否为真实损失、是否可能追回。
-4. 产出 `PHASE1-RESULT.md`：真实线索数、误报分析、字段缺口、是否进入 Phase 2 单场景 MVP。
+### Stage B — 候选发现
 
-## 4. 本阶段明确不做
+**≥10 条 Candidate**（Candidate ≠ Claim）。
+
+Candidate 定义：数据中存在需要人工进一步确认的异常线索（状态异常 / 金额差异 / 物流记录缺口 / 退款结算异常）。
+
+### Stage C — 人工真实性确认（最重要）
+
+人工抽样确认 **≥5 条**，逐条分类记录：
+
+| 结果 | 记录 |
+|---|---|
+| 真实问题 | TRUE POSITIVE |
+| 数据误判 | FALSE POSITIVE |
+| 信息不足 | NEEDS DATA |
+
+**Value Discovery Rate** = 人工确认真实异常数 ÷ 抽样检查数量（例如检查 20 条、确认 8 条 → 40%）。**只记录，不作为通过门槛。**
+
+## 4. 必须产出 PHASE1-RESULT.md
+
+```
+# Phase1 Result
+
+## Dataset
+来源:
+时间:
+数量:
+
+## Import Result
+
+## Data Quality
+
+## Candidate Findings
+
+## Human Verification
+
+## False Positive Analysis
+
+## Missing Data
+
+## Next Decision
+```
+
+## 5. Phase 1 暂不判断的指标
+
+❌ 回收金额　❌ 成功率　❌ ARR　❌ 佣金收入
+
+原因：这些依赖规则引擎、平台确认与真实追回，当前仍未开放。
+
+## 6. 本阶段明确不做
 
 - ❌ 自动提交 Claim / Appeal（`supportsClaimSubmission=false`，恒 `NEEDS_MANUAL`）
 - ❌ 自动扣佣 / 自动 PAID / 任何自动资金动作
 - ❌ 调用第三方平台 API 或使用真实账号授权
 - ❌ 输出「可追回金额」的承诺性结论（真实追回效果只能由 Production Validation 判定）
 
-## 5. 判据
+## 7. 宿主需提供的文件（HOST APPROVAL REQUIRED）
 
-Phase 1 = PASS 当且仅当：真实（或脱敏真实结构）文件贯通导入 → 事实层 → 人工复核，且至少一条**人工确认**的真实可追回线索。否则如实记录失败点与字段缺口，不做粉饰。
+RD-01 Shopify Orders Export：
+
+- 必须字段：`Order ID`、`Order Name`、`Created At`、`Fulfillment Status`、`Financial Status`、`Tracking Number`、`Fulfilled At`、`Currency`、`Total Price`
+- 可选字段：`Refund Subtotal`、`Shipping`、`Shipping Method`、`Destination Country`、`Weight`
+- 交付方式：宿主自行放入本地目录后告知路径（不经聊天上传真实客户数据）
+
+## 8. 执行步骤（收到文件后）
+
+1. Validation Harness 跑 `文件 → Import → Normalization → Validation → Quarantine`（产出 Stage A 报告）。
+2. 生成候选线索列表（仅事实与依据，不含金额承诺）→ Stage B。
+3. 人工逐条确认并分类 → Stage C + Value Discovery Rate。
+4. 产出 `PHASE1-RESULT.md`，交架构方裁决是否进入 Phase 2（建议单场景：FBA/物流退款审计）。

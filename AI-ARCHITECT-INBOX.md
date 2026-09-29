@@ -64423,3 +64423,257 @@ None (code)
 WAITING:
 Host Data + External Accounts
 ```
+
+### [MSG-20260929-44] MERGE-EXECUTED + PHASE1-READY 裁决：合并确认完成（main = e15a77c / CI PASS）+ Phase 1 受控启动批准（补最小数据规模、Stage A/B/C 验收、Value Discovery Rate、PHASE1-RESULT.md 结构）
+
+```text
+MERGE-EXECUTED + PHASE1-READY 裁决
+结论
+合并：确认完成 ✅
+纯文本
+main:
+e15a77c
+
+STATUS:
+MERGED
+CI:
+PASS
+
+合并路径符合要求：
+
+未 force push
+未绕过保护
+保留 GitHub 分支治理
+
+确认归档：
+
+纯文本
+gate/7-commercial-validation
+        ↓
+      main
+Phase 1 真实数据验证：批准启动 ✅
+
+当前阶段定义保持：
+
+纯文本
+PHASE 1
+REAL DATA VALIDATION
+
+目标：
+验证产品是否能从真实业务数据中发现可验证线索
+
+不是验证：
+
+自动追回
+自动提交
+自动收费
+补充 Phase 1 验收标准
+
+建议加入 PHASE1-REAL-DATA-VALIDATION.md。
+
+一、最小数据规模
+RD-01 Shopify
+
+建议：
+
+最低：
+纯文本
+订单数 ≥ 500
+
+原因：
+
+几十单容易被偶然性误导。
+
+推荐：
+纯文本
+1,000 - 10,000 orders
+
+足够观察：
+
+退款
+履约
+物流异常
+拒付线索
+时间范围：
+
+优先：
+
+纯文本
+最近 3 个月
+
+可扩：
+
+纯文本
+6-12个月
+
+如果客户数据允许。
+
+二、验证必须通过的三个阶段
+Stage A：数据可用性
+
+PASS 条件：
+
+必须输出：
+
+纯文本
+Import PASS
+
+字段覆盖率报告
+
+UNKNOWN 字段报告
+
+Quarantine 报告
+
+要求：
+
+无大规模未知字段
+无静默丢数据
+row trace 保留
+Stage B：候选发现
+
+PASS 条件：
+
+至少发现：
+
+纯文本
+≥10 条 Candidate
+
+但是注意：
+
+Candidate ≠ Claim。
+
+定义：
+
+候选：
+
+数据中存在需要人工进一步确认的异常线索。
+
+例如：
+
+状态异常
+金额差异
+物流记录缺口
+退款/结算异常
+Stage C：人工真实性确认
+
+这是最重要。
+
+最低：
+
+纯文本
+人工抽样确认 ≥5 条
+
+结果分类：
+
+结果	记录
+真实问题	TRUE POSITIVE
+数据误判	FALSE POSITIVE
+信息不足	NEEDS DATA
+三、商业验证额外指标
+
+Phase 1 增加一个：
+
+Value Discovery Rate
+
+不要只看发现数量。
+
+计算：
+
+纯文本
+人工确认真实异常数
+/
+抽样检查数量
+
+例如：
+
+检查 20 条：
+
+确认 8 条：
+
+40%
+
+记录即可。
+
+四、必须产出 PHASE1-RESULT.md
+
+结构：
+
+Markdown
+# Phase1 Result
+
+## Dataset
+来源:
+时间:
+数量:
+
+## Import Result
+
+## Data Quality
+
+## Candidate Findings
+
+## Human Verification
+
+## False Positive Analysis
+
+## Missing Data
+
+## Next Decision
+五、暂时不要加入的指标
+
+不要在 Phase 1 判断：
+
+❌ 回收金额
+❌ 成功率
+❌ ARR
+❌ 佣金收入
+
+原因：
+
+这些依赖：
+
+规则引擎
+平台确认
+真实追回
+
+当前仍未开放。
+
+六、第一批优先顺序确认
+
+保持：
+
+1. Shopify RD-01
+        ↓
+2. Amazon RD-02
+        ↓
+3. Carrier RD-04
+
+原因：
+
+Shopify 最适合作为第一条：
+
+文件容易获得
+不需要 API
+数据结构清晰
+能快速验证 Adapter → Evidence 链
+最终状态
+纯文本
+CrossClaim AI
+
+CODE:
+✅ Production Candidate
+
+MERGE:
+✅ Completed
+
+PHASE1:
+✅ Approved
+
+WAITING:
+真实脱敏数据
+
+NEXT:
+Import → Normalize → Validate → Candidate → Human Verify
+
+Codex 可以更新 Phase1 文档后等待宿主数据。
+```
