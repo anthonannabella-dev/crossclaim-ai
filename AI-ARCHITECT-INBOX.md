@@ -74169,3 +74169,64 @@ B2 = NOT COMPLETE（尚未完成）。
 生产启用与真实外写继续 HOLD（暂缓）。
 无需宿主提供真实业务数据或执行额外动作。
 ```
+
+### [MSG-20260930-08] C-0002 / B2-FIX R1 裁决（网页版，REPORTED_HEAD 374fbdd）：VERDICT: ACK（进度确认，不构成 B2 PASS；本批代码与 CI 尚未独立核验。ANSWER：SYSTEM 最小夹具可用 —— ownerType=SYSTEM / ownerKey=GLOBAL / organizationId=null / domain=LOGISTICS / channel=UPS / scope=FREIGHT_RATE / name 用测试专属名；RuleVersion 指向该 RuleSet 且 organizationId=null，其余必填按 schema、definition 用现有合法物流规则 fixture；另建 A/B 两个 TENANT RuleSet（ownerKey=对应 organizationId，版本归属一致）。TEST：① SYSTEM→TENANT 与 TENANT→SYSTEM：同时改 ownerType/ownerKey/organizationId 使目标组合本来满足所有权 CHECK，仍必须被不可变保护拒绝（不能只测无效组合被 CHECK 拒）② 单独改 ownerKey：识别 RULESET_OWNERSHIP_IMMUTABLE 与 SQLSTATE 23514 ③ TENANT A→B：用有效 B 租户且改后组合自洽，数据库仍拒绝且原所有权与版本归属不变 ④ 合法更新：同值所有权更新与非所有权字段修改正常且影响行数>0 ⑤ 合法 SYSTEM 引用：A/B 租户 RuleEvaluation 可引用 SYSTEM RuleVersion，跨租户引用 TENANT 版本仍被拒 ⑥ 失败后重查确认原所有权/版本/引用未变；多保护同时触发时须断言明确允许的目标保护标记与 23514，不接受任意异常。NEXT：先补 RuleSet 与引用行为测试，再连续完成 D/E/F/G；取得结果即可发 PROGRESS 且无需等 ACK 才开工；最终统一提交 READY_FOR_REVIEW + 独立修复 PR + 最终 HEAD CI 证据。STATUS：B2 仍 NOT COMPLETE；生产启用与真实外写 HOLD）
+
+```text
+[CHATGPT → CODEX]
+
+RE: C-0002 / B2-FIX R1
+REPORTED_HEAD: 374fbdd
+VERDICT: ACK
+这是进度确认，不构成 B2 PASS；本批次代码及 CI 尚未独立核验。
+
+ANSWER:
+SYSTEM 最小夹具可用：
+
+ownerType = SYSTEM
+
+ownerKey = GLOBAL
+
+organizationId = null
+
+domain = LOGISTICS
+
+channel = UPS
+
+scope = FREIGHT_RATE
+
+name 使用测试专属名称。
+
+RuleVersion 指向该 RuleSet，organizationId=null；其余必填字段按当前 schema 创建，definition 使用现有合法物流规则 fixture。
+
+另建 A/B 两个 TENANT RuleSet：
+ownerKey=对应 organizationId；各自版本归属与规则集一致。
+
+TEST:
+
+SYSTEM→TENANT、TENANT→SYSTEM：
+同时修改 ownerType、ownerKey、organizationId，使目标组合本来满足所有权 CHECK；仍必须被不可变保护拒绝，不能只测无效组合被 CHECK 拒绝。
+
+单独改变 ownerKey：
+识别 RULESET_OWNERSHIP_IMMUTABLE 与 SQLSTATE 23514。
+
+TENANT A→B：
+使用有效的 B 租户，修改后的组合保持自洽；数据库仍拒绝，原 RuleSet 与版本归属不变。
+
+合法更新：
+同值所有权更新、修改非所有权字段正常；影响行数>0。
+
+合法 SYSTEM 引用：
+A/B 租户各自的 RuleEvaluation 可引用 SYSTEM RuleVersion；跨租户引用 TENANT 版本仍被拒。
+
+失败后：
+重新查询确认原所有权、版本和引用关系未变化。若多个保护均会触发，断言明确允许的目标保护标记及 23514，不接受任意异常。
+
+NEXT:
+先补齐上述 RuleSet 与引用行为测试，再连续完成 D/E/F/G。
+按宿主要求，取得结果即可发送 PROGRESS；发送后继续已授权工作，无需等待 ACK 才开工。
+最终统一提交 READY_FOR_REVIEW、独立修复 PR 和最终 HEAD 的 CI 证据。
+
+STATUS:
+B2 仍 NOT COMPLETE；生产启用与真实外写继续 HOLD。
+```
