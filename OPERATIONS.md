@@ -35,21 +35,65 @@
 ## 3. 关键审计动作（运维关注）
 
 ```text
-auth.login_succeeded / auth.login_failed / auth.session_expired / auth.session_revoked
-file.uploaded / file.upload_duplicate / file.upload_failed / file.scan_passed / file.downloaded
-import.completed / import.failed
-source_connection.created / status_changed / credential_rotated
-sync_run.completed / sync_run.failed
-adapter.pull_completed / adapter.pull_failed
-opportunity.status_changed / recovery.review_required / recovery.review_approved
-case.created / case.opened / case.status_changed
-claim.created / claim.item_created / claim.status_changed / claim.recoverable_amount_reviewed
-evidence.created / evidence.case_linked / evidence.promotion_failed / evidence.promotion_reused
-billing.status_changed / commission.reconciliation_failed
-payment.succeeded / payment.review_required / payment.processing_recovered / payment.processing_replayed
-payment.reconciliation_failed / recovery_outcome.confirmed
-canonical_fact.conflict_detected / identity.duplicate_resolved
-user.invited / user.invitation_accepted / user.invitation_failed
+adapter.pull_completed
+adapter.pull_failed
+auth.login_failed
+auth.login_succeeded
+auth.session_expired
+auth.session_revoked
+billing.status_changed
+canonical_fact.conflict
+canonical_fact.conflict_detected
+case.created
+case.status_changed
+claim.created
+claim.evidence_linked
+claim.item_created
+claim.item_created_without_platform_ref
+claim.recoverable_amount_reviewed
+claim.status_changed
+commercial_terms.created
+commission.reconciliation_failed
+connector.normalizer_version_changed
+connector.pull_finished
+connector.pull_started
+evidence.case_linked
+evidence.created
+evidence.promotion_failed
+evidence.promotion_reused
+file.downloaded
+file.scan_passed
+file.upload_duplicate
+file.upload_failed
+file.uploaded
+identity.duplicate_resolved
+import.completed
+import.failed
+import.retry_completed
+opportunity.status_changed
+payment.processing_failed
+payment.processing_payment_linked
+payment.processing_recovered
+payment.processing_replayed
+payment.processing_started
+payment.reconciliation_failed
+payment.review_approved
+payment.review_rejected
+payment.review_required
+payment.succeeded
+recovery.review_approved
+recovery.review_rejected
+recovery.review_required
+recovery_outcome.confirmed
+rule_evaluation.shadow_completed
+source_connection.created
+source_connection.credential_rotated
+source_connection.status_changed
+sync_run.completed
+sync_run.failed
+user.invitation_accepted
+user.invitation_failed
+user.invited
 ```
 
 ---

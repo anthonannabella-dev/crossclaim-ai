@@ -76,6 +76,9 @@ jobs:
       - name: API contract (API.md ↔ implemented routes)
         run: node tools/api-contract/check-routes.mjs --root .
 
+      - name: Audit coverage (audit actions ↔ OPERATIONS.md)
+        run: node tools/audit-coverage/check-audit-actions.mjs --root .
+
       - name: TypeScript typecheck
         working-directory: apps/api
         run: npx tsc --noEmit
