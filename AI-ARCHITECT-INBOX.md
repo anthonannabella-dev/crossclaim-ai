@@ -65534,3 +65534,270 @@ Platform API
 
 可以继续推进，不需要等待真实数据。下一步提交 Operations Web Console v1 Design。
 ```
+
+### [MSG-20260929-50] OPERATIONS-CONSOLE-V1-DESIGN 裁决：GO（READY_FOR_IMPLEMENTATION）+ REVISE-1 静态白名单 / REVISE-2 统一错误映射 + 追加 E1 网络层仅 GET / E2 DOM 泄露扫描 / E3 前端静态扫描；下一步 OPERATIONS-CONSOLE-V1-IMPLEMENTATION
+
+```text
+裁决：
+
+OPERATIONS-CONSOLE-V1-DESIGN
+纯文本
+RESULT: GO
+STATUS: READY_FOR_IMPLEMENTATION
+
+设计符合当前 Production Candidate 阶段边界，可以进入实现。
+
+已确认通过项
+1. 定位
+
+✅ 通过
+
+核心原则正确：
+
+API 是最终安全边界，前端只是受控展示层。
+
+不允许前端成为安全判断主体。
+
+2. 页面范围
+
+✅ 通过
+
+7 个页面范围合理：
+
+纯文本
+/operations
+/admin
+/admin/tenant-overview
+/admin/audit
+/admin/imports
+/admin/recovery-review
+/admin/members
+/admin/system-health
+
+均复用已有 API。
+
+不新增：
+
+API
+Schema
+权限模型
+写路径
+3. 禁止项
+
+✅ 全部保持
+
+特别确认：
+
+禁止：
+
+❌ 写按钮
+❌ 审批按钮
+❌ Claim 提交入口
+❌ Appeal 提交入口
+❌ 下载
+❌ 导出
+❌ 文件预览
+❌ 平台跳转
+
+不要采用：
+
+先显示按钮，点击后提示无权限
+
+这种模式。
+
+采用：
+
+无能力就不渲染
+
+正确。
+
+实现前补充两个小修订
+REVISE-1：页面路由探测需要固定白名单
+
+当前：
+
+/admin 首页探测式生成入口
+
+允许。
+
+但增加约束：
+
+必须是静态允许列表：
+
+例如：
+
+纯文本
+ADMIN_MODULES = [
+ tenantOverview,
+ audit,
+ imports,
+ recoveryReview,
+ members,
+ systemHealth
+]
+
+禁止：
+
+自动扫描 API
+根据后端返回动态生成任意页面
+暴露未来未知 Admin API
+
+原因：
+
+防止未来新增危险端点后被自动暴露。
+
+REVISE-2：前端日志与错误展示
+
+增加：
+
+禁止页面显示：
+
+SQL error
+stack trace
+backend exception
+Prisma error
+connection string
+
+统一：
+
+纯文本
+401
+LOGIN_REQUIRED
+
+403
+NO_PERMISSION
+
+404
+NOT_FOUND
+
+500
+SYSTEM_ERROR
+
+详细信息只留服务端日志。
+
+实现验收增加 3 项
+E1 浏览器网络层检查
+
+Playwright 验证：
+
+所有 console 页面请求：
+
+纯文本
+method == GET
+
+禁止：
+
+纯文本
+POST
+PUT
+PATCH
+DELETE
+E2 DOM 泄露扫描
+
+最终 HTML 检查：
+
+禁止出现：
+
+纯文本
+tokenHash
+storageKey
+passwordHash
+secret
+credential
+IP
+userAgent
+完整 email
+E3 前端代码静态扫描
+
+检查：
+
+不存在：
+
+纯文本
+fetch(... POST)
+axios.post
+form action mutation
+download=
+export=
+实现批准范围
+
+允许：
+
+✅ Next 页面
+✅ Server Component
+✅ apiGet
+✅ cookies auth
+✅ i18n
+✅ 分页
+✅ 空态
+✅ 错误态
+✅ 权限裁剪展示
+
+禁止：
+
+❌ 新数据库表
+❌ 新权限键
+❌ 新 API 写端点
+❌ 新业务逻辑
+❌ 前端计算金额
+❌ 前端推断 Claim 状态
+
+下一步骤
+
+进入：
+
+纯文本
+OPERATIONS-CONSOLE-V1-IMPLEMENTATION
+
+提交时需要包含：
+
+页面实现列表
+
+Playwright E2E 结果
+
+四角色权限矩阵验证：
+
+OWNER
+OPS
+FINANCE
+VIEWER
+
+只读快照：
+
+纯文本
+before:
+User
+Membership
+Session
+UserInvitation
+AuditLog
+Case
+Claim
+Settlement
+
+after:
+完全一致
+前端泄露扫描结果
+
+最终状态：
+
+纯文本
+Production Candidate v1.0
+
+CODE:
+PASS
+
+OPERATIONS API:
+PASS
+
+OPERATIONS CONSOLE DESIGN:
+GO
+
+NEXT:
+Implementation
+
+AFTER:
+Kill Switch Design
+
+可以开始实现。
+```
