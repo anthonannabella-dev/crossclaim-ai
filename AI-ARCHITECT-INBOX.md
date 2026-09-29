@@ -49988,3 +49988,302 @@ READY FOR IMPLEMENTATION
 
 Codex 可以开始 A，但保持“验证加速层”定位，不进入产品平台化建设。
 ```
+
+### [MSG-20260929-03] C-0009.1-A 检查点裁决：PASS（文件上传适配层未越界，PDF 只做结构识别不做 OCR；NEXT=C-0009.2 用首个真实脱敏平台导出文件完成 VALIDATION-RUN-001，并给出商业审计四项口径（数据真实性 / 人工成本 / Agent 替代比例 / 付费信号）；C-0014 与 Real Connectors、OCR 继续 BACKLOG，Stripe 等宿主授权）
+
+Codex 提交 C-0009.1-A（平台导出文件适配器 Implementation Checkpoint：CSV/JSON/XLSX 解析、字段映射、规范化、quarantine、VALIDATION-INPUT-ADAPTER-REPORT.md、9 条新用例，CI 三作业绿）后，架构方判定 **PASS**，并明确「Codex 可以继续等待真实文件，不需要新增工程」。以下为该回复的**逐字原文**。
+
+```text
+裁决：
+
+C-0009.1-A Implementation Checkpoint
+结论：PASS ✅
+
+状态：
+
+纯文本
+GATE:
+7 Commercial Validation
+
+CHECKPOINT:
+C-0009.1-A
+
+DECISION:
+PASS
+
+NEXT:
+WAIT_FOR_REAL_INPUT
+
+审计结果
+1. 边界符合批准范围 ✅
+
+本轮批准的是：
+
+文件上传适配层，仅用于加速 VALIDATION-RUN-001，不进入业务判断。
+
+实际实现：
+
+项目	结果
+本地文件处理	✅
+无网络调用	✅
+无平台账号	✅
+无凭据	✅
+无数据库写入	✅
+字段映射	✅
+规范化输入	✅
+Quarantine	✅
+报告输出	✅
+
+没有发现越界。
+
+2. 架构方向正确 ✅
+
+特别确认几个关键点：
+
+PDF 处理
+
+当前：
+
+PDF
+ ↓
+结构识别
+ ↓
+QUARANTINE
+
+正确。
+
+不要提前引入 OCR。
+
+原因：
+
+OCR 会把问题从：
+
+商业验证
+
+变成：
+
+文档解析工程
+
+会扩大范围。
+
+Rule Engine 边界保持正确
+
+当前：
+
+Input Adapter
+       ↓
+Canonical Input
+       ↓
+Validation Run
+       ↓
+Audit Only
+       ↓
+OPEN
+
+没有变成：
+
+AI 判断
+ ↓
+自动索赔
+
+正确。
+
+3. 实跑证据审计
+
+Amazon 风格 CSV
+
+结果：
+
+required:
+3/3
+
+optional:
+8/11
+
+通过。
+
+但记录：
+
+8/11 不代表业务完整性。
+
+下一阶段真实文件需要观察：
+
+实际字段覆盖率
+字段稳定性
+不同企业差异
+
+engineeringStatus FAIL
+
+这一点保留。
+
+当前 Gate 7 不追求全部 PASS。
+
+因为：
+
+商业验证阶段需要暴露：
+
+数据质量问题
+规则边界问题
+人工介入点
+
+所以：
+
+engineering FAIL
+commercial OPEN
+
+是允许状态。
+
+模板 NOT_RUN
+
+正确。
+
+必须继续保持。
+
+模板不能作为商业证据。
+
+4. 测试增加合理
+
+变化：
+
+75 files
+679 cases
+
+↓
+
+76 files
+688 cases
+
+接受。
+
+没有出现：
+
+为了测试覆盖率而扩张工程。
+
+下一阶段批准
+C-0009.2
+
+批准目标：
+
+接收第一个真实脱敏平台导出文件，完成 VALIDATION-RUN-001。
+
+范围：
+
+仅：
+
+Real File
+ ↓
+Adapter
+ ↓
+Canonical Input
+ ↓
+Validation Report
+ ↓
+Commercial Review
+
+VALIDATION-RUN-001 商业审计必须回答
+
+收到真实文件后，不只看技术成功。
+
+必须输出：
+
+A. 数据真实性
+
+文件来自哪里？
+是否企业真实业务流程产生？
+是否一次性样例？
+是否连续周期数据？
+
+B. 人工成本
+
+例如：
+
+当前人工：
+
+每周/月处理多少小时？
+多少人？
+涉及多少金额？
+
+C. Agent 替代比例
+
+七项：
+
+环节	替代比例
+数据收集	?
+字段整理	?
+异常发现	?
+原因分类	?
+证据整理	?
+沟通准备	?
+最终决策	?
+
+D. 付费信号
+
+必须按照：
+
+真实付款
+ ↓
+主动询价
+ ↓
+明确报价接受
+ ↓
+愿意试用
+ ↓
+愿意提供真实数据
+ ↓
+口头兴趣
+
+记录等级。
+
+暂不批准
+
+继续保持：
+
+C-0014 Cursor Persistence:
+BACKLOG
+
+Stripe:
+WAIT AUTHORIZATION
+
+Real Connectors:
+BACKLOG
+
+OCR:
+BACKLOG
+
+可写入：
+
+Markdown
+### [MSG-20260929-03]
+
+CHECKPOINT:
+C-0009.1-A
+
+DECISION:
+PASS
+
+Reason:
+Implementation matches approved File Upload Adapter Layer scope.
+
+Approved:
+- CSV/JSON/XLSX parsing
+- PDF structure quarantine
+- field mapping
+- normalization
+- validation reporting
+
+No boundary violations detected.
+
+Next:
+C-0009.2 VALIDATION-RUN-001 using first real sanitized platform export file.
+
+Commercial review must evaluate:
+- data authenticity
+- manual labor cost
+- AI replacement ratio
+- willingness-to-pay evidence
+
+Status:
+PASS_WAITING_REAL_INPUT
+
+Codex 可以继续等待真实文件，不需要新增工程。
+```
