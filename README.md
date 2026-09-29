@@ -95,6 +95,27 @@ AI 负责文档理解、字段抽取、异常解释、证据推荐、案件总�
 
 ---
 
+## 离线验证工具（宿主可自行运行）
+
+三者都是**离线**工具：无网络、无凭据、不写数据库、不产生任何商业结论。
+
+1. 统一验证 Harness（推荐入口，任意平台导出文件）
+
+       cd apps/api
+       npx tsx ../../tools/validation-run/harness.ts --in <文件路径> [--platform SHOPIFY] [--out <输出目录>]
+
+   产出 `HARNESS-REPORT.md`（适配结果 + 数据质量 + 结构校验 + 商业评审骨架）与 `harness-summary.json`。
+   平台由表头特征猜测，需人工确认；`commercialConclusion` 恒为 `OPEN`。
+
+2. C-0009.1 验证工具包（脱敏 → 结构校验 → 报告）
+
+       cd apps/api
+       npx tsx ../../tools/validation-run/run.ts --in <csv> --out <目录>
+
+3. 人工填写模板：`DATA-QUALITY-REPORT-TEMPLATE.md`（Harness 自动填前 5 节，商业评审段由人工填写）
+
+> 真实/脱敏文件到手后：跑 Harness → 按模板补写商业评审 → 结论写进 `reports/C-0009.1-validation-runs.md`，
+> 再据此提交 `C-0015-SCENARIO-SELECTION.md` 选定唯一 MVP 场景。
 ## 文档
 
 | 文档 | 内容 |
