@@ -91,8 +91,13 @@ jobs:
             IF immutable_ok <> expected THEN
               RAISE EXCEPTION 'immutability triggers incomplete (expected % per-table triggers, found %)', expected, immutable_ok;
             END IF;
-            SELECT count(*) INTO ruleset_ok FROM pg_trigger
-              WHERE NOT tgisinternal AND tgenabled = 'O' AND tgname = 'cc_ruleset_ownership_immutable';
+            SELECT count(*) INTO ruleset_ok
+              FROM pg_trigger g
+              JOIN pg_class c ON c.oid = g.tgrelid
+              JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = current_schema()
+              WHERE NOT g.tgisinternal AND g.tgenabled = 'O'
+                AND g.tgname = 'cc_ruleset_ownership_immutable'
+                AND c.relname = 'RuleSet';
             IF ruleset_ok <> 1 THEN RAISE EXCEPTION 'RuleSet ownership trigger missing'; END IF;
             RAISE NOTICE 'OK: baseline=% immutable=% ruleset=%', baseline, immutable_ok, ruleset_ok;
           END
