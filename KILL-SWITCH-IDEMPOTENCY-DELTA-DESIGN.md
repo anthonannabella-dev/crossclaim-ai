@@ -94,3 +94,77 @@ model KillSwitchRequest {
 - **D3**：记录保留 ≥180 天（v1 不做自动清理）是否接受？
 - **D4**：拉闸不落库（直接生效、仅审计）是否接受？还是也要求落一条 request 记录以便对照？
 - **D5**：`note` 是否需要在表中持久化（当前设计持久化），还是只保留在 AuditLog？
+
+---
+
+## 9. R2 修订（按架构方 MSG-20260929-57）
+
+### 9.1 D1 修订 — `target` 改为枚举
+
+```prisma
+enum KillSwitchTarget {
+  ENABLED
+  DISABLED
+}
+```
+
+`target` 不再恒为 `enabled`：开启与关闭都要有完整请求生命周期（谁请求、为什么、是否取消 pending enable、紧急关闭事件链）。
+
+### 9.2 D4 修订 — 拉闸同样落库（统一生命周期）
+
+拉闸（`target=DISABLED`）**也创建** `KillSwitchRequest`，但直接 `state=APPLIED`（无 pending），随后写 AuditLog：
+
+```
+target=DISABLED, state=APPLIED, requestedBy=A, confirmedBy=NULL
+```
+
+统一后的生命周期：开启 `Request → Confirm → APPLIED`；关闭 `Request → APPLIED`。
+
+### 9.3 唯一 pending 约束 — 部分唯一索引（手写 SQL）
+
+`@@index([organizationId, scope, state])` 不足以保证「同 scope 仅一个 pending」。迁移中改为**手写部分唯一索引**：
+
+```sql
+CREATE UNIQUE INDEX "kill_switch_request_pending_unique"
+  ON "KillSwitchRequest" ("organizationId", "scope")
+  WHERE "state" = 'PENDING_ENABLE';
+```
+
+（Prisma schema 不直接支持部分唯一索引 → 由迁移 SQL 落地，schema 侧保留普通索引。）
+
+### 9.4 状态流转（固定）
+
+```
+PENDING_ENABLE → APPLIED
+PENDING_ENABLE → EXPIRED
+PENDING_ENABLE → CANCELLED
+DISABLED(request) → APPLIED      （无 pending 阶段）
+```
+
+**禁止**：`APPLIED → PENDING_ENABLE`、`APPLIED → EXPIRED`（终态不可回退）。
+
+### 9.5 D5 澄清 — note 双写不冲突
+
+- `KillSwitchRequest.note`：**运营用途**（pending 复核、历史查询、解释）。
+- `AuditLog.changes.note`：**不可变审计快照**。
+
+两者语义不同、非双事实源；以 AuditLog 为审计事实，Request 为控制面状态。
+
+### 9.6 D3 补充 — 不做 DELETE
+
+保留 ≥180 天，但**禁止**直接 `DELETE FROM "KillSwitchRequest"`；未来清理必须走独立 retention policy 设计（含删除/归档自身的审计设计）。
+
+### 9.7 下一阶段顺序（架构方给定）
+
+```
+KILL-SWITCH-IDEMPOTENCY-DELTA R2
+        ↓
+Schema Migration Request（列出确切 DDL 与影响面，等批准）
+        ↓
+Migration Approval
+        ↓
+Implementation
+        ↓
+Concurrency Security Review
+```
+

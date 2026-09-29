@@ -67495,3 +67495,350 @@ Concurrency / Security Test
 
 不要直接进入 POST 实现。先提交 Delta 设计。
 ```
+
+### [MSG-20260929-57] KILL-SWITCH-IDEMPOTENCY-DELTA-DESIGN 裁决：RESULT: GO_WITH_MINOR_REVISE（D1 target 改枚举 ENABLED|DISABLED；D2 触发器 27→28 GO；D3 保留≥180 天 GO 但不做 DELETE、需独立 retention policy；D4 拉闸也必须落 KillSwitchRequest(state=APPLIED)；D5 note 双写 Request+AuditLog 不冲突）+ 要求先交 DELTA R2，再走 Schema Migration Request → Migration Approval → Implementation → Concurrency Security Review
+
+```text
+裁决：
+
+纯文本
+KILL-SWITCH-IDEMPOTENCY-DELTA-DESIGN
+
+RESULT: GO_WITH_MINOR_REVISE
+STATUS: SCHEMA DELTA DESIGN APPROVED AFTER 2 SMALL CHANGES
+NEXT: MIGRATION REVIEW (NOT YET EXECUTE)
+
+整体方案 A 正确。Kill Switch 属于控制面状态机，不应该把 AuditLog 当作状态存储，因此新增 KillSwitchRequest 是合理方向。
+
+但在执行 Schema 前，需要补两个语义点。
+
+D1 新增 KillSwitchRequest
+
+裁决：
+
+纯文本
+GO
+
+批准方案 A。
+
+原因：
+
+需要同时解决：
+
+幂等
+多实例并发
+pending 生命周期
+双人确认
+超时失效
+
+这些都不是 AuditLog 适合承担的。
+
+字段调整建议
+
+当前：
+
+target(恒 enabled，拉闸不落库)
+
+需要修改。
+
+建议：
+
+纯文本
+target
+enum:
+ ENABLED
+ DISABLED
+
+原因：
+
+虽然当前拉闸即时执行，但未来需要完整审计：
+
+谁请求关闭
+为什么关闭
+是否取消 pending enable
+紧急关闭事件链
+
+如果完全不记录，会形成：
+
+AuditLog 有事实，但 Request 生命周期断裂。
+
+建议：
+
+KillSwitchRequest
+
+保存：
+
+字段	用途
+target	开启/关闭方向
+state	请求生命周期
+reasonCode	控制原因
+requestedBy	发起人
+confirmedBy	确认人
+expiresAt	确认窗口
+idempotencyKey	幂等
+D2 租户触发器 27 → 28
+
+裁决：
+
+纯文本
+GO
+
+批准。
+
+原因：
+
+KillSwitchRequest 是：
+
+tenant-owned control record。
+
+必须保持：
+
+DB 层租户隔离。
+
+必须同步：
+
+CI trigger count
+ARCHITECTURE_CONTRACT.md
+DOMAIN_MODEL.md
+D3 保留 >=180 天
+
+裁决：
+
+纯文本
+GO
+
+接受。
+
+理由：
+
+控制面事件属于安全审计数据。
+
+180 天合理。
+
+但补充：
+
+不要做：
+
+纯文本
+DELETE FROM KillSwitchRequest
+
+未来清理必须：
+
+独立 retention policy。
+
+并且：
+
+删除/归档本身需要设计。
+
+D4 拉闸是否落 Request
+
+裁决：
+
+纯文本
+REVISE
+
+这里需要修改。
+
+当前：
+
+拉闸不落 request，只审计
+
+不建议。
+
+原因：
+
+会产生两个生命周期：
+
+开启：
+
+Request → Confirm → Applied
+
+关闭：
+
+AuditLog only
+
+模型不一致。
+
+建议：
+
+拉闸也创建：
+
+KillSwitchRequest
+
+但是：
+
+直接状态：
+
+APPLIED
+
+无需 pending。
+
+例如：
+
+target=DISABLED
+state=APPLIED
+requestedBy=A
+confirmedBy=NULL
+
+然后写 AuditLog。
+
+这样：
+
+开启
+关闭
+
+统一追踪。
+
+D5 note 存储位置
+
+裁决：
+
+纯文本
+GO_WITH_MINOR_REVISE
+
+接受持久化。
+
+但需要明确：
+
+存在两个用途：
+
+KillSwitchRequest
+
+保存：
+
+note
+
+用于：
+
+pending review
+查询历史
+运营解释
+AuditLog
+
+保存：
+
+note snapshot
+
+用于不可变审计。
+
+二者不是事实冲突。
+
+需要补充的 Schema Delta
+
+执行前增加：
+
+1. target 枚举
+
+不要恒 enabled：
+
+KillSwitchTarget:
+ ENABLED
+ DISABLED
+2. 唯一 pending 约束
+
+当前：
+
+@@index([organizationId, scope, state])
+
+不足。
+
+需要说明：
+
+如何保证：
+
+同 scope 一个 pending。
+
+PostgreSQL 建议：
+
+partial unique index：
+
+SQL
+UNIQUE(
+ organizationId,
+ scope
+)
+WHERE state='PENDING_ENABLE'
+
+如果 Prisma 不直接支持：
+
+迁移 SQL 手写。
+
+3. 状态流转明确
+
+建议固定：
+
+PENDING_ENABLE
+        |
+        |
+     APPLIED
+
+
+PENDING_ENABLE
+        |
+        |
+    EXPIRED
+
+
+PENDING_ENABLE
+        |
+        |
+   CANCELLED
+
+
+DISABLED request:
+        |
+        |
+     APPLIED
+
+禁止：
+
+APPLIED -> PENDING
+APPLIED -> EXPIRED
+e6d2742 合并
+
+批准：
+
+纯文本
+GO
+
+原因：
+
+只是设计文档。
+
+可以 fast-forward：
+
+不 force
+不绕保护
+CI PASS
+下一阶段
+
+不要直接 migrate。
+
+顺序：
+
+代码
+KILL-SWITCH-IDEMPOTENCY-DELTA R2
+        ↓
+Schema Migration Request
+        ↓
+Migration Approval
+        ↓
+Implementation
+        ↓
+Concurrency Security Review
+
+最终状态：
+
+代码
+Kill Switch Read                  PASS
+Kill Switch Base Implementation   PASS
+Kill Switch Change Design R1      PASS
+Kill Switch Idempotency Design    GO_WITH_MINOR_REVISE
+
+Waiting:
+- target 修正
+- disable request 生命周期补齐
+- pending unique constraint 明确
+
+请 Codex 先提交 KILL-SWITCH-IDEMPOTENCY-DELTA-DESIGN R2。
+```
