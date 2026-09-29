@@ -66702,3 +66702,244 @@ HOLD
 
 可以开始提交 KILL-SWITCH-IMPLEMENTATION CHECKPOINT。
 ```
+
+### [MSG-20260929-54] KILL-SWITCH-IMPLEMENTATION 裁决：RESULT: PASS / READY_FOR_MERGE（批准 15b94d4 → main，fast-forward only）+ 下一步 P1.1 = KILL-SWITCH-CHANGE-ENTRY-DESIGN（DESIGN-FIRST：POST 生命周期 / 状态机 / 双人确认 API / 幂等键 / 权限 / 审计 / 回滚），变更入口暂不实现
+
+```text
+裁决如下。
+
+KILL-SWITCH-IMPLEMENTATION
+纯文本
+RESULT: PASS
+STATUS: READY_FOR_MERGE
+
+本轮实现符合已批准的 Design R1 范围，未越过冻结边界，可以收口。
+
+一、实现复核
+1. Fail-closed 配置解析
+
+✅ PASS
+
+已满足：
+
+tenant > global > environment default
+取更严格值
+非法值 → disabled
+缺失配置 → disabled
+observability 默认 enabled
+
+符合设计。
+
+2. 权限与可见性
+
+✅ PASS
+
+当前：
+
+角色	结果
+OWNER	完整状态
+ADMIN	完整状态
+OPS	仅 scope/value/source
+FINANCE	403
+VIEWER	403
+
+符合最小暴露原则。
+
+3. 双人确认逻辑
+
+✅ PASS
+
+重点修复认可。
+
+原缺陷：
+
+同一 OWNER 在已有待确认流程中被误识别为新请求
+
+修复后：
+
+流程：
+
+纯文本
+找到 pending confirmation
+        ↓
+检查 confirmationBy != actor
+        ↓
+检查15分钟窗口
+        ↓
+确认成功
+
+正确。
+
+测试覆盖：
+
+同人闭环拒绝
+双人确认成功
+超窗失效
+
+通过。
+
+4. AuditLog
+
+✅ PASS
+
+复用：
+
+纯文本
+action:
+killswitch.changed
+
+entityType:
+KillSwitch
+
+没有新增表。
+
+符合设计。
+
+5. HTTP 边界
+
+✅ PASS
+
+特别认可：
+
+本轮没有开放变更 HTTP 入口。
+
+当前：
+
+纯文本
+GET /admin/kill-switch
+
+只有读取。
+
+这是正确的分阶段控制。
+
+二、测试复核
+
+通过：
+
+纯文本
+kill-switch.test.ts
+12/12
+
+kill-switch-http-db.test.ts
+5/5
+
+覆盖：
+
+默认值
+非法值
+优先级
+权限
+双人确认
+读取不写审计
+
+符合要求。
+
+三、Merge 批准
+
+批准：
+
+纯文本
+15b94d4 → main
+STATUS: GO
+TYPE: fast-forward only
+
+要求：
+
+不 force
+不绕过保护
+CI 必须通过
+四、下一步方向裁决
+
+关于：
+
+下一步是否开放 POST /admin/kill-switch
+
+裁决：
+
+不立即实现。
+
+进入：
+
+纯文本
+KILL-SWITCH CHANGE ENTRY
+DESIGN-FIRST
+
+先提交设计。
+
+原因：
+
+变更入口属于控制面，不同于读取。
+
+需要额外审：
+
+CSRF / auth boundary
+幂等
+二次确认状态机
+并发修改
+回滚
+紧急关闭路径
+AuditLog 完整性
+五、下一优先级
+
+批准顺序：
+
+P1.1
+
+提交：
+
+纯文本
+KILL-SWITCH-CHANGE-ENTRY-DESIGN.md
+
+范围：
+
+仅设计。
+
+覆盖：
+
+POST /admin/kill-switch 生命周期
+enable/disable 状态机
+双人确认 API
+幂等键
+权限
+审计
+回滚
+之后再进入其他 Production Hardening
+
+建议顺序：
+
+纯文本
+1. Kill Switch Change Entry Design
+        ↓
+2. Deployment / Secrets / Environment Hardening
+        ↓
+3. Observability Hardening
+        ↓
+4. Real Data Validation RD-01
+        ↓
+5. Integration Pending
+
+当前状态：
+
+纯文本
+Production Candidate v1.0
+
+Operations Console:
+PASS
+
+Kill Switch Read Layer:
+PASS
+
+Kill Switch Change Layer:
+DESIGN ONLY NEXT
+
+Submission Adapter:
+HOLD
+
+Auto Claim:
+FORBIDDEN
+
+Auto Billing:
+HOLD
+
+可以继续提交 KILL-SWITCH-CHANGE-ENTRY-DESIGN。
+```
