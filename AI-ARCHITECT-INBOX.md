@@ -59378,3 +59378,356 @@ READY_FOR_IMPLEMENTATION
 
 可以进入 Operations Dashboard 实现阶段。完成后提交 Implementation Checkpoint。
 ```
+
+### [MSG-20260929-31] OPERATIONS-DASHBOARD-IMPLEMENTATION-CHECKPOINT 裁决：PASS ✅（PASS_CLOSE / OPERATIONS_DASHBOARD_READY）——只读 Dashboard / Projection only / 不新增事实源 / 不改业务状态与资金链路 / 不触碰自动动作全部通过；三个 GET 端点与 API contract 登记通过；D1 待回执实现通过（respondedAt 为主 + RESPONSE_EVENT_WITHOUT_TIMESTAMP 异常标注、不自动修复事实）；Recovery 投影（confirmed/received/variance/outstanding 只累加正缺口）通过；租户隔离在汇总+明细+金额三处均验证通过；金额分片裁决 A：维持 OWNER/ADMIN = counts+amounts、FINANCE = amounts only（不批准 FINANCE 看到确认/对账计数；未来需要应单独设计）；性能（索引命中 + limit=500→≤100）与无写入口验证通过；95 files / 877 tests；NEXT = NOTIFICATION-DESIGN（DESIGN-FIRST：只设计 Event/Trigger/Recipient/Template/Permission/Audit，禁止 Email/SMS/企业微信/自动外部联系/平台通知发送；须覆盖 Claim deadline approaching、Claim response received、Recovery confirmation required、Recovery payout discrepancy、Review required (>threshold)）
+
+本轮为运营看板实现检查点裁决（PASS_CLOSE），确认金额分片为非 FINANCE 见计数，并指定下一模块 Notification Design。
+
+```text
+OPERATIONS-DASHBOARD-IMPLEMENTATION-CHECKPOINT 裁决
+结论：PASS ✅
+
+状态：
+
+纯文本
+
+GATE:
+7 Commercial Validation
+
+TARGET:
+Operations Dashboard Implementation
+
+DECISION:
+PASS_CLOSE
+
+STATUS:
+OPERATIONS_DASHBOARD_READY
+一、整体实现审计
+
+通过。
+
+本次实现符合 MSG-20260929-30：
+
+只读 Dashboard
+Projection only
+不新增事实源
+不改变业务状态
+不改变资金链路
+不触碰自动动作
+二、端点设计审计
+结论：通过 ✅
+
+当前：
+
+纯文本
+GET /operations/dashboard
+
+GET /operations/claims
+
+GET /operations/recovery
+
+符合批准范围。
+
+确认：
+
+全部 GET
+无 mutation
+API contract 已登记
+
+通过。
+
+三、D1 待回执实现审计
+通过 ✅
+
+当前：
+
+纯文本
+SUBMITTED / ACKNOWLEDGED
+
++
+
+respondedAt == null
+
+符合修订。
+
+特别认可：
+
+AuditLog 不一致处理：
+
+纯文本
+response event exists
+
+but
+
+respondedAt missing
+
+↓
+
+RESPONSE_EVENT_WITHOUT_TIMESTAMP
+
+正确。
+
+没有自动修复事实。
+
+四、Recovery 投影审计
+通过 ✅
+
+当前：
+
+纯文本
+confirmed
+
+=
+Settlement.amount
+
+
+received
+
+=
+SUM(RecoveryPayout.amount)
+
+正确。
+
+确认：
+
+以下均为：
+
+Projection
+
+不是：
+
+Database mutation。
+
+variance
+
+通过：
+
+纯文本
+variance = received - confirmed
+outstanding
+
+通过：
+
+只累加正缺口。
+
+避免负数污染。
+
+五、安全与租户隔离审计
+通过 ✅
+
+真实库验证：
+
+纯文本
+Tenant A
+
+cannot see
+
+Tenant B
+
+通过。
+
+特别认可：
+
+不是只测试 API 返回。
+
+而是验证：
+
+汇总
+明细
+金额
+
+均隔离。
+
+六、金额裁剪语义裁决
+第四节问题：
+
+选择：
+
+A：维持分片 ✅
+
+当前设计正确：
+
+角色	Counts	Amounts
+OWNER	✅	✅
+ADMIN	✅	✅
+FINANCE	❌	✅
+VIEWER	❌	❌
+
+原因：
+
+FINANCE 需要：
+
+到账金额
+对账金额
+
+但不一定需要：
+
+Claim 生命周期运营状态
+提交阶段统计
+
+保持最小权限原则。
+
+不批准：
+
+FINANCE 默认看到：
+
+纯文本
+confirmationStatus counts
+reconciliationStatus counts
+
+因为这些属于运营流程状态。
+
+未来如果需要：
+
+可以单独设计：
+
+纯文本
+
+而不是扩大当前 Dashboard 权限。
+
+七、性能边界审计
+通过 ✅
+
+认可：
+
+纯文本
+Claim_organizationId_status_dueAt_idx
+
+索引命中证明。
+
+同时：
+
+limit=500
+
+实际限制：
+
+<=100
+
+通过。
+
+八、无写入口验证
+
+通过。
+
+当前：
+
+读取：
+
+不会：
+
+写 AuditLog
+更新 Claim
+更新 Settlement
+
+符合设计。
+
+九、测试证据
+
+通过：
+
+纯文本
+95 files
+
+877 tests
+
+PASS
+
+新增：
+
+30 项覆盖：
+
+权限
+隔离
+查询
+投影
+性能
+
+完整。
+
+十、下一优先模块建议
+
+Operations Dashboard 收口后，按照既定路线：
+
+下一步：
+Notification Design（DESIGN-FIRST）
+
+状态：
+
+纯文本
+GO_DESIGN_FIRST
+
+范围：
+
+只设计：
+
+Event
+Trigger
+Recipient
+Template
+Permission
+Audit
+
+不实现：
+
+❌ Email provider
+❌ SMS
+❌ 企业微信
+❌ 自动外部联系
+❌ 平台通知发送
+
+建议提交：
+
+纯文本
+NOTIFICATION-DESIGN.md
+
+重点覆盖：
+
+Claim deadline approaching
+Claim response received
+Recovery confirmation required
+Recovery payout discrepancy
+Review required (>threshold)
+最终归档
+Markdown
+
+TYPE:
+IMPLEMENTATION CHECKPOINT DECISION
+
+TARGET:
+OPERATIONS-DASHBOARD
+
+DECISION:
+PASS_CLOSE
+
+
+Validated:
+- readonly GET endpoints
+- dashboard projection
+- claim buckets
+- recovery projection
+- permission filtering
+- tenant isolation
+- query performance
+- no mutation
+
+
+Permission split:
+
+APPROVED:
+
+OWNER/ADMIN:
+counts + amounts
+
+FINANCE:
+amounts only
+
+
+STATUS:
+OPERATIONS_DASHBOARD_READY
+
+
+NEXT:
+NOTIFICATION-DESIGN
+
+Operations Dashboard 模块可以收口。下一阶段进入 Notification Design。
+```
