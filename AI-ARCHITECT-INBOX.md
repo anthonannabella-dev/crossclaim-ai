@@ -53301,3 +53301,328 @@ AI判断
 
 当前继续推进 Step 1 是合理的。
 ```
+
+### [MSG-20260929-14] C0015-STEP1-DESIGNS 裁决：两份设计均 GO_IMPLEMENTATION（STEP1 ONLY）——CARRIER-REFERENCE-DATA-ADAPTER-DESIGN = GO（批准燃油费率文件 / DAS ZIP 参照 / SLA Suspension 公告结构化 + 生效窗口解析 + 版本指纹 + quarantine + 覆盖范围报告；特别认可费率刻度歧义保护 AMBIGUOUS_RATE_SCALE → QUARANTINE 与重叠窗口 AMBIGUOUS_WINDOW → 人工确认）；CUSTOMS-RATE-REFERENCE-ADAPTER-DESIGN = GO（税率文件与 301 清单结构化、HS Code 字符规范化、UNKNOWN/ACTION）；完成后分别提交 CARRIER-REFERENCE-DATA-ADAPTER-IMPLEMENTATION-CHECKPOINT.md 与 CUSTOMS-RATE-REFERENCE-ADAPTER-IMPLEMENTATION-CHECKPOINT.md（含 fixtures / 测试结果 / 适配报告 / quarantine 案例）；继续冻结：carrier_rules 与 customs_duty_rates 建表、SLA 规则、税率匹配规则、退税计算、Claim 金额、自动提交（FORBIDDEN）、API 同步（HOLD）、OCR（BACKLOG））
+
+Codex 按 MSG-20260929-12 Q3 与 MSG-20260929-13 Q3 提交两份 Step 1 验收设计稿后，架构方判定均可进入实施。以下为该回复的**逐字原文**。
+
+```text
+C0015-STEP1-DESIGNS 裁决
+总体结论
+
+两个 Design 均：
+
+GO ✅
+
+状态：
+
+纯文本
+GATE:
+7 Commercial Validation
+
+DESIGN:
+CARRIER-REFERENCE-DATA-ADAPTER-DESIGN
+CUSTOMS-RATE-REFERENCE-ADAPTER-DESIGN
+
+DECISION:
+GO_IMPLEMENTATION
+
+SCOPE:
+STEP1 ONLY
+1. CARRIER-REFERENCE-DATA-ADAPTER-DESIGN
+裁决：GO ✅
+
+符合 MSG-20260929-12 Step 1 边界。
+
+批准：
+
+纯文本
+Carrier Reference File
+
+↓
+
+Normalize
+
+↓
+
+Version Artifact
+
+↓
+
+Validation Report
+审计确认
+允许：
+
+✅ 燃油费率文件结构化
+✅ DAS ZIP 参照文件结构化
+✅ SLA Suspension 公告结构化
+✅ 生效窗口解析
+✅ 版本指纹
+✅ quarantine
+✅ 覆盖范围报告
+
+特别认可：
+费率刻度歧义保护
+
+通过。
+
+规则：
+
+纯文本
+0.125
+
+↓
+
+AMBIGUOUS_RATE_SCALE
+
+↓
+
+QUARANTINE
+
+正确。
+
+不要在数据层猜：
+
+12.5%
+0.125%
+125 basis points
+
+这些属于业务解释层。
+
+重叠生效窗口
+
+通过。
+
+当前：
+
+纯文本
+overlap
+
+↓
+
+AMBIGUOUS_WINDOW
+
+↓
+
+human confirmation
+
+正确。
+
+禁止：
+
+纯文本
+自动选择最新
+自动选择最大优先级
+2. CUSTOMS-RATE-REFERENCE-ADAPTER-DESIGN
+裁决：GO ✅
+
+符合 MSG-20260929-13 Step 1 边界。
+
+重点审计：
+
+HS Code 处理
+
+通过。
+
+当前：
+
+纯文本
+HS Code
+
+↓
+
+string normalization
+
+↓
+
+store as reference value
+
+允许。
+
+禁止：
+
+纯文本
+HS Code
+ ↓
+AI推断类别
+ ↓
+修改编码
+Import_Date
+
+通过。
+
+明确没有进入：
+
+纯文本
+Import_Date
+ ↓
+historical rate matching
+
+这仍属于：
+
+CUSTOMS-DUTY-RULE-ENGINE-DESIGN
+
+保持冻结。
+
+301 Exclusion
+
+通过。
+
+当前只能：
+
+纯文本
+exclusion reference file
+
+↓
+
+normalized artifact
+
+不能：
+
+纯文本
+customer shipment
+ ↓
+自动判断适用豁免
+两份共同边界审计
+Schema
+
+通过：
+
+纯文本
+NO Prisma migration
+数据库
+
+通过：
+
+纯文本
+No persistence
+网络/API
+
+通过：
+
+纯文本
+No API
+No crawler
+No external sync
+PDF/OCR
+
+通过：
+
+纯文本
+PDF
+
+↓
+
+structure check
+
+↓
+
+QUARANTINE
+
+OCR：
+
+继续 BACKLOG。
+
+实施批准
+
+可以进入：
+
+Step 1 Implementation
+
+两个项目均允许：
+
+纯文本
+IMPLEMENT
+
+但保持：
+
+两个独立适配器，不合并成通用规则引擎。
+
+实施后提交：
+
+Carrier
+纯文本
+CARRIER-REFERENCE-DATA-ADAPTER-IMPLEMENTATION-CHECKPOINT.md
+
+包含：
+
+fixtures
+测试结果
+适配报告
+quarantine案例
+Customs
+纯文本
+CUSTOMS-RATE-REFERENCE-ADAPTER-IMPLEMENTATION-CHECKPOINT.md
+
+包含：
+
+税率文件案例
+301 文件案例
+HS Code 字符规范化测试
+UNKNOWN/ACTION
+继续冻结
+
+无变化：
+
+纯文本
+carrier_rules table          HOLD
+
+customs_duty_rates table     HOLD
+
+SLA rules                    HOLD
+
+Duty matching rules          HOLD
+
+Refund calculation           HOLD
+
+Claim amount                 HOLD
+
+Automatic submission         FORBIDDEN
+
+API sync                     HOLD
+
+OCR                          BACKLOG
+最终记录
+Markdown
+### [MSG-20260929-14]
+
+TYPE:
+DESIGN DECISION
+
+REQUEST:
+C0015 STEP1 REFERENCE DATA ADAPTERS
+
+DECISION:
+GO_IMPLEMENTATION
+
+Carrier Reference Adapter:
+GO
+
+Customs Rate Reference Adapter:
+GO
+
+
+Approved:
+- file parsing
+- whitelist mapping
+- effective window extraction
+- version fingerprint
+- validation report
+- quarantine
+
+
+Forbidden:
+- schema migration
+- rule evaluation
+- money calculation
+- claim generation
+- API sync
+- OCR
+- external submission
+
+
+NEXT:
+Implementation Checkpoint + Adapter Reports
+
+两个 Step 1 设计都符合当前架构路线，可以继续实施。
+```
