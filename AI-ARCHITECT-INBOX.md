@@ -50887,3 +50887,426 @@ WAITING_COMMERCIAL_VALIDATION
 
 等第一份真实导出文件 → 跑 VALIDATION-RUN-001 → 判断 CrossClaim 第一个商业切入口。
 ```
+
+### [MSG-20260929-06] Shopify/D2C 范围裁决：REGISTER_FUTURE_SCOPE / NOT_APPROVED（并入 C-0015，不新增 C-0016；真实连接器继续 HOLD、自动提交 Dispute 继续 FORBIDDEN、HS Code 维持 BACKLOG+NEEDS_COMPLIANCE_REVIEW、托管/预授权/自动扣佣 HOLD；**Shopify CSV/XLSX 导出适配 = APPROVED IN PRINCIPLE（边界同 C-0009.1-A）**，下一步只需提交 SHOPIFY-FILE-ADAPTER-DESIGN.md）
+
+Codex 提交 BRIDGE-SCOPE-SHOPIFY-D2C（宿主新需求：Shopify/D2C 数据源 + 三大审计引擎 + 托管分账）后，架构方判定该需求并入 C-0015 未来范围、不在 Gate 7 实施，但放行「Shopify 文件导出适配」并指定下一份文档。以下为该回复的**逐字原文**。
+
+```text
+BRIDGE-SCOPE-SHOPIFY-D2C 裁决
+总体结论
+
+不作为当前 Gate 7 实施范围。登记为未来阶段候选。
+
+状态：
+
+纯文本
+GATE:
+7 Commercial Validation
+
+REQUEST:
+Shopify / D2C Cross-border Recovery Loop
+
+DECISION:
+REGISTER_FUTURE_SCOPE
+
+IMPLEMENTATION:
+NOT_APPROVED
+
+CURRENT_PRIORITY:
+C-0009.2 VALIDATION-RUN-001
+
+原因：
+
+该需求比 C-0015 更接近完整商业闭环：
+
+Shopify订单
+ ↓
+物流/支付/争议数据
+ ↓
+AI识别损失
+ ↓
+生成证据
+ ↓
+提交争议
+ ↓
+追回资金
+ ↓
+佣金分成
+
+已经包含：
+
+新渠道
+新数据模型
+新规则
+外部金融动作
+争议责任
+资金分账
+
+不能在 Gate 7 验证阶段直接并入开发。
+
+Q1：是否受理？并入 C-0015 还是 C-0016？
+裁决：
+
+并入 C-0015。
+
+不新增 C-0016。
+
+原因：
+
+Shopify/D2C 本质仍属于：
+
+跨境交易损耗恢复（Cross-border Recovery）
+
+与 Amazon/Walmart/TikTok 方向属于同一战略域。
+
+统一：
+
+纯文本
+C-0015
+Cross-border Recovery Platform Expansion
+
+├── Marketplace
+│   ├── Amazon
+│   ├── Walmart
+│   └── TikTok Shop
+│
+└── D2C
+    └── Shopify
+
+避免形成多个方向分叉。
+
+Q2：四个冲突点裁决
+1. Shopify / Stripe Disputes / PayPal Disputes 连接器
+
+结论：
+
+继续 BACKLOG
+
+保持：
+
+纯文本
+Real Connectors:
+HOLD
+
+不改变。
+
+理由：
+
+现在最大未知：
+
+不是技术连接。
+
+而是：
+
+哪一种损失类型值得成为第一个收费产品。
+
+允许：
+
+Shopify 文件导出适配
+
+原因：
+
+它符合已经批准的 C-0009.1-A 模式：
+
+Export File
+ ↓
+Adapter
+ ↓
+Canonical Input
+ ↓
+Validation
+
+无需：
+
+API
+OAuth
+Secret
+平台授权
+
+所以：
+
+Shopify API:
+❌ HOLD
+
+Shopify CSV/XLSX Export Adapter:
+✅ 可申请实施
+
+2. 自动提交 Dispute
+
+结论：
+
+继续 FORBIDDEN ❌
+
+没有变化。
+
+允许：
+
+订单证据
+ ↓
+AI整理
+ ↓
+Dispute Evidence Package
+ ↓
+人工确认提交
+
+禁止：
+
+AI
+ ↓
+自动提交 Stripe/PayPal/Card Network
+
+原因：
+
+涉及：
+
+平台规则
+金融争议
+错误提交风险
+商户授权
+
+3. 关税 HS Code / C88 / 7501
+
+结论：
+
+保持：
+BACKLOG
++
+NEEDS_COMPLIANCE_REVIEW
+
+没有变化。
+
+原因：
+
+这个方向不是普通 AI 文档任务。
+
+核心问题：
+
+不是：
+
+能不能解析文件
+
+而是：
+
+谁承担 HS Code 判断责任
+
+需要先确认：
+
+用户自己内部核查？
+贸易顾问？
+报关代理？
+是否涉及申报行为？
+
+所以：
+
+OCR 不是第一问题。
+
+合规边界才是第一问题。
+
+4. 托管账户 / 预授权 / 自动扣佣
+
+结论：
+
+HOLD
+
+保持：
+
+Payment Expansion:
+WAIT
+
+原因：
+
+当前支付域只是：
+
+Payment
+PaymentEvent
+PaymentAttempt
+Reconciliation
+
+属于系统准备。
+
+不代表批准：
+
+资金托管
+自动划扣
+预授权冻结
+分账
+
+这些需要：
+
+Stripe Connect / Payment API
+KYC
+资金流设计
+退款责任
+合规审查
+
+Q3：是否允许 Shopify 文件适配器？
+答：
+
+允许，但必须单独提交范围。
+
+状态：
+
+纯文本
+SHOPIFY-FILE-ADAPTER
+
+APPROVED IN PRINCIPLE
+
+SCOPE:
+same as C-0009.1-A
+
+边界：
+
+允许：
+
+✅ CSV/XLSX 导入
+✅ 字段映射
+✅ quarantine
+✅ canonical input
+✅ validation report
+
+禁止：
+
+❌ Shopify API
+❌ 自动同步
+❌ dispute 提交
+❌ 退款动作
+❌ 规则判断
+❌ 佣金计算
+
+Q4：需要哪些 Design/Delta？
+
+当前：
+
+不要全部提交。
+
+顺序：
+
+第一：
+
+提交：
+
+SHOPIFY-FILE-ADAPTER-DESIGN.md
+
+内容：
+
+支持文件格式
+字段映射
+数据白名单
+quarantine策略
+
+第二：
+
+如果真实数据验证通过：
+
+提交：
+
+C-0015-SCENARIO-SELECTION.md
+
+选择：
+
+三选一：
+
+Shopify Chargeback Recovery
+Shopify Logistics SLA Recovery
+Marketplace Warehouse Loss
+
+必须只选一个 MVP。
+
+第三：
+
+进入设计阶段才需要：
+
+Dispute Evidence Mapping Design
+
+包括：
+
+证据类型
+来源
+完整性
+人工确认点
+Rule Engine Design
+
+包括：
+
+输入
+规则
+输出
+Audit状态
+Payment Flow Design
+
+最后。
+
+Compliance Assessment
+
+仅在：
+
+HS Code
+自动提交
+资金托管
+
+之前必须完成。
+
+最终记录
+Markdown
+### [MSG-20260929-06]
+
+TYPE:
+SCOPE DECISION
+
+REQUEST:
+Shopify D2C Cross-border Recovery
+
+DECISION:
+REGISTER INTO C-0015 FUTURE SCOPE
+
+NOT IMPLEMENT NOW
+
+Q1:
+Merge into C-0015.
+No new C-0016.
+
+Q2:
+1. Real connectors:
+   HOLD
+
+2. Auto dispute submission:
+   FORBIDDEN
+
+3. HS Code / C88 / 7501:
+   BACKLOG + COMPLIANCE REVIEW REQUIRED
+
+4. Escrow / pre-auth / auto commission:
+   HOLD
+
+Q3:
+Shopify export adapter:
+APPROVED IN PRINCIPLE
+Same boundary as C-0009.1-A
+
+Q4:
+Next document only:
+SHOPIFY-FILE-ADAPTER-DESIGN.md
+
+Current active task:
+C-0009.2 VALIDATION-RUN-001
+WAITING_REAL_INPUT
+
+补充架构判断：
+
+目前 CrossClaim 已经出现一个明显方向：
+
+不要先做“全平台追回平台”。
+
+更可能的正确路径是：
+
+一个损失类型
++
+一个渠道
++
+一个明确金额结果
++
+人工确认闭环
+
+先跑通一个垂直闭环，再扩展 Amazon / Shopify / Walmart。
+```
