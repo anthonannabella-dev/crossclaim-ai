@@ -61259,3 +61259,342 @@ Import/Validation Operations Design
 
 可以继续进入 A4 Import/Validation Operations Design。
 ```
+
+### [MSG-20260929-36] ADMIN-IMPORT-VALIDATION-DESIGN 裁决：GO ✅（GO_WITH_MINOR_REVISE / READY_FOR_IMPLEMENTATION_AFTER_REVISION）——D1 GO（五状态桶接受：处理中/成功/部分成功/失败/已重试成功；不新增「等待人工确认/待处理/修复中」等运营工作流状态，改为允许**异常角标 projection flag**（如 PARTIAL + QUALITY_WARNING），避免 Admin 产生第二套状态机）；D2 GO_WITH_MINOR_REVISE（L1 租户摘要 → L2 批次详情 → L3 行级定位 结构接受；L3 现有 errorCode/rowNumber/field/action 之外**增加 sourceColumnName**（用户文件列名映射，如 Tracking Number(s)），禁止原始值/原始行 JSON/完整文件内容）；D3 HOLD（v1 不展示任何样本数据：不返回脱敏字段、前 N 个字段或示例值；未来如需另开 ADMIN-IMPORT-SAMPLE-VIEW-DESIGN，含字段白名单/脱敏策略/权限）；D4 GO（Admin 一律不展示金额/币种/单价/订单价值——金额留在 Recovery/Billing/Finance 域）；D5 GO（v1 不提供任何下载：原始文件/错误 CSV/数据导出均不可下载；未来另开 EXPORT-DESIGN 含导出人/内容/脱敏规则/AuditLog）；实现阶段额外要求：Import 查询隔离测试（A 看不到 B 的 batch/error/quality summary）、错误信息泄露测试（响应不含 rawRow/rawPayload/customer data/token/storageKey）、状态映射测试（固定 ImportBatch Status → Admin Bucket，不在 Admin 内新建状态判断）、Quality Summary 必须标注为 projection 而非 source of truth；NEXT = ADMIN-IMPORT-VALIDATION IMPLEMENTATION
+
+本轮为 Admin P2 导入/校验设计裁决：GO_WITH_MINOR_REVISE，四项实现期要求；可进入实现。
+
+```text
+ADMIN-IMPORT-VALIDATION-DESIGN 裁决
+总体结论：GO_WITH_MINOR_REVISE ✅
+
+状态：
+
+Markdown
+### [MSG-20260929-36]
+
+TYPE:
+DESIGN DECISION
+
+TARGET:
+ADMIN-IMPORT-VALIDATION-DESIGN
+
+DECISION:
+GO_WITH_MINOR_REVISE
+
+STATUS:
+READY_FOR_IMPLEMENTATION_AFTER_REVISION
+
+NEXT:
+ADMIN_IMPORT_VALIDATION_IMPLEMENTATION
+
+整体设计符合 Admin Console 定位：
+
+运营观察、问题定位，不成为数据修复后台。
+
+D1：五状态桶
+裁决：GO ✅
+
+当前：
+
+处理中
+成功
+部分成功
+失败
+已重试成功
+
+接受。
+
+不新增：
+
+等待人工确认
+待处理
+修复中
+
+原因：
+
+这些属于运营工作流状态，不属于 ImportBatch 当前事实状态。
+
+但是增加一个要求：
+
+允许增加：
+
+纯文本
+异常角标（projection flag）
+
+而不是状态。
+
+例如：
+
+纯文本
+PARTIAL
++
+QUALITY_WARNING
+
+而不是：
+
+纯文本
+WAITING_REVIEW
+
+避免 Admin 产生第二套状态机。
+
+D2：L1/L2/L3 展示层级
+裁决：GO_WITH_MINOR_REVISE ✅
+
+三级结构正确：
+
+L1:
+租户运营摘要
+
+↓
+
+L2:
+批次详情
+
+↓
+
+L3:
+行级错误定位
+
+接受。
+
+L3：
+
+当前：
+
+errorCode
+rowNumber
+field
+action
+
+可以。
+
+增加一个允许字段：
+
+纯文本
+sourceColumnName
+
+原因：
+
+运营处理导入问题时：
+
+field：
+
+可能是：
+
+trackingNo
+
+但用户文件：
+
+可能叫：
+
+Tracking Number(s)
+
+增加映射帮助。
+
+禁止：
+
+原始值
+原始行 JSON
+完整文件内容
+D3：L3 是否允许脱敏样本
+裁决：HOLD ❌（v1 不做）
+
+维持：
+
+L3 不返回原始行内容。
+
+包括：
+
+不返回：
+
+脱敏字段
+前 N 个字段
+示例值
+
+原因：
+
+导入数据可能包含：
+
+客户信息
+地址
+订单信息
+物流信息
+
+Admin v1 不是数据浏览器。
+
+未来如果需要：
+
+单独设计：
+
+ADMIN-IMPORT-SAMPLE-VIEW-DESIGN
+
+需要：
+
+字段白名单
+脱敏策略
+权限
+D4：金额展示
+裁决：采用推荐方案
+一律不展示金额 ✅
+
+即：
+
+Admin Import：
+
+不返回：
+
+金额
+币种
+单价
+订单价值
+
+原因：
+
+Admin 的目标：
+
+哪里失败？
+
+为什么失败？
+
+怎么定位？
+
+不是：
+
+业务数据查看。
+
+金额继续留在：
+
+Recovery
+Billing
+Finance
+
+域。
+
+D5：下载能力
+裁决：GO（v1 不提供）✅
+
+保持：
+
+不提供：
+
+原始文件下载
+错误 CSV 下载
+导入数据导出
+
+原因：
+
+下载会快速扩大：
+
+数据泄露面
+权限复杂度
+审计复杂度
+
+未来：
+
+如果需要：
+
+单独：
+
+EXPORT-DESIGN
+
+包括：
+
+谁导出
+导出什么
+脱敏规则
+AuditLog
+额外实现要求
+
+进入 Implementation 时增加：
+
+1. Import 查询隔离测试
+
+必须覆盖：
+
+A 租户：
+
+不能看到：
+
+B 租户：
+
+batch
+error
+quality summary
+2. 错误信息泄露测试
+
+确保：
+
+response 不包含：
+
+rawRow
+rawPayload
+customer data
+token
+storageKey
+3. 状态映射测试
+
+固定：
+
+ImportBatch Status
+
+↓
+
+Admin Bucket
+
+不要在 Admin 内创建新状态判断。
+
+4. Quality Summary
+
+必须标注：
+
+这是：
+
+projection
+
+不是：
+
+source of truth
+最终裁决
+Markdown
+### [MSG-20260929-36]
+
+ADMIN IMPORT VALIDATION DESIGN
+
+DECISION:
+GO_WITH_MINOR_REVISE
+
+
+D1:
+GO
+五状态接受。
+允许异常角标，不新增状态。
+
+
+D2:
+GO_WITH_MINOR_REVISE
+L1/L2/L3接受。
+增加sourceColumnName。
+禁止原始值。
+
+
+D3:
+HOLD
+v1不展示任何样本数据。
+
+
+D4:
+GO
+Admin一律不展示金额。
+
+
+D5:
+GO
+v1不提供任何下载。
+
+
+STATUS:
+READY_FOR_IMPLEMENTATION_AFTER_REVISION
+
+可以进入 ADMIN-IMPORT-VALIDATION IMPLEMENTATION。
+```
