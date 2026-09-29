@@ -45,3 +45,17 @@
 - Production Enablement 继续 HOLD；真实 Claim/Appeal/扣佣/收费/平台写操作继续禁止。
 - 真实 Secret/OAuth/第三方生产凭据继续 HOST PENDING。
 - 合并决策由架构方作出；不得绕过 GitHub 分支保护。
+
+## 6. 断因诊断与保活（2026-09-30 实测）
+
+| 断因 | 现象 | 处置 |
+|---|---|---|
+| 临时标签被回收 | 下一轮 `Tab not found in browser 1` | 只用**会话 URL** 认会话：`getTab({url})` 失败即 `createBrowserTab(url)` 重建；每轮 `markHandoff()` 保活 |
+| 账号/配置不一致 | 早期读到 `Annabella Anthon`，后期为 `zhengsanwei` | 发送前核对侧栏账号；发现不一致即停发并改用正确账号 |
+| 会话类型不同 | 输入框标签是「使用 ChatGPT Work」而非「询问 ChatGPT」 | Work 会话固定用 `div[contenteditable="true"][aria-label="使用 ChatGPT Work"]`；普通会话用「询问 ChatGPT」；两者都无则退化为「底部 composer 容器内最后一个 contenteditable」，**不得选中页面中部编辑器** |
+| 假输入框 | 回帖里的「开始写作」编辑器也是 contenteditable | 仅认底部 composer 区域；中部编辑器一律不填 |
+| 虚拟滚动 / 流式截断 | 旧消息不在 DOM；回复半截 | 先点顶部「正在加载更早的消息…」再上滚；等「回答已完成」再取文本，截到「ChatGPT 可能会出错」为止 |
+
+**发送验证（强制）**：`fill` + `Enter` 后必须回读——① 输入框已清空；② 正文出现桥路标记（如 `[CODEX -> CHATGPT]` / `BRIDGE ONLINE`）。未验证到即视为未发送，重试一次；仍失败则报「桥路不可用」，不得假设成功。
+
+**消息约定**：每条以 `[CODEX -> CHATGPT] <topic>` 开头，便于去重与送达确认；裁决归档编号自 `MSG-20260930-06` 起递增。
