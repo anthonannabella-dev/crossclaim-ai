@@ -340,6 +340,7 @@ model Organization {
   paymentAttempts   PaymentProcessingAttempt[]
   claimItems        ClaimItem[]
   claimItemEvidences ClaimItemEvidence[]
+  recoveryPayouts   RecoveryPayout[]
 
   @@index([status])
 }
@@ -1046,14 +1047,28 @@ model Settlement {
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt
 
+  /// MSG-20260929-26 R1a：业务确认轴（是否被人工确认为事实）—— 与到账轴互不覆盖
+  confirmationStatus     SettlementConfirmationStatus   @default(CONFIRMED)
+  /// MSG-20260929-26 R1b：到账对账轴（钱是否真的到账、到了多少、是否有问题）
+  reconciliationStatus   SettlementReconciliationStatus @default(NOT_STARTED)
+  /// MSG-20260929-26 R2a：业务确认留痕（R2b 的 confirmedAt 复用既有列）
+  confirmedByUserId      String?
+  /// MSG-20260929-26 R4：冲回链（不删除原记录；财务处置由 FINANCE 人工完成，D3）
+  reversedBySettlementId String?
+
   organization    Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   case            Case?                 @relation(fields: [caseId], references: [id])
   evidence        EvidenceArtifact?     @relation(fields: [evidenceId], references: [id])
   ledgerEntries   RecoveryLedgerEntry[]
   feeCalculations FeeCalculation[]
+  payouts         RecoveryPayout[]
+  reversedBy      Settlement?           @relation("SettlementReversal", fields: [reversedBySettlementId], references: [id])
+  reversals       Settlement[]          @relation("SettlementReversal")
 
   @@unique([organizationId, id])
   @@index([organizationId, status, receivedAt])
+  @@index([organizationId, confirmationStatus])
+  @@index([organizationId, reconciliationStatus])
   @@index([caseId])
 }
 
@@ -1393,4 +1408,50 @@ model ClaimItemEvidence {
   @@unique([organizationId, claimItemId, evidenceId])
   @@unique([organizationId, id])
   @@index([claimItemId])
+}
+
+// ============================================================
+// 十一、回收确认（Recovery Confirmation）—— MSG-20260929-26
+// 两条互不覆盖的事实轴；到账事实唯一来源；金额口径零改动。
+// ============================================================
+
+/// 业务确认轴：这笔回收是否已被人工确认为事实（与到账对账解耦）
+enum SettlementConfirmationStatus {
+  CONFIRMED
+  PENDING_CONFIRMATION
+  REJECTED_BY_REVIEW
+}
+
+/// 到账对账轴：平台/银行到账与确认金额的对齐进度
+enum SettlementReconciliationStatus {
+  NOT_STARTED
+  PARTIAL
+  RECONCILED
+  DISPUTED
+  REVERSED
+}
+
+/// 到账事实的唯一来源：金额只存在这里；
+/// receivedAmount = Σ RecoveryPayout.amount 为**投影**，不落库（避免第二份金额事实源）。
+model RecoveryPayout {
+  id             String   @id @default(uuid())
+  organizationId String
+  settlementId   String
+  /// 平台/银行到账引用（幂等键）
+  payoutRef      String
+  amount         Decimal  @db.Decimal(18, 4)
+  currency       String   @default("USD")
+  receivedAt     DateTime
+  /// PLATFORM_SETTLEMENT / BANK_TRANSFER / OTHER（服务层白名单，不新增 TYPE）
+  sourceType     String
+  createdBy      String?
+  createdAt      DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  settlement   Settlement   @relation(fields: [settlementId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, payoutRef])
+  @@unique([organizationId, id])
+  @@index([organizationId, receivedAt])
+  @@index([organizationId, settlementId])
 }

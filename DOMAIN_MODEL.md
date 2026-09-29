@@ -5,7 +5,7 @@
 
 ---
 
-## 一、模型总览（36 个 = 33 个核心模型 + 3 个联结模型）
+## 一、模型总览（37 个 = 34 个核心模型 + 3 个联结模型）
 
 > **口径统一**：**29 个核心模型**（架构章程 §六 的清单 + C-0006-A 的 `CanonicalFact` + C-0006-B1 的 `RuleEvaluationShadow` + C-0008-A 的 `Session`、`UserInvitation`）**+ 2 个联结模型 `CaseEvidence`、`CanonicalFactSource`**。
 > README、本文、PR 描述、架构契约测试全部按此口径，不允许 29/31 混用。
@@ -108,7 +108,8 @@
 
 | 模型 | 说明 |
 |---|---|
-| `Settlement` | **客户实际收到的钱**（平台 credit / 承运商 credit / 银行到账 / 抵扣） |
+| `Settlement` | **客户实际收到的钱**（平台 credit / 承运商 credit / 银行到账 / 抵扣）。MSG-20260929-26 起含两条互不覆盖的状态轴：`confirmationStatus`（业务确认）与 `reconciliationStatus`（到账对账） |
+| `RecoveryPayout` | MSG-20260929-26 新增：**到账事实的唯一来源**（金额只存在这里）。`receivedAmount = Σ amount` 为读侧投影，不落库；`@@unique([organizationId, payoutRef])` 保证幂等 |
 | `RecoveryLedgerEntry` | 追回账本分录。**只增不改**，纠错用 REVERSAL |
 
 ### 收费
