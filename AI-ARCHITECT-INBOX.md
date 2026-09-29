@@ -62739,3 +62739,347 @@ DESIGN_FIRST_APPROVED
 
 可以继续提交 ADMIN-USER-MEMBERSHIP-DESIGN。
 ```
+
+### [MSG-20260929-39] ADMIN-USER-MEMBERSHIP-DESIGN 裁决：GO ✅（GO_WITH_MINOR_REVISE）——A2 身份只读视图方向通过；逐项修订见归档正文（邮箱/会话/邀请/锁定/矩阵等）。
+
+本轮为 Admin P4/A2 设计裁决（GO_WITH_MINOR_REVISE）。
+
+```text
+ADMIN-USER-MEMBERSHIP-DESIGN 裁决
+总体结论：GO_WITH_MINOR_REVISE ✅
+
+状态：
+
+Markdown
+
+### [MSG-20260929-39]
+
+TYPE:
+DESIGN DECISION
+
+TARGET:
+ADMIN-USER-MEMBERSHIP-DESIGN
+
+DECISION:
+GO_WITH_MINOR_REVISE
+
+STATUS:
+READY_FOR_IMPLEMENTATION_AFTER_REVISE
+
+NEXT:
+ADMIN_USER_MEMBERSHIP_IMPLEMENTATION
+
+整体设计符合 Admin Console 的最终边界：
+
+身份治理可观察，不承担身份治理动作。
+
+通过。
+
+D1：邮箱展示
+裁决：REVISE 🔶
+
+不建议展示完整邮箱。
+
+改为：
+
+默认掩码展示。
+
+例如：
+
+纯文本
+a***@example.com
+
+原因：
+
+Admin v1 目标：
+
+确认：
+
+谁存在
+什么角色
+什么状态
+
+不是：
+
+查看完整个人联系方式。
+
+权限：
+
+即使 OWNER/ADMIN：
+
+也建议：
+
+默认：
+
+纯文本
+maskedEmail
+
+如果未来确实需要完整邮箱：
+
+需要单独设计：
+
+纯文本
+ADMIN-PII-ACCESS-DESIGN
+
+包括：
+
+特殊权限
+查看审计
+原因记录
+D2：Session 粒度
+裁决：GO ✅
+
+保持：
+
+只展示：
+
+纯文本
+activeCount
+
+expiredCount
+
+禁止：
+
+tokenHash
+IP
+UA
+单条 Session
+浏览器信息
+
+正确。
+
+Session 在 v1 只是：
+
+安全健康指标。
+
+不是：
+
+用户行为分析。
+
+D3：邀请字段
+裁决：GO ✅
+
+保留：
+
+纯文本
+status
+
+expiresAt
+
+attemptCount
+
+足够。
+
+禁止：
+
+tokenHash
+inviteToken
+invitation URL
+
+正确。
+
+特别注意：
+
+邀请链接本质等同认证凭据。
+
+不能进入 Admin。
+
+D4：锁定状态
+裁决：GO_WITH_MINOR_REVISE ✅
+
+允许展示。
+
+但是：
+
+只展示：
+
+纯文本
+isLocked: true/false
+
+不要展示：
+
+锁定原因：
+
+例如：
+
+密码失败次数
+安全策略详情
+风险规则
+
+原因：
+
+避免暴露安全策略。
+
+D5：权限矩阵
+裁决：GO ✅
+
+确认：
+
+只读。
+
+来源：
+
+纯文本
+permissionsFor()
+
+展示：
+
+角色：
+
+↓
+
+权限布尔矩阵
+
+可以。
+
+禁止：
+
+任何：
+
+编辑按钮
+toggle
+save
+update
+
+未来如果需要修改权限：
+
+单独：
+
+纯文本
+ADMIN-GOVERNANCE-DESIGN
+六、补充实现要求
+
+进入 Implementation 增加：
+
+1. PII 扫描
+
+响应禁止：
+
+完整：
+
+email（除非未来明确批准）
+phone
+address
+
+当前：
+
+只允许：
+
+maskedEmail。
+
+2. 禁键扫描
+
+继续保持：
+
+禁止：
+
+纯文本
+passwordHash
+
+tokenHash
+
+inviteToken
+
+secret
+
+credential
+
+storageKey
+
+ip
+
+userAgent
+
+amount
+
+currency
+3. 租户隔离
+
+覆盖：
+
+A organization：
+
+不能看到：
+
+B：
+
+users
+memberships
+invitations
+sessions
+4. 治理动作不存在证明
+
+静态检查：
+
+禁止出现：
+
+纯文本
+inviteUser
+
+updateRole
+
+deleteUser
+
+disableUser
+
+revokeSession
+
+等写路径。
+
+七、Admin Console 全部模块状态更新
+
+完成本轮后：
+
+Admin Console：
+
+模块	状态
+Tenant Overview	READY
+Audit Explorer	READY
+System Health	READY
+Import Validation	READY
+Recovery Review	READY
+User/Membership	DESIGN APPROVED
+
+Admin v1 基本闭环。
+
+最终归档
+Markdown
+
+### [MSG-20260929-39]
+
+ADMIN USER MEMBERSHIP DESIGN
+
+DECISION:
+GO_WITH_MINOR_REVISE
+
+
+D1:
+REVISE
+Email masked by default.
+
+
+D2:
+GO
+Session counts only.
+
+
+D3:
+GO
+Invite status/expiresAt/attemptCount only.
+
+
+D4:
+GO_WITH_MINOR_REVISE
+Allow locked boolean only.
+
+
+D5:
+GO
+Readonly permission matrix only.
+
+
+STATUS:
+READY_FOR_IMPLEMENTATION_AFTER_REVISE
+
+可以进入 ADMIN-USER-MEMBERSHIP IMPLEMENTATION。完成后建议进入 Final Gate Review（Production Candidate 总审）。
+```

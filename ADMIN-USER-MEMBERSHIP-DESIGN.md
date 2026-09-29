@@ -93,3 +93,26 @@ NEED: **GO / REVISE / HOLD**（ADMIN-USER-MEMBERSHIP-DESIGN）
 * **D5 权限矩阵**：确认矩阵为**只读展示**且不出现在任何可编辑上下文中？
 
 > 边界未变：只读、单租户、无新表、无写路径、无治理动作、无凭据与 PII 泄露；自动提交 FORBIDDEN、自动扣佣 HOLD。
+
+---
+
+## 7. R1 修订记录（MSG-20260929-39 = GO_WITH_MINOR_REVISE）
+
+| 裁决项 | 最终口径 |
+|---|---|
+| D1 REVISE | **邮箱默认掩码**（例如 `a***@b.com`）；不返回完整邮箱，也不提供解掩码入口 |
+| D2 GO | 会话仅计数与状态分布（无单条会话明细、无 IP/UA/tokenHash） |
+| D3 GO | 邀请仅 `status` / `expiresAt` / `attemptCount`（无 tokenHash、无邀请链接） |
+| D4 GO_WITH_MINOR_REVISE | **仅允许 `locked` 布尔**（不给失败次数、不给锁定原因，不给解锁入口） |
+| D5 GO | 权限矩阵只读展示 |
+
+### 7.1 硬约束：Admin v1 无任何写路径
+
+不得出现（且实现期需静态扫描确认）：invite / updateRole / deactivate / delete / revokeSession / resetPassword 等任何写端点或导出函数。
+
+### 7.2 实现期验收（补充）
+
+1. 邮箱掩码单测（响应中不出现完整邮箱字符串，仅掩码形式）。
+2. 锁定位仅布尔（响应中不出现失败次数或锁定原因字段）。
+3. 无写路径扫描（导出面与端点层均无邀请/改角色/停用/删除/吊销会话/重置凭据）。
+4. 只读证明：读取前后 `User` / `Membership` / `Session` / `UserInvitation` / `AuditLog` 快照一致。
