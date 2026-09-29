@@ -64845,3 +64845,192 @@ RD-01 Shopify Validation
 
 拿第一批真实 Shopify 数据，验证整个价值链是否成立。
 ```
+
+### [MSG-20260929-46] PHASE1-ADDENDUM-APPLIED + DOC-MERGE 确认：PASS_CLOSE（main = aa3080d / CI PASS；Phase 1 规范最终版确认，无需继续扩代码，等 RD-01 Shopify 脱敏文件）
+
+```text
+PHASE1-ADDENDUM-APPLIED + DOC-MERGE 确认
+状态确认：PASS_CLOSE ✅
+
+当前归档状态：
+
+纯文本
+CrossClaim AI
+
+MAIN:
+aa3080d
+
+CI:
+PASS
+
+CODE:
+Production Candidate
+
+PHASE1:
+Approved
+
+NEXT:
+RD-01 Shopify Real Data Validation
+
+文档同步完成，Phase 1 验收标准已经固定。
+
+已确认合并结果
+
+✅ fast-forward 合并完成
+✅ 未 force push
+✅ 未绕过保护
+✅ main CI 通过
+
+当前：
+
+纯文本
+gate/7-commercial-validation
+          ↓
+        main
+
+已完成。
+
+Phase 1 验证规范最终版确认
+
+现在 Phase 1 的目标非常明确：
+
+不是证明：
+
+“系统已经能自动追回钱”
+
+而是证明：
+
+“系统能否从真实业务数据中稳定发现可人工验证的追回机会”。
+
+Stage A：数据入口验证
+
+必须满足：
+
+纯文本
+Input Rows
+=
+Normalized Rows
++
+Quarantine Rows
++
+Rejected Rows
+
+并输出：
+
+Import Report
+Field Coverage
+UNKNOWN Field Report
+Quarantine Report
+
+通过标准：
+
+不静默丢数据
+不猜字段
+可 row trace
+Stage B：候选发现
+
+每个 Candidate 必须具备：
+
+纯文本
+candidate_id
+
+source_file_hash
+
+source_row_reference
+
+normalized_fact_reference
+
+evidence_reference
+
+created_reason
+
+重点：
+
+任何候选必须回答：
+
+为什么系统认为它值得人工检查？
+
+Stage C：人工验证
+
+最低：
+
+纯文本
+≥5 条人工抽样
+
+分类：
+
+纯文本
+TRUE POSITIVE
+
+FALSE POSITIVE
+ ├ 数据误解
+ ├ 规则缺失
+ ├ 业务合理
+
+NEEDS DATA
+Phase 1 最终决策出口
+
+保持三个出口：
+
+纯文本
+PASS_TO_MVP
+
+继续采集数据
+
+STOP / REWORK
+
+禁止：
+
+Phase 1 直接推导：
+
+收费模型成立
+自动追回成立
+自动提交成立
+ARR 预测成立
+下一动作
+
+当前不需要 Codex 继续扩代码。
+
+等待：
+
+RD-01 Shopify 脱敏文件
+
+建议第一批：
+
+CSV/XLSX
+≥500 orders
+最近 3 个月优先
+
+然后执行：
+
+纯文本
+Shopify Export
+        ↓
+Import
+        ↓
+Normalization
+        ↓
+Validation
+        ↓
+Candidate Discovery
+        ↓
+Human Verification
+        ↓
+PHASE1-RESULT.md
+当前冻结保持
+模块	状态
+真实平台 API	HOLD
+Amazon SP-API	HOLD
+Stripe 扣佣	HOLD
+自动 Claim 提交	FORBIDDEN
+自动资金动作	HOLD
+规则金额计算	HOLD
+HS Code 判断	HOLD
+SLA 自动索赔判断	HOLD
+
+最终确认：
+
+CrossClaim AI 已从“开发阶段”进入“真实价值验证阶段”。
+
+下一关键节点不是代码提交，而是第一份真实数据跑出的 Phase 1 Result。
+```
