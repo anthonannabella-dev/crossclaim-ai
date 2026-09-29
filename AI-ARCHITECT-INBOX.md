@@ -70706,3 +70706,307 @@ READ-ONLY-KILLSWITCH-CONSUMPTION-IMPLEMENTATION
 
 Production Enablement 继续 HOLD。
 ```
+
+### [MSG-20260929-68] READ-ONLY-KILLSWITCH-CONSUMPTION-DESIGN R2 裁决：RESULT: PASS / STATUS: READ-ONLY-KILLSWITCH-CONSUMPTION-DESIGN = FROZEN / NEXT: READ-ONLY-KILLSWITCH-CONSUMPTION-IMPLEMENTATION / SCOPE: S1-S4 ONLY / BOUNDARY: NO ACTION GUARD, NO BUSINESS BLOCKING, NO RUNTIME ACTION CHANGE, NO PRODUCTION ENABLEMENT（D4 PASS：Resolver Source -> Presentation Mapping -> Human Label，UI 不得自行解释 source 或改变判断，未识别 source 一律按关闭展示；Consumer Registry 分类 PASS：GET /admin/kill-switch、Admin Console、Operations Console、Health = READ_ONLY，Submission/Billing Guard = FUTURE ACTION_GUARD，实现时必须保留静态约束——READ_ONLY 禁止 assertActionAllowed()/throw business rejection/return blocked，ACTION_GUARD 才允许 allow-deny 决策；blocked audit 边界 PASS+：killswitch.changed=控制面状态变化、killswitch.blocked=业务动作尝试执行且被安全策略拒绝，查询/展示/健康检查/resolver 计算都不写；审计失败仍拒绝（deny + security log），绝不允许 audit failed -> allow action；实现批准范围 S1 Admin Console（展示 value / source 文案 / evaluatedAt，OWNER-ADMIN 可展开详情；禁止修改/提交/确认/拉闸）、S2 Operations Console（展示 scope/状态/来源；禁止阻断业务流程或改变页面行为）、S3 Health（增加 killSwitchResolver.status=ok|degraded；禁止把 resolver degraded 等同服务 down、禁止改业务 readiness 规则）、S4 Display-only Regression（disabled 展示 closed / enabled 展示 enabled，两者业务结果逐字段一致）；checkpoint 验收清单冻结：① 静态扫描证明 READ_ONLY 路径不存在 resolveKillSwitch( / assertActionAllowed( / killSwitch.disabled return / killSwitchRequest.find ② 权限验证 OWNER-ADMIN 完整、OPS 最小、FINANCE-VIEWER 403 ③ 泄露验证不得出现 token/secret/API key/customer data/PII ④ Audit 验证读取与展示都不增加 AuditLog、不产生 killswitch.changed/killswitch.blocked）
+
+```text
+复核 READ-ONLY-KILLSWITCH-CONSUMPTION-DESIGN-R2。
+
+裁决：
+
+纯文本
+RESULT: PASS
+
+STATUS:
+READ-ONLY-KILLSWITCH-CONSUMPTION-DESIGN = FROZEN
+
+NEXT:
+READ-ONLY-KILLSWITCH-CONSUMPTION-IMPLEMENTATION
+
+SCOPE:
+S1-S4 ONLY
+
+BOUNDARY:
+NO ACTION GUARD
+NO BUSINESS BLOCKING
+NO RUNTIME ACTION CHANGE
+NO PRODUCTION ENABLEMENT
+
+R2 已补齐上一轮要求，设计边界清晰，可以进入实现。
+
+D4 source 展示层分离
+
+裁决：
+
+PASS
+
+确认采用：
+
+纯文本
+Resolver Source
+        |
+        v
+Presentation Mapping
+        |
+        v
+Human Label
+
+禁止：
+
+纯文本
+UI
+ |
+自行解释 source
+ |
+改变判断
+
+实现要求保持：
+
+resolver 负责事实
+label 层负责展示
+UI 不参与决策
+
+特别认可：
+
+未识别 source 一律按关闭展示
+
+符合 fail-closed。
+
+Consumer Registry 分类
+
+裁决：
+
+PASS
+
+最终分类冻结：
+
+Consumer	Type
+GET /admin/kill-switch	READ_ONLY
+Admin Console	READ_ONLY
+Operations Console	READ_ONLY
+Health	READ_ONLY
+Submission Guard	FUTURE ACTION_GUARD
+Billing Guard	FUTURE ACTION_GUARD
+
+实现时必须保留静态约束：
+
+READ_ONLY 禁止：
+
+纯文本
+assertActionAllowed()
+throw business rejection
+return blocked
+
+ACTION_GUARD 才允许：
+
+纯文本
+allow / deny decision
+blocked audit 边界
+
+裁决：
+
+PASS+
+
+认可以下语义分离：
+
+killswitch.changed
+
+表示：
+
+纯文本
+控制面状态变化
+
+例如：
+
+OWNER 拉闸
+双人确认开启
+killswitch.blocked
+
+表示：
+
+纯文本
+业务动作尝试执行
++
+被安全策略拒绝
+
+不表示：
+
+查询
+展示
+健康检查
+resolver 计算
+
+补充确认：
+
+审计失败仍拒绝：
+
+纯文本
+Action Guard:
+    deny
+
+Audit:
+    fail
+
+Result:
+    deny + security log
+
+不能：
+
+纯文本
+Audit failed
+      ↓
+allow action
+实现阶段批准范围
+
+进入：
+
+纯文本
+READ-ONLY-KILLSWITCH-CONSUMPTION-IMPLEMENTATION
+
+只允许：
+
+S1 Admin Console
+
+允许：
+
+展示 value
+展示 source 文案
+展示 evaluatedAt
+OWNER/ADMIN 展开详情
+
+禁止：
+
+修改
+提交
+确认
+拉闸
+S2 Operations Console
+
+允许：
+
+展示：
+
+scope
+状态
+来源
+
+禁止：
+
+阻断业务流程
+改变页面行为
+S3 Health
+
+允许：
+
+增加：
+
+JSON
+{
+  "killSwitchResolver": {
+    "status": "ok|degraded"
+  }
+}
+
+禁止：
+
+将 resolver degraded 自动等同服务 down
+修改业务 readiness 规则（除非另案）
+S4 Display-only Regression
+
+必须验证：
+
+disabled:
+
+展示:
+closed
+
+业务请求:
+行为不变
+
+enabled:
+
+展示:
+enabled
+
+业务请求:
+行为不变
+
+两者业务结果逐字段一致。
+
+实现验收清单冻结
+
+提交 checkpoint 时需要包含：
+
+1. 静态扫描
+
+证明不存在：
+
+resolveKillSwitch(
+assertActionAllowed(
+killSwitch.disabled return
+killSwitchRequest.find
+
+在 READ_ONLY 路径中。
+
+2. 权限验证
+
+保持：
+
+OWNER/ADMIN：
+
+完整展示
+
+OPS：
+
+最小展示
+
+FINANCE/VIEWER：
+
+403
+
+3. 泄露验证
+
+不得出现：
+
+token
+secret
+API key
+customer data
+PII
+
+4. Audit 验证
+
+读取：
+
+AuditLog 数量不增加。
+
+展示：
+
+不产生：
+
+纯文本
+killswitch.changed
+killswitch.blocked
+
+最终：
+
+纯文本
+READ-ONLY-KILLSWITCH-CONSUMPTION-DESIGN-R2
+
+FINAL:
+PASS
+
+DESIGN FROZEN
+
+可以进入：
+
+纯文本
+READ-ONLY-KILLSWITCH-CONSUMPTION-IMPLEMENTATION
+
+继续保持：
+
+纯文本
+Production Enablement = HOLD
+Action Guard = HOLD
+Business Blocking = FORBIDDEN
+```
