@@ -69998,3 +69998,391 @@ CI 结果
 
 然后再评估是否进入 Production Hardening。
 ```
+
+### [MSG-20260929-66] EFFECTIVE-KILL-SWITCH-RESOLVER-IMPLEMENTATION-CHECKPOINT 裁决：RESULT: PASS / STATUS: EffectiveKillSwitchResolver Implementation = COMPLETE / NEXT: Read-only consumption integration OR Production Hardening (no runtime action enablement) / BOUNDARY: Runtime execution remains HOLD（实现验收 PASS：Resolver 架构无 effectiveValue 落库、无 resolver 写 Config/改控制面/改业务事实（I1/I2 通过）；16 行矩阵全覆盖，含 Global Hard Disable 优先、Tenant Control 覆盖、Pending 只进 control view、multiple APPLIED latest appliedAt wins + id tie breaker；I1-I4 全 PASS；Cache PASS_WITH_CONSTRAINTS（process memory only / TTL 5s / MAX 30s，禁止 Redis-CDN-browser cache）；OPS 可见性补充裁决：保持最小暴露——OPS 仅 {scope,value,source}，OWNER/ADMIN 可见 value/source/degraded/stale/evaluatedAt；Q1 合并 GO：c3c4ea4 / c0e3524 / 64dfe24 fast-forward 合并 main（不 force、不绕过保护、CI PASS）；Q2 裁决：先做「只读消费点接线设计」而非 Production Hardening，批准提交 READ-ONLY-KILLSWITCH-CONSUMPTION-DESIGN（允许 health/status、admin console 展示、operations dashboard 标识、future action guard 设计占位；禁止自动阻断业务流程/自动提交 Claim/自动扣佣/自动付款/改 Settlement/接平台 API）；设计要求：1 Consumer Registry（列出哪些模块读取 resolver 并标明当前 READ ONLY、未来 ACTION GATE）2 Guard Boundary（现在 Resolver->Display only；未来 Resolver->Action Guard->Business Action，中间不能跳过）3 禁止隐式接入（不得散落 if killSwitch.disabled: return error，未来必须 Central Guard Layer 统一入口））
+
+```text
+收到 EFFECTIVE-KILL-SWITCH-RESOLVER-IMPLEMENTATION-CHECKPOINT。
+
+裁决：
+
+纯文本
+RESULT: PASS
+
+STATUS:
+EffectiveKillSwitchResolver Implementation = COMPLETE
+
+NEXT:
+Read-only consumption integration OR Production Hardening
+(no runtime action enablement)
+
+BOUNDARY:
+Runtime execution remains HOLD
+
+本轮实现符合设计冻结要求。
+
+一、实现验收
+1. Resolver 架构
+
+PASS ✅
+
+当前结构符合要求：
+
+纯文本
+Config Value
+      +
+KillSwitchRequest Control State
+      ↓
+EffectiveKillSwitchResolver
+      ↓
+Effective Value Projection
+
+确认：
+
+没有：
+
+effectiveValue 落库
+resolver 写 Config
+resolver 修改 KillSwitchRequest
+resolver 改业务事实
+
+I1/I2 通过。
+
+二、16 行矩阵
+
+PASS ✅
+
+全部覆盖。
+
+重点确认几个安全关键点：
+
+Global Hard Disable 优先级
+
+通过：
+
+纯文本
+global disabled
++
+tenant enabled
+
+=
+disabled
+
+source:
+global-hard-disabled
+
+正确。
+
+Tenant Control 覆盖
+
+通过：
+
+纯文本
+tenant disabled
++
+global enabled
+
+=
+disabled
+
+source:
+tenant-control
+
+正确。
+
+Pending 不影响执行
+
+通过：
+
+纯文本
+PENDING_ENABLE
+
+只进入 control view
+
+不进入 resolver
+
+这是必须保持的。
+
+Latest Applied
+
+通过：
+
+纯文本
+multiple APPLIED
+
+latest appliedAt wins
+
+tie breaker：
+
+纯文本
+id
+
+确定性满足。
+
+三、I1-I4
+I1
+
+PASS ✅
+
+确认：
+
+纯文本
+Effective Value never persisted
+
+保持。
+
+I2
+
+PASS ✅
+
+确认：
+
+纯文本
+Control Request
+!=
+Config Mutation
+
+没有越权写路径。
+
+I3
+
+PASS ✅
+
+disabled 优先原则通过。
+
+I4
+
+PASS ✅
+
+尤其：
+
+数据库异常：
+
+业务 scope:
+
+纯文本
+disabled
++
+fail-closed
+
+通过。
+
+四、Cache
+
+PASS_WITH_CONSTRAINTS ✅
+
+接受：
+
+纯文本
+process memory cache
+
+TTL:
+5s
+
+MAX:
+30s
+
+保持：
+
+禁止：
+
+Redis
+CDN
+browser cache
+五、OPS 是否展示 degraded/stale？
+
+针对第 7 节补充裁决：
+
+保持现状，不扩大
+
+即：
+
+OPS：
+
+仅：
+
+JSON
+{
+ scope,
+ value,
+ source
+}
+
+OWNER/ADMIN：
+
+可见：
+
+JSON
+{
+ value,
+ source,
+ degraded,
+ stale,
+ evaluatedAt
+}
+
+理由：
+
+degraded/stale 属系统状态信息，不属于普通运行摘要。
+
+保持最小暴露。
+
+六、Q1 合并
+
+批准：
+
+纯文本
+c3c4ea4
+c0e3524
+64dfe24
+
+fast-forward 合并 main。
+
+条件：
+
+不 force
+不绕过保护
+CI PASS
+
+GO。
+
+七、Q2 下一阶段选择
+
+裁决：
+
+不进入 Production Hardening 之前，先做「只读消费点接线设计」
+
+原因：
+
+当前：
+
+Resolver 已存在，但：
+
+没有业务消费者
+
+这是一个架构孤岛。
+
+下一步应该验证：
+
+哪些地方需要读取：
+
+纯文本
+EffectiveKillSwitchResolver
+
+但只允许：
+
+READ ONLY。
+
+批准：
+
+提交：
+
+纯文本
+READ-ONLY-KILLSWITCH-CONSUMPTION-DESIGN
+
+范围：
+
+允许：
+
+✅ health/status
+✅ admin console 展示
+✅ operations dashboard 标识
+✅ future action guard 的设计占位
+
+禁止：
+
+❌ 自动阻断业务流程
+❌ 自动提交 Claim
+❌ 自动扣佣
+❌ 自动付款
+❌ 修改 Settlement
+❌ 接平台 API
+
+八、下一阶段设计要求
+
+Read-only Consumption Design 必须回答：
+
+1. Consumer Registry
+
+列出：
+
+哪些模块读取 resolver。
+
+例如：
+
+纯文本
+Admin Console
+Operations Console
+Health Check
+Future Submission Guard
+Future Billing Guard
+
+并标明：
+
+当前：
+
+READ ONLY
+
+未来：
+
+ACTION GATE
+
+2. Guard Boundary
+
+必须明确：
+
+现在：
+
+纯文本
+Resolver
+    ↓
+Display only
+
+未来：
+
+纯文本
+Resolver
+    ↓
+Action Guard
+    ↓
+Business Action
+
+中间不能跳过。
+
+3. 禁止隐式接入
+
+禁止：
+
+纯文本
+if killSwitch.disabled:
+    return error
+
+散落业务代码。
+
+未来必须：
+
+纯文本
+Central Guard Layer
+
+统一入口。
+
+最终状态：
+
+纯文本
+EffectiveKillSwitchResolver
+
+Design        PASS
+Implementation PASS
+Tests          PASS
+Merge          APPROVED
+
+Runtime Action Enablement HOLD
+
+下一步：
+
+纯文本
+GO:
+READ-ONLY-KILLSWITCH-CONSUMPTION-DESIGN
+
+提交设计稿后继续审。
+```
