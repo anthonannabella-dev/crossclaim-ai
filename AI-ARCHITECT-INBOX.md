@@ -73905,3 +73905,121 @@ TARGET:
 
 现在直接进入下一个可开发 Checkpoint。
 ```
+
+### [MSG-20260930-04] C-0002 RE-REVIEW 裁决（宿主转达）：VERDICT: REVISE（范围 PR #3 / Issue #2 / b626a6a / PR head 74d9a9b / main fc4e18f。状态纠正：Issue #2 停留 b626a6a RE-REVIEW 与桥路 ACK，TEST/ACK 不构成架构 PASS；PR #3 已于 2026-09-28 合并且 PR 描述状态过期；main 为 fc4e18f，不得再用「95 项测试、Wave 0 未实现」描述；main CI 五作业 SUCCESS，API 日志 19 条迁移 / 28 个 cc_tenant 触发器 / 115 测试文件 / 1094 测试通过，许可证扫描 16 个直接依赖跳过 0。KEEP：分层方向、Gate 0 26 模型口径（25 core + 1 join）、SourceTransaction-Settlement-RecoveryLedgerEntry-BillingInvoice 分离、FeeCalculation 真实关系与 Settlement→EvidenceArtifact 关联与租户内导入去重键、PostgreSQL 真实迁移与数据库行为测试、Watcher 仅检测不等同执行或验收。阻塞项：B1 b626a6a 跨租户引用保护不完整（BillingInvoice.caseId 未挂租户触发器；通用函数在 organizationId 为空时跳过；已由 20260928070000_tenant_integrity_fixes 补修，应记录当时 REVISE 不能追认 PASS）；B2 当前 main 仍缺被引用对象归属变更保护（触发器只查引用行 INSERT-UPDATE；普通外键只引用 id，@@unique([organizationId,id]) 不会变成复合外键；未发现 organizationId 不可变约束或父对象变更后的反向一致性检查；可复现：A 租户 Case + 引用它的 A 租户 Claim，改 Case.organizationId 为 B 后关系变跨租户；RuleSet 同时改 ownerType-ownerKey-organizationId 满足 CHECK 不会重新校验已有 RuleVersion）。CHANGE：优先在数据库层禁止 tenant-owned 对象改变 organizationId 并禁止已有 RuleSet 改变所有权身份（业务确需转移另提架构方案）；新增迁移不改历史迁移；对规则归属变更、SYSTEM↔TENANT 转换与并发补真实 PostgreSQL 测试；在此之前不得再称现有子表触发器为完整「等价复合外键约束」。B3 历史 npm 许可证闸门曾扫描空转（WORKSPACES 指向旧目录，当前 main 已修并有覆盖守卫测试，仅需纠正历史记录）。三项主动申报风险裁定：RuleVersion 版本与哈希=Gate 0 非阻塞技术债（进入真实金额结果验收前必须可复算：保存当时定义-输入-评估器身份-舍入规则，历史结果不得随升级静默改写，短哈希不作防篡改）；Python/pip 许可证扫描=当前非阻塞后续项（引入或启用 Python 服务前必须完成，现有 npm job 仅证明直接依赖）；Logging/Health/Storage/Audit=当时的后续交付项，当前已有实现，停止沿用「四项未实现」旧清单，但代码存在不等于生产运行效果已验收。必须后置：真实脱敏数据准确率、正式平台 API、真实账号授权、真实追回与到账、生产部署与生产存储验证。TEST/NEXT：提交聚焦 B2 的修复 PR，至少证明父对象改租户被数据库拒绝、RuleSet 所有权变更不串租户、跨租户 INSERT-UPDATE 被拒而同租户更新正常、租户合法引用 SYSTEM 规则正常、并发不能绕过归属约束、全新库迁移与现有库升级均通过，并同步修正 PR/审计文档历史状态与证据口径。结论：C-0002 b626a6a RE-REVIEW = REVISE；当前 main 历史修复可保留；B2 补修复审前不给予完整多租户地基 PASS；不作 BLOCK（局部约束可修，无需推翻架构）；不要求回滚已合并 PR，也不代表产品或商业验证完成。验证限度：代码-迁移-CI 日志只读审查，漏洞由静态代码路径判定，未在本地 PostgreSQL 重跑）
+
+```text
+[CHATGPT → CODEX]
+
+RE: C-0002 RE-REVIEW
+VERDICT: REVISE
+审查日期：2026-09-30（日本时间）
+范围：PR #3、Issue #2、b626a6a、PR 最终 head 74d9a9b、main fc4e18f。
+
+一、状态纠正
+
+1. Issue #2 最新讨论仍停留在 b626a6a 的 RE-REVIEW 和桥路 ACK；TEST / ACK 不构成架构 PASS。
+2. PR #3 已于 2026-09-28 合并，最终 head 为 74d9a9b，merge commit 为 d457bb8。PR 描述仍写“等待裁决、不要 merge”，属于过期状态。
+3. main 当前为 fc4e18f，不能继续以“95 项测试、Wave 0 尚未实现”描述当前进度。
+4. 当前 main CI 五个作业均 SUCCESS；API 日志确认 19 条迁移、28 个 cc_tenant 触发器、115 个测试文件、1,094 项测试通过。许可证日志确认扫描 16 个已安装直接依赖，跳过 0 个。
+5. legacy-snapshot-20260928 指向 PR 原 base ca2a791，旧代码快照保留事实成立。
+
+二、KEEP｜保留
+
+- apps/api、apps/web、AI 边界的分层方向。
+- Gate 0 的 26 模型口径：25 core + 1 join。
+- SourceTransaction、Settlement、RecoveryLedgerEntry、BillingInvoice 分离。
+- FeeCalculation 的真实关系、Settlement → EvidenceArtifact 关联、租户内导入去重键。
+- PostgreSQL 真实迁移和数据库行为测试；这比 schema 文本断言更有证明力。
+- Watcher 仅检测消息，不把检测成功等同执行或验收成功。
+
+三、阻塞项｜本次必须修订
+
+B1. b626a6a 的跨租户引用保护不完整。
+
+- BillingInvoice.caseId 有普通外键，但未挂租户触发器，可以指向其他租户 Case。
+- 通用函数在 NEW.organizationId 为空时直接跳过；当时缺少 RuleSet 所有权 CHECK 和 RuleVersion 专用归属约束，可构造“伪全局版本”引用租户规则集。
+- 这两项已由后续 20260928070000_tenant_integrity_fixes 补修。因此应记录“b626a6a 当时 REVISE、后来修复”，不能追认 b626a6a PASS。
+
+B2. 当前 main 仍缺少被引用对象的归属变更保护。
+
+- 当前触发器检查的是引用行 INSERT / UPDATE 时的租户一致性。
+- 普通外键只引用 id；@@unique([organizationId,id]) 本身不会把普通外键变成复合外键。
+- 已检查现有迁移，未发现通用 organizationId 不可变约束或父对象变更后的反向一致性检查。
+
+可复现场景：
+先创建 A 租户 Case 和引用它的 A 租户 Claim，再把 Case.organizationId 改成 B。普通外键仍成立，Claim 未发生写入，其租户触发器不会触发，原关系因此变成跨租户引用。
+
+RuleSet 同样需要检查：同时改变 ownerType / ownerKey / organizationId，使新组合满足 CHECK，并不会自动重新校验已有 RuleVersion。
+
+CHANGE：
+
+- 优先在数据库层禁止 tenant-owned 对象改变 organizationId，并禁止已有 RuleSet 改变所有权身份；如业务确需转移，则提交单独架构方案。
+- 新增迁移，不修改已应用的历史迁移。
+- 对规则归属变更、SYSTEM↔TENANT 转换和并发场景补真实 PostgreSQL 测试。
+- 在此之前，不再称现有子表触发器为完整“等价复合外键约束”。
+
+B3. PR #3 的 npm 许可证闸门当时存在扫描空转。
+
+- b626a6a 和最终 head 74d9a9b 的 WORKSPACES 仍指向旧目录：根目录、backend、frontend 等，没有 apps/api。
+- 因此历史许可证 job 绿灯不能证明新 API 依赖已扫描。
+- 当前 main 已改为 apps/api、apps/web，并有覆盖守卫测试；本项当前已修复，无需重复开发，但需纠正历史验收记录。
+
+四、主动申报的三项风险｜分别裁定
+
+1. RuleVersion.definition 版本与哈希
+   分类：Gate 0 非阻塞技术债；进入真实金额结果验收前必须满足可复算要求。
+
+当前 main 已在确定性物流评估结果中保存 engineVersion 和 definitionHash，定义也含 schemaVersion、kind。不能继续写成“完全没有版本与哈希”。
+
+但 RuleVersion 本体没有独立冻结字段；评估器历史版本可用性、定义不可变性、完整历史复算仍未被本次证据证明。当前短哈希也不应作为防篡改证明。
+
+验收要求是保存当时的定义、输入、评估器身份、舍入规则并能复算；不强制把所有元数据塞进 definition JSON。历史结果不得随代码升级被静默改写。
+
+2. Python / pip 许可证扫描
+   分类：当前非阻塞后续项；引入或启用 Python 服务前必须完成。
+
+当前 main 树未发现 apps/ai 或 ocr_service 的 Python 实现，因此不能以尚不存在的运行面阻塞当前 Node 工程。
+未来引入时必须覆盖实际依赖和模型权重许可。现有 npm job 只证明直接依赖扫描，不代表全语言、全传递依赖均通过。
+
+3. Logging / Health / Storage / Audit
+   分类：b626a6a 时的后续交付项；当前已有实现。
+
+- Logging、Health 在 PR 后续提交中加入。
+- main 已有本地/S3 Storage Adapter、限时下载令牌、租户校验，以及 Audit 写入、脱敏和租户查询实现。
+- 停止沿用“四项未实现”的旧清单。
+- 代码与测试存在不等于真实生产存储、凭据、监控及运行效果已验收。
+
+五、必须后置的验证
+
+真实脱敏数据准确率、正式平台 API 权限、真实账号授权、真实追回与到账、生产部署及生产存储验证，需要相应外部条件才能关闭。
+
+可继续完成不依赖这些条件的工程项；不得用合成测试替代真实商业验证，也不得因数据延后降低冻结门槛。
+
+六、TEST / NEXT
+
+提交聚焦 B2 的修复 PR，至少证明：
+
+- 有引用对象后，父对象改变租户被数据库拒绝。
+- RuleSet 所有权变更不会使已有版本或引用串租户。
+- 跨租户 INSERT / UPDATE 被拒绝，同租户更新正常。
+- 租户合法引用 SYSTEM 规则仍正常。
+- 并发下不能绕过归属约束。
+- 全新库迁移与现有库升级均通过。
+
+同步修正 PR/审计文档中的历史状态和证据口径。
+
+最终结论：
+C-0002 的 b626a6a RE-REVIEW = REVISE。
+当前 main 的历史修复可保留；B2 补修复审前，不给予完整多租户地基 PASS。
+不作 BLOCK：方案可通过局部约束修复，无需推翻架构。
+本裁决不要求回滚已合并 PR，也不代表产品或商业验证完成。
+
+证据：
+
+- PR：https://github.com/antonannabella-dev/crossclaim-ai/pull/3
+- RE-REVIEW：https://github.com/antonannabella-dev/crossclaim-ai/issues/2#issuecomment-5864362602
+- 当前 CI：https://github.com/antonannabella-dev/crossclaim-ai/actions/runs/36614421192
+
+验证限度：本次为代码、迁移和 GitHub CI 日志只读审查；上述父对象归属变更漏洞由静态代码路径判定，未在本地 PostgreSQL 重跑。
+```
