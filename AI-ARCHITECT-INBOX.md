@@ -72448,3 +72448,318 @@ HOLD
 
 P2-3 SECRET ROTATION DESIGN / IMPLEMENTATION CHECKPOINT。
 ```
+
+### [MSG-20260929-73] P2-3-SECRET-ROTATION-CHECKPOINT 裁决：RESULT: PASS_CLOSE / STATUS: P2-3 SECRET ROTATION = PASS / MERGE: APPROVED / NEXT: P2-4 PRODUCTION VALIDATION RUNBOOK = GO（Q1 批准 34d1d47/113cd9b/3c565e2 fast-forward 合并 main；P2-3 目的是建立 Secret 清单边界/轮换流程/回滚规范/审计边界/防泄露约束而非执行真实轮换，全部满足：① Inventory 七项名称且 hostApprovalRequired=true ② Secret Value 防泄露 PASS——构造期拒绝 value/hash/prefix/suffix/length/oldSecret/newSecret/secretMaterial（不依赖日志扫描）③ Rotation Flow prepare→generate→overlap-window→switch→verify→revoke-old→audit ④ Rollback detect-invalid-new-secret→restore-old-secret→verify→audit-failure，禁止无审计回滚 ⑤ HOST 边界 PASS（未执行生产 Secret/云平台/OAuth/第三方/真凭证，保持 HOST APPROVAL REQUIRED）；P2-2 Follow-up CLOSED（Claim seed 补齐 + CaseEvidence seed 补齐 + 22/22 models + 22 张非空表 + tenant scope 验证 + BACKUP_VERIFY_OK），P2-2 正式关闭；Q2 批准进入 P2-4 Production Validation Runbook，边界 CODE READY ≠ PRODUCTION VALIDATED；验收标准冻结：Stage A Import Integrity（input rows = normalized + quarantine + rejected；禁止 silent drop/自动修正未知字段/猜测金额；输出 IMPORT-REPORT.md 与 DATA-QUALITY-REPORT.md）、Stage B Candidate Discovery（Candidate >= 10 且 Candidate ≠ Claim，仅表示潜在线索）、Stage C Human Verification（>=5 samples，分类 TRUE_POSITIVE/FALSE_POSITIVE/NEEDS_DATA）；P2-4 禁止自动提交 Claim/Appeal/扣佣/收费/金额承诺/平台操作；输出必须包含 PHASE1-RESULT.md（Dataset Summary / Import Result / Data Quality / Candidate Findings / Human Verification / False Positive Analysis / Missing Data / Decision Gate），Decision Gate 只能是 PASS_TO_MVP / CONTINUE_DATA_COLLECTION / STOP_REWORK）
+
+```text
+复核 P2-3 Secret Rotation Checkpoint。
+
+裁决：
+
+纯文本
+RESULT: PASS_CLOSE
+
+STATUS:
+P2-3 SECRET ROTATION = PASS
+
+MERGE:
+APPROVED
+
+NEXT:
+P2-4 PRODUCTION VALIDATION RUNBOOK = GO
+
+PRODUCTION ENABLEMENT:
+HOLD
+Q1：合并批准
+
+批准 fast-forward：
+
+纯文本
+34d1d47
+113cd9b
+3c565e2
+
+进入 main。
+
+理由：
+
+P2-3 的目标是建立：
+
+Secret 清单边界
+轮换流程规范
+回滚规范
+审计边界
+防泄露约束
+
+而不是执行真实轮换。
+
+当前全部满足。
+
+P2-2 Follow-up：Claim / CaseEvidence 已关闭
+
+之前：
+
+纯文本
+FOLLOW_UP_REQUIRED
+
+现在：
+
+纯文本
+CLOSED
+
+验证：
+
+✅ Claim seed 补齐
+✅ CaseEvidence seed 补齐
+✅ 22/22 models
+✅ 22 张非空表
+✅ tenant scope 验证
+✅ BACKUP_VERIFY_OK
+
+因此：
+
+P2-2 可以正式关闭。
+
+P2-3 逐项验收
+1. Secret Inventory
+
+PASS。
+
+当前：
+
+纯文本
+DATABASE_URL
+SESSION_SECRET
+AUDIT_IP_SALT
+STORAGE_URL_SECRET
+STRIPE_WEBHOOK_SECRET
+SOURCE_CONNECTION_CREDENTIAL_REF
+OAUTH_CLIENT_CREDENTIAL_REF
+
+全部：
+
+纯文本
+hostApprovalRequired=true
+
+符合要求。
+
+2. Secret Value 防泄露
+
+PASS。
+
+重点通过：
+
+禁止：
+
+secret value
+hash
+prefix
+suffix
+length
+oldSecret
+newSecret
+secretMaterial
+
+并且：
+
+构造期拒绝
+
+这个设计正确。
+
+不要依赖日志扫描作为最后防线。
+
+3. Rotation Flow
+
+PASS。
+
+流程：
+
+prepare
+ ↓
+generate
+ ↓
+overlap-window
+ ↓
+switch
+ ↓
+verify
+ ↓
+revoke-old
+ ↓
+audit
+
+符合生产安全流程。
+
+4. Rollback
+
+PASS。
+
+尤其：
+
+detect-invalid-new-secret
+        ↓
+restore-old-secret
+        ↓
+verify
+        ↓
+audit-failure
+
+并且：
+
+禁止：
+
+无审计回滚
+
+正确。
+
+5. HOST 边界
+
+PASS。
+
+确认：
+
+未执行：
+
+生产 Secret
+云平台
+OAuth
+第三方账号
+真凭证
+
+保持：
+
+HOST APPROVAL REQUIRED
+Q2：进入 P2-4
+
+批准。
+
+进入：
+
+P2-4 Production Validation Runbook
+
+但是保持边界：
+
+CODE READY ≠ PRODUCTION VALIDATED
+P2-4 验收标准冻结
+
+按之前规则执行。
+
+Stage A：Import Integrity
+
+必须：
+
+input rows
+=
+normalized
++
+quarantine
++
+rejected
+
+禁止：
+
+silent drop
+自动修正未知字段
+猜测金额
+
+输出：
+
+IMPORT-REPORT.md
+DATA-QUALITY-REPORT.md
+Stage B：Candidate Discovery
+
+要求：
+
+Candidate >= 10
+
+但是：
+
+注意：
+
+Candidate ≠ Claim
+
+只能表示：
+
+潜在线索
+
+不能表示：
+
+已确认追回
+
+Stage C：Human Verification
+
+至少：
+
+>=5 samples
+
+分类：
+
+TRUE_POSITIVE
+FALSE_POSITIVE
+NEEDS_DATA
+不允许在 P2-4 做：
+
+❌ 自动提交 Claim
+❌ 自动 Appeal
+❌ 自动扣佣
+❌ 自动收费
+❌ 自动金额承诺
+❌ 自动平台操作
+
+P2-4 输出必须包含
+PHASE1-RESULT.md
+
+结构：
+
+Dataset Summary
+
+Import Result
+
+Data Quality
+
+Candidate Findings
+
+Human Verification
+
+False Positive Analysis
+
+Missing Data
+
+Decision Gate
+
+只能：
+
+PASS_TO_MVP
+CONTINUE_DATA_COLLECTION
+STOP_REWORK
+当前整体状态
+
+更新：
+
+P2-1 Deployment Smoke
+PASS_CLOSE
+
+P2-2 Backup Restore
+PASS_CLOSE
+ └─ Claim/CaseEvidence follow-up CLOSED
+
+P2-3 Secret Rotation
+PASS_CLOSE
+ └─ Real rotation pending HOST
+
+P2-4 Production Validation
+GO
+
+Action Guard
+DESIGN ONLY / HOLD
+
+Runtime Business Blocking
+HOLD
+
+Production Enablement
+HOLD
+
+下一步可以提交：
+
+P2-4 Production Validation Runbook Implementation / Validation Checkpoint。
+```
