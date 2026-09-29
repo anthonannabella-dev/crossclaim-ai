@@ -38,7 +38,7 @@
 | Gate 6 | 客户运营层 | 邀请制认证（Email/密码 + HttpOnly 会话）、连接管理、机会复核、建案、回收结果、账单、案件与证据读取 | HTTP + DB 测试 |
 | Gate 7 | 工程能力 | 处置洞察与 CSV 导出、高额回收人工卡口（默认 $1000）、掩码与交付物 LOCKED、佣金对账（dry-run/仅 DRAFT）、支付域（Payment/PaymentEvent/PaymentProcessingAttempt + 执行恢复 + 对账差异）、Claim 归一化（ClaimItem + 证据联结 + 来源指纹 v1）、规则引擎审计（Audit Only）、平台连接器抽象层、验证脚手架、i18n 五语层 | 单元 + DB + HTTP 测试 |
 
-**规模（实测）**：36 模型（33 核心 + 3 联结）· 16 条迁移 · 27 个租户完整性触发器 · 81 个测试文件 ·
+**规模（实测）**：36 模型（33 核心 + 3 联结）· 17 条迁移 · 27 个租户完整性触发器 · 81 个测试文件 ·
 CI 三作业（api / web / license-gate）。
 
 ---

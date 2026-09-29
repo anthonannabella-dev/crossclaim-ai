@@ -106,6 +106,23 @@ enum CaseStatus {
   CLOSED
 }
 
+/// MSG-20260929-23：dueAt 的来源（禁止自由文本；未知时留空并给 ACTION）
+enum ClaimDeadlineSource {
+  PLATFORM_NOTICE
+  USER_INPUT
+  CONTRACT
+  UNKNOWN
+}
+
+/// MSG-20260929-23：终局原因（枚举化，禁自由文本）
+enum ClaimTerminalReasonCode {
+  PLATFORM_DECISION
+  DEADLINE_MISSED
+  INSUFFICIENT_EVIDENCE
+  WITHDRAWN_BY_SELLER
+  DUPLICATE_CLAIM
+  OTHER
+}
 enum ClaimStatus {
   DRAFT
   SUBMITTED
@@ -864,6 +881,15 @@ model Claim {
   aiDraftText    String?
   finalText      String?
   attachmentKey  String?
+  /// S1（MSG-20260929-23）：平台侧案件号；与 externalRef（我方提交引用）语义分离
+  platformCaseRef    String?
+  /// S2：dueAt 的来源；无来源时 dueAt 必须为 null
+  deadlineSource     ClaimDeadlineSource?
+  /// S3：人工批准留痕（仅 OWNER/ADMIN 可写）
+  approvedByUserId   String?
+  approvedAt         DateTime?
+  /// S4：终局原因（枚举；仅终局态可写）
+  terminalReasonCode ClaimTerminalReasonCode?
   createdAt      DateTime    @default(now())
   updatedAt      DateTime    @updatedAt
 
@@ -874,6 +900,7 @@ model Claim {
   @@unique([organizationId, id])
   @@index([organizationId, caseId, round])
   @@index([dueAt, respondedAt])
+  @@index([organizationId, status, dueAt])
 }
 
 model Appeal {

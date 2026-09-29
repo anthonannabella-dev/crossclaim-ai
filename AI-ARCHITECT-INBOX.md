@@ -56319,3 +56319,389 @@ READY_FOR_SCHEMA_REVIEW
 
 可以进入 Recovery Schema Delta 评审。该设计比直接做自动扣佣更符合 Production Candidate 路线。
 ```
+
+### [MSG-20260929-23] CLAIM-TRACKING-SCHEMA-DELTA-REQUEST 裁决：GO ✅（READY_FOR_IMPLEMENTATION）——S1-S5 字段扩展获批：platformCaseRef / deadlineSource / approvedByUserId+approvedAt / terminalReasonCode / 复合索引；审核确认不破坏现有模型、migration 可回滚、幂等策略明确、多租户隔离不受影响；下一步可执行 S1-S5 migration 并进入 Claim Tracking 实现阶段
+
+Codex 按 MSG-20260929-21 的 NEXT 提交 CLAIM-TRACKING-SCHEMA-DELTA-REQUEST.md 后，架构方批准该 Delta。以下为该回复的逐字原文。
+
+```text
+CLAIM-TRACKING-SCHEMA-DELTA-REQUEST 裁决
+结论：GO ✅
+
+状态：
+
+纯文本
+GATE:
+7 Commercial Validation
+
+REQUEST:
+CLAIM TRACKING SCHEMA DELTA
+
+DECISION:
+APPROVED
+
+SCOPE:
+S1-S5 ONLY
+
+NEXT:
+Migration + Implementation
+总体审计结论
+
+该 Schema Delta 符合：
+
+MSG-20260929-21 Claim Tracking Design
+当前 Production Candidate 三轨模型
+不改变资金链路
+不改变规则引擎
+不改变自动提交边界
+
+批准执行。
+
+一、字段设计审计
+S1 Claim.platformCaseRef
+结论：GO ✅
+
+批准。
+
+理由：
+
+当前：
+
+纯文本
+externalRef
+
+无法稳定表达：
+
+平台案件号
+外部工单编号
+第三方 Case ID
+
+拆分合理。
+
+约束：
+
+需要保持：
+
+organization scope
+platform scope
+
+后续实现时注意：
+
+不要默认全局唯一。
+
+S2 Claim.deadlineSource
+结论：GO ✅
+
+批准。
+
+这是必要字段。
+
+当前规则：
+
+纯文本
+dueAt
+
+如果没有来源，会产生伪精确。
+
+批准不变量：
+
+纯文本
+dueAt != null
+
+⇒
+
+deadlineSource != null
+
+建议实现阶段：
+
+deadlineSource 使用枚举约束。
+
+例如：
+
+纯文本
+PLATFORM_NOTICE
+CONTRACT
+USER_CONFIRMED
+UNKNOWN
+
+禁止长期自由文本扩散。
+
+S3 approvedByUserId / approvedAt
+结论：GO ✅
+
+批准。
+
+符合：
+
+纯文本
+AI Prepare
+
+↓
+
+Human Approval
+
+↓
+
+External Action
+
+的未来扩展模型。
+
+当前不会开启 External Action。
+
+权限：
+
+保持：
+
+OWNER
+ADMIN
+
+写入。
+
+S4 terminalReasonCode
+结论：GO ✅
+
+批准。
+
+这是必要的审计字段。
+
+禁止：
+
+纯文本
+terminalReason = "平台不给钱因为..."
+
+自由文本。
+
+采用：
+
+纯文本
+enum
+
+实现阶段需提交：
+
+枚举列表。
+
+例如：
+
+纯文本
+APPROVED
+REJECTED
+NO_RESPONSE
+EXPIRED
+WITHDRAWN
+
+（最终以代码设计为准）
+
+S5 Index
+结论：GO ✅
+
+批准。
+
+查询场景合理：
+
+纯文本
+organizationId
++
+status
++
+dueAt
+
+支持：
+
+到期案件
+待处理案件
+运营看板
+二、不变量审计
+
+全部通过。
+
+I1
+纯文本
+dueAt != null
+→
+deadlineSource != null
+
+通过。
+
+I2
+纯文本
+APPROVED/PARTIALLY_APPROVED
+→
+approval audit
+
+通过。
+
+I3
+纯文本
+PARTIALLY_APPROVED
+→
+responseAmount required
+
+通过。
+
+I4
+
+终局不可回退：
+
+通过。
+
+CAS 方案正确。
+
+I5
+纯文本
+terminalReasonCode
+→
+terminal state
+
+通过。
+
+三、迁移方案审计
+结论：通过 ✅
+
+当前方案：
+
+纯文本
+ADD COLUMN
++
+CREATE INDEX
+
+风险可控。
+
+认可：
+
+nullable
+no backfill
+no trigger change
+
+特别确认：
+
+纯文本
+27 tenant triggers
+
+保持不变。
+
+这是正确保护点。
+
+四、回滚方案
+
+通过。
+
+原因：
+
+没有：
+
+数据迁移
+字段重写
+旧数据转换
+
+因此：
+
+rollback 风险低。
+
+五、实现验收要求
+
+批准以下验收：
+
+1.
+
+Schema：
+
+✅ prisma validate
+✅ migrate deploy
+✅ trigger count = 27
+
+2.
+
+兼容性：
+
+必须确认：
+
+现有 Claim 查询：
+
+不因 NULL 新字段失败
+不改变旧状态流转
+3.
+
+新增测试
+
+批准：
+
+覆盖：
+
+NULL 默认行为
+I1-I5
+CAS 冲突
+tenant isolation
+4.
+
+并发测试
+
+批准：
+
+目标：
+
+纯文本
+Request A
+        |
+        | CAS success
+
+Request B
+        |
+        | stable conflict error
+六、实施边界
+
+允许：
+
+✅ Prisma migration
+✅ Service 层约束
+✅ Claim Tracking read model
+
+禁止：
+
+❌ 自动提交
+❌ 平台轮询
+❌ Billing 修改
+❌ FeeCalculation 改动
+❌ Payment 自动化
+
+最终归档
+Markdown
+### [MSG-20260929-23]
+
+TYPE:
+SCHEMA DELTA DECISION
+
+TARGET:
+CLAIM-TRACKING-SCHEMA-DELTA-REQUEST
+
+DECISION:
+GO
+
+Approved:
+
+S1 platformCaseRef
+S2 deadlineSource
+S3 approvedByUserId / approvedAt
+S4 terminalReasonCode
+S5 organizationId-status-dueAt index
+
+Conditions:
+
+- migration only these changes
+- no trigger changes
+- no payment changes
+- no rule changes
+- no submission enablement
+
+Required validation:
+
+- fresh DB migration
+- trigger count remains 27
+- invariant tests
+- CAS concurrency test
+- tenant isolation
+
+STATUS:
+READY_FOR_IMPLEMENTATION
+
+可以执行 S1-S5 migration，并进入 Claim Tracking 实现阶段。
+```
