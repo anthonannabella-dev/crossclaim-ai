@@ -65294,3 +65294,243 @@ STOP_REWORK
 
 等待 RD-01 数据。
 ```
+
+### [MSG-20260929-49] HOST-DIRECTIVE-CONTINUE-DEV 裁决：合并 GO（15ec430 + 09563b3）+ A) Operations Web Console v1 = GO（P0，先交 OPERATIONS-CONSOLE-V1-DESIGN.md）+ B) Kill Switch = GO DESIGN-FIRST（P1）+ C) Submission Adapter = 继续 HOLD
+
+```text
+裁决如下。
+
+1) Merge 决策
+
+批准。
+
+纯文本
+15ec430 + 09563b3 → main
+STATUS: GO
+TYPE: fast-forward documentation merge
+
+执行要求：
+
+✅ fast-forward
+✅ 不 force
+✅ 不绕过保护
+✅ CI 必须通过
+
+原因：
+
+本轮仍属于规范固化，不改变运行逻辑。
+REAL-DATA-VALIDATION-BACKLOG.md 的调整符合当前架构原则：
+CODE PASS
+INTEGRATION PENDING
+PRODUCTION VALIDATION PENDING
+
+这个三轨模型继续作为后续开发判断标准。
+
+2) A/B/C 优先级裁决
+A) Operations Web Console v1
+
+裁决：GO
+
+优先级：
+
+纯文本
+P0
+
+原因：
+
+它满足当前阶段最重要条件：
+
+已有 API
+已有权限模型
+已有安全边界
+无 Schema 变化
+无资金动作
+无平台依赖
+无生产风险
+
+允许范围：
+
+✅ 页面展示
+✅ 登录态权限渲染
+✅ Dashboard
+✅ Admin Overview
+✅ Audit Explorer
+✅ Import Validation
+✅ Recovery Review
+✅ Membership View
+✅ System Health
+
+保持：
+
+禁止：
+
+❌ 写操作
+❌ 导出
+❌ 下载
+❌ 金额越权展示
+❌ 权限修改
+❌ 审批按钮
+❌ Claim 提交按钮
+
+验收：
+
+新增：
+
+OPERATIONS-CONSOLE-V1-DESIGN.md
+↓
+IMPLEMENTATION CHECKPOINT
+↓
+E2E 浏览器测试
+
+重点验证：
+
+前端不会隐藏权限后误展示按钮
+API 权限仍是最终防线
+Viewer / Finance / OPS 看到正确裁剪内容
+B) Kill Switch
+
+裁决：GO DESIGN-FIRST
+
+优先级：
+
+纯文本
+P1
+
+先不要实现。
+
+先提交：
+
+KILL-SWITCH-DESIGN.md
+
+必须覆盖：
+
+1. Scope
+
+例如：
+
+submission disabled
+billing disabled
+integration disabled
+workflow disabled
+2. 权限
+
+不能简单复用普通管理员。
+
+需要明确：
+
+谁可以开启
+谁可以关闭
+是否需要双人确认
+3. 审计
+
+必须记录：
+
+who
+when
+what switch
+old value
+new value
+reason
+4. 默认状态
+
+原则：
+
+fail closed
+
+例如：
+
+unknown = disabled
+missing config = disabled
+C) Submission Adapter
+
+裁决：继续 HOLD
+
+不要启动实现。
+
+可以接受：
+
+未来 DESIGN ONLY。
+
+但当前不进入开发。
+
+原因：
+
+仍依赖：
+
+平台条款确认
+API 权限
+商业责任边界
+自动提交风险
+平台账号授权
+
+保持：
+
+AI Prepare
+        ↓
+Human Approve
+        ↓
+Submit
+
+冻结。
+
+新执行顺序
+
+调整为：
+
+Phase 1:
+真实数据等待
+        +
+继续开发
+
+↓
+
+P0
+Operations Web Console v1
+        ↓
+
+P1
+Kill Switch Design
+        ↓
+
+P2
+Production Hardening
+
+        ↓
+
+等待：
+RD-01/RD-02/RD-04
+
+        ↓
+
+Production Validation
+
+        ↓
+
+再评估：
+Submission Adapter
+当前总状态更新
+纯文本
+PRODUCT:
+Production Candidate v1.0
+
+CODE:
+PASS
+
+INTEGRATION:
+PENDING
+
+REAL VALIDATION:
+PENDING
+
+NEXT:
+A) Operations Web Console v1
+B) Kill Switch Design
+
+HOLD:
+Submission Adapter
+Auto Claim
+Auto Commission
+Platform API
+
+可以继续推进，不需要等待真实数据。下一步提交 Operations Web Console v1 Design。
+```
