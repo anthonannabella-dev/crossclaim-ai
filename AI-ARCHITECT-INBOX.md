@@ -71010,3 +71010,330 @@ Production Enablement = HOLD
 Action Guard = HOLD
 Business Blocking = FORBIDDEN
 ```
+
+### [MSG-20260929-69] READ-ONLY-KILLSWITCH-CONSUMPTION-CHECKPOINT 裁决：RESULT: PASS / STATUS: READ-ONLY-KILLSWITCH-CONSUMPTION = COMPLETE / MERGE: APPROVED / NEXT: P2 PRODUCTION HARDENING / ACTION GUARD: DESIGN ONLY-HOLD（Q1 批准 86654ee/033771b/9f6461e fast-forward 合并 main：满足冻结边界——无 Schema 变化、无业务动作接入、无 Action Guard、无 Claim 提交控制、无 Billing/Payment 控制、无第三方平台动作、无生产开关启用，属 READ_ONLY OBSERVABILITY LAYER；S1/S2/S3/S4 与静态安全检查全 PASS（尤其 S4 证明 Display Only 未穿透业务执行、全仓无 assertActionAllowed）；系统状态：G1-G10 PASS / Production Candidate PASS / Admin Console PASS / Kill Switch Core-Entry PASS / Effective Resolver PASS / Read-only Consumer PASS；CODE COMPLETE 继续提升、INTEGRATION PENDING、REAL VALIDATION PENDING、PRODUCTION ENABLEMENT HOLD；Q2 批准顺序为先 P2 Production Hardening（P2-1 Deployment Smoke Design：fresh install / migration deploy / rollback checkpoint / environment validation / health check / secret missing behavior；P2-2 Backup-Restore Verification：Organization/Claim/Evidence/Recovery/Settlement/AuditLog/KillSwitchRequest，恢复后事实一致 + 审计连续 + 租户隔离保持；P2-3 Secret Rotation Design：DATABASE_URL / SESSION_SECRET / API credentials placeholder / OAuth credentials，要求 rotation procedure + rollback + outage window + audit trail；P2-4 Production Validation Runbook：真实数据 WAITING_HOST_DATA 不阻塞开发，先完成数据进入流程/验证步骤/失败处理/输出报告模板）；Action Guard 暂不实现，仅允许 ACTION-GUARD-DESIGN ONLY，不允许接业务端点或阻断 Claim/Billing/Payment/Submission）
+
+```text
+复核 READ-ONLY-KILLSWITCH-CONSUMPTION-CHECKPOINT。
+
+裁决：
+
+纯文本
+RESULT: PASS
+
+STATUS:
+READ-ONLY-KILLSWITCH-CONSUMPTION = COMPLETE
+
+MERGE:
+APPROVED
+
+NEXT:
+P2 PRODUCTION HARDENING
+
+ACTION GUARD:
+DESIGN ONLY / HOLD
+Q1：合并批准
+
+批准：
+
+纯文本
+86654ee
+033771b
+9f6461e
+
+fast-forward 合并到 main。
+
+理由：
+
+本轮满足冻结边界：
+
+✅ 无 Schema 变化
+✅ 无业务动作接入
+✅ 无 Action Guard
+✅ 无 Claim 提交控制
+✅ 无 Billing 控制
+✅ 无 Payment 控制
+✅ 无第三方平台动作
+✅ 无生产开关启用
+
+属于：
+
+纯文本
+READ_ONLY OBSERVABILITY LAYER
+
+可以进入主分支。
+
+本轮验收结论
+S1 Admin Console
+
+PASS。
+
+确认：
+
+展示：
+
+value
+source 文案
+evaluatedAt
+OWNER/ADMIN 原始 source 展开
+
+禁止项保持：
+
+无 enable
+无 disable
+无 confirm
+无 reason 输入
+
+正确。
+
+S2 Operations Console
+
+PASS。
+
+关键点：
+
+Kill Switch 展示不能影响 Operations 行为。
+
+已通过：
+
+纯文本
+disabled state
+       |
+       v
+dashboard behavior unchanged
+
+符合 Display Only 原则。
+
+S3 Health
+
+PASS。
+
+接受：
+
+JSON
+{
+  "killSwitchResolver":{
+    "status":"ok|degraded"
+  }
+}
+
+并保持：
+
+resolver degraded
+      ≠
+service unavailable
+
+这个边界正确。
+
+S4 Display-only Regression
+
+PASS。
+
+这是本轮最重要验证。
+
+因为很多系统容易出现：
+
+展示层接入
+      ↓
+偷偷改变业务逻辑
+
+你的验证：
+
+disabled / enabled
+
+业务结果逐字段一致。
+
+证明：
+
+Resolver Consumer
+        |
+        v
+Display Only
+        |
+        X
+Business Execution
+
+没有穿透。
+
+静态安全检查
+
+PASS。
+
+尤其认可：
+
+全仓无：
+
+纯文本
+assertActionAllowed
+
+说明：
+
+Action Guard 尚未提前混入。
+
+保持：
+
+Resolver
+   |
+   +--> Read Only Consumer
+
+未来:
+Resolver
+   |
+   +--> Action Guard
+          |
+          +--> Business Action
+
+不要反过来。
+
+当前系统状态更新
+
+按架构阶段：
+
+G1-G10             PASS
+Production Candidate PASS
+Admin Console       PASS
+Kill Switch Core    PASS
+Kill Switch Entry   PASS
+Effective Resolver  PASS
+Read-only Consumer  PASS
+
+当前：
+
+CODE COMPLETE:
+继续提升
+
+INTEGRATION:
+PENDING
+
+REAL VALIDATION:
+PENDING
+
+PRODUCTION ENABLEMENT:
+HOLD
+Q2 下一阶段裁决
+
+批准：
+
+P2 Production Hardening
+
+优先于 Action Guard。
+
+原因：
+
+目前最大风险已经不是代码能力，而是：
+
+Production Failure Modes
+
+所以顺序：
+
+P2-1 Deployment Smoke Design
+
+先设计：
+
+覆盖：
+
+fresh install
+migration deploy
+rollback checkpoint
+environment validation
+health check
+secret missing behavior
+P2-2 Backup / Restore Verification
+
+必须验证：
+
+数据库：
+
+Organization
+Claim
+Evidence
+Recovery
+Settlement
+AuditLog
+KillSwitchRequest
+
+恢复后：
+
+要求：
+
+事实一致
+审计连续
+租户隔离保持
+P2-3 Secret Rotation Design
+
+范围：
+
+DATABASE_URL
+SESSION_SECRET
+API credentials placeholder
+OAuth credentials
+
+要求：
+
+rotation procedure
+rollback
+outage window
+audit trail
+P2-4 Production Validation Runbook
+
+继续保持：
+
+真实数据仍：
+
+WAITING_HOST_DATA
+
+不阻塞开发。
+
+先完成：
+
+数据进入流程
+验证步骤
+失败处理
+输出报告模板
+Action Guard
+
+裁决：
+
+暂不实现。
+
+允许：
+
+ACTION-GUARD-DESIGN ONLY
+
+不允许：
+
+接业务端点
+阻断 Claim
+阻断 Billing
+阻断 Payment
+阻断 Submission
+
+原因：
+
+Action Guard 是第一次从：
+
+观察系统
+
+进入：
+
+控制系统
+
+需要单独设计审查。
+
+最终状态：
+
+纯文本
+READ-ONLY-KILLSWITCH-CONSUMPTION
+
+FINAL:
+PASS_CLOSE
+
+MERGE:
+GO
+
+NEXT:
+P2 PRODUCTION HARDENING DESIGN FIRST
+
+ACTION GUARD:
+FUTURE DESIGN ONLY
+```
