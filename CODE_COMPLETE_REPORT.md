@@ -9,6 +9,18 @@
 
 ## 0. 当前结论（一句话）
 
+**三轨状态口径（宿主指令 2026-09-29 起生效）**：代码完成度与生产验证**分离**，缺真实数据不阻塞开发。
+
+| 轨道 | 含义 | 判定方式 |
+|---|---|---|
+| `CODE PASS` | 代码 / Schema 契约 / fixtures / 单测 / 集成测试 / E2E 全部就位 | 本地 + CI 全绿 |
+| `INTEGRATION PENDING` | 外部 Adapter 未接真实系统（或缺凭据 / 授权） | 真实依赖清单 `REAL-DATA-VALIDATION-BACKLOG.md` |
+| `PRODUCTION VALIDATION PENDING` | 必须用真实数据 / 真实账号跑通才能判定 | 上线前统一执行 |
+
+真实依赖逐项登记在 [`REAL-DATA-VALIDATION-BACKLOG.md`](REAL-DATA-VALIDATION-BACKLOG.md)（RD-01…RD-12）。
+自动提交 Claim/Appeal 仍为 FORBIDDEN，流程恒为 `AI Prepare → Human Approve → Submit`。
+
+
 **离线工程侧已无可继续推进项。** 架构方允许的三个离线方向已全部交付：方向 A（VALIDATION-RUN HARNESS，MSG-20260929-16 判 PASS / `COMMERCIAL_VALIDATION_PIPELINE_READY`）、方向 C（`DATA-QUALITY-REPORT-TEMPLATE.md`）；方向 B（`C-0015-SCENARIO-SELECTION.md`）**必须由真实数据触发**，属 `REAL_DATA_REQUIRED`。当前唯一阻塞项 = `REAL_DATA_REQUIRED`：一份真实/脱敏平台导出文件（任意平台或类型，无需 API、无需凭据）；其余未完成项全部落在设计获批前不得动工的冻结区（见 §J），不计为「可完成的工程任务」。
 真实依赖项（§D）与需架构方裁决项（§B 末两行）不算缺口，但必须留档。
 
