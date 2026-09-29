@@ -65169,3 +65169,128 @@ SLA 自动索赔	HOLD
 
 宿主投放第一份 RD-01 Shopify 脱敏导出文件。
 ```
+
+### [MSG-20260929-48] 合并完成状态确认 + Phase 1 执行规范补充：Stage A 需产出 IMPORT-REPORT.md / DATA-QUALITY-REPORT.md；Decision Gate 规范为 PASS_TO_MVP / CONTINUE_DATA_COLLECTION / STOP_REWORK（等待 RD-01）
+
+```text
+收到，状态确认。
+
+当前裁决状态
+纯文本
+MAIN:
+203b40b
+CI:
+PASS
+
+PRODUCT:
+Production Candidate v1.0
+
+PHASE1:
+WAITING_REAL_DATA
+
+RD-01 Shopify:
+NOT_RECEIVED
+
+本轮合并确认完成：
+
+✅ 5a06194：MSG-20260929-46 裁决归档
+✅ c4702ca：inbox 投放目录说明
+✅ 203b40b：MSG-20260929-47 裁决归档
+
+无代码变化，无 Schema 变化，无生产行为变化。
+
+下一触发条件
+
+等待：
+
+D:\crossclaim-ai\inbox\
+
+出现 RD-01 脱敏 Shopify CSV/XLSX。
+
+收到后严格按冻结流程执行：
+
+Stage A — 数据完整性
+
+检查：
+
+Import 是否 PASS
+input rows = normalized + quarantine + rejected
+字段覆盖率
+UNKNOWN 字段
+是否存在静默丢行
+row trace 保留
+
+输出：
+
+IMPORT-REPORT.md
+DATA-QUALITY-REPORT.md
+Stage B — 候选发现
+
+只生成 Candidate，不生成 Claim。
+
+每条必须包含：
+
+candidate_id
+source_file_hash
+source_row_reference
+normalized_fact_reference
+evidence_reference
+created_reason
+
+目标：
+
+Candidate >= 10
+
+注意：
+
+Candidate ≠ 可追回金额
+Candidate ≠ 已确认损失
+
+Stage C — 人工真实性验证
+
+抽样：
+
+>=5 条
+
+分类：
+
+TRUE POSITIVE
+FALSE POSITIVE
+数据误解
+规则缺失
+业务合理
+数据不足
+
+记录：
+
+Value Discovery Rate
+
+只作为观察指标，不作为自动商业结论。
+
+最终输出：
+
+PHASE1-RESULT.md
+
+只能产生：
+
+PASS_TO_MVP
+CONTINUE_DATA_COLLECTION
+STOP_REWORK
+
+不会直接进入：
+
+自动追回
+自动提交平台
+自动收费
+自动资金动作
+
+当前产品状态：
+
+代码侧已经进入 Production Candidate。
+
+下一关键变量不是继续写代码，而是验证：
+
+真实客户数据中，是否存在稳定、重复、可解释的“追回机会”。
+
+等待 RD-01 数据。
+```

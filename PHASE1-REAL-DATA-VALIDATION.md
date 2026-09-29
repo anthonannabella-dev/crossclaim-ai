@@ -160,3 +160,35 @@ STOP / REWORK
 | HS Code 判断 | HOLD |
 | 物流 SLA 规则判定 | HOLD |
 
+
+## 10. MSG-20260929-48 执行规范补充（Stage A 产物与 Decision Gate 定名）
+
+### 10.1 Stage A 必须产出的报告（两份）
+
+| 文件 | 内容 |
+|---|---|
+| `IMPORT-REPORT.md` | Import 是否 PASS；完整性等式 `input rows = normalized + quarantine + rejected`；是否存在静默丢行；row trace 是否保留 |
+| `DATA-QUALITY-REPORT.md` | 字段覆盖率；`UNKNOWN` 字段清单；Quarantine 明细与原因码 |
+
+### 10.2 Stage B 提醒（不变）
+
+只生成 **Candidate**，不生成 Claim；每条必带 `candidate_id` / `source_file_hash` / `source_row_reference` / `normalized_fact_reference` / `evidence_reference` / `created_reason`；目标 **Candidate ≥ 10**。
+
+> Candidate ≠ 可追回金额；Candidate ≠ 已确认损失。
+
+### 10.3 Stage C 分类（不变）+ 观察指标
+
+抽样 **≥5 条**，分类：TRUE POSITIVE / FALSE POSITIVE（数据误解 / 规则缺失 / 业务合理 / 数据不足）。记录 **Value Discovery Rate**，仅作观察指标，不作为自动商业结论。
+
+### 10.4 Decision Gate（定名）
+
+`PHASE1-RESULT.md` 的 Next Decision 只能取以下三者之一：
+
+```
+PASS_TO_MVP
+CONTINUE_DATA_COLLECTION
+STOP_REWORK
+```
+
+不得直接进入：自动追回 / 自动提交平台 / 自动收费 / 自动资金动作。
+
