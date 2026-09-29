@@ -54014,3 +54014,322 @@ VALIDATION-RUN HARNESS
 
 本阶段可以收口。实现质量符合当前 Gate 7 边界。
 ```
+
+### [MSG-20260929-16] C0009.2-VALIDATION-RUN-HARNESS 裁决：PASS（STATUS = COMMERCIAL_VALIDATION_PIPELINE_READY）——统一验证 Harness 通过：导出文件 → 适配 → 规范输入 → 结构校验 → 数据质量 + 商业评审骨架；确认无平台连接、无规则判定、无追回金额计算、无对外动作；架构方判断「继续扩展代码的边际价值已经下降」，NEXT = REAL DATA VALIDATION（下一阶段应优先取得真实业务输入））
+
+Codex 提交 C0009.2-VALIDATION-RUN-HARNESS（统一验证入口 + 离线 CLI + 10 用例，HEAD 0683c09，CI 三作业 SUCCESS）后，架构方判定 PASS 并给出阶段结论。以下为该回复的**逐字原文**。
+
+```text
+C0009.2-VALIDATION-RUN-HARNESS 裁决
+结论：PASS ✅
+
+状态：
+
+纯文本
+GATE:
+7 Commercial Validation
+
+CHECKPOINT:
+C0009.2 VALIDATION-RUN-HARNESS
+
+DECISION:
+PASS_CLOSE
+
+STATUS:
+COMMERCIAL_VALIDATION_PIPELINE_READY
+审计结论
+
+本次实现符合 MSG-20260929-09 / 11 / 15 指定方向。
+
+核心判断：
+
+这是验证基础设施增强，不是提前建设商业闭环。
+
+因此通过。
+
+一、架构边界检查 ✅
+
+当前链路：
+
+纯文本
+Export File
+
+↓
+
+Adapter
+
+↓
+
+Canonical Input
+
+↓
+
+Structural Validation
+
+↓
+
+Data Quality Analysis
+
+↓
+
+Commercial Review Skeleton
+
+符合批准范围。
+
+没有进入：
+
+纯文本
+Data
+ ↓
+Rule Engine
+ ↓
+Recovery Amount
+ ↓
+Claim
+ ↓
+Payment
+二、三个硬边界审计 ✅
+1. 不做业务判断
+
+通过。
+
+明确没有：
+
+平台 API
+规则判定
+可追回金额
+索赔生成
+自动提交
+2. commercialConclusion 恒 OPEN
+
+通过。
+
+这是本轮最重要约束之一。
+
+当前：
+
+纯文本
+VALIDATION_RUN_STATUS:
+RUN_RECORDED
+
+COMMERCIAL_CONCLUSION:
+OPEN
+
+正确。
+
+3. 平台识别
+
+通过。
+
+特别认可：
+
+纯文本
+platformConfirmed=false
+
+这是正确设计。
+
+因为：
+
+表头推断 ≠ 真实来源证明。
+
+禁止：
+
+纯文本
+Detected Amazon
+=
+Confirmed Amazon
+三、测试覆盖审计 ✅
+1. 任意平台文件
+
+通过：
+
+目标：
+
+证明：
+
+任意导出文件可以进入统一验证管线。
+
+2. 缺字段
+
+通过：
+
+纯文本
+Adapter
+ ↓
+QUARANTINE
+
+不产生虚假商业报告。
+
+3. PDF
+
+通过：
+
+保持：
+
+纯文本
+PDF
+ ↓
+STRUCTURE_ONLY
+ ↓
+NO OCR
+4. Template 输入
+
+通过：
+
+纯文本
+TEMPLATE
+ ↓
+NOT_RUN
+
+正确。
+
+模板不是商业证据。
+
+5. 数据质量分析
+
+通过。
+
+特别确认：
+
+CLAIM_OUTCOME_UNKNOWN：
+
+允许作为：
+
+纯文本
+Data Quality Finding
+
+不允许变成：
+
+纯文本
+Claim Opportunity
+
+当前实现正确。
+
+四、报告设计审计 ✅
+
+通过：
+
+报告包含：
+
+三层状态
+数据质量
+人工商业评审区域
+
+并且：
+
+不包含商业结论词。
+
+这是符合 Gate 7 的。
+
+五、主动登记失误处理
+结论：接受，无影响
+
+情况：
+
+out-smoke.csv
+误提交
+↓
+独立提交删除
+↓
+未改写历史
+
+处理正确。
+
+不需要额外动作。
+
+当前 C-0015 / Gate 7 状态更新
+纯文本
+C-0015 Cross-border Recovery
+
+FOUNDATION:
+
+✅ Shopify File Adapter
+✅ Carrier Reference Adapter
+✅ Customs Reference Adapter
+✅ Validation Run Harness
+
+
+WAIT:
+
+⏸ Real customer data
+⏸ Scenario selection
+
+
+HOLD:
+
+⏸ API connectors
+⏸ Rule engines
+⏸ Payment loop
+
+
+FORBIDDEN:
+
+❌ Automatic submission
+下一步裁决建议
+
+现在已经完成：
+
+离线验证基础设施阶段
+
+下一步不建议继续无限增加基础设施。
+
+应该进入：
+
+REAL VALIDATION PHASE
+
+即：
+
+等待或获取：
+
+一个真实脱敏 Shopify 导出
+一个真实物流账单
+一个真实税率/费用文件
+
+然后执行：
+
+纯文本
+VALIDATION-RUN
+
+↓
+
+Commercial Review
+
+↓
+
+C-0015 Scenario Selection
+归档
+Markdown
+### [MSG-20260929-16]
+
+TYPE:
+IMPLEMENTATION CHECKPOINT DECISION
+
+TARGET:
+C0009.2 VALIDATION-RUN-HARNESS
+
+DECISION:
+PASS_CLOSE
+
+Validated:
+- unified validation entry
+- offline CLI
+- adapter pipeline
+- structural validation
+- data quality analysis
+- commercial review skeleton
+
+Confirmed:
+- commercialConclusion always OPEN
+- platform detection not confirmation
+- no business judgement
+- no recovery calculation
+- no external action
+
+STATUS:
+COMMERCIAL_VALIDATION_PIPELINE_READY
+
+NEXT:
+REAL DATA VALIDATION
+
+本阶段收口。继续扩展代码的边际价值已经下降，下一阶段应优先获得真实业务输入。
+```
