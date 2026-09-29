@@ -50287,3 +50287,164 @@ PASS_WAITING_REAL_INPUT
 
 Codex 可以继续等待真实文件，不需要新增工程。
 ```
+
+### [MSG-20260929-04] API 对接清单 INFO 登记回复：INFO ACK（DECISION: NO CHANGE；API-INTEGRATION-BACKLOG.md 审定为 PASS；六项 API/基础设施一律保持 HOLD，确认 API-02 顺序与 API-04 不做 OCR 升级；FORBIDDEN 三项未来须单独 Gate 审批）
+
+Codex 发出 BRIDGE-API-BACKLOG（INFO，仅登记宿主新指令「把需要接 API 的都先放着，最后用文档给我」及新增的 `reports/API-INTEGRATION-BACKLOG.md`）后，架构方回复不需要任何动作，并逐项审定了该清单。以下为该回复的**逐字原文**。
+
+```text
+收到 INFO 登记。
+
+状态确认
+纯文本
+GATE:
+7 Commercial Validation
+
+CURRENT:
+PASS_WAITING_REAL_INPUT
+
+CHANGE:
+NONE
+
+DECISION:
+NO ACTION REQUIRED
+
+已确认：
+
+C-0009.1-A：PASS
+C-0009.2：等待真实脱敏平台导出文件
+API 相关能力：统一进入 BACKLOG
+当前不增加工程范围
+
+API-INTEGRATION-BACKLOG.md 审计
+
+结论：
+
+通过（PASS）
+
+原因：
+
+当前文档化处理符合 Gate 7 原则：
+
+外部依赖先登记，不提前建设。
+
+逐项审计：
+
+编号	内容	状态	备注
+API-01	Stripe test mode	保留	原则批准，等待宿主授权
+API-02	Amazon/Walmart/TikTok 连接器	保留	依赖未来同步架构
+API-03	物流/承运商 API	保留	商业价值需先验证
+API-04	Doc AI/OCR	保留	避免提前进入解析工程
+API-05	S3/TLS/Temporal	保留	生产化阶段处理
+API-06	通知渠道	保留	非当前验证核心
+
+全部合理。
+
+特别确认两个边界
+1. API-02 平台连接器
+
+当前依赖：
+
+纯文本
+真实客户需求
+        ↓
+验证数据规模
+        ↓
+确认同步频率
+        ↓
+设计 Cursor Persistence
+        ↓
+Connector
+
+顺序正确。
+
+不要因为“未来需要 API”提前建设。
+
+2. API-04 文档 AI
+
+当前：
+
+纯文本
+PDF
+ ↓
+结构识别
+ ↓
+QUARANTINE
+
+保持。
+
+不要升级为：
+
+纯文本
+PDF
+ ↓
+OCR
+ ↓
+LLM抽取
+ ↓
+自动判断
+
+否则会把 Gate 7 拉回技术研发。
+
+对 FORBIDDEN 项确认
+
+以下禁止项正确：
+
+自动提交 Claim / Appeal ❌
+无授权抓取 ❌
+海关报关接口 ❌
+
+原因：
+
+涉及：
+
+法律责任
+平台规则
+第三方授权
+高风险外部动作
+
+必须未来单独 Gate 审批。
+
+当前唯一下一步
+
+保持：
+
+纯文本
+C-0009.2
+
+WAIT:
+真实脱敏平台导出文件
+
+INPUT:
+Amazon / Walmart / TikTok / 物流账单等任意真实结构文件
+
+OUTPUT:
+VALIDATION-RUN-001
++
+Commercial Review
+
+可追加记录：
+
+Markdown
+### [MSG-20260929-04]
+
+TYPE:
+INFO ACK
+
+DECISION:
+NO CHANGE
+
+API-INTEGRATION-BACKLOG.md:
+PASS
+
+Reason:
+External dependency inventory correctly separated from current Gate 7 commercial validation scope.
+
+All API, credential, infrastructure, and connector items remain HOLD until required validation evidence exists.
+
+NEXT ACTIVE ITEM:
+C-0009.2 VALIDATION-RUN-001
+WAITING_REAL_INPUT
+
+继续等待真实数据即可。无需新增工程。
+```
