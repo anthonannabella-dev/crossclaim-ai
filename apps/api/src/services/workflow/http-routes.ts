@@ -36,6 +36,12 @@ import { listPaymentReconciliation, toReconciliationCsv } from './payment-reconc
 import { replayPaymentEvent, runDueRetries } from './payment-attempt';
 import { getCase, getClaimDraft, listCaseEvidence, listCases } from './case-read';
 import {
+  getAdminSystemHealth,
+  getAuditEntry,
+  getTenantOverview,
+  listAuditEntries,
+} from '../operations/admin-console';
+import {
   buildOperationsDashboard,
   listClaimBucketDetail,
   listRecoveryDetail,
@@ -74,6 +80,11 @@ const CASE_CLAIM_PATH = /^\/cases\/([^/]+)\/claim$/;
 const OPERATIONS_DASHBOARD_PATH = /^\/operations\/dashboard$/;
 const OPERATIONS_CLAIMS_PATH = /^\/operations\/claims$/;
 const OPERATIONS_RECOVERY_PATH = /^\/operations\/recovery$/;
+// MSG-20260929-34：Admin Console Phase 1（只读；A1/A3/A6）
+const ADMIN_TENANT_OVERVIEW_PATH = /^\/admin\/tenant-overview$/;
+const ADMIN_AUDIT_LIST_PATH = /^\/admin\/audit$/;
+const ADMIN_AUDIT_DETAIL_PATH = /^\/admin\/audit\/([^/]+)$/;
+const ADMIN_SYSTEM_HEALTH_PATH = /^\/admin\/system-health$/;
 
 /** 请求体层面的错误（与领域状态无关），统一映射为 400。 */
 class HttpBodyError extends Error {
@@ -199,7 +210,13 @@ export async function handleWorkflowRequest(
   const operationsDashboard = OPERATIONS_DASHBOARD_PATH.test(path);
   const operationsClaims = OPERATIONS_CLAIMS_PATH.test(path);
   const operationsRecovery = OPERATIONS_RECOVERY_PATH.test(path);
-  if (!operationsDashboard && !operationsClaims && !operationsRecovery && !review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !replayPath && !retryDuePath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim) {
+  const adminTenantOverview = ADMIN_TENANT_OVERVIEW_PATH.test(path);
+  const adminAuditList = ADMIN_AUDIT_LIST_PATH.test(path);
+  const adminAuditDetail = ADMIN_AUDIT_DETAIL_PATH.exec(path);
+  const adminSystemHealth = ADMIN_SYSTEM_HEALTH_PATH.test(path);
+  const adminAny =
+    adminTenantOverview || adminAuditList || adminAuditDetail !== null || adminSystemHealth;
+  if (!adminAny && !operationsDashboard && !operationsClaims && !operationsRecovery && !review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !replayPath && !retryDuePath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim) {
     return false;
   }
 
@@ -493,6 +510,47 @@ export async function handleWorkflowRequest(
           caseClaim[1] ?? '',
         ),
       );
+      return true;
+    }
+
+    // MSG-20260929-34：Admin Console Phase 1（只读；GET only；不写 AuditLog、无写路径）
+    if (adminAny) {
+      if ((req.method ?? 'GET') !== 'GET') {
+        sendJson(res, 405, { error: 'METHOD_NOT_ALLOWED' });
+        return true;
+      }
+      const adminQuery = new URLSearchParams((req.url ?? '').split('?')[1] ?? '');
+      const adminDeps = { prisma: deps.prisma, ...(deps.now ? { now: deps.now } : {}) };
+      const actor = { organizationId: context.organizationId, role: context.role };
+      if (adminTenantOverview) {
+        sendJson(res, 200, await getTenantOverview(adminDeps, actor));
+        return true;
+      }
+      if (adminAuditList) {
+        sendJson(
+          res,
+          200,
+          await listAuditEntries(adminDeps, {
+            ...actor,
+            filter: {
+              action: adminQuery.get('action') ?? undefined,
+              actorUserId: adminQuery.get('actorUserId') ?? undefined,
+              entityType: adminQuery.get('entityType') ?? undefined,
+              entityId: adminQuery.get('entityId') ?? undefined,
+              from: adminQuery.get('from') ?? undefined,
+              to: adminQuery.get('to') ?? undefined,
+              cursor: adminQuery.get('cursor') ?? undefined,
+              limit: adminQuery.get('limit') ?? undefined,
+            },
+          }),
+        );
+        return true;
+      }
+      if (adminAuditDetail) {
+        sendJson(res, 200, await getAuditEntry(adminDeps, { ...actor, auditId: adminAuditDetail[1] ?? '' }));
+        return true;
+      }
+      sendJson(res, 200, await getAdminSystemHealth(adminDeps, actor));
       return true;
     }
 

@@ -319,3 +319,18 @@ C-0008-B2（Case / Evidence / Claim Draft / Billing）的端点尚未实现。
 - **D1**：`awaiting_response` 只看 `respondedAt`（AuditLog 响应事件作交叉校验），与 `dueAt` 无关
 - **金额裁剪先于聚合**：无权角色的响应中**不存在**金额键（不是 0），也无法用 total/count 反推
 - 所有查询强制 `organizationId` 注入；租户 A 无法观测租户 B 的任何行
+
+---
+
+## Admin Console Phase 1（运营可观测层，MSG-20260929-34）
+
+| 方法 | 路径 | 成功 | 权限 |
+|---|---|---|---|
+| GET | `/admin/tenant-overview` | 200 租户概览（成员/会话/连接状态计数/导入数/Claim 状态计数/Settlement 数/审计计数与最近活动）；**不含** token/secret/原始连接配置 | OWNER / ADMIN |
+| GET | `/admin/audit` | 200 `{ items, nextCursor, window }`；列表**只返回元数据**（action/entityType/entityId/createdAt/actor/severity）；窗口默认 7 天、上限 30 天 | OWNER / ADMIN |
+| GET | `/admin/audit/:id` | 200 审计详情（含已脱敏 `changes`）；跨租户 → 404 | OWNER / ADMIN |
+| GET | `/admin/system-health` | 200 `{ status, checkedAt, checks }`；降级时**不返回** SQL 错误/连接串/堆栈 | OWNER / ADMIN / OPS |
+
+- **只读**：仅 GET；无写路径、不写 AuditLog、无权限编辑/平台配置/API Key/资金操作
+- **单租户视图**：强制 `organizationId`；`actorUserId` 过滤仅用于审计调查，且不得跨租户
+- Phase 1 = A1 Tenant Overview + A3 Audit Explorer + A6 System Health；A4/A5/A2 属后续阶段
