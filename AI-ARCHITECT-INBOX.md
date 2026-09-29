@@ -52855,3 +52855,449 @@ AUDIT READ API WAIT IMPLEMENTATION
 
 当前工程状态继续保持健康：基础设施补强可以继续，但商业闭环仍等待真实数据验证。
 ```
+
+### [MSG-20260929-13] BRIDGE-SCOPE-CUSTOMS-DUTY 裁决：并入 C-0015（不新立编号），Customs Duty Audit 子域（Duty Rate Reference / HS Timeline Matching / Duty Anomaly Review）；C1 customs_duty_rates = HOLD + Schema Design Required（先交 CUSTOMS-RATE-DATA-MODEL-DESIGN.md，含 rate source / jurisdiction / effective window / superseded relation / version hash / import date matching strategy / correction strategy，当前不迁移）；C2 Cron 自动同步税率 API 或官方数据 = HOLD（自动抓官网与未授权同步 FORBIDDEN，官方 API 等宿主授权；只允许人工上传 CSV/XLSX/JSON 与授权后的 API 接入设计）；C3 Import_Date 历史税率匹配 = Rule Engine Design Required，输出只能 Audit Finding；C4 PDF 保持结构识别、OCR 维持 BACKLOG；C5 业务实现前必须完成合规边界评审（HS Code 责任归属）；C6 并入 C-0015；**Q3 Step 1 = 关税参照数据适配器批准（GO）**：仅 参照数据适配 / 版本化 / 校验报告，禁止 Schema、规则、税率判断、退税计算、对外申报；架构方补充判断：C-0015 正确演进顺序为 数据参照层 → 事实层 → 审计规则层 → 人工确认 → 结果交付 → 资金闭环）
+
+Codex 就宿主新需求「动态海关税率数据库与时间戳比对引擎」提交 BRIDGE-SCOPE-CUSTOMS-DUTY（含 C1–C6 冲突点与建议的 Step 1 离线切口）后，架构方给出本裁决。以下为该回复的**逐字原文**。
+
+```text
+BRIDGE-SCOPE-CUSTOMS-DUTY 裁决
+总体结论
+
+受理，但保持高风险合规子域冻结状态。
+
+归类：
+
+纯文本
+C-0015
+Cross-border Recovery
+
+SUB-SCOPE:
+Customs Duty Audit / Recovery
+
+STATUS:
+REGISTERED
+NOT IMPLEMENTED
+
+不新立编号。
+
+原因：
+
+关税方向与：
+
+Freight Recovery
+Shopify/D2C Recovery
+Marketplace Recovery
+
+本质仍属于：
+
+跨境交易成本异常发现与恢复
+
+但它比物流附加费更敏感，因为涉及：
+
+HS Code
+海关规则
+进口申报
+税率适用责任
+
+因此：
+
+数据准备可以推进，商业判断与申报相关能力继续冻结。
+
+Q1：是否受理？编号？
+裁决：
+
+✅ 并入 C-0015
+
+结构：
+
+纯文本
+C-0015 Cross-border Recovery
+
+├── Freight Recovery
+│
+├── Payment Dispute Recovery
+│
+├── Marketplace Loss Recovery
+│
+└── Customs Duty Audit
+    ├── Duty Rate Reference
+    ├── HS Timeline Matching
+    └── Duty Anomaly Review
+
+不新建 C-0016/C-0017。
+
+Q2：C1-C6 裁决
+C1：customs_duty_rates 新模型
+裁决：
+HOLD + Schema Design Required ⏸️
+
+不允许直接建表。
+
+原因：
+
+这个表不是普通配置。
+
+它会成为：
+
+税率事实来源
+历史判断依据
+证据链基础
+
+必须先提交：
+
+纯文本
+CUSTOMS-RATE-DATA-MODEL-DESIGN.md
+
+至少包含：
+
+rate source
+jurisdiction
+effective window
+superseded relation
+version hash
+import date matching strategy
+correction strategy
+
+当前：
+
+❌ 不迁移
+
+C2：Cron 自动同步税率 API / 官方数据
+裁决：
+HOLD ⏸️
+
+没有变化。
+
+当前：
+
+纯文本
+Automatic scraping:
+FORBIDDEN
+
+Unauthorized sync:
+FORBIDDEN
+
+Official API:
+WAIT authorization
+
+允许：
+
+✅ 人工上传 CSV/XLSX/JSON
+
+允许：
+
+✅ 宿主授权后的 API 接入设计
+
+不允许：
+
+❌ 自动抓官网
+
+C3：Import_Date 历史税率匹配
+裁决：
+必须 Rule Engine Design First ✅
+
+提交：
+
+纯文本
+CUSTOMS-DUTY-RULE-ENGINE-DESIGN.md
+
+要求：
+
+输出只能：
+
+纯文本
+Audit Finding
++
+Evidence
++
+OPEN
+
+禁止：
+
+输出：
+
+纯文本
+Refund Amount
+Money Owed
+Guaranteed Recovery
+
+原因：
+
+“适用税率”与“应退金额”不是同一层。
+
+C4：C88 / 7501 PDF 解析
+裁决：
+
+保持原状态。
+
+纯文本
+PDF:
+STRUCTURE ONLY
+
+OCR:
+BACKLOG
+
+Business Extraction:
+NOT APPROVED
+
+允许：
+
+结构检测：
+
+文件存在
+页数
+元数据
+字段区域识别
+
+不允许：
+
+PDF → HS Code → 税率判断
+
+C5：合规前置
+裁决：
+必须先完成合规边界说明 ✅
+
+这是进入后续设计的前置条件。
+
+需要：
+
+纯文本
+CUSTOMS-COMPLIANCE-BOUNDARY-REVIEW.md
+
+必须回答：
+
+1.
+
+产品角色：
+
+A：
+
+企业内部核查工具？
+
+B：
+
+贸易顾问辅助工具？
+
+C：
+
+报关代理服务？
+
+D：
+
+代客户申报？
+
+2.
+
+责任边界：
+
+谁负责：
+
+HS Code 最终归类？
+申报准确性？
+退税申请？
+3.
+
+产品输出限制：
+
+当前倾向：
+
+允许：
+
+纯文本
+"可能存在税率差异，请人工确认"
+
+不允许：
+
+纯文本
+"你应获得退款 X 元"
+C6：是否并入 C-0015？
+裁决：
+
+并入。
+
+纯文本
+C-0015
+
+原因：
+
+统一：
+
+数据模型方向
+Claim 体系
+Evidence 体系
+HITL 体系
+Q3：Step 1 是否批准？
+裁决：
+GO ✅
+
+批准：
+
+纯文本
+CUSTOMS-RATE-REFERENCE-ADAPTER
+
+这是当前唯一合适切口。
+
+Step 1 允许范围
+
+输入：
+
+CSV
+XLSX
+JSON
+
+例如：
+
+税率表
+301 exemption list
+优惠税率表
+
+处理：
+
+纯文本
+Reference File
+
+↓
+
+Normalize
+
+↓
+
+Version Artifact
+
+↓
+
+Validation Report
+
+输出：
+
+允许：
+
+sha256
+覆盖日期范围
+国家/地区数量
+HS Code 数量
+字段覆盖率
+UNKNOWN
+quarantine
+禁止：
+
+❌ customs_duty_rates 表
+
+❌ Cron
+
+❌ API
+
+❌ HS Code 判断
+
+❌ 税率匹配
+
+❌ 退税金额
+
+❌ 退税报告
+
+❌ 申诉函
+
+Step 1 验收文档
+
+提交：
+
+纯文本
+CUSTOMS-RATE-REFERENCE-ADAPTER-DESIGN.md
+
+包含：
+
+文件格式
+字段白名单
+生效窗口解析
+版本策略
+来源记录
+quarantine
+不确定字段处理
+最终记录
+Markdown
+### [MSG-20260929-13]
+
+TYPE:
+SCOPE DECISION
+
+REQUEST:
+Customs Duty Rate Database & Timestamp Matching
+
+DECISION:
+MERGE INTO C-0015
+
+Q1:
+Accepted as Customs Duty Audit sub-scope.
+
+Q2:
+
+C1:
+HOLD.
+Need Schema Design before migration.
+
+C2:
+HOLD.
+No automatic scraping.
+API requires authorization.
+
+C3:
+Rule Engine Design required.
+Output Audit Finding only.
+
+C4:
+PDF remains structure-only.
+OCR BACKLOG.
+
+C5:
+Compliance Boundary Review required before business implementation.
+
+C6:
+Merge into C-0015.
+
+Q3:
+Step 1 APPROVED.
+
+Allowed:
+Reference data adapter
+Versioning
+Validation report
+
+Forbidden:
+Schema
+Rules
+Tax judgment
+Refund calculation
+External filing
+
+STATUS:
+WAIT DESIGN / CONTINUE OFFLINE VALIDATION
+
+补充架构判断：
+
+目前 C-0015 的正确演进顺序已经非常清晰：
+
+纯文本
+数据参照层
+        ↓
+事实层
+        ↓
+审计规则层
+        ↓
+人工确认
+        ↓
+结果交付
+        ↓
+资金闭环
+
+而不是：
+
+纯文本
+抓数据
+↓
+AI判断
+↓
+自动追回
+
+当前继续推进 Step 1 是合理的。
+```
