@@ -58229,3 +58229,426 @@ RECOVERY_CONFIRMATION_LAYER_READY
 
 本轮通过。下一步处理权限 Delta，然后 Recovery Confirmation 可以进入完整 Production Candidate 状态。
 ```
+
+### [MSG-20260929-28] RECOVERY-PAYOUT-PERMISSION-DELTA 裁决：PASS ✅（PASS_CLOSE / RECOVERY_CONFIRMATION_OPERATIONAL_GUARDRAIL_READY）——F1 租户隔离例外登记通过（明确写出「直接写库仍可能绕过服务层」，未粉饰为完全安全；org 过滤 + 不泄露跨租户存在性 + 复合唯一键 + 重新评估条件齐备）；F2 recoveryPayoutRecord（OWNER/ADMIN/FINANCE）通过，claimTrackingApprove 继续承载确认与冲回；fail-closed 顺序（assertPermission → DB access）通过；CI 失败报告被接受（修复而非绕过）；Recovery Confirmation 模块正式收口；NEXT 优先顺序 = 1 Operations Dashboard Design（DESIGN-FIRST，定义指标/数据来源/权限/查询模型，不做 UI）→ 2 Notification Design → 3 Admin Console Design
+
+本轮为 RECOVERY-PAYOUT-PERMISSION-DELTA 的裁决（PASS_CLOSE），并给出下一模块优先顺序。
+
+```text
+RECOVERY-PAYOUT-PERMISSION-DELTA 裁决
+结论：PASS ✅
+
+状态：
+
+纯文本
+id="c6m8qa"
+
+GATE:
+7 Commercial Validation
+
+TARGET:
+RecoveryPayout Permission Delta
+
+DECISION:
+PASS_CLOSE
+
+STATUS:
+RECOVERY_CONFIRMATION_OPERATIONAL_GUARDRAIL_READY
+一、F1 租户隔离例外执行审计
+结论：PASS ✅
+
+已正确执行 MSG-20260929-27 的 B 方案。
+
+ARCHITECTURE_CONTRACT 登记
+
+通过。
+
+关键点完整：
+
+纯文本
+id="f3x7mv"
+
+Exception:
+RecoveryPayout tenant isolation
+
+Reason:
+No DB trigger by approved scope
+
+Protection:
+Application layer + constraints + audit
+
+特别认可：
+
+没有隐藏风险。
+
+明确写出：
+
+直接写库仍可能绕过服务层。
+
+这是正确的风险登记。
+
+不要写成“完全安全”。
+
+当前保护层
+
+通过：
+
+1. organizationId 过滤
+
+✅
+
+2. 不泄露跨租户存在性
+
+✅
+
+这一点符合安全原则：
+
+纯文本
+Unauthorized
+
+≠
+
+Resource not found detail
+3. 唯一约束
+
+通过：
+
+纯文本
+organizationId + payoutRef
+
+organizationId + id
+4. 重新评估条件
+
+通过：
+
+未来开放：
+
+ETL
+SQL 工具
+DB 级写入
+
+则：
+
+重新评估 trigger。
+
+合理。
+
+二、F2 权限 Delta 审计
+结论：PASS ✅
+
+新增：
+
+纯文本
+recoveryPayoutRecord
+
+合理。
+
+权限映射
+
+批准：
+
+动作	权限
+RecoveryPayout 登记	recoveryPayoutRecord
+Recovery Confirmation	claimTrackingApprove
+Reversal	claimTrackingApprove
+角色：
+纯文本
+OWNER      ✅
+ADMIN      ✅
+FINANCE    ✅
+
+OPS        ❌
+VIEWER     ❌
+UNKNOWN    ❌
+
+通过。
+
+原因：
+
+到账事实属于财务事实。
+
+FINANCE 纳入正确。
+
+三、Fail Closed 审计
+通过 ✅
+
+重点：
+
+纯文本
+assertPermission
+
+↓
+
+DB Access
+
+顺序正确。
+
+不允许：
+
+纯文本
+查询资源
+
+↓
+
+判断权限
+
+否则可能产生：
+
+存在性泄露
+跨租户信息泄露
+四、审计动作
+
+通过。
+
+当前：
+
+纯文本
+recovery_payout.recorded
+
+recovery_payout.duplicate_ignored
+
+settlement.reconciliation_changed
+
+足够覆盖。
+
+五、CI 失败报告
+接受，无阻塞
+
+原因：
+
+处理方式正确：
+
+发生：
+
+纯文本
+TS6133 unused import
+
+↓
+
+修复
+
+↓
+
+重新验证
+
+重要的是：
+
+没有：
+
+修改历史绕过
+隐藏失败
+标记假通过
+
+当前证据：
+
+纯文本
+93 files
+
+847 tests
+
+PASS
+
+接受。
+
+六、Recovery Confirmation 状态更新
+
+当前：
+
+纯文本
+id="r7p2kc"
+
+Recovery Confirmation
+
+Schema:
+PASS
+
+Implementation:
+PASS
+
+Permission:
+PASS
+
+Audit:
+PASS
+
+Tenant Guard:
+PASS
+
+该模块收口。
+
+七、下一优先模块排序
+
+按照 Production Candidate 路线，不建议先做 Admin。
+
+推荐顺序：
+
+Next 1：Operations Dashboard Design
+优先级：最高
+
+状态：
+
+纯文本
+GO DESIGN-FIRST
+
+原因：
+
+现在已经有：
+
+Claim Tracking
+Recovery Confirmation
+Evidence
+Validation
+
+需要一个运营视角。
+
+提交：
+
+纯文本
+OPERATIONS-DASHBOARD-DESIGN.md
+
+重点：
+
+不是 UI。
+
+先定义：
+
+指标
+数据来源
+权限
+查询模型
+
+建议指标：
+
+Claim Pipeline
+
+待确认
+待提交准备
+已提交
+待回执
+已确认
+待对账
+争议
+
+以及：
+
+Recovery
+
+Confirmed
+Received
+Outstanding
+Disputed
+Next 2：Notification Design
+优先级：第二
+
+原因：
+
+Dashboard 解决“看”。
+
+Notification 解决“行动”。
+
+提交：
+
+纯文本
+NOTIFICATION-DESIGN.md
+
+先设计：
+
+Event
+Trigger
+Recipient
+Template
+
+不接：
+
+Email
+SMS
+企业微信
+Next 3：Admin Console Design
+优先级：第三
+
+原因：
+
+Admin 依赖：
+
+RBAC
+Audit
+Tenant
+Config
+
+现在基础已经接近成熟。
+
+推荐顺序
+纯文本
+id="k4m8vz"
+
+Recovery Confirmation
+        ✅
+
+        ↓
+
+Operations Dashboard Design
+        1
+
+        ↓
+
+Notification Design
+        2
+
+        ↓
+
+Admin Console Design
+        3
+
+        ↓
+
+Rule Engine Design
+        4
+
+        ↓
+
+Real Validation
+        5
+最终归档
+Markdown
+### [MSG-20260929-28]
+
+TYPE:
+EXECUTION CHECKPOINT DECISION
+
+TARGET:
+RECOVERY-PAYOUT-PERMISSION-DELTA
+
+DECISION:
+PASS_CLOSE
+
+F1:
+PASS
+
+Architecture contract exception registered.
+RecoveryPayout remains service-enforced tenant isolation.
+
+F2:
+PASS
+
+Added:
+recoveryPayoutRecord
+
+Mapping:
+OWNER/ADMIN/FINANCE
+
+Confirmed:
+claimTrackingApprove remains for confirmation and reversal.
+
+Validation:
+93 files / 847 tests PASS
+
+STATUS:
+RECOVERY_CONFIRMATION_OPERATIONAL_GUARDRAIL_READY
+
+NEXT:
+1. Operations Dashboard Design
+2. Notification Design
+3. Admin Console Design
+
+Recovery Confirmation 模块可以正式收口。下一步进入运营产品化层。
+```
