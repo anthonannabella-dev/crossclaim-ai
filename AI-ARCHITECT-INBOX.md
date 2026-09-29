@@ -72763,3 +72763,295 @@ HOLD
 
 P2-4 Production Validation Runbook Implementation / Validation Checkpoint。
 ```
+
+### [MSG-20260929-74] P2-4-VALIDATION-RUNBOOK-CHECKPOINT 裁决：RESULT: PASS_CLOSE / STATUS: P2-4 VALIDATION RUNBOOK = PASS / MERGE: APPROVED / NEXT: FINAL PRODUCTION GATE PREPARATION = GO / ACTION GUARD: DESIGN ONLY-HOLD（Q1 批准 c961e0d/4c5bf3a/fc4e18f fast-forward 合并 main；P2-4 验收 PASS：Stage A input = normalized + quarantine + rejected（少行/多行检测、缺字段拒绝、不猜测、不自动修正）；Stage B Candidate >= 10 且 Candidate != Claim；Stage C >=5 samples 分类 TRUE_POSITIVE/FALSE_POSITIVE/NEEDS_DATA，未知分类 STOP_REWORK；Decision Gate 固定三态 PASS_TO_MVP/CONTINUE_DATA_COLLECTION/STOP_REWORK 并禁止自动 Claim/Appeal/佣金/收费/金额承诺/平台操作；PHASE1-RESULT 不含 recoveryAmount/successRate/ARR/billingCapacity（须来自真实业务验证）；首轮 c961e0d 的 CJS top-level await 失败 -> 4c5bf3a 修复保留修复链；P2 总体：P2-1/P2-2/P2-4 PASS_CLOSE、P2-3 PASS_CLOSE（真实轮换 HOST Pending）；下一步裁决选择 (a) Final Production Gate Preparation 并批准，要求提交 FINAL-PRODUCTION-GATE-REVIEW.md（G1-G10 最终状态 / P2-1~P2-4 证据索引 / CODE COMPLETE Matrix / HOST APPROVAL Matrix / Production Candidate 判定 / 上线前 Checklist / Phase 1 Real Data Entry Point），并明确生产待办仍 HOLD（DNS-TLS、生产部署、Secret 轮换执行、真实客户数据、真实平台凭据、真实账号验证），Action Guard 继续 DESIGN ONLY/HOLD 且暂不启动 ACTION-GUARD-DESIGN（需先有真实业务验证结果）；当前状态：CODE STATUS = PRODUCTION CANDIDATE READY，BUSINESS VALIDATION = WAITING_HOST_DATA，PRODUCTION ENABLEMENT = HOLD）
+
+```text
+复核 P2-4 Production Validation Runbook Checkpoint。
+
+裁决：
+
+纯文本
+RESULT: PASS_CLOSE
+
+STATUS:
+P2-4 VALIDATION RUNBOOK = PASS
+
+MERGE:
+APPROVED
+
+NEXT:
+FINAL PRODUCTION GATE PREPARATION = GO
+
+ACTION GUARD:
+DESIGN ONLY / HOLD
+Q1：合并批准
+
+批准 fast-forward：
+
+纯文本
+c961e0d
+4c5bf3a
+fc4e18f
+
+进入 main。
+
+理由：
+
+本阶段完成的是：
+
+验证流程固化
+输入边界固化
+数据质量检查
+人工验证流程
+Decision Gate
+
+没有突破冻结边界。
+
+P2-4 验收结果
+Stage A：Import Integrity
+
+PASS。
+
+关键点：
+
+纯文本
+input
+=
+normalized
++
+quarantine
++
+rejected
+
+并且已经验证：
+
+✅ 少行检测
+✅ 多行检测
+✅ 缺字段拒绝
+✅ 不猜测
+✅ 不自动修正
+
+这是必须保留的核心安全边界。
+
+Stage B：Candidate Discovery
+
+PASS。
+
+当前规则：
+
+纯文本
+Candidate >= 10
+
+并明确：
+
+Candidate != Claim
+
+正确。
+
+不能因为发现异常就进入业务承诺。
+
+Stage C：Human Verification
+
+PASS。
+
+要求：
+
+纯文本
+>=5 samples
+
+分类：
+
+TRUE_POSITIVE
+FALSE_POSITIVE
+NEEDS_DATA
+
+未知分类：
+
+STOP_REWORK
+
+符合之前定义。
+
+Decision Gate
+
+PASS。
+
+固定：
+
+PASS_TO_MVP
+
+CONTINUE_DATA_COLLECTION
+
+STOP_REWORK
+
+并禁止：
+
+自动 Claim
+自动 Appeal
+自动佣金
+自动收费
+自动金额承诺
+自动平台操作
+
+保持正确。
+
+报告边界
+
+特别确认：
+
+PHASE1-RESULT 不包含：
+
+❌ recoveryAmount
+❌ successRate
+❌ ARR
+❌ billingCapacity
+
+这是正确的。
+
+因为这些指标必须来自真实业务验证，而不是模拟数据。
+
+测试与工程质量
+
+通过。
+
+记录首轮失败：
+
+c961e0d
+↓
+CJS top-level await issue
+↓
+4c5bf3a 修复
+↓
+CI PASS
+
+这个处理符合工程要求。
+
+不是隐藏失败，而是保留修复链。
+
+P2 总体状态更新
+
+现在：
+
+项目	状态
+P2-1 Deployment Smoke	PASS_CLOSE
+P2-2 Backup Restore	PASS_CLOSE
+P2-3 Secret Rotation	PASS_CLOSE（真实轮换 HOST Pending）
+P2-4 Validation Runbook	PASS_CLOSE
+下一步裁决
+
+选择：
+
+✅ (a) Final Production Gate Preparation
+
+批准。
+
+原因：
+
+目前代码侧已经达到：
+
+CODE COMPLETE
++
+PRODUCTION HARDENING COMPLETE
+
+下一阶段应该不是继续增加功能，而是形成：
+
+FINAL PRODUCTION GATE REVIEW
+
+重点汇总：
+
+1. Code Readiness
+
+确认：
+
+Schema
+API Contract
+Permission
+Audit Coverage
+Tests
+CI
+Migration
+2. Production Pending Matrix
+
+必须明确分离：
+
+已完成
+CODE
+TEST
+CI
+SECURITY DESIGN
+BACKUP VERIFY
+VALIDATION PIPELINE
+HOST REQUIRED
+
+仍保持：
+
+DNS/TLS
+Production deployment
+Secret rotation execution
+Real customer data
+Real platform credentials
+Real account validation
+HOLD
+
+继续冻结：
+
+Action Guard
+Automatic Claim Submission
+Automatic Appeal
+Automatic Billing
+Automatic Payment
+Platform API execution
+不进入 Action Guard
+
+暂不启动：
+
+ACTION-GUARD-DESIGN
+
+理由：
+
+当前还没有真实业务验证结果。
+
+先完成：
+
+真实数据
+↓
+Phase1 Validation
+↓
+确认 MVP 场景
+↓
+再决定哪些动作需要 Guard
+
+避免提前设计业务阻断层。
+
+下一步允许 Codex 提交
+
+建议任务：
+
+FINAL-PRODUCTION-GATE-REVIEW.md
+
+内容：
+
+G1-G10 最终状态
+P2-1~P2-4 证据索引
+CODE COMPLETE Matrix
+HOST APPROVAL Matrix
+Production Candidate 判定
+上线前 Checklist
+Phase 1 Real Data Entry Point
+
+当前裁决：
+
+纯文本
+CrossClaim AI
+
+CODE STATUS:
+PRODUCTION CANDIDATE READY
+
+BUSINESS VALIDATION:
+WAITING_HOST_DATA
+
+PRODUCTION ENABLEMENT:
+HOLD
+
+可以进入 Final Production Gate 汇总。
+```
