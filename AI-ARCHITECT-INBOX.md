@@ -66414,3 +66414,291 @@ HOLD
 
 可以继续推进 Kill Switch R1。
 ```
+
+### [MSG-20260929-53] KILL-SWITCH-DESIGN R1 裁决：RESULT: PASS / READY_FOR_IMPLEMENTATION（批准进入 Kill Switch 实现阶段）
+
+```text
+裁决如下。
+
+KILL-SWITCH-DESIGN R1
+纯文本
+RESULT: PASS
+STATUS: READY_FOR_IMPLEMENTATION
+
+R1 已完整落实 MSG-20260929-52 的全部修订要求，可以进入实现阶段。
+
+逐项复核
+D1 Scope
+
+✅ PASS
+
+最终六项：
+
+纯文本
+submission
+billing
+integration
+platform_connector
+workflow
+observability
+
+接受。
+
+拆出 platform_connector 正确：
+
+第三方账号授权风险
+外部 API 行为风险
+平台规则变化风险
+
+与内部 integration 分离。
+
+D2 双人确认
+
+✅ PASS
+
+关键约束已落实：
+
+同一用户不能完成双人确认闭环
+
+必须服务端校验：
+
+纯文本
+confirmationBy != actorUserId
+
+不能依赖 UI。
+
+通过。
+
+D3 Audit reason
+
+✅ PASS
+
+结构化 reason：
+
+纯文本
+SECURITY_INCIDENT
+PLATFORM_FAILURE
+MAINTENANCE
+TESTING
+OTHER
+optional note
+
+接受。
+
+补充实现要求：
+
+note 必须：
+
+长度限制
+禁止凭据
+禁止 token / secret / key
+
+避免 AuditLog 变成敏感信息存储。
+
+D4 权限可见性
+
+✅ PASS
+
+最终权限模型合理：
+
+角色	能力
+OWNER	完整查看
+ADMIN	完整查看
+OPS	运行状态
+FINANCE	403
+VIEWER	403
+
+尤其：
+
+OPS 不看：
+
+操作者
+reason
+历史
+
+符合最小权限原则。
+
+D5 默认值
+
+✅ PASS
+
+最终：
+
+纯文本
+submission          disabled
+billing             disabled
+integration         disabled
+platform_connector  disabled
+workflow            disabled
+observability       enabled
+
+符合 fail-closed。
+
+R1 优先级
+
+✅ PASS
+
+解析：
+
+纯文本
+tenant
+  >
+global
+  >
+environment default
+
+并取更严格值。
+
+通过。
+
+R2 历史事实保护
+
+✅ PASS
+
+明确：
+
+Kill Switch 不允许：
+
+删除 Claim
+修改 Settlement
+回滚 Billing
+删除 AuditLog
+
+只影响：
+
+未来动作。
+
+通过。
+
+批准进入实现
+
+批准：
+
+纯文本
+KILL-SWITCH-IMPLEMENTATION
+STATUS: GO
+
+允许范围：
+
+1. 配置解析层
+
+包含：
+
+tenant/global/env priority
+strictest resolution
+unknown → disabled
+2. 权限与确认层
+
+实现：
+
+OWNER 发起关闭
+OWNER/ADMIN 确认开启
+confirmationBy != actor
+
+必须测试：
+
+同人确认失败
+超过 15 分钟失败
+重复确认幂等
+3. AuditLog
+
+写入：
+
+纯文本
+killswitch.changed
+
+包含：
+
+纯文本
+scope
+switch
+oldValue
+newValue
+reasonCode
+note?
+actor
+confirmationBy
+4. 只读状态端点
+
+允许：
+
+GET only。
+
+不允许：
+
+修改端点
+Admin 页面直接控制
+前端绕过权限
+实现验收要求
+
+新增：
+
+A. Fail Closed
+
+测试：
+
+缺配置
+非法值
+UNKNOWN
+环境变量错误
+
+结果：
+
+必须：
+
+纯文本
+disabled
+B. 双人确认
+
+测试：
+
+场景	结果
+A 发起 A 确认	失败
+A 发起 B 确认	成功
+超时确认	失败
+重复确认	幂等
+C. 审计
+
+测试：
+
+每次状态变化有 AuditLog
+读取状态不写 AuditLog
+note 禁敏感字段
+D. 历史保护
+
+验证：
+
+开启/关闭前后：
+
+纯文本
+Claim
+Settlement
+Billing
+AuditLog
+
+事实行不变化。
+
+当前状态
+纯文本
+Production Candidate v1.0
+
+Operations Console:
+PASS
+
+Kill Switch Design:
+PASS
+
+Kill Switch Implementation:
+GO
+
+Submission Adapter:
+HOLD
+
+Auto Claim:
+FORBIDDEN
+
+Auto Billing:
+HOLD
+
+可以开始提交 KILL-SWITCH-IMPLEMENTATION CHECKPOINT。
+```
