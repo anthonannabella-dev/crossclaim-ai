@@ -109,7 +109,7 @@ Claim / Appeal 文本草稿        直接对外提交
 |---|---|
 | 校验函数 | `crossclaim_assert_tenant_integrity()` |
 | 迁移 | `apps/api/prisma/migrations/20260928060000_tenant_integrity/migration.sql` |
-| 覆盖范围 | 17 张有跨表引用的 tenant-owned 表 |
+| 覆盖范围 | 24 张 tenant-owned 表 / 28 个 `cc_tenant%` 触发器（CI 逐次断言数量） |
 
 另有两类**规则所有权**约束同属本层（`20260928070000_tenant_integrity_fixes`）：
 
@@ -144,11 +144,19 @@ Claim / Appeal 文本草稿        直接对外提交
 
 | 项 | 内容 |
 |---|---|
-| 为什么没有 DB trigger | MSG-20260929-26 明确批准该 Delta「不新增 / 不修改触发器」，27 个 `cc_tenant%` 是 CI 断言的保护点 |
+| 为什么没有 DB trigger | MSG-20260929-26 明确批准该 Delta「不新增 / 不修改触发器」，`cc_tenant%` 数量是 CI 断言的保护点（当时为 27；`20260930090000` 起为 28） |
 | 当前保护层 | 服务层 `loadSettlement` 按 `organizationId` 过滤（不存在即 `NOT_FOUND`，不泄露跨租户存在性），写入只使用该 Settlement 的 `id`；`(organizationId, payoutRef)` 与 `(organizationId, id)` 复合唯一键；审计全留痕 |
 | 测试覆盖 | `recovery-confirmation-db.test.ts` 跨租户拒绝用例（I1）与 `claim-tracking-service-db.test.ts` 跨租户写路径用例 |
 | 残余风险 | 绕过应用层的直接写库（外部 ETL、管理员手写 SQL、运维工具）可写入跨租户引用，数据库层不会拦截 |
-| 重新评估条件 | 一旦开放 DB 级写入通道（外部 ETL / 管理员 SQL 工具 / 数据导入作业），必须重新评估并补 `cc_tenant_RecoveryPayout`（27 → 28，同步 CI 断言） |
+| 重新评估条件 | 一旦开放 DB 级写入通道（外部 ETL / 管理员 SQL 工具 / 数据导入作业），必须重新评估并补 `cc_tenant_RecoveryPayout`（届时 28 → 29，同步 CI 断言） |
+
+### 5.6 KillSwitchRequest 的租户触发器（登记事实，MSG-20260929-59）
+
+`KillSwitchRequest`（控制面请求表）在 `20260930090000_kill_switch_request` 中挂上第 28 个 `cc_tenant%` 触发器 `cc_tenant_kill_switch_request`。
+
+与既有 27 个的差异必须明确登记：本表唯一外键指向**租户根 `Organization`**，表内没有跨表 tenant 引用，因此触发器调用既有函数 `crossclaim_assert_tenant_integrity()` 时**不带 `TG_ARGV` 参数对**（按 MSG-20260929-59 的要求不新建函数）。
+
+其保护效力来自：FK → `Organization`、`(organizationId, id)` 复合唯一、`(organizationId, idempotencyKey)` 幂等唯一、部分唯一索引 `kill_switch_request_pending_unique`，以及应用层租户过滤。若后续需要更强的数据库级闭合（例如 `requestedBy` / `confirmedBy` 必须是该租户成员），属**租户隔离语义变更**，需单独经架构方批准。
 
 ## 六、Adapter 契约
 

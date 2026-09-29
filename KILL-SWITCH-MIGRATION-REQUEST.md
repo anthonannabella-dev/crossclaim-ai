@@ -1,4 +1,8 @@
-# SCHEMA MIGRATION REQUEST — KillSwitchRequest（请求批准；**未执行**）
+# SCHEMA MIGRATION REQUEST — KillSwitchRequest（请求批准；**已执行**）
+
+> **状态：已执行。** MSG-20260929-59（RESULT: GO / STATUS: MIGRATION APPROVED）批准后执行：
+> 迁移 `20260930090000_kill_switch_request`；结果见 `KILL-SWITCH-MIGRATION-APPLIED.md`。
+> 本文件 §2 的 DDL 为已批准原文，执行时按 §2 末尾说明把触发器函数名替换为既有函数名。
 
 > 依据架构方 **MSG-20260929-58**：Delta R2 = PASS / SCHEMA DESIGN APPROVED；**NEXT: SCHEMA MIGRATION REQUEST REVIEW**。
 > 本文件只列出将要执行的 DDL 与影响面。**在获得 Migration Approval 前，不修改 `schema.prisma`、不生成迁移、不部署。**

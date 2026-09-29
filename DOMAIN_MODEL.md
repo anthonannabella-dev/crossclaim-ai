@@ -5,7 +5,7 @@
 
 ---
 
-## 一、模型总览（37 个 = 34 个核心模型 + 3 个联结模型）
+## 一、模型总览（38 个 = 35 个核心模型 + 3 个联结模型）
 
 > **口径统一**：**29 个核心模型**（架构章程 §六 的清单 + C-0006-A 的 `CanonicalFact` + C-0006-B1 的 `RuleEvaluationShadow` + C-0008-A 的 `Session`、`UserInvitation`）**+ 2 个联结模型 `CaseEvidence`、`CanonicalFactSource`**。
 > README、本文、PR 描述、架构契约测试全部按此口径，不允许 29/31 混用。
@@ -125,6 +125,12 @@
 |---|---|
 | `AuditLog` | 全链路留痕（actorType：USER / SYSTEM / AI / EXTERNAL） |
 
+### 控制面（Kill Switch 变更请求，MSG-20260929-59）
+
+| 模型 | 说明 |
+|---|---|
+| `KillSwitchRequest` | 控制面请求事实（开启 `PENDING_ENABLE → APPLIED`；拉闸 `DISABLED → APPLIED`）。只记请求，不承载资金语义，也不触碰 Claim / Settlement / Billing |
+
 ### 联结模型
 
 | 模型 | 说明 |
@@ -217,7 +223,7 @@ DRAFT → SUBMITTED → ACKNOWLEDGED →
 |---|---|
 | 校验函数 | `crossclaim_assert_tenant_integrity()` |
 | 迁移 | `20260928060000_tenant_integrity/migration.sql` |
-| 覆盖 | **17 张**有跨表引用的 tenant-owned 表 |
+| 覆盖 | **24 张** tenant-owned 表 / **28 个** `cc_tenant%` 触发器（CI 逐次断言数量） |
 
 另外两类**规则所有权**约束（同属数据库级强制）：
 
@@ -312,7 +318,7 @@ BillingInvoice（CrossClaim 向客户开票）
 - 所有迁移**必须可重复执行**，破坏性 DDL 必须显式说明
 - 每次 schema 变更必须同步更新本文件
 - fresh clone 必须能跑通：`apps/api` → `npm ci` → `npx prisma migrate deploy`
-- **CI 会在全新 PostgreSQL 上真实执行迁移**，并校验 27 个租户触发器存在
+- **CI 会在全新 PostgreSQL 上真实执行迁移**，并校验 28 个租户触发器存在
 
 当前迁移：
 
@@ -333,6 +339,10 @@ BillingInvoice（CrossClaim 向客户开票）
 | `20260929030000_payment_attempt_payment_link` | C-0010-B2 追加：`paymentId` 链路（+1 → 22） |
 | `20260929040000_payment_attempt_guards` | C-0010-B2 REVISE：`SUCCEEDED` 必须有 paymentId（CHECK）+ 成功后不可改写（BEFORE UPDATE 触发器；非租户触发器，计数不变） |
 | `20260929050000_claim_item` | C-0011：ClaimItem / ClaimItemEvidence（+5 → 27） |
+| `20260929060000_claim_source_fingerprint` | C-0013-A：ClaimItem.sourceFingerprint + fingerprintVersion（部分唯一索引；触发器不变） |
+| `20260929070000_claim_tracking_delta` | MSG-20260929-23：Claim 到期 / 终局 / 平台案件号（S1–S5；触发器不变） |
+| `20260929080000_recovery_confirmation_delta` | MSG-20260929-26：Settlement 双状态轴 + RecoveryPayout（触发器不变） |
+| `20260930090000_kill_switch_request` | MSG-20260929-59：KillSwitchRequest / KillSwitchTarget / KillSwitchRequestState（+1 租户触发器 → **28**） |
 
 ---
 

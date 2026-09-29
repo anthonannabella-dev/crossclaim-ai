@@ -18,7 +18,7 @@
 
 ## 2. 租户隔离与授权
 
-- 所有业务表带 `organizationId`；**27 个数据库触发器**在真实 PostgreSQL 上强制租户完整性
+- 所有业务表带 `organizationId`；**28 个数据库触发器**在真实 PostgreSQL 上强制租户完整性
   （跨租户引用会被数据库拒绝），由 `tenant-isolation.test.ts` 验证。
 - 角色矩阵（`services/workflow/permissions.ts`）：
 

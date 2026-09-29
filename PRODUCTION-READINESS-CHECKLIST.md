@@ -21,7 +21,7 @@
 
 ## B. 数据与 Schema
 
-- [x] 36 模型 / 16 迁移 / 27 租户完整性触发器，CI 校验触发器数量
+- [x] 38 模型 / 19 迁移 / 28 租户完整性触发器，CI 校验触发器数量
 - [x] 幂等以来源指纹 v1 统一（`sourceFingerprint` + `fingerprintVersion`）
 - [ ] 追加 Schema（Claim Tracking / Billing 扩展 / carrier_rules / customs_duty_rates）→ **DESIGN-FIRST（MSG-20）**
 
@@ -46,7 +46,7 @@
 
 - [x] 密码哈希、会话令牌哈希、账号锁定、邀请制
 - [x] 角色矩阵 fail-closed（OWNER/ADMIN/OPS/FINANCE/VIEWER）
-- [x] 租户隔离由数据库触发器强制（27 个）
+- [x] 租户隔离由数据库触发器强制（28 个）
 - [x] 上传内容扫描（可执行/压缩包/PDF/图片伪装/MIME 伪造/NUL）
 - [x] 凭据只以引用名出现；审计不落原始 IP（加盐哈希）
 - [x] 载荷与自由文本的凭据/PII 防线（`NO_SECRET_KEYS` / `NO_SECRET_VALUES` / 邮箱电话拦截）

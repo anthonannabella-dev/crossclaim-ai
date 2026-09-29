@@ -95,11 +95,13 @@ describe('模型清单一致性（C-0002 CHANGE #1）', () => {
     'ClaimItem',
     // MSG-20260929-26：到账事实的唯一来源（Recovery Confirmation Delta）
     'RecoveryPayout',
+    // MSG-20260929-59：Kill Switch 变更请求（控制面；Schema Migration Request 已批准）
+    'KillSwitchRequest',
   ];
   const JOIN_MODELS = ['CaseEvidence', 'CanonicalFactSource', 'ClaimItemEvidence'];
 
   it(`核心模型恰好 ${CORE.length} 个`, () => {
-    expect(CORE).toHaveLength(34);
+    expect(CORE).toHaveLength(35);
     for (const name of CORE) expect(modelBlock(name), `缺少核心模型 ${name}`).not.toBe('');
   });
 
@@ -107,8 +109,8 @@ describe('模型清单一致性（C-0002 CHANGE #1）', () => {
     for (const name of JOIN_MODELS) expect(modelBlock(name), `缺少联结模型 ${name}`).not.toBe('');
   });
 
-  it('模型总数为 37（34 core + 3 join）—— 与 README/DOMAIN_MODEL 表述一致', () => {
-    expect(modelNames()).toHaveLength(37);
+  it('模型总数为 38（35 core + 3 join）—— 与 README/DOMAIN_MODEL 表述一致', () => {
+    expect(modelNames()).toHaveLength(38);
   });
 });
 
@@ -144,6 +146,7 @@ describe('租户归属（C-0002 CHANGE #2）', () => {
     'ClaimItem',
     'ClaimItemEvidence',
     'RecoveryPayout',
+    'KillSwitchRequest',
   ];
 
   it.each(TENANT_OWNED)('%s 带 organizationId', (name) => {
@@ -209,6 +212,9 @@ describe('租户完整性数据库约束（C-0002 CHANGE #3）', () => {
     'FeeCalculation',
     // C-0002 第二次复审 CHANGE #13
     'BillingInvoice',
+    // MSG-20260929-59：控制面表（唯一外键指向租户根 Organization，
+    // 触发器调用既有 crossclaim_assert_tenant_integrity()，无跨表 TG_ARGV 参数对）
+    'KillSwitchRequest',
   ];
 
   it.each(TRIGGERED)('%s 挂了租户校验触发器', (table) => {
@@ -387,5 +393,43 @@ describe('账本只增不改', () => {
     expect(l).toMatch(/voidedAt\s+DateTime\?/);
     expect(l).toMatch(/voidReason\s+String\?/);
     expect(enumBlock('LedgerEntryType')).toContain('REVERSAL');
+  });
+});
+
+// ============================================================
+// MSG-20260929-59：Kill Switch 变更请求 Schema Migration（已批准 DDL）
+// ============================================================
+describe('Kill Switch 变更请求（MSG-20260929-59 / -57）', () => {
+  it('新增 KillSwitchRequest，且幂等键按租户唯一', () => {
+    const r = modelBlock('KillSwitchRequest');
+    expect(r).toMatch(/idempotencyKey\s+String/);
+    expect(r).toMatch(/@@unique\(\[organizationId,\s*idempotencyKey\]\)/);
+    expect(r).toMatch(/@@unique\(\[organizationId,\s*id\]\)/);
+  });
+
+  it('枚举取值与设计一致（target ENABLED|DISABLED；state 四态）', () => {
+    expect(enumBlock('KillSwitchTarget')).toContain('ENABLED');
+    expect(enumBlock('KillSwitchTarget')).toContain('DISABLED');
+    const st = enumBlock('KillSwitchRequestState');
+    for (const s of ['PENDING_ENABLE', 'APPLIED', 'EXPIRED', 'CANCELLED']) expect(st).toContain(s);
+  });
+
+  it('部分唯一索引：同租户同 scope 仅一个 PENDING_ENABLE', () => {
+    expect(ALL_MIGRATIONS_SQL).toMatch(
+      /CREATE UNIQUE INDEX "kill_switch_request_pending_unique"[\s\S]{0,120}WHERE "state" = 'PENDING_ENABLE'/,
+    );
+  });
+
+  it('新增第 28 个租户触发器（沿用既有校验函数，不新建函数）', () => {
+    expect(ALL_MIGRATIONS_SQL).toMatch(
+      /CREATE TRIGGER cc_tenant_kill_switch_request[\s\S]{0,120}ON "KillSwitchRequest"/,
+    );
+    expect(ALL_MIGRATIONS_SQL).toMatch(
+      /ON "KillSwitchRequest"[\s\S]{0,120}EXECUTE FUNCTION crossclaim_assert_tenant_integrity\(\)/,
+    );
+  });
+
+  it('不触碰资金与业务事实模型（只有新增）', () => {
+    expect(modelBlock('KillSwitchRequest')).not.toMatch(/Settlement|RecoveryLedgerEntry|BillingInvoice/);
   });
 });

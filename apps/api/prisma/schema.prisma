@@ -341,6 +341,7 @@ model Organization {
   claimItems        ClaimItem[]
   claimItemEvidences ClaimItemEvidence[]
   recoveryPayouts   RecoveryPayout[]
+  killSwitchRequests KillSwitchRequest[]
 
   @@index([status])
 }
@@ -1454,4 +1455,65 @@ model RecoveryPayout {
   @@unique([organizationId, id])
   @@index([organizationId, receivedAt])
   @@index([organizationId, settlementId])
+}
+
+
+// ============================================================
+// 十二、控制面（Kill Switch 变更请求）—— MSG-20260929-57 / -59
+// ------------------------------------------------------------
+// 已批准范围（MSG-20260929-59 A1）：新表 / 新枚举 / 新索引 / 新租户触发器 /
+// Organization 反向关系。**不修改** Claim / Settlement / Billing / Submission /
+// AuditLog 既有字段，也不引入任何自动动作。
+//
+// 语义（MSG-20260929-57 D1/D4 + MSG-20260929-56）：
+//   · 开启：PENDING_ENABLE →（另一 OWNER/ADMIN 确认）→ APPLIED
+//   · 拉闸：target=DISABLED 直接落 APPLIED（无 pending 阶段）
+//   · 终态不可回退（APPLIED / EXPIRED / CANCELLED）
+//   · 本表只记录控制面请求事实；资金与业务事实（Settlement / Ledger / Billing）零触碰
+// ============================================================
+
+enum KillSwitchTarget {
+  ENABLED
+  DISABLED
+}
+
+/// 请求生命周期。APPLIED / EXPIRED / CANCELLED 为终态。
+enum KillSwitchRequestState {
+  PENDING_ENABLE
+  APPLIED
+  EXPIRED
+  CANCELLED
+}
+
+model KillSwitchRequest {
+  id             String                 @id @default(uuid())
+  organizationId String
+  /// 目标作用域（例如 "global" / 通道名）；同租户同 scope 只允许一条 PENDING_ENABLE
+  scope          String
+  target         KillSwitchTarget
+  state          KillSwitchRequestState @default(PENDING_ENABLE)
+  reasonCode     String
+  /// 运营用途（≤200 字符，拒绝凭据样式）；审计快照另存于 AuditLog.changes
+  note           String?
+  /// actorUserId（同租户成员）
+  requestedBy    String
+  requestedAt    DateTime               @default(now())
+  /// requestedAt + 15min；过期后不得确认（惰性置 EXPIRED）
+  expiresAt      DateTime
+  /// 仅另一 OWNER/ADMIN 可确认；服务端强制 confirmedBy !== requestedBy
+  confirmedBy    String?
+  confirmedAt    DateTime?
+  /// 实际落地时间（target=DISABLED 的请求直接带此时间落 APPLIED）
+  appliedAt      DateTime?
+  /// 幂等键：同租户重复提交返回首次结果，不重复写审计
+  idempotencyKey String
+  createdAt      DateTime               @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, idempotencyKey])
+  @@unique([organizationId, id])
+  /// 普通索引（「同 scope 仅一个 PENDING_ENABLE」由迁移中的部分唯一索引保证）
+  @@index([organizationId, scope, state])
+  @@index([expiresAt])
 }
