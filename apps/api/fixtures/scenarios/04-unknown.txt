@@ -1,0 +1,2 @@
+%% this is neither csv nor json nor xlsx nor pdf; it is a deliberately unparseable blob %%
+<<binary-ish payload>>

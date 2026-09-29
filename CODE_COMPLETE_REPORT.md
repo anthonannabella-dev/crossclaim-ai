@@ -131,9 +131,9 @@ CI 三作业（api / web / license-gate）。
 | O1 | 补 `DEPLOYMENT.md` / `SECURITY.md` / `OPERATIONS.md` | 文档 | 本轮完成 |
 | O2 | 修 README 计数漂移（75/679 → 76/688）与文档索引 | 文档 | 本轮完成 |
 | O3 | 新增 `prisma/seed.ts` + `db:seed`（合成数据，幂等，禁生产） | 数据/开发环境 | 本轮完成 |
-| O4 | 合成 fixture 场景包（失败/边界 14 类） | 测试数据 | 待办 |
-| O5 | 失败模式矩阵测试（429 / 超时 / 部分成功 / 重试耗尽 / 超大文件） | 测试 | 待办 |
-| O6 | 批量与性能场景测试（1 万行导入） | 测试 | 待办 |
+| O4 | 合成 fixture 场景包（失败/边界 14 类） | 测试数据 | **完成**：`apps/api/fixtures/scenarios/`（8 个 fixture + README） |
+| O5 | 失败模式矩阵测试（429 / 超时 / 部分成功 / 重试耗尽 / 超大文件） | 测试 | **完成**：`validation-run-scenarios.test.ts` 14 用例全绿；connector 侧复核 RATE_LIMITED / retry+backoff / partial pull / DATABASE_TIMEOUT 已由 `acquisition`、`adapter`、`sync-runner`、`workflow-payment-attempt` 覆盖 |
+| O6 | 批量与性能场景测试（1 万行导入） | 测试 | **部分完成**：适配层 1 万行 smoke（阈值 20s）已绿；DB 导入链路的 1 万行基准仍待补 |
 | O7 | HTTP 契约测试与 `API.md` 对齐核查 | 测试 | 待办 |
 | O8 | 审计动作覆盖率核查（关键动作是否都有审计） | 审计 | 待办 |
 | O9 | 可观测性补强评估（metrics 端点 / job 状态） | 运维 | 待办 |

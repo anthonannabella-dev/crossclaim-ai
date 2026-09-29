@@ -1,0 +1,5 @@
+Order ID,Tracking Number,Invoice Number,Billed Amount,Billed Currency,Invoice Amount,Note
+112-000000-0005,1Z0000000000000005,INV-0005,0.0000,USD,0.0000,zero amount
+112-000000-0006,1Z0000000000000006,INV-0006,-12.3400,USD,-12.3400,negative amount
+112-000000-0007,1Z0000000000000007,INV-0007,999999999999.9999,USD,999999999999.9999,very large amount
+112-000000-0008,1Z0000000000000008,INV-0008,1.0000,CNY,1.0000,"中文备注 / emoji 🚚 / very long text ____________________________________________________________________________________________"

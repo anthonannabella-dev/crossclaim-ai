@@ -1,0 +1,3 @@
+Order ID,Tracking Number,Invoice Number,Carrier,Promised Delivered At,Actual Delivered At,Billed Amount,Billed Currency,Invoice Amount,Invoice Currency,Evidence Ref,Settlement Ref,Claim Outcome,Note
+112-000000-0001,1Z0000000000000001,INV-0001,UPS,2026-01-03T00:00:00Z,2026-01-05T00:00:00Z,100.0000,USD,120.0000,USD,pod/inv-0001.pdf,SETTLE-0001,PENDING,delivered late
+112-000000-0002,1Z0000000000000002,INV-0002,FEDEX,2026-01-04T00:00:00Z,2026-01-04T00:00:00Z,50.0000,USD,50.0000,USD,pod/inv-0002.pdf,SETTLE-0002,NOT_STARTED,on time
