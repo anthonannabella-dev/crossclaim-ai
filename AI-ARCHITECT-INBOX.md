@@ -53626,3 +53626,391 @@ Implementation Checkpoint + Adapter Reports
 
 两个 Step 1 设计都符合当前架构路线，可以继续实施。
 ```
+
+### [MSG-20260929-15] C0015-STEP1-IMPLEMENTATION 裁决：PASS（参照数据层正式收口，STATUS = REFERENCE_DATA_LAYER_READY）——承运商与关税两份参照数据适配器实现符合 MSG-20260929-14 批准范围：只做文件解析 / 白名单映射 / 生效窗口 / 版本材料 / 校验报告 / quarantine，并确认离线可复现（offline reproducibility）；无 schema、rules、money、claims、API、OCR、external actions 变化；下一步回到 VALIDATION-RUN HARNESS）
+
+Codex 提交 C0015-STEP1-IMPLEMENTATION（参照数据适配器实现 + 26 用例 + 两份 Implementation Checkpoint，HEAD 6fa0e69，CI 三作业 SUCCESS）后，架构方判定 PASS。以下为该回复的**逐字原文**。
+
+```text
+C0015-STEP1-IMPLEMENTATION 裁决
+结论：PASS ✅
+
+状态：
+
+纯文本
+GATE:
+7 Commercial Validation
+
+CHECKPOINT:
+C0015 STEP1 Reference Data Adapters
+
+DECISION:
+PASS_CLOSE
+
+STATUS:
+REFERENCE_DATA_LAYER_READY
+审计结论
+
+本次实现符合 MSG-20260929-14 批准范围。
+
+没有发现：
+
+Schema 变更
+数据库写入
+规则判断
+金额计算
+Claim 生成
+API 接入
+OCR 引入
+外部动作
+
+范围控制正确。
+
+一、架构边界检查 ✅
+
+实际流程：
+
+纯文本
+Reference File
+
+↓
+
+Parser
+
+↓
+
+Whitelist Mapping
+
+↓
+
+Window Validation
+
+↓
+
+Normalized Artifact
+
+↓
+
+Validation Report
+
+符合 Step 1 定义。
+
+没有提前进入：
+
+纯文本
+Reference Data
+
+↓
+
+Business Decision
+
+↓
+
+Recovery Amount
+二、关键实现审计
+1. sourceSha256 + rowHash
+
+通过。
+
+这是后续审计链需要的基础。
+
+当前形成：
+
+纯文本
+source file identity
+
++
+
+row level identity
+
++
+
+artifact version
+
+符合可追溯要求。
+
+2. 缺必需列处理
+
+通过。
+
+修正方向正确：
+
+原：
+
+纯文本
+missing header
+
+↓
+
+row error
+
+错误。
+
+修正：
+
+纯文本
+missing header
+
+↓
+
+file-level quarantine
+
+正确。
+
+因为缺少结构前提时，不应生成半可信工件。
+
+3. 日期歧义处理
+
+通过。
+
+例如：
+
+纯文本
+03/04/2026
+
+↓
+
+INVALID_DATE
+
+正确。
+
+不要自动推断：
+
+MM/DD
+DD/MM
+
+否则会污染历史规则基础。
+
+4. 生效窗口冲突
+
+通过。
+
+当前：
+
+纯文本
+Overlap
+
+↓
+
+AMBIGUOUS_WINDOW
+
+↓
+
+Human Review
+
+正确。
+
+禁止：
+
+最新覆盖旧
+最大优先级
+自动合并
+5. 费率刻度保护
+
+通过。
+
+保持：
+
+纯文本
+0.125
+
+↓
+
+AMBIGUOUS_RATE_SCALE
+
+
+正确。
+
+这是高风险错误来源。
+
+6. Customs HS Code 处理
+
+通过。
+
+允许：
+
+纯文本
+format normalization
+
+禁止：
+
+纯文本
+classification inference
+
+当前符合。
+
+7. 301 exclusion 三态
+
+通过。
+
+正确：
+
+纯文本
+true
+false
+unknown
+
+不要压缩成 boolean。
+
+因为：
+
+未知 ≠ false。
+
+三、已知限制审计
+XLSX 第一 Sheet
+
+接受。
+
+当前阶段：
+
+无需扩展。
+
+记录即可。
+
+未来如果真实客户文件出现：
+
+多 Sheet 才进入需求。
+
+Carrier 名称归一
+
+接受。
+
+当前：
+
+纯文本
+trim + case normalization
+
+足够。
+
+不要提前建立：
+
+FedEx/Federal Express
+
+UPS/United Parcel Service
+
+这种业务字典。
+
+四、测试覆盖
+
+通过：
+
+纯文本
+26/26 PASS
+
+Carrier:
+12
+
+Customs:
+12
+
+Bypass:
+2
+
+覆盖关键风险：
+
+结构错误
+数据错误
+歧义
+幂等
+PDF边界
+
+满足当前阶段。
+
+当前状态更新
+
+C-0015 当前：
+
+纯文本
+C-0015
+
+├── Shopify File Adapter
+│   PASS
+│
+├── Carrier Reference Adapter
+│   PASS
+│
+├── Customs Reference Adapter
+│   PASS
+│
+├── Real Connector
+│   HOLD
+│
+├── Rule Engine
+│   HOLD DESIGN REQUIRED
+│
+├── Payment Loop
+│   HOLD
+│
+└── External Submission
+    FORBIDDEN
+下一步建议（非强制）
+
+现在离线基础层已经较完整。
+
+下一步最有价值的是：
+
+C-0009.2 VALIDATION-RUN HARNESS
+
+把：
+
+Shopify 文件
+Carrier reference
+Customs reference
+
+统一进入：
+
+纯文本
+Input
+ ↓
+Adapter
+ ↓
+Reference Artifact
+ ↓
+Validation Report
+ ↓
+Commercial Review Skeleton
+
+但仍不要进入：
+
+Rule Evaluation
+Recovery Amount
+Claim
+归档
+Markdown
+### [MSG-20260929-15]
+
+TYPE:
+IMPLEMENTATION CHECKPOINT DECISION
+
+TARGET:
+C0015 STEP1 REFERENCE DATA ADAPTERS
+
+DECISION:
+PASS_CLOSE
+
+Validated:
+- carrier reference adapter
+- customs reference adapter
+- versioned artifacts
+- validation reports
+- quarantine handling
+- ambiguity protection
+- offline reproducibility
+
+No changes:
+- schema
+- rules
+- money
+- claims
+- API
+- OCR
+- external actions
+
+STATUS:
+REFERENCE_DATA_LAYER_READY
+
+NEXT:
+VALIDATION-RUN HARNESS
+
+本阶段可以收口。实现质量符合当前 Gate 7 边界。
+```
