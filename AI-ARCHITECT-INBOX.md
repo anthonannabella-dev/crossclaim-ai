@@ -58652,3 +58652,409 @@ NEXT:
 
 Recovery Confirmation 模块可以正式收口。下一步进入运营产品化层。
 ```
+
+### [MSG-20260929-29] OPERATIONS-DASHBOARD-DESIGN 裁决：GO ✅（GO_WITH_MINOR_REVISE / READY_FOR_IMPLEMENTATION）——总体设计通过（Dashboard = Projection，不成为事实源、不改资金链路、不改 Claim 生命周期、不触碰自动提交）；D1 REVISE：待回执不得用 dueAt 判断，改为 status IN (SUBMITTED, ACKNOWLEDGED) 且无 response event（用 AuditLog/事件投影判断，不新增字段）；D2 HOLD：v1 不做 Case 聚合层（未来另开 CASE-VIEW-DESIGN）；D3 GO：window 参数化，默认 7d、上限 30d；另要求「待确认」更名为 Draft / 待提交确认、金额裁剪需覆盖 VIEWER/FINANCE/OWNER、并新增「dashboard 不得成为写入口」验收；实现边界：允许 GET 端点 + Projection service + 权限裁剪 + 游标分页 + 查询测试，禁止新事实表/写路径/自动动作/规则判断扩展/Billing 修改
+
+本轮为 OPERATIONS-DASHBOARD-DESIGN 的裁决：GO_WITH_MINOR_REVISE，D1 需改待回执判定、D2 HOLD、D3 窗口参数化；随后可进入实现。
+
+```text
+OPERATIONS-DASHBOARD-DESIGN 裁决
+总体结论：GO ✅（小调整后进入实现）
+
+状态：
+
+纯文本
+
+GATE:
+7 Commercial Validation
+
+TARGET:
+Operations Dashboard Design
+
+DECISION:
+GO_WITH_MINOR_REVISE
+
+STATUS:
+READY_FOR_IMPLEMENTATION_AFTER_D1-D3_ADJUSTMENT
+一、整体设计审计
+
+通过。
+
+该设计符合当前 Production Candidate 原则：
+
+Dashboard = Projection
+不成为事实源
+不新增业务状态
+不修改资金链路
+不改变 Claim 生命周期
+不触碰自动提交
+
+方向正确。
+
+二、核心原则确认
+1. 看板不可写入事实
+
+通过 ✅
+
+必须保持：
+
+纯文本
+Business Fact
+
+↓
+
+AuditLog / Domain Data
+
+↓
+
+Dashboard Projection
+
+
+禁止：
+
+纯文本
+Dashboard Action
+
+↓
+
+直接修改 Claim / Settlement
+2. 金额字段裁剪
+
+通过 ✅
+
+特别认可：
+
+无权限不是返回 0，而是不返回金额字段。
+
+正确。
+
+否则：
+
+纯文本
+amount: 0
+
+可能造成：
+
+信息泄露
+业务误解
+三、D1 裁决：待回执定义
+
+原设计：
+
+纯文本
+ACKNOWLEDGED AND dueAt IS NULL
+裁决：
+REVISE 🔶
+
+调整为：
+
+纯文本
+待回执：
+
+SUBMITTED
++
+ACKNOWLEDGED
+
+且：
+
+没有 response event
+
+不要用 dueAt 判断。
+
+原因：
+
+dueAt 表示：
+
+截止时间
+
+不是：
+
+是否收到平台回执
+
+存在：
+
+纯文本
+SUBMITTED
++
+dueAt = 2026-10-10
+
+但平台完全没有回复。
+
+它应该属于：
+
+待回执。
+
+建议：
+
+读取：
+
+AuditLog / Claim event 投影判断。
+
+不要新增字段。
+
+四、D2 裁决：Case 聚合层
+结论：
+HOLD（暂不做）✅
+
+第一版：
+
+保持：
+
+纯文本
+租户级 Dashboard
+
++
+
+Bucket 明细
+
+即可。
+
+原因：
+
+当前目标：
+
+验证运营闭环。
+
+不是构建 BI 系统。
+
+Case 聚合需要进一步明确：
+
+一个 Claim 多 Case？
+一个 Case 多 Claim？
+平台案件号如何归并？
+
+目前：
+
+platformCaseRef 已有。
+
+但聚合语义还不足。
+
+未来单独：
+
+纯文本
+CASE-VIEW-DESIGN
+
+处理。
+
+五、D3 裁决：窗口 W
+结论：
+GO：参数化，但限制范围
+
+批准：
+
+纯文本
+window 参数
+
+默认：
+
+纯文本
+7d
+
+最大：
+
+纯文本
+30d
+
+原因：
+
+运营场景不同：
+
+日常运营看 7 天
+周会看 14/30 天
+
+约束：
+
+禁止：
+
+纯文本
+window=3650
+
+造成大扫描。
+
+六、指标审计
+Claim Pipeline
+
+通过。
+
+需要调整一处：
+待确认
+
+当前：
+
+纯文本
+status=DRAFT
+
+可以。
+
+但建议名称不要叫：
+
+“待确认”。
+
+因为 DRAFT 更接近：
+
+“未提交”。
+
+建议 UI 语义：
+
+纯文本
+Draft / 待提交确认
+
+避免误解。
+
+Recovery 指标
+
+通过。
+
+尤其：
+
+纯文本
+Received
+=
+SUM(RecoveryPayout)
+
+正确。
+
+Outstanding / Variance
+
+通过。
+
+但必须明确：
+
+都是：
+
+Projection。
+
+不是：
+
+Settlement 写回。
+
+七、查询设计
+
+通过。
+
+游标：
+
+批准：
+
+纯文本
+(dueAt,id)
+
+(occurredAt,id)
+单页：
+
+100
+
+合理。
+
+organizationId 强制注入
+
+必须保持。
+
+八、实现阶段要求增加两项验收
+
+原有验收通过。
+
+新增：
+
+1.
+
+Dashboard 不得成为写入口：
+
+测试：
+
+纯文本
+GET dashboard
+
+no mutation
+2.
+
+金额裁剪测试：
+
+至少覆盖：
+
+纯文本
+VIEWER
+
+FINANCE
+
+OWNER
+
+三种。
+
+九、最终裁决归档
+Markdown
+### [MSG-20260929-29]
+
+TYPE:
+DESIGN DECISION
+
+TARGET:
+OPERATIONS-DASHBOARD-DESIGN
+
+DECISION:
+GO_WITH_MINOR_REVISE
+
+
+D1:
+REVISE
+
+Change:
+待回执不要由 dueAt 判断。
+
+Use:
+SUBMITTED/ACKNOWLEDGED
++
+absence of response event
+
+
+D2:
+HOLD
+
+No case aggregation in v1.
+
+
+D3:
+GO
+
+window parameter allowed:
+
+default:
+7d
+
+max:
+30d
+
+
+Approved:
+- projection only
+- read only
+- no new fact tables
+- no payment changes
+- no submission changes
+
+
+STATUS:
+READY_FOR_IMPLEMENTATION
+
+下一步可以进入 Operations Dashboard 实现。
+
+实现边界：
+
+允许：
+
+GET 查询端点
+Projection service
+权限裁剪
+游标分页
+查询测试
+
+禁止：
+
+新事实表
+写路径
+自动动作
+规则判断扩展
+Billing 修改
+
+通过。
+```
