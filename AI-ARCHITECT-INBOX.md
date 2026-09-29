@@ -59058,3 +59058,323 @@ Billing 修改
 
 通过。
 ```
+
+### [MSG-20260929-30] OPERATIONS-DASHBOARD-DESIGN R1 裁决：PASS ✅（READY_FOR_IMPLEMENTATION）——D1 修订通过（待回执 = SUBMITTED/ACKNOWLEDGED 且 respondedAt 为空，dueAt 只用于 deadline 桶；AuditLog 交叉校验异常须标注而非静默修复）；D2 Case 聚合 v1 HOLD 通过（未来 CASE-VIEW-DESIGN）；D3 window 通过（默认 7d，允许 1/7/14/30d，31d+ = INVALID_WINDOW）；命名调整通过（草稿/待提交确认）；两项新增验收通过；实现批准范围：GET endpoint / Projection service / Cursor pagination / Permission projection / Query tests / EXPLAIN 验证；继续禁止新事实表、写路径、自动动作、规则判断、Billing 修改、自动扣佣、自动提交；实现阶段额外三项检查 = 租户隔离（A 不得观测 B）、金额裁剪不得被聚合（total/count/average）绕过、性能边界（EXPLAIN + 索引证明 + 最大分页测试）
+
+本轮为运营看板设计 R1 的复审：PASS / READY_FOR_IMPLEMENTATION，并追加三项实现期检查。
+
+```text
+OPERATIONS-DASHBOARD-DESIGN R1 裁决
+结论：PASS ✅
+
+状态：
+
+纯文本
+
+GATE:
+7 Commercial Validation
+
+TARGET:
+Operations Dashboard Design R1
+
+DECISION:
+PASS
+
+STATUS:
+READY_FOR_IMPLEMENTATION
+一、D1 修订审计：通过 ✅
+
+原问题：
+
+待回执不能依赖 dueAt 判断。
+
+当前修订正确。
+
+采用：
+
+纯文本
+待回执：
+
+status ∈ {
+ SUBMITTED,
+ ACKNOWLEDGED
+}
+
+AND
+
+respondedAt IS NULL
+
+通过。
+
+特别认可两点：
+
+1. respondedAt 作为主事实源
+
+正确。
+
+原因：
+
+dueAt 是时间约束，不是响应事实。
+
+现在分离：
+
+纯文本
+response state
+
+≠
+
+deadline state
+
+符合设计原则。
+
+2. AuditLog 交叉校验
+
+通过。
+
+异常处理：
+
+纯文本
+AuditLog 有 response event
+
+但
+
+respondedAt NULL
+
+↓
+
+有回执 + 数据异常角标
+
+这是正确处理。
+
+不应该静默修复。
+
+二、D2 Case 聚合 HOLD 落实：通过 ✅
+
+确认：
+
+v1 不做：
+
+Case 聚合
+多 Claim 合并视图
+平台 Case BI
+
+保持：
+
+纯文本
+Tenant Dashboard
+
++
+
+Bucket Detail
+
+正确。
+
+未来：
+
+单独：
+
+纯文本
+CASE-VIEW-DESIGN
+三、D3 Window 参数化：通过 ✅
+
+当前：
+
+纯文本
+Allowed:
+
+1d
+7d
+14d
+30d
+
+Default:
+7d
+
+批准。
+
+限制：
+
+纯文本
+31d+
+=
+INVALID_WINDOW
+
+正确。
+
+避免：
+
+全表扫描
+运营误操作
+查询成本失控
+四、命名调整：通过 ✅
+
+修改：
+
+原：
+
+纯文本
+待确认
+
+改：
+
+纯文本
+草稿 / 待提交确认
+
+正确。
+
+因为：
+
+DRAFT 不代表：
+
+“等待别人确认”
+
+而代表：
+
+“尚未进入提交流程”。
+
+五、新增验收项：通过 ✅
+1. Dashboard 不成为写入口
+
+通过。
+
+要求：
+
+纯文本
+GET request
+
+before rows
+
+after rows
+
+updatedAt unchanged
+
+正确。
+
+2. 字段级权限裁剪
+
+通过。
+
+覆盖：
+
+角色	结果
+VIEWER	403
+FINANCE	恢复金额可见，Claim金额隐藏
+OWNER	完整
+
+正确。
+
+六、实现批准范围确认
+
+进入实现。
+
+允许：
+
+✅ GET endpoint
+✅ Projection service
+✅ Cursor pagination
+✅ Permission projection
+✅ Query tests
+✅ EXPLAIN 查询验证
+
+继续禁止：
+
+❌ 新事实表
+❌ Dashboard 写路径
+❌ 自动动作
+❌ 规则判断
+❌ Billing 修改
+❌ 自动扣佣
+❌ 自动提交
+
+七、实现阶段额外要求
+
+除了设计中的验收，再增加三个检查：
+
+1. 查询隔离
+
+必须验证：
+
+纯文本
+Tenant A dashboard
+
+cannot observe
+
+Tenant B claims/recovery
+2. 金额裁剪不可通过聚合绕过
+
+例如：
+
+无权限用户不能通过：
+
+纯文本
+totalRecovered
+count
+average
+
+推导受限金额。
+
+3. Dashboard 性能边界
+
+提交时附：
+
+查询计划（EXPLAIN）
+使用索引证明
+最大分页测试
+最终归档
+Markdown
+
+### [MSG-20260929-30]
+
+TYPE:
+DESIGN RE-REVIEW DECISION
+
+TARGET:
+OPERATIONS-DASHBOARD-DESIGN R1
+
+DECISION:
+PASS
+
+D1:
+PASS
+
+待回执:
+SUBMITTED/ACKNOWLEDGED
++
+respondedAt absent
+
+dueAt only for deadline buckets
+
+
+D2:
+HOLD
+
+No Case aggregation in v1.
+
+
+D3:
+PASS
+
+window:
+default 7d
+allowed:
+1/7/14/30d
+max:
+30d
+
+
+Approved:
+- GET only
+- Projection service
+- Permission filtering
+- Cursor pagination
+
+Additional validation:
+- tenant isolation
+- aggregation leakage prevention
+- EXPLAIN evidence
+
+STATUS:
+READY_FOR_IMPLEMENTATION
+
+可以进入 Operations Dashboard 实现阶段。完成后提交 Implementation Checkpoint。
+```

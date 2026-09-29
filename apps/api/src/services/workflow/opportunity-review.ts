@@ -49,7 +49,9 @@ export type WorkflowErrorCode =
   /** C-0012：人工复核提交的 ruleAmount 与历史规则输出不一致 */
   | 'RULE_AMOUNT_MISMATCH'
   /** C-0013-A：Connector 路径必须至少带 platformRef 或 sourceFingerprint */
-  | 'SOURCE_IDENTITY_REQUIRED';
+  | 'SOURCE_IDENTITY_REQUIRED'
+  /** MSG-20260929-30：运营看板 window 越界（只允许 1d/7d/14d/30d） */
+  | 'INVALID_WINDOW';
 
 export class WorkflowError extends Error {
   readonly code: WorkflowErrorCode;
