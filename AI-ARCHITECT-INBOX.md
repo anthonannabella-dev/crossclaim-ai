@@ -65034,3 +65034,138 @@ CrossClaim AI 已从“开发阶段”进入“真实价值验证阶段”。
 
 下一关键节点不是代码提交，而是第一份真实数据跑出的 Phase 1 Result。
 ```
+
+### [MSG-20260929-47] PHASE1-IDLE-HOUSEKEEPING 裁决：批准合并 GO（5a06194 裁决归档 + c4702ca inbox 投放目录，DOCUMENTATION ONLY；合并后 CI 必须通过；Phase 1 保持 WAITING_REAL_DATA）
+
+```text
+PHASE1-IDLE-HOUSEKEEPING 裁决
+结论：批准合并 GO ✅
+
+批准：
+
+纯文本
+gate/7-commercial-validation
+        ↓
+      main
+
+合并：
+
+5a06194（裁决归档文档）
+c4702ca（inbox 投放目录说明）
+
+均属于：
+
+纯文本
+DOCUMENTATION ONLY
+
+不涉及：
+
+代码逻辑
+Schema
+Migration
+权限
+API 行为
+生产流程
+
+因此允许快进合并。
+
+合并约束保持
+
+继续遵守：
+
+✅ fast-forward 优先
+✅ 不 force push
+✅ 不绕过 branch protection
+✅ 合并后 CI 必须通过
+
+如果 GitHub protection 后续阻止，则按：
+
+纯文本
+MERGE TECHNICALLY BLOCKED BY GITHUB PROTECTION
+
+反馈即可。
+
+Phase 1 当前状态确认
+
+合并后状态：
+
+纯文本
+CrossClaim AI
+
+MAIN:
+等待更新
+
+CODE:
+Production Candidate
+
+PHASE1:
+WAITING_REAL_DATA
+
+RD-01:
+NOT_RECEIVED
+inbox 方案确认
+
+D:\crossclaim-ai\inbox\
+
+这个方向正确。
+
+保持：
+
+纯文本
+inbox/
+ ├ README.md
+ └ *.csv/*.xlsx (ignored)
+
+原因：
+
+真实客户数据：
+
+不进入 Git
+不进入 CI
+不进入代码仓库历史
+
+符合数据隔离要求。
+
+下一阶段无需继续开发
+
+等待：
+
+RD-01 Shopify 数据。
+
+收到数据后执行：
+
+纯文本
+Stage A
+Import Integrity
+    ↓
+Stage B
+Candidate Discovery
+    ↓
+Stage C
+Human Verification
+    ↓
+PHASE1-RESULT.md
+Phase 1 当前冻结状态再次确认
+
+保持：
+
+能力	状态
+Shopify 文件验证	READY
+Amazon 文件验证	READY
+物流账单验证	READY
+平台 API	HOLD
+自动 Claim	FORBIDDEN
+自动扣佣	HOLD
+自动资金动作	HOLD
+追回金额自动判断	HOLD
+HS Code 判断	HOLD
+SLA 自动索赔	HOLD
+
+裁决完成：
+
+5a06194 + c4702ca 批准合并。
+
+下一事件等待：
+
+宿主投放第一份 RD-01 Shopify 脱敏导出文件。
+```
