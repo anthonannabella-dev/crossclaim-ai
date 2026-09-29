@@ -213,4 +213,66 @@ describe('P2-4 Validation Runbook — Stage 0 入场前置检查（preflight，�
     expect(result.blockingChecks).toEqual(['non-empty']);
   });
 });
+describe('P2-4 Validation Runbook — Stage 0 边界用例（MSG-20260930-02 授权范围）', () => {
+  const now = '2026-09-30T00:00:00.000Z';
+
+  function build(rows: string[]) {
+    return ['order_id,occurred_at,amount,currency', ...rows].join('\n');
+  }
+
+  it('17 超大 CSV（50,000 行）→ 只读检查在时限内完成且行数准确（性能边界）', () => {
+    const rows: string[] = [];
+    for (let index = 1; index <= 50_000; index += 1) {
+      rows.push(`BULK-${index},2026-09-01T00:00:00Z,120.50,JPY`);
+    }
+    const startedAt = Date.now();
+    const result = (tool.preflightDataset as any)({ text: build(rows), now });
+    const elapsedMs = Date.now() - startedAt;
+    expect(result.verdict).toBe('READY_FOR_STAGE_A');
+    expect(result.rowCount).toBe(50_000);
+    expect(result.blockingChecks).toEqual([]);
+    expect(elapsedMs).toBeLessThan(15_000); // 只读结构检查：50k 行不应退化到分钟级
+  });
+
+  it('18 空字段（amount/currency 为空）→ 当前不阻断（Stage 0 只做结构/列名；数值语义留给 Stage A 数据质量）', () => {
+    const result = (tool.preflightDataset as any)({
+      text: build(['EMPTY-1,2026-09-01T00:00:00Z,,', 'EMPTY-2,2026-09-02T00:00:00Z,,']),
+      now,
+      minRows: 2,
+    });
+    // 记录当前边界：不猜测金额、不因空值自动判定为“数据可用”
+    expect(result.blockingChecks).toEqual([]);
+    expect(result.verdict).toBe('READY_FOR_STAGE_A');
+    expect(result.checks.find((check: { name: string }) => check.name === 'required-columns').ok).toBe(true);
+  });
+
+  it('19 Decimal 精度：金额文本原样保留，Stage 0 不做任何四舍五入或运算', () => {
+    const csv = build([
+      'DEC-1,2026-09-01T00:00:00Z,12345678.123456,JPY',
+      'DEC-2,2026-09-02T00:00:00Z,0.000001,JPY',
+    ]);
+    const result = (tool.preflightDataset as any)({ text: csv, now, minRows: 2 });
+    expect(result.verdict).toBe('READY_FOR_STAGE_A');
+    expect(csv).toContain('12345678.123456');
+    expect(csv).toContain('0.000001');
+    // 只读契约：preflight 不返回任何金额计算结果
+    expect(Object.keys(result)).not.toContain('amount');
+    expect(JSON.stringify(result)).not.toContain('12345678.123456');
+  });
+
+  it('20 多币种混排 → 结构检查不阻断（币种一致性属 Stage A/DATA-QUALITY，不由 Stage 0 猜测）', () => {
+    const result = (tool.preflightDataset as any)({
+      text: build([
+        'CUR-1,2026-09-01T00:00:00Z,100.00,JPY',
+        'CUR-2,2026-09-01T00:00:00Z,100.00,USD',
+        'CUR-3,2026-09-01T00:00:00Z,100.00,EUR',
+      ]),
+      now,
+      minRows: 3,
+    });
+    expect(result.verdict).toBe('READY_FOR_STAGE_A');
+    expect(result.blockingChecks).toEqual([]);
+  });
+});
+
 
