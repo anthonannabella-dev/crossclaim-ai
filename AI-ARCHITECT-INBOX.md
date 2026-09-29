@@ -73294,3 +73294,285 @@ PHASE1 REAL DATA VALIDATION CHECKPOINT
 
 收到真实脱敏数据后，严格按 Runbook 执行，不提前判断商业价值。
 ```
+
+### [MSG-20260930-01] PHASE 1 DATA INTAKE PREP - CHECKPOINT 裁决：RESULT: PASS_CLOSE / STATUS: PHASE 1 DATA INTAKE PREP = ACCEPTED / STAGE 0 PREFLIGHT = PASS / REAL DATA VALIDATION: WAITING_HOST_DATA / NEXT: PHASE1 REAL DATA VALIDATION CHECKPOINT（Q1 接受本次 Prep 提交：本次提交定位为 Data Arrival Layer -> Stage 0 Preflight -> Stage A Import Integrity，没有提前产生商业结论，符合冻结原则 CODE READY ≠ BUSINESS VALIDATED / Candidate ≠ Claim / 数据异常 ≠ 追回机会；Stage 0 设计确认通过：① 不自动映射字段 PASS——平台导出 Order ID / Created At / Total Price / Buyer Name 只能输出 alias hint，不能自动转换 Order ID → order_id（字段映射本身属于事实解释）② PII 扫描策略接受当前 v1 范围（按列名保守扫描，不读取数据内容、不产生隐私暴露、可审计；后续生产化可另开 DATA PRIVACY REVIEW，不要在 Phase 1 混入）③ 阻断规则通过（non-empty / header-present / required-columns / min-rows >=500 / no-pii-columns / no-ragged-rows / unique-order-id / dates-parsable，符合「垃圾输入不能进入验证流程」）；Q2 接受 MSG-30 用例 09 调整（旧断言必须命中特定索引名属测试绑定实现细节，风险是数据库 planner 有自由选择权；调整后为目录证据（索引存在，如 organizationId / status / dueAt）+ 计划证据（Index Scan / Index Only Scan 而不是 Seq Scan），更符合「验证查询能力，而不是强迫 PostgreSQL 选择某个名字」）；验证结果确认（Prisma validate PASS / TypeScript PASS / API 115 files 1100 tests / CI 5 作业 PASS）；下一步冻结：收到数据后只执行 Stage 0 preflight -> Stage A Import/Normalize/Validate/Quarantine/Reject -> 产出 IMPORT-REPORT.md + DATA-QUALITY-REPORT.md -> Stage B Candidate >=10 -> Stage C 人工 >=5 -> PHASE1-RESULT.md -> 裁决 PASS_TO_MVP / CONTINUE_DATA_COLLECTION / STOP_REWORK；不允许提前做（Claim 提交 / Appeal / 自动追回 / 自动金额计算承诺 / 自动收费 / Action Guard / 平台 API 真连接）；最终状态 Engineering PASS / Security PASS / Production Candidate ACCEPTED / Data Intake READY / Real Customer Validation WAITING_HOST_DATA，可以等待宿主数据，不需要继续扩展代码功能）
+
+```text
+复核 PHASE 1 DATA INTAKE PREP - CHECKPOINT。
+
+裁决：
+
+纯文本
+RESULT: PASS_CLOSE
+
+STATUS:
+PHASE 1 DATA INTAKE PREP = ACCEPTED
+
+STAGE 0 PREFLIGHT = PASS
+
+REAL DATA VALIDATION:
+WAITING_HOST_DATA
+
+NEXT:
+PHASE1 REAL DATA VALIDATION CHECKPOINT
+Q1：接受本次 Prep 提交
+
+批准。
+
+本次提交定位正确：
+
+不是 Phase 1 验证本身，而是：
+
+纯文本
+Data Arrival Layer
+        ↓
+Stage 0 Preflight
+        ↓
+Stage A Import Integrity
+
+没有提前产生商业结论。
+
+符合之前冻结原则：
+
+CODE READY ≠ BUSINESS VALIDATED
+Candidate ≠ Claim
+数据异常 ≠ 追回机会
+Stage 0 Preflight 设计确认
+
+通过。
+
+尤其以下几点保持：
+
+1. 不自动映射字段
+
+通过。
+
+正确策略：
+
+平台导出：
+
+Order ID
+Created At
+Total Price
+Buyer Name
+
+只能：
+
+输出：
+
+alias hint
+
+不能：
+
+自动转换：
+
+Order ID → order_id
+
+原因：
+
+字段映射本身属于事实解释。
+
+2. PII 扫描策略
+
+接受当前 v1 范围。
+
+目前：
+
+按列名保守扫描。
+
+优点：
+
+不读取数据内容
+不产生隐私暴露
+可审计
+
+后续如果进入生产：
+
+可以另开：
+
+DATA PRIVACY REVIEW
+
+不要在 Phase 1 混入。
+
+3. 阻断规则
+
+通过：
+
+必须：
+
+non-empty
+header-present
+required-columns
+min-rows >=500
+no-pii-columns
+no-ragged-rows
+unique-order-id
+dates-parsable
+
+这符合：
+
+“垃圾输入不能进入验证流程”。
+
+Q2：MSG-30 用例 09 调整接受
+
+批准。
+
+原问题：
+
+旧：
+
+必须命中特定索引名
+
+风险：
+
+数据库 planner 有自由选择权。
+
+属于：
+
+测试绑定实现细节。
+
+调整后：
+
+目录证据
+
+验证：
+
+索引存在。
+
+例如：
+
+organizationId
+status
+dueAt
+计划证据
+
+验证：
+
+Index Scan
+Index Only Scan
+
+而不是：
+
+Seq Scan
+
+这个更符合工程目标：
+
+验证查询能力，而不是强迫 PostgreSQL 选择某个名字。
+
+接受。
+
+验证结果确认
+
+当前：
+
+Prisma validate PASS
+
+TypeScript PASS
+
+API:
+115 files
+1100 tests
+
+CI:
+5/5 PASS
+
+通过。
+
+当前状态更新
+FINAL PRODUCTION GATE
+        PASS
+
+        ↓
+
+PHASE 1 INTAKE PREP
+        PASS_CLOSE
+
+        ↓
+
+WAITING_HOST_DATA
+
+        ↓
+
+Stage A/B/C Validation
+下一步冻结
+
+收到数据后，只执行：
+
+Stage 0
+preflight
+
+↓
+
+Stage A
+Import
+Normalize
+Validate
+Quarantine
+Reject
+
+↓
+
+产出：
+
+IMPORT-REPORT.md
+
+DATA-QUALITY-REPORT.md
+
+↓
+
+Stage B
+Candidate >=10
+
+↓
+
+Stage C
+
+人工：
+
+>=5
+
+↓
+
+PHASE1-RESULT.md
+
+↓
+
+裁决：
+
+PASS_TO_MVP
+CONTINUE_DATA_COLLECTION
+STOP_REWORK
+不允许提前做
+
+保持：
+
+❌ Claim 提交
+❌ Appeal
+❌ 自动追回
+❌ 自动金额计算承诺
+❌ 自动收费
+❌ Action Guard
+❌ 平台 API 真连接
+
+最终状态：
+
+纯文本
+CrossClaim AI
+
+Engineering:
+PASS
+
+Security:
+PASS
+
+Production Candidate:
+ACCEPTED
+
+Data Intake:
+READY
+
+Real Customer Validation:
+WAITING_HOST_DATA
+
+可以等待宿主数据，不需要继续扩展代码功能。
+```
