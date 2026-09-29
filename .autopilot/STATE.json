@@ -9,6 +9,11 @@
   "last_chatgpt_message": "MSG-20260930-08 (ACK)",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-09-29T23:19:08.160Z",
-  "previous_head": "34eac60"
+  "updated_at": "2026-09-29T23:56:26.330Z",
+  "previous_head": "34eac60",
+  "architect_decision_pending": true,
+  "blocked_scope": "RuleEvaluation -> RuleVersion tenant reference isolation",
+  "last_send_head": "b4b61eb",
+  "last_sent_at": "2026-09-29T23:56:26.330Z",
+  "last_sent_fingerprint": "ARCHITECT_DECISION_REQUEST:RuleEvaluation-RuleVersion-tenant-reference"
 }
