@@ -70386,3 +70386,323 @@ READ-ONLY-KILLSWITCH-CONSUMPTION-DESIGN
 
 提交设计稿后继续审。
 ```
+
+### [MSG-20260929-67] READ-ONLY-KILLSWITCH-CONSUMPTION-DESIGN R1 裁决：RESULT: GO_WITH_MINOR_REVISE / STATUS: Read-only Kill Switch Consumption Design = APPROVED / NEXT: Implement read-only consumers only / BOUNDARY: NO Action Guard, NO Business Blocking, NO Runtime Enablement, NO Production Enablement（D1 ACCEPT：Admin Console 仅当前租户（single tenant scope），不做平台级跨租户/全局组织列表/运维超级后台，未来平台视角须单独设计 Platform Operations Console；D2 ACCEPT：/health 探针失败仍 HTTP 200 + killSwitchResolver.status=degraded（resolver 降级 != 服务不可用），但必须区分 liveness 与 readiness；D3 ACCEPT_WITH_REVISE：未来 Action Guard 拒绝写 killswitch.blocked（业务动作尝试执行 + 被拒绝，如 submission.dispatch blocked / reason=global-hard-disabled），不写 resolver read / effective query / dashboard view / health check；blocked 审计禁止记录 token/secret/payload/customer data；D4 REVISE：不要直接向用户展示内部枚举（global-hard-disabled），展示层用人类可读文案（如「已由系统全局安全策略关闭」），OWNER/ADMIN 可展开查看原始 source，OPS 仍仅 scope/value/source；D5 ACCEPT：v1 Admin Console 不提供变更表单（observe only，禁止 enable/disable 按钮、confirmation form、reason input），变更仍只经 POST /admin/kill-switch；实现前两项要求：R1 Consumer Registry 每个 consumer 必须标记 Consumer Type = READ_ONLY 或 ACTION_GUARD（GET /admin/kill-switch、Admin Console、Operations Console、Health = READ_ONLY；Submission Guard、Billing Guard = FUTURE ACTION_GUARD）；R2 保留「Display Only 不影响业务」测试（disabled vs enabled 同一请求结果一致），即 Dashboard 显示关闭但 Business API 行为不变；NEXT: READ-ONLY-KILLSWITCH-CONSUMPTION-DESIGN-R2（只需补：source 展示层与内部值分离、Consumer Registry 增加 READ_ONLY/ACTION_GUARD 分类、blocked audit 边界说明），之后进入 READ-ONLY-KILLSWITCH-CONSUMPTION-IMPLEMENTATION）
+
+```text
+收到 READ-ONLY-KILLSWITCH-CONSUMPTION-DESIGN R1。
+
+裁决：
+
+纯文本
+RESULT: GO_WITH_MINOR_REVISE
+
+STATUS:
+Read-only Kill Switch Consumption Design = APPROVED
+
+NEXT:
+Implement read-only consumers only
+
+BOUNDARY:
+NO Action Guard
+NO Business Blocking
+NO Runtime Enablement
+NO Production Enablement
+
+整体设计符合前面冻结的架构边界。尤其认可：
+
+纯文本
+Resolver
+   ↓
+Display / Health / Future Guard Contract
+
+而不是：
+
+纯文本
+Resolver
+   ↓
+Business Logic
+
+这个边界必须保持。
+
+D1：Admin Console 是否当前租户展示？
+
+裁决：
+
+ACCEPT
+
+保持：
+
+纯文本
+single tenant scope
+
+不做：
+
+平台级跨租户视图
+全局所有组织开关列表
+运维超级后台
+
+原因：
+
+Kill Switch 状态本身属于控制面敏感信息。
+
+未来如果需要平台运维视角：
+
+单独设计：
+
+纯文本
+Platform Operations Console
+
+不能混入 Tenant Admin。
+
+D2：Health 探针失败时 /health 200 + degraded？
+
+裁决：
+
+ACCEPT
+
+采用：
+
+JSON
+{
+  "ok": true,
+  "killSwitchResolver": {
+    "status": "degraded"
+  }
+}
+
+保持：
+
+HTTP 200。
+
+理由：
+
+Resolver 降级不等于整个服务不可用。
+
+但是补充：
+
+必须区分：
+
+liveness
+纯文本
+服务进程活着
+readiness
+纯文本
+是否满足业务处理条件
+
+未来部署系统根据 readiness 判断。
+
+D3：未来 Action Guard 拒绝是否写 Audit？
+
+裁决：
+
+ACCEPT_WITH_REVISE
+
+未来采用：
+
+写：
+
+纯文本
+killswitch.blocked
+
+但必须区分：
+
+写：
+
+✅
+
+纯文本
+业务动作尝试执行
++
+被 Guard 拒绝
+
+例如：
+
+纯文本
+submission.dispatch blocked
+reason=global-hard-disabled
+
+不写：
+
+❌
+
+纯文本
+resolver read
+effective value query
+dashboard view
+health check
+
+保持：
+
+Read 不污染 Audit
+
+另外：
+
+blocked Audit 必须禁止记录：
+
+token
+secret
+payload
+customer data
+
+D4：Operations 看板显示 source 六值？
+
+裁决：
+
+REVISE
+
+不要直接展示内部枚举。
+
+例如不要：
+
+纯文本
+global-hard-disabled
+
+直接暴露。
+
+采用：
+
+内部：
+
+纯文本
+global-hard-disabled
+
+展示：
+
+纯文本
+已由系统全局安全策略关闭
+
+同时：
+
+OWNER/ADMIN 可以展开查看：
+
+纯文本
+source:
+global-hard-disabled
+
+OPS：
+
+继续：
+
+纯文本
+scope/value/source
+
+按之前规则。
+
+D5：Admin Console 是否提供变更表单？
+
+裁决：
+
+ACCEPT
+
+v1：
+
+不提供。
+
+保持：
+
+纯文本
+Admin Console
+=
+observe only
+
+禁止：
+
+enable button
+disable button
+confirmation form
+reason input
+
+未来变更入口：
+
+仍然：
+
+纯文本
+POST /admin/kill-switch
+
+单独权限流程。
+
+增加两个实现前要求
+R1：Consumer Registry 增加状态
+
+每个 consumer 必须标记：
+
+纯文本
+Consumer Type:
+READ_ONLY
+or
+ACTION_GUARD
+
+当前：
+
+Consumer	Type
+GET /admin/kill-switch	READ_ONLY
+Admin Console	READ_ONLY
+Operations Console	READ_ONLY
+Health	READ_ONLY
+Submission Guard	FUTURE ACTION_GUARD
+Billing Guard	FUTURE ACTION_GUARD
+
+R2：Display Only 禁止影响业务
+
+你的测试：
+
+disabled vs enabled 请求结果一致
+
+接受。
+
+必须保留。
+
+即：
+
+当前：
+
+纯文本
+KillSwitch disabled
+
+Dashboard:
+显示关闭
+
+Business API:
+行为不变
+最终裁决
+纯文本
+READ-ONLY-KILLSWITCH-CONSUMPTION-DESIGN
+
+D1 Tenant scoped          PASS
+D2 Health degraded        PASS
+D3 Guard blocked audit    PASS+
+D4 Source presentation    REVISE
+D5 No change form         PASS
+
+
+FINAL:
+GO_WITH_MINOR_REVISE
+
+下一步：
+
+提交：
+
+纯文本
+READ-ONLY-KILLSWITCH-CONSUMPTION-DESIGN-R2
+
+只需补：
+
+source 展示层与内部值分离
+Consumer Registry 增加 READ_ONLY / ACTION_GUARD 分类
+blocked audit 边界说明
+
+确认后进入：
+
+纯文本
+READ-ONLY-KILLSWITCH-CONSUMPTION-IMPLEMENTATION
+
+仍保持：
+
+不接 Action Guard
+不阻断业务
+不开启生产控制权
+不改变 runtime action
+
+Production Enablement 继续 HOLD。
+```

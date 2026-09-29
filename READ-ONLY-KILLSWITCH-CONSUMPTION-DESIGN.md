@@ -167,3 +167,78 @@ export async function assertActionAllowed(
 - **DESIGN ONLY**：本稿不改代码、不改 Schema、不改运行时取值、不接任何业务动作。
 - `Runtime Action Enablement = HOLD`；`Production Enablement = HOLD`。
 - 任何业务动作接线（§5）都必须单独裁决，且不得绕过 Central Guard Layer。
+
+---
+
+## 11. R2 修订（按架构方 MSG-20260929-67 = GO_WITH_MINOR_REVISE）
+
+本轮只补三处：**source 展示层与内部值分离 / Consumer Registry 增加 READ_ONLY-ACTION_GUARD 分类 / blocked audit 边界说明**；其余裁定（D1/D2/D5）原样生效，仍为 **DESIGN ONLY**。
+
+### 11.1 补充一：source 展示层与内部值分离（D4 = REVISE）
+
+**规则：内部枚举值（machine value）与展示文案（human text）必须分离，UI 不得直接暴露内部枚举。**
+
+| 内部 `source`（API 原值） | 展示文案（zh-CN / en 示例） | 说明 |
+|---|---|---|
+| `global-hard-disabled` | 已由系统全局安全策略关闭 / Disabled by system-wide safety policy | 宿主硬开关 |
+| `tenant-control` | 已由本租户的控制面请求关闭（或开启） / Set by tenant control request | 控制面 APPLIED |
+| `tenant-config` | 已由本租户配置关闭（或开启） / Set by tenant configuration | 租户配置层 |
+| `global-config` | 已由系统配置开启 / Enabled by system configuration | global 软开启 |
+| `environment-default` | 系统默认（未启用） / System default | 默认层 |
+| `fail-closed` | 因无法确认状态而保持关闭 / Disabled because state could not be verified | 失败/异常 |
+
+呈现规则：
+
+1. **默认只显示文案**（不可见内部枚举）；
+2. OWNER/ADMIN 可"展开查看原始值"（`source: global-hard-disabled`）——用于排障与审计对齐；
+3. OPS 维持既有最小暴露（`scope` / `value` / `source`），但 UI 亦以文案呈现；原始枚举随 API 字段返回（OPS 现有契约不变）；
+4. **展示层不得因为文案而改变判定**：文案是渲染映射，判定仍只依据 resolver 的 `value`/`source`（单一事实源）。
+5. 文案映射集中在一处（未来实现：`apps/web/app/lib/kill-switch-labels.ts`），不得散落各页面；未识别的 `source` 一律按"已关闭（原因未知）"呈现（fail closed 的展示面）。
+
+### 11.2 补充二：Consumer Registry 增加 Consumer Type 分类（MSG-20260929-67 R1）
+
+每个消费者必须显式标记类型：`READ_ONLY`（只展示，永不阻断）或 `ACTION_GUARD`（判定并影响动作，未来才允许）。
+
+| Consumer | Type | 状态 |
+|---|---|---|
+| `GET /admin/kill-switch` | **READ_ONLY** | 已实现 |
+| Admin Console 展示 | **READ_ONLY** | 未实现（本设计 S1） |
+| Operations Console 标识 | **READ_ONLY** | 未实现（本设计 S2） |
+| Health / Status 探针 | **READ_ONLY** | 未实现（本设计 S3） |
+| Future Submission Guard | **FUTURE ACTION_GUARD** | 占位（需另行批准） |
+| Future Billing Guard | **FUTURE ACTION_GUARD** | 占位（需另行批准） |
+
+仓库级约束（未来实现检查项）：
+
+- `READ_ONLY` 消费者的代码路径**禁止**出现 `throw` / `return error` / 提前返回等"阻断"语义；它们只能读取并渲染。
+- 只有 `ACTION_GUARD` 类型模块允许返回拒绝决策，且必须经 Central Guard Layer（§4）。
+- 实现期建议加静态扫描用例：`READ_ONLY` 消费者文件不得引用 `assertActionAllowed`；业务服务不得直接引用 resolver。
+
+### 11.3 补充三：blocked audit 边界说明（D3 = ACCEPT_WITH_REVISE）
+
+**未来 Action Guard 拒绝时的审计边界（本稿只定义，不实现）**
+
+| 事件 | 是否写审计 | action | 允许记录的字段 | 明确禁止 |
+|---|---|---|---|---|
+| 业务动作被 Guard 拒绝 | ✅ 写 | `killswitch.blocked` | `action`（如 `submission.dispatch`）、`scope`、`value`、`source`、`reasonCode`、`actorUserId`、`occurredAt`、`traceId?` | ❌ token / secret / API key / 请求 payload 全文 / 客户数据 / PII |
+| resolver 读取 / effective value 查询 | ❌ 不写 | — | — | — |
+| Dashboard 展示 / health check | ❌ 不写 | — | — | — |
+
+补充约束：
+
+1. **只审计"尝试执行且被拒绝"**，不审计"读取状态"——保持 `AuditLog` 只回答"谁改变了什么/谁被拒绝"。
+2. `killswitch.blocked` 与被拒绝的业务实体**不建立外键**（避免把安全事件耦合进业务事实表）；只在 `changes` 中记录标识与原因码。
+3. 审计写入失败时的行为：**拒绝决策仍然生效**（拒绝优先），但必须记录结构化安全日志（不进 AuditLog）；不得因为审计失败而放行动作（I4 延伸）。
+4. 与既有 `killswitch.changed` 的区分：`changed` = 控制面状态变化；`blocked` = 业务动作被安全策略拒绝。
+
+### 11.4 R2 后的执行顺序
+
+```text
+本 R2 提交 → 架构方复核（GO / REVISE）
+        ↓
+READ-ONLY-KILLSWITCH-CONSUMPTION-IMPLEMENTATION（仅 S1–S4，READ_ONLY 消费点）
+        ↓
+Action Guard 设计（另案）→ Runtime Action Enablement（另案）→ Production Enablement（HOLD）
+```
+
+仍保持：**不接 Action Guard、不阻断业务、不开启生产控制权、不改变 runtime action**；`Production Enablement = HOLD`。
