@@ -152,28 +152,34 @@ async function seed(prisma) {
   });
 
   let caseA = null;
-  await attempt('Case(A)', async () => {
+  let caseB = null;
+  await attempt('Case(A/B)', async () => {
     caseA = await prisma.case.create({
       data: { organizationId: ORG_A, caseNo: 'BV-CASE-1', title: 'bv case', domain: 'LOGISTICS' },
+    });
+    caseB = await prisma.case.create({
+      data: { organizationId: ORG_B, caseNo: 'BV-CASE-2', title: 'bv case b', domain: 'LOGISTICS' },
     });
   });
 
   if (caseA && evidenceA) {
     await attempt('CaseEvidence(A)', async () => {
-      await prisma.caseEvidence.create({ data: { caseId: caseA.id, evidenceId: evidenceA.id } });
+      await prisma.caseEvidence.create({
+        data: { organizationId: ORG_A, caseId: caseA.id, evidenceId: evidenceA.id },
+      });
     });
   }
 
   await attempt("Claim(A/B)", async () => {
-    for (const [org, key] of [[ORG_A, "a"], [ORG_B, "b"]]) {
+    if (caseA) {
       await prisma.claim.create({
-        data: {
-          organizationId: org,
-          ...(org === ORG_A && caseA ? { caseId: caseA.id } : {}),
-          status: "DRAFT",
-        },
+        data: { organizationId: ORG_A, caseId: caseA.id, target: "PLATFORM", status: "DRAFT" },
       });
-      void key;
+    }
+    if (caseB) {
+      await prisma.claim.create({
+        data: { organizationId: ORG_B, caseId: caseB.id, target: "PLATFORM", status: "DRAFT" },
+      });
     }
   });
 
