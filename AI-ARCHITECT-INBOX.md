@@ -71337,3 +71337,395 @@ P2 PRODUCTION HARDENING DESIGN FIRST
 ACTION GUARD:
 FUTURE DESIGN ONLY
 ```
+
+### [MSG-20260929-70] P2-PRODUCTION-HARDENING-DESIGN R1 裁决：RESULT: GO_WITH_MINOR_REVISE / STATUS: P2-PRODUCTION-HARDENING-DESIGN = APPROVED_WITH_REVISIONS / NEXT: P2-1 Deployment Smoke Implementation-Validation / BOUNDARY: HOST APPROVAL REQUIRED, REAL DATA VALIDATION PENDING, ACTION GUARD HOLD, PRODUCTION ENABLEMENT HOLD（D1 APPROVE：新增独立 /readyz（DB 可用 + migration 完整 + resolver 可解析），/health 固定为 liveness；READY=false 允许原因 database unavailable / migration mismatch / resolver fail closed，禁止返回 SQL 错误/连接串/堆栈/secret；D2 APPROVE WITH SCOPE LIMIT：CI 允许 synthetic dataset -> pg_dump -> pg_restore scratch -> compare（schema/migration/trigger 28/indexes/tenant isolation），禁止真实客户数据、禁止输出备份文件或保存 dump artifact，真实备份仅宿主环境；D3 APPROVE：新增 secret.rotated（字段仅 secretName/actorUserId/timestamp/result/changeRequestId；禁止 value/hash/prefix/suffix/length 与 oldSecret/newSecret；属 security operation audit，读 secret 不产生审计）；D4 APPROVE：docker compose smoke 允许本地/CI/临时环境，须用测试 secret + 随机数据库 + 生命周期销毁；D5 REVISE：Validation 门槛改为 Stage A 数据完整性（input rows = normalized + quarantine + rejected，禁止 silent drop）、Stage B Candidate >=10（Candidate != Claim）、Stage C 人工确认 >=5（TRUE POSITIVE / FALSE POSITIVE / NEEDS DATA），第一阶段禁止直接判断回收金额/成功率/ARR/收费能力；D6 APPROVE：P2-1→P2-2→P2-3→P2-4 逐项 checkpoint，不合并（风险性质不同）；批准进入 P2-1 Deployment Smoke Implementation（允许 /readyz、smoke scripts、env validation、docker compose；禁止生产部署/DNS/TLS/Secret 实际轮换），下一 checkpoint 重点看 /readyz 语义、fresh install、migration upgrade、secret 缺失行为、不泄露环境信息、CI 可重复执行证据）
+
+```text
+复核 P2-PRODUCTION-HARDENING-DESIGN（R1）。
+
+裁决：
+
+纯文本
+RESULT: GO_WITH_MINOR_REVISE
+
+STATUS:
+P2-PRODUCTION-HARDENING-DESIGN = APPROVED_WITH_REVISIONS
+
+NEXT:
+P2-1 Deployment Smoke Implementation / Validation
+
+BOUNDARY:
+HOST APPROVAL REQUIRED
+REAL DATA VALIDATION PENDING
+ACTION GUARD HOLD
+PRODUCTION ENABLEMENT HOLD
+
+整体设计方向正确，且保持了目前最重要的边界：
+
+不把 Production Candidate 误认为 Production Ready
+不因为没有真实数据停止工程推进
+不提前进入 Action Guard
+不把 Kill Switch 从观察层升级成业务控制层
+
+下面逐项裁决。
+
+D1：独立 readiness 端点
+
+裁决：
+
+✅ APPROVE
+
+采用：
+
+纯文本
+/health
+    |
+    +-- liveness
+    |
+    +-- 服务是否活着
+
+
+/readyz
+    |
+    +-- DB 可用
+    +-- migration 完整
+    +-- resolver 可解析
+    |
+    +-- 是否接收业务流量
+
+原因：
+
+当前已经明确：
+
+resolver degraded != service down
+
+因此不能让 /health 承担 readiness 职责。
+
+补充要求：
+
+/readyz 必须继续区分：
+
+纯文本
+READY=false
+
+原因:
+- database unavailable
+- migration mismatch
+- resolver fail closed
+
+但是：
+
+禁止返回：
+
+SQL 错误
+connection string
+stack trace
+secret 信息
+D2：Backup / Restore 验证纳入 CI
+
+裁决：
+
+✅ APPROVE WITH SCOPE LIMIT
+
+采用：
+
+CI：
+
+允许：
+
+纯文本
+synthetic dataset
+        |
+        v
+pg_dump
+        |
+        v
+pg_restore scratch
+        |
+        v
+compare
+
+验证：
+
+schema
+migration
+trigger 28
+indexes
+tenant isolation
+
+禁止：
+
+CI：
+
+使用真实客户数据
+输出备份文件
+保存数据库 dump artifact
+
+真实备份：
+
+保持：
+
+HOST ENVIRONMENT ONLY
+
+D3：新增 secret.rotated 审计动作
+
+裁决：
+
+✅ APPROVE
+
+建议动作：
+
+纯文本
+secret.rotated
+
+字段：
+
+允许：
+
+JSON
+{
+ secretName,
+ actorUserId,
+ timestamp,
+ result,
+ changeRequestId
+}
+
+禁止：
+
+纯文本
+secret value
+hash
+prefix
+suffix
+length
+
+尤其禁止：
+
+oldSecret
+newSecret
+
+注意：
+
+这个动作属于：
+
+security operation audit
+
+不是业务 AuditLog。
+
+需要继续遵守：
+
+读 secret 不产生审计。
+
+D4：Docker Compose smoke
+
+裁决：
+
+✅ APPROVE
+
+允许：
+
+本地
+CI
+临时环境
+
+用于：
+
+S-1:
+
+empty db
++
+migration deploy
++
+boot
+
+S-2:
+
+existing db
++
+migration upgrade
+
+要求：
+
+docker 环境必须：
+
+使用测试 secret
+使用随机数据库
+生命周期结束销毁
+
+D5：Production Validation 门槛
+
+裁决：
+
+REVISE。
+
+原：
+
+>=500 单
+行级成功率 >=99%
+异常桶可解释
+
+不足。
+
+调整为：
+
+Stage A 数据完整性门槛
+
+必须：
+
+input rows
+=
+normalized rows
++
+quarantine rows
++
+rejected rows
+
+禁止：
+
+silent drop。
+
+Stage B Candidate
+
+保持：
+
+Candidate >=10
+
+但是：
+
+Candidate ≠ Claim。
+
+Stage C 人工确认
+
+新增：
+
+必须：
+
+human verification >=5
+
+分类：
+
+TRUE POSITIVE
+FALSE POSITIVE
+NEEDS DATA
+不允许作为第一阶段门槛：
+
+禁止直接判断：
+
+回收金额
+成功率
+ARR
+收费能力
+
+这些属于商业验证阶段。
+
+D6：交付方式
+
+裁决：
+
+✅ APPROVE
+
+采用：
+
+P2-1
+ ↓
+checkpoint
+ ↓
+P2-2
+ ↓
+checkpoint
+ ↓
+P2-3
+ ↓
+checkpoint
+ ↓
+P2-4
+ ↓
+checkpoint
+
+不要合并。
+
+原因：
+
+四项风险性质不同：
+
+阶段	风险
+P2-1	部署失败
+P2-2	数据恢复失败
+P2-3	安全事故
+P2-4	商业真实性
+
+必须独立验收。
+
+P2 顺序确认
+
+批准执行顺序：
+
+第一阶段
+P2-1 Deployment Smoke
+
+进入：
+
+IMPLEMENTATION / CHECKPOINT
+
+范围：
+
+允许：
+
+/readyz
+smoke scripts
+env validation
+docker compose
+
+禁止：
+
+生产部署
+DNS
+TLS
+Secret 实际轮换
+第二阶段
+
+P2-2 Backup Restore
+
+第三阶段
+
+P2-3 Secret Rotation
+
+第四阶段
+
+P2-4 Real Validation Runbook
+
+等待：
+
+HOST DATA
+当前架构状态更新
+纯文本
+CODE COMPLETE                 PASS
+ADMIN OBSERVABILITY           PASS
+KILL SWITCH                   PASS
+READ ONLY CONSUMPTION         PASS
+
+P2 HARDENING                  APPROVED
+
+PRODUCTION ENABLEMENT         HOLD
+
+REAL DATA VALIDATION          WAITING_HOST_DATA
+
+ACTION GUARD                  DESIGN ONLY
+
+可以进入：
+
+纯文本
+P2-1 Deployment Smoke Implementation
+
+提交下一 checkpoint 时重点看：
+
+/readyz 语义
+fresh install
+migration upgrade
+secret 缺失行为
+不泄露环境信息
+CI 可重复执行证据
+
+裁决完成。
+```
