@@ -82,3 +82,8 @@ tools/license-gate/report.json
 # ----- C-0013-B 连接器运行时产物（游标 / 隔离区不进仓库）-----
 reports/cursors/
 reports/quarantine/
+
+# Phase 1 真实/脱敏数据投放目录：数据不入库（仅保留 README）
+inbox/*
+!inbox/README.md
+
