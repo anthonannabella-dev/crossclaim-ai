@@ -28,6 +28,8 @@
 | 交付方式 | 宿主自行放到 `D:\crossclaim-ai\inbox\`（该目录**不入 Git**，见 `.gitignore` 的 `inbox/*`），然后告知路径 |
 
 **脱敏要求**：订单号可哈希，但**同一订单在所有行必须一致**（保证可追踪）。
+> 列的含义、格式、示例与常见错误见 [`PHASE1-DATA-FIELD-DICTIONARY.md`](PHASE1-DATA-FIELD-DICTIONARY.md)（并说明 Phase 1 四列契约与 Validation Run 十四列契约的区别）。
+
 
 ## 2. 字段映射：不猜、不自动改写
 
