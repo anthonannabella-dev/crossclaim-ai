@@ -57450,3 +57450,395 @@ CLAIM TRACKING READ MODEL READY
 
 本轮实现通过。权限设计也批准进入正式 Delta。
 ```
+
+### [MSG-20260929-26] RECOVERY-CONFIRMATION-SCHEMA-DELTA-REQUEST · R2 裁决：GO ✅（READY_FOR_IMPLEMENTATION）——C1 状态拆分获批（confirmationStatus: PENDING_CONFIRMATION/CONFIRMED/REJECTED_BY_REVIEW 与 reconciliationStatus: NOT_STARTED/PARTIAL/RECONCILED/DISPUTED/REVERSED）；历史 Settlement 默认 CONFIRMED+NOT_STARTED 接受（须做迁移计数校验）；confirmedAmount = Settlement.recoveredAmount（不新增字段）、receivedAmount = SUM(RecoveryPayout.amount)（不落库）；RecoveryPayout 为到账事实唯一来源；索引三项获批；I1-I7 全部通过；迁移=CREATE TYPE ×2 + ADD COLUMN ×4 + CREATE TABLE + CREATE INDEX，不改触发器/FeeCalculation/BillingInvoice/Payment Domain；NEXT = Recovery Confirmation migration + implementation
+
+本轮为 MSG-20260929-24 REVISE 后的 R2 修订版答复，直接批准迁移与实现；同时复述 MSG-20260929-25 中 Claim Tracking 权限位裁决（claimTrackingApprove=OWNER/ADMIN、claimTrackingReceive=OWNER/ADMIN/OPS），要求无需重复修改。
+
+```text
+RECOVERY-CONFIRMATION-SCHEMA-DELTA-REQUEST · R2 裁决
+结论：GO ✅
+
+状态：
+
+纯文本
+GATE:
+7 Commercial Validation
+
+REQUEST:
+RECOVERY-CONFIRMATION-SCHEMA-DELTA R2
+
+DECISION:
+APPROVED
+
+SCOPE:
+Schema Delta Only
+
+NEXT:
+Migration + Implementation
+总体审计结论
+
+R2 已解决 MSG-20260929-24 的核心问题：
+
+Confirmation（确认事实）与 Reconciliation（到账事实）分离。
+
+当前设计通过。
+
+一、C1 状态拆分审计
+结论：GO ✅
+
+当前：
+
+纯文本
+confirmationStatus
+
++
+
+reconciliationStatus
+
+正确。
+
+Confirmation 负责：
+纯文本
+是否经过业务确认
+
+状态：
+
+PENDING_CONFIRMATION
+CONFIRMED
+REJECTED_BY_REVIEW
+Reconciliation 负责：
+纯文本
+到账核对状态
+
+状态：
+
+NOT_STARTED
+PARTIAL
+RECONCILED
+DISPUTED
+REVERSED
+
+特别确认：
+
+纯文本
+CONFIRMED
++
+NOT_STARTED
+
+是合法状态。
+
+这解决了上一版本最大语义冲突。
+
+二、历史默认状态
+结论：接受 ✅
+
+当前说明：
+
+纯文本
+历史 Settlement
+
+↓
+
+CONFIRMED
+
++
+
+NOT_STARTED
+
+可以接受。
+
+前提：
+
+现有历史 Settlement 确实来自人工确认流程。
+
+实现阶段必须增加：
+
+历史迁移验证：
+
+纯文本
+Existing Settlement count
+
+=
+
+Migrated confirmation state count
+三、金额来源设计
+结论：GO ✅
+
+这是本次最重要改进之一。
+
+confirmedAmount
+
+来源：
+
+纯文本
+Settlement.recoveredAmount
+
+批准。
+
+不新增：
+
+confirmedAmount 字段。
+
+receivedAmount
+
+来源：
+
+纯文本
+SUM(RecoveryPayout.amount)
+
+批准。
+
+不落库。
+
+原因：
+
+避免：
+
+纯文本
+Settlement Amount
+
++
+RecoveryPayout Amount
+
++
+ReceivedAmount Field
+
+形成三个事实源。
+
+四、RecoveryPayout
+结论：GO ✅
+
+批准。
+
+定位：
+
+实际到账事件事实表。
+
+不是：
+
+Settlement 替代品
+Payment 表替代品
+
+关系：
+
+纯文本
+Settlement
+
+     |
+     |
+RecoveryPayout
+
+     |
+     |
+Payment Reconciliation View
+
+正确。
+
+五、索引设计
+结论：GO ✅
+Settlement confirmationStatus
+
+用途：
+
+运营确认。
+
+合理。
+
+Settlement reconciliationStatus
+
+用途：
+
+财务对账。
+
+合理。
+
+RecoveryPayout receivedAt
+
+用途：
+
+期间扫描。
+
+合理。
+
+六、不变量审计
+
+全部通过。
+
+I1
+
+租户隔离：
+
+✅
+
+I2
+纯文本
+RECONCILED
+
+⇒
+
+received == confirmed
+
+通过。
+
+I3
+
+PARTIAL：
+
+通过。
+
+I4
+
+超额：
+
+纯文本
+received > confirmed
+
+↓
+
+DISPUTED
+
+通过。
+
+不自动改账。
+
+I5
+
+PENDING_CONFIRMATION：
+
+不能进入 recovery outcome。
+
+通过。
+
+I6
+
+payoutRef 幂等。
+
+通过。
+
+I7
+
+冲回链：
+
+原金额不可修改。
+
+通过。
+
+七、迁移方案
+结论：批准 ✅
+
+允许：
+
+纯文本
+CREATE TYPE ×2
+
+ADD COLUMN ×4
+
+CREATE TABLE RecoveryPayout
+
+CREATE INDEX
+
+确认：
+
+不改变：
+
+触发器
+FeeCalculation
+BillingInvoice
+Payment Domain
+八、实现验收要求
+
+批准。
+
+新增重点：
+
+1. 状态组合测试
+
+必须覆盖：
+
+纯文本
+CONFIRMED
++
+NOT_STARTED
+
+CONFIRMED
++
+PARTIAL
+
+CONFIRMED
++
+RECONCILED
+
+REJECTED
++
+DISPUTED
+2. RecoveryPayout 幂等
+
+必须验证：
+
+重复：
+
+纯文本
+
+不会重复累计。
+
+3. 冲回
+
+必须验证：
+
+原 Settlement：
+
+金额不变
+时间线完整
+最终归档
+Markdown
+### [MSG-20260929-26]
+
+TYPE:
+SCHEMA DELTA DECISION
+
+TARGET:
+RECOVERY-CONFIRMATION-SCHEMA-DELTA R2
+
+DECISION:
+GO
+
+Approved:
+
+- confirmationStatus
+- reconciliationStatus
+- RecoveryPayout
+- payoutRef idempotency
+- reversal chain
+- receivedAmount projection
+
+Confirmed:
+
+- confirmedAmount remains Settlement.recoveredAmount
+- receivedAmount = SUM(RecoveryPayout.amount)
+- no duplicate money source
+
+Required validation:
+- migration fresh DB
+- trigger count 27
+- historical settlement state check
+- payout idempotency
+- reversal traceability
+
+No change:
+- auto commission HOLD
+- payment automation HOLD
+- submission rules unchanged
+
+STATUS:
+READY_FOR_IMPLEMENTATION
+
+关于上一条 Claim Tracking 权限位：
+
+已在 MSG-20260929-25 裁决：
+
+claimTrackingApprove → OWNER/ADMIN ✅
+claimTrackingReceive → OWNER/ADMIN/OPS ✅
+
+无需重复修改。可以继续进入 Recovery Confirmation migration 与实现。
+```
