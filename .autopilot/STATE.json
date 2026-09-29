@@ -1,6 +1,6 @@
 {
   "gate": "B2-FIX R1",
-  "head": "34eac60",
+  "head": "7ed4e6d",
   "status": "RECONCILED",
   "current_task": "1. RuleVersion + RuleEvaluation reference behavior tests（A/B 可引用 SYSTEM 版本；跨租户引用 TENANT 版本被拒；拒绝后引用关系不变）",
   "next_task": "D: existing tenant triggers per-name/table checklist",
@@ -10,5 +10,5 @@
   "production_enabled": false,
   "external_write_enabled": false,
   "updated_at": "2026-09-29T23:19:08.160Z",
-  "previous_head": "e1288ee"
+  "previous_head": "34eac60"
 }
