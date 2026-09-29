@@ -2,12 +2,13 @@
   "gate": "B2-FIX R1",
   "head": "8626e56",
   "status": "IMPLEMENTING",
-  "current_task": "RuleVersion + RuleEvaluation reference behavior tests",
+  "current_task": "1. RuleVersion + RuleEvaluation reference behavior tests（A/B 可引用 SYSTEM 版本；跨租户引用 TENANT 版本被拒；拒绝后引用关系不变）",
   "next_task": "D: existing tenant triggers per-name/table checklist",
   "send_head": "374fbdd",
   "decision_head": "374fbdd",
   "last_chatgpt_message": "MSG-20260930-08 (ACK)",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-09-29T23:19:08.160Z"
+  "updated_at": "2026-09-29T23:19:08.160Z",
+  "last_error": "Error: Command failed: git rev-parse --short HEAD\nfatal: detected dubious ownership in repository at 'D:/crossclaim-ai'\n'D:/crossclaim-ai' is owned by:\n\tNT AUTHORITY/SYSTEM (S-1-5-18)\nbut the current user is:\n\tDESKTOP-HPMBV7B/os (S-1-5-21-2032994302-2066087180-89361319-1001)\nTo add an exception for "
 }
