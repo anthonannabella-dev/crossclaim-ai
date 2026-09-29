@@ -233,3 +233,145 @@ Concurrency / Security Review
 ```
 
 > 当前状态：**DESIGN ONLY**；架构方裁决前不动代码、不动 runtime value、不开启真实动作。
+
+---
+
+## 12. R2 修订（按架构方 MSG-20260929-64 = GO_WITH_MINOR_REVISE）
+
+本轮只做四处修订：**source 六值落稿 / APPLIED 永久有效规则 / 四个 resolver 不变量 / 当前 source 行为迁移说明**。
+其余内容（三层分离、审计边界、冻结项关系、验证矩阵）保持不变；仍为 **DESIGN ONLY**。
+
+### 12.1 D1 定稿：五层优先级（含 Global Config ENABLED）
+
+```text
+Global HARD DISABLED
+        >
+Tenant DISABLED        （tenant config 或 tenant control request）
+        >
+Tenant ENABLED         （tenant config 或 tenant control request）
+        >
+Global Config ENABLED
+        >
+Environment Default
+```
+
+关键语义：**`global enabled` 不是强制开启**，而只是"允许进入下一层判断"。因此
+`global enabled + tenant disabled` → `disabled`（`source=tenant-config` 或 `tenant-control`）。
+
+| 层 | 条件 | value | source |
+|---|---|---|---|
+| 1 | Global Config = `disabled` | disabled | `global-hard-disabled` |
+| 2 | Tenant（config 或 APPLIED control）= `disabled` | disabled | `tenant-config` / `tenant-control` |
+| 3 | Tenant（config 或 APPLIED control）= `enabled` | enabled | `tenant-config` / `tenant-control` |
+| 4 | Global Config = `enabled`（无租户信号） | enabled | `global-config` |
+| 5 | 全部缺失 | 默认（业务五项 disabled、observability enabled） | `environment-default` |
+| — | 判定异常（见 §12.4） | disabled | `fail-closed` |
+
+同一层同时存在 config 与 control 信号且冲突时：**disabled 胜出（I3）**；
+若两者一致则优先报告 `tenant-control`（可解释性：控制面动作为最近一次显式决定）。
+
+### 12.2 D2 定稿：`source` 六值枚举（落稿）
+
+```ts
+export type KillSwitchResolutionSource =
+  | 'global-hard-disabled'
+  | 'tenant-control'
+  | 'tenant-config'
+  | 'global-config'
+  | 'environment-default'
+  | 'fail-closed';
+```
+
+**同步计划（实现提交必须一并完成）**
+
+| 对象 | 动作 |
+|---|---|
+| `API.md` | `GET /admin/kill-switch` 的 `source` 取值集合改为六值，并标注为**破坏性变更**（消费者按字符串比较会受影响） |
+| 测试 | `kill-switch.test.ts` 01–05 的 source 断言逐条改；新增 resolver 用例覆盖 §7 的 16 行矩阵 |
+| 文档 | 本文档 §2 / §12.1 / §12.7；`DOMAIN_MODEL.md` 或 `ARCHITECTURE_CONTRACT.md` 增补「Effective Value 解析」小节 |
+| 控制台 | `apps/web` 只读控制台展示 `source` 时按六值渲染（未识别值按 disabled 呈现） |
+| 变更记录 | 标注：`source` 语义变更（解释性字段），**value 语义不变**（Case A 的 value 本来已是 disabled） |
+
+### 12.3 D3 定稿：缓存约束（ACCEPT_WITH_LIMIT）
+
+| 项 | 定稿 |
+|---|---|
+| 允许 | **仅进程内内存缓存**（process memory） |
+| v1 **禁止** | Redis、CDN 缓存、浏览器缓存（HTTP 响应继续保持 `cache-control: no-store`） |
+| 键 | `(organizationId, scope)` —— 同时满足 organization scoped 与 scope scoped |
+| 填充 | 可按 organization 一次查询批量填充 6 个 scope 条目（读取成本优化）；**失效必须支持两级**：`invalidate(organizationId)` 与 `invalidate(organizationId, scope)` |
+| TTL | 默认 **5 秒**，硬上限 **30 秒**（可配置但不得越过上限） |
+| 写后失效 | 控制面写入成功（created / confirmed / applied / cancelled / expired）后**主动 invalidate** 该租户（或该 org+scope） |
+| 跨实例 | 允许存在 **≤ TTL** 的陈旧窗口；必须可解释、有界 |
+| 禁止行为 | 缓存不得跨租户共享；不得返回其他租户的结果；DB 失败时业务 scope 不得用缓存兜底（见 §12.4） |
+
+### 12.4 D4 定稿：DB 不可用行为 + 陈旧值必须显式
+
+| scope 组 | DB 不可用 / 查询超时 | 输出 |
+|---|---|---|
+| `submission` / `billing` / `integration` / `platform_connector` / `workflow` | **fail closed** | `value='disabled'`, `source='fail-closed'`, `degraded=true`, `stale=false` |
+| `observability` | 允许返回 `lastKnownValue` | `degraded=true`, **`stale=true`**, `evaluatedAt=<上次成功评估时间>` |
+
+要求：**陈旧值不得伪装成实时状态**。API 与控制台必须显式呈现 `stale=true`（文案示例："降级：显示上次已知值"），
+且 `evaluatedAt` 必须是上次**成功**评估时间，不得用当前时间冒充。
+
+### 12.5 D5 定稿（REVISE）：APPLIED 永久有效（不自动过期）
+
+| 项 | 定稿 |
+|---|---|
+| 生效范围 | `state='APPLIED'` 的控制请求 **长期有效**，**不自动过期** |
+| 何时改变 | ① 新的请求覆盖（同 scope 新的 APPLIED，含 ENABLED→DISABLED / DISABLED→ENABLED）② OWNER 拉闸（`request+disabled`，单人即时）③ 运维配置变化（global/tenant config 收紧为 disabled） |
+| 不引入 | `expirationPolicy` / 自动恢复定时器 —— 如需，属**独立设计**（必须评估 `billing disabled` 自动恢复的风险） |
+| 与 `EXPIRED` 的区别 | `EXPIRED` 只适用于 `PENDING_ENABLE`（15 分钟确认窗口）；APPLIED 永不 EXPIRED |
+| 风险评估 | 安全开关自动恢复不可预测 → v1 选择"宁可保持关闭，等人工显式开启" |
+
+### 12.6 D6 定稿：PENDING_ENABLE 不参与 effective
+
+`PENDING_ENABLE` 只存在于 **control view**（`GET /admin/kill-switch` full 视图的 `pendingRequest`），
+**不影响** `Effective Value`。避免"申请开启 → 运行提前开启 → 等待确认失效"的窗口。
+
+### 12.7 R2-1：当前 source 行为迁移说明（不得直接覆盖）
+
+**现行实现（`resolveKillSwitch`，已上线）→ 未来 resolver（生效值）**
+
+| 场景 | 现行 `source` | 未来 `source` | 变更性质 |
+|---|---|---|---|
+| global=disabled + tenant=enabled | `tenant`（value=disabled） | `global-hard-disabled`（value=disabled） | **source 语义变更**（value 不变） |
+| global=disabled，无 tenant | `global`（value=disabled） | `global-hard-disabled`（value=disabled） | source 细化 |
+| global=enabled + tenant=disabled | `tenant`（value=disabled） | `tenant-config`（value=disabled） | source 重命名 |
+| global=enabled + tenant=enabled | `tenant`（value=enabled） | `tenant-config`（value=enabled） | source 重命名 |
+| 仅 global=enabled | `global`（value=enabled） | `global-config`（value=enabled） | source 重命名 |
+| 无配置 | `default` | `environment-default` | source 重命名 |
+| 非法配置值（已配置但非法） | `tenant` / `global`（value=disabled） | `fail-closed`（value=disabled） | source 语义变更 |
+| APPLIED 控制请求参与 | 不参与 | `tenant-control` | **新增层**（value 可能变化，属实现提交的核心变更） |
+
+**Change note 与测试更新计划**
+
+1. **不得直接覆盖**：实现提交必须单独列出上表，逐条标注 value 是否变化、source 如何变化；
+2. `API.md` 标注破坏性变更（`source` 取值集合 + 新增 `APPLIED` 控制请求参与）；
+3. 测试更新：`kill-switch.test.ts` 用例 01–05 的 `source` 断言逐条改；新增 resolver 用例覆盖 §7 的 16 行矩阵（含 Case A/B/C）；
+4. 涉及前端：`apps/web` 控制台若展示 `source`，按六值渲染并显示 `degraded/stale`；
+5. 单独的 change note（实现 checkpoint 的一节）说明：**value 语义未变的部分**（Case A/B/C）与**新增的部分**（control 层参与）。
+
+### 12.8 R2-2：四个 resolver 不变量（I1–I4）
+
+| 不变量 | 含义 | 实现方式 | 验证 |
+|---|---|---|---|
+| **I1** Effective Value is never persisted | 生效值是派生投影，绝不落库 | resolver 返回内存对象；表结构中不存在 effective 列；代码层禁止写入路径引用 effective | 矩阵 #6（读取 resolver → AuditLog 不增加）；实现期加"无 effective 落库"的架构契约断言 |
+| **I2** Control Request cannot mutate Config Value | 控制面不得改写配置/环境变量 | `KillSwitchRequest` 写路径与配置写路径在代码上分离；resolver 只读两域；配置变更只来自部署/运维 | 代码审查 + 架构契约测试（禁止 `KillSwitchRequest` 相关代码引用 config 写入 API） |
+| **I3** Disabled decision always dominates Enabled decision | 任一层 disabled 一律胜出 | 解析按 §12.1 逐层，disabled 短路返回；同层冲突时 disabled 优先 | 矩阵 #1/#2/#8/#9 |
+| **I4** Resolver failure cannot enable protected actions | resolver 失败永不导致放行 | 任何异常/超时/损坏记录 → `disabled` + `source='fail-closed'`（observability 例外但标 `stale`） | 矩阵 #5/#13/#16 |
+
+### 12.9 R2 后的执行顺序
+
+```text
+本 R2 提交 → 架构方复核（GO / REVISE）
+        ↓
+EffectiveKillSwitchResolver IMPLEMENTATION（DESIGN FROZEN）
+        ↓
+Implementation Checkpoint（16 行矩阵 + I1–I4 断言 + source 迁移说明 + CI）
+        ↓
+Runtime Activation Policy（另行批准）→ Production Enablement（继续 HOLD）
+```
+
+仍保持：不开放真实外部动作、不改变业务自动化状态、**不开启生产 Kill Switch 控制权**。

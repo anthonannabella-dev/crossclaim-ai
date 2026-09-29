@@ -69333,3 +69333,339 @@ DESIGN ONLY
 
 提交设计稿后再进入下一轮裁决。
 ```
+
+### [MSG-20260929-64] EFFECTIVE-KILL-SWITCH-RESOLUTION-DESIGN R1 裁决：RESULT: GO_WITH_MINOR_REVISE / STATUS: Effective Runtime Resolution Design = APPROVED WITH CHANGES / BOUNDARY: DESIGN ONLY, NO CODE, NO SCHEMA, NO RUNTIME ACTIVATION（D1 ACCEPT：保留 Global Config ENABLED 层，最终优先级 Global HARD DISABLED > Tenant DISABLED > Tenant ENABLED > Global Config ENABLED > Environment Default；D2 ACCEPT：source 采用六值枚举 global-hard-disabled / tenant-control / tenant-config / global-config / environment-default / fail-closed，同步 API contract + tests + documentation；D3 ACCEPT_WITH_LIMIT：TTL=5s、MAX=30s，v1 禁止 Redis/CDN/browser cache，仅进程内缓存且 organization scoped + scope scoped + 写后主动 invalidate；D4 ACCEPT：仅 observability 可返回 lastKnownValue + degraded=true + evaluatedAt 且必须明确 stale、不能伪装实时，业务 scope DB error 一律 fail closed；D5 REVISE：APPLIED 不自动过期、v1 永久有效直到新 Request 覆盖 / OWNER 拉闸 / 运维配置变化，未来 expirationPolicy 独立设计；D6 ACCEPT：PENDING_ENABLE 只在 control view、不影响 runtime；另须补两个 REVISE 点：R1 当前 source 语义差异须单独 change note + 测试更新计划（不得直接覆盖），R2 四个 resolver 不变量 I1 Effective Value is never persisted / I2 Control Request cannot mutate Config Value / I3 Disabled always dominates Enabled / I4 Resolver failure cannot enable protected actions；NEXT: EFFECTIVE-KILL-SWITCH-RESOLUTION-DESIGN-R2，之后才进入 EffectiveKillSwitchResolver IMPLEMENTATION；Production Enablement 继续 HOLD）
+
+```text
+收到 EFFECTIVE-KILL-SWITCH-RESOLUTION-DESIGN R1。
+
+裁决：
+
+纯文本
+RESULT: GO_WITH_MINOR_REVISE
+
+STATUS:
+Effective Runtime Resolution Design = APPROVED WITH CHANGES
+
+BOUNDARY:
+DESIGN ONLY
+NO CODE
+NO SCHEMA
+NO RUNTIME ACTIVATION
+
+整体设计方向正确，尤其是三层分离：
+
+Config Value
+      ↓
+Control Request
+      ↓
+Effective Value Projection
+
+这个边界必须保持，不允许回退成 KillSwitchRequest 直接改配置。
+
+D1：Global Config = enabled 是否保留？
+
+裁决：
+
+ACCEPT（保留）
+
+理由：
+
+需要区分：
+
+global hard disable
+global normal config
+tenant control
+
+最终模型：
+
+Global HARD DISABLED
+        >
+Tenant DISABLED
+        >
+Tenant ENABLED
+        >
+Global Config ENABLED
+        >
+Environment Default
+
+原因：
+
+global enabled 本质不是强制开启，而是允许系统进入下一层判断。
+
+例如：
+
+global enabled
+tenant disabled
+
+结果：
+
+disabled
+source=tenant-control
+D2：source 六值枚举是否采用？
+
+裁决：
+
+ACCEPT
+
+采用。
+
+当前 source：
+
+tenant
+global
+default
+
+粒度不足。
+
+改为：
+
+TypeScript
+type KillSwitchResolutionSource =
+ | "global-hard-disabled"
+ | "tenant-control"
+ | "tenant-config"
+ | "global-config"
+ | "environment-default"
+ | "fail-closed"
+
+原因：
+
+source 是安全解释信息，不只是调试字段。
+
+必须能够回答：
+
+为什么这个动作被禁止？
+
+例如：
+
+effective=false
+
+source=global-hard-disabled
+
+比：
+
+source=tenant
+
+更准确。
+
+需要同步：
+
+API contract
+tests
+documentation
+
+D3：进程缓存 TTL=5秒
+
+裁决：
+
+ACCEPT_WITH_LIMIT
+
+采用：
+
+TTL = 5 seconds
+MAX = 30 seconds
+
+但是增加约束：
+
+v1：
+
+禁止：
+
+Redis
+CDN cache
+browser cache
+
+原因：
+
+Kill Switch 属安全控制。
+
+允许：
+
+process memory cache
+
+但必须：
+
+organization scoped
+scope scoped
+写后主动 invalidate
+
+D4：DB 不可用时 observability 是否返回旧值？
+
+裁决：
+
+ACCEPT
+
+但是限制：
+
+仅 observability。
+
+规则：
+
+业务 scope：
+
+submission
+billing
+integration
+platform_connector
+workflow
+
+DB error：
+
+fail closed
+disabled
+
+observability：
+
+允许：
+
+lastKnownValue
++
+degraded=true
++
+evaluatedAt
+
+但必须：
+
+明确：
+
+this value is stale
+
+不能伪装实时状态。
+
+D5：APPLIED 是否自动过期？
+
+裁决：
+
+REVISE
+
+不采用自动过期。
+
+v1：
+
+保持：
+
+APPLIED
+永久有效
+
+直到：
+
+新 Request 覆盖
+OWNER 拉闸
+运维配置变化
+
+原因：
+
+安全开关自动恢复风险较高。
+
+尤其：
+
+billing disabled
+
+如果自动恢复，会产生不可预测行为。
+
+未来如果需要：
+
+增加：
+
+expirationPolicy
+
+独立设计。
+
+D6：PENDING_ENABLE 是否参与 effective？
+
+裁决：
+
+ACCEPT
+
+保持：
+
+PENDING_ENABLE
+
+只存在 control view
+
+不影响 runtime
+
+原因：
+
+避免：
+
+申请开启
+       ↓
+运行提前开启
+       ↓
+等待确认失效
+必须补充两个 REVISE 点
+R1：解决当前 source 语义差异
+
+你已经发现：
+
+当前 resolveKillSwitch Case A source=tenant
+
+需要在设计修订中明确：
+
+current implementation behavior
+        ↓
+future resolver behavior
+
+不要直接覆盖。
+
+因为这是行为变化。
+
+需要：
+
+单独 change note
+测试更新计划
+
+R2：增加 Effective Resolution 不变量
+
+补充：
+
+不变量 I1
+Effective Value is never persisted
+I2
+Control Request cannot mutate Config Value
+I3
+Disabled decision always dominates Enabled decision
+I4
+Resolver failure cannot enable protected actions
+
+最终状态
+Effective Kill Switch Resolution Design
+
+D1 Global soft enable        PASS
+D2 Source enum               PASS
+D3 Cache                     PASS
+D4 DB failure behavior       PASS
+D5 APPLIED lifetime          REVISE
+D6 Pending behavior          PASS
+
+
+FINAL:
+GO_WITH_MINOR_REVISE
+
+下一步：
+
+请提交：
+
+EFFECTIVE-KILL-SWITCH-RESOLUTION-DESIGN-R2
+
+只需要修改：
+
+source 六值落稿
+APPLIED 永久有效规则
+四个 resolver invariant
+当前 source 行为迁移说明
+
+确认后，再进入：
+
+EffectiveKillSwitchResolver IMPLEMENTATION
+
+仍保持：
+
+不开放真实外部动作
+不改变业务自动化状态
+不开启生产 Kill Switch 控制权
+
+Production Enablement 继续 HOLD。
+```
