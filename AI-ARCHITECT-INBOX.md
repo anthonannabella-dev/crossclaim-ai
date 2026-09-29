@@ -59731,3 +59731,416 @@ NOTIFICATION-DESIGN
 
 Operations Dashboard 模块可以收口。下一阶段进入 Notification Design。
 ```
+
+### [MSG-20260929-32] NOTIFICATION-DESIGN 裁决：GO ✅（GO_WITH_MINOR_REVISE / READY_FOR_IMPLEMENTATION_AFTER_D1_ADJUSTMENT）——D1 PASS（N1–N5 接受；N6 claim.overdue 保持默认关闭，因属 N1 的升级语义，默认开启会造成重复提醒）；D2 GO（状态型「进入即通知、每实体每事件一次」，v1 不批准每 3 天周期提醒——需要 reminder policy / escalation / quiet period，未来另设 Notification Policy Layer）；D3 HOLD（不落库未读状态、不新增 Notification 表，保持无状态投影）；D4 REVISE（**允许有限聚合摘要**：同租户 + 同事件类型 + 同权限范围 + 同时间窗口，如「今日 12 个 Claim 接近截止」；禁止跨权限范围/跨金额权限/跨租户聚合；summary 与 detail 分离且 detail 仍按权限过滤）；收件人解析与模板裁剪通过（金额键不存在而非 0）；Kill Switch 若实现必须有权限 + 审计 + 变更记录；实现范围：Notification projection service / event derivation / recipient resolution / permission filtering / idempotency calculation / tests；禁止 Email·SMS·企业微信接入、Notification 表、未读状态、外部发送、自动联系客户或平台
+
+本轮为通知设计 R0 的裁决：GO_WITH_MINOR_REVISE，D4 允许有限聚合；实现已获批准。
+
+```text
+NOTIFICATION-DESIGN 裁决
+总体结论：GO ✅（附小范围 REVISE）
+
+状态：
+
+纯文本
+
+GATE:
+7 Commercial Validation
+
+TARGET:
+Notification Design R0
+
+DECISION:
+GO_WITH_MINOR_REVISE
+
+STATUS:
+READY_FOR_IMPLEMENTATION_AFTER_D1_ADJUSTMENT
+一、总体审计
+
+方向正确。
+
+当前设计符合 Production Candidate 原则：
+
+Notification = Projection
+不成为事实源
+不新增业务状态
+不发外部渠道
+不改变 Claim / Settlement
+不触碰资金动作
+
+通过。
+
+二、D1 事件目录审计
+结论：基本通过，N1-N5 接受，N6 保持关闭 ✅
+N1 claim.deadline_approaching
+
+通过。
+
+来源：
+
+纯文本
+Claim.dueAt
++
+deadline projection
+
+合理。
+
+N2 claim.response_received
+
+通过。
+
+认可：
+
+双来源：
+
+respondedAt
+AuditLog response event
+
+正确。
+
+N3 recovery.confirmation_required
+
+通过。
+
+来源：
+
+纯文本
+confirmationStatus=PENDING_CONFIRMATION
+
+合理。
+
+N4 recovery.payout_discrepancy
+
+通过。
+
+符合：
+
+Recovery Confirmation 模型。
+
+N5 review.required_high_value
+
+通过。
+
+保持：
+
+提醒人工，不代表自动动作。
+
+N6 claim.overdue
+
+结论：
+
+保持：
+
+纯文本
+DEFAULT OFF
+
+正确。
+
+原因：
+
+overdue 属于 N1 的升级语义。
+
+如果默认开启，容易造成：
+
+deadline approaching 一次
+overdue 再一次
+重复提醒
+
+后续如果需要：
+
+单独调整策略。
+
+三、D2 状态型通知去重策略
+
+当前：
+
+纯文本
+进入即通知
+
++
+每实体事件一次
+裁决：
+GO ✅
+
+v1 保持。
+
+不批准 v1：
+
+纯文本
+每3天提醒
+
+原因：
+
+需要新增：
+
+reminder policy
+escalation rule
+quiet period
+
+复杂度会上升。
+
+未来可以设计：
+
+纯文本
+Notification Policy Layer
+
+但不是当前阶段。
+
+四、D3 未读状态落库
+裁决：
+HOLD ✅
+
+接受你的建议。
+
+原因：
+
+当前 Notification 是：
+
+纯文本
+事实
+
+↓
+
+通知投影
+
+不是：
+
+纯文本
+Inbox System
+
+落库意味着新增：
+
+Notification 表
+readAt
+recipient state
+retention policy
+
+需要独立 Schema Delta。
+
+当前保持：
+
+无状态通知计算。
+
+五、D4 聚合摘要
+裁决：
+REVISE 🔶
+
+不是完全禁止。
+
+采用：
+
+v1：
+
+允许有限聚合摘要，但必须满足：
+
+允许：
+纯文本
+同租户
+
++
+
+同事件类型
+
++
+
+同权限范围
+
++
+
+同时间窗口
+
+例如：
+
+“今日有 12 个 Claim 接近截止”
+
+禁止：
+
+跨：
+
+不同权限范围
+不同金额权限
+不同租户
+
+原因：
+
+完全逐条：
+
+运营噪音高。
+
+完全聚合：
+
+容易产生权限泄露。
+
+建议定义：
+
+纯文本
+Aggregation:
+summary only
+
+Detail:
+permission filtered
+六、收件人解析审计
+
+通过 ✅
+
+特别认可：
+
+纯文本
+不接受外部地址
+
+正确。
+
+权限映射：
+
+事件	权限
+N1/N3/N5	claimTrackingApprove
+N2	claimTrackingReceive
+N4	recoveryPayoutRecord
+
+通过。
+
+七、模板裁剪
+
+通过 ✅
+
+关键：
+
+金额键不存在，而不是：
+
+纯文本
+amount:0
+
+正确。
+
+禁止泄露：
+
+storageKey
+原始文件
+Claim正文
+其他租户
+
+通过。
+
+八、Kill Switch
+
+通过 ✅
+
+但补充：
+
+Kill Switch 本身如果未来实现：
+
+必须：
+
+有权限
+有审计
+有变更记录
+九、实现阶段要求
+
+批准实现后，需要验证：
+
+1. 幂等
+
+覆盖：
+
+event型
+state型
+2. 权限
+
+至少：
+
+纯文本
+OWNER
+
+FINANCE
+
+OPS
+
+VIEWER
+3. 无事实修改
+
+要求：
+
+通知生成前后：
+
+Claim/Settlement/AuditLog snapshot 一致。
+
+最终归档
+Markdown
+
+### [MSG-20260929-32]
+
+TYPE:
+DESIGN DECISION
+
+TARGET:
+NOTIFICATION-DESIGN
+
+DECISION:
+GO_WITH_MINOR_REVISE
+
+
+D1:
+PASS
+
+N1-N5 approved.
+N6 remains disabled by default.
+
+
+D2:
+GO
+
+State notification:
+enter once per entity/event.
+
+No periodic reminder in v1.
+
+
+D3:
+HOLD
+
+No unread persistence.
+No notification table.
+
+
+D4:
+REVISE
+
+Allow limited tenant-scoped summaries:
+
+same event
+same permission scope
+same time window
+
+Detail remains permission filtered.
+
+
+Approved:
+- projection only
+- no external delivery
+- no schema
+- no write path
+
+STATUS:
+READY_FOR_IMPLEMENTATION
+
+可以进入 Notification 实现阶段。
+
+下一步实现范围：
+
+允许：
+
+Notification projection service
+event derivation
+recipient resolution
+permission filtering
+idempotency calculation
+tests
+
+禁止：
+
+Email/SMS/企业微信接入
+Notification 表
+未读状态
+外部发送
+自动联系客户/平台。
+```

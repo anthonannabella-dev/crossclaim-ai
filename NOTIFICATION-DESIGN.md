@@ -1,8 +1,8 @@
-# NOTIFICATION — DESIGN（R0）
+# NOTIFICATION — DESIGN（R1：按 MSG-20260929-32 修订）
 
 > 类型：**Design Only**（MSG-20260929-31 NEXT：Notification = DESIGN-FIRST）
-> PREVIOUS: MSG-20260929-31（Operations Dashboard 收口 PASS_CLOSE / OPERATIONS_DASHBOARD_READY）
-> 分支 `gate/7-commercial-validation` · Codex · 2026-09-29 · ROUND: **R0**
+> PREVIOUS: MSG-20260929-32（**GO_WITH_MINOR_REVISE**：D1 PASS / D2 GO / D3 HOLD / **D4 REVISE = 允许有限聚合**）
+> 分支 `gate/7-commercial-validation` · Codex · 2026-09-29 · ROUND: **R1**
 
 **本文件只定义：Event → Trigger → Recipient → Template → Permission → Audit。**
 不实现任何渠道，不新增任何表，不发起任何对外联系。
@@ -113,9 +113,21 @@
 * 永远不出现：凭据与密钥、`storageKey`、原始文件内容、Claim 正文全文、其他租户任何信息、模型 prompt/trace。
 * N4（争议）在 FINANCE 视图中可含金额；在 OWNER/ADMIN 视图中含金额与实体引用；不含 Claim 正文。
 
-### 4.2 聚合上限
+### 4.2 有限聚合摘要（D4 裁决后口径）
 
-同一批次内，同一 `eventId` 的多个实体默认**逐条**呈现；若启用聚合摘要（D4 待裁决），单条摘要最多引用 N 个实体并必须给出总数（不得只列前 N 个而隐藏其余）。
+MSG-20260929-32 D4 = **REVISE**：允许**有限聚合摘要**，但必须同时满足四个"同"：
+
+| 约束 | 说明 |
+|---|---|
+| 同租户 | `organizationId` 相同（永不跨租户聚合） |
+| 同事件 | 同一 `eventId`（禁止把不同事件混进一条摘要） |
+| 同权限范围 | 同一 `visibility` 分组（STANDARD / WITH_AMOUNTS 不合并） |
+| 同时间窗口 | 同一评估窗口（状态型按 UTC 日期分桶） |
+
+* **summary only / detail filtered**：摘要只给**总数**（例：「今日有 12 个 Claim 接近截止」）；
+  明细仍逐条按权限裁剪，且摘要最多附带 N 个实体样本（默认 N=5），**必须同时给出总数**，不得只列前 N 个而隐藏其余。
+* v1 只有 N1（`claim.deadline_approaching`）开启聚合（状态型、噪音最高）；其余事件一律逐条（`aggregation: false`）。
+* 聚合是**投影的投影**：仍不落库、不投递、不新增表。
 
 ---
 
@@ -140,7 +152,14 @@
 
 ### 5.3 Kill Switch（设计层要求）
 
-必须有一个租户级开关，关闭后：不再产生任何新通知（包括内部呈现）；已产生的只读不删。开关变更本身必须审计（动作名在实现阶段确定）。
+必须有一个租户级开关，关闭后：不再产生任何新通知（包括内部呈现）；已产生的只读不删。
+
+MSG-20260929-32 §八 补充要求：Kill Switch 一旦进入实现，必须同时具备
+**（1）有权限**（只有 OWNER/ADMIN 可切换，复用 `claimTrackingApprove`，不新增权限键）、
+**（2）有审计**（动作名在实现阶段确定并同步 `OPERATIONS.md`）、
+**（3）有变更记录**（记录切换人、时间、原值/新值）。
+
+本轮实现采用**注入式开关**（`killSwitchEnabled` 由调用方传入），不新增存储、不新增权限键；真正的持久化开关属未来 Schema Delta。
 
 ---
 
@@ -167,3 +186,22 @@ NEED: **GO / REVISE / HOLD**（NOTIFICATION-DESIGN）
 * **D4 聚合摘要**：是否允许同一事件多实体合并为一条摘要（含总数与上限）？还是 v1 一律逐条？
 
 > 边界未变：不接任何渠道、不自动对外联系、不发平台通知；自动提交 FORBIDDEN、自动扣佣 HOLD、金额口径零改动。
+---
+
+## 8. R1 修订记录与实现范围（MSG-20260929-32）
+
+| 裁决项 | 处置 |
+|---|---|
+| D1 PASS（N1–N5 启用，N6 默认关闭） | 事件目录保持；N6 明确标注为 N1 的升级语义，默认不评估 |
+| D2 GO（进入即通知，不做周期提醒） | 幂等键：事件型 `event\|entity\|transition`；状态型 `event\|entity\|UTC 日期` |
+| D3 HOLD（不落库未读状态） | v1 无状态投影；不新增 `Notification` 表、不新增 `readAt` |
+| D4 REVISE（允许有限聚合） | §4.2 已按"四个同"重写；v1 仅 N1 聚合，summary + detail 分离 |
+| Kill Switch 三要素 | §5.3 已补权限 / 审计 / 变更记录要求 |
+
+### 8.1 已批准的实现范围（MSG-20260929-32 §九）
+
+**允许**：Notification projection service · event derivation · recipient resolution · permission filtering · idempotency calculation · tests。
+
+**禁止**：Email / SMS / 企业微信接入 · `Notification` 表 · 未读状态 · 外部发送 · 自动联系客户或平台。
+
+已实现：`apps/api/src/services/operations/notification-projection.ts`（纯投影 + 读侧装配，无写路径、无端点、无投递）。
