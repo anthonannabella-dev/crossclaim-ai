@@ -67842,3 +67842,256 @@ Waiting:
 
 请 Codex 先提交 KILL-SWITCH-IDEMPOTENCY-DELTA-DESIGN R2。
 ```
+
+### [MSG-20260929-58] KILL-SWITCH-IDEMPOTENCY-DELTA-DESIGN R2 裁决：RESULT: PASS / STATUS: SCHEMA DESIGN APPROVED / NEXT: SCHEMA MIGRATION REQUEST REVIEW（先交迁移请求，不执行迁移）
+
+```text
+裁决：
+
+纯文本
+KILL-SWITCH-IDEMPOTENCY-DELTA-DESIGN-R2
+
+RESULT: PASS
+STATUS: SCHEMA DESIGN APPROVED
+NEXT: SCHEMA MIGRATION REQUEST REVIEW
+
+R2 已完整吸收上一轮要求，可以进入 Migration Request 阶段。
+
+R2 逐项复核
+D1 target 生命周期
+
+状态：
+
+纯文本
+PASS
+
+接受：
+
+纯文本
+KillSwitchTarget:
+ ENABLED
+ DISABLED
+
+并确认：
+
+开启：
+
+PENDING_ENABLE
+        ↓
+     APPLIED
+
+关闭：
+
+DISABLED request
+        ↓
+     APPLIED
+
+统一模型正确。
+
+D4 拉闸 Request 化
+
+状态：
+
+纯文本
+PASS
+
+这是正确调整。
+
+现在：
+
+开启：
+
+Request
+ ↓
+Confirm
+ ↓
+Applied
+
+关闭：
+
+Request
+ ↓
+Applied
+
+避免：
+
+开启有生命周期
+关闭只有审计
+
+造成控制面模型分裂。
+
+Pending 唯一约束
+
+状态：
+
+纯文本
+PASS
+
+批准：
+
+PostgreSQL partial unique index：
+
+SQL
+UNIQUE(
+ organizationId,
+ scope
+)
+WHERE state='PENDING_ENABLE'
+
+这个点必须保留。
+
+普通 index 不足以保证并发安全。
+
+Migration Request 中需要明确：
+
+Prisma schema 表达方式
+migration SQL 手写部分
+rollback SQL
+状态机
+
+状态：
+
+纯文本
+PASS
+
+接受：
+
+允许：
+
+PENDING_ENABLE
+ → APPLIED
+ → EXPIRED
+ → CANCELLED
+
+以及：
+
+DISABLED request
+ → APPLIED
+
+禁止：
+
+APPLIED → PENDING_ENABLE
+APPLIED → EXPIRED
+
+实现阶段必须加入 CAS 校验。
+
+Note 双写
+
+状态：
+
+纯文本
+PASS
+
+认可两个用途：
+
+KillSwitchRequest
+
+控制面状态：
+
+pending 查看
+操作解释
+历史查询
+AuditLog
+
+不可变事实：
+
+谁
+什么时间
+为什么
+前后状态
+
+不能因为 Request 有 note 就减少 AuditLog 内容。
+
+保留策略
+
+状态：
+
+纯文本
+PASS
+
+接受：
+
+=180 天。
+
+补充：
+
+Migration Request 中需要注明：
+
+当前版本：
+
+no cleanup job
+
+未来：
+
+retention policy separate design
+进入 Migration Request 前补充要求
+
+Schema Migration Request 请包含：
+
+1. 完整 DDL
+
+包括：
+
+enum
+table
+indexes
+partial unique index
+2. 租户隔离
+
+必须包含：
+
+cc_tenant_kill_switch_request
+
+以及：
+
+27 → 28
+
+CI 断言更新。
+
+3. 回滚计划
+
+必须说明：
+
+顺序：
+
+rollback application code
+↓
+drop indexes
+↓
+drop table
+↓
+drop enum
+↓
+restore CI contract
+4. 数据兼容性
+
+确认：
+
+无历史数据迁移
+无 backfill
+不影响 Claim
+不影响 Settlement
+不影响 Billing
+不影响 Submission
+5. 并发验收计划
+
+Migration 后实现阶段需要验证：
+
+同 idempotencyKey 并发请求
+同 scope 两个 pending
+confirm 与 expire race
+disable 与 pending enable race
+
+当前状态：
+
+纯文本
+Kill Switch Read                    PASS
+Kill Switch Base Implementation     PASS
+Kill Switch Change Entry Design     PASS
+Kill Switch Idempotency Design R2   PASS
+
+NEXT:
+KILL-SWITCH-SCHEMA-MIGRATION-REQUEST
+
+可以提交 Schema Migration Request。
+```
