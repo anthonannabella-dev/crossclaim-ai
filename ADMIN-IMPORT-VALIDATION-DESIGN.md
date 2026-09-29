@@ -88,7 +88,7 @@
 ## 5. 查询模型（草案）
 
 ```
-GET /admin/imports?status=&platform=&from=&to=&cursor=&limit=
+GET /admin/imports?bucket=&channel=&cursor=&limit=   ← 实现口径（bucket = 固定状态桶；不提供 status/platform/from/to）
 GET /admin/imports/:batchId
 GET /admin/imports/:batchId/errors?cursor=&limit=        # L3（原因码/行号/字段名）
 GET /admin/imports/quality-summary?window=7d|30d          # 数据质量摘要
@@ -129,3 +129,9 @@ NEED: **GO / REVISE / HOLD**（ADMIN-IMPORT-VALIDATION-DESIGN）
 2. **错误信息泄露**：响应中不得出现 `rawRow` / `rawPayload` / 客户数据 / token / `storageKey`。
 3. **状态映射**：固定 `ImportBatch.status` → Admin Bucket 的映射，**不得在 Admin 内新建状态判断**。
 4. **Quality Summary 标注**：必须显式标注为 projection（不是 source of truth）。
+
+### 7.2 实现与设计的差异（对齐记录）
+
+- 列表过滤：实现为 `bucket` + `channel`（固定桶映射），**不提供** `status` / `platform` / `from` / `to`（窗口过滤在实现中未开放，避免大扫描；如需再提设计变更）
+- 端点路径：`GET /admin/imports`、`/admin/imports/quality-summary`、`/admin/imports/:batchId`、`/admin/imports/:batchId/errors`（与本文第五节一致）
+- L3 字段：`errorCode / rowNumber / field / sourceColumnName / action`（白名单，其余键一律丢弃）

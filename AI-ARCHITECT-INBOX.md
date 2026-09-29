@@ -62363,3 +62363,379 @@ READY_FOR_IMPLEMENTATION_AFTER_REVISE
 
 可以进入 ADMIN-RECOVERY-REVIEW IMPLEMENTATION。
 ```
+
+### [MSG-20260929-38] ADMIN-CONSOLE-PHASE3-CHECKPOINT 裁决：PASS_CLOSE ✅（A5 恢复复核队列实现通过）——Admin 只读队列（状态严格来自既有审核审计、无审批端点、角标为 projection flag、AGED 常量化、证据仅元数据、金额与阈值不展示）通过；后续阶段安排见归档正文。
+
+本轮为 Admin Phase 3（A5）检查点裁决 PASS_CLOSE。
+
+```text
+ADMIN-CONSOLE-PHASE3-CHECKPOINT 裁决
+结论：PASS_CLOSE ✅
+
+状态：
+
+Markdown
+
+### [MSG-20260929-38]
+
+TYPE:
+IMPLEMENTATION CHECKPOINT DECISION
+
+TARGET:
+ADMIN-CONSOLE-PHASE3
+A5 Recovery Review Queue
+
+DECISION:
+PASS_CLOSE
+
+STATUS:
+RECOVERY_REVIEW_OBSERVABILITY_READY
+
+NEXT:
+ADMIN_CONSOLE_PHASE4_DESIGN
+A2 USER/MEMBERSHIP VIEW
+一、总体审计
+
+A5 实现符合 MSG-20260929-37。
+
+通过。
+
+本轮最大风险点：
+
+Admin 是否偷偷变成审批入口。
+
+已验证没有。
+
+保持：
+
+✅ 只读
+✅ 无审批动作
+✅ 无状态修改
+✅ 无金额暴露
+✅ 无证据内容暴露
+✅ 无新事实源
+✅ 无权限绕过
+
+二、D1 状态来源
+PASS ✅
+
+关键点：
+
+状态严格来源：
+
+纯文本
+recovery.review_required
+
+recovery.review_approved
+
+recovery.review_rejected
+
+AuditLog
+
+而不是 Admin 自己推断。
+
+特别认可：
+
+无审核记录：
+
+纯文本
+不入队
+
+正确。
+
+避免：
+
+错误逻辑：
+
+纯文本
+没有批准记录
+=
+等待审批
+
+这种隐含推断。
+
+三、D1 角标设计
+
+PASS ✅
+
+当前：
+
+纯文本
+HIGH_VALUE_REVIEW_REQUIRED
+
+AGED
+
+MISSING_EVIDENCE_REF
+
+作为：
+
+projection flag。
+
+正确。
+
+不是：
+
+状态。
+
+四、D2 证据展示
+
+PASS ✅
+
+返回：
+
+纯文本
+evidenceId
+
+kind
+
+role
+
+capturedAt
+
+足够。
+
+禁止：
+
+文件名
+URL
+storageKey
+文件内容
+
+正确。
+
+五、D3 无审批捷径
+
+PASS ✅
+
+这是本轮最重要验收。
+
+通过：
+
+模块层
+
+无：
+
+approve
+reject
+submit
+mutate
+updateStatus
+HTTP 层
+
+只有：
+
+GET
+
+非 GET：
+
+405。
+
+流程保持：
+
+纯文本
+Admin Console
+
+↓
+
+reviewPath
+
+↓
+
+Recovery Review Service
+
+↓
+
+Permission Check
+
+↓
+
+AuditLog
+
+正确。
+
+六、D4 金额隔离
+
+PASS ✅
+
+当前：
+
+不返回：
+
+amount
+currency
+recoveredAmount
+settlementAmount
+payoutAmount
+threshold
+feeAmount
+
+并且：
+
+没有通过：
+
+纯文本
+HIGH_VALUE_REVIEW_REQUIRED
+
+泄露阈值。
+
+正确。
+
+七、D5 AGED
+
+PASS ✅
+
+设计符合：
+
+纯文本
+AGED_THRESHOLD_DAYS = 7
+
+代码常量。
+
+没有：
+
+数据库配置
+Admin 修改入口
+
+正确。
+
+八、权限
+
+这里确认：
+
+纯文本
+recoveryReview
+=
+OWNER/ADMIN
+
+接受。
+
+OPS 不开放合理。
+
+原因：
+
+A5 接近：
+
+审核
+风险
+回收决策
+
+比 A4 Import 更敏感。
+
+九、API 契约情况
+
+注意：
+
+报告：
+
+纯文本
+implemented=49
+documented=50
+
+这里需要在最终合并前修复。
+
+虽然不影响本轮业务设计，但属于工程卫生问题。
+
+要求：
+
+REVISE（非阻塞）
+
+补齐：
+
+API.md 或契约记录。
+
+即：
+
+最终状态：
+
+纯文本
+PASS_CLOSE
++
+DOC_CONTRACT_FIX_REQUIRED
+十、下一步选择
+
+问题：
+
+是否进入 P4 A2 User/Membership，还是 Final Gate Review？
+
+裁决：
+
+进入 P4：GO_DESIGN_FIRST ✅
+
+原因：
+
+当前 Admin Console 还缺：
+
+A2 User/Membership View。
+
+但注意：
+
+A2 风险最高。
+
+进入前必须保持：
+
+禁止：
+
+❌ 修改角色
+❌ 邀请用户
+❌ 删除用户
+❌ 重置密码
+❌ Session 操作
+❌ API Token 管理
+
+A2 只能：
+
+查看：
+
+用户
+Membership
+Role
+状态
+最近活动（脱敏）
+
+建议提交：
+
+ADMIN-USER-MEMBERSHIP-DESIGN.md
+
+重点回答：
+
+角色展示粒度
+是否显示邮箱
+Session 是否展示
+是否展示最后登录时间
+是否展示邀请状态
+权限矩阵
+最终归档
+Markdown
+
+### [MSG-20260929-38]
+
+ADMIN CONSOLE PHASE 3
+
+DECISION:
+PASS_CLOSE
+
+
+Validated:
+- Recovery Review visibility
+- No approval bypass
+- No amount leakage
+- Evidence metadata only
+- Audit sourced status
+- Tenant isolation
+- Read only guarantee
+
+
+Minor:
+Fix API documentation mismatch
+
+
+NEXT:
+ADMIN_CONSOLE_PHASE4
+
+A2:
+USER/MEMBERSHIP VIEW
+
+DESIGN_FIRST_APPROVED
+
+可以继续提交 ADMIN-USER-MEMBERSHIP-DESIGN。
+```

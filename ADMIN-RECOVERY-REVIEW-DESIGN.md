@@ -106,3 +106,19 @@ NEED: **GO / REVISE / HOLD**（ADMIN-RECOVERY-REVIEW-DESIGN）
 * **D5 时效**：`AGED` 角标的阈值（建议 7 天）与是否需要在清单顶部单独列出「超期未处置」分组？
 
 > 边界未变：只读、单租户、无新表、无写路径、无审批捷径、无下载、无金额；自动提交 FORBIDDEN、自动扣佣 HOLD。
+
+---
+
+## 7. R1 修订记录（MSG-20260929-37 = GO_WITH_MINOR_REVISE）与实现对齐
+
+| 裁决项 | 最终实现 |
+|---|---|
+| D1 角标必须是 projection flag | 最终角标名为 `HIGH_VALUE_REVIEW_REQUIRED`（**不是** `HIGH_VALUE`），另含 `AGED`、`MISSING_EVIDENCE_REF`；一律不是状态 |
+| D3 只深链、不新增审批端点 | 模块导出面经用例扫描确认无 approve/reject/状态变更函数；端点仅 `GET /admin/recovery-review` 与 `GET /admin/recovery-review/:caseId`（非 GET → 405） |
+| D4 不展示任何金额（含阈值） | 禁键清单 amount / currency / recoveredAmount / settlementAmount / payoutAmount / threshold / feeAmount；用例断言响应不含 `threshold` 与 `1000` 字样 |
+| D5 AGED 阈值 | `AGED_THRESHOLD_DAYS = 7` 为**代码常量**；「Overdue」以查询分组（bucket 过滤 + AGED 角标）实现，不新增状态 |
+| D2 证据粒度 | 仅 `evidenceId / kind / role / capturedAt` |
+
+### 7.1 实现期验收（MSG-20260929-37 六）
+
+1. 无审批捷径扫描（导出面 + 仅 GET 端点）　2. 状态一致性（严格来自既有审核审计，无记录不入队）　3. 金额泄露扫描（离线禁键 + 真实库深度扫描）　4. 深链安全（仅返回既有 `reviewPath`，由目标服务二次校验权限）
