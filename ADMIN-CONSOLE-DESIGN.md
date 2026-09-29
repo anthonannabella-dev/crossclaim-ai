@@ -115,3 +115,24 @@ NEED: **GO / REVISE / HOLD**（ADMIN-CONSOLE-DESIGN）
 * **D4 六个模块是否全部进 v1**：建议 **A1 + A3 + A6 先做**（概览 / 审计 / 健康），A2/A4/A5 随后（避免一次交付过宽）。
 
 > 边界未变：只读、无新表、无写路径、无外部渠道、无资金操作；自动提交 FORBIDDEN、自动扣佣 HOLD。
+
+---
+
+## 7. R1 修订记录（MSG-20260929-34 = GO / 分阶段实施）
+
+| 裁决项 | 处置 |
+|---|---|
+| D1 REVISE（最小权限分层） | A1/A2/A3 = OWNER/ADMIN；A4/A6 = OWNER/ADMIN/OPS；A5 = OWNER/ADMIN + 既有 review 权限；**FINANCE v1 不单独开放**（未来另开 inance-console-design） |
+| D2 GO（有限制） | 允许 ctorUserId 过滤，**仅限审计/安全调查**；禁止员工绩效排名/行为评分/活跃排行；必须受 organizationId 限制 |
+| D3 GO | 列表只返回元数据（action / entityType / entityId / createdAt / actor / severity）；详情走独立 GET /admin/audit/:id；changes 受限且优先脱敏 |
+| D4 REVISE（分阶段） | **P1** A1 Tenant Overview + A3 Audit Explorer + A6 System Health → **P2** A4 Import/Validation → **P3** A5 Recovery Review Queue → **P4** A2 Membership |
+
+### 7.1 实现前必须补充的三项测试
+
+1. **Audit Explorer 防泄露**：列表默认不返回 changes；租户隔离；ctorUserId 不得跨租户查询。
+2. **System Health 降级**：数据库异常时不得返回 SQL 错误、连接串或内部堆栈。
+3. **Admin 只读证明**：请求前后 Organization / Membership / AuditLog / Claim / Settlement 快照一致。
+
+### 7.2 Phase 1 实现范围（已批准）
+
+A1 Tenant Overview（不得展示 token / secret / 原始连接配置）、A3 Audit Explorer（元数据列表 + 独立详情端点）、A6 System Health（复用 health/metrics，不新增监控系统）。

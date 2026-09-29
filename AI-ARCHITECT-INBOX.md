@@ -60498,3 +60498,435 @@ Notification 模块收口。
 
 下一步进入 Admin Console Design（DESIGN-FIRST）。
 ```
+
+### [MSG-20260929-34] ADMIN-CONSOLE-DESIGN 裁决：GO ✅（GO_WITH_PHASED_IMPLEMENTATION / READY_FOR_PHASED_IMPLEMENTATION）——总体设计通过（Admin = 运营可观测层，非超级管理员后台；保持只读、单租户、无新事实表、无权限编辑、无资金操作、无平台配置、无 API Key 管理）；六个模块设计通过（A1 不得展示 token/secret/原始连接配置；A2 只读禁改角色/邀请/删除；A5 Admin 页面不得直接审批，必须走既有 recovery-review 端点与权限校验；A6 复用 health/metrics 不新增监控系统）；D1 REVISE = 最小权限分层（A1/A2/A3 = OWNER/ADMIN；A4/A6 = OWNER/ADMIN/OPS；A5 = OWNER/ADMIN + 既有 review 权限；FINANCE v1 不单独开放，未来另开 finance-console-design）；D2 GO 但受限（允许 actorUserId 过滤，仅用于审计/安全调查，禁止员工绩效排名与行为评分，必须受 organizationId 限制）；D3 GO（列表只返回 action/entityType/entityId/createdAt/actor/severity 元数据，详情走独立 GET /admin/audit/:id，changes 受限且优先脱敏而非完整 old/new）；D4 REVISE = 分阶段（P1 = A1 Tenant Overview + A3 Audit Explorer + A6 System Health；P2 = A4 Import/Validation；P3 = A5 Recovery Review Queue；P4 = A2 Membership）；实现前补充要求：Audit Explorer 防泄露测试（changes 默认不返回、租户隔离、actorUserId 不跨租户）、System Health 降级测试（不得泄露 SQL 错误/连接串/堆栈）、Admin 只读证明（Organization/Membership/AuditLog/Claim/Settlement 前后快照一致）；NEXT = 进入 Admin Console Phase 1 实现
+
+本轮为 Admin Console 设计裁决：GO_WITH_PHASED_IMPLEMENTATION，D1/D4 REVISE，D2/D3 有限 GO；可进入 Phase 1 实现。
+
+```text
+ADMIN-CONSOLE-DESIGN 裁决
+总体结论：GO ✅（按阶段拆分实施）
+
+状态：
+
+纯文本
+
+GATE:
+7 Commercial Validation
+
+TARGET:
+Admin Console Design R0
+
+DECISION:
+GO_WITH_PHASED_IMPLEMENTATION
+
+STATUS:
+READY_FOR_IMPLEMENTATION_DESIGN_SPLIT
+一、总体审计
+
+设计方向正确。
+
+符合之前约束：
+
+Admin = 运营可观测层，不是超级管理员后台。
+
+通过。
+
+当前边界保持：
+
+✅ 只读
+✅ 单租户视图
+✅ 无新事实表
+✅ 无权限编辑
+✅ 无资金操作
+✅ 无平台配置
+✅ 无 API Key 管理
+
+二、六个模块设计审计
+A1 Tenant Overview
+
+通过 ✅
+
+用途：
+
+租户健康
+最近活动
+数据源状态
+
+注意：
+
+不要展示：
+
+token
+secret
+原始连接配置
+A2 User/Membership View
+
+通过 ✅
+
+只读。
+
+禁止：
+
+修改角色
+邀请用户
+删除用户
+
+这些属于未来：
+
+Admin Governance。
+
+A3 Audit Explorer
+
+通过 ✅
+
+这是 v1 最重要模块之一。
+
+原因：
+
+当前系统：
+
+Claim
+Recovery
+Import
+Permission
+
+都依赖 AuditLog。
+
+A4 Import/Validation Operations
+
+通过 ✅
+
+适合 OPS。
+
+A5 Recovery Review Queue
+
+通过 ✅
+
+但强调：
+
+Admin 页面不能直接审批。
+
+必须：
+
+纯文本
+Admin View
+
+↓
+
+Existing recovery-review endpoint
+
+↓
+
+Existing permission check
+A6 System Health
+
+通过 ✅
+
+复用：
+
+health
+metrics
+
+不新增监控系统。
+
+三、D1 角色可见范围
+裁决：
+REVISE 🔶
+
+不是完全 OWNER/ADMIN。
+
+采用：
+
+最小权限分层。
+
+建议：
+
+模块	角色
+A1 Tenant Overview	OWNER/ADMIN
+A2 Membership	OWNER/ADMIN
+A3 Audit Explorer	OWNER/ADMIN
+A4 Import/Validation	OWNER/ADMIN/OPS
+A5 Recovery Review Queue	OWNER/ADMIN + 需要对应 review 权限
+A6 System Health	OWNER/ADMIN/OPS
+FINANCE
+
+不单独开放 Admin v1。
+
+原因：
+
+FINANCE 已经有：
+
+Recovery 金额权限
+对账能力
+
+但 Admin 是：
+
+运营治理视角。
+
+未来如果需要：
+
+单独：
+
+纯文本
+finance-console-design
+四、D2 Audit Explorer actorUserId 查询
+裁决：
+GO，但有限制 ✅
+
+允许：
+
+纯文本
+actorUserId filter
+
+但必须：
+
+用于：
+
+审计调查
+操作追踪
+安全排查
+
+禁止：
+
+做：
+
+员工绩效排名
+行为评分
+活跃排行
+
+查询必须受：
+
+organizationId
+
+限制。
+
+五、D3 Audit 详情粒度
+裁决：
+
+采用建议方案：
+
+GO ✅
+
+列表：
+
+只返回：
+
+纯文本
+action
+
+entityType
+
+entityId
+
+createdAt
+
+actor
+
+severity
+
+详情：
+
+单独：
+
+纯文本
+GET /admin/audit/:id
+
+返回：
+
+changes。
+
+原因：
+
+避免：
+
+大查询
+敏感字段泄露
+无权限字段扩散
+
+同时：
+
+changes 继续遵守之前规则：
+
+优先：
+
+纯文本
+
+而不是完整 old/new value。
+
+六、D4 六模块是否全部 v1
+裁决：
+REVISE 🔶
+
+不要一次全部实现。
+
+批准分阶段。
+
+Phase 1（优先）
+A1 Tenant Overview
+A3 Audit Explorer
+A6 System Health
+
+原因：
+
+三者基础依赖最少。
+
+Phase 2
+A4 Import/Validation
+
+原因：
+
+已有：
+
+ImportBatch
+error report
+validation harness
+
+容易接入。
+
+Phase 3
+A5 Recovery Review Queue
+
+原因：
+
+涉及：
+
+权限
+状态推进
+人工流程
+
+需要更谨慎。
+
+Phase 4
+A2 User/Membership
+
+最后。
+
+原因：
+
+涉及：
+
+身份治理
+权限边界
+
+风险最高。
+
+七、实现前补充要求
+
+提交实现时：
+
+增加：
+
+1. Audit Explorer 防泄露测试
+
+覆盖：
+
+changes 不默认返回
+tenant isolation
+actorUserId 不跨租户查询
+2. System Health 降级测试
+
+验证：
+
+数据库异常情况下：
+
+不会返回：
+
+SQL 错误
+connection string
+内部堆栈
+3. Admin 只读证明
+
+必须：
+
+请求前后：
+
+Organization
+Membership
+AuditLog
+Claim
+Settlement
+
+数据快照一致。
+
+最终归档
+Markdown
+
+### [MSG-20260929-34]
+
+TYPE:
+DESIGN DECISION
+
+TARGET:
+ADMIN-CONSOLE-DESIGN
+
+DECISION:
+GO_WITH_PHASED_IMPLEMENTATION
+
+
+D1:
+REVISE
+
+Role split:
+
+OWNER/ADMIN:
+A1 A2 A3
+
+OWNER/ADMIN/OPS:
+A4 A6
+
+A5:
+existing review permission required
+
+FINANCE:
+not separate in v1
+
+
+D2:
+GO
+
+actorUserId filtering allowed.
+
+Purpose:
+audit/security investigation only.
+
+No employee scoring.
+
+
+D3:
+GO
+
+List:
+metadata only.
+
+Detail:
+separate endpoint.
+
+changes restricted.
+
+
+D4:
+REVISE
+
+Phase order:
+
+P1:
+A1 Tenant Overview
+A3 Audit Explorer
+A6 System Health
+
+P2:
+A4 Import
+
+P3:
+A5 Recovery Review
+
+P4:
+A2 Membership
+
+
+STATUS:
+READY_FOR_PHASED_IMPLEMENTATION
+
+可以进入 Admin Console Phase 1 实现。建议先做 Tenant Overview + Audit Explorer + System Health。
+```
