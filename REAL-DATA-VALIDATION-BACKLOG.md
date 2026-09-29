@@ -32,6 +32,11 @@
 
 ---
 
+## 1.1 合成数据已暴露的差距（待真实文件确认）
+
+- **Walmart 结算导出主键**：真实导出常以 `PO Number` / `Purchase Order Number` 作为行标识，而 canonical 14 列要求 `orderId`。
+  当前适配器不做 PO→orderId 的猜测映射，因此 `apps/api/fixtures/synthetic/walmart-settlement-sample.csv` 会 QUARANTINE 并附 ACTION。
+  处置：拿到真实 Walmart 导出后确认列名与语义，再决定是否新增别名（属数据映射决策）。
 ## 2. 执行规则
 
 1. 上述任一项未完成时，**不得**阻塞其他模块开发；只在相关模块上标注 `REAL_DATA_VALIDATION_PENDING`。
