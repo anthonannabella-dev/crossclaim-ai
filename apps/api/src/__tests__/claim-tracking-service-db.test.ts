@@ -1,7 +1,7 @@
 // Claim Tracking 写路径（真实 PostgreSQL）：CAS 并发、幂等、跨租户、I1/I3/I5。
 // 依据：MSG-20260929-23（S1-S5 GO）与 MSG-20260929-25（A1 权限位 GO）。
 
-import { Prisma, PrismaClient } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { createAuditWriter } from '../services/audit';

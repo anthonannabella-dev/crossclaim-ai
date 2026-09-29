@@ -57842,3 +57842,390 @@ claimTrackingReceive → OWNER/ADMIN/OPS ✅
 
 无需重复修改。可以继续进入 Recovery Confirmation migration 与实现。
 ```
+
+### [MSG-20260929-27] RECOVERY-CONFIRMATION-IMPLEMENTATION-CHECKPOINT 裁决：PASS ✅（PASS_CLOSE / RECOVERY_CONFIRMATION_LAYER_READY）——双轴模型（confirmationStatus + reconciliationStatus）、RecoveryPayout 唯一事实来源、payoutRef 幂等、冲回链、租户隔离、审计覆盖、迁移安全全部通过；接受两项偏离（confirmedAt 复用、tenant-owned 复合唯一索引）；F1 裁决 B：在 ARCHITECTURE_CONTRACT.md 登记 RecoveryPayout tenant isolation exception（不新增触发器，记录风险与保护层）；F2 裁决 B：新增 recoveryPayoutRecord 权限（OWNER/ADMIN/FINANCE），recordRecoveryConfirmation 与 linkReversal 继续用 claimTrackingApprove；NEXT = 先提交 RECOVERY-PAYOUT-PERMISSION-DELTA.md 再实现；auto commission HOLD / auto payment HOLD / auto submission FORBIDDEN 不变
+
+本轮为上一轮 IMPLEMENTATION CHECKPOINT 的裁决：PASS_CLOSE。需执行两项后续（F1 文档登记、F2 权限 Delta + 实现）。
+
+```text
+RECOVERY-CONFIRMATION-IMPLEMENTATION-CHECKPOINT 裁决
+总体结论
+PASS ✅
+
+状态：
+
+纯文本
+id="rc-impl-27"
+
+GATE:
+7 Commercial Validation
+
+TARGET:
+Recovery Confirmation Implementation
+
+DECISION:
+PASS_CLOSE
+
+STATUS:
+RECOVERY_CONFIRMATION_LAYER_READY
+一、实现审计结论
+
+本次实现符合 MSG-20260929-26 批准范围。
+
+核心判断：
+
+Recovery Confirmation 已正确形成“确认轴 + 到账轴”双轨模型，没有滑向资金自动化。
+
+通过。
+
+二、核心模型审计 ✅
+1. confirmationStatus
+
+通过。
+
+职责：
+
+纯文本
+是否完成业务确认
+2. reconciliationStatus
+
+通过。
+
+职责：
+
+纯文本
+到账核对状态
+
+二者没有混用。
+
+符合上一轮修订目标。
+
+三、RecoveryPayout 审计 ✅
+
+通过。
+
+当前：
+
+纯文本
+RecoveryPayout
+
+=
+到账事实唯一来源
+
+正确。
+
+receivedAmount
+
+采用：
+
+纯文本
+SUM(RecoveryPayout.amount)
+
+不落库。
+
+批准。
+
+避免：
+
+Settlement.amount
+
++
+RecoveryPayout.amount
+
++
+ReceivedAmount字段
+
+三个事实源。
+
+四、金额与资金边界检查 ✅
+
+通过。
+
+确认：
+
+没有修改：
+
+FeeCalculation
+RecoveryLedgerEntry
+BillingInvoice
+
+没有：
+
+Stripe
+Payment API
+自动扣佣
+自动结算
+
+保持：
+
+纯文本
+Auto Commission:
+HOLD
+五、测试与迁移审计 ✅
+
+通过。
+
+关键证据：
+
+Fresh PostgreSQL 16
+Migration success
+Trigger count = 27
+
+Vitest:
+92 files
+838 tests
+
+API Contract:
+PASS
+
+Audit Coverage:
+PASS
+
+关键业务测试：
+
+项目	结果
+历史默认 CONFIRMED + NOT_STARTED	✅
+跨租户拒绝	✅
+payoutRef 幂等	✅
+PARTIAL	✅
+RECONCILED	✅
+超额 DISPUTED	✅
+冲回链 I7	✅
+双轴隔离	✅
+审计留痕	✅
+
+通过。
+
+六、偏离说明裁决
+R2b confirmedAt 复用
+接受 ✅
+
+原因：
+
+你给出的理由成立：
+
+同一语义不能存在两个时间事实源。
+
+复用已有：
+
+纯文本
+confirmRecoveryOutcome
+
+正确。
+
+不需要增加。
+
+RecoveryPayout tenant-owned 复合唯一索引
+接受 ✅
+
+原因：
+
+属于已有架构契约要求。
+
+这个变化：
+
+不是业务语义变化。
+
+只是满足：
+
+纯文本
+organizationId + id
+
+tenant-owned 标准约束。
+
+接受。
+
+七、F1 租户触发器问题
+裁决：
+
+选择：
+
+B ✅
+
+接受服务层保证，并记录架构例外。
+
+原因：
+
+本次 Delta 已明确：
+
+不新增/不修改触发器。
+
+而且：
+
+RecoveryPayout 的跨租户风险已经有：
+
+服务层 I1
+跨租户测试
+审计覆盖
+
+因此当前阶段不强制改 27→28。
+
+但是需要补充：
+
+在：
+
+纯文本
+ARCHITECTURE_CONTRACT.md
+
+登记：
+
+纯文本
+RecoveryPayout tenant isolation exception
+
+说明：
+
+为什么没有 DB trigger
+风险是什么
+当前保护层是什么
+
+未来如果：
+
+开放 DB 级写入
+外部 ETL
+管理员 SQL 工具
+
+则重新评估。
+
+八、F2 权限语义
+裁决：
+
+选择：
+
+B（小范围新增专用权限）✅
+
+不建议长期复用 claimTrackingReceive。
+
+原因：
+
+现在出现语义分离：
+
+纯文本
+Claim Tracking
+
+登记外部事件
+
+
+Recovery Confirmation
+
+登记资金到账事实
+
+二者越来越不同。
+
+批准新增：
+
+纯文本
+recoveryPayoutRecord
+
+权限：
+
+建议：
+
+OWNER
+ADMIN
+FINANCE
+
+原因：
+
+到账登记属于财务事实录入。
+
+FINANCE 无法登记会造成运营断层。
+
+保持：
+
+recordRecoveryConfirmation
+
+继续：
+
+纯文本
+claimTrackingApprove
+
+OWNER
+ADMIN
+
+因为它代表：
+
+业务确认。
+
+linkReversal
+
+继续：
+
+纯文本
+claimTrackingApprove
+
+因为冲回属于状态裁决。
+
+最终权限：
+
+动作	权限
+录入 RecoveryPayout	recoveryPayoutRecord
+确认 Recovery	claimTrackingApprove
+冲回链建立	claimTrackingApprove
+九、下一步要求
+
+新增权限前提交：
+
+纯文本
+RECOVERY-PAYOUT-PERMISSION-DELTA.md
+
+只需说明：
+
+新权限
+RBAC 映射
+审计动作
+fail-closed
+
+然后可以实现。
+
+最终归档
+Markdown
+### [MSG-20260929-27]
+
+TYPE:
+IMPLEMENTATION CHECKPOINT DECISION
+
+TARGET:
+RECOVERY-CONFIRMATION-IMPLEMENTATION
+
+DECISION:
+PASS_CLOSE
+
+Validated:
+- dual-axis confirmation/reconciliation model
+- RecoveryPayout fact source
+- payout idempotency
+- reversal chain
+- tenant isolation
+- audit coverage
+- migration safety
+
+Accepted deviations:
+- confirmedAt reuse
+- tenant-owned unique contract index
+
+F1:
+B
+Document tenant trigger exception in architecture contract.
+
+F2:
+B
+Add recoveryPayoutRecord permission.
+
+Mapping:
+
+recoveryPayoutRecord:
+OWNER/ADMIN/FINANCE
+
+claimTrackingApprove:
+OWNER/ADMIN
+
+No change:
+- auto commission HOLD
+- auto payment HOLD
+- auto submission FORBIDDEN
+
+STATUS:
+RECOVERY_CONFIRMATION_LAYER_READY
+
+本轮通过。下一步处理权限 Delta，然后 Recovery Confirmation 可以进入完整 Production Candidate 状态。
+```

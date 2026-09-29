@@ -46,6 +46,7 @@ const DENY_ALL: PermissionMatrix = {
   manageClaimItems: false,
   claimTrackingApprove: false,
   claimTrackingReceive: false,
+  recoveryPayoutRecord: false,
 };
 
 function asRow(role: AppRole): Row {

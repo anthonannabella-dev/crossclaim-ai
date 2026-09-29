@@ -17,6 +17,10 @@
  *   FINANCE        yes（受限字段）      no               no
  *   VIEWER         no                 no               no
  *   —— FINANCE 只看 status / recoverableAmount / settlementRef，不得绕过证据边界。
+ *
+ * MSG-20260929-27 F2 追加（到账事实录入）：
+ *   recoveryPayoutRecord = OWNER / ADMIN / FINANCE（到账登记属财务事实录入；OPS / VIEWER 不可）
+ *   —— 与 Claim Tracking 分离：Claim Tracking 登记外部事件，Recovery Confirmation 登记资金到账事实。
  */
 
 export const APP_ROLES = ['OWNER', 'ADMIN', 'OPS', 'FINANCE', 'VIEWER'] as const;
@@ -42,6 +46,8 @@ export interface PermissionMatrix {
   claimTrackingApprove: boolean;
   /** MSG-20260929-25 A1：Claim Tracking 录入外部回执 / 平台案件号（OWNER/ADMIN/OPS） */
   claimTrackingReceive: boolean;
+  /** MSG-20260929-27 F2：录入到账事实 RecoveryPayout（OWNER/ADMIN/FINANCE） */
+  recoveryPayoutRecord: boolean;
 }
 
 const DENY_ALL: PermissionMatrix = {
@@ -58,6 +64,7 @@ const DENY_ALL: PermissionMatrix = {
   manageClaimItems: false,
   claimTrackingApprove: false,
   claimTrackingReceive: false,
+  recoveryPayoutRecord: false,
 };
 
 export const PERMISSIONS: Record<AppRole, PermissionMatrix> = {
@@ -75,6 +82,7 @@ export const PERMISSIONS: Record<AppRole, PermissionMatrix> = {
     manageClaimItems: true,
     claimTrackingApprove: true,
     claimTrackingReceive: true,
+    recoveryPayoutRecord: true,
   },
   ADMIN: {
     manageConnections: true,
@@ -90,6 +98,7 @@ export const PERMISSIONS: Record<AppRole, PermissionMatrix> = {
     manageClaimItems: true,
     claimTrackingApprove: true,
     claimTrackingReceive: true,
+    recoveryPayoutRecord: true,
   },
   OPS: {
     manageConnections: false,
@@ -105,6 +114,7 @@ export const PERMISSIONS: Record<AppRole, PermissionMatrix> = {
     manageClaimItems: true,
     claimTrackingApprove: false,
     claimTrackingReceive: true,
+    recoveryPayoutRecord: false,
   },
   FINANCE: {
     manageConnections: false,
@@ -120,6 +130,7 @@ export const PERMISSIONS: Record<AppRole, PermissionMatrix> = {
     manageClaimItems: false,
     claimTrackingApprove: false,
     claimTrackingReceive: false,
+    recoveryPayoutRecord: true,
   },
   VIEWER: { ...DENY_ALL },
 };

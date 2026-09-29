@@ -234,14 +234,15 @@ export interface RecordPayoutResult {
  * 登记一笔真实到账（唯一事实来源）。I1/I6 在此实现：
  *   I1 同租户（loadSettlement 按 organizationId 过滤）
  *   I6 (organizationId, payoutRef) 唯一 → 重复登记返回既有事实，不重复累加
- * 权限：MSG-20260929-25 将「登记到账相关事件（非财务确认）」授予 claimTrackingReceive
- *       （OWNER/ADMIN/OPS）；本函数只登记到账事实，不构成财务确认（D5 HOLD）。
+ * 权限：MSG-20260929-27 F2 为到账事实录入新增 recoveryPayoutRecord
+ *       （OWNER/ADMIN/FINANCE）—— 与 Claim Tracking 的外部事件登记分离。
+ *       本函数只登记到账事实，不构成财务确认，也不构成扣款授权（D5 HOLD）。
  */
 export async function recordRecoveryPayout(
   input: RecordPayoutInput,
   deps: RecoveryConfirmationDeps,
 ): Promise<RecordPayoutResult> {
-  assertPermission(input.role, 'claimTrackingReceive');
+  assertPermission(input.role, 'recoveryPayoutRecord');
   const normalized = normalizePayoutInput(input);
   const at = (deps.now ?? (() => new Date()))();
   const settlement = await loadSettlement(deps, input.organizationId, input.settlementId);

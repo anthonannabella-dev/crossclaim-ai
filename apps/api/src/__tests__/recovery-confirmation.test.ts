@@ -8,6 +8,7 @@
 import { Prisma } from '@prisma/client';
 import { describe, expect, it } from 'vitest';
 
+import { permissionsFor } from '../services/workflow/permissions';
 import {
   PAYOUT_SOURCE_TYPES,
   normalizePayoutInput,
@@ -152,8 +153,17 @@ describe('MSG-26 · 录入校验（离线）', () => {
   });
 });
 
-describe('MSG-26 · 权限 fail-closed（不触库）', () => {
-  it('16 无到账登记权限者，在任何 DB 访问之前即被拒绝', async () => {
+describe('MSG-27 · 到账登记权限 recoveryPayoutRecord', () => {
+  it('16 权限矩阵：OWNER/ADMIN/FINANCE 可登记；OPS/VIEWER/未知角色 fail-closed', () => {
+    for (const role of ['OWNER', 'ADMIN', 'FINANCE']) {
+      expect(permissionsFor(role).recoveryPayoutRecord, role).toBe(true);
+    }
+    for (const role of ['OPS', 'VIEWER', 'SUPERADMIN', '', null, undefined]) {
+      expect(permissionsFor(role as never).recoveryPayoutRecord, String(role)).toBe(false);
+    }
+  });
+
+  it('17 无权限者，在任何 DB 访问之前即被拒绝', async () => {
     let touched = false;
     const prismaStub = {
       settlement: {
@@ -165,7 +175,7 @@ describe('MSG-26 · 权限 fail-closed（不触库）', () => {
     } as never;
     const auditStub = { record: () => Promise.resolve({ id: 'a', createdAt: new Date() }) };
 
-    for (const role of ['VIEWER', 'FINANCE', 'SUPERADMIN', '']) {
+    for (const role of ['VIEWER', 'OPS', 'SUPERADMIN', '']) {
       await expect(
         recordRecoveryPayout(
           {

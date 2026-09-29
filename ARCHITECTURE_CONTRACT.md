@@ -134,6 +134,22 @@ Claim / Appeal 文本草稿        直接对外提交
 
 ---
 
+### 5.5 已登记的租户隔离例外：RecoveryPayout
+
+> 裁决依据：**MSG-20260929-27 F1 = B**（接受服务层保证，登记为架构例外）。
+
+`RecoveryPayout`（到账事实唯一来源）属 tenant-owned 且跨表引用 `Settlement`，
+按 §5.2 的规则本应挂 `cc_tenant_RecoveryPayout` 触发器。经架构方裁决，
+**当前阶段不新增触发器**（触发器总数保持 27），理由与代价如下：
+
+| 项 | 内容 |
+|---|---|
+| 为什么没有 DB trigger | MSG-20260929-26 明确批准该 Delta「不新增 / 不修改触发器」，27 个 `cc_tenant%` 是 CI 断言的保护点 |
+| 当前保护层 | 服务层 `loadSettlement` 按 `organizationId` 过滤（不存在即 `NOT_FOUND`，不泄露跨租户存在性），写入只使用该 Settlement 的 `id`；`(organizationId, payoutRef)` 与 `(organizationId, id)` 复合唯一键；审计全留痕 |
+| 测试覆盖 | `recovery-confirmation-db.test.ts` 跨租户拒绝用例（I1）与 `claim-tracking-service-db.test.ts` 跨租户写路径用例 |
+| 残余风险 | 绕过应用层的直接写库（外部 ETL、管理员手写 SQL、运维工具）可写入跨租户引用，数据库层不会拦截 |
+| 重新评估条件 | 一旦开放 DB 级写入通道（外部 ETL / 管理员 SQL 工具 / 数据导入作业），必须重新评估并补 `cc_tenant_RecoveryPayout`（27 → 28，同步 CI 断言） |
+
 ## 六、Adapter 契约
 
 每个外部平台一个 Adapter。**Phase 1 的活跃接口是只读的**：
