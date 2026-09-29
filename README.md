@@ -135,6 +135,7 @@ AI 负责文档理解、字段抽取、异常解释、证据推荐、案件总�
 | `REAL-DATA-VALIDATION-BACKLOG.md` | 真实依赖登记（RD-01…RD-12）与三轨状态口径 |
 | `PRODUCTION-READINESS-CHECKLIST.md` | 生产就绪判据（A–H 门 + 上线前 Validation 清单） |
 | `FINAL-GATE-REVIEW.md` | 最终总审（Gate 1–10 + Production Candidate 判定：CODE COMPLETE / INTEGRATION PENDING / REAL VALIDATION PENDING / BLOCKERS） |
+| `docs/releases/PRODUCTION-CANDIDATE-v1.0.md` | Production Candidate v1.0 归档（FINAL PASS / CODE COMPLETE / 待集成与待验证清单 / 已知边界 / 上线清单） |
 | `reports/ADMIN-BACKOFFICE-AUDIT.md` | 后台异常处置能力核查（运维视角能力/缺口/上线清单） |
 
 *（以上文档均已建立；`apps/ai` 仍待立项。）*
