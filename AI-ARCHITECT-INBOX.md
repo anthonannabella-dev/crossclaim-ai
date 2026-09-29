@@ -61598,3 +61598,390 @@ READY_FOR_IMPLEMENTATION_AFTER_REVISION
 
 可以进入 ADMIN-IMPORT-VALIDATION IMPLEMENTATION。
 ```
+
+### [MSG-20260929-36-A] ADMIN-CONSOLE-PHASE2-CHECKPOINT 裁决：PASS_CLOSE ✅（IMPORT_VALIDATION_OBSERVABILITY_READY）——A4 实现符合 MSG-20260929-36（Admin 只观察、不修复、不改变事实；无 Schema 变更/无 Import 写入/无重跑入口/无删除入口/无下载/无金额暴露/无原始数据暴露/无 AuditLog 写入）；D1 状态映射 PASS（固定映射 + IMPORTED+retry→retried_success + 未知状态 UNKNOWN_STATUS→failed fail-closed；未新增 waiting_review/fixing/processing_error 等运营状态，避免第二套 Import 状态机）；D2 错误展示 PASS（L3 白名单含 sourceColumnName；明确丢弃 rawRow/rawValue/原始 JSON/客户数据）；D3 数据样本 PASS（不展示脱敏样本/前 N 字段/示例值）；D4 金额隔离 PASS（禁键 amount/currency/unitPrice/orderValue 扫描通过）；D5 下载能力 PASS（无原始文件下载/错误 CSV/导出接口）；权限：importValidation = OWNER/ADMIN/OPS PASS（属 Admin Console 内**模块访问策略**，若未来落成真正 RBAC permission key 需单独 Permission Delta）；测试质量通过（租户隔离、泄露防护含 SECRET_CUSTOMER/1Z999 marker、状态映射、projection 标记）；两处修正获认可（Channel 枚举 fixture 漂移；OPS 权限误判——Admin Console 不应简单复制 Dashboard 权限）；NEXT = P3 A5 Recovery Review Queue（GO_DESIGN_FIRST，先提交 ADMIN-RECOVERY-REVIEW-DESIGN.md；边界：可以查看待审核项/状态/证据引用/审核要求/跳转既有审核流程；不可以 Admin 页面直接 Approve/Reject、修改 Recovery 状态、修改金额、创建 Settlement、触发扣佣、提交 Claim；任何操作必须走 Admin Console → 既有 Recovery Review Service → 既有 Permission Check → AuditLog）
+
+本轮为 Admin Phase 2（A4）检查点裁决 PASS_CLOSE，并开放 P3/A5 设计（设计先行）。
+
+```text
+ADMIN-CONSOLE-PHASE2-CHECKPOINT 裁决
+结论：PASS_CLOSE ✅
+
+状态：
+
+Markdown
+
+### [MSG-20260929-36-A]
+
+TYPE:
+IMPLEMENTATION CHECKPOINT DECISION
+
+TARGET:
+ADMIN-CONSOLE-PHASE2
+A4 Import/Validation Operations
+
+DECISION:
+PASS_CLOSE
+
+STATUS:
+IMPORT_VALIDATION_OBSERVABILITY_READY
+
+NEXT:
+ADMIN_CONSOLE_PHASE3_DESIGN
+RECOVERY_REVIEW_QUEUE
+一、总体审计
+
+A4 实现符合 MSG-20260929-36 的设计约束。
+
+通过。
+
+核心原则保持：
+
+Admin 只观察、不修复、不改变事实。
+
+本轮没有越界：
+
+✅ 无 Schema 变更
+✅ 无 Import 写入
+✅ 无重跑入口
+✅ 无删除入口
+✅ 无下载
+✅ 无金额暴露
+✅ 无原始数据暴露
+✅ 无 AuditLog 写入
+
+二、D1 状态映射
+PASS ✅
+
+实现：
+
+纯文本
+PENDING/PARSING
+        ↓
+in_progress
+
+IMPORTED
+        ↓
+succeeded
+
+IMPORTED + retry
+        ↓
+retried_success
+
+PARTIAL
+        ↓
+partial
+
+FAILED
+        ↓
+failed
+
+符合要求。
+
+特别认可：
+
+未知状态：
+
+纯文本
+UNKNOWN_STATUS
+        ↓
+failed bucket
+
+采用 fail-closed。
+
+正确。
+
+没有新增：
+
+waiting_review
+fixing
+processing_error
+
+等运营状态。
+
+避免产生第二套 Import 状态机。
+
+三、D2 错误展示
+PASS ✅
+
+L3：
+
+当前：
+
+纯文本
+errorCode
+rowNumber
+field
+action
+sourceColumnName
+
+符合。
+
+明确丢弃：
+
+rawRow
+rawValue
+原始 JSON
+客户数据
+
+正确。
+
+sourceColumnName 增加合理。
+
+例如：
+
+业务字段：
+
+纯文本
+trackingNo
+
+对应：
+
+用户文件：
+
+纯文本
+Tracking Number(s)
+
+可以帮助运营定位。
+
+四、D3 数据样本
+PASS ✅
+
+继续保持：
+
+不展示：
+
+脱敏样本
+前 N 字段
+示例值
+
+正确。
+
+原因：
+
+Admin Import 不是数据查看工具。
+
+五、D4 金额隔离
+PASS ✅
+
+禁键扫描：
+
+通过。
+
+禁止：
+
+amount
+currency
+unitPrice
+orderValue
+
+符合 Admin v1 定位。
+
+金额继续由：
+
+Recovery
+Billing
+Finance
+
+处理。
+
+六、D5 下载能力
+PASS ✅
+
+保持：
+
+无：
+
+原始文件下载
+错误 CSV
+导出接口
+
+正确。
+
+七、权限设计
+
+这里有一个重要调整：
+
+之前：
+
+A4 使用：
+
+OWNER/ADMIN/OPS
+
+本轮：
+
+实现：
+
+纯文本
+importValidation
+=
+OWNER
+ADMIN
+OPS
+
+结论：
+
+PASS ✅
+
+原因：
+
+这是沿用之前批准的角色分层。
+
+虽然新增：
+
+纯文本
+importValidation
+
+看起来像权限键，但从描述看它属于：
+
+Admin Console 内模块访问策略。
+
+需要注意：
+
+如果未来落成真正 RBAC permission key：
+
+需要单独 Permission Delta。
+
+当前：
+
+只作为模块能力映射，可以接受。
+
+八、测试质量
+
+通过。
+
+覆盖：
+
+租户隔离
+
+通过。
+
+泄露防护
+
+通过。
+
+尤其：
+
+纯文本
+SECRET_CUSTOMER
+1Z999
+
+这类 marker 防线有效。
+
+状态映射
+
+通过。
+
+Projection 标记
+
+通过。
+
+九、两个修正点评
+1. Channel 枚举问题
+
+修正正确。
+
+这是典型 fixture 漂移问题。
+
+已修。
+
+2. OPS 权限误判
+
+修正正确。
+
+说明：
+
+Admin Console 不应该简单复制 Dashboard 权限。
+
+模块能力需要独立设计。
+
+十、下一阶段确认
+P3：A5 Recovery Review Queue
+
+结论：
+
+GO_DESIGN_FIRST ✅
+
+可以提交：
+
+ADMIN-RECOVERY-REVIEW-DESIGN.md
+
+但提前明确边界。
+
+A5 最大风险：
+
+不是 UI。
+
+而是：
+
+人工流程与状态推进边界。
+
+设计必须明确：
+
+可以：
+查看待审核项
+查看状态
+查看证据引用
+查看审核要求
+跳转已有审核流程
+不可以：
+
+❌ Admin 页面直接 Approve
+❌ Admin 页面直接 Reject
+❌ 修改 Recovery 状态
+❌ 修改金额
+❌ 创建 Settlement
+❌ 触发扣佣
+❌ 提交 Claim
+
+如果需要操作：
+
+必须：
+
+纯文本
+Admin Console
+
+↓
+
+Existing Recovery Review Service
+
+↓
+
+Existing Permission Check
+
+↓
+
+AuditLog
+最终归档
+Markdown
+
+### [MSG-20260929-36-A]
+
+ADMIN CONSOLE PHASE 2
+
+DECISION:
+PASS_CLOSE
+
+
+Validated:
+- Import observability
+- Bucket projection
+- Error quarantine visibility
+- Tenant isolation
+- Secret/data redaction
+- No download
+- No amount exposure
+- Read-only guarantee
+
+
+NEXT:
+ADMIN_CONSOLE_PHASE3
+
+A5:
+RECOVERY_REVIEW_QUEUE
+
+STATUS:
+DESIGN_FIRST_APPROVED
+
+可以继续提交 A5 Recovery Review Queue Design。
+```
