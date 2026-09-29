@@ -35,7 +35,8 @@ npm run typecheck
 ## i18n 开发规范（C-0009.2）
 
 - 所有面向用户的文案必须走 `i18n/dictionaries/*`，**禁止在新页面/组件里硬编码中文或英文文案**。
-- 新增文案时只需改 `zh-CN.ts` 与 `en-US.ts`；`de/ja/es` 由 `placeholder.ts` 自动派生（保持空值，UI 置灰）。
-- 键一致性由构建期不变量强制：`next build` 会校验所有语言键集合一致，且预留语言必须保持占位。
+- 已发布五种语言：`zh-CN`（默认）/ `en-US` / `de` / `ja` / `es`，各自一个独立字典文件。新增文案必须同时补齐五种语言（缺键 → typecheck 失败；空值 → `next build` 断言失败）。
+- 键一致性由构建期不变量强制：`next build` 会校验五种语言的键集合与 `zh-CN` 完全一致，且不允许留下空值（半成品翻译）。`placeholder.ts` 保留给未来的第六种语言先占位、后翻译。
+- 范围边界（架构方 MSG-20260929-05 / C-0015-I18N-LAYER）：i18n 只做「字典结构 + locale 识别 + UI 文案切换」；**LLM 多语言业务输出、索赔信自动多语言生成、站点语言策略暂不做**。
 - 服务端返回的业务错误码（如 `ILLEGAL_TRANSITION`、`REVIEW_REQUIRED`）保持英文原样，由前端映射为本地化文案，**不要翻译 API 契约**。
 - 语言解析优先级：`cc_lang` cookie → `Accept-Language` → 默认 `zh-CN`。

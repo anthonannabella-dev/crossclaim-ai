@@ -73,6 +73,8 @@ AI 负责文档理解、字段抽取、异常解释、证据推荐、案件总�
   PaymentProcessingAttempt + 执行恢复 + 财务对账差异清单）、**Claim 归一化**（ClaimItem /
   证据联结 / 来源指纹）、**规则引擎审计**（残差分类 / 版本漂移 / 新鲜度，仅只读）、
   **平台连接器抽象层**（Connector 契约 / 编排器 / quarantine，不含任何真实平台接入）
+  · **i18n 轻量层**（C-0015-I18N-LAYER：zh-CN / en-US / de / ja / es 五语字典 + `cc_lang`
+  cookie 与 `Accept-Language` 识别 + UI 文案切换；不含 LLM 多语言输出，架构方 MSG-20260929-05 批准）
 - CI：全新 PostgreSQL 上真实执行迁移并跑 **75 文件 / 679 用例**（含真实库不变量与租户隔离），
   另有 Web typecheck/build 与双 workspace 许可证闸门
 
