@@ -211,8 +211,9 @@ export interface SettlementProjectionRow {
 }
 
 export interface RecoveryMetrics {
-  confirmation: { confirmed: number; pending: number; rejectedByReview: number };
-  reconciliation: {
+  /** 状态分布计数：需 claimTrackingApprove（OWNER/ADMIN）；无权限时整个键不存在 */
+  confirmation?: { confirmed: number; pending: number; rejectedByReview: number };
+  reconciliation?: {
     notStarted: number;
     partial: number;
     reconciled: number;
@@ -233,13 +234,14 @@ const decimal = (value: string | InstanceType<typeof Prisma.Decimal>): InstanceT
   new Prisma.Decimal(value).toDecimalPlaces(MONEY_SCALE, Prisma.Decimal.ROUND_HALF_UP);
 
 /**
- * 汇总 Recovery。金额部分仅在 `includeAmounts` 为 true 时计算并输出
- * —— 这是「金额裁剪先于聚合」的落点：无权者的响应里根本不存在这些数，
+ * 汇总 Recovery（按权限分片输出）。
+ * 这是「金额裁剪先于聚合」的落点：无金额权限时 `amounts` 键**不存在**（不是 0），
  * 也不可能通过 total / count / average 反推（MSG-20260929-30 §七.2）。
+ * 计数与金额是两份额度：FINANCE 有 amounts（财务事实），OWNER/ADMIN 有 counts。
  */
 export function composeRecoveryMetrics(
   rows: SettlementProjectionRow[],
-  includeAmounts: boolean,
+  options: { includeCounts: boolean; includeAmounts: boolean },
 ): RecoveryMetrics {
   const confirmation = { confirmed: 0, pending: 0, rejectedByReview: 0 };
   const reconciliation = { notStarted: 0, partial: 0, reconciled: 0, disputed: 0, reversed: 0 };
@@ -256,7 +258,8 @@ export function composeRecoveryMetrics(
     else if (row.reconciliationStatus === 'REVERSED') reconciliation.reversed += 1;
   }
 
-  if (!includeAmounts) return { confirmation, reconciliation };
+  const counts = options.includeCounts ? { confirmation, reconciliation } : {};
+  if (!options.includeAmounts) return counts;
 
   let confirmed = new Prisma.Decimal(0);
   let received = new Prisma.Decimal(0);
@@ -271,8 +274,7 @@ export function composeRecoveryMetrics(
     if (gap.gt(0)) outstanding = outstanding.plus(gap);
   }
   return {
-    confirmation,
-    reconciliation,
+    ...counts,
     amounts: {
       confirmedTotal: confirmed.toFixed(MONEY_SCALE),
       receivedTotal: received.toFixed(MONEY_SCALE),
@@ -341,8 +343,11 @@ export function composeDashboard(input: {
   }
 
   let recovery: DashboardPayload['recovery'] = null;
-  if (input.visibility.recoveryCounts) {
-    recovery = composeRecoveryMetrics(input.settlements, input.visibility.recoveryAmounts);
+  if (input.visibility.recoveryCounts || input.visibility.recoveryAmounts) {
+    recovery = composeRecoveryMetrics(input.settlements, {
+      includeCounts: input.visibility.recoveryCounts,
+      includeAmounts: input.visibility.recoveryAmounts,
+    });
   } else {
     denied.push('recovery');
   }
@@ -376,6 +381,45 @@ export interface OperationsDashboardDeps {
   now?: () => Date;
 }
 
+// ---------------------------------------------------------------- 游标分页（§4.3）
+
+export const DEFAULT_PAGE_SIZE = 25;
+export const MAX_PAGE_SIZE = 100;
+
+export interface CursorPage<T> {
+  items: T[];
+  nextCursor: string | null;
+}
+
+/** 游标 = base64url("<sortMillis>|<id>")；不使用 offset，避免深翻页漂移 */
+export function encodeCursor(sortValue: number, id: string): string {
+  return Buffer.from(`${sortValue}|${id}`, 'utf8').toString('base64url');
+}
+
+export function decodeCursor(raw: unknown): { sortValue: number; id: string } | null {
+  if (typeof raw !== 'string' || raw.trim() === '') return null;
+  try {
+    const decoded = Buffer.from(raw.trim(), 'base64url').toString('utf8');
+    const index = decoded.lastIndexOf('|');
+    if (index <= 0) throw new Error('malformed cursor');
+    const sortValue = Number(decoded.slice(0, index));
+    const id = decoded.slice(index + 1);
+    if (!Number.isFinite(sortValue) || id === '') throw new Error('malformed cursor');
+    return { sortValue, id };
+  } catch {
+    throw new WorkflowError('INVALID_INPUT', 'cursor 非法');
+  }
+}
+
+export function normalizePageSize(raw: unknown): number {
+  if (raw === undefined || raw === null || raw === '') return DEFAULT_PAGE_SIZE;
+  const value = Number(raw);
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new WorkflowError('INVALID_INPUT', 'limit 必须是正整数');
+  }
+  return Math.min(value, MAX_PAGE_SIZE);
+}
+
 const RESPONSE_EVENT_ACTIONS = ['claim.response_recorded', 'claim.terminal_recorded'] as const;
 
 /**
@@ -390,14 +434,19 @@ export async function buildOperationsDashboard(
   const window = parseDashboardWindow(input.window, at);
   const visibility = dashboardVisibilityFor(input.role);
 
-  if (!visibility.claimPipeline && !visibility.recoveryCounts && !visibility.lossPool) {
+  if (
+    !visibility.claimPipeline &&
+    !visibility.recoveryCounts &&
+    !visibility.recoveryAmounts &&
+    !visibility.lossPool
+  ) {
     // 三块都不可见：直接 403（fail-closed，且不触库）
     throw new WorkflowError('FORBIDDEN', '当前角色无权访问运营看板');
   }
 
   const claims = visibility.claimPipeline
     ? await deps.prisma.claim.findMany({
-        where: { organizationId: input.organizationId, round: 1 },
+        where: { organizationId: input.organizationId },
         select: {
           id: true,
           caseId: true,
@@ -458,7 +507,7 @@ export async function buildOperationsDashboard(
     : [];
 
   let settlements: SettlementProjectionRow[] = [];
-  if (visibility.recoveryCounts) {
+  if (visibility.recoveryCounts || visibility.recoveryAmounts) {
     const [settlementRows, payoutRows] = await Promise.all([
       deps.prisma.settlement.findMany({
         where: { organizationId: input.organizationId },
@@ -489,4 +538,250 @@ export async function buildOperationsDashboard(
     claimItemStatuses,
     settlements,
   });
+}
+
+// ---------------------------------------------------------------- 明细查询（§4.1 / §4.3）
+
+const BUCKET_STATUS_FILTER: Record<ClaimBucket, string[] | null> = {
+  draft: ['DRAFT'],
+  awaiting_response: [...OPEN_CLAIM_STATUSES],
+  deadline_approaching: [...OPEN_CLAIM_STATUSES],
+  overdue: [...OPEN_CLAIM_STATUSES],
+  approved: ['APPROVED'],
+  partially_approved: ['PARTIALLY_APPROVED'],
+  terminal: [...TERMINAL_CLAIM_STATUSES],
+};
+
+/** 按到期排序的桶（升序）；其余桶按更新时间倒序 */
+const DEADLINE_SORTED_BUCKETS: readonly ClaimBucket[] = ['deadline_approaching', 'overdue'];
+
+export function assertClaimBucket(raw: unknown): ClaimBucket {
+  const value = typeof raw === 'string' ? raw.trim() : '';
+  if (!(CLAIM_BUCKETS as readonly string[]).includes(value)) {
+    throw new WorkflowError('INVALID_INPUT', `bucket 必须是 ${CLAIM_BUCKETS.join(' / ')} 之一`);
+  }
+  return value as ClaimBucket;
+}
+
+export interface ClaimDetailItem {
+  claimId: string;
+  caseId: string;
+  status: string;
+  dueAt: string | null;
+  deadlineSource: string | null;
+  platformCaseRef: string | null;
+  respondedAt: string | null;
+  updatedAt: string;
+  anomalies: string[];
+  /** 默认金额裁剪：无 viewClaimAmounts 时该键不存在 */
+  responseAmount?: string | null;
+}
+
+export interface RecoveryDetailItem {
+  settlementId: string;
+  confirmationStatus: string;
+  reconciliationStatus: string;
+  payoutCount: number;
+  updatedAt: string;
+  /** 默认金额裁剪：无 recoveryPayoutRecord+viewBilling 时整个 amounts 键不存在 */
+  amounts?: { confirmed: string; received: string; outstanding: string };
+}
+
+/**
+ * 单桶明细（游标分页）。所有查询强制 organizationId；先做 SQL 预筛，再用同一套纯函数谓词复核。
+ * 读取会按角色做**字段级裁剪**（金额键不存在，而不是 0）。
+ */
+export async function listClaimBucketDetail(
+  deps: OperationsDashboardDeps,
+  input: {
+    organizationId: string;
+    role: string | null | undefined;
+    bucket: unknown;
+    cursor?: unknown;
+    limit?: unknown;
+  },
+): Promise<CursorPage<ClaimDetailItem>> {
+  const at = (deps.now ?? (() => new Date()))();
+  const window = parseDashboardWindow(undefined, at);
+  const visibility = dashboardVisibilityFor(input.role);
+  if (!visibility.claimPipeline) {
+    throw new WorkflowError('FORBIDDEN', '当前角色无权访问申诉管线');
+  }
+  const bucket = assertClaimBucket(input.bucket);
+  const limit = normalizePageSize(input.limit);
+  const cursor = decodeCursor(input.cursor);
+  const byDeadline = DEADLINE_SORTED_BUCKETS.includes(bucket);
+
+  const where: Record<string, unknown> = {
+    organizationId: input.organizationId,
+    status: { in: BUCKET_STATUS_FILTER[bucket] ?? [] },
+  };
+  if (bucket === 'deadline_approaching') {
+    where.dueAt = { gte: window.to, lt: window.horizonEnd };
+  } else if (bucket === 'overdue') {
+    where.dueAt = { lt: window.to };
+  } else if (bucket === 'awaiting_response') {
+    where.respondedAt = null;
+  }
+  if (cursor) {
+    const key = byDeadline ? 'dueAt' : 'updatedAt';
+    const value = new Date(cursor.sortValue);
+    where.OR = byDeadline
+      ? [{ [key]: { gt: value } }, { [key]: value, id: { gt: cursor.id } }]
+      : [{ [key]: { lt: value } }, { [key]: value, id: { lt: cursor.id } }];
+  }
+
+  const rows = await deps.prisma.claim.findMany({
+    where: where as never,
+    orderBy: byDeadline ? [{ dueAt: 'asc' }, { id: 'asc' }] : [{ updatedAt: 'desc' }, { id: 'desc' }],
+    take: limit + 1,
+    select: {
+      id: true,
+      caseId: true,
+      status: true,
+      dueAt: true,
+      deadlineSource: true,
+      respondedAt: true,
+      platformCaseRef: true,
+      updatedAt: true,
+      responseAmount: true,
+    },
+  });
+
+  const [commercialTerms, responseEvents] = await Promise.all([
+    deps.prisma.auditLog.findMany({
+      where: { organizationId: input.organizationId, entityType: 'Case', action: 'commercial_terms.created' },
+      select: { entityId: true },
+    }),
+    deps.prisma.auditLog.findMany({
+      where: {
+        organizationId: input.organizationId,
+        entityType: 'Claim',
+        action: { in: RESPONSE_EVENT_ACTIONS as unknown as string[] },
+      },
+      select: { entityId: true },
+    }),
+  ]);
+  const termsSet = new Set(commercialTerms.map((row) => row.entityId ?? ''));
+  const responseSet = new Set(responseEvents.map((row) => row.entityId ?? ''));
+
+  const page = rows.slice(0, limit);
+  const items: ClaimDetailItem[] = [];
+  for (const row of page) {
+    const projection = projectClaimRow(
+      {
+        id: row.id,
+        caseId: row.caseId,
+        status: row.status,
+        dueAt: row.dueAt,
+        deadlineSource: row.deadlineSource,
+        respondedAt: row.respondedAt,
+        platformCaseRef: row.platformCaseRef,
+        updatedAt: row.updatedAt,
+        hasResponseEvent: responseSet.has(row.id),
+        caseHasCommercialTerms: termsSet.has(row.caseId),
+      },
+      window,
+    );
+    if (!projection.buckets.includes(bucket)) continue;
+    items.push({
+      claimId: row.id,
+      caseId: row.caseId,
+      status: row.status,
+      dueAt: row.dueAt ? row.dueAt.toISOString() : null,
+      deadlineSource: row.deadlineSource,
+      platformCaseRef: row.platformCaseRef,
+      respondedAt: row.respondedAt ? row.respondedAt.toISOString() : null,
+      updatedAt: row.updatedAt.toISOString(),
+      anomalies: projection.anomalies,
+      ...(visibility.claimAmounts
+        ? { responseAmount: row.responseAmount ? decimal(row.responseAmount).toFixed(MONEY_SCALE) : null }
+        : {}),
+    });
+  }
+
+  const last = page[page.length - 1];
+  const nextCursor =
+    rows.length > limit && last
+      ? encodeCursor((byDeadline ? (last.dueAt ?? last.updatedAt) : last.updatedAt).getTime(), last.id)
+      : null;
+
+  return { items, nextCursor };
+}
+
+/** 回收明细（游标分页）：按 updatedAt 倒序；金额按权限裁剪。 */
+export async function listRecoveryDetail(
+  deps: OperationsDashboardDeps,
+  input: {
+    organizationId: string;
+    role: string | null | undefined;
+    cursor?: unknown;
+    limit?: unknown;
+  },
+): Promise<CursorPage<RecoveryDetailItem>> {
+  const visibility = dashboardVisibilityFor(input.role);
+  if (!visibility.recoveryCounts && !visibility.recoveryAmounts) {
+    throw new WorkflowError('FORBIDDEN', '当前角色无权访问回收视图');
+  }
+  const limit = normalizePageSize(input.limit);
+  const cursor = decodeCursor(input.cursor);
+  const where: Record<string, unknown> = { organizationId: input.organizationId };
+  if (cursor) {
+    const value = new Date(cursor.sortValue);
+    where.OR = [{ updatedAt: { lt: value } }, { updatedAt: value, id: { lt: cursor.id } }];
+  }
+
+  const rows = await deps.prisma.settlement.findMany({
+    where: where as never,
+    orderBy: [{ updatedAt: 'desc' }, { id: 'desc' }],
+    take: limit + 1,
+    select: {
+      id: true,
+      amount: true,
+      confirmationStatus: true,
+      reconciliationStatus: true,
+      updatedAt: true,
+    },
+  });
+  const page = rows.slice(0, limit);
+  const payoutSums = page.length
+    ? await deps.prisma.recoveryPayout.groupBy({
+        by: ['settlementId'],
+        where: { organizationId: input.organizationId, settlementId: { in: page.map((row) => row.id) } },
+        _sum: { amount: true },
+        _count: { _all: true },
+      })
+    : [];
+  const payoutBySettlement = new Map(
+    payoutSums.map((row) => [row.settlementId, row] as const),
+  );
+
+  const items: RecoveryDetailItem[] = page.map((row) => {
+    const payout = payoutBySettlement.get(row.id);
+    const confirmed = decimal(row.amount);
+    const received = decimal(payout?._sum.amount ?? new Prisma.Decimal(0));
+    const gap = confirmed.minus(received);
+    return {
+      settlementId: row.id,
+      confirmationStatus: row.confirmationStatus,
+      reconciliationStatus: row.reconciliationStatus,
+      payoutCount: payout?._count._all ?? 0,
+      updatedAt: row.updatedAt.toISOString(),
+      ...(visibility.recoveryAmounts
+        ? {
+            amounts: {
+              confirmed: confirmed.toFixed(MONEY_SCALE),
+              received: received.toFixed(MONEY_SCALE),
+              outstanding: (gap.gt(0) ? gap : new Prisma.Decimal(0)).toFixed(MONEY_SCALE),
+            },
+          }
+        : {}),
+    };
+  });
+
+  const last = page[page.length - 1];
+  return {
+    items,
+    nextCursor: rows.length > limit && last ? encodeCursor(last.updatedAt.getTime(), last.id) : null,
+  };
 }

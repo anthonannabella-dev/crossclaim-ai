@@ -36,6 +36,11 @@ import { listPaymentReconciliation, toReconciliationCsv } from './payment-reconc
 import { replayPaymentEvent, runDueRetries } from './payment-attempt';
 import { getCase, getClaimDraft, listCaseEvidence, listCases } from './case-read';
 import {
+  buildOperationsDashboard,
+  listClaimBucketDetail,
+  listRecoveryDetail,
+} from '../operations/dashboard-projection';
+import {
   getOpportunityInsight,
   listOpportunityInsights,
   toExportRows,
@@ -65,6 +70,10 @@ const CASE_LIST_PATH = /^\/cases$/;
 const CASE_DETAIL_PATH = /^\/cases\/([^/]+)$/;
 const CASE_EVIDENCE_PATH = /^\/cases\/([^/]+)\/evidence$/;
 const CASE_CLAIM_PATH = /^\/cases\/([^/]+)\/claim$/;
+// MSG-20260929-30：运营看板（只读投影，GET only）
+const OPERATIONS_DASHBOARD_PATH = /^\/operations\/dashboard$/;
+const OPERATIONS_CLAIMS_PATH = /^\/operations\/claims$/;
+const OPERATIONS_RECOVERY_PATH = /^\/operations\/recovery$/;
 
 /** 请求体层面的错误（与领域状态无关），统一映射为 400。 */
 class HttpBodyError extends Error {
@@ -187,7 +196,10 @@ export async function handleWorkflowRequest(
   const caseDetail = CASE_DETAIL_PATH.exec(path);
   const caseEvidence = CASE_EVIDENCE_PATH.exec(path);
   const caseClaim = CASE_CLAIM_PATH.exec(path);
-  if (!review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !replayPath && !retryDuePath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim) {
+  const operationsDashboard = OPERATIONS_DASHBOARD_PATH.test(path);
+  const operationsClaims = OPERATIONS_CLAIMS_PATH.test(path);
+  const operationsRecovery = OPERATIONS_RECOVERY_PATH.test(path);
+  if (!operationsDashboard && !operationsClaims && !operationsRecovery && !review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !replayPath && !retryDuePath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim) {
     return false;
   }
 
@@ -480,6 +492,53 @@ export async function handleWorkflowRequest(
           { organizationId: context.organizationId, role: context.role },
           caseClaim[1] ?? '',
         ),
+      );
+      return true;
+    }
+
+    // MSG-20260929-30：运营看板（只读投影；GET only；不写 AuditLog、无写路径）
+    if (operationsDashboard || operationsClaims || operationsRecovery) {
+      if ((req.method ?? 'GET') !== 'GET') {
+        sendJson(res, 405, { error: 'METHOD_NOT_ALLOWED' });
+        return true;
+      }
+      const query = new URLSearchParams((req.url ?? '').split('?')[1] ?? '');
+      const dashboardDeps = { prisma: deps.prisma, ...(deps.now ? { now: deps.now } : {}) };
+      if (operationsDashboard) {
+        sendJson(
+          res,
+          200,
+          await buildOperationsDashboard(dashboardDeps, {
+            organizationId: context.organizationId,
+            role: context.role,
+            window: query.get('window') ?? undefined,
+          }),
+        );
+        return true;
+      }
+      if (operationsClaims) {
+        sendJson(
+          res,
+          200,
+          await listClaimBucketDetail(dashboardDeps, {
+            organizationId: context.organizationId,
+            role: context.role,
+            bucket: query.get('bucket') ?? undefined,
+            cursor: query.get('cursor') ?? undefined,
+            limit: query.get('limit') ?? undefined,
+          }),
+        );
+        return true;
+      }
+      sendJson(
+        res,
+        200,
+        await listRecoveryDetail(dashboardDeps, {
+          organizationId: context.organizationId,
+          role: context.role,
+          cursor: query.get('cursor') ?? undefined,
+          limit: query.get('limit') ?? undefined,
+        }),
       );
       return true;
     }

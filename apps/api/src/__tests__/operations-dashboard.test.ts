@@ -150,16 +150,16 @@ describe('MSG-30 · Recovery 汇总与金额裁剪（不得被聚合绕过）', 
   ];
 
   it('13 计数与状态分布', () => {
-    const metrics = composeRecoveryMetrics(rows, true);
+    const metrics = composeRecoveryMetrics(rows, { includeCounts: true, includeAmounts: true });
     expect(metrics.confirmation).toEqual({ confirmed: 3, pending: 1, rejectedByReview: 0 });
-    expect(metrics.reconciliation.reconciled).toBe(1);
-    expect(metrics.reconciliation.partial).toBe(1);
-    expect(metrics.reconciliation.disputed).toBe(1);
-    expect(metrics.reconciliation.notStarted).toBe(1);
+    expect(metrics.reconciliation?.reconciled).toBe(1);
+    expect(metrics.reconciliation?.partial).toBe(1);
+    expect(metrics.reconciliation?.disputed).toBe(1);
+    expect(metrics.reconciliation?.notStarted).toBe(1);
   });
 
   it('14 金额投影：confirmed = Settlement.amount、received = Σ payouts、outstanding 只累加正缺口', () => {
-    const metrics = composeRecoveryMetrics(rows, true);
+    const metrics = composeRecoveryMetrics(rows, { includeCounts: true, includeAmounts: true });
     expect(metrics.amounts?.confirmedTotal).toBe('160.0000');
     expect(metrics.amounts?.receivedTotal).toBe('132.0000');
     expect(metrics.amounts?.outstandingTotal).toBe('30.0000');
@@ -167,7 +167,7 @@ describe('MSG-30 · Recovery 汇总与金额裁剪（不得被聚合绕过）', 
   });
 
   it('15 无金额权限：响应中根本不存在 amounts 键（不是 0）', () => {
-    const metrics = composeRecoveryMetrics(rows, false);
+    const metrics = composeRecoveryMetrics(rows, { includeCounts: true, includeAmounts: false });
     expect(metrics).not.toHaveProperty('amounts');
     expect(Object.keys(metrics)).toEqual(['confirmation', 'reconciliation']);
     // 计数无法反推金额：即使有 count，也无任何金额字段可推导
@@ -223,9 +223,28 @@ describe('MSG-30 · 角色可见性与整卷装配', () => {
           receivedAmount: new Prisma.Decimal('0.00005'),
         },
       ],
-      true,
+      { includeCounts: true, includeAmounts: true },
     );
     expect(metrics.amounts?.confirmedTotal).toBe('33.3334');
     expect(metrics.amounts?.receivedTotal).toBe('0.0001');
+  });
+
+  it('21 FINANCE：只有金额、没有计数（两份额度分片）', () => {
+    const settlementRows = [
+      { confirmationStatus: 'CONFIRMED', reconciliationStatus: 'RECONCILED', amount: '160.0000', receivedAmount: '160.0000' },
+    ];
+    const finance = composeDashboard({
+      now: NOW,
+      window: window7d,
+      visibility: dashboardVisibilityFor('FINANCE'),
+      claims: [claim()],
+      claimItemStatuses: [],
+      settlements: settlementRows,
+    });
+    expect(finance.claimPipeline).toBeNull();
+    expect(finance.recovery?.amounts?.confirmedTotal).toBe('160.0000');
+    expect(finance.recovery).not.toHaveProperty('confirmation');
+    expect(finance.recovery).not.toHaveProperty('reconciliation');
+    expect(JSON.stringify(finance)).not.toContain('SUBMITTED');
   });
 });

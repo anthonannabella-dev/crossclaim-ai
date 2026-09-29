@@ -303,3 +303,19 @@ C-0008-B2（Case / Evidence / Claim Draft / Billing）的端点尚未实现。
 - 领域模型与权限矩阵：[DOMAIN_MODEL.md](./DOMAIN_MODEL.md)
 - Web 应用说明：[apps/web/README.md](./apps/web/README.md)
 - 架构方裁决归档：[AI-ARCHITECT-INBOX.md](./AI-ARCHITECT-INBOX.md)
+
+---
+
+## 运营看板（Operations Dashboard，MSG-20260929-30）
+
+| 方法 | 路径 | 成功 | 权限 |
+|---|---|---|---|
+| GET | `/operations/dashboard` | 200 租户汇总：`{ generatedAt, window, claimPipeline, recovery, lossPool, denied }`；`window` 默认 `7d`，允许 `1d/7d/14d/30d`，越界 400 `INVALID_WINDOW` | OWNER / ADMIN / OPS（FINANCE 仅回收金额区块；VIEWER 403） |
+| GET | `/operations/claims` | 200 `{ items, nextCursor }`（游标分页，单页上限 100） | 需 `claimTrackingApprove` 或 `claimTrackingReceive` |
+| GET | `/operations/recovery` | 200 `{ items, nextCursor }`（金额字段按 `viewBilling` + `recoveryPayoutRecord` 裁剪） | 需 `claimTrackingApprove` |
+
+- **只读**：仅 GET；无写路径、不写 AuditLog、不触发任何自动动作
+- **投影**：Claim 桶与 Recovery 指标都由既有事实实时计算；看板不是事实源，也不可写入
+- **D1**：`awaiting_response` 只看 `respondedAt`（AuditLog 响应事件作交叉校验），与 `dueAt` 无关
+- **金额裁剪先于聚合**：无权角色的响应中**不存在**金额键（不是 0），也无法用 total/count 反推
+- 所有查询强制 `organizationId` 注入；租户 A 无法观测租户 B 的任何行
