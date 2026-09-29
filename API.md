@@ -26,6 +26,7 @@ C-0008-B2（Case / Evidence / Claim Draft / Billing）的端点尚未实现。
 |---|---|---|---|
 | GET | `/health` | 健康检查（含数据库探测） | 200；依赖不可用时 503 `degraded` |
 | GET | `/healthz` | 同上（探针兼容命名） | 同上 |
+| GET | `/readyz` | Readiness（P2-1）：DB 可用 + migration 完整 + resolver 可解析。只返回 `{ ready, reasons, checkedAt, version }`；`reasons` 为原因码 `DATABASE_UNAVAILABLE` / `MIGRATION_MISMATCH` / `KILL_SWITCH_RESOLVER_FAIL_CLOSED`，**不含** SQL 错误/连接串/堆栈/secret。ready=false → 503（部署层据此摘流）；与 `/health`（liveness）语义分离 | 200 `{ ready: true, reasons: [] }`；不满足 → 503 |
 | GET | `/metrics` | Prometheus 文本指标（进程内计数） | 200 `text/plain`；`METRICS_ENABLED!=true` 时 404 |
 
 ## 文件下载
