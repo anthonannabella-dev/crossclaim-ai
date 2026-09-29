@@ -9,7 +9,7 @@
 
 ## 0. 当前结论（一句话）
 
-**尚未 CODE COMPLETE。** 本轮（offline-completion-7）已清空 §I 的 O6 / O10；剩余离线可完成项来自架构方 MSG-20260929-09 允许的离线范围：方向 A（VALIDATION-RUN HARNESS）、方向 B（C-0015 场景选择框架，只写选择标准）、方向 C（数据质量报告模板），下一轮继续；
+**离线工程侧已无可继续推进项。** 架构方允许的三个离线方向已全部交付：方向 A（VALIDATION-RUN HARNESS，MSG-20260929-16 判 PASS / `COMMERCIAL_VALIDATION_PIPELINE_READY`）、方向 C（`DATA-QUALITY-REPORT-TEMPLATE.md`）；方向 B（`C-0015-SCENARIO-SELECTION.md`）**必须由真实数据触发**，属 `REAL_DATA_REQUIRED`。当前唯一阻塞项 = `REAL_DATA_REQUIRED`：一份真实/脱敏平台导出文件（任意平台或类型，无需 API、无需凭据）；其余未完成项全部落在设计获批前不得动工的冻结区（见 §J），不计为「可完成的工程任务」。
 真实依赖项（§D）与需架构方裁决项（§B 末两行）不算缺口，但必须留档。
 
 ---
@@ -142,3 +142,17 @@ CI 三作业（api / web / license-gate）。
 | O10 | 管理后台异常处置能力核查（真实上线后运维视角） | 产品/运维 | **完成**：核查报告见 `reports/ADMIN-BACKOFFICE-AUDIT.md`；补齐两个运维关键端点的 HTTP 层测试（`payment-admin-http-db.test.ts`，6 用例：401 / 403 / 400 / 409 / 200 / 越界夹取） |
 
 > 更新规则：每完成一项 → 更新本表状态 → 提交并跑 CI；全部完成且无新增项时，本文档 §0 改写为 CODE COMPLETE。
+
+---
+
+## J. 本轮新增能力（C-0015 Step 1 + 验证 Harness）
+
+| 能力 | 位置 | 状态 | 证据 |
+|---|---|---|---|
+| 承运商参照数据适配（燃油费率 / DAS 邮编 / SLA 暂停公告） | `apps/api/src/services/reference-data/index.ts` | 已交付（MSG-20260929-14 GO → 15 PASS） | `reference-data.test.ts` 26/26 |
+| 关税参照数据适配（税率表 / 301 豁免清单） | 同上 | 已交付 | 同上（HS 规范化、费率刻度歧义防护） |
+| 统一验证 Harness（适配 → 规范输入 → 结构校验 → 数据质量 + 商业评审骨架） | `apps/api/src/services/validation-run/harness.ts` | 已交付（MSG-20260929-16 PASS） | `validation-run-harness.test.ts` 10/10 |
+| 运维只读失败明细端点 | `apps/api/src/services/auth/data-routes.ts` | 已交付（MSG-20260929-11 PASS_CLOSE） | `imports-error-report-db.test.ts` 5/5 |
+| 数据质量报告模板（方向 C） | `DATA-QUALITY-REPORT-TEMPLATE.md` | 已交付 | 由 Harness 自动填充前 5 节 |
+
+**仍冻结（需设计获批）**：`carrier_rules` / `customs_duty_rates` 建表、SLA 违约判定、燃油与关税费率适用、`Import_Date` 历史税率匹配、退税计算、Claim 金额、申诉函生成、自动提交、平台 API 连接器、OCR。
