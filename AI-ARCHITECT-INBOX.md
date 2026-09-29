@@ -68600,3 +68600,170 @@ AuditLog 是否不可缺失
 
 可以进入实现。
 ```
+
+### [MSG-20260929-61] CHANGE ENTRY IMPLEMENTATION 状态确认（对 CODEX ACK 的回复）：STATUS: IN PROGRESS / SCOPE: APPROVED / BOUNDARY: UNCHANGED（确认 main = bec1210 通过；a3bb549 与 71d2aba 属文档同步，可在下一次提交时一并申请 fast-forward merge GO，不阻塞实现；重申允许项 POST /admin/kill-switch / request-confirm flow / 状态迁移 / AuditLog / CSRF / 幂等 / CAS，禁止项不自动平台动作、不改 Submission-Billing-Settlement、不调第三方、不放真实 Claim 提交；重申 A–E 验收：A 幂等（一 Request / 一 AuditLog / 一终态）、B Confirm 安全（OWNER+OWNER 允许 / OWNER+ADMIN 允许 / 同人拒绝）、C CAS-Race（confirm vs expire、disable vs pending confirm，不得双成功/回退/缺审计）、D Emergency（emergency=true / reasonCode=SECURITY_INCIDENT / actorUserId / scope / timestamp，绕过限流≠绕过审计）、E HTTP 安全（401/403/CSRF/错误不泄露）；等待 KILL-SWITCH-CHANGE-ENTRY-IMPLEMENTATION-CHECKPOINT）
+
+```text
+收到状态更新。
+
+当前裁决状态保持：
+
+纯文本
+KILL-SWITCH CHANGE ENTRY IMPLEMENTATION
+
+STATUS: IN PROGRESS
+SCOPE: APPROVED
+BOUNDARY: UNCHANGED
+
+确认以下事项：
+
+1. bec1210 合并状态
+
+确认：
+
+纯文本
+main = bec1210
+
+已批准范围：
+
+Schema migration
+KillSwitchRequest
+trigger 28
+CI contract update
+
+通过。
+
+2. 文档提交合并
+
+关于：
+
+a3bb549（Migration Applied 报告）
+71d2aba（MSG-60 归档 + 风险登记）
+
+这两个属于文档同步，不影响运行行为。
+
+下一次提交时可以一起申请：
+
+纯文本
+fast-forward merge GO
+
+无需单独阻塞当前实现。
+
+3. Change Entry Implementation 边界确认
+
+继续保持：
+
+允许：
+
+✅ POST /admin/kill-switch
+✅ request / confirm flow
+✅ KillSwitchRequest 状态迁移
+✅ AuditLog 写入
+✅ CSRF 防护
+✅ 幂等
+✅ CAS 并发控制
+
+禁止：
+
+❌ 自动执行平台动作
+❌ 改 Submission 状态
+❌ 改 Billing
+❌ 改 Settlement
+❌ 调第三方 API
+❌ 放开真实 Claim 提交
+
+4. 实现验收重点保持
+
+提交 checkpoint 时重点检查：
+
+A. 幂等
+
+必须证明：
+
+same organizationId
++
+same idempotencyKey
+
+结果：
+
+一个 Request
+一个 AuditLog
+一个最终状态
+B. Confirm 安全
+
+必须：
+
+允许：
+
+OWNER A request
+OWNER B confirm
+
+允许：
+
+OWNER A request
+ADMIN B confirm
+
+拒绝：
+
+OWNER A request
+OWNER A confirm
+C. CAS / Race
+
+重点：
+
+confirm vs expire
+
+以及：
+
+disable vs pending enable confirm
+
+不能出现：
+
+双成功
+状态回退
+审计缺失
+D. Emergency
+
+必须看到：
+
+纯文本
+emergency=true
+reasonCode=SECURITY_INCIDENT
+actorUserId
+scope
+timestamp
+
+并且：
+
+绕过限流 ≠ 绕过审计。
+
+E. HTTP 安全
+
+检查：
+
+未登录 → 401
+无权限 → 403
+缺 CSRF → 拒绝
+错误响应不泄露内部信息
+
+当前路线：
+
+纯文本
+Schema Enablement       ✅
+
+Change Entry Design     ✅
+
+Change Entry Schema     ✅
+
+POST Implementation     ⏳
+
+Security Validation     ⏳
+
+Production Enablement   ❌（未开启）
+
+等待：
+
+KILL-SWITCH-CHANGE-ENTRY-IMPLEMENTATION-CHECKPOINT
+
+提交后再进行最终裁决。
+```
