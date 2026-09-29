@@ -81,7 +81,7 @@ const IMPORT_ERROR_REPORT_PATH = /^\/imports\/[^/]+\/error-report$/;
 /** MSG-20260929-40：只读的 /operations/*（看板）与 /admin/*（Admin Console）也要进工作流分发，
  *  否则请求在 server 层就落到默认 404 —— 端点「纸面存在、实际不可达」。 */
 const WORKFLOW_PATH =
-  /^(?:\/opportunities\/(?:insights(?:\.csv)?|[^/]+\/(?:qualify|reject|case|basis))|\/connections(?:\/[^/]+\/(?:status|credential-ref))?|\/cases(?:\/[^/]+\/(?:commercial-terms|recovery-outcome|recovery-review|appeal-package|claim|evidence)|\/[^/]+)?|\/billing(?:\/[^/]+\/status)?|\/commissions\/reconcile|\/payments(?:\/webhook|\/reconciliation(?:\.csv)?|\/events\/[^/]+\/replay|\/processing\/retry-due)?|\/operations\/(?:dashboard|claims|recovery)|\/admin\/(?:tenant-overview|audit(?:\/[^/]+)?|system-health|imports(?:\/[^/]+(?:\/errors)?)?|recovery-review(?:\/[^/]+)?|members(?:\/[^/]+)?|permission-matrix))$/;
+  /^(?:\/opportunities\/(?:insights(?:\.csv)?|[^/]+\/(?:qualify|reject|case|basis))|\/connections(?:\/[^/]+\/(?:status|credential-ref))?|\/cases(?:\/[^/]+\/(?:commercial-terms|recovery-outcome|recovery-review|appeal-package|claim|evidence)|\/[^/]+)?|\/billing(?:\/[^/]+\/status)?|\/commissions\/reconcile|\/payments(?:\/webhook|\/reconciliation(?:\.csv)?|\/events\/[^/]+\/replay|\/processing\/retry-due)?|\/operations\/(?:dashboard|claims|recovery)|\/admin\/(?:tenant-overview|audit(?:\/[^/]+)?|system-health|imports(?:\/[^/]+(?:\/errors)?)?|recovery-review(?:\/[^/]+)?|members(?:\/[^/]+)?|permission-matrix|kill-switch))$/;
 
 /** CHANGE #20：Unicode 文件名走 RFC 5987 的 filename*=UTF-8''，同时给 ASCII 回退名 */
 export function buildContentDisposition(

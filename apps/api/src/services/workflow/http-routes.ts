@@ -36,6 +36,7 @@ import { listPaymentReconciliation, toReconciliationCsv } from './payment-reconc
 import { replayPaymentEvent, runDueRetries } from './payment-attempt';
 import { getCase, getClaimDraft, listCaseEvidence, listCases } from './case-read';
 import { getMember, getPermissionMatrix, listMembers } from '../operations/admin-membership';
+import { getKillSwitchStatus, killSwitchConfigFromEnv } from '../operations/kill-switch';
 import {
   getRecoveryReviewItem,
   listRecoveryReviewQueue,
@@ -109,6 +110,8 @@ const ADMIN_RECOVERY_REVIEW_ITEM_PATH = /^\/admin\/recovery-review\/([^/]+)$/;
 const ADMIN_MEMBERS_PATH = /^\/admin\/members$/;
 const ADMIN_PERMISSION_MATRIX_PATH = /^\/admin\/permission-matrix$/;
 const ADMIN_MEMBER_DETAIL_PATH = /^\/admin\/members\/([^/]+)$/;
+// MSG-20260929-53：Kill Switch 只读状态（GET only；变更路径不在本增量）
+const ADMIN_KILL_SWITCH_PATH = /^\/admin\/kill-switch$/;
 
 /** 请求体层面的错误（与领域状态无关），统一映射为 400。 */
 class HttpBodyError extends Error {
@@ -247,6 +250,7 @@ export async function handleWorkflowRequest(
   const adminMembersList = ADMIN_MEMBERS_PATH.test(path);
   const adminPermissionMatrix = ADMIN_PERMISSION_MATRIX_PATH.test(path);
   const adminMemberDetail = ADMIN_MEMBER_DETAIL_PATH.exec(path);
+  const adminKillSwitch = ADMIN_KILL_SWITCH_PATH.test(path);
   const adminAny =
     adminTenantOverview ||
     adminAuditList ||
@@ -260,7 +264,8 @@ export async function handleWorkflowRequest(
     adminRecoveryReviewItem !== null ||
     adminMembersList ||
     adminPermissionMatrix ||
-    adminMemberDetail !== null;
+    adminMemberDetail !== null ||
+    adminKillSwitch;
   if (!adminAny && !operationsDashboard && !operationsClaims && !operationsRecovery && !review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !replayPath && !retryDuePath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim) {
     return false;
   }
@@ -566,6 +571,23 @@ export async function handleWorkflowRequest(
           deps.prisma,
           { organizationId: context.organizationId, role: context.role },
           caseClaim[1] ?? '',
+        ),
+      );
+      return true;
+    }
+
+    // MSG-20260929-53：Kill Switch 只读状态（GET only；无变更端点）
+    if (adminKillSwitch) {
+      if ((req.method ?? 'GET') !== 'GET') {
+        sendJson(res, 405, { error: 'METHOD_NOT_ALLOWED' });
+        return true;
+      }
+      sendJson(
+        res,
+        200,
+        await getKillSwitchStatus(
+          { prisma: deps.prisma, config: killSwitchConfigFromEnv() },
+          { organizationId: context.organizationId, role: context.role },
         ),
       );
       return true;

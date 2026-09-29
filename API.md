@@ -376,6 +376,7 @@ C-0008-B2（Case / Evidence / Claim Draft / Billing）的端点尚未实现。
 | GET | `/admin/members` | 200 `{ items, nextCursor }`；每项含 `emailMasked`（**默认掩码**）、role、isActive、status、`locked`（仅布尔）、lastLoginAt | OWNER / ADMIN |
 | GET | `/admin/members/:userId` | 200 成员详情：会话**仅计数**（total/active/expired）+ 邀请（status/expiresAt/attemptCount）；跨租户 → 404 | OWNER / ADMIN |
 | GET | `/admin/permission-matrix` | 200 `{ readonly: true, roles, permissions, matrix }`（只读展示，来源代码常量） | OWNER / ADMIN |
+| GET | `/admin/kill-switch` | 200 `{ visibility, switches }`（只读状态；OWNER/ADMIN 全量、OPS 仅开关取值、FINANCE/VIEWER 403；非 GET → 405；无变更端点） | OWNER / ADMIN / OPS（摘要） |
 
 - **无写路径**：不存在 invite / updateRole / deactivate / delete / revokeSession / resetPassword 端点
 - **邮箱默认掩码**（如 `a***@example.com`）；不返回完整邮箱，也不提供解掩码入口

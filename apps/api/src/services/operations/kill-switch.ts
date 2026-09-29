@@ -315,3 +315,14 @@ async function writeAudit(
 export function __resetKillSwitchPending(): void {
   pending.clear();
 }
+
+
+/** 环境层配置：KILLSWITCH_GLOBAL_<SCOPE> = enabled|disabled（非法值由解析层 fail-closed）。 */
+export function killSwitchConfigFromEnv(env: NodeJS.ProcessEnv = process.env): KillSwitchConfig {
+  const global: Record<string, unknown> = {};
+  for (const scope of KILL_SWITCH_SCOPES) {
+    const raw = env['KILLSWITCH_GLOBAL_' + scope.toUpperCase()];
+    if (raw !== undefined) global[scope] = raw;
+  }
+  return { global };
+}
