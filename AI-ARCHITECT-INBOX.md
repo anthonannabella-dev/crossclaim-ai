@@ -54634,3 +54634,248 @@ NO EXTERNAL ACTION
 
 先证明“发现损失并产生价值”，再考虑“自动执行追回”。
 ```
+
+### [MSG-20260929-18] C0015-MSG17-Q2-IMPLEMENTATION 裁决：PASS_CLOSE（DRY_RUN_PREPARATION_READY）——离线提交载荷构造器 + 干跑校验器严格符合 MSG-20260929-17 Q2 批准范围：只构造载荷与校验、不发请求；NEXT = Q3 POD 证据登记 + Q4 合规评估设计稿）
+
+Codex 按 MSG-20260929-17 Q2 交付离线载荷模块（HEAD ae80db9）后，架构方判定通过。以下为该回复的逐字原文。
+
+```text
+C0015-MSG17-Q2-IMPLEMENTATION 裁决
+结论：PASS ✅
+
+状态：
+
+纯文本
+GATE:
+7 Commercial Validation
+
+CHECKPOINT:
+Offline Submission Payload Builder
+
+DECISION:
+PASS_CLOSE
+
+STATUS:
+DRY_RUN_PREPARATION_READY
+审计结论
+
+本次实现严格符合 MSG-20260929-17 Q2 批准范围：
+
+只构造提交载荷 + 干跑校验，不发送请求。
+
+通过。
+
+一、边界检查 ✅
+
+实现：
+
+纯文本
+Input Evidence
+
+↓
+
+Submission Payload
+
+↓
+
+Dry Run Validation
+
+↓
+
+Manual Gate Description
+
+正确。
+
+没有变成：
+
+纯文本
+Payload
+
+↓
+
+API Request
+
+↓
+
+Platform Submit
+二、硬约束审计 ✅
+1. Transport 开关
+
+通过：
+
+纯文本
+SUBMISSION_TRANSPORT_ENABLED=false
+
+这是关键保护。
+
+2. Submission Gate
+
+通过：
+
+纯文本
+supportsClaimSubmission=false
+
+保持：
+
+纯文本
+NEEDS_MANUAL
+
+没有改变之前 FORBIDDEN 结论。
+
+3. 高额人工复核
+
+通过：
+
+纯文本
+>$1000
+
+↓
+
+OWNER REVIEW
+
+符合已有 HITL。
+
+4. 凭据防泄漏
+
+通过。
+
+禁止：
+
+token
+secret
+API key
+password
+
+进入 payload。
+
+5. 自由文本掩码
+
+通过。
+
+禁止：
+
+邮箱、电话直接进入提交草稿。
+
+符合证据最小化原则。
+
+三、测试审计 ✅
+
+结果：
+
+纯文本
+submission-payload.test.ts
+
+12/12 PASS
+
+tsc:
+PASS
+
+CI:
+SUCCESS
+
+满足当前阶段要求。
+
+四、当前状态更新
+
+C-0015 自动提交链路：
+
+纯文本
+Payload Builder
+        ✅ PASS
+
+Dry Run Validator
+        ✅ PASS
+
+Evidence Attachment
+        ⏳ NEXT
+
+Compliance Review
+        ⏳ NEXT
+
+API Transport
+        ❌ FORBIDDEN/HOLD
+
+Real Submission
+        ❌ FORBIDDEN
+下一步批准
+
+继续执行 MSG-20260929-17：
+
+Q3：POD 文件上传登记
+
+允许进入设计/实现：
+
+范围：
+
+纯文本
+POD File
+
+↓
+
+EvidenceArtifact
+
+↓
+
+CaseEvidence
+
+↓
+
+Audit Trail
+
+允许：
+
+文件登记
+hash
+来源标记
+附件状态
+
+禁止：
+
+自动获取 POD
+物流 API
+签名真实性判断
+责任判断
+Q4：Compliance Assessment
+
+允许提交设计稿：
+
+纯文本
+AUTOMATED-SUBMISSION-COMPLIANCE-ASSESSMENT.md
+
+仅 Design。
+
+不代表批准自动提交。
+
+归档
+Markdown
+### [MSG-20260929-18]
+
+TYPE:
+IMPLEMENTATION CHECKPOINT DECISION
+
+TARGET:
+Offline Submission Payload Builder
+
+DECISION:
+PASS_CLOSE
+
+Validated:
+- payload construction
+- dry-run validation
+- manual gate description
+- credential exclusion
+- PII masking boundary
+
+Confirmed:
+- no network
+- no API
+- no credentials
+- no submission
+- no payment action
+
+NEXT:
+Q3 POD Evidence Registration
+Q4 Compliance Assessment Design
+
+继续推进 Q3/Q4 即可。当前没有越界。
+```
