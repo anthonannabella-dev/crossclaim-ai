@@ -44,6 +44,8 @@ const DENY_ALL: PermissionMatrix = {
   viewClaimItemSummary: false,
   viewClaimEvidence: false,
   manageClaimItems: false,
+  claimTrackingApprove: false,
+  claimTrackingReceive: false,
 };
 
 function asRow(role: AppRole): Row {

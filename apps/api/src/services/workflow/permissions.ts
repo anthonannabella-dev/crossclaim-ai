@@ -38,6 +38,10 @@ export interface PermissionMatrix {
   viewClaimEvidence: boolean;
   /** C-0011：建单 / 状态迁移 / 证据联结 */
   manageClaimItems: boolean;
+  /** MSG-20260929-25 A1：Claim Tracking 记录提交 / 判定终局（仅 OWNER/ADMIN） */
+  claimTrackingApprove: boolean;
+  /** MSG-20260929-25 A1：Claim Tracking 录入外部回执 / 平台案件号（OWNER/ADMIN/OPS） */
+  claimTrackingReceive: boolean;
 }
 
 const DENY_ALL: PermissionMatrix = {
@@ -52,6 +56,8 @@ const DENY_ALL: PermissionMatrix = {
   viewClaimItemSummary: false,
   viewClaimEvidence: false,
   manageClaimItems: false,
+  claimTrackingApprove: false,
+  claimTrackingReceive: false,
 };
 
 export const PERMISSIONS: Record<AppRole, PermissionMatrix> = {
@@ -67,6 +73,8 @@ export const PERMISSIONS: Record<AppRole, PermissionMatrix> = {
     viewClaimItemSummary: true,
     viewClaimEvidence: true,
     manageClaimItems: true,
+    claimTrackingApprove: true,
+    claimTrackingReceive: true,
   },
   ADMIN: {
     manageConnections: true,
@@ -80,6 +88,8 @@ export const PERMISSIONS: Record<AppRole, PermissionMatrix> = {
     viewClaimItemSummary: true,
     viewClaimEvidence: true,
     manageClaimItems: true,
+    claimTrackingApprove: true,
+    claimTrackingReceive: true,
   },
   OPS: {
     manageConnections: false,
@@ -93,6 +103,8 @@ export const PERMISSIONS: Record<AppRole, PermissionMatrix> = {
     viewClaimItemSummary: true,
     viewClaimEvidence: true,
     manageClaimItems: true,
+    claimTrackingApprove: false,
+    claimTrackingReceive: true,
   },
   FINANCE: {
     manageConnections: false,
@@ -106,6 +118,8 @@ export const PERMISSIONS: Record<AppRole, PermissionMatrix> = {
     viewClaimItemSummary: true,
     viewClaimEvidence: false,
     manageClaimItems: false,
+    claimTrackingApprove: false,
+    claimTrackingReceive: false,
   },
   VIEWER: { ...DENY_ALL },
 };
