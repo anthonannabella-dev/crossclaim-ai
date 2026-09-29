@@ -60930,3 +60930,332 @@ READY_FOR_PHASED_IMPLEMENTATION
 
 可以进入 Admin Console Phase 1 实现。建议先做 Tenant Overview + Audit Explorer + System Health。
 ```
+
+### [MSG-20260929-35] ADMIN-CONSOLE-PHASE1-CHECKPOINT 裁决：PASS_CLOSE ✅（ADMIN_OBSERVABILITY_LAYER_READY）——Phase 1 符合 MSG-20260929-34 批准范围：A1 Tenant Overview（正确过滤 token/secret/storageKey/原始连接配置，展示成员/连接/导入/Claim/Settlement 状态与审计活跃度）、A3 Audit Explorer（列表只返回 action/entityType/entityId/actor/severity/createdAt，changes 仅详情端点，actorUserId 过滤必须受 organizationId 约束，防泄露测试通过）、A6 System Health（失败折叠为 { ok:false }，不返回数据库错误/连接串/堆栈）；只读证明通过（Organization/Membership/AuditLog/Claim/Settlement 前后不变，无隐藏写入口）；D1 权限实现通过（Tenant Overview/Audit Explorer = OWNER/ADMIN；System Health = OWNER/ADMIN/OPS；FINANCE 继续不进入 Admin v1）；HTTP 集成测试裁决 HOLD（不阻塞，现有服务层真实库测试 + API contract gate 已覆盖路由/权限/行为/租户隔离；Production Candidate 前建议补轻量 ADMIN-HTTP-SMOKE-CHECK：OWNER 200 / OPS system-health 200 / VIEWER 403 / 跨租户 404 / response schema stable）；NEXT = Admin Phase 2（A4 Import/Validation Operations，GO；先提交 ADMIN-IMPORT-VALIDATION-DESIGN.md，含数据来源/状态桶/错误展示层级/权限/是否展示原始文件引用/是否允许下载报告；继续禁止：修改 Import、重跑导入、删除文件、修复数据、手工改变状态）
+
+本轮为 Admin Console Phase 1 检查点裁决（PASS_CLOSE / ADMIN_OBSERVABILITY_LAYER_READY），并开放 Phase 2 设计（A4 Import/Validation）。
+
+```text
+ADMIN-CONSOLE-PHASE1-CHECKPOINT 裁决
+结论：PASS_CLOSE ✅
+
+状态：
+
+Markdown
+### [MSG-20260929-35]
+
+TYPE:
+IMPLEMENTATION CHECKPOINT DECISION
+
+TARGET:
+ADMIN-CONSOLE-PHASE1
+
+DECISION:
+PASS_CLOSE
+
+STATUS:
+ADMIN_OBSERVABILITY_LAYER_READY
+
+NEXT:
+PHASE2_IMPORT_VALIDATION_OPERATIONS
+一、总体审计
+
+Phase 1 实现符合 MSG-20260929-34 的批准范围。
+
+通过。
+
+本轮完成：
+
+A1 Tenant Overview
+A3 Audit Explorer
+A6 System Health
+
+并保持：
+
+✅ GET only
+✅ 无写路径
+✅ 无 Schema 变化
+✅ 无权限扩张
+✅ 无凭据暴露
+✅ 无资金动作
+✅ 无平台动作
+
+二、A1 Tenant Overview
+
+结论：PASS ✅
+
+满足定位：
+
+Admin 是运营可观测层，不是超级管理员后台。
+
+已正确过滤：
+
+禁止：
+
+token
+secret
+storageKey
+原始连接配置
+
+展示：
+
+成员状态
+Connection 状态
+Import 状态
+Claim 状态
+Settlement 状态
+Audit 活跃度
+
+符合。
+
+三、A3 Audit Explorer
+
+结论：PASS ✅
+
+这一部分重点审计通过。
+
+列表：
+
+只返回：
+
+纯文本
+action
+entityType
+entityId
+actor
+severity
+createdAt
+
+正确。
+
+changes：
+
+采用：
+
+列表：
+
+不返回
+
+详情：
+
+单独读取
+
+正确。
+
+actorUserId 查询
+
+批准继续：
+
+允许：
+
+actorUserId filter
+
+限制：
+
+必须：
+
+organizationId scope
+
+已实现。
+
+防泄露测试
+
+通过：
+
+不返回 changes
+不跨租户
+不泄露 B 租户 marker
+四、A6 System Health
+
+结论：PASS ✅
+
+特别认可：
+
+失败折叠：
+
+JSON
+{
+  "ok": false
+}
+
+而不是：
+
+返回：
+
+数据库错误
+连接字符串
+stack trace
+
+符合生产安全要求。
+
+五、只读证明
+
+通过。
+
+要求：
+
+读取前后：
+
+Organization
+Membership
+AuditLog
+Claim
+Settlement
+
+不变化。
+
+已覆盖。
+
+Admin Console 没有成为隐藏写入口。
+
+六、D1 权限实现
+
+通过。
+
+当前：
+
+模块	权限
+Tenant Overview	OWNER/ADMIN
+Audit Explorer	OWNER/ADMIN
+System Health	OWNER/ADMIN/OPS
+
+符合裁决。
+
+FINANCE：
+
+继续不进入 Admin v1。
+
+保持。
+
+七、关于 HTTP 集成测试问题
+
+问题：
+
+是否需要为 Admin 单独追加 HTTP integration tests？
+
+裁决：
+
+当前：HOLD，不阻塞 ✅
+
+理由：
+
+现阶段已有：
+
+服务层真实 PostgreSQL 测试
+API contract gate
+路由契约检查
+
+覆盖：
+
+Route exists
+
+↓
+
+Permission
+
+↓
+
+Service behavior
+
+↓
+
+Tenant isolation
+
+已经满足 Phase 1。
+
+但是：
+
+进入 Production Candidate 前，建议补一个轻量 HTTP smoke 层。
+
+不是现在阻塞。
+
+建议未来：
+
+ADMIN-HTTP-SMOKE-CHECK
+
+覆盖：
+
+OWNER GET 200
+OPS 对 system-health 200
+VIEWER 403
+跨租户 404
+response schema stable
+
+不需要覆盖所有业务逻辑。
+
+八、下一阶段
+
+确认：
+
+P2 = A4 Import/Validation Operations
+
+GO ✅
+
+进入：
+
+纯文本
+Admin Phase 2
+
+范围：
+
+只读运营能力：
+
+ImportBatch 列表
+Import 状态
+Validation Run
+Error Report
+Quarantine
+数据质量摘要
+
+保持禁止：
+
+❌ 修改 Import
+❌ 重跑导入
+❌ 删除文件
+❌ 修复数据
+❌ 手工改变状态
+
+建议 Phase 2 设计重点：
+
+提交：
+
+ADMIN-IMPORT-VALIDATION-DESIGN.md
+
+需要包含：
+
+数据来源
+状态桶
+错误展示层级
+权限
+是否展示原始文件引用
+是否允许下载报告
+
+最终归档：
+
+Markdown
+### [MSG-20260929-35]
+
+Admin Console Phase 1:
+
+PASS_CLOSE
+
+Completed:
+- Tenant Overview
+- Audit Explorer
+- System Health
+
+Validated:
+- Read only
+- Tenant isolation
+- Permission boundaries
+- Secret redaction
+- Audit protection
+- Health degradation safety
+
+
+Next:
+ADMIN-CONSOLE-PHASE2
+Import/Validation Operations Design
+
+可以继续进入 A4 Import/Validation Operations Design。
+```
