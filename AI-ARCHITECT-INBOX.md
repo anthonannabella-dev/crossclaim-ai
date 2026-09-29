@@ -67261,3 +67261,237 @@ HOLD
 
 请 Codex 先提交 KILL-SWITCH-CHANGE-ENTRY-DESIGN R1。
 ```
+
+### [MSG-20260929-56] KILL-SWITCH-CHANGE-ENTRY-DESIGN R1 裁决：RESULT: PASS_WITH_NEXT_DELTA（设计通过；进入实现前必须先提交 KILL-SWITCH-IDEMPOTENCY-DELTA-DESIGN，实现阶段重点审多实例幂等 / 并发确认 / 审计不可丢 / 紧急关闭 / 无事实回滚）
+
+```text
+裁决：
+
+纯文本
+KILL-SWITCH-CHANGE-ENTRY-DESIGN-R1
+
+RESULT: PASS_WITH_NEXT_DELTA
+STATUS: DESIGN APPROVED
+NEXT: KILL-SWITCH-IDEMPOTENCY-DELTA-DESIGN
+
+R1 已经满足前一轮提出的控制面要求，可以进入下一阶段。但不进入变更入口实现，先完成幂等持久化 Delta 设计。
+
+R1 复核结果
+D1 phase + target 组合
+
+状态：
+
+纯文本
+PASS
+
+当前规则接受：
+
+phase	target	行为
+request	disabled	立即执行
+request	enabled	创建 PENDING_ENABLE
+confirm	enabled	确认开启
+
+禁止：
+
+confirm + disabled
+confirm 无 pending request
+
+服务端校验即可。
+
+D2 CSRF
+
+状态：
+
+纯文本
+PASS
+
+已满足。
+
+确认保留：
+
+Browser:
+
+Origin/Referer 校验
++
+x-crossclaim-csrf
+
+非 Browser：
+
+未来独立认证设计
+
+并确认：
+
+CSRF token 不进入：
+
+AuditLog
+changes
+request metadata
+D3 幂等持久化
+
+这是进入实现前唯一剩余 Gate。
+
+当前：
+
+纯文本
+PASS_DESIGN
+
+但是：
+
+纯文本
+NOT READY IMPLEMENTATION
+
+原因：
+
+Kill Switch 属于安全控制面。
+
+不能接受：
+
+memory cache
+Redis 临时方案（除非有明确持久化保证）
+单实例状态
+下一步必须提交：
+KILL-SWITCH-IDEMPOTENCY-DELTA-DESIGN.md
+
+设计时请重点回答：
+
+1. 存储方案
+
+优先考虑：
+
+方案 A：
+
+KillSwitchRequest table
+
+建议字段：
+
+id
+organizationId
+scope
+target
+phase
+status
+idempotencyKey
+requestActorId
+confirmationActorId
+requestedAt
+expiresAt
+appliedAt
+createdAt
+updatedAt
+
+约束：
+
+unique(
+ organizationId,
+ idempotencyKey
+)
+
+以及：
+
+同 scope 只能存在一个 ACTIVE pending request
+
+方案 B：
+
+复用现有机制。
+
+如果选择 B，需要证明：
+
+唯一性在哪里保证
+并发如何保证
+查询如何保证
+重启如何恢复
+
+否则不接受。
+
+2. 状态模型
+
+必须保持单事实源。
+
+建议：
+
+DISABLED
+ENABLED
+PENDING_ENABLE
+EXPIRED_REQUEST
+
+并明确：
+
+AuditLog 是历史事实。
+
+Runtime state 是当前状态。
+
+Pending request 是流程状态。
+
+三者不能混淆。
+
+3. 事务边界
+
+必须明确：
+
+成功返回 applied 前：
+
+必须完成：
+
+state mutation
++
+idempotency record
++
+audit log
+
+如果：
+
+AuditLog 写失败：
+
+=> 状态不能变化
+
+如果：
+
+Idempotency 写失败：
+
+=> 不允许返回成功
+
+4. 回滚安全
+
+增加：
+
+request expired
+request cancelled
+request replayed
+
+三种情况。
+
+尤其：
+
+重复 confirm：
+
+必须返回稳定错误。
+
+不能二次开启。
+
+当前总状态
+代码
+Kill Switch Read          PASS
+Kill Switch Design        PASS
+Kill Switch Implementation PASS
+Kill Switch Change Entry Design R1 PASS
+
+Kill Switch Change Entry Implementation HOLD
+Reason:
+waiting idempotency persistence design
+下一步顺序
+
+执行：
+
+代码
+KILL-SWITCH-IDEMPOTENCY-DELTA-DESIGN
+        ↓
+Schema Review
+        ↓
+Migration Approval
+        ↓
+Change Entry Implementation
+        ↓
+Concurrency / Security Test
+
+不要直接进入 POST 实现。先提交 Delta 设计。
+```
