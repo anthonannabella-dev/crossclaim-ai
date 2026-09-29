@@ -18,6 +18,11 @@ import { PrismaClient } from '@prisma/client';
 import { loadEnv } from './config/env';
 import { createLogger, type Logger, type LogLevel } from './config/logger';
 import { checkHealth, healthHttpStatus } from './services/health';
+import { killSwitchConfigFromEnv } from './services/operations/kill-switch';
+import {
+  createEffectiveKillSwitchResolver,
+  type EffectiveKillSwitchResolver,
+} from './services/operations/kill-switch-resolver';
 import { createMetrics } from './services/metrics';
 import {
   createStorageAdapter,
@@ -97,8 +102,23 @@ export function buildContentDisposition(
 
 let metrics: ReturnType<typeof createMetrics> | undefined;
 
+/**
+ * MSG-20260929-68 S3：进程级只读探针 —— 能否完成一次控制面读取与生效值解析。
+ * 使用哨兵租户 id（不存在的组织），不读取任何真实租户数据，也不外泄任何租户信息。
+ */
+async function probeKillSwitchResolver(resolver: EffectiveKillSwitchResolver): Promise<boolean> {
+  const sentinelOrganizationId = '00000000-0000-4000-8000-000000000000';
+  const results = await resolver.resolveAll(sentinelOrganizationId);
+  return results.every((item) => item.degraded !== true);
+}
+
 export function createServer(deps: ServerDeps): http.Server {
   const { prisma, log, storage, audit } = deps;
+  // MSG-20260929-68：进程内 resolver 单例（只读端口；控制面写入后由写路径 invalidate）
+  const killSwitchResolver = createEffectiveKillSwitchResolver({
+    controlRequests: { findMany: (args) => prisma.killSwitchRequest.findMany(args) },
+    config: killSwitchConfigFromEnv(),
+  });
   // 审计 IP 盐值只影响“谁”的哈希；缺失时保持空值（不阻塞服务启动）
   const auditIpSalt = (() => {
     try {
@@ -207,6 +227,7 @@ export function createServer(deps: ServerDeps): http.Server {
       handleWorkflowRequest(req, res, {
         prisma,
         session: auth.session,
+        killSwitchResolver,
         // C-0010-C2：webhook 的结构化安全日志（验签失败 / 版本不一致）必须落到运行时 logger
         log: (event, fields) => log.warn(event, fields),
       })
@@ -231,7 +252,11 @@ export function createServer(deps: ServerDeps): http.Server {
     }
 
     if (req.method === 'GET' && (url === '/health' || url === '/healthz')) {
-      checkHealth({ db: prisma, version: VERSION })
+      checkHealth({
+        db: prisma,
+        version: VERSION,
+        killSwitch: () => probeKillSwitchResolver(killSwitchResolver),
+      })
         .then((result) => send(healthHttpStatus(result), result))
         .catch((err) =>
           send(503, { status: 'degraded', error: err instanceof Error ? err.message : 'unknown' }),

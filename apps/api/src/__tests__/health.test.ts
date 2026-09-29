@@ -46,6 +46,35 @@ describe('checkHealth', () => {
   });
 });
 
+describe('S3 Kill Switch 探针（MSG-20260929-68）', () => {
+  it('探针可用 → killSwitchResolver.status=ok，且整体 status 仍由数据库决定', async () => {
+    const result = await checkHealth({ db: prisma, version: '0.1.0', killSwitch: async () => true });
+    expect(result.killSwitchResolver.status).toBe('ok');
+    expect(result.status).toBe('ok');
+    expect(healthHttpStatus(result)).toBe(200);
+  });
+
+  it('探针降级 → killSwitchResolver.status=degraded，但整体 status 仍 ok、HTTP 仍 200（resolver 降级 != 服务 down）', async () => {
+    const result = await checkHealth({ db: prisma, version: '0.1.0', killSwitch: async () => false });
+    expect(result.killSwitchResolver.status).toBe('degraded');
+    expect(result.status).toBe('ok');
+    expect(healthHttpStatus(result)).toBe(200);
+  });
+
+  it('探针抛错 → 同样只降级探针字段（不得等同服务不可用）', async () => {
+    const result = await checkHealth({
+      db: prisma,
+      version: '0.1.0',
+      killSwitch: async () => {
+        throw new Error('probe failure');
+      },
+    });
+    expect(result.killSwitchResolver.status).toBe('degraded');
+    expect(result.status).toBe('ok');
+    expect(healthHttpStatus(result)).toBe(200);
+  });
+});
+
 describe('HTTP 入口', () => {
   async function withServer<T>(fn: (base: string) => Promise<T>): Promise<T> {
     const log = createLogger({ level: 'error', sink: () => undefined });
@@ -71,6 +100,15 @@ describe('HTTP 入口', () => {
       expect(body.status).toBe('ok');
       expect(body.version).toBeDefined();
       expect(body.checks.database.ok).toBe(true);
+    });
+  });
+
+  it('GET /health 返回 killSwitchResolver 字段（S3，HTTP 200）', async () => {
+    await withServer(async (base) => {
+      const res = await fetch(`${base}/health`);
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as { killSwitchResolver?: { status?: string } };
+      expect(body.killSwitchResolver?.status).toBe('ok');
     });
   });
 

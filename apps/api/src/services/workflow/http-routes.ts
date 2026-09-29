@@ -138,6 +138,8 @@ class HttpBodyError extends Error {
 export interface WorkflowRouteDeps {
   prisma: PrismaClient;
   session: SessionDeps;
+  /** MSG-20260929-68：由 server 创建的进程内 resolver 单例（未提供时回退到本地 WeakMap 缓存） */
+  killSwitchResolver?: EffectiveKillSwitchResolver;
   /** Platforms of the adapters registered in this deployment (API connections only). */
   registeredPlatforms?: readonly string[];
   now?: () => Date;
@@ -227,6 +229,10 @@ function headerValue(raw: string | string[] | undefined): string | undefined {
  * 控制面写入成功后由写路径主动 invalidate。
  */
 const killSwitchResolvers = new WeakMap<object, EffectiveKillSwitchResolver>();
+function resolveKillSwitchResolver(deps: WorkflowRouteDeps): EffectiveKillSwitchResolver {
+  return deps.killSwitchResolver ?? killSwitchResolverFor(deps.prisma);
+}
+
 function killSwitchResolverFor(prisma: PrismaClient): EffectiveKillSwitchResolver {
   let resolver = killSwitchResolvers.get(prisma);
   if (!resolver) {
@@ -629,7 +635,7 @@ export async function handleWorkflowRequest(
               config: killSwitchConfigFromEnv(),
               // 生效值 = Config Layer 与 Control Plane 的只读合成投影（不落库）
               effective: (scope, organizationId) =>
-                killSwitchResolverFor(deps.prisma).resolve(scope, organizationId),
+                resolveKillSwitchResolver(deps).resolve(scope, organizationId),
             },
             { organizationId: context.organizationId, role: context.role },
             { ...(deps.now ? { now: deps.now } : {}) },
@@ -664,7 +670,7 @@ export async function handleWorkflowRequest(
       );
       // 控制面写入成功后主动失效该租户缓存（§12.3；跨实例陈旧窗口 <= TTL）
       if (typeof body.scope === 'string') {
-        killSwitchResolverFor(deps.prisma).invalidate(context.organizationId, body.scope);
+        resolveKillSwitchResolver(deps).invalidate(context.organizationId, body.scope);
       }
       sendJson(res, 200, changeResult);
       return true;

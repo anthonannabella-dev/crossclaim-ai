@@ -1,6 +1,7 @@
 import Link from 'next/link';
 
 import { apiGet, consoleLang, consoleText, renderCell, statusLabel, tableRows } from '../lib/console';
+import { sourceLabel, valueLabel } from '../lib/kill-switch-labels';
 
 interface DashboardBody {
   generatedAt?: string;
@@ -11,9 +12,18 @@ interface DashboardBody {
 }
 
 export default async function OperationsConsolePage({ searchParams }: { searchParams?: Promise<{ window?: string }> }) {
-  const t = consoleText(await consoleLang());
+  const lang = await consoleLang();
+  const t = consoleText(lang);
   const window = (await searchParams)?.window ?? '7d';
   const result = await apiGet<DashboardBody>(`/operations/dashboard?window=${encodeURIComponent(window)}`);
+  // S2（MSG-20260929-68）：只读标识；无权限或失败时不渲染，且**不影响页面行为**
+  const killSwitch = await apiGet<{ switches?: unknown }>('/admin/kill-switch');
+  const killSwitchSwitches =
+    killSwitch.status === 'ok' && Array.isArray(killSwitch.data?.switches)
+      ? (killSwitch.data?.switches as Array<Record<string, unknown>>).filter(
+          (item): item is Record<string, unknown> => !!item && typeof item === 'object',
+        )
+      : [];
 
   if (result.status === 'LOGIN_REQUIRED') {
     return (
@@ -49,6 +59,20 @@ export default async function OperationsConsolePage({ searchParams }: { searchPa
           {t.generatedAt}: {renderCell(body.generatedAt)} · {t.window}: {renderCell(body.window ?? window)}
         </p>
       </section>
+
+      {killSwitchSwitches.length > 0 && (
+        <section className="rounded-lg border border-amber-300 bg-amber-50 p-4">
+          <h2 className="text-sm font-semibold">{t.killSwitch}</h2>
+          <ul className="mt-2 space-y-1 text-xs text-amber-900">
+            {killSwitchSwitches.map((item, index) => (
+              <li key={String(item.scope ?? index)}>
+                {renderCell(item.scope)}: {valueLabel(lang, item.value)} · {sourceLabel(lang, item.source)}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-2 text-xs text-amber-700">{t.killSwitchNote}</p>
+        </section>
+      )}
 
       {buckets.length > 0 && (
         <section className="rounded-lg border bg-white p-6">
