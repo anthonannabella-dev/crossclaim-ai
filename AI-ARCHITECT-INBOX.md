@@ -63083,3 +63083,335 @@ READY_FOR_IMPLEMENTATION_AFTER_REVISE
 
 可以进入 ADMIN-USER-MEMBERSHIP IMPLEMENTATION。完成后建议进入 Final Gate Review（Production Candidate 总审）。
 ```
+
+### [MSG-20260929-40] ADMIN-CONSOLE-PHASE4-CHECKPOINT 裁决：A2 = PASS_WITH_REQUIRED_FINAL_HARDENING（补 A2 真实库隔离 + 只读快照 + HTTP smoke 后方可进入 Final Gate Review）
+
+```text
+ADMIN-CONSOLE-PHASE4-CHECKPOINT 裁决
+总体结论：PASS_WITH_REQUIRED_FINAL_HARDENING ✅
+
+A2 User/Membership 实现方向正确，已经满足 Admin Console v1 的核心边界：
+
+只读身份可观测层，不成为身份治理入口。
+
+当前状态：
+
+Markdown
+ADMIN USER MEMBERSHIP
+
+DESIGN:
+PASS
+
+IMPLEMENTATION:
+PASS_WITH_REQUIRED_FINAL_HARDENING
+
+STATUS:
+READY_FOR_FINAL_GATE_AFTER_DB_VALIDATION
+对本次实现裁决
+PASS ✅
+
+已满足：
+
+D1 邮箱保护
+
+通过。
+
+当前：
+
+纯文本
+email -> maskEmail()
+
+正确：
+
+默认掩码
+无解掩码入口
+非法输入安全处理
+
+保持。
+
+D2 Session
+
+PASS。
+
+只返回：
+
+JSON
+{
+  "total":0,
+  "active":0,
+  "expired":0
+}
+
+禁止：
+
+tokenHash
+IP
+UA
+session 明细
+
+符合安全边界。
+
+D3 Invitation
+
+PASS。
+
+使用：
+
+status
+expiresAt
+attemptCount
+
+并且：
+
+状态来自已有事实：
+
+acceptedAt
+revokedAt
+expiresAt
+
+没有创造第二套邀请状态机。
+
+正确。
+
+D4 Lock 状态
+
+PASS。
+
+当前：
+
+只暴露：
+
+JSON
+{
+ "locked": true
+}
+
+禁止：
+
+failedLogins
+lockedUntil
+解锁操作
+
+正确。
+
+D5 Permission Matrix
+
+PASS。
+
+只读矩阵：
+
+JSON
+{
+ readonly:true
+}
+
+来源：
+
+permissionsFor
+
+符合 Admin Console 定位。
+
+唯一需要补齐的问题
+必须补：真实库隔离 + Snapshot Validation
+
+目前：
+
+服务层和端点层完成
+DB 级隔离和快照还没有补齐
+
+这个不能直接进入 Final Gate。
+
+原因：
+
+A2 涉及最高敏感域：
+
+User
+Membership
+Session
+Invitation
+
+必须证明：
+
+1. 租户隔离
+
+必须增加真实 PostgreSQL：
+
+场景：
+
+Tenant A:
+
+user_a@example.com
+
+Tenant B:
+
+user_b@example.com
+
+验证：
+
+A 查询：
+
+不能出现：
+
+B user
+B membership
+B invitation
+B session count
+
+包括：
+
+详情：
+
+GET /admin/members/:userId
+
+跨租户必须：
+
+404
+
+不能：
+
+403
+
+避免泄露存在性。
+
+2. 只读快照
+
+增加：
+
+调用前：
+
+记录：
+
+User count
+Membership count
+Session count
+Invitation count
+AuditLog count
+
+调用：
+
+/admin/members
+/admin/members/:id
+/admin/permission-matrix
+
+调用后：
+
+全部一致。
+
+证明：
+
+Admin 不修改事实。
+
+3. PII 深度扫描
+
+继续保持：
+
+响应禁止：
+
+passwordHash
+tokenHash
+inviteToken
+secret
+credential
+storageKey
+ip
+userAgent
+amount
+currency
+
+额外检查：
+
+完整邮箱不要泄露。
+
+例如：
+
+禁止：
+
+john.smith@gmail.com
+
+只允许：
+
+j***@gmail.com
+是否需要 HTTP 集成测试？
+
+之前的问题：
+
+是否需要专门 Admin HTTP 集成测试？
+
+现在结论：
+
+不需要新增完整一套。
+
+原因：
+
+已有：
+
+API contract gate
+服务层真实库测试
+路由契约检查
+
+足够。
+
+但 A2 必须补：
+
+最低 HTTP smoke：
+
+3 个：
+
+GET /admin/members
+GET /admin/members/:id
+GET /admin/permission-matrix
+
+验证：
+
+auth
+role
+405
+404
+
+即可。
+
+Final Gate Review 是否开始？
+
+裁决：
+
+可以进入 Final Gate Review，但条件：
+
+先完成：
+
+A2 DB isolation
++
+Readonly snapshot
++
+HTTP smoke
+
+然后进入：
+
+FINAL GATE REVIEW（Production Candidate 总审）
+
+最终状态：
+
+模块	状态
+A1 Tenant Overview	PASS
+A3 Audit Explorer	PASS
+A6 System Health	PASS
+A4 Import Validation	PASS
+A5 Recovery Review	PASS
+A2 User/Membership	PASS（待硬化测试）
+
+下一步建议：
+
+代码
+ADMIN-CONSOLE-PHASE4-HARDENING
+↓
+FINAL-GATE-REVIEW
+↓
+PRODUCTION-CANDIDATE-AUDIT
+
+进入 Final Gate 时重点不是继续堆功能，而是审：
+
+是否还有未封闭的写入口
+是否还有权限绕过
+是否还有真实数据依赖遗漏
+哪些模块属于 REAL_DATA_VALIDATION_PENDING
+是否达到 Production Candidate。
+```

@@ -13,6 +13,7 @@
 - [x] 环境变量清单与 `.env.example` 对齐（数据库、存储、审计盐、Temporal、AI、可观测性、运行时）
 - [x] 默认安全开关为关闭态：`PAYMENTS_ENABLED=false`、`METRICS_ENABLED=false`
 - [x] 健康检查 `/health`、`/healthz`（含数据库探测）
+- [x] Admin Console / Operations 只读端点 HTTP smoke（真实服务器 + PostgreSQL）：401 未登录 / 403 角色 / 404 跨租户 / 405 非 GET / 200 白名单，且调用前后事实快照一致（MSG-20260929-40；同时修正 `/admin/*`、`/operations/*` 未进 `WORKFLOW_PATH` 导致真实服务器 404 的接线缺陷）
 - [ ] 生产域名 / TLS / 反向代理配置（**HOST APPROVAL REQUIRED**）
 - [ ] 生产数据库与对象存储（S3 兼容）（**HOST APPROVAL REQUIRED**）
 
@@ -37,7 +38,7 @@
 | Success Fee 自动扣佣 | 未开始 | HOLD | PENDING |
 | 参照数据（承运商费率 / 关税税率） | PASS | PENDING（真实公告文件） | PENDING |
 | 统一验证 Harness | PASS | — | PENDING（真实文件） |
-| Dashboard / Admin / Notifications | 未开始 | DESIGN-FIRST | PENDING |
+| Dashboard / Admin / Notifications | PASS | PENDING（真实数据） | PENDING |
 
 ## D. 安全
 

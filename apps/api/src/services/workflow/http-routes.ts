@@ -47,6 +47,7 @@ import {
   listImportErrors,
 } from '../operations/admin-imports';
 import {
+  assertAdminAccess,
   getAdminSystemHealth,
   getAuditEntry,
   getTenantOverview,
@@ -298,16 +299,29 @@ export async function handleWorkflowRequest(
   }
 
   const method = req.method ?? 'GET';
+  // MSG-20260929-40：Admin Console 与 Operations 看板都是只读 GET 面。
+  // 此前未登记，GET 请求在方法闸门处直接 405（与端点内的 GET-only 校验重复）。
   const allowed =
-    connection && !connection[2]
-      ? ['GET', 'POST']
-      : reviewPath
+    adminAny || operationsDashboard || operationsClaims || operationsRecovery
+      ? ['GET']
+      : connection && !connection[2]
         ? ['GET', 'POST']
-        : billingPath && !billingPath[1]
-          ? ['GET']
-        : insightList || insightCsv || insight || appealPath || caseListPath || caseDetail || caseEvidence || caseClaim || reconciliationPath || reconciliationCsvPath
+        : reviewPath
+          ? ['GET', 'POST']
+          : billingPath && !billingPath[1]
             ? ['GET']
-            : ['POST'];
+            : insightList ||
+                insightCsv ||
+                insight ||
+                appealPath ||
+                caseListPath ||
+                caseDetail ||
+                caseEvidence ||
+                caseClaim ||
+                reconciliationPath ||
+                reconciliationCsvPath
+              ? ['GET']
+              : ['POST'];
   if (!allowed.includes(method)) {
     sendJson(res, 405, { error: 'METHOD_NOT_ALLOWED' });
     return true;
@@ -565,6 +579,10 @@ export async function handleWorkflowRequest(
       }
       const memberQuery = new URLSearchParams((req.url ?? '').split('?')[1] ?? '');
       const memberActor = { organizationId: context.organizationId, role: context.role };
+      // MSG-20260929-40：A2 三端点统一走 Admin 模块鉴权。
+      // 修正前 /admin/permission-matrix 在路由层没有任何角色校验（服务层也不校验），
+      // 任何已登录角色（含 VIEWER）都能读到完整角色×权限矩阵。
+      assertAdminAccess(context.role, 'userMembership');
       if (adminPermissionMatrix) {
         sendJson(res, 200, getPermissionMatrix());
         return true;
