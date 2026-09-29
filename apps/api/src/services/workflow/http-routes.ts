@@ -35,6 +35,7 @@ import { handlePaymentWebhook } from './payment-webhook';
 import { listPaymentReconciliation, toReconciliationCsv } from './payment-reconciliation';
 import { replayPaymentEvent, runDueRetries } from './payment-attempt';
 import { getCase, getClaimDraft, listCaseEvidence, listCases } from './case-read';
+import { getMember, getPermissionMatrix, listMembers } from '../operations/admin-membership';
 import {
   getRecoveryReviewItem,
   listRecoveryReviewQueue,
@@ -103,6 +104,10 @@ const ADMIN_IMPORT_DETAIL_PATH = /^\/admin\/imports\/([^/]+)$/;
 // MSG-20260929-37：Admin Phase 3 / A5（只读恢复复核队列；无审批捷径）
 const ADMIN_RECOVERY_REVIEW_PATH = /^\/admin\/recovery-review$/;
 const ADMIN_RECOVERY_REVIEW_ITEM_PATH = /^\/admin\/recovery-review\/([^/]+)$/;
+// MSG-20260929-39：Admin Phase 4 / A2（只读身份视图；无写路径、邮箱掩码）
+const ADMIN_MEMBERS_PATH = /^\/admin\/members$/;
+const ADMIN_PERMISSION_MATRIX_PATH = /^\/admin\/permission-matrix$/;
+const ADMIN_MEMBER_DETAIL_PATH = /^\/admin\/members\/([^/]+)$/;
 
 /** 请求体层面的错误（与领域状态无关），统一映射为 400。 */
 class HttpBodyError extends Error {
@@ -238,6 +243,9 @@ export async function handleWorkflowRequest(
   const adminImportDetail = ADMIN_IMPORT_DETAIL_PATH.exec(path);
   const adminRecoveryReviewList = ADMIN_RECOVERY_REVIEW_PATH.test(path);
   const adminRecoveryReviewItem = ADMIN_RECOVERY_REVIEW_ITEM_PATH.exec(path);
+  const adminMembersList = ADMIN_MEMBERS_PATH.test(path);
+  const adminPermissionMatrix = ADMIN_PERMISSION_MATRIX_PATH.test(path);
+  const adminMemberDetail = ADMIN_MEMBER_DETAIL_PATH.exec(path);
   const adminAny =
     adminTenantOverview ||
     adminAuditList ||
@@ -248,7 +256,10 @@ export async function handleWorkflowRequest(
     adminImportErrors !== null ||
     adminImportDetail !== null ||
     adminRecoveryReviewList ||
-    adminRecoveryReviewItem !== null;
+    adminRecoveryReviewItem !== null ||
+    adminMembersList ||
+    adminPermissionMatrix ||
+    adminMemberDetail !== null;
   if (!adminAny && !operationsDashboard && !operationsClaims && !operationsRecovery && !review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !replayPath && !retryDuePath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim) {
     return false;
   }
@@ -542,6 +553,40 @@ export async function handleWorkflowRequest(
           { organizationId: context.organizationId, role: context.role },
           caseClaim[1] ?? '',
         ),
+      );
+      return true;
+    }
+
+    // MSG-20260929-39：Admin Phase 4 / A2（只读身份视图；GET only；无写路径）
+    if (adminMembersList || adminPermissionMatrix || adminMemberDetail) {
+      if ((req.method ?? 'GET') !== 'GET') {
+        sendJson(res, 405, { error: 'METHOD_NOT_ALLOWED' });
+        return true;
+      }
+      const memberQuery = new URLSearchParams((req.url ?? '').split('?')[1] ?? '');
+      const memberActor = { organizationId: context.organizationId, role: context.role };
+      if (adminPermissionMatrix) {
+        sendJson(res, 200, getPermissionMatrix());
+        return true;
+      }
+      if (adminMembersList) {
+        sendJson(
+          res,
+          200,
+          await listMembers(
+            { prisma: deps.prisma },
+            {
+              ...memberActor,
+              filter: { cursor: memberQuery.get('cursor') ?? undefined, limit: memberQuery.get('limit') ?? undefined },
+            },
+          ),
+        );
+        return true;
+      }
+      sendJson(
+        res,
+        200,
+        await getMember({ prisma: deps.prisma }, { ...memberActor, userId: adminMemberDetail?.[1] ?? '' }),
       );
       return true;
     }

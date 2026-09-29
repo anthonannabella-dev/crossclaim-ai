@@ -366,3 +366,18 @@ C-0008-B2（Case / Evidence / Claim Draft / Billing）的端点尚未实现。
 - **证据仅元数据**：evidenceId / kind / role / capturedAt；不含文件名、storageKey、URL 或原文
 - **不展示任何金额**（含阈值金额）；仅显示 `HIGH_VALUE_REVIEW_REQUIRED` 这类事实标签
 - 仅 GET；无写路径、不写 AuditLog、无新表
+
+---
+
+## Admin Console Phase 4 — User / Membership View（MSG-20260929-39）
+
+| 方法 | 路径 | 成功 | 权限 |
+|---|---|---|---|
+| GET | `/admin/members` | 200 `{ items, nextCursor }`；每项含 `emailMasked`（**默认掩码**）、role、isActive、status、`locked`（仅布尔）、lastLoginAt | OWNER / ADMIN |
+| GET | `/admin/members/:userId` | 200 成员详情：会话**仅计数**（total/active/expired）+ 邀请（status/expiresAt/attemptCount）；跨租户 → 404 | OWNER / ADMIN |
+| GET | `/admin/permission-matrix` | 200 `{ readonly: true, roles, permissions, matrix }`（只读展示，来源代码常量） | OWNER / ADMIN |
+
+- **无写路径**：不存在 invite / updateRole / deactivate / delete / revokeSession / resetPassword 端点
+- **邮箱默认掩码**（如 `a***@example.com`）；不返回完整邮箱，也不提供解掩码入口
+- 仅 `locked` 布尔；不返回失败次数、锁定时间或解锁入口；邀请不返回 tokenHash 与邀请链接
+- 仅 GET；无写路径、不写 AuditLog、无新表、无导出
