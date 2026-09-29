@@ -45,3 +45,51 @@
    不重新设计核心业务流程（归一化、检测、证据、人工复核、账单）。
 4. 自动提交继续 FORBIDDEN；未完成真实条款核对前，不得把任何平台标记为「允许代理提交」。
 5. 真实数据到位后，按 RD-01…RD-12 顺序重跑并回填本表（把 `PENDING` 改为实测结论 + 证据文件）。
+
+---
+
+## 3. 开发继续推进原则（宿主指令 2026-09-29 · 第二次明确）
+
+宿主指令原文要点（生效口径）：
+
+1. **不得**因缺少真实客户数据 / 真实平台导出 / 真实 API 凭证而停止后续产品开发。
+2. 「代码/产品完成」与「真实生产验证」拆成独立维度：`CODE PASS` / `INTEGRATION PENDING` / `PRODUCTION VALIDATION PENDING`。
+3. 无真实数据的模块：先固定 Schema/Contract → realistic fixtures/synthetic datasets → Parser/Normalizer/Adapter → unit → integration → E2E → 异常/重复/缺字段/超大文件/重试/幂等测试 → 明确标注 `REAL_DATA_VALIDATION_PENDING`。
+4. 所有外部平台能力一律走 **Adapter 层**；未来接真实 API / CSV / Browser Automation 只替换外部 Adapter，**不允许重新设计核心业务流程**。
+5. 遇到必须真实数据才能验证的项目：登记进本文件后**跳过**，继续开发后续功能。
+6. 最终上线前统一执行 Production Validation：真实脱敏文件 → 真实 API → 真实卖家账户 → 真实 Claim → 真实平台响应 → 真实到账 → 真实 Success Fee。
+7. 真实平台自动提交维持现状：`AI Prepare → Human Approve → Submit`；未完成真实条款核对前不得标记为批准。
+
+## 4. 模块覆盖矩阵（开发推进看板）
+
+> 口径：`CODE` = 代码/契约/测试是否就位；`INTEGRATION` = 外部系统对接；`VALIDATION` = 真实数据判定。
+> 「覆盖 backlog」列指向第 1 节条目；`—` 表示该模块不依赖真实外部数据即可判定。
+
+| 模块 | CODE | INTEGRATION | VALIDATION | 覆盖 backlog |
+|---|---|---|---|---|
+| Customer Operation Layer（机会/案件/账单/连接 Web） | PASS | PENDING | PENDING | — / RD-01·02·03 |
+| Source Connection（连接生命周期 / 凭据引用） | PASS | PENDING | PENDING | RD-01·02·03 |
+| Upload / Import（CSV/JSON/XLSX + 隔离区） | PASS | PENDING | PENDING | RD-01·02·03·04 |
+| Normalization（canonical 事实层） | PASS | PENDING | PENDING | RD-01…RD-06 |
+| Detection Engine（差异/异常检测） | PASS | PENDING | PENDING | RD-04·05·06 |
+| Claim Candidate（候选，非 Claim） | PASS | PENDING | PENDING | RD-01·02·03 |
+| Evidence Package（上传登记 / 证据链） | PASS | PENDING | PENDING | RD-08 |
+| Human Review（人工复核 + 高额卡口） | PASS | — | PENDING | — |
+| Submission Preparation（离线载荷 + 干跑校验） | PASS | PENDING | PENDING | RD-10 |
+| Submission Adapter（执行） | DESIGN-ONLY | **HOLD（DESIGN-FIRST）** | PENDING | RD-10·RD-11 |
+| Claim Tracking（状态机 / CAS / 回执） | PASS | PENDING | PENDING | RD-11 |
+| Recovery Confirmation（确认 + 付款登记） | PASS | PENDING | PENDING | RD-12 |
+| Success Fee / Billing（dry-run 对账） | PASS（dry-run） | PENDING | PENDING | RD-12 |
+| Dashboard（Operations 看板投影） | PASS | — | PENDING | — |
+| Admin Console v1（A1–A6 只读） | PASS | — | PENDING | — |
+| Notifications（投影，无投递） | PASS | PENDING | PENDING | — |
+| Audit Trail（审计覆盖闸门） | PASS | — | — | — |
+| RBAC / Tenant Isolation（5 角色 + 27 触发器） | PASS | — | — | — |
+| Security（凭据引用 / 内容扫描 / PII 边界） | PASS | — | — | — |
+| Failure Recovery（重试 / DEAD_LETTER / replay） | PASS | PENDING | PENDING | RD-09 |
+| Idempotency（来源指纹 v1） | PASS | PENDING | PENDING | RD-01…RD-04 |
+| Observability（日志 / 指标 / 健康检查） | PASS | PENDING | PENDING | — |
+| Kill Switch（租户/平台级） | DESIGN-FIRST | HOLD | — | — |
+| Deployment / Environment（清单 + 回滚） | PASS | PENDING | — | — |
+| Production readiness checklist | PASS | PENDING | PENDING | RD-01…RD-12 |
+
