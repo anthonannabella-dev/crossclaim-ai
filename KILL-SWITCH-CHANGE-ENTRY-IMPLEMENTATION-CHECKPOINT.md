@@ -111,3 +111,20 @@ commit：**ba50932**（`feat(p1.3): Kill Switch 变更入口…`）；CI（HEAD 
 - **Q1**：读层 `value` 是否要反映 APPLIED 请求？（§5.1 给出了建议合成规则；涉及 fail-closed 语义，我未自行决定）
 - **Q2**：confirm 是否需要独立持久化幂等键？（§5.2；若需要则属 Schema Delta）
 - **Q3**：是否批准把 `e650872` / `ba50932`（含本报告提交）fast-forward 合并到 `main`？（MSG-20260929-61 已明确「文档提交可在下一次提交时一并申请」）
+
+---
+
+## 8. 架构方裁决（MSG-20260929-62）与执行结果
+
+`RESULT: PASS_WITH_TWO_ARCHITECTURE_DECISIONS` / `STATUS: READY_FOR_MERGE` / `NEXT: finalize runtime control semantics review`
+
+| 项 | 裁决 | 执行 |
+|---|---|---|
+| 实现验收（POST Change Entry / 幂等 / 双人确认 / Race / Emergency / HTTP 安全） | **PASS ✅**（未越过冻结边界） | 无需改动 |
+| **Q1** 读层 `value` 是否反映 APPLIED 请求 | **REVISE**：先不要让 APPLIED 直接改 runtime value；控制面（`KillSwitchRequest`）与运行时（Config Layer）保持两个域；**本次合并前不得修改** | ✅ 未修改运行时取值语义；下一步改为单独提交 **Effective Kill Switch Resolution Design**（DESIGN ONLY），目标优先级：`global hard disable > tenant control state > environment default` |
+| **Q2** confirm 独立持久化幂等键 | **ACCEPT**：当前版本足够（`requestId` + 终态 + `confirmedBy`/`confirmedAt`），不需要 Schema Delta；未来多阶段/多审批人才需要独立 `KillSwitchApproval` | ✅ 不新增 Schema |
+| **Q3** 合并 main | **GO ✅**：`e650872` / `ba50932` / `3b85716` fast-forward（不 force、不绕过保护、CI 保持 PASS） | ✅ 已执行：`bec1210..3b85716 -> main`；三个提交 CI 均 `completed success` |
+
+Kill Switch 总状态（架构方口径）：Design ✅ / Schema ✅ / Read API ✅ / Change Entry ✅ / Persistence Idempotency ✅ / Security Validation ✅；**Runtime Activation Policy = PENDING DESIGN**、**Production Enablement = HOLD**。
+
+下一优先级（架构方给定）：**P1 Runtime Resolution Design**（`EffectiveKillSwitchResolver`：global disabled 优先级 / tenant enabled-disabled / environment fallback / cache / fail closed / audit boundary）→ **P2 Production Hardening**（backup-restore 验证 / secret rotation / deployment smoke / real-data validation）。

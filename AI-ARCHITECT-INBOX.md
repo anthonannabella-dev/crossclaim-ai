@@ -68767,3 +68767,348 @@ KILL-SWITCH-CHANGE-ENTRY-IMPLEMENTATION-CHECKPOINT
 
 提交后再进行最终裁决。
 ```
+
+### [MSG-20260929-62] KILL-SWITCH-CHANGE-ENTRY-IMPLEMENTATION-CHECKPOINT 裁决：RESULT: PASS_WITH_TWO_ARCHITECTURE_DECISIONS / STATUS: READY_FOR_MERGE / NEXT: finalize runtime control semantics review（实现验收 PASS：POST Change Entry / 幂等 / 双人确认 / Race / Emergency / HTTP 安全全通过，冻结边界未越过；Q1 REVISE：先不要让 APPLIED 直接改 runtime value，下一步单独做 Effective Kill Switch Resolution Design（优先级 global hard disable > tenant control state > environment default），本次合并前不得修改；Q2 ACCEPT：confirm 不需要独立持久化幂等键（requestId + terminal state + confirmedBy/confirmedAt 足够），未来多阶段/多审批人才需要 KillSwitchApproval；Q3 GO：批准 e650872 / ba50932 / 3b85716 fast-forward 合并 main，条件不 force、不绕过保护、CI 保持 PASS；NEXT: Runtime Resolution Design ONLY，Production Enablement = HOLD）
+
+```text
+收到 KILL-SWITCH-CHANGE-ENTRY-IMPLEMENTATION-CHECKPOINT。
+
+先给结论：
+
+纯文本
+RESULT: PASS_WITH_TWO_ARCHITECTURE_DECISIONS
+STATUS: READY_FOR_MERGE
+NEXT: finalize runtime control semantics review
+
+本轮实现通过。
+
+一、实现验收结论
+1. POST Change Entry
+
+PASS ✅
+
+已满足批准范围：
+
+POST /admin/kill-switch
+phase × target 校验
+CSRF
+Origin/Referer
+幂等持久化
+双人确认
+15 分钟窗口
+CAS
+emergency audit
+rate limit
+
+没有越过冻结边界：
+
+保持：
+
+❌ 不提交 Claim
+❌ 不提交 Appeal
+❌ 不修改 Settlement
+❌ 不推进 Billing
+❌ 不自动扣佣
+❌ 不调用平台 API
+
+通过。
+
+二、重点安全检查
+A. 幂等
+
+PASS ✅
+
+你的实现满足要求：
+
+纯文本
+KillSwitchRequest
++
+(organizationId,idempotencyKey)
+unique
+
+并且：
+
+replay 返回首次结果
+不重复 AuditLog
+并发由数据库唯一约束兜底
+
+符合控制面要求。
+
+B. 双人确认
+
+PASS ✅
+
+规则：
+
+允许：
+
+OWNER A request
+OWNER B confirm
+
+允许：
+
+OWNER A request
+ADMIN B confirm
+
+禁止：
+
+OWNER A request
+OWNER A confirm
+
+服务端强制。
+
+通过。
+
+C. Race Condition
+
+PASS ✅
+
+特别确认两个关键：
+
+confirm vs expire
+
+终态：
+
+只能：
+
+APPLIED
+or
+EXPIRED
+
+不存在：
+
+APPLIED + EXPIRED
+disable vs pending enable
+
+处理：
+
+CANCELLED
+APPLIED
+
+并且审计完整。
+
+通过。
+
+D. Emergency
+
+PASS ✅
+
+确认：
+
+SECURITY_INCIDENT
+↓
+emergency=true
+↓
+AuditLog
+
+符合：
+
+紧急绕过限流，但不能绕过审计
+
+通过。
+
+E. HTTP 安全
+
+PASS ✅
+
+覆盖：
+
+401
+403
+CSRF
+Cross Origin
+非法 phase
+非法 idempotencyKey
+note 泄露防护
+跨租户 requestId
+
+通过。
+
+三、Q1 裁决：APPLIED 请求是否影响 runtime value？
+裁决：
+
+REVISE（先不要让 APPLIED 直接改 runtime value）
+
+理由：
+
+当前实现更安全。
+
+现在：
+
+Config Layer
+ tenant
+ global
+ environment default
+        ↓
+ runtime value
+
+和：
+
+KillSwitchRequest
+        ↓
+control history
+
+是两个不同域。
+
+这样避免：
+
+用户审批动作
+        ↓
+直接改变运行时行为
+
+造成控制面和执行面耦合。
+
+建议下一步设计：
+
+新增：
+
+Effective Kill Switch Resolution Design
+
+明确：
+
+优先级：
+
+global hard disable
+        >
+tenant control state
+        >
+environment default
+
+但是：
+
+不要在本次合并前修改。
+
+原因：
+
+这是运行时安全策略变更，不只是实现细节。
+
+当前：
+
+保持：
+
+Change Entry = 控制面完成
+
+Runtime Activation = 单独设计
+四、Q2 裁决：confirm 是否需要独立持久化幂等键？
+裁决：
+
+当前版本 ACCEPT，不需要 Schema Delta。
+
+原因：
+
+confirm 幂等可以由：
+
+requestId
++
+terminal state
++
+confirmedBy
++
+confirmedAt
+
+保证。
+
+当前：
+
+第一次：
+
+PENDING_ENABLE
+→ APPLIED
+
+第二次：
+
+发现：
+
+state = APPLIED
+
+返回第一次结果。
+
+满足。
+
+只有未来出现：
+
+多阶段确认
+多审批人
+审批撤回
+审批链
+
+才需要：
+
+KillSwitchApproval
+
+独立模型。
+
+当前不要扩大。
+
+五、Q3 合并裁决
+
+批准：
+
+e650872
+ba50932
+3b85716
+
+fast-forward → main
+
+GO ✅
+
+条件：
+
+不 force
+不绕过保护
+CI 必须保持 PASS
+六、当前 Kill Switch 总状态
+
+更新：
+
+Kill Switch Design             ✅
+Kill Switch Schema              ✅
+Kill Switch Read API            ✅
+Kill Switch Change Entry        ✅
+Persistence Idempotency         ✅
+Security Validation             ✅
+
+Runtime Activation Policy       PENDING DESIGN
+Production Enablement           HOLD
+七、下一优先级建议
+
+不要立即开启真实动作。
+
+建议顺序：
+
+P1 Runtime Resolution Design
+
+设计：
+
+EffectiveKillSwitchResolver
+
+明确：
+
+global disabled 优先级
+tenant enabled/disabled
+environment fallback
+cache
+fail closed
+audit boundary
+
+然后：
+
+P2 Production Hardening
+
+包括：
+
+backup/restore 验证
+secret rotation
+deployment smoke
+real-data validation
+
+当前 checkpoint：
+
+纯文本
+KILL-SWITCH CHANGE ENTRY
+FINAL STATUS: PASS
+
+MERGE: APPROVED
+
+NEXT: Runtime Resolution Design ONLY
+```
