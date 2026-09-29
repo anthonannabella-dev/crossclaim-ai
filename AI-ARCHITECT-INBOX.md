@@ -61985,3 +61985,381 @@ DESIGN_FIRST_APPROVED
 
 可以继续提交 A5 Recovery Review Queue Design。
 ```
+
+### [MSG-20260929-37] ADMIN-RECOVERY-REVIEW-DESIGN 裁决：GO ✅（GO_WITH_MINOR_REVISE / READY_FOR_IMPLEMENTATION_AFTER_REVISE）——核心原则「Admin 看见流程，但不拥有流程」通过；D1 GO_WITH_MINOR_REVISE（三状态桶 待人工复核/已通过/已驳回 接受；Recovery Review 已有自己的状态机，Admin 不得再造 待处理/处理中/已解决/已关闭；三个角标 HIGH_VALUE/AGED/MISSING_EVIDENCE_REF 接受，但**必须是 projection flag 而非状态**，如 PENDING_REVIEW + HIGH_VALUE，禁止 HIGH_VALUE_REVIEWING）；D2 GO（证据仅 evidenceId/kind/role/capturedAt，不展示文件名/storageKey/URL/原始内容/OCR；未来预览需另开 EVIDENCE-VIEWER-DESIGN）；D3 GO（只深链既有 Recovery Review Service → Permission Check → AuditLog；**硬约束**：Admin 不得新增 approve/reject endpoint 或 status mutation）；D4 GO（Admin 不展示任何金额：recoveredAmount/settlementAmount/threshold amount/payout amount 全部禁止；只允许显示 HIGH_VALUE_REVIEW_REQUIRED 这类事实标签，**不允许**显示「超过 \」因为那会暴露阈值）；D5 REVISE（AGED_THRESHOLD_DAYS = 7 作为**默认配置常量**而非数据库配置、不可由 Admin 修改，设计须说明未来可配置；顶部单独分组 Overdue Review Queue 允许，但**只是查询分组不是新状态**）；实现前新增四项验收：无审批捷径扫描（Admin 不存在 POST/PATCH/PUT/DELETE 的 Recovery Review 路径）、状态一致性（必须来自既有 recovery-review 状态，禁止自行计算如 evidence count>2 即 approved）、金额泄露扫描（禁止 amount/currency/settlementAmount/recoveredAmount/threshold 字段）、深链安全（深链必须再次经过目标服务权限校验，不能凭 Admin URL 带 caseId 就放行）；NEXT = ADMIN-RECOVERY-REVIEW IMPLEMENTATION
+
+本轮为 Admin P3/A5 设计裁决：GO_WITH_MINOR_REVISE，D5 需改为常量+查询分组，实现前四项验收。
+
+```text
+ADMIN-RECOVERY-REVIEW-DESIGN 裁决
+总体结论：GO_WITH_MINOR_REVISE ✅
+
+状态：
+
+Markdown
+
+### [MSG-20260929-37]
+
+TYPE:
+DESIGN DECISION
+
+TARGET:
+ADMIN-RECOVERY-REVIEW-DESIGN
+
+DECISION:
+GO_WITH_MINOR_REVISE
+
+STATUS:
+READY_FOR_IMPLEMENTATION_AFTER_REVISE
+
+NEXT:
+ADMIN_RECOVERY_REVIEW_IMPLEMENTATION
+
+整体方向正确。
+
+这是 Admin Console 中风险最高的模块之一，因为它接近：
+
+人工审核
+金额风险
+状态推进
+
+因此必须严格保持：
+
+Admin 看见流程，但不拥有流程。
+
+当前设计符合。
+
+D1：三状态桶 + 三角标
+裁决：GO_WITH_MINOR_REVISE ✅
+
+当前：
+
+纯文本
+待人工复核
+
+已通过
+
+已驳回
+
+接受。
+
+原因：
+
+Recovery Review 已经存在自己的状态机。
+
+Admin 不应该重新创造：
+
+待处理
+处理中
+已解决
+已关闭
+
+等运营状态。
+
+三个角标：
+
+纯文本
+HIGH_VALUE
+
+AGED
+
+MISSING_EVIDENCE_REF
+
+接受。
+
+补充一个要求：
+
+角标必须是：
+
+Projection Flag。
+
+不是：
+
+状态。
+
+即：
+
+正确：
+
+纯文本
+PENDING_REVIEW
++
+HIGH_VALUE
+
+错误：
+
+纯文本
+HIGH_VALUE_REVIEWING
+
+避免状态污染。
+
+D2：证据展示粒度
+裁决：采用建议方案 GO ✅
+
+使用：
+
+纯文本
+evidenceId
+
+kind
+
+role
+
+capturedAt
+
+不展示：
+
+文件名
+storageKey
+URL
+原始内容
+OCR 内容
+
+原因：
+
+Admin Review 只是导航和定位。
+
+证据查看仍属于：
+
+Evidence Service。
+
+未来如果需要预览：
+
+单独设计：
+
+纯文本
+EVIDENCE-VIEWER-DESIGN
+D3：深链到 Recovery Review
+裁决：GO ✅
+
+确认：
+
+纯文本
+
+Admin Console
+
+↓
+
+Recovery Review Service
+
+↓
+
+Permission Check
+
+↓
+
+AuditLog
+
+禁止：
+
+Admin 新增：
+
+approve endpoint
+reject endpoint
+status mutation
+
+这是硬约束。
+
+D4：金额展示
+裁决：GO（保持不展示）✅
+
+确认：
+
+Admin Recovery Review：
+
+不展示：
+
+recoveredAmount
+settlementAmount
+threshold amount
+payout amount
+
+允许：
+
+显示：
+
+纯文本
+
+HIGH_VALUE_REVIEW_REQUIRED
+
+不允许：
+
+显示：
+
+纯文本
+超过 $1000
+
+因为这本身暴露金额阈值。
+
+原因：
+
+金额属于：
+
+Recovery / Finance 域。
+
+D5：AGED 阈值与分组
+裁决：REVISE 🔶
+
+不要把 7 天写死。
+
+建议：
+
+v1：
+
+纯文本
+AGED_THRESHOLD_DAYS = 7
+
+作为：
+
+默认配置常量。
+
+但设计必须说明：
+
+未来可配置。
+
+不要：
+
+数据库配置。
+
+不要：
+
+Admin 修改。
+
+顶部单独分组：
+
+GO ✅
+
+增加：
+
+纯文本
+Overdue Review Queue
+
+但注意：
+
+只是查询分组。
+
+不是新状态。
+
+例如：
+
+纯文本
+Pending Review
+
+ ├── Normal
+
+ └── Aged (>7 days)
+六、实现前新增验收要求
+
+进入实现时增加：
+
+1. 无审批捷径扫描
+
+必须证明：
+
+Admin 模块不存在：
+
+纯文本
+POST
+
+PATCH
+
+PUT
+
+DELETE
+
+Recovery Review 路径。
+
+2. 状态一致性
+
+Admin 显示：
+
+必须来自：
+
+existing recovery-review state。
+
+禁止：
+
+自己计算：
+
+纯文本
+if evidence count > 2 then approved
+3. 金额泄露扫描
+
+响应禁止：
+
+字段：
+
+纯文本
+amount
+
+currency
+
+settlementAmount
+
+recoveredAmount
+
+threshold
+4. 深链安全
+
+深链：
+
+必须再次经过：
+
+目标服务权限校验。
+
+不能：
+
+Admin URL 带一个 caseId 就放行。
+
+七、最终裁决
+Markdown
+
+### [MSG-20260929-37]
+
+ADMIN RECOVERY REVIEW DESIGN
+
+DECISION:
+GO_WITH_MINOR_REVISE
+
+
+D1:
+GO_WITH_MINOR_REVISE
+
+三状态接受。
+角标为projection flag，不得成为状态。
+
+
+D2:
+GO
+
+evidenceId/kind/role/capturedAt
+
+禁止文件内容与storage信息。
+
+
+D3:
+GO
+
+只深链既有Recovery Review Service。
+
+不新增审批端点。
+
+
+D4:
+GO
+
+Admin不展示任何金额。
+
+
+D5:
+REVISE
+
+AGED默认7天，但作为常量。
+允许顶部分组，不新增状态。
+
+
+STATUS:
+READY_FOR_IMPLEMENTATION_AFTER_REVISE
+
+可以进入 ADMIN-RECOVERY-REVIEW IMPLEMENTATION。
+```
