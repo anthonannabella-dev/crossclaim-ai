@@ -69669,3 +69669,332 @@ EffectiveKillSwitchResolver IMPLEMENTATION
 
 Production Enablement 继续 HOLD。
 ```
+
+### [MSG-20260929-65] EFFECTIVE-KILL-SWITCH-RESOLUTION-DESIGN-R2 裁决：RESULT: PASS / STATUS: Effective Kill Switch Resolution Design = FROZEN / NEXT: EffectiveKillSwitchResolver IMPLEMENTATION / BOUNDARY: Implementation only, No Production Enablement, No external action activation（六项复核全 PASS：① source 六值模型冻结且 effective value + resolution source + evaluation metadata 必须三者一致返回；② APPLIED 永久有效、PENDING_ENABLE->EXPIRED 仅限确认窗口、禁止 APPLIED->EXPIRED；③ I1-I4 冻结（I1 禁止新增 KillSwitchRequest.effectiveValue 等字段；I2 Control Plane != Config Plane；I3 同层冲突 disabled > enabled；I4 Unknown = Disabled）；④ source 行为迁移说明接受——不直接改 resolveKillSwitch()，改为新增 EffectiveKillSwitchResolver；⑤ cache 冻结 memory only、key=organizationId+scope、TTL 5s、max 30s、禁止 Redis/CDN/Browser cache；⑥ DB failure 行为接受（业务 scope disabled + source=fail-closed；observability lastKnownValue + degraded/stale）；实现阶段额外要求：A 不变量自动化验证（I1 schema/code scan 无 effective persistence、I2 resolver 无 write path、I3 enabled+disabled 冲突取 disabled、I4 异常路径不得返回 enabled）、B 16 行矩阵必须落测试（含 latest wins / same timestamp id tie breaker / unknown scope / unknown value / DB failure business / DB failure observability stale / tenant isolation / cache invalidate）、C 实现仍禁止修改 runtime config、自动开启/关闭任何 scope、接入平台 API、改 Claim/Billing/Submission 流程；完成后提交 EFFECTIVE-KILL-SWITCH-RESOLVER-IMPLEMENTATION-CHECKPOINT（文件清单 / 16 行矩阵结果 / I1-I4 证据 / source migration test / cache-invalidation 测试 / CI 结果））
+
+```text
+收到 EFFECTIVE-KILL-SWITCH-RESOLUTION-DESIGN-R2。
+
+裁决：
+
+纯文本
+RESULT: PASS
+
+STATUS:
+Effective Kill Switch Resolution Design = FROZEN
+
+NEXT:
+EffectiveKillSwitchResolver IMPLEMENTATION
+
+BOUNDARY:
+Implementation only
+No Production Enablement
+No external action activation
+
+R2 已满足上一轮要求，设计可以冻结。
+
+一、逐项复核
+1. Source 六值模型
+
+PASS ✅
+
+最终枚举：
+
+TypeScript
+global-hard-disabled
+tenant-control
+tenant-config
+global-config
+environment-default
+fail-closed
+
+接受。
+
+特别认可：
+
+source 不是调试字段，而是安全解释字段。
+
+后续实现必须保持：
+
+纯文本
+effective value
++
+resolution source
++
+evaluation metadata
+
+三者一致返回。
+
+2. APPLIED 生命周期
+
+PASS ✅
+
+接受：
+
+纯文本
+PENDING_ENABLE
+    ↓
+APPLIED
+
+永久有效
+
+以及：
+
+纯文本
+PENDING_ENABLE
+    ↓
+EXPIRED
+
+只适用于确认窗口。
+
+禁止：
+
+纯文本
+APPLIED
+    ↓
+EXPIRED
+
+确认。
+
+原因正确：
+
+安全控制不应该依赖自动恢复。
+
+3. Resolver 四个不变量
+
+PASS ✅
+
+冻结：
+
+I1
+纯文本
+Effective Value is never persisted
+
+通过。
+
+禁止新增：
+
+纯文本
+KillSwitchRequest.effectiveValue
+
+或类似字段。
+
+I2
+纯文本
+Control Request cannot mutate Config Value
+
+通过。
+
+保持：
+
+纯文本
+Control Plane
+
+!=
+
+Config Plane
+I3
+纯文本
+Disabled dominates Enabled
+
+通过。
+
+尤其：
+
+同层冲突：
+
+纯文本
+disabled > enabled
+
+必须保持。
+
+I4
+纯文本
+Resolver failure cannot enable protected actions
+
+通过。
+
+核心安全原则：
+
+纯文本
+Unknown
+=
+Disabled
+4. Source 行为迁移说明
+
+PASS ✅
+
+这是本轮最重要的补充。
+
+接受：
+
+不直接修改：
+
+纯文本
+resolveKillSwitch()
+
+而是：
+
+新增：
+
+纯文本
+EffectiveKillSwitchResolver
+
+通过迁移说明控制行为变化。
+
+避免：
+
+“修 bug”名义下改变安全语义。
+
+5. Cache 设计
+
+PASS ✅
+
+冻结：
+
+纯文本
+memory cache only
+
+key:
+organizationId + scope
+
+TTL:
+5s
+
+max:
+30s
+
+禁止：
+
+Redis
+CDN
+Browser cache
+
+除非未来重新设计。
+
+6. DB Failure 行为
+
+PASS ✅
+
+业务 scope：
+
+纯文本
+submission
+billing
+integration
+platform_connector
+workflow
+
+数据库异常：
+
+纯文本
+disabled
+source=fail-closed
+
+接受。
+
+Observability：
+
+允许：
+
+纯文本
+lastKnownValue
+degraded=true
+stale=true
+
+接受。
+
+二、进入实现阶段的额外要求
+
+进入：
+
+纯文本
+EffectiveKillSwitchResolver IMPLEMENTATION
+
+时增加以下验收。
+
+A. 不变量自动化验证
+
+必须有：
+
+纯文本
+I1:
+schema/code scan
+不存在 effective persistence
+
+I2:
+resolver 无 write path
+
+I3:
+enabled + disabled conflict
+结果 disabled
+
+I4:
+exception path
+不能返回 enabled
+B. 16 行矩阵必须落测试
+
+至少：
+
+Case	Expected
+global hard disabled + tenant enabled	disabled/global-hard-disabled
+tenant disabled + global enabled	disabled/tenant-control
+tenant enabled + default disabled	enabled/tenant-control
+无配置 business scope	disabled/environment-default
+无配置 observability	enabled/environment-default
+pending enable	不参与
+expired request	不参与
+cancelled request	不参与
+multiple applied	latest wins
+same timestamp	id tie breaker
+unknown scope	disabled
+unknown value	disabled
+DB failure business	fail closed
+DB failure observability	stale
+tenant isolation	no leakage
+cache invalidate	new result
+C. 明确禁止范围
+
+Implementation 仍禁止：
+
+❌ 修改 runtime config
+❌ 自动开启任何 scope
+❌ 自动关闭任何 scope
+❌ 接入平台 API
+❌ 改 Claim 流程
+❌ 改 Billing 流程
+❌ 改 Submission 流程
+
+三、最终状态
+纯文本
+Effective Kill Switch Resolution Design R2
+
+STATUS: PASS
+
+Architecture:
+FROZEN
+
+Implementation:
+GO
+
+Production Enablement:
+HOLD
+
+可以进入 EffectiveKillSwitchResolver IMPLEMENTATION。
+
+完成后提交：
+
+纯文本
+EFFECTIVE-KILL-SWITCH-RESOLVER-IMPLEMENTATION-CHECKPOINT
+
+重点包含：
+
+文件清单
+16 行矩阵测试结果
+I1-I4 验证证据
+source migration test
+cache/invalidation 测试
+CI 结果
+
+然后再评估是否进入 Production Hardening。
+```
