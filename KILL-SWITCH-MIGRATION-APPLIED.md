@@ -135,4 +135,29 @@ DROP TYPE IF EXISTS "KillSwitchTarget";
 | 提交 | 内容 | main 状态 |
 |---|---|---|
 | `6a433e9` | Migration Request 文档（不改变运行行为） | ✅ 已按 MSG-20260929-59 的 APPROVED 执行 **fast-forward merge**（`7a6c123..6a433e9`）；该提交 CI = `completed success`；未 force、未绕过保护 |
-| `96e0bf9` / `bec1210` | MSG-59 裁决归档 + KillSwitchRequest 迁移实现 | ⏸ **未合并到 main**，等待架构方裁决 |
+| `96e0bf9` / `bec1210` | MSG-59 裁决归档 + KillSwitchRequest 迁移实现 | ✅ 已按 MSG-20260929-60 Q3 = GO 执行 **fast-forward merge**（`6a433e9..bec1210`）；未 force、未绕过保护；CI = `completed success` |
+| `a3bb549` | 本报告（MIGRATION APPLIED） | ⏸ 报告提交晚于 Q3 批准对象（`bec1210`），**未合并到 main**；如需一并落入 main 请在下轮裁决中确认 |
+
+---
+
+## 9. 架构方裁决（MSG-20260929-60）
+
+`RESULT: PASS_WITH_ONE_ARCHITECTURE_NOTE` / `STATUS: MIGRATION APPROVED` / `NEXT: CHANGE ENTRY IMPLEMENTATION`
+
+| 问题 | 裁决 | 要点 |
+|---|---|---|
+| Q1 第 28 个触发器强度 | **ACCEPT** | 架构方明确区分「触发器数量契约」与「触发器语义强度」；本表隔离由 tenant root FK + `organizationId` + `(organizationId,idempotencyKey)` + `(organizationId,id)` + pending 部分唯一索引 + 应用层 tenant filter 承担；**本轮不要求补强** |
+| Q2 Change Entry Implementation | **GO** | 范围严格限定 `POST /admin/kill-switch`：phase + target 校验 / CSRF / Origin-Referer / 幂等持久化 / 双人确认 / 15 分钟窗口 / CAS 状态迁移 / `emergency=true` 审计。禁令：❌ 自动开启 Submission、❌ 自动关闭 Billing、❌ 修改 Claim、❌ 修改 Settlement、❌ 修改 Payment、❌ 调用第三方平台（Kill Switch 是控制开关，不是自动化执行器） |
+| Q3 `bec1210` 合并 main | **GO** | fast-forward；不 force、不绕过保护、CI PASS |
+
+Change Entry Checkpoint 的 5 项必审标准（下一阶段实现目标）：幂等（同键第二次返回首次结果、不产生第二条 AuditLog、不改状态）、双人确认（OWNER A request + OWNER B confirm ✅；OWNER A request + ADMIN B confirm ✅；OWNER A request + OWNER A confirm ❌）、Race Condition（confirm vs expire 只能一个成功；disable vs pending-enable confirm 终态一致）、Emergency（`emergency=true` / `reasonCode=SECURITY_INCIDENT` / `actorUserId` / `scope` / `timestamp`）、HTTP 安全（未登录 401 / 无权限 403 / 非 CSRF POST 拒绝 / 错误不泄露内部信息）。
+
+### 9.1 后续风险项（架构方要求登记：`FOLLOW_UP_REQUIRED`）
+
+| 项 | 内容 |
+|---|---|
+| 登记名 | **Kill Switch Authorization Integrity** |
+| 性质 | 授权完整性，**不是** Tenant Row Isolation（本轮不阻塞） |
+| 升级触发条件（任一出现） | ① 外部 ETL 写入 `KillSwitchRequest`；② 管理 SQL 写入路径（运维/管理员直连）；③ 任何非应用层写入口 |
+| 升级目标 | 在 DB 级同时约束 `organizationId` + `requestedBy` membership + `confirmedBy` membership |
+| 当前归属 | Change Entry Implementation 的**权限层**（服务端强制）；DB 级补强留待上述条件出现时**单独提交 Delta 审批** |

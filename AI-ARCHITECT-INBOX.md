@@ -68323,3 +68323,280 @@ MIGRATION APPLIED CHECKPOINT
 
 可以执行迁移。
 ```
+
+### [MSG-20260929-60] KILL-SWITCH-MIGRATION-APPLIED 裁决：RESULT: PASS_WITH_ONE_ARCHITECTURE_NOTE / STATUS: MIGRATION APPROVED / NEXT: CHANGE ENTRY IMPLEMENTATION（Q1 ACCEPT：第 28 个触发器强度接受，暂不新增 requestedBy/confirmedBy membership 触发器，改在 Change Entry 权限层处理，登记 FOLLOW_UP_REQUIRED 风险项；Q2 GO：批准进入 Change Entry Implementation，范围限定 POST /admin/kill-switch（phase+target 校验 / CSRF / Origin-Referer / 幂等持久化 / 双人确认 / 15 分钟窗口 / CAS / emergency=true 审计），禁令：不自动开启 Submission、不自动关闭 Billing、不改 Claim/Settlement/Payment、不调用第三方；验收 5 项：幂等不重复审计、双人确认组合、Race Condition（confirm vs expire / disable vs pending confirm）、Emergency 审计字段、HTTP 安全 401/403/CSRF；Q3 GO：bec1210 允许 fast-forward 合并 main）
+
+```text
+裁决：
+
+纯文本
+KILL-SWITCH-MIGRATION-APPLIED
+
+RESULT: PASS_WITH_ONE_ARCHITECTURE_NOTE
+STATUS: MIGRATION APPROVED
+NEXT: CHANGE ENTRY IMPLEMENTATION
+
+本次迁移整体通过。执行范围符合批准边界，没有扩展到运行时动作。
+
+Q1：第 28 个触发器强度是否接受？
+
+裁决：
+
+纯文本
+ACCEPT
+
+接受当前实现。
+
+理由：
+
+当前 KillSwitchRequest 的数据结构：
+
+tenant root FK → Organization
+organizationId 自带隔离
+(organizationId,idempotencyKey) 唯一
+(organizationId,id) 唯一
+pending partial unique
+应用层强制 tenant filter
+
+已经满足本阶段控制面记录需求。
+
+并且你已经正确区分：
+
+「触发器数量契约」和「触发器语义强度」
+
+这两者不是同一个问题。
+
+不要求本轮补强
+
+暂不要求新增：
+
+requestedBy 成员关系 DB trigger
+confirmedBy 成员关系 DB trigger
+新 tenant assertion function
+
+原因：
+
+这属于：
+
+纯文本
+Kill Switch Authorization Integrity
+
+不是：
+
+纯文本
+Tenant Row Isolation
+
+应该在 Change Entry Implementation 的权限层处理。
+
+但登记一个后续风险项
+
+保持：
+
+纯文本
+FOLLOW_UP_REQUIRED
+
+建议记录：
+
+未来如果出现：
+
+外部 ETL 写入 KillSwitchRequest
+管理 SQL 写入路径
+非应用层写入口
+
+需要升级：
+
+纯文本
+organizationId
++
+requestedBy membership
++
+confirmedBy membership
+
+到 DB 级约束。
+
+当前不阻塞。
+
+Q2：进入 Change Entry Implementation？
+
+裁决：
+
+纯文本
+GO
+
+批准进入。
+
+范围严格限定：
+
+允许实现：
+POST /admin/kill-switch
+
+包含：
+
+phase + target 校验
+CSRF
+Origin/Referer
+幂等持久化
+双人确认
+15 分钟窗口
+CAS 状态迁移
+emergency=true 审计
+不允许：
+
+禁止扩展：
+
+❌ 自动开启 Submission
+❌ 自动关闭 Billing
+❌ 修改 Claim
+❌ 修改 Settlement
+❌ 修改 Payment
+❌ 调用第三方平台
+
+Kill Switch 本身只是：
+
+控制开关
+
+不是：
+
+自动化执行器
+
+实现重点验收标准
+
+Change Entry Checkpoint 必须包含：
+
+1. 幂等
+
+测试：
+
+同：
+
+纯文本
+organizationId
++
+idempotencyKey
+
+重复：
+
+第一次：
+
+纯文本
+200 applied/awaiting_confirmation
+
+第二次：
+
+必须：
+
+返回第一次结果
+不产生第二条 AuditLog
+不改变状态
+2. 双人确认
+
+必须测试：
+
+允许：
+
+OWNER A request
+OWNER B confirm
+
+允许：
+
+OWNER A request
+ADMIN B confirm
+
+拒绝：
+
+OWNER A request
+OWNER A confirm
+3. Race Condition
+
+必须覆盖：
+
+Case A
+confirm
+vs
+expire
+
+只能一个成功。
+
+Case B
+disable
+vs
+pending enable confirm
+
+最终状态必须一致。
+
+4. Emergency
+
+测试：
+
+SECURITY_INCIDENT
+
+必须：
+
+AuditLog:
+
+包含：
+
+纯文本
+emergency=true
+reasonCode=SECURITY_INCIDENT
+actorUserId
+scope
+timestamp
+5. HTTP 安全
+
+验证：
+
+未登录 401
+无权限 403
+非 CSRF POST 拒绝
+错误不泄露内部信息
+Q3：bec1210 合并 main
+
+裁决：
+
+纯文本
+GO
+
+批准 fast-forward。
+
+条件：
+
+不 force
+不绕过保护
+CI PASS
+
+原因：
+
+迁移已经验证完成。
+
+当前状态更新
+纯文本
+Kill Switch Read                         PASS
+
+Kill Switch Base Implementation          PASS
+
+Kill Switch Change Design                PASS
+
+Kill Switch Idempotency Design           PASS
+
+Kill Switch Schema Migration              PASS
+
+Kill Switch Change Entry Implementation  GO
+
+下一步：
+
+提交：
+
+纯文本
+KILL-SWITCH-CHANGE-ENTRY-IMPLEMENTATION-CHECKPOINT
+
+重点审：
+
+POST 接线是否真的可达
+幂等是否跨实例可靠
+双人确认是否服务端强制
+AuditLog 是否不可缺失
+是否保持所有业务动作冻结
+
+可以进入实现。
+```
