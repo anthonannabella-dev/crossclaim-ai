@@ -36,6 +36,12 @@ import { listPaymentReconciliation, toReconciliationCsv } from './payment-reconc
 import { replayPaymentEvent, runDueRetries } from './payment-attempt';
 import { getCase, getClaimDraft, listCaseEvidence, listCases } from './case-read';
 import {
+  getImportBatch,
+  getImportQualitySummary,
+  listImportBatches,
+  listImportErrors,
+} from '../operations/admin-imports';
+import {
   getAdminSystemHealth,
   getAuditEntry,
   getTenantOverview,
@@ -85,6 +91,11 @@ const ADMIN_TENANT_OVERVIEW_PATH = /^\/admin\/tenant-overview$/;
 const ADMIN_AUDIT_LIST_PATH = /^\/admin\/audit$/;
 const ADMIN_AUDIT_DETAIL_PATH = /^\/admin\/audit\/([^/]+)$/;
 const ADMIN_SYSTEM_HEALTH_PATH = /^\/admin\/system-health$/;
+// MSG-20260929-36：Admin Phase 2 / A4（只读导入与校验运维视图）
+const ADMIN_IMPORTS_PATH = /^\/admin\/imports$/;
+const ADMIN_IMPORT_QUALITY_PATH = /^\/admin\/imports\/quality-summary$/;
+const ADMIN_IMPORT_ERRORS_PATH = /^\/admin\/imports\/([^/]+)\/errors$/;
+const ADMIN_IMPORT_DETAIL_PATH = /^\/admin\/imports\/([^/]+)$/;
 
 /** 请求体层面的错误（与领域状态无关），统一映射为 400。 */
 class HttpBodyError extends Error {
@@ -214,8 +225,19 @@ export async function handleWorkflowRequest(
   const adminAuditList = ADMIN_AUDIT_LIST_PATH.test(path);
   const adminAuditDetail = ADMIN_AUDIT_DETAIL_PATH.exec(path);
   const adminSystemHealth = ADMIN_SYSTEM_HEALTH_PATH.test(path);
+  const adminImportsList = ADMIN_IMPORTS_PATH.test(path);
+  const adminImportQuality = ADMIN_IMPORT_QUALITY_PATH.test(path);
+  const adminImportErrors = ADMIN_IMPORT_ERRORS_PATH.exec(path);
+  const adminImportDetail = ADMIN_IMPORT_DETAIL_PATH.exec(path);
   const adminAny =
-    adminTenantOverview || adminAuditList || adminAuditDetail !== null || adminSystemHealth;
+    adminTenantOverview ||
+    adminAuditList ||
+    adminAuditDetail !== null ||
+    adminSystemHealth ||
+    adminImportsList ||
+    adminImportQuality ||
+    adminImportErrors !== null ||
+    adminImportDetail !== null;
   if (!adminAny && !operationsDashboard && !operationsClaims && !operationsRecovery && !review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !replayPath && !retryDuePath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim) {
     return false;
   }
@@ -509,6 +531,55 @@ export async function handleWorkflowRequest(
           { organizationId: context.organizationId, role: context.role },
           caseClaim[1] ?? '',
         ),
+      );
+      return true;
+    }
+
+    // MSG-20260929-36：Admin Phase 2 / A4（只读；GET only；无下载、无金额、无原始行）
+    if (adminImportsList || adminImportQuality || adminImportErrors || adminImportDetail) {
+      if ((req.method ?? 'GET') !== 'GET') {
+        sendJson(res, 405, { error: 'METHOD_NOT_ALLOWED' });
+        return true;
+      }
+      const importQuery = new URLSearchParams((req.url ?? '').split('?')[1] ?? '');
+      const importDeps = { prisma: deps.prisma, ...(deps.now ? { now: deps.now } : {}) };
+      const importActor = { organizationId: context.organizationId, role: context.role };
+      if (adminImportsList) {
+        sendJson(
+          res,
+          200,
+          await listImportBatches(importDeps, {
+            ...importActor,
+            filter: {
+              bucket: importQuery.get('bucket') ?? undefined,
+              channel: importQuery.get('channel') ?? undefined,
+              cursor: importQuery.get('cursor') ?? undefined,
+              limit: importQuery.get('limit') ?? undefined,
+            },
+          }),
+        );
+        return true;
+      }
+      if (adminImportQuality) {
+        sendJson(res, 200, await getImportQualitySummary(importDeps, importActor));
+        return true;
+      }
+      if (adminImportErrors) {
+        sendJson(
+          res,
+          200,
+          await listImportErrors(importDeps, {
+            ...importActor,
+            batchId: adminImportErrors[1] ?? '',
+            limit: importQuery.get('limit') ?? undefined,
+          }),
+        );
+        return true;
+      }
+      sendJson(
+        res,
+        200,
+        await getImportBatch(importDeps, { ...importActor, batchId: adminImportDetail?.[1] ?? '' }),
       );
       return true;
     }

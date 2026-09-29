@@ -334,3 +334,20 @@ C-0008-B2（Case / Evidence / Claim Draft / Billing）的端点尚未实现。
 - **只读**：仅 GET；无写路径、不写 AuditLog、无权限编辑/平台配置/API Key/资金操作
 - **单租户视图**：强制 `organizationId`；`actorUserId` 过滤仅用于审计调查，且不得跨租户
 - Phase 1 = A1 Tenant Overview + A3 Audit Explorer + A6 System Health；A4/A5/A2 属后续阶段
+
+---
+
+## Admin Console Phase 2 — Import / Validation Operations（MSG-20260929-36）
+
+| 方法 | 路径 | 成功 | 权限 |
+|---|---|---|---|
+| GET | `/admin/imports` | 200 `{ items, nextCursor }`；每项含 `bucket`（固定映射）与 `flags`（异常角标） | OWNER / ADMIN / OPS |
+| GET | `/admin/imports/quality-summary` | 200 `{ projection: true, generatedAt, buckets }`（**显式标注为投影**） | OWNER / ADMIN / OPS |
+| GET | `/admin/imports/:batchId/errors` | 200 `{ batchId, items, truncated }`；**仅白名单字段** errorCode / rowNumber / field / sourceColumnName / action | OWNER / ADMIN / OPS |
+| GET | `/admin/imports/:batchId` | 200 批次详情（状态桶 + 角标 + 时间线 + 错误条数）；跨租户 → 404 | OWNER / ADMIN / OPS |
+
+- **只读**：仅 GET；不修改 Import、不重跑导入、不删除文件、不修复数据、不手工改状态
+- **无下载**：不提供原始文件 / 错误 CSV / 数据导出（未来如需另开 EXPORT-DESIGN）
+- **无样本**：L3 不返回原始行内容或脱敏样本（未来如需另开 ADMIN-IMPORT-SAMPLE-VIEW-DESIGN）
+- **无金额**：Admin 一律不展示金额 / 币种 / 单价 / 订单价值
+- 状态桶为 `ImportBatch.status` 的**固定映射**（in_progress / succeeded / retried_success / partial / failed）；不新增工作流状态，运营补充信息用角标表达（QUALITY_WARNING / RETRIED / UNKNOWN_STATUS）
