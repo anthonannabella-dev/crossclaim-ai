@@ -27,6 +27,7 @@ const pending = tasksText
 let head = 'UNKNOWN';
 try {
   head = execSync(`git -c safe.directory=${ROOT} rev-parse --short HEAD`, { cwd: ROOT }).toString().trim();
+  if (state.last_error) delete state.last_error; // 成功即清除陈旧错误（watchdog 语义）
 } catch (error) {
   head = 'GIT_UNAVAILABLE';
   state.last_error = String(error).slice(0, 300);
