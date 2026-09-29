@@ -71729,3 +71729,360 @@ CI 可重复执行证据
 
 裁决完成。
 ```
+
+### [MSG-20260929-71] P2-1-DEPLOYMENT-SMOKE-CHECKPOINT 裁决：RESULT: PASS / STATUS: P2-1 DEPLOYMENT SMOKE = COMPLETE / MERGE: APPROVED / NEXT: P2-2 BACKUP-RESTORE VERIFICATION / BOUNDARY: REAL BACKUP = HOST ONLY, REAL DATA = WAITING_HOST_DATA, ACTION GUARD = HOLD, PRODUCTION ENABLEMENT = HOLD（Q1 批准 0e4f4cc/40a3f60/35fc56b/0e9a273 fast-forward 合并 main：属生产可靠性基础设施，未触碰 Claim 自动提交/Billing/Payment/Settlement/Platform API/Action Guard/生产 Secret；验收 PASS：① /health 与 /readyz 语义分离冻结（liveness 200 恒定 vs readiness DB+migration+resolver 200/503，避免 resolver degraded 被误判为实例不健康）② readiness 只允许 DATABASE_UNAVAILABLE/MIGRATION_MISMATCH/KILL_SWITCH_RESOLVER_FAIL_CLOSED，禁止泄露 SQL/URL/stack/secret ③ Env Validation 只输出原因码（DATABASE_URL_INVALID / AUDIT_IP_SALT_TOO_SHORT / PORT_INVALID），不回显连接串 ④ Deployment Smoke 12 步链路覆盖（19 migrations / 28 tenant triggers；随机容器+端口+库+测试 secret+销毁）⑤ 首轮 API 契约失败被视为有效发现（补 /readyz 文档后转绿，非绕过）；Q2 批准进入 P2-2 Backup/Restore Verification（CI 合成验证：Synthetic Dataset -> PostgreSQL -> pg_dump -> pg_restore scratch -> Compare；必须验证 B1 行数一致（Organization/User/Membership/Claim/Evidence/Recovery/Settlement/Billing/AuditLog/KillSwitchRequest）、B2 租户隔离（Tenant A restore = Tenant A original 且 A != B）、B3 金额一致（Decimal 精度，禁止 float）、B4 Audit 连续性（count/action 分布/max(createdAt)）、B5 Kill Switch（state 分布 + idempotency 唯一约束 + trigger 28）、B6 Schema（migration count/indexes/enums/constraints）、B7 不变量（恢复后禁止跨租户引用/orphan evidence/invalid FK）；额外要求：① Restore Failure Simulation（至少一个失败场景，如 scratch restore interrupted -> verification fail -> backup rejected，证明不会误判成功）② Backup Artifact Boundary（CI 允许 temporary dump，禁止 upload artifact/persist dump/commit dump）③ 真实环境边界（REAL BACKUP TEST = HOST APPROVAL REQUIRED，不使用真实数据库）；阶段状态：P2-1 PASS_CLOSE / P2-2 GO / P2-3 PENDING / P2-4 PENDING_HOST_DATA）
+
+```text
+复核 P2-1 Deployment Smoke Checkpoint。
+
+裁决：
+
+纯文本
+RESULT: PASS
+
+STATUS:
+P2-1 DEPLOYMENT SMOKE = COMPLETE
+
+MERGE:
+APPROVED
+
+NEXT:
+P2-2 BACKUP / RESTORE VERIFICATION
+
+BOUNDARY:
+REAL BACKUP = HOST ONLY
+REAL DATA = WAITING_HOST_DATA
+ACTION GUARD = HOLD
+PRODUCTION ENABLEMENT = HOLD
+Q1：合并批准
+
+批准 fast-forward：
+
+纯文本
+0e4f4cc
+40a3f60
+35fc56b
+0e9a273
+
+进入 main。
+
+理由：
+
+本阶段完成的是生产可靠性基础设施，不涉及业务能力扩展：
+
+✅ /readyz
+✅ env fail-fast
+✅ deployment smoke
+✅ migration verification
+✅ CI reproducibility
+
+没有触碰：
+
+Claim 自动提交
+Billing
+Payment
+Settlement
+Platform API
+Action Guard
+Production Secret
+
+符合 P2 范围。
+
+P2-1 验收结果
+1. /health 与 /readyz 分离
+
+PASS。
+
+当前语义冻结：
+
+纯文本
+/health
+    |
+    +-- liveness
+    |
+    +-- HTTP 200
+
+
+/readyz
+    |
+    +-- DB
+    +-- migration
+    +-- resolver
+    |
+    +-- HTTP 200/503
+
+这个修正很重要。
+
+避免未来出现：
+
+resolver degraded
+        ↓
+service unhealthy
+        ↓
+错误摘除实例
+2. Readiness 原因码
+
+PASS。
+
+允许：
+
+DATABASE_UNAVAILABLE
+MIGRATION_MISMATCH
+KILL_SWITCH_RESOLVER_FAIL_CLOSED
+
+禁止泄露：
+
+SQL
+PostgreSQL URL
+stack
+secret
+
+符合生产安全要求。
+
+3. Env Validation
+
+PASS。
+
+特别认可：
+
+错误输出：
+
+允许：
+
+DATABASE_URL_INVALID
+AUDIT_IP_SALT_TOO_SHORT
+PORT_INVALID
+
+禁止：
+
+postgres://user:password@host/db
+
+这种错误泄露非常常见，目前处理正确。
+
+4. Deployment Smoke
+
+PASS。
+
+12 步链路覆盖完整：
+
+Docker
+ ↓
+Postgres
+ ↓
+Migration
+ ↓
+Trigger count
+ ↓
+API boot
+ ↓
+health
+ ↓
+ready
+
+重点：
+
+Migration
+
+已验证：
+
+19 migrations applied
+28 tenant triggers
+
+保持架构契约。
+
+容器隔离
+
+PASS：
+
+随机容器
+随机端口
+随机数据库
+测试 secret
+销毁容器
+
+符合 CI smoke 要求。
+
+5. 首轮契约失败记录
+
+接受。
+
+这是有效发现：
+
+Implementation
+      ↓
+API Contract Gate
+      ↓
+Missing /readyz docs
+      ↓
+Fix
+      ↓
+PASS
+
+不是绕过。
+
+反而证明契约闸门有效。
+
+Q2：进入 P2-2 Backup / Restore Verification
+
+批准。
+
+进入：
+
+P2-2 BACKUP / RESTORE VERIFICATION
+
+范围按照设计执行。
+
+允许实现范围
+CI 合成验证
+
+允许：
+
+Synthetic Dataset
+        |
+        v
+PostgreSQL
+        |
+        v
+pg_dump
+        |
+        v
+pg_restore scratch
+        |
+        v
+Compare
+必须验证
+B1 行数一致
+
+包含：
+
+Organization
+User
+Membership
+Claim
+Evidence
+Recovery
+Settlement
+Billing
+AuditLog
+KillSwitchRequest
+B2 租户隔离
+
+必须：
+
+Tenant A restore
+=
+Tenant A original
+
+且：
+
+Tenant A != Tenant B
+B3 金额一致
+
+保持：
+
+Decimal 精度比较。
+
+禁止：
+
+float。
+
+B4 Audit 连续性
+
+验证：
+
+count
+action distribution
+max(createdAt)
+
+B5 Kill Switch
+
+必须包含：
+
+KillSwitchRequest state 分布
+idempotency 唯一约束
+trigger 28
+
+B6 Schema
+
+验证：
+
+migration count
+indexes
+enums
+constraints
+B7 不变量
+
+恢复后：
+
+禁止出现：
+
+跨租户引用
+orphan evidence
+invalid foreign key
+
+P2-2 额外补充要求
+
+提交 checkpoint 时增加：
+
+1. Restore Failure Simulation
+
+至少一个失败场景：
+
+例如：
+
+scratch restore interrupted
+        ↓
+verification fail
+        ↓
+backup rejected
+
+证明不会误判成功。
+
+2. Backup Artifact Boundary
+
+明确：
+
+CI：
+
+允许：
+
+temporary dump
+
+禁止：
+
+upload artifact
+persist dump
+commit dump
+
+3. 真实环境边界
+
+继续保持：
+
+REAL BACKUP TEST
+=
+HOST APPROVAL REQUIRED
+
+不要使用真实数据库。
+
+当前阶段状态
+
+更新：
+
+P2-1 Deployment Smoke       PASS_CLOSE
+
+P2-2 Backup Restore          GO
+
+P2-3 Secret Rotation         PENDING
+
+P2-4 Real Validation         PENDING_HOST_DATA
+
+继续：
+
+Action Guard:
+DESIGN ONLY / HOLD
+
+Production Enablement:
+HOLD
+
+下一提交进入 P2-2 Backup / Restore Verification Design/Implementation Checkpoint。
+```
