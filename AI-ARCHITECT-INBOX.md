@@ -69112,3 +69112,224 @@ MERGE: APPROVED
 
 NEXT: Runtime Resolution Design ONLY
 ```
+
+### [MSG-20260929-63] RUNTIME RESOLUTION 设计指令裁决：STATUS: FINAL PASS（Change Entry）/ RUNTIME RESOLUTION: DESIGN PENDING / PRODUCTION ENABLEMENT: HOLD（GO: Effective Kill Switch Resolution Design，DESIGN ONLY，不改 Schema、不改 runtime value、不启用真实外部动作；设计稿必须覆盖 7 项：① Effective Value 解析模型（Environment Default -> Global Config -> Tenant Config -> KillSwitchRequest Control State -> Effective Runtime Decision；严格区分 Config Value / Control Request / Effective Value；禁止 KillSwitchRequest 直接 UPDATE Config）② 优先级固定 Global HARD DISABLED > Tenant DISABLED > Tenant ENABLED > Environment Default（含 Case A/B/C）③ Cache 设计（v1 无分布式缓存，DB read + short memory cache，避免 Redis 状态漂移）④ Fail Closed（unknown scope/value、missing config、corrupted record -> disabled；DB 不可用 -> submission/billing/platform/workflow deny、observability 降级但不影响业务安全）⑤ Audit Boundary（REQUEST created/confirmed/applied/cancelled 写、resolver 读取与 API 查询不写）⑥ 与冻结项关系（安全控制层，非业务自动化层：不自动提交 Claim/Appeal、不自动扣佣/付款、不自动改 Settlement）⑦ 验证矩阵 7 行（global disabled+tenant enabled -> disabled；tenant disabled+default enabled -> disabled；全部缺失 -> fail closed；非法 scope -> disabled；数据库异常 -> 安全拒绝；读取 resolver -> AuditLog 不增加；tenant 隔离 -> 不能读取其他租户））
+
+```text
+收到 ACK MSG-20260929-62。
+
+确认当前状态：
+
+纯文本
+KILL-SWITCH CHANGE ENTRY
+STATUS: FINAL PASS
+
+RUNTIME RESOLUTION
+STATUS: DESIGN PENDING
+
+PRODUCTION ENABLEMENT
+STATUS: HOLD
+
+当前处理方向正确：先补齐 Runtime Resolution Design，再考虑任何运行时启用行为。
+
+下一份设计稿请重点覆盖以下审查点：
+
+Effective Kill Switch Resolution Design 必须包含
+1. Effective Value 解析模型
+
+明确输入：
+
+Environment Default
+        ↓
+Global Config
+        ↓
+Tenant Config
+        ↓
+KillSwitchRequest Control State
+        ↓
+Effective Runtime Decision
+
+但需要严格区分：
+
+Config Value
+Control Request
+Effective Value
+
+禁止：
+
+KillSwitchRequest
+直接 UPDATE Config
+
+否则会重新引入控制面污染事实层的问题。
+
+2. 优先级规则
+
+必须固定：
+
+Global HARD DISABLED
+        >
+Tenant DISABLED
+        >
+Tenant ENABLED
+        >
+Environment Default
+
+需要明确：
+
+Case A
+global = disabled
+tenant = enabled
+
+结果：
+
+effective = disabled
+source = global
+Case B
+global = enabled
+tenant = disabled
+
+结果：
+
+effective = disabled
+source = tenant
+Case C
+没有任何配置
+
+结果：
+
+submission/billing/integration/platform_connector/workflow
+
+=> disabled
+observability
+
+=> enabled
+3. Cache 设计
+
+需要说明：
+
+是否缓存
+缓存粒度
+TTL
+失效方式
+
+建议：
+
+v1：
+
+no distributed cache
+
+优先：
+
+DB read + short memory cache
+
+避免：
+
+Redis 状态漂移
+4. Fail Closed
+
+必须覆盖：
+
+数据异常
+
+例如：
+
+unknown scope
+unknown value
+missing config
+corrupted record
+
+结果：
+
+disabled
+数据库不可用
+
+需要明确：
+
+submission:
+
+deny
+
+billing:
+
+deny
+
+platform:
+
+deny
+
+workflow:
+
+deny
+
+observability:
+
+降级但不影响业务安全
+5. Audit Boundary
+
+必须明确：
+
+哪些写 Audit：
+
+✅
+
+KillSwitchRequest created
+KillSwitchRequest confirmed
+KillSwitchRequest applied
+KillSwitchRequest cancelled
+
+不写：
+
+❌
+
+每一次读取 resolver
+每一次 API 查询 effective value
+
+否则 AuditLog 会污染。
+
+6. 与现有冻结项关系
+
+必须保持：
+
+Kill Switch
+=
+安全控制层
+
+不是业务自动化层
+
+所以：
+
+不会：
+
+自动提交 Claim
+自动 Appeal
+自动扣佣
+自动付款
+自动修改 Settlement
+
+7. 必须增加验证矩阵
+
+至少：
+
+场景	结果
+global disabled + tenant enabled	disabled
+tenant disabled + default enabled	disabled
+全部缺失	fail closed
+非法 scope	disabled
+数据库异常	安全拒绝
+读取 resolver	AuditLog 不增加
+tenant 隔离	不能读取其他租户
+
+当前批准下一步：
+
+GO:
+Effective Kill Switch Resolution Design
+
+限制：
+
+DESIGN ONLY
+不改 Schema
+不改 runtime value
+不启用真实外部动作
+
+提交设计稿后再进入下一轮裁决。
+```
