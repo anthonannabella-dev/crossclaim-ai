@@ -73,3 +73,72 @@ changes         { switch, scope, oldValue, newValue, reason, confirmationBy? }
 - **D3**：审计写入既有 `AuditLog`（不新增表、动作名 `killswitch.changed`）是否接受？
 - **D4**：`OPS/FINANCE/VIEWER` 是否可见状态（只读）？
 - **D5**：`workflow` 默认 `enabled` 是否接受？还是要求 v1 默认 `disabled`（更保守）？
+
+---
+
+## 9. R1 修订（按架构方 MSG-20260929-52）
+
+### 9.1 D1 修订 — Scope 拆出 `platform_connector`
+
+最终 Scope（六项）：
+
+```
+submission
+billing
+integration          （内部集成：文件/Sync 调度等）
+platform_connector   （外部平台与承运商 API：Amazon SP-API / Walmart / TikTok / Carrier API）
+workflow
+observability
+```
+
+理由：外部平台连接涉及**第三方账号授权与外部行为风险**，风险面与内部 integration 不同，必须可独立熔断。
+
+### 9.2 D2 补充 — 禁止同人完成双人确认
+
+- 开启：`OWNER` 发起 + 另一 `OWNER`/`ADMIN` 确认，窗口 ≤15 分钟。
+- **同一用户不得同时充当发起人与确认人**：`confirmationBy` 必须与发起人 `actorUserId` 不同；服务端必须强制校验（不是 UI 约束）。
+
+### 9.3 D3 补充 — reason 结构化
+
+审计 `changes` 中 `reason` 改为：
+
+```
+reasonCode ∈ { SECURITY_INCIDENT, PLATFORM_FAILURE, MAINTENANCE, TESTING, OTHER }
+note?      （可选自由文本，禁止粘贴凭据）
+```
+
+目的：审计可分析、可聚合。`reasonCode` 必填。
+
+### 9.4 D4 修订 — 可见性最小暴露
+
+| 角色 | 可见内容 |
+|---|---|
+| OWNER / ADMIN | 当前状态、scope、最近变更时间、操作者 |
+| OPS | 仅「系统运行状态」摘要：`submission=disabled`、`integration=disabled` 等开关取值；**看不到** 谁改的 / reason / 审计历史 |
+| FINANCE / VIEWER | 403（Kill Switch 属系统控制面，不属业务查看面） |
+
+### 9.5 D5 修订 — 默认值全部 fail-closed
+
+```
+submission         disabled
+billing            disabled
+integration        disabled
+platform_connector disabled
+workflow           disabled
+observability      enabled     ← 唯一例外：关闭监控会降低安全性
+```
+
+缺配置保护系统，而不是保持运行。
+
+### 9.6 R1 — 状态解析优先级
+
+```
+tenant switch  >  global switch  >  environment default
+```
+
+逐层解析，**取更严格者**（disabled 优先）。示例：`global=enabled` 且 `tenant=disabled` → 结果 `disabled`。
+
+### 9.7 R2 — Kill Switch 不改变历史事实
+
+拉闸只影响**未来动作**；绝不：删除 Claim、修改 Settlement、回滚 Billing、删除 AuditLog。此条为硬约束，写入实现验收（关闭前后事实行数一致 + 历史记录不可变）。
+

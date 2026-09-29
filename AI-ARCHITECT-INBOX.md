@@ -66069,3 +66069,348 @@ KILL-SWITCH-DESIGN
 
 可以继续推进。下一步提交 KILL-SWITCH-DESIGN.md。
 ```
+
+### [MSG-20260929-52] KILL-SWITCH-DESIGN 裁决：GO_WITH_REVISE（D1 增加 platform_connector；D2 双人确认禁止同人闭环；D3 reasonCode 枚举；D4 OPS 最小可见 / FINANCE·VIEWER 403；D5 默认全部 disabled 仅 observability enabled；R1 优先级 tenant>global>env；R2 不改变历史事实）+ 批准 b8e7ba5 → main
+
+```text
+裁决如下。
+
+KILL-SWITCH-DESIGN
+纯文本
+RESULT: GO_WITH_REVISE
+STATUS: DESIGN APPROVED WITH REQUIRED CHANGES
+NEXT: UPDATE DESIGN → IMPLEMENTATION REVIEW
+
+整体方向正确，符合 Production Candidate 阶段要求：先设计安全闸门，再实现；不提前打开真实生产动作。
+
+D1 Scope 五项
+裁决：GO（小修订）
+
+当前：
+
+纯文本
+submission
+billing
+integration
+workflow
+observability
+
+接受。
+
+但增加独立项：
+
+纯文本
+platform_connector
+
+原因：
+
+虽然目前 integration 包含平台连接，但未来风险不同：
+
+Amazon SP-API
+Walmart API
+TikTok API
+Carrier API
+
+这些属于：
+
+外部权限、账号授权、第三方行为风险
+
+不应与内部 integration 混在一起。
+
+最终 Scope：
+
+纯文本
+submission
+billing
+integration
+platform_connector
+workflow
+observability
+D2 双人确认规则
+裁决：GO
+
+规则接受：
+
+纯文本
+开启:
+OWNER 发起
++
+OWNER / ADMIN 确认
+
+窗口:
+<=15分钟
+
+关闭：
+
+纯文本
+OWNER 单人立即执行
+
+正确。
+
+原因：
+
+Kill Switch 的安全方向应该：
+
+关闭容易
+恢复困难
+
+符合 fail-safe 原则。
+
+补充：
+
+设计中增加：
+
+同一用户不能完成双人确认闭环
+confirmationBy 必须不同 actor
+
+防止：
+
+单人伪双签。
+
+D3 AuditLog
+裁决：GO
+
+接受：
+
+复用：
+
+纯文本
+AuditLog
+
+不新增表。
+
+action:
+
+纯文本
+killswitch.changed
+
+结构：
+
+JSON
+{
+ switch,
+ scope,
+ oldValue,
+ newValue,
+ reason,
+ confirmationBy
+}
+
+通过。
+
+补充：
+
+reason 不允许无限自由文本。
+
+建议：
+
+纯文本
+reasonCode + optional note
+
+例如：
+
+纯文本
+SECURITY_INCIDENT
+PLATFORM_FAILURE
+MAINTENANCE
+TESTING
+OTHER
+
+避免审计不可分析。
+
+D4 OPS / FINANCE / VIEWER 可见性
+裁决：REVISE
+
+当前设计：
+
+等待裁决
+
+结论：
+
+采用最小暴露原则。
+
+权限：
+
+角色	状态查看
+OWNER	✅
+ADMIN	✅
+OPS	有限
+FINANCE	❌
+VIEWER	❌
+
+具体：
+
+OWNER / ADMIN
+
+看到：
+
+当前状态
+scope
+最近变更时间
+操作者
+OPS
+
+只看到：
+
+纯文本
+system operational status
+
+例如：
+
+submission disabled
+integration disabled
+
+但不看到：
+
+谁改的
+reason
+审计历史
+FINANCE / VIEWER
+
+403。
+
+原因：
+
+Kill Switch 属系统控制面，不属于业务查看面。
+
+D5 workflow 默认值
+裁决：REVISE
+
+当前：
+
+纯文本
+workflow = enabled
+
+不接受。
+
+改：
+
+纯文本
+workflow = disabled
+
+理由：
+
+Kill Switch 设计目标是：
+
+缺配置时保护系统，而不是保持运行。
+
+最终：
+
+纯文本
+submission        disabled
+billing           disabled
+integration       disabled
+platform_connector disabled
+workflow          disabled
+observability     enabled
+
+唯一例外：
+
+observability 默认开启。
+
+因为关闭监控会降低安全性。
+
+增加两个实现前设计要求
+R1 状态解析优先级
+
+明确：
+
+纯文本
+tenant switch
+        ↓
+global switch
+        ↓
+environment default
+
+取更严格。
+
+例如：
+
+global enabled
+tenant disabled
+
+结果：
+
+disabled
+
+R2 Kill Switch 不改变历史事实
+
+必须明确：
+
+关闭：
+
+不会：
+
+删除 Claim
+修改 Settlement
+回滚 Billing
+删除 AuditLog
+
+只影响：
+
+未来动作。
+
+合并批准
+
+批准：
+
+纯文本
+b8e7ba5 → main
+STATUS: GO
+TYPE: fast-forward documentation merge
+
+条件：
+
+不 force
+不绕保护
+CI PASS
+下一步
+
+先不要实现。
+
+流程：
+
+纯文本
+b8e7ba5 merge
+
+↓
+
+更新 KILL-SWITCH-DESIGN.md
+
+↓
+
+提交 Design R1
+
+↓
+
+再次审查
+
+↓
+
+IMPLEMENTATION
+
+当前状态：
+
+纯文本
+Production Candidate v1.0
+
+Operations Console:
+PASS
+
+Kill Switch:
+DESIGN GO_WITH_REVISE
+
+Implementation:
+NOT STARTED
+
+Submission Adapter:
+HOLD
+
+Auto Claim:
+FORBIDDEN
+
+Auto Billing:
+HOLD
+
+可以继续推进 Kill Switch R1。
+```
