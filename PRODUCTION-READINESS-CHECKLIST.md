@@ -4,6 +4,8 @@
 > 本清单是「能否进入 Production Candidate」的判据；**勾选 ≠ 已上线**，真实数据与真实平台验证统一在最后执行。
 >
 > 红线（架构方未改判前恒定）：自动提交 Claim/Appeal **未批准**；自动扣佣 **未批准**；真实追回效果**只能**由 Production Validation 判定。
+>
+> 最终总审（Gate 1–10 + Production Candidate 判定）见 [`FINAL-GATE-REVIEW.md`](FINAL-GATE-REVIEW.md)。
 
 ---
 
