@@ -105,3 +105,31 @@ KYC / 分账 / 收费 / Success Fee、真实客户数据、真实 Claim 提交�
 2. 真实数据**不入仓库、不过聊天**；只放 `inbox/`（已 gitignore）。
 3. 不修改 main、不绕过分支保护、不提前开启任何生产动作。
 4. Phase 1 结论只允许「线索是否可人工确认」，不得外推为商业收益。
+---
+
+## 8. 当前决定与重入步骤（2026-09-30 宿主指示：**数据最后再补**）
+
+**决定**：Phase 1 的真实数据**延后交付**（原文：「需要的数据最后再补」「做文档记录最后再补」）。
+本请求单保持 `WAITING_HOST_DATA` —— 不阻塞、不臆造、不自动降级，也不因此修改任何冻结门槛。
+
+**期间不做**（已冻结）：
+
+- ❌ 不用公开数据集替代真实验证（记录见 [`EXTERNAL-DATASET-SMOKE.md`](EXTERNAL-DATASET-SMOKE.md)，状态 `STOPPED`）
+- ❌ 不启动 Action Guard / 不做任何自动动作 / 不做任何生产动作
+- ❌ 不因缺数据而降低 Stage A/B/C 门槛或改写 Decision Gate
+
+**数据到位后的重入步骤（顺序冻结，与架构方 MSG-20260930-01 一致）**：
+
+```text
+1) node tools/validation/phase1-runbook.mjs preflight <dataset.csv>     → 必须 READY_FOR_STAGE_A
+2) node tools/validation/phase1-runbook.mjs audit-input <dataset.csv>   → input = normalized + quarantine + rejected
+3) 导入（既有 pipeline，dedupeKey 幂等）→ IMPORT-REPORT.md / DATA-QUALITY-REPORT.md
+4) Stage B 候选（Candidate >= 10，Candidate ≠ Claim）
+5) Stage C 人工抽样（>= 5：TRUE_POSITIVE / FALSE_POSITIVE / NEEDS_DATA）
+6) PHASE1-RESULT.md（8 节）→ Decision Gate（PASS_TO_MVP / CONTINUE_DATA_COLLECTION / STOP_REWORK）
+```
+
+数据一到位即提交 **PHASE1 REAL DATA VALIDATION CHECKPOINT**（当前唯一被批准的下一提交）交架构方裁决。
+
+**最小交付提醒**：≥500 行、最近 3 个月优先、CSV/XLSX、表头 `order_id,occurred_at,amount,currency`、无 PII、无凭据；
+放入 `D:\crossclaim-ai\inbox\`（不入 Git）后告知路径。
