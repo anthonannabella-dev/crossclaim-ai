@@ -63415,3 +63415,394 @@ PRODUCTION-CANDIDATE-AUDIT
 哪些模块属于 REAL_DATA_VALIDATION_PENDING
 是否达到 Production Candidate。
 ```
+
+### [MSG-20260929-41] ADMIN-CONSOLE-PHASE4-HARDENING 裁决：PASS_CLOSE（ADMIN-CONSOLE V1 = READY_FOR_FINAL_GATE_REVIEW；下一步由 Codex 提交 FINAL-GATE-REVIEW.md）
+
+```text
+ADMIN-CONSOLE-PHASE4-HARDENING 裁决
+结论：PASS_CLOSE ✅
+
+A2 User/Membership 已完成最终硬化，满足进入 Final Gate Review 的前置条件。
+
+状态更新：
+
+纯文本
+ADMIN-CONSOLE-PHASE4-HARDENING
+
+STATUS:
+PASS_CLOSE
+
+ADMIN-CONSOLE V1:
+READY_FOR_FINAL_GATE_REVIEW
+本轮三项硬化确认
+1. DB Isolation ✅ PASS
+
+已覆盖：
+
+同租户查询
+跨租户详情
+未知 userId
+Membership 串租户
+Session 聚合串租户
+Invitation 串租户
+
+关键要求：
+
+跨租户不能泄露存在性
+
+采用：
+
+纯文本
+404
+
+而不是：
+
+纯文本
+403
+
+符合之前所有租户隔离约定。
+
+2. Readonly Snapshot ✅ PASS
+
+验证对象：
+
+User
+Membership
+Session
+UserInvitation
+AuditLog
+
+调用前后：
+
+纯文本
+count unchanged
+
+说明：
+
+Admin Console：
+
+不写事实数据
+不产生隐藏状态变化
+不修改审计链
+
+通过。
+
+3. HTTP Smoke ✅ PASS
+
+这一轮发现的三个缺陷非常有价值，已修复：
+
+缺陷 1：
+纯文本
+service exists
+but route unreachable
+
+说明此前只验证了 service，没有验证真实 HTTP 面。
+
+已补：
+
+WORKFLOW_PATH
+route wiring
+
+正确。
+
+缺陷 2：
+
+方法白名单遗漏
+
+之前：
+
+GET-only 设计存在
+
+但：
+
+route gate 未放行。
+
+现在：
+
+双层保护：
+
+纯文本
+method gate
++
+handler GET-only
+
+通过。
+
+缺陷 3：
+
+permission-matrix 权限绕过
+
+这是本轮最重要发现。
+
+之前：
+
+纯文本
+service no auth
+route no auth
+
+导致：
+
+登录用户即可读取完整权限矩阵。
+
+现在：
+
+统一：
+
+纯文本
+assertAdminAccess()
+
+并：
+
+OWNER ✅
+ADMIN ✅
+OPS ❌
+FINANCE ❌
+VIEWER ❌
+
+fail-closed。
+
+通过。
+
+Final Gate Review 开始
+
+进入：
+
+PRODUCTION-CANDIDATE FINAL GATE REVIEW
+
+目标：
+
+不是继续开发功能。
+
+而是验证：
+
+当前代码是否已经达到「除真实平台、真实数据、真实资金、真实提交验证外，可以作为生产候选版本」。
+
+Final Gate 审查清单
+Gate 1：核心业务闭环完整性
+
+检查：
+
+数据进入
+Upload / Import
+Adapter
+Normalization
+Validation Harness
+Quarantine
+
+重点：
+
+是否任何未知字段会被错误猜测。
+
+事实层
+
+检查：
+
+ClaimItem
+EvidenceArtifact
+Claim
+Settlement
+RecoveryPayout
+
+重点：
+
+是否存在：
+
+双事实来源
+金额重复来源
+状态漂移。
+Gate 2：Claim 生命周期
+
+重点：
+
+审：
+
+纯文本
+DRAFT
+ ↓
+SUBMITTED
+ ↓
+ACKNOWLEDGED
+ ↓
+APPROVED/PARTIALLY_APPROVED
+ ↓
+RECOVERY
+
+检查：
+
+状态 CAS
+terminal 不回退
+deadline 来源
+platformCaseRef 语义
+Gate 3：Evidence Chain
+
+检查：
+
+文件上传
+EvidenceArtifact
+CaseEvidence
+
+重点：
+
+是否：
+
+原文件可追溯
+hash 一致
+tenant isolation
+不泄露 storageKey
+Gate 4：Recovery / Settlement
+
+重点：
+
+审：
+
+已完成：
+
+Recovery Confirmation
+RecoveryPayout
+
+检查：
+
+confirmedAmount 唯一来源
+receivedAmount 投影
+reconciliation 状态
+reversal 链
+
+禁止：
+
+自动扣佣
+自动 PAID
+自动资金动作
+Gate 5：Submission Boundary
+
+重点：
+
+确认：
+
+当前：
+
+纯文本
+AI Prepare
+      ↓
+Human Approve
+      ↓
+Manual Submit
+
+仍保持。
+
+检查：
+
+Submission Payload
+dry-run
+credentials isolation
+
+禁止：
+
+Amazon 自动 Case
+TikTok 自动 Dispute
+Walmart 自动提交
+Stripe 自动扣款
+Gate 6：真实依赖隔离
+
+检查：
+
+所有外部依赖是否明确：
+
+REAL_DATA_VALIDATION_PENDING
+
+包括：
+
+Shopify 真导出
+Amazon Settlement
+Walmart Settlement
+TikTok 数据
+物流账单
+Carrier SLA
+DAS
+Customs Rate
+C88/7501
+17TRACK/EasyPost
+Stripe test/live
+Gate 7：权限安全
+
+重点审：
+
+已经发现过一次：
+
+service pass ≠ production safe
+
+所以 Final Gate 必查：
+
+每个 GET 是否真实 HTTP 可达
+每个写入口是否权限前置
+VIEWER fail-close
+跨租户 404
+不泄露存在性
+Gate 8：Observability
+
+检查：
+
+已有：
+
+AuditLog
+Health
+Dashboard
+Notification projection
+Admin Console
+
+重点：
+
+是否：
+
+关键动作有审计
+读操作不污染审计
+Kill Switch 有效
+Gate 9：生产部署准备
+
+检查：
+
+环境变量清单
+migration 流程
+rollback
+CI gate
+seed
+health check
+backup/restore 文档
+Gate 10：最终分类
+
+最终输出：
+
+纯文本
+PRODUCTION CANDIDATE:
+
+A. CODE COMPLETE
+B. INTEGRATION PENDING
+C. REAL VALIDATION PENDING
+D. BLOCKERS
+
+不会因为：
+
+没客户数据
+没真实 API
+没真实追回案例
+
+否定代码完成度。
+
+下一步
+
+请 Codex 提交：
+
+FINAL-GATE-REVIEW.md
+
+建议结构：
+
+当前模块完成矩阵
+Schema 状态
+API 状态
+权限状态
+外部依赖状态
+已知 Pending 清单
+Blocker 清单
+Production Candidate 判定依据
+
+然后进入最终裁决。
+```
