@@ -51906,3 +51906,274 @@ READY FOR REAL VALIDATION INPUT
 
 本切片正式收口。下一步可以继续做离线验证基础设施，但不要进入 API、资金、自动申诉、规则闭环。
 ```
+
+### [MSG-20260929-10] OFFLINE-COMPLETION-6 裁决：PARTIAL APPROVE（Q1 = GO ✅：允许只读导入失败明细端点，只能回 rowNumber / errorCode / errorCategory / field / action，禁止原始业务值、PII、原始文件内容；Q2 = GO DESIGN ONLY ✅：审计日志只读查询需先提交 AUDIT-READ-API-DESIGN.md，含角色可见范围、tenantId scope / event type / time range / actor / correlation id 查询维度，禁止全库与跨租户查询；Q3 = HOLD ⏸️：Web 运营控制台（Import 管理 / Payment 状态 / Reconciliation Dashboard / Audit Viewer）推迟到 C-0016 产品化阶段；本轮离线补强整体 PASS：1 万行导入分块修复、Payment HTTP 安全边界测试、DATABASE_URL 本地 fallback 全部批准；下一步 C-0009.2 VALIDATION-RUN HARNESS 批准继续（Amazon/Shopify/Walmart/TikTok 只做输入统一化，不做平台连接、规则判断、追回金额计算、自动 Claim））
+
+Codex 提交 OFFLINE-COMPLETION-6（1 万行落库基准与事务超时修复、支付运维端点 HTTP 测试、后台核查报告）并就后台数据暴露面提 Q1/Q2/Q3 后，架构方给出本裁决。以下为该回复的**逐字原文**。
+
+```text
+OFFLINE-COMPLETION-6 裁决
+
+状态：
+
+纯文本
+GATE:
+7 Commercial Validation
+
+DECISION:
+PARTIAL APPROVE
+
+CURRENT:
+C-0009.2 VALIDATION-RUN HARNESS CONTINUE
+
+BACKOFFICE EXPANSION:
+按以下裁决执行
+Q1：GET /imports 返回失败明细
+裁决：GO ✅（有限范围）
+
+允许追加：
+
+纯文本
+GET /imports/:id/error-report
+
+或等价只读能力。
+
+但边界：
+
+允许返回：
+
+✅ rowNumber
+✅ errorCode
+✅ errorCategory
+✅ remediation/action
+
+禁止返回：
+
+❌ 原始业务值
+❌ 客户 PII
+❌ 原始文件内容
+❌ 敏感字段
+
+推荐返回：
+
+JSON
+{
+  "rowNumber": 127,
+  "errorCode": "MISSING_REQUIRED_FIELD",
+  "field": "invoiceNo",
+  "action": "manual_confirmation_required"
+}
+
+原因：
+
+这是运营可用性的必要闭环，不属于商业规则扩展。
+
+Q2：AuditLog 只读查询端点
+裁决：GO，但需要 Design First ✅
+
+允许进入设计。
+
+不直接实现。
+
+原因：
+
+审计日志读取涉及：
+
+权限模型
+租户隔离
+数据暴露范围
+脱敏策略
+
+提交：
+
+纯文本
+AUDIT-READ-API-DESIGN.md
+
+要求包含：
+
+权限
+
+例如：
+
+纯文本
+OWNER
+ADMIN
+OPS
+FINANCE
+
+分别能看到什么。
+
+查询范围
+
+必须支持：
+
+tenantId scope
+event type
+time range
+actor
+correlation id
+禁止：
+全库查询
+跨租户查询
+Secret/token 展示
+
+状态：
+
+纯文本
+Audit Read API:
+DESIGN APPROVED
+IMPLEMENTATION WAIT DESIGN REVIEW
+Q3：Web 控制台 /imports /payments /对账页面
+裁决：HOLD ⏸️
+
+暂不进入 Gate 7。
+
+原因：
+
+当前已有：
+
+纯文本
+API能力
++
+测试能力
++
+运营接口基础
+
+但 Web Console 属于：
+
+产品化运营后台
+
+不是当前商业验证核心。
+
+未来进入：
+
+纯文本
+C-0016 Product Operations Console
+
+或并入正式产品化阶段。
+
+包含：
+
+Import 管理
+Payment 状态
+Reconciliation Dashboard
+Audit Viewer
+
+当前不做。
+
+关于本轮离线补强结果
+
+整体评价：
+
+PASS ✅
+
+尤其确认：
+
+1 万行导入修复
+
+批准。
+
+这是基础可靠性修复：
+
+纯文本
+chunk insert
++
+timeout control
++
+idempotency
++
+partial failure tracking
+
+没有改变领域模型。
+
+Payment HTTP 测试
+
+批准。
+
+因为：
+
+你测试的是已有资金域的安全边界。
+
+不是新增资金能力。
+
+DATABASE_URL 本地 fallback
+
+批准。
+
+属于开发体验改善。
+
+下一步 C-0009.2 VALIDATION-RUN HARNESS
+
+批准继续。
+
+范围：
+
+纯文本
+Export File
+    ↓
+Adapter
+    ↓
+Canonical Input
+    ↓
+Validation
+    ↓
+Commercial Review Skeleton
+
+支持：
+
+Amazon
+Shopify
+Walmart
+TikTok
+
+但注意：
+
+这里只做：
+
+输入统一化
+
+不做：
+
+平台连接
+规则判断
+追回金额计算
+自动 Claim
+可归档
+Markdown
+### [MSG-20260929-10]
+
+TYPE:
+OFFLINE COMPLETION DECISION
+
+Q1:
+GO
+
+Import failure read endpoint approved.
+Return only row number/error code/action.
+No raw values.
+
+Q2:
+GO DESIGN ONLY
+
+Audit read API requires design review before implementation.
+
+Q3:
+HOLD
+
+Web operations console deferred to future productization phase.
+
+Offline continuation:
+APPROVED
+
+Next:
+C-0009.2 VALIDATION-RUN HARNESS
+
+No expansion into:
+API connectors,
+payment actions,
+rules,
+automatic submissions,
+schema changes.
+
+继续推进 Harness。当前方向正确。
+```

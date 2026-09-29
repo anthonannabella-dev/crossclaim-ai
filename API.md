@@ -82,9 +82,12 @@ C-0008-B2（Case / Evidence / Claim Draft / Billing）的端点尚未实现。
 | 方法 | 路径 | 成功 |
 |---|---|---|
 | GET | `/imports` | 200 `{ items: [{ id, status, rowsTotal, rowsOk, rowsFailed, startedAt, finishedAt, fileAssetId, connectionId }] }` |
+| GET | `/imports/:id/error-report` | 200 `{ batchId, status, rowsTotal, rowsOk, rowsFailed, failureStage, issues: [{ rowNumber, errorCode, errorCategory, field, action }], issuesTruncated, duplicates, emptyRowsSkipped }`（**只回错误码/行号/动作，不回原始值、PII、原始文件内容**；MSG-20260929-10 Q1） |
 | GET | `/opportunities` | 200 `{ items: [{ id, status, opportunityType, title, amountExpected, amountActual, recoverableAmount, currency, detectedAt }] }`（金额为 4 位小数字符串） |
 
-两者都按会话 `organizationId` 过滤，最多 100 条（默认 20）。非 GET 请求不匹配该处理器，按 404 处理。
+三者都按会话 `organizationId` 过滤，最多 100 条（默认 20）。非 GET 请求不匹配该处理器，按 404 处理。
+
+失败明细端点（架构方 MSG-20260929-10 Q1）只允许返回 `rowNumber / errorCode / errorCategory / field / action`：不回 `message` 自由文本、不回批次 `provenance`（平台名 / 游标 / 平台原始载荷）、不回任何原始业务值；跨租户或不存在的批次一律 404（不区分「不存在」与「无权」）。
 
 ## 机会人工复核（C-0008-B1）
 

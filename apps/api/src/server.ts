@@ -75,6 +75,9 @@ function asciiFilename(filename: string | undefined): string {
 const RFC5987_EXTRA = /[!'()*]/g;
 
 /** C-0008-B1 / B2-1：工作流端点路径（机会复核 qualify|reject、建案 case、连接管理），其余路径走默认 404。 */
+/** MSG-20260929-10 Q1：导入失败明细只读端点（脱敏投影，见 services/auth/data-routes.ts）。 */
+const IMPORT_ERROR_REPORT_PATH = /^\/imports\/[^/]+\/error-report$/;
+
 const WORKFLOW_PATH =
   /^(?:\/opportunities\/(?:insights(?:\.csv)?|[^/]+\/(?:qualify|reject|case|basis))|\/connections(?:\/[^/]+\/(?:status|credential-ref))?|\/cases(?:\/[^/]+\/(?:commercial-terms|recovery-outcome|recovery-review|appeal-package|claim|evidence)|\/[^/]+)?|\/billing(?:\/[^/]+\/status)?|\/commissions\/reconcile|\/payments(?:\/webhook|\/reconciliation(?:\.csv)?|\/events\/[^/]+\/replay|\/processing\/retry-due)?)$/;
 
@@ -181,7 +184,12 @@ export function createServer(deps: ServerDeps): http.Server {
     }
 
     // C-0008-A 内部只读数据端点（导入批次 / 追回机会），同样仅面向内部 Web
-    if (auth && (url === '/imports' || url === '/opportunities')) {
+    if (
+      auth &&
+      (url === '/imports' ||
+        url === '/opportunities' ||
+        IMPORT_ERROR_REPORT_PATH.test(url.split('?')[0] ?? ''))
+    ) {
       handleDataRequest(req, res, { prisma, session: auth.session })
         .then((handled) => {
           if (!handled) send(404, { error: 'not_found' });

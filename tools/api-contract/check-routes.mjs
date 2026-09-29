@@ -8,6 +8,7 @@
  *   1. services/workflow/http-routes.ts  —— 业务路由（正则常量）
  *   2. services/auth/http-routes.ts      —— 认证路由（path === '/auth/...'）
  *   3. server.ts                         —— 健康检查等顶层路由（url === '/health'）
+ *   4. services/auth/data-routes.ts      —— 只读数据路由（正则常量，如 /imports/:id/error-report）
  *
  * 退出码：0 = 一致；1 = 有漂移（未文档化的实现 / 未实现的文档）；2 = 用法或读文件错误。
  */
@@ -153,11 +154,13 @@ function main() {
   let workflowSource;
   let authSource;
   let serverSource;
+  let dataSource;
   try {
     apiMd = read('API.md');
     workflowSource = read('apps/api/src/services/workflow/http-routes.ts');
     authSource = read('apps/api/src/services/auth/http-routes.ts');
     serverSource = read('apps/api/src/server.ts');
+    dataSource = read('apps/api/src/services/auth/data-routes.ts');
   } catch (error) {
     console.error(`读取失败：${error instanceof Error ? error.message : 'unknown'}`);
     process.exit(2);
@@ -166,6 +169,7 @@ function main() {
   const documented = documentedRoutes(apiMd);
   const implemented = new Map([
     ...workflowRoutes(workflowSource),
+    ...workflowRoutes(dataSource),
     ...literalRoutes(authSource, 'path'),
     ...literalRoutes(serverSource, 'url'),
   ]);
