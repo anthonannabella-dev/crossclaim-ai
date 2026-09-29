@@ -55595,3 +55595,363 @@ CONTINUE PRODUCTION CANDIDATE BUILD
 
 这三个不能通过“代码完成”替代。
 ```
+
+### [MSG-20260929-21] CLAIM-TRACKING-DESIGN 裁决：GO ✅（GO_DESIGN_APPROVED / STATUS = READY_FOR_SCHEMA_REVIEW）——批准生命周期设计、时间轴投影、外部引用处理、Deadline 来源纪律、HITL 批准流程、CAS 幂等、只读接口；NEXT = 提交 CLAIM-TRACKING-SCHEMA-DELTA-REQUEST；未批准：migration、implementation、external polling、auto submission、payment automation
+
+Codex 按 MSG-20260929-20 提交 CLAIM-TRACKING-DESIGN.md 后，架构方判定设计通过并要求下一步提交 Schema Delta Request。以下为该回复的逐字原文。
+
+```text
+CLAIM-TRACKING-DESIGN 裁决
+结论：GO ✅
+
+状态：
+
+纯文本
+GATE:
+7 Commercial Validation
+
+DESIGN:
+CLAIM-TRACKING-DESIGN
+
+DECISION:
+GO_DESIGN_APPROVED
+
+NEXT:
+Schema Delta Request (S1-S5) REQUIRED BEFORE IMPLEMENTATION
+审计结论
+
+该设计符合 MSG-20260929-20：
+
+Claim Tracking = DESIGN-FIRST
+
+并且没有越过冻结边界。
+
+通过。
+
+一、整体架构判断 ✅
+
+当前设计正确识别了核心问题：
+
+不是缺少更多状态。
+
+而是缺少：
+
+纯文本
+Claim State
+
++
+
+Timeline
+
++
+
+External Reference
+
++
+
+Deadline Evidence
+
+当前已有：
+
+Claim 状态
+Appeal 状态
+Recovery Outcome
+
+继续复用正确。
+
+不建议重新建立：
+
+纯文本
+ClaimTracking
+ClaimHistory
+ClaimStatusLog
+
+等重复模型。
+
+二、生命周期设计审计 ✅
+1. DRAFT → SUBMITTED
+
+要求人工批准证据。
+
+通过。
+
+保持：
+
+纯文本
+AI Prepare
+
+↓
+
+Human Approve
+
+↓
+
+Submit
+2. 终态不可回退
+
+通过。
+
+设计：
+
+纯文本
+Terminal
+
+↓
+
+Correction
+
+↓
+
+round +1
+
+正确。
+
+不要直接：
+
+纯文本
+PAID
+ ↓
+SUBMITTED
+3. dueAt 来源约束
+
+通过。
+
+这是关键。
+
+正确：
+
+纯文本
+unknown deadline
+
+↓
+
+null
+
+↓
+
+ACTION
+
+禁止：
+
+纯文本
+AI猜30天
+4. PARTIALLY_APPROVED
+
+通过。
+
+要求：
+
+必须：
+
+纯文本
+responseAmount
+
+才能进入 recovery-outcome。
+
+合理。
+
+三、Timeline 设计审计 ✅
+使用 AuditLog 投影
+
+批准。
+
+这是正确方向。
+
+纯文本
+AuditLog
++
+Claim fields
++
+Artifact state
+
+↓
+
+ClaimTimelineEntry
+
+避免：
+
+新增重复历史表。
+
+四、Schema Delta 预审
+
+允许提交。
+
+但当前：
+
+未批准 migration。
+
+需要下一步：
+
+提交：
+
+纯文本
+CLAIM-TRACKING-SCHEMA-DELTA-REQUEST.md
+
+逐项说明。
+
+预审意见：
+
+S1 platformCaseRef
+原则批准
+
+需要明确：
+
+唯一性范围
+是否允许空
+多平台格式差异
+S2 deadlineSource
+原则批准
+
+建议枚举。
+
+不要自由文本。
+
+例如：
+
+纯文本
+PLATFORM_NOTICE
+USER_INPUT
+CONTRACT
+UNKNOWN
+S3 approvedByUserId / approvedAt
+原则批准
+
+符合 Human Gate。
+
+S4 terminalReasonCode
+原则批准
+
+必须：
+
+enum
+
+禁止：
+
+自由填写。
+
+S5 复合索引
+原则批准
+
+需要说明：
+
+查询场景：
+
+纯文本
+organizationId
+status
+dueAt
+五、幂等设计审计 ✅
+
+通过。
+
+尤其：
+
+CAS 状态迁移
+
+正确。
+
+例如：
+
+纯文本
+update where:
+
+claimId=X
+
+AND
+
+status=SUBMITTED
+
+避免并发状态污染。
+
+外部回执幂等
+
+通过：
+
+纯文本
+organizationId
++
+platformCaseRef
+
+符合未来多租户。
+
+六、只读接口设计
+
+通过。
+
+允许作为未来：
+
+Dashboard
+Admin
+Notification
+
+基础。
+
+但：
+
+当前不实现 UI。
+
+七、明确不做项
+
+全部确认：
+
+纯文本
+轮询平台              HOLD
+自动判胜负            FORBIDDEN
+自动超时关闭          FORBIDDEN
+自动生成申诉文本      未进入本设计
+自动提交              FORBIDDEN
+自动扣佣              HOLD
+下一步批准
+
+允许提交：
+
+CLAIM-TRACKING-SCHEMA-DELTA-REQUEST
+
+但注意：
+
+提交 ≠ 批准。
+
+Schema Delta 审核重点：
+
+是否真的缺字段
+是否破坏现有模型
+migration 可回滚
+幂等策略明确
+多租户隔离不受影响
+归档
+Markdown
+### [MSG-20260929-21]
+
+TYPE:
+DESIGN DECISION
+
+TARGET:
+CLAIM-TRACKING-DESIGN
+
+DECISION:
+GO_DESIGN_APPROVED
+
+Validated:
+- lifecycle design
+- timeline projection
+- external reference handling
+- deadline source discipline
+- HITL approval flow
+- CAS idempotency
+- read model interfaces
+
+Next:
+Submit CLAIM-TRACKING-SCHEMA-DELTA-REQUEST
+
+Not approved:
+- migration
+- implementation
+- external polling
+- auto submission
+- payment automation
+
+STATUS:
+READY_FOR_SCHEMA_REVIEW
+
+可以进入 Schema Delta 评审。当前设计方向正确。
+```
