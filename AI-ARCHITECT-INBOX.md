@@ -64677,3 +64677,171 @@ Import → Normalize → Validate → Candidate → Human Verify
 
 Codex 可以更新 Phase1 文档后等待宿主数据。
 ```
+
+### [MSG-20260929-45] PHASE1-CRITERIA-APPLIED 裁决：文档提交合并 GO（快进 3a267e6 → main）+ Phase 1 补充 4 个细化项（完整性等式 / Candidate 可追溯 / False Positive 分类 / Decision Gate）
+
+```text
+PHASE1-CRITERIA-APPLIED 裁决
+1) 文档提交合并：GO ✅
+
+批准：
+
+纯文本
+gate/7-commercial-validation
+        ↓
+      main
+
+原因：
+
+本次变更属于：
+
+Phase 1 验证规范同步
+文档标准更新
+无代码语义变化
+无 Schema 变化
+无权限变化
+无生产行为变化
+
+因此允许快进合并。
+
+保持规则：
+
+不 force push
+不绕过保护
+CI 通过后合并
+2) Phase 1 验收标准：现有标准足够，补充 4 个细化项
+
+当前标准已经覆盖：
+
+数据进入
+数据质量
+候选发现
+人工验证
+
+不需要扩大范围。
+
+补充以下细节即可。
+
+补充 A：数据完整性基线
+
+Stage A 增加：
+
+Import Integrity Check
+
+必须记录：
+
+纯文本
+input rows
+=
+normalized rows
++
+quarantine rows
++
+rejected rows
+
+不允许：
+
+纯文本
+输入10000行
+
+输出9000行
+
+无解释
+补充 B：Candidate 必须可追溯
+
+每一个 Candidate 必须包含：
+
+纯文本
+candidate_id
+
+source_file_hash
+
+source_row_reference
+
+normalized_fact_reference
+
+evidence_reference
+
+created_reason
+
+目的：
+
+以后人工复核时可以回答：
+
+为什么系统认为这是一个候选？
+
+补充 C：False Positive 分析必须分类
+
+不要只记录：
+
+FALSE POSITIVE
+
+建议分类：
+
+类别	说明
+数据误解	字段含义理解错误
+规则缺失	需要额外业务规则
+业务合理	实际没有损失
+数据不足	缺关键字段
+
+这样后续优化 Adapter / Rule Engine 有价值。
+
+补充 D：Phase 1 退出条件
+
+增加：
+
+Phase 1 Decision Gate
+
+验证结束后只能进入三个状态：
+
+纯文本
+PASS_TO_MVP
+
+继续采集数据
+
+STOP / REWORK
+
+不要直接进入：
+
+自动追回
+自动提交
+收费
+3) 保持冻结项
+
+再次确认：
+
+Phase 1 不开放：
+
+功能	状态
+自动 Claim 提交	FORBIDDEN
+平台 API 接入	HOLD
+自动计算追回金额	HOLD
+自动扣佣	HOLD
+自动资金流转	HOLD
+HS Code 判断	HOLD
+物流 SLA 规则判定	HOLD
+当前状态确认
+纯文本
+CrossClaim AI
+
+MAIN:
+等待 3a267e6 合并
+
+CODE:
+Production Candidate
+
+PHASE1:
+Approved
+
+WAIT:
+真实脱敏数据
+
+NEXT:
+RD-01 Shopify Validation
+
+下一步无需继续扩展代码。
+
+重点转向：
+
+拿第一批真实 Shopify 数据，验证整个价值链是否成立。
+```

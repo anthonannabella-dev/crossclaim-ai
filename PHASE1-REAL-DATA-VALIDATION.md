@@ -99,3 +99,64 @@ RD-01 Shopify Orders Export：
 2. 生成候选线索列表（仅事实与依据，不含金额承诺）→ Stage B。
 3. 人工逐条确认并分类 → Stage C + Value Discovery Rate。
 4. 产出 `PHASE1-RESULT.md`，交架构方裁决是否进入 Phase 2（建议单场景：FBA/物流退款审计）。
+
+## 9. MSG-20260929-45 细化项（Phase 1 验收补充）
+
+### 9.1 补充 A — 数据完整性基线（Import Integrity Check）
+
+Stage A 必须记录并满足等式：
+
+```
+input rows = normalized rows + quarantine rows + rejected rows
+```
+
+**不允许**「输入 10000 行 → 输出 9000 行且无解释」。
+
+### 9.2 补充 B — Candidate 必须可追溯
+
+每个 Candidate 必须包含：
+
+```
+candidate_id
+source_file_hash
+source_row_reference
+normalized_fact_reference
+evidence_reference
+created_reason
+```
+
+目的：人工复核时能回答「为什么系统认为这是一个候选？」
+
+### 9.3 补充 C — False Positive 必须分类
+
+| 类别 | 说明 |
+|---|---|
+| 数据误解 | 字段含义理解错误 |
+| 规则缺失 | 需要额外业务规则 |
+| 业务合理 | 实际没有损失 |
+| 数据不足 | 缺关键字段 |
+
+### 9.4 补充 D — Phase 1 退出条件（Decision Gate）
+
+验证结束后只能进入以下三个状态之一：
+
+```
+PASS_TO_MVP
+继续采集数据
+STOP / REWORK
+```
+
+不得直接进入：自动追回 / 自动提交 / 收费。
+
+### 9.5 冻结项（Phase 1 不开放）
+
+| 功能 | 状态 |
+|---|---|
+| 自动 Claim 提交 | FORBIDDEN |
+| 平台 API 接入 | HOLD |
+| 自动计算追回金额 | HOLD |
+| 自动扣佣 | HOLD |
+| 自动资金流转 | HOLD |
+| HS Code 判断 | HOLD |
+| 物流 SLA 规则判定 | HOLD |
+
