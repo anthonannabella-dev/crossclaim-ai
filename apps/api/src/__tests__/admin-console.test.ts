@@ -48,7 +48,12 @@ describe('MSG-34 · D1 角色分层（最小权限）', () => {
       expect((error as WorkflowError).code).toBe('FORBIDDEN');
     }
     expect(Object.keys(adminVisibilityFor('OWNER'))).toEqual([...ADMIN_MODULES]);
-    expect(adminVisibilityFor('OPS')).toEqual({ tenantOverview: false, auditExplorer: false, systemHealth: true });
+    expect(adminVisibilityFor('OPS')).toEqual({
+      tenantOverview: false,
+      auditExplorer: false,
+      importValidation: true,
+      systemHealth: true,
+    });
   });
 });
 

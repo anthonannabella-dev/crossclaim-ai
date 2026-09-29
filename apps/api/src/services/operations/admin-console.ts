@@ -20,7 +20,7 @@ import { permissionsFor } from '../workflow/permissions';
 
 // ---------------------------------------------------------------- 访问控制（D1 角色分层）
 
-export const ADMIN_MODULES = ['tenantOverview', 'auditExplorer', 'systemHealth'] as const;
+export const ADMIN_MODULES = ['tenantOverview', 'auditExplorer', 'importValidation', 'systemHealth'] as const;
 export type AdminModule = (typeof ADMIN_MODULES)[number];
 
 /**
@@ -31,6 +31,7 @@ export type AdminModule = (typeof ADMIN_MODULES)[number];
 export const ADMIN_MODULE_ROLES: Record<AdminModule, readonly string[]> = {
   tenantOverview: ['OWNER', 'ADMIN'],
   auditExplorer: ['OWNER', 'ADMIN'],
+  importValidation: ['OWNER', 'ADMIN', 'OPS'],
   systemHealth: ['OWNER', 'ADMIN', 'OPS'],
 };
 
