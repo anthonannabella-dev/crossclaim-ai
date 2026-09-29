@@ -57119,3 +57119,334 @@ WAITING_REVISION
 
 整体设计方向正确，主要问题是 Confirmation（确认事实）和 Reconciliation（到账事实）被压进一个状态字段。这个现在修正，比上线后拆状态成本低很多。
 ```
+
+### [MSG-20260929-25] CLAIM-TRACKING-PROJECTION-CHECKPOINT 裁决：PASS ✅（CLAIM TRACKING READ MODEL READY）——只读投影通过（schema 迁移 S1-S5、时间轴投影、不变量校验、回收确认闸门、到期投影）；权限裁决 A1 GO：新增专用权限键 claimTrackingApprove（OWNER/ADMIN）与 claimTrackingReceive（OWNER/ADMIN/OPS），A2 不适用（拒绝复用不相关权限）；限制不变：无自动提交、无支付自动化、无平台轮询
+
+Codex 提交 CLAIM-TRACKING-PROJECTION-CHECKPOINT（只读投影实现 + 权限位 A1/A2 问题）后，架构方判定通过并批准新增专用权限键。以下为该回复的逐字原文。
+
+```text
+CLAIM-TRACKING-PROJECTION-CHECKPOINT 裁决
+总体结论
+只读投影实现：
+PASS ✅
+权限问题：
+A1 GO ✅（新增专用权限键）
+
+状态：
+
+纯文本
+GATE:
+7 Commercial Validation
+
+TARGET:
+Claim Tracking Projection
+
+DECISION:
+PASS
+
+AUTH:
+NEW CLAIM TRACKING PERMISSIONS APPROVED
+一、本轮实现审计
+结论：通过
+
+当前实现符合 MSG-20260929-23：
+
+Schema 已扩展，先实现只读投影与验证，不扩张写路径。
+
+1. Timeline 设计
+
+通过 ✅
+
+采用：
+
+纯文本
+AuditLog
++
+Claim fields
+
+↓
+
+ClaimTimelineProjection
+
+符合之前批准方向。
+
+没有新增：
+
+ClaimHistory 表
+TrackingEvent 表
+
+避免重复事实源。
+
+2. AuditLog 权威原则
+
+通过 ✅
+
+这是正确选择。
+
+时间线：
+
+纯文本
+Business Event
+
+↓
+
+AuditLog
+
+↓
+
+Projection
+
+而不是：
+
+纯文本
+Business Event
+
+↓
+
+Duplicate Timeline Table
+3. Invariants 检查
+
+通过。
+
+I1
+纯文本
+dueAt != null
+
+⇒
+
+deadlineSource != null
+
+正确。
+
+I2
+
+终局批准留痕。
+
+通过。
+
+I3
+
+部分批准金额约束。
+
+通过。
+
+I4
+
+终局原因限制。
+
+通过。
+
+I5
+
+终局不得保留开放 deadline。
+
+通过。
+
+4. Recovery Outcome Gate
+
+通过。
+
+当前：
+
+纯文本
+APPROVED
+
+或
+
+PARTIALLY_APPROVED + responseAmount
+
+↓
+
+允许进入 recovery outcome
+
+符合 MSG-20260929-22。
+
+5. Expiring Claims
+
+通过。
+
+要求：
+
+非终局
+到期窗口
+升序
+
+合理。
+
+二、A1 权限裁决
+A1：新增两个权限键
+结论：GO ✅
+
+批准。
+
+不要复用：
+
+setCommercialTerms
+
+等无关权限。
+
+你的判断正确。
+
+原因：
+
+权限必须表达业务语义。
+
+当前需要区分：
+
+纯文本
+商业配置权限
+
+≠
+
+Claim 生命周期权限
+
+批准：
+
+Permission 1
+纯文本
+claimTrackingApprove
+
+权限：
+
+OWNER
+ADMIN
+
+用途：
+
+提交批准
+终局确认
+状态推进关键节点
+Permission 2
+纯文本
+claimTrackingReceive
+
+权限：
+
+OWNER
+ADMIN
+OPS
+
+用途：
+
+录入外部回执
+更新平台反馈信息
+登记到账相关事件（非财务确认）
+判终局
+
+复用：
+
+纯文本
+claimTrackingApprove
+
+正确。
+
+不新增第三个权限。
+
+三、权限实现要求
+
+新增权限必须保持：
+
+Fail Closed
+
+即：
+
+未知角色：
+
+纯文本
+DENY
+
+必须审计：
+
+包括：
+
+谁
+什么时间
+哪个 Claim
+原状态
+新状态
+四、关于 Recovery Confirmation Delta
+
+记录：
+
+当前状态：
+
+纯文本
+RECOVERY-CONFIRMATION-SCHEMA-DELTA
+
+STATUS:
+WAITING_REVISION
+
+不影响 Claim Tracking。
+
+两个方向可以并行。
+
+五、下一步批准
+
+允许继续：
+
+实现 Claim Tracking 写路径（在权限新增后）
+提交权限 Delta
+提交测试
+
+但限制：
+
+不允许：
+
+❌ 自动提交平台
+❌ 平台轮询
+❌ 自动判胜负
+❌ 自动扣佣
+
+最终归档
+Markdown
+### [MSG-20260929-25]
+
+TYPE:
+IMPLEMENTATION CHECKPOINT DECISION
+
+TARGET:
+CLAIM-TRACKING-PROJECTION-CHECKPOINT
+
+DECISION:
+PASS
+
+Validated:
+- schema migration S1-S5
+- timeline projection
+- invariant checks
+- recovery outcome gate
+- expiring claims projection
+
+AUTH DECISION:
+
+A1:
+GO
+
+Add:
+claimTrackingApprove
+claimTrackingReceive
+
+Mapping:
+
+claimTrackingApprove:
+OWNER/ADMIN
+
+claimTrackingReceive:
+OWNER/ADMIN/OPS
+
+
+A2:
+Not applicable.
+
+No reuse of unrelated permissions.
+
+Restrictions:
+- no auto submission
+- no payment automation
+- no platform polling
+
+STATUS:
+CLAIM TRACKING READ MODEL READY
+
+本轮实现通过。权限设计也批准进入正式 Delta。
+```
