@@ -107,6 +107,30 @@ jobs:
       - name: Deployment smoke (docker, fresh install + upgrade)
         run: node tools/smoke/deploy-smoke.mjs
 
+  backup-verify:
+    name: Backup restore verify · synthetic dataset
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: apps/api/package-lock.json
+
+      - name: Install dependencies (api)
+        working-directory: apps/api
+        run: npm ci --no-audit --no-fund
+
+      - name: Generate Prisma Client
+        working-directory: apps/api
+        run: npx prisma generate
+
+      # P2-2（MSG-20260929-71 Q2）：合成数据 + 临时容器；dump 只在容器内，禁止 upload artifact
+      - name: Backup / restore verification (docker, synthetic)
+        run: node tools/backup-verify/run-synthetic-backup-verify.mjs
+
   license-gate:
     name: 许可证闸门
     runs-on: ubuntu-latest
