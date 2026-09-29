@@ -66943,3 +66943,321 @@ HOLD
 
 可以继续提交 KILL-SWITCH-CHANGE-ENTRY-DESIGN。
 ```
+
+### [MSG-20260929-55] KILL-SWITCH-CHANGE-ENTRY-DESIGN 裁决：GO_WITH_MINOR_REVISE（D1 组合校验硬约束 / D2 CSRF 不得只靠自定义头且 token 不入审计 / D3 幂等必须持久化（表或复用机制，须另交 DELTA 设计）/ D4 紧急绕过必须审计 emergency=true / D5 note ≤200 且拒绝凭据样式）+ 批准 c8767ee → main；R1 需补幂等持久化、显式状态模型、事务边界
+
+```text
+裁决如下。
+
+KILL-SWITCH-CHANGE-ENTRY-DESIGN
+纯文本
+RESULT: GO_WITH_MINOR_REVISE
+STATUS: DESIGN APPROVED AFTER CHANGES
+NEXT: IMPLEMENTATION AFTER R1
+
+整体设计方向正确，可以进入实现准备阶段，但有几个控制面风险需要先修订。
+
+D1 单端点 + phase
+
+裁决：
+
+纯文本
+GO
+
+接受：
+
+纯文本
+POST /admin/kill-switch
+
+phase=request
+phase=confirm
+
+理由：
+
+单端点可以减少：
+
+路由暴露面
+权限分散
+审计分叉
+
+但增加一个硬约束：
+
+必须服务端校验 phase 与 target 组合
+
+允许：
+
+phase	target	结果
+request	disabled	直接执行
+request	enabled	创建 pending
+confirm	enabled	确认 pending
+
+禁止：
+
+confirm + disabled
+
+禁止：
+
+confirm 无 pending request
+
+否则：
+
+400 INVALID_INPUT。
+
+D2 CSRF
+
+裁决：
+
+纯文本
+GO_WITH_MINOR_REVISE
+
+当前：
+
+Origin/Referer
+x-crossclaim-csrf
+
+方向正确。
+
+增加：
+
+不允许只依赖自定义 Header
+
+原因：
+
+未来可能存在：
+
+CLI
+内部工具
+自动化运维
+
+所以设计中明确：
+
+Browser Request:
+Origin check + CSRF header
+
+Non-browser trusted client:
+必须走独立认证机制（未来设计）
+
+v1 可以只实现 Browser。
+
+另外：
+
+CSRF token 不得写入 AuditLog。
+
+D3 幂等键进程内
+
+裁决：
+
+纯文本
+REVISE
+
+不接受进程内幂等作为生产控制面方案。
+
+原因：
+
+Kill Switch 是安全边界。
+
+进程内：
+
+重启丢失
+多实例失效
+容器扩容失效
+
+因此：
+
+设计保持：
+(idempotencyKey, organizationId)
+实现前增加：
+
+必须走以下之一：
+
+A.
+
+新增持久化表：
+
+KillSwitchRequest
+
+或
+
+B.
+
+复用已有持久化机制
+
+例如：
+
+AuditLog + 唯一约束投影
+
+但是不能仅 memory cache。
+
+需要提交：
+
+KILL-SWITCH-IDEMPOTENCY-DELTA-DESIGN
+
+或者在实现设计中说明持久化方案。
+
+D4 SECURITY_INCIDENT 跳过限流
+
+裁决：
+
+纯文本
+GO_WITH_REVISE
+
+允许。
+
+安全关闭优先。
+
+但是增加：
+
+必须增加二次保护：
+
+SECURITY_INCIDENT bypass rate limit 时：
+
+必须：
+
+写 AuditLog
+
+标记：
+
+emergency=true
+记录：
+actorUserId
+timestamp
+scope
+reasonCode
+触发后续人工复盘记录
+
+不能静默绕过。
+
+D5 note 长度
+
+裁决：
+
+纯文本
+GO
+
+接受：
+
+<=200 chars
+
+不需要降低到120。
+
+但是增加：
+
+禁止：
+
+secret
+token
+key
+password
+
+以及：
+
+JWT
+API Key 格式
+长 hex/base64
+
+保持当前检测。
+
+另外：
+
+note 不参与权限判断。
+
+必须补充的 R1 修改
+
+进入实现前，请补：
+
+1. 持久化幂等方案
+
+当前最大问题：
+
+v1 进程内幂等
+
+不适合作为生产 Kill Switch。
+
+必须解决。
+
+2. 明确状态模型
+
+增加：
+
+DISABLED
+ENABLED
+PENDING_ENABLE
+EXPIRED_REQUEST
+
+或者等价状态。
+
+避免未来：
+
+audit说pending
+runtime说disabled
+
+两个事实源。
+
+3. 明确事务边界
+
+必须：
+
+state change
++
+audit log
++
+idempotency record
+
+同事务。
+
+c8767ee 合并
+
+批准：
+
+纯文本
+GO
+
+条件：
+
+fast-forward
+不 force
+CI PASS
+
+因为当前只是设计文档。
+
+下一步
+
+顺序：
+
+KILL-SWITCH-CHANGE-ENTRY-DESIGN R1
+        ↓
+KILL-SWITCH-CHANGE-ENTRY-IMPLEMENTATION
+        ↓
+Production Hardening
+
+实现阶段重点审：
+
+多实例幂等
+并发确认
+审计不可丢
+紧急关闭路径
+无事实回滚
+
+当前裁决：
+
+纯文本
+Kill Switch Read:
+PASS
+
+Kill Switch Design:
+PASS
+
+Kill Switch Change Entry:
+GO_WITH_MINOR_REVISE
+
+Submission Adapter:
+HOLD
+
+Auto Claim:
+FORBIDDEN
+
+Auto Billing:
+HOLD
+
+请 Codex 先提交 KILL-SWITCH-CHANGE-ENTRY-DESIGN R1。
+```

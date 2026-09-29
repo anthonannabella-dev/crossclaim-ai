@@ -127,3 +127,51 @@ changes = {
 - **D3**：幂等键 `(organizationId, idempotencyKey)` 进程内实现（不建表）是否接受？
 - **D4**：`reasonCode=SECURITY_INCIDENT` 时跳过速率限制（紧急关闭优先）是否接受？
 - **D5**：note 约束阈值（≤200 字符 + 凭据样式拒绝）是否接受，是否需要更严格（例如 ≤120 字符）？
+
+---
+
+## 11. R1 修订（按架构方 MSG-20260929-55）
+
+### 11.1 D1 硬约束：服务端校验 phase × target 组合
+
+| phase | target | 结果 |
+|---|---|---|
+| `request` | `disabled` | 直接执行（OWNER 单人） |
+| `request` | `enabled` | 创建 PENDING_ENABLE |
+| `confirm` | `enabled` | 确认 PENDING_ENABLE |
+
+**禁止**：`confirm + disabled`；`confirm` 且无 pending request → 一律 `400 INVALID_INPUT`。
+
+### 11.2 D2 CSRF：不得只依赖自定义头
+
+- 浏览器路径：`Origin`/`Referer` 同源校验 **+** `x-crossclaim-csrf: 1`（v1 只实现浏览器路径）。
+- 非浏览器可信客户端（CLI / 内部工具 / 自动化运维）：**必须走独立认证机制**（未来单独设计），不得复用浏览器 Cookie 路径。
+- **CSRF token 不得写入 AuditLog**。
+
+### 11.3 D3 幂等：必须持久化（进程内不可接受）
+
+`(organizationId, idempotencyKey)` 是**控制面**幂等键，进程内实现会因重启/多实例/扩容失效，**不接受**。实现前必须在下列二者中择一并在实现设计中写明：
+
+- **A**：新增持久化表 `KillSwitchRequest`（含 scope / target / phase / 状态 / 过期时间 / idempotencyKey 唯一约束）→ 需 **Schema Delta 审批**；
+- **B**：复用既有持久化机制（例如以 `AuditLog` + 唯一约束投影推导）→ 需说明并发与唯一性问题。
+
+→ 先提交 **KILL-SWITCH-IDEMPOTENCY-DELTA-DESIGN**（或在实现设计中给出等价方案）后再实现。
+
+### 11.4 D4 紧急绕过限流必须留痕
+
+`reasonCode=SECURITY_INCIDENT` 允许跳过速率限制，但**不得静默**：
+
+- 必须写 AuditLog，并在 `changes` 标记 `emergency: true`；
+- 记录 `actorUserId` / `timestamp` / `scope` / `reasonCode`；
+- 触发后续人工复盘记录（进入 OPERATIONS.md 事件记录，模板另附）。
+
+### 11.5 D5 note 约束维持
+
+≤200 字符；拒绝 `secret` / `token` / `key` / `password` 及 JWT、API Key 形态、长 hex/base64；`note` **不参与任何权限判断**。
+
+### 11.6 R1 必补三项
+
+1. **持久化幂等方案**（见 §11.3，含 DELTA 设计或等价说明）；
+2. **显式状态模型**：`DISABLED` / `ENABLED` / `PENDING_ENABLE` / `EXPIRED_REQUEST`，并与读取层保持一致，避免「审计说 pending、运行时说 disabled」双事实源；
+3. **事务边界**：状态变更 + 审计写入 + 幂等记录写入**同一事务**（幂等记录未持久化前不得对外返回成功）。
+
