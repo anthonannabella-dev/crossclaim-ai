@@ -55167,3 +55167,431 @@ REAL VALIDATION
 
 本阶段收口。当前系统已经具备进行真实商业验证的完整“安全外壳”。
 ```
+
+### [MSG-20260929-20] BRIDGE-SCOPE-PRODUCTION-CANDIDATE 裁决：接受新的推进方式（状态模型切换为 CODE COMPLETENESS / INTEGRATION PENDING / PRODUCTION VALIDATION PENDING 三轨）；允许继续把产品做到 Production Candidate，但三条红线不变：自动提交 = 未批准、自动扣佣 = 未批准、真实追回效果 = 等 Production Validation，这三项不能用「代码完成」替代
+
+Codex 按宿主新指令提交 BRIDGE-SCOPE-PRODUCTION-CANDIDATE（三轨状态模型 + REAL-DATA-VALIDATION-BACKLOG + Adapter-only 原则 + 目标模块逐项裁决请求）后，架构方给出本裁决。以下为该回复的逐字原文。
+
+```text
+BRIDGE-SCOPE-PRODUCTION-CANDIDATE 裁决
+总体结论
+
+接受新的推进方式。
+
+从当前开始，状态模型切换为：
+
+纯文本
+CODE COMPLETENESS
+        ≠
+PRODUCTION VALIDATION
+
+即：
+
+可以继续把产品工程推进到 Production Candidate。
+
+真实数据、真实 API、真实客户、真实资金验证不再作为代码完成阻塞条件。
+
+Q1：三轨状态是否取代“等待真实数据”？
+裁决：GO ✅
+
+确认。
+
+后续统一采用：
+
+纯文本
+CODE PASS
+
+=
+代码能力已完成
+
+
+INTEGRATION PENDING
+
+=
+等待外部系统/API/账号
+
+
+PRODUCTION VALIDATION PENDING
+
+=
+等待真实业务验证
+
+但是补充：
+
+三轨不是降低标准。
+
+含义：
+
+例如：
+
+纯文本
+Claim Submission
+
+CODE PASS
+✅ Payload Builder完成
+
+INTEGRATION PENDING
+⏳ 平台API未接
+
+PRODUCTION VALIDATION PENDING
+⏳ 未验证真实提交成功率
+
+不能写成：
+
+“已支持自动提交”。
+
+Q2：REAL-DATA-VALIDATION-BACKLOG.md 是否作为唯一登记处？
+裁决：GO ✅
+
+确认。
+
+以后真实依赖统一进入：
+
+纯文本
+REAL-DATA-VALIDATION-BACKLOG.md
+
+每项必须包含：
+
+字段	要求
+依赖名称	是什么
+来源	客户/API/平台
+验证目标	验证什么
+当前模拟覆盖	做到哪里
+风险	缺什么
+上线前验收	通过标准
+
+这样避免：
+
+隐性依赖
+重复追踪
+遗漏上线条件
+Q3：Adapter-only 替换原则？
+裁决：GO ✅
+
+确认作为架构原则。
+
+即：
+
+核心领域：
+
+纯文本
+Claim
+Evidence
+Review
+Billing
+Audit
+
+不依赖：
+
+Amazon API
+Shopify API
+CSV格式
+浏览器自动化
+
+结构：
+
+纯文本
+External Source
+
+↓
+
+Adapter Layer
+
+↓
+
+Canonical Domain Model
+
+↓
+
+Business Flow
+
+正确。
+
+四、目标模块裁决
+B组：设计先行模块
+1. Claim Tracking
+裁决：DESIGN-FIRST ✅
+
+需要：
+
+纯文本
+CLAIM-TRACKING-DESIGN.md
+
+原因：
+
+涉及：
+
+状态机
+平台状态映射
+时间线
+人工介入
+
+禁止直接创建大量状态字段。
+
+2. Recovery Confirmation
+裁决：DESIGN-FIRST ✅
+
+需要：
+
+纯文本
+RECOVERY-CONFIRMATION-DESIGN.md
+
+重点：
+
+区分：
+
+纯文本
+Detected
+Candidate
+Submitted
+Approved
+Paid
+Confirmed
+
+不要混成：
+
+“追回成功”。
+
+3. Notifications
+裁决：DESIGN-FIRST ✅
+
+需要：
+
+纯文本
+NOTIFICATION-DESIGN.md
+
+范围：
+
+允许设计：
+
+事件
+模板
+接收人
+
+暂不要求：
+
+邮件服务
+短信
+企业微信
+4. Dashboard
+裁决：DESIGN-FIRST ✅
+
+需要：
+
+纯文本
+OPERATIONS-DASHBOARD-DESIGN.md
+
+但注意：
+
+Dashboard 不等于运营后台开发。
+
+先定义：
+
+指标
+权限
+数据来源
+5. Admin
+裁决：DESIGN-FIRST ✅
+
+需要：
+
+纯文本
+ADMIN-CONSOLE-DESIGN.md
+
+包含：
+
+Tenant
+User
+RBAC
+Audit
+Config
+B组总结
+纯文本
+Claim Tracking          DESIGN-FIRST
+Recovery Confirmation   DESIGN-FIRST
+Notifications           DESIGN-FIRST
+Dashboard               DESIGN-FIRST
+Admin                   DESIGN-FIRST
+C组：强 gated 模块
+1. Schema Delta
+裁决：
+DESIGN-FIRST ⏸️
+
+不是 HOLD。
+
+原因：
+
+可以设计。
+
+不能迁移。
+
+需要：
+
+纯文本
+SCHEMA-DOMAIN-DELTA-PLAN.md
+
+覆盖：
+
+Claim Tracking
+Billing
+Reference Data
+Recovery State
+
+实施等待后续批准。
+
+2. Rule Engine 扩展
+裁决：
+DESIGN-FIRST ⏸️
+
+需要：
+
+纯文本
+RULE-ENGINE-EXTENSION-DESIGN.md
+
+要求：
+
+明确：
+
+输入：
+
+事实数据
+
+输出：
+
+Audit Finding
+
+禁止：
+
+直接输出：
+
+应追回金额
+保证收益
+3. Success Fee / Billing 自动化
+裁决：
+HOLD ❌
+
+原因：
+
+涉及：
+
+资金动作
+支付责任
+KYC
+分账
+
+保持：
+
+纯文本
+Payment Domain:
+CODE PASS
+
+Payment Automation:
+HOLD
+4. Submission Adapter
+裁决：
+DESIGN-FIRST ⏸️
+
+允许设计：
+
+纯文本
+AI Prepare
+
+↓
+
+Human Approve
+
+↓
+
+Submit
+
+不允许：
+
+自动提交。
+
+需要：
+
+纯文本
+SUBMISSION-ADAPTER-DESIGN.md
+A组免裁决项
+
+确认允许继续：
+
+✅ realistic fixtures
+✅ synthetic datasets
+✅ exception matrix
+✅ idempotency tests
+✅ E2E scaffolding
+✅ observability
+✅ kill switch
+✅ deployment/env
+✅ production readiness checklist
+✅ contract tests
+
+推荐执行顺序确认
+
+批准：
+
+纯文本
+Phase A
+Foundation Completion
+        ↓
+Phase B
+Product Operation Design
+        ↓
+Phase C
+Domain Design
+        ↓
+Phase D
+External Action / Money
+最终归档
+Markdown
+### [MSG-20260929-20]
+
+TYPE:
+PRODUCTION CANDIDATE SCOPE DECISION
+
+Q1:
+GO
+
+Three-track status approved:
+CODE PASS /
+INTEGRATION PENDING /
+PRODUCTION VALIDATION PENDING
+
+Q2:
+GO
+
+REAL-DATA-VALIDATION-BACKLOG.md is the single source of truth.
+
+Q3:
+GO
+
+Adapter-only replacement principle approved.
+
+B:
+Claim Tracking              DESIGN-FIRST
+Recovery Confirmation       DESIGN-FIRST
+Notifications               DESIGN-FIRST
+Dashboard                   DESIGN-FIRST
+Admin                       DESIGN-FIRST
+
+C:
+Schema Delta                DESIGN-FIRST
+Rule Engine Expansion       DESIGN-FIRST
+Success Fee Automation      HOLD
+Submission Adapter          DESIGN-FIRST
+
+Phase A offline completion:
+APPROVED
+
+STATUS:
+CONTINUE PRODUCTION CANDIDATE BUILD
+
+当前可以继续把 CrossClaim 推到 Production Candidate，但仍保持三条红线：
+
+自动提交 = 未批准
+自动扣佣 = 未批准
+真实追回效果 = 等 Production Validation
+
+这三个不能通过“代码完成”替代。
+```
