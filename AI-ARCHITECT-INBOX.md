@@ -51310,3 +51310,292 @@ WAITING_REAL_INPUT
 
 先跑通一个垂直闭环，再扩展 Amazon / Shopify / Walmart。
 ```
+
+### [MSG-20260929-07] SHOPIFY-FILE-ADAPTER-DESIGN 裁决：GO_IMPLEMENTATION（设计通过，边界未越界；批准 CSV/XLSX/JSON 导入 + 字段映射 + quarantine + canonical input + validation report + Shopify 别名支持；逐项确认 invoiceNo 缺失必须 UNKNOWN+ACTION、多单号取第一+ambiguity、PII 掩码、复用 C-0009.1-A 框架；Shopify/Stripe/PayPal API 与自动提交、资金托管、15% 扣佣、HS Code 维持冻结）
+
+Codex 提交 SHOPIFY-FILE-ADAPTER-DESIGN.md（呼应 MSG-20260929-06 的 Q4 要求）后，架构方判定该设计未触碰 Gate 边界并批准进入实现。以下为该回复的**逐字原文**。
+
+```text
+SHOPIFY-FILE-ADAPTER-DESIGN 裁决
+结论：GO ✅
+
+状态：
+
+纯文本
+GATE:
+7 Commercial Validation
+
+DESIGN:
+SHOPIFY-FILE-ADAPTER-DESIGN
+
+DECISION:
+GO_IMPLEMENTATION
+
+SCOPE:
+APPROVED
+审计结论
+
+该设计符合 MSG-20260929-06 的批准边界。
+
+没有发现：
+
+Schema 扩张
+资金链路变化
+规则引擎引入
+外部 API 接入
+平台授权依赖
+对外动作
+
+因此允许进入实现。
+
+逐项审核
+1. 边界控制 ✅
+
+批准范围：
+
+纯文本
+CSV/XLSX
+    ↓
+字段映射
+    ↓
+quarantine
+    ↓
+canonical input
+    ↓
+validation report
+
+保持。
+
+特别确认禁止项：
+
+动作	状态
+Shopify API	禁止
+自动同步	禁止
+自动提交 Dispute	禁止
+退款动作	禁止
+佣金计算	禁止
+业务追回判断	禁止
+
+正确。
+
+2. invoiceNo 处理正确 ✅
+
+这是一个重要判断。
+
+你写：
+
+Shopify Orders 通常无发票号 → UNKNOWN + ACTION，不用订单号顶替
+
+批准。
+
+禁止：
+
+纯文本
+orderId
+  ↓
+假装
+  ↓
+invoiceNo
+
+原因：
+
+会污染证据链。
+
+当前原则：
+
+纯文本
+UNKNOWN
+>
+错误映射
+
+保持。
+
+3. trackingNo 多值处理 ✅
+
+批准：
+
+纯文本
+多个 tracking number
+
+↓
+
+first value
++
+ambiguity flag
+
+不要：
+
+自动合并
+自动判断哪个有效
+自动选择最佳物流
+
+这些属于未来规则层。
+
+4. PII 掩码策略 ✅
+
+批准。
+
+特别认可：
+
+平台字段只进入 metadata 证据，不进入 canonical input
+
+方向正确。
+
+当前验证阶段：
+
+canonical input 应尽量：
+
+最小化
+可复现
+可审计
+5. Quarantine 设计 ✅
+
+覆盖：
+
+缺字段
+不可解析
+PDF
+未知格式
+多单号
+金额异常
+
+通过。
+
+补充一个建议（非阻塞）：
+
+未来报告增加：
+
+纯文本
+quarantineReasonCode
+
+例如：
+
+纯文本
+MISSING_REQUIRED_FIELD
+AMBIGUOUS_TRACKING
+UNSUPPORTED_FORMAT
+
+但：
+
+本轮不要求。
+
+不要扩大范围。
+
+6. 实现方式 ✅
+
+复用 C-0009.1-A：
+
+正确。
+
+批准：
+
+纯文本
+existing adapter framework
+        +
+Shopify aliases
+        +
+fixtures
+
+不要复制新的 adapter 系统。
+
+7. 验收方案 ✅
+
+9 条测试合理。
+
+其中重点关注：
+
+1 万行批量
+
+需要验证：
+
+不是性能优化，而是：
+
+不崩溃
+不丢行
+rowNumber 保持
+Disputes CSV
+
+注意：
+
+只做：
+
+字段结构识别。
+
+不要进入：
+
+纯文本
+Dispute
+ ↓
+胜诉概率
+ ↓
+自动申诉
+下一步批准
+
+Codex 可以进入：
+
+SHOPIFY-FILE-ADAPTER IMPLEMENTATION
+
+范围：
+
+纯文本
+APPROVED
+
+完成后提交：
+
+Implementation Checkpoint
+测试结果
+Adapter Report
+当前仍保持冻结
+
+以下没有变化：
+
+纯文本
+Shopify API                 HOLD
+Stripe Dispute API          HOLD
+PayPal Dispute API          HOLD
+自动提交争议                FORBIDDEN
+资金托管                    HOLD
+15%自动扣佣                 HOLD
+HS Code/关税               BACKLOG
+
+可归档：
+
+Markdown
+### [MSG-20260929-07]
+
+TYPE:
+DESIGN DECISION
+
+DOCUMENT:
+SHOPIFY-FILE-ADAPTER-DESIGN
+
+DECISION:
+GO_IMPLEMENTATION
+
+Reason:
+Design strictly follows approved offline adapter boundary.
+
+Approved:
+- CSV/XLSX/JSON import
+- field mapping
+- quarantine
+- canonical input
+- validation report
+- Shopify export alias support
+
+Rejected/Not included:
+- Shopify API
+- dispute submission
+- refund action
+- commission calculation
+- rule engine
+- schema changes
+
+Next:
+SHOPIFY-FILE-ADAPTER Implementation Checkpoint
+
+STATUS:
+APPROVED
+
+继续执行即可。该设计没有触碰 Gate 边界。
+```

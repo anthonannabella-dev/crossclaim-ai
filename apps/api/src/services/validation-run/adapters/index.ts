@@ -163,7 +163,7 @@ export function adaptUploadedFile(input: AdaptInput): AdaptResult {
     };
   }
 
-  const { rows, mapping } = adaptRows(header, dataRows);
+  const { rows, mapping, dataAmbiguities } = adaptRows(header, dataRows);
   const coverage = coverageOf(mapping);
   return {
     rows,
@@ -175,7 +175,7 @@ export function adaptUploadedFile(input: AdaptInput): AdaptResult {
       adaptedRowCount: rows.length,
       mappedColumns: mapping.matchedHeader,
       unknownColumns: mapping.unknownColumns,
-      ambiguities: mapping.ambiguities,
+      ambiguities: [...mapping.ambiguities, ...dataAmbiguities],
       coverage,
       ...(coverage.requiredMatched === coverage.requiredTotal ? {} : { quarantineReason: 'REQUIRED_COLUMNS_MISSING' }),
     },

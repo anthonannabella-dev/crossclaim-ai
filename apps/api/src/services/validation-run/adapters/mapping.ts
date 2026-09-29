@@ -20,19 +20,71 @@ import {
 } from './types';
 
 export const COLUMN_ALIASES: Record<string, readonly string[]> = {
-  orderId: ['orderid', 'order', 'orderno', 'ordernumber', 'amazonorderid', 'merchantorderid', '订单号', '订单编号'],
-  trackingNo: ['tracking', 'trackingno', 'trackingnumber', 'trackingid', 'awb', 'awbno', '运单号', '物流单号', '快递单号'],
-  invoiceNo: ['invoice', 'invoiceno', 'invoicenumber', 'invoiceid', 'documentnumber', 'settlementid', '发票号', '结算单号'],
+  orderId: [
+    'orderid',
+    'order',
+    'orderno',
+    'ordernumber',
+    'amazonorderid',
+    'merchantorderid',
+    'name',
+    'ordername',
+    'shopifyordername',
+    '订单号',
+    '订单编号',
+  ],
+  trackingNo: [
+    'tracking',
+    'trackingno',
+    'trackingnumber',
+    'trackingnumbers',
+    'trackingnum',
+    'trackingid',
+    'awb',
+    'awbno',
+    '运单号',
+    '物流单号',
+    '快递单号',
+  ],
+  invoiceNo: [
+    'invoice',
+    'invoiceno',
+    'invoicenumber',
+    'invoiceid',
+    'invoicereference',
+    'referencenumber',
+    'documentnumber',
+    'settlementid',
+    '发票号',
+    '结算单号',
+  ],
   channel: ['channel', 'carrier', 'service', 'shipmethod', 'shippingmethod', '渠道', '承运商', '运输方式'],
   promisedDeliveredAt: ['promised', 'promiseddeliveredat', 'promiseddelivery', 'estimateddelivery', 'sla', 'sladue', '承诺妥投', '承诺时间'],
-  actualDeliveredAt: ['delivered', 'deliveredat', 'actualdelivery', 'actualdeliveredat', 'deliverydate', '妥投时间', '实际妥投'],
+  actualDeliveredAt: [
+    'delivered',
+    'deliveredat',
+    'actualdelivery',
+    'actualdeliveredat',
+    'deliverydate',
+    'fulfilledat',
+    '妥投时间',
+    '实际妥投',
+  ],
   billedAmount: ['billed', 'billedamount', 'carriercharge', 'freightcharge', 'shippingcharge', '运费', '运费金额'],
   billedCurrency: ['billedcurrency', 'freightcurrency', '运费币种'],
   invoiceAmount: ['invoiceamount', 'invoiced', 'invoicedamount', 'chargedamount', '账单金额', '账单'],
   invoiceCurrency: ['invoicecurrency', '币种'],
   evidenceRef: ['evidence', 'evidenceref', 'pod', 'proof', 'proofofdelivery', '凭证', '单据'],
   settlementRef: ['settlement', 'settlementref', 'payout', 'payoutid', '赔付', '赔付单号'],
-  claimOutcome: ['claimoutcome', 'claimstatus', '理赔状态', '索赔状态'],
+  claimOutcome: [
+    'claimoutcome',
+    'claimstatus',
+    'disputestatus',
+    'disputestate',
+    'chargebackstatus',
+    '理赔状态',
+    '索赔状态',
+  ],
   note: ['note', 'notes', 'remark', 'remarks', 'description', 'feedescription', 'feetype', 'fee type', '备注', '说明', '费用类型'],
 };
 
@@ -142,12 +194,32 @@ export function mapHeader(header: string[]): HeaderMapping {
 const cell = (cells: string[], position: number | null): string =>
   position === null ? '' : (cells[position] ?? '').trim();
 
-export function adaptRows(header: string[], rows: string[][]): { rows: AdaptedRow[]; mapping: HeaderMapping } {
+/** 运单号分隔符：Shopify 等平台会用 `/`、`,`、`;`、`|` 或空格连接多个单号 */
+const TRACKING_SEPARATOR = /\s*[/,;|]\s*|\s{2,}/;
+
+export function adaptRows(
+  header: string[],
+  rows: string[][],
+): { rows: AdaptedRow[]; mapping: HeaderMapping; dataAmbiguities: AdapterAmbiguity[] } {
   const mapping = mapHeader(header);
+  const dataAmbiguities: AdapterAmbiguity[] = [];
   const adapted = rows.map((cells, index) => {
     const row: ValidationRow = {};
     for (const column of CANONICAL_COLUMNS) row[column] = cell(cells, mapping.index[column]);
     if (!row.claimOutcome) row.claimOutcome = 'NOT_STARTED';
+    if (row.trackingNo && TRACKING_SEPARATOR.test(row.trackingNo.trim())) {
+      const first = row.trackingNo.split(TRACKING_SEPARATOR)[0]?.trim() ?? '';
+      if (first && first !== row.trackingNo) {
+        row.trackingNo = first;
+        if (!dataAmbiguities.some((item) => item.field === 'trackingNo')) {
+          dataAmbiguities.push({
+            field: 'trackingNo',
+            detail: '该订单含多个运单号，已取第一个（其余保留在原始行的 rawRowHash 中，未合并、未择优）',
+            action: 'manual confirmation required',
+          });
+        }
+      }
+    }
     const metadata: AdapterMetadata = {
       sourcePlatform: cell(cells, mapping.metadataIndex.sourcePlatform) || null,
       transactionId: cell(cells, mapping.metadataIndex.transactionId) || null,
@@ -165,7 +237,7 @@ export function adaptRows(header: string[], rows: string[][]): { rows: AdaptedRo
       metadata,
     };
   });
-  return { rows: adapted, mapping };
+  return { rows: adapted, mapping, dataAmbiguities };
 }
 
 export function coverageOf(mapping: HeaderMapping): {

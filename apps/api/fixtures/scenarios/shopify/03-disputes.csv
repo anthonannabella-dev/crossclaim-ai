@@ -1,0 +1,3 @@
+Order Name,Tracking Number,Invoice Number,Dispute Status,Dispute Reason,Dispute Amount,Currency
+#3001,1Z0000000000003001,INV-3001,needs_response,fraudulent,150.00,USD
+#3002,1Z0000000000003002,INV-3002,under_review,product_not_received,80.00,USD
