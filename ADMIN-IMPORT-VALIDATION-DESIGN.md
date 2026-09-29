@@ -110,3 +110,22 @@ NEED: **GO / REVISE / HOLD**（ADMIN-IMPORT-VALIDATION-DESIGN）
 * **D5 报告下载**：确认 v1 **不提供任何下载**（错误报告/原始文件均不可下载），仅页内只读展示？
 
 > 边界未变：只读、单租户、无新表、无写路径、无外部渠道；不修改 Import、不重跑导入、不删除文件、不修复数据、不手工改状态。
+
+---
+
+## 7. R1 修订记录（MSG-20260929-36 = GO_WITH_MINOR_REVISE）
+
+| 裁决项 | 处置 |
+|---|---|
+| D1 GO | 五状态桶接受；**不新增**任何运营工作流状态（等待人工确认 / 待处理 / 修复中），改用**异常角标（projection flag）**，如 `PARTIAL + QUALITY_WARNING`；Admin 不产生第二套状态机 |
+| D2 GO_WITH_MINOR_REVISE | L3 行级定位在 `errorCode / rowNumber / field / action` 之外**增加 `sourceColumnName`**（用户文件列名映射，例如 `Tracking Number(s)`）；禁止原始值、原始行 JSON、完整文件内容 |
+| D3 HOLD | v1 **不展示任何样本数据**（不返回脱敏字段、前 N 个字段或示例值）；未来如需 → 单独 `ADMIN-IMPORT-SAMPLE-VIEW-DESIGN`（字段白名单 + 脱敏策略 + 权限） |
+| D4 GO | Admin **一律不展示金额**（金额 / 币种 / 单价 / 订单价值）——金额留在 Recovery / Billing / Finance 域 |
+| D5 GO | v1 不提供任何下载（原始文件 / 错误 CSV / 数据导出）；未来如需 → 单独 `EXPORT-DESIGN`（导出人 + 内容 + 脱敏规则 + AuditLog） |
+
+### 7.1 实现阶段必须补充的四项测试
+
+1. **Import 查询隔离**：A 租户看不到 B 租户的 batch / error / quality summary。
+2. **错误信息泄露**：响应中不得出现 `rawRow` / `rawPayload` / 客户数据 / token / `storageKey`。
+3. **状态映射**：固定 `ImportBatch.status` → Admin Bucket 的映射，**不得在 Admin 内新建状态判断**。
+4. **Quality Summary 标注**：必须显式标注为 projection（不是 source of truth）。
