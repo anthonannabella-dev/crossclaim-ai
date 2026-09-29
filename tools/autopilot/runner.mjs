@@ -26,7 +26,7 @@ const pending = tasksText
 
 let head = 'UNKNOWN';
 try {
-  head = execSync('git rev-parse --short HEAD', { cwd: ROOT }).toString().trim();
+  head = execSync(`git -c safe.directory=${ROOT} rev-parse --short HEAD`, { cwd: ROOT }).toString().trim();
 } catch (error) {
   head = 'GIT_UNAVAILABLE';
   state.last_error = String(error).slice(0, 300);
