@@ -55955,3 +55955,367 @@ READY_FOR_SCHEMA_REVIEW
 
 可以进入 Schema Delta 评审。当前设计方向正确。
 ```
+
+### [MSG-20260929-22] RECOVERY-CONFIRMATION-DESIGN 裁决：GO ✅（READY_FOR_SCHEMA_REVIEW）——确认「回收事实 vs 到账现实」分离、部分到账处理、冲回可追溯、幂等策略；D1 GO（RecoveryPayout 表）、D2 GO（PARTIALLY_RECONCILED）、D3 GO（冲回由 FINANCE 处置，不自动改账单）、D4 GO（复用 payment reconciliation 差异层）、D5 HOLD（自动扣佣继续冻结）；NEXT = 提交 RECOVERY-CONFIRMATION-SCHEMA-DELTA-REQUEST
+
+Codex 按 MSG-20260929-20 提交 RECOVERY-CONFIRMATION-DESIGN.md 后，架构方判定设计通过并对 D1-D5 给出结论。以下为该回复的逐字原文。
+
+```text
+RECOVERY-CONFIRMATION-DESIGN 裁决
+结论：GO ✅
+
+状态：
+
+纯文本
+GATE:
+7 Commercial Validation
+
+DESIGN:
+RECOVERY-CONFIRMATION-DESIGN
+
+DECISION:
+GO_DESIGN_APPROVED
+
+NEXT:
+Recovery Schema Delta Request REQUIRED BEFORE IMPLEMENTATION
+总体审计结论
+
+该设计符合 MSG-20260929-20：
+
+Recovery Confirmation = DESIGN-FIRST
+
+并且正确区分了：
+
+纯文本
+发现 Recovery
+
+≠
+
+确认真实到账
+
+≠
+
+自动扣佣
+
+通过。
+
+一、核心设计判断 ✅
+
+当前问题识别正确：
+
+已有能力：
+
+纯文本
+Claim Outcome
+
+↓
+
+Settlement
+
+↓
+
+RecoveryLedgerEntry
+
+↓
+
+FeeCalculation
+
+但缺少：
+
+纯文本
+External Payout Reality
+
+↓
+
+Internal Recovery Record
+
+之间的对齐层。
+
+因此需要：
+
+Recovery Confirmation
+
+而不是：
+
+Recovery Automation
+
+二、D1：是否新增 RecoveryPayout 表？
+裁决：GO（原则批准）✅
+
+建议新增。
+
+原因：
+
+一个 Recovery 对应：
+
+一次到账
+多次到账
+冲回
+跨期付款
+
+如果硬塞进 Settlement：
+
+会导致：
+
+多付款记录
+状态污染
+对账困难
+
+设计方向：
+
+纯文本
+Recovery Case
+
+        |
+
+        |
+
+RecoveryPayout
+    |
+    |
+payoutRef
+amount
+currency
+receivedAt
+source
+status
+
+但：
+
+现在只是批准设计。
+
+需要下一步 Schema Delta。
+
+三、D2：PARTIALLY_RECONCILED 是否需要？
+裁决：GO ✅
+
+批准。
+
+原因：
+
+真实支付环境：
+
+不能假设：
+
+纯文本
+全部到账
+
+现实：
+
+分批到账
+扣除费用
+跨期支付
+
+因此：
+
+状态需要区分：
+
+纯文本
+CONFIRMED
+
+↓
+
+PARTIALLY_RECONCILED
+
+↓
+
+RECONCILED
+四、D3：冲回是否自动改账单？
+裁决：
+GO（保持不自动）✅
+
+即：
+
+你的建议正确。
+
+禁止：
+
+纯文本
+Platform reversed
+
+↓
+
+Auto modify invoice
+
+采用：
+
+纯文本
+Reversal Event
+
+↓
+
+Audit Record
+
+↓
+
+Finance Review
+
+原因：
+
+冲回可能涉及：
+
+争议
+退款
+会计处理
+
+不能自动调整财务结果。
+
+五、D4：payment-reconciliation 关系
+裁决：GO ✅
+
+批准复用差异清单。
+
+关系：
+
+纯文本
+Payment Domain
+
+负责:
+支付事件
+
+        +
+
+Recovery Confirmation
+
+负责:
+业务回收确认
+
+不要重复建设：
+
+Payment Reconciliation Engine。
+
+建议：
+
+纯文本
+Payment Reconciliation
+
+↓
+
+Difference Report
+
+↓
+
+Recovery Confirmation Projection
+六、D5：自动扣佣是否推进？
+裁决：
+HOLD ⏸️
+
+保持。
+
+没有变化。
+
+当前：
+
+纯文本
+Recovery Confirmation
+
+CODE/DESIGN:
+Allowed
+
+
+Auto Fee Charge:
+HOLD
+
+原因：
+
+确认到账 ≠ 授权扣款。
+
+仍需：
+
+商业验证
+支付设计
+合规确认
+七、额外审计意见
+confirmedAmount / receivedAmount 双投影
+
+批准。
+
+这是必要区分：
+
+纯文本
+Confirmed Recovery
+
+=
+平台确认应该赔付
+
+
+Received Recovery
+
+=
+实际收到资金
+
+两者不能混用。
+
+超 Claim 金额
+
+处理正确：
+
+纯文本
+received > expected
+
+↓
+
+DISPUTED
+
+
+不要自动扩大 Claim。
+
+八、Schema Delta 前置要求
+
+允许提交：
+
+纯文本
+RECOVERY-CONFIRMATION-SCHEMA-DELTA-REQUEST.md
+
+重点审核：
+
+R1-R5：
+
+编号	结论
+R1 confirmationStatus	原则批准
+R2 confirmedByUserId/confirmedAt	原则批准
+R3 RecoveryPayout	原则批准
+R4 reversedBySettlementId	原则批准
+R5 Index	需说明查询场景
+最终归档
+Markdown
+### [MSG-20260929-22]
+
+TYPE:
+DESIGN DECISION
+
+TARGET:
+RECOVERY-CONFIRMATION-DESIGN
+
+DECISION:
+GO_DESIGN_APPROVED
+
+D1:
+GO - RecoveryPayout concept approved
+
+D2:
+GO - PARTIALLY_RECONCILED approved
+
+D3:
+GO - reversal requires finance handling, no auto billing change
+
+D4:
+GO - reuse payment reconciliation difference layer
+
+D5:
+HOLD - auto commission remains frozen
+
+Validated:
+- recovery fact vs payout reality separation
+- partial payment handling
+- reversal traceability
+- idempotency strategy
+
+Next:
+Submit RECOVERY-CONFIRMATION-SCHEMA-DELTA-REQUEST
+
+STATUS:
+READY_FOR_SCHEMA_REVIEW
+
+可以进入 Recovery Schema Delta 评审。该设计比直接做自动扣佣更符合 Production Candidate 路线。
+```
