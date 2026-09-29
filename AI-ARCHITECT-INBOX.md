@@ -64158,3 +64158,268 @@ CrossClaim AI 当前版本：
 
 真实数据验证 + 首批客户验证 + 商业闭环验证。
 ```
+
+### [MSG-20260929-43] PRODUCTION-CANDIDATE-ARCHIVE 裁决：合并 GO（gate/7-commercial-validation → main，须尊重分支保护）+ Phase 1 真实数据验证 GO（受控启动，先 RD-01 Shopify 导出）
+
+```text
+PRODUCTION-CANDIDATE-ARCHIVE 裁决
+结论
+1) 合并决策：GO（批准合并）✅
+
+批准：
+
+纯文本
+gate/7-commercial-validation
+        ↓
+      main
+
+理由：
+
+当前状态已经达到：
+
+纯文本
+PRODUCTION-CANDIDATE-v1.0
+
+且：
+
+Final Gate PASS
+CI success
+CODE COMPLETE
+未发现代码侧 blocker
+所有冻结边界仍有效
+
+因此允许进入主分支。
+
+但保持：
+
+不绕过 GitHub branch protection
+若 GitHub 阻止，由系统规则处理
+
+即：
+
+纯文本
+MERGE = APPROVED
+GITHUB PROTECTION = RESPECTED
+2) Phase 1 真实数据验证：GO，但采用受控启动 ✅
+
+批准启动：
+
+纯文本
+Phase 1
+REAL DATA VALIDATION
+
+但是不是全面接入。
+
+原则：
+
+先验证“发现真实追回机会”的能力，不验证自动化资金和提交链路。
+
+第一批请求宿主提供：
+RD-01 Shopify 独立站数据
+
+优先。
+
+需要：
+
+Shopify Orders Export
+
+格式：
+
+CSV
+XLSX
+
+建议字段：
+
+必须：
+
+Order ID
+Order Name
+Created At
+Fulfillment Status
+Financial Status
+Tracking Number
+Fulfilled At
+Currency
+Total Price
+
+可选：
+
+Refund Status
+Dispute Status
+Chargeback Status
+
+处理目标：
+
+验证：
+
+Shopify Export
+ ↓
+Adapter
+ ↓
+Normalization
+ ↓
+Validation Report
+
+不做：
+
+API
+自动同步
+自动退款
+RD-02 Amazon 数据
+
+第二优先。
+
+需要：
+
+Settlement Report
+
+例如：
+
+Amazon Settlement Summary
+Transaction Report
+FBA Inventory Reconciliation
+
+目标：
+
+验证：
+
+Settlement File
+ ↓
+Import
+ ↓
+Canonical Fact
+ ↓
+Claim Candidate
+
+重点看：
+
+字段稳定性
+差异发现能力
+证据链
+RD-04 物流数据
+
+第三优先。
+
+需要：
+
+任意：
+
+DHL
+FedEx
+UPS
+专线物流账单
+
+至少：
+
+Shipment ID
+Tracking No
+Ship Date
+Destination ZIP
+Charge Amount
+Service Level
+Delivery Date
+
+验证：
+
+目前只验证：
+
+数据结构
+可审计输入
+
+暂不启用：
+
+SLA 追回判断
+自动索赔
+Phase 1 验证目标重新定义
+
+不是：
+
+“追回多少钱”
+
+因为目前：
+
+Rule Engine HOLD
+Claim Submission HOLD
+Success Fee HOLD
+
+而是：
+
+验证：
+
+A. 数据进入
+
+是否稳定：
+
+纯文本
+文件
+ ↓
+Adapter
+ ↓
+Validation
+B. 事实构建
+
+是否能形成：
+
+纯文本
+订单
+物流
+结算
+证据
+C. 是否存在真实候选
+
+人工观察：
+
+Claim Candidate
+
+而不是：
+
+自动 Claim
+暂不启动
+
+以下保持冻结：
+
+功能	状态
+Amazon SP-API 自动提交	FORBIDDEN
+TikTok/Walmart 自动 Dispute	FORBIDDEN
+Stripe 自动扣佣	HOLD
+17TRACK/EasyPost 自动抓取	HOLD
+自动税率同步	HOLD
+自动 HS 判断	HOLD
+自动追回金额	HOLD
+下一步执行指令
+
+Codex：
+
+可以准备 merge 到 main。
+可以建立：
+纯文本
+PHASE1-REAL-DATA-VALIDATION.md
+
+内容：
+
+RD-01
+RD-02
+RD-04
+输入文件要求
+验证目标
+通过标准
+不做事项
+等宿主提供第一批真实脱敏文件。
+
+最终状态：
+
+纯文本
+CrossClaim AI
+
+CODE:
+✅ Production Candidate
+
+NEXT:
+Real Data Validation
+
+BLOCKER:
+None (code)
+
+WAITING:
+Host Data + External Accounts
+```
