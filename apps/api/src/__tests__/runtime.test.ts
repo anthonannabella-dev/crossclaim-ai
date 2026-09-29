@@ -113,7 +113,8 @@ describe('运行时装配（CHANGE #18）', () => {
         prisma: stubPrisma([]),
         log: createLogger({ level: 'error', sink: () => undefined }),
       }),
-    ).toThrow(/盐值过短/);
+    // P2-1（MSG-20260929-70）：取值违规只报变量名与原因码（不回显取值）
+    ).toThrow(/AUDIT_IP_SALT_TOO_SHORT/);
   });
 });
 

@@ -87,6 +87,26 @@ jobs:
         working-directory: apps/api
         run: npm test
 
+  deploy-smoke:
+    name: Deploy smoke · fresh install + migration upgrade
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: apps/api/package-lock.json
+
+      - name: Install dependencies (api)
+        working-directory: apps/api
+        run: npm ci --no-audit --no-fund
+
+      # P2-1（MSG-20260929-70 D4）：容器化 smoke，只用测试 secret、随机库、结束销毁
+      - name: Deployment smoke (docker, fresh install + upgrade)
+        run: node tools/smoke/deploy-smoke.mjs
+
   license-gate:
     name: 许可证闸门
     runs-on: ubuntu-latest

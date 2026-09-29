@@ -37,6 +37,57 @@ export const ENV_SPECS: EnvSpec[] = [
   { name: 'METRICS_ENABLED', required: false, defaultValue: 'false', description: '是否暴露 GET /metrics（Prometheus 文本）；默认 false' },
 ];
 
+/** 取值层面的违规（只报原因码，绝不回显取值） */
+export class EnvValuesError extends Error {
+  constructor(public readonly codes: string[]) {
+    super('环境变量取值不合规: ' + codes.join(', ') + '（仅报告变量名与原因码，不回显取值）');
+    this.name = 'EnvValuesError';
+  }
+}
+
+export interface EnvValidationResult {
+  errors: string[];
+  warnings: string[];
+}
+
+/**
+ * 取值校验（P2-1，MSG-20260929-70）：URL 形态 / 盐值长度 / 白名单枚举 / 数字端口。
+ * 只输出「变量名 + 原因码」，绝不包含取值（含长度/前后缀）。
+ */
+export function validateEnvValues(source: Record<string, string | undefined>): EnvValidationResult {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+
+  const databaseUrl = source.DATABASE_URL;
+  if (!databaseUrl) {
+    warnings.push("DATABASE_URL_MISSING");
+  } else if (!/^postgres(ql)?:\/\//.test(databaseUrl)) {
+    errors.push("DATABASE_URL_INVALID_FORMAT");
+  }
+
+  for (const name of ["AUDIT_IP_SALT", "STORAGE_URL_SECRET"]) {
+    const value = source[name];
+    if (value !== undefined && value !== "" && value.length < 16) {
+      errors.push(name + "_TOO_SHORT");
+    }
+  }
+
+  if (source.STORAGE_DRIVER && !["local", "s3"].includes(source.STORAGE_DRIVER)) {
+    errors.push("STORAGE_DRIVER_INVALID");
+  }
+  if (source.METRICS_ENABLED && !["true", "false"].includes(source.METRICS_ENABLED)) {
+    errors.push("METRICS_ENABLED_INVALID");
+  }
+  if (source.PORT && !/^\d+$/.test(source.PORT)) {
+    errors.push("PORT_INVALID");
+  }
+  if (source.NODE_ENV && !["development", "test", "production"].includes(source.NODE_ENV)) {
+    errors.push("NODE_ENV_INVALID");
+  }
+
+  return { errors, warnings };
+}
+
 export class EnvError extends Error {
   constructor(public readonly missing: string[]) {
     super(

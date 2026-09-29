@@ -3,8 +3,53 @@
  */
 
 import { describe, expect, it } from 'vitest';
-import { EnvError, envPresence, loadEnv } from '../config/env';
+import { EnvError, EnvValuesError, envPresence, loadEnv, validateEnvValues } from '../config/env';
 import { createLogger, isSensitiveKey, redact } from '../config/logger';
+
+// ============================================================
+describe('P2-1 env 取值校验（MSG-20260929-70）', () => {
+  it('合法取值不报错', () => {
+    const result = validateEnvValues({
+      DATABASE_URL: 'postgresql://user:pass@localhost:5432/db',
+      AUDIT_IP_SALT: 'a'.repeat(20),
+      STORAGE_URL_SECRET: 'b'.repeat(20),
+      STORAGE_DRIVER: 'local',
+      METRICS_ENABLED: 'false',
+      PORT: '3000',
+      NODE_ENV: 'production',
+    });
+    expect(result.errors).toEqual([]);
+  });
+
+  it('非法取值只报变量名与原因码，不回显取值', () => {
+    const result = validateEnvValues({
+      DATABASE_URL: 'mysql://secret-user:secret-pass@host/db',
+      AUDIT_IP_SALT: 'short',
+      STORAGE_DRIVER: 'nfs',
+      METRICS_ENABLED: 'yes',
+      PORT: 'port',
+      NODE_ENV: 'staging',
+    });
+    expect(result.errors).toEqual([
+      'DATABASE_URL_INVALID_FORMAT',
+      'AUDIT_IP_SALT_TOO_SHORT',
+      'STORAGE_DRIVER_INVALID',
+      'METRICS_ENABLED_INVALID',
+      'PORT_INVALID',
+      'NODE_ENV_INVALID',
+    ]);
+    const text = JSON.stringify(result) + new EnvValuesError(result.errors).message;
+    for (const forbidden of ['secret-user', 'secret-pass', 'mysql://', 'short']) {
+      expect(text, forbidden).not.toContain(forbidden);
+    }
+  });
+
+  it('缺少 DATABASE_URL 只给 warning（启动期由 loadEnv fail fast）', () => {
+    const result = validateEnvValues({});
+    expect(result.errors).toEqual([]);
+    expect(result.warnings).toEqual(['DATABASE_URL_MISSING']);
+  });
+});
 
 // ============================================================
 describe('loadEnv', () => {

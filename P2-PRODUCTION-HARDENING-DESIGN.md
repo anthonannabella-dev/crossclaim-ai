@@ -202,3 +202,45 @@
 | **D4** | smoke 脚本（S-1/S-2）是否允许用 docker compose 在本机/CI 复现 | 建议允许（不含任何生产凭据） |
 | **D5** | Validation 报告的通过门槛（例如：≥500 单、行级成功率 ≥99%、异常桶可解释） | 建议按此门槛，最终以架构方裁定为准 |
 | **D6** | P2 四项是否合并为一个实现 checkpoint，还是逐项交付 | 建议逐项（P2-1 → P2-2 → P2-3 → P2-4），每项单独 checkpoint |
+
+
+---
+
+## 7. R2 修订（按架构方 MSG-20260929-70 = GO_WITH_MINOR_REVISE）
+
+### 7.1 D1（APPROVE）→ 独立 readiness 端点已实现
+
+- `/health`（+ `/healthz`）= **liveness**：仅表示进程活着；resolver 降级时仍 200。
+- `/readyz` = **readiness**：DB 可用 + migration 完整 + resolver 可解析；不满足 → **503**。
+- 失败只返回原因码：`DATABASE_UNAVAILABLE` / `MIGRATION_MISMATCH` / `KILL_SWITCH_RESOLVER_FAIL_CLOSED`；
+  **禁止**返回 SQL 错误 / 连接串 / 堆栈 / secret（实现中连错误消息都不带出）。
+
+### 7.2 D2（APPROVE WITH SCOPE LIMIT）→ 备份比对入 CI 的边界
+
+- CI 只允许 **synthetic dataset → 临时库 → 比对（schema / migration / trigger 28 / indexes / tenant isolation）**；
+- 禁止在 CI 使用真实客户数据、禁止输出备份文件、禁止保存数据库 dump artifact；
+- 真实备份验证仍**只在宿主环境**进行（P2-2 阶段执行）。
+
+### 7.3 D3（APPROVE）→ `secret.rotated` 审计动作
+
+- 允许字段：`secretName` / `actorUserId` / `timestamp` / `result` / `changeRequestId`；
+- 禁止：secret 取值、hash、前后缀、长度，尤其禁止 `oldSecret` / `newSecret`；
+- 语义：属 **security operation audit**（不是业务 AuditLog）；**读取 secret 不产生审计**。
+
+### 7.4 D4（APPROVE）→ docker smoke
+
+- 允许本地 / CI / 临时环境执行；容器使用**测试 secret**、**随机数据库名**、生命周期结束**销毁**；
+- 已实现：`tools/smoke/deploy-smoke.mjs` + CI 作业 `Deploy smoke · fresh install + migration upgrade`。
+
+### 7.5 D5（REVISE）→ Production Validation 门槛（替换原 §4 门槛）
+
+| 阶段 | 门槛 |
+|---|---|
+| **Stage A** 数据完整性 | `input rows = normalized rows + quarantine rows + rejected rows`；**禁止 silent drop** |
+| **Stage B** Candidate | `Candidate >= 10`；**Candidate ≠ Claim**（不得记为已主张） |
+| **Stage C** 人工确认 | `human verification >= 5`，分类 TRUE POSITIVE / FALSE POSITIVE / NEEDS DATA |
+| 第一阶段**禁止** | 直接判断回收金额 / 成功率 / ARR / 收费能力（属商业验证阶段） |
+
+### 7.6 D6（APPROVE）→ 逐项交付
+
+`P2-1 → checkpoint → P2-2 → checkpoint → P2-3 → checkpoint → P2-4 → checkpoint`（不合并；四项风险性质不同）。

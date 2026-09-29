@@ -18,7 +18,9 @@ import { PrismaClient } from '@prisma/client';
 import { loadEnv } from './config/env';
 import { createLogger, type Logger, type LogLevel } from './config/logger';
 import { checkHealth, healthHttpStatus } from './services/health';
+import { checkReadiness, countLocalMigrations, readinessHttpStatus } from './services/readiness';
 import { killSwitchConfigFromEnv } from './services/operations/kill-switch';
+import { EnvValuesError, validateEnvValues } from './config/env';
 import {
   createEffectiveKillSwitchResolver,
   type EffectiveKillSwitchResolver,
@@ -251,6 +253,34 @@ export function createServer(deps: ServerDeps): http.Server {
       return;
     }
 
+    // P2-1（MSG-20260929-70 D1）：readiness 独立于 liveness；只返回原因码
+    if (req.method === 'GET' && url === '/readyz') {
+      checkReadiness({
+        databaseProbe: async () => {
+          await prisma.$queryRaw`SELECT 1`;
+        },
+        appliedMigrations: async () => {
+          const rows = (await prisma.$queryRaw`
+            SELECT count(*)::int AS count FROM "_prisma_migrations" WHERE finished_at IS NOT NULL
+          `) as Array<{ count: number }>;
+          return rows[0]?.count ?? 0;
+        },
+        expectedMigrations: countLocalMigrations(),
+        resolverProbe: () => probeKillSwitchResolver(killSwitchResolver),
+        version: VERSION,
+      })
+        .then((result) => send(readinessHttpStatus(result), result))
+        .catch(() =>
+          send(503, {
+            ready: false,
+            reasons: ['DATABASE_UNAVAILABLE'],
+            checkedAt: new Date().toISOString(),
+            version: VERSION,
+          }),
+        );
+      return;
+    }
+
     if (req.method === 'GET' && (url === '/health' || url === '/healthz')) {
       checkHealth({
         db: prisma,
@@ -359,6 +389,15 @@ export interface Runtime {
 
 export function createRuntime(options: RuntimeOptions): Runtime {
   const { env, prisma, log } = options;
+
+  // P2-1（MSG-20260929-70）：取值层面 fail fast（只报变量名与原因码，绝不回显取值）
+  const envValidation = validateEnvValues(env);
+  if (envValidation.errors.length > 0) {
+    throw new EnvValuesError(envValidation.errors);
+  }
+  for (const warning of envValidation.warnings) {
+    log.warn('env_warning', { code: warning });
+  }
 
   // S3 驱动缺凭据时必须 fail fast，不静默回退 local
   const storage = createStorageAdapter(env, options.storageDeps ?? {});
