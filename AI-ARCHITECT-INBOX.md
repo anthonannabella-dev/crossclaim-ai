@@ -52177,3 +52177,681 @@ schema changes.
 
 继续推进 Harness。当前方向正确。
 ```
+
+### [MSG-20260929-12] BRIDGE-SCOPE-CARRIER-SURCHARGE 裁决：并入 C-0015（不新立 C-0017），Freight Recovery 成为 C-0015 子域（SLA Delay / Fuel Surcharge / DAS Error / Accessorial Charges）；C1 carrier_rules = HOLD + Design Required（先交 CARRIER-RULE-DATA-MODEL-DESIGN.md，含 rule version / effective_date / expiration_date / source / authority / hash / tenant scope / update strategy，当前不允许 migration）；C2 规则引擎 = Design First（先交 FREIGHT-RULE-ENGINE-DESIGN.md；SLA 违约、Fuel 错扣、DAS 错误、可追回金额都必须 Audit Finding + OPEN，不得输出 Money Owed）；C3 费率与 DAS 数据只允许离线文件上传（CSV/XLSX/JSON，人工维护），官方站点自动抓取继续 FORBIDDEN；C4 申诉函草稿生成 GO（未来阶段），自动提交承运商 FORBIDDEN（supportsClaimSubmission=false 不变）；C5 复用 C-0012 规则审计基础能力 + C-0015 商业场景；**Q3 Step 1 = Carrier Reference Data Adapter 批准（GO）**：只做 输入文件 → 规范化参照工件 → 校验报告（文件 hash / 条目数 / 生效时间范围 / 字段覆盖率 / UNKNOWN 字段 / quarantine），禁止 carrier_rules 建表、RuleEvaluation、SLA/Fuel/DAS 判定、Claim 金额、申诉函、自动提交；下一步需提交 CARRIER-REFERENCE-DATA-ADAPTER-DESIGN.md）
+
+Codex 就宿主新需求「动态物流规则与运费附加费审计引擎」提交 BRIDGE-SCOPE-CARRIER-SURCHARGE（含 C1–C5 冲突点与我建议的 Step 1 离线切口）后，架构方给出本裁决。以下为该回复的**逐字原文**。
+
+```text
+BRIDGE-SCOPE-CARRIER-SURCHARGE 裁决
+总体结论
+
+受理，但不进入规则实现阶段。
+
+归类：
+
+纯文本
+C-0015
+Cross-border Recovery Expansion
+
+SUB-SCOPE:
+Freight Cost & SLA Audit
+
+STATUS:
+REGISTERED / NOT IMPLEMENTED
+
+不新立 C-0017。
+
+原因：
+
+物流附加费审计本质仍属于：
+
+跨境交易损失发现与恢复
+
+与：
+
+Shopify D2C
+Amazon/Walmart/TikTok
+FBA/物流损耗
+
+属于同一价值链。
+
+拆成 C-0017 会导致：
+
+数据模型分叉
+规则体系分裂
+商业验证分散
+
+因此并入 C-0015。
+
+Q1：是否受理？编号？
+裁决：
+
+✅ 并入 C-0015
+
+结构：
+
+纯文本
+C-0015 Cross-border Recovery
+
+├── Marketplace Loss
+│
+├── D2C Dispute Recovery
+│
+└── Freight Recovery
+    ├── SLA Delay
+    ├── Fuel Surcharge
+    ├── DAS Error
+    └── Accessorial Charges
+Q2：C1-C5 裁决
+C1：carrier_rules 新核心模型
+裁决：
+HOLD + Design Required ⏸️
+
+不能直接建表。
+
+原因：
+
+carrier_rules 不是简单配置表。
+
+它影响：
+
+规则版本
+责任判断
+金额计算
+证据链
+
+需要先提交：
+
+纯文本
+CARRIER-RULE-DATA-MODEL-DESIGN.md
+
+包含：
+
+rule version
+effective_date
+expiration_date
+source
+authority
+hash
+tenant scope
+update strategy
+
+当前：
+
+❌ 不允许 migration。
+
+C2：规则引擎
+裁决：
+必须 Design First ✅
+
+需要：
+
+纯文本
+FREIGHT-RULE-ENGINE-DESIGN.md
+
+原因：
+
+以下不能直接实现：
+
+SLA 违约
+Fuel surcharge 错扣
+DAS 错误
+可追回金额
+
+尤其：
+
+“可追回金额”
+
+属于商业结论。
+
+必须保持：
+
+当前原则：
+
+纯文本
+Rule Evaluation
+        ↓
+Audit Finding
+        ↓
+OPEN
+
+而不是：
+
+纯文本
+Rule Engine
+        ↓
+Money Owed
+C3：费率/DAS 数据来源
+裁决：
+
+允许离线文件。
+
+禁止自动抓取。
+
+即：
+
+纯文本
+CSV/XLSX/JSON upload
+        ✅
+
+Operator managed reference data
+        ✅
+
+Official website crawler
+        ❌
+
+原因：
+
+继续遵守：
+
+无授权抓取 FORBIDDEN
+
+C4：申诉函生成
+
+分开裁决。
+
+草稿生成：
+
+✅ GO（未来阶段）
+
+允许：
+
+纯文本
+Evidence
+ ↓
+Draft Appeal Letter
+ ↓
+Human Review
+自动提交承运商：
+
+❌ FORBIDDEN
+
+保持：
+
+纯文本
+supportsClaimSubmission=false
+C5：是否进入 C-0012 / C-0015
+裁决：
+
+并入：
+
+纯文本
+C-0015
+
+C-0012 规则审计作为基础能力复用。
+
+关系：
+
+纯文本
+C-0012
+Rule Audit Foundation
+
+        +
+
+C-0015
+Commercial Recovery Scenario
+Q3：Step 1 是否批准？
+裁决：
+GO ✅
+
+批准：
+
+纯文本
+Step 1:
+Carrier Reference Data Adapter
+
+这是当前正确切口。
+
+批准范围
+
+允许：
+
+输入
+CSV
+XLSX
+JSON
+数据类型
+Fuel surcharge table
+DAS ZIP reference
+SLA suspension notice
+输出
+
+只能：
+
+纯文本
+Source file
+ ↓
+Normalized reference artifact
+ ↓
+Validation report
+
+报告：
+
+包含：
+
+文件 hash
+条目数量
+生效时间范围
+字段覆盖率
+UNKNOWN 字段
+quarantine
+禁止
+
+本阶段禁止：
+
+❌ carrier_rules DB 表
+
+❌ RuleEvaluation
+
+❌ SLA 判断
+
+❌ Fuel surcharge 错扣判断
+
+❌ DAS 错误判断
+
+❌ Claim 金额
+
+❌ 申诉函
+
+❌ 自动提交
+
+Step 1 验收文档要求
+
+提交：
+
+纯文本
+CARRIER-REFERENCE-DATA-ADAPTER-DESIGN.md
+
+内容：
+
+支持格式
+字段白名单
+生效窗口解析
+版本指纹
+quarantine策略
+不确定字段处理
+最终记录
+Markdown
+### [MSG-20260929-12]
+
+TYPE:
+SCOPE DECISION
+
+REQUEST:
+Carrier Dynamic Rule & Surcharge Audit
+
+DECISION:
+MERGE INTO C-0015
+
+Q1:
+No C-0017.
+Freight Recovery becomes C-0015 sub-scope.
+
+Q2:
+
+C1:
+HOLD.
+Need CARRIER-RULE-DATA-MODEL-DESIGN before schema.
+
+C2:
+GO DESIGN ONLY.
+Need FREIGHT-RULE-ENGINE-DESIGN before implementation.
+
+C3:
+Offline reference upload allowed.
+Automatic official website scraping forbidden.
+
+C4:
+Draft appeal allowed later.
+Automatic carrier submission forbidden.
+
+C5:
+Use C-0015 + C-0012 foundation.
+
+Q3:
+Step 1 APPROVED.
+
+Allowed:
+Reference data adapter
+Versioned artifacts
+Validation reports
+
+Forbidden:
+Schema
+Rules
+Money calculation
+Claims
+External actions
+
+STATUS:
+WAITING DESIGN / CONTINUE OFFLINE VALIDATION
+
+当前方向判断：
+
+这个切口比直接做“自动追回”更合理，因为它先建立：
+
+可信数据 → 可审计规则 → 人工确认 → 商业闭环
+
+而不是直接进入高风险资金动作。
+```
+
+### [MSG-20260929-11] MSG10-Q1-Q2 裁决：Q1 = PASS_CLOSE（导入失败明细实现符合有限范围批准：只回 rowNumber/errorCode/errorCategory/field/action + 批次元数据，不回原始值 / PII / 原始载荷 / 自由文本 message；跨租户与不存在一律 404 不区分；未知错误码归 OTHER + manual_confirmation_required；契约闸门纳入 data-routes.ts 属必要修正）；Q2 = DESIGN APPROVED WITH CONDITIONS（A1 changes 只回键名 GO；A2 动作分类必须固定枚举、禁止运行时动态创建 GO；A3 审计读取暂不留痕 HOLD；A4 复合索引 GO 但走轻量 DB PERFORMANCE CHANGE NOTE，不需完整 Domain Schema Delta；A5 CSV 导出 HOLD）；AUDIT READ API 仍在等实现批准；继续 C-0009.2 VALIDATION-RUN HARNESS，不得进入 API Connector / 自动申诉 / 资金闭环 / 规则判断 / HS Code / 佣金扣款）
+
+Codex 回报 MSG-20260929-10 Q1 实现（GET /imports/:id/error-report）并提交 Q2 设计稿 AUDIT-READ-API-DESIGN.md 后，架构方给出本裁决。以下为该回复的**逐字原文**。
+
+```text
+MSG10-Q1-Q2 裁决
+总体结论
+纯文本
+GATE:
+7 Commercial Validation
+
+Q1:
+PASS
+
+Q2:
+DESIGN APPROVED WITH CONDITIONS
+
+STATUS:
+CONTINUE C-0009.2 HARNESS
+AUDIT READ API WAIT IMPLEMENTATION APPROVAL
+Q1：Import Error Report Implementation
+裁决：PASS ✅
+
+实现符合 MSG-20260929-10 的有限范围批准。
+
+审计确认
+数据暴露控制
+
+通过：
+
+返回：
+
+纯文本
+rowNumber
+errorCode
+errorCategory
+field
+action
+batch metadata
+
+不返回：
+
+纯文本
+raw value
+PII
+original payload
+free text message
+
+符合最小暴露原则。
+
+跨租户处理
+
+通过：
+
+纯文本
+wrong tenant
+or
+unknown batch
+
+↓
+
+404
+
+不区分：
+
+不存在
+无权限
+
+正确。
+
+避免泄露资源存在性。
+
+Unknown errorCode
+
+通过：
+
+纯文本
+OTHER
++
+manual_confirmation_required
+
+正确。
+
+不要把内部异常文本暴露给运营端。
+
+API Contract 闸门调整
+
+通过。
+
+这是必要修正：
+
+之前如果只靠路径匹配，会产生：
+
+API 存在但未进入契约检查
+
+的问题。
+
+纳入 data-routes.ts 是合理的。
+
+Q1 状态
+纯文本
+IMPORT ERROR REPORT
+
+PASS_CLOSE
+
+无需修改。
+
+Q2：AUDIT-READ-API-DESIGN 裁决
+
+总体：
+
+Design 通过，可以进入实现准备。
+
+但以下五点需要明确。
+
+A1：changes 只返回键名
+裁决：GO ✅
+
+批准。
+
+返回：
+
+JSON
+{
+ "changeKeys":[
+   "status",
+   "amount"
+ ]
+}
+
+不要：
+
+JSON
+{
+ "oldAmount":100,
+ "newAmount":200
+}
+
+原因：
+
+Audit Viewer 是审计定位工具。
+
+不是数据变更查看器。
+
+如果需要查看业务数据：
+
+走业务权限。
+
+A2：动作分类白名单来源
+裁决：GO（需要固定枚举）✅
+
+要求：
+
+不要自由字符串。
+
+采用稳定枚举：
+
+例如：
+
+纯文本
+USER_LOGIN
+IMPORT_CREATED
+IMPORT_FAILED
+PAYMENT_RETRY
+PAYMENT_REPLAY
+ROLE_CHANGED
+
+规则：
+
+新增事件类型必须：
+
+code review
+文档登记
+
+禁止运行时动态创建。
+
+A3：读取审计是否留痕
+裁决：HOLD ⏸️
+
+当前不要求。
+
+理由：
+
+你提出：
+
+读取审计本身不写审计，避免自激
+
+这个设计合理。
+
+但企业环境中：
+
+“谁查看了审计”
+
+未来可能需要。
+
+当前 Gate 7：
+
+不引入。
+
+所以：
+
+纯文本
+Audit Read:
+no access logging
+for now
+
+未来安全阶段重新评估。
+
+A4：复合索引是否属于 Schema 变更
+裁决：GO，但走轻量评估 ✅
+
+索引属于数据库结构变化。
+
+但不是领域 Schema。
+
+因此：
+
+不需要完整 Domain Schema Delta。
+
+需要：
+
+纯文本
+DB PERFORMANCE CHANGE NOTE
+
+说明：
+
+index purpose
+query pattern
+rollback
+
+即可。
+
+A5：是否允许 CSV 导出
+裁决：HOLD ⏸️
+
+暂不加入。
+
+原因：
+
+CSV 导出会扩大：
+
+数据泄露面
+权限控制
+下载审计
+脱敏策略
+
+当前：
+
+API 查询足够。
+
+未来 Console 阶段再做。
+
+Q2 最终表
+项	裁决
+A1 changes 只回键名	GO
+A2 动作白名单	GO
+A3 查询留痕	HOLD
+A4 复合索引	GO（DB Note）
+A5 CSV Export	HOLD
+下一步边界
+
+批准继续：
+
+C-0009.2 VALIDATION-RUN HARNESS
+
+继续做：
+
+✅ 多平台文件统一入口
+✅ 验证报告
+✅ 商业评审骨架
+✅ 数据质量分析
+
+不要进入：
+
+❌ API Connector
+❌ 自动申诉
+❌ 资金闭环
+❌ 规则判断
+❌ HS Code
+❌ 佣金扣款
+
+归档：
+
+Markdown
+### [MSG-20260929-11]
+
+TYPE:
+IMPLEMENTATION + DESIGN DECISION
+
+Q1:
+IMPORT ERROR REPORT
+
+DECISION:
+PASS_CLOSE
+
+Q2:
+AUDIT READ API DESIGN
+
+A1:
+GO - changes returns keys only
+
+A2:
+GO - fixed event enum whitelist
+
+A3:
+HOLD - no read access logging currently
+
+A4:
+GO - DB performance note required
+
+A5:
+HOLD - CSV export deferred
+
+STATUS:
+CONTINUE C-0009.2 VALIDATION-RUN HARNESS
+AUDIT READ API WAIT IMPLEMENTATION
+
+当前工程状态继续保持健康：基础设施补强可以继续，但商业闭环仍等待真实数据验证。
+```
