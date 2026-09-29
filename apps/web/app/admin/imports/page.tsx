@@ -1,6 +1,6 @@
 import Link from 'next/link';
 
-import { apiGet, consoleLang, consoleText, renderCell, tableRows } from '../../lib/console';
+import { apiGet, consoleLang, consoleText, renderCell, statusLabel, tableRows } from '../../lib/console';
 
 interface ImportsBody {
   items?: unknown;
@@ -17,7 +17,7 @@ export default async function ImportValidationPage({ searchParams }: { searchPar
     apiGet<{ projection?: boolean; buckets?: unknown }>('/admin/imports/quality-summary'),
   ]);
   if (list.status !== 'ok' || !list.data) {
-    return <p className="rounded-lg border bg-white p-6 text-sm">{t[list.status]}</p>;
+    return <p className="rounded-lg border bg-white p-6 text-sm">{statusLabel(t, list.status)}</p>;
   }
   const rows = tableRows(list.data.items);
   const columns = rows.length > 0 ? PREFERRED.filter((key) => key in (rows[0] ?? {})) : PREFERRED.slice(0, 4);

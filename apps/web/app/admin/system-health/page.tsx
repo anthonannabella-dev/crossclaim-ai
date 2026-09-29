@@ -1,4 +1,4 @@
-import { apiGet, consoleLang, consoleText, renderCell, tableRows } from '../../lib/console';
+import { apiGet, consoleLang, consoleText, renderCell, statusLabel, tableRows } from '../../lib/console';
 
 interface HealthBody {
   status?: string;
@@ -10,7 +10,7 @@ export default async function SystemHealthPage() {
   const t = consoleText(await consoleLang());
   const result = await apiGet<HealthBody>('/admin/system-health');
   if (result.status !== 'ok' || !result.data) {
-    return <p className="rounded-lg border bg-white p-6 text-sm">{t[result.status]}</p>;
+    return <p className="rounded-lg border bg-white p-6 text-sm">{statusLabel(t, result.status)}</p>;
   }
   const checks = tableRows(result.data.checks);
   return (

@@ -1,4 +1,4 @@
-import { apiGet, consoleLang, consoleText, renderCell, tableRows } from '../../lib/console';
+import { apiGet, consoleLang, consoleText, renderCell, statusLabel, tableRows } from '../../lib/console';
 
 interface MemberItem {
   userId?: string;
@@ -20,7 +20,7 @@ export default async function MembersPage() {
     apiGet<{ readonly?: boolean; roles?: string[]; permissions?: string[] }>('/admin/permission-matrix'),
   ]);
   if (list.status !== 'ok' || !list.data) {
-    return <p className="rounded-lg border bg-white p-6 text-sm">{t[list.status]}</p>;
+    return <p className="rounded-lg border bg-white p-6 text-sm">{statusLabel(t, list.status)}</p>;
   }
   const rows = tableRows(list.data.items);
   return (

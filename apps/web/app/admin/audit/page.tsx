@@ -1,6 +1,6 @@
 import Link from 'next/link';
 
-import { apiGet, consoleLang, consoleText, renderCell, tableRows } from '../../lib/console';
+import { apiGet, consoleLang, consoleText, renderCell, statusLabel, tableRows } from '../../lib/console';
 
 interface AuditBody {
   items?: unknown;
@@ -16,7 +16,7 @@ export default async function AuditExplorerPage({ searchParams }: { searchParams
   const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
   const result = await apiGet<AuditBody>(`/admin/audit${query}`);
   if (result.status !== 'ok' || !result.data) {
-    return <p className="rounded-lg border bg-white p-6 text-sm">{t[result.status]}</p>;
+    return <p className="rounded-lg border bg-white p-6 text-sm">{statusLabel(t, result.status)}</p>;
   }
   const rows = tableRows(result.data.items);
   const columns = rows.length > 0 ? PREFERRED.filter((key) => key in (rows[0] ?? {})) : PREFERRED.slice(0, 4);

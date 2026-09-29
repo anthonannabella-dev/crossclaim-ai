@@ -87,3 +87,7 @@ reports/quarantine/
 inbox/*
 !inbox/README.md
 
+
+# 运行时本地存储（E1/E2 采集用，勿入库）
+.runtime-storage/
+

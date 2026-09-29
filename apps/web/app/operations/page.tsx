@@ -1,6 +1,6 @@
 import Link from 'next/link';
 
-import { apiGet, consoleLang, consoleText, renderCell, tableRows } from '../lib/console';
+import { apiGet, consoleLang, consoleText, renderCell, statusLabel, tableRows } from '../lib/console';
 
 interface DashboardBody {
   generatedAt?: string;
@@ -28,7 +28,7 @@ export default async function OperationsConsolePage({ searchParams }: { searchPa
   if (result.status !== 'ok' || !result.data) {
     return (
       <section className="rounded-lg border bg-white p-6">
-        <h1 className="text-xl font-semibold">{t[result.status]}</h1>
+        <h1 className="text-xl font-semibold">{statusLabel(t, result.status)}</h1>
         <Link href="/" className="mt-4 inline-block text-slate-700 underline">
           {t.backHome}
         </Link>

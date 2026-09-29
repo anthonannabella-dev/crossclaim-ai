@@ -1,10 +1,10 @@
-import { apiGet, consoleLang, consoleText, renderCell } from '../../lib/console';
+import { apiGet, consoleLang, consoleText, renderCell, statusLabel } from '../../lib/console';
 
 export default async function TenantOverviewPage() {
   const t = consoleText(await consoleLang());
   const result = await apiGet<Record<string, unknown>>('/admin/tenant-overview');
   if (result.status !== 'ok' || !result.data) {
-    return <p className="rounded-lg border bg-white p-6 text-sm">{t[result.status]}</p>;
+    return <p className="rounded-lg border bg-white p-6 text-sm">{statusLabel(t, result.status)}</p>;
   }
   const entries = Object.entries(result.data).filter(([, value]) => typeof value !== 'object');
   return (

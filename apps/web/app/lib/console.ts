@@ -118,6 +118,14 @@ export function consoleText(lang: ConsoleLang): Record<string, string> {
   return TEXT[lang];
 }
 
+/** 受控状态 → 文案键（不透出任何后端细节）。 */
+export function statusLabel(t: Record<string, string>, status: ConsoleStatus): string {
+  if (status === 'LOGIN_REQUIRED') return t.loginRequired;
+  if (status === 'NO_PERMISSION') return t.noPermission;
+  if (status === 'NOT_FOUND') return t.notFound;
+  return t.systemError;
+}
+
 /** 只渲染 API 已返回的白名单字段；不做任何补算。 */
 export function pick(source: unknown, keys: readonly string[]): Record<string, unknown> {
   if (!source || typeof source !== 'object') return {};
