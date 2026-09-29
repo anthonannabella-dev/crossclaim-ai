@@ -75,7 +75,7 @@ AI 负责文档理解、字段抽取、异常解释、证据推荐、案件总�
   **平台连接器抽象层**（Connector 契约 / 编排器 / quarantine，不含任何真实平台接入）
   · **i18n 轻量层**（C-0015-I18N-LAYER：zh-CN / en-US / de / ja / es 五语字典 + `cc_lang`
   cookie 与 `Accept-Language` 识别 + UI 文案切换；不含 LLM 多语言输出，架构方 MSG-20260929-05 批准）
-- CI：全新 PostgreSQL 上真实执行迁移并跑 **75 文件 / 679 用例**（含真实库不变量与租户隔离），
+- CI：全新 PostgreSQL 上真实执行迁移并跑 **76 文件 / 688 用例**（含真实库不变量与租户隔离），
   另有 Web typecheck/build 与双 workspace 许可证闸门
 
 尚未完成 / 明确 HOLD：
@@ -89,6 +89,7 @@ AI 负责文档理解、字段抽取、异常解释、证据推荐、案件总�
 > **本地跑测试需要数据库**：
 > `docker run -d --name crossclaim-postgres -e POSTGRES_USER=crossclaim -e POSTGRES_PASSWORD=ccdevpass -e POSTGRES_DB=crossclaim -p 127.0.0.1:55432:5432 postgres:16-alpine`
 > 然后 `DATABASE_URL=postgresql://crossclaim:ccdevpass@localhost:55432/crossclaim npx prisma migrate deploy && npm test`
+> 初始化可操作数据（幂等；生产环境默认拒绝）：`cd apps/api && npm run db:seed`
 
 详见 [MIGRATION_PLAN.md](./MIGRATION_PLAN.md)。
 
@@ -106,5 +107,9 @@ AI 负责文档理解、字段抽取、异常解释、证据推荐、案件总�
 | `AGENTS.md` | AI Agent 协作规则 |
 | `MODEL_LICENSES.md` | 模型权重许可证登记 |
 | `API.md` | 内部 HTTP 端点参考（含角色矩阵与错误码） |
+| `DEPLOYMENT.md` | 部署步骤、环境变量清单、初始化与回滚 |
+| `SECURITY.md` | 认证、租户隔离、凭据边界、上传安全 |
+| `OPERATIONS.md` | 健康检查、日志、审计动作、故障处置 |
+| `CODE_COMPLETE_REPORT.md` | 离线完成度审计（活文档，含离线工作队列） |
 
-*（`DEPLOYMENT.md` / `SECURITY.md` / `OPERATIONS.md` 待补，未完成的文档不代写。）*
+*（以上文档均已建立；`apps/ai` 仍待立项。）*
