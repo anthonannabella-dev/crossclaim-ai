@@ -72086,3 +72086,365 @@ HOLD
 
 下一提交进入 P2-2 Backup / Restore Verification Design/Implementation Checkpoint。
 ```
+
+### [MSG-20260929-72] P2-2-BACKUP-RESTORE-CHECKPOINT 裁决：RESULT: PASS_WITH_REQUIRED_FOLLOW_UP / STATUS: P2-2 BACKUP-RESTORE VERIFICATION = PASS / MERGE: APPROVED / NEXT: P2-3 SECRET ROTATION DESIGN-IMPLEMENTATION（Q1 批准 dc61e40/1e21219 fast-forward 合并 main（pg_dump / pg_restore scratch / schema / trigger 28 / tenant isolation / numeric 精度 / audit 连续性 / KillSwitchRequest / restore failure simulation 全达标）；FOLLOW_UP_REQUIRED 登记：Claim 与 CaseEvidence 未进入种子覆盖，属核心业务链（Claim→CaseEvidence→EvidenceArtifact→Recovery→Settlement），Final Production Gate 前必须完成 BACKUP_VERIFY_COVERAGE_CLOSE（Claim 至少覆盖 create/restore/tenant isolation/status enum/relation integrity；CaseEvidence 至少覆盖 Case↔EvidenceArtifact 关系、restore 后引用一致、无 orphan；只补 seed fixture + compare coverage，不重设计备份系统）；B1-B7 与 SIM 全 PASS（B2 36 张 tenant-owned 表、B3 numeric decimal、B4 count+max(createdAt)+action 分布、B5 state+幂等索引+pending 索引+trigger 28、B6 19/174/41/242、B7 fkCount=90 unvalidated=0、SIM auditRows 2→0 detected=true；dump 边界 = 容器 /tmp 允许、CI artifact/repo/persistent storage 禁止）；Q2 选择 (b) 进入 P2-3 Secret Rotation：范围冻结（Secret inventory 仅名称：DATABASE_URL/SESSION_SECRET/AUDIT_IP_SALT/STORAGE_URL_SECRET/webhook signing secret/credentialRef/future OAuth placeholder；rotation flow prepare→generate→overlap window→switch→verify→revoke old→audit；audit 动作 secret.rotated 只记 secretName/actor/timestamp/result/changeRequestId，禁止 value/hash/prefix/suffix；rollback 必须覆盖 new secret invalid→restore old→verify→audit failure 不允许）；本阶段禁止真实 Secret 轮换/生产环境操作/云平台账号操作/OAuth 真凭证接入/第三方平台连接，仍 HOST APPROVAL REQUIRED）
+
+```text
+复核 P2-2 Backup / Restore Checkpoint。
+
+裁决：
+
+纯文本
+RESULT: PASS_WITH_REQUIRED_FOLLOW_UP
+
+STATUS:
+P2-2 BACKUP / RESTORE VERIFICATION = PASS
+
+MERGE:
+APPROVED
+
+NEXT:
+P2-3 SECRET ROTATION DESIGN / IMPLEMENTATION
+
+FOLLOW_UP:
+Claim + CaseEvidence seed coverage must be closed before FINAL PRODUCTION READINESS
+Q1：合并批准
+
+批准：
+
+纯文本
+dc61e40
+1e21219
+
+fast-forward 合并到 main。
+
+原因：
+
+本阶段核心目标已经达到：
+
+✅ pg_dump
+✅ pg_restore scratch
+✅ schema 验证
+✅ trigger 28 验证
+✅ tenant isolation 验证
+✅ numeric 精度验证
+✅ audit continuity 验证
+✅ KillSwitchRequest 验证
+✅ restore failure simulation
+
+符合 P2-2 目标。
+
+但是：Claim / CaseEvidence 缺口必须登记
+
+这里不直接 BLOCK，但必须标记：
+
+纯文本
+STATUS:
+FOLLOW_UP_REQUIRED
+
+原因：
+
+你的备份验证覆盖：
+
+38 tables compared
+20 non-empty
+
+但是：
+
+Claim
+CaseEvidence
+
+未进入种子覆盖。
+
+这两个不是普通表。
+
+原因：
+
+它们属于核心业务链：
+
+Claim
+ |
+CaseEvidence
+ |
+EvidenceArtifact
+ |
+Recovery
+ |
+Settlement
+
+恢复可靠性不能长期缺少验证。
+
+裁决：
+
+允许：
+
+进入 P2-3。
+
+但是增加一个硬要求：
+
+在 Final Production Gate 前必须完成：
+
+BACKUP_VERIFY_COVERAGE_CLOSE
+
+验收：
+
+Claim
+
+至少验证：
+
+create
+restore
+tenant isolation
+status enum
+relation integrity
+CaseEvidence
+
+至少验证：
+
+Case ↔ EvidenceArtifact relation
+restore 后引用一致
+无 orphan
+
+不需要重新设计备份系统。
+
+只补：
+
+seed fixture + compare coverage。
+
+P2-2 详细验收
+B1 行数一致
+
+PASS。
+
+B2 租户隔离
+
+PASS。
+
+36 tenant-owned 表验证通过。
+
+这是重点。
+
+B3 金额一致
+
+PASS。
+
+特别认可：
+
+使用：
+
+numeric decimal comparison
+
+而不是：
+
+float compare
+
+否则金额恢复验证没有意义。
+
+B4 Audit
+
+PASS。
+
+验证：
+
+count
++
+max(createdAt)
++
+action distribution
+
+符合要求。
+
+B5 Kill Switch
+
+PASS。
+
+包含：
+
+Request state
+idempotency index
+pending index
+trigger 28
+
+很好。
+
+B6 Schema
+
+PASS。
+
+当前：
+
+migration: 19
+indexes: 174
+enum: 41
+constraints: 242
+
+保持契约。
+
+B7 不变量
+
+PASS。
+
+fkCount=90
+unvalidated=0
+
+通过。
+
+Restore Failure Simulation
+
+PASS。
+
+这一项很重要。
+
+因为很多系统只证明：
+
+restore 成功
+
+但没有证明：
+
+坏恢复不会被误判成功
+
+当前：
+
+auditRows before=2
+after=0
+detected=true
+
+符合预期。
+
+dump 边界
+
+PASS。
+
+确认：
+
+允许：
+
+container /tmp
+
+禁止：
+
+CI artifact
+repository
+persistent storage
+
+符合数据安全要求。
+
+Q2：下一步选择
+
+选择：
+
+b) 进入 P2-3 Secret Rotation
+
+批准。
+
+原因：
+
+Claim / CaseEvidence 是覆盖补齐问题，不影响当前备份机制正确性。
+
+P2-3 是独立安全能力，可以并行推进。
+
+P2-3 范围冻结
+
+允许：
+
+Design / Implementation
+
+包含：
+
+Secret inventory
+
+仅名称：
+
+DATABASE_URL
+SESSION_SECRET
+AUDIT_IP_SALT
+STORAGE_URL_SECRET
+webhook signing secret
+credentialRef
+future OAuth placeholder
+Rotation flow
+
+必须：
+
+prepare
+ ↓
+generate
+ ↓
+overlap window
+ ↓
+switch
+ ↓
+verify
+ ↓
+revoke old
+ ↓
+audit
+Audit
+
+采用：
+
+secret.rotated
+
+只记录：
+
+secretName
+actor
+timestamp
+result
+changeRequestId
+
+禁止：
+
+secret value
+hash
+prefix
+suffix
+Rollback
+
+必须覆盖：
+
+new secret invalid
+        |
+        v
+restore old secret
+        |
+        v
+verify
+        |
+        v
+audit failure
+不允许
+
+本阶段禁止：
+
+❌ 真实 Secret 轮换
+❌ 生产环境操作
+❌ 云平台账号操作
+❌ OAuth 真凭证接入
+❌ 第三方平台连接
+
+仍然：
+
+HOST APPROVAL REQUIRED
+当前状态更新
+P2-1 Deployment Smoke       PASS_CLOSE
+
+P2-2 Backup Restore          PASS_CLOSE
+    └─ Claim/CaseEvidence follow-up OPEN
+
+P2-3 Secret Rotation         GO
+
+P2-4 Real Validation         WAITING_HOST_DATA
+
+继续保持：
+
+Action Guard:
+DESIGN ONLY / HOLD
+
+Production Enablement:
+HOLD
+
+下一步提交：
+
+P2-3 SECRET ROTATION DESIGN / IMPLEMENTATION CHECKPOINT。
+```
