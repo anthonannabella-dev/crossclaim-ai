@@ -36,7 +36,15 @@ import { listPaymentReconciliation, toReconciliationCsv } from './payment-reconc
 import { replayPaymentEvent, runDueRetries } from './payment-attempt';
 import { getCase, getClaimDraft, listCaseEvidence, listCases } from './case-read';
 import { getMember, getPermissionMatrix, listMembers } from '../operations/admin-membership';
-import { getKillSwitchStatus, killSwitchConfigFromEnv } from '../operations/kill-switch';
+import {
+  CsrfRejectedError,
+  RateLimitedError,
+  assertKillSwitchCsrf,
+  changeKillSwitch,
+  enforceKillSwitchRateLimit,
+  getKillSwitchStatus,
+  killSwitchConfigFromEnv,
+} from '../operations/kill-switch';
 import {
   getRecoveryReviewItem,
   listRecoveryReviewQueue,
@@ -164,6 +172,9 @@ async function readJsonBody(req: IncomingMessage): Promise<Record<string, unknow
 function statusFor(error: unknown): { code: number; error: string } {
   if (error instanceof HttpBodyError) return { code: 400, error: error.code };
   if (error instanceof ForbiddenError) return { code: 403, error: error.code };
+  // MSG-20260929-60：Kill Switch 变更入口的两类边界错误
+  if (error instanceof CsrfRejectedError) return { code: 403, error: error.code };
+  if (error instanceof RateLimitedError) return { code: 429, error: error.code };
   if (error instanceof WorkflowError) {
     switch (error.code) {
       case 'NOT_FOUND':
@@ -200,6 +211,10 @@ function statusFor(error: unknown): { code: number; error: string } {
     }
   }
   return { code: 500, error: 'WORKFLOW_ERROR' };
+}
+
+function headerValue(raw: string | string[] | undefined): string | undefined {
+  return Array.isArray(raw) ? raw[0] : raw;
 }
 
 function requireString(body: Record<string, unknown>, key: string): string | undefined {
@@ -307,7 +322,10 @@ export async function handleWorkflowRequest(
   // MSG-20260929-40：Admin Console 与 Operations 看板都是只读 GET 面。
   // 此前未登记，GET 请求在方法闸门处直接 405（与端点内的 GET-only 校验重复）。
   const allowed =
-    adminAny || operationsDashboard || operationsClaims || operationsRecovery
+    // MSG-20260929-60：Kill Switch 变更入口是唯一的 Admin POST 面；其余 Admin 端点保持只读 GET
+    adminKillSwitch
+      ? ['GET', 'POST']
+      : adminAny || operationsDashboard || operationsClaims || operationsRecovery
       ? ['GET']
       : connection && !connection[2]
         ? ['GET', 'POST']
@@ -576,20 +594,46 @@ export async function handleWorkflowRequest(
       return true;
     }
 
-    // MSG-20260929-53：Kill Switch 只读状态（GET only；无变更端点）
+    // MSG-20260929-53：Kill Switch 只读状态；MSG-20260929-60：新增变更入口（POST /admin/kill-switch）
     if (adminKillSwitch) {
-      if ((req.method ?? 'GET') !== 'GET') {
-        sendJson(res, 405, { error: 'METHOD_NOT_ALLOWED' });
+      if (method === 'GET') {
+        sendJson(
+          res,
+          200,
+          await getKillSwitchStatus(
+            { prisma: deps.prisma, config: killSwitchConfigFromEnv() },
+            { organizationId: context.organizationId, role: context.role },
+            { ...(deps.now ? { now: deps.now } : {}) },
+          ),
+        );
         return true;
       }
-      sendJson(
-        res,
-        200,
-        await getKillSwitchStatus(
-          { prisma: deps.prisma, config: killSwitchConfigFromEnv() },
-          { organizationId: context.organizationId, role: context.role },
-        ),
+      // 1) CSRF：同源（Origin/Referer ↔ Host）+ 自定义头，服务端强制
+      assertKillSwitchCsrf({
+        origin: headerValue(req.headers.origin),
+        referer: headerValue(req.headers.referer),
+        host: headerValue(req.headers.host),
+        csrfHeader: headerValue(req.headers['x-crossclaim-csrf']),
+      });
+      // 2) 速率限制（SECURITY_INCIDENT 例外；紧急路径仍必须留痕）
+      const body = await readJsonBody(req);
+      enforceKillSwitchRateLimit(actor, body.scope, body.reasonCode);
+      // 3) 变更（幂等 / 双人确认 / CAS / 审计同事务）
+      const changeResult = await changeKillSwitch(
+        { prisma: deps.prisma, config: killSwitchConfigFromEnv() },
+        actor,
+        {
+          scope: body.scope,
+          target: body.target,
+          phase: body.phase,
+          reasonCode: body.reasonCode,
+          ...(body.note !== undefined ? { note: body.note } : {}),
+          ...(body.requestId !== undefined ? { requestId: body.requestId } : {}),
+          idempotencyKey: body.idempotencyKey,
+        },
+        { ...(deps.now ? { now: deps.now } : {}) },
       );
+      sendJson(res, 200, changeResult);
       return true;
     }
 

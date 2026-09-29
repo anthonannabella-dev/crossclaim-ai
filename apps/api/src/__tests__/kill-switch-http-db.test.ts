@@ -78,6 +78,7 @@ const snapshot = async () => ({
   audits: await prisma.auditLog.count(),
   users: await prisma.user.count(),
   memberships: await prisma.membership.count(),
+  killSwitchRequests: await prisma.killSwitchRequest.count(),
 });
 
 describe('Kill Switch — 只读端点（真实 HTTP + PostgreSQL）', () => {
@@ -133,14 +134,17 @@ describe('Kill Switch — 只读端点（真实 HTTP + PostgreSQL）', () => {
     });
   });
 
-  it('04 非 GET → 405；且不产生任何写入', async () => {
+  it('04 方法闸门：PUT/DELETE → 405；POST 无 CSRF → 403（MSG-20260929-60 起 POST 是变更入口）；均无写入', async () => {
     await withServer(async (base) => {
       const owner = await login(base, 'ks-owner@example.com');
       const before = await snapshot();
-      for (const method of ['POST', 'PUT', 'DELETE']) {
+      for (const method of ['PUT', 'DELETE']) {
         const res = await call(base, '/admin/kill-switch', method, owner);
         expect(res.status, method).toBe(405);
       }
+      const postRes = await call(base, '/admin/kill-switch', 'POST', owner);
+      expect(postRes.status).toBe(403);
+      expect(((await postRes.json()) as { error: string }).error).toBe('CSRF_REJECTED');
       expect(await snapshot()).toEqual(before);
     });
   });
