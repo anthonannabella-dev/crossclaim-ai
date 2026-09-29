@@ -115,3 +115,102 @@ describe('P2-4 Validation Runbook — Stage B/C 与 Decision Gate', () => {
     expect(markdown).not.toContain('recoveryAmount'); // 阶段一不判断商业指标
   });
 });
+
+describe('P2-4 Validation Runbook — Stage 0 入场前置检查（preflight，只读）', () => {
+  const now = '2026-09-30T00:00:00.000Z';
+
+  function csv(header: string[], rowCount: number, date = '2026-09-01T00:00:00Z') {
+    const lines = [header.join(',')];
+    for (let index = 1; index <= rowCount; index += 1) {
+      lines.push(
+        header
+          .map((column) => {
+            if (column === 'order_id') return `ORDER-${index}`;
+            if (column === 'occurred_at') return date;
+            if (column === 'amount') return '120.50';
+            if (column === 'currency') return 'JPY';
+            if (column === 'product_name') return 'Widget';
+            if (column === 'buyer_name') return 'MASKED';
+            return 'NaN';
+          })
+          .join(','),
+      );
+    }
+    return lines.join('\n');
+  }
+
+  it('11 结构合规（必需列/行数/唯一 id/日期可解析）→ READY_FOR_STAGE_A', () => {
+    const result = (tool.preflightDataset as any)({ text: csv(['order_id', 'occurred_at', 'amount', 'currency'], 500), now });
+    expect(result.verdict).toBe('READY_FOR_STAGE_A');
+    expect(result.ok).toBe(true);
+    expect(result.rowCount).toBe(500);
+    expect(result.blockingChecks).toEqual([]);
+    expect(result.nextStep).toContain('audit-input');
+  });
+
+  it('12 缺必需列 → NEEDS_FIX，缺口进 blockingChecks，且只给别名提示不做映射', () => {
+    const result = (tool.preflightDataset as any)({ text: csv(['order_id', 'occurred_at'], 500), now });
+    expect(result.verdict).toBe('NEEDS_FIX');
+    expect(result.blockingChecks).toContain('required-columns');
+    expect(
+      result.checks.find((check: { name: string }) => check.name === 'required-columns').detail,
+    ).toContain('amount+currency');
+  });
+
+  it('13 行数不足（< 500）→ NEEDS_FIX', () => {
+    const result = (tool.preflightDataset as any)({
+      text: csv(['order_id', 'occurred_at', 'amount', 'currency'], 120),
+      now,
+    });
+    expect(result.verdict).toBe('NEEDS_FIX');
+    expect(result.blockingChecks).toContain('min-rows');
+  });
+
+  it('14 疑似 PII 列 → NEEDS_FIX；业务标识列（product_name）不算 PII', () => {
+    const pii = (tool.preflightDataset as any)({
+      text: csv(['order_id', 'occurred_at', 'amount', 'currency', 'buyer_name'], 500),
+      now,
+    });
+    expect(pii.verdict).toBe('NEEDS_FIX');
+    expect(pii.blockingChecks).toContain('no-pii-columns');
+    expect(pii.checks.find((check: { name: string }) => check.name === 'no-pii-columns').detail).toContain(
+      'buyer_name',
+    );
+
+    const business = (tool.preflightDataset as any)({
+      text: csv(['order_id', 'occurred_at', 'amount', 'currency', 'product_name'], 500),
+      now,
+    });
+    expect(business.blockingChecks).not.toContain('no-pii-columns');
+  });
+
+  it('15 重复 order_id / 日期不可解析 → NEEDS_FIX；日期窗口仅提示不阻断', () => {
+    const duplicated = (tool.preflightDataset as any)({
+      text: csv(['order_id', 'occurred_at', 'amount', 'currency'], 500).replace('ORDER-2,', 'ORDER-1,'),
+      now,
+    });
+    expect(duplicated.blockingChecks).toContain('unique-order-id');
+
+    const badDates = (tool.preflightDataset as any)({
+      text: csv(['order_id', 'occurred_at', 'amount', 'currency'], 500, 'not-a-date'),
+      now,
+    });
+    expect(badDates.blockingChecks).toContain('dates-parsable');
+
+    const oldDates = (tool.preflightDataset as any)({
+      text: csv(['order_id', 'occurred_at', 'amount', 'currency'], 500, '2020-01-01T00:00:00Z'),
+      now,
+    });
+    expect(oldDates.ok).toBe(true); // 窗口偏好为非阻断项
+    expect(
+      oldDates.checks.find((check: { name: string }) => check.name === 'recent-window-preferred').ok,
+    ).toBe(false);
+  });
+
+  it('16 空文件 → NEEDS_FIX（不抛异常）', () => {
+    const result = (tool.preflightDataset as any)({ text: '\n\n', now });
+    expect(result.verdict).toBe('NEEDS_FIX');
+    expect(result.blockingChecks).toEqual(['non-empty']);
+  });
+});
+

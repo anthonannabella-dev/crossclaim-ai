@@ -11,6 +11,8 @@
 - 可选字段：`Refund Subtotal`、`Shipping`、`Shipping Method`、`Destination Country`、`Weight`（或 `Refund Status`、`Dispute Status`、`Chargeback Status`）
 - 脱敏建议：姓名/地址/邮箱/电话可整列替换为占位符；订单号可哈希，但**同一订单内保持一致**
 - 命名建议：`shopify-orders-<YYYYMM>-<YYYYMM>.csv`
+- 表头命名（推荐）：直接使用 canonical 名 `order_id,occurred_at,amount,currency`；
+  若保留 Shopify 原生列名（`Order ID` / `Created At` / `Total Price`），需人工确认映射表——**系统不会自动猜字段**
 
 ## RD-02（第二优先）· Amazon 结算类导出
 
@@ -23,6 +25,11 @@
 
 ## 放开文件后会发生什么
 
-`Shopify Export → Import → Normalization → Validation → Quarantine → Candidate Discovery → Human Verification → PHASE1-RESULT.md`
+```text
+node tools/validation/phase1-runbook.mjs preflight <dataset.csv>   # Stage 0：入场前置检查（只读）
+```
 
-验收标准、完整性等式与 Decision Gate 见 [`PHASE1-REAL-DATA-VALIDATION.md`](../PHASE1-REAL-DATA-VALIDATION.md)。
+`Shopify Export → Stage 0 preflight → Import → Normalization → Validation → Quarantine → Candidate Discovery → Human Verification → PHASE1-RESULT.md`
+
+交付清单与登记表见 [`HOST-DATA-REQUEST.md`](../HOST-DATA-REQUEST.md)；验收标准、完整性等式与 Decision Gate 见
+[`PHASE1-REAL-DATA-VALIDATION.md`](../PHASE1-REAL-DATA-VALIDATION.md)。

@@ -16,9 +16,12 @@
 | 禁止 | 买家姓名/地址/邮箱等 PII；真实支付凭据；平台凭据 |
 | 交付方式 | 宿主指定路径（不经聊天、不入仓库） |
 
+> 交付清单、字段命名与登记表以 [`HOST-DATA-REQUEST.md`](HOST-DATA-REQUEST.md) 为**单一口径**。
+
 ## 2. 步骤
 
 ```text
+0) 入场前置检查（Stage 0，只读）          → tools/validation/phase1-runbook.mjs preflight <csv>
 1) 接收检查（结构 + 行数 + 必需列）      → tools/validation/phase1-runbook.mjs audit-input <csv>
 2) 导入（既有 pipeline）                  → 产出 ImportBatch / SourceTransaction（幂等：dedupeKey）
 3) 数据质量报告                            → templates/DATA-QUALITY-REPORT.md
