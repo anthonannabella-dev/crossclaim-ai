@@ -116,3 +116,10 @@ UserInvitation
 
 共 36 张；覆盖要求：每张表应有 cc_tenant_immutable__<表名> 且 tgenabled=O。
 
+
+## C. 覆盖核对结果（TASK2 D）
+
+- 基线 cc_tenant 族（排除 immutable）：28 条
+- 归属不可变族 cc_tenant_immutable__*：36 条
+- 缺少归属不可变触发器的表：0 张
+
