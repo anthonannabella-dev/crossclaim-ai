@@ -18,6 +18,7 @@ import { PrismaClient } from '@prisma/client';
 import { loadEnv } from './config/env';
 import { createLogger, type Logger, type LogLevel } from './config/logger';
 import { checkHealth, healthHttpStatus } from './services/health';
+import { createMetrics } from './services/metrics';
 import {
   createStorageAdapter,
   type StorageAdapter,
@@ -89,6 +90,8 @@ export function buildContentDisposition(
   return `${disposition}; filename="${asciiFilename(filename)}"; filename*=UTF-8''${encoded}`;
 }
 
+let metrics: ReturnType<typeof createMetrics> | undefined;
+
 export function createServer(deps: ServerDeps): http.Server {
   const { prisma, log, storage, audit } = deps;
   // 审计 IP 盐值只影响“谁”的哈希；缺失时保持空值（不阻塞服务启动）
@@ -119,6 +122,8 @@ export function createServer(deps: ServerDeps): http.Server {
 
   return http.createServer((req, res) => {
     const started = Date.now();
+    // O9：进程内计数器（只按方法与状态码分类，不采集租户/PII 数据）
+    metrics ??= createMetrics();
     const url = req.url ?? '/';
 
     // CHANGE #23：/files/<token> 的 token 是短期访问凭证，绝不写进日志。
@@ -126,6 +131,7 @@ export function createServer(deps: ServerDeps): http.Server {
     // （/auth/*、/uploads、/imports、/opportunities/*、/connections*）。
     const logPath = url.startsWith('/files/') ? '/files/[REDACTED]' : url;
     res.on('finish', () => {
+      metrics?.observe(req.method ?? 'UNKNOWN', res.statusCode, Date.now() - started);
       log.info('http_request', {
         method: req.method,
         path: logPath,
@@ -200,6 +206,17 @@ export function createServer(deps: ServerDeps): http.Server {
         .catch((err) =>
           send(500, { error: err instanceof Error ? err.message : 'workflow_error' }),
         );
+      return;
+    }
+
+    // O9：默认不暴露；只有显式开启才返回 Prometheus 文本
+    if (req.method === 'GET' && url === '/metrics') {
+      if (process.env.METRICS_ENABLED !== 'true') {
+        send(404, { error: 'not_found' });
+        return;
+      }
+      res.writeHead(200, { 'content-type': 'text/plain; version=0.0.4; charset=utf-8' });
+      res.end(metrics?.render() ?? '');
       return;
     }
 

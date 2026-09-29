@@ -26,6 +26,7 @@ C-0008-B2（Case / Evidence / Claim Draft / Billing）的端点尚未实现。
 |---|---|---|---|
 | GET | `/health` | 健康检查（含数据库探测） | 200；依赖不可用时 503 `degraded` |
 | GET | `/healthz` | 同上（探针兼容命名） | 同上 |
+| GET | `/metrics` | Prometheus 文本指标（进程内计数） | 200 `text/plain`；`METRICS_ENABLED!=true` 时 404 |
 
 ## 文件下载
 

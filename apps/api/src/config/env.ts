@@ -34,6 +34,7 @@ export const ENV_SPECS: EnvSpec[] = [
   { name: 'STORAGE_TOKEN_KEY', required: false, description: '下载令牌加密专用密钥（可选；未配置则由 STORAGE_URL_SECRET 派生）' },
   { name: 'STORAGE_SIGNED_URL_TTL_SECONDS', required: false, defaultValue: '300', description: '签名下载地址默认有效期（秒）' },
   { name: 'AUDIT_IP_SALT', required: false, description: '审计 IP 哈希盐值（真实值放密钥管理；未配置时本地开发回退用 STORAGE_URL_SECRET）' },
+  { name: 'METRICS_ENABLED', required: false, defaultValue: 'false', description: '是否暴露 GET /metrics（Prometheus 文本）；默认 false' },
 ];
 
 export class EnvError extends Error {

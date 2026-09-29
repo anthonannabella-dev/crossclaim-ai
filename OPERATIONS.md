@@ -27,8 +27,9 @@
 | 迁移审计 | `AuditLog.migration.applied` | 迁移执行留痕 |
 | CI | GitHub Actions | 三作业：api（迁移 + 类型 + 测试）/ web（typecheck + build）/ license-gate |
 
-**当前缺口（已记入 CODE_COMPLETE_REPORT TD-7）**：无 metrics 端点（Prometheus 风格）。
-现有替代：按 `http_request` 日志聚合 QPS / 错误率 / 延迟；按 `AuditLog` 统计业务动作量。
+**指标端点（O9，已实现）**：`GET /metrics` 返回 Prometheus 文本，**默认关闭**（`METRICS_ENABLED=true` 才暴露，否则 404）。
+指标口径：`crossclaim_http_requests_total{method,status_class}`、`crossclaim_http_request_duration_ms_sum/_count`、`crossclaim_process_uptime_seconds`。
+计数器只存在于进程内（重启清零），**不含任何租户/PII 数据**；需要长周期趋势仍以 `http_request` 日志与 `AuditLog` 为准。
 
 ---
 

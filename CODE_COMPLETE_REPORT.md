@@ -109,7 +109,7 @@ CI 三作业（api / web / license-gate）。
 | TD-4 | 失败模式 fixture 未矩阵化 | 回归面依赖零散用例 | 本轮起补 |
 | TD-5 | 无 `db:seed` | 新环境冷启动慢 | 本轮起补 |
 | TD-6 | 缺 DEPLOYMENT / SECURITY / OPERATIONS 文档 | 运维交接依赖口头 | 本轮起补 |
-| TD-7 | 无 metrics 端点（仅结构化日志） | 生产可观测性偏弱 | 待评估（可离线完成） |
+| TD-7 | ~~无 metrics 端点~~ | — | **已解决**（`/metrics` 端点 + 文档 + 测试，默认关闭） |
 
 ---
 
@@ -136,7 +136,7 @@ CI 三作业（api / web / license-gate）。
 | O6 | 批量与性能场景测试（1 万行导入） | 测试 | **部分完成**：适配层 1 万行 smoke（阈值 20s）已绿；DB 导入链路的 1 万行基准仍待补 |
 | O7 | HTTP 契约测试与 `API.md` 对齐核查 | 测试 | **完成**：新增 `tools/api-contract/check-routes.mjs`（双向比对，已接入 CI，本地 `API_CONTRACT_OK`） |
 | O8 | 审计动作覆盖率核查（关键动作是否都有审计） | 审计 | **完成**：新增 `tools/audit-coverage/check-audit-actions.mjs`（代码 ↔ OPERATIONS.md 双向核对，已接入 CI）；核对中发现文档里 `case.opened` 实际只在测试中使用，已从运维清单移除，并补齐 17 个真实动作 |
-| O9 | 可观测性补强评估（metrics 端点 / job 状态） | 运维 | 待办 |
+| O9 | 可观测性补强评估（metrics 端点 / job 状态） | 运维 | **完成**：`GET /metrics`（Prometheus 文本，默认关闭，`METRICS_ENABLED=true` 才暴露）+ 单测/HTTP 测试 |
 | O10 | 管理后台异常处置能力核查（真实上线后运维视角） | 产品/运维 | 待办 |
 
 > 更新规则：每完成一项 → 更新本表状态 → 提交并跑 CI；全部完成且无新增项时，本文档 §0 改写为 CODE COMPLETE。
