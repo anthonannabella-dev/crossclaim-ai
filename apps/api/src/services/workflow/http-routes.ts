@@ -36,6 +36,10 @@ import { listPaymentReconciliation, toReconciliationCsv } from './payment-reconc
 import { replayPaymentEvent, runDueRetries } from './payment-attempt';
 import { getCase, getClaimDraft, listCaseEvidence, listCases } from './case-read';
 import {
+  getRecoveryReviewItem,
+  listRecoveryReviewQueue,
+} from '../operations/admin-recovery-review';
+import {
   getImportBatch,
   getImportQualitySummary,
   listImportBatches,
@@ -96,6 +100,9 @@ const ADMIN_IMPORTS_PATH = /^\/admin\/imports$/;
 const ADMIN_IMPORT_QUALITY_PATH = /^\/admin\/imports\/quality-summary$/;
 const ADMIN_IMPORT_ERRORS_PATH = /^\/admin\/imports\/([^/]+)\/errors$/;
 const ADMIN_IMPORT_DETAIL_PATH = /^\/admin\/imports\/([^/]+)$/;
+// MSG-20260929-37：Admin Phase 3 / A5（只读恢复复核队列；无审批捷径）
+const ADMIN_RECOVERY_REVIEW_PATH = /^\/admin\/recovery-review$/;
+const ADMIN_RECOVERY_REVIEW_ITEM_PATH = /^\/admin\/recovery-review\/([^/]+)$/;
 
 /** 请求体层面的错误（与领域状态无关），统一映射为 400。 */
 class HttpBodyError extends Error {
@@ -229,6 +236,8 @@ export async function handleWorkflowRequest(
   const adminImportQuality = ADMIN_IMPORT_QUALITY_PATH.test(path);
   const adminImportErrors = ADMIN_IMPORT_ERRORS_PATH.exec(path);
   const adminImportDetail = ADMIN_IMPORT_DETAIL_PATH.exec(path);
+  const adminRecoveryReviewList = ADMIN_RECOVERY_REVIEW_PATH.test(path);
+  const adminRecoveryReviewItem = ADMIN_RECOVERY_REVIEW_ITEM_PATH.exec(path);
   const adminAny =
     adminTenantOverview ||
     adminAuditList ||
@@ -237,7 +246,9 @@ export async function handleWorkflowRequest(
     adminImportsList ||
     adminImportQuality ||
     adminImportErrors !== null ||
-    adminImportDetail !== null;
+    adminImportDetail !== null ||
+    adminRecoveryReviewList ||
+    adminRecoveryReviewItem !== null;
   if (!adminAny && !operationsDashboard && !operationsClaims && !operationsRecovery && !review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !replayPath && !retryDuePath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim) {
     return false;
   }
@@ -531,6 +542,41 @@ export async function handleWorkflowRequest(
           { organizationId: context.organizationId, role: context.role },
           caseClaim[1] ?? '',
         ),
+      );
+      return true;
+    }
+
+    // MSG-20260929-37：Admin Phase 3 / A5（只读；GET only；无审批端点、无金额）
+    if (adminRecoveryReviewList || adminRecoveryReviewItem) {
+      if ((req.method ?? 'GET') !== 'GET') {
+        sendJson(res, 405, { error: 'METHOD_NOT_ALLOWED' });
+        return true;
+      }
+      const reviewQuery = new URLSearchParams((req.url ?? '').split('?')[1] ?? '');
+      const reviewDeps = { prisma: deps.prisma, ...(deps.now ? { now: deps.now } : {}) };
+      const reviewActor = { organizationId: context.organizationId, role: context.role };
+      if (adminRecoveryReviewList) {
+        sendJson(
+          res,
+          200,
+          await listRecoveryReviewQueue(reviewDeps, {
+            ...reviewActor,
+            filter: {
+              bucket: reviewQuery.get('bucket') ?? undefined,
+              cursor: reviewQuery.get('cursor') ?? undefined,
+              limit: reviewQuery.get('limit') ?? undefined,
+            },
+          }),
+        );
+        return true;
+      }
+      sendJson(
+        res,
+        200,
+        await getRecoveryReviewItem(reviewDeps, {
+          ...reviewActor,
+          caseId: adminRecoveryReviewItem?.[1] ?? '',
+        }),
       );
       return true;
     }

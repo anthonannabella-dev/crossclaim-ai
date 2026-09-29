@@ -351,3 +351,18 @@ C-0008-B2（Case / Evidence / Claim Draft / Billing）的端点尚未实现。
 - **无样本**：L3 不返回原始行内容或脱敏样本（未来如需另开 ADMIN-IMPORT-SAMPLE-VIEW-DESIGN）
 - **无金额**：Admin 一律不展示金额 / 币种 / 单价 / 订单价值
 - 状态桶为 `ImportBatch.status` 的**固定映射**（in_progress / succeeded / retried_success / partial / failed）；不新增工作流状态，运营补充信息用角标表达（QUALITY_WARNING / RETRIED / UNKNOWN_STATUS）
+
+---
+
+## Admin Console Phase 3 — Recovery Review Queue（MSG-20260929-37）
+
+| 方法 | 路径 | 成功 | 权限 |
+|---|---|---|---|
+| GET | `/admin/recovery-review` | 200 `{ items, nextCursor }`；每项含 `bucket`（pending_review / approved / rejected，来自既有审核记录）与 `flags`（HIGH_VALUE_REVIEW_REQUIRED / AGED / MISSING_EVIDENCE_REF） | OWNER / ADMIN |
+| GET | `/admin/recovery-review/:caseId` | 200 单项只读视图（含证据元数据引用与 `reviewPath` 深链）；跨租户或无审核记录 → 404 | OWNER / ADMIN |
+
+- **Admin 看见流程，但不拥有流程**：不提供 approve / reject / 状态变更端点；审批仍由既有 `/cases/:caseId/recovery-review` 流程承担（其权限与审计不变）
+- **角标是 projection flag**，不是状态；`AGED` 阈值固定为代码常量 7 天（不可由 Admin 配置）
+- **证据仅元数据**：evidenceId / kind / role / capturedAt；不含文件名、storageKey、URL 或原文
+- **不展示任何金额**（含阈值金额）；仅显示 `HIGH_VALUE_REVIEW_REQUIRED` 这类事实标签
+- 仅 GET；无写路径、不写 AuditLog、无新表
