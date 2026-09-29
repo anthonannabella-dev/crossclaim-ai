@@ -56705,3 +56705,417 @@ READY_FOR_IMPLEMENTATION
 
 可以执行 S1-S5 migration，并进入 Claim Tracking 实现阶段。
 ```
+
+### [MSG-20260929-24] RECOVERY-CONFIRMATION-SCHEMA-DELTA-REQUEST 裁决：REVISE 🔶（小范围修改后 GO；SCHEMA_DIRECTION_APPROVED / WAITING_REVISION）——方向批准：RecoveryPayout、payoutRef 幂等、冲回链、人工确认字段、不做支付自动化；必须修改：把「确认（确认事实）」与「对账（到账事实）」拆成两个语义（当前被压进一个状态字段）、明确历史 Settlement 的默认状态处理、明确 confirmedAmount 来源（原字段还是计算投影）、确认 RecoveryPayout 是否为唯一事实来源；migration 与 schema 部署仍未批准
+
+Codex 按 MSG-20260929-22 的 NEXT 提交 RECOVERY-CONFIRMATION-SCHEMA-DELTA-REQUEST.md 后，架构方给出 REVISE：方向批准但要求拆分确认/对账语义。以下为该回复的逐字原文。
+
+```text
+RECOVERY-CONFIRMATION-SCHEMA-DELTA-REQUEST 裁决
+结论：REVISE 🔶（小范围修改后 GO）
+
+状态：
+
+纯文本
+GATE:
+7 Commercial Validation
+
+REQUEST:
+RECOVERY-CONFIRMATION-SCHEMA-DELTA
+
+DECISION:
+REVISE_REQUIRED
+
+SCOPE:
+Schema direction approved
+Migration not yet approved
+
+NEXT:
+Address R1 default + status semantics
+总体判断
+
+整体方向正确。
+
+批准的大方向：
+
+✅ Recovery Confirmation 独立于 Payment
+✅ RecoveryPayout 独立记录到账事实
+✅ 不自动扣佣
+✅ 不改变 FeeCalculation
+✅ 不改变 RecoveryLedgerEntry
+✅ 冲回保留历史链路
+
+这些符合 MSG-20260929-22。
+
+但是有一个关键 Schema 语义问题，需要修正后再迁移。
+
+一、R1 confirmationStatus 审计
+当前设计：
+纯文本
+SettlementConfirmationStatus
+
+CONFIRMED
+PARTIALLY_RECONCILED
+RECONCILED
+DISPUTED
+REVERSED
+
+default CONFIRMED
+结论：
+
+需要 REVISE 🔶
+
+原因：
+
+你这里混合了两个维度：
+
+维度 A：
+
+业务确认状态：
+
+这个 Settlement 是否被人工确认？
+
+维度 B：
+
+到账对账状态：
+
+实际收到多少钱？
+
+当前：
+
+纯文本
+CONFIRMED
+
+同时代表：
+
+已确认
+已到账？
+
+语义容易污染。
+
+建议拆分。
+
+推荐方案：
+SettlementConfirmationStatus
+
+只表达确认：
+
+纯文本
+PENDING_CONFIRMATION
+
+CONFIRMED
+
+REJECTED
+
+ReconciliationStatus
+
+表达到账：
+
+纯文本
+UNRECONCILED
+
+PARTIALLY_RECONCILED
+
+RECONCILED
+
+DISPUTED
+
+REVERSED
+
+原因：
+
+否则未来出现：
+
+情况：
+
+人工确认平台批准赔付
+
+但是钱还没到账
+
+应该是什么状态？
+
+现在：
+
+CONFIRMED？
+
+还是：
+
+PARTIALLY_RECONCILED？
+
+会产生冲突。
+
+二、R2 confirmedByUserId / confirmedAt
+结论：GO ✅
+
+保持。
+
+这是：
+
+Human Confirmation Evidence。
+
+要求：
+
+写入必须：
+
+OWNER/ADMIN
+AuditLog
+三、R4 reversedBySettlementId
+结论：GO ✅
+
+批准。
+
+方向正确：
+
+纯文本
+Original Settlement
+
+        |
+
+        |
+
+Reversal Settlement
+
+禁止：
+
+UPDATE 原金额。
+
+四、RecoveryPayout 新表
+结论：GO ✅
+
+批准。
+
+这是本 Delta 最核心部分。
+
+结构合理：
+
+纯文本
+RecoveryPayout
+
+organizationId
+
+settlementId
+
+payoutRef
+
+amount
+
+currency
+
+receivedAt
+
+sourceType
+唯一约束
+
+批准：
+
+纯文本
+organizationId
++
+payoutRef
+
+正确。
+
+因为同一个平台可能：
+
+不同租户存在同名 payoutRef。
+
+索引
+
+批准：
+
+organizationId + receivedAt
+organizationId + settlementId
+
+合理。
+
+五、R5 Settlement Index
+结论：GO ✅
+
+批准：
+
+纯文本
+organizationId
++
+confirmationStatus
+
+但是：
+
+如果拆分 ReconciliationStatus：
+
+需要重新评估：
+
+是否应该：
+
+纯文本
+organizationId
++
+reconciliationStatus
+
+或者两个索引。
+
+六、默认值问题
+当前：
+纯文本
+confirmationStatus DEFAULT CONFIRMED
+
+需要调整。
+
+原因：
+
+历史 Settlement 不一定经过人工确认。
+
+默认 CONFIRMED 会产生：
+
+“历史数据已经确认”的假象。
+
+建议：
+
+如果必须兼容：
+
+增加：
+
+纯文本
+LEGACY_CONFIRMED
+
+或者：
+
+迁移后：
+
+历史记录保持：
+
+纯文本
+CONFIRMATION_UNKNOWN
+
+这一点需要在 Revision 中明确。
+
+七、不变量审计
+I1 payout 同租户
+
+GO ✅
+
+I2 RECONCILED ⇒ receivedAmount == confirmedAmount
+
+GO，但需要明确：
+
+receivedAmount 来源：
+
+是否：
+
+纯文本
+SUM(RecoveryPayout.amount)
+
+不要存重复金额。
+
+I3 PARTIALLY_RECONCILED
+
+GO ✅
+
+I4 received > confirmed ⇒ DISPUTED
+
+GO ✅
+
+I5 原 Settlement 金额不可修改
+
+GO ✅
+
+非常重要。
+
+I6 payoutRef 唯一
+
+GO ✅
+
+八、迁移方案
+
+当前：
+
+CREATE TYPE
+ADD COLUMN
+CREATE TABLE
+INDEX
+
+方向可行。
+
+但：
+
+需要等状态语义修正。
+
+九、实现前必须补充
+
+请提交：
+
+纯文本
+RECOVERY-CONFIRMATION-SCHEMA-DELTA-REVISION.md
+
+只需要回答：
+
+R1 修订：
+
+选择：
+
+方案 A：
+
+拆：
+
+ConfirmationStatus
++
+ReconciliationStatus
+
+（推荐）
+
+或者：
+
+方案 B：
+
+保留单状态，但重新定义全部状态语义。
+
+R2：
+
+历史 Settlement 默认状态如何处理。
+
+R3：
+
+confirmedAmount 来源是否：
+
+Settlement 原字段？
+
+还是计算投影？
+
+R4：
+
+RecoveryPayout 是否唯一事实来源。
+
+最终归档
+Markdown
+### [MSG-20260929-24]
+
+TYPE:
+SCHEMA DELTA DECISION
+
+TARGET:
+RECOVERY-CONFIRMATION-SCHEMA-DELTA
+
+DECISION:
+REVISE
+
+Approved direction:
+- RecoveryPayout
+- payoutRef idempotency
+- reversal chain
+- human confirmation fields
+- no payment automation
+
+Required revision:
+- separate confirmation semantics from reconciliation semantics
+- clarify historical default status
+- clarify amount source
+
+Not approved yet:
+- migration
+- schema deployment
+
+STATUS:
+SCHEMA_DIRECTION_APPROVED
+WAITING_REVISION
+
+整体设计方向正确，主要问题是 Confirmation（确认事实）和 Reconciliation（到账事实）被压进一个状态字段。这个现在修正，比上线后拆状态成本低很多。
+```
