@@ -81,6 +81,7 @@ AI 负责文档理解、字段抽取、异常解释、证据推荐、案件总�
 - `VALIDATION-RUN-001`（商业验证唯一缺口，需要一份脱敏真实结构账单；脚手架已就绪）
 - C-0010-C2 真实 Stripe **test mode** 联调（需宿主授权：test 账号 / webhook signing secret / Stripe CLI）
 - 真实平台连接器（OAuth / 凭据 / 限流 / 游标持久化）——抽象层已就绪，接入需另行开闸
+- 所有 **API / 第三方账号**接入项已汇总为 `reports/API-INTEGRATION-BACKLOG.md`（宿主逐项开闸；清单不含任何凭据取值）
 - `apps/ai`、生产部署与安全/运维文档
 
 > **本地跑测试需要数据库**：
