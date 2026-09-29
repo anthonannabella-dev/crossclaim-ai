@@ -59,3 +59,40 @@
 **发送验证（强制）**：`fill` + `Enter` 后必须回读——① 输入框已清空；② 正文出现桥路标记（如 `[CODEX -> CHATGPT]` / `BRIDGE ONLINE`）。未验证到即视为未发送，重试一次；仍失败则报「桥路不可用」，不得假设成功。
 
 **消息约定**：每条以 `[CODEX -> CHATGPT] <topic>` 开头，便于去重与送达确认；裁决归档编号自 `MSG-20260930-06` 起递增。
+
+## 7. 持续执行环（宿主 2026-09-30 确认）
+
+**固定循环（每批一致）**：
+
+```text
+① 送审（在右侧网页版 ChatGPT 当前会话发 `[CODEX -> CHATGPT]` 包）
+② 等约 3 分钟（回复生成中；页面出现「停止生成」时继续等）
+③ 滚到会话最底部 → 只认本次送审之后的新回复 → 全文读取
+④ 取审计报告（DECISION / KEEP / CHANGE / RISKS / TEST / NEXT / PRODUCTION）
+⑤ 执行 CHANGE（与 RISKS/TEST 一并）
+⑥ 新 commit + 本地全绿 + 推 CI
+⑦ 回到 ① 再送审，持续向下推进
+```
+
+**标记规则（架构方 MSG-20260930-07）**：
+
+- 中间小步提交一律标 **`TYPE: PROGRESS`**（进度），**不得**标 `READY_FOR_REVIEW`。
+- 全部修订完成、拿到**最终 HEAD 的 CI 证据**后，再统一提交一次 `TYPE: READY_FOR_REVIEW`（7 段式）+ **独立修复 PR** 以界定 diff。
+- 只有出现**新方案选择 / 范围变化 / 实际阻塞**时才提前提问，不逐小步等开工确认。
+
+**每轮状态回复必须带（宿主 2026-09-30）**：
+
+```text
+CHATGPT_WEB:
+- send_head:
+- latest_reply_found: YES / NO
+- scrolled_to_bottom: YES / NO
+- full_reply_captured: YES / NO
+- decision:
+- decision_head:
+- github_archived: YES / NO
+```
+
+**失败保护**：无法确认到底部 / 回复可能截断 / AX 只返回部分消息 → 不猜结论，继续滚动与分段提取；确实读不到则记录 `CHATGPT_WEB_READ = FAILED`、`FALLBACK = GITHUB_BRIDGE`，并如实标注。
+
+**归档纪律**：每次新裁决**立即逐字**写入 `AI-ARCHITECT-INBOX.md`（`### [MSG-YYYYMMDD-NN]` + ```text 原文块），并跑 `tools/verdict-diff/compare.mjs` 必须 `FULL_COPY_OK`。
