@@ -73,6 +73,9 @@ jobs:
             && echo "OK: 27 tenant triggers present" \
             || (echo "FAIL: tenant triggers missing" && exit 1)
 
+      - name: API contract (API.md ↔ implemented routes)
+        run: node tools/api-contract/check-routes.mjs --root .
+
       - name: TypeScript typecheck
         working-directory: apps/api
         run: npx tsc --noEmit
