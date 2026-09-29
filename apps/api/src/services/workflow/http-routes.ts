@@ -46,6 +46,10 @@ import {
   killSwitchConfigFromEnv,
 } from '../operations/kill-switch';
 import {
+  createEffectiveKillSwitchResolver,
+  type EffectiveKillSwitchResolver,
+} from '../operations/kill-switch-resolver';
+import {
   getRecoveryReviewItem,
   listRecoveryReviewQueue,
 } from '../operations/admin-recovery-review';
@@ -215,6 +219,25 @@ function statusFor(error: unknown): { code: number; error: string } {
 
 function headerValue(raw: string | string[] | undefined): string | undefined {
   return Array.isArray(raw) ? raw[0] : raw;
+}
+
+/**
+ * 生效值解析器（EFFECTIVE-KILL-SWITCH-RESOLUTION-DESIGN，MSG-20260929-65 GO）。
+ * 进程内单例（按 prisma 客户端缓存）：只有单例才能让 §12.3 的进程内缓存生效。
+ * 控制面写入成功后由写路径主动 invalidate。
+ */
+const killSwitchResolvers = new WeakMap<object, EffectiveKillSwitchResolver>();
+function killSwitchResolverFor(prisma: PrismaClient): EffectiveKillSwitchResolver {
+  let resolver = killSwitchResolvers.get(prisma);
+  if (!resolver) {
+    resolver = createEffectiveKillSwitchResolver({
+      // 只读端口（I2：类型层面即无写路径）
+      controlRequests: { findMany: (args) => prisma.killSwitchRequest.findMany(args) },
+      config: killSwitchConfigFromEnv(),
+    });
+    killSwitchResolvers.set(prisma, resolver);
+  }
+  return resolver;
 }
 
 function requireString(body: Record<string, unknown>, key: string): string | undefined {
@@ -601,7 +624,13 @@ export async function handleWorkflowRequest(
           res,
           200,
           await getKillSwitchStatus(
-            { prisma: deps.prisma, config: killSwitchConfigFromEnv() },
+            {
+              prisma: deps.prisma,
+              config: killSwitchConfigFromEnv(),
+              // 生效值 = Config Layer 与 Control Plane 的只读合成投影（不落库）
+              effective: (scope, organizationId) =>
+                killSwitchResolverFor(deps.prisma).resolve(scope, organizationId),
+            },
             { organizationId: context.organizationId, role: context.role },
             { ...(deps.now ? { now: deps.now } : {}) },
           ),
@@ -633,6 +662,10 @@ export async function handleWorkflowRequest(
         },
         { ...(deps.now ? { now: deps.now } : {}) },
       );
+      // 控制面写入成功后主动失效该租户缓存（§12.3；跨实例陈旧窗口 <= TTL）
+      if (typeof body.scope === 'string') {
+        killSwitchResolverFor(deps.prisma).invalidate(context.organizationId, body.scope);
+      }
       sendJson(res, 200, changeResult);
       return true;
     }

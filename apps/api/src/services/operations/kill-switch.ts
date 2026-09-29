@@ -85,7 +85,7 @@ export interface KillSwitchConfig {
 }
 
 /** 只接受显式白名单；其他一律视作无效（→ 更严格层）。 */
-function parseValue(raw: unknown): KillSwitchValue | null {
+export function parseKillSwitchValue(raw: unknown): KillSwitchValue | null {
   if (raw === 'enabled') return 'enabled';
   if (raw === 'disabled') return 'disabled';
   return null;
@@ -105,8 +105,8 @@ export function resolveKillSwitch(
   const tenantRaw = config?.tenant?.[organizationId]?.[scope];
   const globalRaw = config?.global?.[scope];
 
-  const tenantValue = parseValue(tenantRaw);
-  const globalValue = parseValue(globalRaw);
+  const tenantValue = parseKillSwitchValue(tenantRaw);
+  const globalValue = parseKillSwitchValue(globalRaw);
   const defaultValue = KILL_SWITCH_DEFAULTS[scope];
 
   // 非法但已配置 → 视为 disabled（fail-closed）
@@ -176,6 +176,12 @@ export interface KillSwitchSwitchView {
   actorUserId?: string | null;
   /** 仅 full 可见：控制面状态（与 KillSwitchRequest 一致，避免「审计说 pending」的分裂） */
   controlState?: KillSwitchRequestStateValue | 'NONE';
+  /** 仅 full 可见（MSG-20260929-65）：降级标记（DB 不可用等） */
+  degraded?: boolean;
+  /** 仅 full 可见：陈旧标记（返回的是上次已知值） */
+  stale?: boolean;
+  /** 仅 full 可见：评估时间（stale 时为上次成功评估时间） */
+  evaluatedAt?: string;
   pendingRequest?: {
     requestId: string;
     expiresAt: string;
@@ -195,19 +201,58 @@ export interface KillSwitchStatusView {
   switches: KillSwitchSwitchView[];
 }
 
+/** 生效值投影（由 EffectiveKillSwitchResolver 提供；见 EFFECTIVE-KILL-SWITCH-RESOLUTION-DESIGN） */
+export interface KillSwitchEffectiveView {
+  value: KillSwitchValue;
+  source: string;
+  controlState?: KillSwitchRequestStateValue | 'NONE';
+  degraded?: boolean;
+  stale?: boolean;
+  evaluatedAt?: string;
+}
+
 export async function getKillSwitchStatus(
-  deps: { prisma: PrismaClient; config?: KillSwitchConfig },
+  deps: {
+    prisma: PrismaClient;
+    config?: KillSwitchConfig;
+    /**
+     * 生效值解析器（MSG-20260929-65 Implementation GO）。
+     * 提供时 value / source / 评估元数据来自 EffectiveKillSwitchResolver；
+     * 未提供时回退到配置层解析（保持既有离线用例与旧语义可用）。
+     */
+    effective?: (scope: KillSwitchScope, organizationId: string) => Promise<KillSwitchEffectiveView>;
+  },
   actor: Pick<KillSwitchActor, 'organizationId' | 'role'>,
   options: { now?: () => Date } = {},
 ): Promise<KillSwitchStatusView> {
   const visibility = assertKillSwitchVisibility(actor.role);
   const now = options.now ? options.now() : new Date();
-  const switches: KillSwitchSwitchView[] = KILL_SWITCH_SCOPES.map((scope) => {
+  const switches: KillSwitchSwitchView[] = [];
+  for (const scope of KILL_SWITCH_SCOPES) {
+    if (deps.effective) {
+      const effective = await deps.effective(scope, actor.organizationId);
+      switches.push({
+        scope,
+        value: effective.value,
+        source: effective.source,
+        ...(effective.controlState !== undefined ? { controlState: effective.controlState } : {}),
+        ...(effective.degraded !== undefined ? { degraded: effective.degraded } : {}),
+        ...(effective.stale !== undefined ? { stale: effective.stale } : {}),
+        ...(effective.evaluatedAt !== undefined ? { evaluatedAt: effective.evaluatedAt } : {}),
+      });
+      continue;
+    }
     const resolved = resolveKillSwitch(deps.config, scope, actor.organizationId);
-    return { scope, value: resolved.value, source: resolved.source };
-  });
+    switches.push({ scope, value: resolved.value, source: resolved.source });
+  }
 
-  if (visibility === 'summary') return { visibility, switches };
+  // OPS 摘要保持最小暴露（MSG-20260929-53/54）：仅 scope / value / source
+  if (visibility === 'summary') {
+    return {
+      visibility,
+      switches: switches.map((item) => ({ scope: item.scope, value: item.value, source: item.source })),
+    };
+  }
 
   // full：附最近一次变更（来自既有 AuditLog，只读）
   const logs = await deps.prisma.auditLog.findMany({
@@ -259,6 +304,17 @@ export async function getKillSwitchStatus(
     switches: switches.map((item) => {
       const pending = pendingByScope.get(item.scope);
       const applied = appliedByScope.get(item.scope);
+      const controlState =
+        item.controlState ??
+        (pending
+          ? 'PENDING_ENABLE'
+          : applied
+            ? 'APPLIED'
+            : requests.some((row) => row.scope === item.scope && row.state === 'CANCELLED')
+              ? 'CANCELLED'
+              : requests.some((row) => row.scope === item.scope && row.state === 'EXPIRED')
+                ? 'EXPIRED'
+                : 'NONE');
       const lastRequest = applied
         ? {
             requestId: applied.id,
@@ -270,7 +326,7 @@ export async function getKillSwitchStatus(
       return {
         ...item,
         ...(lastByScope.get(item.scope) ?? {}),
-        controlState: pending ? 'PENDING_ENABLE' : applied ? 'APPLIED' : 'NONE',
+        controlState,
         ...(pending
           ? {
               pendingRequest: {

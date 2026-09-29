@@ -130,7 +130,8 @@ describe('Kill Switch — 只读端点（真实 HTTP + PostgreSQL）', () => {
         expect(byScope[scope].value, scope).toBe('disabled');
       }
       expect(byScope.observability.value).toBe('enabled');
-      for (const item of body.switches) expect(item.source).toBe('default');
+      // MSG-20260929-65：读层改由 EffectiveKillSwitchResolver 提供 source（六值枚举）
+      for (const item of body.switches) expect(item.source).toBe('environment-default');
     });
   });
 
