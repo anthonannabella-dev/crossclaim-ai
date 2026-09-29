@@ -54333,3 +54333,304 @@ REAL DATA VALIDATION
 
 本阶段收口。继续扩展代码的边际价值已经下降，下一阶段应优先获得真实业务输入。
 ```
+
+### [MSG-20260929-17] BRIDGE-SCOPE-AUTO-SUBMISSION 裁决：NOT_APPROVED（维持现有冻结，不推翻）——自动提交 Amazon/TikTok/Walmart Claim = FORBIDDEN 保持；自动 Stripe 扣佣 = HOLD 保持；Q2 离线 Submission Payload Builder + Dry Run Validator = GO（无网络 / 无 API / 无凭据）；Q3 POD 以文件上传登记为证据附件 = GO，17TRACK/EasyPost 承运商 API 检索 = HOLD；Q4 AUTOMATED-SUBMISSION-COMPLIANCE-ASSESSMENT.md = GO（Design Only，仅作为未来进入该阶段的前置审查，不构成批准）；STATUS = PREPARE ONLY / NO EXTERNAL ACTION；架构路线：先证明「发现损失并产生价值」，再考虑「自动执行追回」）
+
+Codex 就宿主新需求「全自动 API 申诉与静默履约管道」提交 BRIDGE-SCOPE-AUTO-SUBMISSION（含与既有 FORBIDDEN/HOLD 裁决的逐条冲突比对与 Q1–Q4）后，架构方给出本裁决。以下为该回复的**逐字原文**。
+
+```text
+BRIDGE-SCOPE-AUTO-SUBMISSION 裁决
+总体结论
+
+维持现有冻结，不推翻。
+
+状态：
+
+纯文本
+GATE:
+7 Commercial Validation
+
+REQUEST:
+Automated Submission & Settlement Pipeline
+
+DECISION:
+NOT_APPROVED
+
+CURRENT:
+FORBIDDEN / HOLD
+
+该需求属于 CrossClaim 后期商业闭环，不属于当前验证阶段。
+
+当前正确顺序仍然是：
+
+纯文本
+真实问题验证
+        ↓
+人工确认价值
+        ↓
+规则可靠性
+        ↓
+平台授权
+        ↓
+自动化动作
+
+不能反过来：
+
+纯文本
+API接入
+ ↓
+自动提交
+ ↓
+等待赔付
+ ↓
+验证价值
+Q1：是否推翻 FORBIDDEN？
+裁决：
+不推翻 ❌
+
+保持：
+
+纯文本
+supportsClaimSubmission=false
+
+Submission Gate:
+NEEDS_MANUAL
+自动扣佣是否推翻？
+
+同样：
+
+不推翻 ❌
+
+保持：
+
+纯文本
+Payment Automation:
+HOLD
+
+原因：
+
+涉及：
+
+平台责任
+商户授权
+金融流程
+退款/争议处理
+KYC/支付合规
+如果未来重新评估，需要前置：
+
+需要同时满足：
+
+1. 商业证据
+
+证明：
+
+哪个场景高频
+哪个平台优先
+真实追回金额
+客户愿意采用
+2. 合规评估
+
+包括：
+
+是否允许代理提交
+平台条款限制
+授权范围
+错误提交责任
+3. 宿主授权
+
+包括：
+
+API 权限
+Secret 管理
+测试环境
+生产授权
+4. 回滚设计
+
+包括：
+
+重复提交防护
+撤销机制
+人工接管
+Q2：是否允许离线准备件？
+裁决：
+GO，但严格限定 ✅
+
+允许：
+
+纯文本
+Claim Draft Payload Builder
+
+↓
+
+Validation
+
+↓
+
+Dry Run Report
+
+允许：
+
+构造请求 schema
+字段完整性检查
+附件清单校验
+幂等键设计
+模拟响应处理
+
+禁止：
+
+❌ HTTP 请求
+
+❌ API Client
+
+❌ OAuth/token
+
+❌ 真实平台 endpoint
+
+❌ 自动提交
+
+定义：
+
+纯文本
+Prepared ≠ Submitted
+Q3：POD 未授权处理
+裁决：
+GO ✅
+
+允许：
+
+纯文本
+POD File Upload
+
+↓
+
+EvidenceArtifact
+
+↓
+
+CaseEvidence
+
+但限制：
+
+只作为：
+
+用户提供的证据附件登记
+
+不允许：
+
+自动：
+
+查询物流商
+抓取 POD
+验证签名真实性
+判断责任归属
+
+当前：
+
+纯文本
+Uploaded Evidence:
+OK
+
+Carrier API Retrieval:
+HOLD
+Q4：是否需要 AUTOMATED-SUBMISSION-COMPLIANCE-ASSESSMENT.md？
+裁决：
+GO（Design Only）✅
+
+建议提交。
+
+但注意：
+
+它不是批准自动提交。
+
+它只是未来进入该阶段的前置审查。
+
+文档应覆盖：
+
+1. Responsibility Boundary
+
+谁负责：
+
+提交内容
+平台沟通
+错误申诉
+2. Platform Terms
+
+每个平台：
+
+是否允许代理提交
+授权方式
+限制条件
+3. Risk
+
+包括：
+
+错误 Claim
+重复提交
+过期提交
+证据不足
+4. Human Override
+
+必须设计：
+
+纯文本
+AI Prepare
+
+↓
+
+Human Approve
+
+↓
+
+Submit
+
+即使未来自动化，也必须有：
+
+kill switch
+audit trail
+rollback
+最终裁决表
+项目	结论
+自动提交 Amazon/TikTok/Walmart Claim	❌ FORBIDDEN 保持
+自动 Stripe 扣佣	❌ HOLD 保持
+离线 Submission Payload Builder	✅ GO
+Dry Run Validator	✅ GO
+POD 文件上传登记	✅ GO
+17TRACK/EasyPost API	⏸ HOLD
+Compliance Assessment 文档	✅ GO DESIGN ONLY
+可归档
+Markdown
+### [MSG-20260929-17]
+
+TYPE:
+SCOPE DECISION
+
+REQUEST:
+Automated Submission & Settlement Pipeline
+
+DECISION:
+NOT_APPROVED
+
+Q1:
+No change.
+Auto submission remains FORBIDDEN.
+Auto commission remains HOLD.
+
+Q2:
+Offline payload builder and dry-run validation approved.
+No network/API/credentials.
+
+Q3:
+POD upload as evidence artifact approved.
+Carrier retrieval remains HOLD.
+
+Q4:
+AUTOMATED-SUBMISSION-COMPLIANCE-ASSESSMENT.md approved as design only.
+
+STATUS:
+PREPARE ONLY
+NO EXTERNAL ACTION
+
+当前架构路线保持：
+
+先证明“发现损失并产生价值”，再考虑“自动执行追回”。
+```
