@@ -33,6 +33,7 @@ import {
   PAYMENT_RETRY_DUE_CONSUMED_EVENT_ACTION,
   PAYMENT_REPLAY_CONSUMED_EVENT_ACTION,
 } from '../services/action-guard/approval-tx-verify';
+import { freezeRetryBatch, runDueRetries } from '../services/workflow';
 
 const prisma = new PrismaClient();
 const ORG = 'cf200000-0000-4000-8000-0000000000a3';
@@ -53,6 +54,7 @@ const storage = new LocalFileSystemStorage({
   publicBaseUrl: 'http://localhost:3000',
 });
 
+let ownerId = '';
 let invoiceId = '';
 let eventId = 'cf200000-0000-4000-8000-0000000000bb';
 let paymentId = '';
@@ -80,6 +82,7 @@ beforeEach(async () => {
       emailVerified: true,
     },
   });
+  ownerId = owner.id;
   await prisma.membership.create({ data: { organizationId: ORG, userId: owner.id, role: 'OWNER', isActive: true } });
   const invoice = await prisma.billingInvoice.create({
     data: {
@@ -227,6 +230,46 @@ async function state() {
   };
 }
 
+
+async function advisoryLockCountFor(key: string, granted: boolean): Promise<number> {
+  const rows = await prisma.$queryRawUnsafe<{ n: bigint }[]>(
+    `SELECT count(*)::bigint AS n
+       FROM pg_locks l
+      WHERE l.locktype = 'advisory'
+        AND l.granted = ${granted ? 'true' : 'false'}
+        AND (l.objid::text = ((hashtext($1)::bigint & 4294967295))::text
+             OR l.classid::text = ((hashtext($1)::bigint & 4294967295))::text)`,
+    key,
+  );
+  return Number(rows[0]?.n ?? 0n);
+}
+
+async function waitFor(check: () => Promise<boolean>, timeoutMs: number, label: string): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    if (await check()) return;
+    if (Date.now() > deadline) throw new Error(`CONTROL_POINT_TIMEOUT:${label}`);
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+}
+
+async function holdLockFor(key: string): Promise<() => void> {
+  let release: () => void = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  void prisma
+    .$transaction(
+      async (tx) => {
+        await tx.$executeRawUnsafe('SELECT pg_advisory_xact_lock(hashtext($1))', key);
+        await gate;
+      },
+      { timeout: 30_000, maxWait: 30_000 },
+    )
+    .catch(() => undefined);
+  await waitFor(async () => (await advisoryLockCountFor(key, true)) >= 1, 10_000, 'HOLDER_LOCK_NOT_GRANTED');
+  return release;
+}
 describe('② 第二批 — retry-due（冻结清单批次审批）真实 HTTP + PostgreSQL', () => {
   it('01 全链路：freeze → REQUEST/APPROVE → execute 200，恰一次新增 attempt 与一次批次消费', async () => {
     await withServer(async (base) => {
@@ -440,5 +483,200 @@ describe('② 第二批 — retry-due（冻结清单批次审批）真实 HTTP +
       expect(after).toMatchObject({ invoiceStatus: 'ISSUED', paidAmount: '0.0000', attempts: 1, executed: 0 });
       expect(await prisma.auditLog.count({ where: { organizationId: ORG, action: 'payment.succeeded' } })).toBe(0);
     });
+  }, 40_000);
+
+  it('09 冻结期限到期（审批仍有效）→ 拒绝批准；过期冻结不得重新批准延长', async () => {
+    await withServer(async (base) => {
+      const cookie = await login(base);
+      const frozen = await freeze(base, cookie);
+      const batchId = String(frozen.body.batchId);
+      // 直接把冻结记录的 expiresAt 改到过去（模拟冻结已过期）
+      const row = await prisma.auditLog.findFirstOrThrow({
+        where: { organizationId: ORG, entityType: 'PaymentRetryBatch', entityId: batchId, action: 'payment.retry_batch_frozen' },
+      });
+      const changes = row.changes as Record<string, unknown>;
+      await prisma.auditLog.update({
+        where: { id: row.id },
+        data: { changes: { ...changes, expiresAt: new Date(Date.now() - 60_000).toISOString() } as never },
+      });
+      const requested = await review(base, cookie, { batchId, decision: 'REQUEST' });
+      // 冻结有效期在审批时即强制生效：过期的冻结记录不得再请求、更不得批准延长
+      expect(requested.status).toBe(403);
+      expect(requested.body.reason).toBe('APPROVAL_EXPIRED');
+      const approved = await review(base, cookie, { batchId, decision: 'APPROVE' });
+      expect(approved.status).toBe(403);
+      expect(approved.body.reason).toBe('APPROVAL_EXPIRED');
+      expect(await state()).toMatchObject({ invoiceStatus: 'ISSUED', attempts: 1, consumed: 0 });
+    });
+  }, 40_000);
+
+  it('10 等发票锁期间主体成员停用 → 逐项锁后重验拒绝，无部分提交', async () => {
+    await withServer(async (base) => {
+      const cookie = await login(base);
+      const frozen = await freeze(base, cookie);
+      const batchId = String(frozen.body.batchId);
+      const approvalId = await approveBatch(base, cookie, batchId);
+      const release = await holdLockFor(`cc-payment-invoice:${invoiceId}`);
+      const pending = execute(base, cookie, { batchId, approvalId });
+      try {
+        await waitFor(
+          async () => (await advisoryLockCountFor(`cc-payment-invoice:${invoiceId}`, false)) >= 1,
+          10_000,
+          'BATCH_WAITING_ON_INVOICE_LOCK',
+        );
+        await prisma.membership.updateMany({ where: { organizationId: ORG }, data: { isActive: false } });
+      } finally {
+        release();
+      }
+      const res = await pending;
+      expect(res.status).toBe(403);
+      expect(res.body.reason).toBe('APPROVAL_ACTOR_MISMATCH');
+      const after = await state();
+      expect(after).toMatchObject({ invoiceStatus: 'ISSUED', attempts: 1, executed: 0, consumed: 0 });
+      expect(after.paidAmount).toBe('0.0000');
+    });
+  }, 40_000);
+
+  it('11 冻结后 attempt 变为不可重试 → 跳过留证，无新执行', async () => {
+    await withServer(async (base) => {
+      const cookie = await login(base);
+      const frozen = await freeze(base, cookie);
+      const batchId = String(frozen.body.batchId);
+      const approvalId = await approveBatch(base, cookie, batchId);
+      await prisma.paymentProcessingAttempt.updateMany({
+        where: { id: attemptId },
+        data: { status: 'DEAD_LETTER' },
+      });
+      const res = await execute(base, cookie, { batchId, approvalId });
+      expect(res.status).toBe(200);
+      const skipped = res.body.skipped as Array<Record<string, unknown>>;
+      expect(skipped).toHaveLength(1);
+      expect(String(skipped[0].reason)).toBe('ATTEMPT_NOT_RETRYABLE');
+      expect(await state()).toMatchObject({ invoiceStatus: 'ISSUED', attempts: 1, executed: 0, consumed: 1 });
+    });
+  }, 40_000);
+
+  it('12 同审批并发执行 → 恰一次（其余 APPROVAL_ALREADY_CONSUMED）', async () => {
+    await withServer(async (base) => {
+      const cookie = await login(base);
+      const frozen = await freeze(base, cookie);
+      const batchId = String(frozen.body.batchId);
+      const approvalId = await approveBatch(base, cookie, batchId);
+      const results = await Promise.all([
+        execute(base, cookie, { batchId, approvalId }),
+        execute(base, cookie, { batchId, approvalId }),
+      ]);
+      expect(results.filter((r) => r.status === 200)).toHaveLength(1);
+      const rejected = results.filter((r) => r.status !== 200);
+      expect(rejected.map((r) => String(r.body.reason ?? r.body.error))).toEqual(['APPROVAL_ALREADY_CONSUMED']);
+      expect(await state()).toMatchObject({ invoiceStatus: 'PAID', attempts: 2, consumed: 1 });
+    });
+  }, 40_000);
+
+  it('13 不同批次包含同一 attempt → 只有一次实际执行，后者跳过留证', async () => {
+    await withServer(async (base) => {
+      const cookie = await login(base);
+      const first = await freeze(base, cookie);
+      const firstId = String(first.body.batchId);
+      const firstApproval = await approveBatch(base, cookie, firstId);
+      // 模拟「另一批次在认领前已冻结同一 attempt」：恢复 nextRetryAt 后再次冻结
+      await prisma.paymentProcessingAttempt.updateMany({
+        where: { id: attemptId },
+        data: { nextRetryAt: new Date(Date.now() - 1_000) },
+      });
+      const second = await freeze(base, cookie);
+      const secondId = String(second.body.batchId);
+      expect(Number(second.body.itemCount)).toBe(1);
+      const secondApproval = await approveBatch(base, cookie, secondId);
+
+      const firstRun = await execute(base, cookie, { batchId: firstId, approvalId: firstApproval });
+      expect(firstRun.status).toBe(200);
+      expect((firstRun.body.executed as unknown[]).length).toBe(1);
+
+      const secondRun = await execute(base, cookie, { batchId: secondId, approvalId: secondApproval });
+      expect(secondRun.status).toBe(200);
+      expect((secondRun.body.executed as unknown[]).length).toBe(0);
+      const skipped = secondRun.body.skipped as Array<Record<string, unknown>>;
+      expect(skipped).toHaveLength(1);
+      expect(['ALREADY_CLAIMED_OR_NOT_DUE', 'SUPERSEDED_GENERATION', 'NOT_DUE']).toContain(String(skipped[0].reason));
+      // 同一失败尝试只被实际重试一次
+      expect(await prisma.auditLog.count({ where: { organizationId: ORG, action: 'payment.retry_due_executed' } })).toBe(1);
+    });
+  }, 40_000);
+
+  it('14 数量上限：≥21 候选项时冻结清单仍恰为上限 20', async () => {
+    await withServer(async (base) => {
+      const cookie = await login(base);
+      for (let index = 0; index < 21; index += 1) {
+        const lateEventId = `cf200000-0000-4000-8000-0000000001${String(index).padStart(2, '0')}`;
+        await prisma.paymentEvent.create({
+          data: {
+            id: lateEventId,
+            organizationId: ORG,
+            provider: 'STRIPE',
+            providerEventId: `evt_cap_${index}`,
+            eventType: 'payment_intent.succeeded',
+            payloadHash: `hash_cap_${index}`,
+            receivedAt: NOW,
+            processingResult: 'PROCESSED',
+          },
+        });
+        await prisma.paymentProcessingAttempt.create({
+          data: {
+            organizationId: ORG,
+            paymentEventId: lateEventId,
+            attemptNo: 1,
+            status: 'RETRYABLE_FAILED',
+            errorCode: 'CAS_CONFLICT',
+            errorSummary: 'cap candidate',
+            startedAt: NOW,
+            finishedAt: NOW,
+            nextRetryAt: new Date(Date.now() - 1_000),
+            actorType: 'EXTERNAL',
+            actorRef: 'STRIPE',
+            paymentId,
+          },
+        });
+      }
+      const frozen = await freeze(base, cookie, { limit: 999 });
+      expect(frozen.status).toBe(200);
+      expect(Number(frozen.body.itemCount)).toBe(20);
+    });
+  }, 60_000);
+
+  it('15 冻结摘要被篡改 / 未知版本 → 失败关闭', async () => {
+    await withServer(async (base) => {
+      const cookie = await login(base);
+      const frozen = await freeze(base, cookie);
+      const batchId = String(frozen.body.batchId);
+      const approvalId = await approveBatch(base, cookie, batchId);
+      const row = await prisma.auditLog.findFirstOrThrow({
+        where: { organizationId: ORG, entityType: 'PaymentRetryBatch', entityId: batchId, action: 'payment.retry_batch_frozen' },
+      });
+      const changes = row.changes as Record<string, unknown>;
+      await prisma.auditLog.update({
+        where: { id: row.id },
+        data: { changes: { ...changes, digest: 'tampered-digest' } as never },
+      });
+      const res = await execute(base, cookie, { batchId, approvalId });
+      expect(res.status).toBeGreaterThanOrEqual(400);
+      expect(await state()).toMatchObject({ invoiceStatus: 'ISSUED', attempts: 1, executed: 0 });
+    });
+  }, 40_000);
+
+  it('16 旧入口（runDueRetries）缺审批不能执行', async () => {
+    const frozen = await freezeRetryBatch(
+      prisma,
+      { organizationId: ORG, actorUserId: ownerId, role: 'OWNER' },
+      { now: () => NOW },
+    );
+    await expect(
+      runDueRetries(
+        prisma,
+        { organizationId: ORG, role: 'OWNER', actorUserId: ownerId, batchId: frozen.batchId },
+        { now: () => NOW },
+      ),
+    ).rejects.toMatchObject({ reason: 'APPROVAL_NOT_FOUND' });
+    expect(await state()).toMatchObject({ invoiceStatus: 'ISSUED', attempts: 1, executed: 0, consumed: 0 });
   }, 40_000);
 });
