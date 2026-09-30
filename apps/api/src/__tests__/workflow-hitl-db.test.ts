@@ -143,7 +143,7 @@ describe('C-0009.2 — 高额回收人工卡口（真实 PostgreSQL）', () => {
     expect(row.recoveredAmount?.toFixed(4)).toBe('0.0000');
   });
 
-  it('ADMIN 复核通过后可确认；状态由审计推导为 APPROVED', async () => {
+  it('ADMIN 复核通过后可确认（R3：必须携带操作级 approvalId）；状态由审计推导为 APPROVED', async () => {
     const kase = await seedReadyCase();
     await expect(confirm(kase.id)).rejects.toMatchObject({ code: 'REVIEW_REQUIRED' });
 
@@ -159,7 +159,8 @@ describe('C-0009.2 — 高额回收人工卡口（真实 PostgreSQL）', () => {
         boundPayload: { recoveredAmount: '1500.0000', currency: 'USD', basisReference: 'carrier-email-20260928', evidenceArtifactId: null },
         boundAction: 'commission.charge',
       },
-      () => NOW,
+      // R3：审批必须晚于对应的 review_required（同秒会被判定为轮次不成立）
+      () => new Date(NOW.getTime() + 1000),
     );
     expect(approved).toMatchObject({ state: 'APPROVED', decision: 'APPROVE' });
 
@@ -170,7 +171,8 @@ describe('C-0009.2 — 高额回收人工卡口（真实 PostgreSQL）', () => {
     );
     expect(status.state).toBe('APPROVED');
 
-    const result = await confirm(kase.id);
+    // R3 CHANGE B：高额旧卡口不是操作级审批替代 —— 确认必须携带审批事件 id
+    const result = await confirm(kase.id, { approvalId: approved.approvalId as string });
     expect(result.created).toBe(true);
     // 1500.0000 × 0.15 = 225.0000（Decimal 4 位 HALF_UP）
     expect(result.feeAmount).toBe('225.0000');

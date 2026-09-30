@@ -403,6 +403,11 @@ export async function assertHighValueReviewCleared(
   // 记录一次"需要复核"，供审批者处理（同一状态重复触发也各留一条，便于审计）
   const at = now();
   await prisma.$transaction(async (tx) => {
+    // R3 CHANGE B：自动写入 review_required 与显式审批（REQUEST/APPROVE/REJECT）及资金执行
+    // 共用同一案件锁，避免「状态判定发生在锁外」造成的串行化差异。
+    if (typeof tx.$executeRawUnsafe === 'function') {
+      await tx.$executeRawUnsafe('SELECT pg_advisory_xact_lock(hashtext($1))', `cc-recovery-case:${input.caseId}`);
+    }
     await writeReviewAudit(tx, {
       organizationId: input.organizationId,
       actorUserId: input.actorUserId,

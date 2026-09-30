@@ -139,7 +139,7 @@ describe('HITL 原子消费与恰一次（真实 PostgreSQL）', () => {
     expect(await counts()).toEqual({ settlement: 1, ledger: 1, fee: 1, billing: 1, consumed: 1 });
   });
 
-  it('04 成功后撤销授权：再次提交（新审批缺失）不得产生新的资金对象', async () => {
+  it('04 成功后撤销授权：再次提交被最终拒绝（R3：锁内重验优先于幂等返回），零新增资金', async () => {
     const approvalId = await approve();
     await confirm(approvalId);
     // 撤销事件（晚于审批）
@@ -155,8 +155,8 @@ describe('HITL 原子消费与恰一次（真实 PostgreSQL）', () => {
         createdAt: new Date(NOW.getTime() + 5000),
       },
     });
-    const again = await confirm(approvalId);
-    expect(again.created).toBe(false); // 已消费 → 幂等分支；不得新增资金对象
+    // R3 CHANGE B：既有资金链的返回到达之前必须先通过锁内完整重验 —— 撤销后不得再返回成功
+    await expect(confirm(approvalId)).rejects.toMatchObject({ reason: 'APPROVAL_REVOKED' });
     expect(await counts()).toEqual({ settlement: 1, ledger: 1, fee: 1, billing: 1, consumed: 1 });
   });
 });

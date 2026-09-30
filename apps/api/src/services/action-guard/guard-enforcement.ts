@@ -82,17 +82,22 @@ export async function withActionGuard<T>(options: WithActionGuardOptions<T>): Pr
     });
     } catch (error) {
       const e = error as { code?: string; reason?: string };
-      // CHANGE D：审批核验结果单独成一条可关联的安全审计（不记录凭据/原始载荷）
-      await writeApprovalAudit(audit, {
-        code: e?.code ?? 'ACTION_GUARD_APPROVAL_NOT_VERIFIED',
-        action,
-        organizationId: String(input?.organizationId ?? ''),
-        actorUserId: String(input?.actorUserId ?? ''),
-        approvalId: String(input?.approvalId ?? ''),
-        targetRef: approvalTargetRef ?? null,
-        operationId: operationId ?? null,
-        reason: e?.reason ?? null,
-      });
+      // CHANGE D：审批核验结果单独成一条可关联的安全审计（不记录凭据/原始载荷）。
+      // R3 CHANGE D：拒绝路径的审计失败**不得覆盖原错误**（放行路径仍必须失败关闭）。
+      try {
+        await writeApprovalAudit(audit, {
+          code: e?.code ?? 'ACTION_GUARD_APPROVAL_NOT_VERIFIED',
+          action,
+          organizationId: String(input?.organizationId ?? ''),
+          actorUserId: String(input?.actorUserId ?? ''),
+          approvalId: String(input?.approvalId ?? ''),
+          targetRef: approvalTargetRef ?? null,
+          operationId: operationId ?? null,
+          reason: e?.reason ?? null,
+        });
+      } catch {
+        // 审计不可用不改变拒绝判定：原始审批错误优先
+      }
       throw error;
     }
     // CHANGE D：放行路径必须有可落库的审批审计；端口缺失或写入失败一律拒绝（work=0）

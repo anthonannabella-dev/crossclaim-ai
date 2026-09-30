@@ -54,3 +54,14 @@
 - 授权项 ③ 收口并送审：HEAD c70ae2e、CI run 36656201359（5/5）；审计请求 Issue #2 comment 5902419993（CI 更正 5902422241）。
   本轮新增真实依赖集成测试：真实 Kill Switch resolver + 真实 AuditLog 落地（actorType=AI、actorRef 满足 cc_audit_actor_shape_check），覆盖默认拒绝/APPLIED 开启后放行/未开启 scope 拒绝/配置异常回落 READ_ONLY/只读投影零审计；Action Guard 合计 68/68。
   环境自解：Docker Desktop 重启后拉起 crossclaim-postgres（127.0.0.1:55432），本地 DB 测试恢复可用。
+
+## 2026-09-30 · 授权项② 第一批 R3（MSG-20260930-19 REVISE，CHANGE A–D）
+
+- CHANGE A（前序提交 `9065f2f`）：锁后重读服务端时间核验有效期；事务内重验审批人与执行人的用户状态/成员/角色；两套校验器拒绝缺失或未知 fingerprintVersion；原因码统一 APPROVAL_SOURCE_ERROR / APPROVAL_VERSION_UNSUPPORTED。
+- CHANGE B（本轮）：`recovery-outcome.ts` 删除事务外的 existingSettlement 早返回；案件 advisory lock **无条件**获取；既有资金链核查移入「锁内 + 完整重验之后」并按**案件**执行（缺 Ledger/Fee/Billing → 409 ILLEGAL_TRANSITION，不返回空 ID）；合法幂等返回必须核对同 `approvalId` 消费事件 + 同 `operationId` + 同规范化载荷（金额/币种/Settlement 金额）；高额确认缺 `approvalId` 直接拒绝 REVIEW_REQUIRED（旧案件状态不是操作级授权替代）；缺 `approvalId` 的兼容路径经证明在受保护 HTTP 入口不可达（守卫先 409 REQUIRE_APPROVAL），入口隔离测试见 C。
+- CHANGE B（串行化）：`assertHighValueReviewCleared` 自动写 `review_required` 与显式 REQUEST/APPROVE/REJECT、资金执行共用同一案件锁。
+- CHANGE C（本轮新增 `action-guard-hitl-r3-race-db.test.ts`，真实 HTTP + PostgreSQL，9 例）：持有案件 advisory lock 制造真实控制点 —— 等锁期间撤销 → 403 APPROVAL_REVOKED；等锁期间审批过期 → 403 APPROVAL_EXPIRED（证明锁后重读时间生效）；等锁期间成员停用 → 403 APPROVAL_ACTOR_MISMATCH；同案件不同审批并发 → 全案仅一条完整链；既有资金链缺项 → 409 ILLEGAL_TRANSITION；指纹版本异常 → 403 APPROVAL_VERSION_UNSUPPORTED；受保护入口缺 approvalId → 4xx 且零资金；审计端口写入失败 → 放行降级为拒绝且真实库零资金。所有用例精确断言状态码、reason、对象关联与消费计数。
+- CHANGE D（本轮）：成功审计 `recovery_outcome.confirmed` 增加 `approvalId`/`operationId`/`result=CONFIRMED` 并保持 `entityId=Settlement.id`（可关联具体 Settlement）；新增最终拒绝审计 `recovery.outcome_rejected`（stage ENTRY_GATE / LOCKED_RECHECK、reason、执行主体记入 changes、result=REJECTED），事务已回滚故用独立连接写入；拒绝路径审计写入失败**不覆盖**原始错误（`guard-enforcement.ts` 同步修正）。
+- 既有套件口径同步（R3 生效后的真实合同）：`workflow-hitl-db` 的「复核通过后可确认」改为必须携带操作级 `approvalId`；`action-guard-hitl-concurrency-db` 04 由「撤销后幂等 200」改为「最终拒绝 APPROVAL_REVOKED」。
+- 文档同步：`docs/releases/ACTION-APPROVAL-BINDING-CONTRACT.md` 全量改写为 R3 口径（实际审计事件名 `action_guard.approval_decision` / `recovery.outcome_rejected`、原因码、锁顺序、幂等链完整性、兼容路径收口、验收矩阵）。
+- 本地验证：`npx tsc --noEmit` PASS；定向 6 套 DB 套件（outcome / hitl / concurrency / http-chain / payment / r3-race）全绿；全量 `npx vitest run` = 139 文件 / 1240 passed + 20 skipped，唯一失败为既知技术债 `phase1-runbook.test.ts`（Node 24 导入不兼容，Node 22 CI 通过），非本批次引入。
