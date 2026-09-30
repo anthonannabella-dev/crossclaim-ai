@@ -268,9 +268,9 @@ export function createHitlApprovalVerifier(deps: HitlApprovalVerifierDeps): Acti
         const superseded = await deps.prisma.auditLog.count({
           where: {
             organizationId: query.organizationId,
-            entityType: 'Case',
+            entityType: targetEntityType,
             entityId: targetRef,
-            action: APPROVAL_REQUIRED_EVENT_ACTION,
+            action: requiredAction,
             createdAt: { gt: event.createdAt },
           },
         });

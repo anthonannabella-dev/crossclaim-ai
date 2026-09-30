@@ -951,6 +951,8 @@ export async function handleWorkflowRequest(
           approvalEventAction: PAYMENT_APPROVAL_EVENT_ACTION,
           requiredEventAction: PAYMENT_REQUIRED_EVENT_ACTION,
           rejectedEventAction: PAYMENT_REJECTED_EVENT_ACTION,
+          // 支付域没有独立的 revoked 事件：拒绝即为撤销；不得回落到 recovery.approval_revoked
+          revokedEventAction: PAYMENT_REJECTED_EVENT_ACTION,
           consumedEventAction: PAYMENT_CONSUMED_EVENT_ACTION,
           targetEntityType: 'BillingInvoice',
         },
