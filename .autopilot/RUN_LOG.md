@@ -316,3 +316,22 @@
 - CHANGE B：用例 28 需精确最终结果 —— PAID 集合**恰等于** `{invoiceId, secondInvoice.id}`；`payment.succeeded` **恰 2 条**且实体集合与两张发票一致；逐发票断言 `paidAmount`；逐 Payment 核对关联/金额/币种；四个冻结项均有明确执行或跳过结果，成功来源无重复。
 - 口径清理：删除测试中"空 body 留待下一轮诊断"旧注释；契约中 R16 的「target 含某字段即可映射」旧规则须标记为已被 R17 取代，避免两套有效口径并存。
 - 边界：CI 全绿已确认；本机口径（1312 passed + 20 skipped、既知 runbook 失败）不得写成本机全量通过；"连续三次稳定"为提交方申报；调度器/独立 worker 认证/生产启用与真实资金外写继续后置；capture/replay 已通过范围不因本轮局部 REVISE 撤销。
+
+## 2026-09-30 — ② 第二批 retry-due 修订（R18 / MSG-20260930-34 收口）
+
+- 实现（提交 `4c695c0`）：
+  - **CHANGE A 结构化精确白名单**：`services/workflow/payment-conflict-map.ts` 重写 —— 仅 `code === P2002` 且 `meta.target` 结构化匹配才映射（数组 target 长度**恰为 2**、元素全为非空字符串、**无重复**、字段集合**精确等于** `{organizationId,paymentId}` → `PAYMENT_SOURCE_CONFLICT`，或 `{organizationId,paymentEventId}` → `ATTEMPT_ALREADY_RUNNING`，顺序可互换；字符串 target **精确等于** `PaymentProcessingAttempt_succeeded_payment_key` → `PAYMENT_SOURCE_CONFLICT`，用 `hasOwnProperty` 查表）。**删除全部消息子串/关键字猜测**，其余一律 `null` → 原样抛出。
+  - **映射单测 8 例（3 正 + 5 反）**：两字段两种顺序 / 约束名精确匹配；反例 = 无 target 但消息含约束名、仅 `paymentEventId` 且消息含 attempt、三字段与非字符串/空串、重复字段、未知约束名与非唯一错误。
+  - **CHANGE B 用例 28 精确最终结果**：PAID 集合恰等于两张发票、每张 `paidAmount = AMOUNT`；`payment.succeeded` 恰 2 条且实体集合一致；Payment 恰 2 条且逐行关联/金额/币种核对；四个冻结项「执行 + 跳过」恰 4 且无重复。
+- **阶段控制点根因修复（用例缺陷，非服务缺陷）**：旧控制点固定持发票 I1，而服务端按「分阶段 + 每阶段资源 ID 字典序」取锁（R15 CHANGE A），两批次共享同一发票集合 → 第一把发票锁必是字典序较小者。当 I2 的 UUID 更小时，先到批次拿 I2 再等 I1、另一批次被挡在 I2 上，I1 只留 1 个等待者 → **实测 3 次运行 2 次 `CONTROL_POINT_TIMEOUT` 假失败**。已改为持**服务端锁序中的第一把共享发票锁**，并新增：① 开跑前「受审键无残留 advisory lock（5s 有界排空）」前置；② 控制点成立时「4 个事件键等待者 = 0」自证；③ 失败取证（逐键 wait/held + `pg_locks` 现场）。修复后连续 **3/3 通过**，断言未放宽。
+- 契约口径清理（`docs/releases/ACTION-APPROVAL-BINDING-CONTRACT.md`）：R17 行改为结构化精确白名单全文；**R16 行标记已被 R17 取代（仅历史留档）**，消除两套口径并存；矩阵「约束映射白名单」行改为严格口径 + 8/8；RD 28 行改为「第一把共享发票锁 + 事件键等待者 = 0 + 精确最终结果」；RD 23–28 历史重复行标注「已被上方同名行取代，仅留档」。
+- 证据：`prisma validate` valid；`tsc --noEmit` PASS；定向单进程 **14 文件 / 133 用例全绿**（retry-due 28/28、映射 8/8、replay/capture/attempt/billing/payment-admin/HITL 回归）；本机全量 **144 文件 / 1314 passed + 20 skipped**，唯一失败为**既知** `phase1-runbook.test.ts`（Node 24 导入兼容技术债，非本次改动引入，不写作「全量通过」）。
+- CI：HEAD `4c695c0` → run **36718083469** = **5/5 SUCCESS**；API 作业日志 **144 files / 1334 tests PASS**。
+- 送审：Issue #2 comment **5911844071**（R18 七段式，含 CHANGE A/B、控制点根因与修复、口径清理、诚实披露）。
+- **ChatGPT 唤醒通道本轮不可用**：右侧应用内浏览器会话在 12:33Z 与 13:05Z 两次探测均为 `Codex auth token is unavailable`（会话级令牌缺失，浏览器发现同样失败）→ 唤醒未送达，**待下一轮重试**；请求全文已在 Issue #2 留档，通道中断不影响留档完整性。
+
+### R18 证据补充：控制点假失败在 **CI** 上同样复现
+
+- CI run **36714714672**（commit `485b317`，docs-only runlog 提交）→ 作业 `API · migration + typecheck + tests` **FAILURE**；日志 2026-09-30T12:31:16Z 明示：`action-guard-payment-retry-due-http-db.test.ts` 用例 28 抛 `Error: CONTROL_POINT_TIMEOUT:BOTH_BATCHES_WAITING_ON_SHARED_INVOICE`（12:27:23Z 亦出现同一错误）。
+- 含义：上一轮「CI 全绿」并不等于该用例稳定通过，而是**发票 UUID 顺序恰好有利**的抽样；根因即本轮修复的「控制点持错发票锁」。
+- 已在 Issue #2 追加留档 comment **5911869998**（不改送审点 `4c695c0`）。
