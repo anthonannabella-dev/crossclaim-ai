@@ -398,3 +398,12 @@
 - 结论：`/cases/:id/claim` 现为 **GET 草稿**（`getClaimDraft`），**不承载提交**；因此需新增提交路由 `POST /cases/:id/claim/submit`。
 - 落点已精确登记（见 `ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3.2「实现落点」表）：路由常量 + 匹配注册 + 处理分支（fail closed）+ 复用 `outlinePath → createHitlSubmissionBoundary` 范式 + 放行后仅 `recordSubmission()` 并返回 `NEEDS_MANUAL` + 新测试文件。
 - 无需 Schema/迁移；capability 映射与静态清单已就绪。下一步即按该表编码。
+
+## 2026-10-01 — Gate 7 / ② claim.submit 小批次 = READY_FOR_REVIEW（R19）
+
+- 实现（HEAD `0745c33`）：`POST /cases/:id/claim/submit` —— 缺 guard/默认 READ_ONLY → fail closed；`createHitlSubmissionBoundary({action:'claim.submit'})` 审批+能力+Production Gate 校验与 `action_guard.approval_decision` 审计；放行后**仅** `recordSubmission()`，返回 `NEEDS_MANUAL`、`platformWriteExecuted=false`（零平台外写）。
+- 配套：`server.ts` `WORKFLOW_PATH` 登记新路径（修 404 根因）；`recovery-review.ts` 审批载荷校验按动作类型判定（资金动作不变，`claim.submit` 仅要求 `basisReference`）。
+- 验收：`action-guard-claim-submit-http-db.test.ts` 六项（真实 HTTP + PostgreSQL）——未配置 control plane/缺 approvalId/审批不存在/审批绑定他人/能力未满足/合法审批→恰一次提交+恰一次消费+零外写+NEEDS_MANUAL；**连续 3 次 6/6**，与 `action-guard-hitl-r3-race-db` 合跑 **15/15**；`tsc --noEmit` PASS、`prisma validate` valid。
+- CI：run **36790488457** = **5/5 SUCCESS**；API 日志 **1341 tests PASS**（较 1335 增加 6 例，与新增套件一致）。
+- 送审：Issue #2 comment **5921507920**（七段式）；ChatGPT 会话唤醒已投递并验证（tail 含 `0745c33`）。
+- 边界：Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据继续 HOLD；平台提交恒为 NEEDS_MANUAL。
