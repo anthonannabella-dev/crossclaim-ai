@@ -1,7 +1,7 @@
 /**
  * MSG-20260930-34 CHANGE A 验收：**严格结构化白名单**
  *   正例：两种已识别字段组合（顺序可互换）、已取证的完整约束名
- *   反例：缺 target、仅单字段、三字段、重复字段、混入非字符串、未知约束名、非唯一约束错误 → 一律 null
+ *   反例：缺 target、仅单字段、三字段、重复字段、混入非字符串、空串、**带空白（不清洗）**、未知约束名、非唯一约束错误 → 一律 null
  */
 import { describe, expect, it } from 'vitest';
 
@@ -74,6 +74,18 @@ describe('支付域唯一约束严格白名单映射', () => {
       mapKnownPaymentUniqueConflict({ code: 'P2002', meta: { target: ['organizationId', 42] } }),
     ).toBeNull();
     expect(mapKnownPaymentUniqueConflict({ code: 'P2002', meta: { target: ['organizationId', ''] } })).toBeNull();
+  });
+
+  it('反例：字段名/约束名带空白 → null（精确相等，不做 trim 清洗）', () => {
+    expect(
+      mapKnownPaymentUniqueConflict({ code: 'P2002', meta: { target: ['organizationId ', 'paymentId'] } }),
+    ).toBeNull();
+    expect(
+      mapKnownPaymentUniqueConflict({
+        code: 'P2002',
+        meta: { target: ' PaymentProcessingAttempt_succeeded_payment_key' },
+      }),
+    ).toBeNull();
   });
 
   it('反例：未知约束名 / 非唯一约束错误 → null', () => {

@@ -1,7 +1,7 @@
 /**
  * 支付域「已识别唯一约束」→ 稳定领域错误的**严格结构化白名单**（MSG-20260930-34 CHANGE A）
  * ---------------------------------------------------------------------------
- * 只接受**结构化**证据；不做任何消息子串/关键字猜测：
+ * 只接受**结构化**证据；不做任何消息子串/关键字猜测，也**不做任何清洗**（不 trim、不过滤成员）：
  *   · 数组 `meta.target`：长度恰为 2、全部为非空字符串、无重复，
  *     且字段集合**精确等于**下列两种已识别组合之一（字段顺序可互换）：
  *       {organizationId, paymentId}      → PAYMENT_SOURCE_CONFLICT（成功 Payment 来源唯一约束）
@@ -39,18 +39,20 @@ export function mapKnownPaymentUniqueConflict(error: unknown): PaymentConflictMa
 
   const rawTarget = (error as { meta?: { target?: unknown } } | undefined)?.meta?.target;
 
+  // 字符串形态：仅接受**精确相等**的完整约束名（不 trim，不做任何清洗）
   if (typeof rawTarget === 'string') {
-    const code = Object.prototype.hasOwnProperty.call(KNOWN_CONSTRAINT_NAMES, rawTarget.trim())
-      ? KNOWN_CONSTRAINT_NAMES[rawTarget.trim()]
+    const code = Object.prototype.hasOwnProperty.call(KNOWN_CONSTRAINT_NAMES, rawTarget)
+      ? KNOWN_CONSTRAINT_NAMES[rawTarget]
       : undefined;
     return code ? { code, message: MESSAGES[code] } : null;
   }
 
+  // 数组形态：长度恰为 2、元素全为非空字符串、无重复、字段集合精确相等（不 trim）
   if (!Array.isArray(rawTarget)) return null;
   if (rawTarget.length !== 2) return null;
-  if (!rawTarget.every((value): value is string => typeof value === 'string' && value.trim() !== '')) return null;
+  if (!rawTarget.every((value): value is string => typeof value === 'string' && value !== '')) return null;
 
-  const fields = rawTarget.map((value) => value.trim());
+  const fields = rawTarget as string[];
   if (new Set(fields).size !== fields.length) return null;
   const key = [...fields].sort().join(',');
   const matched = KNOWN_FIELD_COMBOS.find((combo) => combo.key === key);
