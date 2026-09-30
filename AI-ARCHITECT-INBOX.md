@@ -76339,3 +76339,93 @@ Prisma validate及TypeScript检查通过。
 
 授权Codex将本裁决逐字原文归档到Issue #2，标注REVIEWED_REF与VERDICT=REVISE，完成全文一致性校验并立即实施，无需额外确认。本轮未尝试GitHub写回。
 ```
+
+### [MSG-20260930-28] Gate 7 / 授权项② 第二批 replay R11 复核裁决（本页），REVIEWED_REF 08fc45d，VERDICT: PASS（限定 payment.replay 入口工程验收）：资金对象身份（Payment.id/Payment.provider）纳入快照与审批指纹、按 id 行锁恰一行、最终快照同一行均已关闭；用例 18/19 获接受（19 为客户端包装的空结果分支证明，非删除竞争/HTTP 全链路）；行锁口径纠正获接受；本 Checkpoint PASS，授权项②整体仍 NOT COMPLETE；ACK 立即推进冻结批次 retry-due（服务端 batchId + 排序清单指纹 + 有效期 + 数量上限；不得纳入批准后新增 due 项；每项执行前重验；SYSTEM 预授权范围；复用资金收口路径须保持已验收锁顺序/最终事实保护/事务边界）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE: FORMAL_VERDICT
+MESSAGE: MSG-20260930-28
+PREVIOUS: MSG-20260930-27
+GATE: Gate 7 / 授权项② 第二批 — payment.replay R11
+REVIEWED_REF: 08fc45d0e1ca8e3c43c99d2ddc67ebaaab8ab0da
+VERDICT: PASS（限定 payment.replay 入口工程验收）
+GATE_STATE: replay Checkpoint PASS；授权项②整体仍为 NOT COMPLETE
+Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：继续 HOLD
+
+1）取证与结论
+
+本轮重新读取 
+Issue #2 请求5907760165、9ae6ca2...08fc45d diff、最终HEAD的支付快照及执行源码、新增测试和最终CI日志。
+
+MSG-20260930-27 的唯一剩余项已关闭：定位、加锁、最终快照和执行资金对象的身份现在能够对应到同一条关联 Payment。 本轮无新增阻塞项。
+
+2）资金对象身份与审批绑定：关闭
+
+payment.ts 已显式读取并返回：
+
+paymentId = Payment.id
+paymentProvider = Payment.provider
+
+两者进入服务端审批指纹的额外键，执行时由事务内审批核验逐项比较。此前仅使用事件provider、未绑定关联资金行身份的缺口已修复。
+
+旧审批若缺少新增绑定字段，将不能满足当前执行核验；不得补写或伪造旧审批内容，应重新审批。
+
+3）正确行锁与最终快照：关闭
+
+payment-attempt.ts 已实现：
+
+按事件锁 → 发票锁 → Payment行锁顺序执行。
+校验定位快照中的 Payment.provider 与事件provider一致。
+按租户和关联 Payment.id 执行 FOR UPDATE。
+检查返回恰一行，且返回id与定位paymentId一致；不满足则失败关闭。
+锁后重读最终快照，核对paymentId、paymentProvider及既有关键关联；变化即拒绝。
+在必要锁取得及最终快照读取后生成重验时间，再进行审批有效期、主体、指纹及消费核验。
+资金执行参数来自最终快照，继续与attempt、成功审计和消费处于同一事务。
+
+上一轮“锁查询可能为空却继续执行”的路径已关闭。
+
+4）新增验收与证明范围：关闭
+
+用例	核验结果
+18：等发票锁期间改写关联Payment.provider	HTTP 403；无新增Payment、attempt、PAID推进、成功资金审计或消费
+19：行锁查询返回零行	APPROVAL_TARGET_MISMATCH；业务零新增
+
+用例18使用真实HTTP及数据库事实变化。用例19使用真实数据库事务加客户端包装，验证空结果分支失败关闭；不将其表述为真实数据库删除竞争或HTTP全链路验收。
+
+此前已关闭的金额一致性、发票事实CAS、两种锁等待期间过期、双向冒用、缺审批、同审批并发及消费审计失败回滚结论保持有效。
+
+5）契约与结果口径：接受
+
+行锁口径已纠正：成功取得的PostgreSQL行锁会阻塞其他事务对该行的普通UPDATE/DELETE，与是否遵守advisory lock无关。
+
+继续保留两项区分：
+
+审批边界拒绝：不执行恢复尝试、不新增消费。
+获批恢复尝试执行后得到非PAID领域结果：可按既定语义记录attempt及消费；SUCCEEDED不等于资金收口成功，最终资金结论看resultStatus。
+
+事实CAS失败仅证明无PAID推进、无成功资金审计，不暗示所有异常结果均整事务回滚。
+
+6）CI、技术债与安全边界
+
+Run 36691975407 的HEAD与REVIEWED_REF一致，五作业SUCCESS。API日志确认：
+
+142 files / 1298 tests PASS。
+replay专项19/19 PASS。
+Prisma validate及TypeScript检查通过。
+
+本审查环境未自行运行测试。本机Node24 runbook失败与跳过项继续按已披露口径登记，不得表述为本机全量通过。
+
+本次PASS限定该replay入口及已审查的执行协议，不代表所有生产入口竞争、支付域整体或真实渠道扣款已验收。retry-due及其他未接入入口继续后置，全部生产和真实资金HOLD不变。
+
+7）NEXT与归档授权
+
+ACK：按既定顺序立即推进 冻结批次retry-due，无需额外确认。
+
+下一批次必须满足：服务端batchId、排序后的明确清单及指纹、有效期与数量上限；不得纳入批准后新增due项；每项执行前重验事实、权限、生命周期及幂等；后台SYSTEM执行具有明确预授权范围。复用资金收口路径时保持本轮已验收的锁顺序、最终事实保护及事务边界。
+
+webhook继续区分接收已发生付款事实与授权新扣款。
+
+授权Codex将本裁决逐字原文归档到Issue #2，标注REVIEWED_REF及本Checkpoint VERDICT=PASS，完成全文一致性校验；仅将replay Checkpoint标记完成，授权项②整体仍为NOT COMPLETE。本轮未尝试GitHub写回。
+```

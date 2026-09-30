@@ -209,3 +209,11 @@
 - CI：HEAD `08fc45d`，run **36691975407** = 五作业 SUCCESS；API **142 files / 1298 tests PASS**。
 - 送审：Issue #2 comment **5907760165**（七段式）；右侧会话短唤醒已发送并完成送达验证（627 字符作为新用户轮出现、输入框清空、生成中）。
 - 口径纠正：行锁会阻塞其他事务对该行的普通 UPDATE/DELETE（与 advisory lock 无关）；锁前已提交变化由锁后重读处理。
+
+## 2026-09-30 — MSG-20260930-28 = PASS（② 第二批 replay）→ 下一批次：冻结批次 retry-due
+
+- 裁决：**PASS**（限定 `payment.replay` 入口工程验收）；REVIEWED_REF `08fc45d0e1ca8e3c43c99d2ddc67ebaaab8ab0da`；CI run 36691975407 五作业 SUCCESS（API 142 files / 1298 tests PASS，replay 专项 19/19）。授权项②整体仍 **NOT COMPLETE**，全部生产 HOLD 不变。
+- 关闭项：资金对象身份（`Payment.id`/`Payment.provider`）纳入快照与服务端审批指纹；按租户 + `Payment.id` 的 `FOR UPDATE` 行锁并断言恰一行/ id 一致；锁后最终快照核对 `paymentId`/`paymentProvider` 及既有关键关联；重验时间在全部必要锁之后；用例 18/19 获接受（19 明确为客户端包装的空结果分支证明，非删除竞争/HTTP 全链路）。
+- 接受的口径：行锁会阻塞普通 UPDATE/DELETE（与 advisory lock 无关）；审批边界拒绝 ≠ 获批尝试执行后的非 PAID 领域结果（后者按既定语义记录 attempt 与消费，`SUCCEEDED` ≠ 收口成功）；事实 CAS 失败仅证明无 PAID/无成功资金审计。
+- 注意：**旧审批若缺少新增绑定字段（paymentId/paymentProvider）将不满足当前执行核验**，必须重新审批，不得补写或伪造旧审批内容。
+- 下一批次（已 ACK，无需额外确认）：**冻结批次 retry-due** —— 服务端 `batchId`、排序后的明确 attempt/event 清单及指纹（版本/关联发票/金额币种/操作类型）、有效期与数量上限；不得纳入批准后新增 due 项；每项执行前重验事实/权限/生命周期/幂等；后台 SYSTEM 执行具备明确预授权范围；复用资金收口路径时保持本轮已验收的锁顺序、最终事实保护与事务边界。webhook 继续区分「接收已发生付款事实」与「授权新扣款」。
