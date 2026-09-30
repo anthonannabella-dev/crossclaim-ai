@@ -53,6 +53,7 @@ const storage = new LocalFileSystemStorage({
 let ownerId = '';
 let caseId = '';
 let claimId = '';
+const createdOrgs: string[] = [];
 
 beforeAll(async () => {
   await prisma.$connect();
@@ -60,6 +61,15 @@ beforeAll(async () => {
 afterAll(async () => {
   for (const server of liveServers) {
     await new Promise<void>((resolve) => server.close(() => resolve()));
+  }
+  // 与其它同库套件一致：结束即整表清库，避免残留数据污染后续文件
+  const tables = await prisma.$queryRawUnsafe<{ tablename: string }[]>(
+    "SELECT tablename FROM pg_tables WHERE schemaname = 'public' AND tablename NOT IN ('_prisma_migrations')",
+  );
+  if (tables.length > 0) {
+    await prisma.$executeRawUnsafe(
+      `TRUNCATE TABLE ${tables.map((row) => '"' + row.tablename + '"').join(', ')} CASCADE;`,
+    );
   }
   await prisma.$disconnect();
   fs.rmSync(storageRoot, { recursive: true, force: true });
@@ -69,6 +79,7 @@ beforeEach(async () => {
   // 每用例唯一数据（不做全局 TRUNCATE）：消除用例间共享状态导致的竞态
   const suffix = randomUUID().replace(/-/g, '').slice(0, 10);
   ORG = randomUUID();
+  createdOrgs.push(ORG);
   EMAIL = `claim-submit-${suffix}@example.com`;
   await prisma.organization.create({
     data: { id: ORG, name: 'claim.submit 租户', slug: `claim-submit-${suffix}` },
