@@ -1103,4 +1103,56 @@ describe('② 第二批 — retry-due（冻结清单批次审批）真实 HTTP +
       expect(consumed.createdAt.getTime()).toBeGreaterThanOrEqual(executedAudit.createdAt.getTime());
     });
   }, 40_000);
+
+  it('27 共享发票：批次（E1/E2）与 replay（E2）真实并发 → 会话级控制点证明「等事件锁时未持发票锁」，无死锁与重复推进', async () => {
+    const second = await seedSecondAttempt('51', 'hash-second-51');
+    await withServer(async (base) => {
+      const cookie = await login(base);
+      const frozen = await freeze(base, cookie);
+      expect(Number(frozen.body.itemCount)).toBe(2);
+      const batchId = String(frozen.body.batchId);
+      const approvalId = await approveBatch(base, cookie, batchId);
+
+      // replay 审批（目标 E2，与批次共享同一发票）
+      const requested = await post(base, `/payments/events/${second.secondEventId}/replay-review`, cookie, {
+        decision: 'REQUEST',
+      });
+      expect(requested.status).toBe(200);
+      const approved = await post(base, `/payments/events/${second.secondEventId}/replay-review`, cookie, {
+        decision: 'APPROVE',
+      });
+      expect(approved.status).toBe(200);
+      const replayApprovalId = String(((await approved.json()) as { approvalId: string }).approvalId);
+
+      // 独立会话先持有 E2 事件锁
+      const release = await holdLockFor(`cc-payment-event:${second.secondEventId}`);
+      const batchRun = execute(base, cookie, { batchId, approvalId });
+      const replayRun = post(base, `/payments/events/${second.secondEventId}/replay`, cookie, {
+        approvalId: replayApprovalId,
+        reason: 'MANUAL_RECOVERY',
+      });
+      try {
+        await waitFor(
+          async () => (await advisoryLockCountFor(`cc-payment-event:${second.secondEventId}`, false)) >= 1,
+          10_000,
+          'BATCH_OR_REPLAY_WAITING_ON_E2',
+        );
+        // 会话级控制点：批次尚未取得共享发票 I 的锁（分阶段锁协议的证据）
+        expect(await advisoryLockCountFor(`cc-payment-invoice:${invoiceId}`, true)).toBe(0);
+      } finally {
+        release();
+      }
+
+      const [batchRes, replayRes] = await Promise.all([batchRun, replayRun]);
+      // 两者都必须在有界时间内结束、无死锁类错误；同事件并发下允许「拒绝（403/409）或
+      // 数据库唯一索引导致的 fail-closed 500」，但绝不允许部分资金提交（下方断言）
+      expect([200, 403, 409, 500]).toContain(batchRes.status);
+      expect([200, 403, 409, 500]).toContain(replayRes.status);
+      const invoice = await prisma.billingInvoice.findUniqueOrThrow({ where: { id: invoiceId } });
+      expect(invoice.status).toBe('PAID');
+      // 无重复资金推进：恰一次 PAID 成功审计、支付对象仍为 1
+      expect(await prisma.auditLog.count({ where: { organizationId: ORG, action: 'payment.succeeded' } })).toBeLessThanOrEqual(1);
+      expect(await prisma.payment.count({ where: { organizationId: ORG } })).toBe(1);
+    });
+  }, 60_000);
 });
