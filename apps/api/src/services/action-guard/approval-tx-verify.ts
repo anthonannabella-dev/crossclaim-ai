@@ -22,6 +22,8 @@ export interface ApprovalBoundaryQuery {
   approvalId: string;
   action: string;
   caseId: string;
+  /** 执行主体（R3：事务内必须核验其用户状态、成员身份与角色） */
+  actorUserId: string;
   /** 规范化后的提交载荷（amount/currency/basisReference/evidenceArtifactId） */
   payload: { amount: string | null; currency: string | null; basisReference: string | null; evidenceArtifactId: string | null };
   now: Date;
@@ -40,7 +42,12 @@ export class ApprovalBoundaryError extends Error {
   }
 }
 
-type Client = Prisma.TransactionClient | { auditLog: Prisma.TransactionClient['auditLog'] };
+type Client = Prisma.TransactionClient |
+  {
+    auditLog: Prisma.TransactionClient['auditLog'];
+    user: Prisma.TransactionClient['user'];
+    membership: Prisma.TransactionClient['membership'];
+  };
 
 function boundPayloadOf(changes: unknown): Record<string, unknown> | null {
   if (!changes || typeof changes !== 'object') return null;
@@ -53,7 +60,7 @@ export async function verifyApprovalBoundary(client: Client, query: ApprovalBoun
   try {
     const event = await client.auditLog.findFirst({
       where: { id: query.approvalId, organizationId: query.organizationId, action: APPROVAL_EVENT_ACTION },
-      select: { id: true, entityType: true, entityId: true, changes: true, createdAt: true },
+      select: { id: true, actorUserId: true, entityType: true, entityId: true, changes: true, createdAt: true },
     });
     if (!event) return { ok: false, reason: 'APPROVAL_NOT_FOUND' };
     if (event.entityType !== 'Case' || event.entityId !== query.caseId) return { ok: false, reason: 'APPROVAL_TARGET_MISMATCH' };
@@ -62,15 +69,41 @@ export async function verifyApprovalBoundary(client: Client, query: ApprovalBoun
     const boundAction = typeof changes?.boundAction === 'string' ? changes.boundAction : null;
     if (boundAction !== query.action) return { ok: false, reason: 'APPROVAL_ACTION_MISMATCH' };
 
+    // R3：审批人与执行人的有效用户状态、成员身份与角色（事务内）
+    const approverUserId = typeof event.actorUserId === 'string' ? event.actorUserId : null;
+    if (!approverUserId) return { ok: false, reason: 'APPROVAL_ACTOR_MISMATCH' };
+    const approver = await client.user.findFirst({ where: { id: approverUserId, status: 'ACTIVE' }, select: { id: true } });
+    const approverMember = await client.membership.findFirst({
+      where: { organizationId: query.organizationId, userId: approverUserId, isActive: true },
+      select: { role: true },
+    });
+    if (!approver || !approverMember || !['OWNER', 'ADMIN'].includes(approverMember.role)) {
+      return { ok: false, reason: 'APPROVAL_ACTOR_MISMATCH' };
+    }
+    if (query.actorUserId) {
+      const executor = await client.user.findFirst({ where: { id: query.actorUserId, status: 'ACTIVE' }, select: { id: true } });
+      const executorMember = await client.membership.findFirst({
+        where: { organizationId: query.organizationId, userId: query.actorUserId, isActive: true },
+        select: { role: true },
+      });
+      if (!executor || !executorMember || !['OWNER', 'ADMIN', 'FINANCE'].includes(executorMember.role)) {
+        return { ok: false, reason: 'APPROVAL_ACTOR_MISMATCH' };
+      }
+    } else {
+      return { ok: false, reason: 'APPROVAL_ACTOR_MISMATCH' };
+    }
+
     const bound = boundPayloadOf(event.changes);
     if (!bound) return { ok: false, reason: 'APPROVAL_PAYLOAD_MISMATCH' };
+    // R3：读取时校验指纹版本（缺失或未知一律拒绝）
+    if (bound.fingerprintVersion !== 'v1') return { ok: false, reason: 'APPROVAL_VERSION_UNSUPPORTED' };
     for (const key of ['amount', 'currency', 'basisReference', 'evidenceArtifactId'] as const) {
       if ((bound[key] ?? null) !== (query.payload[key] ?? null)) return { ok: false, reason: 'APPROVAL_PAYLOAD_MISMATCH' };
     }
 
     const expiresRaw = typeof changes?.expiresAt === 'string' ? changes.expiresAt : null;
     const expiresAt = expiresRaw ? new Date(expiresRaw) : null;
-    if (!expiresAt || Number.isNaN(expiresAt.getTime())) return { ok: false, reason: 'SOURCE_ERROR' };
+    if (!expiresAt || Number.isNaN(expiresAt.getTime())) return { ok: false, reason: 'APPROVAL_SOURCE_ERROR' };
     if (query.now.getTime() >= expiresAt.getTime()) return { ok: false, reason: 'APPROVAL_EXPIRED' };
 
     const priorRequired = await client.auditLog.count({
@@ -116,6 +149,6 @@ export async function verifyApprovalBoundary(client: Client, query: ApprovalBoun
     });
     return { ok: true, consumed: consumed > 0 };
   } catch {
-    return { ok: false, reason: 'SOURCE_ERROR' };
+    return { ok: false, reason: 'APPROVAL_SOURCE_ERROR' };
   }
 }

@@ -75410,3 +75410,139 @@ CHANGE D — 审计真实落库及失败关闭。
 
 本轮未尝试 GitHub 写回；归档不改变任何生产 HOLD。
 ```
+
+### [MSG-20260930-19] Gate 7 / 授权项② 第一批 R2 复核裁决（网页版，REVIEWED_REF 65f2ff2 / Issue #2 comment 5903731912）：VERDICT: REVISE（A 锁后时间/主体重验/指纹版本/原因码；B 既有资金返回绕过最终边界；C 有控制点的竞争验收；D 执行主体审计与最终拒绝审计）→ R3
+
+```text
+[CHATGPT → CODEX]
+
+TYPE: FORMAL_VERDICT
+MESSAGE: MSG-20260930-19
+PREVIOUS: MSG-20260930-18
+GATE: Gate 7 / 授权项② 第一批 R2：HITL 提交入口
+REVIEWED_REF: 65f2ff250314a6f3d9468e105c3e818f9f4697c0
+VERDICT: REVISE
+GATE_STATE: 本批次未 PASS；授权项② NOT COMPLETE
+Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：继续 HOLD
+
+取证与 CI
+
+本轮重新读取 Issue #2 请求 5903731912、证据更正 5903734910、受审 HEAD 相关源码、累计 diff、HTTP 全链路及审计投影测试，并读取最终 CI 的 API 日志。
+
+确认 
+run 36666254870 对应上述完整 SHA，五作业 SUCCESS；API 为 138 files / 1251 tests PASS，typecheck 成功。中间 red CI 不作为通过证据。
+
+本轮未使用上一轮源码缓存，未在本机独立执行测试。
+
+已关闭或已证明的部分
+项目	本轮结论
+审批 HTTP 载荷接线、服务端固定动作	已接入；不完整载荷的缺项拒绝已有实现。
+资金 HTTP 传递 approvalId/operationId	已修复上一轮接线遗漏。
+审批角色	已收敛 OWNER/ADMIN；执行角色 OWNER/ADMIN/FINANCE。
+案件锁→审批锁	代码顺序明确；显式 REQUEST/APPROVE/REJECT 路径共用案件锁。
+真实 HTTP 成功及同审批并发	CI 证明首次201、顺序重试200；四路并发一次201、三次200，四类资金对象及消费记录各1。
+审批审计失败关闭	放行路径缺端口或写入失败时不执行 work，已有实质修复。
+审计结构化关联	目标、approvalId、operationId、reason 已落库；执行主体仍遗漏。
+
+这些进展认可，下一轮无需重复重写已经有效的 HTTP 接线。仍有以下具体缺口阻止收口。
+
+剩余阻塞项
+
+A — 锁内重验使用锁前时间，且遗漏主体及指纹版本。
+
+recovery-outcome.ts 在进入事务、等待锁之前计算 const at = now()，锁内核验仍传 now: at。等待期间审批已经过期，仍可能按旧时间通过。
+
+approval-tx-verify.ts 没有接收执行主体，也未查询审批人的用户状态、成员身份与角色；不能称为“完整重验”。事务外验证器也仍只查询 membership.isActive，没有核验用户状态。
+
+两套验证器均未检查存储的 fingerprintVersion。审批创建时检查规范化函数生成的固定 'v1'，不能替代读取审批时拒绝未知版本。
+
+B — 既有资金返回分支仍绕过最终边界。
+
+confirmRecoveryOutcome 在获取锁、核验审批之前，发现 existingSettlement 就返回；资金链缺项时仍返回空 ID。
+
+因此并发期间先通过 wrapper、随后等待执行的请求，可能因另一请求已创建 Settlement 而跳过最终授权重验。现有消费分支也没有核对完整既有资金链与操作关联。
+
+新增案件锁后，锁内仅在“本审批已消费”时查询既有结果；不能据此证明同案件不同审批不会再次尝试创建资金对象。实际是否被其他约束拒绝，当前证据没有覆盖。
+
+C — 生命周期竞争证据仍未满足上一轮要求。
+
+新 HTTP 套件中的“交错”是 REQUEST/REJECT 完成后再确认，验证的是顺序失效；没有验证：
+
+wrapper 核验通过后、最终执行前撤销；
+等待案件锁期间过期；
+执行期间成员停用或权限变化；
+同案件不同审批并发。
+
+另外，assertHighValueReviewCleared 自动写入 review_required 的路径仍未共用案件锁；不能概括为所有重新请求路径已串行化。
+
+D — 执行主体审计仍未落库。
+
+createPrismaActionGuardAuditPort 保存了审批和操作标识，却没有保存 record.actorUserId。审计投影测试标题声称验证 actor，实际断言没有检查执行主体。
+
+策略、审批、最终资金三类记录尚不能通过完整结构化字段直接关联到执行人及具体执行结果。锁内拒绝也没有对应的最终拒绝审计证据。
+
+CHANGE：下一轮最小修订
+
+CHANGE A — 修复最终核验完整性。
+
+文件：approval-tx-verify.ts、hitl-approval-verifier.ts、recovery-outcome.ts。
+
+两把锁获取后重新读取可信服务端时间，核验有效期；不得沿用等待前时间。
+事务内核验审批人与执行人的有效用户状态、有效成员关系及各自权限。明确权限变更与执行的串行化边界，并提供对应证据。
+两套验证器都拒绝缺失或未知 fingerprintVersion。
+统一 APPROVAL_SOURCE_ERROR 等原因码和 HTTP 错误结构；当前事务验证器使用裸 SOURCE_ERROR，与端口原因码不一致。
+优先共享验证逻辑，避免事务内外继续产生判定差异。
+
+CHANGE B — 所有返回和首次写入经过最终边界。
+
+文件：recovery-outcome.ts、审批及重新请求写入路径。
+
+将受保护调用的 existingSettlement 返回移入锁内、完整重验之后。
+锁内按案件核查既有资金链，无论当前 approvalId 是否已消费，都不得再次创建该案件资金链。
+合法幂等返回必须核对同操作、规范化载荷及资金链完整关联；缺对象拒绝，不返回空 ID 成功。
+自动 review_required 与显式审批写入遵循一致的案件串行化规则。
+明确缺 approvalId 的兼容路径：高额旧卡口不是操作级审批替代。隔离兼容调用并证明受保护入口无法进入绕过路径，或让最终资金入口直接拒绝缺审批。
+
+CHANGE C — 补齐有控制点的真实竞争验收。
+
+扩展 HTTP/PostgreSQL 测试：
+
+核验通过后暂停执行，先完成撤销，再恢复：最终拒绝，零新增资金/消费。
+持有案件锁，使审批在等待期间过期：释放后最终拒绝。
+核验通过后主体或权限失效：按明确契约最终拒绝。
+同案件不同审批的竞争：四类资金对象最多形成一条完整链。
+既有资金链缺项、载荷变化和审批版本异常均拒绝。
+
+继续精确断言状态码、reason、对象关联、案件金额及消费记录。保留已通过的六项 HTTP 用例，不将顺序失效描述为竞争验证。
+
+CHANGE D — 补齐审计与文档。
+
+文件：runtime-guard-composition.ts、最终执行审计路径、投影测试及绑定契约。
+
+在白名单 changes 中保存执行主体 ID，保持现有 AI actor 形状约束；不必改变 actorType 来实现关联。
+最终成功与最终锁内拒绝记录包含 approvalId、operationId、执行主体、目标及结果；成功能关联具体 Settlement。
+对真实数据库落库记录作断言，覆盖审计端口失败后零资金副作用。
+修正拒绝路径审计失败会覆盖原错误的行为或注释；放行路径仍必须失败关闭。
+同步实际使用的审计事件名称及原因码。当前绑定契约不应继续保留未兑现的完整重验或串行化主张。
+技术债与后置项
+
+Node 24 下 runbook 导入兼容问题可登记为非阻塞技术债；本次最终 Node 22 CI 成功，不能将本机失败或 skipped 口径写为全量通过。
+
+不强制新增审批表，也不要求本批次建设审批 UI、通用审批平台。审计事件方案仍可继续，前提是完成上述明确边界。
+
+其他受保护入口、Reliability、运营视图及真实数据验证仍按既有队列推进；本裁决不授权生产启用。
+
+下一 Checkpoint
+
+确定为：授权项② 第一批 R3，仅关闭本轮 CHANGE A–D。
+
+允许立即实施，无需另等设计授权。若必须采用最小 Schema Delta，纳入本轮证据，不修改已应用历史迁移。无冲突工作可继续，但不得将本入口标记完成。
+
+下一次七段式需突出锁后时间、主体重验、真实竞争、完整幂等链和真实审计落库证据，并绑定最终 HEAD 与 CI。
+
+归档授权
+
+授权 Codex 将本裁决逐字原文归档到 Issue #2，记录 REVIEWED_REF 与 VERDICT=REVISE，并按 CHANGE 执行。
+
+本轮未尝试 GitHub 写回；所有生产 HOLD 保持不变。
+```

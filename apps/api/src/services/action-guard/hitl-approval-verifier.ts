@@ -112,7 +112,13 @@ export function createHitlApprovalVerifier(deps: HitlApprovalVerifierDeps): Acti
       return kase?.organizationId ?? null;
     });
 
+  /**
+   * R3 CHANGE A：主体有效性 = 用户状态 ACTIVE + 有效成员关系 + 角色；
+   * 三者缺一即返回 null（拒绝），不只看 membership.isActive。
+   */
   const resolveMemberRole = async ({ organizationId, actorUserId }: { organizationId: string; actorUserId: string }) => {
+    const user = await deps.prisma.user.findFirst({ where: { id: actorUserId, status: 'ACTIVE' }, select: { id: true } });
+    if (!user) return null;
     const membership = await deps.prisma.membership.findFirst({
       where: { organizationId, userId: actorUserId, isActive: true },
       select: { role: true },
@@ -214,6 +220,8 @@ export function createHitlApprovalVerifier(deps: HitlApprovalVerifierDeps): Acti
       // 载荷绑定
       const bound = boundPayloadOf(event.changes);
       if (!bound) return { valid: false, reason: 'APPROVAL_PAYLOAD_MISMATCH' };
+      // R3 CHANGE A：读取时校验指纹版本（缺失或未知一律拒绝）
+      if (bound.fingerprintVersion !== 'v1') return { valid: false, reason: 'APPROVAL_VERSION_UNSUPPORTED' };
       const submitted = normalizeBoundPayload(query.payload);
       if (!submitted) return { valid: false, reason: 'APPROVAL_PAYLOAD_MISMATCH' };
       for (const key of ['amount', 'currency', 'basisReference', 'evidenceArtifactId']) {

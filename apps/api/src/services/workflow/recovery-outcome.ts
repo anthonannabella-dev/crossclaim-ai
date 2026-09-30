@@ -260,19 +260,22 @@ export async function confirmRecoveryOutcome(
       // R2 CHANGE B1：锁顺序固定为「案件 → 审批」，保证同案不同审批也只允许一条资金链
       await tx.$executeRawUnsafe('SELECT pg_advisory_xact_lock(hashtext($1))', `cc-recovery-case:${kase.id}`);
       await tx.$executeRawUnsafe('SELECT pg_advisory_xact_lock(hashtext($1))', `cc-approval:${approvalId}`);
+      // R3 CHANGE A：锁获取后**重新读取服务端时间**，不得沿用等待前的时间
+      const verificationTime = now();
       // 锁内重验审批绑定与生命周期（不能用事务外结论）
       const boundary = await verifyApprovalBoundary(tx, {
         organizationId: input.organizationId,
         approvalId,
         action: RECOVERY_CONFIRMATION_ACTION,
         caseId: kase.id,
+        actorUserId: input.actorUserId,
         payload: {
           amount: recoveredAmount.toFixed(MONEY_SCALE),
           currency,
           basisReference,
           evidenceArtifactId: requestedEvidenceId,
         },
-        now: at,
+        now: verificationTime,
       });
       if (!boundary.ok) {
         throw new ApprovalBoundaryError(boundary.reason, kase.id);
