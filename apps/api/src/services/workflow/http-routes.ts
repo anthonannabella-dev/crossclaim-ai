@@ -29,6 +29,7 @@ import { confirmCommercialTerms, createCaseForOpportunity } from './case-creatio
 import { confirmRecoveryOutcome } from './recovery-outcome';
 import { ActionGuardApprovalVerificationError } from '../action-guard/approval-verifier';
 import { createHitlSubmissionBoundary } from '../action-guard/hitl-submission';
+import { ActionGuardNotConfiguredError } from '../action-guard/guard-enforcement';
 import {
   ActionGuardApprovalRequiredError,
   ActionGuardDeniedError,
@@ -197,6 +198,7 @@ function statusFor(error: unknown): { code: number; error: string } {
   if (error instanceof ActionGuardDeniedError) return { code: 403, error: error.code };
   if (error instanceof ActionGuardApprovalRequiredError) return { code: 409, error: error.code };
   if (error instanceof ActionGuardApprovalVerificationError) return { code: 403, error: error.code };
+  if (error instanceof ActionGuardNotConfiguredError) return { code: 403, error: error.code };
   if (error instanceof WorkflowError) {
     switch (error.code) {
       case 'NOT_FOUND':
@@ -941,7 +943,7 @@ export async function handleWorkflowRequest(
       const approvalId = typeof body.approvalId === 'string' ? body.approvalId : undefined;
       if (!deps.actionGuard) {
         // fail closed：受保护入口必须在组合根注入 Action Guard
-        throw new WorkflowError('FORBIDDEN', 'ACTION_GUARD_NOT_CONFIGURED：受保护入口必须接入 Action Guard');
+        throw new ActionGuardNotConfiguredError('commission.charge');
       }
       // 资金确认是受保护动作：闸门 + 服务端审批绑定（HITL 复核状态）双重校验，
       // 拒绝/审批不通过/能力或审计异常时 confirmRecoveryOutcome 不会被调用（零业务副作用）。

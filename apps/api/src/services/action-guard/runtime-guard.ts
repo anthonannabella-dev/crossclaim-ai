@@ -40,7 +40,8 @@ export interface ActionGuardCapabilityPort {
 }
 
 export interface ActionGuardAuditRecord {
-  action: 'action_guard.evaluated';
+  /** 审计动作名：策略评估 action_guard.evaluated / 审批核验 action_guard.approval_decision 等 */
+  action: string;
   actionName: string;
   decision: ActionGuardResult['decision'];
   code: string;
