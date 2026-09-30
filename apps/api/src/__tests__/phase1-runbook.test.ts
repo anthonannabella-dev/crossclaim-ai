@@ -1,17 +1,27 @@
 // P2-4（MSG-20260929-73）— Production Validation Runbook：门槛冻结、Stage A 记账、Decision Gate、禁止自动动作
 
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
 
 import { beforeAll, describe, expect, it } from 'vitest';
 
 const toolPath = path.join(__dirname, '..', '..', '..', '..', 'tools', 'validation', 'phase1-runbook.mjs');
 
-/** 动态导入纯 ESM 工具（CommonJS 输出下不允许 top-level await） */
+/**
+ * 动态导入纯 ESM 工具（CommonJS 输出下不允许 top-level await）。
+ *
+ * 工具文件首行是 shebang（`#!/usr/bin/env node`）：原生 ESM 加载器会剥离它，但 vite(vite-node) 的 SSR
+ * 转换不会——shebang 会被留在转换产物里，Node 抛 `SyntaxError: Invalid or unexpected token`，
+ * 导致整份套件 collect 失败（本机 Node 24 必现；CI 的 Node 20 组合不触发）。
+ * 因此这里读入源码、剥离 shebang 后用 data: URL 导入：不依赖加载器对 shebang 的处理，行为稳定。
+ * （该工具只依赖 `node:fs`，data: URL 模块可以正常导入 `node:` 内置模块。）
+ */
 let tool: Record<string, unknown>;
 
 beforeAll(async () => {
-  tool = (await import(pathToFileURL(toolPath).href)) as Record<string, unknown>;
+  const source = readFileSync(toolPath, 'utf8').replace(/^#![^\n]*\n/, '');
+  const url = `data:text/javascript;base64,${Buffer.from(source, "utf8").toString("base64")}`;
+  tool = (await import(/* @vite-ignore */ url)) as Record<string, unknown>;
 });
 
 describe('P2-4 Validation Runbook — 冻结门槛', () => {
