@@ -65,3 +65,8 @@
 - 既有套件口径同步（R3 生效后的真实合同）：`workflow-hitl-db` 的「复核通过后可确认」改为必须携带操作级 `approvalId`；`action-guard-hitl-concurrency-db` 04 由「撤销后幂等 200」改为「最终拒绝 APPROVAL_REVOKED」。
 - 文档同步：`docs/releases/ACTION-APPROVAL-BINDING-CONTRACT.md` 全量改写为 R3 口径（实际审计事件名 `action_guard.approval_decision` / `recovery.outcome_rejected`、原因码、锁顺序、幂等链完整性、兼容路径收口、验收矩阵）。
 - 本地验证：`npx tsc --noEmit` PASS；定向 6 套 DB 套件（outcome / hitl / concurrency / http-chain / payment / r3-race）全绿；全量 `npx vitest run` = 139 文件 / 1240 passed + 20 skipped，唯一失败为既知技术债 `phase1-runbook.test.ts`（Node 24 导入不兼容，Node 22 CI 通过），非本批次引入。
+
+- R3 送审（REVIEWED_REF `cb95143`）：CI run `36668581862` = 5/5 SUCCESS（API / Deploy smoke / Web / 许可证闸门 / Backup restore）。
+- 正式审计请求（GitHub Issue #2）：comment `5904049895` → https://github.com/anthonannabella-dev/crossclaim-ai/issues/2#issuecomment-5904049895（七段式：GATE/HEAD/FILES/TESTS/CI/BOUNDARY/自我披露/REQUESTED DECISION）。
+- 中间一次红 CI 已如实登记：`9065f2f` 的 Deploy smoke 在 `S-1 migrate deploy (fresh database)` 瞬时失败；相邻提交与当前 HEAD 同一步骤成功，本机 `node tools/smoke/deploy-smoke.mjs` 全项通过（20 migrations / 64 triggers / health 200 / readyz 200），判定为 Docker 就绪竞态，不作为通过证据。
+- 通道①（右侧 ChatGPT 会话）本轮不可用：computer-use 返回 `Browsers: Error: Codex auth token is unavailable`（apps/browsers 均为空），js_reset 后重试仍失败。属环境级故障，按 SELF_RESOLVE 处理：正式请求已按通道②落在 Issue #2；短唤醒待通道恢复后补发（每次心跳重试），期间不重复写 Issue，不改动已送审的 HEAD。
