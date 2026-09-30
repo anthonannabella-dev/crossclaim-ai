@@ -103,13 +103,19 @@ Claim / Appeal 文本草稿        直接对外提交
 实现方式（为什么不是 Prisma 复合外键）：
 
 - Prisma 的复合外键要求 FK 字段全部可空，而 `organizationId` 不可空 —— 二者冲突
-- 因此采用**等价数据库级约束**：一个通用触发器函数 + 按表挂触发器
+- 因此采用**数据库触发器**：一个通用函数 `crossclaim_assert_tenant_integrity()` + 按表挂触发器
+- 但触发器集合**不等于完整的「等价复合外键约束」**：它只在**引用行 INSERT / UPDATE 时**校验同租户，
+  不阻止**被引用对象事后改 `organizationId`**（普通外键只引用 `id`，`@@unique([organizationId, id])` 不会因此变成复合外键），
+  也不阻止 `RuleSet` 所有权漂移。
+- 归属漂移由后续迁移 `20260930100000_tenant_ownership_immutability` 的归属不可变触发器
+  （`cc_tenant_immutable__*` / `cc_ruleset_ownership_immutable`）覆盖。
 
 | 对象 | 位置 |
 |---|---|
 | 校验函数 | `crossclaim_assert_tenant_integrity()` |
 | 迁移 | `apps/api/prisma/migrations/20260928060000_tenant_integrity/migration.sql` |
-| 覆盖范围 | 24 张 tenant-owned 表 / 28 个 `cc_tenant%` 触发器（CI 逐次断言数量） |
+| 覆盖范围 | 28 个 `cc_tenant_*` 引用完整性触发器 + 36 个 `cc_tenant_immutable__*` 归属不可变触发器 |
+| CI 断言 | 按**清单**断言名称 / 所属表 / 事件类型 / 启用状态（`tools/tenant-triggers/`），不再使用「数量下限」 |
 
 另有两类**规则所有权**约束同属本层（`20260928070000_tenant_integrity_fixes`）：
 

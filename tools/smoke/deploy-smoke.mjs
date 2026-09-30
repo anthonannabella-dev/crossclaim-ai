@@ -164,7 +164,7 @@ async function main() {
     return count + ' migrations';
   });
 
-  await step('tenant triggers = 28', () => {
+  await step('tenant triggers >= 28（基线：cc_tenant 系列；B2 追加归属不可变触发器）', () => {
     const count = run('docker', [
       'exec',
       container,
@@ -177,8 +177,8 @@ async function main() {
       '-c',
       "select count(*) from pg_trigger where tgname like 'cc_tenant%'",
     ]).trim();
-    if (count !== '28') throw new Error('trigger count=' + count);
-    return '28 triggers';
+    if (Number(count) < 28) throw new Error('trigger count=' + count + ' (expected >= 28)');
+    return count + ' triggers';
   });
 
   let api = null;
