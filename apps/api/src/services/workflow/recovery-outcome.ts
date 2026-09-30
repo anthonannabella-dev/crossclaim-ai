@@ -47,6 +47,13 @@ export interface ConfirmRecoveryOutcomeInput {
   basisReference: unknown;
   evidenceArtifactId?: unknown;
   note?: unknown;
+  /**
+   * CHANGE B（MSG-20260930-17）：本次执行所依据的审批标识。
+   * 提供时，审批消费与首次资金写入在同一事务内完成（advisory lock 串行化）。
+   */
+  approvalId?: string;
+  /** 操作关联标识（缺省由 approvalId + caseId 生成） */
+  operationId?: string;
 }
 
 export interface ConfirmRecoveryOutcomeResult {
@@ -237,7 +244,63 @@ export async function confirmRecoveryOutcome(
   const feeAmount = money(recoveredAmount.times(new Prisma.Decimal(terms.successFeeRate)));
   const at = now();
 
+  const approvalId = typeof input.approvalId === 'string' && input.approvalId.trim() !== '' ? input.approvalId.trim() : null;
+  const operationId =
+    typeof input.operationId === 'string' && input.operationId.trim() !== ''
+      ? input.operationId.trim()
+      : approvalId ? `approval:${approvalId}` : null;
+
   return prisma.$transaction(async (tx) => {
+    // CHANGE B（MSG-20260930-17 §4）：审批消费与首次资金写入必须原子化。
+    // 以 approvalId 为粒度取事务级 advisory lock → 锁内重查消费 → 写消费事件；
+    // 已消费时走幂等分支（返回既有资金对象，不重复创建）。
+    if (approvalId) {
+      await tx.$executeRawUnsafe('SELECT pg_advisory_xact_lock(hashtext($1))', `cc-approval:${approvalId}`);
+      const consumed = await tx.$queryRawUnsafe<Array<{ n: bigint }>>(
+        `SELECT count(*)::bigint AS n FROM "AuditLog" WHERE "organizationId" = $1 AND action = 'recovery.approval_consumed' AND changes->>'approvalId' = $2`,
+        input.organizationId,
+        approvalId,
+      );
+      if (Number(consumed[0]?.n ?? 0) > 0) {
+        const settled = await tx.settlement.findFirst({
+          where: { organizationId: input.organizationId, caseId: kase.id },
+          select: { id: true, amount: true },
+        });
+        const feeRow = settled
+          ? await tx.feeCalculation.findFirst({ where: { organizationId: input.organizationId, settlementId: settled.id }, select: { id: true, feeAmount: true } })
+          : null;
+        const invoiceRow = await tx.billingInvoice.findFirst({ where: { organizationId: input.organizationId, caseId: kase.id }, select: { id: true } });
+        const ledgerRow = settled
+          ? await tx.recoveryLedgerEntry.findFirst({ where: { organizationId: input.organizationId, settlementId: settled.id }, select: { id: true } })
+          : null;
+        return {
+          caseId: kase.id,
+          caseNo: kase.caseNo,
+          settlementId: settled?.id ?? '',
+          ledgerEntryId: ledgerRow?.id ?? '',
+          feeCalculationId: feeRow?.id ?? '',
+          billingInvoiceId: invoiceRow?.id ?? '',
+          recoveredAmount: (settled ? money(settled.amount) : recoveredAmount).toFixed(MONEY_SCALE),
+          feeAmount: (feeRow?.feeAmount ? money(feeRow.feeAmount) : new Prisma.Decimal(0)).toFixed(MONEY_SCALE),
+          created: false,
+          exceedsClaim,
+        };
+      }
+      // 消费事件：审批与首次资金写入同事务落库
+      await tx.auditLog.create({
+        data: {
+          organizationId: input.organizationId,
+          actorType: 'USER',
+          actorUserId: input.actorUserId,
+          action: 'recovery.approval_consumed',
+          entityType: 'Case',
+          entityId: kase.id,
+          changes: { approvalId, operationId, caseNo: kase.caseNo, recoveredAmount: recoveredAmount.toFixed(MONEY_SCALE), currency } as never,
+          createdAt: at,
+        },
+      });
+    }
+
     // 凭证：优先使用用户指定的 EvidenceArtifact，否则为本次人工确认留一条可追溯凭证
     let evidenceId = requestedEvidenceId;
     if (!evidenceId) {
