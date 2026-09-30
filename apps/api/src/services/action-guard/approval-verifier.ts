@@ -19,6 +19,12 @@ import { ACTION_GUARD_CATALOG } from './action-guard';
  */
 export const RECOVERY_CONFIRMATION_ACTION = 'commission.charge';
 
+/**
+ * 受保护动作名（单一来源）：支付捕获/资金确认（POST /billing/:id/status、/payments/events/:id/replay、
+ * /payments/processing/retry-due）。非守卫文件必须引用本常量（② 第二批 P1）。
+ */
+export const PAYMENT_CAPTURE_ACTION = 'payment.capture';
+
 export const APPROVAL_REASON_CODES = [
   'APPROVAL_NOT_FOUND',
   'APPROVAL_NOT_APPROVED',

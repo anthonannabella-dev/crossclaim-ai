@@ -14,6 +14,8 @@
 import { Prisma, type PrismaClient } from '@prisma/client';
 
 import { prepareAuditInsert } from '../audit';
+import { PAYMENT_CAPTURE_ACTION } from '../action-guard/approval-verifier';
+import { nextLifecycleAt, normalizeApprovalTtl, normalizeBoundPayload } from './recovery-review';
 import { WorkflowError } from './opportunity-review';
 import { assertPermission } from './permissions';
 
@@ -86,7 +88,7 @@ async function writeAudit(
     changes: Record<string, unknown>;
     at: Date;
   },
-): Promise<void> {
+): Promise<string> {
   const row = prepareAuditInsert(
     {
       organizationId: input.organizationId,
@@ -100,7 +102,7 @@ async function writeAudit(
     },
     { maxStringLength: 512 },
   );
-  await tx.auditLog.create({
+  const created = await tx.auditLog.create({
     data: {
       organizationId: row.organizationId,
       actorType: row.actorType,
@@ -115,6 +117,7 @@ async function writeAudit(
       createdAt: input.at,
     },
   });
+  return created.id;
 }
 
 export interface ApplyPaymentSucceededInput {
@@ -357,9 +360,17 @@ export async function submitPaymentReview(
     invoiceId: string;
     decision: 'REQUEST' | 'APPROVE' | 'REJECT';
     reason?: string;
+    /**
+     * P1（② 第二批）：APPROVE 必须绑定本次操作的规范化载荷。
+     * 形状与 recovery 一致（amount/currency/basisReference/evidenceArtifactId），便于复用验证器。
+     */
+    boundPayload?: { amount?: unknown; currency?: unknown; basisReference?: unknown; evidenceArtifactId?: unknown };
+    /** 服务端固定动作；缺省 = payment.capture */
+    boundAction?: string;
+    approvalTtlMs?: number;
   },
   deps: { now?: () => Date } = {},
-): Promise<{ invoiceId: string; state: PaymentReviewState }> {
+): Promise<{ invoiceId: string; state: PaymentReviewState; approvalId: string | null }> {
   assertPermission(input.role, 'setCommercialTerms');
   assertPermission(input.role, 'advanceBilling');
   if (input.decision === 'REJECT' && (!input.reason || input.reason.trim() === '')) {
@@ -372,8 +383,12 @@ export async function submitPaymentReview(
   });
   if (!invoice) throw new WorkflowError('NOT_FOUND', `发票 ${input.invoiceId} 不存在或不属于该租户`);
 
-  const at = (deps.now ?? (() => new Date()))();
+  const now = deps.now ?? (() => new Date());
   return prisma.$transaction(async (tx) => {
+    // P1：目标级串行化（发票粒度），与 recovery 的案件锁同一模式
+    if (typeof tx.$executeRawUnsafe === 'function') {
+      await tx.$executeRawUnsafe('SELECT pg_advisory_xact_lock(hashtext($1))', `cc-payment-invoice:${invoice.id}`);
+    }
     const events = await tx.auditLog.findMany({
       where: {
         organizationId: input.organizationId,
@@ -391,6 +406,8 @@ export async function submitPaymentReview(
       select: { action: true, createdAt: true },
     });
     const state = resolvePaymentReviewState(events);
+    // P1：生命周期事件时间在锁内生成，且同发票严格递增（与 recovery nextLifecycleAt 同规则）
+    const at = nextLifecycleAt(events, now);
 
     if (input.decision === 'REQUEST') {
       if (state === 'PENDING') throw new WorkflowError('ILLEGAL_TRANSITION', '该账单已处于待审批状态');
@@ -403,7 +420,7 @@ export async function submitPaymentReview(
         changes: { invoiceNo: invoice.invoiceNo, threshold: resolvePaymentReviewThreshold() },
         at,
       });
-      return { invoiceId: invoice.id, state: 'PENDING' as PaymentReviewState };
+      return { invoiceId: invoice.id, state: 'PENDING' as PaymentReviewState, approvalId: null };
     }
 
     if (state !== 'PENDING') {
@@ -411,7 +428,26 @@ export async function submitPaymentReview(
     }
     const action =
       input.decision === 'APPROVE' ? PAYMENT_REVIEW_ACTIONS.approved : PAYMENT_REVIEW_ACTIONS.rejected;
-    await writeAudit(tx, {
+    // P1：APPROVE 必须绑定本次操作的规范化载荷（金额/币种/依据），未知指纹版本拒绝
+    const bound = input.decision === 'APPROVE'
+      ? normalizeBoundPayload({
+          recoveredAmount: input.boundPayload?.amount,
+          currency: input.boundPayload?.currency,
+          basisReference: input.boundPayload?.basisReference,
+          evidenceArtifactId: input.boundPayload?.evidenceArtifactId,
+        })
+      : null;
+    if (input.decision === 'APPROVE') {
+      if (!bound || bound.amount === null || bound.currency === null || bound.basisReference === null) {
+        throw new WorkflowError('INVALID_INPUT', '审批必须绑定完整操作载荷（金额/币种/依据）');
+      }
+      if (bound.fingerprintVersion !== 'v1') {
+        throw new WorkflowError('INVALID_INPUT', '未知的审批载荷指纹版本');
+      }
+    }
+    const expiresAt =
+      input.decision === 'APPROVE' ? new Date(at.getTime() + normalizeApprovalTtl(input.approvalTtlMs)) : null;
+    const approvalId = await writeAudit(tx, {
       organizationId: input.organizationId,
       actor: { type: 'USER', userId: input.actorUserId },
       action,
@@ -421,12 +457,20 @@ export async function submitPaymentReview(
         invoiceNo: invoice.invoiceNo,
         ...(input.reason ? { reason: input.reason } : {}),
         charged: false,
+        ...(bound && input.decision === 'APPROVE'
+          ? {
+              boundPayload: bound,
+              boundAction: input.boundAction && input.boundAction.trim() !== '' ? input.boundAction.trim() : PAYMENT_CAPTURE_ACTION,
+              expiresAt: expiresAt ? expiresAt.toISOString() : null,
+            }
+          : {}),
       },
       at,
     });
     return {
       invoiceId: invoice.id,
       state: input.decision === 'APPROVE' ? ('APPROVED' as PaymentReviewState) : ('REJECTED' as PaymentReviewState),
+      approvalId: input.decision === 'APPROVE' ? approvalId : null,
     };
   });
 }

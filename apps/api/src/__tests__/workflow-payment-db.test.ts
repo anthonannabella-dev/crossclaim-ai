@@ -267,14 +267,18 @@ describe('C-0010-A — 支付域（真实 PostgreSQL）', () => {
     ).rejects.toThrow(ForbiddenError);
 
     // 6) OWNER 审批后，第三次回调把发票推进到 PAID
+    // P1（② 第二批）：支付审批同样必须绑定本次操作的规范化载荷，并返回审批事件 id
     const approval = await submitPaymentReview(prisma, {
       organizationId: ORG,
       actorUserId: ownerId,
       role: 'OWNER',
       invoiceId: INVOICE,
       decision: 'APPROVE',
+      boundPayload: { amount: '1500.0000', currency: 'USD', basisReference: 'pi_hitl_3', evidenceArtifactId: null },
+      boundAction: 'payment.capture',
     });
     expect(approval.state).toBe('APPROVED');
+    expect(typeof approval.approvalId).toBe('string');
 
     await post(succeededEvent('evt_hitl_3', 'pi_hitl_3', 150000));
     const invoice = await invoiceRow();
