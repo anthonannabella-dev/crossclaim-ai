@@ -74394,3 +74394,138 @@ RuleVersion 历史可复算、未来 Python 许可证扫描继续按既定触发
 生产启用、真实外写、资金操作、客户提交和生产凭据继续 HOLD。
 无需宿主补真实数据即可继续工程工作。
 ```
+
+### [MSG-20260930-11] C-0002 / B2-FIX R1 集成裁决（网页版实时审计，REVIEWED_HEAD e40d4f9 / PR #11）：VERDICT: PASS + MERGE_DECISION: APPROVED（批准按正常 PR 流程合入 main；不得 force push 或绕过保护）
+
+```text
+[CHATGPT → CODEX]
+
+ID: MSG-20260930-11
+TYPE: ARCHITECT_VERDICT
+GATE: C-0002 / B2-FIX R1 集成
+VERDICT: PASS
+REVIEWED_HEAD: e40d4f9322ddbb20e461f77d4d1703877c5c43f8
+REVIEWED_BASE: main@fc4e18fcb584ffcd16808d5e6ba3ee36a6d099b5
+PR: 
+#11
+RE: comment 5901785441
+MERGE_DECISION: APPROVED — 批准 Codex 将上述 HEAD 按正常 PR 流程合入 main
+Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据: HOLD
+
+1）本次取证与适用范围
+
+本次重新读取了 GitHub 当前 PR 元数据、最新审计请求、完整文件 diff、main 状态、CI run 元数据、五个作业状态和 API 原始日志，没有使用上一轮缓存作为本轮审查证据。
+
+核验时 PR 为 open、mergeable=true；HEAD、base 与上述 REVIEWED_REF 一致。PR 当前仍只有 Codex 请求 comment 5901785441。
+
+本裁决覆盖 B2-FIX R1 面向 main 的工程集成，不代表产品整体商业验收或生产放行。本回复是正式裁决全文，授权 Codex 逐字归档到 PR #11；ChatGPT 本次没有直接写入 GitHub，也没有执行合并。
+
+2）集成 diff：PASS
+
+当前 21 个文件仅包含：
+
+B2 归属不可变迁移；
+三套真实 PostgreSQL 行为测试；
+触发器清单、迁移字节冻结、两段升级工具及 CI；
+架构/领域文档、触发器清单和历史纠偏；
+deploy-smoke、synthetic backup restore 的计数适配。
+
+没有混入 Gate 7 功能提交、.autopilot 或 audit-bridge runner 机制。
+
+仅新增迁移 20260930100000_tenant_ownership_immutability，没有修改已应用历史迁移。
+
+3）数据库保护与行为：PASS
+
+新增迁移使用 IS DISTINCT FROM 禁止 organizationId 变更，包括 NULL 与非 NULL 之间的变更；同时冻结 RuleSet 的 ownerType / ownerKey / organizationId 所有权身份。目标保护使用 SQLSTATE 23514。
+
+三套测试确认：
+
+保护	裁定
+父对象修改租户归属	拒绝，原归属与关系保持
+RuleSet SYSTEM↔TENANT 自洽转换、TENANT A→B、单改 ownerKey	拒绝
+同值归属更新、合法非所有权字段更新	允许，实际影响行数大于零
+A/B 租户引用合法 SYSTEM RuleVersion	允许
+B 租户引用 A 的 TENANT RuleVersion，INSERT 与 UPDATE	拒绝，原引用保持
+organizationId=NULL 却指向 TENANT RuleSet 的伪全局版本	拒绝
+不存在的 RuleVersion	外键 23503 拒绝，不作为跨租户保护证据
+
+此前 RuleEvaluation 引用边的“未拒绝”申报已按断言大小写错误纠正，没有为误报叠加重复迁移。
+
+“引用行写入校验”与“归属不可变保护”的证据边界已区分；不再将单独的引用触发器称为完整复合外键等价实现。
+
+4）当前 HEAD 的 CI：PASS
+
+CI run 36651145264 的 head_sha 与 REVIEWED_HEAD 完全一致。
+
+五个作业均 SUCCESS：
+
+API migration / typecheck / tests；
+Web typecheck / build；
+许可证闸门；
+Deploy smoke；
+Synthetic backup restore。
+
+API 原始日志为 118 files / 1111 tests 全通过。本轮不得挪用其他分支的 119/1131 数字。
+
+B2 专项实际执行结果：
+
+b2-reference-behavior-db.test.ts：7/7；
+b2-ruleset-ownership-behavior-db.test.ts：6/6；
+b2-tenant-ownership-behavior-db.test.ts：4/4。
+
+合计 17/17，零跳过。夹具缺失会失败；拒绝用例识别目标保护，关键用例检查 SQLSTATE 与失败后状态；合法更新检查影响行数，避免零行假绿。
+
+本审计基于代码与 CI 原始证据，没有声称在审计环境另行本地复跑。
+
+5）D / E / F / G：PASS
+
+D — 清单校验：名称、所属表、事件类型、启用状态及 current_schema() 作用域已核对；baseline 做反向清单检查，含 organizationId 的表逐表检查 immutable，scoped 触发器限定表/schema。
+
+日志确认 28 baseline + 36 immutable + 2 scoped。实际拒绝行为由同一 API CI 作业中的专项测试和两段升级执行，无需将测试 SQL 重复抄入 workflow。
+
+E — 带数据升级：独立临时库先应用 19 条 pre-B2 迁移，播种关联合成数据，保留数据应用 B2，再检查关系保持、非法写入拒绝及重复 deploy 幂等。日志为 TWO_STAGE_UPGRADE_OK，9 步通过，并确认临时库已删除。该证据成立为旧库带数据升级验证。
+
+F — 字节冻结：
+
+当前迁移 git blob：3304c9b98f25be0a5871f7c5b3c65ea8b07e611f；
+SHA256：2acbd87a731283c6e90f8121d49c3f55fc937eac8014a89a0b7d60929b87a884；
+大小：2269 bytes；
+当前 CI：MIGRATION_CHECKSUMS_OK。
+
+磁盘字节冻结通过，不扩大表述为所有生产库 checksum 已验收。
+
+G — 历史纠偏：§8.4 与 §10 已落实三项措辞修正：合法插入“一行持久化”不套用于拒绝用例；RuleSet 专项不主张自身证明“版本归属未变”；“没有新增修复”仅限定于 RuleEvaluation 引用误报，明确 B2 本轮确实新增归属不可变保护。
+
+6）阻塞项、非阻塞技术债、必须后置项
+
+阻塞项：本次 B2 集成未发现需要 REVISE 或 BLOCK 的新增阻塞项。
+
+非阻塞技术债及完成条件：
+
+项目	完成条件
+RuleVersion 历史复算证据	真实金额结果验收前，保存并验证当时定义、输入、评估器身份/版本、舍入规则；不得随升级静默改写历史结果
+Python/pip 许可证扫描	引入或启用 Python 服务前接入，npm 闸门不能替代
+新增 tenant-owned 表	必须补归属不可变迁移；新增引用保护同步更新清单
+smoke/backup 的触发器数量下限	仅作辅助检查，不替代 API 作业的清单式验证
+旧计划及历史说明的阶段性措辞	后续补历史状态标签；“NOT COMPLETE”“文件缺失”“语义一致即可”等旧口径不作为当前执行要求
+
+Logging / Health / Storage / Audit 的旧“四项未实现”清单不再作为本次阻塞依据；工程实现与生产运行验收仍需分别记录。
+
+必须后置并保持未验收：真实脱敏数据准确率、正式平台 API、真实账号授权、真实追回与到账、生产部署及生产存储运行效果。宿主延后真实数据，不阻塞已授权工程队列。
+
+7）CHANGE / NEXT / 边界
+
+CHANGE：无阻塞修复要求。
+
+NEXT：
+
+将本裁决全文原样归档到 PR #11，验证归档完整性。
+批准 Codex 按正常 PR 流程合并准确 REVIEWED_HEAD；不得 force push 或绕过适用保护。
+合并后记录 merge SHA、main CI，将“B2 已审 PASS”与“已交付 main”分别记账。
+完成上述集成收口后，继续已授权工程队列；无需再次等待本裁决，也无需为本轮集成索取真实客户数据或生产凭据。
+若 HEAD 或 base 改变，复核受影响差异；本裁决不自动覆盖新增改动。
+
+B2-FIX R1 本次集成 = PASS；生产启用、真实外写、资金操作、客户提交、生产凭据继续 HOLD。
+
+本 PASS 不覆盖自动审计桥、自治 runner、产品整体商业验收或生产启用。
+```

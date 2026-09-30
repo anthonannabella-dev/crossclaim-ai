@@ -36,3 +36,8 @@
   - 集成 HEAD CI：run 36651145264 → **5/5 SUCCESS**。
 - 正式审计请求（GitHub comment）：id `5901785441` → https://github.com/anthonannabella-dev/crossclaim-ai/pull/11#issuecomment-5901785441（已回读验证，含 GATE/HEAD/CHANGE/Schema/tests/CI/evidence/requested decision）。
 - 短唤醒（ChatGPT Web）：已发送并回读验证（输入框清空 + 会话尾部出现该 `你说：` 轮次）；未在 Web 重复全文。
+
+- **MSG-20260930-11 = PASS + MERGE_DECISION: APPROVED**（REVIEWED_HEAD `e40d4f9` / PR #11）。全文 3692 字符已逐字归档：仓库 `AI-ARCHITECT-INBOX.md`（compare.mjs FULL_COPY_OK 85/85）与 GitHub PR #11 comment `5901910080`。
+- 连接器阻塞留痕：ChatGPT 的 GitHub 写回需要「允许 ChatGPT 使用 GitHub 吗 / Add Comment To Issue」授权弹窗；该弹窗无法由 Codex 侧激活（Playwright 点击 / force / 坐标 / Enter 均无效，轮次结束后变静态）。架构方在回复中明确授权 Codex 原文归档，故本轮由 Codex 转录，未删减。
+- 按裁决执行合并：PR #11（head `e40d4f9`，base `main@fc4e18f`）以 merge commit 合入，merge SHA `16b47a24bf692a333c1734e9ac5642371490d4bf`；未 force push、未绕过保护。
+- 双账已分列（见 TASKS.md）：B2 工程修复 PASS / B2 集成 PASS / 已交付 main（main CI 5/5 SUCCESS（run on 16b47a2））。

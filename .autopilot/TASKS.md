@@ -26,3 +26,13 @@
 
 - [ ] 13. Gate 7 授权队列下一 Checkpoint（MSG-20260930-03 的 8 项里，Action Guard CP1 已完成）：候选 ② RUNTIME BUSINESS BLOCKING → ③ PRODUCTION CONTROL PLANE → ⑤ RELIABILITY → ⑥ OPERATIONS-ADMIN → ⑦ SECURITY HARDENING。
 - 开工前先确认：不与 PR #11 的集成范围冲突；涉及安全/资金/规则引擎/Gate 边界的部分需架构方裁决。
+
+## 双账（B2）
+
+| 账目 | 状态 | 证据 |
+| --- | --- | --- |
+| B2-FIX R1 工程修复（审 PASS） | PASS | MSG-20260930-10（REVIEWED_HEAD 62dffa6 / CODE_HEAD 1144401） |
+| B2-FIX R1 面向 main 的集成（审 PASS + MERGE APPROVED） | PASS | MSG-20260930-11（REVIEWED_HEAD e40d4f9 / PR #11 / comment 5901910080） |
+| 已交付 main | MERGED + main CI 5/5 SUCCESS（run on 16b47a2） | merge commit `16b47a2` |
+
+> 说明：架构方要求「B2 已审 PASS」与「已交付 main」分别记账；上表即两账分列。
