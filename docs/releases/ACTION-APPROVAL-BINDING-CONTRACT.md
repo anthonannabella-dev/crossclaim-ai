@@ -172,7 +172,10 @@ boundPayload = {
 | 冻结有效期（R13 修订） | 冻结 `expiresAt` 在**审批与执行**均强制生效；实际有效截止取「冻结截止」与「审批截止」**较早值**；过期冻结记录不得再请求/批准（不得延长）；审批指纹绑定 `freezeExpiresAt` 并在执行核对 |
 | 逐项锁后重验（R13 修订） | 每项取得全部必要锁后**重新生成时间**，并再次核验审批有效期/主体/撤销/轮次与冻结授权范围；任何失效 → 抛错回滚本次整批执行且**不消费批次**；逐项 attempt/审计时间使用锁后新时间 |
 | attempt 代际与去重（R13 修订） | 事件锁后对原 attempt 加行锁重读并核对 `paymentEventId`/`paymentId`/`attemptNo`/状态/到期；**一次性认领**（清空 `nextRetryAt`，使旧代际不再被任何批次选中）；检测后继代际取代与重试上限（≤ `MAX_ATTEMPTS`）；不同批次含同一 attempt 时只有一次实际执行，其余跳过留证 |
-| 整批锁顺序（R13 修订） | 批次内所有项按**同一全局资源键**（`invoiceId|paymentId|paymentEventId`）排序后逐项取锁（事件锁 → 发票锁 → Payment 行锁），避免两个多项批次交叉持锁 |
+| 整批分阶段锁协议（R14 修订，取代逐项取锁） | 批次内所有项按确定性顺序**分阶段**取锁：先取得**全部事件锁** → 再取得**全部发票锁** → 再取得 **Payment 行锁 与 attempt 行锁**；事务持有全部锁后才开始逐项执行。这样消除「已持发票锁、再等待新事件锁」的循环等待（与 replay 的 事件→发票→Payment 顺序兼容） |
+| 代际与认领位置（R14 修订） | 关联 / 状态 / 到期 / `attemptNo` 代际 / 后继代际 / 重试上限检查全部在**取得事件锁之后**完成；一次性认领（清空 `nextRetryAt`）置于**最终事实比对与授权确认之后、创建新 attempt 之前**——事实变化被跳过的项**不会**提前清空认领标记 |
+| 执行时间一致性（R14 修订） | 每项的判定时间 `itemAt` 在全部必要锁取得后生成，并统一用于：审批重验、attempt 开始/结束、资金处理（`paidAt`）、成功资金审计与执行审计；批次消费使用**实际完成阶段**生成的时间；跳过留证使用对应判定时间 |
+| 存储 itemCount（R14 修订） | 读取冻结记录时必须校验**存储的 `itemCount`**（不得用 `items.length` 重算成恒真）；`itemCount` 与清单长度不一致、未知 `digestVersion`、非法 item 结构均**失败关闭** |
 | 批次记录校验（R13 修订） | 批次锁后重读并集中校验：`digestVersion`、操作/处理版本、逐项结构、数量（≤20）、`itemCount` 与清单一致、重复项、摘要复核；未知版本/损坏/异常数量 → 失败关闭 |
 | 旧入口关闭（R13 修订） | 旧的动态选单入口 `runDueRetries` **不再是**「按 `limit` 动态查询 + 无需审批直接恢复资金」的路径；现仅作受保护「冻结批次执行」别名，必须提供 `batchId` + `approvalId`（缺审批拒绝 `APPROVAL_NOT_FOUND`），后台调度器同样必须走受保护路径 |
 | 消费与结果 | 批次消费 `payment.retry_due_consumed`（独立事件族，含 `approvalId`/`batchId`/`digest`/执行与跳过项数）；逐项执行审计 `payment.retry_due_executed`。`attempt.SUCCEEDED` 仍表示「一次获批的恢复尝试已执行」，资金结论看 `resultStatus` |
@@ -228,5 +231,11 @@ boundPayload = {
 | 冻结候选项 ≥21 | 清单恰为上限 20（RD 用例 14） | 不动态扩张 |
 | 冻结摘要被篡改 / 未知版本 | 失败关闭（RD 用例 15） | 零执行 |
 | 旧入口 `runDueRetries` 缺审批 | 拒绝 `APPROVAL_NOT_FOUND`（RD 用例 16） | 零 attempt / 资金 / 消费 |
+| 等事件锁期间出现后继代际 | 旧项在事件锁后判定跳过 `SUPERSEDED_GENERATION`，且**不清空**认领标记（RD 用例 17） | 无新执行、可被后续合法批次处理 |
+| 等发票锁期间审批过期 | 逐项锁后重验拒绝 `APPROVAL_EXPIRED`，整批回滚不消费（RD 用例 18） | 零部分提交 |
+| 已批准后冻结到期（审批仍有效） | 执行拒绝 `APPROVAL_EXPIRED`（较早截止边界生效；RD 用例 19） | 零新增 |
+| 存储 `itemCount` 与清单不符 | 失败关闭（RD 用例 20） | 零执行 |
+| 未知 `digestVersion` | 精确拒绝 `APPROVAL_VERSION_UNSUPPORTED`（RD 用例 21） | 零执行 |
+| 两项批次（首项执行、次项事实变化） | 首项执行、次项跳过留证（RD 用例 22）；任何项授权失效 → 抛错回滚整批（含已执行项） | 逐项留证、整体事务边界 |
 
 > 实现与测试（`action-guard-hitl-*`、`workflow-hitl-db`、`workflow-outcome-db`、`action-guard-payment-capture-http-db`、`workflow-billing*`）按本文件逐条对齐后送审。
