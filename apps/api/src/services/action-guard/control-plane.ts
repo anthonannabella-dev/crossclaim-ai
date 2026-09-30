@@ -18,7 +18,7 @@
  */
 
 import type { ActionRiskClass } from './action-guard';
-import { ACTION_GUARD_CATALOG, type ActionGuardInput } from './action-guard';
+import { ACTION_GUARD_CATALOG, evaluateActionGuard, type ActionGuardInput, type ActionGuardResult } from './action-guard';
 import {
   createActionGuardCapabilitySource,
   type KillSwitchReadPort,
@@ -55,6 +55,12 @@ export interface ProductionControlPlane {
   capabilitySource: ReturnType<typeof createActionGuardCapabilitySource>;
   /** 只读快照，便于运营展示与测试 */
   snapshot(): Promise<ControlPlaneConfig>;
+  /**
+   * 纯评估（**不写审计、不改变任何状态**）：用于运营展示 / 预检 / 状态投影。
+   * 与 guard.evaluate 的区别：guard.evaluate 会尝试写审计（MSG-20260930-12 §5 指出该差异），
+   * 展示场景必须走这个函数，避免把「看一眼」变成审计事件。
+   */
+  evaluateWithoutAudit(input: ActionGuardInput): Promise<ActionGuardResult>;
 }
 
 /** 内部写入动作（业务库写入；不触发外部/资金） */
@@ -126,5 +132,10 @@ export function createProductionControlPlane(deps: ControlPlaneDeps): Production
     audit: deps.audit,
   });
 
-  return { guard, capabilitySource, snapshot: readConfig };
+  async function evaluateWithoutAudit(input: ActionGuardInput): Promise<ActionGuardResult> {
+    const capabilities = await resolveWithMode(input);
+    return evaluateActionGuard({ ...input, capabilities });
+  }
+
+  return { guard, capabilitySource, snapshot: readConfig, evaluateWithoutAudit };
 }
