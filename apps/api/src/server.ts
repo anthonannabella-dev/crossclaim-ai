@@ -61,6 +61,11 @@ export interface ServerDeps {
   audit?: AuditWriter;
   /** 可选：C-0008-A 内部认证端口（/auth/*）的依赖覆写 */
   auth?: import('./services/auth').AuthRouteDeps;
+  /**
+   * 可选：受保护业务入口的运行时守卫（授权项 ②）。
+   * 缺省由 createAppActionGuard 装配（READ_ONLY → 拒绝写入）；测试/组合根可显式注入。
+   */
+  actionGuard?: import('./services/action-guard/runtime-guard').RuntimeActionGuard;
 }
 
 /** 只保留文件名，剥掉路径与危险字符（CR/LF/引号/反斜杠/NUL） */
@@ -231,7 +236,7 @@ export function createServer(deps: ServerDeps): http.Server {
         prisma,
         session: auth.session,
         // 授权项 ②（MSG-20260930-16 §6）：受保护入口的运行时闸门；缺省 READ_ONLY → 拒绝写入
-        actionGuard: createAppActionGuard({ prisma, killSwitchResolver }),
+        actionGuard: deps.actionGuard ?? createAppActionGuard({ prisma, killSwitchResolver }),
         killSwitchResolver,
         // C-0010-C2：webhook 的结构化安全日志（验签失败 / 版本不一致）必须落到运行时 logger
         log: (event, fields) => log.warn(event, fields),
