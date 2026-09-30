@@ -42,6 +42,8 @@ export function createPrismaActionGuardAuditPort(prisma: PrismaClient): ActionGu
             code: record.code,
             risk: record.risk,
             reasonCodes: record.reasonCodes,
+            // R3：执行主体必须可关联（AuditLog.actorType=AI 时 actorUserId 必须为空，故记入 changes）
+            actorUserId: record.actorUserId,
             approvalId: record.approvalId ?? null,
             operationId: record.operationId ?? null,
             reason: record.reason ?? null,

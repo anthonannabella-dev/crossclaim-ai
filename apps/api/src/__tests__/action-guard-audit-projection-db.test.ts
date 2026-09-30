@@ -51,6 +51,8 @@ describe('Action guard audit projection（真实 Prisma）', () => {
     expect(row.entityId).toBe(TARGET);
     const changes = row.changes as Record<string, unknown>;
     expect(changes.approvalId).toBe('appr-1');
+    // R3：执行主体落库（结构化字段）
+    expect(changes.actorUserId).toBe(ACTOR);
     expect(changes.operationId).toBe('approval:appr-1');
     expect(changes.actionName).toBe('commission.charge');
     expect(changes.risk).toBe('EXTERNAL_WRITE');
