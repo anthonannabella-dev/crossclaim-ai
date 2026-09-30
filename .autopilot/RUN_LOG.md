@@ -45,3 +45,8 @@
 - Action Guard CP2 送审：HEAD `123d21f`，CI run 36653496477（5/5）；审计请求落在 GitHub Issue #2 → comment `5902082182`（7 段式）。
 - 短唤醒已发（不含全文）；右侧 ChatGPT 进入「读 Issue #2 + 123d21f diff + CI 原始证据」的复核阶段。
 - 宿主动作已完成：右侧 GitHub 连接器授权（始终允许），权限弹窗消失，后续正式 VERDICT 可直接写回 GitHub。
+
+- 通道诊断（2026-09-30）：ChatGPT 的 GitHub 连接器写回返回 **403 Resource not accessible by integration**（GitHub App 缺 Issues 写权限）。
+  影响：若唤醒消息要求「直接写回 GitHub」，ChatGPT 会尝试写入、失败、并结束本轮而不产出裁决（h4=最新一条回复、无 assistant 文本）。
+  规避（已生效）：唤醒改为「只在本会话输出完整 VERDICT，不要写入 GitHub」，由 Codex 原文归档到 Issue #2（架构方在 MSG-11/-12 均明确授权）。
+  宿主项（非阻塞）：若要 ChatGPT 直写 GitHub，需在 GitHub 侧给该连接器授权 Issues: Write。
