@@ -46,7 +46,7 @@ boundPayload = {
 | 有效期 | 审批事件记录 `expiresAt`（默认 24h，可配置）；`now >= expiresAt`。R3：`now` 必须是**两把锁获取之后重新读取的服务端时间**，不得沿用等待锁之前的时间 | 拒绝 `APPROVAL_EXPIRED` |
 | 撤销 | 出现晚于该审批的 `recovery.review_rejected` / `recovery.approval_revoked` | 拒绝 `APPROVAL_REVOKED` |
 | 消费 | 存在携带同一 `approvalId` 的 `recovery.approval_consumed` | 进入幂等返回**之前**仍必须先通过本节全部重验（见 §4） |
-| 审批轮次 | 审批事件必须晚于其对应的 `recovery.review_required`，且 `review_required` 与审批之间不得插入另一轮 | 否则 `APPROVAL_NOT_APPROVED` |
+| 审批轮次 | 审批事件必须晚于其对应的 `recovery.review_required`，且 `review_required` 与审批之间不得插入另一轮（**R4**：同案件生命周期事件时间在案件锁内生成并严格递增，见 §4.2） | 否则 `APPROVAL_NOT_APPROVED` |
 | 数据源异常 | 查询/解析失败 | 拒绝 `APPROVAL_SOURCE_ERROR`（事务内外同一原因码；**不得**伪报为租户不匹配或裸 `SOURCE_ERROR`） |
 
 ## 4. 原子执行与恰一次（CHANGE B · R3 修订）
@@ -67,6 +67,12 @@ boundPayload = {
 - 并发首次提交：advisory lock 串行化，只有一条链；其余请求读到完整链后走幂等分支；
 - **撤销 / 过期 / 主体失效优先于幂等返回**：即使该审批此前已成功消费过，重试时若已撤销、已过期或主体失效，一律**最终拒绝**（R3 口径变更，取代 R2 的「先返回既有结果」）；
 - 同案不同审批并发：旧审批被新一轮 `review_required` 取代后拒绝，全案仍只有一条完整链。
+
+### 4.2 生命周期事件顺序（R4）
+
+- 自动写入（`assertHighValueReviewCleared` 的 `review_required`）与显式 REQUEST/APPROVE/REJECT **都在案件锁内**读取事件、推导状态、决定是否写入与 `previousState`；锁外读取只能作为预检查，不决定写入。
+- 生命周期事件时间在**案件锁内**生成；同一案件内严格递增（若当前毫秒不晚于已有最新事件，则顺延 1ms），使 `createdAt` 的 `<` / `>` 在事务内外都有确定语义，不假设毫秒时间唯一。
+- 因此「自动路径读到旧状态 → 期间完成 APPROVE → 仍按旧状态追加 REQUEST」的交错不再可能：自动路径要么在锁内看到 `APPROVED` 而不写入，要么先写入 `review_required`（此时后续 APPROVE 的轮次顺序明确，旧审批在新轮次生效后被拒绝）。
 
 ### 4.1 缺 `approvalId` 的兼容路径（R3 显式收口）
 

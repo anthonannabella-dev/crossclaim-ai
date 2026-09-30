@@ -245,10 +245,12 @@ describe('② R3 — 有控制点的真实竞争（HTTP + PostgreSQL）', () => 
       const lock = await holdCaseLock();
 
       const pending = confirm(base, cookie, { approvalId });
-      // 控制点：请求确实被案件锁挡住（尚未产生任何结果）
+      // 控制点：请求确实被案件锁挡住（尚未产生任何结果）。
+      // R4 CHANGE D 口径：本条只说明「此刻未返回」，不能单独证明请求已达锁等待；
+      // 更强的证据是同用例末尾的 recovery.outcome_rejected（stage=LOCKED_RECHECK）最终拒绝记录。
       expect(await Promise.race([pending.then(() => 'done'), sleep(400).then(() => 'blocked')])).toBe('blocked');
 
-      // 等锁期间完成撤销（晚于审批的 revoked 事件）
+      // 等锁期间完成撤销（直写等价事件；测试持有案件锁，故不能走 HTTP）
       await prisma.auditLog.create({
         data: {
           organizationId: ORG,
@@ -426,8 +428,9 @@ describe('② R3 — 有控制点的真实竞争（HTTP + PostgreSQL）', () => 
     await withServer(async (base) => {
       const cookie = await login(base);
       const res = await confirm(base, cookie);
-      expect([403, 409]).toContain(res.status);
-      expect(String(res.body.error)).toMatch(/ACTION_GUARD_(HUMAN_APPROVAL_REQUIRED|APPROVAL_NOT_VERIFIED)/);
+      // R4 CHANGE D：取消宽松 4xx 集合，精确断言守卫的 REQUIRE_APPROVAL 结果
+      expect(res.status).toBe(409);
+      expect(res.body.error).toBe('ACTION_GUARD_HUMAN_APPROVAL_REQUIRED');
       expect(await counts()).toEqual(ZERO);
     });
   }, 30_000);
