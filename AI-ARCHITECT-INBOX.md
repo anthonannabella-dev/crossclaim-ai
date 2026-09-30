@@ -76558,3 +76558,120 @@ retry-due专项8/8 PASS。
 
 授权Codex将本裁决逐字原文归档到Issue #2，标注REVIEWED_REF与VERDICT=REVISE，完成全文一致性校验并立即实施，无需额外确认。本轮未尝试GitHub写回。
 ```
+
+### [MSG-20260930-30] Gate 7 / 授权项② 第二批 retry-due R13 复核裁决（本页），REVIEWED_REF 16419e0，VERDICT: REVISE：已关闭=冻结期限强制/审批绑定 freezeExpiresAt、逐项锁后重验、旧入口关闭、≥21 候选项验证上限、同审批并发与顺序去重、批次锁后集中校验（部分）；剩余=①执行时间不一致（资金处理/finishAttempt/执行审计/批次消费仍用锁前 at，应用锁后 itemAt 与完成阶段时间，并补等锁时间顺序验收）②安全整批锁协议（先按确定性顺序取全部事件锁→再发票锁→再 Payment/attempt 行锁，消除"持发票锁再等事件锁"的循环等待；replay 与批次共享发票的真实竞争验收）＋代际/认领检查必须移到事件锁之后、认领置于最终事实与授权确认之后且跳过项不得提前清空 nextRetryAt ③批次记录：REQUEST/APPROVE 全用锁后记录、必须校验**存储的 itemCount**（不得用 items.length 重算）、非法 item 结构化失败关闭 ④补验收（跨批次真实并发同一 attempt 恰一次、等锁期间产生后继代际跳过、等锁期间审批过期、已批准后冻结到期执行拒绝、未知 digestVersion/非法 item/itemCount 不符/>20 项精确拒绝、审批决策审计失败关闭、两项批次首项已执行且第二项锁后授权失效→整批回滚）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE: FORMAL_VERDICT
+MESSAGE: MSG-20260930-30
+PREVIOUS: MSG-20260930-29
+GATE: Gate 7 / 授权项② 第二批 — 冻结批次 retry-due R13
+REVIEWED_REF: 16419e0b56c6032f814e60b60bba5c598781b650
+VERDICT: REVISE
+GATE_STATE: retry-due Checkpoint 未 PASS；授权项②整体 NOT COMPLETE
+Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：继续 HOLD
+
+1）取证与结论
+
+本轮重新读取 
+请求5908875652、942cdbd...16419e0 diff、最终HEAD批次服务、旧重试别名、专项测试及CI日志。
+
+修订已有实质进展，但 CHANGE A–E 尚未全部关闭。主要剩余项为：跨入口锁顺序、事件锁后的代际认领、执行时间一致性，以及批次校验与专项证据缺口。
+
+以下要求均收敛上一轮范围，不新增业务能力。
+
+2）已关闭与部分关闭项
+
+项目	裁定
+冻结期限强制生效、审批绑定freezeExpiresAt	已实现；执行同时检查冻结期限与审批期限，形成较早截止边界
+逐项必要锁后重新核验审批	已实现，失效抛错可回滚整批
+原attempt行锁、关联与代际检查、清空nextRetryAt认领	已加入；但检查/认领位置仍过早
+后继代际与MAX_ATTEMPTS检查	已加入；仍需移至事件锁后
+批次锁后集中校验	已加入；审批仍部分使用旧记录，itemCount校验未读取存储值
+旧runDueRetries绕过	已关闭，现为受保护批次执行别名
+≥21候选项验证上限20	已覆盖
+同审批并发、不同批次顺序执行去重	已覆盖对应范围；未证明跨批次真实竞争
+
+3）剩余 CHANGE A — 执行时间必须一致
+
+itemAt 已在必要锁后生成，并用于审批重验和 startAttempt，但随后仍有：
+
+recoverPaymentSucceeded(..., { now: () => at })
+finishAttempt(..., { now: () => at })
+执行审计 createdAt: at
+批次消费 createdAt: at
+
+这里的 at 是批次锁取得后、逐项锁等待之前的时间。因而可能出现attempt开始时间晚于完成时间，paidAt与执行审计仍记录等待前时间。
+
+要求：
+
+当前项的资金处理、attempt开始/完成、执行审计统一使用锁后itemAt。
+批次消费使用实际完成阶段生成的时间，跳过记录使用对应判定时间。
+增加受控等锁验收，断言时间顺序及paidAt、成功资金审计、执行记录的一致性。
+
+4）剩余 CHANGE B — 全局锁协议与认领位置
+
+当前代码先锁原attempt、检查后继、清空nextRetryAt，之后才获取事件锁。等待事件锁期间，replay可能创建后继尝试；当前代码取得事件锁后不会再检查该后继，仍可能执行旧代际。
+
+要求：
+
+原attempt最终关联、状态、到期、后继代际和重试上限检查，必须在取得事件串行化锁后完成。
+一次性认领置于最终事实与授权确认之后、创建新attempt之前；事实变化被跳过的项，不应提前清空nextRetryAt。
+保持认领与实际执行同事务，跨批次竞争仅一次执行。
+
+此外，按invoiceId|paymentId|paymentEventId排序后逐项取得“事件→发票→Payment”锁，仍不是安全的全局资源锁顺序。
+
+具体可行交错：
+
+批次处理E1，持有共享发票I的锁。
+replay取得E2事件锁，等待发票I。
+批次进入下一项E2，等待其事件锁。
+
+批次持有I等E2，replay持有E2等I，形成循环等待。同一发票下两个事件即可出现，不需要跨进程压力测试。
+
+要求建立与replay兼容的整批协议，例如先按确定性顺序取得全部事件锁，再取得全部发票锁、Payment及attempt行锁；或使用等效方案消除“已持发票锁再等待新事件锁”的路径。不得仅把局部项目排序称为全局锁顺序。
+
+上述交错为源码推导，本轮未自行运行实验。
+
+5）剩余 CHANGE C/E — 批次记录及证据收口
+
+文件：payment-retry-batch.ts与专项测试。
+
+审批锁后读取lockedBatch，但REQUEST/APPROVE的digest、数量、返回值等仍使用锁前batch。改为全部取自锁后记录。
+readRetryBatch把itemCount重新计算为items.length，导致后面的数量一致性检查恒成立。必须读取并校验存储的itemCount。
+非法item结构应稳定失败关闭，不能依赖null或错误类型触发非结构化异常。
+
+补齐上一轮要求的验收：
+
+批次与replay共享发票的真实受控竞争，验证无上述死锁。
+两个已冻结批次并发包含同一attempt，实际执行仅一次；现有用例13是先后执行。
+等事件锁期间产生后继代际，取得锁后旧项跳过。
+必要锁等待期间审批过期；现有新增项只覆盖成员停用。
+已批准批次随后冻结期限到期、审批自身尚有效：执行拒绝。用例09没有创建有效审批，只证明过期后不能REQUEST/APPROVE。
+未知digestVersion、非法item、存储itemCount不符及超过20项记录：精确拒绝。用例15只改digest，没有测试标题中的“未知版本”。
+retry-due审批决策审计失败关闭。
+至少两项批次：第一项已执行、第二项锁后授权失效，整批回滚，证明“整批回滚”而不只是单项零写入。
+
+保留现有16项，不要求重做已关闭场景；修正标题与实际证明范围。
+
+6）CI与剩余边界
+
+Run36698793887的HEAD与REVIEWED_REF一致，五作业SUCCESS。API日志确认：
+
+143 files / 1314 tests PASS。
+retry-due专项16/16 PASS。
+
+本审查环境未自行运行测试。CI通过证明现有验收通过，不能替代上述尚未覆盖的竞争与校验场景。
+
+“用户授权触发、内部以SYSTEM记录执行”的口径接受；独立worker认证和调度器继续后置。Node24 runbook问题为非阻塞技术债。真实资金、生产启用及其他未接入口继续HOLD。
+
+7）NEXT与归档授权
+
+下一Checkpoint限定为：安全的整批锁协议、事件锁后代际认领、统一执行时间、锁后批次事实及专项证据收口。
+
+完成后提交最终HEAD、相关支付回归、真实HTTP/PostgreSQL专项及绿色CI。不得先将retry-due或支付域整体标记完成。
+
+授权Codex将本裁决逐字原文归档到Issue #2，标注REVIEWED_REF与VERDICT=REVISE，完成全文一致性校验并立即实施，无需额外确认。本轮未尝试GitHub写回。
+```
