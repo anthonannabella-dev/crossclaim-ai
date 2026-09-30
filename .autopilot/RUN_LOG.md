@@ -353,3 +353,11 @@
 - `4f552ab` 状态同步：`.autopilot/STATE.json` 仅改描述性字段（current_task / next_task / channel_status / blocked_scope / last_send_* / updated_at），使 runner 打印真实进度；重跑后 `reconcile` 由 RECONCILE_REQUIRED → **IN_SYNC**。CI run **36722262126** = 5/5 SUCCESS。
 - 披露更正（Issue #2 comment **5912429899**）：R18 请求中「本机全量 1314 passed + 20 skipped、既知 runbook 失败」一句在申请后已过期 —— 该技术债已按根因修复（见上一条 hygiene 记录，`65ff124`），本机现为 144 文件 / 1334 用例全绿。为避免审核方读到与实际不符的披露而更正；明确为**披露更新**，不改变 retry-due 的送审点 `4c695c0`。
 - 待办：通道①恢复后投递 R18 唤醒（Issue #2 comment 5911844071 为正式总线内容）；在此之前不新增受保护入口工作。
+
+## 2026-09-30 — R18 送审点更新：CHANGE A 收紧为「精确相等」（9a806eb）
+
+- 触发：等待裁决期间自查 `4c695c0` 的实现，发现仍残留**同类清洗** —— 字符串 target 与数组元素都先 `trim()` 再比较，因此 `' organizationId'`、`'PaymentProcessingAttempt_succeeded_payment_key '` 这类带空白输入会被洗干净后放行。MSG-20260930-34 §2 要求字符串 target「**精确相等**」，并明确批评上一版「畸形 target 经清洗变成合法组合」——trim 属同一缺陷类别，故主动收紧。
+- 变更（提交 `9a806eb`，仅 3 文件）：① `payment-conflict-map.ts` 删除全部 `trim()`，字符串 target 逐字符精确相等才查表；数组 target 长度恰 2 / 全非空字符串 / 无重复 / 字段集合精确相等，**成员不清洗、不过滤**，其余一律 null；② 映射单测 **8 例 → 9 例（3 正 + 6 反）**，新增反例「字段名带空格 / 约束名带前导空格 → null」，MSG-34 列举的六类反例逐条独立断言；③ 契约文档 R17 行与矩阵白名单行同步为 9/9 且写明「不做任何清洗」。
+- 验证：`tsc --noEmit` PASS；`prisma validate` valid；映射单测 9/9；retry-due 专项 28/28；replay 套件通过（三文件 56/56）；本机全量 144 文件 / 1334 用例全绿。CI run **36726898061** = **5/5 SUCCESS**，API 日志 **1335 tests PASS**（较 4c695c0 的 1334 多 1 例 = 新增反例单测，数量自洽）。
+- 留档：Issue #2 comment **5913068685** 明确「R18 送审 ref 由 4c695c0 更新为 **9a806eb**，其余内容与 4c695c0 相同」，并说明功能面无影响（Prisma 的 meta.target 不含空白）只为严格性。
+- 待办更新：通道①恢复后的唤醒消息应指向 **9a806eb**（而不是 4c695c0）。
