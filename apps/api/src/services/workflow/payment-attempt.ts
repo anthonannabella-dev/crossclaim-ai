@@ -20,11 +20,23 @@ import { Prisma, type PrismaClient } from '@prisma/client';
 import { prepareAuditInsert } from '../audit';
 import {
   applyPaymentSucceeded,
+  readReplaySnapshot,
   recoverPaymentSucceeded,
+  replayFingerprintExtra,
   type ApplyPaymentSucceededResult,
+  type PaymentReplayFingerprint,
 } from './payment';
 import { WorkflowError } from './opportunity-review';
 import { assertPermission } from './permissions';
+import { PAYMENT_REPLAY_ACTION } from '../action-guard/approval-verifier';
+import {
+  ApprovalBoundaryError,
+  PAYMENT_APPROVAL_EVENT_ACTION,
+  PAYMENT_REJECTED_EVENT_ACTION,
+  PAYMENT_REPLAY_CONSUMED_EVENT_ACTION,
+  PAYMENT_REQUIRED_EVENT_ACTION,
+  verifyApprovalBoundary,
+} from '../action-guard/approval-tx-verify';
 
 export const ATTEMPT_STATUSES = [
   'PENDING',
@@ -63,6 +75,118 @@ export const ATTEMPT_AUDIT = {
   replayed: 'payment.processing_replayed',
   recovered: 'payment.processing_recovered',
 } as const;
+
+/** ② 第二批 replay：事务内/外都可用的最小客户端类型 */
+type AttemptClient = PrismaClient | Prisma.TransactionClient;
+
+function str(value: unknown): string | null {
+  return typeof value === 'string' && value.trim() !== '' ? value.trim() : null;
+}
+
+/** 重放消费审计（与执行同事务；approvalId 供验证器判定「已消费」） */
+async function writeReplayConsumedAudit(
+  tx: Prisma.TransactionClient,
+  input: {
+    organizationId: string;
+    actorUserId: string;
+    approvalId: string;
+    operationId: string;
+    fingerprint: PaymentReplayFingerprint;
+    resultStatus: string | null;
+    at: Date;
+  },
+): Promise<void> {
+  const row = prepareAuditInsert(
+    {
+      organizationId: input.organizationId,
+      actorType: 'SYSTEM',
+      actorRef: 'payment-replay-guard',
+      action: PAYMENT_REPLAY_CONSUMED_EVENT_ACTION,
+      entityType: 'PaymentEvent',
+      entityId: input.fingerprint.paymentEventId,
+      changes: {
+        approvalId: input.approvalId,
+        operationId: input.operationId,
+        actorUserId: input.actorUserId,
+        paymentEventId: input.fingerprint.paymentEventId,
+        invoiceId: input.fingerprint.invoiceId,
+        provider: input.fingerprint.provider,
+        providerEventId: input.fingerprint.providerEventId,
+        payloadHash: input.fingerprint.payloadHash,
+        amount: input.fingerprint.amount,
+        currency: input.fingerprint.currency,
+        recoveryAction: input.fingerprint.recoveryAction,
+        processingVersion: input.fingerprint.processingVersion,
+        resultStatus: input.resultStatus,
+      },
+    },
+    { maxStringLength: 512 },
+  );
+  await tx.auditLog.create({
+    data: {
+      organizationId: row.organizationId,
+      actorType: row.actorType,
+      actorUserId: row.actorUserId,
+      actorRef: row.actorRef,
+      action: row.action,
+      entityType: row.entityType,
+      entityId: row.entityId,
+      changes: (row.changes ?? undefined) as Prisma.InputJsonValue | undefined,
+      ip: row.ip,
+      userAgent: row.userAgent,
+      createdAt: input.at,
+    },
+  });
+}
+
+/** replay 锁内拒绝的最终拒绝审计（事务已回滚 → 独立连接写入；失败不覆盖原错误） */
+async function writeReplayRejectionAudit(
+  prisma: PrismaClient,
+  input: {
+    organizationId: string;
+    actorUserId: string;
+    paymentEventId: string;
+    approvalId: string | null;
+    stage: string;
+    reason: string;
+    at: Date;
+  },
+): Promise<void> {
+  const row = prepareAuditInsert(
+    {
+      organizationId: input.organizationId,
+      actorType: 'SYSTEM',
+      actorRef: 'payment-replay-guard',
+      action: 'payment.replay_rejected',
+      entityType: 'PaymentEvent',
+      entityId: input.paymentEventId,
+      changes: {
+        paymentEventId: input.paymentEventId,
+        actorUserId: input.actorUserId,
+        approvalId: input.approvalId,
+        stage: input.stage,
+        reason: input.reason,
+        result: 'REJECTED',
+      },
+    },
+    { maxStringLength: 512, now: () => input.at },
+  );
+  await prisma.auditLog.create({
+    data: {
+      organizationId: row.organizationId,
+      actorType: row.actorType,
+      actorUserId: row.actorUserId,
+      actorRef: row.actorRef,
+      action: row.action,
+      entityType: row.entityType,
+      entityId: row.entityId,
+      changes: (row.changes ?? undefined) as Prisma.InputJsonValue | undefined,
+      ip: row.ip,
+      userAgent: row.userAgent,
+      createdAt: input.at,
+    },
+  });
+}
 
 /** 第 N 次失败之后的下一次重试延迟；超过上限返回 null（DEAD_LETTER）。 */
 export function nextRetryDelayMinutes(attemptNo: number): number | null {
@@ -169,7 +293,7 @@ export interface StartAttemptInput {
  * 同一事件已有一个 PENDING/RUNNING 时，第二次插入会命中唯一冲突 → ILLEGAL_TRANSITION。
  */
 export async function startAttempt(
-  prisma: PrismaClient,
+  prisma: AttemptClient,
   input: StartAttemptInput,
   deps: { now?: () => Date } = {},
 ): Promise<{ id: string; attemptNo: number }> {
@@ -215,7 +339,7 @@ export interface FinishAttemptInput {
 
 /** CAS 收口：只有 RUNNING 的 attempt 能被收口 —— SUCCEEDED 之后无法再改（含禁止改绑 paymentId）。 */
 export async function finishAttempt(
-  prisma: PrismaClient,
+  prisma: AttemptClient,
   input: FinishAttemptInput,
   deps: { now?: () => Date } = {},
 ): Promise<boolean> {
@@ -372,6 +496,8 @@ export interface ReplayInput {
   paymentEventId: string;
   reason: unknown;
   note?: unknown;
+  /** ② 第二批 replay：操作级审批（payment.replay）。缺失即拒绝，不提供 bypass。 */
+  approvalId?: string;
 }
 
 export interface ReplayResult {
@@ -396,124 +522,177 @@ export async function replayPaymentEvent(
     throw new WorkflowError('INVALID_INPUT', 'REASON_REQUIRED：replay 必须给出白名单原因');
   }
   const note = typeof input.note === 'string' ? redactErrorSummary(input.note) : '';
+  const approvalId = str(input.approvalId);
+  // ② 第二批 replay：操作级审批不可选。缺审批一律拒绝 —— 受保护资金入口不留 bypass。
+  if (!approvalId || str(input.paymentEventId) === null) {
+    throw new ApprovalBoundaryError('APPROVAL_NOT_FOUND', String(input.paymentEventId ?? ''));
+  }
 
-  const event = await prisma.paymentEvent.findFirst({
+  // 锁外预检查只用于快速失败；执行依据一律取自锁内执行快照（与 R7 同口径）。
+  const pre = await prisma.paymentEvent.findFirst({
     where: { id: input.paymentEventId, organizationId: input.organizationId },
-    select: { id: true, provider: true },
+    select: { id: true },
   });
-  if (!event) throw new WorkflowError('NOT_FOUND', `支付事件 ${input.paymentEventId} 不存在或不属于该租户`);
+  if (!pre) throw new WorkflowError('NOT_FOUND', `支付事件 ${input.paymentEventId} 不存在或不属于该租户`);
 
-  const linked = await prisma.paymentProcessingAttempt.findFirst({
-    where: { organizationId: input.organizationId, paymentEventId: event.id, paymentId: { not: null } },
-    orderBy: { attemptNo: 'desc' },
-    select: { attemptNo: true, paymentId: true },
-  });
-  if (!linked?.paymentId) {
-    throw new WorkflowError(
-      'PAYMENT_CONTEXT_REQUIRED',
-      'PAYMENT_CONTEXT_REQUIRED：该事件没有可用的 paymentId，无法安全重放（请走财务人工对账）',
-    );
-  }
+  try {
+    return await prisma.$transaction(async (tx) => {
+      // 统一锁协议：事件级 advisory lock（审批创建 submitPaymentReplayReview 使用同一把锁）
+      if (typeof tx.$executeRawUnsafe === 'function') {
+        await tx.$executeRawUnsafe('SELECT pg_advisory_xact_lock(hashtext($1))', `cc-payment-event:${pre.id}`);
+      }
+      // 执行时间在锁内生成，统一用于 attempt / 审计 / 消费
+      const at = (deps.now ?? (() => new Date()))();
+      // 锁内执行快照：事件身份 + 关联 attempt + 资金事实
+      const snapshot = await readReplaySnapshot(tx, {
+        organizationId: input.organizationId,
+        paymentEventId: pre.id,
+      });
+      // 锁内重验审批：指纹逐项比对锁内快照（过期/撤销/取代/消费均在锁内判定）
+      const boundary = await verifyApprovalBoundary(tx, {
+        organizationId: input.organizationId,
+        approvalId,
+        action: PAYMENT_REPLAY_ACTION,
+        caseId: snapshot.paymentEventId,
+        actorUserId: input.actorUserId,
+        payload: {
+          amount: snapshot.amount,
+          currency: snapshot.currency,
+          basisReference: snapshot.basisReference,
+          evidenceArtifactId: snapshot.evidenceArtifactId,
+        },
+        extra: replayFingerprintExtra(snapshot),
+        now: at,
+        approvalEventAction: PAYMENT_APPROVAL_EVENT_ACTION,
+        requiredEventAction: PAYMENT_REQUIRED_EVENT_ACTION,
+        revocationEventActions: [PAYMENT_REJECTED_EVENT_ACTION],
+        consumedEventAction: PAYMENT_REPLAY_CONSUMED_EVENT_ACTION,
+        targetEntityType: 'PaymentEvent',
+      });
+      if (!boundary.ok) throw new ApprovalBoundaryError(boundary.reason, snapshot.paymentEventId);
+      if (boundary.consumed) {
+        throw new ApprovalBoundaryError('APPROVAL_ALREADY_CONSUMED', snapshot.paymentEventId);
+      }
 
-  const payment = await prisma.payment.findFirst({
-    where: { id: linked.paymentId, organizationId: input.organizationId },
-    select: { id: true, invoiceId: true, externalPaymentId: true, amount: true, currency: true },
-  });
-  if (!payment) {
-    throw new WorkflowError('NOT_FOUND', `Payment ${linked.paymentId} 不存在或不属于该租户`);
-  }
-
-  const at = (deps.now ?? (() => new Date()))();
-  const attempt = await startAttempt(
-    prisma,
-    {
-      organizationId: input.organizationId,
-      paymentEventId: event.id,
-      actorType: 'OPERATOR',
-      actorRef: input.actorUserId,
-    },
-    { now: () => at },
-  );
-
-  const outcome = await recoverPaymentSucceeded(
-    prisma,
-    {
-      organizationId: input.organizationId,
-      provider: event.provider,
-      externalPaymentId: payment.externalPaymentId,
-      invoiceId: payment.invoiceId,
-      amount: payment.amount.toFixed(4),
-      currency: payment.currency,
-    },
-    {
-      now: () => at,
-      onPaymentRecorded: async (tx, paymentId) => {
-        await tx.paymentProcessingAttempt.updateMany({
-          where: { id: attempt.id, status: 'RUNNING' },
-          data: { paymentId },
-        });
-        await writeAttemptAudit(tx, {
+      const attempt = await startAttempt(
+        tx,
+        {
           organizationId: input.organizationId,
-          actorType: 'SYSTEM',
+          paymentEventId: snapshot.paymentEventId,
+          actorType: 'OPERATOR',
           actorRef: input.actorUserId,
-          actorUserId: input.actorUserId,
-          action: ATTEMPT_AUDIT.linked,
-          paymentEventId: event.id,
-          changes: { attemptId: attempt.id, paymentId, paymentEventId: event.id },
-          at,
-        });
-      },
-    },
-  );
+        },
+        { now: () => at },
+      );
 
-  await finishAttempt(
-    prisma,
-    { attemptId: attempt.id, status: 'SUCCEEDED', resultStatus: outcome.status },
-    { now: () => at },
-  );
-  await prisma.$transaction(async (tx) => {
-    await writeAttemptAudit(tx, {
-      organizationId: input.organizationId,
-      actorType: 'SYSTEM',
-      actorRef: input.actorUserId,
-      actorUserId: input.actorUserId,
-      action: ATTEMPT_AUDIT.replayed,
-      paymentEventId: event.id,
-      changes: {
-        paymentEventId: event.id,
-        oldAttemptNo: linked.attemptNo,
-        newAttemptNo: attempt.attemptNo,
-        reason,
-        ...(note ? { note } : {}),
-      },
-      at,
-    });
-    // REVISE-2：恢复成功要有独立标识，财务审计能区分「webhook 正常成功」与「恢复成功」
-    await writeAttemptAudit(tx, {
-      organizationId: input.organizationId,
-      actorType: 'SYSTEM',
-      actorRef: input.actorUserId,
-      actorUserId: input.actorUserId,
-      action: ATTEMPT_AUDIT.recovered,
-      paymentEventId: event.id,
-      changes: {
-        paymentEventId: event.id,
-        attemptId: attempt.id,
-        paymentId: payment.id,
+      // 重放沿用既有资金执行路径，但事实来自**锁内快照**，且与核验/消费处于同一事务
+      const outcome = await recoverPaymentSucceeded(
+        tx,
+        {
+          organizationId: input.organizationId,
+          provider: snapshot.provider,
+          externalPaymentId: snapshot.externalPaymentId,
+          invoiceId: snapshot.invoiceId,
+          amount: snapshot.amount,
+          currency: snapshot.currency,
+        },
+        {
+          now: () => at,
+          client: tx,
+          onPaymentRecorded: async (innerTx, paymentId) => {
+            await innerTx.paymentProcessingAttempt.updateMany({
+              where: { id: attempt.id, status: 'RUNNING' },
+              data: { paymentId },
+            });
+            await writeAttemptAudit(innerTx, {
+              organizationId: input.organizationId,
+              actorType: 'SYSTEM',
+              actorRef: input.actorUserId,
+              actorUserId: input.actorUserId,
+              action: ATTEMPT_AUDIT.linked,
+              paymentEventId: snapshot.paymentEventId,
+              changes: { attemptId: attempt.id, paymentId, paymentEventId: snapshot.paymentEventId },
+              at,
+            });
+          },
+        },
+      );
+
+      await finishAttempt(
+        tx,
+        { attemptId: attempt.id, status: 'SUCCEEDED', resultStatus: outcome.status },
+        { now: () => at },
+      );
+      await writeAttemptAudit(tx, {
+        organizationId: input.organizationId,
+        actorType: 'SYSTEM',
+        actorRef: input.actorUserId,
+        actorUserId: input.actorUserId,
+        action: ATTEMPT_AUDIT.replayed,
+        paymentEventId: snapshot.paymentEventId,
+        changes: {
+          paymentEventId: snapshot.paymentEventId,
+          oldAttemptNo: snapshot.previousAttemptNo,
+          newAttemptNo: attempt.attemptNo,
+          reason,
+          ...(note ? { note } : {}),
+          approvalId,
+          operationId: `approval:${approvalId}`,
+        },
+        at,
+      });
+      // 恢复成功要有独立标识，财务审计能区分「webhook 正常成功」与「恢复成功」
+      await writeAttemptAudit(tx, {
+        organizationId: input.organizationId,
+        actorType: 'SYSTEM',
+        actorRef: input.actorUserId,
+        actorUserId: input.actorUserId,
+        action: ATTEMPT_AUDIT.recovered,
+        paymentEventId: snapshot.paymentEventId,
+        changes: {
+          paymentEventId: snapshot.paymentEventId,
+          attemptId: attempt.id,
+          paymentId: outcome.paymentId,
+          resultStatus: outcome.status,
+          recovery: true,
+        },
+        at,
+      });
+      // 消费事件与本次执行同事务、同锁：同审批并发只有一次能走到这里
+      await writeReplayConsumedAudit(tx, {
+        organizationId: input.organizationId,
+        actorUserId: input.actorUserId,
+        approvalId,
+        operationId: `approval:${approvalId}`,
+        fingerprint: snapshot,
         resultStatus: outcome.status,
-        recovery: true,
-      },
-      at,
-    });
-  });
+        at,
+      });
 
-  return {
-    paymentEventId: event.id,
-    attemptId: attempt.id,
-    attemptNo: attempt.attemptNo,
-    status: 'SUCCEEDED',
-    resultStatus: outcome.status,
-  };
+      return {
+        paymentEventId: snapshot.paymentEventId,
+        attemptId: attempt.id,
+        attemptNo: attempt.attemptNo,
+        status: 'SUCCEEDED' as AttemptStatus,
+        resultStatus: outcome.status,
+      };
+    });
+  } catch (error) {
+    // 锁内拒绝 → 独立的最终拒绝审计（事务已回滚，故用独立连接写入；失败不覆盖原错误）
+    if (error instanceof ApprovalBoundaryError || error instanceof WorkflowError) {
+      const reasonCode = error instanceof ApprovalBoundaryError ? error.reason : error.code;
+      await writeReplayRejectionAudit(prisma, {
+        organizationId: input.organizationId,
+        actorUserId: input.actorUserId,
+        paymentEventId: input.paymentEventId,
+        approvalId,
+        stage: 'LOCKED_RECHECK',
+        reason: reasonCode,
+        at: (deps.now ?? (() => new Date()))(),
+      }).catch(() => undefined);
+    }
+    throw error;
+  }
 }
 
 export interface RetryDueResult {

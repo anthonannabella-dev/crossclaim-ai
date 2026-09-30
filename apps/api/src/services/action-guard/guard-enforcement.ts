@@ -165,5 +165,6 @@ export const GUARD_ENFORCED_ACTIONS = [
   'platform.write',
   'commission.charge',
   'payment.capture',
+  'payment.replay',
   'secret.rotate',
 ] as const;

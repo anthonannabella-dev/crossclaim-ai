@@ -14,7 +14,7 @@
 import { Prisma, type PrismaClient } from '@prisma/client';
 
 import { prepareAuditInsert } from '../audit';
-import { PAYMENT_CAPTURE_ACTION } from '../action-guard/approval-verifier';
+import { PAYMENT_CAPTURE_ACTION, PAYMENT_REPLAY_ACTION } from '../action-guard/approval-verifier';
 import { nextLifecycleAt, normalizeApprovalTtl, normalizeBoundPayload } from './recovery-review';
 import { WorkflowError } from './opportunity-review';
 import { assertPermission } from './permissions';
@@ -146,12 +146,17 @@ export interface ApplyPaymentSucceededResult {
   status: 'PAID' | 'PENDING_REVIEW' | 'AMOUNT_MISMATCH' | 'ILLEGAL_TRANSITION';
 }
 
+/** 资金执行可运行在独立事务（webhook/首处理）或调用方**已有的锁内事务**（replay）中 */
+export type PaymentExecClient = PrismaClient | Prisma.TransactionClient;
+
 export async function applyPaymentSucceeded(
-  prisma: PrismaClient,
+  prisma: PaymentExecClient,
   input: ApplyPaymentSucceededInput,
   deps: {
     now?: () => Date;
     env?: Record<string, string | undefined>;
+    /** ② 第二批 replay：由调用方提供**已有的锁内事务**，使核验/执行/消费同事务（不新开事务） */
+    client?: Prisma.TransactionClient;
     /**
      * C-0010-B2：Payment 行被记入的**同一个事务**里回调，用于把执行尝试链接到 Payment
      * 并写 `payment.processing_payment_linked` 审计（链接与资金事实同生共死）。
@@ -162,7 +167,8 @@ export async function applyPaymentSucceeded(
   const at = (deps.now ?? (() => new Date()))();
   const mode: PaymentSucceededMode = input.mode ?? 'FIRST_PROCESSING';
 
-  const invoice = await prisma.billingInvoice.findFirst({
+  const client = deps.client ?? prisma;
+  const invoice = await client.billingInvoice.findFirst({
     where: { id: input.invoiceId, organizationId: input.organizationId },
     select: { id: true, status: true, total: true, currency: true, invoiceNo: true },
   });
@@ -173,7 +179,13 @@ export async function applyPaymentSucceeded(
   const amountMatches = money(invoice.total) === money(input.amount);
   const currencyMatches = invoice.currency === input.currency;
 
-  return prisma.$transaction(async (tx) => {
+  // ② 第二批 replay：允许在调用方已有的**锁内事务**中执行（统一锁协议 + 统一执行快照）
+  const exec = deps.client
+    ? (fn: (tx: Prisma.TransactionClient) => Promise<ApplyPaymentSucceededResult>) =>
+        fn(deps.client as Prisma.TransactionClient)
+    : (fn: (tx: Prisma.TransactionClient) => Promise<ApplyPaymentSucceededResult>) =>
+        (prisma as PrismaClient).$transaction(fn);
+  return exec(async (tx) => {
     // 幂等：同 (organizationId, provider, externalPaymentId) 只记录一次
     const existing = await tx.payment.findFirst({
       where: {
@@ -343,7 +355,7 @@ export async function applyPaymentSucceeded(
  * 调用点必须显式选择恢复语义（replay / retry-due），不允许靠隐式开关改变资金代码行为。
  */
 export async function recoverPaymentSucceeded(
-  prisma: PrismaClient,
+  prisma: PaymentExecClient,
   input: ApplyPaymentSucceededInput,
   deps: Parameters<typeof applyPaymentSucceeded>[2] = {},
 ): Promise<ApplyPaymentSucceededResult> {
@@ -488,6 +500,230 @@ export async function submitPaymentReview(
       invoiceId: invoice.id,
       state: input.decision === 'APPROVE' ? ('APPROVED' as PaymentReviewState) : ('REJECTED' as PaymentReviewState),
       approvalId: input.decision === 'APPROVE' ? approvalId : null,
+    };
+  });
+}
+
+/* ────────────────────────────────────────────────────────────────────────────
+ * ② 第二批 replay（MSG-20260930-22 §6(1) / MSG-20260930-24 §7）
+ * 审批目标 = 具体 `PaymentEvent`；指纹由**服务端**组装（客户端不可替换原始 JSON）。
+ * 与 payment.capture 是两条独立授权：互不通用、互不消费。
+ * ──────────────────────────────────────────────────────────────────────────── */
+
+export const REPLAY_RECOVERY_ACTION = 'recoverPaymentSucceeded';
+export const REPLAY_PROCESSING_VERSION = 'v1';
+
+export interface PaymentReplayFingerprint {
+  paymentEventId: string;
+  invoiceId: string;
+  provider: string;
+  providerEventId: string;
+  payloadHash: string;
+  externalPaymentId: string;
+  amount: string;
+  currency: string;
+  /** 事件身份（规范化）：provider:providerEventId */
+  basisReference: string;
+  /** 载荷摘要（绝不绑定用户可替换的原始 JSON） */
+  evidenceArtifactId: string;
+  recoveryAction: string;
+  processingVersion: string;
+  /** 仅用于审计上下文（不是审批指纹的一部分） */
+  previousAttemptNo: number;
+}
+
+type ReplayReadClient = PrismaClient | Prisma.TransactionClient;
+
+/**
+ * 读取（或**锁内重读**）本次 replay 的执行快照：事件身份 + 关联 attempt + 资金事实。
+ * 无可用 paymentId → `PAYMENT_CONTEXT_REQUIRED`（不猜、不人工补金额）。
+ */
+export async function readReplaySnapshot(
+  client: ReplayReadClient,
+  input: { organizationId: string; paymentEventId: string },
+): Promise<PaymentReplayFingerprint> {
+  const event = await client.paymentEvent.findFirst({
+    where: { id: input.paymentEventId, organizationId: input.organizationId },
+    select: { id: true, provider: true, providerEventId: true, payloadHash: true },
+  });
+  if (!event) {
+    throw new WorkflowError('NOT_FOUND', `支付事件 ${input.paymentEventId} 不存在或不属于该租户`);
+  }
+  const linked = await client.paymentProcessingAttempt.findFirst({
+    where: { organizationId: input.organizationId, paymentEventId: event.id, paymentId: { not: null } },
+    orderBy: { attemptNo: 'desc' },
+    select: { attemptNo: true, paymentId: true },
+  });
+  if (!linked?.paymentId) {
+    throw new WorkflowError(
+      'PAYMENT_CONTEXT_REQUIRED',
+      'PAYMENT_CONTEXT_REQUIRED：该事件没有可用的 paymentId，无法安全重放（请走财务人工对账）',
+    );
+  }
+  const payment = await client.payment.findFirst({
+    where: { id: linked.paymentId, organizationId: input.organizationId },
+    select: { id: true, invoiceId: true, externalPaymentId: true, amount: true, currency: true },
+  });
+  if (!payment) throw new WorkflowError('NOT_FOUND', `Payment ${linked.paymentId} 不存在或不属于该租户`);
+
+  return {
+    paymentEventId: event.id,
+    invoiceId: payment.invoiceId,
+    provider: event.provider,
+    providerEventId: event.providerEventId,
+    payloadHash: event.payloadHash,
+    externalPaymentId: payment.externalPaymentId,
+    amount: money(payment.amount),
+    currency: payment.currency,
+    basisReference: `${event.provider}:${event.providerEventId}`,
+    evidenceArtifactId: event.payloadHash,
+    recoveryAction: REPLAY_RECOVERY_ACTION,
+    processingVersion: REPLAY_PROCESSING_VERSION,
+    previousAttemptNo: linked.attemptNo ?? 0,
+  };
+}
+
+/** 审批指纹的「额外键」：执行侧锁内快照必须与其逐项一致（verifyApprovalBoundary 的 extra）。 */
+export function replayFingerprintExtra(fp: PaymentReplayFingerprint): Record<string, string> {
+  return {
+    paymentEventId: fp.paymentEventId,
+    invoiceId: fp.invoiceId,
+    provider: fp.provider,
+    providerEventId: fp.providerEventId,
+    payloadHash: fp.payloadHash,
+    externalPaymentId: fp.externalPaymentId,
+    recoveryAction: fp.recoveryAction,
+    processingVersion: fp.processingVersion,
+  };
+}
+
+export interface PaymentReplayReviewResult {
+  paymentEventId: string;
+  state: PaymentReviewState;
+  approvalId: string | null;
+  fingerprint?: PaymentReplayFingerprint;
+}
+
+/**
+ * replay 的 HITL 复核（REQUEST / APPROVE / REJECT），目标为具体 `PaymentEvent`。
+ * APPROVE 由**服务端**组装绑定载荷（金额/币种/事件身份/载荷摘要/恢复动作/处理版本），
+ * 客户端不能替换指纹内容。
+ */
+export async function submitPaymentReplayReview(
+  prisma: PrismaClient,
+  input: {
+    organizationId: string;
+    actorUserId: string;
+    role: string;
+    paymentEventId: string;
+    decision: 'REQUEST' | 'APPROVE' | 'REJECT';
+    reason?: string;
+    approvalTtlMs?: number;
+  },
+  deps: { now?: () => Date } = {},
+): Promise<PaymentReplayReviewResult> {
+  assertPermission(input.role, 'setCommercialTerms');
+  assertPermission(input.role, 'advanceBilling');
+  if (input.decision === 'REJECT' && (!input.reason || input.reason.trim() === '')) {
+    throw new WorkflowError('REASON_REQUIRED', 'REJECT 必须给出 reason');
+  }
+
+  const event = await prisma.paymentEvent.findFirst({
+    where: { id: input.paymentEventId, organizationId: input.organizationId },
+    select: { id: true, providerEventId: true },
+  });
+  if (!event) throw new WorkflowError('NOT_FOUND', `支付事件 ${input.paymentEventId} 不存在或不属于该租户`);
+
+  const now = deps.now ?? (() => new Date());
+  return prisma.$transaction(async (tx) => {
+    // 与执行侧同一把锁：审批生命周期写入与 replay 执行遵循一致的串行化协议
+    if (typeof tx.$executeRawUnsafe === 'function') {
+      await tx.$executeRawUnsafe('SELECT pg_advisory_xact_lock(hashtext($1))', `cc-payment-event:${event.id}`);
+    }
+    const events = await tx.auditLog.findMany({
+      where: {
+        organizationId: input.organizationId,
+        entityType: 'PaymentEvent',
+        entityId: event.id,
+        action: {
+          in: [
+            PAYMENT_REVIEW_ACTIONS.required,
+            PAYMENT_REVIEW_ACTIONS.approved,
+            PAYMENT_REVIEW_ACTIONS.rejected,
+          ],
+        },
+      },
+      orderBy: { createdAt: 'asc' },
+      select: { action: true, createdAt: true },
+    });
+    const state = resolvePaymentReviewState(events);
+    // 生命周期事件时间在锁内生成且同目标严格递增（与账单域同规则）
+    const at = nextLifecycleAt(events, now);
+
+    if (input.decision === 'REQUEST') {
+      if (state === 'PENDING') throw new WorkflowError('ILLEGAL_TRANSITION', '该支付事件已处于待审批状态');
+      await writeAudit(tx, {
+        organizationId: input.organizationId,
+        actor: { type: 'USER', userId: input.actorUserId },
+        action: PAYMENT_REVIEW_ACTIONS.required,
+        entityType: 'PaymentEvent',
+        entityId: event.id,
+        changes: { providerEventId: event.providerEventId, action: PAYMENT_REPLAY_ACTION, version: REPLAY_PROCESSING_VERSION },
+        at,
+      });
+      return { paymentEventId: event.id, state: 'PENDING' as PaymentReviewState, approvalId: null };
+    }
+
+    if (state !== 'PENDING') {
+      throw new WorkflowError('ILLEGAL_TRANSITION', `当前状态 ${state} 不允许审批（必须先有待审批请求）`);
+    }
+
+    if (input.decision === 'REJECT') {
+      await writeAudit(tx, {
+        organizationId: input.organizationId,
+        actor: { type: 'USER', userId: input.actorUserId },
+        action: PAYMENT_REVIEW_ACTIONS.rejected,
+        entityType: 'PaymentEvent',
+        entityId: event.id,
+        changes: { providerEventId: event.providerEventId, reason: input.reason?.trim() ?? '' },
+        at,
+      });
+      return { paymentEventId: event.id, state: 'REJECTED' as PaymentReviewState, approvalId: null };
+    }
+
+    // APPROVE：锁内读取执行快照并以此为指纹（服务端组装，客户端不可替换）
+    const fingerprint = await readReplaySnapshot(tx, {
+      organizationId: input.organizationId,
+      paymentEventId: event.id,
+    });
+    const expiresAt = new Date(at.getTime() + normalizeApprovalTtl(input.approvalTtlMs));
+    const approvalId = await writeAudit(tx, {
+      organizationId: input.organizationId,
+      actor: { type: 'USER', userId: input.actorUserId },
+      action: PAYMENT_REVIEW_ACTIONS.approved,
+      entityType: 'PaymentEvent',
+      entityId: event.id,
+      changes: {
+        providerEventId: event.providerEventId,
+        charged: false,
+        boundPayload: {
+          amount: fingerprint.amount,
+          currency: fingerprint.currency,
+          basisReference: fingerprint.basisReference,
+          evidenceArtifactId: fingerprint.evidenceArtifactId,
+          fingerprintVersion: 'v1',
+          ...replayFingerprintExtra(fingerprint),
+        },
+        boundAction: PAYMENT_REPLAY_ACTION,
+        expiresAt: expiresAt.toISOString(),
+      },
+      at,
+    });
+    return {
+      paymentEventId: event.id,
+      state: 'APPROVED' as PaymentReviewState,
+      approvalId,
+      fingerprint,
     };
   });
 }

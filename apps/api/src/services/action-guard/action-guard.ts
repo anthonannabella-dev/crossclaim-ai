@@ -33,6 +33,8 @@ export const ACTION_GUARD_CATALOG: Record<string, { risk: ActionRiskClass; requi
   'platform.write': { risk: 'EXTERNAL_WRITE', requires: ['humanApproval', 'platformEnablement', 'productionGate'] },
   'commission.charge': { risk: 'MONEY_MOVEMENT', requires: ['humanApproval', 'productionGate'] },
   'payment.capture': { risk: 'MONEY_MOVEMENT', requires: ['humanApproval', 'productionGate'] },
+  // ② 第二批 replay：恢复重放是**独立的资金动作身份**，与 payment.capture 审批互不通用（MSG-20260930-22 §6(1)）
+  'payment.replay': { risk: 'MONEY_MOVEMENT', requires: ['humanApproval', 'productionGate'] },
   'secret.rotate': { risk: 'SECRET_ACCESS', requires: ['hostApproval'] },
 };
 

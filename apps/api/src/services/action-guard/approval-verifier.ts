@@ -25,6 +25,12 @@ export const RECOVERY_CONFIRMATION_ACTION = 'commission.charge';
  */
 export const PAYMENT_CAPTURE_ACTION = 'payment.capture';
 
+/**
+ * 受保护动作名（单一来源）：支付事件重放（POST /payments/events/:id/replay，② 第二批 replay）。
+ * 与 PAYMENT_CAPTURE_ACTION 分开：账单确认审批不得用于 replay，反之亦然。
+ */
+export const PAYMENT_REPLAY_ACTION = 'payment.replay';
+
 export const APPROVAL_REASON_CODES = [
   'APPROVAL_NOT_FOUND',
   'APPROVAL_NOT_APPROVED',

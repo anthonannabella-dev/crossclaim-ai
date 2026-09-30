@@ -25,6 +25,8 @@ export const PAYMENT_APPROVAL_EVENT_ACTION = 'payment.review_approved';
 export const PAYMENT_REQUIRED_EVENT_ACTION = 'payment.review_required';
 export const PAYMENT_REJECTED_EVENT_ACTION = 'payment.review_rejected';
 export const PAYMENT_CONSUMED_EVENT_ACTION = 'payment.capture_consumed';
+/** ② 第二批 replay：独立的消费事件（账单确认的消费不得覆盖重放授权，反之亦然） */
+export const PAYMENT_REPLAY_CONSUMED_EVENT_ACTION = 'payment.replay_consumed';
 
 export interface ApprovalBoundaryQuery {
   organizationId: string;

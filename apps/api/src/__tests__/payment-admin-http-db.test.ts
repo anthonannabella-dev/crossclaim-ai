@@ -29,6 +29,8 @@ import { createServer } from '../server';
 import { hashPassword } from '../services/auth';
 import { createAuditWriter, createPrismaAuditSink } from '../services/audit';
 import { LocalFileSystemStorage } from '../services/storage';
+import { createAppActionGuard, staticControlPlaneConfig } from '../services/action-guard/runtime-guard-composition';
+import type { RuntimeActionGuard } from '../services/action-guard/runtime-guard';
 
 const prisma = new PrismaClient();
 const ORG = 'cc000000-0000-4000-8000-00000000000a';
@@ -159,7 +161,7 @@ const auditCount = (action: string) =>
 const invoiceRow = () => prisma.billingInvoice.findUniqueOrThrow({ where: { id: INVOICE } });
 
 async function withServer<T>(run: (base: string) => Promise<T>): Promise<T> {
-  const server = createServer({ prisma, log, audit, storage });
+  const server = createServer({ prisma, log, audit, storage, actionGuard: permissiveGuard() });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const { port } = server.address() as AddressInfo;
   try {
@@ -190,6 +192,38 @@ function post(base: string, pathname: string, cookie?: string, body?: unknown) {
   });
 }
 
+/** ② 第二批 replay：受保护动作需要注入 Action Guard（本文件其余用例仍关注运维语义） */
+const permissiveGuard = (): RuntimeActionGuard =>
+  createAppActionGuard({
+    prisma,
+    killSwitchResolver: {
+      async resolve(scope: string) {
+        return { scope, value: 'enabled' as const, degraded: false, stale: false };
+      },
+    },
+    audit: { write: () => {} },
+    config: staticControlPlaneConfig({
+      globalDisabled: false,
+      mode: 'WRITE_ENABLED',
+      productionGate: 'SATISFIED',
+      platformEnabled: { 'payment.capture': true, 'payment.replay': true },
+      tenantFeatureEnabled: { 'payment.capture': true, 'payment.replay': true },
+      hostApprovalGranted: true,
+    }),
+  });
+
+/** 经 HTTP 创建 replay 审批（REQUEST → APPROVE），返回 approvalId */
+async function approveReplayViaHttp(base: string, cookie: string, eventId: string) {
+  const pathname = '/payments/events/' + eventId + '/replay-review';
+  const requested = await post(base, pathname, cookie, { decision: 'REQUEST' });
+  expect(requested.status).toBe(200);
+  const approved = await post(base, pathname, cookie, { decision: 'APPROVE' });
+  expect(approved.status).toBe(200);
+  const body = (await approved.json()) as { approvalId?: string };
+  if (!body.approvalId) throw new Error('REPLAY_APPROVAL_NOT_CREATED');
+  return body.approvalId;
+}
+
 describe('O10 — 支付运维端点（真实 HTTP + PostgreSQL）', () => {
   it('未登录 → 两个端点都 401，且零写入', async () => {
     await seedInvoice();
@@ -215,16 +249,19 @@ describe('O10 — 支付运维端点（真实 HTTP + PostgreSQL）', () => {
   it('FINANCE 不能重放、OPS 不能跑重试 → 403 FORBIDDEN，账单不动', async () => {
     await seedInvoice();
     await seedEvent();
-    await seedFailedAttempt();
+    const payment = await seedPayment();
+    await seedFailedAttempt({ paymentId: payment.id });
     const before = await attemptCount();
 
     await withServer(async (base) => {
+      const owner = await login(base, 'admin-owner@example.com');
+      const approvalId = await approveReplayViaHttp(base, owner, EVENT);
       const finance = await login(base, 'admin-finance@example.com');
       const replay = await post(
         base,
         '/payments/events/' + EVENT + '/replay',
         finance,
-        { reason: 'MANUAL_RECOVERY' },
+        { reason: 'MANUAL_RECOVERY', approvalId },
       );
       expect(replay.status).toBe(403);
       expect(await replay.json()).toMatchObject({ error: 'FORBIDDEN' });
@@ -242,17 +279,20 @@ describe('O10 — 支付运维端点（真实 HTTP + PostgreSQL）', () => {
   it('重放原因缺失或不在白名单 → 400 INVALID_INPUT，零写入', async () => {
     await seedInvoice();
     await seedEvent();
-    await seedFailedAttempt();
+    const payment = await seedPayment();
+    await seedFailedAttempt({ paymentId: payment.id });
     const before = await attemptCount();
 
     await withServer(async (base) => {
       const owner = await login(base, 'admin-owner@example.com');
-      const missing = await post(base, '/payments/events/' + EVENT + '/replay', owner, {});
+      const approvalId = await approveReplayViaHttp(base, owner, EVENT);
+      const missing = await post(base, '/payments/events/' + EVENT + '/replay', owner, { approvalId });
       expect(missing.status).toBe(400);
       expect(await missing.json()).toMatchObject({ error: 'INVALID_INPUT' });
 
       const unknown = await post(base, '/payments/events/' + EVENT + '/replay', owner, {
         reason: 'BECAUSE_I_SAID_SO',
+        approvalId,
       });
       expect(unknown.status).toBe(400);
       expect(await unknown.json()).toMatchObject({ error: 'INVALID_INPUT' });
@@ -293,9 +333,11 @@ describe('O10 — 支付运维端点（真实 HTTP + PostgreSQL）', () => {
 
     await withServer(async (base) => {
       const owner = await login(base, 'admin-owner@example.com');
+      const approvalId = await approveReplayViaHttp(base, owner, EVENT);
       const response = await post(base, '/payments/events/' + EVENT + '/replay', owner, {
         reason: 'MANUAL_RECOVERY',
         note: '运维手工恢复',
+        approvalId,
       });
       expect(response.status).toBe(200);
       expect(await response.json()).toMatchObject({

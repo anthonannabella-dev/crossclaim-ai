@@ -30,11 +30,16 @@ import { confirmRecoveryOutcome } from './recovery-outcome';
 import { ActionGuardApprovalVerificationError } from '../action-guard/approval-verifier';
 import { createHitlSubmissionBoundary } from '../action-guard/hitl-submission';
 import { ActionGuardNotConfiguredError } from '../action-guard/guard-enforcement';
-import { PAYMENT_CAPTURE_ACTION, RECOVERY_CONFIRMATION_ACTION } from '../action-guard/approval-verifier';
+import {
+  PAYMENT_CAPTURE_ACTION,
+  PAYMENT_REPLAY_ACTION,
+  RECOVERY_CONFIRMATION_ACTION,
+} from '../action-guard/approval-verifier';
 import {
   PAYMENT_APPROVAL_EVENT_ACTION,
   PAYMENT_CONSUMED_EVENT_ACTION,
   PAYMENT_REJECTED_EVENT_ACTION,
+  PAYMENT_REPLAY_CONSUMED_EVENT_ACTION,
   PAYMENT_REQUIRED_EVENT_ACTION,
 } from '../action-guard/approval-tx-verify';
 import { ApprovalBoundaryError } from '../action-guard/approval-tx-verify';
@@ -45,7 +50,7 @@ import {
   type RuntimeActionGuard,
 } from '../action-guard/runtime-guard';
 import { getRecoveryReviewStatus, submitRecoveryReview } from './recovery-review';
-import { submitPaymentReview } from './payment';
+import { readReplaySnapshot, submitPaymentReplayReview, submitPaymentReview } from './payment';
 import { advanceBillingInvoice, listBillingInvoices } from './billing';
 import { getAppealPackageState } from './appeal-package';
 import { reconcilePayoutItems } from './commission-reconciliation';
@@ -115,6 +120,8 @@ const PAYMENT_WEBHOOK_PATH = /^\/payments\/webhook$/;
 const PAYMENTS_RECONCILIATION_PATH = /^\/payments\/reconciliation$/;
 const PAYMENTS_RECONCILIATION_CSV_PATH = /^\/payments\/reconciliation\.csv$/;
 const PAYMENT_REPLAY_PATH = /^\/payments\/events\/([^/]+)\/replay$/;
+// ② 第二批 replay：最小受认证审批入口（REQUEST / APPROVE / REJECT）
+const PAYMENT_REPLAY_REVIEW_PATH = /^\/payments\/events\/([^/]+)\/replay-review$/;
 const PAYMENT_RETRY_DUE_PATH = /^\/payments\/processing\/retry-due$/;
 const BILLING_PATH = /^\/billing(?:\/([^/]+)\/status)?$/;
 const CASE_LIST_PATH = /^\/cases$/;
@@ -305,6 +312,7 @@ export async function handleWorkflowRequest(
   const reconciliationPath = PAYMENTS_RECONCILIATION_PATH.test(path);
   const reconciliationCsvPath = PAYMENTS_RECONCILIATION_CSV_PATH.test(path);
   const replayPath = PAYMENT_REPLAY_PATH.exec(path);
+  const replayReviewPath = PAYMENT_REPLAY_REVIEW_PATH.exec(path);
   const retryDuePath = PAYMENT_RETRY_DUE_PATH.test(path);
   const billingPath = BILLING_PATH.exec(path);
   const caseListPath = CASE_LIST_PATH.test(path);
@@ -343,7 +351,7 @@ export async function handleWorkflowRequest(
     adminPermissionMatrix ||
     adminMemberDetail !== null ||
     adminKillSwitch;
-  if (!adminAny && !operationsDashboard && !operationsClaims && !operationsRecovery && !review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !paymentReviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !replayPath && !retryDuePath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim) {
+  if (!adminAny && !operationsDashboard && !operationsClaims && !operationsRecovery && !review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !paymentReviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !replayPath && !replayReviewPath && !retryDuePath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim) {
     return false;
   }
 
@@ -426,21 +434,82 @@ export async function handleWorkflowRequest(
   };
 
   try {
-    if (replayPath) {
-      // C-0010-B2：重放（TD-PAYMENT-003：必须给出白名单原因；无 paymentId → 409）
+    if (replayReviewPath) {
+      // ② 第二批 replay：最小受认证审批入口（受认证会话；审批人 OWNER/ADMIN）
       const body = await readJsonBody(req);
-      const result = await replayPaymentEvent(
+      const result = await submitPaymentReplayReview(
         deps.prisma,
         {
           organizationId: context.organizationId,
           actorUserId: context.userId,
           role: context.role,
-          paymentEventId: replayPath[1] ?? '',
-          reason: body.reason,
-          note: body.note,
+          paymentEventId: replayReviewPath[1] ?? '',
+          decision: body.decision === 'APPROVE' ? 'APPROVE' : body.decision === 'REJECT' ? 'REJECT' : 'REQUEST',
+          ...(typeof body.reason === 'string' ? { reason: body.reason } : {}),
+          ...(typeof body.approvalTtlMs === 'number' ? { approvalTtlMs: body.approvalTtlMs } : {}),
         },
         deps.now ? { now: deps.now } : {},
       );
+      sendJson(res, 200, result);
+      return true;
+    }
+
+    if (replayPath) {
+      // ② 第二批 replay：受保护资金动作（Action Guard + 服务端审批绑定；缺 approvalId → 409，不可绕过）
+      const body = await readJsonBody(req);
+      const paymentEventId = replayPath[1] ?? '';
+      const approvalId = typeof body.approvalId === 'string' ? body.approvalId : undefined;
+      if (!deps.actionGuard) {
+        // fail closed：受保护入口必须在组合根注入 Action Guard
+        throw new ActionGuardNotConfiguredError(PAYMENT_REPLAY_ACTION);
+      }
+      // 指纹由服务端组装（提交侧比对输入）；执行侧会在事件锁内重读事实再次比对
+      const fingerprint = await readReplaySnapshot(deps.prisma, {
+        organizationId: context.organizationId,
+        paymentEventId,
+      });
+      const boundary = createHitlSubmissionBoundary({
+        guard: deps.actionGuard,
+        prisma: deps.prisma,
+        approvalVerifier: {
+          prisma: deps.prisma,
+          approvalEventAction: PAYMENT_APPROVAL_EVENT_ACTION,
+          requiredEventAction: PAYMENT_REQUIRED_EVENT_ACTION,
+          rejectedEventAction: PAYMENT_REJECTED_EVENT_ACTION,
+          // 支付域没有独立的 revoked 事件：拒绝即为撤销；不得回落到 recovery.approval_revoked
+          revokedEventAction: PAYMENT_REJECTED_EVENT_ACTION,
+          consumedEventAction: PAYMENT_REPLAY_CONSUMED_EVENT_ACTION,
+          targetEntityType: 'PaymentEvent',
+        },
+        audit: createPrismaActionGuardAuditPort(deps.prisma),
+      });
+      const result = await boundary.submit({
+        action: PAYMENT_REPLAY_ACTION,
+        organizationId: context.organizationId,
+        actorUserId: context.userId,
+        targetRef: paymentEventId,
+        approvalId,
+        payload: {
+          recoveredAmount: fingerprint.amount,
+          currency: fingerprint.currency,
+          basisReference: fingerprint.basisReference,
+          evidenceArtifactId: fingerprint.evidenceArtifactId,
+        },
+        perform: () =>
+          replayPaymentEvent(
+            deps.prisma,
+            {
+              organizationId: context.organizationId,
+              actorUserId: context.userId,
+              role: context.role,
+              paymentEventId,
+              reason: body.reason,
+              note: body.note,
+              ...(approvalId ? { approvalId } : {}),
+            },
+            deps.now ? { now: deps.now } : {},
+          ),
+      });
       sendJson(res, 200, result);
       return true;
     }
