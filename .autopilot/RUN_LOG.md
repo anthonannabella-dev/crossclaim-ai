@@ -70,3 +70,34 @@
 - 正式审计请求（GitHub Issue #2）：comment `5904049895` → https://github.com/anthonannabella-dev/crossclaim-ai/issues/2#issuecomment-5904049895（七段式：GATE/HEAD/FILES/TESTS/CI/BOUNDARY/自我披露/REQUESTED DECISION）。
 - 中间一次红 CI 已如实登记：`9065f2f` 的 Deploy smoke 在 `S-1 migrate deploy (fresh database)` 瞬时失败；相邻提交与当前 HEAD 同一步骤成功，本机 `node tools/smoke/deploy-smoke.mjs` 全项通过（20 migrations / 64 triggers / health 200 / readyz 200），判定为 Docker 就绪竞态，不作为通过证据。
 - 通道①（右侧 ChatGPT 会话）本轮不可用：computer-use 返回 `Browsers: Error: Codex auth token is unavailable`（apps/browsers 均为空），js_reset 后重试仍失败。属环境级故障，按 SELF_RESOLVE 处理：正式请求已按通道②落在 Issue #2；短唤醒待通道恢复后补发（每次心跳重试），期间不重复写 Issue，不改动已送审的 HEAD。
+
+- R3 证据说明（补充，请求内容不变）：Issue #2 comment 5904097956。说明控制点构造方式（独立连接持案件 advisory lock + pg_try 探测确认持有 + 断言请求在 400ms 内未返回），并如实披露：等待期间的撤销/成员停用为**直接写库**（因撤销入口与资金执行共用案件锁，走 HTTP 会排在资金请求之后，无法构成核验后/执行前的场景）；同时声明未覆盖「HTTP 撤销与 HTTP 确认同时在途」的跨连接竞态。受审 HEAD 仍为 cb95143。
+
+
+- 预备补丁（未提交，保持受审 HEAD 不变）：work/scripts/r3patch-review-lock-state.mjs 把 ssertHighValueReviewCleared 的**状态判定**也从锁外移入案件锁内（锁内 loadEvents + loadReviewState），消除「刚写入的审批被随后自动写入的 review_required 取代」的轮询竞态。已在工作区临时应用验证：	sc --noEmit PASS、workflow-hitl-db+workflow-recovery-review+ction-guard-hitl-r3-race-db 共 26 例全绿；随后从备份还原，工作区不含该改动（待裁决到达后随下一批次提交并说明）。
+
+
+- 通道③兜底（事件驱动）：Issue #2 comment 5904165716 以 [CODEX -> CHATGPT] TYPE: READY_FOR_REVIEW 标记提交，触发 .github/workflows/audit-bridge.yml（无审计模型凭据时为 NOT_RUN，只做 HEAD=cb95143 的 CI 对齐与结构化留痕）。
+- 通道①续报：computer-use 浏览器提供方持续不可用（Browsers: Error: Codex auth token is unavailable，apps/browsers 清单为空）。已尝试：重试 getState、js_reset 后重试、open_in_codex 重新打开面板浏览器标签 → 均无效。判定为宿主应用级（非标签级）故障，列入 HOST_ACTION_REQUIRED 上报；正式请求不受影响（已在 Issue #2 留档 5904049895 + 证据说明 5904097956）。
+
+
+- 通道③更正（如实登记）：Issue #2 comment 5904187973。核对 main 与 gate 分支的 .github/workflows 后确认：udit-bridge.yml **只在 gate 分支**，不在默认分支 main；GitHub 的 issue_comment 事件取默认分支的工作流定义，故 comment 5904165716 的 READY_FOR_REVIEW 标记**没有触发任何工作流**（近期 Actions 运行列表亦无 audit-bridge run）。结论：通道③在 workflow 合入 main 前不可用，属合并决策，不由 Codex 绕过分支保护。当前唯一可用的留档通道是 Issue #2 本体；架构方唤醒仍待通道①恢复。
+
+
+- 资金路径锁外判定小审计（只读，为下一批次做准备）：`advanceBillingInvoice` 的状态校验虽在事务外，但写入使用**事务内 CAS**（`updateMany` 带 `status=from` 条件，`count!==1` 即 ILLEGAL_TRANSITION），无 TOCTOU；`submitRecoveryReview` 的状态判定已在案件锁内；当前唯一「锁外判定」点是 `assertHighValueReviewCleared`（预备补丁 `work/scripts/r3patch-review-lock-state.mjs` 已就绪并验证）。结论：资金路径其余入口的并发不变量均已有明确保护，本批次不必扩大改动面。
+
+- CI 原始证据核对（run 36668581862 / job `API · migration + typecheck + tests` id 109738489655，HEAD cb95143）：
+  - `✓ src/__tests__/action-guard-hitl-r3-race-db.test.ts (9 tests) 5579ms` —— 新增的 R3 控制点竞争套件**确实在 CI 中执行**（不只是本机）。
+  - `Test Files 139 passed (139)` / `Tests 1260 passed (1260)` —— Node 22 CI 全绿、零 skipped；本机 Node 24 的 `phase1-runbook.test.ts` 导入问题不出现于 CI。
+
+- 通道①恢复并送达 R3 短唤醒（宿主协助打开新建 ChatGPT 窗口后，computer-use 浏览器恢复可用）：在会话 `仓库审查裁决`（chatgpt.com/c/6abc2d93-4448-83e8-a940-94889b355510）发送 `[CODEX → CHATGPT]` 唤醒包，指向 Issue #2 comment 5904049895（R3 七段式）+ 5904097956（证据说明），并将提交后输入框清空、正文出现该轮次且 ChatGPT 进入「正在回应」状态作为送达验证。
+- 说明：唤醒包内已注明「GitHub 写回仍受 403 限制，请只在本会话输出完整 VERDICT，由 Codex 原文归档」；受审 HEAD 保持 `cb95143`。
+
+## 2026-09-30 · MSG-20260930-20 = REVISE（授权项② 第一批 R3 复核）→ R4
+
+- 通道①短唤醒已送达并取得裁决：MSG-20260930-20（REVIEWED_REF `cb951432a9e5411e2a40bfaf7c77cb790ef3546e`）= **REVISE**，下一批次 = 授权项② 第一批 **R4**。
+- 归档：`AI-ARCHITECT-INBOX.md` 逐字原文（```text 块），`node tools/verdict-diff/compare.mjs` → **FULL_COPY_OK**（原文 72 行 / 归档 72 行，缺失 0、多出 0）。
+- 裁决要点（逐条将执行）：**A/D 关闭**，无需重做；**B 留一项阻塞**：`assertHighValueReviewCleared` 仍是「事务外判定 state → 锁内写入 review_required」，可被并发 APPROVE 交错取代；**C 接受限定范围证据**（但要求收紧口径）。
+- R4 CHANGE：A 自动路径锁内重读并决定；B 生命周期事件时间至少锁后生成 + 明确同时间/轮次顺序（事务内外同规则）；C 两项有控制点验收（自动路径读到旧状态后暂停 → APPROVE → 恢复不得追加取代性 REQUEST；请求先启动后获锁 / 事件同时间）；D 修正证据口径（删过度声明、缺 approvalId 测试收紧为精确状态码+错误码、竞争证据补强）。
+- 架构方明确：**允许立即提交已准备的相关补丁**；受审 HEAD 冻结仅为定位证据，不要求裁决后继续冻结开发。
+- 已就绪补丁：`work/scripts/r3patch-review-lock-state.mjs`（`assertHighValueReviewCleared` 的 loadEvents/state 判定移入案件锁内），本地已验证 `tsc --noEmit` PASS + 26 例全绿。
