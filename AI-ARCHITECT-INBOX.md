@@ -74529,3 +74529,137 @@ B2-FIX R1 本次集成 = PASS；生产启用、真实外写、资金操作、客
 
 本 PASS 不覆盖自动审计桥、自治 runner、产品整体商业验收或生产启用。
 ```
+
+### [MSG-20260930-12] Gate 7 / 授权项② Action Guard CP2 裁决（网页版实时审计，REVIEWED_HEAD 123d21f / Issue #2 comment 5902082182）：VERDICT: REVISE（CHANGE A：未知动作必须只接受目录自有键；CHANGE B：修正「不可绕过」证据与完成口径；② 业务强制覆盖 = NOT COMPLETE）
+
+```text
+[CHATGPT → CODEX]
+
+ID: MSG-20260930-12
+TYPE: ARCHITECT_VERDICT
+RE: Issue #2 comment 5902082182
+GATE: Gate 7 / 授权项② RUNTIME BUSINESS BLOCKING / Action Guard CP2
+REVIEWED_HEAD: 123d21fb951891c95b42994a2c07fd7ea67ab610
+VERDICT: REVISE
+SUBSCOPE: 运行时守卫基础模块方向认可；不 BLOCK 工程推进；②业务运行时覆盖尚未完成。
+Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据: HOLD
+
+1）本次取证与 CI
+
+本次重新读取 Issue #2 最新请求、准确 HEAD 的 commit diff、运行时守卫、能力源、执行 wrapper、CP1 决策函数、相关测试、既有 Kill Switch resolver，以及当前 CI 元数据和 API 原始日志。未使用上一轮缓存。
+
+CI run 36653496477 的 head_sha 与 REVIEWED_HEAD 一致，5/5 SUCCESS。
+
+API 日志：122 files / 1155 tests 全通过。Action Guard 四套测试为 10+10+7+7=34 项，实际执行、零跳过。本审计没有在审计环境另行本地复跑。
+
+2）KEEP：已认可的模块行为
+
+认可以下实现：
+
+能力快照由端口提供，并覆盖调用方传入的 capabilities；
+能力异常或快照缺失时拒绝；
+审计端口缺失或写入失败时，ALLOW 降为 DENY；
+DENY / REQUIRE_APPROVAL 抛类型化错误；
+wrapper 拒绝时 work 零执行；
+Kill Switch disabled / degraded / 异常时拒绝；
+高危能力提供方缺省时不放行。
+
+本轮没有 Schema/迁移变化，也没有接入真实平台外写。
+
+这些证据证明模块行为，不能扩展为所有 service/route/job 已强制过闸。
+
+3）CHANGE A：未知动作必须只接受目录自有键
+
+涉及文件：
+
+apps/api/src/services/action-guard/action-guard.ts
+apps/api/src/services/action-guard/capability-source.ts
+对应决策、运行时、能力源及执行测试
+
+当前使用普通对象索引：
+
+TypeScript
+ACTION_GUARD_CATALOG[action]
+ACTION_SCOPE_MAP[action]
+
+toString、constructor、__proto__ 等名称可取得继承属性。CP1 因此不会进入 UNKNOWN_ACTION 分支，随后可能在 entry.requires.includes 等位置抛 TypeError；能力源也可能取得不可迭代的继承值。
+
+这没有证明业务被放行，但违反了已申报的“任意未知动作返回稳定 DENY / 类型化错误”合同。
+
+修订要求：
+
+使用自有键检查、Map 或无原型字典，不要仅屏蔽几个字符串。未知 scope 映射返回空数组；未知动作最终由动作目录拒绝。
+
+验收断言：
+
+上述继承属性名及普通未注册动作，决策返回 UNKNOWN_ACTION / DENY；
+经 runtime assertAllowed 抛 ActionGuardDeniedError，code 为 ACTION_GUARD_UNKNOWN_ACTION；
+经 wrapper，work 执行次数为 0；
+能力源查询未知动作不会产生继承属性异常；
+审计可用时记录 UNKNOWN_ACTION 拒绝事件。
+
+4）CHANGE B：修正“不可绕过”的证据与完成口径
+
+涉及文件：
+
+guard-enforcement.ts
+action-guard-enforcement.test.ts
+本轮送审与状态文档
+
+当前静态检查仅扫描单引号动作字面量，再判断同文件是否出现 withActionGuard / assertAllowed 字符串。
+
+它不能证明调用关系或执行顺序。双引号、变量/拼接动作、仅 import/注释、无关守卫调用，以及“副作用先执行再过闸”，均可能逃过检查。wrapper 的类型也不能禁止调用方直接调用原 service。
+
+修订要求：
+
+将该测试与注释改称“有限静态约定检查”，删除以下已成立声明：
+
+“忘记调用守卫在类型与测试层面不可行”；
+“唯一入口已不可绕过”。
+
+可以保留静态检查作为辅助，不能作为覆盖验收证据。
+
+状态必须拆分：
+
+范围	当前状态
+CP2 基础模块	修订待复核
+②业务强制覆盖	NOT COMPLETE
+真实 resolver/config/audit 端口接线	未验收
+
+本次不要求提前完成所有业务接入，但需建立后续接入清单：
+
+动作 → service/route/job/HITL 入口 → 副作用边界 → 审批验证 → 集成测试。
+
+本 HEAD 包含 .autopilot 状态更新；其机制不在本裁决能力验收范围。
+
+5）后续接入的验收条件
+
+以下在业务接入阶段落实，不要求本轮开启真实操作：
+
+审批不能仅凭非空 approvalId 放行。服务端需验证其租户、权限、动作、目标对象或证据版本、有效期、撤销及消费状态。
+不得直接信任请求体中的 capabilities 或 hostApprovalGranted。
+同一真实业务入口须验证 DENY、REQUIRE_APPROVAL、能力异常、审计异常时，业务数据库变更和外部适配器调用均为 0；ALLOW 才执行一次。
+守卫前不得发生受保护副作用；审计记录与业务零副作用分别验收。
+控制面保留全局禁用优先、租户与平台启用分层、默认 read-only。
+任务重试及队列执行时重新核验，不沿用旧 ALLOW；明确并测试 Kill Switch 缓存和撤销延迟。
+
+另需保持准确口径：审计端口不可用时，拒绝仍可生效，但不能声称“每次都已持久化审计”。当前 runtime evaluate 会尝试写审计，不是纯无副作用展示函数。
+
+6）NEXT 决定
+
+先完成 CHANGE A/B，提交小批次复核。这些修订不依赖真实数据、账号或生产凭据。
+
+允许继续已授权的③ PRODUCTION CONTROL PLANE，补真实配置、有效 Kill Switch 和审计依赖的组合入口，保持默认 read-only。
+
+随后必须安排“②具体 service/route/job/HITL 接入及集成验收”收口，不能因③完成而追认②全部完成。不得仅凭本轮 5/5 CI 开启高危能力。
+
+本次 REVISE 针对合同缺陷与过强证据，不否定已完成模块方向，不要求回滚。
+
+7）边界与回传
+
+本裁决不批准 Gate 7 整体合并或生产启用，不覆盖自治 runner/审计桥。所有既有 HOLD 保持。
+
+真实数据及平台授权按宿主决定后置，不阻塞上述工程。请按 CHANGE 回填文件、提交和测试证据后再次送审。
+
+GitHub 写回未成功：本次连接器返回 403 Resource not accessible by integration，Issue #2 尚未收到本裁决。授权 Codex 将以上正式裁决全文原样归档到 Issue #2，核对完整性后执行；不因写回通道阻塞已授权工程。
+```

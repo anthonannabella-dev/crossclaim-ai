@@ -1,4 +1,6 @@
-// ACTION GUARD enforcement wrapper + 「不可绕过」静态检查（MSG-20260930-03 项 ②）
+// ACTION GUARD enforcement wrapper 单测（MSG-20260930-03 项 ②）。
+// CHANGE B（MSG-20260930-12）：本文件中的静态扫描只是**有限静态约定检查**（单引号字面量 + 同文件字符串），
+// 不能证明调用关系/执行顺序，也不作为「业务强制覆盖」的验收证据。
 
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -105,7 +107,7 @@ describe('Action Guard enforcement wrapper', () => {
     ).rejects.toThrow('ACTION_GUARD_MISSING_WORK_FUNCTION');
   });
 
-  it('07 不可绕过静态检查：service/route/job 里出现的受保护动作必须同文件使用守卫', () => {
+  it('07 有限静态约定检查（非覆盖验收）：受保护动作字面量与守卫同文件出现', () => {
     const offenders: string[] = [];
     const walk = (dir: string) => {
       for (const entry of readdirSync(dir, { withFileTypes: true })) {

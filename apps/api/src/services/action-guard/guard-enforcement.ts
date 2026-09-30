@@ -1,8 +1,11 @@
 /**
  * ACTION GUARD — ENFORCEMENT WRAPPER（MSG-20260930-03 授权项 ②）
  * -------------------------------------------------------------------
- * 目的：给 service / route / job runner 一个**唯一入口**来执行受保护动作，
- * 使得「忘记调用守卫」在类型与测试层面都不可行：
+ * 目的：给 service / route / job runner 提供一个**统一执行助手**，让受保护动作在同一个调用点完成
+ * 「先过闸、再执行」。
+ *
+ * CHANGE B（MSG-20260930-12）：本模块**不声称**「唯一入口 / 已不可绕过」。
+ * 类型系统无法禁止调用方绕过本助手直接调用业务函数；覆盖面由后续的业务接入清单与集成验收证明。
  *
  *   const result = await withActionGuard({ guard, input, work: async () => doTheThing() });
  *
@@ -32,7 +35,7 @@ export async function withActionGuard<T>(options: WithActionGuardOptions<T>): Pr
   return work(decision);
 }
 
-/** 需要在 service/route/job 层显式过闸的动作（用于「不可绕过」静态检查）。 */
+/** 需要在 service/route/job 层显式过闸的动作（供**有限静态约定检查**与后续接入清单使用）。 */
 export const GUARD_ENFORCED_ACTIONS = [
   'claim.submit',
   'appeal.submit',

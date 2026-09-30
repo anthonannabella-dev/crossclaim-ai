@@ -36,6 +36,15 @@ export const ACTION_GUARD_CATALOG: Record<string, { risk: ActionRiskClass; requi
   'secret.rotate': { risk: 'SECRET_ACCESS', requires: ['hostApproval'] },
 };
 
+/**
+ * CHANGE A（MSG-20260930-12）：动作目录只接受**自有键**。
+ * 普通对象索引会命中原型链（toString / constructor / __proto__ 等），
+ * 使未知动作绕过 UNKNOWN_ACTION 分支并在后续字段访问时抛 TypeError。
+ */
+function catalogEntryFor(action: string) {
+  return Object.prototype.hasOwnProperty.call(ACTION_GUARD_CATALOG, action) ? ACTION_GUARD_CATALOG[action] : undefined;
+}
+
 export interface ActionGuardInput {
   action: string;
   actorUserId: string;
@@ -66,7 +75,7 @@ export interface ActionGuardResult {
 /** 默认 deny / fail closed 的决策函数（纯函数，无副作用） */
 export function evaluateActionGuard(input: ActionGuardInput): ActionGuardResult {
   const action = String(input?.action ?? '');
-  const entry = ACTION_GUARD_CATALOG[action];
+  const entry = catalogEntryFor(action);
 
   if (!entry) {
     return {

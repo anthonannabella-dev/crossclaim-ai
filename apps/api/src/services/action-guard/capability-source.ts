@@ -65,8 +65,13 @@ export interface ActionGuardCapabilitySourceDeps {
 }
 
 /** 计算某动作需要检查的 Kill Switch scope（未配置则返回空数组）。 */
+/**
+ * CHANGE A（MSG-20260930-12）：scope 映射同样只接受自有键；
+ * 未知动作（含 toString / constructor / __proto__ 等继承键）一律返回空数组，
+ * 绝不返回原型链上的值，避免不可迭代的继承值进入守卫。
+ */
 export function scopesForAction(action: string): ActionKillSwitchScope[] {
-  return ACTION_SCOPE_MAP[action] ?? [];
+  return Object.prototype.hasOwnProperty.call(ACTION_SCOPE_MAP, action) ? ACTION_SCOPE_MAP[action] : [];
 }
 
 export function createActionGuardCapabilitySource(deps: ActionGuardCapabilitySourceDeps): ActionGuardCapabilityPort {
