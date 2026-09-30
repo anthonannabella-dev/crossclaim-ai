@@ -321,6 +321,15 @@ export async function submitRecoveryReview(
     const action = decision === 'APPROVE' ? REVIEW_ACTIONS.approved : REVIEW_ACTIONS.rejected;
     // CHANGE A（MSG-20260930-17）：审批必须绑定"本次操作"，而不是只表达案件状态。
     const bound = decision === 'APPROVE' ? normalizeBoundPayload(input.boundPayload) : null;
+    if (decision === 'APPROVE') {
+      // CHANGE A（R2）：缺金额/币种/依据的审批不得创建"看似可用"的 approvalId
+      if (!bound || bound.amount === null || bound.currency === null || bound.basisReference === null) {
+        throw new WorkflowError('INVALID_INPUT', '审批必须绑定完整操作载荷（金额/币种/依据）');
+      }
+      if (bound.fingerprintVersion !== 'v1') {
+        throw new WorkflowError('INVALID_INPUT', '未知的审批载荷指纹版本');
+      }
+    }
     const ttlMs = normalizeApprovalTtl(input.approvalTtlMs);
     const expiresAt = decision === 'APPROVE' ? new Date(at.getTime() + ttlMs) : null;
     const approvalEventId = await writeReviewAudit(tx, {

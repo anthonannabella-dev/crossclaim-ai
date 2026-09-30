@@ -36,7 +36,7 @@ export const APPROVAL_REJECTED_EVENT_ACTION = 'recovery.review_rejected';
 export const APPROVAL_REVOKED_EVENT_ACTION = 'recovery.approval_revoked';
 export const APPROVAL_CONSUMED_EVENT_ACTION = 'recovery.approval_consumed';
 
-export const APPROVAL_ACTOR_ROLES = ['OWNER', 'ADMIN', 'FINANCE'] as const;
+export const APPROVAL_ACTOR_ROLES = ['OWNER', 'ADMIN'] as const;
 export const EXECUTOR_ROLES = ['OWNER', 'ADMIN', 'FINANCE'] as const;
 
 export interface ApprovalEventRow {
@@ -235,7 +235,9 @@ export function createHitlApprovalVerifier(deps: HitlApprovalVerifierDeps): Acti
           return { valid: false, reason: 'APPROVAL_REVOKED' };
         }
         if (await isConsumed({ organizationId: query.organizationId, approvalId: query.approvalId })) {
-          return { valid: false, reason: 'APPROVAL_ALREADY_CONSUMED' };
+          // R2 CHANGE B2：同审批、同载荷、策略与权限仍满足 → 允许进入幂等返回既有结果分支；
+          // 消费/风险审计仍会记录，且业务层不会再次创建资金对象。
+          return { valid: true, consumed: true };
         }
       } catch {
         return { valid: false, reason: 'APPROVAL_SOURCE_ERROR' };

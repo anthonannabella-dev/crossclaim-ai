@@ -30,6 +30,7 @@ import { confirmRecoveryOutcome } from './recovery-outcome';
 import { ActionGuardApprovalVerificationError } from '../action-guard/approval-verifier';
 import { createHitlSubmissionBoundary } from '../action-guard/hitl-submission';
 import { ActionGuardNotConfiguredError } from '../action-guard/guard-enforcement';
+import { RECOVERY_CONFIRMATION_ACTION } from '../action-guard/approval-verifier';
 import { createPrismaActionGuardAuditPort } from '../action-guard/runtime-guard-composition';
 import {
   ActionGuardApprovalRequiredError,
@@ -551,6 +552,17 @@ export async function handleWorkflowRequest(
           reason: body.reason,
           recoveredAmount: body.recoveredAmount,
           currency: body.currency,
+          // CHANGE A（R2）：审批必须绑定"本次操作"的规范化载荷；动作由服务端固定，不接受客户端指定
+          boundPayload:
+            typeof body.decision === 'string' && body.decision.trim().toUpperCase() === 'APPROVE'
+              ? {
+                  recoveredAmount: body.recoveredAmount,
+                  currency: body.currency,
+                  basisReference: body.basisReference,
+                  evidenceArtifactId: body.evidenceArtifactId,
+                }
+              : undefined,
+          boundAction: RECOVERY_CONFIRMATION_ACTION,
         },
         deps.now,
       );
@@ -978,6 +990,9 @@ export async function handleWorkflowRequest(
               basisReference: body.basisReference,
               evidenceArtifactId: body.evidenceArtifactId,
               note: body.note,
+              // CHANGE A（R2）：把审批与操作身份贯穿到资金执行（原子消费的前提）
+              approvalId,
+              operationId: approvalId ? `approval:${approvalId}` : undefined,
             },
             deps.now,
           ),

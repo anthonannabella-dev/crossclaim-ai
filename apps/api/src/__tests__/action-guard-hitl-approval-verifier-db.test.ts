@@ -216,7 +216,7 @@ describe('HITL approval verifier v3（操作级绑定，真实 PostgreSQL）', (
     });
   });
 
-  it('11 已消费 → APPROVAL_ALREADY_CONSUMED', async () => {
+  it('11 已消费（同审批同载荷、策略与权限仍满足）→ 允许幂等返回（valid + consumed 标记）', async () => {
     const approvalId = await approveCase();
     await prisma.auditLog.create({
       data: {
@@ -230,8 +230,40 @@ describe('HITL approval verifier v3（操作级绑定，真实 PostgreSQL）', (
         createdAt: new Date(NOW.getTime() + 60_000),
       },
     });
+    await expect(verifier(new Date(NOW.getTime() + 120_000)).verify(query({ approvalId }))).resolves.toEqual({
+      valid: true,
+      consumed: true,
+    });
+  });
+
+  it('11b 已消费但随后被撤销 → 仍拒绝（生命周期优先于幂等）', async () => {
+    const approvalId = await approveCase();
+    await prisma.auditLog.create({
+      data: {
+        organizationId: ORG,
+        actorType: 'USER',
+        actorUserId: ownerId,
+        action: 'recovery.approval_consumed',
+        entityType: 'Case',
+        entityId: caseId,
+        changes: { approvalId, operationId: 'op-1' } as never,
+        createdAt: new Date(NOW.getTime() + 60_000),
+      },
+    });
+    await prisma.auditLog.create({
+      data: {
+        organizationId: ORG,
+        actorType: 'USER',
+        actorUserId: ownerId,
+        action: 'recovery.approval_revoked',
+        entityType: 'Case',
+        entityId: caseId,
+        changes: { approvalId } as never,
+        createdAt: new Date(NOW.getTime() + 90_000),
+      },
+    });
     await expect(verifier(new Date(NOW.getTime() + 120_000)).verify(query({ approvalId }))).resolves.toMatchObject({
-      reason: 'APPROVAL_ALREADY_CONSUMED',
+      reason: 'APPROVAL_REVOKED',
     });
   });
 

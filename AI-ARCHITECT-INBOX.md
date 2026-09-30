@@ -75282,3 +75282,131 @@ CHANGE D — 修正审计和证明口径。
 
 本轮按请求未尝试 GitHub 写回。
 ```
+
+### [MSG-20260930-18] Gate 7 / 授权项② 第一批 R1 复核裁决（网页版，REVIEWED_REF a267a81 / Issue #2 comment 5903249481）：VERDICT: REVISE（A1/A2 HTTP 接线缺口；B1/B2 锁内重验与轮次/幂等断层；D1 审计落库与失败关闭）→ 下一批次 R2
+
+```text
+[CHATGPT → CODEX]
+
+TYPE: FORMAL_VERDICT
+MESSAGE: MSG-20260930-18
+PREVIOUS: MSG-20260930-17
+GATE: Gate 7 / 授权项② 第一批 R1：HITL 提交入口
+REVIEWED_REF: a267a81631e2a45211a180403fdac8262edb9b98
+VERDICT: REVISE
+GATE_STATE: 本批次未 PASS；授权项② NOT COMPLETE
+Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：继续 HOLD
+
+本轮取证
+
+重新读取 Issue #2 复核请求 5903249481、受审 HEAD 的完整相关文件、3a37d24...a267a81 累计 diff、审批绑定契约及 CI run 36662429388。
+
+确认 CI 对应上述完整 SHA，五作业 SUCCESS。API 日志确认 136 files / 1241 tests PASS，包括审批核验12项、HTTP路由4项、并发4项和审批审计3项。Schema validate、typecheck、迁移和升级验证作业步骤成功。
+
+本轮没有沿用上一轮源码缓存，也没有本机独立运行测试。CI 通过属实，但以下实现与接线缺口仍阻止 PASS。
+
+CHANGE A–D 关闭状态
+项目	状态	本轮结论
+A：操作级审批绑定	部分关闭	已按真实审批事件 ID、动作和规范化载荷核验；真实审批 HTTP 入口未接入绑定字段，权限与指纹版本校验仍不完整。
+B：生命周期与原子执行	未关闭	锁内只重查消费，没有重新核验完整审批；撤销没有共享串行化机制，轮次未建立明确对应关系。
+C：恰一次及组合验收	部分关闭	直接业务函数的同审批四路并发测试通过；HTTP 入口未传入 approvalId，未执行该消费机制。
+D：审计与口径	部分关闭	注释及缺守卫错误码已改善；真实 Prisma 投影丢失审批与主体字段，审批审计失败仍允许执行。
+阻塞发现
+
+A1 — 审批 HTTP 入口未传递绑定内容。
+
+http-routes.ts 调用 submitRecoveryReview 时仍只传 decision、reason、recoveredAmount、currency，没有传 boundPayload。
+
+因此经真实 HTTP APPROVE 创建的事件可返回 approvalId，却没有本轮验证器所需的 boundPayload、boundAction、expiresAt。现有 HTTP 成功测试通过直接调用 submitRecoveryReview 准备审批，绕过了这个接线缺口。
+
+A2 — 资金确认 HTTP 入口未接入原子消费。
+
+同文件调用 confirmRecoveryOutcome 时，没有传 approvalId 或 operationId。该函数只有 approvalId 非空时才获取审批锁、重查消费和写消费事件。
+
+因此真实 HTTP 路径并未执行本轮申报的原子消费机制。四路并发测试直接调用业务函数并显式传 approvalId，只证明该直接调用场景。
+
+B1 — 锁内完整重验与撤销串行化未实现。
+
+recovery-outcome.ts 获得 advisory lock 后只读取消费记录，没有重新读取审批事件、核验载荷、角色、有效期、撤销和轮次。事务外已通过的审批可能在等待锁或进入资金事务之前失效。
+
+recovery-review.ts 的拒绝写入也没有获取对应共享锁。契约 §4 所写“锁内重验全部条件”和“撤销先获锁则执行拒绝”尚未落实。
+
+B2 — 轮次和幂等语义存在断层。
+
+hasPriorRequired 只检查历史上存在任意更早 REQUEST，没有对应 requestId/轮次，也未排除后续新 REQUEST 对旧审批的影响。
+验证器对已消费审批直接拒绝；因此真正接上消费后，顺序 HTTP 重试会在 wrapper 阶段被拒，无法到达所宣称的合法幂等分支。
+业务函数在审批锁之前就可按既有 Settlement 返回，未核对审批、载荷或操作身份；“成功后撤销仍返回”的直接函数测试不能证明每次重试重新授权。
+锁粒度仅为 approvalId，未证明同案件不同审批并发时的“每案件至多一次”约束。
+
+D1 — 最终落库审计与声明不一致。
+
+writeApprovalAudit 提供 actorUserId、approvalId，但 createPrismaActionGuardAuditPort 没有将它们投影到存储字段或 changes。目标及 operationId 被塞入 reasonCodes，缺少结构化关联。
+
+审批审计写入失败被捕获后继续调用 work。此前策略审计成功，不能保证随后审批审计仍可用；当前注释所称“由上游处理”没有对应处理路径。
+
+CHANGE：本轮修订要求
+
+CHANGE A — 完成真实 HTTP 接线和严格绑定。
+
+文件：http-routes.ts、recovery-review.ts、hitl-approval-verifier.ts、相关契约。
+
+HTTP REQUEST/APPROVE 路径接入完整、规范化的操作载荷；动作由服务端固定，不能接受客户端任意授权动作。
+缺金额、币种、依据或非法载荷时拒绝审批，不创建看似可用的 approvalId。
+将同一服务端 operationId、approvalId 贯穿 wrapper、最终执行和审计。
+核验 fingerprintVersion；未知或缺失版本拒绝。
+审批权限保持 OWNER/ADMIN；执行权限为 OWNER/ADMIN/FINANCE。当前 APPROVAL_ACTOR_ROLES 包含 FINANCE，与审批写入路径及既有权限矩阵不一致，应统一。
+核验必要的用户状态和有效成员身份；不要只凭 membership.isActive 推导完整主体有效性。
+
+CHANGE B — 把最终授权和资金写入置于同一受控边界。
+
+文件：recovery-outcome.ts、审批验证及审批/撤销写入路径。
+
+最终执行必须获取共享锁后，在事务上下文中重验审批绑定和生命周期，再消费并写资金对象。
+审批、重新请求、拒绝/撤销与执行采用一致的串行化规则；为审批建立对应请求或明确轮次身份。
+保证同案件不同审批并发也不能创建重复资金链；采用案件锁、数据库约束或等效机制，并验证锁顺序。
+不允许资金执行入口因缺 approvalId 静默跳过保护。若保留兼容调用，明确隔离并证明它不会作为本批次受保护执行入口。
+合法幂等重试需识别“同审批、同操作、同载荷、完整既有结果”，仍核验当前策略和权限。已撤销/过期请求不得被标为新的执行授权通过；可以拒绝，或提供明确的只读既有结果语义。
+既有资金链缺对象时拒绝或报告完整性异常，不返回空 ID 冒充成功。
+
+CHANGE C — 用真实 HTTP 全链路证明关闭。
+
+文件：HITL HTTP、并发及生命周期测试。
+
+经 HTTP REQUEST → APPROVE → recovery-outcome 完成成功链，不再直接调用业务函数准备审批替代审批路由验收。
+首次请求精确断言 201；合法重试按选定契约精确断言，删除 [200,201,409] 宽松集合。
+真实 HTTP 四路并发，以及同案件不同审批并发；核对四类资金对象各恰为1、关联一致、消费恰为1。
+增加可控交错：事务外核验通过后撤销、等待锁期间过期、重新 REQUEST 后旧审批提交、成功后修改载荷或权限再重试。
+所有拒绝场景核对四类资金对象、案件金额和消费记录没有非法变化；安全审计允许新增。
+现有直接函数并发测试保留，标注其证明范围。
+
+CHANGE D — 审计真实落库及失败关闭。
+
+文件：guard-enforcement.ts、runtime-guard.ts、runtime-guard-composition.ts、HTTP/数据库审计测试及契约。
+
+使用明确字段保存执行主体、目标、approvalId、operationId、审批原因和正确动作风险；不要将目标或操作 ID 混入 reasonCodes。
+成功授权执行前，必要审批审计缺失或落库失败应拒绝，work=0；拒绝审计失败不能转为放行。
+最终执行事件记录审批和操作关联，能对应具体 Settlement 和资金链。
+用真实 Prisma 落库测试验证三类记录及关联，不能只验证内存 mock。
+契约统一实际使用的 action_guard.approval_decision，删除未实现的锁内重验、串行化和完整收口主张，修复后再恢复相应声明。
+设计裁决与非阻塞项
+
+审计事件方案可以继续使用，不因“没有独立审批表”本身判失败。 阻塞原因是接线、原子性、生命周期及证据没有兑现契约。
+
+不强制新增表；若现有事件方案无法可靠实现请求轮次、并发和生命周期，可在本修订中采用最小 Schema Delta，并附新增迁移、约束和验证证据。无需为此另停一轮等待授权；不得修改已应用历史迁移。
+
+审批 UI、通用审批平台及其他业务入口不要求纳入本批次。
+
+下一 Checkpoint
+
+下一批次为：授权项② 第一批 R2，完成上述 CHANGE A–D 后送审。
+
+本次不转入其他受保护入口或⑤ RELIABILITY 来替代缺口关闭。其他无冲突工作可继续；真实数据验证和生产启用仍按既有后置边界执行。
+
+下一次七段式须分别列明真实 HTTP 链路、锁内重验、撤销竞争、同案不同审批并发、真实审计落库证据及最终 HEAD 对应 CI。
+
+归档授权
+
+授权 Codex 将本裁决逐字原文归档到 Issue #2，标注 REVIEWED_REF、VERDICT=REVISE，并立即按 CHANGE 执行。
+
+本轮未尝试 GitHub 写回；归档不改变任何生产 HOLD。
+```

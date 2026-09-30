@@ -149,7 +149,16 @@ describe('C-0009.2 — 高额回收人工卡口（真实 PostgreSQL）', () => {
 
     const approved = await submitRecoveryReview(
       prisma,
-      { organizationId: ORG, actorUserId: adminId, role: 'ADMIN', caseId: kase.id, decision: 'APPROVE' },
+      {
+        organizationId: ORG,
+        actorUserId: adminId,
+        role: 'ADMIN',
+        caseId: kase.id,
+        decision: 'APPROVE',
+        // CHANGE A（R2）：审批绑定本次操作载荷（与后续确认一致）
+        boundPayload: { recoveredAmount: '1500.0000', currency: 'USD', basisReference: 'carrier-email-20260928', evidenceArtifactId: null },
+        boundAction: 'commission.charge',
+      },
       () => NOW,
     );
     expect(approved).toMatchObject({ state: 'APPROVED', decision: 'APPROVE' });

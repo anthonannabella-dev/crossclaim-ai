@@ -198,7 +198,7 @@ describe('HITL route × Action Guard（真实 HTTP + PostgreSQL）', () => {
       const res = await confirm(base, cookie, { approvalId });
       expect([200, 201]).toContain(res.status);
       const again = await confirm(base, cookie, { approvalId });
-      expect([200, 201, 409]).toContain(again.status);
+      expect(again.status).toBe(200); // 合法幂等重试：返回既有结果（created=false）
     }, permissiveGuard());
     const counts = await moneyCounts();
     expect(counts.settlements).toBe(1);

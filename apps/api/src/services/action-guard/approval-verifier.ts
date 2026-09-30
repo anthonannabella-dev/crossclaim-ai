@@ -55,6 +55,8 @@ export interface ActionGuardApprovalQuery {
 
 export interface ActionGuardApprovalDecision {
   valid: boolean;
+  /** 该审批已被消费；valid=true 表示允许进入"幂等返回既有结果"分支（不是新的执行授权） */
+  consumed?: boolean;
   reason?: ApprovalReasonCode;
   expiresAt?: string | null;
   consumedAt?: string | null;
