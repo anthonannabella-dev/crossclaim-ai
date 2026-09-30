@@ -952,6 +952,13 @@ export async function handleWorkflowRequest(
         actorUserId: actor.actorUserId,
         targetRef: caseId,
         approvalId,
+        // CHANGE A：把本次提交载荷交给审批校验逐项比对（金额/币种/依据/证据）
+        payload: {
+          recoveredAmount: body.recoveredAmount,
+          currency: body.currency,
+          basisReference: body.basisReference,
+          evidenceArtifactId: body.evidenceArtifactId,
+        },
         perform: () =>
           confirmRecoveryOutcome(
             deps.prisma,

@@ -19,6 +19,7 @@ import type { PrismaClient } from '@prisma/client';
 import type { ActionGuardInput, ActionGuardResult } from './action-guard';
 import { withActionGuard } from './guard-enforcement';
 import { createHitlApprovalVerifier, type HitlApprovalVerifierDeps } from './hitl-approval-verifier';
+import type { ActionGuardApprovalVerifier } from './approval-verifier';
 import type { RuntimeActionGuard } from './runtime-guard';
 
 export interface HitlSubmissionBoundaryDeps {
@@ -26,6 +27,8 @@ export interface HitlSubmissionBoundaryDeps {
   prisma: PrismaClient;
   /** 覆盖默认的复核状态读取（测试或其它 HITL 通道） */
   approvalVerifier?: HitlApprovalVerifierDeps;
+  /** 直接注入审批校验器（单元测试用；优先于 approvalVerifier） */
+  approvals?: ActionGuardApprovalVerifier;
 }
 
 export interface HitlSubmissionInput<T> {
@@ -35,6 +38,13 @@ export interface HitlSubmissionInput<T> {
   /** 目标对象 / 证据版本（本批以 caseId 作为审批绑定目标） */
   targetRef: string;
   approvalId?: string;
+  /** 本次提交的操作载荷（金额/币种/依据/证据），用于与审批绑定逐项比对 */
+  payload?: {
+    recoveredAmount?: unknown;
+    currency?: unknown;
+    basisReference?: unknown;
+    evidenceArtifactId?: unknown;
+  };
   /** 真实业务动作；仅在守卫与审批校验全部通过后调用一次 */
   perform: (decision: ActionGuardResult) => Promise<T> | T;
 }
@@ -45,12 +55,15 @@ export interface HitlSubmissionBoundary {
 
 export function createHitlSubmissionBoundary(deps: HitlSubmissionBoundaryDeps): HitlSubmissionBoundary {
   if (!deps?.guard) throw new Error('HITL_SUBMISSION_MISSING_GUARD');
-  if (!deps?.prisma && !deps?.approvalVerifier) throw new Error('HITL_SUBMISSION_MISSING_APPROVAL_SOURCE');
+  if (!deps?.prisma && !deps?.approvalVerifier && !deps?.approvals) {
+    throw new Error('HITL_SUBMISSION_MISSING_APPROVAL_SOURCE');
+  }
 
   const approvals =
-    deps.approvalVerifier !== undefined
+    deps.approvals ??
+    (deps.approvalVerifier !== undefined
       ? createHitlApprovalVerifier({ ...deps.approvalVerifier, prisma: deps.prisma })
-      : createHitlApprovalVerifier({ prisma: deps.prisma });
+      : createHitlApprovalVerifier({ prisma: deps.prisma }));
 
   return {
     async submit<T>(input: HitlSubmissionInput<T>) {
@@ -65,6 +78,7 @@ export function createHitlSubmissionBoundary(deps: HitlSubmissionBoundaryDeps): 
         input: guardInput,
         approvals,
         approvalTargetRef: input.targetRef,
+        approvalPayload: input.payload,
         work: input.perform,
       });
     },

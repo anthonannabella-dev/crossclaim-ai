@@ -16,6 +16,8 @@ import { createAuditWriter, createPrismaAuditSink } from '../services/audit';
 import { LocalFileSystemStorage } from '../services/storage';
 import { createAppActionGuard, staticControlPlaneConfig } from '../services/action-guard/runtime-guard-composition';
 import type { RuntimeActionGuard } from '../services/action-guard/runtime-guard';
+import { RECOVERY_CONFIRMATION_ACTION } from '../services/action-guard/approval-verifier';
+import { submitRecoveryReview } from '../services/workflow/recovery-review';
 
 const prisma = new PrismaClient();
 const ORG = 'cf000000-0000-4000-8000-0000000000g1'.replace('g', 'a');
@@ -127,19 +129,27 @@ async function confirm(base: string, cookie: string, body: Record<string, unknow
   return { status: res.status, body: (await res.json()) as Record<string, unknown> };
 }
 
-async function approvalEvent(action: string) {
-  await prisma.auditLog.create({
-    data: {
+/** CHANGE A（R1）：走真实审批写入路径，绑定本次操作载荷，返回 approvalId */
+async function approveOperation() {
+  await submitRecoveryReview(
+    prisma,
+    { organizationId: ORG, actorUserId: ownerId, role: 'OWNER', caseId, decision: 'REQUEST', recoveredAmount: '3000.0000', currency: 'USD' },
+    () => NOW,
+  );
+  const result = await submitRecoveryReview(
+    prisma,
+    {
       organizationId: ORG,
-      actorType: 'USER',
       actorUserId: ownerId,
-      action,
-      entityType: 'Case',
-      entityId: caseId,
-      changes: { synthetic: true } as never,
-      createdAt: new Date(),
+      role: 'OWNER',
+      caseId,
+      decision: 'APPROVE',
+      boundPayload: { recoveredAmount: '3000.0000', currency: 'USD', basisReference: 'route-test', evidenceArtifactId: null },
+      boundAction: RECOVERY_CONFIRMATION_ACTION,
     },
-  });
+    () => new Date(NOW.getTime() + 1000),
+  );
+  return result.approvalId as string;
 }
 
 async function moneyCounts() {
@@ -171,7 +181,7 @@ describe('HITL route × Action Guard（真实 HTTP + PostgreSQL）', () => {
     expect(await moneyCounts()).toEqual({ settlements: 0, fees: 0, billing: 0 });
   });
 
-  it('03 有 approvalId 但 HITL 复核未批准：403 ACTION_GUARD_APPROVAL_NOT_VERIFIED 且零资金副作用', async () => {
+  it('03 有 approvalId 但无对应审批事件：403 ACTION_GUARD_APPROVAL_NOT_VERIFIED 且零资金副作用', async () => {
     await withServer(async (base) => {
       const cookie = await login(base);
       const res = await confirm(base, cookie, { approvalId: 'appr-1' });
@@ -181,14 +191,13 @@ describe('HITL route × Action Guard（真实 HTTP + PostgreSQL）', () => {
     expect(await moneyCounts()).toEqual({ settlements: 0, fees: 0, billing: 0 });
   });
 
-  it('04 复核 APPROVED + approvalId：201 且恰好一次资金写入；重复调用不产生额外写入', async () => {
-    await approvalEvent('recovery.review_required');
-    await approvalEvent('recovery.review_approved');
+  it('04 操作级审批通过 + approvalId：201 且恰好一次资金写入；重复调用不产生额外写入', async () => {
+    const approvalId = await approveOperation();
     await withServer(async (base) => {
       const cookie = await login(base);
-      const res = await confirm(base, cookie, { approvalId: 'appr-1' });
+      const res = await confirm(base, cookie, { approvalId });
       expect([200, 201]).toContain(res.status);
-      const again = await confirm(base, cookie, { approvalId: 'appr-1' });
+      const again = await confirm(base, cookie, { approvalId });
       expect([200, 201, 409]).toContain(again.status);
     }, permissiveGuard());
     const counts = await moneyCounts();

@@ -32,10 +32,17 @@ export interface WithActionGuardOptions<T> {
   approvals?: ActionGuardApprovalVerifier;
   /** 审批绑定的目标对象 / 证据版本（可选） */
   approvalTargetRef?: string;
+  /** 本次提交的操作载荷（服务端会规范化后与审批绑定逐项比对） */
+  approvalPayload?: {
+    recoveredAmount?: unknown;
+    currency?: unknown;
+    basisReference?: unknown;
+    evidenceArtifactId?: unknown;
+  };
 }
 
 export async function withActionGuard<T>(options: WithActionGuardOptions<T>): Promise<T> {
-  const { guard, input, work, approvals, approvalTargetRef } = options ?? ({} as WithActionGuardOptions<T>);
+  const { guard, input, work, approvals, approvalTargetRef, approvalPayload } = options ?? ({} as WithActionGuardOptions<T>);
   if (!guard?.assertAllowed) throw new Error('ACTION_GUARD_MISSING_RUNTIME_GUARD');
   if (typeof work !== 'function') throw new Error('ACTION_GUARD_MISSING_WORK_FUNCTION');
 
@@ -50,6 +57,7 @@ export async function withActionGuard<T>(options: WithActionGuardOptions<T>): Pr
         action,
         actorUserId: String(input?.actorUserId ?? ''),
         targetRef: approvalTargetRef,
+        payload: approvalPayload,
       },
     });
   }
