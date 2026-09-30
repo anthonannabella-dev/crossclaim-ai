@@ -33,6 +33,7 @@ import { ActionGuardNotConfiguredError } from '../action-guard/guard-enforcement
 import {
   PAYMENT_CAPTURE_ACTION,
   PAYMENT_REPLAY_ACTION,
+  PAYMENT_RETRY_DUE_ACTION,
   RECOVERY_CONFIRMATION_ACTION,
 } from '../action-guard/approval-verifier';
 import {
@@ -41,6 +42,7 @@ import {
   PAYMENT_REJECTED_EVENT_ACTION,
   PAYMENT_REPLAY_CONSUMED_EVENT_ACTION,
   PAYMENT_REQUIRED_EVENT_ACTION,
+  PAYMENT_RETRY_DUE_CONSUMED_EVENT_ACTION,
 } from '../action-guard/approval-tx-verify';
 import { ApprovalBoundaryError } from '../action-guard/approval-tx-verify';
 import { createPrismaActionGuardAuditPort } from '../action-guard/runtime-guard-composition';
@@ -51,12 +53,18 @@ import {
 } from '../action-guard/runtime-guard';
 import { getRecoveryReviewStatus, submitRecoveryReview } from './recovery-review';
 import { readReplaySnapshot, submitPaymentReplayReview, submitPaymentReview } from './payment';
+import {
+  executeRetryBatch,
+  freezeRetryBatch,
+  readRetryBatch,
+  submitRetryBatchReview,
+} from './payment-retry-batch';
 import { advanceBillingInvoice, listBillingInvoices } from './billing';
 import { getAppealPackageState } from './appeal-package';
 import { reconcilePayoutItems } from './commission-reconciliation';
 import { handlePaymentWebhook } from './payment-webhook';
 import { listPaymentReconciliation, toReconciliationCsv } from './payment-reconciliation';
-import { replayPaymentEvent, runDueRetries } from './payment-attempt';
+import { replayPaymentEvent } from './payment-attempt';
 import { getCase, getClaimDraft, listCaseEvidence, listCases } from './case-read';
 import { getMember, getPermissionMatrix, listMembers } from '../operations/admin-membership';
 import {
@@ -123,6 +131,9 @@ const PAYMENT_REPLAY_PATH = /^\/payments\/events\/([^/]+)\/replay$/;
 // ② 第二批 replay：最小受认证审批入口（REQUEST / APPROVE / REJECT）
 const PAYMENT_REPLAY_REVIEW_PATH = /^\/payments\/events\/([^/]+)\/replay-review$/;
 const PAYMENT_RETRY_DUE_PATH = /^\/payments\/processing\/retry-due$/;
+// ② 第二批 retry-due：冻结清单（freeze）与批次审批（review）最小受认证入口
+const PAYMENT_RETRY_DUE_FREEZE_PATH = /^\/payments\/processing\/retry-due\/freeze$/;
+const PAYMENT_RETRY_DUE_REVIEW_PATH = /^\/payments\/processing\/retry-due\/review$/;
 const BILLING_PATH = /^\/billing(?:\/([^/]+)\/status)?$/;
 const CASE_LIST_PATH = /^\/cases$/;
 const CASE_DETAIL_PATH = /^\/cases\/([^/]+)$/;
@@ -314,6 +325,8 @@ export async function handleWorkflowRequest(
   const replayPath = PAYMENT_REPLAY_PATH.exec(path);
   const replayReviewPath = PAYMENT_REPLAY_REVIEW_PATH.exec(path);
   const retryDuePath = PAYMENT_RETRY_DUE_PATH.test(path);
+  const retryDueFreezePath = PAYMENT_RETRY_DUE_FREEZE_PATH.exec(path);
+  const retryDueReviewPath = PAYMENT_RETRY_DUE_REVIEW_PATH.exec(path);
   const billingPath = BILLING_PATH.exec(path);
   const caseListPath = CASE_LIST_PATH.test(path);
   const caseDetail = CASE_DETAIL_PATH.exec(path);
@@ -351,7 +364,7 @@ export async function handleWorkflowRequest(
     adminPermissionMatrix ||
     adminMemberDetail !== null ||
     adminKillSwitch;
-  if (!adminAny && !operationsDashboard && !operationsClaims && !operationsRecovery && !review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !paymentReviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !replayPath && !replayReviewPath && !retryDuePath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim) {
+  if (!adminAny && !operationsDashboard && !operationsClaims && !operationsRecovery && !review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !paymentReviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !replayPath && !replayReviewPath && !retryDuePath && !retryDueFreezePath && !retryDueReviewPath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim) {
     return false;
   }
 
@@ -514,18 +527,97 @@ export async function handleWorkflowRequest(
       return true;
     }
 
-    if (retryDuePath) {
-      // C-0010-B2：自动重放到期 attempt（无队列 / 无后台线程；由宿主侧调度调用）
+    if (retryDueFreezePath) {
+      // ② 第二批 retry-due：冻结当前到期清单（服务端 batchId + 排序清单指纹 + 有效期/数量上限）
       const body = await readJsonBody(req);
-      const result = await runDueRetries(
+      const result = await freezeRetryBatch(
         deps.prisma,
         {
           organizationId: context.organizationId,
+          actorUserId: context.userId,
           role: context.role,
           ...(typeof body.limit === 'number' ? { limit: body.limit } : {}),
+          ...(typeof body.ttlMs === 'number' ? { ttlMs: body.ttlMs } : {}),
         },
         deps.now ? { now: deps.now } : {},
       );
+      sendJson(res, 200, result);
+      return true;
+    }
+
+    if (retryDueReviewPath) {
+      // ② 第二批 retry-due：批次审批（REQUEST / APPROVE / REJECT；审批人 OWNER/ADMIN）
+      const body = await readJsonBody(req);
+      const result = await submitRetryBatchReview(
+        deps.prisma,
+        {
+          organizationId: context.organizationId,
+          actorUserId: context.userId,
+          role: context.role,
+          batchId: typeof body.batchId === 'string' ? body.batchId : '',
+          decision: body.decision === 'APPROVE' ? 'APPROVE' : body.decision === 'REJECT' ? 'REJECT' : 'REQUEST',
+          ...(typeof body.reason === 'string' ? { reason: body.reason } : {}),
+          ...(typeof body.approvalTtlMs === 'number' ? { approvalTtlMs: body.approvalTtlMs } : {}),
+        },
+        deps.now ? { now: deps.now } : {},
+      );
+      sendJson(res, 200, result);
+      return true;
+    }
+
+    if (retryDuePath) {
+      // ② 第二批 retry-due：受保护执行（Action Guard + 批次审批；缺 approvalId → 409，不可绕过）
+      const body = await readJsonBody(req);
+      const batchId = typeof body.batchId === 'string' ? body.batchId : '';
+      const approvalId = typeof body.approvalId === 'string' ? body.approvalId : undefined;
+      if (!deps.actionGuard) {
+        throw new ActionGuardNotConfiguredError(PAYMENT_RETRY_DUE_ACTION);
+      }
+      // 提交侧指纹输入：批次摘要（执行侧会在批次锁内重读并再次核对）
+      const batch = await readRetryBatch(deps.prisma, {
+        organizationId: context.organizationId,
+        batchId,
+      });
+      if (!batch) throw new WorkflowError('NOT_FOUND', `批次 ${batchId} 不存在或不属于该租户`);
+      const boundary = createHitlSubmissionBoundary({
+        guard: deps.actionGuard,
+        prisma: deps.prisma,
+        approvalVerifier: {
+          prisma: deps.prisma,
+          approvalEventAction: PAYMENT_APPROVAL_EVENT_ACTION,
+          requiredEventAction: PAYMENT_REQUIRED_EVENT_ACTION,
+          rejectedEventAction: PAYMENT_REJECTED_EVENT_ACTION,
+          revokedEventAction: PAYMENT_REJECTED_EVENT_ACTION,
+          consumedEventAction: PAYMENT_RETRY_DUE_CONSUMED_EVENT_ACTION,
+          targetEntityType: 'PaymentRetryBatch',
+        },
+        audit: createPrismaActionGuardAuditPort(deps.prisma),
+      });
+      const result = await boundary.submit({
+        action: PAYMENT_RETRY_DUE_ACTION,
+        organizationId: context.organizationId,
+        actorUserId: context.userId,
+        targetRef: batch.batchId,
+        approvalId,
+        payload: {
+          recoveredAmount: null,
+          currency: null,
+          basisReference: batch.batchId,
+          evidenceArtifactId: batch.digest,
+        },
+        perform: () =>
+          executeRetryBatch(
+            deps.prisma,
+            {
+              organizationId: context.organizationId,
+              actorUserId: context.userId,
+              role: context.role,
+              batchId: batch.batchId,
+              ...(approvalId ? { approvalId } : {}),
+            },
+            deps.now ? { now: deps.now } : {},
+          ),
+      });
       sendJson(res, 200, result);
       return true;
     }
