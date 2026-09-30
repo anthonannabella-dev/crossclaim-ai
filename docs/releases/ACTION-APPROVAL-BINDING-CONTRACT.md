@@ -168,7 +168,13 @@ boundPayload = {
 | 只处理冻结清单 | 批准后新出现的 due 项**绝不执行**（执行循环只遍历冻结清单；`limit` 不参与执行阶段选单） |
 | 逐项重验与留证 | 每项执行前重验 attempt 状态/到期、事件身份与载荷摘要、Payment 身份/币种/金额/关联发票；锁后（事件锁 → 发票锁 → Payment 行锁）再次比对最终事实；不一致项**跳过**并写 `payment.retry_due_skipped`（原因精确） |
 | 资金收口复用 | 复用 replay 已验收协议：`recoverPaymentSucceeded`（调用方事务）+ 发票锁 + `total`/`currency` 事实 CAS；attempt/资金写入/审计同事务 |
-| 执行身份与授权范围 | SYSTEM（`actorRef = payment-retry-worker`，`actorUserId` 为空）；预先授权范围由「批次审批 + 冻结摘要 + `batchId` + 有效期」共同界定 |
+| 执行身份与授权范围 | **用户授权触发、内部以 SYSTEM 记录执行**（`actorType=SYSTEM`、`actorRef = payment-retry-worker`、`actorUserId` 为空）；预先授权范围由「批次审批 + 冻结摘要 + `batchId` + 冻结截止时间」共同界定。**不宣称**独立后台 worker 认证已完成；调度器继续后置 |
+| 冻结有效期（R13 修订） | 冻结 `expiresAt` 在**审批与执行**均强制生效；实际有效截止取「冻结截止」与「审批截止」**较早值**；过期冻结记录不得再请求/批准（不得延长）；审批指纹绑定 `freezeExpiresAt` 并在执行核对 |
+| 逐项锁后重验（R13 修订） | 每项取得全部必要锁后**重新生成时间**，并再次核验审批有效期/主体/撤销/轮次与冻结授权范围；任何失效 → 抛错回滚本次整批执行且**不消费批次**；逐项 attempt/审计时间使用锁后新时间 |
+| attempt 代际与去重（R13 修订） | 事件锁后对原 attempt 加行锁重读并核对 `paymentEventId`/`paymentId`/`attemptNo`/状态/到期；**一次性认领**（清空 `nextRetryAt`，使旧代际不再被任何批次选中）；检测后继代际取代与重试上限（≤ `MAX_ATTEMPTS`）；不同批次含同一 attempt 时只有一次实际执行，其余跳过留证 |
+| 整批锁顺序（R13 修订） | 批次内所有项按**同一全局资源键**（`invoiceId|paymentId|paymentEventId`）排序后逐项取锁（事件锁 → 发票锁 → Payment 行锁），避免两个多项批次交叉持锁 |
+| 批次记录校验（R13 修订） | 批次锁后重读并集中校验：`digestVersion`、操作/处理版本、逐项结构、数量（≤20）、`itemCount` 与清单一致、重复项、摘要复核；未知版本/损坏/异常数量 → 失败关闭 |
+| 旧入口关闭（R13 修订） | 旧的动态选单入口 `runDueRetries` **不再是**「按 `limit` 动态查询 + 无需审批直接恢复资金」的路径；现仅作受保护「冻结批次执行」别名，必须提供 `batchId` + `approvalId`（缺审批拒绝 `APPROVAL_NOT_FOUND`），后台调度器同样必须走受保护路径 |
 | 消费与结果 | 批次消费 `payment.retry_due_consumed`（独立事件族，含 `approvalId`/`batchId`/`digest`/执行与跳过项数）；逐项执行审计 `payment.retry_due_executed`。`attempt.SUCCEEDED` 仍表示「一次获批的恢复尝试已执行」，资金结论看 `resultStatus` |
 ## 6. 验收矩阵（CHANGE C 对应）
 
@@ -214,5 +220,13 @@ boundPayload = {
 | retry-due 审批过期 | 403 `APPROVAL_EXPIRED`（RD 用例 06） | 零新增 |
 | retry-due 数量上限 | `limit` 越界被夹取，执行只处理冻结清单（RD 用例 07） | 不动态扩张 |
 | retry-due 批次消费审计失败 | 整个事务回滚（RD 用例 08） | attempt / 资金 / 执行审计不部分提交 |
+| retry-due 冻结期限到期（审批仍有效） | 拒绝批准（`APPROVAL_EXPIRED`）；过期冻结不得重新批准延长（RD 用例 09） | 零新增 |
+| retry-due 等锁期间主体停用 | 逐项锁后重验拒绝 `APPROVAL_ACTOR_MISMATCH`，整批回滚且不消费（RD 用例 10） | 零部分提交 |
+| retry-due 冻结后 attempt 不可重试 | 跳过留证 `ATTEMPT_NOT_RETRYABLE`（RD 用例 11） | 无新执行 |
+| retry-due 同审批并发执行 | 恰一次；其余 `APPROVAL_ALREADY_CONSUMED`（RD 用例 12） | 恰一次消费 |
+| 不同批次包含同一 attempt | 只执行一次，后者跳过留证（RD 用例 13） | `payment.retry_due_executed` 恰 1 |
+| 冻结候选项 ≥21 | 清单恰为上限 20（RD 用例 14） | 不动态扩张 |
+| 冻结摘要被篡改 / 未知版本 | 失败关闭（RD 用例 15） | 零执行 |
+| 旧入口 `runDueRetries` 缺审批 | 拒绝 `APPROVAL_NOT_FOUND`（RD 用例 16） | 零 attempt / 资金 / 消费 |
 
 > 实现与测试（`action-guard-hitl-*`、`workflow-hitl-db`、`workflow-outcome-db`、`action-guard-payment-capture-http-db`、`workflow-billing*`）按本文件逐条对齐后送审。
