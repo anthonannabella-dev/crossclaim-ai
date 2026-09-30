@@ -17,6 +17,15 @@ export const APPROVAL_REJECTED_EVENT_ACTION = 'recovery.review_rejected';
 export const APPROVAL_REVOKED_EVENT_ACTION = 'recovery.approval_revoked';
 export const APPROVAL_CONSUMED_EVENT_ACTION = 'recovery.approval_consumed';
 
+/**
+ * P2（② 第二批）：支付域（payment.capture）的审批事件族。
+ * 事件挂在 BillingInvoice 上；消费事件用独立名字，避免与 recovery 的消费计数混淆。
+ */
+export const PAYMENT_APPROVAL_EVENT_ACTION = 'payment.review_approved';
+export const PAYMENT_REQUIRED_EVENT_ACTION = 'payment.review_required';
+export const PAYMENT_REJECTED_EVENT_ACTION = 'payment.review_rejected';
+export const PAYMENT_CONSUMED_EVENT_ACTION = 'payment.capture_consumed';
+
 export interface ApprovalBoundaryQuery {
   organizationId: string;
   approvalId: string;
@@ -27,6 +36,12 @@ export interface ApprovalBoundaryQuery {
   /** 规范化后的提交载荷（amount/currency/basisReference/evidenceArtifactId） */
   payload: { amount: string | null; currency: string | null; basisReference: string | null; evidenceArtifactId: string | null };
   now: Date;
+  /** 审批/请求/撤销/消费事件族与目标实体（缺省 = recovery + Case，保持既有行为） */
+  approvalEventAction?: string;
+  requiredEventAction?: string;
+  revocationEventActions?: readonly string[];
+  consumedEventAction?: string;
+  targetEntityType?: string;
 }
 
 export type ApprovalBoundaryResult = { ok: true; consumed: boolean } | { ok: false; reason: string };
@@ -57,13 +72,18 @@ function boundPayloadOf(changes: unknown): Record<string, unknown> | null {
 
 /** 锁内重验：审批存在/归属/目标/动作/载荷/有效期/撤销/消费/轮次 */
 export async function verifyApprovalBoundary(client: Client, query: ApprovalBoundaryQuery): Promise<ApprovalBoundaryResult> {
+  const approvalAction = query.approvalEventAction ?? APPROVAL_EVENT_ACTION;
+  const requiredAction = query.requiredEventAction ?? APPROVAL_REQUIRED_EVENT_ACTION;
+  const revocationActions = query.revocationEventActions ?? [APPROVAL_REJECTED_EVENT_ACTION, APPROVAL_REVOKED_EVENT_ACTION];
+  const consumedAction = query.consumedEventAction ?? APPROVAL_CONSUMED_EVENT_ACTION;
+  const targetEntityType = query.targetEntityType ?? 'Case';
   try {
     const event = await client.auditLog.findFirst({
-      where: { id: query.approvalId, organizationId: query.organizationId, action: APPROVAL_EVENT_ACTION },
+      where: { id: query.approvalId, organizationId: query.organizationId, action: approvalAction },
       select: { id: true, actorUserId: true, entityType: true, entityId: true, changes: true, createdAt: true },
     });
     if (!event) return { ok: false, reason: 'APPROVAL_NOT_FOUND' };
-    if (event.entityType !== 'Case' || event.entityId !== query.caseId) return { ok: false, reason: 'APPROVAL_TARGET_MISMATCH' };
+    if (event.entityType !== targetEntityType || event.entityId !== query.caseId) return { ok: false, reason: 'APPROVAL_TARGET_MISMATCH' };
 
     const changes = event.changes as Record<string, unknown> | null;
     const boundAction = typeof changes?.boundAction === 'string' ? changes.boundAction : null;
@@ -109,9 +129,9 @@ export async function verifyApprovalBoundary(client: Client, query: ApprovalBoun
     const priorRequired = await client.auditLog.count({
       where: {
         organizationId: query.organizationId,
-        entityType: 'Case',
+        entityType: targetEntityType,
         entityId: query.caseId,
-        action: APPROVAL_REQUIRED_EVENT_ACTION,
+        action: requiredAction,
         createdAt: { lt: event.createdAt },
       },
     });
@@ -120,9 +140,9 @@ export async function verifyApprovalBoundary(client: Client, query: ApprovalBoun
     const revocation = await client.auditLog.count({
       where: {
         organizationId: query.organizationId,
-        entityType: 'Case',
+        entityType: targetEntityType,
         entityId: query.caseId,
-        action: { in: [APPROVAL_REJECTED_EVENT_ACTION, APPROVAL_REVOKED_EVENT_ACTION] },
+        action: { in: [...revocationActions] },
         createdAt: { gt: event.createdAt },
       },
     });
@@ -132,9 +152,9 @@ export async function verifyApprovalBoundary(client: Client, query: ApprovalBoun
     const superseded = await client.auditLog.count({
       where: {
         organizationId: query.organizationId,
-        entityType: 'Case',
+        entityType: targetEntityType,
         entityId: query.caseId,
-        action: APPROVAL_REQUIRED_EVENT_ACTION,
+        action: requiredAction,
         createdAt: { gt: event.createdAt },
       },
     });
@@ -143,7 +163,7 @@ export async function verifyApprovalBoundary(client: Client, query: ApprovalBoun
     const consumed = await client.auditLog.count({
       where: {
         organizationId: query.organizationId,
-        action: APPROVAL_CONSUMED_EVENT_ACTION,
+        action: consumedAction,
         changes: { path: ['approvalId'], equals: query.approvalId } as never,
       },
     });
