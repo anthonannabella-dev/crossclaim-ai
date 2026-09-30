@@ -178,3 +178,10 @@
 - CHANGE C：跨域双向冒用（replay 审批用于账单确认反向也要测，精确状态码/原因且两类消费均不新增）、服务层直调缺 approvalId 显式验收、replay 审批决策审计失败放行前关闭、**replay 消费审计失败 → 整个事务回滚**（attempt/发票推进/成功审计不得部分提交）。
 - CHANGE D：用例 03 标注为**提交侧**拒绝（删除"锁内快照拒绝"表述）；双向冒用需两方向均执行才算完成；说明 `attempt.status=SUCCEEDED` 与 `resultStatus` 的区别（AMOUNT_MISMATCH/PENDING_REVIEW/ILLEGAL_TRANSITION 也会消费审批并记录 SUCCEEDED attempt → 表示"一次获批恢复尝试已执行"，不是"付款收口成功"）；保留"直写仅证明读取已提交变化"的限制。
 - 口径：retry-due 仍直接调用 `runDueRetries`（未接守卫/批次审批）申报准确，本轮不得宣称支付域所有恢复入口已受保护；真实渠道扣款与生产继续 HOLD。下一 Checkpoint = replay R8 修订批次（完成后重跑类型检查、真实 PostgreSQL/HTTP 专项、相关支付回归与最终 HEAD CI，再提交七段式）。
+
+## 2026-09-30 — ② 第二批 R8 修订（R9 送审）
+
+- 实现：`7350ad2`（CHANGE A：事件锁→发票锁固定顺序、锁后重读 status/total/currency、PAID CAS 加事实条件、重验时间在锁后、同事务不回退）、`dc141b5`（CHANGE B/C/D：replay 专项 9→15 例 + 契约 §5.4/矩阵）、`3cd0615`（单测夹具同步锁内快照与事实 CAS 断言）。
+- 验收：replay 专项 **15/15**（含等发票锁期间事实变化→AMOUNT_MISMATCH 且绝不写旧 paidAmount；事实 CAS 交错零部分提交；反向冒用精确 403 且两类消费不新增；服务层缺审批零副作用；审批决策审计失败放行前关闭；消费审计失败整事务回滚）；定向回归 11 套件 94 例全绿；本机全量 142 文件 / 1274 passed + 20 skipped（唯一失败为既知 runbook 债，不写"全量通过"）；tsc PASS。
+- CI：HEAD `3cd0615`，run **36689383793** = 五作业 SUCCESS；API **142 files / 1294 tests PASS**。如实披露中间 commit `dc141b5` CI 为红（单测夹具未同步），已修复、不作为通过证据。
+- 送审：Issue #2 comment **5907298588**（七段式）；右侧会话短唤醒已发送并完成送达验证（704 字符作为新用户轮出现、输入框清空、生成中）。
