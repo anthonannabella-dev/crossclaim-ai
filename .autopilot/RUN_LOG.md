@@ -101,3 +101,10 @@
 - R4 CHANGE：A 自动路径锁内重读并决定；B 生命周期事件时间至少锁后生成 + 明确同时间/轮次顺序（事务内外同规则）；C 两项有控制点验收（自动路径读到旧状态后暂停 → APPROVE → 恢复不得追加取代性 REQUEST；请求先启动后获锁 / 事件同时间）；D 修正证据口径（删过度声明、缺 approvalId 测试收紧为精确状态码+错误码、竞争证据补强）。
 - 架构方明确：**允许立即提交已准备的相关补丁**；受审 HEAD 冻结仅为定位证据，不要求裁决后继续冻结开发。
 - 已就绪补丁：`work/scripts/r3patch-review-lock-state.mjs`（`assertHighValueReviewCleared` 的 loadEvents/state 判定移入案件锁内），本地已验证 `tsc --noEmit` PASS + 26 例全绿。
+
+## 2026-09-30 · 授权项② 第一批 R4（MSG-20260930-20 的 CHANGE A–D 收口）
+
+- 实现：`840bf09`（CHANGE A+B：自动路径状态判定移入案件锁内；`nextLifecycleAt` 生命周期事件时间锁内生成且同案件严格递增）、`a545bc0`（CHANGE C+D：新增 `action-guard-hitl-r4-ordering-db.test.ts` 3 例；R3 缺 approvalId 断言收紧为精确 409+错误码；契约新增 §4.2）。
+- 验证：`npx tsc --noEmit` PASS；定向 R4 3/3、R3 9/9、`workflow-hitl-db` 5/5、`workflow-recovery-review` 12/12、`action-guard-hitl-http-chain-db` 6/6、`action-guard-hitl-approval-verifier-db` 13/13 全绿；CI run `36671238244`（HEAD `a545bc0`）五作业 SUCCESS。
+- 送审：Issue #2 comment `5904438093`（七段式，含自我披露：用例 01 因受保护入口缺 approvalId 在守卫层即 409，改为服务层直调 + 等待期间直写等价事件；`nextLifecycleAt` 复用锁内已读事件以避免在单测 fake 客户端引入新依赖）。
+- 通道①：本轮 computer-use 浏览器提供方再次不可用（`Codex auth token unavailable`），R4 短唤醒待通道恢复后补发；正式请求已留档 Issue #2，架构方也可直接在 Issue 上复核。
