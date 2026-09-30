@@ -33,7 +33,13 @@ import {
   PAYMENT_RETRY_DUE_CONSUMED_EVENT_ACTION,
   PAYMENT_REPLAY_CONSUMED_EVENT_ACTION,
 } from '../services/action-guard/approval-tx-verify';
-import { freezeRetryBatch, runDueRetries } from '../services/workflow';
+import {
+  executeRetryBatch,
+  freezeRetryBatch,
+  runDueRetries,
+  submitRetryBatchReview,
+  type RetryBatchExecutionResult,
+} from '../services/workflow';
 
 const prisma = new PrismaClient();
 const ORG = 'cf200000-0000-4000-8000-0000000000a3';
@@ -866,4 +872,178 @@ describe('② 第二批 — retry-due（冻结清单批次审批）真实 HTTP +
     });
   }, 40_000);
 
+
+  /** 造一个「次项」：不同事件、同一发票与 Payment（多项目批次场景） */
+  async function seedSecondAttempt(eventSuffix: string, payloadHash: string) {
+    const secondEventId = `cf200000-0000-4000-8000-0000000002${eventSuffix}`;
+    await prisma.paymentEvent.create({
+      data: {
+        id: secondEventId,
+        organizationId: ORG,
+        provider: 'STRIPE',
+        providerEventId: `evt_${eventSuffix}`,
+        eventType: 'payment_intent.succeeded',
+        payloadHash,
+        receivedAt: NOW,
+        processingResult: 'PROCESSED',
+      },
+    });
+    const attempt = await prisma.paymentProcessingAttempt.create({
+      data: {
+        organizationId: ORG,
+        paymentEventId: secondEventId,
+        attemptNo: 1,
+        status: 'RETRYABLE_FAILED',
+        errorCode: 'CAS_CONFLICT',
+        errorSummary: 'second item',
+        startedAt: NOW,
+        finishedAt: NOW,
+        nextRetryAt: new Date(Date.now() - 1_000),
+        actorType: 'EXTERNAL',
+        actorRef: 'STRIPE',
+        paymentId,
+      },
+    });
+    return { secondEventId, attemptId: attempt.id };
+  }
+
+  /** 测试专用事务包装：仅拦截 auditLog.create；首条 retry_due_executed 写入后等待屏障 */
+  function wrapPrismaWithBarrier(barrier: Promise<void>, state: { armed: boolean }) {
+    const wrapTx = (tx: unknown) =>
+      new Proxy(tx as Record<string, unknown>, {
+        get(target, prop) {
+          if (prop === 'auditLog') {
+            const delegate = target.auditLog as Record<string, unknown>;
+            return new Proxy(delegate, {
+              get(d, p) {
+                if (p === 'create') {
+                  const original = (d.create as (args: unknown) => Promise<unknown>).bind(d);
+                  return async (args: { data?: { action?: string } }) => {
+                    const created = await original(args);
+                    if (!state.armed && args?.data?.action === 'payment.retry_due_executed') {
+                      state.armed = true;
+                      await barrier;
+                    }
+                    return created;
+                  };
+                }
+                const value = d[p as string];
+                return typeof value === 'function' ? (value as () => unknown).bind(d) : value;
+              },
+            });
+          }
+          const value = target[prop as string];
+          return typeof value === 'function' ? (value as () => unknown).bind(target) : value;
+        },
+      });
+    return new Proxy(prisma, {
+      get(target, prop) {
+        if (prop === '$transaction') {
+          return (fn: (tx: unknown) => Promise<unknown>) => target.$transaction((tx) => fn(wrapTx(tx)));
+        }
+        const value = Reflect.get(target as object, prop, target as object);
+        return typeof value === 'function' ? (value as () => unknown).bind(target) : value;
+      },
+    }) as unknown as typeof prisma;
+  }
+
+  it('23 首项资金写入后授权失效（Promise 屏障）→ 整批回滚（资金/attempt/审计/认领/消费全不提交）', async () => {
+    const second = await seedSecondAttempt('41', 'hash-second-41');
+    const frozen = await freezeRetryBatch(prisma, { organizationId: ORG, actorUserId: ownerId, role: 'OWNER' }, { now: () => new Date() });
+    expect(frozen.itemCount).toBe(2);
+    await submitRetryBatchReview(
+      prisma,
+      { organizationId: ORG, actorUserId: ownerId, role: 'OWNER', batchId: frozen.batchId, decision: 'REQUEST' },
+      { now: () => new Date() },
+    );
+    const approval = await submitRetryBatchReview(
+      prisma,
+      { organizationId: ORG, actorUserId: ownerId, role: 'OWNER', batchId: frozen.batchId, decision: 'APPROVE' },
+      { now: () => new Date(Date.now() + 1000) },
+    );
+
+    let releaseBarrier: () => void = () => {};
+    const barrier = new Promise<void>((resolve) => {
+      releaseBarrier = resolve;
+    });
+    const barrierState = { armed: false };
+    const wrapped = wrapPrismaWithBarrier(barrier, barrierState);
+
+    const run = executeRetryBatch(
+      wrapped,
+      {
+        organizationId: ORG,
+        actorUserId: ownerId,
+        role: 'OWNER',
+        batchId: frozen.batchId,
+        approvalId: String(approval.approvalId),
+      },
+      { now: () => new Date() },
+    );
+    run.catch(() => undefined);
+
+    await waitFor(async () => barrierState.armed, 10_000, 'BARRIER_NOT_ARMED');
+    await prisma.membership.updateMany({ where: { organizationId: ORG }, data: { isActive: false } });
+    releaseBarrier();
+
+    await expect(run).rejects.toMatchObject({ reason: 'APPROVAL_ACTOR_MISMATCH' });
+
+    const after = await state();
+    expect(after).toMatchObject({ invoiceStatus: 'ISSUED', paidAmount: '0.0000', attempts: 2, executed: 0, consumed: 0 });
+    expect(await prisma.auditLog.count({ where: { organizationId: ORG, action: 'payment.succeeded' } })).toBe(0);
+    const firstAttempt = await prisma.paymentProcessingAttempt.findUniqueOrThrow({ where: { id: attemptId } });
+    expect(firstAttempt.nextRetryAt).not.toBeNull();
+    const secondAttempt = await prisma.paymentProcessingAttempt.findUniqueOrThrow({ where: { id: second.attemptId } });
+    expect(secondAttempt.nextRetryAt).not.toBeNull();
+  }, 60_000);
+
+  it('24 两个已批准批次真实并发包含同一 attempt → 仅一次实际重试', async () => {
+    const frozenA = await freezeRetryBatch(prisma, { organizationId: ORG, actorUserId: ownerId, role: 'OWNER' }, { now: () => new Date() });
+    await submitRetryBatchReview(
+      prisma,
+      { organizationId: ORG, actorUserId: ownerId, role: 'OWNER', batchId: frozenA.batchId, decision: 'REQUEST' },
+      { now: () => new Date() },
+    );
+    const approvalA = await submitRetryBatchReview(
+      prisma,
+      { organizationId: ORG, actorUserId: ownerId, role: 'OWNER', batchId: frozenA.batchId, decision: 'APPROVE' },
+      { now: () => new Date(Date.now() + 1000) },
+    );
+    // 第二个批次（在认领前冻结）同样包含该 attempt
+    await prisma.paymentProcessingAttempt.updateMany({
+      where: { id: attemptId },
+      data: { nextRetryAt: new Date(Date.now() - 1_000) },
+    });
+    const frozenB = await freezeRetryBatch(prisma, { organizationId: ORG, actorUserId: ownerId, role: 'OWNER' }, { now: () => new Date() });
+    expect(frozenB.itemCount).toBe(1);
+    await submitRetryBatchReview(
+      prisma,
+      { organizationId: ORG, actorUserId: ownerId, role: 'OWNER', batchId: frozenB.batchId, decision: 'REQUEST' },
+      { now: () => new Date() },
+    );
+    const approvalB = await submitRetryBatchReview(
+      prisma,
+      { organizationId: ORG, actorUserId: ownerId, role: 'OWNER', batchId: frozenB.batchId, decision: 'APPROVE' },
+      { now: () => new Date(Date.now() + 1000) },
+    );
+
+    const settled = await Promise.allSettled([
+      executeRetryBatch(
+        prisma,
+        { organizationId: ORG, actorUserId: ownerId, role: 'OWNER', batchId: frozenA.batchId, approvalId: String(approvalA.approvalId) },
+        { now: () => new Date() },
+      ),
+      executeRetryBatch(
+        prisma,
+        { organizationId: ORG, actorUserId: ownerId, role: 'OWNER', batchId: frozenB.batchId, approvalId: String(approvalB.approvalId) },
+        { now: () => new Date() },
+      ),
+    ]);
+    const executedTotal = settled
+      .filter((entry): entry is PromiseFulfilledResult<RetryBatchExecutionResult> => entry.status === 'fulfilled')
+      .reduce((sum, entry) => sum + entry.value.executed.length, 0);
+    expect(executedTotal).toBe(1);
+    expect(await prisma.auditLog.count({ where: { organizationId: ORG, action: 'payment.retry_due_executed' } })).toBe(1);
+    expect(await prisma.payment.count({ where: { organizationId: ORG } })).toBe(1);
+  }, 60_000);
 });
