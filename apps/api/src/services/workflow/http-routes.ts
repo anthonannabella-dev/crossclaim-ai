@@ -977,7 +977,18 @@ export async function handleWorkflowRequest(
               to: body.to,
               paymentReference: body.paymentReference,
               note: body.note,
-              ...(approvalId ? { approvalId } : {}),
+              ...(approvalId
+                ? {
+                    approvalId,
+                    // 与服务端审批绑定的同一规范化载荷（锁内重验逐项比对）
+                    approvalPayload: {
+                      amount: body.amount,
+                      currency: body.currency,
+                      basisReference: body.paymentReference ?? body.note,
+                      evidenceArtifactId: body.evidenceArtifactId,
+                    },
+                  }
+                : {}),
             },
             deps.now,
           ),
