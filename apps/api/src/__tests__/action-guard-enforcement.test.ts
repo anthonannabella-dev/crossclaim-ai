@@ -123,7 +123,9 @@ describe('Action Guard enforcement wrapper', () => {
         const source = readFileSync(full, 'utf8');
         for (const action of GUARD_ENFORCED_ACTIONS) {
           if (!source.includes(`'${action}'`)) continue;
+          // 合法过闸形式：直连 wrapper、runtime assertAllowed，或经 ② 第一批评审过的 HITL 提交边界
           if (source.includes('withActionGuard') || source.includes('assertAllowed')) continue;
+          if (source.includes('createHitlSubmissionBoundary') && source.includes('.submit(')) continue;
           offenders.push(`${full.replace(API_SRC, 'src')} :: ${action}`);
         }
       }
