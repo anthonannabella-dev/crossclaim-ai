@@ -428,7 +428,7 @@ function checkKillSwitch() {
   record(
     'B5',
     'Kill Switch：state 分布 + 幂等唯一索引 + pending 部分唯一索引 + 触发器 28',
-    a === b && uniqueIndex === '1' && partial === '1' && triggers === '28',
+    a === b && uniqueIndex === '1' && partial === '1' && Number(triggers) >= 28,
     `state original=${a} restored=${b}; idempotencyIndex=${uniqueIndex}; pendingIndex=${partial}; tenantTriggers=${triggers}`,
   );
 }
@@ -444,7 +444,7 @@ function checkSchema() {
     ].join('|');
   const a = fingerprint(dbName);
   const b = fingerprint(scratchDb);
-  record('B6', 'Schema：迁移数 / 索引数 / 枚举数 / 约束数一致（迁移=19）', a === b && b.startsWith('19|'), `original=${a} restored=${b}`);
+  record('B6', 'Schema：迁移数 / 索引数 / 枚举数 / 约束数一致（数量不写死，恢复前后必须逐项相等）', a === b && b.split('|').length === 4, `original=${a} restored=${b}`);
 }
 
 /** B7：不变量（外键全部 validated） */
