@@ -46,6 +46,8 @@ import {
 } from '../action-guard/approval-tx-verify';
 import { ApprovalBoundaryError } from '../action-guard/approval-tx-verify';
 import { createPrismaActionGuardAuditPort } from '../action-guard/runtime-guard-composition';
+import { createAuditWriter, createPrismaAuditSink, type AuditWriter } from '../audit';
+import { recordSubmission } from '../claims/tracking-service';
 import {
   ActionGuardApprovalRequiredError,
   ActionGuardDeniedError,
@@ -139,6 +141,8 @@ const CASE_LIST_PATH = /^\/cases$/;
 const CASE_DETAIL_PATH = /^\/cases\/([^/]+)$/;
 const CASE_EVIDENCE_PATH = /^\/cases\/([^/]+)\/evidence$/;
 const CASE_CLAIM_PATH = /^\/cases\/([^/]+)\/claim$/;
+// ② RUNTIME BUSINESS BLOCKING：claim.submit（人工提交入口；平台外写保持 NEEDS_MANUAL）
+const CASE_CLAIM_SUBMIT_PATH = /^\/cases\/([^/]+)\/claim\/submit$/;
 // MSG-20260929-30：运营看板（只读投影，GET only）
 const OPERATIONS_DASHBOARD_PATH = /^\/operations\/dashboard$/;
 const OPERATIONS_CLAIMS_PATH = /^\/operations\/claims$/;
@@ -186,6 +190,8 @@ export interface WorkflowRouteDeps {
   /** Platforms of the adapters registered in this deployment (API connections only). */
   registeredPlatforms?: readonly string[];
   now?: () => Date;
+  /** 审计写入端口（缺省时按 server.ts 同策略自建；claim.submit 等受保护入口需要它记录人工提交） */
+  audit?: AuditWriter;
   /** C-0010-C2：结构化安全日志出口（webhook 验签失败、版本不一致等） */
   log?: (event: string, fields: Record<string, unknown>) => void;
 }
@@ -333,6 +339,7 @@ export async function handleWorkflowRequest(
   const caseDetail = CASE_DETAIL_PATH.exec(path);
   const caseEvidence = CASE_EVIDENCE_PATH.exec(path);
   const caseClaim = CASE_CLAIM_PATH.exec(path);
+  const caseClaimSubmit = CASE_CLAIM_SUBMIT_PATH.exec(path);
   const operationsDashboard = OPERATIONS_DASHBOARD_PATH.test(path);
   const operationsClaims = OPERATIONS_CLAIMS_PATH.test(path);
   const operationsRecovery = OPERATIONS_RECOVERY_PATH.test(path);
@@ -365,7 +372,7 @@ export async function handleWorkflowRequest(
     adminPermissionMatrix ||
     adminMemberDetail !== null ||
     adminKillSwitch;
-  if (!adminAny && !operationsDashboard && !operationsClaims && !operationsRecovery && !review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !paymentReviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !replayPath && !replayReviewPath && !retryDuePath && !retryDueFreezePath && !retryDueReviewPath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim) {
+  if (!adminAny && !operationsDashboard && !operationsClaims && !operationsRecovery && !review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !paymentReviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !replayPath && !replayReviewPath && !retryDuePath && !retryDueFreezePath && !retryDueReviewPath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim && !caseClaimSubmit) {
     return false;
   }
 
@@ -859,6 +866,70 @@ export async function handleWorkflowRequest(
           caseClaim[1] ?? '',
         ),
       );
+      return true;
+    }
+
+    if (caseClaimSubmit) {
+      // ② RUNTIME BUSINESS BLOCKING：Claim 人工提交（HITL）——受保护动作 claim.submit
+      const body = await readJsonBody(req);
+      const caseId = caseClaimSubmit[1] ?? '';
+      const approvalId = typeof body.approvalId === 'string' ? body.approvalId : undefined;
+      if (!deps.actionGuard) {
+        // fail closed：受保护入口必须在组合根注入 Action Guard
+        throw new ActionGuardNotConfiguredError('claim.submit');
+      }
+      const claim = await deps.prisma.claim.findFirst({
+        where: { organizationId: actor.organizationId, caseId, round: 1 },
+        select: { id: true, status: true },
+      });
+      if (!claim) {
+        throw new WorkflowError('NOT_FOUND', `案件 ${caseId} 没有第 1 轮 Claim`);
+      }
+      const claimAudit =
+        deps.audit ??
+        (() => {
+          const salt = process.env.AUDIT_IP_SALT ?? process.env.STORAGE_URL_SECRET ?? '';
+          if (salt.length < 16) {
+            throw new WorkflowError('FORBIDDEN', '审计端口未配置，无法记录人工提交（fail closed）');
+          }
+          return createAuditWriter(createPrismaAuditSink(deps.prisma), { ipSalt: salt });
+        })();
+      const boundary = createHitlSubmissionBoundary({
+        guard: deps.actionGuard,
+        prisma: deps.prisma,
+        audit: createPrismaActionGuardAuditPort(deps.prisma),
+      });
+      const outcome = await boundary.submit({
+        action: 'claim.submit',
+        organizationId: actor.organizationId,
+        actorUserId: actor.actorUserId,
+        targetRef: claim.id,
+        approvalId,
+        // 审批指纹绑定到本 Claim（payload 字段名沿用既有契约：basisReference）
+        payload: { basisReference: claim.id },
+        perform: () =>
+          recordSubmission(
+            {
+              organizationId: actor.organizationId,
+              actorUserId: actor.actorUserId,
+              role: actor.role,
+              claimId: claim.id,
+              ...(typeof body.note === 'string' && body.note.trim() !== '' ? { note: body.note } : {}),
+            },
+            {
+              prisma: deps.prisma,
+              audit: claimAudit,
+              ...(deps.now ? { now: deps.now } : {}),
+            },
+          ),
+      });
+      // ALLOW 后**唯一**副作用：写跟踪记录；不发生任何平台外写（提交恒为 NEEDS_MANUAL）
+      sendJson(res, 200, {
+        ...outcome,
+        caseId,
+        externalSubmission: 'NEEDS_MANUAL',
+        platformWriteExecuted: false,
+      });
       return true;
     }
 
