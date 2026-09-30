@@ -1,6 +1,6 @@
 # 审批绑定与生命周期契约（授权项 ② · R1 → R4；② 第二批 payment.capture 接入中）
 
-依据：**MSG-20260930-17**（R1 REVISE）→ **MSG-20260930-18**（R2 REVISE）→ **MSG-20260930-19**（R3 REVISE）→ **MSG-20260930-20**（R4 REVISE，自动路径锁内判定与事件顺序）→ **MSG-20260930-21**（R4 = PASS；下一批次 = ② 第二批 payment.capture）。
+依据：**MSG-20260930-17**（R1 REVISE）→ **MSG-20260930-18**（R2 REVISE）→ **MSG-20260930-19**（R3 REVISE）→ **MSG-20260930-20**（R4 REVISE，自动路径锁内判定与事件顺序）→ **MSG-20260930-21**（R4 = PASS；下一批次 = ② 第二批 payment.capture）→ **MSG-20260930-22**（R5 REVISE：审批必须绑定真实账单操作与迁移；下一批次 = 账单入口 R6，随后 replay → 冻结批次 retry-due）。
 本文件随每轮裁决同步：**只保留已兑现的表述**，未实现的承诺不得留在契约里。
 范围：受保护业务入口（首批 = recovery-outcome → 资金确认）的**操作级**审批授权。
 
@@ -107,7 +107,11 @@ boundPayload = {
 | 消费事件 | `payment.capture_consumed`（含 `approvalId`/`operationId`/`invoiceId`/状态迁移与金额；与资金写入同事务） |
 | 审批写入 | `submitPaymentReview` 的 APPROVE 必须绑定 `boundAction` + 规范化 `boundPayload`（金额/币种/依据）+ `expiresAt` + `fingerprintVersion`，并返回 `approvalId` |
 | 锁与顺序 | 发票级 advisory lock（`cc-payment-invoice:<invoiceId>`）；生命周期事件时间在锁内生成且同发票严格递增（与 recovery 同规则） |
-| 入口闭环（本批次） | `POST /billing/:id/status` 经 HITL 边界接入；缺 Action Guard 即 fail-closed；缺 `approvalId` → 409 REQUIRE_APPROVAL |
+| 入口闭环（R5/R6） | `POST /billing/:id/status` 经 HITL 边界接入；缺 Action Guard 即 fail-closed；缺 `approvalId` → 409 REQUIRE_APPROVAL |
+| 审批创建入口（R6 新增） | `POST /billing/:id/payment-review`（受认证会话；审批人 OWNER/ADMIN），REQUEST/APPROVE/REJECT，APPROVE 由服务端组装绑定载荷 |
+| 真实操作绑定（R6 CHANGE A） | 审批指纹 = `invoiceId` + **精确 `from`→`to`** + 金额 + 币种 + 依据 + 证据 + 版本；`payment.capture` 审批**只能用于 `to=PAID`**（签发等迁移走独立授权） |
+| 锁内事实核对（R6 CHANGE A） | 执行时在发票锁内**重读** `status/total/currency`，与批准快照逐项比对；不一致 → 403 `APPROVAL_PAYLOAD_MISMATCH`（堵住"批准 1 USD 却登记 1500 USD"） |
+| 最终审计（R6 CHANGE D） | `billing.status_changed` 记 `approvalId`/`operationId`/`result`；锁内拒绝写 `payment.capture_rejected`（stage/reason/执行主体/审批/操作/结果，SYSTEM actor，事务外写入且失败不覆盖原错误） |
 | 幂等语义 | 状态迁移**不是**幂等创建：审批已消费且发票已在目标状态时，重复提交返回 409 `ILLEGAL_TRANSITION`，消费记录保持 1（零新增副作用） |
 
 待架构方裁定（本批次未接）：
@@ -115,6 +119,12 @@ boundPayload = {
 - `POST /payments/events/:id/replay` 的审批主体（目标为 `PaymentEvent`，载荷指纹如何定义）；
 - `POST /payments/processing/retry-due` 的审批主体（一次调用可能覆盖多张发票，是否需要「批次摘要指纹」）；
 - `POST /payments/webhook` 是否纳入 Action Guard（当前边界 = 验签 + `providerEventId` 幂等 + 事件形状校验）。
+
+## 5.2 三项设计裁决（MSG-20260930-22，已授权实施）
+
+- **replay**：执行主体=当前认证用户（独立核验有效成员与执行权限），审批人 OWNER/ADMIN；审批目标=具体 `PaymentEvent`，指纹绑定其关联发票、事件/支付身份、规范化金额币种、预期恢复动作、处理版本与载荷摘要；**不绑定用户可替换的原始 JSON**；事件或关键关联变化即失效；不得把账单确认审批用于 replay。
+- **retry-due**：采用**冻结清单批次审批**——租户隔离、服务端生成 `batchId`、指纹=排序后的明确 attempt/event 清单及版本+关联发票+金额币种+操作类型+有效期与数量上限；执行不得动态扩展到批准后新出现的 due 项；每项执行前重验事实/权限/生命周期/幂等，变化项拒绝或跳过并留证；不接受只绑定 limit 或查询条件的开放批次；后台重试须以 SYSTEM 身份运行并带预先授权范围。
+- **webhook**：接收付款事实**不引入每次人工审批**，保持验签、重放保护、幂等、租户/发票/金额币种匹配与审计边界；但「接收已发生付款」与「发起新扣款/外写」必须分离——验签成功不等于授权扣款，后续处理仍受运行模式、Kill Switch、生命周期与适用审批规则约束。
 
 ## 6. 验收矩阵（CHANGE C 对应）
 
