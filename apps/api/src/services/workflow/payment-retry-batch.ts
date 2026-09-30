@@ -23,7 +23,7 @@ import {
   verifyApprovalBoundary,
 } from '../action-guard/approval-tx-verify';
 import { PAYMENT_RETRY_DUE_ACTION } from '../action-guard/approval-verifier';
-import { finishAttempt, startAttempt } from './payment-attempt';
+import { MAX_ATTEMPTS, finishAttempt, startAttempt } from './payment-attempt';
 import { nextLifecycleAt, normalizeApprovalTtl } from './recovery-review';
 import { WorkflowError } from './opportunity-review';
 import { assertPermission } from './permissions';
@@ -558,7 +558,15 @@ export async function executeRetryBatch(
     const executed: RetryBatchExecutionResult['executed'] = [];
     const skipped: RetryBatchExecutionResult['skipped'] = [];
 
-    for (const item of batch.items) {
+    // CHANGE B：**整批全局确定性锁顺序** —— 所有批次都按同一资源键排序后取锁，
+    // 避免两个多项批次交叉持锁（事务会保留前面项目的锁直到提交）。
+    const orderedItems = [...batch.items].sort((left, right) =>
+      `${left.invoiceId}|${left.paymentId}|${left.paymentEventId}`.localeCompare(
+        `${right.invoiceId}|${right.paymentId}|${right.paymentEventId}`,
+      ),
+    );
+
+    for (const item of orderedItems) {
       const attempt = await tx.paymentProcessingAttempt.findFirst({
         where: { id: item.attemptId, organizationId: input.organizationId },
         select: { id: true, status: true, attemptNo: true, nextRetryAt: true, paymentId: true },
@@ -634,6 +642,68 @@ export async function executeRetryBatch(
       });
       if (beforeLock) {
         await writeSkip(beforeLock);
+        continue;
+      }
+
+      // CHANGE B：先对**原 attempt** 加行锁并重读（身份/关联/状态/到期/代际一次性认领）
+      if (typeof tx.$queryRawUnsafe === 'function') {
+        const lockedAttempt = (await tx.$queryRawUnsafe(
+          'SELECT id FROM "PaymentProcessingAttempt" WHERE id = $1 AND "organizationId" = $2 FOR UPDATE',
+          item.attemptId,
+          input.organizationId,
+        )) as Array<{ id?: string }>;
+        if (!Array.isArray(lockedAttempt) || lockedAttempt.length !== 1) {
+          await writeSkip('ATTEMPT_LOCK_MISS');
+          continue;
+        }
+      }
+      const claimed = await tx.paymentProcessingAttempt.findFirst({
+        where: { id: item.attemptId, organizationId: input.organizationId },
+        select: { status: true, attemptNo: true, nextRetryAt: true, paymentId: true, paymentEventId: true },
+      });
+      if (!claimed) {
+        await writeSkip('ATTEMPT_MISSING');
+        continue;
+      }
+      if (claimed.paymentEventId !== item.paymentEventId || claimed.paymentId !== item.paymentId) {
+        await writeSkip('ATTEMPT_RELATION_CHANGED');
+        continue;
+      }
+      if (claimed.status !== 'RETRYABLE_FAILED') {
+        await writeSkip('ATTEMPT_NOT_RETRYABLE');
+        continue;
+      }
+      if (claimed.attemptNo !== item.attemptNo) {
+        await writeSkip('ATTEMPT_GENERATION_CHANGED');
+        continue;
+      }
+      if (!claimed.nextRetryAt || claimed.nextRetryAt.getTime() > now().getTime()) {
+        await writeSkip('ALREADY_CLAIMED_OR_NOT_DUE');
+        continue;
+      }
+      if (item.attemptNo >= MAX_ATTEMPTS) {
+        await writeSkip('RETRY_LIMIT_REACHED');
+        continue;
+      }
+      // 已被后继代际取代 → 不再重试旧代际
+      const superseded = await tx.paymentProcessingAttempt.count({
+        where: {
+          organizationId: input.organizationId,
+          paymentEventId: item.paymentEventId,
+          attemptNo: { gt: item.attemptNo },
+        },
+      });
+      if (superseded > 0) {
+        await writeSkip('SUPERSEDED_GENERATION');
+        continue;
+      }
+      // 一次性认领：清空 nextRetryAt（freeze 只选已到期项，清空后不会再被任何批次选中）
+      const claimedUpdate = await tx.paymentProcessingAttempt.updateMany({
+        where: { id: item.attemptId, status: 'RETRYABLE_FAILED', nextRetryAt: { not: null } },
+        data: { nextRetryAt: null },
+      });
+      if (claimedUpdate.count !== 1) {
+        await writeSkip('CLAIM_FAILED');
         continue;
       }
 

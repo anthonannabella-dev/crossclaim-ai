@@ -290,12 +290,25 @@ describe('② 第二批 — retry-due（冻结清单批次审批）真实 HTTP +
       const batchId = String(frozen.body.batchId);
       const approvalId = await approveBatch(base, cookie, batchId);
 
-      // 批准后才出现的第二个到期项
+      // 批准后才出现的第二个到期项（**不同事件**，避免与冻结项构成同一代际取代关系）
+      const lateEventId = 'cf200000-0000-4000-8000-0000000000cc';
+      await prisma.paymentEvent.create({
+        data: {
+          id: lateEventId,
+          organizationId: ORG,
+          provider: 'STRIPE',
+          providerEventId: 'evt_retry_due_late',
+          eventType: 'payment_intent.succeeded',
+          payloadHash: 'hash-retry-due-late',
+          receivedAt: NOW,
+          processingResult: 'PROCESSED',
+        },
+      });
       const second = await prisma.paymentProcessingAttempt.create({
         data: {
           organizationId: ORG,
-          paymentEventId: eventId,
-          attemptNo: 9,
+          paymentEventId: lateEventId,
+          attemptNo: 1,
           status: 'RETRYABLE_FAILED',
           errorCode: 'CAS_CONFLICT',
           errorSummary: 'added after freeze',
