@@ -66,6 +66,13 @@ export interface HitlApprovalVerifierDeps {
   /** 只读：该审批之前是否存在对应的 review_required（轮次校验） */
   hasPriorRequired?: (args: { organizationId: string; caseId: string; approvalCreatedAt: Date }) => Promise<boolean>;
   now?: () => Date;
+  /** P3（② 第二批）：事件族与目标实体（缺省 = recovery + Case）。PAYMENT 变体传 payment.review_* 与 BillingInvoice。 */
+  approvalEventAction?: string;
+  requiredEventAction?: string;
+  rejectedEventAction?: string;
+  revokedEventAction?: string;
+  consumedEventAction?: string;
+  targetEntityType?: string;
 }
 
 function str(value: unknown): string | null {
@@ -94,12 +101,18 @@ function expiresAtOf(changes: unknown): Date | null {
 export function createHitlApprovalVerifier(deps: HitlApprovalVerifierDeps): ActionGuardApprovalVerifier {
   if (!deps?.prisma) throw new Error('HITL_VERIFIER_MISSING_PRISMA');
   const now = deps.now ?? (() => new Date());
+  const approvalAction = deps.approvalEventAction ?? APPROVAL_EVENT_ACTION;
+  const requiredAction = deps.requiredEventAction ?? APPROVAL_REQUIRED_EVENT_ACTION;
+  const rejectedAction = deps.rejectedEventAction ?? APPROVAL_REJECTED_EVENT_ACTION;
+  const revokedAction = deps.revokedEventAction ?? APPROVAL_REVOKED_EVENT_ACTION;
+  const consumedAction = deps.consumedEventAction ?? APPROVAL_CONSUMED_EVENT_ACTION;
+  const targetEntityType = deps.targetEntityType ?? 'Case';
 
   const readApprovalEvent =
     deps.readApprovalEvent ??
     (async ({ organizationId, approvalId }) => {
       const row = await deps.prisma.auditLog.findFirst({
-        where: { id: approvalId, organizationId, action: APPROVAL_EVENT_ACTION },
+        where: { id: approvalId, organizationId, action: approvalAction },
         select: { id: true, organizationId: true, actorUserId: true, entityType: true, entityId: true, changes: true, createdAt: true },
       });
       return row ?? null;
@@ -132,9 +145,9 @@ export function createHitlApprovalVerifier(deps: HitlApprovalVerifierDeps): Acti
       const count = await deps.prisma.auditLog.count({
         where: {
           organizationId,
-          entityType: 'Case',
+          entityType: targetEntityType,
           entityId: caseId,
-          action: { in: [APPROVAL_REJECTED_EVENT_ACTION, APPROVAL_REVOKED_EVENT_ACTION] },
+          action: { in: [rejectedAction, revokedAction] },
           createdAt: { gt: approvalCreatedAt },
         },
       });
@@ -147,7 +160,7 @@ export function createHitlApprovalVerifier(deps: HitlApprovalVerifierDeps): Acti
       const count = await deps.prisma.auditLog.count({
         where: {
           organizationId,
-          action: APPROVAL_CONSUMED_EVENT_ACTION,
+          action: consumedAction,
           changes: { path: ['approvalId'], equals: approvalId } as never,
         },
       });
@@ -160,9 +173,9 @@ export function createHitlApprovalVerifier(deps: HitlApprovalVerifierDeps): Acti
       const count = await deps.prisma.auditLog.count({
         where: {
           organizationId,
-          entityType: 'Case',
+          entityType: targetEntityType,
           entityId: caseId,
-          action: APPROVAL_REQUIRED_EVENT_ACTION,
+          action: requiredAction,
           createdAt: { lt: approvalCreatedAt },
         },
       });
@@ -182,7 +195,7 @@ export function createHitlApprovalVerifier(deps: HitlApprovalVerifierDeps): Acti
         return { valid: false, reason: 'APPROVAL_SOURCE_ERROR' };
       }
       if (!event) return { valid: false, reason: 'APPROVAL_NOT_FOUND' };
-      if (event.entityType !== 'Case' || str(event.entityId) !== targetRef) {
+      if (event.entityType !== targetEntityType || str(event.entityId) !== targetRef) {
         return { valid: false, reason: 'APPROVAL_TARGET_MISMATCH' };
       }
 
