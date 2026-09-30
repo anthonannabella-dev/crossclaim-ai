@@ -124,7 +124,12 @@ tgenabled = 'O'（启用）；session_replication_role = origin（无复制绕�
   且**不得**当作跨租户保护证据；
 - 所有拒绝用例都复查「失败后无非法新增行、原引用/原归属未变」。
 
-结论：本轮**没有发生架构修复**（保护本来就是对的），发生的是**测试断言缺陷**；该误报在此如实留痕。
+结论（按 MSG-20260930-10 限定）：就 **`RuleEvaluation` → `RuleVersion` 跨租户引用** 这一项而言，本轮**没有新增架构修复**——
+该边保护本来就是正确的，真正发生的是**测试断言缺陷**；该误报在此如实留痕。
+
+必须区分：本轮确实**新增了架构保护**——B2 归属不可变迁移 `20260930100000_tenant_ownership_immutability`
+（禁止 tenant-owned 对象改 `organizationId`；禁止 `RuleSet` 所有权身份漂移）。它与本节的引用误报是两件独立的事，
+不得用本节的「无误报」覆盖或淡化本轮的实际修复内容。
 
 ---
 
@@ -142,3 +147,28 @@ CI 断言方式（`tools/tenant-triggers/`、`.github/workflows/ci.yml`）：
 2. 运行库不得出现清单未覆盖的启用 `cc_tenant_*`；
 3. 每张含 `organizationId` 的表都要有 `cc_tenant_immutable__<表>`；
 4. **不再使用「总数 ≥ N」的下限断言**（下限无法证明每一条必要保护都存在）。
+
+---
+
+## 10. 文字口径修正（MSG-20260930-10 CHANGE，非阻塞）
+
+架构方在最终 PASS 中要求修正三处措辞；此处逐条落地，避免后续复核引用到过强口径。
+
+### 10.1 「插入影响一行并持久化」只适用于合法正向用例
+
+- 该表述在 CHANGE A 取证中用于**合法正向**用例：A 租户引用合法 SYSTEM 版本、同租户引用 TENANT 版本，断言
+  `$executeRawUnsafe` 返回 1 且复查该行存在（`b2-reference-behavior-db.test.ts` 用例 01/02/04）。
+- **跨租户拒绝用例一律记录「零新增行」**：用例 03 断言「原归属/引用未变 + 目标组合零行」，用例 05 断言 UPDATE 被拒后
+  `ruleVersionId` 仍指向原 SYSTEM 版本。不得把「影响一行」的说法套用到拒绝用例上。
+
+### 10.2 RuleSet 专项文件不主张「版本归属未变」
+
+- `b2-ruleset-ownership-behavior-db.test.ts`（6/6）当前**不创建 `RuleVersion` 夹具**（文件中 `RuleVersion` 出现 0 次），
+  其断言只覆盖 `RuleSet` 的所有权身份与归属列；因此该文件**不能**用来证明「版本归属未变」。
+- 版本与引用一致性的证据来自：`b2-reference-behavior-db.test.ts`（版本允许/拒绝/引用未变）与
+  `tools/upgrade-verify/two-stage-upgrade.mjs`（升级后 `RuleEvaluation.ruleVersionId` 仍指向原 `RV_SYS`）。
+- 若后续需要由 RuleSet 专项直接证明版本侧行为，应**新增** RuleVersion 夹具与断言，而不是扩大现有文件的声明范围。
+
+### 10.3 结论措辞已限定（见 §8.4）
+
+「本轮没有发生架构修复」已限定为「`RuleEvaluation` 跨租户引用误报未导致新增修复」，并明确本轮新增了 B2 归属不可变保护。

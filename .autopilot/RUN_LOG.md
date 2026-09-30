@@ -25,3 +25,7 @@
     结合 CHANGE 编号（R1=#1–#12，ROUND 3 中 #13–#15 已成 PASS）看，第二轮内容已并入后续 PASS 记录。
     深挖需在虚拟滚动面板向上回溯到 2026-09-28（预估多次加载），暂记 **待核项**，不臆造补录。
   - 另有 50 个段落（均为 20260929-27…39 的旧格式条目）没有 ```text 围栏但正文仍在 → 属格式差异，非内容缺口。
+
+- **B2-FIX R1 = PASS**（MSG-20260930-10，REVIEWED_HEAD 62dffa6 / CODE_HEAD 1144401 / FIX_PR #10）。已逐字归档并 `compare.mjs` = FULL_COPY_OK（52/52）。
+- 架构方三项非阻塞文字修正已落地：docs/releases/B2-FIX-R1-RECORD-CORRECTIONS.md §8.4 结论限定 + 新增 §10（「影响一行」仅限合法正向用例；RuleSet 专项不含 RuleVersion 夹具故不主张版本归属；误报结论限定）。
+- 架构方 NEXT：PR #10 的 base 是审查对比快照，合并它不会把修复交付到 main；须沿**正常面向 main 的 PR 路径**集成，核对实际 diff 并取得集成 HEAD 的 CI，不得强推或绕过保护。
