@@ -565,37 +565,54 @@ export async function executeRetryBatch(
         `${right.paymentEventId}|${right.invoiceId}|${right.paymentId}|${right.attemptId}`,
       ),
     );
+    // CHANGE A（MSG-31）：**每个阶段的资源集合独立排序**（不得由事件顺序推断其他资源顺序）
+    const sortedIds = (ids: string[]) => [...new Set(ids)].sort((left, right) => left.localeCompare(right));
+    const eventIds = sortedIds(orderedItems.map((item) => item.paymentEventId));
+    const invoiceIds = sortedIds(orderedItems.map((item) => item.invoiceId));
+    const paymentIds = sortedIds(orderedItems.map((item) => item.paymentId));
+    const attemptIds = sortedIds(orderedItems.map((item) => item.attemptId));
+
     if (typeof tx.$executeRawUnsafe === 'function') {
-      for (const eventId of [...new Set(orderedItems.map((item) => item.paymentEventId))]) {
+      for (const eventId of eventIds) {
         // eslint-disable-next-line no-await-in-loop
         await tx.$executeRawUnsafe('SELECT pg_advisory_xact_lock(hashtext($1))', `cc-payment-event:${eventId}`);
       }
-      for (const invoiceId of [...new Set(orderedItems.map((item) => item.invoiceId))]) {
+      for (const invoiceId of invoiceIds) {
         // eslint-disable-next-line no-await-in-loop
         await tx.$executeRawUnsafe('SELECT pg_advisory_xact_lock(hashtext($1))', `cc-payment-invoice:${invoiceId}`);
       }
     }
+
+    // CHANGE B（MSG-31）：记录**实际锁定成功的行身份**；未锁定项不得执行
+    const lockedPayments = new Set<string>();
+    const lockedAttempts = new Set<string>();
     if (typeof tx.$queryRawUnsafe === 'function') {
-      for (const paymentId of [...new Set(orderedItems.map((item) => item.paymentId))]) {
+      for (const paymentId of paymentIds) {
         // eslint-disable-next-line no-await-in-loop
         const lockedPayment = (await tx.$queryRawUnsafe(
           'SELECT id FROM "Payment" WHERE "organizationId" = $1 AND id = $2 FOR UPDATE',
           input.organizationId,
           paymentId,
         )) as Array<{ id?: string }>;
-        if (!Array.isArray(lockedPayment) || lockedPayment.length !== 1) {
-          // 目标资金行缺失：留给逐项判定为跳过（不在此处抛错，避免整批因单点缺失而回滚）
-          continue;
+        if (Array.isArray(lockedPayment) && lockedPayment.length === 1 && lockedPayment[0]?.id === paymentId) {
+          lockedPayments.add(paymentId);
         }
       }
-      for (const attemptId of [...new Set(orderedItems.map((item) => item.attemptId))]) {
+      for (const attemptId of attemptIds) {
         // eslint-disable-next-line no-await-in-loop
-        await tx.$queryRawUnsafe(
+        const lockedAttempt = (await tx.$queryRawUnsafe(
           'SELECT id FROM "PaymentProcessingAttempt" WHERE id = $1 AND "organizationId" = $2 FOR UPDATE',
           attemptId,
           input.organizationId,
-        );
+        )) as Array<{ id?: string }>;
+        if (Array.isArray(lockedAttempt) && lockedAttempt.length === 1 && lockedAttempt[0]?.id === attemptId) {
+          lockedAttempts.add(attemptId);
+        }
       }
+    } else {
+      // 无原始查询能力（单元测试替身）时按已取得 advisory lock 处理
+      for (const paymentId of paymentIds) lockedPayments.add(paymentId);
+      for (const attemptId of attemptIds) lockedAttempts.add(attemptId);
     }
 
     const executed: RetryBatchExecutionResult['executed'] = [];
@@ -721,6 +738,16 @@ export async function executeRetryBatch(
       });
       if (mismatch) {
         await writeSkip(mismatch);
+        continue;
+      }
+
+      // CHANGE B：必须确认本项的行锁身份（恰一行且 id 正确），否则跳过留证（不得因后续可读而恢复执行）
+      if (!lockedPayments.has(item.paymentId)) {
+        await writeSkip('PAYMENT_NOT_LOCKED');
+        continue;
+      }
+      if (!lockedAttempts.has(item.attemptId)) {
+        await writeSkip('ATTEMPT_NOT_LOCKED');
         continue;
       }
 
