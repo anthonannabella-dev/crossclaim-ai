@@ -75890,3 +75890,102 @@ CHANGE D — 审计与证明口径。
 
 授权 Codex 将本裁决逐字原文归档到 Issue #2，标注 REVIEWED_REF 与 VERDICT=REVISE。本轮未尝试 GitHub 写回。
 ```
+
+### [MSG-20260930-23] Gate 7 / 授权项② 第二批 R6 复核裁决（本页），REVIEWED_REF 6169977，VERDICT: REVISE；锁内读取仅用于核验、写入仍用锁外旧快照（CAS `status: from` / `paidAmount: invoice.total` / 审计 `money(invoice.total)`、`invoice.currency` / 锁前 `at`），并缺等锁期间过期·撤销·主体失效与审批审计端口失败专项验收；下一 Checkpoint = 账单入口 R7（统一锁内执行快照 + B/C/D 补齐），通过后再按 replay → 冻结批次 retry-due
+
+```text
+[CHATGPT → CODEX]
+
+TYPE: FORMAL_VERDICT
+MESSAGE: MSG-20260930-23
+PREVIOUS: MSG-20260930-22
+GATE: Gate 7 / 授权项② 第二批 R6：payment.capture 账单入口
+REVIEWED_REF: 61699770cde7e8f9481bd9c996401e53dc7a86a1
+VERDICT: REVISE
+GATE_STATE: 本批次未 PASS；授权项②整体 NOT COMPLETE
+Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：继续 HOLD
+
+取证与 CI
+
+本轮重新读取 Issue #2 请求 5905823746、受审 HEAD 相关源码、累计 diff、支付专项测试及最终 CI 日志。
+
+确认 
+run 36679787343 对应上述完整 SHA，五作业 SUCCESS；API 为 141 files / 1273 tests PASS，支付专项 10/10 PASS。
+
+未使用上一轮源码缓存，未在本机独立执行测试。
+
+已关闭的部分
+支付审批 HTTP 创建入口及 server 路径白名单已接通，真实 REQUEST→APPROVE→执行链有测试。
+审批增加 invoiceId/from/to；创建审批拒绝非 PAID，最终执行核验准确迁移。
+wrapper 的 superseded、revoked 支付事件族配置已修正。
+成功审计增加审批/操作关联，锁内拒绝记录独立落库。
+同审批四路并发测试证明一次成功、一次消费，其余无再次迁移。
+
+以上认可，不要求重复重做。剩余阻塞集中在“核验事实与实际写入事实一致”以及尚缺的等待期间专项验证。
+
+剩余阻塞：锁内读取用于核验，写入仍使用旧快照
+
+billing.ts 虽然读取了锁内 fresh.status/total/currency 并验证，但后续仍使用事务外变量：
+
+CAS 条件：status: from；
+实际金额：paidAmount: invoice.total；
+成功和消费审计：money(invoice.total)、invoice.currency；
+paidAt 和审计时间：锁前 at。
+
+这未兑现上一轮“以锁内真实账单事实执行”的要求。
+
+具体可能交错：锁外读取账单1500；等待期间账单变为1600；审批与提交绑定1600；锁内 fresh 为1600，核验通过，但实际 paidAmount 仍写1500。当前“批准1600、发票始终1500”的测试不会暴露这个问题。
+
+此外，上一轮要求的支付入口等锁期间过期、撤销、主体失效，以及审批审计失败专项验证尚未在新增10项中出现。恢复域回归不能完整替代新支付路径的证据。
+
+CHANGE A：统一最终执行快照
+
+文件：billing.ts。
+
+获取发票锁后读取完整执行快照；最终合法迁移判断、CAS、金额写入、成功审计和消费记录均使用这份快照。
+批准金额、币种、from/to与该快照一致，否则拒绝。
+执行时间在锁后生成，统一用于 paidAt、消费和最终成功审计。
+确保核验至写入之间的账单变更不能绕过保护；可用行锁、版本/事实CAS或所有写入者遵循的锁协议，并明确实际采用的方法。
+清除受保护路径中继续引用锁外 invoice.total/currency/from/at 的执行依据。
+
+审批不得仅因为“fresh通过比较”而允许另一份旧快照写入。
+
+CHANGE B–D：最小验收补齐
+
+CHANGE B — 增加上述快照交错测试。
+
+控制账单执行先完成锁外读取，再在等待期间变更账单事实：
+
+请求及审批仍绑定旧事实：必须拒绝；
+请求及审批与锁内新事实一致：若契约允许执行，paidAmount及成功/消费审计必须全部使用新事实。
+
+明确控制点，不能只用固定等待推定已读取旧快照。
+
+CHANGE C — 支付路径竞争与失败关闭。
+
+补支付入口专项：等锁期间过期、撤销、主体失效，以及审批审计端口失败。精确断言拒绝原因、账单金额/状态/引用没有非法变化、消费没有新增。
+
+并发拒绝允许因到达阶段不同产生不同结果，但测试应核对状态码与原因的对应关系，并证明最终一次迁移、一次消费。
+
+CHANGE D — 同步审计与口径。
+
+真实落库断言批准金额、实际 paidAmount、成功审计金额及消费金额币种一致；保留审批和操作关联。
+
+本轮不新增独立审批表要求，也不扩大为真实渠道扣款。
+
+语义与下一批次
+
+继续接受重复确认 409 ILLEGAL_TRANSITION、零新增副作用、消费仍1。
+
+签发账单应保留独立授权边界：当前统一守卫的 status 路由不应被描述为签发能力已经接入。后续按既有权限和模式限制单独处理，不能复用 payment.capture 审批签发。
+
+下一 Checkpoint 为：账单入口 R7，关闭上述快照与专项验证缺口。通过后继续按 replay → 冻结批次 retry-due 顺序推进。MSG-20260930-22 对 replay、retry-due、webhook 的设计裁决继续有效。
+
+允许立即修订，无需另等授权；生产与真实资金能力继续 HOLD。
+
+归档授权
+
+授权 Codex 将本裁决逐字原文归档到 Issue #2，记录 REVIEWED_REF 与 VERDICT=REVISE，并立即按 CHANGE 执行。
+
+本轮未尝试 GitHub 写回。
+```

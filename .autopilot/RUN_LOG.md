@@ -129,3 +129,11 @@
 - 阻塞项（R6 必须关闭）：**A** 审批载荷未与「实际执行的账单事实」核对（批准金额/币种未与锁内 `invoice.total/currency` 比对，也未绑定 from/to 迁移）；**B** wrapper 的 superseded 查询仍硬编码 Case/recovery REQUEST，且 revoked 事件族与事务内不一致；**C** 缺支付入口专项验收（HTTP 全链路/并发/等锁失效/审计失败零副作用/最终拒绝关联），若没有支付审批 HTTP 创建入口须披露或改名；**D** `billing.status_changed` 未带 approvalId/operationId、锁内拒绝无最终拒绝记录、测试顶部注释过时。
 - 语义裁决：接受「状态迁移重复请求 409 + 零新增副作用 + 消费仍 1」，不强制改 200；但每次请求必须重新经过授权判断，且不得宣称支付渠道幂等已完成。
 - 三项设计裁决（授权实施）：replay = 逐 PaymentEvent 审批（绑定关联发票/事件身份/金额币种/预期恢复动作/处理版本/载荷摘要，禁绑原始 JSON）；retry-due = **冻结清单批次审批**（服务端 batchId、排序清单指纹、有效期与数量上限、执行前逐项重验、不得动态扩展、后台 SYSTEM 身份与预先授权）；webhook = 保持验签/重放保护/幂等/匹配边界，**接收已发生付款事实 与 发起新扣款必须分开**，验签不等于授权扣款。
+
+## 2026-09-30 — MSG-20260930-23 = REVISE（授权项② 第二批 R6）→ 账单入口 R7
+
+- 裁决：**REVISE**；REVIEWED_REF `61699770cde7e8f9481bd9c996401e53dc7a86a1`；CI run 36679787343 = 5/5；API 141 files / 1273 tests PASS，支付专项 10/10 PASS。**已关闭**：支付审批 HTTP 创建入口 + server 白名单、`invoiceId/from/to` 绑定与创建期拒非 PAID、wrapper superseded/revoked 支付事件族、成功/消费审计关联、同审批四路并发恰一次。
+- 剩余阻塞：`billing.ts` 锁内 `fresh` 只用于核验，**写入仍取自锁外旧快照** —— CAS 用 `status: from`、金额写 `paidAmount: invoice.total`、成功与消费审计用 `money(invoice.total)`/`invoice.currency`、`paidAt` 与审计时间用锁前 `at`；交错示例：锁外读 1500 → 等待期间变 1600 → 审批绑定 1600 → 锁内 fresh=1600 核验通过，但实际写 1500。另：等锁期间过期/撤销/主体失效与审批审计端口失败专项验证尚未出现在新增 10 项中。
+- CHANGE A（`billing.ts`）：锁后读取**完整执行快照**，迁移判断、CAS、金额写入、成功审计、消费记录全部用该快照；批准金额/币种/from→to 必须与快照一致；执行时间锁后生成并统一用于 `paidAt`/消费/成功审计；明确实际采用的防绕过机制（行锁/事实CAS/统一锁协议）；清除受保护路径对锁外 `invoice.total/currency/from/at` 的引用。
+- CHANGE B：快照交错测试（明确控制点，不能只靠固定等待）——绑定旧事实→拒绝；绑定锁内新事实→若允许执行，`paidAmount` 与成功/消费审计必须全用新事实。CHANGE C：等锁期间过期/撤销/主体失效 + 审批审计端口失败专项，精确断言 reason、账单状态/金额/引用无非法变化、消费无新增，并发拒绝可因阶段不同但需状态码↔原因对应并证明「一次迁移、一次消费」。CHANGE D：真实落库断言批准金额 = 实际 `paidAmount` = 成功审计金额 = 消费金额/币种一致。
+- 语义：继续接受重复确认 409 ILLEGAL_TRANSITION + 零副作用 + 消费仍 1；**签发（DRAFT→ISSUED）需独立授权边界，不得复用 payment.capture 审批**，不得把当前 status 路由描述为已接入签发能力。后续顺序：R7 通过 → replay → 冻结批次 retry-due；MSG-20260930-22 对 replay/retry-due/webhook 的设计裁决继续有效；生产与真实资金继续 HOLD。
