@@ -553,13 +553,20 @@ export async function replayPaymentEvent(
       }
       // R9 修订 CHANGE A：定位快照只能用于定位目标 —— 在固定锁顺序（事件锁 → 发票锁）之后
       // 为关联 **Payment 行**加行锁（FOR UPDATE），再重读最终事实作为唯一执行依据。
+      // R10 修订：Payment 身份必须自洽 —— 事件 provider 与 Payment.provider 不一致即失败关闭
+      if (locating.paymentProvider !== locating.provider) {
+        throw new ApprovalBoundaryError('APPROVAL_PAYLOAD_MISMATCH', locating.paymentEventId);
+      }
+      // 按租户 + **关联 Payment.id** 取得行锁，并确认恰一行且 id 正确
       if (typeof tx.$queryRawUnsafe === 'function') {
-        await tx.$queryRawUnsafe(
-          'SELECT id FROM "Payment" WHERE "organizationId" = $1 AND provider = $2 AND "externalPaymentId" = $3 FOR UPDATE',
+        const locked = (await tx.$queryRawUnsafe(
+          'SELECT id FROM "Payment" WHERE "organizationId" = $1 AND id = $2 FOR UPDATE',
           input.organizationId,
-          locating.provider,
-          locating.externalPaymentId,
-        );
+          locating.paymentId,
+        )) as Array<{ id?: string }>;
+        if (!Array.isArray(locked) || locked.length !== 1 || locked[0]?.id !== locating.paymentId) {
+          throw new ApprovalBoundaryError('APPROVAL_TARGET_MISMATCH', locating.paymentEventId);
+        }
       }
       // 最终快照：事件身份 / 关联发票 / 资金事实（金额、币种、externalPaymentId）全部锁后重读
       const snapshot = await readReplaySnapshot(tx, {
@@ -568,6 +575,8 @@ export async function replayPaymentEvent(
       });
       // 关键关联若在等待期间改变 → 拒绝（不得沿用定位快照继续执行）
       if (
+        snapshot.paymentId !== locating.paymentId ||
+        snapshot.paymentProvider !== locating.paymentProvider ||
         snapshot.invoiceId !== locating.invoiceId ||
         snapshot.externalPaymentId !== locating.externalPaymentId ||
         snapshot.payloadHash !== locating.payloadHash ||

@@ -31,7 +31,7 @@ import { createAppActionGuard, staticControlPlaneConfig } from '../services/acti
 import type { RuntimeActionGuard } from '../services/action-guard/runtime-guard';
 import { PAYMENT_REPLAY_CONSUMED_EVENT_ACTION } from '../services/action-guard/approval-tx-verify';
 import { applyPaymentSucceeded } from '../services/workflow';
-import { replayPaymentEvent } from '../services/workflow';
+import { replayPaymentEvent, submitPaymentReplayReview } from '../services/workflow';
 
 const prisma = new PrismaClient();
 const ORG = 'cf100000-0000-4000-8000-0000000000a2';
@@ -792,5 +792,78 @@ describe('② 第二批 — replay（payment.replay）真实 HTTP + PostgreSQL',
       expect(after).toMatchObject({ invoiceStatus: 'ISSUED', attempts: 1, consumed: 0, replayed: 0 });
       expect(after.paidAmount).toBe('0.0000');
     });
+  }, 40_000);
+
+  it('18 等发票锁期间 Payment.provider 被改写 → 403（身份/事实不一致），无新增 Payment / attempt / PAID / 成功审计 / 消费', async () => {
+    await withServer(async (base) => {
+      const cookie = await login(base);
+      const approvalId = await approveReplay(base, cookie);
+      const release = await holdLockFor(INVOICE_KEY());
+      const pending = replay(base, cookie, { approvalId });
+      try {
+        await waitFor(
+          async () => (await advisoryLockCountFor(INVOICE_KEY(), false)) >= 1,
+          10_000,
+          'REPLAY_WAITING_ON_INVOICE_LOCK',
+        );
+        // 等发票锁期间改写关联 Payment 的 provider（金额与 externalPaymentId 不变）
+        await prisma.payment.updateMany({ where: { organizationId: ORG }, data: { provider: 'OTHER_PSP' } });
+      } finally {
+        release();
+      }
+      const res = await pending;
+      expect(res.status).toBe(403);
+      expect(['APPROVAL_PAYLOAD_MISMATCH', 'APPROVAL_TARGET_MISMATCH']).toContain(String(res.body.reason));
+      const after = await state();
+      expect(after).toMatchObject({ invoiceStatus: 'ISSUED', attempts: 1, payments: 1, consumed: 0, replayed: 0 });
+      expect(after.paidAmount).toBe('0.0000');
+      expect(await prisma.auditLog.count({ where: { organizationId: ORG, action: 'payment.succeeded' } })).toBe(0);
+    });
+  }, 40_000);
+
+  it('19 行锁查询零行 → 失败关闭（不执行资金处理，零新增）', async () => {
+    await submitPaymentReplayReview(
+      prisma,
+      { organizationId: ORG, actorUserId: ownerId, role: 'OWNER', paymentEventId: eventId, decision: 'REQUEST' },
+      { now: () => NOW },
+    );
+    const approved = await submitPaymentReplayReview(
+      prisma,
+      { organizationId: ORG, actorUserId: ownerId, role: 'OWNER', paymentEventId: eventId, decision: 'APPROVE' },
+      { now: () => new Date(NOW.getTime() + 1000) },
+    );
+    const approvalId = String(approved.approvalId);
+
+    // 最小客户端包装：让 Payment 的 FOR UPDATE 查询返回零行（模拟锁不到目标行）
+    const wrappedTx = (tx: unknown) =>
+      new Proxy(tx as Record<string, unknown>, {
+        get(target, prop) {
+          if (prop === '$queryRawUnsafe') {
+            return async (sql: string, ...args: unknown[]) =>
+              String(sql).includes('"Payment"') && String(sql).includes('FOR UPDATE')
+                ? []
+                : (target.$queryRawUnsafe as (...a: unknown[]) => Promise<unknown>)(sql, ...args);
+          }
+          const value = target[prop as string];
+          return typeof value === 'function' ? (value as () => unknown).bind(target) : value;
+        },
+      });
+    const wrappedClient = {
+      paymentEvent: prisma.paymentEvent,
+      auditLog: prisma.auditLog,
+      $transaction: (fn: (tx: unknown) => Promise<unknown>) =>
+        prisma.$transaction((tx) => fn(wrappedTx(tx))),
+    } as unknown as typeof prisma;
+    await expect(
+      replayPaymentEvent(
+        wrappedClient,
+        { organizationId: ORG, actorUserId: ownerId, role: 'OWNER', paymentEventId: eventId, reason: REASON, approvalId },
+        { now: () => NOW },
+      ),
+    ).rejects.toMatchObject({ reason: 'APPROVAL_TARGET_MISMATCH' });
+    const after = await state();
+    expect(after).toMatchObject({ invoiceStatus: 'ISSUED', attempts: 1, payments: 1, consumed: 0, replayed: 0 });
+    expect(after.paidAmount).toBe('0.0000');
+    expect(await prisma.auditLog.count({ where: { organizationId: ORG, action: 'payment.succeeded' } })).toBe(0);
   }, 40_000);
 });

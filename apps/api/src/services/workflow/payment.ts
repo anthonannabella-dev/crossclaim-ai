@@ -536,6 +536,10 @@ export const REPLAY_PROCESSING_VERSION = 'v1';
 
 export interface PaymentReplayFingerprint {
   paymentEventId: string;
+  /** 关联 Payment 的行身份（R10 修订：行锁按它取得并核对） */
+  paymentId: string;
+  /** 关联 Payment.provider（R10 修订：必须与事件 provider 一致） */
+  paymentProvider: string;
   invoiceId: string;
   provider: string;
   providerEventId: string;
@@ -583,12 +587,15 @@ export async function readReplaySnapshot(
   }
   const payment = await client.payment.findFirst({
     where: { id: linked.paymentId, organizationId: input.organizationId },
-    select: { id: true, invoiceId: true, externalPaymentId: true, amount: true, currency: true },
+    select: { id: true, invoiceId: true, externalPaymentId: true, amount: true, currency: true, provider: true },
   });
   if (!payment) throw new WorkflowError('NOT_FOUND', `Payment ${linked.paymentId} 不存在或不属于该租户`);
+  if (!linked.paymentId) throw new WorkflowError('NOT_FOUND', 'Payment 关联缺失');
 
   return {
     paymentEventId: event.id,
+    paymentId: payment.id,
+    paymentProvider: payment.provider,
     invoiceId: payment.invoiceId,
     provider: event.provider,
     providerEventId: event.providerEventId,
@@ -608,6 +615,8 @@ export async function readReplaySnapshot(
 export function replayFingerprintExtra(fp: PaymentReplayFingerprint): Record<string, string> {
   return {
     paymentEventId: fp.paymentEventId,
+    paymentId: fp.paymentId,
+    paymentProvider: fp.paymentProvider,
     invoiceId: fp.invoiceId,
     provider: fp.provider,
     providerEventId: fp.providerEventId,

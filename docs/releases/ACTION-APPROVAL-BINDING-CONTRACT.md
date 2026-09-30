@@ -153,7 +153,7 @@ boundPayload = {
 | 缺审批 | HTTP：409 `ACTION_GUARD_HUMAN_APPROVAL_REQUIRED`；服务层直调同样拒绝（`APPROVAL_NOT_FOUND`）——受保护资金入口**没有** bypass 路径 |
 | 拒绝审计 | 锁内拒绝写 `payment.replay_rejected`（stage/reason/执行主体/approvalId/结果；事务外独立写入，失败不覆盖原错误） |
 | 最小审批入口 | `POST /payments/events/:id/replay-review`（受认证会话；REQUEST/APPROVE/REJECT；审批人 OWNER/ADMIN；APPROVE 由服务端组装指纹） |
-| 资金事实保护（R8 修订 CHANGE A） | 锁顺序固定 **事件锁 → 发票锁**；`applyPaymentSucceeded` 锁外仅做存在性预检查，事务内取得 `cc-payment-invoice:<invoiceId>` 后**重读** `status/total/currency` 快照，PAID 更新 CAS 同时比较 `status` + `total` + `currency`；事实在核验与更新之间被改变 → `AMOUNT_MISMATCH` / `ILLEGAL_TRANSITION`，**绝不**写入旧 `paidAmount`/旧成功审计。Payment 行在本路径只读/只插入（唯一键幂等），无更新写入者 |
+| 资金事实保护（R8 修订 CHANGE A） | 锁顺序固定 **事件锁 → 发票锁**；`applyPaymentSucceeded` 锁外仅做存在性预检查，事务内取得 `cc-payment-invoice:<invoiceId>` 后**重读** `status/total/currency` 快照，PAID 更新 CAS 同时比较 `status` + `total` + `currency`；事实在核验与更新之间被改变 → `AMOUNT_MISMATCH` / `ILLEGAL_TRANSITION`，**绝不**写入旧 `paidAmount`/旧成功审计。Payment 行按 **id** 取得 PostgreSQL 行锁（`FOR UPDATE`），并确认恰一行且 `id` 与定位快照一致；**行锁会阻塞其他事务对该行的普通 UPDATE/DELETE（与是否遵守 advisory lock 无关）**——锁前已提交的变化由锁后重读处理，锁持有期间的修改由数据库锁串行化；资金对象身份（`Payment.id`、`Payment.provider`）纳入快照与审批指纹，`Payment.provider` 必须与事件 `provider` 一致 |
 | 结果语义 | `attempt.status = SUCCEEDED` 表示「**一次获批的恢复尝试已执行**」；资金结论看 `resultStatus`（`PAID` = 收口成功；`AMOUNT_MISMATCH` / `PENDING_REVIEW` / `ILLEGAL_TRANSITION` = 已执行但未收口成功，同样会消费该审批）。不得把这些结果表述为「付款收口成功」 |
 | 现状限定 | 本批次不接入真实支付凭据、不发起真实扣款；`retry-due` 仍未接入守卫（下一批次）；webhook 边界不变 |
 ## 6. 验收矩阵（CHANGE C 对应）
