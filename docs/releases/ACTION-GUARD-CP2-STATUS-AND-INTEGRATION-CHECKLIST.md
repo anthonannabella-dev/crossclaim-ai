@@ -41,11 +41,13 @@
 | `appeal.submit` | 待定（申诉路径） | 平台外写（HOLD） | 同上 | 待补 | TODO |
 | `platform.write` | 待定（适配器写路径） | 平台外写（HOLD） | 同上 | 待补 | TODO |
 | `commission.charge` | 待定（结算/佣金路径） | 资金动作（HOLD） | 同上 + 财务复核 | 待补 | TODO |
-| `payment.capture` | 待定（支付路径） | 资金动作（HOLD） | 同上 + 财务复核 | 待补 | TODO |
+| `payment.capture` | 账单登记入口（HTTP 受保护入口） | 资金动作（HOLD） | Action Guard 审批绑定 + 锁内事实 CAS + 快照交错校验 | HTTP 级：拒绝零副作用 / 允许恰一次（含并发与等锁失效） | **已验收 PASS（MSG-20260930-24 / REVIEWED_REF 73115a3）** |
 | `secret.rotate` | 待定（运维路径） | 凭据操作（HOST ONLY） | HOST APPROVAL | 待补 | TODO |
 | `claim.prepare` | 待定（内部写入） | 业务库写入 | 不要求人工审批，但需能力闸门 | 待补 | TODO |
 | `billing.draft` | 待定（内部写入） | 业务库写入 | 不要求人工审批 | 待补 | TODO |
 | `evidence.read` | 待定（只读） | 无 | 无 | 待补 | TODO |
+
+> 追加记录（同属本清单口径，逐批次登记）：`payment.replay` = **验收 PASS**（MSG-20260930-28 / REVIEWED_REF 08fc45d；资金对象身份纳入快照与审批指纹、按 id 行锁恰一行）；`payment.retry_due`（冻结批次）= **送审中**（R18 / HEAD 4c695c0 / CI run 36718083469 / Issue #2 comment 5911844071）。三类受保护入口共用同一 Action Guard 审批边界；② 整体仍为 NOT COMPLETE。
 
 ## 4. 下一 Checkpoint 关系
 

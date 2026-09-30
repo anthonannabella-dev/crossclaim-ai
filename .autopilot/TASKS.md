@@ -24,7 +24,7 @@
 
 ## 下一队列（已授权，等待 PR #11 裁决后再开工）
 
-- [ ] 13. Gate 7 授权队列下一 Checkpoint（MSG-20260930-03 的 8 项里，Action Guard CP1 已完成）：候选 ② RUNTIME BUSINESS BLOCKING → ③ PRODUCTION CONTROL PLANE → ⑤ RELIABILITY → ⑥ OPERATIONS-ADMIN → ⑦ SECURITY HARDENING。
+- [ ] 13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**当前动作 = ② RUNTIME BUSINESS BLOCKING 的业务接入覆盖**（`payment.capture` PASS / `payment.replay` PASS / `payment.retry_due` R18 送审中；其余入口见 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 的优先顺序）。
 - 开工前先确认：不与 PR #11 的集成范围冲突；涉及安全/资金/规则引擎/Gate 边界的部分需架构方裁决。
 
 ## 双账（B2）
@@ -42,9 +42,9 @@
 | 项 | 状态 | 证据 |
 | --- | --- | --- |
 | ① ACTION GUARD（设计 → 实现） | 已完成（CP1 = 纯决策函数 + 审计事件） | 8109003 / 26f78e8 起 |
-| ② RUNTIME BUSINESS BLOCKING（Action Guard CP2） | **送审中** | HEAD 123d21f；Issue #2 comment 5902082182；CI run 36653496477 |
-| ③ PRODUCTION CONTROL PLANE | 待开工（CP2 裁决后） | — |
-| ⑤ RELIABILITY | 待开工 | — |
+| ② RUNTIME BUSINESS BLOCKING（Action Guard CP2） | **进行中（整体 NOT COMPLETE）** | 第一批 HITL 提交入口：已接入（见 `ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §5/§6）；账单登记入口 `payment.capture` = PASS（MSG-20260930-24 / REVIEWED_REF 73115a3）；`payment.replay` = PASS（MSG-20260930-28 / REVIEWED_REF 08fc45d）；冻结批次 `payment.retry_due` = **送审中**（R18：HEAD 4c695c0 / CI run 36718083469 / Issue #2 comment 5911844071）；其余入口见 §3 清单 TODO |
+| ③ PRODUCTION CONTROL PLANE | **已完成 = PASS** | MSG-20260930-16（REVIEWED_HEAD e460a82 / Issue #2 comment 5902610608）；实现：`control-plane.ts` / `control-plane-wiring.ts` / `control-plane-status.ts` / `capability-source.ts` / `kill-switch-adapter.ts`（四层模式 READ_ONLY/DRY_RUN/MANUAL_REVIEW/WRITE_ENABLED，默认 READ_ONLY；配置异常回落 READ_ONLY） |
+| ⑤ RELIABILITY | 待开工（**须待 ② 业务覆盖完成**） | MSG-20260930-16 原文顺序：「修复后再推进 ② 业务接入第一批 HITL 提交入口，**优先于新增⑤可靠性工作**」 |
 | ⑥ OPERATIONS-ADMIN | 待开工 | — |
 | ⑦ SECURITY HARDENING | 待开工 | — |
 
