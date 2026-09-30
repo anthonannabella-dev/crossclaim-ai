@@ -174,6 +174,8 @@ boundPayload = {
 | attempt 代际与去重（R13 修订） | 事件锁后对原 attempt 加行锁重读并核对 `paymentEventId`/`paymentId`/`attemptNo`/状态/到期；**一次性认领**（清空 `nextRetryAt`，使旧代际不再被任何批次选中）；检测后继代际取代与重试上限（≤ `MAX_ATTEMPTS`）；不同批次含同一 attempt 时只有一次实际执行，其余跳过留证 |
 | 整批分阶段锁协议（R14 修订，取代逐项取锁） | 批次内所有项按确定性顺序**分阶段**取锁：先取得**全部事件锁** → 再取得**全部发票锁** → 再取得 **Payment 行锁 与 attempt 行锁**；事务持有全部锁后才开始逐项执行。这样消除「已持发票锁、再等待新事件锁」的循环等待（与 replay 的 事件→发票→Payment 顺序兼容） |
 | 各阶段独立排序（R15 修订） | **每个阶段的去重资源集合独立确定性排序**（全部事件 ID / 全部发票 ID / 全部 Payment ID / 全部 attempt ID 各自比较），不得由事件顺序推断其他资源顺序——否则两个事件集合不重叠、发票集合交叉的批次仍可能互相持有一张发票并等待另一张 |
+| 唯一约束冲突语义（R17 修订：**精确白名单**） | 仅映射**确属已识别约束**的 Prisma `P2002`（`services/workflow/payment-conflict-map.ts`）：目标组合 `paymentId + organizationId`（或约束名 `PaymentProcessingAttempt_succeeded_payment_key`）→ 409 `PAYMENT_SOURCE_CONFLICT`；`paymentEventId + organizationId` → 409 `ATTEMPT_ALREADY_RUNNING`。**未知 P2002、`meta.target` 不完整、非唯一约束错误一律原样抛出**；映射发生在事务回滚之后的独立位置，不在失败事务内继续写审计/消费。批次与 replay 两条路径均适用 |
+| 冲突取证分阶段（R17） | **链接阶段**（`paymentProcessingAttempt.updateMany()` 把 `paymentId` 写入 attempt）与**完成阶段**（attempt 终态更新）分别取证；不得把不同阶段观察到的错误合并为单一未经证实的结论 |
 | 唯一约束冲突语义（R16 修订） | 已识别的预期约束**必须**在事务回滚之后、事务之外映射为稳定领域错误：成功 Payment 来源冲突（`PaymentProcessingAttempt_succeeded_payment_key`，或 Prisma `P2002` 且 `meta.target` 含 `paymentId`）→ 409 `PAYMENT_SOURCE_CONFLICT`；同一事件进行中 attempt 冲突（`meta.target` 含 `paymentEventId`）→ 409 `ATTEMPT_ALREADY_RUNNING`。**批次执行与 replay 两条路径均需映射**；其余错误原样抛出（不放宽唯一约束、不把未知故障伪装为 409）；执行侧在锁内先行检查「已有成功来源 / 同事件进行中」并跳过留证 |
 | 行锁身份校验（R15 修订） | 记录**实际锁定成功**的 Payment/attempt 行身份（恰一行且 `id` 一致）；每个需执行项必须确认其行已锁定，否则**跳过留证**（`PAYMENT_NOT_LOCKED` / `ATTEMPT_NOT_LOCKED`），不得因后续查询能读到行而恢复执行；正常缺失项仍可按批次语义跳过 |
 | 代际与认领位置（R14 修订） | 关联 / 状态 / 到期 / `attemptNo` 代际 / 后继代际 / 重试上限检查全部在**取得事件锁之后**完成；一次性认领（清空 `nextRetryAt`）置于**最终事实比对与授权确认之后、创建新 attempt 之前**——事实变化被跳过的项**不会**提前清空认领标记 |
@@ -216,6 +218,7 @@ boundPayload = {
 | 锁协议之外的写入者在核验与更新之间改发票事实 | 事实 CAS 未命中 → `ILLEGAL_TRANSITION` + `payment.reconciliation_failed`（R8 用例 11） | **无 PAID 推进、无成功资金审计**；异常审计与已执行尝试按既定结果语义记录（不暗示整事务回滚） |
 | 反向冒用：replay 审批用于账单确认 | 403 `APPROVAL_TARGET_MISMATCH` / `APPROVAL_ACTION_MISMATCH`（R8 用例 12） | 两类消费均不新增、账单不推进 |
 | replay 服务层直调缺 `approvalId` | 拒绝 `APPROVAL_NOT_FOUND`（R8 用例 13） | 零 attempt / 零资金 / 零消费 |
+| 约束映射白名单 | 已知两类约束 → 稳定领域码；未知 P2002 / `meta` 不完整 / 非唯一约束错误 → 原样抛出（`payment-conflict-map` 单测 6/6） | 不掩盖未知错误 |
 | replay 审批决策审计失败 | 放行前关闭（R8 用例 14） | 零副作用（进程级故障注入） |
 | replay 消费审计失败 | 整个事务回滚（R8 用例 15） | attempt / 发票推进 / 成功审计均不部分提交 |
 | retry-due 全链路（freeze → REQUEST/APPROVE → execute） | 200；恰一次新增 attempt、恰一次批次消费、SYSTEM 身份（RD 用例 01） | 资金对象不重复创建 |
@@ -244,8 +247,8 @@ boundPayload = {
 | 两个已批准批次真实并发含同一 attempt | 仅一次实际重试；**不得忽略 rejected**（要求一执行、一明确跳过并给出精确原因；RD 用例 24） | 跨批次去重 |
 | retry-due 审批决策审计失败 | 放行前关闭（RD 用例 25） | 零副作用 |
 | 受控**等发票锁**后释放 | 200；`attempt.startedAt ≤ paidAt ≤ payment.succeeded.createdAt`、执行审计不早于 attempt、批次消费不早于执行审计（RD 用例 26） | 时间口径一致 |
-| 共享发票：批次（E1/E2）与 replay（E2）真实并发 | 会话级控制点（双方到达 E2 等待点、等待者不持共享发票锁）；释放后有界完成且**不允许任意 500**（结构化 200/403/409；RD 用例 27） | 发票 PAID 一次、成功审计 ≤1 |
-| 事件集合不同、发票集合交叉的两批次并发 | 各阶段独立排序下无异常/无死锁；每张发票至多一次 PAID 且至少一张推进、成功审计与发票一一对应（RD 用例 28；构造为直接写入的冻结记录，证明边界已登记） | 无交叉持锁 |
+| 共享发票：批次（E1/E2）与 replay（E2）真实并发 | 会话级控制点（双方到达 E2 等待点、等待者不持共享发票锁）；释放后有界完成且**不允许任意 500**；非 200 必须为 200/403/409 之一并给出**非空领域原因**（RD 用例 27） | 发票 PAID 一次、成功审计 ≤1 |
+| 事件集合**完全不相交**、发票集合交叉的两批次并发 | 显式断言事件集合交集为空；**阶段控制点**（独立连接先持共享发票 I1 锁，两个批次在各自事件锁阶段完成后均阻塞于 I1）；无异常/无死锁；逐发票断言 PAID 集合去重且与 `payment.succeeded` 一一对应、执行 attempt 无重复、资金对象数不变（RD 用例 28；构造为直接写入的冻结记录，证明边界已登记） | 无交叉持锁 |
 | 首项资金写入后授权失效（受控屏障） | 抛错 `APPROVAL_ACTOR_MISMATCH`，**整批回滚**：发票不推进、无成功资金审计、两条 attempt 认领标记均保留、零执行审计、零批次消费（RD 用例 23） | 无任何部分提交 |
 | 两个已批准批次真实并发含同一 attempt | 仅一次实际重试（`executed` 合计 1、执行审计 1、支付对象 1；RD 用例 24） | 跨批次去重有效 |
 | retry-due 审批决策审计失败 | 放行前关闭、零副作用（RD 用例 25） | 零资金副作用 |
