@@ -108,3 +108,10 @@
 - 验证：`npx tsc --noEmit` PASS；定向 R4 3/3、R3 9/9、`workflow-hitl-db` 5/5、`workflow-recovery-review` 12/12、`action-guard-hitl-http-chain-db` 6/6、`action-guard-hitl-approval-verifier-db` 13/13 全绿；CI run `36671238244`（HEAD `a545bc0`）五作业 SUCCESS。
 - 送审：Issue #2 comment `5904438093`（七段式，含自我披露：用例 01 因受保护入口缺 approvalId 在守卫层即 409，改为服务层直调 + 等待期间直写等价事件；`nextLifecycleAt` 复用锁内已读事件以避免在单测 fake 客户端引入新依赖）。
 - 通道①：本轮 computer-use 浏览器提供方再次不可用（`Codex auth token unavailable`），R4 短唤醒待通道恢复后补发；正式请求已留档 Issue #2，架构方也可直接在 Issue 上复核。
+
+## 2026-09-30 · 通道①根因诊断 + 技能沉淀（宿主指派）
+
+- R4 短唤醒已送达（通道①恢复后）：会话 `仓库审查裁决` 输入框清空 + 正文出现 `Checkpoint R4` + 进入生成态；指向 Issue #2 comment `5904438093`（请求）与 `5904626397`（证据补充）。
+- 根因定位（可复现的判别法）：故障时 `cua.listBrowsers()` **仍成功**（返回 in-app browser + 扩展浏览器），但 `cua.listTabs()` / `cua.getTab()` / `cua.getState()` 抛 `Codex auth token is unavailable`。即**浏览器发现可用、会话级标签自动化不可用**；该 token 与 `metadata.codexSessionId` 绑定（每个 Codex 会话铸造）。
+- 已证伪的处置：`js_reset`（内核重置）无效；`open_in_codex` 重新打开面板标签无效；不是页面/标签/登录问题。恢复与「宿主在右侧打开/聚焦 ChatGPT 窗口」同步发生（本次与 04:44Z 各一次）。
+- 沉淀技能：`C:\Users\os\.codex\skills\chatgpt-web-audit-bridge`（`SKILL.md` + `references/channel-failures.md` + `references/verdict-capture.md` + `agents/openai.yaml`），`quick_validate.py` → Skill is valid。内容含：落地记录优先、唤醒三步验证、DOM 提取裁决、逐字归档+校验、以及「发现可用/标签不可用」判别表与重试/上报节奏。
