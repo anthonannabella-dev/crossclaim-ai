@@ -118,7 +118,7 @@ boundPayload = {
 
 - `POST /billing/:id/status`（`payment.capture`）：已接入并通过 R7 验收（§5.3）。
 - `POST /payments/events/:id/replay`（`payment.replay`）：**已接入**（§5.4；R8 批次），目标为具体 `PaymentEvent`。
-- `POST /payments/processing/retry-due`：采用**冻结清单批次审批**（MSG-20260930-22 §6(2)），实现为下一批次；当前仍未接入守卫，不得表述为已完成。
+- `POST /payments/processing/retry-due`（`payment.retry_due`）：**已接入**（§5.5；冻结清单批次审批 + 受保护执行）。
 - `POST /payments/webhook`：保持验签 + `providerEventId` 幂等 + 事件形状校验边界；「接收已发生付款事实」与「发起新扣款/外写」必须分开。
 
 ## 5.2 三项设计裁决（MSG-20260930-22，已授权实施）
@@ -156,6 +156,20 @@ boundPayload = {
 | 资金事实保护（R8 修订 CHANGE A） | 锁顺序固定 **事件锁 → 发票锁**；`applyPaymentSucceeded` 锁外仅做存在性预检查，事务内取得 `cc-payment-invoice:<invoiceId>` 后**重读** `status/total/currency` 快照，PAID 更新 CAS 同时比较 `status` + `total` + `currency`；事实在核验与更新之间被改变 → `AMOUNT_MISMATCH` / `ILLEGAL_TRANSITION`，**绝不**写入旧 `paidAmount`/旧成功审计。Payment 行按 **id** 取得 PostgreSQL 行锁（`FOR UPDATE`），并确认恰一行且 `id` 与定位快照一致；**行锁会阻塞其他事务对该行的普通 UPDATE/DELETE（与是否遵守 advisory lock 无关）**——锁前已提交的变化由锁后重读处理，锁持有期间的修改由数据库锁串行化；资金对象身份（`Payment.id`、`Payment.provider`）纳入快照与审批指纹，`Payment.provider` 必须与事件 `provider` 一致 |
 | 结果语义 | `attempt.status = SUCCEEDED` 表示「**一次获批的恢复尝试已执行**」；资金结论看 `resultStatus`（`PAID` = 收口成功；`AMOUNT_MISMATCH` / `PENDING_REVIEW` / `ILLEGAL_TRANSITION` = 已执行但未收口成功，同样会消费该审批）。不得把这些结果表述为「付款收口成功」 |
 | 现状限定 | 本批次不接入真实支付凭据、不发起真实扣款；`retry-due` 仍未接入守卫（下一批次）；webhook 边界不变 |
+## 5.5 冻结清单批次重试：`payment.retry_due`（② 第二批 retry-due）
+
+| 项 | 值 |
+| --- | --- |
+| 受保护动作 | `payment.retry_due`（`MONEY_MOVEMENT`；requires `humanApproval` + `productionGate`）。**独立身份**：与 `payment.capture` / `payment.replay` 三者互不通用、互不消费 |
+| 冻结（freeze） | `POST /payments/processing/retry-due/freeze`：服务端生成 `batchId`；只选 `RETRYABLE_FAILED` 且已到期且具备 `paymentId` 的项；**固定排序**（`nextRetryAt asc, id asc`）；数量上限 ≤ 20（`limit` 越界夹取）；有效期默认 15 分钟（夹取 1–60 分钟）。清单以 `PaymentRetryBatch` 审计记录落库（`entityType=PaymentRetryBatch`，`entityId=batchId`，`action=payment.retry_batch_frozen`，含逐项指纹与 `digest`） |
+| 批次指纹 | 逐项固化：`attemptId`/`attemptNo`/`paymentEventId`/事件 `provider`+`providerEventId`+`payloadHash`/`paymentId`+`paymentProvider`/`invoiceId`/`externalPaymentId`/规范化金额币种/操作类型/处理版本；`digest = sha256(规范化排序清单 JSON)` |
+| 审批 | `POST /payments/processing/retry-due/review`（REQUEST/APPROVE/REJECT；审批人 OWNER/ADMIN）；APPROVE 绑定 `batchId` + `digest` + `itemCount` + 有效期，`boundAction = payment.retry_due`；与执行共用同一把批次锁 `cc-payment-retry-batch:<batchId>` |
+| 执行 | `POST /payments/processing/retry-due`（必须携带 `batchId` + `approvalId`；缺审批 → 409 `ACTION_GUARD_HUMAN_APPROVAL_REQUIRED`，缺 Action Guard → fail-closed）。**单一事务**内：批次锁 → 重读批次并复核 `digest` → 审批核验（摘要/数量/有效期/撤销/消费）→ 逐项重验与执行 → 批次消费 |
+| 只处理冻结清单 | 批准后新出现的 due 项**绝不执行**（执行循环只遍历冻结清单；`limit` 不参与执行阶段选单） |
+| 逐项重验与留证 | 每项执行前重验 attempt 状态/到期、事件身份与载荷摘要、Payment 身份/币种/金额/关联发票；锁后（事件锁 → 发票锁 → Payment 行锁）再次比对最终事实；不一致项**跳过**并写 `payment.retry_due_skipped`（原因精确） |
+| 资金收口复用 | 复用 replay 已验收协议：`recoverPaymentSucceeded`（调用方事务）+ 发票锁 + `total`/`currency` 事实 CAS；attempt/资金写入/审计同事务 |
+| 执行身份与授权范围 | SYSTEM（`actorRef = payment-retry-worker`，`actorUserId` 为空）；预先授权范围由「批次审批 + 冻结摘要 + `batchId` + 有效期」共同界定 |
+| 消费与结果 | 批次消费 `payment.retry_due_consumed`（独立事件族，含 `approvalId`/`batchId`/`digest`/执行与跳过项数）；逐项执行审计 `payment.retry_due_executed`。`attempt.SUCCEEDED` 仍表示「一次获批的恢复尝试已执行」，资金结论看 `resultStatus` |
 ## 6. 验收矩阵（CHANGE C 对应）
 
 | 场景 | 期望 | 资金对象 |
@@ -192,5 +206,13 @@ boundPayload = {
 | replay 服务层直调缺 `approvalId` | 拒绝 `APPROVAL_NOT_FOUND`（R8 用例 13） | 零 attempt / 零资金 / 零消费 |
 | replay 审批决策审计失败 | 放行前关闭（R8 用例 14） | 零副作用（进程级故障注入） |
 | replay 消费审计失败 | 整个事务回滚（R8 用例 15） | attempt / 发票推进 / 成功审计均不部分提交 |
+| retry-due 全链路（freeze → REQUEST/APPROVE → execute） | 200；恰一次新增 attempt、恰一次批次消费、SYSTEM 身份（RD 用例 01） | 资金对象不重复创建 |
+| retry-due 缺 `approvalId` | 409 `ACTION_GUARD_HUMAN_APPROVAL_REQUIRED`（RD 用例 02） | 零副作用 |
+| 批准后新增 due 项 | 不执行（只处理冻结清单；RD 用例 03） | 新增项状态不变 |
+| 冻结后清单内事实变化 | 该项跳过并留证 `payment.retry_due_skipped`（RD 用例 04） | 无资金推进、无成功审计 |
+| 跨域冒用（replay 审批 → retry-due） | 403 `APPROVAL_TARGET_MISMATCH` / `APPROVAL_ACTION_MISMATCH`（RD 用例 05） | 三类消费均不新增 |
+| retry-due 审批过期 | 403 `APPROVAL_EXPIRED`（RD 用例 06） | 零新增 |
+| retry-due 数量上限 | `limit` 越界被夹取，执行只处理冻结清单（RD 用例 07） | 不动态扩张 |
+| retry-due 批次消费审计失败 | 整个事务回滚（RD 用例 08） | attempt / 资金 / 执行审计不部分提交 |
 
 > 实现与测试（`action-guard-hitl-*`、`workflow-hitl-db`、`workflow-outcome-db`、`action-guard-payment-capture-http-db`、`workflow-billing*`）按本文件逐条对齐后送审。
