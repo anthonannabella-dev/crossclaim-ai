@@ -67,6 +67,23 @@ export {
   type RetryableErrorCode,
 } from './payment-attempt';
 export {
+  RETRY_BATCH_ACTOR_REF,
+  RETRY_BATCH_DEFAULT_TTL_MS,
+  RETRY_BATCH_DIGEST_VERSION,
+  RETRY_BATCH_EVENTS,
+  RETRY_BATCH_MAX_ITEMS,
+  RETRY_BATCH_OPERATION,
+  RETRY_BATCH_VERSION,
+  freezeRetryBatch,
+  readRetryBatch,
+  retryBatchDigest,
+  submitRetryBatchReview,
+  type FreezeRetryBatchResult,
+  type RetryBatchItemFingerprint,
+  type RetryBatchRecord,
+  type RetryBatchReviewResult,
+} from './payment-retry-batch';
+export {
   TIME_WINDOW_DAYS,
   normalizePayoutItem,
   reconcilePayoutItems,
