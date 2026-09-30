@@ -68,3 +68,20 @@
 1. 上述三条入口是否即为本批次接入范围（或需增减）；
 2. webhook 是否纳入 Action Guard（若纳入，审批语义如何定义）；
 3. `payment.capture` 的载荷指纹应包含哪些字段（建议：invoiceId、金额、币种、externalRef/支付引用、证据或事件 id）。
+
+## 7. 实现计划（按 R1–R4 已验证的模式，逐文件）
+
+现状差异：支付域已有 `payment.review_*` 状态机（`payment.ts` 的 `submitPaymentReview`）但与 recovery 的 R0 版本同型——
+只表达“发票曾被批准过”，**没有** `approvalId`、`boundPayload`、`boundAction`、`expiresAt`、消费事件与锁内重验。
+
+| 步骤 | 文件 | 内容 |
+| --- | --- | --- |
+| P1 | `workflow/payment.ts` | APPROVE 写入 `boundAction='payment.capture'` + 规范化 `boundPayload`（invoiceId/金额/币种/引用/证据）+ `expiresAt` + `fingerprintVersion:'v1'`；缺关键字段拒绝；返回 `approvalId`（审批事件 id） |
+| P2 | `action-guard/approval-tx-verify.ts` | 把事务内验证器参数化为「审批事件 action 家族 + 目标实体类型」，recovery 行为保持不变（默认参数），新增 `payment.capture` 变体（`payment.review_approved` / `BillingInvoice`） |
+| P3 | `action-guard/hitl-approval-verifier.ts` | 允许按动作选择审批事件家族（默认 recovery）；两套验证器继续共用判定口径 |
+| P4 | `workflow/http-routes.ts` | 三条入口经 `createHitlSubmissionBoundary().submit({ action:'payment.capture', approvalId, payload })`；`approvalId` 缺失 → 守卫 REQUIRE_APPROVAL（409），perform 零执行 |
+| P5 | `workflow/billing.ts` / `payment-attempt.ts` | 目标级 advisory lock（`cc-payment-invoice:<invoiceId>` / `cc-payment-event:<eventId>`）+ 锁内完整重验 + 消费事件 + 幂等返回；被拒绝时零资金写入，并写 `payment.capture_rejected` 审计 |
+| P6 | 测试 | 真实 HTTP + PostgreSQL：审批绑定/载荷变更/过期/撤销/消费/主体失效/并发恰一次/拒绝零副作用/审计关联；保留既有支付域套件 |
+| P7 | 文档 | 绑定契约新增支付域章节；`payment.capture` 写入清单登记；非阻塞整理项（契约标题/依据链、4.1/4.2 排序） |
+
+风险控制：本批次只加「服务端入口 + 机制」，不接真实渠道与凭据；provider 端口继续由测试适配器注入。
