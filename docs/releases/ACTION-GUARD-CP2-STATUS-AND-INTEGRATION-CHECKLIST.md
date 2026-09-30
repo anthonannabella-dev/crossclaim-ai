@@ -52,3 +52,14 @@
 - 允许继续 **③ PRODUCTION CONTROL PLANE**（真实配置、有效 Kill Switch 与审计依赖的组合入口，保持默认 read-only）。
 - 仍需单独安排 **② 具体 service/route/job/HITL 接入及集成验收收口**；③ 完成不追认 ② 完成。
 - 不得仅凭基础模块的 CI 绿灯开启高危能力；Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据继续 HOLD。
+
+## 5. ② 第一批接入记录（HITL 提交入口，MSG-20260930-16 §6）
+
+| 项 | 状态 | 证据 |
+| --- | --- | --- |
+| 审批绑定校验端口 + wrapper 强制（不得仅凭 approvalId） | 已实现 | approval-verifier / guard-enforcement（Action Guard 16 套 107/107） |
+| HITL 审批验证器（审计派生复核状态：租户/目标/状态绑定） | 已实现 | hitl-approval-verifier（真实 PostgreSQL 7/7） |
+| HITL 提交边界（拒绝零副作用 / ALLOW 恰一次 / 重试重新核验） | 已实现 | hitl-submission（7 项） |
+| 真实入口接线：POST /cases/:id/recovery-outcome | 已接入（HEAD 3a37d24，送审中） | http-routes + server.ts；HTTP 级验收 4/4（拒绝时资金写入全为 0；APPROVED+approvalId 恰一次） |
+| 审批有效期/撤销/一次性消费（独立审批记录） | **待架构方裁决**（涉及 Schema 变更，未自行实现） | — |
+| 其余受保护入口（申诉/平台写入等） | TODO | 见第 3 节清单 |
