@@ -41,6 +41,8 @@ import {
   runDueRetries,
   submitRetryBatchReview,
   type RetryBatchExecutionResult,
+  type RetryBatchItemFingerprint,
+  type RetryBatchRecord,
 } from '../services/workflow';
 
 const prisma = new PrismaClient();
@@ -1184,8 +1186,78 @@ describe('② 第二批 — retry-due（冻结清单批次审批）真实 HTTP +
     });
   }, 60_000);
 
-  it('28 发票集合交叉的两批次并发 → 各阶段独立排序，无死锁且每张发票至多一次 PAID', async () => {
-    // 第二张发票与资金对象（与首张金额币种一致）
+/**
+   * 用例 28（MSG-32 CHANGE C 重做）：两批次**事件集合不同**、**共享两张发票**、
+   * 且按各自 items 顺序的「发票首次出现顺序相反」：
+   *   A = [E1(P1/I1), E2(P2/I2)] → 发票首现 I1 后 I2
+   *   B = [E3(P2/I2), E4(P1/I1)] → 发票首现 I2 后 I1
+   * 只有「各阶段资源独立排序」才能避免两张发票交叉持锁。
+   */
+  async function seedCrossingCandidate(suffix: string, invoiceIdValue: string, paymentIdValue: string, dueOffsetMs: number) {
+    const eventIdValue = `cf200000-0000-4000-8000-0000000003${suffix}`;
+    await prisma.paymentEvent.create({
+      data: {
+        id: eventIdValue,
+        organizationId: ORG,
+        provider: 'STRIPE',
+        providerEventId: `evt_cross_${suffix}`,
+        eventType: 'payment_intent.succeeded',
+        payloadHash: `hash_cross_${suffix}`,
+        receivedAt: NOW,
+        processingResult: 'PROCESSED',
+      },
+    });
+    const attempt = await prisma.paymentProcessingAttempt.create({
+      data: {
+        organizationId: ORG,
+        paymentEventId: eventIdValue,
+        attemptNo: 1,
+        status: 'RETRYABLE_FAILED',
+        errorCode: 'CAS_CONFLICT',
+        errorSummary: `cross candidate ${suffix}`,
+        startedAt: NOW,
+        finishedAt: NOW,
+        nextRetryAt: new Date(Date.now() - dueOffsetMs),
+        actorType: 'EXTERNAL',
+        actorRef: 'STRIPE',
+        paymentId: paymentIdValue,
+      },
+    });
+    return { eventId: eventIdValue, attemptId: attempt.id, invoiceId: invoiceIdValue, paymentId: paymentIdValue };
+  }
+
+  async function writeFrozenRecord(batchId: string, items: RetryBatchItemFingerprint[]) {
+    await prisma.auditLog.create({
+      data: {
+        organizationId: ORG,
+        actorType: 'USER',
+        actorUserId: ownerId,
+        action: 'payment.retry_batch_frozen',
+        entityType: 'PaymentRetryBatch',
+        entityId: batchId,
+        changes: {
+          batchId,
+          digest: retryBatchDigest(items),
+          digestVersion: 'v1',
+          itemCount: items.length,
+          expiresAt: new Date(Date.now() + 900_000).toISOString(),
+          requestedBy: ownerId,
+          operation: 'retry_due',
+          version: 'v1',
+          items,
+        } as never,
+      },
+    });
+  }
+
+  function fingerprintOf(record: RetryBatchRecord, attemptIdValue: string): RetryBatchItemFingerprint {
+    const found = record.items.find((item) => item.attemptId === attemptIdValue);
+    if (!found) throw new Error('ITEM_NOT_FOUND');
+    return found;
+  }
+
+  it('28 事件集合不同、发票集合交叉的两批次并发 → 独立排序下无死锁、每张发票至多一次 PAID', async () => {
+    // 第二张发票与资金对象
     const secondInvoice = await prisma.billingInvoice.create({
       data: {
         organizationId: ORG,
@@ -1203,91 +1275,49 @@ describe('② 第二批 — retry-due（冻结清单批次审批）真实 HTTP +
         organizationId: ORG,
         invoiceId: secondInvoice.id,
         provider: 'STRIPE',
-        externalPaymentId: 'pi_retry_due_2',
+        externalPaymentId: 'pi_retry_due_cross_2',
         amount: new Prisma.Decimal(AMOUNT),
         currency: CURRENCY,
         status: 'SUCCEEDED',
-        idempotencyKey: 'pi_retry_due_2',
-      },
-    });
-    const secondEventId = 'cf200000-0000-4000-8000-000000000061';
-    await prisma.paymentEvent.create({
-      data: {
-        id: secondEventId,
-        organizationId: ORG,
-        provider: 'STRIPE',
-        providerEventId: 'evt_cross_2',
-        eventType: 'payment_intent.succeeded',
-        payloadHash: 'hash-cross-2',
-        receivedAt: NOW,
-        processingResult: 'PROCESSED',
-      },
-    });
-    await prisma.paymentProcessingAttempt.create({
-      data: {
-        organizationId: ORG,
-        paymentEventId: secondEventId,
-        attemptNo: 1,
-        status: 'RETRYABLE_FAILED',
-        errorCode: 'CAS_CONFLICT',
-        errorSummary: 'cross candidate',
-        startedAt: NOW,
-        finishedAt: NOW,
-        nextRetryAt: new Date(Date.now() - 1_000),
-        actorType: 'EXTERNAL',
-        actorRef: 'STRIPE',
-        paymentId: secondPayment.id,
+        idempotencyKey: 'pi_retry_due_cross_2',
       },
     });
 
-    const frozenA = await freezeRetryBatch(
-      prisma,
-      { organizationId: ORG, actorUserId: ownerId, role: 'OWNER' },
-      { now: () => new Date() },
-    );
-    expect(frozenA.itemCount).toBe(2);
-    const recordA = await readRetryBatch(prisma, { organizationId: ORG, batchId: frozenA.batchId });
-    expect(recordA).not.toBeNull();
-    const itemsA = recordA!.items;
+    // 四个候选：E1→P1(I1)、E2→P2(I2)、E3→P2(I2)、E4→P1(I1)（到期时间递减以便稳定排序）
+    const e1 = await seedCrossingCandidate('01', invoiceId, paymentId, 4_000);
+    const e2 = await seedCrossingCandidate('02', secondInvoice.id, secondPayment.id, 3_000);
+    const e3 = await seedCrossingCandidate('03', secondInvoice.id, secondPayment.id, 2_000);
+    const e4 = await seedCrossingCandidate('04', invoiceId, paymentId, 1_000);
 
-    // 构造第二个批次：与 A 相同的两项，但**顺序相反**（发票集合交叉）
-    const reversed = [...itemsA].reverse();
+    const allItems = await freezeRetryBatch(prisma, { organizationId: ORG, actorUserId: ownerId, role: 'OWNER' }, { now: () => new Date() });
+    expect(allItems.itemCount).toBe(5); // 含种子 attempt
+    const full = await readRetryBatch(prisma, { organizationId: ORG, batchId: allItems.batchId });
+    expect(full).not.toBeNull();
+    const seedItem = fingerprintOf(full!, attemptId);
+    const itemsA = [
+      ...(seedItem.invoiceId === invoiceId ? [seedItem] : []),
+      fingerprintOf(full!, e1.attemptId),
+      fingerprintOf(full!, e2.attemptId),
+    ];
+    const itemsB = [fingerprintOf(full!, e3.attemptId), fingerprintOf(full!, e4.attemptId), seedItem];
+    // 断言构造满足「事件集合不同、发票首次出现顺序相反」
+    const firstInvoiceA = itemsA.find((item) => item.invoiceId)?.invoiceId ?? '';
+    expect(firstInvoiceA).toBe(invoiceId);
+    expect(itemsB[0].invoiceId).toBe(secondInvoice.id);
+    const batchAId = crypto.randomUUID();
     const batchBId = crypto.randomUUID();
-    await prisma.auditLog.create({
-      data: {
-        organizationId: ORG,
-        actorType: 'USER',
-        actorUserId: ownerId,
-        action: 'payment.retry_batch_frozen',
-        entityType: 'PaymentRetryBatch',
-        entityId: batchBId,
-        changes: {
-          batchId: batchBId,
-          digest: retryBatchDigest(reversed),
-          digestVersion: 'v1',
-          itemCount: reversed.length,
-          expiresAt: new Date(Date.now() + 900_000).toISOString(),
-          requestedBy: ownerId,
-          operation: 'retry_due',
-          version: 'v1',
-          items: reversed,
-        } as never,
-      },
-    });
+    await writeFrozenRecord(batchAId, itemsA);
+    await writeFrozenRecord(batchBId, itemsB);
 
-    // 两个批次都走审批（服务层，真实时钟）
-    await submitRetryBatchReview(
-      prisma,
-      { organizationId: ORG, actorUserId: ownerId, role: 'OWNER', batchId: frozenA.batchId, decision: 'REQUEST' },
-      { now: () => new Date() },
-    );
-    await submitRetryBatchReview(
-      prisma,
-      { organizationId: ORG, actorUserId: ownerId, role: 'OWNER', batchId: batchBId, decision: 'REQUEST' },
-      { now: () => new Date() },
-    );
+    for (const batchId of [batchAId, batchBId]) {
+      await submitRetryBatchReview(
+        prisma,
+        { organizationId: ORG, actorUserId: ownerId, role: 'OWNER', batchId, decision: 'REQUEST' },
+        { now: () => new Date() },
+      );
+    }
     const approvals = await Promise.all(
-      [frozenA.batchId, batchBId].map((batchId) =>
+      [batchAId, batchBId].map((batchId) =>
         submitRetryBatchReview(
           prisma,
           { organizationId: ORG, actorUserId: ownerId, role: 'OWNER', batchId, decision: 'APPROVE' },
@@ -1297,7 +1327,7 @@ describe('② 第二批 — retry-due（冻结清单批次审批）真实 HTTP +
     );
 
     const settled = await Promise.allSettled(
-      [frozenA.batchId, batchBId].map((batchId, index) =>
+      [batchAId, batchBId].map((batchId, index) =>
         executeRetryBatch(
           prisma,
           {
@@ -1311,13 +1341,22 @@ describe('② 第二批 — retry-due（冻结清单批次审批）真实 HTTP +
         ),
       ),
     );
+    // 不允许死锁或未知异常
     const rejected = settled.filter((entry) => entry.status === 'rejected') as PromiseRejectedResult[];
-    expect(rejected.filter((entry) => /deadlock/i.test(String(entry.reason)))).toHaveLength(0);
+    expect(rejected.map((entry) => String(entry.reason))).toEqual([]);
+    const results = (settled as PromiseFulfilledResult<RetryBatchExecutionResult>[]).map((entry) => entry.value);
+    expect(results.reduce((sum, value) => sum + value.executed.length + value.skipped.length, 0)).toBeGreaterThanOrEqual(4);
 
-    // 每张发票至多一次 PAID 推进、支付对象数不变
-    expect(await prisma.auditLog.count({ where: { organizationId: ORG, action: 'payment.succeeded' } })).toBeLessThanOrEqual(2);
-    expect(await prisma.payment.count({ where: { organizationId: ORG } })).toBe(2);
-    const invoices = await prisma.billingInvoice.findMany({ where: { organizationId: ORG }, select: { status: true } });
+    // 逐发票关联：每张发票最多一次 PAID，且资金对象数不变
+    const invoices = await prisma.billingInvoice.findMany({ where: { organizationId: ORG }, select: { id: true, status: true } });
     expect(invoices.filter((row) => row.status === 'PAID').length).toBeLessThanOrEqual(2);
-  }, 60_000);
-});
+    expect(invoices.filter((row) => row.status === 'PAID').length).toBeGreaterThanOrEqual(1);
+    expect(await prisma.payment.count({ where: { organizationId: ORG } })).toBe(2);
+    const successAudits = await prisma.auditLog.findMany({
+      where: { organizationId: ORG, action: 'payment.succeeded' },
+      select: { entityId: true },
+    });
+    const paidInvoiceIds = new Set(successAudits.map((row) => row.entityId));
+    expect(successAudits.length).toBe(paidInvoiceIds.size);
+    expect(e3.eventId && e4.eventId && e2.eventId).toBeTruthy();
+  }, 60_000);});
