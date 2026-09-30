@@ -274,7 +274,8 @@ describe('C-0010-A — 支付域（真实 PostgreSQL）', () => {
       role: 'OWNER',
       invoiceId: INVOICE,
       decision: 'APPROVE',
-      boundPayload: { amount: '1500.0000', currency: 'USD', basisReference: 'pi_hitl_3', evidenceArtifactId: null },
+      // R6 CHANGE A：支付审批必须绑定真实账单操作（金额/币种/依据 + 精确 from→to）
+      boundPayload: { amount: '1500.0000', currency: 'USD', basisReference: 'pi_hitl_3', evidenceArtifactId: null, from: 'ISSUED', to: 'PAID' },
       boundAction: 'payment.capture',
     });
     expect(approval.state).toBe('APPROVED');

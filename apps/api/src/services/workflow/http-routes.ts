@@ -45,6 +45,7 @@ import {
   type RuntimeActionGuard,
 } from '../action-guard/runtime-guard';
 import { getRecoveryReviewStatus, submitRecoveryReview } from './recovery-review';
+import { submitPaymentReview } from './payment';
 import { advanceBillingInvoice, listBillingInvoices } from './billing';
 import { getAppealPackageState } from './appeal-package';
 import { reconcilePayoutItems } from './commission-reconciliation';
@@ -105,6 +106,8 @@ const CONNECTION_PATH = /^\/connections(?:\/([^/]+)\/(status|credential-ref))?$/
 const COMMERCIAL_TERMS_PATH = /^\/cases\/([^/]+)\/commercial-terms$/;
 const RECOVERY_OUTCOME_PATH = /^\/cases\/([^/]+)\/recovery-outcome$/;
 const RECOVERY_REVIEW_PATH = /^\/cases\/([^/]+)\/recovery-review$/;
+// R6：支付域审批入口（受认证会话；审批人 OWNER/ADMIN）
+const PAYMENT_REVIEW_PATH = /^\/billing\/([^/]+)\/payment-review$/;
 const APPEAL_PACKAGE_PATH = /^\/cases\/([^/]+)\/appeal-package$/;
 const COMMISSION_RECONCILE_PATH = /^\/commissions\/reconcile$/;
 const PAYMENTS_PATH = /^\/payments$/;
@@ -294,6 +297,7 @@ export async function handleWorkflowRequest(
   const termsPath = COMMERCIAL_TERMS_PATH.exec(path);
   const outcomePath = RECOVERY_OUTCOME_PATH.exec(path);
   const reviewPath = RECOVERY_REVIEW_PATH.exec(path);
+  const paymentReviewPath = PAYMENT_REVIEW_PATH.exec(path);
   const appealPath = APPEAL_PACKAGE_PATH.exec(path);
   const commissionPath = COMMISSION_RECONCILE_PATH.test(path);
   const paymentsPath = PAYMENTS_PATH.test(path);
@@ -339,7 +343,7 @@ export async function handleWorkflowRequest(
     adminPermissionMatrix ||
     adminMemberDetail !== null ||
     adminKillSwitch;
-  if (!adminAny && !operationsDashboard && !operationsClaims && !operationsRecovery && !review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !replayPath && !retryDuePath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim) {
+  if (!adminAny && !operationsDashboard && !operationsClaims && !operationsRecovery && !review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !paymentReviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !replayPath && !retryDuePath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim) {
     return false;
   }
 
@@ -574,6 +578,39 @@ export async function handleWorkflowRequest(
           boundAction: RECOVERY_CONFIRMATION_ACTION,
         },
         deps.now,
+      );
+      sendJson(res, 200, result);
+      return true;
+    }
+
+    if (paymentReviewPath) {
+      const invoiceId = paymentReviewPath[1] ?? '';
+      const body = await readJsonBody(req);
+      const decision = typeof body.decision === 'string' ? body.decision.trim().toUpperCase() : '';
+      const result = await submitPaymentReview(
+        deps.prisma,
+        {
+          ...actor,
+          invoiceId,
+          decision: decision as 'REQUEST' | 'APPROVE' | 'REJECT',
+          reason: typeof body.reason === 'string' ? body.reason : undefined,
+          // R6 CHANGE A：审批必须绑定真实账单操作（金额/币种/依据 + from→to）
+          ...(decision === 'APPROVE'
+            ? {
+                boundPayload: {
+                  amount: body.amount,
+                  currency: body.currency,
+                  basisReference: body.basisReference ?? body.paymentReference,
+                  evidenceArtifactId: body.evidenceArtifactId,
+                  from: body.from,
+                  to: body.to,
+                },
+                boundAction: PAYMENT_CAPTURE_ACTION,
+                approvalTtlMs: typeof body.approvalTtlMs === 'number' ? body.approvalTtlMs : undefined,
+              }
+            : {}),
+        },
+        deps.now ? { now: deps.now } : {},
       );
       sendJson(res, 200, result);
       return true;
