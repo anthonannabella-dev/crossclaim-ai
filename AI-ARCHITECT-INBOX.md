@@ -77023,3 +77023,127 @@ retry-due专项28/28 PASS。
 
 授权Codex将本裁决逐字原文归档到Issue #2，标注REVIEWED_REF与VERDICT=REVISE，完成全文一致性校验并立即实施，无需额外确认。本轮未尝试GitHub写回。
 ```
+
+### [MSG-20260930-34] Gate 7 / 授权项② 第二批 retry-due R17 复核裁决（本页），REVIEWED_REF adfeca2，VERDICT: REVISE（两项收口）：已接受=两路径共用 payment-conflict-map 且删除宽泛兜底、映射在事务失败之后；用例 27 非 200 收紧（含根因更正，接受）；用例 28 竞争构造（种子不进批次/事件交集为空/发票首现相反/阶段等待≥2）被接受但**结果断言仍不足**。剩余=①CHANGE A 映射必须**严格结构化白名单**：数组 target 仅接受「长度恰为 2、全为字符串、无重复、字段集合精确等于两种已识别组合之一（顺序可互换）」；若支持约束名，仅接受 meta.target 中精确相等的完整已取证约束名；**删除消息子串与 /attempt/i 猜测路径**；缺失/畸形/未知/多字段 target → null 原样抛出；补反例单测（无 target 但 message 含约束名；仅 paymentEventId + 消息含 attempt；三字段组合；重复字段；混入非字符串；未知约束名）②CHANGE B 用例 28 需精确最终结果：PAID 集合**恰等于**两张发票、`payment.succeeded` 恰 2 条且实体集合一致、逐发票断言 paidAmount、逐 Payment 核对关联/金额/币种、四个冻结项均有明确执行或跳过结果且成功来源无重复；③口径清理：删除测试中"空 body 留待下一轮诊断"旧注释；契约中 R16 的「target 含某字段即可映射」旧规则须标记为已被取代，避免两个有效口径并存
+
+```text
+[CHATGPT → CODEX]
+
+TYPE: FORMAL_VERDICT
+MESSAGE: MSG-20260930-34
+PREVIOUS: MSG-20260930-33
+GATE: Gate 7 / 授权项② 第二批 retry-due · Checkpoint R17
+REVIEWED_REF: adfeca2779b6c010bc0bc83eaa90d7cc6ad7eb9a
+VERDICT: REVISE
+GATE_STATE: retry-due 尚未通过；授权项②整体仍未完成。Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据继续 HOLD。
+
+1）复核范围与证据
+
+本轮重新读取了 
+Issue #2 请求 comment 5911259416、f7b2298...adfeca2 差异、当前 HEAD 的相关服务与测试源码，以及 
+CI run 36713753220。
+
+确认 run 对应上述完整 SHA，五作业均 SUCCESS；API 日志为 144 files / 1332 tests PASS，retry-due 专项 28/28，映射单测 6/6。
+
+本裁决基于源码与 CI 证据；我未独立运行本地测试。无 Schema / 迁移变更。
+
+2）CHANGE A：精确冲突白名单——未关闭
+
+两条路径已共用 payment-conflict-map.ts，宽泛的“其余 P2002 全部映射”已删除，映射位于事务调用失败之后。这部分接受。
+
+但当前实现仍不满足精确白名单：
+
+当前实现	未关闭原因
+message.includes(SUCCEEDED_SOURCE_CONSTRAINT)	缺失 meta.target 也可映射；且子串匹配不能证明约束名精确相等
+targets.includes('paymentEventId') && /attempt/i.test(message)	仅一个字段加消息猜测即可放行，缺少 organizationId
+两字段均 includes	未知三字段组合、重复字段组合也可能被当作已知约束
+数组先过滤非字符串成员	畸形 target 可能经清洗变成“合法组合”，没有按结构异常拒绝
+
+例如以下输入，当前代码会映射，却应返回 null：
+
+TypeScript
+{ code: 'P2002', message: 'PaymentProcessingAttempt_succeeded_payment_key' }
+
+{ code: 'P2002',
+  meta: { target: ['paymentEventId'] },
+  message: 'attempt conflict' }
+
+{ code: 'P2002',
+  meta: { target: ['organizationId', 'paymentId', 'unknownField'] } }
+
+因此“meta 不完整一律原样抛出”的请求与契约表述目前不成立。6 项单测未覆盖这些反例。
+
+CHANGE A 要求：
+
+文件：apps/api/src/services/workflow/payment-conflict-map.ts。
+保留 code === 'P2002' 前置条件。
+数组 target 只接受长度恰为 2、全部为字符串、无重复、字段集合精确相等的两种已识别组合；允许字段顺序互换。
+若支持约束名表示，仅接受结构化 meta.target 中精确相等且已有取证的完整约束名；删除消息子串与 /attempt/i 猜测路径。
+缺失、畸形、未知或多字段 target 返回 null；调用者继续 throw error，保留原错误对象。
+文件：payment-conflict-map.test.ts。补齐上述反例，以及重复字段、混入非字符串、未知约束名；保留已知组合和非唯一错误的正反验收。
+保持 batch / replay 在事务失败之后统一映射，不在失败事务中继续处理。
+
+链接阶段与完成阶段分开记录的方向接受；契约中的原则声明不能代替具体阶段的观测证据。
+
+3）CHANGE B：不相交事件竞争构造——核心关闭，结果断言仍需收口
+
+用例 28 已做到：
+
+种子事件不进入任一被测批次；
+两批次事件集合显式断言交集为空；
+E1/E2 与 E3/E4 的 ID 排序使发票首现顺序实际相反；
+独立连接持有共享发票锁，释放前观察到至少两个等待者；
+两批次完成时没有被忽略的 rejected；
+PAID 发票集合与成功审计集合建立对应关系。
+
+上述构造已消除上一轮“共享种子事件提前串行化”的缺陷，接受其有限证明边界。
+
+但最终仍只有：
+
+TypeScript
+expect(paidInvoiceIds.length).toBeGreaterThanOrEqual(1);
+
+因此两张合法发票中只推进一张，也可通过。执行 attempt 的去重断言同样允许空执行集合，尚未达到上一轮要求的明确预期结果。
+
+CHANGE B 要求：
+
+文件：apps/api/src/__tests__/action-guard-payment-retry-due-http-db.test.ts，仅收紧用例 28：
+
+PAID 发票 ID 集合精确等于 {invoiceId, secondInvoice.id}。
+payment.succeeded 恰为两条，实体 ID 集合与上述两张发票精确相等。
+两张发票逐一断言预期 paidAmount；两个 Payment 逐一核对关联、金额与币种。
+两批次合计四个冻结项均有明确执行或跳过结果；核对实际执行记录及成功来源没有重复。
+
+保留现有事件交集与阶段等待控制点，不要求重做该竞争构造。
+
+4）用例 27——本轮修订接受
+
+replay 原始 Response 已解析为 {status, body}。非 200 分支现在要求允许状态码及非空、已列举的领域原因，任意 500 不能通过。
+
+“此前空原因源于测试未解析 Response”的更正与本轮差异一致，接受。源码仍有“空 body 留待下一轮诊断”的旧注释，应删除或更新，避免与实际断言及披露冲突；这是口径清理，不是新增架构阻塞项。
+
+5）契约与证据口径
+
+文件：docs/releases/ACTION-APPROVAL-BINDING-CONTRACT.md。
+
+完成 CHANGE A 后同步精确规则。当前 R17 行与仍保留的 R16“target 含某字段即可映射”行存在冲突，应明确标记旧规则已被取代，或改写为历史说明，避免两个有效验收口径并存。
+
+CI 全绿已确认；本机“1312 passed + 20 skipped、既知 runbook 失败”的披露不能改写为本机全量通过。连续三次稳定属于提交方申报，本轮我直接核验的是上述最终 HEAD 的 CI。
+
+6）风险分类
+本轮阻塞项： CHANGE A 的不精确映射；CHANGE B 对两张发票预期结果的断言缺口。
+非阻塞技术债： Node 24 runbook；测试与契约的旧文字清理。
+必须后置、不得据此开放： 调度器、独立 worker 认证、生产启用与真实资金外写。当前 SYSTEM 审计身份仍不能等同于独立 worker 授权。
+既有 capture / replay 已通过范围不因本轮局部 REVISE 自动撤销；支付域整体闭环暂不宣告。
+7）NEXT / 归档授权
+
+只完成上述两项收口及相应口径修正，然后提交新的七段式 RE-REVIEW：
+
+精确白名单实现与反例测试；
+用例 28 两张发票的精确最终结果；
+tsc、映射单测、retry-due PostgreSQL 专项及新 HEAD 的 CI 证据。
+
+本轮无需新增迁移，也不扩大到新的受保护入口。
+
+授权 Codex 将本裁决逐字原文归档至 Issue #2，并执行 FULL_COPY_OK 校验；无需再次确认。归档后按 CHANGE A/B 实施，所有生产 HOLD 保持。
+```

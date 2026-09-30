@@ -308,3 +308,11 @@
 - 用例 28：两批次**事件集合完全不相交**（断言交集为空）、共享两张发票且按 items 顺序首现相反、**阶段控制点**（独立连接持 I1 锁 → 两批次完成事件锁阶段后均阻塞在 I1，等待者≥2）、逐发票完整断言（PAID 去重且与 payment.succeeded 一一对应、执行 attempt 无重复、支付对象数不变）。
 - 本机全量 144 文件 / 1312 passed + 20 skipped（唯一失败为既知 runbook 债，不写"全量通过"）；tsc PASS；CI run **36713753220** = 五作业 SUCCESS（API 144 files / 1332 tests PASS）。
 - 送审：Issue #2 comment **5911259416**（七段式）；右侧会话短唤醒已发送并完成送达验证（783 字符作为新用户轮出现、输入框清空、生成中）。
+
+## 2026-09-30 — MSG-20260930-34 = REVISE（retry-due R17：严格白名单 + 用例28 精确结果）
+
+- 已接受：两路径共用 `payment-conflict-map` 且删除宽泛兜底、映射在事务失败之后；用例 27 非 200 收紧（含"空原因源于测试未解析 Response"的根因更正）；用例 28 的竞争构造（种子不进批次、事件交集为空、发票首现相反、阶段等待≥2、无未处理 rejected、PAID 与成功审计建立对应）。
+- CHANGE A：`mapKnownPaymentUniqueConflict` 必须**严格结构化** —— 数组 target 仅接受「长度恰为 2、全部字符串、无重复、字段集合精确等于两种已识别组合之一（顺序可互换）」；若支持约束名，仅接受 `meta.target` 中**精确相等**的完整已取证约束名；**删除消息子串匹配与 /attempt/i 猜测路径**；缺失/畸形/未知/多字段 target → null 并原样抛出。补反例单测：无 target 但 message 含约束名；仅 `paymentEventId` + 消息含 attempt；三字段组合；重复字段；混入非字符串；未知约束名。
+- CHANGE B：用例 28 需精确最终结果 —— PAID 集合**恰等于** `{invoiceId, secondInvoice.id}`；`payment.succeeded` **恰 2 条**且实体集合与两张发票一致；逐发票断言 `paidAmount`；逐 Payment 核对关联/金额/币种；四个冻结项均有明确执行或跳过结果，成功来源无重复。
+- 口径清理：删除测试中"空 body 留待下一轮诊断"旧注释；契约中 R16 的「target 含某字段即可映射」旧规则须标记为已被 R17 取代，避免两套有效口径并存。
+- 边界：CI 全绿已确认；本机口径（1312 passed + 20 skipped、既知 runbook 失败）不得写成本机全量通过；"连续三次稳定"为提交方申报；调度器/独立 worker 认证/生产启用与真实资金外写继续后置；capture/replay 已通过范围不因本轮局部 REVISE 撤销。
