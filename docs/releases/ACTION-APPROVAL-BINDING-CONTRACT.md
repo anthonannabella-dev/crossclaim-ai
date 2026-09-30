@@ -114,11 +114,12 @@ boundPayload = {
 | 最终审计（R6 CHANGE D） | `billing.status_changed` 记 `approvalId`/`operationId`/`result`；锁内拒绝写 `payment.capture_rejected`（stage/reason/执行主体/审批/操作/结果，SYSTEM actor，事务外写入且失败不覆盖原错误） |
 | 幂等语义 | 状态迁移**不是**幂等创建：审批已消费且发票已在目标状态时，重复提交返回 409 `ILLEGAL_TRANSITION`，消费记录保持 1（零新增副作用） |
 
-待架构方裁定（本批次未接）：
+支付域受保护入口状态（按已批准设计推进）：
 
-- `POST /payments/events/:id/replay` 的审批主体（目标为 `PaymentEvent`，载荷指纹如何定义）；
-- `POST /payments/processing/retry-due` 的审批主体（一次调用可能覆盖多张发票，是否需要「批次摘要指纹」）；
-- `POST /payments/webhook` 是否纳入 Action Guard（当前边界 = 验签 + `providerEventId` 幂等 + 事件形状校验）。
+- `POST /billing/:id/status`（`payment.capture`）：已接入并通过 R7 验收（§5.3）。
+- `POST /payments/events/:id/replay`（`payment.replay`）：**已接入**（§5.4；R8 批次），目标为具体 `PaymentEvent`。
+- `POST /payments/processing/retry-due`：采用**冻结清单批次审批**（MSG-20260930-22 §6(2)），实现为下一批次；当前仍未接入守卫，不得表述为已完成。
+- `POST /payments/webhook`：保持验签 + `providerEventId` 幂等 + 事件形状校验边界；「接收已发生付款事实」与「发起新扣款/外写」必须分开。
 
 ## 5.2 三项设计裁决（MSG-20260930-22，已授权实施）
 
@@ -137,6 +138,22 @@ boundPayload = {
 - **签发边界**：`payment.capture` 审批**只能用于 `to=PAID`**；`DRAFT → ISSUED` 需要独立授权边界，
   当前统一守卫的 `POST /billing/:id/status` **不得**被描述为「签发能力已接入」，也不得复用收费审批完成签发。
 - 适用对象：本节的「执行快照」结论限定在**账单登记**（`BillingInvoice`）；真实支付渠道扣款未接入，仍属 HOLD。
+## 5.4 支付事件重放：`payment.replay`（② 第二批 replay）
+
+| 项 | 值 |
+| --- | --- |
+| 受保护动作 | `payment.replay`（`MONEY_MOVEMENT`；requires `humanApproval` + `productionGate`；Kill Switch scope `billing`）。**独立身份**：与 `payment.capture` 互不通用、互不消费 |
+| 审批目标 | 具体 `PaymentEvent`（`entityType = PaymentEvent`，`entityId = paymentEventId`）；不是 `BillingInvoice`，也不是 `Case` |
+| 审批事件族 | `payment.review_required` / `payment.review_approved` / `payment.review_rejected`（挂在 `PaymentEvent` 上） |
+| 消费事件 | `payment.replay_consumed`（独立于 `payment.capture_consumed`；含 `approvalId`/`operationId`/`paymentEventId`/`invoiceId`/金额币种/`recoveryAction`/`processingVersion`，与执行同事务） |
+| 指纹（**服务端组装**） | `amount`、`currency`（关联 `Payment` 的规范化值）；`basisReference = provider:providerEventId`（事件身份）；`evidenceArtifactId = PaymentEvent.payloadHash`（**载荷摘要**）；额外键 `paymentEventId` / `invoiceId` / `provider` / `providerEventId` / `payloadHash` / `externalPaymentId` / `recoveryAction = recoverPaymentSucceeded` / `processingVersion = v1` |
+| 不绑定什么 | 用户可任意替换的原始 JSON；事件或关键关联（事件身份 / 载荷摘要 / 金额币种 / 关联发票）变化即失效 |
+| 锁与事务 | 事件级 advisory lock `cc-payment-event:<paymentEventId>`；**审批生命周期写入与执行共用同一把锁**；执行在**单一事务**内完成：锁内执行快照 → 锁内指纹重验（有效期/撤销/取代/消费）→ attempt → 资金写入（`applyPaymentSucceeded` 复用调用方事务）→ 消费审计 |
+| 提交侧 vs 锁内 | HTTP 入口先由服务端读取指纹并交给 HITL 边界做**提交侧**比对（预检），执行侧在锁内**重读事实再次比对**（权威判定）；两阶段不一致时以锁内为准 |
+| 缺审批 | HTTP：409 `ACTION_GUARD_HUMAN_APPROVAL_REQUIRED`；服务层直调同样拒绝（`APPROVAL_NOT_FOUND`）——受保护资金入口**没有** bypass 路径 |
+| 拒绝审计 | 锁内拒绝写 `payment.replay_rejected`（stage/reason/执行主体/approvalId/结果；事务外独立写入，失败不覆盖原错误） |
+| 最小审批入口 | `POST /payments/events/:id/replay-review`（受认证会话；REQUEST/APPROVE/REJECT；审批人 OWNER/ADMIN；APPROVE 由服务端组装指纹） |
+| 现状限定 | 本批次不接入真实支付凭据、不发起真实扣款；`retry-due` 仍未接入守卫（下一批次）；webhook 边界不变 |
 ## 6. 验收矩阵（CHANGE C 对应）
 
 | 场景 | 期望 | 资金对象 |
@@ -160,5 +177,12 @@ boundPayload = {
 | 支付域执行快照交错（审批绑定锁内新事实） | 200；`paidAmount` = 成功审计金额 = 消费金额/币种 = 批准金额（R7 用例 12） | 恰一次登记 + 恰一次消费 |
 | 支付域等锁期间失效（过期 / 撤销 / 主体成员停用） | 403 `APPROVAL_EXPIRED` / `APPROVAL_REVOKED` / `APPROVAL_ACTOR_MISMATCH`（R7 用例 13a–13c） | 账单金额与状态不变、消费不新增 |
 | 支付域审批审计端口写入失败 | 拒绝（≥400，fail-closed；R7 用例 14：数据库层拒绝 `action_guard.approval_decision`） | `work` 不执行：账单与消费零变化 |
+| replay HTTP 全链路（REQUEST→APPROVE→执行） | 200；attempt 恰一次、`payment.replay_consumed` 恰一次、审计带 `approvalId`/`operationId`（R8 用例 01） | 资金对象不重复创建 |
+| replay 缺 `approvalId` | 409 `ACTION_GUARD_HUMAN_APPROVAL_REQUIRED`（R8 用例 02） | 零副作用 |
+| replay 事件关键关联被改写（载荷摘要变化） | 403 `APPROVAL_PAYLOAD_MISMATCH`（提交侧比对；R8 用例 03） | 零副作用 |
+| replay 等锁期间事实变化（控制点 = 事件 advisory lock 等待行） | 403 `APPROVAL_PAYLOAD_MISMATCH` + `payment.replay_rejected`（R8 用例 04） | 零副作用 |
+| 跨域冒用：`payment.capture` 审批用于 replay | 403 `APPROVAL_TARGET_MISMATCH` / `APPROVAL_ACTION_MISMATCH`（R8 用例 05） | 零副作用、零消费 |
+| replay 同审批并发 | 恰一次重放 + 一次消费；其余 403 `APPROVAL_ALREADY_CONSUMED`（R8 用例 06） | 资金对象恰一条 |
+| replay 等锁期间过期 / 撤销 / 主体成员停用 | 403 `APPROVAL_EXPIRED` / `APPROVAL_REVOKED` / `APPROVAL_ACTOR_MISMATCH`（R8 用例 07–09） | 账单金额与状态不变、消费不新增 |
 
 > 实现与测试（`action-guard-hitl-*`、`workflow-hitl-db`、`workflow-outcome-db`、`action-guard-payment-capture-http-db`、`workflow-billing*`）按本文件逐条对齐后送审。
