@@ -212,7 +212,8 @@ export async function advanceBillingInvoice(
       : undefined,
   );
 
-  return prisma.$transaction(async (tx) => {
+  try {
+    return await prisma.$transaction(async (tx) => {
     // P5：目标级串行化（发票粒度）→ 锁内完整重验 → CAS → 审计/消费
     if (typeof tx.$executeRawUnsafe === 'function') {
       await tx.$executeRawUnsafe('SELECT pg_advisory_xact_lock(hashtext($1))', `cc-payment-invoice:${invoice.id}`);
@@ -341,5 +342,86 @@ export async function advanceBillingInvoice(
     }
 
     return { invoiceId: invoice.id, from, to, paymentReferenceProvided: paymentReference !== '' };
+    });
+  } catch (error) {
+    // R6 CHANGE D：锁内拒绝必须留下最终拒绝审计（事务已回滚，故独立连接写入；失败不覆盖原错误）
+    const reason =
+      error instanceof ApprovalBoundaryError
+        ? error.reason
+        : error instanceof WorkflowError
+          ? error.code
+          : null;
+    if (reason !== null) {
+      await writePaymentRejectionAudit(prisma, {
+        organizationId: input.organizationId,
+        actorUserId: input.actorUserId,
+        invoiceId: invoice.id,
+        approvalId: typeof input.approvalId === 'string' ? input.approvalId : null,
+        operationId:
+          typeof input.operationId === 'string' && input.operationId.trim() !== ''
+            ? input.operationId.trim()
+            : typeof input.approvalId === 'string' && input.approvalId.trim() !== ''
+              ? `approval:${input.approvalId}`
+              : null,
+        stage: 'LOCKED_RECHECK',
+        reason,
+        at: now(),
+      }).catch(() => undefined);
+    }
+    throw error;
+  }
+}
+
+/**
+ * R6 CHANGE D：支付捕获最终拒绝审计（锁内重验拒绝）。
+ * 记录执行主体、审批、操作、目标与结果；主体记入 changes（可能已失效），保持 SYSTEM actor 形状约束。
+ */
+async function writePaymentRejectionAudit(
+  prisma: PrismaClient,
+  input: {
+    organizationId: string;
+    actorUserId: string;
+    invoiceId: string;
+    approvalId: string | null;
+    operationId: string | null;
+    stage: 'LOCKED_RECHECK';
+    reason: string;
+    at: Date;
+  },
+): Promise<void> {
+  const row = prepareAuditInsert(
+    {
+      organizationId: input.organizationId,
+      actorType: 'SYSTEM',
+      actorRef: 'payment-capture-guard',
+      action: 'payment.capture_rejected',
+      entityType: 'BillingInvoice',
+      entityId: input.invoiceId,
+      changes: {
+        invoiceId: input.invoiceId,
+        actorUserId: input.actorUserId,
+        approvalId: input.approvalId,
+        operationId: input.operationId,
+        stage: input.stage,
+        reason: input.reason,
+        result: 'REJECTED',
+      },
+    },
+    { maxStringLength: 512, now: () => input.at },
+  );
+  await prisma.auditLog.create({
+    data: {
+      organizationId: row.organizationId,
+      actorType: row.actorType,
+      actorUserId: row.actorUserId,
+      actorRef: row.actorRef,
+      action: row.action,
+      entityType: row.entityType,
+      entityId: row.entityId,
+      changes: (row.changes ?? undefined) as Prisma.InputJsonValue | undefined,
+      ip: row.ip,
+      userAgent: row.userAgent,
+      createdAt: input.at,
+    },
   });
 }
