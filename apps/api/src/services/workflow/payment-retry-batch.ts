@@ -14,11 +14,25 @@ import { createHash } from 'node:crypto';
 import { Prisma, type PrismaClient } from '@prisma/client';
 
 import { prepareAuditInsert } from '../audit';
+import {
+  ApprovalBoundaryError,
+  PAYMENT_APPROVAL_EVENT_ACTION,
+  PAYMENT_REJECTED_EVENT_ACTION,
+  PAYMENT_REQUIRED_EVENT_ACTION,
+  PAYMENT_RETRY_DUE_CONSUMED_EVENT_ACTION,
+  verifyApprovalBoundary,
+} from '../action-guard/approval-tx-verify';
 import { PAYMENT_RETRY_DUE_ACTION } from '../action-guard/approval-verifier';
+import { finishAttempt, startAttempt } from './payment-attempt';
 import { nextLifecycleAt, normalizeApprovalTtl } from './recovery-review';
 import { WorkflowError } from './opportunity-review';
 import { assertPermission } from './permissions';
-import { PAYMENT_REVIEW_ACTIONS, type PaymentReviewState, resolvePaymentReviewState } from './payment';
+import {
+  PAYMENT_REVIEW_ACTIONS,
+  recoverPaymentSucceeded,
+  type PaymentReviewState,
+  resolvePaymentReviewState,
+} from './payment';
 
 export const RETRY_BATCH_OPERATION = 'retry_due';
 export const RETRY_BATCH_VERSION = 'v1';
@@ -371,5 +385,353 @@ export async function submitRetryBatchReview(
       itemCount: batch.itemCount,
       expiresAt: expiresAt.toISOString(),
     };
+  });
+}
+
+export interface RetryBatchExecutionResult {
+  batchId: string;
+  digest: string;
+  itemCount: number;
+  executed: Array<{ attemptId: string; paymentEventId: string; attemptNo: number; resultStatus: string | null }>;
+  skipped: Array<{ attemptId: string; paymentEventId: string; reason: string }>;
+}
+
+function itemFactsMatch(
+  item: RetryBatchItemFingerprint,
+  current: { event: { provider: string; providerEventId: string; payloadHash: string } | null; payment: { id: string; provider: string; invoiceId: string; externalPaymentId: string; amount: string; currency: string } | null },
+): string | null {
+  if (!current.event) return 'EVENT_MISSING';
+  if (!current.payment) return 'PAYMENT_MISSING';
+  if (current.event.provider !== item.provider) return 'EVENT_PROVIDER_CHANGED';
+  if (current.event.providerEventId !== item.providerEventId) return 'EVENT_IDENTITY_CHANGED';
+  if (current.event.payloadHash !== item.payloadHash) return 'EVENT_PAYLOAD_CHANGED';
+  if (current.payment.id !== item.paymentId) return 'PAYMENT_IDENTITY_CHANGED';
+  if (current.payment.provider !== item.paymentProvider) return 'PAYMENT_PROVIDER_CHANGED';
+  if (current.payment.provider !== current.event.provider) return 'PAYMENT_PROVIDER_MISMATCH';
+  if (current.payment.invoiceId !== item.invoiceId) return 'INVOICE_RELATION_CHANGED';
+  if (current.payment.externalPaymentId !== item.externalPaymentId) return 'EXTERNAL_ID_CHANGED';
+  if (current.payment.amount !== item.amount) return 'AMOUNT_CHANGED';
+  if (current.payment.currency !== item.currency) return 'CURRENCY_CHANGED';
+  return null;
+}
+
+/**
+ * 执行冻结批次（受保护动作 `payment.retry_due`）。
+ *
+ * 结构：**单一事务**内完成 批次锁 → 审批核验（batchId/摘要/数量上限/有效期）→ 逐项重验与执行 → 批次消费。
+ *   · 只处理**冻结清单内**的项（绝不动态纳入批准后新增的 due 项）；
+ *   · 每项复用 replay 已验收协议：事件锁 → 发票锁 → Payment 行锁 → 最终事实比对 → attempt → 资金写入（同一事务）；
+ *   · 事实/生命周期/幂等不满足的项 → 跳过并在同一事务内留证（`payment.retry_due_skipped`）；
+ *   · 执行身份 = SYSTEM（`actorRef = payment-retry-worker`），预授权范围 = 冻结清单 + batchId + 有效期。
+ */
+export async function executeRetryBatch(
+  prisma: PrismaClient,
+  input: {
+    organizationId: string;
+    actorUserId: string;
+    role: string;
+    batchId: string;
+    approvalId?: string;
+  },
+  deps: { now?: () => Date } = {},
+): Promise<RetryBatchExecutionResult> {
+  assertPermission(input.role, 'setCommercialTerms');
+  assertPermission(input.role, 'advanceBilling');
+
+  const approvalId = typeof input.approvalId === 'string' && input.approvalId.trim() !== '' ? input.approvalId.trim() : '';
+  if (!approvalId) throw new ApprovalBoundaryError('APPROVAL_NOT_FOUND', input.batchId);
+
+  const pre = await readRetryBatch(prisma, { organizationId: input.organizationId, batchId: input.batchId });
+  if (!pre) throw new WorkflowError('NOT_FOUND', `批次 ${input.batchId} 不存在或不属于该租户`);
+
+  const now = deps.now ?? (() => new Date());
+
+  return prisma.$transaction(async (tx) => {
+    // 批次锁：与审批创建/其他执行者共用同一把锁（恰一次消费的串行化点）
+    if (typeof tx.$executeRawUnsafe === 'function') {
+      await tx.$executeRawUnsafe('SELECT pg_advisory_xact_lock(hashtext($1))', `cc-payment-retry-batch:${pre.batchId}`);
+    }
+    const at = now();
+    const batch = await readRetryBatch(tx, { organizationId: input.organizationId, batchId: pre.batchId });
+    if (!batch) throw new WorkflowError('NOT_FOUND', `批次 ${pre.batchId} 不存在或不属于该租户`);
+    if (retryBatchDigest(batch.items) !== batch.digest) {
+      throw new ApprovalBoundaryError('APPROVAL_PAYLOAD_MISMATCH', batch.batchId);
+    }
+
+    const boundary = await verifyApprovalBoundary(tx, {
+      organizationId: input.organizationId,
+      approvalId,
+      action: PAYMENT_RETRY_DUE_ACTION,
+      caseId: batch.batchId,
+      actorUserId: input.actorUserId,
+      payload: {
+        amount: null,
+        currency: null,
+        basisReference: batch.batchId,
+        evidenceArtifactId: batch.digest,
+      },
+      extra: {
+        batchId: batch.batchId,
+        digest: batch.digest,
+        digestVersion: batch.digestVersion,
+        itemCount: String(batch.itemCount),
+      },
+      now: at,
+      approvalEventAction: PAYMENT_APPROVAL_EVENT_ACTION,
+      requiredEventAction: PAYMENT_REQUIRED_EVENT_ACTION,
+      revocationEventActions: [PAYMENT_REJECTED_EVENT_ACTION],
+      consumedEventAction: PAYMENT_RETRY_DUE_CONSUMED_EVENT_ACTION,
+      targetEntityType: 'PaymentRetryBatch',
+    });
+    if (!boundary.ok) throw new ApprovalBoundaryError(boundary.reason, batch.batchId);
+    if (boundary.consumed) throw new ApprovalBoundaryError('APPROVAL_ALREADY_CONSUMED', batch.batchId);
+
+    const executed: RetryBatchExecutionResult['executed'] = [];
+    const skipped: RetryBatchExecutionResult['skipped'] = [];
+
+    for (const item of batch.items) {
+      const attempt = await tx.paymentProcessingAttempt.findFirst({
+        where: { id: item.attemptId, organizationId: input.organizationId },
+        select: { id: true, status: true, attemptNo: true, nextRetryAt: true, paymentId: true },
+      });
+      const event = await tx.paymentEvent.findFirst({
+        where: { id: item.paymentEventId, organizationId: input.organizationId },
+        select: { id: true, provider: true, providerEventId: true, payloadHash: true },
+      });
+      const payment = await tx.payment.findFirst({
+        where: { id: item.paymentId, organizationId: input.organizationId },
+        select: { id: true, provider: true, invoiceId: true, externalPaymentId: true, amount: true, currency: true },
+      });
+
+      const writeSkip = async (reason: string) => {
+        const row = prepareAuditInsert(
+          {
+            organizationId: input.organizationId,
+            actorType: 'SYSTEM',
+            actorRef: RETRY_BATCH_ACTOR_REF,
+            action: RETRY_BATCH_EVENTS.skipped,
+            entityType: 'PaymentRetryBatch',
+            entityId: batch.batchId,
+            changes: {
+              batchId: batch.batchId,
+              digest: batch.digest,
+              attemptId: item.attemptId,
+              paymentEventId: item.paymentEventId,
+              reason,
+              result: 'SKIPPED',
+              actorUserId: input.actorUserId,
+            },
+          },
+          { maxStringLength: 512 },
+        );
+        await tx.auditLog.create({
+          data: {
+            organizationId: row.organizationId,
+            actorType: row.actorType,
+            actorUserId: row.actorUserId,
+            actorRef: row.actorRef,
+            action: row.action,
+            entityType: row.entityType,
+            entityId: row.entityId,
+            changes: (row.changes ?? undefined) as Prisma.InputJsonValue | undefined,
+            ip: row.ip,
+            userAgent: row.userAgent,
+            createdAt: at,
+          },
+        });
+        skipped.push({ attemptId: item.attemptId, paymentEventId: item.paymentEventId, reason });
+      };
+
+      if (!attempt || attempt.status !== 'RETRYABLE_FAILED') {
+        await writeSkip('ATTEMPT_NOT_RETRYABLE');
+        continue;
+      }
+      if (!attempt.nextRetryAt || attempt.nextRetryAt.getTime() > at.getTime()) {
+        await writeSkip('NOT_DUE');
+        continue;
+      }
+      const beforeLock = itemFactsMatch(item, {
+        event,
+        payment: payment
+          ? {
+              id: payment.id,
+              provider: payment.provider,
+              invoiceId: payment.invoiceId,
+              externalPaymentId: payment.externalPaymentId,
+              amount: money(payment.amount),
+              currency: payment.currency,
+            }
+          : null,
+      });
+      if (beforeLock) {
+        await writeSkip(beforeLock);
+        continue;
+      }
+
+      // 复用 replay 已验收的锁顺序：事件锁 → 发票锁 → Payment 行锁
+      /* eslint-disable no-await-in-loop */
+      if (typeof tx.$executeRawUnsafe === 'function') {
+        await tx.$executeRawUnsafe('SELECT pg_advisory_xact_lock(hashtext($1))', `cc-payment-event:${item.paymentEventId}`);
+        await tx.$executeRawUnsafe('SELECT pg_advisory_xact_lock(hashtext($1))', `cc-payment-invoice:${item.invoiceId}`);
+      }
+      if (typeof tx.$queryRawUnsafe === 'function') {
+        const locked = (await tx.$queryRawUnsafe(
+          'SELECT id FROM "Payment" WHERE "organizationId" = $1 AND id = $2 FOR UPDATE',
+          input.organizationId,
+          item.paymentId,
+        )) as Array<{ id?: string }>;
+        if (!Array.isArray(locked) || locked.length !== 1 || locked[0]?.id !== item.paymentId) {
+          await writeSkip('PAYMENT_LOCK_MISS');
+          continue;
+        }
+      }
+
+      // 锁后最终事实比对（与冻结值一致才执行）
+      const finalEvent = await tx.paymentEvent.findFirst({
+        where: { id: item.paymentEventId, organizationId: input.organizationId },
+        select: { id: true, provider: true, providerEventId: true, payloadHash: true },
+      });
+      const finalPayment = await tx.payment.findFirst({
+        where: { id: item.paymentId, organizationId: input.organizationId },
+        select: { id: true, provider: true, invoiceId: true, externalPaymentId: true, amount: true, currency: true },
+      });
+      const afterLock = itemFactsMatch(item, {
+        event: finalEvent,
+        payment: finalPayment
+          ? {
+              id: finalPayment.id,
+              provider: finalPayment.provider,
+              invoiceId: finalPayment.invoiceId,
+              externalPaymentId: finalPayment.externalPaymentId,
+              amount: money(finalPayment.amount),
+              currency: finalPayment.currency,
+            }
+          : null,
+      });
+      if (afterLock) {
+        await writeSkip(afterLock);
+        continue;
+      }
+
+      const next = await startAttempt(
+        tx,
+        {
+          organizationId: input.organizationId,
+          paymentEventId: item.paymentEventId,
+          actorType: 'SYSTEM',
+          actorRef: RETRY_BATCH_ACTOR_REF,
+        },
+        { now: () => at },
+      );
+      const outcome = await recoverPaymentSucceeded(
+        tx,
+        {
+          organizationId: input.organizationId,
+          provider: item.provider,
+          externalPaymentId: item.externalPaymentId,
+          invoiceId: item.invoiceId,
+          amount: item.amount,
+          currency: item.currency,
+        },
+        {
+          now: () => at,
+          client: tx,
+          onPaymentRecorded: async (innerTx: Prisma.TransactionClient, paymentId: string) => {
+            await innerTx.paymentProcessingAttempt.updateMany({
+              where: { id: next.id, status: 'RUNNING' },
+              data: { paymentId },
+            });
+          },
+        },
+      );
+      await finishAttempt(tx, { attemptId: next.id, status: 'SUCCEEDED', resultStatus: outcome.status }, { now: () => at });
+      const row = prepareAuditInsert(
+        {
+          organizationId: input.organizationId,
+          actorType: 'SYSTEM',
+          actorRef: RETRY_BATCH_ACTOR_REF,
+          action: RETRY_BATCH_EVENTS.executed,
+          entityType: 'PaymentRetryBatch',
+          entityId: batch.batchId,
+          changes: {
+            batchId: batch.batchId,
+            digest: batch.digest,
+            attemptId: item.attemptId,
+            newAttemptId: next.id,
+            newAttemptNo: next.attemptNo,
+            paymentEventId: item.paymentEventId,
+            resultStatus: outcome.status,
+            approvalId,
+            operationId: `approval:${approvalId}`,
+            actorUserId: input.actorUserId,
+            authorizationScope: 'FROZEN_BATCH',
+          },
+        },
+        { maxStringLength: 512 },
+      );
+      await tx.auditLog.create({
+        data: {
+          organizationId: row.organizationId,
+          actorType: row.actorType,
+          actorUserId: row.actorUserId,
+          actorRef: row.actorRef,
+          action: row.action,
+          entityType: row.entityType,
+          entityId: row.entityId,
+          changes: (row.changes ?? undefined) as Prisma.InputJsonValue | undefined,
+          ip: row.ip,
+          userAgent: row.userAgent,
+          createdAt: at,
+        },
+      });
+      executed.push({
+        attemptId: item.attemptId,
+        paymentEventId: item.paymentEventId,
+        attemptNo: next.attemptNo,
+        resultStatus: outcome.status,
+      });
+      /* eslint-enable no-await-in-loop */
+    }
+
+    // 批次消费：与本次执行同事务（恰一次）
+    const consumedRow = prepareAuditInsert(
+      {
+        organizationId: input.organizationId,
+        actorType: 'SYSTEM',
+        actorRef: RETRY_BATCH_ACTOR_REF,
+        action: PAYMENT_RETRY_DUE_CONSUMED_EVENT_ACTION,
+        entityType: 'PaymentRetryBatch',
+        entityId: batch.batchId,
+        changes: {
+          approvalId,
+          operationId: `approval:${approvalId}`,
+          batchId: batch.batchId,
+          digest: batch.digest,
+          itemCount: batch.itemCount,
+          executedCount: executed.length,
+          skippedCount: skipped.length,
+          actorUserId: input.actorUserId,
+          authorizationScope: 'FROZEN_BATCH',
+        },
+      },
+      { maxStringLength: 512 },
+    );
+    await tx.auditLog.create({
+      data: {
+        organizationId: consumedRow.organizationId,
+        actorType: consumedRow.actorType,
+        actorUserId: consumedRow.actorUserId,
+        actorRef: consumedRow.actorRef,
+        action: consumedRow.action,
+        entityType: consumedRow.entityType,
+        entityId: consumedRow.entityId,
+        changes: (consumedRow.changes ?? undefined) as Prisma.InputJsonValue | undefined,
+        ip: consumedRow.ip,
+        userAgent: consumedRow.userAgent,
+        createdAt: at,
+      },
+    });
+
+    return { batchId: batch.batchId, digest: batch.digest, itemCount: batch.itemCount, executed, skipped };
   });
 }
