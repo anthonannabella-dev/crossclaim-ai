@@ -75161,3 +75161,124 @@ ALLOW 才执行一次；
 
 CHANGE D1 关闭；③控制面工程 Checkpoint PASS；②业务强制覆盖仍未完成；生产启用、真实外写、资金、客户提交、生产凭据继续 HOLD。
 ```
+
+### [MSG-20260930-17] Gate 7 / 授权项② 第一批 HITL 提交入口裁决（网页版，REVIEWED_REF 3a37d24 / Issue #2 comment 5902888924）：VERDICT: REVISE（CHANGE A 真实服务端审批绑定；B 生命周期与原子执行；C 组合与 HTTP/PostgreSQL 验收；D 审计与证明口径）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE: FORMAL_VERDICT
+MESSAGE: MSG-20260930-17
+GATE: Gate 7 / 授权项② 第一批：HITL 提交入口接入
+REVIEWED_REF: 3a37d2441b2229eebabee9470ef2c1eb1e0c0325
+VERDICT: REVISE
+GATE_STATE: 授权项② NOT COMPLETE；本批次尚未 PASS
+Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：继续 HOLD
+
+审查范围与证据
+
+本轮重新读取 Issue #2 请求 comment 5902888924、CI 更正 comment 5902891690、受审 HEAD 的代码、相对前一 Checkpoint 的累计 diff，以及 CI run 36659787552 的作业状态和 API 日志。
+
+确认该 run 对应受审完整 SHA，五作业 SUCCESS；API 日志为 134 files / 1228 tests PASS，tsc --noEmit 成功。中间提交 b415e23 的 red CI 不作为通过证据。本审查未在本机独立执行测试。
+
+逐项裁决
+验收项	裁决	依据
+审批不得仅凭 approvalId 放行	部分实现，未关闭	已增加服务端状态查询，但 hitl-approval-verifier.ts 完全未使用 approvalId。案件 APPROVED 后，任意非空 ID 均可通过。
+拒绝时零资金副作用	现有场景通过，覆盖未完整	默认拒绝、缺 ID、未批准的 HTTP 用例确认三类资金表为零；尚未覆盖审批身份、有效期、载荷变更等新增拒绝场景，也未核对 RecoveryLedgerEntry。
+ALLOW 恰一次	单次调用通过；业务级证据不足	wrapper 每次调用 work 一次；HTTP 仅验证顺序重复提交，未验证并发提交。费用和账单断言为 ≤1，允许缺失，不能证明完整资金链恰一次。
+每次重试重新核验	状态重读通过；完整审批核验未关闭	每次调用重新查询案件状态，状态变化后拒绝；但所查询状态没有绑定具体审批 ID、动作、主体及本次提交内容。
+
+本轮已有有效接线和 fail-closed 进展，因此裁决为 REVISE，允许继续修订；不要求整体回退。
+
+阻塞项与具体依据
+
+A — 审批身份与授权范围未绑定。
+
+hitl-approval-verifier.ts 的生产实现只读取 organizationId + targetRef 对应案件的复核状态：
+
+未查找或核验 query.approvalId；
+未验证审批授权的动作和执行主体；
+未绑定 recoveredAmount、currency、basisReference、evidenceArtifactId 或其规范化版本；
+requiredStateForAction 只决定要求何种状态，不能证明审批针对该动作；其 NOT_REQUIRED → valid:true 分支还允许绕过目录要求的人工审批。
+
+真实 PostgreSQL 测试用任意 a1 配合 claim.submit，复用 recovery.review_approved 后即 valid；HTTP 成功用例使用未建立对应审批身份的 appr-1。这直接说明当前验证的是“案件状态”，不是“本次操作的审批”。
+
+B — 有效期、撤销、消费并未由现有状态实现。
+
+“approved 晚于 required”表达审批轮次先后，不能自动表达过期或一次性消费。当前查询未使用时间或消费状态，也没有审批与首次资金写入之间的原子关联。
+
+此外，recovery-review.ts 的状态解析实际取最后一条事件；代码并未显式验证所宣称的严格时间先后条件。必须避免将这一既有状态函数当作完整授权凭证。
+
+C — 恰一次与最终审计证据不足。
+
+confirmRecoveryOutcome 的既有 Settlement 查询在资金事务之前，单凭该检查及顺序重试用例不能证明并发安全；本轮没有证明并发一定重复写入，但也没有足够证据宣告并发恰一次。
+
+wrapper 先执行 guard.assertAllowed，随后才验证审批。因此审批失败时，前置策略 ALLOW 记录不能充当最终执行授权通过记录。当前真实 Prisma 审计投影也缺少审批、目标及执行主体关联。
+
+CHANGE：文件级修订要求
+
+CHANGE A — 建立真实服务端审批绑定。
+
+涉及 approval-verifier.ts、hitl-approval-verifier.ts、hitl-submission.ts、http-routes.ts 及审批写入路径：
+
+approvalId 必须对应服务端真实、可定位的审批记录或审批事件；随机 ID、他案 ID、他租户 ID 一律拒绝。
+核验组织、目标、准确动作、当前执行主体的权限，以及规范化后的金额、币种、依据和证据版本；关键内容变化必须重新审批。
+审批人的身份与执行人的权限分别校验，不要求二者机械相同；不得用硬编码 OWNER 代替执行人的授权判断。
+禁止通过 requiredStateForAction=NOT_REQUIRED 绕过动作目录的人工审批要求。
+recovery-outcome 当前映射为 commission.charge：明确记录这一映射的授权含义；审批不得被该通用适配器复用于 claim.submit 等无关动作。
+数据源故障继续拒绝，但不得统一伪报为 TENANT_MISMATCH。
+
+CHANGE B — 完成生命周期和原子执行约束。
+
+涉及审批持久化路径及 recovery-outcome.ts：
+
+明确并实现有效期、撤销、审批轮次、消费或等效的单操作绑定规则；缺失必要属性按拒绝处理。
+将最终审批有效性核验、首次资金写入和消费关联纳入可证明的事务或并发控制机制，明确与撤销操作的串行化顺序。
+相同操作的重试每次重新经过策略与授权核验；合法幂等重试可返回既有结果，但不能再次产生资金对象。
+不同载荷不得借用同一审批创建另一操作。
+
+允许继续实现这项服务端保护。不强制新增独立 Approval 表；审计事件方案只有在能满足上述绑定和原子性时才可采用。若需要 Schema 变更，将最小 Schema Delta、约束及迁移证据纳入本次复核；不要修改已应用历史迁移。
+
+CHANGE C — 补齐组合与 HTTP/PostgreSQL 验收。
+
+扩展现有 HITL 测试，至少覆盖：
+
+已 APPROVED 案件配随机 ID、错误案件/租户/动作、无权限执行人；
+金额、币种、依据或证据版本变更；
+过期、撤销、已消费后新操作、审批源异常；
+首次成功后重试期间授权变化；
+多个并发首次提交。
+
+拒绝场景核对 work=0，且 Settlement、RecoveryLedgerEntry、FeeCalculation、BillingInvoice 及案件回收金额没有非法变化；安全审计记录允许新增。
+
+成功场景四类资金对象均应 恰为1且关联一致。合法重复请求应明确返回既有结果，不能用 [200,201,409] 的宽松集合替代精确行为断言。
+
+CHANGE D — 修正审计和证明口径。
+
+涉及 guard-enforcement.ts、runtime-guard-composition.ts、测试注释和检查点文档：
+
+区分策略 ALLOW、审批核验结果与最终执行结果；审批拒绝应有可关联、稳定的安全审计。
+记录执行主体、目标、审批身份和操作关联标识；不记录凭据或原始敏感载荷。
+删除“忘记守卫在类型与测试层面不可行”等过度声明；静态字符串检查仅为有限约定检查。
+将“零副作用”准确表述为“零业务/资金副作用”，保留安全审计。
+修正未配置守卫的错误码口径：当前直接缺依赖分支实际使用 WorkflowError FORBIDDEN；默认服务器装配 READ_ONLY 是另一条路径。
+非阻塞技术债与后置项
+
+本批次无需建设全局通用审批平台、审批 UI 或覆盖所有业务入口；允许先完成 recovery-outcome 的严格操作级授权。
+
+其余受保护入口、⑤ RELIABILITY、⑥运营视图仍待后续 Checkpoint。真实平台传输、生产凭据、客户提交和真实资金启用必须继续后置，不能由本次测试或 CI 绿灯推导授权。
+
+下一 Checkpoint
+
+下一批次确定为：授权项② 第一批 R1，完成 CHANGE A–D 后再次送审。
+
+不将本入口标为完成，也不以其他入口或 Reliability 批次替代本轮缺口关闭。可继续与本修订无冲突的只读文档和取证工作。
+
+复核提交需列出逐项文件与 commit、审批绑定及生命周期契约、真实 HTTP/PostgreSQL 并发和重试结果、最终 SHA 对应的 CI；涉及迁移时附迁移验证证据。
+
+归档授权
+
+授权 Codex 将本裁决逐字原文归档到 GitHub Issue #2，标注 REVIEWED_REF 和 VERDICT=REVISE。归档仅传递裁决，不改变任何生产 HOLD。
+
+本轮按请求未尝试 GitHub 写回。
+```
