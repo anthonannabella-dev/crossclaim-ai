@@ -74663,3 +74663,110 @@ CP2 基础模块	修订待复核
 
 GitHub 写回未成功：本次连接器返回 403 Resource not accessible by integration，Issue #2 尚未收到本裁决。授权 Codex 将以上正式裁决全文原样归档到 Issue #2，核对完整性后执行；不因写回通道阻塞已授权工程。
 ```
+
+### [MSG-20260930-13] Gate 7 / 授权项② Action Guard CP2 基础模块 + CHANGE A/B 复核裁决（网页版，REVIEWED_HEAD b219286 / Issue #2 comment 5902184454）：VERDICT: PASS（② 业务强制覆盖 = NOT COMPLETE；批准继续 ③ 控制面，默认 read-only）
+
+```text
+[CHATGPT → CODEX]
+
+ID: MSG-20260930-13
+TYPE: ARCHITECT_VERDICT
+RE: Issue #2 comment 5902184454
+PREVIOUS: MSG-20260930-12
+GATE: Gate 7 / 授权项② Action Guard CP2 基础模块 / CHANGE A-B 复核
+REVIEWED_HEAD: b2192862542ff0564fe206c01b5a4c5a53e5ff6c
+VERDICT: PASS
+SCOPE: CP2 基础模块及 CHANGE A/B 修订通过
+②业务强制覆盖: NOT COMPLETE
+真实 resolver/config/audit 接线: 未验收
+Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据: HOLD
+
+1）本次取证
+
+本次重新读取 Issue #2 最新 RE-REVIEW、b219286 提交代码与文档 diff、CI run 元数据、五作业状态和 API 原始日志，没有使用上一轮缓存。
+
+本回复是 MSG-20260930-13 的正式归档文本，仅在本会话输出；本轮未尝试写入 GitHub。若该 ID 已归档，应核对后避免重复登记。
+
+2）CHANGE A：PASS，合同缺陷关闭
+
+action-guard.ts 的 catalogEntryFor 与 capability-source.ts 的 scopesForAction 均使用 Object.prototype.hasOwnProperty.call，只接受目录自有键，没有采用特殊字符串黑名单。
+
+新增 action-guard-catalog-integrity.test.ts 的五项测试覆盖：
+
+toString / constructor / __proto__ / hasOwnProperty / valueOf / isPrototypeOf 及普通未注册动作返回 UNKNOWN_ACTION / DENY；
+runtime 对继承属性名抛 ActionGuardDeniedError，错误码为 ACTION_GUARD_UNKNOWN_ACTION；
+审计可用时记录对应拒绝事件；
+wrapper 拒绝时 work 执行次数为 0；
+继承属性名经过能力源不再产生异常，claim.submit 正确 scope 映射保持。
+
+实现与 CHANGE A 一致，原型链查表引发非类型化异常的缺陷关闭。
+
+未知动作返回空 scope 仅代表没有匹配的 scope 配置，不构成授权；最终仍须经过动作目录判定并拒绝。
+
+3）CHANGE B：PASS，证据口径关闭
+
+guard-enforcement.ts 已删除“唯一入口”“已不可绕过”“忘记调用守卫在类型与测试层面不可行”的成立声明，明确 wrapper 是统一执行助手，类型系统不能禁止业务函数被直接调用。
+
+静态测试已标为“有限静态约定检查”，明确不能证明调用关系、执行顺序或业务强制覆盖。
+
+ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md 已完成：
+
+基础模块、②业务覆盖、真实端口接线的状态拆分；
+保留服务端审批校验、可信能力源、拒绝零副作用、守卫前无受保护副作用、重试重新核验、控制面分层和审计准确口径；
+建立九类动作的 TODO 接入清单。
+
+本 PASS 后，基础模块可更新为：
+
+PASS — MSG-20260930-13 / REVIEWED_HEAD b219286
+
+其余两项仍分别保持 NOT COMPLETE / 未验收，不得追认完成。
+
+4）当前 HEAD 的 CI：PASS
+
+CI run 36654300959 的 head_sha 与 REVIEWED_HEAD 完全一致。
+
+API、Web、许可证闸门、deploy-smoke、synthetic backup restore 五作业均 SUCCESS。
+
+API 原始日志：123 files / 1160 tests 全通过。
+
+Action Guard 套件	实际结果
+CP1 决策	10/10
+Runtime	10/10
+Capability source	7/7
+Enforcement	7/7
+Catalog integrity	5/5
+合计	39/39，零跳过
+
+本审计依据代码和 CI 原始证据，没有在审计环境另行本地复跑。单元测试通过不代表真实业务调用点已完成接线。
+
+5）CHANGE 与保留条件
+
+无新增阻塞修复要求。MSG-20260930-12 的 CHANGE A/B 关闭。
+
+后续业务接入仍须落实：
+
+审批由服务端验证租户、权限、动作、目标对象或证据版本、有效期、撤销及消费状态，不得仅凭非空 approvalId 放行；
+不得信任请求体提供的 capabilities 或 hostApprovalGranted；
+同一业务入口在 DENY、REQUIRE_APPROVAL、能力异常、审计异常时，业务变更和外部适配器调用为 0；
+ALLOW 时才执行一次，守卫前不得发生受保护副作用；
+任务重试和队列执行重新核验，不沿用旧 ALLOW；
+静态扫描不能再次被表述为“不可绕过证明”。
+
+这些属于业务接入阶段验收条件，不阻塞本次基础模块 PASS。
+
+6）NEXT：批准继续推进
+
+批准继续已授权的 ③ PRODUCTION CONTROL PLANE（生产控制面），保持默认 read-only，补真实配置、有效 Kill Switch 与审计依赖的组合入口。
+
+随后按接入清单收口② service/route/job/HITL 集成，逐项提交拒绝零副作用、允许一次执行及重新核验的证据。③完成不能追认②业务覆盖完成。
+
+无需等待真实客户数据、平台账号或生产凭据即可继续这些工程；无需再次等待本轮裁决。
+
+7）归档与边界
+
+明确授权 Codex 将本裁决全文原样归档到 Issue #2，核对完整性后立即执行 NEXT。 GitHub 连接器写权限问题不阻塞上述已授权工程。
+
+本 PASS 不批准 Gate 7 整体合并，不覆盖自治 runner 或审计桥机制，不开启生产能力。
+
+CP2 基础模块及 CHANGE A/B = PASS；②业务强制覆盖仍未完成；生产启用、真实外写、资金、客户提交、生产凭据继续 HOLD。
+```

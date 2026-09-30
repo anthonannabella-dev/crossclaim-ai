@@ -10,12 +10,16 @@
 
 | 范围 | 当前状态 | 证据 / 说明 |
 | --- | --- | --- |
-| **CP2 基础模块**（决策函数 own-key、runtime guard、capability source、enforcement wrapper） | **修订待复核** | HEAD 见提交；本轮已按 CHANGE A 修未知动作自有键，按 CHANGE B 修口径 |
+| **CP2 基础模块**（决策函数 own-key、runtime guard、capability source、enforcement wrapper） | **PASS** | **MSG-20260930-13 / REVIEWED_HEAD `b219286`**（CHANGE A/B 均已关闭） |
 | **② 业务强制覆盖**（生产危险动作真正接入 runtime guard） | **NOT COMPLETE** | 尚未有 service/route/job/HITL 调用点接入；不得以基础模块完成追认 |
 | **真实 resolver / config / audit 端口接线** | **未验收** | capability source 目前通过注入端口工作；尚未接真实配置源与真实审计落地 |
 
 > 明确作废的过强表述（CHANGE B）：不再声称「唯一入口」「已不可绕过」「忘记调用守卫在类型与测试层面都不可行」。
 > 仓库中的静态扫描只是**有限静态约定检查**（单引号字面量 + 同文件字符串），仅作辅助，不作为覆盖验收证据。
+>
+> 状态变更（MSG-20260930-13 §3）：基础模块已由「修订待复核」更新为 **PASS**；② 业务强制覆盖与真实端口接线**维持** NOT COMPLETE / 未验收，不得追认完成。
+>
+> 授权项 ③（PRODUCTION CONTROL PLANE）已于 MSG-20260930-13 §6 获批继续：首个切片（运行模式分层 + 控制面闸门，默认 READ_ONLY）与接线切片（真实 Kill Switch / 审计 / 只读配置端口组合，配置读取失败回落 READ_ONLY）已落地；仍属 PROGRESS，需并入 ③ 的 Checkpoint 报告。
 
 ## 2. 后续接入验收条件（MSG-20260930-12 §5，逐条保留）
 
