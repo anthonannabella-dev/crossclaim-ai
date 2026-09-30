@@ -115,3 +115,10 @@
 - 根因定位（可复现的判别法）：故障时 `cua.listBrowsers()` **仍成功**（返回 in-app browser + 扩展浏览器），但 `cua.listTabs()` / `cua.getTab()` / `cua.getState()` 抛 `Codex auth token is unavailable`。即**浏览器发现可用、会话级标签自动化不可用**；该 token 与 `metadata.codexSessionId` 绑定（每个 Codex 会话铸造）。
 - 已证伪的处置：`js_reset`（内核重置）无效；`open_in_codex` 重新打开面板标签无效；不是页面/标签/登录问题。恢复与「宿主在右侧打开/聚焦 ChatGPT 窗口」同步发生（本次与 04:44Z 各一次）。
 - 沉淀技能：`C:\Users\os\.codex\skills\chatgpt-web-audit-bridge`（`SKILL.md` + `references/channel-failures.md` + `references/verdict-capture.md` + `agents/openai.yaml`），`quick_validate.py` → Skill is valid。内容含：落地记录优先、唤醒三步验证、DOM 提取裁决、逐字归档+校验、以及「发现可用/标签不可用」判别表与重试/上报节奏。
+
+## 2026-09-30 · MSG-20260930-21 = PASS（授权项② 第一批 R4）→ 第二批 payment.capture
+
+- 裁决：**PASS**（REVIEWED_REF `a545bc04...`；CI run 36671238244 = 5/5，API 140 files / 1263 tests PASS；R4 顺序套件 3/3、R3 竞争套件 9/9）。A/B/C/D 全部关闭；「recovery-outcome 第一批工程 Checkpoint」获准标记完成；② 整体仍 NOT COMPLETE。
+- 归档：`AI-ARCHITECT-INBOX.md`（```text 逐字），`compare.mjs` → 见本轮输出。
+- 下一 Checkpoint（架构方指定）：**授权项② 第二批 —— `payment.capture` 真实服务端入口接入**；要求先在七段式中盘点现有资金执行入口与调用链、明确实际接入范围，并按本批次已形成的五项要求验证；不得接入真实支付凭据/真实扣款/生产资金能力。
+- 非阻塞整理项（随下一批次做，不另开 R5）：契约标题与依据链更新至 R4、章节 4.1/4.2 排序、区分「事务内外一致」与「测试分别执行」、新增生命周期写入路径登记进写入清单。
