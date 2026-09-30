@@ -49,6 +49,19 @@
 
 > 追加记录（同属本清单口径，逐批次登记）：`payment.replay` = **验收 PASS**（MSG-20260930-28 / REVIEWED_REF 08fc45d；资金对象身份纳入快照与审批指纹、按 id 行锁恰一行）；`payment.retry_due`（冻结批次）= **送审中**（R18 / HEAD 4c695c0 / CI run 36718083469 / Issue #2 comment 5911844071）。三类受保护入口共用同一 Action Guard 审批边界；② 整体仍为 NOT COMPLETE。
 
+### 3.1 代码引用抽查（2026-09-30）
+
+> 仅为下一批次选题提供地图：**不是验收结论**，本小节**不改变第 3 节的状态列**。逐项验收一律以架构方逐批次裁决为准；行号为当次抽查结果。
+
+| 动作 | 代码引用（证据） | 抽查结论 |
+| --- | --- | --- |
+| `commission.charge` | 入口 `/cases/:id/recovery-outcome`：`services/workflow/http-routes.ts:1212-1235`（缺 Action Guard 即 `ActionGuardNotConfiguredError` fail closed；经 `hitl-submission` 边界 + 审批指纹比对后才调用 `confirmRecoveryOutcome`） | 入口**已接线**（对应第 5 节「第一批 HITL 提交入口」） |
+| `payment.capture` / `payment.replay` / `payment.retry_due` | 见上方追加记录 | 已验收 PASS / PASS / **送审中**（R18，ref 9a806eb） |
+| `claim.submit` / `appeal.submit` / `platform.write` | 目录：`services/action-guard/action-guard.ts:31-33`（均 `EXTERNAL_WRITE`，requires humanApproval + platformEnablement + productionGate）；能力映射：`capability-source.ts:35-37`；静态约定清单：`guard-enforcement.ts:163-165` | 只有目录/能力/静态清单，**未发现路由或服务接线**（与「平台外写 HOLD」一致） |
+| `claim.prepare` / `billing.draft` | 目录：`action-guard.ts:29-30`（`INTERNAL_WRITE`，`requires: []`） | 入口接线与「能力闸门」接入**未核**（第 3 节仍为 TODO） |
+| `evidence.read` | 目录：`action-guard.ts:28`（`READ_ONLY`，`requires: []`） | 只读动作、无审批要求；未见专门接线 |
+| `secret.rotate` | 目录：`action-guard.ts:40`（`SECRET_ACCESS`，`requires: [hostApproval]`）；静态清单：`guard-enforcement.ts:170` | HOST ONLY，未接线 |
+
 ## 4. 下一 Checkpoint 关系
 
 - 允许继续 **③ PRODUCTION CONTROL PLANE**（真实配置、有效 Kill Switch 与审计依赖的组合入口，保持默认 read-only）。

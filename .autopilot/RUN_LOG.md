@@ -361,3 +361,5 @@
 - 验证：`tsc --noEmit` PASS；`prisma validate` valid；映射单测 9/9；retry-due 专项 28/28；replay 套件通过（三文件 56/56）；本机全量 144 文件 / 1334 用例全绿。CI run **36726898061** = **5/5 SUCCESS**，API 日志 **1335 tests PASS**（较 4c695c0 的 1334 多 1 例 = 新增反例单测，数量自洽）。
 - 留档：Issue #2 comment **5913068685** 明确「R18 送审 ref 由 4c695c0 更新为 **9a806eb**，其余内容与 4c695c0 相同」，并说明功能面无影响（Prisma 的 meta.target 不含空白）只为严格性。
 - 待办更新：通道①恢复后的唤醒消息应指向 **9a806eb**（而不是 4c695c0）。
+
+- 另：在 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` 追加「3.1 代码引用抽查」（纯代码引用地图，明确**不是验收结论**、不改状态列）：`commission.charge` 入口**已接线**（/cases/:id/recovery-outcome，缺守卫 fail closed）；`claim.submit`/`appeal.submit`/`platform.write` 仅有目录+能力映射+静态清单、无路由接线；`claim.prepare`/`billing.draft`/`evidence.read`/`secret.rotate` 接线状态见该表。
