@@ -243,6 +243,7 @@ function statusFor(error: unknown): { code: number; error: string } {
       case 'CURRENCY_MISMATCH':
       case 'REVIEW_REQUIRED':
       case 'PAYMENT_CONTEXT_REQUIRED':
+      case 'PAYMENT_SOURCE_CONFLICT':
       case 'ATTEMPT_ALREADY_RUNNING':
       case 'CLAIM_ITEM_CASE_REQUIRED':
         return { code: 409, error: error.code };

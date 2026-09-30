@@ -1146,10 +1146,9 @@ describe('② 第二批 — retry-due（冻结清单批次审批）真实 HTTP +
       }
 
       const [batchRes, replayRes] = await Promise.all([batchRun, replayRun]);
-      // 两者都必须在有界时间内结束、无死锁类错误；同事件并发下允许「拒绝（403/409）或
-      // 数据库唯一索引导致的 fail-closed 500」，但绝不允许部分资金提交（下方断言）
-      expect([200, 403, 409, 500]).toContain(batchRes.status);
-      expect([200, 403, 409, 500]).toContain(replayRes.status);
+      // MSG-32 CHANGE A/B：不允许任意 500 —— 已识别的成功来源/进行中冲突必须收口为结构化结果
+      expect([200, 403, 409]).toContain(batchRes.status);
+      expect([200, 403, 409]).toContain(replayRes.status);
       const invoice = await prisma.billingInvoice.findUniqueOrThrow({ where: { id: invoiceId } });
       expect(invoice.status).toBe('PAID');
       // 无重复资金推进：恰一次 PAID 成功审计、支付对象仍为 1

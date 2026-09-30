@@ -44,6 +44,7 @@ export type WorkflowErrorCode =
   | 'PAYMENT_CONTEXT_REQUIRED'
   /** C-0010-B2 REVISE-3：并发的执行尝试冲突（绝不把数据库 P2002 暴露给 API 调用方） */
   | 'ATTEMPT_ALREADY_RUNNING'
+  | 'PAYMENT_SOURCE_CONFLICT'
   /** C-0011：REVIEW_REQUIRED 起必须入案（状态机不变量，不是数据库 CHECK） */
   | 'CLAIM_ITEM_CASE_REQUIRED'
   /** C-0012：人工复核提交的 ruleAmount 与历史规则输出不一致 */

@@ -525,7 +525,8 @@ export async function executeRetryBatch(
     freezeExpiresAt: batch.expiresAt,
   });
 
-  return prisma.$transaction(async (tx) => {
+  const run = () =>
+    prisma.$transaction(async (tx) => {
     // 批次锁：与审批创建/其他执行者共用同一把锁（恰一次消费的串行化点）
     if (typeof tx.$executeRawUnsafe === 'function') {
       await tx.$executeRawUnsafe('SELECT pg_advisory_xact_lock(hashtext($1))', `cc-payment-retry-batch:${pre.batchId}`);
@@ -782,6 +783,30 @@ export async function executeRetryBatch(
         continue;
       }
 
+      // CHANGE A（MSG-32）：先区分「已有成功资金来源」与「同事件进行中」，避免落到数据库唯一约束
+      const succeededSource = await tx.paymentProcessingAttempt.count({
+        where: {
+          organizationId: input.organizationId,
+          paymentId: item.paymentId,
+          status: 'SUCCEEDED',
+          id: { not: item.attemptId },
+        },
+      });
+      if (succeededSource > 0) {
+        await writeSkip('PAYMENT_SOURCE_ALREADY_SUCCEEDED');
+        continue;
+      }
+      const runningAttempt = await tx.paymentProcessingAttempt.count({
+        where: {
+          organizationId: input.organizationId,
+          paymentEventId: item.paymentEventId,
+          status: 'RUNNING',
+        },
+      });
+      if (runningAttempt > 0) {
+        await writeSkip('ATTEMPT_ALREADY_RUNNING');
+        continue;
+      }
       const next = await startAttempt(
         tx,
         {
@@ -858,5 +883,19 @@ export async function executeRetryBatch(
     );
 
     return { batchId: batch.batchId, digest: batch.digest, itemCount: batch.itemCount, executed, skipped };
-  });
+    });
+
+  try {
+    return await run();
+  } catch (error) {
+    // 事务已回滚：仅在事务外把**已识别的预期约束**映射为稳定领域错误，其余错误原样抛出
+    const message = String((error as { message?: string })?.message ?? '');
+    if (message.includes('PaymentProcessingAttempt_succeeded_payment_key')) {
+      throw new WorkflowError('PAYMENT_SOURCE_CONFLICT', '该资金对象已有成功执行来源（并发恢复已收口为领域冲突）');
+    }
+    if (message.includes('PaymentProcessingAttempt') && message.includes('running')) {
+      throw new WorkflowError('ATTEMPT_ALREADY_RUNNING', '该事件已有进行中的执行尝试');
+    }
+    throw error;
+  }
 }
