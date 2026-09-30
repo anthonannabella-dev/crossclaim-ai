@@ -1125,10 +1125,7 @@ describe('② 第二批 — retry-due（冻结清单批次审批）真实 HTTP +
     });
   }, 40_000);
 
-  // NOTE（MSG-32 CHANGE B）：本用例要求「批次与 replay 同时到达 E2 等待点」的会话级证据；
-  // 当前构造在本机偶发不稳定（并发释放顺序不同导致分支未覆盖全部结构化结果），
-  // 因此**显式跳过**而不是把 flaky 结果当作通过证据 —— 待下一轮用更稳的构造补齐后恢复。
-  it.skip('27 共享发票：批次（E1/E2）与 replay（E2）真实并发 → 会话级控制点证明「等事件锁时未持发票锁」，无死锁与重复推进', async () => {
+  it('27 共享发票：批次（E1/E2）与 replay（E2）真实并发 → 会话级控制点证明「等事件锁时未持发票锁」，无死锁与重复推进', async () => {
     const second = await seedSecondAttempt('51', 'hash-second-51');
     await withServer(async (base) => {
       const cookie = await login(base);
