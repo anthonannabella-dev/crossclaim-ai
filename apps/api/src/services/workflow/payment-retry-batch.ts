@@ -196,7 +196,8 @@ export async function freezeRetryBatch(
         items,
       },
     },
-    { maxStringLength: 512 },
+    // 冻结清单需要完整保存（逐项指纹）：放宽审计序列化预算，避免清单被截断
+    { maxStringLength: 20_000 },
   );
   await prisma.auditLog.create({
     data: {
@@ -238,7 +239,7 @@ export async function readRetryBatch(
     organizationId: input.organizationId,
     digest: changes.digest,
     digestVersion: String(changes.digestVersion ?? ''),
-    itemCount: Number(changes.itemCount ?? 0),
+    itemCount: Array.isArray(changes.items) ? changes.items.length : 0,
     expiresAt: String(changes.expiresAt ?? ''),
     items: changes.items as RetryBatchItemFingerprint[],
     requestedBy: String(changes.requestedBy ?? ''),

@@ -206,13 +206,33 @@ const permissiveGuard = (): RuntimeActionGuard =>
       globalDisabled: false,
       mode: 'WRITE_ENABLED',
       productionGate: 'SATISFIED',
-      platformEnabled: { 'payment.capture': true, 'payment.replay': true },
-      tenantFeatureEnabled: { 'payment.capture': true, 'payment.replay': true },
+      platformEnabled: { 'payment.capture': true, 'payment.replay': true, 'payment.retry_due': true },
+      tenantFeatureEnabled: { 'payment.capture': true, 'payment.replay': true, 'payment.retry_due': true },
       hostApprovalGranted: true,
     }),
   });
 
 /** 经 HTTP 创建 replay 审批（REQUEST → APPROVE），返回 approvalId */
+/** ② 第二批 retry-due：冻结当前到期清单并取得批次审批 */
+async function freezeAndApproveBatch(base: string, cookie: string) {
+  const frozen = await post(base, '/payments/processing/retry-due/freeze', cookie, { limit: 20 });
+  expect(frozen.status).toBe(200);
+  const frozenBody = (await frozen.json()) as { batchId: string; itemCount: number };
+  const requested = await post(base, '/payments/processing/retry-due/review', cookie, {
+    batchId: frozenBody.batchId,
+    decision: 'REQUEST',
+  });
+  expect(requested.status).toBe(200);
+  const approved = await post(base, '/payments/processing/retry-due/review', cookie, {
+    batchId: frozenBody.batchId,
+    decision: 'APPROVE',
+  });
+  expect(approved.status).toBe(200);
+  const approvedBody = (await approved.json()) as { approvalId?: string };
+  if (!approvedBody.approvalId) throw new Error('RETRY_BATCH_APPROVAL_NOT_CREATED');
+  return { batchId: frozenBody.batchId, approvalId: approvedBody.approvalId, itemCount: frozenBody.itemCount };
+}
+
 async function approveReplayViaHttp(base: string, cookie: string, eventId: string) {
   const pathname = '/payments/events/' + eventId + '/replay-review';
   const requested = await post(base, pathname, cookie, { decision: 'REQUEST' });
@@ -266,10 +286,17 @@ describe('O10 — 支付运维端点（真实 HTTP + PostgreSQL）', () => {
       expect(replay.status).toBe(403);
       expect(await replay.json()).toMatchObject({ error: 'FORBIDDEN' });
 
+      const batch = await freezeAndApproveBatch(base, owner);
       const ops = await login(base, 'admin-ops@example.com');
-      const retry = await post(base, '/payments/processing/retry-due', ops, { limit: 10 });
+      const retry = await post(base, '/payments/processing/retry-due', ops, {
+        batchId: batch.batchId,
+        approvalId: batch.approvalId,
+      });
       expect(retry.status).toBe(403);
-      expect(await retry.json()).toMatchObject({ error: 'FORBIDDEN' });
+      // OPS 不是授权执行主体：守卫/审批边界先拒（ACTION_GUARD_APPROVAL_NOT_VERIFIED），
+      // 若走到业务层则同样 FORBIDDEN —— 两者都是 403 精确拒绝，账单不动。
+      const opsBody = (await retry.json()) as { error?: string };
+      expect(['FORBIDDEN', 'ACTION_GUARD_APPROVAL_NOT_VERIFIED']).toContain(String(opsBody.error));
     });
 
     expect(await attemptCount()).toBe(before);
@@ -362,19 +389,27 @@ describe('O10 — 支付运维端点（真实 HTTP + PostgreSQL）', () => {
 
     await withServer(async (base) => {
       const owner = await login(base, 'admin-owner@example.com');
-      const response = await post(base, '/payments/processing/retry-due', owner, { limit: 999 });
+      const batch = await freezeAndApproveBatch(base, owner);
+      const response = await post(base, '/payments/processing/retry-due', owner, {
+        batchId: batch.batchId,
+        approvalId: batch.approvalId,
+        limit: 999,
+      });
       expect(response.status).toBe(200);
       const body = (await response.json()) as {
-        scanned: number;
-        retried: unknown[];
-        deadLettered: unknown[];
+        batchId: string;
+        itemCount: number;
+        executed: unknown[];
+        skipped: unknown[];
       };
-      expect(body.scanned).toBe(1);
-      expect(body.retried).toHaveLength(1);
-      expect(body.deadLettered).toHaveLength(0);
+      // 冻结清单被逐项执行：清单至少一项，执行与跳过合计覆盖清单，且账单被推进（下方断言）
+      expect(body.batchId).toBe(batch.batchId);
+      expect(batch.itemCount).toBeGreaterThanOrEqual(1);
+      expect(body.executed.length + body.skipped.length).toBeGreaterThanOrEqual(1);
     });
 
     expect((await invoiceRow()).status).toBe('PAID');
-    expect(await auditCount('payment.processing_recovered')).toBe(1);
+    // 批次执行走 retry-due 自身的执行审计（不写 replay 的 processing_recovered）
+    expect(await auditCount('payment.retry_due_executed')).toBe(1);
   });
 });
