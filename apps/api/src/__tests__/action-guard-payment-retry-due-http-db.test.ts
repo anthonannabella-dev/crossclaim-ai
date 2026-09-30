@@ -865,4 +865,5 @@ describe('② 第二批 — retry-due（冻结清单批次审批）真实 HTTP +
       expect(await state()).toMatchObject({ invoiceStatus: 'PAID', consumed: 1 });
     });
   }, 40_000);
+
 });
