@@ -37,6 +37,7 @@ import {
   RECOVERY_CONFIRMATION_ACTION,
 } from '../action-guard/approval-verifier';
 import {
+  APPROVAL_CONSUMED_EVENT_ACTION,
   PAYMENT_APPROVAL_EVENT_ACTION,
   PAYMENT_CONSUMED_EVENT_ACTION,
   PAYMENT_REJECTED_EVENT_ACTION,
@@ -878,6 +879,15 @@ export async function handleWorkflowRequest(
         // fail closed：受保护入口必须在组合根注入 Action Guard
         throw new ActionGuardNotConfiguredError('claim.submit');
       }
+      // 审批目标 = 案件（HITL 复核事件族挂在 Case 上，与第一批 /recovery-outcome 同域）；
+      // 本轮 Claim 由 basisReference 绑定，金额/币种取服务端案件事实（不由请求体决定）。
+      const kase = await deps.prisma.case.findFirst({
+        where: { id: caseId, organizationId: actor.organizationId },
+        select: { claimedAmount: true, currency: true },
+      });
+      if (!kase) {
+        throw new WorkflowError('NOT_FOUND', `案件 ${caseId} 不存在或不属于该租户`);
+      }
       const claim = await deps.prisma.claim.findFirst({
         where: { organizationId: actor.organizationId, caseId, round: 1 },
         select: { id: true, status: true },
@@ -903,12 +913,17 @@ export async function handleWorkflowRequest(
         action: 'claim.submit',
         organizationId: actor.organizationId,
         actorUserId: actor.actorUserId,
-        targetRef: claim.id,
+        targetRef: caseId,
         approvalId,
-        // 审批指纹绑定到本 Claim（payload 字段名沿用既有契约：basisReference）
-        payload: { basisReference: claim.id },
-        perform: () =>
-          recordSubmission(
+        // 审批指纹绑定：案件申报金额/币种 + 本轮 Claim（payload 字段名沿用既有契约：basisReference）
+        payload: {
+          recoveredAmount: kase.claimedAmount ? kase.claimedAmount.toFixed(4) : null,
+          currency: kase.currency,
+          basisReference: claim.id,
+        },
+        perform: async () => {
+          // ALLOW 后**唯一**业务副作用：写跟踪记录（CAS DRAFT→SUBMITTED）；不发生任何平台外写
+          const submission = await recordSubmission(
             {
               organizationId: actor.organizationId,
               actorUserId: actor.actorUserId,
@@ -921,9 +936,31 @@ export async function handleWorkflowRequest(
               audit: claimAudit,
               ...(deps.now ? { now: deps.now } : {}),
             },
-          ),
+          );
+          // 审批消费：只有 CAS 成功者才落消费事件 → 消费恰好一次；
+          // 重复提交在 CAS 处被拒（ILLEGAL_TRANSITION），不会产生第二次业务写入或第二次消费。
+          await deps.prisma.auditLog.create({
+            data: {
+              organizationId: actor.organizationId,
+              actorType: 'USER',
+              actorUserId: actor.actorUserId,
+              action: APPROVAL_CONSUMED_EVENT_ACTION,
+              entityType: 'Case',
+              entityId: caseId,
+              changes: {
+                approvalId: approvalId ?? null,
+                operationId: approvalId ? `approval:${approvalId}` : null,
+                claimId: claim.id,
+                caseNo: null,
+                basisReference: claim.id,
+              } as never,
+              createdAt: (deps.now ?? (() => new Date()))(),
+            },
+          });
+          return submission;
+        },
       });
-      // ALLOW 后**唯一**副作用：写跟踪记录；不发生任何平台外写（提交恒为 NEEDS_MANUAL）
+      // 提交恒为 NEEDS_MANUAL：未发生任何平台外写
       sendJson(res, 200, {
         ...outcome,
         caseId,

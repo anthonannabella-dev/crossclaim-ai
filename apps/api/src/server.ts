@@ -237,6 +237,9 @@ export function createServer(deps: ServerDeps): http.Server {
         session: auth.session,
         // 授权项 ②（MSG-20260930-16 §6）：受保护入口的运行时闸门；缺省 READ_ONLY → 拒绝写入
         actionGuard: deps.actionGuard ?? createAppActionGuard({ prisma, killSwitchResolver }),
+        // ② claim.submit：人工提交（claim.submitted_by_human）沿用同一个 AuditWriter；
+        // 未注入时由路由按同策略自建，盐值不足则 fail closed
+        ...(audit ? { audit } : {}),
         killSwitchResolver,
         // C-0010-C2：webhook 的结构化安全日志（验签失败 / 版本不一致）必须落到运行时 logger
         log: (event, fields) => log.warn(event, fields),
