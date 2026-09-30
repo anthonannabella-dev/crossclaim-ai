@@ -86,7 +86,7 @@ export function createActionGuardCapabilitySource(deps: ActionGuardCapabilitySou
       for (const scope of scopes) {
         // 抛异常 → 让 Action Guard 判 STATE_UNAVAILABLE（fail closed）
         const effective = await deps.killSwitch.resolve(scope, organizationId);
-        if (!effective || effective.value !== 'enabled' || effective.degraded === true) {
+        if (!effective || effective.value !== 'enabled' || effective.degraded === true || effective.stale === true) {
           tenantEnabled = false;
           break;
         }

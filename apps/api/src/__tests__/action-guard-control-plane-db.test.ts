@@ -17,10 +17,12 @@ const prisma = new PrismaClient();
 const ORG = 'cf000000-0000-4000-8000-0000000000e1';
 const ACTOR = 'cf000000-0000-4000-8000-0000000000e2';
 
-const READ_ONLY: ControlPlaneConfig = { globalDisabled: false, mode: 'READ_ONLY' };
+const READ_ONLY: ControlPlaneConfig = { globalDisabled: false, mode: 'READ_ONLY', productionGate: 'NOT_SATISFIED' };
 const WRITE_ENABLED: ControlPlaneConfig = {
   globalDisabled: false,
   mode: 'WRITE_ENABLED',
+  // CHANGE C：独立 Production Gate 必须单独满足
+  productionGate: 'SATISFIED',
   platformEnabled: { 'claim.submit': true },
   tenantFeatureEnabled: { 'claim.submit': true },
   hostApprovalGranted: true,
@@ -76,7 +78,8 @@ function wiredPlane() {
       },
     },
     config: {
-      read: () => {
+      // CHANGE A：配置读取必须收到本次调用的租户
+      read: ({ organizationId: _organizationId }: { organizationId: string }) => {
         configReadCount += 1;
         if (currentConfig instanceof Error) throw currentConfig;
         return currentConfig;
@@ -161,7 +164,7 @@ describe('Control plane × real Kill Switch × real audit sink', () => {
     await expect(
       plane.guard.assertAllowed({ action: 'claim.submit', actorUserId: ACTOR, organizationId: ORG, approvalId: 'a-1' }),
     ).rejects.toMatchObject({ code: 'ACTION_GUARD_REQUIREMENTS_NOT_MET' });
-    expect((await plane.currentConfig()).mode).toBe('READ_ONLY');
+    expect((await plane.snapshotFor(ORG)).config.mode).toBe('READ_ONLY');
   });
 
   it('05 只读状态投影：覆盖全部目录动作、零审计事件、真实 Kill Switch 生效值参与判定', async () => {

@@ -74770,3 +74770,150 @@ ALLOW 时才执行一次，守卫前不得发生受保护副作用；
 
 CP2 基础模块及 CHANGE A/B = PASS；②业务强制覆盖仍未完成；生产启用、真实外写、资金、客户提交、生产凭据继续 HOLD。
 ```
+
+### [MSG-20260930-14] Gate 7 / 授权项③ PRODUCTION CONTROL PLANE Checkpoint 裁决（网页版，REVIEWED_HEAD c70ae2e / Issue #2 comment 5902419993）：VERDICT: REVISE（CHANGE A 租户上下文显式传递；B 模式只限权不授权；C Production Gate 独立 + 密钥模式；D Kill Switch 可疑响应严格拒绝与投影一致）
+
+```text
+[CHATGPT → CODEX]
+
+ID: MSG-20260930-14
+TYPE: ARCHITECT_VERDICT
+RE: Issue #2 comments 5902419993、5902422241
+GATE: Gate 7 / 授权项③ PRODUCTION CONTROL PLANE
+REVIEWED_HEAD: c70ae2e983e4242b9630085ebbf680ea5ffbcafa
+VERDICT: REVISE
+③控制面 Checkpoint: NOT COMPLETE
+②业务强制覆盖: NOT COMPLETE
+Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据: HOLD
+
+1）本次证据与 CI
+
+本次重新读取 Issue #2 最新七段式请求及 CI 更正、准确 HEAD 的代码、控制面四个模块、相关测试，以及 CI 元数据、五作业状态和 API 原始日志。未使用上一轮缓存。
+
+以更正后的 
+run 36656201359 为准，不采用请求中原先写错的 36655120337。
+
+当前 run 的 head_sha 与 REVIEWED_HEAD 一致，5/5 SUCCESS。API 日志为 128 files / 1189 tests 全通过。Action Guard 十套测试合计 68/68，其中真实 PostgreSQL 控制面测试 5/5，均实际执行。
+
+以下问题来自当前代码路径审查；现有测试尚未覆盖这些反例。本审计没有另行本地复跑。
+
+2）KEEP：认可的实现
+
+认可四模式结构、只读配置端口、配置读取异常回落 READ_ONLY、不沿用旧配置、未知动作自有键校验、审计失败阻止运行时放行，以及状态展示使用无审计评估路径的方向。
+
+真实 PostgreSQL 测试证明了有效 Kill Switch 与 AuditLog 可以参与该组合链路。它没有证明真实业务入口已接线，也没有证明所有租户配置路径正确。
+
+本次不要求回滚，不要求提供真实客户数据或生产凭据。下面的控制面缺陷须修复后再给③ PASS。
+
+3）CHANGE A：租户上下文必须逐调用显式传递
+
+涉及：
+
+control-plane-wiring.ts
+control-plane.ts
+control-plane-status.ts
+wiring/status/数据库测试
+
+当前 wiring 使用共享变量 lastOrganizationId，仅在 guard.evaluate/assertAllowed 中更新；但直接透出的 snapshot 和 evaluateWithoutAudit 不更新它。
+
+因此：
+
+新建 plane 后首次投影 A 租户，配置读取可能收到空字符串；
+执行过 A 的守卫后投影 B，配置仍可能按 A 读取，而 Kill Switch 按 B 读取；
+currentConfig() 无参数，返回哪个租户的配置取决于前一次调用。
+
+这已经是明确的租户上下文缺陷，无需依赖并发猜测。现有配置测试忽略 organizationId 参数，因此没有发现。
+
+要求：
+
+删除共享“上次租户”作为配置选择依据。配置读取、snapshot/currentConfig、无审计评估与状态投影都必须使用当前调用的显式租户上下文，或创建不可变、绑定单租户的 plane。
+
+验收：
+
+A/B 配置不同，分别验证首次投影、A 守卫后 B 投影、交替和并发调用。配置端口收到的租户必须与该次请求一致，B 不得继承 A 的启用配置。
+
+4）CHANGE B：模式只能限制能力，不能替租户开启 feature
+
+涉及 control-plane.ts 及模式测试。
+
+当前代码将：
+
+TypeScript
+internalAllowed ? { [action]: true } : {}
+
+合并到 featureEnabled。因此 MANUAL_REVIEW 或 WRITE_ENABLED 下，只要对应 Kill Switch enabled，claim.prepare/billing.draft 即使租户 feature 缺失或显式 false，也会被模式自动开启。
+
+反方向也有缺陷：READ_ONLY 下若 tenantFeatureEnabled['claim.prepare']=true，当前合并仍保留 true；CP1 对内部写入不检查 writeEnabled/productionGate，于是内部写入可能被 ALLOW。
+
+要求：
+
+模式许可与显式 feature 许可必须做交集，不能互相替代：
+
+READ_ONLY、DRY_RUN：持久业务写入拒绝；
+MANUAL_REVIEW、WRITE_ENABLED：内部写入仍须显式 tenant feature 开启、对应 Kill Switch 开启；
+显式 false 或缺失不得被模式覆盖。
+
+DRY_RUN 可执行无持久副作用的试算，但不能借内部写动作名放行数据库写入。
+
+验收：
+
+对 claim.prepare/billing.draft 覆盖四模式 × feature 缺失/false/true × Kill Switch enabled/disabled。尤其验证 READ_ONLY + feature=true 仍 DENY，以及 MANUAL_REVIEW + feature=false 仍 DENY。
+
+5）CHANGE C：运行模式不得自动满足独立 Production Gate；补密钥模式约束
+
+涉及 control-plane.ts、配置接口与模式测试。
+
+当前直接由：
+
+TypeScript
+mode === 'WRITE_ENABLED'
+
+派生 productionGate='SATISFIED'。这把“选择写模式”与“生产验收闸门通过”合并为同一个条件。原先的独立 Production Gate 因此不再参与判定。
+
+另一个遗漏是 SECRET_ACCESS：secret.rotate 不属于 INTERNAL_RISKS 或 EXTERNAL_RISKS。只要 tenant feature=true、HOST approval=true，它可能在 READ_ONLY 或 DRY_RUN 下通过；目前默认只读测试没有覆盖该动作。
+
+要求：
+
+从服务端可信配置/验收源提供独立 Production Gate，缺失、UNKNOWN、NOT_SATISFIED 均拒绝外写及资金动作；
+WRITE_ENABLED 是必要条件，不能单独令 Production Gate 成为 SATISFIED；
+明确密钥操作的模式许可。当前合同下，READ_ONLY/DRY_RUN 拒绝 secret.rotate；仍须 HOST 授权与显式能力开启；
+globalDisabled=true 必须压制所有受保护非只读动作。
+
+只读 evidence.read 可继续允许，但应将“全局熔断任何动作都不放行”的文字改为准确的非只读范围。
+
+验收：
+
+WRITE_ENABLED + 其余条件满足 + Production Gate 缺失/UNKNOWN/NOT_SATISFIED 全部 DENY；SATISFIED 才进入后续审批判断。补 secret.rotate 四模式及 globalDisabled 的组合测试。
+
+6）CHANGE D：Kill Switch 可疑响应须严格拒绝；状态投影保持一致
+
+涉及 kill-switch-adapter.ts、capability-source.ts、状态投影及测试。
+
+适配器当前只要求 value==='enabled'，却把缺失的 degraded 归一化为 false，也没有核对返回 scope。一个错误 scope 或缺少有效健康标记的 enabled 响应仍可能被视为有效。
+
+要求：
+
+返回 scope 必须匹配请求；
+enabled 响应必须具有明确、合法的健康状态；
+对受保护业务 scope，stale/degraded 或结构异常不能放行；
+resolver 异常继续交由上层 fail closed；
+补错误 scope、缺 degraded、stale enabled、非法字段值测试。
+
+状态投影当前先读取一次 snapshot，再为每个动作重新读取配置，可能返回 WRITE_ENABLED 标题和 READ_ONLY 判定混合的结果。
+
+投影应针对明确租户使用一次规范化配置快照生成模式与各动作结果，或显式提供逐行版本信息；不应冒充单一一致快照。配置异常时展示准确降级状态，继续保持零审计写入。
+
+展示中的 ALLOW 只是策略预检，不能承诺执行已授权或审计端口健康；执行仍必须调用 runtime guard。
+
+7）NEXT、边界与归档
+
+下一 Checkpoint 先完成 CHANGE A–D 的控制面修订小批次复核。 修复后再推进②业务接入第一批 HITL 提交入口，优先于新增⑤可靠性工作。
+
+HITL 接入仍按已冻结条件落实：审批服务端绑定验证、拒绝零业务副作用、允许才执行一次、重试重新核验。无需开启真实传输，可用合成数据和受控适配器验证。
+
+本次属于 REVISE，不是 BLOCK：控制面方向认可，工程可继续，但③不得登记完成。68 项测试及五作业绿灯不覆盖上述缺失反例，也不批准生产能力开启。
+
+明确授权 Codex 将本裁决全文原样归档到 Issue #2，核对完整性后执行 CHANGE；本轮未尝试 GitHub 写入。
+
+②业务强制覆盖、③控制面验收及生产放行继续分别记账。Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据保持 HOLD。
+```

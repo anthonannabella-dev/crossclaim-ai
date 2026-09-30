@@ -1,13 +1,12 @@
 /**
- * CONTROL PLANE STATUS PROJECTION（授权项 ③；MSG-20260930-12 §5 口径修正）
- * ----------------------------------------------------------------------
- * 只读状态投影：给定控制面与租户，输出**全部目录动作**的判定结果，供运营面板/预检使用。
+ * CONTROL PLANE STATUS PROJECTION v2（MSG-20260930-14 CHANGE A/D）
+ * ----------------------------------------------------------------
+ * - 针对**显式租户**读取**一次**规范化配置快照，再用同一快照生成每行判定（不逐行重读配置）；
+ * - 纯评估：零审计写入；
+ * - 只遍历动作目录自有键；
+ * - 配置源降级时如实标注（不冒充单一一致快照）。
  *
- * 关键纪律：
- *   - **纯评估**：调用 \`plane.evaluateWithoutAudit\`，不写审计、不改变任何状态；
- *     架构方明确指出 \`runtime.evaluate\` 会尝试写审计，展示场景不得沿用它；
- *   - 只遍历**动作目录自有键**（不遍历原型链、不接受调用方传入的动作列表）；
- *   - 不读 env、不写库、不发请求。
+ * 说明：投影中的 ALLOW 只是**策略预检**，不代表已授权执行或审计端口健康；真正执行仍必须走 runtime guard。
  */
 
 import { ACTION_GUARD_CATALOG, type ActionGuardDecision, type ActionGuardInput, type ActionRiskClass } from './action-guard';
@@ -25,6 +24,9 @@ export interface ControlPlaneStatus {
   organizationId: string;
   mode: string;
   globalDisabled: boolean;
+  productionGate: string;
+  /** 配置源异常/缺失导致的降级（此时按 READ_ONLY 快照展示） */
+  configDegraded: boolean;
   generatedAt: string;
   rows: ControlPlaneStatusRow[];
   summary: { allow: number; deny: number; requireApproval: number; total: number };
@@ -43,7 +45,7 @@ export async function projectControlPlaneStatus(options: ProjectControlPlaneStat
   if (!plane?.evaluateWithoutAudit) throw new Error('CONTROL_PLANE_STATUS_MISSING_PLANE');
   if (!organizationId) throw new Error('CONTROL_PLANE_STATUS_MISSING_ORGANIZATION');
 
-  const config = await plane.snapshot();
+  const snapshot = await plane.snapshotFor(organizationId);
   const actions = Object.keys(ACTION_GUARD_CATALOG).sort();
   const rows: ControlPlaneStatusRow[] = [];
 
@@ -52,9 +54,9 @@ export async function projectControlPlaneStatus(options: ProjectControlPlaneStat
       action,
       actorUserId: options.actorUserId ?? 'control-plane-status',
       organizationId,
-      // 审批与 capabilities 都不由调用方提供：能力一律来自控制面组合逻辑
     };
-    const result = await plane.evaluateWithoutAudit(input);
+    // CHANGE D：所有行使用同一份规范化配置快照
+    const result = await plane.evaluateWithoutAudit(input, snapshot.config);
     rows.push({
       action,
       risk: result.risk === 'UNKNOWN' ? 'READ_ONLY' : result.risk,
@@ -73,8 +75,10 @@ export async function projectControlPlaneStatus(options: ProjectControlPlaneStat
 
   return {
     organizationId,
-    mode: config.mode,
-    globalDisabled: config.globalDisabled,
+    mode: snapshot.config.mode,
+    globalDisabled: snapshot.config.globalDisabled,
+    productionGate: snapshot.config.productionGate ?? 'NOT_SATISFIED',
+    configDegraded: snapshot.degraded,
     generatedAt: (options.now ?? (() => new Date().toISOString()))(),
     rows,
     summary,
