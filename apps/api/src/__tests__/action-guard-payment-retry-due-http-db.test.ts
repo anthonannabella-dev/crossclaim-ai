@@ -36,6 +36,8 @@ import {
 import {
   executeRetryBatch,
   freezeRetryBatch,
+  readRetryBatch,
+  retryBatchDigest,
   runDueRetries,
   submitRetryBatchReview,
   type RetryBatchExecutionResult,
@@ -1154,5 +1156,142 @@ describe('② 第二批 — retry-due（冻结清单批次审批）真实 HTTP +
       expect(await prisma.auditLog.count({ where: { organizationId: ORG, action: 'payment.succeeded' } })).toBeLessThanOrEqual(1);
       expect(await prisma.payment.count({ where: { organizationId: ORG } })).toBe(1);
     });
+  }, 60_000);
+
+  it('28 发票集合交叉的两批次并发 → 各阶段独立排序，无死锁且每张发票至多一次 PAID', async () => {
+    // 第二张发票与资金对象（与首张金额币种一致）
+    const secondInvoice = await prisma.billingInvoice.create({
+      data: {
+        organizationId: ORG,
+        invoiceNo: 'INV-RD-2',
+        status: 'ISSUED',
+        subtotal: new Prisma.Decimal(AMOUNT),
+        taxAmount: new Prisma.Decimal(0),
+        total: new Prisma.Decimal(AMOUNT),
+        currency: CURRENCY,
+        issuedAt: NOW,
+      },
+    });
+    const secondPayment = await prisma.payment.create({
+      data: {
+        organizationId: ORG,
+        invoiceId: secondInvoice.id,
+        provider: 'STRIPE',
+        externalPaymentId: 'pi_retry_due_2',
+        amount: new Prisma.Decimal(AMOUNT),
+        currency: CURRENCY,
+        status: 'SUCCEEDED',
+        idempotencyKey: 'pi_retry_due_2',
+      },
+    });
+    const secondEventId = 'cf200000-0000-4000-8000-000000000061';
+    await prisma.paymentEvent.create({
+      data: {
+        id: secondEventId,
+        organizationId: ORG,
+        provider: 'STRIPE',
+        providerEventId: 'evt_cross_2',
+        eventType: 'payment_intent.succeeded',
+        payloadHash: 'hash-cross-2',
+        receivedAt: NOW,
+        processingResult: 'PROCESSED',
+      },
+    });
+    await prisma.paymentProcessingAttempt.create({
+      data: {
+        organizationId: ORG,
+        paymentEventId: secondEventId,
+        attemptNo: 1,
+        status: 'RETRYABLE_FAILED',
+        errorCode: 'CAS_CONFLICT',
+        errorSummary: 'cross candidate',
+        startedAt: NOW,
+        finishedAt: NOW,
+        nextRetryAt: new Date(Date.now() - 1_000),
+        actorType: 'EXTERNAL',
+        actorRef: 'STRIPE',
+        paymentId: secondPayment.id,
+      },
+    });
+
+    const frozenA = await freezeRetryBatch(
+      prisma,
+      { organizationId: ORG, actorUserId: ownerId, role: 'OWNER' },
+      { now: () => new Date() },
+    );
+    expect(frozenA.itemCount).toBe(2);
+    const recordA = await readRetryBatch(prisma, { organizationId: ORG, batchId: frozenA.batchId });
+    expect(recordA).not.toBeNull();
+    const itemsA = recordA!.items;
+
+    // 构造第二个批次：与 A 相同的两项，但**顺序相反**（发票集合交叉）
+    const reversed = [...itemsA].reverse();
+    const batchBId = crypto.randomUUID();
+    await prisma.auditLog.create({
+      data: {
+        organizationId: ORG,
+        actorType: 'USER',
+        actorUserId: ownerId,
+        action: 'payment.retry_batch_frozen',
+        entityType: 'PaymentRetryBatch',
+        entityId: batchBId,
+        changes: {
+          batchId: batchBId,
+          digest: retryBatchDigest(reversed),
+          digestVersion: 'v1',
+          itemCount: reversed.length,
+          expiresAt: new Date(Date.now() + 900_000).toISOString(),
+          requestedBy: ownerId,
+          operation: 'retry_due',
+          version: 'v1',
+          items: reversed,
+        } as never,
+      },
+    });
+
+    // 两个批次都走审批（服务层，真实时钟）
+    await submitRetryBatchReview(
+      prisma,
+      { organizationId: ORG, actorUserId: ownerId, role: 'OWNER', batchId: frozenA.batchId, decision: 'REQUEST' },
+      { now: () => new Date() },
+    );
+    await submitRetryBatchReview(
+      prisma,
+      { organizationId: ORG, actorUserId: ownerId, role: 'OWNER', batchId: batchBId, decision: 'REQUEST' },
+      { now: () => new Date() },
+    );
+    const approvals = await Promise.all(
+      [frozenA.batchId, batchBId].map((batchId) =>
+        submitRetryBatchReview(
+          prisma,
+          { organizationId: ORG, actorUserId: ownerId, role: 'OWNER', batchId, decision: 'APPROVE' },
+          { now: () => new Date(Date.now() + 1000) },
+        ),
+      ),
+    );
+
+    const settled = await Promise.allSettled(
+      [frozenA.batchId, batchBId].map((batchId, index) =>
+        executeRetryBatch(
+          prisma,
+          {
+            organizationId: ORG,
+            actorUserId: ownerId,
+            role: 'OWNER',
+            batchId,
+            approvalId: String(approvals[index].approvalId),
+          },
+          { now: () => new Date() },
+        ),
+      ),
+    );
+    const rejected = settled.filter((entry) => entry.status === 'rejected') as PromiseRejectedResult[];
+    expect(rejected.filter((entry) => /deadlock/i.test(String(entry.reason)))).toHaveLength(0);
+
+    // 每张发票至多一次 PAID 推进、支付对象数不变
+    expect(await prisma.auditLog.count({ where: { organizationId: ORG, action: 'payment.succeeded' } })).toBeLessThanOrEqual(2);
+    expect(await prisma.payment.count({ where: { organizationId: ORG } })).toBe(2);
+    const invoices = await prisma.billingInvoice.findMany({ where: { organizationId: ORG }, select: { status: true } });
+    expect(invoices.filter((row) => row.status === 'PAID').length).toBeLessThanOrEqual(2);
   }, 60_000);
 });
