@@ -68,7 +68,7 @@ jobs:
       - name: Verify migration checksums (byte-identical reinclusion of re-added migration)
         run: node tools/migration-checksum/check-migration-checksums.mjs --root .
 
-      - name: Verify tenant-integrity triggers (checklist: name / table / event / enabled)
+      - name: Verify tenant-integrity triggers (checklist of name / table / event / enabled)
         run: |
           node tools/tenant-triggers/emit-check-sql.mjs \
             | PGPASSWORD=ci psql -h localhost -U crossclaim -d crossclaim -v ON_ERROR_STOP=1
