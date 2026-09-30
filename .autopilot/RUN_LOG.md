@@ -363,3 +363,11 @@
 - 待办更新：通道①恢复后的唤醒消息应指向 **9a806eb**（而不是 4c695c0）。
 
 - 另：在 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` 追加「3.1 代码引用抽查」（纯代码引用地图，明确**不是验收结论**、不改状态列）：`commission.charge` 入口**已接线**（/cases/:id/recovery-outcome，缺守卫 fail closed）；`claim.submit`/`appeal.submit`/`platform.write` 仅有目录+能力映射+静态清单、无路由接线；`claim.prepare`/`billing.draft`/`evidence.read`/`secret.rotate` 接线状态见该表。
+
+## 2026-09-30 — R18 唤醒已送达 + **通道诊断口径更正**（重要）
+
+- **唤醒已送出并验证**（16:05Z 前后）：右侧 ChatGPT 审计会话（`/c/6abc2d93-4448-83e8-a940-94889b355510`，标题「仓库审查裁决」）收到指向 **`9a806eb`** 的 R18 唤醒；验证三要素：正文作为最新一轮出现（DOM 尾部含 `[CODEX → CHATGPT]` 与 `9a806eb`）、页面显示「ChatGPT 正在回应」、会话未中断。
+- **诊断口径更正（此前 3 小时的误判）**：`Codex auth token is unavailable` 实际来自 **Edge 扩展浏览器**（`type=extension`，`metadata.extensionInstanceId=266b0aab-…`）。工作流的健康检查用 `cua.getState()`，它会把**所有** surface 的 tab 一并列出；只要 Edge 报错，整个调用失败并返回 `browsers: []`，于是被误读为「ChatGPT 网页通道整体不可用」。
+- 实测（16:03Z）：`cua.listBrowsers()` 正常返回两个 surface（`Codex In-app Browser`(id=1, iab) / `Edge`(id=2, extension)）；`cua.listTabs({browser:"1"})` **正常**返回审计会话标签页与用户新开的 `chatgpt.com/` 标签页；`cua.listTabs({browser:"2"})`（Edge）报 token 错误。→ **in-app browser 通道始终可用**，可用会话读取已确认（对话最后一条仍是已归档的 MSG-20260930-34，即架构方尚未看到 R18）。
+- 影响：此前「唤醒发不出去、评审无法开始」的结论**过宽**；实际是聚合健康检查被 Edge surface 毒化。已据此在 16:0xZ 直接投递唤醒。此处如实记录，避免后续再用聚合调用判断通道状态。
+- 后续口径（SELF_RESOLVE，写入本轮记录，供下一轮沿用）：通道健康检查 = `listBrowsers()` 逐 surface 判断 + 只对需要操作的 surface 调 `listTabs`；Edge 扩展持续报 token 错误时**忽略该 surface**（不影响 in-app browser 的读写），必要时再提示宿主重新连接扩展，而不再要求重开 ChatGPT 会话。
