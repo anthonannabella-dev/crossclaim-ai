@@ -57,7 +57,7 @@ describe('Control plane v2 — tenant context / mode / gate', () => {
     expect((await p.snapshotFor(ORG_B)).config.mode).toBe('READ_ONLY');
   });
 
-  it('A2 交替与并发调用：每次配置读取的租户与请求一致，B 不继承 A 的启用配置', async () => {
+  it('A2 交替与并发**快照调用**：每次配置读取的租户与请求一致，B 不继承 A 的启用配置（不主张业务并发执行已验收）', async () => {
     const { plane: p, seenTenants } = plane({
       [ORG]: base({ mode: 'WRITE_ENABLED', productionGate: 'SATISFIED', platformEnabled: { 'claim.submit': true }, tenantFeatureEnabled: { 'claim.submit': true }, hostApprovalGranted: true }),
       [ORG_B]: base(),
@@ -111,14 +111,19 @@ describe('Control plane v2 — tenant context / mode / gate', () => {
     }
   });
 
-  it('B4 Kill Switch disabled：任何模式下的内部写入都拒绝', async () => {
-    const { plane: p } = plane(
-      { [ORG]: base({ mode: 'WRITE_ENABLED', productionGate: 'SATISFIED', tenantFeatureEnabled: { 'claim.prepare': true } }) },
-      'disabled',
-    );
-    await expect(
-      p.guard.assertAllowed({ action: 'claim.prepare', actorUserId: ACTOR, organizationId: ORG }),
-    ).rejects.toMatchObject({ code: 'ACTION_GUARD_REQUIREMENTS_NOT_MET' });
+  it('B4 Kill Switch disabled：四模式 × 内部写入全部拒绝', async () => {
+    for (const mode of ['READ_ONLY', 'DRY_RUN', 'MANUAL_REVIEW', 'WRITE_ENABLED'] as const) {
+      const { plane: p } = plane(
+        { [ORG]: base({ mode, productionGate: 'SATISFIED', tenantFeatureEnabled: { 'claim.prepare': true, 'billing.draft': true } }) },
+        'disabled',
+      );
+      for (const action of ['claim.prepare', 'billing.draft']) {
+        await expect(
+          p.guard.assertAllowed({ action, actorUserId: ACTOR, organizationId: ORG }),
+          `${mode}/${action}`,
+        ).rejects.toMatchObject({ code: 'ACTION_GUARD_REQUIREMENTS_NOT_MET' });
+      }
+    }
   });
 
   it('C1 Production Gate 独立：WRITE_ENABLED + 全 enablement + 审批，但 Gate 缺失/UNKNOWN/NOT_SATISFIED → DENY', async () => {

@@ -41,12 +41,17 @@ describe('Kill Switch read port adapter v2', () => {
     await expect(port.resolve('submission', ORG)).rejects.toThrow('resolver db down');
   });
 
-  it('04 结构异常一律拒绝：scope 不匹配 / 缺 degraded / 非法 value', async () => {
+  it('04 结构异常一律拒绝：scope 不匹配 / 缺 degraded / 非法 value / 非法 stale 类型（CHANGE D1）', async () => {
     const cases = [
       { scope: 'billing', value: 'enabled', degraded: false }, // scope 不匹配
       { scope: 'submission', value: 'enabled' }, // 缺 degraded
       { scope: 'submission', value: 'ENABLED', degraded: false }, // 非法 value
       { scope: 'submission', value: 'enabled', degraded: 'no' }, // degraded 类型错
+      { scope: 'submission', value: 'enabled', degraded: false, stale: 'true' }, // D1：stale 字符串
+      { scope: 'submission', value: 'enabled', degraded: false, stale: 'false' }, // D1：stale 字符串
+      { scope: 'submission', value: 'enabled', degraded: false, stale: 1 }, // D1：stale 数字
+      { scope: 'submission', value: 'enabled', degraded: false, stale: null }, // D1：stale null
+      { scope: 'submission', value: 'enabled', degraded: false, stale: {} }, // D1：stale 对象
       undefined as never,
     ];
     for (const raw of cases) {
@@ -56,6 +61,13 @@ describe('Kill Switch read port adapter v2', () => {
       expect(result.degraded, JSON.stringify(raw)).toBe(true);
       expect(result.stale, JSON.stringify(raw)).toBe(true);
     }
+  });
+
+  it('04b stale 缺省（undefined）合法 → 按 false 处理；stale=false 合法', async () => {
+    const missing = createKillSwitchReadPort({ async resolve(s) { return { scope: s, value: 'enabled', degraded: false }; } });
+    await expect(missing.resolve('submission', ORG)).resolves.toMatchObject({ value: 'enabled', stale: false });
+    const explicit = createKillSwitchReadPort({ async resolve(s) { return { scope: s, value: 'enabled', degraded: false, stale: false }; } });
+    await expect(explicit.resolve('submission', ORG)).resolves.toMatchObject({ value: 'enabled', stale: false });
   });
 
   it('05 依赖缺失即失败', () => {
