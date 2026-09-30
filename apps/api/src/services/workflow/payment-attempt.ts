@@ -18,6 +18,8 @@
 import { Prisma, type PrismaClient } from '@prisma/client';
 
 import { prepareAuditInsert } from '../audit';
+// 仅类型导入：避免与 payment-retry-batch 形成运行期循环依赖
+import type { RetryBatchExecutionResult } from './payment-retry-batch';
 import {
   applyPaymentSucceeded,
   readReplaySnapshot,
@@ -740,171 +742,28 @@ export interface RetryDueResult {
 }
 
 /** 自动重放：只处理 RETRYABLE_FAILED 且到点的 attempt；没有 paymentId 的一律 DEAD_LETTER（不猜）。 */
+/**
+ * ② 第二批 retry-due（MSG-20260930-29 CHANGE D）：**旧动态选单入口已关闭**。
+ * 该函数不再自行按 `limit` 动态查询 due 项并直接恢复资金 —— 那是一条不需要 `batchId`/`approvalId`
+ * 的绕过审批路径。现在它只能作为「冻结批次执行」的别名：必须提供 `batchId` + `approvalId`，
+ * 由 `executeRetryBatch` 在批次锁内重算摘要、核验审批并只处理冻结清单。
+ * 后台调度器（若有）同样必须走这条受保护路径；本批次不提供无审批入口。
+ */
 export async function runDueRetries(
   prisma: PrismaClient,
-  input: { organizationId: string; role: string; limit?: number },
+  input: { organizationId: string; role: string; actorUserId: string; batchId: string; approvalId?: string },
   deps: { now?: () => Date } = {},
-): Promise<RetryDueResult> {
-  assertPermission(input.role, 'setCommercialTerms');
-  assertPermission(input.role, 'advanceBilling');
-  const at = (deps.now ?? (() => new Date()))();
-  const take = Math.min(Math.max(input.limit ?? 20, 1), 100);
-
-  const due = await prisma.paymentProcessingAttempt.findMany({
-    where: {
+): Promise<RetryBatchExecutionResult> {
+  const { executeRetryBatch } = await import('./payment-retry-batch');
+  return executeRetryBatch(
+    prisma,
+    {
       organizationId: input.organizationId,
-      status: 'RETRYABLE_FAILED',
-      nextRetryAt: { lte: at },
+      actorUserId: input.actorUserId,
+      role: input.role,
+      batchId: input.batchId,
+      ...(input.approvalId ? { approvalId: input.approvalId } : {}),
     },
-    orderBy: { nextRetryAt: 'asc' },
-    take,
-    select: { id: true, paymentEventId: true, paymentId: true, attemptNo: true },
-  });
-
-  const retried: ReplayResult[] = [];
-  const deadLettered: RetryDueResult['deadLettered'] = [];
-
-  for (const attempt of due) {
-    if (!attempt.paymentId) {
-      await prisma.paymentProcessingAttempt.updateMany({
-        where: { id: attempt.id, status: 'RETRYABLE_FAILED' },
-        data: { status: 'DEAD_LETTER', nextRetryAt: null, finishedAt: at },
-      });
-      deadLettered.push({
-        attemptId: attempt.id,
-        paymentEventId: attempt.paymentEventId,
-        reason: 'PAYMENT_CONTEXT_REQUIRED',
-      });
-      continue;
-    }
-
-    const event = await prisma.paymentEvent.findFirst({
-      where: { id: attempt.paymentEventId, organizationId: input.organizationId },
-      select: { id: true, provider: true },
-    });
-    const payment = await prisma.payment.findFirst({
-      where: { id: attempt.paymentId, organizationId: input.organizationId },
-      select: { id: true, invoiceId: true, externalPaymentId: true, amount: true, currency: true },
-    });
-    if (!event || !payment) {
-      await prisma.paymentProcessingAttempt.updateMany({
-        where: { id: attempt.id, status: 'RETRYABLE_FAILED' },
-        data: { status: 'DEAD_LETTER', nextRetryAt: null, finishedAt: at },
-      });
-      deadLettered.push({
-        attemptId: attempt.id,
-        paymentEventId: attempt.paymentEventId,
-        reason: 'PAYMENT_CONTEXT_REQUIRED',
-      });
-      continue;
-    }
-
-    const next = await startAttempt(
-      prisma,
-      {
-        organizationId: input.organizationId,
-        paymentEventId: event.id,
-        actorType: 'SYSTEM',
-        actorRef: SYSTEM_RETRY_ACTOR_REF,
-      },
-      { now: () => at },
-    );
-    try {
-      const outcome = await recoverPaymentSucceeded(
-        prisma,
-        {
-          organizationId: input.organizationId,
-          provider: event.provider,
-          externalPaymentId: payment.externalPaymentId,
-          invoiceId: payment.invoiceId,
-          amount: payment.amount.toFixed(4),
-          currency: payment.currency,
-        },
-        {
-          now: () => at,
-          onPaymentRecorded: async (tx, paymentId) => {
-            await tx.paymentProcessingAttempt.updateMany({
-              where: { id: next.id, status: 'RUNNING' },
-              data: { paymentId },
-            });
-            await writeAttemptAudit(tx, {
-              organizationId: input.organizationId,
-              actorType: 'SYSTEM',
-              actorRef: SYSTEM_RETRY_ACTOR_REF,
-              action: ATTEMPT_AUDIT.linked,
-              paymentEventId: event.id,
-              changes: { attemptId: next.id, paymentId, paymentEventId: event.id },
-              at,
-            });
-          },
-        },
-      );
-      await finishAttempt(
-        prisma,
-        { attemptId: next.id, status: 'SUCCEEDED', resultStatus: outcome.status },
-        { now: () => at },
-      );
-      await prisma.$transaction(async (tx) => {
-        await writeAttemptAudit(tx, {
-          organizationId: input.organizationId,
-          actorType: 'SYSTEM',
-          actorRef: SYSTEM_RETRY_ACTOR_REF,
-          action: ATTEMPT_AUDIT.recovered,
-          paymentEventId: event.id,
-          changes: {
-            paymentEventId: event.id,
-            attemptId: next.id,
-            paymentId: payment.id,
-            resultStatus: outcome.status,
-            recovery: true,
-          },
-          at,
-        });
-      });
-      retried.push({
-        paymentEventId: event.id,
-        attemptId: next.id,
-        attemptNo: next.attemptNo,
-        status: 'SUCCEEDED',
-        resultStatus: outcome.status,
-      });
-    } catch (error) {
-      const info = classifyAttemptError(error);
-      const delay = info.retryable ? nextRetryDelayMinutes(next.attemptNo) : null;
-      await finishAttempt(
-        prisma,
-        {
-          attemptId: next.id,
-          status: delay === null ? 'DEAD_LETTER' : 'RETRYABLE_FAILED',
-          errorCode: info.errorCode,
-          errorSummary: info.errorSummary,
-          nextRetryAt: delay === null ? null : new Date(at.getTime() + delay * 60_000),
-        },
-        { now: () => at },
-      );
-      await prisma.$transaction(async (tx) => {
-        await writeAttemptAudit(tx, {
-          organizationId: input.organizationId,
-          actorType: 'SYSTEM',
-          actorRef: SYSTEM_RETRY_ACTOR_REF,
-          action: ATTEMPT_AUDIT.failed,
-          paymentEventId: event.id,
-          changes: {
-            attemptId: next.id,
-            attemptNo: next.attemptNo,
-            errorCode: info.errorCode,
-            errorSummary: info.errorSummary,
-          },
-          at,
-        });
-      });
-      deadLettered.push({
-        attemptId: next.id,
-        paymentEventId: event.id,
-        reason: info.errorCode,
-      });
-    }
-  }
-
-  return { scanned: due.length, retried, deadLettered };
+    deps,
+  );
 }

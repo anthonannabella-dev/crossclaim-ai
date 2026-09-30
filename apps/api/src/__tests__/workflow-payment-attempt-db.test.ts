@@ -18,7 +18,9 @@ import {
   applyPaymentSucceeded,
   handlePaymentWebhook,
   replayPaymentEvent,
+  freezeRetryBatch,
   runDueRetries,
+  submitRetryBatchReview,
   startAttempt,
   submitPaymentReplayReview,
 } from '../services/workflow';
@@ -209,11 +211,31 @@ describe('C-0010-B2 — 执行尝试（真实 PostgreSQL）', () => {
     const payment = await seedPayment();
     await seedFailedAttempt(event.id, payment.id);
 
-    const result = await runDueRetries(prisma, { organizationId: ORG, role: 'ADMIN' }, { now: () => NOW });
-    expect(result.scanned).toBe(1);
-    expect(result.deadLettered).toHaveLength(0);
-    expect(result.retried).toHaveLength(1);
-    expect(result.retried[0]).toMatchObject({ status: 'SUCCEEDED', resultStatus: 'PAID' });
+    // ② 第二批 retry-due：旧动态选单入口已关闭，改为「冻结清单 + 批次审批 + 受保护执行」
+    const frozen = await freezeRetryBatch(
+      prisma,
+      { organizationId: ORG, actorUserId: ownerId, role: 'OWNER' },
+      { now: () => NOW },
+    );
+    await submitRetryBatchReview(
+      prisma,
+      { organizationId: ORG, actorUserId: ownerId, role: 'OWNER', batchId: frozen.batchId, decision: 'REQUEST' },
+      { now: () => NOW },
+    );
+    const batchApproval = await submitRetryBatchReview(
+      prisma,
+      { organizationId: ORG, actorUserId: ownerId, role: 'OWNER', batchId: frozen.batchId, decision: 'APPROVE' },
+      { now: () => new Date(NOW.getTime() + 1000) },
+    );
+    const result = await runDueRetries(
+      prisma,
+      { organizationId: ORG, role: 'ADMIN', actorUserId: ownerId, batchId: frozen.batchId, approvalId: String(batchApproval.approvalId) },
+      { now: () => NOW },
+    );
+    expect(result.itemCount).toBe(1);
+    expect(result.skipped).toHaveLength(0);
+    expect(result.executed).toHaveLength(1);
+    expect(result.executed[0]).toMatchObject({ resultStatus: 'PAID' });
 
     expect(await prisma.payment.count({ where: { organizationId: ORG } })).toBe(1);
     const invoice = await invoiceRow();
