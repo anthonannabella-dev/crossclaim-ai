@@ -65,13 +65,13 @@ jobs:
         working-directory: apps/api
         run: npx prisma generate
 
-      - name: Verify tenant-integrity triggers exist
+      - name: Verify migration checksums (byte-identical reinclusion of re-added migration)
+        run: node tools/migration-checksum/check-migration-checksums.mjs --root .
+
+      - name: Verify tenant-integrity triggers (checklist of name / table / event / enabled)
         run: |
-          PGPASSWORD=ci psql -h localhost -U crossclaim -d crossclaim -t -c \
-            "select count(*) from pg_trigger where tgname like 'cc_tenant%'" \
-            | grep -qE '[[:space:]]*28[[:space:]]*' \
-            && echo "OK: 28 tenant triggers present" \
-            || (echo "FAIL: tenant triggers missing" && exit 1)
+          node tools/tenant-triggers/emit-check-sql.mjs \
+            | PGPASSWORD=ci psql -h localhost -U crossclaim -d crossclaim -v ON_ERROR_STOP=1
 
       - name: API contract (API.md ↔ implemented routes)
         run: node tools/api-contract/check-routes.mjs --root .
@@ -86,6 +86,12 @@ jobs:
       - name: Unit + database integration tests
         working-directory: apps/api
         run: npm test
+
+      - name: Two-stage upgrade verification (pre-B2 → seed → apply B2; data preserved)
+        run: node tools/upgrade-verify/two-stage-upgrade.mjs
+        env:
+          CC_PSQL_CMD: psql -h localhost -U crossclaim
+          PGPASSWORD: ci
 
   deploy-smoke:
     name: Deploy smoke · fresh install + migration upgrade

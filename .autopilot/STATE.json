@@ -1,0 +1,19 @@
+{
+  "gate": "B2-FIX R1",
+  "head": "fb92c8b",
+  "status": "RECONCILED",
+  "current_task": "1. RuleVersion + RuleEvaluation reference behavior tests（A/B 可引用 SYSTEM 版本；跨租户引用 TENANT 版本被拒；拒绝后引用关系不变）",
+  "next_task": "D: existing tenant triggers per-name/table checklist",
+  "send_head": "374fbdd",
+  "decision_head": "374fbdd",
+  "last_chatgpt_message": "MSG-20260930-08 (ACK)",
+  "production_enabled": false,
+  "external_write_enabled": false,
+  "updated_at": "2026-09-29T23:56:26.330Z",
+  "previous_head": "7ed4e6d",
+  "architect_decision_pending": true,
+  "blocked_scope": "RuleEvaluation -> RuleVersion tenant reference isolation",
+  "last_send_head": "b4b61eb",
+  "last_sent_at": "2026-09-29T23:56:26.330Z",
+  "last_sent_fingerprint": "ARCHITECT_DECISION_REQUEST:RuleEvaluation-RuleVersion-tenant-reference"
+}

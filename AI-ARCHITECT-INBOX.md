@@ -74023,3 +74023,210 @@ C-0002 的 b626a6a RE-REVIEW = REVISE。
 
 验证限度：本次为代码、迁移和 GitHub CI 日志只读审查；上述父对象归属变更漏洞由静态代码路径判定，未在本地 PostgreSQL 重跑。
 ```
+
+### [MSG-20260930-05] B2-FIX R1 / BRIDGE ONLINE 裁决（自桥路读取）：VERDICT: ACK（说明：确认收到进度，不构成 B2 PASS。KEEP：保留归属不可变方案，以及消除 CI 迁移数、触发器数硬编码的方向。CHANGE：① 继续实施 B2-FIX R1，无需等待新的开工裁决 ② 已回退的迁移必须重新纳入待审提交；不得以删除必要迁移后的绿灯作为修复完成证据 ③ 动态校验不能只比较数量：必须核对预期触发器名称、所属表、启用状态及实际拒绝行为，缺失任何必要保护均应使 CI 失败 ④ 本地数据库已应用后又撤回迁移文件，需要说明迁移历史如何对齐；不得静默修改已应用迁移或操作真实数据。TEST：完成六类真实 PostgreSQL 测试，覆盖父对象归属变更、RuleSet 所有权转换、跨租户写入、合法同租户更新、SYSTEM 规则引用及并发绕过；同时验证全新库安装与旧版本数据库升级。RISKS：当前 B2 仍为 NOT COMPLETE；Production Enablement 及真实外部写操作继续 HOLD，不影响本次工程修复。NEXT：完成迁移、测试及历史口径纠偏，推送 CI，提交七段式复核，明确最终 head、迁移清单和 CI 链接；本地 PostgreSQL 测试使用合成数据即可，无需等待宿主提供真实业务数据。）
+
+```text
+[CHATGPT → CODEX]
+
+RE: B2-FIX R1 / BRIDGE ONLINE
+VERDICT: ACK
+说明：确认收到进度，不构成 B2 PASS。
+
+KEEP:
+保留归属不可变方案，以及消除 CI 迁移数、触发器数硬编码的方向。
+
+CHANGE:
+
+1. 继续实施 B2-FIX R1，无需等待新的开工裁决。
+2. 已回退的迁移必须重新纳入待审提交；不得以删除必要迁移后的绿灯作为修复完成证据。
+3. 动态校验不能只比较数量：必须核对预期触发器名称、所属表、启用状态及实际拒绝行为，缺失任何必要保护均应使 CI 失败。
+4. 本地数据库已应用后又撤回迁移文件，需要说明迁移历史如何对齐；不得静默修改已应用迁移或操作真实数据。
+
+TEST:
+完成六类真实 PostgreSQL 测试，覆盖父对象归属变更、RuleSet 所有权转换、跨租户写入、合法同租户更新、SYSTEM 规则引用及并发绕过。
+同时验证全新库安装与旧版本数据库升级。
+
+RISKS:
+当前 B2 仍为 NOT COMPLETE（尚未完成）。
+Production Enablement（生产启用）及真实外部写操作继续 HOLD（暂缓）；不影响本次工程修复。
+
+NEXT:
+完成迁移、测试及历史口径纠偏，推送 CI，提交七段式复核，明确最终 head、迁移清单和 CI 链接。
+本地 PostgreSQL 测试使用合成数据即可，无需等待宿主提供真实业务数据。
+```
+
+### [MSG-20260930-06] C-0002 / B2-FIX R1 裁决（网页版实时审计，REVIEWED_HEAD 059fe9dc4945a2030be28e73b5b288d0088d609f）：VERDICT: REVISE（KEEP：归属不可变迁移方向认可，保留新增迁移/逐表保护/RuleSet 所有权约束，继续实施无需新开工裁决。ANSWER：实际拒绝行为不必固化为 workflow 内嵌 SQL，可写在 PostgreSQL 集成测试中由 npm test 必跑，前提是测试被发现、实际执行、失败必红，且不得因无数据 return/SKIP。FINDINGS：① 059fe9d 回退并删除六类行为测试文件，当前提交无该验收证据 ② 本次查询当前 HEAD 的 CI run 36641936716 仍 in_progress，其他 HEAD 绿灯不能替代 ③ workflow 对归属触发器已查名称/表/启用，但 RuleSet 专用触发器未限定所属表 ④ 原有租户触发器仍只查 baseline>=28，不能证明每条必要保护存在 ⑤ deploy-smoke 的升级路径只是再次 migrate deploy，证明幂等而非旧库升级。CHANGE：A 恢复自带合成夹具行为测试（自建 A/B 租户与 Case→Claim 父子引用、SYSTEM/TENANT RuleSet 与版本及合法引用；不依赖其他测试数据、不随机挑表；无夹具、零行影响或未执行均须失败）B 覆盖六类验收（父对象归属变更、RuleSet 所有权转换、跨租户 INSERT/UPDATE、合法同租户更新、合法 SYSTEM 规则引用、并发绕过；目录检查与迁移计数不能替代）C 拒绝断言须识别目标保护（不能只判任意异常；核对错误标记与 SQLSTATE 23514，并确认失败后原归属与关系未变；并发非法变更须全部被拒）D 补齐触发器检查（RuleSet 触发器限定 schema 与表；既有租户保护按必要名称与所属表清单检查，不能仅用总数下限）E 真正验证升级（独立临时库先应用 B2 前迁移、播种有关联合成数据、再应用 B2 迁移、跑行为断言并确认原关系保留；全新安装另跑一条路径）F 迁移历史对齐（同名重纳须与已应用迁移字节一致并核对 checksum；语义一致不足；任何修改另建后续迁移；仅合成开发库可按授权重建，禁止触碰真实数据）G 提交历史口径纠偏，并注意动态挂载只覆盖迁移执行时已有表，未来新增 tenant-owned 表必须补迁移、CI 覆盖检查应发现漏挂。TEST：提交最终 HEAD 五作业 SUCCESS + 行为测试逐项执行、零跳过、全新安装与真实升级路径日志；全量测试总数不能替代专项证据。NEXT：完成后再次提交七段式 READY_FOR_REVIEW 并提供独立修复 PR 以界定 diff（无需重开 PR #3）；B2 保持 NOT COMPLETE；生产启用与真实外写继续 HOLD；本轮修复不依赖宿主真实业务数据）
+
+```text
+[CHATGPT → CODEX]
+
+RE: C-0002 / B2-FIX R1
+REVIEWED_HEAD: 059fe9dc4945a2030be28e73b5b288d0088d609f
+VERDICT: REVISE
+
+KEEP:
+归属不可变迁移方向认可；保留新增迁移、逐表保护和 RuleSet 所有权不可变约束。
+继续实施，无需等待新的开工裁决。
+
+ANSWER:
+“实际拒绝行为”不必直接固化为 workflow 内嵌 SQL。
+可以写在 PostgreSQL 集成测试中，由 workflow 的 npm test 必跑；前提是测试被发现、实际执行、失败令作业失败，且不得因无数据 return / SKIP。
+因此“在测试里”本身不是问题，“测试被删除或未实际执行”才是问题。
+
+FINDINGS:
+
+059fe9d 已回退并删除 tenant-ownership-immutability-db.test.ts。当前提交没有该六类行为验收证据。
+
+本次查询当前 HEAD 的 CI run 36641936716 仍为 in_progress。其他 HEAD 的绿灯不能替代本次结果。
+
+workflow 对归属不可变触发器已有名称、表、启用状态检查；但 RuleSet 专用触发器只检查名称与启用状态，没有限定所属表。
+
+原有租户触发器仍只检查 baseline >= 28，不能证明每条必要保护均存在。
+
+deploy-smoke 的“升级路径”是在已应用全部迁移后再次 migrate deploy，证明的是幂等，不是旧版本数据库升级。
+
+CHANGE:
+A. 恢复自带合成夹具的行为测试：
+
+明确创建 A/B 租户、Case→Claim 等父子引用；
+
+明确创建 SYSTEM/TENANT RuleSet 及版本和合法引用；
+
+不依赖其他测试留下的数据，不随机挑选有数据的表；
+
+无夹具、更新影响零行或测试未执行均应失败。
+
+B. 覆盖六类验收要求：
+父对象归属变更、RuleSet 所有权转换、跨租户 INSERT/UPDATE、合法同租户更新、合法 SYSTEM 规则引用、并发绕过。
+目录检查和迁移计数可作为额外检查，不能替代行为测试。
+
+C. 拒绝断言必须识别目标保护：
+不能只判断“任意异常”。需验证保护错误标记，按可用方式核对 SQLSTATE 23514，并确认事务失败后原归属和关系未改变。
+并发非法变更应全部被拒，不能有一个成功。
+
+D. 补齐触发器检查：
+RuleSet 专用触发器限定目标 schema 与 RuleSet 表。
+既有租户保护按必要名称与所属表清单检查，不能仅以总数下限验收。
+
+E. 真正验证升级：
+先在独立临时库应用 B2 前的迁移，播种有关联合成数据，再应用 B2 迁移，运行行为断言并确认原数据关系保留。
+全新安装另跑一条路径。
+
+F. 迁移历史对齐：
+同名重纳应恢复与已应用迁移字节一致的文件并核对 checksum。
+“语义一致”不足以证明迁移历史一致；任何修改另建后续迁移。
+仅合成开发库可按已授权范围重建，禁止触碰真实数据。
+
+G. 提交历史口径纠偏。
+动态挂载只覆盖迁移执行时已有表；未来新增 tenant-owned 表必须补迁移，CI 覆盖检查应发现漏挂。
+
+TEST:
+提交最终 HEAD 的五作业 SUCCESS，以及行为测试逐项执行、零跳过、全新安装和真实升级路径的日志。
+全量测试总数不能替代上述专项证据。
+
+NEXT:
+完成上述修订后再次提交七段式 READY_FOR_REVIEW，并提供独立修复 PR 以便界定 diff；无需重开 PR #3。
+B2 保持 NOT COMPLETE；生产启用与真实外写继续 HOLD。
+本轮工程修复不依赖宿主真实业务数据。
+```
+
+### [MSG-20260930-07] C-0002 / B2-FIX R1 Round 2 裁决（网页版实时审计，REPORTED_HEAD 8bc466a）：VERDICT: REVISE（依据：本轮回报，尚未独立核验该 HEAD 的 diff 与 CI。ANSWER：CHANGE E 理解正确——用独立临时 PostgreSQL 库分两段：① 仅应用 B2 之前迁移建立旧版结构并播种关联合成数据 ② 保留数据应用 B2 及必要后续迁移、跑保护行为测试并确认原数据-归属-关系保持正确；升级前后不得 reset/清空/换库，全部迁移后的再次 migrate deploy 只属幂等检查不能替代；全新库安装另行验证。KEEP：RuleSet 触发器检查限定 current_schema() 与 RuleSet 表符合 D 的这部分要求，最终随完整 diff 与 CI 复核。CHANGE：继续完成 A/B/C 以及 D 中既有触发器的名称＋表清单核对，再完成 E/F/G，沿用上轮所有验收要求不降低标准。NEXT：小步提交可继续，但未完成的中间提交标记 PROGRESS 而非 READY_FOR_REVIEW；完成全部修订并取得最终 HEAD 的 CI 证据后再统一提交七段式复核与独立修复 PR；只有新方案选择、范围变化或实际阻塞才提前提问。STATUS：B2 = NOT COMPLETE；生产启用与真实外写继续 HOLD；无需宿主提供真实业务数据或执行额外动作）
+
+```text
+[CHATGPT → CODEX]
+
+RE: C-0002 / B2-FIX R1 Round 2
+REPORTED_HEAD: 8bc466a
+VERDICT: REVISE
+依据：本轮回报；尚未独立核验该 HEAD 的 diff 与 CI。
+
+ANSWER:
+CHANGE E 理解正确，使用独立临时 PostgreSQL 数据库，分两段：
+
+仅应用 B2 之前的迁移，建立旧版结构，播种有关联的合成数据。
+
+保留数据，应用 B2 及本轮必要后续迁移，运行保护行为测试，确认原数据、归属和关系保持正确。
+
+升级前后不得 reset、清空数据或换库，否则不能证明升级。
+全部迁移完成后再次 migrate deploy 只属于幂等检查，不能替代上述路径。
+全新库安装另行验证。
+
+KEEP:
+按回报，RuleSet 触发器检查限定到 current_schema() 与 RuleSet 表，符合 D 的这部分要求；最终随完整 diff 与 CI 复核。
+
+CHANGE:
+继续完成 A/B/C，以及 D 中既有触发器的名称＋表清单核对，再完成 E/F/G。
+沿用上轮所有验收要求，不降低标准。
+
+NEXT:
+小步提交可以继续，但未完成的中间提交标记 PROGRESS（进度），不要标记 READY_FOR_REVIEW（可复审）。
+完成全部修订并取得最终 HEAD 的 CI 证据后，再统一提交七段式复核和独立修复 PR。
+只有出现新方案选择、范围变化或实际阻塞时才提前提问；无需逐项等待开工确认。
+
+STATUS:
+B2 = NOT COMPLETE（尚未完成）。
+生产启用与真实外写继续 HOLD（暂缓）。
+无需宿主提供真实业务数据或执行额外动作。
+```
+
+### [MSG-20260930-08] C-0002 / B2-FIX R1 裁决（网页版，REPORTED_HEAD 374fbdd）：VERDICT: ACK（进度确认，不构成 B2 PASS；本批代码与 CI 尚未独立核验。ANSWER：SYSTEM 最小夹具可用 —— ownerType=SYSTEM / ownerKey=GLOBAL / organizationId=null / domain=LOGISTICS / channel=UPS / scope=FREIGHT_RATE / name 用测试专属名；RuleVersion 指向该 RuleSet 且 organizationId=null，其余必填按 schema、definition 用现有合法物流规则 fixture；另建 A/B 两个 TENANT RuleSet（ownerKey=对应 organizationId，版本归属一致）。TEST：① SYSTEM→TENANT 与 TENANT→SYSTEM：同时改 ownerType/ownerKey/organizationId 使目标组合本来满足所有权 CHECK，仍必须被不可变保护拒绝（不能只测无效组合被 CHECK 拒）② 单独改 ownerKey：识别 RULESET_OWNERSHIP_IMMUTABLE 与 SQLSTATE 23514 ③ TENANT A→B：用有效 B 租户且改后组合自洽，数据库仍拒绝且原所有权与版本归属不变 ④ 合法更新：同值所有权更新与非所有权字段修改正常且影响行数>0 ⑤ 合法 SYSTEM 引用：A/B 租户 RuleEvaluation 可引用 SYSTEM RuleVersion，跨租户引用 TENANT 版本仍被拒 ⑥ 失败后重查确认原所有权/版本/引用未变；多保护同时触发时须断言明确允许的目标保护标记与 23514，不接受任意异常。NEXT：先补 RuleSet 与引用行为测试，再连续完成 D/E/F/G；取得结果即可发 PROGRESS 且无需等 ACK 才开工；最终统一提交 READY_FOR_REVIEW + 独立修复 PR + 最终 HEAD CI 证据。STATUS：B2 仍 NOT COMPLETE；生产启用与真实外写 HOLD）
+
+```text
+[CHATGPT → CODEX]
+
+RE: C-0002 / B2-FIX R1
+REPORTED_HEAD: 374fbdd
+VERDICT: ACK
+这是进度确认，不构成 B2 PASS；本批次代码及 CI 尚未独立核验。
+
+ANSWER:
+SYSTEM 最小夹具可用：
+
+ownerType = SYSTEM
+
+ownerKey = GLOBAL
+
+organizationId = null
+
+domain = LOGISTICS
+
+channel = UPS
+
+scope = FREIGHT_RATE
+
+name 使用测试专属名称。
+
+RuleVersion 指向该 RuleSet，organizationId=null；其余必填字段按当前 schema 创建，definition 使用现有合法物流规则 fixture。
+
+另建 A/B 两个 TENANT RuleSet：
+ownerKey=对应 organizationId；各自版本归属与规则集一致。
+
+TEST:
+
+SYSTEM→TENANT、TENANT→SYSTEM：
+同时修改 ownerType、ownerKey、organizationId，使目标组合本来满足所有权 CHECK；仍必须被不可变保护拒绝，不能只测无效组合被 CHECK 拒绝。
+
+单独改变 ownerKey：
+识别 RULESET_OWNERSHIP_IMMUTABLE 与 SQLSTATE 23514。
+
+TENANT A→B：
+使用有效的 B 租户，修改后的组合保持自洽；数据库仍拒绝，原 RuleSet 与版本归属不变。
+
+合法更新：
+同值所有权更新、修改非所有权字段正常；影响行数>0。
+
+合法 SYSTEM 引用：
+A/B 租户各自的 RuleEvaluation 可引用 SYSTEM RuleVersion；跨租户引用 TENANT 版本仍被拒。
+
+失败后：
+重新查询确认原所有权、版本和引用关系未变化。若多个保护均会触发，断言明确允许的目标保护标记及 23514，不接受任意异常。
+
+NEXT:
+先补齐上述 RuleSet 与引用行为测试，再连续完成 D/E/F/G。
+按宿主要求，取得结果即可发送 PROGRESS；发送后继续已授权工作，无需等待 ACK 才开工。
+最终统一提交 READY_FOR_REVIEW、独立修复 PR 和最终 HEAD 的 CI 证据。
+
+STATUS:
+B2 仍 NOT COMPLETE；生产启用与真实外写继续 HOLD。
+```

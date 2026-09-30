@@ -1,0 +1,15 @@
+{
+  "note": "B2-FIX R1 / MSG-20260930-06 CHANGE F —— 同名重纳迁移的字节冻结。20260930100000_tenant_ownership_immutability 曾先在 d629333 合入、因 CI 硬编码期望失败而在 c93a07e 整体回退、再于 5c4e0db 同名重纳。本文件把重纳后的字节冻结：CI 校验 on-disk 文件 sha256 必须与「原合入版本」的 sha256 完全一致（语义一致不足）。",
+  "entries": [
+    {
+      "migration": "20260930100000_tenant_ownership_immutability",
+      "file": "apps/api/prisma/migrations/20260930100000_tenant_ownership_immutability/migration.sql",
+      "sha256": "2acbd87a731283c6e90f8121d49c3f55fc937eac8014a89a0b7d60929b87a884",
+      "bytes": 2269,
+      "originalCommit": "d629333",
+      "revertedInCommit": "c93a07e",
+      "reincludedCommit": "5c4e0db",
+      "gitBlobId": "3304c9b98f25be0a5871f7c5b3c65ea8b07e611f"
+    }
+  ]
+}

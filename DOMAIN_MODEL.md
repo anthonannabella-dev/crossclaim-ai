@@ -216,14 +216,18 @@ DRAFT → SUBMITTED → ACKNOWLEDGED →
 "引用对象必须同租户"由**数据库触发器**强制，不只靠应用层约定。
 
 为什么不是 Prisma 复合外键：Prisma 要求复合外键的 FK 字段全部可空，
-而 `organizationId` 不可空，二者冲突；因此采用架构契约允许的
-**等价数据库级约束**。
+而 `organizationId` 不可空，二者冲突；因此采用架构契约允许的**数据库触发器**。
+
+注意：触发器集合**不等于完整的「等价复合外键约束」**——它只在**引用行写入时**校验同租户，
+不覆盖「被引用对象事后改 `organizationId`」。归属漂移由
+`20260930100000_tenant_ownership_immutability`（`cc_tenant_immutable__*` + `cc_ruleset_ownership_immutable`）覆盖。
 
 | 对象 | 位置 |
 |---|---|
 | 校验函数 | `crossclaim_assert_tenant_integrity()` |
 | 迁移 | `20260928060000_tenant_integrity/migration.sql` |
-| 覆盖 | **24 张** tenant-owned 表 / **28 个** `cc_tenant%` 触发器（CI 逐次断言数量） |
+| 覆盖 | **28 个** `cc_tenant_*` 引用完整性触发器 + **36 个** `cc_tenant_immutable__*` 归属不可变触发器 |
+| CI 断言 | 按名称 / 所属表 / 事件类型 / 启用状态**清单**断言（`tools/tenant-triggers/`），不使用数量下限 |
 
 另外两类**规则所有权**约束（同属数据库级强制）：
 
