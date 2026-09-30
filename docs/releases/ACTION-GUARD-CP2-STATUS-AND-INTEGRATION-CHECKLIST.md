@@ -62,6 +62,36 @@
 | `evidence.read` | 目录：`action-guard.ts:28`（`READ_ONLY`，`requires: []`） | 只读动作、无审批要求；未见专门接线 |
 | `secret.rotate` | 目录：`action-guard.ts:40`（`SECRET_ACCESS`，`requires: [hostApproval]`）；静态清单：`guard-enforcement.ts:170` | HOST ONLY，未接线 |
 
+### 3.2 ② 下一小批次范围（依据 MSG-20261001-01 §7，PROGRESS 登记）
+
+**已收口（供对照）：** 第一批 = `POST /cases/:id/recovery-outcome` → `commission.charge`（MSG-20260930-21 = PASS）；第二批 = 支付域 `payment.capture`（MSG-24 = PASS）/ `payment.replay`（MSG-28 = PASS）/ `payment.retry_due`（**MSG-20261001-01 = PASS**）。webhook 依 MSG-20260930-22 §(3) 作为**独立边界**（验签 / 重放保护 / 幂等 / 租户-发票-金额币种匹配 / 审计），不纳入逐次人工审批批次。
+
+**待覆盖（§3 清单剩余）：** `claim.submit`、`appeal.submit`、`platform.write`（均 `EXTERNAL_WRITE`）、`claim.prepare`、`billing.draft`（`INTERNAL_WRITE`）、`evidence.read`（`READ_ONLY`）、`secret.rotate`（`SECRET_ACCESS` / HOST ONLY）。
+
+**选定下一小批次：`claim.submit`（提交路径 · HITL 人工闸门 · 平台外写保持 HOLD）。**
+
+选择理由：
+
+1. 它是产品核心动作，且已有明确的执行端约束：`services/adapters/ingest-bridge.ts` 的提交闸门**永不调用** `adapter.submitClaim()`，只返回 `NEEDS_MANUAL`；`adapters/registry.ts` 拒绝注册带写入面的适配器。因此本批次可完整接入 Action Guard，而**不触发任何真实外写**。
+2. 与已 PASS 的第一批（HITL 提交入口）同构：复用 `hitl-submission` 边界 + 审批指纹 + `action_guard.approval_decision` 审计，改动面小、可验证性强。
+3. `appeal.submit` / `platform.write` 更依赖 ④ PLATFORM ADAPTER PRODUCTION-SHAPE 的骨架与错误模型设计，宜在其后。
+
+**拟改动面（待实现，未开工）：**
+
+- 服务/路由：为 Claim 提交路径接入 `createHitlSubmissionBoundary({ action: 'claim.submit' })`；缺 Action Guard 即 `ActionGuardNotConfiguredError`（fail closed），未满足 capability（`submission` scope / platformEnablement / productionGate）或审批校验失败时**零业务与外写副作用**。
+- 能力与审计：沿用 `capability-source` 的 `submission` scope 映射；落 `action_guard.approval_decision`（含 approvalId / 主体 / 目标 / operationId）。
+- 外写边界：即使闸门放行，仍只返回 `NEEDS_MANUAL`（不调用任何平台写入面）；传输开关保持 false。
+
+**验收计划（HTTP + 真实 PostgreSQL）：**
+
+1. 未注入 Action Guard → 403 `ACTION_GUARD_REQUIREMENTS_NOT_MET`，零副作用；
+2. 注入守卫但缺 `approvalId` → 409 `ACTION_GUARD_HUMAN_APPROVAL_REQUIRED`，零副作用；
+3. 有 `approvalId` 但无对应审批事件 → 403 `ACTION_GUARD_APPROVAL_NOT_VERIFIED`，零副作用；
+4. capability 未满足（submission scope 关闭 / 平台未启用 / Production Gate 未满足）→ 拒绝，零副作用；
+5. 全部满足 + 操作级审批 → 恰一次业务写入 + 恰一次审批消费，且**不产生任何平台外写**（返回 `NEEDS_MANUAL`）；
+6. 重复提交 → 幂等或 409 `APPROVAL_ALREADY_CONSUMED`（按既有第一批口径），无重复副作用。
+
+**边界：** 真实平台提交、真实 OAuth/凭据、`platform.write`/`appeal.submit` 与 ④ 适配器生产形态均不在本批次；生产 HOLD 全部保持。
 ## 4. 下一 Checkpoint 关系
 
 - 允许继续 **③ PRODUCTION CONTROL PLANE**（真实配置、有效 Kill Switch 与审计依赖的组合入口，保持默认 read-only）。

@@ -379,3 +379,10 @@
 - 结论边界：**支付域三类受保护内部入口（payment.capture / payment.replay / payment.retry_due）当前工程范围收口**；但明确不代表真实网关扣款、生产资金执行、webhook 新授权、调度器/独立 worker 认证、②全覆盖、Gate 7 或生产上线。授权项②整体仍 **NOT COMPLETE**。
 - 非阻塞纠偏（架构方 §5）：状态记录中需分别绑定提交 —— 本机 **1334**（4c695c0 时代）与最终 CI **1335**（9a806eb）不可混写；已在本记录与 TASKS.md 中区分。
 - 下一步（架构方 §7）：同步清单/状态（payment.retry_due = PASS、reviewed ref、修正测试数量与旧送审点引用）→ 在 ② 剩余业务入口中按集成清单选择**下一小批次**并提交七段式审计请求；不得跳过 ② 剩余项进入 ⑤/⑥/⑦，不得重开已通过的 ③。
+
+## 2026-10-01 — ② 下一小批次范围登记（PROGRESS，依据 MSG-20261001-01 §7）
+
+- 现状：① 完成；③ = PASS（MSG-16）；② 第一批（HITL 提交入口 → `commission.charge`）= PASS（MSG-21）；② 第二批（`payment.capture` / `payment.replay` / `payment.retry_due`）全部 PASS（MSG-24 / MSG-28 / **MSG-20261001-01**）；webhook 依 MSG-22 §(3) 为独立边界，不纳入逐次人工审批。
+- 剩余待覆盖：`claim.submit` / `appeal.submit` / `platform.write`（EXTERNAL_WRITE）、`claim.prepare` / `billing.draft`（INTERNAL_WRITE）、`evidence.read`（READ_ONLY）、`secret.rotate`（HOST ONLY）。
+- **选定下一小批次 = `claim.submit`（提交路径 · HITL 人工闸门 · 平台外写保持 HOLD）**：复用第一批的 `hitl-submission` 边界与审批指纹；执行端已知「提交闸门永不调用 `adapter.submitClaim()`，只返回 `NEEDS_MANUAL`」，故可在**不触发真实外写**的前提下完成接入与验收。范围与 6 项验收计划见 `ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3.2。
+- 未开工：本轮仅登记范围（PROGRESS），实现与送审在后续轮次；期间不得重开已通过的 ③，不得跳过 ② 剩余项进入 ⑤/⑥/⑦。
