@@ -392,3 +392,9 @@
 - 结论：**当前没有 Claim 提交的 HTTP 路由**（`services/claims/*` 仅被测试引用），但跟踪写入原语（`recordSubmission` 等）与恒为人工卡口的外写闸门（`submitClaimThroughAdapter` → `NEEDS_MANUAL`，注册表拒绝写入面适配器）都已存在。
 - 实现面：新增受保护路由 + 复用 `createHitlSubmissionBoundary`（`claim.submit`，humanApproval+platformEnablement+productionGate）→ 放行后写跟踪记录并返回 `NEEDS_MANUAL`（零平台外写）+ `action_guard.approval_decision` 审计 + 6 项 HTTP/PostgreSQL 验收。
 - 已登记于 `ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3.2；实现与送审留待后续轮次。生产 HOLD 全部保持。
+
+## 2026-10-01 — claim.submit 实现落点复核（只读，PROGRESS）
+
+- 结论：`/cases/:id/claim` 现为 **GET 草稿**（`getClaimDraft`），**不承载提交**；因此需新增提交路由 `POST /cases/:id/claim/submit`。
+- 落点已精确登记（见 `ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3.2「实现落点」表）：路由常量 + 匹配注册 + 处理分支（fail closed）+ 复用 `outlinePath → createHitlSubmissionBoundary` 范式 + 放行后仅 `recordSubmission()` 并返回 `NEEDS_MANUAL` + 新测试文件。
+- 无需 Schema/迁移；capability 映射与静态清单已就绪。下一步即按该表编码。

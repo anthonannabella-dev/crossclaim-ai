@@ -102,6 +102,19 @@
 | 审批边界可复用：`createHitlSubmissionBoundary` + `createAppActionGuard`（第一批已 PASS 的同一套） | `services/action-guard/hitl-submission.ts`、`http-routes.ts`（recovery-outcome 接线） |
 
 **因此实现面收敛为（下一步实施）：**① 新增受保护路由（提交 Claim 记录，触发 `claim.submit` 动作）；② 缺守卫 / 缺审批 / capability 未满足 → 精确拒绝且零副作用；③ 全部满足 → 经 `createHitlSubmissionBoundary` 放行后调用 `recordSubmission()` 写跟踪记录、并**返回 `NEEDS_MANUAL` 表明未发生任何平台外写**；④ 审计落 `action_guard.approval_decision`；⑤ 按 6 项计划补齐 HTTP + 真实 PostgreSQL 测试。
+**实现落点（2026-10-01 复核，可直接照此编码）：**
+
+| 步骤 | 精确位置 | 说明 |
+| --- | --- | --- |
+| 新增路由常量 | `services/workflow/http-routes.ts:141` 附近（现有 `CASE_CLAIM_PATH = /^\/cases\/([^/]+)\/claim$/` 旁） | 新增 `CASE_CLAIM_SUBMIT_PATH = /^\/cases\/([^/]+)\/claim\/submit$/`（`/cases/:id/claim` 现为 **GET 草稿**，不承载提交） |
+| 注册匹配 | 同文件 `:335` 附近的 path 解析段；`:368` 的「未知路由」大条件 | 两处都要加入 `caseClaimSubmit`，否则新路由会被判为未匹配 |
+| 处理分支 | 同文件 `:863`（`if (caseClaim) { … }` 之后） | 新分支内**先** `if (!deps.actionGuard) throw new ActionGuardNotConfiguredError('claim.submit')`（fail closed），再走 HITL 边界 |
+| 复用范式 | 同文件 `:1201-1235`（`outcomePath` → `createHitlSubmissionBoundary` → `boundary.submit({ action, organizationId, actorUserId, targetRef, approvalId, payload })`） | 参数形态照抄：`action: 'claim.submit'`、`targetRef: caseId`、`payload` 传本次提交载荷（用于审批指纹比对）、`audit: createPrismaActionGuardAuditPort(deps.prisma)` |
+| 放行后的副作用（唯一） | 调用 `services/claims/tracking-service.ts:89` 的 `recordSubmission()` 写跟踪记录，并返回 `{ status: 'NEEDS_MANUAL' }` | **不得**调用 `submitClaimThroughAdapter()` 之外的任何外写；`NEEDS_MANUAL` 即「未发生平台提交」的显式结果 |
+| 拒绝路径 | 缺守卫 / 缺 approvalId / 审批不存在 / capability 未满足 | 与第一批一致：403 `ACTION_GUARD_REQUIREMENTS_NOT_MET` / 409 `ACTION_GUARD_HUMAN_APPROVAL_REQUIRED` / 403 `ACTION_GUARD_APPROVAL_NOT_VERIFIED`，且**零副作用** |
+| 新增测试 | `apps/api/src/__tests__/action-guard-claim-submit-http-db.test.ts`（照 `action-guard-hitl-http-chain-db.test.ts` 结构） | 覆盖 §3.2 已登记的 6 项 HTTP + 真实 PostgreSQL 验收 |
+
+> 备注：本批次**不需要 Schema/迁移**；`claim.submit` 的 capability 映射（`submission` scope）与 `GUARD_ENFORCED_ACTIONS` 清单已存在，无需新增。
 ## 4. 下一 Checkpoint 关系
 
 - 允许继续 **③ PRODUCTION CONTROL PLANE**（真实配置、有效 Kill Switch 与审计依赖的组合入口，保持默认 read-only）。
