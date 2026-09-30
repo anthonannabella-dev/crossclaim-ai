@@ -185,3 +185,11 @@
 - 验收：replay 专项 **15/15**（含等发票锁期间事实变化→AMOUNT_MISMATCH 且绝不写旧 paidAmount；事实 CAS 交错零部分提交；反向冒用精确 403 且两类消费不新增；服务层缺审批零副作用；审批决策审计失败放行前关闭；消费审计失败整事务回滚）；定向回归 11 套件 94 例全绿；本机全量 142 文件 / 1274 passed + 20 skipped（唯一失败为既知 runbook 债，不写"全量通过"）；tsc PASS。
 - CI：HEAD `3cd0615`，run **36689383793** = 五作业 SUCCESS；API **142 files / 1294 tests PASS**。如实披露中间 commit `dc141b5` CI 为红（单测夹具未同步），已修复、不作为通过证据。
 - 送审：Issue #2 comment **5907298588**（七段式）；右侧会话短唤醒已发送并完成送达验证（704 字符作为新用户轮出现、输入框清空、生成中）。
+
+## 2026-09-30 — ② 第二批 replay R9 修订（R10 送审）
+
+- 架构裁决 MSG-20260930-26 = REVISE（REVIEWED_REF 3cd0615）：已关闭项保留（发票锁/发票事实 CAS/双向冒用/缺审批/两类审计故障/口径），剩余两项 = ① Payment 执行快照在等发票锁前读取、等待后未重读/未保护；② 缺"等待**发票锁**期间审批过期"专项。已逐字归档（compare.mjs = FULL_COPY_OK）+ Issue #2 comment `5907496573`。
+- 实现 `9ae6ca2`：定位快照只用于定位；锁顺序固定为**事件锁 → 发票锁 → Payment 行锁**（`SELECT ... FOR UPDATE`）；锁后重读最终快照作为审批核验/资金参数/成功审计/消费的唯一依据；`invoiceId`/`externalPaymentId`/`payloadHash`/`providerEventId` 任一变化即 403 拒绝；重验时间在全部必要锁之后生成。
+- 验收：replay 专项 **17/17**（新增 16 等发票锁期间 Payment 变化→403 零新增；17 等发票锁期间审批过期→403 APPROVAL_EXPIRED；用例 01 补真实落库一致性断言 Payment/发票 paidAmount/成功审计/消费 同额同币种）；本机全量 142 文件 / 1276 passed + 20 skipped（唯一失败为既知 runbook 债，不写"全量通过"）；tsc PASS。
+- CI：HEAD `9ae6ca2`，run **36690601646** = 五作业 SUCCESS；API **142 files / 1296 tests PASS**。
+- 送审：Issue #2 comment **5907528281**（七段式）；右侧会话短唤醒已发送并完成送达验证（677 字符作为新用户轮出现、输入框清空、生成中）。
