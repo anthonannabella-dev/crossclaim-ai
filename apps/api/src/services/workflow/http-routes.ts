@@ -30,7 +30,13 @@ import { confirmRecoveryOutcome } from './recovery-outcome';
 import { ActionGuardApprovalVerificationError } from '../action-guard/approval-verifier';
 import { createHitlSubmissionBoundary } from '../action-guard/hitl-submission';
 import { ActionGuardNotConfiguredError } from '../action-guard/guard-enforcement';
-import { RECOVERY_CONFIRMATION_ACTION } from '../action-guard/approval-verifier';
+import { PAYMENT_CAPTURE_ACTION, RECOVERY_CONFIRMATION_ACTION } from '../action-guard/approval-verifier';
+import {
+  PAYMENT_APPROVAL_EVENT_ACTION,
+  PAYMENT_CONSUMED_EVENT_ACTION,
+  PAYMENT_REJECTED_EVENT_ACTION,
+  PAYMENT_REQUIRED_EVENT_ACTION,
+} from '../action-guard/approval-tx-verify';
 import { ApprovalBoundaryError } from '../action-guard/approval-tx-verify';
 import { createPrismaActionGuardAuditPort } from '../action-guard/runtime-guard-composition';
 import {
@@ -931,17 +937,51 @@ export async function handleWorkflowRequest(
         return true;
       }
       const body = await readJsonBody(req);
-      const result = await advanceBillingInvoice(
-        deps.prisma,
-        {
-          ...actor,
-          invoiceId: billingPath[1],
-          to: body.to,
-          paymentReference: body.paymentReference,
-          note: body.note,
+      // P4（② 第二批）：资金/状态推进是受保护动作 payment.capture —— 守卫 + 支付域审批绑定
+      const approvalId = typeof body.approvalId === 'string' ? body.approvalId : undefined;
+      if (!deps.actionGuard) {
+        throw new ActionGuardNotConfiguredError(PAYMENT_CAPTURE_ACTION);
+      }
+      const boundary = createHitlSubmissionBoundary({
+        guard: deps.actionGuard,
+        prisma: deps.prisma,
+        // 支付域审批族（挂 BillingInvoice），与 recovery 的 Case 族分开
+        approvalVerifier: {
+          prisma: deps.prisma,
+          approvalEventAction: PAYMENT_APPROVAL_EVENT_ACTION,
+          requiredEventAction: PAYMENT_REQUIRED_EVENT_ACTION,
+          rejectedEventAction: PAYMENT_REJECTED_EVENT_ACTION,
+          consumedEventAction: PAYMENT_CONSUMED_EVENT_ACTION,
+          targetEntityType: 'BillingInvoice',
         },
-        deps.now,
-      );
+        audit: createPrismaActionGuardAuditPort(deps.prisma),
+      });
+      const result = await boundary.submit({
+        action: PAYMENT_CAPTURE_ACTION,
+        organizationId: actor.organizationId,
+        actorUserId: actor.actorUserId,
+        targetRef: billingPath[1] ?? '',
+        approvalId,
+        payload: {
+          recoveredAmount: body.amount,
+          currency: body.currency,
+          basisReference: body.paymentReference ?? body.note,
+          evidenceArtifactId: body.evidenceArtifactId,
+        },
+        perform: () =>
+          advanceBillingInvoice(
+            deps.prisma,
+            {
+              ...actor,
+              invoiceId: billingPath[1],
+              to: body.to,
+              paymentReference: body.paymentReference,
+              note: body.note,
+              ...(approvalId ? { approvalId } : {}),
+            },
+            deps.now,
+          ),
+      });
       sendJson(res, 200, result);
       return true;
     }
