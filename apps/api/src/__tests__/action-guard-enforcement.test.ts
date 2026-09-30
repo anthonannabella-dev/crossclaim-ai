@@ -38,6 +38,7 @@ describe('Action Guard enforcement wrapper', () => {
       guard: guardWith(satisfied),
       input: { action: 'claim.submit', actorUserId: ACTOR, organizationId: ORG, approvalId: 'a-1' },
       approvals: { async verify() { return { valid: true }; } },
+      audit: { write: () => {} },
       work: (decision) => {
         calls += 1;
         return decision.code;
@@ -93,6 +94,7 @@ describe('Action Guard enforcement wrapper', () => {
         guard: guardWith(satisfied),
         input: { action: 'claim.submit', actorUserId: ACTOR, organizationId: ORG, approvalId: 'a-1' },
         approvals: { async verify() { return { valid: true }; } },
+        audit: { write: () => {} },
         work: () => {
           throw new Error('downstream failure');
         },

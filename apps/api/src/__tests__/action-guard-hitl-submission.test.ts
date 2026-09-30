@@ -38,7 +38,7 @@ function boundary(caps: unknown, approval: ApprovalOutcome, auditThrows = false,
     },
   };
   return {
-    boundary: createHitlSubmissionBoundary({ guard, prisma: undefined as never, approvals }),
+    boundary: createHitlSubmissionBoundary({ guard, prisma: undefined as never, approvals, audit: { write: () => {} } }),
     events,
   };
 }
@@ -122,6 +122,7 @@ describe('HITL submission boundary (v3)', () => {
       guard,
       prisma: undefined as never,
       approvals: { async verify() { return outcome; } },
+      audit: { write: () => {} },
     });
     let calls = 0;
     await run(b, () => (calls += 1));
