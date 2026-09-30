@@ -18,6 +18,16 @@
 import { Prisma, type PrismaClient } from '@prisma/client';
 
 import { prepareAuditInsert } from '../audit';
+import { PAYMENT_CAPTURE_ACTION } from '../action-guard/approval-verifier';
+import {
+  ApprovalBoundaryError,
+  PAYMENT_APPROVAL_EVENT_ACTION,
+  PAYMENT_CONSUMED_EVENT_ACTION,
+  PAYMENT_REJECTED_EVENT_ACTION,
+  PAYMENT_REQUIRED_EVENT_ACTION,
+  verifyApprovalBoundary,
+} from '../action-guard/approval-tx-verify';
+import { normalizeBoundPayload } from './recovery-review';
 import { WorkflowError } from './opportunity-review';
 import { assertPermission } from './permissions';
 
@@ -110,6 +120,15 @@ export async function listBillingInvoices(
 }
 
 export interface AdvanceBillingInput {
+  /** P5（② 第二批）：操作级审批（payment.capture）。提供时在资金事务内完整重验并写消费事件。 */
+  approvalId?: string;
+  operationId?: string;
+  approvalPayload?: {
+    amount?: unknown;
+    currency?: unknown;
+    basisReference?: unknown;
+    evidenceArtifactId?: unknown;
+  };
   organizationId: string;
   actorUserId: string;
   role: string;
@@ -174,8 +193,53 @@ export async function advanceBillingInvoice(
 
   const from = invoice.status;
   const at = now();
+  // P5：审批与操作身份（缺省时保持既有直接调用语义）
+  const approvalId = typeof input.approvalId === 'string' && input.approvalId.trim() !== '' ? input.approvalId.trim() : null;
+  const operationId =
+    typeof input.operationId === 'string' && input.operationId.trim() !== ''
+      ? input.operationId.trim()
+      : approvalId
+        ? `approval:${approvalId}`
+        : null;
+  const boundPayload = normalizeBoundPayload(
+    input.approvalPayload
+      ? {
+          recoveredAmount: input.approvalPayload.amount,
+          currency: input.approvalPayload.currency,
+          basisReference: input.approvalPayload.basisReference,
+          evidenceArtifactId: input.approvalPayload.evidenceArtifactId,
+        }
+      : undefined,
+  );
 
   return prisma.$transaction(async (tx) => {
+    // P5：目标级串行化（发票粒度）→ 锁内完整重验 → CAS → 审计/消费
+    if (typeof tx.$executeRawUnsafe === 'function') {
+      await tx.$executeRawUnsafe('SELECT pg_advisory_xact_lock(hashtext($1))', `cc-payment-invoice:${invoice.id}`);
+    }
+    if (approvalId) {
+      const boundary = await verifyApprovalBoundary(tx, {
+        organizationId: input.organizationId,
+        approvalId,
+        action: PAYMENT_CAPTURE_ACTION,
+        caseId: invoice.id,
+        actorUserId: input.actorUserId,
+        payload: {
+          amount: boundPayload?.amount ?? null,
+          currency: boundPayload?.currency ?? null,
+          basisReference: boundPayload?.basisReference ?? null,
+          evidenceArtifactId: boundPayload?.evidenceArtifactId ?? null,
+        },
+        now: now(),
+        approvalEventAction: PAYMENT_APPROVAL_EVENT_ACTION,
+        requiredEventAction: PAYMENT_REQUIRED_EVENT_ACTION,
+        revocationEventActions: [PAYMENT_REJECTED_EVENT_ACTION],
+        consumedEventAction: PAYMENT_CONSUMED_EVENT_ACTION,
+        targetEntityType: 'BillingInvoice',
+      });
+      if (!boundary.ok) throw new ApprovalBoundaryError(boundary.reason, invoice.id);
+      if (boundary.consumed) throw new ApprovalBoundaryError('APPROVAL_ALREADY_CONSUMED', invoice.id);
+    }
     // CAS：并发推进只有一个能命中当前状态
     const updated = await tx.billingInvoice.updateMany({
       where: { id: invoice.id, organizationId: input.organizationId, status: from as never },
@@ -233,6 +297,30 @@ export async function advanceBillingInvoice(
         createdAt: at,
       },
     });
+
+    if (approvalId) {
+      // P5：消费事件与资金写入同事务（审批一次性）
+      await tx.auditLog.create({
+        data: {
+          organizationId: input.organizationId,
+          actorType: 'USER',
+          actorUserId: input.actorUserId,
+          action: PAYMENT_CONSUMED_EVENT_ACTION,
+          entityType: 'BillingInvoice',
+          entityId: invoice.id,
+          changes: {
+            approvalId,
+            operationId,
+            invoiceId: invoice.id,
+            from,
+            to,
+            amount: money(invoice.total),
+            currency: invoice.currency,
+          } as never,
+          createdAt: at,
+        },
+      });
+    }
 
     return { invoiceId: invoice.id, from, to, paymentReferenceProvided: paymentReference !== '' };
   });
