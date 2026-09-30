@@ -1,18 +1,18 @@
 {
   "gate": "B2-FIX R1",
-  "head": "92e7ca0",
+  "head": "cef7540",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**当前动作 = ② RUNTIME BUSINESS BLOCKING 的业务接入覆盖**（`payment.capture` PASS / `payment.replay` PASS / `payment.retry_due` R18 送审中；其余入口见 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 的优先顺序）。",
-  "next_task": "读 ② 裁决（R18）→ PASS 则继续 ② 剩余受保护入口（见 ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md §3，含 claim.submit / appeal.submit / platform.write / commission.charge 等 TODO）；REVISE 则逐项修复后重送。② 整体 NOT COMPLETE 前不开 ⑤/⑥/⑦（MSG-20260930-16 优先顺序）。",
+  "next_task": "按 MSG-20261001-01 §7：在 ② 剩余业务入口中按集成清单选择下一小批次并提交七段式审计请求；不得跳过 ② 剩余项进入 ⑤/⑥/⑦，不得重开已通过的 ③",
   "send_head": "62dffa6",
   "decision_head": "374fbdd",
-  "last_chatgpt_message": "MSG-20260930-11 (PASS + MERGE APPROVED) —— 已逐字归档，compare.mjs FULL_COPY_OK（85/85）",
+  "last_chatgpt_message": "MSG-20261001-01（PASS，本批次工程验收，REVIEWED_REF 9a806eb）—— 已逐字归档，compare.mjs FULL_COPY_OK（67 行）",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-09-30T16:03:26.067Z",
-  "previous_head": "4f552ab",
-  "architect_decision_pending": true,
-  "blocked_scope": "Gate 7 授权项② 第二批 retry-due R18 裁决（送审 ref 9a806eb；唤醒已于 16:05Z 送达，等待架构方在会话中输出 VERDICT）",
+  "updated_at": "2026-09-30T16:07:28.664Z",
+  "previous_head": "92e7ca0",
+  "architect_decision_pending": false,
+  "blocked_scope": null,
   "last_send_head": "9a806eb",
   "last_sent_at": "2026-09-30T16:05:00.000Z",
   "last_sent_fingerprint": "WAKEUP_DELIVERED:R18:retry-due-msg34-closure:9a806eb",
@@ -40,5 +40,10 @@
   "github_connector": "AUTHORIZED_BY_HOST（始终允许；权限弹窗已消失，ChatGPT 可直接写回 GitHub）",
   "cp3_head": "c70ae2e",
   "cp3_ci": "run 36656201359 → 5/5 SUCCESS",
-  "cp3_audit_request": "https://github.com/anthonannabella-dev/crossclaim-ai/issues/2#issuecomment-5902419993"
+  "cp3_audit_request": "https://github.com/anthonannabella-dev/crossclaim-ai/issues/2#issuecomment-5902419993",
+  "payment_entry_status": "payment.capture = PASS（MSG-24 / 73115a3）；payment.replay = PASS（MSG-28 / 08fc45d）；payment.retry_due = PASS（MSG-20261001-01 / 9a806eb）—— 三类受保护内部入口当前工程范围收口；授权项②整体仍 NOT COMPLETE",
+  "test_count_attribution": {
+    "4c695c0": "本机 144 文件 / 1334 用例（1314 passed + 20 skipped）",
+    "9a806eb": "CI 144 文件 / 1335 tests PASS"
+  }
 }

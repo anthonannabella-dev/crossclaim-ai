@@ -371,3 +371,11 @@
 - 实测（16:03Z）：`cua.listBrowsers()` 正常返回两个 surface（`Codex In-app Browser`(id=1, iab) / `Edge`(id=2, extension)）；`cua.listTabs({browser:"1"})` **正常**返回审计会话标签页与用户新开的 `chatgpt.com/` 标签页；`cua.listTabs({browser:"2"})`（Edge）报 token 错误。→ **in-app browser 通道始终可用**，可用会话读取已确认（对话最后一条仍是已归档的 MSG-20260930-34，即架构方尚未看到 R18）。
 - 影响：此前「唤醒发不出去、评审无法开始」的结论**过宽**；实际是聚合健康检查被 Edge surface 毒化。已据此在 16:0xZ 直接投递唤醒。此处如实记录，避免后续再用聚合调用判断通道状态。
 - 后续口径（SELF_RESOLVE，写入本轮记录，供下一轮沿用）：通道健康检查 = `listBrowsers()` 逐 surface 判断 + 只对需要操作的 surface 调 `listTabs`；Edge 扩展持续报 token 错误时**忽略该 surface**（不影响 in-app browser 的读写），必要时再提示宿主重新连接扩展，而不再要求重开 ChatGPT 会话。
+
+## 2026-09-30/10-01 — MSG-20261001-01 = **PASS**（retry-due R18 / 送审点 9a806eb）
+
+- 唤醒于 16:05Z 送达后，架构方在审计会话给出 R18 裁决：**PASS（本批次工程验收）**，REVIEWED_REF = 9a806eb303194d185b83547a581ba8c9069ec584；CI run 36726898061 = 5/5（API 144 files / **1335** tests、retry-due 28/28、映射单测 9/9、phase1-runbook 20/20）。
+- 关闭项：CHANGE A 结构化精确白名单（含删除 trim 清洗）；CHANGE B 用例 28 精确最终结果；阶段控制点修复（持服务端排序后的第一把共享发票锁）获接受；runbook 修复获接受（明确「未删除测试或放宽断言」）。
+- 结论边界：**支付域三类受保护内部入口（payment.capture / payment.replay / payment.retry_due）当前工程范围收口**；但明确不代表真实网关扣款、生产资金执行、webhook 新授权、调度器/独立 worker 认证、②全覆盖、Gate 7 或生产上线。授权项②整体仍 **NOT COMPLETE**。
+- 非阻塞纠偏（架构方 §5）：状态记录中需分别绑定提交 —— 本机 **1334**（4c695c0 时代）与最终 CI **1335**（9a806eb）不可混写；已在本记录与 TASKS.md 中区分。
+- 下一步（架构方 §7）：同步清单/状态（payment.retry_due = PASS、reviewed ref、修正测试数量与旧送审点引用）→ 在 ② 剩余业务入口中按集成清单选择**下一小批次**并提交七段式审计请求；不得跳过 ② 剩余项进入 ⑤/⑥/⑦，不得重开已通过的 ③。

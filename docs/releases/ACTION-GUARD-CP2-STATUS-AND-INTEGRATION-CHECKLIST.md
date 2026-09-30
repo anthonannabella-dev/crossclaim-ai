@@ -47,7 +47,7 @@
 | `billing.draft` | 待定（内部写入） | 业务库写入 | 不要求人工审批 | 待补 | TODO |
 | `evidence.read` | 待定（只读） | 无 | 无 | 待补 | TODO |
 
-> 追加记录（同属本清单口径，逐批次登记）：`payment.replay` = **验收 PASS**（MSG-20260930-28 / REVIEWED_REF 08fc45d；资金对象身份纳入快照与审批指纹、按 id 行锁恰一行）；`payment.retry_due`（冻结批次）= **送审中**（R18 / HEAD 4c695c0 / CI run 36718083469 / Issue #2 comment 5911844071）。三类受保护入口共用同一 Action Guard 审批边界；② 整体仍为 NOT COMPLETE。
+> 追加记录（同属本清单口径，逐批次登记）：`payment.replay` = **验收 PASS**（MSG-20260930-28 / REVIEWED_REF 08fc45d；资金对象身份纳入快照与审批指纹、按 id 行锁恰一行）；`payment.retry_due`（冻结批次）= **验收 PASS**（MSG-20261001-01 / REVIEWED_REF 9a806eb / CI run 36726898061 / Issue #2 comment 5915049394）。三类受保护入口共用同一 Action Guard 审批边界，**支付域三类受保护内部入口当前工程范围已收口**（不等于真实扣款/生产启用/webhook 新授权/②全覆盖）；② 整体仍为 NOT COMPLETE。
 
 ### 3.1 代码引用抽查（2026-09-30）
 
@@ -56,7 +56,7 @@
 | 动作 | 代码引用（证据） | 抽查结论 |
 | --- | --- | --- |
 | `commission.charge` | 入口 `/cases/:id/recovery-outcome`：`services/workflow/http-routes.ts:1212-1235`（缺 Action Guard 即 `ActionGuardNotConfiguredError` fail closed；经 `hitl-submission` 边界 + 审批指纹比对后才调用 `confirmRecoveryOutcome`） | 入口**已接线**（对应第 5 节「第一批 HITL 提交入口」） |
-| `payment.capture` / `payment.replay` / `payment.retry_due` | 见上方追加记录 | 已验收 PASS / PASS / **送审中**（R18，ref 9a806eb） |
+| `payment.capture` / `payment.replay` / `payment.retry_due` | 见上方追加记录 | 已验收 **PASS / PASS / PASS**（retry-due = MSG-20261001-01 / ref 9a806eb） |
 | `claim.submit` / `appeal.submit` / `platform.write` | 目录：`services/action-guard/action-guard.ts:31-33`（均 `EXTERNAL_WRITE`，requires humanApproval + platformEnablement + productionGate）；能力映射：`capability-source.ts:35-37`；静态约定清单：`guard-enforcement.ts:163-165` | 只有目录/能力/静态清单，**未发现路由或服务接线**（与「平台外写 HOLD」一致） |
 | `claim.prepare` / `billing.draft` | 目录：`action-guard.ts:29-30`（`INTERNAL_WRITE`，`requires: []`） | 入口接线与「能力闸门」接入**未核**（第 3 节仍为 TODO） |
 | `evidence.read` | 目录：`action-guard.ts:28`（`READ_ONLY`，`requires: []`） | 只读动作、无审批要求；未见专门接线 |

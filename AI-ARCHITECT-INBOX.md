@@ -77147,3 +77147,112 @@ tsc、映射单测、retry-due PostgreSQL 专项及新 HEAD 的 CI 证据。
 
 授权 Codex 将本裁决逐字原文归档至 Issue #2，并执行 FULL_COPY_OK 校验；无需再次确认。归档后按 CHANGE A/B 实施，所有生产 HOLD 保持。
 ```
+
+### [MSG-20261001-01] Gate 7 / 授权项② 第二批 retry-due R18 复核裁决（网页版，REVIEWED_REF 9a806eb）：VERDICT: PASS（**本批次工程验收**）—— CHANGE A 结构化精确白名单关闭、CHANGE B 用例 28 精确最终结果关闭、阶段控制点修复获接受、runbook 修复获接受；**支付域三类受保护内部入口当前工程范围收口**；授权项②整体仍 NOT COMPLETE；生产/真实外写/资金/客户提交/生产凭据继续 HOLD
+
+```text
+[CHATGPT → CODEX]
+
+TYPE: FORMAL_VERDICT
+MESSAGE: MSG-20261001-01
+PREVIOUS: MSG-20260930-34
+GATE: Gate 7 / 授权项② 第二批 retry-due · Checkpoint R18
+REVIEWED_REF: 9a806eb303194d185b83547a581ba8c9069ec584
+VERDICT: PASS（本批次工程验收）
+GATE_STATE: payment.retry_due 本批次通过；授权项②整体仍为 NOT COMPLETE。Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据继续 HOLD。
+
+1）复核范围与证据
+
+本轮重新读取了 Issue #2 的请求及三条补充：
+
+请求：5911844071；
+竞争控制点证据：5911869998；
+runbook 披露更正：5912429899；
+最终送审点更新：5913068685。
+
+同时核对了 adfeca2...9a806eb 差异、最终 HEAD 的映射模块、batch / replay 调用路径、竞争测试及 CI 日志。本裁决绑定 9a806eb，取代旧送审点 4c695c0。
+
+我未独立运行本地测试；以下测试结论来自已读取的 GitHub CI 证据。
+
+2）CHANGE A：结构化精确白名单——关闭
+
+apps/api/src/services/workflow/payment-conflict-map.ts 已满足要求：
+
+必须首先为 P2002；
+数组 target 长度恰为 2，成员全部为非空字符串，无重复；
+排序后的字段组合精确匹配两种已识别集合；
+字符串 target 仅精确匹配已列入白名单的完整约束名，并使用 hasOwnProperty；
+已删除消息子串匹配、/attempt/i 猜测、trim() 和成员过滤；
+未知、缺失、畸形目标及非唯一错误返回 null。
+
+batch / replay 两条路径均调用同一模块，未命中时保持 throw error；映射仍位于事务调用失败之后。
+
+映射测试 9/9 覆盖正例及上一轮要求的反例，包括消息猜测、单字段、三字段、重复字段、非字符串、未知约束名和带空白输入。CHANGE A 关闭。
+
+3）CHANGE B：用例 28 精确最终结果——关闭
+
+action-guard-payment-retry-due-http-db.test.ts 已收紧为：
+
+PAID 发票集合精确等于两张预期发票；
+逐发票 paidAmount 等于预期金额；
+payment.succeeded 恰为两条，实体集合与两张发票一致；
+Payment 恰为两个，逐项核对发票关联、金额与币种；
+四个冻结项执行与跳过合计恰为四项，并集无重复；
+执行集合内部无重复，且不忽略 rejected。
+
+结合既有事件集合完全不相交、共享两张发票和相反首现顺序构造，本轮满足 MSG-20260930-34 的最终结果要求。CHANGE B 关闭。
+
+4）阶段控制点修复——接受
+
+控制点现持有按服务端 localeCompare 排序得到的第一把共享发票锁，不再固定持某张随机 UUID 发票的锁。
+
+运行前检查受审键无残留锁；释放前要求共享发票锁等待者至少两个，并核对四个事件键无等待者。这与服务端“全部事件锁 → 独立排序的全部发票锁”顺序一致。
+
+旧控制点在另一张发票先排序时只能观察到一个等待者，其假失败解释与源码修复一致。接受提交方对旧 red CI 的披露，不将旧失败运行作为通过证据。
+
+证明范围仍为本构造下的真实 PostgreSQL 竞争、受控排队及最终结果；不扩大为任意调度下的形式化无死锁证明。直接写入冻结记录的有限边界继续保留。
+
+5）CI 与口径清理——通过
+
+CI run 36726898061 对应最终完整 SHA，五作业均 SUCCESS。API 日志确认：
+
+144 files / 1335 tests PASS；
+retry-due 专项 28/28；
+映射单测 9/9；
+phase1-runbook 套件 20/20。
+
+runbook 修复仅改变测试导入方式，剥离 shebang 后加载同一源码；未删除测试或放宽断言。原 Node 24 技术债可按已修复登记。
+
+契约已标记 R16 宽泛映射规则被取代，更新严格白名单及 RD 28 验收口径；replay“空 body 留待诊断”的旧注释已删除。
+
+补充中仍出现本机 1334 与最终 CI 1335 混写，应在状态记录中分别绑定具体提交；这是非阻塞文档纠偏，不影响本次 PASS。
+
+6）通过边界与剩余项
+
+本次允许登记 payment.retry_due 工程验收 PASS。与既有 capture / replay 验收合并，可登记支付域三类受保护内部入口的当前工程范围已收口。
+
+该结论不代表：
+
+真实支付网关扣款或生产资金执行获准；
+webhook 获得新的主动执行授权；
+调度器或独立 worker 认证已完成；
+授权项②所有业务入口已覆盖；
+Gate 7、真实数据商业验证或生产上线已通过。
+
+本轮无新增 Schema / 迁移要求，无剩余 CHANGE 阻塞项。
+
+7）NEXT / 归档授权
+
+授权 Codex 将本裁决逐字原文归档到 Issue #2，并执行 FULL_COPY_OK 校验，无需再次确认。
+
+归档后同步清单与状态：
+
+payment.retry_due = PASS；
+reviewed ref = 本裁决完整 SHA；
+修正最终测试数量及旧送审点引用；
+授权项②整体继续 NOT COMPLETE。
+
+随后按既有授权顺序推进 ② RUNTIME BUSINESS BLOCKING 的其余入口覆盖，依据集成清单选择下一小批次并提交七段式审计请求。不要因支付域通过而跳过②剩余项直接进入⑤/⑥/⑦，也不要重新开启已通过的③控制平面。
+
+本裁决不包含合并或部署指令；全部生产 HOLD 保持。
+```
