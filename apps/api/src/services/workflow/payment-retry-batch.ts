@@ -99,6 +99,57 @@ export function retryBatchDigest(items: readonly RetryBatchItemFingerprint[]): s
   return createHash('sha256').update(JSON.stringify(canonical)).digest('hex');
 }
 
+/**
+ * CHANGE C：批次锁后集中校验冻结记录（未知版本 / 损坏清单 / 重复项 / 数量异常一律失败关闭）。
+ */
+export function assertRetryBatchRecord(record: RetryBatchRecord): void {
+  if (record.digestVersion !== RETRY_BATCH_DIGEST_VERSION) {
+    throw new ApprovalBoundaryError('APPROVAL_VERSION_UNSUPPORTED', record.batchId);
+  }
+  if (!Array.isArray(record.items) || record.items.length === 0 || record.items.length > RETRY_BATCH_MAX_ITEMS) {
+    throw new ApprovalBoundaryError('APPROVAL_PAYLOAD_MISMATCH', record.batchId);
+  }
+  if (record.itemCount !== record.items.length) {
+    throw new ApprovalBoundaryError('APPROVAL_PAYLOAD_MISMATCH', record.batchId);
+  }
+  const expiresAt = new Date(record.expiresAt);
+  if (Number.isNaN(expiresAt.getTime())) {
+    throw new ApprovalBoundaryError('APPROVAL_SOURCE_ERROR', record.batchId);
+  }
+  const seenAttempts = new Set<string>();
+  for (const item of record.items) {
+    const strings = [
+      item.attemptId,
+      item.paymentEventId,
+      item.provider,
+      item.providerEventId,
+      item.payloadHash,
+      item.paymentId,
+      item.paymentProvider,
+      item.invoiceId,
+      item.externalPaymentId,
+      item.amount,
+      item.currency,
+    ];
+    if (strings.some((value) => typeof value !== 'string' || value === '')) {
+      throw new ApprovalBoundaryError('APPROVAL_PAYLOAD_MISMATCH', record.batchId);
+    }
+    if (!Number.isInteger(item.attemptNo) || item.attemptNo < 1) {
+      throw new ApprovalBoundaryError('APPROVAL_PAYLOAD_MISMATCH', record.batchId);
+    }
+    if (item.operation !== RETRY_BATCH_OPERATION || item.version !== RETRY_BATCH_VERSION) {
+      throw new ApprovalBoundaryError('APPROVAL_VERSION_UNSUPPORTED', record.batchId);
+    }
+    if (seenAttempts.has(item.attemptId)) {
+      throw new ApprovalBoundaryError('APPROVAL_PAYLOAD_MISMATCH', record.batchId);
+    }
+    seenAttempts.add(item.attemptId);
+  }
+  if (retryBatchDigest(record.items) !== record.digest) {
+    throw new ApprovalBoundaryError('APPROVAL_PAYLOAD_MISMATCH', record.batchId);
+  }
+}
+
 export interface FreezeRetryBatchResult {
   batchId: string;
   digest: string;
@@ -285,6 +336,18 @@ export async function submitRetryBatchReview(
     if (typeof tx.$executeRawUnsafe === 'function') {
       await tx.$executeRawUnsafe('SELECT pg_advisory_xact_lock(hashtext($1))', `cc-payment-retry-batch:${batch.batchId}`);
     }
+    // CHANGE C：锁后重读并集中校验冻结记录（审批不得基于锁前记录）
+    const lockedBatch = await readRetryBatch(tx, {
+      organizationId: input.organizationId,
+      batchId: batch.batchId,
+    });
+    if (!lockedBatch) throw new WorkflowError('NOT_FOUND', `批次 ${batch.batchId} 不存在或不属于该租户`);
+    assertRetryBatchRecord(lockedBatch);
+    // CHANGE A：冻结有效期在审批时强制生效（过期冻结不得重新批准延长）
+    const approvalAt = now();
+    if (approvalAt.getTime() >= new Date(lockedBatch.expiresAt).getTime()) {
+      throw new ApprovalBoundaryError('APPROVAL_EXPIRED', lockedBatch.batchId);
+    }
     const events = await tx.auditLog.findMany({
       where: {
         organizationId: input.organizationId,
@@ -375,6 +438,8 @@ export async function submitRetryBatchReview(
         digestVersion: batch.digestVersion,
         itemCount: String(batch.itemCount),
         expiresAt: expiresAt.toISOString(),
+        // CHANGE C：审批绑定**冻结截止时间**（执行侧核对，避免只绑定独立审批截止）
+        freezeExpiresAt: lockedBatch.expiresAt,
       },
       expiresAt: expiresAt.toISOString(),
     });
@@ -455,8 +520,10 @@ export async function executeRetryBatch(
     const at = now();
     const batch = await readRetryBatch(tx, { organizationId: input.organizationId, batchId: pre.batchId });
     if (!batch) throw new WorkflowError('NOT_FOUND', `批次 ${pre.batchId} 不存在或不属于该租户`);
-    if (retryBatchDigest(batch.items) !== batch.digest) {
-      throw new ApprovalBoundaryError('APPROVAL_PAYLOAD_MISMATCH', batch.batchId);
+    assertRetryBatchRecord(batch);
+    const batchExpiresAt = new Date(batch.expiresAt).getTime();
+    if (at.getTime() >= batchExpiresAt) {
+      throw new ApprovalBoundaryError('APPROVAL_EXPIRED', batch.batchId);
     }
 
     const boundary = await verifyApprovalBoundary(tx, {
@@ -476,6 +543,7 @@ export async function executeRetryBatch(
         digest: batch.digest,
         digestVersion: batch.digestVersion,
         itemCount: String(batch.itemCount),
+        freezeExpiresAt: batch.expiresAt,
       },
       now: at,
       approvalEventAction: PAYMENT_APPROVAL_EVENT_ACTION,
@@ -614,6 +682,39 @@ export async function executeRetryBatch(
         continue;
       }
 
+      // CHANGE A：取得全部必要锁后重新生成时间，并**再次核验**审批有效期/主体/撤销/轮次与冻结范围；
+      // 任何失效都抛出拒绝 → 本次整批执行回滚、批次不消费。
+      const itemAt = now();
+      if (itemAt.getTime() >= batchExpiresAt) {
+        throw new ApprovalBoundaryError('APPROVAL_EXPIRED', batch.batchId);
+      }
+      const itemBoundary = await verifyApprovalBoundary(tx, {
+        organizationId: input.organizationId,
+        approvalId,
+        action: PAYMENT_RETRY_DUE_ACTION,
+        caseId: batch.batchId,
+        actorUserId: input.actorUserId,
+        payload: {
+          amount: null,
+          currency: null,
+          basisReference: batch.batchId,
+          evidenceArtifactId: batch.digest,
+        },
+        extra: {
+          batchId: batch.batchId,
+          digest: batch.digest,
+          digestVersion: batch.digestVersion,
+          itemCount: String(batch.itemCount),
+          freezeExpiresAt: batch.expiresAt,
+        },
+        now: itemAt,
+        approvalEventAction: PAYMENT_APPROVAL_EVENT_ACTION,
+        requiredEventAction: PAYMENT_REQUIRED_EVENT_ACTION,
+        revocationEventActions: [PAYMENT_REJECTED_EVENT_ACTION],
+        consumedEventAction: PAYMENT_RETRY_DUE_CONSUMED_EVENT_ACTION,
+        targetEntityType: 'PaymentRetryBatch',
+      });
+      if (!itemBoundary.ok) throw new ApprovalBoundaryError(itemBoundary.reason, batch.batchId);
       const next = await startAttempt(
         tx,
         {
@@ -622,7 +723,7 @@ export async function executeRetryBatch(
           actorType: 'SYSTEM',
           actorRef: RETRY_BATCH_ACTOR_REF,
         },
-        { now: () => at },
+        { now: () => itemAt },
       );
       const outcome = await recoverPaymentSucceeded(
         tx,
