@@ -36,3 +36,16 @@
 | 已交付 main | MERGED + main CI 5/5 SUCCESS（run on 16b47a2） | merge commit `16b47a2` |
 
 > 说明：架构方要求「B2 已审 PASS」与「已交付 main」分别记账；上表即两账分列。
+
+## Gate 7 授权队列（MSG-20260930-03，8 项）
+
+| 项 | 状态 | 证据 |
+| --- | --- | --- |
+| ① ACTION GUARD（设计 → 实现） | 已完成（CP1 = 纯决策函数 + 审计事件） | 8109003 / 26f78e8 起 |
+| ② RUNTIME BUSINESS BLOCKING（Action Guard CP2） | **送审中** | HEAD 123d21f；Issue #2 comment 5902082182；CI run 36653496477 |
+| ③ PRODUCTION CONTROL PLANE | 待开工（CP2 裁决后） | — |
+| ⑤ RELIABILITY | 待开工 | — |
+| ⑥ OPERATIONS-ADMIN | 待开工 | — |
+| ⑦ SECURITY HARDENING | 待开工 | — |
+
+> CP2 已交付：runtime-guard（fail closed + 审计不可用降级）/ capability-source（Kill Switch 接线）/ guard-enforcement（唯一执行入口 + 不可绕过静态检查），共 34 项 Action Guard 单测。
