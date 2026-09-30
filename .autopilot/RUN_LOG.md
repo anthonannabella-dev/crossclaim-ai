@@ -147,3 +147,14 @@
 - CI：HEAD 73115a3，run **36682995038** = 五作业 SUCCESS；API 作业 **141 files / 1279 tests PASS**。
 - 送审：Issue #2 comment **5906316560**（七段式）；右侧会话短唤醒已发送并完成送达验证（正文 512 字符作为新用户轮出现、输入框已清空、生成中）。
 - 如实披露：用例 11 在旧实现下同样会拒绝，判别旧/新实现的是**用例 12**；控制点中的直写账单事实只证明「锁内重验读取到已提交的新事实」，不代表生产入口之间的完整竞争协议。签发边界未实现，不得描述为已接入。
+
+## 2026-09-30 — MSG-20260930-24 = PASS（授权项② 第二批 R7）→ 下一批次 replay
+
+- 裁决：**PASS**（限定本批次账单登记入口的工程验收）；REVIEWED_REF `73115a3081026029f7fee284dc90f444e3c439f2`；CI run 36682995038 五作业 SUCCESS（API 141 files / 1279 tests PASS，支付专项 16/16）；Prisma validate 与 TypeScript 检查通过。授权项②整体仍 **NOT COMPLETE**，全部生产 HOLD 状态不变。
+- CHANGE A（锁内执行快照 + 事实 CAS）**关闭**：锁外仅读 `id/status` 预检查；锁内读完整快照并用于迁移判断、批准金额/币种核对、`extra.from→to`、`paidAmount`、成功与消费审计；`executionAt` 锁后生成，统一用于有效期核验/`paidAt`/`issuedAt`/两类审计；CAS 同时比较租户、目标、状态、`total`、`currency`。认可 `submitPaymentReview` 与账单执行遵循同一发票锁协议。
+- CHANGE B（两项快照交错验收）**关闭**：控制点（`pg_locks` 未授予记录）获认可；用例 11 拒绝且无登记/无消费 + 锁内拒绝审计；**用例 12 为判别旧快照写入缺陷的关键回归证据**；架构方接受我方对用例 11 证明力的主动纠正。
+- CHANGE C（等锁失效/并发/审计失败）**关闭**：`APPROVAL_EXPIRED` / `APPROVAL_REVOKED` / `APPROVAL_ACTOR_MISMATCH` 三项断言账单保持 ISSUED、`paidAmount` 为零、引用未新增、消费为零；数据库 CHECK 拒绝 `action_guard.approval_decision` 时 HTTP 失败且业务零副作用、成功迁移审计为零；四路同审批并发仍为恰一次迁移 + 一次消费；重复确认 409 `ILLEGAL_TRANSITION` 语义维持。
+- CHANGE D（真实落库/审计关联/CI 口径）**关闭**：用例 12 核对批准金额 = 实际登记金额 = 成功审计金额 = 消费金额/币种，保留 `approvalId`/`operationId`/`invoiceId` 关联；契约 §5.3 与测试注释同步；本机 runbook 失败与跳过项不得写成「本机全量通过」，通过依据为最终 CI。
+- 非阻塞项与限定：Node 24 runbook 兼容继续登记；控制点直写只证明锁内能读取已提交的新事实；事实 CAS 不等于强制所有写入者遵守 advisory lock，后续写入者必须遵守既定协议。**必须后置**：DRAFT→ISSUED 独立签发授权边界、真实支付渠道扣款与生产资金能力、replay / retry-due / 其他未接入入口、授权项②整体完成与生产启用裁决。
+- 下一步（已 ACK 顺序）：**replay** 必须逐 `PaymentEvent` 绑定审批，覆盖关联发票、事件身份、金额/币种、预期恢复动作、处理版本及载荷摘要，执行前重新核验主体/事实/生命周期/幂等；随后 **retry-due** 使用服务端冻结批次（排序清单指纹 + 有效期 + 数量上限，不得动态纳入新 due 项，后台 SYSTEM 需明确预授权范围）；webhook 保持「接收事实 ≠ 授权新扣款」。
+- 留档：逐字归档进 AI-ARCHITECT-INBOX.md（compare.mjs = FULL_COPY_OK，62/62 行）+ Issue #2 comment **5906424099**。
