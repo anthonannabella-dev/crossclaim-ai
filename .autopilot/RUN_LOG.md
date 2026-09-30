@@ -50,3 +50,7 @@
   影响：若唤醒消息要求「直接写回 GitHub」，ChatGPT 会尝试写入、失败、并结束本轮而不产出裁决（h4=最新一条回复、无 assistant 文本）。
   规避（已生效）：唤醒改为「只在本会话输出完整 VERDICT，不要写入 GitHub」，由 Codex 原文归档到 Issue #2（架构方在 MSG-11/-12 均明确授权）。
   宿主项（非阻塞）：若要 ChatGPT 直写 GitHub，需在 GitHub 侧给该连接器授权 Issues: Write。
+
+- 授权项 ③ 收口并送审：HEAD c70ae2e、CI run 36656201359（5/5）；审计请求 Issue #2 comment 5902419993（CI 更正 5902422241）。
+  本轮新增真实依赖集成测试：真实 Kill Switch resolver + 真实 AuditLog 落地（actorType=AI、actorRef 满足 cc_audit_actor_shape_check），覆盖默认拒绝/APPLIED 开启后放行/未开启 scope 拒绝/配置异常回落 READ_ONLY/只读投影零审计；Action Guard 合计 68/68。
+  环境自解：Docker Desktop 重启后拉起 crossclaim-postgres（127.0.0.1:55432），本地 DB 测试恢复可用。
