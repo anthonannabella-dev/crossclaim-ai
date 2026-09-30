@@ -227,13 +227,25 @@ export function createHitlApprovalVerifier(deps: HitlApprovalVerifierDeps): Acti
         if (!(await hasPriorRequired({ organizationId: query.organizationId, caseId: targetRef, approvalCreatedAt: event.createdAt }))) {
           return { valid: false, reason: 'APPROVAL_NOT_APPROVED' };
         }
+        if (await hasLaterRevocation({ organizationId: query.organizationId, caseId: targetRef, approvalCreatedAt: event.createdAt })) {
+          return { valid: false, reason: 'APPROVAL_REVOKED' };
+        }
+
         const expiresAt = expiresAtOf(event.changes);
         if (!expiresAt) return { valid: false, reason: 'APPROVAL_SOURCE_ERROR' };
         const at = query.now ? new Date(query.now) : now();
         if (at.getTime() >= expiresAt.getTime()) return { valid: false, reason: 'APPROVAL_EXPIRED' };
-        if (await hasLaterRevocation({ organizationId: query.organizationId, caseId: targetRef, approvalCreatedAt: event.createdAt })) {
-          return { valid: false, reason: 'APPROVAL_REVOKED' };
-        }
+        // R2 CHANGE B2：审批之后若出现新的 REQUEST（新一轮），旧审批失效
+        const superseded = await deps.prisma.auditLog.count({
+          where: {
+            organizationId: query.organizationId,
+            entityType: 'Case',
+            entityId: targetRef,
+            action: APPROVAL_REQUIRED_EVENT_ACTION,
+            createdAt: { gt: event.createdAt },
+          },
+        });
+        if (superseded > 0) return { valid: false, reason: 'APPROVAL_NOT_APPROVED' };
         if (await isConsumed({ organizationId: query.organizationId, approvalId: query.approvalId })) {
           // R2 CHANGE B2：同审批、同载荷、策略与权限仍满足 → 允许进入幂等返回既有结果分支；
           // 消费/风险审计仍会记录，且业务层不会再次创建资金对象。

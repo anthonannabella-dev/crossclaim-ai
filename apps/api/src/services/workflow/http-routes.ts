@@ -1128,8 +1128,15 @@ export async function handleWorkflowRequest(
     return true;
   } catch (error) {
     const { code, error: name } = statusFor(error);
+    const reason =
+      error instanceof ActionGuardApprovalVerificationError
+        ? error.reason
+        : error instanceof ApprovalBoundaryError
+          ? error.reason
+          : undefined;
     sendJson(res, code, {
       error: name,
+      ...(reason && reason !== 'VERIFIER_MISSING' ? { reason } : {}),
       ...(code === 400 && review?.[2] === 'reject' ? { allowedReasons: [...REJECT_REASONS] } : {}),
     });
     return true;

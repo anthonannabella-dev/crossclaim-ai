@@ -95,6 +95,18 @@ export async function verifyApprovalBoundary(client: Client, query: ApprovalBoun
     });
     if (revocation > 0) return { ok: false, reason: 'APPROVAL_REVOKED' };
 
+    // R2 CHANGE B2：审批之后若出现新的 REQUEST（新一轮），旧审批即失效
+    const superseded = await client.auditLog.count({
+      where: {
+        organizationId: query.organizationId,
+        entityType: 'Case',
+        entityId: query.caseId,
+        action: APPROVAL_REQUIRED_EVENT_ACTION,
+        createdAt: { gt: event.createdAt },
+      },
+    });
+    if (superseded > 0) return { ok: false, reason: 'APPROVAL_NOT_APPROVED' };
+
     const consumed = await client.auditLog.count({
       where: {
         organizationId: query.organizationId,
