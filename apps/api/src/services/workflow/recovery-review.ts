@@ -41,6 +41,32 @@ export interface ReviewEvent {
 const money = (value: string | InstanceType<typeof Prisma.Decimal>): string =>
   new Prisma.Decimal(value).toDecimalPlaces(4, Prisma.Decimal.ROUND_HALF_UP).toFixed(4);
 
+/** 审批有效期默认 24h（CHANGE B）；上限 30 天，非法值回落默认 */
+export const DEFAULT_APPROVAL_TTL_MS = 24 * 60 * 60 * 1000;
+export const MAX_APPROVAL_TTL_MS = 30 * 24 * 60 * 60 * 1000;
+export function normalizeApprovalTtl(raw: unknown): number {
+  if (typeof raw !== 'number' || !Number.isFinite(raw) || raw <= 0) return DEFAULT_APPROVAL_TTL_MS;
+  return Math.min(Math.floor(raw), MAX_APPROVAL_TTL_MS);
+}
+
+/** 绑定载荷规范化（金额 4 位小数 / 币种大写 / 字符串裁剪）；缺项不猜测 */
+export function normalizeBoundPayload(raw?: {
+  recoveredAmount?: unknown;
+  currency?: unknown;
+  basisReference?: unknown;
+  evidenceArtifactId?: unknown;
+}): Record<string, string | null> | null {
+  if (!raw) return null;
+  const amount =
+    typeof raw.recoveredAmount === 'string' && raw.recoveredAmount.trim() !== ''
+      ? money(raw.recoveredAmount.trim())
+      : null;
+  const currency = typeof raw.currency === 'string' && raw.currency.trim() !== '' ? raw.currency.trim().toUpperCase() : null;
+  const basisReference = typeof raw.basisReference === 'string' && raw.basisReference.trim() !== '' ? raw.basisReference.trim() : null;
+  const evidenceArtifactId = typeof raw.evidenceArtifactId === 'string' && raw.evidenceArtifactId.trim() !== '' ? raw.evidenceArtifactId.trim() : null;
+  return { amount, currency, basisReference, evidenceArtifactId, fingerprintVersion: 'v1' };
+}
+
 export function resolveHighValueThreshold(env: Record<string, string | undefined> = process.env): string {
   const raw = env.HITL_RECOVERY_THRESHOLD;
   if (typeof raw !== 'string' || raw.trim() === '') return DEFAULT_HIGH_VALUE_THRESHOLD;
@@ -145,10 +171,23 @@ export interface SubmitRecoveryReviewInput {
   reason?: unknown;
   recoveredAmount?: unknown;
   currency?: unknown;
+  /** CHANGE A（MSG-20260930-17）：本次审批所授权的操作载荷，用于执行时逐项比对 */
+  boundPayload?: {
+    recoveredAmount?: unknown;
+    currency?: unknown;
+    basisReference?: unknown;
+    evidenceArtifactId?: unknown;
+  };
+  /** 审批有效期（毫秒）；缺省 24h */
+  approvalTtlMs?: number;
+  /** CHANGE A：本次审批授权的动作（由入口显式声明；缺省 commission.charge = 回收资金确认） */
+  boundAction?: string;
 }
 
 export interface SubmitRecoveryReviewResult extends RecoveryReviewStatus {
   decision: 'REQUEST' | 'APPROVE' | 'REJECT';
+  /** CHANGE A：APPROVE 时返回审批事件 id（即 approvalId）；其余为 null */
+  approvalId?: string | null;
 }
 
 async function writeReviewAudit(
@@ -158,10 +197,10 @@ async function writeReviewAudit(
     actorUserId: string;
     caseId: string;
     action: string;
-    changes: Record<string, unknown>;
+      changes: Record<string, unknown>;
     at: Date;
   },
-): Promise<void> {
+): Promise<string> {
   const row = prepareAuditInsert(
     {
       organizationId: input.organizationId,
@@ -174,7 +213,7 @@ async function writeReviewAudit(
     },
     { maxStringLength: 512 },
   );
-  await tx.auditLog.create({
+  const created = await tx.auditLog.create({
     data: {
       organizationId: row.organizationId,
       actorType: row.actorType,
@@ -188,7 +227,9 @@ async function writeReviewAudit(
       userAgent: row.userAgent,
       createdAt: input.at,
     },
+    select: { id: true },
   });
+  return created.id;
 }
 
 export async function submitRecoveryReview(
@@ -277,7 +318,11 @@ export async function submitRecoveryReview(
     }
 
     const action = decision === 'APPROVE' ? REVIEW_ACTIONS.approved : REVIEW_ACTIONS.rejected;
-    await writeReviewAudit(tx, {
+    // CHANGE A（MSG-20260930-17）：审批必须绑定"本次操作"，而不是只表达案件状态。
+    const bound = decision === 'APPROVE' ? normalizeBoundPayload(input.boundPayload) : null;
+    const ttlMs = normalizeApprovalTtl(input.approvalTtlMs);
+    const expiresAt = decision === 'APPROVE' ? new Date(at.getTime() + ttlMs) : null;
+    const approvalEventId = await writeReviewAudit(tx, {
       organizationId: input.organizationId,
       actorUserId: input.actorUserId,
       caseId: kase.id,
@@ -286,6 +331,13 @@ export async function submitRecoveryReview(
         caseNo: kase.caseNo,
         threshold,
         ...(reason ? { reason } : {}),
+        ...(bound
+          ? {
+              boundPayload: bound,
+              expiresAt: expiresAt?.toISOString() ?? null,
+              boundAction: typeof input.boundAction === 'string' && input.boundAction.trim() !== '' ? input.boundAction.trim() : 'commission.charge',
+            }
+          : {}),
       },
       at,
     });
@@ -297,6 +349,7 @@ export async function submitRecoveryReview(
       lastEventAt: at,
       lastActorUserId: input.actorUserId,
       decision: decision as 'APPROVE' | 'REJECT',
+      approvalId: decision === 'APPROVE' ? approvalEventId : null,
     };
   });
 }

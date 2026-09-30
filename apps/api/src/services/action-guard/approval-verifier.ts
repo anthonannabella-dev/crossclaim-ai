@@ -20,6 +20,8 @@ export const APPROVAL_REASON_CODES = [
   'APPROVAL_TENANT_MISMATCH',
   'APPROVAL_ACTION_MISMATCH',
   'APPROVAL_ACTOR_MISMATCH',
+  'APPROVAL_PAYLOAD_MISMATCH',
+  'APPROVAL_SOURCE_ERROR',
   'APPROVAL_TARGET_MISMATCH',
   'APPROVAL_EXPIRED',
   'APPROVAL_REVOKED',
@@ -34,6 +36,13 @@ export interface ActionGuardApprovalQuery {
   actorUserId: string;
   /** 绑定的目标对象 / 证据版本等（可选；有值时服务端必须比对） */
   targetRef?: string;
+  /** 本次提交的操作载荷（服务端会规范化后与审批绑定逐项比对） */
+  payload?: {
+    recoveredAmount?: unknown;
+    currency?: unknown;
+    basisReference?: unknown;
+    evidenceArtifactId?: unknown;
+  };
   /** 判定时刻（便于测试与可复现） */
   now?: string;
 }
