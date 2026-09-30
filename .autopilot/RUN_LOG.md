@@ -168,3 +168,13 @@
 - CI：HEAD `96eedc6`，run **36686652727** = 五作业 SUCCESS；API **142 files / 1288 tests PASS**。
 - 送审：Issue #2 comment **5906863811**（七段式）；右侧会话短唤醒已发送并完成送达验证（573 字符作为新用户轮出现、输入框清空、生成中）。
 - 如实披露：用例 03 的拒绝来自**提交侧**比对（不产生服务层锁内拒绝审计），锁内拒绝审计由用例 04 证明；控制点中的直写事实仅证明执行阶段读取已提交的新事实。retry-due 仍未接入守卫（下一批次，按冻结清单批次审批设计）；webhook 边界与生产 HOLD 不变。
+
+## 2026-09-30 — MSG-20260930-25 = REVISE（② 第二批 R8 / replay）
+
+- 裁决：**REVISE**；REVIEWED_REF `96eedc6f2eeb473c0494062a9c9bc3b330c6f9b0`；CI run 36686652727 五作业 SUCCESS（API 142 files / 1288 tests PASS，replay 专项 9/9）。已确认完成项保留：独立动作身份、`PaymentEvent` 目标、服务端指纹、受认证审批入口、服务层缺审批拒绝、单事务、同审批并发恰一次、等事件锁期间过期/撤销/停用与 Payment 金额变化拒绝。
+- **阻塞发现**：事件锁不能替代**发票事实保护** —— `applyPaymentSucceeded` 读取发票后仅以状态 CAS（`status: ISSUED`）推进 PAID，未取得 R7 的 `cc-payment-invoice:<invoiceId>`，也未比较 `total`/`currency`；可行交错：replay 读到 ISSUED/900 通过后，另一事务把发票改为 950 或改币种，状态 CAS 仍命中并写入 `paidAmount=900` + 消费审批。
+- CHANGE A：在 payment-attempt/payment 明确并实现事件、Payment、发票的锁定/事实校验协议（与 R7 发票锁兼容、明确多锁取得顺序避免反向获取、锁后重读最终发票事实、PAID CAS 至少加 `total`/`currency` 事实、明确 Payment 行保护方式、审批重验时间在必要锁取得后生成、attempt+资金+成功审计+消费同事务不回退）。
+- CHANGE B：补可判别的跨对象竞争验收（显式控制点证明到达发票核验→更新阶段；金额/币种变化或锁竞争只能被串行化或被重读/事实 CAS 拒绝；不得出现新发票事实与旧 `paidAmount`/旧成功审计同时提交；等待发票锁时至少验证"等待期间审批过期在最后重验被拒"；成功时核对 Payment/发票/审计/消费金额币种一致）。
+- CHANGE C：跨域双向冒用（replay 审批用于账单确认反向也要测，精确状态码/原因且两类消费均不新增）、服务层直调缺 approvalId 显式验收、replay 审批决策审计失败放行前关闭、**replay 消费审计失败 → 整个事务回滚**（attempt/发票推进/成功审计不得部分提交）。
+- CHANGE D：用例 03 标注为**提交侧**拒绝（删除"锁内快照拒绝"表述）；双向冒用需两方向均执行才算完成；说明 `attempt.status=SUCCEEDED` 与 `resultStatus` 的区别（AMOUNT_MISMATCH/PENDING_REVIEW/ILLEGAL_TRANSITION 也会消费审批并记录 SUCCEEDED attempt → 表示"一次获批恢复尝试已执行"，不是"付款收口成功"）；保留"直写仅证明读取已提交变化"的限制。
+- 口径：retry-due 仍直接调用 `runDueRetries`（未接守卫/批次审批）申报准确，本轮不得宣称支付域所有恢复入口已受保护；真实渠道扣款与生产继续 HOLD。下一 Checkpoint = replay R8 修订批次（完成后重跑类型检查、真实 PostgreSQL/HTTP 专项、相关支付回归与最终 HEAD CI，再提交七段式）。

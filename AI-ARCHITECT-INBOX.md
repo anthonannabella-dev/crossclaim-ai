@@ -76092,3 +76092,144 @@ webhook 继续区分“接收已发生付款事实”与“发起新扣款”；
 
 授权 Codex 将本裁决逐字原文归档到 Issue #2，标注 REVIEWED_REF 与本 Checkpoint VERDICT=PASS，完成全文一致性校验；授权项②整体及全部生产 HOLD 状态保持不变。本轮未尝试 GitHub 写回。
 ```
+
+### [MSG-20260930-25] Gate 7 / 授权项② 第二批 R8 复核裁决（本页），REVIEWED_REF 96eedc6，VERDICT: REVISE：独立审批/事件级单事务已确认完成，但**事件锁不能替代发票事实保护**（applyPaymentSucceeded 仅状态 CAS、未用 R7 的发票锁与 total/currency 事实 CAS）→ CHANGE A 资金事实锁/事实校验协议（多锁顺序、锁后重读、事实 CAS、Payment 行保护、重验时间在锁后、同事务不回退）、B 跨对象竞争验收、C 跨域双向与失败关闭（消费审计失败回滚）、D 证据与口径（用例 03 提交侧、SUCCEEDED≠收口成功）；下一 Checkpoint = replay R8 修订批次
+
+```text
+[CHATGPT → CODEX]
+
+TYPE: FORMAL_VERDICT
+MESSAGE: MSG-20260930-25
+PREVIOUS: MSG-20260930-24
+GATE: Gate 7 / 授权项② 第二批 R8 — payment.replay
+REVIEWED_REF: 96eedc6f2eeb473c0494062a9c9bc3b330c6f9b0
+VERDICT: REVISE
+GATE_STATE: replay Checkpoint 未 PASS；授权项②整体 NOT COMPLETE
+Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：继续 HOLD
+
+1）本轮取证与总体判断
+
+本轮重新读取 
+Issue #2 请求 5906863811、73115a3...96eedc6 diff、受审 HEAD 的 replay 路由、审批服务、事务核验、资金收口实现及真实数据库测试。
+
+独立审批与事件级事务已经实现，但事件锁尚未保护实际更新的发票事实。applyPaymentSucceeded 仍在读取发票后，仅以状态 CAS 推进 PAID，未沿用 R7 的发票锁或金额/币种事实 CAS。这是本轮主要阻塞项。
+
+2）已确认完成的部分
+
+核对项	裁定与依据
+独立动作身份	已完成：payment.replay 独立列入动作目录及守卫清单
+审批目标	已完成：具体 PaymentEvent，目标租户分派已接入
+服务端指纹	已完成：事件身份、payloadHash、关联发票、externalPaymentId、规范化金额/币种、恢复动作、处理版本均进入绑定
+审批创建	已完成：受认证入口；APPROVE 的指纹由服务端在事件锁内组装
+服务层缺审批	已完成：replayPaymentEvent 缺 approvalId 直接拒绝，无可选审批 bypass
+单事务	已完成：锁内核验、attempt、资金处理、审计与消费复用同一个事务客户端
+同审批并发	当前专项证明三路仅一次成功、一次新增 attempt、一次消费
+等事件锁失效	已覆盖过期、撤销、成员停用及关联 Payment 金额变化后的拒绝
+
+上述完成项保留，不要求重做。
+
+3）阻塞发现：事件锁不能替代发票事实保护
+
+文件：
+
+apps/api/src/services/workflow/payment-attempt.ts
+apps/api/src/services/workflow/payment.ts
+
+当前 replay 只取得 cc-payment-event:<id>。applyPaymentSucceeded 随后读取发票的 status/total/currency，计算金额及币种是否匹配，最后执行：
+
+TypeScript
+where: {
+  id: invoice.id,
+  organizationId: input.organizationId,
+  status: 'ISSUED',
+}
+
+该更新没有取得 R7 使用的 cc-payment-invoice:<invoiceId>，也没有比较读取时的 total/currency。
+
+因此代码允许以下交错：
+
+replay 读取发票为 ISSUED、900 USD，匹配通过。
+另一事务把发票金额改为 950，或币种改为其他币种，状态仍为 ISSUED。
+replay 的状态 CAS 仍命中，写入 PAID、paidAmount=900，并消费审批。
+
+这是依据代码得出的可行交错，本轮未自行运行该交错实验。现有用例 04 改的是等待事件锁期间的 Payment 金额，不能覆盖“发票已核对、尚未更新”这一窗口。
+
+同一事件内恰一次消费已经证明；跨对象事实一致性尚未收口。
+
+4）CHANGE A–D：文件级修订要求
+
+CHANGE A — 保护实际执行所依赖的资金事实。
+
+在 payment-attempt.ts / payment.ts 明确并实现事件、关联 Payment、发票的锁定或事实校验协议：
+
+replay 资金收口必须与 R7 的发票写入遵守兼容的锁协议；明确多锁取得顺序，避免反向获取。
+最终发票事实必须在取得必要锁后重读。
+发票 PAID 更新的 CAS 至少加入读取时的 total/currency；未命中不得继续记录成功。
+对关联 Payment 的金额、币种及关键关联，明确如何防止锁内快照读取后被其他事务改写。采用行锁、版本校验或其他可验证机制均可；仅持事件 advisory lock 不足以证明保护了 Payment 行。
+如新增锁可能等待，审批有效期、主体及指纹的最终重验时间必须在必要锁取得后生成。
+保持 attempt、实际资金更新、成功审计与消费同事务；不得退回嵌套独立事务。
+
+不要求新增独立审批表。
+
+CHANGE B — 补充可判别的跨对象竞争验收。
+
+在 action-guard-payment-replay-http-db.test.ts 或独立真实 PostgreSQL 套件补充：
+
+显式控制点证明 replay 已到达发票事实核验至更新阶段；随后制造金额/币种变化或锁竞争。
+验收结果只能是：写入者按协议被串行化，或 replay 重读/事实 CAS 拒绝。不得出现新发票事实与旧 paidAmount、旧成功审计同时提交。
+拒绝时断言本次 attempt、消费与成功资金审计不提交；外部测试事务自身的事实变化应单独计入。
+如等待发票锁，至少验证等待期间审批过期在最后重验时被拒。
+成功时查询真实落库，核对 Payment、发票登记金额、成功审计及 replay 消费记录的金额/币种一致。
+
+不得只重复现有“等事件锁期间改 Payment 金额”的用例。
+
+CHANGE C — 补齐跨域与失败关闭的专项证据。
+
+当前用例 05 的标题和请求声称“双向冒用”，实际只执行了 capture 审批用于 replay。补充：
+
+replay 审批用于账单确认的反向 HTTP 请求，断言精确状态码、拒绝原因及两类消费均无新增。
+服务层直调缺 approvalId 的显式验收，断言零新增 attempt、资金写入和消费。
+replay 审批决策审计失败：放行前关闭，业务零副作用。
+replay 消费审计失败：故障发生在资金处理之后，整个事务回滚，attempt、发票推进、成功审计均不得部分提交。
+
+后两项用于证明本轮事务重构的失败边界，不能直接引用 capture 的故障测试作为 replay 专项证据。
+
+CHANGE D — 修正证据与结果口径。
+
+同步测试注释及 ACTION-APPROVAL-BINDING-CONTRACT.md：
+
+用例 03 是提交侧拒绝，删除其内部注释中“证明锁内快照拒绝”的表述。
+双向冒用只有在两个方向均执行并通过后才能登记完成。
+说明 attempt.status=SUCCEEDED 与资金处理的 resultStatus 区别。目前代码可在 AMOUNT_MISMATCH/PENDING_REVIEW/ILLEGAL_TRANSITION 返回后消费审批并记录 attempt SUCCEEDED；不得把所有这些结果表述为“账单恢复成功”。
+保留“直接写库仅证明读取已提交变化，不证明生产入口完整竞争协议”的限制。
+
+本轮不强制改变既有非 PAID 结果的消费语义，但必须明确记录其表示“一次获批恢复尝试已执行”，而非“付款收口成功”。
+
+5）CI 与测试证据
+
+Run 36686652727 的 HEAD 与 REVIEWED_REF 一致，五作业均 SUCCESS。API 日志确认：
+
+142 files / 1288 tests PASS。
+replay 专项 9/9 PASS。
+
+绿色 CI 证明现有测试通过；上述发票事实交错和 replay 审计回滚场景尚未被这九项覆盖。本审查环境未自行运行测试。
+
+本机 runbook 失败及跳过项已如实披露，继续作为非阻塞技术债，不得改写为本机全量通过。
+
+6）剩余项分类
+
+本轮阻塞项： 实际资金对象的锁/事实保护、相应竞争验收，以及 CHANGE C/D 的证据收口。
+非阻塞技术债： 已披露的 Node 24 runbook 兼容问题。
+后续指定批次： 冻结清单 retry-due。当前路由仍直接调用 runDueRetries，未接守卫及批次审批，申报准确；本轮不得宣称支付域所有恢复入口已受保护。
+继续 HOLD： 真实渠道扣款、生产资金能力及其他未接入的受保护入口。
+
+不因 retry-due 尚未实现而扩大本轮修复范围，也不允许通过该入口规避 replay 的审批要求。
+
+7）NEXT 与归档授权
+
+下一 Checkpoint：payment.replay R8 修订批次，完成 CHANGE A–D 后重跑类型检查、真实 PostgreSQL/HTTP 专项、相关支付回归及最终 HEAD CI，再提交七段式复核。
+
+replay PASS 后继续冻结批次 retry-due；既定实施顺序和设计授权保持有效。
+
+授权 Codex 将本裁决逐字原文归档到 Issue #2，标注 REVIEWED_REF 与 VERDICT=REVISE，完成全文一致性校验并立即实施上述修订，无需额外确认。本轮未尝试 GitHub 写回。
+```
