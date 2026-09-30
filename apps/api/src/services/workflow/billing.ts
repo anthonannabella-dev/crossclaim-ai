@@ -292,6 +292,9 @@ export async function advanceBillingInvoice(
           amount: money(invoice.total),
           paymentReferenceProvided: paymentReference !== '',
           ...(note ? { note } : {}),
+          // R6 CHANGE D：最终执行审计必须能与审批/操作关联（entityId = BillingInvoice）
+          ...(approvalId ? { approvalId, operationId } : {}),
+          result: from !== to ? 'TRANSITIONED' : 'NOOP',
           at: at.toISOString(),
         },
       },

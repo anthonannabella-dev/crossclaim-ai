@@ -5,8 +5,9 @@
  * 02 缺 approvalId：守卫 REQUIRE_APPROVAL（409），发票与消费零变化
  * 03 载荷不符：403 APPROVAL_PAYLOAD_MISMATCH，零副作用
  * 04 审批后被撤销：403 APPROVAL_REVOKED，零副作用
- * 05 已消费后重复提交：403 APPROVAL_ALREADY_CONSUMED，消费仍为 1
+ * 05 已消费后重复提交：409 ILLEGAL_TRANSITION（状态迁移非幂等），消费仍为 1
  * 06 指纹版本未知：403 APPROVAL_VERSION_UNSUPPORTED，零副作用
+ * 注：账单登记（本域）与真实支付渠道扣款是两件事；本批次不接入真实渠道与凭据。
  */
 
 import type { AddressInfo } from 'node:net';
