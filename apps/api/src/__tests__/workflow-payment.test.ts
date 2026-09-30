@@ -209,9 +209,17 @@ function fakePaymentPrisma(options: {
   const paymentCreate: ReturnType<typeof vi.fn> = vi.fn(async () => ({ id: 'payment-1' }));
   const updateMany: ReturnType<typeof vi.fn> = vi.fn(async () => ({ count: options.casHits === false ? 0 : 1 }));
 
+  const invoiceRow = {
+    id: INVOICE,
+    status: invoiceStatus,
+    total: new Prisma.Decimal(total),
+    currency,
+    invoiceNo: 'BILL-1',
+  };
   const tx = {
     payment: { findFirst: vi.fn(async () => null), create: paymentCreate },
-    billingInvoice: { updateMany },
+    // R8 修订 CHANGE A：执行侧在锁内重读发票事实（status/total/currency）
+    billingInvoice: { findFirst: vi.fn(async () => invoiceRow), updateMany },
     auditLog: { create: auditCreate, findMany: vi.fn(async () => options.reviewEvents ?? []) },
   };
 
@@ -292,7 +300,11 @@ describe('C-0010-A — PAID 推进保护', () => {
     );
     expect(result.status).toBe('PAID');
     expect(updateMany).toHaveBeenCalledTimes(1);
+    // R8 修订 CHANGE A：CAS 同时比较状态与记账事实（total/currency）
     expect(updateMany.mock.calls[0][0].where).toMatchObject({ status: 'ISSUED' });
+    expect(updateMany.mock.calls[0][0].where.total.toString()).toBe("1500");
+    expect(updateMany.mock.calls[0][0].where.currency).toBe('USD');
+    expect(updateMany.mock.calls[0][0].data.paidAmount.toString()).toBe("1500");
     expect(auditCreate.mock.calls.map((c) => c[0].data.action)).toContain('payment.succeeded');
   });
 
