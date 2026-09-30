@@ -193,3 +193,19 @@
 - 验收：replay 专项 **17/17**（新增 16 等发票锁期间 Payment 变化→403 零新增；17 等发票锁期间审批过期→403 APPROVAL_EXPIRED；用例 01 补真实落库一致性断言 Payment/发票 paidAmount/成功审计/消费 同额同币种）；本机全量 142 文件 / 1276 passed + 20 skipped（唯一失败为既知 runbook 债，不写"全量通过"）；tsc PASS。
 - CI：HEAD `9ae6ca2`，run **36690601646** = 五作业 SUCCESS；API **142 files / 1296 tests PASS**。
 - 送审：Issue #2 comment **5907528281**（七段式）；右侧会话短唤醒已发送并完成送达验证（677 字符作为新用户轮出现、输入框清空、生成中）。
+
+## 2026-09-30 — MSG-20260930-27 = REVISE（replay R10：行锁身份校验缺口）
+
+- 已关闭项保留：定位快照与最终执行快照分离、事件锁→发票锁→Payment 行锁后重读最终事实、关键关联不一致即拒绝、重验时间在行锁之后、用例 16/17、用例 01 落库一致性、事实 CAS 口径收紧。
+- 唯一剩余阻塞：`FOR UPDATE` 查询未确认锁到关联 Payment 本身 —— 查询用事件 `provider` + `externalPaymentId`，未返回/核对 `Payment.id`、`Payment.provider`，也未确认恰一行；可行交错：定位后等发票锁期间改写 Payment.provider，锁查询零行而最终快照仍用事件 provider，可能创建另一条资金记录。
+- CHANGE：快照显式携带 `Payment.id`/`Payment.provider`；校验 Payment.provider 与事件 provider 一致（不一致失败关闭）；按租户 + `Payment.id` 加行锁并确认恰一行且 id 正确；最终重读确认执行所用的正是被锁定行；保持锁顺序/时间位置/同事务；可将 paymentId 纳入服务端绑定。补真实 PostgreSQL 验收：等发票锁期间改 Payment.provider（或构造事件与 Payment.provider 不一致）→ 精确拒绝且无新增 Payment/attempt/PAID/成功审计/消费；锁查询零行 → 失败关闭。
+- 口径纠正：**PostgreSQL 行锁同样阻塞其他事务对同一行的普通 UPDATE/DELETE**，不只是"协议内写入者"；锁前已提交变化由最终重读处理，锁持有期间的修改由数据库锁串行化。
+
+## 2026-09-30 — ② 第二批 replay R10 修订（R11 送审）
+
+- MSG-20260930-27 = REVISE（唯一剩余：行锁未确认锁定关联 Payment 本身）已逐字归档（FULL_COPY_OK 66/66）+ Issue #2 comment `5907579437`。
+- 实现 `08fc45d`：快照显式携带 `Payment.id`/`Payment.provider` 并纳入服务端审批指纹；事件 provider 与 Payment.provider 不一致 → 失败关闭；行锁改为按租户 + **Payment.id** 且断言恰一行/id 一致；最终重读新增比对 `paymentId`/`paymentProvider`，确保定位、锁定、最终快照与执行是同一条 Payment。
+- 验收：replay 专项 **19/19**（新增 18 等发票锁期间 provider 改写→403 零新增；19 行锁零行→失败关闭）；支付定向回归 7 套件 71 例全绿；本机全量 142 文件 / 1278 passed + 20 skipped（唯一失败为既知 runbook 债，不写"全量通过"）；tsc PASS。
+- CI：HEAD `08fc45d`，run **36691975407** = 五作业 SUCCESS；API **142 files / 1298 tests PASS**。
+- 送审：Issue #2 comment **5907760165**（七段式）；右侧会话短唤醒已发送并完成送达验证（627 字符作为新用户轮出现、输入框清空、生成中）。
+- 口径纠正：行锁会阻塞其他事务对该行的普通 UPDATE/DELETE（与 advisory lock 无关）；锁前已提交变化由锁后重读处理。

@@ -76233,3 +76233,109 @@ replay PASS 后继续冻结批次 retry-due；既定实施顺序和设计授权�
 
 授权 Codex 将本裁决逐字原文归档到 Issue #2，标注 REVIEWED_REF 与 VERDICT=REVISE，完成全文一致性校验并立即实施上述修订，无需额外确认。本轮未尝试 GitHub 写回。
 ```
+
+### [MSG-20260930-27] Gate 7 / 授权项② 第二批 replay R10 复核裁决（本页），REVIEWED_REF 9ae6ca2，VERDICT: REVISE（剩余一个行锁身份校验缺口）：最终快照重读/发票锁等待期间事实变化与过期验收已关闭；唯一剩余 = 行锁查询未确认锁到关联 Payment 本身（未携带/核对 Payment.id 与 Payment.provider，未确认恰一行）→ CHANGE：快照显式携带 paymentId/paymentProvider、校验 provider 与事件一致、按租户+Payment.id 加锁并确认恰一行、最终重读确认同一行、补 provider 不一致与零行锁失败关闭验收；并纠正"行锁只保护协议内写入者"的口径（PostgreSQL 行锁同样阻塞普通 UPDATE/DELETE）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE: FORMAL_VERDICT
+MESSAGE: MSG-20260930-27
+PREVIOUS: MSG-20260930-26
+GATE: Gate 7 / 授权项② 第二批 — payment.replay R10
+REVIEWED_REF: 9ae6ca2634846a1f4aa2ed784c446c1ed3621bb4
+VERDICT: REVISE（剩余一个行锁身份校验缺口）
+GATE_STATE: replay Checkpoint 未 PASS；授权项②整体 NOT COMPLETE
+Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：继续 HOLD
+
+1）取证与结论
+
+本轮重新读取 
+请求 5907528281、3cd0615...9ae6ca2 diff、最终 HEAD 的 payment-attempt.ts、payment.ts、相关 schema 和最终 CI 日志。
+
+最终快照重读、发票锁等待期间的事实变化及过期验收均已补齐。但目前 FOR UPDATE 查询未确认锁到了关联 Payment 本身：查询使用事件 provider 和 externalPaymentId，返回结果被忽略；最终快照没有暴露或核对 Payment.id、Payment.provider。因此还不能关闭“关联 Payment 行保护”。
+
+2）已关闭的剩余项
+
+定位快照与最终执行快照已分开。
+正常匹配情况下，事件锁 → 发票锁 → Payment 行锁之后重读最终事实。
+invoiceId、externalPaymentId、payloadHash、providerEventId 与定位快照不一致时拒绝。
+replay 最终重验时间在行锁查询之后生成。
+用例16证明等发票锁期间 Payment 金额变化后返回403 APPROVAL_PAYLOAD_MISMATCH，无新增 attempt、成功资金审计或消费。
+用例17证明等发票锁期间过期后返回403 APPROVAL_EXPIRED，无业务新增。
+用例01已核对真实落库的 Payment、发票 paidAmount、成功审计及消费金额/币种一致。
+事实 CAS 失败口径已收紧，不再暗示必然整事务回滚。
+
+以上保留，不要求重做。
+
+3）唯一剩余阻塞：锁定行身份未被确认
+
+readReplaySnapshot 根据 attempt.paymentId 查询 Payment，但返回：
+
+纯文本
+provider = PaymentEvent.provider
+externalPaymentId = Payment.externalPaymentId
+
+它没有读取 Payment.provider，也没有返回 Payment.id。
+
+执行侧随后：
+
+SQL
+SELECT id FROM "Payment"
+WHERE "organizationId" = $1
+  AND provider = $2
+  AND "externalPaymentId" = $3
+FOR UPDATE
+
+其中 provider 来自事件。代码没有检查结果是否恰为一行，也没有确认返回 id 等于关联 attempt.paymentId。
+
+可行交错：定位后等发票锁期间，关联 Payment.provider 被改写，而金额、externalPaymentId 等保持不变。行锁查询可能返回零行；最终快照仍返回事件 provider，现有比较及审批指纹均可能通过。资金处理再按事件 provider 查找 Payment，可能创建另一条资金记录。
+
+这是源码推导出的风险，本轮未运行该交错实验。已有金额变化测试不能证明上述身份条件成立。
+
+4）CHANGE — 最小修订要求
+
+涉及 payment.ts、payment-attempt.ts：
+
+快照显式携带关联 Payment.id 和 Payment.provider。
+校验 Payment.provider 与事件 provider 一致；不一致即失败关闭。
+优先按租户和关联 Payment.id 取得行锁，并确认返回恰一行、id正确。
+最终重读确认使用的 Payment.id 正是已锁定行；关键关联变化不得转而执行另一条未锁定 Payment。
+保持固定锁顺序、最终时间位置、审批重验及同事务结构。
+
+可将 paymentId 纳入服务端审批绑定，以明确资金对象身份；至少必须确保定位、锁定、最终快照及执行使用同一条 Payment。
+
+补充真实 PostgreSQL 验收：
+
+等发票锁期间改变关联 Payment.provider，或构造事件与 Payment.provider 不一致：精确拒绝，无新增 Payment、attempt、PAID推进、成功资金审计或消费。
+验证锁查询零行时失败关闭。
+保留现有正常成功及17项验收。
+
+不要求扩大为全仓库资金模型改造。
+
+5）证据口径纠正
+
+请求 §6(1) 的“行锁只保护协议内写入者，协议外直写仅由重读拒绝”需要纠正：
+
+成功取得的 PostgreSQL 行锁同样会阻塞其他事务对该行的普通 UPDATE/DELETE，即使它们不使用 advisory lock。 锁取得前已提交的变化由最终重读处理；行锁持有期间的修改由数据库锁串行化。
+
+本轮缺口是尚未证明取得了正确行的锁，不是行锁只对遵守应用协议的写入者有效。
+
+6）CI与边界
+
+Run 36690601646 的 HEAD 与 REVIEWED_REF 一致，五作业 SUCCESS。API日志确认：
+
+142 files / 1296 tests PASS。
+replay专项17/17 PASS。
+Prisma validate及TypeScript检查通过。
+
+本审查环境未自行运行测试。Node24 runbook问题继续为非阻塞技术债；retry-due仍是指定后续批次；全部生产及真实资金 HOLD 不变。
+
+7）NEXT与归档授权
+
+下一 Checkpoint仅收口：锁定Payment身份校验、provider不一致/零行锁失败关闭验收、行锁口径纠正。此前已关闭项目保持有效。
+
+完成后提交最终HEAD、专项及相关回归、绿色CI进行复核。replay PASS后继续冻结批次retry-due，既定顺序不变。
+
+授权Codex将本裁决逐字原文归档到Issue #2，标注REVIEWED_REF与VERDICT=REVISE，完成全文一致性校验并立即实施，无需额外确认。本轮未尝试GitHub写回。
+```
