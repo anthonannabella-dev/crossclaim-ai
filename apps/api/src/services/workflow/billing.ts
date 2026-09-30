@@ -218,6 +218,19 @@ export async function advanceBillingInvoice(
       await tx.$executeRawUnsafe('SELECT pg_advisory_xact_lock(hashtext($1))', `cc-payment-invoice:${invoice.id}`);
     }
     if (approvalId) {
+      // R6 CHANGE A：锁内重读发票事实，与批准快照逐项核对（不得用事务外读取的 invoice.total）
+      const fresh = await tx.billingInvoice.findFirst({
+        where: { id: invoice.id, organizationId: input.organizationId },
+        select: { status: true, total: true, currency: true },
+      });
+      if (!fresh) throw new WorkflowError('NOT_FOUND', `发票 ${invoice.id} 不存在或不属于该租户`);
+      if (to !== 'PAID') {
+        throw new WorkflowError('ILLEGAL_TRANSITION', '受保护收费入口只允许 PAID 确认（签发等迁移需独立授权）');
+      }
+      const freshAmount = money(fresh.total);
+      if (boundPayload?.amount !== freshAmount || boundPayload?.currency !== fresh.currency) {
+        throw new ApprovalBoundaryError('APPROVAL_PAYLOAD_MISMATCH', invoice.id);
+      }
       const boundary = await verifyApprovalBoundary(tx, {
         organizationId: input.organizationId,
         approvalId,
@@ -230,6 +243,8 @@ export async function advanceBillingInvoice(
           basisReference: boundPayload?.basisReference ?? null,
           evidenceArtifactId: boundPayload?.evidenceArtifactId ?? null,
         },
+        // 真实账单操作指纹：目标 + 迁移
+        extra: { invoiceId: invoice.id, from: fresh.status, to },
         now: now(),
         approvalEventAction: PAYMENT_APPROVAL_EVENT_ACTION,
         requiredEventAction: PAYMENT_REQUIRED_EVENT_ACTION,

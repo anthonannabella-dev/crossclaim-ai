@@ -42,6 +42,8 @@ export interface ApprovalBoundaryQuery {
   revocationEventActions?: readonly string[];
   consumedEventAction?: string;
   targetEntityType?: string;
+  /** 额外指纹键（如支付域的 invoiceId/from/to），存在时逐项与审批绑定比对 */
+  extra?: Record<string, string | null>;
 }
 
 export type ApprovalBoundaryResult = { ok: true; consumed: boolean } | { ok: false; reason: string };
@@ -119,6 +121,10 @@ export async function verifyApprovalBoundary(client: Client, query: ApprovalBoun
     if (bound.fingerprintVersion !== 'v1') return { ok: false, reason: 'APPROVAL_VERSION_UNSUPPORTED' };
     for (const key of ['amount', 'currency', 'basisReference', 'evidenceArtifactId'] as const) {
       if ((bound[key] ?? null) !== (query.payload[key] ?? null)) return { ok: false, reason: 'APPROVAL_PAYLOAD_MISMATCH' };
+    }
+    // R6 CHANGE A：额外指纹键（目标与状态迁移）必须与本次执行一致
+    for (const key of Object.keys(query.extra ?? {})) {
+      if ((bound[key] ?? null) !== (query.extra?.[key] ?? null)) return { ok: false, reason: 'APPROVAL_PAYLOAD_MISMATCH' };
     }
 
     const expiresRaw = typeof changes?.expiresAt === 'string' ? changes.expiresAt : null;

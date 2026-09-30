@@ -137,7 +137,15 @@ async function advance(base: string, cookie: string, body: Record<string, unknow
   return { status: res.status, body: (await res.json()) as Record<string, unknown> };
 }
 
-const boundPayload = { amount: AMOUNT, currency: CURRENCY, basisReference: REFERENCE, evidenceArtifactId: null };
+// R6 CHANGE A：审批必须绑定真实账单操作（目标 + 迁移 + 金额/币种）
+const boundPayload = {
+  amount: AMOUNT,
+  currency: CURRENCY,
+  basisReference: REFERENCE,
+  evidenceArtifactId: null,
+  from: 'ISSUED',
+  to: 'PAID',
+};
 
 async function requestAndApprove(now: () => Date = () => NOW) {
   await submitPaymentReview(prisma, { organizationId: ORG, actorUserId: ownerId, role: 'OWNER', invoiceId, decision: 'REQUEST' }, { now });
@@ -240,7 +248,7 @@ describe('② 第二批 — payment.capture（账单入口）真实 HTTP + Postg
           changes: {
             invoiceNo: 'INV-PC-1',
             boundAction: ACTION,
-            boundPayload: { ...boundPayload, fingerprintVersion: 'v9' },
+            boundPayload: { ...boundPayload, invoiceId: invoiceId, fingerprintVersion: 'v9' },
             expiresAt: new Date(NOW.getTime() + 3_600_000).toISOString(),
           } as never,
           createdAt: new Date(NOW.getTime() + 1000),

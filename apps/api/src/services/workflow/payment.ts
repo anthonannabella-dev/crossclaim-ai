@@ -364,7 +364,15 @@ export async function submitPaymentReview(
      * P1（② 第二批）：APPROVE 必须绑定本次操作的规范化载荷。
      * 形状与 recovery 一致（amount/currency/basisReference/evidenceArtifactId），便于复用验证器。
      */
-    boundPayload?: { amount?: unknown; currency?: unknown; basisReference?: unknown; evidenceArtifactId?: unknown };
+    boundPayload?: {
+      amount?: unknown;
+      currency?: unknown;
+      basisReference?: unknown;
+      evidenceArtifactId?: unknown;
+      /** R6 CHANGE A：绑定准确的状态迁移（收费确认必须 to=PAID） */
+      from?: unknown;
+      to?: unknown;
+    };
     /** 服务端固定动作；缺省 = payment.capture */
     boundAction?: string;
     approvalTtlMs?: number;
@@ -437,12 +445,20 @@ export async function submitPaymentReview(
           evidenceArtifactId: input.boundPayload?.evidenceArtifactId,
         })
       : null;
+    const fromStatus = typeof input.boundPayload?.from === 'string' ? input.boundPayload.from.trim().toUpperCase() : '';
+    const toStatus = typeof input.boundPayload?.to === 'string' ? input.boundPayload.to.trim().toUpperCase() : '';
     if (input.decision === 'APPROVE') {
       if (!bound || bound.amount === null || bound.currency === null || bound.basisReference === null) {
         throw new WorkflowError('INVALID_INPUT', '审批必须绑定完整操作载荷（金额/币种/依据）');
       }
       if (bound.fingerprintVersion !== 'v1') {
         throw new WorkflowError('INVALID_INPUT', '未知的审批载荷指纹版本');
+      }
+      if (fromStatus === '' || toStatus === '') {
+        throw new WorkflowError('INVALID_INPUT', '审批必须绑定准确的状态迁移（from/to）');
+      }
+      if (toStatus !== 'PAID') {
+        throw new WorkflowError('INVALID_INPUT', 'payment.capture 审批只能用于 PAID 收费确认（签发等迁移需独立授权）');
       }
     }
     const expiresAt =
@@ -459,7 +475,8 @@ export async function submitPaymentReview(
         charged: false,
         ...(bound && input.decision === 'APPROVE'
           ? {
-              boundPayload: bound,
+              // R6 CHANGE A：真实账单操作指纹（目标 + 迁移 + 金额/币种/依据）
+              boundPayload: { ...bound, invoiceId: invoice.id, from: fromStatus, to: toStatus },
               boundAction: input.boundAction && input.boundAction.trim() !== '' ? input.boundAction.trim() : PAYMENT_CAPTURE_ACTION,
               expiresAt: expiresAt ? expiresAt.toISOString() : null,
             }
