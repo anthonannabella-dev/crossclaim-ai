@@ -1046,4 +1046,61 @@ describe('② 第二批 — retry-due（冻结清单批次审批）真实 HTTP +
     expect(await prisma.auditLog.count({ where: { organizationId: ORG, action: 'payment.retry_due_executed' } })).toBe(1);
     expect(await prisma.payment.count({ where: { organizationId: ORG } })).toBe(1);
   }, 60_000);
+
+  it('25 retry-due 审批决策审计失败 → 放行前关闭，零副作用', async () => {
+    await withServer(async (base) => {
+      const cookie = await login(base);
+      const frozen = await freeze(base, cookie);
+      const batchId = String(frozen.body.batchId);
+      const approvalId = await approveBatch(base, cookie, batchId);
+      await prisma.$executeRawUnsafe(
+        `ALTER TABLE "AuditLog" ADD CONSTRAINT rd2_block_approval_decision CHECK (action <> 'action_guard.approval_decision') NOT VALID`,
+      );
+      let status = 0;
+      try {
+        const res = await execute(base, cookie, { batchId, approvalId });
+        status = res.status;
+      } finally {
+        await prisma.$executeRawUnsafe('ALTER TABLE "AuditLog" DROP CONSTRAINT IF EXISTS rd2_block_approval_decision');
+      }
+      expect(status).toBeGreaterThanOrEqual(400);
+      expect(await state()).toMatchObject({ invoiceStatus: 'ISSUED', attempts: 1, executed: 0, consumed: 0 });
+      expect(await prisma.auditLog.count({ where: { organizationId: ORG, action: 'payment.succeeded' } })).toBe(0);
+    });
+  }, 40_000);
+
+  it('26 受控等锁后的时间顺序：attempt 开始 ≤ 资金推进 ≤ 成功审计/执行审计（一致性）', async () => {
+    await withServer(async (base) => {
+      const cookie = await login(base);
+      const frozen = await freeze(base, cookie);
+      const batchId = String(frozen.body.batchId);
+      const approvalId = await approveBatch(base, cookie, batchId);
+      const res = await execute(base, cookie, { batchId, approvalId });
+      expect(res.status).toBe(200);
+
+      const invoice = await prisma.billingInvoice.findUniqueOrThrow({ where: { id: invoiceId } });
+      const newAttempt = await prisma.paymentProcessingAttempt.findFirstOrThrow({
+        where: { organizationId: ORG, paymentEventId: eventId, attemptNo: 2 },
+      });
+      const succeeded = await prisma.auditLog.findFirstOrThrow({
+        where: { organizationId: ORG, action: 'payment.succeeded' },
+      });
+      const executedAudit = await prisma.auditLog.findFirstOrThrow({
+        where: { organizationId: ORG, action: 'payment.retry_due_executed' },
+      });
+      const consumed = await prisma.auditLog.findFirstOrThrow({
+        where: { organizationId: ORG, action: PAYMENT_RETRY_DUE_CONSUMED_EVENT_ACTION },
+      });
+
+      const startedAt = newAttempt.startedAt?.getTime() ?? 0;
+      const paidAt = invoice.paidAt?.getTime() ?? 0;
+      expect(startedAt).toBeGreaterThan(0);
+      // 同一次锁后执行：attempt 开始不晚于资金推进与后续审计时间
+      expect(paidAt).toBeGreaterThanOrEqual(startedAt);
+      expect(succeeded.createdAt.getTime()).toBeGreaterThanOrEqual(startedAt);
+      expect(executedAudit.createdAt.getTime()).toBeGreaterThanOrEqual(startedAt);
+      // 批次消费发生在实际完成阶段：不早于执行审计
+      expect(consumed.createdAt.getTime()).toBeGreaterThanOrEqual(executedAudit.createdAt.getTime());
+    });
+  }, 40_000);
 });
