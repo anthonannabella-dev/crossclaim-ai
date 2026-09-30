@@ -92,6 +92,16 @@
 6. 重复提交 → 幂等或 409 `APPROVAL_ALREADY_CONSUMED`（按既有第一批口径），无重复副作用。
 
 **边界：** 真实平台提交、真实 OAuth/凭据、`platform.write`/`appeal.submit` 与 ④ 适配器生产形态均不在本批次；生产 HOLD 全部保持。
+**实施前置侦察（2026-10-01，只读）——`claim.submit` 落地缺口：**
+
+| 事实 | 证据 |
+| --- | --- |
+| 目前**没有** Claim 提交的 HTTP 路由（`http-routes.ts` 无 claim 提交入口；`services/claims/*` 仅被测试引用） | `rg "claims/"` 命中仅 `__tests__/claim-tracking-*` |
+| 但**跟踪侧写入原语已存在**：`recordSubmission()`（审计动作 `claim.submitted_by_human`）、`recordAcknowledgement()` / `setDeadline()` / `recordTerminal()` | `services/claims/tracking-service.ts:89/127/168/211` |
+| **外写闸门已存在且恒为人工卡口**：`submitClaimThroughAdapter()` 直接返回 `NEEDS_MANUAL`，永不调用 `adapter.submitClaim()`；注册表拒绝带写入面的适配器 | `services/adapters/ingest-bridge.ts:214-226`、`adapters/registry.ts:70`、`adapters/types.ts:132` |
+| 审批边界可复用：`createHitlSubmissionBoundary` + `createAppActionGuard`（第一批已 PASS 的同一套） | `services/action-guard/hitl-submission.ts`、`http-routes.ts`（recovery-outcome 接线） |
+
+**因此实现面收敛为（下一步实施）：**① 新增受保护路由（提交 Claim 记录，触发 `claim.submit` 动作）；② 缺守卫 / 缺审批 / capability 未满足 → 精确拒绝且零副作用；③ 全部满足 → 经 `createHitlSubmissionBoundary` 放行后调用 `recordSubmission()` 写跟踪记录、并**返回 `NEEDS_MANUAL` 表明未发生任何平台外写**；④ 审计落 `action_guard.approval_decision`；⑤ 按 6 项计划补齐 HTTP + 真实 PostgreSQL 测试。
 ## 4. 下一 Checkpoint 关系
 
 - 允许继续 **③ PRODUCTION CONTROL PLANE**（真实配置、有效 Kill Switch 与审计依赖的组合入口，保持默认 read-only）。

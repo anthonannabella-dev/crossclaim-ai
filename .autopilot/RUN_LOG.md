@@ -386,3 +386,9 @@
 - 剩余待覆盖：`claim.submit` / `appeal.submit` / `platform.write`（EXTERNAL_WRITE）、`claim.prepare` / `billing.draft`（INTERNAL_WRITE）、`evidence.read`（READ_ONLY）、`secret.rotate`（HOST ONLY）。
 - **选定下一小批次 = `claim.submit`（提交路径 · HITL 人工闸门 · 平台外写保持 HOLD）**：复用第一批的 `hitl-submission` 边界与审批指纹；执行端已知「提交闸门永不调用 `adapter.submitClaim()`，只返回 `NEEDS_MANUAL`」，故可在**不触发真实外写**的前提下完成接入与验收。范围与 6 项验收计划见 `ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3.2。
 - 未开工：本轮仅登记范围（PROGRESS），实现与送审在后续轮次；期间不得重开已通过的 ③，不得跳过 ② 剩余项进入 ⑤/⑥/⑦。
+
+## 2026-10-01 — `claim.submit` 批次实施前置侦察（只读，PROGRESS）
+
+- 结论：**当前没有 Claim 提交的 HTTP 路由**（`services/claims/*` 仅被测试引用），但跟踪写入原语（`recordSubmission` 等）与恒为人工卡口的外写闸门（`submitClaimThroughAdapter` → `NEEDS_MANUAL`，注册表拒绝写入面适配器）都已存在。
+- 实现面：新增受保护路由 + 复用 `createHitlSubmissionBoundary`（`claim.submit`，humanApproval+platformEnablement+productionGate）→ 放行后写跟踪记录并返回 `NEEDS_MANUAL`（零平台外写）+ `action_guard.approval_decision` 审计 + 6 项 HTTP/PostgreSQL 验收。
+- 已登记于 `ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3.2；实现与送审留待后续轮次。生产 HOLD 全部保持。
