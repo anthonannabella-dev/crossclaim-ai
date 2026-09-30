@@ -158,3 +158,13 @@
 - 非阻塞项与限定：Node 24 runbook 兼容继续登记；控制点直写只证明锁内能读取已提交的新事实；事实 CAS 不等于强制所有写入者遵守 advisory lock，后续写入者必须遵守既定协议。**必须后置**：DRAFT→ISSUED 独立签发授权边界、真实支付渠道扣款与生产资金能力、replay / retry-due / 其他未接入入口、授权项②整体完成与生产启用裁决。
 - 下一步（已 ACK 顺序）：**replay** 必须逐 `PaymentEvent` 绑定审批，覆盖关联发票、事件身份、金额/币种、预期恢复动作、处理版本及载荷摘要，执行前重新核验主体/事实/生命周期/幂等；随后 **retry-due** 使用服务端冻结批次（排序清单指纹 + 有效期 + 数量上限，不得动态纳入新 due 项，后台 SYSTEM 需明确预授权范围）；webhook 保持「接收事实 ≠ 授权新扣款」。
 - 留档：逐字归档进 AI-ARCHITECT-INBOX.md（compare.mjs = FULL_COPY_OK，62/62 行）+ Issue #2 comment **5906424099**。
+
+## 2026-09-30 — ② 第二批 R8（replay）实施与送审
+
+- 实施 commit 顺序：`deb8585`（动作身份 payment.replay + PaymentEvent 目标族 + 服务端指纹 + 最小受认证审批入口 + 单一事件锁内事务执行 + 既有用例迁移）→ `3448238`（replay 专项验收 9 例）→ `96eedc6`（契约 §5.4 与验收矩阵同步）。
+- 关键实现：`payment.replay` 为**独立资金动作身份**（MONEY_MOVEMENT + humanApproval + productionGate），与 `payment.capture` 互不通用；审批目标 = 具体 `PaymentEvent`；指纹 = 关联发票/事件身份（provider:providerEventId）/金额币种/载荷摘要（payloadHash）/预期恢复动作/处理版本，由**服务端**组装（不绑定可替换的原始 JSON）；执行在**单一事件 advisory lock 事务**内完成（锁内执行快照 → 锁内指纹重验 → attempt → 资金写入（applyPaymentSucceeded 复用调用方事务）→ 消费 `payment.replay_consumed`）；锁内拒绝写 `payment.replay_rejected`；缺审批 HTTP 409、服务层直调亦拒绝（无 bypass）。
+- 验收：replay 专项 **9/9**（真实 HTTP + PostgreSQL，含等锁期间事实变化/过期/撤销/主体停用、跨域冒用双向拒绝、同审批并发恰一次、锁内拒绝审计）；既有套件迁移后 payment-attempt 6/6、payment-admin-http 6/6；定向回归 11 文件 78 例全绿。
+- 本机全量：142 文件 / **1268 passed + 20 skipped**，唯一失败为既知 `phase1-runbook.test.ts`（Node 24 导入兼容，非阻塞技术债）——不以「全量通过」表述。`tsc --noEmit` PASS。
+- CI：HEAD `96eedc6`，run **36686652727** = 五作业 SUCCESS；API **142 files / 1288 tests PASS**。
+- 送审：Issue #2 comment **5906863811**（七段式）；右侧会话短唤醒已发送并完成送达验证（573 字符作为新用户轮出现、输入框清空、生成中）。
+- 如实披露：用例 03 的拒绝来自**提交侧**比对（不产生服务层锁内拒绝审计），锁内拒绝审计由用例 04 证明；控制点中的直写事实仅证明执行阶段读取已提交的新事实。retry-due 仍未接入守卫（下一批次，按冻结清单批次审批设计）；webhook 边界与生产 HOLD 不变。
