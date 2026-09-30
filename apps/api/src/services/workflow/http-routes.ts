@@ -31,6 +31,7 @@ import { ActionGuardApprovalVerificationError } from '../action-guard/approval-v
 import { createHitlSubmissionBoundary } from '../action-guard/hitl-submission';
 import { ActionGuardNotConfiguredError } from '../action-guard/guard-enforcement';
 import { RECOVERY_CONFIRMATION_ACTION } from '../action-guard/approval-verifier';
+import { ApprovalBoundaryError } from '../action-guard/approval-tx-verify';
 import { createPrismaActionGuardAuditPort } from '../action-guard/runtime-guard-composition';
 import {
   ActionGuardApprovalRequiredError,
@@ -201,6 +202,8 @@ function statusFor(error: unknown): { code: number; error: string } {
   if (error instanceof ActionGuardApprovalRequiredError) return { code: 409, error: error.code };
   if (error instanceof ActionGuardApprovalVerificationError) return { code: 403, error: error.code };
   if (error instanceof ActionGuardNotConfiguredError) return { code: 403, error: error.code };
+  // R2：锁内审批核验失败 → 403 + 精确原因（APPROVAL_*）
+  if (error instanceof ApprovalBoundaryError) return { code: 403, error: error.reason };
   if (error instanceof WorkflowError) {
     switch (error.code) {
       case 'NOT_FOUND':

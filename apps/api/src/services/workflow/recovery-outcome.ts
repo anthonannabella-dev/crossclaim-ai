@@ -27,6 +27,8 @@ import { prepareAuditInsert } from '../audit';
 import { billingInvoiceNoFor, type CommercialTerms } from '../recovery';
 import { WorkflowError } from './opportunity-review';
 import { assertPermission } from './permissions';
+import { ApprovalBoundaryError, verifyApprovalBoundary } from '../action-guard/approval-tx-verify';
+import { RECOVERY_CONFIRMATION_ACTION } from '../action-guard/approval-verifier';
 import { assertHighValueReviewCleared } from './recovery-review';
 
 const MONEY_SCALE = 4;
@@ -255,13 +257,27 @@ export async function confirmRecoveryOutcome(
     // 以 approvalId 为粒度取事务级 advisory lock → 锁内重查消费 → 写消费事件；
     // 已消费时走幂等分支（返回既有资金对象，不重复创建）。
     if (approvalId) {
+      // R2 CHANGE B1：锁顺序固定为「案件 → 审批」，保证同案不同审批也只允许一条资金链
+      await tx.$executeRawUnsafe('SELECT pg_advisory_xact_lock(hashtext($1))', `cc-recovery-case:${kase.id}`);
       await tx.$executeRawUnsafe('SELECT pg_advisory_xact_lock(hashtext($1))', `cc-approval:${approvalId}`);
-      const consumed = await tx.$queryRawUnsafe<Array<{ n: bigint }>>(
-        `SELECT count(*)::bigint AS n FROM "AuditLog" WHERE "organizationId" = $1 AND action = 'recovery.approval_consumed' AND changes->>'approvalId' = $2`,
-        input.organizationId,
+      // 锁内重验审批绑定与生命周期（不能用事务外结论）
+      const boundary = await verifyApprovalBoundary(tx, {
+        organizationId: input.organizationId,
         approvalId,
-      );
-      if (Number(consumed[0]?.n ?? 0) > 0) {
+        action: RECOVERY_CONFIRMATION_ACTION,
+        caseId: kase.id,
+        payload: {
+          amount: recoveredAmount.toFixed(MONEY_SCALE),
+          currency,
+          basisReference,
+          evidenceArtifactId: requestedEvidenceId,
+        },
+        now: at,
+      });
+      if (!boundary.ok) {
+        throw new ApprovalBoundaryError(boundary.reason, kase.id);
+      }
+      if (boundary.consumed) {
         const settled = await tx.settlement.findFirst({
           where: { organizationId: input.organizationId, caseId: kase.id },
           select: { id: true, amount: true },

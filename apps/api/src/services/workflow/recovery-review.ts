@@ -269,6 +269,11 @@ export async function submitRecoveryReview(
   const at = now();
 
   return prisma.$transaction(async (tx) => {
+    // R2 CHANGE B1：审批/重请求/拒绝与资金执行共用同一案件锁（串行化顺序一致）；
+    // 单测的 fake tx 不实现 $executeRawUnsafe，仅在真实客户端上执行。
+    if (typeof tx.$executeRawUnsafe === 'function') {
+      await tx.$executeRawUnsafe('SELECT pg_advisory_xact_lock(hashtext($1))', `cc-recovery-case:${kase.id}`);
+    }
     const events = await tx.auditLog.findMany({
       where: {
         organizationId: input.organizationId,
