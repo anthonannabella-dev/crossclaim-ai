@@ -153,6 +153,8 @@ boundPayload = {
 | 缺审批 | HTTP：409 `ACTION_GUARD_HUMAN_APPROVAL_REQUIRED`；服务层直调同样拒绝（`APPROVAL_NOT_FOUND`）——受保护资金入口**没有** bypass 路径 |
 | 拒绝审计 | 锁内拒绝写 `payment.replay_rejected`（stage/reason/执行主体/approvalId/结果；事务外独立写入，失败不覆盖原错误） |
 | 最小审批入口 | `POST /payments/events/:id/replay-review`（受认证会话；REQUEST/APPROVE/REJECT；审批人 OWNER/ADMIN；APPROVE 由服务端组装指纹） |
+| 资金事实保护（R8 修订 CHANGE A） | 锁顺序固定 **事件锁 → 发票锁**；`applyPaymentSucceeded` 锁外仅做存在性预检查，事务内取得 `cc-payment-invoice:<invoiceId>` 后**重读** `status/total/currency` 快照，PAID 更新 CAS 同时比较 `status` + `total` + `currency`；事实在核验与更新之间被改变 → `AMOUNT_MISMATCH` / `ILLEGAL_TRANSITION`，**绝不**写入旧 `paidAmount`/旧成功审计。Payment 行在本路径只读/只插入（唯一键幂等），无更新写入者 |
+| 结果语义 | `attempt.status = SUCCEEDED` 表示「**一次获批的恢复尝试已执行**」；资金结论看 `resultStatus`（`PAID` = 收口成功；`AMOUNT_MISMATCH` / `PENDING_REVIEW` / `ILLEGAL_TRANSITION` = 已执行但未收口成功，同样会消费该审批）。不得把这些结果表述为「付款收口成功」 |
 | 现状限定 | 本批次不接入真实支付凭据、不发起真实扣款；`retry-due` 仍未接入守卫（下一批次）；webhook 边界不变 |
 ## 6. 验收矩阵（CHANGE C 对应）
 
@@ -184,5 +186,11 @@ boundPayload = {
 | 跨域冒用：`payment.capture` 审批用于 replay | 403 `APPROVAL_TARGET_MISMATCH` / `APPROVAL_ACTION_MISMATCH`（R8 用例 05） | 零副作用、零消费 |
 | replay 同审批并发 | 恰一次重放 + 一次消费；其余 403 `APPROVAL_ALREADY_CONSUMED`（R8 用例 06） | 资金对象恰一条 |
 | replay 等锁期间过期 / 撤销 / 主体成员停用 | 403 `APPROVAL_EXPIRED` / `APPROVAL_REVOKED` / `APPROVAL_ACTOR_MISMATCH`（R8 用例 07–09） | 账单金额与状态不变、消费不新增 |
+| replay 已到达发票核验→更新阶段时发票事实变化（显式控制点 = 发票锁等待行） | `resultStatus = AMOUNT_MISMATCH`（R8 用例 10）：账单保持 ISSUED、`paidAmount` 为 0、无 `payment.succeeded` | 不得出现新发票事实 + 旧 `paidAmount`/旧成功审计 |
+| 锁协议之外的写入者在核验与更新之间改发票事实 | 事实 CAS 未命中 → `ILLEGAL_TRANSITION` + `payment.reconciliation_failed`（R8 用例 11） | 零部分提交（无 PAID、无成功审计） |
+| 反向冒用：replay 审批用于账单确认 | 403 `APPROVAL_TARGET_MISMATCH` / `APPROVAL_ACTION_MISMATCH`（R8 用例 12） | 两类消费均不新增、账单不推进 |
+| replay 服务层直调缺 `approvalId` | 拒绝 `APPROVAL_NOT_FOUND`（R8 用例 13） | 零 attempt / 零资金 / 零消费 |
+| replay 审批决策审计失败 | 放行前关闭（R8 用例 14） | 零副作用（进程级故障注入） |
+| replay 消费审计失败 | 整个事务回滚（R8 用例 15） | attempt / 发票推进 / 成功审计均不部分提交 |
 
 > 实现与测试（`action-guard-hitl-*`、`workflow-hitl-db`、`workflow-outcome-db`、`action-guard-payment-capture-http-db`、`workflow-billing*`）按本文件逐条对齐后送审。

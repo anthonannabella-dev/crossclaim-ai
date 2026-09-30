@@ -3,13 +3,15 @@
  * ----------------------------------------------------------------------------------
  * 01 HTTP 全链路：REQUEST → APPROVE（服务端指纹）→ replay 200；attempt 恰一次、消费恰一次
  * 02 缺 approvalId → 409 ACTION_GUARD_HUMAN_APPROVAL_REQUIRED，零副作用
- * 03 事件关键关联在审批后被改写（payloadHash 变化）→ 403 APPROVAL_PAYLOAD_MISMATCH，零副作用
+ * 03 事件关键关联在审批后被改写（payloadHash 变化）→ 403（**提交侧**指纹比对），零副作用
  * 04 等锁期间事件事实变化（显式控制点 = pg_locks 中事件 advisory lock 等待行）→ 403，零副作用
- * 05 跨域冒用：payment.capture 审批不能用于 replay；replay 审批不能用于账单确认
+ * 05/12 跨域冒用（双向均已执行）：payment.capture 审批不能用于 replay；replay 审批不能用于账单确认
  * 06 同审批并发 → 恰一次重放 + 一次消费，其余精确拒绝（APPROVAL_ALREADY_CONSUMED）
  * 07 等锁期间审批过期 → 403 APPROVAL_EXPIRED；08 撤销 → 403 APPROVAL_REVOKED；09 主体成员停用 → 403 APPROVAL_ACTOR_MISMATCH
  *
  * 说明：本文件验证的是**恢复收口（replay）**；不接入真实支付渠道、不发起任何真实扣款。
+ * 口径：attempt.status = SUCCEEDED 表示「一次获批的恢复**尝试**已执行」；资金结论看 resultStatus
+ *   （PAID = 收口成功；AMOUNT_MISMATCH / PENDING_REVIEW / ILLEGAL_TRANSITION = 已执行但未收口成功，同样会消费该审批）。
  */
 
 import type { AddressInfo } from 'node:net';
@@ -28,6 +30,8 @@ import { LocalFileSystemStorage } from '../services/storage';
 import { createAppActionGuard, staticControlPlaneConfig } from '../services/action-guard/runtime-guard-composition';
 import type { RuntimeActionGuard } from '../services/action-guard/runtime-guard';
 import { PAYMENT_REPLAY_CONSUMED_EVENT_ACTION } from '../services/action-guard/approval-tx-verify';
+import { applyPaymentSucceeded } from '../services/workflow';
+import { replayPaymentEvent } from '../services/workflow';
 
 const prisma = new PrismaClient();
 const ORG = 'cf100000-0000-4000-8000-0000000000a2';
@@ -336,7 +340,7 @@ describe('② 第二批 — replay（payment.replay）真实 HTTP + PostgreSQL',
     await withServer(async (base) => {
       const cookie = await login(base);
       const approvalId = await approveReplay(base, cookie);
-      // 直接写库改变事件事实（证明锁内快照与审批指纹不一致时拒绝）
+      // 直接写库改变事件事实：该请求由**提交侧**指纹比对拒绝（不产生服务层锁内拒绝审计；锁内拒绝见用例 04）
       await prisma.paymentEvent.update({ where: { id: eventId }, data: { payloadHash: 'hash-replay-2' } });
       const res = await replay(base, cookie, { approvalId });
       expect(res.status).toBe(403);
@@ -493,6 +497,224 @@ describe('② 第二批 — replay（payment.replay）真实 HTTP + PostgreSQL',
       expect(res.status).toBe(403);
       expect(res.body.reason).toBe('APPROVAL_ACTOR_MISMATCH');
       expect(await state()).toMatchObject({ invoiceStatus: 'ISSUED', attempts: 1, consumed: 0 });
+    });
+  }, 40_000);
+  // ── R8 修订 CHANGE B/C：跨对象竞争、跨域双向、失败关闭与回滚 ─────────────────────
+  const INVOICE_KEY = () => `cc-payment-invoice:${invoiceId}`;
+
+  async function advisoryLockCountFor(key: string, granted: boolean): Promise<number> {
+    const rows = await prisma.$queryRawUnsafe<{ n: bigint }[]>(
+      `SELECT count(*)::bigint AS n
+         FROM pg_locks l
+        WHERE l.locktype = 'advisory'
+          AND l.granted = ${granted ? 'true' : 'false'}
+          AND (l.objid::text = ((hashtext($1)::bigint & 4294967295))::text
+               OR l.classid::text = ((hashtext($1)::bigint & 4294967295))::text)`,
+      key,
+    );
+    return Number(rows[0]?.n ?? 0n);
+  }
+
+  async function holdLockFor(key: string): Promise<() => void> {
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    void prisma
+      .$transaction(
+        async (tx) => {
+          await tx.$executeRawUnsafe('SELECT pg_advisory_xact_lock(hashtext($1))', key);
+          await gate;
+        },
+        { timeout: 30_000, maxWait: 30_000 },
+      )
+      .catch(() => undefined);
+    await waitFor(async () => (await advisoryLockCountFor(key, true)) >= 1, 10_000, 'HOLDER_LOCK_NOT_GRANTED');
+    return release;
+  }
+
+  it('10 等发票锁期间发票事实变化 → 重读后拒绝推进（AMOUNT_MISMATCH），绝不写旧 paidAmount', async () => {
+    await withServer(async (base) => {
+      const cookie = await login(base);
+      const approvalId = await approveReplay(base, cookie);
+      const release = await holdLockFor(INVOICE_KEY());
+      const pending = replay(base, cookie, { approvalId });
+      try {
+        // 控制点：请求已取得事件锁、读取快照，正阻塞在发票锁上（即"已到达发票事实核验→更新阶段"）
+        await waitFor(
+          async () => (await advisoryLockCountFor(INVOICE_KEY(), false)) >= 1,
+          10_000,
+          'REPLAY_WAITING_ON_INVOICE_LOCK',
+        );
+        await prisma.billingInvoice.update({
+          where: { id: invoiceId },
+          data: { total: new Prisma.Decimal('950.0000') },
+        });
+      } finally {
+        release();
+      }
+      const res = await pending;
+      // 结果只能是「重读/事实 CAS 拒绝」：attempt 会记为已执行，但账单不得推进
+      expect(res.status).toBe(200);
+      expect(res.body.resultStatus).toBe('AMOUNT_MISMATCH');
+      const invoice = await prisma.billingInvoice.findUniqueOrThrow({
+        where: { id: invoiceId },
+        select: { status: true, paidAmount: true, total: true },
+      });
+      expect(invoice.status).toBe('ISSUED');
+      expect(invoice.paidAmount.toFixed(4)).toBe('0.0000');
+      expect(invoice.total.toFixed(4)).toBe('950.0000');
+      expect(await prisma.auditLog.count({ where: { organizationId: ORG, action: 'payment.succeeded' } })).toBe(0);
+      // 消费记录表示「一次获批恢复尝试已执行」，不是收口成功
+      expect((await state()).consumed).toBe(1);
+    });
+  }, 40_000);
+
+  it('11 事实 CAS：锁协议之外的写入者在核验与更新之间改事实 → CAS 未命中，零部分提交', async () => {
+    let injected = false;
+    const result = await prisma.$transaction(async (tx) => {
+      const proxy = new Proxy(tx as unknown as Record<string, unknown>, {
+        get(target, prop) {
+          if (prop === 'billingInvoice') {
+            const delegate = target.billingInvoice as Record<string, unknown>;
+            return new Proxy(delegate, {
+              get(d, p) {
+                if (p === 'updateMany') {
+                  return async (args: unknown) => {
+                    if (!injected) {
+                      injected = true;
+                      // 模拟"不遵守发票锁协议"的写入者：在 CAS 之前提交新的发票事实
+                      await prisma.billingInvoice.update({
+                        where: { id: invoiceId },
+                        data: { total: new Prisma.Decimal('950.0000') },
+                      });
+                    }
+                    return (d.updateMany as (a: unknown) => Promise<unknown>)(args);
+                  };
+                }
+                const value = d[p as string];
+                return typeof value === 'function' ? (value as () => unknown).bind(d) : value;
+              },
+            });
+          }
+          const value = target[prop as string];
+          return typeof value === 'function' ? (value as () => unknown).bind(target) : value;
+        },
+      }) as unknown as typeof tx;
+      return applyPaymentSucceeded(
+        prisma,
+        {
+          organizationId: ORG,
+          provider: 'STRIPE',
+          externalPaymentId: 'pi_replay_1',
+          invoiceId,
+          amount: AMOUNT,
+          currency: CURRENCY,
+          mode: 'RECOVERY',
+        },
+        { client: proxy, now: () => NOW },
+      );
+    });
+
+    expect(injected).toBe(true);
+    expect(result.status).toBe('ILLEGAL_TRANSITION');
+    const invoice = await prisma.billingInvoice.findUniqueOrThrow({
+      where: { id: invoiceId },
+      select: { status: true, paidAmount: true, total: true },
+    });
+    expect(invoice.status).toBe('ISSUED');
+    expect(invoice.paidAmount.toFixed(4)).toBe('0.0000');
+    expect(invoice.total.toFixed(4)).toBe('950.0000');
+    expect(await prisma.auditLog.count({ where: { organizationId: ORG, action: 'payment.succeeded' } })).toBe(0);
+    expect(await prisma.auditLog.count({ where: { organizationId: ORG, action: 'payment.reconciliation_failed' } })).toBe(1);
+  }, 40_000);
+
+  it('12 反向冒用：replay 审批用于账单确认 → 403，两类消费均不新增', async () => {
+    await withServer(async (base) => {
+      const cookie = await login(base);
+      const replayApprovalId = await approveReplay(base, cookie);
+      const res = await post(base, `/billing/${invoiceId}/status`, cookie, {
+        to: 'PAID',
+        paymentReference: 'bank-transfer',
+        amount: AMOUNT,
+        currency: CURRENCY,
+        approvalId: replayApprovalId,
+      });
+      expect(res.status).toBe(403);
+      const body = (await res.json()) as Record<string, unknown>;
+      expect(['APPROVAL_TARGET_MISMATCH', 'APPROVAL_ACTION_MISMATCH']).toContain(String(body.reason));
+      const invoice = await prisma.billingInvoice.findUniqueOrThrow({
+        where: { id: invoiceId },
+        select: { status: true, paidAmount: true },
+      });
+      expect(invoice.status).toBe('ISSUED');
+      expect(invoice.paidAmount.toFixed(4)).toBe('0.0000');
+      expect(await prisma.auditLog.count({ where: { organizationId: ORG, action: 'billing.status_changed' } })).toBe(0);
+      expect(
+        await prisma.auditLog.count({
+          where: { organizationId: ORG, action: { in: [PAYMENT_REPLAY_CONSUMED_EVENT_ACTION, 'payment.capture_consumed'] } },
+        }),
+      ).toBe(0);
+    });
+  }, 40_000);
+
+  it('13 服务层直调缺 approvalId → 拒绝且零 attempt / 零资金 / 零消费', async () => {
+    const before = await state();
+    await expect(
+      replayPaymentEvent(
+        prisma,
+        { organizationId: ORG, actorUserId: ownerId, role: 'OWNER', paymentEventId: eventId, reason: REASON },
+        { now: () => NOW },
+      ),
+    ).rejects.toMatchObject({ reason: 'APPROVAL_NOT_FOUND' });
+    const after = await state();
+    expect(after).toMatchObject({
+      invoiceStatus: before.invoiceStatus,
+      attempts: before.attempts,
+      consumed: before.consumed,
+      payments: before.payments,
+    });
+  }, 40_000);
+
+  it('14 审批决策审计失败 → 放行前关闭，零副作用', async () => {
+    await withServer(async (base) => {
+      const cookie = await login(base);
+      const approvalId = await approveReplay(base, cookie);
+      await prisma.$executeRawUnsafe(
+        `ALTER TABLE "AuditLog" ADD CONSTRAINT r8_block_approval_decision CHECK (action <> 'action_guard.approval_decision') NOT VALID`,
+      );
+      let status = 0;
+      try {
+        const res = await replay(base, cookie, { approvalId });
+        status = res.status;
+      } finally {
+        await prisma.$executeRawUnsafe('ALTER TABLE "AuditLog" DROP CONSTRAINT IF EXISTS r8_block_approval_decision');
+      }
+      expect(status).toBeGreaterThanOrEqual(400);
+      expect(await state()).toMatchObject({ invoiceStatus: 'ISSUED', attempts: 1, consumed: 0, replayed: 0 });
+    });
+  }, 40_000);
+
+  it('15 消费审计失败 → 整个事务回滚（attempt / 发票推进 / 成功审计不得部分提交）', async () => {
+    await withServer(async (base) => {
+      const cookie = await login(base);
+      const approvalId = await approveReplay(base, cookie);
+      await prisma.$executeRawUnsafe(
+        `ALTER TABLE "AuditLog" ADD CONSTRAINT r8_block_replay_consumed CHECK (action <> '${PAYMENT_REPLAY_CONSUMED_EVENT_ACTION}') NOT VALID`,
+      );
+      let status = 0;
+      try {
+        const res = await replay(base, cookie, { approvalId });
+        status = res.status;
+      } finally {
+        await prisma.$executeRawUnsafe('ALTER TABLE "AuditLog" DROP CONSTRAINT IF EXISTS r8_block_replay_consumed');
+      }
+      expect(status).toBeGreaterThanOrEqual(400);
+      const after = await state();
+      expect(after).toMatchObject({ invoiceStatus: 'ISSUED', attempts: 1, consumed: 0, replayed: 0 });
+      expect(after.paidAmount).toBe('0.0000');
+      expect(await prisma.auditLog.count({ where: { organizationId: ORG, action: 'payment.succeeded' } })).toBe(0);
+      expect(await prisma.auditLog.count({ where: { organizationId: ORG, action: 'payment.processing_recovered' } })).toBe(0);
     });
   }, 40_000);
 });

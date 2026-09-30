@@ -324,7 +324,7 @@ export async function applyPaymentSucceeded(
         entityType: 'BillingInvoice',
         entityId: invoice.id,
         changes: {
-          reason: `invoice status is ${invoice.status}, ISSUED required`,
+          reason: 'invoice facts changed before update (status/amount/currency CAS miss)',
           externalPaymentId: input.externalPaymentId,
         },
         at,
