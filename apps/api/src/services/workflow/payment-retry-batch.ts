@@ -290,7 +290,7 @@ export async function readRetryBatch(
     organizationId: input.organizationId,
     digest: changes.digest,
     digestVersion: String(changes.digestVersion ?? ''),
-    itemCount: Array.isArray(changes.items) ? changes.items.length : 0,
+    itemCount: Number(changes.itemCount ?? Number.NaN),
     expiresAt: String(changes.expiresAt ?? ''),
     items: changes.items as RetryBatchItemFingerprint[],
     requestedBy: String(changes.requestedBy ?? ''),
@@ -401,13 +401,13 @@ export async function submitRetryBatchReview(
     if (input.decision === 'REQUEST') {
       if (state === 'PENDING') throw new WorkflowError('ILLEGAL_TRANSITION', '该批次已处于待审批状态');
       await write(PAYMENT_REVIEW_ACTIONS.required, {
-        batchId: batch.batchId,
-        digest: batch.digest,
-        itemCount: batch.itemCount,
+        batchId: lockedBatch.batchId,
+        digest: lockedBatch.digest,
+        itemCount: lockedBatch.itemCount,
         action: PAYMENT_RETRY_DUE_ACTION,
         version: RETRY_BATCH_VERSION,
       });
-      return { batchId: batch.batchId, state: 'PENDING' as PaymentReviewState, approvalId: null };
+      return { batchId: lockedBatch.batchId, state: 'PENDING' as PaymentReviewState, approvalId: null };
     }
 
     if (state !== 'PENDING') {
@@ -416,27 +416,27 @@ export async function submitRetryBatchReview(
 
     if (input.decision === 'REJECT') {
       await write(PAYMENT_REVIEW_ACTIONS.rejected, {
-        batchId: batch.batchId,
+        batchId: lockedBatch.batchId,
         reason: input.reason?.trim() ?? '',
       });
-      return { batchId: batch.batchId, state: 'REJECTED' as PaymentReviewState, approvalId: null };
+      return { batchId: lockedBatch.batchId, state: 'REJECTED' as PaymentReviewState, approvalId: null };
     }
 
     const expiresAt = new Date(at.getTime() + normalizeApprovalTtl(input.approvalTtlMs));
     const approvalId = await write(PAYMENT_REVIEW_ACTIONS.approved, {
-      batchId: batch.batchId,
+      batchId: lockedBatch.batchId,
       charged: false,
       boundAction: PAYMENT_RETRY_DUE_ACTION,
       boundPayload: {
         amount: null,
         currency: null,
-        basisReference: batch.batchId,
-        evidenceArtifactId: batch.digest,
+        basisReference: lockedBatch.batchId,
+        evidenceArtifactId: lockedBatch.digest,
         fingerprintVersion: 'v1',
-        batchId: batch.batchId,
-        digest: batch.digest,
-        digestVersion: batch.digestVersion,
-        itemCount: String(batch.itemCount),
+        batchId: lockedBatch.batchId,
+        digest: lockedBatch.digest,
+        digestVersion: lockedBatch.digestVersion,
+        itemCount: String(lockedBatch.itemCount),
         expiresAt: expiresAt.toISOString(),
         // CHANGE C：审批绑定**冻结截止时间**（执行侧核对，避免只绑定独立审批截止）
         freezeExpiresAt: lockedBatch.expiresAt,
@@ -444,11 +444,11 @@ export async function submitRetryBatchReview(
       expiresAt: expiresAt.toISOString(),
     });
     return {
-      batchId: batch.batchId,
+      batchId: lockedBatch.batchId,
       state: 'APPROVED' as PaymentReviewState,
       approvalId,
-      digest: batch.digest,
-      itemCount: batch.itemCount,
+      digest: lockedBatch.digest,
+      itemCount: lockedBatch.itemCount,
       expiresAt: expiresAt.toISOString(),
     };
   });
@@ -511,6 +511,19 @@ export async function executeRetryBatch(
   if (!pre) throw new WorkflowError('NOT_FOUND', `批次 ${input.batchId} 不存在或不属于该租户`);
 
   const now = deps.now ?? (() => new Date());
+  const approvalPayload = (batch: RetryBatchRecord) => ({
+    amount: null,
+    currency: null,
+    basisReference: batch.batchId,
+    evidenceArtifactId: batch.digest,
+  });
+  const approvalExtra = (batch: RetryBatchRecord) => ({
+    batchId: batch.batchId,
+    digest: batch.digest,
+    digestVersion: batch.digestVersion,
+    itemCount: String(batch.itemCount),
+    freezeExpiresAt: batch.expiresAt,
+  });
 
   return prisma.$transaction(async (tx) => {
     // 批次锁：与审批创建/其他执行者共用同一把锁（恰一次消费的串行化点）
@@ -532,19 +545,8 @@ export async function executeRetryBatch(
       action: PAYMENT_RETRY_DUE_ACTION,
       caseId: batch.batchId,
       actorUserId: input.actorUserId,
-      payload: {
-        amount: null,
-        currency: null,
-        basisReference: batch.batchId,
-        evidenceArtifactId: batch.digest,
-      },
-      extra: {
-        batchId: batch.batchId,
-        digest: batch.digest,
-        digestVersion: batch.digestVersion,
-        itemCount: String(batch.itemCount),
-        freezeExpiresAt: batch.expiresAt,
-      },
+      payload: approvalPayload(batch),
+      extra: approvalExtra(batch),
       now: at,
       approvalEventAction: PAYMENT_APPROVAL_EVENT_ACTION,
       requiredEventAction: PAYMENT_REQUIRED_EVENT_ACTION,
@@ -555,22 +557,147 @@ export async function executeRetryBatch(
     if (!boundary.ok) throw new ApprovalBoundaryError(boundary.reason, batch.batchId);
     if (boundary.consumed) throw new ApprovalBoundaryError('APPROVAL_ALREADY_CONSUMED', batch.batchId);
 
+    // ② 安全整批锁协议（MSG-20260930-30 CHANGE B）：按确定性顺序**分阶段**取锁，
+    //    先全部事件锁 → 再全部发票锁 → 再 Payment / attempt 行锁，
+    //    消除「已持发票锁再等待新事件锁」的循环等待（与 replay 兼容：事件→发票→Payment）。
+    const orderedItems = [...batch.items].sort((left, right) =>
+      `${left.paymentEventId}|${left.invoiceId}|${left.paymentId}|${left.attemptId}`.localeCompare(
+        `${right.paymentEventId}|${right.invoiceId}|${right.paymentId}|${right.attemptId}`,
+      ),
+    );
+    if (typeof tx.$executeRawUnsafe === 'function') {
+      for (const eventId of [...new Set(orderedItems.map((item) => item.paymentEventId))]) {
+        // eslint-disable-next-line no-await-in-loop
+        await tx.$executeRawUnsafe('SELECT pg_advisory_xact_lock(hashtext($1))', `cc-payment-event:${eventId}`);
+      }
+      for (const invoiceId of [...new Set(orderedItems.map((item) => item.invoiceId))]) {
+        // eslint-disable-next-line no-await-in-loop
+        await tx.$executeRawUnsafe('SELECT pg_advisory_xact_lock(hashtext($1))', `cc-payment-invoice:${invoiceId}`);
+      }
+    }
+    if (typeof tx.$queryRawUnsafe === 'function') {
+      for (const paymentId of [...new Set(orderedItems.map((item) => item.paymentId))]) {
+        // eslint-disable-next-line no-await-in-loop
+        const lockedPayment = (await tx.$queryRawUnsafe(
+          'SELECT id FROM "Payment" WHERE "organizationId" = $1 AND id = $2 FOR UPDATE',
+          input.organizationId,
+          paymentId,
+        )) as Array<{ id?: string }>;
+        if (!Array.isArray(lockedPayment) || lockedPayment.length !== 1) {
+          // 目标资金行缺失：留给逐项判定为跳过（不在此处抛错，避免整批因单点缺失而回滚）
+          continue;
+        }
+      }
+      for (const attemptId of [...new Set(orderedItems.map((item) => item.attemptId))]) {
+        // eslint-disable-next-line no-await-in-loop
+        await tx.$queryRawUnsafe(
+          'SELECT id FROM "PaymentProcessingAttempt" WHERE id = $1 AND "organizationId" = $2 FOR UPDATE',
+          attemptId,
+          input.organizationId,
+        );
+      }
+    }
+
     const executed: RetryBatchExecutionResult['executed'] = [];
     const skipped: RetryBatchExecutionResult['skipped'] = [];
 
-    // CHANGE B：**整批全局确定性锁顺序** —— 所有批次都按同一资源键排序后取锁，
-    // 避免两个多项批次交叉持锁（事务会保留前面项目的锁直到提交）。
-    const orderedItems = [...batch.items].sort((left, right) =>
-      `${left.invoiceId}|${left.paymentId}|${left.paymentEventId}`.localeCompare(
-        `${right.invoiceId}|${right.paymentId}|${right.paymentEventId}`,
-      ),
-    );
+    const writeBatchAudit = async (
+      action: string,
+      changes: Record<string, unknown>,
+      createdAt: Date,
+      actorType: 'SYSTEM' = 'SYSTEM',
+    ) => {
+      const row = prepareAuditInsert(
+        {
+          organizationId: input.organizationId,
+          actorType,
+          actorRef: RETRY_BATCH_ACTOR_REF,
+          action,
+          entityType: 'PaymentRetryBatch',
+          entityId: batch.batchId,
+          changes,
+        },
+        { maxStringLength: 512 },
+      );
+      await tx.auditLog.create({
+        data: {
+          organizationId: row.organizationId,
+          actorType: row.actorType,
+          actorUserId: row.actorUserId,
+          actorRef: row.actorRef,
+          action: row.action,
+          entityType: row.entityType,
+          entityId: row.entityId,
+          changes: (row.changes ?? undefined) as Prisma.InputJsonValue | undefined,
+          ip: row.ip,
+          userAgent: row.userAgent,
+          createdAt,
+        },
+      });
+    };
 
     for (const item of orderedItems) {
+      // 所有必要锁均已持有：本项统一使用**锁后判定时间**
+      const itemAt = now();
+      const writeSkip = async (reason: string) => {
+        await writeBatchAudit(
+          RETRY_BATCH_EVENTS.skipped,
+          {
+            batchId: batch.batchId,
+            digest: batch.digest,
+            attemptId: item.attemptId,
+            paymentEventId: item.paymentEventId,
+            reason,
+            result: 'SKIPPED',
+            actorUserId: input.actorUserId,
+          },
+          itemAt,
+        );
+        skipped.push({ attemptId: item.attemptId, paymentEventId: item.paymentEventId, reason });
+      };
+
+      // 事件锁后重读原 attempt（关联 / 状态 / 到期 / 代际）
       const attempt = await tx.paymentProcessingAttempt.findFirst({
         where: { id: item.attemptId, organizationId: input.organizationId },
-        select: { id: true, status: true, attemptNo: true, nextRetryAt: true, paymentId: true },
+        select: { status: true, attemptNo: true, nextRetryAt: true, paymentId: true, paymentEventId: true },
       });
+      if (!attempt) {
+        await writeSkip('ATTEMPT_MISSING');
+        continue;
+      }
+      if (attempt.paymentEventId !== item.paymentEventId || attempt.paymentId !== item.paymentId) {
+        await writeSkip('ATTEMPT_RELATION_CHANGED');
+        continue;
+      }
+      if (attempt.attemptNo !== item.attemptNo) {
+        await writeSkip('ATTEMPT_GENERATION_CHANGED');
+        continue;
+      }
+      if (attempt.status !== 'RETRYABLE_FAILED') {
+        await writeSkip('ATTEMPT_NOT_RETRYABLE');
+        continue;
+      }
+      if (!attempt.nextRetryAt || attempt.nextRetryAt.getTime() > itemAt.getTime()) {
+        await writeSkip('ALREADY_CLAIMED_OR_NOT_DUE');
+        continue;
+      }
+      if (item.attemptNo >= MAX_ATTEMPTS) {
+        await writeSkip('RETRY_LIMIT_REACHED');
+        continue;
+      }
+      const superseded = await tx.paymentProcessingAttempt.count({
+        where: {
+          organizationId: input.organizationId,
+          paymentEventId: item.paymentEventId,
+          attemptNo: { gt: item.attemptNo },
+        },
+      });
+      if (superseded > 0) {
+        await writeSkip('SUPERSEDED_GENERATION');
+        continue;
+      }
+
+      // 最终事实比对（事件锁已持有）
       const event = await tx.paymentEvent.findFirst({
         where: { id: item.paymentEventId, organizationId: input.organizationId },
         select: { id: true, provider: true, providerEventId: true, payloadHash: true },
@@ -579,55 +706,7 @@ export async function executeRetryBatch(
         where: { id: item.paymentId, organizationId: input.organizationId },
         select: { id: true, provider: true, invoiceId: true, externalPaymentId: true, amount: true, currency: true },
       });
-
-      const writeSkip = async (reason: string) => {
-        const row = prepareAuditInsert(
-          {
-            organizationId: input.organizationId,
-            actorType: 'SYSTEM',
-            actorRef: RETRY_BATCH_ACTOR_REF,
-            action: RETRY_BATCH_EVENTS.skipped,
-            entityType: 'PaymentRetryBatch',
-            entityId: batch.batchId,
-            changes: {
-              batchId: batch.batchId,
-              digest: batch.digest,
-              attemptId: item.attemptId,
-              paymentEventId: item.paymentEventId,
-              reason,
-              result: 'SKIPPED',
-              actorUserId: input.actorUserId,
-            },
-          },
-          { maxStringLength: 512 },
-        );
-        await tx.auditLog.create({
-          data: {
-            organizationId: row.organizationId,
-            actorType: row.actorType,
-            actorUserId: row.actorUserId,
-            actorRef: row.actorRef,
-            action: row.action,
-            entityType: row.entityType,
-            entityId: row.entityId,
-            changes: (row.changes ?? undefined) as Prisma.InputJsonValue | undefined,
-            ip: row.ip,
-            userAgent: row.userAgent,
-            createdAt: at,
-          },
-        });
-        skipped.push({ attemptId: item.attemptId, paymentEventId: item.paymentEventId, reason });
-      };
-
-      if (!attempt || attempt.status !== 'RETRYABLE_FAILED') {
-        await writeSkip('ATTEMPT_NOT_RETRYABLE');
-        continue;
-      }
-      if (!attempt.nextRetryAt || attempt.nextRetryAt.getTime() > at.getTime()) {
-        await writeSkip('NOT_DUE');
-        continue;
-      }
-      const beforeLock = itemFactsMatch(item, {
+      const mismatch = itemFactsMatch(item, {
         event,
         payment: payment
           ? {
@@ -640,121 +719,12 @@ export async function executeRetryBatch(
             }
           : null,
       });
-      if (beforeLock) {
-        await writeSkip(beforeLock);
+      if (mismatch) {
+        await writeSkip(mismatch);
         continue;
       }
 
-      // CHANGE B：先对**原 attempt** 加行锁并重读（身份/关联/状态/到期/代际一次性认领）
-      if (typeof tx.$queryRawUnsafe === 'function') {
-        const lockedAttempt = (await tx.$queryRawUnsafe(
-          'SELECT id FROM "PaymentProcessingAttempt" WHERE id = $1 AND "organizationId" = $2 FOR UPDATE',
-          item.attemptId,
-          input.organizationId,
-        )) as Array<{ id?: string }>;
-        if (!Array.isArray(lockedAttempt) || lockedAttempt.length !== 1) {
-          await writeSkip('ATTEMPT_LOCK_MISS');
-          continue;
-        }
-      }
-      const claimed = await tx.paymentProcessingAttempt.findFirst({
-        where: { id: item.attemptId, organizationId: input.organizationId },
-        select: { status: true, attemptNo: true, nextRetryAt: true, paymentId: true, paymentEventId: true },
-      });
-      if (!claimed) {
-        await writeSkip('ATTEMPT_MISSING');
-        continue;
-      }
-      if (claimed.paymentEventId !== item.paymentEventId || claimed.paymentId !== item.paymentId) {
-        await writeSkip('ATTEMPT_RELATION_CHANGED');
-        continue;
-      }
-      if (claimed.status !== 'RETRYABLE_FAILED') {
-        await writeSkip('ATTEMPT_NOT_RETRYABLE');
-        continue;
-      }
-      if (claimed.attemptNo !== item.attemptNo) {
-        await writeSkip('ATTEMPT_GENERATION_CHANGED');
-        continue;
-      }
-      if (!claimed.nextRetryAt || claimed.nextRetryAt.getTime() > now().getTime()) {
-        await writeSkip('ALREADY_CLAIMED_OR_NOT_DUE');
-        continue;
-      }
-      if (item.attemptNo >= MAX_ATTEMPTS) {
-        await writeSkip('RETRY_LIMIT_REACHED');
-        continue;
-      }
-      // 已被后继代际取代 → 不再重试旧代际
-      const superseded = await tx.paymentProcessingAttempt.count({
-        where: {
-          organizationId: input.organizationId,
-          paymentEventId: item.paymentEventId,
-          attemptNo: { gt: item.attemptNo },
-        },
-      });
-      if (superseded > 0) {
-        await writeSkip('SUPERSEDED_GENERATION');
-        continue;
-      }
-      // 一次性认领：清空 nextRetryAt（freeze 只选已到期项，清空后不会再被任何批次选中）
-      const claimedUpdate = await tx.paymentProcessingAttempt.updateMany({
-        where: { id: item.attemptId, status: 'RETRYABLE_FAILED', nextRetryAt: { not: null } },
-        data: { nextRetryAt: null },
-      });
-      if (claimedUpdate.count !== 1) {
-        await writeSkip('CLAIM_FAILED');
-        continue;
-      }
-
-      // 复用 replay 已验收的锁顺序：事件锁 → 发票锁 → Payment 行锁
-      /* eslint-disable no-await-in-loop */
-      if (typeof tx.$executeRawUnsafe === 'function') {
-        await tx.$executeRawUnsafe('SELECT pg_advisory_xact_lock(hashtext($1))', `cc-payment-event:${item.paymentEventId}`);
-        await tx.$executeRawUnsafe('SELECT pg_advisory_xact_lock(hashtext($1))', `cc-payment-invoice:${item.invoiceId}`);
-      }
-      if (typeof tx.$queryRawUnsafe === 'function') {
-        const locked = (await tx.$queryRawUnsafe(
-          'SELECT id FROM "Payment" WHERE "organizationId" = $1 AND id = $2 FOR UPDATE',
-          input.organizationId,
-          item.paymentId,
-        )) as Array<{ id?: string }>;
-        if (!Array.isArray(locked) || locked.length !== 1 || locked[0]?.id !== item.paymentId) {
-          await writeSkip('PAYMENT_LOCK_MISS');
-          continue;
-        }
-      }
-
-      // 锁后最终事实比对（与冻结值一致才执行）
-      const finalEvent = await tx.paymentEvent.findFirst({
-        where: { id: item.paymentEventId, organizationId: input.organizationId },
-        select: { id: true, provider: true, providerEventId: true, payloadHash: true },
-      });
-      const finalPayment = await tx.payment.findFirst({
-        where: { id: item.paymentId, organizationId: input.organizationId },
-        select: { id: true, provider: true, invoiceId: true, externalPaymentId: true, amount: true, currency: true },
-      });
-      const afterLock = itemFactsMatch(item, {
-        event: finalEvent,
-        payment: finalPayment
-          ? {
-              id: finalPayment.id,
-              provider: finalPayment.provider,
-              invoiceId: finalPayment.invoiceId,
-              externalPaymentId: finalPayment.externalPaymentId,
-              amount: money(finalPayment.amount),
-              currency: finalPayment.currency,
-            }
-          : null,
-      });
-      if (afterLock) {
-        await writeSkip(afterLock);
-        continue;
-      }
-
-      // CHANGE A：取得全部必要锁后重新生成时间，并**再次核验**审批有效期/主体/撤销/轮次与冻结范围；
-      // 任何失效都抛出拒绝 → 本次整批执行回滚、批次不消费。
-      const itemAt = now();
+      // 授权与冻结范围最终重验（锁后；失效 → 抛错回滚整批、不消费）
       if (itemAt.getTime() >= batchExpiresAt) {
         throw new ApprovalBoundaryError('APPROVAL_EXPIRED', batch.batchId);
       }
@@ -764,19 +734,8 @@ export async function executeRetryBatch(
         action: PAYMENT_RETRY_DUE_ACTION,
         caseId: batch.batchId,
         actorUserId: input.actorUserId,
-        payload: {
-          amount: null,
-          currency: null,
-          basisReference: batch.batchId,
-          evidenceArtifactId: batch.digest,
-        },
-        extra: {
-          batchId: batch.batchId,
-          digest: batch.digest,
-          digestVersion: batch.digestVersion,
-          itemCount: String(batch.itemCount),
-          freezeExpiresAt: batch.expiresAt,
-        },
+        payload: approvalPayload(batch),
+        extra: approvalExtra(batch),
         now: itemAt,
         approvalEventAction: PAYMENT_APPROVAL_EVENT_ACTION,
         requiredEventAction: PAYMENT_REQUIRED_EVENT_ACTION,
@@ -785,6 +744,17 @@ export async function executeRetryBatch(
         targetEntityType: 'PaymentRetryBatch',
       });
       if (!itemBoundary.ok) throw new ApprovalBoundaryError(itemBoundary.reason, batch.batchId);
+
+      // 一次性认领：置于最终事实与授权确认之后、创建新 attempt 之前
+      const claim = await tx.paymentProcessingAttempt.updateMany({
+        where: { id: item.attemptId, status: 'RETRYABLE_FAILED', nextRetryAt: { not: null } },
+        data: { nextRetryAt: null },
+      });
+      if (claim.count !== 1) {
+        await writeSkip('CLAIM_FAILED');
+        continue;
+      }
+
       const next = await startAttempt(
         tx,
         {
@@ -806,7 +776,7 @@ export async function executeRetryBatch(
           currency: item.currency,
         },
         {
-          now: () => at,
+          now: () => itemAt,
           client: tx,
           onPaymentRecorded: async (innerTx: Prisma.TransactionClient, paymentId: string) => {
             await innerTx.paymentProcessingAttempt.updateMany({
@@ -816,93 +786,49 @@ export async function executeRetryBatch(
           },
         },
       );
-      await finishAttempt(tx, { attemptId: next.id, status: 'SUCCEEDED', resultStatus: outcome.status }, { now: () => at });
-      const row = prepareAuditInsert(
+      await finishAttempt(tx, { attemptId: next.id, status: 'SUCCEEDED', resultStatus: outcome.status }, { now: () => itemAt });
+      await writeBatchAudit(
+        RETRY_BATCH_EVENTS.executed,
         {
-          organizationId: input.organizationId,
-          actorType: 'SYSTEM',
-          actorRef: RETRY_BATCH_ACTOR_REF,
-          action: RETRY_BATCH_EVENTS.executed,
-          entityType: 'PaymentRetryBatch',
-          entityId: batch.batchId,
-          changes: {
-            batchId: batch.batchId,
-            digest: batch.digest,
-            attemptId: item.attemptId,
-            newAttemptId: next.id,
-            newAttemptNo: next.attemptNo,
-            paymentEventId: item.paymentEventId,
-            resultStatus: outcome.status,
-            approvalId,
-            operationId: `approval:${approvalId}`,
-            actorUserId: input.actorUserId,
-            authorizationScope: 'FROZEN_BATCH',
-          },
+          batchId: batch.batchId,
+          digest: batch.digest,
+          attemptId: item.attemptId,
+          newAttemptId: next.id,
+          newAttemptNo: next.attemptNo,
+          paymentEventId: item.paymentEventId,
+          resultStatus: outcome.status,
+          approvalId,
+          operationId: `approval:${approvalId}`,
+          actorUserId: input.actorUserId,
+          authorizationScope: 'FROZEN_BATCH',
         },
-        { maxStringLength: 512 },
+        itemAt,
       );
-      await tx.auditLog.create({
-        data: {
-          organizationId: row.organizationId,
-          actorType: row.actorType,
-          actorUserId: row.actorUserId,
-          actorRef: row.actorRef,
-          action: row.action,
-          entityType: row.entityType,
-          entityId: row.entityId,
-          changes: (row.changes ?? undefined) as Prisma.InputJsonValue | undefined,
-          ip: row.ip,
-          userAgent: row.userAgent,
-          createdAt: at,
-        },
-      });
       executed.push({
         attemptId: item.attemptId,
         paymentEventId: item.paymentEventId,
         attemptNo: next.attemptNo,
         resultStatus: outcome.status,
       });
-      /* eslint-enable no-await-in-loop */
     }
 
-    // 批次消费：与本次执行同事务（恰一次）
-    const consumedRow = prepareAuditInsert(
+    // 批次消费：使用**实际完成阶段**生成的时间（不再沿用锁等待前的 at）
+    const completedAt = now();
+    await writeBatchAudit(
+      PAYMENT_RETRY_DUE_CONSUMED_EVENT_ACTION,
       {
-        organizationId: input.organizationId,
-        actorType: 'SYSTEM',
-        actorRef: RETRY_BATCH_ACTOR_REF,
-        action: PAYMENT_RETRY_DUE_CONSUMED_EVENT_ACTION,
-        entityType: 'PaymentRetryBatch',
-        entityId: batch.batchId,
-        changes: {
-          approvalId,
-          operationId: `approval:${approvalId}`,
-          batchId: batch.batchId,
-          digest: batch.digest,
-          itemCount: batch.itemCount,
-          executedCount: executed.length,
-          skippedCount: skipped.length,
-          actorUserId: input.actorUserId,
-          authorizationScope: 'FROZEN_BATCH',
-        },
+        approvalId,
+        operationId: `approval:${approvalId}`,
+        batchId: batch.batchId,
+        digest: batch.digest,
+        itemCount: batch.itemCount,
+        executedCount: executed.length,
+        skippedCount: skipped.length,
+        actorUserId: input.actorUserId,
+        authorizationScope: 'FROZEN_BATCH',
       },
-      { maxStringLength: 512 },
+      completedAt,
     );
-    await tx.auditLog.create({
-      data: {
-        organizationId: consumedRow.organizationId,
-        actorType: consumedRow.actorType,
-        actorUserId: consumedRow.actorUserId,
-        actorRef: consumedRow.actorRef,
-        action: consumedRow.action,
-        entityType: consumedRow.entityType,
-        entityId: consumedRow.entityId,
-        changes: (consumedRow.changes ?? undefined) as Prisma.InputJsonValue | undefined,
-        ip: consumedRow.ip,
-        userAgent: consumedRow.userAgent,
-        createdAt: at,
-      },
-    });
 
     return { batchId: batch.batchId, digest: batch.digest, itemCount: batch.itemCount, executed, skipped };
   });
