@@ -35,6 +35,8 @@ export const ACTION_GUARD_CATALOG: Record<string, { risk: ActionRiskClass; requi
   'payment.capture': { risk: 'MONEY_MOVEMENT', requires: ['humanApproval', 'productionGate'] },
   // ② 第二批 replay：恢复重放是**独立的资金动作身份**，与 payment.capture 审批互不通用（MSG-20260930-22 §6(1)）
   'payment.replay': { risk: 'MONEY_MOVEMENT', requires: ['humanApproval', 'productionGate'] },
+  // ② 第二批 retry-due：冻结清单批次审批的独立资金动作身份（与 capture/replay 互不通用）
+  'payment.retry_due': { risk: 'MONEY_MOVEMENT', requires: ['humanApproval', 'productionGate'] },
   'secret.rotate': { risk: 'SECRET_ACCESS', requires: ['hostApproval'] },
 };
 

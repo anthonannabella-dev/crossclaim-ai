@@ -31,6 +31,12 @@ export const PAYMENT_CAPTURE_ACTION = 'payment.capture';
  */
 export const PAYMENT_REPLAY_ACTION = 'payment.replay';
 
+/**
+ * 受保护动作名（单一来源）：冻结清单批次重试（POST /payments/processing/retry-due，② 第二批 retry-due）。
+ * 与 PAYMENT_CAPTURE_ACTION / PAYMENT_REPLAY_ACTION 三者互不通用、互不消费。
+ */
+export const PAYMENT_RETRY_DUE_ACTION = 'payment.retry_due';
+
 export const APPROVAL_REASON_CODES = [
   'APPROVAL_NOT_FOUND',
   'APPROVAL_NOT_APPROVED',

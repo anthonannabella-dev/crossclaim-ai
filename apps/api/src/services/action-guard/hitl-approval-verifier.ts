@@ -123,6 +123,14 @@ export function createHitlApprovalVerifier(deps: HitlApprovalVerifierDeps): Acti
     (async ({ targetRef }) => {
       // P3：支付域的目标是 BillingInvoice，不是 Case —— 按目标实体类型分派
       // ② 第二批 replay：目标是具体 PaymentEvent
+      // ② 第二批 retry-due：批次目标是 PaymentRetryBatch（审计记录）
+      if (targetEntityType === 'PaymentRetryBatch') {
+        const batch = await deps.prisma.auditLog.findFirst({
+          where: { organizationId: undefined, action: 'payment.retry_batch_frozen', entityId: targetRef },
+          select: { organizationId: true },
+        });
+        return batch?.organizationId ?? null;
+      }
       if (targetEntityType === 'PaymentEvent') {
         const event = await deps.prisma.paymentEvent.findUnique({
           where: { id: targetRef },
