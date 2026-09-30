@@ -543,15 +543,39 @@ export async function replayPaymentEvent(
       }
 
       // 锁内执行快照：事件身份 + 关联 attempt + 资金事实
-      const snapshot = await readReplaySnapshot(tx, {
+      const locating = await readReplaySnapshot(tx, {
         organizationId: input.organizationId,
         paymentEventId: pre.id,
       });
       // R8 修订 CHANGE A：在**必要锁全部取得之后**再做最终重验（事件锁 → 发票锁）
       if (typeof tx.$executeRawUnsafe === 'function') {
-        await tx.$executeRawUnsafe('SELECT pg_advisory_xact_lock(hashtext($1))', `cc-payment-invoice:${snapshot.invoiceId}`);
+        await tx.$executeRawUnsafe('SELECT pg_advisory_xact_lock(hashtext($1))', `cc-payment-invoice:${locating.invoiceId}`);
       }
-      // 重验时间在必要锁（事件锁 + 发票锁）取得之后生成，统一用于 attempt / 审计 / 消费
+      // R9 修订 CHANGE A：定位快照只能用于定位目标 —— 在固定锁顺序（事件锁 → 发票锁）之后
+      // 为关联 **Payment 行**加行锁（FOR UPDATE），再重读最终事实作为唯一执行依据。
+      if (typeof tx.$queryRawUnsafe === 'function') {
+        await tx.$queryRawUnsafe(
+          'SELECT id FROM "Payment" WHERE "organizationId" = $1 AND provider = $2 AND "externalPaymentId" = $3 FOR UPDATE',
+          input.organizationId,
+          locating.provider,
+          locating.externalPaymentId,
+        );
+      }
+      // 最终快照：事件身份 / 关联发票 / 资金事实（金额、币种、externalPaymentId）全部锁后重读
+      const snapshot = await readReplaySnapshot(tx, {
+        organizationId: input.organizationId,
+        paymentEventId: pre.id,
+      });
+      // 关键关联若在等待期间改变 → 拒绝（不得沿用定位快照继续执行）
+      if (
+        snapshot.invoiceId !== locating.invoiceId ||
+        snapshot.externalPaymentId !== locating.externalPaymentId ||
+        snapshot.payloadHash !== locating.payloadHash ||
+        snapshot.providerEventId !== locating.providerEventId
+      ) {
+        throw new ApprovalBoundaryError('APPROVAL_PAYLOAD_MISMATCH', snapshot.paymentEventId);
+      }
+      // 重验时间在所有可能等待的必要锁（事件锁 → 发票锁 → Payment 行锁）取得之后生成
       const at = (deps.now ?? (() => new Date()))();
       // 锁内重验审批：指纹逐项比对锁内快照（过期/撤销/取代/消费均在锁内判定）
       const boundary = await verifyApprovalBoundary(tx, {

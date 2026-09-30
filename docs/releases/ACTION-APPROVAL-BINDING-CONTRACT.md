@@ -187,7 +187,7 @@ boundPayload = {
 | replay 同审批并发 | 恰一次重放 + 一次消费；其余 403 `APPROVAL_ALREADY_CONSUMED`（R8 用例 06） | 资金对象恰一条 |
 | replay 等锁期间过期 / 撤销 / 主体成员停用 | 403 `APPROVAL_EXPIRED` / `APPROVAL_REVOKED` / `APPROVAL_ACTOR_MISMATCH`（R8 用例 07–09） | 账单金额与状态不变、消费不新增 |
 | replay 已到达发票核验→更新阶段时发票事实变化（显式控制点 = 发票锁等待行） | `resultStatus = AMOUNT_MISMATCH`（R8 用例 10）：账单保持 ISSUED、`paidAmount` 为 0、无 `payment.succeeded` | 不得出现新发票事实 + 旧 `paidAmount`/旧成功审计 |
-| 锁协议之外的写入者在核验与更新之间改发票事实 | 事实 CAS 未命中 → `ILLEGAL_TRANSITION` + `payment.reconciliation_failed`（R8 用例 11） | 零部分提交（无 PAID、无成功审计） |
+| 锁协议之外的写入者在核验与更新之间改发票事实 | 事实 CAS 未命中 → `ILLEGAL_TRANSITION` + `payment.reconciliation_failed`（R8 用例 11） | **无 PAID 推进、无成功资金审计**；异常审计与已执行尝试按既定结果语义记录（不暗示整事务回滚） |
 | 反向冒用：replay 审批用于账单确认 | 403 `APPROVAL_TARGET_MISMATCH` / `APPROVAL_ACTION_MISMATCH`（R8 用例 12） | 两类消费均不新增、账单不推进 |
 | replay 服务层直调缺 `approvalId` | 拒绝 `APPROVAL_NOT_FOUND`（R8 用例 13） | 零 attempt / 零资金 / 零消费 |
 | replay 审批决策审计失败 | 放行前关闭（R8 用例 14） | 零副作用（进程级故障注入） |
