@@ -14,6 +14,7 @@ import { createHash } from 'node:crypto';
 import { Prisma, type PrismaClient } from '@prisma/client';
 
 import { prepareAuditInsert } from '../audit';
+import { mapKnownPaymentUniqueConflict } from './payment-conflict-map';
 import {
   ApprovalBoundaryError,
   PAYMENT_APPROVAL_EVENT_ACTION,
@@ -889,21 +890,10 @@ export async function executeRetryBatch(
     return await run();
   } catch (error) {
     // 事务已回滚：仅在事务外把**已识别的预期约束**映射为稳定领域错误，其余错误原样抛出
-    const message = String((error as { message?: string })?.message ?? '');
-    const metaTarget = String(((error as { meta?: { target?: unknown } })?.meta?.target as unknown) ?? '');
-    const isUniqueViolation = (error as { code?: string })?.code === 'P2002';
-    // 已识别的预期唯一约束（约束名或 P2002 目标）→ 稳定领域错误；其余错误原样抛出
-    if (message.includes('PaymentProcessingAttempt_succeeded_payment_key') || /paymentId/i.test(metaTarget)) {
-      throw new WorkflowError('PAYMENT_SOURCE_CONFLICT', '该资金对象已有成功执行来源（并发恢复已收口为领域冲突）');
-    }
-    if (
-      (message.includes('PaymentProcessingAttempt') && message.includes('running')) ||
-      /paymentEventId/i.test(metaTarget)
-    ) {
-      throw new WorkflowError('ATTEMPT_ALREADY_RUNNING', '该事件已有进行中的执行尝试');
-    }
-    if (isUniqueViolation) {
-      throw new WorkflowError('PAYMENT_SOURCE_CONFLICT', '该资金对象或事件已存在冲突的执行来源（并发恢复已收口为领域冲突）');
+    // MSG-33 CHANGE A：仅映射**白名单内已识别**的唯一约束；其余错误原样抛出
+    const mappedConflict = mapKnownPaymentUniqueConflict(error);
+    if (mappedConflict) {
+      throw new WorkflowError(mappedConflict.code, mappedConflict.message);
     }
     throw error;
   }

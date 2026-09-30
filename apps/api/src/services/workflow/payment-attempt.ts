@@ -18,6 +18,7 @@
 import { Prisma, type PrismaClient } from '@prisma/client';
 
 import { prepareAuditInsert } from '../audit';
+import { mapKnownPaymentUniqueConflict } from './payment-conflict-map';
 // 仅类型导入：避免与 payment-retry-batch 形成运行期循环依赖
 import type { RetryBatchExecutionResult } from './payment-retry-batch';
 import {
@@ -731,13 +732,10 @@ export async function replayPaymentEvent(
         at: (deps.now ?? (() => new Date()))(),
       }).catch(() => undefined);
     }
-    // 已识别的唯一约束冲突（并发恢复 / 进行中 attempt）→ 稳定领域错误；其余错误原样抛出
-    const metaTarget = String(((error as { meta?: { target?: unknown } })?.meta?.target as unknown) ?? '');
-    if ((error as { code?: string })?.code === 'P2002') {
-      if (/paymentEventId/i.test(metaTarget)) {
-        throw new WorkflowError('ATTEMPT_ALREADY_RUNNING', '该事件已有进行中的执行尝试');
-      }
-      throw new WorkflowError('PAYMENT_SOURCE_CONFLICT', '该资金对象已有成功执行来源');
+    // MSG-33 CHANGE A：仅映射白名单内已识别的唯一约束；其余错误原样抛出
+    const mappedConflict = mapKnownPaymentUniqueConflict(error);
+    if (mappedConflict) {
+      throw new WorkflowError(mappedConflict.code, mappedConflict.message);
     }
     throw error;
   }

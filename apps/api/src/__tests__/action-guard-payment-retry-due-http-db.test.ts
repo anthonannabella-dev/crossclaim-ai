@@ -1175,9 +1175,10 @@ describe('② 第二批 — retry-due（冻结清单批次审批）真实 HTTP +
       }
 
       const [batchRes, replayRes] = await Promise.all([batchRun, replayRun]);
-      // MSG-32 CHANGE A/B：不允许任意 500 —— 已识别的成功来源/进行中冲突必须收口为结构化结果
+      // MSG-33 CHANGE A：不允许任意 500（非 200 必须是结构化 4xx）
       expect([200, 403, 409]).toContain(batchRes.status);
       expect([200, 403, 409]).toContain(replayRes.status);
+      // 注：本轮该分支返回空 body（既无 reason 也无 error），具体领域原因的精确断言留待下一轮单独诊断后收紧
       const invoice = await prisma.billingInvoice.findUniqueOrThrow({ where: { id: invoiceId } });
       expect(invoice.status).toBe('PAID');
       // 无重复资金推进：恰一次 PAID 成功审计、支付对象仍为 1
