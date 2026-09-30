@@ -345,3 +345,11 @@
 - 验证：`phase1-runbook.test.ts` 20/20 PASS；`tsc --noEmit` PASS；**本机全量 144 文件 / 1334 用例全绿**（首次与 CI 完全一致）；CI run **36720354790** = **5/5 SUCCESS**。
 - 意义：消除「本地全量永远差一条」的长期披露负担；此后本地与 CI 的证据口径一致。
 - 送审点说明：该提交为**测试环境修复**，不改变 R18（retry-due MSG-34 收口）的 REVIEWED_REF —— **R18 送审点仍为 `4c695c0`**（Issue #2 comment 5911844071）。
+
+## 2026-09-30 — 等待 R18 裁决期间：台账/状态同步与披露更正（无代码、无 Schema、无受保护入口扩张）
+
+- 背景：ChatGPT 网页通道自 12:33Z 起不可用（`Codex auth token is unavailable`），已按 MSG-34 §7「不扩大到新的受保护入口」保持队列不扩张；期间只做不触发审计口径的同步工作。
+- `2d84330` 台账纠正（依据已归档裁决）：`.autopilot/TASKS.md` 中 ③ PRODUCTION CONTROL PLANE 由「待开工」改记为 **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；② 记为**整体 NOT COMPLETE**并展开逐批次证据（HITL 提交入口已接入 / `payment.capture` PASS MSG-24 73115a3 / `payment.replay` PASS MSG-28 08fc45d / `payment.retry_due` R18 送审中 4c695c0）；⑤ 标注「须待 ② 业务覆盖完成」（MSG-16 原文优先顺序）。`ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 同步（`payment.capture` 行由 TODO → 已验收 PASS；表下追加 replay / retry-due 逐批次登记）。CI run **36722007041** = 5/5 SUCCESS。
+- `4f552ab` 状态同步：`.autopilot/STATE.json` 仅改描述性字段（current_task / next_task / channel_status / blocked_scope / last_send_* / updated_at），使 runner 打印真实进度；重跑后 `reconcile` 由 RECONCILE_REQUIRED → **IN_SYNC**。CI run **36722262126** = 5/5 SUCCESS。
+- 披露更正（Issue #2 comment **5912429899**）：R18 请求中「本机全量 1314 passed + 20 skipped、既知 runbook 失败」一句在申请后已过期 —— 该技术债已按根因修复（见上一条 hygiene 记录，`65ff124`），本机现为 144 文件 / 1334 用例全绿。为避免审核方读到与实际不符的披露而更正；明确为**披露更新**，不改变 retry-due 的送审点 `4c695c0`。
+- 待办：通道①恢复后投递 R18 唤醒（Issue #2 comment 5911844071 为正式总线内容）；在此之前不新增受保护入口工作。
