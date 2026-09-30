@@ -119,12 +119,30 @@ export interface RecoveryReviewStatus {
   lastActorUserId: string | null;
 }
 
+/**
+ * R4 CHANGE B（MSG-20260930-20）：案件生命周期事件的**锁内单调时间**。
+ * 事件时间在案件锁内生成；若同一毫秒已有更晚/相同的事件，则顺延 1ms，
+ * 从而保证同案件内 required/approved/rejected 的 createdAt **严格递增**，
+ * 事务内外的 < / > 顺序判断都有确定语义（不假设毫秒时间必然唯一）。
+ */
+export function nextLifecycleAt(events: Array<{ createdAt: Date }>, now: () => Date = () => new Date()): Date {
+  const candidate = now();
+  let latest = 0;
+  for (const event of events) {
+    const time = event.createdAt instanceof Date ? event.createdAt.getTime() : new Date(event.createdAt).getTime();
+    if (Number.isFinite(time) && time > latest) latest = time;
+  }
+  return latest >= candidate.getTime() ? new Date(latest + 1) : candidate;
+}
+/** 审计读取器：既接受 PrismaClient，也接受事务客户端（R3：锁内重读状态） */
+type ReviewAuditReader = { auditLog: Prisma.TransactionClient['auditLog'] };
+
 async function loadEvents(
-  prisma: PrismaClient,
+  client: ReviewAuditReader,
   organizationId: string,
   caseId: string,
 ): Promise<ReviewEvent[]> {
-  const rows = await prisma.auditLog.findMany({
+  const rows = await client.auditLog.findMany({
     where: {
       organizationId,
       entityType: 'Case',
@@ -266,7 +284,6 @@ export async function submitRecoveryReview(
   }
 
   const threshold = resolveHighValueThreshold();
-  const at = now();
 
   return prisma.$transaction(async (tx) => {
     // R2 CHANGE B1：审批/重请求/拒绝与资金执行共用同一案件锁（串行化顺序一致）；
@@ -285,6 +302,8 @@ export async function submitRecoveryReview(
       select: { action: true, createdAt: true, actorUserId: true, changes: true },
     });
     const state = resolveHighValueReviewState(events);
+    // R4 CHANGE B：事件时间在案件锁内生成；同案件内严格递增（不沿用锁前 at）
+    const at = nextLifecycleAt(events, now);
 
     if (decision === 'REQUEST') {
       if (state === 'PENDING') {
@@ -396,33 +415,35 @@ export async function assertHighValueReviewCleared(
   });
   if (!needsReview) return;
 
-  const events = await loadEvents(prisma, input.organizationId, input.caseId);
-  const state = resolveHighValueReviewState(events);
-  if (state === 'APPROVED') return;
-
-  // 记录一次"需要复核"，供审批者处理（同一状态重复触发也各留一条，便于审计）
-  const at = now();
-  await prisma.$transaction(async (tx) => {
-    // R3 CHANGE B：自动写入 review_required 与显式审批（REQUEST/APPROVE/REJECT）及资金执行
-    // 共用同一案件锁，避免「状态判定发生在锁外」造成的串行化差异。
+  // 记录一次"需要复核"，供审批者处理（同一状态重复触发也各留一条，便于审计）。
+  // R3 CHANGE B：**状态判定与写入都在案件锁内** —— 若在锁外判定，
+  // 「刚通过审批」与「随后自动写入 review_required」可能交错，后者会取代前者（轮次不变量被破坏）。
+  const cleared = await prisma.$transaction(async (tx) => {
     if (typeof tx.$executeRawUnsafe === 'function') {
       await tx.$executeRawUnsafe('SELECT pg_advisory_xact_lock(hashtext($1))', `cc-recovery-case:${input.caseId}`);
     }
-    await writeReviewAudit(tx, {
-      organizationId: input.organizationId,
-      actorUserId: input.actorUserId,
-      caseId: input.caseId,
-      action: REVIEW_ACTIONS.required,
-      changes: {
-        caseNo: input.caseNo,
-        recoveredAmount: money(input.recoveredAmount),
-        currency: input.currency,
-        threshold,
-        previousState: state,
-      },
-      at,
-    });
+    const events = await loadEvents(tx, input.organizationId, input.caseId);
+    const state = resolveHighValueReviewState(events);
+    if (state === 'APPROVED') return true;
+    // R4 CHANGE B：与显式审批同一规则：锁内生成、同案件严格递增
+    const at = nextLifecycleAt(events, now);
+      await writeReviewAudit(tx, {
+        organizationId: input.organizationId,
+        actorUserId: input.actorUserId,
+        caseId: input.caseId,
+        action: REVIEW_ACTIONS.required,
+        changes: {
+          caseNo: input.caseNo,
+          recoveredAmount: money(input.recoveredAmount),
+          currency: input.currency,
+          threshold,
+          previousState: state,
+        },
+        at,
+      });
+    return false;
   });
+  if (cleared) return;
 
   throw new WorkflowError(
     'REVIEW_REQUIRED',
