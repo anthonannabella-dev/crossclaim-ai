@@ -20,6 +20,7 @@ import type { ActionGuardInput, ActionGuardResult } from './action-guard';
 import { withActionGuard } from './guard-enforcement';
 import { createHitlApprovalVerifier, type HitlApprovalVerifierDeps } from './hitl-approval-verifier';
 import type { ActionGuardApprovalVerifier } from './approval-verifier';
+import type { ActionGuardAuditPort } from './runtime-guard';
 import type { RuntimeActionGuard } from './runtime-guard';
 
 export interface HitlSubmissionBoundaryDeps {
@@ -29,6 +30,8 @@ export interface HitlSubmissionBoundaryDeps {
   approvalVerifier?: HitlApprovalVerifierDeps;
   /** 直接注入审批校验器（单元测试用；优先于 approvalVerifier） */
   approvals?: ActionGuardApprovalVerifier;
+  /** CHANGE D：审批核验结果审计端口（生产装配写入 action_guard.approval_decision） */
+  audit?: ActionGuardAuditPort;
 }
 
 export interface HitlSubmissionInput<T> {
@@ -38,6 +41,8 @@ export interface HitlSubmissionInput<T> {
   /** 目标对象 / 证据版本（本批以 caseId 作为审批绑定目标） */
   targetRef: string;
   approvalId?: string;
+  /** 操作关联标识（缺省由 approvalId 推导） */
+  operationId?: string;
   /** 本次提交的操作载荷（金额/币种/依据/证据），用于与审批绑定逐项比对 */
   payload?: {
     recoveredAmount?: unknown;
@@ -79,6 +84,8 @@ export function createHitlSubmissionBoundary(deps: HitlSubmissionBoundaryDeps): 
         approvals,
         approvalTargetRef: input.targetRef,
         approvalPayload: input.payload,
+        operationId: input.operationId ?? (input.approvalId ? `approval:${input.approvalId}` : undefined),
+        audit: deps.audit,
         work: input.perform,
       });
     },

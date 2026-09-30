@@ -30,6 +30,7 @@ import { confirmRecoveryOutcome } from './recovery-outcome';
 import { ActionGuardApprovalVerificationError } from '../action-guard/approval-verifier';
 import { createHitlSubmissionBoundary } from '../action-guard/hitl-submission';
 import { ActionGuardNotConfiguredError } from '../action-guard/guard-enforcement';
+import { createPrismaActionGuardAuditPort } from '../action-guard/runtime-guard-composition';
 import {
   ActionGuardApprovalRequiredError,
   ActionGuardDeniedError,
@@ -947,7 +948,12 @@ export async function handleWorkflowRequest(
       }
       // 资金确认是受保护动作：闸门 + 服务端审批绑定（HITL 复核状态）双重校验，
       // 拒绝/审批不通过/能力或审计异常时 confirmRecoveryOutcome 不会被调用（零业务副作用）。
-      const boundary = createHitlSubmissionBoundary({ guard: deps.actionGuard, prisma: deps.prisma });
+      const boundary = createHitlSubmissionBoundary({
+        guard: deps.actionGuard,
+        prisma: deps.prisma,
+        // CHANGE D：审批核验结果写入可关联的安全审计（action_guard.approval_decision）
+        audit: createPrismaActionGuardAuditPort(deps.prisma),
+      });
       const outcome = await boundary.submit({
         action: 'commission.charge',
         organizationId: actor.organizationId,
