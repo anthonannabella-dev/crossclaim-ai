@@ -21,6 +21,7 @@
 import type { ActionGuardInput, ActionGuardResult } from './action-guard';
 import type { RuntimeActionGuard } from './runtime-guard';
 import {
+  ActionGuardApprovalVerificationError,
   actionRequiresHumanApproval,
   verifyApprovalOrThrow,
   type ActionGuardApprovalVerifier,
@@ -94,6 +95,15 @@ export async function withActionGuard<T>(options: WithActionGuardOptions<T>): Pr
       });
       throw error;
     }
+    // CHANGE D：放行路径必须有可落库的审批审计；端口缺失或写入失败一律拒绝（work=0）
+    if (!audit) {
+      throw new ActionGuardApprovalVerificationError({
+        code: 'ACTION_GUARD_APPROVAL_AUDIT_UNAVAILABLE',
+        approvalId: String(input?.approvalId ?? ''),
+        action,
+        reason: 'AUDIT_UNAVAILABLE',
+      });
+    }
     await writeApprovalAudit(audit, {
       code: 'ACTION_GUARD_APPROVAL_VERIFIED',
       action,
@@ -109,7 +119,8 @@ export async function withActionGuard<T>(options: WithActionGuardOptions<T>): Pr
 }
 
 /**
- * 审批核验审计（CHANGE D）：只写白名单字段；审计端口缺失/失败不改变判定（策略层已 fail closed）。
+ * 审批核验审计（CHANGE D）：结构化白名单字段（目标/操作/原因独立字段，不再混入 reasonCodes）。
+ * 调用方（放行路径）负责在端口缺失或写入失败时拒绝执行；拒绝路径的审计失败不覆盖原错误。
  */
 async function writeApprovalAudit(
   audit: ActionGuardAuditPort | undefined,
@@ -125,22 +136,21 @@ async function writeApprovalAudit(
   },
 ): Promise<void> {
   if (!audit) return;
-  try {
-    await audit.write({
-      action: 'action_guard.approval_decision',
-      actionName: fields.action,
-      decision: fields.code === 'ACTION_GUARD_APPROVAL_VERIFIED' ? 'ALLOW' : 'DENY',
-      code: fields.code,
-      risk: 'EXTERNAL_WRITE',
-      actorUserId: fields.actorUserId,
-      organizationId: fields.organizationId,
-      approvalId: fields.approvalId || null,
-      reasonCodes: [fields.targetRef ?? '', fields.operationId ?? '', fields.reason ?? ''].filter((v) => v !== ''),
-      evaluatedAt: new Date().toISOString(),
-    });
-  } catch {
-    /* 审计失败不影响已完成的策略判定；由上游审计降级规则处理 */
-  }
+  await audit.write({
+    action: 'action_guard.approval_decision',
+    actionName: fields.action,
+    decision: fields.code === 'ACTION_GUARD_APPROVAL_VERIFIED' ? 'ALLOW' : 'DENY',
+    code: fields.code,
+    risk: 'EXTERNAL_WRITE',
+    actorUserId: fields.actorUserId,
+    organizationId: fields.organizationId,
+    approvalId: fields.approvalId || null,
+    reasonCodes: fields.reason ? [fields.reason] : [],
+    targetRef: fields.targetRef,
+    operationId: fields.operationId,
+    reason: fields.reason,
+    evaluatedAt: new Date().toISOString(),
+  });
 }
 
 /** 需要在 service/route/job 层显式过闸的动作（供**有限静态约定检查**与后续接入清单使用）。 */

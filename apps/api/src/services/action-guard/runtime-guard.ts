@@ -50,6 +50,10 @@ export interface ActionGuardAuditRecord {
   organizationId: string;
   approvalId: string | null;
   reasonCodes: string[];
+  /** 结构化关联字段（CHANGE D；均为白名单，不含凭据或原始载荷） */
+  targetRef?: string | null;
+  operationId?: string | null;
+  reason?: string | null;
   evaluatedAt: string;
 }
 

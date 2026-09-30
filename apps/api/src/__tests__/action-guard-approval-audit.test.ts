@@ -58,33 +58,68 @@ describe('Approval verification audit (CHANGE D)', () => {
     expect(h.policyEvents).toHaveLength(1); // 策略层审计仍独立存在
   });
 
-  it('02 拒绝：写入同一动作的 DENY 记录，reason 与 operationId 进入 reasonCodes', async () => {
+  it('02 拒绝：写入 DENY 记录，reason 独立字段 + reasonCodes 仅含原因', async () => {
     const h = harness({ valid: false, reason: 'APPROVAL_EXPIRED' });
     await expect(h.run()).rejects.toMatchObject({ name: 'ActionGuardApprovalVerificationError' });
     expect(h.approvalEvents).toHaveLength(1);
-    const record = h.approvalEvents[0] as { code: string; decision: string; reasonCodes: string[] };
+    const record = h.approvalEvents[0] as {
+      code: string;
+      decision: string;
+      reasonCodes: string[];
+      reason: string | null;
+      operationId: string | null;
+      targetRef: string | null;
+    };
     expect(record.code).toBe('ACTION_GUARD_APPROVAL_NOT_VERIFIED');
     expect(record.decision).toBe('DENY');
-    expect(record.reasonCodes).toContain('APPROVAL_EXPIRED');
-    expect(record.reasonCodes).toContain('op-1');
-    expect(record.reasonCodes).toContain(CASE);
+    expect(record.reason).toBe('APPROVAL_EXPIRED');
+    expect(record.reasonCodes).toEqual(['APPROVAL_EXPIRED']);
+    expect(record.operationId).toBe('op-1');
+    expect(record.targetRef).toBe(CASE);
   });
 
-  it('03 未注入审批审计端口：判定不受影响（缺端口不改变 fail-closed 结果）', async () => {
+  it('03 未注入审批审计端口（放行路径）：拒绝且 work=0（CHANGE D 失败关闭）', async () => {
     const guard = createRuntimeActionGuard({
       capabilities: { resolve: async () => satisfied },
       audit: { write: () => {} },
     });
     let calls = 0;
-    await withActionGuard({
-      guard,
-      input: { action: 'claim.submit', actorUserId: ACTOR, organizationId: ORG, approvalId: 'appr-1' },
-      approvals: { async verify() { return { valid: true }; } },
-      approvalTargetRef: CASE,
-      work: () => {
-        calls += 1;
-      },
+    await expect(
+      withActionGuard({
+        guard,
+        input: { action: 'claim.submit', actorUserId: ACTOR, organizationId: ORG, approvalId: 'appr-1' },
+        approvals: { async verify() { return { valid: true }; } },
+        approvalTargetRef: CASE,
+        work: () => {
+          calls += 1;
+        },
+      }),
+    ).rejects.toMatchObject({ code: 'ACTION_GUARD_APPROVAL_AUDIT_UNAVAILABLE' });
+    expect(calls).toBe(0);
+  });
+
+  it('04 审批审计写入失败：拒绝且 work=0', async () => {
+    const guard = createRuntimeActionGuard({
+      capabilities: { resolve: async () => satisfied },
+      audit: { write: () => {} },
     });
-    expect(calls).toBe(1);
+    let calls = 0;
+    await expect(
+      withActionGuard({
+        guard,
+        input: { action: 'claim.submit', actorUserId: ACTOR, organizationId: ORG, approvalId: 'appr-1' },
+        approvals: { async verify() { return { valid: true }; } },
+        approvalTargetRef: CASE,
+        audit: {
+          write: () => {
+            throw new Error('audit sink down');
+          },
+        },
+        work: () => {
+          calls += 1;
+        },
+      }),
+    ).rejects.toThrow('audit sink down');
+    expect(calls).toBe(0);
   });
 });

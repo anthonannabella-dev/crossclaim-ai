@@ -71,9 +71,14 @@ export class ActionGuardApprovalVerificationError extends Error {
   readonly code: string;
   readonly approvalId: string;
   readonly action: string;
-  readonly reason?: ApprovalReasonCode | 'VERIFIER_ERROR' | 'VERIFIER_MISSING';
+  readonly reason?: ApprovalReasonCode | 'VERIFIER_ERROR' | 'VERIFIER_MISSING' | 'AUDIT_UNAVAILABLE';
 
-  constructor(params: { code: string; approvalId: string; action: string; reason?: ApprovalReasonCode | 'VERIFIER_ERROR' | 'VERIFIER_MISSING' }) {
+  constructor(params: {
+    code: string;
+    approvalId: string;
+    action: string;
+    reason?: ApprovalReasonCode | 'VERIFIER_ERROR' | 'VERIFIER_MISSING' | 'AUDIT_UNAVAILABLE';
+  }) {
     super(`${params.code}: ${params.action}`);
     this.name = 'ActionGuardApprovalVerificationError';
     this.code = params.code;
