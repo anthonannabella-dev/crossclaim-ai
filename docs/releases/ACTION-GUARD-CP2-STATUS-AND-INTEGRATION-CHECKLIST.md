@@ -63,3 +63,14 @@
 | 真实入口接线：POST /cases/:id/recovery-outcome | 已接入（HEAD 3a37d24，送审中） | http-routes + server.ts；HTTP 级验收 4/4（拒绝时资金写入全为 0；APPROVED+approvalId 恰一次） |
 | 审批有效期/撤销/一次性消费（独立审批记录） | **待架构方裁决**（涉及 Schema 变更，未自行实现） | — |
 | 其余受保护入口（申诉/平台写入等） | TODO | 见第 3 节清单 |
+
+## 6. ② 第一批 R1（操作级审批，MSG-20260930-17 CHANGE A–D）
+
+| 项 | 状态 | 证据 |
+| --- | --- | --- |
+| CHANGE A 操作级审批绑定 | 已实现（送审中） | approvalId=审批事件 id；组织/目标/动作/审批人/执行人/载荷指纹校验；删除 NOT_REQUIRED 绕过 |
+| CHANGE B 生命周期与原子消费 | 已实现（送审中） | 有效期/撤销/消费/轮次；advisory lock + 同事务消费；幂等重试返回既有结果 |
+| CHANGE C 组合与并发验收 | 已实现（送审中） | 首次四类资金对象各恰为 1；4 路并发仅一次成功；HTTP 三类拒绝零资金写入 |
+| CHANGE D 审计与口径 | 已实现（送审中） | action_guard.approval_decision（含 approvalId/主体/目标/operationId）；缺守卫 403 ACTION_GUARD_NOT_CONFIGURED；零业务/资金副作用口径 |
+| 审批表（独立生命周期记录） | **待架构方裁决** | 若审计事件方案不足，改走最小 Schema Delta |
+| 其余受保护入口 | TODO | 见第 3 节清单 |
