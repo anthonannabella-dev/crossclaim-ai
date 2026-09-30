@@ -37,6 +37,7 @@ describe('Action Guard enforcement wrapper', () => {
     const result = await withActionGuard({
       guard: guardWith(satisfied),
       input: { action: 'claim.submit', actorUserId: ACTOR, organizationId: ORG, approvalId: 'a-1' },
+      approvals: { async verify() { return { valid: true }; } },
       work: (decision) => {
         calls += 1;
         return decision.code;
@@ -91,6 +92,7 @@ describe('Action Guard enforcement wrapper', () => {
       withActionGuard({
         guard: guardWith(satisfied),
         input: { action: 'claim.submit', actorUserId: ACTOR, organizationId: ORG, approvalId: 'a-1' },
+        approvals: { async verify() { return { valid: true }; } },
         work: () => {
           throw new Error('downstream failure');
         },
