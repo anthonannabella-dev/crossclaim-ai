@@ -335,3 +335,13 @@
 - CI run **36714714672**（commit `485b317`，docs-only runlog 提交）→ 作业 `API · migration + typecheck + tests` **FAILURE**；日志 2026-09-30T12:31:16Z 明示：`action-guard-payment-retry-due-http-db.test.ts` 用例 28 抛 `Error: CONTROL_POINT_TIMEOUT:BOTH_BATCHES_WAITING_ON_SHARED_INVOICE`（12:27:23Z 亦出现同一错误）。
 - 含义：上一轮「CI 全绿」并不等于该用例稳定通过，而是**发票 UUID 顺序恰好有利**的抽样；根因即本轮修复的「控制点持错发票锁」。
 - 已在 Issue #2 追加留档 comment **5911869998**（不改送审点 `4c695c0`）。
+
+## 2026-09-30 — 工程卫生批次：本机全量与 CI 对齐（phase1-runbook shebang）
+
+- 现象：本机（Node 24）`npx vitest run` 恒为 **144 文件中 1 文件失败 + 20 skipped**（`phase1-runbook.test.ts` collect 失败），而 CI（Node 20）该文件 20/20 通过；每次披露都要附带「本地非全绿」说明。
+- 根因（探针实证）：`tools/validation/phase1-runbook.mjs` 首行是 CLI shebang `#!/usr/bin/env node`；原生 ESM 加载器会剥离它，但 **vite-node 的 SSR 转换不会** —— shebang 留在转换产物里，Node 抛 `SyntaxError: Invalid or unexpected token`，整份套件 collect 失败、20 条用例被记为 skipped。
+- 探针结论：① 直接动态导入原文件 = **FAIL**；② 无 shebang 的临时副本 = **PASS**；③ 读入源码、剥离 shebang 后经 `data:` URL 导入 = **PASS**（并能读到 `PHASE1_THRESHOLDS`）。据此采用 ③。
+- 修复（`65ff124`，仅测试侧）：`phase1-runbook.test.ts` 改为读入源码 → 剥离 shebang → `data:` URL 导入（`@vite-ignore`）。工具本身与其 CLI 用法**未改动**；其余同模式导入（`action-guard.test.ts` 导入的是项目内 `.ts`，无 shebang）不受影响。
+- 验证：`phase1-runbook.test.ts` 20/20 PASS；`tsc --noEmit` PASS；**本机全量 144 文件 / 1334 用例全绿**（首次与 CI 完全一致）；CI run **36720354790** = **5/5 SUCCESS**。
+- 意义：消除「本地全量永远差一条」的长期披露负担；此后本地与 CI 的证据口径一致。
+- 送审点说明：该提交为**测试环境修复**，不改变 R18（retry-due MSG-34 收口）的 REVIEWED_REF —— **R18 送审点仍为 `4c695c0`**（Issue #2 comment 5911844071）。
