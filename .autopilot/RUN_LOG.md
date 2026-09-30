@@ -137,3 +137,13 @@
 - CHANGE A（`billing.ts`）：锁后读取**完整执行快照**，迁移判断、CAS、金额写入、成功审计、消费记录全部用该快照；批准金额/币种/from→to 必须与快照一致；执行时间锁后生成并统一用于 `paidAt`/消费/成功审计；明确实际采用的防绕过机制（行锁/事实CAS/统一锁协议）；清除受保护路径对锁外 `invoice.total/currency/from/at` 的引用。
 - CHANGE B：快照交错测试（明确控制点，不能只靠固定等待）——绑定旧事实→拒绝；绑定锁内新事实→若允许执行，`paidAmount` 与成功/消费审计必须全用新事实。CHANGE C：等锁期间过期/撤销/主体失效 + 审批审计端口失败专项，精确断言 reason、账单状态/金额/引用无非法变化、消费无新增，并发拒绝可因阶段不同但需状态码↔原因对应并证明「一次迁移、一次消费」。CHANGE D：真实落库断言批准金额 = 实际 `paidAmount` = 成功审计金额 = 消费金额/币种一致。
 - 语义：继续接受重复确认 409 ILLEGAL_TRANSITION + 零副作用 + 消费仍 1；**签发（DRAFT→ISSUED）需独立授权边界，不得复用 payment.capture 审批**，不得把当前 status 路由描述为已接入签发能力。后续顺序：R7 通过 → replay → 冻结批次 retry-due；MSG-20260930-22 对 replay/retry-due/webhook 的设计裁决继续有效；生产与真实资金继续 HOLD。
+
+## 2026-09-30 — ② 第二批 R7 实施与送审（MSG-20260930-23 的 CHANGE A–D 收口）
+
+- 留档：MSG-20260930-23 逐字归档进 AI-ARCHITECT-INBOX.md（compare.mjs = FULL_COPY_OK，58/58 行，0 缺失 / 0 多出）+ Issue #2 comment 5905995528；commit 5584df8（已 push）。
+- 实现 commit 73115a3：billing.ts 统一**锁内执行快照**（迁移判断 / CAS / paidAmount / paidAt / 成功审计 / 消费审计全部取自锁后快照；执行时间锁内生成；锁外读取降级为预检查，只剩 id/status）；CAS 在状态之外同时比较 total + currency（事实 CAS），与统一发票 advisory lock 共同构成防绕过机制；明确拒绝「锁内比较通过、却写入另一份旧快照」。
+- 验收：支付入口专项 **16/16**（新增 11 快照交错·审批绑定旧事实→403 + 锁内拒绝审计；12 快照交错·审批绑定锁内新事实→paidAmount/成功审计/消费审计全为 1600 USD；13a/13b/13c 等锁期间过期·撤销·主体停用→精确 403 且零副作用；14 审批审计写入失败→fail-closed）。控制点 = pg_locks 中该发票 advisory lock 的**未授予行**（按 hashtext 匹配发票键），非固定等待。
+- 定向回归 14 套件 **85/85**；本机全量 141 文件 / **1259 passed + 20 skipped**，唯一失败为**既知** phase1-runbook.test.ts（Node 24 导入兼容，非阻塞技术债）——不以「全量通过」表述；npx prisma validate = valid，npx tsc --noEmit = PASS。
+- CI：HEAD 73115a3，run **36682995038** = 五作业 SUCCESS；API 作业 **141 files / 1279 tests PASS**。
+- 送审：Issue #2 comment **5906316560**（七段式）；右侧会话短唤醒已发送并完成送达验证（正文 512 字符作为新用户轮出现、输入框已清空、生成中）。
+- 如实披露：用例 11 在旧实现下同样会拒绝，判别旧/新实现的是**用例 12**；控制点中的直写账单事实只证明「锁内重验读取到已提交的新事实」，不代表生产入口之间的完整竞争协议。签发边界未实现，不得描述为已接入。
