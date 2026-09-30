@@ -85,3 +85,30 @@
 | P7 | 文档 | 绑定契约新增支付域章节；`payment.capture` 写入清单登记；非阻塞整理项（契约标题/依据链、4.1/4.2 排序） |
 
 风险控制：本批次只加「服务端入口 + 机制」，不接真实渠道与凭据；provider 端口继续由测试适配器注入。
+
+## 8. 实施进展与范围收敛（2026-09-30 更新）
+
+已完成并推送：
+
+| 步骤 | commit | 内容 |
+| --- | --- | --- |
+| P1 | `57531cd` | `submitPaymentReview` APPROVE 强制 `boundPayload`/`boundAction`/`expiresAt` 并返回 `approvalId`；发票级 advisory lock + 锁内单调事件时间；`writeAudit` 返回审计行 id |
+| P2 | `93cec29` | 事务内审批验证器按「事件族 + 目标实体」参数化（默认 recovery/Case 不变；新增 `payment.review_*` / `payment.capture_consumed`） |
+| P3 | `ac49108` | wrapper 审批验证器同口径参数化（含目标实体校验） |
+| P4 | `b37be03` | `POST /billing/:id/status` 经 HITL 边界接入 `payment.capture`（缺 Action Guard 即 fail-closed） |
+| P5 | `a9ee522` | `advanceBillingInvoice` 发票级锁 + 锁内完整重验 + 消费事件（消费与资金写入同事务） |
+
+### 范围收敛：本批次先交付 `POST /billing/:id/status`
+
+`payments/events/:id/replay` 与 `payments/processing/retry-due` 的**审批主体**尚未定义清楚，原因是审批事件挂在具体目标实体上：
+
+- 账单入口的目标明确（`BillingInvoice`，`entityId=invoiceId`，载荷=金额/币种/支付引用）；
+- 重放入口的目标是 **PaymentEvent**，批量重试入口**没有单一目标**（一次调用可能覆盖多张发票）。
+
+若草率复用 `BillingInvoice` 目标，就会出现"审批绑定到发票 A、却用于重放事件 B"的错配。因此本批次：
+
+1. 先交付账单入口的完整闭环（P1–P5 + 验收），证明机制在支付域可用；
+2. 在七段式中请求架构方裁定重放/批量的**审批主体与载荷指纹定义**（例如：按 PaymentEvent 逐条审批、或按批次的发票集合生成摘要指纹），再接入这两条入口；
+3. 外部 webhook 是否纳入 Action Guard 同样待裁定（当前边界=验签 + `providerEventId` 幂等 + 事件形状校验）。
+
+这样既满足"不得臆造支付渠道已接通"的约束，也不会把未定义的审批语义写进代码。
