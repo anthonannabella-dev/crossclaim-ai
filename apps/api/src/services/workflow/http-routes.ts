@@ -1380,6 +1380,13 @@ export async function handleWorkflowRequest(
     return true;
   } catch (error) {
     const { code, error: name } = statusFor(error);
+    // MSG-33 CHANGE A：错误响应必须带**非空**领域名，便于调用方断言具体原因
+    const errorName =
+      typeof name === 'string' && name !== ''
+        ? name
+        : typeof (error as { code?: unknown })?.code === 'string' && (error as { code?: string }).code !== ''
+          ? String((error as { code?: string }).code)
+          : 'UNEXPECTED_ERROR';
     const reason =
       error instanceof ActionGuardApprovalVerificationError
         ? error.reason
@@ -1387,7 +1394,7 @@ export async function handleWorkflowRequest(
           ? error.reason
           : undefined;
     sendJson(res, code, {
-      error: name,
+      error: errorName,
       ...(reason && reason !== 'VERIFIER_MISSING' ? { reason } : {}),
       ...(code === 400 && review?.[2] === 'reject' ? { allowedReasons: [...REJECT_REASONS] } : {}),
     });
