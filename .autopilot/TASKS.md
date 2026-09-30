@@ -13,11 +13,16 @@
 - [x] 8. 审查对比 PR #10（base b2-fix-r1-baseline —— 架构方已注明其不交付到 main）
 - [x] 9. READY_FOR_REVIEW（已投递并回读验证）
 - [x] 10. ChatGPT final audit（MSG-20260930-10 = PASS，已逐字归档 FULL_COPY_OK 52/52）
-- [ ] 11. 面向 main 的正常集成 PR（架构方 NEXT：核对实际 diff + 取得集成 HEAD 的 CI；不得强推/绕过保护）
-- [ ] 12. MSG-20260930-10 的三项非阻塞文字口径修正（§10 已落地，随集成 PR 复核）
+- [x] 11. 面向 main 的正常集成 PR #11（base main；集成 HEAD e40d4f9；CI run 36651145264 = 5/5 SUCCESS；正式审计请求 comment 5901785441）
+- [x] 12. MSG-20260930-10 的三项非阻塞文字口径修正（§8.4 限定 + §10 新增；随集成 PR 复核）
 
 ## 边界（持续有效）
 
 - Production Enablement / 真实外写 / 资金操作 / 客户提交 / 生产凭据 = HOLD。
 - 本次 PASS ≠ 自动审计桥 / 自治 runner / 产品整体 / 真实数据 / 生产启用通过。
 - 进入下一重大 Gate 需架构方裁决；合并决策归架构方，且不得绕过分支保护。
+
+## 下一队列（已授权，等待 PR #11 裁决后再开工）
+
+- [ ] 13. Gate 7 授权队列下一 Checkpoint（MSG-20260930-03 的 8 项里，Action Guard CP1 已完成）：候选 ② RUNTIME BUSINESS BLOCKING → ③ PRODUCTION CONTROL PLANE → ⑤ RELIABILITY → ⑥ OPERATIONS-ADMIN → ⑦ SECURITY HARDENING。
+- 开工前先确认：不与 PR #11 的集成范围冲突；涉及安全/资金/规则引擎/Gate 边界的部分需架构方裁决。
