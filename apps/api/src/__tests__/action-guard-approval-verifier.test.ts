@@ -86,6 +86,8 @@ describe('Approval binding verification', () => {
       guard: guard(),
       input: { action: 'claim.submit', actorUserId: ACTOR, organizationId: ORG, approvalId: 'appr-1' },
       approvals: { async verify() { return { valid: true }; } },
+      // CHANGE D：放行路径必须提供审批审计端口
+      audit: { write: () => {} },
       work: (decision) => {
         calls += 1;
         return decision.code;
