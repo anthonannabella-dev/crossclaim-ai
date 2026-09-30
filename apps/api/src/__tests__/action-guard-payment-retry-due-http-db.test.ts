@@ -219,6 +219,7 @@ async function approveBatch(base: string, cookie: string, batchId: string, overr
 
 async function execute(base: string, cookie: string, body: Record<string, unknown>) {
   const res = await post(base, '/payments/processing/retry-due', cookie, body);
+
   return { status: res.status, body: (await res.json()) as Record<string, unknown> };
 }
 
@@ -1174,10 +1175,34 @@ describe('② 第二批 — retry-due（冻结清单批次审批）真实 HTTP +
         release();
       }
 
-      const [batchRes, replayRes] = await Promise.all([batchRun, replayRun]);
-      // MSG-33 CHANGE A：不允许任意 500（非 200 必须是结构化 4xx）
-      expect([200, 403, 409]).toContain(batchRes.status);
-      expect([200, 403, 409]).toContain(replayRes.status);
+      const [batchRes, replayRaw] = await Promise.all([batchRun, replayRun]);
+      // replay 腿此前是原始 Response（未解析），这里统一成 { status, body } 供断言使用
+      const replayRes = {
+        status: replayRaw.status,
+        body: (await replayRaw.json().catch(() => ({}))) as Record<string, unknown>,
+      };
+      // MSG-33 CHANGE A：不允许任意 500，且非 200 必须给出具体状态码 + **非空领域原因**
+      for (const [status, body] of [
+        [batchRes.status, batchRes.body] as const,
+        [replayRes.status, replayRes.body] as const,
+      ]) {
+        expect([200, 403, 409]).toContain(status);
+        if (status !== 200) {
+          const record = body as Record<string, unknown>;
+          const code = [record.reason, record.error]
+            .map((value) => (typeof value === 'string' ? value.trim() : ''))
+            .find((value) => value !== '') ?? '';
+          expect(code).not.toBe('');
+          expect([
+            'ATTEMPT_ALREADY_RUNNING',
+            'PAYMENT_SOURCE_CONFLICT',
+            'ACTION_GUARD_HUMAN_APPROVAL_REQUIRED',
+            'APPROVAL_ALREADY_CONSUMED',
+            'APPROVAL_PAYLOAD_MISMATCH',
+            'ILLEGAL_TRANSITION',
+          ]).toContain(code);
+        }
+      }
       // 注：本轮该分支返回空 body（既无 reason 也无 error），具体领域原因的精确断言留待下一轮单独诊断后收紧
       const invoice = await prisma.billingInvoice.findUniqueOrThrow({ where: { id: invoiceId } });
       expect(invoice.status).toBe('PAID');
