@@ -254,6 +254,32 @@ async function advisoryLockCountFor(key: string, granted: boolean): Promise<numb
   return Number(rows[0]?.n ?? 0n);
 }
 
+/**
+ * 控制点取证：逐键导出“等待/持有”计数，并列出当前全部 advisory lock 现场。
+ * 失败原因因此一眼可见（残留孤儿事务 / 批次滞留在事件锁阶段 / 真正的并发竞争），
+ * 而不是只留下一个 CONTROL_POINT_TIMEOUT。
+ */
+async function describeAdvisoryControlPoint(
+  client: PrismaClient,
+  keys: readonly string[],
+): Promise<Record<string, unknown>> {
+  const perKey: Record<string, { waiting: number; held: number }> = {};
+  for (const key of keys) {
+    perKey[key] = {
+      waiting: await advisoryLockCountFor(key, false),
+      held: await advisoryLockCountFor(key, true),
+    };
+  }
+  const advisoryLocks = await client.$queryRawUnsafe(
+    `SELECT l.pid, l.granted, l.classid::text AS classid, l.objid::text AS objid,
+            l.objsubid::text AS objsubid, a.state, a.wait_event
+       FROM pg_locks l LEFT JOIN pg_stat_activity a ON a.pid = l.pid
+      WHERE l.locktype = 'advisory'
+      ORDER BY l.granted, l.pid`,
+  );
+  return { perKey, advisoryLocks };
+}
+
 async function waitFor(check: () => Promise<boolean>, timeoutMs: number, label: string): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   for (;;) {
@@ -1202,7 +1228,6 @@ describe('② 第二批 — retry-due（冻结清单批次审批）真实 HTTP +
           ]).toContain(code);
         }
       }
-      // 注：本轮该分支返回空 body（既无 reason 也无 error），具体领域原因的精确断言留待下一轮单独诊断后收紧
       const invoice = await prisma.billingInvoice.findUniqueOrThrow({ where: { id: invoiceId } });
       expect(invoice.status).toBe('PAID');
       // 无重复资金推进：恰一次 PAID 成功审计、支付对象仍为 1
@@ -1212,18 +1237,15 @@ describe('② 第二批 — retry-due（冻结清单批次审批）真实 HTTP +
   }, 60_000);
 
 /**
-   * 用例 28（MSG-32 CHANGE C 重做）：两批次**事件集合不同**、**共享两张发票**、
-   * 且按各自 items 顺序的「发票首次出现顺序相反」：
+   * 用例 28（MSG-33 CHANGE B 重做，MSG-34 CHANGE B 收口）：两批次**事件集合完全不相交**、
+   * **共享两张发票**，且按各自 items 顺序的「发票首次出现顺序相反」：
    *   A = [E1(P1/I1), E2(P2/I2)] → 发票首现 I1 后 I2
    *   B = [E3(P2/I2), E4(P1/I1)] → 发票首现 I2 后 I1
-   * 只有「各阶段资源独立排序」才能避免两张发票交叉持锁。
-   */
-/**
-   * 用例 28（MSG-33 CHANGE B 重做）：两批次**事件集合完全不相交**、**共享两张发票**、
-   * 且按各自 items 顺序的「发票首次出现顺序相反」：
-   *   A = [E1(P1/I1), E2(P2/I2)] → 发票首现 I1 后 I2
-   *   B = [E3(P2/I2), E4(P1/I1)] → 发票首现 I2 后 I1
-   * 控制点：独立连接先持发票 I1 的锁 → 两个批次在各自事件锁阶段完成后都必须阻塞在 I1 上。
+   * 阶段控制点：独立连接持**服务端锁序中的第一把共享发票锁**（两张发票 id 字典序较小者），
+   * 两个批次在完成各自事件锁阶段后都排队在该锁上（该锁等待者 ≥2，且 4 个事件键等待者 = 0）。
+   * 为什么必须是「较小者」：服务端按「分阶段 + 每阶段资源 ID 排序」取锁，两批次共享同一发票集合，
+   * 故第一把锁必定相同；若固定持 I1 而 I2 字典序更小，则先到的批次拿到 I2 再等 I1、另一批次被挡在 I2 上，
+   * I1 只会有 1 个等待者（旧写法由此产生约 50% 的假失败）。
    */
   async function seedCrossCandidate(suffix: string, invoiceValue: string, paymentValue: string, dueOffsetMs: number) {
     const eventIdValue = `cf200000-0000-4000-8000-0000000004${suffix}`;
@@ -1359,8 +1381,44 @@ describe('② 第二批 — retry-due（冻结清单批次审批）真实 HTTP +
       ),
     );
 
-    // 阶段控制点：先持发票 I1 的锁 → 两个批次完成各自事件锁阶段后都必须阻塞在 I1
-    const release = await holdLockFor(`cc-payment-invoice:${invoiceId}`);
+    // 阶段控制点（MSG-34 收口）：服务端发票锁按「分阶段 + 每阶段资源 ID 字典序」取得（R15 CHANGE A），
+    // 两批次共享两张发票，故两者的**第一把**发票锁必是其中字典序较小者。
+    // 控制点必须持这把锁，才能观察到“两个批次都进入发票阶段、并排队在同一把发票锁上”。
+    const sharedInvoiceKey = `cc-payment-invoice:${[invoiceId, secondInvoice.id].sort((left, right) => left.localeCompare(right))[0]}`;
+    const controlEventKeys = [e1, e2, e3, e4].map((seed) => `cc-payment-event:${seed.eventId}`);
+    const controlInvoiceKeys = [
+      `cc-payment-invoice:${invoiceId}`,
+      `cc-payment-invoice:${secondInvoice.id}`,
+    ];
+    const controlKeyList = [
+      ...controlEventKeys,
+      ...controlInvoiceKeys,
+      `cc-payment-retry-batch:${batchAId}`,
+      `cc-payment-retry-batch:${batchBId}`,
+    ];
+    // 前置（必须在开跑之前）：受审键上不得有残留 advisory lock（等待或持有）。
+    // 上一个控制点的持锁事务可能仍在提交途中，故给一个有界排空窗口；
+    // 若始终排不空，说明存在残留孤儿事务——立即给带键名的取证失败，
+    // 而不是让它在控制点上伪装成“等不到第二个等待者”。
+    try {
+      await waitFor(
+        async () => {
+          for (const key of controlKeyList) {
+            if ((await advisoryLockCountFor(key, false)) > 0) return false;
+            if ((await advisoryLockCountFor(key, true)) > 0) return false;
+          }
+          return true;
+        },
+        5_000,
+        'CONTROL_KEYS_DRAINED',
+      );
+    } catch (drainError) {
+      const drainDiagnostic = await describeAdvisoryControlPoint(prisma, controlKeyList);
+      throw new Error(
+        `RETRY_DUE_CONTROL_KEYS_DIRTY ${JSON.stringify(drainDiagnostic)} :: ${String(drainError)}`,
+      );
+    }
+    const release = await holdLockFor(sharedInvoiceKey);
     const runs = [batchAId, batchBId].map((batchId, index) =>
       executeRetryBatch(
         prisma,
@@ -1376,9 +1434,21 @@ describe('② 第二批 — retry-due（冻结清单批次审批）真实 HTTP +
     );
     try {
       await waitFor(
-        async () => (await advisoryLockCountFor(`cc-payment-invoice:${invoiceId}`, false)) >= 2,
+        async () => (await advisoryLockCountFor(sharedInvoiceKey, false)) >= 2,
         10_000,
         'BOTH_BATCHES_WAITING_ON_SHARED_INVOICE',
+      );
+      // 阶段自证：两批次都已离开事件锁阶段 → 等待只发生在共享发票上（阶段差异的直接证据）
+      for (const eventKey of controlEventKeys) {
+        expect({ eventKey, waiting: await advisoryLockCountFor(eventKey, false) }).toEqual({
+          eventKey,
+          waiting: 0,
+        });
+      }
+    } catch (controlPointError) {
+      const diagnostic = await describeAdvisoryControlPoint(prisma, controlKeyList);
+      throw new Error(
+        `RETRY_DUE_CONTROL_POINT_FAILED ${JSON.stringify(diagnostic)} :: ${String(controlPointError)}`,
       );
     } finally {
       release();
@@ -1389,29 +1459,44 @@ describe('② 第二批 — retry-due（冻结清单批次审批）真实 HTTP +
     expect(rejected.map((entry) => String(entry.reason))).toEqual([]);
     const results = (settled as PromiseFulfilledResult<RetryBatchExecutionResult>[]).map((entry) => entry.value);
 
-    // 逐发票完整断言：PAID 与成功审计一一对应、无重复执行、资金对象数不变
+    // CHANGE B（MSG-34）：**精确**最终结果断言（两张发票都必须推进，不允许只用下界）
+    const expectedInvoices = [invoiceId, secondInvoice.id].sort();
     const invoices = await prisma.billingInvoice.findMany({
       where: { organizationId: ORG },
-      select: { id: true, status: true },
+      select: { id: true, status: true, paidAmount: true },
     });
-    const paidInvoiceIds = invoices.filter((row) => row.status === 'PAID').map((row) => row.id);
-    expect(paidInvoiceIds.length).toBeGreaterThanOrEqual(1);
-    expect(new Set(paidInvoiceIds).size).toBe(paidInvoiceIds.length);
+    const paidInvoices = invoices.filter((row) => row.status === 'PAID');
+    expect(paidInvoices.map((row) => row.id).sort()).toEqual(expectedInvoices);
+    for (const row of paidInvoices) {
+      expect(row.paidAmount?.toFixed(4)).toBe(AMOUNT);
+    }
 
+    // payment.succeeded 恰两条，且实体集合与两张发票精确相等
     const successAudits = await prisma.auditLog.findMany({
       where: { organizationId: ORG, action: 'payment.succeeded' },
       select: { entityId: true },
     });
-    expect(successAudits.length).toBe(new Set(successAudits.map((row) => row.entityId)).size);
-    expect(successAudits.length).toBe(paidInvoiceIds.length);
-    for (const audit of successAudits) {
-      expect(paidInvoiceIds).toContain(audit.entityId);
+    expect(successAudits).toHaveLength(2);
+    expect(successAudits.map((row) => row.entityId).sort()).toEqual(expectedInvoices);
+
+    // 两个 Payment 逐一核对关联/金额/币种
+    const payments = await prisma.payment.findMany({
+      where: { organizationId: ORG },
+      select: { invoiceId: true, amount: true, currency: true },
+    });
+    expect(payments).toHaveLength(2);
+    expect(payments.map((row) => row.invoiceId).sort()).toEqual(expectedInvoices);
+    for (const row of payments) {
+      expect(row.amount.toFixed(4)).toBe(AMOUNT);
+      expect(row.currency).toBe(CURRENCY);
     }
 
+    // 四个冻结项均有明确结果，且实际执行/成功来源无重复
     const executedAttemptIds = results.flatMap((value) => value.executed.map((row) => row.attemptId));
+    const skippedAttemptIds = results.flatMap((value) => value.skipped.map((row) => row.attemptId));
+    expect(executedAttemptIds.length + skippedAttemptIds.length).toBe(4);
+    expect(new Set([...executedAttemptIds, ...skippedAttemptIds]).size).toBe(4);
     expect(new Set(executedAttemptIds).size).toBe(executedAttemptIds.length);
-    expect(executedAttemptIds.length).toBeLessThanOrEqual(4);
-    expect(await prisma.payment.count({ where: { organizationId: ORG } })).toBe(2);
     expect(e3.eventId && e4.eventId).toBeTruthy();
   }, 60_000);
 });
