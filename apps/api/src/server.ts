@@ -48,6 +48,7 @@ import {
   handleUploadRequest,
 } from './services/auth';
 import { handleWorkflowRequest } from './services/workflow';
+import { createAppActionGuard } from './services/action-guard/runtime-guard-composition';
 
 const VERSION = '0.1.0';
 
@@ -229,6 +230,8 @@ export function createServer(deps: ServerDeps): http.Server {
       handleWorkflowRequest(req, res, {
         prisma,
         session: auth.session,
+        // 授权项 ②（MSG-20260930-16 §6）：受保护入口的运行时闸门；缺省 READ_ONLY → 拒绝写入
+        actionGuard: createAppActionGuard({ prisma, killSwitchResolver }),
         killSwitchResolver,
         // C-0010-C2：webhook 的结构化安全日志（验签失败 / 版本不一致）必须落到运行时 logger
         log: (event, fields) => log.warn(event, fields),
