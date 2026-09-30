@@ -372,7 +372,7 @@ export async function submitRetryBatchReview(
         batchId: batch.batchId,
         digest: batch.digest,
         digestVersion: batch.digestVersion,
-        itemCount: batch.itemCount,
+        itemCount: String(batch.itemCount),
         expiresAt: expiresAt.toISOString(),
       },
       expiresAt: expiresAt.toISOString(),
