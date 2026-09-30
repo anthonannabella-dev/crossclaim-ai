@@ -60,7 +60,10 @@ END $$ LANGUAGE plpgsql;
 ## 4. 同步的文档纠偏（本 PR 一并提交）
 
 - `AI-ARCHITECT-INBOX.md` 已归档裁决原文（MSG-20260930-04，FULL_COPY_OK）。
-- `FINAL-PRODUCTION-GATE-REVIEW.md` / `ARCHITECTURE_CONTRACT.md`：把「现有触发器 = 等价复合外键约束」的表述改为「引用行写入时校验 + 本次新增归属不可变约束」，并记录 B1「当时 REVISE、后来修复」、B3「许可证闸门曾扫描空转（当前已修）」。
+- `ARCHITECTURE_CONTRACT.md` / `DOMAIN_MODEL.md`：**已完成**——「等价数据库级约束」表述改为「引用行写入时校验的数据库触发器 + 本次新增的归属不可变约束」，
+  并明确「触发器集合 ≠ 完整的等价复合外键约束」（不覆盖被引用对象事后改归属）。
+- 历史口径与证据口径统一：见 `docs/releases/B2-FIX-R1-RECORD-CORRECTIONS.md`
+  （含 B1「当时 REVISE、后来修复」、B3「许可证闸门曾扫描空转（当前已修）」、deploy-smoke 升级路径仅证幂等、动态挂载只覆盖迁移执行时已有表）。
 
 ## 5. 风险与回滚
 

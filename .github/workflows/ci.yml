@@ -65,45 +65,13 @@ jobs:
         working-directory: apps/api
         run: npx prisma generate
 
-      - name: Verify tenant-integrity triggers (name / table / enabled)
+      - name: Verify migration checksums (byte-identical reinclusion of re-added migration)
+        run: node tools/migration-checksum/check-migration-checksums.mjs --root .
+
+      - name: Verify tenant-integrity triggers (checklist: name / table / event / enabled)
         run: |
-          PGPASSWORD=ci psql -h localhost -U crossclaim -d crossclaim -v ON_ERROR_STOP=1 <<'SQL'
-          DO $$
-          DECLARE
-            baseline int;
-            expected int;
-            immutable_ok int;
-            ruleset_ok int;
-          BEGIN
-            SELECT count(*) INTO baseline FROM pg_trigger WHERE NOT tgisinternal AND tgenabled = 'O'
-              AND tgname LIKE 'cc_tenant_%' AND tgname NOT LIKE 'cc_tenant_immutable__%';
-            IF baseline < 28 THEN RAISE EXCEPTION 'baseline tenant triggers < 28 (got %)', baseline; END IF;
-            SELECT count(*) INTO expected FROM information_schema.columns
-              WHERE table_schema = current_schema() AND column_name = 'organizationId' AND table_name <> '_prisma_migrations';
-            SELECT count(*) INTO immutable_ok
-              FROM pg_trigger g
-              JOIN pg_class c ON c.oid = g.tgrelid
-              JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = current_schema()
-              JOIN information_schema.columns ic
-                ON ic.table_schema = current_schema() AND ic.table_name = c.relname
-               AND ic.column_name = 'organizationId'
-              WHERE NOT g.tgisinternal AND g.tgenabled = 'O' AND g.tgname = 'cc_tenant_immutable__' || c.relname;
-            IF immutable_ok <> expected THEN
-              RAISE EXCEPTION 'immutability triggers incomplete (expected % per-table triggers, found %)', expected, immutable_ok;
-            END IF;
-            SELECT count(*) INTO ruleset_ok
-              FROM pg_trigger g
-              JOIN pg_class c ON c.oid = g.tgrelid
-              JOIN pg_namespace n ON n.oid = c.relnamespace AND n.nspname = current_schema()
-              WHERE NOT g.tgisinternal AND g.tgenabled = 'O'
-                AND g.tgname = 'cc_ruleset_ownership_immutable'
-                AND c.relname = 'RuleSet';
-            IF ruleset_ok <> 1 THEN RAISE EXCEPTION 'RuleSet ownership trigger missing'; END IF;
-            RAISE NOTICE 'OK: baseline=% immutable=% ruleset=%', baseline, immutable_ok, ruleset_ok;
-          END
-          $$;
-          SQL
-          echo "OK: tenant-integrity triggers verified (baseline>=28, per-table immutability complete, ruleset immutable)"
+          node tools/tenant-triggers/emit-check-sql.mjs \
+            | PGPASSWORD=ci psql -h localhost -U crossclaim -d crossclaim -v ON_ERROR_STOP=1
 
       - name: API contract (API.md ↔ implemented routes)
         run: node tools/api-contract/check-routes.mjs --root .
@@ -118,6 +86,12 @@ jobs:
       - name: Unit + database integration tests
         working-directory: apps/api
         run: npm test
+
+      - name: Two-stage upgrade verification (pre-B2 → seed → apply B2; data preserved)
+        run: node tools/upgrade-verify/two-stage-upgrade.mjs
+        env:
+          CC_PSQL_CMD: psql -h localhost -U crossclaim
+          PGPASSWORD: ci
 
   deploy-smoke:
     name: Deploy smoke · fresh install + migration upgrade
