@@ -1,6 +1,6 @@
-# 审批绑定与生命周期契约（授权项 ② · R1 → R3）
+# 审批绑定与生命周期契约（授权项 ② · R1 → R4；② 第二批 payment.capture 接入中）
 
-依据：**MSG-20260930-17**（R1 REVISE）→ **MSG-20260930-18**（R2 REVISE）→ **MSG-20260930-19**（R3 REVISE）。
+依据：**MSG-20260930-17**（R1 REVISE）→ **MSG-20260930-18**（R2 REVISE）→ **MSG-20260930-19**（R3 REVISE）→ **MSG-20260930-20**（R4 REVISE，自动路径锁内判定与事件顺序）→ **MSG-20260930-21**（R4 = PASS；下一批次 = ② 第二批 payment.capture）。
 本文件随每轮裁决同步：**只保留已兑现的表述**，未实现的承诺不得留在契约里。
 范围：受保护业务入口（首批 = recovery-outcome → 资金确认）的**操作级**审批授权。
 
@@ -98,6 +98,24 @@ boundPayload = {
 - 静态字符串检查仅为「有限静态约定检查」，不使用「类型与测试层面不可行」这类表述；
 - 未配置守卫的错误码：默认装配路径（READ_ONLY）→ `ACTION_GUARD_REQUIREMENTS_NOT_MET`；直接缺依赖分支 → `ACTION_GUARD_NOT_CONFIGURED`。
 
+## 5.1 支付域：`payment.capture`（② 第二批）
+
+| 项 | 值 |
+| --- | --- |
+| 受保护动作 | `payment.capture`（目录要求 `humanApproval` + `productionGate`；Kill Switch scope `billing`） |
+| 审批事件族 | `payment.review_required` / `payment.review_approved` / `payment.review_rejected`（挂在 `BillingInvoice` 上，与 `recovery.review_*` 的 `Case` 族彻底分离） |
+| 消费事件 | `payment.capture_consumed`（含 `approvalId`/`operationId`/`invoiceId`/状态迁移与金额；与资金写入同事务） |
+| 审批写入 | `submitPaymentReview` 的 APPROVE 必须绑定 `boundAction` + 规范化 `boundPayload`（金额/币种/依据）+ `expiresAt` + `fingerprintVersion`，并返回 `approvalId` |
+| 锁与顺序 | 发票级 advisory lock（`cc-payment-invoice:<invoiceId>`）；生命周期事件时间在锁内生成且同发票严格递增（与 recovery 同规则） |
+| 入口闭环（本批次） | `POST /billing/:id/status` 经 HITL 边界接入；缺 Action Guard 即 fail-closed；缺 `approvalId` → 409 REQUIRE_APPROVAL |
+| 幂等语义 | 状态迁移**不是**幂等创建：审批已消费且发票已在目标状态时，重复提交返回 409 `ILLEGAL_TRANSITION`，消费记录保持 1（零新增副作用） |
+
+待架构方裁定（本批次未接）：
+
+- `POST /payments/events/:id/replay` 的审批主体（目标为 `PaymentEvent`，载荷指纹如何定义）；
+- `POST /payments/processing/retry-due` 的审批主体（一次调用可能覆盖多张发票，是否需要「批次摘要指纹」）；
+- `POST /payments/webhook` 是否纳入 Action Guard（当前边界 = 验签 + `providerEventId` 幂等 + 事件形状校验）。
+
 ## 6. 验收矩阵（CHANGE C 对应）
 
 | 场景 | 期望 | 资金对象 |
@@ -115,5 +133,7 @@ boundPayload = {
 | 并发首次提交（同一审批） | 仅一次 201，其余 200 | 四类均恰为 1 |
 | 同案件不同审批并发 | 旧审批被取代后拒绝 | 全案最多一条完整链 |
 | 受保护入口缺 `approvalId` | 409 REQUIRE_APPROVAL | 四类均 0 |
+| 支付域（`payment.capture`，账单入口）缺 `approvalId` | 409 `ACTION_GUARD_HUMAN_APPROVAL_REQUIRED` | 发票状态与支付对象不变 |
+| 支付域审批已消费后重复提交 | 409 `ILLEGAL_TRANSITION`（状态迁移非幂等），消费记录仍为 1 | 无新增副作用 |
 
 > 实现与测试（`action-guard-hitl-*`、`workflow-hitl-db`、`workflow-outcome-db`）按本文件逐条对齐后送审。
