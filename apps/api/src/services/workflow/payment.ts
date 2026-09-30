@@ -167,17 +167,15 @@ export async function applyPaymentSucceeded(
   const at = (deps.now ?? (() => new Date()))();
   const mode: PaymentSucceededMode = input.mode ?? 'FIRST_PROCESSING';
 
+  // R8 修订 CHANGE A：锁外仅做存在性预检查（快速失败）；执行依据一律取锁内快照
   const client = deps.client ?? prisma;
-  const invoice = await client.billingInvoice.findFirst({
+  const preInvoice = await client.billingInvoice.findFirst({
     where: { id: input.invoiceId, organizationId: input.organizationId },
-    select: { id: true, status: true, total: true, currency: true, invoiceNo: true },
+    select: { id: true, status: true },
   });
-  if (!invoice) {
+  if (!preInvoice) {
     throw new WorkflowError('NOT_FOUND', `发票 ${input.invoiceId} 不存在或不属于该租户`);
   }
-
-  const amountMatches = money(invoice.total) === money(input.amount);
-  const currencyMatches = invoice.currency === input.currency;
 
   // ② 第二批 replay：允许在调用方已有的**锁内事务**中执行（统一锁协议 + 统一执行快照）
   const exec = deps.client
@@ -186,6 +184,21 @@ export async function applyPaymentSucceeded(
     : (fn: (tx: Prisma.TransactionClient) => Promise<ApplyPaymentSucceededResult>) =>
         (prisma as PrismaClient).$transaction(fn);
   return exec(async (tx) => {
+    // R8 修订 CHANGE A：统一锁协议 —— 资金执行必须先取得该发票的行级咨询锁
+    // （与 R7 账单状态写入同一把锁；锁顺序固定为：事件锁 → 发票锁，避免反向获取）
+    if (typeof tx.$executeRawUnsafe === 'function') {
+      await tx.$executeRawUnsafe('SELECT pg_advisory_xact_lock(hashtext($1))', `cc-payment-invoice:${input.invoiceId}`);
+    }
+    // 锁后重读**最终发票事实**：判定、CAS 与写入全部使用这份快照
+    const invoice = await tx.billingInvoice.findFirst({
+      where: { id: input.invoiceId, organizationId: input.organizationId },
+      select: { id: true, status: true, total: true, currency: true, invoiceNo: true },
+    });
+    if (!invoice) {
+      throw new WorkflowError('NOT_FOUND', `发票 ${input.invoiceId} 不存在或不属于该租户`);
+    }
+    const amountMatches = money(invoice.total) === money(input.amount);
+    const currencyMatches = invoice.currency === input.currency;
     // 幂等：同 (organizationId, provider, externalPaymentId) 只记录一次
     const existing = await tx.payment.findFirst({
       where: {
@@ -291,9 +304,17 @@ export async function applyPaymentSucceeded(
     }
 
     // CAS：只有 ISSUED 才能推进到 PAID（一次且仅一次）
+    // R8 修订 CHANGE A：状态 + 记账事实（total/currency）双重 CAS；
+    // 即使存在不遵守发票锁协议的写入者，也只会 CAS 未命中而拒绝，不会写入旧快照金额。
     const updated = await tx.billingInvoice.updateMany({
-      where: { id: invoice.id, organizationId: input.organizationId, status: 'ISSUED' },
-      data: { status: 'PAID', paidAt: at, paidAmount: new Prisma.Decimal(input.amount) },
+      where: {
+        id: invoice.id,
+        organizationId: input.organizationId,
+        status: 'ISSUED',
+        total: invoice.total,
+        currency: invoice.currency,
+      },
+      data: { status: 'PAID', paidAt: at, paidAmount: invoice.total },
     });
     if (updated.count !== 1) {
       await writeAudit(tx, {

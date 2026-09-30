@@ -541,13 +541,18 @@ export async function replayPaymentEvent(
       if (typeof tx.$executeRawUnsafe === 'function') {
         await tx.$executeRawUnsafe('SELECT pg_advisory_xact_lock(hashtext($1))', `cc-payment-event:${pre.id}`);
       }
-      // 执行时间在锁内生成，统一用于 attempt / 审计 / 消费
-      const at = (deps.now ?? (() => new Date()))();
+
       // 锁内执行快照：事件身份 + 关联 attempt + 资金事实
       const snapshot = await readReplaySnapshot(tx, {
         organizationId: input.organizationId,
         paymentEventId: pre.id,
       });
+      // R8 修订 CHANGE A：在**必要锁全部取得之后**再做最终重验（事件锁 → 发票锁）
+      if (typeof tx.$executeRawUnsafe === 'function') {
+        await tx.$executeRawUnsafe('SELECT pg_advisory_xact_lock(hashtext($1))', `cc-payment-invoice:${snapshot.invoiceId}`);
+      }
+      // 重验时间在必要锁（事件锁 + 发票锁）取得之后生成，统一用于 attempt / 审计 / 消费
+      const at = (deps.now ?? (() => new Date()))();
       // 锁内重验审批：指纹逐项比对锁内快照（过期/撤销/取代/消费均在锁内判定）
       const boundary = await verifyApprovalBoundary(tx, {
         organizationId: input.organizationId,
