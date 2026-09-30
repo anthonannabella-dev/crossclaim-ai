@@ -220,7 +220,16 @@ describe('C-0010-A — 支付域（真实 PostgreSQL）', () => {
     );
     await submitRecoveryReview(
       prisma,
-      { organizationId: ORG, actorUserId: ownerId, role: 'OWNER', caseId, decision: 'APPROVE' },
+      {
+        organizationId: ORG,
+        actorUserId: ownerId,
+        role: 'OWNER',
+        caseId,
+        decision: 'APPROVE',
+        // CHANGE A（R2）：审批必须绑定本次操作载荷
+        boundPayload: { recoveredAmount: '1500.0000', currency: 'USD', basisReference: 'payment-db-basis', evidenceArtifactId: null },
+        boundAction: 'commission.charge',
+      },
       () => NOW,
     );
     expect(await auditCount('recovery.review_approved')).toBe(1);
