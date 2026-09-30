@@ -1,4 +1,4 @@
-# 审批绑定与生命周期契约（授权项 ② · R1 → R4；② 第二批 payment.capture 接入中）
+# 审批绑定与生命周期契约（授权项 ② · R1 → R7；② 第二批 payment.capture 接入中）
 
 依据：**MSG-20260930-17**（R1 REVISE）→ **MSG-20260930-18**（R2 REVISE）→ **MSG-20260930-19**（R3 REVISE）→ **MSG-20260930-20**（R4 REVISE，自动路径锁内判定与事件顺序）→ **MSG-20260930-21**（R4 = PASS；下一批次 = ② 第二批 payment.capture）→ **MSG-20260930-22**（R5 REVISE：审批必须绑定真实账单操作与迁移；下一批次 = 账单入口 R6，随后 replay → 冻结批次 retry-due）。
 本文件随每轮裁决同步：**只保留已兑现的表述**，未实现的承诺不得留在契约里。
@@ -110,7 +110,7 @@ boundPayload = {
 | 入口闭环（R5/R6） | `POST /billing/:id/status` 经 HITL 边界接入；缺 Action Guard 即 fail-closed；缺 `approvalId` → 409 REQUIRE_APPROVAL |
 | 审批创建入口（R6 新增） | `POST /billing/:id/payment-review`（受认证会话；审批人 OWNER/ADMIN），REQUEST/APPROVE/REJECT，APPROVE 由服务端组装绑定载荷 |
 | 真实操作绑定（R6 CHANGE A） | 审批指纹 = `invoiceId` + **精确 `from`→`to`** + 金额 + 币种 + 依据 + 证据 + 版本；`payment.capture` 审批**只能用于 `to=PAID`**（签发等迁移走独立授权） |
-| 锁内事实核对（R6 CHANGE A） | 执行时在发票锁内**重读** `status/total/currency`，与批准快照逐项比对；不一致 → 403 `APPROVAL_PAYLOAD_MISMATCH`（堵住"批准 1 USD 却登记 1500 USD"） |
+| 锁内执行快照（R6 CHANGE A → **R7 CHANGE A**） | 见 §5.3：执行时在发票锁内读取**完整执行快照**，迁移判断 / CAS / 金额写入 / 成功与消费审计 / 执行时间全部取自它；批准金额与币种必须等于锁内快照，否则 403 `APPROVAL_PAYLOAD_MISMATCH` |
 | 最终审计（R6 CHANGE D） | `billing.status_changed` 记 `approvalId`/`operationId`/`result`；锁内拒绝写 `payment.capture_rejected`（stage/reason/执行主体/审批/操作/结果，SYSTEM actor，事务外写入且失败不覆盖原错误） |
 | 幂等语义 | 状态迁移**不是**幂等创建：审批已消费且发票已在目标状态时，重复提交返回 409 `ILLEGAL_TRANSITION`，消费记录保持 1（零新增副作用） |
 
@@ -126,6 +126,17 @@ boundPayload = {
 - **retry-due**：采用**冻结清单批次审批**——租户隔离、服务端生成 `batchId`、指纹=排序后的明确 attempt/event 清单及版本+关联发票+金额币种+操作类型+有效期与数量上限；执行不得动态扩展到批准后新出现的 due 项；每项执行前重验事实/权限/生命周期/幂等，变化项拒绝或跳过并留证；不接受只绑定 limit 或查询条件的开放批次；后台重试须以 SYSTEM 身份运行并带预先授权范围。
 - **webhook**：接收付款事实**不引入每次人工审批**，保持验签、重放保护、幂等、租户/发票/金额币种匹配与审计边界；但「接收已发生付款」与「发起新扣款/外写」必须分离——验签成功不等于授权扣款，后续处理仍受运行模式、Kill Switch、生命周期与适用审批规则约束。
 
+## 5.3 R7：锁内执行快照与签发边界（MSG-20260930-23）
+
+- **单一事实来源**：`advanceBillingInvoice` 在取得发票 advisory lock 之后读取完整快照（`status/invoiceNo/caseId/total/currency`），
+  其后的合法迁移判断、CAS、`paidAmount`、`paidAt` 与两类审计（`billing.status_changed`、`payment.capture_consumed`）**全部**引用该快照；
+  锁外读取降级为「预检查」（存在性 / 明显非法迁移，快速失败），不再提供任何执行依据。
+- **防绕过机制**：① 所有受保护写入遵循同一把发票 advisory lock（`cc-payment-invoice:<invoiceId>`）；
+  ② CAS 在状态之外同时比较**记账事实**（`total` + `currency`）——即使存在不遵循锁协议的写入者，也只会在 CAS 未命中时拒绝，而不是把锁外旧金额写进账单。
+- **执行时间**：`paidAt` / `issuedAt`、消费事件与成功审计的时间戳均由锁内生成（不再沿用锁前 `at`）。
+- **签发边界**：`payment.capture` 审批**只能用于 `to=PAID`**；`DRAFT → ISSUED` 需要独立授权边界，
+  当前统一守卫的 `POST /billing/:id/status` **不得**被描述为「签发能力已接入」，也不得复用收费审批完成签发。
+- 适用对象：本节的「执行快照」结论限定在**账单登记**（`BillingInvoice`）；真实支付渠道扣款未接入，仍属 HOLD。
 ## 6. 验收矩阵（CHANGE C 对应）
 
 | 场景 | 期望 | 资金对象 |
@@ -145,5 +156,9 @@ boundPayload = {
 | 受保护入口缺 `approvalId` | 409 REQUIRE_APPROVAL | 四类均 0 |
 | 支付域（`payment.capture`，账单入口）缺 `approvalId` | 409 `ACTION_GUARD_HUMAN_APPROVAL_REQUIRED` | 发票状态与支付对象不变 |
 | 支付域审批已消费后重复提交 | 409 `ILLEGAL_TRANSITION`（状态迁移非幂等），消费记录仍为 1 | 无新增副作用 |
+| 支付域执行快照交错（审批绑定旧事实，锁内事实已变） | 403 `APPROVAL_PAYLOAD_MISMATCH`（R7 用例 11；控制点 = `pg_locks` 中该发票 advisory lock 的等待行） | 无新增副作用 + 锁内拒绝审计 |
+| 支付域执行快照交错（审批绑定锁内新事实） | 200；`paidAmount` = 成功审计金额 = 消费金额/币种 = 批准金额（R7 用例 12） | 恰一次登记 + 恰一次消费 |
+| 支付域等锁期间失效（过期 / 撤销 / 主体成员停用） | 403 `APPROVAL_EXPIRED` / `APPROVAL_REVOKED` / `APPROVAL_ACTOR_MISMATCH`（R7 用例 13a–13c） | 账单金额与状态不变、消费不新增 |
+| 支付域审批审计端口写入失败 | 拒绝（≥400，fail-closed；R7 用例 14：数据库层拒绝 `action_guard.approval_decision`） | `work` 不执行：账单与消费零变化 |
 
-> 实现与测试（`action-guard-hitl-*`、`workflow-hitl-db`、`workflow-outcome-db`）按本文件逐条对齐后送审。
+> 实现与测试（`action-guard-hitl-*`、`workflow-hitl-db`、`workflow-outcome-db`、`action-guard-payment-capture-http-db`、`workflow-billing*`）按本文件逐条对齐后送审。

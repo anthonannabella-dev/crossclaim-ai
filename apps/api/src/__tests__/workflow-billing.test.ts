@@ -23,18 +23,21 @@ const ACTOR = '88888888-8888-4888-8888-888888888888';
 const INVOICE = '99999999-9999-4999-8999-999999999999';
 
 interface FakeTx {
-  billingInvoice: { updateMany: ReturnType<typeof vi.fn> };
+  billingInvoice: { findFirst: ReturnType<typeof vi.fn>; updateMany: ReturnType<typeof vi.fn> };
   auditLog: { create: ReturnType<typeof vi.fn> };
 }
 
 function fakePrisma(status: string, casHits = true) {
+  const snapshot = { id: INVOICE, status, invoiceNo: 'BILL-1', caseId: 'case-1', total: 100, currency: 'USD' };
   const tx: FakeTx = {
     billingInvoice: {
+      // R7 CHANGE A：锁内执行快照（状态/金额/币种/单号/案件均取自这里）
+      findFirst: vi.fn(async () => snapshot),
       updateMany: vi.fn(async () => ({ count: casHits ? 1 : 0 })),
     },
     auditLog: { create: vi.fn(async () => ({ id: 'audit-1' })) },
   };
-  const findFirst = vi.fn(async () => ({ id: INVOICE, status, invoiceNo: 'BILL-1', caseId: 'case-1', total: 100, currency: 'USD' }));
+  const findFirst = vi.fn(async () => snapshot);
   const transaction = vi.fn(async (fn: (client: FakeTx) => Promise<unknown>) => fn(tx));
   return {
     prisma: { billingInvoice: { findFirst }, $transaction: transaction } as unknown as PrismaClient,

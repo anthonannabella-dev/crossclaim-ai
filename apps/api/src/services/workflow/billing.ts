@@ -163,37 +163,37 @@ export async function advanceBillingInvoice(
   if (note.length > NOTE_MAX) {
     throw new WorkflowError('INVALID_INPUT', `note 不得超过 ${NOTE_MAX} 个字符`);
   }
-  // 裁定：PAID 必须带 paymentReference 或 note（在触库前判定）
+  // 该对象：PAID 必须带 paymentReference 或 note，在传入前判定
   if (to === 'PAID' && paymentReference === '' && note === '') {
     throw new WorkflowError(
       'PAYMENT_REFERENCE_REQUIRED',
-      'PAID 必须提供 paymentReference 或 note（至少一个）',
+      'PAID 必须提供 paymentReference 或 note（二者之一）',
     );
   }
   if (to === '') {
     throw new WorkflowError('INVALID_INPUT', '目标状态非法');
   }
 
-  const invoice = await prisma.billingInvoice.findFirst({
+  // R7 CHANGE A：锁外读取仅作为**预检查**（存在性 / 明显非法迁移），快速失败用；
+  // 它不再提供执行依据 —— 金额 / 币种 / 当前状态 / 执行时间一律取自锁后快照。
+  const precheck = await prisma.billingInvoice.findFirst({
     where: { id: input.invoiceId, organizationId: input.organizationId },
-    select: { id: true, status: true, invoiceNo: true, caseId: true, total: true, currency: true },
+    select: { id: true, status: true },
   });
-  if (!invoice) {
+  if (!precheck) {
     throw new WorkflowError('NOT_FOUND', `发票 ${input.invoiceId} 不存在或不属于该租户`);
   }
-  if (invoice.status === to) {
-    throw new WorkflowError('ILLEGAL_TRANSITION', `发票已处于 ${to}，无需重复迁移`);
+  if (precheck.status === to) {
+    throw new WorkflowError('ILLEGAL_TRANSITION', `发票已处于 ${to}，不可重复迁移`);
   }
-  if (!canAdvanceBilling(invoice.status, to)) {
+  if (!canAdvanceBilling(precheck.status, to)) {
     throw new WorkflowError(
       'ILLEGAL_TRANSITION',
-      `发票状态 ${invoice.status} 不能迁移到 ${to}（只允许 DRAFT → ISSUED → PAID）`,
+      `发票状态 ${precheck.status} 不能迁移到 ${to}：只接受 DRAFT → ISSUED → PAID`,
     );
   }
 
-  const from = invoice.status;
-  const at = now();
-  // P5：审批与操作身份（缺省时保持既有直接调用语义）
+  // P5：操作关联标识（缺省时由审批编号直接推导）
   const approvalId = typeof input.approvalId === 'string' && input.approvalId.trim() !== '' ? input.approvalId.trim() : null;
   const operationId =
     typeof input.operationId === 'string' && input.operationId.trim() !== ''
@@ -214,137 +214,168 @@ export async function advanceBillingInvoice(
 
   try {
     return await prisma.$transaction(async (tx) => {
-    // P5：目标级串行化（发票粒度）→ 锁内完整重验 → CAS → 审计/消费
-    if (typeof tx.$executeRawUnsafe === 'function') {
-      await tx.$executeRawUnsafe('SELECT pg_advisory_xact_lock(hashtext($1))', `cc-payment-invoice:${invoice.id}`);
-    }
-    if (approvalId) {
-      // R6 CHANGE A：锁内重读发票事实，与批准快照逐项核对（不得用事务外读取的 invoice.total）
-      const fresh = await tx.billingInvoice.findFirst({
-        where: { id: invoice.id, organizationId: input.organizationId },
-        select: { status: true, total: true, currency: true },
-      });
-      if (!fresh) throw new WorkflowError('NOT_FOUND', `发票 ${invoice.id} 不存在或不属于该租户`);
-      if (to !== 'PAID') {
-        throw new WorkflowError('ILLEGAL_TRANSITION', '受保护收费入口只允许 PAID 确认（签发等迁移需独立授权）');
+      // 统一锁协议（R7 CHANGE A）：所有账单写入者都必须先持有该发票的行级咨询锁；
+      // 锁内读取的事实才是本次执行的依据。
+      if (typeof tx.$executeRawUnsafe === 'function') {
+        await tx.$executeRawUnsafe(
+          'SELECT pg_advisory_xact_lock(hashtext($1))',
+          `cc-payment-invoice:${input.invoiceId}`,
+        );
       }
-      const freshAmount = money(fresh.total);
-      if (boundPayload?.amount !== freshAmount || boundPayload?.currency !== fresh.currency) {
-        throw new ApprovalBoundaryError('APPROVAL_PAYLOAD_MISMATCH', invoice.id);
-      }
-      const boundary = await verifyApprovalBoundary(tx, {
-        organizationId: input.organizationId,
-        approvalId,
-        action: PAYMENT_CAPTURE_ACTION,
-        caseId: invoice.id,
-        actorUserId: input.actorUserId,
-        payload: {
-          amount: boundPayload?.amount ?? null,
-          currency: boundPayload?.currency ?? null,
-          basisReference: boundPayload?.basisReference ?? null,
-          evidenceArtifactId: boundPayload?.evidenceArtifactId ?? null,
-        },
-        // 真实账单操作指纹：目标 + 迁移
-        extra: { invoiceId: invoice.id, from: fresh.status, to },
-        now: now(),
-        approvalEventAction: PAYMENT_APPROVAL_EVENT_ACTION,
-        requiredEventAction: PAYMENT_REQUIRED_EVENT_ACTION,
-        revocationEventActions: [PAYMENT_REJECTED_EVENT_ACTION],
-        consumedEventAction: PAYMENT_CONSUMED_EVENT_ACTION,
-        targetEntityType: 'BillingInvoice',
+      // R7 CHANGE A：锁后读取**完整执行快照**；迁移判断、CAS、金额写入、成功审计与消费记录全部使用它。
+      const snapshot = await tx.billingInvoice.findFirst({
+        where: { id: input.invoiceId, organizationId: input.organizationId },
+        select: { id: true, status: true, invoiceNo: true, caseId: true, total: true, currency: true },
       });
-      if (!boundary.ok) throw new ApprovalBoundaryError(boundary.reason, invoice.id);
-      if (boundary.consumed) throw new ApprovalBoundaryError('APPROVAL_ALREADY_CONSUMED', invoice.id);
-    }
-    // CAS：并发推进只有一个能命中当前状态
-    const updated = await tx.billingInvoice.updateMany({
-      where: { id: invoice.id, organizationId: input.organizationId, status: from as never },
-      data: {
-        status: to as never,
-        ...(to === 'ISSUED' ? { issuedAt: at } : {}),
-        ...(to === 'PAID'
-          ? {
-              paidAt: at,
-              paidAmount: invoice.total,
-              ...(paymentReference ? { externalRef: paymentReference } : {}),
-            }
-          : {}),
-      },
-    });
-    if (updated.count !== 1) {
-      throw new WorkflowError('ILLEGAL_TRANSITION', '发票状态已被其他操作改变，请刷新后重试');
-    }
+      if (!snapshot) {
+        throw new WorkflowError('NOT_FOUND', `发票 ${input.invoiceId} 不存在或不属于该租户`);
+      }
+      const from = snapshot.status;
+      if (from === to) {
+        throw new WorkflowError('ILLEGAL_TRANSITION', `发票已处于 ${to}，不可重复迁移`);
+      }
+      if (!canAdvanceBilling(from, to)) {
+        throw new WorkflowError(
+          'ILLEGAL_TRANSITION',
+          `发票状态 ${from} 不能迁移到 ${to}：只接受 DRAFT → ISSUED → PAID`,
+        );
+      }
+      // R7 CHANGE A：执行时间在锁内生成，统一用于 issuedAt / paidAt、消费记录与最终成功审计。
+      const executionAt = now();
+      const lockedAmount = money(snapshot.total);
 
-    const row = prepareAuditInsert(
-      {
-        organizationId: input.organizationId,
-        actorType: 'USER',
-        actorUserId: input.actorUserId,
-        action: 'billing.status_changed',
-        entityType: 'BillingInvoice',
-        entityId: invoice.id,
-        // 裁定：只记录「是否提供了支付引用 / 备注」，绝不写入完整支付流水
-        changes: {
-          from,
-          to,
-          invoiceNo: invoice.invoiceNo,
-          caseId: invoice.caseId,
-          currency: invoice.currency,
-          amount: money(invoice.total),
-          paymentReferenceProvided: paymentReference !== '',
-          ...(note ? { note } : {}),
-          // R6 CHANGE D：最终执行审计必须能与审批/操作关联（entityId = BillingInvoice）
-          ...(approvalId ? { approvalId, operationId } : {}),
-          result: from !== to ? 'TRANSITIONED' : 'NOOP',
-          at: at.toISOString(),
+      if (approvalId) {
+        // 受保护收费动作只能用于 PAID 确认；签发（DRAFT → ISSUED）保留独立授权边界，不得复用本审批。
+        if (to !== 'PAID') {
+          throw new WorkflowError(
+            'ILLEGAL_TRANSITION',
+            '受保护收费动作只接受 PAID 确认；签发等迁移需独立授权边界',
+          );
+        }
+        // 批准事实必须等于**锁内**账单事实（金额/币种）；不允许凭"锁内比较通过"再写入另一份旧快照。
+        if (boundPayload?.amount !== lockedAmount || boundPayload?.currency !== snapshot.currency) {
+          throw new ApprovalBoundaryError('APPROVAL_PAYLOAD_MISMATCH', snapshot.id);
+        }
+        const boundary = await verifyApprovalBoundary(tx, {
+          organizationId: input.organizationId,
+          approvalId,
+          action: PAYMENT_CAPTURE_ACTION,
+          caseId: snapshot.id,
+          actorUserId: input.actorUserId,
+          payload: {
+            amount: boundPayload?.amount ?? null,
+            currency: boundPayload?.currency ?? null,
+            basisReference: boundPayload?.basisReference ?? null,
+            evidenceArtifactId: boundPayload?.evidenceArtifactId ?? null,
+          },
+          // 真实账单操作指纹：目标 + 精确迁移（取自锁内快照）
+          extra: { invoiceId: snapshot.id, from, to },
+          now: executionAt,
+          approvalEventAction: PAYMENT_APPROVAL_EVENT_ACTION,
+          requiredEventAction: PAYMENT_REQUIRED_EVENT_ACTION,
+          revocationEventActions: [PAYMENT_REJECTED_EVENT_ACTION],
+          consumedEventAction: PAYMENT_CONSUMED_EVENT_ACTION,
+          targetEntityType: 'BillingInvoice',
+        });
+        if (!boundary.ok) throw new ApprovalBoundaryError(boundary.reason, snapshot.id);
+        if (boundary.consumed) throw new ApprovalBoundaryError('APPROVAL_ALREADY_CONSUMED', snapshot.id);
+      }
+      // CAS：状态 + 事实（金额/币种）双重比较。咨询锁之外的写入者若改变事实，这里必须拒绝，
+      // 而不是把锁外旧快照写进账单。
+      const updated = await tx.billingInvoice.updateMany({
+        where: {
+          id: snapshot.id,
+          organizationId: input.organizationId,
+          status: from as never,
+          total: snapshot.total,
+          currency: snapshot.currency,
         },
-      },
-      { maxStringLength: NOTE_MAX },
-    );
-    await tx.auditLog.create({
-      data: {
-        organizationId: row.organizationId,
-        actorType: row.actorType,
-        actorUserId: row.actorUserId,
-        actorRef: row.actorRef,
-        action: row.action,
-        entityType: row.entityType,
-        entityId: row.entityId,
-        changes: (row.changes ?? undefined) as Prisma.InputJsonValue | undefined,
-        ip: row.ip,
-        userAgent: row.userAgent,
-        createdAt: at,
-      },
-    });
-
-    if (approvalId) {
-      // P5：消费事件与资金写入同事务（审批一次性）
-      await tx.auditLog.create({
         data: {
+          status: to as never,
+          ...(to === 'ISSUED' ? { issuedAt: executionAt } : {}),
+          ...(to === 'PAID'
+            ? {
+                paidAt: executionAt,
+                paidAmount: snapshot.total,
+                ...(paymentReference ? { externalRef: paymentReference } : {}),
+              }
+            : {}),
+        },
+      });
+      if (updated.count !== 1) {
+        throw new WorkflowError('ILLEGAL_TRANSITION', '发票状态或记账事实已被其他事务改变，请刷新后重试');
+      }
+
+      const row = prepareAuditInsert(
+        {
           organizationId: input.organizationId,
           actorType: 'USER',
           actorUserId: input.actorUserId,
-          action: PAYMENT_CONSUMED_EVENT_ACTION,
+          action: 'billing.status_changed',
           entityType: 'BillingInvoice',
-          entityId: invoice.id,
+          entityId: snapshot.id,
+          // 该对象只记录是否提供了支付依据 / 备注本身，绝不写入完整支付流水
           changes: {
-            approvalId,
-            operationId,
-            invoiceId: invoice.id,
             from,
             to,
-            amount: money(invoice.total),
-            currency: invoice.currency,
-          } as never,
-          createdAt: at,
+            invoiceNo: snapshot.invoiceNo,
+            caseId: snapshot.caseId,
+            currency: snapshot.currency,
+            amount: lockedAmount,
+            paymentReferenceProvided: paymentReference !== '',
+            ...(note ? { note } : {}),
+            // R6 CHANGE D：本次执行的账单操作关联（审批/操作）；entityId = BillingInvoice
+            ...(approvalId ? { approvalId, operationId } : {}),
+            result: 'TRANSITIONED',
+            at: executionAt.toISOString(),
+          },
+        },
+        { maxStringLength: NOTE_MAX },
+      );
+      await tx.auditLog.create({
+        data: {
+          organizationId: row.organizationId,
+          actorType: row.actorType,
+          actorUserId: row.actorUserId,
+          actorRef: row.actorRef,
+          action: row.action,
+          entityType: row.entityType,
+          entityId: row.entityId,
+          changes: (row.changes ?? undefined) as Prisma.InputJsonValue | undefined,
+          ip: row.ip,
+          userAgent: row.userAgent,
+          createdAt: executionAt,
         },
       });
-    }
 
-    return { invoiceId: invoice.id, from, to, paymentReferenceProvided: paymentReference !== '' };
+      if (approvalId) {
+        // P5：消费事件与资金写入同事务（一次性）
+        await tx.auditLog.create({
+          data: {
+            organizationId: input.organizationId,
+            actorType: 'USER',
+            actorUserId: input.actorUserId,
+            action: PAYMENT_CONSUMED_EVENT_ACTION,
+            entityType: 'BillingInvoice',
+            entityId: snapshot.id,
+            changes: {
+              approvalId,
+              operationId,
+              invoiceId: snapshot.id,
+              from,
+              to,
+              amount: lockedAmount,
+              currency: snapshot.currency,
+            } as never,
+            createdAt: executionAt,
+          },
+        });
+      }
+
+      return { invoiceId: snapshot.id, from, to, paymentReferenceProvided: paymentReference !== '' };
     });
   } catch (error) {
-    // R6 CHANGE D：锁内拒绝必须留下最终拒绝审计（事务已回滚，故独立连接写入；失败不覆盖原错误）
+    // R6 CHANGE D：支付捕获在锁内被拒绝时写最终拒绝审计（事务已回滚，故用独立连接写入；失败不覆盖原错误）
     const reason =
       error instanceof ApprovalBoundaryError
         ? error.reason
@@ -355,7 +386,7 @@ export async function advanceBillingInvoice(
       await writePaymentRejectionAudit(prisma, {
         organizationId: input.organizationId,
         actorUserId: input.actorUserId,
-        invoiceId: invoice.id,
+        invoiceId: input.invoiceId,
         approvalId: typeof input.approvalId === 'string' ? input.approvalId : null,
         operationId:
           typeof input.operationId === 'string' && input.operationId.trim() !== ''
