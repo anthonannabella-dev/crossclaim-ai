@@ -19,6 +19,7 @@
 import { Prisma, type PrismaClient } from '@prisma/client';
 
 import { prepareAuditInsert } from '../audit';
+import { RECOVERY_CONFIRMATION_ACTION } from '../action-guard/approval-verifier';
 import { WorkflowError } from './opportunity-review';
 import { assertPermission } from './permissions';
 
@@ -335,7 +336,10 @@ export async function submitRecoveryReview(
           ? {
               boundPayload: bound,
               expiresAt: expiresAt?.toISOString() ?? null,
-              boundAction: typeof input.boundAction === 'string' && input.boundAction.trim() !== '' ? input.boundAction.trim() : 'commission.charge',
+              boundAction:
+                typeof input.boundAction === 'string' && input.boundAction.trim() !== ''
+                  ? input.boundAction.trim()
+                  : RECOVERY_CONFIRMATION_ACTION,
             }
           : {}),
       },

@@ -13,6 +13,12 @@
 
 import { ACTION_GUARD_CATALOG } from './action-guard';
 
+/**
+ * 受保护动作名（单一来源）：回收资金确认（POST /cases/:id/recovery-outcome）。
+ * 非守卫文件必须引用本常量，不得散落动作字面量（有限静态约定检查要求）。
+ */
+export const RECOVERY_CONFIRMATION_ACTION = 'commission.charge';
+
 export const APPROVAL_REASON_CODES = [
   'APPROVAL_NOT_FOUND',
   'APPROVAL_NOT_APPROVED',
