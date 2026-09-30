@@ -29,3 +29,10 @@
 - **B2-FIX R1 = PASS**（MSG-20260930-10，REVIEWED_HEAD 62dffa6 / CODE_HEAD 1144401 / FIX_PR #10）。已逐字归档并 `compare.mjs` = FULL_COPY_OK（52/52）。
 - 架构方三项非阻塞文字修正已落地：docs/releases/B2-FIX-R1-RECORD-CORRECTIONS.md §8.4 结论限定 + 新增 §10（「影响一行」仅限合法正向用例；RuleSet 专项不含 RuleVersion 夹具故不主张版本归属；误报结论限定）。
 - 架构方 NEXT：PR #10 的 base 是审查对比快照，合并它不会把修复交付到 main；须沿**正常面向 main 的 PR 路径**集成，核对实际 diff 并取得集成 HEAD 的 CI，不得强推或绕过保护。
+
+- **宿主协议升级：双通道即时唤醒**（GitHub = 唯一正式审计总线/Source of Truth；右侧 ChatGPT Web = 仅短唤醒；每小时巡检降级为 watchdog）。落地记录见 docs/ai-bridge/DUAL-CHANNEL-WAKEUP-PROTOCOL.md。
+- 面向 main 的集成 PR：**#11**（head `fix/b2-tenant-immutability-r1-to-main` = `e40d4f9`，base `main`），diff 只含 B2-FIX R1 修复本体（无 Gate 7 功能提交、无审计桥/自治 runner）。
+  - 集成分支本地复核：prisma validate PASS、tsc PASS、b2 专项 17/17、两段升级 9 步全绿、MIGRATION_CHECKSUMS_OK。
+  - 集成 HEAD CI：run 36651145264 → **5/5 SUCCESS**。
+- 正式审计请求（GitHub comment）：id `5901785441` → https://github.com/anthonannabella-dev/crossclaim-ai/pull/11#issuecomment-5901785441（已回读验证，含 GATE/HEAD/CHANGE/Schema/tests/CI/evidence/requested decision）。
+- 短唤醒（ChatGPT Web）：已发送并回读验证（输入框清空 + 会话尾部出现该 `你说：` 轮次）；未在 Web 重复全文。
