@@ -347,8 +347,19 @@ export async function submitRecoveryReview(
     const bound = decision === 'APPROVE' ? normalizeBoundPayload(input.boundPayload) : null;
     if (decision === 'APPROVE') {
       // CHANGE A（R2）：缺金额/币种/依据的审批不得创建"看似可用"的 approvalId
-      if (!bound || bound.amount === null || bound.currency === null || bound.basisReference === null) {
-        throw new WorkflowError('INVALID_INPUT', '审批必须绑定完整操作载荷（金额/币种/依据）');
+      // ② 后续批次：审批载荷校验**按动作类型**判定 —— 资金动作必须有金额/币种/依据；
+      // 非资金动作（如 claim.submit）无金额语义，但必须绑定操作依据（basisReference）。
+      const requestedAction =
+        typeof input.boundAction === 'string' && input.boundAction.trim() !== ''
+          ? input.boundAction.trim()
+          : RECOVERY_CONFIRMATION_ACTION;
+      if (!bound) throw new WorkflowError('INVALID_INPUT', '审批必须绑定操作载荷');
+      if (requestedAction === RECOVERY_CONFIRMATION_ACTION) {
+        if (bound.amount === null || bound.currency === null || bound.basisReference === null) {
+          throw new WorkflowError('INVALID_INPUT', '审批必须绑定完整操作载荷（金额/币种/依据）');
+        }
+      } else if (bound.basisReference === null) {
+        throw new WorkflowError('INVALID_INPUT', '审批必须绑定操作依据（basisReference）');
       }
       if (bound.fingerprintVersion !== 'v1') {
         throw new WorkflowError('INVALID_INPUT', '未知的审批载荷指纹版本');
