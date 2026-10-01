@@ -46,6 +46,13 @@ export const PLATFORM_WRITE_ACTION = 'platform.write';
 export const RECOVERY_MANUAL_SUBMIT_ACTION = 'recovery.manual_submit';
 
 /**
+ * 受保护动作名（单一来源）：provider case reference 补录（R43 S4 / MSG-20261001-36）。
+ * 与 recovery.manual_submit **互不通用**：审批必须绑定 submissionId + claimItemId + providerCaseRefCanonical，
+ * 且不得复用 S3 的 manual_submit 审批。
+ */
+export const RECOVERY_MANUAL_REFERENCE_ACTION = 'recovery.manual_submit_reference_recorded';
+
+/**
  * 受保护动作名（单一来源）：支付捕获/资金确认（POST /billing/:id/status、/payments/events/:id/replay、
  * /payments/processing/retry-due）。非守卫文件必须引用本常量（② 第二批 P1）。
  */

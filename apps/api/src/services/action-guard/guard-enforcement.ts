@@ -162,6 +162,7 @@ async function writeApprovalAudit(
 export const GUARD_ENFORCED_ACTIONS = [
   'claim.submit',
   'recovery.manual_submit',
+  'recovery.manual_submit_reference_recorded',
   'appeal.submit',
   'platform.write',
   'commission.charge',

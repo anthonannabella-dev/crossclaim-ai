@@ -35,6 +35,7 @@ export const ACTION_SCOPE_MAP: Record<string, ActionKillSwitchScope[]> = {
   'claim.submit': ['submission'],
   'appeal.submit': ['submission'],
   'recovery.manual_submit': ['submission'],
+  'recovery.manual_submit_reference_recorded': ['submission'],
   'platform.write': ['platform_connector'],
   'commission.charge': ['billing'],
   'payment.capture': ['billing'],
