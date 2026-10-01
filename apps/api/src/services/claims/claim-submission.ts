@@ -141,6 +141,22 @@ export async function submitClaimWithApproval(
         if (locked.length !== 1) {
           throw new WorkflowError('NOT_FOUND', 'Claim 不存在或不属于该租户/案件');
         }
+        // B-2b（MSG-20261001-04 遗留项）：锁后按**Claim 提交权限**重验「执行这一刻」的角色。
+        // 禁止复用锁前 role / 锁前 permission 结论 / 审批创建时角色；只认锁后从数据库读到的当前成员角色。
+        const currentMembership = await tx.membership.findFirst({
+          where: {
+            organizationId: input.organizationId,
+            userId: input.actorUserId,
+            isActive: true,
+          },
+          select: { role: true },
+        });
+        // 成员缺失/停用 → 与既有主体重验口径一致（APPROVAL_ACTOR_MISMATCH）；
+        // 成员仍在但角色已不足以提交 → 权限矩阵拒绝（FORBIDDEN）。
+        if (!currentMembership) {
+          throw new ApprovalBoundaryError('APPROVAL_ACTOR_MISMATCH', input.claimId);
+        }
+        assertPermission(currentMembership.role, 'claimTrackingApprove');
         // B-3：全部必要锁取得后再生成执行时间，并在本事务内统一使用
         const at = now();
         const claim = await tx.claim.findFirst({
