@@ -619,3 +619,10 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - CI 修复：ee77970 失败两项 —— ①新表缺租户触发器（已补 cc_tenant_platform_write_attempt + cc_tenant_immutable__PlatformWriteAttempt 并同步 checklist，本地 29 baseline / 37 immutable 通过）；②architecture-contract 模型口径 38→39（36 core + 3 join），测试/DOMAIN_MODEL/README 已同步（b21f20f），本机 architecture-contract 109/109 PASS。
 - S3/M3（d852d51）：platform_write_attempt_succeeded_unique（raw SQL partial unique index）落地并应用；24 migrations，schema up to date；tsc PASS。
 - 下一步：S3 服务层（Prisma 账本端口 + T1/T2/T3/R1）与 PG1–PG10 验收。
+
+## 2026-10-01 JST — S3 增量（对账策略 + 状态词表）
+
+- 新增 apps/api/src/services/platform-write/reconcile-policy.ts：纯函数 decideReconciliation / reconcileBackoffMinutes / assertReconcilable；UNKNOWN→RECONCILING（1/5/15/60 分钟，24h → MANUAL_REVIEW），FAILED_CONFIRMED 仅由 CONFIRMED_NOT_APPLIED（可信证据）触发，INCONCLUSIVE 永不判失败。
+- types.ts/state-machine.ts：新增 UNKNOWN_PROVIDER_RESPONSE / RECONCILING / FAILED_CONFIRMED / MANUAL_REVIEW 四态与迁移（IN_FLIGHT→UNKNOWN；UNKNOWN/RECONCILING→SUCCEEDED/FAILED_CONFIRMED/MANUAL_REVIEW；MANUAL_REVIEW 可由 OWNER/ADMIN 收敛）。
+- 验证：tsc --noEmit PASS；platform-write 17/17 PASS。提交 5c0ae44 已推送。
+- 下一步：Prisma 账本端口 + T1/T2/T3/R1 编排 + PG1–PG10（含并发/故障注入/重发禁止）验收。

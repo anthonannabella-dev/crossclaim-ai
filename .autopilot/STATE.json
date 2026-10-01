@@ -1,15 +1,15 @@
 {
   "gate": "B2-FIX R1",
-  "head": "2d93dac",
+  "head": "5c0ae44",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
-  "next_task": "S3 服务层（T1/T2/T3/R1）：Prisma 账本端口 + acquireExecutionRight（六项原子授权点，含 approval 唯一绑定与消费审计同事务）+ submitThroughPort + settleResult + reconcile（UNKNOWN→RECONCILING 只读、绝不重发），并补 PG1–PG10 与本轮新增断言（apps/api/src/__tests__/platform-write-ledger-db.test.ts）→ S5 全量回归后送审 Implementation Checkpoint",
+  "next_task": "S3 剩余：实现 Prisma 账本端口与 T1/T2/T3/R1 编排（六项原子授权点：锁后重验 approval → 唯一 idempotency 链 → approval 唯一绑定 → attempt 得执行权状态 → 同事务写 approval_consumed；T2 事务外投递；T3 收敛；R1 只读对账不重发），补 PG1–PG10 + 新增断言与 reconcile-policy 单测，随后 S4/S5 全量回归并送审 Implementation Checkpoint",
   "send_head": "7d888cc",
   "decision_head": "7d888cc",
   "last_chatgpt_message": "MSG-20261001-19",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T06:58:38.232Z",
+  "updated_at": "2026-10-01T07:06:11.094Z",
   "previous_head": "d852d51",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -49,12 +49,12 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-01T06:59:40.818Z",
+  "last_tick_at": "2026-10-01T07:29:42.178Z",
   "state": "IMPLEMENT",
-  "last_action": "CI 全绿确认：2d93dac（run 36827017675 = completed success）—— M1/M2/M3 迁移 + 租户触发器 + 模型口径 39 全部通过 CI",
-  "last_action_at": "2026-10-01T06:58:38.231Z",
-  "next_action": "S3 服务层（T1/T2/T3/R1）：Prisma 账本端口 + acquireExecutionRight（六项原子授权点，含 approval 唯一绑定与消费审计同事务）+ submitThroughPort + settleResult + reconcile（UNKNOWN→RECONCILING 只读、绝不重发），并补 PG1–PG10 与本轮新增断言（apps/api/src/__tests__/platform-write-ledger-db.test.ts）→ S5 全量回归后送审 Implementation Checkpoint",
-  "current_head": "2d93dac",
+  "last_action": "S3 增量（5c0ae44）：对账策略模块 + 状态词表四态扩展；tsc PASS、既有 17 项测试全绿",
+  "last_action_at": "2026-10-01T07:06:11.093Z",
+  "next_action": "S3 剩余：实现 Prisma 账本端口与 T1/T2/T3/R1 编排（六项原子授权点：锁后重验 approval → 唯一 idempotency 链 → approval 唯一绑定 → attempt 得执行权状态 → 同事务写 approval_consumed；T2 事务外投递；T3 收敛；R1 只读对账不重发），补 PG1–PG10 + 新增断言与 reconcile-policy 单测，随后 S4/S5 全量回归并送审 Implementation Checkpoint",
+  "current_head": "5c0ae44",
   "reviewed_head": "549dba8",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-01T06:54:40.446Z",
-    "gapMs": 300372,
+    "previousTickAt": "2026-10-01T07:24:41.551Z",
+    "gapMs": 300629,
     "stale": false,
-    "checkedAt": "2026-10-01T06:59:40.818Z"
+    "checkedAt": "2026-10-01T07:29:42.178Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -186,6 +186,21 @@
       "run": "36827017675",
       "result": "completed success",
       "note": "S1/M1 + tenant guard + S2/M2 + S3/M3 全部迁移与口径修复后 CI 全绿"
+    },
+    "s3_partial": {
+      "status": "IN_PROGRESS",
+      "done": [
+        "M3 partial unique index 迁移已应用",
+        "reconcile-policy.ts：UNKNOWN→RECONCILING（1/5/15/60 分钟退避、24h→MANUAL_REVIEW）+ FAILED_CONFIRMED 仅可信证据",
+        "状态词表/迁移表补齐四态（UNKNOWN_PROVIDER_RESPONSE/RECONCILING/FAILED_CONFIRMED/MANUAL_REVIEW）",
+        "tsc PASS；platform-write 17/17 PASS"
+      ],
+      "remaining": [
+        "Prisma 账本端口（acquireExecutionRight 六项原子授权点 + 同事务 approval_consumed）",
+        "submitThroughPort / settleResult / reconcile 编排接入",
+        "PG1–PG10 + 本轮新增断言的真实 PostgreSQL 验收（platform-write-ledger-db.test.ts）",
+        "reconcile-policy 单测（18–22）"
+      ]
     }
   }
 }

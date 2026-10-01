@@ -288,3 +288,4 @@ export * from './state-machine';
 export * from './ledger';
 export * from './simulated-adapter';
 export * from './reconcile-policy';
+export * from './prisma-ledger';
