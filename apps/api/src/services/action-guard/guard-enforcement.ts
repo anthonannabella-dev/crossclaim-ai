@@ -161,6 +161,7 @@ async function writeApprovalAudit(
 /** 需要在 service/route/job 层显式过闸的动作（供**有限静态约定检查**与后续接入清单使用）。 */
 export const GUARD_ENFORCED_ACTIONS = [
   'claim.submit',
+  'recovery.manual_submit',
   'appeal.submit',
   'platform.write',
   'commission.charge',

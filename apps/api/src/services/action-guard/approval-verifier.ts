@@ -39,6 +39,13 @@ export const APPEAL_SUBMIT_ACTION = 'appeal.submit';
 export const PLATFORM_WRITE_ACTION = 'platform.write';
 
 /**
+ * 受保护动作名（单一来源）：人工追回提交（R43 S3 / MSG-20261001-31 CHANGE B）。
+ * 与 claim.submit / appeal.submit / platform.write **互不通用**：
+ * 审批必须绑定 claimItemId + caseId + packageVersion + digestVersion + packageDigest。
+ */
+export const RECOVERY_MANUAL_SUBMIT_ACTION = 'recovery.manual_submit';
+
+/**
  * 受保护动作名（单一来源）：支付捕获/资金确认（POST /billing/:id/status、/payments/events/:id/replay、
  * /payments/processing/retry-due）。非守卫文件必须引用本常量（② 第二批 P1）。
  */
