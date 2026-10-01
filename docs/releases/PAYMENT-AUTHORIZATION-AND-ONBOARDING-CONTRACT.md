@@ -1,5 +1,7 @@
 # Success Fee 支付授权分离 与 Onboarding / 自动收费契约（R13）
 
+> 配套契约：**R14** —— `docs/releases/CUSTOMS-BROKER-CONNECTOR-CONTRACT.md`（Customs / Duty Drawback）：**Platform OAuth / Broker POA / Payment Authorization 三类授权域完全独立**，任何一项都不得自动推导另一项；CrossClaim 不充当 Customs Broker、不默认代收退款。
+
 > 依据：**HOST DIRECTIVE 2026-10-02（补充二）**。
 > 状态：**长期产品规则** —— 现在只登记到 roadmap / architecture / product contract；
 > **不打断** 当前 R45 → R46 执行队列。实际 `PaymentMethod` / `Mandate` / autopay enablement

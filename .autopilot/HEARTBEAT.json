@@ -2,18 +2,18 @@
   "runner_status": "RUNNING",
   "current_gate": "B2-FIX R1",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
-  "current_head": "ebdfd45",
-  "last_action": "HOST DIRECTIVE 2026-10-02（补充二）落盘为 R13：Platform OAuth ≠ Payment Authorization（不得推导扣款授权）；Onboarding 免费扫描不得强制绑卡；自动收费链路唯一化（无有效支付授权只出账单不扣款）；不保存 PAN/CVV；autopay 属独立 Payment Activation Gate 且 HOLD。队列不变。",
-  "last_action_at": "2026-10-01T15:54:46.392Z",
-  "next_action": "R45 S3 REVISE 落地（结构化金额异常 + 弱引用 fail-closed + digest 覆盖 algorithmVersion 与全输入 + MATCHED 语义文档约束）→ 随后进入 R45 S4 受保护动作（basis_set / basis_supersede / override / provider_outcome_record）。",
+  "current_head": "ce051ec",
+  "last_action": "SCHEDULER_STALE_RECOVERED（gap=11min）→ 本轮已恢复执行",
+  "last_action_at": "2026-10-01T16:05:26.974Z",
+  "next_action": "等待 R45 S4 Implementation Checkpoint 裁决：①PASS → 进入 S5（只读 checker + 全量回归收口）②REVISE → 按 CHANGE 修订 ③BLOCK → 停止。",
   "retry_count": 0,
   "last_error": null,
   "reconcile": "RECONCILE_REQUIRED",
   "remaining_tasks": 2,
   "automation_status": "ACTIVE",
   "interval_minutes": 5,
-  "tick_at": "2026-10-01T15:54:46.390Z",
-  "schedule_stale_previous": false,
+  "tick_at": "2026-10-01T16:05:26.972Z",
+  "schedule_stale_previous": true,
   "state_machine": "IMPLEMENT",
   "continue_required": true,
   "rules_loaded": true,
@@ -66,6 +66,34 @@
       "NEW_RISK_BOUNDARY",
       "ARCH_REVIEW_REQUIRED"
     ]
+  },
+  "customs_broker_policy": {
+    "directive": "HOST DIRECTIVE 2026-10-02（补充三）",
+    "contract_doc": "docs/releases/CUSTOMS-BROKER-CONNECTOR-CONTRACT.md",
+    "abstraction": "BrokerConnector",
+    "transports": [
+      "API/WEBHOOK",
+      "ABI_VENDOR_INTEGRATION",
+      "EDI_SFTP",
+      "MANUAL_BROKER_PORTAL"
+    ],
+    "crossclaim_is_customs_broker": false,
+    "authorization_domains": [
+      "PLATFORM_OAUTH",
+      "BROKER_POA",
+      "PAYMENT_AUTHORIZATION"
+    ],
+    "refund_funds": {
+      "default_destination": "CLAIMANT_OR_CUSTOMER_LEGAL_ACCOUNT",
+      "crossclaim_custody_default": "NONE",
+      "forbidden": [
+        "默认代收客户 Customs refund",
+        "形成资金池",
+        "从退款中截留佣金"
+      ],
+      "escalation": "任何代收/资金池模式必须另开 Funds Custody / Money Movement 合规审计"
+    },
+    "queue_impact": "NONE —— 不打断 R45 → R46；实施批次另行提交独立设计 / Schema Delta / 合规审计 / 测试"
   },
   "payment_authorization_policy": {
     "directive": "HOST DIRECTIVE 2026-10-02（补充二）",

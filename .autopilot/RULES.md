@@ -217,3 +217,30 @@ authorization status 等引用；卡数据输入必须在支付服务商侧完�
 
 **R13.6 现在只登记、不实施**：本契约不打断 R45 → R46 队列；PaymentMethod / Mandate / autopay enablement 在 R46 完成后作为
 **独立 Payment Activation Gate** 实施、测试与审计（当前 **HOLD**；生产凭据与真实扣款 HOST APPROVAL REQUIRED）。
+
+## R14 Customs / Duty Drawback 与 BrokerConnector 长期契约（HOST DIRECTIVE 2026-10-02 补充三）
+
+**落盘位置**：`docs/releases/CUSTOMS-BROKER-CONNECTOR-CONTRACT.md`（与 R12 / R13 配套）。
+**机器可读镜像**：`.autopilot/rules.json#customs_broker_connector`；runner 每轮输出 `customs_broker_policy`；
+校验器 `tools/autopilot/check-autopilot-rules.mjs` 在 CI 强制。
+
+**R14.1 BrokerConnector 抽象**：链路 = Recovery Opportunity → Evidence/Claim Package → **BrokerConnector** →
+Licensed Customs Broker / ABI Service → CBP → Outcome/Reimbursement → Reconciliation。必须支持多种 transport
+（API/Webhook · ABI Vendor Integration · EDI/SFTP · 必要时 Manual Broker Portal），**不得绑定某一家 Broker**。
+
+**R14.2 执业边界**：CrossClaim **不得**自称 Customs Broker，**不得**执行依法必须由 licensed customs broker 承担的 customs business；
+V1 = Broker 负责 licensed review / filing / CBP communication，CrossClaim 负责数据接入 / detection / matching / Evidence Package / workflow / tracking / reconciliation。
+
+**R14.3 三域独立**：Platform OAuth · Broker POA · Payment Authorization 三个授权域**完全独立**，任何一项都不得自动推导另一项；
+CrossClaim 不得伪造、代替或从 Platform OAuth 推导 Broker POA。
+
+**R14.4 费用独立**：Broker Fee 与 CrossClaim Fee 在领域模型 / 合同主体 / Invoice / Payment attribution 上必须可独立表达；
+**禁止默认**「收统一百分比再按每笔 Customs Business 给 Broker 分佣」（涉及美国 Customs Broker compensation / fee-sharing 规则，实施前须专门合规审查）；
+优先 fixed fee / per-file fee / volume pricing / platform fee。
+
+**R14.5 客户体验统一**：客户在 CrossClaim 内完成资料、授权与状态跟踪；Broker 可为独立法律/收费主体，客户不重复整理材料或手工搬运数据。
+
+**R14.6 退款资金**：退款原则上优先直接进入 claimant/customer 合法收款账户；CrossClaim **不得默认代收**、**不得形成资金池**、**不得从退款中截留佣金**；
+此类模式必须另开 Funds Custody / Money Movement 合规审计。CrossClaim 成功费仍按 R12/R13（无有效 Payment Authorization 只出 Invoice，不自动扣款）。
+
+**R14.7 仅登记、不打断队列**：本规则不改变 R45 → R46；进入 Customs/BrokerConnector 实施批次时再提交独立设计、Schema Delta、合规审计与测试。

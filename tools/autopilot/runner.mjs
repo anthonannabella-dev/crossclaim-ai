@@ -101,6 +101,18 @@ const heartbeat = {
     host_approval_required: AUTOPILOT_RULES?.platform_api_approval_readiness?.host_approval_required ?? [],
     status_fields: AUTOPILOT_RULES?.platform_api_approval_readiness?.platform_status_fields ?? [],
   },
+  customs_broker_policy: {
+    directive: AUTOPILOT_RULES?.customs_broker_connector?.directive ?? null,
+    contract_doc: AUTOPILOT_RULES?.customs_broker_connector?.contract_doc ?? null,
+    abstraction: AUTOPILOT_RULES?.customs_broker_connector?.abstraction ?? null,
+    transports: AUTOPILOT_RULES?.customs_broker_connector?.transports ?? [],
+    crossclaim_is_customs_broker:
+      AUTOPILOT_RULES?.customs_broker_connector?.licensed_boundary?.crossclaim_is_customs_broker ?? null,
+    authorization_domains:
+      AUTOPILOT_RULES?.customs_broker_connector?.authorization_domains?.domains ?? [],
+    refund_funds: AUTOPILOT_RULES?.customs_broker_connector?.refund_funds ?? null,
+    queue_impact: AUTOPILOT_RULES?.customs_broker_connector?.queue_impact ?? null,
+  },
   payment_authorization_policy: {
     directive: AUTOPILOT_RULES?.payment_authorization_separation?.directive ?? null,
     contract_doc: AUTOPILOT_RULES?.payment_authorization_separation?.contract_doc ?? null,

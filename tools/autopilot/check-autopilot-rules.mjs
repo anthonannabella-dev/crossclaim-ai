@@ -25,6 +25,7 @@ const statePath = path.join(AP, 'STATE.json');
 if (!fs.existsSync(rulesMdPath)) failures.push('MISSING .autopilot/RULES.md');
 else {
   const md = fs.readFileSync(rulesMdPath, 'utf8');
+  if (!/R14/.test(md)) failures.push('RULES.md 缺少 R14（Customs / BrokerConnector 长期契约）');
   if (!/R13/.test(md)) failures.push('RULES.md 缺少 R13（Success Fee 支付授权分离契约）');
   if (!/R12/.test(md)) failures.push('RULES.md 缺少 R12（Success Fee / Billing 永久红线）');
   if (!md.includes('Reobserved_not_billable') && !md.includes('≠ recovered ≠ billable')) {
@@ -145,6 +146,35 @@ if (!paymentSeparation) {
   }
   if (paymentSeparation.irreversible_upgrade_forbidden !== true) {
     failures.push('payment_authorization_separation 必须声明 irreversible_upgrade_forbidden=true');
+  }
+}
+
+// R14_BLOCK：Customs / Duty Drawback 与 BrokerConnector 长期契约（HOST DIRECTIVE 2026-10-02 补充三）
+const customsConnector = rules?.customs_broker_connector ?? null;
+if (!customsConnector) {
+  failures.push('rules.json 缺少 customs_broker_connector（R14 未落盘）');
+} else {
+  const rel = customsConnector.contract_doc;
+  if (!rel || !fs.existsSync(path.join(ROOT, rel))) failures.push('缺少 R14 契约文档: ' + rel);
+  const doc = rel && fs.existsSync(path.join(ROOT, rel)) ? fs.readFileSync(path.join(ROOT, rel), 'utf8') : '';
+  for (const token of ['BrokerConnector', 'licensed customs broker', 'POA', 'PAYMENT', 'refund']) {
+    if (!doc.toUpperCase().includes(token.toUpperCase())) failures.push('R14 契约文档缺少关键口径: ' + token);
+  }
+  for (const key of ['transports', 'status_fields']) {
+    if (!Array.isArray(customsConnector[key]) || customsConnector[key].length === 0) failures.push('customs_broker_connector 缺少非空数组: ' + key);
+  }
+  if (customsConnector.licensed_boundary?.crossclaim_is_customs_broker !== false) {
+    failures.push('customs_broker_connector 必须声明 crossclaim_is_customs_broker=false');
+  }
+  if (customsConnector.authorization_domains?.independent !== true) {
+    failures.push('customs_broker_connector 必须声明 authorization_domains.independent=true');
+  }
+  const domains = customsConnector.authorization_domains?.domains ?? [];
+  for (const domain of ['PLATFORM_OAUTH', 'BROKER_POA', 'PAYMENT_AUTHORIZATION']) {
+    if (!domains.includes(domain)) failures.push('customs_broker_connector 缺少授权域: ' + domain);
+  }
+  if (customsConnector.refund_funds?.crossclaim_custody_default !== 'NONE') {
+    failures.push('customs_broker_connector.refund_funds.crossclaim_custody_default 必须为 NONE');
   }
 }
 

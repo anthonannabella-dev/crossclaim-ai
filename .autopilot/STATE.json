@@ -1,6 +1,6 @@
 {
   "gate": "B2-FIX R1",
-  "head": "e4dcee3",
+  "head": "ce051ec",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
   "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
@@ -9,8 +9,8 @@
   "last_chatgpt_message": "MSG-20261002-49",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T16:04:44.017Z",
-  "previous_head": "0de8882",
+  "updated_at": "2026-10-01T16:05:41.730Z",
+  "previous_head": "e4dcee3",
   "architect_decision_pending": true,
   "blocked_scope": null,
   "last_send_head": "e4dcee3",
@@ -49,12 +49,12 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-01T15:54:46.390Z",
+  "last_tick_at": "2026-10-01T16:05:26.972Z",
   "state": "IMPLEMENT",
-  "last_action": "R45 S4 已实施并送审 Implementation Checkpoint：四个受保护动作（basis set / supersede / override / 人工 provider outcome）全量落盘，含 supersede 后置失败完整回滚、evidence 逐条校验与失败零推进；18 项新增 DB 验收（9+9）、R45 家族 68/68、全量 175 files / 1717 tests PASS。",
-  "last_action_at": "2026-10-01T16:04:44.017Z",
+  "last_action": "HOST DIRECTIVE 2026-10-02（补充三）落盘为 R14：BrokerConnector 抽象（多 transport、不绑定单一 Broker）+ 执业边界（不自称 Customs Broker）+ 三授权域独立（Platform OAuth / Broker POA / Payment Authorization）+ Broker Fee 与 CrossClaim Fee 独立表达（禁止默认分佣，需合规审查）+ 退款不默认代收/不成池。队列不变。",
+  "last_action_at": "2026-10-01T16:05:41.730Z",
   "next_action": "等待 R45 S4 Implementation Checkpoint 裁决：①PASS → 进入 S5（只读 checker + 全量回归收口）②REVISE → 按 CHANGE 修订 ③BLOCK → 停止。",
-  "current_head": "e4dcee3",
+  "current_head": "ce051ec",
   "reviewed_head": "07b7009",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-01T15:49:52.282Z",
-    "gapMs": 294109,
-    "stale": false,
-    "checkedAt": "2026-10-01T15:54:46.390Z"
+    "previousTickAt": "2026-10-01T15:54:46.390Z",
+    "gapMs": 640583,
+    "stale": true,
+    "checkedAt": "2026-10-01T16:05:26.972Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -250,7 +250,7 @@
     "integration_boundary_review": "AUTHORIZED_TO_PLAN（先提交设计/实施计划，不直接开放真实 transport）"
   },
   "r36_submission_comment": "5927087320",
-  "stale_recovered_at": "2026-10-01T15:33:46.078Z",
+  "stale_recovered_at": "2026-10-01T16:05:26.972Z",
   "engineering_regression_policy": {
     "source": "HOST PRODUCT DIRECTION 2026-10-01",
     "doc": "docs/releases/ENGINEERING-REGRESSION-POLICY.md",
@@ -1936,5 +1936,23 @@
     },
     "boundary": "NO Settlement · NO Billing · NO Fee · NO RecoveryLedger mutation · NO platform write · TRANSPORT=false · NO production credentials",
     "next": "PASS → R45 S5（只读 consistency checker + full regression 收口）；REVISE → 按 CHANGE 修订；BLOCK → 停止"
+  },
+  "customs_broker_connector": {
+    "directive": "HOST DIRECTIVE 2026-10-02（补充三）",
+    "rule": "R14 —— Customs / Duty Drawback 与 BrokerConnector 长期契约",
+    "contract_doc": "docs/releases/CUSTOMS-BROKER-CONNECTOR-CONTRACT.md",
+    "chain": "Recovery Opportunity → Evidence/Claim Package → BrokerConnector → Licensed Customs Broker / ABI Service → CBP → Outcome/Reimbursement → Reconciliation",
+    "transports": [
+      "API/WEBHOOK",
+      "ABI_VENDOR_INTEGRATION",
+      "EDI_SFTP",
+      "MANUAL_BROKER_PORTAL"
+    ],
+    "licensed_boundary": "CrossClaim 不自称 Customs Broker、不执行 licensed customs business（Broker = licensed review/filing/CBP communication；CrossClaim = 数据接入/detection/matching/Evidence Package/workflow/tracking/reconciliation）",
+    "authorization_domains": "Platform OAuth / Broker POA / Payment Authorization 三域完全独立，任何一项不得推导另一项；Broker POA 必须 BROKER_DIRECT",
+    "fee_separation": "Broker Fee 与 CrossClaim Fee 必须可独立表达；禁止默认「统一百分比 → 按笔给 Broker 分佣」（涉美国 Customs Broker compensation/fee-sharing 规则，需专门合规审查）",
+    "refund_funds": "退款优先直接进入 claimant/customer 合法账户；CrossClaim 不得默认代收/资金池/截留（否则另开 Funds Custody 合规审计）",
+    "queue_impact": "NONE —— 不打断 R45 → R46",
+    "landed_at": "2026-10-01T16:05:41.730Z"
   }
 }

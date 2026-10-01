@@ -1226,3 +1226,14 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 人工 outcome：MANUAL_WITH_EVIDENCE + evidence 逐条校验（存在/同租户/不重复/可用来源）+ structured reason + approval binding；重复事件幂等 fail-closed；失败事实/审计/消费零推进；不推导 providerAccepted。
 - 证据：prisma validate valid · tsc PASS · basis 9/9 · 人工 9/9 · R45 家族 68/68 · 全量 175 files / 1717 tests PASS。
 - 送审：REVIEWED_HEAD e4dcee3（Issue #2 comment 5935348764）；唤醒已投递并三要素验证（输入框清空 / 新消息在底部 / 正在生成）。
+
+## 2026-10-02 JST — HOST DIRECTIVE（补充三）：R14 Customs / Duty Drawback 与 BrokerConnector 长期契约落盘
+
+- BrokerConnector 抽象：`Recovery Opportunity → Evidence/Claim Package → BrokerConnector → Licensed Customs Broker / ABI Service → CBP → Outcome/Reimbursement → Reconciliation`；支持 API/Webhook · ABI Vendor · EDI/SFTP · 必要时 Manual Broker Portal，不得绑定单一 Broker。
+- 执业边界：CrossClaim 不自称 Customs Broker、不执行依法须由 licensed customs broker 承担的 customs business；V1 = Broker 负责 licensed review/filing/CBP communication，CrossClaim 负责数据接入/detection/matching/Evidence Package/workflow/tracking/reconciliation。
+- 三授权域独立：Platform OAuth · Broker POA · Payment Authorization 完全独立、互不推导；CrossClaim 不得伪造/代替/从 Platform OAuth 推导 Broker POA。
+- 费用独立：Broker Fee 与 CrossClaim Fee 在领域模型/合同主体/Invoice/Payment attribution 可独立表达；**禁止默认**「统一百分比 → 按笔给 Broker 分佣」（美国 Customs Broker compensation/fee-sharing 规则，实施前专门合规审查）；优先 fixed / per-file / volume / platform fee。
+- 客户体验统一：客户仅用 CrossClaim 完成资料/授权/跟踪；Broker 可为独立法律与收费主体。
+- 退款资金：优先直接进入 claimant/customer 合法账户；不得默认代收、形成资金池或截留佣金（否则另开 Funds Custody / Money Movement 合规审计）。CrossClaim 成功费仍按 R12/R13（无有效授权只出 Invoice）。
+- 落盘：`docs/releases/CUSTOMS-BROKER-CONNECTOR-CONTRACT.md` + `.autopilot/RULES.md` R14 + `.autopilot/rules.json#customs_broker_connector`；runner 每轮输出 `customs_broker_policy`；checker 在 CI 强制（含 crossclaim_is_customs_broker=false、三授权域齐备、refund custody=NONE）。
+- 队列：R45 → R46 不变；Customs/BrokerConnector 实施批次另行提交独立设计 / Schema Delta / 合规审计 / 测试。

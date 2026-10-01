@@ -533,3 +533,12 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - 送审：REVIEWED_HEAD e4dcee3（Issue #2 comment 5935348764）。
 - NEXT：PASS → R45 S5（只读 checker + 全量回归收口）；REVISE → 修订；BLOCK → 停止。
 - 禁止：Settlement / Billing / Fee / RecoveryLedger 改写 / 平台外写 / transport / 生产凭据。
+
+### R14（Customs / Duty Drawback / BrokerConnector）—— HOST DIRECTIVE 2026-10-02 补充三
+
+- BrokerConnector：多 transport（API/Webhook · ABI Vendor · EDI/SFTP · Manual Portal）、不绑定单一 Broker、不污染核心领域模型。
+- 执业边界：CrossClaim ≠ Customs Broker；Broker 负责 licensed review/filing/CBP communication。
+- 三授权域独立：Platform OAuth / Broker POA / Payment Authorization 互不推导。
+- 费用独立：Broker Fee 与 CrossClaim Fee 可独立表达；禁止默认分佣模式（需专门合规审查）。
+- 退款：优先直达 claimant/customer 账户；不得默认代收/资金池/截留。
+- 实施时点：进入 Customs/BrokerConnector 批次时另行提交设计/Schema Delta/合规审计/测试；R45 → R46 不变。

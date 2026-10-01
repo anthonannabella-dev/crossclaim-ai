@@ -70,7 +70,8 @@
     "TRANSPORT=false",
     "SETTLEMENT/BILLING LINKAGE HOLD",
     "AUTO_DEBIT / PAYMENT COLLECTION",
-    "PAYMENT METHOD / MANDATE / AUTOPAY ENABLEMENT"
+    "PAYMENT METHOD / MANDATE / AUTOPAY ENABLEMENT",
+    "CUSTOMS BROKER BUSINESS / FUNDS CUSTODY"
   ],
   "enforced_from_submission_keys": [
     "r44_submission"
@@ -414,6 +415,103 @@
       "AUTOPAY_ENABLED",
       "PAYMENT_MANDATE_REF_ONLY",
       "ONBOARDING_FREE_SCAN_CARD_REQUIRED"
+    ]
+  },
+  "customs_broker_connector": {
+    "directive": "HOST DIRECTIVE 2026-10-02（补充三）",
+    "contract_doc": "docs/releases/CUSTOMS-BROKER-CONNECTOR-CONTRACT.md",
+    "companion_docs": [
+      "docs/releases/SUCCESS-FEE-BILLING-REDLINE.md",
+      "docs/releases/PAYMENT-AUTHORIZATION-AND-ONBOARDING-CONTRACT.md"
+    ],
+    "abstraction": "BrokerConnector",
+    "chain": [
+      "CrossClaim Recovery Opportunity",
+      "Evidence / Claim Package",
+      "BrokerConnector",
+      "Licensed Customs Broker / ABI Service",
+      "CBP",
+      "Outcome / Reimbursement",
+      "CrossClaim Reconciliation"
+    ],
+    "transports": [
+      "API/WEBHOOK",
+      "ABI_VENDOR_INTEGRATION",
+      "EDI_SFTP",
+      "MANUAL_BROKER_PORTAL"
+    ],
+    "no_single_broker_binding": true,
+    "licensed_boundary": {
+      "crossclaim_is_customs_broker": false,
+      "crossclaim_does_customs_business": false,
+      "v1_split": {
+        "broker": [
+          "licensed review",
+          "filing",
+          "CBP communication"
+        ],
+        "crossclaim": [
+          "数据接入",
+          "Recovery detection",
+          "matching",
+          "Evidence Package",
+          "workflow",
+          "tracking",
+          "reconciliation"
+        ]
+      }
+    },
+    "authorization_domains": {
+      "domains": [
+        "PLATFORM_OAUTH",
+        "BROKER_POA",
+        "PAYMENT_AUTHORIZATION"
+      ],
+      "independent": true,
+      "forbidden_derivations": [
+        "Platform OAuth → Broker POA",
+        "Platform OAuth → Payment Authorization",
+        "Broker POA → Payment Authorization",
+        "Payment Authorization → Broker POA"
+      ],
+      "broker_poa_source": "BROKER_DIRECT（不得由 CrossClaim 伪造/代替/从 Platform OAuth 推导）"
+    },
+    "fee_separation": {
+      "must_be_independently_expressible": [
+        "domain_model",
+        "contracting_party",
+        "invoice",
+        "payment_attribution"
+      ],
+      "forbidden_default": "CrossClaim 向客户收统一百分比 → 再按每笔 Customs Business 给 Broker 分佣",
+      "compliance_note": "涉及美国 Customs Broker compensation / fee-sharing 规则，实施前必须专门合规审查",
+      "preferred_models": [
+        "FIXED_FEE",
+        "PER_FILE_FEE",
+        "VOLUME_PRICING",
+        "PLATFORM_FEE"
+      ]
+    },
+    "customer_experience": "客户在 CrossClaim 内完成资料/授权/状态跟踪；Broker 可为独立法律与收费主体；客户不重复整理材料或手工搬运数据",
+    "refund_funds": {
+      "default_destination": "CLAIMANT_OR_CUSTOMER_LEGAL_ACCOUNT",
+      "crossclaim_custody_default": "NONE",
+      "forbidden": [
+        "默认代收客户 Customs refund",
+        "形成资金池",
+        "从退款中截留佣金"
+      ],
+      "escalation": "任何代收/资金池模式必须另开 Funds Custody / Money Movement 合规审计"
+    },
+    "crossclaim_success_fee": "verified recovery / Settlement → FeeCalculation → BillingInvoice → 有效 Payment Authorization/Mandate → Provider 收款；无有效授权只生成 Invoice，不自动扣款（R12/R13）",
+    "queue_impact": "NONE —— 不打断 R45 → R46；实施批次另行提交独立设计 / Schema Delta / 合规审计 / 测试",
+    "status_fields": [
+      "CUSTOMS_BROKER_CONNECTOR",
+      "CROSSCLAIM_ACTS_AS_CUSTOMS_BROKER",
+      "BROKER_POA_SOURCE",
+      "AUTHORIZATION_DOMAINS_SEPARATED",
+      "BROKER_FEE_MODEL",
+      "CROSSCLAIM_CUSTODY_OF_REFUND"
     ]
   }
 }
