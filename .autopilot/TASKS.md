@@ -550,3 +550,11 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - CHANGE B/C：S5 checker 必须覆盖 approval 语义与状态语义（19 项最低检查面）。
 - NEXT：**R45 S5**（只读 checker + 全量回归收口）→ R45 Full Regression / Release Implementation Checkpoint。
 - 禁止：任何自动修复（DETECT ≠ REPAIR）；Settlement / Billing / Fee / RecoveryLedger 改写 / 平台外写 / transport / 生产凭据。
+
+### R45 Release（Full Regression / S5 checker）—— Checkpoint 待裁决
+
+- 交付：只读 checker（14 组）+ 12 项 DB 验收 + CI/升级接入。
+- 证据：two-stage upgrade OK · 全量 176 files / 1730 tests PASS · tsc 0 error · prisma validate valid。
+- 送审：REVIEWED_HEAD 6f725d1（Issue #2 comment 5935743965）。
+- NEXT：PASS（R45 CLOSED）→ R46（Settlement / Billing linkage，独立 Gate）；REVISE → 修订；BLOCK → 停止。
+- 禁止：Settlement / Billing / Fee / RecoveryLedger 改写 / 平台外写 / transport / 生产凭据。

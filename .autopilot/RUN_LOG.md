@@ -1247,3 +1247,11 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - CHANGE C：S5 必须落实 MSG-49 状态语义（无 basis → MATCHED；dangling·cross-tenant basis·policy → inconsistency；FULLY 必须有有效 basis；over-recovery 必须带 `AMOUNT_EXCEEDS_EXPECTED`；MATCHED 不得衍生 recovered/billable）。
 - NEXT：**R45 S5 —— read-only consistency checker + permanent regression closure**（19 项最低检查面；DETECT ≠ REPAIR；执行前后 DB 快照一致；漂移 → 非零、clean → 零）；完成后提交 R45 Full Regression / Release Implementation Checkpoint。
 - 边界：NO Settlement · NO Billing · NO Fee · NO RecoveryLedger mutation · NO platform write · TRANSPORT=false · NO production credentials。
+
+## 2026-10-02 JST — R45 S5（read-only consistency checker）实施 + Full Regression / Release Checkpoint 送审
+
+- 交付：`tools/consistency/check-reconciliation.mjs`（14 组只读检查：deterministic rebuild == stored projection / 弱引用 / membership generation / reversal linkage / evidence / S4 approval 语义 / identity 冲突 / 摘要一致；DETECT ≠ REPAIR）。
+- 测试：`reconciliation-consistency-checker-db.test.ts` 12/12（clean → 通过且执行前后快照一致；9 类漂移 → 非零）。
+- 接入：CI（fresh deploy 后执行）+ two-stage upgrade（stage 2 后执行）；本地 two-stage upgrade OK，全量 176 files / 1730 tests PASS。
+- R45 全阶段：S1–S4 CLOSED（MSG-47/48/49/50），S5 本 Checkpoint；请裁决 R45 是否整体 CLOSED。
+- 送审：REVIEWED_HEAD 6f725d1（Issue #2 comment 5935743965）；唤醒已投递并三要素验证（输入框清空 / 新消息在底部 / 生成中）。
