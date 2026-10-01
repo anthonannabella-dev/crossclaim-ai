@@ -175,3 +175,38 @@ export function firstProviderWriteDecision(globalTransportEnabled = false): Prov
     transportAllowed: gate.transportAllowed,
   };
 }
+
+/**
+ * MSG-20261001-25 CHANGE C（冻结的门槛）：Amazon 任一未来写操作进入自动 transport 前，
+ * 必须针对**具体 operation** 逐项取证；任一项未证明 → 不得自动 write（保持 NEEDS_MANUAL）。
+ * write eligibility = provider + operation + capability evidence（不是 provider 全局布尔值）。
+ */
+export const AMAZON_WRITE_TRANSPORT_PREREQUISITES = [
+  'WRITE_ENDPOINT_AND_AUTHORIZATION',
+  'IDEMPOTENCY_OR_REPLAY_SEMANTICS',
+  'OPERATION_OR_REQUEST_IDENTIFIER',
+  'POST_WRITE_STATUS_CONFIRMATION',
+  'AMBIGUOUS_RESPONSE_RECOVERY',
+  'SANDBOX_EVIDENCE_AND_BASELINE',
+] as const;
+
+export type AmazonWriteTransportPrerequisite = (typeof AMAZON_WRITE_TRANSPORT_PREREQUISITES)[number];
+
+export interface AmazonOperationWriteEligibility {
+  operation: string;
+  eligible: boolean;
+  missing: readonly AmazonWriteTransportPrerequisite[];
+  disposition: "NEEDS_MANUAL";
+}
+
+/**
+ * 逐 operation 判定写回资格。只有六项**全部** PROVEN 才 eligible；缺任一项一律 NEEDS_MANUAL。
+ * 注意：本函数只回答“是否具备进入真实 write adapter 的门槛条件”，不构成 enablement。
+ */
+export function isAmazonOperationWriteEligible(
+  operation: string,
+  evidence: Partial<Record<AmazonWriteTransportPrerequisite, boolean>>,
+): AmazonOperationWriteEligibility {
+  const missing = AMAZON_WRITE_TRANSPORT_PREREQUISITES.filter((item) => evidence[item] !== true);
+  return { operation, eligible: missing.length === 0, missing, disposition: "NEEDS_MANUAL" };
+}

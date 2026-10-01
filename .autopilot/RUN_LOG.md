@@ -761,3 +761,14 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - CHANGE A：下一批实现只读 adapter boundary（受限范围已列明）；CHANGE B：只读也必须 operation/resource 级 fail-closed，RDT 独立边界；CHANGE C：六项写回前置冻结为 transport 门槛（provider + operation + evidence）。
 - 架构方说明：其检索 Amazon 文档未返回结果，故未独立复核我方引用的文档事实；后续涉及 write eligibility 的送审必须附具体官方文档页 / 版本 / 取证日期。
 - NEXT：Amazon SP-API READ-ONLY Adapter Implementation Plan → Implementation Checkpoint（不同时开发 TikTok/Walmart）。
+
+## 2026-10-01 JST — R40 Amazon SP-API READ-ONLY Adapter 实施
+
+- CHANGE A：实现只读 adapter boundary 五段 —— descriptor → credential port abstraction → read fetch contract → pagination/rate-limit handling → normalization boundary（落点端口由既有 Runner/ingest 注入）。
+- CHANGE B：只读也 fail-closed 到 operation/resource 级：descriptor 显式声明 resource/operation/requiredRoles/requiresRestrictedDataToken/pagination/rateLimit/path；未登记一律拒绝；WRITE 条目（createReport）永远拒绝；RDT 独立能力边界（无 RDT capability 时拒绝受限数据）。
+- CHANGE C：六项写回前置代码化为 `AMAZON_WRITE_TRANSPORT_PREREQUISITES` + `isAmazonOperationWriteEligible()`（缺一即 NEEDS_MANUAL）。
+- 端口：凭据端口未配置实现抛 `CREDENTIAL_PORT_UNCONFIGURED`（本阶段不接真实凭据）；只读传输端口只有 `get()`；落点端口以 fingerprint 幂等 upsert + quarantine。
+- 抓取：分页 NextToken 透传（最多 50 页防失控）；429 退避重试（上限 2000ms，次数耗尽抛 AMAZON_READ_THROTTLED）；5xx/非 200 立即失败，不产生业务记录。
+- TEST 十项：未登记 fail-closed / write 永远拒绝 / 无 RDT 拒绝 / 凭据未配置 fail-closed / 分页 token 透传 / 429 不重复 / retry 不绕过 fingerprint 幂等 / malformed·unknown → quarantine / 无 write sink（源码禁词 + GET-only）/ gate=true 仍 ADAPTER_NOT_ELIGIBLE。
+- 回归：platform-write + action-guard + read-only = 39 files / 376 tests PASS（PG1–PG10 / H1–H9 / D1–D4 永久基线未受影响）；tsc PASS。
+- 边界：未接真实凭据、未访问真实 seller 数据、未申请/扩大 scope、未实现写操作、无 Schema/migration/依赖变更。

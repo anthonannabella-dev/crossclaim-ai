@@ -1,16 +1,16 @@
 {
   "gate": "B2-FIX R1",
-  "head": "1d2b150",
+  "head": "450eabd",
   "status": "IMPLEMENTING",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
-  "next_task": "R40：Amazon SP-API READ-ONLY Adapter Implementation Plan → Implementation Checkpoint（CHANGE A 划定范围）：descriptor（**operation/resource 级**：resource / operation / required role·scope / restricted-data requirement / pagination model / rate-limit behavior） → auth/credential port abstraction → read fetch contract → pagination + rate-limit handling → normalization boundary → 接入既有 Connector Runner；目标链路 Amazon read contract → Fetcher → Normalizer → ClaimItem/Quarantine。本轮仍不接真实凭据、不访问真实 seller 数据、不申请/扩大 write scope、不实现 submit/write operation（fixture / sandbox-compatible shape / mocked transport 验证）。必测 10 项：未登记 resource/operation fail-closed、write operation 永远拒绝、无 RDT capability 时拒绝受限数据、pagination cursor 正确传递、429 不产生重复业务记录、retry 不绕过 sourceFingerprint 幂等、malformed shape → quarantine 不静默丢弃、adapter 不得取得 platform-write sink、PLATFORM_WRITE_TRANSPORT_ENABLED=true 时 Amazon 仍 ADAPTER_NOT_ELIGIBLE、PG1–PG10 / H1–H9 / D1–D4 永久基线继续通过。六项写回前置（CHANGE C）已冻结为 transport 门槛，按 operation 逐个取证前不得进入真实 write adapter。",
+  "next_task": "R40 送审：Amazon SP-API READ-ONLY Adapter Implementation Checkpoint（Issue #2 七段式 + ChatGPT 唤醒）—— 附 operation/resource 级 descriptor、只读边界实现、TEST 十项证据（含 429 不重复/幂等/quarantine/不得取得 write sink/gate 打开仍 ADAPTER_NOT_ELIGIBLE）、六项写回门槛代码化与永久基线回归；等待裁决后进入 operation-level write readiness 取证或按指示调整。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写/客户提交 HOLD。",
   "send_head": "79a7d36",
   "decision_head": "79a7d36",
   "last_chatgpt_message": "MSG-20261001-25",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T09:43:03.015Z",
-  "previous_head": "79a7d36",
+  "updated_at": "2026-10-01T09:51:22.752Z",
+  "previous_head": "450eabd",
   "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "79a7d36",
@@ -51,10 +51,10 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-01T09:42:12.410Z",
   "state": "IMPLEMENT",
-  "last_action": "MSG-20261001-25 = PASS WITH REVISE 收口（归档 FULL_COPY_OK 75 行）：批准 Amazon SP-API 为首个样板；READ-ONLY 先行；六项写回前置冻结为 transport 门槛",
-  "last_action_at": "2026-10-01T09:43:03.015Z",
-  "next_action": "R40：Amazon SP-API READ-ONLY Adapter Implementation Plan → Implementation Checkpoint（CHANGE A 划定范围）：descriptor（**operation/resource 级**：resource / operation / required role·scope / restricted-data requirement / pagination model / rate-limit behavior） → auth/credential port abstraction → read fetch contract → pagination + rate-limit handling → normalization boundary → 接入既有 Connector Runner；目标链路 Amazon read contract → Fetcher → Normalizer → ClaimItem/Quarantine。本轮仍不接真实凭据、不访问真实 seller 数据、不申请/扩大 write scope、不实现 submit/write operation（fixture / sandbox-compatible shape / mocked transport 验证）。必测 10 项：未登记 resource/operation fail-closed、write operation 永远拒绝、无 RDT capability 时拒绝受限数据、pagination cursor 正确传递、429 不产生重复业务记录、retry 不绕过 sourceFingerprint 幂等、malformed shape → quarantine 不静默丢弃、adapter 不得取得 platform-write sink、PLATFORM_WRITE_TRANSPORT_ENABLED=true 时 Amazon 仍 ADAPTER_NOT_ELIGIBLE、PG1–PG10 / H1–H9 / D1–D4 永久基线继续通过。六项写回前置（CHANGE C）已冻结为 transport 门槛，按 operation 逐个取证前不得进入真实 write adapter。",
-  "current_head": "1d2b150",
+  "last_action": "R40 实施完成：Amazon SP-API READ-ONLY adapter boundary（operation/resource 级 fail-closed）+ 六项写回门槛代码化；TEST 十项全绿",
+  "last_action_at": "2026-10-01T09:51:22.752Z",
+  "next_action": "R40 送审：Amazon SP-API READ-ONLY Adapter Implementation Checkpoint（Issue #2 七段式 + ChatGPT 唤醒）—— 附 operation/resource 级 descriptor、只读边界实现、TEST 十项证据（含 429 不重复/幂等/quarantine/不得取得 write sink/gate 打开仍 ADAPTER_NOT_ELIGIBLE）、六项写回门槛代码化与永久基线回归；等待裁决后进入 operation-level write readiness 取证或按指示调整。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写/客户提交 HOLD。",
+  "current_head": "450eabd",
   "reviewed_head": "549dba8",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -434,5 +434,35 @@
     "write_eligibility_rule": "provider + operation + capability evidence（不是 provider 全局布尔值）",
     "evidence_note": "架构方未能独立复核 Amazon 文档；后续 write eligibility 送审必须附具体官方文档页 / 版本 / 取证日期",
     "holds": "AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · PLATFORM_WRITE_TRANSPORT_ENABLED=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · CUSTOMER SUBMISSION HOLD"
+  },
+  "r40_read_only_adapter": {
+    "round": "R40（MSG-20261001-25 CHANGE A/B/C 实施）",
+    "module": "apps/api/src/services/adapters/amazon-sp-read-only-adapter.ts",
+    "test": "apps/api/src/__tests__/amazon-sp-read-only-adapter.test.ts（10/10）+ platform-write-provider-readiness.test.ts（7/7，含六项门槛）",
+    "doc": "docs/releases/AMAZON-SP-READ-ONLY-ADAPTER-PLAN.md",
+    "descriptor": {
+      "granularity": "operation + resource 级（resources/operations/requiredRoles/requiresRdt/pagination/rateLimit/path）",
+      "registered": [
+        "getOrders",
+        "getOrderItems",
+        "getRestrictedOrderAddress（需 RDT）",
+        "createReport（WRITE，永远拒绝）"
+      ],
+      "denialReasons": [
+        "OPERATION_NOT_REGISTERED",
+        "RESOURCE_MISMATCH",
+        "WRITE_OPERATION_FORBIDDEN",
+        "READ_METHOD_VIOLATION",
+        "RDT_CAPABILITY_REQUIRED"
+      ]
+    },
+    "ports": {
+      "credentials": "AmazonCredentialPort（未配置实现抛 CREDENTIAL_PORT_UNCONFIGURED；本阶段不接真实凭据）",
+      "transport": "AmazonReadTransport（GET-only）",
+      "sink": "AmazonReadOnlySink（fingerprint 幂等 upsert + quarantine；由既有 Connector Runner/ingest 实现，本模块不写库）"
+    },
+    "write_gate": "AMAZON_WRITE_TRANSPORT_PREREQUISITES（六项）+ isAmazonOperationWriteEligible()：缺任一项 eligible=false / NEEDS_MANUAL",
+    "evidence": "platform-write + action-guard + amazon read-only = 39 files / 376 tests PASS（永久基线 PG1–PG10 / H1–H9 / D1–D4 未受影响）；tsc PASS",
+    "boundary": "无真实凭据、无真实 seller 数据、无 write scope、无写操作、无 Schema/migration/依赖变更；TRANSPORT=false"
   }
 }

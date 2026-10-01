@@ -180,3 +180,14 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - 必测 10 项（下一批）：未登记 resource/operation fail-closed；write operation 永远拒绝；无 RDT capability 时拒绝受限数据；pagination cursor 正确传递；429 不产生重复业务记录；retry 不绕过 sourceFingerprint 幂等；malformed/unknown shape → quarantine 不静默丢弃；adapter 不得取得 platform-write sink；`PLATFORM_WRITE_TRANSPORT_ENABLED=true` 时 Amazon 仍 `ADAPTER_NOT_ELIGIBLE`；PG1–PG10 / H1–H9 / D1–D4 永久基线继续通过。
 - 目标链路：`Amazon read contract → Fetcher → Normalizer → ClaimItem/Quarantine`（不是打通自动申诉）；不同时开发 TikTok/Walmart。
 - 保持：AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写/客户提交 HOLD。
+
+### R40 · Amazon SP-API READ-ONLY Adapter（MSG-20261001-25 CHANGE A/B/C 实施，2026-10-01）
+
+- 代码：`services/adapters/amazon-sp-read-only-adapter.ts` —— operation/resource 级 descriptor（resource/operation/requiredRoles/RDT/pagination/rateLimit/path）+ 授权判定（5 类拒绝原因）+ 凭据端口（未配置即 fail-closed）+ GET-only 只读传输端口 + 分页/429 退避抓取 + 规范化（fingerprint、quarantine）+ 幂等落点编排。
+- 只读授权 fail-closed：未登记 operation / resource 不符 / WRITE 操作 / 非 GET / 缺 RDT 能力 一律拒绝；`createReport` 已登记为 WRITE 以证明「写操作永远拒绝」不是靠未登记。
+- 规范化：`amazon-sp::<resource>::<operation>::<identifier>`（不含金额）；畸形/缺标识 → `MALFORMED_RECORD`，未登记 operation → `UNKNOWN_SHAPE`，**不静默丢弃**。
+- CHANGE C 代码化：`AMAZON_WRITE_TRANSPORT_PREREQUISITES`（六项）+ `isAmazonOperationWriteEligible()`；缺任一项 `eligible=false` / `NEEDS_MANUAL`。
+- 文档：`docs/releases/AMAZON-SP-READ-ONLY-ADAPTER-PLAN.md`（目标链路、descriptor 表、端口、分页/限流、幂等、TEST 十项矩阵、六项写回门槛）。
+- 证据：`amazon-sp-read-only-adapter.test.ts` 10/10（MSG-25 TEST 十项）+ provider readiness 7/7；platform-write + action-guard + read-only = 39 files / 376 tests PASS；tsc PASS。
+- 边界：无真实凭据 / 无真实 seller 数据 / 无 write scope / 无写操作 / 无 Schema·migration·依赖变更；TRANSPORT=false。
+- 下一步：提交 R40 Implementation Checkpoint 送审。

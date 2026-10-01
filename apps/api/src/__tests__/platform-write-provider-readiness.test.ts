@@ -18,6 +18,8 @@ import {
   FIRST_PROVIDER_ID,
   firstProviderWriteDecision,
   registerFirstProviderReadOnlyCapability,
+  AMAZON_WRITE_TRANSPORT_PREREQUISITES,
+  isAmazonOperationWriteEligible,
 } from '../services/platform-write/amazon-sp-api-readiness';
 
 afterEach(() => {
@@ -90,5 +92,27 @@ describe('Provider Adapter Readiness — 首个 provider 能力档案（Amazon S
     expect(decision.reason).toBe('ADAPTER_NOT_REGISTERED');
     expect(decision.transportAllowed).toBe(false);
     expect(decision.disposition).toBe('READ_ONLY');
+  });
+  it('07 六项写回前置冻结为代码门槛：缺任一项即 NEEDS_MANUAL（CHANGE C）', () => {
+    expect(AMAZON_WRITE_TRANSPORT_PREREQUISITES).toHaveLength(6);
+    const partial = isAmazonOperationWriteEligible("createReport", {
+      WRITE_ENDPOINT_AND_AUTHORIZATION: true,
+      IDEMPOTENCY_OR_REPLAY_SEMANTICS: true,
+    });
+    expect(partial.eligible).toBe(false);
+    expect(partial.disposition).toBe("NEEDS_MANUAL");
+    expect(partial.missing).toEqual([
+      "OPERATION_OR_REQUEST_IDENTIFIER",
+      "POST_WRITE_STATUS_CONFIRMATION",
+      "AMBIGUOUS_RESPONSE_RECOVERY",
+      "SANDBOX_EVIDENCE_AND_BASELINE",
+    ]);
+
+    const complete = isAmazonOperationWriteEligible(
+      "createReport",
+      Object.fromEntries(AMAZON_WRITE_TRANSPORT_PREREQUISITES.map((item) => [item, true])),
+    );
+    expect(complete.eligible).toBe(true);
+    expect(complete.missing).toEqual([]);
   });
 });
