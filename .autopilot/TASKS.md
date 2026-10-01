@@ -324,3 +324,11 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - S6 报告矩阵：M1–M20 / PG1–PG10 / H1–H9 / D1–D4 / S2–S5 基线 / fresh migration / two-stage upgrade / trigger inventories / architecture contract / tsc / prisma validate / 全量 suite；不得用 skip/放宽断言/删除历史测试收绿。
 - NEXT：**R43 S6 — Full Regression / Release Checkpoint**（不新增产品能力）→ 最终 R43 Implementation Checkpoint（由架构方判定 R43 是否整体关闭）。
 - 保持：AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · SETTLEMENT/BILLING LINKAGE HOLD。
+
+### R43 S6（Full Regression / Release Checkpoint）—— 已实现，最终 Checkpoint 待裁决
+
+- 交付：checker 新增 approval 语义强校验（5c）+ 6 个新测试用例（S6-A1/A2/A3、S6-B1/B2/B3）；未新增产品能力、未改 Schema/migration/触发器清单。
+- 证据：checker 11/11；全量 165 files / 1574 tests PASS；two-stage upgrade OK；租户触发器 42 / append-only 5；tsc + prisma validate PASS；api-contract + audit-coverage OK。
+- 送审：REVIEWED_HEAD f77da82（Issue #2 comment 5931572320 / CI 36861687249）。
+- NEXT：PASS（且 R43 整体关闭获批）→ 转为下一授权队列批次（② 剩余业务入口，须另送审）；REVISE → 按 CHANGE 重送；BLOCK → 停止。
+- 保持：AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · SETTLEMENT/BILLING LINKAGE HOLD。

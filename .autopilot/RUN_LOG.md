@@ -971,3 +971,13 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - S6 报告矩阵：M1–M20 / PG1–PG10 / H1–H9 / D1–D4 / S2–S5 基线 / fresh migration / two-stage upgrade / trigger inventories / architecture contract / tsc / prisma validate / 全量 suite；**不得 skip、放宽断言或删除历史安全测试收绿**。
 - 档案：`AI-ARCHITECT-INBOX.md` → `MSG-20261001-38`；`tools/verdict-diff/compare.mjs` = **FULL_COPY_OK**。
 - NEXT：**R43 S6 — Full Regression / Release Checkpoint**（不新增产品能力）；完成后提交最终 R43 Implementation Checkpoint，由架构方判定 R43 是否整体关闭。
+
+## 2026-10-01 JST — R43 S6 Full Regression / Release Checkpoint 送审（CHANGE A/B 收口）
+
+- 依据：MSG-20261001-38 = PASS WITH REVISE（S5 关闭，免 S5 RE-REVIEW，直接进入 S6）。
+- CHANGE A（补齐 checker，而非仅映射）：新增第 5c 项 approval 语义强校验 —— approval 事件必须同租户、`action=recovery.review_approved`、目标为本单位 Case（entityType/entityId）、`boundAction=recovery.manual_submit`、`boundPayload.basisReference` 等于 submission 保存的 versioned basis（五元复合串天然排除他案/他包 approval）、`fingerprintVersion=v1`。
+- CHANGE B（DB 接受 → checker 拒绝 → 零修复）：状态漂移 [2]、basis 漂移 [3]、approval binding 漂移 [5c]（S6-A1/A2/A3）、reference 租户漂移 [7]（S6-B2）；非 canonical 形状与同租户重复 canonical 由 DB CHECK/UNIQUE 直接 fail-closed（S6-B1/B3，不绕过约束），checker 8a/8b 为纵深防御。
+- 证据：checker 测试 5 → 11 项全绿；全量 suite **165 files / 1574 tests PASS**（真实 PostgreSQL，无 skip/放宽/删除历史测试）；tsc PASS；prisma validate valid；tenant 触发器 42 baseline/42 immutable/2 scoped；append-only 5；checker clean 退出码 0；two-stage upgrade TWO_STAGE_UPGRADE_OK（含升级路径三套清单与非法写入拒绝）。
+- 本地备注：migration-checksum 对 20260930100000 的本地误报由 CRLF 行尾造成（hash(CRLF)≠pinned；LF 归一后一致），CI 为权威。
+- 送审：REVIEWED_HEAD f77da82（Issue #2 comment 5931572320 / CI 36861687249 success（5/5 jobs: API / Deploy smoke / Backup restore verify / Web typecheck+build / 许可证闸门））；唤醒已投递并验证。
+- HOLD 保持：AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · SETTLEMENT/BILLING LINKAGE HOLD。

@@ -1,6 +1,6 @@
 {
   "gate": "B2-FIX R1",
-  "head": "a2c4306",
+  "head": "f77da82",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
   "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
@@ -9,13 +9,13 @@
   "last_chatgpt_message": "MSG-20261001-38",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T12:04:50.743Z",
+  "updated_at": "2026-10-01T12:34:27.336Z",
   "previous_head": "18cbf8b",
-  "architect_decision_pending": false,
+  "architect_decision_pending": true,
   "blocked_scope": null,
-  "last_send_head": "a2c4306",
-  "last_sent_at": "2026-10-01T11:58:01.792Z",
-  "last_sent_fingerprint": "R43-S5:Read-Only-Consistency-Checker",
+  "last_send_head": "f77da82",
+  "last_sent_at": "2026-10-01T12:34:27.336Z",
+  "last_sent_fingerprint": "R43-S6:Full-Regression-Release-Checkpoint",
   "final_head": "1144401",
   "ci_run": "36833002042",
   "ci_result": "SUCCESS",
@@ -51,10 +51,10 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-01T12:03:15.518Z",
   "state": "IMPLEMENT",
-  "last_action": "MSG-20261001-38 = PASS WITH REVISE 已逐字归档并 FULL_COPY_OK —— R43 S5 关闭（无需 S5 RE-REVIEW）；NEXT = R43 S6 全量回归收口（含 CHANGE A approval 语义强校验映射 + CHANGE B 真实可制造漂移覆盖；不得 skip/放宽断言收绿）",
-  "last_action_at": "2026-10-01T12:04:50.743Z",
-  "next_action": "R43 S6 — Full Regression / Release Checkpoint：不新增产品能力。① 补 CHANGE A（approval 语义强校验：org/approvalId/action=recovery.manual_submit/versioned basis 一致/非他案 approval）与 CHANGE B（DB 接受的业务漂移 fixture → checker 拒绝 → zero repair）；② 输出矩阵 M1–M20 / PG1–PG10 / H1–H9 / D1–D4 / S2–S5 基线 / fresh migration / two-stage upgrade / trigger inventories / architecture contract / tsc / prisma validate / 全量 suite；③ 提交最终 R43 Implementation Checkpoint。",
-  "current_head": "a2c4306",
+  "last_action": "R43 S6 Full Regression / Release Checkpoint 已送审（CHANGE A approval 语义强校验 + CHANGE B 真实可制造漂移；checker 11/11；全量 165 files / 1574 tests PASS；two-stage upgrade OK）—— 等待架构方判定 CHANGE A/B 收口、S6 关闭与 R43 整体关闭",
+  "last_action_at": "2026-10-01T12:34:27.336Z",
+  "next_action": "等待 R43 S6 / R43 整体关闭裁决：①PASS → R43 Manual Recovery Persistence 整体关闭，转入 TASKS.md 下一授权队列项（② 剩余业务入口批次，须另送审）②REVISE → 按 CHANGE 修改后重送 ③BLOCK → 停止该方案。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
+  "current_head": "f77da82",
   "reviewed_head": "07b7009",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -1008,5 +1008,30 @@
     ],
     "no_greenwashing": "任何失败不得用跳过测试、放宽断言或删除历史安全测试来“收绿”",
     "next": "R43 S6 — Full Regression / Release Checkpoint（不新增产品能力）；完成后提交最终 R43 Implementation Checkpoint，报告 REVIEWED_HEAD / CI / M1–M20 mapping / PG1–PG10 / H1–H9 / D1–D4 / full-suite counts / migration+upgrade / trigger inventories / consistency checker / known remaining gaps"
+  },
+  "r43s6_submission": {
+    "submission_comment": "5931572320",
+    "ci_run": "36861687249",
+    "ci_conclusion": "success（5/5 jobs: API / Deploy smoke / Backup restore verify / Web typecheck+build / 许可证闸门）",
+    "reviewed_head": "f77da82",
+    "scope": "R43 S6 Full Regression / Release Checkpoint（不新增产品能力）：CHANGE A approval 语义强校验（checker 5c）+ CHANGE B 真实可制造漂移（S6-A1/A2/A3、S6-B1/B2/B3）",
+    "files": [
+      "tools/consistency/check-recovery-manual-submission.mjs（+5c）",
+      "apps/api/src/__tests__/recovery-manual-consistency-checker-db.test.ts（5 → 11 用例）"
+    ],
+    "evidence": {
+      "checker_tests": "11/11 PASS（真实 PostgreSQL；含 CHANGE A/B 全部新用例）",
+      "full_suite": "165 files / 1574 tests PASS（本地真实 PostgreSQL；无 skip、无放宽）",
+      "two_stage_upgrade": "TWO_STAGE_UPGRADE_OK（preB2=28；租户触发器 42 / append-only 5 / checker upgrade path；非法写入被拒；二次 deploy 幂等）",
+      "trigger_inventories": "tenant triggers 42 baseline / 42 immutable / 2 scoped；append-only controlled-mutation 5",
+      "gates": "prisma validate valid；tsc --noEmit PASS；api-contract OK；audit-coverage OK（implemented=63 / documented=55）",
+      "local_checksum_note": "本地 CRLF 工作树导致 migration-checksum 对 20260930100000_tenant_ownership_immutability 误报（hash(CRLF)=f6211b49… vs pinned LF=2acbd87a…）；CI（LF）为权威"
+    },
+    "known_gaps": [
+      "HTTP/路由未接线 recovery.manual_submit 与 reference 补录（留后续批次）",
+      "outcome tracking / reimbursement reconciliation 未实现（独立后续边界）",
+      "transport=false / REAL WRITE ADAPTER / AMAZON WRITE / PRODUCTION CREDENTIALS / SETTLEMENT·BILLING LINKAGE 全部继续 HOLD"
+    ],
+    "wakeup_channel": "https://chatgpt.com/c/6ab9ee1b-fd54-83ee-b363-b67750afcedd"
   }
 }
