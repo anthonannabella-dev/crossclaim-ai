@@ -1105,3 +1105,12 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 关键不变量：UNIQUE(org, providerEventFingerprint) 防重复 ingest 双计；rr1: reconciliation 幂等；FULLY_RECONCILED 严格条件 + 明确 expected basis；CONFLICTING_EVIDENCE fail-closed；reversal 保留原事实并重算 projection；override 不改原事实。
 - 索引/约束/触发器/迁移影响已列；required-triggers 与 append-only 清单、two-stage-upgrade、CI fresh 路径同批更新。
 - 送审：REVIEWED_HEAD aa9225e（Issue #2 comment 5933085332）；唤醒已投递并三要素验证。
+
+## 2026-10-01 JST — MSG-20261001-45 = PASS WITH REVISE（R45-A Schema Delta）→ R45-B Implementation Plan
+
+- 裁决：**PASS WITH REVISE**（REVIEWED_HEAD aa9225e）。六表职责边界成立；projection 允许持久化但冻结为 derived cache（stored == deterministic rebuild 必须可验证）。
+- 4 项裁决：①projection 持久化批准 ②tolerance policy v1 建表（默认 exact、版本化、旧 projection 不得被静默改写）③ExpectedRecoveryBasis 需 humanApproval，两个独立动作 basis_set / basis_supersede ④ProviderOutcomeFact 允许人工录入但须受保护路径（证据 + 审批 + sourceKind=MANUAL_WITH_EVIDENCE）。
+- CHANGE A：reversal 不用负金额，必须引用 reversesFactId（同 tenant/provider/currency、不可自指、不可重复 full-reverse，v1 仅 full reversal）。CHANGE B：providerEventId + providerEventFingerprint 双概念。CHANGE C：basis effective 用 supersededAt IS NULL + partial unique，supersede 同事务并测并发。CHANGE D：新增 ClaimReconciliationProjectionFact 关系表。
+- 4 项风险：重复 ingest 双计 / basis 并发双 effective / reversal 负金额 / projection 漂移成真值；必须 Facts → Basis·Policy·Override → deterministic projector → Projection。
+- NEXT：**R45-B Implementation Plan**（docs-only；仍不实施）。
+- 档案：`AI-ARCHITECT-INBOX.md` → MSG-20261001-45。

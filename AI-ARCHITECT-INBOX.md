@@ -82471,3 +82471,248 @@ NO Settlement · NO Billing · NO Fee · NO RecoveryLedger mutation · NO platfo
 
 VERDICT: PASS WITH REVISE — MSG-20261001-44
 ```
+
+### [MSG-20261001-45] R45-A Outcome & Reimbursement Reconciliation — Schema Delta Request —— **PASS WITH REVISE**（4 项裁决 + CHANGE A reversal 金额约束 / CHANGE B providerEventId + fingerprint 双概念 / CHANGE C effective basis DB 可判定 / CHANGE D projection↔fact 关系表；NEXT = **R45-B Implementation Plan（docs-only）**，仍不实施）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE: FORMAL_VERDICT
+MESSAGE: MSG-20261001-45
+PREVIOUS: MSG-20261001-44
+GATE: Gate 7 / R45-A Outcome & Reimbursement Reconciliation Schema Delta Request
+REVIEWED_HEAD: aa9225e
+DECISION: PASS WITH REVISE
+
+KEEP
+
+R45-A 的总体数据模型方向认可。尤其保留：
+
+immutable facts 与 derived projection 分层；
+Provider acceptance/revocation 用追加事实表达；
+reimbursement reversal 不覆盖原事实；
+ExpectedRecoveryBasis 独立于 ClaimItem 金额；
+ingestion identity 与 reconciliation identity 分离；
+conflicting evidence fail-closed；
+override 不修改原始事实；
+projection 可重算；
+Settlement/Billing/Fee/RecoveryLedger 继续完全隔离。
+四项裁决
+① 表集合 + Projection 持久化
+
+批准。
+
+六张表的职责边界成立。
+
+ClaimReconciliationProjection 允许持久化，而不是只在内存计算。
+
+原因是它需要支持：
+
+查询；
+deterministic rebuild；
+drift detection；
+reversal 后重新投影；
+projectionVersion/inputDigest 验证。
+
+但必须冻结：
+
+Projection 是 cache/materialized derived state，不是业务事实源。
+
+删除并从 immutable facts + basis + override + policy 重建后，结果必须一致。
+
+后续 checker 应能够验证：
+
+stored projection == deterministic rebuild
+
+② ReconciliationTolerancePolicy
+
+v1 建表，批准。
+
+不要使用代码常量后再迁移。
+
+默认 policy：
+
+absoluteTolerance = 0
+relativeTolerance = 0
+
+即 exact match。
+
+Policy 必须：
+
+append-only/versioned；
+provider/operation 范围显式；
+projection 保存实际使用的 tolerancePolicyId/version；
+不允许后续修改 policy 让旧 projection 静默改变；
+policy 更新只能影响重新计算，并产生新的 projection inputDigest/version。
+③ ExpectedRecoveryBasis
+
+需要 humanApproval。
+
+批准建立独立受保护动作：
+
+recovery.reconciliation_basis_set
+
+以及将来取代 basis：
+
+recovery.reconciliation_basis_supersede
+
+不要用一个模糊的 recovery.reconciliation_write。
+
+首次建立和 supersede 都属于影响“是否完全追回”的关键金额判断输入，因此必须：
+
+humanApproval + current membership/role recheck + reason + provenance + audit
+
+旧 basis 保留，不能 UPDATE。
+
+④ ProviderOutcomeFact v1 来源
+
+允许人工录入，但必须是受保护路径。
+
+不限制为 file/API-only，否则在 Amazon 当前 manual recovery 模式下会产生闭环缺口。
+
+人工录入必须：
+
+humanApproval；
+EvidenceArtifact 至少一个；
+structured reason/sourceRef；
+actor；
+capturedAt；
+明确 sourceKind=MANUAL_WITH_EVIDENCE；
+不允许仅凭客户端布尔值 providerAccepted=true；
+ACCEPTANCE_REVOKED 同样需要独立事实和证据。
+
+人工事实与 API/file 事实冲突时：
+
+CONFLICTING_EVIDENCE，禁止自动择优。
+
+CHANGE A — 修正 Reimbursement reversal 的金额约束
+
+当前统一 amount >= 0 需要进一步明确。
+
+不要通过负金额表达 reversal。
+
+建议：
+
+OBSERVED.amount > 0
+
+而：
+
+REIMBURSEMENT_REVERSED
+必须引用 reversesFactId，金额语义由被引用事实取得或要求与原事实一致。
+
+至少满足：
+
+reversal 不能 reversal 自己；
+只能指向同 tenant/provider/currency 的有效 OBSERVED fact；
+同一原始 reimbursement 不得被重复 full-reverse；
+若未来支持 partial reversal，必须另行设计，不要由 v1 金额字段隐式表达。
+
+R45 v1 建议只支持 full reversal。
+
+CHANGE B — Provider event identity 不得只剩一个 fingerprint
+
+保留两个概念：
+
+providerEventId?
+和
+providerEventFingerprint
+
+如果官方来源提供稳定 event ID，应保存原始 provider event ID，并由 server canonicalization 后参与 identity。
+
+Fingerprint 是统一幂等键，但不能把原生 provider identifier 丢掉。
+
+建议 fingerprint 输入至少包含：
+
+provider + source/resource + providerEventId/canonical source identity + event kind
+
+并有：
+
+fingerprintVersion='v1'
+
+否则不同资源空间中相同 ID 有碰撞风险。
+
+CHANGE C — ExpectedRecoveryBasis 的 effective 语义必须数据库可判定
+
+“每 Claim 至多一条 effective basis”认可，但 Schema Delta 必须明确 effective 的数据库表达。
+
+例如：
+
+supersededAt IS NULL
+
+配合 partial unique：
+
+UNIQUE (organizationId, claimItemId) WHERE supersededAt IS NULL
+
+并要求 supersede 在同一事务完成：
+
+lock current basis → insert replacement → mark old superseded
+
+需要设计避免唯一索引造成插入/更新顺序冲突。
+
+实现计划中必须明确事务顺序和并发测试。
+
+CHANGE D — Projection 不要存不可验证的 matchedFactIds blob 作为唯一关联
+
+如果 matchedFactIds 只是 JSON/array，会削弱 FK、tenant isolation 和一致性验证。
+
+R45-B 实施计划请评估增加明确关联表，例如：
+
+ClaimReconciliationProjectionFact
+
+把：
+
+projectionId ↔ reimbursementFactId
+
+作为关系化关联。
+
+Projection 可以保留摘要字段，但事实成员关系不能只有不可约束 JSON。
+
+RISKS
+
+当前最重要的四个实现风险是：
+
+同一 provider event 被重复 ingest 后金额双计；
+basis supersede 并发产生两个 effective basis；
+reversal 被错误实现成负金额，最终净额语义不可审计；
+persisted projection 漂移后反过来成为“真值”。
+
+因此后续实现必须坚持：
+
+Facts → Basis/Policy/Override → deterministic projector → Projection
+
+而不是从旧 Projection 增量猜测新 Projection。
+
+TEST
+
+R45 永久验收至少增加：
+
+相同 providerEventId 重复 ingest → 单一 fact；
+相同 ID、不同 resource → 不误去重；
+fingerprint version mismatch → fail-closed；
+full reversal 一次成功；
+duplicate reversal → 拒绝；
+cross-tenant reversal → 拒绝；
+reversal 后 deterministic rebuild；
+concurrent basis supersede → 最终恰一个 effective；
+old basis 永久保留；
+policy exact 默认；
+policy version 改变后旧 projection 不被静默改写；
+projection 删除后 rebuild 得到相同结果；
+projection drift checker 能发现人工漂移；
+projection↔fact 所有关系同 tenant；
+manual provider outcome 缺 evidence/approval → 零写入；
+conflicting source facts → 不自动 accepted/reconciled。
+NEXT
+
+允许进入：
+
+R45-B — Implementation Plan（docs-only）
+
+先把 CHANGE A–D 写入最终模型和 migration/transaction/test 计划，再进入任何 Schema/migration 实施。
+
+继续保持：
+
+NO Settlement · NO Billing · NO Fee · NO RecoveryLedger mutation · NO platform write · TRANSPORT=false · NO production credentials。
+
+VERDICT: PASS WITH REVISE — MSG-20261001-45
+```

@@ -1,17 +1,17 @@
 {
   "gate": "B2-FIX R1",
-  "head": "aa9225e",
+  "head": "3488e89",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
   "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
   "send_head": "07b7009",
   "decision_head": "07b7009",
-  "last_chatgpt_message": "MSG-20261001-44",
+  "last_chatgpt_message": "MSG-20261001-45",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T14:04:39.105Z",
-  "previous_head": "4d01a09",
-  "architect_decision_pending": true,
+  "updated_at": "2026-10-01T14:06:08.407Z",
+  "previous_head": "aa9225e",
+  "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "aa9225e",
   "last_sent_at": "2026-10-01T14:04:39.105Z",
@@ -49,12 +49,12 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-01T14:04:39.446Z",
+  "last_tick_at": "2026-10-01T14:05:16.610Z",
   "state": "IMPLEMENT",
-  "last_action": "R45-A Schema Delta Request 已送审（docs-only，未实施）：4 张 immutable facts/basis/decision + 1 derived projection（+ 待判 tolerance policy）；providerEventFingerprint 防双计；Expected Recovery Basis 版本化；override 每笔单独审批；导出 4 项待裁决",
-  "last_action_at": "2026-10-01T14:04:39.105Z",
-  "next_action": "等待 R45-A Schema Delta 裁决：①PASS → 提交 R45-B Implementation Plan（仍不写代码）②REVISE → 按 CHANGE 修订 Delta Request ③BLOCK → 停止该 Schema 方案。",
-  "current_head": "aa9225e",
+  "last_action": "MSG-20261001-45 = PASS WITH REVISE 已逐字归档并 FULL_COPY_OK —— R45-A 数据模型方向认可；需按 4 项裁决 + CHANGE A–D 修订并提交 R45-B Implementation Plan（docs-only，仍不实施）",
+  "last_action_at": "2026-10-01T14:06:08.407Z",
+  "next_action": "R45-B Implementation Plan（docs-only）：把 CHANGE A–D 与 4 项裁决写入最终模型（ClaimReconciliationProjectionFact 关系表、providerEventId+fingerprint 双概念、supersededAt partial unique 与 supersede 事务顺序、tolerance policy 建表、两个 basis 受保护动作、人工 provider outcome 受保护路径）+ migration/transaction/test 计划；仍不实施 Schema/代码。",
+  "current_head": "3488e89",
   "reviewed_head": "07b7009",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-01T13:58:45.634Z",
-    "gapMs": 353813,
+    "previousTickAt": "2026-10-01T14:04:39.446Z",
+    "gapMs": 37165,
     "stale": false,
-    "checkedAt": "2026-10-01T14:04:39.446Z"
+    "checkedAt": "2026-10-01T14:05:16.610Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -1510,5 +1510,32 @@
     "next": "R45-B — Implementation Plan（Schema 批准后；仍不写代码）",
     "wakeup_channel": "https://chatgpt.com/c/6ab9ee1b-fd54-83ee-b363-b67750afcedd",
     "wakeup_delivery": "DELIVERED_VERIFIED（输入框清空 / 新用户消息在底部 / 生成中）"
+  },
+  "r45a_verdict": {
+    "message_id": "MSG-20261001-45",
+    "decision": "PASS WITH REVISE",
+    "reviewed_head": "aa9225e",
+    "archival": "FULL_COPY_OK",
+    "archival_at": "2026-10-01T14:06:08.407Z",
+    "rulings": {
+      "q1_tables_projection": "批准六表 + 允许 projection 持久化；冻结为 derived cache（非事实源），stored == deterministic rebuild 必须可验证",
+      "q2_tolerance_policy": "v1 建表批准（不得先代码常量后迁移）；默认 exact(0/0)；append-only/versioned；provider/operation 范围显式；projection 保存实际使用的 tolerancePolicyId/version；policy 更新只影响重算并产生新 inputDigest/version",
+      "q3_expected_basis": "需 humanApproval；两个独立受保护动作 recovery.reconciliation_basis_set / recovery.reconciliation_basis_supersede（禁止 recovery.reconciliation_write）；锁后 membership/role 重验 + reason + provenance + audit；旧 basis 保留",
+      "q4_provider_outcome_source": "允许人工录入但须受保护路径（humanApproval + 至少一个 EvidenceArtifact + structured reason/sourceRef + actor + capturedAt + sourceKind=MANUAL_WITH_EVIDENCE）；不允许仅凭客户端布尔 providerAccepted=true；ACCEPTANCE_REVOKED 同样需独立事实与证据；人工与 API/file 冲突 → CONFLICTING_EVIDENCE 禁止自动择优"
+    },
+    "changes": {
+      "A": "reversal 不得用负金额：OBSERVED.amount > 0；REIMBURSEMENT_REVERSED 必须引用 reversesFactId（不可自指；只能指向同 tenant/provider/currency 的有效 OBSERVED；同一原始事实不得重复 full-reverse；partial reversal 另行设计）；v1 仅 full reversal",
+      "B": "provider identity 双概念：providerEventId（原始稳定 ID）+ providerEventFingerprint（provider + source/resource + providerEventId/canonical source identity + event kind，fingerprintVersion=v1），避免不同资源空间同 ID 碰撞",
+      "C": "ExpectedRecoveryBasis effective 必须 DB 可判定：supersededAt IS NULL + partial unique UNIQUE(organizationId, claimItemId) WHERE supersededAt IS NULL；supersede 同一事务（lock current → insert replacement → mark old superseded），实现计划须明确事务顺序与并发测试",
+      "D": "Projection 不得只存 matchedFactIds blob：增加关系化关联表 ClaimReconciliationProjectionFact（projectionId ↔ reimbursementFactId），事实成员关系需 FK/租户约束"
+    },
+    "risks": [
+      "同一 provider event 重复 ingest → 金额双计",
+      "basis supersede 并发产生两个 effective basis",
+      "reversal 被实现成负金额导致净额语义不可审计",
+      "persisted projection 漂移后反过来成为真值"
+    ],
+    "pipeline_rule": "Facts → Basis/Policy/Override → deterministic projector → Projection（不得从旧 Projection 增量猜测）",
+    "next": "R45-B — Implementation Plan（docs-only）：先把 CHANGE A–D 写入最终模型与 migration/transaction/test 计划，再进入任何 Schema/migration 实施"
   }
 }

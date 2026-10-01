@@ -435,3 +435,9 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - 送审：REVIEWED_HEAD aa9225e（Issue #2 comment 5933085332）。
 - NEXT：PASS → R45-B Implementation Plan（仍不写代码）；REVISE → 修订后重送；BLOCK → 停止。
 - 禁止：Settlement / Billing / Fee / RecoveryLedger 改写 / 平台外写 / transport。
+
+### MSG-20261001-45 裁决（R45-A Schema Delta = PASS WITH REVISE → R45-B Implementation Plan）
+
+- DECISION：**PASS WITH REVISE**（REVIEWED_HEAD aa9225e；归档 FULL_COPY_OK）。4 项裁决 + CHANGE A–D 见 STATE.r45a_verdict。
+- NEXT：**R45-B Implementation Plan**（docs-only；仍不实施 Schema/代码）。
+- 禁止：Settlement / Billing / Fee / RecoveryLedger 改写 / 平台外写 / transport。
