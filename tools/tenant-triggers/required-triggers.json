@@ -31,7 +31,8 @@
     { "name": "cc_tenant_ruleevaluationshadow", "table": "RuleEvaluationShadow" },
     { "name": "cc_tenant_ruleversion", "table": "RuleVersion" },
     { "name": "cc_tenant_settlement", "table": "Settlement" },
-    { "name": "cc_tenant_sourcetransaction", "table": "SourceTransaction" }
+    { "name": "cc_tenant_sourcetransaction", "table": "SourceTransaction" },
+    { "name": "cc_tenant_platform_write_attempt", "table": "PlatformWriteAttempt" }
   ],
   "scopedTriggers": [
     { "name": "cc_ruleset_ownership_immutable", "table": "RuleSet", "tgtype": 19 },
