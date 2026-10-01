@@ -254,3 +254,15 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - CHANGE D：Reconciliation 与资金域**继续分离**（只输出 matched/unmatched/ambiguous；不得触碰 Settlement/Billing/RecoveryLedgerEntry/费用）；后续单独提交 Recovery Reconciliation → Settlement Boundary Design。
 - NEXT：**R43-A — Manual Recovery Persistence Schema Delta Request**（docs-only，8 项）；获批后再提交 R43 Implementation Plan；不要直接进入完整 R43 实现。
 - 保持：AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · **SETTLEMENT/BILLING LINKAGE HOLD**。
+
+### MSG-20261001-31 裁决（R43-A Schema Delta 批准 + CHANGE A/B/C → R43-B Implementation Plan）
+
+- DECISION：**PASS WITH REVISE**（REVIEWED_HEAD f2a20b9；Issue #2 comment 5930157696；CI 36853926652；逐字归档 FULL_COPY_OK）。
+- 获批：4 张新表（`RecoveryPackage` / `RecoveryPackageArtifact` / `RecoveryManualSubmission` / `RecoveryManualSubmissionEvidence`）+ 2 枚举；8 项持久化边界均有结论。
+- 决议要点：①`READY_TO_APPEAL` 为唯一前置；②`requires` 仅 `[humanApproval]`，但仍需 RBAC/action guard（ACTIVE user/membership、当前角色、tenant boundary、action permission）；③v1 单链 `@@unique([organizationId, claimItemId])`；④`providerCaseRef` 可空但补录须 canonical + 租户 partial unique + append-only audit；⑤独立 package 表；⑥submission-evidence 联结表；⑦I1/I2 只读一致性 checker 必須进入 CI（只报告不自动修复）；⑧append-only 需按 CHANGE A 收紧。
+- CHANGE A：artifact / submission / submission-evidence 全表 immutable；`RecoveryPackage` **仅核心字段 immutable**（identity / binding / digest / version），`status` 只能经受控 CAS；禁止普通 update 改 digest · Claim/Case binding · packageVersion；SUPERSEDED/WITHDRAWN 必須带 reason + actor + audit；实现前定义可变字段白名单。
+- CHANGE B：`approvalId` 必須进入单链不变量 —— 同一 approval 不得授权两条 manual submission；新增 `UNIQUE(organizationId, approvalId)`；若创建时必有则设为 required；与 `recovery.approval_consumed` 同事务。
+- CHANGE C：`providerCaseRef` 唯一性必須基于 **canonical value**（trim → Unicode normalize → provider 特定归一化）并保存/比较 canonical identity；Amazon 大小写语义未证明前不得擅自 lower-case。
+- TEST：M1–M11 接受为基础矩阵，另增 9 项（双向一致性 / 同 approval 并发 / digest·binding 不可改 / CAS 合法性 / immutable 直接 UPDATE 被拒 / canonical 重复被拒 / ref 为空仍可确认 / 补录不改变 accepted 事实 / checker 只报告）；PG1–PG10 / H1–H9 / D1–D4 基线继续保留。
+- NEXT：**R43-B — Manual Recovery Persistence Implementation Plan（docs-only，10 项）** —— ①migration 顺序 ②四表 FK/unique/index ③tenant + immutable/controlled-mutation triggers ④package CAS 状态机 ⑤`recovery.manual_submit` Action Guard ⑥approval + ClaimItem + submission + audit 原子事务 ⑦providerCaseRef canonicalization ⑧consistency checker ⑨M1–M11 + MSG-31 新增验收 ⑩rollback 仅设计不执行；不需再送一轮 Schema Request，经审后才编码。
+- 保持：AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · SETTLEMENT/BILLING LINKAGE HOLD。

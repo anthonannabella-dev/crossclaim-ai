@@ -1,15 +1,15 @@
 {
   "gate": "B2-FIX R1",
-  "head": "72e2361",
+  "head": "f2a20b9",
   "status": "IMPLEMENTING",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
   "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
   "send_head": "07b7009",
   "decision_head": "07b7009",
-  "last_chatgpt_message": "MSG-20261001-30",
+  "last_chatgpt_message": "MSG-20261001-31",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T11:09:44.747Z",
+  "updated_at": "2026-10-01T11:14:46.828Z",
   "previous_head": "7e83945",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -51,10 +51,10 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-01T11:08:56.305Z",
   "state": "IMPLEMENT",
-  "last_action": "MSG-20261001-30 = PASS WITH REVISE 已逐字归档并 FULL_COPY_OK（R43 方向批准；CHANGE A/B/C/D 已登记）；下一批 = R43-A Schema Delta Request（docs-only，不实现）",
-  "last_action_at": "2026-10-01T11:09:44.747Z",
-  "next_action": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
-  "current_head": "72e2361",
+  "last_action": "MSG-20261001-31 = PASS WITH REVISE 已逐字归档并 FULL_COPY_OK（R43-A 四表架构批准；CHANGE A 受控 CAS/核心字段 immutable；CHANGE B approvalId 单链唯一；CHANGE C providerCaseRef canonical 化）；下一批 = R43-B Implementation Plan（docs-only）",
+  "last_action_at": "2026-10-01T11:14:46.828Z",
+  "next_action": "R43-B — Manual Recovery Persistence Implementation Plan（docs-only，先设计不实现）：①migration 顺序 ②四表 FK/unique/index ③tenant + immutable/controlled-mutation triggers ④package CAS 状态机 ⑤recovery.manual_submit Action Guard ⑥approval+ClaimItem+submission+audit 原子事务 ⑦providerCaseRef canonicalization ⑧consistency checker ⑨M1–M11 + MSG-31 新增验收 ⑩rollback 仅设计不执行。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
+  "current_head": "f2a20b9",
   "reviewed_head": "07b7009",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -637,5 +637,37 @@
     },
     "holds": "AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · SETTLEMENT/BILLING LINKAGE HOLD",
     "archival_at": "2026-10-01T11:09:44.745Z"
+  },
+  "r43a_submission": {
+    "submission_comment": "5930157696",
+    "ci_run": "36853926652",
+    "reviewed_head": "f2a20b9",
+    "doc": "docs/releases/R43-A-MANUAL-RECOVERY-PERSISTENCE-SCHEMA-DELTA-REQUEST.md",
+    "wakeup_channel": "https://chatgpt.com/c/6ab9ee1b-fd54-83ee-b363-b67750afcedd",
+    "wakeup_delivery": "DELIVERED_VERIFIED（输入框清空 / 新用户消息在底部 / 生成中）"
+  },
+  "r43a_verdict": {
+    "message_id": "MSG-20261001-31",
+    "decision": "PASS WITH REVISE",
+    "reviewed_head": "f2a20b9",
+    "archival": "FULL_COPY_OK",
+    "archival_at": "2026-10-01T11:14:46.828Z",
+    "rulings": {
+      "q1_source_state": "批准 READY_TO_APPEAL 唯一前置",
+      "q2_requires": "批准仅 [humanApproval]，但必须继续经过普通 RBAC/action guard（ACTIVE user / ACTIVE membership / 当前角色 / tenant boundary / action permission）",
+      "q3_single_chain": "批准 @@unique([organizationId, claimItemId])；再次申诉不得做成第二条 v1 submission",
+      "q4_provider_case_ref_nullable": "批准可空；补录须 canonical 非空 + 租户 partial unique + append-only audit，且不得解释为 provider accepted",
+      "q5_package_table": "批准独立 RecoveryPackage 表",
+      "q6_submission_evidence_join": "批准新增联结表",
+      "q7_consistency_checker": "要求：transaction-time validation + 只读 checker + CI fixture/真实 PG 漂移检测；只报告不自动修复",
+      "q8_append_only": "原则批准，须按 CHANGE A 收紧（RecoveryPackage 为受控 CAS 生命周期）"
+    },
+    "changes": {
+      "A": "区分不可变事实与生命周期状态：artifact/submission/submission-evidence 全表 immutable；RecoveryPackage 仅 identity/binding/digest/version 核心字段 immutable，status 只能经受控 CAS；禁止普通 update 改 digest/Claim·Case binding/packageVersion；SUPERSEDED/WITHDRAWN 必须带 reason + actor + audit；实现前定义可变字段白名单",
+      "B": "approvalId 进入单链不变量：同一 approval 不得授权两条 manual submission；新增租户范围 UNIQUE(organizationId, approvalId)；若创建时必有则设为 required（不得无理由 nullable）；与 recovery.approval_consumed 同事务",
+      "C": "providerCaseRef 唯一性必须基于 canonical value（trim → Unicode normalize → provider 特定归一化），保存并比较 canonical identity；Amazon 大小写语义未证明前不得擅自 lower-case"
+    },
+    "test_additions": "ClaimItem 状态 ⇔ submission record 双向一致性；同 approval 并发授权两个 ClaimItem 至多一个成功；package digest/binding 创建后不可改；package 状态只能合法 CAS；immutable 表直接 UPDATE 被拒；providerCaseRef canonical 重复被拒；providerCaseRef 为空仍可完成人工确认；补录不改变 provider accepted 事实；checker 能发现人工不一致但不自动修复",
+    "next": "R43-B — Manual Recovery Persistence Implementation Plan（docs-only，10 项；经审后才编码）"
   }
 }

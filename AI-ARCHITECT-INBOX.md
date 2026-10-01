@@ -80350,3 +80350,201 @@ AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CR
 
 VERDICT: PASS WITH REVISE — MSG-20261001-30
 ```
+
+### [MSG-20261001-31] R43-A Manual Recovery Persistence Schema Delta —— PASS WITH REVISE（4 表 + 2 枚举框架批准；CHANGE A：artifact/submission/evidence append-only 但 RecoveryPackage 为受控 CAS 生命周期（核心字段 immutable）；CHANGE B：approvalId 必須进入单链唯一约束（organizationId, approvalId）；CHANGE C：providerCaseRef 唯一性必須用 canonical value）；NEXT = R43-B Manual Recovery Persistence Implementation Plan（docs-only，10 项）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE: FORMAL_VERDICT
+MESSAGE: MSG-20261001-31
+PREVIOUS: MSG-20261001-30
+GATE: Gate 7 / R43-A Manual Recovery Persistence Schema Delta
+REVIEWED_HEAD: f2a20b9
+DECISION: PASS WITH REVISE
+
+KEEP
+
+整体持久化边界批准。四表拆分合理，并正确解决了 MSG-30 的核心问题：
+
+ClaimItem.status + RecoveryManualSubmission 作为业务事实；
+AuditLog 只承担 append-only evidence；
+package 与 submission 明确分离；
+PDF / JSON manifest 只引用既有 FileAsset，不复制证据；
+submission evidence 继续引用 EvidenceArtifact；
+providerCaseRef / submittedAt / submittedByUserId / approvalId 独立归属 submission；
+package digest/version 显式持久化；
+recovery.manual_submit 绑定 Claim/Case/package；
+状态跃迁 + submission + approval consumption + audit 规划在同一事务；
+reconciliation 与 Settlement/Billing/RecoveryLedger 继续隔离。
+8 问裁决
+
+① READY_TO_APPEAL 是否唯一前置？——批准。
+
+v1 固定：
+
+READY_TO_APPEAL → SUBMITTED_MANUAL
+
+不得从 DISCOVERED / VERIFIED / REVIEW_REQUIRED / RECOVERED / CLOSED 直接进入。
+
+② requires 是否仅 [humanApproval]？——批准，但必须继续经过普通 RBAC/action guard。
+
+humanApproval 是附加要求，不替代：
+
+ACTIVE user；
+ACTIVE membership；
+当前角色；
+tenant boundary；
+action permission。
+
+③ v1 单链 @@unique([organizationId, claimItemId])？——批准。
+
+一个 ClaimItem 在 v1 只能有一个逻辑 manual-submission chain。
+
+如果 Amazon 拒绝后需要二次/三次 appeal，不要偷偷放宽这个唯一约束；以后用独立 round/appeal 模型做 Schema Delta。
+
+④ providerCaseRef 是否允许为空？——批准。
+
+人工提交时可能尚未拿到 Amazon case/reference。
+
+但后续补录必须：
+
+非空规范化；
+同租户 partial unique；
+记录 append-only audit；
+不得把“补录 providerCaseRef”解释为 provider accepted。
+
+⑤ 独立 RecoveryPackage 表？——批准。
+
+Package 是具有 digest/version/lifecycle 的独立业务 artifact，不应塞入 ClaimItem 或 AuditLog。
+
+⑥ RecoveryManualSubmissionEvidence 联结表？——批准。
+
+保持“引用证据、不复制证据”。
+
+⑦ I1/I2 只读一致性检查 + CI？——要求。
+
+批准且列为实施 Gate。
+
+数据库约束覆盖不了的跨表状态不变量必须有：
+
+transaction-time validation；
+read-only consistency checker；
+CI fixture/真实 PostgreSQL corruption detection。
+
+但 checker 只报告，不自动修复生产数据。
+
+⑧ artifact/submission/evidence 三表 append-only？——原则批准，需按 CHANGE A 收紧。
+
+CHANGE A — 区分“不可变事实”与“生命周期状态”
+
+RecoveryPackageArtifact、RecoveryManualSubmission、RecoveryManualSubmissionEvidence：
+
+append-only / immutable 批准。
+
+但 RecoveryPackage 本身具有：
+
+GENERATED → EXPORTED / SUPERSEDED / WITHDRAWN
+
+生命周期，因此不能同时把整张 RecoveryPackage 表定义成“所有字段 immutable”，否则状态机自身矛盾。
+
+要求：
+
+identity/binding/digest/version 等核心字段 immutable；
+package status 只能通过受控 CAS 状态机修改；
+禁止普通 update 任意改 digest、Claim/Case binding 或 packageVersion；
+SUPERSEDED/WITHDRAWN 必须带 reason + actor + audit。
+
+因此实现前明确 trigger/service 的可变字段白名单。
+
+CHANGE B — approvalId 必须进入单链不变量
+
+既然 RecoveryManualSubmission.approvalId 是人工提交授权依据，必须明确：
+
+同一个 approval 不得授权两个 manual submission。
+
+Schema Request 增加租户范围唯一约束：
+
+UNIQUE (organizationId, approvalId)
+
+若 approvalId 在记录创建时理论上必有，则优先设为 required；不要无理由 nullable。
+
+并与 recovery.approval_consumed 在同事务内成立。
+
+CHANGE C — providerCaseRef 唯一性必须使用 canonical value
+
+批准 partial unique，但不能直接对用户输入的原始字符串做 identity。
+
+Implementation Plan 需要定义 canonicalization，例如：
+
+trim → Unicode normalization → provider-specific case normalization
+
+并保存/比较 canonical identity。
+
+否则：
+
+ABC-123、ABC-123 等可能绕过幂等。
+
+如果 Amazon reference 被证明大小写敏感，则不要擅自 lower-case；以官方语义为准。
+
+RISKS
+
+当前最大风险已经不是平台外写，而是业务状态与四张新表之间产生漂移。
+
+尤其必须防：
+
+ClaimItem = SUBMITTED_MANUAL 但没有 submission record，
+
+或反过来：
+
+存在 submission record，但 ClaimItem 仍为 READY_TO_APPEAL。
+
+这也是 I1/I2 checker 必须进入长期 CI 的原因。
+
+另一个风险是未来把“再次申诉”错误实现成第二条 v1 submission；当前单链约束应保持，后续 appeal/round 独立建模。
+
+TEST
+
+M1–M11 接受作为基础矩阵，并增加/明确：
+
+ClaimItem 状态与 submission record 双向一致性；
+同 approval 并发授权两个 ClaimItem → 至多一个成功；
+package digest/binding 创建后不可修改；
+package 状态只能合法 CAS；
+immutable submission/artifact/evidence 直接 UPDATE 被拒绝；
+providerCaseRef canonical duplicate 被拒绝；
+providerCaseRef 为空仍可完成人工确认；
+后续补 providerCaseRef 不改变“provider accepted”事实；
+consistency checker 能发现人工制造的跨表不一致，但不自动修复。
+
+PG1–PG10 / H1–H9 / D1–D4 永久基线继续保留。
+
+NEXT
+
+完成 CHANGE A/B/C 后，不需要再提交一轮 Schema Request。
+
+直接提交：
+
+R43-B — Manual Recovery Persistence Implementation Plan
+
+计划中明确：
+
+migration 顺序；
+四表 FK/unique/index；
+tenant + immutable/controlled-mutation triggers；
+package CAS 状态机；
+recovery.manual_submit Action Guard；
+approval + ClaimItem + submission + audit 原子事务；
+providerCaseRef canonicalization；
+consistency checker；
+M1–M11 + 本裁决新增验收；
+rollback 仅设计，不执行。
+
+仍然不要直接实现，Implementation Plan 经审后再编码。
+
+继续保持：
+
+AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · SETTLEMENT/BILLING LINKAGE HOLD。
+
+VERDICT: PASS WITH REVISE — MSG-20261001-31
+```

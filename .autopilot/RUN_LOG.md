@@ -842,3 +842,15 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - TEST 清單（11 條）納入 R43-A 驗收要求。
 - NEXT：**R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，8 項持久化邊界）**；Schema Delta 獲批後才提 R43 Implementation Plan。
 - 邊界：AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · SETTLEMENT/BILLING LINKAGE HOLD。
+
+## 2026-10-01 JST — R43-A 送审 + MSG-20261001-31 = PASS WITH REVISE
+
+- R43-A 送审：REVIEWED_HEAD f2a20b9；Issue #2 comment 5930157696；CI 36853926652；docs-only。
+- 档案：`AI-ARCHITECT-INBOX.md` → `MSG-20261001-31`；`tools/verdict-diff/compare.mjs` = **FULL_COPY_OK**。
+- 裁决：PASS WITH REVISE。4 表（RecoveryPackage / RecoveryPackageArtifact / RecoveryManualSubmission / RecoveryManualSubmissionEvidence）架架批准；8 問全部有結論。
+- CHANGE A：區分不可變事實與生命週期狀態 —— artifact/submission/submission-evidence 全表 immutable；RecoveryPackage 僅核心字段 immutable，status 只能經受控 CAS；SUPERSEDED/WITHDRAWN 必須帶 reason + actor + audit；實現前定義可變字段白名單。
+- CHANGE B：approvalId 必須進入單鏈不變量（同一 approval 不得授權兩條 submission；UNIQUE(organizationId, approvalId)；創建時必有則設 required）。
+- CHANGE C：providerCaseRef 唯一性必須用 canonical value（trim → Unicode normalize → provider 特定歸一化）；不得擅自降小寫。
+- TEST：M1–M11 接受作基礎矩陣，另增 9 項（雙向一致性、同 approval 並發、digest/binding 不可改、CAS 合法性、immutable UPDATE 被拒、canonical 重複被拒、ref 為空仍可確認、補錄不改變 accepted 事實、checker 只報告）；PG/H/D 基線保留。
+- NEXT：**R43-B — Manual Recovery Persistence Implementation Plan（docs-only，10 項）**；不需再送一輪 Schema Request；經審後才編碼。
+- 邊界：AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · SETTLEMENT/BILLING LINKAGE HOLD。
