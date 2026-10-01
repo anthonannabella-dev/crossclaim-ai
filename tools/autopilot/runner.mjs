@@ -101,6 +101,16 @@ const heartbeat = {
     host_approval_required: AUTOPILOT_RULES?.platform_api_approval_readiness?.host_approval_required ?? [],
     status_fields: AUTOPILOT_RULES?.platform_api_approval_readiness?.platform_status_fields ?? [],
   },
+  billing_redline_policy: {
+    directive: AUTOPILOT_RULES?.success_fee_billing_redline?.directive ?? null,
+    doc: AUTOPILOT_RULES?.success_fee_billing_redline?.doc ?? null,
+    headline: AUTOPILOT_RULES?.success_fee_billing_redline?.headline ?? null,
+    allowed_chain: AUTOPILOT_RULES?.success_fee_billing_redline?.allowed_chain ?? [],
+    billable_predicate: AUTOPILOT_RULES?.success_fee_billing_redline?.billable_predicate ?? [],
+    forbidden: AUTOPILOT_RULES?.success_fee_billing_redline?.forbidden ?? [],
+    auto_debit_gate: AUTOPILOT_RULES?.success_fee_billing_redline?.auto_debit_gate ?? null,
+    queue_impact: AUTOPILOT_RULES?.success_fee_billing_redline?.queue_impact ?? null,
+  },
   reuse_policy: {
     matrix_path: AUTOPILOT_RULES?.open_source_reuse?.matrix_path ?? null,
     registry_path: AUTOPILOT_RULES?.open_source_reuse?.registry_path ?? null,

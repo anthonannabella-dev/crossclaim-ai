@@ -25,6 +25,11 @@ const statePath = path.join(AP, 'STATE.json');
 if (!fs.existsSync(rulesMdPath)) failures.push('MISSING .autopilot/RULES.md');
 else {
   const md = fs.readFileSync(rulesMdPath, 'utf8');
+  if (!/R12/.test(md)) failures.push('RULES.md 缺少 R12（Success Fee / Billing 永久红线）');
+  if (!md.includes('Reobserved_not_billable') && !md.includes('≠ recovered ≠ billable')) {
+    failures.push('RULES.md R12 缺少一句话红线（Reimbursement observed ≠ recovered ≠ billable）');
+  }
+
   for (const field of ['FOUNDATION_REUSED', 'NEW_RISK_BOUNDARY', 'ARCH_REVIEW_REQUIRED']) {
     if (!md.includes(field)) failures.push('RULES.md 缺少状态字段: ' + field);
   }
@@ -98,6 +103,25 @@ if (!platform) {
   }
   if (!Array.isArray(platform.platform_status_fields) || platform.platform_status_fields.length === 0) {
     failures.push('platform_api_approval_readiness 缺少 platform_status_fields');
+  }
+}
+
+// R12_BLOCK：Success Fee / Billing 永久红线（HOST DIRECTIVE 2026-10-02）
+const billingRedline = rules?.success_fee_billing_redline ?? null;
+if (!billingRedline) {
+  failures.push('rules.json 缺少 success_fee_billing_redline（R12 未落盘）');
+} else {
+  const rel = billingRedline.doc;
+  if (!rel || !fs.existsSync(path.join(ROOT, rel))) failures.push('缺少 R12 规范文档: ' + rel);
+  const doc = rel && fs.existsSync(path.join(ROOT, rel)) ? fs.readFileSync(path.join(ROOT, rel), 'utf8') : '';
+  for (const token of ['Settlement = RECEIVED', 'billable', 'Payment Authorization Gate', 'FeeCalculation']) {
+    if (!doc.includes(token)) failures.push('R12 文档缺少关键口径: ' + token);
+  }
+  for (const key of ['billable_predicate', 'forbidden', 'ai_forbidden_decisions', 'status_fields']) {
+    if (!Array.isArray(billingRedline[key]) || billingRedline[key].length === 0) failures.push('success_fee_billing_redline 缺少非空数组: ' + key);
+  }
+  if (billingRedline.auto_debit_gate?.status !== 'HOLD') {
+    failures.push('success_fee_billing_redline.auto_debit_gate.status 必须为 HOLD（自动扣款属独立 Gate）');
   }
 }
 

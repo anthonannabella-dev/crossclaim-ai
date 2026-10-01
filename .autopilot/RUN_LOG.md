@@ -1169,3 +1169,12 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 边界：未实现 projector、未开放人工 outcome 受保护 HTTP、未实现 basis set/supersede、零 Schema 变更。
 - 证据：prisma validate valid · tsc PASS · 指纹纯函数 7/7 · ingest DB 12/12 · C-0005 回归 12/12 · 全量 171 files / 1668 tests PASS。
 - 送审：REVIEWED_HEAD 8706b2d（Issue #2 comment 5934172241）；唤醒已投递并三要素验证（输入框清空 / 新消息在底部 / 生成中）。
+
+## 2026-10-02 JST — HOST DIRECTIVE：R12 Success Fee / Billing 永久红线落盘
+
+- 红线：**Reimbursement observed ≠ recovered ≠ billable** —— 只有 reconciliation 确认真实到账并形成合法 `Settlement = RECEIVED`（及对应 RecoveryLedger 事实）后，才允许计算 Success Fee 与生成 `BillingInvoice`。
+- 链路（冻结）：Reconciliation → Confirmed Settlement → RecoveryLedger → FeeCalculation → BillingInvoice → Payment；`Payment` 自动扣款属**独立 Production / Payment Authorization Gate**，当前 **HOLD**。
+- 可计费判定：`Settlement.status = RECEIVED`（PARTIAL 仅按已到账部分）· `confirmationStatus = CONFIRMED` · `reconciliationStatus ∈ { RECONCILED, PARTIAL }` · `evidenceId` 非空 · 未被冲回 · 计费基数只取自已确认到账的 Settlement/RecoveryLedger（不得取自 ReimbursementFact.amount、平台 approved、ClaimItem 金额）· 费率来自既有 FeeCalculation（`FeeBasis = NONE` 不得开票）· 沿用 `billing.draft` 锁后重读/依据唯一/`BILLING_BASIS_REQUIRED` 口径。
+- 禁止：仅因 approved 收费 / 仅因 observed 收费 / 未确认到账收费 / partial 按 full 收费 / reversal·correction 后按旧金额收费 / AI 决定 recovered amount 或 fee / 未经客户明确预授权自动扣款。
+- 落盘：`docs/releases/SUCCESS-FEE-BILLING-REDLINE.md` + `.autopilot/RULES.md` R12 + `.autopilot/rules.json#success_fee_billing_redline`；runner 每轮输出 `billing_redline_policy`；checker 在 CI 强制（规则段 + JSON 块 + 文档 + auto_debit_gate=HOLD）。
+- 队列：不改变 R45（S1 CLOSED → S2 送审中 → S3 → S4 → S5）与 R46 排期；不重新规划、不重复审计已 PASS 底座。

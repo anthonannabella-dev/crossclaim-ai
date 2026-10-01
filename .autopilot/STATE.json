@@ -1,6 +1,6 @@
 {
   "gate": "B2-FIX R1",
-  "head": "8706b2d",
+  "head": "52c50e0",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
   "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
@@ -9,8 +9,8 @@
   "last_chatgpt_message": "MSG-20261001-47",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T15:04:06.972Z",
-  "previous_head": "028c015",
+  "updated_at": "2026-10-01T15:06:13.609Z",
+  "previous_head": "8706b2d",
   "architect_decision_pending": true,
   "blocked_scope": null,
   "last_send_head": "8706b2d",
@@ -49,12 +49,12 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-01T14:50:14.249Z",
+  "last_tick_at": "2026-10-01T15:05:57.798Z",
   "state": "IMPLEMENT",
-  "last_action": "R45 S2 已实施并送审 Implementation Checkpoint：provider/source event identity v1 + provider outcome / reimbursement ingest（幂等复用 vs fail-closed 明确区分）+ 19 项新增验收（7 纯函数 / 12 真实 PostgreSQL）；全量 171 files / 1668 tests PASS。",
-  "last_action_at": "2026-10-01T15:04:06.972Z",
+  "last_action": "HOST DIRECTIVE 2026-10-02 落盘为 R12（Success Fee / Billing 永久红线）：Reimbursement observed ≠ recovered ≠ billable；只有 Settlement = RECEIVED（且 confirmationStatus=CONFIRMED、reconciliationStatus ∈ {RECONCILED, PARTIAL}、证据可追溯、未被冲回）才可计费开票；自动扣款为独立 Gate 且 HOLD。队列不变。",
+  "last_action_at": "2026-10-01T15:06:13.609Z",
   "next_action": "等待 R45 S2 Implementation Checkpoint 裁决：①PASS → 进入 S3（deterministic projector）②REVISE → 按 CHANGE 修订 ③BLOCK → 停止。",
-  "current_head": "8706b2d",
+  "current_head": "52c50e0",
   "reviewed_head": "07b7009",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-01T14:45:15.896Z",
-    "gapMs": 298354,
-    "stale": false,
-    "checkedAt": "2026-10-01T14:50:14.249Z"
+    "previousTickAt": "2026-10-01T14:50:14.249Z",
+    "gapMs": 943551,
+    "stale": true,
+    "checkedAt": "2026-10-01T15:05:57.798Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -250,7 +250,7 @@
     "integration_boundary_review": "AUTHORIZED_TO_PLAN（先提交设计/实施计划，不直接开放真实 transport）"
   },
   "r36_submission_comment": "5927087320",
-  "stale_recovered_at": "2026-10-01T14:45:15.896Z",
+  "stale_recovered_at": "2026-10-01T15:05:57.798Z",
   "engineering_regression_policy": {
     "source": "HOST PRODUCT DIRECTION 2026-10-01",
     "doc": "docs/releases/ENGINEERING-REGRESSION-POLICY.md",
@@ -1749,5 +1749,26 @@
     },
     "boundary": "NO Settlement · NO Billing · NO Fee · NO RecoveryLedger mutation · NO platform write · TRANSPORT=false · NO production credentials；未实现 projector；未开放人工 outcome 受保护 HTTP",
     "next": "PASS → R45 S3（deterministic projector：DELETE → CAS → INSERT 同事务整体替换 + inputDigest/projectionVersion + CHANGE A 弱引用强校验 + CHANGE C system exact policy 确定性取用/创建）；REVISE → 修订；BLOCK → 停止"
+  },
+  "billing_redline": {
+    "directive": "HOST DIRECTIVE 2026-10-02",
+    "rule": "R12 —— Success Fee / Billing 永久红线",
+    "headline": "Reimbursement observed ≠ recovered ≠ billable",
+    "doc": "docs/releases/SUCCESS-FEE-BILLING-REDLINE.md",
+    "machine_readable": ".autopilot/rules.json#success_fee_billing_redline",
+    "enforced_by": "tools/autopilot/check-autopilot-rules.mjs（CI）+ tools/autopilot/runner.mjs（每轮 HEARTBEAT 输出 billing_redline_policy）",
+    "billable_requires": "Settlement = RECEIVED（PARTIAL 仅已到账部分）+ confirmationStatus=CONFIRMED + reconciliationStatus ∈ {RECONCILED, PARTIAL} + evidenceId 非空 + 未被冲回 + 费率来自 FeeCalculation（FeeBasis ≠ NONE）+ 沿用 billing.draft 锁后重读/依据唯一口径",
+    "forbidden": [
+      "仅因平台 approved 收费",
+      "仅因 reimbursement observed 收费",
+      "未确认到账收费",
+      "partial 按 full 收费",
+      "reversal / correction 后按旧金额收费",
+      "AI 决定 recovered amount 或 fee",
+      "未经客户明确预授权自动扣款"
+    ],
+    "auto_debit": "HOLD（独立 Production / Payment Authorization Gate；需客户明确预授权 + 支付通道正式验收 + 架构方与宿主书面放行）",
+    "queue_impact": "NONE —— R45 队列不变（S1 CLOSED → S2 送审中 → S3 → S4 → S5）",
+    "landed_at": "2026-10-01T15:06:13.609Z"
   }
 }

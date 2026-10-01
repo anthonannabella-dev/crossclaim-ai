@@ -161,3 +161,35 @@ model_weight_license / decision(ACCEPT|REVIEW|REJECT) / reason`，外加复用�
 **R11.7 宿主控制**：未经 HOST APPROVAL 不得：提交平台申请、创建付费账号、使用真实客户账户、写入真实 Client Secret / Refresh Token、开启真实 write scope、提交真实 Claim/Appeal、开启生产支付接入、使用生产凭据。
 
 **R11.8 每轮涉及平台接入时输出平台状态字段**（见 rules.json `platform_status_fields`）。
+
+## R12 Success Fee / Billing 永久红线（HOST DIRECTIVE 2026-10-02）
+
+**一句话红线**：`Reimbursement observed ≠ recovered ≠ billable` —— 只有系统通过 reconciliation 确认真实到账并形成合法
+`Settlement = RECEIVED`（及对应 `RecoveryLedger` 事实）后，才允许计算 Success Fee 与生成 `BillingInvoice`。
+
+**落盘位置**：`docs/releases/SUCCESS-FEE-BILLING-REDLINE.md`（规范文档）。
+**机器可读镜像**：`.autopilot/rules.json` → `success_fee_billing_redline`；runner 每轮写入 HEARTBEAT 的 `billing_redline_policy`；
+校验器 `tools/autopilot/check-autopilot-rules.mjs` 在 CI 强制（规则段 + JSON 块 + 文档同时存在）。
+
+**R12.1 允许链路（冻结）**：`Reconciliation → Confirmed Settlement → RecoveryLedger → FeeCalculation → BillingInvoice → Payment`。
+`Payment` 自动扣款属于**独立 Production / Payment Authorization Gate**，当前 **HOLD**。
+
+**R12.2 可计费判定（必须同时成立）**：`Settlement.status = RECEIVED`（`PARTIAL` 仅按已到账部分）·
+`confirmationStatus = CONFIRMED` · `reconciliationStatus ∈ { RECONCILED, PARTIAL }` · `evidenceId` 非空 ·
+未被冲回（`reversedBySettlementId IS NULL`）· 计费基数只取自已确认到账的 Settlement/RecoveryLedger（**不得**取自
+`ReimbursementFact.amount`、平台 approved 状态或 ClaimItem 金额）· 费率来自既有 `FeeCalculation`（`FeeBasis = NONE` 不得开票）·
+沿用 `billing.draft` 的锁后重读 / 依据唯一 / `BILLING_BASIS_REQUIRED` 口径。
+
+**R12.3 明确禁止（fail-closed）**：仅因平台 approved 收费 · 仅因 reimbursement observed 收费 · 未确认到账收费 ·
+partial recovery 按 full recovery 收费 · reversal / correction 后继续按旧金额收费 · AI 直接决定 recovered amount 或 fee ·
+未经客户明确预授权自动扣款。
+
+**R12.4 冲正强制重算**：冲正以新事实表达、不覆盖历史；相关 `FeeCalculation` 必须重算，已签发账单走既有受控状态机
+（`VOID` / `WRITTEN_OFF`），不得直接改金额；「旧金额继续计费」一律视为 fail-closed 缺陷。
+
+**R12.5 自动扣款 = 独立 Gate（当前 HOLD）**：开启需 ① 客户明确预授权（可追溯授权事实 + 撤销路径）② 支付通道正式验收
+（生产凭据 / webhook 验签 / 对账 / 退款与争议路径）③ 架构方与宿主书面放行。Gate 放行前只允许生成账单事实与草稿/通知，
+**不得**发起扣款；生产凭据与生产支付接入继续 HOST APPROVAL REQUIRED。
+
+**R12.6 不改变队列**：本红线不改变 R45 执行队列（S1 CLOSED → S2 → S3 → S4 → S5）与 R46 排期，不重新规划，
+不重复审计已 PASS 底座；R46 设计/计划必须显式引用本文件并逐条对应 R12.2 / R12.3。

@@ -485,3 +485,11 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - 送审：REVIEWED_HEAD 8706b2d（Issue #2 comment 5934172241）。
 - NEXT：PASS → R45 S3（deterministic projector，DELETE → CAS → INSERT）；REVISE → 修订；BLOCK → 停止。
 - 禁止：Settlement / Billing / Fee / RecoveryLedger 改写 / 平台外写 / transport / 生产凭据。
+
+### R12（Success Fee / Billing 永久红线）—— HOST DIRECTIVE 2026-10-02
+
+- 红线：`Reimbursement observed ≠ recovered ≠ billable`；只有 `Settlement = RECEIVED`（+ CONFIRMED + RECONCILED/PARTIAL + 证据可追溯 + 未被冲回）才可计费开票。
+- 自动扣款：独立 Production / Payment Authorization Gate，**HOLD**（需客户明确预授权 + 支付通道正式验收 + 架构方与宿主书面放行）。
+- 落盘：`docs/releases/SUCCESS-FEE-BILLING-REDLINE.md` / `.autopilot/RULES.md` R12 / `.autopilot/rules.json` / runner / checker。
+- R46 设计/计划必须显式引用本红线并逐条对应可计费判定与禁止清单。
+- 队列：R45 不变（S2 送审中 → S3 → S4 → S5）。
