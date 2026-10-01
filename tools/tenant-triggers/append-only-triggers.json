@@ -72,12 +72,65 @@
       "table": "ClaimReconciliationProjectionFact",
       "tgtype": 7,
       "semantics": "BEFORE INSERT → 成员关系的 projectionVersion 必须等于当前 projection generation（CHANGE A）"
+    },
+    {
+      "name": "cc_append_only__SettlementReceiptSnapshot",
+      "table": "SettlementReceiptSnapshot",
+      "tgtype": 27,
+      "semantics": "BEFORE UPDATE OR DELETE → 拒绝（R46 资金域事实不可改）"
+    },
+    {
+      "name": "cc_append_only__SettlementAdjustment",
+      "table": "SettlementAdjustment",
+      "tgtype": 27,
+      "semantics": "BEFORE UPDATE OR DELETE → 拒绝（R46 资金域事实不可改）"
+    },
+    {
+      "name": "cc_append_only__FeeCalculationSettlement",
+      "table": "FeeCalculationSettlement",
+      "tgtype": 27,
+      "semantics": "BEFORE UPDATE OR DELETE → 拒绝（R46 资金域事实不可改）"
+    },
+    {
+      "name": "cc_append_only__FeeCalculationAdjustment",
+      "table": "FeeCalculationAdjustment",
+      "tgtype": 27,
+      "semantics": "BEFORE UPDATE OR DELETE → 拒绝（R46 资金域事实不可改）"
+    },
+    {
+      "name": "cc_settlement_receipt_basis_immutable",
+      "table": "Settlement",
+      "tgtype": 19,
+      "semantics": "BEFORE UPDATE → 到账依据（receiptSnapshotId / external identity / fingerprint）创建后不可改（MSG-20261002-54 CHANGE B）"
+    },
+    {
+      "name": "cc_settlementadjustment_full_reversal_guard",
+      "table": "SettlementAdjustment",
+      "tgtype": 7,
+      "semantics": "BEFORE INSERT → v1 full reversal 等额 / 同币种 / 同租户（CHANGE B1）"
+    },
+    {
+      "name": "cc_feecalculationsettlement_chain_unique",
+      "table": "FeeCalculationSettlement",
+      "tgtype": 7,
+      "semantics": "BEFORE INSERT → 同一 fee chain 内资金事实唯一（MSG-20261002-54 CHANGE A / F3 修正）"
+    },
+    {
+      "name": "cc_feecalculationadjustment_void_amount",
+      "table": "FeeCalculationAdjustment",
+      "tgtype": 7,
+      "semantics": "BEFORE INSERT → VOID 等额于目标 FeeCalculation（CHANGE C1 / 三分类）"
     }
   ],
   "unexpectedPrefixes": [
     "cc_append_only__%",
     "cc_recoverypackage_%",
     "cc_reconciliation%",
-    "cc_reimbursementfact_%"
+    "cc_reimbursementfact_%",
+    "cc_money_%",
+    "cc_settlement_%",
+    "cc_settlementadjustment_%",
+    "cc_feecalculationsettlement_%",
+    "cc_feecalculationadjustment_%"
   ]
 }

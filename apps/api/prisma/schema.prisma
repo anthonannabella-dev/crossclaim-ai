@@ -123,6 +123,7 @@ enum ClaimTerminalReasonCode {
   DUPLICATE_CLAIM
   OTHER
 }
+
 enum ClaimStatus {
   DRAFT
   SUBMITTED
@@ -284,6 +285,53 @@ enum FeeBasis {
   NONE
 }
 
+/// R46 S1 —— Settlement 外部资金身份类别（CHANGE A1：唯一性以 kind + valueHash + version 为依据）
+enum SettlementExternalIdentityKind {
+  BANK_TRANSACTION
+  PSP_SETTLEMENT
+  PLATFORM_SETTLEMENT_REPORT
+  CARRIER_SETTLEMENT
+  INSURER_PAYOUT
+  CHECK_REFERENCE
+  MANUAL_DOCUMENT
+  OTHER
+}
+
+/// R46 S1 —— Settlement 归属依据（Q2：不得“无归属到账”）
+enum SettlementLinkageBasisKind {
+  CLAIM_ITEM_DIRECT
+  CASE_LEVEL_ALLOCATION
+  MANUAL_BASIS
+}
+
+/// R46 S1 —— 到账证据来源类别
+enum SettlementReceiptSourceKind {
+  OFFICIAL_API
+  PLATFORM_REPORT
+  BANK_STATEMENT
+  PSP_SETTLEMENT_REPORT
+  MANUAL_DOCUMENT
+}
+
+/// R46 S1 —— 冲正/更正类别（v1 仅 REVERSAL 启用）
+enum SettlementAdjustmentKind {
+  REVERSAL
+  CORRECTION
+}
+
+/// R46 S1 —— fee membership 方向
+enum FeeMembershipBasisRole {
+  POSITIVE
+  NEGATIVE
+}
+
+/// R46 S1 —— Fee 调整三分类（MSG-20261002-54 ①）
+enum FeeCalculationAdjustmentKind {
+  VOID
+  REVERSAL
+  CORRECTION
+}
+
 enum AuditActorType {
   USER
   SYSTEM
@@ -306,74 +354,78 @@ model Organization {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  memberships       Membership[]
-  sessions          Session[]
-  invitations       UserInvitation[]
-  connections       SourceConnection[]
-  fileAssets        FileAsset[]
-  importBatches     ImportBatch[]
-  transactions      SourceTransaction[]
-  canonicalFacts    CanonicalFact[]
-  canonicalFactSources CanonicalFactSource[]
-  ruleEvaluationShadows RuleEvaluationShadow[]
-  opportunities     RecoveryOpportunity[]
-  graphNodes        RecoveryGraphNode[]
-  graphEdges        RecoveryGraphEdge[]
-  evidence          EvidenceArtifact[]
-  evidenceEdges     EvidenceEdge[]
-  cases             Case[]
-  caseEvidences     CaseEvidence[]
-  caseOpportunities CaseOpportunity[]
-  routes            RecoveryRoute[]
-  claims            Claim[]
-  appeals           Appeal[]
-  ruleSets          RuleSet[]
-  ruleVersions      RuleVersion[]
-  ruleEvaluations   RuleEvaluation[]
-  settlements       Settlement[]
-  ledgerEntries     RecoveryLedgerEntry[]
-  billingInvoices   BillingInvoice[]
-  feeCalculations   FeeCalculation[]
-  auditLogs         AuditLog[]
-  payments          Payment[]
-  paymentEvents     PaymentEvent[]
-  paymentAttempts   PaymentProcessingAttempt[]
-  claimItems        ClaimItem[]
-  claimItemEvidences ClaimItemEvidence[]
-  recoveryPayouts   RecoveryPayout[]
-  killSwitchRequests KillSwitchRequest[]
-  platformWriteAttempts PlatformWriteAttempt[]
-  recoveryPackages      RecoveryPackage[]
-  recoveryPackageArtifacts RecoveryPackageArtifact[]
-  manualRecoverySubmissions RecoveryManualSubmission[]
+  memberships                        Membership[]
+  sessions                           Session[]
+  invitations                        UserInvitation[]
+  connections                        SourceConnection[]
+  fileAssets                         FileAsset[]
+  importBatches                      ImportBatch[]
+  transactions                       SourceTransaction[]
+  canonicalFacts                     CanonicalFact[]
+  canonicalFactSources               CanonicalFactSource[]
+  ruleEvaluationShadows              RuleEvaluationShadow[]
+  opportunities                      RecoveryOpportunity[]
+  graphNodes                         RecoveryGraphNode[]
+  graphEdges                         RecoveryGraphEdge[]
+  evidence                           EvidenceArtifact[]
+  evidenceEdges                      EvidenceEdge[]
+  cases                              Case[]
+  caseEvidences                      CaseEvidence[]
+  caseOpportunities                  CaseOpportunity[]
+  routes                             RecoveryRoute[]
+  claims                             Claim[]
+  appeals                            Appeal[]
+  ruleSets                           RuleSet[]
+  ruleVersions                       RuleVersion[]
+  ruleEvaluations                    RuleEvaluation[]
+  settlements                        Settlement[]
+  ledgerEntries                      RecoveryLedgerEntry[]
+  billingInvoices                    BillingInvoice[]
+  feeCalculations                    FeeCalculation[]
+  auditLogs                          AuditLog[]
+  payments                           Payment[]
+  paymentEvents                      PaymentEvent[]
+  paymentAttempts                    PaymentProcessingAttempt[]
+  claimItems                         ClaimItem[]
+  claimItemEvidences                 ClaimItemEvidence[]
+  recoveryPayouts                    RecoveryPayout[]
+  killSwitchRequests                 KillSwitchRequest[]
+  platformWriteAttempts              PlatformWriteAttempt[]
+  recoveryPackages                   RecoveryPackage[]
+  recoveryPackageArtifacts           RecoveryPackageArtifact[]
+  manualRecoverySubmissions          RecoveryManualSubmission[]
   manualRecoverySubmissionReferences RecoveryManualSubmissionReference[]
-  manualRecoverySubmissionEvidences RecoveryManualSubmissionEvidence[]
+  manualRecoverySubmissionEvidences  RecoveryManualSubmissionEvidence[]
   // R45 S1（MSG-20261001-45 / -46）：Outcome / Reimbursement Reconciliation
-  providerOutcomeFacts          ProviderOutcomeFact[]
-  reimbursementFacts            ReimbursementFact[]
-  expectedRecoveryBases         ExpectedRecoveryBasis[]
-  reconciliationOverrides       ReconciliationOverrideDecision[]
-  reconciliationProjections     ClaimReconciliationProjection[]
-  reconciliationProjectionFacts ClaimReconciliationProjectionFact[]
-  reconciliationTolerancePolicies ReconciliationTolerancePolicy[]
+  providerOutcomeFacts               ProviderOutcomeFact[]
+  reimbursementFacts                 ReimbursementFact[]
+  expectedRecoveryBases              ExpectedRecoveryBasis[]
+  reconciliationOverrides            ReconciliationOverrideDecision[]
+  reconciliationProjections          ClaimReconciliationProjection[]
+  reconciliationProjectionFacts      ClaimReconciliationProjectionFact[]
+  reconciliationTolerancePolicies    ReconciliationTolerancePolicy[]
+  settlementReceiptSnapshots         SettlementReceiptSnapshot[]
+  settlementAdjustments              SettlementAdjustment[]
+  feeCalculationSettlements          FeeCalculationSettlement[]
+  feeCalculationAdjustments          FeeCalculationAdjustment[]
 
   @@index([status])
 }
 
 model User {
-  id            String    @id @default(uuid())
-  email         String    @unique
-  passwordHash  String?
-  displayName   String
-  status        String    @default("ACTIVE")
-  emailVerified Boolean   @default(false)
-  lastLoginAt   DateTime?
-  failedLogins  Int       @default(0)
-  lockedUntil   DateTime?
+  id                String    @id @default(uuid())
+  email             String    @unique
+  passwordHash      String?
+  displayName       String
+  status            String    @default("ACTIVE")
+  emailVerified     Boolean   @default(false)
+  lastLoginAt       DateTime?
+  failedLogins      Int       @default(0)
+  lockedUntil       DateTime?
   /// C-0008-A：改密后以此时间作废既有会话
   passwordChangedAt DateTime?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
 
   memberships Membership[]
   sessions    Session[]
@@ -444,10 +496,10 @@ model FileAsset {
   sourceRef      String?
   createdAt      DateTime @default(now())
 
-  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  connection   SourceConnection?  @relation(fields: [connectionId], references: [id])
-  batches      ImportBatch[]
-  evidence     EvidenceArtifact[]
+  organization             Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  connection               SourceConnection?         @relation(fields: [connectionId], references: [id])
+  batches                  ImportBatch[]
+  evidence                 EvidenceArtifact[]
   recoveryPackageArtifacts RecoveryPackageArtifact[]
 
   @@unique([organizationId, id])
@@ -502,10 +554,10 @@ model SourceTransaction {
   raw            Json
   createdAt      DateTime       @default(now())
 
-  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  connection   SourceConnection? @relation(fields: [connectionId], references: [id])
-  importBatch  ImportBatch?      @relation(fields: [importBatchId], references: [id])
-  evaluations  RuleEvaluation[]
+  organization         Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  connection           SourceConnection?      @relation(fields: [connectionId], references: [id])
+  importBatch          ImportBatch?           @relation(fields: [importBatchId], references: [id])
+  evaluations          RuleEvaluation[]
   canonicalFactSources CanonicalFactSource[]
   shadowEvaluations    RuleEvaluationShadow[]
 
@@ -587,9 +639,9 @@ model CanonicalFact {
   firstSeenAt          DateTime            @default(now())
   lastUpdatedAt        DateTime            @updatedAt
 
-  organization Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  sources      CanonicalFactSource[]
-  evaluations  RuleEvaluation[]
+  organization      Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  sources           CanonicalFactSource[]
+  evaluations       RuleEvaluation[]
   shadowEvaluations RuleEvaluationShadow[]
 
   @@unique([organizationId, factKey])
@@ -748,14 +800,14 @@ model EvidenceArtifact {
   capturedAt     DateTime?
   createdAt      DateTime     @default(now())
 
-  organization Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  fileAsset    FileAsset?        @relation(fields: [fileAssetId], references: [id])
-  connection   SourceConnection? @relation(fields: [connectionId], references: [id])
-  caseLinks    CaseEvidence[]
-  settlements  Settlement[]
-  outEdges     EvidenceEdge[]    @relation("EvidenceFrom")
-  inEdges      EvidenceEdge[]    @relation("EvidenceTo")
-  claimLinks   ClaimItemEvidence[]
+  organization          Organization                       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  fileAsset             FileAsset?                         @relation(fields: [fileAssetId], references: [id])
+  connection            SourceConnection?                  @relation(fields: [connectionId], references: [id])
+  caseLinks             CaseEvidence[]
+  settlements           Settlement[]
+  outEdges              EvidenceEdge[]                     @relation("EvidenceFrom")
+  inEdges               EvidenceEdge[]                     @relation("EvidenceTo")
+  claimLinks            ClaimItemEvidence[]
   manualSubmissionLinks RecoveryManualSubmissionEvidence[]
 
   @@unique([organizationId, id])
@@ -823,17 +875,18 @@ model Case {
   createdAt       DateTime       @default(now())
   updatedAt       DateTime       @updatedAt
 
-  organization    Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  opportunities   CaseOpportunity[]
-  evidence        CaseEvidence[]
-  routes          RecoveryRoute[]
-  claims          Claim[]
-  appeals         Appeal[]
-  settlements     Settlement[]
-  ledgerEntries   RecoveryLedgerEntry[]
-  billingInvoices BillingInvoice[]
-  feeCalculations FeeCalculation[]
-  claimItems      ClaimItem[]
+  organization               Organization                @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  opportunities              CaseOpportunity[]
+  evidence                   CaseEvidence[]
+  routes                     RecoveryRoute[]
+  claims                     Claim[]
+  appeals                    Appeal[]
+  settlements                Settlement[]
+  ledgerEntries              RecoveryLedgerEntry[]
+  billingInvoices            BillingInvoice[]
+  feeCalculations            FeeCalculation[]
+  claimItems                 ClaimItem[]
+  settlementReceiptSnapshots SettlementReceiptSnapshot[]
 
   @@unique([organizationId, caseNo])
   @@unique([organizationId, id])
@@ -883,22 +936,22 @@ model RecoveryRoute {
 // ============================================================
 
 model Claim {
-  id             String      @id @default(uuid())
-  organizationId String
-  caseId         String
-  round          Int         @default(1)
-  status         ClaimStatus @default(DRAFT)
-  target         RouteTarget
-  externalRef    String?
-  submittedAt    DateTime?
-  submittedBy    String?
-  dueAt          DateTime?
-  respondedAt    DateTime?
-  responseAmount Decimal?    @db.Decimal(18, 4)
-  responseNote   String?
-  aiDraftText    String?
-  finalText      String?
-  attachmentKey  String?
+  id                 String                   @id @default(uuid())
+  organizationId     String
+  caseId             String
+  round              Int                      @default(1)
+  status             ClaimStatus              @default(DRAFT)
+  target             RouteTarget
+  externalRef        String?
+  submittedAt        DateTime?
+  submittedBy        String?
+  dueAt              DateTime?
+  respondedAt        DateTime?
+  responseAmount     Decimal?                 @db.Decimal(18, 4)
+  responseNote       String?
+  aiDraftText        String?
+  finalText          String?
+  attachmentKey      String?
   /// S1（MSG-20260929-23）：平台侧案件号；与 externalRef（我方提交引用）语义分离
   platformCaseRef    String?
   /// S2：dueAt 的来源；无来源时 dueAt 必须为 null
@@ -908,8 +961,8 @@ model Claim {
   approvedAt         DateTime?
   /// S4：终局原因（枚举；仅终局态可写）
   terminalReasonCode ClaimTerminalReasonCode?
-  createdAt      DateTime    @default(now())
-  updatedAt      DateTime    @updatedAt
+  createdAt          DateTime                 @default(now())
+  updatedAt          DateTime                 @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   case         Case         @relation(fields: [caseId], references: [id], onDelete: Cascade)
@@ -996,12 +1049,12 @@ model RuleVersion {
   isActive       Boolean   @default(true)
   createdAt      DateTime  @default(now())
 
-  organization Organization?    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  ruleSet      RuleSet          @relation(fields: [ruleSetId], references: [id], onDelete: Cascade)
-  evaluations  RuleEvaluation[]
+  organization      Organization?          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  ruleSet           RuleSet                @relation(fields: [ruleSetId], references: [id], onDelete: Cascade)
+  evaluations       RuleEvaluation[]
   shadowEvaluations RuleEvaluationShadow[]
-  routes       RecoveryRoute[]
-  claimItems   ClaimItem[]
+  routes            RecoveryRoute[]
+  claimItems        ClaimItem[]
 
   @@unique([ruleSetId, version, tier])
   @@unique([organizationId, id])
@@ -1073,20 +1126,40 @@ model Settlement {
   /// MSG-20260929-26 R4：冲回链（不删除原记录；财务处置由 FINANCE 人工完成，D3）
   reversedBySettlementId String?
 
-  organization    Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  case            Case?                 @relation(fields: [caseId], references: [id])
-  evidence        EvidenceArtifact?     @relation(fields: [evidenceId], references: [id])
+  /// MSG-20261002-53/54（R46-A/B）：不可变外部资金身份 —— externalIdentityValue **不参与唯一判定**
+  externalIdentityKind             SettlementExternalIdentityKind?
+  externalIdentityValue            String?
+  externalIdentityValueHash        String?
+  externalIdentityVersion          String?
+  financialEventFingerprint        String?
+  financialEventFingerprintVersion String?
+  /// linkage basis（Q2：不得“无归属到账”）
+  claimItemId                      String?
+  linkageBasisKind                 SettlementLinkageBasisKind?
+  linkageBasisRef                  String?
+  /// CHANGE E：审批绑定的到账证据快照（创建后不可改）
+  receiptSnapshotId                String?
+
+  organization    Organization               @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  case            Case?                      @relation(fields: [caseId], references: [id])
+  evidence        EvidenceArtifact?          @relation(fields: [evidenceId], references: [id])
   ledgerEntries   RecoveryLedgerEntry[]
   feeCalculations FeeCalculation[]
   payouts         RecoveryPayout[]
-  reversedBy      Settlement?           @relation("SettlementReversal", fields: [reversedBySettlementId], references: [id])
-  reversals       Settlement[]          @relation("SettlementReversal")
+  reversedBy      Settlement?                @relation("SettlementReversal", fields: [reversedBySettlementId], references: [id])
+  reversals       Settlement[]               @relation("SettlementReversal")
+  claimItem       ClaimItem?                 @relation(fields: [claimItemId], references: [id])
+  receiptSnapshot SettlementReceiptSnapshot? @relation(fields: [receiptSnapshotId], references: [id])
+  adjustments     SettlementAdjustment[]
+  feeMemberships  FeeCalculationSettlement[]
 
   @@unique([organizationId, id])
   @@index([organizationId, status, receivedAt])
   @@index([organizationId, confirmationStatus])
   @@index([organizationId, reconciliationStatus])
   @@index([caseId])
+  @@index([organizationId, claimItemId, receivedAt])
+  @@index([organizationId, receiptSnapshotId])
 }
 
 /// 账本分录。**只增不改**：纠错靠 REVERSAL + voidsEntryId。
@@ -1170,14 +1243,157 @@ model FeeCalculation {
   computation      Json
   calculatedAt     DateTime @default(now())
 
-  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  billingInvoice BillingInvoice? @relation(fields: [billingInvoiceId], references: [id], onDelete: Cascade)
-  settlement     Settlement?     @relation(fields: [settlementId], references: [id])
-  case           Case?           @relation(fields: [caseId], references: [id])
+  /// MSG-20261002-53/54（R46-B §11）：fee chain identity 与血缘
+  feeChainId                   String?
+  claimItemId                  String?
+  feeChainRootFeeCalculationId String?
+  supersededByFeeCalculationId String?
+  membershipDigest             String?
+  feeBasisVersion              String?
+  policyRef                    String?
+
+  organization    Organization               @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  billingInvoice  BillingInvoice?            @relation(fields: [billingInvoiceId], references: [id], onDelete: Cascade)
+  settlement      Settlement?                @relation(fields: [settlementId], references: [id])
+  case            Case?                      @relation(fields: [caseId], references: [id])
+  claimItem       ClaimItem?                 @relation("FeeCalculationClaimItem", fields: [claimItemId], references: [id])
+  feeChainRoot    FeeCalculation?            @relation("FeeChainRoot", fields: [feeChainRootFeeCalculationId], references: [id])
+  feeChainMembers FeeCalculation[]           @relation("FeeChainRoot")
+  supersededBy    FeeCalculation?            @relation("FeeSupersede", fields: [supersededByFeeCalculationId], references: [id])
+  supersedes      FeeCalculation[]           @relation("FeeSupersede")
+  memberships     FeeCalculationSettlement[]
+  adjustments     FeeCalculationAdjustment[] @relation("FeeAdjustment")
 
   @@unique([organizationId, id])
   @@index([organizationId, billingInvoiceId])
   @@index([organizationId, settlementId])
+  @@index([organizationId, feeChainId])
+  @@index([organizationId, claimItemId])
+  @@index([caseId])
+}
+
+/// R46 S1 —— 到账证据快照（append-only；MSG-20261002-53 CHANGE E1 / MSG-20261002-54 CHANGE B）
+/// 一个已记录 Settlement 必须绑定一个 immutable snapshot；更正必须生成新 snapshot/version + 新 digest。
+model SettlementReceiptSnapshot {
+  id             String  @id @default(uuid())
+  organizationId String
+  claimItemId    String?
+  caseId         String?
+
+  externalIdentityKind             SettlementExternalIdentityKind
+  externalIdentityValueHash        String?
+  externalIdentityVersion          String?
+  financialEventFingerprint        String?
+  financialEventFingerprintVersion String?
+
+  amount             Decimal                     @db.Decimal(18, 4)
+  currency           String                      @default("USD")
+  receivedAt         DateTime
+  sourceKind         SettlementReceiptSourceKind
+  /// [{ evidenceArtifactId, digest, kind }]；至少 1 条
+  evidenceReferences Json
+  snapshotVersion    String                      @default("v1")
+  /// 64hex；由服务端按 versioned canonicalization contract 计算
+  snapshotDigest     String
+  createdByUserId    String?
+  createdAt          DateTime                    @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  claimItem    ClaimItem?   @relation(fields: [claimItemId], references: [id])
+  case         Case?        @relation(fields: [caseId], references: [id])
+  settlements  Settlement[]
+
+  @@unique([organizationId, id])
+  @@index([organizationId, createdAt])
+  @@index([organizationId, claimItemId])
+}
+
+/// R46 S1 —— 独立 reversal/correction 财务事实（append-only；MSG-20261002-53 CHANGE B1）
+/// v1 只开放 full reversal；每个 original Settlement 至多 1 条（0 或 1）。
+model SettlementAdjustment {
+  id                   String                   @id @default(uuid())
+  organizationId       String
+  originalSettlementId String
+  adjustmentKind       SettlementAdjustmentKind
+  /// v1：REVERSAL 恒 > 0，且必须等于原 Settlement.amount
+  amount               Decimal                  @db.Decimal(18, 4)
+  currency             String                   @default("USD")
+  occurredAt           DateTime
+
+  externalIdentityKind             SettlementExternalIdentityKind
+  externalIdentityValue            String?
+  externalIdentityValueHash        String?
+  externalIdentityVersion          String?
+  financialEventFingerprint        String?
+  financialEventFingerprintVersion String?
+
+  evidenceReferences Json
+  reasonCode         String
+  reasonText         String?
+  approvalId         String
+  createdByUserId    String?
+  createdAt          DateTime @default(now())
+
+  organization       Organization               @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  originalSettlement Settlement                 @relation(fields: [originalSettlementId], references: [id])
+  feeMemberships     FeeCalculationSettlement[]
+
+  @@unique([organizationId, id])
+  @@unique([organizationId, approvalId])
+  /// v1：full reversal 唯一 —— 同一 original Settlement 至多一条调整事实
+  @@unique([organizationId, originalSettlementId])
+  @@index([organizationId, originalSettlementId])
+}
+
+/// R46 S1 —— Fee ↔ Settlement/adjustment 逐笔 membership（append-only；MSG-20261002-53 CHANGE C）
+model FeeCalculationSettlement {
+  id                 String                 @id @default(uuid())
+  organizationId     String
+  feeCalculationId   String
+  settlementId       String?
+  adjustmentId       String?
+  basisRole          FeeMembershipBasisRole
+  /// POSITIVE > 0；NEGATIVE < 0（membership 是计算结果，不是输入契约）
+  amountContribution Decimal                @db.Decimal(18, 4)
+  currency           String                 @default("USD")
+  createdAt          DateTime               @default(now())
+
+  organization   Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  feeCalculation FeeCalculation        @relation(fields: [feeCalculationId], references: [id])
+  settlement     Settlement?           @relation(fields: [settlementId], references: [id])
+  adjustment     SettlementAdjustment? @relation(fields: [adjustmentId], references: [id])
+
+  @@unique([organizationId, id])
+  @@index([organizationId, feeCalculationId])
+  @@index([organizationId, settlementId])
+  @@index([organizationId, adjustmentId])
+}
+
+/// R46 S1 —— Fee 作废/调整事实（append-only；MSG-20261002-54 ① / CHANGE C1）
+/// 三类语义必须可区分：VOID / REVERSAL / CORRECTION；**不得**修改历史 FeeCalculation。
+model FeeCalculationAdjustment {
+  id                             String                       @id @default(uuid())
+  organizationId                 String
+  targetFeeCalculationId         String
+  adjustmentKind                 FeeCalculationAdjustmentKind
+  /// 只存正数；方向由 kind 决定（projector/service 统一计算 effect）
+  amount                         Decimal                      @db.Decimal(18, 4)
+  currency                       String                       @default("USD")
+  /// 触发本次 Fee 调整的 SettlementAdjustment id 列表（REVERSAL 必填；VOID 可空）
+  triggerSettlementAdjustmentIds Json?
+  evidenceReferences             Json
+  reasonCode                     String
+  reasonText                     String?
+  approvalId                     String
+  createdByUserId                String?
+  createdAt                      DateTime                     @default(now())
+
+  organization         Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  targetFeeCalculation FeeCalculation @relation("FeeAdjustment", fields: [targetFeeCalculationId], references: [id])
+
+  @@unique([organizationId, id])
+  @@unique([organizationId, approvalId])
+  @@index([organizationId, targetFeeCalculationId])
 }
 
 // ============================================================
@@ -1244,8 +1460,8 @@ model Payment {
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
 
-  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  invoice      BillingInvoice  @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+  organization Organization               @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invoice      BillingInvoice             @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   attempts     PaymentProcessingAttempt[]
 
   @@unique([organizationId, provider, externalPaymentId])
@@ -1265,7 +1481,7 @@ model PaymentEvent {
   receivedAt       DateTime           @default(now())
   processingResult PaymentEventResult
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization Organization               @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   attempts     PaymentProcessingAttempt[]
 
   @@unique([provider, providerEventId])
@@ -1284,7 +1500,7 @@ enum PaymentAttemptStatus {
 /// C-0010-B2：一次「执行尝试」= 把不可变的 PaymentEvent 变成 Payment / 账单状态的尝试
 /// 与 PaymentEvent 同为 append-only；不变量由部分唯一索引与 Payment 唯一键保证。
 model PaymentProcessingAttempt {
-  id             String   @id @default(uuid())
+  id             String               @id @default(uuid())
   organizationId String
   paymentEventId String
   attemptNo      Int
@@ -1302,7 +1518,7 @@ model PaymentProcessingAttempt {
   /// EXTERNAL / SYSTEM / OPERATOR（应用层白名单）
   actorType      String
   actorRef       String?
-  createdAt      DateTime @default(now())
+  createdAt      DateTime             @default(now())
   paymentId      String?
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
@@ -1366,48 +1582,51 @@ enum ClaimEvidenceType {
 }
 
 model ClaimItem {
-  id               String   @id @default(uuid())
-  organizationId   String
+  id                 String                 @id @default(uuid())
+  organizationId     String
   /// REVIEW_REQUIRED 起必须存在（服务层不变量，不用数据库 CHECK）
-  caseId           String?
-  opportunityId    String?
+  caseId             String?
+  opportunityId      String?
   /// AMAZON | TIKTOK | WALMART | UNKNOWN（应用层白名单）
-  platformType     String
-  claimType        String
+  platformType       String
+  claimType          String
   /// 平台侧唯一引用；为空时该行不享受自动幂等（未来由 sourceFingerprint 关闭缺口）
-  platformRef      String?
+  platformRef        String?
   /// C-0013-A：来源指纹（与 platformRef 二选一去重；**不含金额**，平台更正不会拆单）
-  sourceFingerprint String?
+  sourceFingerprint  String?
   /// 指纹算法版本（当前恒为 v1）；sourceFingerprint 非空时必须非空
   fingerprintVersion String?
-  occurredAt       DateTime
-  amountExpected   Decimal? @db.Decimal(18, 4)
-  amountActual     Decimal? @db.Decimal(18, 4)
-  currency         String   @default("USD")
+  occurredAt         DateTime
+  amountExpected     Decimal?               @db.Decimal(18, 4)
+  amountActual       Decimal?               @db.Decimal(18, 4)
+  currency           String                 @default("USD")
   /// 由既有 Rule Engine 产出，本模型不定义算法
-  recoverableAmount Decimal? @db.Decimal(18, 4)
-  responsibleParty ClaimResponsibleParty @default(UNKNOWN)
-  status           ClaimItemStatus @default(DISCOVERED)
-  closedReason     ClaimItemClosedReason?
-  closedAt         DateTime?
+  recoverableAmount  Decimal?               @db.Decimal(18, 4)
+  responsibleParty   ClaimResponsibleParty  @default(UNKNOWN)
+  status             ClaimItemStatus        @default(DISCOVERED)
+  closedReason       ClaimItemClosedReason?
+  closedAt           DateTime?
   /// 归一化器版本，用于回溯「当时是谁归一化的」
-  normalizerVersion String
+  normalizerVersion  String
   /// 规则版本，用于回溯「当时用哪版规则算出的可追回金额」
-  ruleVersionId    String?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  ruleVersionId      String?
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
 
-  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  case         Case?               @relation(fields: [caseId], references: [id])
-  opportunity  RecoveryOpportunity? @relation(fields: [opportunityId], references: [id])
-  ruleVersion  RuleVersion?        @relation(fields: [ruleVersionId], references: [id])
-  evidenceLinks ClaimItemEvidence[]
-  recoveryPackages  RecoveryPackage[]
-  manualSubmissions RecoveryManualSubmission[]
+  organization               Organization                     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  case                       Case?                            @relation(fields: [caseId], references: [id])
+  opportunity                RecoveryOpportunity?             @relation(fields: [opportunityId], references: [id])
+  ruleVersion                RuleVersion?                     @relation(fields: [ruleVersionId], references: [id])
+  settlements                Settlement[]
+  settlementReceiptSnapshots SettlementReceiptSnapshot[]
+  feeCalculations            FeeCalculation[]                 @relation("FeeCalculationClaimItem")
+  evidenceLinks              ClaimItemEvidence[]
+  recoveryPackages           RecoveryPackage[]
+  manualSubmissions          RecoveryManualSubmission[]
   // R45 S1
-  expectedRecoveryBases   ExpectedRecoveryBasis[]
-  reconciliationOverrides ReconciliationOverrideDecision[]
-  reconciliationProjections ClaimReconciliationProjection[]
+  expectedRecoveryBases      ExpectedRecoveryBasis[]
+  reconciliationOverrides    ReconciliationOverrideDecision[]
+  reconciliationProjections  ClaimReconciliationProjection[]
 
   @@unique([organizationId, platformType, platformRef, claimType])
   @@unique([organizationId, id])
@@ -1416,16 +1635,16 @@ model ClaimItem {
 }
 
 model ClaimItemEvidence {
-  id             String   @id @default(uuid())
+  id             String            @id @default(uuid())
   organizationId String
   claimItemId    String
   evidenceId     String
   evidenceType   ClaimEvidenceType @default(OTHER)
   note           String?
-  createdAt      DateTime @default(now())
+  createdAt      DateTime          @default(now())
 
-  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  claimItem    ClaimItem       @relation(fields: [claimItemId], references: [id], onDelete: Cascade)
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  claimItem    ClaimItem        @relation(fields: [claimItemId], references: [id], onDelete: Cascade)
   evidence     EvidenceArtifact @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, claimItemId, evidenceId])
@@ -1478,7 +1697,6 @@ model RecoveryPayout {
   @@index([organizationId, receivedAt])
   @@index([organizationId, settlementId])
 }
-
 
 // ============================================================
 // 十二、控制面（Kill Switch 变更请求）—— MSG-20260929-57 / -59
@@ -1566,7 +1784,7 @@ enum PlatformWriteAttemptStatus {
 }
 
 model PlatformWriteAttempt {
-  id                 String                      @id @default(uuid())
+  id                 String                     @id @default(uuid())
   organizationId     String
   /// 受保护动作名（单一来源常量 platform.write）
   action             String
@@ -1577,14 +1795,14 @@ model PlatformWriteAttempt {
   /// 幂等键 pw1-*（同一逻辑提交恒定）
   idempotencyKey     String
   /// 同一逻辑执行链内的投递/对账计数（不产生第二条可独立成功的链）
-  attemptNo          Int                         @default(1)
-  status             PlatformWriteAttemptStatus  @default(PENDING)
+  attemptNo          Int                        @default(1)
+  status             PlatformWriteAttemptStatus @default(PENDING)
   /// CLAIM / APPEAL（应用层枚举；弱引用，不建 FK）
   targetKind         String
   targetId           String
   platform           String
   /// 是否模拟通道；真实通道必须显式为 false 才允许真实调用
-  simulated          Boolean                     @default(true)
+  simulated          Boolean                    @default(true)
   /// 审批事件 id（AuditLog.id；非 FK，仅引用 + 复制摘要事实）
   approvalId         String?
   /// 审批绑定的快照摘要，必须等于 snapshotDigest
@@ -1597,7 +1815,7 @@ model PlatformWriteAttempt {
   finishedAt         DateTime?
   nextRetryAt        DateTime?
   providerRef        String?
-  reconcileAttempts  Int                         @default(0)
+  reconcileAttempts  Int                        @default(0)
   reconcileNextAt    DateTime?
   reconcileLastActor String?
   /// CONFIRMED_SUCCEEDED / CONFIRMED_FAILED / INCONCLUSIVE
@@ -1606,8 +1824,8 @@ model PlatformWriteAttempt {
   /// SYSTEM / USER
   convergedBy        String?
   convergedReason    String?
-  createdAt          DateTime                    @default(now())
-  updatedAt          DateTime                    @updatedAt
+  createdAt          DateTime                   @default(now())
+  updatedAt          DateTime                   @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
@@ -1648,7 +1866,7 @@ enum RecoveryPackageArtifactKind {
 
 /// 人工提交材料包（服务端生成、带 digest 与版本；审批与提交的绑定锚点）
 model RecoveryPackage {
-  id                    String                 @id @default(uuid())
+  id                    String                @id @default(uuid())
   organizationId        String
   claimItemId           String
   /// 与 ClaimItem.caseId 一致（服务层校验；弱引用，不建 FK）
@@ -1664,17 +1882,17 @@ model RecoveryPackage {
   /// required/optional/missing 只读投影快照（白名单字段，无原始客户/凭据内容）
   completenessSnapshot  Json?
   generatedByUserId     String?
-  generatedAt           DateTime               @default(now())
+  generatedAt           DateTime              @default(now())
   /// 新 digest 取代旧包（弱引用）
   supersededByPackageId String?
   /// SUPERSEDED / WITHDRAWN 必须带 reason + actor + 审计
   transitionReason      String?
   transitionActorUserId String?
-  createdAt             DateTime               @default(now())
-  updatedAt             DateTime               @updatedAt
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
 
-  organization Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  claimItem    ClaimItem              @relation(fields: [claimItemId], references: [id], onDelete: Cascade)
+  organization Organization               @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  claimItem    ClaimItem                  @relation(fields: [claimItemId], references: [id], onDelete: Cascade)
   artifacts    RecoveryPackageArtifact[]
   submissions  RecoveryManualSubmission[]
 
@@ -1749,22 +1967,22 @@ model RecoveryManualSubmission {
 /// provider case reference 事实（append-only，第五张表）：
 /// 人工提交后补录的引用；Submission 本体保持完全 immutable（不得在 Submission 上 UPDATE）。
 model RecoveryManualSubmissionReference {
-  id                        String   @id @default(uuid())
-  organizationId            String
-  submissionId              String
+  id                       String   @id @default(uuid())
+  organizationId           String
+  submissionId             String
   /// 用户原始输入（展示 / 审计）
-  providerCaseRefRaw        String
+  providerCaseRefRaw       String
   /// 规范身份：trim → NFKC → 去零宽 → 折叠空白（**不做大小写折叠**）
-  providerCaseRefCanonical  String
+  providerCaseRefCanonical String
   /// 产生该补录事实的审批事件 id（可空：补录为受保护动作时非空）
-  approvalId                String?
-  recordedAt                DateTime @default(now())
-  recordedByUserId          String
-  note                      String?
-  createdAt                 DateTime @default(now())
+  approvalId               String?
+  recordedAt               DateTime @default(now())
+  recordedByUserId         String
+  note                     String?
+  createdAt                DateTime @default(now())
 
-  organization Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  submission   RecoveryManualSubmission  @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  organization Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  submission   RecoveryManualSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
 
   /// 同一租户内 canonical 引用唯一（补录不得把同一平台引用绑到两处）
   @@unique([organizationId, providerCaseRefCanonical])
@@ -1774,16 +1992,16 @@ model RecoveryManualSubmissionReference {
 
 /// 提交时附带的证据引用（联结表，append-only）：只引用既有 EvidenceArtifact
 model RecoveryManualSubmissionEvidence {
-  id             String             @id @default(uuid())
+  id             String   @id @default(uuid())
   organizationId String
   submissionId   String
   evidenceId     String
   note           String?
-  createdAt      DateTime           @default(now())
+  createdAt      DateTime @default(now())
 
-  organization Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  submission   RecoveryManualSubmission  @relation(fields: [submissionId], references: [id], onDelete: Cascade)
-  evidence     EvidenceArtifact          @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+  organization Organization             @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  submission   RecoveryManualSubmission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  evidence     EvidenceArtifact         @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, submissionId, evidenceId])
   @@unique([organizationId, id])
@@ -1801,7 +2019,7 @@ model RecoveryManualSubmissionEvidence {
 /// provider 受理 / 撤销事实（Immutable，append-only）。
 /// 撤销以**新事实**表达，绝不改写历史 ACCEPTED（MSG-20261001-44 Q4）。
 model ProviderOutcomeFact {
-  id                       String                     @id @default(uuid())
+  id                       String                    @id @default(uuid())
   organizationId           String
   /// 弱引用（与 R43 同口径，不建 FK）
   caseId                   String
@@ -1818,7 +2036,7 @@ model ProviderOutcomeFact {
   /// 版本化服务端指纹（CHANGE B）：64 hex
   providerEventFingerprint String
   /// 指纹算法版本（当前恒为 v1）
-  fingerprintVersion       String                     @default("v1")
+  fingerprintVersion       String                    @default("v1")
   /// 来源类型；人工录入必须 MANUAL_WITH_EVIDENCE 且带 ≥1 证据（受保护路径，Q④）
   sourceKind               ProviderOutcomeSourceKind
   sourceRef                String
@@ -1829,7 +2047,7 @@ model ProviderOutcomeFact {
   evidenceArtifactIds      String[]
   reasonCode               String?
   note                     String?
-  createdAt                DateTime                   @default(now())
+  createdAt                DateTime                  @default(now())
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
@@ -1873,9 +2091,9 @@ model ReimbursementFact {
   note                     String?
   createdAt                DateTime                @default(now())
 
-  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  reversesFact ReimbursementFact?  @relation("ReimbursementReversal", fields: [reversesFactId], references: [id])
-  reversedBy   ReimbursementFact[] @relation("ReimbursementReversal")
+  organization      Organization                        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  reversesFact      ReimbursementFact?                  @relation("ReimbursementReversal", fields: [reversesFactId], references: [id])
+  reversedBy        ReimbursementFact[]                 @relation("ReimbursementReversal")
   projectionMembers ClaimReconciliationProjectionFact[]
   overrideDecisions ReconciliationOverrideDecision[]
 
@@ -1916,7 +2134,7 @@ model ExpectedRecoveryBasis {
 
 /// 对账人工覆盖决策（Immutable，append-only）：v1 每笔 reimbursement 单独审批（MSG-20261001-44 Q⑤）。
 model ReconciliationOverrideDecision {
-  id                  String                            @id @default(uuid())
+  id                  String                             @id @default(uuid())
   organizationId      String
   claimItemId         String
   reimbursementFactId String
@@ -1927,7 +2145,7 @@ model ReconciliationOverrideDecision {
   approvalId          String
   decidedByUserId     String
   decidedAt           DateTime
-  createdAt           DateTime                          @default(now())
+  createdAt           DateTime                           @default(now())
 
   organization      Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   claimItem         ClaimItem         @relation(fields: [claimItemId], references: [id], onDelete: Cascade)
@@ -1944,16 +2162,16 @@ model ReconciliationOverrideDecision {
 /// 对账投影（derived materialization / 可重算缓存，**不是**不可逆历史事实）。
 /// MSG-20261001-46 Q3：重算 = 同事务整体替换；DELETE 仅限 derived ProjectionFact。
 model ClaimReconciliationProjection {
-  id                       String                       @id @default(uuid())
+  id                       String                         @id @default(uuid())
   organizationId           String
   claimItemId              String
   status                   ReconciliationProjectionStatus
   /// 本次计算使用的 effective 基准（可追溯）
   basisId                  String?
-  expectedAmount           Decimal?                     @db.Decimal(18, 4)
+  expectedAmount           Decimal?                       @db.Decimal(18, 4)
   currency                 String?
   /// 有效且未被冲正抵销的已匹配金额
-  netMatchedObservedAmount Decimal                      @default(0) @db.Decimal(18, 4)
+  netMatchedObservedAmount Decimal                        @default(0) @db.Decimal(18, 4)
   /// 摘要缓存；一致性以关系表 ClaimReconciliationProjectionFact 为准（checker 校验）
   matchedFactIds           String[]
   /// CHANGE C：每个投影必须能引用实际使用的策略（不得代码隐式 fallback）
@@ -1962,10 +2180,10 @@ model ClaimReconciliationProjection {
   /// 输入摘要（sha256，64 hex）
   inputDigest              String
   /// 投影版本（单调 +1；与成员关系 generation 绑定）
-  projectionVersion        Int                          @default(1)
+  projectionVersion        Int                            @default(1)
   computedAt               DateTime
-  createdAt                DateTime                     @default(now())
-  updatedAt                DateTime                     @updatedAt
+  createdAt                DateTime                       @default(now())
+  updatedAt                DateTime                       @updatedAt
 
   organization Organization                        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   claimItem    ClaimItem                           @relation(fields: [claimItemId], references: [id], onDelete: Cascade)
@@ -1988,9 +2206,9 @@ model ClaimReconciliationProjectionFact {
   reimbursementFactId String
   createdAt           DateTime @default(now())
 
-  organization      Organization                    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  projection        ClaimReconciliationProjection   @relation(fields: [projectionId], references: [id], onDelete: Cascade)
-  reimbursementFact ReimbursementFact               @relation(fields: [reimbursementFactId], references: [id], onDelete: Cascade)
+  organization      Organization                  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  projection        ClaimReconciliationProjection @relation(fields: [projectionId], references: [id], onDelete: Cascade)
+  reimbursementFact ReimbursementFact             @relation(fields: [reimbursementFactId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, projectionId, projectionVersion, reimbursementFactId])
   @@unique([organizationId, id])

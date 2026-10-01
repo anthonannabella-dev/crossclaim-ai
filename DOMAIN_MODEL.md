@@ -5,7 +5,7 @@
 
 ---
 
-## 一、模型总览（51 个 = 46 个核心模型 + 5 个联结模型）
+## 一、模型总览（55 个 = 49 个核心模型 + 6 个联结模型）
 
 > **口径统一**：**29 个核心模型**（架构章程 §六 的清单 + C-0006-A 的 `CanonicalFact` + C-0006-B1 的 `RuleEvaluationShadow` + C-0008-A 的 `Session`、`UserInvitation`）**+ 2 个联结模型 `CaseEvidence`、`CanonicalFactSource`**。
 > README、本文、PR 描述、架构契约测试全部按此口径，不允许 29/31 混用。
@@ -157,6 +157,18 @@
 | `ReconciliationTolerancePolicy` | 版本化容差策略（append-only）；scope = 租户 + provider + operation + version，至多一个 effective；含显式系统 exact policy |
 
 > 四事实分离：受理 ≠ 赔付观察 ≠ 对账 ≠ 结算；投影不是真值，drift 必须可被 checker 发现并重算。
+
+### Settlement / Billing Linkage（R46 S1 / MSG-20261002-53 / -54）
+
+| 模型 | 说明 |
+| --- | --- |
+| `SettlementReceiptSnapshot` | 到账证据快照（append-only）：external identity / fingerprint / amount / currency / receivedAt / evidenceReferences / snapshotVersion / snapshotDigest（64hex）。**创建后不可改**；更正必须新快照 + 重新审批（MSG-54 CHANGE B）|
+| `SettlementAdjustment` | 独立 reversal/correction 财务事实（append-only）：引用原 Settlement（`ON DELETE RESTRICT`）、自身带 external identity、同事件幂等；v1 仅 full reversal 且等额（MSG-53 CHANGE B1 / MSG-54 收紧）|
+| `FeeCalculationAdjustment` | Fee 作废/调整事实（append-only）：`VOID` / `REVERSAL` / `CORRECTION` 三分类语义不同；**不得**修改历史 `FeeCalculation`（MSG-54 ① / CHANGE C1）|
+
+> `Settlement` 增列：external identity 三元组 + versioned fingerprint + `claimItemId`/`linkageBasisKind`/`linkageBasisRef` + `receiptSnapshotId`（创建后不可改）。
+> `FeeCalculation` 增列：`feeChainId` / `feeChainRootFeeCalculationId` / `supersededByFeeCalculationId` / `claimItemId` / `membershipDigest` / `feeBasisVersion` / `policyRef`。
+> 冻结：`FeeCalculation exists ≠ Invoice may automatically issue`；`BillingInvoice` / `BillingStatus` 本轮不变。
 ### 联结模型
 
 | 模型 | 说明 |
@@ -164,6 +176,7 @@
 | `CaseEvidence` | 案件 ↔ 证据的多对多联结（复合主键） |
 | `CanonicalFactSource` | 业务事实 ↔ 原始来源的联结（C-0006-A） |
 | `ClaimItemEvidence` | 归一化损失事件 ↔ 证据的联结（C-0011） |
+| `FeeCalculationSettlement` | FeeCalculation ↔ Settlement/Adjustment 逐笔成员关系（R46 S1）；`basisRole` POSITIVE/NEGATIVE + `amountContribution`；同一 fee chain 内资金事实唯一 |
 
 ---
 
