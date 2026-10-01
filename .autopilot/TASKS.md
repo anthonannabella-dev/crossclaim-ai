@@ -283,3 +283,10 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - 证据：two-stage upgrade OK；S1 DB test 10/10；回归 43 files / 523 tests PASS；tsc PASS；prisma validate valid。
 - 送审：REVIEWED_HEAD d39c53e（Issue #2 comment 5930423157 / CI 36855842245）；待 S1 Checkpoint 裁决。
 - NEXT：PASS → S2（package 生成 + canonical manifest + digest + CAS；先做现有依赖 PDF 能力检查）；REVISE → 按 CHANGE 修改重送；BLOCK → 停止该方案。
+
+### MSG-20261001-33 裁决（R43 S1 关闭 → R43 S2 Recovery Package Implementation）
+
+- DECISION：**PASS**（REVIEWED_HEAD d39c53e；归档 FULL_COPY_OK）。S1 关闭；M6 合并进 M1 获认可；append-only 清单方案满足条件。
+- NEXT：**R43 S2 — Recovery Package Implementation**：package generation → canonical JSON manifest → digest/version → artifact generation → package CAS lifecycle；S2 完成后提交 Implementation Checkpoint。
+- S2 禁止：不注册 recovery.manual_submit / 不消费 approval / 不改 ClaimItem 状态 / 不创建 RecoveryManualSubmission / 不接 HTTP confirmation / 不外写 / 不联动 Settlement·Billing。
+- S2 PDF 依赖：先做现有依赖能力检查，优先复用；必须新增则单独提 dependency delta。JSON manifest 为规范事实载体，PDF 为派生物。

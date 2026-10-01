@@ -80713,3 +80713,115 @@ AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CR
 
 VERDICT: PASS WITH REVISE — MSG-20261001-32
 ```
+
+### [MSG-20261001-33] R43 Manual Recovery Persistence / S1 Implementation Checkpoint —— **PASS**（S1 可闭合；五张表与两套 trigger inventory 确认；CHANGE 无；NEXT = R43 S2 — Recovery Package Implementation：package generation → canonical JSON manifest → digest/version → artifact generation → package CAS lifecycle，不得顺带 S3）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE: FORMAL_VERDICT
+MESSAGE: MSG-20261001-33
+PREVIOUS: MSG-20261001-32
+GATE: Gate 7 / R43 Manual Recovery Persistence / S1 Implementation Checkpoint
+REVIEWED_HEAD: d39c53e
+DECISION: PASS
+
+KEEP
+
+S1 的实现与 MSG-20261001-32 的约束一致，可以关闭。
+
+重点确认：
+
+第五张 RecoveryManualSubmissionReference 已采用，正确解决 Submission append-only 与后补 providerCaseRef 的冲突；
+5 表 + 2 enum 均为增量 Schema，不修改既有业务对象；
+RecoveryManualSubmission 本体保持 immutable；
+reference/evidence/artifact/submission 四表 UPDATE + DELETE 数据库级拒绝；
+RecoveryPackage 独立 controlled-mutation；
+EXPORTED 已修正为非终态，不会把“导出过”误解释为“已提交”；
+SUPERSEDED/WITHDRAWN 才承担终止语义，并要求 reason + actor；
+tenant trigger inventory 与 append-only/controlled-mutation inventory 已拆开；
+fresh deploy 与 two-stage upgrade 均显式验证两套 inventory；
+正向 + 反向 trigger 校验可以防止“少 trigger”和“偷偷多挂/错挂 trigger”；
+canonical provider reference 不做未经证明的大小写折叠；
+S1 没有提前注册 recovery.manual_submit，没有 HTTP、provider credential、transport、Settlement/Billing 联动。
+三项答复
+
+① S1 可以关闭：YES。
+
+允许进入 S2：package generation + canonical manifest + digest + CAS lifecycle。
+
+② M6 合并进 M1：认可。
+
+第五张 reference 表在首次实际 Schema 实施前已经成为最终设计的一部分，因此直接包含在初始结构迁移中，比先创建四表再立即追加第五表更干净。
+
+不要为了匹配旧计划编号人为制造一条空 M6。
+
+③ append-only 独立清单方案：满足 MSG-32 条件。
+
+当前已经具备：
+
+独立 inventory → 正向检查 → 反向检查 → fresh deploy CI → upgrade-path 检查
+
+这满足要求。
+
+CHANGE
+
+无阻塞 CHANGE。
+
+但 S2 必须继续执行以下已冻结不变量，不得在实现中弱化。
+
+RISKS
+
+S2 最大风险从 Schema 转移到了材料包身份稳定性。
+
+必须避免：
+
+JSON manifest 与 PDF 各自独立计算业务事实；
+同一业务内容因 JSON key 顺序、时间格式、Decimal/string 表达差异产生不同 digest；
+exporter metadata、生成时间、文件路径等非业务字段进入 package identity；
+package 已 SUPERSEDED/WITHDRAWN 后仍被 approval/manual-submit 使用；
+digest 算法只绑定 hash，而没有同时绑定 packageVersion + digestVersion。
+TEST
+
+S2 至少覆盖：
+
+同一事实输入，无论对象 key 顺序如何 → canonical manifest 完全一致、digest 一致；
+Decimal / currency / timestamp / null / optional field 的 canonicalization 有固定契约；
+改变任一受保护业务字段 → digest 必须变化；
+exporter 时间、文件路径等非业务 metadata 变化 → package digest 不应变化；
+JSON manifest 为 canonical source of truth，PDF 从它派生；
+PDF/manifest artifact 不包含 credential/token/secret；
+同一 package 重试生成不得产生第二条逻辑 package；
+GENERATED → EXPORTED 后仍允许合法 manual-submit 后续流程；
+SUPERSEDED/WITHDRAWN 后禁止用于新 approval/manual-submit；
+package CAS 并发只能一个状态跃迁成功；
+packageVersion + digestVersion + packageDigest 均持久化并参与后续 approval binding；
+生成/导出失败不得伪造 EXPORTED 状态。
+NEXT
+
+现在直接进入：
+
+R43 S2 — Recovery Package Implementation
+
+范围只允许：
+
+package generation → canonical JSON manifest → digest/version → artifact generation → package CAS lifecycle
+
+S2 不要顺带实现 S3：
+
+不注册 recovery.manual_submit
+不消费 approval
+不把 ClaimItem 改为 SUBMITTED_MANUAL
+不创建 RecoveryManualSubmission
+不接 HTTP submission confirmation
+不做 Amazon 外写
+不联动 Settlement/Billing
+
+S2 完成后提交 Implementation Checkpoint，重点给出 canonical manifest/digest 的确定性证据、并发 CAS、artifact 安全性以及 GENERATED/EXPORTED/SUPERSEDED/WITHDRAWN 生命周期测试。
+
+继续保持：
+
+AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · SETTLEMENT/BILLING LINKAGE HOLD。
+
+VERDICT: PASS — MSG-20261001-33
+```

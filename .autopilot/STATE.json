@@ -1,17 +1,17 @@
 {
   "gate": "B2-FIX R1",
-  "head": "d39c53e",
+  "head": "9b2c98b",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
   "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
   "send_head": "07b7009",
   "decision_head": "07b7009",
-  "last_chatgpt_message": "MSG-20261001-32",
+  "last_chatgpt_message": "MSG-20261001-33",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T11:31:45.069Z",
-  "previous_head": "409dbd0",
-  "architect_decision_pending": true,
+  "updated_at": "2026-10-01T11:32:47.012Z",
+  "previous_head": "d39c53e",
+  "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "d39c53e",
   "last_sent_at": "2026-10-01T11:31:45.069Z",
@@ -49,12 +49,12 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-01T11:19:10.669Z",
+  "last_tick_at": "2026-10-01T11:32:11.656Z",
   "state": "IMPLEMENT",
-  "last_action": "R43 Implementation S1 已实现并送审（5 表 + 2 枚举 + 5 支迁移 + append-only 清单/CI/升级双校验 + S1 DB 测试 10 项；两段升级 OK；回归 43 files / 523 tests PASS；tsc PASS）；等待 S1 Implementation Checkpoint 裁决",
-  "last_action_at": "2026-10-01T11:31:45.069Z",
-  "next_action": "等待 MSG 裁决（S1 Checkpoint）：①PASS → 进入 S2（package 生成 + canonical manifest + digest + CAS 状态机；PDF 依赖能力先做现有依赖检查）②REVISE → 按 CHANGE 修改后重送 S1 ③BLOCK → 停止该方案。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
-  "current_head": "d39c53e",
+  "last_action": "MSG-20261001-33 = PASS 已逐字归档并 FULL_COPY_OK —— R43 S1 Implementation Checkpoint 关闭；下一批 = R43 S2（Recovery Package Implementation：package generation → canonical JSON manifest → digest/version → artifact generation → package CAS lifecycle），不携带 S3",
+  "last_action_at": "2026-10-01T11:32:47.012Z",
+  "next_action": "R43 S2 — Recovery Package Implementation（范围仅：package generation → canonical JSON manifest → digest/version → artifact generation → package CAS lifecycle）。S2 禁止项：不注册 recovery.manual_submit、不消费 approval、不改 ClaimItem 状态、不创建 RecoveryManualSubmission、不接 HTTP submission confirmation、不做 Amazon 外写、不联动 Settlement/Billing。必须先做现有依赖 PDF 能力检查（优先复用；如需新依赖单独提 dependency delta）。完成后提交 S2 Implementation Checkpoint（canonical manifest/digest 确定性证据 + 并发 CAS + artifact 安全性 + 生命周期测试）。",
+  "current_head": "9b2c98b",
   "reviewed_head": "07b7009",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-01T11:08:56.305Z",
-    "gapMs": 614365,
+    "previousTickAt": "2026-10-01T11:19:10.669Z",
+    "gapMs": 780987,
     "stale": true,
-    "checkedAt": "2026-10-01T11:19:10.669Z"
+    "checkedAt": "2026-10-01T11:32:11.656Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -250,7 +250,7 @@
     "integration_boundary_review": "AUTHORIZED_TO_PLAN（先提交设计/实施计划，不直接开放真实 transport）"
   },
   "r36_submission_comment": "5927087320",
-  "stale_recovered_at": "2026-10-01T11:19:10.669Z",
+  "stale_recovered_at": "2026-10-01T11:32:11.656Z",
   "engineering_regression_policy": {
     "source": "HOST PRODUCT DIRECTION 2026-10-01",
     "doc": "docs/releases/ENGINEERING-REGRESSION-POLICY.md",
@@ -713,5 +713,29 @@
     },
     "wakeup_channel": "https://chatgpt.com/c/6ab9ee1b-fd54-83ee-b363-b67750afcedd",
     "wakeup_delivery": "DELIVERED_VERIFIED（输入框清空 / 新用户消息在底部）"
+  },
+  "r43s1_verdict": {
+    "message_id": "MSG-20261001-33",
+    "decision": "PASS",
+    "reviewed_head": "d39c53e",
+    "archival": "FULL_COPY_OK",
+    "archival_at": "2026-10-01T11:32:47.012Z",
+    "status": "S1 CLOSED（允许进入 S2：package generation + canonical manifest + digest + CAS lifecycle）",
+    "rulings": {
+      "s1_close": "YES",
+      "m6_merge": "认可（第五张 reference 表直接包含在初始结构迁移，不制造空 M6）",
+      "append_only_inventory": "满足 MSG-32 条件（独立 inventory + 正向检查 + 反向检查 + fresh deploy CI + upgrade path）"
+    },
+    "s2_boundaries": [
+      "不注册 recovery.manual_submit",
+      "不消费 approval",
+      "不把 ClaimItem 改为 SUBMITTED_MANUAL",
+      "不创建 RecoveryManualSubmission",
+      "不接 HTTP submission confirmation",
+      "不做 Amazon 外写",
+      "不联动 Settlement/Billing"
+    ],
+    "s2_risks": "材料包身份稳定性：JSON manifest 与 PDF 不得各自计算业务事实；key 顺序/时间格式/Decimal 表达不得影响 digest；exporter metadata（时间、路径）不得进入 package identity；SUPERSEDED/WITHDRAWN 不得被 approval/manual-submit 使用；digest 必须与 packageVersion + digestVersion 共同绑定",
+    "s2_tests": "12 项（key 顺序无关的 canonical manifest/digest；Decimal/currency/timestamp/null/optional 固定契约；业务字段变化 → digest 变化；非业务 metadata 变化 → digest 不变；JSON manifest 为 canonical source of truth、PDF 派生；artifact 不含 credential/token/secret；重试生成不产生第二条逻辑 package；GENERATED→EXPORTED 后仍允许后续 manual-submit 流程；SUPERSEDED/WITHDRAWN 后禁止用于新 approval/manual-submit；CAS 并发仅一个跃迁成功；packageVersion + digestVersion + packageDigest 均持久化并参与 approval binding；生成/导出失败不得伪造 EXPORTED）"
   }
 }
