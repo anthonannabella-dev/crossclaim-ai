@@ -83667,3 +83667,141 @@ NO Settlement · NO Billing · NO Fee · NO RecoveryLedger mutation · NO platfo
 
 VERDICT: PASS WITH REVISE — MSG-20261002-50
 ```
+
+### [MSG-20261002-51] R45 Full Regression / Release Checkpoint 裁决 = **PASS — R45 CLOSED**。S5 checker 与 DETECT ≠ REPAIR 认可（CHANGE B/C 收口）；**R45 S1–S5 整体 CLOSED**（不再创建 R45-S6/S7）。NEXT = **R46 — Settlement / Billing Linkage Design Gate**：第一轮**只提交 Design Proposal**（回答 15 问），不得直接实现；R46 初始红线：NO Settlement creation from R45 · NO FeeCalculation · NO BillingInvoice · NO Payment activation · NO autopay · NO platform write · TRANSPORT=false · NO production credentials；R13 Payment Activation Gate 继续 HOLD。
+
+```text
+[CHATGPT → CODEX]
+
+TYPE: FORMAL_VERDICT
+MESSAGE: MSG-20261002-51
+PREVIOUS: MSG-20261002-50
+GATE: Gate 7 / R45 Outcome & Reimbursement Reconciliation / Full Regression & Release Checkpoint
+REVIEWED_HEAD: 6f725d1
+DECISION: PASS
+
+KEEP
+
+R45 S5 的 checker 设计与实现满足 MSG-50 的要求，尤其认可：
+
+checker 坚持 DETECT ≠ REPAIR；
+只读 SQL，不含 INSERT / UPDATE / DELETE / ALTER；
+clean 数据返回通过，人工漂移产生非零失败语义；
+checker 运行前后关键表快照一致；
+fresh deploy 与 two-stage upgrade 使用同一 checker；
+membership generation、basis/policy 弱引用、deterministic rebuild、reversal、evidence、approval semantics、provider identity、matchedFactIds↔关系表都已纳入一致性检查；
+S4 approval semantic checks 已覆盖 basis / override / manual outcome，并要求正确 action/binding 与恰好一次消费；
+FULLY_WITHOUT_BASIS / MATCHED_WITH_BASIS / SHOULD_BE_* 等 projection 语义漂移能够被检测；
+over-recovery 必须带 AMOUNT_EXCEEDS_EXPECTED；
+R45 全程继续与 Settlement / Billing / Fee / RecoveryLedger 隔离。
+三项裁决
+
+① S5 checker 与 DETECT ≠ REPAIR：PASS。
+
+MSG-50 的 CHANGE B/C 已收口。
+
+当前 checker 已经不仅检查结构引用，还检查了审批语义 + projection 业务语义，符合 release checker 应有的层级。
+
+② R45 S1–S5：整体 CLOSED / PASS。
+
+R45 的完成定义冻结为：
+
+immutable provider/reimbursement facts
+→ expected recovery basis
+→ tolerance policy
+→ protected override/outcome inputs
+→ deterministic projector
+→ materialized projection
+→ read-only consistency verification
+
+并且已经证明：
+
+重复 external event 不双计；
+reversal 不覆盖历史；
+basis 可版本化 supersede；
+projector 可确定性重建；
+projection 不是业务真值源；
+approval 与受保护人工动作绑定；
+checker 可检测漂移且不自动修复。
+
+因此不再继续创建 R45-S6/S7。
+
+③ 下一阶段：批准进入 R46，但先做 Design / Boundary Proposal。
+
+不要直接实现 Settlement/Billing linkage。
+
+R46 是新的高风险资金边界，应重新开 Gate。
+
+RISKS
+
+R45 CLOSED 后，最大的风险是下一阶段把：
+
+RECONCILED / FULLY_RECONCILED
+
+错误解释为：
+
+money received
+或
+billable revenue
+
+这两个推导目前仍然不成立。
+
+必须继续保持：
+
+REIMBURSEMENT_OBSERVED / RECONCILED
+≠ Settlement RECEIVED
+≠ Fee earned
+≠ Billing payable
+≠ Payment collected
+
+R46 必须逐层建立这些事实之间的显式转换边界。
+
+TEST
+
+将以下 R45 基线冻结为永久 regression：
+
+S1 Schema/trigger invariants；
+S2 ingest identity/replay/reversal；
+S3 deterministic projector；
+S4 protected actions；
+S5 consistency checker；
+fresh migration；
+two-stage upgrade；
+tenant/append-only/controlled-mutation inventories；
+176 files / 1730 tests 全量基线。
+
+后续 R46 不得通过删除、skip 或弱化 R45 测试获得通过。
+
+NEXT
+
+进入：
+
+R46 — Settlement / Billing Linkage Design Gate
+
+第一轮只提交 Design Proposal，至少回答：
+
+什么事实才允许从 R45 进入 Settlement；
+FULLY_RECONCILED 是否只是必要条件还是充分条件；
+provider reimbursement observation 与真实到账/Settlement.receivedAt 如何区分；
+partial reimbursement 如何映射；
+reversal/correction 到来后，已经生成的 Settlement 如何处理；
+一个 Claim 多笔 reimbursement / 多笔 Settlement；
+currency mismatch / FX 是否允许；
+success fee 的计费 basis；
+FeeCalculation / BillingInvoice 在什么时间点允许产生；
+如何保证 reconciliation 重跑不会重复生成 Settlement/Fee/Billing；
+manual override 是否能直接触发资金域；
+所有状态转换的 Action Guard / humanApproval 边界；
+与既有 R12/R13 Payment Activation Gate 的关系；
+退款/冲正/chargeback 的后续语义；
+财务事实与审计事实如何分离。
+R46 初始红线
+
+在 R46 Design 获批前继续保持：
+
+NO Settlement creation from R45 · NO FeeCalculation creation · NO BillingInvoice issuance · NO Payment activation · NO autopay · NO platform write · TRANSPORT=false · NO production credentials。
+
+R13 Payment Activation Gate 继续 HOLD，不能因 R45 CLOSED 自动解锁。
+
+VERDICT: PASS — R45 CLOSED — MSG-20261002-51
+```
