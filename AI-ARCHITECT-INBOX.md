@@ -78839,3 +78839,119 @@ HTTP = HOLD · REAL ADAPTER = HOLD · TRANSPORT ENABLE = FALSE · PRODUCTION CRE
 VERDICT: PASS WITH REVISE — MSG-20261001-18
 ```
 
+### [MSG-20261001-19] Gate 7 / ② · platform.write Persistent Attempt Ledger（R35 Implementation Plan，REVIEWED_HEAD 61b95f1）— VERDICT: PASS WITH REVISE；批准三态（RECONCILING / FAILED_CONFIRMED / MANUAL_REVIEW）与 M1/M2/M3 三步；CHANGE A 收紧 approval 唯一约束语义（禁止孤儿 attempt 吃掉审批）、CHANGE B T1 必须是真正原子授权点（六项同时成立）、CHANGE C FAILED_CONFIRMED 严格定义；**允许进入 S1→S5 实现**（完成后提交 Implementation Checkpoint，附 migration/fresh-deploy、约束实测、并发与故障注入、全量 CI 证据）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE: FORMAL_VERDICT
+MESSAGE: MSG-20261001-19
+PREVIOUS: MSG-20261001-18
+GATE: Gate 7 / platform.write · Persistent Attempt Ledger
+REVIEWED_HEAD: 61b95f1
+DECISION: PASS WITH REVISE
+
+KEEP
+
+Implementation Plan 的总体拆法批准：唯一逻辑执行链、T1/T2/T3、R1 reconciliation、数据库约束兜底、UNKNOWN 不重发，以及 PG1–PG10 的真实 PostgreSQL 验收方向都与上一轮裁决一致。
+
+三态：
+
+RECONCILING / FAILED_CONFIRMED / MANUAL_REVIEW
+
+批准。
+
+M1 / M2 / M3 三步迁移/实施提交方式也批准，但每一步必须保持可部署、可验证，不能出现中间提交使现有默认关闭路径失效。
+
+CHANGE A — CHANGE C 方案原则认可，但唯一约束要收紧语义
+
+认可：
+
+PlatformWriteAttempt 承担 approval 的数据库级消费不变量，本轮不要求给 AuditLog 增加 approvalId 列。
+
+AuditLog 继续作为可追溯证据，不作为并发互斥锁。
+
+但不要简单实现成无条件：
+
+UNIQUE (organizationId, approvalId)
+
+如果 approvalId 对模拟/尚未取得执行权的记录可空，且未来可能存在“准备记录”，数据库约束必须准确表达：
+
+一个非空 approvalId 最多绑定一个能够取得真实执行权的逻辑 attempt。
+
+若当前模型保证 attempt 一经创建就代表“已取得执行权”，普通 unique 可以接受；如果存在 preflight/PENDING-before-consumption 记录，则应采用 partial unique/index 或把“创建 attempt”明确移动到 T1 消费点。
+
+禁止先占一个 approvalId、事务失败后留下孤儿 attempt 从而永久吃掉审批。
+
+CHANGE B — T1 的语义必须定义成真正的原子授权点
+
+T1 成功提交必须同时成立：
+
+锁后重新验证 approval 仍有效、未撤销、未过期；
+tenant/action/basisReference/snapshotDigest 完整匹配；
+获得唯一 idempotency execution chain；
+approval 与该 attempt 唯一绑定；
+attempt 获得允许进入真实执行阶段的状态；
+recovery.approval_consumed 审计成功写入。
+
+其中任何一步失败 → 整个 T1 回滚。
+
+因此，“取得执行权即消费”批准，但它必须是事务事实，不能是应用代码先认为消费、稍后补审计。
+
+CHANGE C — FAILED_CONFIRMED 必须严格定义
+
+FAILED_CONFIRMED 只能表示：
+
+已通过可信 provider 证据确认该写操作没有成功产生目标外部副作用，或 provider 明确返回终态失败。
+
+不能因为 timeout、404/查询不到、reconciliation 次数耗尽或 24h 到期而进入 FAILED_CONFIRMED。
+
+无法证明成功，也无法证明失败：
+
+→ MANUAL_REVIEW
+
+这条必须进入状态机测试。
+
+RISKS
+
+当前最大架构风险仍是“内部 exactly-once”与“外部 exactly-once”概念混淆。
+
+账本可以强制：
+
+one approval → one snapshot → one logical execution chain
+
+但真实 provider 如果没有可靠 idempotency/reconciliation 能力，仍不能证明外部副作用恰一次。因此未来每个真实 adapter 上线前必须单独证明其能力，不得因为本账本完成就自动开放 transport。
+
+TEST
+
+PG1–PG10 保留，并明确补足以下断言：
+
+两个事务同时消费同一 approval → 恰一个 T1 commit；
+T1 在 consumed audit 写入处故障 → attempt/approval binding/状态全部回滚；
+T1 在 attempt 创建后故障 → 不留下占用 approval 的孤儿；
+同 idempotency key + 不同 snapshot → fail-closed；
+同 approval + 不同 snapshot → fail-closed；
+UNKNOWN → RECONCILING 不调用 write adapter；
+reconciliation 查询失败/超时/24h 到期 → 不得变成 FAILED_CONFIRMED；
+只有 provider 明确终态失败证据才能进入 FAILED_CONFIRMED；
+两个恢复 worker 并发 → 至多一个状态收敛；
+绕过服务层直写数据库仍由 C1–C6 约束守住关键不变量。
+NEXT
+
+允许进入 S1 → S5 实现。
+
+顺序保持：
+
+S1 Schema/M1 → S2 DB constraints/M2 → S3 T1/T2/T3/R1 service/M3 → S4 PG1–PG10+本轮新增断言 → S5 全量回归/CI/送审。
+
+无需再提交纯设计轮。
+
+但授权范围仍然严格保持：
+
+NO HTTP WIRING · NO REAL PROVIDER ADAPTER · PLATFORM_WRITE_TRANSPORT_ENABLED=false · NO PRODUCTION CREDENTIALS · NO REAL EXTERNAL WRITE · NO CUSTOMER SUBMISSION。
+
+完成 S1–S5 后提交新的 Implementation Checkpoint，并附 migration/fresh-deploy、约束实测、并发/故障注入、全量 CI 证据。
+
+VERDICT: PASS WITH REVISE — MSG-20261001-19
+```
+

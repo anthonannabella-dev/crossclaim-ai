@@ -594,3 +594,13 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - CHANGE A：区分逻辑执行链与执行/对账历史；CHANGE B：UNKNOWN 恢复所有权（SYSTEM 只读）；CHANGE C：消费不变量必须可并发验证（现状报告：AuditLog 无 approvalId 列、消费无 DB 唯一约束）。
 - 交付：`docs/releases/C-PLATFORM-WRITE-LEDGER-IMPLEMENTATION-PLAN.md`（最终模型/索引 C1–C6/迁移 M1–M3/T1-T2-T3+R1 服务边界/PG1–PG10 验收矩阵）；设计文档 §12 已收入裁定。
 - 边界：HTTP / 真实 adapter / transport / 生产凭据 / 客户提交 全部继续 HOLD。
+
+## 2026-10-01 JST — 裁决 MSG-20261001-19 = PASS WITH REVISE（R35 Implementation Plan；批准进入实现）
+
+- R35（61b95f1）→ 裁决 PASS WITH REVISE；逐字归档（111 行）→ FULL_COPY_OK；Issue #2 comment 5925918882。
+- 批准：总体拆法、三态 `RECONCILING`/`FAILED_CONFIRMED`/`MANUAL_REVIEW`、M1/M2/M3 三步提交。
+- CHANGE A：约束语义收紧（非空 approvalId 最多绑定一个能取得真实执行权的逻辑 attempt；禁止孤儿 attempt 吃掉审批；不要求改 AuditLog）。
+- CHANGE B：T1 = 原子授权点（六项同时成立，任一步失败整笔回滚；消费必须是事务事实）。
+- CHANGE C：`FAILED_CONFIRMED` 严格定义；timeout/404/次数耗尽/24h 到期 → `MANUAL_REVIEW`。
+- NEXT：S1 Schema/M1 → S2 constraints/M2 → S3 service/M3 → S4 PG1–PG10+新增断言 → S5 回归/CI/送审 Implementation Checkpoint。
+- 硬边界不变：NO HTTP WIRING · NO REAL ADAPTER · TRANSPORT=FALSE · NO PRODUCTION CREDENTIALS · NO REAL EXTERNAL WRITE · NO CUSTOMER SUBMISSION。

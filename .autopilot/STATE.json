@@ -1,21 +1,21 @@
 {
   "gate": "B2-FIX R1",
-  "head": "7de5c60",
+  "head": "61b95f1",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
-  "next_task": "R35 送审：C-PLATFORM-WRITE-LEDGER Implementation Plan（含 CHANGE C 现状报告与待确认项）；获批后才实施 migration（M1/M2/M3）与服务层改造",
+  "next_task": "S1 Schema/M1：新增 PlatformWriteAttemptStatus 枚举（含 RECONCILING/FAILED_CONFIRMED/MANUAL_REVIEW）与 PlatformWriteAttempt 表 + migration；随后 S2 约束（C1/C2/C4–C6 + C3 partial unique index raw SQL）；不接 HTTP、不接真实 adapter、transport 恒关",
   "send_head": "7d888cc",
   "decision_head": "7d888cc",
-  "last_chatgpt_message": "MSG-20261001-18",
+  "last_chatgpt_message": "MSG-20261001-19",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T06:18:26.154Z",
+  "updated_at": "2026-10-01T06:22:27.583Z",
   "previous_head": "caf2fac",
   "architect_decision_pending": false,
   "blocked_scope": null,
-  "last_send_head": "7de5c60",
-  "last_sent_at": "2026-10-01T06:13:36.436Z",
-  "last_sent_fingerprint": "R34:platform-write-ledger-design+schema-delta-request",
+  "last_send_head": "61b95f1",
+  "last_sent_at": "2026-10-01T06:19:06.271Z",
+  "last_sent_fingerprint": "R35:C-PLATFORM-WRITE-LEDGER-Implementation-Plan",
   "final_head": "1144401",
   "ci_run": "pending（0bb399a 台账提交）",
   "ci_result": "pending",
@@ -49,12 +49,12 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-01T06:16:38.998Z",
+  "last_tick_at": "2026-10-01T06:21:39.264Z",
   "state": "IMPLEMENT",
-  "last_action": "MSG-20261001-18（R34 账本/原子性设计）= PASS WITH REVISE：逐字归档 + FULL_COPY_OK + Issue #2 comment 5925860624；设计 §12 收入五问裁决与 CHANGE A/B/C；交付 Implementation Plan",
-  "last_action_at": "2026-10-01T06:18:26.154Z",
-  "next_action": "R35 送审：C-PLATFORM-WRITE-LEDGER Implementation Plan（含 CHANGE C 现状报告与待确认项）；获批后才实施 migration（M1/M2/M3）与服务层改造",
-  "current_head": "7de5c60",
+  "last_action": "MSG-20261001-19（R35 Implementation Plan）= PASS WITH REVISE：逐字归档 + FULL_COPY_OK + Issue #2 comment 5925918882；三态与 M1/M2/M3 获批，进入 S1–S5 实现",
+  "last_action_at": "2026-10-01T06:22:27.583Z",
+  "next_action": "S1 Schema/M1：新增 PlatformWriteAttemptStatus 枚举（含 RECONCILING/FAILED_CONFIRMED/MANUAL_REVIEW）与 PlatformWriteAttempt 表 + migration；随后 S2 约束（C1/C2/C4–C6 + C3 partial unique index raw SQL）；不接 HTTP、不接真实 adapter、transport 恒关",
+  "current_head": "61b95f1",
   "reviewed_head": "549dba8",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-01T06:13:36.604Z",
-    "gapMs": 182395,
+    "previousTickAt": "2026-10-01T06:19:06.436Z",
+    "gapMs": 152829,
     "stale": false,
-    "checkedAt": "2026-10-01T06:16:38.998Z"
+    "checkedAt": "2026-10-01T06:21:39.264Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -146,5 +146,20 @@
     "rulings": "I1=A；partial unique index 批准；approvalId 不得无条件可空；UNKNOWN→RECONCILING 自动对账（1/5/15/60min，24h 转人工）且不得重发；24 个月默认保留期",
     "open_question": "CHANGE C：以 PlatformWriteAttempt.(organizationId, approvalId) 唯一约束承担消费不变量是否获得认可（否则需额外裁定 AuditLog 侧唯一约束）"
   },
-  "r34_submission_comment": "5925817147"
+  "r34_submission_comment": "5925817147",
+  "r35_submission_comment": "5925880746",
+  "platform_write_ledger_implementation": {
+    "status": "AUTHORIZED（S1–S5）",
+    "verdict": "PASS WITH REVISE",
+    "message_id": "MSG-20261001-19",
+    "reviewed_head": "61b95f1",
+    "archive_comment": "5925918882",
+    "archive_verified": "FULL_COPY_OK",
+    "changes": {
+      "A": "约束语义收紧：非空 approvalId 最多绑定一个能取得真实执行权的逻辑 attempt；禁止孤儿 attempt 吃掉审批",
+      "B": "T1 = 原子授权点（六项同时成立，任一步失败整笔回滚；消费即事务事实）",
+      "C": "FAILED_CONFIRMED 严格定义；无法证明成功/失败一律 MANUAL_REVIEW"
+    },
+    "order": "S1 Schema/M1 → S2 constraints/M2 → S3 service/M3 → S4 PG1–PG10+新增断言 → S5 回归/CI/送审"
+  }
 }

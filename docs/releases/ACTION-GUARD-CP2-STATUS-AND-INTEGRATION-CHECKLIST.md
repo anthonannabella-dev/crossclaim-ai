@@ -39,7 +39,7 @@
 | --- | --- | --- | --- | --- | --- |
 | `claim.submit` | `POST /cases/:id/claim/submit`（http-routes + server WORKFLOW_PATH） | 平台外写（当前 HOLD，传输开关 false；入口恒返回 `NEEDS_MANUAL`） | approvalId 服务端校验（租户/动作/对象/有效期/消费）+ 锁后角色/主体重验 | HTTP 级 22/22（拒绝零副作用 / 并发恰一次 / 等锁失效 / 审计失败注入 / 审计留痕与原始错误保留） | **已验收 PASS（MSG-20261001-07 / REVIEWED_REF 28e0cd9；CI run 36805839845）** |
 | `appeal.submit` | `POST /cases/:id/appeal/submit`（http-routes + server WORKFLOW_PATH） | 平台外写（当前 HOLD；入口仅登记内部结果 `platformWriteExecuted=false` / `NEEDS_MANUAL`） | approvalId 服务端校验（租户/动作/对象/轮次/版本化提交快照摘要）+ 案件锁 → Appeal 行锁后重验主体/角色/审批生命周期 + 锁后重算快照比对 | HTTP 级 **13/13**（缺审批 / 动作不通用 / 重复 / 缺 guard / 锁期撤销 / 轮次歧义 / 空正文 / 审批后正文变化 / 独立审批人+执行人行锁期降权 / 并发恰一次 / 审计失败整笔回滚 / 错误绑定拒绝） | **已验收 PASS（MSG-20261001-16 / REVIEWED_HEAD 7d888cc；CI 36820104474）** |
-| `platform.write` | 边界模块 + 账本设计 + 实施计划（未接线对外路由） | 平台外写（**HOLD**；transport 恒关） | Action Guard + 审批绑定快照 + 执行权账本 | 离线 fail-closed 17/17；Action Guard 22/22 | **PASS WITH REVISE（MSG-20261001-18 / REVIEWED_HEAD 7de5c60）→ Implementation Plan 已交付（R35 送审中）** |
+| `platform.write` | 边界模块 + 账本设计 + 实施计划（未接线对外路由） | 平台外写（**HOLD**；transport 恒关） | Action Guard + 审批绑定快照 + 执行权账本 | 离线 fail-closed 17/17；Action Guard 22/22 | **PASS WITH REVISE（MSG-20261001-19 / REVIEWED_HEAD 61b95f1）→ 已获准进入 S1–S5 实现**；HTTP/adapter/transport/生产凭据/客户提交继续 HOLD |
 | `commission.charge` | 待定（结算/佣金路径） | 资金动作（HOLD） | 同上 + 财务复核 | 待补 | TODO |
 | `payment.capture` | 账单登记入口（HTTP 受保护入口） | 资金动作（HOLD） | Action Guard 审批绑定 + 锁内事实 CAS + 快照交错校验 | HTTP 级：拒绝零副作用 / 允许恰一次（含并发与等锁失效） | **已验收 PASS（MSG-20260930-24 / REVIEWED_REF 73115a3）** |
 | `secret.rotate` | 待定（运维路径） | 凭据操作（HOST ONLY） | HOST APPROVAL | 待补 | TODO |
@@ -256,3 +256,17 @@
 | CHANGE C | 消费必须可并发验证；**现状报告**：`AuditLog` 无 approvalId 列、消费无数据库唯一约束（既有恰一次靠业务 CAS/锁）→ 方案 = `PlatformWriteAttempt.(organizationId, approvalId)` 唯一约束承担；**待架构方确认** |
 
 交付物：`docs/releases/C-PLATFORM-WRITE-LEDGER-IMPLEMENTATION-PLAN.md`（R35 送审）；`PLATFORM-WRITE-ATTEMPT-LEDGER-DESIGN.md` §12 已收入裁定。
+
+### 11.4 MSG-20261001-19 裁定收入（实现授权）
+
+| 项 | 结论 |
+| --- | --- |
+| 总体拆法 | **批准**（唯一逻辑执行链 / T1-T2-T3 / R1 reconciliation / 数据库约束兜底 / UNKNOWN 不重发 / PG1–PG10） |
+| 三态 | `RECONCILING` / `FAILED_CONFIRMED` / `MANUAL_REVIEW` **批准** |
+| 迁移 | M1/M2/M3 三步**批准**（每步可部署可验证；不得使默认关闭路径失效） |
+| CHANGE A | `PlatformWriteAttempt` 承担消费不变量获得认可（**不给 AuditLog 加列**）；约束须准确表达「一个非空 approvalId 最多绑定一个能取得真实执行权的逻辑 attempt」；禁止孤儿 attempt 吃掉审批 |
+| CHANGE B | T1 = 真正原子授权点（六项同时成立，任一步失败整笔回滚；消费必须是事务事实） |
+| CHANGE C | `FAILED_CONFIRMED` 仅表示可信证据确认未产生副作用或 provider 明确终态失败；timeout/404/次数耗尽/24h 到期 → `MANUAL_REVIEW` |
+| NEXT | 允许 S1 Schema/M1 → S2 constraints/M2 → S3 service/M3 → S4 PG1–PG10+新增断言 → S5 全量回归/CI/送审 Implementation Checkpoint |
+
+> 实现期间硬边界：NO HTTP WIRING · NO REAL PROVIDER ADAPTER · `PLATFORM_WRITE_TRANSPORT_ENABLED=false` · NO PRODUCTION CREDENTIALS · NO REAL EXTERNAL WRITE · NO CUSTOMER SUBMISSION。
