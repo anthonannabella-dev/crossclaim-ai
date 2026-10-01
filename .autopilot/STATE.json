@@ -1,15 +1,15 @@
 {
   "gate": "B2-FIX R1",
-  "head": "b21f20f",
+  "head": "d852d51",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
-  "next_task": "等待 b21f20f CI 绿 → S3：M3 partial unique index（SUCCEEDED 唯一，raw SQL）+ 服务层 T1/T2/T3/R1（acquireExecutionRight/submitThroughPort/settleResult/reconcile，替换内存账本为 Prisma 账本端口）",
+  "next_task": "S3 服务层：实现 Prisma 账本端口与 T1/T2/T3/R1（acquireExecutionRight 六项原子授权点 + submitThroughPort + settleResult + reconcile，UNKNOWN→RECONCILING 不重发），并补 PG1–PG10 真实 PostgreSQL 验收（apps/api/src/__tests__/platform-write-ledger-db.test.ts）",
   "send_head": "7d888cc",
   "decision_head": "7d888cc",
   "last_chatgpt_message": "MSG-20261001-19",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T06:43:48.365Z",
+  "updated_at": "2026-10-01T06:45:28.307Z",
   "previous_head": "caf2fac",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -49,12 +49,12 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-01T06:44:39.492Z",
+  "last_tick_at": "2026-10-01T06:49:40.633Z",
   "state": "IMPLEMENT",
-  "last_action": "S2/M2 完成（f0e3dd4）：C1/C2 唯一约束 + C4-C6 索引；并修复 ee77970 的两处 CI 失败（租户触发器清单、模型计数 38→39，b21f20f）",
-  "last_action_at": "2026-10-01T06:43:48.365Z",
-  "next_action": "等待 b21f20f CI 绿 → S3：M3 partial unique index（SUCCEEDED 唯一，raw SQL）+ 服务层 T1/T2/T3/R1（acquireExecutionRight/submitThroughPort/settleResult/reconcile，替换内存账本为 Prisma 账本端口）",
-  "current_head": "b21f20f",
+  "last_action": "S3/M3 完成（d852d51）：SUCCEEDED partial unique index 落地并应用；24 migrations up to date；tsc PASS",
+  "last_action_at": "2026-10-01T06:45:28.307Z",
+  "next_action": "S3 服务层：实现 Prisma 账本端口与 T1/T2/T3/R1（acquireExecutionRight 六项原子授权点 + submitThroughPort + settleResult + reconcile，UNKNOWN→RECONCILING 不重发），并补 PG1–PG10 真实 PostgreSQL 验收（apps/api/src/__tests__/platform-write-ledger-db.test.ts）",
+  "current_head": "d852d51",
   "reviewed_head": "549dba8",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-01T06:43:48.505Z",
-    "gapMs": 50988,
+    "previousTickAt": "2026-10-01T06:45:28.451Z",
+    "gapMs": 252183,
     "stale": false,
-    "checkedAt": "2026-10-01T06:44:39.492Z"
+    "checkedAt": "2026-10-01T06:49:40.633Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -175,6 +175,11 @@
         "ee77970 API job: architecture-contract 模型计数 38 → 39（36 core + 3 join）→ 测试/DOMAIN_MODEL/README 已同步"
       ],
       "local_verify": "migrate status up to date（23 migrations）；validate/tsc PASS；platform-write 17/17 + action-guard 10/10 + tenant-isolation PASS；architecture-contract 109/109；tenant-trigger checklist 29 baseline / 37 immutable"
+    },
+    "m3": {
+      "status": "DONE",
+      "migration": "20261001065000_platform_write_attempt_succeeded_partial_index（SUCCEEDED 部分唯一索引）",
+      "verify": "migrate deploy OK（24 migrations，schema up to date）；索引定义已在 dev DB 取证；tsc PASS"
     }
   }
 }

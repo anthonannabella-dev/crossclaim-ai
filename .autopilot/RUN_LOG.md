@@ -612,3 +612,10 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 验证：`prisma validate` valid；`prisma migrate deploy` 成功（21 migrations，schema up to date）；`prisma generate` OK；`tsc --noEmit` PASS；platform-write 17/17 + Action Guard 22/22（39 项）PASS。
 - 边界不变：未接线 HTTP、未接真实 adapter、`PLATFORM_WRITE_TRANSPORT_ENABLED=false`、未消费审批、无真实外写。
 - 下一步：S2 约束（C1/C2/C4–C6）→ M3 partial unique index → S3 服务层。
+
+## 2026-10-01 JST — S2/S3 进展（约束 + 部分唯一索引）
+
+- S2/M2（f0e3dd4）：C1 @@unique(organizationId,idempotencyKey)、C2 @@unique(organizationId,approvalId)、C4–C6 索引；migration 20261001064005 已应用。
+- CI 修复：ee77970 失败两项 —— ①新表缺租户触发器（已补 cc_tenant_platform_write_attempt + cc_tenant_immutable__PlatformWriteAttempt 并同步 checklist，本地 29 baseline / 37 immutable 通过）；②architecture-contract 模型口径 38→39（36 core + 3 join），测试/DOMAIN_MODEL/README 已同步（b21f20f），本机 architecture-contract 109/109 PASS。
+- S3/M3（d852d51）：platform_write_attempt_succeeded_unique（raw SQL partial unique index）落地并应用；24 migrations，schema up to date；tsc PASS。
+- 下一步：S3 服务层（Prisma 账本端口 + T1/T2/T3/R1）与 PG1–PG10 验收。
