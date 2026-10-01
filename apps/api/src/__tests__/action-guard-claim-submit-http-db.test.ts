@@ -812,4 +812,36 @@ describe('R19 CHANGE A–D — claim.submit 原子性 / 锁内重验 / 装配路
       ),
     ).rejects.toMatchObject({ code: 'INVALID_INPUT' });
   }, 60_000);
+  it('19 等锁期间执行角色被降级（成员仍有效）→ 锁后拒绝 + claim.submit_rejected 留痕', async () => {
+    await withServer(async (base) => {
+      const cookie = await login(base);
+      const approvalId = await seedApproval();
+      const release = await holdCaseLock();
+      const pending = submit(base, cookie, { approvalId });
+      try {
+        await waitFor(
+          async () => (await advisoryLockCount(caseLockKey(), false)) >= 1,
+          10_000,
+          'SUBMIT_WAITING_ON_CASE_LOCK',
+        );
+        // 降级：OWNER → VIEWER（成员仍 isActive，但权限矩阵不再允许 Claim 提交）
+        await prisma.membership.updateMany({
+          where: { organizationId: ORG, userId: ownerId },
+          data: { role: 'VIEWER' },
+        });
+      } finally {
+        release();
+      }
+      const res = await pending;
+      expect(res.status).toBe(403);
+      expect(await sideEffects()).toMatchObject(ZERO);
+      // 锁后权限拒绝必须留痕（claim.submit_rejected），且不与成功业务审计混淆
+      const rejected = await prisma.auditLog.count({
+        where: { organizationId: ORG, action: 'claim.submit_rejected' },
+      });
+      expect(rejected).toBe(1);
+      const successAudits = await prisma.auditLog.count({ where: { organizationId: ORG, action: 'claim.submitted_by_human' } });
+      expect(successAudits).toBe(0);
+    });
+  }, 60_000);
 });
