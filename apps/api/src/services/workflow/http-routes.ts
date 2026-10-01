@@ -50,6 +50,7 @@ import { createPrismaActionGuardAuditPort } from '../action-guard/runtime-guard-
 import type { AuditWriter } from '../audit';
 import { submitClaimWithApproval } from '../claims/claim-submission';
 import { BILLING_DRAFT_ACTION, createBillingDraft } from '../billing/billing-draft';
+import { EVIDENCE_READ_ACTION } from '../evidence/evidence-read';
 import { CLAIM_PREPARE_ACTION, prepareClaimDraft } from '../claims/claim-preparation';
 import {
   ActionGuardApprovalRequiredError,
@@ -857,6 +858,18 @@ export async function handleWorkflowRequest(
       return true;
     }
     if (caseEvidence) {
+      // ② 下一小批次（MSG-20261001-13 §5）：证据读取受保护动作 evidence.read（READ_ONLY）
+      if (!deps.actionGuard) {
+        // fail closed：受保护入口必须在组合根注入 Action Guard
+        throw new ActionGuardNotConfiguredError(EVIDENCE_READ_ACTION);
+      }
+      // 只读动作：无人工审批；能力状态不可用/缺 guard 时失败关闭。
+      await deps.actionGuard.assertAllowed({
+        action: EVIDENCE_READ_ACTION,
+        actorUserId: actor.actorUserId,
+        organizationId: actor.organizationId,
+      });
+      // 租户 / 主体权限 / 案件归属检查由既有只读投影完成（跨租户 404、无权限 403）
       sendJson(res, 200, {
         items: await listCaseEvidence(
           deps.prisma,

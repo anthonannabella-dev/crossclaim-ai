@@ -95,3 +95,12 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 | PS04-7 | 权限 / 审计 / 看板投影（争议域） | PS04-6 | 排队 |
 
 > 说明：以上为**表格式登记**，不使用 `- [ ]`，以免被 runner 当作当前 Gate 7 队列的下一个执行任务；实施顺序由架构方在 ② 收口后另行裁决。
+
+
+### ② 队列进展（2026-10-01）
+
+- `claim.submit` = **PASS**（MSG-20261001-07 / REVIEWED_REF 28e0cd9）
+- `claim.prepare` = **PASS**（MSG-20261001-10 / REVIEWED_REF d6d239b）
+- `billing.draft` = **PASS**（MSG-20261001-13 / REVIEWED_REF d81a86f）
+- **evidence.read 小批次**：已接入 `GET /cases/:id/evidence` + Action Guard 只读契约（缺 guard / 能力不可用失败关闭；租户与权限检查复用既有投影；拒绝不泄露内容/地址/存储引用），专项 6/6 → 送审中
+- 剩余：`appeal.submit` / `platform.write`（EXTERNAL_WRITE，继续 HOLD）
