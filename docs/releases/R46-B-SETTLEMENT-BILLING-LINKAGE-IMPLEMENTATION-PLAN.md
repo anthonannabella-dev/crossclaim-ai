@@ -325,3 +325,137 @@ R45 永久基线（S1–S5 / fresh migration / two-stage upgrade / 三份清单 
 4. §6 的 **S1…S6** 拆分与「每个 Stage 独立 Checkpoint 送审」是否批准？S1 是否可以先行（Schema + migrations + triggers + inventories，零资金行为）？
 
 > 边界（重申）：本计划为 docs-only；实施前保持 **NO R45→Settlement automatic creation · NO automatic Fee · NO automatic Invoice issuance · NO Payment activation · NO autopay · NO platform write · TRANSPORT=false · NO production credentials**；R13 Payment Activation Gate = HOLD。
+
+---
+
+## 11. S1 最终 Schema 实施口径（MSG-20261002-54 收口）
+
+> 本段为 **MSG-20261002-54 = PASS WITH REVISE** 要求的 S1 前置收口：先把该裁决的 CHANGE A（F3 fee-chain uniqueness）/ CHANGE B（Settlement↔Snapshot 不可漂移）/ CHANGE C（Invoice 不得从 Fee 自动产生）写进最终 S1 Schema 实施口径，再实施 S1。**本段仍属 docs-only。**
+
+### 11.1 CHANGE A —— fee chain identity 与唯一性（替换 §2.5 的 F3）
+
+**问题（MSG-54 F3 修正）**：原 `UNIQUE(org, settlementId)` / `UNIQUE(org, adjustmentId)` 会把一笔资金事实在整个组织生命周期中锁死给唯一一个 FeeCalculation，从而堵死合法的 superseding / recalculation / correction chain / invoice regeneration。
+
+**S1 口径（最终）**：
+
+| 概念 | 定义 |
+| --- | --- |
+| `feeChainId` | **稳定服务端 identity**，等于链上首个（root）FeeCalculation 的 id；supersede 时**沿用**同一 `feeChainId` |
+| `feeChainRootFeeCalculationId` | 指向链根（root）的 FeeCalculation；root 自身该列为 NULL |
+| `feePolicyRef` + `feeBasisVersion` | 该链使用的费率依据与版本（R12「依据存在且唯一」） |
+| `supersededByFeeCalculationId` | 链内前向指针；**只作版本协调，禁止用于金额推导** |
+
+唯一性（全部为 append-only 表上的约束 + 只读 checker）：
+
+```text
+-- 1) 同一链内不得重复纳入同一资金事实
+UNIQUE (organizationId, feeChainId, settlementId)   WHERE settlementId IS NOT NULL
+UNIQUE (organizationId, feeChainId, adjustmentId)   WHERE adjustmentId IS NOT NULL
+
+-- 2) 同一 claimItem 在同一时刻最多一条 active 链（active = 未被 supersede）
+UNIQUE (organizationId, claimItemId) WHERE supersededByFeeCalculationId IS NULL
+
+-- 3) membership 行级唯一（同一次计算内）
+UNIQUE (feeCalculationId, settlementId, adjustmentId)
+```
+
+**不变量（替换旧 F3）**：*同一个资金事实不得同时进入两个互不相关的 active fee chain。*
+
+- 「同一链」= 相同 `feeChainId`（含 superseding / recalculation）；
+- 「互不相关」= 不同 `feeChainId` 且同时 active。由约束 (2) 在 claimItem 维度直接排除，并由 checker 做跨表交叉验证（DETECT ≠ REPAIR）；
+- **不得**使用 `UNIQUE(org, settlementId)` 全局锁死（该写法在 S1 中明确禁止）。
+
+### 11.2 full-reversal 唯一语义（MSG-54 CHANGE B1 收紧）
+
+v1 下对任一 original Settlement：
+
+```text
+有效 REVERSAL 数 ∈ {0, 1}
+且若为 1：amount == 原 Settlement.amount（等额 full reversal）
+```
+
+- **不再**使用「总额 ≤ 原金额」的累计口径（v1 无 partial reversal）；
+- partial reversal / CORRECTION → **fail-closed**（`ADJUSTMENT_KIND_NOT_ENABLED`）；
+- 第二个**不同** reversal event 指向同一 Settlement → `REVERSAL_ALREADY_APPLIED`；
+- **同一** reversal event replay → `REUSED existing adjustment`（幂等复用，不新建、不报错）。
+
+实现：`UNIQUE (organizationId, originalSettlementId)` on `SettlementAdjustment`（v1 因只有 full reversal 而等价于「0 或 1」）+ `BEFORE INSERT` 跨行校验触发器（等额 / 同币种 / 同租户）+ 服务层 `SELECT … FOR UPDATE` 双保险。
+
+### 11.3 CHANGE B —— Settlement ↔ Snapshot 唯一且不可漂移
+
+| 规则 | 实现 |
+| --- | --- |
+| 已记录 Settlement **必须**绑定一个 immutable ReceiptSnapshot | `receiptSnapshotId` 在状态进入 RECEIVED/PARTIAL 时非空；由 S1 CHECK + S2 服务层共同保证 |
+| `receiptSnapshotId` **创建后不可改** | `Settlement` 受控变更触发器：`receiptSnapshotId`、身份四列、`financialEventFingerprint` 两列一旦非空即拒绝 UPDATE |
+| snapshot `digest` / `snapshotVersion` **不可改** | `SettlementReceiptSnapshot` append-only（BEFORE UPDATE OR DELETE → 拒绝） |
+| 更正 receipt evidence | **新 snapshot（新 version + 新 digest）+ 新 Settlement/adjustment path**；不得 UPDATE 已确认 Settlement 的 receipt basis |
+
+> 冻结：Settlement 的到账事实**不得**在审批后重新指向另一个 snapshot。
+
+### 11.4 CHANGE C —— Invoice 不得从 Fee 自动产生
+
+```text
+FeeCalculation exists ≠ Invoice may automatically issue
+```
+
+S5 必须先设计/实现：`fee eligibility` → `invoice candidate` → `invoice draft linkage` → `separate authorization`。
+除既有 `billing.invoice_issue` Gate 已明确批准外，**S5 不得**把 FeeCalculation 自动推进为 ISSUED invoice（`BillingInvoice` / `BillingStatus` 在 R46-A/B/S1 均不变）。
+
+### 11.5 CHANGE C1 修正 —— adjustment 符号契约
+
+| 规则 | 说明 |
+| --- | --- |
+| 存储 | adjustment 行**只存正数** `amount` |
+| 方向 | 由 `kind` 决定：`REVERSAL → −amount`；`VOID → −originalFeeAmount`；`CORRECTION → 由明确 correction semantics 决定` |
+| 计算 | 统一由 projector / service 计算 effect，**禁止**在数据层自行写负数造成 `-(-100)` 双重符号歧义 |
+
+`FeeCalculationSettlement.amountContribution` 保留带符号语义（membership 是计算结果，不是输入契约）。
+
+### 11.6 FeeCalculationAdjustment 三分类语义（MSG-54 ①）
+
+| kind | 含义 | 必备规则 |
+| --- | --- | --- |
+| `VOID` | 原 FeeCalculation **从业务事实起点**就不应成立 | 必须有 `reasonCode`；`amount == originalFeeAmount`（正数存储）；`triggerSettlementAdjustmentIds` 可为空 |
+| `REVERSAL` | 原计算当时成立，后来因 Settlement reversal 等后续资金事实需要冲减 | 必须引用 ≥1 个 `SettlementAdjustment`；evidence ≥ 1 |
+| `CORRECTION` | 原计算的输入 / 政策 / 费率事实后来被纠正 | 必须携带纠正后的依据引用（`feePolicyRef` / `feeBasisVersion`）+ evidence ≥ 1 |
+
+三者**不得只是 UI 标签**；`reasonCode` / `evidence` / `sourceFact` / `amount` 规则必须可被 DB CHECK 或触发器区分。**任何 Adjustment 均不得直接修改历史 `FeeCalculation.status` / `amount`**；净值只能由 `original + immutable adjustments` 推导。
+
+### 11.7 S1 范围（MSG-54 ④）
+
+S1 **只允许**：
+
+1. `schema.prisma`：4 新表 + 2 表纯增列 + 新增枚举；
+2. migration：表 / 列 / FK（含复合 FK）/ unique / partial unique / index / CHECK；
+3. 触发器：租户保护（tgtype 23）× 4 新表；append-only（tgtype 27）× 4 新表；`Settlement` 新列受控变更；`SettlementAdjustment` 跨行不变量；
+4. `tools/tenant-triggers/{required,append-only}-triggers.json` 清单同步；
+5. fresh deploy + two-stage upgrade 测试 + architecture contract 更新。
+
+S1 **不得**：创建 Settlement · 记录 receipt · 创建 reversal · 计算 Fee · 创建 Invoice · 修改 RecoveryLedger · 激活 Payment（**零资金业务行为证明**必须出现在 S1 Checkpoint 中）。
+
+### 11.8 S1 Checkpoint 必报项（MSG-54 NEXT）
+
+1. fee-chain identity / uniqueness 最终方案（§11.1）；
+2. Settlement ↔ Snapshot immutability（§11.3）；
+3. full-reversal unique 语义（§11.2）；
+4. FK / partial unique / CHECK / triggers 清单；
+5. trigger inventories；
+6. fresh deploy；
+7. two-stage upgrade；
+8. architecture contract；
+9. **零资金行为证明**。
+
+### 11.9 MSG-54 新增 10 项永久验收的归属
+
+| # | 验收 | Stage |
+| --- | --- | --- |
+| 1 | 同一 Settlement 在同一 fee calculation 内重复 membership → 拒绝 | S1 / S4 |
+| 2 | 同一 Settlement 在合法 superseding fee chain 中如何处理 → 明确并测试 | S4 |
+| 3 | 两个无关 active fee chains 同时消费同一 Settlement → fail-closed | S1 / S4 |
+| 4 | Settlement 创建后修改 receiptSnapshotId → DB/service 拒绝 | S1 |
+| 5 | ReceiptSnapshot digest / version UPDATE → 拒绝 | S1 |
+| 6 | full reversal 第二个不同事件 → 拒绝 | S1 / S3 |
+| 7 | same reversal replay → REUSED | S3 |
+| 8 | FeeCalculationAdjustment 不修改历史 FeeCalculation | S4 |
+| 9 | adjustment effect 符号由 kind 统一解释 | S4 |
+| 10 | FeeCalculation 创建后 BillingInvoice 仍为 0，直到独立 invoice authorization | S5 |
