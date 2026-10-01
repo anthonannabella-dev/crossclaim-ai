@@ -1,6 +1,6 @@
 {
   "gate": "B2-FIX R1",
-  "head": "df7b086",
+  "head": "51b27ff",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
   "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
@@ -9,13 +9,13 @@
   "last_chatgpt_message": "MSG-20261002-51",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T16:28:29.263Z",
+  "updated_at": "2026-10-01T16:34:14.570Z",
   "previous_head": "fa82384",
-  "architect_decision_pending": false,
+  "architect_decision_pending": true,
   "blocked_scope": null,
-  "last_send_head": "6f725d1",
-  "last_sent_at": "2026-10-01T16:26:51.180Z",
-  "last_sent_fingerprint": "R45:S5-Release-Checkpoint",
+  "last_send_head": "51b27ff",
+  "last_sent_at": "2026-10-01T16:34:14.570Z",
+  "last_sent_fingerprint": "R46:Settlement-Billing-Linkage-Design-Proposal",
   "final_head": "1144401",
   "ci_run": "36833002042",
   "ci_result": "SUCCESS",
@@ -51,10 +51,10 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-01T16:33:21.343Z",
   "state": "IMPLEMENT",
-  "last_action": "MSG-20261002-51 = PASS 已逐字归档（FULL_COPY_OK）：R45（S1–S5）整体 CLOSED；批准进入 R46 Design Gate（第一轮只交 Design Proposal）。",
-  "last_action_at": "2026-10-01T16:28:29.263Z",
-  "next_action": "R46 — Settlement / Billing Linkage Design Proposal（docs-only，逐条回答 15 问）；不实现任何资金域代码。",
-  "current_head": "fa82384",
+  "last_action": "R46 Settlement / Billing Linkage Design Proposal（docs-only）已送审：事实分层与硬不变量 + 逐条回答 15 问（含 FULLY_RECONCILED 必要性/充分性、override 不得触发资金域、重跑幂等四道防线、动作闸门建议）。",
+  "last_action_at": "2026-10-01T16:34:14.570Z",
+  "next_action": "等待 R46 Design Proposal 裁决：①PASS → 提交 R46-A Schema Delta Request（docs-only）②REVISE → 修订设计 ③BLOCK → 停止。",
+  "current_head": "51b27ff",
   "reviewed_head": "07b7009",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -2058,5 +2058,28 @@
     "frozen_regression": "R45 基线永久冻结（S1–S5 + fresh migration + two-stage upgrade + inventories + 176 files / 1730 tests）；R46 不得删除、skip 或弱化 R45 测试。",
     "r46_redline": "NO Settlement creation from R45 · NO FeeCalculation creation · NO BillingInvoice issuance · NO Payment activation · NO autopay · NO platform write · TRANSPORT=false · NO production credentials；R13 Payment Activation Gate 继续 HOLD。",
     "next": "R46 — Settlement / Billing Linkage Design Proposal（docs-only；回答 15 问；不实现）"
+  },
+  "r46_design_submission": {
+    "submission_comment": "5935875894",
+    "reviewed_head": "51b27ff",
+    "doc": "docs/releases/R46-SETTLEMENT-BILLING-LINKAGE-DESIGN-PROPOSAL.md",
+    "kind": "Design / Boundary Proposal（docs-only；回答 MSG-20261002-51 的 15 问）",
+    "fact_layers": "R45 derived（OBSERVED → RECONCILED/FULLY_RECONCILED，仅候选信号）≠ R46 financial facts（Settlement RECEIVED/PARTIAL → RecoveryLedgerEntry → FeeCalculation → BillingInvoice → Payment）",
+    "hard_invariants": "REIMBURSEMENT_OBSERVED / RECONCILED ≠ Settlement RECEIVED ≠ Fee earned ≠ Billing payable ≠ Payment collected（逐层不可跳跃）",
+    "key_rulings_proposed": {
+      "q1": "只有外部可验证到账证据 + 受保护动作才可建 Settlement；projection 不直接建 Settlement",
+      "q2": "FULLY_RECONCILED 既非充分也非独立必要，但对账侧必要组成",
+      "q7": "v1 不允许 FX / 自动换汇（币种不一致 fail-closed）",
+      "q11": "manual override 不得触发资金域",
+      "q10": "重跑幂等四道防线（projection 与资金域解耦 / 服务端幂等键 / approval 恰好一次 / R46 checker）",
+      "q12": "settlement.record / billing.fee_calculate / billing.invoice_issue = INTERNAL_WRITE + humanApproval；payment.capture = MONEY_MOVEMENT + productionGate（HOLD）"
+    },
+    "boundary": "docs-only；NO Settlement creation from R45 · NO FeeCalculation · NO BillingInvoice · NO Payment activation · NO autopay · NO platform write · TRANSPORT=false · NO production credentials；R13 Payment Activation Gate 继续 HOLD",
+    "questions": [
+      "§1 事实分层与硬不变量、§2 对 15 问的答复是否认可？",
+      "Q2 与 Q11 两个口径是否批准？",
+      "是否批准按 R46-A（Schema Delta Request）→ R46-B（Implementation Plan）→ S1…Sn 推进？"
+    ],
+    "next": "PASS → R46-A Settlement / Billing Linkage Schema Delta Request（docs-only）；REVISE → 修订设计；BLOCK → 停止"
   }
 }

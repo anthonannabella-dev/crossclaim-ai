@@ -564,3 +564,10 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - DECISION：**PASS — R45 CLOSED**（REVIEWED_HEAD 6f725d1；归档 FULL_COPY_OK）。详见 STATE.r45_release_verdict。
 - NEXT：**R46 Design Proposal（docs-only，回答 15 问）**；Design 获批前保持初始红线（NO Settlement creation from R45 / NO FeeCalculation / NO BillingInvoice / NO Payment activation / NO autopay / NO platform write）。
 - R13 Payment Activation Gate 继续 HOLD；R45 永久回归基线不得删除、skip 或弱化。
+
+### R46（Settlement / Billing Linkage）—— Design Proposal 待裁决
+
+- 交付：`docs/releases/R46-SETTLEMENT-BILLING-LINKAGE-DESIGN-PROPOSAL.md`（docs-only；15 问答复 + 事实分层 + 硬不变量 + 动作闸门建议）。
+- 送审：REVIEWED_HEAD 51b27ff（Issue #2 comment 5935875894）。
+- NEXT：PASS → R46-A Schema Delta Request（docs-only）；REVISE → 修订设计；BLOCK → 停止。
+- 边界：NO Settlement creation from R45 · NO FeeCalculation · NO BillingInvoice · NO Payment activation · NO autopay · NO platform write。

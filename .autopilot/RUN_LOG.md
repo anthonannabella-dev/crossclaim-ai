@@ -1264,3 +1264,11 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 风险：不得把 RECONCILED / FULLY_RECONCILED 解释为 money received 或 billable revenue。
 - 冻结回归：R45 基线（S1–S5 / fresh / upgrade / inventories / 176 files 1730 tests）永久保留。
 - R46 初始红线：NO Settlement creation from R45 · NO FeeCalculation · NO BillingInvoice · NO Payment activation · NO autopay · NO platform write · TRANSPORT=false · NO production credentials；R13 Payment Activation Gate 继续 HOLD。
+
+## 2026-10-02 JST — R46 Settlement / Billing Linkage Design Proposal 送审（docs-only，不实现）
+
+- 文档：`docs/releases/R46-SETTLEMENT-BILLING-LINKAGE-DESIGN-PROPOSAL.md`（docs-only；未改 Schema / 未写 migration / 未改代码）。
+- 事实分层：R45 derived（仅候选信号）≠ R46 financial facts；硬不变量 OBSERVED/RECONCILED ≠ Settlement RECEIVED ≠ Fee earned ≠ Billing payable ≠ Payment collected。
+- 15 问答复：以外部到账证据 + 受保护动作作为 Settlement 入口；FULLY_RECONCILED 既非充分也非独立必要；v1 不允许 FX；override 不得触发资金域；重跑幂等四道防线；动作闸门建议（settlement.record / billing.fee_calculate / billing.invoice_issue = INTERNAL_WRITE + humanApproval；payment.capture = MONEY_MOVEMENT + productionGate）。
+- 边界：NO Settlement creation from R45 · NO FeeCalculation · NO BillingInvoice · NO Payment activation · NO autopay · NO platform write；R13 Payment Activation Gate 继续 HOLD。
+- 送审：REVIEWED_HEAD 51b27ff（Issue #2 comment 5935875894）；唤醒已投递并三要素验证（输入框清空 / 新消息在底部 / 生成中）。
