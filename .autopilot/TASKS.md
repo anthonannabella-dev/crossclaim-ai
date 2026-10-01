@@ -1,3 +1,13 @@
+
+### HOST DIRECTIVE 2026-10-01「冻结底座 + 加速交付」（长期有效）
+
+- 策略文档：`docs/releases/DELIVERY-ACCELERATION-POLICY.md`；AGENTS.md §三·五。
+- 节奏：IMPLEMENT → targeted tests → commit → CI → 风险分类；未触碰高风险边界则直接进入下一执行单元（不空转等裁决）。
+- 审计：增量风险审计（只交本轮新增/变化边界 + 证据）；已 PASS 且未变化的底座不再重复送审。
+- 架构级审计仅限：Schema 实质变化 / 租户隔离边界 / 权限模型 / 审批·HITL 边界 / 真实外部写 / 资金·结算·扣费 / 幂等·事务·并发一致性 / 安全边界。
+- 每轮回报必须含：FOUNDATION_REUSED / NEW_RISK_BOUNDARY / ARCH_REVIEW_REQUIRED。
+- 历史清单（Prisma ledger port / T1–T3 / R1 / approval_consumed 同事务 / T2 事务外投递 / PG1–PG10 / reconcile 策略测试）= platform-write ledger 批次，已于 MSG-20261001-21 PASS 关闭。
+
 # B2-FIX R1 任务队列（自治循环；完成即自动进入下一项）
 
 ## B2-FIX R1 —— 架构方最终裁决 MSG-20260930-10 = PASS（REVIEWED_HEAD 62dffa6 / CODE_HEAD 1144401）

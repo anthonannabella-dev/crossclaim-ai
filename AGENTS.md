@@ -102,7 +102,23 @@ NEXT:
 
 ---
 
+## 三·五、交付加速与「冻结底座」协议（2026-10-01 HOST DIRECTIVE）
+
+宿主 2026-10-01 直接指令：CrossClaim 进入「冻结底座 + 加速交付」阶段。完整文本见 `docs/releases/DELIVERY-ACCELERATION-POLICY.md`。
+
+- **冻结**：已审计 PASS 且未变化的底座（Tenant 隔离 / Case·Recovery 状态机 / Approval·HITL / Action Guard / Audit Log / 事务·CAS·行锁 / 幂等与并发 / Recovery·Reconcile / 权限重验与审批消费 / R43 持久化闭环 / Platform Write Ledger）不得无理由重构或重复审计。
+- **复用**：新业务能力优先用现有 Recovery OS 内核 + Adapter + Connector + Rule Pack；先查仓库既有实现、旧 `zhuihuiweikuan-saas`（只读）、成熟 MIT/Apache-2.0 组件。
+- **架构级审计仅限**：Schema 实质变化 / 租户隔离边界 / 权限模型 / 审批·HITL 边界 / 真实外部写 / 资金·结算·扣费 / 幂等·事务·并发一致性 / 安全边界。普通业务功能、UI、Rule Pack、Adapter、Connector、映射与解析规则不再默认升级为架构级审计。
+- **编排工具**：n8n / Activepieces 仅限外围（定时、通知、同步、非关键搬运、webhook 编排）；核心事务（索赔提交、审批消费、资金结算、关键状态迁移）不得进低代码工作流。
+- **节奏**：IMPLEMENT → targeted tests → commit → CI → 风险分类；未触碰高风险边界则**直接进入下一执行单元**，不空转等待裁决。
+- **审计**：改为**增量风险审计** —— 只提交本轮新增/变化的边界、风险与测试证据；已 PASS 且未变化的基础设施不再重复送审。
+- **每轮状态必须给出三项**：`FOUNDATION_REUSED` / `NEW_RISK_BOUNDARY` / `ARCH_REVIEW_REQUIRED`（NO 时继续自主推进）。
+- **继续 HOLD**：Production Enablement · 真实外部写 · 真实资金 · 客户真实提交 · 生产凭据（以及既有 AMAZON WRITE / REAL WRITE ADAPTER / TRANSPORT=false / SETTLEMENT·BILLING LINKAGE HOLD）。
+
 ## 四、必须发起审计的场景
+
+> 2026-10-01 HOST DIRECTIVE 修订：架构级审计仅限 §三·五 列出的八类边界；其余增量只做「增量风险审计」，不重复送审已 PASS 且未变化的基础设施。
+
 
 以下情况**必须**写进 `AI-BRIDGE` Issue 或当前 PR 评论，不得自行决定：
 

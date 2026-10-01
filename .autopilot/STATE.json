@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261001-39",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T12:35:52.643Z",
+  "updated_at": "2026-10-01T12:37:30.147Z",
   "previous_head": "3a68d17",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -51,8 +51,8 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-01T12:36:09.809Z",
   "state": "IMPLEMENT",
-  "last_action": "SCHEDULER_STALE_RECOVERED（gap=33min）→ 本轮已恢复执行",
-  "last_action_at": "2026-10-01T12:35:52.643Z",
+  "last_action": "HOST DIRECTIVE「冻结底座 + 加速交付」已落库（DELIVERY-ACCELERATION-POLICY.md + AGENTS.md §三·五 + STATE/TASKS/RUN_LOG）：增量风险审计、复用优先、仅 8 类边界触发架构审计、每轮回报 FOUNDATION_REUSED / NEW_RISK_BOUNDARY / ARCH_REVIEW_REQUIRED",
+  "last_action_at": "2026-10-01T12:37:30.147Z",
   "next_action": "R44 — Manual Recovery HTTP/API Boundary：先提交实现计划/边界送审（authn → tenant/role → action guard → 服务端 package/basis 解析 → 复用 S3/S4 服务 → 响应语义；跨租户 404、客户端不得自证 digest/basis、重复/并发、错误 package/reference binding、失败零推进、handler 不复制事务逻辑）。R44 不得实现 outcome/reimbursement reconciliation、不得联动 Settlement/Billing、不得开启任何 Amazon write transport。",
   "current_head": "3a68d17",
   "reviewed_head": "07b7009",
@@ -1065,5 +1065,59 @@
         "R46 — Settlement / Billing Linkage（需单独设计与审计）"
       ]
     }
+  },
+  "delivery_acceleration": {
+    "directive": "HOST DIRECTIVE 2026-10-01「冻结底座 + 加速交付」",
+    "doc": "docs/releases/DELIVERY-ACCELERATION-POLICY.md",
+    "applied_at": "2026-10-01T12:37:30.147Z",
+    "cadence": "IMPLEMENT → targeted tests → commit → CI → 风险分类",
+    "frozen_foundation": [
+      "Tenant / Organization 隔离",
+      "Case / Recovery 主状态机",
+      "Approval / HITL",
+      "Action Guard",
+      "Audit Log",
+      "Transaction / CAS / Row Lock",
+      "幂等与并发控制",
+      "Recovery / Reconcile",
+      "权限重验与审批消费机制",
+      "R43 Manual Recovery Persistence（S1–S6，MSG-20261001-39 CLOSED）",
+      "Platform Write Attempt Ledger（PG1–PG10，MSG-20261001-21 PASS）"
+    ],
+    "arch_review_triggers": [
+      "Schema 实质变化",
+      "租户隔离边界变化",
+      "权限模型变化",
+      "审批 / HITL 边界变化",
+      "真实外部写操作变化",
+      "资金 / 结算 / 扣费变化",
+      "幂等 / 事务 / 并发一致性边界变化",
+      "安全边界变化"
+    ],
+    "reuse_first": [
+      "仓库现有实现",
+      "旧 zhuihuiweikuan-saas（只读迁移候选）",
+      "成熟 MIT / Apache-2.0 组件",
+      "现有库"
+    ],
+    "orchestration_boundary": "n8n / Activepieces 仅限外围自动化（定时 / 通知 / 同步 / 非关键搬运 / webhook 编排）；核心事务（索赔提交、审批消费、资金结算、关键状态迁移）禁止进低代码工作流。",
+    "incremental_audit": true,
+    "status_fields": [
+      "FOUNDATION_REUSED",
+      "NEW_RISK_BOUNDARY",
+      "ARCH_REVIEW_REQUIRED"
+    ],
+    "historic_batch_note": "宿主点名的 Prisma ledger port / T1–T3 / R1 / approval_consumed 同事务 / T2 事务外投递 / PG1–PG10 / reconcile 策略测试 = platform-write ledger 批次，已于 MSG-20261001-21 PASS 关闭，无需重复审计。",
+    "holds": [
+      "PRODUCTION ENABLEMENT HOLD",
+      "REAL EXTERNAL WRITE HOLD",
+      "REAL MONEY HOLD",
+      "CUSTOMER SUBMISSION HOLD",
+      "PRODUCTION CREDENTIALS HOLD",
+      "AMAZON WRITE HOLD",
+      "REAL WRITE ADAPTER HOLD",
+      "TRANSPORT=false",
+      "SETTLEMENT/BILLING LINKAGE HOLD"
+    ]
   }
 }

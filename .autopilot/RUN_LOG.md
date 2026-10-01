@@ -992,3 +992,12 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - NEXT：**R44 — Manual Recovery HTTP/API Boundary**（仅入口边界；不得实现 outcome/reconciliation、不得联动 Settlement/Billing、不得开启任何 Amazon write transport）。
 - 档案：`AI-ARCHITECT-INBOX.md` → `MSG-20261001-39`；`tools/verdict-diff/compare.mjs` = **FULL_COPY_OK**。
 - HOLD 保持：AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · SETTLEMENT/BILLING LINKAGE HOLD。
+
+## 2026-10-01 JST — HOST DIRECTIVE：冻结底座 + 加速交付（策略落库）
+
+- 宿主指示：已 PASS 底座默认冻结；新能力复用 Recovery OS 内核 + Adapter + Connector + Rule Pack；仅 8 类边界触发架构级审计；开源/既有能力优先复用；编排工具仅限外围；节奏 IMPLEMENT → targeted tests → commit → CI → 风险分类；ChatGPT 审计改为增量风险审计。
+- 落库：`docs/releases/DELIVERY-ACCELERATION-POLICY.md`（全文）+ `AGENTS.md` §三·五（协作规则）+ `.autopilot/STATE.json`（delivery_acceleration）+ 本任务清单。
+- 状态口径：每轮回报须含 FOUNDATION_REUSED / NEW_RISK_BOUNDARY / ARCH_REVIEW_REQUIRED。
+- 对账：宿主点名的 Prisma ledger port / T1–T3 / R1 / approval_consumed 同事务 / T2 事务外投递 / PG1–PG10 / reconcile 策略测试，已属 platform-write ledger 批次（MSG-20261001-21 PASS CLOSED），无需重复审计。
+- NEXT：R44 — Manual Recovery HTTP/API Boundary（仅入口边界；复用 R43 S3/S4 服务，不复制事务逻辑）。
+- 记录时 HEAD：0029d46。
