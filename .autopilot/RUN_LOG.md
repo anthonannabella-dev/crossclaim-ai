@@ -905,3 +905,11 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - S3 严格顺序：advisory lock → ClaimItem FOR UPDATE → 锁后重读成员/角色 → READY_TO_APPEAL → 锁定目标 package（非终态）→ 服务端重构 versioned basis → verifyApprovalBoundary → CAS 跃迁 SUBMITTED_MANUAL → INSERT submission + evidence links → 写 recovery.manual_submitted + recovery.approval_consumed（同一事务）；失败则三者均不推进/创建/消费；拒绝审计回滚后写。
 - S3 验收 14 项（见 STATE.r43s2_verdict.s3_acceptance）。
 - 边界：S3 不得顺带 providerCaseRef 后补 / outcome tracking / reconciliation / Settlement linkage；AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · SETTLEMENT/BILLING LINKAGE HOLD。
+
+## 2026-10-01 JST — R43 S3（recovery.manual_submit）实现 + Checkpoint 送审
+
+- 交付：`services/recovery/manual-submission.ts`（锁内重验 + 原子提交）+ Action Guard 注册（catalog / 常量 / scope / guard-enforcement）+ S3 数据库测试 13 项。
+- 顺序：case advisory lock → ClaimItem FOR UPDATE → 锁后重读成员/角色 → READY_TO_APPEAL → 锁定 package（非终态）→ 服务端 versioned basis → verifyApprovalBoundary → CAS → submission + evidence → manual_submitted + approval_consumed（同事务）；拒绝留痕回滚后写。
+- 证据：S3 13/13 PASS；回归 46 files / 551 tests PASS；tsc PASS；未改 Schema/migration/触发器清单；无新增依赖。
+- 送审：REVIEWED_HEAD b6be095（Issue #2 comment 5930644528 / CI 36857439876）；唤醒已投递并验证。
+- 边界：S3 未实现 providerCaseRef 后补 / outcome tracking / reconciliation / Settlement·Billing 联动 / 平台外写。

@@ -1,6 +1,6 @@
 {
   "gate": "B2-FIX R1",
-  "head": "9742914",
+  "head": "b6be095",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
   "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
@@ -9,13 +9,13 @@
   "last_chatgpt_message": "MSG-20261001-34",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T11:40:23.261Z",
+  "updated_at": "2026-10-01T11:47:18.964Z",
   "previous_head": "4ad4016",
-  "architect_decision_pending": false,
+  "architect_decision_pending": true,
   "blocked_scope": null,
-  "last_send_head": "4ad4016",
-  "last_sent_at": "2026-10-01T11:39:18.528Z",
-  "last_sent_fingerprint": "R43-S2:Recovery-Package-Implementation",
+  "last_send_head": "b6be095",
+  "last_sent_at": "2026-10-01T11:47:18.964Z",
+  "last_sent_fingerprint": "R43-S3:Recovery-Manual-Submit",
   "final_head": "1144401",
   "ci_run": "36833002042",
   "ci_result": "SUCCESS",
@@ -51,10 +51,10 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-01T11:39:44.750Z",
   "state": "IMPLEMENT",
-  "last_action": "MSG-20261001-34 = PASS 已逐字归档并 FULL_COPY_OK —— R43 S2 关闭；下一批 = R43 S3（recovery.manual_submit 注册 + 锁内重验 + 原子人工提交确认），不得顺带 S4/S5",
-  "last_action_at": "2026-10-01T11:40:23.261Z",
-  "next_action": "R43 S3 — recovery.manual_submit：按 MSG-20261001-34 的严格顺序实现锁内重验 + 原子提交（advisory lock → ClaimItem FOR UPDATE → 锁后重读成员/角色 → READY_TO_APPEAL → 锁定 package（非终态）→ 服务端重构 versioned basis → verifyApprovalBoundary → CAS 跃迁 → INSERT submission + evidence links → 审计 manual_submitted + approval_consumed）；拒绝审计回滚后写；S3 验收 14 项。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
-  "current_head": "9742914",
+  "last_action": "R43 S3（recovery.manual_submit）已实现并送审：Action Guard 注册（INTERNAL_WRITE + humanApproval）+ 锁内重验 + 原子人工提交确认（submission + evidence + manual_submitted + approval_consumed 同事务；拒绝留痕回滚后写）；S3 测试 13/13 PASS；回归 46 files / 551 tests PASS；tsc PASS；等待 S3 Checkpoint 裁决",
+  "last_action_at": "2026-10-01T11:47:18.964Z",
+  "next_action": "等待 S3 Checkpoint 裁决：①PASS → 进入 S4（providerCaseRef canonical 补录 + 受保护动作）②REVISE → 按 CHANGE 修改后重送 S3 ③BLOCK → 停止该方案。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
+  "current_head": "b6be095",
   "reviewed_head": "07b7009",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -797,5 +797,30 @@
       "Settlement/Billing/RecoveryLedger 仍零变化"
     ],
     "s3_boundaries": "S3 不得顺带实现 providerCaseRef 后补、outcome tracking、reconciliation 或 Settlement linkage（留给 S4/S5）"
+  },
+  "r43s3_submission": {
+    "submission_comment": "5930644528",
+    "ci_run": "36857439876",
+    "reviewed_head": "b6be095",
+    "module": "apps/api/src/services/recovery/manual-submission.ts",
+    "test": "apps/api/src/__tests__/recovery-manual-submission-db.test.ts（13）",
+    "action_guard_registration": [
+      "services/action-guard/action-guard.ts（INTERNAL_WRITE + humanApproval）",
+      "services/action-guard/approval-verifier.ts（RECOVERY_MANUAL_SUBMIT_ACTION）",
+      "services/action-guard/capability-source.ts（submission scope）",
+      "services/action-guard/guard-enforcement.ts（GUARD_ENFORCED_ACTIONS）"
+    ],
+    "evidence": {
+      "s3_tests": "13/13 PASS",
+      "regression": "46 files / 551 tests PASS",
+      "tsc": "PASS"
+    },
+    "open_questions": [
+      "S3 是否可关闭（→ S4 providerCaseRef canonical 补录）",
+      "执行人权限沿用 claimTrackingApprove（OWNER/ADMIN；FINANCE 无 claim tracking 写权限故未纳入）",
+      "审计名 recovery.manual_submitted / recovery.manual_submit_rejected 是否认可"
+    ],
+    "wakeup_channel": "https://chatgpt.com/c/6ab9ee1b-fd54-83ee-b363-b67750afcedd",
+    "wakeup_delivery": "DELIVERED_VERIFIED（输入框清空 / 新用户消息在底部）"
   }
 }
