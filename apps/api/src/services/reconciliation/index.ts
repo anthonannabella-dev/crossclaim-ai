@@ -83,3 +83,12 @@ export {
   rebuildClaimReconciliationProjection,
 } from './projector';
 export type { ProjectorDeps, ProjectionRebuildInput, ProjectionRebuildResult } from './projector';
+
+// R45 S4 —— 对账期受保护动作（第一批：basis set / supersede）
+export {
+  RECONCILIATION_BASIS_SET_RECORDED_ACTION,
+  RECONCILIATION_BASIS_SUPERSEDED_ACTION,
+  setReconciliationBasis,
+  supersedeReconciliationBasis,
+} from './basis-actions';
+export type { BasisActionDeps, ReconBasisKind, ReconciliationBasisInput, ReconciliationBasisResult } from './basis-actions';
