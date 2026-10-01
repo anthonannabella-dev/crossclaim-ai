@@ -798,3 +798,11 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 裁决要点：Amazon 只读 adapter 未形成第二套 ingest/data pipeline，正确复用 Connector Runner → ClaimItem / Quarantine / CursorStore / sourceFingerprint；13 项结果长期保留；R41 PASS_CLOSE。
 - 组合根：暂不纳入生产；仅 test/fixture composition、disabled descriptor、无凭据开发装配。
 - NEXT：R42 = Amazon FBA Recovery Write-Operation Capability Evidence（DOCS/EVIDENCE ONLY；12 项输出 + 三选一结论）；六项门槛未全达前不得进入 write adapter design，更不得实现。
+
+## 2026-10-01 JST — R42 Amazon FBA 写操作官方能力取证（DOCS ONLY）
+
+- 只读取证：官方 SP-API 文档索引 `llms.txt` 全量计数 + `api/reference` 分册抽样；无账号、无凭据、无写请求。
+- 结果：`reimburse` / `claim` / `safe-t` / `a-to-z` / `dispute` 命中均为 **0**；相关域只有只读入口（Finances、FBA Inventory `getInventorySummaries`、Reports `createReport` 仅创建报表任务；inventory 写操作明确 sandbox-only）。
+- 结论：**NOT_AVAILABLE / NOT_PROVEN → NEEDS_MANUAL**；六项 transport prerequisites 全部 NOT_PROVEN；Amazon 保持 READ-ONLY，组合根不纳入生产。
+- 排除：createReport / reimbursement 查询 / inventory adjustment 查询 / Seller Central UI / Case·Support 泛化能力 / 浏览器自动化。
+- 产品路径：自动发现 → 自动核算 → 自动证据包 → **人工一键提交**（不因追求闭环降低 transport 门槛）。

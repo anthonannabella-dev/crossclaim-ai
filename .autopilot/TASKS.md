@@ -219,3 +219,11 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - 禁止事项：不得把 createReport / reimbursement 查询 / inventory adjustment 查询 / Seller Central UI 流程 / Case·Support 泛化能力当作“自动发起 FBA 索赔”写入口；不得用浏览器自动化绕过 API 能力缺失。
 - 判据：官方文档没有明确证明 = NOT_PROVEN；不能从“能读 reimbursement”推导“能创建 claim”。
 - 保持：AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写/客户提交 HOLD。
+
+### R42 · Amazon FBA Recovery Write-Operation Capability Evidence（DOCS ONLY，2026-10-01）
+
+- 交付：`docs/releases/AMAZON-FBA-RECOVERY-WRITE-OPERATION-EVIDENCE.md`（12 项输出 + 六项门槛矩阵 + 排除清单 + 取证限制）。
+- 证据：官方索引 `llms.txt`（216,733 bytes）全量检索 —— `reimburse` / `claim` / `safe-t` / `a-to-z` / `dispute` **均 0 命中**；相关域仅只读（Finances 检索、FBA Inventory `getInventorySummaries`；`createInventoryItem` 等为 sandbox-only；`createReport` 仅创建报表任务）。
+- 结论：**NOT_AVAILABLE / NOT_PROVEN → NEEDS_MANUAL**；Amazon 保持 READ-ONLY；组合根不纳入生产。
+- 明确排除：`createReport` / reimbursement 查询 / inventory adjustment 查询 / Seller Central UI / Case·Support 泛化能力 / 浏览器自动化。
+- 下一步：提交 R42 送审（docs-only）。

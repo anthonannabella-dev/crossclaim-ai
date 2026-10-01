@@ -1,16 +1,16 @@
 {
   "gate": "B2-FIX R1",
-  "head": "fd2237c",
+  "head": "329a3f2",
   "status": "IMPLEMENTING",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
-  "next_task": "R42 — Amazon FBA Recovery Write-Operation Capability Evidence（DOCS / EVIDENCE ONLY，不得实现 write adapter）：回答「Amazon 官方是否提供第三方应用可用的 FBA inventory-loss / reimbursement recovery 明确写 operation」；输出 12 项（业务动作名称 / 官方 API·operation / version·endpoint / required role·scope / 能否创建或提交 recovery action / provider idempotency / operation·request identifier / post-write status query / ambiguous timeout·5xx recovery / sandbox 能力 / 六项 transport prerequisites 矩阵 / 最终结论 WRITE_ELIGIBLE_FOR_DESIGN | READ_ONLY·NEEDS_MANUAL | NOT_AVAILABLE·NOT_PROVEN）。禁止把 createReport、reimbursement 查询、inventory adjustment 查询、Seller Central UI 流程、Case/Support 泛化能力当作「自动发起 FBA 索赔」写入口；禁止浏览器自动化绕过。组合根：暂不纳入生产；仅允许 test/fixture composition、disabled descriptor registration、无凭据开发装配。",
+  "next_task": "R42 送审：Amazon FBA Recovery Write-Operation Capability Evidence（docs-only，Issue #2 + 唤醒）—— 结论 NOT_AVAILABLE / NOT_PROVEN → NEEDS_MANUAL；附官方索引全量检索计数（reimburse/claim/safe-t/a-to-z/dispute 均 0 命中）、只读域对照（Finances/FBA Inventory/Reports）、12 项输出与六项门槛矩阵、明确排除清单与取证限制；期间 Amazon 保持 READ-ONLY，组合根不纳入生产，AMAZON WRITE / TRANSPORT / 生产凭据 继续 HOLD。",
   "send_head": "9b399f7",
   "decision_head": "9b399f7",
   "last_chatgpt_message": "MSG-20261001-27",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T10:13:48.925Z",
-  "previous_head": "fd2237c",
+  "updated_at": "2026-10-01T10:19:20.831Z",
+  "previous_head": "329a3f2",
   "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "9b399f7",
@@ -49,12 +49,12 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-01T10:13:12.899Z",
+  "last_tick_at": "2026-10-01T10:18:20.598Z",
   "state": "IMPLEMENT",
-  "last_action": "MSG-20261001-27 = PASS 收口：R41 PASS_CLOSE（无平行数据链）；下一批准工作 = R42 docs-only FBA 写操作能力取证",
-  "last_action_at": "2026-10-01T10:13:48.925Z",
-  "next_action": "R42 — Amazon FBA Recovery Write-Operation Capability Evidence（DOCS / EVIDENCE ONLY，不得实现 write adapter）：回答「Amazon 官方是否提供第三方应用可用的 FBA inventory-loss / reimbursement recovery 明确写 operation」；输出 12 项（业务动作名称 / 官方 API·operation / version·endpoint / required role·scope / 能否创建或提交 recovery action / provider idempotency / operation·request identifier / post-write status query / ambiguous timeout·5xx recovery / sandbox 能力 / 六项 transport prerequisites 矩阵 / 最终结论 WRITE_ELIGIBLE_FOR_DESIGN | READ_ONLY·NEEDS_MANUAL | NOT_AVAILABLE·NOT_PROVEN）。禁止把 createReport、reimbursement 查询、inventory adjustment 查询、Seller Central UI 流程、Case/Support 泛化能力当作「自动发起 FBA 索赔」写入口；禁止浏览器自动化绕过。组合根：暂不纳入生产；仅允许 test/fixture composition、disabled descriptor registration、无凭据开发装配。",
-  "current_head": "fd2237c",
+  "last_action": "R42 取证完成（docs-only）：官方 SP-API 文档索引 0 命中 reimburse/claim/safe-t/a-to-z/dispute → NOT_AVAILABLE / NOT_PROVEN → NEEDS_MANUAL",
+  "last_action_at": "2026-10-01T10:19:20.831Z",
+  "next_action": "R42 送审：Amazon FBA Recovery Write-Operation Capability Evidence（docs-only，Issue #2 + 唤醒）—— 结论 NOT_AVAILABLE / NOT_PROVEN → NEEDS_MANUAL；附官方索引全量检索计数（reimburse/claim/safe-t/a-to-z/dispute 均 0 命中）、只读域对照（Finances/FBA Inventory/Reports）、12 项输出与六项门槛矩阵、明确排除清单与取证限制；期间 Amazon 保持 READ-ONLY，组合根不纳入生产，AMAZON WRITE / TRANSPORT / 生产凭据 继续 HOLD。",
+  "current_head": "329a3f2",
   "reviewed_head": "549dba8",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-01T10:08:12.728Z",
-    "gapMs": 300172,
+    "previousTickAt": "2026-10-01T10:13:12.899Z",
+    "gapMs": 307700,
     "stale": false,
-    "checkedAt": "2026-10-01T10:13:12.899Z"
+    "checkedAt": "2026-10-01T10:18:20.598Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -536,5 +536,33 @@
     "composition_root": "暂不纳入生产组合根（仅 test/fixture composition、disabled descriptor registration、无凭据开发装配）",
     "next_round": "R42 = Amazon FBA Recovery Write-Operation Capability Evidence（DOCS/EVIDENCE ONLY）",
     "permanent_holds": "AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · CUSTOMER SUBMISSION HOLD"
+  },
+  "r42_write_operation_evidence": {
+    "round": "R42（MSG-20261001-27 NEXT，DOCS / EVIDENCE ONLY）",
+    "doc": "docs/releases/AMAZON-FBA-RECOVERY-WRITE-OPERATION-EVIDENCE.md",
+    "method": "官方索引 llms.txt（216,733 bytes）全量大小写不敏感计数 + api/reference 分册抽样；只读，无账号/凭据/写请求",
+    "counts": {
+      "reimburse": 0,
+      "claim": 0,
+      "safe-t": 0,
+      "a-to-z": 0,
+      "dispute": 0
+    },
+    "read_only_domains": [
+      "Finances v0 / v2024-06-19（retrieve financial information）",
+      "Finance Remittance（对账）",
+      "FBA Inventory v1 getInventorySummaries（只读；create/delete/add inventory 为 sandbox-only）",
+      "Reports API（createReport 仅创建报表任务）"
+    ],
+    "verdict": "NOT_AVAILABLE / NOT_PROVEN → NEEDS_MANUAL（六项 transport prerequisites 全部 NOT_PROVEN）",
+    "excluded": [
+      "createReport",
+      "reimbursement 查询",
+      "inventory adjustment 查询",
+      "Seller Central UI 流程",
+      "Case/Support 泛化能力",
+      "浏览器自动化"
+    ],
+    "holds": "AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · CUSTOMER SUBMISSION HOLD"
   }
 }
