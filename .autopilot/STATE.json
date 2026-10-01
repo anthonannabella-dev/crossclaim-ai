@@ -1,17 +1,17 @@
 {
   "gate": "B2-FIX R1",
-  "head": "5c0591d",
-  "status": "READY_FOR_REVIEW",
+  "head": "cb822a1",
+  "status": "IMPLEMENTING",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
-  "next_task": "等待 R42 裁决；期间 Amazon 保持 READ-ONLY（组合根不纳入生产）、AMAZON WRITE / REAL WRITE ADAPTER / TRANSPORT=false / 生产凭据 / 真实外写 / 客户提交 全部 HOLD；裁决后可进入下一只读平台或其他架构方指定工作项",
+  "next_task": "R42 REVISE（docs-only）：CHANGE A 结论改为 PUBLIC WRITE OPERATION NOT FOUND / NOT PROVEN（不得写无条件的 NOT_AVAILABLE/官方不存在）；CHANGE B 补 operation-level negative evidence matrix（Finances/FBA Inventory/Reports/Fulfillment Inbound/Fulfillment Outbound/Notifications/reimbursement·adjustment 读取来源 → inspected operations → closest candidate → why NOT recovery submission）；CHANGE C 三级状态 PROVEN_AVAILABLE / PROVEN_UNAVAILABLE / NOT_PROVEN，本轮落 NOT_PROVEN + executionDisposition=NEEDS_MANUAL；同时先把 MSG-20261001-28 原文逐字归档（FULL_COPY_OK）→ 提交 R42 RE-REVIEW（docs-only，Issue #2 + 唤醒）。通过后进入 R43 — Amazon Manual Recovery Handoff Design（ClaimItem → evidence completeness → recovery package → human approval → submission instructions/export → submitted-manual recording → outcome/reimbursement reconciliation）",
   "send_head": "5c0591d",
-  "decision_head": "9b399f7",
-  "last_chatgpt_message": "MSG-20261001-27",
+  "decision_head": "5c0591d",
+  "last_chatgpt_message": "MSG-20261001-28",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T10:25:29.066Z",
+  "updated_at": "2026-10-01T10:28:33.229Z",
   "previous_head": "5c0591d",
-  "architect_decision_pending": true,
+  "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "5c0591d",
   "last_sent_at": "2026-10-01T10:25:29.066Z",
@@ -49,12 +49,12 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-01T10:23:13.389Z",
+  "last_tick_at": "2026-10-01T10:28:13.588Z",
   "state": "IMPLEMENT",
-  "last_action": "R42 已投递（Amazon FBA Recovery Write-Operation Capability Evidence，docs-only）；等待架构方编号裁决",
-  "last_action_at": "2026-10-01T10:25:29.066Z",
-  "next_action": "等待 R42 裁决；期间 Amazon 保持 READ-ONLY（组合根不纳入生产）、AMAZON WRITE / REAL WRITE ADAPTER / TRANSPORT=false / 生产凭据 / 真实外写 / 客户提交 全部 HOLD；裁决后可进入下一只读平台或其他架构方指定工作项",
-  "current_head": "5c0591d",
+  "last_action": "MSG-20261001-28 = REVISE 收到（R42 证据语言收紧 + operation-level negative matrix + 三级状态）；归档与 CHANGE A/B/C 修改待下一轮执行",
+  "last_action_at": "2026-10-01T10:28:33.229Z",
+  "next_action": "R42 REVISE（docs-only）：CHANGE A 结论改为 PUBLIC WRITE OPERATION NOT FOUND / NOT PROVEN（不得写无条件的 NOT_AVAILABLE/官方不存在）；CHANGE B 补 operation-level negative evidence matrix（Finances/FBA Inventory/Reports/Fulfillment Inbound/Fulfillment Outbound/Notifications/reimbursement·adjustment 读取来源 → inspected operations → closest candidate → why NOT recovery submission）；CHANGE C 三级状态 PROVEN_AVAILABLE / PROVEN_UNAVAILABLE / NOT_PROVEN，本轮落 NOT_PROVEN + executionDisposition=NEEDS_MANUAL；同时先把 MSG-20261001-28 原文逐字归档（FULL_COPY_OK）→ 提交 R42 RE-REVIEW（docs-only，Issue #2 + 唤醒）。通过后进入 R43 — Amazon Manual Recovery Handoff Design（ClaimItem → evidence completeness → recovery package → human approval → submission instructions/export → submitted-manual recording → outcome/reimbursement reconciliation）",
+  "current_head": "cb822a1",
   "reviewed_head": "549dba8",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-01T10:18:20.598Z",
-    "gapMs": 292792,
+    "previousTickAt": "2026-10-01T10:23:13.389Z",
+    "gapMs": 300200,
     "stale": false,
-    "checkedAt": "2026-10-01T10:23:13.389Z"
+    "checkedAt": "2026-10-01T10:28:13.588Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -574,5 +574,17 @@
     "wakeup_channel": "https://chatgpt.com/c/6ab9ee1b-fd54-83ee-b363-b67750afcedd",
     "wakeup_delivery": "DELIVERED_VERIFIED",
     "verdict_expected": "NOT_AVAILABLE / NOT_PROVEN → NEEDS_MANUAL"
+  },
+  "r42_verdict": {
+    "message_id": "MSG-20261001-28",
+    "decision": "REVISE",
+    "reviewed_head": "5c0591d",
+    "archival": "PENDING（下一轮逐字归档 + FULL_COPY_OK）",
+    "changes": {
+      "A": "结论语言收紧为 PUBLIC WRITE OPERATION NOT FOUND / NOT PROVEN",
+      "B": "补 operation-level negative evidence matrix",
+      "C": "三级状态 PROVEN_AVAILABLE / PROVEN_UNAVAILABLE / NOT_PROVEN；本轮 NOT_PROVEN + NEEDS_MANUAL"
+    },
+    "holds": "AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · CUSTOMER SUBMISSION HOLD"
   }
 }
