@@ -420,6 +420,68 @@ describe('R45 S3 · basis / policy 引用强度（CHANGE A / C）', () => {
     expect(policy).not.toBeNull();
   });
 
+  // MSG-20261002-49 CHANGE A：引用损坏必须 fail-closed，不得静默降级成「无 basis」
+  it('既有 Projection 引用 dangling basis → 重建 fail-closed（不降级为无 basis）', async () => {
+    await createBasis(ORG_A, claimA, caseA, '100.0000');
+    await createObserved(ORG_A, claimA, '100.0000');
+    const first = await rebuildClaimReconciliationProjection(prisma, {
+      organizationId: ORG_A,
+      claimItemId: claimA,
+      reason: 'MANUAL_REBUILD',
+    });
+    // 人为制造弱引用损坏（basisId 指向不存在行）
+    await prisma.$executeRawUnsafe(
+      `UPDATE "ClaimReconciliationProjection" SET "basisId" = $2 WHERE "id" = $1`,
+      first.projectionId,
+      uuid(),
+    );
+    await expectRejection(
+      () =>
+        rebuildClaimReconciliationProjection(prisma, {
+          organizationId: ORG_A,
+          claimItemId: claimA,
+          reason: 'REFERENCE_CHECK',
+        }),
+      /PROJECTION_BASIS_REFERENCE_INVALID/,
+    );
+  });
+
+  it('既有 Projection 引用 cross-tenant policy → 重建 fail-closed', async () => {
+    await createBasis(ORG_A, claimA, caseA, '100.0000');
+    await createObserved(ORG_A, claimA, '100.0000');
+    const first = await rebuildClaimReconciliationProjection(prisma, {
+      organizationId: ORG_A,
+      claimItemId: claimA,
+      reason: 'MANUAL_REBUILD',
+    });
+    const foreignPolicy = await prisma.reconciliationTolerancePolicy.create({
+      data: {
+        organizationId: ORG_B,
+        provider: 'amazon',
+        operation: 'RECONCILIATION',
+        policyVersion: 'v1',
+        absoluteTolerance: '0',
+        relativeTolerance: '0',
+        effectiveAt: new Date('2026-09-08T00:00:00.000Z'),
+        createdByUserId: uuid(),
+      },
+    });
+    await prisma.$executeRawUnsafe(
+      `UPDATE "ClaimReconciliationProjection" SET "tolerancePolicyId" = $2 WHERE "id" = $1`,
+      first.projectionId,
+      foreignPolicy.id,
+    );
+    await expectRejection(
+      () =>
+        rebuildClaimReconciliationProjection(prisma, {
+          organizationId: ORG_A,
+          claimItemId: claimA,
+          reason: 'REFERENCE_CHECK',
+        }),
+      /PROJECTION_POLICY_REFERENCE_INVALID/,
+    );
+  });
+
   it('并发重建（system policy 缺失）→ 最终仍只有一条 system exact policy', async () => {
     await prisma.$executeRawUnsafe(`DELETE FROM "ReconciliationTolerancePolicy" WHERE "id" = $1`, SYSTEM_EXACT_POLICY_ID);
     await createBasis(ORG_A, claimA, caseA, '100.0000');

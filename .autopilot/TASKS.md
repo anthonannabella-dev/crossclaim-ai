@@ -510,3 +510,10 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - 送审：REVIEWED_HEAD 46074bd（Issue #2 comment 5934720171）。
 - NEXT：PASS → R45 S4（basis set / basis supersede / override / provider outcome 人工录入）；REVISE → 修订；BLOCK → 停止。
 - 禁止：Settlement / Billing / Fee / RecoveryLedger 改写 / 平台外写 / transport / 生产凭据。
+
+### MSG-20261002-49 裁决（R45 S3 = PASS WITH REVISE → S3 主体 CLOSED → 进入 R45 S4）
+
+- DECISION：**PASS WITH REVISE**（REVIEWED_HEAD 46074bd；归档 FULL_COPY_OK）。S3 主体 CLOSED；详见 STATE.r45_s3_verdict。
+- REVISE 落地：① `AMOUNT_EXCEEDS_EXPECTED` 结构化金额异常（区别于匹配歧义）② cross-tenant / dangling basis·policy → fail-closed（不得降级为无 basis）③ inputDigest 覆盖 algorithmVersion 与全部有效输入。
+- NEXT：**R45 S4 — Protected Reconciliation Actions**（basis_set / basis_supersede / override / provider_outcome_record；INTERNAL_WRITE + humanApproval + 锁后角色重验；人工 outcome evidence 逐条校验；supersede 顺序与后置失败恢复）。
+- 禁止：Settlement / Billing / Fee / RecoveryLedger 改写 / 平台外写 / transport / 生产凭据。

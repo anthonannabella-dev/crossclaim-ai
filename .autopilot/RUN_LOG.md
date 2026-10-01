@@ -1198,3 +1198,13 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 边界：未实现 S4 受保护写动作；零 Schema / migration / 触发器清单变更。
 - 证据：prisma validate valid · tsc PASS · 纯计算层 13/13 · projector DB 14/14 · 全量 173 files / 1695 tests PASS。
 - 送审：REVIEWED_HEAD 46074bd（Issue #2 comment 5934720171）；唤醒已投递并三要素验证（输入框清空 / 新消息在底部 / 正在生成）。
+
+## 2026-10-02 JST — MSG-20261002-49 = PASS WITH REVISE（R45 S3 主体 CLOSED）→ 3 项语义修正 + 批准进入 R45 S4
+
+- 裁决：**PASS WITH REVISE**（REVIEWED_HEAD 46074bd）；归档 FULL_COPY_OK；全文见 `AI-ARCHITECT-INBOX.md` 的 `MSG-20261002-49`。
+- S3 主体：可标记 CLOSED（纯计算层与 IO 分离、定点金额、canonical inputDigest、旧 Projection 仅 CAS、DELETE → CAS → INSERT 同事务、rollback 有真库证据、generation 一致、policy 无隐式 fallback、system exact policy 并发唯一）。
+- REVISE ①：over-recovery 不得一律归为匹配歧义 → 必须记录结构化异常 `AMOUNT_EXCEEDS_EXPECTED`（v1 可 status=AMBIGUOUS 但 reason 明确，且文档注明是 fail-closed exceptional state）。
+- REVISE ②（CHANGE A）：cross-tenant / dangling basis·policy 不得降级为「无 basis」→ 必须 fail-closed / consistency error；只有真正不存在 effective basis 才是 MATCHED。
+- REVISE ③（CHANGE B）：inputDigest 必须覆盖 fact identity/content、reversal、basis id/version/amount/currency、policy id/version/abs/rel、override、projection algorithm/version；顺序变化而语义相同 → digest 不变。
+- MATCHED 语义冻结：仅表示「事实已唯一关联但缺有效 basis」，不得被描述为 recovered / fully recovered / reimbursement complete / billable。
+- NEXT：**R45 S4 — Protected Reconciliation Actions**（四个动作；全部 INTERNAL_WRITE + humanApproval + 锁后 ACTIVE membership/role 重验；含人工 outcome 的 evidence 逐条校验与 supersede 顺序要求）。

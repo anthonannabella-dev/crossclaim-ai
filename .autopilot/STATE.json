@@ -1,17 +1,17 @@
 {
   "gate": "B2-FIX R1",
-  "head": "46074bd",
+  "head": "1b9246b",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
   "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
   "send_head": "07b7009",
   "decision_head": "07b7009",
-  "last_chatgpt_message": "MSG-20261002-48",
+  "last_chatgpt_message": "MSG-20261002-49",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T15:32:56.199Z",
-  "previous_head": "e34f28f",
-  "architect_decision_pending": true,
+  "updated_at": "2026-10-01T15:34:19.025Z",
+  "previous_head": "46074bd",
+  "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "46074bd",
   "last_sent_at": "2026-10-01T15:32:56.199Z",
@@ -49,12 +49,12 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-01T15:19:48.336Z",
+  "last_tick_at": "2026-10-01T15:33:46.078Z",
   "state": "IMPLEMENT",
-  "last_action": "R45 S3 已实施并送审 Implementation Checkpoint：deterministic projector（纯计算层 + 锁内 IO 层，DELETE → CAS → INSERT 整体替换 membership，含中途失败完整回滚验收）+ 27 项新增验收（13 纯函数 / 14 真实 PostgreSQL）；全量 173 files / 1695 tests PASS。",
-  "last_action_at": "2026-10-01T15:32:56.199Z",
-  "next_action": "等待 R45 S3 Implementation Checkpoint 裁决：①PASS → 进入 S4（受保护动作）②REVISE → 按 CHANGE 修订 ③BLOCK → 停止。",
-  "current_head": "46074bd",
+  "last_action": "MSG-20261002-49 = PASS WITH REVISE 已逐字归档（FULL_COPY_OK）：S3 主体 CLOSED；REVISE 三项（AMOUNT_EXCEEDS_EXPECTED 结构化异常 / cross-tenant·dangling 引用不得降级 / inputDigest 全覆盖）；批准进入 R45 S4。",
+  "last_action_at": "2026-10-01T15:34:19.025Z",
+  "next_action": "R45 S3 REVISE 落地（结构化金额异常 + 弱引用 fail-closed + digest 覆盖 algorithmVersion 与全输入 + MATCHED 语义文档约束）→ 随后进入 R45 S4 受保护动作（basis_set / basis_supersede / override / provider_outcome_record）。",
+  "current_head": "1b9246b",
   "reviewed_head": "07b7009",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-01T15:14:46.848Z",
-    "gapMs": 301489,
-    "stale": false,
-    "checkedAt": "2026-10-01T15:19:48.336Z"
+    "previousTickAt": "2026-10-01T15:19:48.336Z",
+    "gapMs": 837743,
+    "stale": true,
+    "checkedAt": "2026-10-01T15:33:46.078Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -250,7 +250,7 @@
     "integration_boundary_review": "AUTHORIZED_TO_PLAN（先提交设计/实施计划，不直接开放真实 transport）"
   },
   "r36_submission_comment": "5927087320",
-  "stale_recovered_at": "2026-10-01T15:05:57.798Z",
+  "stale_recovered_at": "2026-10-01T15:33:46.078Z",
   "engineering_regression_policy": {
     "source": "HOST PRODUCT DIRECTION 2026-10-01",
     "doc": "docs/releases/ENGINEERING-REGRESSION-POLICY.md",
@@ -1862,5 +1862,29 @@
     },
     "boundary": "NO Settlement · NO Billing · NO Fee · NO RecoveryLedger mutation · NO platform write · TRANSPORT=false · NO production credentials；未实现 S4 受保护写动作",
     "next": "PASS → R45 S4（basis set / basis supersede / override / provider outcome 人工录入）；REVISE → 按 CHANGE 修订；BLOCK → 停止"
+  },
+  "r45_s3_verdict": {
+    "message_id": "MSG-20261002-49",
+    "decision": "PASS WITH REVISE",
+    "reviewed_head": "46074bd",
+    "archival": "FULL_COPY_OK",
+    "archival_at": "2026-10-01T15:34:19.025Z",
+    "s3_status": "CLOSED（主体实现符合 MSG-48 授权范围；13/13 纯计算 + 14/14 PostgreSQL + 全量 1695 tests 与风险面匹配）",
+    "rulings": {
+      "matched_semantics": "MATCHED 认可，但仅作为「事实匹配状态」：= reimbursement fact 已唯一关联到该 Claim，但缺少有效 ExpectedRecoveryBasis，无法判断 PARTIAL/FULL。冻结：MATCHED 不得被 UI/API/audit 描述为 recovered / fully recovered / reimbursement complete / billable。",
+      "over_recovery": "REVISE —— 不得把所有 over-recovery 自动归为 AMBIGUOUS。必须区分「匹配歧义」与「金额异常」：对象归属已唯一确定、仅 netMatchedObserved > expected + tolerance 时，应记录结构化异常 AMOUNT_EXCEEDS_EXPECTED 并保持 projection 不进入 FULLY_RECONCILED。v1 枚举暂只有 5 状态时，可 status = AMBIGUOUS，但必须同时记录 ambiguityReason = AMOUNT_EXCEEDS_EXPECTED，并在文档注明这是 fail-closed exceptional state（不是多候选 Claim 的匹配歧义）；后续扩展状态模型时优先拆出 EXCEPTION/CONFLICT。",
+      "basis_degradation": "CHANGE A —— cross-tenant / dangling basis 不得降级成「无 basis」。真正不存在 effective basis → 可以 MATCHED；但出现 dangling basisId / cross-tenant basis reference / Projection 已引用错误 basis / effective basis 关系非法漂移时，必须 fail-closed / consistency error。Policy 同理。",
+      "digest_coverage": "CHANGE B —— inputDigest 必须覆盖所有会改变结果的输入：reimbursement fact identity/content、reversal、effective basis ID/version/amount/currency、tolerance policy ID/version/absolute/relative、applicable override、projection algorithm/version。任一有效输入变化 → 新 digest；输入顺序变化但语义相同 → digest 不变（最终 R45 回归必须明确测试）。",
+      "next_unit": "批准进入 R45 S4 — Protected Reconciliation Actions：recovery.reconciliation_basis_set / recovery.reconciliation_basis_supersede / recovery.reconciliation_override / recovery.reconciliation_provider_outcome_record，全部 INTERNAL_WRITE + humanApproval 并要求当前 ACTIVE membership/role 锁后重验。"
+    },
+    "s4_special_requirements": [
+      "人工 ProviderOutcomeFact：sourceKind=MANUAL_WITH_EVIDENCE；EvidenceArtifact ≥1；每个 evidence ID 存在 / 同 tenant / 不重复 / 合法 evidence 状态·type；structured reason；approval binding；失败时事实/审计/approval consumption 全部零推进。",
+      "Basis supersede 必须继续：lock → old basis CAS superseded → insert replacement → audit + approval consumption → commit；任何后置失败必须恢复旧 effective basis。",
+      "Override：每个 reimbursement fact 独立 approval；不修改原 fact；reason + evidence；cross-tenant / 错误 fact binding fail-closed。",
+      "不要在 S4 顺带开放 Settlement/Billing 或「可收费 recovered amount」。"
+    ],
+    "risks": "主要风险已从事务原子性转为状态语义被上层误读：MATCHED 被误当 recovered；金额异常与对象匹配歧义混为一个业务概念；损坏的弱引用被静默降级成「没有 basis」。这三点必须在 API/UI 之前锁死。",
+    "boundary": "NO Settlement · NO Billing · NO Fee · NO RecoveryLedger mutation · NO platform write · TRANSPORT=false · NO production credentials",
+    "next": "R45 S4 —— Protected Reconciliation Actions；完成后提交独立 Implementation Checkpoint。"
   }
 }

@@ -106,3 +106,55 @@ lock projection / claim scope（ClaimItem … FOR UPDATE；projection header …
 - `NEW_RISK_BOUNDARY` = **YES**（投影重算的一致性/并发边界；无新 Schema）。
 - `ARCH_REVIEW_REQUIRED` = **YES**。
 - 下一步：PASS → **R45 S4（受保护动作：basis set / basis supersede / override / provider outcome 人工录入）**；REVISE → 按 CHANGE 修订；BLOCK → 停止该方向。
+
+## 附录 · MSG-20261002-49 裁决结果与 REVISE 落地
+
+> 裁决：**PASS WITH REVISE — MSG-20261002-49**（REVIEWED_HEAD `46074bd`；归档 FULL_COPY_OK）。**S3 主体可标记 CLOSED**（13/13 纯计算 + 14/14 PostgreSQL + 全量 1695 tests 与风险面匹配）。
+
+### 1. 状态语义冻结（②）
+
+| 状态 | 冻结语义 |
+| --- | --- |
+| `UNMATCHED` | 无计入事实（net = 0） |
+| `MATCHED` | 事实已唯一关联到该 Claim，但**缺少有效 ExpectedRecoveryBasis** → 无法判断 PARTIAL/FULL；**不得**被 UI/API/audit 描述为 `recovered` / `fully recovered` / `reimbursement complete` / `billable` |
+| `PARTIALLY_RECONCILED` | net < expected 且超出容差 |
+| `FULLY_RECONCILED` | 在容差内达到 expected（仅表示对账完成，**不代表已可计费**） |
+| `AMBIGUOUS` | fail-closed 异常态：**匹配歧义**（多候选 / conflicting evidence / currency mismatch）或**金额异常**（`AMOUNT_EXCEEDS_EXPECTED`） |
+
+代码侧以 `PROJECTION_STATUS_MEANINGS` 常量固化（含单测断言），供 API/UI 复用，避免上层自行措辞。
+
+### 2. REVISE ①：金额异常与匹配歧义分离
+
+- 过度回收（`netMatchedObserved > expected + tolerance`）不再使用通用原因码；改为结构化异常 **`AMOUNT_EXCEEDS_EXPECTED`** 写入 `ambiguityReasons` 与 projection rebuild audit。
+- v1 枚举只有 5 个状态，因此 `status` 仍为 `AMBIGUOUS`，但语义已明确：这是 **fail-closed exceptional state（金额异常）**，**不是**「多个候选 Claim」的匹配歧义；后续扩展状态模型时优先拆出 `EXCEPTION` / `CONFLICT`。
+
+### 3. REVISE ②（CHANGE A）：引用损坏必须 fail-closed
+
+投影重建在**任何写入之前**校验（`assertWeakReferencesIntact`）：
+
+- 既有 Projection 的 `basisId` 必须存在且同租户、同 claimItem → 否则 `PROJECTION_BASIS_REFERENCE_INVALID`；
+- 既有 Projection 的 `tolerancePolicyId` 必须存在且同租户（或系统级） → 否则 `PROJECTION_POLICY_REFERENCE_INVALID`；
+- 本 claim 的 basis supersede 链不得漂移（`supersededAt` 非空时 successor 必须存在且同租户同 claim） → 否则 `BASIS_SUPERSEDE_CHAIN_INVALID`。
+
+只有「**真正不存在 effective basis**」才会落到 `MATCHED`；引用损坏一律 fail-closed，绝不解释成「业务上还没建立 basis」。
+
+### 4. REVISE ③（CHANGE B）：inputDigest 覆盖全部有效输入
+
+`inputDigest = sha256(canonicalJson({ algorithmVersion, claimItemId, basis{id,amount,currency,version}, policy{id,version,absolute,relative}, facts[{id,amount,currency,providerEventId,providerCaseRefCanonical,occurredAt}], overrides[{factId,decisionKind}] }))`
+
+- 新增 `algorithmVersion = reconciliation-projection/v1`（算法版本变化 → 新 digest）；
+- 单测覆盖：fact identity/content、reversal（事实从输入消失）、basis id/version/amount/currency、policy id/version/absolute/relative、override、算法版本 —— 任一变化 → digest 变化；仅输入顺序变化而语义相同 → digest 不变；
+- projection rebuild audit 同步记录 `algorithmVersion` 与 previous/new digest。
+
+### 5. REVISE 后验收
+
+| 项 | 结果 |
+| --- | --- |
+| `npx tsc --noEmit` | PASS（0 error） |
+| 纯计算层单测 | **15/15 PASS**（新增 MATCHED 语义冻结 + digest 全输入覆盖） |
+| projector DB 验收 | **16/16 PASS**（新增 dangling basis / cross-tenant policy → fail-closed） |
+| Schema 变更 | 无（仍为零 Schema 变更） |
+
+### 6. NEXT
+
+批准进入 **R45 S4 — Protected Reconciliation Actions**：`recovery.reconciliation_basis_set` / `recovery.reconciliation_basis_supersede` / `recovery.reconciliation_override` / `recovery.reconciliation_provider_outcome_record`，全部 INTERNAL_WRITE + humanApproval + 锁后 ACTIVE membership/role 重验；人工 outcome 需 evidence 逐条校验；supersede 遵循 S1 冻结顺序并保证后置失败恢复旧 effective basis；**不得顺带开放 Settlement/Billing 或「可收费 recovered amount」**。

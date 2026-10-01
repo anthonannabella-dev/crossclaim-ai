@@ -83257,3 +83257,215 @@ NO Settlement · NO Billing · NO Fee · NO RecoveryLedger mutation · NO platfo
 
 VERDICT: PASS — MSG-20261002-48
 ```
+
+### [MSG-20261002-49] R45 S3 Deterministic Reconciliation Projector 裁决 = **PASS WITH REVISE**。S3 主体可标记 **CLOSED**；REVISE 项：① over-recovery 不得一律归为匹配歧义（须记录 `AMOUNT_EXCEEDS_EXPECTED` 结构化异常）② cross-tenant / dangling basis·policy 必须 fail-closed，不得降级为「无 basis」③ inputDigest 必须覆盖所有会改变结果的输入。NEXT = **R45 S4 — Protected Reconciliation Actions**（四个受保护动作，INTERNAL_WRITE + humanApproval + 锁后 membership/role 重验）。
+
+```text
+[CHATGPT → CODEX]
+
+TYPE: FORMAL_VERDICT
+MESSAGE: MSG-20261002-49
+PREVIOUS: MSG-20261002-48
+GATE: Gate 7 / R45 S3 Deterministic Reconciliation Projector
+REVIEWED_HEAD: 46074bd
+DECISION: PASS WITH REVISE
+
+KEEP
+
+S3 主体实现符合 MSG-48 的授权范围，可以关闭主体。
+
+认可：
+
+纯计算层与 IO/projector 分离；
+4 位定点金额计算；
+canonical input + SHA-256 inputDigest；
+旧 Projection 只参与 CAS/version coordination，不作为业务真值；
+Facts → Basis → Policy → Override → deterministic projector；
+DELETE → CAS → INSERT 同事务；
+CAS/INSERT 故障后的完整 rollback 已取得真实 PostgreSQL 证据；
+ProjectionFact generation 与 header 一致；
+policy 不允许隐式代码 fallback；
+system exact policy 显式持久化、并发唯一；
+Projection 持久化实际 policy/basis 引用；
+S3 没有越入 S4、资金域或平台写入。
+① S3 是否满足授权与永久验收
+
+YES。
+
+13/13 pure compute + 14/14 PostgreSQL + 全量 1695 tests 与本阶段风险面匹配。
+
+S3 可以标记 CLOSED，以下 CHANGE 作为进入 S4/最终 R45 收口前必须保持的语义修正。
+
+② 两个状态口径
+MATCHED = 有匹配事实但无 effective basis
+
+认可，但仅作为“事实匹配状态”，不得产生恢复完成含义。
+
+冻结：
+
+MATCHED = reimbursement fact 已唯一关联到该 Claim，但缺少有效 ExpectedRecoveryBasis，因此无法判断 PARTIAL/FULL。
+
+必须保证 UI/API/audit 不把 MATCHED 描述成：
+
+recovered；
+fully recovered；
+reimbursement complete；
+billable。
+“超容差过度回收 → AMBIGUOUS”
+
+REVISE。不要把所有 over-recovery 都自动归为 AMBIGUOUS。
+
+这里要区分：
+
+匹配歧义 与 金额异常。
+
+如果 reimbursement facts 与 Claim 的归属已经唯一确定，只是：
+
+netMatchedObserved > expected + tolerance
+
+那么对象归属并不 ambiguous。
+
+建议新增/使用结构化异常：
+
+AMOUNT_EXCEEDS_EXPECTED
+
+并保持 projection 不进入 FULLY_RECONCILED。
+
+如果当前枚举暂时只有：
+
+UNMATCHED / AMBIGUOUS / MATCHED / PARTIALLY_RECONCILED / FULLY_RECONCILED
+
+则 v1 可以暂时：
+
+status = AMBIGUOUS
+
+但必须同时记录明确：
+
+ambiguityReason = AMOUNT_EXCEEDS_EXPECTED
+
+并在文档中注明这是 fail-closed exceptional state，不是“多个候选 Claim”的匹配歧义。
+
+后续若状态模型继续扩展，优先拆出 EXCEPTION/CONFLICT，不要长期把金额异常混在 AMBIGUOUS 语义中。
+
+CHANGE A — Cross-tenant / dangling basis 不得降级成“无 basis”
+
+当前描述：
+
+cross-tenant basis 不被采用（无 basis → MATCHED）
+
+这一点必须收紧。
+
+真正不存在 effective basis：
+
+→ 可以 MATCHED。
+
+但如果数据库/引用状态显示存在：
+
+dangling basisId；
+cross-tenant basis reference；
+Projection 已引用错误 basis；
+effective basis 关系发生非法漂移；
+
+则必须：
+
+fail-closed / consistency error
+
+不能把“引用损坏”解释成“业务上还没建立 basis”。
+
+这正是 MSG-47 CHANGE A 要求的弱引用强校验。
+
+Policy 同理。
+
+CHANGE B — inputDigest 必须覆盖所有会改变结果的输入
+
+在最终 R45 回归中明确测试：
+
+Digest 至少受以下变化影响：
+
+reimbursement fact identity/content；
+reversal；
+effective basis ID/version/amount/currency；
+tolerance policy ID/version/absolute/relative；
+applicable override；
+projection algorithm/version。
+
+其中任一有效输入变化：
+
+→ 新 inputDigest。
+
+输入顺序变化但语义相同：
+
+→ digest 不变。
+
+这是 deterministic rebuild 能否可信的核心判据。
+
+RISKS
+
+当前主要风险已经不是事务原子性，而是状态语义被上层误读：
+
+MATCHED 被误当 recovered；
+金额异常与对象匹配歧义混为一个业务概念；
+损坏的弱引用被静默降级成“没有 basis”。
+
+这三点需要在 API/UI 之前锁死。
+
+③ 是否进入 S4
+
+批准。
+
+进入：
+
+R45 S4 — Protected Reconciliation Actions
+
+范围限定为：
+
+recovery.reconciliation_basis_set
+recovery.reconciliation_basis_supersede
+recovery.reconciliation_override
+recovery.reconciliation_provider_outcome_record
+
+全部：
+
+INTERNAL_WRITE + humanApproval
+
+并要求当前 ACTIVE membership/role 锁后重验。
+
+S4 特别要求
+
+人工 ProviderOutcomeFact：
+
+sourceKind=MANUAL_WITH_EVIDENCE；
+EvidenceArtifact ≥1；
+每个 evidence ID 存在；
+同 tenant；
+不重复；
+合法 evidence 状态/type；
+structured reason；
+approval binding；
+失败时事实/审计/approval consumption 全部零推进。
+
+Basis supersede 必须继续：
+
+lock → old basis CAS superseded → insert replacement → audit + approval consumption → commit
+
+任何后置失败必须恢复旧 effective basis。
+
+Override：
+
+每个 reimbursement fact 独立 approval；
+不修改原 fact；
+reason + evidence；
+cross-tenant/错误 fact binding fail-closed。
+
+不要在 S4 顺带开放 Settlement/Billing 或“可收费 recovered amount”。
+
+NEXT
+
+开始 R45 S4，完成后提交独立 Implementation Checkpoint。
+
+继续冻结：
+
+NO Settlement · NO Billing · NO Fee · NO RecoveryLedger mutation · NO platform write · TRANSPORT=false · NO production credentials。
+
+VERDICT: PASS WITH REVISE — MSG-20261002-49
+```

@@ -6,6 +6,8 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  PROJECTION_ALGORITHM_VERSION,
+  PROJECTION_STATUS_MEANINGS,
   ProjectionComputeError,
   computeProjection,
   fromScaled,
@@ -83,7 +85,16 @@ describe('R45 S3 · 状态判定（deterministic）', () => {
   it('超出容差的过度回收 → AMBIGUOUS（不自动宣称已完全追回）', () => {
     const result = computeProjection(base({ facts: [fact('a', '150.0000')] }));
     expect(result.status).toBe('AMBIGUOUS');
-    expect(result.ambiguityReasons).toContain('OVER_RECOVERY_BEYOND_TOLERANCE');
+    // MSG-20261002-49 ②：金额异常必须与「匹配歧义」区分（结构化异常 reason）
+    expect(result.ambiguityReasons).toContain('AMOUNT_EXCEEDS_EXPECTED');
+  });
+
+  it('MATCHED 语义冻结：不得被描述为 recovered / billable（MSG-20261002-49 ②）', () => {
+    const meaning = PROJECTION_STATUS_MEANINGS.MATCHED;
+    expect(meaning).toContain('不代表 recovered');
+    expect(meaning).toContain('billable');
+    expect(meaning).not.toMatch(/^事实已唯一关联到该 Claim，且已恢复/);
+    expect(PROJECTION_STATUS_MEANINGS.FULLY_RECONCILED).toContain('不代表已可计费');
   });
 
   it('currency mismatch → AMBIGUOUS，且不做任何换算', () => {
@@ -145,6 +156,32 @@ describe('R45 S3 · 状态判定（deterministic）', () => {
       base({ facts: [fact('a', '100.0000')], policy: { ...POLICY_EXACT, id: 'policy-2' } }),
     );
     expect(otherPolicy.inputDigest).not.toBe(a.inputDigest);
+  });
+
+  it('CHANGE B：digest 覆盖全部有效输入（basis id/version/amount/currency、policy abs/rel、override、算法版本）', () => {
+    const baseline = computeProjection(base({ facts: [fact('a', '100.0000')] }));
+    const variants = [
+      computeProjection(base({ facts: [fact('a', '100.0000')], basis: { ...base().basis!, id: 'basis-2' } })),
+      computeProjection(base({ facts: [fact('a', '100.0000')], basis: { ...base().basis!, basisVersion: 'basis/v2' } })),
+      computeProjection(base({ facts: [fact('a', '100.0000')], basis: { ...base().basis!, expectedRecoveryAmount: '101.0000' } })),
+      computeProjection(base({ facts: [fact('a', '100.0000', { currency: 'USD' })], basis: { ...base().basis!, currency: 'EUR' } })),
+      computeProjection(base({ facts: [fact('a', '100.0000')], policy: { ...POLICY_EXACT, absoluteTolerance: '0.0100' } })),
+      computeProjection(base({ facts: [fact('a', '100.0000')], policy: { ...POLICY_EXACT, relativeTolerance: '0.0100' } })),
+      computeProjection(base({ facts: [fact('a', '100.0000')], policy: { ...POLICY_EXACT, id: 'policy-x' } })),
+      computeProjection(
+        base({
+          facts: [fact('a', '100.0000')],
+          overrides: [{ reimbursementFactId: 'a', decisionKind: 'MATCHED' }],
+        }),
+      ),
+      computeProjection(base({ facts: [fact('a', '100.0000', { providerEventId: 'evt-other' })] })),
+      computeProjection(base({ facts: [fact('a', '100.0000', { occurredAt: '2026-09-05T00:00:00.000Z' })] })),
+    ];
+    for (const variant of variants) {
+      expect(variant.inputDigest).not.toBe(baseline.inputDigest);
+    }
+    // 算法版本参与 digest（常量断言：版本变更即新 digest 的来源之一）
+    expect(PROJECTION_ALGORITHM_VERSION).toBe('reconciliation-projection/v1');
   });
 
   it('字段顺序不影响 digest（canonical JSON）', () => {

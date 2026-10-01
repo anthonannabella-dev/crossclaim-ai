@@ -30,6 +30,21 @@ export const PROJECTION_STATUSES = [
 
 export type ProjectionStatus = (typeof PROJECTION_STATUSES)[number];
 
+/** 投影算法版本：参与 inputDigest（CHANGE B：algorithm/version 变化必须产生新 digest） */
+export const PROJECTION_ALGORITHM_VERSION = 'reconciliation-projection/v1';
+
+/**
+ * 状态语义（MSG-20261002-49 ② 冻结）：**MATCHED 不是 recovered**。
+ * UI / API / audit 一律不得把 MATCHED 描述为 recovered / fully recovered / reimbursement complete / billable。
+ */
+export const PROJECTION_STATUS_MEANINGS: Record<ProjectionStatus, string> = {
+  UNMATCHED: '无计入事实（net = 0）',
+  MATCHED: '事实已唯一关联到该 Claim，但缺少有效 ExpectedRecoveryBasis —— 无法判断 PARTIAL/FULL，**不代表 recovered / fully recovered / reimbursement complete / billable**',
+  PARTIALLY_RECONCILED: 'net < expected 且超出容差（部分对账）',
+  FULLY_RECONCILED: '在容差内达到 expected（仅表示对账完成，不代表已可计费）',
+  AMBIGUOUS: 'fail-closed 异常态：匹配歧义（多候选 / conflicting evidence / currency mismatch）或金额异常（AMOUNT_EXCEEDS_EXPECTED）',
+};
+
 const SCALE = 4;
 const SCALE_FACTOR = 10n ** BigInt(SCALE);
 
@@ -202,14 +217,16 @@ export function computeProjection(input: ProjectionComputationInput): Projection
     } else if (diff < 0n) {
       status = 'PARTIALLY_RECONCILED';
     } else {
-      // 超出容差的过度回收：不得自动宣称已完全追回
-      ambiguityReasons.push('OVER_RECOVERY_BEYOND_TOLERANCE');
+      // 超出容差的过度回收（金额异常，而非匹配歧义）：不得自动宣称已完全追回
+      // MSG-20261002-49 ②：必须记录结构化异常 AMOUNT_EXCEEDS_EXPECTED（v1 暂以 status=AMBIGUOUS + 明确 reason 表达）
+      ambiguityReasons.push('AMOUNT_EXCEEDS_EXPECTED');
       status = 'AMBIGUOUS';
     }
   }
 
   const memberFactIds = included.map((fact) => fact.id);
   const digestInput = {
+    algorithmVersion: PROJECTION_ALGORITHM_VERSION,
     claimItemId: input.claimItemId,
     basis: input.basis
       ? {

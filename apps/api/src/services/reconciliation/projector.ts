@@ -24,6 +24,7 @@ import { Prisma, type PrismaClient } from '@prisma/client';
 import { prepareAuditInsert } from '../audit';
 import { canonicalProvider } from './fingerprint';
 import {
+  PROJECTION_ALGORITHM_VERSION,
   computeProjection,
   type ProjectionComputation,
   type ProjectionFactInput,
@@ -118,6 +119,23 @@ interface ProjectionRow {
   id: string;
   projectionVersion: number;
   inputDigest: string;
+  basisId: string | null;
+  tolerancePolicyId: string;
+}
+
+interface BasisRefRow {
+  id: string;
+  organizationId: string;
+  claimItemId: string;
+  supersededAt: Date | null;
+}
+
+interface PolicyRefRow {
+  id: string;
+  organizationId: string | null;
+  provider: string | null;
+  operation: string | null;
+  supersededAt: Date | null;
 }
 
 type TxClient = Prisma.TransactionClient;
@@ -185,6 +203,62 @@ async function resolveEffectivePolicy(
   }
   if (scoped.length === 1) return scoped[0];
   return ensureSystemExactPolicy(tx, input.now);
+}
+
+/**
+ * MSG-20261002-49 CHANGE A：**引用损坏必须 fail-closed**，不得降级成「业务上还没建立 basis」。
+ * 校验：(1) 既有 Projection 的弱引用（basisId / tolerancePolicyId）存在且归属正确；
+ *       (2) 本 claim 的 basis supersede 链没有非法漂移（指向不存在或跨 claim 的后继）。
+ */
+async function assertWeakReferencesIntact(
+  tx: TxClient,
+  input: { organizationId: string; claimItemId: string; previous: ProjectionRow | null },
+): Promise<void> {
+  const { organizationId, claimItemId, previous } = input;
+
+  if (previous?.basisId) {
+    const rows = await tx.$queryRaw<BasisRefRow[]>`
+      SELECT "id", "organizationId", "claimItemId", "supersededAt"
+        FROM "ExpectedRecoveryBasis" WHERE "id" = ${previous.basisId}`;
+    const row = rows[0];
+    if (!row || row.organizationId !== organizationId || row.claimItemId !== claimItemId) {
+      throw new ReconciliationProjectorError(
+        'PROJECTION_BASIS_REFERENCE_INVALID',
+        '既有 Projection 引用的 basis 不存在 / 跨租户 / 跨 claim（引用损坏必须 fail-closed）',
+      );
+    }
+  }
+
+  if (previous?.tolerancePolicyId) {
+    const rows = await tx.$queryRaw<PolicyRefRow[]>`
+      SELECT "id", "organizationId", "provider", "operation", "supersededAt"
+        FROM "ReconciliationTolerancePolicy" WHERE "id" = ${previous.tolerancePolicyId}`;
+    const row = rows[0];
+    const tenantOk = row != null && (row.organizationId === organizationId || row.organizationId === null);
+    if (!row || !tenantOk) {
+      throw new ReconciliationProjectorError(
+        'PROJECTION_POLICY_REFERENCE_INVALID',
+        '既有 Projection 引用的 tolerance policy 不存在或跨租户（引用损坏必须 fail-closed）',
+      );
+    }
+  }
+
+  // basis supersede 链漂移检测：本 claim 的历史 basis 若被判为 superseded，其 successor 必须存在且属于同一 claim
+  const chain = await tx.$queryRaw<{ id: string; successorId: string | null; successorOk: boolean }[]>`
+    SELECT b."id",
+           b."supersededByBasisId" AS "successorId",
+           COALESCE(s."organizationId" = b."organizationId" AND s."claimItemId" = b."claimItemId", false) AS "successorOk"
+      FROM "ExpectedRecoveryBasis" b
+      LEFT JOIN "ExpectedRecoveryBasis" s ON s."id" = b."supersededByBasisId"
+     WHERE b."organizationId" = ${organizationId} AND b."claimItemId" = ${claimItemId}
+       AND b."supersededAt" IS NOT NULL`;
+  const broken = chain.filter((row) => !row.successorId || !row.successorOk);
+  if (broken.length > 0) {
+    throw new ReconciliationProjectorError(
+      'BASIS_SUPERSEDE_CHAIN_INVALID',
+      'basis supersede 链非法漂移（后继缺失或跨 claim/租户）：' + broken.map((row) => row.id).join(','),
+    );
+  }
 }
 
 /**
@@ -289,7 +363,7 @@ export async function rebuildClaimReconciliationProjection(
 
     // 锁定 projection header（若存在）
     const existing = await tx.$queryRaw<ProjectionRow[]>`
-      SELECT "id", "projectionVersion", "inputDigest"
+      SELECT "id", "projectionVersion", "inputDigest", "basisId", "tolerancePolicyId"
         FROM "ClaimReconciliationProjection"
        WHERE "organizationId" = ${organizationId} AND "claimItemId" = ${claimItemId}
        FOR UPDATE`;
@@ -298,6 +372,9 @@ export async function rebuildClaimReconciliationProjection(
     }
     const previous = existing[0] ?? null;
     const nextVersion = previous ? previous.projectionVersion + 1 : 1;
+
+    // CHANGE A：引用完整性在任何写入之前判定（损坏 → fail-closed，绝不静默降级）
+    await assertWeakReferencesIntact(tx, { organizationId, claimItemId, previous });
 
     let projectionId: string;
     if (previous) {
@@ -373,6 +450,7 @@ export async function rebuildClaimReconciliationProjection(
         entityId: projectionId,
         changes: {
           claimItemId,
+          algorithmVersion: PROJECTION_ALGORITHM_VERSION,
           previousInputDigest: previous?.inputDigest ?? null,
           newInputDigest: computation.inputDigest,
           previousProjectionVersion: previous?.projectionVersion ?? null,
