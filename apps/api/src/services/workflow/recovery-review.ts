@@ -22,6 +22,7 @@ import { prepareAuditInsert } from '../audit';
 import {
   APPEAL_SUBMIT_ACTION,
   CLAIM_SUBMIT_ACTION,
+  PLATFORM_WRITE_ACTION,
   RECOVERY_CONFIRMATION_ACTION,
 } from '../action-guard/approval-verifier';
 import { WorkflowError } from './opportunity-review';
@@ -39,7 +40,7 @@ export const REVIEW_ACTIONS = {
  * 非资金动作**白名单**（当前仅 claim.submit）。默认动作（commission.charge）与资金动作仍要求
  * 完整金额/币种/依据；白名单之外的动作一律拒绝，避免"任何非默认动作都被当作非资金动作"。
  */
-export const NON_MONEY_APPROVAL_ACTIONS = [CLAIM_SUBMIT_ACTION, APPEAL_SUBMIT_ACTION] as const;
+export const NON_MONEY_APPROVAL_ACTIONS = [CLAIM_SUBMIT_ACTION, APPEAL_SUBMIT_ACTION, PLATFORM_WRITE_ACTION] as const;
 
 export type HighValueReviewState = 'NOT_REQUIRED' | 'PENDING' | 'APPROVED' | 'REJECTED';
 

@@ -683,3 +683,18 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 新增单测 platform-write-response-contract.test.ts：5/5 PASS。
 - 边界：未接线路由、未接真实 adapter、transport 恒关。
 - 下一步：P1 主体（路由 + 守卫接线）。
+
+## 2026-10-01 JST — R37 P1/P2：platform.write HTTP 入口接线（路由 + 守卫 + 服务端快照/审批绑定）
+
+- 新增 `apps/api/src/services/platform-write/http-request.ts`：入口编排（HTTP → 守卫 → 服务端快照/审批绑定 → 执行）。
+  · 拒绝客户端自证：organizationId / snapshotDigest / basisReference / payloadDigest / payload → 400 PLATFORM_WRITE_CLIENT_ASSERTION_REJECTED（服务端事实只能由服务端重算）。
+  · 快照载荷只由 DB 事实构成（caseNo/domain/status/claimedAmount/recoveredAmount/currency/targetKind/targetId/targetStatus/targetRound/evidenceCount）；digest → `basisReference`，`pw1-<sha256(version|digest)>` → 幂等键。
+  · 目标解析按 CLAIM（默认 round=1）/ APPEAL（默认最新轮次，同轮多行 → 409 TARGET_AMBIGUOUS）；跨租户与不存在一律 404。
+  · 未注入 Action Guard → 403 ACTION_GUARD_NOT_CONFIGURED（fail closed）。
+  · transport 恒关 → NEEDS_MANUAL，零投递、零账本写入、不消费审批；并断言 sinkCalls 必须为 0。
+  · transport 若被打开：抛 PLATFORM_WRITE_TRANSPORT_NOT_WIRED（503），绝不静默降级（T1/T2/T3 属 P3）。
+- 接线：`workflow/http-routes.ts` 新增 `POST /cases/:id/platform/write` 分支 + 结构化错误映射；`server.ts` WORKFLOW_PATH 放行该路径（此前在 server 层就是 404「纸面存在、实际不可达」）。
+- 审批策略：`NON_MONEY_APPROVAL_ACTIONS += platform.write`（仅绑定 basisReference = 服务端快照摘要，复用 recovery.review_required/approved 事件族）。
+- 新增 `apps/api/src/__tests__/platform-write-http-db.test.ts`：12/12 PASS（真实 HTTP + PostgreSQL）—— H1a 未认证 401 / H1b 跨租户 404 / H2 缺守卫装配 403 / H3a 缺审批 / H3b platform·tenant·gate·默认只读 / H3c 目标不存在 / H3d 非法 targetKind / H4a 客户端自证 400 / H4b 幂等键不一致 409 / H4c 回抄服务端幂等键 200 / H7 合法审批 → 200 NEEDS_MANUAL + 零账本零消费零 platform.write 审计 / H7b 审批绑定他摘要 403 APPROVAL_PAYLOAD_MISMATCH。
+- 回归：跨模块 37 files / 470 tests PASS（platform-write + action-guard + tenant-isolation + architecture-contract）；全量 154 files / 1472 tests PASS；tsc PASS；prisma validate valid（未改 Schema）。
+- 边界：未接真实 adapter、未开启 transport、无生产凭据/真实外写/资金/客户提交；HTTP 层不直接调用 sink。

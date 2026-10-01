@@ -48,6 +48,10 @@ import {
 } from '../action-guard/approval-tx-verify';
 import { ApprovalBoundaryError } from '../action-guard/approval-tx-verify';
 import { createPrismaActionGuardAuditPort } from '../action-guard/runtime-guard-composition';
+import {
+  PlatformWriteRequestError,
+  requestPlatformWrite,
+} from '../platform-write/http-request';
 import type { AuditWriter } from '../audit';
 import { submitClaimWithApproval } from '../claims/claim-submission';
 import { BILLING_DRAFT_ACTION, createBillingDraft } from '../billing/billing-draft';
@@ -156,6 +160,8 @@ const CASE_CLAIM_PREPARE_PATH = /^\/cases\/([^/]+)\/claim\/prepare$/;
 const CASE_BILLING_DRAFT_PATH = /^\/cases\/([^/]+)\/billing\/draft$/;
 // ② 下一小批次（MSG-20261001-14 §5）：appeal.submit（Appeal 人工提交 · 独立动作与审批绑定）
 const CASE_APPEAL_SUBMIT_PATH = /^\/cases\/([^/]+)\/appeal\/submit$/;
+// R37 P1（MSG-20261001-22 CHANGE A）：平台真实写回入口（EXTERNAL_WRITE · transport 恒关）
+const CASE_PLATFORM_WRITE_PATH = /^\/cases\/([^/]+)\/platform\/write$/;
 // MSG-20260929-30：运营看板（只读投影，GET only）
 const OPERATIONS_DASHBOARD_PATH = /^\/operations\/dashboard$/;
 const OPERATIONS_CLAIMS_PATH = /^\/operations\/claims$/;
@@ -248,6 +254,8 @@ function statusFor(error: unknown): { code: number; error: string } {
   if (error instanceof ActionGuardApprovalRequiredError) return { code: 409, error: error.code };
   if (error instanceof ActionGuardApprovalVerificationError) return { code: 403, error: error.code };
   if (error instanceof ActionGuardNotConfiguredError) return { code: 403, error: error.code };
+  // R37 P1：platform.write 入口的结构化拒绝（客户端自证 / 幂等键不一致 / 目标不存在等）
+  if (error instanceof PlatformWriteRequestError) return { code: error.httpStatus, error: error.code };
   // R2：锁内审批核验失败 → 403 + 精确原因（APPROVAL_*）
   if (error instanceof ApprovalBoundaryError) return { code: 403, error: error.reason };
   if (error instanceof WorkflowError) {
@@ -359,6 +367,7 @@ export async function handleWorkflowRequest(
   const caseClaimPrepare = CASE_CLAIM_PREPARE_PATH.exec(path);
   const caseBillingDraft = CASE_BILLING_DRAFT_PATH.exec(path);
   const caseAppealSubmit = CASE_APPEAL_SUBMIT_PATH.exec(path);
+  const casePlatformWrite = CASE_PLATFORM_WRITE_PATH.exec(path);
   const operationsDashboard = OPERATIONS_DASHBOARD_PATH.test(path);
   const operationsClaims = OPERATIONS_CLAIMS_PATH.test(path);
   const operationsRecovery = OPERATIONS_RECOVERY_PATH.test(path);
@@ -391,7 +400,7 @@ export async function handleWorkflowRequest(
     adminPermissionMatrix ||
     adminMemberDetail !== null ||
     adminKillSwitch;
-  if (!adminAny && !operationsDashboard && !operationsClaims && !operationsRecovery && !review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !paymentReviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !replayPath && !replayReviewPath && !retryDuePath && !retryDueFreezePath && !retryDueReviewPath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim && !caseClaimSubmit && !caseClaimPrepare && !caseBillingDraft && !caseAppealSubmit) {
+  if (!adminAny && !operationsDashboard && !operationsClaims && !operationsRecovery && !review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !paymentReviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !replayPath && !replayReviewPath && !retryDuePath && !retryDueFreezePath && !retryDueReviewPath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim && !caseClaimSubmit && !caseClaimPrepare && !caseBillingDraft && !caseAppealSubmit && !casePlatformWrite) {
     return false;
   }
 
@@ -1052,6 +1061,27 @@ export async function handleWorkflowRequest(
       return true;
     }
 
+    if (casePlatformWrite) {
+      // R37 P1/P2：平台真实写回入口（EXTERNAL_WRITE · transport 恒关）
+      // 快照/摘要由服务端重算，客户端自证字段一律拒绝；响应恒为 platformWriteExecuted=false。
+      const body = await readJsonBody(req);
+      const caseId = casePlatformWrite[1] ?? '';
+      const result = await requestPlatformWrite(
+        {
+          organizationId: context.organizationId,
+          actorUserId: context.userId,
+          role: context.role,
+          caseId,
+        },
+        body,
+        {
+          prisma: deps.prisma,
+          ...(deps.actionGuard ? { actionGuard: deps.actionGuard } : {}),
+        },
+      );
+      sendJson(res, result.httpStatus, result.body);
+      return true;
+    }
     if (caseBillingDraft) {
       // ② 下一小批次：账单草稿写入（受保护动作 billing.draft · INTERNAL_WRITE）
       const body = await readJsonBody(req);

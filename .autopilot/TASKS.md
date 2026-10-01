@@ -118,3 +118,11 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 | `CONTRACT-REGRESSION` | 模块接口变更 → contract regression | 接口变更 | 长期有效（已生效） |
 
 > 全文：`docs/releases/ENGINEERING-REGRESSION-POLICY.md`；AGENTS.md 已同步同一约束。
+
+### platform.write 进展（2026-10-01 · R37 P1/P2）
+
+- `POST /cases/:id/platform/write` 已接线（EXTERNAL_WRITE · fail-closed）：服务端从 DB 事实重算快照/摘要/幂等键；客户端自证 digest/basisReference/payload/organizationId 一律 400；幂等键不一致 409。
+- 守卫：`platform.write` 经 withActionGuard（humanApproval）；未注入 Action Guard → 403 ACTION_GUARD_NOT_CONFIGURED；审批绑定 `basisReference` = 服务端快照摘要；载荷策略白名单 `NON_MONEY_APPROVAL_ACTIONS += platform.write`。
+- transport 恒关：零投递、零账本写入、不消费审批；响应 `platformWriteExecuted=false` / `executionDisposition=NEEDS_MANUAL`。
+- 验收：`platform-write-http-db.test.ts` 12/12（H1–H4/H7 子集，真实 HTTP + PostgreSQL）；跨模块回归 37 文件 / 470 项 PASS；全量 154 文件 / 1472 项 PASS；tsc PASS。
+- 剩余：P3 T1/T3 编排接线（`acquireExecutionRight` / `settleAttempt`）→ P4 H5/H6/H8（重放同一链 / 并发唯一链 / 断连幂等）→ P5 全量回归 + Golden Path E2E + CI → 送审 Integration Boundary Implementation Checkpoint。

@@ -1,16 +1,16 @@
 {
   "gate": "B2-FIX R1",
-  "head": "ddba459",
-  "status": "RECONCILED",
+  "head": "1f85240",
+  "status": "IMPLEMENTING",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
-  "next_task": "P1 主体：POST /cases/:id/platform/write 路由 + withActionGuard 接线（fail-closed，transport 仍关），响应经 buildPlatformWriteResponse 输出（platformWriteExecuted=false / executionDisposition=NEEDS_MANUAL）→ P2 服务端快照/审批绑定 → P3 T1/T3 编排 → P4 H1–H8+补充断言 → P5 全量回归+Golden Path E2E+CI",
+  "next_task": "P3：T1/T3 编排接线（acquireExecutionRight + settleAttempt，仍不开放真实 transport）→ P4 HTTP 层 H5/H6/H8（重放同一链 / 并发唯一链 / 断连幂等）真实 PostgreSQL 证据 → P5 全量回归 + Golden Path E2E + CI → 送审 Integration Boundary Implementation Checkpoint",
   "send_head": "7d888cc",
   "decision_head": "7d888cc",
   "last_chatgpt_message": "MSG-20261001-22",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T08:23:02.555Z",
-  "previous_head": "d2c82fa",
+  "updated_at": "2026-10-01T08:40:18.428Z",
+  "previous_head": "1f85240",
   "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "ddba459",
@@ -49,12 +49,12 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-01T08:12:16.317Z",
+  "last_tick_at": "2026-10-01T08:23:44.400Z",
   "state": "IMPLEMENT",
-  "last_action": "P1 增量：platform.write HTTP 响应契约（services/platform-write/response-contract.ts）—— platformWriteExecuted 恒 false、executionDisposition=NEEDS_MANUAL、provider 成功字段黑名单；单测 5/5、tsc PASS",
-  "last_action_at": "2026-10-01T08:23:02.554Z",
-  "next_action": "P1 主体：POST /cases/:id/platform/write 路由 + withActionGuard 接线（fail-closed，transport 仍关），响应经 buildPlatformWriteResponse 输出（platformWriteExecuted=false / executionDisposition=NEEDS_MANUAL）→ P2 服务端快照/审批绑定 → P3 T1/T3 编排 → P4 H1–H8+补充断言 → P5 全量回归+Golden Path E2E+CI",
-  "current_head": "ddba459",
+  "last_action": "R37 P1/P2 完成：platform.write HTTP 入口接线（服务端快照/审批绑定/fail-closed 守卫）",
+  "last_action_at": "2026-10-01T08:40:18.428Z",
+  "next_action": "P3：T1/T3 编排接线（acquireExecutionRight + settleAttempt，仍不开放真实 transport）→ P4 HTTP 层 H5/H6/H8（重放同一链 / 并发唯一链 / 断连幂等）真实 PostgreSQL 证据 → P5 全量回归 + Golden Path E2E + CI → 送审 Integration Boundary Implementation Checkpoint",
+  "current_head": "1f85240",
   "reviewed_head": "549dba8",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-01T08:08:33.107Z",
-    "gapMs": 223211,
-    "stale": false,
-    "checkedAt": "2026-10-01T08:12:16.317Z"
+    "previousTickAt": "2026-10-01T08:12:16.317Z",
+    "gapMs": 688083,
+    "stale": true,
+    "checkedAt": "2026-10-01T08:23:44.400Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -250,7 +250,7 @@
     "integration_boundary_review": "AUTHORIZED_TO_PLAN（先提交设计/实施计划，不直接开放真实 transport）"
   },
   "r36_submission_comment": "5927087320",
-  "stale_recovered_at": "2026-10-01T08:01:55.601Z",
+  "stale_recovered_at": "2026-10-01T08:23:44.400Z",
   "engineering_regression_policy": {
     "source": "HOST PRODUCT DIRECTION 2026-10-01",
     "doc": "docs/releases/ENGINEERING-REGRESSION-POLICY.md",
@@ -274,5 +274,29 @@
       "D": "transport 双重门控（global gate + adapter 注册 + 能力校验 + T1 授权）"
     },
     "scope": "仅 P1–P5：HTTP 接线 + server-side boundary validation + typed adapter capability registry + transport gate enforcement + H1–H8 与补充断言；不得接真实 adapter/credential/provider write"
+  },
+  "platform_write_http_batch": {
+    "status": "PROGRESS（HTTP 接线 + 服务端快照/审批绑定完成；T1/T2/T3 与 H5/H6/H8 属 P3/P4）",
+    "route": "POST /cases/:id/platform/write（EXTERNAL_WRITE · fail-closed · transport 恒关）",
+    "files": [
+      "apps/api/src/services/platform-write/http-request.ts",
+      "apps/api/src/services/workflow/http-routes.ts",
+      "apps/api/src/server.ts",
+      "apps/api/src/services/workflow/recovery-review.ts",
+      "apps/api/src/__tests__/platform-write-http-db.test.ts"
+    ],
+    "invariants": [
+      "身份/租户来自服务端会话与路径；跨租户一律 404（不泄露存在性）",
+      "快照/摘要/幂等键全部服务端重算；客户端自证字段（organizationId/snapshotDigest/basisReference/payload/payloadDigest）一律 400",
+      "客户端声明幂等键与服务端派生不一致 → 409 PLATFORM_WRITE_IDEMPOTENCY_KEY_MISMATCH",
+      "Action Guard：未注入 → 403 ACTION_GUARD_NOT_CONFIGURED；审批绑定 basisReference = 服务端快照摘要",
+      "transport 恒关：零投递、零账本写入、不消费审批；响应 platformWriteExecuted=false / executionDisposition=NEEDS_MANUAL"
+    ],
+    "approval_policy": "NON_MONEY_APPROVAL_ACTIONS += platform.write（仅绑定 basisReference；复用既有 recovery.review_required/approved 事件族）",
+    "acceptance": "platform-write-http-db.test.ts 12/12（H1a/H1b/H2/H3a/H3b/H3c/H3d/H4a/H4b/H4c/H7/H7b）",
+    "regression": "跨模块 37 files / 470 tests PASS；全量 154 files / 1472 tests PASS",
+    "tsc": "PASS",
+    "prisma_validate": "valid（本批次未改 Schema）",
+    "boundary": "真实 adapter / transport / 生产凭据 / 真实外写 继续 HOLD"
   }
 }
