@@ -947,3 +947,10 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 12 项要求：不 UPDATE Submission / raw+canonical 分开 / 空 ref 拒绝 / 跨租户·错 submission·非 ACTIVE 成员 fail-closed / 并发至多一次 / 不产生 accepted·reimbursed·recovered / 不改 ClaimItem 状态 / 不消费旧 approval / 独立 action+binding / 读取展示语义。
 - 证据：S4 7/7 PASS；回归 35 files / 336 tests PASS；tsc PASS；未改 Schema/migration/触发器清单；无新增依赖。
 - 送审：REVIEWED_HEAD 6b5ec65（Issue #2 comment 5930826355 / CI 36858596490）；唤醒已投递并验证。
+
+## 2026-10-01 JST — MSG-20261001-37 = PASS（R43 S4 关闭）→ 进入 R43 S5
+
+- 裁决：**PASS**（REVIEWED_HEAD 6b5ec65）。S4 关闭；动作名 + rmr1: independent binding 认可；canonical 不 lower-case + DB unique 认可。
+- 非阻塞建议：未来新增动作优先“动作/命令”命名；报告口径 = 实际 test case 数 + acceptance 条目数。
+- 档案：`AI-ARCHITECT-INBOX.md` → `MSG-20261001-37`；`tools/verdict-diff/compare.mjs` = **FULL_COPY_OK**。
+- NEXT：**R43 S5 — Read-only Consistency Checker + CI**（12 项只读检查 + CI fresh/upgrade/clean/drift）；S5 不得实现 repair mode；完成后 S6 全量回归收口。

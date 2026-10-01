@@ -309,3 +309,9 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - DECISION：**PASS**（REVIEWED_HEAD 4c6c865；归档 FULL_COPY_OK）。S3 正式关闭。
 - NEXT：**R43 S4**：受保护 reference 补录动作 + canonicalization + append-only INSERT + 审计 + 读取/展示；12 项要求见 STATE.r43s3_rereview_verdict.s4_scope。
 - 禁止：不 UPDATE Submission / 不产生 accepted·reimbursed·recovered / 不改 ClaimItem 状态 / 不消费旧 approval / 不进入 outcome·reconciliation。
+
+### MSG-20261001-37 裁决（R43 S4 关闭 → R43 S5 只读 checker + CI）
+
+- DECISION：**PASS**（REVIEWED_HEAD 6b5ec65；归档 FULL_COPY_OK）。S4 正式关闭。
+- NEXT：**R43 S5**：`tools/consistency/check-recovery-manual-submission.mjs` 12 项只读检查；CI 同时覆盖 fresh deploy / upgrade path / clean / intentional-drift；不得 repair mode。
+- 保持：AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · SETTLEMENT/BILLING LINKAGE HOLD。

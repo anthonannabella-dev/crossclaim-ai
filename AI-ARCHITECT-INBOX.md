@@ -81252,3 +81252,131 @@ AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CR
 
 VERDICT: PASS — MSG-20261001-36
 ```
+
+### [MSG-20261001-37] R43 Manual Recovery Persistence / S4 Provider Case Reference —— **PASS**（S4 关闭；NEXT = R43 S5 — Read-only Consistency Checker + CI；不得实现 repair mode）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE: FORMAL_VERDICT
+MESSAGE: MSG-20261001-37
+PREVIOUS: MSG-20261001-36
+GATE: Gate 7 / R43 Manual Recovery Persistence / S4 Provider Case Reference
+REVIEWED_HEAD: 6b5ec65
+DECISION: PASS
+
+KEEP
+
+S4 可以关闭。
+
+本轮关键边界均正确：
+
+RecoveryManualSubmission 保持 append-only，没有为补录 reference 做 UPDATE；
+RecoveryManualSubmissionReference 承担独立事实；
+raw / canonical 分离；
+canonicalization 保持 trim → NFKC → 去零宽 → 折叠空白；
+未经 provider 语义证明不 lower-case；
+DB unique constraint 是 canonical 冲突的最终一致性兜底；
+独立 Action Guard action、独立 approval、独立 rmr1: binding；
+S3 approval 无法复用于 S4；
+锁后 membership/role 重验；
+并发补录相同 canonical reference 至多一次；
+reference 补录没有被解释为 provider accepted / reimbursed / recovered；
+ClaimItem 继续保持 SUBMITTED_MANUAL；
+Settlement / RecoveryLedger / Billing / Payment 零副作用。
+三项答复
+
+① S4 可以关闭：YES。
+
+批准进入 S5：只读一致性 checker + CI 接线。
+
+② recovery.manual_submit_reference_recorded + rmr1:：认可。
+
+动作与 S3 recovery.manual_submit 的业务含义明确分离，独立 approval binding 是正确边界。
+
+③ canonical 不 lower-case + DB unique：认可。
+
+CASE-777 与 case-777 当前允许作为不同 canonical value 是正确的保守行为。在 Amazon/provider 官方语义证明 case-insensitive 之前，不得自行合并。
+
+CHANGE
+
+无阻塞 CHANGE。
+
+有一个命名层面的非阻塞建议：未来新增动作时优先保持“动作/命令”命名风格，而不是事件过去式；但当前 action 已完整接入 Guard、approval 和测试，不要求为了命名重构 S4。
+
+RISKS
+
+S5 最大风险是 checker 被逐渐变成“修复器”。
+
+必须坚持：
+
+detect ≠ repair
+
+checker 只能读取、报告、返回机器可判定退出码；不得：
+
+自动 UPDATE/DELETE；
+自动补 submission/reference；
+自动改变 ClaimItem 状态；
+自动消费/修复 approval；
+自动去重；
+自动联动 Settlement/Billing；
+因发现不一致而自行推断 provider accepted/reimbursed。
+TEST
+
+S4 当前证据接受，并应长期保留：
+
+Submission immutable；
+ClaimItem 状态不变；
+canonical normalization；
+case preservation；
+DB duplicate enforcement；
+concurrent insert ≤ 1；
+tenant/membership fail-closed；
+S3 approval 不可复用；
+wrong canonical binding 拒绝；
+provider/financial facts 零副作用。
+
+另外送审文字称“测试 7 项”，但列出了 S4-01 至 S4-08。以后统一报告为实际 test case 数 + acceptance 条目数；不影响本次 PASS。
+
+NEXT
+
+批准进入：
+
+R43 S5 — Read-only Consistency Checker + CI
+
+按已批准边界实现：
+
+tools/consistency/check-recovery-manual-submission.mjs
+
+至少检查：
+
+ClaimItem.status = SUBMITTED_MANUAL ⇒ 必须存在对应 Submission；
+Submission ⇒ 对应 ClaimItem 必须是 SUBMITTED_MANUAL；
+submission 的 claim/case/package digest/basis 关系一致；
+Submission 与 Package 属于同 tenant；
+approvalId 唯一且绑定关系一致；
+SubmissionEvidence 全部同 tenant 且引用有效；
+Reference 与 Submission/ClaimItem 同 tenant；
+providerCaseRefCanonical 满足 canonical contract 且无重复；
+package 若已经 SUPERSEDED/WITHDRAWN，不得因此反向篡改历史 submission；checker 应报告事实关系，而不是自动修改；
+checker 对人工制造的漂移返回非零 exit code；
+clean database 返回 0；
+checker 前后数据库内容完全一致。
+
+CI 必须同时覆盖：
+
+fresh deploy；
+upgrade path；
+clean consistency check；
+intentional-drift fixture/test 能证明 checker 真能发现错误。
+
+S5 不得实现 repair mode。
+
+S5 完成后再进入 S6 全量 M1–M20 + PG1–PG10 + H1–H9 + D1–D4 回归收口。
+
+继续保持：
+
+AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · SETTLEMENT/BILLING LINKAGE HOLD。
+
+VERDICT: PASS — MSG-20261001-37
+```
