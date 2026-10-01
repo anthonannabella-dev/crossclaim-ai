@@ -60,6 +60,7 @@ let caseId = '';
 let claimId = '';
 let foreignOrg = '';
 let foreignEmail = '';
+let foreignCaseId = '';
 
 beforeAll(async () => {
   await prisma.$connect();
@@ -137,7 +138,7 @@ beforeEach(async () => {
   await prisma.membership.create({
     data: { organizationId: foreignOrg, userId: foreignUser.id, role: 'OWNER', isActive: true },
   });
-  await prisma.case.create({
+  const foreignCase = await prisma.case.create({
     data: {
       organizationId: foreignOrg,
       caseNo: 'CS-F-' + foreignSuffix,
@@ -147,6 +148,7 @@ beforeEach(async () => {
       currency: 'USD',
     },
   });
+  foreignCaseId = foreignCase.id;
 });
 
 type GuardVariant = 'permissive' | 'defaultGuard' | 'platformOff' | 'tenantOff' | 'gateOff';
@@ -394,6 +396,69 @@ describe('R37 P1/P2 — platform.write HTTP 入口（真实 HTTP + PostgreSQL）
     expect(res.body?.error).toBe('ACTION_GUARD_NOT_CONFIGURED');
     expect(await sideEffects()).toMatchObject(ZERO);
   }, 60_000);
+
+  it('H1c 跨租户审批（他租户 approvalId）→ 拒绝且零 attempt 零消费', async () => {
+    await withServer(async (base) => {
+      const cookie = await login(base);
+      const digest = await snapshotDigestFor();
+      const foreignUser = await prisma.user.findFirstOrThrow({ where: { email: foreignEmail } });
+      await submitRecoveryReview(
+        prisma,
+        {
+          organizationId: foreignOrg,
+          actorUserId: foreignUser.id,
+          role: 'OWNER',
+          caseId: foreignCaseId,
+          decision: 'REQUEST',
+          recoveredAmount: null,
+          currency: null,
+        } as never,
+        () => NOW,
+      );
+      const approved = (await submitRecoveryReview(
+        prisma,
+        {
+          organizationId: foreignOrg,
+          actorUserId: foreignUser.id,
+          role: 'OWNER',
+          caseId: foreignCaseId,
+          decision: 'APPROVE',
+          boundAction: PLATFORM_WRITE_ACTION,
+          boundPayload: { basisReference: digest },
+        } as never,
+        () => new Date(NOW.getTime() + 1000),
+      )) as { approvalId?: string };
+      expect(approved.approvalId).toBeTruthy();
+
+      const res = await write(base, cookie, { approvalId: approved.approvalId });
+      // 审批按 organizationId 查询：跨租户等于不存在（不泄露存在性），零副作用
+      expect(res.status).toBe(403);
+      expect(rejectionReason(res.body)).toBe('APPROVAL_NOT_FOUND');
+      expect(await sideEffects()).toMatchObject(ZERO);
+    });
+  }, 60_000);
+
+  it('H9 HTTP 层不存在直接投递路径（sink 只能由编排在 T1 之后调用）', async () => {
+    const root = process.cwd();
+    const httpRoutes = fs.readFileSync(path.join(root, 'src', 'services', 'workflow', 'http-routes.ts'), 'utf8');
+    const httpRequest = fs.readFileSync(
+      path.join(root, 'src', 'services', 'platform-write', 'http-request.ts'),
+      'utf8',
+    );
+    for (const source of [httpRoutes, httpRequest]) {
+      // 不得出现任何投递端口 / 模拟适配器 / 编排接线
+      expect(source).not.toContain('simulated-adapter');
+      expect(source).not.toContain('createSimulatedPlatformWritePort');
+      expect(source).not.toContain('PlatformWritePort');
+      expect(source).not.toContain('platform-write/orchestrator');
+      // 不得对投递端口发起调用（sink.* / .submit( 只允许出现在编排层）
+      expect(source).not.toMatch(/sink\s*\.\s*submit\s*\(/);
+      expect(source).not.toMatch(/deps\s*\.\s*sink/);
+    }
+    // 入口模块不得直接引用编排/投递实现：transport 未接线时必须失败关闭
+    expect(httpRequest).not.toContain("from './orchestrator'");
+    expect(httpRequest).toContain('PLATFORM_WRITE_TRANSPORT_NOT_WIRED');
+  }, 30_000);
 
   it('H3a 缺 approvalId → 拒绝且零副作用', async () => {
     await withServer(async (base) => {
