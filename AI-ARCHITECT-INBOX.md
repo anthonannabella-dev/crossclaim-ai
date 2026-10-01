@@ -78406,3 +78406,93 @@ title／description 属于原有可见元数据；字段投影不等于对自由
 Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据继续 HOLD。本次 PASS 不构成生产或真实平台提交授权。
 ```
 
+### [MSG-20261001-15] Gate 7 / ② RUNTIME BUSINESS BLOCKING · appeal.submit · R31（REVIEWED_REF 814f5cd）：VERDICT: REVISE（CHANGE A 审批须绑定实际提交载荷快照（含 claimId/round/正文摘要与选择规则）；CHANGE B 轮次与对象选择须一致（限定 round=2、锁定与 CAS 携带轮次、关联 Claim 核对）；CHANGE C 补齐载荷变化/独立审批人+执行人/过期撤销/并发/审计回滚/租户与绑定/非 DRAFT 等关键验收并收紧既有断言）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE: FORMAL_VERDICT
+MESSAGE: MSG-20261001-15
+PREVIOUS: MSG-20261001-14
+GATE: Gate 7 / 授权项② RUNTIME BUSINESS BLOCKING · appeal.submit
+HEAD: 814f5cd
+REVIEWED_REF: 814f5cdd1595929838e5489673ad7c33059ef857
+DECISION: REVISE
+ACK: 入口、独立动作及原子事务已实现；实际提交载荷和轮次绑定未满足指定要求，关键验收不足。
+
+1. REVIEW / TEST
+
+重新读取了 
+Issue #2 请求、本轮 diff、Appeal Schema、提交服务、路由、审批验证器及 
+CI run 36817215750。
+
+确认 CI 对应 REVIEWED_REF，五作业 SUCCESS；API 日志确认 149 files / 1411 tests PASS，appeal.submit 6/6 PASS，tsc、prisma validate 通过。本审查未自行运行本地测试。
+
+2. KEEP
+真实入口与 server 路径门控。
+独立动作 appeal.submit，不得与 claim.submit 审批通用。
+案件锁→Appeal 行锁→当前主体权限重验→审批生命周期重验。
+状态推进、成功审计与审批消费使用同一事务客户端。
+拒绝留痕失败不覆盖原错误。
+内部登记结果为 NEEDS_MANUAL，平台外写继续关闭。
+不要求新增 Schema；现有字段及审批事件载荷可承载本轮修订。
+3. CHANGE A — 审批必须绑定实际提交内容
+
+文件：appeal-submission.ts、http-routes.ts、审批载荷构造及验证相关文件。
+
+当前指纹仅绑定 basisReference=appealId。Appeal 的 claimId、round、finalText／aiDraftText 在审批后变化，现有审批仍可能放行。绑定对象 ID 不等于绑定实际提交载荷。
+
+要求：
+
+定义版本化、服务端生成的 Appeal 提交快照：至少包含 appealId、caseId、claimId、round、实际选用正文的摘要及正文选择规则。
+审批创建与执行核验使用同一规范化算法；审批接口不得仅凭客户端填写任意摘要就宣称绑定了服务端事实。
+Appeal 行锁后重新读取最终快照，逐项或通过确定性摘要比对审批绑定；变化即结构化拒绝，零推进、零消费。
+空正文不得作为有效提交内容；若本批实际只登记“提交意向”，应先修改动作契约，不能继续宣称完成提交载荷绑定。
+
+无需增加数据库指纹列，可复用既有审批事件的版本化载荷。
+
+4. CHANGE B — 轮次与对象选择必须一致
+
+同提交服务及路由。
+
+请求、注释称 round=2，但行锁 SQL 没有限定 round，读取后也未检查 round；CAS 仅比较 id、租户和 DRAFT。路由又选择最高轮次，实际支持范围与声明不一致。
+
+本轮按已申报的 round=2 收敛：
+
+路由限定 round=2；存在多个候选时明确选择规则或失败关闭，不任意取一条。
+锁后确认 Appeal 身份、caseId、claimId、round；核对关联 Claim 属于同租户同案件。
+CAS 包含案件、round及必要绑定事实，影响行数必须恰为1。
+成功、消费及拒绝记录携带一致的 Appeal／Claim／案件／轮次关联。
+
+更高轮次的支持另批扩展，不在本轮默认放开。
+
+5. CHANGE C — 补齐针对本入口的关键验收
+
+文件：action-guard-appeal-submit-http-db.test.ts。
+
+补充：
+
+审批后正文、Claim关联或轮次变化→精确拒绝，无提交与消费。
+独立 OWNER 审批人、ADMIN 执行人；等 Appeal 行锁期间执行人降为 FINANCE→403 FORBIDDEN，成员停用→主体失效拒绝；同路径未变成功对照。
+等必要锁期间审批过期、撤销→精确拒绝。
+同审批并发提交→最多一次状态推进、恰一次成功审计与消费。
+成功业务审计失败、消费审计失败→整事务回滚；放行前审批决策审计失败→零业务推进。
+跨租户、错误 Appeal绑定、非DRAFT、默认能力拒绝。
+成功记录与消费记录精确核对关联字段和统一时间；拒绝留痕失败仍保留原始错误。
+
+现有用例02仅断言≥400、用例04接受任意200／403／409，需收紧为明确契约的状态码与原因。
+
+另外，platformWrites 当前实际统计的是 BillingInvoice 数量，不能证明平台零调用。改名为真实指标，并按实现路径／静态探针准确记录零外写证据。用例06为直接插入拒绝审计事件模拟撤销，应明确不构成真实撤销入口全链路验收。
+
+6. NEXT / RISKS
+
+上述 A–C 为本轮完整 CHANGE 清单。当前6项测试未证明实际正文绑定、轮次保护、并发至多一次及审计失败原子回滚。
+
+收敛后完成专项、相关回归、tsc、prisma validate、新 HEAD CI，再送审。appeal.submit 暂不登记 PASS，不进入下一业务小批次。Codex 可逐字归档并直接实施，无需宿主确认。
+
+7. PRODUCTION
+
+授权项②整体仍 NOT COMPLETE。
+Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据继续 HOLD。
+```
+
