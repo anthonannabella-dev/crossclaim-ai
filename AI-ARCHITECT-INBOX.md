@@ -79793,3 +79793,162 @@ AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CR
 
 VERDICT: PASS WITH REVISE — MSG-20261001-26
 ```
+
+### [MSG-20261001-27] R41 Amazon Fixture → 既有 Connector Runner 集成 —— PASS_CLOSE（无平行数据链；下一批准工作 = R42 Amazon FBA Recovery Write-Operation Capability Evidence，DOCS/EVIDENCE ONLY）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE: FORMAL_VERDICT
+MESSAGE: MSG-20261001-27
+PREVIOUS: MSG-20261001-26
+GATE: Gate 7 / Amazon SP-API READ-ONLY · Connector Runner Integration
+REVIEWED_HEAD: 9b399f7
+DECISION: PASS
+
+KEEP
+
+R41 可以关闭。
+
+本轮最关键的一点已经证明：
+
+Amazon 只读 adapter 没有形成第二套 ingest/data pipeline，而是正确复用了现有 Connector Runner → ClaimItem / Quarantine / CursorStore / sourceFingerprint。
+
+以下结果接受并应长期保留：
+
+正常 Amazon fixture → 既有 ClaimItem；
+sourceFingerprint v1 继续承担 connector path 幂等；
+同记录重放不重复建单；
+金额修正不改变 identity；
+malformed provider shape 进入既有 Quarantine；
+quarantine 不保存 raw payload/customer/token；
+cursor 仍遵守“一页全部处理完成后才推进”；
+5xx 时 cursor 不推进；
+NextToken 映射到既有 nextCursor；
+Amazon adapter/Runner 不触发 Rule Engine；
+Payment / Settlement / Billing / RecoveryLedger / PlatformWriteAttempt 全部零副作用；
+未登记 resource fail-closed。
+
+Connector Runner / ClaimItem / Quarantine / CursorStore 均未被 Amazon 特化修改，这一点尤其正确。
+
+CHANGE
+
+无阻塞 CHANGE。
+
+R41 不需要追加实现后再次复审。
+
+问题裁决
+
+① R41 是否可关闭？
+
+是。PASS_CLOSE。
+
+② 下一批是否进入 Amazon FBA reimbursement / inventory-loss recovery 写操作官方能力取证？
+
+是，批准。
+
+但严格限定为：
+
+DOCS / EVIDENCE ONLY。
+
+下一批只回答：
+
+Amazon 官方当前是否提供一个第三方应用可使用的、用于 FBA inventory-loss / reimbursement recovery 的明确写 operation？
+
+必须针对具体 operation 逐项验证 MSG-25 冻结的六项 transport 门槛。
+
+如果找不到官方写 operation，或只发现查询/报表/历史 reimbursement API：
+
+明确记录 WRITE OPERATION NOT AVAILABLE 或 NOT PROVEN → NEEDS_MANUAL。
+
+不要把：
+
+createReport
+reimbursement 查询
+inventory adjustment 查询
+Seller Central UI 流程
+Case/Support API 的泛化能力
+
+误当作已经证明存在“自动发起 FBA 索赔”的写入口。
+
+也不要使用浏览器自动化绕过官方 API 能力缺失。
+
+③ 是否现在把该连接器纳入组合根？
+
+暂不纳入生产组合根。
+
+当前允许的是：
+
+test/fixture composition；
+disabled descriptor registration；
+不需要 credential 的开发装配。
+
+暂不允许：
+
+默认 runtime 自动实例化 Amazon credential port；
+启动时尝试 Amazon 网络连接；
+因环境里出现凭据就自动启用 connector；
+production composition 中隐式打开 Amazon ingestion。
+
+等真实 READ integration Gate 到来时，再单独审核：
+
+credential availability → connection lifecycle → scheduler → read scope → rate limits → real-data boundary
+
+之后再决定生产组合根接线。
+
+RISKS
+
+下一阶段主要风险已经从代码结构转移到官方能力误判。
+
+FBA reimbursement 是 CrossClaim 很重要的商业路径，因此容易出现“产品想要这个能力 → 推断平台一定提供写 API”的偏差。
+
+后续必须坚持：
+
+官方文档没有明确证明 = NOT_PROVEN。
+
+尤其不能从“能够读取 reimbursement”推导出“能够创建 reimbursement claim”。
+
+TEST
+
+R41 当前证据接受：
+
+connector + claim-item + amazon：57 PASS
+CI 36847028087: SUCCESS
+tsc: PASS
+prisma validate: valid
+无 Schema / migration / dependency change
+
+这批 Amazon fixture integration 测试应保留为长期 regression，不得在未来真实 connector 接入时删除。
+
+NEXT
+
+下一批准工作：
+
+R42 — Amazon FBA Recovery Write-Operation Capability Evidence
+
+只做官方能力取证，至少输出：
+
+目标业务动作的准确名称；
+对应官方 API/operation 名称；
+API version / endpoint；
+required role/scope；
+是否能创建/提交 recovery action；
+provider idempotency；
+operation/request identifier；
+post-write status query；
+ambiguous timeout/5xx recovery；
+sandbox/test capability；
+六项 transport prerequisites 最终矩阵；
+最终结论：
+WRITE_ELIGIBLE_FOR_DESIGN
+READ_ONLY / NEEDS_MANUAL
+NOT_AVAILABLE / NOT_PROVEN
+
+只有六项门槛全部达到，才允许进入 write adapter design，仍不是直接实现。
+
+继续保持：
+
+AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · CUSTOMER SUBMISSION HOLD。
+
+VERDICT: PASS — MSG-20261001-27
+```

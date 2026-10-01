@@ -790,3 +790,11 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 关键证据：重放 idempotent=1 且 ClaimItem 计数不变；金额更正（120→999）仍 1 条；quarantine 白名单通过且不含 raw/customer/token；cursor 失败不推进（5xx 后仍为 PAGE-2）；RuleEvaluation/Payment/Settlement/Billing/PlatformWriteAttempt/RecoveryLedgerEntry 全 0。
 - 回归：connector + claim-item + amazon = 7 files / 57 tests PASS；tsc PASS。
 - 边界：无真实凭据/账号/网络；无 Schema/migration/依赖变更；TRANSPORT=false。
+
+## 2026-10-01 JST — 裁决 MSG-20261001-27 = PASS（R41 CLOSED → R42 计划）
+
+- 送审：R41（REVIEWED_HEAD 9b399f7；Issue #2 comment 5929290849；CI run 36847028087 = SUCCESS）。
+- 归档：AI-ARCHITECT-INBOX.md §MSG-20261001-27；`tools/verdict-diff/compare.mjs` = **FULL_COPY_OK**。
+- 裁决要点：Amazon 只读 adapter 未形成第二套 ingest/data pipeline，正确复用 Connector Runner → ClaimItem / Quarantine / CursorStore / sourceFingerprint；13 项结果长期保留；R41 PASS_CLOSE。
+- 组合根：暂不纳入生产；仅 test/fixture composition、disabled descriptor、无凭据开发装配。
+- NEXT：R42 = Amazon FBA Recovery Write-Operation Capability Evidence（DOCS/EVIDENCE ONLY；12 项输出 + 三选一结论）；六项门槛未全达前不得进入 write adapter design，更不得实现。

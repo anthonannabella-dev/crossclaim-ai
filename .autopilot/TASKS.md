@@ -209,3 +209,13 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - 回归：connector + claim-item + amazon = 7 files / 57 tests PASS；tsc PASS。
 - 边界：无真实凭据/账号/网络、无 Schema/migration/依赖变更、TRANSPORT=false。
 - 下一步：提交 R41 送审；并可并行准备 docs-only FBA write-operation 取证（不得实现 write adapter）。
+
+### MSG-20261001-27 裁决（R41 CLOSED → R42 FBA 写操作能力取证）
+
+- DECISION：**PASS**（REVIEWED_HEAD 9b399f7；归档 FULL_COPY_OK）；**R41 = PASS_CLOSE**，无需追加实现复审。
+- 长期保留：Amazon fixture integration（connector + claim-item + amazon = 57 PASS）作为 regression 基线，真实 connector 接入时不得删除。
+- 组合根：**暂不纳入生产**；仅允许 test/fixture composition、disabled descriptor registration、无凭据开发装配；禁止默认运行时实例化 Amazon credential port / 启动即连网 / 有凭据即自动启用 / production composition 隐式开启 ingestion。
+- R42（下一批准工作，DOCS / EVIDENCE ONLY）：回答官方是否存在可用的 FBA inventory-loss / reimbursement recovery 写 operation；输出 12 项 + 最终结论（WRITE_ELIGIBLE_FOR_DESIGN | READ_ONLY·NEEDS_MANUAL | NOT_AVAILABLE·NOT_PROVEN）。
+- 禁止事项：不得把 createReport / reimbursement 查询 / inventory adjustment 查询 / Seller Central UI 流程 / Case·Support 泛化能力当作“自动发起 FBA 索赔”写入口；不得用浏览器自动化绕过 API 能力缺失。
+- 判据：官方文档没有明确证明 = NOT_PROVEN；不能从“能读 reimbursement”推导“能创建 claim”。
+- 保持：AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写/客户提交 HOLD。
