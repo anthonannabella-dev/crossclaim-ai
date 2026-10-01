@@ -669,3 +669,10 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - KEEP：总体边界设计批准（分层链路、HTTP 不直接调 sink、客户端不得自证 digest、账本收敛并发、adapter 能力前置、transport 独立 Gate）。
 - CHANGE A：v1 不拆 prepare/submit；CHANGE B：响应显式 platformWriteExecuted=false + executionDisposition；CHANGE C：adapter 三能力走代码注册表 typed descriptor（不新增 DB Schema）+ fail-closed validator；CHANGE D：transport 双重门控。
 - NEXT：批准 P1–P5 实施（仅 HTTP 接线/boundary validation/capability registry/gate enforcement/H1–H8+补充断言）；不得实现真实 adapter/credential/provider write；HTTP 必须默认落 NEEDS_MANUAL。
+
+## 2026-10-01 JST — P1 前置：adapter 能力注册表 + transport 双重门控（CHANGE C/D）
+
+- 新增 apps/api/src/services/platform-write/adapter-capability.ts：AdapterCapabilityDescriptor（idempotentWrite / statusQuery / ambiguousResponseSemantics）+ 代码注册表 + evaluateAdapterEligibility（fail-closed：未注册/缺幂等写/ambiguous 未定义/缺 statusQuery）+ evaluateTransportGate（global gate + adapter 合格 + 授权有效，四项缺一 fail-closed）。
+- 新增 apps/api/src/__tests__/platform-write-adapter-capability.test.ts：8/8 PASS（含「全局 gate 关闭时即使能力齐备也不得调用 transport」与「gate=true 但 adapter 不合格/授权无效同样 fail-closed」）。
+- 未新增数据库 Schema（按 CHANGE C）；未接真实 adapter/凭据；transport 恒关。
+- 下一步：P1 主体（路由 + 守卫接线，响应显式 platformWriteExecuted=false / executionDisposition=NEEDS_MANUAL）。
