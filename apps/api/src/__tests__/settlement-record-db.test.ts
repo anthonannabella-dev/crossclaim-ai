@@ -379,3 +379,30 @@ describe('R46 S2 生产装配：action-guard verifier 注入', () => {
     expect(await counts()).toEqual(before);
   });
 });
+
+describe('R46 S2 MSG-56 CHANGE：同 approval 并发消费', () => {
+  it('same approval + 两个独立并发执行 → 恰好一次消费（loser fail-closed，无第二 Settlement）', async () => {
+    const payload = input();
+    const before = await counts();
+    const results = await Promise.allSettled([
+      recordSettlement(deps, { ...payload } as never),
+      recordSettlement(deps, { ...payload } as never),
+    ]);
+    const ok = results.filter((r) => r.status === 'fulfilled') as PromiseFulfilledResult<{ status: string; settlementId: string }>[];
+    const failed = results.filter((r) => r.status === 'rejected') as PromiseRejectedResult[];
+
+    expect(ok.length).toBeGreaterThanOrEqual(1);
+    for (const r of failed) {
+      const code = (r.reason as { code?: string })?.code;
+      expect(['APPROVAL_ALREADY_CONSUMED', 'EVENT_IDENTITY_CONFLICT', 'APPROVAL_REQUIRED']).toContain(code);
+      expect(String(r.reason)).not.toMatch(/P2002|Unique constraint/);
+    }
+
+    const after = await counts();
+    expect(after.settlements).toBe(before.settlements + 1);
+    const consumed = await prisma.auditLog.count({
+      where: { id: 'settlement-approval-' + payload.approvalId },
+    });
+    expect(consumed).toBe(1);
+  });
+});
