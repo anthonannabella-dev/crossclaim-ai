@@ -1,17 +1,17 @@
 {
   "gate": "B2-FIX R1",
-  "head": "59a2769",
+  "head": "8c47f2c",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
   "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
   "send_head": "07b7009",
   "decision_head": "07b7009",
-  "last_chatgpt_message": "MSG-20261002-53",
+  "last_chatgpt_message": "MSG-20261002-54",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T16:47:10.283Z",
-  "previous_head": "5d8786e",
-  "architect_decision_pending": true,
+  "updated_at": "2026-10-01T16:49:21.370Z",
+  "previous_head": "59a2769",
+  "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "5d8786e",
   "last_sent_at": "2026-10-01T16:47:10.283Z",
@@ -49,11 +49,11 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-01T16:47:35.297Z",
+  "last_tick_at": "2026-10-01T16:48:45.571Z",
   "state": "IMPLEMENT",
-  "last_action": "R46-B — Settlement / Billing Linkage Implementation Plan（docs-only）已送审：最终模型（4 新表 + 2 表增列 + FeeCalculationAdjustment）+ CHANGE A1/B1/C1/E1/F 落实 + 约束/触发器清单 + S1…S6 实施顺序 + 30 项永久验收映射。",
-  "last_action_at": "2026-10-01T16:47:10.283Z",
-  "next_action": "等待 R46-B 裁决：①PASS → 开始 R46 S1（Schema + migrations + triggers + inventories）②REVISE → 修订 R46-B ③BLOCK → 停止。",
+  "last_action": "MSG-20261002-54 = PASS WITH REVISE 已逐字归档（FULL_COPY_OK）：R46-B 批准；S1 可先行但必须先收口 F3 / fee-chain uniqueness（改 (org, feeCalculationId, settlementId)）+ Settlement↔Snapshot 不可漂移 + Invoice 不得从 Fee 自动产生；amountDelta 改为正数 + kind 定方向；v1 full reversal = 0 或恰好 1。",
+  "last_action_at": "2026-10-01T16:49:21.370Z",
+  "next_action": "R46 S1：先把 CHANGE A/B/C 写进 S1 Schema 实施口径（fee chain identity / snapshot immutability / invoice 边界），再实施 Schema + migration + triggers + inventories（零资金业务行为）。",
   "current_head": "5d8786e",
   "reviewed_head": "07b7009",
   "claim_submit_batch": {
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-01T16:47:26.765Z",
-    "gapMs": 8533,
+    "previousTickAt": "2026-10-01T16:47:35.297Z",
+    "gapMs": 70275,
     "stale": false,
-    "checkedAt": "2026-10-01T16:47:35.297Z"
+    "checkedAt": "2026-10-01T16:48:45.571Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -2341,5 +2341,50 @@
       "§6 的 S1…S6 拆分与「每个 Stage 独立 Checkpoint」是否批准？S1 是否可先行？"
     ],
     "next": "PASS → 开始 R46 S1（Schema + migrations + triggers + inventories，零资金行为）；REVISE → 修订 R46-B；BLOCK → 停止"
+  },
+  "r46b_verdict": {
+    "message_id": "MSG-20261002-54",
+    "decision": "PASS WITH REVISE",
+    "reviewed_head": "5d8786e",
+    "archival": "FULL_COPY_OK",
+    "archived_at": "2026-10-01T16:49:21.370Z",
+    "fee_adjustment_semantics": "VOID（原计算从起点不应成立）/ REVERSAL（原成立、后续资金事实冲减）/ CORRECTION（输入·政策·费率被纠正）必须有不同 reasonCode / evidence / sourceFact / adjustmentAmount 规则；不得直接改历史 FeeCalculation.status/amount；净值只由 original + immutable adjustments 推导",
+    "change_a1": "PASS（唯一身份含 identityVersion；externalIdentityValue 仅受保护 provenance/display；日志/API 不回显完整值；identityVersion 变化不得自动重认同一事件）",
+    "change_b1": "v1 full reversal = 0 或恰好 1 个，且 amount == original amount；不允许多个 reversal 累计；partial 继续 fail-closed；第二个不同 reversal event → REVERSAL_ALREADY_APPLIED；同事件 replay → REUSED",
+    "change_c1": "amountDelta 符号契约：adjustment 存正数 amount，kind 决定方向（REVERSAL → −amount；VOID → −originalFeeAmount；CORRECTION 由明确 semantics 决定），由 projector/service 统一计算 effect",
+    "change_a_f3": "F3 修正：不得用 (org, settlementId) 全局唯一；改为 (org, feeCalculationId, settlementId) / (org, feeCalculationId, adjustmentId)；重复计费不变量 = 同一资金事实不得同时进入两个互不相关的 active fee chains；需定义 fee chain identity（claimItemId + feePolicy/version、supersession root、feeChainId 或等价稳定身份）",
+    "change_b_snapshot_immutability": "Settlement ↔ Snapshot 唯一且不可漂移：已记录 Settlement 必须绑定一个 immutable ReceiptSnapshot；receiptSnapshotId / snapshot digest·version 创建后不可改；更正证据走新 snapshot + 新 Settlement/adjustment path",
+    "change_c_invoice_boundary": "FeeCalculation exists ≠ Invoice may automatically issue；S5 先设计 fee eligibility / invoice candidate / invoice draft linkage / separate authorization；未经既有 billing.invoice_issue Gate 明确批准，不得自动 ISSUED",
+    "s1_scope": "S1 只允许 Schema + migration + FK + unique/index + CHECK + triggers + inventories + fresh/upgrade tests（零资金业务行为）；不得创建 Settlement / receipt / reversal / Fee / Invoice、不得改 RecoveryLedger、不得激活 Payment",
+    "s1_report_requirements": [
+      "fee-chain identity / uniqueness 最终方案",
+      "Settlement ↔ Snapshot immutability",
+      "full-reversal unique 语义",
+      "FK / partial unique / CHECK / triggers",
+      "trigger inventories",
+      "fresh deploy",
+      "two-stage upgrade",
+      "architecture contract",
+      "零资金行为证明"
+    ],
+    "risks": [
+      "F3 过强 unique 把合法 fee supersession/recalculation 锁死",
+      "ReceiptSnapshot 与 Settlement 绑定未来被 UPDATE 漂移",
+      "FeeCalculation 存在后被错误自动推进成 BillingInvoice"
+    ],
+    "permanent_tests_added": [
+      "同一 Settlement 在同一 fee calculation 内重复 membership → 拒绝",
+      "同一 Settlement 在合法 superseding fee chain 中的处理 → 明确并测试",
+      "两个无关 active fee chains 同时消费同一 Settlement → fail-closed",
+      "Settlement 创建后修改 receiptSnapshotId → DB/service 拒绝",
+      "ReceiptSnapshot digest/version UPDATE → 拒绝",
+      "full reversal 第二个不同事件 → 拒绝",
+      "same reversal replay → REUSED",
+      "FeeCalculationAdjustment 不修改历史 FeeCalculation",
+      "adjustment effect 符号由 kind 统一解释",
+      "FeeCalculation 创建后 BillingInvoice 仍为 0，直到独立 invoice authorization"
+    ],
+    "next_unit": "R46 S1（Schema + migrations + triggers + inventories，零资金业务行为），前置：把 CHANGE A/B/C 写进最终 S1 Schema 实施口径",
+    "redline": "NO automatic Settlement from R45 · NO automatic Fee · NO automatic Invoice issuance · NO Payment activation · NO autopay · NO platform write · TRANSPORT=false · NO production credentials；R13 Payment Activation Gate = HOLD"
   }
 }

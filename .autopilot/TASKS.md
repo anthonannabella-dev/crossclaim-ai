@@ -601,3 +601,11 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - 送审：REVIEWED_HEAD 5d8786e（Issue #2 comment 5936110978）。
 - NEXT：PASS → R46 S1（Schema + migrations + triggers + inventories，零资金行为）；REVISE → 修订；BLOCK → 停止。
 - 规则：每个 Stage 独立 Implementation Checkpoint 送审；30 项永久验收；既有基线不得删除 / skip / 弱化。
+
+### MSG-20261002-54 裁决（R46-B = PASS WITH REVISE → R46 S1，先收口 CHANGE A/B/C）
+
+- DECISION：**PASS WITH REVISE**（REVIEWED_HEAD 5d8786e；归档 FULL_COPY_OK）。详见 STATE.r46b_verdict。
+- S1 前置：F3 / fee-chain uniqueness 最终方案（fee chain identity 定义）；Settlement↔Snapshot 不可漂移；Invoice 不得从 Fee 自动产生。
+- S1 范围：Schema + migration + FK + unique/index + CHECK + triggers + inventories + fresh/upgrade tests（**零资金业务行为**）。
+- S1 送审报告项：fee-chain uniqueness / snapshot immutability / full-reversal unique 语义 / FK·partial unique·CHECK·triggers / inventories / fresh deploy / two-stage upgrade / architecture contract / 零资金行为证明。
+- 冻结：NO automatic Settlement from R45 · NO automatic Fee · NO automatic Invoice · NO Payment activation · NO autopay · NO platform write；R13 Payment Activation Gate = HOLD。

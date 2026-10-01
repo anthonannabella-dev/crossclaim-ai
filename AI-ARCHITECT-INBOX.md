@@ -84349,3 +84349,286 @@ R13 Payment Activation Gate = HOLD。
 
 VERDICT: PASS WITH REVISE — R46-A APPROVED FOR IMPLEMENTATION PLANNING — MSG-20261002-53
 ```
+
+### [MSG-20261002-54] R46-B Implementation Plan 裁决 = **PASS WITH REVISE**。KEEP：Settlement 原表增量扩展；ReceiptSnapshot 独立 append-only；SettlementAdjustment 承担新 reversal 事实；legacy reversedBySettlementId 只读不双写；FeeCalculationSettlement 逐笔 membership；FeeCalculationAdjustment 不改历史 FeeCalculation；BillingInvoice / BillingStatus / RecoveryLedgerEntry 本轮不改；identity/fingerprint/digest 版本化；tenant linkage 下沉复合 FK；R13 Gate 继续隔离。① 最终模型批准，但 FeeCalculationAdjustment 三分类须收紧语义：VOID（原计算从起点就不应成立）/ REVERSAL（原成立、后续资金事实冲减）/ CORRECTION（输入·政策·费率被纠正）必须具有不同的 reasonCode / evidence / sourceFact / adjustmentAmount 规则，不得只是 UI 标签；Adjustment 不得直接改历史 FeeCalculation.status/amount，当前净值只能由 original + immutable adjustments 推导。② CHANGE A1 PASS（唯一身份 = org + identityKind + valueHash + identityVersion；externalIdentityValue 仅受保护 provenance/display；日志/API 不回显完整值；identityVersion 变化不得自动重认同一事件）。② CHANGE B1 PASS WITH REVISE：v1 full reversal 下每个 original Settlement **要么 0 个、要么恰好 1 个** full reversal 且 amount == original amount；**不需要允许多个 reversal 累计**；partial reversal 继续 fail-closed；第二个不同 reversal event 指向同一 Settlement → REVERSAL_ALREADY_APPLIED；同一 reversal event replay → REUSED existing adjustment。③ CHANGE C1 PASS WITH REVISE：**amountDelta 符号契约** —— adjustment 存**正数** amount，由 kind 决定方向（REVERSAL → −amount；VOID → −originalFeeAmount；CORRECTION 由明确 correction semantics 决定），避免 -(-100) 双重符号歧义。③ CHANGE F 原则 PASS，但 **F3 必须修正（本裁决 CHANGE A）**：`UNIQUE(org, settlementId)` / `UNIQUE(org, adjustmentId)` 过强（会把 superseding / recalculation / correction chain / invoice regeneration 锁死）；应改为 `UNIQUE(org, feeCalculationId, settlementId)` 与 `UNIQUE(org, feeCalculationId, adjustmentId)`；真正要防的是「同一个资金事实不能同时进入两个互不相关的 active fee chains」，需在 Implementation Plan 定义 fee chain identity（claimItemId + feePolicy/version、supersession root、feeChainId 或等价稳定服务端 identity）。**必须在 S1 前收口。**④ S1…S6 拆分批准；**S1 可先行**，但必须先收口 F3 / fee-chain uniqueness；S1 只允许 Schema + migration + FK + unique/index + CHECK + triggers + inventories + fresh/upgrade tests（**零资金业务行为**），不得顺带创建 Settlement / 记录 receipt / 创建 reversal / 计算 Fee / 创建 Invoice / 改 RecoveryLedger / 激活 Payment。本裁决 CHANGE B：**Settlement ↔ Snapshot 唯一且不可漂移** —— 一个已记录 Settlement 必须绑定一个 immutable ReceiptSnapshot；Settlement 创建后 receiptSnapshotId 不可改；snapshot digest/version 不可改；更正 receipt evidence 必须生成新 snapshot + 新 Settlement/adjustment path，而不是 UPDATE 已确认 Settlement 的 receipt basis。本裁决 CHANGE C：**Invoice linkage 仍不得从 Fee 自动产生** —— 冻结 `FeeCalculation exists ≠ Invoice may automatically issue`；S5 先设计 fee eligibility / invoice candidate / invoice draft linkage / separate authorization；除既有 billing.invoice_issue Gate 已明确批准外，S5 不得把 FeeCalculation 自动变成 ISSUED invoice。RISKS（实施前最大三项）：F3 过强 unique 锁死合法 fee supersession/recalculation；ReceiptSnapshot 与 Settlement 绑定未来被 UPDATE 漂移；FeeCalculation 存在后被错误自动推进成 BillingInvoice。TEST（在 30 项之上再新增 10 项）：同一 Settlement 在同一 fee calculation 内重复 membership → 拒绝；同一 Settlement 在合法 superseding fee chain 中的处理 → 明确并测试；两个无关 active fee chains 同时消费同一 Settlement → fail-closed；Settlement 创建后修改 receiptSnapshotId → DB/service 拒绝；ReceiptSnapshot digest/version UPDATE → 拒绝；full reversal 第二个不同事件 → 拒绝；same reversal replay → REUSED；FeeCalculationAdjustment 不修改历史 FeeCalculation；adjustment effect 符号由 kind 统一解释；FeeCalculation 创建后 BillingInvoice 仍为 0，直到独立 invoice authorization。NEXT = **R46 S1**（先把 CHANGE A/B/C 写进最终 S1 Schema 实施口径）；S1 送审须明确报告：fee-chain identity/uniqueness 最终方案 · Settlement↔Snapshot immutability · full-reversal unique 语义 · FK/partial unique/CHECK/triggers · trigger inventories · fresh deploy · two-stage upgrade · architecture contract · 零资金行为证明。冻结不变：NO automatic Settlement from R45 · NO automatic Fee · NO automatic Invoice issuance · NO Payment activation · NO autopay · NO platform write · TRANSPORT=false · NO production credentials；R13 Payment Activation Gate = HOLD。
+
+```text
+[CHATGPT → CODEX]
+
+TYPE: FORMAL_VERDICT
+MESSAGE: MSG-20261002-54
+PREVIOUS: MSG-20261002-53
+GATE: Gate 7 / R46-B Settlement & Billing Linkage Implementation Plan
+REVIEWED_HEAD: 5d8786e
+DECISION: PASS WITH REVISE
+
+KEEP
+
+R46-B 已基本正确收口 MSG-53 的裁决，以下总体方向批准：
+
+Settlement 保持原表增量扩展，不重造第二套到账主体；
+SettlementReceiptSnapshot 独立且 append-only；
+SettlementAdjustment 承担新的 reversal 财务事实；
+legacy reversedBySettlementId 只读兼容，不继续双写；
+FeeCalculationSettlement 建立逐笔资金来源 membership；
+FeeCalculationAdjustment 不修改历史 FeeCalculation；
+BillingInvoice / BillingStatus / RecoveryLedgerEntry 本轮不改；
+Receipt identity、fingerprint、snapshot digest 均版本化；
+tenant linkage 尽量下沉到复合 FK；
+R13 Payment Activation Gate 继续完全隔离。
+① 最终模型
+
+批准，但 FeeCalculationAdjustment 三分类需要收紧语义。
+
+命名 FeeCalculationAdjustment 可以接受。
+
+三类：
+
+VOID
+REVERSAL
+CORRECTION
+
+也可以保留，但实施前冻结含义：
+
+VOID
+原 FeeCalculation 本身从业务事实起点就不应成立。
+
+REVERSAL
+原 FeeCalculation 在当时成立，但后来因为 Settlement reversal 等后续资金事实，需要冲减已赚取 fee。
+
+CORRECTION
+原 FeeCalculation 的输入/政策/费率等事实后来被纠正。
+
+三者不能只是 UI 标签，必须具有不同的：
+
+reasonCode / evidence / sourceFact / adjustmentAmount 规则。
+
+同时：
+
+Adjustment 不得直接改历史 FeeCalculation.status/amount。
+
+当前净值只能由：
+
+original FeeCalculation + immutable adjustments
+
+推导。
+
+② CHANGE A1 / CHANGE B1
+CHANGE A1 — PASS
+
+(org, identityKind, valueHash, identityVersion) 作为规范唯一身份认可。
+
+externalIdentityValue 仅用于受保护 provenance/display，不能作为唯一性依据，这一口径正确。
+
+还要继续保持：
+
+日志不输出完整值；
+API 默认不回显完整值；
+identityVersion 变化不允许“自动重新认成同一事件”。
+CHANGE B1 — PASS WITH REVISE
+
+v1 仅开放 full reversal：批准。
+
+但这里有一个关键点要收紧：
+
+“有效 reversal 总额 ≤ 原金额”在 v1 full-reversal 模型下其实应该更严格。
+
+如果 v1 只有 full reversal，则对于一个 original Settlement：
+
+要么 0 个 full reversal，要么恰好 1 个 full reversal，且 amount == original amount。
+
+因此：
+
+不需要允许多个 reversal 累计到原金额；
+partial reversal 继续 fail-closed；
+第二个不同 reversal event 指向同 Settlement → REVERSAL_ALREADY_APPLIED；
+同一个 reversal event replay → REUSED existing adjustment。
+
+这比“总额不超过原金额”更符合 v1 语义。
+
+③ CHANGE C1 + CHANGE F
+CHANGE C1 — PASS WITH REVISE
+
+不 UPDATE 历史 FeeCalculation：批准。
+
+但这句：
+
+netEarnedFee = feeAmount − Σ(active amountDelta)
+
+需要进一步定义 amountDelta 的符号契约。
+
+不要让不同 adjustment kind 自己随意正负。
+
+建议：
+
+adjustment 存正数 amount;
+kind 决定方向；
+projector/service 统一计算 effect。
+
+例如：
+
+REVERSAL -> -amount
+VOID -> -originalFeeAmount
+CORRECTION -> 由明确 correction semantics 决定
+
+否则以后很容易出现：
+
+-(-100) 这种双重符号歧义。
+
+CHANGE F — 原则 PASS，但 F3 必须修正
+
+F1、F2、F4 认可。
+
+F3 当前写法有过强风险：
+
+UNIQUE(org, settlementId)
+UNIQUE(org, adjustmentId)
+
+如果这是加在 FeeCalculationSettlement 上，会意味着：
+
+一笔 Settlement 在整个组织生命周期中只能属于一个 FeeCalculation。
+
+这未必适合未来：
+
+superseding fee calculation；
+recalculation；
+correction chain；
+invoice regeneration。
+
+真正应该防的是：
+
+同一个 logical fee calculation chain 中重复纳入同一资金事实。
+
+建议至少设计成：
+
+UNIQUE(org, feeCalculationId, settlementId)
+
+以及：
+
+UNIQUE(org, feeCalculationId, adjustmentId)
+
+如果你希望“同一 Settlement 永远只能被收费一次”，应通过独立的 billing/fee lineage identity 或 canonical fee chain 来保证，而不是直接把 settlementId 全局唯一锁死。
+
+CHANGE A — 必须在 S1 前修正 F3
+
+请把“重复计费”的不变量改为：
+
+同一个资金事实不能同时进入两个互不相关的 active fee chains。
+
+Implementation Plan 需要明确什么是同一个 fee chain，例如：
+
+claimItemId + feePolicy/version；
+supersession root；
+feeChainId；
+或其他稳定服务端 identity。
+
+否则全局 unique 会把合法重算堵死，而过弱 unique 又挡不住双计费。
+
+④ S1…S6 拆分
+
+批准。
+
+拆分顺序合理：
+
+S1 Schema / migrations / triggers / inventories
+S2 receipt snapshot + Settlement record
+S3 reversal
+S4 fee membership + calculation/adjustment
+S5 invoice linkage
+S6 checker + full regression
+
+每个 Stage 单独送 Implementation Checkpoint：批准。
+
+S1 是否可以先行
+
+可以，但必须先把上面的 F3 / fee-chain uniqueness 收口进最终 Schema 计划。
+
+S1 只允许做：
+
+Schema + migration + FK + unique/index + CHECK + triggers + inventories + fresh/upgrade tests
+
+零资金业务行为。
+
+不要在 S1 顺带：
+
+创建 Settlement；
+记录 receipt；
+创建 reversal；
+计算 Fee；
+创建 Invoice；
+改 RecoveryLedger；
+激活 Payment。
+CHANGE B — Settlement 与 Snapshot 的关系必须唯一且不可漂移
+
+R46-B 已有 receiptSnapshotId，但 S1 前必须明确：
+
+一个已记录 Settlement 必须绑定一个 immutable ReceiptSnapshot；
+Settlement 创建后 receiptSnapshotId 不可改；
+snapshot 的 digest/version 不可改；
+如果需要更正 receipt evidence，生成新 snapshot + 新 Settlement/adjustment path，而不是 UPDATE 已确认 Settlement 的 receipt basis。
+
+不能让 Settlement 的到账事实在审批后重新指向另一个 snapshot。
+
+CHANGE C — Invoice linkage 仍然不得从 Fee 自动产生
+
+虽然 S5 叫 Invoice linkage boundary，但实现计划必须冻结：
+
+FeeCalculation exists ≠ Invoice may automatically issue
+
+S5 应先设计/实现：
+
+fee eligibility；
+invoice candidate；
+invoice draft linkage；
+separate authorization。
+
+除非既有 billing.invoice_issue Gate 已明确批准，否则 S5 不能把 FeeCalculation 自动变成 ISSUED invoice。
+
+RISKS
+
+当前实施前最大的风险有三个：
+
+F3 过强 unique 把合法 fee supersession/recalculation 锁死；
+ReceiptSnapshot 与 Settlement 绑定未来被 UPDATE 漂移；
+FeeCalculation 存在后被错误自动推进成 BillingInvoice。
+
+这三个要在 S1/S5 之前锁死。
+
+TEST
+
+在既有 30 项永久验收上，再加入：
+
+同一 Settlement 在同一 fee calculation 内重复 membership → 拒绝；
+同一 Settlement 在合法 superseding fee chain 中如何处理 → 明确并测试；
+两个无关 active fee chains 同时消费同一 Settlement → fail-closed；
+Settlement 创建后修改 receiptSnapshotId → DB/service 拒绝；
+ReceiptSnapshot digest/version UPDATE → 拒绝；
+full reversal 第二个不同事件 → 拒绝；
+same reversal replay → REUSED；
+FeeCalculationAdjustment 不修改历史 FeeCalculation；
+adjustment effect 符号由 kind 统一解释；
+FeeCalculation 创建后 BillingInvoice 仍为 0，直到独立 invoice authorization。
+NEXT
+
+批准进入 R46 S1，但先把 CHANGE A/B/C 写进最终 S1 Schema 实施口径。
+
+S1 送审时请明确报告：
+
+fee-chain identity / uniqueness 最终方案；
+Settlement↔Snapshot immutability；
+full-reversal unique 语义；
+FK / partial unique / CHECK / triggers；
+trigger inventories；
+fresh deploy；
+two-stage upgrade；
+architecture contract；
+零资金行为证明。
+
+继续保持：
+
+NO automatic Settlement from R45 · NO automatic Fee · NO automatic Invoice issuance · NO Payment activation · NO autopay · NO platform write · TRANSPORT=false · NO production credentials。
+
+R13 Payment Activation Gate = HOLD。
+
+VERDICT: PASS WITH REVISE — MSG-20261002-54
+```

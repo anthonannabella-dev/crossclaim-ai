@@ -1318,3 +1318,15 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - CHANGE F：四项数据库级不变量（复合外键同租户 / currency / membership uniqueness / snapshotDigest）。
 - 实施顺序：S1 Schema+triggers+inventories → S2 receipt snapshot + ingest → S3 adjustment → S4 fee membership → S5 invoice 边界 → S6 checker + full regression；30 项永久验收映射。
 - 送审：REVIEWED_HEAD 5d8786e（Issue #2 comment 5936110978）；唤醒已投递并三要素验证（输入框清空 / 新消息在底部 / ChatGPT 正在回应）。
+
+## 2026-10-02 JST — MSG-20261002-54 = PASS WITH REVISE：R46-B 批准，S1 可先行（先收口 CHANGE A/B/C）
+
+- 裁决：**PASS WITH REVISE**（REVIEWED_HEAD 5d8786e）；归档 FULL_COPY_OK；全文见 AI-ARCHITECT-INBOX.md 的 MSG-20261002-54。
+- CHANGE A（本裁决）：**F3 修正** —— 不得用 `UNIQUE(org, settlementId)` 全局锁死；改为 `UNIQUE(org, feeCalculationId, settlementId)` / `UNIQUE(org, feeCalculationId, adjustmentId)`；需定义 fee chain identity；重复计费不变量 = 同一资金事实不得同时进入两个互不相关的 active fee chains。
+- CHANGE B（本裁决）：Settlement ↔ Snapshot 唯一且不可漂移（receiptSnapshotId / digest / version 创建后不可改；更正走新 snapshot + 新路径）。
+- CHANGE C（本裁决）：`FeeCalculation exists ≠ Invoice may automatically issue`；S5 先设计 eligibility / candidate / draft linkage / separate authorization。
+- CHANGE B1 revise：v1 full reversal = 0 或恰好 1（amount == original）；不允许多个 reversal 累计；partial fail-closed。
+- CHANGE C1 revise：adjustment 存正数 amount，kind 决定方向，projector/service 统一计算 effect。
+- ① FeeCalculationAdjustment 三分类语义冻结（VOID / REVERSAL / CORRECTION 各有 reasonCode·evidence·sourceFact·amount 规则；不得改历史 FeeCalculation）。
+- TEST：在既有 30 项上再新增 10 项永久验收（fee chain 双计费 / snapshot 漂移 / adjustment 符号 / invoice 自动产生）。
+- NEXT：R46 S1（Schema + migrations + triggers + inventories，零资金业务行为），送审须报告 fee-chain uniqueness 最终方案、snapshot immutability、full-reversal unique 语义、FK/partial unique/CHECK/triggers、inventories、fresh deploy、two-stage upgrade、architecture contract、零资金行为证明。
