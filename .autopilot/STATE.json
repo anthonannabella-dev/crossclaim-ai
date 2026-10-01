@@ -1,21 +1,21 @@
 {
   "gate": "B2-FIX R1",
-  "head": "a25e2fc",
-  "status": "IMPLEMENTING",
+  "head": "9b399f7",
+  "status": "READY_FOR_REVIEW",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
-  "next_task": "R41 送审：Amazon Fixture → Existing Connector Runner Integration Checkpoint（Issue #2 + 唤醒）—— 附 9 项集成断言（ClaimItem/幂等不拆单/quarantine 白名单/cursor 生命周期/normalizerVersion 可追溯/Rule Engine 与资金零变化/WRITE·未登记 fail-closed）、复用既有 sourceFingerprint v1 的证据与回归（connector + claim-item + amazon = 57 tests PASS）。同时可并行准备 docs-only 的 Amazon FBA recovery write-operation 官方能力取证（CHANGE C，不得实现 write adapter）。",
-  "send_head": "d3f4722",
+  "next_task": "等待 R41 裁决：PASS → 按结论推进 docs-only FBA 写操作取证（六项门槛逐项附官方文档页/版本/取证日期）或组合根接入；REVISE → 按 CHANGE 修改后再次送审；期间 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写/客户提交 HOLD",
+  "send_head": "9b399f7",
   "decision_head": "d3f4722",
   "last_chatgpt_message": "MSG-20261001-26",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T10:06:24.936Z",
-  "previous_head": "a25e2fc",
-  "architect_decision_pending": false,
+  "updated_at": "2026-10-01T10:12:51.763Z",
+  "previous_head": "9b399f7",
+  "architect_decision_pending": true,
   "blocked_scope": null,
-  "last_send_head": "d3f4722",
-  "last_sent_at": "2026-10-01T09:57:30.698Z",
-  "last_sent_fingerprint": "R40:AmazonSP-ReadOnly-Adapter-Checkpoint",
+  "last_send_head": "9b399f7",
+  "last_sent_at": "2026-10-01T10:12:51.763Z",
+  "last_sent_fingerprint": "R41:Amazon-Firsture-ConnectorRunner-Integration",
   "final_head": "1144401",
   "ci_run": "36833002042",
   "ci_result": "SUCCESS",
@@ -49,12 +49,12 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-01T10:03:11.539Z",
+  "last_tick_at": "2026-10-01T10:08:12.728Z",
   "state": "IMPLEMENT",
-  "last_action": "R41 实施完成：Amazon 只读 adapter 接入既有 Connector Runner（fixture-only）；9 项集成断言全绿，未建平行 ingest 链",
-  "last_action_at": "2026-10-01T10:06:24.936Z",
-  "next_action": "R41 送审：Amazon Fixture → Existing Connector Runner Integration Checkpoint（Issue #2 + 唤醒）—— 附 9 项集成断言（ClaimItem/幂等不拆单/quarantine 白名单/cursor 生命周期/normalizerVersion 可追溯/Rule Engine 与资金零变化/WRITE·未登记 fail-closed）、复用既有 sourceFingerprint v1 的证据与回归（connector + claim-item + amazon = 57 tests PASS）。同时可并行准备 docs-only 的 Amazon FBA recovery write-operation 官方能力取证（CHANGE C，不得实现 write adapter）。",
-  "current_head": "a25e2fc",
+  "last_action": "R41 已投递（Amazon Fixture → Existing Connector Runner Integration Checkpoint）；等待架构方编号裁决",
+  "last_action_at": "2026-10-01T10:12:51.763Z",
+  "next_action": "等待 R41 裁决：PASS → 按结论推进 docs-only FBA 写操作取证（六项门槛逐项附官方文档页/版本/取证日期）或组合根接入；REVISE → 按 CHANGE 修改后再次送审；期间 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写/客户提交 HOLD",
+  "current_head": "9b399f7",
   "reviewed_head": "549dba8",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-01T09:58:10.814Z",
-    "gapMs": 300726,
+    "previousTickAt": "2026-10-01T10:03:11.539Z",
+    "gapMs": 301190,
     "stale": false,
-    "checkedAt": "2026-10-01T10:03:11.539Z"
+    "checkedAt": "2026-10-01T10:08:12.728Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -511,5 +511,19 @@
     "fail_closed": "未登记 resource（sellers）→ OPERATION_NOT_REGISTERED；WRITE/RDT 规则保持（上一批次 10 项持续通过）",
     "regression": "connector + claim-item + amazon = 7 files / 57 tests PASS；tsc PASS",
     "boundary": "无真实凭据/账号/网络；未新增 Schema/migration/依赖；TRANSPORT=false"
+  },
+  "r41_submission": {
+    "submission_comment": "5929290849",
+    "ci_run": "36847028087",
+    "ci_result": "SUCCESS",
+    "reviewed_head": "9b399f7",
+    "local_evidence": "connector + claim-item + amazon = 7 files / 57 tests PASS；tsc PASS；prisma validate valid",
+    "wakeup_channel": "https://chatgpt.com/c/6ab9ee1b-fd54-83ee-b363-b67750afcedd",
+    "wakeup_delivery": "DELIVERED_VERIFIED（输入框清空 / 新用户消息在底部 / 生成中）",
+    "open_questions": [
+      "R41 fixture-only 集成是否可关闭（Checkpoint PASS）",
+      "下一批是否按 CHANGE C 推进 docs-only 的 Amazon FBA reimbursement / inventory-loss recovery 写操作官方能力取证",
+      "是否需把该连接器纳入组合根（仍 fixture/禁用凭据）"
+    ]
   }
 }
