@@ -1,16 +1,16 @@
 {
   "gate": "B2-FIX R1",
-  "head": "b7daaef",
+  "head": "3542591",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
   "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
   "send_head": "07b7009",
   "decision_head": "07b7009",
-  "last_chatgpt_message": "MSG-20261002-58",
+  "last_chatgpt_message": "MSG-20261002-59",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T21:56:47.493Z",
-  "previous_head": "21384b8",
+  "updated_at": "2026-10-01T22:26:48.440Z",
+  "previous_head": "b7daaef",
   "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "ab00cd9",
@@ -49,10 +49,10 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-01T22:01:46.758Z",
+  "last_tick_at": "2026-10-01T22:26:48.206Z",
   "state": "IMPLEMENT",
-  "last_action": "SCHEDULER_STALE_RECOVERED（gap=20min）→ 本轮已恢复执行",
-  "last_action_at": "2026-10-01T21:56:47.493Z",
+  "last_action": "MSG-20261002-59 = PASS 已归档（FULL_COPY_OK）：CHANGE A/B/C CLOSED，R46 S3 CLOSED，R46 S4 AUTHORIZED。",
+  "last_action_at": "2026-10-01T22:26:48.440Z",
   "next_action": "R46 S2：receipt snapshot + Settlement record/ingest 受保护写边界（可信到账证据 → server-side canonical snapshot → humanApproval → Settlement）。",
   "current_head": "ab00cd9",
   "reviewed_head": "07b7009",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-01T21:41:34.893Z",
-    "gapMs": 1211866,
+    "previousTickAt": "2026-10-01T22:16:36.039Z",
+    "gapMs": 612168,
     "stale": true,
-    "checkedAt": "2026-10-01T22:01:46.758Z"
+    "checkedAt": "2026-10-01T22:26:48.206Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -250,7 +250,7 @@
     "integration_boundary_review": "AUTHORIZED_TO_PLAN（先提交设计/实施计划，不直接开放真实 transport）"
   },
   "r36_submission_comment": "5927087320",
-  "stale_recovered_at": "2026-10-01T22:01:46.758Z",
+  "stale_recovered_at": "2026-10-01T22:26:48.206Z",
   "engineering_regression_policy": {
     "source": "HOST PRODUCT DIRECTION 2026-10-01",
     "doc": "docs/releases/ENGINEERING-REGRESSION-POLICY.md",
@@ -2659,17 +2659,17 @@
     ]
   },
   "r46_s3_verdict": {
-    "message_id": "MSG-20261002-58",
-    "decision": "REVISE",
-    "reviewed_head": "17d13ae",
+    "message_id": "MSG-20261002-59",
+    "decision": "PASS — R46 S3 CLOSED",
+    "reviewed_head": "b7daaef",
     "archival": "FULL_COPY_OK",
-    "archived_at": "2026-10-01T21:56:47.493Z",
+    "archived_at": "2026-10-01T22:26:48.440Z",
     "changes": {
       "A": "approval 必须绑定完整 reversal 事实（canonical reversal snapshot/digest，锁后重建比较）",
       "B": "provenance 不得客户端自证（digest/kind/source 服务端派生）",
       "C": "same approvalId + 两个不同有效 execution 并发 → exactly one committed / approval_consumed=1 / loser APPROVAL_ALREADY_CONSUMED / 零残留"
     },
-    "s3_status": "REVISE（未 CLOSED、不进入 S4；修复后提交 S3 FINAL 再裁决）",
+    "s3_status": "CLOSED",
     "implemented": {
       "A": [
         "3fbb47b（canonical reversal snapshot digest 绑定）",
@@ -2682,6 +2682,29 @@
         "21384b8（same approvalId 双 execution 竞争验收）"
       ]
     },
-    "next_unit": "R46 S3 FINAL Checkpoint → 重送审；通过后进入 R46 S4（Fee membership + fee calculation/adjustment）"
+    "next_unit": "R46 S4 — Fee Membership + Fee Calculation / Adjustment（AUTHORIZED）"
+  },
+  "r46_s4_authorization": {
+    "authorized_by": "MSG-20261002-59",
+    "chain": "eligible unreversed Settlement → FeeCalculationSettlement membership → FeeCalculation → reversal → FeeCalculationAdjustment",
+    "fee_basis": "confirmed + unreversed + eligible Settlement amount only",
+    "forbidden_basis": [
+      "Claim amount",
+      "ExpectedRecoveryBasis",
+      "R45 projection",
+      "FULLY_RECONCILED",
+      "manual override",
+      "estimated recovery",
+      "provider accepted but unpaid"
+    ],
+    "membership_rule": "no global UNIQUE(org, settlementId)；须有同 feeChain 并发竞争验收 + 合法不同 chain 正向对照",
+    "adjustment_kinds": [
+      "VOID",
+      "REVERSAL",
+      "CORRECTION"
+    ],
+    "fee_policy": "server-side rate/policyRef/feeBasisVersion；客户端不得自报",
+    "approval_rule": "Settlement approval ≠ Fee approval；financial write 继续 Action Guard / humanApproval",
+    "redline": "BillingInvoice=0 · Payment=0 · no autopay · R13 Payment Activation Gate HOLD"
   }
 }

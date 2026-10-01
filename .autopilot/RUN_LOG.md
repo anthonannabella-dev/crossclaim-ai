@@ -1400,3 +1400,8 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - B/C：21384b8（证据服务端派生；same approvalId 双 execution 竞争 → 恰好一次消费）。
 - 证据：settlement-reversal-db 10/10 PASS、tsc 0 error、下游 Fee/Invoice/Payment/Ledger 全 0。
 - NEXT：R46 S3 FINAL Checkpoint 重送审；S3 未 CLOSED、不进 S4。
+
+## 2026-10-02 JST — MSG-20261002-59 = PASS：R46 S3 CLOSED → R46 S4 AUTHORIZED
+
+- CHANGE A/B/C CLOSED；10/10 + S2 基线 + canonical 12/12 + action-guard 15/15 + tsc 0 进入永久回归基线。
+- NEXT：R46 S4（Fee membership + Fee calculation/adjustment；fee basis 限 confirmed+unreversed+eligible Settlement；不得全局 UNIQUE(org, settlementId)；reversal → FeeCalculationAdjustment；Settlement approval ≠ Fee approval；18 项永久验收；BillingInvoice=0 / Payment=0 / R13 Gate HOLD）。
