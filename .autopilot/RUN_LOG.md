@@ -1387,3 +1387,8 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - CHANGE B + 20 项永久验收 = PASS；S2 生产接线证据被接受。
 - 唯一收口：same approval + 独立并发执行 → 恰一次消费（loser fail-closed、无第二 Settlement、approval_consumed 恰 1）。若已覆盖则不重复开发。
 - NEXT：R46 S3（SettlementAdjustment / Full Reversal；v1 仅 full reversal；不得触发 Fee/Invoice/Payment）。
+
+## 2026-10-02 JST — R46 S2 = CLOSED（MSG-56 CHANGE 闭环）+ R46 S3 启动
+
+- 新增同 approval 并发消费证据（真实 PostgreSQL，settlement-record-db 15/15）→ S2 主体正式 CLOSED。
+- R46 S3 已按 MSG-20261002-56 冻结范围进入实现：仅 append SettlementAdjustment(kind=REVERSAL)，不改原 Settlement、不触达 Fee/Invoice/Payment/Ledger。

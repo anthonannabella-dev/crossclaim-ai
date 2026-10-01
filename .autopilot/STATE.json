@@ -1,6 +1,6 @@
 {
   "gate": "B2-FIX R1",
-  "head": "9c7074b",
+  "head": "f3beb6a",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
   "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
@@ -9,8 +9,8 @@
   "last_chatgpt_message": "MSG-20261002-56",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T18:39:41.143Z",
-  "previous_head": "4bc0e03",
+  "updated_at": "2026-10-01T18:43:16.593Z",
+  "previous_head": "9c7074b",
   "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "ab00cd9",
@@ -49,10 +49,10 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-01T18:38:04.238Z",
+  "last_tick_at": "2026-10-01T18:43:16.485Z",
   "state": "IMPLEMENT",
-  "last_action": "MSG-20261002-56 已归档（FULL_COPY_OK）：S2 主体可关闭；唯一收口项 = 同 approval 并发消费永久证据；NEXT = R46 S3（full reversal）。",
-  "last_action_at": "2026-10-01T18:39:41.143Z",
+  "last_action": "MSG-20261002-56 CHANGE 已闭环（same approval 并发消费 15/15）→ R46 S2 CLOSED；R46 S3 已按冻结范围登记并进入实现队列。",
+  "last_action_at": "2026-10-01T18:43:16.593Z",
   "next_action": "R46 S2：receipt snapshot + Settlement record/ingest 受保护写边界（可信到账证据 → server-side canonical snapshot → humanApproval → Settlement）。",
   "current_head": "ab00cd9",
   "reviewed_head": "07b7009",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-01T18:33:06.758Z",
-    "gapMs": 297480,
+    "previousTickAt": "2026-10-01T18:38:04.238Z",
+    "gapMs": 312248,
     "stale": false,
-    "checkedAt": "2026-10-01T18:38:04.238Z"
+    "checkedAt": "2026-10-01T18:43:16.485Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -2634,5 +2634,28 @@
       "资金下游零副作用"
     ],
     "redline": "NO automatic Fee · NO automatic Invoice mutation · NO Payment activation · NO autopay · NO platform write · TRANSPORT=false · NO production credentials；R13 Gate = HOLD"
+  },
+  "r46_s2_status": "CLOSED",
+  "r46_s3_authorization": {
+    "authorized_by": "MSG-20261002-56",
+    "scope": "Settlement → verified reversal evidence → SettlementAdjustment(kind=REVERSAL)；v1 仅 full reversal",
+    "forbidden": [
+      "Fee 重算",
+      "Invoice VOID",
+      "Payment/refund",
+      "autopay",
+      "平台外写",
+      "生产支付能力"
+    ],
+    "invariants": [
+      "原 Settlement 永久保留、不可修改",
+      "amount == 原 Settlement.amount 且 currency 一致",
+      "same reversal event replay → REUSED",
+      "different reversal event after full reversal → REVERSAL_ALREADY_APPLIED",
+      "跨租户 fail-closed",
+      "并发只能形成一个有效 full reversal",
+      "事务失败零残留",
+      "资金下游零副作用"
+    ]
   }
 }

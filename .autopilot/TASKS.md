@@ -636,3 +636,13 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - 交付：`docs/releases/CARRIER-RECOVERY-V1-CONTRACT.md`；RULES R16；STATE.carrier_recovery_directive。
 - 状态：REGISTERED / IMPLEMENTATION_STARTED = NO；V1 Top-10 rules 先行；UPS Compliance Gate HOLD。
 - 队列：不打断 R46 → Settlement/Billing → Full Regression。
+
+### R46 S2 = CLOSED（MSG-20261002-56 CHANGE 已闭环）
+
+- 证据：settlement-record-db **15/15**（新增 same approval 并发消费：loser fail-closed、无第二 Settlement、approval_consumed 恰 1）· canonical digest 12/12 · action-guard 15/15 · tsc 0 error。
+
+### R46 S3 — SettlementAdjustment / Full Reversal（已授权，进行中）
+
+- 范围：Settlement → verified reversal evidence → SettlementAdjustment(kind=REVERSAL)；v1 仅 full reversal。
+- 禁止：Fee 重算 / Invoice VOID / Payment·refund / autopay / 平台外写 / 生产支付。
+- 验收：原 Settlement 不变；等额同币种；重放 REUSED；第二个不同 reversal event fail-closed；跨租户拒绝；并发仅一个有效 full reversal；事务失败零残留；下游零副作用。
