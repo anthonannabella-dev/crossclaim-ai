@@ -414,3 +414,11 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - NEXT：**R45 — Outcome / Reimbursement Reconciliation**；第一批只交 **Design / Boundary Proposal**。
 - R45 四类事实：SUBMITTED_MANUAL ≠ PROVIDER_ACCEPTED ≠ REIMBURSEMENT_OBSERVED ≠ RECONCILED；12 项设计见 STATE.r44b_verdict.r45_design_items；不确定必须 fail-closed。
 - R45 禁止：Settlement / Billing / Fee / 改写 RecoveryLedger / 自动外写 / 开启 transport / observed reimbursement 直接等同可收费 recovered amount。
+
+### R45（Outcome / Reimbursement Reconciliation）—— Design / Boundary Proposal 待裁决
+
+- 交付：`docs/releases/R45-OUTCOME-REIMBURSEMENT-RECONCILIATION-DESIGN.md`（docs-only）。
+- 关键：四类事实分离（SUBMITTED_MANUAL ≠ PROVIDER_ACCEPTED ≠ REIMBURSEMENT_OBSERVED ≠ RECONCILED）；12 项设计边界；不确定一律 fail-closed。
+- 送审：REVIEWED_HEAD 4d01a09（Issue #2 comment 5932927885）。
+- NEXT：裁决 PASS 后按 Q7 提交 Schema Delta Request 或 Implementation Plan（仍不实现代码）。
+- 禁止：Settlement / Billing / Fee / 改写 RecoveryLedger / 自动外写 / transport。

@@ -1,6 +1,6 @@
 {
   "gate": "B2-FIX R1",
-  "head": "4d69248",
+  "head": "4d01a09",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
   "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
@@ -9,13 +9,13 @@
   "last_chatgpt_message": "MSG-20261001-43",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T13:54:17.805Z",
+  "updated_at": "2026-10-01T13:55:56.953Z",
   "previous_head": "f5c322e",
-  "architect_decision_pending": false,
+  "architect_decision_pending": true,
   "blocked_scope": null,
-  "last_send_head": "f5c322e",
-  "last_sent_at": "2026-10-01T13:52:59.400Z",
-  "last_sent_fingerprint": "R44-B:Manual-Recovery-Reference-Approval-Creation",
+  "last_send_head": "4d01a09",
+  "last_sent_at": "2026-10-01T13:55:56.953Z",
+  "last_sent_fingerprint": "R45:Outcome-Reimbursement-Reconciliation-Design",
   "final_head": "1144401",
   "ci_run": "36833002042",
   "ci_result": "SUCCESS",
@@ -49,12 +49,12 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-01T13:53:46.416Z",
+  "last_tick_at": "2026-10-01T13:55:57.254Z",
   "state": "IMPLEMENT",
-  "last_action": "MSG-20261001-43 = PASS — R44-B CLOSED / MANUAL RECOVERY HTTP APPROVAL + EXECUTION BOUNDARY CLOSED 已逐字归档并 FULL_COPY_OK；NEXT = R45 Design / Boundary Proposal（docs-only，不实现）",
-  "last_action_at": "2026-10-01T13:54:17.805Z",
-  "next_action": "R45 — Outcome / Reimbursement Reconciliation（第一批仅 Design / Boundary Proposal，不实现）：定义 SUBMITTED_MANUAL ≠ PROVIDER_ACCEPTED ≠ REIMBURSEMENT_OBSERVED ≠ RECONCILED 四类事实 + 12 项设计（可信来源 / 匹配规则 / matched·unmatched·ambiguous / partial / 多对一 / 一对多疑似 / currency·amount tolerance / reversal·correction / evidence provenance / idempotency / 人工 override 权限·审批·审计 / 不确定必须 fail-closed）；R45 不得创建 Settlement·Billing·Fee、不得改写 RecoveryLedger、不得自动外写、不得开启 transport。",
-  "current_head": "4d69248",
+  "last_action": "R45 Design / Boundary Proposal 已送审（docs-only，无实现）：四类事实分离 + 12 项设计边界 + 7 项待裁决问题；等待裁决后按 Q7 决定 Schema Delta Request 或 Implementation Plan",
+  "last_action_at": "2026-10-01T13:55:56.953Z",
+  "next_action": "等待 R45 Design / Boundary Proposal 裁决：①PASS/ACK → 按 Q7 回答提交 R45 Schema Delta Request 或 Implementation Plan（仍不实现代码）②REVISE → 按 CHANGE 修改设计重送 ③BLOCK → 停止该方向。",
+  "current_head": "4d01a09",
   "reviewed_head": "07b7009",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-01T13:52:59.732Z",
-    "gapMs": 46684,
+    "previousTickAt": "2026-10-01T13:53:46.416Z",
+    "gapMs": 130839,
     "stale": false,
-    "checkedAt": "2026-10-01T13:53:46.416Z"
+    "checkedAt": "2026-10-01T13:55:57.254Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -1412,5 +1412,39 @@
       "把 observed reimbursement 直接等同于可收费 recovered amount"
     ],
     "risk_note": "不要把「Manual Recovery HTTP 闭环完成」扩大解释为「Recovery 商业闭环完成」：provider outcome → reimbursement observation → claim reconciliation，以及 recovered money → Settlement → Billing 仍是独立事实层。"
+  },
+  "r45_design_submission": {
+    "submission_comment": "5932927885",
+    "reviewed_head": "4d01a09",
+    "doc": "docs/releases/R45-OUTCOME-REIMBURSEMENT-RECONCILIATION-DESIGN.md",
+    "kind": "Design / Boundary Proposal（docs-only；无实现、无 Schema 变更、无新依赖）",
+    "submitted_under_rules": true,
+    "risk_classification": {
+      "FOUNDATION_REUSED": "R43 canonical identity（唯一 builder）+ EvidenceArtifact/provenance + Action Guard/HITL + 事务·CAS·行锁 + AuditLog + consistency checker 模式",
+      "NEW_RISK_BOUNDARY": "YES（R45 将引入新事实层：PROVIDER_ACCEPTED / REIMBURSEMENT_OBSERVED / RECONCILED；本批次仅设计，无实现）",
+      "ARCH_REVIEW_REQUIRED": "YES —— 触发项：领域与 Schema 变化（新事实层 + 新受保护动作 recovery.reconciliation_override）；本批次仅送设计边界，实现前需 Schema Delta / Implementation Plan"
+    },
+    "oss": "OSS_CANDIDATE = 无新增（预计新增依赖 0）；OSS_DECISION = EXISTING；LICENSE/COMMERCIAL_USE/LICENSE_RISK = n/a",
+    "key_points": [
+      "四类事实分离：SUBMITTED_MANUAL ≠ PROVIDER_ACCEPTED ≠ REIMBURSEMENT_OBSERVED ≠ RECONCILED（不得互相推导）",
+      "来源分级：官方 API(HIGH，本批次不接入) / 平台导出文件(MEDIUM，文件指纹+解析器版本+行级 provenance) / 人工录入(MEDIUM，需证据) / 客户端自证(拒绝)",
+      "匹配：唯一确定才 MATCHED；无候选 UNMATCHED；多候选 AMBIGUOUS fail-closed；partial 以单笔事实记录；多笔对一 claim 允许；一笔多 claim 一律歧义",
+      "币种不符 fail-closed（不自动换算）；容差配置化且审计，超差即 AMBIGUOUS",
+      "reversal/correction 不改原事实（append-only），对账层重算；已 reconciled 冲正后回 partial/unmatched",
+      "reconciliation 幂等键 rr1:<claimItemId>:<reimbursementFactId>（服务端构造）",
+      "人工 override 受保护动作 recovery.reconciliation_override + humanApproval + claimTrackingApprove + 锁后实时重验 + 结构化 reason + 证据",
+      "禁止：Settlement / Billing / Fee / 改写 RecoveryLedger / 自动外写 / transport / observed ≠ 可收费 recovered"
+    ],
+    "questions": [
+      "金额容差默认值（绝对+相对）？是否允许按 provider 配置？",
+      "FULLY_RECONCILED 是否必须「累计 observed ≥ claim 金额 且 全部证据可追溯」？",
+      "AMBIGUOUS 是否一律只能人工 override（禁止自动消歧）？",
+      "冲正仅影响对账层，还是也允许标记 provider accepted 为 REVOKED（append-only）？",
+      "override 审批粒度：每笔单独审批还是允许「批量 override + 逐笔审计」？",
+      "人工录入与平台导出文件冲突时，一律 fail-closed 还是按来源优先级择优？",
+      "R45 实现是否按 R43 模式拆为 Schema Delta Request → Implementation Plan → S1…Sn（每个 Schema 变更单独送审）？"
+    ],
+    "wakeup_channel": "https://chatgpt.com/c/6ab9ee1b-fd54-83ee-b363-b67750afcedd",
+    "wakeup_delivery": "DELIVERED_VERIFIED（输入框清空 / 新用户消息在底部 / 生成中）"
   }
 }

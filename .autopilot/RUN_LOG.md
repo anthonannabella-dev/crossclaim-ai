@@ -1080,3 +1080,11 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 风险口径（架构方）：**不得**把「Manual Recovery HTTP 闭环完成」扩大解释为「Recovery 商业闭环完成」；provider outcome → reimbursement observation → claim reconciliation、以及 recovered money → Settlement → Billing 仍为独立事实层。
 - NEXT：**R45 — Outcome / Reimbursement Reconciliation**，第一批**只交 Design / Boundary Proposal（不实现）**；需定义四类事实与 12 项设计；R45 暂不得创建 Settlement/Billing/Fee、不得改写 RecoveryLedger、不得自动外写、不得开启 transport、不得把 observed reimbursement 等同于可收费 recovered amount。
 - 档案：`AI-ARCHITECT-INBOX.md` → `MSG-20261001-43`；`compare.mjs` = **FULL_COPY_OK**。
+
+## 2026-10-01 JST — R45 Design / Boundary Proposal 送审（Outcome / Reimbursement Reconciliation）
+
+- 依据 MSG-20261001-43：R44-B CLOSED / Manual Recovery HTTP 边界整体闭合；R45 第一批只交 Design / Boundary Proposal（不实现）。
+- 文档：`docs/releases/R45-OUTCOME-REIMBURSEMENT-RECONCILIATION-DESIGN.md`（四类事实分离、来源分级、匹配与歧义 fail-closed、partial/多对一/一对多、币种与容差、冲正更正、provenance、幂等、人工 override 权限·审批·审计、不确定必须 fail-closed；复用映射 + 边界禁止项 + 7 项待裁决问题）。
+- docs-only：无实现、无 Schema/migration/触发器变更、无新增依赖（OSS_DECISION = EXISTING）。
+- 送审：REVIEWED_HEAD 4d01a09（Issue #2 comment 5932927885）；唤醒已投递并三要素验证。
+- HOLD 保持：AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · SETTLEMENT/BILLING LINKAGE HOLD。
