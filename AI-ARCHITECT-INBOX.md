@@ -82197,3 +82197,277 @@ AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CR
 
 VERDICT: PASS — R44-B CLOSED — MANUAL RECOVERY HTTP APPROVAL + EXECUTION BOUNDARY CLOSED — MSG-20261001-43
 ```
+
+### [MSG-20261001-44] R45 Outcome / Reimbursement Reconciliation — Design Boundary —— **PASS WITH REVISE**（7 项裁决 + CHANGE A Expected Recovery Basis / CHANGE B Fact vs Projection / CHANGE C 外部事件身份与幂等；NEXT = **R45-A Schema Delta Request**，仍不实现）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE: FORMAL_VERDICT
+MESSAGE: MSG-20261001-44
+PREVIOUS: MSG-20261001-43
+GATE: Gate 7 / R45 Outcome & Reimbursement Reconciliation / Design Boundary
+REVIEWED_HEAD: 4d01a09
+DECISION: PASS WITH REVISE
+
+KEEP
+
+R45 的总体边界正确，尤其保留以下硬不变量：
+
+SUBMITTED_MANUAL
+≠ PROVIDER_ACCEPTED
+≠ REIMBURSEMENT_OBSERVED
+≠ RECONCILED
+≠ RECOVERED / BILLABLE
+
+认可：
+
+observed 事实 append-only；
+reversal/correction 不覆盖原事实；
+provenance 强制存在；
+唯一确定才 MATCHED；
+多候选 → AMBIGUOUS；
+currency mismatch 不自动换汇；
+partial reimbursement 不自动宣称 claim fully recovered；
+override 不修改原始事实；
+Settlement/Billing/RecoveryLedger 继续隔离；
+本批次 docs-only，没有提前实施。
+7 项裁决
+① 金额容差
+
+REVISE：不要在领域层冻结一个全局业务默认容差。
+
+允许 provider/operation/version 级配置，但必须版本化并记录实际使用的 policy。
+
+建议模型：
+
+amountTolerancePolicyId + policyVersion
+
+策略可包含：
+
+absoluteTolerance + relativeTolerance
+
+规则：
+
+abs(observed - expected) <= max(absoluteTolerance, expected × relativeTolerance)
+
+但 v1 默认应为 exact match：absolute=0、relative=0。
+
+Amazon 或其他 provider 若以后证明存在合法 rounding/fee/netting 行为，再通过 evidence-backed policy 单独放宽。
+
+不能先拍一个 $0.01 / 1% 之类的通用默认值。
+
+② FULLY_RECONCILED
+
+YES，但条件需要比“累计金额 ≥ claim 金额”更严格。
+
+至少同时满足：
+
+所有计入金额来自有效、未被 reversal/correction 抵销的 observed facts；
+每笔 provenance 完整；
+currency 一致；
+reconciliation 全部为 MATCHED；
+不存在 unresolved AMBIGUOUS / conflicting facts；
+使用明确的 expected recovery basis；
+netMatchedObserved 达到该 basis。
+
+不要简单使用 ClaimItem 某个“金额”字段，因为：
+
+claim amount ≠ necessarily recoverable amount ≠ provider reimbursement basis
+
+R45 Schema 必须明确 expected basis 的来源/version。
+
+③ AMBIGUOUS
+
+v1：禁止自动消歧。
+
+只能：
+
+AMBIGUOUS → human review → approved override → deterministic resolution
+
+但“人工查看”与“人工 override”区分：
+
+人工可以查看/补证据而不改变状态；真正把 ambiguous 指向某 Claim 时，必须走 recovery.reconciliation_override + humanApproval。
+
+未来若有经过验证的 deterministic matching rule，可单独送审，不在 R45 v1 偷渡启用。
+
+④ reversal 与 PROVIDER_ACCEPTED
+
+不要修改历史 PROVIDER_ACCEPTED fact。
+
+如果后续官方事实表明 provider 撤销/否决此前受理，应新增 append-only provider outcome fact，例如：
+
+ACCEPTED
+→ 后续事实 ACCEPTANCE_REVOKED
+
+而不是 UPDATE 原 ACCEPTED。
+
+Reconciliation projector 可以根据事实序列计算当前 effective state。
+
+同理：
+
+REIMBURSEMENT_OBSERVED
+→ REIMBURSEMENT_REVERSED
+
+保留完整时间链。
+
+⑤ Override 审批粒度
+
+v1 每个 reconciliation decision 单独审批。
+
+不批准一个 approval 授权 N 个未知对象的开放式 batch override。
+
+未来允许 batch 时，也必须：
+
+创建时冻结完整 item set；
+每项独立 basis/digest；
+batch digest 覆盖所有成员；
+不允许审批后增删成员；
+每笔独立 audit/result。
+
+R45 v1 不需要承担这个复杂度。
+
+⑥ 人工录入 vs 平台导出冲突
+
+一律 fail-closed，不按 HIGH/MEDIUM 排名自动覆盖事实。
+
+source trust level 用于风险判断和人工调查，不是 last-writer-wins / higher-trust-wins 规则。
+
+如果两条事实针对同一 provider event 却内容冲突：
+
+CONFLICTING_EVIDENCE
+
+不得自动选择其一。
+
+即使未来：
+
+official API HIGH
+vs
+manual MEDIUM
+
+也不能删除/覆盖人工事实；只能新增 resolution fact，说明哪一个被采用以及证据依据。
+
+⑦ 实现节奏
+
+YES。按 R43 模式拆。
+
+下一步不是直接写实现，而是：
+
+R45-A — Schema Delta Request
+
+Schema 批准后：
+
+R45-B — Implementation Plan
+
+然后按风险边界拆 S1…Sn。
+
+不要求“每一张表一个 Schema Request”；同一领域原子模型可以一次 Schema Delta 提交，但所有新增表、枚举、索引、CHECK、partial unique、trigger、append-only 规则必须一次完整列出。
+
+CHANGE A — 增加 Expected Recovery Basis
+
+进入 Schema Delta 前必须明确：
+
+FULLY_RECONCILED 到底与什么金额比较
+
+至少设计版本化事实：
+
+expectedRecoveryAmount
+currency
+basisKind
+basisVersion
+basisSource
+
+它必须可追溯，且不能在 reimbursement 到账后反向修改 basis 来制造 FULLY_RECONCILED。
+
+CHANGE B — 区分 Fact 与 Projection
+
+Schema Proposal 必须明确两层：
+
+Immutable Facts
+
+例如：
+
+ProviderOutcomeFact
+ReimbursementFact
+ReimbursementCorrection/Reversal
+OverrideDecision
+
+与：
+
+Derived Projection
+
+例如：
+
+UNMATCHED
+AMBIGUOUS
+MATCHED
+PARTIALLY_RECONCILED
+FULLY_RECONCILED
+
+Projection 可以重算；Facts 不可覆盖。
+
+避免未来把 FULLY_RECONCILED 当成不可逆历史事实。
+
+CHANGE C — 外部事件身份与幂等
+
+rr1:<claimItemId>:<reimbursementFactId> 只解决 reconciliation 幂等，不足以解决 同一 reimbursement 被重复 ingest 两次。
+
+Schema Delta 必须单独定义 provider/source event identity，例如：
+
+providerEventId
+
+若 provider 没有稳定 ID，则使用版本化 server-side fingerprint。
+
+目标是不让：
+
+同一笔 $100 reimbursement 被导入两次
+→ 两个 Fact
+→ 累计成 $200
+→ 错误 FULLY_RECONCILED。
+
+这是 R45 的关键资金事实风险。
+
+RISKS
+
+当前最高风险不是匹配算法，而是重复事实导致金额被双计。
+
+第二风险是 expected basis 漂移。
+
+第三风险是把 projection 当成 immutable fact，导致 reversal 到来后无法安全重算。
+
+这三项必须在 Schema 层解决，而不能只靠 service code。
+
+TEST
+
+未来 R45 验收至少必须覆盖：
+
+同一 reimbursement 重复 ingest → 只计一次；
+correction/reversal → 原事实仍存在；
+reversal 后 FULL → PARTIAL/UNMATCHED 可重算；
+partial × N 累计；
+currency mismatch；
+amount outside tolerance；
+one reimbursement → multiple candidate claims → AMBIGUOUS；
+conflicting sources → CONFLICTING_EVIDENCE；
+override 必须 approval；
+override 不改原 fact；
+expected basis 变更不能静默发生；
+provenance 缺失零写入；
+cross-tenant fail-closed；
+Settlement/Billing/RecoveryLedger 始终零变化。
+NEXT
+
+提交：
+
+R45-A — Outcome / Reimbursement Reconciliation Schema Delta Request
+
+必须包含：
+
+facts + external-event identity/fingerprint + expected recovery basis + projection + override + provenance + indexes/checks/triggers + migration impact
+
+仍然：
+
+NO Settlement · NO Billing · NO Fee · NO RecoveryLedger mutation · NO platform write · TRANSPORT=false · NO production credentials。
+
+VERDICT: PASS WITH REVISE — MSG-20261001-44
+```

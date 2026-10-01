@@ -1088,3 +1088,12 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - docs-only：无实现、无 Schema/migration/触发器变更、无新增依赖（OSS_DECISION = EXISTING）。
 - 送审：REVIEWED_HEAD 4d01a09（Issue #2 comment 5932927885）；唤醒已投递并三要素验证。
 - HOLD 保持：AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · SETTLEMENT/BILLING LINKAGE HOLD。
+
+## 2026-10-01 JST — MSG-20261001-44 = PASS WITH REVISE（R45 Design 裁决）→ R45-A Schema Delta Request
+
+- 裁决：**PASS WITH REVISE**（REVIEWED_HEAD 4d01a09）。四类事实分离 / append-only / provenance / fail-closed / override 不改原事实 / 资金域隔离获认可。
+- 7 项裁决：容差需版本化 policy（v1 exact，不冻结全局默认）；FULLY_RECONCILED 需更严格条件 + 明确 expected basis；AMBIGUOUS 禁止自动消歧；reversal 不改历史事实（新增 REVOKED/REVERSED 事实）；override v1 每笔单独审批；来源冲突一律 fail-closed；实现按 Schema Delta → Plan → S1…Sn。
+- CHANGE A/B/C：Expected Recovery Basis（版本化）/ Fact 与 Projection 分离 / 外部事件身份与幂等（providerEventId 或版本化 fingerprint）。
+- 首要风险：重复事实导致金额双计；其次 expected basis 漂移；再次把 projection 当 immutable fact。
+- NEXT：**R45-A Schema Delta Request**（docs-only，仍不实现）。
+- 档案：`AI-ARCHITECT-INBOX.md` → `MSG-20261001-44`；`compare.mjs` = **FULL_COPY_OK**。

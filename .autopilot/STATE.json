@@ -1,17 +1,17 @@
 {
   "gate": "B2-FIX R1",
-  "head": "4d01a09",
+  "head": "f963013",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
   "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
   "send_head": "07b7009",
   "decision_head": "07b7009",
-  "last_chatgpt_message": "MSG-20261001-43",
+  "last_chatgpt_message": "MSG-20261001-44",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T13:55:56.953Z",
-  "previous_head": "f5c322e",
-  "architect_decision_pending": true,
+  "updated_at": "2026-10-01T14:00:16.788Z",
+  "previous_head": "4d01a09",
+  "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "4d01a09",
   "last_sent_at": "2026-10-01T13:55:56.953Z",
@@ -49,12 +49,12 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-01T13:55:57.254Z",
+  "last_tick_at": "2026-10-01T13:58:45.634Z",
   "state": "IMPLEMENT",
-  "last_action": "R45 Design / Boundary Proposal 已送审（docs-only，无实现）：四类事实分离 + 12 项设计边界 + 7 项待裁决问题；等待裁决后按 Q7 决定 Schema Delta Request 或 Implementation Plan",
-  "last_action_at": "2026-10-01T13:55:56.953Z",
-  "next_action": "等待 R45 Design / Boundary Proposal 裁决：①PASS/ACK → 按 Q7 回答提交 R45 Schema Delta Request 或 Implementation Plan（仍不实现代码）②REVISE → 按 CHANGE 修改设计重送 ③BLOCK → 停止该方向。",
-  "current_head": "4d01a09",
+  "last_action": "MSG-20261001-44 = PASS WITH REVISE 已逐字归档并 FULL_COPY_OK —— R45 设计边界总体认可；需按 7 项裁决 + CHANGE A/B/C 修订设计并提交 R45-A Schema Delta Request（仍不实现）",
+  "last_action_at": "2026-10-01T14:00:16.788Z",
+  "next_action": "R45-A — Schema Delta Request：完整列出 immutable facts / external event identity·fingerprint / expected recovery basis（版本化）/ derived projection / override / provenance / indexes·CHECK·partial unique·triggers·append-only / migration impact；禁止 Settlement·Billing·Fee·RecoveryLedger 改写·平台外写·transport。",
+  "current_head": "f963013",
   "reviewed_head": "07b7009",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-01T13:53:46.416Z",
-    "gapMs": 130839,
+    "previousTickAt": "2026-10-01T13:55:57.254Z",
+    "gapMs": 168381,
     "stale": false,
-    "checkedAt": "2026-10-01T13:55:57.254Z"
+    "checkedAt": "2026-10-01T13:58:45.634Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -1446,5 +1446,32 @@
     ],
     "wakeup_channel": "https://chatgpt.com/c/6ab9ee1b-fd54-83ee-b363-b67750afcedd",
     "wakeup_delivery": "DELIVERED_VERIFIED（输入框清空 / 新用户消息在底部 / 生成中）"
+  },
+  "r45_design_verdict": {
+    "message_id": "MSG-20261001-44",
+    "decision": "PASS WITH REVISE",
+    "reviewed_head": "4d01a09",
+    "archival": "FULL_COPY_OK",
+    "archival_at": "2026-10-01T14:00:16.788Z",
+    "rulings": [
+      "Q1 容差 REVISE：不冻结全局默认；provider/operation/version 级版本化 policy（amountTolerancePolicyId + policyVersion）；规则 abs(observed-expected) <= max(absoluteTolerance, expected*relativeTolerance)；v1 默认 exact(0/0)；放宽需 evidence-backed 单独送审",
+      "Q2 FULLY_RECONCILED YES 但更严格：计入金额仅来自有效且未被 reversal/correction 抵销的 observed facts；provenance 完整；currency 一致；全部 MATCHED；无 unresolved AMBIGUOUS/conflict；使用明确 expected recovery basis 且 netMatchedObserved 达标；不得用 ClaimItem 金额字段当 recoverable",
+      "Q3 AMBIGUOUS v1 禁止自动消歧；人工查看 ≠ override；真正指向必须走 recovery.reconciliation_override + humanApproval；未来 deterministic rule 单独送审",
+      "Q4 reversal 不改历史事实：新增 append-only ACCEPTANCE_REVOKED / REIMBURSEMENT_REVERSED，由 projector 计算 effective state",
+      "Q5 override v1 每笔单独审批；不批准开放式 batch override；未来 batch 需冻结 item set + 每项 basis/digest + batch digest + 不可增删成员 + 每笔独立 audit",
+      "Q6 来源冲突一律 fail-closed（CONFLICTING_EVIDENCE）；trust level 仅用于风险判断，不是 higher-trust-wins；只能新增 resolution fact",
+      "Q7 实现节奏 YES：R45-A Schema Delta Request → R45-B Implementation Plan → S1…Sn；同一领域原子模型可一次 Schema Delta，但必须一次完整列出表/枚举/索引/CHECK/partial unique/trigger/append-only 规则"
+    ],
+    "changes": {
+      "A": "Expected Recovery Basis：版本化事实 expectedRecoveryAmount / currency / basisKind / basisVersion / basisSource；可追溯；不得在 reimbursement 到账后反向改 basis",
+      "B": "Immutable Facts（ProviderOutcomeFact / ReimbursementFact / ReimbursementCorrection·Reversal / OverrideDecision）vs Derived Projection（UNMATCHED / AMBIGUOUS / MATCHED / PARTIALLY_RECONCILED / FULLY_RECONCILED）；projection 可重算，facts 不可覆盖",
+      "C": "外部事件身份与幂等：rr1: 仅解决 reconciliation 幂等；必须定义 providerEventId 或版本化 server-side fingerprint，防止同一笔 reimbursement 重复 ingest 被双计"
+    },
+    "risks": [
+      "重复事实导致金额双计（最高）",
+      "expected basis 漂移",
+      "把 projection 当 immutable fact 导致 reversal 后无法安全重算"
+    ],
+    "next": "R45-A — Outcome / Reimbursement Reconciliation Schema Delta Request（docs-only，仍不实现）"
   }
 }
