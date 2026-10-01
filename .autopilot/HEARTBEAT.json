@@ -1,11 +1,11 @@
 {
   "runner_status": "RUNNING",
   "current_gate": "B2-FIX R1",
-  "current_task": "Gate 7 / ② billing.draft —— MSG-20261001-11 CHANGE A/B/C 已实施并送审 R28",
-  "current_head": "d81a86f",
+  "current_task": "Gate 7 / ② billing.draft —— MSG-20261001-12 CHANGE A + TEST 已实施并送审 R29",
+  "current_head": "88fd9b3",
   "last_action": "MSG-20261001-12 (R28) = REVISE 已收敛：invoiceRefAt 单一持久化来源（createdAt: at）+ 事实一致性验收补齐（双费用集合、非零支付字段保留、金额+币种一致、同路径成功对照、时序口径修正）；专项 21/21、回归 32 files/297、tsc/prisma PASS；送审 R29（Issue #2 comment 5924692602 / CI 36814394218 success / HEAD d81a86f）",
-  "last_action_at": "2026-10-01T04:22:53.680Z",
-  "next_action": "等待 MSG-20261001-13（R29 裁决）：PASS → billing.draft 收口并进入 ② 剩余小批次（evidence.read / appeal.submit / platform.write）；REVISE → 立即按新 CHANGE 收敛后重新送审",
+  "last_action_at": "2026-10-01T04:23:06.880Z",
+  "next_action": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
   "retry_count": 0,
   "last_error": null,
   "reconcile": "RECONCILE_REQUIRED",
@@ -16,8 +16,5 @@
     "real_money": false,
     "customer_submission": false,
     "production_credentials": "HOST_ONLY"
-  },
-  "last_tick_at": "2026-10-01T04:22:53.680Z",
-  "state": "REVIEW_WAIT",
-  "architect_decision_pending": true
+  }
 }

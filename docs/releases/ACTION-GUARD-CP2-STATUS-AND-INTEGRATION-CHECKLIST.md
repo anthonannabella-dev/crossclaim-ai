@@ -44,7 +44,7 @@
 | `payment.capture` | 账单登记入口（HTTP 受保护入口） | 资金动作（HOLD） | Action Guard 审批绑定 + 锁内事实 CAS + 快照交错校验 | HTTP 级：拒绝零副作用 / 允许恰一次（含并发与等锁失效） | **已验收 PASS（MSG-20260930-24 / REVIEWED_REF 73115a3）** |
 | `secret.rotate` | 待定（运维路径） | 凭据操作（HOST ONLY） | HOST APPROVAL | 待补 | TODO |
 | `claim.prepare` | `POST /cases/:id/claim/prepare`（http-routes + server WORKFLOW_PATH） | 业务库写入（第 1 轮 Claim 草稿 `target`/`aiDraftText` + `claim.prepared` 审计同事务；不推进状态） | 能力闸门（`INTERNAL_WRITE` / `requires: []`，**无人工审批**）+ 案件锁 + Claim 行锁后最终主体/角色重验 | HTTP 级 **21/21**（含行锁等待期降权/停用/未变对照、并发创建、状态交错、更新路径审计失败回滚） | **已验收 PASS（MSG-20261001-10 / REVIEWED_REF d6d239b；CI 36811474236）** |
-| `billing.draft` | `POST /cases/:id/billing/draft`（http-routes + server WORKFLOW_PATH） | 业务库写入（DRAFT `BillingInvoice` + `billing.drafted` 审计同事务；不推进收款/到账/扣划） | 能力闸门（`INTERNAL_WRITE` / `requires: []`，**无人工审批**）+ 案件锁 + 账单行锁 + 费用依据行锁后最终主体/角色重验 | HTTP 级 20/20（含幂等真实状态、VOID/WRITTEN_OFF→409、费用抢移拒绝、费用锁等待期金额变化/非法/权限降级） | **R28 送审中（MSG-20261001-11 CHANGE A/B/C 已收敛）** |
+| `billing.draft` | `POST /cases/:id/billing/draft`（http-routes + server WORKFLOW_PATH） | 业务库写入（DRAFT `BillingInvoice` + `billing.drafted` 审计同事务；不推进收款/到账/扣划） | 能力闸门（`INTERNAL_WRITE` / `requires: []`，**无人工审批**）+ 案件锁 + 账单行锁 + 费用依据行锁后最终主体/角色重验 | HTTP 级 **21/21**（含幂等真实状态、VOID/WRITTEN_OFF→409、费用抢移拒绝、费用锁等待期金额+币种变化/非法/权限降级、同路径成功对照、invoiceRefAt 三方一致、非零支付字段保留、双费用集合排序） | **R29 送审中（MSG-20261001-12 CHANGE A + TEST 已收敛）** |
 | `evidence.read` | 待定（只读） | 无 | 无 | 待补 | TODO |
 
 > 追加记录（同属本清单口径，逐批次登记）：`payment.replay` = **验收 PASS**（MSG-20260930-28 / REVIEWED_REF 08fc45d；资金对象身份纳入快照与审批指纹、按 id 行锁恰一行）；`payment.retry_due`（冻结批次）= **验收 PASS**（MSG-20261001-01 / REVIEWED_REF 9a806eb / CI run 36726898061 / Issue #2 comment 5915049394）。三类受保护入口共用同一 Action Guard 审批边界，**支付域三类受保护内部入口当前工程范围已收口**（不等于真实扣款/生产启用/webhook 新授权/②全覆盖）；② 整体仍为 NOT COMPLETE。
@@ -168,11 +168,11 @@
 | 入口接线：POST /cases/:id/billing/draft | 已接入（R28 送审中） | `services/workflow/http-routes.ts` + `server.ts` WORKFLOW_PATH |
 | 能力闸门（INTERNAL_WRITE，无人工审批） | 已实现（R28 送审中） | 缺 guard → 403 ACTION_GUARD_NOT_CONFIGURED；默认 READ_ONLY / billing Kill Switch 关闭 / feature 未开启 → 403 且零副作用 |
 | 锁顺序与锁后重验 | 已实现（R28 送审中） | 案件锁 `cc-recovery-case:<caseId>` → 既有账单行锁 → 费用依据行锁 → 最终 ACTIVE 用户/有效 Membership/当前角色重验 → 生成执行时间 → 幂等/拒绝/写入 |
-| 幂等与并发 | 已实现（R28 送审中） | 幂等返回**真实持久化状态**（DRAFT/ISSUED/PAID/PARTIALLY_PAID）+ `invoiceRefAt`/`checkedAt` 分离 + `basisFeeCalculationIds` 集合；并发仅生成一张账单 |
+| 幂等与并发 | 已实现（R29 送审中） | 幂等返回**真实持久化状态**（DRAFT/ISSUED/PAID/PARTIALLY_PAID）+ `invoiceRefAt`（创建时显式 `createdAt: at`，单一持久化来源）/`checkedAt` 分离 + `basisFeeCalculationIds` 集合；并发仅生成一张账单 |
 | VOID / WRITTEN_OFF 后策略 | 已实现（R28 送审中） | 结构化 409 `BILLING_REISSUE_REQUIRES_NEW_NUMBER`；不删除/不重用旧账单、不抢移费用关联、不触发唯一约束 500 |
 | 费用依据可靠事实 | 已实现（R28 送审中） | 费用行锁后重读；禁止抢移已关联其他账单的费用；金额 > 0 与 3 位大写币种校验 |
 | 事务与审计 | 已实现（R28 送审中） | `billing.drafted` 与写入同事务；审计失败整笔回滚 |
 | 边界 | 已实现（R28 送审中） | 不推进收款/到账/扣划（`paymentCollectedByThisCall=false`），不创建 Payment/Settlement/Ledger，不触达平台 |
-| 集成测试 | 20/20（R28 送审中） | `action-guard-billing-draft-http-db.test.ts`（真实 HTTP + PostgreSQL） |
-| 架构方裁决 | **待裁决（R27 = REVISE 已收敛，送审 R28）** | Issue #2 comment 5924586221 / CI run 36813619247 / HEAD 5dc18ad |
+| 集成测试 | **21/21**（R29 送审中） | `action-guard-billing-draft-http-db.test.ts`（真实 HTTP + PostgreSQL） |
+| 架构方裁决 | **待裁决（R27/R28 = REVISE 已收敛，送审 R29）** | Issue #2 comment 5924692602 / CI run 36814394218 / HEAD d81a86f |
 | 后续集成项（记录，不在本批） | 待立项 | 既有 `closure-service` / `commission-reconciliation` 自动起草路径未接入本次共用案件锁：当前只声明**本入口之间**的并发保障（MSG-20261001-11 §6） |
