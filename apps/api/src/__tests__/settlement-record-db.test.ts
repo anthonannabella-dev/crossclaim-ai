@@ -11,6 +11,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { hashPassword } from '../services/auth';
 import {
+  createSettlementRecordDeps,
   recordSettlement,
   SettlementRecordError,
   type SettlementRecordDeps,
@@ -338,5 +339,17 @@ describe('R46 S2 approval 绑定漂移 与 snapshot 不可漂移（DB 级）', (
 
     const row = await prisma.settlement.findFirstOrThrow({ where: { id: result.settlementId } });
     expect(row.receiptSnapshotId).toBe(result.receiptSnapshotId);
+  });
+});
+
+describe('R46 S2 生产装配工厂（createSettlementRecordDeps）', () => {
+  it('工厂装配的依赖强制 ACTIVE membership 复验', async () => {
+    const wired = createSettlementRecordDeps(prisma, async (request) => request.approvalId.length > 0);
+    const ok = await recordSettlement(wired, input() as never);
+    expect(ok.status).toBe('CREATED');
+
+    await expect(
+      recordSettlement(wired, { ...input(), actorUserId: actorInactive } as never),
+    ).rejects.toMatchObject({ code: 'APPROVAL_REQUIRED' });
   });
 });

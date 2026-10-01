@@ -423,3 +423,26 @@ class ReusedAfterRace extends Error {
     super('REUSED_AFTER_RACE');
   }
 }
+
+/**
+ * 生产装配：把受保护写路径的依赖绑定到真实 Prisma + 外部注入的审批校验器
+ * （approval 校验仍由 action-guard 提供；membership 复验由本工厂强制，避免调用方漏接）。
+ */
+export function createSettlementRecordDeps(
+  prisma: PrismaClient,
+  verifyApproval: SettlementRecordDeps['verifyApproval'],
+): SettlementRecordDeps {
+  return {
+    prisma,
+    verifyApproval,
+    assertActiveMembership: async (organizationId: string, userId: string) => {
+      const row = await prisma.membership.findFirst({
+        where: { organizationId, userId, isActive: true },
+        select: { id: true },
+      });
+      if (!row) {
+        throw new SettlementRecordError('APPROVAL_REQUIRED', 'no ACTIVE membership for actor');
+      }
+    },
+  };
+}
