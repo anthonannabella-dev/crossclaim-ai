@@ -1,8 +1,8 @@
 {
   "gate": "B2-FIX R1",
-  "head": "ab00cd9",
+  "head": "ea66ae2",
   "status": "RECONCILED",
-  "current_task": "13. Gate 7 授权队列推进：R45（S1–S5）CLOSED → R46 Settlement / Billing Linkage Gate：Design（MSG-52）→ R46-A Schema Delta（MSG-53）→ R46-B Implementation Plan（MSG-54）→ **R46 S1 Schema 已实施并送审**（REVIEWED_HEAD ab00cd9）。批准后进入 S2…S6（每个 Stage 独立 Checkpoint）。",
+  "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
   "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
   "send_head": "07b7009",
   "decision_head": "07b7009",
@@ -10,7 +10,7 @@
   "production_enabled": false,
   "external_write_enabled": false,
   "updated_at": "2026-10-01T17:11:23.024Z",
-  "previous_head": "4d15688",
+  "previous_head": "ab00cd9",
   "architect_decision_pending": true,
   "blocked_scope": null,
   "last_send_head": "ab00cd9",
@@ -49,9 +49,9 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-01T16:53:46.495Z",
+  "last_tick_at": "2026-10-01T17:11:28.151Z",
   "state": "IMPLEMENT",
-  "last_action": "R46 S1 Settlement / Billing Linkage Schema Checkpoint 已送审：4 新表 + 2 表纯增列 + 4 migration（表/租户触发器/append-only/不变量）+ 清单同步（71 + 20）+ 架构契约 140/140；fresh deploy 与 two-stage upgrade 均通过；零资金业务行为。",
+  "last_action": "SCHEDULER_STALE_RECOVERED（gap=18min）→ 本轮已恢复执行",
   "last_action_at": "2026-10-01T17:11:23.024Z",
   "next_action": "等待 R46 S1 裁决：①PASS → 开始 R46 S2（receipt snapshot + Settlement ingest/record）②REVISE → 修订 S1 ③BLOCK → 停止。",
   "current_head": "ab00cd9",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-01T16:50:36.400Z",
-    "gapMs": 190096,
+    "previousTickAt": "2026-10-01T17:11:28.017Z",
+    "gapMs": 135,
     "stale": false,
-    "checkedAt": "2026-10-01T16:53:46.495Z"
+    "checkedAt": "2026-10-01T17:11:28.151Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -250,7 +250,7 @@
     "integration_boundary_review": "AUTHORIZED_TO_PLAN（先提交设计/实施计划，不直接开放真实 transport）"
   },
   "r36_submission_comment": "5927087320",
-  "stale_recovered_at": "2026-10-01T16:27:48.463Z",
+  "stale_recovered_at": "2026-10-01T17:11:28.017Z",
   "engineering_regression_policy": {
     "source": "HOST PRODUCT DIRECTION 2026-10-01",
     "doc": "docs/releases/ENGINEERING-REGRESSION-POLICY.md",
