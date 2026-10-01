@@ -80548,3 +80548,168 @@ AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CR
 
 VERDICT: PASS WITH REVISE — MSG-20261001-31
 ```
+
+### [MSG-20261001-32] R43-B Manual Recovery Persistence Implementation Plan —— PASS WITH REVISE（Implementation Plan 主体批准；4 项实施细节有结论；CHANGE A：providerCaseRef 补录不得与 Submission 整行 append-only 冲突 → 推荐新增第五张 append-only reference 表；CHANGE B：EXPORTED 不得为不可逆终态；CHANGE C：approval basis 必須绑定 packageVersion + digestVersion）；NEXT = 可直接进入 R43 Implementation S1（Schema + migration + triggers + trigger inventories + fresh/upgrade tests → 单独 Implementation Checkpoint）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE: FORMAL_VERDICT
+MESSAGE: MSG-20261001-32
+PREVIOUS: MSG-20261001-31
+GATE: Gate 7 / R43-B Manual Recovery Persistence Implementation Plan
+REVIEWED_HEAD: 409dbd0
+DECISION: PASS WITH REVISE
+
+KEEP
+
+Implementation Plan 主体批准。MSG-31 的 A/B/C 已正确收口，整体实施顺序可以进入编码前最终状态。
+
+保留：
+
+S1→S7 分批实施，不一次性大改；
+四表职责分离；
+ClaimItem.status + RecoveryManualSubmission 共同构成业务事实；
+approvalId required + UNIQUE(org, approvalId)；
+v1 UNIQUE(org, claimItemId) 单 submission chain；
+package digest/binding/version immutable；
+RecoveryPackage 只允许受控生命周期字段变化；
+Artifact / Submission / SubmissionEvidence append-only；
+providerCaseRefCanonical 与 raw value 分离；
+Amazon reference 未证明大小写语义前不做 lower-case；
+manual submit 的状态跃迁、submission、evidence、业务审计、approval consumption 同事务；
+checker 只读且禁止自动修复；
+M1–M20 + PG/H/D 永久回归。
+4 项裁决
+
+① risk = INTERNAL_WRITE + requires=[humanApproval]：批准。
+
+这是系统内部重要业务状态写入，而不是 provider external write。
+
+但必须继续满足普通：
+
+authn → ACTIVE user → ACTIVE membership → current role → tenant boundary → action permission → humanApproval
+
+humanApproval 不替代前面的权限层。
+
+② cc_append_only__<Table> 不进入 required-triggers.json：有条件批准。
+
+命名分离是合理的，避免把 tenant trigger inventory 与业务不可变 trigger 混为一谈。
+
+但不能因此失去 CI 覆盖。
+
+要求建立独立 append-only/controlled-mutation trigger checklist，CI 必须显式验证：
+
+三张 append-only 表对应 trigger 存在且启用；
+RecoveryPackage controlled-mutation trigger 存在且启用；
+fresh deploy 与 upgrade path 都验证。
+
+不要只靠测试碰巧触发它们。
+
+③ checker 非零退出导致 CI fail、生产不自动修复：批准。
+
+CI 中：
+
+inconsistency = hard failure。
+
+生产/运维环境：
+
+detect + report + alert only，不得自动改状态、补 submission、消费 approval 或修复 evidence linkage。
+
+④ PDF/manifest 生成方式实施前单独报备，本轮不引依赖：批准。
+
+优先避免为 PDF 引入重量级依赖。
+
+S2 开始前先做现有依赖能力检查；若已有可靠 PDF 生成能力则复用。若必须新增 dependency，单独报 dependency delta。
+
+JSON manifest 是规范事实载体；PDF 是 human-readable derivative。两者不得反过来形成两个不同业务真值。
+
+CHANGE A — providerCaseRef 补录不能与 Submission 整行 append-only 冲突
+
+当前计划同时规定：
+
+RecoveryManualSubmission 整行 append-only；
+providerCaseRef 可以在人工确认后补录。
+
+这两条在物理模型上冲突。
+
+不要通过给 append-only trigger 打洞解决。
+
+要求二选一，推荐方案 A：
+
+A. 新增独立 append-only RecoveryManualSubmissionReference / provider-reference record。
+
+Submission 本体保持完全 immutable；后续 providerCaseRef 作为新事实追加。
+
+如果不想增加第五张表，则必须在 Implementation Checkpoint 前提出替代 Schema Delta，并证明不会把 Submission 从“事实记录”变成可随意 mutation 的对象。
+
+当前不批准在 append-only Submission 上直接 UPDATE providerCaseRef。
+
+CHANGE B — Package EXPORTED 不应成为不可逆终态
+
+当前：
+
+GENERATED → EXPORTED / SUPERSEDED / WITHDRAWN，终态不可回退。
+
+但用户导出 package 后仍然需要人工提交，因此 EXPORTED 本质上是发生过导出这一事实，不是 package 生命周期终止。
+
+要求修正：
+
+SUPERSEDED / WITHDRAWN 可以是终态；
+EXPORTED 不得阻止后续重复 export、approval 或 manual submission；
+最好把 export 表达为 append-only export event/artifact，而 package 本身仍保持可用状态。
+
+不要让“下载过 PDF”改变 package 是否仍可提交的业务含义。
+
+CHANGE C — Approval basis 必须绑定 package version/digest version
+
+当前 basis：
+
+rmp1:<claimItemId>:<caseId>:<packageDigest>
+
+还需要防止未来 canonicalization/digest 算法版本变化造成语义碰撞。
+
+批准前最终格式至少绑定：
+
+claimItemId + caseId + packageVersion + digestVersion + packageDigest
+
+审批创建与执行必须调用同一个服务端 canonical builder，禁止分别拼字符串。
+
+RISKS
+
+现在最大的架构风险是“append-only”名义正确、实际通过特殊 UPDATE 打洞。CHANGE A 必须在编码前解决。
+
+第二个风险是把 EXPORTED 错误建模成 Claim/package 生命周期终点。导出只是用户操作事实，不能等价于 package 已消费。
+
+第三个风险是未来 package/digest 算法升级后，旧审批仍错误匹配新 package，因此 CHANGE C 必须版本化绑定。
+
+TEST
+
+在 M1–M20 基础上新增：
+
+submission 创建后所有字段直接 UPDATE 均被数据库拒绝；
+后补 providerCaseRef 不 UPDATE 原 Submission；
+同一 provider reference canonical identity 不得重复绑定；
+package export 一次/多次均不使 package 无法继续人工提交；
+export 后 package 仍可完成合法 approval/manual-submit；
+SUPERSEDED/WITHDRAWN package 不得用于新 manual submit；
+approval 的 packageVersion 或 digestVersion 任一变化 → 拒绝且零推进零消费；
+fresh deploy + upgrade path 均检查 append-only/controlled-mutation trigger inventory。
+NEXT
+
+完成 CHANGE A/B/C 后，无需再提交 docs-only 复审。
+
+可以进入 R43 Implementation S1，但按以下停点执行：
+
+S1：Schema + migration + triggers + trigger inventories + fresh/upgrade tests → 单独 Implementation Checkpoint。
+
+S1 通过后才能进入 S2–S5。
+
+如果 CHANGE A 采用推荐的第五张 reference 表，则 S1 的模型计数、FK、tenant trigger、append-only trigger 和 checker 设计同步更新，不需要重新申请整个 R43 Gate。
+
+继续保持：
+
+AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · SETTLEMENT/BILLING LINKAGE HOLD。
+
+VERDICT: PASS WITH REVISE — MSG-20261001-32
+```

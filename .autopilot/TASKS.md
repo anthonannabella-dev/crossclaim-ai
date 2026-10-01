@@ -266,3 +266,13 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - TEST：M1–M11 接受为基础矩阵，另增 9 项（双向一致性 / 同 approval 并发 / digest·binding 不可改 / CAS 合法性 / immutable 直接 UPDATE 被拒 / canonical 重复被拒 / ref 为空仍可确认 / 补录不改变 accepted 事实 / checker 只报告）；PG1–PG10 / H1–H9 / D1–D4 基线继续保留。
 - NEXT：**R43-B — Manual Recovery Persistence Implementation Plan（docs-only，10 项）** —— ①migration 顺序 ②四表 FK/unique/index ③tenant + immutable/controlled-mutation triggers ④package CAS 状态机 ⑤`recovery.manual_submit` Action Guard ⑥approval + ClaimItem + submission + audit 原子事务 ⑦providerCaseRef canonicalization ⑧consistency checker ⑨M1–M11 + MSG-31 新增验收 ⑩rollback 仅设计不执行；不需再送一轮 Schema Request，经审后才编码。
 - 保持：AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · SETTLEMENT/BILLING LINKAGE HOLD。
+
+### MSG-20261001-32 裁决（R43-B 批准 + CHANGE A/B/C → R43 Implementation S1）
+
+- DECISION：**PASS WITH REVISE**（REVIEWED_HEAD 409dbd0；Issue #2 comment 5930209791；CI 36854327085；归档 FULL_COPY_OK）。Implementation Plan 主体批准：S1→S7 分批实施、四表职责分离、approvalId required + UNIQUE(org, approvalId)、v1 单链、package digest/binding/version immutable、Artifact/Submission/SubmissionEvidence append-only、canonical ref 与 raw 分离、同事务跃迁、checker 只读、M1–M20 + PG/H/D。
+- 实施细节四项：①risk=INTERNAL_WRITE + requires=[humanApproval]（humanApproval 不替代 RBAC 层）②`cc_append_only__<Table>` 不进 `required-triggers.json`，但**必須新建独立 append-only/controlled-mutation trigger checklist 并在 CI 显式验证（fresh + upgrade）** ③checker：CI 不一致 = hard failure；生产只 report/alert④PDF 优先复用现有依赖，JSON manifest 为规范事实载体。
+- CHANGE A：新增第五张 append-only 表 `RecoveryManualSubmissionReference`；Submission 本体保持完全 immutable；禁止在 Submission 上直接 UPDATE providerCaseRef。
+- CHANGE B：`RecoveryPackage` 终态仅 SUPERSEDED/WITHDRAWN；EXPORTED 不阻断后续 export/approval/manual-submit；export 表达为 append-only export event/artifact。
+- CHANGE C：approval basis 至少绑定 claimItemId + caseId + packageVersion + digestVersion + packageDigest；创建与执行共用同一个服务端 canonical builder。
+- NEXT（无需 docs-only 复审）：**R43 Implementation S1** —— Schema + migration + triggers + trigger inventories + fresh/upgrade tests → 单独 Implementation Checkpoint；S1 通过后才能进入 S2–S5。若采用第五张表，S1 同步更新模型计数（43→44）、FK、tenant/append-only 触发器与 checker 设计。
+- 保持：AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · SETTLEMENT/BILLING LINKAGE HOLD。

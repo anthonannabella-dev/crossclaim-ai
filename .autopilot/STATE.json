@@ -1,15 +1,15 @@
 {
   "gate": "B2-FIX R1",
-  "head": "f2a20b9",
+  "head": "409dbd0",
   "status": "IMPLEMENTING",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
   "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
   "send_head": "07b7009",
   "decision_head": "07b7009",
-  "last_chatgpt_message": "MSG-20261001-31",
+  "last_chatgpt_message": "MSG-20261001-32",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T11:14:46.828Z",
+  "updated_at": "2026-10-01T11:18:07.822Z",
   "previous_head": "7e83945",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -51,10 +51,10 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-01T11:08:56.305Z",
   "state": "IMPLEMENT",
-  "last_action": "MSG-20261001-31 = PASS WITH REVISE 已逐字归档并 FULL_COPY_OK（R43-A 四表架构批准；CHANGE A 受控 CAS/核心字段 immutable；CHANGE B approvalId 单链唯一；CHANGE C providerCaseRef canonical 化）；下一批 = R43-B Implementation Plan（docs-only）",
-  "last_action_at": "2026-10-01T11:14:46.828Z",
-  "next_action": "R43-B — Manual Recovery Persistence Implementation Plan（docs-only，先设计不实现）：①migration 顺序 ②四表 FK/unique/index ③tenant + immutable/controlled-mutation triggers ④package CAS 状态机 ⑤recovery.manual_submit Action Guard ⑥approval+ClaimItem+submission+audit 原子事务 ⑦providerCaseRef canonicalization ⑧consistency checker ⑨M1–M11 + MSG-31 新增验收 ⑩rollback 仅设计不执行。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
-  "current_head": "f2a20b9",
+  "last_action": "MSG-20261001-32 = PASS WITH REVISE 已逐字归档并 FULL_COPY_OK（R43-B Implementation Plan 主体批准；CHANGE A 第五张 reference 表 / B package EXPORTED 非终态 / C basis 绑定 version；NEXT = 可直接进入 R43 Implementation S1 → 单独 Checkpoint）",
+  "last_action_at": "2026-10-01T11:18:07.822Z",
+  "next_action": "R43 Implementation S1（Schema + migration + triggers + trigger inventories + fresh/upgrade tests）→ 提交 S1 Implementation Checkpoint；S1 通过后才进入 S2–S5。S1 范围：①五张表（含 RecoveryManualSubmissionReference）+ 2 枚举 ②五支迁移（表/租户触发器/package 受控变更/append-only/唯一性）③required-triggers.json + 新增 append-only/controlled-mutation checklist ④package 生命周期修正（EXPORTED 非终态）⑤模型计数 39 → 44（40 core + 4 join）⑥fresh deploy 与 upgrade path 触发器取证。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
+  "current_head": "409dbd0",
   "reviewed_head": "07b7009",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -669,5 +669,33 @@
     },
     "test_additions": "ClaimItem 状态 ⇔ submission record 双向一致性；同 approval 并发授权两个 ClaimItem 至多一个成功；package digest/binding 创建后不可改；package 状态只能合法 CAS；immutable 表直接 UPDATE 被拒；providerCaseRef canonical 重复被拒；providerCaseRef 为空仍可完成人工确认；补录不改变 provider accepted 事实；checker 能发现人工不一致但不自动修复",
     "next": "R43-B — Manual Recovery Persistence Implementation Plan（docs-only，10 项；经审后才编码）"
+  },
+  "r43b_submission": {
+    "submission_comment": "5930209791",
+    "ci_run": "36854327085",
+    "reviewed_head": "409dbd0",
+    "doc": "docs/releases/R43-B-MANUAL-RECOVERY-PERSISTENCE-IMPLEMENTATION-PLAN.md",
+    "wakeup_channel": "https://chatgpt.com/c/6ab9ee1b-fd54-83ee-b363-b67750afcedd",
+    "wakeup_delivery": "DELIVERED_VERIFIED（输入框清空 / 新用户消息在底部）"
+  },
+  "r43b_verdict": {
+    "message_id": "MSG-20261001-32",
+    "decision": "PASS WITH REVISE",
+    "reviewed_head": "409dbd0",
+    "archival": "FULL_COPY_OK",
+    "archival_at": "2026-10-01T11:18:07.822Z",
+    "rulings": {
+      "q1_risk": "批准 risk=INTERNAL_WRITE + requires=[humanApproval]；但 humanApproval 不替代 authn → ACTIVE user → ACTIVE membership → 当前角色 → tenant boundary → action permission",
+      "q2_append_only_naming": "有条件批准 cc_append_only__<Table> 不进 required-triggers.json：必须新建独立 append-only/controlled-mutation trigger checklist，CI 显式验证（三张 append-only 表 + package controlled-mutation，fresh deploy 与 upgrade path 都验证）",
+      "q3_checker": "批准：CI 中 inconsistency = hard failure；生产/运维 detect + report + alert only，不得自动改状态/补 submission/消费 approval/修 evidence linkage",
+      "q4_pdf": "批准：S2 前先做现有依赖能力检查，优先复用；若必须新增依赖则单独提 dependency delta；JSON manifest = 规范事实载体，PDF 仅为 human-readable derivative，二者不得形成两个业务真值"
+    },
+    "changes": {
+      "A": "providerCaseRef 补录与 Submission 整行 append-only 冲突：推荐新增独立 append-only 表 RecoveryManualSubmissionReference（第五张表），Submission 本体保持完全 immutable；不批准在 append-only Submission 上直接 UPDATE providerCaseRef；若不加第五张表，必须在 Implementation Checkpoint 前提替代 Schema Delta 并证明不会把 Submission 变成可随意 mutation 的对象",
+      "B": "RecoveryPackage.EXPORTED 不得成为不可逆终态：EXPORTED 只是「发生过导出」的事实，不得阻止后续重复 export / approval / manual submission；终态仅 SUPERSEDED / WITHDRAWN；最好把 export 表达为 append-only export event/artifact，package 本身保持可用状态",
+      "C": "approval basis 必须绑定 packageVersion + digestVersion：最终格式至少 claimItemId + caseId + packageVersion + digestVersion + packageDigest；审批创建与执行必须调用同一个服务端 canonical builder，禁止分别拼字符串"
+    },
+    "test_additions": "M21–M28：submission 创建后所有字段直接 UPDATE 均被 DB 拒绝；后补 providerCaseRef 不 UPDATE 原 Submission；同一 provider reference canonical identity 不得重复绑定；package export 一次/多次均不使 package 无法继续人工提交；export 后仍可完成合法 approval/manual-submit；SUPERSEDED/WITHDRAWN package 不得用于新 manual submit；approval 的 packageVersion 或 digestVersion 任一变化 → 拒绝且零推进零消费；fresh deploy + upgrade path 均检查 append-only/controlled-mutation trigger inventory",
+    "next": "完成 CHANGE A/B/C 后无需再提交 docs-only 复审；可直接进入 R43 Implementation S1（Schema + migration + triggers + trigger inventories + fresh/upgrade tests → 单独 Implementation Checkpoint）；S1 通过后才能进入 S2–S5"
   }
 }

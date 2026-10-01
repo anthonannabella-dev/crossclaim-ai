@@ -854,3 +854,15 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - TEST：M1–M11 接受作基礎矩陣，另增 9 項（雙向一致性、同 approval 並發、digest/binding 不可改、CAS 合法性、immutable UPDATE 被拒、canonical 重複被拒、ref 為空仍可確認、補錄不改變 accepted 事實、checker 只報告）；PG/H/D 基線保留。
 - NEXT：**R43-B — Manual Recovery Persistence Implementation Plan（docs-only，10 項）**；不需再送一輪 Schema Request；經審後才編碼。
 - 邊界：AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · SETTLEMENT/BILLING LINKAGE HOLD。
+
+## 2026-10-01 JST — R43-B 送审 + MSG-20261001-32 = PASS WITH REVISE
+
+- R43-B 送审：REVIEWED_HEAD 409dbd0；Issue #2 comment 5930209791；CI 36854327085；docs-only。
+- 档案：`AI-ARCHITECT-INBOX.md` → `MSG-20261001-32`；`tools/verdict-diff/compare.mjs` = **FULL_COPY_OK**。
+- 裁决：PASS WITH REVISE。Implementation Plan 主体批准；4 项实施细节（risk=INTERNAL_WRITE、append-only 清单、checker 只报告、PDF 依赖）均有结论。
+- CHANGE A：providerCaseRef 补录与 Submission 整行 append-only 冲突 → 推荐新增第五张 append-only 表 `RecoveryManualSubmissionReference`；不批准在 append-only Submission 上直接 UPDATE。
+- CHANGE B：`RecoveryPackage.EXPORTED` 不得为不可逆终态（终态仅 SUPERSEDED/WITHDRAWN）；export 应表达为 append-only export event/artifact。
+- CHANGE C：approval basis 必须绑定 packageVersion + digestVersion，且审批创建与执行共用同一个服务端 canonical builder。
+- TEST：新增 M21–M28（八项）；与 M1–M20、PG1–PG10 / H1–H9 / D1–D4 合并为长期基线。
+- NEXT：无需再提交 docs-only 复审；可直接进入 **R43 Implementation S1**（Schema + migration + triggers + trigger inventories + fresh/upgrade tests）→ 单独 Implementation Checkpoint；S1 通过后才能进入 S2–S5。
+- 边界：AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · SETTLEMENT/BILLING LINKAGE HOLD。
