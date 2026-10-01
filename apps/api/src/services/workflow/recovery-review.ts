@@ -19,7 +19,11 @@
 import { Prisma, type PrismaClient } from '@prisma/client';
 
 import { prepareAuditInsert } from '../audit';
-import { CLAIM_SUBMIT_ACTION, RECOVERY_CONFIRMATION_ACTION } from '../action-guard/approval-verifier';
+import {
+  APPEAL_SUBMIT_ACTION,
+  CLAIM_SUBMIT_ACTION,
+  RECOVERY_CONFIRMATION_ACTION,
+} from '../action-guard/approval-verifier';
 import { WorkflowError } from './opportunity-review';
 import { assertPermission } from './permissions';
 
@@ -35,7 +39,7 @@ export const REVIEW_ACTIONS = {
  * 非资金动作**白名单**（当前仅 claim.submit）。默认动作（commission.charge）与资金动作仍要求
  * 完整金额/币种/依据；白名单之外的动作一律拒绝，避免"任何非默认动作都被当作非资金动作"。
  */
-export const NON_MONEY_APPROVAL_ACTIONS = [CLAIM_SUBMIT_ACTION] as const;
+export const NON_MONEY_APPROVAL_ACTIONS = [CLAIM_SUBMIT_ACTION, APPEAL_SUBMIT_ACTION] as const;
 
 export type HighValueReviewState = 'NOT_REQUIRED' | 'PENDING' | 'APPROVED' | 'REJECTED';
 
@@ -366,7 +370,7 @@ export async function submitRecoveryReview(
           throw new WorkflowError('INVALID_INPUT', '审批必须绑定完整操作载荷（金额/币种/依据）');
         }
       } else if ((NON_MONEY_APPROVAL_ACTIONS as readonly string[]).includes(requestedAction)) {
-        // 非资金动作（本批次仅 claim.submit）：无金额语义，但必须绑定操作依据
+        // 非资金动作（claim.submit / appeal.submit）：无金额语义，但必须绑定操作依据；
         if (bound.basisReference === null) {
           throw new WorkflowError('INVALID_INPUT', '审批必须绑定操作依据（basisReference）');
         }

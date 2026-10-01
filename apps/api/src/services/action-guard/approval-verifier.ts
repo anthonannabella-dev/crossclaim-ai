@@ -26,6 +26,12 @@ export const RECOVERY_CONFIRMATION_ACTION = 'commission.charge';
 export const CLAIM_SUBMIT_ACTION = 'claim.submit';
 
 /**
+ * 受保护动作名（单一来源）：Appeal 人工提交（② 下一小批次 appeal.submit，MSG-20261001-14 §5）。
+ * 与 claim.submit **互不通用**：审批必须绑定具体 Appeal / 案件 / 轮次与载荷指纹。
+ */
+export const APPEAL_SUBMIT_ACTION = 'appeal.submit';
+
+/**
  * 受保护动作名（单一来源）：支付捕获/资金确认（POST /billing/:id/status、/payments/events/:id/replay、
  * /payments/processing/retry-due）。非守卫文件必须引用本常量（② 第二批 P1）。
  */
