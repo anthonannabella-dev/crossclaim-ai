@@ -39,7 +39,7 @@
 | --- | --- | --- | --- | --- | --- |
 | `claim.submit` | `POST /cases/:id/claim/submit`（http-routes + server WORKFLOW_PATH） | 平台外写（当前 HOLD，传输开关 false；入口恒返回 `NEEDS_MANUAL`） | approvalId 服务端校验（租户/动作/对象/有效期/消费）+ 锁后角色/主体重验 | HTTP 级 22/22（拒绝零副作用 / 并发恰一次 / 等锁失效 / 审计失败注入 / 审计留痕与原始错误保留） | **已验收 PASS（MSG-20261001-07 / REVIEWED_REF 28e0cd9；CI run 36805839845）** |
 | `appeal.submit` | `POST /cases/:id/appeal/submit`（http-routes + server WORKFLOW_PATH） | 平台外写（当前 HOLD；入口仅登记内部结果 `platformWriteExecuted=false` / `NEEDS_MANUAL`） | approvalId 服务端校验（租户/动作/对象/轮次/版本化提交快照摘要）+ 案件锁 → Appeal 行锁后重验主体/角色/审批生命周期 + 锁后重算快照比对 | HTTP 级 **13/13**（缺审批 / 动作不通用 / 重复 / 缺 guard / 锁期撤销 / 轮次歧义 / 空正文 / 审批后正文变化 / 独立审批人+执行人行锁期降权 / 并发恰一次 / 审计失败整笔回滚 / 错误绑定拒绝） | **已验收 PASS（MSG-20261001-16 / REVIEWED_HEAD 7d888cc；CI 36820104474）** |
-| `platform.write` | 边界模块 `services/platform-write/*`（未接线对外路由）+ 设计稿 | 平台外写（**HOLD**；`PLATFORM_WRITE_TRANSPORT_ENABLED=false` 恒关） | Action Guard + 审批绑定快照 + 传输闸门 | 离线 fail-closed 17/17；Action Guard 22/22 | **PASS WITH REVISE（MSG-20261001-17）→ CHANGE B/C/D 设计已交付（R34 送审中）**；真实外写继续 HOLD |
+| `platform.write` | 边界模块 + 账本设计 + 实施计划（未接线对外路由） | 平台外写（**HOLD**；transport 恒关） | Action Guard + 审批绑定快照 + 执行权账本 | 离线 fail-closed 17/17；Action Guard 22/22 | **PASS WITH REVISE（MSG-20261001-18 / REVIEWED_HEAD 7de5c60）→ Implementation Plan 已交付（R35 送审中）** |
 | `commission.charge` | 待定（结算/佣金路径） | 资金动作（HOLD） | 同上 + 财务复核 | 待补 | TODO |
 | `payment.capture` | 账单登记入口（HTTP 受保护入口） | 资金动作（HOLD） | Action Guard 审批绑定 + 锁内事实 CAS + 快照交错校验 | HTTP 级：拒绝零副作用 / 允许恰一次（含并发与等锁失效） | **已验收 PASS（MSG-20260930-24 / REVIEWED_REF 73115a3）** |
 | `secret.rotate` | 待定（运维路径） | 凭据操作（HOST ONLY） | HOST APPROVAL | 待补 | TODO |
@@ -241,3 +241,18 @@
 | `docs/releases/PLATFORM-WRITE-SCHEMA-DELTA-REQUEST.md` | 正式 Schema Delta Request（仅请求批准）：新枚举 `PlatformWriteAttemptStatus`（含 `UNKNOWN_PROVIDER_RESPONSE`）；新表 `PlatformWriteAttempt` 字段表；C1–C6 约束/索引（含 partial unique index 请求）；与既有模型关系（仅 `organizationId` FK，其余弱引用）；明确不含 migration/HTTP/transport；回滚方案；5 个待批问题 | 已交付 |
 
 > 本轮**未**改 Prisma Schema、**未**写 migration、**未**接线 HTTP、**未**开启 transport、**未**消费审批、**未**调用真实平台。
+
+### 11.3 MSG-20261001-18 裁定收入（账本/原子性设计）
+
+| 项 | 结论 |
+| --- | --- |
+| ① I1 | **选项 A**：`(organizationId, idempotencyKey)` = 唯一逻辑执行链；`attemptNo` 仅同一链内计数 |
+| ② partial unique index | **批准**（`SUCCEEDED` 唯一性），索引冲突转稳定业务错误 |
+| ③ `approvalId` | 不批准无条件可空；服务层 + 测试锁死 `simulated=false && status>=IN_FLIGHT ⇒ 有效 approvalId` |
+| ④ UNKNOWN | `UNKNOWN_PROVIDER_RESPONSE → RECONCILING → SUCCEEDED / FAILED_CONFIRMED / MANUAL_REVIEW`；1/5/15/60 分钟、24h 转人工；**绝不重发写请求** |
+| ⑤ 保留期 | 24 个月默认（非不可变合规结论）；legal/dispute hold；append-only 加密归档；本阶段不实现清理 |
+| CHANGE A | 区分逻辑执行链与执行/对账历史；只建 `PlatformWriteAttempt`；未来另设 append-only child model |
+| CHANGE B | UNKNOWN 恢复所有权：SYSTEM 只读 reconciliation；人工需 OWNER/ADMIN + actor/reason 审计 |
+| CHANGE C | 消费必须可并发验证；**现状报告**：`AuditLog` 无 approvalId 列、消费无数据库唯一约束（既有恰一次靠业务 CAS/锁）→ 方案 = `PlatformWriteAttempt.(organizationId, approvalId)` 唯一约束承担；**待架构方确认** |
+
+交付物：`docs/releases/C-PLATFORM-WRITE-LEDGER-IMPLEMENTATION-PLAN.md`（R35 送审）；`PLATFORM-WRITE-ATTEMPT-LEDGER-DESIGN.md` §12 已收入裁定。

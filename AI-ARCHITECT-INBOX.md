@@ -78703,3 +78703,139 @@ e113307 的 platform.write 安全骨架可以保留并作为下一阶段底座�
 VERDICT: PASS WITH REVISE — MSG-20261001-17
 ```
 
+### [MSG-20261001-18] Gate 7 / ② · platform.write Attempt Ledger + Approval Atomicity Design（R34，REVIEWED_HEAD 7de5c60）— VERDICT: PASS WITH REVISE；五问裁决（I1 选 A、批准 partial unique index、approvalId 不得无条件可空、UNKNOWN→RECONCILING 自动对账优先且禁止重发写请求、24 个月默认保留期）；CHANGE A 区分逻辑执行链与执行/对账历史、CHANGE B UNKNOWN 恢复所有权、CHANGE C 审批消费必须与执行权具备可并发验证的不变量；下一交付 = C-PLATFORM-WRITE-LEDGER Implementation Plan（无需再送纯文档复审）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE: FORMAL_VERDICT
+MESSAGE: MSG-20261001-18
+PREVIOUS: MSG-20261001-17
+GATE: Gate 7 / platform.write · Attempt Ledger + Approval Atomicity Design
+REVIEWED_HEAD: 7de5c60
+DECISION: PASS WITH REVISE
+
+KEEP
+
+T1/T2/T3 的事务边界正确：数据库短事务取得执行权，事务外调用 provider，再以独立事务收敛结果。尤其要保留 UNKNOWN_PROVIDER_RESPONSE 不允许直接重发写请求 的原则；这避免把“网络超时”错误解释成“平台未执行”。
+
+I1/I2/I3 应继续作为后续 Schema、服务层和测试共同的不变量，而不能只存在于文档。
+
+5 个问题裁决
+
+① I1：选 A。
+
+一个 (organizationId, idempotencyKey) 对应唯一逻辑执行链。重试、恢复、对账不得通过创建第二条逻辑 attempt 来规避原链状态。
+
+如果需要保存每次 transport/reconciliation 历史，未来可增加 append-only attempt-event/history，而不是创建另一条能够独立成功的主执行链。
+
+② Partial unique index：批准。
+
+数据库必须承担最终不变量，不应只依赖应用层 CAS。
+
+批准对 SUCCEEDED 唯一性增加 partial unique index；同时保留应用层状态机/CAS。索引冲突必须转换成稳定业务错误或幂等结果，不得向 API 暴露数据库约束细节。
+
+③ approvalId：主 PlatformWriteAttempt 不批准无条件可空。
+
+对于任何能够进入真实 IN_FLIGHT 的 platform write：
+
+approvalId MUST NOT BE NULL
+
+模拟/准备阶段可以不存在审批，但不得与“获得真实执行权”的状态混淆。
+
+Schema 若因渐进迁移需要 nullable，可以 nullable；但必须由服务层 + 状态转换测试锁死：
+
+simulated=false && status >= IN_FLIGHT ⇒ 有有效 approvalId。
+
+不要现在用过强数据库 CHECK 把未来迁移锁死。
+
+④ UNKNOWN_PROVIDER_RESPONSE：自动查询对账优先，人工兜底；禁止自动重发写请求。
+
+状态建议：
+
+UNKNOWN_PROVIDER_RESPONSE → RECONCILING → SUCCEEDED | FAILED_CONFIRMED | MANUAL_REVIEW
+
+只有 provider 提供只读、稳定、可按 provider request/idempotency reference 查询的能力时，才允许自动 reconciliation。
+
+建议默认：
+
+首次自动查询：约 1 分钟
+后续退避：5 / 15 / 60 分钟
+最长自动 reconciliation 窗口：24 小时
+24 小时仍无法确定 → MANUAL_REVIEW
+
+这些是系统默认值，不应硬编码成不可配置的业务真理。不同 adapter 后续可提交自己的 provider-specific policy。
+
+关键不变量：
+
+UNKNOWN / RECONCILING 状态绝不重新发送原始写请求。
+
+CHANGE
+
+CHANGE A — Schema Delta 必须区分“逻辑执行链”与“执行/对账历史”。
+
+不要让 attemptNo=2/3 意味着同一 idempotency key 获得第二条独立写入机会。
+
+如果本轮 Schema 只建 PlatformWriteAttempt，它就是唯一逻辑执行记录；retry/reconciliation 信息先记录在该记录和 AuditLog。
+
+如果未来需要完整逐次 transport 历史，再独立设计 append-only child model。
+
+CHANGE B — 增加 UNKNOWN 状态的恢复所有权。
+
+Schema/实施计划必须明确谁可以把：
+
+UNKNOWN_PROVIDER_RESPONSE → RECONCILING → terminal/manual
+
+向前推进。
+
+SYSTEM 只能执行只读 reconciliation；不得因此获得新的平台写权限。人工处理需要 OWNER/ADMIN 或未来明确批准的运营权限，并留下 actor + reason 审计。
+
+CHANGE C — approval consumption 必须与 attempt 执行权绑定。
+
+T1 通过，但实现时 recovery.approval_consumed 不能只是“写了一条审计所以认为消费完成”。
+
+必须存在可并发验证的消费不变量，使两个事务不能消费同一 approval 获得两个执行权。具体可以复用当前审批边界已有的消费机制；若现有模型无法数据库级证明，则实现前必须再次报告，不得自行弱化。
+
+⑤ 保留期与归档
+
+24 个月可以作为当前默认在线/可查询保留期，但不要把 24 个月写成不可变合规结论。
+
+原因是未来不同平台、客户合同、争议/税务/财务证据要求可能不同。
+
+批准的设计口径：
+
+默认 retention policy：24 months；
+legal hold / dispute hold 可阻止清理；
+归档采用不可变、加密、访问受控的 append-only 导出；
+保留 attempt 核心事实、状态历史、snapshot digest/version、approval reference、provider reference、审计关联；
+不归档 secret/token/credential 或无必要的原始敏感 payload；
+删除/归档任务本阶段不实现，后续单独审计。
+RISKS
+
+最大剩余风险是把“exactly-once”说得过强。系统能建立的是本方唯一执行权 + 幂等 + provider 状态 reconciliation；如果某个平台既没有幂等写语义，也没有可靠的只读查询接口，就无法数学意义保证外部副作用 exactly-once。
+
+这种 adapter 在未来真实接入时应 BLOCK 自动真实写入，而不是降低核心账本的不变量。
+
+TEST
+
+实施阶段至少要求真实 PostgreSQL 验证：
+
+同 key 并发只有一个执行权；同 approval + 不同 snapshot 不能同时取得执行权；T1 任一步失败整体回滚；approval 已消费时第二执行链拒绝；UNKNOWN 后不得重新调用 write sink；重启后从持久化状态继续 reconciliation；两个 reconciliation worker 不能双重收敛；SUCCEEDED 不可改绑 snapshot/approval/provider reference；跨租户 FK/绑定拒绝；partial unique index 在绕过服务层时仍能守住 I3。
+
+当前 docs-only CI 若最终失败，不能以本裁决覆盖 CI；修复 CI 后再进入实现。
+
+NEXT
+
+上述 CHANGE 收入设计后，不需要再提交一轮纯文档复审；可直接提交：
+
+C-PLATFORM-WRITE-LEDGER Implementation Plan
+
+计划中给出最终模型、索引、迁移顺序、T1/T2/T3 服务边界以及上述 PostgreSQL 验收矩阵。
+
+仍然保持：
+
+HTTP = HOLD · REAL ADAPTER = HOLD · TRANSPORT ENABLE = FALSE · PRODUCTION CREDENTIALS = HOLD · CUSTOMER SUBMISSION = HOLD。
+
+VERDICT: PASS WITH REVISE — MSG-20261001-18
+```
+

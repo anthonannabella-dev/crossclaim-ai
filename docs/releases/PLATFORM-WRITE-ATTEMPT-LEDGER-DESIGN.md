@@ -137,3 +137,49 @@
 3. `approvalId` 是否允许为空（无人工审批的模拟路径）？为空时 I2 的唯一约束如何表达？
 4. `UNKNOWN_PROVIDER_RESPONSE` 的处置：自动探测对账 vs 纯人工；由谁触发、多久超时？
 5. 保留期与归档形式（24 个月是否合适，归档到何处）。
+
+---
+
+## 12. MSG-20261001-18 裁定收入（本设计的最终口径）
+
+### 12.1 五个问题的裁决结论
+
+| 问题 | 裁决 | 对本设计的影响 |
+| --- | --- | --- |
+| ① I1 选项 | **选 A**：一个 `(organizationId, idempotencyKey)` = **唯一逻辑执行链** | 重试/恢复/对账**不得**另开第二条逻辑 attempt；`attemptNo` 只作为**同一逻辑记录内**的投递/对账计数，不产生可独立成功的第二条链 |
+| ② partial unique index | **批准**（`SUCCEEDED` 唯一性） | 数据库承担最终不变量；索引冲突须转为稳定业务错误/幂等结果，不向 API 暴露约束细节 |
+| ③ `approvalId` 可空性 | **不批准无条件可空** | Schema 可 nullable，但服务层 + 状态转换测试锁死：`simulated=false && status >= IN_FLIGHT ⇒ 有有效 approvalId`；暂不用过强数据库 CHECK |
+| ④ UNKNOWN 处置 | **自动只读对账优先、人工兜底；禁止自动重发写请求** | 状态链 `UNKNOWN_PROVIDER_RESPONSE → RECONCILING → SUCCEEDED / FAILED_CONFIRMED / MANUAL_REVIEW`；默认 1 分钟 / 5 / 15 / 60 分钟退避，最长 24 小时后转人工 |
+| ⑤ 保留期与归档 | 24 个月为**默认在线保留期**（非不可变合规结论） | legal/dispute hold 可阻止清理；归档为不可变、加密、访问受控的 append-only 导出；本阶段不实现清理任务 |
+
+### 12.2 CHANGE A —— 区分「逻辑执行链」与「执行/对账历史」
+
+- 本轮只建 `PlatformWriteAttempt`，它就是**唯一逻辑执行记录**；
+- retry / reconciliation 信息先记录在**该记录自身**与 `AuditLog`；
+- 未来若需要完整逐次 transport 历史，另设 **append-only child model**，不得让 `attemptNo=2/3` 变成同一幂等键的第二次独立写入机会。
+
+### 12.3 CHANGE B —— UNKNOWN 状态的恢复所有权
+
+| 角色 | 可执行动作 | 限制 |
+| --- | --- | --- |
+| SYSTEM | 只读 reconciliation（查询 provider 状态）、推进 `RECONCILING` | **不得**因此获得任何新的平台写权限；**绝不重发写请求** |
+| OWNER / ADMIN（或未来明确批准的运营权限） | 将 `MANUAL_REVIEW` 收敛为终态 | 必须留下 `actor + reason` 审计 |
+
+### 12.4 CHANGE C —— 审批消费必须与执行权具备可并发验证的不变量（附录：现状核查报告）
+
+**现状核查（2026-10-01，代码事实）**：
+
+| 事实 | 位置 | 影响 |
+| --- | --- | --- |
+| 审批消费 = 写一条 `recovery.approval_consumed` 审计事件（`changes.approvalId`） | `services/action-guard/{approval-tx-verify,hitl-approval-verifier}.ts`；写入点见 `services/claims/claim-submission.ts:221`、`services/appeals/appeal-submission.ts:245`、`services/workflow/recovery-outcome.ts` | **消费本身没有数据库唯一约束**；`AuditLog` 无 `approvalId` 列，无法直接对「同一 approval 消费两次」加唯一约束 |
+| 「恰一次」由业务侧保障 | claim 的 DRAFT CAS + 案件 advisory lock；appeal 的 Appeal 行锁 + CAS | 已在既有批次通过真实 PostgreSQL 并发测试（MSG-20261001-07 / -16） |
+
+**本设计的补齐方案（不弱化）**：把「获得执行权」的数据库级不变量放在**新表**上——`@@unique([organizationId, approvalId])`（`approvalId` 非空时）：
+
+1. 取得执行权 = 在 `PlatformWriteAttempt` 上成功插入/CAS 一行；
+2. 同一 approval 若已被消费，第二次插入直接违反唯一约束 → 结构化拒绝（不写入、不投递）；
+3. 消费审计（`recovery.approval_consumed`）与 attempt 取得执行权**同事务**写入；
+4. 因此「两个事务不能消费同一 approval 获得两个执行权」在数据库层可被判据。
+
+> **需要架构方确认（CHANGE C 要求的前置报告）**：上述「以 `PlatformWriteAttempt.(organizationId, approvalId)` 唯一约束作为消费不变量」是否满足 CHANGE C；若要求**直接在审计侧**具备唯一约束（即给 `AuditLog` 增加可唯一约束的 `approvalId` 列），属于额外 Schema 变更，需另行裁定，本设计不擅自实施。
+
