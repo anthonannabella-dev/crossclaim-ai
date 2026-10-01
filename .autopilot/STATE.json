@@ -1,17 +1,17 @@
 {
   "gate": "B2-FIX R1",
-  "head": "8129998",
+  "head": "028c015",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
   "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
   "send_head": "07b7009",
   "decision_head": "07b7009",
-  "last_chatgpt_message": "MSG-20261001-46",
+  "last_chatgpt_message": "MSG-20261001-47",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T14:43:30.669Z",
-  "previous_head": "44b9b2c",
-  "architect_decision_pending": true,
+  "updated_at": "2026-10-01T14:45:52.526Z",
+  "previous_head": "8129998",
+  "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "8129998",
   "last_sent_at": "2026-10-01T14:43:30.669Z",
@@ -49,12 +49,12 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-01T14:12:11.158Z",
+  "last_tick_at": "2026-10-01T14:45:15.896Z",
   "state": "IMPLEMENT",
-  "last_action": "R45 S1 已实施并送审 Implementation Checkpoint：七表 + 七枚举 + M1–M5 迁移（租户/append-only/受控 supersede/partial unique/CHECK/reversal 守卫/generation 立即校验）+ 26 项 DB 验收；报告 1 项需裁决的顺序偏差（deferred 约束在 Prisma 下静默回滚）",
-  "last_action_at": "2026-10-01T14:43:30.669Z",
-  "next_action": "等待 R45 S1 Implementation Checkpoint 裁决：①PASS → 进入 S2（ingest）②REVISE → 按 CHANGE 修订 ③BLOCK → 停止。",
-  "current_head": "8129998",
+  "last_action": "MSG-20261001-47 = PASS WITH REVISE 已逐字归档（FULL_COPY_OK）：S1 主体满足授权范围；批准 generation 顺序 DELETE → CAS → INSERT（立即判定）；CHANGE A–C 预登记为 S2–S5 约束；批准进入 R45 S2（ingest only）。",
+  "last_action_at": "2026-10-01T14:45:52.526Z",
+  "next_action": "R45 S2（ingest only）：ProviderOutcomeFact / ReimbursementFact 写入 + server-side identity/fingerprint（v1）+ 重复 ingest 复用既有事实（幂等，不新建不双计）+ reversal ingest（自身指纹、同租户/同 provider/同 currency、重复 replay 幂等、不同 reversal 指向已 fully reversed 的 OBSERVED → fail-closed）；不含 projector / 不含人工 outcome 受保护 HTTP。",
+  "current_head": "028c015",
   "reviewed_head": "07b7009",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-01T14:11:17.139Z",
-    "gapMs": 54020,
-    "stale": false,
-    "checkedAt": "2026-10-01T14:12:11.158Z"
+    "previousTickAt": "2026-10-01T14:12:11.158Z",
+    "gapMs": 1984739,
+    "stale": true,
+    "checkedAt": "2026-10-01T14:45:15.896Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -250,7 +250,7 @@
     "integration_boundary_review": "AUTHORIZED_TO_PLAN（先提交设计/实施计划，不直接开放真实 transport）"
   },
   "r36_submission_comment": "5927087320",
-  "stale_recovered_at": "2026-10-01T13:52:59.732Z",
+  "stale_recovered_at": "2026-10-01T14:45:15.896Z",
   "engineering_regression_policy": {
     "source": "HOST PRODUCT DIRECTION 2026-10-01",
     "doc": "docs/releases/ENGINEERING-REGRESSION-POLICY.md",
@@ -1685,5 +1685,34 @@
     },
     "boundary": "NO Settlement · NO Billing · NO Fee · NO RecoveryLedger mutation · NO platform write · TRANSPORT=false · NO production credentials；S1 未接入 ingest / projector / 受保护动作 HTTP·service / provider API",
     "next": "PASS → R45 S2（ingest）；REVISE → 按 CHANGE 修订；BLOCK → 停止该方向"
+  },
+  "r45_s1_verdict": {
+    "message_id": "MSG-20261001-47",
+    "decision": "PASS WITH REVISE",
+    "reviewed_head": "8129998",
+    "archival": "FULL_COPY_OK",
+    "archival_at": "2026-10-01T14:45:52.526Z",
+    "rulings": {
+      "q1_s1_scope": "YES —— S1 主体满足 MSG-46 授权范围，可关闭主体实现。保留两点约束（不 BLOCK S1）：projection.basisId / tolerancePolicyId 弱引用不能长期仅靠约定；evidenceArtifactIds text[] 不视为已获得数据库级 referential integrity —— 必须在相应服务/checker 阶段补强验证。",
+      "q2_generation_order": "批准 DELETE → CAS → INSERT（立即判定），不要求 DEFERRABLE trigger；冻结重算事务：lock projection → deterministic inputs 已固定 → DELETE current ProjectionFact membership → CAS projection generation/version/inputDigest → INSERT new membership（exact new generation）→ audit → commit。任何一步失败必须整体 rollback，旧 header + 旧 membership 完整恢复。必须补一个永久验收：DELETE 已执行后 CAS 或 INSERT 人为失败 → 回滚后旧 generation 与旧 membership 逐行保持。",
+      "q3_next_unit": "批准进入 R45 S2，范围严格限定为：ProviderOutcomeFact / ReimbursementFact ingest + server-side identity/fingerprint + replay idempotency + reversal ingest。S2 不实现 projector，不提前接受人工 outcome 的完整受保护 HTTP 路径（留到 S4）。S2 重点证明：same external event → same existing fact（不是 duplicate → error/new fact）；same providerEventId + different resource identity → distinct facts；same reversal replay → existing reversal；different reversal event → same OBSERVED already fully reversed → fail-closed。"
+    },
+    "changes": {
+      "A": "basisId / tolerancePolicyId 弱引用必须补一致性防线：S3 projector 读取时必须验证 organizationId / referenced row exists / expected ClaimItem·provider·scope / effective·version semantics；S5 checker 必须把 dangling basisId、cross-tenant basisId、dangling tolerancePolicyId、scope/version 不匹配判为 inconsistency；若后续证明可建普通 FK 且不破坏历史/versioning 语义，优先数据库 FK，否则保留服务层 + checker 双层防线。",
+      "B": "evidenceArtifactIds text[] 只能作为 v1 有条件方案：进入人工 ProviderOutcomeFact 写路径前必须验证数组中每一个 EvidenceArtifact 存在 / 同 tenant / 类型·状态允许作为该事实证据 / 不允许重复 ID / 不允许客户端用不存在 ID 构造 provenance；checker 检测 dangling/cross-tenant evidence references；未来若 evidence 需要独立查询、删除保护、生命周期管理或数量显著增长，应升级为关系表，不要继续扩展数组语义。",
+      "C": "system exact policy 不得依赖 migration seed 永久存在：S3 的「取用或显式创建」必须是确定性数据库操作（先查询唯一 system exact policy → 缺失时受控、幂等创建 → 并发创建由 unique scope 收敛 → Projection 必须最终持久化真实 tolerancePolicyId + version）；禁止 if missing => internally assume 0/0 without persisted policy。"
+    },
+    "preregistered_tests": [
+      "DELETE 后 CAS 故障 → rollback 恢复旧 projection + membership",
+      "DELETE/CAS 后 INSERT 故障 → 同样完整恢复",
+      "stale generation membership 立即拒绝",
+      "system exact policy 缺失 → 显式创建并持久化 ID",
+      "并发 exact-policy 创建 → 最终唯一",
+      "dangling / cross-tenant basis·policy → projector fail-closed",
+      "manual evidence 数组含不存在 / 跨租户 / 重复 ID → 零事实写入",
+      "checker 可检测人工制造的弱引用漂移"
+    ],
+    "boundary": "NO Settlement · NO Billing · NO Fee · NO RecoveryLedger mutation · NO platform write · TRANSPORT=false · NO production credentials",
+    "next": "R45 S2 —— ProviderOutcomeFact / ReimbursementFact ingest（identity/fingerprint + replay 幂等 + reversal ingest；不含 projector、不含人工 outcome 受保护 HTTP 路径）"
   }
 }

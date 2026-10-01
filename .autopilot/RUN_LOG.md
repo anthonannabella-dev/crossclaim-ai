@@ -1150,3 +1150,14 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 升级：two-stage upgrade OK（保数据 + 升级路径两清单 + checker 通过）；本地重建（drop → migrate deploy）无残留。
 - 偏差回报：generation 一致性改为**立即判定**（DELETE 旧 membership → CAS 版本 → INSERT 新 membership），不使用 DEFERRABLE 约束触发器 —— 实测 Prisma 客户端会吞掉 COMMIT 阶段 deferred 约束错误（静默回滚、调用方无感）。请架构方裁决该顺序调整。
 - 送审：REVIEWED_HEAD 8129998（Issue #2 comment 5933790490）；唤醒已投递并三要素验证。
+
+## 2026-10-01 JST — MSG-20261001-47 = PASS WITH REVISE（R45 S1）→ 批准 S1 主体 + generation 顺序调整，进入 R45 S2（ingest）
+
+- 裁决：**PASS WITH REVISE**（REVIEWED_HEAD 8129998）；归档 FULL_COPY_OK；全文见 `AI-ARCHITECT-INBOX.md` 的 `MSG-20261001-47`。
+- Q1：S1 主体满足 MSG-46 授权范围，可关闭主体实现；两点保留约束（不 BLOCK）：弱引用 basis/policy 与 text[] evidence 必须在服务/checker 阶段补强验证。
+- Q2：批准 generation 顺序 **DELETE → CAS → INSERT（立即判定）**，不要求 DEFERRABLE；新增永久验收「DELETE 后 CAS/INSERT 人为失败 → 回滚后旧 generation + 旧 membership 逐行保持」。
+- Q3：批准进入 **R45 S2（ingest only）**：ProviderOutcomeFact / ReimbursementFact ingest + identity/fingerprint + replay 幂等 + reversal ingest；不实现 projector，不提前开放人工 outcome 受保护 HTTP。
+- CHANGE A：basisId / tolerancePolicyId 弱引用 → S3 读取强校验 + S5 checker 判 dangling/cross-tenant/scope-version mismatch 为 inconsistency。
+- CHANGE B：evidenceArtifactIds text[] = v1 有条件方案（写路径逐条验证存在/同租户/类型状态/不重复；checker 检测 dangling·cross-tenant；未来升级关系表）。
+- CHANGE C：system exact policy 不得依赖 migration seed 永久存在（S3 确定性查询/受控幂等创建/unique scope 收敛/Projection 持久化真实 policyId+version；禁止隐式 0/0）。
+- 边界：NO Settlement · NO Billing · NO Fee · NO RecoveryLedger mutation · NO platform write · TRANSPORT=false · NO production credentials。

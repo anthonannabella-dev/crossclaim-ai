@@ -119,3 +119,28 @@ CI 侧：`api` job 的 fresh `prisma migrate deploy` + 两套清单校验 + 全�
 - **PASS** → 进入 **R45 S2（ingest：provider outcome / reimbursement 事实写入 + 指纹幂等复用）**；
 - **REVISE** → 按 CHANGE 逐项修订后重送；
 - **BLOCK** → 停止该方向，不绕道。
+
+## 附录 · MSG-20261001-47 裁决结果
+
+> 裁决：**PASS WITH REVISE — MSG-20261001-47**（REVIEWED_HEAD `8129998`；归档 `AI-ARCHITECT-INBOX.md` FULL_COPY_OK）。
+
+| 裁决 | 结果 |
+| --- | --- |
+| ① S1 是否满足授权范围 | **YES** —— 可关闭 S1 主体实现。保留两点（不 BLOCK）：`projection.basisId / tolerancePolicyId` 弱引用与 `evidenceArtifactIds text[]` 必须在服务/checker 阶段补强验证 |
+| ② Generation 顺序调整 | **批准** `DELETE → CAS → INSERT`（立即判定），不要求 DEFERRABLE trigger；新增永久验收「DELETE 后 CAS/INSERT 人为失败 → 回滚后旧 generation + 旧 membership 逐行保持」 |
+| ③ 下一执行单元 | **批准进入 R45 S2（ingest only）**：ProviderOutcomeFact / ReimbursementFact + server-side identity/fingerprint + replay 幂等 + reversal ingest；不含 projector、不含人工 outcome 受保护 HTTP |
+
+### 落实动作（本批次）
+
+- 新增永久验收测试：`reconciliation-schema-s1-db.test.ts` 增加「重算事务中途失败 → 回滚后旧 projection generation 与旧 membership 逐行保持」
+  （场景 1：DELETE 后 CAS 非法 → 回滚；场景 2：DELETE + CAS 成功后 INSERT 失败（FK）→ 回滚），专项 **27/27 PASS**。
+
+### 预登记约束（S2–S5 永久验收，逐条在对应阶段落地）
+
+1. **CHANGE A**：`basisId` / `tolerancePolicyId` 弱引用 —— S3 读取时强校验（存在 / 同租户 / 期望 ClaimItem·provider·scope / effective·version）；S5 checker 将 dangling basisId、cross-tenant basisId、dangling tolerancePolicyId、scope/version 不匹配判为 inconsistency；能建 FK 时优先 FK。
+2. **CHANGE B**：`evidenceArtifactIds text[]` 仅为 v1 有条件方案 —— 人工 outcome 写路径逐条验证（存在 / 同租户 / 类型·状态允许 / 不重复 / 不得由客户端构造不存在 ID）；checker 检测 dangling·cross-tenant evidence；未来升级为关系表。
+3. **CHANGE C**：system exact policy 不得依赖 migration seed 永久存在 —— S3 必须「确定性查询 → 受控幂等创建 → unique scope 收敛 → Projection 持久化真实 `tolerancePolicyId + version`」；禁止 `if missing => assume 0/0`。
+
+### S2 预登记验收
+
+same external event → same existing fact（不是 duplicate → error/new fact）· same `providerEventId` + different resource identity → distinct facts · same reversal replay → existing reversal · different reversal event → same OBSERVED already fully reversed → fail-closed。

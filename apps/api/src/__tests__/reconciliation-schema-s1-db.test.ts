@@ -809,6 +809,78 @@ describe('R45 S1 · Projection（derived materialization，CHANGE A / D）', () 
       /cross-tenant|check_violation|23514/,
     );
   });
+
+  // MSG-20261001-47 Q2 新增永久验收：
+  // DELETE 已执行后 CAS 或 INSERT 人为失败 → 事务回滚后旧 generation 与旧 membership 必须逐行保持。
+  it('重算事务中途失败 → 回滚后旧 projection generation 与旧 membership 逐行保持（MSG-47 Q2）', async () => {
+    const projection = await createProjection(ORG_A, claimA);
+    const observed = await createObserved(ORG_A, claimA);
+    const originalMemberId = uuid();
+    await prisma.$executeRawUnsafe(
+      `INSERT INTO "ClaimReconciliationProjectionFact"
+         ("id","organizationId","projectionId","projectionVersion","reimbursementFactId")
+       VALUES ($1,$2,$3,1,$4)`,
+      originalMemberId,
+      ORG_A,
+      projection,
+      observed,
+    );
+    const originalHeader = await prisma.$queryRawUnsafe<{ projectionVersion: number; inputDigest: string; computedAt: Date }[]>(
+      `SELECT "projectionVersion", "inputDigest", "computedAt" FROM "ClaimReconciliationProjection" WHERE "id" = $1`,
+      projection,
+    );
+
+    // 场景 1：DELETE 已执行 → CAS 非法（版本跳跃）→ 整个事务回滚
+    await expectRejection(
+      () =>
+        prisma.$transaction(async (tx) => {
+          await tx.$executeRawUnsafe(`DELETE FROM "ClaimReconciliationProjectionFact" WHERE "projectionId" = $1`, projection);
+          await tx.$executeRawUnsafe(
+            `UPDATE "ClaimReconciliationProjection" SET "projectionVersion" = 7, "updatedAt" = CURRENT_TIMESTAMP WHERE "id" = $1`,
+            projection,
+          );
+        }),
+      /VERSION_STEP_INVALID|23514/,
+    );
+
+    // 场景 2：DELETE + CAS 均成功 → INSERT 人为失败（FK 不存在）→ 整个事务回滚
+    await expectRejection(
+      () =>
+        prisma.$transaction(async (tx) => {
+          await tx.$executeRawUnsafe(`DELETE FROM "ClaimReconciliationProjectionFact" WHERE "projectionId" = $1`, projection);
+          await tx.$executeRawUnsafe(
+            `UPDATE "ClaimReconciliationProjection" SET "projectionVersion" = 2, "updatedAt" = CURRENT_TIMESTAMP WHERE "id" = $1`,
+            projection,
+          );
+          await tx.$executeRawUnsafe(
+            `INSERT INTO "ClaimReconciliationProjectionFact"
+               ("id","organizationId","projectionId","projectionVersion","reimbursementFactId")
+             VALUES ($1,$2,$3,2,$4)`,
+            uuid(),
+            ORG_A,
+            projection,
+            uuid(),
+          );
+        }),
+      /P2003|foreign key|23503|PROJECTION_FACT_ORPHAN/i,
+    );
+
+    const headerAfter = await prisma.$queryRawUnsafe<{ projectionVersion: number; inputDigest: string }[]>(
+      `SELECT "projectionVersion", "inputDigest" FROM "ClaimReconciliationProjection" WHERE "id" = $1`,
+      projection,
+    );
+    const membersAfter = await prisma.$queryRawUnsafe<{ id: string; projectionVersion: number; reimbursementFactId: string }[]>(
+      `SELECT "id", "projectionVersion", "reimbursementFactId" FROM "ClaimReconciliationProjectionFact" WHERE "projectionId" = $1`,
+      projection,
+    );
+    expect(headerAfter).toHaveLength(1);
+    expect(headerAfter[0].projectionVersion).toBe(originalHeader[0].projectionVersion);
+    expect(headerAfter[0].inputDigest).toBe(originalHeader[0].inputDigest);
+    expect(membersAfter).toHaveLength(1);
+    expect(membersAfter[0].id).toBe(originalMemberId);
+    expect(membersAfter[0].projectionVersion).toBe(1);
+    expect(membersAfter[0].reimbursementFactId).toBe(observed);
+  });
 });
 
 describe('R45 S1 · ReconciliationTolerancePolicy（CHANGE C）', () => {

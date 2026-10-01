@@ -467,3 +467,13 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - 需裁决：generation 一致性顺序由「CAS → DELETE → INSERT」调整为「DELETE → CAS → INSERT」（立即判定；deferred 在 Prisma 下静默回滚）。
 - NEXT：PASS → R45 S2（ingest）；REVISE → 修订；BLOCK → 停止。
 - 禁止：Settlement / Billing / Fee / RecoveryLedger 改写 / 平台外写 / transport / 生产凭据。
+
+### MSG-20261001-47 裁决（R45 S1 = PASS WITH REVISE → 批准 S1 主体 + generation 顺序调整 → 进入 R45 S2 ingest）
+
+- DECISION：**PASS WITH REVISE**（REVIEWED_HEAD 8129998；归档 FULL_COPY_OK）。S1 主体满足授权范围；Q2 批准 `DELETE → CAS → INSERT`（立即判定）；Q3 批准进入 S2。详见 STATE.r45_s1_verdict。
+- 新增永久验收：DELETE 已执行后 CAS 或 INSERT 人为失败 → 事务回滚后旧 projection generation 与旧 membership **逐行保持**。
+- CHANGE A（预登记）：projection.basisId / tolerancePolicyId 弱引用 → S3 读取强校验（exists / 同租户 / scope / effective·version）+ S5 checker 判 dangling·cross-tenant·scope mismatch 为 inconsistency。
+- CHANGE B（预登记）：evidenceArtifactIds text[] 为 v1 有条件方案 → 人工 outcome 写路径逐条验证（存在 / 同租户 / 类型状态 / 不重复）；checker 检测 dangling·cross-tenant；未来升级关系表。
+- CHANGE C（预登记）：system exact policy 必须「确定性查询 → 受控幂等创建 → unique scope 收敛 → Projection 持久化真实 policyId+version」；禁止隐式 0/0。
+- NEXT：**R45 S2 — ingest only**（ProviderOutcomeFact / ReimbursementFact + identity/fingerprint + replay 幂等 + reversal ingest）；不含 projector、不含人工 outcome 受保护 HTTP。
+- 禁止：Settlement / Billing / Fee / RecoveryLedger 改写 / 平台外写 / transport / 生产凭据。

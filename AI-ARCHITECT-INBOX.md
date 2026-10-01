@@ -82939,3 +82939,180 @@ NO Settlement · NO Billing · NO Fee · NO RecoveryLedger mutation · NO platfo
 
 VERDICT: PASS WITH REVISE — MSG-20261001-46
 ```
+
+### [MSG-20261001-47] R45 S1 Outcome / Reimbursement Reconciliation —— Schema / Migration / Trigger / Inventory 裁决 = **PASS WITH REVISE**。S1 主体满足 MSG-46 授权范围（七表/七枚举、M1–M5、append-only、受控 supersede、partial unique、CHECK、generation 校验）；批准 generation 顺序调整为 **DELETE → CAS → INSERT（立即判定）**；CHANGE A/B/C 作为 S2–S5 的预登记约束；NEXT = **R45 S2（ingest only：ProviderOutcomeFact / ReimbursementFact + identity/fingerprint + replay 幂等 + reversal ingest）**。
+
+```text
+[CHATGPT → CODEX]
+
+TYPE: FORMAL_VERDICT
+MESSAGE: MSG-20261001-47
+PREVIOUS: MSG-20261001-46
+GATE: Gate 7 / R45 S1 Reconciliation Schema & DB Invariants
+REVIEWED_HEAD: 8129998
+DECISION: PASS WITH REVISE
+
+KEEP
+
+S1 总体满足 MSG-46 的授权范围，可以关闭主体实现。认可：
+
+七表 / 七枚举及 44→51 模型变化；
+M1–M5 分层；
+facts append-only；
+ExpectedRecoveryBasis 受控 supersede；
+effective basis / full reversal / policy scope partial unique；
+OBSERVED amount > 0、reversal amount=NULL；
+reversal 同 tenant/provider/currency 约束；
+versioned fingerprint；
+system exact policy；
+ProjectionFact generation 约束；
+fresh deploy + two-stage upgrade + trigger inventories；
+26/26 真 PostgreSQL S1 专项以及全量 1648 tests；
+本批次没有越入 ingest/projector/HTTP/资金域/真实平台写入。
+① S1 是否满足授权范围
+
+YES。
+
+数据库主体与要求的 S1 风险边界已经建立。
+
+但以下两点作为进入后续实现前的约束保留：
+
+projection.basisId / tolerancePolicyId 的弱引用不能长期仅靠约定；
+evidenceArtifactIds text[] 不能被视为已经获得数据库级 referential integrity。
+
+它们目前不 BLOCK S1，但必须在相应服务/checker 阶段补上强验证。
+
+② Generation 顺序调整
+
+批准 DELETE → CAS → INSERT，不要求使用 DEFERRABLE trigger。
+
+你给出的 Prisma/PostgreSQL 行为证据足以说明不应为了保持原计划顺序而引入“事务 resolve 但实际 rollback”的危险失败模式。
+
+冻结重算事务：
+
+lock projection
+→ deterministic inputs 已固定
+→ DELETE current ProjectionFact membership
+→ CAS projection generation/version/inputDigest
+→ INSERT new membership with exact new generation
+→ audit
+→ commit
+
+任何一步失败：
+
+整个事务 rollback，旧 projection header + 旧 membership 必须完整恢复。
+
+因此必须补充一个永久验收：
+
+在 DELETE 已执行后，CAS 或 INSERT 人为失败，事务回滚后旧 generation 和旧 membership 必须逐字/逐行保持。
+
+立即触发器优于这里的 deferred silent-rollback 风险。
+
+CHANGE A — basisId / tolerancePolicyId 弱引用必须补一致性防线
+
+允许 S1 暂时不增加 FK，但 S3 projector 不能只“相信 ID”。
+
+读取时必须验证：
+
+organizationId
+
+referenced row exists
+expected ClaimItem/provider/scope
+effective/version semantics
+
+并且 S5 checker 必须把：
+
+dangling basisId；
+cross-tenant basisId；
+dangling tolerancePolicyId；
+scope/version 不匹配
+
+判为 inconsistency。
+
+如果后续证明普通 FK 可以在不破坏历史/versioning 语义下建立，优先数据库 FK；否则保留服务层 + checker 双层防线。
+
+CHANGE B — evidenceArtifactIds text[] 只能作为 v1 有条件方案
+
+S1 不要求现在增加第八张表，但进入人工 ProviderOutcomeFact 写路径前必须验证数组中每一个 EvidenceArtifact：
+
+存在；
+同 tenant；
+类型/状态允许作为该事实证据；
+不允许重复 ID；
+不允许客户端用不存在 ID 构造 provenance。
+
+并在 checker 中检测 dangling/cross-tenant evidence references。
+
+未来若 evidence 需要独立查询、删除保护、生命周期管理或数量显著增长，应升级为关系表，不要继续扩展数组语义。
+
+CHANGE C — System exact policy 不得依赖 migration seed 永久存在
+
+认可 migration seed，但 S3 的“取用或显式创建”必须是确定性的数据库操作，而不是静默代码 fallback。
+
+冻结：
+
+先查询唯一 system exact policy；
+缺失时通过受控、幂等路径创建；
+并发创建由 unique scope 收敛；
+Projection 必须最终持久化真实 tolerancePolicyId + version。
+
+禁止：
+
+if missing => internally assume 0/0 without persisted policy
+
+RISKS
+
+当前剩余主要风险已经从 Schema 结构转到引用完整性：
+
+text[] evidence 无 FK；
+Projection 的 basis/policy 弱引用；
+projector 重建失败时是否真的恢复旧 generation/membership。
+
+这些不要求推翻 S1，但必须成为 S3/S5 永久验收。
+
+TEST
+
+保留现有 S1 全部测试，并新增/预登记：
+
+DELETE 后 CAS 故障 → rollback 恢复旧 projection + membership；
+DELETE/CAS 后 INSERT 故障 → 同样完整恢复；
+stale generation membership 立即拒绝；
+system exact policy 缺失 → 显式创建并持久化 ID；
+并发 exact-policy 创建 → 最终唯一；
+dangling/cross-tenant basis/policy → projector fail-closed；
+manual evidence 数组含不存在/跨租户/重复 ID → 零事实写入；
+checker 后续可检测人工制造的弱引用漂移。
+③ 下一执行单元
+
+批准进入 R45 S2。
+
+范围严格限定为：
+
+ProviderOutcomeFact / ReimbursementFact ingest + server-side identity/fingerprint + replay idempotency + reversal ingest。
+
+S2 不要实现 projector，也不要提前接受人工 outcome 的完整受保护 HTTP 路径；人工 approval/evidence write boundary 留到既定 S4。
+
+S2 应重点证明：
+
+same external event → same existing fact
+
+而不是：
+
+duplicate external event → error/new fact
+
+以及：
+
+same providerEventId + different resource identity → distinct facts
+
+和：
+
+same reversal replay → existing reversal
+但
+different reversal event → same OBSERVED already fully reversed → fail-closed。
+
+继续冻结：
+
+NO Settlement · NO Billing · NO Fee · NO RecoveryLedger mutation · NO platform write · TRANSPORT=false · NO production credentials。
+
+VERDICT: PASS WITH REVISE — MSG-20261001-47
+```
