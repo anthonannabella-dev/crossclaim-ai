@@ -1,10 +1,10 @@
 {
   "gate": "B2-FIX R1",
-  "head": "UNKNOWN",
+  "head": "549dba8",
   "status": "RECONCILED",
-  "current_task": "Gate 7 / ② evidence.read（READ_ONLY 证据读取）—— 已接入并送审",
+  "current_task": "Gate 7 / ② evidence.read（READ_ONLY 证据读取）—— 已实现并送审 R30",
   "next_task": "等待 MSG-20261001-11：全文读取 → 逐字归档 → FULL_COPY_OK → PASS 则 billing.draft 收口并进入 ② 剩余小批次（evidence.read / appeal.submit / platform.write），REVISE 则按新 CHANGE 收敛",
-  "send_head": "d81a86f",
+  "send_head": "549dba8",
   "decision_head": "d6d239b",
   "last_chatgpt_message": "MSG-20261001-13",
   "production_enabled": false,
@@ -13,11 +13,11 @@
   "previous_head": "88fd9b3",
   "architect_decision_pending": true,
   "blocked_scope": null,
-  "last_send_head": "d81a86f",
+  "last_send_head": "549dba8",
   "last_sent_at": "2026-10-01T00:58:20.480Z",
   "last_sent_fingerprint": "WAKEUP_DELIVERED:R18:retry-due-msg34-closure:9a806eb",
   "final_head": "1144401",
-  "ci_run": "pending",
+  "ci_run": "36815640605",
   "ci_result": "5/5 SUCCESS",
   "fix_pr": "https://github.com/anthonannabella-dev/crossclaim-ai/pull/10",
   "channel_status": "CHATGPT_WEB_AVAILABLE（in-app browser 可用；须逐 surface 判读：聚合 getState() 会被 Edge 扩展 surface 的 token 错误毒化）",
@@ -50,11 +50,11 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE（FREQ=MINUTELY;INTERVAL=5；2026-10-01 核实后由 PAUSED 恢复）",
   "last_tick_at": "2026-10-01T00:58:20.480Z",
-  "state": "IMPLEMENT",
-  "last_action": "MSG-20261001-13 (R29) = PASS；billing.draft 工程批次收口并登记（REVIEWED_REF d81a86f / CI 36814394218 / Issue #2 comment 5924753663）；已按 §5 开工 evidence.read（只读契约 + 脱敏投影 + 6 项专项）",
-  "last_action_at": "2026-10-01T04:30:55.502Z",
-  "next_action": "evidence.read 送审（七段式 + Issue #2 + ChatGPT 轻量唤醒）→ 取裁决：PASS 则继续 ② 剩余（appeal.submit / platform.write），REVISE 则按 CHANGE 收敛",
-  "current_head": "UNKNOWN",
+  "state": "REVIEW_WAIT",
+  "last_action": "evidence.read 批次完成并送审 R30（Issue #2 comment 5924843804 / CI run 36815640605 success / HEAD 549dba8）；专项 6/6、回归 31 files/285、tsc/prisma PASS；billing.draft 已登记 PASS（MSG-20261001-13）",
+  "last_action_at": "2026-10-01T04:38:09.292Z",
+  "next_action": "等待 MSG-20261001-14：PASS → evidence.read 收口并进入 ② 剩余小批次（appeal.submit / platform.write，EXTERNAL_WRITE 继续 HOLD）；REVISE → 按新 CHANGE 收敛",
+  "current_head": "549dba8",
   "reviewed_head": "d81a86f",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -86,6 +86,8 @@
   },
   "evidence_read_batch": {
     "verdict": "PENDING_REVIEW",
-    "reviewed_ref": "UNKNOWN"
+    "request_comment": "5924843804",
+    "reviewed_ref": "549dba8",
+    "ci_run": "36815640605"
   }
 }
