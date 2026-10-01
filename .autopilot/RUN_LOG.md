@@ -887,3 +887,12 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - S2 风险：材料包身份稳定性（key 顺序 / 时间格式 / Decimal 表达不得影响 digest；非业务 metadata 不得进入 identity；digest 与 packageVersion + digestVersion 共同绑定）。
 - S2 验收 12 项（见 STATE.r43s1_verdict.s2_tests）。
 - 边界：AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · SETTLEMENT/BILLING LINKAGE HOLD。
+
+## 2026-10-01 JST — R43 S2（Recovery Package Implementation）实现 + Checkpoint 送审
+
+- 交付：`apps/api/src/services/recovery/recovery-package.ts` —— canonical manifest（稳定序列化 + Decimal 固定 4 位 + UTC ISO 毫秒 + null 契约 + 数组字典序）、（ 64hex）、approval basis 唯一 builder、package CAS 生命周期（EXPORTED 非终态；终态需 reason+actor）、零依赖 PDF 派生、artifact 落库（只引用 FileAsset）。
+- 测试：`recovery-manual-package.test.ts` 9 项 + `recovery-manual-package-db.test.ts` 6 项 = **15/15 PASS**（含 key 顺序无关、非业务 metadata 不进入 identity、CAS 并发至多一次真实跃迁、陈旧期望拒绝、artifact 幂等、边界：无 SUBMITTED_MANUAL / 无 submission / 无 approval 消费 / 资金域全 0）。
+- 回归：43 files / 519 tests PASS（另一组合 43/523 亦全绿）；tsc PASS。
+- PDF 依赖：仓库仅有 `@prisma/client` → 采用**零依赖最小 writer**，未新增依赖（无 dependency delta）。
+- 送审：REVIEWED_HEAD 4ad4016（Issue #2 comment 5930531626 / CI 36856596781）；唤醒已投递并验证。
+- 边界：S2 未注册 recovery.manual_submit、未消费 approval、未改 ClaimItem 状态、未创建 RecoveryManualSubmission、未接 HTTP confirmation、未外写、未联动 Settlement·Billing。

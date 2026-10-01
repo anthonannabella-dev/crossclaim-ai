@@ -1,6 +1,6 @@
 {
   "gate": "B2-FIX R1",
-  "head": "9b2c98b",
+  "head": "4ad4016",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
   "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
@@ -9,13 +9,13 @@
   "last_chatgpt_message": "MSG-20261001-33",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T11:32:47.012Z",
+  "updated_at": "2026-10-01T11:39:18.528Z",
   "previous_head": "d39c53e",
-  "architect_decision_pending": false,
+  "architect_decision_pending": true,
   "blocked_scope": null,
-  "last_send_head": "d39c53e",
-  "last_sent_at": "2026-10-01T11:31:45.069Z",
-  "last_sent_fingerprint": "R43-S1:Manual-Recovery-Persistence-Schema-Triggers",
+  "last_send_head": "4ad4016",
+  "last_sent_at": "2026-10-01T11:39:18.528Z",
+  "last_sent_fingerprint": "R43-S2:Recovery-Package-Implementation",
   "final_head": "1144401",
   "ci_run": "36833002042",
   "ci_result": "SUCCESS",
@@ -51,10 +51,10 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-01T11:32:11.656Z",
   "state": "IMPLEMENT",
-  "last_action": "MSG-20261001-33 = PASS 已逐字归档并 FULL_COPY_OK —— R43 S1 Implementation Checkpoint 关闭；下一批 = R43 S2（Recovery Package Implementation：package generation → canonical JSON manifest → digest/version → artifact generation → package CAS lifecycle），不携带 S3",
-  "last_action_at": "2026-10-01T11:32:47.012Z",
-  "next_action": "R43 S2 — Recovery Package Implementation（范围仅：package generation → canonical JSON manifest → digest/version → artifact generation → package CAS lifecycle）。S2 禁止项：不注册 recovery.manual_submit、不消费 approval、不改 ClaimItem 状态、不创建 RecoveryManualSubmission、不接 HTTP submission confirmation、不做 Amazon 外写、不联动 Settlement/Billing。必须先做现有依赖 PDF 能力检查（优先复用；如需新依赖单独提 dependency delta）。完成后提交 S2 Implementation Checkpoint（canonical manifest/digest 确定性证据 + 并发 CAS + artifact 安全性 + 生命周期测试）。",
-  "current_head": "9b2c98b",
+  "last_action": "R43 S2（Recovery Package Implementation）已实现并送审：canonical manifest/digest + approval basis 唯一 builder + package CAS 生命周期 + 零依赖 PDF 派生 + artifact 落库；S2 测试 15/15 PASS；回归 43 files / 519 tests PASS；tsc PASS；等待 S2 Checkpoint 裁决",
+  "last_action_at": "2026-10-01T11:39:18.528Z",
+  "next_action": "等待 S2 Checkpoint 裁决：①PASS → 进入 S3（注册 recovery.manual_submit + 锁内重验 + 原子提交；顺带完成 S4 providerCaseRef canonical 补录与 S5 只读 checker）②REVISE → 按 CHANGE 修改后重送 S2 ③BLOCK → 停止该方案。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
+  "current_head": "4ad4016",
   "reviewed_head": "07b7009",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -737,5 +737,23 @@
     ],
     "s2_risks": "材料包身份稳定性：JSON manifest 与 PDF 不得各自计算业务事实；key 顺序/时间格式/Decimal 表达不得影响 digest；exporter metadata（时间、路径）不得进入 package identity；SUPERSEDED/WITHDRAWN 不得被 approval/manual-submit 使用；digest 必须与 packageVersion + digestVersion 共同绑定",
     "s2_tests": "12 项（key 顺序无关的 canonical manifest/digest；Decimal/currency/timestamp/null/optional 固定契约；业务字段变化 → digest 变化；非业务 metadata 变化 → digest 不变；JSON manifest 为 canonical source of truth、PDF 派生；artifact 不含 credential/token/secret；重试生成不产生第二条逻辑 package；GENERATED→EXPORTED 后仍允许后续 manual-submit 流程；SUPERSEDED/WITHDRAWN 后禁止用于新 approval/manual-submit；CAS 并发仅一个跃迁成功；packageVersion + digestVersion + packageDigest 均持久化并参与 approval binding；生成/导出失败不得伪造 EXPORTED）"
+  },
+  "r43s2_submission": {
+    "submission_comment": "5930531626",
+    "ci_run": "36856596781",
+    "reviewed_head": "4ad4016",
+    "module": "apps/api/src/services/recovery/recovery-package.ts",
+    "tests": [
+      "apps/api/src/__tests__/recovery-manual-package.test.ts（9）",
+      "apps/api/src/__tests__/recovery-manual-package-db.test.ts（6）"
+    ],
+    "evidence": {
+      "s2_tests": "15/15 PASS",
+      "regression": "43 files / 519 tests PASS（另一组合 43/523 全绿）",
+      "tsc": "PASS",
+      "pdf_dependency": "零依赖最小 PDF writer（仓库仅有 @prisma/client）；无新增依赖"
+    },
+    "wakeup_channel": "https://chatgpt.com/c/6ab9ee1b-fd54-83ee-b363-b67750afcedd",
+    "wakeup_delivery": "DELIVERED_VERIFIED（输入框清空 / 新用户消息在底部）"
   }
 }
