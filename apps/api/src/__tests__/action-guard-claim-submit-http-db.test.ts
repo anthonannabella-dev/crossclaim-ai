@@ -835,11 +835,30 @@ describe('R19 CHANGE A–D — claim.submit 原子性 / 锁内重验 / 装配路
       const res = await pending;
       expect(res.status).toBe(403);
       expect(await sideEffects()).toMatchObject(ZERO);
-      // 锁后权限拒绝必须留痕（claim.submit_rejected），且不与成功业务审计混淆
-      const rejected = await prisma.auditLog.count({
-        where: { organizationId: ORG, action: 'claim.submit_rejected' },
+      // 锁后权限拒绝必须留痕（claim.submit_rejected），且字段完整、不与成功业务审计混淆
+      const rejectedRows = await prisma.auditLog.findMany({ where: { organizationId: ORG, action: 'claim.submit_rejected' } });
+      expect(rejectedRows).toHaveLength(1);
+      const changes = (rejectedRows[0]?.changes ?? {}) as Record<string, unknown>;
+      expect(changes).toMatchObject({
+        stage: 'LOCKED_RECHECK',
+        result: 'REJECTED',
+        reason: 'FORBIDDEN',
+        caseId,
+        claimId,
+        approvalId,
       });
-      expect(rejected).toBe(1);
+      expect(typeof changes.operationId === 'string' && changes.operationId.startsWith('approval:')).toBe(true);
+      // Claim 未推进：状态、submittedAt/submittedBy 均保持未写
+      const claimRow = await prisma.claim.findUniqueOrThrow({
+        where: { id: claimId },
+        select: { status: true, submittedAt: true, submittedBy: true },
+      });
+      expect(claimRow.status).toBe('DRAFT');
+      expect(claimRow.submittedAt).toBeNull();
+      expect(claimRow.submittedBy).toBeNull();
+      // 审批不得被消费
+      const consumed = await prisma.auditLog.count({ where: { organizationId: ORG, action: { contains: 'consumed' } } });
+      expect(consumed).toBe(0);
       const successAudits = await prisma.auditLog.count({ where: { organizationId: ORG, action: 'claim.submitted_by_human' } });
       expect(successAudits).toBe(0);
     });
