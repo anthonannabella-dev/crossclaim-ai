@@ -79125,3 +79125,148 @@ HTTP HOLD · REAL ADAPTER HOLD · PLATFORM_WRITE_TRANSPORT_ENABLED=false · PROD
 VERDICT: PASS — MSG-20261001-21
 ```
 
+### [MSG-20261001-22] Gate 7 / ② · platform.write · Integration Boundary Review（R37，REVIEWED_HEAD ddba459）— VERDICT: PASS WITH REVISE；总体边界设计批准；CHANGE A v1 不拆 prepare/submit（路由 POST /cases/:id/platform/write，preview 必须纯只读）、CHANGE B 响应必须显式 platformWriteExecuted=false + executionDisposition（当前 NEEDS_MANUAL）、CHANGE C adapter 三能力用代码注册表 typed descriptor（不新增 DB Schema，fail-closed validator）、CHANGE D transport 双重门控（global gate + adapter 注册 + 能力校验 + T1 授权，缺一 fail-closed）；批准进入 P1–P5（仅 HTTP 接线/boundary validation/capability registry/gate enforcement/H1–H8+补充测试，不得接真实 adapter 或真实外写）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE: FORMAL_VERDICT
+MESSAGE: MSG-20261001-22
+PREVIOUS: MSG-20261001-21
+GATE: Gate 7 / platform.write · Integration Boundary Review
+REVIEWED_HEAD: ddba459
+DECISION: PASS WITH REVISE
+
+KEEP
+
+总体边界设计批准。以下原则保持：
+
+HTTP → authn → tenant/role → Action Guard → server snapshot → approval binding → T1 → T2 → T3。
+HTTP 层永远不得直接调用 write sink。
+digest / basisReference / organizationId / idempotency identity 不接受客户端作为可信事实。
+并发与重放最终由 persistent ledger/database constraints 收敛，而不是 HTTP 内存锁。
+adapter capability 必须在真实 transport 前被证明。
+transport enablement 是独立 Gate，HTTP 接线不能顺带开启真实外写。
+当前所有 HOLD 继续有效。
+CHANGE A — v1 不拆 prepare / submit
+
+① 路由采用：
+
+POST /cases/:id/platform/write
+
+批准。
+
+v1 不增加 prepare endpoint。
+
+原因是当前已经存在 server-side snapshot + approval binding；再开放一个 prepare endpoint 容易产生“prepare 时看到的状态”与 T1 真正取得执行权时状态不同的第二套生命周期。
+
+HTTP 请求只表达“尝试执行这个已批准动作”。真正授权事实仍必须在 T1 锁后重新验证。
+
+以后如果 UI 确实需要 preview，可以另做纯只读 preview，不得产生 execution right、不得消费 approval。
+
+CHANGE B — 响应必须显式返回未真实执行
+
+② 要求返回 platformWriteExecuted=false。
+
+在 transport 仍关闭的当前阶段，成功 HTTP 响应不能让调用方误解为“平台已经写入”。
+
+建议响应至少区分：
+
+status / attemptId / platformWriteExecuted / executionDisposition
+
+其中当前允许：
+
+platformWriteExecuted: false
+
+executionDisposition: 'NEEDS_MANUAL'
+
+不要返回 provider success 类字段。
+
+未来 transport Gate 真正开启后，再单独定义真实执行响应语义。
+
+CHANGE C — adapter capability 显式注册，但本轮不要进数据库 Schema
+
+③ 三项能力必须显式声明，但当前采用代码注册表 / typed descriptor，不新增数据库 Schema。
+
+至少：
+
+idempotentWrite
+statusQuery
+ambiguousResponseSemantics
+
+能力必须由 adapter implementation 固定声明，不能来自 HTTP 请求、租户配置或客户端参数。
+
+建议 fail-closed capability validator：
+
+无 idempotentWrite → 不允许自动 write；
+ambiguous semantics 未定义 → 不允许自动 write；
+无 statusQuery → 不允许自动 reconciliation；
+adapter 未注册/能力未知 → NEEDS_MANUAL。
+
+等真实 provider adapter 出现后，如果确实需要版本化/运营动态配置，再单独提 Schema Delta。
+
+CHANGE D — transport Gate 采用双重门控
+
+④ §7 独立 Gate 原则批准，但实现必须至少同时满足：
+
+全局 transport enablement + adapter capability eligibility
+
+即使以后：
+
+PLATFORM_WRITE_TRANSPORT_ENABLED=true
+
+也不能意味着所有 adapter 自动获得外写能力。
+
+真实调用必须同时满足：
+
+global gate ON
+
+specific adapter registered
+capabilities validated
+request/T1 authorization valid
+
+缺任一项 → fail-closed。
+
+生产凭据存在本身也绝不能等价于 enablement。
+
+RISKS
+
+下一阶段最大风险是把“HTTP 200”“attempt 创建成功”“T1 获得执行权”和“provider 已执行成功”混成一个状态。
+
+四者必须继续分离。
+
+尤其在 transport=false 时，HTTP 接线只是把已验证的安全编排暴露给应用层，不代表真实平台集成完成。
+
+TEST
+
+H1–H8 保留，并增加/明确以下断言：
+
+客户端伪造 digest / basisReference / organizationId / idempotency key 不得改变服务端事实；
+跨租户 case/approval → 404/结构化拒绝且零 attempt、零消费；
+等待锁期间执行人被降权/停用 → 锁后拒绝；
+同一请求串行重放 → 同一 execution chain，不创建第二条；
+两个 HTTP 请求并发 → 数据库约束保证唯一执行链；
+transport=false → platformWriteExecuted=false 且 sinkCalls=0；
+HTTP handler/service 不存在直接 sink 调用路径；
+adapter capability 缺失/未知 → fail-closed；
+全局 gate=false 时，即使 adapter 声明全部能力也不得调用 transport；
+全局 gate=true 但 adapter 不合格也不得调用 transport。
+NEXT
+
+批准进入 P1–P5 Implementation，但授权范围仅限：
+
+HTTP 接线 + server-side boundary validation + typed adapter capability registry + transport gate enforcement + H1–H8/上述补充测试。
+
+本轮不得实现真实 Amazon/TikTok/Walmart adapter，不得配置真实 credential，不得执行真实 provider write。
+
+实现完成后提交新的 Implementation Checkpoint。
+
+此期间：
+
+REAL ADAPTER HOLD · REAL PROVIDER TRANSPORT HOLD · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · CUSTOMER SUBMISSION HOLD。
+
+HTTP 可以在本轮实现，但必须默认落在安全的 NEEDS_MANUAL / platformWriteExecuted=false 路径。
+
+VERDICT: PASS WITH REVISE — MSG-20261001-22
+```
+

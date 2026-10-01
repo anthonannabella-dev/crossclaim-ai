@@ -662,3 +662,10 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 
 - 新增 `docs/releases/INTEGRATION-BOUNDARY-REVIEW-PLAN.md`：分层链路逐层不变量与失败模式；HTTP 身份/权限与跨租户 fail-closed；禁止客户端自证 digest；重放/并发收敛同一 chain；HTTP 失败不得绕过 T1；adapter capability contract 与缺失时的 NEEDS_MANUAL/BLOCK 规则；transport 独立 Gate；H1–H8 验收矩阵与 P1–P5 实施步骤。
 - 边界：不接 HTTP、不接真实 adapter、transport 恒关、无生产凭据/真实外写/资金/客户提交。
+
+## 2026-10-01 JST — 裁决 MSG-20261001-22 = PASS WITH REVISE（R37 Integration Boundary Review）
+
+- 归档 §MSG-20261001-22（140 行）→ FULL_COPY_OK；Issue #2 comment 5927474749。
+- KEEP：总体边界设计批准（分层链路、HTTP 不直接调 sink、客户端不得自证 digest、账本收敛并发、adapter 能力前置、transport 独立 Gate）。
+- CHANGE A：v1 不拆 prepare/submit；CHANGE B：响应显式 platformWriteExecuted=false + executionDisposition；CHANGE C：adapter 三能力走代码注册表 typed descriptor（不新增 DB Schema）+ fail-closed validator；CHANGE D：transport 双重门控。
+- NEXT：批准 P1–P5 实施（仅 HTTP 接线/boundary validation/capability registry/gate enforcement/H1–H8+补充断言）；不得实现真实 adapter/credential/provider write；HTTP 必须默认落 NEEDS_MANUAL。

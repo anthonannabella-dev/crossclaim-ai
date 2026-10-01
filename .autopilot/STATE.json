@@ -1,21 +1,21 @@
 {
   "gate": "B2-FIX R1",
-  "head": "db106f6",
+  "head": "ddba459",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
-  "next_task": "Integration Boundary Review 设计/实施计划（先计划后实现，不开放 transport）：HTTP request→authn→tenant membership/role→action guard→server-side snapshot→approval binding→persistent ledger T1→transport boundary；分别定义 HTTP 身份/权限与跨租户 fail-closed、禁止客户端自声明 digest、重放/并发收敛同一 chain、HTTP 失败不得绕过 T1、adapter capability contract（idempotency/status-query/ambiguous-response）、无安全恢复能力的 provider 保持 NEEDS_MANUAL、transport enablement 为独立 Gate",
+  "next_task": "P1–P5 实施（不接真实 adapter）：P1 POST /cases/:id/platform/write 路由 + withActionGuard 接线（fail-closed，transport 仍关）；P2 服务端快照 + 审批绑定；P3 T1/T3 编排接入（复用 prisma-ledger）；P4 H1–H8 + CHANGE 补充断言（真实 HTTP + PostgreSQL）；P5 全量回归 + Golden Path E2E + CI → 送审 Integration Boundary Implementation Checkpoint；响应必须含 platformWriteExecuted=false 与 executionDisposition=NEEDS_MANUAL",
   "send_head": "7d888cc",
   "decision_head": "7d888cc",
-  "last_chatgpt_message": "MSG-20261001-21",
+  "last_chatgpt_message": "MSG-20261001-22",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T08:02:48.483Z",
+  "updated_at": "2026-10-01T08:12:53.072Z",
   "previous_head": "d2c82fa",
   "architect_decision_pending": false,
   "blocked_scope": null,
-  "last_send_head": "db106f6",
-  "last_sent_at": "2026-10-01T08:01:55.432Z",
-  "last_sent_fingerprint": "R36-RE-REVIEW:PG6+PG7+PG-map",
+  "last_send_head": "ddba459",
+  "last_sent_at": "2026-10-01T08:08:32.943Z",
+  "last_sent_fingerprint": "R37:Integration-Boundary-Review-plan",
   "final_head": "1144401",
   "ci_run": "36833002042",
   "ci_result": "SUCCESS",
@@ -49,12 +49,12 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-01T08:02:11.443Z",
+  "last_tick_at": "2026-10-01T08:12:16.317Z",
   "state": "IMPLEMENT",
-  "last_action": "MSG-20261001-21 = PASS：R36 Persistent Attempt Ledger Implementation Checkpoint 关闭；归档 + FULL_COPY_OK（Issue #2 comment 5927328440）；批准进入 Integration Boundary Review（HTTP/Adapter/Transport 前置边界审计）",
-  "last_action_at": "2026-10-01T08:02:48.482Z",
-  "next_action": "Integration Boundary Review 设计/实施计划（先计划后实现，不开放 transport）：HTTP request→authn→tenant membership/role→action guard→server-side snapshot→approval binding→persistent ledger T1→transport boundary；分别定义 HTTP 身份/权限与跨租户 fail-closed、禁止客户端自声明 digest、重放/并发收敛同一 chain、HTTP 失败不得绕过 T1、adapter capability contract（idempotency/status-query/ambiguous-response）、无安全恢复能力的 provider 保持 NEEDS_MANUAL、transport enablement 为独立 Gate",
-  "current_head": "db106f6",
+  "last_action": "MSG-20261001-22 = PASS WITH REVISE 收口：R37 边界设计批准（CHANGE A–D）；归档 FULL_COPY_OK（Issue #2 comment 5927474749）；批准进入 P1–P5（安全默认 NEEDS_MANUAL/platformWriteExecuted=false）",
+  "last_action_at": "2026-10-01T08:12:53.071Z",
+  "next_action": "P1–P5 实施（不接真实 adapter）：P1 POST /cases/:id/platform/write 路由 + withActionGuard 接线（fail-closed，transport 仍关）；P2 服务端快照 + 审批绑定；P3 T1/T3 编排接入（复用 prisma-ledger）；P4 H1–H8 + CHANGE 补充断言（真实 HTTP + PostgreSQL）；P5 全量回归 + Golden Path E2E + CI → 送审 Integration Boundary Implementation Checkpoint；响应必须含 platformWriteExecuted=false 与 executionDisposition=NEEDS_MANUAL",
+  "current_head": "ddba459",
   "reviewed_head": "549dba8",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-01T08:01:55.601Z",
-    "gapMs": 15844,
+    "previousTickAt": "2026-10-01T08:08:33.107Z",
+    "gapMs": 223211,
     "stale": false,
-    "checkedAt": "2026-10-01T08:02:11.443Z"
+    "checkedAt": "2026-10-01T08:12:16.317Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -259,5 +259,20 @@
     "triggers": "核心领域模型 / Schema / 状态机 / Action Guard / Claim / Appeal / Settlement / RecoveryLedger / Billing / platform.write / Adapter / Import / Canonical Fact",
     "rules": 10
   },
-  "r36_rereview_comment": "5927313247"
+  "r36_rereview_comment": "5927313247",
+  "r37_submission_comment": "5927413447",
+  "integration_boundary_review": {
+    "verdict": "PASS WITH REVISE",
+    "message_id": "MSG-20261001-22",
+    "reviewed_head": "ddba459",
+    "archive_comment": "5927474749",
+    "archive_verified": "FULL_COPY_OK",
+    "changes": {
+      "A": "v1 不拆 prepare/submit；路由 POST /cases/:id/platform/write；preview 必须纯只读",
+      "B": "响应显式 platformWriteExecuted=false + executionDisposition（当前 NEEDS_MANUAL），不返回 provider success 字段",
+      "C": "adapter 三能力用代码注册表 typed descriptor（不新增 DB Schema），fail-closed validator",
+      "D": "transport 双重门控（global gate + adapter 注册 + 能力校验 + T1 授权）"
+    },
+    "scope": "仅 P1–P5：HTTP 接线 + server-side boundary validation + typed adapter capability registry + transport gate enforcement + H1–H8 与补充断言；不得接真实 adapter/credential/provider write"
+  }
 }
