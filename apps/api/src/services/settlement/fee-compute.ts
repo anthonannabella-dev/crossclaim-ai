@@ -161,3 +161,30 @@ export function computeSettlementFee(input: FeeComputeInput): FeeComputeResult {
     feeBasisVersion: input.policy.feeBasisVersion,
   };
 }
+
+export type FeeAdjustmentKind = 'VOID' | 'REVERSAL' | 'CORRECTION';
+
+/**
+ * MSG-20261002-59 §4：adjustment 只存**正数** amount，方向由 kind 决定，避免 -(-100) 双重符号歧义。
+ *   VOID      → −originalFeeAmount
+ *   REVERSAL  → −amount
+ *   CORRECTION→ ±amount（由 caller 的 correction semantics 决定；v1 需显式传 direction）
+ */
+export function feeAdjustmentEffect(input: {
+  kind: FeeAdjustmentKind;
+  amount: string;
+  originalFeeAmount?: string;
+  correctionDirection?: 'INCREASE' | 'DECREASE';
+}): string {
+  const amount = parseDecimal(input.amount, 'adjustment.amount');
+  if (input.kind === 'REVERSAL') return formatDecimal(-amount);
+  if (input.kind === 'VOID') {
+    if (!input.originalFeeAmount) throw new FeeComputeError('ORIGINAL_FEE_REQUIRED', 'VOID requires originalFeeAmount');
+    const original = parseDecimal(input.originalFeeAmount, 'originalFeeAmount');
+    if (amount !== original) throw new FeeComputeError('VOID_AMOUNT_MISMATCH', 'VOID amount must equal original fee');
+    return formatDecimal(-original);
+  }
+  if (input.correctionDirection === 'INCREASE') return formatDecimal(amount);
+  if (input.correctionDirection === 'DECREASE') return formatDecimal(-amount);
+  throw new FeeComputeError('CORRECTION_DIRECTION_REQUIRED', 'CORRECTION requires explicit direction');
+}

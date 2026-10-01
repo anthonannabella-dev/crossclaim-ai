@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   computeMembershipDigest,
+  feeAdjustmentEffect,
   computeSettlementFee,
   FeeComputeError,
   type FeeComputeInput,
@@ -75,5 +76,16 @@ describe('R46 S4 确定性 fee 计算', () => {
     expect(() =>
       computeSettlementFee(base({ policy: { basis: 'RECOVERED_AMOUNT_PCT', rate: '1.5', policyRef: 'p', feeBasisVersion: 'v1', currency: 'USD' } })),
     ).toThrowError(/INVALID_RATE/);
+  });
+});
+
+describe('R46 S4 FeeCalculationAdjustment 方向语义', () => {
+  it('REVERSAL → 负向；VOID → −originalFeeAmount（等额校验）；CORRECTION 需显式方向', () => {
+    expect(feeAdjustmentEffect({ kind: 'REVERSAL', amount: '150.0000' })).toBe('-150.0000');
+    expect(feeAdjustmentEffect({ kind: 'VOID', amount: '150.0000', originalFeeAmount: '150.0000' })).toBe('-150.0000');
+    expect(() => feeAdjustmentEffect({ kind: 'VOID', amount: '1.0000', originalFeeAmount: '150.0000' })).toThrowError(/VOID_AMOUNT_MISMATCH/);
+    expect(feeAdjustmentEffect({ kind: 'CORRECTION', amount: '10.0000', correctionDirection: 'INCREASE' })).toBe('10.0000');
+    expect(feeAdjustmentEffect({ kind: 'CORRECTION', amount: '10.0000', correctionDirection: 'DECREASE' })).toBe('-10.0000');
+    expect(() => feeAdjustmentEffect({ kind: 'CORRECTION', amount: '10.0000' })).toThrowError(/CORRECTION_DIRECTION_REQUIRED/);
   });
 });
