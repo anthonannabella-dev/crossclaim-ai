@@ -616,3 +616,11 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - 送审：REVIEWED_HEAD ab00cd9（Issue #2 comment 5936548245）。
 - 证据：fresh deploy OK / two-stage upgrade OK / 全量 176 files 1751 tests PASS / tsc 0 error / 零资金业务行为。
 - NEXT：PASS → R46 S2（receipt snapshot + Settlement ingest/record）；REVISE → 修订 S1；BLOCK → 停止。
+
+### MSG-20261002-55 裁决（R46 S1 CLOSED / S2 AUTHORIZED）
+
+- DECISION：**PASS WITH REVISE**（REVIEWED_HEAD ab00cd9；归档 FULL_COPY_OK）。详见 STATE.r46_s1_verdict。
+- NEXT：**R46 S2 — Receipt Snapshot + Settlement Record/Ingest Protected Write Boundary**（可信到账证据 → server-side canonical snapshot → humanApproval → Settlement；到此停止）。
+- S2 硬验收：canonical digest 等价证明；17 项最低永久验收（含并发同 receipt 至多一条、approval 绑定、零资金外溢）。
+- 待办（S4 前）：CHANGE A fee-chain 并发竞争验收（真实 PostgreSQL，独立连接）。
+- 边界：NO automatic Settlement from R45 · NO automatic Fee · NO automatic Invoice · NO Payment activation · NO autopay · NO platform write；R13 Payment Activation Gate = HOLD。

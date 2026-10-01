@@ -1,17 +1,17 @@
 {
   "gate": "B2-FIX R1",
-  "head": "ea66ae2",
+  "head": "f1e851d",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
   "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
   "send_head": "07b7009",
   "decision_head": "07b7009",
-  "last_chatgpt_message": "MSG-20261002-54",
+  "last_chatgpt_message": "MSG-20261002-55",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T17:11:23.024Z",
-  "previous_head": "ab00cd9",
-  "architect_decision_pending": true,
+  "updated_at": "2026-10-01T17:12:21.088Z",
+  "previous_head": "ea66ae2",
+  "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "ab00cd9",
   "last_sent_at": "2026-10-01T17:11:23.024Z",
@@ -49,11 +49,11 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-01T17:11:28.151Z",
+  "last_tick_at": "2026-10-01T17:11:46.054Z",
   "state": "IMPLEMENT",
-  "last_action": "SCHEDULER_STALE_RECOVERED（gap=18min）→ 本轮已恢复执行",
-  "last_action_at": "2026-10-01T17:11:23.024Z",
-  "next_action": "等待 R46 S1 裁决：①PASS → 开始 R46 S2（receipt snapshot + Settlement ingest/record）②REVISE → 修订 S1 ③BLOCK → 停止。",
+  "last_action": "MSG-20261002-55 = PASS WITH REVISE 已逐字归档（FULL_COPY_OK）：**R46 S1 CLOSED**，S2 已授权（Receipt Snapshot + Settlement Record/Ingest 受保护写边界）。CHANGE A（fee-chain 并发竞争验收）须在 S4 前完成；CHANGE B（canonical snapshot digest 等价证明）为 S2 硬验收。",
+  "last_action_at": "2026-10-01T17:12:21.088Z",
+  "next_action": "R46 S2：receipt snapshot + Settlement record/ingest 受保护写边界（可信到账证据 → server-side canonical snapshot → humanApproval → Settlement）。",
   "current_head": "ab00cd9",
   "reviewed_head": "07b7009",
   "claim_submit_batch": {
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-01T17:11:28.017Z",
-    "gapMs": 135,
+    "previousTickAt": "2026-10-01T17:11:28.151Z",
+    "gapMs": 17903,
     "stale": false,
-    "checkedAt": "2026-10-01T17:11:28.151Z"
+    "checkedAt": "2026-10-01T17:11:46.054Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -2431,5 +2431,46 @@
       "证据是否满足 S1 送审报告要求？是否批准进入 R46 S2？"
     ],
     "next": "PASS → R46 S2（receipt snapshot + Settlement ingest/record 受保护写路径）；REVISE → 修订 S1；BLOCK → 停止"
+  },
+  "r46_s1_verdict": {
+    "message_id": "MSG-20261002-55",
+    "decision": "PASS WITH REVISE — R46 S1 CLOSED / S2 AUTHORIZED",
+    "reviewed_head": "ab00cd9",
+    "archival": "FULL_COPY_OK",
+    "archived_at": "2026-10-01T17:12:21.088Z",
+    "s1_status": "CLOSED",
+    "change_a_fee_chain_concurrency": "R46 永久回归必须在 S4 fee implementation checkpoint 前完成真实 PostgreSQL 并发竞争验收：两个并发事务把同一 Settlement 纳入同一 feeChainId 下不同 FeeCalculation → 数据库层最多一个成功、loser fail-closed、最终 membership 恰一；并保留正向对照（不同合法 fee chain 不被阻塞）",
+    "change_b_canonical_digest": "S2 硬验收：stored snapshotDigest == sha256(server-side canonical receipt snapshot)，唯一 server-side builder/canonicalizer；覆盖 key 顺序不变性 / amount 规范化 / currency canonical / UTC timestamp / evidence 稳定排序 / identity+version 纳入 digest / 客户端 digest 拒绝 / 可信字段变化 → digest 变化 / 非业务 metadata 变化 → digest 不变",
+    "frozen_service_semantics": [
+      "same reversal event replay → REUSED",
+      "different reversal event on already-reversed Settlement → REVERSAL_ALREADY_APPLIED",
+      "数据库 unique violation 不得直接泄漏成裸 500"
+    ],
+    "risks": [
+      "禁止「客户端说到账 → Settlement」",
+      "禁止「R45 reimbursement observed → Settlement」"
+    ],
+    "s2_min_tests": [
+      "server-side canonical ReceiptSnapshot + digest",
+      "客户端自证 digest/identity/currency/amount 等可信派生字段 fail-closed",
+      "settlement.record = INTERNAL_WRITE + humanApproval",
+      "approval 绑定完整 receipt snapshot",
+      "锁内 ACTIVE membership/role 重验",
+      "Settlement / snapshot / evidence / claim·case 同租户",
+      "无可信到账 evidence → 零 Settlement",
+      "exact receipt replay → REUSED（同一 Settlement）",
+      "same identity + conflicting immutable facts → EVENT_IDENTITY_CONFLICT",
+      "different receipt → distinct Settlement",
+      "approval 后 amount/currency/identity/evidence/receivedAt 变化 → 原 approval 无效",
+      "成功路径 Settlement + snapshot + audit + approval consumption 原子提交",
+      "成功审计失败 → 整体回滚",
+      "approval consumption 失败 → 整体回滚",
+      "并发同 receipt → 至多创建一个 Settlement",
+      "Settlement 创建不产生 FeeCalculation / BillingInvoice / Payment、不修改 RecoveryLedger",
+      "R45 projection/override 不得成为 Settlement 创建入口"
+    ],
+    "next_unit": "R46 S2 — Receipt Snapshot + Settlement Record/Ingest Protected Write Boundary",
+    "s2_scope": "只做到：可信到账证据 → immutable server-side receipt snapshot → human approval → Settlement financial fact；不得顺带进入 SettlementAdjustment / FeeCalculation / BillingInvoice / Payment",
+    "redline": "NO automatic Settlement from R45 · NO automatic Fee · NO automatic Invoice issuance · NO Payment activation · NO autopay · NO platform write · TRANSPORT=false · NO production credentials；R13 Payment Activation Gate = HOLD"
   }
 }

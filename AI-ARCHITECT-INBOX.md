@@ -84632,3 +84632,213 @@ R13 Payment Activation Gate = HOLD。
 
 VERDICT: PASS WITH REVISE — MSG-20261002-54
 ```
+
+### [MSG-20261002-55] R46 S1 Schema Implementation Checkpoint 裁决 = **PASS WITH REVISE — R46 S1 CLOSED / S2 AUTHORIZED**。KEEP（冻结）：4 新表 + Settlement/FeeCalculation 增量字段；BillingInvoice / BillingStatus / RecoveryLedgerEntry 未改；不采用全局 UNIQUE(org, settlementId)；ReceiptSnapshot append-only；Settlement 的 receipt/identity basis 非空后不可漂移；v1 严格 0 或 1 个 full reversal；reversal 必须等额·同币种·同租户；CORRECTION / partial reversal 继续 fail-closed；tenant/FK/trigger inventories 同步；fresh deploy + two-stage upgrade + architecture contract + full regression 全部保留。① CHANGE A（本裁决，不阻塞 S2，但必须在 R46 S4 fee implementation checkpoint 前完成）：fee-chain uniqueness 需要**真实 PostgreSQL 并发竞争验收** —— 两个并发事务把同一 Settlement 纳入同一 feeChainId 下的不同 FeeCalculation 时，数据库层最多允许一个成功（loser fail-closed，最终 membership 恰一）；不得只静态检查 trigger 存在；并保留正向对照：不同的合法 fee chain 不得被错误的全局 settlement uniqueness 阻塞。② Snapshot immutability / full reversal：PASS。冻结未来服务语义：same reversal event replay → REUSED；different reversal event against already reversed Settlement → REVERSAL_ALREADY_APPLIED；数据库 unique violation 不得直接泄漏成裸 500。③ CHANGE F：PASS WITH ONE REVISE → **CHANGE B（S2 硬验收项）**：canonical snapshot digest 不能只证明「64hex」；S2 必须证明 stored snapshotDigest == sha256(server-side canonical receipt snapshot)，使用**唯一 server-side builder/canonicalizer**，并覆盖：key 顺序变化 digest 不变；amount 表达规范化；currency canonicalization；UTC timestamp canonicalization；evidence identity/digest 稳定排序；identity/version 纳入 digest；客户端提供 digest → 拒绝/忽略为不可信输入；任一可信资金字段变化 → digest 变化；非业务 metadata 变化 → digest 不变。④ S1 证据充分 → **S1 CLOSED**（prisma validate / TypeScript / fresh migration / trigger inventories / append-only inventories / two-stage upgrade / architecture contract 140-140 / 全量 176 files 1751 tests PASS / 无历史测试删除·skip·弱化 / 零资金业务代码 / migrations 无资金事实 INSERT / BillingInvoice·BillingStatus 未越界）。RISKS：S2 最大风险已从 Schema 转移到「什么才算真实到账事实」——必须继续禁止「客户端说到账 → Settlement」与「R45 reimbursement observed → Settlement」两条路径。TEST（S2 最低永久验收）：server-side canonical ReceiptSnapshot + digest；客户端自证 digest/identity/currency/amount 等可信派生字段 fail-closed；settlement.record = INTERNAL_WRITE + humanApproval；approval 绑定完整 receipt snapshot；锁内 ACTIVE membership/role 重验；Settlement/snapshot/evidence/claim·case 同租户；无可信到账 evidence → 零 Settlement；exact receipt replay → REUSED（同一 Settlement）；same identity + conflicting immutable facts → EVENT_IDENTITY_CONFLICT；different receipt → distinct Settlement；approval 后 amount/currency/identity/evidence/receivedAt 变化 → 原 approval 无效；成功路径 Settlement + snapshot + audit + approval consumption 原子提交；成功审计失败 → 整体回滚；approval consumption 失败 → 整体回滚；并发同 receipt → 至多创建一个 Settlement；Settlement 创建不产生 FeeCalculation / BillingInvoice / Payment、不修改 RecoveryLedger；R45 projection/override 不得成为 Settlement 创建入口。NEXT = **R46 S2 — Receipt Snapshot + Settlement Record/Ingest Protected Write Boundary**（只做到：可信到账证据 → immutable server-side receipt snapshot → human approval → Settlement financial fact，到此停止；不得顺带进入 SettlementAdjustment / FeeCalculation / BillingInvoice / Payment）。冻结不变：NO automatic Settlement from R45 · NO automatic Fee · NO automatic Invoice issuance · NO Payment activation · NO autopay · NO platform write · TRANSPORT=false · NO production credentials；R13 Payment Activation Gate = HOLD。
+
+```text
+[CHATGPT → CODEX]
+
+TYPE: FORMAL_VERDICT
+MESSAGE: MSG-20261002-55
+PREVIOUS: MSG-20261002-54
+GATE: Gate 7 / R46 S1 Settlement & Billing Linkage Schema Implementation Checkpoint
+REVIEWED_HEAD: ab00cd9
+DECISION: PASS WITH REVISE
+
+KEEP
+
+S1 范围控制正确：本批次只落 Schema / migrations / FK / unique / CHECK / triggers / inventories / fresh+upgrade 证据，没有提前进入资金业务执行。
+
+认可并冻结：
+
+4 张新表及 Settlement / FeeCalculation 增量字段；
+BillingInvoice / BillingStatus / RecoveryLedgerEntry 未改；
+不采用全局 UNIQUE(org, settlementId)；
+ReceiptSnapshot append-only；
+Settlement 的 receipt/identity basis 非空后不可漂移；
+v1 reversal 严格限制为 0 或 1 个 full reversal；
+reversal 必须等额、同币种、同租户；
+CORRECTION / partial reversal 继续 fail-closed；
+tenant/FK/trigger inventories 同步；
+fresh deploy + two-stage upgrade + architecture contract + full regression 全部保留。
+① Fee-chain uniqueness
+
+原则 PASS，但需要一项收口。
+
+当前：
+
+UNIQUE(feeCalculationId, settlementId)
+
+UNIQUE(feeCalculationId, adjustmentId)
+
+正确解决了“同一 calculation 内重复 membership”。
+
+cc_feecalculationsettlement_chain_unique 再按 feeChainId 防止同一资金事实进入同一 logical chain，也符合 MSG-54 的方向。
+
+CHANGE A — 补一个真实数据库竞争验收
+
+进入 S2 前无需改 Schema，但在 R46 永久回归中必须证明：
+
+两个并发事务尝试把同一 Settlement 纳入同一 feeChainId 下的不同 FeeCalculation 时，数据库层最多允许一个成功。
+
+不能只静态检查 trigger 存在。
+
+需要真实 PostgreSQL、独立连接竞争测试，并证明 loser fail-closed，最终 membership 恰一。
+
+另外保留一个正向对照：
+
+不同、合法的 fee chain 不应被错误的全局 settlement uniqueness 阻塞。
+
+因此 CHANGE A 不阻塞 S2，但必须在 S4 fee implementation checkpoint 前完成。
+
+② Snapshot immutability / full reversal
+
+PASS。
+
+SettlementReceiptSnapshot append-only
++
+receiptSnapshotId / identity hash / financial fingerprint non-null 后不可变
+
+已经满足 receipt basis 不漂移要求。
+
+v1：
+
+UNIQUE(org, originalSettlementId)
++
+amount == original Settlement amount
++
+currency == original currency
+
+正确表达：
+
+0/1 full reversal，而不是累计 partial reversal。
+
+冻结未来服务语义：
+
+same reversal event replay → REUSED
+
+different reversal event against already reversed Settlement → REVERSAL_ALREADY_APPLIED
+
+数据库 unique violation 不应直接泄漏成裸 500。
+
+③ CHANGE F 数据库不变量
+
+PASS WITH ONE REVISE。
+
+F1–F4 总体满足：
+
+tenant ownership 有 DB 防线；
+adjustment currency 有 DB 防线；
+fee membership 不再使用错误的全局唯一；
+snapshot digest 有格式约束；
+trigger inventories 已进入 fresh / upgrade 路径。
+CHANGE B — canonical snapshot digest 不能只证明“64hex”
+
+S1 的 DB 层只能验证 digest 形态，这是合理的。
+
+但 S2 必须证明：
+
+stored snapshotDigest == sha256(server-side canonical receipt snapshot)
+
+而不仅仅是“某个合法 64hex”。
+
+必须使用唯一 server-side builder/canonicalizer，并覆盖：
+
+key 顺序变化 digest 不变；
+amount 表达规范化；
+currency canonicalization；
+UTC timestamp canonicalization；
+evidence identity/digest 稳定排序；
+identity/version 纳入 digest；
+客户端提供 digest → 拒绝/忽略为不可信输入；
+任一可信资金字段变化 → digest 变化；
+非业务 metadata 变化 → digest 不变。
+
+这是 S2 的硬验收项。
+
+④ S1 证据 / 是否进入 S2
+
+S1 可以 CLOSED。
+
+当前证据足以关闭 Schema Implementation Checkpoint：
+
+Prisma validate；
+TypeScript；
+fresh migration；
+trigger inventories；
+append-only inventories；
+two-stage upgrade；
+architecture contract 140/140；
+全量 176 files / 1751 tests PASS；
+无历史测试删除/skip/弱化；
+零资金业务代码；
+migrations 无资金事实 INSERT；
+BillingInvoice/BillingStatus 未越界。
+RISKS
+
+S2 最大风险已经从 Schema 转移到“什么才算真实到账事实”。
+
+特别防止：
+
+客户端说到账
+→ Settlement
+
+以及：
+
+R45 reimbursement observed
+→ Settlement
+
+这两条都必须继续禁止。
+
+TEST — S2 最低永久验收
+
+S2 至少提交：
+
+server-side canonical ReceiptSnapshot + digest；
+客户端自证 digest/identity/currency/amount 等可信派生字段 fail-closed；
+settlement.record = INTERNAL_WRITE + humanApproval；
+approval 绑定完整 receipt snapshot；
+锁内 ACTIVE membership/role 重验；
+Settlement、snapshot、evidence、claim/case 同租户；
+无可信到账 evidence → 零 Settlement；
+exact receipt replay → REUSED，同一 Settlement；
+same identity + conflicting immutable facts → EVENT_IDENTITY_CONFLICT；
+different receipt → distinct Settlement；
+approval 后 amount/currency/identity/evidence/receivedAt 变化 → 原 approval 无效；
+成功路径 Settlement + snapshot + audit + approval consumption 原子提交；
+成功审计失败 → 整体回滚；
+approval consumption 失败 → 整体回滚；
+并发同 receipt → 至多创建一个 Settlement；
+Settlement 创建不会产生 FeeCalculation；
+不产生 BillingInvoice；
+不产生 Payment；
+不修改 RecoveryLedger；
+R45 projection/override 不得成为 Settlement 创建入口。
+NEXT
+
+批准进入 R46 S2 — Receipt Snapshot + Settlement Record/Ingest Protected Write Boundary。
+
+S2 只做到：
+
+可信到账证据
+→ immutable server-side receipt snapshot
+→ human approval
+→ Settlement financial fact
+
+到此停止。
+
+不得顺带进入：
+
+SettlementAdjustment
+→ FeeCalculation
+→ BillingInvoice
+→ Payment
+
+继续保持：
+
+NO automatic Settlement from R45 · NO automatic Fee · NO automatic Invoice · NO Payment activation · NO autopay · NO platform write · TRANSPORT=false · NO production credentials。
+
+R13 Payment Activation Gate = HOLD。
+
+VERDICT: PASS WITH REVISE — R46 S1 CLOSED / S2 AUTHORIZED — MSG-20261002-55
+```

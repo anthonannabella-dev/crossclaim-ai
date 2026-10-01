@@ -1342,3 +1342,12 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 证据：prisma validate valid · tsc 0 error · fresh deploy（cc_s1_check，4 迁移全应用 + 两套清单 OK）· two-stage upgrade OK（immutable=53）· 全量 176 files / 1751 tests PASS。
 - 零资金行为：未改任何 `apps/api/src` 业务代码；迁移无 `INSERT INTO` 资金表；未改 BillingInvoice / BillingStatus。
 - 送审：REVIEWED_HEAD ab00cd9（Issue #2 comment 5936548245）；唤醒已投递并三要素验证。
+
+## 2026-10-02 JST — MSG-20261002-55 = PASS WITH REVISE：R46 S1 CLOSED / S2 AUTHORIZED
+
+- 裁决：**PASS WITH REVISE — R46 S1 CLOSED / S2 AUTHORIZED**（REVIEWED_HEAD ab00cd9）；归档 FULL_COPY_OK；全文见 AI-ARCHITECT-INBOX.md 的 MSG-20261002-55。
+- CHANGE A：fee-chain uniqueness 需真实 PostgreSQL 并发竞争验收（同一 Settlement 进同一 feeChainId 的不同 FeeCalculation → 至多一个成功），**在 S4 前完成**，不阻塞 S2。
+- CHANGE B（S2 硬验收）：canonical snapshot digest 必须证明 stored digest == sha256(server-side canonical snapshot)，并覆盖键序/金额/币种/UTC/evidence 排序/identity 版本/客户端 digest 拒绝等。
+- 冻结服务语义：same reversal replay → REUSED；different reversal on already-reversed → REVERSAL_ALREADY_APPLIED；unique violation 不得裸 500。
+- S1 证据充分 → CLOSED（fresh deploy / two-stage upgrade / 架构契约 140-140 / 全量 176 files 1751 tests / 零资金行为）。
+- NEXT：R46 S2（receipt snapshot + Settlement record/ingest 受保护写边界）；S2 最低永久验收 17 项已登记。
