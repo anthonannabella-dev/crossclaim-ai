@@ -650,3 +650,10 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - CHANGE B：补 PG7 真实双 worker 竞争（两独立 Prisma client 并发 R1；仅一个 CAS 收敛、无双重终态审计、无第二个 SUCCEEDED、loser 明确 no-op）。
 - CHANGE C：补 PG1–PG10 → test name/evidence 映射表（不得只报 10/10）。
 - NEXT：只补 A/B/C → 重跑专项+action-guard+tsc+prisma+fresh migration/trigger checklist+全量 → 直接提交 R36 RE-REVIEW（无需 Design/Plan）。
+
+## 2026-10-01 JST — 裁决 MSG-20261001-21 = PASS（R36 RE-REVIEW，checkpoint 关闭）
+
+- 归档：AI-ARCHITECT-INBOX.md §MSG-20261001-21 → compare.mjs FULL_COPY_OK；Issue #2 comment 5927328440。
+- 结论：R36 CHANGE A/B/C 完整收口；PG6/PG7/PG1–PG10 全部 PASS；无变更、无生产代码 delta；checkpoint 正式关闭。
+- 永久门槛：PG6/PG7 不得删除或弱化。
+- NEXT：Integration Boundary Review（HTTP/Adapter/Transport 前置边界审计）——下一轮先提交设计/实施计划，不直接开放真实 transport；边界继续 HTTP HOLD · REAL ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写/客户提交 HOLD。

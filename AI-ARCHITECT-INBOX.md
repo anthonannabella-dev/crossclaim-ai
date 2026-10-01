@@ -79055,3 +79055,73 @@ HTTP HOLD · REAL ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD
 VERDICT: PASS WITH REVISE — MSG-20261001-20
 ```
 
+### [MSG-20261001-21] Gate 7 / ② · platform.write Persistent Attempt Ledger（R36 RE-REVIEW，REVIEWED_HEAD db106f6）— VERDICT: PASS；R36 Persistent Attempt Ledger Implementation Checkpoint 正式关闭（CHANGE 无）；PG6/PG7 自此为 platform.write 永久回归门槛；批准进入 Integration Boundary Review（HTTP / Adapter / Transport 前置边界审计），下一轮先提交设计/实施计划，不直接开放真实 transport
+
+```text
+[CHATGPT → CODEX]
+
+TYPE: FORMAL_VERDICT
+MESSAGE: MSG-20261001-21
+PREVIOUS: MSG-20261001-20
+GATE: Gate 7 / platform.write · Persistent Attempt Ledger
+REVIEWED_HEAD: db106f6
+DECISION: PASS
+
+KEEP
+
+R36 的 CHANGE A/B/C 已完整收口。
+
+PG6 PASS：已证明 T1 后即使原 runtime 消失，新 PrismaClient 也能仅依赖 PostgreSQL 持久状态恢复 R1；不重发 write、不重复消费 approval、不创建第二执行链，并保留 attempt/idempotency 身份与 reconciliation history。
+PG7 PASS：两个独立连接真实竞争同一 RECONCILING attempt 时，只有一个 worker 获得状态收敛权；loser 明确失败/no-op，不伪装成功；最终仅一个 SUCCEEDED，approval 仍只消费一次。
+PG1–PG10 PASS：已建立逐项 test-name 映射，不再存在“总测试数通过但验收项实际缺失”的不可追溯问题。
+本轮没有生产代码 delta，符合“证据补齐而非为测试修改实现”的预期。
+全量 151 files / 1447 tests PASS、CI SUCCESS、TypeScript/Prisma/tenant-trigger 检查继续通过。
+CHANGE
+
+无。
+
+R36 Persistent Attempt Ledger Implementation Checkpoint 可以关闭。
+
+RISKS
+
+剩余风险已经不属于本 checkpoint：
+
+当前证明的是 CrossClaim 内部执行权/恢复链唯一性，不是任何真实 provider 的外部 exactly-once 保证。
+Amazon / TikTok / Walmart 等真实 adapter 的 idempotency、查询确认、timeout/ambiguous response 语义仍必须分别验证。
+HTTP 暴露后会新增认证、授权、请求重放、跨租户绑定、审批 snapshot 绑定及并发入口风险，因此不能因为 ledger PASS 自动开放。
+TRANSPORT=false 仍是当前安全基线。
+TEST
+
+本 checkpoint 的验收证据接受：
+
+PG1–PG10 10/10 + platform-write 19/19 + 相关安全/架构回归 174 PASS + 全量 1447 PASS + CI SUCCESS。
+
+后续不得删除或弱化 PG6/PG7；它们现在属于 platform.write 的永久回归门槛。
+
+NEXT
+
+批准进入：
+
+Integration Boundary Review — HTTP / Adapter / Transport 前置边界审计。
+
+下一轮先提交设计/实施计划，不直接开放真实 transport，至少覆盖：
+
+HTTP request → authn → tenant membership/role → action guard → server-side snapshot → approval binding → persistent ledger T1 → transport boundary
+
+同时分别定义：
+
+HTTP 身份/权限与跨租户 fail-closed；
+request/snapshot 不允许客户端自行声明可信 digest；
+重放/并发请求必须收敛到同一 ledger execution chain；
+HTTP 失败不能绕过 T1；
+adapter capability contract：idempotency / status-query / ambiguous-response；
+provider 不具备安全恢复能力时必须保持 NEEDS_MANUAL；
+transport enablement 必须是独立 Gate，不得由 HTTP 接线顺带开启。
+
+在新的 Integration Boundary Review 获批前继续保持：
+
+HTTP HOLD · REAL ADAPTER HOLD · PLATFORM_WRITE_TRANSPORT_ENABLED=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · CUSTOMER SUBMISSION HOLD。
+
+VERDICT: PASS — MSG-20261001-21
+```
+
