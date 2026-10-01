@@ -1,16 +1,16 @@
 {
   "gate": "B2-FIX R1",
-  "head": "3ab1d25",
+  "head": "de696dc",
   "status": "IMPLEMENTING",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
-  "next_task": "Provider Adapter Readiness / First Provider Design Gate（MSG-20261001-24 NEXT）：先做设计与能力取证，**不实现真实写 adapter**。第一轮选定 1 个 provider 作为首个样板，提交 10 项能力档案：①官方 API endpoint / version / required scopes ②read/write scope 是否可物理分离 ③原生 idempotency ④request/operation identifier ⑤写后 status-query / reconciliation ⑥timeout·5xx·reset 的 ambiguous response 判定 ⑦rate limit / retry 官方规则 ⑧credential 生命周期（rotation/revocation）⑨sandbox/test-mode ⑩是否满足自动写入最低能力矩阵；任何关键能力无法证明 → 保持 READ-ONLY / NEEDS_MANUAL。期间 REAL ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写/客户提交 HOLD。",
+  "next_task": "提交 R39 送审（Provider Adapter Readiness / First Provider Design Gate：Issue #2 七段式 + ChatGPT 唤醒）→ 等待编号裁决；裁决后按结论推进（认可则实现只读 adapter 边界；若要求先补逐操作取证则先补取证）。期间 REAL ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写/客户提交 HOLD。",
   "send_head": "a23b8db",
   "decision_head": "a23b8db",
   "last_chatgpt_message": "MSG-20261001-24",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T09:23:55.750Z",
-  "previous_head": "a23b8db",
+  "updated_at": "2026-10-01T09:31:24.259Z",
+  "previous_head": "de696dc",
   "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "a23b8db",
@@ -49,12 +49,12 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-01T09:23:11.046Z",
+  "last_tick_at": "2026-10-01T09:28:20.443Z",
   "state": "IMPLEMENT",
-  "last_action": "MSG-20261001-24 = PASS 收口（Integration Boundary CLOSED；归档 FULL_COPY_OK 56 行）",
-  "last_action_at": "2026-10-01T09:23:55.750Z",
-  "next_action": "Provider Adapter Readiness / First Provider Design Gate（MSG-20261001-24 NEXT）：先做设计与能力取证，**不实现真实写 adapter**。第一轮选定 1 个 provider 作为首个样板，提交 10 项能力档案：①官方 API endpoint / version / required scopes ②read/write scope 是否可物理分离 ③原生 idempotency ④request/operation identifier ⑤写后 status-query / reconciliation ⑥timeout·5xx·reset 的 ambiguous response 判定 ⑦rate limit / retry 官方规则 ⑧credential 生命周期（rotation/revocation）⑨sandbox/test-mode ⑩是否满足自动写入最低能力矩阵；任何关键能力无法证明 → 保持 READ-ONLY / NEEDS_MANUAL。期间 REAL ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写/客户提交 HOLD。",
-  "current_head": "3ab1d25",
+  "last_action": "R39 Provider Adapter Readiness 设计/取证完成（首个 provider = Amazon SP-API；10 项能力档案 + READ-ONLY/NEEDS_MANUAL 结论 + fail-closed 回归）",
+  "last_action_at": "2026-10-01T09:31:24.259Z",
+  "next_action": "提交 R39 送审（Provider Adapter Readiness / First Provider Design Gate：Issue #2 七段式 + ChatGPT 唤醒）→ 等待编号裁决；裁决后按结论推进（认可则实现只读 adapter 边界；若要求先补逐操作取证则先补取证）。期间 REAL ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写/客户提交 HOLD。",
+  "current_head": "de696dc",
   "reviewed_head": "549dba8",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-01T09:07:17.553Z",
-    "gapMs": 953494,
-    "stale": true,
-    "checkedAt": "2026-10-01T09:23:11.046Z"
+    "previousTickAt": "2026-10-01T09:23:11.046Z",
+    "gapMs": 309397,
+    "stale": false,
+    "checkedAt": "2026-10-01T09:28:20.443Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -373,5 +373,36 @@
     ],
     "risk_transfer": "剩余风险转移到真实 Provider Adapter 层；禁止因「API 能调用」直接开启 global transport gate"
   },
-  "integration_boundary_status": "CLOSED（MSG-20261001-24 PASS；下一授权入口 = Provider Adapter Readiness / First Provider Design Gate）"
+  "integration_boundary_status": "CLOSED（MSG-20261001-24 PASS；下一授权入口 = Provider Adapter Readiness / First Provider Design Gate）",
+  "provider_adapter_readiness": {
+    "round": "R39（设计/取证轮）",
+    "first_provider": "amazon-sp（Amazon Selling Partner API）",
+    "evidence_method": "只读抓取官方文档（developer-docs.amazon.com/sp-api：llms.txt 索引 + 页面 .md）；未访问真实账号、未配置凭据、无写请求",
+    "dossier": {
+      "proven": [
+        "① endpoint/version/scopes",
+        "⑦ rate limit/retry（429 可重试 + x-amzn-RateLimit-Limit）",
+        "⑧ credential 生命周期（refresh token / client secret rotation / revoke）",
+        "⑨ sandbox"
+      ],
+      "partial": [
+        "② read/write 只能按 role 级隔离（RDT）",
+        "④ 仅部分操作有 operation id",
+        "⑤ 仅部分操作可状态查询"
+      ],
+      "not_proven": [
+        "③ 平台级原生幂等写",
+        "⑥ 不确定响应的可复现处置语义",
+        "⑩ 自动写入最低能力矩阵（因③⑥）"
+      ]
+    },
+    "conclusion": "READ-ONLY 先行；platform.write 保持 NEEDS_MANUAL（能力不合格 → 门控拒绝）",
+    "code": {
+      "module": "apps/api/src/services/platform-write/amazon-sp-api-readiness.ts（只读描述符 + 10 项档案 + 裁决函数）",
+      "test": "apps/api/src/__tests__/platform-write-provider-readiness.test.ts（6 项，含「能力不得被静默放宽」与双重门控 fail-closed）",
+      "doc": "docs/releases/PROVIDER-ADAPTER-READINESS-AMAZON-SP-API.md"
+    },
+    "regression": "platform-write 家族 + architecture-contract = 9 files / 186 tests PASS",
+    "boundary": "未实现真实 adapter、未申请 provider 应用/角色、未配置凭据、未访问真实账号数据；TRANSPORT=false 保持"
+  }
 }

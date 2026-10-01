@@ -742,3 +742,13 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 永久回归基线登记：PG1–PG10、H1–H9、D1–D4、transport=false 零副作用、唯一入口、跨租户与缺审批 fail-closed。
 - NEXT：Provider Adapter Readiness / First Provider Design Gate（先设计取证，选 1 个 provider，10 项能力档案；能力不足即 READ-ONLY/NEEDS_MANUAL）。
 - 边界：REAL ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写/客户提交 HOLD；禁止因「API 能调用」直接开启 global transport gate。
+
+## 2026-10-01 JST — R39 Provider Adapter Readiness（首个样板 provider 取证）
+
+- 选型：首个样板 provider = **Amazon SP-API**（单 provider，不同时做 Amazon/TikTok/Walmart）；理由：业务相关性、官方文档可逐项留证、只读即可产生价值、与现有 adapter 能力声明机制一致。
+- 取证（只读）：`developer-docs.amazon.com/sp-api/llms.txt` 索引 + `docs/*.md` 页面（Connect to the SP-API / Authorize Applications / Usage Plans and Rate Limits / SP-API Endpoints / SP-API Sandbox / Application Management API 等）。
+- 结论：①⑦⑧⑨ PROVEN；②④⑤ PARTIAL；③（平台级原生幂等写）⑥（不确定响应处置）⑩（最低能力矩阵）**NOT_PROVEN** → 结论 **READ-ONLY / NEEDS_MANUAL**，不降低安全门槛。
+- 代码：新增 `services/platform-write/amazon-sp-api-readiness.ts`（只读描述符 + 档案 + `firstProviderWriteDecision()`）、测试 `platform-write-provider-readiness.test.ts`（6 项）；文档 `docs/releases/PROVIDER-ADAPTER-READINESS-AMAZON-SP-API.md`。
+- 断言要点：三能力均 false → `eligibility.reason=IDEMPOTENT_WRITE_MISSING`、`eligibleForAutomaticWrite=false`；`globalTransportEnabled=true` 时仍 `ADAPTER_NOT_ELIGIBLE` / `transportAllowed=false`；重复注册幂等。
+- 回归：platform-write 家族 + architecture-contract 9 files / 186 tests PASS；tsc PASS。
+- 边界：未实现真实 adapter、未申请 provider 应用/角色、未配置凭据、未访问真实账号数据、TRANSPORT=false。

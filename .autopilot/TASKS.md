@@ -161,3 +161,12 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - NEXT（Provider Adapter Readiness / First Provider Design Gate，**先设计取证、不实现真实写 adapter**）：选定 1 个 provider 作为首个样板，提交 10 项能力档案（endpoint/version/scopes；read·write scope 是否可物理分离；原生 idempotency；request/operation identifier；status-query/reconciliation；ambiguous response 判定；rate limit/retry；credential 生命周期；sandbox/test-mode；自动写入最低能力矩阵评估）。
 - 结论口径：任一关键能力无法证明 → 保持 READ-ONLY / NEEDS_MANUAL，不降低现有安全门槛；建议只选一个 provider 先把完整安全模式验证出来。
 - 期间保持：REAL ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · CUSTOMER SUBMISSION HOLD。
+
+### R39 · Provider Adapter Readiness（首个样板 provider：Amazon SP-API，2026-10-01）
+
+- 交付：`docs/releases/PROVIDER-ADAPTER-READINESS-AMAZON-SP-API.md`（10 项能力档案 + 最低能力矩阵判定 + 只读接入形态 + 补齐清单 + 待裁决问题）。
+- 取证：只读抓取官方文档（`llms.txt` 索引 + 页面 `.md`）；**未访问真实账号、未配置凭据、无写请求**。
+- 结论：①⑦⑧⑨ PROVEN；②④⑤ PARTIAL；**③⑥⑩ NOT_PROVEN** → 自动写入最低能力矩阵不满足 → **READ-ONLY 先行；`platform.write` 保持 NEEDS_MANUAL**。
+- 代码固化：`amazon-sp-api-readiness.ts` 声明只读描述符（三能力 false）+ `firstProviderWriteDecision()`；回归 `platform-write-provider-readiness.test.ts` 6 项（含「能力不得被静默放宽」、全局 gate 打开仍 `ADAPTER_NOT_ELIGIBLE`）。
+- 回归：platform-write 家族 + architecture-contract = 9 files / 186 tests PASS；tsc PASS。
+- 下一步：提交 R39 送审 → 裁决后实现只读 adapter 边界（不接真实凭据）或先补逐操作取证。
