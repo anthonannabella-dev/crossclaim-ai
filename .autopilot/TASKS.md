@@ -126,3 +126,12 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - transport 恒关：零投递、零账本写入、不消费审批；响应 `platformWriteExecuted=false` / `executionDisposition=NEEDS_MANUAL`。
 - 验收：`platform-write-http-db.test.ts` 12/12（H1–H4/H7 子集，真实 HTTP + PostgreSQL）；跨模块回归 37 文件 / 470 项 PASS；全量 154 文件 / 1472 项 PASS；tsc PASS。
 - 剩余：P3 T1/T3 编排接线（`acquireExecutionRight` / `settleAttempt`）→ P4 H5/H6/H8（重放同一链 / 并发唯一链 / 断连幂等）→ P5 全量回归 + Golden Path E2E + CI → 送审 Integration Boundary Implementation Checkpoint。
+
+### platform.write 进展（2026-10-01 · R37 P3）
+
+- `orchestrator.ts`：T1（`acquireExecutionRight`：唯一执行链 + 审批唯一绑定 + CAS + 同事务消费）→ T2（仅门控放行且 `simulated` 端口可投递）→ T3（`settleAttempt` CAS 收敛）。
+- `approval-tx-port.ts`：事务内审批核验复用 `verifyApprovalBoundary`（事件族 `recovery.review_approved` / 目标 Case / 载荷指纹 basisReference=快照摘要 / 有效期 / 撤销 / 轮次），消费事实写 `recovery.approval_consumed`（同事务）。
+- 门控未放行（global gate / adapter 能力 / 授权）→ 一律 NEEDS_MANUAL，**零账本、零消费、零投递**；T2 结果不可判定 → MANUAL_REVIEW + UNKNOWN_PROVIDER_RESPONSE（禁止重发）。
+- 验收：`platform-write-orchestrator-db.test.ts` 10/10（真实 PostgreSQL；含 H5 重放同一链、H6 并发唯一链、H8 断连重试不重发、跨动作冒用拒绝）；platform-write + action-guard 回归 36 文件 / 352 项 PASS；tsc PASS。
+- 待裁决（列入 Checkpoint）：transport 关闭时是否应登记 attempt 并消费审批（现行为为不登记、不消费）。
+- 剩余：P4 HTTP 层 H5/H6/H8 与补充断言 → P5 全量回归 + Golden Path E2E + CI → 送审。

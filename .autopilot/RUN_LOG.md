@@ -698,3 +698,17 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 新增 `apps/api/src/__tests__/platform-write-http-db.test.ts`：12/12 PASS（真实 HTTP + PostgreSQL）—— H1a 未认证 401 / H1b 跨租户 404 / H2 缺守卫装配 403 / H3a 缺审批 / H3b platform·tenant·gate·默认只读 / H3c 目标不存在 / H3d 非法 targetKind / H4a 客户端自证 400 / H4b 幂等键不一致 409 / H4c 回抄服务端幂等键 200 / H7 合法审批 → 200 NEEDS_MANUAL + 零账本零消费零 platform.write 审计 / H7b 审批绑定他摘要 403 APPROVAL_PAYLOAD_MISMATCH。
 - 回归：跨模块 37 files / 470 tests PASS（platform-write + action-guard + tenant-isolation + architecture-contract）；全量 154 files / 1472 tests PASS；tsc PASS；prisma validate valid（未改 Schema）。
 - 边界：未接真实 adapter、未开启 transport、无生产凭据/真实外写/资金/客户提交；HTTP 层不直接调用 sink。
+
+## 2026-10-01 JST — R37 P3：T1/T2/T3 编排接线（执行权 + 同事务审批消费 + 门控投递 + 收敛）
+
+- 新增 `services/platform-write/orchestrator.ts`：`runPlatformWriteAttempt` 强制顺序「门控 → T1 → T2 → T3」。
+  · transport 双重门控（global gate + adapter 能力 + 守卫授权）任一不满足 → NEEDS_MANUAL，零账本写入、不消费审批、零投递（绝不把未放行写成一条已消费的执行链）。
+  · 放行后才执行 T1（`acquireExecutionRight`）——同一事务内完成执行权 CAS、审批唯一绑定与 `recovery.approval_consumed` 消费事实。
+  · T2 投递仅接受 `simulated: true` 端口；超时/异常 → 收敛为 MANUAL_REVIEW + UNKNOWN_PROVIDER_RESPONSE，禁止重发写请求。
+  · T3 用 `settleAttempt` 的 CAS 收敛（仅 IN_FLIGHT 可收敛）；重放返回既有链状态（REPLAYED），不新增 attempt、不重复消费。
+- 新增 `services/platform-write/approval-tx-port.ts`：事务内审批端口（核验复用 `verifyApprovalBoundary`；消费写审计 `recovery.approval_consumed`，含 approvalId / attemptId / boundAction）。
+- `prisma-ledger.ts`：`PlatformWriteApprovalInTxPort.verifyInTransaction` 参数扩展为 `PlatformWriteApprovalVerifyArgs`（caseId / actorUserId / targetKind / targetId / now），两处调用点同步传入上下文。
+- 新增 `apps/api/src/__tests__/platform-write-orchestrator-db.test.ts`：10/10 PASS（真实 PostgreSQL）—— 01 gate 关闭零副作用 / 02 adapter 未注册 / 03 授权无效 / 04 缺审批 / 05 正常链路（attempt SUCCEEDED + 消费恰 1 + sink 恰 1）/ 06 H5 重放同一链 / 07 H6 并发唯一链 / 08 审批绑定他摘要拒绝 / 09 跨动作冒用拒绝 / 10 H8 断连不重发。
+- 回归：platform-write + action-guard 36 files / 352 tests PASS；tsc PASS。
+- 边界：未接真实 adapter、未开启 transport、无生产凭据/真实外写/资金/客户提交。
+- 待裁决（列入 Checkpoint）：transport 关闭时是否应登记 attempt 并消费审批（现行为为不登记、不消费）。

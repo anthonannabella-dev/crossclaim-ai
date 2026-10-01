@@ -41,11 +41,27 @@ export class PlatformWriteLedgerError extends Error {
   }
 }
 
+/** 事务内审批核验参数：核验必须发生在 T1 事务内，且携带案件/执行人上下文 */
+export interface PlatformWriteApprovalVerifyArgs {
+  organizationId: string;
+  approvalId: string;
+  /** 审批事件族动作名（默认 recovery.review_approved） */
+  action: string;
+  /** 审批创建时绑定的服务端快照摘要（basisReference） */
+  snapshotDigest: string;
+  caseId: string;
+  actorUserId: string;
+  targetKind: PlatformWriteTargetKind;
+  targetId: string;
+  /** 判定时刻（锁内时间，便于可复现） */
+  now: Date;
+}
+
 /** 审批校验/消费端口：**必须**接受事务客户端，保证与 attempt 同事务 */
 export interface PlatformWriteApprovalInTxPort {
   verifyInTransaction(
     tx: Prisma.TransactionClient,
-    args: { organizationId: string; approvalId: string; action: string; snapshotDigest: string },
+    args: PlatformWriteApprovalVerifyArgs,
   ): Promise<{ ok: true } | { ok: false; code: PlatformWriteLedgerCode; message: string }>;
   consumeInTransaction(
     tx: Prisma.TransactionClient,
@@ -135,6 +151,11 @@ export async function acquireExecutionRight(
         approvalId: input.approvalId,
         action: input.approvalAction ?? 'recovery.review_approved',
         snapshotDigest: input.snapshotDigest,
+        caseId: input.caseId,
+        actorUserId: input.actorUserId,
+        targetKind: input.targetKind,
+        targetId: input.targetId,
+        now,
       });
       if (!verified.ok) {
         throw new PlatformWriteLedgerError(verified.code, verified.message);
@@ -145,6 +166,11 @@ export async function acquireExecutionRight(
         approvalId: input.approvalId,
         action: input.approvalAction ?? 'recovery.review_approved',
         snapshotDigest: input.snapshotDigest,
+        caseId: input.caseId,
+        actorUserId: input.actorUserId,
+        targetKind: input.targetKind,
+        targetId: input.targetId,
+        now,
       });
       if (!verified.ok) {
         throw new PlatformWriteLedgerError(verified.code, verified.message);

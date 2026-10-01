@@ -1,16 +1,16 @@
 {
   "gate": "B2-FIX R1",
-  "head": "1f85240",
+  "head": "87c2044",
   "status": "IMPLEMENTING",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
-  "next_task": "P3：T1/T3 编排接线（acquireExecutionRight + settleAttempt，仍不开放真实 transport）→ P4 HTTP 层 H5/H6/H8（重放同一链 / 并发唯一链 / 断连幂等）真实 PostgreSQL 证据 → P5 全量回归 + Golden Path E2E + CI → 送审 Integration Boundary Implementation Checkpoint",
+  "next_task": "P4：HTTP 层 H5/H6/H8 与补充断言（真实 HTTP + PostgreSQL）→ P5 全量回归 + Golden Path E2E（真实 PostgreSQL 全链路）+ CI → 送审 Integration Boundary Implementation Checkpoint（含待裁决问题：transport 关闭时 T1 是否登记/消费审批）",
   "send_head": "7d888cc",
   "decision_head": "7d888cc",
   "last_chatgpt_message": "MSG-20261001-22",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T08:40:18.428Z",
-  "previous_head": "1f85240",
+  "updated_at": "2026-10-01T08:50:10.335Z",
+  "previous_head": "87c2044",
   "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "ddba459",
@@ -51,10 +51,10 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-01T08:23:44.400Z",
   "state": "IMPLEMENT",
-  "last_action": "R37 P1/P2 完成：platform.write HTTP 入口接线（服务端快照/审批绑定/fail-closed 守卫）",
-  "last_action_at": "2026-10-01T08:40:18.428Z",
-  "next_action": "P3：T1/T3 编排接线（acquireExecutionRight + settleAttempt，仍不开放真实 transport）→ P4 HTTP 层 H5/H6/H8（重放同一链 / 并发唯一链 / 断连幂等）真实 PostgreSQL 证据 → P5 全量回归 + Golden Path E2E + CI → 送审 Integration Boundary Implementation Checkpoint",
-  "current_head": "1f85240",
+  "last_action": "R37 P3 完成：T1/T2/T3 编排（执行权 + 同事务审批消费 + 门控投递 + 收敛）",
+  "last_action_at": "2026-10-01T08:50:10.335Z",
+  "next_action": "P4：HTTP 层 H5/H6/H8 与补充断言（真实 HTTP + PostgreSQL）→ P5 全量回归 + Golden Path E2E（真实 PostgreSQL 全链路）+ CI → 送审 Integration Boundary Implementation Checkpoint（含待裁决问题：transport 关闭时 T1 是否登记/消费审批）",
+  "current_head": "87c2044",
   "reviewed_head": "549dba8",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -297,6 +297,27 @@
     "regression": "跨模块 37 files / 470 tests PASS；全量 154 files / 1472 tests PASS",
     "tsc": "PASS",
     "prisma_validate": "valid（本批次未改 Schema）",
+    "boundary": "真实 adapter / transport / 生产凭据 / 真实外写 继续 HOLD"
+  },
+  "platform_write_orchestration_batch": {
+    "status": "PROGRESS（T1/T2/T3 编排与事务内审批端口完成；HTTP 层 H5/H6/H8 属 P4）",
+    "files": [
+      "apps/api/src/services/platform-write/orchestrator.ts",
+      "apps/api/src/services/platform-write/approval-tx-port.ts",
+      "apps/api/src/services/platform-write/prisma-ledger.ts",
+      "apps/api/src/__tests__/platform-write-orchestrator-db.test.ts"
+    ],
+    "invariants": [
+      "T1 只在 transport 双重门控放行后执行；未放行一律 NEEDS_MANUAL 且零账本、零消费、零投递",
+      "T1 在**同一事务**内完成：执行权 CAS + 审批唯一绑定 + recovery.approval_consumed 消费事实",
+      "事务内审批核验复用 verifyApprovalBoundary（事件族 recovery.review_approved / 目标 Case / 载荷指纹 / 有效期 / 撤销 / 轮次）",
+      "T2 结果不可判定（超时/中断）→ MANUAL_REVIEW + UNKNOWN_PROVIDER_RESPONSE，禁止重发写请求",
+      "T3 仅 IN_FLIGHT 可收敛（CAS），重放走既有链：不新增 attempt、不重复消费"
+    ],
+    "acceptance": "platform-write-orchestrator-db.test.ts 10/10（含 H5 重放 / H6 并发唯一链 / H8 断连重试不重发）",
+    "regression": "platform-write + action-guard = 36 files / 352 tests PASS",
+    "tsc": "PASS",
+    "open_question": "transport 关闭时是否应登记 attempt 并消费审批（现行为：不登记、不消费；T1 仅在 transport 放行后执行）——列入 Checkpoint 待裁决",
     "boundary": "真实 adapter / transport / 生产凭据 / 真实外写 继续 HOLD"
   }
 }
