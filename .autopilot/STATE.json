@@ -1,17 +1,17 @@
 {
   "gate": "B2-FIX R1",
-  "head": "79a7d36",
-  "status": "READY_FOR_REVIEW",
+  "head": "1d2b150",
+  "status": "IMPLEMENTING",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
-  "next_task": "等待 R39 裁决：PASS → 按结论实现只读 adapter 边界（不接真实凭据/账号）或按指示补逐操作取证；REVISE → 按 CHANGE 修改后再次送审；期间 REAL ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写/客户提交 HOLD",
+  "next_task": "R40：Amazon SP-API READ-ONLY Adapter Implementation Plan → Implementation Checkpoint（CHANGE A 划定范围）：descriptor（**operation/resource 级**：resource / operation / required role·scope / restricted-data requirement / pagination model / rate-limit behavior） → auth/credential port abstraction → read fetch contract → pagination + rate-limit handling → normalization boundary → 接入既有 Connector Runner；目标链路 Amazon read contract → Fetcher → Normalizer → ClaimItem/Quarantine。本轮仍不接真实凭据、不访问真实 seller 数据、不申请/扩大 write scope、不实现 submit/write operation（fixture / sandbox-compatible shape / mocked transport 验证）。必测 10 项：未登记 resource/operation fail-closed、write operation 永远拒绝、无 RDT capability 时拒绝受限数据、pagination cursor 正确传递、429 不产生重复业务记录、retry 不绕过 sourceFingerprint 幂等、malformed shape → quarantine 不静默丢弃、adapter 不得取得 platform-write sink、PLATFORM_WRITE_TRANSPORT_ENABLED=true 时 Amazon 仍 ADAPTER_NOT_ELIGIBLE、PG1–PG10 / H1–H9 / D1–D4 永久基线继续通过。六项写回前置（CHANGE C）已冻结为 transport 门槛，按 operation 逐个取证前不得进入真实 write adapter。",
   "send_head": "79a7d36",
-  "decision_head": "a23b8db",
-  "last_chatgpt_message": "MSG-20261001-24",
+  "decision_head": "79a7d36",
+  "last_chatgpt_message": "MSG-20261001-25",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T09:37:59.156Z",
-  "previous_head": "de696dc",
-  "architect_decision_pending": true,
+  "updated_at": "2026-10-01T09:43:03.015Z",
+  "previous_head": "79a7d36",
+  "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "79a7d36",
   "last_sent_at": "2026-10-01T09:37:59.156Z",
@@ -49,12 +49,12 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-01T09:37:12.216Z",
+  "last_tick_at": "2026-10-01T09:42:12.410Z",
   "state": "IMPLEMENT",
-  "last_action": "R39 已投递（Provider Adapter Readiness / First Provider Design Gate）；等待架构方编号裁决",
-  "last_action_at": "2026-10-01T09:37:59.156Z",
-  "next_action": "等待 R39 裁决：PASS → 按结论实现只读 adapter 边界（不接真实凭据/账号）或按指示补逐操作取证；REVISE → 按 CHANGE 修改后再次送审；期间 REAL ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写/客户提交 HOLD",
-  "current_head": "79a7d36",
+  "last_action": "MSG-20261001-25 = PASS WITH REVISE 收口（归档 FULL_COPY_OK 75 行）：批准 Amazon SP-API 为首个样板；READ-ONLY 先行；六项写回前置冻结为 transport 门槛",
+  "last_action_at": "2026-10-01T09:43:03.015Z",
+  "next_action": "R40：Amazon SP-API READ-ONLY Adapter Implementation Plan → Implementation Checkpoint（CHANGE A 划定范围）：descriptor（**operation/resource 级**：resource / operation / required role·scope / restricted-data requirement / pagination model / rate-limit behavior） → auth/credential port abstraction → read fetch contract → pagination + rate-limit handling → normalization boundary → 接入既有 Connector Runner；目标链路 Amazon read contract → Fetcher → Normalizer → ClaimItem/Quarantine。本轮仍不接真实凭据、不访问真实 seller 数据、不申请/扩大 write scope、不实现 submit/write operation（fixture / sandbox-compatible shape / mocked transport 验证）。必测 10 项：未登记 resource/operation fail-closed、write operation 永远拒绝、无 RDT capability 时拒绝受限数据、pagination cursor 正确传递、429 不产生重复业务记录、retry 不绕过 sourceFingerprint 幂等、malformed shape → quarantine 不静默丢弃、adapter 不得取得 platform-write sink、PLATFORM_WRITE_TRANSPORT_ENABLED=true 时 Amazon 仍 ADAPTER_NOT_ELIGIBLE、PG1–PG10 / H1–H9 / D1–D4 永久基线继续通过。六项写回前置（CHANGE C）已冻结为 transport 门槛，按 operation 逐个取证前不得进入真实 write adapter。",
+  "current_head": "1d2b150",
   "reviewed_head": "549dba8",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-01T09:28:20.443Z",
-    "gapMs": 531774,
+    "previousTickAt": "2026-10-01T09:37:12.216Z",
+    "gapMs": 300195,
     "stale": false,
-    "checkedAt": "2026-10-01T09:37:12.216Z"
+    "checkedAt": "2026-10-01T09:42:12.410Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -420,5 +420,19 @@
       "下一批实现只读 adapter 边界（不接真实凭据）还是先补逐操作取证",
       "六项写回前置是否作为将来开启 transport 的门槛"
     ]
+  },
+  "r39_verdict": {
+    "message_id": "MSG-20261001-25",
+    "decision": "PASS WITH REVISE",
+    "reviewed_head": "79a7d36",
+    "archived": "FULL_COPY_OK（原文 75 行 / 归档 75 行 / 缺失 0 / 多出 0）",
+    "changes": {
+      "A": "下一批先实现 READ-ONLY adapter boundary（descriptor → auth/credential port abstraction → read fetch contract → pagination/rate-limit handling → normalization boundary → existing Connector Runner）；不接真实凭据、不访问真实 seller 数据、不扩大 write scope、不实现写操作",
+      "B": "只读能力也必须 fail-closed 到 operation/resource 级（不允许 provider 级粗粒度布尔）；未登记 operation 一律拒绝；RDT/受限数据保持独立能力边界",
+      "C": "六项写回前置正式冻结为 transport 门槛（write endpoint/授权、idempotency/replay、operation/request identifier、写后可确认终态、ambiguous response 不重复写策略、sandbox 证据 + PG/H/D 基线）；任一 NOT_PROVEN → 不自动 write"
+    },
+    "write_eligibility_rule": "provider + operation + capability evidence（不是 provider 全局布尔值）",
+    "evidence_note": "架构方未能独立复核 Amazon 文档；后续 write eligibility 送审必须附具体官方文档页 / 版本 / 取证日期",
+    "holds": "AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · PLATFORM_WRITE_TRANSPORT_ENABLED=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · CUSTOMER SUBMISSION HOLD"
   }
 }

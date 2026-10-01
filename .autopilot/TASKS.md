@@ -170,3 +170,13 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - 代码固化：`amazon-sp-api-readiness.ts` 声明只读描述符（三能力 false）+ `firstProviderWriteDecision()`；回归 `platform-write-provider-readiness.test.ts` 6 项（含「能力不得被静默放宽」、全局 gate 打开仍 `ADAPTER_NOT_ELIGIBLE`）。
 - 回归：platform-write 家族 + architecture-contract = 9 files / 186 tests PASS；tsc PASS。
 - 下一步：提交 R39 送审 → 裁决后实现只读 adapter 边界（不接真实凭据）或先补逐操作取证。
+
+### MSG-20261001-25 裁决（R39 → Amazon SP-API READ-ONLY Adapter Implementation Plan）
+
+- DECISION：**PASS WITH REVISE**（REVIEWED_HEAD 79a7d36；归档 FULL_COPY_OK 75 行）；首个样板 Amazon SP-API 与「READ-ONLY / platform.write=NEEDS_MANUAL」结论均获批准。
+- CHANGE A：下一批实现 **READ-ONLY adapter boundary**（descriptor → auth/credential port abstraction → read fetch contract → pagination/rate-limit handling → normalization boundary → 既有 Connector Runner）；不接真实凭据、不访问真实 seller 数据、不扩大 write scope、不实现写操作；可用 fixture / sandbox-compatible shape / mocked transport 验证。
+- CHANGE B：只读能力必须 **operation/resource 级** fail-closed（禁止 provider 级粗粒度布尔）；descriptor 需显式声明 resource / operation / required role·scope / restricted-data requirement / pagination model / rate-limit behavior；未登记 operation 一律拒绝；RDT 受限数据保持独立能力边界。
+- CHANGE C：六项写回前置**冻结为 transport 门槛**（按具体 operation 取证）；write eligibility = `provider + operation + capability evidence`，不是 provider 全局布尔值。
+- 必测 10 项（下一批）：未登记 resource/operation fail-closed；write operation 永远拒绝；无 RDT capability 时拒绝受限数据；pagination cursor 正确传递；429 不产生重复业务记录；retry 不绕过 sourceFingerprint 幂等；malformed/unknown shape → quarantine 不静默丢弃；adapter 不得取得 platform-write sink；`PLATFORM_WRITE_TRANSPORT_ENABLED=true` 时 Amazon 仍 `ADAPTER_NOT_ELIGIBLE`；PG1–PG10 / H1–H9 / D1–D4 永久基线继续通过。
+- 目标链路：`Amazon read contract → Fetcher → Normalizer → ClaimItem/Quarantine`（不是打通自动申诉）；不同时开发 TikTok/Walmart。
+- 保持：AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写/客户提交 HOLD。

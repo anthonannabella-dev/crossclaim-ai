@@ -752,3 +752,12 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 断言要点：三能力均 false → `eligibility.reason=IDEMPOTENT_WRITE_MISSING`、`eligibleForAutomaticWrite=false`；`globalTransportEnabled=true` 时仍 `ADAPTER_NOT_ELIGIBLE` / `transportAllowed=false`；重复注册幂等。
 - 回归：platform-write 家族 + architecture-contract 9 files / 186 tests PASS；tsc PASS。
 - 边界：未实现真实 adapter、未申请 provider 应用/角色、未配置凭据、未访问真实账号数据、TRANSPORT=false。
+
+## 2026-10-01 JST — 裁决 MSG-20261001-25 = PASS WITH REVISE
+
+- 送审：R39（REVIEWED_HEAD 79a7d36；Issue #2 comment 5928789033；CI run 36843292912 SUCCESS）。
+- 归档：AI-ARCHITECT-INBOX.md §MSG-20261001-25，逐字 75 行；`tools/verdict-diff/compare.mjs` = **FULL_COPY_OK**。
+- KEEP：首个样板 Amazon SP-API 批准；READ-ONLY / NEEDS_MANUAL 结论批准；PROVEN·PARTIAL·NOT_PROVEN 分级口径正确；三项未取证能力未落实到具体写操作前不得标 write-eligible。
+- CHANGE A：下一批实现只读 adapter boundary（受限范围已列明）；CHANGE B：只读也必须 operation/resource 级 fail-closed，RDT 独立边界；CHANGE C：六项写回前置冻结为 transport 门槛（provider + operation + evidence）。
+- 架构方说明：其检索 Amazon 文档未返回结果，故未独立复核我方引用的文档事实；后续涉及 write eligibility 的送审必须附具体官方文档页 / 版本 / 取证日期。
+- NEXT：Amazon SP-API READ-ONLY Adapter Implementation Plan → Implementation Checkpoint（不同时开发 TikTok/Walmart）。
