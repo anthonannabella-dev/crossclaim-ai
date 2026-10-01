@@ -261,3 +261,17 @@ CrossClaim 不得伪造、代替或从 Platform OAuth 推导 Broker POA。
 - **UPS Compliance Gate**：默认只用客户提供数据；扩大 API 自动化前必须完成 terms review 或 partner access。
 - Provider Capability Matrix 必建；UNKNOWN 默认 fail-closed；不得因技术可行假设合同允许。
 - 队列影响：NONE（不打断 R46 → Settlement/Billing → Full Regression）。
+
+## R17 — 无人值守自治执行模式（HOST DIRECTIVE 2026-10-02 补充六）
+
+- 沿用既有 `.autopilot/{STATE,TASKS,RULES,RUN_LOG,BLOCKERS,HEARTBEAT}` 与 ChatGPT Audit Loop；**不得重新初始化**、不得丢裁决、不得回退已 PASS/CLOSED 批次。
+- **「无新裁决」不是停止条件**：TASKS 中存在 AUTHORIZED / READY / CONTINUE / REMAINING 单元即必须 IMPLEMENT。
+- 执行循环：RECONCILE → SELECT NEXT AUTHORIZED UNIT → IMPLEMENT → LOCAL TEST → DB TEST → TYPECHECK/VALIDATE → COMMIT → PUSH → CI → CLASSIFY → AUDIT REQUEST → READ FULL VERDICT → APPLY VERDICT → CONTINUE。
+- **禁止空转**：不得连续两个 tick 只有「无新裁决 / runner 正常 / IN_SYNC / 下一步是… / 等待审计 / 无需宿主动作」而无任何真实变化（code / test / DB acceptance / migration / commit / HEAD / CI / audit）。触发即 `AUTOPILOT_STALL = TRUE`，必须 SELF-RECOVER 到最小可执行单元。
+- 小批次原则：单一能力 / 可测试 / 可回滚 / 可审计 / 不扩大未授权范围；完成即 LOCAL PASS → COMMIT → PUSH → CI → 七段式 Audit Request → 右侧 wake-up。
+- 裁决处理：PASS 继续下一单元；PASS WITH REVISE 先落实强制 CHANGE；REVISE 修改后重送审；BLOCK 只停被 BLOCK 范围，独立已授权任务继续。
+- HOST ACTION REQUIRED 仅限：生产凭据 / 真实账户授权 / 真实客户脱敏数据（无法 synthetic）/ 真实资金操作 / 法律合规商业决定 / 外部登录验证码签约 / ChatGPT 明确 BLOCK。其余（测试失败、类型错误、migration、fixture、CI flaky、merge 冲突、依赖、本地环境、测试隔离）一律 SELF_RESOLVE。
+- 真实数据延后：继续 synthetic fixture / test doubles / mocked adapters / controlled PostgreSQL integration tests；但不得用 synthetic 冒充真实商业验证。
+- 安全边界不变：production_enabled=false · external_write_enabled=false · TRANSPORT=false；真实平台写入 / 自动 Claim 提交 / 扣款 / 自动 Success Fee / 自动 Invoice issuance / Autopay / 生产凭据 继续 HOLD。
+- 已登记的产品指令（Carrier Recovery V1、Customs Self-Service Pricing 等）状态为 REGISTERED / IMPLEMENTATION_STARTED=NO / QUEUE_IMPACT=NONE，**不得抢占 R46 主队列**。
+- 全局回归纪律：重要修改必须检查 schema compatibility / tenant isolation / permission / action guard / approval binding / idempotency / concurrency / transaction rollback / audit integrity / claim·appeal·recovery·settlement consistency。

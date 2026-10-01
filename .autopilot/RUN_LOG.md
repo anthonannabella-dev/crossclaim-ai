@@ -1374,3 +1374,9 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - COMMON CARRIER RECOVERY ENGINE + Rule Pack（UPS/FedEx/DHL/USPS）；V1 Top-10 rules；数据优先级沿用 Rule Tier。
 - UPS Compliance Gate = HOLD（默认客户提供数据）；Provider Capability Matrix 必建，UNKNOWN fail-closed。
 - 队列影响：NONE（CURRENT_R46_QUEUE_UNCHANGED = YES / CARRIER_RECOVERY_IMPLEMENTATION_STARTED = NO）。
+
+## 2026-10-02 JST — HOST DIRECTIVE（补充六）：无人值守自治执行模式登记
+
+- 规则：RULES **R17**；STATE.autopilot_resume_directive。
+- 关键：无新裁决不是停止条件；禁止空转（AUTOPILOT_STALL 自恢复）；小批次 + 七段式审计闭环；HOST ACTION 仅限 7 类；真实数据延后但不得冒充商业验证。
+- 主线不变：R46 → Settlement/Billing → Full Regression；已登记产品指令（Carrier Recovery V1 / Customs Pricing）不抢占主队列。
