@@ -24,7 +24,7 @@ import {
 } from '../action-guard/approval-tx-verify';
 import { CLAIM_SUBMIT_ACTION } from '../action-guard/approval-verifier';
 import { WorkflowError } from '../workflow/opportunity-review';
-import { assertPermission } from '../workflow/permissions';
+import { ForbiddenError, assertPermission } from '../workflow/permissions';
 import { CLAIM_TRACKING_ACTION } from './tracking-service';
 
 /** 锁内拒绝留痕（事务回滚后写入；不含敏感取值） */
@@ -245,8 +245,18 @@ export async function submitClaimWithApproval(
     );
   } catch (error) {
     // 锁内拒绝留痕：事务已回滚，故在事务外写入；写入失败不得覆盖原始拒绝
-    if (error instanceof ApprovalBoundaryError || error instanceof WorkflowError) {
-      const reason = error instanceof ApprovalBoundaryError ? error.reason : error.code;
+    if (
+      error instanceof ApprovalBoundaryError ||
+      error instanceof WorkflowError ||
+      // 锁后按 Claim 提交权限重验失败（角色被撤销/降级）也必须留痕
+      error instanceof ForbiddenError
+    ) {
+      const reason =
+        error instanceof ApprovalBoundaryError
+          ? error.reason
+          : error instanceof ForbiddenError
+            ? 'FORBIDDEN'
+            : error.code;
       try {
         const row = prepareAuditInsert(
           {
