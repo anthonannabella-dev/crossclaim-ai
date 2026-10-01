@@ -657,3 +657,8 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 结论：R36 CHANGE A/B/C 完整收口；PG6/PG7/PG1–PG10 全部 PASS；无变更、无生产代码 delta；checkpoint 正式关闭。
 - 永久门槛：PG6/PG7 不得删除或弱化。
 - NEXT：Integration Boundary Review（HTTP/Adapter/Transport 前置边界审计）——下一轮先提交设计/实施计划，不直接开放真实 transport；边界继续 HTTP HOLD · REAL ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写/客户提交 HOLD。
+
+## 2026-10-01 JST — Integration Boundary Review 设计/实施计划（R37 送审内容）
+
+- 新增 `docs/releases/INTEGRATION-BOUNDARY-REVIEW-PLAN.md`：分层链路逐层不变量与失败模式；HTTP 身份/权限与跨租户 fail-closed；禁止客户端自证 digest；重放/并发收敛同一 chain；HTTP 失败不得绕过 T1；adapter capability contract 与缺失时的 NEEDS_MANUAL/BLOCK 规则；transport 独立 Gate；H1–H8 验收矩阵与 P1–P5 实施步骤。
+- 边界：不接 HTTP、不接真实 adapter、transport 恒关、无生产凭据/真实外写/资金/客户提交。
