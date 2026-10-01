@@ -493,3 +493,12 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - 落盘：`docs/releases/SUCCESS-FEE-BILLING-REDLINE.md` / `.autopilot/RULES.md` R12 / `.autopilot/rules.json` / runner / checker。
 - R46 设计/计划必须显式引用本红线并逐条对应可计费判定与禁止清单。
 - 队列：R45 不变（S2 送审中 → S3 → S4 → S5）。
+
+### MSG-20261002-48 裁决（R45 S2 = PASS → S2 CLOSED → 进入 R45 S3 Deterministic Projector）
+
+- DECISION：**PASS**（REVIEWED_HEAD 8706b2d；归档 FULL_COPY_OK）。S2 CLOSED；`MANUAL_PATH_DEFERRED` 获批；批准进入 S3。详见 STATE.r45_s2_verdict。
+- NEXT：**R45 S3 — Deterministic Projector**（范围冻结：immutable facts + effective basis + effective tolerance policy + 合法 override inputs → deterministic computation → persisted Projection + ProjectionFact membership；**不得**顺带实现 S4 受保护写动作）。
+- 事务顺序（冻结）：lock projection/claim scope → 固定输入 → 强校验 basis/policy → deterministic rebuild → inputDigest → DELETE old membership → CAS header → INSERT new membership → audit → commit；失败必须完整恢复。
+- 永久验收 16 项见 STATE.r45_s2_verdict.s3_permanent_acceptance；S3 完成后先提交 S3 Implementation Checkpoint 再决定是否进入 S4。
+- 风险：不得把旧 Projection 当业务计算输入。
+- 禁止：Settlement / Billing / Fee / RecoveryLedger 改写 / 平台外写 / transport / 生产凭据。

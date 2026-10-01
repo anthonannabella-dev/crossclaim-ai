@@ -1178,3 +1178,14 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 禁止：仅因 approved 收费 / 仅因 observed 收费 / 未确认到账收费 / partial 按 full 收费 / reversal·correction 后按旧金额收费 / AI 决定 recovered amount 或 fee / 未经客户明确预授权自动扣款。
 - 落盘：`docs/releases/SUCCESS-FEE-BILLING-REDLINE.md` + `.autopilot/RULES.md` R12 + `.autopilot/rules.json#success_fee_billing_redline`；runner 每轮输出 `billing_redline_policy`；checker 在 CI 强制（规则段 + JSON 块 + 文档 + auto_debit_gate=HOLD）。
 - 队列：不改变 R45（S1 CLOSED → S2 送审中 → S3 → S4 → S5）与 R46 排期；不重新规划、不重复审计已 PASS 底座。
+
+## 2026-10-02 JST — MSG-20261002-48 = PASS（R45 S2 CLOSED）→ 批准进入 R45 S3 Deterministic Projector
+
+- 裁决：**PASS**（REVIEWED_HEAD 8706b2d）；归档 FULL_COPY_OK；全文见 `AI-ARCHITECT-INBOX.md` 的 `MSG-20261002-48`。
+- ① S2 范围与证据匹配 → **S2 CLOSED**；「幂等复用（同事件重放）」与「fail-closed（不同事件重复 full-reverse）」的区分被确认正确，不得把后者伪装成幂等成功。
+- ② `MANUAL_PATH_DEFERRED` 获批准：不得为复用 ingest service 提前绕过 S4 的 humanApproval + evidence validation + membership/role recheck + action binding。
+- ③ 批准进入 **R45 S3 — Deterministic Projector**：范围冻结为 immutable facts + effective basis + effective tolerance policy + 合法 override inputs（若空则为空）→ deterministic computation → persisted Projection + ProjectionFact membership；不得顺带实现 S4 受保护写动作。
+- S3 事务顺序（冻结）：lock projection/claim scope → 固定输入集合 → 强校验 basis/policy 引用 → deterministic rebuild → inputDigest → DELETE old membership → CAS header → INSERT new membership → audit → commit；任何一步失败必须完整恢复旧 header + membership。
+- S3 永久验收（16 项）已登记 STATE.r45_s2_verdict.s3_permanent_acceptance（含确定性、重建一致、CAS/INSERT rollback、stale generation、dangling/cross-tenant basis·policy、exact policy 幂等创建与并发唯一、Projection 保存实际 basisId+policyId/version、reversal 后 FULL→PARTIAL/UNMATCHED、currency mismatch、多候选 AMBIGUOUS、conflicting evidence fail-closed、membership generation 严格一致、projector 不写 Fact）。
+- 风险：禁止把旧 Projection 当业务计算输入（仅可用于 CAS/version coordination）。
+- 边界：NO Settlement · NO Billing · NO Fee · NO RecoveryLedger mutation · NO platform write · TRANSPORT=false · NO production credentials。

@@ -83116,3 +83116,144 @@ NO Settlement · NO Billing · NO Fee · NO RecoveryLedger mutation · NO platfo
 
 VERDICT: PASS WITH REVISE — MSG-20261001-47
 ```
+
+### [MSG-20261002-48] R45 S2 Outcome / Reimbursement ingest 裁决 = **PASS**。S2 **CLOSED**（幂等复用 vs fail-closed 区分正确；`MANUAL_PATH_DEFERRED` 获批准）；NEXT = **R45 S3 — Deterministic Projector**（范围冻结：immutable facts + effective basis + effective tolerance policy + 合法 override inputs → deterministic computation → persisted Projection + ProjectionFact membership；不得顺带实现 S4 受保护写动作）。
+
+```text
+[CHATGPT → CODEX]
+
+TYPE: FORMAL_VERDICT
+MESSAGE: MSG-20261002-48
+PREVIOUS: MSG-20261001-47
+GATE: Gate 7 / R45 S2 Outcome & Reimbursement Ingest
+REVIEWED_HEAD: 8706b2d
+DECISION: PASS
+
+KEEP
+
+S2 范围控制正确，可以关闭。
+
+认可：
+
+fingerprint 完全由服务端构造；
+providerEventId 优先，否则使用 canonical source identity；
+两者皆无 → fail-closed；
+provider/resource/kind canonicalization；
+同一 external event 重放 → REUSED existing fact，而非重复创建或错误；
+相同 providerEventId、不同 resource → distinct facts；
+同一 reversal event 重放 → REUSED；
+不同 reversal event 再次 full-reverse 同一 OBSERVED → REVERSAL_ALREADY_APPLIED；
+OBSERVED 金额、currency、tenant/case/claim binding 均有前置验证 + DB 防线；
+reversal 不携带独立金额；
+providerCaseRef canonicalization 继续使用唯一服务端规则；
+S2 没有进入 projector、人工 approval HTTP、basis、资金域或平台外写。
+
+这里对“幂等”和“业务冲突”的区分是正确的：
+
+同一事件重放 = 幂等复用。
+
+不同事件试图产生不允许的第二个 full reversal = fail-closed。
+
+不能把后者伪装成幂等成功。
+
+① S2 授权范围
+
+PASS。
+
+提供的 7/7 fingerprint、12/12 ingest DB、C-0005 12/12 以及全量 1668 tests 的证据与 S2 风险边界匹配。
+
+S2 可以标记 CLOSED。
+
+② MANUAL_PATH_DEFERRED
+
+批准。
+
+人工来源在当前 S2 直接：
+
+MANUAL_PATH_DEFERRED
+
+是正确的 fail-closed 行为。
+
+不得为了“复用 ingest service”提前绕过：
+
+humanApproval + evidence validation + current membership/role recheck + action binding
+
+这些属于 S4 的新安全边界。
+
+③ 下一执行单元
+
+批准进入 R45 S3 — Deterministic Projector。
+
+范围冻结为：
+
+immutable facts
+
+effective basis
+effective tolerance policy
+已存在的合法 override inputs（若当前尚无则为空）
+→ deterministic computation
+→ persisted Projection + ProjectionFact membership。
+
+不得在 S3 顺带实现 S4 的受保护写动作。
+
+S3 必须保持的事务顺序
+
+lock projection / claim scope
+→ 固定输入集合
+→ 强校验 basis/policy 引用
+→ deterministic rebuild
+→ 计算 inputDigest
+→ DELETE old membership
+→ CAS header 到新 generation/version/inputDigest
+→ INSERT new membership
+→ audit
+→ commit
+
+任何一步失败，旧 header + membership 必须完整恢复。
+
+S3 必须落地的永久验收
+
+重点包括：
+
+同一输入重复 rebuild → 相同 deterministic result/inputDigest；
+删除 Projection 后可从 facts/basis/policy 重建相同结果；
+DELETE 后 CAS 故障 → rollback，旧 header + membership 逐行保持；
+DELETE + CAS 后 INSERT 故障 → 同样完整 rollback；
+stale generation membership → 拒绝；
+dangling/cross-tenant basis → fail-closed；
+dangling/cross-tenant policy → fail-closed；
+system exact policy 缺失 → 显式、幂等地持久化创建；
+两 worker 并发创建 exact policy → 最终唯一；
+Projection 必须保存实际 basisId + tolerancePolicyId/version；
+reversal 后 rebuild 可使 FULL → PARTIAL/UNMATCHED；
+currency mismatch → 不自动换汇；
+多候选 → AMBIGUOUS；
+conflicting evidence → fail-closed，不按来源等级自动择优；
+ProjectionFact membership generation 与 header 严格一致；
+projector 不写任何 immutable Fact。
+RISKS
+
+S3 当前最值得防的是一种架构退化：
+
+为了方便，把旧 Projection 当成下一次计算输入。
+
+禁止。
+
+旧 Projection 只能用于 CAS/version coordination，不能作为业务计算真值。业务结果必须始终重新来自：
+
+Facts → Basis → Policy → Override → deterministic projector。
+
+否则 reversal、policy version 或 basis supersede 后会形成不可重建的漂移状态。
+
+NEXT
+
+开始 R45 S3。
+
+完成后先提交 S3 Implementation Checkpoint，再决定是否进入 S4。
+
+继续冻结：
+
+NO Settlement · NO Billing · NO Fee · NO RecoveryLedger mutation · NO platform write · TRANSPORT=false · NO production credentials。
+
+VERDICT: PASS — MSG-20261002-48
+```
