@@ -1,17 +1,17 @@
 {
   "gate": "B2-FIX R1",
-  "head": "918564a",
+  "head": "a5e0677",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
-  "next_task": "等待 R36 裁决（REVIEWED_HEAD 918564a / comment 5927087320）：PASS → platform.write 批次收口并按裁定决定是否补 PG6/PG7；REVISE → 按 CHANGE 修订；BLOCK → 停止该方案",
+  "next_task": "执行 CHANGE A/B/C：①PG6（T1 commit→UNKNOWN→销毁 client→全新 client 从 DB 恢复→R1；断言不依赖内存/不调 sink/不重复消费 approval/不建第二条链/attemptId 与 idempotencyKey 保持）②PG7（两个独立 Prisma client 并发 R1：仅一个 CAS 成功、无双重终态审计、无第二个 SUCCEEDED、不重复消费 approval、loser 返回明确 no-op）③PG1–PG10 映射表；随后重跑专项+action-guard+tsc+prisma+全量 → 提交 R36 RE-REVIEW",
   "send_head": "7d888cc",
   "decision_head": "7d888cc",
-  "last_chatgpt_message": "MSG-20261001-19",
+  "last_chatgpt_message": "MSG-20261001-20",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T07:46:46.031Z",
+  "updated_at": "2026-10-01T07:48:37.495Z",
   "previous_head": "d2c82fa",
-  "architect_decision_pending": true,
+  "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "918564a",
   "last_sent_at": "2026-10-01T07:46:18.303Z",
@@ -49,12 +49,12 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-01T07:46:18.489Z",
-  "state": "REVIEW_WAIT",
-  "last_action": "SCHEDULER_STALE_RECOVERED（gap=17min）→ 本轮已恢复执行",
-  "last_action_at": "2026-10-01T07:46:18.304Z",
-  "next_action": "等待 R36 裁决（REVIEWED_HEAD 918564a / comment 5927087320）：PASS → platform.write 批次收口并按裁定决定是否补 PG6/PG7；REVISE → 按 CHANGE 修订；BLOCK → 停止该方案",
-  "current_head": "d2c82fa",
+  "last_tick_at": "2026-10-01T07:47:48.904Z",
+  "state": "IMPLEMENT",
+  "last_action": "MSG-20261001-20（R36 Implementation Checkpoint）= PASS WITH REVISE：逐字归档 + FULL_COPY_OK + Issue #2 comment 5927130487；登记 CHANGE A/B/C",
+  "last_action_at": "2026-10-01T07:48:37.494Z",
+  "next_action": "执行 CHANGE A/B/C：①PG6（T1 commit→UNKNOWN→销毁 client→全新 client 从 DB 恢复→R1；断言不依赖内存/不调 sink/不重复消费 approval/不建第二条链/attemptId 与 idempotencyKey 保持）②PG7（两个独立 Prisma client 并发 R1：仅一个 CAS 成功、无双重终态审计、无第二个 SUCCEEDED、不重复消费 approval、loser 返回明确 no-op）③PG1–PG10 映射表；随后重跑专项+action-guard+tsc+prisma+全量 → 提交 R36 RE-REVIEW",
+  "current_head": "a5e0677",
   "reviewed_head": "549dba8",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-01T07:29:42.178Z",
-    "gapMs": 996312,
-    "stale": true,
-    "checkedAt": "2026-10-01T07:46:18.489Z"
+    "previousTickAt": "2026-10-01T07:46:18.489Z",
+    "gapMs": 90416,
+    "stale": false,
+    "checkedAt": "2026-10-01T07:47:48.904Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -218,6 +218,18 @@
       "r36_comment": "5927087320",
       "ci": "36831459167 SUCCESS",
       "open_gap": "PG6 重启后继续对账 / PG7 两 worker 并发不双重收敛 尚未独立多连接取证（当前依赖 CAS 乐观锁）"
+    },
+    "r36_verdict": {
+      "message_id": "MSG-20261001-20",
+      "decision": "PASS WITH REVISE",
+      "reviewed_head": "918564a",
+      "archive_comment": "5927130487",
+      "archive_verified": "FULL_COPY_OK",
+      "changes": [
+        "A: PG6 真实跨进程/重启恢复证据（新 client 从 DB 恢复）",
+        "B: PG7 真实双 worker 竞争（两独立 client 并发 R1，loser 明确 no-op）",
+        "C: PG1-PG10 → test name/evidence 映射表"
+      ]
     }
   },
   "r36_submission_comment": "5927087320",

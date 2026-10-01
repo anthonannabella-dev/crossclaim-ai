@@ -641,3 +641,12 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 同步 `AGENTS.md`（长期约束章节）与 `.autopilot/TASKS.md`（`GOLDEN-PATH-E2E` 排队 + 4 条长期回归任务）；
 - 适用范围：核心领域模型 / Schema / 状态机 / Action Guard / Claim / Appeal / Settlement / RecoveryLedger / Billing / platform.write / Adapter / Import / Canonical Fact；
 - 不改变 Gate 7 / ② 批次顺序；当前 S3/S4/S5 继续推进（R36 送审中）。
+
+## 2026-10-01 JST — 裁决 MSG-20261001-20 = PASS WITH REVISE（R36 Implementation Checkpoint）
+
+- 归档：AI-ARCHITECT-INBOX.md §MSG-20261001-20（59 非空行）→ compare.mjs FULL_COPY_OK；Issue #2 comment 5927130487。
+- KEEP：S1–S5 主体实现接受（M1/M2/M3、唯一约束与 partial unique index、T1/T2/T3/R1 职责隔离、UNKNOWN→RECONCILING→MANUAL_REVIEW、FAILED_CONFIRMED 仅可信证据、transport 关闭）。
+- CHANGE A：补 PG6 真实跨进程/重启恢复证据（销毁原 client，新 client 从数据库事实恢复；不依赖内存、不调 write sink、不重复消费 approval、不建第二条链、保持原 attemptId/idempotencyKey）。
+- CHANGE B：补 PG7 真实双 worker 竞争（两独立 Prisma client 并发 R1；仅一个 CAS 收敛、无双重终态审计、无第二个 SUCCEEDED、loser 明确 no-op）。
+- CHANGE C：补 PG1–PG10 → test name/evidence 映射表（不得只报 10/10）。
+- NEXT：只补 A/B/C → 重跑专项+action-guard+tsc+prisma+fresh migration/trigger checklist+全量 → 直接提交 R36 RE-REVIEW（无需 Design/Plan）。
