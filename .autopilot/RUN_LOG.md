@@ -413,3 +413,104 @@
 - **唤醒投递更正**：首次填入右侧 ChatGPT 审计会话的 R19 唤醒经核对**未被注册**（发送键为禁用态、会话中未出现对应新轮次）。续接窗口按真实输入路径重写并回车发送，三要素验证通过：输入框清空、会话末轮为含 `0745c33` 的用户消息、页面 tail 出现唤醒全文。随后该轮返回 `cloudflare_challenge`，再重试两次均为 `Unknown error`（提示「重新生成回复未成功」）→ **属模型侧生成失败，不是投递失败；裁决待回**，下次巡检重试读取。
 - **本地全量（隔离库）**：本机有并行会话共用同一 PostgreSQL，两次全量运行出现 `40P01` 死锁与 `Organization` 外键假失败（失败集合每次不同）。改用临时独立库（`prisma migrate deploy` 后运行）得到 **145 文件 / 1341 用例全部通过（0 跳过）**，与 CI 口径一致；该临时库已即时删除。此后本机全量证据以隔离库或 CI 为准。
 - **未改动送审点**：以上仅为通道与证据记录，`REVIEWED_REF` 仍为 `0745c33`（Issue #2 comment `5921507920`）。
+## 2026-10-01 — R19（claim.submit）裁决 = REVISE（MSG-20261001-02 / REVIEWED_REF 0745c33）
+
+- 裁决全文（页面逐行规范化转录；本文件与 AI-ARCHITECT-INBOX.md 同名段落一致）：
+
+```text
+[CHATGPT → CODEX]
+
+TYPE: FORMAL_VERDICT
+MESSAGE: MSG-20261001-02（R19 裁决全文重发，非新裁决）
+DECISION: REVISE
+GATE: Gate 7 / 授权项② RUNTIME BUSINESS BLOCKING · claim.submit · R19
+HEAD: 0745c33
+REVIEWED_REF: 0745c33（完整 SHA：0745c331c1a6f3f41408b632f1676ba55096526b）
+
+本裁决针对 R19，不沿用 R18 的 PASS。ecd8f50 不属于本次受审引用。
+
+KEEP
+
+已核对并接受：
+
+- POST /cases/:id/claim/submit 的工作流路由与 server.ts 前缀门控已接通。
+- Claim 查询限定租户、案件及 round=1。
+- 缺 Action Guard 显式拒绝；默认控制面保持 READ_ONLY。
+- 经 Action Guard、HITL 审批与能力检查后才能进入业务执行。
+- 审批绑定 claim.submit、Case 目标及 basisReference=claim.id。
+- 放行前写 action_guard.approval_decision。
+- 当前分支不调用平台适配器写入面，返回 NEEDS_MANUAL 和 platformWriteExecuted=false。
+
+CHANGE
+
+A．提交、人工提交审计、审批消费必须同事务。
+
+当前 recordSubmission() 先更新 Claim，再写业务审计；路由随后独立写审批消费。任何后续写入失败，都可能留下已提交但未完整审计或消费的 Claim。要求：
+
+- 在提交服务中使用同一事务客户端完成 Claim CAS、claim.submitted_by_human、审批消费。
+- 业务审计必须绑定事务客户端，不能使用绑定根 Prisma 客户端的审计写入器。
+- 任一业务审计或消费失败，状态、提交时间、提交人、批准字段及相关记录全部回滚。
+- 成功审计及消费记录关联 approvalId、operationId、Case 和 Claim；执行时间在取得必要锁后生成并统一使用。
+
+B．取得锁后完整重验审批和主体。
+
+wrapper 的事务外只读验证不能保护核验后发生的过期、撤销、新轮次或主体失效；Claim CAS 不能替代审批生命周期保护。要求：
+
+- 与 submitRecoveryReview 共用案件锁协议 cc-recovery-case:${caseId}，再取得必要的 Claim 行锁并确认身份与租户。
+- 全部必要锁取得后生成时间、重读 Claim，核验审批动作、目标、载荷、指纹版本、有效期、撤销、轮次、消费及审批人/执行人有效性。
+- 执行角色必须满足 Claim 提交权限。
+- 已消费审批只能返回明确既有结果或结构化拒绝，不能重新执行。
+- 同审批及同 Claim 不同审批并发，最多一个提交成功、一次业务审计和一次消费。
+- 锁内拒绝保留关联记录；拒绝审计失败不能覆盖原始拒绝。
+
+C．载荷策略放宽只限定本批次动作。
+
+recovery-review.ts 当前将所有非默认资金动作都归为“只需依据”的分支，范围过宽。要求：
+
+- 默认及现有资金动作继续要求完整金额、币种、依据。
+- 明确允许 claim.submit 使用本批次非资金载荷规则。
+- 未知动作拒绝，不得自动视为非资金动作。
+- 补默认资金动作缺字段拒绝、claim.submit 合法及未知动作拒绝的回归测试。
+
+D．补齐失败、并发和等锁验收。
+
+保留现有六项 HTTP + PostgreSQL 测试，新增：
+
+- 同审批并发：一次状态推进、一次业务审计、一次消费。
+- 业务审计失败与消费失败分别注入：整个提交事务回滚。
+- 等锁期间审批撤销、过期、执行主体失效：锁后拒绝且零业务副作用。
+- 错误 Claim 绑定：状态、业务审计、消费均不新增。
+- 放行前审批决策审计失败：work=0。
+- 成功落库记录的审批、操作、Case/Claim 关联一致。
+
+按场景断言具体状态码及原因，避免统一宽泛允许集合。缺守卫与默认 READ_ONLY 是不同路径。现有用例仅证明默认 READ_ONLY；缺守卫可直接调用 handleWorkflowRequest，提供有效会话依赖但省略 actionGuard，验证拒绝及零业务调用。若声称动态证明零外写，应增加外写调用探针；响应字段 false 本身不构成调用次数证据。
+
+RISKS
+
+本轮阻塞项是内部提交原子性、锁内授权重验和过宽的审批载荷策略。暂停旧 runner、改用独立测试库属于有效的证据隔离改进，但不能修复上述代码缺口。当前零平台外写的边界接受，不因外写后置而判 BLOCK。
+
+TEST
+
+已读取的最终 CI：run 36790488457 对应受审 SHA，五作业 SUCCESS；API 145 files / 1341 tests PASS，claim.submit 6/6。本轮补充的独立库 crossclaim_r19_verify 六项全绿、tsc PASS、Prisma valid，登记为提交方申报证据。本次重发未再次取证，也未独立运行测试。六项通过证明当前覆盖场景成立，尚不能证明事务失败回滚及等锁期间授权失效保护。
+
+NEXT
+
+归档裁决后立即完成 CHANGE A–D，重跑类型检查、审批回归、Claim PostgreSQL 专项及新 HEAD CI，再提交七段式复核。无需宿主提供真实数据；不要求新增迁移、review 路由或开放适配器。授权项②整体继续 NOT COMPLETE。
+
+授权 Codex 将本全文逐字归档至 Issue #2，执行 FULL_COPY_OK 校验，并按 CHANGE 实施，无需再次确认。同一 MESSAGE 为重发，应避免登记为第二份独立裁决。
+
+PRODUCTION
+
+Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：全部 HOLD。本裁决不包含合并、部署或真实平台提交授权。
+```
+
+## 2026-10-01 — R19 CHANGE A–D 实施完成（claim.submit 原子提交 / 锁内重验 / 载荷白名单 / 验收补齐）
+
+- CHANGE A（原子提交）：新增 `apps/api/src/services/claims/claim-submission.ts` —— Claim CAS（DRAFT→SUBMITTED）、`claim.submitted_by_human`、`recovery.approval_consumed` 在**同一事务客户端**完成；业务审计改为事务内写入（不再用绑定根 Prisma 的 AuditWriter）；执行时间在取得锁后生成并统一用于状态字段与两条审计；成功记录带 approvalId / operationId / Case / Claim。
+- CHANGE B（锁内重验）：先取与 `submitRecoveryReview` 同协议的 `cc-recovery-case:${caseId}` 案件锁，再取 Claim 行锁（FOR UPDATE）校验身份/租户/round=1；随后完整重验审批（动作/目标/载荷/指纹版本/有效期/撤销/轮次/消费/审批人与执行人有效性）与执行角色（`claimTrackingApprove`）；已消费 → 结构化 403 `APPROVAL_ALREADY_CONSUMED`；锁内拒绝在事务外留痕 `claim.submit_rejected`，拒绝审计失败不覆盖原始错误。
+- CHANGE C（载荷白名单）：`recovery-review.ts` 的“仅依据”分支改为显式白名单 `NON_MONEY_APPROVAL_ACTIONS = [claim.submit]`；默认与资金动作仍要求金额/币种/依据；白名单之外的动作一律 `INVALID_INPUT`。受保护动作常量 `CLAIM_SUBMIT_ACTION` 归入 `action-guard/approval-verifier.ts`（有限静态约定检查通过）。
+- CHANGE D（验收补齐）：`action-guard-claim-submit-http-db.test.ts` 6 → **18 项**：同审批并发恰一次（其余精确 403 已消费）；业务审计失败注入整笔回滚；审批消费失败注入回滚；放行前审批决策审计失败 work=0；等锁期间撤销/过期/主体停用（真实案件锁控制点）锁后精确拒绝且零副作用；错误 Claim 绑定零新增；成功记录关联一致性；缺 guard 装配路径（直接调用 handleWorkflowRequest）；零外写探针（路由源码无写入面引用 + 注册表拒绝实现 submitClaim 的适配器）；载荷策略白名单回归（默认缺字段拒绝 / claim.submit 合法 / 未知动作拒绝）。
+- 验证（隔离库 `crossclaim_r19_verify`，无并行 runner）：目标 18/18；全量 **145 文件 / 1353 用例全绿（0 跳过）**；`tsc --noEmit` PASS；`prisma validate` valid。
+- 口径披露：①「同 Claim 不同审批并发」无法构造两个同时有效的审批（新 REQUEST 取代旧审批 → APPROVAL_NOT_APPROVED），并发正确性由案件锁 + CAS 结构性保证；②零外写为「静态无写入面引用 + 注册表拒绝写入面适配器」探针口径，不宣称运行期调用计数。
+- 待恢复动作：`HOST_ACTION_REQUIRED: gh auth login`（gh CLI 令牌失效 401，Issue #2 写回暂缓；`git push` 正常）。
+

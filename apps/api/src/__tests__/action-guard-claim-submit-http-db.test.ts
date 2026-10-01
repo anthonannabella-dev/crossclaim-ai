@@ -15,6 +15,8 @@
 
 import { randomUUID } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
+import type { IncomingMessage, ServerResponse } from 'node:http';
+import { Readable } from 'node:stream';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -30,6 +32,10 @@ import { LocalFileSystemStorage } from '../services/storage';
 import { createAppActionGuard, staticControlPlaneConfig } from '../services/action-guard/runtime-guard-composition';
 import type { RuntimeActionGuard } from '../services/action-guard/runtime-guard';
 import { APPROVAL_REASON_CODES } from '../services/action-guard/approval-verifier';
+import { AdapterCapabilityError } from '../services/adapters/types';
+import { createAdapterRegistry } from '../services/adapters/registry';
+import { handleWorkflowRequest, type WorkflowRouteDeps } from '../services/workflow/http-routes';
+import { SESSION_COOKIE } from '../services/auth/http-routes';
 import { submitRecoveryReview } from '../services/workflow/recovery-review';
 
 const prisma = new PrismaClient();
@@ -361,5 +367,449 @@ describe('② RUNTIME BUSINESS BLOCKING — claim.submit（真实 HTTP + Postgre
       expect(final.humanSubmissionAudits).toBe(1);
       expect(final.consumedAudits).toBe(1);
     });
+  }, 60_000);
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// R19（MSG-20261001-02）验收：CHANGE A（原子提交）/ B（锁后完整重验）/
+// C（载荷策略白名单）/ D（失败、并发、等锁与装配路径）
+// ─────────────────────────────────────────────────────────────────────────────
+
+const caseLockKey = () => `cc-recovery-case:${caseId}`;
+
+async function advisoryLockCount(key: string, granted: boolean): Promise<number> {
+  const rows = await prisma.$queryRawUnsafe<{ n: bigint }[]>(
+    `SELECT count(*)::bigint AS n
+       FROM pg_locks l
+      WHERE l.locktype = 'advisory'
+        AND l.granted = ${granted ? 'true' : 'false'}
+        AND (l.objid::text = ((hashtext($1)::bigint & 4294967295))::text
+             OR l.classid::text = ((hashtext($1)::bigint & 4294967295))::text)`,
+    key,
+  );
+  return Number(rows[0]?.n ?? 0n);
+}
+
+async function waitFor(check: () => Promise<boolean>, timeoutMs: number, label: string): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    if (await check()) return;
+    if (Date.now() > deadline) throw new Error(`CONTROL_POINT_TIMEOUT:${label}`);
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+}
+
+/** 独立连接持有案件咨询锁（与 submitRecoveryReview / 提交事务同一协议）；返回释放函数 */
+async function holdCaseLock(): Promise<() => void> {
+  let release: () => void = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  void prisma
+    .$transaction(
+      async (tx) => {
+        await tx.$executeRawUnsafe('SELECT pg_advisory_xact_lock(hashtext($1))', caseLockKey());
+        await gate;
+      },
+      { timeout: 30_000, maxWait: 30_000 },
+    )
+    .catch(() => undefined);
+  await waitFor(async () => (await advisoryLockCount(caseLockKey(), true)) >= 1, 10_000, 'CASE_LOCK_NOT_GRANTED');
+  return release;
+}
+
+/** 注入数据库层「某审计动作不可写」的失败；用后必然拆除约束 */
+async function withAuditActionBlocked<T>(action: string, run: () => Promise<T>): Promise<T> {
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE "AuditLog" ADD CONSTRAINT r19_block_audit_action CHECK (action <> '${action}') NOT VALID`,
+  );
+  try {
+    return await run();
+  } finally {
+    await prisma.$executeRawUnsafe('ALTER TABLE "AuditLog" DROP CONSTRAINT IF EXISTS r19_block_audit_action');
+  }
+}
+
+/** 直接调用工作流处理器（不经 server 前缀门控），用于覆盖「缺 Action Guard 装配」路径 */
+async function callWorkflowDirect(
+  targetPath: string,
+  body: Record<string, unknown>,
+  options: { guard?: RuntimeActionGuard | null } = {},
+) {
+  const token = 'r19-direct-session-token';
+  const req = Readable.from([Buffer.from(JSON.stringify(body))]) as unknown as IncomingMessage;
+  const reqAny = req as unknown as {
+    url?: string;
+    method?: string;
+    headers?: Record<string, string>;
+  };
+  reqAny.url = targetPath;
+  reqAny.method = 'POST';
+  reqAny.headers = {
+    cookie: `${SESSION_COOKIE}=${token}`,
+    'content-type': 'application/json',
+    origin: 'http://127.0.0.1',
+  };
+
+  let status = 0;
+  let payload: Record<string, unknown> | null = null;
+  const res = {
+    writeHead(code: number) {
+      status = code;
+    },
+    end(data?: string) {
+      payload = data ? (JSON.parse(data) as Record<string, unknown>) : null;
+    },
+  } as unknown as ServerResponse;
+
+  const deps: WorkflowRouteDeps = {
+    prisma,
+    session: {
+      sessions: {
+        create: async () => ({ id: 'r19-session' }),
+        findByTokenHash: async () => ({
+          id: 'r19-session',
+          organizationId: ORG,
+          userId: ownerId,
+          createdAt: new Date(),
+          lastSeenAt: new Date(),
+          expiresAt: new Date(Date.now() + 3_600_000),
+          revokedAt: null,
+        }),
+        touch: async () => undefined,
+        revoke: async () => undefined,
+        revokeAllForUser: async () => 0,
+      },
+      memberships: {
+        findActive: async () => ({ organizationId: ORG, userId: ownerId, role: 'OWNER' }),
+        listActiveForUser: async () => [{ organizationId: ORG, userId: ownerId, role: 'OWNER' }],
+      },
+      audit,
+      ipSalt: SALT,
+    },
+    // 缺省（不传 actionGuard）即「装配缺失」路径；显式传 null 等价
+    ...(options.guard ? { actionGuard: options.guard } : {}),
+  };
+
+  await handleWorkflowRequest(req, res, deps);
+  return { status, body: payload as Record<string, unknown> | null };
+}
+
+describe('R19 CHANGE A–D — claim.submit 原子性 / 锁内重验 / 装配路径 / 载荷策略', () => {
+  it('07 同审批并发提交：恰一次状态推进 + 恰一次业务审计 + 恰一次审批消费', async () => {
+    await withServer(async (base) => {
+      const cookie = await login(base);
+      const approvalId = await seedApproval();
+      const results = await Promise.all([
+        submit(base, cookie, { approvalId }),
+        submit(base, cookie, { approvalId }),
+        submit(base, cookie, { approvalId }),
+        submit(base, cookie, { approvalId }),
+      ]);
+      expect(results.filter((r) => r.status === 200)).toHaveLength(1);
+      const rejected = results.filter((r) => r.status !== 200);
+      expect(rejected).toHaveLength(3);
+      // 其余必须精确拒绝（已消费）——不允许宽泛 500
+      for (const r of rejected) {
+        expect(r.status).toBe(403);
+        expect(r.body.error).toBe('APPROVAL_ALREADY_CONSUMED');
+      }
+      const after = await sideEffects();
+      expect(after).toMatchObject({ claimStatus: 'SUBMITTED', humanSubmissionAudits: 1, consumedAudits: 1 });
+    });
+  }, 60_000);
+
+  it('08 业务审计写入失败（claim.submitted_by_human 被库拒绝）→ 整笔提交事务回滚', async () => {
+    await withServer(async (base) => {
+      const cookie = await login(base);
+      const approvalId = await seedApproval();
+      const res = await withAuditActionBlocked('claim.submitted_by_human', () =>
+        submit(base, cookie, { approvalId }),
+      );
+      expect(res.status).not.toBe(200);
+      expect(res.status).toBeGreaterThanOrEqual(400);
+      expect(await sideEffects()).toMatchObject(ZERO);
+    });
+  }, 60_000);
+
+  it('09 审批消费写入失败（recovery.approval_consumed 被库拒绝）→ 状态与业务审计一并回滚', async () => {
+    await withServer(async (base) => {
+      const cookie = await login(base);
+      const approvalId = await seedApproval();
+      const res = await withAuditActionBlocked('recovery.approval_consumed', () =>
+        submit(base, cookie, { approvalId }),
+      );
+      expect(res.status).not.toBe(200);
+      // CHANGE A 的核心：消费失败必须把已写入的 Claim CAS 与人工提交审计一起回滚
+      const claim = await prisma.claim.findUniqueOrThrow({ where: { id: claimId } });
+      expect(claim.status).toBe('DRAFT');
+      expect(claim.submittedAt).toBeNull();
+      expect(claim.submittedBy).toBeNull();
+      expect(await sideEffects()).toMatchObject(ZERO);
+    });
+  }, 60_000);
+
+  it('10 放行前审批决策审计失败 → work=0（零业务副作用）', async () => {
+    await withServer(async (base) => {
+      const cookie = await login(base);
+      const approvalId = await seedApproval();
+      const res = await withAuditActionBlocked('action_guard.approval_decision', () =>
+        submit(base, cookie, { approvalId }),
+      );
+      expect(res.status).not.toBe(200);
+      expect(await sideEffects()).toMatchObject(ZERO);
+    });
+  }, 60_000);
+
+  it('11 等锁期间审批被撤销 → 锁后拒绝 APPROVAL_REVOKED，零业务副作用', async () => {
+    await withServer(async (base) => {
+      const cookie = await login(base);
+      const approvalId = await seedApproval();
+      const release = await holdCaseLock();
+      const pending = submit(base, cookie, { approvalId });
+      try {
+        // 控制点：请求已通过事务外只读校验，正阻塞在案件锁上
+        await waitFor(async () => (await advisoryLockCount(caseLockKey(), false)) >= 1, 10_000, 'SUBMIT_WAITING_ON_CASE_LOCK');
+        await prisma.auditLog.create({
+          data: {
+            organizationId: ORG,
+            actorType: 'USER',
+            actorUserId: ownerId,
+            action: 'recovery.review_rejected',
+            entityType: 'Case',
+            entityId: caseId,
+            changes: { reason: '等锁期间撤销' } as never,
+            createdAt: new Date(),
+          },
+        });
+      } finally {
+        release();
+      }
+      const res = await pending;
+      expect(res.status).toBe(403);
+      expect(res.body.error).toBe('APPROVAL_REVOKED');
+      expect(await sideEffects()).toMatchObject(ZERO);
+    });
+  }, 60_000);
+
+  it('12 等锁期间审批过期 → 锁后拒绝 APPROVAL_EXPIRED，零业务副作用', async () => {
+    await withServer(async (base) => {
+      const cookie = await login(base);
+      await submitRecoveryReview(
+        prisma,
+        {
+          organizationId: ORG,
+          actorUserId: ownerId,
+          role: 'OWNER',
+          caseId,
+          decision: 'REQUEST',
+        } as never,
+        () => NOW,
+      );
+      const approved = (await submitRecoveryReview(
+        prisma,
+        {
+          organizationId: ORG,
+          actorUserId: ownerId,
+          role: 'OWNER',
+          caseId,
+          decision: 'APPROVE',
+          boundAction: ACTION,
+          boundPayload: { basisReference: claimId },
+          // TTL 相对**真实时钟**（审批在真实 now 生成，3s 后过期；外层只读校验先通过，锁内重验时已过期）
+          approvalTtlMs: 3_000,
+        } as never,
+        () => new Date(),
+      )) as { approvalId?: string };
+      const approvalId = String(approved.approvalId);
+      const release = await holdCaseLock();
+      const pending = submit(base, cookie, { approvalId });
+      try {
+        await waitFor(async () => (await advisoryLockCount(caseLockKey(), false)) >= 1, 10_000, 'SUBMIT_WAITING_ON_CASE_LOCK');
+        await new Promise((resolve) => setTimeout(resolve, 3_600));
+      } finally {
+        release();
+      }
+      const res = await pending;
+      expect(res.status).toBe(403);
+      expect(res.body.error).toBe('APPROVAL_EXPIRED');
+      expect(await sideEffects()).toMatchObject(ZERO);
+    });
+  }, 60_000);
+
+  it('13 等锁期间执行主体成员停用 → 锁后拒绝 APPROVAL_ACTOR_MISMATCH，零业务副作用', async () => {
+    await withServer(async (base) => {
+      const cookie = await login(base);
+      const approvalId = await seedApproval();
+      const release = await holdCaseLock();
+      const pending = submit(base, cookie, { approvalId });
+      try {
+        await waitFor(async () => (await advisoryLockCount(caseLockKey(), false)) >= 1, 10_000, 'SUBMIT_WAITING_ON_CASE_LOCK');
+        await prisma.membership.updateMany({
+          where: { organizationId: ORG, userId: ownerId },
+          data: { isActive: false },
+        });
+      } finally {
+        release();
+      }
+      const res = await pending;
+      expect(res.status).toBe(403);
+      expect(res.body.error).toBe('APPROVAL_ACTOR_MISMATCH');
+      expect(await sideEffects()).toMatchObject(ZERO);
+    });
+  }, 60_000);
+
+  it('14 审批绑定到其他 Claim → 状态/业务审计/消费均不新增', async () => {
+    const other = await prisma.claim.create({
+      data: { organizationId: ORG, caseId, round: 2, status: 'DRAFT', target: 'CARRIER', aiDraftText: 'draft2' },
+    });
+    await withServer(async (base) => {
+      const cookie = await login(base);
+      const approvalId = await seedApproval(other.id);
+      const res = await submit(base, cookie, { approvalId });
+      expect(res.status).toBe(403);
+      expect(res.body.reason).toBe('APPROVAL_PAYLOAD_MISMATCH');
+      expect(await sideEffects()).toMatchObject(ZERO);
+      const otherAfter = await prisma.claim.findUniqueOrThrow({ where: { id: other.id } });
+      expect(otherAfter.status).toBe('DRAFT');
+    });
+  }, 60_000);
+
+  it('15 成功落库记录的关联一致性：approvalId / operationId / Case / Claim', async () => {
+    await withServer(async (base) => {
+      const cookie = await login(base);
+      const approvalId = await seedApproval();
+      expect((await submit(base, cookie, { approvalId })).status).toBe(200);
+
+      const human = await prisma.auditLog.findFirstOrThrow({
+        where: { organizationId: ORG, action: 'claim.submitted_by_human' },
+      });
+      expect(human.entityType).toBe('Claim');
+      expect(human.entityId).toBe(claimId);
+      expect(human.changes).toMatchObject({
+        from: 'DRAFT',
+        to: 'SUBMITTED',
+        humanApproved: true,
+        caseId,
+        approvalId,
+        operationId: `approval:${approvalId}`,
+      });
+
+      const consumed = await prisma.auditLog.findFirstOrThrow({
+        where: { organizationId: ORG, action: 'recovery.approval_consumed' },
+      });
+      expect(consumed.entityType).toBe('Case');
+      expect(consumed.entityId).toBe(caseId);
+      expect(consumed.changes).toMatchObject({
+        approvalId,
+        operationId: `approval:${approvalId}`,
+        caseId,
+        claimId,
+        basisReference: claimId,
+      });
+
+      const claim = await prisma.claim.findUniqueOrThrow({ where: { id: claimId } });
+      expect(claim.submittedBy).toBe(ownerId);
+      expect(claim.approvedByUserId).toBe(ownerId);
+      expect(claim.submittedAt?.getTime()).toBe(claim.approvedAt?.getTime());
+    });
+  }, 60_000);
+
+  it('16 缺 Action Guard 装配（直接调用 handleWorkflowRequest）→ 拒绝且零业务调用', async () => {
+    const res = await callWorkflowDirect(`/cases/${caseId}/claim/submit`, { approvalId: 'any' });
+    expect(res.status).toBe(403);
+    expect(res.body?.error).toBe('ACTION_GUARD_NOT_CONFIGURED');
+    expect(await sideEffects()).toMatchObject(ZERO);
+  }, 60_000);
+
+  it('17 零平台外写探针：路由源码不含适配器写入面 + 注册表拒绝写入面适配器', () => {
+    const routeSource = fs.readFileSync(
+      path.resolve(__dirname, '..', 'services', 'workflow', 'http-routes.ts'),
+      'utf8',
+    );
+    // 静态探针：受保护入口文件内不得出现任何平台写入面引用
+    expect(routeSource).not.toMatch(/submitClaim\s*\(/);
+    expect(routeSource).not.toMatch(/submitClaimThroughAdapter/);
+    expect(routeSource).not.toMatch(/from '\.\.\/adapters/);
+
+    // 动态探针：实现写入面的适配器在**注册阶段**即被拒绝（闸门先于调用）
+    const writeProbe = {
+      platform: 'r19-write-probe',
+      capabilities: () => ({
+        platform: 'r19-write-probe',
+        displayName: 'R19 write probe',
+        domains: ['LOGISTICS'],
+        channels: ['UPS'],
+        maxPageSize: 50,
+        supportsClaimSubmission: false,
+      }),
+      submitClaim: async () => {
+        throw new Error('WRITE_PROBE_INVOKED');
+      },
+    };
+    expect(() => createAdapterRegistry([writeProbe as never])).toThrow(AdapterCapabilityError);
+  });
+
+  it('18 审批载荷策略白名单：默认资金动作缺字段拒绝 / claim.submit 合法 / 未知动作拒绝', async () => {
+    const request = () =>
+      submitRecoveryReview(
+        prisma,
+        { organizationId: ORG, actorUserId: ownerId, role: 'OWNER', caseId, decision: 'REQUEST' } as never,
+        () => NOW,
+      );
+
+    // 默认（资金动作 commission.charge）：缺金额/币种 → 拒绝
+    await request();
+    await expect(
+      submitRecoveryReview(
+        prisma,
+        {
+          organizationId: ORG,
+          actorUserId: ownerId,
+          role: 'OWNER',
+          caseId,
+          decision: 'APPROVE',
+          boundPayload: { basisReference: claimId },
+        } as never,
+        () => new Date(NOW.getTime() + 1000),
+      ),
+    ).rejects.toMatchObject({ code: 'INVALID_INPUT' });
+
+    // claim.submit：仅绑定依据即可（本批次白名单）
+    await prisma.$executeRawUnsafe('DELETE FROM "AuditLog"');
+    await request();
+    const claimSubmitApproval = (await submitRecoveryReview(
+      prisma,
+      {
+        organizationId: ORG,
+        actorUserId: ownerId,
+        role: 'OWNER',
+        caseId,
+        decision: 'APPROVE',
+        boundAction: ACTION,
+        boundPayload: { basisReference: claimId },
+      } as never,
+      () => new Date(NOW.getTime() + 1000),
+    )) as { approvalId?: string };
+    expect(typeof claimSubmitApproval.approvalId).toBe('string');
+
+    // 未知动作：不得被当作非资金动作放行
+    await prisma.$executeRawUnsafe('DELETE FROM "AuditLog"');
+    await request();
+    await expect(
+      submitRecoveryReview(
+        prisma,
+        {
+          organizationId: ORG,
+          actorUserId: ownerId,
+          role: 'OWNER',
+          caseId,
+          decision: 'APPROVE',
+          boundAction: 'unknown.action',
+          boundPayload: { basisReference: claimId },
+        } as never,
+        () => new Date(NOW.getTime() + 1000),
+      ),
+    ).rejects.toMatchObject({ code: 'INVALID_INPUT' });
   }, 60_000);
 });

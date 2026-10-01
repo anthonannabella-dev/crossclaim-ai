@@ -20,6 +20,12 @@ import { ACTION_GUARD_CATALOG } from './action-guard';
 export const RECOVERY_CONFIRMATION_ACTION = 'commission.charge';
 
 /**
+ * 受保护动作名（单一来源）：Claim 人工提交（POST /cases/:id/claim/submit，② RUNTIME BUSINESS BLOCKING）。
+ * 非守卫文件（路由/服务/审批载荷策略）必须引用本常量，不得散落动作字面量（有限静态约定检查要求）。
+ */
+export const CLAIM_SUBMIT_ACTION = 'claim.submit';
+
+/**
  * 受保护动作名（单一来源）：支付捕获/资金确认（POST /billing/:id/status、/payments/events/:id/replay、
  * /payments/processing/retry-due）。非守卫文件必须引用本常量（② 第二批 P1）。
  */

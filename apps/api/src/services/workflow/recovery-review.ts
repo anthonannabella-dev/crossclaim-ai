@@ -19,7 +19,7 @@
 import { Prisma, type PrismaClient } from '@prisma/client';
 
 import { prepareAuditInsert } from '../audit';
-import { RECOVERY_CONFIRMATION_ACTION } from '../action-guard/approval-verifier';
+import { CLAIM_SUBMIT_ACTION, RECOVERY_CONFIRMATION_ACTION } from '../action-guard/approval-verifier';
 import { WorkflowError } from './opportunity-review';
 import { assertPermission } from './permissions';
 
@@ -29,6 +29,13 @@ export const REVIEW_ACTIONS = {
   approved: 'recovery.review_approved',
   rejected: 'recovery.review_rejected',
 } as const;
+
+/**
+ * ② RUNTIME BUSINESS BLOCKING（R19 CHANGE C）：允许使用「仅绑定 basisReference」载荷规则的
+ * 非资金动作**白名单**（当前仅 claim.submit）。默认动作（commission.charge）与资金动作仍要求
+ * 完整金额/币种/依据；白名单之外的动作一律拒绝，避免"任何非默认动作都被当作非资金动作"。
+ */
+export const NON_MONEY_APPROVAL_ACTIONS = [CLAIM_SUBMIT_ACTION] as const;
 
 export type HighValueReviewState = 'NOT_REQUIRED' | 'PENDING' | 'APPROVED' | 'REJECTED';
 
@@ -347,8 +354,8 @@ export async function submitRecoveryReview(
     const bound = decision === 'APPROVE' ? normalizeBoundPayload(input.boundPayload) : null;
     if (decision === 'APPROVE') {
       // CHANGE A（R2）：缺金额/币种/依据的审批不得创建"看似可用"的 approvalId
-      // ② 后续批次：审批载荷校验**按动作类型**判定 —— 资金动作必须有金额/币种/依据；
-      // 非资金动作（如 claim.submit）无金额语义，但必须绑定操作依据（basisReference）。
+      // ② R19 CHANGE C：载荷放宽**只限定本批次动作**（白名单），未知动作一律拒绝，
+      // 不得把"非默认动作"整体当作非资金动作放行。
       const requestedAction =
         typeof input.boundAction === 'string' && input.boundAction.trim() !== ''
           ? input.boundAction.trim()
@@ -358,8 +365,13 @@ export async function submitRecoveryReview(
         if (bound.amount === null || bound.currency === null || bound.basisReference === null) {
           throw new WorkflowError('INVALID_INPUT', '审批必须绑定完整操作载荷（金额/币种/依据）');
         }
-      } else if (bound.basisReference === null) {
-        throw new WorkflowError('INVALID_INPUT', '审批必须绑定操作依据（basisReference）');
+      } else if ((NON_MONEY_APPROVAL_ACTIONS as readonly string[]).includes(requestedAction)) {
+        // 非资金动作（本批次仅 claim.submit）：无金额语义，但必须绑定操作依据
+        if (bound.basisReference === null) {
+          throw new WorkflowError('INVALID_INPUT', '审批必须绑定操作依据（basisReference）');
+        }
+      } else {
+        throw new WorkflowError('INVALID_INPUT', `审批动作不受支持：${requestedAction}`);
       }
       if (bound.fingerprintVersion !== 'v1') {
         throw new WorkflowError('INVALID_INPUT', '未知的审批载荷指纹版本');
