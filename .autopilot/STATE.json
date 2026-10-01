@@ -1,17 +1,17 @@
 {
   "gate": "B2-FIX R1",
-  "head": "d3f4722",
-  "status": "READY_FOR_REVIEW",
+  "head": "fd73d44",
+  "status": "IMPLEMENTING",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
-  "next_task": "等待 R40 裁决：PASS → 按结论进入 operation-level write readiness 取证（六项逐项附官方文档页/版本/取证日期）或只读落点接入；REVISE → 按 CHANGE 修改后再次送审；期间 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写/客户提交 HOLD",
+  "next_task": "R41：Amazon Fixture → Existing Connector Runner Integration（fixture-only）：Amazon descriptor → mocked/fixture Fetcher → Amazon Normalizer → 既有 Connector Runner → createClaimItem(CONNECTOR_IMPORT) / Quarantine；必须复用 sourceFingerprint v1 / ClaimItem 幂等 / cursor 生命周期 / quarantine 白名单 / normalizerVersion / Connector Runner 审计，不得为 Amazon 另建平行 ingest 链；无真实凭据/账号/网络。必测：正常记录→ClaimItem、同页重放仍 1 条、金额更正但 identity 不变不拆单、malformed→Quarantine、quarantine 不含 raw payload/customer/token、cursor 成功推进/异常不推进、normalizer version 可追溯、Rule Engine 不被偷偷触发、Payment·Settlement·Billing·platform-write ledger 零变化、WRITE/RDT/unknown operation 继续 fail-closed，并保留 PG/H/D 永久基线。可并行：docs-only 的 Amazon FBA reimbursement/inventory-loss recovery 写操作官方能力取证（先回答官方是否存在可用写 operation；不存在即记录 WRITE OPERATION NOT AVAILABLE / NOT PROVEN → NEEDS_MANUAL，不得用浏览器自动化绕过）。",
   "send_head": "d3f4722",
-  "decision_head": "79a7d36",
-  "last_chatgpt_message": "MSG-20261001-25",
+  "decision_head": "d3f4722",
+  "last_chatgpt_message": "MSG-20261001-26",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T09:57:30.698Z",
-  "previous_head": "d3f4722",
-  "architect_decision_pending": true,
+  "updated_at": "2026-10-01T09:58:49.557Z",
+  "previous_head": "fd73d44",
+  "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "d3f4722",
   "last_sent_at": "2026-10-01T09:57:30.698Z",
@@ -49,12 +49,12 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-01T09:52:40.802Z",
+  "last_tick_at": "2026-10-01T09:58:10.814Z",
   "state": "IMPLEMENT",
-  "last_action": "R40 已投递（Amazon SP-API READ-ONLY Adapter Implementation Checkpoint）；等待架构方编号裁决",
-  "last_action_at": "2026-10-01T09:57:30.698Z",
-  "next_action": "等待 R40 裁决：PASS → 按结论进入 operation-level write readiness 取证（六项逐项附官方文档页/版本/取证日期）或只读落点接入；REVISE → 按 CHANGE 修改后再次送审；期间 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写/客户提交 HOLD",
-  "current_head": "d3f4722",
+  "last_action": "MSG-20261001-26 = PASS WITH REVISE 收口：R40 READ-ONLY boundary CLOSED（CI 36845421711 SUCCESS 已确认）；下一批 R41 = fixture → 既有 Connector Runner 集成",
+  "last_action_at": "2026-10-01T09:58:49.557Z",
+  "next_action": "R41：Amazon Fixture → Existing Connector Runner Integration（fixture-only）：Amazon descriptor → mocked/fixture Fetcher → Amazon Normalizer → 既有 Connector Runner → createClaimItem(CONNECTOR_IMPORT) / Quarantine；必须复用 sourceFingerprint v1 / ClaimItem 幂等 / cursor 生命周期 / quarantine 白名单 / normalizerVersion / Connector Runner 审计，不得为 Amazon 另建平行 ingest 链；无真实凭据/账号/网络。必测：正常记录→ClaimItem、同页重放仍 1 条、金额更正但 identity 不变不拆单、malformed→Quarantine、quarantine 不含 raw payload/customer/token、cursor 成功推进/异常不推进、normalizer version 可追溯、Rule Engine 不被偷偷触发、Payment·Settlement·Billing·platform-write ledger 零变化、WRITE/RDT/unknown operation 继续 fail-closed，并保留 PG/H/D 永久基线。可并行：docs-only 的 Amazon FBA reimbursement/inventory-loss recovery 写操作官方能力取证（先回答官方是否存在可用写 operation；不存在即记录 WRITE OPERATION NOT AVAILABLE / NOT PROVEN → NEEDS_MANUAL，不得用浏览器自动化绕过）。",
+  "current_head": "fd73d44",
   "reviewed_head": "549dba8",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-01T09:42:12.410Z",
-    "gapMs": 628393,
-    "stale": true,
-    "checkedAt": "2026-10-01T09:52:40.802Z"
+    "previousTickAt": "2026-10-01T09:52:40.802Z",
+    "gapMs": 330013,
+    "stale": false,
+    "checkedAt": "2026-10-01T09:58:10.814Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -478,5 +478,18 @@
       "下一批是否选定一个具体 Amazon write operation 做 operation-level 六项取证（并指定优先类型）",
       "只读落点是否接入既有 Connector Runner/ingest（仍不接真实凭据，仅 fixture 贯通 ClaimItem/Quarantine）"
     ]
+  },
+  "r40_verdict": {
+    "message_id": "MSG-20261001-26",
+    "decision": "PASS WITH REVISE",
+    "reviewed_head": "d3f4722",
+    "archived": "FULL_COPY_OK（逐行一致，缺失 0 / 多出 0）",
+    "r40_status": "CLOSED（CONDITION MET：CI run 36845421711 = SUCCESS）",
+    "changes": {
+      "A": "CI 必须在最终收口时确认 SUCCESS（已满足）",
+      "B": "R41 先贯通既有 Connector Runner / ClaimItem / Quarantine（fixture-only，优先于 write 取证）",
+      "C": "write operation 仅可 docs-only 取证（优先 FBA reimbursement / inventory-loss recovery）；不得实现 write adapter、不得浏览器自动化绕过"
+    },
+    "permanent_holds": "AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · CUSTOMER SUBMISSION HOLD"
   }
 }

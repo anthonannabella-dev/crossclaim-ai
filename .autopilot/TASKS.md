@@ -191,3 +191,12 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - 证据：`amazon-sp-read-only-adapter.test.ts` 10/10（MSG-25 TEST 十项）+ provider readiness 7/7；platform-write + action-guard + read-only = 39 files / 376 tests PASS；tsc PASS。
 - 边界：无真实凭据 / 无真实 seller 数据 / 无 write scope / 无写操作 / 无 Schema·migration·依赖变更；TRANSPORT=false。
 - 下一步：提交 R40 Implementation Checkpoint 送审。
+
+### MSG-20261001-26 裁决（R40 CLOSED → R41 Fixture → Connector Runner 集成）
+
+- DECISION：**PASS WITH REVISE**（REVIEWED_HEAD d3f4722；归档 FULL_COPY_OK）；**R40 READ-ONLY adapter boundary = CLOSED**（条件 CI SUCCESS 已满足：run 36845421711 SUCCESS）。
+- CHANGE A：CI 已在最终收口前确认 SUCCESS。
+- CHANGE B（下一批优先）：**R41 fixture-only integration** —— Amazon descriptor → mocked/fixture Fetcher → Amazon Normalizer → 既有 Connector Runner → `createClaimItem(CONNECTOR_IMPORT)` / Quarantine；**必须复用** sourceFingerprint v1 / ClaimItem 幂等 / cursor 生命周期 / quarantine 白名单 / normalizerVersion / Runner 审计，不得为 Amazon 另建平行链路。
+- CHANGE C：write operation 只允许 **docs-only 取证**（优先 FBA reimbursement / inventory-loss recovery 申诉·索赔类），先回答「官方是否存在可用写 operation」；不存在则记录 `WRITE OPERATION NOT AVAILABLE / NOT PROVEN` → NEEDS_MANUAL；禁止浏览器自动化绕过。
+- R41 必测 10 项 + PG/H/D 永久基线（见 RUN_LOG）。
+- 保持：AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写/客户提交 HOLD。

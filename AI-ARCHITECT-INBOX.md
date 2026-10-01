@@ -79647,3 +79647,149 @@ AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · PLATFORM_WRITE_TRANSPORT_ENABLED
 
 VERDICT: PASS WITH REVISE — MSG-20261001-25
 ```
+
+### [MSG-20261001-26] R40 Amazon SP-API READ-ONLY Adapter Checkpoint —— PASS WITH REVISE（只读边界可关闭，条件为该 HEAD 的 CI SUCCESS；下一批 R41 fixture → 既有 Connector Runner 集成；write operation 仅可 docs-only 取证）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE: FORMAL_VERDICT
+MESSAGE: MSG-20261001-26
+PREVIOUS: MSG-20261001-25
+GATE: Gate 7 / Amazon SP-API READ-ONLY Adapter
+REVIEWED_HEAD: d3f4722
+DECISION: PASS WITH REVISE
+
+KEEP
+
+R40 的只读 adapter 边界实现接受。
+
+以下设计正确并保留：
+
+descriptor → credential port → GET-only fetch → pagination/rate-limit → normalization → read-only sink/Runner 边界；
+credential 未配置即 CREDENTIAL_PORT_UNCONFIGURED；
+operation/resource 级 allowlist，而非 Amazon provider 全局 read 开关；
+RDT 独立授权；
+WRITE operation 即使登记也明确拒绝；
+六项 write prerequisites 已代码化，write eligibility 保持 provider + operation + evidence；
+Amazon adapter 不持有 platform-write sink；
+fixture/mocked transport 足以作为当前阶段验证，不要求真实卖家凭据。
+
+因此问题①：
+
+READ-ONLY adapter boundary 可以关闭。
+
+CHANGE A — CI 必须在最终收口时确认 SUCCESS
+
+当前送审时 CI 36845421711 仍为 in_progress。
+
+本地 376 tests、tsc、Prisma 证据接受，但 checkpoint 最终关闭条件仍包括：
+
+该 HEAD 对应 CI SUCCESS。
+
+如果 CI 后续全绿，无需重新设计；R40 可直接视为关闭。
+
+如果 CI failure，则只针对 failure 重审。
+
+CHANGE B — 下一批先贯通既有 Connector Runner / ClaimItem / Quarantine
+
+问题③：批准，而且优先于 write-operation 取证。
+
+下一批做 fixture-only integration：
+
+Amazon descriptor → mocked/fixture Fetcher → Amazon Normalizer → existing Connector Runner → createClaimItem(CONNECTOR_IMPORT) / Quarantine
+
+仍然：
+
+无真实 credential、无真实 seller account、无网络调用。
+
+重点不是增加功能，而是证明 Amazon adapter 没有形成一套平行的数据链。
+
+必须复用现有：
+
+sourceFingerprint v1
+ClaimItem 幂等
+cursor 生命周期
+quarantine 白名单
+normalizerVersion
+Connector Runner 审计
+
+不要为 Amazon 重新实现第二套 ingest/幂等/quarantine。
+
+CHANGE C — 暂不进入 Amazon write operation 实现
+
+问题②可以开始取证，但不能开始 write adapter implementation。
+
+优先取证类型选择：
+
+Amazon FBA reimbursement / inventory-loss recovery 相关的“申诉/索赔提交”操作。
+
+原因是它与 CrossClaim 当前核心产品链：
+
+发现损失 → 证据 → Claim → 人工审批 → 提交追回 → 结果确认
+
+最直接对应。
+
+但不要先假定 SP-API 一定存在一个满足要求的“自动索赔 endpoint”。
+
+下一轮应先回答：
+
+Amazon 官方当前究竟允许第三方应用通过哪个具体 operation/API 对目标 FBA reimbursement / inventory discrepancy 发起或推进 recovery action？
+
+如果没有官方可用写 operation，或者必须通过 Seller Central 人工流程，则明确记录：
+
+WRITE OPERATION NOT AVAILABLE / NOT PROVEN → NEEDS_MANUAL
+
+不要为了实现自动化而改用浏览器自动化绕过这一 Gate。
+
+RISKS
+
+现在最大的产品/架构风险是“读取链已经打通”后，为了追求闭环而强行寻找写 API。
+
+CrossClaim 的正确策略仍然是：
+
+能安全自动发现和准备证据 ≠ 必须自动提交。
+
+即使最终 Amazon 只能做到：
+
+自动发现 → 自动核算 → 自动证据包 → 人工一键提交
+
+仍然是有效产品路径，不应降低 transport 安全门槛。
+
+TEST
+
+fixture-only Runner integration 至少增加：
+
+正常 Amazon record → ClaimItem；
+同页/同记录重放 → ClaimItem 仍 1 条；
+金额更正但 identity 不变 → 不拆 Claim；
+malformed shape → Quarantine；
+quarantine 不包含 raw payload/customer/token；
+cursor 成功后推进，处理中异常不推进；
+normalizer version 可追溯；
+Rule Engine 不被 Amazon adapter/Runner 偷偷触发；
+Payment/Settlement/Billing/platform-write ledger 零变化；
+WRITE/RDT/unknown operation 继续 fail-closed。
+
+并继续保留 PG/H/D 永久安全基线。
+
+NEXT
+
+顺序批准为：
+
+1. 等 36845421711 CI SUCCESS → R40 READ-ONLY Boundary CLOSED
+
+2. R41：Amazon Fixture → Existing Connector Runner Integration
+
+3. 可并行提交一份 docs-only 的 Amazon FBA recovery write-operation 官方能力取证，但不得实现 write adapter。
+
+如果具体 write operation 的六项门槛不能全部证明，Amazon 保持：
+
+READ-ONLY + NEEDS_MANUAL。
+
+继续保持：
+
+AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · CUSTOMER SUBMISSION HOLD。
+
+VERDICT: PASS WITH REVISE — MSG-20261001-26
+```

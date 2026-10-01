@@ -772,3 +772,12 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - TEST 十项：未登记 fail-closed / write 永远拒绝 / 无 RDT 拒绝 / 凭据未配置 fail-closed / 分页 token 透传 / 429 不重复 / retry 不绕过 fingerprint 幂等 / malformed·unknown → quarantine / 无 write sink（源码禁词 + GET-only）/ gate=true 仍 ADAPTER_NOT_ELIGIBLE。
 - 回归：platform-write + action-guard + read-only = 39 files / 376 tests PASS（PG1–PG10 / H1–H9 / D1–D4 永久基线未受影响）；tsc PASS。
 - 边界：未接真实凭据、未访问真实 seller 数据、未申请/扩大 scope、未实现写操作、无 Schema/migration/依赖变更。
+
+## 2026-10-01 JST — 裁决 MSG-20261001-26 = PASS WITH REVISE（R40 CLOSED）
+
+- 送审：R40（REVIEWED_HEAD d3f4722；Issue #2 comment 5929012663；CI run 36845421711 = SUCCESS 已确认）。
+- 归档：AI-ARCHITECT-INBOX.md §MSG-20261001-26；`tools/verdict-diff/compare.mjs` = **FULL_COPY_OK**。
+- 裁决：R40 只读边界可关闭（条件 CI SUCCESS 已满足）；只读边界的 8 项设计要点全部 KEEP。
+- CHANGE B（R41）：fixture-only 贯通既有 Connector Runner / ClaimItem / Quarantine，复用 sourceFingerprint v1、ClaimItem 幂等、cursor 生命周期、quarantine 白名单、normalizerVersion、Runner 审计——目标是证明 Amazon adapter 没有形成平行数据链。
+- CHANGE C：写操作仅 docs-only 取证（FBA reimbursement / inventory-loss recovery 优先）；不存在官方写 operation 即记录 NOT AVAILABLE / NOT PROVEN → NEEDS_MANUAL；禁止浏览器自动化绕过。
+- 风险提示（架构方）：最大风险是「读取链打通后为闭环强行找写 API」；正确策略是「能安全自动发现和准备证据 ≠ 必须自动提交」，人工一键提交仍是有效产品路径。
