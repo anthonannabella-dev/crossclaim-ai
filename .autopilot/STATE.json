@@ -1422,7 +1422,7 @@
     "risk_classification": {
       "FOUNDATION_REUSED": "R43 canonical identity（唯一 builder）+ EvidenceArtifact/provenance + Action Guard/HITL + 事务·CAS·行锁 + AuditLog + consistency checker 模式",
       "NEW_RISK_BOUNDARY": "YES（R45 将引入新事实层：PROVIDER_ACCEPTED / REIMBURSEMENT_OBSERVED / RECONCILED；本批次仅设计，无实现）",
-      "ARCH_REVIEW_REQUIRED": "YES —— 触发项：领域与 Schema 变化（新事实层 + 新受保护动作 recovery.reconciliation_override）；本批次仅送设计边界，实现前需 Schema Delta / Implementation Plan"
+      "ARCH_REVIEW_REQUIRED": "YES —— 触发项：Schema 实质变化（新事实层 PROVIDER_ACCEPTED / REIMBURSEMENT_OBSERVED / RECONCILED 需要新表与新列）+ 审批 / HITL 边界变化（新增受保护动作 recovery.reconciliation_override）；本批次仅送设计边界，实现前必须先过 Schema Delta Request / Implementation Plan"
     },
     "oss": "OSS_CANDIDATE = 无新增（预计新增依赖 0）；OSS_DECISION = EXISTING；LICENSE/COMMERCIAL_USE/LICENSE_RISK = n/a",
     "key_points": [
