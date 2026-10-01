@@ -1,21 +1,21 @@
 {
   "gate": "B2-FIX R1",
-  "head": "450eabd",
-  "status": "IMPLEMENTING",
+  "head": "d3f4722",
+  "status": "READY_FOR_REVIEW",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
-  "next_task": "R40 送审：Amazon SP-API READ-ONLY Adapter Implementation Checkpoint（Issue #2 七段式 + ChatGPT 唤醒）—— 附 operation/resource 级 descriptor、只读边界实现、TEST 十项证据（含 429 不重复/幂等/quarantine/不得取得 write sink/gate 打开仍 ADAPTER_NOT_ELIGIBLE）、六项写回门槛代码化与永久基线回归；等待裁决后进入 operation-level write readiness 取证或按指示调整。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写/客户提交 HOLD。",
-  "send_head": "79a7d36",
+  "next_task": "等待 R40 裁决：PASS → 按结论进入 operation-level write readiness 取证（六项逐项附官方文档页/版本/取证日期）或只读落点接入；REVISE → 按 CHANGE 修改后再次送审；期间 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写/客户提交 HOLD",
+  "send_head": "d3f4722",
   "decision_head": "79a7d36",
   "last_chatgpt_message": "MSG-20261001-25",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T09:51:22.752Z",
-  "previous_head": "450eabd",
-  "architect_decision_pending": false,
+  "updated_at": "2026-10-01T09:57:30.698Z",
+  "previous_head": "d3f4722",
+  "architect_decision_pending": true,
   "blocked_scope": null,
-  "last_send_head": "79a7d36",
-  "last_sent_at": "2026-10-01T09:37:59.156Z",
-  "last_sent_fingerprint": "R39:Provider-Adapter-Readiness-AmazonSPAPI",
+  "last_send_head": "d3f4722",
+  "last_sent_at": "2026-10-01T09:57:30.698Z",
+  "last_sent_fingerprint": "R40:AmazonSP-ReadOnly-Adapter-Checkpoint",
   "final_head": "1144401",
   "ci_run": "36833002042",
   "ci_result": "SUCCESS",
@@ -49,12 +49,12 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-01T09:42:12.410Z",
+  "last_tick_at": "2026-10-01T09:52:40.802Z",
   "state": "IMPLEMENT",
-  "last_action": "R40 实施完成：Amazon SP-API READ-ONLY adapter boundary（operation/resource 级 fail-closed）+ 六项写回门槛代码化；TEST 十项全绿",
-  "last_action_at": "2026-10-01T09:51:22.752Z",
-  "next_action": "R40 送审：Amazon SP-API READ-ONLY Adapter Implementation Checkpoint（Issue #2 七段式 + ChatGPT 唤醒）—— 附 operation/resource 级 descriptor、只读边界实现、TEST 十项证据（含 429 不重复/幂等/quarantine/不得取得 write sink/gate 打开仍 ADAPTER_NOT_ELIGIBLE）、六项写回门槛代码化与永久基线回归；等待裁决后进入 operation-level write readiness 取证或按指示调整。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写/客户提交 HOLD。",
-  "current_head": "450eabd",
+  "last_action": "R40 已投递（Amazon SP-API READ-ONLY Adapter Implementation Checkpoint）；等待架构方编号裁决",
+  "last_action_at": "2026-10-01T09:57:30.698Z",
+  "next_action": "等待 R40 裁决：PASS → 按结论进入 operation-level write readiness 取证（六项逐项附官方文档页/版本/取证日期）或只读落点接入；REVISE → 按 CHANGE 修改后再次送审；期间 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写/客户提交 HOLD",
+  "current_head": "d3f4722",
   "reviewed_head": "549dba8",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-01T09:37:12.216Z",
-    "gapMs": 300195,
-    "stale": false,
-    "checkedAt": "2026-10-01T09:42:12.410Z"
+    "previousTickAt": "2026-10-01T09:42:12.410Z",
+    "gapMs": 628393,
+    "stale": true,
+    "checkedAt": "2026-10-01T09:52:40.802Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -250,7 +250,7 @@
     "integration_boundary_review": "AUTHORIZED_TO_PLAN（先提交设计/实施计划，不直接开放真实 transport）"
   },
   "r36_submission_comment": "5927087320",
-  "stale_recovered_at": "2026-10-01T09:23:11.046Z",
+  "stale_recovered_at": "2026-10-01T09:52:40.802Z",
   "engineering_regression_policy": {
     "source": "HOST PRODUCT DIRECTION 2026-10-01",
     "doc": "docs/releases/ENGINEERING-REGRESSION-POLICY.md",
@@ -464,5 +464,19 @@
     "write_gate": "AMAZON_WRITE_TRANSPORT_PREREQUISITES（六项）+ isAmazonOperationWriteEligible()：缺任一项 eligible=false / NEEDS_MANUAL",
     "evidence": "platform-write + action-guard + amazon read-only = 39 files / 376 tests PASS（永久基线 PG1–PG10 / H1–H9 / D1–D4 未受影响）；tsc PASS",
     "boundary": "无真实凭据、无真实 seller 数据、无 write scope、无写操作、无 Schema/migration/依赖变更；TRANSPORT=false"
+  },
+  "r40_submission": {
+    "submission_comment": "5929012663",
+    "ci_run": "36845421711",
+    "ci_result": "SUCCESS",
+    "reviewed_head": "d3f4722",
+    "local_evidence": "platform-write + action-guard + read-only = 39 files / 376 tests PASS；tsc PASS；prisma validate valid",
+    "wakeup_channel": "https://chatgpt.com/c/6ab9ee1b-fd54-83ee-b363-b67750afcedd",
+    "wakeup_delivery": "DELIVERED_VERIFIED（输入框清空 / 新用户消息在底部 / 生成中）",
+    "open_questions": [
+      "本 READ-ONLY adapter boundary 是否可关闭（Checkpoint PASS）",
+      "下一批是否选定一个具体 Amazon write operation 做 operation-level 六项取证（并指定优先类型）",
+      "只读落点是否接入既有 Connector Runner/ingest（仍不接真实凭据，仅 fixture 贯通 ClaimItem/Quarantine）"
+    ]
   }
 }
