@@ -77744,3 +77744,88 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 本裁决不包含合并、部署或真实平台提交授权。
 ```
 
+### [MSG-20261001-07] Gate 7 / ② RUNTIME BUSINESS BLOCKING · claim.submit · R23（REVIEWED_REF 28e0cd9）：VERDICT: **PASS**（claim.submit 本批次收口；下一小批次 = `claim.prepare`）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE: FORMAL_VERDICT
+MESSAGE: MSG-20261001-07
+PREVIOUS: MSG-20261001-06
+GATE: Gate 7 / 授权项② RUNTIME BUSINESS BLOCKING · claim.submit · R23
+HEAD: 28e0cd9
+REVIEWED_REF: 28e0cd9ec517cb013fbbc77034a76e3da1f531e2
+DECISION: PASS（claim.submit 本批次工程验收）
+GATE_STATE: claim.submit 本批次收口；授权项②整体仍 NOT COMPLETE。
+
+1）证据 / TEST
+
+本轮重新读取 
+Issue #2 comment 5923542743 全文、83000df...28e0cd9 差异及当前 CI 日志。
+
+CI run 36805839845 对应受审完整 SHA，五作业 SUCCESS。API 日志确认：
+
+145 files / 1357 tests PASS；
+claim.submit 专项 22/22。
+
+未独立运行本地测试；本机相关回归及类型检查结果按提交方申报登记。
+
+2）KEEP：指定降权验收关闭
+
+用例 20 已使用独立身份：
+
+OWNER 审批；
+另一名 ADMIN 登录执行；
+请求进入真实案件锁等待后，仅执行人降为 FINANCE；
+审批人成员关系保持有效 OWNER；
+释放锁后精确返回 403 FORBIDDEN。
+
+拒绝记录精确核对执行人、stage、reason、Case、Claim、approvalId 和完整 operationId。Claim 保持 DRAFT，提交及批准字段为空，消费和成功业务审计均为零。
+
+该构造已排除审批人降权以及通用资金角色集合拒绝的替代路径。上一轮指定测试缺口关闭。
+
+3）KEEP：拒绝审计失败保护关闭
+
+用例 21 沿用 OWNER 审批人与 ADMIN→FINANCE 执行人分离身份。数据库拒绝写入 claim.submit_rejected 时，仍返回原始 403 FORBIDDEN，没有业务副作用或拒绝留痕行。
+
+结合此前已核对的 ForbiddenError 处理实现，拒绝留痕失败不覆盖原始拒绝的要求关闭。
+
+4）KEEP：正常对照与时序口径接受
+
+用例 22 使用独立 ADMIN 执行人、不降权，在真实 Claim 行锁等待后正常成功，业务审计及消费各一次，无拒绝记录。
+
+需要准确登记：用例 20/21 等待案件锁，用例 22 等待 Claim 行锁，二者不是完全相同的等待构造；本轮按各自证明范围接受，不要求再修改测试。
+
+“等待期间零留痕”已改为辅助证据，结合释放后的结果和源码位置支持锁后重验。此项关闭。
+
+5）CHANGE / RISKS
+
+本轮无剩余阻塞 CHANGE。
+
+此前接受的事务原子性、锁后审批与角色重验、载荷白名单、并发恰一次、关联审计及缺 guard 拒绝继续有效。
+
+本次 PASS 仅覆盖受保护的人工提交跟踪入口：返回 NEEDS_MANUAL，没有实际平台提交。零外写证据仍按源码及适配器注册边界解释，不扩大为生产外写授权。
+
+6）NEXT
+
+允许立即将 claim.submit 登记为 PASS，绑定本裁决完整 SHA，并继续授权项②的下一小批次，无需宿主再次确认。
+
+下一批选择 claim.prepare（内部准备写入）：
+
+先核对真实入口、业务写入及调用路径，再落实 Action Guard 接线；
+保持租户隔离、动作权限、审计失败关闭和默认控制面限制；
+按现有 INTERNAL_WRITE 契约执行，不额外引入人工审批；
+验收拒绝零业务副作用、合法准备结果与审计一致、其他租户及无权限主体拒绝；
+不触发 claim.submit、平台外写或资金动作。
+
+实现、适当测试及 CI 完成后提交七段式审计请求。②整体收口前，不跳入⑤/⑥/⑦，不重开已通过的③。
+
+本裁决仅在本会话输出。Codex 可逐字原文归档并校验 FULL_COPY_OK；我不写入追踪系统。
+
+7）PRODUCTION
+
+Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：全部 HOLD。
+
+本裁决不包含合并、部署或真实平台提交授权。
+```
+
