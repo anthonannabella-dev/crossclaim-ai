@@ -25,6 +25,8 @@ import {
   type PlatformWriteInternalResult,
 } from './response-contract';
 import { buildPlatformWriteSnapshot, deriveIdempotencyKey, snapshotDigest } from './snapshot';
+import { createPrismaPlatformWriteApprovalInTxPort } from './approval-tx-port';
+import { runPlatformWriteAttempt } from './orchestrator';
 import {
   PLATFORM_WRITE_SNAPSHOT_VERSION,
   PLATFORM_WRITE_TARGET_KINDS,
@@ -298,22 +300,46 @@ export async function requestPlatformWrite(
     // 审批指纹绑定：只绑定服务端重算的快照摘要（客户端无法自证）
     payload: { basisReference: bundle.digest },
     perform: async () => {
-      if (!transportEnabled) {
-        // transport 恒关：只登记「需人工处置」，零投递、零账本、不消费审批
-        return {
-          status: 'NEEDS_MANUAL' as const,
-          attemptId: null,
-          sinkCalls: 0,
-          code: 'PLATFORM_WRITE_TRANSPORT_DISABLED',
-        };
+      if (transportEnabled) {
+        // transport 一旦开启必须走 T1（执行权）→ T2（事务外投递）→ T3（独立事务收敛），
+        // 且真实响应语义尚未定义（MSG-20261001-23 CHANGE C）：失败关闭，绝不静默降级。
+        throw new PlatformWriteRequestError(
+          'PLATFORM_WRITE_TRANSPORT_NOT_WIRED',
+          503,
+          'transport 开启路径尚未接线（需真实 adapter 与响应契约单独裁决）',
+        );
       }
-      // transport 一旦开启必须走 T1（执行权）→ T2（事务外投递）→ T3（独立事务收敛）。
-      // 该分支尚未接线：失败关闭，绝不静默降级为「成功」或未定义语义。
-      throw new PlatformWriteRequestError(
-        'PLATFORM_WRITE_TRANSPORT_NOT_WIRED',
-        503,
-        'transport 开启路径尚未接线（需完成 T1/T2/T3 编排并单独裁决）',
+      // HTTP 层唯一执行入口 = 编排器（T1/T2/T3 只能由它触发）。
+      // 门控在编排器内判定：transport 恒关 → 拒绝 → NEEDS_MANUAL，
+      // 零账本、零审批消费、零投递（CHANGE A）。
+      const orchestrated = await runPlatformWriteAttempt(
+        deps.prisma,
+        {
+          approvals: createPrismaPlatformWriteApprovalInTxPort(),
+          // HTTP 层不持有任何 write sink：即使门控被放开也不存在投递面
+          sink: null,
+          // 守卫已放行才会执行到这里（withActionGuard ALLOW）
+          authorizationValid: true,
+        },
+        {
+          organizationId: context.organizationId,
+          caseId: context.caseId,
+          targetKind: bundle.target.targetKind,
+          targetId: bundle.target.targetId,
+          platform,
+          snapshotVersion: bundle.snapshot.version,
+          snapshotDigest: bundle.digest,
+          idempotencyKey: bundle.idempotencyKey,
+          actorUserId: context.actorUserId,
+          approvalId: approvalId ?? null,
+        },
       );
+      return {
+        status: orchestrated.status,
+        attemptId: orchestrated.attemptId,
+        sinkCalls: orchestrated.sinkCalls,
+        code: orchestrated.code ?? null,
+      };
     },
   });
 
@@ -322,6 +348,15 @@ export async function requestPlatformWrite(
       'PLATFORM_WRITE_SINK_CALLED_WITHOUT_TRANSPORT',
       500,
       'transport 关闭时不得发生任何投递',
+    );
+  }
+
+  if (internal.status !== 'NEEDS_MANUAL') {
+    // transport=true 的「已执行」响应语义未定义（MSG-20261001-23 CHANGE C）：不得输出 200
+    throw new PlatformWriteRequestError(
+      'PLATFORM_WRITE_TRANSPORT_NOT_WIRED',
+      503,
+      'transport 已执行路径的响应契约尚未获批',
     );
   }
 

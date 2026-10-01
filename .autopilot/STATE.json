@@ -1,16 +1,16 @@
 {
   "gate": "B2-FIX R1",
-  "head": "f2e1188",
-  "status": "IMPLEMENTING",
+  "head": "fd3956d",
+  "status": "READY_FOR_REVIEW",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
-  "next_task": "执行 MSG-20261001-23 CHANGE B/D：①HTTP→orchestrator 唯一执行入口契约测试（handler 不持有 sink / 不直调 T1 / 不直接消费 approval / 不自造 digest / 无绕过路径）②最小 Golden Path E2E（HTTP → authn → membership/role → Action Guard → server snapshot → approval binding → orchestrator → transport=false → NEEDS_MANUAL；断言 platformWriteExecuted=false / executionDisposition=NEEDS_MANUAL / attempt=0 / approval_consumed=0 / sinkCalls=0 / Payment·Settlement·Billing 不变 + 跨租户与缺审批 fail-closed 对照）→ 全量回归 + CI → 提交 R38 RE-REVIEW",
+  "next_task": "提交 R38 RE-REVIEW（Issue #2 七段式 + ChatGPT 会话唤醒；附 CHANGE B/D 证据与全量回归）→ 等待裁决；若 PASS 则 Integration Boundary Checkpoint 关闭，下一阶段进入 Provider Adapter Readiness / First Provider Design Gate（非自动开启 transport）",
   "send_head": "f2e1188",
   "decision_head": "f2e1188",
   "last_chatgpt_message": "MSG-20261001-23",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T09:06:30.830Z",
-  "previous_head": "f2e1188",
+  "updated_at": "2026-10-01T09:16:24.530Z",
+  "previous_head": "fd3956d",
   "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "f2e1188",
@@ -49,12 +49,12 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-01T08:23:44.400Z",
+  "last_tick_at": "2026-10-01T09:07:17.553Z",
   "state": "IMPLEMENT",
-  "last_action": "MSG-20261001-23 = PASS WITH REVISE 收口（归档 FULL_COPY_OK，92 行逐行一致）",
-  "last_action_at": "2026-10-01T09:06:30.830Z",
-  "next_action": "执行 MSG-20261001-23 CHANGE B/D：①HTTP→orchestrator 唯一执行入口契约测试（handler 不持有 sink / 不直调 T1 / 不直接消费 approval / 不自造 digest / 无绕过路径）②最小 Golden Path E2E（HTTP → authn → membership/role → Action Guard → server snapshot → approval binding → orchestrator → transport=false → NEEDS_MANUAL；断言 platformWriteExecuted=false / executionDisposition=NEEDS_MANUAL / attempt=0 / approval_consumed=0 / sinkCalls=0 / Payment·Settlement·Billing 不变 + 跨租户与缺审批 fail-closed 对照）→ 全量回归 + CI → 提交 R38 RE-REVIEW",
-  "current_head": "f2e1188",
+  "last_action": "MSG-20261001-23 CHANGE B/D 实施完成（HTTP→orchestrator 唯一入口 + 最小 Golden Path E2E）",
+  "last_action_at": "2026-10-01T09:16:24.530Z",
+  "next_action": "提交 R38 RE-REVIEW（Issue #2 七段式 + ChatGPT 会话唤醒；附 CHANGE B/D 证据与全量回归）→ 等待裁决；若 PASS 则 Integration Boundary Checkpoint 关闭，下一阶段进入 Provider Adapter Readiness / First Provider Design Gate（非自动开启 transport）",
+  "current_head": "fd3956d",
   "reviewed_head": "549dba8",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-01T08:12:16.317Z",
-    "gapMs": 688083,
+    "previousTickAt": "2026-10-01T08:23:44.400Z",
+    "gapMs": 2613154,
     "stale": true,
-    "checkedAt": "2026-10-01T08:23:44.400Z"
+    "checkedAt": "2026-10-01T09:07:17.553Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -250,7 +250,7 @@
     "integration_boundary_review": "AUTHORIZED_TO_PLAN（先提交设计/实施计划，不直接开放真实 transport）"
   },
   "r36_submission_comment": "5927087320",
-  "stale_recovered_at": "2026-10-01T08:23:44.400Z",
+  "stale_recovered_at": "2026-10-01T09:07:17.553Z",
   "engineering_regression_policy": {
     "source": "HOST PRODUCT DIRECTION 2026-10-01",
     "doc": "docs/releases/ENGINEERING-REGRESSION-POLICY.md",
@@ -332,5 +332,20 @@
       "D": "本 checkpoint 要建立最小 Golden Path E2E（安全终点 NEEDS_MANUAL；含跨租户与缺审批 fail-closed）并纳入 CI"
     },
     "next_gate": "Provider Adapter Readiness / First Provider Design Gate（Integration Boundary 关闭后，非自动开启 transport）"
+  },
+  "r38_change_bd_batch": {
+    "status": "DONE（待提交 R38 RE-REVIEW）",
+    "change_b": {
+      "entry": "HTTP perform 改为经 runPlatformWriteAttempt（唯一执行入口）；handler 不持有 sink（sink: null）、不直调 ledger T1、不直接消费 approval、不自造可信 digest、无绕过路径",
+      "evidence": "platform-write-golden-path-db.test.ts B1（架构契约：入口只经编排器、T1/T2/T3 仅在 orchestrator）+ platform-write-http-db H9（入口无 sink/orchestrator 反引用的旧断言已按 CHANGE B 更新为「必须经编排器」）",
+      "transport_path": "transport=true 仍 fail-closed（503 PLATFORM_WRITE_TRANSPORT_NOT_WIRED；响应语义未获批，CHANGE C）"
+    },
+    "change_d": {
+      "golden_path": "platform-write-golden-path-db.test.ts D1–D4（真实 HTTP + PostgreSQL）：合法租户/角色/审批 → 200 NEEDS_MANUAL（code=GLOBAL_GATE_DISABLED，证明经编排器门控）+ attempt=0 + approval_consumed=0 + sinkCalls=0 + Payment/Settlement/RecoveryLedger/FeeCalculation/BillingInvoice 均为 0 + Claim 仍 DRAFT；跨租户 404；缺审批 fail-closed；重复提交仍同一安全终点",
+      "ci": "随全量 CI 长期运行（156 files / 1489 tests）"
+    },
+    "regression": "platform-write 家族 71 tests PASS（7 files）；全量 156 files / 1489 tests PASS",
+    "tsc": "PASS",
+    "boundary": "REAL ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写/客户提交 HOLD"
   }
 }

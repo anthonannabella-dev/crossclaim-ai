@@ -455,8 +455,10 @@ describe('R37 P1/P2 — platform.write HTTP 入口（真实 HTTP + PostgreSQL）
       expect(source).not.toMatch(/sink\s*\.\s*submit\s*\(/);
       expect(source).not.toMatch(/deps\s*\.\s*sink/);
     }
-    // 入口模块不得直接引用编排/投递实现：transport 未接线时必须失败关闭
-    expect(httpRequest).not.toContain("from './orchestrator'");
+    // MSG-20261001-23 CHANGE B：入口必须经编排器（唯一执行入口）；
+    // transport=true 路径未接线时仍失败关闭（响应语义未获批）。
+    expect(httpRequest).toContain("from './orchestrator'");
+    expect(httpRequest).toContain('runPlatformWriteAttempt(');
     expect(httpRequest).toContain('PLATFORM_WRITE_TRANSPORT_NOT_WIRED');
   }, 30_000);
 

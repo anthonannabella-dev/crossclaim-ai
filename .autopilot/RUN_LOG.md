@@ -723,3 +723,13 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - CHANGE C：transport=true 成功响应语义本轮不定义。
 - CHANGE D：本 checkpoint 建立最小 Golden Path E2E 并纳入 CI。
 - NEXT：CHANGE B/D → 全量回归 + CI → R38 RE-REVIEW；之后进入 Provider Adapter Readiness / First Provider Design Gate（非自动开启 transport）。
+
+## 2026-10-01 JST — MSG-20261001-23 CHANGE B/D 实施（HTTP→orchestrator 唯一入口 + 最小 Golden Path E2E）
+
+- CHANGE B：`services/platform-write/http-request.ts` 的安全终点改由编排器产出——`perform` → `runPlatformWriteAttempt`（approvals = 事务内审批端口，`sink: null`，authorizationValid=true）；门控拒绝时返回 NEEDS_MANUAL（`code=GLOBAL_GATE_DISABLED`），零账本、零消费、零投递。
+- CHANGE B 契约：入口模块不得出现 acquireExecutionRight / settleAttempt / consumeInTransaction / PlatformWritePort；路由层不得越过入口引用编排或审批端口；T1/T2/T3 仅存在于 orchestrator。
+- CHANGE B 兼容：transport=true 仍 503 `PLATFORM_WRITE_TRANSPORT_NOT_WIRED`；非 NEEDS_MANUAL 结果一律拒绝输出 200（响应语义未获批，MSG-23 CHANGE C）。
+- CHANGE D：新增 `apps/api/src/__tests__/platform-write-golden-path-db.test.ts`（真实 HTTP + PostgreSQL）—— D1 合法链路安全终点且资金对象全不变、D2 跨租户 fail-closed、D3 缺审批 fail-closed、D4 重复提交同一安全终点。
+- 既有断言同步：`platform-write-http-db` 的 H9 由「入口不得引用编排器」更新为「入口必须经编排器且 transport=true 仍失败关闭」（与 MSG-23 CHANGE B 一致）。
+- 回归：platform-write 家族 71 tests PASS（7 files）；全量 156 files / 1489 tests PASS；tsc PASS。
+- 边界：REAL ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写/客户提交 HOLD；未合并 main。

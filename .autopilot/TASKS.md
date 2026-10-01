@@ -145,3 +145,11 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - CHANGE D：本 checkpoint 建立**最小 Golden Path E2E**（安全 Golden Path：HTTP → authn → membership/role → Action Guard → server snapshot → approval binding → orchestrator → transport=false → NEEDS_MANUAL），纳入 CI 作为长期基线。
 - NEXT：完成 CHANGE B/D → 全量回归 + CI → 提交 **R38 RE-REVIEW**（无需再走 Design/Plan）。Integration Boundary 关闭后进入 **Provider Adapter Readiness / First Provider Design Gate**。
 - 期间保持：REAL ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · CUSTOMER SUBMISSION HOLD。
+
+### MSG-20261001-23 CHANGE B/D 实施（2026-10-01）
+
+- CHANGE B（HTTP→orchestrator 唯一执行入口）：`http-request.ts` 的 `perform` 改为调用 `runPlatformWriteAttempt`；handler 不持有 sink（`sink: null`）、不直接调用 ledger T1、不直接消费 approval、不自造可信 digest；`transport=true` 仍 503 fail-closed（响应语义未获批）。
+- CHANGE D（最小 Golden Path E2E）：`platform-write-golden-path-db.test.ts` D1–D4 —— 合法审批 → 200 `platformWriteExecuted=false` / `executionDisposition=NEEDS_MANUAL` / `attempt=0` / `approval_consumed=0` / `sinkCalls=0` / Payment·Settlement·Ledger·Fee·Billing 全 0 / Claim 仍 DRAFT；跨租户 404；缺审批 fail-closed；重复提交同一安全终点。
+- 架构契约：`B1` 断言入口只经编排器、T1/T2/T3 仅存在于 orchestrator；原 P4 的 H9 断言已按 CHANGE B 更新。
+- 回归：platform-write 家族 71 tests PASS；全量 156 files / 1489 tests PASS；tsc PASS。
+- NEXT：提交 R38 RE-REVIEW → PASS 后进入 Provider Adapter Readiness / First Provider Design Gate。
