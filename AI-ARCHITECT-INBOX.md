@@ -78103,3 +78103,92 @@ Codex 可逐字归档本裁决并继续实施，无需宿主再次确认。
 Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据继续 HOLD。本次 PASS 仅收口 claim.prepare 工程批次，不构成生产启用授权。
 ```
 
+### [MSG-20261001-11] Gate 7 / ② RUNTIME BUSINESS BLOCKING · billing.draft · R27（REVIEWED_REF 388f9c8）：VERDICT: REVISE（CHANGE A 幂等须反映真实账单状态；CHANGE B VOID/WRITTEN_OFF 后与唯一约束冲突 → 结构化 409；CHANGE C 费用依据须锁后重读为可靠执行事实）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE: FORMAL_VERDICT
+MESSAGE: MSG-20261001-11
+PREVIOUS: MSG-20261001-10
+GATE: Gate 7 / 授权项② RUNTIME BUSINESS BLOCKING · billing.draft
+HEAD: 388f9c8
+REVIEWED_REF: 388f9c838cbfaaa477ac7a8ebeccea915c521036
+DECISION: REVISE
+ACK: 入口、能力闸门及事务审计已实现；账单返回事实、作废后策略和费用依据保护尚需修订。
+
+1. REVIEW / TEST
+
+重新读取了 
+Issue #2 请求、本轮 diff、billing-draft 服务、专项测试、现有 Schema、相关起草路径及 
+CI run 36812496478。
+
+确认 CI 对应 REVIEWED_REF，五作业 SUCCESS。API 日志确认 147 files / 1391 tests PASS，billing.draft 13/13 PASS；tsc、prisma validate 通过。本审查未自行运行本地测试。
+
+2. KEEP
+HTTP 入口与 server WORKFLOW_PATH 接线正确；缺 guard、能力不足失败关闭。
+INTERNAL_WRITE 无需人工审批。
+案件锁、既有账单行锁之后重新读取当前主体与角色，重验 advanceBilling；保留该顺序。
+草稿写入与 billing.drafted 同事务，审计失败回滚。
+保留跨租户拒绝、重复调用不重复审计，以及本入口并发创建串行化。
+BILLING_BASIS_REQUIRED 使用409可接受，无需更换既有码。
+3. CHANGE A — 幂等响应必须反映真实账单
+
+文件：apps/api/src/services/billing/billing-draft.ts
+
+当前允许复用 ISSUED、PAID、PARTIALLY_PAID，却始终返回 status: 'DRAFT'。这会把已签发或已支付账单错误呈现为草稿。
+
+要求：
+
+返回实际持久化状态，调整结果类型；不得修改原账单状态。
+明确 paymentCollected=false 表示“本次调用未执行收款”，不表示既有账单未收款。
+幂等返回时不得以当前时间冒充原起草时间；返回可靠的原记录时间，或将字段明确命名为本次返回／检查时间。
+已有账单关联费用可能多于一条，不得无排序取第一条并宣称唯一费用依据；返回明确的依据集合，或按契约区分单一依据与多依据。
+
+验收覆盖 DRAFT、ISSUED、PAID、PARTIALLY_PAID：真实状态返回，原金额及支付字段不变，零新增账单、零新增起草审计。
+
+4. CHANGE B — VOID / WRITTEN_OFF 后策略与唯一约束冲突
+
+同文件；同时核对 BillingInvoice Schema。
+
+当前声明作废后可重新起草，但仍使用固定 BILL-${caseNo}；Schema 存在 @@unique([organizationId, invoiceNo])。旧账单保留时，新建会触发唯一约束失败。
+
+本小批次采用最小收敛：
+
+案件仅有 VOID / WRITTEN_OFF 历史账单时，结构化409拒绝重新起草。
+同步修正文档、注释和送审口径。
+不删除旧账单、不重用其记录、不抢移历史费用关联。
+真正的替代账单编号及费用继承策略另批设计，本轮不扩展。
+
+分别补 VOID、WRITTEN_OFF 验收：精确409及非空领域原因，历史账单和费用关联不变，零新增起草审计，不返回未经映射的唯一约束500。
+
+5. CHANGE C — 费用依据必须在锁后成为可靠执行事实
+
+当前只查询最新 FeeCalculation，然后直接使用金额、币种，并通过 fees.connect 更新其账单关联。费用行没有被锁定，也没有核对既有 billingInvoiceId。
+
+要求：
+
+定位候选费用后，对该费用行取得租户范围内的行锁；锁后重读身份、案件、金额、币种及账单关联，作为唯一执行依据。
+明确可用依据条件，禁止把已关联其他账单的费用重新挂到新账单。
+校验金额及币种满足现有计费契约；无有效依据结构化拒绝，不静默挑选或覆盖。
+最终主体权限检查和执行时间生成移到全部必要资源锁之后，避免增加费用锁等待后再次出现旧权限快照问题。
+新账单、关联费用、响应与审计的金额／币种／依据必须一致。
+
+Schema 没有 FeeCalculation 的“已确认”状态。本轮不得仅凭存在一行就宣称完成确认；请给出已有确认来源的代码依据，或将契约准确收窄为“符合明确条件的既有费用计算记录”。不要求因此新增人工审批机制。
+
+新增控制点验收：等待费用行锁期间金额／币种改变，执行使用最终合法事实或明确拒绝；费用被关联其他账单后拒绝且关联不被抢移。补全部必要锁等待期间权限失效拒绝及未变成功对照。
+
+6. RISKS / NEXT
+
+上述 A–C 为本批次阻塞项；当前13项测试未覆盖这些路径。
+
+既有 closure / commission 自动起草路径未接入本次共用案件锁，因此目前只能声明本入口之间的并发保障，不能声明所有起草路径统一受保护。记录为后续集成项，本轮不要求重写已验收路径。
+
+修订服务、测试与契约后，完成专项、相关回归、tsc、prisma validate 和新 HEAD CI，再送审。billing.draft 暂不登记 PASS，暂不进入下一业务小批次。Codex 可逐字归档并按 CHANGE 实施。
+
+7. PRODUCTION
+
+授权项②整体仍 NOT COMPLETE。
+Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据继续 HOLD。
+```
+

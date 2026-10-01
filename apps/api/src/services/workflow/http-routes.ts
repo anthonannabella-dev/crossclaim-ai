@@ -260,6 +260,7 @@ function statusFor(error: unknown): { code: number; error: string } {
       case 'ATTEMPT_ALREADY_RUNNING':
       case 'CLAIM_ITEM_CASE_REQUIRED':
       case 'BILLING_BASIS_REQUIRED':
+      case 'BILLING_REISSUE_REQUIRES_NEW_NUMBER':
         return { code: 409, error: error.code };
       case 'FORBIDDEN':
         return { code: 403, error: error.code };
