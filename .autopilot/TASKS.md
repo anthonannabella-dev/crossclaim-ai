@@ -477,3 +477,11 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - CHANGE C（预登记）：system exact policy 必须「确定性查询 → 受控幂等创建 → unique scope 收敛 → Projection 持久化真实 policyId+version」；禁止隐式 0/0。
 - NEXT：**R45 S2 — ingest only**（ProviderOutcomeFact / ReimbursementFact + identity/fingerprint + replay 幂等 + reversal ingest）；不含 projector、不含人工 outcome 受保护 HTTP。
 - 禁止：Settlement / Billing / Fee / RecoveryLedger 改写 / 平台外写 / transport / 生产凭据。
+
+### R45 S2（Reconciliation ingest）—— Implementation Checkpoint 待裁决
+
+- 交付：identity v1 指纹 + provider outcome / reimbursement ingest（幂等复用 vs fail-closed 区分）+ 19 项新增验收（7 纯函数 / 12 真实 PostgreSQL）。
+- S2 范围纪律：未实现 projector、未开放人工 outcome 受保护 HTTP、零 Schema 变更。
+- 送审：REVIEWED_HEAD 8706b2d（Issue #2 comment 5934172241）。
+- NEXT：PASS → R45 S3（deterministic projector，DELETE → CAS → INSERT）；REVISE → 修订；BLOCK → 停止。
+- 禁止：Settlement / Billing / Fee / RecoveryLedger 改写 / 平台外写 / transport / 生产凭据。

@@ -1161,3 +1161,11 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - CHANGE B：evidenceArtifactIds text[] = v1 有条件方案（写路径逐条验证存在/同租户/类型状态/不重复；checker 检测 dangling·cross-tenant；未来升级关系表）。
 - CHANGE C：system exact policy 不得依赖 migration seed 永久存在（S3 确定性查询/受控幂等创建/unique scope 收敛/Projection 持久化真实 policyId+version；禁止隐式 0/0）。
 - 边界：NO Settlement · NO Billing · NO Fee · NO RecoveryLedger mutation · NO platform write · TRANSPORT=false · NO production credentials。
+
+## 2026-10-02 JST — R45 S2（Reconciliation ingest）实施 + Implementation Checkpoint 送审
+
+- 交付：`services/reconciliation/fingerprint.ts`（v1 身份指纹：provider + sourceResource + eventKind + id/src 身份；两者皆缺失 fail-closed）、`ingest.ts`（ingestProviderOutcomeFact / ingestReimbursementFact；零 UPDATE）、`index.ts`（保留 C-0005 既有跨源对账导出并追加 S2 导出）。
+- 语义：same external event → same existing fact（REUSED，不双计）；同 providerEventId 不同 resource → distinct facts；same reversal replay → REUSED；different reversal event 指向同一 OBSERVED → REVERSAL_ALREADY_APPLIED fail-closed；人工来源 → MANUAL_PATH_DEFERRED（留 S4）。
+- 边界：未实现 projector、未开放人工 outcome 受保护 HTTP、未实现 basis set/supersede、零 Schema 变更。
+- 证据：prisma validate valid · tsc PASS · 指纹纯函数 7/7 · ingest DB 12/12 · C-0005 回归 12/12 · 全量 171 files / 1668 tests PASS。
+- 送审：REVIEWED_HEAD 8706b2d（Issue #2 comment 5934172241）；唤醒已投递并三要素验证（输入框清空 / 新消息在底部 / 生成中）。
