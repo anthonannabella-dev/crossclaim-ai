@@ -44,10 +44,13 @@ interface Seeded {
   claimItemId: string;
   submissionId: string;
   packageDigest: string;
+  userId: string;
 }
 
 /** 直接构造一致的提交数据（含审批审计事件与 package） */
-async function seedConsistentSubmission(overrides: { basisReference?: string } = {}): Promise<Seeded> {
+async function seedConsistentSubmission(
+  overrides: { basisReference?: string; approvalChanges?: Record<string, unknown> } = {},
+): Promise<Seeded> {
   const suffix = randomUUID().replace(/-/g, '').slice(0, 10);
   const org = randomUUID();
   await prisma.organization.create({ data: { id: org, name: 'R43 S5 租户', slug: 'r43-s5-' + suffix } });
@@ -97,6 +100,9 @@ async function seedConsistentSubmission(overrides: { basisReference?: string } =
       packageDigest: 'a'.repeat(64),
     },
   });
+  const basisReference =
+    overrides.basisReference ??
+    `rmp1:${claim.id}:${createdCase.id}:recovery-package/v1:v1:${'a'.repeat(64)}`;
   const approval = await prisma.auditLog.create({
     data: {
       organizationId: org,
@@ -105,12 +111,18 @@ async function seedConsistentSubmission(overrides: { basisReference?: string } =
       action: 'recovery.review_approved',
       entityType: 'Case',
       entityId: createdCase.id,
-      changes: { boundAction: 'recovery.manual_submit' },
+      changes: (overrides.approvalChanges ?? {
+        boundAction: 'recovery.manual_submit',
+        boundPayload: {
+          amount: null,
+          currency: null,
+          basisReference,
+          evidenceArtifactId: null,
+          fingerprintVersion: 'v1',
+        },
+      }) as never,
     },
   });
-  const basisReference =
-    overrides.basisReference ??
-    `rmp1:${claim.id}:${createdCase.id}:recovery-package/v1:v1:${'a'.repeat(64)}`;
   const submission = await prisma.recoveryManualSubmission.create({
     data: {
       organizationId: org,
@@ -131,6 +143,7 @@ async function seedConsistentSubmission(overrides: { basisReference?: string } =
     claimItemId: claim.id,
     submissionId: submission.id,
     packageDigest: 'a'.repeat(64),
+    userId: user.id,
   };
 }
 
@@ -214,3 +227,135 @@ async function snapshot(organizationId: string) {
   ]);
   return { claimItems, submissions, evidences, references, packages, audits };
 }
+
+/**
+ * R43 S6（MSG-20261001-38）—— CHANGE A：approval 语义强校验；CHANGE B：真实可制造漂移
+ * 原则：DB 接受的业务不一致（不绕过 FK / 不绕过 append-only 触发器）→ checker 必须拒绝 → checker 零修复。
+ */
+describe('R43 S6 — approval 语义强校验与可制造漂移', () => {
+  it('S6-A1 approval 绑定动作不是 recovery.manual_submit → INCONSISTENT[5c]', async () => {
+    const seeded = await seedConsistentSubmission({
+      approvalChanges: {
+        boundAction: 'claim.submit',
+        boundPayload: {
+          amount: null,
+          currency: null,
+          basisReference: 'rmp1:other:other:recovery-package/v1:v1:' + 'c'.repeat(64),
+          evidenceArtifactId: null,
+          fingerprintVersion: 'v1',
+        },
+      },
+    });
+    const before = await snapshot(seeded.org);
+    await expect(runChecker()).rejects.toThrow(/INCONSISTENT\[5c\]/);
+    expect(await snapshot(seeded.org)).toEqual(before);
+  });
+
+  it('S6-A2 approval 的 versioned basis 与 submission 保存值不一致（他案/他包 approval）→ INCONSISTENT[5c]', async () => {
+    await seedConsistentSubmission({
+      approvalChanges: {
+        boundAction: 'recovery.manual_submit',
+        boundPayload: {
+          amount: null,
+          currency: null,
+          basisReference: 'rmp1:another-claim:another-case:recovery-package/v1:v1:' + 'd'.repeat(64),
+          evidenceArtifactId: null,
+          fingerprintVersion: 'v1',
+        },
+      },
+    });
+    await expect(runChecker()).rejects.toThrow(/INCONSISTENT\[5c\]/);
+  });
+
+  it('S6-A3 approval 目标不是本单位 Case / 缺少 fingerprintVersion → INCONSISTENT[5c]', async () => {
+    const seeded = await seedConsistentSubmission({
+      approvalChanges: {
+        boundAction: 'recovery.manual_submit',
+        boundPayload: { amount: null, currency: null, basisReference: 'x', evidenceArtifactId: null },
+      },
+    });
+    await expect(runChecker()).rejects.toThrow(/INCONSISTENT\[5c\]/);
+    expect(seeded.submissionId).toBeTruthy();
+  });
+
+  it('S6-B1 非 canonical reference：数据库 CHECK 直接 fail-closed（不绕过约束；checker 8a 为纵深防御）', async () => {
+    const seeded = await seedConsistentSubmission();
+    let rejection = '';
+    try {
+      await prisma.recoveryManualSubmissionReference.create({
+        data: {
+          organizationId: seeded.org,
+          submissionId: seeded.submissionId,
+          providerCaseRefRaw: '  CASE-S6-B1  ',
+          providerCaseRefCanonical: '  CASE-S6-B1  ',
+          recordedByUserId: seeded.userId,
+        },
+      });
+    } catch (error) {
+      rejection = String(error);
+    }
+    // 数据库本身不允许该状态存在（CHECK canonical_shape）→ 满足 MSG-38「不要求绕过 FK/约束制造非法状态」
+    expect(rejection).toMatch(/canonical_shape|23514/);
+    expect(await prisma.recoveryManualSubmissionReference.count({ where: { organizationId: seeded.org } })).toBe(0);
+    // checker 在该（数据库强制合法）状态下保持 clean；8a 是纵深防御，静态断言其守卫存在
+    await expect(runChecker()).resolves.toBeUndefined();
+    expect(checkerSql).toContain('INCONSISTENT[8a]');
+  });
+
+  it('S6-B3 同一租户重复 canonical reference：数据库 UNIQUE 兜底 fail-closed', async () => {
+    const seeded = await seedConsistentSubmission();
+    await prisma.recoveryManualSubmissionReference.create({
+      data: {
+        organizationId: seeded.org,
+        submissionId: seeded.submissionId,
+        providerCaseRefRaw: 'CASE-S6-B3',
+        providerCaseRefCanonical: 'CASE-S6-B3',
+        recordedByUserId: seeded.userId,
+      },
+    });
+    await expect(runChecker()).resolves.toBeUndefined();
+    let rejection = '';
+    try {
+      await prisma.recoveryManualSubmissionReference.create({
+        data: {
+          organizationId: seeded.org,
+          submissionId: seeded.submissionId,
+          providerCaseRefRaw: 'case-s6-b3',
+          providerCaseRefCanonical: 'CASE-S6-B3',
+          recordedByUserId: seeded.userId,
+        },
+      });
+    } catch (error) {
+      rejection = String(error);
+    }
+    expect(rejection).toMatch(/Unique|23505|providerCaseRefCanonical/);
+  });
+  it('S6-B2 DB 允许的 reference 租户漂移（organizationId ≠ submission 租户）→ INCONSISTENT[7] 或数据库 fail-closed', async () => {
+    const seeded = await seedConsistentSubmission();
+    const otherOrg = randomUUID();
+    await prisma.organization.create({
+      data: { id: otherOrg, name: 'R43 S6 他租户', slug: 'r43-s6-' + randomUUID().replace(/-/g, '').slice(0, 10) },
+    });
+    let inserted = false;
+    try {
+      await prisma.recoveryManualSubmissionReference.create({
+        data: {
+          organizationId: otherOrg,
+          submissionId: seeded.submissionId,
+          providerCaseRefRaw: 'CASE-S6-B2',
+          providerCaseRefCanonical: 'CASE-S6-B2',
+          recordedByUserId: seeded.userId,
+        },
+      });
+      inserted = true;
+    } catch {
+      inserted = false;
+    }
+    if (inserted) {
+      await expect(runChecker()).rejects.toThrow(/INCONSISTENT\[7\]/);
+    } else {
+      // 数据库/触发器直接拒绝该状态 → 等价于 fail-closed，不需要 checker 兜底
+      await expect(runChecker()).resolves.toBeUndefined();
+    }
+  });
+});

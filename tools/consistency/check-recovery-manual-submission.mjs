@@ -9,6 +9,8 @@
 //   - 人工制造的漂移 → RAISE EXCEPTION → psql 非零退出码
 //   - 第 9 项（package 终态与历史 submission 的关系）作为**事实关系**在 NOTICE 中报告，不判失败、不修改
 // 检查项 1–8 / 10–12 见 buildRecoveryManualConsistencySql 内的注释与 SQL。
+// R43 S6（MSG-20261001-38 CHANGE A）：第 5c 项为 approval 语义强校验（同租户 / 目标 Case /
+// boundAction=recovery.manual_submit / boundPayload.basisReference=versioned basis / fingerprintVersion=v1）。
 
 export function buildRecoveryManualConsistencySql() {
   return `DO $$
@@ -78,6 +80,24 @@ BEGIN
           AND a.action = 'recovery.review_approved');
   IF v IS NOT NULL THEN
     RAISE EXCEPTION 'INCONSISTENT[5b] submission approval event missing: %', v;
+  END IF;
+
+  -- 5c) approval 语义强校验（R43 S6 / MSG-20261001-38 CHANGE A）：
+  --     授权当前 submission 的那次 approval 必须 —— 同租户、事件族 = recovery.review_approved、
+  --     目标（entityType/entityId）= 本单位 Case、boundAction = recovery.manual_submit、
+  --     boundPayload.basisReference = 本 submission 保存的 versioned basis（五元复合串，天然排除他案/他包 approval）、
+  --     boundPayload.fingerprintVersion = v1。任一不满足即视为数据库不一致（fail-closed）。
+  SELECT string_agg(s.id, ', ') INTO v
+    FROM "RecoveryManualSubmission" s
+    JOIN "AuditLog" a ON a.id = s."approvalId" AND a."organizationId" = s."organizationId"
+   WHERE a.action IS DISTINCT FROM 'recovery.review_approved'
+      OR a."entityType" IS DISTINCT FROM 'Case'
+      OR a."entityId" IS DISTINCT FROM s."caseId"
+      OR (a.changes ->> 'boundAction') IS DISTINCT FROM 'recovery.manual_submit'
+      OR (a.changes -> 'boundPayload' ->> 'basisReference') IS DISTINCT FROM s."approvalBasisReference"
+      OR (a.changes -> 'boundPayload' ->> 'fingerprintVersion') IS DISTINCT FROM 'v1';
+  IF v IS NOT NULL THEN
+    RAISE EXCEPTION 'INCONSISTENT[5c] submission approval binding mismatch: %', v;
   END IF;
 
   -- 6) SubmissionEvidence 全部同租户且引用有效
