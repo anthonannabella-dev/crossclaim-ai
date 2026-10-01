@@ -22,6 +22,10 @@ const readJson = (p, fallback) => {
 };
 
 const state = readJson(AP + '/STATE.json', { gate: 'UNKNOWN', status: 'UNKNOWN', head: null });
+/** .autopilot 持久自治规则（宿主 Directive 2026-10-01）：缺失即视为规则丢失，必须显式回执 */
+const AUTOPILOT_RULES = readJson(AP + '/rules.json', null);
+if (!AUTOPILOT_RULES) state.rules_missing = true;
+else delete state.rules_missing;
 const tasksText = fs.readFileSync(AP + '/TASKS.md', 'utf8');
 const pending = tasksText
   .split(/\r?\n/)
@@ -85,6 +89,20 @@ const heartbeat = {
   state_machine: state.state ?? null,
   next_action: state.next_action ?? pending[0] ?? null,
   continue_required: (state.state ?? '') === 'IMPLEMENT' && Boolean(state.next_action),
+  rules_loaded: Boolean(AUTOPILOT_RULES),
+  arch_review_policy: {
+    rules_file: AUTOPILOT_RULES?.rules_file ?? '.autopilot/RULES.md',
+    incremental_audit: AUTOPILOT_RULES?.incremental_audit ?? null,
+    continue_when_no_new_risk: AUTOPILOT_RULES?.continue_when_arch_review_required_false ?? null,
+    no_verdict_is_not_stop: AUTOPILOT_RULES?.no_verdict_is_not_stop ?? null,
+    frozen_foundation_count: Array.isArray(AUTOPILOT_RULES?.frozen_foundation)
+      ? AUTOPILOT_RULES.frozen_foundation.length
+      : 0,
+    arch_review_triggers: AUTOPILOT_RULES?.arch_review_triggers ?? [],
+    allowed_stop_conditions: AUTOPILOT_RULES?.allowed_stop_conditions ?? [],
+    forbidden_stop_reasons: AUTOPILOT_RULES?.forbidden_stop_reasons ?? [],
+    status_fields: AUTOPILOT_RULES?.status_fields ?? [],
+  },
   boundary: {
     production_enabled: false,
     external_write_enabled: false,

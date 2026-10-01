@@ -1,0 +1,76 @@
+{
+  "version": 1,
+  "source": "HOST DIRECTIVE 2026-10-01「冻结底座 + 加速交付」",
+  "effective": "persistent (every tick / after session or runner restart)",
+  "rules_file": ".autopilot/RULES.md",
+  "policy_doc": "docs/releases/DELIVERY-ACCELERATION-POLICY.md",
+  "frozen_foundation": [
+    "Tenant / Organization 隔离",
+    "Case / Recovery 主状态机",
+    "Approval / HITL",
+    "Action Guard",
+    "Audit Log",
+    "Transaction / CAS / Row Lock",
+    "幂等与并发控制",
+    "Recovery / Reconcile",
+    "权限重验与审批消费机制",
+    "R43 Manual Recovery Persistence (S1–S6, MSG-20261001-39 CLOSED)",
+    "Platform Write Attempt Ledger (PG1–PG10, MSG-20261001-21 PASS)"
+  ],
+  "arch_review_triggers": [
+    "Schema 实质变化",
+    "租户隔离边界变化",
+    "权限模型变化",
+    "审批 / HITL 边界变化",
+    "真实外部写操作变化",
+    "资金 / 结算 / 扣费变化",
+    "幂等 / 事务 / 并发一致性边界变化",
+    "安全边界变化"
+  ],
+  "incremental_audit": true,
+  "continue_when_arch_review_required_false": true,
+  "no_verdict_is_not_stop": true,
+  "forbidden_stop_reasons": [
+    "无新 ChatGPT 裁决",
+    "等待裁决",
+    "等待宿主状态确认"
+  ],
+  "allowed_stop_conditions": [
+    "READY_FOR_REVIEW",
+    "HOST_ACTION_REQUIRED",
+    "ARCHITECT_BLOCK",
+    "UNRESOLVED_TECHNICAL_BLOCK"
+  ],
+  "cadence": "IMPLEMENT → targeted tests → commit → CI → 风险分类",
+  "queue_policy": "follow .autopilot/TASKS.md order; no re-planning; no rollback; already-closed steps are not reopened",
+  "reuse_first": [
+    "仓库现有实现",
+    "旧 zhuihuiweikuan-saas（只读）",
+    "成熟 MIT / Apache-2.0 组件",
+    "现有库"
+  ],
+  "orchestration_boundary": "n8n/Activepieces 仅限外围自动化；核心事务（索赔提交/审批消费/资金结算/关键状态迁移）禁止进低代码工作流",
+  "status_fields": [
+    "FOUNDATION_REUSED",
+    "NEW_RISK_BOUNDARY",
+    "ARCH_REVIEW_REQUIRED"
+  ],
+  "submission_record_contract": {
+    "requires_risk_classification": true,
+    "arch_review_yes_requires_trigger": true
+  },
+  "holds": [
+    "PRODUCTION ENABLEMENT HOLD",
+    "REAL EXTERNAL WRITE HOLD",
+    "REAL MONEY HOLD",
+    "CUSTOMER SUBMISSION HOLD",
+    "PRODUCTION CREDENTIALS HOLD",
+    "AMAZON WRITE HOLD",
+    "REAL WRITE ADAPTER HOLD",
+    "TRANSPORT=false",
+    "SETTLEMENT/BILLING LINKAGE HOLD"
+  ],
+  "enforced_from_submission_keys": [
+    "r44_submission"
+  ]
+}

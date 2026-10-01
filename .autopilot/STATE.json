@@ -1,6 +1,6 @@
 {
   "gate": "B2-FIX R1",
-  "head": "219a67c",
+  "head": "ea2adc2",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
   "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
@@ -10,7 +10,7 @@
   "production_enabled": false,
   "external_write_enabled": false,
   "updated_at": "2026-10-01T12:45:41.734Z",
-  "previous_head": "3a68d17",
+  "previous_head": "219a67c",
   "architect_decision_pending": true,
   "blocked_scope": null,
   "last_send_head": "219a67c",
@@ -49,9 +49,9 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-01T12:36:09.809Z",
+  "last_tick_at": "2026-10-01T12:46:54.821Z",
   "state": "IMPLEMENT",
-  "last_action": "R44 Manual Recovery HTTP/API Boundary 已实现并送审（增量风险审计：仅入口边界）—— 10 个真库 HTTP 用例；recovery-manual 69/69 + action-guard 62/62；来源入口层零事务（静态探针）；等待架构方裁决",
+  "last_action": "SCHEDULER_STALE_RECOVERED（gap=11min）→ 本轮已恢复执行",
   "last_action_at": "2026-10-01T12:45:41.734Z",
   "next_action": "等待 R44 增量裁决（PASS → 入口边界收口并按 HOST DIRECTIVE 直接进入下一执行单元；REVISE → 按 CHANGE 修改重送；BLOCK → 停止该入口）。并行准备 R45（Outcome / Reimbursement Reconciliation）设计与 Schema Delta Request（docs-only，可先做，不触碰已冻结底座）。",
   "current_head": "219a67c",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-01T12:36:04.308Z",
-    "gapMs": 5501,
+    "previousTickAt": "2026-10-01T12:46:42.153Z",
+    "gapMs": 12670,
     "stale": false,
-    "checkedAt": "2026-10-01T12:36:09.809Z"
+    "checkedAt": "2026-10-01T12:46:54.821Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -250,7 +250,7 @@
     "integration_boundary_review": "AUTHORIZED_TO_PLAN（先提交设计/实施计划，不直接开放真实 transport）"
   },
   "r36_submission_comment": "5927087320",
-  "stale_recovered_at": "2026-10-01T12:36:04.308Z",
+  "stale_recovered_at": "2026-10-01T12:46:42.153Z",
   "engineering_regression_policy": {
     "source": "HOST PRODUCT DIRECTION 2026-10-01",
     "doc": "docs/releases/ENGINEERING-REGRESSION-POLICY.md",
@@ -1118,7 +1118,11 @@
       "REAL WRITE ADAPTER HOLD",
       "TRANSPORT=false",
       "SETTLEMENT/BILLING LINKAGE HOLD"
-    ]
+    ],
+    "persistent_rules_md": ".autopilot/RULES.md",
+    "persistent_rules_json": ".autopilot/rules.json",
+    "enforced_by": "tools/autopilot/runner.mjs（每轮写入 HEARTBEAT）+ tools/autopilot/check-autopilot-rules.mjs（CI）",
+    "survives_restart": true
   },
   "r44_submission": {
     "submission_comment": "5931742832",
@@ -1132,15 +1136,16 @@
       "gates": "tsc PASS；api-contract OK；prisma validate valid（未改 Schema）"
     },
     "risk_classification": {
-      "FOUNDATION_REUSED": "R43 S1–S6 持久化底座 + platform.write 入口范式",
-      "NEW_RISK_BOUNDARY": "YES（新增两个对外 HTTP 入口）",
-      "ARCH_REVIEW_REQUIRED": "YES（增量：仅入口边界 / 请求契约 / 错误映射 / 零副作用证据）"
+      "FOUNDATION_REUSED": "R43 S1–S6 持久化底座（package/versioned basis builder、S3 原子提交、S4 补录、Action Guard/HITL、审计与租户触发器）+ platform.write 入口范式",
+      "NEW_RISK_BOUNDARY": "YES —— 新增两个对外 HTTP 入口（manual-submit / manual-reference）",
+      "ARCH_REVIEW_REQUIRED": "YES —— 触发项：安全边界变化（新增对外入口面）；仅送增量（入口边界 / 请求契约 / 错误映射 / 零副作用证据），不重复送审已 PASS 底座"
     },
     "known_gaps": [
       "recovery.manual_submit 审批的创建入口尚未暴露（reviewRecovery 拒绝该 boundAction）→ 独立批次",
       "R45 outcome/reimbursement reconciliation、R46 Settlement/Billing linkage → 各自独立批次"
     ],
     "wakeup_channel": "https://chatgpt.com/c/6ab9ee1b-fd54-83ee-b363-b67750afcedd",
-    "wakeup_delivery": "DELIVERED_VERIFIED（输入框清空 / 新用户消息在底部 / 生成中）"
+    "wakeup_delivery": "DELIVERED_VERIFIED（输入框清空 / 新用户消息在底部 / 生成中）",
+    "submitted_under_rules": true
   }
 }

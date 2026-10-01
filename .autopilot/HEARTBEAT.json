@@ -2,20 +2,54 @@
   "runner_status": "RUNNING",
   "current_gate": "B2-FIX R1",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
-  "current_head": "309fdd3",
-  "last_action": "SCHEDULER_STALE_RECOVERED（gap=33min）→ 本轮已恢复执行",
-  "last_action_at": "2026-10-01T12:36:09.809Z",
-  "next_action": "R44 — Manual Recovery HTTP/API Boundary：先提交实现计划/边界送审（authn → tenant/role → action guard → 服务端 package/basis 解析 → 复用 S3/S4 服务 → 响应语义；跨租户 404、客户端不得自证 digest/basis、重复/并发、错误 package/reference binding、失败零推进、handler 不复制事务逻辑）。R44 不得实现 outcome/reimbursement reconciliation、不得联动 Settlement/Billing、不得开启任何 Amazon write transport。",
+  "current_head": "ea2adc2",
+  "last_action": "SCHEDULER_STALE_RECOVERED（gap=11min）→ 本轮已恢复执行",
+  "last_action_at": "2026-10-01T12:46:54.823Z",
+  "next_action": "等待 R44 增量裁决（PASS → 入口边界收口并按 HOST DIRECTIVE 直接进入下一执行单元；REVISE → 按 CHANGE 修改重送；BLOCK → 停止该入口）。并行准备 R45（Outcome / Reimbursement Reconciliation）设计与 Schema Delta Request（docs-only，可先做，不触碰已冻结底座）。",
   "retry_count": 0,
   "last_error": null,
   "reconcile": "IN_SYNC",
   "remaining_tasks": 2,
   "automation_status": "ACTIVE",
   "interval_minutes": 5,
-  "tick_at": "2026-10-01T12:36:09.809Z",
+  "tick_at": "2026-10-01T12:46:54.821Z",
   "schedule_stale_previous": false,
   "state_machine": "IMPLEMENT",
   "continue_required": true,
+  "rules_loaded": true,
+  "arch_review_policy": {
+    "rules_file": ".autopilot/RULES.md",
+    "incremental_audit": true,
+    "continue_when_no_new_risk": true,
+    "no_verdict_is_not_stop": true,
+    "frozen_foundation_count": 11,
+    "arch_review_triggers": [
+      "Schema 实质变化",
+      "租户隔离边界变化",
+      "权限模型变化",
+      "审批 / HITL 边界变化",
+      "真实外部写操作变化",
+      "资金 / 结算 / 扣费变化",
+      "幂等 / 事务 / 并发一致性边界变化",
+      "安全边界变化"
+    ],
+    "allowed_stop_conditions": [
+      "READY_FOR_REVIEW",
+      "HOST_ACTION_REQUIRED",
+      "ARCHITECT_BLOCK",
+      "UNRESOLVED_TECHNICAL_BLOCK"
+    ],
+    "forbidden_stop_reasons": [
+      "无新 ChatGPT 裁决",
+      "等待裁决",
+      "等待宿主状态确认"
+    ],
+    "status_fields": [
+      "FOUNDATION_REUSED",
+      "NEW_RISK_BOUNDARY",
+      "ARCH_REVIEW_REQUIRED"
+    ]
+  },
   "boundary": {
     "production_enabled": false,
     "external_write_enabled": false,

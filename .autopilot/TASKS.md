@@ -1,6 +1,9 @@
 
 ### HOST DIRECTIVE 2026-10-01「冻结底座 + 加速交付」（长期有效）
 
+- **持久自治规则（跨轮次/会话/runner 重启生效）**：`.autopilot/RULES.md` + `.autopilot/rules.json`；runner 每轮写入 HEARTBEAT，CI 由 `tools/autopilot/check-autopilot-rules.mjs` 校验。
+- `ARCH_REVIEW_REQUIRED = NO` ⇒ 直接进入下一执行单元，**不得以「无新裁决」停止或空转**；合法停止条件仅 READY_FOR_REVIEW / HOST_ACTION_REQUIRED / ARCHITECT_BLOCK / UNRESOLVED_TECHNICAL_BLOCK。
+
 - 策略文档：`docs/releases/DELIVERY-ACCELERATION-POLICY.md`；AGENTS.md §三·五。
 - 节奏：IMPLEMENT → targeted tests → commit → CI → 风险分类；未触碰高风险边界则直接进入下一执行单元（不空转等裁决）。
 - 审计：增量风险审计（只交本轮新增/变化边界 + 证据）；已 PASS 且未变化的底座不再重复送审。
