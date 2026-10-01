@@ -315,3 +315,12 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - DECISION：**PASS**（REVIEWED_HEAD 6b5ec65；归档 FULL_COPY_OK）。S4 正式关闭。
 - NEXT：**R43 S5**：`tools/consistency/check-recovery-manual-submission.mjs` 12 项只读检查；CI 同时覆盖 fresh deploy / upgrade path / clean / intentional-drift；不得 repair mode。
 - 保持：AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · SETTLEMENT/BILLING LINKAGE HOLD。
+
+### MSG-20261001-38 裁决（R43 S5 关闭 → R43 S6 全量回归收口）
+
+- DECISION：**PASS WITH REVISE**（REVIEWED_HEAD a2c4306；归档 FULL_COPY_OK）。S5 关闭，无需单独 S5 RE-REVIEW。
+- 认可：checker 纯只读（DETECT ≠ REPAIR 为长期不变量，后续禁加 --fix/自动修复）；clean→0、漂移→非零；fresh + upgrade 双路径；终态 package → NOTICE 事实报告。
+- S6 必须补：CHANGE A（approval 语义强校验映射/补齐）+ CHANGE B（DB 接受的业务漂移 fixture → checker 拒绝 → zero repair）。
+- S6 报告矩阵：M1–M20 / PG1–PG10 / H1–H9 / D1–D4 / S2–S5 基线 / fresh migration / two-stage upgrade / trigger inventories / architecture contract / tsc / prisma validate / 全量 suite；不得用 skip/放宽断言/删除历史测试收绿。
+- NEXT：**R43 S6 — Full Regression / Release Checkpoint**（不新增产品能力）→ 最终 R43 Implementation Checkpoint（由架构方判定 R43 是否整体关闭）。
+- 保持：AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · SETTLEMENT/BILLING LINKAGE HOLD。

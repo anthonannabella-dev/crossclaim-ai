@@ -1,21 +1,21 @@
 {
   "gate": "B2-FIX R1",
-  "head": "18cbf8b",
+  "head": "a2c4306",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
   "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
   "send_head": "07b7009",
   "decision_head": "07b7009",
-  "last_chatgpt_message": "MSG-20261001-37",
+  "last_chatgpt_message": "MSG-20261001-38",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T11:59:52.269Z",
-  "previous_head": "6b5ec65",
+  "updated_at": "2026-10-01T12:04:50.743Z",
+  "previous_head": "18cbf8b",
   "architect_decision_pending": false,
   "blocked_scope": null,
-  "last_send_head": "6b5ec65",
+  "last_send_head": "a2c4306",
   "last_sent_at": "2026-10-01T11:58:01.792Z",
-  "last_sent_fingerprint": "R43-S4:Provider-Case-Reference-Canonical-Backfill",
+  "last_sent_fingerprint": "R43-S5:Read-Only-Consistency-Checker",
   "final_head": "1144401",
   "ci_run": "36833002042",
   "ci_result": "SUCCESS",
@@ -49,12 +49,12 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-01T11:58:44.149Z",
+  "last_tick_at": "2026-10-01T12:03:15.518Z",
   "state": "IMPLEMENT",
-  "last_action": "MSG-20261001-37 = PASS 已逐字归档并 FULL_COPY_OK —— R43 S4 正式关闭；下一批 = R43 S5（只读一致性 checker + CI 接线，不得实现 repair mode）",
-  "last_action_at": "2026-10-01T11:59:52.269Z",
-  "next_action": "R43 S5 — Read-only Consistency Checker + CI：实现 tools/consistency/check-recovery-manual-submission.mjs（12 项只读检查；JSON/退出码；无写入路径），CI 同时覆盖 fresh deploy / upgrade path / clean check / intentional-drift 发现能力；完成后进入 S6 全量回归收口（M1–M20 + PG1–PG10 + H1–H9 + D1–D4）。",
-  "current_head": "18cbf8b",
+  "last_action": "MSG-20261001-38 = PASS WITH REVISE 已逐字归档并 FULL_COPY_OK —— R43 S5 关闭（无需 S5 RE-REVIEW）；NEXT = R43 S6 全量回归收口（含 CHANGE A approval 语义强校验映射 + CHANGE B 真实可制造漂移覆盖；不得 skip/放宽断言收绿）",
+  "last_action_at": "2026-10-01T12:04:50.743Z",
+  "next_action": "R43 S6 — Full Regression / Release Checkpoint：不新增产品能力。① 补 CHANGE A（approval 语义强校验：org/approvalId/action=recovery.manual_submit/versioned basis 一致/非他案 approval）与 CHANGE B（DB 接受的业务漂移 fixture → checker 拒绝 → zero repair）；② 输出矩阵 M1–M20 / PG1–PG10 / H1–H9 / D1–D4 / S2–S5 基线 / fresh migration / two-stage upgrade / trigger inventories / architecture contract / tsc / prisma validate / 全量 suite；③ 提交最终 R43 Implementation Checkpoint。",
+  "current_head": "a2c4306",
   "reviewed_head": "07b7009",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-01T11:52:44.258Z",
-    "gapMs": 359891,
+    "previousTickAt": "2026-10-01T11:58:44.149Z",
+    "gapMs": 271369,
     "stale": false,
-    "checkedAt": "2026-10-01T11:58:44.149Z"
+    "checkedAt": "2026-10-01T12:03:15.518Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -956,5 +956,57 @@
     ],
     "s5_boundary": "detect ≠ repair：不得实现 repair mode",
     "next": "R43 S5 → S6 全量 M1–M20 + PG1–PG10 + H1–H9 + D1–D4 回归收口"
+  },
+  "r43s5_submission": {
+    "submission_comment": "5930927792",
+    "ci_run": "36859106365",
+    "reviewed_head": "a2c4306",
+    "module": "tools/consistency/check-recovery-manual-submission.mjs",
+    "test": "apps/api/src/__tests__/recovery-manual-consistency-checker-db.test.ts（5 个用例覆盖 12 项检查）",
+    "shape": "buildRecoveryManualConsistencySql() 生成单个 DO $$ … $$ 块；CLI 仅打印 SQL；clean → psql 退出码 0；漂移 → RAISE EXCEPTION → 非零；无写入语句（静态断言）",
+    "evidence": {
+      "s5_tests": "5/5 PASS（真实 PostgreSQL）",
+      "local_psql": "NOTICE OK（submissions=0, references=0），退出码 0",
+      "ci_paths": "fresh deploy（ci.yml 独立步骤）+ upgrade path（two-stage-upgrade.mjs）",
+      "tsc": "PASS"
+    },
+    "wakeup_channel": "https://chatgpt.com/c/6ab9ee1b-fd54-83ee-b363-b67750afcedd",
+    "wakeup_delivery": "DELIVERED_VERIFIED（输入框清空 / 新用户消息在底部）"
+  },
+  "r43s5_verdict": {
+    "message_id": "MSG-20261001-38",
+    "decision": "PASS WITH REVISE",
+    "reviewed_head": "a2c4306",
+    "archival": "FULL_COPY_OK",
+    "archival_at": "2026-10-01T12:04:50.743Z",
+    "status": "S5 CLOSED（无需 S5 RE-REVIEW，直接进入 S6）",
+    "rulings": {
+      "detect_not_repair": "认可 12 项检查 + DETECT ≠ REPAIR 为长期不变量：后续不得给该 checker 增加 --fix / 自动 UPDATE / 自动去重；若确需修复工具，作为独立受控批次设计",
+      "terminal_package_notice": "认可终态 package → NOTICE：package 后续被 supersede/withdraw 不会让此前合法 submission 变成“从未发生”，不得因此判数据库损坏",
+      "s5_close": "YES —— 进入 S6 全量收口"
+    },
+    "changes": {
+      "A": "S6 补一条 approval 语义的强校验回归：organization 一致 / approvalId 一致 / action = recovery.manual_submit / basisReference 与 submission 保存的 versioned basis 一致 / approval 不是另一个 ClaimItem·package 的合法 approval（现有 SQL 已覆盖则只给 test-name 映射，未覆盖则补 checker）",
+      "B": "S6 增加“真实可制造漂移”的 checker 覆盖：至少一组 DB 允许存在但业务不一致的漂移（Submission/ClaimItem 状态不一致 / basis 不一致 / approval binding 不一致 / canonical·reference 业务不一致），证明 DB accepts fixture → checker rejects → zero repair；不要求绕过 FK 制造数据库本身不允许的状态"
+    },
+    "test_matrix_required": [
+      "M1–M20",
+      "PG1–PG10",
+      "H1–H9",
+      "D1–D4",
+      "S2 canonical/digest 基线",
+      "S3 transaction-failure injection 基线",
+      "S4 canonical reference/concurrency 基线",
+      "S5 clean + intentional-drift checker",
+      "fresh migration",
+      "two-stage upgrade",
+      "trigger inventories",
+      "architecture contract",
+      "tsc",
+      "prisma validate",
+      "全量 suite"
+    ],
+    "no_greenwashing": "任何失败不得用跳过测试、放宽断言或删除历史安全测试来“收绿”",
+    "next": "R43 S6 — Full Regression / Release Checkpoint（不新增产品能力）；完成后提交最终 R43 Implementation Checkpoint，报告 REVIEWED_HEAD / CI / M1–M20 mapping / PG1–PG10 / H1–H9 / D1–D4 / full-suite counts / migration+upgrade / trigger inventories / consistency checker / known remaining gaps"
   }
 }

@@ -954,3 +954,20 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 非阻塞建议：未来新增动作优先“动作/命令”命名；报告口径 = 实际 test case 数 + acceptance 条目数。
 - 档案：`AI-ARCHITECT-INBOX.md` → `MSG-20261001-37`；`tools/verdict-diff/compare.mjs` = **FULL_COPY_OK**。
 - NEXT：**R43 S5 — Read-only Consistency Checker + CI**（12 项只读检查 + CI fresh/upgrade/clean/drift）；S5 不得实现 repair mode；完成后 S6 全量回归收口。
+
+## 2026-10-01 JST — R43 S5（只读一致性 checker + CI 接线）实现 + Checkpoint 送审
+
+- 交付：`tools/consistency/check-recovery-manual-submission.mjs`（12 项只读检查，`buildRecoveryManualConsistencySql()` 生成单个 DO 块，CLI 仅打印 SQL）+ `recovery-manual-consistency-checker-db.test.ts` 5 项 + CI 与 two-stage upgrade 双路径接线。
+- 语义：clean → psql 退出码 0；人工漂移 → RAISE EXCEPTION → 非零；生成 SQL 不含任何写语句（INSERT/UPDATE/DELETE/ALTER/DROP/TRUNCATE）；**不实现 repair mode**。
+- 证据：S5 5/5 PASS（真实 PostgreSQL）；本地 psql clean 实测退出码 0（NOTICE OK）；TWO_STAGE_UPGRADE_OK（含 checker upgrade path）；tsc PASS；未改 Schema/migration/触发器清单；无新增依赖。
+- 送审：REVIEWED_HEAD a2c4306（Issue #2 comment 5930927792 / CI 36859106365）；唤醒已投递并验证。
+
+## 2026-10-01 JST — MSG-20261001-38 = PASS WITH REVISE（R43 S5 关闭）→ 进入 R43 S6
+
+- 裁决：**PASS WITH REVISE**（REVIEWED_HEAD a2c4306）。S5 主体关闭，**无需 S5 RE-REVIEW**，直接进入 S6 全量收口。
+- 认可：纯只读 checker 无 repair mode；clean→0 / 漂移→非零；fresh deploy 与 two-stage upgrade 双路径接入；12 项检查 + DETECT ≠ REPAIR 为长期不变量；终态 package → NOTICE 语义认可（历史合法 submission 不因后续 supersede/withdraw 被判损坏）。
+- CHANGE A（S6 补齐）：approval 语义强校验回归 —— organization / approvalId 一致、action = recovery.manual_submit、basisReference 与 submission 保存的 versioned basis 一致、且不是另一个 ClaimItem·package 的合法 approval（现有 SQL 已覆盖则给 test-name 映射，否则补 checker）。
+- CHANGE B（S6 补齐）：真实可制造漂移覆盖 —— 至少一组 DB 允许存在但业务不一致的漂移，证明 DB accepts fixture → checker rejects → zero repair。
+- S6 报告矩阵：M1–M20 / PG1–PG10 / H1–H9 / D1–D4 / S2–S5 基线 / fresh migration / two-stage upgrade / trigger inventories / architecture contract / tsc / prisma validate / 全量 suite；**不得 skip、放宽断言或删除历史安全测试收绿**。
+- 档案：`AI-ARCHITECT-INBOX.md` → `MSG-20261001-38`；`tools/verdict-diff/compare.mjs` = **FULL_COPY_OK**。
+- NEXT：**R43 S6 — Full Regression / Release Checkpoint**（不新增产品能力）；完成后提交最终 R43 Implementation Checkpoint，由架构方判定 R43 是否整体关闭。

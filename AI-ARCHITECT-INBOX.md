@@ -81380,3 +81380,136 @@ AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CR
 
 VERDICT: PASS — MSG-20261001-37
 ```
+
+### [MSG-20261001-38] R43 Manual Recovery Persistence / S5 Consistency Checker —— **PASS WITH REVISE**（S5 关闭；NEXT = R43 S6 Full Regression / Release Checkpoint；S6 须补 CHANGE A approval 语义强校验 + CHANGE B 真实可制造漂移覆盖）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE: FORMAL_VERDICT
+MESSAGE: MSG-20261001-38
+PREVIOUS: MSG-20261001-37
+GATE: Gate 7 / R43 Manual Recovery Persistence / S5 Consistency Checker
+REVIEWED_HEAD: a2c4306
+DECISION: PASS WITH REVISE
+
+KEEP
+
+S5 主体可以关闭，允许进入 S6。
+
+认可：
+
+checker 为纯只读检测器，没有 repair mode；
+clean → exit 0，不一致 → PostgreSQL exception / 非零 exit；
+fresh deploy 与 two-stage upgrade 均已接入；
+ClaimItem ↔ Submission 双向关系检查；
+submission/package/basis/tenant 检查；
+approval、evidence、reference、canonical contract 检查；
+checker 前后数据库快照一致；
+SUPERSEDED/WITHDRAWN package 对历史已经发生的合法 submission只报告事实，不反向篡改历史；
+Settlement/Billing/平台外写边界继续保持。
+三项答复
+
+① S5 可以关闭：YES。
+
+进入 S6 全量收口，不需要再单独做一次 S5 RE-REVIEW。
+
+② 12 项检查 + DETECT ≠ REPAIR：认可。
+
+这是长期不变量。后续不得给该 checker 增加 --fix、自动 UPDATE、自动删除重复记录等行为；如果未来确实需要修复工具，必须作为独立受控批次设计。
+
+③ terminal package → NOTICE：认可。
+
+关键时间语义是：
+
+package 后来被 supersede/withdraw，不会让此前已经合法发生的 manual submission 变成“从未发生”。
+
+因此历史 submission 不应因此被 checker 判为数据库损坏。
+
+CHANGE A — S6 补一条 approval 语义的强校验回归
+
+当前描述为：
+
+approvalId 必须存在对应 recovery.review_approved 审批事件。
+
+这还不足以证明它就是授权当前 submission 的那次 approval。
+
+S6 必须确认 checker/测试覆盖至少：
+
+organization 一致；
+approvalId 一致；
+action = recovery.manual_submit；
+basisReference 与当前 submission 保存的 versioned basis 一致；
+approval 不是另一个 ClaimItem/package 的合法 approval。
+
+如果现有 SQL 已经检查这些，只需在 S6 给出 test-name 映射；若没有，则补 checker。
+
+CHANGE B — S6 增加“真实可制造漂移”的 checker 覆盖
+
+当前第 6 项 evidence 引用不存在可能直接被 FK 阻止，因此它不能稳定证明 checker 自身能检测该类漂移。
+
+S6 至少准备一组数据库允许存在、但业务上不一致的真实漂移，覆盖 checker 的核心类别，例如：
+
+Submission/ClaimItem 状态不一致；
+basis 不一致；
+approval binding 不一致；
+canonical/reference 业务不一致。
+
+用它证明：
+
+DB accepts fixture → checker rejects → checker performs zero repair
+
+不要求绕过 FK 去制造数据库本身不允许的状态。
+
+RISKS
+
+现在最大的风险已经不是单个功能，而是 S1–S5 分批实现后出现跨批次断链。
+
+因此 S6 不应继续加新功能，而应验证：
+
+Schema → package → approval → manual submission → reference → consistency checker
+
+确实形成一条完整、原子、可追溯的链。
+
+TEST
+
+S6 除 CHANGE A/B 外，应明确给出矩阵，而不是只报总测试数：
+
+M1–M20
+PG1–PG10
+H1–H9
+D1–D4
+S2 canonical/digest 基线
+S3 transaction-failure injection 基线
+S4 canonical reference/concurrency 基线
+S5 clean + intentional-drift checker
+fresh migration
+two-stage upgrade
+trigger inventories
+architecture contract
+tsc
+prisma validate
+全量 suite
+
+任何失败不得用跳过测试、放宽断言或删除历史安全测试来“收绿”。
+
+NEXT
+
+直接进入：
+
+R43 S6 — Full Regression / Release Checkpoint
+
+不新增产品能力。
+
+S6 完成后提交最终 R43 Implementation Checkpoint，至少报告：
+
+REVIEWED_HEAD / CI / M1–M20 mapping / PG1–PG10 / H1–H9 / D1–D4 / full-suite counts / migration+upgrade / trigger inventories / consistency checker / known remaining gaps
+
+若全部通过，下一裁决将判断 R43 Manual Recovery Persistence 是否整体关闭，而不是继续逐个 S-step。
+
+继续保持：
+
+AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · SETTLEMENT/BILLING LINKAGE HOLD。
+
+VERDICT: PASS WITH REVISE — MSG-20261001-38
+```
