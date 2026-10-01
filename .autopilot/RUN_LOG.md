@@ -1037,3 +1037,12 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 边界：LLM 不得决定 金额 / Fee / Deadline / Ledger / Settlement / Billing / 状态推进 / 权限判断 / 审批消费；编排工具仅限外围；禁止大换底座（冻结 Recovery OS 等）。
 - 校验：`node tools/license-gate/check-oss-registry.mjs --root .` = OSS_REUSE_LICENSE_OK；`tools/license-gate/check-licenses.mjs` = 通过；`tools/autopilot/check-autopilot-rules.mjs` = AUTOPILOT_RULES_OK。
 - 队列不受影响：R43 S3→S4→S5 已按序关闭（MSG-36/37/38/39）；当前真实下一单元 = R44 RE-REVIEW 裁决 → R44-A Approval Creation Boundary。
+
+## 2026-10-01 JST — MSG-20261001-41 = PASS（R44 CLOSED）→ 进入 R44-A Approval Creation Boundary
+
+- 裁决：**PASS — R44 CLOSED**（REVIEWED_HEAD eca4207；CI 36865362444 SUCCESS 5/5）。CHANGE A/B 全部收口；confused-deputy / object-binding 四类场景零副作用获认可。
+- 关闭边界：HTTP authn → tenant/path object binding → request anti-self-attestation → Action Guard → 既有 R43 S3/S4 service → atomic business execution。
+- R44-A 冻结规则：creation/execution 共用同一 server-side package/basis builder；客户端不得传可信 digest/basis；不得只绑定裸 packageId；package 变更后 execution 必须拒绝；creator/executor 各自动作时重验 membership/role。
+- R44-A 测试清单（14 项）：未认证 / 非法角色 / 跨租户 / 错绑定 / 伪造 digest·basis·version / terminal package 不得创建 / 重复创建幂等 / 过期·撤销 / creation 不改 ClaimItem / 不产生 Submission / 不消费 approval / 资金域零变化 / 创建的 approval 可被 R44 execution 消费 / 创建后 package 变化 → fail-closed。
+- 档案：`AI-ARCHITECT-INBOX.md` → `MSG-20261001-41`；`compare.mjs` = **FULL_COPY_OK**。
+- HOLD 保持：AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · SETTLEMENT/BILLING LINKAGE HOLD。

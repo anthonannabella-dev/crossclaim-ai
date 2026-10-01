@@ -81793,3 +81793,110 @@ AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CR
 
 VERDICT: PASS WITH REVISE — MSG-20261001-40
 ```
+
+### [MSG-20261001-41] R44 Manual Recovery Execution HTTP Boundary —— **PASS — R44 CLOSED**（CHANGE A/B 全部收口；NEXT = R44-A Manual Recovery Approval Creation Boundary，需同一 server-side package/basis builder + creation 不改变 ClaimItem/不产生 Submission/不消费 approval + 创建后 package 变化 → execution fail-closed）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE: FORMAL_VERDICT
+MESSAGE: MSG-20261001-41
+PREVIOUS: MSG-20261001-40
+GATE: Gate 7 / R44 Manual Recovery Execution HTTP Boundary
+REVIEWED_HEAD: eca4207
+DECISION: PASS
+
+KEEP
+
+CHANGE A / B 已完整收口。
+
+确认接受：
+
+manual-submit 跨租户案件路径 → 404；
+manual-submit 同租户但 path case 与 ClaimItem 不符 → 404；
+manual-reference 跨租户 submission → 404；
+manual-reference 同租户但 path case 与 submission 不符 → 404；
+四类 confused-deputy / object-binding 场景均证明零副作用；
+route caseId 现在不能被 body target 绕过；
+R44 口径已正确收窄为 Execution HTTP Boundary，不再宣称完整用户 E2E；
+approval creation 明确留给 R44-A；
+fixture 的 createdAt 显式排序属于测试确定性修复，没有改变生产语义或断言强度；
+HEAD eca4207 CI 5/5 SUCCESS。
+三项裁决
+
+① CHANGE A / B：CLOSED。
+
+无剩余阻塞项。
+
+② R44 HTTP Execution Boundary：CLOSED / PASS。
+
+当前边界已形成：
+
+HTTP authn
+→ tenant/path object binding
+→ request anti-self-attestation
+→ Action Guard
+→ existing R43 S3/S4 service
+→ atomic business execution
+
+并且 handler 没有复制事务/锁逻辑。
+
+③ 下一执行单元：批准进入 R44-A。
+
+范围保持你列出的：
+
+Manual Recovery Approval Creation Boundary
+
+只处理：
+
+谁可创建 approval
+→ 绑定 Claim / Case / package / versioned basis
+→ approval lifecycle
+→ HTTP request contract
+→ 与既有 execution endpoint 对接
+
+CHANGE
+
+无。
+
+RISKS
+
+R44-A 最大风险是 approval creation 与 execution 使用不同的事实构造逻辑。
+
+因此必须继续冻结：
+
+approval creation 与 execution 使用同一个 server-side package/basis builder；
+客户端不得传可信 digest/basis；
+创建 approval 时不能只绑定裸 packageId；
+package 在 approval 后被 supersede/withdraw 或 digest/version 变化时，execution 必须拒绝；
+approval creator 与 later executor 可以是不同人，但两者都必须在各自动作时重新通过当前 membership/role 校验。
+TEST
+
+R44-A 至少覆盖：
+
+未认证；
+非法角色；
+跨租户 case/package；
+package 与 ClaimItem/Case 错绑定；
+客户端伪造 digest/basis/version；
+package terminal 状态不得创建新 approval；
+相同 package/basis 重复创建的幂等语义；
+approval 过期 / 撤销；
+creation 成功但不改变 ClaimItem；
+creation 不产生 Submission；
+creation 不消费 approval；
+Settlement/Billing/RecoveryLedger/Payment 零变化；
+创建出的 approval 能被现有 R44 execution endpoint 正常消费；
+创建后 package 变化 → execution fail-closed。
+NEXT
+
+进入：
+
+R44-A — Manual Recovery Approval Creation Boundary
+
+仍保持：
+
+NO outcome/reimbursement reconciliation · NO Settlement/Billing linkage · NO Amazon write transport · TRANSPORT=false · NO production credentials。
+
+VERDICT: PASS — R44 CLOSED — MSG-20261001-41
+```

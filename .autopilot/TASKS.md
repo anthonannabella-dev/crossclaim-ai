@@ -379,3 +379,10 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - CHANGE B 已满足：09e9f6d 与 eca4207 的 CI 均 success 5/5；夹具确定化修复消除 APPROVAL_NOT_APPROVED 偶发。
 - 送审：REVIEWED_HEAD eca4207（Issue #2 comment 5932108490 / CI 36865362444）。
 - NEXT：PASS → R44 Execution Boundary CLOSED → 进入 **R44-A Approval Creation Boundary**；REVISE → 按 CHANGE 重送；BLOCK → 停止。
+
+### MSG-20261001-41 裁决（R44 CLOSED → 进入 R44-A Approval Creation Boundary）
+
+- DECISION：**PASS — R44 CLOSED**（REVIEWED_HEAD eca4207；CI 36865362444 SUCCESS 5/5；归档 FULL_COPY_OK）。
+- NEXT：**R44-A — Manual Recovery Approval Creation Boundary**：谁可创建 approval → 绑定 Claim/Case/package/versioned basis → approval lifecycle → HTTP request contract → 与既有 execution endpoint 对接。
+- 冻结：creation 与 execution 同一 builder；客户端不得自证 digest/basis；不得只绑裸 packageId；package 变更 → execution 拒绝；creator/executor 各自重验 membership/role。
+- 范围外：outcome/reimbursement reconciliation · Settlement/Billing linkage · Amazon write transport · 生产凭据。
