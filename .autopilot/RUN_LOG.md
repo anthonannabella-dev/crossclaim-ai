@@ -570,3 +570,11 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 硬开关 `PLATFORM_WRITE_TRANSPORT_ENABLED=false`：默认路径 NEEDS_MANUAL，拒绝路径 `sinkCalls=0`；真实通道在类型（simulated 字面量）与运行时（SIMULATED_SINK_REQUIRED）双重拒绝。
 - 设计稿：`docs/releases/ACTION-GUARD-PLATFORM-WRITE-DESIGN.md`（非目标 + 后续需架构方裁决 4 条）。
 - 下一步（下一 tick）：接线对外 HTTP 入口 + 真实 HTTP + PostgreSQL fail-closed 验收 → R33 送审；真实平台外写、凭据、生产启用继续 HOLD。
+
+## 2026-10-01 JST — 裁决 MSG-20261001-17 = PASS WITH REVISE（platform.write 安全骨架 / R33）
+
+- 通道：`c/6ab9ee1b-fd54-83ee-b363-b67750afcedd`；R33 已送达（三要素验证通过）。
+- 架构方首段回复在 CHANGE A 说明处被截断（结尾“……此时开放 HTTP 会让进程级状态承担外”）；已在同一会话请求补全并取得 `MSG-20261001-17 — CONTINUED`。
+- 归档：两段原文按原样合并（`[CONTINUATION]` 分隔）写入 `AI-ARCHITECT-INBOX.md` 的 `### [MSG-20261001-17]`（94 非空行）→ compare.mjs **FULL_COPY_OK**；Issue #2 comment 5925786916。
+- 裁定：KEEP 安全骨架；CHANGE A 暂不接 HTTP；CHANGE B 先提交 PlatformWriteAttempt 账本 Design/Schema Delta（不写 migration）；CHANGE C 审批消费与执行权原子边界 + UNKNOWN_PROVIDER_RESPONSE；CHANGE D `PLATFORM_WRITE_TRANSPORT_ENABLED=true` 不单独构成授权。
+- 下一步：产出账本设计 + Schema Delta Request 后重新送审；期间不接 HTTP / 不接真实 adapter / 不开启 transport。

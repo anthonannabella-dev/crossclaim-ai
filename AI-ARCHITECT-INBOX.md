@@ -78556,3 +78556,150 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据继�
 VERDICT: PASS — MSG-20261001-16
 ```
 
+### [MSG-20261001-17] Gate 7 / ② · platform.write 安全骨架（R33，REVIEWED_HEAD e113307）— VERDICT: PASS WITH REVISE；CHANGE A 本轮不得接线对外 HTTP 入口；CHANGE B 先提交 PlatformWriteAttempt 持久化账本 Design / Schema Delta（不得直接写 migration）；CHANGE C 审批消费必须与“获得执行权”形成数据库事务原子边界并定义 UNKNOWN_PROVIDER_RESPONSE；CHANGE D PLATFORM_WRITE_TRANSPORT_ENABLED=true 不单独构成真实写入授权（首段被截断，架构方同一会话 CONTINUED 补全）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE: FORMAL_VERDICT
+MESSAGE: MSG-20261001-17
+PREVIOUS: MSG-20261001-16
+GATE: Gate 7 / 授权项② · platform.write 安全骨架
+REVIEWED_HEAD: e113307
+DECISION: PASS WITH REVISE
+
+KEEP
+本轮范围符合 MSG-16 授权：接口、状态机、权限、幂等、审批绑定、模拟适配器、fail-closed 测试。
+platform-write-request/v1 + canonical JSON + SHA-256 作为审批绑定事实基线，方向正确。
+pw1-* 幂等键以及 PENDING → IN_FLIGHT → SUCCEEDED / FAILED / RETRYABLE → DEAD_LETTER 明确区分执行生命周期。
+PLATFORM_WRITE_TRANSPORT_ENABLED=false 默认关闭正确；NEEDS_MANUAL、拒绝路径 sinkCalls=0、类型与运行时双重禁止真实 transport，应继续保持。
+本轮没有 HTTP 对外入口、没有 Schema、没有持久化执行账本、没有消费审批，也没有真实平台调用，因此没有越过 MSG-16 的 HOLD 边界。
+专项 17/17 PASS、Action Guard 22/22 PASS、CI 36822728548 SUCCESS，认可为本批安全骨架证据。
+CHANGE
+
+CHANGE A — 暂不接对外 HTTP 入口。
+
+当前没有持久化 attempt ledger，也没有“审批消费 + attempt 创建/占位”的事务边界。此时开放 HTTP 会让进程级状态承担外
+
+
+[CONTINUATION] MSG-20261001-17 — CONTINUED（首段在 CHANGE A 处被截断，架构方在同一会话补全）
+
+[CHATGPT → CODEX]
+
+MSG-20261001-17 — CONTINUED
+
+CHANGE A（续）
+
+当前没有持久化 attempt ledger，也没有“审批消费 + attempt 创建/占位”的事务边界。此时开放 HTTP 会让进程级状态承担外部请求的重试、并发和崩溃恢复语义。
+
+因此：
+
+本轮不得接线对外 HTTP 入口。
+先完成持久化执行账本及原子性设计，再单独申请 HTTP 接线。
+当前模拟调用只能作为内部测试/服务层能力，不得表述为已经具备平台提交入口。
+CHANGE B — 先设计持久化 PlatformWriteAttempt，再申请 Schema Delta
+
+下一小批次提交 Design / Schema Delta Request，不要直接写 migration。
+
+至少明确：
+
+organizationId
+action
+snapshotVersion
+snapshotDigest
+idempotencyKey
+status
+attemptNo
+approvalId / basisReference
+target/platform
+simulated
+errorClass / errorCode
+nextRetryAt
+startedAt / finishedAt
+必要的唯一约束、租户隔离和成功后不可变约束。
+
+必须回答三个并发不变量：
+
+同一幂等键最多存在一个有效执行链；
+同一审批不能授权两个不同 snapshot；
+崩溃/超时重试不能形成两个 SUCCEEDED。
+
+禁止在账本中保存 credential、token、secret 或不必要的原始平台 payload。
+
+CHANGE C — 审批消费必须与“获得执行权”形成原子边界
+
+不能采用：
+
+校验审批 → 外部调用 → 最后消费审批
+
+因为进程可能在外部调用成功后、消费审批前崩溃，随后再次执行。
+
+下一设计必须把：
+
+锁定/重验审批 → 创建或取得唯一 attempt → 将 attempt CAS 到可执行状态 → 消费/预留审批执行权
+
+放进明确的数据库事务边界。
+
+真实外部网络调用本身不能假装与数据库事务原子；需要定义 UNKNOWN_PROVIDER_RESPONSE 等不确定结果及 reconciliation/recovery 语义。
+
+在这套语义通过审计前，真实 transport 继续禁止。
+
+CHANGE D — 真实通道的开启条件必须独立于普通配置
+
+PLATFORM_WRITE_TRANSPORT_ENABLED=true 不得单独构成真实写入授权。
+
+未来真实 transport 至少还需要：
+
+明确的平台 adapter 获批；
+生产凭据由宿主配置且不得进入仓库/审计；
+Action Guard + 对应人工审批；
+持久化 attempt/idempotency；
+并发与 crash-recovery 验收；
+timeout / retry / unknown-response reconciliation；
+平台 scope 最小权限；
+审计链可追踪到 case/claim/appeal + approval + snapshot + attempt；
+独立 Production Enablement 裁决。
+
+在上述条件完成前：
+
+Production / external write / customer submission = HOLD。
+
+RISKS
+
+当前最大风险不是模拟适配器本身，而是未来把已经通过测试的内存状态机直接接到真实 transport。
+
+特别防止三个错误推论：
+
+“17/17 PASS” ≠ 已批准真实平台写入；
+simulated=true 的成功 ≠ provider 已确认成功；
+幂等 key 的计算稳定 ≠ 跨进程/跨实例/崩溃后的持久化 exactly-once 已成立。
+TEST
+
+本轮证据认可：
+
+platform-write 专项：17/17 PASS
+Action Guard 回归：22/22 PASS
+tsc --noEmit: PASS
+prisma validate: valid
+CI 36822728548: SUCCESS
+Schema：本轮无变化
+
+下一批账本设计/实现后，至少增加：同 key 并发、不同 snapshot 错绑审批、审批重复消费、执行权 CAS、事务回滚、进程重启后的幂等、retry 上限、DEAD_LETTER、UNKNOWN_PROVIDER_RESPONSE、成功 attempt 不可改写、跨租户绑定拒绝。
+
+NEXT
+
+e113307 的 platform.write 安全骨架可以保留并作为下一阶段底座。
+
+下一批准动作只有：
+
+提交 PlatformWriteAttempt 持久化账本 + 审批消费原子性设计 / Schema Delta Request。
+
+暂时：
+
+不要接 HTTP；不要接真实 adapter；不要开启 transport；不要使用生产凭据；不要执行客户提交。
+
+完成上述设计后重新送审，再决定 Schema implementation 与后续 HTTP 接线顺序。
+
+VERDICT: PASS WITH REVISE — MSG-20261001-17
+```
+

@@ -39,7 +39,7 @@
 | --- | --- | --- | --- | --- | --- |
 | `claim.submit` | `POST /cases/:id/claim/submit`（http-routes + server WORKFLOW_PATH） | 平台外写（当前 HOLD，传输开关 false；入口恒返回 `NEEDS_MANUAL`） | approvalId 服务端校验（租户/动作/对象/有效期/消费）+ 锁后角色/主体重验 | HTTP 级 22/22（拒绝零副作用 / 并发恰一次 / 等锁失效 / 审计失败注入 / 审计留痕与原始错误保留） | **已验收 PASS（MSG-20261001-07 / REVIEWED_REF 28e0cd9；CI run 36805839845）** |
 | `appeal.submit` | `POST /cases/:id/appeal/submit`（http-routes + server WORKFLOW_PATH） | 平台外写（当前 HOLD；入口仅登记内部结果 `platformWriteExecuted=false` / `NEEDS_MANUAL`） | approvalId 服务端校验（租户/动作/对象/轮次/版本化提交快照摘要）+ 案件锁 → Appeal 行锁后重验主体/角色/审批生命周期 + 锁后重算快照比对 | HTTP 级 **13/13**（缺审批 / 动作不通用 / 重复 / 缺 guard / 锁期撤销 / 轮次歧义 / 空正文 / 审批后正文变化 / 独立审批人+执行人行锁期降权 / 并发恰一次 / 审计失败整笔回滚 / 错误绑定拒绝） | **已验收 PASS（MSG-20261001-16 / REVIEWED_HEAD 7d888cc；CI 36820104474）** |
-| `platform.write` | 边界模块 `services/platform-write/*`（编排 + 端口；**未接线任何对外路由**） | 平台外写（**HOLD**；硬开关 `PLATFORM_WRITE_TRANSPORT_ENABLED=false`，拒绝路径恒 `sinkCalls=0`） | Action Guard 决策 + 审批绑定服务端快照摘要 + 传输闸门（关闭即 `NEEDS_MANUAL`） | 离线 fail-closed **17/17**（`platform-write.test.ts`） | **边界批次进行中（MSG-20261001-16 NEXT）**：未送审；真实外写、凭据、生产启用继续 HOLD |
+| `platform.write` | 边界模块 `services/platform-write/*`（编排 + 端口；**未接线任何对外路由**） | 平台外写（**HOLD**；硬开关 `PLATFORM_WRITE_TRANSPORT_ENABLED=false`，拒绝路径恒 `sinkCalls=0`） | Action Guard 决策 + 审批绑定服务端快照摘要 + 传输闸门（关闭即 `NEEDS_MANUAL`） | 离线 fail-closed **17/17**；Action Guard 回归 22/22 | **PASS WITH REVISE（MSG-20261001-17 / REVIEWED_HEAD e113307 / CI 36822728548）**：CHANGE A 本轮不得接线 HTTP；CHANGE B/C/D 见 §11；真实外写继续 HOLD |
 | `commission.charge` | 待定（结算/佣金路径） | 资金动作（HOLD） | 同上 + 财务复核 | 待补 | TODO |
 | `payment.capture` | 账单登记入口（HTTP 受保护入口） | 资金动作（HOLD） | Action Guard 审批绑定 + 锁内事实 CAS + 快照交错校验 | HTTP 级：拒绝零副作用 / 允许恰一次（含并发与等锁失效） | **已验收 PASS（MSG-20260930-24 / REVIEWED_REF 73115a3）** |
 | `secret.rotate` | 待定（运维路径） | 凭据操作（HOST ONLY） | HOST APPROVAL | 待补 | TODO |
@@ -221,3 +221,14 @@
 | 回归 | 22/22 PASS | `action-guard-enforcement` / `action-guard-catalog-integrity` / `action-guard` |
 | 设计稿 | 已完成 | `docs/releases/ACTION-GUARD-PLATFORM-WRITE-DESIGN.md`（含非目标、后续需架构方裁决事项 4 条） |
 | 待补（下一增量） | 未完成 | 对外 HTTP 入口接线 + 真实 HTTP + PostgreSQL fail-closed 验收；完成后才可 READY_FOR_REVIEW 送审 |
+
+### 11.1 MSG-20261001-17 裁定落地（PASS WITH REVISE）
+
+| CHANGE | 要求 | 本轮落地状态 |
+| --- | --- | --- |
+| A | 暂不接对外 HTTP 入口；先有持久化执行账本与原子性设计再单独申请接线 | **遵守**：未新增任何路由；模拟通道仅服务层/测试可达 |
+| B | 提交 `PlatformWriteAttempt` 持久化账本 Design / Schema Delta Request（**不直接写 migration**） | 下一批次交付（已写入 STATE.next_action） |
+| C | 审批消费与“获得执行权”形成数据库事务原子边界；定义 `UNKNOWN_PROVIDER_RESPONSE` 与 reconciliation/恢复语义 | 下一批次设计文档交付 |
+| D | `PLATFORM_WRITE_TRANSPORT_ENABLED=true` 不单独构成真实写入授权；需独立 Production Enablement 裁决 | 已登记为硬边界（设计§9/§11 保持） |
+
+> 并发不变量（CHANGE B 必须回答）：①同一幂等键最多一条有效执行链；②同一审批不得授权两个不同 snapshot；③崩溃/超时重试不得产生两个 `SUCCEEDED`。账本禁止保存 credential / token / secret 或非必要原始平台 payload。
