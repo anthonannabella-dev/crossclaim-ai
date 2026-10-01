@@ -18,6 +18,9 @@ import {
   deriveIdempotencyKey,
   snapshotDigest,
   attemptBackoffMs,
+  decideReconciliation,
+  reconcileBackoffMinutes,
+  assertReconcilable,
   isTerminalState,
   nextStateAfterOutcome,
   assertTransition,
@@ -346,5 +349,53 @@ describe('MSG-20261001-16 NEXT · platform.write 批次验收', () => {
         expect(text.includes(token), name + ' 不应包含 ' + token).toBe(false);
       }
     }
+  });
+  it('18 UNKNOWN 对账：可信证据 → FAILED_CONFIRMED；INCONCLUSIVE 永不判失败', () => {
+    const confirmed = decideReconciliation({
+      evidence: { kind: 'CONFIRMED_NOT_APPLIED', detail: 'provider 确认无该写操作' },
+      reconcileAttempts: 0,
+      elapsedMinutes: 2,
+    });
+    expect(confirmed.nextStatus).toBe('FAILED_CONFIRMED');
+    expect(confirmed.reconciledStatus).toBe('CONFIRMED_FAILED');
+    expect(confirmed.automated).toBe(true);
+    expect(confirmed.nextDelayMinutes).toBeNull();
+
+    const succeeded = decideReconciliation({
+      evidence: { kind: 'CONFIRMED_SUCCEEDED', providerRef: 'SIM-9' },
+      reconcileAttempts: 0,
+      elapsedMinutes: 1,
+    });
+    expect(succeeded.nextStatus).toBe('SUCCEEDED');
+    expect(succeeded.automated).toBe(true);
+
+    const inconclusive = decideReconciliation({
+      evidence: { kind: 'INCONCLUSIVE' },
+      reconcileAttempts: 0,
+      elapsedMinutes: 0,
+    });
+    expect(inconclusive.nextStatus).toBe('RECONCILING');
+    expect(inconclusive.reconciledStatus).toBe('INCONCLUSIVE');
+    expect(inconclusive.automated).toBe(false);
+    expect(inconclusive.nextDelayMinutes).toBe(1);
+  });
+
+  it('19 对账退避与 24 小时窗口：超窗/耗尽一律 MANUAL_REVIEW，且只有 UNKNOWN/RECONCILING 可对账', () => {
+    expect(reconcileBackoffMinutes(1)).toBe(1);
+    expect(reconcileBackoffMinutes(2)).toBe(5);
+    expect(reconcileBackoffMinutes(3)).toBe(15);
+    expect(reconcileBackoffMinutes(4)).toBe(60);
+    expect(reconcileBackoffMinutes(9)).toBe(60);
+
+    const overWindow = decideReconciliation({ evidence: { kind: 'INCONCLUSIVE' }, reconcileAttempts: 1, elapsedMinutes: 24 * 60 });
+    expect(overWindow.nextStatus).toBe('MANUAL_REVIEW');
+    expect(overWindow.reconciledStatus).toBe('INCONCLUSIVE');
+
+    const exhausted = decideReconciliation({ evidence: { kind: 'INCONCLUSIVE' }, reconcileAttempts: 4, elapsedMinutes: 10 });
+    expect(exhausted.nextStatus).toBe('MANUAL_REVIEW');
+
+    expect(() => assertReconcilable('SUCCEEDED')).toThrowError(PlatformWriteError);
+    expect(() => assertReconcilable('UNKNOWN_PROVIDER_RESPONSE')).not.toThrow();
+    expect(() => assertReconcilable('RECONCILING')).not.toThrow();
   });
 });

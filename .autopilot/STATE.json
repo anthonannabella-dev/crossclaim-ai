@@ -1,15 +1,15 @@
 {
   "gate": "B2-FIX R1",
-  "head": "5c0ae44",
+  "head": "d2c82fa",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
-  "next_task": "S3 剩余：实现 Prisma 账本端口与 T1/T2/T3/R1 编排（六项原子授权点：锁后重验 approval → 唯一 idempotency 链 → approval 唯一绑定 → attempt 得执行权状态 → 同事务写 approval_consumed；T2 事务外投递；T3 收敛；R1 只读对账不重发），补 PG1–PG10 + 新增断言与 reconcile-policy 单测，随后 S4/S5 全量回归并送审 Implementation Checkpoint",
+  "next_task": "S4/S5：本机全量回归（npm test）+ 提交 Implementation Checkpoint（R36）送审架构方（附 migration/fresh-deploy、约束实测 PG1-PG10、并发与故障注入、全量 CI 证据）",
   "send_head": "7d888cc",
   "decision_head": "7d888cc",
   "last_chatgpt_message": "MSG-20261001-19",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T07:06:11.094Z",
+  "updated_at": "2026-10-01T07:38:01.314Z",
   "previous_head": "d852d51",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -51,10 +51,10 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-01T07:29:42.178Z",
   "state": "IMPLEMENT",
-  "last_action": "S3 增量（5c0ae44）：对账策略模块 + 状态词表四态扩展；tsc PASS、既有 17 项测试全绿",
-  "last_action_at": "2026-10-01T07:06:11.093Z",
-  "next_action": "S3 剩余：实现 Prisma 账本端口与 T1/T2/T3/R1 编排（六项原子授权点：锁后重验 approval → 唯一 idempotency 链 → approval 唯一绑定 → attempt 得执行权状态 → 同事务写 approval_consumed；T2 事务外投递；T3 收敛；R1 只读对账不重发），补 PG1–PG10 + 新增断言与 reconcile-policy 单测，随后 S4/S5 全量回归并送审 Implementation Checkpoint",
-  "current_head": "5c0ae44",
+  "last_action": "S3 服务层核心完成：Prisma 账本端口 + T1/T2/T3/R1（六项原子授权点、同事务 approval_consumed、T2 事务外投递、R1 只读对账不重发）+ PG1-PG10 子集 8/8 + 对账策略单测 19/19",
+  "last_action_at": "2026-10-01T07:38:01.314Z",
+  "next_action": "S4/S5：本机全量回归（npm test）+ 提交 Implementation Checkpoint（R36）送审架构方（附 migration/fresh-deploy、约束实测 PG1-PG10、并发与故障注入、全量 CI 证据）",
+  "current_head": "d2c82fa",
   "reviewed_head": "549dba8",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -201,6 +201,16 @@
         "PG1–PG10 + 本轮新增断言的真实 PostgreSQL 验收（platform-write-ledger-db.test.ts）",
         "reconcile-policy 单测（18–22）"
       ]
+    },
+    "s3": {
+      "status": "CORE_DONE",
+      "files": [
+        "services/platform-write/prisma-ledger.ts",
+        "services/platform-write/reconcile-policy.ts"
+      ],
+      "pg": "PG1/PG2/PG3/PG4/PG5/PG8/PG9/PG10 = 8/8 PASS",
+      "unit": "platform-write 19/19 PASS（含 18/19 对账策略）",
+      "regression": "platform-write-ledger-db + platform-write + action-guard + tenant-isolation = 54 PASS"
     }
   }
 }

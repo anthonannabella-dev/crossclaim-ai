@@ -626,3 +626,11 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - types.ts/state-machine.ts：新增 UNKNOWN_PROVIDER_RESPONSE / RECONCILING / FAILED_CONFIRMED / MANUAL_REVIEW 四态与迁移（IN_FLIGHT→UNKNOWN；UNKNOWN/RECONCILING→SUCCEEDED/FAILED_CONFIRMED/MANUAL_REVIEW；MANUAL_REVIEW 可由 OWNER/ADMIN 收敛）。
 - 验证：tsc --noEmit PASS；platform-write 17/17 PASS。提交 5c0ae44 已推送。
 - 下一步：Prisma 账本端口 + T1/T2/T3/R1 编排 + PG1–PG10（含并发/故障注入/重发禁止）验收。
+
+## 2026-10-01 JST — S3 服务层核心完成（账本端口 + T1/T2/T3/R1）
+
+- 新增 apps/api/src/services/platform-write/prisma-ledger.ts：acquireExecutionRight（T1 六项原子授权点：事务内锁后重验审批 → 组织内唯一幂等执行链 → approval 唯一绑定 → CAS PENDING→IN_FLIGHT → 同事务写 approval_consumed）、settleAttempt（T3 CAS 收敛）、markAttemptUnknown、reconcileOnce（R1 只读对账，绝不调用 write sink）、submitPlatformWrite（T1→T2→T3 编排，transport 关闭时 NEEDS_MANUAL 零投递）。
+- 新增 apps/api/src/__tests__/platform-write-ledger-db.test.ts：真实 PostgreSQL 验收 PG1（同键并发恰一次）/PG2（同 approval 不同 snapshot 拒绝）/PG3（消费写入失败整笔回滚）/PG4（已消费拒绝）/PG5（UNKNOWN 对账只读，sink 调用 0）/PG8（SUCCEEDED 不可再收敛）/PG9（跨租户拒绝）/PG10（partial unique index 拦截）→ 8/8 PASS。
+- platform-write 单测 19/19（新增 18/19 对账策略：FAILED_CONFIRMED 仅可信证据、INCONCLUSIVE 永不判失败、1/5/15/60 分钟退避、24h → MANUAL_REVIEW）。
+- 回归：platform-write-ledger-db + platform-write + action-guard + tenant-isolation = 54 PASS；tsc PASS。提交 d2c82fa（账本）+ 随后提交（策略单测）。
+- 下一步：S4/S5 全量回归 → Implementation Checkpoint（R36）送审。
