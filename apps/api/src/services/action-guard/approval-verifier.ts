@@ -197,3 +197,12 @@ export async function verifyApprovalOrThrow(params: {
 
   return decision;
 }
+
+/**
+ * 受保护动作名（单一来源）：R45 S4 对账期受保护动作（MSG-20261002-49 ③）。
+ * 四个动作**互不通用**，且均与 recovery.manual_submit / reference_recorded 分离。
+ */
+export const RECONCILIATION_BASIS_SET_ACTION = 'recovery.reconciliation_basis_set';
+export const RECONCILIATION_BASIS_SUPERSEDE_ACTION = 'recovery.reconciliation_basis_supersede';
+export const RECONCILIATION_OVERRIDE_ACTION = 'recovery.reconciliation_override';
+export const RECONCILIATION_PROVIDER_OUTCOME_ACTION = 'recovery.reconciliation_provider_outcome_record';

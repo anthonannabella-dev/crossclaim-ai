@@ -23,6 +23,10 @@ import {
   APPEAL_SUBMIT_ACTION,
   CLAIM_SUBMIT_ACTION,
   PLATFORM_WRITE_ACTION,
+  RECONCILIATION_BASIS_SET_ACTION,
+  RECONCILIATION_BASIS_SUPERSEDE_ACTION,
+  RECONCILIATION_OVERRIDE_ACTION,
+  RECONCILIATION_PROVIDER_OUTCOME_ACTION,
   RECOVERY_CONFIRMATION_ACTION,
   RECOVERY_MANUAL_SUBMIT_ACTION,
   RECOVERY_MANUAL_REFERENCE_ACTION,
@@ -394,7 +398,11 @@ export async function submitRecoveryReview(
       } else if (
         (NON_MONEY_APPROVAL_ACTIONS as readonly string[]).includes(requestedAction) ||
         requestedAction === RECOVERY_MANUAL_SUBMIT_ACTION ||
-        requestedAction === RECOVERY_MANUAL_REFERENCE_ACTION
+        requestedAction === RECOVERY_MANUAL_REFERENCE_ACTION ||
+        requestedAction === RECONCILIATION_BASIS_SET_ACTION ||
+        requestedAction === RECONCILIATION_BASIS_SUPERSEDE_ACTION ||
+        requestedAction === RECONCILIATION_OVERRIDE_ACTION ||
+        requestedAction === RECONCILIATION_PROVIDER_OUTCOME_ACTION
       ) {
         // 非资金动作（claim.submit / appeal.submit）：无金额语义，但必须绑定操作依据；
         if (bound.basisReference === null) {
@@ -406,6 +414,42 @@ export async function submitRecoveryReview(
           for (const key of ['submissionId', 'claimItemId', 'providerCaseRefCanonical']) {
             if (!refExtra || refExtra[key] === undefined || refExtra[key] === null || refExtra[key] === '') {
               throw new WorkflowError('INVALID_INPUT', 'reference 补录审批必须绑定：' + key);
+            }
+          }
+        }
+        const RECONCILIATION_REQUIRED_KEYS: Record<string, readonly string[]> = {
+          [RECONCILIATION_BASIS_SET_ACTION]: [
+            'claimItemId',
+            'caseId',
+            'expectedRecoveryAmount',
+            'currency',
+            'basisKind',
+            'basisVersion',
+          ],
+          [RECONCILIATION_BASIS_SUPERSEDE_ACTION]: [
+            'claimItemId',
+            'caseId',
+            'supersedesBasisId',
+            'expectedRecoveryAmount',
+            'currency',
+            'basisKind',
+            'basisVersion',
+          ],
+          [RECONCILIATION_OVERRIDE_ACTION]: ['claimItemId', 'reimbursementFactId', 'decisionKind'],
+          [RECONCILIATION_PROVIDER_OUTCOME_ACTION]: [
+            'caseId',
+            'provider',
+            'kind',
+            'occurredAt',
+            'canonicalSourceIdentity',
+          ],
+        };
+        if (RECONCILIATION_REQUIRED_KEYS[requestedAction]) {
+          // R45 S4：对账期受保护动作必须绑定完整、服务端构造的操作指纹（客户端不得自证）
+          const reconExtra = normalizeBoundExtra(input.boundExtra);
+          for (const key of RECONCILIATION_REQUIRED_KEYS[requestedAction]) {
+            if (!reconExtra || reconExtra[key] === undefined || reconExtra[key] === null || reconExtra[key] === '') {
+              throw new WorkflowError('INVALID_INPUT', '对账期受保护动作审批必须绑定：' + key);
             }
           }
         }

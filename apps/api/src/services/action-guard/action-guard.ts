@@ -30,6 +30,11 @@ export const ACTION_GUARD_CATALOG: Record<string, { risk: ActionRiskClass; requi
   'billing.draft': { risk: 'INTERNAL_WRITE', requires: [] },
   // R43 S3 / MSG-20261001-31 + MSG-20261001-34：人工追回提交（零平台外写；humanApproval 不替代 RBAC 层）
   'recovery.manual_submit': { risk: 'INTERNAL_WRITE', requires: ['humanApproval'] },
+  // R45 S4 / MSG-20261002-49 ③：对账期四个受保护动作（INTERNAL_WRITE + humanApproval；零资金域/零平台外写）
+  'recovery.reconciliation_basis_set': { risk: 'INTERNAL_WRITE', requires: ['humanApproval'] },
+  'recovery.reconciliation_basis_supersede': { risk: 'INTERNAL_WRITE', requires: ['humanApproval'] },
+  'recovery.reconciliation_override': { risk: 'INTERNAL_WRITE', requires: ['humanApproval'] },
+  'recovery.reconciliation_provider_outcome_record': { risk: 'INTERNAL_WRITE', requires: ['humanApproval'] },
   // R43 S4 / MSG-20261001-36：provider case reference 补录（独立动作；零平台外写）
   'recovery.manual_submit_reference_recorded': { risk: 'INTERNAL_WRITE', requires: ['humanApproval'] },
   'claim.submit': { risk: 'EXTERNAL_WRITE', requires: ['humanApproval', 'platformEnablement', 'productionGate'] },
