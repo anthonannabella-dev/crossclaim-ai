@@ -1,17 +1,17 @@
 {
   "gate": "B2-FIX R1",
-  "head": "44b9b2c",
+  "head": "b628aa4",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
   "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
   "send_head": "07b7009",
   "decision_head": "07b7009",
-  "last_chatgpt_message": "MSG-20261001-45",
+  "last_chatgpt_message": "MSG-20261001-46",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T14:07:55.274Z",
-  "previous_head": "be33942",
-  "architect_decision_pending": true,
+  "updated_at": "2026-10-01T14:13:01.550Z",
+  "previous_head": "44b9b2c",
+  "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "25389be",
   "last_sent_at": "2026-10-01T14:07:55.274Z",
@@ -49,12 +49,12 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-01T14:10:39.241Z",
+  "last_tick_at": "2026-10-01T14:12:11.158Z",
   "state": "IMPLEMENT",
-  "last_action": "R45-B Implementation Plan 已送审（docs-only）：七表最终模型 + CHANGE A–D 落实 + 四个受保护动作 + 确定性 projector + M1–M6 迁移拆分 + 15 项验收；等待是否批准进入 S1 实施",
-  "last_action_at": "2026-10-01T14:07:55.274Z",
-  "next_action": "等待 R45-B Implementation Plan 裁决：①PASS → 进入 S1（Schema/migration/触发器清单，首次产生 Schema 变更）②REVISE → 按 CHANGE 修订计划 ③BLOCK → 停止该方向。",
-  "current_head": "25389be",
+  "last_action": "MSG-20261001-46 = PASS WITH REVISE 已逐字归档（FULL_COPY_OK）。七表模型 + CHANGE A–C 批准；basis supersede 事务顺序修正；授权进入 R45 S1（Schema / Migration / Trigger / Inventory），S1 只做数据结构与数据库不变量。",
+  "last_action_at": "2026-10-01T14:13:01.550Z",
+  "next_action": "R45 S1：七表（ProviderOutcomeFact / ReimbursementFact / ExpectedRecoveryBasis / ReconciliationOverrideDecision / ClaimReconciliationProjection / ClaimReconciliationProjectionFact / ReconciliationTolerancePolicy）+ 枚举 + 租户触发器 + immutable/append-only 触发器 + projection 受控更新 + basis 受控 supersede（同一事务 CAS）+ partial unique + CHECK + 触发器清单与计数同步（required-triggers / append-only-triggers / architecture-contract / DOMAIN_MODEL / README / two-stage-upgrade / CI fresh）；完成后先送 Implementation Checkpoint 再进 S2。",
+  "current_head": "b628aa4",
   "reviewed_head": "07b7009",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-01T14:10:30.395Z",
-    "gapMs": 8847,
+    "previousTickAt": "2026-10-01T14:11:17.139Z",
+    "gapMs": 54020,
     "stale": false,
-    "checkedAt": "2026-10-01T14:10:39.241Z"
+    "checkedAt": "2026-10-01T14:12:11.158Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -1629,5 +1629,30 @@
       "TRACK_A": "R44 → R45 → R46 → Full Regression → Production Candidate（不阻塞）",
       "TRACK_B": "本准备线（docs-only，与 TRACK A 并行）"
     }
+  },
+  "r45b_verdict": {
+    "message_id": "MSG-20261001-46",
+    "decision": "PASS WITH REVISE",
+    "reviewed_head": "25389be",
+    "archival": "FULL_COPY_OK",
+    "archival_at": "2026-10-01T14:13:01.550Z",
+    "rulings": {
+      "q1_basis_supersede_transaction_order": "七表模型 + CHANGE A–D 批准，但 basis supersede 事务顺序必须修正：advisory lock / ClaimItem lock → SELECT current effective basis FOR UPDATE → 校验 approval/binding/provenance → UPDATE old SET supersededAt（受控 CAS）→ INSERT new effective basis → audit/approval consumption → commit。全部同一事务；partial unique UNIQUE(org, claimItemId) WHERE supersededAt IS NULL 仅作最终防线。必须实测：replacement INSERT 失败 → old 仍 effective；audit/consumption 失败 → old 仍 effective；两并发 supersede → 恰一个 effective；不得先 commit supersede 再另事务 INSERT。",
+      "q2_s1_authorized": "YES —— 授权进入 R45 S1（Schema / Migration / Trigger / Inventory）。S1 只实施数据结构与数据库不变量；不得顺带 ingest / projector / protected-action HTTP·service / provider API / Settlement·Billing / production credentials。S1 完成后必须先提交 Implementation Checkpoint 再进入 S2。",
+      "q3_projection_fact_rebuild": "ProjectionFact 重算策略 = 同事务整体替换：lock projection → 读 immutable inputs → deterministic rebuild → 计算 inputDigest → CAS projection version/inputDigest → DELETE 当前 membership → INSERT rebuild 后 membership → commit。DELETE 仅限 derived ProjectionFact；审计靠 projection rebuild audit（previousInputDigest / newInputDigest / projectionVersion / reason·trigger / actor·system / rebuiltAt）。",
+      "q4_s1_acceptance_evidence": "S1 送审必须提供真实 PostgreSQL 证据：七表 fresh deploy / two-stage upgrade / tenant triggers / immutable·append-only triggers / projection controlled mutation / provider fingerprint unique / 同 providerEventId 不同 resource 不误冲突 / OBSERVED.amount > 0 / reversal self-reference 拒绝 / duplicate full reversal DB·事务防线 / effective basis partial unique / supersede 失败 rollback 后旧 basis 仍 effective / concurrent supersede 恰一 effective / policy scope 不产生两个 effective / ProjectionFact FK·tenant·version-generation 一致 / 跨租户关系拒绝 / 既有 PG·H·D·M·R43·R44 基线不弱化。"
+    },
+    "changes": {
+      "A": "ProjectionFact 必须绑定 projection 版本：projectionId + projectionVersion + reimbursementFactId（或不可变 projectionGenerationId），确保 membership 明确属于当前 generation；checker 必须验证当前 membership 属于当前 projection generation/version。",
+      "B": "reversal 自身也是 provider event，必须有自己的 providerEventId / providerEventFingerprint / fingerprintVersion，不得只靠 reversesFactId 推导。同时满足：reversal event 只能 ingest 一次；同一 OBSERVED v1 最多一个有效 full reversal；两个不同 reversal event 指向同一 OBSERVED → 第二个 fail-closed；重放同一 reversal event → 幂等返回已有 fact（不是新的业务 reversal）。",
+      "C": "tolerance policy scope 优先级冻结：provider + operation/resource + version 同一 scope 只能一个 effective policy；无 provider-specific effective policy 时使用**显式系统 exact policy 记录**（不得代码隐式 fallback），使每个 Projection 都能引用实际的 tolerancePolicyId + policyVersion。"
+    },
+    "risks": [
+      "partial unique 与 basis supersede 写入顺序冲突",
+      "projection header 与 membership generation 不一致",
+      "reversal 被重复 ingest，或 reversal 指向同一 observed fact"
+    ],
+    "boundary": "NO Settlement · NO Billing · NO Fee · NO RecoveryLedger mutation · NO platform write · TRANSPORT=false · NO production credentials",
+    "next": "R45 S1 — Schema / Migration / Trigger / Inventory Implementation（首次产生 Schema 实质变更）；S1 完成后先送 Implementation Checkpoint，不得直接连续跨越 S1–S5。"
   }
 }

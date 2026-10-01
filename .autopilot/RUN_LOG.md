@@ -1129,3 +1129,15 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 持久规则：`.autopilot/RULES.md` R11 + `.autopilot/rules.json#platform_api_approval_readiness`；runner HEARTBEAT 增加 `platform_readiness_policy`；`check-autopilot-rules.mjs` 强制 8 份文档存在且五平台覆盖。
 - 原则：READ-ONLY FIRST + LEAST PRIVILEGE + MINIMUM DATA；REAL EXTERNAL WRITE / Claim·Appeal 自动对外提交 继续 HOLD；平台接入必须成为 Adapter，不得改 Recovery OS 核心。
 - TRACK A 未受影响：R45-B Implementation Plan 已送审，继续按裁决推进。
+
+## 2026-10-01 JST — MSG-20261001-46 = PASS WITH REVISE（R45-B Implementation Plan）→ 授权进入 R45 S1
+
+- 裁决：**PASS WITH REVISE**（REVIEWED_HEAD 25389be）；归档 FULL_COPY_OK；裁决全文见 `AI-ARCHITECT-INBOX.md` 的 `MSG-20261001-46`。
+- 批准：七表模型 + Facts / Basis / Policy / Override / Projection 分层 + full reversal v1 + providerEventId/versioned fingerprint 双保险 + ProjectionFact 关系化 + tolerance policy v1 schema + 四个受保护动作 + deterministic rebuild + checker DETECT 不 REPAIR。
+- 修正（Q1）：basis supersede 事务顺序 —— advisory/ClaimItem lock → SELECT current effective basis FOR UPDATE → 校验 approval/binding/provenance → UPDATE old SET supersededAt（受控 CAS）→ INSERT new effective basis → audit/approval consumption → commit；全部同一事务，partial unique 仅作最终防线；须实测 INSERT 失败/consumption 失败回滚、并发 supersede 恰一 effective。
+- 授权（Q2）：进入 **R45 S1（Schema / Migration / Trigger / Inventory）**；S1 只做数据结构与数据库不变量，S1 完成后先送 Implementation Checkpoint 再进 S2。
+- 策略（Q3）：ProjectionFact 重算 = 同事务整体替换（lock → 读 immutable inputs → deterministic rebuild → inputDigest → CAS version/digest → DELETE 当前 membership → INSERT 新 membership → commit）；DELETE 仅限 derived ProjectionFact，审计靠 projection rebuild audit。
+- CHANGE A：ProjectionFact 绑定 projection 版本（projectionId + projectionVersion + reimbursementFactId / projectionGenerationId）。
+- CHANGE B：reversal 自身具备 providerEventId / providerEventFingerprint / fingerprintVersion；同一 OBSERVED 至多一个有效 full reversal；重复 reversal event 幂等。
+- CHANGE C：tolerance policy scope 优先级冻结；无 provider-specific policy 时使用显式系统 exact policy 记录，不得代码隐式 fallback。
+- 边界：NO Settlement · NO Billing · NO Fee · NO RecoveryLedger mutation · NO platform write · TRANSPORT=false · NO production credentials。

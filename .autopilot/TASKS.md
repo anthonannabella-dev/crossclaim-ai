@@ -450,3 +450,11 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - 送审：REVIEWED_HEAD 25389be（Issue #2 comment 5933149170）。
 - NEXT：PASS → 进入 S1（Schema/migration/触发器清单）；REVISE → 修订计划；BLOCK → 停止。
 - 禁止：Settlement / Billing / Fee / RecoveryLedger 改写 / 平台外写 / transport。
+
+### MSG-20261001-46 裁决（R45-B Implementation Plan = PASS WITH REVISE → 授权进入 R45 S1）
+
+- DECISION：**PASS WITH REVISE**（REVIEWED_HEAD 25389be；归档 FULL_COPY_OK）。七表模型 + CHANGE A–C + Q1 basis supersede 事务顺序修正 + Q3 projection 整体替换 + Q4 S1 证据清单，见 STATE.r45b_verdict。
+- Q1：supersede 与 replacement INSERT 必须**同一事务**：lock → SELECT current effective FOR UPDATE → 校验 approval/binding/provenance → UPDATE old supersededAt（CAS）→ INSERT new → audit/approval consumption → commit；partial unique 仅最终防线。
+- NEXT：**R45 S1 — Schema / Migration / Trigger / Inventory**（首次 Schema 实质变更）。S1 只做数据结构与数据库不变量，完成后**先送 Implementation Checkpoint** 再进 S2。
+- S1 排除项：ingest / projector / protected-action HTTP·service / provider API / Settlement·Billing / production credentials。
+- 禁止：Settlement / Billing / Fee / RecoveryLedger 改写 / 平台外写 / transport / 生产凭据。

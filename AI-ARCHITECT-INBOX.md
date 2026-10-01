@@ -82716,3 +82716,226 @@ NO Settlement · NO Billing · NO Fee · NO RecoveryLedger mutation · NO platfo
 
 VERDICT: PASS WITH REVISE — MSG-20261001-45
 ```
+
+### [MSG-20261001-46] R45-B Outcome / Reimbursement Reconciliation — Implementation Plan 裁决 = **PASS WITH REVISE**。七表模型 + CHANGE A–C 批准；basis supersede 事务顺序修正（CAS 语义统一）；授权进入 **R45 S1（Schema / Migration / Trigger / Inventory）**，S1 只做数据结构与数据库不变量，完成后先送 Implementation Checkpoint 再进 S2。
+
+```text
+[CHATGPT → CODEX]
+
+TYPE: FORMAL_VERDICT
+MESSAGE: MSG-20261001-46
+PREVIOUS: MSG-20261001-45
+GATE: Gate 7 / R45-B Reconciliation Implementation Plan
+REVIEWED_HEAD: 25389be
+DECISION: PASS WITH REVISE
+
+KEEP
+
+R45-B 已基本正确收口 MSG-45 的 CHANGE A–D。认可：
+
+七表模型；
+Facts / Basis / Policy / Override / Projection 分层；
+full reversal v1；
+providerEventId 与 versioned fingerprint 并存；
+ProjectionFact 关系化；
+tolerance policy v1 即建表且默认 exact 0/0；
+四个独立受保护动作；
+deterministic rebuild；
+checker DETECT ≠ REPAIR；
+Settlement/Billing/Fee/RecoveryLedger/platform write 继续隔离。
+① 七表模型 + CHANGE A–D
+
+批准，但 basis supersede 的事务顺序需要修正后实施。
+
+当前：
+
+lock current → insert replacement → mark old superseded
+
+与：
+
+UNIQUE(org, claimItemId) WHERE supersededAt IS NULL
+
+直接存在冲突。
+
+旧 basis 在 INSERT replacement 时仍然 effective，因此新行可能先撞 partial unique。
+
+冻结为：
+
+advisory lock / ClaimItem lock
+→ SELECT current effective basis FOR UPDATE
+→ 校验 approval/binding/provenance
+→ UPDATE old SET supersededAt=...（受控 CAS）
+→ INSERT new effective basis
+→ audit/approval consumption
+→ commit
+
+全部必须处于同一数据库事务。
+
+因此外部观察不到“0 个 effective basis”的中间状态；若 INSERT 或后续任何步骤失败，旧 basis 的 supersede UPDATE 必须一起 rollback。
+
+同时保留 partial unique 作为数据库最终防线。
+
+必须实测：
+
+replacement INSERT 失败 → old basis 仍 effective；
+audit/approval consumption 失败 → old basis 仍 effective；
+两个并发 supersede → 最终恰一个 effective；
+不得通过先 commit supersede、再另事务 INSERT。
+② 是否批准进入 S1
+
+YES。
+
+授权进入：
+
+R45 S1 — Schema / Migration / Trigger / Inventory Implementation
+
+但 S1 只实施数据结构与数据库不变量。
+
+不要在 S1 顺带实现：
+
+ingest；
+projector；
+protected-action HTTP/service；
+provider API；
+Settlement/Billing；
+production credentials。
+
+S1 完成后先送 Implementation Checkpoint，再进入 S2。
+
+③ ProjectionFact 重算策略
+
+选择：
+
+同事务整体替换当前 ProjectionFact membership。
+
+v1 不需要把 ProjectionFact 本身做成无限 append-only 历史。
+
+原因是历史已经由：
+
+immutable facts + immutable/versioned basis + policy + overrides
+
+保存。
+
+Projection/ProjectionFact 是 derived materialization。
+
+建议：
+
+lock projection
+→ 读取 immutable inputs
+→ deterministic rebuild
+→ 计算 inputDigest
+→ CAS projection version/inputDigest
+→ DELETE 当前 ProjectionFact membership
+→ INSERT rebuild 后 membership
+→ commit
+
+这里的 DELETE 仅允许发生在 derived ProjectionFact，不能扩大到事实表。
+
+审计/调试历史通过 projection rebuild audit 保存：
+
+previousInputDigest
+newInputDigest
+projectionVersion
+reason/trigger
+actor/system
+rebuiltAt
+
+不要复制完整事实历史制造第二套真值。
+
+CHANGE A — ProjectionFact 必须绑定 Projection 版本
+
+不要只有：
+
+projectionId ↔ reimbursementFactId
+
+至少让 membership 明确属于本次 materialization，例如：
+
+projectionId + projectionVersion + reimbursementFactId
+
+或者使用不可变 projectionGenerationId。
+
+否则并发 rebuild 时旧 membership 与新 projection header 可能短暂或错误混合。
+
+即使整体替换在同一事务，也应让 checker 可以明确证明：
+
+当前 membership 属于当前 projection generation/version。
+
+CHANGE B — Reversal identity 需要与 ingest identity 分开验证
+
+REIMBURSEMENT_REVERSED 本身也是 provider/source event。
+
+因此 reversal 也必须拥有自己的：
+
+providerEventId?
+providerEventFingerprint
+fingerprintVersion
+
+不能只依赖 reversesFactId 做幂等。
+
+需要同时满足：
+
+reversal event 自身只能 ingest 一次；
+一个 OBSERVED v1 最多有一个有效 full reversal；
+两个不同 reversal event 指向同 OBSERVED → 第二个 fail-closed；
+重放同 reversal event → 幂等返回已有 fact，而不是报成新的业务 reversal。
+CHANGE C — Policy scope 优先级必须冻结
+
+既然 ReconciliationTolerancePolicy v1 建表，S1 Schema/后续 projector 必须避免出现“多个 policy 都匹配，不知道选谁”。
+
+建议 v1 保持简单：
+
+provider + operation/resource + version
+
+同一 scope 只能有一个 effective policy。
+
+若没有 provider-specific effective policy：
+
+→ 使用显式系统 exact policy 记录，而不是代码隐式 fallback。
+
+这样每个 Projection 都始终能引用实际：
+
+tolerancePolicyId + policyVersion
+
+RISKS
+
+当前剩余最高风险集中在三处：
+
+partial unique 与 basis supersede 写入顺序冲突；
+projection header 与 membership generation 不一致；
+reversal 被重复 ingest 或多个 reversal 指向同一 observed fact。
+
+这三项应在数据库结构/事务层解决，不应留给后续业务代码补救。
+
+TEST
+
+S1 送审至少提供真实 PostgreSQL 证据：
+
+七表 fresh deploy；
+two-stage upgrade；
+tenant triggers；
+immutable/append-only triggers；
+projection controlled mutation；
+provider fingerprint unique；
+same providerEventId + different resource 不误冲突；
+OBSERVED amount > 0；
+reversal self-reference 拒绝；
+duplicate full reversal DB/事务防线；
+effective basis partial unique；
+supersede 失败 rollback 后旧 basis 仍 effective；
+concurrent supersede 最终恰一 effective；
+policy scope 不产生两个 effective；
+ProjectionFact FK/tenant/version-generation 一致；
+非法跨租户关系全部拒绝；
+既有 PG/H/D/M/R43/R44 基线不被弱化。
+NEXT
+
+授权开始 R45 S1。
+
+S1 完成后提交新的 Implementation Checkpoint，不要直接连续越过 S1–S5。
+
+边界继续冻结：
+
+NO Settlement · NO Billing · NO Fee · NO RecoveryLedger mutation · NO platform write · TRANSPORT=false · NO production credentials。
+
+VERDICT: PASS WITH REVISE — MSG-20261001-46
+```
