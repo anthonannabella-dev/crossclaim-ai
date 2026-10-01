@@ -6,18 +6,18 @@
   "next_task": "R19 裁决 = REVISE（MSG-20261001-02 / REVIEWED_REF 0745c33）已逐项实施 CHANGE A–D：原子提交服务 + 锁内完整重验 + 载荷白名单 + 6→18 项验收；隔离库 145 文件/1353 用例全绿、tsc PASS、prisma valid；HEAD e8ba20e 已推送 → 待 CI 复核后投递七段式复审批次（GitHub Issue 写回待 gh auth 恢复：HOST_ACTION_REQUIRED: gh auth login）",
   "send_head": "62dffa6",
   "decision_head": "374fbdd",
-  "last_chatgpt_message": "MSG-20261001-08",
+  "last_chatgpt_message": "MSG-20261001-09",
   "production_enabled": false,
   "external_write_enabled": false,
   "updated_at": "2026-10-01T01:56:44.938Z",
   "previous_head": "f827dee",
   "architect_decision_pending": true,
   "blocked_scope": null,
-  "last_send_head": "19aa7cb",
+  "last_send_head": "d6d239b",
   "last_sent_at": "2026-10-01T00:58:20.480Z",
   "last_sent_fingerprint": "WAKEUP_DELIVERED:R18:retry-due-msg34-closure:9a806eb",
   "final_head": "1144401",
-  "ci_run": "36810544914",
+  "ci_run": "36811474236",
   "ci_result": "5/5 SUCCESS",
   "fix_pr": "https://github.com/anthonannabella-dev/crossclaim-ai/pull/10",
   "channel_status": "CHATGPT_WEB_AVAILABLE（in-app browser 可用；须逐 surface 判读：聚合 getState() 会被 Edge 扩展 surface 的 token 错误毒化）",
@@ -51,10 +51,10 @@
   "automation_status": "ACTIVE（FREQ=MINUTELY;INTERVAL=5；2026-10-01 核实后由 PAUSED 恢复）",
   "last_tick_at": "2026-10-01T00:58:20.480Z",
   "state": "REVIEW_WAIT",
-  "last_action": "R25 已投递（Issue #2 comment 5924173226 / CI run 36810544914 success）：MSG-20261001-08 CHANGE A/B 收口 + 审批时间炸弹修复（10 套件改用 Date.now()-60s 基准）",
-  "last_action_at": "2026-10-01T03:33:42.004Z",
-  "next_action": "等待 MSG-20261001-09：全文读取 → 逐字归档 AI-ARCHITECT-INBOX.md → compare.mjs FULL_COPY_OK → PASS 则 claim.prepare 收口并进入 billing.draft，REVISE 则按新 CHANGE 收敛",
-  "current_head": "19aa7cb",
+  "last_action": "MSG-20261001-09 CHANGE B 已实施并送审 R26（Issue #2 comment 5924289939 / CI run 36811474236 success，HEAD d6d239b）；同批登记 HOST 产品范围冻结 + PRODUCT-SCOPE-04 设计稿与 backlog",
+  "last_action_at": "2026-10-01T03:44:57.321Z",
+  "next_action": "等待 MSG-20261001-10：全文读取 → 逐字归档 → compare.mjs FULL_COPY_OK → PASS 则 claim.prepare 收口并进入 billing.draft，REVISE 则按新 CHANGE 收敛；PRODUCT-SCOPE-04 保持「设计 + backlog」，PS04-1/PS04-5 开工前需架构方裁决",
+  "current_head": "d6d239b",
   "reviewed_head": "cabdead",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -62,5 +62,11 @@
     "reviewed_ref": "28e0cd9ec517cb013fbbc77034a76e3da1f531e2",
     "ci_run": "36805839845"
   },
-  "local_flake_note": "local full-suite: action-guard-hitl-approval-verifier-db 03 与 action-guard-hitl-route-db 04 在基线 cabdead 上同样失败（固定 NOW 常量 + 真实时钟），与 MSG-08 改动无因果；CI 为权威"
+  "local_flake_note": "local full-suite: action-guard-hitl-approval-verifier-db 03 与 action-guard-hitl-route-db 04 在基线 cabdead 上同样失败（固定 NOW 常量 + 真实时钟），与 MSG-08 改动无因果；CI 为权威",
+  "product_scope": {
+    "frozen_direction": "Cross-Channel Recovery OS（Platform / Logistics / Customs / Independent-site & Payment）",
+    "task": "PRODUCT-SCOPE-04 — Independent-site / Chargeback Recovery",
+    "design_doc": "docs/releases/PRODUCT-SCOPE-04-INDEPENDENT-SITE-CHARGEBACK-RECOVERY-DESIGN.md",
+    "status": "design + backlog done (not implemented)"
+  }
 }
