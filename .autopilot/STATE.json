@@ -1,17 +1,17 @@
 {
   "gate": "B2-FIX R1",
-  "head": "419489b",
-  "status": "READY_FOR_REVIEW",
+  "head": "21e39c2",
+  "status": "IMPLEMENTING",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
-  "next_task": "等待 R42 RE-REVIEW 裁决：PASS → 进入 R43 — Amazon Manual Recovery Handoff Design（ClaimItem → evidence completeness → recovery package → human approval → submission instructions/export → submitted-manual recording → outcome/reimbursement reconciliation），不再研究 Amazon 自动写入；REVISE → 按 CHANGE 修改后再次送审；期间 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写/客户提交 HOLD",
+  "next_task": "R43 — Amazon Manual Recovery Handoff Design（只交 Design Proposal）：形成 ClaimItem → Evidence Completeness → Recovery Package → Human Approval → Submission Instructions/Export → SUBMITTED_MANUAL → Outcome Tracking → Reimbursement/Settlement Reconciliation 完整人工提交闭环；12 项重点（证据完整性 required/optional/missing 不得假 ready；材质包不得伪造平台受理；复用 Action Guard/approval；handoff 只 export/copy/instructions；SUBMITTED_MANUAL 仅人工确认进入；记录 case/reference/时间/操作者/证据但不存凭据；outcome 区分 pending/rejected/reimbursed 不由提交推导赔付；reimbursement 只读数据可追溯关联原 ClaimItem；幂等（重复点击/导出/确认不建第二条链）；审计（package generated/approved/exported/manually submitted/outcome observed/reconciled）；fail-closed（缺审批/证据不全/跨租户/错误绑定/状态错误均不得推进）；边界冻结（不接真实凭据、不浏览器自动化、不恢复 write research、不开启 transport））；并明确区分四事实：系统已生成提交材料 ≠ 用户已提交 ≠ Amazon 已受理 ≠ Amazon 已赔付",
   "send_head": "419489b",
-  "decision_head": "5c0591d",
-  "last_chatgpt_message": "MSG-20261001-28",
+  "decision_head": "419489b",
+  "last_chatgpt_message": "MSG-20261001-29",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T10:41:45.914Z",
+  "updated_at": "2026-10-01T10:43:37.133Z",
   "previous_head": "419489b",
-  "architect_decision_pending": true,
+  "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "419489b",
   "last_sent_at": "2026-10-01T10:41:45.914Z",
@@ -49,12 +49,12 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-01T10:38:14.387Z",
+  "last_tick_at": "2026-10-01T10:43:13.839Z",
   "state": "IMPLEMENT",
-  "last_action": "R42 RE-REVIEW 已投递（CHANGE A/B/C 收口，docs-only）；等待架构方编号裁决",
-  "last_action_at": "2026-10-01T10:41:45.914Z",
-  "next_action": "等待 R42 RE-REVIEW 裁决：PASS → 进入 R43 — Amazon Manual Recovery Handoff Design（ClaimItem → evidence completeness → recovery package → human approval → submission instructions/export → submitted-manual recording → outcome/reimbursement reconciliation），不再研究 Amazon 自动写入；REVISE → 按 CHANGE 修改后再次送审；期间 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写/客户提交 HOLD",
-  "current_head": "419489b",
+  "last_action": "MSG-20261001-29 = PASS：R42 正式关闭（无需继续 Amazon 自动写入能力搜索）；下一批准工作 = R43 Amazon Manual Recovery Handoff Design（仅 Design Proposal，不实现）",
+  "last_action_at": "2026-10-01T10:43:37.133Z",
+  "next_action": "R43 — Amazon Manual Recovery Handoff Design（只交 Design Proposal）：形成 ClaimItem → Evidence Completeness → Recovery Package → Human Approval → Submission Instructions/Export → SUBMITTED_MANUAL → Outcome Tracking → Reimbursement/Settlement Reconciliation 完整人工提交闭环；12 项重点（证据完整性 required/optional/missing 不得假 ready；材质包不得伪造平台受理；复用 Action Guard/approval；handoff 只 export/copy/instructions；SUBMITTED_MANUAL 仅人工确认进入；记录 case/reference/时间/操作者/证据但不存凭据；outcome 区分 pending/rejected/reimbursed 不由提交推导赔付；reimbursement 只读数据可追溯关联原 ClaimItem；幂等（重复点击/导出/确认不建第二条链）；审计（package generated/approved/exported/manually submitted/outcome observed/reconciled）；fail-closed（缺审批/证据不全/跨租户/错误绑定/状态错误均不得推进）；边界冻结（不接真实凭据、不浏览器自动化、不恢复 write research、不开启 transport））；并明确区分四事实：系统已生成提交材料 ≠ 用户已提交 ≠ Amazon 已受理 ≠ Amazon 已赔付",
+  "current_head": "21e39c2",
   "reviewed_head": "549dba8",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-01T10:28:13.588Z",
-    "gapMs": 600800,
-    "stale": true,
-    "checkedAt": "2026-10-01T10:38:14.387Z"
+    "previousTickAt": "2026-10-01T10:38:14.387Z",
+    "gapMs": 299453,
+    "stale": false,
+    "checkedAt": "2026-10-01T10:43:13.839Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -586,7 +586,9 @@
       "C": "三级状态 PROVEN_AVAILABLE / PROVEN_UNAVAILABLE / NOT_PROVEN；本轮落 NOT_PROVEN + executionDisposition=NEEDS_MANUAL"
     },
     "next_after_rereview": "R43 — Amazon Manual Recovery Handoff Design",
-    "holds": "AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · CUSTOMER SUBMISSION HOLD"
+    "holds": "AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · CUSTOMER SUBMISSION HOLD",
+    "state": "CLOSED（MSG-20261001-29 = PASS；无 CHANGE）",
+    "archival": "MSG-20261001-28 FULL_COPY_OK 已完成；MSG-20261001-29 逐字归档待下一轮执行（补充项）"
   },
   "r42_rereview": {
     "submission_comment": "5929706917",
@@ -596,5 +598,12 @@
     "wakeup_channel": "https://chatgpt.com/c/6ab9ee1b-fd54-83ee-b363-b67750afcedd",
     "wakeup_delivery": "DELIVERED_VERIFIED",
     "next_after_pass": "R43 — Amazon Manual Recovery Handoff Design"
+  },
+  "r43_design": {
+    "status": "AUTHORIZED_TO_DESIGN（Design Proposal only）",
+    "gate": "Gate 7 / Amazon Manual Recovery Handoff",
+    "focus_points": 12,
+    "four_fact_separation": "生成材料 ≠ 已提交 ≠ 已受理 ≠ 已赔付",
+    "holds": "AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD"
   }
 }

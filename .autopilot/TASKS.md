@@ -236,3 +236,11 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - CHANGE C（已落）：三级状态 `PROVEN_AVAILABLE` / `PROVEN_UNAVAILABLE` / `NOT_PROVEN`；本轮落 **NOT_PROVEN** + `executionDisposition = NEEDS_MANUAL`（未来 private/partner API 只产生新 evidence revision）。
 - TEST（架构方要求）：文档无绝对表述、最终状态 NOT_PROVEN、NOT_PROVEN→NEEDS_MANUAL、六项门槛仍 fail-closed、不创建 write adapter、不改 TRANSPORT=false、不新增组合根/凭据/网络/Schema —— 均满足（本轮 docs-only）。
 - NEXT：提交 R42 RE-REVIEW（docs-only）；通过后进入 **R43 — Amazon Manual Recovery Handoff Design**（ClaimItem → evidence completeness → recovery package → human approval → submission instructions/export → submitted-manual recording → outcome/reimbursement reconciliation）。
+
+### MSG-20261001-29 裁决（R42 CLOSED → R43 Manual Recovery Handoff Design）
+
+- DECISION：**PASS**（REVIEWED_HEAD 419489b / CI 36849923746 SUCCESS）；CHANGE A/B/C 全部收口，**R42 正式关闭**（无需继续 Amazon 自动写入能力搜索）。
+- 风险转化：未来若 Amazon 公开新 operation/partner API，只新增 evidence revision 并重走六项 transport Gate，不修改历史 R42 事实。
+- NEXT：**R43 — Amazon Manual Recovery Handoff Design（只交 Design Proposal，不实现）**：ClaimItem → Evidence Completeness → Recovery Package → Human Approval → Submission Instructions/Export → SUBMITTED_MANUAL → Outcome Tracking → Reimbursement/Settlement Reconciliation。
+- R43 十二项重点与「生成材料 ≠ 已提交 ≠ 已受理 ≠ 已赔付」四事实分离见 STATE.next_action。
+- 边界冻结：AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 继续 HOLD。
