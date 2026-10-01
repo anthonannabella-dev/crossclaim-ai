@@ -1285,3 +1285,12 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - CHANGE E：settlement.record 的 approval 必须绑定 receipt snapshot；审批后关键字段变化 → approval 失效。
 - NEXT：R46-A Schema Delta Request（docs-only，一次完整定义），之后 R46-B Implementation Plan。
 - 红线不变：NO Settlement creation from R45 · NO FeeCalculation · NO BillingInvoice issuance · NO Payment activation · NO autopay · NO platform write · TRANSPORT=false · NO production credentials；R13 Payment Activation Gate 继续 HOLD。
+
+## 2026-10-02 JST — R46-A Settlement / Billing Linkage Schema Delta Request 送审（docs-only）
+
+- 文档：`docs/releases/R46-A-SETTLEMENT-BILLING-LINKAGE-SCHEMA-DELTA-REQUEST.md`（docs-only；未改 Schema / 未写 migration / 未改代码）。
+- 现状核对（CHANGE D 前置）：`BillingStatus` 有 `VOID`/`WRITTEN_OFF`、**无** `CREDIT`/`CREDIT_NOTE` → R46-A **不改** BillingInvoice 状态机；`Settlement` 缺外部资金身份 / claim linkage / receipt snapshot；`FeeCalculation` 仅单个可空 `settlementId`。
+- Schema Delta：Settlement 纯增列（身份三元组 + versioned fingerprint + linkage + receiptSnapshotId）；新表 `SettlementAdjustment` / `FeeCalculationSettlement` / `SettlementReceiptSnapshot`；BillingInvoice / RecoveryLedgerEntry 不变。
+- 两个待裁定项：§5.4 legacy `reversedBySettlementId` 选型；§6.6 FeeCalculation 作废语义。
+- 边界：NO Settlement creation from R45 · NO FeeCalculation · NO BillingInvoice · NO Payment activation · NO autopay · NO platform write；R13 Payment Activation Gate 继续 HOLD。
+- 送审：REVIEWED_HEAD 103865f（Issue #2 comment 5936029898）；唤醒已投递并三要素验证（输入框清空 / 新消息在底部 / ChatGPT 正在回应）。

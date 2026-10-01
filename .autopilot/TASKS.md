@@ -578,3 +578,11 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - NEXT：**R46-A — Settlement / Billing Linkage Schema Delta Request（docs-only）**：一次完整定义 Settlement external identity / reversal·adjustment / Fee↔Settlement membership / net billable basis / idempotency / receipt snapshot / invoice linkage 边界 / indexes·unique·CHECK·triggers / migration impact。
 - 必办 CHANGE A–E 与 15 项永久验收；不得在 R46-A 顺便修改 BillingInvoice 状态机。
 - 红线不变（NO Settlement creation from R45 / NO FeeCalculation / NO BillingInvoice / NO Payment activation / NO autopay / NO platform write）；R13 Payment Activation Gate 继续 HOLD。
+
+### R46-A（Settlement / Billing Linkage Schema Delta Request）—— 待裁决
+
+- 交付：`docs/releases/R46-A-SETTLEMENT-BILLING-LINKAGE-SCHEMA-DELTA-REQUEST.md`（docs-only；一次完整送审）。
+- 送审：REVIEWED_HEAD 103865f（Issue #2 comment 5936029898）。
+- 待裁定：§5.4 legacy 冲回链选型；§6.6 FeeCalculation 作废语义。
+- NEXT：PASS → R46-B Implementation Plan（docs-only）；REVISE → 修订本请求；BLOCK → 停止。
+- 边界：NO Settlement creation from R45 · NO FeeCalculation · NO BillingInvoice · NO Payment activation · NO autopay · NO platform write；R13 Payment Activation Gate 继续 HOLD。

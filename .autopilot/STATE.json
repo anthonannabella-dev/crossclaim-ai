@@ -1,21 +1,21 @@
 {
   "gate": "B2-FIX R1",
-  "head": "c99cb8b",
+  "head": "103865f",
   "status": "RECONCILED",
-  "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
+  "current_task": "13. Gate 7 授权队列推进：R45（S1–S5）CLOSED → R46 Settlement / Billing Linkage Gate 进行中：Design Proposal = PASS WITH REVISE（MSG-20261002-52）；R46-A Schema Delta Request 已送审（REVIEWED_HEAD 103865f）。R46-B Implementation Plan → S1…Sn 待批准后开始（同一原子资金模型，不逐表分批）。",
   "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
   "send_head": "07b7009",
   "decision_head": "07b7009",
   "last_chatgpt_message": "MSG-20261002-52",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T16:39:28.082Z",
+  "updated_at": "2026-10-01T16:43:09.590Z",
   "previous_head": "51b27ff",
-  "architect_decision_pending": false,
+  "architect_decision_pending": true,
   "blocked_scope": null,
-  "last_send_head": "51b27ff",
-  "last_sent_at": "2026-10-01T16:34:14.570Z",
-  "last_sent_fingerprint": "R46:Settlement-Billing-Linkage-Design-Proposal",
+  "last_send_head": "103865f",
+  "last_sent_at": "2026-10-01T16:43:09.590Z",
+  "last_sent_fingerprint": "R46-A:Settlement-Billing-Linkage-Schema-Delta-Request",
   "final_head": "1144401",
   "ci_run": "36833002042",
   "ci_result": "SUCCESS",
@@ -51,10 +51,10 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-01T16:38:33.653Z",
   "state": "IMPLEMENT",
-  "last_action": "MSG-20261002-52 = PASS WITH REVISE 已逐字归档（FULL_COPY_OK）：R46 Design 原则批准；CHANGE A–E（Settlement external identity / reversal 独立事实 / Fee↔Settlement membership / Invoice 状态机单列 / receipt snapshot 绑定）与 15 项永久验收为 R46-A 必办。",
-  "last_action_at": "2026-10-01T16:39:28.082Z",
-  "next_action": "R46-A — Settlement / Billing Linkage Schema Delta Request（docs-only，一次完整定义原子资金模型）；不实现任何资金域代码。",
-  "current_head": "51b27ff",
+  "last_action": "R46-A — Settlement / Billing Linkage Schema Delta Request（docs-only，一次完整送审）已提交：现状核对（BillingStatus 有 VOID/WRITTEN_OFF、缺 CREDIT/CREDIT_NOTE → 不改 BillingInvoice）+ Settlement 外部资金身份 + SettlementAdjustment 独立冲回事实 + FeeCalculationSettlement membership + net billable basis + receipt snapshot 绑定 + 索引/CHECK/触发器/migration impact。",
+  "last_action_at": "2026-10-01T16:43:09.590Z",
+  "next_action": "等待 R46-A 裁决：①PASS → 提交 R46-B Implementation Plan ②REVISE → 修订 Schema Delta Request ③BLOCK → 停止该方案。",
+  "current_head": "103865f",
   "reviewed_head": "07b7009",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -2170,5 +2170,67 @@
     "sequencing": "R46-A（docs-only，一次完整定义原子资金模型；不逐表分批）→ R46-B Implementation Plan → S1…Sn；避免分批 Schema 形成临时不完整资金状态。",
     "redline": "NO Settlement creation from R45 · NO FeeCalculation creation · NO BillingInvoice issuance · NO Payment activation · NO autopay · NO platform write · TRANSPORT=false · NO production credentials；R13 Payment Activation Gate 继续 HOLD。",
     "frozen_regression": "R45 基线（S1–S5 / fresh migration / two-stage upgrade / inventories / 176 files 1730 tests）永久保留，R46 不得删除、skip 或弱化。"
+  },
+  "r46a_submission": {
+    "submission_comment": "5936029898",
+    "reviewed_head": "103865f",
+    "doc": "docs/releases/R46-A-SETTLEMENT-BILLING-LINKAGE-SCHEMA-DELTA-REQUEST.md",
+    "kind": "Schema Delta Request（docs-only；一次完整定义原子资金模型，不逐表分批）",
+    "baseline_audit": {
+      "settlement": "externalRef?（无 unique / 无 kind / 无版本）+ reversedBySettlementId?（legacy 冲回链）；缺外部资金身份 / claim linkage / receipt snapshot",
+      "billing_status": "DRAFT/ISSUED/PAID/PARTIALLY_PAID/VOID/WRITTEN_OFF —— 有 VOID/WRITTEN_OFF，缺 CREDIT/CREDIT_NOTE",
+      "fee_calculation": "仅单个可空 settlementId，无法逐笔追溯",
+      "recovery_ledger": "append-only + voidsEntryId，已满足；不改结构",
+      "change_d_conclusion": "R46-A 不修改 BillingInvoice 状态机；credit / credit-note semantics 单列提案"
+    },
+    "schema_delta": {
+      "settlement_add_columns": [
+        "externalIdentityKind",
+        "externalIdentityValue",
+        "externalIdentityValueHash",
+        "externalIdentityVersion",
+        "financialEventFingerprint",
+        "financialEventFingerprintVersion",
+        "claimItemId",
+        "linkageBasisKind",
+        "linkageBasisRef",
+        "receiptSnapshotId"
+      ],
+      "new_tables": [
+        "SettlementAdjustment",
+        "FeeCalculationSettlement",
+        "SettlementReceiptSnapshot"
+      ],
+      "unchanged": [
+        "BillingInvoice",
+        "BillingStatus",
+        "RecoveryLedgerEntry"
+      ]
+    },
+    "changes_landed": {
+      "A": "双 unique（org+identityKind+valueHash / org+fingerprint）+ CHECK 二选一；完全重放=REUSED；相同 identity 但事实冲突=EVENT_IDENTITY_CONFLICT fail-closed；不同 receipt=distinct Settlement",
+      "B": "SettlementAdjustment 独立事实（引用原 Settlement / RESTRICT / 自身外部 identity / 同事件幂等 / 禁重复 full reversal / 净额可重算）",
+      "C": "FeeCalculationSettlement membership + netBillable = Σ到账 − Σ冲回；legacy settlementId 仅只读指针",
+      "D": "不改 BillingInvoice 状态机；VOID / CREDIT·CREDIT_NOTE / WRITTEN_OFF 三者单列 semantics",
+      "E": "settlement.record 的 approval boundExtra 必须含 receiptSnapshotDigest；审批后关键字段变化 → 原 approval 失效"
+    },
+    "decision_points": [
+      "§5.4 legacy Settlement.reversedBySettlementId 选型（推荐：不删不改 + 新表为规范 + 双写→收口；备选：Settlement.kind 判别列）",
+      "§6.6 FeeCalculation 作废语义（推荐：独立作废事实表；备选：supersededBy 指针 / 受控 voidedAt）"
+    ],
+    "permanent_acceptance": "MSG-20261002-52 的 15 项永久验收全部有设计承载（文档 §12 映射表）",
+    "migration_impact": "Settlement 纯增列（全 nullable）；新增 3 表 + 3 组 append-only 与租户保护触发器并更新两份清单；不自动回填 externalRef（仅显式清单）；既有创建路径（recovery-outcome / closure-service / recovery-confirmation）改造留 R46-B；R45 永久基线不得删除/skip/弱化",
+    "boundary": "docs-only；NO Settlement creation from R45 · NO FeeCalculation creation · NO BillingInvoice issuance · NO Payment activation · NO autopay · NO platform write · TRANSPORT=false · NO production credentials；R13 Payment Activation Gate 继续 HOLD",
+    "questions": [
+      "§1 现状核对（尤其不改 BillingInvoice 状态机）是否认可？",
+      "§4 外部资金身份是否满足 CHANGE A？",
+      "§5 SettlementAdjustment 模型是否批准？并裁定 §5.4 legacy 冲回链选型。",
+      "§6 membership + net billable basis 是否满足 CHANGE C？并裁定 §6.6 作废语义。",
+      "§7 invoice 边界与三项 semantics 单列是否批准？",
+      "§8 receipt snapshot 与 approval 绑定是否满足 CHANGE E？",
+      "§10–§11 索引 / 唯一 / CHECK / 触发器 / migration impact 是否完整可实施？",
+      "批准后是否按 R46-B Implementation Plan → S1…Sn（同一原子资金模型）推进？"
+    ],
+    "next": "PASS → R46-B Implementation Plan（docs-only）；REVISE → 修订 Schema Delta Request；BLOCK → 停止"
   }
 }
