@@ -594,3 +594,10 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - 裁定：§5.4 legacy 冲回链「可读、不回填、不双写」；§6.6 独立 Fee 作废/调整事实。
 - NEXT：**R46-B Implementation Plan（docs-only）** → S1…S6（每个高风险 Checkpoint 再送审）。
 - 边界：NO R45→Settlement automatic creation · NO automatic Fee · NO automatic Invoice · NO Payment activation · NO autopay · NO platform write；R13 Payment Activation Gate = HOLD。
+
+### R46-B（Implementation Plan）—— 待裁决
+
+- 交付：`docs/releases/R46-B-SETTLEMENT-BILLING-LINKAGE-IMPLEMENTATION-PLAN.md`（docs-only）。
+- 送审：REVIEWED_HEAD 5d8786e（Issue #2 comment 5936110978）。
+- NEXT：PASS → R46 S1（Schema + migrations + triggers + inventories，零资金行为）；REVISE → 修订；BLOCK → 停止。
+- 规则：每个 Stage 独立 Implementation Checkpoint 送审；30 项永久验收；既有基线不得删除 / skip / 弱化。

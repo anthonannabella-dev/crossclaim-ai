@@ -1,21 +1,21 @@
 {
   "gate": "B2-FIX R1",
-  "head": "9bdd562",
+  "head": "5d8786e",
   "status": "RECONCILED",
-  "current_task": "13. Gate 7 授权队列推进：R45（S1–S5）CLOSED → R46 Settlement / Billing Linkage Gate 进行中：Design Proposal = PASS WITH REVISE（MSG-20261002-52）；R46-A Schema Delta Request 已送审（REVIEWED_HEAD 103865f）。R46-B Implementation Plan → S1…Sn 待批准后开始（同一原子资金模型，不逐表分批）。",
+  "current_task": "13. Gate 7 授权队列推进：R45（S1–S5）CLOSED → R46 Settlement / Billing Linkage Gate：Design Proposal = PASS WITH REVISE（MSG-20261002-52）；R46-A Schema Delta Request = PASS WITH REVISE APPROVED FOR IMPLEMENTATION PLANNING（MSG-20261002-53）；**R46-B Implementation Plan 已送审**（REVIEWED_HEAD 5d8786e）。批准后按 S1…S6 推进（每个 Stage 独立 Checkpoint 送审）。",
   "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
   "send_head": "07b7009",
   "decision_head": "07b7009",
   "last_chatgpt_message": "MSG-20261002-53",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T16:44:57.207Z",
+  "updated_at": "2026-10-01T16:47:10.283Z",
   "previous_head": "51b27ff",
-  "architect_decision_pending": false,
+  "architect_decision_pending": true,
   "blocked_scope": null,
-  "last_send_head": "103865f",
-  "last_sent_at": "2026-10-01T16:43:09.590Z",
-  "last_sent_fingerprint": "R46-A:Settlement-Billing-Linkage-Schema-Delta-Request",
+  "last_send_head": "5d8786e",
+  "last_sent_at": "2026-10-01T16:47:10.283Z",
+  "last_sent_fingerprint": "R46-B:Settlement-Billing-Linkage-Implementation-Plan",
   "final_head": "1144401",
   "ci_run": "36833002042",
   "ci_result": "SUCCESS",
@@ -51,10 +51,10 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-01T16:38:33.653Z",
   "state": "IMPLEMENT",
-  "last_action": "MSG-20261002-53 = PASS WITH REVISE 已逐字归档（FULL_COPY_OK）：R46-A 批准进入 Implementation Planning；新增 CHANGE A1/B1/C1/E1 + CHANGE F（四个数据库级不变量）+ 14 项永久验收；§5.4 裁定「legacy 可读、新写只用 SettlementAdjustment、不双写」；§6.6 裁定「独立 Fee 作废/调整事实」。",
-  "last_action_at": "2026-10-01T16:44:57.207Z",
-  "next_action": "R46-B — Implementation Plan（docs-only，完整规划同一原子资金模型；按 S1…S6 推荐顺序）。",
-  "current_head": "103865f",
+  "last_action": "R46-B — Settlement / Billing Linkage Implementation Plan（docs-only）已送审：最终模型（4 新表 + 2 表增列 + FeeCalculationAdjustment）+ CHANGE A1/B1/C1/E1/F 落实 + 约束/触发器清单 + S1…S6 实施顺序 + 30 项永久验收映射。",
+  "last_action_at": "2026-10-01T16:47:10.283Z",
+  "next_action": "等待 R46-B 裁决：①PASS → 开始 R46 S1（Schema + migrations + triggers + inventories）②REVISE → 修订 R46-B ③BLOCK → 停止。",
+  "current_head": "5d8786e",
   "reviewed_head": "07b7009",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -2287,5 +2287,59 @@
     ],
     "redline": "NO R45→Settlement automatic creation · NO automatic Fee · NO automatic Invoice issuance · NO Payment activation · NO autopay · NO platform write · TRANSPORT=false · NO production credentials；R13 Payment Activation Gate = HOLD",
     "frozen_regression": "R45 永久基线 + MSG-52 的 15 项 + 本裁决新增 14 项；不得删除、skip 或弱化。"
+  },
+  "r46b_submission": {
+    "submission_comment": "5936110978",
+    "reviewed_head": "5d8786e",
+    "doc": "docs/releases/R46-B-SETTLEMENT-BILLING-LINKAGE-IMPLEMENTATION-PLAN.md",
+    "kind": "Implementation Plan（docs-only；同一原子资金模型一次完整规划）",
+    "final_model": {
+      "new_tables": [
+        "SettlementReceiptSnapshot",
+        "SettlementAdjustment",
+        "FeeCalculationSettlement",
+        "FeeCalculationAdjustment"
+      ],
+      "altered_tables": [
+        "Settlement（纯增列）",
+        "FeeCalculation（纯增列）"
+      ],
+      "unchanged": [
+        "BillingInvoice",
+        "BillingStatus",
+        "RecoveryLedgerEntry"
+      ],
+      "legacy": "Settlement.reversedBySettlementId = 只读兼容（不删除 / 不回填 / 不再作为新写入路径 / 不双写）"
+    },
+    "changes_landed": {
+      "A1": "唯一键 (org, identityKind, valueHash, identityVersion)（fingerprint 同构）；externalIdentityValue 退出唯一判定，仅作受保护 provenance/display；版本升级产生新身份键",
+      "B1": "v1 只开放 full reversal（CORRECTION fail-closed）；触发器保证等额 / 同币种 / 同租户 / 不超冲 / 重复 full reversal 拒绝 / 同事件重放幂等复用；服务层 SELECT … FOR UPDATE 双保险",
+      "C1": "不 UPDATE 历史 FeeCalculation；新增 FeeCalculationAdjustment（VOID/REVERSAL/CORRECTION）；netEarnedFee = feeAmount − Σ(active amountDelta)；baseAmount == Σ amountContribution",
+      "E1": "snapshot append-only；变更必须生成新 snapshot/version + 新 digest 并重新审批；approval 绑定 receiptSnapshotDigest 且锁后重验",
+      "F": [
+        "F1 同租户归属：复合外键 (organizationId, xxxId) → 父表(organizationId, id)，不依赖 service validation",
+        "F2 adjustment currency 与原 Settlement 一致（v1 禁 FX）",
+        "F3 membership uniqueness：UNIQUE(org, settlementId) / UNIQUE(org, adjustmentId)",
+        "F4 snapshotDigest：versioned canonicalization contract + 64hex DB CHECK，服务端计算，客户端 digest 忽略/拒绝"
+      ]
+    },
+    "stages": [
+      "S1 Schema + migrations + triggers + inventories",
+      "S2 receipt snapshot + Settlement ingest/record",
+      "S3 SettlementAdjustment / reversal",
+      "S4 Fee membership + fee calculation/adjustment",
+      "S5 Invoice linkage boundary",
+      "S6 consistency checker + full regression"
+    ],
+    "stage_rule": "每个 Stage 完成后提交独立 Implementation Checkpoint 并等待裁决；不跨 Stage 顺带实现。",
+    "permanent_acceptance": "30 项（MSG-20261002-52 的 15 + MSG-20261002-53 的 15）逐项映射到 S1–S6；R45/R44/R43/PG/H/D/M 基线不得删除、skip 或弱化。",
+    "boundary": "docs-only；NO R45→Settlement automatic creation · NO automatic Fee · NO automatic Invoice issuance · NO Payment activation · NO autopay · NO platform write · TRANSPORT=false · NO production credentials；R13 Payment Activation Gate = HOLD",
+    "questions": [
+      "§1 最终模型（含 FeeCalculationAdjustment 命名与三分类）是否批准？",
+      "§2.1 CHANGE A1 与 §2.2 CHANGE B1 是否符合 MSG-53 裁决？",
+      "§2.3 CHANGE C1 + §2.5 CHANGE F 四项数据库级不变量是否完整？",
+      "§6 的 S1…S6 拆分与「每个 Stage 独立 Checkpoint」是否批准？S1 是否可先行？"
+    ],
+    "next": "PASS → 开始 R46 S1（Schema + migrations + triggers + inventories，零资金行为）；REVISE → 修订 R46-B；BLOCK → 停止"
   }
 }

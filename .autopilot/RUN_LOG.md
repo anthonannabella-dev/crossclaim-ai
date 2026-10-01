@@ -1306,3 +1306,15 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - CHANGE F：四个数据库级不变量（同租户归属 / adjustment currency / fee membership uniqueness / snapshot digest）。
 - NEXT：R46-B — Implementation Plan（docs-only）；推荐 S1 Schema → S2 receipt snapshot + ingest → S3 SettlementAdjustment → S4 Fee membership → S5 Invoice linkage → S6 checker + full regression。
 - 冻结不变：NO R45→Settlement automatic creation · NO automatic Fee · NO automatic Invoice · NO Payment activation · NO autopay · NO platform write；R13 Payment Activation Gate = HOLD。
+
+## 2026-10-02 JST — R46-B Settlement / Billing Linkage Implementation Plan 送审（docs-only）
+
+- 文档：`docs/releases/R46-B-SETTLEMENT-BILLING-LINKAGE-IMPLEMENTATION-PLAN.md`（docs-only；未改 Schema / 未写 migration / 未改代码）。
+- 最终模型：4 新表（ReceiptSnapshot / SettlementAdjustment / FeeCalculationSettlement / FeeCalculationAdjustment）+ Settlement·FeeCalculation 纯增列；BillingInvoice / RecoveryLedgerEntry 不变；legacy `reversedBySettlementId` 只读兼容（不双写）。
+- CHANGE A1：唯一键含 identityVersion；`externalIdentityValue` 退出唯一判定（仅受保护 provenance/display）。
+- CHANGE B1：v1 仅 full reversal（等额 / 同币种 / 同租户 / 不超冲，触发器 + 服务层双保险）；CORRECTION fail-closed。
+- CHANGE C1：不 UPDATE 历史 FeeCalculation → `FeeCalculationAdjustment`（VOID/REVERSAL/CORRECTION）+ netEarnedFee 重算。
+- CHANGE E1：snapshot 不可变，新状态 → 新 snapshot/version + 重新审批。
+- CHANGE F：四项数据库级不变量（复合外键同租户 / currency / membership uniqueness / snapshotDigest）。
+- 实施顺序：S1 Schema+triggers+inventories → S2 receipt snapshot + ingest → S3 adjustment → S4 fee membership → S5 invoice 边界 → S6 checker + full regression；30 项永久验收映射。
+- 送审：REVIEWED_HEAD 5d8786e（Issue #2 comment 5936110978）；唤醒已投递并三要素验证（输入框清空 / 新消息在底部 / ChatGPT 正在回应）。
