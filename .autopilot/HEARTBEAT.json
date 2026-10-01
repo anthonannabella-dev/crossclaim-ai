@@ -1,11 +1,11 @@
 {
   "runner_status": "RUNNING",
   "current_gate": "B2-FIX R1",
-  "current_task": "Gate 7 / ② claim.prepare（INTERNAL_WRITE）—— MSG-20261001-08 CHANGE A/B 已实现并送审 R25",
-  "current_head": "814f5cd",
+  "current_task": "Gate 7 / ② appeal.submit（Appeal 人工提交）—— 已实现并送审 R31",
+  "current_head": "7758e41",
   "last_action": "appeal.submit 批次完成并送审 R31（Issue #2 comment 5925044853 / CI run 36817215750 success / HEAD 814f5cd）；专项 6/6、回归 32 files/300、tsc/prisma PASS",
-  "last_action_at": "2026-10-01T04:58:38.917Z",
-  "next_action": "等待 MSG-20261001-15（R31 裁决）：PASS → appeal.submit 收口并进入 ② 剩余最后一项 platform.write（EXTERNAL_WRITE，HOLD）；REVISE → 按新 CHANGE 收敛",
+  "last_action_at": "2026-10-01T04:59:09.758Z",
+  "next_action": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
   "retry_count": 0,
   "last_error": null,
   "reconcile": "RECONCILE_REQUIRED",
@@ -16,9 +16,5 @@
     "real_money": false,
     "customer_submission": false,
     "production_credentials": "HOST_ONLY"
-  },
-  "last_tick_at": "2026-10-01T04:58:38.917Z",
-  "state": "REVIEW_WAIT",
-  "last_chatgpt_message": "MSG-20261001-08",
-  "architect_decision_pending": true
+  }
 }
