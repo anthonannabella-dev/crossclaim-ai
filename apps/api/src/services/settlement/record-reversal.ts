@@ -6,7 +6,11 @@
  * 禁止：修改/删除原 Settlement；触发 Fee 重算 / Invoice VOID / Payment·refund / autopay / 平台外写。
  */
 
+import { createHash } from 'node:crypto';
+
 import type { PrismaClient } from '@prisma/client';
+
+import { canonicalJson } from '../platform-write/snapshot';
 
 import {
   verifyApprovalOrThrow,
@@ -154,12 +158,32 @@ export async function recordSettlementReversal(
   const occurredAt = input.occurredAt instanceof Date ? input.occurredAt : new Date(String(input.occurredAt));
   if (Number.isNaN(occurredAt.getTime())) throw new ReversalError('INVALID_INPUT', 'occurredAt invalid');
 
+  // CHANGE 1（MSG-20261002-57）：把全部可信不可变 reversal 字段纳入服务端 canonical snapshot，
+  // 审批绑定该 digest，锁后重验 —— 杜绝「审批 A、落库 B」。
+  const reversalSnapshotDigest = createHash('sha256')
+    .update(
+      canonicalJson({
+        organizationId,
+        originalSettlementId: input.originalSettlementId,
+        amount,
+        currency,
+        occurredAtUtc: occurredAt.toISOString(),
+        externalIdentityKind: input.externalIdentityKind,
+        externalIdentityValueHash: valueHash,
+        financialEventFingerprint: fingerprint,
+        reasonCode: input.reasonCode,
+        evidenceArtifactIds: input.evidenceReferences.map((r) => r.evidenceArtifactId).sort(),
+      }),
+    )
+    .digest('hex');
+
   const approved = await deps.verifyApproval({
     organizationId,
     action: SETTLEMENT_REVERSAL_ACTION,
     approvalId: input.approvalId,
     actorUserId: input.actorUserId,
     boundExtra: {
+      reversalSnapshotDigest,
       originalSettlementId: input.originalSettlementId,
       amount,
       currency,
