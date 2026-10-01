@@ -9,18 +9,18 @@
   "last_chatgpt_message": "MSG-20261001-01（PASS，本批次工程验收，REVIEWED_REF 9a806eb）—— 已逐字归档，compare.mjs FULL_COPY_OK（67 行）",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-09-30T23:26:15.971Z",
+  "updated_at": "2026-10-01T00:58:20.480Z",
   "previous_head": "c853aa8",
   "architect_decision_pending": true,
   "blocked_scope": null,
-  "last_send_head": "0745c33",
-  "last_sent_at": "2026-09-30T23:26:15.970Z",
+  "last_send_head": "e8ba20e",
+  "last_sent_at": "2026-10-01T00:58:20.480Z",
   "last_sent_fingerprint": "WAKEUP_DELIVERED:R18:retry-due-msg34-closure:9a806eb",
   "final_head": "1144401",
   "ci_run": "62dffa6 → SUCCESS（5/5）",
   "ci_result": "5/5 SUCCESS",
   "fix_pr": "https://github.com/anthonannabella-dev/crossclaim-ai/pull/10",
-  "channel_status": "CHATGPT_WEB_AVAILABLE（in-app browser surface 可用；Edge 扩展 surface 报 Codex auth token is unavailable —— 该 surface 与本流程无关，聚合 getState() 会因此整体失败，须逐 surface 判断）",
+  "channel_status": "CHATGPT_WEB_AVAILABLE（in-app browser 可用；须逐 surface 判读：聚合 getState() 会被 Edge 扩展 surface 的 token 错误毒化）",
   "pending_verdict_unarchived": "MSG-20260930-09 (REVISE) —— 面板不可读，未归档；其 TEST 清单已在 0023f51 落实",
   "b2_status": "PASS（MSG-20260930-10 工程修复 + MSG-20260930-11 集成 PASS/MERGE APPROVED）",
   "protocol": "DUAL_CHANNEL_WAKEUP（GitHub = 正式总线 / ChatGPT Web = 仅唤醒）",
@@ -47,5 +47,7 @@
     "9a806eb": "CI 144 文件 / 1335 tests PASS"
   },
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
-  "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）"
+  "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
+  "automation_status": "ACTIVE（FREQ=MINUTELY;INTERVAL=5；2026-10-01 核实后由 PAUSED 恢复）",
+  "last_tick_at": "2026-10-01T00:58:20.480Z"
 }
