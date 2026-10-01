@@ -52,6 +52,12 @@ import {
   PlatformWriteRequestError,
   requestPlatformWrite,
 } from '../platform-write/http-request';
+import {
+  RecoveryManualHttpError,
+  requestManualRecoveryReference,
+  requestManualRecoverySubmit,
+} from '../recovery/http-request';
+import { ManualReferenceError } from '../recovery/manual-reference';
 import type { AuditWriter } from '../audit';
 import { submitClaimWithApproval } from '../claims/claim-submission';
 import { BILLING_DRAFT_ACTION, createBillingDraft } from '../billing/billing-draft';
@@ -162,6 +168,9 @@ const CASE_BILLING_DRAFT_PATH = /^\/cases\/([^/]+)\/billing\/draft$/;
 const CASE_APPEAL_SUBMIT_PATH = /^\/cases\/([^/]+)\/appeal\/submit$/;
 // R37 P1（MSG-20261001-22 CHANGE A）：平台真实写回入口（EXTERNAL_WRITE · transport 恒关）
 const CASE_PLATFORM_WRITE_PATH = /^\/cases\/([^/]+)\/platform\/write$/;
+// R44（MSG-20261001-39 NEXT）：人工追回提交入口（受保护动作 · 复用 R43 S3/S4 服务，不复制事务逻辑）
+const CASE_RECOVERY_MANUAL_SUBMIT_PATH = /^\/cases\/([^/]+)\/recovery\/manual-submit$/;
+const CASE_RECOVERY_MANUAL_REFERENCE_PATH = /^\/cases\/([^/]+)\/recovery\/manual-reference$/;
 // MSG-20260929-30：运营看板（只读投影，GET only）
 const OPERATIONS_DASHBOARD_PATH = /^\/operations\/dashboard$/;
 const OPERATIONS_CLAIMS_PATH = /^\/operations\/claims$/;
@@ -256,6 +265,11 @@ function statusFor(error: unknown): { code: number; error: string } {
   if (error instanceof ActionGuardNotConfiguredError) return { code: 403, error: error.code };
   // R37 P1：platform.write 入口的结构化拒绝（客户端自证 / 幂等键不一致 / 目标不存在等）
   if (error instanceof PlatformWriteRequestError) return { code: error.httpStatus, error: error.code };
+  // R44：人工追回提交入口的结构化拒绝（客户端自证 / 幂等键不一致 / 目标不存在等）
+  if (error instanceof RecoveryManualHttpError) return { code: error.httpStatus, error: error.code };
+  if (error instanceof ManualReferenceError) {
+    return { code: error.code === 'PROVIDER_CASE_REF_CONFLICT' ? 409 : 400, error: error.code };
+  }
   // R2：锁内审批核验失败 → 403 + 精确原因（APPROVAL_*）
   if (error instanceof ApprovalBoundaryError) return { code: 403, error: error.reason };
   if (error instanceof WorkflowError) {
@@ -368,6 +382,8 @@ export async function handleWorkflowRequest(
   const caseBillingDraft = CASE_BILLING_DRAFT_PATH.exec(path);
   const caseAppealSubmit = CASE_APPEAL_SUBMIT_PATH.exec(path);
   const casePlatformWrite = CASE_PLATFORM_WRITE_PATH.exec(path);
+  const caseRecoveryManualSubmit = CASE_RECOVERY_MANUAL_SUBMIT_PATH.exec(path);
+  const caseRecoveryManualReference = CASE_RECOVERY_MANUAL_REFERENCE_PATH.exec(path);
   const operationsDashboard = OPERATIONS_DASHBOARD_PATH.test(path);
   const operationsClaims = OPERATIONS_CLAIMS_PATH.test(path);
   const operationsRecovery = OPERATIONS_RECOVERY_PATH.test(path);
@@ -400,7 +416,7 @@ export async function handleWorkflowRequest(
     adminPermissionMatrix ||
     adminMemberDetail !== null ||
     adminKillSwitch;
-  if (!adminAny && !operationsDashboard && !operationsClaims && !operationsRecovery && !review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !paymentReviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !replayPath && !replayReviewPath && !retryDuePath && !retryDueFreezePath && !retryDueReviewPath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim && !caseClaimSubmit && !caseClaimPrepare && !caseBillingDraft && !caseAppealSubmit && !casePlatformWrite) {
+  if (!adminAny && !operationsDashboard && !operationsClaims && !operationsRecovery && !review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !paymentReviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !replayPath && !replayReviewPath && !retryDuePath && !retryDueFreezePath && !retryDueReviewPath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim && !caseClaimSubmit && !caseClaimPrepare && !caseBillingDraft && !caseAppealSubmit && !casePlatformWrite && !caseRecoveryManualSubmit && !caseRecoveryManualReference) {
     return false;
   }
 
@@ -1077,6 +1093,48 @@ export async function handleWorkflowRequest(
         {
           prisma: deps.prisma,
           ...(deps.actionGuard ? { actionGuard: deps.actionGuard } : {}),
+        },
+      );
+      sendJson(res, result.httpStatus, result.body);
+      return true;
+    }
+    if (caseRecoveryManualSubmit) {
+      // R44：人工追回提交（受保护动作 recovery.manual_submit · 复用 R43 S3 服务；零平台外写）
+      const body = await readJsonBody(req);
+      const caseId = caseRecoveryManualSubmit[1] ?? '';
+      const result = await requestManualRecoverySubmit(
+        {
+          organizationId: actor.organizationId,
+          actorUserId: actor.actorUserId,
+          role: actor.role,
+          caseId,
+        },
+        body,
+        {
+          prisma: deps.prisma,
+          ...(deps.actionGuard ? { actionGuard: deps.actionGuard } : {}),
+          ...(deps.now ? { now: deps.now } : {}),
+        },
+      );
+      sendJson(res, result.httpStatus, result.body);
+      return true;
+    }
+    if (caseRecoveryManualReference) {
+      // R44：人工提交后补录 provider case reference（独立受保护动作 · 独立 binding · append-only）
+      const body = await readJsonBody(req);
+      const caseId = caseRecoveryManualReference[1] ?? '';
+      const result = await requestManualRecoveryReference(
+        {
+          organizationId: actor.organizationId,
+          actorUserId: actor.actorUserId,
+          role: actor.role,
+          caseId,
+        },
+        body,
+        {
+          prisma: deps.prisma,
+          ...(deps.actionGuard ? { actionGuard: deps.actionGuard } : {}),
+          ...(deps.now ? { now: deps.now } : {}),
         },
       );
       sendJson(res, result.httpStatus, result.body);
