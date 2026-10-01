@@ -1097,3 +1097,11 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 首要风险：重复事实导致金额双计；其次 expected basis 漂移；再次把 projection 当 immutable fact。
 - NEXT：**R45-A Schema Delta Request**（docs-only，仍不实现）。
 - 档案：`AI-ARCHITECT-INBOX.md` → `MSG-20261001-44`；`compare.mjs` = **FULL_COPY_OK**。
+
+## 2026-10-01 JST — R45-A Schema Delta Request 送审（Outcome / Reimbursement Reconciliation）
+
+- 文档：`docs/releases/R45-A-RECONCILIATION-SCHEMA-DELTA-REQUEST.md`（docs-only；未改 Schema、未写 migration、未改代码、未加依赖）。
+- 表集合：ProviderOutcomeFact / ReimbursementFact（含 providerEventId 或版本化 fingerprint）/ ExpectedRecoveryBasis（版本化）/ ReconciliationOverrideDecision（每笔单独审批）/ ClaimReconciliationProjection（derived）+ 待裁 ReconciliationTolerancePolicy。
+- 关键不变量：UNIQUE(org, providerEventFingerprint) 防重复 ingest 双计；rr1: reconciliation 幂等；FULLY_RECONCILED 严格条件 + 明确 expected basis；CONFLICTING_EVIDENCE fail-closed；reversal 保留原事实并重算 projection；override 不改原事实。
+- 索引/约束/触发器/迁移影响已列；required-triggers 与 append-only 清单、two-stage-upgrade、CI fresh 路径同批更新。
+- 送审：REVIEWED_HEAD aa9225e（Issue #2 comment 5933085332）；唤醒已投递并三要素验证。

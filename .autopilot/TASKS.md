@@ -428,3 +428,10 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - DECISION：**PASS WITH REVISE**（REVIEWED_HEAD 4d01a09；归档 FULL_COPY_OK）。7 项裁决 + CHANGE A/B/C 见 STATE.r45_design_verdict。
 - NEXT：**R45-A — Outcome / Reimbursement Reconciliation Schema Delta Request**（docs-only；仍不实现）。
 - 禁止：Settlement / Billing / Fee / 改写 RecoveryLedger / 平台外写 / transport。
+
+### R45-A（Reconciliation Schema Delta Request）—— 待裁决
+
+- 交付：`docs/releases/R45-A-RECONCILIATION-SCHEMA-DELTA-REQUEST.md`（docs-only，未实施）。
+- 送审：REVIEWED_HEAD aa9225e（Issue #2 comment 5933085332）。
+- NEXT：PASS → R45-B Implementation Plan（仍不写代码）；REVISE → 修订后重送；BLOCK → 停止。
+- 禁止：Settlement / Billing / Fee / RecoveryLedger 改写 / 平台外写 / transport。
