@@ -43,7 +43,7 @@
 | `commission.charge` | 待定（结算/佣金路径） | 资金动作（HOLD） | 同上 + 财务复核 | 待补 | TODO |
 | `payment.capture` | 账单登记入口（HTTP 受保护入口） | 资金动作（HOLD） | Action Guard 审批绑定 + 锁内事实 CAS + 快照交错校验 | HTTP 级：拒绝零副作用 / 允许恰一次（含并发与等锁失效） | **已验收 PASS（MSG-20260930-24 / REVIEWED_REF 73115a3）** |
 | `secret.rotate` | 待定（运维路径） | 凭据操作（HOST ONLY） | HOST APPROVAL | 待补 | TODO |
-| `claim.prepare` | `POST /cases/:id/claim/prepare`（http-routes + server WORKFLOW_PATH） | 业务库写入（第 1 轮 Claim 草稿 `target`/`aiDraftText` + `claim.prepared` 审计同事务；不推进状态） | 能力闸门（`INTERNAL_WRITE` / `requires: []`，**无人工审批**） | HTTP 级 12/12（默认 READ_ONLY、缺 guard、Kill Switch 关闭、feature 未开启、跨租户 404、FINANCE 403、已提交 409、审计失败回滚、非法输入 400，拒绝均零副作用） | 已接入（R24 送审中） |
+| `claim.prepare` | `POST /cases/:id/claim/prepare`（http-routes + server WORKFLOW_PATH） | 业务库写入（第 1 轮 Claim 草稿 `target`/`aiDraftText` + `claim.prepared` 审计同事务；不推进状态） | 能力闸门（`INTERNAL_WRITE` / `requires: []`，**无人工审批**）+ 案件锁 + Claim 行锁后最终主体/角色重验 | HTTP 级 **21/21**（含行锁等待期降权/停用/未变对照、并发创建、状态交错、更新路径审计失败回滚） | **已验收 PASS（MSG-20261001-10 / REVIEWED_REF d6d239b；CI 36811474236）** |
 | `billing.draft` | 待定（内部写入） | 业务库写入 | 不要求人工审批 | 待补 | TODO |
 | `evidence.read` | 待定（只读） | 无 | 无 | 待补 | TODO |
 
@@ -154,8 +154,8 @@
 | 租户隔离与动作权限 | 已实现（R24 送审中） | 跨租户 → 404 NOT_FOUND；服务内 `assertPermission(role,'claimTrackingApprove')`（OWNER/ADMIN），FINANCE → 403 FORBIDDEN |
 | 审计失败关闭 | 已实现（R24 送审中） | `claim.prepared` 与业务写入同事务客户端；库拒绝审计写入 → 整笔回滚 |
 | 零外部副作用 | 已实现（R24 送审中） | 不引用适配器写入面、不产生资金对象、不推进 Claim（submittedAt/submittedBy/approved* 保持空）；`platformWriteExecuted=false` |
-| 集成测试 | **18/18**（R25 送审中） | `action-guard-claim-prepare-http-db.test.ts`（真实 HTTP + PostgreSQL；含 MSG-08 CHANGE A/B：prepare/submit 竞争、并发创建、等锁期降权/停用/未变对照、更新路径审计失败回滚） |
-| 架构方裁决 | **待裁决** | 本批次送审 R24；② 整体仍 NOT COMPLETE |
+| 集成测试 | **21/21**（R26 已验收） | `action-guard-claim-prepare-http-db.test.ts`（真实 HTTP + PostgreSQL；含 MSG-08 CHANGE A/B：prepare/submit 竞争、并发创建、等锁期降权/停用/未变对照、更新路径审计失败回滚） |
+| 架构方裁决 | **PASS（MSG-20261001-10 / REVIEWED_REF d6d239b / CI run 36811474236）** | claim.prepare 工程批次收口（R24→R25→R26；CHANGE A 竞争保护 + CHANGE B 行锁后最终重验）；② 整体仍 NOT COMPLETE |
 
 
 > **MSG-20261001-08（R24 = REVISE）已实施**：准备事务改为「案件锁 `cc-recovery-case:<caseId>`（与提交服务同协议）→ 租户核对 → 锁后重读 ACTIVE 用户 + 有效 Membership + 当前角色并重验权限 → 既有 Claim 行锁 → 带租户/案件/round=1/status=DRAFT 条件的 CAS」；主体失效沿用稳定码 `APPROVAL_ACTOR_MISMATCH`。集成测试 12 → 18 项（R25 送审中）。

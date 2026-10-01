@@ -206,3 +206,40 @@ CI 红 · 测试未跑 · API 未验证 · 模型许可证未知 · migration �
 - 审计/报告类文档**不复述凭据取值**（文档自身不得成为新的泄露源）
 - 凭据只以"引用名"形式出现在配置里，实际值放密钥管理
 - 引入依赖前必须过许可证闸门；模型权重单独登记在 `MODEL_LICENSES.md`
+
+
+---
+
+## 八、产品总方向（长期冻结）与自治循环协议
+
+### 8.1 产品总方向（2026-10-01 HOST PRODUCT DIRECTION，长期有效）
+
+- CrossClaim AI = **跨境资金损耗 Recovery OS**：Platform / Logistics / Customs-Trade / Independent-site-Payment 四类 Recovery 共享**统一 Recovery Engine**
+  （`Source Data → Canonical Fact → RecoveryOpportunity → Case → Evidence → Claim/Appeal/Dispute → Settlement → RecoveryLedger → Billing`）。
+- **每个 Gate / Wave / Schema / Adapter / Claim / Appeal / Evidence / Settlement / Billing 设计都必须自检**：是否仍满足统一跨渠道 Recovery Engine；不得收缩为 Amazon/FBA 单点工具，也不得为单渠道另建孤立子系统。
+- 长期定位与 backlog 登记见 `PRODUCT_SPEC.md` §十一；设计稿见 `docs/releases/PRODUCT-SCOPE-04-INDEPENDENT-SITE-CHARGEBACK-RECOVERY-DESIGN.md`。
+- PRODUCT-SCOPE-04 当前仅**登记 + 设计排队**，未实施；其 Schema/规则/资金链路实施需架构方裁决。
+
+### 8.2 自治循环 STEP 0 · reconcile（每轮必须执行）
+
+每轮开始按以下**固定顺序**重建事实，禁止只读本地 STATE 直接续跑：
+
+1. **GitHub Issue #2 最新正式 ARCHITECT VERDICT**（正式总线）
+2. `AI-ARCHITECT-INBOX.md` 最新 `### [MSG-…]`
+3. `.autopilot/STATE.json`
+4. `.autopilot/TASKS.md`
+
+优先级：**GitHub 正式裁决 > AI-ARCHITECT-INBOX > STATE.json > TASKS.md**。
+发生冲突时以更高优先级为准并自动修正低优先级记录（含 `head` / `current_head` / `last_chatgpt_message` / `architect_decision_pending` / `reviewed_head`），
+修正后继续执行当前任务，**不因 reconcile 本身而停下**。
+
+### 8.3 自治循环裁决语义（5 分钟 tick，保持 ACTIVE）
+
+| 裁决 | 自动动作 |
+| --- | --- |
+| `PASS` | 登记该批次 PASS → 立即进入下一小批次（NEXT） |
+| `REVISE` | 立即按 `CHANGE` 实施 → 专项/回归/tsc/prisma → commit/push/CI → 重新送审 |
+| `BLOCK` | 停止被否定方案，不得绕道；提交替代方案重新审计 |
+
+只有本文件 §七 `HOST APPROVAL REQUIRED` 的 1–11 项才允许打断自治循环请求宿主。
+Production Enablement / 真实平台外写 / 真实资金 / 客户提交 / 生产凭据：**继续 HOLD**。
