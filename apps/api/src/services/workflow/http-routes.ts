@@ -57,6 +57,7 @@ import {
   requestManualRecoveryReference,
   requestManualRecoverySubmit,
   requestManualRecoverySubmitApproval,
+  requestManualRecoveryReferenceApproval,
 } from '../recovery/http-request';
 import { ManualReferenceError } from '../recovery/manual-reference';
 import type { AuditWriter } from '../audit';
@@ -174,6 +175,8 @@ const CASE_RECOVERY_MANUAL_SUBMIT_PATH = /^\/cases\/([^/]+)\/recovery\/manual-su
 const CASE_RECOVERY_MANUAL_REFERENCE_PATH = /^\/cases\/([^/]+)\/recovery\/manual-reference$/;
 // R44-A（MSG-20261001-41 NEXT）：人工提交审批创建入口（只创建审批事实，不执行提交）
 const CASE_RECOVERY_MANUAL_APPROVAL_PATH = /^\/cases\/([^/]+)\/recovery\/manual-submit-approval$/;
+// R44-B（MSG-20261001-42 NEXT）：reference 补录的独立审批创建入口
+const CASE_RECOVERY_MANUAL_REFERENCE_APPROVAL_PATH = /^\/cases\/([^/]+)\/recovery\/manual-reference-approval$/;
 // MSG-20260929-30：运营看板（只读投影，GET only）
 const OPERATIONS_DASHBOARD_PATH = /^\/operations\/dashboard$/;
 const OPERATIONS_CLAIMS_PATH = /^\/operations\/claims$/;
@@ -388,6 +391,7 @@ export async function handleWorkflowRequest(
   const caseRecoveryManualSubmit = CASE_RECOVERY_MANUAL_SUBMIT_PATH.exec(path);
   const caseRecoveryManualReference = CASE_RECOVERY_MANUAL_REFERENCE_PATH.exec(path);
   const caseRecoveryManualApproval = CASE_RECOVERY_MANUAL_APPROVAL_PATH.exec(path);
+  const caseRecoveryManualReferenceApproval = CASE_RECOVERY_MANUAL_REFERENCE_APPROVAL_PATH.exec(path);
   const operationsDashboard = OPERATIONS_DASHBOARD_PATH.test(path);
   const operationsClaims = OPERATIONS_CLAIMS_PATH.test(path);
   const operationsRecovery = OPERATIONS_RECOVERY_PATH.test(path);
@@ -420,7 +424,7 @@ export async function handleWorkflowRequest(
     adminPermissionMatrix ||
     adminMemberDetail !== null ||
     adminKillSwitch;
-  if (!adminAny && !operationsDashboard && !operationsClaims && !operationsRecovery && !review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !paymentReviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !replayPath && !replayReviewPath && !retryDuePath && !retryDueFreezePath && !retryDueReviewPath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim && !caseClaimSubmit && !caseClaimPrepare && !caseBillingDraft && !caseAppealSubmit && !casePlatformWrite && !caseRecoveryManualSubmit && !caseRecoveryManualReference && !caseRecoveryManualApproval) {
+  if (!adminAny && !operationsDashboard && !operationsClaims && !operationsRecovery && !review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !paymentReviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !replayPath && !replayReviewPath && !retryDuePath && !retryDueFreezePath && !retryDueReviewPath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim && !caseClaimSubmit && !caseClaimPrepare && !caseBillingDraft && !caseAppealSubmit && !casePlatformWrite && !caseRecoveryManualSubmit && !caseRecoveryManualReference && !caseRecoveryManualApproval && !caseRecoveryManualReferenceApproval) {
     return false;
   }
 
@@ -1119,6 +1123,18 @@ export async function handleWorkflowRequest(
           ...(deps.actionGuard ? { actionGuard: deps.actionGuard } : {}),
           ...(deps.now ? { now: deps.now } : {}),
         },
+      );
+      sendJson(res, result.httpStatus, result.body);
+      return true;
+    }
+    if (caseRecoveryManualReferenceApproval) {
+      // R44-B：创建 reference 补录审批（canonical 恒服务端构造；不创建 Reference、不消费审批）
+      const body = await readJsonBody(req);
+      const caseId = caseRecoveryManualReferenceApproval[1] ?? '';
+      const result = await requestManualRecoveryReferenceApproval(
+        { organizationId: actor.organizationId, actorUserId: actor.actorUserId, role: actor.role, caseId },
+        body,
+        { prisma: deps.prisma, ...(deps.actionGuard ? { actionGuard: deps.actionGuard } : {}), ...(deps.now ? { now: deps.now } : {}) },
       );
       sendJson(res, result.httpStatus, result.body);
       return true;

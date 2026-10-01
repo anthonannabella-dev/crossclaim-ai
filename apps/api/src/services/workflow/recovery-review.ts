@@ -25,6 +25,7 @@ import {
   PLATFORM_WRITE_ACTION,
   RECOVERY_CONFIRMATION_ACTION,
   RECOVERY_MANUAL_SUBMIT_ACTION,
+  RECOVERY_MANUAL_REFERENCE_ACTION,
 } from '../action-guard/approval-verifier';
 import { WorkflowError } from './opportunity-review';
 import { assertPermission } from './permissions';
@@ -392,11 +393,21 @@ export async function submitRecoveryReview(
         }
       } else if (
         (NON_MONEY_APPROVAL_ACTIONS as readonly string[]).includes(requestedAction) ||
-        requestedAction === RECOVERY_MANUAL_SUBMIT_ACTION
+        requestedAction === RECOVERY_MANUAL_SUBMIT_ACTION ||
+        requestedAction === RECOVERY_MANUAL_REFERENCE_ACTION
       ) {
         // 非资金动作（claim.submit / appeal.submit）：无金额语义，但必须绑定操作依据；
         if (bound.basisReference === null) {
           throw new WorkflowError('INVALID_INPUT', '审批必须绑定操作依据（basisReference）');
+        }
+        if (requestedAction === RECOVERY_MANUAL_REFERENCE_ACTION) {
+          // R44-B：reference 补录审批必须绑定 submissionId + claimItemId + providerCaseRefCanonical（canonical 恒服务端构造）
+          const refExtra = normalizeBoundExtra(input.boundExtra);
+          for (const key of ['submissionId', 'claimItemId', 'providerCaseRefCanonical']) {
+            if (!refExtra || refExtra[key] === undefined || refExtra[key] === null || refExtra[key] === '') {
+              throw new WorkflowError('INVALID_INPUT', 'reference 补录审批必须绑定：' + key);
+            }
+          }
         }
         if (requestedAction === RECOVERY_MANUAL_SUBMIT_ACTION) {
           // R44-A：人工提交审批必须绑定五元 versioned basis（与执行时核验逐项一致）

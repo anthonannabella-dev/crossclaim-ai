@@ -41,6 +41,7 @@ export const RECOVERY_MANUAL_HTTP_CODES = [
   'RECOVERY_MANUAL_REFERENCE_REQUIRED',
   'RECOVERY_MANUAL_APPROVAL_INVALID_DECISION',
   'RECOVERY_MANUAL_APPROVAL_PACKAGE_TERMINAL',
+  'RECOVERY_MANUAL_APPROVAL_REFERENCE_REQUIRED',
 ] as const;
 export type RecoveryManualHttpCode = (typeof RECOVERY_MANUAL_HTTP_CODES)[number];
 
@@ -143,6 +144,23 @@ export interface ManualSubmitApprovalHttpResponse {
   /** true = 复用了同 action + 同 basis 的既有未消费未过期审批（幂等） */
   idempotent: boolean;
   /** 审批创建恒不产生任何执行/资金副作用 */
+  platformWriteExecuted: false;
+}
+
+
+export interface ManualReferenceApprovalHttpResponse {
+  decision: 'REQUEST' | 'APPROVE';
+  caseId: string;
+  submissionId: string;
+  claimItemId: string;
+  /** 服务端 canonical 化结果（客户端只提供 raw） */
+  providerCaseRefCanonical: string;
+  approvalBasisReference: string;
+  state?: 'PENDING';
+  approvalId?: string;
+  idempotent: boolean;
+  /** reference 审批只授权“记录人工取得的 provider reference”，绝不表示 provider 已受理 */
+  providerAccepted: false;
   platformWriteExecuted: false;
 }
 
@@ -591,4 +609,139 @@ async function findReusableManualSubmitApproval(
   const row = rows[0];
   if (!row) return null;
   return { approvalId: row.id, expiresAt: row.expires_at ? new Date(row.expires_at).toISOString() : null };
+}
+
+/**
+ * `POST /cases/:caseId/recovery/manual-reference-approval`（R44-B）
+ * -------------------------------------------------------------------
+ * 为 `recovery.manual_submit_reference_recorded` 建立**独立** approval creation 路径：
+ *   · 客户端只提供 raw reference；canonical 恒由服务端计算（与 execution 同一个 canonicalize + 同一 basis builder）；
+ *   · 与 S3 / R44-A 的 `recovery.manual_submit` 审批严格 action isolation（双向不可复用）；
+ *   · 只创建审批事实：不创建 Reference、不改 Submission/ClaimItem、不消费 approval、不产生 providerAccepted。
+ */
+export async function requestManualRecoveryReferenceApproval(
+  context: RecoveryManualRouteContext,
+  body: Record<string, unknown>,
+  deps: RecoveryManualRequestDeps,
+): Promise<{ httpStatus: number; body: ManualReferenceApprovalHttpResponse }> {
+  rejectClientAssertions(body, context.caseId);
+
+  const submissionId = str(body.submissionId);
+  if (submissionId === '') throw invalidBody('submissionId 必填');
+
+  const rawRef =
+    typeof body.providerCaseRefRaw === 'string'
+      ? body.providerCaseRefRaw
+      : typeof body.providerCaseRef === 'string'
+        ? body.providerCaseRef
+        : '';
+  if (rawRef.trim() === '') {
+    throw new RecoveryManualHttpError('RECOVERY_MANUAL_APPROVAL_REFERENCE_REQUIRED', 400, 'providerCaseRefRaw 必填（canonical 由服务端构造）');
+  }
+
+  const submission = await deps.prisma.recoveryManualSubmission.findFirst({
+    where: { id: submissionId, organizationId: context.organizationId },
+    select: { id: true, claimItemId: true, caseId: true },
+  });
+  if (!submission || submission.caseId !== context.caseId) {
+    throw notFound('RECOVERY_MANUAL_SUBMISSION_NOT_FOUND', 'RecoveryManualSubmission 不存在或不属于该案件');
+  }
+
+  const rawDecision = str(body.decision).toUpperCase();
+  const decision = rawDecision === '' ? 'APPROVE' : rawDecision;
+  if (decision !== 'REQUEST' && decision !== 'APPROVE') {
+    throw new RecoveryManualHttpError('RECOVERY_MANUAL_APPROVAL_INVALID_DECISION', 400, 'decision 必须是 REQUEST 或 APPROVE');
+  }
+
+  // canonical 化（含空值校验）恒在服务端完成 —— 客户端传入 canonical 已在上面被结构化拒绝
+  const canonical = canonicalizeProviderCaseRef(rawRef);
+  const basisReference = buildRecoveryReferenceBasisReference({
+    submissionId: submission.id,
+    claimItemId: submission.claimItemId,
+    providerCaseRefCanonical: canonical,
+  });
+
+  const base = {
+    caseId: context.caseId,
+    submissionId: submission.id,
+    claimItemId: submission.claimItemId,
+    providerCaseRefCanonical: canonical,
+    approvalBasisReference: basisReference,
+  };
+
+  if (decision === 'APPROVE') {
+    const reusable = await findReusableReferenceApproval(deps.prisma, {
+      organizationId: context.organizationId,
+      caseId: context.caseId,
+      basisReference,
+    });
+    if (reusable) {
+      return {
+        httpStatus: 200,
+        body: { ...base, decision: 'APPROVE', approvalId: reusable.approvalId, idempotent: true, providerAccepted: false, platformWriteExecuted: false },
+      };
+    }
+  }
+
+  const ttlRaw = body.approvalTtlMs;
+  const review = (await submitRecoveryReview(
+    deps.prisma,
+    {
+      organizationId: context.organizationId,
+      actorUserId: context.actorUserId,
+      role: context.role,
+      caseId: context.caseId,
+      decision,
+      ...(decision === 'APPROVE'
+        ? {
+            boundAction: RECOVERY_MANUAL_REFERENCE_ACTION,
+            boundPayload: { basisReference },
+            boundExtra: {
+              submissionId: submission.id,
+              claimItemId: submission.claimItemId,
+              providerCaseRefCanonical: canonical,
+            },
+            ...(typeof ttlRaw === 'number' ? { approvalTtlMs: ttlRaw } : {}),
+          }
+        : {}),
+    } as never,
+    deps.now ?? (() => new Date()),
+  )) as { approvalId?: string };
+
+  if (decision === 'REQUEST') {
+    return { httpStatus: 200, body: { ...base, decision: 'REQUEST', state: 'PENDING', idempotent: false, providerAccepted: false, platformWriteExecuted: false } };
+  }
+  if (!review.approvalId) throw invalidBody('审批创建失败（未返回 approvalId）');
+  return {
+    httpStatus: 200,
+    body: { ...base, decision: 'APPROVE', approvalId: review.approvalId, idempotent: false, providerAccepted: false, platformWriteExecuted: false },
+  };
+}
+
+/** reference 审批幂等：同 action + 同 canonical basis 的既有未消费未过期审批 */
+async function findReusableReferenceApproval(
+  prisma: PrismaClient,
+  args: { organizationId: string; caseId: string; basisReference: string },
+): Promise<{ approvalId: string } | null> {
+  const rows = await prisma.$queryRawUnsafe<Array<{ id: string }>>(
+    'SELECT a.id AS id FROM "AuditLog" a\n' +
+      ' WHERE a."organizationId" = $1\n' +
+      "   AND a.action = 'recovery.review_approved'\n" +
+      "   AND a.\"entityType\" = 'Case' AND a.\"entityId\" = $2\n" +
+      "   AND a.changes ->> 'boundAction' = $3\n" +
+      "   AND a.changes -> 'boundPayload' ->> 'basisReference' = $4\n" +
+      '   AND (a.changes ->> \'expiresAt\')::timestamptz > now()\n' +
+      '   AND NOT EXISTS (\n' +
+      '     SELECT 1 FROM "AuditLog" c\n' +
+      '      WHERE c."organizationId" = a."organizationId"\n' +
+      "        AND c.action = 'recovery.approval_consumed'\n" +
+      "        AND c.changes ->> 'approvalId' = a.id)\n" +
+      ' ORDER BY a."createdAt" DESC\n' +
+      ' LIMIT 1',
+    args.organizationId,
+    args.caseId,
+    RECOVERY_MANUAL_REFERENCE_ACTION,
+    args.basisReference,
+  );
+  return rows[0] ? { approvalId: rows[0].id } : null;
 }
