@@ -2,10 +2,10 @@
   "runner_status": "RUNNING",
   "current_gate": "B2-FIX R1",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
-  "current_head": "64e404b",
-  "last_action": "MSG-20261001-10 (R26) = PASS；claim.prepare 工程批次收口并登记；逐字归档 + FULL_COPY_OK；Issue #2 comment 5924309102；STATE 漂移已按 GitHub 裁决修正",
-  "last_action_at": "2026-10-01T03:48:11.243Z",
-  "next_action": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
+  "current_head": "388f9c8",
+  "last_action": "billing.draft 批次完成并送审 R27（Issue #2 comment 5924438047 / CI run 36812496478 success / HEAD 388f9c8）；专项 13/13、回归 33 files/297、tsc PASS、prisma valid",
+  "last_action_at": "2026-10-01T03:59:00.445Z",
+  "next_action": "等待 MSG-20261001-11（R27 billing.draft 裁决）；PASS → 登记并进入下一小批次，REVISE → 立即按 CHANGE 改后重新送审",
   "retry_count": 0,
   "last_error": null,
   "reconcile": "RECONCILE_REQUIRED",
@@ -16,5 +16,8 @@
     "real_money": false,
     "customer_submission": false,
     "production_credentials": "HOST_ONLY"
-  }
+  },
+  "last_tick_at": "2026-10-01T03:59:00.445Z",
+  "state": "REVIEW_WAIT",
+  "architect_decision_pending": true
 }
