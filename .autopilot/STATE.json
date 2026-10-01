@@ -1,6 +1,6 @@
 {
   "gate": "B2-FIX R1",
-  "head": "309fdd3",
+  "head": "219a67c",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
   "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
@@ -9,13 +9,13 @@
   "last_chatgpt_message": "MSG-20261001-39",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T12:37:30.147Z",
+  "updated_at": "2026-10-01T12:45:41.734Z",
   "previous_head": "3a68d17",
-  "architect_decision_pending": false,
+  "architect_decision_pending": true,
   "blocked_scope": null,
-  "last_send_head": "f77da82",
-  "last_sent_at": "2026-10-01T12:34:27.336Z",
-  "last_sent_fingerprint": "R43-S6:Full-Regression-Release-Checkpoint",
+  "last_send_head": "219a67c",
+  "last_sent_at": "2026-10-01T12:45:41.734Z",
+  "last_sent_fingerprint": "R44:Manual-Recovery-HTTP-API-Boundary",
   "final_head": "1144401",
   "ci_run": "36833002042",
   "ci_result": "SUCCESS",
@@ -51,10 +51,10 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-01T12:36:09.809Z",
   "state": "IMPLEMENT",
-  "last_action": "HOST DIRECTIVE「冻结底座 + 加速交付」已落库（DELIVERY-ACCELERATION-POLICY.md + AGENTS.md §三·五 + STATE/TASKS/RUN_LOG）：增量风险审计、复用优先、仅 8 类边界触发架构审计、每轮回报 FOUNDATION_REUSED / NEW_RISK_BOUNDARY / ARCH_REVIEW_REQUIRED",
-  "last_action_at": "2026-10-01T12:37:30.147Z",
-  "next_action": "R44 — Manual Recovery HTTP/API Boundary：先提交实现计划/边界送审（authn → tenant/role → action guard → 服务端 package/basis 解析 → 复用 S3/S4 服务 → 响应语义；跨租户 404、客户端不得自证 digest/basis、重复/并发、错误 package/reference binding、失败零推进、handler 不复制事务逻辑）。R44 不得实现 outcome/reimbursement reconciliation、不得联动 Settlement/Billing、不得开启任何 Amazon write transport。",
-  "current_head": "3a68d17",
+  "last_action": "R44 Manual Recovery HTTP/API Boundary 已实现并送审（增量风险审计：仅入口边界）—— 10 个真库 HTTP 用例；recovery-manual 69/69 + action-guard 62/62；来源入口层零事务（静态探针）；等待架构方裁决",
+  "last_action_at": "2026-10-01T12:45:41.734Z",
+  "next_action": "等待 R44 增量裁决（PASS → 入口边界收口并按 HOST DIRECTIVE 直接进入下一执行单元；REVISE → 按 CHANGE 修改重送；BLOCK → 停止该入口）。并行准备 R45（Outcome / Reimbursement Reconciliation）设计与 Schema Delta Request（docs-only，可先做，不触碰已冻结底座）。",
+  "current_head": "219a67c",
   "reviewed_head": "07b7009",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -1119,5 +1119,28 @@
       "TRANSPORT=false",
       "SETTLEMENT/BILLING LINKAGE HOLD"
     ]
+  },
+  "r44_submission": {
+    "submission_comment": "5931742832",
+    "ci_run": "36863814805",
+    "reviewed_head": "219a67c",
+    "new_boundary": "POST /cases/:caseId/recovery/manual-submit 与 /recovery/manual-reference（受保护动作入口）",
+    "doc": "docs/releases/R44-MANUAL-RECOVERY-HTTP-BOUNDARY-CHECKPOINT.md",
+    "evidence": {
+      "http_tests": "recovery-manual-http-db.test.ts 10/10 PASS（真实 HTTP + PostgreSQL）",
+      "regression": "recovery-manual-* 69/69 PASS；action-guard 家族 62/62 PASS",
+      "gates": "tsc PASS；api-contract OK；prisma validate valid（未改 Schema）"
+    },
+    "risk_classification": {
+      "FOUNDATION_REUSED": "R43 S1–S6 持久化底座 + platform.write 入口范式",
+      "NEW_RISK_BOUNDARY": "YES（新增两个对外 HTTP 入口）",
+      "ARCH_REVIEW_REQUIRED": "YES（增量：仅入口边界 / 请求契约 / 错误映射 / 零副作用证据）"
+    },
+    "known_gaps": [
+      "recovery.manual_submit 审批的创建入口尚未暴露（reviewRecovery 拒绝该 boundAction）→ 独立批次",
+      "R45 outcome/reimbursement reconciliation、R46 Settlement/Billing linkage → 各自独立批次"
+    ],
+    "wakeup_channel": "https://chatgpt.com/c/6ab9ee1b-fd54-83ee-b363-b67750afcedd",
+    "wakeup_delivery": "DELIVERED_VERIFIED（输入框清空 / 新用户消息在底部 / 生成中）"
   }
 }

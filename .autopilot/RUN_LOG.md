@@ -1001,3 +1001,13 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 对账：宿主点名的 Prisma ledger port / T1–T3 / R1 / approval_consumed 同事务 / T2 事务外投递 / PG1–PG10 / reconcile 策略测试，已属 platform-write ledger 批次（MSG-20261001-21 PASS CLOSED），无需重复审计。
 - NEXT：R44 — Manual Recovery HTTP/API Boundary（仅入口边界；复用 R43 S3/S4 服务，不复制事务逻辑）。
 - 记录时 HEAD：0029d46。
+
+## 2026-10-01 JST — R44 Manual Recovery HTTP/API Boundary 实现 + 增量风险审计送审
+
+- 新增边界（唯一）：`POST /cases/:caseId/recovery/manual-submit` 与 `POST /cases/:caseId/recovery/manual-reference`（受保护动作入口；复用 R43 S3/S4 服务）。
+- 入口不变量：租户/身份来自会话与路径；跨租户或错案件 404；服务端事实字段（digest / basis / version / canonical / status / submittedAt）出现在请求体一律 400；幂等键服务端派生 rms1-<claimItemId>，不一致 409；Action Guard 未注入 403、缺审批 409；入口层零事务（静态探针无 $transaction / FOR UPDATE / updateMany / pg_advisory）；响应恒 platformWriteExecuted=false。
+- 证据：`recovery-manual-http-db.test.ts` 10/10 PASS（真实 HTTP + PostgreSQL）；recovery-manual-* 69/69；action-guard 家族 62/62；tsc PASS；api-contract OK；prisma validate valid（未改 Schema）。
+- 风险分类：FOUNDATION_REUSED = R43 持久化底座 + platform.write 入口范式；NEW_RISK_BOUNDARY = YES（两个对外入口）；ARCH_REVIEW_REQUIRED = YES（增量）。
+- Known gap：recovery.manual_submit 审批的创建入口尚未暴露（reviewRecovery 拒绝该 boundAction）→ 独立批次。
+- 送审：REVIEWED_HEAD 219a67c（Issue #2 comment 5931742832 / CI 36863814805）；唤醒已投递并三要素验证。
+- HOLD 保持：AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · SETTLEMENT/BILLING LINKAGE HOLD · Production Enablement HOLD。

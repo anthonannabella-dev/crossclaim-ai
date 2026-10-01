@@ -351,3 +351,11 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - NEXT：**R44 — Manual Recovery HTTP/API Boundary**（仅入口边界：authn → tenant/role → action guard → 服务端 package/basis 解析 → 复用 S3/S4 服务 → 响应语义）；不得实现 outcome/reconciliation、不得联动 Settlement/Billing、不得开启任何平台写 transport。
 - 后续独立批次：R45 Outcome/Reimbursement Reconciliation、R46 Settlement/Billing Linkage（各自单独设计+审计）。
 - 保持：AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · SETTLEMENT/BILLING LINKAGE HOLD。
+
+### R44（Manual Recovery HTTP/API Boundary）—— 已实现，增量风险审计待裁决
+
+- 交付：`apps/api/src/services/recovery/http-request.ts` + 路由接线 + 路径白名单 + 错误映射；`recovery-manual-http-db.test.ts` 10 项；`docs/releases/R44-MANUAL-RECOVERY-HTTP-BOUNDARY-CHECKPOINT.md`。
+- 证据：10/10 真库 HTTP 用例；recovery-manual-* 69/69；action-guard 62/62；tsc / api-contract / prisma validate 全绿（未改 Schema）。
+- 送审：REVIEWED_HEAD 219a67c（Issue #2 comment 5931742832 / CI 36863814805）。
+- 并行下一单元（不等裁决、不空转）：R45 Outcome / Reimbursement Reconciliation 的 Design + Schema Delta Request（docs-only）。
+- 保持：AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · SETTLEMENT/BILLING LINKAGE HOLD。
