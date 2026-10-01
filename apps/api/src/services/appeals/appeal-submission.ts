@@ -133,14 +133,24 @@ export async function submitAppealWithApproval(
         );
 
         // 2) Appeal 行锁（限定租户/案件；round=2）
-        const locked = await tx.$queryRawUnsafe<Array<{ id: string; status: string; round: number }>>(
-          'SELECT id, status, round FROM "Appeal" WHERE id = $1 AND "organizationId" = $2 AND "caseId" = $3 FOR UPDATE',
+        // CHANGE B：行锁必须携带轮次（本批次仅 round=2），并核对关联 Claim 属于同租户同案件
+        const locked = await tx.$queryRawUnsafe<
+          Array<{ id: string; status: string; round: number; claimId: string }>
+        >(
+          'SELECT id, status, round, "claimId" FROM "Appeal" WHERE id = $1 AND "organizationId" = $2 AND "caseId" = $3 AND round = 2 FOR UPDATE',
           input.appealId,
           input.organizationId,
           input.caseId,
         );
         if (locked.length !== 1) {
-          throw new WorkflowError('NOT_FOUND', 'Appeal 不存在或不属于该租户/案件');
+          throw new WorkflowError('NOT_FOUND', 'Appeal 不存在、不属于该租户/案件，或不是 round=2');
+        }
+        const linkedClaim = await tx.claim.findFirst({
+          where: { id: locked[0]!.claimId, organizationId: input.organizationId, caseId: input.caseId },
+          select: { id: true, round: true },
+        });
+        if (!linkedClaim) {
+          throw new WorkflowError('NOT_FOUND', 'Appeal 关联的 Claim 不属于同一租户/案件');
         }
 
         // 3) 锁后**最终**主体与权限重验
@@ -172,8 +182,16 @@ export async function submitAppealWithApproval(
         if (decision.consumed) throw new ApprovalBoundaryError('APPROVAL_ALREADY_CONSUMED', input.caseId);
 
         // 6) CAS：Appeal DRAFT → SUBMITTED（仅内部登记，不触达平台）
+        // CHANGE B：CAS 必须携带案件与轮次（影响行数恰为 1）
         const cas = await tx.appeal.updateMany({
-          where: { id: input.appealId, organizationId: input.organizationId, status: 'DRAFT' },
+          where: {
+            id: input.appealId,
+            organizationId: input.organizationId,
+            caseId: input.caseId,
+            claimId: locked[0]!.claimId,
+            round: 2,
+            status: 'DRAFT',
+          },
           data: { status: 'SUBMITTED', submittedAt: at },
         });
         if (cas.count === 0) {
@@ -193,6 +211,8 @@ export async function submitAppealWithApproval(
             humanApproved: true,
             caseId: input.caseId,
             appealId: input.appealId,
+            claimId: locked[0]!.claimId,
+            round: 2,
             approvalId: input.approvalId ?? null,
             operationId,
             ...(input.note ? { note: input.note } : {}),
@@ -210,6 +230,8 @@ export async function submitAppealWithApproval(
             operationId,
             caseId: input.caseId,
             appealId: input.appealId,
+            claimId: locked[0]!.claimId,
+            round: 2,
             basisReference: input.appealId,
           },
           at,

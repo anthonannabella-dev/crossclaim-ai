@@ -995,14 +995,18 @@ export async function handleWorkflowRequest(
       if (!deps.actionGuard) {
         throw new ActionGuardNotConfiguredError(APPEAL_SUBMIT_ACTION);
       }
-      const appeal = await deps.prisma.appeal.findFirst({
-        where: { organizationId: actor.organizationId, caseId },
-        orderBy: { round: 'desc' },
+      // CHANGE B（MSG-20261001-15）：本批次只支持 round=2；多候选必须失败关闭（不任意取一条）
+      const appealCandidates = await deps.prisma.appeal.findMany({
+        where: { organizationId: actor.organizationId, caseId, round: 2 },
         select: { id: true, status: true, round: true },
       });
-      if (!appeal) {
-        throw new WorkflowError('NOT_FOUND', `案件 ${caseId} 没有可提交的 Appeal`);
+      if (appealCandidates.length === 0) {
+        throw new WorkflowError('NOT_FOUND', `案件 ${caseId} 没有 round=2 的 Appeal`);
       }
+      if (appealCandidates.length > 1) {
+        throw new WorkflowError('ILLEGAL_TRANSITION', '同一案件存在多条 round=2 Appeal，需人工澄清后再提交');
+      }
+      const appeal = appealCandidates[0]!;
       const approvalId = typeof body.approvalId === 'string' ? body.approvalId : undefined;
       const boundary = createHitlSubmissionBoundary({
         guard: deps.actionGuard,

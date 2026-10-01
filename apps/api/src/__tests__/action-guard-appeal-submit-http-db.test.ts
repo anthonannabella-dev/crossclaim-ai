@@ -366,4 +366,23 @@ describe('② RUNTIME BUSINESS BLOCKING — appeal.submit（真实 HTTP + Postgr
     const after = await sideEffects();
     expect(after).toMatchObject({ appealStatus: 'DRAFT', submittedAt: null, submittedAudits: 0, consumedAudits: 0 });
   }, 60_000);
+
+  it('07 CHANGE B：轮次与对象选择 —— 仅 round=2 可提交（round=3 → 404；多条 round=2 → 409）', async () => {
+    const target = await baseFor();
+    const cookie = await login(target);
+    // 把既有 appeal 改为 round=3：路由不接受，且不得任意取一条
+    await prisma.appeal.update({ where: { id: appealId }, data: { round: 3 } });
+    const notTwo = await submit(target, cookie, {});
+    expect(notTwo.status).toBe(404);
+    expect(notTwo.body.error).toBe('NOT_FOUND');
+    // 建立两条 round=2：必须失败关闭（不任意选一条）
+    await prisma.appeal.create({ data: { organizationId: ORG, claimId, caseId, round: 2, status: 'DRAFT' } });
+    await prisma.appeal.create({ data: { organizationId: ORG, claimId, caseId, round: 2, status: 'DRAFT' } });
+    const ambiguous = await submit(target, cookie, {});
+    expect(ambiguous.status).toBe(409);
+    expect(ambiguous.body.error).toBe('ILLEGAL_TRANSITION');
+    // 不得产生任何推进或审计
+    expect(await prisma.auditLog.count({ where: { organizationId: ORG, action: 'appeal.submitted_by_human' } })).toBe(0);
+    expect(await prisma.auditLog.count({ where: { organizationId: ORG, action: { contains: 'consumed' } } })).toBe(0);
+  }, 60_000);
 });
