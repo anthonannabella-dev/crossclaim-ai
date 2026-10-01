@@ -6,6 +6,7 @@ import { PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 
 import { hashPassword } from '../services/auth';
+import { computeMembershipDigest } from '../services/settlement/fee-compute';
 import {
   recordFeeCalculation,
   type FeeRecordDeps,
@@ -223,5 +224,28 @@ describe('R46 S4 FeeCalculation 受保护写路径（真实 PostgreSQL）', () =
     void r;
     const rows = await prisma.feeCalculationSettlement.count({ where: { organizationId: ORG_A, settlementId: st } });
     expect(rows).toBe(1);
+  });
+});
+
+describe('R46 S4 余下永久验收（digest 可重建 + 下游零副作用）', () => {
+  it('membershipDigest 可由相同输入重建；BillingInvoice / Payment / RecoveryLedger 仍为 0（不触发 autopay）', async () => {
+    const claim = await newClaim(ORG_A);
+    const st = await seedEligibleSettlement(ORG_A, '1000.0000', claim);
+    const policy = {
+      basis: 'RECOVERED_AMOUNT_PCT' as const,
+      rate: '0.15',
+      policyRef: 'policy-2026-01',
+      feeBasisVersion: 'v1',
+      currency: 'USD',
+    };
+    const r = await recordFeeCalculation(deps, input({ settlementIds: [st], claimItemId: claim, policy }) as never);
+    const rebuilt = computeMembershipDigest({
+      memberships: [{ settlementId: st, amount: '1000.0000', currency: 'USD' }],
+      policy,
+    });
+    expect(rebuilt).toBe(r.membershipDigest);
+    expect(await prisma.billingInvoice.count({ where: { organizationId: ORG_A } })).toBe(0);
+    expect(await prisma.payment.count({ where: { organizationId: ORG_A } })).toBe(0);
+    expect(await prisma.recoveryLedgerEntry.count({ where: { organizationId: ORG_A } })).toBe(0);
   });
 });
