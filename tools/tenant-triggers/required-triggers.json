@@ -1,41 +1,188 @@
 {
-  "note": "B2-FIX R1 / MSG-20260930-06 CHANGE D —— 必需租户保护触发器清单（名称 + 所属表 + 事件类型）。tgtype 23 = ROW|BEFORE|INSERT|UPDATE；19 = ROW|BEFORE|UPDATE。清单来自 docs/releases/TASK2-TENANT-TRIGGER-INVENTORY.md 的运行库取证（2026-09-30）。新增 tenant-owned 表时必须同步补迁移并更新本清单，否则 CI 失败。",
+  "note": "B2-FIX R1 / MSG-20260930-06 CHANGE D —— 必需租户保护触发器清单（名称 + 所属表 + 事件类型）。tgtype 23 = ROW|BEFORE|INSERT|UPDATE；19 = ROW|BEFORE|UPDATE。清单来自 docs/releases/TASK2-TENANT-TRIGGER-INVENTORY.md 的运行库取证（2026-09-30）。新增 tenant-owned 表时必须同步补迁移并更新本清单，否则 CI 失败。 R43 S1（MSG-20261001-31/-32）：新增人工追回提交 5 张表的租户保护触发器；append-only/受控变更触发器见 append-only-triggers.json（独立清单，刻意不与本清单混用）。",
   "immutablePrefix": "cc_tenant_immutable__",
   "immutableTgtype": 19,
   "baselineTgtype": 23,
   "baselineTriggers": [
-    { "name": "cc_tenant_appeal", "table": "Appeal" },
-    { "name": "cc_tenant_billinginvoice", "table": "BillingInvoice" },
-    { "name": "cc_tenant_canonicalfactsource", "table": "CanonicalFactSource" },
-    { "name": "cc_tenant_caseevidence", "table": "CaseEvidence" },
-    { "name": "cc_tenant_caseopportunity", "table": "CaseOpportunity" },
-    { "name": "cc_tenant_claim", "table": "Claim" },
-    { "name": "cc_tenant_claimitem_caseid", "table": "ClaimItem" },
-    { "name": "cc_tenant_claimitem_opportunityid", "table": "ClaimItem" },
-    { "name": "cc_tenant_claimitem_ruleversionid", "table": "ClaimItem" },
-    { "name": "cc_tenant_claimitemevidence_claimitemid", "table": "ClaimItemEvidence" },
-    { "name": "cc_tenant_claimitemevidence_evidenceid", "table": "ClaimItemEvidence" },
-    { "name": "cc_tenant_evidenceartifact", "table": "EvidenceArtifact" },
-    { "name": "cc_tenant_evidenceedge", "table": "EvidenceEdge" },
-    { "name": "cc_tenant_feecalculation", "table": "FeeCalculation" },
-    { "name": "cc_tenant_fileasset", "table": "FileAsset" },
-    { "name": "cc_tenant_importbatch", "table": "ImportBatch" },
-    { "name": "cc_tenant_kill_switch_request", "table": "KillSwitchRequest" },
-    { "name": "cc_tenant_payment_invoiceid", "table": "Payment" },
-    { "name": "cc_tenant_paymentprocessingattempt_paymenteventid", "table": "PaymentProcessingAttempt" },
-    { "name": "cc_tenant_paymentprocessingattempt_paymentid", "table": "PaymentProcessingAttempt" },
-    { "name": "cc_tenant_recoverygraphedge", "table": "RecoveryGraphEdge" },
-    { "name": "cc_tenant_recoveryledgerentry", "table": "RecoveryLedgerEntry" },
-    { "name": "cc_tenant_recoveryroute", "table": "RecoveryRoute" },
-    { "name": "cc_tenant_ruleevaluation", "table": "RuleEvaluation" },
-    { "name": "cc_tenant_ruleevaluationshadow", "table": "RuleEvaluationShadow" },
-    { "name": "cc_tenant_ruleversion", "table": "RuleVersion" },
-    { "name": "cc_tenant_settlement", "table": "Settlement" },
-    { "name": "cc_tenant_sourcetransaction", "table": "SourceTransaction" },
-    { "name": "cc_tenant_platform_write_attempt", "table": "PlatformWriteAttempt" }
+    {
+      "name": "cc_tenant_appeal",
+      "table": "Appeal"
+    },
+    {
+      "name": "cc_tenant_billinginvoice",
+      "table": "BillingInvoice"
+    },
+    {
+      "name": "cc_tenant_canonicalfactsource",
+      "table": "CanonicalFactSource"
+    },
+    {
+      "name": "cc_tenant_caseevidence",
+      "table": "CaseEvidence"
+    },
+    {
+      "name": "cc_tenant_caseopportunity",
+      "table": "CaseOpportunity"
+    },
+    {
+      "name": "cc_tenant_claim",
+      "table": "Claim"
+    },
+    {
+      "name": "cc_tenant_claimitem_caseid",
+      "table": "ClaimItem"
+    },
+    {
+      "name": "cc_tenant_claimitem_opportunityid",
+      "table": "ClaimItem"
+    },
+    {
+      "name": "cc_tenant_claimitem_ruleversionid",
+      "table": "ClaimItem"
+    },
+    {
+      "name": "cc_tenant_claimitemevidence_claimitemid",
+      "table": "ClaimItemEvidence"
+    },
+    {
+      "name": "cc_tenant_claimitemevidence_evidenceid",
+      "table": "ClaimItemEvidence"
+    },
+    {
+      "name": "cc_tenant_evidenceartifact",
+      "table": "EvidenceArtifact"
+    },
+    {
+      "name": "cc_tenant_evidenceedge",
+      "table": "EvidenceEdge"
+    },
+    {
+      "name": "cc_tenant_feecalculation",
+      "table": "FeeCalculation"
+    },
+    {
+      "name": "cc_tenant_fileasset",
+      "table": "FileAsset"
+    },
+    {
+      "name": "cc_tenant_importbatch",
+      "table": "ImportBatch"
+    },
+    {
+      "name": "cc_tenant_kill_switch_request",
+      "table": "KillSwitchRequest"
+    },
+    {
+      "name": "cc_tenant_payment_invoiceid",
+      "table": "Payment"
+    },
+    {
+      "name": "cc_tenant_paymentprocessingattempt_paymenteventid",
+      "table": "PaymentProcessingAttempt"
+    },
+    {
+      "name": "cc_tenant_paymentprocessingattempt_paymentid",
+      "table": "PaymentProcessingAttempt"
+    },
+    {
+      "name": "cc_tenant_recoverygraphedge",
+      "table": "RecoveryGraphEdge"
+    },
+    {
+      "name": "cc_tenant_recoveryledgerentry",
+      "table": "RecoveryLedgerEntry"
+    },
+    {
+      "name": "cc_tenant_recoveryroute",
+      "table": "RecoveryRoute"
+    },
+    {
+      "name": "cc_tenant_ruleevaluation",
+      "table": "RuleEvaluation"
+    },
+    {
+      "name": "cc_tenant_ruleevaluationshadow",
+      "table": "RuleEvaluationShadow"
+    },
+    {
+      "name": "cc_tenant_ruleversion",
+      "table": "RuleVersion"
+    },
+    {
+      "name": "cc_tenant_settlement",
+      "table": "Settlement"
+    },
+    {
+      "name": "cc_tenant_sourcetransaction",
+      "table": "SourceTransaction"
+    },
+    {
+      "name": "cc_tenant_platform_write_attempt",
+      "table": "PlatformWriteAttempt"
+    },
+    {
+      "name": "cc_tenant_recoverypackage",
+      "table": "RecoveryPackage"
+    },
+    {
+      "name": "cc_tenant_recoverypackage_claimitemid",
+      "table": "RecoveryPackage"
+    },
+    {
+      "name": "cc_tenant_recoverypackageartifact",
+      "table": "RecoveryPackageArtifact"
+    },
+    {
+      "name": "cc_tenant_recoverypackageartifact_packageid",
+      "table": "RecoveryPackageArtifact"
+    },
+    {
+      "name": "cc_tenant_recoverypackageartifact_fileassetid",
+      "table": "RecoveryPackageArtifact"
+    },
+    {
+      "name": "cc_tenant_recoverymanualsubmission",
+      "table": "RecoveryManualSubmission"
+    },
+    {
+      "name": "cc_tenant_recoverymanualsubmission_claimitemid",
+      "table": "RecoveryManualSubmission"
+    },
+    {
+      "name": "cc_tenant_recoverymanualsubmission_packageid",
+      "table": "RecoveryManualSubmission"
+    },
+    {
+      "name": "cc_tenant_recoverymanualsubmissionreference",
+      "table": "RecoveryManualSubmissionReference"
+    },
+    {
+      "name": "cc_tenant_recoverymanualsubmissionreference_submissionid",
+      "table": "RecoveryManualSubmissionReference"
+    },
+    {
+      "name": "cc_tenant_recoverymanualsubmissionevidence",
+      "table": "RecoveryManualSubmissionEvidence"
+    },
+    {
+      "name": "cc_tenant_recoverymanualsubmissionevidence_submissionid",
+      "table": "RecoveryManualSubmissionEvidence"
+    },
+    {
+      "name": "cc_tenant_recoverymanualsubmissionevidence_evidenceid",
+      "table": "RecoveryManualSubmissionEvidence"
+    }
   ],
   "scopedTriggers": [
-    { "name": "cc_ruleset_ownership_immutable", "table": "RuleSet", "tgtype": 19 },
-    { "name": "cc_ruleversion_ownership", "table": "RuleVersion", "tgtype": 23 }
+    {
+      "name": "cc_ruleset_ownership_immutable",
+      "table": "RuleSet",
+      "tgtype": 19
+    },
+    {
+      "name": "cc_ruleversion_ownership",
+      "table": "RuleVersion",
+      "tgtype": 23
+    }
   ]
 }

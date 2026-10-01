@@ -213,6 +213,12 @@ function main() {
     return 'tools/tenant-triggers checklist OK';
   });
 
+  step('stage 2: append-only / controlled-mutation checklist SQL passes against upgraded database', () => {
+    const sql = run(NODE_BIN, [join(ROOT, 'tools', 'tenant-triggers', 'emit-check-append-only-sql.mjs')]);
+    psql(tempDb, sql);
+    return 'tools/tenant-triggers append-only checklist OK (upgrade path)';
+  });
+
   step('stage 2: post-upgrade guards actually reject illegal writes', () => {
     const parent = psql(tempDb, `UPDATE "Case" SET "organizationId"='${ORG_B}' WHERE "id"='${CASE_A}'`, {
       expectFail: true,

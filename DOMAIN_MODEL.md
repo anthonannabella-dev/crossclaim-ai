@@ -5,7 +5,7 @@
 
 ---
 
-## 一、模型总览（39 个 = 36 个核心模型 + 3 个联结模型）
+## 一、模型总览（44 个 = 40 个核心模型 + 4 个联结模型）
 
 > **口径统一**：**29 个核心模型**（架构章程 §六 的清单 + C-0006-A 的 `CanonicalFact` + C-0006-B1 的 `RuleEvaluationShadow` + C-0008-A 的 `Session`、`UserInvitation`）**+ 2 个联结模型 `CaseEvidence`、`CanonicalFactSource`**。
 > README、本文、PR 描述、架构契约测试全部按此口径，不允许 29/31 混用。
@@ -131,6 +131,19 @@
 |---|---|
 | `KillSwitchRequest` | 控制面请求事实（开启 `PENDING_ENABLE → APPLIED`；拉闸 `DISABLED → APPLIED`）。只记请求，不承载资金语义，也不触碰 Claim / Settlement / Billing |
 
+### 人工追回提交（R43 S1 / MSG-20261001-31 / -32）
+
+| 模型 | 说明 |
+| --- | --- |
+| `RecoveryPackage` | 材料包身份（`packageVersion` / `digestVersion` / `packageDigest`）；`status` 仅 `GENERATED` / `EXPORTED`（非终态）/ `SUPERSEDED` / `WITHDRAWN`；核心字段不可变 |
+| `RecoveryPackageArtifact` | 导出产物（`PDF` / `JSON_MANIFEST`，append-only），只引用既有 `FileAsset` |
+| `RecoveryManualSubmission` | ②「用户已提交」业务事实（append-only）：`providerCaseRef` 不在此表，`approvalId` required + 租户内唯一 |
+| `RecoveryManualSubmissionReference` | provider case reference 补录事实（append-only，第五张表）：`providerCaseRefCanonical` 租户内唯一 |
+| `RecoveryManualSubmissionEvidence` | 提交证据联结（append-only）：只引用既有 `EvidenceArtifact` |
+
+> 四事实分离：材料包已生成 ≠ 用户已提交 ≠ provider 已受理 ≠ provider 已赔付；业务真值 = `ClaimItem.status` + `RecoveryManualSubmission`，`AuditLog` 仅 append-only 证据。
+
+
 ### 联结模型
 
 | 模型 | 说明 |
@@ -226,7 +239,7 @@ DRAFT → SUBMITTED → ACKNOWLEDGED →
 |---|---|
 | 校验函数 | `crossclaim_assert_tenant_integrity()` |
 | 迁移 | `20260928060000_tenant_integrity/migration.sql` |
-| 覆盖 | **28 个** `cc_tenant_*` 引用完整性触发器 + **36 个** `cc_tenant_immutable__*` 归属不可变触发器 |
+| 覆盖 | **42 个** `cc_tenant_*` 引用完整性触发器 + **42 个** `cc_tenant_immutable__*` 归属不可变触发器（R43 S1 新增人工追回提交域 5 表） |
 | CI 断言 | 按名称 / 所属表 / 事件类型 / 启用状态**清单**断言（`tools/tenant-triggers/`），不使用数量下限 |
 
 另外两类**规则所有权**约束（同属数据库级强制）：
@@ -377,7 +390,7 @@ I3  一笔 Payment 最多一个成功执行来源（SUCCEEDED + paymentId 上的
 - 唯一实现：`apps/api/src/services/workflow/permissions.ts`；未知 / 空角色 fail closed（全部拒绝）。
 - 连接**读取**当前与「连接写」同权限（OWNER / ADMIN）；是否给 OPS 只读仍待架构方裁定（已列入 C-0008-B1 Checkpoint 的 QUESTIONS）。
 - 用户触发的一切状态变化必须与 AuditLog 同事务写入（`actorType=USER` + `actorUserId`）；Web 层不做本地授权。
-- 机会人工复核只允许 `DETECTED → QUALIFIED` 与 `DETECTED → REJECTED`（拒绝必须带批准词表的 reason）；`DETECTED → CONVERTED` 只能由 Recovery Closure 建案流程触发。
+- 机会人工复核只允许 `DETECTED → QUALIFIED` 与 `DETECTED → REJECTED`（拒绝必须带批准词表的 reason）；`DETECTED → CONVERTED` 只能由 Recovery Closure 建案流程触发。
 
 ### 平台写回执行账本（C-PLATFORM-WRITE-LEDGER · MSG-20261001-19 授权）
 

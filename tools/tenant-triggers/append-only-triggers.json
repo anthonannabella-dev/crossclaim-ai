@@ -1,0 +1,36 @@
+{
+  "note": "R43 Implementation S1（MSG-20261001-31 CHANGE A + MSG-20261001-32 CHANGE A/B）—— 人工追回提交域的 append-only / 受控变更触发器清单。与 required-triggers.json（租户保护）刻意分离：cc_append_only__* 不得以 cc_tenant_ 前缀命名，以免触发租户清单的反向校验；本清单由 tools/tenant-triggers/emit-check-append-only-sql.mjs 在 CI 显式校验（fresh deploy 与 upgrade path 都跑），不得只靠测试碰巧触发。",
+  "triggers": [
+    {
+      "name": "cc_append_only__RecoveryPackageArtifact",
+      "table": "RecoveryPackageArtifact",
+      "tgtype": 27,
+      "semantics": "BEFORE UPDATE OR DELETE → 拒绝（导出产物不可改）"
+    },
+    {
+      "name": "cc_append_only__RecoveryManualSubmission",
+      "table": "RecoveryManualSubmission",
+      "tgtype": 27,
+      "semantics": "BEFORE UPDATE OR DELETE → 拒绝（提交事实不可改；provider reference 走独立表）"
+    },
+    {
+      "name": "cc_append_only__RecoveryManualSubmissionReference",
+      "table": "RecoveryManualSubmissionReference",
+      "tgtype": 27,
+      "semantics": "BEFORE UPDATE OR DELETE → 拒绝（补录事实 append-only）"
+    },
+    {
+      "name": "cc_append_only__RecoveryManualSubmissionEvidence",
+      "table": "RecoveryManualSubmissionEvidence",
+      "tgtype": 27,
+      "semantics": "BEFORE UPDATE OR DELETE → 拒绝（证据引用不可改）"
+    },
+    {
+      "name": "cc_recoverypackage_controlled_mutation",
+      "table": "RecoveryPackage",
+      "tgtype": 19,
+      "semantics": "BEFORE UPDATE → 仅允许 status / supersededByPackageId / transitionReason / transitionActorUserId / updatedAt；核心字段与终态由函数拒绝"
+    }
+  ],
+  "unexpectedPrefixes": ["cc_append_only__%", "cc_recoverypackage_%"]
+}

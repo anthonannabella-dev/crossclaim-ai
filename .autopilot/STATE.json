@@ -1,7 +1,7 @@
 {
   "gate": "B2-FIX R1",
-  "head": "409dbd0",
-  "status": "IMPLEMENTING",
+  "head": "3931b41",
+  "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
   "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
   "send_head": "07b7009",
@@ -10,7 +10,7 @@
   "production_enabled": false,
   "external_write_enabled": false,
   "updated_at": "2026-10-01T11:18:07.822Z",
-  "previous_head": "7e83945",
+  "previous_head": "409dbd0",
   "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "07b7009",
@@ -49,9 +49,9 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-01T11:08:56.305Z",
+  "last_tick_at": "2026-10-01T11:19:10.669Z",
   "state": "IMPLEMENT",
-  "last_action": "MSG-20261001-32 = PASS WITH REVISE 已逐字归档并 FULL_COPY_OK（R43-B Implementation Plan 主体批准；CHANGE A 第五张 reference 表 / B package EXPORTED 非终态 / C basis 绑定 version；NEXT = 可直接进入 R43 Implementation S1 → 单独 Checkpoint）",
+  "last_action": "SCHEDULER_STALE_RECOVERED（gap=10min）→ 本轮已恢复执行",
   "last_action_at": "2026-10-01T11:18:07.822Z",
   "next_action": "R43 Implementation S1（Schema + migration + triggers + trigger inventories + fresh/upgrade tests）→ 提交 S1 Implementation Checkpoint；S1 通过后才进入 S2–S5。S1 范围：①五张表（含 RecoveryManualSubmissionReference）+ 2 枚举 ②五支迁移（表/租户触发器/package 受控变更/append-only/唯一性）③required-triggers.json + 新增 append-only/controlled-mutation checklist ④package 生命周期修正（EXPORTED 非终态）⑤模型计数 39 → 44（40 core + 4 join）⑥fresh deploy 与 upgrade path 触发器取证。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
   "current_head": "409dbd0",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-01T11:03:13.961Z",
-    "gapMs": 342345,
-    "stale": false,
-    "checkedAt": "2026-10-01T11:08:56.305Z"
+    "previousTickAt": "2026-10-01T11:08:56.305Z",
+    "gapMs": 614365,
+    "stale": true,
+    "checkedAt": "2026-10-01T11:19:10.669Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -250,7 +250,7 @@
     "integration_boundary_review": "AUTHORIZED_TO_PLAN（先提交设计/实施计划，不直接开放真实 transport）"
   },
   "r36_submission_comment": "5927087320",
-  "stale_recovered_at": "2026-10-01T10:38:14.387Z",
+  "stale_recovered_at": "2026-10-01T11:19:10.669Z",
   "engineering_regression_policy": {
     "source": "HOST PRODUCT DIRECTION 2026-10-01",
     "doc": "docs/releases/ENGINEERING-REGRESSION-POLICY.md",

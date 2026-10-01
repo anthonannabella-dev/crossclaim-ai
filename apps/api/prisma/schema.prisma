@@ -343,6 +343,11 @@ model Organization {
   recoveryPayouts   RecoveryPayout[]
   killSwitchRequests KillSwitchRequest[]
   platformWriteAttempts PlatformWriteAttempt[]
+  recoveryPackages      RecoveryPackage[]
+  recoveryPackageArtifacts RecoveryPackageArtifact[]
+  manualRecoverySubmissions RecoveryManualSubmission[]
+  manualRecoverySubmissionReferences RecoveryManualSubmissionReference[]
+  manualRecoverySubmissionEvidences RecoveryManualSubmissionEvidence[]
 
   @@index([status])
 }
@@ -435,6 +440,7 @@ model FileAsset {
   connection   SourceConnection?  @relation(fields: [connectionId], references: [id])
   batches      ImportBatch[]
   evidence     EvidenceArtifact[]
+  recoveryPackageArtifacts RecoveryPackageArtifact[]
 
   @@unique([organizationId, id])
   @@index([organizationId, sha256])
@@ -742,6 +748,7 @@ model EvidenceArtifact {
   outEdges     EvidenceEdge[]    @relation("EvidenceFrom")
   inEdges      EvidenceEdge[]    @relation("EvidenceTo")
   claimLinks   ClaimItemEvidence[]
+  manualSubmissionLinks RecoveryManualSubmissionEvidence[]
 
   @@unique([organizationId, id])
   @@index([organizationId, kind])
@@ -1387,6 +1394,8 @@ model ClaimItem {
   opportunity  RecoveryOpportunity? @relation(fields: [opportunityId], references: [id])
   ruleVersion  RuleVersion?        @relation(fields: [ruleVersionId], references: [id])
   evidenceLinks ClaimItemEvidence[]
+  recoveryPackages  RecoveryPackage[]
+  manualSubmissions RecoveryManualSubmission[]
 
   @@unique([organizationId, platformType, platformRef, claimType])
   @@unique([organizationId, id])
@@ -1602,4 +1611,168 @@ model PlatformWriteAttempt {
   @@index([organizationId, targetKind, targetId])
   /// C6b：审计对齐
   @@index([organizationId, createdAt])
+}
+
+// ============================================================
+// 十三、人工追回提交（Manual Recovery Handoff）—— R43 / MSG-20261001-31 / -32
+// 四事实分离：package generated ≠ human submitted ≠ provider accepted ≠ reimbursed
+// 业务真值 = ClaimItem.status + RecoveryManualSubmission；AuditLog 仅 append-only 证据。
+// ============================================================
+
+/// 材料包生命周期：只表达「材料包本身」，不含任何「已提交 / 已受理 / 已赔付」语义。
+/// EXPORTED 表示「发生过导出」这一事实（**非终态**）；终态仅 SUPERSEDED / WITHDRAWN。
+enum RecoveryPackageStatus {
+  GENERATED
+  EXPORTED
+  SUPERSEDED
+  WITHDRAWN
+}
+
+/// 导出产物形态：JSON manifest 为规范事实载体，PDF 为 human-readable derivative。
+enum RecoveryPackageArtifactKind {
+  PDF
+  JSON_MANIFEST
+}
+
+/// 人工提交材料包（服务端生成、带 digest 与版本；审批与提交的绑定锚点）
+model RecoveryPackage {
+  id                    String                 @id @default(uuid())
+  organizationId        String
+  claimItemId           String
+  /// 与 ClaimItem.caseId 一致（服务层校验；弱引用，不建 FK）
+  caseId                String?
+  /// 内容结构版本（recovery-package/v1）
+  packageVersion        String
+  /// digest 算法版本（当前恒为 v1，显式落库以便历史可比）
+  digestVersion         String
+  /// sha256(canonical manifest)，64 hex；创建后不可修改
+  packageDigest         String
+  /// 见 enum 注释：EXPORTED 非终态；终态仅 SUPERSEDED / WITHDRAWN
+  status                RecoveryPackageStatus @default(GENERATED)
+  /// required/optional/missing 只读投影快照（白名单字段，无原始客户/凭据内容）
+  completenessSnapshot  Json?
+  generatedByUserId     String?
+  generatedAt           DateTime               @default(now())
+  /// 新 digest 取代旧包（弱引用）
+  supersededByPackageId String?
+  /// SUPERSEDED / WITHDRAWN 必须带 reason + actor + 审计
+  transitionReason      String?
+  transitionActorUserId String?
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+
+  organization Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  claimItem    ClaimItem              @relation(fields: [claimItemId], references: [id], onDelete: Cascade)
+  artifacts    RecoveryPackageArtifact[]
+  submissions  RecoveryManualSubmission[]
+
+  /// 同一输入的包只有一份
+  @@unique([organizationId, claimItemId, packageVersion, packageDigest])
+  @@unique([organizationId, id])
+  @@index([organizationId, claimItemId, status])
+  @@index([organizationId, createdAt])
+}
+
+/// 导出产物（append-only）：只引用既有 FileAsset，不复制证据/存储
+model RecoveryPackageArtifact {
+  id               String                      @id @default(uuid())
+  organizationId   String
+  packageId        String
+  artifactKind     RecoveryPackageArtifactKind
+  /// 只引用既有文件资产
+  fileAssetId      String
+  /// 必须与 FileAsset.sha256 一致（服务层校验）
+  sha256           String
+  exportedByUserId String?
+  exportedAt       DateTime                    @default(now())
+  createdAt        DateTime                    @default(now())
+
+  organization Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  package      RecoveryPackage @relation(fields: [packageId], references: [id], onDelete: Cascade)
+  fileAsset    FileAsset       @relation(fields: [fileAssetId], references: [id])
+
+  /// 同内容重复导出不新增第二份 artifact
+  @@unique([organizationId, packageId, artifactKind, sha256])
+  @@unique([organizationId, id])
+  @@index([organizationId, packageId, exportedAt])
+}
+
+/// 人工提交事实（② 用户已提交）：业务事实，非审计日志；append-only
+model RecoveryManualSubmission {
+  id                     String   @id @default(uuid())
+  organizationId         String
+  claimItemId            String
+  /// 必须与 ClaimItem.caseId 一致；跨案件绑定一律拒绝
+  caseId                 String
+  packageId              String
+  /// 必须等于 RecoveryPackage.packageDigest（同事务校验）
+  packageDigest          String
+  /// 审批事件 id（recovery.review_approved.id；非 FK，仅引用 + 复制摘要事实）
+  /// 受保护动作下提交记录必然由审批消费产生 —— 不保留无审批提交路径
+  approvalId             String
+  /// rmp1:<claimItemId>:<caseId>:<packageVersion>:<digestVersion>:<packageDigest>
+  approvalBasisReference String
+  submittedAt            DateTime
+  submittedByUserId      String
+  /// rms1-<claimItemId>
+  idempotencyKey         String
+  note                   String?
+  createdAt              DateTime @default(now())
+
+  organization  Organization                        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  claimItem     ClaimItem                           @relation(fields: [claimItemId], references: [id], onDelete: Cascade)
+  package       RecoveryPackage                     @relation(fields: [packageId], references: [id])
+  references    RecoveryManualSubmissionReference[]
+  evidenceLinks RecoveryManualSubmissionEvidence[]
+
+  /// v1 单链：一个 ClaimItem 至多一条逻辑提交事实
+  @@unique([organizationId, claimItemId])
+  /// CHANGE B：同一个 approval 不得授权两条 manual submission
+  @@unique([organizationId, approvalId])
+  @@unique([organizationId, idempotencyKey])
+  @@unique([organizationId, id])
+  @@index([organizationId, submittedAt])
+}
+
+/// provider case reference 事实（append-only，第五张表）：
+/// 人工提交后补录的引用；Submission 本体保持完全 immutable（不得在 Submission 上 UPDATE）。
+model RecoveryManualSubmissionReference {
+  id                        String   @id @default(uuid())
+  organizationId            String
+  submissionId              String
+  /// 用户原始输入（展示 / 审计）
+  providerCaseRefRaw        String
+  /// 规范身份：trim → NFKC → 去零宽 → 折叠空白（**不做大小写折叠**）
+  providerCaseRefCanonical  String
+  /// 产生该补录事实的审批事件 id（可空：补录为受保护动作时非空）
+  approvalId                String?
+  recordedAt                DateTime @default(now())
+  recordedByUserId          String
+  note                      String?
+  createdAt                 DateTime @default(now())
+
+  organization Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  submission   RecoveryManualSubmission  @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+
+  /// 同一租户内 canonical 引用唯一（补录不得把同一平台引用绑到两处）
+  @@unique([organizationId, providerCaseRefCanonical])
+  @@unique([organizationId, id])
+  @@index([organizationId, submissionId])
+}
+
+/// 提交时附带的证据引用（联结表，append-only）：只引用既有 EvidenceArtifact
+model RecoveryManualSubmissionEvidence {
+  id             String             @id @default(uuid())
+  organizationId String
+  submissionId   String
+  evidenceId     String
+  note           String?
+  createdAt      DateTime           @default(now())
+
+  organization Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  submission   RecoveryManualSubmission  @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  evidence     EvidenceArtifact          @relation(fields: [evidenceId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, submissionId, evidenceId])
+  @@unique([organizationId, id])
 }

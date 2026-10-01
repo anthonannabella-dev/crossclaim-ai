@@ -73,6 +73,11 @@ jobs:
           node tools/tenant-triggers/emit-check-sql.mjs \
             | PGPASSWORD=ci psql -h localhost -U crossclaim -d crossclaim -v ON_ERROR_STOP=1
 
+      - name: Verify append-only / controlled-mutation triggers (R43 S1 checklist)
+        run: |
+          node tools/tenant-triggers/emit-check-append-only-sql.mjs \
+            | PGPASSWORD=ci psql -h localhost -U crossclaim -d crossclaim -v ON_ERROR_STOP=1
+
       - name: API contract (API.md ↔ implemented routes)
         run: node tools/api-contract/check-routes.mjs --root .
 
