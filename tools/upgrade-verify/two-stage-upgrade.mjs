@@ -219,6 +219,12 @@ function main() {
     return 'tools/tenant-triggers append-only checklist OK (upgrade path)';
   });
 
+  step('stage 2: recovery manual submission consistency checker passes against upgraded database', () => {
+    const sql = run(NODE_BIN, [join(ROOT, 'tools', 'consistency', 'check-recovery-manual-submission.mjs')]);
+    psql(tempDb, sql);
+    return 'tools/consistency checker OK (upgrade path)';
+  });
+
   step('stage 2: post-upgrade guards actually reject illegal writes', () => {
     const parent = psql(tempDb, `UPDATE "Case" SET "organizationId"='${ORG_B}' WHERE "id"='${CASE_A}'`, {
       expectFail: true,

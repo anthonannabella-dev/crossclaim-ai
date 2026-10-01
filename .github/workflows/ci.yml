@@ -78,6 +78,11 @@ jobs:
           node tools/tenant-triggers/emit-check-append-only-sql.mjs \
             | PGPASSWORD=ci psql -h localhost -U crossclaim -d crossclaim -v ON_ERROR_STOP=1
 
+      - name: Verify recovery manual submission consistency (R43 S5 read-only checker)
+        run: |
+          node tools/consistency/check-recovery-manual-submission.mjs \
+            | PGPASSWORD=ci psql -h localhost -U crossclaim -d crossclaim -v ON_ERROR_STOP=1
+
       - name: API contract (API.md ↔ implemented routes)
         run: node tools/api-contract/check-routes.mjs --root .
 
