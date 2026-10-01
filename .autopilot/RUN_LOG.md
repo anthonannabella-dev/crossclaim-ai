@@ -712,3 +712,14 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 回归：platform-write + action-guard 36 files / 352 tests PASS；tsc PASS。
 - 边界：未接真实 adapter、未开启 transport、无生产凭据/真实外写/资金/客户提交。
 - 待裁决（列入 Checkpoint）：transport 关闭时是否应登记 attempt 并消费审批（现行为为不登记、不消费）。
+
+## 2026-10-01 JST — 裁决 MSG-20261001-23 = PASS WITH REVISE（R38 Integration Boundary Implementation Checkpoint）
+
+- 送审：R38（REVIEWED_HEAD f2e1188；Issue #2 comment 5928265681；CI run 36839484499 SUCCESS）。
+- 归档：AI-ARCHITECT-INBOX.md §MSG-20261001-23，逐字 92 行；`tools/verdict-diff/compare.mjs` = **FULL_COPY_OK**（缺失 0 / 多出 0）。
+- KEEP：单入口路由、服务端掌握 snapshot/approval/idempotency、transport=false 响应显式未执行、adapter 能力代码注册表、transport 三层 fail-closed、T1/T2/T3 事务边界、ambiguous 不重发、HOLD 项不变；155 files / 1484 tests + CI 接受为回归基线。
+- CHANGE A：transport=false 时维持零 attempt / 零审批消费（已批准现有实现）；请求历史不得写成 execution attempt。
+- CHANGE B：接受 H5/H6/H8 编排层真实 PostgreSQL 证据；补 HTTP 边界证明（handler→orchestrator 唯一入口 + 五项「不」）。
+- CHANGE C：transport=true 成功响应语义本轮不定义。
+- CHANGE D：本 checkpoint 建立最小 Golden Path E2E 并纳入 CI。
+- NEXT：CHANGE B/D → 全量回归 + CI → R38 RE-REVIEW；之后进入 Provider Adapter Readiness / First Provider Design Gate（非自动开启 transport）。

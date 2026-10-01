@@ -79270,3 +79270,159 @@ HTTP 可以在本轮实现，但必须默认落在安全的 NEEDS_MANUAL / platf
 VERDICT: PASS WITH REVISE — MSG-20261001-22
 ```
 
+
+### [MSG-20261001-23] R38 Integration Boundary Implementation Checkpoint（PASS WITH REVISE；CHANGE A transport=false 零 attempt/零消费、B HTTP→orchestrator 唯一入口证明、C 不定义 transport=true 响应语义、D 最小 Golden Path E2E）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE: FORMAL_VERDICT
+MESSAGE: MSG-20261001-23
+PREVIOUS: MSG-20261001-22
+GATE: Gate 7 / platform.write · Integration Boundary Implementation
+REVIEWED_HEAD: f2e1188
+DECISION: PASS WITH REVISE
+
+KEEP
+
+R38 主体实现接受。
+
+以下边界正确并保留：
+
+POST /cases/:id/platform/write 单入口，不增加 prepare/submit 双生命周期。
+服务端掌握 snapshot / approval binding / idempotency identity。
+HTTP 响应在当前阶段明确 platformWriteExecuted=false、executionDisposition=NEEDS_MANUAL。
+adapter capability 使用代码注册表而非数据库/客户端声明。
+transport 使用 global gate + adapter capability + authorization 三层 fail-closed。
+T1/T2/T3 继续保持事务边界。
+ambiguous provider response 不允许盲目重发。
+REAL ADAPTER / credential / external write / customer submission 继续 HOLD。
+CI SUCCESS + 155 files / 1484 tests PASS 接受为本轮回归基线。
+CHANGE A — transport=false 时维持“零 attempt、零审批消费”
+
+对 §6① 的现有行为：
+
+批准。
+
+当 transport 没有获得独立 Gate 授权时：
+
+TRANSPORT=false → NEEDS_MANUAL → attempt=0 → approval_consumed=0 → sinkCalls=0
+
+这是正确语义。
+
+理由：审批当前绑定的是自动 platform.write 执行权。系统实际上没有取得真实执行资格时，不能为了记录一次 HTTP 点击就消费审批。
+
+否则用户只是触发一个被系统明确禁止的动作，却永久烧掉 approval。
+
+如以后需要记录这种请求，应使用独立的 request/audit event，例如 platform.write_not_executed，不能伪造成 execution attempt。
+
+CHANGE B — H5/H6/H8 的编排层真实 PostgreSQL 证据接受，但补一条 HTTP 边界证明
+
+对 §6②：
+
+接受编排层真实 PostgreSQL 证据。
+
+不要求为了形式把所有数据库竞争重新从 HTTP 层跑一遍。
+
+但至少增加一条 HTTP integration test，证明：
+
+HTTP handler → orchestrator
+
+是唯一执行入口，并且 handler 本身：
+
+不持有 write sink；
+不直接调用 ledger T1；
+不直接消费 approval；
+不直接构造可信 snapshotDigest；
+不存在绕过 orchestrator 的 alternate execution path。
+
+这可以是架构契约测试 + HTTP integration test，不要求重复 PG6/PG7。
+
+CHANGE C — 本轮不定义 transport=true 的“成功响应”产品语义
+
+对 §6③：
+
+暂不定义。
+
+现在没有真实 adapter，无法诚实定义：
+
+SUCCEEDED / ACCEPTED / PENDING_PROVIDER / UNKNOWN
+
+分别应如何映射到 HTTP。
+
+当前只冻结 transport=false：
+
+platformWriteExecuted=false
+executionDisposition=NEEDS_MANUAL
+
+等第一个真实 provider adapter 设计时，根据 provider 的同步/异步/idempotency/status-query 语义单独批准 transport=true 响应契约。
+
+不要现在制造一个未来可能错误的通用 success contract。
+
+CHANGE D — Golden Path E2E 本 checkpoint 要建立最小版本
+
+这个缺口现在应该补。
+
+不是要求真实 provider E2E，而是建立安全 Golden Path：
+
+HTTP → authn → membership/role → Action Guard → server snapshot → approval binding → orchestrator → transport=false → NEEDS_MANUAL
+
+至少验证：
+
+合法租户/角色/审批请求能到达安全终点；
+platformWriteExecuted=false;
+executionDisposition=NEEDS_MANUAL;
+attempt = 0；
+approval_consumed = 0；
+sinkCalls = 0；
+Payment / Settlement / Billing 不变；
+跨租户版本 fail-closed；
+缺审批版本 fail-closed。
+
+将该测试纳入 CI，作为以后真实 adapter 接入时不能破坏的长期基线。
+
+RISKS
+
+目前最大的风险已经不是账本，而是未来真实 adapter 接入时错误复用当前 HTTP 层，把：
+
+request accepted
+execution right acquired
+provider request sent
+provider confirmed success
+
+四个事实合并成一个“成功”。
+
+后续必须继续保持四层分离。
+
+另一个风险是未来有人为了“记录所有请求”而让 transport=false 也创建 PlatformWriteAttempt。禁止这种语义漂移；如果需要请求历史，另建审计事实，不污染 execution ledger。
+
+TEST
+
+保留现有 H1–H9、ledger PG1–PG10 和全量回归。
+
+本轮只补：
+
+HTTP→orchestrator 唯一执行入口契约；
+最小 Golden Path E2E；
+Golden Path 的跨租户与缺审批 fail-closed 对照。
+
+无需重新设计或扩大 provider 范围。
+
+NEXT
+
+完成 CHANGE B/D 后直接提交 R38 RE-REVIEW，无需再走 Design/Plan。
+
+若补充测试通过、全量 CI 继续绿色，则 Integration Boundary 可以关闭。
+
+关闭后下一阶段不是直接开启 transport，而是进入：
+
+Provider Adapter Readiness / First Provider Design Gate
+
+届时逐个平台审核真实 API 能力、只读/写 scope、idempotency、status query、ambiguous response、credential 生命周期和合规边界。
+
+在此之前继续：
+
+REAL ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · CUSTOMER SUBMISSION HOLD。
+
+VERDICT: PASS WITH REVISE — MSG-20261001-23
+```

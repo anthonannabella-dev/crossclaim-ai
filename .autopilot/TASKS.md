@@ -135,3 +135,13 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - 验收：`platform-write-orchestrator-db.test.ts` 10/10（真实 PostgreSQL；含 H5 重放同一链、H6 并发唯一链、H8 断连重试不重发、跨动作冒用拒绝）；platform-write + action-guard 回归 36 文件 / 352 项 PASS；tsc PASS。
 - 待裁决（列入 Checkpoint）：transport 关闭时是否应登记 attempt 并消费审批（现行为为不登记、不消费）。
 - 剩余：P4 HTTP 层 H5/H6/H8 与补充断言 → P5 全量回归 + Golden Path E2E + CI → 送审。
+
+### MSG-20261001-23 裁决（R38 Integration Boundary Implementation Checkpoint）
+
+- DECISION：**PASS WITH REVISE**（REVIEWED_HEAD f2e1188；归档 FULL_COPY_OK）。
+- CHANGE A（已批准现行为）：transport 未获独立 Gate 时 `TRANSPORT=false → NEEDS_MANUAL → attempt=0 → approval_consumed=0 → sinkCalls=0`；不得为「记录请求」伪造 execution attempt（如需请求历史，另建 `platform.write_not_executed` 审计事实）。
+- CHANGE B：接受编排层真实 PostgreSQL 证据；补 HTTP 边界证明（handler→orchestrator 唯一执行入口；handler 不持有 write sink、不直接调用 ledger T1、不直接消费 approval、不自造可信 snapshotDigest、无绕过 orchestrator 的路径）。
+- CHANGE C：本轮不定义 transport=true 的「成功响应」语义；等第一个真实 provider adapter 设计时按 provider 语义单独批准。
+- CHANGE D：本 checkpoint 建立**最小 Golden Path E2E**（安全 Golden Path：HTTP → authn → membership/role → Action Guard → server snapshot → approval binding → orchestrator → transport=false → NEEDS_MANUAL），纳入 CI 作为长期基线。
+- NEXT：完成 CHANGE B/D → 全量回归 + CI → 提交 **R38 RE-REVIEW**（无需再走 Design/Plan）。Integration Boundary 关闭后进入 **Provider Adapter Readiness / First Provider Design Gate**。
+- 期间保持：REAL ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · CUSTOMER SUBMISSION HOLD。
