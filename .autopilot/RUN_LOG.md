@@ -1294,3 +1294,15 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 两个待裁定项：§5.4 legacy `reversedBySettlementId` 选型；§6.6 FeeCalculation 作废语义。
 - 边界：NO Settlement creation from R45 · NO FeeCalculation · NO BillingInvoice · NO Payment activation · NO autopay · NO platform write；R13 Payment Activation Gate 继续 HOLD。
 - 送审：REVIEWED_HEAD 103865f（Issue #2 comment 5936029898）；唤醒已投递并三要素验证（输入框清空 / 新消息在底部 / ChatGPT 正在回应）。
+
+## 2026-10-02 JST — MSG-20261002-53 = PASS WITH REVISE：R46-A 批准进入 Implementation Planning
+
+- 裁决：**PASS WITH REVISE — R46-A APPROVED FOR IMPLEMENTATION PLANNING**（REVIEWED_HEAD 103865f）；归档 FULL_COPY_OK；全文见 AI-ARCHITECT-INBOX.md 的 MSG-20261002-53。
+- CHANGE A1：唯一性以 identityKind + valueHash + identityVersion 为规范依据（externalIdentityValue 不作明文唯一依据）。
+- §5.4 裁定：legacy `reversedBySettlementId` 保留可读、不回填、不再作为新业务写入路径；**不批准双写**；由 checker 检测矛盾表示。
+- CHANGE B1：SettlementAdjustment 字段与 full-reversal 等额约束（服务层 + DB 双保险）；partial correction 未设计完整前 fail-closed。
+- §6.6 裁定：独立 Fee 作废/调整事实（FeeCalculationAdjustment 或等价）；CHANGE C1：不得 UPDATE 旧 FeeCalculation 金额。
+- CHANGE E1：receipt snapshot 不可变，变化时生成新 snapshot/version 并重新审批。
+- CHANGE F：四个数据库级不变量（同租户归属 / adjustment currency / fee membership uniqueness / snapshot digest）。
+- NEXT：R46-B — Implementation Plan（docs-only）；推荐 S1 Schema → S2 receipt snapshot + ingest → S3 SettlementAdjustment → S4 Fee membership → S5 Invoice linkage → S6 checker + full regression。
+- 冻结不变：NO R45→Settlement automatic creation · NO automatic Fee · NO automatic Invoice · NO Payment activation · NO autopay · NO platform write；R13 Payment Activation Gate = HOLD。

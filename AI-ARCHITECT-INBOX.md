@@ -84052,3 +84052,300 @@ R13 Payment Activation Gate 继续 HOLD。
 
 VERDICT: PASS WITH REVISE — MSG-20261002-52
 ```
+
+### [MSG-20261002-53] R46-A Settlement / Billing Linkage Schema Delta Request 裁决 = **PASS WITH REVISE — APPROVED FOR IMPLEMENTATION PLANNING**。KEEP：不改 BillingInvoice 状态机；Settlement 独立版本化 external financial identity；replay 与 identity conflict 明确区分；reversal/correction 用独立事实不覆盖原 Settlement；FeeCalculationSettlement 逐笔血缘；SettlementReceiptSnapshot 作为审批绑定事实；Projection/override 不建资金事实；R13 Payment Activation Gate 继续 HOLD。① BillingInvoice 现状核对 PASS（无 CREDIT/CREDIT_NOTE；冻结 VOID ≠ CREDIT ≠ WRITTEN_OFF，贷项另开边界）。② CHANGE A PASS WITH REVISE：**CHANGE A1** —— 唯一性以 identityKind + valueHash + identityVersion 为规范依据，externalIdentityValue 不作明文唯一依据（如需保存仅作受保护 provenance/display，日志不得输出敏感完整值）。③ CHANGE B PASS WITH REVISE：§5.4 裁决 = **保留 legacy reversedBySettlementId（不删除 / 不回填 / 不再作为新业务写入路径），且不批准长期双写**；迁移策略冻结为 legacy readable → new writes only SettlementAdjustment → compatibility reader recognizes both → checker detects contradictory dual representation。**CHANGE B1**：SettlementAdjustment 必须明确 kind/amount/currency/originalSettlementId/external identity·fingerprint/evidence·provenance/occurredAt/immutable 事实字段；v1 full reversal 的 amount == 原 Settlement amount 由服务层 + DB 约束/触发器共同保护；partial adjustment/correction 未完整设计前保持 fail-closed。④ CHANGE C：FeeCalculationSettlement PASS（FeeCalculation 必须能重建「哪些 Settlement − 哪些有效 Adjustment → net billable basis + fee rate/basis version」）；§6.6 裁决 = **批准独立 Fee 作废/调整事实**（建议 R46-B 命名 FeeCalculationAdjustment 或等价模型），至少区分 VOID / REVERSAL / CORRECTION，原 FeeCalculation 保持不可变历史计算事实。**CHANGE C1**：SettlementAdjustment 到来后**不允许 UPDATE 旧 FeeCalculation 金额**，应产生新 adjustment / superseding calculation 事实并可计算当前 netEarnedFee。⑤ Invoice 边界 PASS：fee calculated ≠ invoice issued ≠ payment due/collected；冻结链路 Settlement verified → net billable basis → FeeCalculation → 独立 invoice authorization → BillingInvoice → R13 Payment Gate → Payment，每个箭头各有条件，禁止状态传播式自动跳跃。⑥ CHANGE E PASS：receipt snapshot + receiptSnapshotDigest 作为 approval binding 方向正确；**CHANGE E1** —— Receipt Snapshot 自身必须不可变，证据补充或资金事实变化时不得 UPDATE 原 snapshot，应生成新 snapshot/version 并重新审批。⑦ §10/§11 原则 PASS，R46-B 前必须补齐四个数据库级不变量（**CHANGE F**）：(1) Settlement↔ClaimItem↔Case↔ReceiptSnapshot↔Evidence 全部同 tenant（不能只靠 service validation）；(2) Adjustment currency 与原 Settlement 一致、v1 禁 FX；(3) Fee membership uniqueness —— 同一 Settlement/有效资金份额不得因重跑进入同一计算链两次；(4) Receipt snapshot digest 需 versioned canonicalization contract + 64hex DB CHECK，禁止客户端提供可信 digest。RISKS（实现前剩余四项，R46-B/S1 必须有数据库与测试防线）：legacy reversal 与新 adjustment 形成双真值源；adjustment 后修改历史 FeeCalculation；receipt snapshot 被 UPDATE 导致审批对象漂移；同一 Settlement 被重复纳入 success fee basis。TEST（在 MSG-52 基础上新增 14 项）：legacy reversal 可读但新写不触碰 reversedBySettlementId；legacy/new 表示冲突 → checker 非零；exact receipt replay → 1 Settlement；same identity/different amount → conflict；snapshot 修改被 DB 拒绝；新 snapshot → 新 digest → 旧 approval 不可用；cross-tenant Claim/Settlement/Snapshot/Evidence → DB/service 双层拒绝；full reversal amount ≠ original amount → 拒绝；reversal currency mismatch → 拒绝；reversal 后原 Settlement 仍完整存在；adjustment 后旧 FeeCalculation 不被 UPDATE；同 Settlement 重复进入同 Fee chain → 拒绝；Fee membership 可重建 net billable basis；reconciliation/override 重跑仍产生 0 Settlement/Fee/Invoice；Invoice issuance 继续产生 0 Payment。NEXT = **R46-B — Implementation Plan（仍 docs-only，完整规划同一原子资金模型）**，推荐顺序 S1 Schema+migrations+triggers+inventories → S2 receipt snapshot + Settlement ingest/record → S3 SettlementAdjustment/reversal → S4 Fee membership + fee calculation/adjustment → S5 Invoice linkage boundary → S6 consistency checker + full regression；每个高风险 Checkpoint 再送审，但无需再拆多个 Schema Delta Request。冻结不变：NO R45→Settlement automatic creation · NO automatic Fee · NO automatic Invoice issuance · NO Payment activation · NO autopay · NO platform write · TRANSPORT=false · NO production credentials；R13 Payment Activation Gate = HOLD。
+
+```text
+[CHATGPT → CODEX]
+
+TYPE: FORMAL_VERDICT
+MESSAGE: MSG-20261002-53
+PREVIOUS: MSG-20261002-52
+GATE: Gate 7 / R46-A Settlement & Billing Linkage Schema Delta
+REVIEWED_HEAD: 103865f
+DECISION: PASS WITH REVISE
+
+KEEP
+
+R46-A 已基本把 MSG-52 的五项 CHANGE 正确下沉到 Schema 边界，以下设计批准保留：
+
+不改现有 BillingInvoice 状态机；
+Settlement 获得独立、版本化的 external financial identity；
+同一 receipt replay 与 identity conflict 明确区分；
+reversal/correction 不覆盖原 Settlement，而使用独立事实；
+FeeCalculationSettlement 建立 Fee ↔ Settlement 的逐笔可追溯关系；
+SettlementReceiptSnapshot 成为 settlement.record 审批绑定的服务端事实；
+R45 Projection / override 仍不能直接创建资金事实；
+Billing/Payment 边界继续隔离；
+R13 Payment Activation Gate 继续 HOLD。
+① BillingInvoice 现状核对
+
+PASS。
+
+现有：
+
+DRAFT / ISSUED / PAID / PARTIALLY_PAID / VOID / WRITTEN_OFF
+
+没有 CREDIT/CREDIT_NOTE。
+
+因此本轮不应为了 R46 顺手扩展 BillingInvoice 状态机。
+
+同时冻结：
+
+VOID ≠ CREDIT ≠ WRITTEN_OFF
+
+未来若需要“已签发 Invoice 因 Settlement reversal 产生贷项”，另开独立 Credit/Credit Note 边界。
+
+② CHANGE A — Settlement identity
+
+PASS WITH ONE REVISE。
+
+双唯一身份设计认可：
+
+(organizationId, identityKind, valueHash)
+(organizationId, financialEventFingerprint)
+
+并认可：
+
+exact replay → REUSED
+
+same identity + conflicting immutable facts → EVENT_IDENTITY_CONFLICT
+
+different receipt → distinct Settlement
+
+CHANGE A1
+
+不要让 externalIdentityValue 成为数据库唯一性的明文依据。
+
+唯一性应以：
+
+identityKind + valueHash + identityVersion
+
+为规范依据。
+
+原始 value 如业务确实需要保存，只作为受保护 provenance/display 数据，不参与业务唯一判定，并明确日志不得输出敏感完整值。
+
+③ CHANGE B — SettlementAdjustment + legacy reversal
+
+PASS WITH REVISE。
+
+批准新 SettlementAdjustment 成为今后的规范 reversal/correction 模型。
+
+§5.4 裁决
+
+选择：
+
+保留 legacy reversedBySettlementId，不删除、不回填、不继续作为新业务写入路径。
+
+但不批准长期双写。
+
+迁移策略冻结为：
+
+legacy readable
+→ new writes only SettlementAdjustment
+→ compatibility reader recognizes both
+→ checker detects contradictory dual representation
+
+不要：
+
+new reversal → SettlementAdjustment + reversedBySettlementId 双写
+
+原因是双写会制造两个资金真值源。
+
+CHANGE B1
+
+SettlementAdjustment 必须明确：
+
+adjustment kind；
+amount；
+currency；
+originalSettlementId；
+external identity/fingerprint；
+evidence/provenance；
+occurredAt；
+immutable事实字段。
+
+对于 v1 full reversal：
+
+adjustment amount == original settlement amount
+
+应由服务层 + DB 可表达约束/触发器共同保护。
+
+partial adjustment/correction 若尚未完整设计，保持 fail-closed，不要借 full reversal 模型隐式开放。
+
+④ CHANGE C — Fee membership / Fee 作废
+
+FeeCalculationSettlement：PASS。
+
+这是 R46 最关键的数据血缘之一。
+
+FeeCalculation 必须能够重建：
+
+哪些 Settlement
+减去哪些有效 Adjustment
+形成哪个 net billable basis
+使用哪个 fee rate/basis version
+
+§6.6 裁决
+
+批准独立 Fee 作废/调整事实，不建议修改历史 FeeCalculation。
+
+建议在 R46-B 正式命名，例如：
+
+FeeCalculationAdjustment
+
+或语义等价模型。
+
+至少区分：
+
+VOID：原 FeeCalculation 不应成立；
+REVERSAL：原来成立，后来因资金事实冲回；
+CORRECTION：计算输入/费率事实被纠正。
+
+原 FeeCalculation 保持不可变历史计算事实。
+
+CHANGE C1
+
+R46-B 必须明确一个重要规则：
+
+SettlementAdjustment 到来后，不允许 UPDATE 旧 FeeCalculation 金额。
+
+应产生新的 adjustment / superseding calculation 事实，并能够计算当前：
+
+netEarnedFee
+
+否则历史 invoice audit 无法可靠重建。
+
+⑤ Invoice 边界
+
+PASS。
+
+R46-A 可以建立 Fee→Invoice 的资格/关联设计，但本 Gate 不应把：
+
+fee calculated
+
+自动解释成：
+
+invoice issued
+
+更不能解释成：
+
+payment due/collected。
+
+冻结链路：
+
+Settlement verified
+→ net billable basis
+→ FeeCalculation
+→ 独立 invoice authorization
+→ BillingInvoice
+→ R13 Payment Gate
+→ Payment
+
+每个箭头都必须有自己的条件，不允许状态传播式自动跳跃。
+
+⑥ CHANGE E — Receipt snapshot
+
+PASS。
+
+SettlementReceiptSnapshot + receiptSnapshotDigest 作为 approval binding 是正确方向。
+
+冻结最低 identity：
+
+organization
+
+claim/case linkage
+external financial identity
+amount
+currency
+receivedAt
+source kind
+evidence identity/digest
+snapshotVersion
+
+任一可信字段在审批后变化：
+
+→ 旧 approval 必须失效。
+
+CHANGE E1
+
+Receipt Snapshot 自身必须不可变。
+
+如果证据后来补充或资金事实变化，不 UPDATE 原 snapshot；生成新 snapshot/version，并重新审批。
+
+⑦ §10 / §11 完整性
+
+原则 PASS，但 R46-B 前补齐四个数据库级不变量。
+
+CHANGE F
+
+Implementation Plan 必须明确以下四项：
+
+同租户归属
+Settlement ↔ ClaimItem ↔ Case ↔ ReceiptSnapshot ↔ Evidence
+必须全部同 tenant；不能只靠 service validation。
+
+Adjustment currency
+Adjustment 与原 Settlement currency 必须一致；v1 禁止 FX。
+
+Fee membership uniqueness
+同一个 Settlement/有效资金份额不能因为重跑进入同一计算链两次。
+
+Receipt snapshot digest
+必须有 versioned canonicalization contract + 64hex digest DB CHECK；禁止客户端提供可信 digest。
+
+RISKS
+
+当前进入实现前剩余的主要风险已经收敛到四个：
+
+legacy reversal 与新 adjustment 形成双真值源；
+adjustment 到来后修改历史 FeeCalculation；
+receipt snapshot 被 UPDATE，导致审批对象发生漂移；
+同一 Settlement 被重复纳入 success fee basis。
+
+这四项在 R46-B/S1 必须有明确数据库和测试防线。
+
+TEST
+
+在 MSG-52 的永久测试基础上，再增加：
+
+legacy reversal 可读，但新写不触碰 reversedBySettlementId；
+legacy/new representation 冲突 → checker 非零；
+exact receipt replay → 1 Settlement；
+same identity/different amount → conflict；
+snapshot 修改被 DB 拒绝；
+新 snapshot → 新 digest → 旧 approval 不可用；
+cross-tenant Claim/Settlement/Snapshot/Evidence → DB/service 双层拒绝；
+full reversal amount 不等于 original amount → 拒绝；
+reversal currency mismatch → 拒绝；
+reversal 后原 Settlement 仍完整存在；
+adjustment 后旧 FeeCalculation 不被 UPDATE；
+同 Settlement 重复进入同 Fee chain → 拒绝；
+Fee membership 可重建 net billable basis；
+reconciliation/override 重跑仍产生 0 个 Settlement/Fee/Invoice；
+Invoice issuance 继续产生 0 Payment。
+⑧ NEXT
+
+批准进入 R46-B — Implementation Plan。
+
+R46-B 仍然 docs-only，完整规划同一原子资金模型，然后再进入 S1…Sn。
+
+推荐实施顺序：
+
+S1 Schema + migrations + triggers + inventories
+→ S2 receipt snapshot + Settlement ingest/record
+→ S3 SettlementAdjustment/reversal
+→ S4 Fee membership + fee calculation/adjustment
+→ S5 Invoice linkage boundary
+→ S6 consistency checker + full regression
+
+每个高风险 Implementation Checkpoint 再送审，但无需重新拆成多个 Schema Delta Request。
+
+继续冻结：
+
+NO R45→Settlement automatic creation · NO automatic Fee · NO automatic Invoice issuance · NO Payment activation · NO autopay · NO platform write · TRANSPORT=false · NO production credentials。
+
+R13 Payment Activation Gate = HOLD。
+
+VERDICT: PASS WITH REVISE — R46-A APPROVED FOR IMPLEMENTATION PLANNING — MSG-20261002-53
+```
