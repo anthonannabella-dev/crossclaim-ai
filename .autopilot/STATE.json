@@ -6,10 +6,10 @@
   "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
   "send_head": "07b7009",
   "decision_head": "07b7009",
-  "last_chatgpt_message": "MSG-20261002-56",
+  "last_chatgpt_message": "MSG-20261002-58",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T18:43:16.593Z",
+  "updated_at": "2026-10-01T21:56:47.493Z",
   "previous_head": "bab1b6c",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -51,8 +51,8 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-01T21:41:34.893Z",
   "state": "IMPLEMENT",
-  "last_action": "SCHEDULER_STALE_RECOVERED（gap=15min）→ 本轮已恢复执行",
-  "last_action_at": "2026-10-01T18:43:16.593Z",
+  "last_action": "MSG-20261002-58 已归档（FULL_COPY_OK）：三项 CHANGE（approval 全字段绑定 / 服务端 provenance / 真 exactly-once）代码与测试已闭环，S3 套件 10/10；待出 S3 FINAL 重送审。",
+  "last_action_at": "2026-10-01T21:56:47.493Z",
   "next_action": "R46 S2：receipt snapshot + Settlement record/ingest 受保护写边界（可信到账证据 → server-side canonical snapshot → humanApproval → Settlement）。",
   "current_head": "ab00cd9",
   "reviewed_head": "07b7009",
@@ -2657,5 +2657,31 @@
       "事务失败零残留",
       "资金下游零副作用"
     ]
+  },
+  "r46_s3_verdict": {
+    "message_id": "MSG-20261002-58",
+    "decision": "REVISE",
+    "reviewed_head": "17d13ae",
+    "archival": "FULL_COPY_OK",
+    "archived_at": "2026-10-01T21:56:47.493Z",
+    "changes": {
+      "A": "approval 必须绑定完整 reversal 事实（canonical reversal snapshot/digest，锁后重建比较）",
+      "B": "provenance 不得客户端自证（digest/kind/source 服务端派生）",
+      "C": "same approvalId + 两个不同有效 execution 并发 → exactly one committed / approval_consumed=1 / loser APPROVAL_ALREADY_CONSUMED / 零残留"
+    },
+    "s3_status": "REVISE（未 CLOSED、不进入 S4；修复后提交 S3 FINAL 再裁决）",
+    "implemented": {
+      "A": [
+        "3fbb47b（canonical reversal snapshot digest 绑定）",
+        "bdf97b7（identity/occurredAt/evidence/reasonCode 漂移用例）"
+      ],
+      "B": [
+        "21384b8（evidence 只收 id，digest/kind 服务端派生）"
+      ],
+      "C": [
+        "21384b8（same approvalId 双 execution 竞争验收）"
+      ]
+    },
+    "next_unit": "R46 S3 FINAL Checkpoint → 重送审；通过后进入 R46 S4（Fee membership + fee calculation/adjustment）"
   }
 }

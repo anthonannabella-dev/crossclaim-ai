@@ -1392,3 +1392,11 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 
 - 新增同 approval 并发消费证据（真实 PostgreSQL，settlement-record-db 15/15）→ S2 主体正式 CLOSED。
 - R46 S3 已按 MSG-20261002-56 冻结范围进入实现：仅 append SettlementAdjustment(kind=REVERSAL)，不改原 Settlement、不触达 Fee/Invoice/Payment/Ledger。
+
+## 2026-10-02 JST — MSG-20261002-58 = REVISE：S3 三项 CHANGE 闭环（approval 全字段绑定 / 服务端 provenance / exactly-once）
+
+- 归档 FULL_COPY_OK（REVIEWED_HEAD 17d13ae）。
+- A：3fbb47b（canonical reversal snapshot digest 绑定）+ bdf97b7（identity/occurredAt/evidence/reasonCode 漂移用例）。
+- B/C：21384b8（证据服务端派生；same approvalId 双 execution 竞争 → 恰好一次消费）。
+- 证据：settlement-reversal-db 10/10 PASS、tsc 0 error、下游 Fee/Invoice/Payment/Ledger 全 0。
+- NEXT：R46 S3 FINAL Checkpoint 重送审；S3 未 CLOSED、不进 S4。

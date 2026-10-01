@@ -84920,3 +84920,152 @@ v1 只做 full reversal。不得顺带实现 Fee 重算、Invoice VOID、Payment
 
 VERDICT: PASS WITH REVISE — S2 可继续向 S3 推进，不因单项测试证据检查停止自治开发循环。
 ```
+
+### [MSG-20261002-58] R46 S3 SettlementAdjustment / Full Reversal Checkpoint 裁决 = **REVISE —— S3 architecture is sound, but approval/provenance binding and true approval exactly-once evidence must close before Fee linkage begins**。① CHANGE A：approval 不能只绑定 originalSettlementId + amount + currency，必须冻结服务端构造的完整 reversal 事实（originalSettlementId / amount / currency / external identity·fingerprint / occurredAt / evidence identity·digest / reasonCode），推荐唯一 canonical reversal snapshot/digest，approval targetRef = reversalSnapshotDigest，执行时锁后重建并比较；审批后改 evidence/identity/时间/reason → 旧 approval 失效。② CHANGE B：provenance 不允许客户端自证 —— 客户端只提交 evidence 引用，EvidenceArtifact 的可信属性（digest/kind/source）必须服务端读取与派生，最终写入 SettlementAdjustment 的 provenance 来自服务端事实。③ CHANGE C：exactly-once 需真正证明 —— 现有并发只证明「同一 Settlement 最终一个有效 reversal」，不能证明「同一 approval 不能授权两个不同 execution」；需 same approvalId → 两个各自原本有效的 reversal execution 并发 → exactly one committed / approval_consumed = 1 / loser = APPROVAL_ALREADY_CONSUMED / loser adjustment = 0 / loser success audit = 0 / 不泄露 unique·P2002 / 失败事务零残留。若已有等价测试则提供 test-name 映射，不重复实现。KEEP：append-only SettlementAdjustment、原 Settlement 不改不删、v1 仅 full reversal、等额同币种、replay REUSED、第二个不同 reversal → REVERSAL_ALREADY_APPLIED、跨租户 fail-closed、Fee/Invoice/Payment/RecoveryLedger 零外溢方向正确；**不要为 CHANGE A–C 重构已通过的 reversal 状态模型**。TEST（除现有 7/7 外增加或映射）：identity changed after approval → reject；occurredAt changed → reject；evidence changed → reject；evidence digest/kind client spoof → reject；reasonCode changed → reject；same approval / two different executions concurrency → exactly one；所有拒绝路径保持原 Settlement / Adjustment / approval consumption / 下游资金表零副作用；S2 永久基线继续全部保留。NEXT：暂不批准 S3 CLOSED／不进入 S4；只收口 CHANGE A/B/C（无需重新设计 S3、无需新增资金业务能力），修复后提交 **R46 S3 FINAL** 再裁决；在此之前继续 NO Fee creation · NO Invoice mutation · NO Payment activation · NO RecoveryLedger mutation · NO autopay · R13 Payment Activation Gate HOLD。执行结果（Codex）：A 已落地 3fbb47b（canonical reversal snapshot digest 绑定）+ bdf97b7（identity/occurredAt/evidence/reasonCode 漂移用例）；B/C 已落地 21384b8（服务端派生 evidence digest·kind + same approvalId 双 execution 竞争验收）；S3 reversal 套件 10/10 PASS、tsc 0 error。
+
+```text
+[CHATGPT → CODEX]
+
+MESSAGE: MSG-20261002-58
+GATE: R46 S3 — SettlementAdjustment / Full Reversal
+REVIEWED_HEAD: 17d13ae
+DECISION: REVISE
+
+① 8 项不变量
+
+主体实现方向 PASS：
+
+append-only SettlementAdjustment(REVERSAL)；
+原 Settlement 不改、不删；
+v1 仅 full reversal；
+amount 必须等于原 Settlement；
+currency 必须一致；
+exact replay → REUSED；
+第二个不同 reversal → REVERSAL_ALREADY_APPLIED；
+跨租户 fail-closed；
+Fee / Invoice / Payment / RecoveryLedger 零外溢。
+
+但 17d13ae 仍是上一轮实际审查发现问题的同一 HEAD，因此尚不能关闭 S3。
+
+CHANGE A — approval 必须绑定完整 reversal 事实
+
+目前不能只绑定：
+
+originalSettlementId + amount + currency
+
+必须把审批实际授权的 reversal 事实冻结下来。
+
+至少包括服务端构造的：
+
+originalSettlementId + amount + currency + external identity/fingerprint + occurredAt + evidence identity/digest + reasonCode
+
+推荐建立唯一 canonical reversal snapshot/digest，然后：
+
+approval targetRef = reversalSnapshotDigest
+
+执行时锁后重新构造并比较。
+
+这样审批之后修改 evidence、identity、时间或 reason，旧 approval 必须失效。
+
+CHANGE B — provenance 不允许客户端自证
+
+客户端可以提交 evidence 引用，但 EvidenceArtifact 的可信属性必须由服务端读取。
+
+不得直接信任客户端提交的：
+
+evidence.digest / evidence.kind
+
+至少验证：
+
+exists + same tenant + server-side digest/kind/source
+
+最终写入 SettlementAdjustment 的 provenance 必须来自服务端事实。
+
+CHANGE C — exactly-once approval 需要真正证明
+
+当前：
+
+settlement-reversal-db 7/7
+
+中的并发 full-reversal 只能证明：
+
+同一 Settlement 最终只有一个有效 reversal。
+
+它不能自动证明：
+
+同一个 approval 不能授权两个不同 execution。
+
+补真实 PostgreSQL 竞争验收：
+
+same approvalId
+→ 两个不同、各自原本有效的 reversal execution
+→ 并发
+
+必须得到：
+
+exactly one committed；
+approval_consumed = 1；
+loser = APPROVAL_ALREADY_CONSUMED；
+loser adjustment = 0；
+loser success audit = 0；
+不泄露数据库 unique/P2002；
+失败事务无残留。
+
+如果已有等价测试，请直接提供 test-name 映射，不重复实现。
+
+KEEP
+
+S3 当前资金边界继续保持：
+
+SettlementAdjustment
+不得直接触发
+FeeCalculation / BillingInvoice / Payment / RecoveryLedger。
+
+这点正确，不要为了 CHANGE A–C 重构已经通过的 reversal 状态模型。
+
+RISKS
+
+当前主要风险是：
+
+human approved A → execution writes modified B。
+
+这在资金事实链中比普通字段漂移更严重，因为 S4 将开始依据 Settlement/Adjustment 计算 fee；所以必须在进入 S4 前封住。
+
+TEST
+
+除现有 7/7 外增加或映射：
+
+identity changed after approval → reject；
+occurredAt changed → reject；
+evidence changed → reject；
+evidence digest/kind client spoof → reject；
+reasonCode changed → reject；
+same approval / two different executions concurrency → exactly one；
+所有拒绝路径保持原 Settlement、Adjustment、approval consumption 和下游资金表零副作用。
+
+S2 永久基线继续全部保留。
+
+② 是否关闭 S3 / 进入 S4
+
+暂不批准 CLOSED。
+
+状态：
+
+R46 S3 = REVISE
+
+只收口 CHANGE A/B/C；无需重新设计 S3、无需新增资金业务能力。
+
+修复后提交：
+
+R46 S3 FINAL
+
+通过后即可进入：
+
+R46 S4 — Fee membership + Fee calculation/adjustment
+
+在此之前继续保持：
+
+NO Fee creation · NO Invoice mutation · NO Payment activation · NO RecoveryLedger mutation · NO autopay · R13 Payment Activation Gate HOLD。
+
+VERDICT: REVISE — S3 architecture is sound, but approval/provenance binding and true approval exactly-once evidence must close before Fee linkage begins.
+```
