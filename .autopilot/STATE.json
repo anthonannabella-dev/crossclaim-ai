@@ -1,17 +1,17 @@
 {
   "gate": "B2-FIX R1",
-  "head": "7d888cc",
+  "head": "528807c",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
-  "next_task": "等待 MSG-20261001-11：全文读取 → 逐字归档 → FULL_COPY_OK → PASS 则 billing.draft 收口并进入 ② 剩余小批次（evidence.read / appeal.submit / platform.write），REVISE 则按新 CHANGE 收敛",
+  "next_task": "② 最后一项 platform.write：仅做设计与安全边界（接口、状态机、权限、幂等、审批绑定、模拟适配器、fail-closed 测试），真实平台外写继续 HOLD；不得继承本 PASS 为真实外写批准",
   "send_head": "7d888cc",
-  "decision_head": "d6d239b",
-  "last_chatgpt_message": "MSG-20261001-15",
+  "decision_head": "7d888cc",
+  "last_chatgpt_message": "MSG-20261001-16",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T01:56:44.938Z",
-  "previous_head": "7a7cfd5",
-  "architect_decision_pending": true,
+  "updated_at": "2026-10-01T05:53:00.989Z",
+  "previous_head": "7d888cc",
+  "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "7d888cc",
   "last_sent_at": "2026-10-01T00:58:20.480Z",
@@ -49,11 +49,11 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-01T05:37:06.185Z",
-  "state": "REVIEW_WAIT",
-  "last_action": "MSG-20261001-15 CHANGE A（版本化提交快照+锁后重算摘要+空正文失败关闭）与 CHANGE C（13 项关键验收、用例02/04收紧、platformWrites→billingInvoices）已实施并推送（7d888cc）；专项 13/13、回归 32 files/307、tsc/prisma PASS；送审 R32",
-  "last_action_at": "2026-10-01T05:36:05.716Z",
-  "next_action": "等待 MSG-20261001-16（R32 裁决）：PASS → appeal.submit 收口并进入 ② 最后一项 platform.write（EXTERNAL_WRITE，HOLD）；REVISE → 按新 CHANGE 收敛",
+  "last_tick_at": "2026-10-01T05:49:20.122Z",
+  "state": "IMPLEMENT",
+  "last_action": "MSG-20261001-16（R32 appeal.submit）= PASS：逐字归档 AI-ARCHITECT-INBOX.md + compare.mjs FULL_COPY_OK + Issue #2 comment 5925593971；CP2 §3/§10 与 TASKS 台账已更新",
+  "last_action_at": "2026-10-01T05:53:00.989Z",
+  "next_action": "② 最后一项 platform.write：仅做设计与安全边界（接口、状态机、权限、幂等、审批绑定、模拟适配器、fail-closed 测试），真实平台外写继续 HOLD；不得继承本 PASS 为真实外写批准",
   "current_head": "7d888cc",
   "reviewed_head": "549dba8",
   "claim_submit_batch": {
@@ -91,17 +91,24 @@
     "ci_run": "36815640605"
   },
   "appeal_submit_batch": {
-    "verdict": "PENDING_REVIEW",
-    "request_comment": "5925044853",
-    "reviewed_ref": "814f5cd",
-    "ci_run": "36817215750"
+    "verdict": "PASS",
+    "message_id": "MSG-20261001-16",
+    "reviewed_head": "7d888cc",
+    "ci_run": "36820104474",
+    "archive_comment": "5925593971",
+    "archive_verified": "FULL_COPY_OK"
   },
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-01T05:36:05.716Z",
-    "gapMs": 60470,
+    "previousTickAt": "2026-10-01T05:48:47.441Z",
+    "gapMs": 32682,
     "stale": false,
-    "checkedAt": "2026-10-01T05:37:06.185Z"
-  }
+    "checkedAt": "2026-10-01T05:49:20.122Z"
+  },
+  "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
+  "wakeup_r32_head": "7d888cc",
+  "wakeup_r32_channel": "https://chatgpt.com/c/6ab9ee1b-fd54-83ee-b363-b67750afcedd",
+  "wakeup_r32_delivery": "DELIVERED_VERIFIED（输入框清空 / 新用户消息在底部 / 生成中）",
+  "wakeup_r32_note": "2026-10-01T05:4x 该会话返回的不是编号裁决，而是定时任务扫描摘要（No new actionable audit item since R32），判定为非裁决产物；已在同一会话重新投递自包含 R32 复审请求。"
 }

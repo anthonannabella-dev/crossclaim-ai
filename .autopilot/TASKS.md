@@ -103,6 +103,6 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - `claim.prepare` = **PASS**（MSG-20261001-10 / REVIEWED_REF d6d239b）
 - `billing.draft` = **PASS**（MSG-20261001-13 / REVIEWED_REF d81a86f）
 - `evidence.read` = **PASS**（MSG-20261001-14 / REVIEWED_REF 549dba8）
-- **appeal.submit 小批次（进行中，MSG-14 §5）**：独立动作 + 审批绑定具体 Appeal/案件/轮次/载荷；共用案件锁 + Appeal 行保护；锁后重验；内部提交记录/审计/消费同事务；仅登记内部结果（platformWriteExecuted=false）
+- `appeal.submit` = **PASS**（MSG-20261001-16 / REVIEWED_HEAD 7d888cc / CI 36820104474）—— CHANGE A/B/C 收口：版本化服务端提交快照（审批创建与执行共用同一规范化算法、Appeal 行锁后重算比对）+ 路由/行锁/读取校验/CAS 显式绑定 round=2 并核对 Claim 同租户同案件 + 专项 13 项关键验收；仅登记内部结果（platformWriteExecuted=false）
 - 记录：evidence.read 小批次历史记录 —— 已接入 `GET /cases/:id/evidence` + Action Guard 只读契约（缺 guard / 能力不可用失败关闭；租户与权限检查复用既有投影；拒绝不泄露内容/地址/存储引用），专项 6/6 → 送审中
-- 剩余：`appeal.submit` / `platform.write`（EXTERNAL_WRITE，继续 HOLD）
+- 剩余：`platform.write`（EXTERNAL_WRITE，继续 HOLD）。下一批仅允许先完成接口、状态机、权限、幂等、审批绑定、模拟适配器与 fail-closed 测试；真实平台外写、客户提交、资金动作一律不启用。

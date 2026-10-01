@@ -543,3 +543,21 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - **根因更正（CI 复现后定论）**：这不是本地 flake —— 同一 2 个用例在 GitHub CI（run 36809566281 / job 110201374093，2026-10-01T03:16Z）同样失败。根因是这些用例用**固定** `NOW` 创建操作级审批，而审批有效期按**真实时钟**判定；当真实时间越过 `NOW + TTL(24h)` 后，审批一律 EXPIRED → 403 / `valid:false`。首个进入失败窗口的是 `NOW = 2026-09-30T03:00:00Z`（= 2026-10-01T03:00Z 到期），与 CI 在 03:16Z 变红完全吻合。
 - **修复**：把全部「用固定 NOW 创建带有效期审批」的测试夹具改为**时钟相对基准** `const NOW = new Date(Date.now() - 60_000);`，所有相对偏移（+1s/+5s/+60s/+90s/+120s/3.6s）与断言语义保持不变；共 10 个文件（hitl-approval-verifier / hitl-route / hitl-concurrency / hitl-http-chain / hitl-r3-race / hitl-r4-ordering / claim-submit / payment-capture / payment-replay / payment-retry-due）。
 - **验证**：本机全量 146 files / 1375 tests PASS；tsc PASS；prisma validate valid；CI 以新 HEAD 为准。
+
+## 2026-10-01 JST — R32 送审重新投递（通道复核）
+
+- 通道：in-app browser 会话 `c/6ab9ee1b-fd54-83ee-b363-b67750afcedd`（CrossClaim GitHub Audit Loop）。
+- 观测：R32 送审后该会话返回 `No new actionable audit item since R32 ...`，属定时任务扫描摘要，**不是编号裁决**，未归档、未当裁决执行。
+- 动作：在同一会话重新投递自包含 R32 复审请求（REVIEWED_HEAD 7d888cc / ISSUE #2 comment 5925427340 / CI run 36820104474 SUCCESS / 本机 专项 13-13、回归 32 files-307、tsc、prisma valid / CHANGE A+B+C 摘要）。
+- 送达三要素（已验证）：输入框已清空（contenteditable 长度 1）、请求文本作为新用户消息出现在会话底部、出现「ChatGPT 正在回应」生成态。
+- 下一步：等待 MSG-20261001-16 → 全文读取（DOM 最小包含节点）→ 逐字归档 AI-ARCHITECT-INBOX.md → compare.mjs FULL_COPY_OK → Issue #2 回写 → PASS 则 appeal.submit 收口，REVISE 则按新 CHANGE 收敛。
+- 边界不变：Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据 继续 HOLD；平台真实写入口 platform.write 仍 HOLD。
+
+## 2026-10-01 JST — 裁决 MSG-20261001-16 = PASS（appeal.submit / R32 收口）
+
+- 通道：in-app browser 会话 `c/6ab9ee1b-fd54-83ee-b363-b67750afcedd`；首次投递返回定时任务摘要（非裁决），重投自包含请求后取得编号裁决。
+- REVIEWED_HEAD `7d888cc`；CI run 36820104474 SUCCESS；本机 appeal.submit 13/13、回归 32 files / 307 PASS、tsc PASS、prisma valid。
+- 归档：`AI-ARCHITECT-INBOX.md` 的 `### [MSG-20261001-16]`（原文 37 行）→ `tools/verdict-diff/compare.mjs` 结果 **FULL_COPY_OK**（缺失 0 / 多出 0）。
+- 回写：Issue #2 comment 5925593971。
+- 裁定要点：CHANGE A/B/C 全部关闭；无阻塞 CHANGE；非阻塞边界两条（用例 06 仅证明消费侧拒绝、本 PASS 不授权真实平台写入）。
+- NEXT：appeal.submit 批次收口 = PASS；② 剩余仅 `platform.write`（EXTERNAL_WRITE，HOLD）——先做接口/状态机/权限/幂等/审批绑定/模拟适配器与 fail-closed 测试。

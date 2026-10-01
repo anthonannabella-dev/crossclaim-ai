@@ -38,7 +38,7 @@
 | 动作（catalog） | service / route / job / HITL 入口 | 副作用边界 | 审批验证 | 集成测试 | 状态 |
 | --- | --- | --- | --- | --- | --- |
 | `claim.submit` | `POST /cases/:id/claim/submit`（http-routes + server WORKFLOW_PATH） | 平台外写（当前 HOLD，传输开关 false；入口恒返回 `NEEDS_MANUAL`） | approvalId 服务端校验（租户/动作/对象/有效期/消费）+ 锁后角色/主体重验 | HTTP 级 22/22（拒绝零副作用 / 并发恰一次 / 等锁失效 / 审计失败注入 / 审计留痕与原始错误保留） | **已验收 PASS（MSG-20261001-07 / REVIEWED_REF 28e0cd9；CI run 36805839845）** |
-| `appeal.submit` | 待定（申诉路径） | 平台外写（HOLD） | 同上 | 待补 | TODO |
+| `appeal.submit` | `POST /cases/:id/appeal/submit`（http-routes + server WORKFLOW_PATH） | 平台外写（当前 HOLD；入口仅登记内部结果 `platformWriteExecuted=false` / `NEEDS_MANUAL`） | approvalId 服务端校验（租户/动作/对象/轮次/版本化提交快照摘要）+ 案件锁 → Appeal 行锁后重验主体/角色/审批生命周期 + 锁后重算快照比对 | HTTP 级 **13/13**（缺审批 / 动作不通用 / 重复 / 缺 guard / 锁期撤销 / 轮次歧义 / 空正文 / 审批后正文变化 / 独立审批人+执行人行锁期降权 / 并发恰一次 / 审计失败整笔回滚 / 错误绑定拒绝） | **已验收 PASS（MSG-20261001-16 / REVIEWED_HEAD 7d888cc；CI 36820104474）** |
 | `platform.write` | 待定（适配器写路径） | 平台外写（HOLD） | 同上 | 待补 | TODO |
 | `commission.charge` | 待定（结算/佣金路径） | 资金动作（HOLD） | 同上 + 财务复核 | 待补 | TODO |
 | `payment.capture` | 账单登记入口（HTTP 受保护入口） | 资金动作（HOLD） | Action Guard 审批绑定 + 锁内事实 CAS + 快照交错校验 | HTTP 级：拒绝零副作用 / 允许恰一次（含并发与等锁失效） | **已验收 PASS（MSG-20260930-24 / REVIEWED_REF 73115a3）** |
@@ -188,3 +188,17 @@
 | 无状态推进 | 已实现（送审中） | 读取前后 Case/Claim/账单/到账事实不变；不触发平台或资金动作 |
 | 专项测试 | 6/6（送审中） | `action-guard-evidence-read-http-db.test.ts`（真实 HTTP + PostgreSQL） |
 | 架构方裁决 | **PASS（MSG-20261001-14 / REVIEWED_REF 549dba8 / CI 36815640605）** | 证据**元数据列表**入口批次收口；不含文件字节读取/签名下载地址签发/下载通道审计；下一小批次 = appeal.submit |
+
+
+## 10. ② 下一小批次接入记录（appeal.submit，MSG-20261001-14 §5）
+
+| 项 | 状态 | 证据 |
+| --- | --- | --- |
+| 入口接线：POST /cases/:id/appeal/submit | 已接入 | `services/workflow/http-routes.ts` + `server.ts` WORKFLOW_PATH；独立动作 `appeal.submit`（与 `claim.submit` 互不通用） |
+| 审批绑定 | 已实现 | approvalId 校验租户/动作/对象/轮次 + `appeal-submission/v1` 版本化服务端提交快照摘要（`services/appeals/appeal-snapshot.ts`；审批创建与执行核验共用 `canonicalJson` + sha256） |
+| 锁序与锁后重验 | 已实现 | 案件锁 → Appeal 行锁（显式 `round=2`）→ 重读 ACTIVE User / 有效 Membership / 实时角色 → 审批生命周期重验 → 锁后重算快照并比对 `basisReference` |
+| 失败关闭 | 已实现 | 正文/关联对象/轮次任一变化 → 结构化拒绝且 Appeal 零推进、审批零消费；空正文 → 409 `APPEAL_BODY_REQUIRED`；多 `round=2` 候选 → 409；`round=3` → 404 |
+| 事务与审计 | 已实现 | 状态推进 + `appeal.submitted` 审计（含 `snapshotVersion/snapshotDigest/bodyRule`）+ 审批消费同事务；审计失败整笔回滚 |
+| 零外写口径 | 已实现 | 仅登记内部结果 `platformWriteExecuted=false` / `NEEDS_MANUAL`；专项中 `platformWrites` 已改为真实口径 `billingInvoices` |
+| 专项测试 | **13/13 PASS** | `action-guard-appeal-submit-http-db.test.ts`（真实 HTTP + PostgreSQL） |
+| 架构方裁决 | **PASS（MSG-20261001-16 / REVIEWED_HEAD 7d888cc / CI 36820104474）** | appeal.submit 批次收口；非阻塞边界：用例 06 仅证明消费侧拒绝能力（非完整撤销入口 E2E）、本 PASS 不授权真实平台写入；② 剩余 = `platform.write`（EXTERNAL_WRITE，继续 HOLD） |
