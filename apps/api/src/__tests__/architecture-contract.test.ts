@@ -97,11 +97,13 @@ describe('模型清单一致性（C-0002 CHANGE #1）', () => {
     'RecoveryPayout',
     // MSG-20260929-59：Kill Switch 变更请求（控制面；Schema Migration Request 已批准）
     'KillSwitchRequest',
+    // MSG-20261001-19：platform.write 持久化执行账本（C-PLATFORM-WRITE-LEDGER）
+    'PlatformWriteAttempt',
   ];
   const JOIN_MODELS = ['CaseEvidence', 'CanonicalFactSource', 'ClaimItemEvidence'];
 
   it(`核心模型恰好 ${CORE.length} 个`, () => {
-    expect(CORE).toHaveLength(35);
+    expect(CORE).toHaveLength(36);
     for (const name of CORE) expect(modelBlock(name), `缺少核心模型 ${name}`).not.toBe('');
   });
 
@@ -109,8 +111,8 @@ describe('模型清单一致性（C-0002 CHANGE #1）', () => {
     for (const name of JOIN_MODELS) expect(modelBlock(name), `缺少联结模型 ${name}`).not.toBe('');
   });
 
-  it('模型总数为 38（35 core + 3 join）—— 与 README/DOMAIN_MODEL 表述一致', () => {
-    expect(modelNames()).toHaveLength(38);
+  it('模型总数为 39（36 core + 3 join）—— 与 README/DOMAIN_MODEL 表述一致', () => {
+    expect(modelNames()).toHaveLength(39);
   });
 });
 

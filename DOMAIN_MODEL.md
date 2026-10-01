@@ -5,7 +5,7 @@
 
 ---
 
-## 一、模型总览（38 个 = 35 个核心模型 + 3 个联结模型）
+## 一、模型总览（39 个 = 36 个核心模型 + 3 个联结模型）
 
 > **口径统一**：**29 个核心模型**（架构章程 §六 的清单 + C-0006-A 的 `CanonicalFact` + C-0006-B1 的 `RuleEvaluationShadow` + C-0008-A 的 `Session`、`UserInvitation`）**+ 2 个联结模型 `CaseEvidence`、`CanonicalFactSource`**。
 > README、本文、PR 描述、架构契约测试全部按此口径，不允许 29/31 混用。
@@ -377,4 +377,13 @@ I3  一笔 Payment 最多一个成功执行来源（SUCCEEDED + paymentId 上的
 - 唯一实现：`apps/api/src/services/workflow/permissions.ts`；未知 / 空角色 fail closed（全部拒绝）。
 - 连接**读取**当前与「连接写」同权限（OWNER / ADMIN）；是否给 OPS 只读仍待架构方裁定（已列入 C-0008-B1 Checkpoint 的 QUESTIONS）。
 - 用户触发的一切状态变化必须与 AuditLog 同事务写入（`actorType=USER` + `actorUserId`）；Web 层不做本地授权。
-- 机会人工复核只允许 `DETECTED → QUALIFIED` 与 `DETECTED → REJECTED`（拒绝必须带批准词表的 reason）；`DETECTED → CONVERTED` 只能由 Recovery Closure 建案流程触发。
+- 机会人工复核只允许 `DETECTED → QUALIFIED` 与 `DETECTED → REJECTED`（拒绝必须带批准词表的 reason）；`DETECTED → CONVERTED` 只能由 Recovery Closure 建案流程触发。
+
+### 平台写回执行账本（C-PLATFORM-WRITE-LEDGER · MSG-20261001-19 授权）
+
+| 模型 | 说明 |
+|---|---|
+| `PlatformWriteAttempt` | `platform.write` 的**唯一逻辑执行记录**：快照版本/摘要、幂等键、状态（含 `UNKNOWN_PROVIDER_RESPONSE` / `RECONCILING` / `FAILED_CONFIRMED` / `MANUAL_REVIEW`）、审批引用与 basisReference、对账字段。**不承载凭据或原始平台 payload** |
+
+> 约束口径：`(organizationId, idempotencyKey)` 唯一 = 唯一逻辑执行链；`(organizationId, approvalId)` 唯一 = 一个非空审批最多绑定一个能取得真实执行权的 attempt；`SUCCEEDED` 另有 partial unique index 兜底（迁移内 raw SQL）。
+> 边界：真实外写、真实 adapter、HTTP 入口、生产凭据全部保持 HOLD；`PLATFORM_WRITE_TRANSPORT_ENABLED = false`。
