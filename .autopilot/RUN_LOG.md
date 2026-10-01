@@ -1330,3 +1330,15 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - ① FeeCalculationAdjustment 三分类语义冻结（VOID / REVERSAL / CORRECTION 各有 reasonCode·evidence·sourceFact·amount 规则；不得改历史 FeeCalculation）。
 - TEST：在既有 30 项上再新增 10 项永久验收（fee chain 双计费 / snapshot 漂移 / adjustment 符号 / invoice 自动产生）。
 - NEXT：R46 S1（Schema + migrations + triggers + inventories，零资金业务行为），送审须报告 fee-chain uniqueness 最终方案、snapshot immutability、full-reversal unique 语义、FK/partial unique/CHECK/triggers、inventories、fresh deploy、two-stage upgrade、architecture contract、零资金行为证明。
+
+## 2026-10-02 JST — R46 S1 Settlement / Billing Linkage Schema 实施并送审（零资金业务行为）
+
+- 交付：4 新表（ReceiptSnapshot / SettlementAdjustment / FeeCalculationSettlement / FeeCalculationAdjustment）+ Settlement·FeeCalculation 纯增列 + 4 migration（tables / tenant_triggers / append_only / invariants）。
+- CHANGE A / F3 修正：fee chain 维度唯一 + claimItem active 唯一 + chain 触发器；**不采用**全局 `UNIQUE(org, settlementId)`（加反向断言）。
+- CHANGE B：snapshot append-only + `cc_settlement_receipt_basis_immutable`（到账依据不可漂移）。
+- CHANGE B1：`UNIQUE(org, originalSettlementId)` + full-reversal 等额/同币种触发器；partial reversal / CORRECTION v1 fail-closed。
+- CHANGE F：F1 租户守卫（4 表 + 11 FK）/ F2 currency / F3 membership 唯一 / F4 snapshotDigest 64hex CHECK。
+- 清单：required-triggers 71；append-only 20（含 5 个不变量触发器）。架构契约 140/140；模型 55 = 49 core + 6 join；DOMAIN_MODEL 同步。
+- 证据：prisma validate valid · tsc 0 error · fresh deploy（cc_s1_check，4 迁移全应用 + 两套清单 OK）· two-stage upgrade OK（immutable=53）· 全量 176 files / 1751 tests PASS。
+- 零资金行为：未改任何 `apps/api/src` 业务代码；迁移无 `INSERT INTO` 资金表；未改 BillingInvoice / BillingStatus。
+- 送审：REVIEWED_HEAD ab00cd9（Issue #2 comment 5936548245）；唤醒已投递并三要素验证。

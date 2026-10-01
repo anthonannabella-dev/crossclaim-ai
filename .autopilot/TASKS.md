@@ -609,3 +609,10 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - S1 范围：Schema + migration + FK + unique/index + CHECK + triggers + inventories + fresh/upgrade tests（**零资金业务行为**）。
 - S1 送审报告项：fee-chain uniqueness / snapshot immutability / full-reversal unique 语义 / FK·partial unique·CHECK·triggers / inventories / fresh deploy / two-stage upgrade / architecture contract / 零资金行为证明。
 - 冻结：NO automatic Settlement from R45 · NO automatic Fee · NO automatic Invoice · NO Payment activation · NO autopay · NO platform write；R13 Payment Activation Gate = HOLD。
+
+### R46 S1（Schema + migrations + triggers + inventories）—— 已实施，待裁决
+
+- 交付：4 新表 + 2 表纯增列 + 4 migration + 清单（71 / 20）+ 架构契约 140/140 + DOMAIN_MODEL 同步。
+- 送审：REVIEWED_HEAD ab00cd9（Issue #2 comment 5936548245）。
+- 证据：fresh deploy OK / two-stage upgrade OK / 全量 176 files 1751 tests PASS / tsc 0 error / 零资金业务行为。
+- NEXT：PASS → R46 S2（receipt snapshot + Settlement ingest/record）；REVISE → 修订 S1；BLOCK → 停止。
