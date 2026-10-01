@@ -23,6 +23,7 @@ import {
   verifyApprovalBoundary,
 } from '../action-guard/approval-tx-verify';
 import { APPEAL_SUBMIT_ACTION } from '../action-guard/approval-verifier';
+import { buildAppealSubmissionSnapshot, appealSubmissionDigest } from './appeal-snapshot';
 import { WorkflowError } from '../workflow/opportunity-review';
 import { ForbiddenError, assertPermission } from '../workflow/permissions';
 
@@ -115,13 +116,7 @@ export async function submitAppealWithApproval(
   assertPermission(input.role, 'claimTrackingApprove');
   const now = deps.now ?? (() => new Date());
   const operationId = input.approvalId ? `approval:${input.approvalId}` : null;
-  // appeal.submit 无金额语义：审批载荷只绑定本条 Appeal 依据
-  const payload = {
-    amount: null,
-    currency: null,
-    basisReference: input.appealId,
-    evidenceArtifactId: null,
-  };
+  // CHANGE A：审批载荷绑定「服务端提交快照摘要」，在 Appeal 行锁后重算（见事务内 B-A 步骤）
 
   try {
     return await deps.prisma.$transaction(
@@ -164,6 +159,28 @@ export async function submitAppealWithApproval(
         });
         if (!actor || !membership) throw new ApprovalBoundaryError('APPROVAL_ACTOR_MISMATCH', input.caseId);
         assertPermission(membership.role, 'claimTrackingApprove');
+
+        // B-A（CHANGE A）：锁后重读正文，按服务端规则构造快照；空正文失败关闭
+        const appealRow = await tx.appeal.findUniqueOrThrow({
+          where: { id: input.appealId },
+          select: { id: true, caseId: true, claimId: true, round: true, finalText: true, aiDraftText: true },
+        });
+        const snapshot = buildAppealSubmissionSnapshot({
+          appealId: appealRow.id,
+          caseId: appealRow.caseId,
+          claimId: appealRow.claimId,
+          round: appealRow.round,
+          finalText: appealRow.finalText,
+          aiDraftText: appealRow.aiDraftText,
+        });
+        if (!snapshot) throw new WorkflowError('APPEAL_BODY_REQUIRED', 'Appeal 正文为空，不能作为有效提交内容');
+        // 审批必须绑定该快照摘要（审批创建与执行核验同一规范化算法）
+        const payload = {
+          amount: null,
+          currency: null,
+          basisReference: appealSubmissionDigest(snapshot),
+          evidenceArtifactId: null,
+        };
 
         // 4) 全部必要锁取得后生成执行时间
         const at = now();
@@ -213,6 +230,9 @@ export async function submitAppealWithApproval(
             appealId: input.appealId,
             claimId: locked[0]!.claimId,
             round: 2,
+            snapshotVersion: snapshot.version,
+            snapshotDigest: payload.basisReference,
+            bodyRule: snapshot.bodyRule,
             approvalId: input.approvalId ?? null,
             operationId,
             ...(input.note ? { note: input.note } : {}),

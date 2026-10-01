@@ -52,6 +52,7 @@ import type { AuditWriter } from '../audit';
 import { submitClaimWithApproval } from '../claims/claim-submission';
 import { BILLING_DRAFT_ACTION, createBillingDraft } from '../billing/billing-draft';
 import { submitAppealWithApproval } from '../appeals/appeal-submission';
+import { buildAppealSubmissionSnapshot, appealSubmissionDigest } from '../appeals/appeal-snapshot';
 import { EVIDENCE_READ_ACTION } from '../evidence/evidence-read';
 import { CLAIM_PREPARE_ACTION, prepareClaimDraft } from '../claims/claim-preparation';
 import {
@@ -266,6 +267,7 @@ function statusFor(error: unknown): { code: number; error: string } {
       case 'CLAIM_ITEM_CASE_REQUIRED':
       case 'BILLING_BASIS_REQUIRED':
       case 'BILLING_REISSUE_REQUIRES_NEW_NUMBER':
+      case 'APPEAL_BODY_REQUIRED':
         return { code: 409, error: error.code };
       case 'FORBIDDEN':
         return { code: 403, error: error.code };
@@ -998,7 +1000,7 @@ export async function handleWorkflowRequest(
       // CHANGE B（MSG-20261001-15）：本批次只支持 round=2；多候选必须失败关闭（不任意取一条）
       const appealCandidates = await deps.prisma.appeal.findMany({
         where: { organizationId: actor.organizationId, caseId, round: 2 },
-        select: { id: true, status: true, round: true },
+        select: { id: true, status: true, round: true, claimId: true, finalText: true, aiDraftText: true },
       });
       if (appealCandidates.length === 0) {
         throw new WorkflowError('NOT_FOUND', `案件 ${caseId} 没有 round=2 的 Appeal`);
@@ -1007,6 +1009,17 @@ export async function handleWorkflowRequest(
         throw new WorkflowError('ILLEGAL_TRANSITION', '同一案件存在多条 round=2 Appeal，需人工澄清后再提交');
       }
       const appeal = appealCandidates[0]!;
+      // CHANGE A：预检绑定与执行核验同一「服务端快照摘要」（空正文失败关闭）
+      const snapshot = buildAppealSubmissionSnapshot({
+        appealId: appeal.id,
+        caseId,
+        claimId: appeal.claimId,
+        round: appeal.round,
+        finalText: appeal.finalText,
+        aiDraftText: appeal.aiDraftText,
+      });
+      if (!snapshot) throw new WorkflowError('APPEAL_BODY_REQUIRED', 'Appeal 正文为空，不能作为有效提交内容');
+      const snapshotReference = appealSubmissionDigest(snapshot);
       const approvalId = typeof body.approvalId === 'string' ? body.approvalId : undefined;
       const boundary = createHitlSubmissionBoundary({
         guard: deps.actionGuard,
@@ -1020,7 +1033,7 @@ export async function handleWorkflowRequest(
         targetRef: caseId,
         approvalId,
         // 审批指纹绑定：appeal.submit 只绑定本条 Appeal 依据（与 claim.submit 不同的动作+载荷）
-        payload: { basisReference: appeal.id },
+        payload: { basisReference: snapshotReference },
         perform: () =>
           submitAppealWithApproval(
             {

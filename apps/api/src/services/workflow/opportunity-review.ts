@@ -56,7 +56,9 @@ export type WorkflowErrorCode =
   /** MSG-20261001-10 §5：billing.draft 缺少可用的费用依据（FeeCalculation）→ 409 */
   | 'BILLING_BASIS_REQUIRED'
   /** MSG-20261001-11 CHANGE B：仅有 VOID/WRITTEN_OFF 历史账单时重新起草需新编号策略 → 409 */
-  | 'BILLING_REISSUE_REQUIRES_NEW_NUMBER';
+  | 'BILLING_REISSUE_REQUIRES_NEW_NUMBER'
+  /** MSG-20261001-15 CHANGE A：Appeal 正文为空，不能作为有效提交内容 → 409 */
+  | 'APPEAL_BODY_REQUIRED';
 
 export class WorkflowError extends Error {
   readonly code: WorkflowErrorCode;

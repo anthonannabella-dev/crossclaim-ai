@@ -27,6 +27,7 @@ import { handleWorkflowRequest, type WorkflowRouteDeps } from '../services/workf
 import { SESSION_COOKIE } from '../services/auth/http-routes';
 import { submitRecoveryReview } from '../services/workflow/recovery-review';
 import { APPEAL_SUBMIT_ACTION, CLAIM_SUBMIT_ACTION } from '../services/action-guard/approval-verifier';
+import { buildAppealSubmissionSnapshot, appealSubmissionDigest } from '../services/appeals/appeal-snapshot';
 
 const prisma = new PrismaClient();
 let ORG = '';
@@ -98,7 +99,7 @@ beforeEach(async () => {
   });
   claimId = claim.id;
   const appeal = await prisma.appeal.create({
-    data: { organizationId: ORG, claimId, caseId, round: 2, status: 'DRAFT' },
+    data: { organizationId: ORG, claimId, caseId, round: 2, status: 'DRAFT', finalText: 'appeal body (final)' },
   });
   appealId = appeal.id;
 });
@@ -153,6 +154,24 @@ async function submit(target: string, cookie: string, body: Record<string, unkno
 }
 
 /** 经既有服务播种操作级审批（动作 + 载荷依据由调用方指定） */
+/** 当前服务端快照摘要（审批必须绑定它；CHANGE A） */
+async function currentSnapshotDigest(): Promise<string> {
+  const appeal = await prisma.appeal.findUniqueOrThrow({
+    where: { id: appealId },
+    select: { id: true, caseId: true, claimId: true, round: true, finalText: true, aiDraftText: true },
+  });
+  const snapshot = buildAppealSubmissionSnapshot({
+    appealId: appeal.id,
+    caseId: appeal.caseId,
+    claimId: appeal.claimId,
+    round: appeal.round,
+    finalText: appeal.finalText,
+    aiDraftText: appeal.aiDraftText,
+  });
+  if (!snapshot) throw new Error('SNAPSHOT_NULL');
+  return appealSubmissionDigest(snapshot);
+}
+
 async function seedApproval(basisReference: string, boundAction: string = APPEAL_SUBMIT_ACTION): Promise<string> {
   await submitRecoveryReview(
     prisma,
@@ -168,7 +187,7 @@ async function seedApproval(basisReference: string, boundAction: string = APPEAL
       caseId,
       decision: 'APPROVE',
       boundAction,
-      boundPayload: { basisReference },
+      boundPayload: { basisReference: basisReference === 'SNAPSHOT' ? await currentSnapshotDigest() : basisReference },
     } as never,
     () => new Date(NOW.getTime() + 1000),
   )) as { approvalId?: string };
@@ -184,7 +203,8 @@ async function sideEffects() {
     submittedAudits: await prisma.auditLog.count({ where: { organizationId: ORG, action: 'appeal.submitted_by_human' } }),
     rejectedAudits: await prisma.auditLog.count({ where: { organizationId: ORG, action: 'appeal.submit_rejected' } }),
     consumedAudits: await prisma.auditLog.count({ where: { organizationId: ORG, action: { contains: 'consumed' } } }),
-    platformWrites: await prisma.billingInvoice.count({ where: { organizationId: ORG } }),
+    // 真实口径：库内 BillingInvoice 行数（不是平台调用计数）；零外写由实现路径 + 静态探针证明
+    billingInvoices: await prisma.billingInvoice.count({ where: { organizationId: ORG } }),
   };
 }
 
@@ -274,6 +294,70 @@ async function callWorkflowDirect() {
   return { status, body: payload as Record<string, unknown> | null };
 }
 
+/** 独立执行人（ADMIN）：角色可在测试中被降级 */
+async function createMember(role: 'OWNER' | 'ADMIN' | 'FINANCE' | 'OPS'): Promise<{ userId: string; email: string }> {
+  const suffix = randomUUID().replace(/-/g, '').slice(0, 10);
+  const email = `appeal-submit-${role.toLowerCase()}-${suffix}@example.com`;
+  const user = await prisma.user.create({
+    data: { email, passwordHash: hashPassword(PASSWORD, FAST_PARAMS), displayName: role, status: 'ACTIVE', emailVerified: true },
+  });
+  await prisma.membership.create({ data: { organizationId: ORG, userId: user.id, role, isActive: true } });
+  return { userId: user.id, email };
+}
+
+async function loginAs(target: string, email: string): Promise<string> {
+  const res = await fetch(`${target}/auth/login`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email, password: PASSWORD }),
+  });
+  expect(res.status).toBe(200);
+  return (res.headers.get('set-cookie') ?? '').split(';')[0];
+}
+
+/** 独立连接持有 Appeal 行锁；返回释放函数与夹具后端 pid */
+async function holdAppealRowLock(): Promise<{ release: () => void; pid: Promise<number> }> {
+  let release: () => void = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let resolvePid: (value: number) => void = () => {};
+  const pid = new Promise<number>((resolve) => {
+    resolvePid = resolve;
+  });
+  void prisma
+    .$transaction(
+      async (tx) => {
+        const pinned = await tx.$queryRawUnsafe<Array<{ pid: number }>>('SELECT pg_backend_pid() AS pid');
+        resolvePid(Number(pinned[0]?.pid ?? 0));
+        await tx.$queryRawUnsafe('SELECT id FROM "Appeal" WHERE id = $1 AND "organizationId" = $2 FOR UPDATE', appealId, ORG);
+        await gate;
+      },
+      { timeout: 30_000, maxWait: 30_000 },
+    )
+    .catch(() => undefined);
+  return { release, pid };
+}
+
+async function blockedByPidCount(pid: number): Promise<number> {
+  const rows = await prisma.$queryRawUnsafe<{ n: bigint }[]>(
+    'SELECT count(*)::bigint AS n FROM pg_stat_activity a WHERE $1::int = ANY(pg_blocking_pids(a.pid))',
+    pid,
+  );
+  return Number(rows[0]?.n ?? 0n);
+}
+
+async function withAuditActionBlocked<T>(action: string, run: () => Promise<T>): Promise<T> {
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE "AuditLog" ADD CONSTRAINT appeal_submit_block_audit CHECK (action <> '${action}') NOT VALID`,
+  );
+  try {
+    return await run();
+  } finally {
+    await prisma.$executeRawUnsafe('ALTER TABLE "AuditLog" DROP CONSTRAINT IF EXISTS appeal_submit_block_audit');
+  }
+}
+
 describe('② RUNTIME BUSINESS BLOCKING — appeal.submit（真实 HTTP + PostgreSQL）', () => {
   it('01 缺 approvalId → 409 ACTION_GUARD_HUMAN_APPROVAL_REQUIRED 且零推进', async () => {
     const target = await baseFor();
@@ -288,9 +372,10 @@ describe('② RUNTIME BUSINESS BLOCKING — appeal.submit（真实 HTTP + Postgr
   it('02 审批动作不通用：claim.submit 的审批不能用于 appeal.submit', async () => {
     const target = await baseFor();
     const cookie = await login(target);
-    const approvalId = await seedApproval(appealId, CLAIM_SUBMIT_ACTION);
+    const approvalId = await seedApproval('SNAPSHOT', CLAIM_SUBMIT_ACTION);
     const res = await submit(target, cookie, { approvalId });
-    expect(res.status).toBeGreaterThanOrEqual(400);
+    expect(res.status).toBe(403);
+    expect(res.body.error).not.toBe('');
     const after = await sideEffects();
     expect(after).toMatchObject({ appealStatus: 'DRAFT', submittedAt: null, submittedAudits: 0, consumedAudits: 0 });
   }, 60_000);
@@ -298,7 +383,7 @@ describe('② RUNTIME BUSINESS BLOCKING — appeal.submit（真实 HTTP + Postgr
   it('03 合法提交 → SUBMITTED + 审计恰一次 + 消费恰一次 + 零平台外写', async () => {
     const target = await baseFor();
     const cookie = await login(target);
-    const approvalId = await seedApproval(appealId);
+    const approvalId = await seedApproval('SNAPSHOT');
     const res = await submit(target, cookie, { approvalId });
     expect(res.status).toBe(200);
     expect(res.body).toMatchObject({
@@ -314,16 +399,17 @@ describe('② RUNTIME BUSINESS BLOCKING — appeal.submit（真实 HTTP + Postgr
     expect(after.submittedAt).not.toBeNull();
     expect(after.submittedAudits).toBe(1);
     expect(after.consumedAudits).toBe(1);
-    expect(after.platformWrites).toBe(0);
+    expect(after.billingInvoices).toBe(0);
   }, 60_000);
 
   it('04 重复提交 → 不产生第二次副作用', async () => {
     const target = await baseFor();
     const cookie = await login(target);
-    const approvalId = await seedApproval(appealId);
+    const approvalId = await seedApproval('SNAPSHOT');
     expect((await submit(target, cookie, { approvalId })).status).toBe(200);
     const replay = await submit(target, cookie, { approvalId });
-    expect([200, 403, 409]).toContain(replay.status);
+    expect(replay.status).toBe(403);
+    expect(String(replay.body.error)).not.toBe('');
     const after = await sideEffects();
     expect(after.submittedAudits).toBe(1);
     expect(after.consumedAudits).toBe(1);
@@ -340,7 +426,7 @@ describe('② RUNTIME BUSINESS BLOCKING — appeal.submit（真实 HTTP + Postgr
   it('06 等案件锁期间审批被撤销 → 锁后 403 APPROVAL_REVOKED 且零推进', async () => {
     const target = await baseFor();
     const cookie = await login(target);
-    const approvalId = await seedApproval(appealId);
+    const approvalId = await seedApproval('SNAPSHOT');
     const release = await holdCaseLock();
     const pending = submit(target, cookie, { approvalId });
     try {
@@ -384,5 +470,92 @@ describe('② RUNTIME BUSINESS BLOCKING — appeal.submit（真实 HTTP + Postgr
     // 不得产生任何推进或审计
     expect(await prisma.auditLog.count({ where: { organizationId: ORG, action: 'appeal.submitted_by_human' } })).toBe(0);
     expect(await prisma.auditLog.count({ where: { organizationId: ORG, action: { contains: 'consumed' } } })).toBe(0);
+  }, 60_000);
+
+  it('08 CHANGE A：Appeal 正文为空 → 409 APPEAL_BODY_REQUIRED（失败关闭，零推进）', async () => {
+    const target = await baseFor();
+    const cookie = await login(target);
+    await prisma.appeal.update({ where: { id: appealId }, data: { finalText: '   ', aiDraftText: null } });
+    const res = await submit(target, cookie, { approvalId: 'any' });
+    expect(res.status).toBe(409);
+    expect(res.body.error).toBe('APPEAL_BODY_REQUIRED');
+    const after = await sideEffects();
+    expect(after).toMatchObject({ appealStatus: 'DRAFT', submittedAt: null, submittedAudits: 0, consumedAudits: 0 });
+  }, 60_000);
+
+  it('09 CHANGE A：审批后正文变化 → 快照摘要不匹配，精确拒绝且零推进', async () => {
+    const target = await baseFor();
+    const cookie = await login(target);
+    const approvalId = await seedApproval('SNAPSHOT');
+    // 审批后正文被改写：锁后重算快照摘要与审批绑定不一致，必须拒绝
+    await prisma.appeal.update({ where: { id: appealId }, data: { finalText: 'appeal body (mutated)' } });
+    const res = await submit(target, cookie, { approvalId });
+    expect(res.status).toBe(403);
+    expect(String(res.body.error)).not.toBe('');
+    const after = await sideEffects();
+    expect(after).toMatchObject({ appealStatus: 'DRAFT', submittedAt: null, submittedAudits: 0, consumedAudits: 0 });
+  }, 60_000);
+
+  it('10 CHANGE C：独立 OWNER 审批人 + ADMIN 执行人；等 Appeal 行锁期间降为 FINANCE → 403 FORBIDDEN', async () => {
+    const target = await baseFor();
+    const executor = await createMember('ADMIN');
+    const cookie = await loginAs(target, executor.email);
+    const approvalId = await seedApproval('SNAPSHOT'); // 审批人 = 既有 OWNER，全程有效
+    const holder = await holdAppealRowLock();
+    const blockerPid = await holder.pid;
+    const pending = submit(target, cookie, { approvalId });
+    try {
+      await waitFor(async () => (await blockedByPidCount(blockerPid)) >= 1, 10_000, 'APPEAL_WAITING_ON_ROW_LOCK');
+      await prisma.membership.updateMany({ where: { organizationId: ORG, userId: executor.userId }, data: { role: 'FINANCE' } });
+    } finally {
+      holder.release();
+    }
+    const res = await pending;
+    expect(res.status).toBe(403);
+    expect(res.body.error).toBe('FORBIDDEN');
+    const after = await sideEffects();
+    expect(after).toMatchObject({ appealStatus: 'DRAFT', submittedAt: null, submittedAudits: 0, consumedAudits: 0 });
+  }, 60_000);
+
+  it('11 CHANGE C：同审批并发提交 → 至多一次状态推进/成功审计/消费', async () => {
+    const target = await baseFor();
+    const cookie = await login(target);
+    const approvalId = await seedApproval('SNAPSHOT');
+    const [a, b] = await Promise.all([submit(target, cookie, { approvalId }), submit(target, cookie, { approvalId })]);
+    const ok = [a, b].filter((r) => r.status === 200);
+    expect(ok.length).toBeGreaterThanOrEqual(1);
+    const after = await sideEffects();
+    expect(after.appealStatus).toBe('SUBMITTED');
+    expect(after.submittedAudits).toBe(1);
+    expect(after.consumedAudits).toBe(1);
+  }, 60_000);
+
+  it('12 CHANGE C：成功业务审计写入失败 → 整笔提交事务回滚', async () => {
+    const target = await baseFor();
+    const cookie = await login(target);
+    const approvalId = await seedApproval('SNAPSHOT');
+    const res = await withAuditActionBlocked('appeal.submitted_by_human', () => submit(target, cookie, { approvalId }));
+    expect(res.status).toBeGreaterThanOrEqual(400);
+    const after = await sideEffects();
+    expect(after).toMatchObject({ appealStatus: 'DRAFT', submittedAt: null, submittedAudits: 0, consumedAudits: 0 });
+  }, 60_000);
+
+  it('13 CHANGE C：错误绑定（审批绑定其他 Appeal 的快照）→ 拒绝且零推进', async () => {
+    const target = await baseFor();
+    const cookie = await login(target);
+    const other = await prisma.appeal.create({ data: { organizationId: ORG, claimId, caseId, round: 2, status: 'DRAFT', finalText: 'other body' } });
+    const otherSnapshot = buildAppealSubmissionSnapshot({
+      appealId: other.id,
+      caseId,
+      claimId,
+      round: 2,
+      finalText: 'other body',
+      aiDraftText: null,
+    })!;
+    const approvalId = await seedApproval(appealSubmissionDigest(otherSnapshot));
+    const res = await submit(target, cookie, { approvalId });
+    expect(res.status).toBeGreaterThanOrEqual(400);
+    const after = await sideEffects();
+    expect(after).toMatchObject({ appealStatus: 'DRAFT', submittedAt: null, submittedAudits: 0, consumedAudits: 0 });
   }, 60_000);
 });
