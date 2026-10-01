@@ -922,3 +922,12 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - CHANGE C：补 digestVersion 与 packageDigest 不匹配 → 拒绝且零推进零消费。
 - 证据：S3 测试 13 → **16/16 PASS**；tsc PASS。
 - NEXT：R43 S3 RE-REVIEW（仅补 CHANGE A/B/C + S3-A…S3-R 映射）。
+
+## 2026-10-01 JST — R43 S3 RE-REVIEW 送审（CHANGE A/B/C 收口）
+
+- CHANGE A：新增可注入审计端口（生产默认实现不变），注入“成功审计写入失败”→ 整体回滚（ClaimItem 仍 READY_TO_APPEAL · Submission/Evidence/两条审计均 0 · approval 仍可合法使用）。
+- CHANGE B：注入“approval_consumed 写入失败”→ 整体回滚（不进入 SUBMITTED_MANUAL · 成功审计不残留 · 重试后仍可提交）。
+- CHANGE C：digestVersion 与 packageDigest 不匹配 → APPROVAL_PAYLOAD_MISMATCH + 零推进零消费（五元 basis 全部参与执行时绑定）。
+- 验收映射：S3-A…S3-R 已在送审正文逐项映射；计数口径分开（16 测试用例 / 18 验收条目）。
+- 证据：S3 16/16 PASS；受影响家族 34 files / 329 tests PASS；tsc PASS。
+- 送审：REVIEWED_HEAD 4c6c865（Issue #2 comment 5930712620 / CI 36857749399）；唤醒已投递并验证。

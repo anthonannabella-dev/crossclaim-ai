@@ -1,6 +1,6 @@
 {
   "gate": "B2-FIX R1",
-  "head": "3317b15",
+  "head": "4c6c865",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
   "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
@@ -9,13 +9,13 @@
   "last_chatgpt_message": "MSG-20261001-35",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T11:49:06.979Z",
+  "updated_at": "2026-10-01T11:52:15.073Z",
   "previous_head": "b6be095",
-  "architect_decision_pending": false,
+  "architect_decision_pending": true,
   "blocked_scope": null,
-  "last_send_head": "b6be095",
-  "last_sent_at": "2026-10-01T11:47:18.964Z",
-  "last_sent_fingerprint": "R43-S3:Recovery-Manual-Submit",
+  "last_send_head": "4c6c865",
+  "last_sent_at": "2026-10-01T11:52:15.073Z",
+  "last_sent_fingerprint": "R43-S3-REREVIEW:Audit-Fault-Injection-Basis-Version",
   "final_head": "1144401",
   "ci_run": "36833002042",
   "ci_result": "SUCCESS",
@@ -51,10 +51,10 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-01T11:47:44.666Z",
   "state": "IMPLEMENT",
-  "last_action": "MSG-20261001-35 = REVISE 已逐字归档并 FULL_COPY_OK —— S3 主体 KEEP；已按 CHANGE A/B/C 补三处证据（成功审计失败回滚 / approval_consumed 失败回滚 / digestVersion+packageDigest 不匹配拒绝），S3 测试 13 → 16 项；下一批 = S3 RE-REVIEW",
-  "last_action_at": "2026-10-01T11:49:06.979Z",
-  "next_action": "R43 S3 RE-REVIEW（REVIEWED_HEAD = 补齐后 HEAD）：只补 CHANGE A/B/C 并提交 S3-A…S3-R 映射；S3 PASS 前不进入 S4 providerCaseRef 补录。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
-  "current_head": "3317b15",
+  "last_action": "R43 S3 RE-REVIEW 已送审：CHANGE A/B/C 全部收口（成功审计失败回滚 / approval_consumed 失败回滚 / digestVersion+packageDigest 不匹配拒绝）+ S3-A…S3-R 显式映射；S3 测试 16 项；受影响家族 34 files / 329 tests PASS；tsc PASS；等待 S3 关闭裁决",
+  "last_action_at": "2026-10-01T11:52:15.073Z",
+  "next_action": "等待 S3 RE-REVIEW 裁决：①PASS → 关闭 S3 并进入 S4（providerCaseRef canonical 补录 + 受保护动作）②REVISE → 按 CHANGE 修改后重送 ③BLOCK → 停止该方案。S3 PASS 前不进入 S4。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
+  "current_head": "4c6c865",
   "reviewed_head": "07b7009",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -856,5 +856,23 @@
     "test_mapping_required": "S3-A … S3-R（checkpoint 必須给出明确映射；不要求每条单独 test function）",
     "note": "次次请把“测试用例数”与“验收条目数”分开表述（非阻塞项）",
     "next": "R43 S3 RE-REVIEW（仅补 CHANGE A/B/C，不扩大范围；无需新 Design/Plan）；S3 PASS 前不进入 S4"
+  },
+  "r43s3_rereview": {
+    "submission_comment": "5930712620",
+    "ci_run": "36857749399",
+    "reviewed_head": "4c6c865",
+    "changes_applied": {
+      "A": "成功审计（recovery.manual_submitted）写入失败 → 整体回滚（可注入审计端口；生产默认实现不变）",
+      "B": "approval_consumed 写入失败 → 整体回滚（成功审计不残留；重试仍可提交）",
+      "C": "digestVersion / packageDigest 不匹配 → APPROVAL_PAYLOAD_MISMATCH + 零推进零消费"
+    },
+    "mapping": "S3-A=S3-01 / B=S3-02 / C=S3-03 / D=S3-04 / E=S3-05 / F·G=S3-F/G 合并用例 / H=S3-06 / I=S3-07 / J=S3-08 / K·L=S3-09/10 合并用例 / M=S3-11 / N=S3-N / O=S3-O / P=S3-12 / Q=S3-13 / R=S3-14",
+    "evidence": {
+      "s3_tests": "16 个测试用例覆盖 18 条验收条目（K/L 与 F/G 各为合并用例）",
+      "affected_families": "34 files / 329 tests PASS（recovery-manual-* + action-guard 全量）",
+      "tsc": "PASS"
+    },
+    "wakeup_channel": "https://chatgpt.com/c/6ab9ee1b-fd54-83ee-b363-b67750afcedd",
+    "wakeup_delivery": "DELIVERED_VERIFIED（输入框清空 / 新用户消息在底部）"
   }
 }
