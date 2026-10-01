@@ -78192,3 +78192,75 @@ Schema 没有 FeeCalculation 的“已确认”状态。本轮不得仅凭存在
 Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据继续 HOLD。
 ```
 
+### [MSG-20261001-12] Gate 7 / ② RUNTIME BUSINESS BLOCKING · billing.draft · R28（REVIEWED_REF 5dc18ad）：VERDICT: REVISE（小范围收尾：CHANGE A 原记录时间须单一持久化来源；TEST 补齐金额/币种一致性、审计核对、双费用集合与非零支付字段保留、同路径成功对照）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE: FORMAL_VERDICT
+MESSAGE: MSG-20261001-12
+PREVIOUS: MSG-20261001-11
+GATE: Gate 7 / 授权项② RUNTIME BUSINESS BLOCKING · billing.draft
+HEAD: 5dc18ad
+REVIEWED_REF: 5dc18addb580d98a3127696d359a7019bea98fb9
+DECISION: REVISE（小范围收尾）
+ACK: A/B/C 的主要实现已修复；剩余一项时间契约修正及验收补齐。
+
+1. REVIEW / TEST
+
+本轮重新读取了 
+Issue #2 请求、388f9c8→5dc18ad diff、服务完整代码、新增测试和 
+CI run 36813619247。
+
+确认 CI 对应 REVIEWED_REF，五作业 SUCCESS；API 日志确认 147 files / 1398 tests PASS，billing.draft 20/20 PASS，tsc、prisma validate 通过。本审查未自行运行本地测试。
+
+2. KEEP — 已关闭项
+幂等返回实际账单状态，费用依据改为排序集合；paymentCollectedByThisCall 语义正确。
+VOID / WRITTEN_OFF 返回结构化409，不删除历史、不重用编号、不抢移费用。
+费用行锁之后重读租户、案件、金额、币种及账单关联；禁止使用已关联费用。
+最终主体权限检查已移至全部资源锁之后。
+金额及币种校验、业务写入与审计同事务保持。
+费用依据口径收窄正确，不宣称存在 Schema 未提供的人工确认状态。
+3. CHANGE A — 原记录时间仍有两个来源
+
+文件：apps/api/src/services/billing/billing-draft.ts
+
+新建响应的 invoiceRefAt 使用应用时间 at，但创建账单时未设置 createdAt；幂等响应又使用数据库生成的 createdAt。同一账单首次与重试返回的原记录时间可能不同。
+
+最小修正二选一：
+
+创建时显式设置 createdAt: at；或
+创建结果读取 createdAt，首次及幂等返回均使用该持久化值。
+
+checkedAt 保留本次锁后检查时间。补验收：首次响应、数据库记录、重复响应的 invoiceRefAt 精确一致；不同检查时间不得改写原记录时间。
+
+4. CHANGE C / TEST — 补齐原要求的事实一致性证据
+
+文件：apps/api/src/__tests__/action-guard-billing-draft-http-db.test.ts
+
+本轮用例18证明金额更新后用于账单与响应，但未核对成功审计；币种变化也未覆盖。请收敛以下验收：
+
+费用锁等待期间同时改变合法金额及币种，释放后精确核对：费用行、关联账单、响应、billing.drafted 的金额／币种／依据一致，关联恰为目标账单。
+同一费用锁等待路径，角色未变正常成功，作为用例20降权拒绝的对照。
+加强用例14：设置非零 paidAmount、实际 paidAt／issuedAt，核对调用后完整保留；构造两个关联费用，断言返回集合精确完整且排序正确，而非仅断言“是数组”。
+
+不要求新增 Schema、审批机制或业务能力。
+
+5. 证据口径
+
+用例18/19目前由持锁连接在请求开始前进行未提交更新，准备请求随后等待该锁，释放提交后读取新事实。该构造可证明最终已提交事实被使用，应按这一准确时序描述；不要声称更新发生在确认等待之后。
+
+以上为本轮全部剩余 CHANGE，不重开已关闭的 VOID 策略、锁顺序和主体检查实现。
+
+6. NEXT / RISKS
+
+完成上述最小修正、专项与相关回归、tsc、prisma validate、新 HEAD CI 后再次送审。billing.draft 暂不登记 PASS。
+
+既有 closure / commission 自动起草路径的统一锁集成仍为后续项；当前并发保障继续限定本入口之间。Codex 可逐字归档并直接实施，无需宿主确认。
+
+7. PRODUCTION
+
+授权项②整体仍 NOT COMPLETE。
+Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据继续 HOLD。
+```
+

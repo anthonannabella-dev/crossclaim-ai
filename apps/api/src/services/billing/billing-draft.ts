@@ -262,6 +262,9 @@ export async function createBillingDraft(
           taxAmount: new Prisma.Decimal(0),
           total: subtotal,
           currency: fee.currency,
+          // CHANGE A（MSG-20261001-12）：原记录时间只保留一个持久化来源 —— 显式写入 createdAt，
+          // 首次响应、数据库记录与幂等重试返回的 invoiceRefAt 因此精确一致。
+          createdAt: at,
           fees: { connect: { id: fee.id } },
         },
         select: { id: true, invoiceNo: true, status: true, subtotal: true, total: true, currency: true },

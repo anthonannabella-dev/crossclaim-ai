@@ -481,6 +481,9 @@ describe('② RUNTIME BUSINESS BLOCKING — billing.draft（真实 HTTP + Postgr
         platformWriteExecuted: false,
       });
       const invoice = await prisma.billingInvoice.findUniqueOrThrow({ where: { id: String(res.body.invoiceId) } });
+      // CHANGE A 验收：首次响应 invoiceRefAt === 数据库 createdAt
+      expect(res.body.invoiceRefAt).toBe(invoice.createdAt.toISOString());
+      expect(typeof res.body.checkedAt).toBe('string');
       expect(invoice.organizationId).toBe(ORG);
       expect(invoice.caseId).toBe(caseId);
       expect(invoice.status).toBe('DRAFT');
@@ -506,6 +509,8 @@ describe('② RUNTIME BUSINESS BLOCKING — billing.draft（真实 HTTP + Postgr
       expect(second.status).toBe(200);
       expect(second.body.invoiceId).toBe(first.body.invoiceId);
       expect(second.body).toMatchObject({ created: false });
+      // CHANGE A 验收：首次/重复响应的 invoiceRefAt 精确一致（不同 checkedAt 不改写原记录时间）
+      expect(second.body.invoiceRefAt).toBe(first.body.invoiceRefAt);
       const after = await sideEffects();
       expect(after.invoiceRows).toBe(1);
       expect(after.draftedAudits).toBe(1);
@@ -620,6 +625,10 @@ describe('② RUNTIME BUSINESS BLOCKING — billing.draft（真实 HTTP + Postgr
     await withServer(async (base) => {
       const cookie = await login(base);
       const feeId = await seedFee();
+      // 第二个关联费用（断言返回集合精确完整且排序）
+      const secondFee = await prisma.feeCalculation.create({ data: { organizationId: ORG, caseId, basis: 'FIXED', baseAmount: new Prisma.Decimal('10.0000'), feeAmount: new Prisma.Decimal('10.0000'), currency: 'USD', computation: { source: 'second' } as never } });
+      const paidAt = new Date('2026-09-30T10:00:00Z');
+      const issuedAt = new Date('2026-09-30T09:00:00Z');
       // 账单只建一次（删除账单会级联删除其费用行）；循环内仅翻转状态
         const invoice = await prisma.billingInvoice.create({
           data: {
@@ -631,7 +640,10 @@ describe('② RUNTIME BUSINESS BLOCKING — billing.draft（真实 HTTP + Postgr
             taxAmount: new Prisma.Decimal(0),
             total: new Prisma.Decimal('450.0000'),
             currency: 'USD',
-            fees: { connect: { id: feeId } },
+            paidAmount: new Prisma.Decimal('120.0000'),
+            paidAt,
+            issuedAt,
+            fees: { connect: [{ id: feeId }, { id: secondFee.id }] },
           },
         });
       for (const status of ['ISSUED', 'PAID', 'PARTIALLY_PAID'] as const) {
@@ -646,10 +658,16 @@ describe('② RUNTIME BUSINESS BLOCKING — billing.draft（真实 HTTP + Postgr
           created: false,
           paymentCollectedByThisCall: false,
         });
-        expect(Array.isArray(res.body.basisFeeCalculationIds)).toBe(true);
+        // CHANGE A/C 验收：返回集合精确完整且按 id 升序
+        const expectedBasis = [feeId, secondFee.id].sort();
+        expect(res.body.basisFeeCalculationIds).toEqual(expectedBasis);
         const after = await prisma.billingInvoice.findUniqueOrThrow({ where: { id: invoice.id } });
         expect(after.status).toBe(status);
-        expect(after.paidAt).toBeNull();
+        // 支付/签发字段与金额完整保留
+        expect(after.paidAmount.toFixed(4)).toBe('120.0000');
+        expect(after.paidAt?.toISOString()).toBe(paidAt.toISOString());
+        expect(after.issuedAt?.toISOString()).toBe(issuedAt.toISOString());
+        expect(res.body.invoiceRefAt).toBe(after.createdAt.toISOString());
         const auditsAfter = await prisma.auditLog.count({ where: { organizationId: ORG, action: 'billing.drafted' } });
         expect(auditsAfter).toBe(auditsBefore);
       }
@@ -719,9 +737,10 @@ describe('② RUNTIME BUSINESS BLOCKING — billing.draft（真实 HTTP + Postgr
     await withServer(async (base) => {
       const cookie = await login(base);
       const feeId = await seedFee('100.0000');
-      // 持锁期间由持锁连接把金额改为 900（外部 UPDATE 会被行锁阻塞）
+      // 精确时序：持锁连接在请求开始前于锁内把金额改为 900.0000、币种改为 EUR（未提交）；
+      // 请求随后等待该行锁，释放提交后读取到该最终已提交事实。
       const holder = await holdFeeRowLock(feeId, async (tx) => {
-        await tx.$executeRawUnsafe('UPDATE "FeeCalculation" SET "feeAmount" = 900.0000 WHERE id = $1', feeId);
+        await tx.$executeRawUnsafe('UPDATE "FeeCalculation" SET "feeAmount" = 900.0000, "currency" = \'EUR\' WHERE id = $1', feeId);
       });
       const blockerPid = await holder.pid;
       const pending = draft(base, cookie);
@@ -732,10 +751,26 @@ describe('② RUNTIME BUSINESS BLOCKING — billing.draft（真实 HTTP + Postgr
       }
       const res = await pending;
       expect(res.status).toBe(200);
-      expect(res.body).toMatchObject({ total: '900.0000', subtotal: '900.0000' });
+      expect(res.body).toMatchObject({ total: '900.0000', subtotal: '900.0000', currency: 'EUR' });
       const invoice = await prisma.billingInvoice.findUniqueOrThrow({ where: { id: String(res.body.invoiceId) } });
       expect(invoice.total.toFixed(4)).toBe('900.0000');
+      expect(invoice.currency).toBe('EUR');
       expect(res.body.basisFeeCalculationIds).toEqual([feeId]);
+      // 费用行：金额/币种/账单关联恰为目标账单
+      const fee = await prisma.feeCalculation.findUniqueOrThrow({ where: { id: feeId } });
+      expect(fee.feeAmount.toFixed(4)).toBe('900.0000');
+      expect(fee.currency).toBe('EUR');
+      expect(fee.billingInvoiceId).toBe(invoice.id);
+      // 成功审计与写入事实一致
+      const audited = await prisma.auditLog.findMany({ where: { organizationId: ORG, action: 'billing.drafted' } });
+      expect(audited).toHaveLength(1);
+      expect(audited[0]?.entityId).toBe(invoice.id);
+      expect(audited[0]?.changes as Record<string, unknown>).toMatchObject({
+        subtotal: '900.0000',
+        total: '900.0000',
+        currency: 'EUR',
+        basisFeeCalculationId: feeId,
+      });
     });
   }, 60_000);
 
@@ -743,6 +778,7 @@ describe('② RUNTIME BUSINESS BLOCKING — billing.draft（真实 HTTP + Postgr
     await withServer(async (base) => {
       const cookie = await login(base);
       const feeId = await seedFee('100.0000');
+      // 精确时序：持锁连接在请求开始前于锁内把金额改为 0（未提交）；请求等待该行锁后读取到该事实
       const holder = await holdFeeRowLock(feeId, async (tx) => {
         await tx.$executeRawUnsafe('UPDATE "FeeCalculation" SET "feeAmount" = 0 WHERE id = $1', feeId);
       });
@@ -779,6 +815,29 @@ describe('② RUNTIME BUSINESS BLOCKING — billing.draft（真实 HTTP + Postgr
       expect(res.status).toBe(403);
       expect(res.body.error).toBe('FORBIDDEN');
       expect(await sideEffects()).toMatchObject(ZERO);
+    });
+  }, 60_000);
+
+  it('21 同一费用锁等待路径、主体与角色未变 → 200 成功（对照用例20）', async () => {
+    await withServer(async (base) => {
+      const feeId = await seedFee();
+      const executor = await createMember('OPS');
+      await prisma.membership.updateMany({ where: { organizationId: ORG, userId: executor.userId }, data: { role: 'FINANCE' } });
+      const cookie = await login(base, executor.email);
+      const holder = await holdFeeRowLock(feeId);
+      const blockerPid = await holder.pid;
+      const pending = draft(base, cookie);
+      try {
+        await waitFor(async () => (await blockedByPidCount(blockerPid)) >= 1, 10_000, 'DRAFT_WAITING_ON_FEE_ROW_LOCK_4');
+      } finally {
+        holder.release();
+      }
+      const res = await pending;
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({ created: true, status: 'DRAFT' });
+      const after = await sideEffects();
+      expect(after.invoiceRows).toBe(1);
+      expect(after.draftedAudits).toBe(1);
     });
   }, 60_000);
 });
