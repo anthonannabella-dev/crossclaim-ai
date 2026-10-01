@@ -1114,3 +1114,11 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 4 项风险：重复 ingest 双计 / basis 并发双 effective / reversal 负金额 / projection 漂移成真值；必须 Facts → Basis·Policy·Override → deterministic projector → Projection。
 - NEXT：**R45-B Implementation Plan**（docs-only；仍不实施）。
 - 档案：`AI-ARCHITECT-INBOX.md` → MSG-20261001-45。
+
+## 2026-10-01 JST — R45-B Implementation Plan 送审（最终七表 + CHANGE A–D + M1–M6）
+
+- 文档：`docs/releases/R45-B-RECONCILIATION-IMPLEMENTATION-PLAN.md`（docs-only；未实施）。
+- 七表：ProviderOutcomeFact / ReimbursementFact / ExpectedRecoveryBasis / ReconciliationOverrideDecision / ClaimReconciliationProjection（derived cache）/ ClaimReconciliationProjectionFact（关系表）/ ReconciliationTolerancePolicy（默认 exact）。
+- CHANGE A–D 落实：reversal 非负金额 + reversesFactId 约束；providerEventId + fingerprint 双概念；supersededAt + partial unique 与 supersede 事务顺序；projection↔fact 关系化。
+- 四个受保护动作：basis_set / basis_supersede / override / provider_outcome_record（均 INTERNAL_WRITE + humanApproval）。
+- 送审：REVIEWED_HEAD 25389be（Issue #2 comment 5933149170）；唤醒已投递并三要素验证。

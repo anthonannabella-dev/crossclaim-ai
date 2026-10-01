@@ -1,6 +1,6 @@
 {
   "gate": "B2-FIX R1",
-  "head": "3488e89",
+  "head": "25389be",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
   "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
@@ -9,13 +9,13 @@
   "last_chatgpt_message": "MSG-20261001-45",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T14:06:08.407Z",
+  "updated_at": "2026-10-01T14:07:55.274Z",
   "previous_head": "aa9225e",
-  "architect_decision_pending": false,
+  "architect_decision_pending": true,
   "blocked_scope": null,
-  "last_send_head": "aa9225e",
-  "last_sent_at": "2026-10-01T14:04:39.105Z",
-  "last_sent_fingerprint": "R45-A:Reconciliation-Schema-Delta-Request",
+  "last_send_head": "25389be",
+  "last_sent_at": "2026-10-01T14:07:55.274Z",
+  "last_sent_fingerprint": "R45-B:Reconciliation-Implementation-Plan",
   "final_head": "1144401",
   "ci_run": "36833002042",
   "ci_result": "SUCCESS",
@@ -49,12 +49,12 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-01T14:05:16.610Z",
+  "last_tick_at": "2026-10-01T14:07:55.601Z",
   "state": "IMPLEMENT",
-  "last_action": "MSG-20261001-45 = PASS WITH REVISE 已逐字归档并 FULL_COPY_OK —— R45-A 数据模型方向认可；需按 4 项裁决 + CHANGE A–D 修订并提交 R45-B Implementation Plan（docs-only，仍不实施）",
-  "last_action_at": "2026-10-01T14:06:08.407Z",
-  "next_action": "R45-B Implementation Plan（docs-only）：把 CHANGE A–D 与 4 项裁决写入最终模型（ClaimReconciliationProjectionFact 关系表、providerEventId+fingerprint 双概念、supersededAt partial unique 与 supersede 事务顺序、tolerance policy 建表、两个 basis 受保护动作、人工 provider outcome 受保护路径）+ migration/transaction/test 计划；仍不实施 Schema/代码。",
-  "current_head": "3488e89",
+  "last_action": "R45-B Implementation Plan 已送审（docs-only）：七表最终模型 + CHANGE A–D 落实 + 四个受保护动作 + 确定性 projector + M1–M6 迁移拆分 + 15 项验收；等待是否批准进入 S1 实施",
+  "last_action_at": "2026-10-01T14:07:55.274Z",
+  "next_action": "等待 R45-B Implementation Plan 裁决：①PASS → 进入 S1（Schema/migration/触发器清单，首次产生 Schema 变更）②REVISE → 按 CHANGE 修订计划 ③BLOCK → 停止该方向。",
+  "current_head": "25389be",
   "reviewed_head": "07b7009",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-01T14:04:39.446Z",
-    "gapMs": 37165,
+    "previousTickAt": "2026-10-01T14:05:16.610Z",
+    "gapMs": 158992,
     "stale": false,
-    "checkedAt": "2026-10-01T14:05:16.610Z"
+    "checkedAt": "2026-10-01T14:07:55.601Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -1537,5 +1537,49 @@
     ],
     "pipeline_rule": "Facts → Basis/Policy/Override → deterministic projector → Projection（不得从旧 Projection 增量猜测）",
     "next": "R45-B — Implementation Plan（docs-only）：先把 CHANGE A–D 写入最终模型与 migration/transaction/test 计划，再进入任何 Schema/migration 实施"
+  },
+  "r45b_submission": {
+    "submission_comment": "5933149170",
+    "reviewed_head": "25389be",
+    "doc": "docs/releases/R45-B-RECONCILIATION-IMPLEMENTATION-PLAN.md",
+    "kind": "Implementation Plan（docs-only；未实施）",
+    "submitted_under_rules": true,
+    "risk_classification": {
+      "FOUNDATION_REUSED": "R43 append-only/租户触发器与事务·行锁模式 + EvidenceArtifact provenance + Action Guard/HITL（boundExtra）+ AuditLog + consistency checker 模式",
+      "NEW_RISK_BOUNDARY": "YES —— R45 最终七表模型（含 ClaimReconciliationProjectionFact 关系表与 ReconciliationTolerancePolicy）与四个受保护动作",
+      "ARCH_REVIEW_REQUIRED": "YES —— 触发项：Schema 实质变化（七表 + 枚举 + partial unique + CHECK + 触发器）+ 审批 / HITL 边界变化（basis_set / basis_supersede / override / provider_outcome_record）；本批次仅提交计划，未实施"
+    },
+    "final_tables": [
+      "ProviderOutcomeFact",
+      "ReimbursementFact",
+      "ExpectedRecoveryBasis",
+      "ReconciliationOverrideDecision",
+      "ClaimReconciliationProjection（derived cache）",
+      "ClaimReconciliationProjectionFact（关系表，CHANGE D）",
+      "ReconciliationTolerancePolicy（v1 建表，默认 exact，Q②）"
+    ],
+    "changes_applied": {
+      "A": "OBSERVED.amount > 0；REVERSED 引用 reversesFactId（不可自指、同 tenant/provider/currency、不可重复 full-reverse）；v1 仅 full reversal",
+      "B": "providerEventId（原生稳定 ID）+ providerEventFingerprint（provider + source/resource + eventId/canonical identity + event kind；v1）",
+      "C": "supersededAt IS NULL + partial unique (org, claimItemId)；supersede 固定事务顺序 + 并发测试",
+      "D": "ClaimReconciliationProjectionFact 关系表，matchedFactIds 仅摘要缓存"
+    },
+    "protected_actions": [
+      "recovery.reconciliation_basis_set",
+      "recovery.reconciliation_basis_supersede",
+      "recovery.reconciliation_override",
+      "recovery.reconciliation_provider_outcome_record"
+    ],
+    "projector": "Facts → Basis/Policy/Override → deterministic projector → Projection；inputDigest + projectionVersion；checker 验证 stored == rebuild",
+    "migration_plan": "M1 表与枚举 → M2 租户触发器与 projection 受控更新 → M3 append-only 与 basis 受控 supersede → M4 唯一/partial unique → M5 CHECK → M6 清单与计数同步",
+    "tests": "15 项 R45 永久验收（见文档 §7）",
+    "questions": [
+      "七表模型 + CHANGE A–D 落实方式是否批准（尤其 basis supersede 事务顺序）？",
+      "是否批准进入 R45-B S1 实施（S1 Schema/migration → S2 ingest → S3 projector → S4 受保护动作 → S5 checker/回归）？",
+      "ClaimReconciliationProjectionFact 重算策略：同事务整体替换还是版本化追加？"
+    ],
+    "next": "R45-B S1 实施（待批准；届时才产生 Schema/migration 变更）",
+    "wakeup_channel": "https://chatgpt.com/c/6ab9ee1b-fd54-83ee-b363-b67750afcedd",
+    "wakeup_delivery": "DELIVERED_VERIFIED（输入框清空 / 新用户消息在底部 / 生成中）"
   }
 }
