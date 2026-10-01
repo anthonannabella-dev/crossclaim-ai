@@ -37,13 +37,13 @@
 
 | 动作（catalog） | service / route / job / HITL 入口 | 副作用边界 | 审批验证 | 集成测试 | 状态 |
 | --- | --- | --- | --- | --- | --- |
-| `claim.submit` | 待定（提交路径，HITL 人工闸门） | 平台外写（当前 HOLD，传输开关 false） | approvalId 服务端校验（租户/动作/对象/有效期/消费） | 待补 | TODO |
+| `claim.submit` | `POST /cases/:id/claim/submit`（http-routes + server WORKFLOW_PATH） | 平台外写（当前 HOLD，传输开关 false；入口恒返回 `NEEDS_MANUAL`） | approvalId 服务端校验（租户/动作/对象/有效期/消费）+ 锁后角色/主体重验 | HTTP 级 22/22（拒绝零副作用 / 并发恰一次 / 等锁失效 / 审计失败注入 / 审计留痕与原始错误保留） | **已验收 PASS（MSG-20261001-07 / REVIEWED_REF 28e0cd9；CI run 36805839845）** |
 | `appeal.submit` | 待定（申诉路径） | 平台外写（HOLD） | 同上 | 待补 | TODO |
 | `platform.write` | 待定（适配器写路径） | 平台外写（HOLD） | 同上 | 待补 | TODO |
 | `commission.charge` | 待定（结算/佣金路径） | 资金动作（HOLD） | 同上 + 财务复核 | 待补 | TODO |
 | `payment.capture` | 账单登记入口（HTTP 受保护入口） | 资金动作（HOLD） | Action Guard 审批绑定 + 锁内事实 CAS + 快照交错校验 | HTTP 级：拒绝零副作用 / 允许恰一次（含并发与等锁失效） | **已验收 PASS（MSG-20260930-24 / REVIEWED_REF 73115a3）** |
 | `secret.rotate` | 待定（运维路径） | 凭据操作（HOST ONLY） | HOST APPROVAL | 待补 | TODO |
-| `claim.prepare` | 待定（内部写入） | 业务库写入 | 不要求人工审批，但需能力闸门 | 待补 | TODO |
+| `claim.prepare` | `POST /cases/:id/claim/prepare`（http-routes + server WORKFLOW_PATH） | 业务库写入（第 1 轮 Claim 草稿 `target`/`aiDraftText` + `claim.prepared` 审计同事务；不推进状态） | 能力闸门（`INTERNAL_WRITE` / `requires: []`，**无人工审批**） | HTTP 级 12/12（默认 READ_ONLY、缺 guard、Kill Switch 关闭、feature 未开启、跨租户 404、FINANCE 403、已提交 409、审计失败回滚、非法输入 400，拒绝均零副作用） | 已接入（R24 送审中） |
 | `billing.draft` | 待定（内部写入） | 业务库写入 | 不要求人工审批 | 待补 | TODO |
 | `evidence.read` | 待定（只读） | 无 | 无 | 待补 | TODO |
 
@@ -142,3 +142,17 @@
 | CHANGE D 审计与口径 | 已实现（送审中） | action_guard.approval_decision（含 approvalId/主体/目标/operationId）；缺守卫 403 ACTION_GUARD_NOT_CONFIGURED；零业务/资金副作用口径 |
 | 审批表（独立生命周期记录） | **待架构方裁决** | 若审计事件方案不足，改走最小 Schema Delta |
 | 其余受保护入口 | TODO | 见第 3 节清单 |
+
+
+## 7. ② 下一小批次接入记录（claim.prepare，MSG-20261001-07 §6）
+
+| 项 | 状态 | 证据 |
+| --- | --- | --- |
+| 入口接线：POST /cases/:id/claim/prepare | 已接入（R24 送审中） | `services/workflow/http-routes.ts` + `server.ts` WORKFLOW_PATH（其余路径仍 404） |
+| 能力闸门（INTERNAL_WRITE，无人工审批） | 已实现（R24 送审中） | `guard.assertAllowed({action:'claim.prepare'})`；缺 guard → 403 ACTION_GUARD_NOT_CONFIGURED；默认控制面 READ_ONLY → 403 |
+| 内部准备写入（草稿 upsert） | 已实现（R24 送审中） | `services/claims/claim-preparation.ts`：`DRAFT`/round=1 创建或更新；已离开 DRAFT → 409 ILLEGAL_TRANSITION |
+| 租户隔离与动作权限 | 已实现（R24 送审中） | 跨租户 → 404 NOT_FOUND；服务内 `assertPermission(role,'claimTrackingApprove')`（OWNER/ADMIN），FINANCE → 403 FORBIDDEN |
+| 审计失败关闭 | 已实现（R24 送审中） | `claim.prepared` 与业务写入同事务客户端；库拒绝审计写入 → 整笔回滚 |
+| 零外部副作用 | 已实现（R24 送审中） | 不引用适配器写入面、不产生资金对象、不推进 Claim（submittedAt/submittedBy/approved* 保持空）；`platformWriteExecuted=false` |
+| 集成测试 | 12/12（R24 送审中） | `action-guard-claim-prepare-http-db.test.ts`（真实 HTTP + PostgreSQL） |
+| 架构方裁决 | **待裁决** | 本批次送审 R24；② 整体仍 NOT COMPLETE |

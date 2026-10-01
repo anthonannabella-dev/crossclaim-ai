@@ -49,6 +49,7 @@ import { ApprovalBoundaryError } from '../action-guard/approval-tx-verify';
 import { createPrismaActionGuardAuditPort } from '../action-guard/runtime-guard-composition';
 import type { AuditWriter } from '../audit';
 import { submitClaimWithApproval } from '../claims/claim-submission';
+import { CLAIM_PREPARE_ACTION, prepareClaimDraft } from '../claims/claim-preparation';
 import {
   ActionGuardApprovalRequiredError,
   ActionGuardDeniedError,
@@ -144,6 +145,8 @@ const CASE_EVIDENCE_PATH = /^\/cases\/([^/]+)\/evidence$/;
 const CASE_CLAIM_PATH = /^\/cases\/([^/]+)\/claim$/;
 // ② RUNTIME BUSINESS BLOCKING：claim.submit（人工提交入口；平台外写保持 NEEDS_MANUAL）
 const CASE_CLAIM_SUBMIT_PATH = /^\/cases\/([^/]+)\/claim\/submit$/;
+// ② 下一小批次（MSG-20261001-07 §6）：claim.prepare（内部准备写入 · INTERNAL_WRITE · 无人审批）
+const CASE_CLAIM_PREPARE_PATH = /^\/cases\/([^/]+)\/claim\/prepare$/;
 // MSG-20260929-30：运营看板（只读投影，GET only）
 const OPERATIONS_DASHBOARD_PATH = /^\/operations\/dashboard$/;
 const OPERATIONS_CLAIMS_PATH = /^\/operations\/claims$/;
@@ -341,6 +344,7 @@ export async function handleWorkflowRequest(
   const caseEvidence = CASE_EVIDENCE_PATH.exec(path);
   const caseClaim = CASE_CLAIM_PATH.exec(path);
   const caseClaimSubmit = CASE_CLAIM_SUBMIT_PATH.exec(path);
+  const caseClaimPrepare = CASE_CLAIM_PREPARE_PATH.exec(path);
   const operationsDashboard = OPERATIONS_DASHBOARD_PATH.test(path);
   const operationsClaims = OPERATIONS_CLAIMS_PATH.test(path);
   const operationsRecovery = OPERATIONS_RECOVERY_PATH.test(path);
@@ -373,7 +377,7 @@ export async function handleWorkflowRequest(
     adminPermissionMatrix ||
     adminMemberDetail !== null ||
     adminKillSwitch;
-  if (!adminAny && !operationsDashboard && !operationsClaims && !operationsRecovery && !review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !paymentReviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !replayPath && !replayReviewPath && !retryDuePath && !retryDueFreezePath && !retryDueReviewPath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim && !caseClaimSubmit) {
+  if (!adminAny && !operationsDashboard && !operationsClaims && !operationsRecovery && !review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !paymentReviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !replayPath && !replayReviewPath && !retryDuePath && !retryDueFreezePath && !retryDueReviewPath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim && !caseClaimSubmit && !caseClaimPrepare) {
     return false;
   }
 
@@ -922,6 +926,41 @@ export async function handleWorkflowRequest(
       });
       // outcome 自带 externalSubmission='NEEDS_MANUAL' 与 platformWriteExecuted=false（零平台外写）
       sendJson(res, 200, outcome);
+      return true;
+    }
+
+    if (caseClaimPrepare) {
+      // ② 下一小批次：Claim 内部准备写入（受保护动作 claim.prepare · INTERNAL_WRITE）
+      const body = await readJsonBody(req);
+      const caseId = caseClaimPrepare[1] ?? '';
+      if (!deps.actionGuard) {
+        // fail closed：受保护入口必须在组合根注入 Action Guard
+        throw new ActionGuardNotConfiguredError(CLAIM_PREPARE_ACTION);
+      }
+      // INTERNAL_WRITE：只需能力闸门（Kill Switch scope=workflow + 动作 feature + 控制面模式），
+      // 不引入人工审批；审批只用于满足 humanApproval 的动作（claim.submit 等）。
+      await deps.actionGuard.assertAllowed({
+        action: CLAIM_PREPARE_ACTION,
+        actorUserId: actor.actorUserId,
+        organizationId: actor.organizationId,
+      });
+      // 放行后执行内部准备写入：租户隔离 + 动作权限 + 业务审计同事务（审计失败整笔回滚）
+      const prepared = await prepareClaimDraft(
+        {
+          organizationId: actor.organizationId,
+          actorUserId: actor.actorUserId,
+          role: actor.role,
+          caseId,
+          target: typeof body.target === 'string' ? body.target : '',
+          draftText: typeof body.draftText === 'string' ? body.draftText : '',
+        },
+        {
+          prisma: deps.prisma,
+          ...(deps.now ? { now: deps.now } : {}),
+        },
+      );
+      // 内部准备写入：恒不触达平台，也不推进 Claim 状态
+      sendJson(res, 200, prepared);
       return true;
     }
 
