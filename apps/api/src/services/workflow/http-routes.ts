@@ -31,6 +31,7 @@ import { ActionGuardApprovalVerificationError } from '../action-guard/approval-v
 import { createHitlSubmissionBoundary } from '../action-guard/hitl-submission';
 import { ActionGuardNotConfiguredError } from '../action-guard/guard-enforcement';
 import {
+  APPEAL_SUBMIT_ACTION,
   CLAIM_SUBMIT_ACTION,
   PAYMENT_CAPTURE_ACTION,
   PAYMENT_REPLAY_ACTION,
@@ -50,6 +51,7 @@ import { createPrismaActionGuardAuditPort } from '../action-guard/runtime-guard-
 import type { AuditWriter } from '../audit';
 import { submitClaimWithApproval } from '../claims/claim-submission';
 import { BILLING_DRAFT_ACTION, createBillingDraft } from '../billing/billing-draft';
+import { submitAppealWithApproval } from '../appeals/appeal-submission';
 import { EVIDENCE_READ_ACTION } from '../evidence/evidence-read';
 import { CLAIM_PREPARE_ACTION, prepareClaimDraft } from '../claims/claim-preparation';
 import {
@@ -151,6 +153,8 @@ const CASE_CLAIM_SUBMIT_PATH = /^\/cases\/([^/]+)\/claim\/submit$/;
 const CASE_CLAIM_PREPARE_PATH = /^\/cases\/([^/]+)\/claim\/prepare$/;
 // ② 下一小批次（MSG-20261001-10 §5）：billing.draft（账单草稿写入 · INTERNAL_WRITE · 无人审批）
 const CASE_BILLING_DRAFT_PATH = /^\/cases\/([^/]+)\/billing\/draft$/;
+// ② 下一小批次（MSG-20261001-14 §5）：appeal.submit（Appeal 人工提交 · 独立动作与审批绑定）
+const CASE_APPEAL_SUBMIT_PATH = /^\/cases\/([^/]+)\/appeal\/submit$/;
 // MSG-20260929-30：运营看板（只读投影，GET only）
 const OPERATIONS_DASHBOARD_PATH = /^\/operations\/dashboard$/;
 const OPERATIONS_CLAIMS_PATH = /^\/operations\/claims$/;
@@ -352,6 +356,7 @@ export async function handleWorkflowRequest(
   const caseClaimSubmit = CASE_CLAIM_SUBMIT_PATH.exec(path);
   const caseClaimPrepare = CASE_CLAIM_PREPARE_PATH.exec(path);
   const caseBillingDraft = CASE_BILLING_DRAFT_PATH.exec(path);
+  const caseAppealSubmit = CASE_APPEAL_SUBMIT_PATH.exec(path);
   const operationsDashboard = OPERATIONS_DASHBOARD_PATH.test(path);
   const operationsClaims = OPERATIONS_CLAIMS_PATH.test(path);
   const operationsRecovery = OPERATIONS_RECOVERY_PATH.test(path);
@@ -384,7 +389,7 @@ export async function handleWorkflowRequest(
     adminPermissionMatrix ||
     adminMemberDetail !== null ||
     adminKillSwitch;
-  if (!adminAny && !operationsDashboard && !operationsClaims && !operationsRecovery && !review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !paymentReviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !replayPath && !replayReviewPath && !retryDuePath && !retryDueFreezePath && !retryDueReviewPath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim && !caseClaimSubmit && !caseClaimPrepare && !caseBillingDraft) {
+  if (!adminAny && !operationsDashboard && !operationsClaims && !operationsRecovery && !review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !paymentReviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !replayPath && !replayReviewPath && !retryDuePath && !retryDueFreezePath && !retryDueReviewPath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim && !caseClaimSubmit && !caseClaimPrepare && !caseBillingDraft && !caseAppealSubmit) {
     return false;
   }
 
@@ -980,6 +985,53 @@ export async function handleWorkflowRequest(
       );
       // 内部准备写入：恒不触达平台，也不推进 Claim 状态
       sendJson(res, 200, prepared);
+      return true;
+    }
+
+    if (caseAppealSubmit) {
+      // ② 下一小批次：Appeal 人工提交（受保护动作 appeal.submit；与 claim.submit 互不通用）
+      const body = await readJsonBody(req);
+      const caseId = caseAppealSubmit[1] ?? '';
+      if (!deps.actionGuard) {
+        throw new ActionGuardNotConfiguredError(APPEAL_SUBMIT_ACTION);
+      }
+      const appeal = await deps.prisma.appeal.findFirst({
+        where: { organizationId: actor.organizationId, caseId },
+        orderBy: { round: 'desc' },
+        select: { id: true, status: true, round: true },
+      });
+      if (!appeal) {
+        throw new WorkflowError('NOT_FOUND', `案件 ${caseId} 没有可提交的 Appeal`);
+      }
+      const approvalId = typeof body.approvalId === 'string' ? body.approvalId : undefined;
+      const boundary = createHitlSubmissionBoundary({
+        guard: deps.actionGuard,
+        prisma: deps.prisma,
+        audit: createPrismaActionGuardAuditPort(deps.prisma),
+      });
+      const outcome = await boundary.submit({
+        action: APPEAL_SUBMIT_ACTION,
+        organizationId: actor.organizationId,
+        actorUserId: actor.actorUserId,
+        targetRef: caseId,
+        approvalId,
+        // 审批指纹绑定：appeal.submit 只绑定本条 Appeal 依据（与 claim.submit 不同的动作+载荷）
+        payload: { basisReference: appeal.id },
+        perform: () =>
+          submitAppealWithApproval(
+            {
+              organizationId: actor.organizationId,
+              actorUserId: actor.actorUserId,
+              role: actor.role,
+              caseId,
+              appealId: appeal.id,
+              ...(approvalId ? { approvalId } : {}),
+              ...(typeof body.note === 'string' && body.note.trim() !== '' ? { note: body.note } : {}),
+            },
+            { prisma: deps.prisma, ...(deps.now ? { now: deps.now } : {}) },
+          ),
+      });
+      sendJson(res, 200, outcome);
       return true;
     }
 
