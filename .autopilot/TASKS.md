@@ -297,3 +297,9 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - NEXT：**R43 S3 — recovery.manual_submit**：严格顺序实现锁内重验 + 原子人工提交确认（详见 STATE.r43s2_verdict.s3_spec）；S3 验收 14 项（s3_acceptance）。
 - S3 禁止：不得顺带 providerCaseRef 后补 / outcome tracking / reconciliation / Settlement linkage（留 S4/S5）。
 - 保持：AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · SETTLEMENT/BILLING LINKAGE HOLD。
+
+### MSG-20261001-35 裁决（R43 S3 REVISE → 补 CHANGE A/B/C 后 RE-REVIEW）
+
+- DECISION：**REVISE**（REVIEWED_HEAD b6be095；归档 FULL_COPY_OK）。S3 主体 KEEP；执行人权限与审计名认可。
+- CHANGE A/B/C：成功审计失败回滚、approval_consumed 失败回滚、digestVersion/packageDigest 不匹配拒绝（均已补测试）。
+- NEXT：**R43 S3 RE-REVIEW**（不扩大范围）；S3 PASS 前不进入 S4。

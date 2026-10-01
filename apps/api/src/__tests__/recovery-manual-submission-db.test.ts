@@ -472,4 +472,126 @@ describe('R43 S3 — recovery.manual_submit（锁内重验 + 原子提交）', (
     expect(submission.packageDigest).toBe(computePackageDigest(buildRecoveryManifest(fact(claimItemId))));
     expect(submission.packageDigest).toBe(approval.packageDigest);
   });
+
+  it('S3-N 故障注入：成功审计（recovery.manual_submitted）写入失败 → 整体回滚，approval 未被消费仍可后续合法使用', async () => {
+    const { generated, approval } = await prepareApprovedPackage();
+    const failingAuditPort = {
+      async write(_tx: unknown, audit: { action: string }) {
+        if (audit.action === RECOVERY_MANUAL_SUBMITTED_ACTION) {
+          throw new Error('INJECTED_SUCCESS_AUDIT_FAILURE');
+        }
+      },
+    };
+    await expect(
+      submitManualRecoveryWithApproval(
+        {
+          organizationId: ORG,
+          role: 'OWNER',
+          actorUserId: executorId,
+          claimItemId,
+          packageId: generated.packageId,
+          approvalId: approval.approvalId,
+          evidenceIds: [evidenceId],
+        },
+        { prisma, auditPort: failingAuditPort as never },
+      ),
+    ).rejects.toThrowError(/INJECTED_SUCCESS_AUDIT_FAILURE/);
+
+    expect((await prisma.claimItem.findUniqueOrThrow({ where: { id: claimItemId } })).status).toBe('READY_TO_APPEAL');
+    expect(await prisma.recoveryManualSubmission.count({ where: { organizationId: ORG } })).toBe(0);
+    expect(await prisma.recoveryManualSubmissionEvidence.count({ where: { organizationId: ORG } })).toBe(0);
+    expect(
+      await prisma.auditLog.count({ where: { organizationId: ORG, action: RECOVERY_MANUAL_SUBMITTED_ACTION } }),
+    ).toBe(0);
+    expect(
+      await prisma.auditLog.count({ where: { organizationId: ORG, action: APPROVAL_CONSUMED_EVENT_ACTION } }),
+    ).toBe(0);
+    expect(await prisma.payment.count({ where: { organizationId: ORG } })).toBe(0);
+    expect(await prisma.settlement.count({ where: { organizationId: ORG } })).toBe(0);
+    expect(await prisma.recoveryLedgerEntry.count({ where: { organizationId: ORG } })).toBe(0);
+    expect(await prisma.billingInvoice.count({ where: { organizationId: ORG } })).toBe(0);
+
+    // approval 未被消费 → 同一 approval 仍可完成一次正常提交
+    const retried = await submit({ packageId: generated.packageId, approvalId: approval.approvalId });
+    expect(retried.status).toBe('SUBMITTED_MANUAL');
+    expect(await prisma.recoveryManualSubmission.count({ where: { organizationId: ORG } })).toBe(1);
+    expect(
+      await prisma.auditLog.count({ where: { organizationId: ORG, action: APPROVAL_CONSUMED_EVENT_ACTION } }),
+    ).toBe(1);
+  });
+
+  it('S3-O 故障注入：approval_consumed 写入失败 → 整体回滚（含成功审计不残留），重试后仍可提交', async () => {
+    const { generated, approval } = await prepareApprovedPackage();
+    const failingAuditPort = {
+      async write(_tx: unknown, audit: { action: string }) {
+        if (audit.action === APPROVAL_CONSUMED_EVENT_ACTION) {
+          throw new Error('INJECTED_APPROVAL_CONSUMED_FAILURE');
+        }
+      },
+    };
+    await expect(
+      submitManualRecoveryWithApproval(
+        {
+          organizationId: ORG,
+          role: 'OWNER',
+          actorUserId: executorId,
+          claimItemId,
+          packageId: generated.packageId,
+          approvalId: approval.approvalId,
+          evidenceIds: [evidenceId],
+        },
+        { prisma, auditPort: failingAuditPort as never },
+      ),
+    ).rejects.toThrowError(/INJECTED_APPROVAL_CONSUMED_FAILURE/);
+
+    expect((await prisma.claimItem.findUniqueOrThrow({ where: { id: claimItemId } })).status).toBe('READY_TO_APPEAL');
+    expect(await prisma.recoveryManualSubmission.count({ where: { organizationId: ORG } })).toBe(0);
+    expect(await prisma.recoveryManualSubmissionEvidence.count({ where: { organizationId: ORG } })).toBe(0);
+    expect(
+      await prisma.auditLog.count({ where: { organizationId: ORG, action: RECOVERY_MANUAL_SUBMITTED_ACTION } }),
+    ).toBe(0);
+    expect(
+      await prisma.auditLog.count({ where: { organizationId: ORG, action: APPROVAL_CONSUMED_EVENT_ACTION } }),
+    ).toBe(0);
+
+    const retried = await submit({ packageId: generated.packageId, approvalId: approval.approvalId });
+    expect(retried.status).toBe('SUBMITTED_MANUAL');
+    expect(await prisma.recoveryManualSubmission.count({ where: { organizationId: ORG } })).toBe(1);
+  });
+
+  it('S3-F/G digestVersion 与 packageDigest 任一变化 → 审批失效（五元 basis 全部参与执行时绑定）', async () => {
+    const { generated } = await prepareApprovedPackage();
+    // digestVersion 不匹配
+    const wrongDigestVersion = await createApproval({
+      approverUserId: ownerId,
+      caseId,
+      claimItemId,
+      packageVersion: generated.packageVersion,
+      digestVersion: 'v0',
+      packageDigest: generated.packageDigest,
+    });
+    await expect(
+      submit({ packageId: generated.packageId, approvalId: wrongDigestVersion.approvalId }),
+    ).rejects.toThrowError(/APPROVAL_PAYLOAD_MISMATCH/);
+    expect((await prisma.claimItem.findUniqueOrThrow({ where: { id: claimItemId } })).status).toBe('READY_TO_APPEAL');
+    expect(await prisma.recoveryManualSubmission.count({ where: { organizationId: ORG } })).toBe(0);
+
+    // packageDigest 不匹配
+    const wrongDigest = await createApproval({
+      approverUserId: ownerId,
+      caseId,
+      claimItemId,
+      packageVersion: generated.packageVersion,
+      digestVersion: generated.digestVersion,
+      packageDigest: 'f'.repeat(64),
+    });
+    await expect(
+      submit({ packageId: generated.packageId, approvalId: wrongDigest.approvalId }),
+    ).rejects.toThrowError(/APPROVAL_PAYLOAD_MISMATCH/);
+    expect((await prisma.claimItem.findUniqueOrThrow({ where: { id: claimItemId } })).status).toBe('READY_TO_APPEAL');
+    expect(await prisma.recoveryManualSubmission.count({ where: { organizationId: ORG } })).toBe(0);
+    expect(
+      await prisma.auditLog.count({ where: { organizationId: ORG, action: APPROVAL_CONSUMED_EVENT_ACTION } }),
+    ).toBe(0);
+  });
 });

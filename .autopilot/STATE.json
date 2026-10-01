@@ -1,17 +1,17 @@
 {
   "gate": "B2-FIX R1",
-  "head": "b6be095",
+  "head": "3317b15",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
   "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
   "send_head": "07b7009",
   "decision_head": "07b7009",
-  "last_chatgpt_message": "MSG-20261001-34",
+  "last_chatgpt_message": "MSG-20261001-35",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T11:47:18.964Z",
-  "previous_head": "4ad4016",
-  "architect_decision_pending": true,
+  "updated_at": "2026-10-01T11:49:06.979Z",
+  "previous_head": "b6be095",
+  "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "b6be095",
   "last_sent_at": "2026-10-01T11:47:18.964Z",
@@ -49,12 +49,12 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-01T11:39:44.750Z",
+  "last_tick_at": "2026-10-01T11:47:44.666Z",
   "state": "IMPLEMENT",
-  "last_action": "R43 S3（recovery.manual_submit）已实现并送审：Action Guard 注册（INTERNAL_WRITE + humanApproval）+ 锁内重验 + 原子人工提交确认（submission + evidence + manual_submitted + approval_consumed 同事务；拒绝留痕回滚后写）；S3 测试 13/13 PASS；回归 46 files / 551 tests PASS；tsc PASS；等待 S3 Checkpoint 裁决",
-  "last_action_at": "2026-10-01T11:47:18.964Z",
-  "next_action": "等待 S3 Checkpoint 裁决：①PASS → 进入 S4（providerCaseRef canonical 补录 + 受保护动作）②REVISE → 按 CHANGE 修改后重送 S3 ③BLOCK → 停止该方案。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
-  "current_head": "b6be095",
+  "last_action": "MSG-20261001-35 = REVISE 已逐字归档并 FULL_COPY_OK —— S3 主体 KEEP；已按 CHANGE A/B/C 补三处证据（成功审计失败回滚 / approval_consumed 失败回滚 / digestVersion+packageDigest 不匹配拒绝），S3 测试 13 → 16 项；下一批 = S3 RE-REVIEW",
+  "last_action_at": "2026-10-01T11:49:06.979Z",
+  "next_action": "R43 S3 RE-REVIEW（REVIEWED_HEAD = 补齐后 HEAD）：只补 CHANGE A/B/C 并提交 S3-A…S3-R 映射；S3 PASS 前不进入 S4 providerCaseRef 补录。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
+  "current_head": "3317b15",
   "reviewed_head": "07b7009",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-01T11:32:11.656Z",
-    "gapMs": 453095,
+    "previousTickAt": "2026-10-01T11:39:44.750Z",
+    "gapMs": 479917,
     "stale": false,
-    "checkedAt": "2026-10-01T11:39:44.750Z"
+    "checkedAt": "2026-10-01T11:47:44.666Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -822,5 +822,39 @@
     ],
     "wakeup_channel": "https://chatgpt.com/c/6ab9ee1b-fd54-83ee-b363-b67750afcedd",
     "wakeup_delivery": "DELIVERED_VERIFIED（输入框清空 / 新用户消息在底部）"
+  },
+  "r43s3_verdict": {
+    "message_id": "MSG-20261001-35",
+    "decision": "REVISE",
+    "reviewed_head": "b6be095",
+    "archival": "FULL_COPY_OK",
+    "archival_at": "2026-10-01T11:49:06.979Z",
+    "status": "REVISE（主体 KEEP · 三项 CHANGE）",
+    "keep": [
+      "recovery.manual_submit = INTERNAL_WRITE + humanApproval",
+      "Action Guard / Kill Switch scope / GUARD_ENFORCED_ACTIONS 接线",
+      "案件锁 → ClaimItem 行锁 → 锁后 ACTIVE membership/role 重验",
+      "READY_TO_APPEAL 唯一来源状态",
+      "package tenant / ClaimItem / Case 绑定重验",
+      "服务端唯一 basis builder",
+      "approval action/payload/extra/expiry/revoke/consumption 重验",
+      "CAS + Submission + Evidence links + 成功审计 + approval consumption 同一事务",
+      "拒绝留痕主事务回滚后独立写",
+      "providerCaseRef 允许为空",
+      "EXPORTED ≠ submitted",
+      "Settlement/Billing/RecoveryLedger/Payment 零副作用"
+    ],
+    "rulings": {
+      "executor_permission": "认可沿用 claimTrackingApprove（OWNER/ADMIN；FINANCE 不入集合）；但必須依赖锁后实时角色重验",
+      "audit_names": "认可 recovery.manual_submitted / recovery.manual_submit_rejected；拒绝审计不得覆盖原领域错误，其自身失败也不得改变事务已回滚的事实"
+    },
+    "changes": {
+      "A": "必須补“成功审计（recovery.manual_submitted）写入失败 → 整体回滚”故障注入：断言 ClaimItem 仍 READY_TO_APPEAL、Submission=0、SubmissionEvidence=0、manual_submitted=0、approval_consumed=0、approval 仍可后续合法使用、无资金副作用",
+      "B": "必須补“approval_consumed 写入失败 → 整体回滚”（故障点在成功审计之后）：ClaimItem 不进入 SUBMITTED_MANUAL、Submission/Evidence/ 成功审计均不残留、approval 未被部分消费、重试后仍可完成一次正常提交",
+      "C": "补 digestVersion 变化 与 packageDigest 变化（不仅 packageVersion）→ APPROVAL_PAYLOAD_MISMATCH / 等价拒绝，且 ClaimItem 零推进、Submission=0、approval consumption=0（证明五元 basis 全部参与执行时绑定）"
+    },
+    "test_mapping_required": "S3-A … S3-R（checkpoint 必須给出明确映射；不要求每条单独 test function）",
+    "note": "次次请把“测试用例数”与“验收条目数”分开表述（非阻塞项）",
+    "next": "R43 S3 RE-REVIEW（仅补 CHANGE A/B/C，不扩大范围；无需新 Design/Plan）；S3 PASS 前不进入 S4"
   }
 }

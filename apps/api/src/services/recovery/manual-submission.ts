@@ -78,9 +78,36 @@ export interface ManualRecoverySubmitDeps {
   now?: () => Date;
   /** 事务超时（默认 30s，与 claim.submit 同口径） */
   transactionTimeoutMs?: number;
+  /**
+   * 审计端口（可选）：默认写 AuditLog。
+   * 仅用于**故障注入**回归（成功审计失败 / approval_consumed 失败必须整体回滚），
+   * 生产组合根使用默认实现，不改变任何领域语义。
+   */
+  auditPort?: ManualSubmissionAuditPort;
+}
+
+export interface ManualSubmissionAuditInput {
+  organizationId: string;
+  actorUserId: string;
+  action: string;
+  entityType: string;
+  entityId: string;
+  changes: Record<string, unknown>;
+  at: Date;
+}
+
+export interface ManualSubmissionAuditPort {
+  write(tx: TxClient, input: ManualSubmissionAuditInput): Promise<void>;
 }
 
 type TxClient = Prisma.TransactionClient;
+
+/** 默认审计端口：与既有事务内审计同源（prepareAuditInsert + AuditLog）。 */
+const defaultAuditPort: ManualSubmissionAuditPort = {
+  async write(tx, input) {
+    await insertTxAudit(tx, input);
+  },
+};
 
 async function insertTxAudit(
   tx: TxClient,
@@ -137,6 +164,7 @@ export async function submitManualRecoveryWithApproval(
   assertPermission(input.role, 'claimTrackingApprove');
   const now = deps.now ?? (() => new Date());
   const operationId = input.approvalId ? `approval:${input.approvalId}` : null;
+  const auditPort = deps.auditPort ?? defaultAuditPort;
 
   try {
     return await deps.prisma.$transaction(
@@ -302,7 +330,7 @@ export async function submitManualRecoveryWithApproval(
         }
 
         // 12) 业务审计
-        await insertTxAudit(tx, {
+        await auditPort.write(tx, {
           organizationId: input.organizationId,
           actorUserId: input.actorUserId,
           action: RECOVERY_MANUAL_SUBMITTED_ACTION,
@@ -325,7 +353,7 @@ export async function submitManualRecoveryWithApproval(
           at,
         });
         // 13) 审批消费（同事务事实）
-        await insertTxAudit(tx, {
+        await auditPort.write(tx, {
           organizationId: input.organizationId,
           actorUserId: input.actorUserId,
           action: APPROVAL_CONSUMED_EVENT_ACTION,

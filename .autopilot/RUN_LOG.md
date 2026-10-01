@@ -913,3 +913,12 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 证据：S3 13/13 PASS；回归 46 files / 551 tests PASS；tsc PASS；未改 Schema/migration/触发器清单；无新增依赖。
 - 送审：REVIEWED_HEAD b6be095（Issue #2 comment 5930644528 / CI 36857439876）；唤醒已投递并验证。
 - 边界：S3 未实现 providerCaseRef 后补 / outcome tracking / reconciliation / Settlement·Billing 联动 / 平台外写。
+
+## 2026-10-01 JST — MSG-20261001-35 = REVISE（R43 S3）收口
+
+- 裁决：**REVISE**（REVIEWED_HEAD b6be095）。主体 KEEP；执行人权限沿用 claimTrackingApprove 认可；审计动作名认可；计数口径注意事项（非阻塞）。
+- CHANGE A：补“成功审计失败 → 整体回滚”故障注入（新增可注入审计端口，生产默认实现不变）。
+- CHANGE B：补“approval_consumed 写入失败 → 整体回滚”（功能点在成功审计之后），并验证重试仍可提交。
+- CHANGE C：补 digestVersion 与 packageDigest 不匹配 → 拒绝且零推进零消费。
+- 证据：S3 测试 13 → **16/16 PASS**；tsc PASS。
+- NEXT：R43 S3 RE-REVIEW（仅补 CHANGE A/B/C + S3-A…S3-R 映射）。
