@@ -421,6 +421,48 @@ async function holdCaseLock(): Promise<() => void> {
   return release;
 }
 
+/** 被夹具后端阻塞的会话数（阻塞方判据；行锁在 pg_locks 里不体现为 tuple 锁） */
+async function blockedByPidCount(pid: number): Promise<number> {
+  const rows = await prisma.$queryRawUnsafe<{ n: bigint }[]>(
+    'SELECT count(*)::bigint AS n FROM pg_stat_activity a WHERE $1::int = ANY(pg_blocking_pids(a.pid))',
+    pid,
+  );
+  return Number(rows[0]?.n ?? 0n);
+}
+
+/**
+ * 独立连接持有 **Claim 行锁**（与提交服务 B-2 同一 SQL 形态），返回释放函数与夹具后端 pid。
+ * 提交事务必须先取得案件咨询锁、再阻塞在 Claim 行锁上 —— 这正是用例 20/22 的控制点，
+ * 也用于显式证明"最终权限判定发生在两把锁之后"。
+ */
+async function holdClaimRowLock(): Promise<{ release: () => void; pid: Promise<number> }> {
+  let release: () => void = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let resolvePid: (value: number) => void = () => {};
+  const pid = new Promise<number>((resolve) => {
+    resolvePid = resolve;
+  });
+  void prisma
+    .$transaction(
+      async (tx) => {
+        const pinned = await tx.$queryRawUnsafe<Array<{ pid: number }>>('SELECT pg_backend_pid() AS pid');
+        resolvePid(Number(pinned[0]?.pid ?? 0));
+        await tx.$queryRawUnsafe(
+          'SELECT id FROM "Claim" WHERE id = $1 AND "organizationId" = $2 AND "caseId" = $3 AND round = 1 FOR UPDATE',
+          claimId,
+          ORG,
+          caseId,
+        );
+        await gate;
+      },
+      { timeout: 30_000, maxWait: 30_000 },
+    )
+    .catch(() => undefined);
+  return { release, pid };
+}
+
 /** 注入数据库层「某审计动作不可写」的失败；用后必然拆除约束 */
 async function withAuditActionBlocked<T>(action: string, run: () => Promise<T>): Promise<T> {
   await prisma.$executeRawUnsafe(
@@ -864,6 +906,133 @@ describe('R19 CHANGE A–D — claim.submit 原子性 / 锁内重验 / 装配路
       expect(consumed).toBe(0);
       const successAudits = await prisma.auditLog.count({ where: { organizationId: ORG, action: 'claim.submitted_by_human' } });
       expect(successAudits).toBe(0);
+    });
+  }, 60_000);
+
+  it('20 等 Claim 行锁期间执行角色被降级（成员仍有效）→ 锁后拒绝 + 留痕（②）', async () => {
+    await withServer(async (base) => {
+      const cookie = await login(base);
+      const approvalId = await seedApproval();
+      const holder = await holdClaimRowLock();
+      const blockerPid = await holder.pid;
+      const pending = submit(base, cookie, { approvalId });
+      try {
+        // 控制点：请求已通过事务外只读校验、已取得案件锁，正阻塞在 Claim 行锁上
+        await waitFor(
+          async () => (await blockedByPidCount(blockerPid)) >= 1,
+          10_000,
+          'SUBMIT_WAITING_ON_CLAIM_ROW_LOCK',
+        );
+        // ⑤ 时序证据：此刻尚未发生最终权限判定 —— 无拒绝留痕、Claim 未推进。
+        // 若实现复用锁前 role/permission 快照在锁外判定，这里就会有留痕或状态变化。
+        expect(
+          await prisma.auditLog.count({ where: { organizationId: ORG, action: 'claim.submit_rejected' } }),
+        ).toBe(0);
+        expect((await prisma.claim.findUniqueOrThrow({ where: { id: claimId } })).status).toBe('DRAFT');
+        // 降级：OWNER → VIEWER（成员仍 isActive，但权限矩阵不再允许 Claim 提交）
+        await prisma.membership.updateMany({
+          where: { organizationId: ORG, userId: ownerId },
+          data: { role: 'VIEWER' },
+        });
+      } finally {
+        holder.release();
+      }
+      const res = await pending;
+      expect(res.status).toBe(403);
+      expect(res.body.error).toBe('FORBIDDEN');
+      expect(await sideEffects()).toMatchObject(ZERO);
+      const rejectedRows = await prisma.auditLog.findMany({
+        where: { organizationId: ORG, action: 'claim.submit_rejected' },
+      });
+      expect(rejectedRows).toHaveLength(1);
+      expect(rejectedRows[0]?.changes as Record<string, unknown>).toMatchObject({
+        stage: 'LOCKED_RECHECK',
+        result: 'REJECTED',
+        reason: 'FORBIDDEN',
+        caseId,
+        claimId,
+        approvalId,
+      });
+      const claimRow = await prisma.claim.findUniqueOrThrow({
+        where: { id: claimId },
+        select: { status: true, submittedAt: true, submittedBy: true },
+      });
+      expect(claimRow.status).toBe('DRAFT');
+      expect(claimRow.submittedAt).toBeNull();
+      expect(claimRow.submittedBy).toBeNull();
+      expect(await prisma.auditLog.count({ where: { organizationId: ORG, action: { contains: 'consumed' } } })).toBe(0);
+      expect(
+        await prisma.auditLog.count({ where: { organizationId: ORG, action: 'claim.submitted_by_human' } }),
+      ).toBe(0);
+    });
+  }, 60_000);
+
+  it('21 锁后权限拒绝时「拒绝留痕写入失败」不得覆盖原始拒绝 → 仍 403 FORBIDDEN（⑥）', async () => {
+    await withServer(async (base) => {
+      const cookie = await login(base);
+      const approvalId = await seedApproval();
+      const res = await withAuditActionBlocked('claim.submit_rejected', async () => {
+        const release = await holdCaseLock();
+        const pending = submit(base, cookie, { approvalId });
+        try {
+          await waitFor(
+            async () => (await advisoryLockCount(caseLockKey(), false)) >= 1,
+            10_000,
+            'SUBMIT_WAITING_ON_CASE_LOCK',
+          );
+          await prisma.membership.updateMany({
+            where: { organizationId: ORG, userId: ownerId },
+            data: { role: 'VIEWER' },
+          });
+        } finally {
+          release();
+        }
+        return pending;
+      });
+      // 原始 ForbiddenError 必须原样返回（403/FORBIDDEN），不得因留痕失败退化成 5xx
+      expect(res.status).toBe(403);
+      expect(res.body.error).toBe('FORBIDDEN');
+      expect(await sideEffects()).toMatchObject(ZERO);
+      // 留痕被库拒绝 → 无留痕行；拒绝判定本身不受影响
+      expect(
+        await prisma.auditLog.count({ where: { organizationId: ORG, action: 'claim.submit_rejected' } }),
+      ).toBe(0);
+    });
+  }, 60_000);
+
+  it('22 等 Claim 行锁期间角色未变 → 锁后正常提交成功（⑤ 反证：拒绝源于锁后判定而非等待本身）', async () => {
+    await withServer(async (base) => {
+      const cookie = await login(base);
+      const approvalId = await seedApproval();
+      const holder = await holdClaimRowLock();
+      const blockerPid = await holder.pid;
+      const pending = submit(base, cookie, { approvalId });
+      try {
+        await waitFor(
+          async () => (await blockedByPidCount(blockerPid)) >= 1,
+          10_000,
+          'SUBMIT_WAITING_ON_CLAIM_ROW_LOCK',
+        );
+        expect(
+          await prisma.auditLog.count({ where: { organizationId: ORG, action: 'claim.submit_rejected' } }),
+        ).toBe(0);
+      } finally {
+        holder.release();
+      }
+      const res = await pending;
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({
+        status: 'SUBMITTED',
+        externalSubmission: 'NEEDS_MANUAL',
+        platformWriteExecuted: false,
+      });
+      const after = await sideEffects();
+      expect(after.claimStatus).toBe('SUBMITTED');
+      expect(after.humanSubmissionAudits).toBe(1);
+      expect(after.consumedAudits).toBe(1);
+      expect(
+        await prisma.auditLog.count({ where: { organizationId: ORG, action: 'claim.submit_rejected' } }),
+      ).toBe(0);
     });
   }, 60_000);
 });
