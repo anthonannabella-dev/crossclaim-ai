@@ -252,3 +252,12 @@ CrossClaim 不得伪造、代替或从 Platform OAuth 推导 Broker POA。
 - 价格一律**配置化**（EXPERIMENTAL），不得硬编码进 Rule Engine / Recovery Domain；不得免费暴露完整 filing 数据集。
 - Entitlement 服务端校验；Package Fee ≠ Success Fee；Checkout 用独立 Payment Provider，≠ Platform OAuth 推导。
 - 队列影响：NONE（不打断 R45 → R46 → Full Regression）。
+
+## R16 — Carrier Recovery V1（HOST DIRECTIVE 2026-10-02 补充五）
+
+- 文档：`docs/releases/CARRIER-RECOVERY-V1-CONTRACT.md`（已登记；**不实现**）。
+- COMMON CARRIER RECOVERY ENGINE + Provider Rule Pack（UPS/FedEx/DHL/USPS）；REUSE > EXTEND > NEW BUILD。
+- V1 Top-10 rule 先行（再 10 → 30 → 50+）；deterministic / versioned / evidence-backed / fail-closed。
+- **UPS Compliance Gate**：默认只用客户提供数据；扩大 API 自动化前必须完成 terms review 或 partner access。
+- Provider Capability Matrix 必建；UNKNOWN 默认 fail-closed；不得因技术可行假设合同允许。
+- 队列影响：NONE（不打断 R46 → Settlement/Billing → Full Regression）。

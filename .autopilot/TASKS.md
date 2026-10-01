@@ -630,3 +630,9 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - 交付：`docs/releases/CUSTOMS-SELF-SERVICE-PRICING-CONTRACT.md`；RULES R15；STATE.customs_pricing_directive。
 - 状态：REGISTERED / IMPLEMENTATION_STARTED = NO；价格 EXPERIMENTAL 可配置。
 - 队列：不打断 R45 → R46 → Full Regression；进入 Customs V1 时再实施 Checkout / Entitlement / Package Unlock。
+
+### Carrier Recovery V1（已登记）
+
+- 交付：`docs/releases/CARRIER-RECOVERY-V1-CONTRACT.md`；RULES R16；STATE.carrier_recovery_directive。
+- 状态：REGISTERED / IMPLEMENTATION_STARTED = NO；V1 Top-10 rules 先行；UPS Compliance Gate HOLD。
+- 队列：不打断 R46 → Settlement/Billing → Full Regression。

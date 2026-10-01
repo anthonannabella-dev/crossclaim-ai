@@ -1367,3 +1367,10 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 三层：FREE AUDIT → ONE-TIME PACKAGE → CONTINUOUS SUBSCRIPTION；Package Tier = MAX(Expected, Volume, Complexity)；价格配置化 EXPERIMENTAL。
 - Entitlement 服务端校验；Package Fee ≠ Success Fee；Checkout 独立 Payment Provider。
 - 队列影响：NONE（CURRENT_R45_R46_QUEUE_UNCHANGED = YES / CUSTOMS_PRICING_IMPLEMENTATION_STARTED = NO）。
+
+## 2026-10-02 JST — HOST DIRECTIVE（补充五）：Carrier Recovery V1 登记
+
+- 文档：`docs/releases/CARRIER-RECOVERY-V1-CONTRACT.md`；规则 RULES R16；STATE.carrier_recovery_directive。
+- COMMON CARRIER RECOVERY ENGINE + Rule Pack（UPS/FedEx/DHL/USPS）；V1 Top-10 rules；数据优先级沿用 Rule Tier。
+- UPS Compliance Gate = HOLD（默认客户提供数据）；Provider Capability Matrix 必建，UNKNOWN fail-closed。
+- 队列影响：NONE（CURRENT_R46_QUEUE_UNCHANGED = YES / CARRIER_RECOVERY_IMPLEMENTATION_STARTED = NO）。
