@@ -1,10 +1,10 @@
 {
   "gate": "B2-FIX R1",
-  "head": "1e51b20",
+  "head": "7d888cc",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
   "next_task": "等待 MSG-20261001-11：全文读取 → 逐字归档 → FULL_COPY_OK → PASS 则 billing.draft 收口并进入 ② 剩余小批次（evidence.read / appeal.submit / platform.write），REVISE 则按新 CHANGE 收敛",
-  "send_head": "814f5cd",
+  "send_head": "7d888cc",
   "decision_head": "d6d239b",
   "last_chatgpt_message": "MSG-20261001-15",
   "production_enabled": false,
@@ -13,7 +13,7 @@
   "previous_head": "7a7cfd5",
   "architect_decision_pending": true,
   "blocked_scope": null,
-  "last_send_head": "814f5cd",
+  "last_send_head": "7d888cc",
   "last_sent_at": "2026-10-01T00:58:20.480Z",
   "last_sent_fingerprint": "WAKEUP_DELIVERED:R18:retry-due-msg34-closure:9a806eb",
   "final_head": "1144401",
@@ -48,13 +48,13 @@
   },
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
-  "automation_status": "ACTIVE（FREQ=MINUTELY;INTERVAL=5；2026-10-01 核实后由 PAUSED 恢复）",
-  "last_tick_at": "2026-10-01T04:59:20.167Z",
-  "state": "IMPLEMENT",
-  "last_action": "MSG-20261001-15 CHANGE B 已实施并推送（7a7cfd5）：路由限定 round=2、行锁/CAS 携带轮次、关联 Claim 核对、审计补关联；专项 7/7、回归 32 files/301、tsc PASS",
-  "last_action_at": "2026-10-01T05:12:11.740Z",
-  "next_action": "appeal.submit 续做：A 服务端版本化提交载荷快照（appealId/caseId/claimId/round + 正文摘要与选择规则；审批创建与执行核验同一规范化算法；Appeal 行锁后重算比对，变化即拒绝；空正文无效）→ C 关键验收补齐（载荷/关联/轮次变化拒绝、独立 OWNER 审批人+ADMIN 执行人（行锁期降权/停用/未变）、过期撤销、并发至多一次、成功审计与消费失败回滚、放行前决策审计失败零推进、跨租户/错误绑定/非 DRAFT/默认能力拒绝；收紧用例02/04 断言；platformWrites 改为真实口径并注明零外写证据路径）→ 专项/回归/tsc/prisma → CI → 七段式 R32",
-  "current_head": "7a7cfd5",
+  "automation_status": "ACTIVE",
+  "last_tick_at": "2026-10-01T05:37:06.185Z",
+  "state": "REVIEW_WAIT",
+  "last_action": "MSG-20261001-15 CHANGE A（版本化提交快照+锁后重算摘要+空正文失败关闭）与 CHANGE C（13 项关键验收、用例02/04收紧、platformWrites→billingInvoices）已实施并推送（7d888cc）；专项 13/13、回归 32 files/307、tsc/prisma PASS；送审 R32",
+  "last_action_at": "2026-10-01T05:36:05.716Z",
+  "next_action": "等待 MSG-20261001-16（R32 裁决）：PASS → appeal.submit 收口并进入 ② 最后一项 platform.write（EXTERNAL_WRITE，HOLD）；REVISE → 按新 CHANGE 收敛",
+  "current_head": "7d888cc",
   "reviewed_head": "549dba8",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -95,5 +95,13 @@
     "request_comment": "5925044853",
     "reviewed_ref": "814f5cd",
     "ci_run": "36817215750"
+  },
+  "schedule_check": {
+    "intervalMinutes": 5,
+    "staleAfterMinutes": 10,
+    "previousTickAt": "2026-10-01T05:36:05.716Z",
+    "gapMs": 60470,
+    "stale": false,
+    "checkedAt": "2026-10-01T05:37:06.185Z"
   }
 }

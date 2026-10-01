@@ -8,6 +8,10 @@ import { execSync } from 'node:child_process';
 import fs from 'node:fs';
 
 const ROOT = process.env.AUTOPILOT_ROOT ?? 'D:/crossclaim-ai';
+
+/** 调度自检（宿主 2026-10-01）：tick 间隔与 stale 判定；不新建第二套 runner。 */
+const AUTOPILOT_INTERVAL_MINUTES = Number(process.env.AUTOPILOT_INTERVAL_MINUTES ?? 5);
+const STALE_AFTER_MS = 2 * AUTOPILOT_INTERVAL_MINUTES * 60_000;
 const AP = ROOT + '/.autopilot';
 const readJson = (p, fallback) => {
   try {
@@ -34,6 +38,26 @@ try {
 }
 
 const reconcile = state.head === head ? 'IN_SYNC' : 'RECONCILE_REQUIRED';
+
+/** stale 判定：距上次真实 tick 超过 2×INTERVAL → 判定调度器停摆（不静默）。 */
+const nowIso = new Date().toISOString();
+const lastTickAt = typeof state.last_tick_at === 'string' ? Date.parse(state.last_tick_at) : Number.NaN;
+const tickGapMs = Number.isFinite(lastTickAt) ? Date.now() - lastTickAt : Number.POSITIVE_INFINITY;
+const scheduleStale = tickGapMs > STALE_AFTER_MS;
+state.automation_status = 'ACTIVE';
+state.last_tick_at = nowIso;
+state.schedule_check = {
+  intervalMinutes: AUTOPILOT_INTERVAL_MINUTES,
+  staleAfterMinutes: AUTOPILOT_INTERVAL_MINUTES * 2,
+  previousTickAt: Number.isFinite(lastTickAt) ? new Date(lastTickAt).toISOString() : null,
+  gapMs: Number.isFinite(tickGapMs) ? tickGapMs : null,
+  stale: scheduleStale,
+  checkedAt: nowIso,
+};
+if (scheduleStale) {
+  state.stale_recovered_at = nowIso;
+  state.last_action = `SCHEDULER_STALE_RECOVERED（gap=${Number.isFinite(tickGapMs) ? Math.round(tickGapMs / 60000) + 'min' : 'unknown'}）→ 本轮已恢复执行`;
+}
 if (reconcile === 'RECONCILE_REQUIRED' && head !== 'GIT_UNAVAILABLE') {
   // 不盲目覆盖：保留原值供审计，再对齐到实际 HEAD
   state.previous_head = state.head;
@@ -54,6 +78,13 @@ const heartbeat = {
   last_error: state.last_error ?? null,
   reconcile,
   remaining_tasks: pending.length,
+  automation_status: 'ACTIVE',
+  interval_minutes: AUTOPILOT_INTERVAL_MINUTES,
+  tick_at: nowIso,
+  schedule_stale_previous: scheduleStale,
+  state_machine: state.state ?? null,
+  next_action: state.next_action ?? pending[0] ?? null,
+  continue_required: (state.state ?? '') === 'IMPLEMENT' && Boolean(state.next_action),
   boundary: {
     production_enabled: false,
     external_write_enabled: false,
@@ -65,6 +96,12 @@ const heartbeat = {
 fs.writeFileSync(AP + '/HEARTBEAT.json', JSON.stringify(heartbeat, null, 2) + '\n', 'utf8');
 
 // 恢复语义：STATE 与实际不一致时以 Git 为准，并把下一个任务写回 STATE.current_task
+if (state.state === 'IMPLEMENT' && state.next_action) {
+  // 宿主规则：IMPLEMENT 且有 next_action → 本轮必须继续执行，不得停在「下一轮执行」
+  heartbeat.continue_required = true;
+}
+fs.writeFileSync(AP + '/STATE.json', JSON.stringify(state, null, 2) + '\n', 'utf8');
+
 if (pending.length > 0) {
   state.current_task = pending[0];
   state.status = state.status === 'RECONCILED' ? 'RECONCILED' : 'IMPLEMENTING';
