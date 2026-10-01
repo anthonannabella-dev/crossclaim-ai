@@ -37,6 +37,8 @@ export const ACTION_GUARD_CATALOG: Record<string, { risk: ActionRiskClass; requi
   'recovery.reconciliation_provider_outcome_record': { risk: 'INTERNAL_WRITE', requires: ['humanApproval'] },
   // R43 S4 / MSG-20261001-36：provider case reference 补录（独立动作；零平台外写）
   'recovery.manual_submit_reference_recorded': { risk: 'INTERNAL_WRITE', requires: ['humanApproval'] },
+  // R46 S2 / MSG-20261002-55：受保护到账记录（INTERNAL_WRITE + humanApproval；零资金域 / 零平台外写；不得由 R45 projection/override 触发）
+  'settlement.record': { risk: 'INTERNAL_WRITE', requires: ['humanApproval'] },
   'claim.submit': { risk: 'EXTERNAL_WRITE', requires: ['humanApproval', 'platformEnablement', 'productionGate'] },
   'appeal.submit': { risk: 'EXTERNAL_WRITE', requires: ['humanApproval', 'platformEnablement', 'productionGate'] },
   'platform.write': { risk: 'EXTERNAL_WRITE', requires: ['humanApproval', 'platformEnablement', 'productionGate'] },
