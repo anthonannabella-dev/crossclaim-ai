@@ -1,7 +1,7 @@
 # R43-A — MANUAL RECOVERY PERSISTENCE — SCHEMA DELTA REQUEST
 
 > 类型：**Schema Delta Request（仅请求批准；不含 migration、不含实现、不含 HTTP 入口）**
-> PREVIOUS: **MSG-20261001-30 = PASS WITH REVISE**（R43 Manual Recovery Handoff Design 方向批准；CHANGE A–D；NEXT = R43-A）
+> PREVIOUS: **MSG-20261001-31 = PASS WITH REVISE**（四表批准；CHANGE A/B/C 已收口，见 §10）。原始送审依据：MSG-20261001-30 = PASS WITH REVISE（R43 Manual Recovery Handoff Design 方向批准；CHANGE A–D；NEXT = R43-A）
 > 分支 `gate/7-commercial-validation` · Codex · 2026-10-01 · ROUND: **R43-A**
 > 边界（冻结）：AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · `PLATFORM_WRITE_TRANSPORT_ENABLED=false` · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · SETTLEMENT/BILLING LINKAGE HOLD
 
@@ -337,3 +337,58 @@ SUBMITTED_MANUAL ──(结果事实，R43 阶段仅登记)──▶ RECOVERED |
 8. **append-only 程度**：是否接受 artifact / submission / submission-evidence 三表为 append-only（仅 `RecoveryPackage` 允许 `SUPERSEDED` / `WITHDRAWN` 状态更新）？（建议：接受）
 
 > 获批后，下一批提交 **R43 Implementation Plan**（仍不实现）；实现批次将同步：Schema/Migration → tenant trigger 清单 → 服务层 `recovery.manual_submit` → M1–M11 + PG/H/D 回归 → CI 送审。
+
+---
+
+## 10. 修订记录：MSG-20261001-31 裁决（CHANGE A/B/C）—— 本节为准
+
+> 来源：**MSG-20261001-31 = PASS WITH REVISE**（REVIEWED_HEAD `f2a20b9`；四表 + 2 枚举批准；8 项待裁决全部有结论）。
+> 本节给出裁决后的**最终口径**；与前文冲突时以本节为准（前文保留作为送审时的原始设计记录）。
+
+### 10.1 CHANGE A —— 区分「不可变事实」与「生命周期状态」
+
+| 对象 | 最终口径 |
+| --- | --- |
+| `RecoveryPackageArtifact` / `RecoveryManualSubmission` / `RecoveryManualSubmissionEvidence` | **整行 append-only**：任何 UPDATE / DELETE 一律拒绝（`cc_append_only__<Table>` 触发器） |
+| `RecoveryPackage` | **不是**整行不可变：核心字段（`organizationId` / `claimItemId` / `caseId` / `packageVersion` / `digestVersion` / `packageDigest` / `generatedAt`）不可变；`status` 只能经**受控 CAS 状态机**修改（`GENERATED → EXPORTED / SUPERSEDED / WITHDRAWN`，终态不可回退） |
+| 变更白名单 | `status` / `supersededByPackageId` / `updatedAt`（+ 未来经裁决新增的字段）；实现前必须在 trigger 与 service 两处显式定义白名单 |
+| 禁止 | 任何普通 `update` 修改 digest、Claim/Case 绑定、`packageVersion` |
+| 审计 | `SUPERSEDED` / `WITHDRAWN` 必须携带 **reason + actor + audit 事件**（`recovery.package_superseded` / `recovery.package_withdrawn`） |
+| 触发器命名 | 三张 append-only 表使用 `cc_append_only__<Table>`（**不得**以 `cc_tenant_` 前缀命名，避免与 `required-triggers.json` 反向校验冲突）；`RecoveryPackage` 使用 `cc_recoverypackage_controlled_mutation` |
+
+### 10.2 CHANGE B —— `approvalId` 进入单链不变量
+
+- `RecoveryManualSubmission.approvalId` **改为 required**（受保护动作下提交记录必然由审批消费产生；不再保留无审批提交路径）。
+- 新增租户范围唯一约束：**`UNIQUE(organizationId, approvalId)`** —— 同一个 approval 不得授权两条 manual submission。
+- 该约束与 `recovery.approval_consumed` 的写入**必须在同一事务内成立**（消费即事务事实）。
+- 与既有 `UNIQUE(organizationId, claimItemId)`（v1 单链）叠加：一条审批 → 一个 ClaimItem → 一条提交链。
+
+### 10.3 CHANGE C —— `providerCaseRef` 唯一性必须使用 canonical value
+
+| 项 | 最终口径 |
+| --- | --- |
+| canonical 化 | `trim` → Unicode **NFKC** → 去零宽字符 → 折叠内部空白；**不做大小写折叠**（Amazon reference 大小写语义未获官方证明前不得擅自 lower-case） |
+| 存储 | 同时保存 `providerCaseRefRaw`（原始输入，展示/审计）与 `providerCaseRefCanonical`（唯一性/幂等） |
+| 唯一性 | partial unique 建在 **canonical** 列：`UNIQUE(organizationId, providerCaseRefCanonical) WHERE providerCaseRefCanonical IS NOT NULL` |
+| 补录 | 独立受保护动作 `recovery.manual_submit_reference_recorded`（含 humanApproval 边界）+ append-only 审计 `recovery.manual_submission_reference_recorded` |
+| 红线 | 补录**不得**被解释为 provider accepted；不改变 `submittedAt` / `submittedByUserId`；outcome 仍只能由事实证据驱动 |
+| 冲突 | canonical 重复 → `PROVIDER_CASE_REF_CONFLICT`（409），零副作用 |
+
+### 10.4 其余 8 问结论（要点）
+
+| 问 | 结论 |
+| --- | --- |
+| ① 源状态 | `READY_TO_APPEAL` 为唯一前置；`DISCOVERED / VERIFIED / REVIEW_REQUIRED / RECOVERED / CLOSED` 不得直接进入 |
+| ② requires | 仅 `[humanApproval]`，**但**必须继续经过普通 RBAC/action guard（ACTIVE user、ACTIVE membership、当前角色、tenant boundary、action permission） |
+| ③ 单链 | `UNIQUE(organizationId, claimItemId)` 批准；再次申诉不得做成第二条 v1 submission（后续独立 round/appeal 建模） |
+| ④ 可空 | `providerCaseRef` 允许为空；补录须按 §10.3 |
+| ⑤ package 表 | 独立 `RecoveryPackage` 表批准 |
+| ⑥ 证据联结表 | `RecoveryManualSubmissionEvidence` 批准（引用不复制） |
+| ⑦ 一致性检查 | **要求**：transaction-time validation + 只读 checker + CI fixture/真实 PostgreSQL 漂移检测；checker **只报告、不自动修复生产数据** |
+| ⑧ append-only | 原则批准，按 §10.1 收紧 |
+
+### 10.5 风险与后续
+
+- 主要风险从「平台外写」转为**业务状态与四张新表之间的漂移**（`ClaimItem = SUBMITTED_MANUAL` 无 submission，或有 submission 但状态仍为 `READY_TO_APPEAL`）→ 由只读一致性 checker 纳入长期 CI。
+- 本请求获批后，**无需再提交一轮 Schema Request**；下一批直接提交 **R43-B — Manual Recovery Persistence Implementation Plan**（docs-only，经审后才编码）。
+- HOLD 保持：AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · SETTLEMENT/BILLING LINKAGE HOLD。
