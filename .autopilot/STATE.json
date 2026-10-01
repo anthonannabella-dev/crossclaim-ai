@@ -1,6 +1,6 @@
 {
   "gate": "B2-FIX R1",
-  "head": "3931b41",
+  "head": "d39c53e",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
   "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
@@ -9,13 +9,13 @@
   "last_chatgpt_message": "MSG-20261001-32",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T11:18:07.822Z",
+  "updated_at": "2026-10-01T11:31:45.069Z",
   "previous_head": "409dbd0",
-  "architect_decision_pending": false,
+  "architect_decision_pending": true,
   "blocked_scope": null,
-  "last_send_head": "07b7009",
-  "last_sent_at": "2026-10-01T10:58:50.635Z",
-  "last_sent_fingerprint": "R43:Manual-Recovery-Handoff-Design",
+  "last_send_head": "d39c53e",
+  "last_sent_at": "2026-10-01T11:31:45.069Z",
+  "last_sent_fingerprint": "R43-S1:Manual-Recovery-Persistence-Schema-Triggers",
   "final_head": "1144401",
   "ci_run": "36833002042",
   "ci_result": "SUCCESS",
@@ -51,10 +51,10 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-01T11:19:10.669Z",
   "state": "IMPLEMENT",
-  "last_action": "SCHEDULER_STALE_RECOVERED（gap=10min）→ 本轮已恢复执行",
-  "last_action_at": "2026-10-01T11:18:07.822Z",
-  "next_action": "R43 Implementation S1（Schema + migration + triggers + trigger inventories + fresh/upgrade tests）→ 提交 S1 Implementation Checkpoint；S1 通过后才进入 S2–S5。S1 范围：①五张表（含 RecoveryManualSubmissionReference）+ 2 枚举 ②五支迁移（表/租户触发器/package 受控变更/append-only/唯一性）③required-triggers.json + 新增 append-only/controlled-mutation checklist ④package 生命周期修正（EXPORTED 非终态）⑤模型计数 39 → 44（40 core + 4 join）⑥fresh deploy 与 upgrade path 触发器取证。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
-  "current_head": "409dbd0",
+  "last_action": "R43 Implementation S1 已实现并送审（5 表 + 2 枚举 + 5 支迁移 + append-only 清单/CI/升级双校验 + S1 DB 测试 10 项；两段升级 OK；回归 43 files / 523 tests PASS；tsc PASS）；等待 S1 Implementation Checkpoint 裁决",
+  "last_action_at": "2026-10-01T11:31:45.069Z",
+  "next_action": "等待 MSG 裁决（S1 Checkpoint）：①PASS → 进入 S2（package 生成 + canonical manifest + digest + CAS 状态机；PDF 依赖能力先做现有依赖检查）②REVISE → 按 CHANGE 修改后重送 S1 ③BLOCK → 停止该方案。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
+  "current_head": "d39c53e",
   "reviewed_head": "07b7009",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -697,5 +697,21 @@
     },
     "test_additions": "M21–M28：submission 创建后所有字段直接 UPDATE 均被 DB 拒绝；后补 providerCaseRef 不 UPDATE 原 Submission；同一 provider reference canonical identity 不得重复绑定；package export 一次/多次均不使 package 无法继续人工提交；export 后仍可完成合法 approval/manual-submit；SUPERSEDED/WITHDRAWN package 不得用于新 manual submit；approval 的 packageVersion 或 digestVersion 任一变化 → 拒绝且零推进零消费；fresh deploy + upgrade path 均检查 append-only/controlled-mutation trigger inventory",
     "next": "完成 CHANGE A/B/C 后无需再提交 docs-only 复审；可直接进入 R43 Implementation S1（Schema + migration + triggers + trigger inventories + fresh/upgrade tests → 单独 Implementation Checkpoint）；S1 通过后才能进入 S2–S5"
+  },
+  "r43s1_submission": {
+    "submission_comment": "5930423157",
+    "ci_run": "36855842245",
+    "reviewed_head": "d39c53e",
+    "scope": "Schema（5 表 + 2 枚举，模型计数 44）+ 5 支迁移（表 / 租户触发器 / package 受控变更 / append-only / 完整性 CHECK）+ append-only 独立清单与校验器（CI + 升级双路径）+ S1 数据库不变量测试 10 项",
+    "evidence": {
+      "prisma_validate": "valid",
+      "migrate_deploy": "5 支迁移全部应用（本地 dev 库）",
+      "two_stage_upgrade": "TWO_STAGE_UPGRADE_OK（含两套触发器清单；immutability=42；二次 deploy 幂等）",
+      "s1_db_test": "recovery-manual-persistence-db.test.ts 10/10 PASS",
+      "regression": "43 files / 523 tests PASS（platform-write + action-guard + amazon-sp + tenant-isolation + architecture-contract + 新测试）",
+      "tsc": "PASS"
+    },
+    "wakeup_channel": "https://chatgpt.com/c/6ab9ee1b-fd54-83ee-b363-b67750afcedd",
+    "wakeup_delivery": "DELIVERED_VERIFIED（输入框清空 / 新用户消息在底部）"
   }
 }

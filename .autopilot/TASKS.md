@@ -276,3 +276,10 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - CHANGE C：approval basis 至少绑定 claimItemId + caseId + packageVersion + digestVersion + packageDigest；创建与执行共用同一个服务端 canonical builder。
 - NEXT（无需 docs-only 复审）：**R43 Implementation S1** —— Schema + migration + triggers + trigger inventories + fresh/upgrade tests → 单独 Implementation Checkpoint；S1 通过后才能进入 S2–S5。若采用第五张表，S1 同步更新模型计数（43→44）、FK、tenant/append-only 触发器与 checker 设计。
 - 保持：AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · SETTLEMENT/BILLING LINKAGE HOLD。
+
+### R43 Implementation S1（Schema / migration / triggers / inventories）—— 已实现，Checkpoint 待裁决
+
+- 交付：5 表 + 2 枚举（模型 44 = 40 core + 4 join）；5 支迁移（表 / 租户触发器 / package 受控变更 / append-only / 完整性 CHECK）；append-only 独立清单 + 校验器 + CI 与升级双路径验证；新增 S1 DB 不变量测试 10 项。
+- 证据：two-stage upgrade OK；S1 DB test 10/10；回归 43 files / 523 tests PASS；tsc PASS；prisma validate valid。
+- 送审：REVIEWED_HEAD d39c53e（Issue #2 comment 5930423157 / CI 36855842245）；待 S1 Checkpoint 裁决。
+- NEXT：PASS → S2（package 生成 + canonical manifest + digest + CAS；先做现有依赖 PDF 能力检查）；REVISE → 按 CHANGE 修改重送；BLOCK → 停止该方案。

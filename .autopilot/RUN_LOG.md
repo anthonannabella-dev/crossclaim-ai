@@ -866,3 +866,14 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - TEST：新增 M21–M28（八项）；与 M1–M20、PG1–PG10 / H1–H9 / D1–D4 合并为长期基线。
 - NEXT：无需再提交 docs-only 复审；可直接进入 **R43 Implementation S1**（Schema + migration + triggers + trigger inventories + fresh/upgrade tests）→ 单独 Implementation Checkpoint；S1 通过后才能进入 S2–S5。
 - 边界：AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · SETTLEMENT/BILLING LINKAGE HOLD。
+
+## 2026-10-01 JST — R43 Implementation S1（Schema / migration / triggers）实现 + Checkpoint 送审
+
+- 依据：MSG-20261001-32 = PASS WITH REVISE NEXT（完成 CHANGE A/B/C 后可直接进入 R43 Implementation S1，S1 单独 Checkpoint）。
+- Schema：5 表 + 2 枚举（RecoveryPackage / RecoveryPackageArtifact / RecoveryManualSubmission / RecoveryManualSubmissionReference / RecoveryManualSubmissionEvidence）；模型计数 39 → **44（40 core + 4 join）**。
+- 迁移 5 支：M1 表结构（migrate diff 生成）→ M2 租户触发器（29→42 条）→ M3 package 受控变更（核心字段不可变 / EXPORTED 非终态 / 终态需 reason+actor）→ M4 四张 append-only（artifact/submission/reference/evidence）→ M5 完整性 CHECK（digest/sha hex64；canonical 非空+trim+NFKC+空白折叠，不做大小写折叠）。
+- Trigger inventory：新增 `tools/tenant-triggers/append-only-triggers.json` + `emit-check-append-only-sql.mjs`（正向 + 反向）；CI 新增独立步骤（fresh）；`two-stage-upgrade.mjs` 新增同清单断言（upgrade）。
+- 证据：prisma validate valid / generate OK / migrate deploy 5 支全部成功；**two-stage upgrade = TWO_STAGE_UPGRADE_OK**（两套清单 OK · immutability=42 · 二次 deploy 幂等）；**S1 DB 测试 10/10 PASS**；回归 **43 files / 523 tests PASS**；tsc PASS。
+- 记录在案：计划中的 M6（第五张 reference 表）已合并进 M1，未新增第六支迁移。
+- 送审：REVIEWED_HEAD d39c53e；Issue #2 comment 5930423157；CI 36855842245；唤醒已投递并验证。
+- 边界：S1 未注册受保护动作、未实现服务层/HTTP、未接凭据、未开 transport、未触碰资金域；无新增依赖。
