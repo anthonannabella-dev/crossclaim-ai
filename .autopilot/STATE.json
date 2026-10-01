@@ -1,17 +1,17 @@
 {
   "gate": "B2-FIX R1",
-  "head": "1812cf7",
-  "status": "RECONCILED",
+  "head": "7e83945",
+  "status": "IMPLEMENTING",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
-  "next_task": "等待 R43 裁决（Design Proposal）：PASS → 进入 R43 实现批次（八阶段闭环，按裁决确定动作名/Schema/导出形态/联动边界）；REVISE → 按 CHANGE 修改设计后再次送审；期间 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写/客户提交 HOLD",
+  "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
   "send_head": "07b7009",
-  "decision_head": "419489b",
-  "last_chatgpt_message": "MSG-20261001-29",
+  "decision_head": "07b7009",
+  "last_chatgpt_message": "MSG-20261001-30",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T10:58:50.635Z",
+  "updated_at": "2026-10-01T11:03:57.748Z",
   "previous_head": "07b7009",
-  "architect_decision_pending": true,
+  "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "07b7009",
   "last_sent_at": "2026-10-01T10:58:50.635Z",
@@ -51,10 +51,10 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-01T11:03:13.961Z",
   "state": "IMPLEMENT",
-  "last_action": "R43 已投递（Amazon Manual Recovery Handoff Design Proposal，docs-only）；等待架构方编号裁决",
-  "last_action_at": "2026-10-01T10:58:50.635Z",
-  "next_action": "等待 R43 裁决（Design Proposal）：PASS → 进入 R43 实现批次（八阶段闭环，按裁决确定动作名/Schema/导出形态/联动边界）；REVISE → 按 CHANGE 修改设计后再次送审；期间 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写/客户提交 HOLD",
-  "current_head": "07b7009",
+  "last_action": "MSG-20261001-30 = PASS WITH REVISE 收到（R43 设计方向批准；CHANGE A–D + NEXT 改为先提交 R43-A Schema Delta Request）；逐字归档待下一轮",
+  "last_action_at": "2026-10-01T11:03:57.748Z",
+  "next_action": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
+  "current_head": "7e83945",
   "reviewed_head": "549dba8",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -623,5 +623,18 @@
       "材料包导出形态与保留期",
       "Reconciliation 与 Settlement/Billing 联动是否留待独立批次（默认不联动）"
     ]
+  },
+  "r43_verdict": {
+    "message_id": "MSG-20261001-30",
+    "decision": "PASS WITH REVISE",
+    "reviewed_head": "07b7009",
+    "archival": "PENDING（下一轮逐字归档 + FULL_COPY_OK）",
+    "changes": {
+      "A": "SUBMITTED_MANUAL 不得仅靠 AuditLog 推导：业务状态走既有 ClaimItem 状态机（ClaimItemStatus 已含 SUBMITTED_MANUAL），AuditLog 仅 append-only 证据；providerCaseRef/submittedAt/submittedBy/submissionEvidence 先提 Schema Delta Request，不在设计阶段实现",
+      "B": "动作名批准 recovery.manual_submit；OWNER/ADMIN 可批准、执行者须当前 ACTIVE member 且执行时重验角色；approval 绑定 claimItemId+caseId+packageDigest（不得只用裸 digest）；package 变化 → 旧审批失效；consumption 与成功确认原子；重复确认不得重复消费或产生第二条 submission chain",
+      "C": "导出第一版 = PDF + machine-readable JSON manifest（先定义 artifact 不实现）；证据只引用既有 EvidenceArtifact/FileAsset；export 不存 credential/token；artifact 默认 24 个月保留（更严格策略取严者）；时间桶不得作为提交链核心幂等依据",
+      "D": "Reconciliation 与资金域继续分离：R43 只做 reimbursement observed → matched/unmatched/ambiguous；不得创建/改 Settlement、生成 Billing、收成功费、改 RecoveryLedgerEntry、把 observed 当结算；后续单独提交 Recovery Reconciliation → Settlement Boundary Design"
+    },
+    "holds": "AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · SETTLEMENT/BILLING LINKAGE HOLD"
   }
 }

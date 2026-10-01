@@ -823,3 +823,10 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 裁决：CHANGE 无；**R42 正式关闭**（不再继续 Amazon 自动写入能力搜索）；风险转为「未来 evidence revision」。
 - NEXT：**R43 — Amazon Manual Recovery Handoff Design（仅 Design Proposal，不实现）**：ClaimItem → Evidence Completeness → Recovery Package → Human Approval → Submission Instructions/Export → SUBMITTED_MANUAL → Outcome Tracking → Reimbursement/Settlement Reconciliation；12 项重点 + 四事实分离（生成材料 ≠ 已提交 ≠ 已受理 ≠ 已赔付）。
 - 边界冻结：AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD。
+
+## 2026-10-01 JST — 裁决 MSG-20261001-30 = PASS WITH REVISE（R43 设计）
+
+- 送审：R43 Design Proposal（REVIEWED_HEAD 07b7009；Issue #2 comment 5929951886）。
+- 裁决：方向批准；CHANGE A（SUBMITTED_MANUAL 走 ClaimItem 状态机，AuditLog 仅证据；新字段先提 Schema Delta）/ B（`recovery.manual_submit`；approval 绑定 claimItemId+caseId+packageDigest；原子消费；并发至多一次）/ C（PDF + JSON manifest；24 个月；时间桶不作幂等依据）/ D（Reconciliation 与 Settlement/Billing 分离）。
+- NEXT：R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，8 项持久化边界）；获批后再提交 R43 Implementation Plan。
+- 风险提示（架构方）：最大风险是把 AuditLog 变成第二套业务数据库 —— 业务事实持久化与审计证据必须分离；人工提交虽无平台写 API，其审批绑定/并发/幂等/TOCTOU 必须达到 claim.submit / appeal.submit 同级。

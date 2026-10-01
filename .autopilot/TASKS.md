@@ -244,3 +244,13 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - NEXT：**R43 — Amazon Manual Recovery Handoff Design（只交 Design Proposal，不实现）**：ClaimItem → Evidence Completeness → Recovery Package → Human Approval → Submission Instructions/Export → SUBMITTED_MANUAL → Outcome Tracking → Reimbursement/Settlement Reconciliation。
 - R43 十二项重点与「生成材料 ≠ 已提交 ≠ 已受理 ≠ 已赔付」四事实分离见 STATE.next_action。
 - 边界冻结：AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 继续 HOLD。
+
+### MSG-20261001-30 裁决（R43 设计 REVISE → 先做 R43-A Schema Delta Request）
+
+- DECISION：**PASS WITH REVISE**（REVIEWED_HEAD 07b7009）；总体架构方向批准（四事实分离、证据完整性门槛、package 标注 NOT SUBMITTED、审批绑定 package digest、export 不产生已提交事实、SUBMITTED_MANUAL 仅人工确认、outcome 事实证据、reconciliation 本阶段只读、全链路 fail-closed）。
+- CHANGE A：SUBMITTED_MANUAL 走既有 **ClaimItem 状态机**（ClaimItemStatus 已含该状态），AuditLog 仅 append-only 证据；providerCaseRef/submittedAt/submittedBy/submissionEvidence **先提 Schema Delta Request**。
+- CHANGE B：动作名 `recovery.manual_submit` 批准；OWNER/ADMIN 批准、执行者须当前 ACTIVE member 且执行时重验；approval 绑定 `claimItemId + caseId + packageDigest`；package 变化 → 旧审批失效；consumption 与成功确认**原子**；并发/重复确认至多一次成功。
+- CHANGE C：导出第一版 = **PDF + machine-readable JSON manifest**（先定义 artifact，不实现）；证据只引用既有 EvidenceArtifact/FileAsset；export 不存 credential/token；artifact 默认 **24 个月**保留（取更严格者）；**时间桶不得作为提交链核心幂等依据**。
+- CHANGE D：Reconciliation 与资金域**继续分离**（只输出 matched/unmatched/ambiguous；不得触碰 Settlement/Billing/RecoveryLedgerEntry/费用）；后续单独提交 Recovery Reconciliation → Settlement Boundary Design。
+- NEXT：**R43-A — Manual Recovery Persistence Schema Delta Request**（docs-only，8 项）；获批后再提交 R43 Implementation Plan；不要直接进入完整 R43 实现。
+- 保持：AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · **SETTLEMENT/BILLING LINKAGE HOLD**。
