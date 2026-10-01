@@ -219,6 +219,12 @@ function main() {
     return 'tools/tenant-triggers append-only checklist OK (upgrade path)';
   });
 
+  step('stage 2: reconciliation consistency checker SQL passes against upgraded database', () => {
+    const sql = run(NODE_BIN, [join(ROOT, 'tools', 'consistency', 'check-reconciliation.mjs')]);
+    psql(tempDb, sql);
+    return 'tools/consistency reconciliation checker OK (upgrade path)';
+  });
+
   step('stage 2: recovery manual submission consistency checker passes against upgraded database', () => {
     const sql = run(NODE_BIN, [join(ROOT, 'tools', 'consistency', 'check-recovery-manual-submission.mjs')]);
     psql(tempDb, sql);

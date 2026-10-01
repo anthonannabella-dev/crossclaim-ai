@@ -83,6 +83,11 @@ jobs:
           node tools/consistency/check-recovery-manual-submission.mjs \
             | PGPASSWORD=ci psql -h localhost -U crossclaim -d crossclaim -v ON_ERROR_STOP=1
 
+      - name: Verify reconciliation consistency (R45 S5 read-only checker)
+        run: |
+          node tools/consistency/check-reconciliation.mjs \
+            | PGPASSWORD=ci psql -h localhost -U crossclaim -d crossclaim -v ON_ERROR_STOP=1
+
       - name: Verify autopilot persistent rules (.autopilot/RULES.md + rules.json)
         run: node tools/autopilot/check-autopilot-rules.mjs --root .
 
