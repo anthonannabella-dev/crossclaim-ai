@@ -1,16 +1,16 @@
 {
   "gate": "B2-FIX R1",
-  "head": "d852d51",
+  "head": "2d93dac",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
-  "next_task": "S3 服务层：实现 Prisma 账本端口与 T1/T2/T3/R1（acquireExecutionRight 六项原子授权点 + submitThroughPort + settleResult + reconcile，UNKNOWN→RECONCILING 不重发），并补 PG1–PG10 真实 PostgreSQL 验收（apps/api/src/__tests__/platform-write-ledger-db.test.ts）",
+  "next_task": "S3 服务层（T1/T2/T3/R1）：Prisma 账本端口 + acquireExecutionRight（六项原子授权点，含 approval 唯一绑定与消费审计同事务）+ submitThroughPort + settleResult + reconcile（UNKNOWN→RECONCILING 只读、绝不重发），并补 PG1–PG10 与本轮新增断言（apps/api/src/__tests__/platform-write-ledger-db.test.ts）→ S5 全量回归后送审 Implementation Checkpoint",
   "send_head": "7d888cc",
   "decision_head": "7d888cc",
   "last_chatgpt_message": "MSG-20261001-19",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T06:45:28.307Z",
-  "previous_head": "caf2fac",
+  "updated_at": "2026-10-01T06:58:38.232Z",
+  "previous_head": "d852d51",
   "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "61b95f1",
@@ -49,12 +49,12 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-01T06:49:40.633Z",
+  "last_tick_at": "2026-10-01T06:59:40.818Z",
   "state": "IMPLEMENT",
-  "last_action": "S3/M3 完成（d852d51）：SUCCEEDED partial unique index 落地并应用；24 migrations up to date；tsc PASS",
-  "last_action_at": "2026-10-01T06:45:28.307Z",
-  "next_action": "S3 服务层：实现 Prisma 账本端口与 T1/T2/T3/R1（acquireExecutionRight 六项原子授权点 + submitThroughPort + settleResult + reconcile，UNKNOWN→RECONCILING 不重发），并补 PG1–PG10 真实 PostgreSQL 验收（apps/api/src/__tests__/platform-write-ledger-db.test.ts）",
-  "current_head": "d852d51",
+  "last_action": "CI 全绿确认：2d93dac（run 36827017675 = completed success）—— M1/M2/M3 迁移 + 租户触发器 + 模型口径 39 全部通过 CI",
+  "last_action_at": "2026-10-01T06:58:38.231Z",
+  "next_action": "S3 服务层（T1/T2/T3/R1）：Prisma 账本端口 + acquireExecutionRight（六项原子授权点，含 approval 唯一绑定与消费审计同事务）+ submitThroughPort + settleResult + reconcile（UNKNOWN→RECONCILING 只读、绝不重发），并补 PG1–PG10 与本轮新增断言（apps/api/src/__tests__/platform-write-ledger-db.test.ts）→ S5 全量回归后送审 Implementation Checkpoint",
+  "current_head": "2d93dac",
   "reviewed_head": "549dba8",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-01T06:45:28.451Z",
-    "gapMs": 252183,
+    "previousTickAt": "2026-10-01T06:54:40.446Z",
+    "gapMs": 300372,
     "stale": false,
-    "checkedAt": "2026-10-01T06:49:40.633Z"
+    "checkedAt": "2026-10-01T06:59:40.818Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -180,6 +180,12 @@
       "status": "DONE",
       "migration": "20261001065000_platform_write_attempt_succeeded_partial_index（SUCCEEDED 部分唯一索引）",
       "verify": "migrate deploy OK（24 migrations，schema up to date）；索引定义已在 dev DB 取证；tsc PASS"
+    },
+    "ci": {
+      "head": "2d93dac",
+      "run": "36827017675",
+      "result": "completed success",
+      "note": "S1/M1 + tenant guard + S2/M2 + S3/M3 全部迁移与口径修复后 CI 全绿"
     }
   }
 }

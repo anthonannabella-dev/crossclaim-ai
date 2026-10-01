@@ -34,6 +34,14 @@ export const PLATFORM_WRITE_ATTEMPT_STATES = [
   'FAILED',
   'DEAD_LETTER',
   'BLOCKED',
+  /** 真实通道超时 / 不可判定（禁止直接重发写请求） */
+  'UNKNOWN_PROVIDER_RESPONSE',
+  /** 只读对账进行中 */
+  'RECONCILING',
+  /** 已由可信证据确认未产生目标外部副作用（严格定义，见 reconcile-policy） */
+  'FAILED_CONFIRMED',
+  /** 无法自动判定，交人工处置 */
+  'MANUAL_REVIEW',
 ] as const;
 export type PlatformWriteAttemptState = (typeof PLATFORM_WRITE_ATTEMPT_STATES)[number];
 
@@ -42,6 +50,8 @@ export const PLATFORM_WRITE_TERMINAL_STATES: readonly PlatformWriteAttemptState[
   'FAILED',
   'DEAD_LETTER',
   'BLOCKED',
+  'FAILED_CONFIRMED',
+  'MANUAL_REVIEW',
 ];
 
 export const PLATFORM_WRITE_STATUSES = [

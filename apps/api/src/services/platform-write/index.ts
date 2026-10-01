@@ -287,3 +287,4 @@ export * from './snapshot';
 export * from './state-machine';
 export * from './ledger';
 export * from './simulated-adapter';
+export * from './reconcile-policy';
