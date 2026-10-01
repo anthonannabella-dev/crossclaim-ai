@@ -1589,4 +1589,17 @@ model PlatformWriteAttempt {
   updatedAt          DateTime                    @updatedAt
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  /// C1：同一幂等键 = 唯一逻辑执行链（MSG-20261001-18 裁决①选 A）
+  @@unique([organizationId, idempotencyKey])
+  /// C2：一个非空 approvalId 最多绑定一个能取得真实执行权的 attempt（NULL 不冲突）
+  @@unique([organizationId, approvalId])
+  /// C4：重试扫描
+  @@index([organizationId, status, nextRetryAt])
+  /// C5：对账扫描
+  @@index([organizationId, status, reconcileNextAt])
+  /// C6：按对象回看执行链
+  @@index([organizationId, targetKind, targetId])
+  /// C6b：审计对齐
+  @@index([organizationId, createdAt])
 }

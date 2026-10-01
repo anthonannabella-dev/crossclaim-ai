@@ -1,15 +1,15 @@
 {
   "gate": "B2-FIX R1",
-  "head": "772e066",
+  "head": "ee77970",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
-  "next_task": "S2（约束/M2）：为 PlatformWriteAttempt 增加 C1 @@unique([organizationId, idempotencyKey])、C2 @@unique([organizationId, approvalId])、C4–C6 索引，生成并应用 M2 迁移；随后 M3 partial unique index（raw SQL）",
+  "next_task": "等待 ee77970 CI 绿（S1 gate）→ S2（约束/M2）：为 PlatformWriteAttempt 增加 C1 @@unique([organizationId, idempotencyKey])、C2 @@unique([organizationId, approvalId])、C4–C6 索引，生成并应用 M2 迁移；随后 M3 partial unique index（raw SQL）",
   "send_head": "7d888cc",
   "decision_head": "7d888cc",
   "last_chatgpt_message": "MSG-20261001-19",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T06:28:34.952Z",
+  "updated_at": "2026-10-01T06:39:24.562Z",
   "previous_head": "caf2fac",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -49,12 +49,12 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-01T06:31:41.535Z",
+  "last_tick_at": "2026-10-01T06:39:39.475Z",
   "state": "IMPLEMENT",
-  "last_action": "S1（Schema/M1）完成：新增 PlatformWriteAttemptStatus 枚举 + PlatformWriteAttempt 表 + Organization 反向关系；migration 20261001062736 已生成并应用到 dev DB；prisma validate/generate、tsc、既有 39 项测试全绿",
-  "last_action_at": "2026-10-01T06:28:24.616Z",
-  "next_action": "S2（约束/M2）：为 PlatformWriteAttempt 增加 C1 @@unique([organizationId, idempotencyKey])、C2 @@unique([organizationId, approvalId])、C4–C6 索引，生成并应用 M2 迁移；随后 M3 partial unique index（raw SQL）",
-  "current_head": "772e066",
+  "last_action": "S1 补正完成并推送（ee77970）：修复 772e066 的 CI 失败（tenant-integrity 触发器清单），本地 tenant-trigger checklist 通过；等待 ee77970 CI 绿后进入 S2",
+  "last_action_at": "2026-10-01T06:39:24.561Z",
+  "next_action": "等待 ee77970 CI 绿（S1 gate）→ S2（约束/M2）：为 PlatformWriteAttempt 增加 C1 @@unique([organizationId, idempotencyKey])、C2 @@unique([organizationId, approvalId])、C4–C6 索引，生成并应用 M2 迁移；随后 M3 partial unique index（raw SQL）",
+  "current_head": "ee77970",
   "reviewed_head": "549dba8",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-01T06:28:35.096Z",
-    "gapMs": 186440,
+    "previousTickAt": "2026-10-01T06:39:24.705Z",
+    "gapMs": 14771,
     "stale": false,
-    "checkedAt": "2026-10-01T06:31:41.535Z"
+    "checkedAt": "2026-10-01T06:39:39.475Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -162,10 +162,10 @@
     },
     "order": "S1 Schema/M1 → S2 constraints/M2 → S3 service/M3 → S4 PG1–PG10+新增断言 → S5 回归/CI/送审",
     "s1": {
-      "status": "DONE",
-      "migration": "20261001062736_platform_write_attempt_ledger（枚举 + 表 + FK；无唯一约束/无索引）",
-      "verify": "prisma validate valid；migrate deploy 成功（dev DB 21 migrations，schema up to date）；prisma generate OK；tsc --noEmit PASS；platform-write 17/17 + Action Guard 22/22 PASS",
-      "boundary": "未接线 HTTP、未接真实 adapter、transport 恒关；未含任何凭据字段"
+      "status": "DONE（含 CI 补正）",
+      "migration": "20261001062736_platform_write_attempt_ledger + 20261001064000_platform_write_attempt_tenant_guard",
+      "ci_fix": "772e066 因 tenant-trigger 清单校验失败 → 补挂 cc_tenant_platform_write_attempt / cc_tenant_immutable__PlatformWriteAttempt 并同步 tools/tenant-triggers/required-triggers.json；本地 checklist 通过（29 baseline / 37 immutable）",
+      "local_verify": "prisma validate valid；migrate deploy 21→22 migrations applied；prisma generate OK；tsc PASS；platform-write 17/17 + action-guard 10/10 + tenant-isolation PASS（46 项）"
     }
   }
 }
