@@ -1380,3 +1380,10 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 规则：RULES **R17**；STATE.autopilot_resume_directive。
 - 关键：无新裁决不是停止条件；禁止空转（AUTOPILOT_STALL 自恢复）；小批次 + 七段式审计闭环；HOST ACTION 仅限 7 类；真实数据延后但不得冒充商业验证。
 - 主线不变：R46 → Settlement/Billing → Full Regression；已登记产品指令（Carrier Recovery V1 / Customs Pricing）不抢占主队列。
+
+## 2026-10-02 JST — MSG-20261002-56 = PASS WITH REVISE：S2 主体可关闭；补同 approval 并发证据；NEXT = S3
+
+- 裁决：REVIEWED_HEAD 4bc0e03；archival FULL_COPY_OK。
+- CHANGE B + 20 项永久验收 = PASS；S2 生产接线证据被接受。
+- 唯一收口：same approval + 独立并发执行 → 恰一次消费（loser fail-closed、无第二 Settlement、approval_consumed 恰 1）。若已覆盖则不重复开发。
+- NEXT：R46 S3（SettlementAdjustment / Full Reversal；v1 仅 full reversal；不得触发 Fee/Invoice/Payment）。
