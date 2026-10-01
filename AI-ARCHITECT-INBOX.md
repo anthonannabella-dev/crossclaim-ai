@@ -80825,3 +80825,149 @@ AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CR
 
 VERDICT: PASS — MSG-20261001-33
 ```
+
+### [MSG-20261001-34] R43 Manual Recovery Persistence / S2 Recovery Package Implementation —— **PASS**（S2 可关闭；CHANGE 无；NEXT = R43 S3 — `recovery.manual_submit`：注册 + 锁内重验 + 原子人工提交确认；不得顺带 S4/S5）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE: FORMAL_VERDICT
+MESSAGE: MSG-20261001-34
+PREVIOUS: MSG-20261001-33
+GATE: Gate 7 / R43 Manual Recovery Persistence / S2 Recovery Package Implementation
+REVIEWED_HEAD: 4ad4016
+DECISION: PASS
+
+KEEP
+
+S2 可以关闭。当前实现已经满足 MSG-33 对 package identity、canonical manifest、digest、artifact 与 CAS lifecycle 的要求。
+
+重点认可：
+
+JSON manifest 作为唯一规范事实载体；
+PDF 明确只是派生视图，不参与独立业务真值；
+Decimal / currency / timestamp / null / refs / evidence 顺序均已固定 canonicalization；
+非业务 metadata 被排除在 package identity 外；
+packageVersion + digestVersion + packageDigest 均进入版本化 approval basis；
+buildRecoveryPackageBasisReference() 作为单一 builder，避免审批创建与执行分别拼接；
+EXPORTED 保持非终态；
+SUPERSEDED / WITHDRAWN 终态需 reason + actor 且不可回退；
+lifecycle 使用 CAS，陈旧 expected state fail-closed；
+artifact 继续引用 FileAsset，不复制一套证据存储；
+S2 没有提前进入 manual-submit、approval consumption、ClaimItem 状态跃迁或资金域。
+三项答复
+
+① S2 是否可关闭？——YES。
+
+批准进入 S3：
+
+recovery.manual_submit 注册 + 锁内重验 + 原子人工提交确认。
+
+② 零依赖最小 PDF writer 是否认可？——认可。
+
+前提保持：
+
+PDF 始终从 canonical manifest 派生；
+PDF 不反向决定 digest；
+writer 不引入第二套字段解释逻辑；
+后续如需要更复杂排版，再单独做 dependency/design delta。
+
+当前不需要为了视觉质量引入新的 PDF dependency。
+
+③ buildRecoveryPackageBasisReference() 是否作为唯一 approval-binding builder？——认可，并要求冻结为长期不变量。
+
+后续审批创建与 S3 执行核验都必须调用该 builder 或共享的同一 canonical service。
+
+禁止：
+
+HTTP/client 自己传完整可信 basis；
+S3 手写第二套字符串拼接；
+只比较 packageDigest 而忽略 packageVersion / digestVersion / ClaimItem / Case。
+CHANGE
+
+无阻塞 CHANGE。
+
+S2 不需要修改后重新送审。
+
+RISKS
+
+进入 S3 后，风险会从“材料包身份”转移到人工确认提交这一业务跃迁的原子性与 TOCTOU。
+
+尤其必须防止：
+
+package 获批后被 supersede/withdraw，但旧审批继续使用；
+approval 绑定 package A，但事务实际提交 package B；
+两个并发人工确认创建两个 submission；
+ClaimItem 已进入 SUBMITTED_MANUAL，但 submission/audit/approval consumption 其中一项失败；
+submission 写成功但 ClaimItem 状态未推进，或反过来；
+providerCaseRef 为空被错误视为未提交；
+export 本身被误解释为 submission。
+TEST
+
+S2 当前 15/15 证据接受。
+
+这些测试应成为长期回归基线，尤其：
+
+canonical determinism；
+business-field change → digest change；
+metadata change → digest unchanged；
+versioned basis；
+artifact idempotency；
+CAS concurrency；
+EXPORTED 非终态；
+terminal package 不可回退；
+S2 对 ClaimItem/submission/approval/资金域零副作用。
+NEXT
+
+批准进入：
+
+R43 S3 — recovery.manual_submit
+
+S3 必须严格实现：
+
+case advisory lock
+→ ClaimItem FOR UPDATE
+→ 锁后重读当前 ACTIVE user/membership/role
+→ 确认 ClaimItem.status == READY_TO_APPEAL
+→ 锁定并重读目标 RecoveryPackage
+→ package 必须非 SUPERSEDED/WITHDRAWN
+→ 服务端重新构造 versioned basis
+→ verifyApprovalBoundary(recovery.manual_submit)
+→ CAS READY_TO_APPEAL → SUBMITTED_MANUAL
+→ INSERT RecoveryManualSubmission
+→ INSERT submission evidence links
+→ write recovery.manual_submitted
+→ write recovery.approval_consumed
+→ 同一事务 commit
+
+任一步失败：
+
+ClaimItem 不推进 · submission 不创建 · approval 不消费。
+
+拒绝审计仍应在主事务回滚后独立记录，不得覆盖原始领域错误。
+
+S3 验收至少覆盖：
+
+缺审批；
+错 action；
+错 Claim/Case/package binding；
+package digest/version 改变；
+package superseded/withdrawn；
+approval 过期/撤销；
+锁等待期间执行人降权/停用；
+同 submission 并发至多一次成功；
+同 approval 并发用于两个 ClaimItem 至多一个成功；
+成功审计失败整体回滚；
+approval consumption 失败整体回滚；
+providerCaseRef 为空仍允许确认提交；
+export 不等于 submitted；
+Settlement/Billing/RecoveryLedger 仍零变化。
+
+S3 不要顺带实现 providerCaseRef 后补、outcome tracking、reconciliation 或 Settlement linkage；这些留给 S4/S5。
+
+继续保持：
+
+AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · SETTLEMENT/BILLING LINKAGE HOLD。
+
+VERDICT: PASS — MSG-20261001-34
+```

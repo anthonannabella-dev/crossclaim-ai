@@ -1,17 +1,17 @@
 {
   "gate": "B2-FIX R1",
-  "head": "4ad4016",
+  "head": "9742914",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
   "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
   "send_head": "07b7009",
   "decision_head": "07b7009",
-  "last_chatgpt_message": "MSG-20261001-33",
+  "last_chatgpt_message": "MSG-20261001-34",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T11:39:18.528Z",
-  "previous_head": "d39c53e",
-  "architect_decision_pending": true,
+  "updated_at": "2026-10-01T11:40:23.261Z",
+  "previous_head": "4ad4016",
+  "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "4ad4016",
   "last_sent_at": "2026-10-01T11:39:18.528Z",
@@ -49,12 +49,12 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-01T11:32:11.656Z",
+  "last_tick_at": "2026-10-01T11:39:44.750Z",
   "state": "IMPLEMENT",
-  "last_action": "R43 S2（Recovery Package Implementation）已实现并送审：canonical manifest/digest + approval basis 唯一 builder + package CAS 生命周期 + 零依赖 PDF 派生 + artifact 落库；S2 测试 15/15 PASS；回归 43 files / 519 tests PASS；tsc PASS；等待 S2 Checkpoint 裁决",
-  "last_action_at": "2026-10-01T11:39:18.528Z",
-  "next_action": "等待 S2 Checkpoint 裁决：①PASS → 进入 S3（注册 recovery.manual_submit + 锁内重验 + 原子提交；顺带完成 S4 providerCaseRef canonical 补录与 S5 只读 checker）②REVISE → 按 CHANGE 修改后重送 S2 ③BLOCK → 停止该方案。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
-  "current_head": "4ad4016",
+  "last_action": "MSG-20261001-34 = PASS 已逐字归档并 FULL_COPY_OK —— R43 S2 关闭；下一批 = R43 S3（recovery.manual_submit 注册 + 锁内重验 + 原子人工提交确认），不得顺带 S4/S5",
+  "last_action_at": "2026-10-01T11:40:23.261Z",
+  "next_action": "R43 S3 — recovery.manual_submit：按 MSG-20261001-34 的严格顺序实现锁内重验 + 原子提交（advisory lock → ClaimItem FOR UPDATE → 锁后重读成员/角色 → READY_TO_APPEAL → 锁定 package（非终态）→ 服务端重构 versioned basis → verifyApprovalBoundary → CAS 跃迁 → INSERT submission + evidence links → 审计 manual_submitted + approval_consumed）；拒绝审计回滚后写；S3 验收 14 项。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
+  "current_head": "9742914",
   "reviewed_head": "07b7009",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-01T11:19:10.669Z",
-    "gapMs": 780987,
-    "stale": true,
-    "checkedAt": "2026-10-01T11:32:11.656Z"
+    "previousTickAt": "2026-10-01T11:32:11.656Z",
+    "gapMs": 453095,
+    "stale": false,
+    "checkedAt": "2026-10-01T11:39:44.750Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -755,5 +755,47 @@
     },
     "wakeup_channel": "https://chatgpt.com/c/6ab9ee1b-fd54-83ee-b363-b67750afcedd",
     "wakeup_delivery": "DELIVERED_VERIFIED（输入框清空 / 新用户消息在底部）"
+  },
+  "r43s2_verdict": {
+    "message_id": "MSG-20261001-34",
+    "decision": "PASS",
+    "reviewed_head": "4ad4016",
+    "archival": "FULL_COPY_OK",
+    "archival_at": "2026-10-01T11:40:23.261Z",
+    "status": "S2 CLOSED（允许进入 S3）",
+    "rulings": {
+      "s2_close": "YES",
+      "pdf_writer": "认可（PDF 始终从 canonical manifest 派生；不反向决定 digest；不引入第二套字段解释逻辑；未来需富排版再单独提 dependency/design delta）",
+      "basis_builder": "buildRecoveryPackageBasisReference() 认可为唯一 approval-binding builder 并冻结为长期不变量；禁止 HTTP/client 自传完整 basis、S3 手写第二套拼接、只比 packageDigest 而忽略 packageVersion/digestVersion/ClaimItem/Case"
+    },
+    "s2_tests_permanent": [
+      "canonical determinism",
+      "business-field change → digest change",
+      "metadata change → digest unchanged",
+      "versioned basis",
+      "artifact idempotency",
+      "CAS concurrency",
+      "EXPORTED 非终态",
+      "terminal package 不可回退",
+      "S2 对 ClaimItem/submission/approval/资金域零副作用"
+    ],
+    "s3_spec": "严格顺序：case advisory lock → ClaimItem FOR UPDATE → 锁后重读 ACTIVE user/membership/role → 确认 ClaimItem.status == READY_TO_APPEAL → 锁定并重读目标 RecoveryPackage → package 非 SUPERSEDED/WITHDRAWN → 服务端重构 versioned basis → verifyApprovalBoundary(recovery.manual_submit) → CAS READY_TO_APPEAL→SUBMITTED_MANUAL → INSERT RecoveryManualSubmission → INSERT submission evidence links → write recovery.manual_submitted → write recovery.approval_consumed → 同一事务 commit；任一步失败：ClaimItem 不推进 · submission 不创建 · approval 不消费；拒绝审计在主事务回滚后独立记录",
+    "s3_acceptance": [
+      "缺审批",
+      "错 action",
+      "错 Claim/Case/package binding",
+      "package digest/version 改变",
+      "package superseded/withdrawn",
+      "approval 过期/撤销",
+      "锁等待期间执行人降权/停用",
+      "同 submission 并发至多一次成功",
+      "同 approval 并发用于两个 ClaimItem 至多一个成功",
+      "成功审计失败整体回滚",
+      "approval consumption 失败整体回滚",
+      "providerCaseRef 为空仍允许确认提交",
+      "export 不等于 submitted",
+      "Settlement/Billing/RecoveryLedger 仍零变化"
+    ],
+    "s3_boundaries": "S3 不得顺带实现 providerCaseRef 后补、outcome tracking、reconciliation 或 Settlement linkage（留给 S4/S5）"
   }
 }

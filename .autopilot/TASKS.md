@@ -290,3 +290,10 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - NEXT：**R43 S2 — Recovery Package Implementation**：package generation → canonical JSON manifest → digest/version → artifact generation → package CAS lifecycle；S2 完成后提交 Implementation Checkpoint。
 - S2 禁止：不注册 recovery.manual_submit / 不消费 approval / 不改 ClaimItem 状态 / 不创建 RecoveryManualSubmission / 不接 HTTP confirmation / 不外写 / 不联动 Settlement·Billing。
 - S2 PDF 依赖：先做现有依赖能力检查，优先复用；必须新增则单独提 dependency delta。JSON manifest 为规范事实载体，PDF 为派生物。
+
+### MSG-20261001-34 裁决（R43 S2 关闭 → R43 S3 recovery.manual_submit）
+
+- DECISION：**PASS**（REVIEWED_HEAD 4ad4016；归档 FULL_COPY_OK）。S2 关闭；S2 测试 15/15 列为长期回归基线。
+- NEXT：**R43 S3 — recovery.manual_submit**：严格顺序实现锁内重验 + 原子人工提交确认（详见 STATE.r43s2_verdict.s3_spec）；S3 验收 14 项（s3_acceptance）。
+- S3 禁止：不得顺带 providerCaseRef 后补 / outcome tracking / reconciliation / Settlement linkage（留 S4/S5）。
+- 保持：AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · SETTLEMENT/BILLING LINKAGE HOLD。

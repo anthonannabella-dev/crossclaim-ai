@@ -896,3 +896,12 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - PDF 依赖：仓库仅有 `@prisma/client` → 采用**零依赖最小 writer**，未新增依赖（无 dependency delta）。
 - 送审：REVIEWED_HEAD 4ad4016（Issue #2 comment 5930531626 / CI 36856596781）；唤醒已投递并验证。
 - 边界：S2 未注册 recovery.manual_submit、未消费 approval、未改 ClaimItem 状态、未创建 RecoveryManualSubmission、未接 HTTP confirmation、未外写、未联动 Settlement·Billing。
+
+## 2026-10-01 JST — MSG-20261001-34 = PASS（R43 S2 关闭）→ 进入 R43 S3
+
+- 裁决：**PASS**（REVIEWED_HEAD 4ad4016）。S2 可关闭；零依赖 PDF writer 认可；`buildRecoveryPackageBasisReference()` 认可为唯一 approval-binding builder 并冻结为长期不变量。
+- 档案：`AI-ARCHITECT-INBOX.md` → `MSG-20261001-34`；`tools/verdict-diff/compare.mjs` = **FULL_COPY_OK**。
+- NEXT：**R43 S3 — recovery.manual_submit**（注册 + 锁内重验 + 原子人工提交确认）。
+- S3 严格顺序：advisory lock → ClaimItem FOR UPDATE → 锁后重读成员/角色 → READY_TO_APPEAL → 锁定目标 package（非终态）→ 服务端重构 versioned basis → verifyApprovalBoundary → CAS 跃迁 SUBMITTED_MANUAL → INSERT submission + evidence links → 写 recovery.manual_submitted + recovery.approval_consumed（同一事务）；失败则三者均不推进/创建/消费；拒绝审计回滚后写。
+- S3 验收 14 项（见 STATE.r43s2_verdict.s3_acceptance）。
+- 边界：S3 不得顺带 providerCaseRef 后补 / outcome tracking / reconciliation / Settlement linkage；AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · SETTLEMENT/BILLING LINKAGE HOLD。
