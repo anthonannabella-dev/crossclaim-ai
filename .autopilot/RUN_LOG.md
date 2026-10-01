@@ -1046,3 +1046,13 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - R44-A 测试清单（14 项）：未认证 / 非法角色 / 跨租户 / 错绑定 / 伪造 digest·basis·version / terminal package 不得创建 / 重复创建幂等 / 过期·撤销 / creation 不改 ClaimItem / 不产生 Submission / 不消费 approval / 资金域零变化 / 创建的 approval 可被 R44 execution 消费 / 创建后 package 变化 → fail-closed。
 - 档案：`AI-ARCHITECT-INBOX.md` → `MSG-20261001-41`；`compare.mjs` = **FULL_COPY_OK**。
 - HOLD 保持：AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · SETTLEMENT/BILLING LINKAGE HOLD。
+
+## 2026-10-01 JST — R44-A Approval Creation Boundary 实现 + 增量风险审计送审
+
+- 新增入口：`POST /cases/:caseId/recovery/manual-submit-approval`（decision=REQUEST|APPROVE）—— 只创建审批事实，不执行提交。
+- 复用而非另造：直接调用 R44 的 `resolveManualSubmissionTarget`（同一 `buildRecoveryPackageBasisReference`）；审批创建复用既有 `submitRecoveryReview`（新增：接受 `recovery.manual_submit` 为非资金动作 + 可选 `boundExtra` 服务端额外绑定键落库进 boundPayload）。
+- 不变量：客户端不得自证 digest/basis/version；不得只绑裸 packageId（强制五元）；终态 package 不得创建（409）；同 basis 重复 APPROVE 幂等；creation 不改 ClaimItem / 不产生 Submission / 不消费 approval / 资金域 0；创建的 approval 可被 R44 execution 正常消费；创建后 package 变化 → execution fail-closed。
+- 证据：`recovery-manual-approval-http-db.test.ts` 12/12（覆盖 MSG-41 的 14 项要求）；recovery-manual-* + admin-recovery-review 家族 102/102；tsc PASS；prisma validate valid（未改 Schema）；无新增依赖。
+- 送审：REVIEWED_HEAD 4c43b41（Issue #2 comment 5932597311 / CI 36868784356 success 5/5）；唤醒已投递并三要素验证。
+- 架构方连接器备注：其 GitHub 写回复 Issue #2 返回 403（integration 权限不足），本项目侧留档完整，无需等待。
+- HOLD 保持：AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · SETTLEMENT/BILLING LINKAGE HOLD。

@@ -387,3 +387,10 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - NEXT：**R44-A — Manual Recovery Approval Creation Boundary**：谁可创建 approval → 绑定 Claim/Case/package/versioned basis → approval lifecycle → HTTP request contract → 与既有 execution endpoint 对接。
 - 冻结：creation 与 execution 同一 builder；客户端不得自证 digest/basis；不得只绑裸 packageId；package 变更 → execution 拒绝；creator/executor 各自重验 membership/role。
 - 范围外：outcome/reimbursement reconciliation · Settlement/Billing linkage · Amazon write transport · 生产凭据。
+
+### R44-A（Manual Recovery Approval Creation Boundary）—— 已实现，增量风险审计待裁决
+
+- 交付：`services/recovery/http-request.ts`（requestManualRecoverySubmitApproval）+ `services/workflow/recovery-review.ts`（接受 recovery.manual_submit + boundExtra）+ 路由/白名单 + `recovery-manual-approval-http-db.test.ts` 12 项。
+- 证据：12/12 新用例；recovery-manual-* + admin-recovery-review 102/102；tsc PASS；prisma validate valid；无新增依赖。
+- 送审：REVIEWED_HEAD 4c43b41（Issue #2 comment 5932597311 / CI 36868784356）。
+- NEXT：PASS → R44-B（reference 审批创建）或架构方指定；REVISE → 按 CHANGE 重送；BLOCK → 停止。
