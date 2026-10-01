@@ -624,3 +624,9 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - S2 硬验收：canonical digest 等价证明；17 项最低永久验收（含并发同 receipt 至多一条、approval 绑定、零资金外溢）。
 - 待办（S4 前）：CHANGE A fee-chain 并发竞争验收（真实 PostgreSQL，独立连接）。
 - 边界：NO automatic Settlement from R45 · NO automatic Fee · NO automatic Invoice · NO Payment activation · NO autopay · NO platform write；R13 Payment Activation Gate = HOLD。
+
+### Customs Self-Service Pricing（已登记）
+
+- 交付：`docs/releases/CUSTOMS-SELF-SERVICE-PRICING-CONTRACT.md`；RULES R15；STATE.customs_pricing_directive。
+- 状态：REGISTERED / IMPLEMENTATION_STARTED = NO；价格 EXPERIMENTAL 可配置。
+- 队列：不打断 R45 → R46 → Full Regression；进入 Customs V1 时再实施 Checkout / Entitlement / Package Unlock。

@@ -1,6 +1,6 @@
 {
   "gate": "B2-FIX R1",
-  "head": "0a79d8d",
+  "head": "5ca4881",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
   "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
@@ -9,8 +9,8 @@
   "last_chatgpt_message": "MSG-20261002-55",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T17:12:21.088Z",
-  "previous_head": "b904cc8",
+  "updated_at": "2026-10-01T17:39:28.015Z",
+  "previous_head": "0a79d8d",
   "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "ab00cd9",
@@ -49,10 +49,10 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-01T17:29:52.693Z",
+  "last_tick_at": "2026-10-01T17:34:51.155Z",
   "state": "IMPLEMENT",
-  "last_action": "MSG-20261002-55 = PASS WITH REVISE 已逐字归档（FULL_COPY_OK）：**R46 S1 CLOSED**，S2 已授权（Receipt Snapshot + Settlement Record/Ingest 受保护写边界）。CHANGE A（fee-chain 并发竞争验收）须在 S4 前完成；CHANGE B（canonical snapshot digest 等价证明）为 S2 硬验收。",
-  "last_action_at": "2026-10-01T17:12:21.088Z",
+  "last_action": "HOST DIRECTIVE（补充四）Customs Self-Service Pricing 已登记（docs/releases/CUSTOMS-SELF-SERVICE-PRICING-CONTRACT.md + RULES R15 + STATE.customs_pricing_directive）；未实现，不打断 R45/R46。",
+  "last_action_at": "2026-10-01T17:39:28.015Z",
   "next_action": "R46 S2：receipt snapshot + Settlement record/ingest 受保护写边界（可信到账证据 → server-side canonical snapshot → humanApproval → Settlement）。",
   "current_head": "ab00cd9",
   "reviewed_head": "07b7009",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-01T17:29:46.681Z",
-    "gapMs": 6012,
+    "previousTickAt": "2026-10-01T17:29:52.693Z",
+    "gapMs": 298463,
     "stale": false,
-    "checkedAt": "2026-10-01T17:29:52.693Z"
+    "checkedAt": "2026-10-01T17:34:51.155Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -2472,5 +2472,46 @@
     "next_unit": "R46 S2 — Receipt Snapshot + Settlement Record/Ingest Protected Write Boundary",
     "s2_scope": "只做到：可信到账证据 → immutable server-side receipt snapshot → human approval → Settlement financial fact；不得顺带进入 SettlementAdjustment / FeeCalculation / BillingInvoice / Payment",
     "redline": "NO automatic Settlement from R45 · NO automatic Fee · NO automatic Invoice issuance · NO Payment activation · NO autopay · NO platform write · TRANSPORT=false · NO production credentials；R13 Payment Activation Gate = HOLD"
+  },
+  "customs_pricing_directive": {
+    "directive": "HOST DIRECTIVE 2026-10-02（补充四）",
+    "contract_doc": "docs/releases/CUSTOMS-SELF-SERVICE-PRICING-CONTRACT.md",
+    "registered_at": "2026-10-01T17:39:28.015Z",
+    "tiers": [
+      "FREE_AUDIT",
+      "SELF_SERVICE_RECOVERY_PACKAGE",
+      "CONTINUOUS_SUBSCRIPTION"
+    ],
+    "package_tier_rule": "PACKAGE_TIER = MAX(EXPECTED_RECOVERY_TIER, DATA_VOLUME_TIER, COMPLEXITY_TIER)",
+    "reference_prices": {
+      "PACKAGE_S": 299,
+      "PACKAGE_M": 699,
+      "PACKAGE_L": 1499,
+      "PACKAGE_XL": 2999,
+      "ENTERPRISE": "CUSTOM_QUOTE"
+    },
+    "subscription_prices": {
+      "CUSTOMS_STARTER": 299,
+      "CUSTOMS_GROWTH": 799,
+      "CUSTOMS_SCALE": 1999,
+      "ENTERPRISE": "CUSTOM_QUOTE"
+    },
+    "price_status": "EXPERIMENTAL（真实付费证据出现前）",
+    "entitlement_gate": "server-side（organizationId / permission / payment status / entitlement / packageId / packageVersion）",
+    "package_fee_is_not_success_fee": true,
+    "checkout_provider": "独立 Payment Provider（不得由 Platform OAuth 推导 Payment Authorization）",
+    "funnel_events": [
+      "AUDIT_STARTED",
+      "DATA_UPLOADED",
+      "AUDIT_COMPLETED",
+      "RECOVERY_FOUND",
+      "RESULT_VIEWED",
+      "CHECKOUT_STARTED",
+      "CHECKOUT_COMPLETED",
+      "PACKAGE_GENERATED",
+      "PACKAGE_DOWNLOADED"
+    ],
+    "implementation_started": "NO",
+    "queue_impact": "NONE —— 不打断 R45 → R46 → Full Regression；进入 Customs V1 时再实施 Checkout / Entitlement / Package Unlock"
   }
 }

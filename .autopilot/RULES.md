@@ -244,3 +244,11 @@ CrossClaim 不得伪造、代替或从 Platform OAuth 推导 Broker POA。
 此类模式必须另开 Funds Custody / Money Movement 合规审计。CrossClaim 成功费仍按 R12/R13（无有效 Payment Authorization 只出 Invoice，不自动扣款）。
 
 **R14.7 仅登记、不打断队列**：本规则不改变 R45 → R46；进入 Customs/BrokerConnector 实施批次时再提交独立设计、Schema Delta、合规审计与测试。
+
+## R15 — Customs Self-Service Pricing（HOST DIRECTIVE 2026-10-02 补充四）
+
+- 文档：`docs/releases/CUSTOMS-SELF-SERVICE-PRICING-CONTRACT.md`（已登记；**不实现**）。
+- 三层：FREE AUDIT → ONE-TIME RECOVERY PACKAGE → CONTINUOUS SUBSCRIPTION；Package Tier = MAX(Expected Recovery, Data Volume, Complexity)。
+- 价格一律**配置化**（EXPERIMENTAL），不得硬编码进 Rule Engine / Recovery Domain；不得免费暴露完整 filing 数据集。
+- Entitlement 服务端校验；Package Fee ≠ Success Fee；Checkout 用独立 Payment Provider，≠ Platform OAuth 推导。
+- 队列影响：NONE（不打断 R45 → R46 → Full Regression）。

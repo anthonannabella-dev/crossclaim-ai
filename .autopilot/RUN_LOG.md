@@ -1359,3 +1359,11 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 同 run 的 `API · migration + typecheck + tests` 为 success。
 - 处置：SELF_RESOLVE —— 触发该 run 的 failed-jobs 重跑（API 201），不修改任何代码。
 - 影响：无（本地 fresh deploy + two-stage upgrade + 全量 1751 tests 已通过；S1 证据不受影响）。
+
+## 2026-10-02 JST — HOST DIRECTIVE（补充四）：Customs Self-Service Pricing 登记
+
+- 文档：`docs/releases/CUSTOMS-SELF-SERVICE-PRICING-CONTRACT.md`（逐字保留原文 + 12 项登记状态）。
+- 规则：RULES R15；STATE.customs_pricing_directive。
+- 三层：FREE AUDIT → ONE-TIME PACKAGE → CONTINUOUS SUBSCRIPTION；Package Tier = MAX(Expected, Volume, Complexity)；价格配置化 EXPERIMENTAL。
+- Entitlement 服务端校验；Package Fee ≠ Success Fee；Checkout 独立 Payment Provider。
+- 队列影响：NONE（CURRENT_R45_R46_QUEUE_UNCHANGED = YES / CUSTOMS_PRICING_IMPLEMENTATION_STARTED = NO）。
