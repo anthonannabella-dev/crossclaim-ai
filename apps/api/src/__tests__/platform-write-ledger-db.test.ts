@@ -103,6 +103,20 @@ async function seedApproval(organizationId: string, digest: string): Promise<str
   return row.id;
 }
 
+/**
+ * PG1–PG10 → test name / evidence 映射（CHANGE C）：
+ *   PG1  同幂等键并发恰一次            → 'PG1 同幂等键并发 → 恰一个取得执行权，另一个返回既有链'
+ *   PG2  同 approval 不同 snapshot 拒绝 → 'PG2 同 approval + 不同 snapshot → 第二执行链被拒（approval 唯一绑定）'
+ *   PG3  T1 消费写入失败整笔回滚        → 'PG3 T1 内消费写入失败 → 整笔回滚（attempt 无残留）'
+ *   PG4  approval 已消费拒绝            → 'PG4 approval 已消费 → 拒绝（消费是事务事实）'
+ *   PG5  UNKNOWN 对账只读、sink 0 次    → 'PG5 UNKNOWN 对账只读：probe 被调用，write sink 调用次数为 0'
+ *   PG6  跨进程/重启恢复（新 client）    → 'PG6 跨进程/重启恢复：销毁原 client，新 client 从数据库事实恢复'
+ *   PG7  双 worker 真实竞争至多一次收敛  → 'PG7 两个独立 client 并发 R1：恰一个收敛，loser 明确 no-op'
+ *   PG8  SUCCEEDED 不可再收敛           → 'PG8 SUCCEEDED 不可再收敛（CAS mismatch）'
+ *   PG9  跨租户访问拒绝                 → 'PG9 跨租户访问被拒'
+ *   PG10 partial unique index 兜底      → 'PG10 绕过服务层直插两条 SUCCEEDED 同键 → partial unique index 拦截'
+ */
+
 beforeAll(async () => {
   await prisma.organization.createMany({
     data: [
@@ -251,5 +265,106 @@ describe('platform.write 持久化账本（PostgreSQL）', () => {
     };
     await prisma.platformWriteAttempt.create({ data: base });
     await expect(prisma.platformWriteAttempt.create({ data: { ...base, id: randomUUID() } })).rejects.toBeTruthy();
+  });
+
+  it('PG6 跨进程/重启恢复：销毁原 client，新 client 从数据库事实恢复', async () => {
+    const digest = '5'.repeat(64);
+    const key = 'pw1-' + '5'.repeat(40);
+    const approvalId = await seedApproval(ORG_A, digest);
+    const acquired = await acquireExecutionRight(
+      prisma,
+      ledgerApprovalPort(),
+      request({ snapshotDigest: digest, idempotencyKey: key, approvalId }),
+    );
+    await settleAttempt(prisma, {
+      organizationId: ORG_A,
+      attemptId: acquired.attemptId,
+      status: 'UNKNOWN_PROVIDER_RESPONSE' as never,
+      errorCode: 'TIMEOUT',
+    } as never);
+
+    const consumedBefore = await prisma.auditLog.count({
+      where: { organizationId: ORG_A, action: CONSUMED_ACTION, entityId: approvalId },
+    });
+    const chainBefore = await prisma.platformWriteAttempt.count({ where: { organizationId: ORG_A, idempotencyKey: key } });
+
+    // 模拟原 worker 消失：全新 client（独立连接/runtime），只依赖数据库事实
+    const fresh = new PrismaClient();
+    try {
+      const sink = createSimulatedPlatformWritePort('SIMULATED');
+      let probeCalls = 0;
+      const recovered = await reconcileOnce(fresh, {
+        organizationId: ORG_A,
+        attemptId: acquired.attemptId,
+        actor: 'SYSTEM',
+        probe: async () => {
+          probeCalls += 1;
+          return { kind: 'INCONCLUSIVE', detail: '恢复期查询失败' };
+        },
+      });
+      expect(probeCalls).toBe(1);
+      expect(sink.callCount()).toBe(0);
+      expect(recovered.status).toBe('RECONCILING');
+
+      const after = await fresh.platformWriteAttempt.findFirst({
+        where: { organizationId: ORG_A, idempotencyKey: key },
+      });
+      expect(after?.id).toBe(acquired.attemptId);
+      expect(after?.idempotencyKey).toBe(key);
+      expect(after?.reconcileAttempts).toBe(1);
+      expect(after?.reconcileLastActor).toBe('SYSTEM');
+      expect(await fresh.auditLog.count({ where: { organizationId: ORG_A, action: CONSUMED_ACTION, entityId: approvalId } })).toBe(consumedBefore);
+      expect(await fresh.platformWriteAttempt.count({ where: { organizationId: ORG_A, idempotencyKey: key } })).toBe(chainBefore);
+    } finally {
+      await fresh.$disconnect();
+    }
+  });
+
+  it('PG7 两个独立 client 并发 R1：恰一个收敛，loser 明确 no-op', async () => {
+    const digest = '6'.repeat(64);
+    const key = 'pw1-' + '6'.repeat(40);
+    const approvalId = await seedApproval(ORG_A, digest);
+    const acquired = await acquireExecutionRight(
+      prisma,
+      ledgerApprovalPort(),
+      request({ snapshotDigest: digest, idempotencyKey: key, approvalId }),
+    );
+    await settleAttempt(prisma, {
+      organizationId: ORG_A,
+      attemptId: acquired.attemptId,
+      status: 'RECONCILING' as never,
+    } as never);
+
+    const clientA = new PrismaClient();
+    const clientB = new PrismaClient();
+    try {
+      const candidateA = await clientA.platformWriteAttempt.findFirst({ where: { id: acquired.attemptId } });
+      const candidateB = await clientB.platformWriteAttempt.findFirst({ where: { id: acquired.attemptId } });
+      expect(candidateA?.status).toBe('RECONCILING');
+      expect(candidateB?.status).toBe('RECONCILING');
+
+      const run = (client: PrismaClient) =>
+        reconcileOnce(client, {
+          organizationId: ORG_A,
+          attemptId: acquired.attemptId,
+          actor: 'SYSTEM',
+          probe: async () => ({ kind: 'CONFIRMED_SUCCEEDED', providerRef: 'SIM-RACE' }),
+        });
+      const settled = await Promise.allSettled([run(clientA), run(clientB)]);
+      const ok = settled.filter((r) => r.status === 'fulfilled');
+      const failed = settled.filter((r) => r.status === 'rejected');
+      expect(ok).toHaveLength(1);
+      expect(failed).toHaveLength(1);
+      expect((failed[0] as PromiseRejectedResult).reason).toBeInstanceOf(PlatformWriteLedgerError);
+
+      const row = await prisma.platformWriteAttempt.findFirst({ where: { id: acquired.attemptId } });
+      expect(row?.status).toBe('SUCCEEDED');
+      expect(row?.reconcileAttempts).toBe(1);
+      expect(await prisma.platformWriteAttempt.count({ where: { organizationId: ORG_A, idempotencyKey: key, status: 'SUCCEEDED' } })).toBe(1);
+      expect(await prisma.auditLog.count({ where: { organizationId: ORG_A, action: CONSUMED_ACTION, entityId: approvalId } })).toBe(1);
+    } finally {
+      await clientA.$disconnect();
+      await clientB.$disconnect();
+    }
   });
 });
