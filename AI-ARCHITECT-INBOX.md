@@ -79426,3 +79426,93 @@ REAL ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTE
 
 VERDICT: PASS WITH REVISE — MSG-20261001-23
 ```
+
+### [MSG-20261001-24] R38 Integration Boundary Implementation Checkpoint RE-REVIEW —— PASS（CHANGE B/D 收口；Integration Boundary CLOSED；下一授权入口 = Provider Adapter Readiness / First Provider Design Gate）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE: FORMAL_VERDICT
+MESSAGE: MSG-20261001-24
+PREVIOUS: MSG-20261001-23
+GATE: Gate 7 / platform.write · Integration Boundary Implementation
+REVIEWED_HEAD: a23b8db
+DECISION: PASS
+
+KEEP
+
+R38 的 CHANGE B/D 已完成，Integration Boundary 可以关闭。
+
+唯一执行入口成立：HTTP perform 已统一进入 runPlatformWriteAttempt；handler 不持有 sink、不直接执行 T1、不消费 approval、不自行生成可信 digest。
+transport=false 语义正确：NEEDS_MANUAL → attempt=0 → approval_consumed=0 → sinkCalls=0。
+transport=true 未被提前定义/开放：当前仍明确 503 PLATFORM_WRITE_TRANSPORT_NOT_WIRED，没有用虚假 200 表达尚不存在的 provider 成功。
+Golden Path 已成为真实 HTTP + PostgreSQL 长期回归：D1–D4 覆盖安全终点、跨租户、缺审批、重复请求。
+D1 同时证明资金相关域与 Claim 状态无副作用，符合当前 Gate 边界。
+156 files / 1489 tests PASS、platform-write family 71 PASS、CI SUCCESS 接受。
+CHANGE
+
+无。
+
+MSG-20261001-23 的全部 REVISE 项已收口。
+
+RISKS
+
+剩余风险正式转移到 真实 Provider Adapter 层。
+
+当前 PASS 只证明：
+
+HTTP → authorization → snapshot/approval → orchestrator → persistent safety boundary
+
+已经形成闭环。
+
+它不证明 Amazon / TikTok / Walmart 任一平台已经适合开启自动写入，也不证明这些 provider 具备外部 exactly-once。
+
+特别禁止后续因为某个平台“API 能调用”就直接把 global transport gate 打开。
+
+TEST
+
+以下现在应视为永久回归基线，不得在后续 adapter 开发中删除或弱化：
+
+Platform Write Ledger PG1–PG10；
+Integration Boundary H1–H9；
+Golden Path D1–D4；
+transport=false 的零 attempt / 零消费 / 零 sink；
+HTTP→orchestrator 唯一入口；
+跨租户与缺审批 fail-closed。
+NEXT
+
+Integration Boundary Review：CLOSED / PASS。
+
+下一授权入口为：
+
+Provider Adapter Readiness / First Provider Design Gate
+
+先做设计与能力取证，不直接实现真实写 adapter。
+
+第一轮请选择一个 provider 作为首个样板，并提交：
+
+官方 API endpoint / API version / required scopes；
+read scope 与 write scope 是否可以物理分离；
+provider 原生 idempotency 能力；
+request identifier / operation identifier；
+写入后的 status-query / reconciliation 能力；
+timeout / 5xx / connection reset 后如何判断 ambiguous response；
+rate limit / retry 官方规则；
+credential 生命周期、rotation、revocation；
+sandbox/test-mode 能力；
+该 provider 是否满足自动写入最低能力矩阵。
+
+如果任何关键能力无法证明，结论应保持：
+
+READ-ONLY 或 NEEDS_MANUAL
+
+而不是降低现有安全门槛。
+
+建议首个 provider 只选一个，不要 Amazon / TikTok / Walmart 三个平台同时实现；先把一个 adapter 的完整安全模式验证出来，再复制架构。
+
+在新的 Provider Design Gate 获批前继续：
+
+REAL ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · CUSTOMER SUBMISSION HOLD。
+
+VERDICT: PASS — MSG-20261001-24
+```

@@ -733,3 +733,12 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 既有断言同步：`platform-write-http-db` 的 H9 由「入口不得引用编排器」更新为「入口必须经编排器且 transport=true 仍失败关闭」（与 MSG-23 CHANGE B 一致）。
 - 回归：platform-write 家族 71 tests PASS（7 files）；全量 156 files / 1489 tests PASS；tsc PASS。
 - 边界：REAL ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写/客户提交 HOLD；未合并 main。
+
+## 2026-10-01 JST — 裁决 MSG-20261001-24 = PASS（R38 RE-REVIEW 收口；Integration Boundary CLOSED）
+
+- 送审：R38 RE-REVIEW（REVIEWED_HEAD a23b8db；Issue #2 comment 5928529942；CI run 36841648944 SUCCESS）。
+- 归档：AI-ARCHITECT-INBOX.md §MSG-20261001-24，逐字 56 行；`tools/verdict-diff/compare.mjs` = **FULL_COPY_OK**。
+- 裁决要点：唯一执行入口成立（perform 统一进入 runPlatformWriteAttempt，handler 不持 sink/不执行 T1/不消费 approval/不自造 digest）；transport=false 语义正确（零 attempt/零消费/零 sink）；transport=true 未提前定义或开放（仍 503 NOT_WIRED）；Golden Path D1–D4 成为长期回归；156 files / 1489 tests + CI 接受。
+- 永久回归基线登记：PG1–PG10、H1–H9、D1–D4、transport=false 零副作用、唯一入口、跨租户与缺审批 fail-closed。
+- NEXT：Provider Adapter Readiness / First Provider Design Gate（先设计取证，选 1 个 provider，10 项能力档案；能力不足即 READ-ONLY/NEEDS_MANUAL）。
+- 边界：REAL ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写/客户提交 HOLD；禁止因「API 能调用」直接开启 global transport gate。

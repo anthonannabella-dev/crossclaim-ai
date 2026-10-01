@@ -153,3 +153,11 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - 架构契约：`B1` 断言入口只经编排器、T1/T2/T3 仅存在于 orchestrator；原 P4 的 H9 断言已按 CHANGE B 更新。
 - 回归：platform-write 家族 71 tests PASS；全量 156 files / 1489 tests PASS；tsc PASS。
 - NEXT：提交 R38 RE-REVIEW → PASS 后进入 Provider Adapter Readiness / First Provider Design Gate。
+
+### MSG-20261001-24 裁决（Integration Boundary CLOSED → Provider Adapter Readiness）
+
+- DECISION：**PASS**（REVIEWED_HEAD a23b8db；归档 FULL_COPY_OK 56 行）；MSG-20261001-23 的 REVISE 项全部收口，**Integration Boundary Review CLOSED**。
+- 永久回归基线（不得删除或弱化）：Platform Write Ledger PG1–PG10、Integration Boundary H1–H9、Golden Path D1–D4、transport=false 零 attempt/零消费/零 sink、HTTP→orchestrator 唯一入口、跨租户与缺审批 fail-closed。
+- NEXT（Provider Adapter Readiness / First Provider Design Gate，**先设计取证、不实现真实写 adapter**）：选定 1 个 provider 作为首个样板，提交 10 项能力档案（endpoint/version/scopes；read·write scope 是否可物理分离；原生 idempotency；request/operation identifier；status-query/reconciliation；ambiguous response 判定；rate limit/retry；credential 生命周期；sandbox/test-mode；自动写入最低能力矩阵评估）。
+- 结论口径：任一关键能力无法证明 → 保持 READ-ONLY / NEEDS_MANUAL，不降低现有安全门槛；建议只选一个 provider 先把完整安全模式验证出来。
+- 期间保持：REAL ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · CUSTOMER SUBMISSION HOLD。
