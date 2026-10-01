@@ -676,3 +676,10 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 新增 apps/api/src/__tests__/platform-write-adapter-capability.test.ts：8/8 PASS（含「全局 gate 关闭时即使能力齐备也不得调用 transport」与「gate=true 但 adapter 不合格/授权无效同样 fail-closed」）。
 - 未新增数据库 Schema（按 CHANGE C）；未接真实 adapter/凭据；transport 恒关。
 - 下一步：P1 主体（路由 + 守卫接线，响应显式 platformWriteExecuted=false / executionDisposition=NEEDS_MANUAL）。
+
+## 2026-10-01 JST — P1 增量：HTTP 响应契约（CHANGE B）
+
+- 新增 apps/api/src/services/platform-write/response-contract.ts：buildPlatformWriteResponse（transport 关闭时 platformWriteExecuted=false、executionDisposition=NEEDS_MANUAL；字段白名单；transport 开启时抛 RESPONSE_CONTRACT_NOT_DEFINED_FOR_ENABLED_TRANSPORT）+ assertNoProviderSuccessFields（providerRef/providerStatus/externalRef/sinkCalls/providerSuccess 黑名单）。
+- 新增单测 platform-write-response-contract.test.ts：5/5 PASS。
+- 边界：未接线路由、未接真实 adapter、transport 恒关。
+- 下一步：P1 主体（路由 + 守卫接线）。
