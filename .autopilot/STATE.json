@@ -1,17 +1,17 @@
 {
   "gate": "B2-FIX R1",
-  "head": "4c43b41",
+  "head": "5c66e91",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
   "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
   "send_head": "07b7009",
   "decision_head": "07b7009",
-  "last_chatgpt_message": "MSG-20261001-41",
+  "last_chatgpt_message": "MSG-20261001-42",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T13:37:50.685Z",
-  "previous_head": "3ff9c7e",
-  "architect_decision_pending": true,
+  "updated_at": "2026-10-01T13:39:15.842Z",
+  "previous_head": "4c43b41",
+  "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "4c43b41",
   "last_sent_at": "2026-10-01T13:37:50.685Z",
@@ -49,12 +49,12 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-01T13:37:50.957Z",
+  "last_tick_at": "2026-10-01T13:38:45.375Z",
   "state": "IMPLEMENT",
-  "last_action": "SCHEDULER_STALE_RECOVERED（gap=18min）→ 本轮已恢复执行",
-  "last_action_at": "2026-10-01T13:37:50.685Z",
-  "next_action": "等待 R44-A 增量裁决：①PASS → R44-A CLOSED，按裁决进入 R44-B（reference 审批创建）或架构方指定单元 ②REVISE → 按 CHANGE 修改重送 ③BLOCK → 停止该入口。",
-  "current_head": "4c43b41",
+  "last_action": "MSG-20261001-42 = PASS 已逐字归档并 FULL_COPY_OK —— R44-A CLOSED；NEXT = R44-B Manual Recovery Reference Approval Creation",
+  "last_action_at": "2026-10-01T13:39:15.842Z",
+  "next_action": "R44-B — Manual Recovery Reference Approval Creation Boundary：为 recovery.manual_submit_reference_recorded 建独立 approval creation 入口（raw 由客户端、canonical 恒服务端构造；extra = submissionId + claimItemId + providerCaseRefCanonical；action isolation 双向；幂等；creation 不创建 Reference / 不改 Submission·ClaimItem / 不消费 approval / 不产生 providerAccepted；创建后 canonical 变化 → execution fail-closed）。",
+  "current_head": "5c66e91",
   "reviewed_head": "07b7009",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-01T13:19:50.158Z",
-    "gapMs": 1080800,
-    "stale": true,
-    "checkedAt": "2026-10-01T13:37:50.957Z"
+    "previousTickAt": "2026-10-01T13:37:50.957Z",
+    "gapMs": 54419,
+    "stale": false,
+    "checkedAt": "2026-10-01T13:38:45.375Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -1279,5 +1279,50 @@
     "wakeup_channel": "https://chatgpt.com/c/6ab9ee1b-fd54-83ee-b363-b67750afcedd",
     "wakeup_delivery": "DELIVERED_VERIFIED（输入框清空 / 新用户消息在底部 / 生成中）",
     "architect_connector_note": "架构方在本会话说明其 GitHub 连接器写回 Issue #2 返回 403（Resource not accessible by integration），故 MSG-41 未由其写回；架构方明确 Codex 可按 PASS 继续。本项目侧全部留档（INBOX + Issue #2 comment + STATE）完整。"
+  },
+  "r44a_verdict": {
+    "message_id": "MSG-20261001-42",
+    "decision": "PASS",
+    "reviewed_head": "4c43b41",
+    "ci_run": "36868784356",
+    "archival": "FULL_COPY_OK",
+    "archival_at": "2026-10-01T13:39:15.842Z",
+    "status": "R44-A CLOSED；R44-B 已获批准进入",
+    "rulings": {
+      "boundary_accepted": "同一 basis builder + 既有 review service + 五元强绑定 + terminal package fail-closed —— 认可",
+      "zero_side_effect": "creation 对 ClaimItem / Submission / approval consumption / Settlement / Billing 零副作用 —— 满足（12 个真库 HTTP 用例覆盖 14 项语义；不要求机械拆 14 个 test function）",
+      "next": "R44-B — Manual Recovery Reference Approval Creation Boundary"
+    },
+    "r44b_rules": [
+      "不得把 providerCaseRef 作为客户端可信 canonical identity：客户端可提交 raw，canonical 必须由服务端构造",
+      "reference approval 不得被解释为 provider accepted（只授权“记录人工取得的 provider reference”）",
+      "reference approval 与 manual-submit approval 必须严格 action isolation（双向不可复用）"
+    ],
+    "r44b_tests": [
+      "未认证 / 非法角色",
+      "跨租户 / wrong case / wrong submission",
+      "raw reference 为空",
+      "客户端伪造 canonical reference",
+      "canonicalization 服务端生成",
+      "approval boundAction 必须等于 recovery.manual_submit_reference_recorded",
+      "approval extra 至少绑定 submissionId + claimItemId + providerCaseRefCanonical",
+      "S3/R44-A approval 不能复用于 reference action",
+      "reference approval 不能复用于 manual-submit",
+      "duplicate same canonical reference approval 幂等",
+      "canonical-changing input → 旧 approval execution fail-closed",
+      "approval creation 不创建 Reference",
+      "creation 不改变 Submission / ClaimItem",
+      "creation 不消费 approval",
+      "creation 不产生 providerAccepted/reimbursed/recovered",
+      "Settlement/Billing/RecoveryLedger/Payment 零变化",
+      "创建出的 reference approval 可被现有 R44 reference execution endpoint 正常消费一次"
+    ],
+    "r44b_scope_out": [
+      "outcome tracking",
+      "reimbursement reconciliation",
+      "Settlement/Billing linkage",
+      "Amazon write",
+      "provider acceptance inference"
+    ]
   }
 }

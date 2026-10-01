@@ -394,3 +394,9 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - 证据：12/12 新用例；recovery-manual-* + admin-recovery-review 102/102；tsc PASS；prisma validate valid；无新增依赖。
 - 送审：REVIEWED_HEAD 4c43b41（Issue #2 comment 5932597311 / CI 36868784356）。
 - NEXT：PASS → R44-B（reference 审批创建）或架构方指定；REVISE → 按 CHANGE 重送；BLOCK → 停止。
+
+### MSG-20261001-42 裁决（R44-A CLOSED → 进入 R44-B Reference Approval Creation）
+
+- DECISION：**PASS**（REVIEWED_HEAD 4c43b41；归档 FULL_COPY_OK）。R44-A 关闭。
+- NEXT：**R44-B**：为 `recovery.manual_submit_reference_recorded` 建独立 approval creation 入口；raw→canonical 由服务端；extra 绑 submissionId + claimItemId + providerCaseRefCanonical；action isolation 双向；幂等；creation 不创建 Reference；canonical 变化 → execution fail-closed。
+- 范围外：outcome tracking · reimbursement reconciliation · Settlement/Billing linkage · Amazon write · provider acceptance inference。

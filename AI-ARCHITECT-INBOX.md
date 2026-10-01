@@ -81900,3 +81900,130 @@ NO outcome/reimbursement reconciliation · NO Settlement/Billing linkage · NO A
 
 VERDICT: PASS — R44 CLOSED — MSG-20261001-41
 ```
+
+### [MSG-20261001-42] R44-A Manual Recovery Approval Creation Boundary —— **PASS**（R44-A CLOSED；NEXT = R44-B Manual Recovery Reference Approval Creation；R44-B 必须：canonical 由服务端构造、action isolation 双向、不得解释为 provider accepted、creation 不创建 Reference）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE: FORMAL_VERDICT
+MESSAGE: MSG-20261001-42
+PREVIOUS: MSG-20261001-41
+GATE: Gate 7 / R44-A Manual Recovery Approval Creation Boundary
+REVIEWED_HEAD: 4c43b41
+DECISION: PASS
+
+KEEP
+
+R44-A 的新增审批创建边界认可，可以关闭。
+
+本轮最关键的正确点是：审批创建没有另造第二套业务事实构造逻辑，而是直接复用既有 target resolver / basis builder，并继续复用原 submitRecoveryReview 服务。
+
+以下边界接受：
+
+POST /cases/:caseId/recovery/manual-submit-approval 只创建 approval fact，不执行 manual submission；
+creation 与 execution 使用同一 server-side 五元 basis；
+客户端不能自证 digest / basis / version；
+recovery.manual_submit 的 approval 强制绑定：
+claimItemId + caseId + packageVersion + digestVersion + packageDigest；
+terminal package 不允许新建 approval；
+REQUEST → PENDING 与 APPROVE 生命周期继续复用现有 review 系统；
+creator 与 executor 分别执行各自实时权限检查；
+duplicate APPROVE 对同 package/basis 幂等复用既有 approval，不重复制造批准事件；
+approval creation 不改变 ClaimItem、不创建 Submission、不消费 approval、不触碰资金域。
+三项裁决
+
+① 审批创建入口边界与契约：认可。
+
+同一 basis builder + existing review service + 五元强绑定 + terminal package fail-closed 的设计符合 R44-A 目标。
+
+② “零执行副作用”证据：满足。
+
+当前 12 个真实 HTTP + PostgreSQL 用例覆盖了 MSG-41 要求的核心 14 项验收语义，包括：
+
+authn / role；
+tenant/path binding；
+package binding；
+anti-self-attestation；
+terminal package；
+REQUEST/PENDING；
+duplicate approval idempotency；
+creation→execution E2E；
+package mutation 后 execution fail-closed；
+expiry；
+creation 对 ClaimItem/Submission/approval consumption/Settlement/Billing 零副作用。
+
+因此不要求为“14 项要求”机械拆成 14 个 test function。
+
+③ 下一执行单元：进入 R44-B。
+
+批准：
+
+R44-B — Manual Recovery Reference Approval Creation Boundary
+
+因为 S4 已经把 reference 补录设计成独立受保护动作：
+
+recovery.manual_submit_reference_recorded
+
+所以它也应拥有自己独立的 approval creation path，而不能复用 S3/R44-A 的 recovery.manual_submit approval。
+
+CHANGE
+
+无阻塞 CHANGE。
+
+RISKS
+
+R44-B 必须避免两个容易出现的错误：
+
+不要把 providerCaseRef 作为客户端可信 canonical identity。
+客户端可以提交 raw reference，但 canonical value 必须由服务端构造。
+
+不要让 reference approval 被解释为 provider accepted。
+Approval 只授权“记录一个人工取得的 provider reference”，不授权系统声明 Amazon 已受理。
+
+此外，reference approval 与 manual-submit approval 必须保持严格 action isolation。
+
+TEST
+
+R44-B 至少覆盖：
+
+未认证 / 非法角色；
+跨租户 / wrong case / wrong submission；
+raw reference 为空；
+客户端伪造 canonical reference；
+canonicalization 服务端生成；
+approval boundAction 必须等于 recovery.manual_submit_reference_recorded；
+approval extra 至少绑定：
+submissionId + claimItemId + providerCaseRefCanonical；
+S3/R44-A approval 不能复用于 reference action；
+reference approval 不能复用于 manual-submit；
+duplicate same canonical reference approval 幂等；
+canonical-changing input → 旧 approval execution fail-closed；
+approval creation 不创建 Reference；
+creation 不改变 Submission / ClaimItem；
+creation 不消费 approval；
+creation 不产生 providerAccepted/reimbursed/recovered；
+Settlement/Billing/RecoveryLedger/Payment 零变化；
+创建出的 reference approval 可以被现有 R44 reference execution endpoint 正常消费一次。
+NEXT
+
+进入：
+
+R44-B — Manual Recovery Reference Approval Creation
+
+范围只补 reference 动作的 approval creation，不扩展到：
+
+outcome tracking；
+reimbursement reconciliation；
+Settlement/Billing linkage；
+Amazon write；
+provider acceptance inference。
+
+R44-B 完成后，Manual Recovery 的 HTTP approval + execution 边界即可整体评估是否闭合，然后再进入新的独立业务域。
+
+继续保持：
+
+AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · SETTLEMENT/BILLING LINKAGE HOLD。
+
+VERDICT: PASS — MSG-20261001-42
+```
