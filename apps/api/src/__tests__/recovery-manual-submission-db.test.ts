@@ -107,6 +107,8 @@ async function createApproval(input: {
       action: 'recovery.review_required',
       entityType: 'Case',
       entityId: input.caseId,
+      // 夹具确定化（断言不变）：required 必须严格早于 approved，避免同毫秒导致 APPROVAL_NOT_APPROVED
+      createdAt: new Date(Date.now() - 2_000),
       changes: { claimItemId: input.claimItemId },
     },
   });
@@ -118,6 +120,7 @@ async function createApproval(input: {
       action: 'recovery.review_approved',
       entityType: 'Case',
       entityId: input.caseId,
+      createdAt: new Date(Date.now() - 1_000),
       changes: {
         boundAction: input.action ?? RECOVERY_MANUAL_SUBMIT_ACTION,
         expiresAt: (input.expiresAt ?? new Date(Date.now() + 3600_000)).toISOString(),
