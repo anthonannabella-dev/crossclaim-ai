@@ -981,3 +981,14 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 本地备注：migration-checksum 对 20260930100000 的本地误报由 CRLF 行尾造成（hash(CRLF)≠pinned；LF 归一后一致），CI 为权威。
 - 送审：REVIEWED_HEAD f77da82（Issue #2 comment 5931572320 / CI 36861687249 success（5/5 jobs: API / Deploy smoke / Backup restore verify / Web typecheck+build / 许可证闸门））；唤醒已投递并验证。
 - HOLD 保持：AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · SETTLEMENT/BILLING LINKAGE HOLD。
+
+## 2026-10-01 JST — MSG-20261001-39 = PASS（R43 整体关闭）→ 进入 R44 Manual Recovery HTTP/API Boundary
+
+- 裁决：**PASS — R43 CLOSED**（REVIEWED_HEAD f77da82；CI 36861687249 = SUCCESS 5/5）。S6 关闭；**R43 Manual Recovery Persistence（S1–S6）整体关闭**，不再创建 S7/S8。
+- CHANGE A/B 收口：A 已从“存在 approval”提升为对当前 submission 的授权语义验证（tenant + approved event + Case target + recovery.manual_submit + exact versioned basis + fingerprintVersion=v1）；B 形成 DB accepts intentional drift → checker rejects → snapshot unchanged，且未绕过 CHECK/UNIQUE/FK。
+- R43 完成定义（冻结）：ClaimItem → RecoveryPackage → Human Approval → atomic manual submission fact → optional provider reference → immutable evidence/audit trail → consistency verification。
+- 永久基线（冻结）：M1–M28 + PG1–PG10 + H1–H9 + D1–D4 + canonical/digest determinism + approval semantic binding + transaction failure rollback + concurrency/exactly-once + reference canonicalization + checker intentional drift + fresh deploy + two-stage upgrade + tenant/immutable/append-only trigger inventories + architecture/audit contracts；后续不得删除/skip/弱化。
+- 遗留被接受为范围之外（三个独立后续边界）：HTTP/API Exposure（R44）、Outcome & Reimbursement Reconciliation（R45）、Settlement/Billing Linkage（R46）。
+- NEXT：**R44 — Manual Recovery HTTP/API Boundary**（仅入口边界；不得实现 outcome/reconciliation、不得联动 Settlement/Billing、不得开启任何 Amazon write transport）。
+- 档案：`AI-ARCHITECT-INBOX.md` → `MSG-20261001-39`；`tools/verdict-diff/compare.mjs` = **FULL_COPY_OK**。
+- HOLD 保持：AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · SETTLEMENT/BILLING LINKAGE HOLD。

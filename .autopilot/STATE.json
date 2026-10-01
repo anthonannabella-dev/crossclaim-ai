@@ -1,17 +1,17 @@
 {
   "gate": "B2-FIX R1",
-  "head": "f77da82",
+  "head": "3a68d17",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
   "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
   "send_head": "07b7009",
   "decision_head": "07b7009",
-  "last_chatgpt_message": "MSG-20261001-38",
+  "last_chatgpt_message": "MSG-20261001-39",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T12:34:27.336Z",
+  "updated_at": "2026-10-01T12:35:52.643Z",
   "previous_head": "18cbf8b",
-  "architect_decision_pending": true,
+  "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "f77da82",
   "last_sent_at": "2026-10-01T12:34:27.336Z",
@@ -51,10 +51,10 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-01T12:03:15.518Z",
   "state": "IMPLEMENT",
-  "last_action": "R43 S6 Full Regression / Release Checkpoint 已送审（CHANGE A approval 语义强校验 + CHANGE B 真实可制造漂移；checker 11/11；全量 165 files / 1574 tests PASS；two-stage upgrade OK）—— 等待架构方判定 CHANGE A/B 收口、S6 关闭与 R43 整体关闭",
-  "last_action_at": "2026-10-01T12:34:27.336Z",
-  "next_action": "等待 R43 S6 / R43 整体关闭裁决：①PASS → R43 Manual Recovery Persistence 整体关闭，转入 TASKS.md 下一授权队列项（② 剩余业务入口批次，须另送审）②REVISE → 按 CHANGE 修改后重送 ③BLOCK → 停止该方案。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
-  "current_head": "f77da82",
+  "last_action": "MSG-20261001-39 = PASS — R43 CLOSED 已逐字归档并 FULL_COPY_OK —— R43 Manual Recovery Persistence（S1–S6）整体关闭；NEXT = R44 Manual Recovery HTTP/API Boundary（仅入口边界；不得联动 outcome/Settlement/Billing，不得开放任何平台写 transport）",
+  "last_action_at": "2026-10-01T12:35:52.643Z",
+  "next_action": "R44 — Manual Recovery HTTP/API Boundary：先提交实现计划/边界送审（authn → tenant/role → action guard → 服务端 package/basis 解析 → 复用 S3/S4 服务 → 响应语义；跨租户 404、客户端不得自证 digest/basis、重复/并发、错误 package/reference binding、失败零推进、handler 不复制事务逻辑）。R44 不得实现 outcome/reimbursement reconciliation、不得联动 Settlement/Billing、不得开启任何 Amazon write transport。",
+  "current_head": "3a68d17",
   "reviewed_head": "07b7009",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -1033,5 +1033,37 @@
       "transport=false / REAL WRITE ADAPTER / AMAZON WRITE / PRODUCTION CREDENTIALS / SETTLEMENT·BILLING LINKAGE 全部继续 HOLD"
     ],
     "wakeup_channel": "https://chatgpt.com/c/6ab9ee1b-fd54-83ee-b363-b67750afcedd"
+  },
+  "r43s6_verdict": {
+    "message_id": "MSG-20261001-39",
+    "decision": "PASS — R43 CLOSED",
+    "reviewed_head": "f77da82",
+    "ci_run": "36861687249",
+    "ci_conclusion": "SUCCESS 5/5",
+    "archival": "FULL_COPY_OK",
+    "archival_at": "2026-10-01T12:35:52.643Z",
+    "status": "S6 CLOSED / R43 CLOSED（R43 Manual Recovery Persistence 整体关闭，不再创建 S7/S8）",
+    "rulings": {
+      "s6_close": "PASS，可以关闭（165 files / 1574 tests、CI 5/5、fresh/upgrade、trigger inventories、checker、tsc、Prisma validation、PG/H/D/M 映射已构成足够 release checkpoint 证据）",
+      "r43_close": "PASS，R43 Manual Recovery Persistence 可以整体关闭",
+      "change_ab": "MSG-38 CHANGE A / B 均已收口（A 从“存在 approval”提升为对当前 submission 的授权语义验证；B 形成 DB accepts intentional drift → checker rejects → snapshot unchanged，且未绕过 CHECK/UNIQUE/FK）",
+      "gaps_accepted": "三项 known remaining gaps 接受为 R43 范围之外，且是三个独立后续能力边界：HTTP/API Exposure、Outcome & Reimbursement Reconciliation、Settlement/Billing Linkage"
+    },
+    "r43_completion_definition": "ClaimItem → RecoveryPackage → Human Approval → atomic manual submission fact → optional provider reference → immutable evidence/audit trail → consistency verification（持久化闭环成立）",
+    "permanent_baseline": "M1–M28 + PG1–PG10 + H1–H9 + D1–D4 + canonical/digest determinism + approval semantic binding + transaction failure rollback + concurrency/exactly-once + reference canonicalization + consistency checker intentional drift + fresh deploy + two-stage upgrade + tenant/immutable/append-only trigger inventories + architecture/audit contracts —— 后续不得通过删除、skip 或弱化测试获得通过",
+    "risks_after_close": "入口与后续业务层错误解释事实：package generated/exported ≠ submitted manually ≠ provider accepted ≠ reimbursed/recovered；providerCaseRef 存在不得被解释为 Amazon 已受理或已赔付",
+    "next_batch": {
+      "id": "R44 — Manual Recovery HTTP/API Boundary",
+      "scope_only": "authn → tenant/role → action guard → server-side package/basis resolution → 复用既有 S3/S4 service → response semantics；重点验证跨租户 404、客户端不得自证 digest/basis、重复/并发、错误 package/reference binding、失败零推进，以及 HTTP handler 不复制 S3/S4 事务逻辑",
+      "forbid": [
+        "outcome/reimbursement reconciliation",
+        "Settlement/Billing linkage",
+        "任何 Amazon write transport"
+      ],
+      "later": [
+        "R45 — Outcome / Reimbursement Reconciliation",
+        "R46 — Settlement / Billing Linkage（需单独设计与审计）"
+      ]
+    }
   }
 }

@@ -25,6 +25,7 @@
 ## 下一队列（已授权，等待 PR #11 裁决后再开工）
 
 - [ ] 13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。
+- [ ] 14. R44 — Manual Recovery HTTP/API Boundary（MSG-20261001-39 裁决 NEXT）：仅做入口边界 —— authn → tenant/role → action guard → 服务端 package/basis 解析（客户端不得自证 digest/basis）→ 复用既有 S3/S4 service → 响应语义；验证跨租户 404、重复/并发、错误 package/reference binding、失败零推进、handler 不复制 S3/S4 事务逻辑。禁止 outcome/reimbursement reconciliation、Settlement/Billing 联动、任何平台写 transport。先提交实现计划/边界送审。
 - 开工前先确认：不与 PR #11 的集成范围冲突；涉及安全/资金/规则引擎/Gate 边界的部分需架构方裁决。
 
 ## 双账（B2）
@@ -331,4 +332,12 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - 证据：checker 11/11；全量 165 files / 1574 tests PASS；two-stage upgrade OK；租户触发器 42 / append-only 5；tsc + prisma validate PASS；api-contract + audit-coverage OK。
 - 送审：REVIEWED_HEAD f77da82（Issue #2 comment 5931572320 / CI 36861687249）。
 - NEXT：PASS（且 R43 整体关闭获批）→ 转为下一授权队列批次（② 剩余业务入口，须另送审）；REVISE → 按 CHANGE 重送；BLOCK → 停止。
+- 保持：AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · SETTLEMENT/BILLING LINKAGE HOLD。
+
+### MSG-20261001-39 裁决（R43 整体关闭 → R44 Manual Recovery HTTP/API Boundary）
+
+- DECISION：**PASS — R43 CLOSED**（REVIEWED_HEAD f77da82；CI 36861687249 SUCCESS 5/5；归档 FULL_COPY_OK）。R43 S1–S6 整体关闭，不再创建 S7/S8。
+- 冻结：R43 完成定义（持久化闭环）+ 永久回归基线（M1–M28 / PG1–PG10 / H1–H9 / D1–D4 / canonical·digest / approval semantic binding / 事务故障回滚 / 并发 exactly-once / reference canonicalization / checker intentional drift / fresh + two-stage upgrade / trigger inventories / architecture·audit contracts）。
+- NEXT：**R44 — Manual Recovery HTTP/API Boundary**（仅入口边界：authn → tenant/role → action guard → 服务端 package/basis 解析 → 复用 S3/S4 服务 → 响应语义）；不得实现 outcome/reconciliation、不得联动 Settlement/Billing、不得开启任何平台写 transport。
+- 后续独立批次：R45 Outcome/Reimbursement Reconciliation、R46 Settlement/Billing Linkage（各自单独设计+审计）。
 - 保持：AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · SETTLEMENT/BILLING LINKAGE HOLD。
