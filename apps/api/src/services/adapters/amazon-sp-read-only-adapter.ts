@@ -213,13 +213,14 @@ function extractRecords(body: unknown): { records: unknown[]; nextToken: string 
 }
 
 /**
- * 只读抓取：operation 授权（fail-closed）→ 凭据端口取 LWA token → GET（含分页 token）→ 429 退避重试。
+ * 单页只读抓取（连接器 cursor「一页一推进」语义）：
+ * operation 授权（fail-closed）→ 凭据端口取 LWA token → 单次 GET（可携带 cursor）→ 429 退避重试。
  * 429 重试只重放**同一次只读请求**，不产生任何业务记录副作用。
  */
-export async function fetchAmazonReadPages(
+export async function fetchAmazonReadPage(
   deps: AmazonReadFetcherDeps,
-  input: AmazonReadFetchInput,
-): Promise<AmazonReadFetchResult> {
+  input: AmazonReadFetchInput & { cursor?: string | null },
+): Promise<{ operation: string; attempts: number; records: unknown[]; nextToken: string | null }> {
   const authorization = authorizeAmazonReadOperation({
     operation: input.operation,
     resource: input.resource,
@@ -237,47 +238,64 @@ export async function fetchAmazonReadPages(
   const maxAttempts = Math.max(1, input.maxAttempts ?? 3);
   const sleep = deps.sleep ?? (async () => undefined);
 
+  const query: Record<string, string> = { ...(input.query ?? {}) };
+  if (input.cursor) query.NextToken = input.cursor;
+
+  let attempts = 0;
+  let attempt = 0;
+  let response: { status: number; headers?: Record<string, string>; body: unknown } | null = null;
+  for (;;) {
+    attempt += 1;
+    attempts += 1;
+    response = await deps.transport.get({
+      path,
+      query,
+      headers: { 'x-amz-access-token': token.token, accept: 'application/json' },
+    });
+    if (response.status !== 429) break;
+    if (attempt >= maxAttempts) {
+      throw new AmazonAdapterBoundaryError('AMAZON_READ_THROTTLED', '429 重试次数耗尽');
+    }
+    // 官方口径：429 可重试，需要退避；退避长度由 descriptor 的恢复速率推导
+    await sleep(Math.min(2000, Math.ceil(1000 / Math.max(0.0001, descriptor.rateLimit.restorePerSecond))));
+  }
+  if (!response) throw new AmazonAdapterBoundaryError('AMAZON_READ_TRANSPORT_FAILED', '无响应');
+  if (response.status >= 500) {
+    throw new AmazonAdapterBoundaryError('AMAZON_READ_TRANSPORT_FAILED', 'provider 5xx: ' + response.status);
+  }
+  if (response.status !== 200) {
+    throw new AmazonAdapterBoundaryError('AMAZON_READ_UNEXPECTED_STATUS', '状态码: ' + response.status);
+  }
+  const page = extractRecords(response.body);
+  return {
+    operation: descriptor.operation,
+    attempts,
+    records: page.records,
+    nextToken: descriptor.pagination === 'NEXT_TOKEN' ? page.nextToken : null,
+  };
+}
+
+/** 多页只读抓取（内部按单页循环；最多 50 页防失控） */
+export async function fetchAmazonReadPages(
+  deps: AmazonReadFetcherDeps,
+  input: AmazonReadFetchInput,
+): Promise<AmazonReadFetchResult> {
   const records: unknown[] = [];
   let pages = 0;
   let attempts = 0;
   let nextToken: string | null = null;
-
   do {
-    const query: Record<string, string> = { ...(input.query ?? {}) };
-    if (nextToken) query.NextToken = nextToken;
-    let attempt = 0;
-    let response: { status: number; headers?: Record<string, string>; body: unknown } | null = null;
-    for (;;) {
-      attempt += 1;
-      attempts += 1;
-      response = await deps.transport.get({
-        path,
-        query,
-        headers: { 'x-amz-access-token': token.token, accept: 'application/json' },
-      });
-      if (response.status !== 429) break;
-      if (attempt >= maxAttempts) {
-        throw new AmazonAdapterBoundaryError('AMAZON_READ_THROTTLED', '429 重试次数耗尽');
-      }
-      // 官方口径：429 可重试，需要退避；退避长度由 descriptor 的恢复速率推导
-      const backoffMs = Math.min(2000, Math.ceil(1000 / Math.max(0.0001, descriptor.rateLimit.restorePerSecond)));
-      await sleep(backoffMs);
-    }
-    if (!response) throw new AmazonAdapterBoundaryError('AMAZON_READ_TRANSPORT_FAILED', '无响应');
-    if (response.status >= 500) {
-      throw new AmazonAdapterBoundaryError('AMAZON_READ_TRANSPORT_FAILED', 'provider 5xx: ' + response.status);
-    }
-    if (response.status !== 200) {
-      throw new AmazonAdapterBoundaryError('AMAZON_READ_UNEXPECTED_STATUS', '状态码: ' + response.status);
-    }
-    const page = extractRecords(response.body);
+    const page = await fetchAmazonReadPage(deps, {
+      ...input,
+      ...(nextToken ? { cursor: nextToken } : {}),
+    });
     records.push(...page.records);
-    nextToken = descriptor.pagination === 'NEXT_TOKEN' ? page.nextToken : null;
+    attempts += page.attempts;
+    nextToken = page.nextToken;
     pages += 1;
     if (pages > 50) throw new AmazonAdapterBoundaryError('AMAZON_READ_PAGINATION_LIMIT', '分页超过上限');
   } while (nextToken);
-
-  return { operation: descriptor.operation, attempts, pages, records, nextToken: null };
+  return { operation: input.operation, attempts, pages, records, nextToken: null };
 }
 
 export interface NormalizedReadFact {

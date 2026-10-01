@@ -200,3 +200,12 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - CHANGE C：write operation 只允许 **docs-only 取证**（优先 FBA reimbursement / inventory-loss recovery 申诉·索赔类），先回答「官方是否存在可用写 operation」；不存在则记录 `WRITE OPERATION NOT AVAILABLE / NOT PROVEN` → NEEDS_MANUAL；禁止浏览器自动化绕过。
 - R41 必测 10 项 + PG/H/D 永久基线（见 RUN_LOG）。
 - 保持：AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写/客户提交 HOLD。
+
+### R41 · Amazon Fixture → 既有 Connector Runner 集成（MSG-20261001-26 CHANGE B，2026-10-01）
+
+- bridge：`services/adapters/amazon-sp-connector.ts` —— `AMAZON_SP_READ_ONLY_CONNECTOR`（无 write scope）+ `createAmazonConnectorFetcher`（单页 + NextToken→nextCursor）+ `createAmazonConnectorNormalizer`（复用 `sourceFingerprintV1`）。
+- adapter：新增 `fetchAmazonReadPage`（单页抓取）以匹配 Runner 的「一页一推进」cursor 语义；多页函数改为内部循环复用。
+- 集成测试 9 项（真实 PostgreSQL + fixture transport）：正常记录→ClaimItem（platformType AMAZON / claimType ORDER_DISCREPANCY / fingerprintVersion v1）；重放幂等；金额更正不拆单；malformed→Quarantine；quarantine 无 raw/customer/token；cursor 成功推进/失败不推进；normalizerVersion 审计可追溯；Rule Engine 与资金·platform-write 零变化；未登记 resource fail-closed。
+- 回归：connector + claim-item + amazon = 7 files / 57 tests PASS；tsc PASS。
+- 边界：无真实凭据/账号/网络、无 Schema/migration/依赖变更、TRANSPORT=false。
+- 下一步：提交 R41 送审；并可并行准备 docs-only FBA write-operation 取证（不得实现 write adapter）。

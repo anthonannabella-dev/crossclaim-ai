@@ -781,3 +781,12 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - CHANGE B（R41）：fixture-only 贯通既有 Connector Runner / ClaimItem / Quarantine，复用 sourceFingerprint v1、ClaimItem 幂等、cursor 生命周期、quarantine 白名单、normalizerVersion、Runner 审计——目标是证明 Amazon adapter 没有形成平行数据链。
 - CHANGE C：写操作仅 docs-only 取证（FBA reimbursement / inventory-loss recovery 优先）；不存在官方写 operation 即记录 NOT AVAILABLE / NOT PROVEN → NEEDS_MANUAL；禁止浏览器自动化绕过。
 - 风险提示（架构方）：最大风险是「读取链打通后为闭环强行找写 API」；正确策略是「能安全自动发现和准备证据 ≠ 必须自动提交」，人工一键提交仍是有效产品路径。
+
+## 2026-10-01 JST — R41 Amazon → 既有 Connector Runner 集成（fixture-only）
+
+- 新增 `services/adapters/amazon-sp-connector.ts`：把只读 adapter 暴露为既有 `Fetcher`（单页；NextToken → nextCursor）与既有 `Normalizer`（复用 `sourceFingerprintV1`，只做形状归一化，不做金额判断）。
+- `amazon-sp-read-only-adapter.ts` 增加 `fetchAmazonReadPage`（单页 GET + 429 退避）供 cursor 一页一推进；`fetchAmazonReadPages` 改为内部循环调用（原 10 项测试继续通过）。
+- 新增 `amazon-sp-connector-runner-db.test.ts`（9 项，真实 PostgreSQL + mocked transport）：证明 Amazon adapter 复用既有 ClaimItem/幂等/cursor/quarantine/normalizerVersion/审计链路，没有平行数据链。
+- 关键证据：重放 idempotent=1 且 ClaimItem 计数不变；金额更正（120→999）仍 1 条；quarantine 白名单通过且不含 raw/customer/token；cursor 失败不推进（5xx 后仍为 PAGE-2）；RuleEvaluation/Payment/Settlement/Billing/PlatformWriteAttempt/RecoveryLedgerEntry 全 0。
+- 回归：connector + claim-item + amazon = 7 files / 57 tests PASS；tsc PASS。
+- 边界：无真实凭据/账号/网络；无 Schema/migration/依赖变更；TRANSPORT=false。

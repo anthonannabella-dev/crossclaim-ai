@@ -1,16 +1,16 @@
 {
   "gate": "B2-FIX R1",
-  "head": "fd73d44",
+  "head": "a25e2fc",
   "status": "IMPLEMENTING",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
-  "next_task": "R41：Amazon Fixture → Existing Connector Runner Integration（fixture-only）：Amazon descriptor → mocked/fixture Fetcher → Amazon Normalizer → 既有 Connector Runner → createClaimItem(CONNECTOR_IMPORT) / Quarantine；必须复用 sourceFingerprint v1 / ClaimItem 幂等 / cursor 生命周期 / quarantine 白名单 / normalizerVersion / Connector Runner 审计，不得为 Amazon 另建平行 ingest 链；无真实凭据/账号/网络。必测：正常记录→ClaimItem、同页重放仍 1 条、金额更正但 identity 不变不拆单、malformed→Quarantine、quarantine 不含 raw payload/customer/token、cursor 成功推进/异常不推进、normalizer version 可追溯、Rule Engine 不被偷偷触发、Payment·Settlement·Billing·platform-write ledger 零变化、WRITE/RDT/unknown operation 继续 fail-closed，并保留 PG/H/D 永久基线。可并行：docs-only 的 Amazon FBA reimbursement/inventory-loss recovery 写操作官方能力取证（先回答官方是否存在可用写 operation；不存在即记录 WRITE OPERATION NOT AVAILABLE / NOT PROVEN → NEEDS_MANUAL，不得用浏览器自动化绕过）。",
+  "next_task": "R41 送审：Amazon Fixture → Existing Connector Runner Integration Checkpoint（Issue #2 + 唤醒）—— 附 9 项集成断言（ClaimItem/幂等不拆单/quarantine 白名单/cursor 生命周期/normalizerVersion 可追溯/Rule Engine 与资金零变化/WRITE·未登记 fail-closed）、复用既有 sourceFingerprint v1 的证据与回归（connector + claim-item + amazon = 57 tests PASS）。同时可并行准备 docs-only 的 Amazon FBA recovery write-operation 官方能力取证（CHANGE C，不得实现 write adapter）。",
   "send_head": "d3f4722",
   "decision_head": "d3f4722",
   "last_chatgpt_message": "MSG-20261001-26",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T09:58:49.557Z",
-  "previous_head": "fd73d44",
+  "updated_at": "2026-10-01T10:06:24.936Z",
+  "previous_head": "a25e2fc",
   "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "d3f4722",
@@ -49,12 +49,12 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-01T09:58:10.814Z",
+  "last_tick_at": "2026-10-01T10:03:11.539Z",
   "state": "IMPLEMENT",
-  "last_action": "MSG-20261001-26 = PASS WITH REVISE 收口：R40 READ-ONLY boundary CLOSED（CI 36845421711 SUCCESS 已确认）；下一批 R41 = fixture → 既有 Connector Runner 集成",
-  "last_action_at": "2026-10-01T09:58:49.557Z",
-  "next_action": "R41：Amazon Fixture → Existing Connector Runner Integration（fixture-only）：Amazon descriptor → mocked/fixture Fetcher → Amazon Normalizer → 既有 Connector Runner → createClaimItem(CONNECTOR_IMPORT) / Quarantine；必须复用 sourceFingerprint v1 / ClaimItem 幂等 / cursor 生命周期 / quarantine 白名单 / normalizerVersion / Connector Runner 审计，不得为 Amazon 另建平行 ingest 链；无真实凭据/账号/网络。必测：正常记录→ClaimItem、同页重放仍 1 条、金额更正但 identity 不变不拆单、malformed→Quarantine、quarantine 不含 raw payload/customer/token、cursor 成功推进/异常不推进、normalizer version 可追溯、Rule Engine 不被偷偷触发、Payment·Settlement·Billing·platform-write ledger 零变化、WRITE/RDT/unknown operation 继续 fail-closed，并保留 PG/H/D 永久基线。可并行：docs-only 的 Amazon FBA reimbursement/inventory-loss recovery 写操作官方能力取证（先回答官方是否存在可用写 operation；不存在即记录 WRITE OPERATION NOT AVAILABLE / NOT PROVEN → NEEDS_MANUAL，不得用浏览器自动化绕过）。",
-  "current_head": "fd73d44",
+  "last_action": "R41 实施完成：Amazon 只读 adapter 接入既有 Connector Runner（fixture-only）；9 项集成断言全绿，未建平行 ingest 链",
+  "last_action_at": "2026-10-01T10:06:24.936Z",
+  "next_action": "R41 送审：Amazon Fixture → Existing Connector Runner Integration Checkpoint（Issue #2 + 唤醒）—— 附 9 项集成断言（ClaimItem/幂等不拆单/quarantine 白名单/cursor 生命周期/normalizerVersion 可追溯/Rule Engine 与资金零变化/WRITE·未登记 fail-closed）、复用既有 sourceFingerprint v1 的证据与回归（connector + claim-item + amazon = 57 tests PASS）。同时可并行准备 docs-only 的 Amazon FBA recovery write-operation 官方能力取证（CHANGE C，不得实现 write adapter）。",
+  "current_head": "a25e2fc",
   "reviewed_head": "549dba8",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-01T09:52:40.802Z",
-    "gapMs": 330013,
+    "previousTickAt": "2026-10-01T09:58:10.814Z",
+    "gapMs": 300726,
     "stale": false,
-    "checkedAt": "2026-10-01T09:58:10.814Z"
+    "checkedAt": "2026-10-01T10:03:11.539Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -491,5 +491,25 @@
       "C": "write operation 仅可 docs-only 取证（优先 FBA reimbursement / inventory-loss recovery）；不得实现 write adapter、不得浏览器自动化绕过"
     },
     "permanent_holds": "AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · CUSTOMER SUBMISSION HOLD"
+  },
+  "r41_connector_integration": {
+    "round": "R41（MSG-20261001-26 CHANGE B）",
+    "modules": {
+      "bridge": "apps/api/src/services/adapters/amazon-sp-connector.ts（ConnectorDescriptor + Fetcher 单页 + Normalizer，复用 sourceFingerprint v1）",
+      "adapter": "apps/api/src/services/adapters/amazon-sp-read-only-adapter.ts（新增 fetchAmazonReadPage 单页抓取，供 cursor 一页一推进）",
+      "test": "apps/api/src/__tests__/amazon-sp-connector-runner-db.test.ts（9 项，真实 PostgreSQL + fixture transport）"
+    },
+    "reuse_evidence": [
+      "sourceFingerprint v1（AMAZON_CONNECTOR_FINGERPRINT_VERSION = v1；ClaimItem.fingerprintVersion = v1）",
+      "ClaimItem 幂等（重放 idempotent=1，计数不变；金额更正不拆单）",
+      "cursor 生命周期（成功推进 NextToken；5xx 失败不推进）",
+      "quarantine 白名单（assertQuarantineEntry 通过；无 raw payload/customer/token）",
+      "normalizerVersion 可追溯（connector.pull_finished 审计携带版本）",
+      "Connector Runner 审计（pull_started / pull_finished，entityId = connectorId）"
+    ],
+    "zero_side_effects": "RuleEvaluation / Payment / Settlement / BillingInvoice / PlatformWriteAttempt / RecoveryLedgerEntry 全部为 0",
+    "fail_closed": "未登记 resource（sellers）→ OPERATION_NOT_REGISTERED；WRITE/RDT 规则保持（上一批次 10 项持续通过）",
+    "regression": "connector + claim-item + amazon = 7 files / 57 tests PASS；tsc PASS",
+    "boundary": "无真实凭据/账号/网络；未新增 Schema/migration/依赖；TRANSPORT=false"
   }
 }
