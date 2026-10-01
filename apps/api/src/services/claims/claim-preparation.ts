@@ -4,7 +4,7 @@
  * 依据 MSG-20261001-07 §6（批次范围）与 MSG-20261001-08 CHANGE A/B（并发与锁后权限）：
  *   - 能力闸门（Kill Switch scope=workflow + 动作 feature + 控制面模式允许 INTERNAL_WRITE），**无人审批**；
  *   - 准备事务**先取与提交服务一致的案件锁** `cc-recovery-case:${caseId}`，再对既有 Claim 取行锁；
- *   - 锁后重读主体（ACTIVE 用户 + 有效 Membership + 当前角色）并重新裁决本动作权限；
+ *   - **取得案件锁与 Claim 行锁之后**重读主体（ACTIVE 用户 + 有效 Membership + 当前角色）并重新裁决本动作权限；
  *   - 更新使用带租户/案件/round=1/status=DRAFT 条件的 CAS，恰一行才算成功；
  *   - 业务写入与 `claim.prepared` 审计同一事务，审计失败整笔回滚；
  *   - 只写业务库：不调用平台适配器写入面、不产生资金对象、不推进 Claim 状态。
@@ -161,7 +161,15 @@ export async function prepareClaimDraft(
       });
       if (!kase) throw new WorkflowError('NOT_FOUND', '案件不存在或不属于该租户');
 
-      // B：锁后重读主体（ACTIVE 用户 + 有效 Membership + 数据库当前角色）并重新裁决本动作权限
+      // A-3：既有 Claim 行锁（与提交服务同一顺序：案件锁 → 行锁；限定租户/案件/round=1）
+      const locked = await tx.$queryRawUnsafe<Array<{ id: string; status: string }>>(
+        'SELECT id, status FROM "Claim" WHERE "organizationId" = $1 AND "caseId" = $2 AND round = 1 FOR UPDATE',
+        input.organizationId,
+        input.caseId,
+      );
+
+      // B（MSG-20261001-09 CHANGE B）：**最终**主体与权限重验必须在「案件锁 + Claim 行锁」之后、任何业务写入之前。
+      // 锁前 assertPermission 仅为快速拒绝，不能替代本处裁决；等待行锁期间发生的角色降权/成员停用/用户停用在此被拦下。
       const actor = await tx.user.findFirst({
         where: { id: input.actorUserId, status: 'ACTIVE' },
         select: { id: true },
@@ -174,13 +182,6 @@ export async function prepareClaimDraft(
       if (!actor || !membership) throw new ApprovalBoundaryError('APPROVAL_ACTOR_MISMATCH', input.caseId);
       // 权限不足（角色降权）→ 与 claim.submit 一致的权限矩阵拒绝
       assertPermission(membership.role, 'claimTrackingApprove');
-
-      // A-3：既有 Claim 行锁（与提交服务同一顺序：案件锁 → 行锁；限定租户/案件/round=1）
-      const locked = await tx.$queryRawUnsafe<Array<{ id: string; status: string }>>(
-        'SELECT id, status FROM "Claim" WHERE "organizationId" = $1 AND "caseId" = $2 AND round = 1 FOR UPDATE',
-        input.organizationId,
-        input.caseId,
-      );
 
       // 全部必要锁与锁后校验完成后才生成执行时间
       const at = now();

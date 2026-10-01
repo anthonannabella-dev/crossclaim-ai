@@ -349,6 +349,44 @@ async function withAuditActionBlocked<T>(action: string, run: () => Promise<T>):
   }
 }
 
+/** 被夹具后端阻塞的会话数（阻塞方判据；行锁在 pg_locks 不体现为 tuple 锁） */
+async function blockedByPidCount(pid: number): Promise<number> {
+  const rows = await prisma.$queryRawUnsafe<{ n: bigint }[]>(
+    'SELECT count(*)::bigint AS n FROM pg_stat_activity a WHERE $1::int = ANY(pg_blocking_pids(a.pid))',
+    pid,
+  );
+  return Number(rows[0]?.n ?? 0n);
+}
+
+/** 独立连接持有 **Claim 行锁**（与准备服务 A-3 同一 SQL 形态）；返回释放函数与夹具后端 pid */
+async function holdClaimRowLock(claimId: string): Promise<{ release: () => void; pid: Promise<number> }> {
+  let release: () => void = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  let resolvePid: (value: number) => void = () => {};
+  const pid = new Promise<number>((resolve) => {
+    resolvePid = resolve;
+  });
+  void prisma
+    .$transaction(
+      async (tx) => {
+        const pinned = await tx.$queryRawUnsafe<Array<{ pid: number }>>('SELECT pg_backend_pid() AS pid');
+        resolvePid(Number(pinned[0]?.pid ?? 0));
+        await tx.$queryRawUnsafe(
+          'SELECT id FROM "Claim" WHERE id = $1 AND "organizationId" = $2 AND "caseId" = $3 AND round = 1 FOR UPDATE',
+          claimId,
+          ORG,
+          caseId,
+        );
+        await gate;
+      },
+      { timeout: 30_000, maxWait: 30_000 },
+    )
+    .catch(() => undefined);
+  return { release, pid };
+}
+
 describe('② RUNTIME BUSINESS BLOCKING — claim.prepare（真实 HTTP + PostgreSQL）', () => {
   it('01 未配置 control plane（默认 READ_ONLY）→ 拒绝且零业务副作用', async () => {
     await withServer(
@@ -575,7 +613,7 @@ describe('② RUNTIME BUSINESS BLOCKING — claim.prepare（真实 HTTP + Postgr
     });
   }, 60_000);
 
-  it('13 prepare 等锁期间 submit 已成功 → 409 ILLEGAL_TRANSITION，草稿与审计均不新增', async () => {
+  it('13 等案件锁期间 Claim 被另一事务提交（直接写库模拟状态交错，非真实 submit 服务）→ 409 ILLEGAL_TRANSITION，草稿与审计均不新增', async () => {
     await withServer(async (base) => {
       const cookie = await login(base);
       const seeded = await prisma.claim.create({ data: { organizationId: ORG, caseId, round: 1, status: 'DRAFT', target: 'CARRIER', aiDraftText: 'seeded' } });
@@ -587,7 +625,7 @@ describe('② RUNTIME BUSINESS BLOCKING — claim.prepare（真实 HTTP + Postgr
           10_000,
           'SUBMIT_DONE_DURING_PREPARE_WAIT',
         );
-        // 等锁期间另一事务（提交路径）完成：Claim 离开 DRAFT
+        // 等锁期间另一事务把 Claim 写为 SUBMITTED（**直接写库模拟状态交错**；本用例不构成真实 submit 全链路验收）
         await prisma.claim.update({
           where: { id: seeded.id },
           data: { status: 'SUBMITTED', submittedAt: new Date(), submittedBy: ownerId },
@@ -701,6 +739,95 @@ describe('② RUNTIME BUSINESS BLOCKING — claim.prepare（真实 HTTP + Postgr
       expect(after.aiDraftText).toBe('original');
       expect(after.status).toBe('DRAFT');
       expect((await sideEffects()).preparedAudits).toBe(0);
+    });
+  }, 60_000);
+
+  it('19 等 Claim 行锁期间执行人降为 FINANCE → 403 FORBIDDEN，既有草稿不变（MSG-09 CHANGE B）', async () => {
+    await withServer(async (base) => {
+      const seeded = await prisma.claim.create({ data: { organizationId: ORG, caseId, round: 1, status: 'DRAFT', target: 'CARRIER', aiDraftText: 'before' } });
+      const executor = await createMember('OPS');
+      await prisma.membership.updateMany({ where: { organizationId: ORG, userId: executor.userId }, data: { role: 'ADMIN' } });
+      const cookie = await login(base, executor.email);
+      const holder = await holdClaimRowLock(seeded.id);
+      const blockerPid = await holder.pid;
+      const pending = prepare(base, cookie, { target: 'INSURER', draftText: 'after downgrade' });
+      try {
+        await waitFor(
+          async () => (await blockedByPidCount(blockerPid)) >= 1,
+          10_000,
+          'PREPARE_WAITING_ON_CLAIM_ROW_LOCK',
+        );
+        await prisma.membership.updateMany({ where: { organizationId: ORG, userId: executor.userId }, data: { role: 'FINANCE' } });
+      } finally {
+        holder.release();
+      }
+      const res = await pending;
+      expect(res.status).toBe(403);
+      expect(res.body.error).toBe('FORBIDDEN');
+      const after = await prisma.claim.findUniqueOrThrow({ where: { id: seeded.id } });
+      expect(after.target).toBe('CARRIER');
+      expect(after.aiDraftText).toBe('before');
+      expect(after.status).toBe('DRAFT');
+      expect(after.submittedAt).toBeNull();
+      expect(after.submittedBy).toBeNull();
+      expect(after.approvedByUserId).toBeNull();
+      expect((await sideEffects()).preparedAudits).toBe(0);
+    });
+  }, 60_000);
+
+  it('20 等 Claim 行锁期间成员停用 → 403 APPROVAL_ACTOR_MISMATCH 且零业务写入', async () => {
+    await withServer(async (base) => {
+      const seeded = await prisma.claim.create({ data: { organizationId: ORG, caseId, round: 1, status: 'DRAFT', target: 'CARRIER', aiDraftText: 'before' } });
+      const executor = await createMember('OPS');
+      await prisma.membership.updateMany({ where: { organizationId: ORG, userId: executor.userId }, data: { role: 'ADMIN' } });
+      const cookie = await login(base, executor.email);
+      const holder = await holdClaimRowLock(seeded.id);
+      const blockerPid = await holder.pid;
+      const pending = prepare(base, cookie, { target: 'INSURER', draftText: 'member disabled' });
+      try {
+        await waitFor(
+          async () => (await blockedByPidCount(blockerPid)) >= 1,
+          10_000,
+          'PREPARE_WAITING_ON_CLAIM_ROW_LOCK_2',
+        );
+        await prisma.membership.updateMany({ where: { organizationId: ORG, userId: executor.userId }, data: { isActive: false } });
+      } finally {
+        holder.release();
+      }
+      const res = await pending;
+      expect(res.status).toBe(403);
+      expect(res.body.error).toBe('APPROVAL_ACTOR_MISMATCH');
+      const after = await prisma.claim.findUniqueOrThrow({ where: { id: seeded.id } });
+      expect(after.aiDraftText).toBe('before');
+      expect((await sideEffects()).preparedAudits).toBe(0);
+    });
+  }, 60_000);
+
+  it('21 等 Claim 行锁期间主体与角色未变 → 200，准备结果与审计一致（对照）', async () => {
+    await withServer(async (base) => {
+      const seeded = await prisma.claim.create({ data: { organizationId: ORG, caseId, round: 1, status: 'DRAFT', target: 'CARRIER', aiDraftText: 'before' } });
+      const executor = await createMember('OPS');
+      await prisma.membership.updateMany({ where: { organizationId: ORG, userId: executor.userId }, data: { role: 'ADMIN' } });
+      const cookie = await login(base, executor.email);
+      const holder = await holdClaimRowLock(seeded.id);
+      const blockerPid = await holder.pid;
+      const pending = prepare(base, cookie, { target: 'INSURER', draftText: 'row lock wait ok' });
+      try {
+        await waitFor(
+          async () => (await blockedByPidCount(blockerPid)) >= 1,
+          10_000,
+          'PREPARE_WAITING_ON_CLAIM_ROW_LOCK_3',
+        );
+      } finally {
+        holder.release();
+      }
+      const res = await pending;
+      expect(res.status).toBe(200);
+      expect(res.body).toMatchObject({ created: false, target: "INSURER", status: "DRAFT" });
+      const after = await prisma.claim.findUniqueOrThrow({ where: { id: seeded.id } });
+      expect(after.target).toBe('INSURER');
+      expect(after.aiDraftText).toBe('row lock wait ok');
+      expect((await sideEffects()).preparedAudits).toBe(1);
     });
   }, 60_000);
 });
