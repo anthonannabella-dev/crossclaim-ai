@@ -1,13 +1,12 @@
 {
   "$comment": "CrossClaim AI License Gate — 依赖许可证准入清单。供 pre-commit / CI 脚本读取，做机器判定，不靠人记。",
   "version": 1,
-  "updated": "2026-09-28",
+  "updated": "2026-10-01",
   "scope": {
     "project": "CrossClaim AI (Recovery OS)",
     "repository": "E:\\zhuihuiweikuan-saas",
     "note": "核心业务代码为自有；第三方基座只允许商业友好的宽松许可证。"
   },
-
   "policy": {
     "allow": [
       "MIT",
@@ -65,7 +64,6 @@
       "requireSbomOnRelease": true
     }
   },
-
   "resolvedDualLicenses": [
     {
       "package": "jszip",
@@ -75,7 +73,6 @@
       "reason": "双许可，选择 MIT 分支。必须在依赖清单中锁定，禁止按 GPL 分支解释。"
     }
   ],
-
   "approvedExceptions": [
     {
       "package": "minio",
@@ -115,7 +112,6 @@
       "constraint": "优先使用 Docling；仅在中文扫描件效果不足时启用。"
     }
   ],
-
   "notAdopted": [
     {
       "package": "n8n",
@@ -138,24 +134,143 @@
       "reason": "许可证可用；架构上不引入，避免与 Prisma 形成双 ORM 双模型定义。"
     }
   ],
-
   "plannedAdditions": [
-    { "package": "temporal", "license": "MIT", "layer": "workflow" },
-    { "package": "langgraph", "license": "MIT", "layer": "ai" },
-    { "package": "docling", "license": "MIT (code only)", "layer": "doc-parsing", "note": "模型许可证另见 MODEL_LICENSES.md" },
-    { "package": "fastapi", "license": "MIT", "layer": "ai-service" },
-    { "package": "pydantic", "license": "MIT", "layer": "ai-service" },
-    { "package": "exceljs", "license": "MIT", "layer": "import" },
-    { "package": "papaparse", "license": "MIT", "layer": "import" },
-    { "package": "@tanstack/react-query", "license": "MIT", "layer": "frontend" },
-    { "package": "react-hook-form", "license": "MIT", "layer": "frontend" },
-    { "package": "recharts", "license": "MIT", "layer": "frontend" },
-    { "package": "stagehand", "license": "MIT", "layer": "browser-agent", "note": "阶段 3 才引入" }
+    {
+      "package": "temporal",
+      "license": "MIT",
+      "layer": "workflow"
+    },
+    {
+      "package": "langgraph",
+      "license": "MIT",
+      "layer": "ai"
+    },
+    {
+      "package": "docling",
+      "license": "MIT (code only)",
+      "layer": "doc-parsing",
+      "note": "模型许可证另见 MODEL_LICENSES.md"
+    },
+    {
+      "package": "fastapi",
+      "license": "MIT",
+      "layer": "ai-service"
+    },
+    {
+      "package": "pydantic",
+      "license": "MIT",
+      "layer": "ai-service"
+    },
+    {
+      "package": "exceljs",
+      "license": "MIT",
+      "layer": "import"
+    },
+    {
+      "package": "papaparse",
+      "license": "MIT",
+      "layer": "import"
+    },
+    {
+      "package": "@tanstack/react-query",
+      "license": "MIT",
+      "layer": "frontend"
+    },
+    {
+      "package": "react-hook-form",
+      "license": "MIT",
+      "layer": "frontend"
+    },
+    {
+      "package": "recharts",
+      "license": "MIT",
+      "layer": "frontend"
+    },
+    {
+      "package": "stagehand",
+      "license": "MIT",
+      "layer": "browser-agent",
+      "note": "阶段 3 才引入"
+    }
   ],
-
   "gateTooling": [
-    { "name": "license-checker-rseidelsohn", "ecosystem": "npm", "license": "BSD-3-Clause (待实测确认)" },
-    { "name": "pip-licenses", "ecosystem": "pypi", "license": "MIT (待实测确认)" },
-    { "name": "syft", "ecosystem": "sbom", "license": "Apache-2.0 (待实测确认)" }
-  ]
+    {
+      "name": "license-checker-rseidelsohn",
+      "ecosystem": "npm",
+      "license": "BSD-3-Clause (待实测确认)"
+    },
+    {
+      "name": "pip-licenses",
+      "ecosystem": "pypi",
+      "license": "MIT (待实测确认)"
+    },
+    {
+      "name": "syft",
+      "ecosystem": "sbom",
+      "license": "Apache-2.0 (待实测确认)"
+    }
+  ],
+  "licenseLevels": {
+    "$comment": "HOST DIRECTIVE 2026-10-01 R10：等级 A/B/C 与下方 policy.allow/review/deny 同源；oss-registry.json 的 license_category 必须落在这三档内。",
+    "A": [
+      "MIT",
+      "MIT-0",
+      "ISC",
+      "BSD-2-Clause",
+      "BSD-3-Clause",
+      "Apache-2.0",
+      "PostgreSQL",
+      "0BSD",
+      "Unlicense",
+      "BlueOak-1.0.0",
+      "CC0-1.0",
+      "Python-2.0",
+      "Zlib"
+    ],
+    "B": [
+      "MPL-2.0",
+      "LGPL-2.1-only",
+      "LGPL-2.1-or-later",
+      "LGPL-3.0-only",
+      "LGPL-3.0-or-later",
+      "EPL-2.0",
+      "CC-BY-SA-4.0",
+      "Artistic-2.0",
+      "UNKNOWN",
+      "custom",
+      "SEE LICENSE IN"
+    ],
+    "C": [
+      "GPL-2.0",
+      "GPL-2.0-only",
+      "GPL-2.0-or-later",
+      "GPL-3.0",
+      "GPL-3.0-only",
+      "GPL-3.0-or-later",
+      "AGPL-1.0",
+      "AGPL-3.0",
+      "AGPL-3.0-only",
+      "AGPL-3.0-or-later",
+      "SSPL-1.0",
+      "BUSL-1.1",
+      "Elastic-2.0",
+      "Sustainable Use License",
+      "Commons Clause",
+      "RSALv2",
+      "n8n Sustainable Use License"
+    ],
+    "C_additional": [
+      "无 LICENSE",
+      "许可不明确",
+      "商用不明确",
+      "模型来源不明",
+      "要求公开整体源码且未获批准"
+    ]
+  },
+  "ossRegistry": {
+    "path": "tools/license-gate/oss-registry.json",
+    "matrix": "docs/releases/OPEN_SOURCE_REUSE_MATRIX.md",
+    "checker": "tools/license-gate/check-oss-registry.mjs",
+    "rules": ".autopilot/RULES.md#r10"
+  }
 }

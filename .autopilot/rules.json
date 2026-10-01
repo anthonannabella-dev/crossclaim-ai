@@ -72,5 +72,142 @@
   ],
   "enforced_from_submission_keys": [
     "r44_submission"
-  ]
+  ],
+  "open_source_reuse": {
+    "matrix_path": "docs/releases/OPEN_SOURCE_REUSE_MATRIX.md",
+    "registry_path": "tools/license-gate/oss-registry.json",
+    "model_license_registry": "MODEL_LICENSES.md",
+    "checker": "tools/license-gate/check-oss-registry.mjs",
+    "gate": "tools/license-gate/check-licenses.mjs",
+    "allowlist": "tools/license-gate/allowlist.json",
+    "classes": [
+      "EXISTING",
+      "LEGACY_REUSE",
+      "OSS_NOW",
+      "OSS_LATER",
+      "REJECT"
+    ],
+    "license_levels": {
+      "A": [
+        "MIT",
+        "Apache-2.0",
+        "BSD-2-Clause",
+        "BSD-3-Clause",
+        "ISC",
+        "宽松许可（商用+无强传播）"
+      ],
+      "B": [
+        "GPL",
+        "LGPL",
+        "AGPL",
+        "MPL",
+        "EPL",
+        "BSL",
+        "SSPL",
+        "Sustainable Use License",
+        "Elastic License",
+        "自定义 Community License",
+        "Source Available",
+        "带商业限制的模型许可"
+      ],
+      "C": [
+        "无 LICENSE",
+        "许可不明确",
+        "商用不明确",
+        "模型来源不明",
+        "禁止商用",
+        "要求公开整体源码且未获批准",
+        "与商业 SaaS 冲突"
+      ]
+    },
+    "dependency_fields": [
+      "dependency_name",
+      "version",
+      "source_repository",
+      "license",
+      "license_category",
+      "commercial_use_allowed",
+      "redistribution_requirement",
+      "attribution_requirement",
+      "copyleft_risk",
+      "saas_network_restriction",
+      "model_weight_license",
+      "decision",
+      "reason",
+      "class"
+    ],
+    "module_output_fields": [
+      "FOUNDATION_REUSED",
+      "LEGACY_REUSED",
+      "OSS_CANDIDATE",
+      "OSS_DECISION",
+      "LICENSE",
+      "COMMERCIAL_USE",
+      "LICENSE_RISK",
+      "NEW_RISK_BOUNDARY",
+      "ARCH_REVIEW_REQUIRED"
+    ],
+    "llm_forbidden_decisions": [
+      "金额",
+      "Fee / Success Fee",
+      "Deadline",
+      "Ledger",
+      "Settlement",
+      "Billing",
+      "状态推进",
+      "权限判断",
+      "审批消费"
+    ],
+    "connector_structure": "Platform SDK/HTTP → Adapter → Canonical ingest → CanonicalFact → Rule Engine → RecoveryOpportunity → Recovery OS",
+    "peripheral_automation_allow": [
+      "通知",
+      "定时任务",
+      "Webhook",
+      "非关键数据同步",
+      "非关键数据搬运",
+      "内部运营自动化"
+    ],
+    "peripheral_automation_deny": [
+      "Claim 提交",
+      "Appeal 提交",
+      "approval consumption",
+      "Settlement",
+      "RecoveryLedger",
+      "Billing",
+      "Success Fee",
+      "Payment",
+      "核心状态迁移",
+      "权限决定"
+    ],
+    "restricted_tools": {
+      "n8n": "Sustainable Use License —— 仅受限外围工具评估；不得嵌入客户产品 / 不得默认托管客户凭据；商业许可单独立项",
+      "activepieces": "MIT core 可候选；packages/ee / enterprise 不得当作 MIT 使用"
+    },
+    "frozen_core": [
+      "Recovery OS",
+      "数据模型",
+      "Tenant isolation",
+      "HITL",
+      "Action Guard",
+      "Audit",
+      "Transaction / CAS / Row Lock",
+      "Ledger",
+      "Billing",
+      "Kill Switch"
+    ],
+    "custom_build_focus": [
+      "Recovery OS",
+      "Canonical Fact",
+      "Rule Engine",
+      "Recovery Opportunity",
+      "Evidence Graph",
+      "Case / Claim / Appeal",
+      "Settlement",
+      "Recovery Ledger",
+      "Success Fee / Billing",
+      "合规边界",
+      "多平台追回逻辑",
+      "结果交付闭环"
+    ]
+  }
 }

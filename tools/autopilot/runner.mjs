@@ -90,6 +90,14 @@ const heartbeat = {
   next_action: state.next_action ?? pending[0] ?? null,
   continue_required: (state.state ?? '') === 'IMPLEMENT' && Boolean(state.next_action),
   rules_loaded: Boolean(AUTOPILOT_RULES),
+  reuse_policy: {
+    matrix_path: AUTOPILOT_RULES?.open_source_reuse?.matrix_path ?? null,
+    registry_path: AUTOPILOT_RULES?.open_source_reuse?.registry_path ?? null,
+    classes: AUTOPILOT_RULES?.open_source_reuse?.classes ?? [],
+    license_levels: Object.keys(AUTOPILOT_RULES?.open_source_reuse?.license_levels ?? {}),
+    status_fields: AUTOPILOT_RULES?.open_source_reuse?.module_output_fields ?? [],
+    llm_forbidden_decisions: AUTOPILOT_RULES?.open_source_reuse?.llm_forbidden_decisions ?? [],
+  },
   arch_review_policy: {
     rules_file: AUTOPILOT_RULES?.rules_file ?? '.autopilot/RULES.md',
     incremental_audit: AUTOPILOT_RULES?.incremental_audit ?? null,

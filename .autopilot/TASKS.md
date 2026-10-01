@@ -1,6 +1,8 @@
 
 ### HOST DIRECTIVE 2026-10-01「冻结底座 + 加速交付」（长期有效）
 
+- **开源优先复用 + 商用许可统一机制（R10）**：矩阵 `docs/releases/OPEN_SOURCE_REUSE_MATRIX.md`；登记表 `tools/license-gate/oss-registry.json`；校验 `node tools/license-gate/check-oss-registry.mjs --root .`（挂在既有 license-gate CI job）；模型权重 `MODEL_LICENSES.md`。新模块开工前必须分类 EXISTING / LEGACY_REUSE / OSS_NOW / OSS_LATER / REJECT，并做 A/B/C 许可判定；**不阻塞当前队列**。
+
 - **持久自治规则（跨轮次/会话/runner 重启生效）**：`.autopilot/RULES.md` + `.autopilot/rules.json`；runner 每轮写入 HEARTBEAT，CI 由 `tools/autopilot/check-autopilot-rules.mjs` 校验。
 - `ARCH_REVIEW_REQUIRED = NO` ⇒ 直接进入下一执行单元，**不得以「无新裁决」停止或空转**；合法停止条件仅 READY_FOR_REVIEW / HOST_ACTION_REQUIRED / ARCHITECT_BLOCK / UNRESOLVED_TECHNICAL_BLOCK。
 

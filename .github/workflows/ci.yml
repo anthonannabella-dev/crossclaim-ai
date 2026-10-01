@@ -171,6 +171,9 @@ jobs:
       - name: Run license gate
         run: node tools/license-gate/check-licenses.mjs --json tools/license-gate/report.json
 
+      - name: OSS reuse & commercial-license registry (R10)
+        run: node tools/license-gate/check-oss-registry.mjs --root .
+
       - name: Upload license report
         if: always()
         uses: actions/upload-artifact@v4

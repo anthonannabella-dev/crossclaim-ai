@@ -1029,3 +1029,11 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 口径修正：R44 = Manual Recovery **Execution** HTTP Boundary（非完整用户可用 E2E）；审批创建入口另立 **R44-A**。
 - 送审：REVIEWED_HEAD eca4207（Issue #2 comment 5932108490 / CI 36865362444 success 5/5）；唤醒已投递并三要素验证。
 - HOLD 保持：AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · SETTLEMENT/BILLING LINKAGE HOLD。
+
+## 2026-10-01 JST — 持久规则 R10：开源优先复用 + 商用许可证统一机制
+
+- 落盘：`.autopilot/RULES.md`（新增 R10 全节）+ `.autopilot/rules.json`（`open_source_reuse`）+ `docs/releases/OPEN_SOURCE_REUSE_MATRIX.md` + `tools/license-gate/oss-registry.json` + `tools/license-gate/check-oss-registry.mjs`（复用既有 license-gate，不新建第二套系统）+ `tools/license-gate/allowlist.json`（A/B/C 等级映射）+ CI license-gate job 新增校验步骤 + runner HEARTBEAT 增加 `reuse_policy`。
+- 分类：EXISTING / LEGACY_REUSE / OSS_NOW / OSS_LATER / REJECT，五档必须在新模块开工前判定；登记字段 14 项（含 model_weight_license）。
+- 边界：LLM 不得决定 金额 / Fee / Deadline / Ledger / Settlement / Billing / 状态推进 / 权限判断 / 审批消费；编排工具仅限外围；禁止大换底座（冻结 Recovery OS 等）。
+- 校验：`node tools/license-gate/check-oss-registry.mjs --root .` = OSS_REUSE_LICENSE_OK；`tools/license-gate/check-licenses.mjs` = 通过；`tools/autopilot/check-autopilot-rules.mjs` = AUTOPILOT_RULES_OK。
+- 队列不受影响：R43 S3→S4→S5 已按序关闭（MSG-36/37/38/39）；当前真实下一单元 = R44 RE-REVIEW 裁决 → R44-A Approval Creation Boundary。

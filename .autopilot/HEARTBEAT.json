@@ -2,9 +2,9 @@
   "runner_status": "RUNNING",
   "current_gate": "B2-FIX R1",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
-  "current_head": "eca4207",
+  "current_head": "cf50f3a",
   "last_action": "SCHEDULER_STALE_RECOVERED（gap=21min）→ 本轮已恢复执行",
-  "last_action_at": "2026-10-01T13:08:39.057Z",
+  "last_action_at": "2026-10-01T13:11:00.839Z",
   "next_action": "等待 R44 RE-REVIEW 裁决：①PASS → R44 HTTP Execution Boundary = CLOSED，按 HOST DIRECTIVE 直接进入 R44-A（Approval Creation Boundary）②REVISE → 按 CHANGE 修改重送 ③BLOCK → 停止该入口。并行可先做 R44-A 的边界设计（docs-only，不触碰已冻结底座）。",
   "retry_count": 0,
   "last_error": null,
@@ -12,11 +12,49 @@
   "remaining_tasks": 2,
   "automation_status": "ACTIVE",
   "interval_minutes": 5,
-  "tick_at": "2026-10-01T13:08:39.055Z",
-  "schedule_stale_previous": true,
+  "tick_at": "2026-10-01T13:11:00.838Z",
+  "schedule_stale_previous": false,
   "state_machine": "IMPLEMENT",
   "continue_required": true,
   "rules_loaded": true,
+  "reuse_policy": {
+    "matrix_path": "docs/releases/OPEN_SOURCE_REUSE_MATRIX.md",
+    "registry_path": "tools/license-gate/oss-registry.json",
+    "classes": [
+      "EXISTING",
+      "LEGACY_REUSE",
+      "OSS_NOW",
+      "OSS_LATER",
+      "REJECT"
+    ],
+    "license_levels": [
+      "A",
+      "B",
+      "C"
+    ],
+    "status_fields": [
+      "FOUNDATION_REUSED",
+      "LEGACY_REUSED",
+      "OSS_CANDIDATE",
+      "OSS_DECISION",
+      "LICENSE",
+      "COMMERCIAL_USE",
+      "LICENSE_RISK",
+      "NEW_RISK_BOUNDARY",
+      "ARCH_REVIEW_REQUIRED"
+    ],
+    "llm_forbidden_decisions": [
+      "金额",
+      "Fee / Success Fee",
+      "Deadline",
+      "Ledger",
+      "Settlement",
+      "Billing",
+      "状态推进",
+      "权限判断",
+      "审批消费"
+    ]
+  },
   "arch_review_policy": {
     "rules_file": ".autopilot/RULES.md",
     "incremental_audit": true,
