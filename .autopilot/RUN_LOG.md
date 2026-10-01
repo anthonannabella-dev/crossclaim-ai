@@ -1020,3 +1020,12 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 口径修正（架构方要求）：R44 = Manual Recovery **Execution** HTTP Boundary，**不是**完整用户可用 E2E；审批创建入口缺失属独立批次 **R44-A — Approval Creation Boundary**；文档不得写成「完整可用」。
 - 档案：`AI-ARCHITECT-INBOX.md` → `MSG-20261001-40`；`compare.mjs` = **FULL_COPY_OK**。
 - NEXT：补 CHANGE A + 等 CI SUCCESS → R44 RE-REVIEW。
+
+## 2026-10-01 JST — R44 RE-REVIEW 送审（CHANGE A 收口 + CHANGE B CI SUCCESS）
+
+- CHANGE A：`recovery-manual-http-db.test.ts` 10 → 14 用例 —— R44-11 manual-submit 跨租户案件 → 404；R44-12 同租户错案件 → 404；R44-13 manual-reference 跨租户 submission → 404；R44-14 同租户错案件 submission → 404（防 confused-deputy）；每条断言失败零副作用（ClaimItem / Submission·Reference / approval consumption / Settlement / Billing）。
+- CHANGE B：09e9f6d CI = success 5/5；RE-REVIEW 头 eca4207 CI = success 5/5。
+- 偶发失败修复（SELF_RESOLVE / CI 修复）：R43 夹具 review_required / review_approved 未显式写 createdAt，同毫秒触发 `APPROVAL_NOT_APPROVED`（bd6d330 API job 3 例）→ 显式有序 createdAt（required −2s / approved −1s）；**断言与生产代码零变化**，仅消除毫秒级不确定性。
+- 口径修正：R44 = Manual Recovery **Execution** HTTP Boundary（非完整用户可用 E2E）；审批创建入口另立 **R44-A**。
+- 送审：REVIEWED_HEAD eca4207（Issue #2 comment 5932108490 / CI 36865362444 success 5/5）；唤醒已投递并三要素验证。
+- HOLD 保持：AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · SETTLEMENT/BILLING LINKAGE HOLD。

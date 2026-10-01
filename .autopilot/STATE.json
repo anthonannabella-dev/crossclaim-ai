@@ -1,6 +1,6 @@
 {
   "gate": "B2-FIX R1",
-  "head": "bd6d330",
+  "head": "eca4207",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
   "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
@@ -9,13 +9,13 @@
   "last_chatgpt_message": "MSG-20261001-40",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T12:48:10.077Z",
+  "updated_at": "2026-10-01T13:08:38.787Z",
   "previous_head": "ea2adc2",
-  "architect_decision_pending": false,
+  "architect_decision_pending": true,
   "blocked_scope": null,
-  "last_send_head": "219a67c",
-  "last_sent_at": "2026-10-01T12:45:41.734Z",
-  "last_sent_fingerprint": "R44:Manual-Recovery-HTTP-API-Boundary",
+  "last_send_head": "eca4207",
+  "last_sent_at": "2026-10-01T13:08:38.787Z",
+  "last_sent_fingerprint": "R44-REREVIEW:Execution-Boundary-Change-A",
   "final_head": "1144401",
   "ci_run": "36833002042",
   "ci_result": "SUCCESS",
@@ -49,12 +49,12 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-01T12:47:43.270Z",
+  "last_tick_at": "2026-10-01T13:08:39.055Z",
   "state": "IMPLEMENT",
-  "last_action": "MSG-20261001-40 = PASS WITH REVISE 已逐字归档并 FULL_COPY_OK —— R44 入口边界原则认可；需补 CHANGE A（两入口各自跨租户/错绑定 404 + 失败零副作用）与 CHANGE B（HEAD CI SUCCESS），随后提交 R44 RE-REVIEW",
-  "last_action_at": "2026-10-01T12:48:10.077Z",
-  "next_action": "R44 RE-REVIEW 前置：①为 manual-submit 与 manual-reference 各补跨租户/错案件 HTTP 404 用例（含失败零副作用断言）②修正文档措辞（R44 = Execution Boundary，非完整 E2E；审批创建另立 R44-A）③推送并等待精确 HEAD CI SUCCESS ④提交 R44 RE-REVIEW。",
-  "current_head": "bd6d330",
+  "last_action": "SCHEDULER_STALE_RECOVERED（gap=21min）→ 本轮已恢复执行",
+  "last_action_at": "2026-10-01T13:08:38.787Z",
+  "next_action": "等待 R44 RE-REVIEW 裁决：①PASS → R44 HTTP Execution Boundary = CLOSED，按 HOST DIRECTIVE 直接进入 R44-A（Approval Creation Boundary）②REVISE → 按 CHANGE 修改重送 ③BLOCK → 停止该入口。并行可先做 R44-A 的边界设计（docs-only，不触碰已冻结底座）。",
+  "current_head": "eca4207",
   "reviewed_head": "07b7009",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-01T12:46:54.821Z",
-    "gapMs": 48450,
-    "stale": false,
-    "checkedAt": "2026-10-01T12:47:43.270Z"
+    "previousTickAt": "2026-10-01T12:47:43.270Z",
+    "gapMs": 1255786,
+    "stale": true,
+    "checkedAt": "2026-10-01T13:08:39.055Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -250,7 +250,7 @@
     "integration_boundary_review": "AUTHORIZED_TO_PLAN（先提交设计/实施计划，不直接开放真实 transport）"
   },
   "r36_submission_comment": "5927087320",
-  "stale_recovered_at": "2026-10-01T12:46:42.153Z",
+  "stale_recovered_at": "2026-10-01T13:08:39.055Z",
   "engineering_regression_policy": {
     "source": "HOST PRODUCT DIRECTION 2026-10-01",
     "doc": "docs/releases/ENGINEERING-REGRESSION-POLICY.md",
@@ -1171,5 +1171,35 @@
       "入口层零事务静态探针继续作为永久回归基线"
     ],
     "next_batch": "R44-A — recovery.manual_submit Approval Creation Boundary（谁可创建审批 / 绑定哪个 Claim·Case·package·basis / approval lifecycle / HTTP request contract / 与既有 execution endpoint 对接；不得扩到 outcome·reconciliation，不得联动 Settlement·Billing，不得开启平台写 transport）"
+  },
+  "r44_rereview_submission": {
+    "submission_comment": "5932108490",
+    "ci_run": "36865362444",
+    "ci_conclusion": "success 5/5",
+    "reviewed_head": "eca4207",
+    "submitted_under_rules": true,
+    "risk_classification": {
+      "FOUNDATION_REUSED": "R43 S1–S6 持久化底座（S3 原子提交 / S4 补录 / Action Guard / HITL 校验 / 审计与租户触发器）+ platform.write 入口范式；本轮未新增任何事务、Schema 或权限语义",
+      "NEW_RISK_BOUNDARY": "NO（本轮不新增边界）—— 仅补 MSG-40 CHANGE A 的 HTTP 证据（两入口跨租户/错案件 404 + 失败零副作用）与 CHANGE B 的 CI SUCCESS，并做纯夹具确定化修复",
+      "ARCH_REVIEW_REQUIRED": "YES —— 触发项：安全边界变化（延续 R44 新增的两个对外入口，按 MSG-20261001-40 要求提交轻量 RE-REVIEW；不重复送审已 PASS 且未变化的基础设施）"
+    },
+    "change_a": {
+      "tests_added": [
+        "R44-11 manual-submit 跨租户案件 → 404",
+        "R44-12 manual-submit 同租户错案件 → 404",
+        "R44-13 manual-reference 跨租户 submission → 404",
+        "R44-14 manual-reference 同租户错案件 submission → 404（防 confused-deputy）"
+      ],
+      "zero_side_effect_assertions": "每条均比对失败前后快照：ClaimItem 状态 / Submission 数 / Reference 数 / approval consumption / Settlement / BillingInvoice",
+      "suite": "recovery-manual-http-db.test.ts 10 → 14/14 PASS"
+    },
+    "change_b": {
+      "ci": "09e9f6d = success 5/5；eca4207 = success 5/5",
+      "flake_fix": "R43 夹具 review_required/review_approved 未显式写 createdAt，同毫秒使 required<approved 严格比较偶发失败（bd6d330 API job 3 例 APPROVAL_NOT_APPROVED）→ 改为显式有序 createdAt（required −2s / approved −1s）；断言与生产代码零变化"
+    },
+    "doc_wording_fix": "R44 = Manual Recovery Execution HTTP Boundary（非完整 E2E）；审批创建入口另立 R44-A",
+    "next_batch": "R44-A — Manual Recovery Approval Creation Boundary（待 R44 关闭后进入）",
+    "wakeup_channel": "https://chatgpt.com/c/6ab9ee1b-fd54-83ee-b363-b67750afcedd",
+    "wakeup_delivery": "DELIVERED_VERIFIED（输入框清空 / 新用户消息在底部 / 生成中）"
   }
 }
