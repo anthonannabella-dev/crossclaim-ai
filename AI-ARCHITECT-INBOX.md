@@ -77829,3 +77829,111 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 本裁决不包含合并、部署或真实平台提交授权。
 ```
 
+### [MSG-20261001-08] Gate 7 / ② RUNTIME BUSINESS BLOCKING · claim.prepare · R24（REVIEWED_REF cabdead）：VERDICT: REVISE（CHANGE A = DRAFT 校验/更新竞争缺口需案件锁+行锁+CAS；CHANGE B = 锁后重读主体与角色）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE: FORMAL_VERDICT
+MESSAGE: MSG-20261001-08
+PREVIOUS: MSG-20261001-07
+GATE: Gate 7 / 授权项② RUNTIME BUSINESS BLOCKING · claim.prepare · R24
+HEAD: cabdead
+REVIEWED_REF: cabdead49685773cf53262b98feeda9097404e9a
+DECISION: REVISE
+
+1）证据 / TEST
+
+本轮重新读取 
+Issue #2 comment 5923761860、提交差异、最终准备服务及 CI 日志。
+
+CI run 36807426773 对应受审 SHA，五作业 SUCCESS；API 日志确认 146 files / 1369 tests PASS，claim.prepare 专项 12/12。
+
+未独立运行本地测试。当前测试未覆盖下述并发及等锁授权变化。
+
+2）KEEP
+
+以下接受：
+
+POST 路由、server 前缀门控及缺 guard 拒绝已接通。
+INTERNAL_WRITE 不要求 approvalId，符合本批次契约。
+默认 READ_ONLY、Kill Switch、feature 和模式限制已接线。
+案件及草稿读取限定租户。
+准备写入与 claim.prepared 使用同一事务，审计失败回滚。
+输入规范化、正文长度限制、无平台及资金调用保持。
+本批次暂用 OWNER/ADMIN 的 claimTrackingApprove 权限可接受，无需新建 permission key。
+创建或更新第 1 轮 DRAFT 的语义可接受。
+3）CHANGE A：DRAFT 校验与更新存在竞争缺口
+
+当前逻辑先读取 existing.status，随后：
+
+TypeScript
+tx.claim.update({
+  where: { id: existing.id },
+  data: { target, aiDraftText: draftText }
+})
+
+更新没有 DRAFT 条件，也没有与 claim.submit 共用锁协议。
+
+因此，在读取 DRAFT 后、更新前，另一事务可以完成提交；准备请求随后仍修改已提交 Claim，并返回硬编码的 status=DRAFT。事务本身不能阻止这种交错。
+
+要求：
+
+准备事务先取得与提交服务一致的案件锁 cc-recovery-case:${caseId}。
+已有 Claim 按一致顺序取得行锁并确认身份、租户、案件与轮次，锁后重读状态。
+更新使用带租户、案件、round=1、status=DRAFT 条件的 CAS，核对恰一行；失败结构化拒绝，不写成功准备审计。
+无草稿时也在案件锁内重新确认不存在，再创建，避免并发创建竞争。
+返回结果来自实际成功写入结果，不能在状态不符时宣称 DRAFT。
+
+补验收：
+
+prepare 等锁期间 submit 已成功：prepare 返回 409 ILLEGAL_TRANSITION，草稿内容与 target 不变，无新增 claim.prepared。
+同案件无草稿的并发准备：最终只有一个 round=1 Claim，无未处理唯一约束错误，响应与各自成功审计一致。
+4）CHANGE B：最终权限不能只使用会话角色快照
+
+当前服务仅在事务之前执行：
+
+TypeScript
+assertPermission(input.role, 'claimTrackingApprove');
+
+数据库写入等待期间发生角色降权、成员停用或用户停用，仍可能继续准备。
+
+要求：
+
+取得必要锁之后，用事务客户端重读 ACTIVE 用户、有效 Membership 和当前角色。
+对实时角色执行本动作权限检查，锁前检查仅作为快速拒绝。
+权限不足保持 403 FORBIDDEN；主体失效采用明确、稳定的拒绝原因。
+拒绝时不修改草稿、不新增成功准备审计；需要记录拒绝时，使用可关联的结构化记录。
+执行时间在锁后校验完成后生成。
+
+补真实 HTTP + PostgreSQL 控制点：
+
+ADMIN 请求进入等待后降为 FINANCE：锁后拒绝，已有草稿内容不变。
+等待期间成员停用或用户停用：拒绝且零业务写入。
+相同等待路径主体未变化：正常准备成功。
+5）TEST 补齐范围
+
+保留现有 12 项，不要求重做已接受部分。除上述竞争与权限测试外，补更新已有草稿时审计失败回滚，确认原 target、正文及状态保留；现有审计失败用例只覆盖新建路径。
+
+不要求新增迁移、审批链路或平台适配器。
+
+6）RISKS / NEXT
+
+本轮阻塞项是：
+
+提交与准备竞争时可能修改已提交 Claim；
+等待期间权限变化后仍使用旧角色执行。
+
+内部写入不需要人工审批，但仍须保护状态与权限。CI 全绿不能替代这些交错场景的验收。
+
+立即完成 CHANGE A/B 及针对性测试，重跑准备专项、Claim 提交回归、类型检查及最终 HEAD CI，再提交七段式复审。暂不启动 billing.draft。
+
+裁决只在本会话输出，不写入追踪系统。Codex 可原文归档并执行，无需再次确认。
+
+7）PRODUCTION
+
+授权项②整体仍 NOT COMPLETE。
+
+Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：全部 HOLD。本裁决不包含合并或部署授权。
+```
+

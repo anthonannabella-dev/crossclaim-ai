@@ -530,3 +530,11 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - R20 通道核实：Issue #2 请求 comment **5922360473** 已写回（STATUS=201）；ChatGPT 会话中 R20 消息确为最后一条、无 assistant 回复、无 generating、无错误横幅；按规程先 `reload()` 复读一次，再发送**轻量重试**「请处理刚才的 R20 复审请求：REVIEWED_HEAD=e8ba20e，Issue #2 comment 5922360473，请给出新的 PASS / REVISE / BLOCK。」，并验证其出现在会话底部（送达）。
 - 重复实例：本轮未再观测到第二个活跃自动化实例；此前出现的并行提交（如 ecd8f50）来自另一执行实例，已通过保持单一 ACTIVE 自动化收敛。
 - 边界：Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据继续 HOLD。
+
+
+## 2026-10-01 · R25 准备期：本地环境已存在的 2 项失败（非本批次引入）
+
+- 现象：本机全量运行出现 2 个失败 —— `action-guard-hitl-approval-verifier-db.test.ts > 03`（`{ valid: false }`）与 `action-guard-hitl-route-db.test.ts > 04`（期望 200/201，实际 403）。
+- 归因验证：`git stash push -u` 回到基线 `cabdead`（CI 五作业 SUCCESS，本地此前全量 146 files/1369 tests 全绿）后，**同样两个用例仍失败**（2 failed | 15 passed），恢复工作区后重复运行仍失败；因此这两个失败与 MSG-20261001-08 CHANGE A/B **无因果**。
+- 两个文件共同特征：固定时间常量 `NOW = 2026-09-30T03:00:00Z` + 真实时钟做审批有效期/绑定判定；随本地墙钟推进（今日为 2026-10-01）逐步进入失败窗口，属**时钟相关本地 flake**。
+- 处置：不修改既有已验收文件的时间夹具（避免掩盖)；本批次证据以 **claim.prepare 专项 18/18 + 回归 29 files/260 PASS + CI（权威）** 为准，本地全量失败按上表登记并在 R25 七段式中披露。

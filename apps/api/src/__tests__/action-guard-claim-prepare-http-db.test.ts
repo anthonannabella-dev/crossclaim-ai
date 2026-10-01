@@ -294,6 +294,61 @@ async function callWorkflowDirect(targetPath: string, body: Record<string, unkno
   return { status, body: payload as Record<string, unknown> | null };
 }
 
+const caseLockKey = () => `cc-recovery-case:${caseId}`;
+
+async function advisoryLockCount(key: string, granted: boolean): Promise<number> {
+  const rows = await prisma.$queryRawUnsafe<{ n: bigint }[]>(
+    `SELECT count(*)::bigint AS n
+       FROM pg_locks l
+      WHERE l.locktype = 'advisory'
+        AND l.granted = ${granted ? 'true' : 'false'}
+        AND (l.objid::text = ((hashtext($1)::bigint & 4294967295))::text
+             OR l.classid::text = ((hashtext($1)::bigint & 4294967295))::text)` ,
+    key,
+  );
+  return Number(rows[0]?.n ?? 0n);
+}
+
+async function waitFor(check: () => Promise<boolean>, timeoutMs: number, label: string): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    if (await check()) return;
+    if (Date.now() > deadline) throw new Error(`CONTROL_POINT_TIMEOUT:${label}`);
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+}
+
+/** 独立连接持有案件咨询锁（与 submitRecoveryReview / claim.submit 同一协议）；返回释放函数 */
+async function holdCaseLock(): Promise<() => void> {
+  let release: () => void = () => {};
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  void prisma
+    .$transaction(
+      async (tx) => {
+        await tx.$executeRawUnsafe('SELECT pg_advisory_xact_lock(hashtext($1))', caseLockKey());
+        await gate;
+      },
+      { timeout: 30_000, maxWait: 30_000 },
+    )
+    .catch(() => undefined);
+  await waitFor(async () => (await advisoryLockCount(caseLockKey(), true)) >= 1, 10_000, 'CASE_LOCK_NOT_GRANTED');
+  return release;
+}
+
+/** 注入数据库层「某审计动作不可写」的失败；用后必然拆除约束 */
+async function withAuditActionBlocked<T>(action: string, run: () => Promise<T>): Promise<T> {
+  await prisma.$executeRawUnsafe(
+    `ALTER TABLE "AuditLog" ADD CONSTRAINT claim_prepare_block_audit CHECK (action <> '${action}') NOT VALID`,
+  );
+  try {
+    return await run();
+  } finally {
+    await prisma.$executeRawUnsafe('ALTER TABLE "AuditLog" DROP CONSTRAINT IF EXISTS claim_prepare_block_audit');
+  }
+}
+
 describe('② RUNTIME BUSINESS BLOCKING — claim.prepare（真实 HTTP + PostgreSQL）', () => {
   it('01 未配置 control plane（默认 READ_ONLY）→ 拒绝且零业务副作用', async () => {
     await withServer(
@@ -517,6 +572,135 @@ describe('② RUNTIME BUSINESS BLOCKING — claim.prepare（真实 HTTP + Postgr
       expect(emptyDraft.status).toBe(400);
       expect(emptyDraft.body.error).toBe('INVALID_FIELD');
       expect(await sideEffects()).toMatchObject(ZERO);
+    });
+  }, 60_000);
+
+  it('13 prepare 等锁期间 submit 已成功 → 409 ILLEGAL_TRANSITION，草稿与审计均不新增', async () => {
+    await withServer(async (base) => {
+      const cookie = await login(base);
+      const seeded = await prisma.claim.create({ data: { organizationId: ORG, caseId, round: 1, status: 'DRAFT', target: 'CARRIER', aiDraftText: 'seeded' } });
+      const release = await holdCaseLock();
+      const pending = prepare(base, cookie, { target: 'INSURER', draftText: 'should not apply' });
+      try {
+        await waitFor(
+          async () => (await advisoryLockCount(caseLockKey(), false)) >= 1,
+          10_000,
+          'SUBMIT_DONE_DURING_PREPARE_WAIT',
+        );
+        // 等锁期间另一事务（提交路径）完成：Claim 离开 DRAFT
+        await prisma.claim.update({
+          where: { id: seeded.id },
+          data: { status: 'SUBMITTED', submittedAt: new Date(), submittedBy: ownerId },
+        });
+      } finally {
+        release();
+      }
+      const res = await pending;
+      expect(res.status).toBe(409);
+      expect(res.body.error).toBe('ILLEGAL_TRANSITION');
+      const after = await prisma.claim.findUniqueOrThrow({ where: { id: seeded.id } });
+      expect(after.status).toBe('SUBMITTED');
+      expect(after.target).toBe('CARRIER');
+      expect(after.aiDraftText).toBe('seeded');
+      expect((await sideEffects()).preparedAudits).toBe(0);
+    });
+  }, 60_000);
+
+  it('14 无草稿的并发准备 → 仅一个 round=1 Claim，响应与审计一致', async () => {
+    await withServer(async (base) => {
+      const cookie = await login(base);
+      const [a, b] = await Promise.all([
+        prepare(base, cookie, { target: 'CARRIER', draftText: 'A' }),
+        prepare(base, cookie, { target: 'INSURER', draftText: 'B' }),
+      ]);
+      expect([a.status, b.status]).toEqual([200, 200]);
+      const results = [a, b] as Array<{ body: Record<string, unknown> }>;
+      const createdFlags = results.map((r) => r.body.created).sort();
+      expect(createdFlags).toEqual([false, true]);
+      // 两个响应指向同一 Claim
+      expect(a.body.claimId).toBe(b.body.claimId);
+      const after = await sideEffects();
+      expect(after.claimRows).toBe(1);
+      expect(after.preparedAudits).toBe(2);
+    });
+  }, 60_000);
+
+  it('15 等锁期间执行人降为 FINANCE → 403 FORBIDDEN，既有草稿不变', async () => {
+    await withServer(async (base) => {
+      const seeded = await prisma.claim.create({ data: { organizationId: ORG, caseId, round: 1, status: 'DRAFT', target: "CARRIER", aiDraftText: "before" } });
+      const executor = await createMember('FINANCE');
+      // 先以 ADMIN 身份请求：构造「请求发出后角色被降级」的等锁窗口
+      await prisma.membership.updateMany({ where: { organizationId: ORG, userId: executor.userId }, data: { role: "ADMIN" } });
+      const cookie = await login(base, executor.email);
+      const release = await holdCaseLock();
+      const pending = prepare(base, cookie, { target: 'INSURER', draftText: 'after downgrade' });
+      try {
+        await waitFor(async () => (await advisoryLockCount(caseLockKey(), false)) >= 1, 10_000, "PREPARE_WAITING_ON_CASE_LOCK");
+        await prisma.membership.updateMany({ where: { organizationId: ORG, userId: executor.userId }, data: { role: "FINANCE" } });
+      } finally {
+        release();
+      }
+      const res = await pending;
+      expect(res.status).toBe(403);
+      expect(res.body.error).toBe('FORBIDDEN');
+      const after = await prisma.claim.findUniqueOrThrow({ where: { id: seeded.id } });
+      expect(after.target).toBe('CARRIER');
+      expect(after.aiDraftText).toBe('before');
+      expect((await sideEffects()).preparedAudits).toBe(0);
+    });
+  }, 60_000);
+
+  it('16 等锁期间成员停用 → APPROVAL_ACTOR_MISMATCH 且零业务写入', async () => {
+    await withServer(async (base) => {
+      const executor = await createMember('OPS');
+      await prisma.membership.updateMany({ where: { organizationId: ORG, userId: executor.userId }, data: { role: "ADMIN" } });
+      const cookie = await login(base, executor.email);
+      const release = await holdCaseLock();
+      const pending = prepare(base, cookie, { target: 'CARRIER', draftText: 'member disabled' });
+      try {
+        await waitFor(async () => (await advisoryLockCount(caseLockKey(), false)) >= 1, 10_000, "PREPARE_WAITING_ON_CASE_LOCK_2");
+        await prisma.membership.updateMany({ where: { organizationId: ORG, userId: executor.userId }, data: { isActive: false } });
+      } finally {
+        release();
+      }
+      const res = await pending;
+      expect(res.status).toBe(403);
+      expect(res.body.error).toBe('APPROVAL_ACTOR_MISMATCH');
+      expect(await sideEffects()).toMatchObject(ZERO);
+    });
+  }, 60_000);
+
+  it('17 同等待路径主体未变 → 正常准备成功（对照）', async () => {
+    await withServer(async (base) => {
+      const executor = await createMember('OPS');
+      await prisma.membership.updateMany({ where: { organizationId: ORG, userId: executor.userId }, data: { role: "ADMIN" } });
+      const cookie = await login(base, executor.email);
+      const release = await holdCaseLock();
+      const pending = prepare(base, cookie, { target: 'CARRIER', draftText: 'wait then ok' });
+      try {
+        await waitFor(async () => (await advisoryLockCount(caseLockKey(), false)) >= 1, 10_000, "PREPARE_WAITING_ON_CASE_LOCK_3");
+      } finally {
+        release();
+      }
+      const res = await pending;
+      expect(res.status).toBe(200);
+      const after = await sideEffects();
+      expect(after.claimRows).toBe(1);
+      expect(after.preparedAudits).toBe(1);
+    });
+  }, 60_000);
+
+  it('18 更新既有草稿时审计写入失败 → 整笔回滚，原草稿内容保留', async () => {
+    await withServer(async (base) => {
+      const seeded = await prisma.claim.create({ data: { organizationId: ORG, caseId, round: 1, status: 'DRAFT', target: 'CARRIER', aiDraftText: 'original' } });
+      const cookie = await login(base);
+      const res = await withAuditActionBlocked('claim.prepared', async () => prepare(base, cookie, { target: 'INSURER', draftText: 'updated' }));
+      expect(res.status).toBeGreaterThanOrEqual(400);
+      const after = await prisma.claim.findUniqueOrThrow({ where: { id: seeded.id } });
+      expect(after.target).toBe('CARRIER');
+      expect(after.aiDraftText).toBe('original');
+      expect(after.status).toBe('DRAFT');
+      expect((await sideEffects()).preparedAudits).toBe(0);
     });
   }, 60_000);
 });

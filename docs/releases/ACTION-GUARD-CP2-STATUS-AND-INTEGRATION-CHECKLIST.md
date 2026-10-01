@@ -154,5 +154,8 @@
 | 租户隔离与动作权限 | 已实现（R24 送审中） | 跨租户 → 404 NOT_FOUND；服务内 `assertPermission(role,'claimTrackingApprove')`（OWNER/ADMIN），FINANCE → 403 FORBIDDEN |
 | 审计失败关闭 | 已实现（R24 送审中） | `claim.prepared` 与业务写入同事务客户端；库拒绝审计写入 → 整笔回滚 |
 | 零外部副作用 | 已实现（R24 送审中） | 不引用适配器写入面、不产生资金对象、不推进 Claim（submittedAt/submittedBy/approved* 保持空）；`platformWriteExecuted=false` |
-| 集成测试 | 12/12（R24 送审中） | `action-guard-claim-prepare-http-db.test.ts`（真实 HTTP + PostgreSQL） |
+| 集成测试 | **18/18**（R25 送审中） | `action-guard-claim-prepare-http-db.test.ts`（真实 HTTP + PostgreSQL；含 MSG-08 CHANGE A/B：prepare/submit 竞争、并发创建、等锁期降权/停用/未变对照、更新路径审计失败回滚） |
 | 架构方裁决 | **待裁决** | 本批次送审 R24；② 整体仍 NOT COMPLETE |
+
+
+> **MSG-20261001-08（R24 = REVISE）已实施**：准备事务改为「案件锁 `cc-recovery-case:<caseId>`（与提交服务同协议）→ 租户核对 → 锁后重读 ACTIVE 用户 + 有效 Membership + 当前角色并重验权限 → 既有 Claim 行锁 → 带租户/案件/round=1/status=DRAFT 条件的 CAS」；主体失效沿用稳定码 `APPROVAL_ACTOR_MISMATCH`。集成测试 12 → 18 项（R25 送审中）。

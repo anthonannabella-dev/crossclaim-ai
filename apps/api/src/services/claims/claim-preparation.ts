@@ -1,20 +1,19 @@
 /**
  * CLAIM 内部准备写入 —— 受保护动作 `claim.prepare`（Gate 7 / ② 下一小批次 · INTERNAL_WRITE）
  * ---------------------------------------------------------------------------------------
- * 依据 MSG-20261001-07 §6：本批次把「内部准备写入」接入 Action Guard，**不引入人工审批**，
- * 只要求能力闸门（Kill Switch scope=workflow + 动作 feature + 控制面模式允许 INTERNAL_WRITE）。
- *
- * 纪律：
- *   - 入口必须先经 Action Guard 断言（路由层），本服务只在**放行后**执行；
- *   - 业务权限与 claim.submit 同一口径（claimTrackingApprove），非提交者不能准备草稿；
- *   - 案件与 Claim 一律按 organizationId 限定（跨租户一律 NOT_FOUND，不泄露存在性）；
- *   - 业务写入与业务审计（claim.prepared）在**同一事务**完成：审计失败 → 整笔回滚；
- *   - 只写业务库：不调用任何平台适配器写入面，不产生资金对象，也**不推进** Claim 状态。
+ * 依据 MSG-20261001-07 §6（批次范围）与 MSG-20261001-08 CHANGE A/B（并发与锁后权限）：
+ *   - 能力闸门（Kill Switch scope=workflow + 动作 feature + 控制面模式允许 INTERNAL_WRITE），**无人审批**；
+ *   - 准备事务**先取与提交服务一致的案件锁** `cc-recovery-case:${caseId}`，再对既有 Claim 取行锁；
+ *   - 锁后重读主体（ACTIVE 用户 + 有效 Membership + 当前角色）并重新裁决本动作权限；
+ *   - 更新使用带租户/案件/round=1/status=DRAFT 条件的 CAS，恰一行才算成功；
+ *   - 业务写入与 `claim.prepared` 审计同一事务，审计失败整笔回滚；
+ *   - 只写业务库：不调用平台适配器写入面、不产生资金对象、不推进 Claim 状态。
  */
 
 import type { Prisma, PrismaClient } from '@prisma/client';
 
 import { prepareAuditInsert } from '../audit';
+import { ApprovalBoundaryError } from '../action-guard/approval-tx-verify';
 import { WorkflowError } from '../workflow/opportunity-review';
 import { assertPermission } from '../workflow/permissions';
 
@@ -40,7 +39,7 @@ const MAX_DRAFT_CHARS = 20_000;
 export interface ClaimPreparationInput {
   organizationId: string;
   actorUserId: string;
-  /** 会话内已解析的角色；权限矩阵在服务内再次裁决 */
+  /** 会话内已解析的角色；仅作事务前快速拒绝，最终裁决在锁后用数据库当前角色执行 */
   role: string;
   caseId: string;
   /** 路由目标（RouteTarget 枚举的合法取值） */
@@ -135,11 +134,13 @@ function normalizeDraftText(raw: unknown): string {
 /**
  * 受保护的内部准备写入（唯一执行入口）。
  * 前置：调用方已完成 Action Guard 能力闸门（`claim.prepare`，INTERNAL_WRITE，无人工审批）。
+ * 纪律：锁前权限检查只是快速拒绝；**最终裁决在案件锁 + Claim 行锁之后按数据库当前角色执行**。
  */
 export async function prepareClaimDraft(
   input: ClaimPreparationInput,
   deps: ClaimPreparationDeps,
 ): Promise<ClaimPreparationResult> {
+  // 快速拒绝（不能替代锁后重验）
   assertPermission(input.role, 'claimTrackingApprove');
   const target = normalizeTarget(input.target);
   const draftText = normalizeDraftText(input.draftText);
@@ -147,54 +148,91 @@ export async function prepareClaimDraft(
 
   return deps.prisma.$transaction(
     async (tx) => {
-      // 租户隔离：案件必须属于调用方租户，否则一律 NOT_FOUND
+      // A-1：案件锁（与 submitRecoveryReview / claim.submit 同一协议）——串行化「提交」与「准备」
+      await tx.$executeRawUnsafe(
+        'SELECT pg_advisory_xact_lock(hashtext($1))',
+        `cc-recovery-case:${input.caseId}`,
+      );
+
+      // A-2：租户隔离：案件必须属于调用方租户，否则一律 NOT_FOUND
       const kase = await tx.case.findFirst({
         where: { id: input.caseId, organizationId: input.organizationId },
         select: { id: true },
       });
       if (!kase) throw new WorkflowError('NOT_FOUND', '案件不存在或不属于该租户');
 
-      // 第 1 轮草稿：存在则必须是 DRAFT（已离开 DRAFT 的 Claim 不得再准备）
-      const existing = await tx.claim.findFirst({
-        where: { organizationId: input.organizationId, caseId: input.caseId, round: 1 },
-        select: { id: true, status: true },
+      // B：锁后重读主体（ACTIVE 用户 + 有效 Membership + 数据库当前角色）并重新裁决本动作权限
+      const actor = await tx.user.findFirst({
+        where: { id: input.actorUserId, status: 'ACTIVE' },
+        select: { id: true },
       });
-      if (existing && existing.status !== 'DRAFT') {
-        throw new WorkflowError('ILLEGAL_TRANSITION', 'Claim 已离开 DRAFT，不能再准备草稿');
-      }
+      const membership = await tx.membership.findFirst({
+        where: { organizationId: input.organizationId, userId: input.actorUserId, isActive: true },
+        select: { role: true },
+      });
+      // 主体失效（用户停用/成员停用或缺失）→ 稳定且明确的拒绝原因
+      if (!actor || !membership) throw new ApprovalBoundaryError('APPROVAL_ACTOR_MISMATCH', input.caseId);
+      // 权限不足（角色降权）→ 与 claim.submit 一致的权限矩阵拒绝
+      assertPermission(membership.role, 'claimTrackingApprove');
 
-      // 全部校验通过后再生成时间，并在本事务内统一使用
+      // A-3：既有 Claim 行锁（与提交服务同一顺序：案件锁 → 行锁；限定租户/案件/round=1）
+      const locked = await tx.$queryRawUnsafe<Array<{ id: string; status: string }>>(
+        'SELECT id, status FROM "Claim" WHERE "organizationId" = $1 AND "caseId" = $2 AND round = 1 FOR UPDATE',
+        input.organizationId,
+        input.caseId,
+      );
+
+      // 全部必要锁与锁后校验完成后才生成执行时间
       const at = now();
-      const claim = existing
-        ? await tx.claim.update({
-            where: { id: existing.id },
-            data: { target, aiDraftText: draftText },
-            select: { id: true, status: true },
-          })
-        : await tx.claim.create({
-            data: {
-              organizationId: input.organizationId,
-              caseId: input.caseId,
-              round: 1,
-              status: 'DRAFT',
-              target,
-              aiDraftText: draftText,
-            },
-            select: { id: true, status: true },
-          });
+      let claimId: string;
+      let created: boolean;
+
+      if (locked.length > 0) {
+        // A-4：带租户/案件/round=1/status=DRAFT 条件的 CAS，恰一行才算成功
+        const cas = await tx.claim.updateMany({
+          where: {
+            id: locked[0]!.id,
+            organizationId: input.organizationId,
+            caseId: input.caseId,
+            round: 1,
+            status: 'DRAFT',
+          },
+          data: { target, aiDraftText: draftText },
+        });
+        if (cas.count !== 1) {
+          throw new WorkflowError('ILLEGAL_TRANSITION', 'Claim 已离开 DRAFT，不能再准备草稿');
+        }
+        claimId = locked[0]!.id;
+        created = false;
+      } else {
+        // A-5：无草稿也在案件锁内重新确认不存在（上面的行锁查询即确认），再创建
+        const applied = await tx.claim.create({
+          data: {
+            organizationId: input.organizationId,
+            caseId: input.caseId,
+            round: 1,
+            status: 'DRAFT',
+            target,
+            aiDraftText: draftText,
+          },
+          select: { id: true },
+        });
+        claimId = applied.id;
+        created = true;
+      }
 
       await insertTxAudit(tx, {
         organizationId: input.organizationId,
         actorUserId: input.actorUserId,
         action: CLAIM_PREPARED_ACTION,
         entityType: 'Claim',
-        entityId: claim.id,
+        entityId: claimId,
         changes: {
           caseId: input.caseId,
-          claimId: claim.id,
+          claimId,
           round: 1,
           target,
-          created: !existing,
+          created,
           draftChars: draftText.length,
         },
         at,
@@ -202,16 +240,17 @@ export async function prepareClaimDraft(
 
       return {
         caseId: input.caseId,
-        claimId: claim.id,
+        claimId,
         round: 1 as const,
+        // 仅当上面的 CAS / 创建真正成功才会返回（不存在「状态不符仍宣称 DRAFT」的路径）
         status: 'DRAFT' as const,
         target,
-        created: !existing,
+        created,
         preparedAt: at.toISOString(),
         platformWriteExecuted: false as const,
         externalSubmission: 'NOT_ATTEMPTED' as const,
       };
     },
-    { timeout: 15_000, maxWait: 15_000 },
+    { timeout: 30_000, maxWait: 30_000 },
   );
 }
