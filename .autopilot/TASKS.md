@@ -362,3 +362,11 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - 送审：REVIEWED_HEAD 219a67c（Issue #2 comment 5931742832 / CI 36863814805）。
 - 并行下一单元（不等裁决、不空转）：R45 Outcome / Reimbursement Reconciliation 的 Design + Schema Delta Request（docs-only）。
 - 保持：AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · SETTLEMENT/BILLING LINKAGE HOLD。
+
+### MSG-20261001-40 裁决（R44 = PASS WITH REVISE → 补 CHANGE A + CI SUCCESS 后 RE-REVIEW）
+
+- DECISION：**PASS WITH REVISE**（REVIEWED_HEAD 219a67c；归档 FULL_COPY_OK）。
+- CHANGE A：manual-submit 与 manual-reference 各自补「跨租户 / wrong-case → 404」HTTP 用例，并断言失败零副作用（ClaimItem / Submission·Reference / approval consumption / 资金域不变）。
+- CHANGE B：精确 HEAD 的 CI 必须 SUCCESS（送审时为 in_progress）。
+- 口径：R44 = Execution HTTP Boundary（非完整 E2E）；审批创建入口属 **R44-A** 独立批次。
+- NEXT：R44 RE-REVIEW → 通过后 R44 HTTP Execution Boundary = CLOSED → 进入 R44-A。

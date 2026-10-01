@@ -1,17 +1,17 @@
 {
   "gate": "B2-FIX R1",
-  "head": "ea2adc2",
+  "head": "bd6d330",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
   "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
   "send_head": "07b7009",
   "decision_head": "07b7009",
-  "last_chatgpt_message": "MSG-20261001-39",
+  "last_chatgpt_message": "MSG-20261001-40",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T12:45:41.734Z",
-  "previous_head": "219a67c",
-  "architect_decision_pending": true,
+  "updated_at": "2026-10-01T12:48:10.077Z",
+  "previous_head": "ea2adc2",
+  "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "219a67c",
   "last_sent_at": "2026-10-01T12:45:41.734Z",
@@ -49,12 +49,12 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-01T12:46:54.821Z",
+  "last_tick_at": "2026-10-01T12:47:43.270Z",
   "state": "IMPLEMENT",
-  "last_action": "SCHEDULER_STALE_RECOVERED（gap=11min）→ 本轮已恢复执行",
-  "last_action_at": "2026-10-01T12:45:41.734Z",
-  "next_action": "等待 R44 增量裁决（PASS → 入口边界收口并按 HOST DIRECTIVE 直接进入下一执行单元；REVISE → 按 CHANGE 修改重送；BLOCK → 停止该入口）。并行准备 R45（Outcome / Reimbursement Reconciliation）设计与 Schema Delta Request（docs-only，可先做，不触碰已冻结底座）。",
-  "current_head": "219a67c",
+  "last_action": "MSG-20261001-40 = PASS WITH REVISE 已逐字归档并 FULL_COPY_OK —— R44 入口边界原则认可；需补 CHANGE A（两入口各自跨租户/错绑定 404 + 失败零副作用）与 CHANGE B（HEAD CI SUCCESS），随后提交 R44 RE-REVIEW",
+  "last_action_at": "2026-10-01T12:48:10.077Z",
+  "next_action": "R44 RE-REVIEW 前置：①为 manual-submit 与 manual-reference 各补跨租户/错案件 HTTP 404 用例（含失败零副作用断言）②修正文档措辞（R44 = Execution Boundary，非完整 E2E；审批创建另立 R44-A）③推送并等待精确 HEAD CI SUCCESS ④提交 R44 RE-REVIEW。",
+  "current_head": "bd6d330",
   "reviewed_head": "07b7009",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-01T12:46:42.153Z",
-    "gapMs": 12670,
+    "previousTickAt": "2026-10-01T12:46:54.821Z",
+    "gapMs": 48450,
     "stale": false,
-    "checkedAt": "2026-10-01T12:46:54.821Z"
+    "checkedAt": "2026-10-01T12:47:43.270Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -1147,5 +1147,29 @@
     "wakeup_channel": "https://chatgpt.com/c/6ab9ee1b-fd54-83ee-b363-b67750afcedd",
     "wakeup_delivery": "DELIVERED_VERIFIED（输入框清空 / 新用户消息在底部 / 生成中）",
     "submitted_under_rules": true
+  },
+  "r44_verdict": {
+    "message_id": "MSG-20261001-40",
+    "decision": "PASS WITH REVISE",
+    "reviewed_head": "219a67c",
+    "archival": "FULL_COPY_OK",
+    "archival_at": "2026-10-01T12:48:10.077Z",
+    "status": "R44 原则认可（Execution HTTP Boundary）；CHANGE A/B 补齐 + CI SUCCESS 后轻量 RE-REVIEW 即关闭",
+    "rulings": {
+      "boundary_accepted": "两个入口只做 authn / tenant-path binding / 请求校验 / Action Guard / 调用既有 R43 service / 响应映射，不复制事务与锁逻辑 —— 认可",
+      "approval_creation_gap": "认可为 R44 范围之外；R44 完成的是 Manual Recovery Execution HTTP Boundary，**不是**完整用户可用 E2E；文档/API 描述不得写成「manual recovery API 已完整可用」；该 gap 独立开 R44-A — Manual Recovery Approval Creation Boundary",
+      "close_condition": "CHANGE A（两入口跨租户/错绑定 404 证据 + 失败零副作用）+ CHANGE B（精确 HEAD CI = SUCCESS）→ 提交 R44 RE-REVIEW"
+    },
+    "changes": {
+      "A": "两个 endpoint 必须各自有跨租户/wrong-case 的 HTTP 404 证据，并断言失败后 ClaimItem 状态 / Submission·Reference 数量 / approval consumption / Settlement·Billing·RecoveryLedger·Payment 均不变（证明 route 参数 caseId 不能被他案/他租户 target 绕过）",
+      "B": "REVIEWED_HEAD 的 CI 必须最终 SUCCESS（送审时 36863814805 仍 in_progress）"
+    },
+    "test_requirements": [
+      "manual-submit：跨租户 / wrong-case → 404",
+      "manual-reference：跨租户 submission / wrong-case → 404",
+      "两者失败后：ClaimItem 状态不变、Submission/Reference 数不变、approval consumption 不变、Settlement/Billing/RecoveryLedger/Payment 不变",
+      "入口层零事务静态探针继续作为永久回归基线"
+    ],
+    "next_batch": "R44-A — recovery.manual_submit Approval Creation Boundary（谁可创建审批 / 绑定哪个 Claim·Case·package·basis / approval lifecycle / HTTP request contract / 与既有 execution endpoint 对接；不得扩到 outcome·reconciliation，不得联动 Settlement·Billing，不得开启平台写 transport）"
   }
 }

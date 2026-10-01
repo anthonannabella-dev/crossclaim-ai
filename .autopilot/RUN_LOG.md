@@ -1011,3 +1011,12 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - Known gap：recovery.manual_submit 审批的创建入口尚未暴露（reviewRecovery 拒绝该 boundAction）→ 独立批次。
 - 送审：REVIEWED_HEAD 219a67c（Issue #2 comment 5931742832 / CI 36863814805）；唤醒已投递并三要素验证。
 - HOLD 保持：AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · SETTLEMENT/BILLING LINKAGE HOLD · Production Enablement HOLD。
+
+## 2026-10-01 JST — MSG-20261001-40 = PASS WITH REVISE（R44 入口边界）
+
+- 裁决：**PASS WITH REVISE**（REVIEWED_HEAD 219a67c）。R44 两个入口的原则、契约与零事务入口层获得认可；CI 送审时仍 in_progress。
+- CHANGE A：两个 endpoint 必须各自有跨租户 / wrong-case 的 HTTP 404 证据，并断言失败后 ClaimItem / Submission·Reference / approval consumption / 资金域全部不变（防 confused-deputy 对象绑定漏洞）。
+- CHANGE B：精确 HEAD 的 CI 必须最终 SUCCESS。
+- 口径修正（架构方要求）：R44 = Manual Recovery **Execution** HTTP Boundary，**不是**完整用户可用 E2E；审批创建入口缺失属独立批次 **R44-A — Approval Creation Boundary**；文档不得写成「完整可用」。
+- 档案：`AI-ARCHITECT-INBOX.md` → `MSG-20261001-40`；`compare.mjs` = **FULL_COPY_OK**。
+- NEXT：补 CHANGE A + 等 CI SUCCESS → R44 RE-REVIEW。

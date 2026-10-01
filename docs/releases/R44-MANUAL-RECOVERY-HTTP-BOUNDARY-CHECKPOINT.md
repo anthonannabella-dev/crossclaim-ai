@@ -8,7 +8,12 @@
 
 ## 1. 本轮新增边界（只有一项）
 
-**人工追回提交的 HTTP 入口**（此前 S3/S4 只有服务层与 Action Guard，无对外入口）：
+**人工追回提交的 HTTP 入口**（此前 S3/S4 只有服务层与 Action Guard，无对外入口）。
+
+> 口径（MSG-20261001-40 ②）：R44 交付的是 **Manual Recovery Execution HTTP Boundary**，**不是**完整用户可用 E2E ——
+> 公共 API 尚不能创建 `recovery.manual_submit` 所需 approval，该 gap 由独立批次 **R44-A — Manual Recovery Approval Creation Boundary** 承接；本文档与 API 描述不得写成「manual recovery API 已完整可用」。
+
+入口清单：
 
 | 路由 | 受保护动作 | 说明 |
 | --- | --- | --- |
@@ -51,12 +56,16 @@
 | R44-08 | 补录 reference → 200，`  CASE-44  ` → canonical `CASE-44`（服务端计算），`providerAccepted=false` |
 | R44-09 | 空 reference → 400；客户端自证 canonical → 400；零副作用 |
 | R44-10 | 静态探针：入口层源码不含 `$transaction` / `FOR UPDATE` / `updateMany` / `pg_advisory`，且确实复用 S3/S4 服务与两个唯一 basis builder（handler 未复制事务逻辑） |
+| R44-11 | **CHANGE A** manual-submit：跨租户案件路径 → 404，且 ClaimItem / Submission·Reference / approval consumption / 资金域计数全部不变 |
+| R44-12 | **CHANGE A** manual-submit：同租户但路径案件与 ClaimItem 不符 → 404 且零副作用 |
+| R44-13 | **CHANGE A** manual-reference：跨租户 submissionId → 404 且零副作用 |
+| R44-14 | **CHANGE A** manual-reference：同租户但路径案件与该 submission 不符 → 404 且零副作用（防 confused-deputy 对象绑定） |
 
 回归（受影响家族）：`recovery-manual-*` **69/69 PASS**；`action-guard` 家族 **62/62 PASS**；`tsc --noEmit` PASS；`api-contract` OK；`prisma validate` valid（未改 Schema）。
 
 ## 4. Known remaining gaps（不掩盖）
 
-1. **`recovery.manual_submit` 审批的创建入口尚未暴露**：现有 `submitRecoveryReview` 明确拒绝该 `boundAction`（`INVALID_INPUT: 审批动作不受支持`）。R44 只暴露**提交入口**并复用既有 HITL 校验；审批创建入口属于独立边界（涉及"哪些动作可被人工批准"），需单独批次 + 审计后再开。
+1. **`recovery.manual_submit` 审批的创建入口尚未暴露**（= 独立批次 **R44-A — Manual Recovery Approval Creation Boundary**）：现有 `submitRecoveryReview` 明确拒绝该 `boundAction`（`INVALID_INPUT: 审批动作不受支持`）。R44 只暴露**执行入口**并复用既有 HITL 校验；"谁可以创建审批 / 绑定哪个 Claim·Case·package·basis / approval lifecycle / 与执行入口对接" 需单独批次 + 审计后再开。
 2. outcome tracking / reimbursement reconciliation（R45）、Settlement / Billing linkage（R46）：各自独立批次。
 3. HOLD 全线继续保持：AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · SETTLEMENT/BILLING LINKAGE HOLD · Production Enablement HOLD。
 

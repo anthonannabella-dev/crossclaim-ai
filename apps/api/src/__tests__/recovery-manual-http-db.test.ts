@@ -202,6 +202,80 @@ async function post(target: string, cookie: string, path: string, body: Record<s
   return { status: res.status, body: text === '' ? {} : (JSON.parse(text) as Record<string, unknown>) };
 }
 
+/** 造一条「已提交」事实（仅用于 reference 路径绑定 404 测试；不经过 Action Guard） */
+async function seedSubmittedFixture(org: string, suffix: string) {
+  const kase = await prisma.case.create({
+    data: {
+      organizationId: org,
+      caseNo: 'R44F-' + suffix,
+      title: 'R44 fixture (submitted)',
+      domain: 'PLATFORM',
+      currency: 'USD',
+      openedAt: new Date('2026-09-01T00:00:00.000Z'),
+    },
+  });
+  const claim = await prisma.claimItem.create({
+    data: {
+      organizationId: org,
+      caseId: kase.id,
+      platformType: 'AMAZON',
+      claimType: 'ORDER_DISCREPANCY',
+      platformRef: 'AMZ-R44F-' + suffix,
+      sourceFingerprint: (randomUUID() + randomUUID()).replace(/-/g, '').slice(0, 64),
+      fingerprintVersion: 'v1',
+      occurredAt: new Date('2026-09-02T00:00:00.000Z'),
+      currency: 'USD',
+      status: 'SUBMITTED_MANUAL',
+      normalizerVersion: 'amazon-sp-normalizer/v1',
+    },
+  });
+  const pkg = await prisma.recoveryPackage.create({
+    data: {
+      organizationId: org,
+      claimItemId: claim.id,
+      caseId: kase.id,
+      packageVersion: 'recovery-package/v1',
+      digestVersion: 'v1',
+      packageDigest: DIGEST_B,
+    },
+  });
+  const submission = await prisma.recoveryManualSubmission.create({
+    data: {
+      organizationId: org,
+      claimItemId: claim.id,
+      caseId: kase.id,
+      packageId: pkg.id,
+      packageDigest: DIGEST_B,
+      approvalId: randomUUID(),
+      approvalBasisReference: buildRecoveryPackageBasisReference({
+        claimItemId: claim.id,
+        caseId: kase.id,
+        packageVersion: 'recovery-package/v1',
+        digestVersion: 'v1',
+        packageDigest: DIGEST_B,
+      }),
+      submittedAt: new Date('2026-09-03T00:00:00.000Z'),
+      submittedByUserId: ownerId,
+      idempotencyKey: 'rms1-' + claim.id,
+    },
+    select: { id: true },
+  });
+  return { caseId: kase.id, claimItemId: claim.id, packageId: pkg.id, submissionId: submission.id };
+}
+
+/** 失败零副作用：捕获参与比较的全部计数 */
+async function counters() {
+  const [claim, submissions, references, consumed, settlements, billing] = await Promise.all([
+    prisma.claimItem.findUniqueOrThrow({ where: { id: claimItemId }, select: { status: true } }),
+    prisma.recoveryManualSubmission.count({ where: { organizationId: ORG } }),
+    prisma.recoveryManualSubmissionReference.count({ where: { organizationId: ORG } }),
+    prisma.auditLog.count({ where: { organizationId: ORG, action: 'recovery.approval_consumed' } }),
+    prisma.settlement.count({ where: { organizationId: ORG } }),
+    prisma.billingInvoice.count({ where: { organizationId: ORG } }),
+  ]);
+  return { claimStatus: claim.status, submissions, references, consumed, settlements, billing };
+}
+
 const submitPath = () => '/cases/' + caseId + '/recovery/manual-submit';
 const referencePath = () => '/cases/' + caseId + '/recovery/manual-reference';
 
@@ -446,4 +520,60 @@ describe('R44 — Manual Recovery HTTP/API Boundary（真实 HTTP + PostgreSQL�
     expect(source).toContain('buildRecoveryPackageBasisReference');
     expect(source).toContain('buildRecoveryReferenceBasisReference');
   });
+});
+
+
+describe('R44 CHANGE A — 两个入口各自的跨租户 / 错绑定 404 与失败零副作用', () => {
+  it('R44-11 manual-submit：跨租户案件路径（他租户 caseId）→ 404 且零副作用', async () => {
+    const target = await baseFor();
+    const cookie = await login(target);
+    const otherOrg = await seedOrganization(randomUUID().replace(/-/g, '').slice(0, 10), 'r44-cross');
+    const other = await seedCaseWithPackage(otherOrg, randomUUID().replace(/-/g, '').slice(0, 10), DIGEST_B);
+    const before = await counters();
+    const res = await post(target, cookie, '/cases/' + other.caseId + '/recovery/manual-submit', {
+      claimItemId,
+      packageId,
+    });
+    expect(res.status).toBe(404);
+    expect(await counters()).toEqual(before);
+  }, 60_000);
+
+  it('R44-12 manual-submit：同租户但路径案件与 ClaimItem 不符 → 404 且零副作用', async () => {
+    const target = await baseFor();
+    const cookie = await login(target);
+    const before = await counters();
+    const res = await post(target, cookie, '/cases/' + otherCaseId + '/recovery/manual-submit', {
+      claimItemId,
+      packageId,
+    });
+    expect(res.status).toBe(404);
+    expect(await counters()).toEqual(before);
+  }, 60_000);
+
+  it('R44-13 manual-reference：跨租户 submissionId → 404 且零副作用', async () => {
+    const target = await baseFor();
+    const cookie = await login(target);
+    const otherOrg = await seedOrganization(randomUUID().replace(/-/g, '').slice(0, 10), 'r44-crossref');
+    const foreign = await seedSubmittedFixture(otherOrg, randomUUID().replace(/-/g, '').slice(0, 10));
+    const before = await counters();
+    const res = await post(target, cookie, referencePath(), {
+      submissionId: foreign.submissionId,
+      providerCaseRefRaw: 'CASE-XT',
+    });
+    expect(res.status).toBe(404);
+    expect(await counters()).toEqual(before);
+  }, 60_000);
+
+  it('R44-14 manual-reference：同租户但路径案件与该 submission 不符 → 404 且零副作用', async () => {
+    const target = await baseFor();
+    const cookie = await login(target);
+    const mine = await seedSubmittedFixture(ORG, randomUUID().replace(/-/g, '').slice(0, 10));
+    const before = await counters();
+    const res = await post(target, cookie, referencePath(), {
+      submissionId: mine.submissionId,
+      providerCaseRefRaw: 'CASE-WRONG-CASE',
+    });
+    expect(res.status).toBe(404);
+    expect(await counters()).toEqual(before);
+  }, 60_000);
 });

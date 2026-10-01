@@ -81648,3 +81648,148 @@ AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CR
 
 VERDICT: PASS — R43 CLOSED — MSG-20261001-39
 ```
+
+### [MSG-20261001-40] R44 Manual Recovery HTTP/API Boundary —— **PASS WITH REVISE**（CHANGE A：两个入口各自补跨租户/错绑定 404 证据 + 失败零副作用；CHANGE B：REVIEWED_HEAD 的 CI 必须 SUCCESS；R44 完成的是 Execution Boundary，不是完整 E2E；NEXT = R44 RE-REVIEW，关闭后进入 R44-A Approval Creation Boundary）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE: FORMAL_VERDICT
+MESSAGE: MSG-20261001-40
+PREVIOUS: MSG-20261001-39
+GATE: Gate 7 / R44 Manual Recovery HTTP/API Boundary
+REVIEWED_HEAD: 219a67c
+DECISION: PASS WITH REVISE
+
+KEEP
+
+本轮增量边界总体正确，可以保留：
+
+POST /cases/:caseId/recovery/manual-submit
+POST /cases/:caseId/recovery/manual-reference
+
+两个 HTTP 入口都只负责：
+
+authn / tenant-path binding / request validation / Action Guard / 调用既有 R43 service / response mapping
+
+而不复制事务与锁逻辑。
+
+以下不变量认可：
+
+organizationId 只能来自 session/tenant context，不接受 request body 自述；
+packageDigest / packageVersion / digestVersion / basisReference / canonical ref / status / submittedAt 等服务端事实不得由客户端声明可信；
+跨租户/错案件统一 404，不泄露对象存在性；
+idempotency key 服务端派生；
+HTTP handler 不出现 $transaction / FOR UPDATE / updateMany / advisory lock；
+实际原子性继续由 R43 S3/S4 服务承担；
+响应始终 platformWriteExecuted=false；
+Settlement/Billing/平台外写继续零副作用。
+三项裁决
+
+① 两个新入口的边界与请求契约：原则认可。
+
+禁止客户端自证 + 服务端派生身份/幂等 + 404 anti-enumeration + fail-closed 的方向正确。
+
+② approval 创建入口缺失：认可为 R44 范围之外。
+
+但必须明确状态：
+
+R44 完成的是：
+
+Manual Recovery Execution HTTP Boundary
+
+不是：
+
+完整用户可用 Manual Recovery HTTP E2E。
+
+因为当前调用方仍无法通过公共 API 创建 recovery.manual_submit 所需 approval。
+
+不要在文档/API 描述中把当前状态称为“manual recovery API 已完整可用”。
+
+这个 gap 应独立开新批次，例如：
+
+R44-A — Manual Recovery Approval Creation Boundary
+
+③ R44 是否可收口：可以，但需完成下列两项 REVISE。
+
+CHANGE A — 两个入口都必须各自有跨租户/错绑定 HTTP 证据
+
+当前送审证据明确列出了 manual-submit 的：
+
+他案件 package → 404
+
+但两个 endpoint 都是新外部边界。
+
+补至少：
+
+/recovery/manual-submit：跨 tenant / wrong case → 404；
+/recovery/manual-reference：跨 tenant submission / wrong case → 404。
+
+不能因为 S3/S4 服务层已有 tenant 测试，就省略新 HTTP route 自己的路径绑定测试。
+
+重点证明：
+
+route 参数 caseId 无法被一个属于其他 case/tenant 的 submission/reference target 绕过。
+
+CHANGE B — CI 必须最终为 SUCCESS
+
+送审时 36863814805 仍为 in_progress。
+
+本地 69/69、62/62、tsc、API contract、Prisma 证据接受，但 R44 正式 CLOSED 的条件仍包括：
+
+精确 HEAD 219a67c 的 CI = SUCCESS。
+
+如果 CI 全绿，仅补 CHANGE A 后无需新设计；直接轻量 RE-REVIEW。
+
+RISKS
+
+R44 当前最大剩余风险是路径对象与业务对象绑定不一致。
+
+例如：
+
+/cases/A/recovery/manual-reference
+
+如果 body 中 submission 实际属于 Case B，而 handler 只依赖 submissionId、不重新约束 Case A，就会形成典型 confused-deputy / object-binding 漏洞。
+
+另一个风险是把“提交入口存在”误解成“审批闭环已完整存在”；当前还没有 approval-creation API，因此不能提前宣称用户端 HTTP 闭环完成。
+
+TEST
+
+保留当前 10 个 HTTP + PostgreSQL 测试，并增加：
+
+manual-submit 跨租户/wrong-case 404；
+manual-reference 跨租户/wrong-case 404；
+两者失败后均验证：
+ClaimItem 状态不变；
+Submission/Reference 数量不变；
+approval consumption 不变；
+Settlement/Billing/RecoveryLedger/Payment 不变。
+
+入口层零事务静态探针继续作为永久回归基线。
+
+NEXT
+
+只补 CHANGE A，并等待 CI SUCCESS 后提交：
+
+R44 RE-REVIEW
+
+若通过，则：
+
+R44 HTTP Execution Boundary = CLOSED。
+
+下一执行单元建议：
+
+R44-A — recovery.manual_submit Approval Creation Boundary
+
+只设计/实现：
+
+谁可以创建审批 → 绑定哪个 Claim/Case/package/basis → approval lifecycle → HTTP request contract → 与现有 execution endpoint 对接
+
+不得借此扩大到 outcome/reimbursement reconciliation，也不得联动 Settlement/Billing，更不得开启 Amazon write transport。
+
+继续保持：
+
+AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · SETTLEMENT/BILLING LINKAGE HOLD。
+
+VERDICT: PASS WITH REVISE — MSG-20261001-40
+```
