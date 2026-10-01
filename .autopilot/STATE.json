@@ -1,6 +1,6 @@
 {
   "gate": "B2-FIX R1",
-  "head": "b628aa4",
+  "head": "8129998",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
   "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
@@ -9,13 +9,13 @@
   "last_chatgpt_message": "MSG-20261001-46",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T14:13:01.550Z",
+  "updated_at": "2026-10-01T14:43:30.669Z",
   "previous_head": "44b9b2c",
-  "architect_decision_pending": false,
+  "architect_decision_pending": true,
   "blocked_scope": null,
-  "last_send_head": "25389be",
-  "last_sent_at": "2026-10-01T14:07:55.274Z",
-  "last_sent_fingerprint": "R45-B:Reconciliation-Implementation-Plan",
+  "last_send_head": "8129998",
+  "last_sent_at": "2026-10-01T14:43:30.669Z",
+  "last_sent_fingerprint": "R45-S1:Reconciliation-Schema-Checkpoint",
   "final_head": "1144401",
   "ci_run": "36833002042",
   "ci_result": "SUCCESS",
@@ -51,10 +51,10 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-01T14:12:11.158Z",
   "state": "IMPLEMENT",
-  "last_action": "MSG-20261001-46 = PASS WITH REVISE 已逐字归档（FULL_COPY_OK）。七表模型 + CHANGE A–C 批准；basis supersede 事务顺序修正；授权进入 R45 S1（Schema / Migration / Trigger / Inventory），S1 只做数据结构与数据库不变量。",
-  "last_action_at": "2026-10-01T14:13:01.550Z",
-  "next_action": "R45 S1：七表（ProviderOutcomeFact / ReimbursementFact / ExpectedRecoveryBasis / ReconciliationOverrideDecision / ClaimReconciliationProjection / ClaimReconciliationProjectionFact / ReconciliationTolerancePolicy）+ 枚举 + 租户触发器 + immutable/append-only 触发器 + projection 受控更新 + basis 受控 supersede（同一事务 CAS）+ partial unique + CHECK + 触发器清单与计数同步（required-triggers / append-only-triggers / architecture-contract / DOMAIN_MODEL / README / two-stage-upgrade / CI fresh）；完成后先送 Implementation Checkpoint 再进 S2。",
-  "current_head": "b628aa4",
+  "last_action": "R45 S1 已实施并送审 Implementation Checkpoint：七表 + 七枚举 + M1–M5 迁移（租户/append-only/受控 supersede/partial unique/CHECK/reversal 守卫/generation 立即校验）+ 26 项 DB 验收；报告 1 项需裁决的顺序偏差（deferred 约束在 Prisma 下静默回滚）",
+  "last_action_at": "2026-10-01T14:43:30.669Z",
+  "next_action": "等待 R45 S1 Implementation Checkpoint 裁决：①PASS → 进入 S2（ingest）②REVISE → 按 CHANGE 修订 ③BLOCK → 停止。",
+  "current_head": "8129998",
   "reviewed_head": "07b7009",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -1654,5 +1654,36 @@
     ],
     "boundary": "NO Settlement · NO Billing · NO Fee · NO RecoveryLedger mutation · NO platform write · TRANSPORT=false · NO production credentials",
     "next": "R45 S1 — Schema / Migration / Trigger / Inventory Implementation（首次产生 Schema 实质变更）；S1 完成后先送 Implementation Checkpoint，不得直接连续跨越 S1–S5。"
+  },
+  "r45_s1_submission": {
+    "submission_comment": "5933790490",
+    "reviewed_head": "8129998",
+    "doc": "docs/releases/R45-S1-RECONCILIATION-SCHEMA-CHECKPOINT.md",
+    "kind": "Implementation Checkpoint（Schema / Migration / Trigger / Inventory；S1 只做数据结构与数据库不变量）",
+    "migrations": [
+      "apps/api/prisma/migrations/20261001141638_reconciliation_facts_tables",
+      "apps/api/prisma/migrations/20261001142000_reconciliation_tenant_triggers",
+      "apps/api/prisma/migrations/20261001142500_reconciliation_append_only",
+      "apps/api/prisma/migrations/20261001143000_reconciliation_unique_constraints",
+      "apps/api/prisma/migrations/20261001143500_reconciliation_integrity_checks"
+    ],
+    "evidence": {
+      "prisma_validate": "valid",
+      "tsc": "PASS（0 error）",
+      "new_db_tests": "26/26 PASS（apps/api/src/__tests__/reconciliation-schema-s1-db.test.ts）",
+      "architecture_contract": "119/119 PASS（模型 51 = 46 core + 5 join）",
+      "full_suite": "1648 tests PASS（本地全量）",
+      "tenant_trigger_checklist": "OK: 56 baseline / 49 immutable / 2 scoped",
+      "append_only_checklist": "OK: 12（append-only / 受控 supersede / 受控 projection / reversal / generation）",
+      "two_stage_upgrade": "TWO_STAGE_UPGRADE_OK（保数据；升级路径两套清单 + checker 通过）"
+    },
+    "deviation_requiring_ruling": "generation 一致性改为**立即判定**（DELETE 上一代 membership → CAS projectionVersion → INSERT 新一代），不使用 DEFERRABLE 约束触发器：实测 Prisma 5.22.0 客户端会吞掉 COMMIT 阶段 deferred 约束错误（静默回滚、调用方无感，两个独立探针复现）。请裁决是否批准该顺序调整（语义仍为同事务整体替换）。",
+    "risk_classification": {
+      "FOUNDATION_REUSED": "租户隔离（crossclaim_assert_tenant_integrity / cc_forbid_tenant_reassignment）+ append-only 与受控变更清单机制 + 跨租户 FK 触发器对 + migration/CI/two-stage upgrade 通道",
+      "NEW_RISK_BOUNDARY": "YES —— Schema 实质变化（七表 + 七枚举）+ 一致性/并发不变量（effective basis、provider 事件身份、冲正语义、projection generation）",
+      "ARCH_REVIEW_REQUIRED": "YES —— 触发项：Schema 实质变化 + 幂等 / 事务 / 并发一致性边界变化；含 1 项需架构方裁决的顺序偏差"
+    },
+    "boundary": "NO Settlement · NO Billing · NO Fee · NO RecoveryLedger mutation · NO platform write · TRANSPORT=false · NO production credentials；S1 未接入 ingest / projector / 受保护动作 HTTP·service / provider API",
+    "next": "PASS → R45 S2（ingest）；REVISE → 按 CHANGE 修订；BLOCK → 停止该方向"
   }
 }

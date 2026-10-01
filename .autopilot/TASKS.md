@@ -458,3 +458,12 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - NEXT：**R45 S1 — Schema / Migration / Trigger / Inventory**（首次 Schema 实质变更）。S1 只做数据结构与数据库不变量，完成后**先送 Implementation Checkpoint** 再进 S2。
 - S1 排除项：ingest / projector / protected-action HTTP·service / provider API / Settlement·Billing / production credentials。
 - 禁止：Settlement / Billing / Fee / RecoveryLedger 改写 / 平台外写 / transport / 生产凭据。
+
+### R45 S1（Schema / Migration / Trigger / Inventory）—— Implementation Checkpoint 待裁决
+
+- 交付：七表 + 七枚举 + M1–M5 迁移 + 两套触发器清单 + 26 项数据库级验收（`docs/releases/R45-S1-RECONCILIATION-SCHEMA-CHECKPOINT.md`）。
+- S1 范围纪律：只做数据结构与数据库不变量；未接入 ingest / projector / 受保护动作 HTTP·service / provider API。
+- 送审：REVIEWED_HEAD 8129998（Issue #2 comment 5933790490）。
+- 需裁决：generation 一致性顺序由「CAS → DELETE → INSERT」调整为「DELETE → CAS → INSERT」（立即判定；deferred 在 Prisma 下静默回滚）。
+- NEXT：PASS → R45 S2（ingest）；REVISE → 修订；BLOCK → 停止。
+- 禁止：Settlement / Billing / Fee / RecoveryLedger 改写 / 平台外写 / transport / 生产凭据。

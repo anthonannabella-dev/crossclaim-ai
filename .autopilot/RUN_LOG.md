@@ -1141,3 +1141,12 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - CHANGE B：reversal 自身具备 providerEventId / providerEventFingerprint / fingerprintVersion；同一 OBSERVED 至多一个有效 full reversal；重复 reversal event 幂等。
 - CHANGE C：tolerance policy scope 优先级冻结；无 provider-specific policy 时使用显式系统 exact policy 记录，不得代码隐式 fallback。
 - 边界：NO Settlement · NO Billing · NO Fee · NO RecoveryLedger mutation · NO platform write · TRANSPORT=false · NO production credentials。
+
+## 2026-10-01 JST — R45 S1（Reconciliation Schema / Migration / Trigger / Inventory）实施 + Implementation Checkpoint 送审
+
+- 交付：`apps/api/prisma/schema.prisma` 七表 + 七枚举（模型 44 → 51）；M1 表与枚举 / M2 租户触发器与 projection 受控更新 / M3 append-only 与 basis 受控 supersede / M4 partial unique 与显式系统 exact policy / M5 CHECK + reversal 同源性守卫 + projection generation 立即校验。
+- 测试：`reconciliation-schema-s1-db.test.ts` 26/26；architecture-contract 119/119；全量 1648 tests PASS；tsc PASS；prisma validate valid。
+- 清单：required-triggers 56（+14）；append-only/受控变更清单 12（新增 append-only 3 + 受控 supersede 1 + 受控 projection 1 + reversal 守卫 1 + generation 版本匹配 1）。
+- 升级：two-stage upgrade OK（保数据 + 升级路径两清单 + checker 通过）；本地重建（drop → migrate deploy）无残留。
+- 偏差回报：generation 一致性改为**立即判定**（DELETE 旧 membership → CAS 版本 → INSERT 新 membership），不使用 DEFERRABLE 约束触发器 —— 实测 Prisma 客户端会吞掉 COMMIT 阶段 deferred 约束错误（静默回滚、调用方无感）。请架构方裁决该顺序调整。
+- 送审：REVIEWED_HEAD 8129998（Issue #2 comment 5933790490）；唤醒已投递并三要素验证。
