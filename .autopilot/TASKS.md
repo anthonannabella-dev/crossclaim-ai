@@ -303,3 +303,9 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - DECISION：**REVISE**（REVIEWED_HEAD b6be095；归档 FULL_COPY_OK）。S3 主体 KEEP；执行人权限与审计名认可。
 - CHANGE A/B/C：成功审计失败回滚、approval_consumed 失败回滚、digestVersion/packageDigest 不匹配拒绝（均已补测试）。
 - NEXT：**R43 S3 RE-REVIEW**（不扩大范围）；S3 PASS 前不进入 S4。
+
+### MSG-20261001-36 裁决（R43 S3 关闭 → R43 S4 providerCaseRef 补录）
+
+- DECISION：**PASS**（REVIEWED_HEAD 4c6c865；归档 FULL_COPY_OK）。S3 正式关闭。
+- NEXT：**R43 S4**：受保护 reference 补录动作 + canonicalization + append-only INSERT + 审计 + 读取/展示；12 项要求见 STATE.r43s3_rereview_verdict.s4_scope。
+- 禁止：不 UPDATE Submission / 不产生 accepted·reimbursed·recovered / 不改 ClaimItem 状态 / 不消费旧 approval / 不进入 outcome·reconciliation。

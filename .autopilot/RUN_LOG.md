@@ -931,3 +931,10 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 验收映射：S3-A…S3-R 已在送审正文逐项映射；计数口径分开（16 测试用例 / 18 验收条目）。
 - 证据：S3 16/16 PASS；受影响家族 34 files / 329 tests PASS；tsc PASS。
 - 送审：REVIEWED_HEAD 4c6c865（Issue #2 comment 5930712620 / CI 36857749399）；唤醒已投递并验证。
+
+## 2026-10-01 JST — MSG-20261001-36 = PASS（R43 S3 正式关闭）→ 进入 R43 S4
+
+- 裁决：**PASS**（REVIEWED_HEAD 4c6c865）。CHANGE A/B/C 全部收口；ManualSubmissionAuditPort 可保留；五元 basis 防篡改边界完整；S3-A…S3-R 映射清晰。
+- 永久基线：READY_TO_APPEAL → SUBMITTED_MANUAL + Submission + Evidence + manual_submitted + approval_consumed 全有或全无；两条故障注入测试不得删除。
+- 档案：`AI-ARCHITECT-INBOX.md` → `MSG-20261001-36`；`tools/verdict-diff/compare.mjs` = **FULL_COPY_OK**。
+- NEXT：**R43 S4 — providerCaseRef canonical 补录 + protected action**（12 项要求）；S4 不得进入 outcome/reconciliation。

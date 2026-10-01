@@ -81156,3 +81156,99 @@ AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CR
 
 VERDICT: REVISE — MSG-20261001-35
 ```
+
+### [MSG-20261001-36] R43 Manual Recovery Persistence / S3 RE-REVIEW —— **PASS**（CHANGE A/B/C 全部收口，S3 正式关闭；NEXT = R43 S4 — providerCaseRef canonical 补录 + protected action）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE: FORMAL_VERDICT
+MESSAGE: MSG-20261001-36
+PREVIOUS: MSG-20261001-35
+GATE: Gate 7 / R43 Manual Recovery Persistence / S3 RE-REVIEW
+REVIEWED_HEAD: 4c6c865
+DECISION: PASS
+
+KEEP
+
+CHANGE A / B / C 全部收口，S3 可以正式关闭。
+
+确认接受：
+
+CHANGE A：recovery.manual_submitted 审计故障已通过真实 PostgreSQL 故障注入证明整笔事务回滚；且原 approval 后续仍可正常使用，证明没有“幽灵消费”。
+CHANGE B：recovery.approval_consumed 故障同样回滚 ClaimItem、Submission、Evidence 与此前成功审计，证明事务尾部不存在部分提交。
+CHANGE C：packageVersion / digestVersion / packageDigest 均已纳入执行时 approval binding；结合既有 ClaimItem/Case 绑定，五元 basis 已形成完整防篡改边界。
+ManualSubmissionAuditPort 可保留：生产组合根仍使用事务内默认实现，没有把审计移出原子事务。
+16 个真实库测试对应 S3-A～S3-R 18 条验收的映射现在清晰，计数口径问题已解决。
+S3 仍没有越界进入 providerCaseRef、outcome、reconciliation、Settlement/Billing 或平台外写。
+CHANGE
+
+无。
+
+本轮不需要再次修改或重新送审。
+
+RISKS
+
+S3 的核心风险已经从“原子人工提交”转移到 S4 的 providerCaseRef 身份语义。
+
+S4 特别防止三类错误：
+
+把“补录 case reference”解释成 Amazon 已受理；
+canonicalization 过度，例如未经官方语义证明就 lower-case；
+append-only Submission 被后补 reference 需求反向破坏。
+
+继续使用独立 RecoveryManualSubmissionReference，不要 UPDATE RecoveryManualSubmission。
+
+TEST
+
+S3 以下不变量现在应作为永久回归基线：
+
+READY_TO_APPEAL → SUBMITTED_MANUAL + Submission + Evidence + manual_submitted + approval_consumed
+
+必须保持全有或全无。
+
+尤其保留两条故障注入测试：
+
+success audit failure → full rollback；
+approval consumption failure → full rollback。
+
+后续任何重构事务/审计层都不得删除这两条。
+
+NEXT
+
+批准进入：
+
+R43 S4 — providerCaseRef canonical 补录 + protected action
+
+S4 范围限定为：
+
+已有 RecoveryManualSubmission
+→ 受保护的 reference 补录动作
+→ canonicalization
+→ RecoveryManualSubmissionReference append-only INSERT
+→ 审计
+→ 读取/展示语义。
+
+要求：
+
+不 UPDATE RecoveryManualSubmission；
+raw + canonical 分开保存；
+canonical 继续：trim → NFKC → 去零宽 → 折叠空白；
+不得 lower-case，除非未来取得 provider 语义证据；
+canonical duplicate 必须由数据库唯一约束最终兜底；
+空 reference 拒绝；
+跨 tenant / 错 submission / 非 ACTIVE membership fail-closed；
+并发补录相同 canonical ref 至多一次；
+补录 reference 不得产生 provider accepted / reimbursed / recovered 事实；
+不改变 ClaimItem SUBMITTED_MANUAL；
+不消费 recovery.manual_submit 的旧 approval；
+若 S4 新动作需要 human approval，应使用独立 action + 独立 approval binding，不得复用 S3 approval。
+
+S4 不得顺带进入 outcome/reimbursement reconciliation；那是后续独立边界。
+
+继续保持：
+
+AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · SETTLEMENT/BILLING LINKAGE HOLD。
+
+VERDICT: PASS — MSG-20261001-36
+```
