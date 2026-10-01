@@ -45,7 +45,7 @@
 | `secret.rotate` | 待定（运维路径） | 凭据操作（HOST ONLY） | HOST APPROVAL | 待补 | TODO |
 | `claim.prepare` | `POST /cases/:id/claim/prepare`（http-routes + server WORKFLOW_PATH） | 业务库写入（第 1 轮 Claim 草稿 `target`/`aiDraftText` + `claim.prepared` 审计同事务；不推进状态） | 能力闸门（`INTERNAL_WRITE` / `requires: []`，**无人工审批**）+ 案件锁 + Claim 行锁后最终主体/角色重验 | HTTP 级 **21/21**（含行锁等待期降权/停用/未变对照、并发创建、状态交错、更新路径审计失败回滚） | **已验收 PASS（MSG-20261001-10 / REVIEWED_REF d6d239b；CI 36811474236）** |
 | `billing.draft` | `POST /cases/:id/billing/draft`（http-routes + server WORKFLOW_PATH） | 业务库写入（DRAFT `BillingInvoice` + `billing.drafted` 审计同事务；不推进收款/到账/扣划） | 能力闸门（`INTERNAL_WRITE` / `requires: []`，**无人工审批**）+ 案件锁 + 账单行锁 + 费用依据行锁后最终主体/角色重验 | HTTP 级 **21/21** | **已验收 PASS（MSG-20261001-13 / REVIEWED_REF d81a86f；CI 36814394218）** |
-| `evidence.read` | 待定（只读） | 无 | 无 | 待补 | TODO |
+| `evidence.read` | `GET /cases/:id/evidence`（既有只读端点接入 Action Guard） | 无（只读） | 无（READ_ONLY 契约，无人工审批） | HTTP 级 6/6（缺 guard / 能力不可用 / 跨租户 404 / FINANCE·VIEWER 403 / 合法读取 / 无状态推进） | **已验收 PASS（MSG-20261001-14 / REVIEWED_REF 549dba8；CI 36815640605）** |
 
 > 追加记录（同属本清单口径，逐批次登记）：`payment.replay` = **验收 PASS**（MSG-20260930-28 / REVIEWED_REF 08fc45d；资金对象身份纳入快照与审批指纹、按 id 行锁恰一行）；`payment.retry_due`（冻结批次）= **验收 PASS**（MSG-20261001-01 / REVIEWED_REF 9a806eb / CI run 36726898061 / Issue #2 comment 5915049394）。三类受保护入口共用同一 Action Guard 审批边界，**支付域三类受保护内部入口当前工程范围已收口**（不等于真实扣款/生产启用/webhook 新授权/②全覆盖）；② 整体仍为 NOT COMPLETE。
 
@@ -187,4 +187,4 @@
 | 租户/主体/归属检查 | 复用既有投影（送审中） | 跨租户 → 404 NOT_FOUND；FINANCE/VIEWER → 403 FORBIDDEN；拒绝响应不含证据内容、下载地址或存储引用 |
 | 无状态推进 | 已实现（送审中） | 读取前后 Case/Claim/账单/到账事实不变；不触发平台或资金动作 |
 | 专项测试 | 6/6（送审中） | `action-guard-evidence-read-http-db.test.ts`（真实 HTTP + PostgreSQL） |
-| 架构方裁决 | 待裁决 | 送审中 |
+| 架构方裁决 | **PASS（MSG-20261001-14 / REVIEWED_REF 549dba8 / CI 36815640605）** | 证据**元数据列表**入口批次收口；不含文件字节读取/签名下载地址签发/下载通道审计；下一小批次 = appeal.submit |

@@ -78339,3 +78339,70 @@ Codex 可逐字归档本裁决并继续实施，无需宿主再次确认。
 Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据继续 HOLD。本次仅收口 billing.draft 工程批次。
 ```
 
+### [MSG-20261001-14] Gate 7 / ② RUNTIME BUSINESS BLOCKING · evidence.read（REVIEWED_REF 549dba8）：VERDICT: **PASS**（证据元数据读取入口工程批次收口；下一小批次 = `appeal.submit`）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE: FORMAL_VERDICT
+MESSAGE: MSG-20261001-14
+PREVIOUS: MSG-20261001-13
+GATE: Gate 7 / 授权项② RUNTIME BUSINESS BLOCKING · evidence.read
+HEAD: 549dba8
+REVIEWED_REF: 549dba88c487b6c01b6d7cf2795766c6e2d282e1
+DECISION: PASS（证据元数据读取入口工程批次）
+ACK: 本轮指定范围已完成。
+
+1. REVIEW / TEST
+
+重新读取了 
+Issue #2 请求、本轮 diff、HTTP 接线、listCaseEvidence 投影、Action Guard 只读判定及 
+CI run 36815640605。
+
+确认 CI 对应 REVIEWED_REF，五作业 SUCCESS。API 日志确认：
+
+evidence.read：6/6 PASS。
+全量：148 files / 1405 tests PASS。
+tsc --noEmit、prisma validate 通过。
+
+本机回归数字为提交方报告；本审查未自行运行本地测试。
+
+2. KEEP — 通过依据
+既有 GET /cases/:id/evidence 在读取投影前调用 assertAllowed；缺 guard 结构化403拒绝。
+READ_ONLY 契约正确：不要求人工审批，不因写入模式、tenant／feature 未开启而拒绝；能力端口不可用失败关闭。
+保留案件租户限定、CaseEvidence 租户过滤及 OWNER／ADMIN／OPS 可见性；FINANCE／VIEWER 拒绝。
+返回字段采用明确投影，fileAssetId 仅用于计算 hasFile，不直接返回下载地址或存储引用字段。
+本轮实现没有新增业务写入、状态推进、平台调用或资金处理。
+
+能力拒绝用例实际模拟的是能力端口异常，并非 Kill Switch 解析异常；按请求中的披露口径接受。不要求为只读动作新增 Kill Switch scope。
+
+3. CHANGE
+
+无阻塞性 CHANGE。
+evidence.read 可登记当前元数据入口批次 PASS，无需同范围再次送审。
+
+4. RISKS / 范围
+本次通过的是证据元数据列表，不涵盖文件字节读取、签名下载地址签发或下载通道的全面审计。
+title／description 属于原有可见元数据；字段投影不等于对自由文本内容做敏感信息识别与清洗，不宣称全面内容脱敏。
+专项测试的合法夹具为 hasFile=false；不扩大为真实附件下载已验收。
+“只读无副作用”限定领域业务与资金事实；会话维护及 Action Guard 评估审计不属于领域状态推进。
+5. NEXT
+
+授权下一小批次 appeal.submit，保持人工提交边界：
+
+核对现有 Appeal 模型、状态机和真实入口；接入独立动作 appeal.submit，审批不得与 claim.submit 通用。
+审批绑定具体 Appeal、所属案件、轮次及实际提交载荷指纹；仅凭 approvalId 不得放行。
+共用必要案件锁并保护 Appeal 行，锁后重验当前主体权限、状态、审批生命周期与载荷。
+内部提交记录、成功业务审计与审批消费同事务；拒绝零推进，并发至多一次。
+本批仅登记内部提交结果，明确返回人工后续状态及 platformWriteExecuted=false；不调用平台写入面。
+若现有模型无法承载所需绑定，先提交最小设计差异，不直接扩大 Schema。
+
+完成专项、相关回归及新 HEAD CI 后送审。Codex 可逐字归档并继续实施，无需宿主再次确认。
+
+6. PRODUCTION
+
+授权项②整体仍 NOT COMPLETE。
+
+Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据继续 HOLD。本次 PASS 不构成生产或真实平台提交授权。
+```
+
