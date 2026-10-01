@@ -1189,3 +1189,12 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - S3 永久验收（16 项）已登记 STATE.r45_s2_verdict.s3_permanent_acceptance（含确定性、重建一致、CAS/INSERT rollback、stale generation、dangling/cross-tenant basis·policy、exact policy 幂等创建与并发唯一、Projection 保存实际 basisId+policyId/version、reversal 后 FULL→PARTIAL/UNMATCHED、currency mismatch、多候选 AMBIGUOUS、conflicting evidence fail-closed、membership generation 严格一致、projector 不写 Fact）。
 - 风险：禁止把旧 Projection 当业务计算输入（仅可用于 CAS/version coordination）。
 - 边界：NO Settlement · NO Billing · NO Fee · NO RecoveryLedger mutation · NO platform write · TRANSPORT=false · NO production credentials。
+
+## 2026-10-02 JST — R45 S3（Deterministic Projector）实施 + Implementation Checkpoint 送审
+
+- 交付：`projection-compute.ts`（纯计算层：4 位定点 BigInt、canonical inputDigest、状态判定）+ `projector.ts`（`rebuildClaimReconciliationProjection`：锁内固定输入 → 重建 → 整体替换 membership → audit）+ index 导出。
+- 事务顺序：lock projection/claim scope → 固定输入 → 强校验 basis·policy → deterministic rebuild → inputDigest → DELETE old membership → CAS header → INSERT new membership → audit → commit；任何一步失败整体回滚（含 DELETE 后 CAS 故障、DELETE+CAS 后 INSERT 故障两例故障注入验收）。
+- CHANGE A/C 落地：basis 强校验（同租户 + 同 claimItem + effective + 唯一）；policy 强校验（同租户 + provider + operation + effective，多匹配即 `POLICY_NOT_UNIQUE`）；system exact policy 缺失时受控幂等创建、并发唯一、Projection 持久化真实 policyId+version。
+- 边界：未实现 S4 受保护写动作；零 Schema / migration / 触发器清单变更。
+- 证据：prisma validate valid · tsc PASS · 纯计算层 13/13 · projector DB 14/14 · 全量 173 files / 1695 tests PASS。
+- 送审：REVIEWED_HEAD 46074bd（Issue #2 comment 5934720171）；唤醒已投递并三要素验证（输入框清空 / 新消息在底部 / 正在生成）。

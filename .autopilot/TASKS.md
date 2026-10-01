@@ -502,3 +502,11 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - 永久验收 16 项见 STATE.r45_s2_verdict.s3_permanent_acceptance；S3 完成后先提交 S3 Implementation Checkpoint 再决定是否进入 S4。
 - 风险：不得把旧 Projection 当业务计算输入。
 - 禁止：Settlement / Billing / Fee / RecoveryLedger 改写 / 平台外写 / transport / 生产凭据。
+
+### R45 S3（Deterministic Projector）—— Implementation Checkpoint 待裁决
+
+- 交付：纯计算层（定点金额 / canonical inputDigest / 状态判定）+ 锁内 IO 层（DELETE → CAS → INSERT 整体替换 membership，含中途失败完整回滚）。
+- 范围纪律：未实现 S4 受保护写动作；零 Schema 变更。
+- 送审：REVIEWED_HEAD 46074bd（Issue #2 comment 5934720171）。
+- NEXT：PASS → R45 S4（basis set / basis supersede / override / provider outcome 人工录入）；REVISE → 修订；BLOCK → 停止。
+- 禁止：Settlement / Billing / Fee / RecoveryLedger 改写 / 平台外写 / transport / 生产凭据。
