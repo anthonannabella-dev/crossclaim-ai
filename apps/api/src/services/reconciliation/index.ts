@@ -56,3 +56,30 @@ export type {
   ProviderOutcomeIngestInput,
   ReimbursementIngestInput,
 } from './ingest';
+
+// R45 S3 —— deterministic projector（MSG-20261002-48）
+// 注意：projection-compute 为纯计算层（无 IO）；projector 为锁内 IO 层（整体替换 membership）。
+export {
+  ProjectionComputeError,
+  PROJECTION_STATUSES,
+  computeProjection,
+  fromScaled,
+  toScaled,
+} from './projection-compute';
+export type {
+  ProjectionBasisInput,
+  ProjectionComputation,
+  ProjectionComputationInput,
+  ProjectionFactInput,
+  ProjectionOverrideInput,
+  ProjectionPolicyInput,
+  ProjectionStatus,
+} from './projection-compute';
+export {
+  RECONCILIATION_POLICY_OPERATION,
+  RECONCILIATION_PROJECTION_REBUILT_ACTION,
+  ReconciliationProjectorError,
+  SYSTEM_EXACT_POLICY_ID,
+  rebuildClaimReconciliationProjection,
+} from './projector';
+export type { ProjectorDeps, ProjectionRebuildInput, ProjectionRebuildResult } from './projector';

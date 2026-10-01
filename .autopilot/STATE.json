@@ -1,6 +1,6 @@
 {
   "gate": "B2-FIX R1",
-  "head": "e34f28f",
+  "head": "f65ca38",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
   "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
@@ -10,7 +10,7 @@
   "production_enabled": false,
   "external_write_enabled": false,
   "updated_at": "2026-10-01T15:15:17.539Z",
-  "previous_head": "52c50e0",
+  "previous_head": "e34f28f",
   "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "8706b2d",
@@ -49,7 +49,7 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-01T15:14:46.848Z",
+  "last_tick_at": "2026-10-01T15:19:48.336Z",
   "state": "IMPLEMENT",
   "last_action": "MSG-20261002-48 = PASS 已逐字归档（FULL_COPY_OK）：R45 S2 CLOSED；MANUAL_PATH_DEFERRED 获批；批准进入 R45 S3 Deterministic Projector（事务顺序 DELETE → CAS → INSERT + 16 项永久验收）。",
   "last_action_at": "2026-10-01T15:15:17.539Z",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-01T15:05:57.798Z",
-    "gapMs": 529051,
+    "previousTickAt": "2026-10-01T15:14:46.848Z",
+    "gapMs": 301489,
     "stale": false,
-    "checkedAt": "2026-10-01T15:14:46.848Z"
+    "checkedAt": "2026-10-01T15:19:48.336Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
