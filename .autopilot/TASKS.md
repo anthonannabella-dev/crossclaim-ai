@@ -407,3 +407,10 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - 证据：12/12 新用例；家族回归 114/114；tsc PASS；prisma validate valid；无新增依赖。
 - 送审：REVIEWED_HEAD f5c322e（Issue #2 comment 5932871096 / CI 36870628101）。
 - NEXT：PASS → R44-B CLOSED；若确认 Manual Recovery HTTP approval+execution 边界整体闭合 → 按排序进入 R45（需先 Design + Schema Delta）。
+
+### MSG-20261001-43 裁决（R44-B CLOSED / Manual Recovery HTTP 边界整体闭合 → R45 Design）
+
+- DECISION：**PASS**（REVIEWED_HEAD f5c322e；归档 FULL_COPY_OK）。R44-B 关闭；Manual Recovery HTTP approval + execution boundary **整体 CLOSED**（不再开 R44-C/D）。
+- NEXT：**R45 — Outcome / Reimbursement Reconciliation**；第一批只交 **Design / Boundary Proposal**。
+- R45 四类事实：SUBMITTED_MANUAL ≠ PROVIDER_ACCEPTED ≠ REIMBURSEMENT_OBSERVED ≠ RECONCILED；12 项设计见 STATE.r44b_verdict.r45_design_items；不确定必须 fail-closed。
+- R45 禁止：Settlement / Billing / Fee / 改写 RecoveryLedger / 自动外写 / 开启 transport / observed reimbursement 直接等同可收费 recovered amount。

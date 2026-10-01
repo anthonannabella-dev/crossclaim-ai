@@ -1072,3 +1072,11 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 证据：`recovery-manual-reference-approval-http-db.test.ts` 12/12（覆盖 MSG-42 的 17 项要求，含端到端消费一次、canonical 变化 fail-closed、双向 isolation）；家族回归 114/114；tsc PASS；prisma validate valid；无新增依赖。
 - 送审：REVIEWED_HEAD f5c322e（Issue #2 comment 5932871096 / CI 36870628101 success 5/5）；唤醒已投递并三要素验证。
 - HOLD 保持：AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · SETTLEMENT/BILLING LINKAGE HOLD。
+
+## 2026-10-01 JST — MSG-20261001-43 = PASS（R44-B CLOSED / Manual Recovery HTTP 边界整体闭合）→ R45 Design
+
+- 裁决：**PASS — R44-B CLOSED — MANUAL RECOVERY HTTP APPROVAL + EXECUTION BOUNDARY CLOSED**（REVIEWED_HEAD f5c322e；CI 36870628101 SUCCESS 5/5）。不再创建 R44-C/R44-D。
+- 永久基线冻结：R43 + R44 + R44-A + R44-B 全量不变量（tenant/path binding、anti-self-attestation、五元 basis、三元 basis、action isolation、approval lifecycle、expiry/revocation、mutation invalidation、exactly-once、rollback、canonicalization、creation 零副作用、execution 原子性、providerAccepted=false、资金域零副作用、checker、fresh+upgrade、历史回归）。
+- 风险口径（架构方）：**不得**把「Manual Recovery HTTP 闭环完成」扩大解释为「Recovery 商业闭环完成」；provider outcome → reimbursement observation → claim reconciliation、以及 recovered money → Settlement → Billing 仍为独立事实层。
+- NEXT：**R45 — Outcome / Reimbursement Reconciliation**，第一批**只交 Design / Boundary Proposal（不实现）**；需定义四类事实与 12 项设计；R45 暂不得创建 Settlement/Billing/Fee、不得改写 RecoveryLedger、不得自动外写、不得开启 transport、不得把 observed reimbursement 等同于可收费 recovered amount。
+- 档案：`AI-ARCHITECT-INBOX.md` → `MSG-20261001-43`；`compare.mjs` = **FULL_COPY_OK**。
