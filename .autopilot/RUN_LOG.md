@@ -1351,3 +1351,11 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 冻结服务语义：same reversal replay → REUSED；different reversal on already-reversed → REVERSAL_ALREADY_APPLIED；unique violation 不得裸 500。
 - S1 证据充分 → CLOSED（fresh deploy / two-stage upgrade / 架构契约 140-140 / 全量 176 files 1751 tests / 零资金行为）。
 - NEXT：R46 S2（receipt snapshot + Settlement record/ingest 受保护写边界）；S2 最低永久验收 17 项已登记。
+
+## 2026-10-02 JST — CI 偶发失败诊断（c9f7e2b deploy smoke / P1001）
+
+- 现象：run 36897686051（c9f7e2b，docs-only 归档提交）中 `Deploy smoke · fresh install + migration upgrade` 失败。
+- 根因：`S-1 migrate deploy (fresh database)` → **P1001: Can't reach database server at 127.0.0.1:32768**（临时 postgres 容器已启动且 pg_isready 通过，但随后不可达）——CI 运行器环境偶发，与本批次 schema/migration 无关（同迁移在 ab00cd9 / ea66ae2 / f1e851d 三个 run 中 success）。
+- 同 run 的 `API · migration + typecheck + tests` 为 success。
+- 处置：SELF_RESOLVE —— 触发该 run 的 failed-jobs 重跑（API 201），不修改任何代码。
+- 影响：无（本地 fresh deploy + two-stage upgrade + 全量 1751 tests 已通过；S1 证据不受影响）。
