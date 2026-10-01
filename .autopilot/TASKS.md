@@ -106,3 +106,15 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - `appeal.submit` = **PASS**（MSG-20261001-16 / REVIEWED_HEAD 7d888cc / CI 36820104474）—— CHANGE A/B/C 收口：版本化服务端提交快照（审批创建与执行共用同一规范化算法、Appeal 行锁后重算比对）+ 路由/行锁/读取校验/CAS 显式绑定 round=2 并核对 Claim 同租户同案件 + 专项 13 项关键验收；仅登记内部结果（platformWriteExecuted=false）
 - 记录：evidence.read 小批次历史记录 —— 已接入 `GET /cases/:id/evidence` + Action Guard 只读契约（缺 guard / 能力不可用失败关闭；租户与权限检查复用既有投影；拒绝不泄露内容/地址/存储引用），专项 6/6 → 送审中
 - 剩余：`platform.write`（EXTERNAL_WRITE，继续 HOLD）。下一批仅允许先完成接口、状态机、权限、幂等、审批绑定、模拟适配器与 fail-closed 测试；真实平台外写、客户提交、资金动作一律不启用。
+
+### 长期回归任务（HOST PRODUCT DIRECTION 2026-10-01；不改变 Gate 7 批次顺序）
+
+| 任务 | 内容 | 触发时机 | 状态 |
+| --- | --- | --- | --- |
+| `GOLDEN-PATH-E2E` | Golden Path E2E（真实 PostgreSQL）：Source Data → Canonical Fact → RecoveryOpportunity → Case → Evidence → Claim Prepare → Claim Submit → 模拟外部处理结果 → Settlement → RecoveryLedger → FeeCalculation → Billing；逐跳校验关联 ID / organizationId / caseId / claimId / settlementId、金额币种状态快照审计审批一致性、任一阶段失败不得非法推进 | 在合适的回归阶段纳入长期 CI；建立后每批次与 S4/S5 必跑 | 排队（未实施） |
+| `CROSS-MODULE-REGRESSION` | 命中核心领域模型 / Schema / 状态机 / Action Guard / Claim-Appeal / Settlement / RecoveryLedger / Billing / platform.write / Adapter / Import-CanonicalFact 的改动 → 批次专项之外必须跨模块回归 | 每批次 | 长期有效（已生效） |
+| `STATE-MACHINE-REGRESSION` | 状态机改动 → 全局 state-machine regression | 状态机改动 | 长期有效（已生效） |
+| `AUTHORIZATION-REGRESSION` | 权限 / Action Guard 改动 → authorization regression | 权限改动 | 长期有效（已生效） |
+| `CONTRACT-REGRESSION` | 模块接口变更 → contract regression | 接口变更 | 长期有效（已生效） |
+
+> 全文：`docs/releases/ENGINEERING-REGRESSION-POLICY.md`；AGENTS.md 已同步同一约束。

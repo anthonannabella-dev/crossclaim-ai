@@ -634,3 +634,10 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - platform-write 单测 19/19（新增 18/19 对账策略：FAILED_CONFIRMED 仅可信证据、INCONCLUSIVE 永不判失败、1/5/15/60 分钟退避、24h → MANUAL_REVIEW）。
 - 回归：platform-write-ledger-db + platform-write + action-guard + tenant-isolation = 54 PASS；tsc PASS。提交 d2c82fa（账本）+ 随后提交（策略单测）。
 - 下一步：S4/S5 全量回归 → Implementation Checkpoint（R36）送审。
+
+## 2026-10-01 JST — 固化长期工程约束：跨模块回归 + Golden Path E2E（HOST DIRECTION）
+
+- 写入 `docs/releases/ENGINEERING-REGRESSION-POLICY.md`（10 条硬性要求 + Golden Path 全链路定义 + 回归清单 R1–R8）；
+- 同步 `AGENTS.md`（长期约束章节）与 `.autopilot/TASKS.md`（`GOLDEN-PATH-E2E` 排队 + 4 条长期回归任务）；
+- 适用范围：核心领域模型 / Schema / 状态机 / Action Guard / Claim / Appeal / Settlement / RecoveryLedger / Billing / platform.write / Adapter / Import / Canonical Fact；
+- 不改变 Gate 7 / ② 批次顺序；当前 S3/S4/S5 继续推进（R36 送审中）。

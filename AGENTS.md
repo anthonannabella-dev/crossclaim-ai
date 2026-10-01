@@ -243,3 +243,29 @@ CI 红 · 测试未跑 · API 未验证 · 模型许可证未知 · migration �
 
 只有本文件 §七 `HOST APPROVAL REQUIRED` 的 1–11 项才允许打断自治循环请求宿主。
 Production Enablement / 真实平台外写 / 真实资金 / 客户提交 / 生产凭据：**继续 HOLD**。
+
+## 长期工程约束：跨模块回归 + Golden Path E2E（HOST PRODUCT DIRECTION 2026-10-01）
+
+**这是一条长期约束，不是一次性任务；不改变 Gate 7 / ② 的批次顺序。**
+
+任何涉及**核心领域模型 / Schema / 状态机 / Action Guard / Claim / Appeal / Settlement / RecoveryLedger /
+Billing / platform.write / Adapter / Import / Canonical Fact** 的改动，除批次专项测试外，
+**必须执行跨模块回归**，防止「单模块全绿但主链路断裂」。
+
+长期保留并逐步完善 **Golden Path E2E**（真实 PostgreSQL）：
+
+`Source Data → Canonical Fact → RecoveryOpportunity → Case → Evidence → Claim Prepare → Claim Submit
+ → 模拟外部处理结果 → Settlement → RecoveryLedger → FeeCalculation → Billing`
+
+硬性要求（摘要，全文见 `docs/releases/ENGINEERING-REGRESSION-POLICY.md`）：
+
+1. 主链路 E2E 必须用真实 PostgreSQL（不得只用 mock）；
+2. 每跳验证 `id / organizationId / caseId / claimId / settlementId` 关联连续；
+3. 验证金额、币种、状态、版本快照、审计事件、审批消费一致；
+4. 任一阶段失败不得造成后续非法推进或部分写入；
+5. Schema Migration 必须验证旧数据与既有链路不被破坏；
+6. 状态机修改 → 全局 state-machine regression；
+7. 权限 / Action Guard 修改 → authorization regression；
+8. 模块接口变更 → contract regression；
+9. S4/S5 或重大 Checkpoint → 全量回归 + Golden Path E2E + CI；
+10. Golden Path 建立后不得为让新代码通过而删除 / 弱化 / skip / 改写核心断言；规则变化须先经架构方审计。
