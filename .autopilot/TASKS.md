@@ -227,3 +227,12 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - 结论：**NOT_AVAILABLE / NOT_PROVEN → NEEDS_MANUAL**；Amazon 保持 READ-ONLY；组合根不纳入生产。
 - 明确排除：`createReport` / reimbursement 查询 / inventory adjustment 查询 / Seller Central UI / Case·Support 泛化能力 / 浏览器自动化。
 - 下一步：提交 R42 送审（docs-only）。
+
+### MSG-20261001-28 裁决（R42 REVISE：证据语言 + negative matrix + 三级状态）
+
+- DECISION：**REVISE**（REVIEWED_HEAD 5c0591d；归档 FULL_COPY_OK）；产品/安全方向 KEEP，仅收紧证据语言与可复核性。
+- CHANGE A（已落）：结论改为 `PUBLIC WRITE OPERATION NOT FOUND / NOT PROVEN`；不得写无条件 `NOT_AVAILABLE` / 「官方不存在」。
+- CHANGE B（已落）：新增 operation-level negative evidence matrix（Finances / FBA Inventory / Reports / Fulfillment Inbound / Fulfillment Outbound / Notifications / reimbursement·adjustment 读取来源 → closest candidate → why NOT recovery submission）。
+- CHANGE C（已落）：三级状态 `PROVEN_AVAILABLE` / `PROVEN_UNAVAILABLE` / `NOT_PROVEN`；本轮落 **NOT_PROVEN** + `executionDisposition = NEEDS_MANUAL`（未来 private/partner API 只产生新 evidence revision）。
+- TEST（架构方要求）：文档无绝对表述、最终状态 NOT_PROVEN、NOT_PROVEN→NEEDS_MANUAL、六项门槛仍 fail-closed、不创建 write adapter、不改 TRANSPORT=false、不新增组合根/凭据/网络/Schema —— 均满足（本轮 docs-only）。
+- NEXT：提交 R42 RE-REVIEW（docs-only）；通过后进入 **R43 — Amazon Manual Recovery Handoff Design**（ClaimItem → evidence completeness → recovery package → human approval → submission instructions/export → submitted-manual recording → outcome/reimbursement reconciliation）。

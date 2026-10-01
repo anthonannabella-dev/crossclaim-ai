@@ -806,3 +806,12 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 结论：**NOT_AVAILABLE / NOT_PROVEN → NEEDS_MANUAL**；六项 transport prerequisites 全部 NOT_PROVEN；Amazon 保持 READ-ONLY，组合根不纳入生产。
 - 排除：createReport / reimbursement 查询 / inventory adjustment 查询 / Seller Central UI / Case·Support 泛化能力 / 浏览器自动化。
 - 产品路径：自动发现 → 自动核算 → 自动证据包 → **人工一键提交**（不因追求闭环降低 transport 门槛）。
+
+## 2026-10-01 JST — 裁决 MSG-20261001-28 = REVISE（R42 证据语言收紧）
+
+- 送审：R42（REVIEWED_HEAD 5c0591d；Issue #2 comment 5929475487；CI 36848406692 SUCCESS）。
+- 归档：AI-ARCHITECT-INBOX.md §MSG-20261001-28；`tools/verdict-diff/compare.mjs` = **FULL_COPY_OK**。
+- CHANGE A：结论语言收紧为 PUBLIC WRITE OPERATION NOT FOUND / NOT_PROVEN（证据强度匹配结论强度；不使用无条件 NOT_AVAILABLE）。
+- CHANGE B：新增 operation-level negative evidence matrix（7 类 domain/API → closest candidate → why NOT recovery submission），使 negative evidence 可复审。
+- CHANGE C：三级状态（PROVEN_AVAILABLE / PROVEN_UNAVAILABLE / NOT_PROVEN）；本轮 NOT_PROVEN + executionDisposition=NEEDS_MANUAL。
+- 后续：提交 R42 RE-REVIEW（docs-only）；通过后不再研究 Amazon 自动写入，转入 R43 — Amazon Manual Recovery Handoff Design（把已证明可做的只读能力连成可用闭环）。

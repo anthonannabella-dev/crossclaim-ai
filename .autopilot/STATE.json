@@ -1,16 +1,16 @@
 {
   "gate": "B2-FIX R1",
-  "head": "cb822a1",
+  "head": "e710c88",
   "status": "IMPLEMENTING",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
-  "next_task": "R42 REVISE（docs-only）：CHANGE A 结论改为 PUBLIC WRITE OPERATION NOT FOUND / NOT PROVEN（不得写无条件的 NOT_AVAILABLE/官方不存在）；CHANGE B 补 operation-level negative evidence matrix（Finances/FBA Inventory/Reports/Fulfillment Inbound/Fulfillment Outbound/Notifications/reimbursement·adjustment 读取来源 → inspected operations → closest candidate → why NOT recovery submission）；CHANGE C 三级状态 PROVEN_AVAILABLE / PROVEN_UNAVAILABLE / NOT_PROVEN，本轮落 NOT_PROVEN + executionDisposition=NEEDS_MANUAL；同时先把 MSG-20261001-28 原文逐字归档（FULL_COPY_OK）→ 提交 R42 RE-REVIEW（docs-only，Issue #2 + 唤醒）。通过后进入 R43 — Amazon Manual Recovery Handoff Design（ClaimItem → evidence completeness → recovery package → human approval → submission instructions/export → submitted-manual recording → outcome/reimbursement reconciliation）",
+  "next_task": "提交 R42 RE-REVIEW（docs-only；Issue #2 + 唤醒）：CHANGE A 结论语言 + B operation-level negative matrix + C 三级状态（本轮 NOT_PROVEN + NEEDS_MANUAL）已落文档；通过后进入 R43 — Amazon Manual Recovery Handoff Design（ClaimItem → evidence completeness → recovery package → human approval → submission instructions/export → submitted-manual recording → outcome/reimbursement reconciliation）。",
   "send_head": "5c0591d",
   "decision_head": "5c0591d",
   "last_chatgpt_message": "MSG-20261001-28",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T10:28:33.229Z",
-  "previous_head": "5c0591d",
+  "updated_at": "2026-10-01T10:33:47.128Z",
+  "previous_head": "e710c88",
   "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "5c0591d",
@@ -51,10 +51,10 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-01T10:28:13.588Z",
   "state": "IMPLEMENT",
-  "last_action": "MSG-20261001-28 = REVISE 收到（R42 证据语言收紧 + operation-level negative matrix + 三级状态）；归档与 CHANGE A/B/C 修改待下一轮执行",
-  "last_action_at": "2026-10-01T10:28:33.229Z",
-  "next_action": "R42 REVISE（docs-only）：CHANGE A 结论改为 PUBLIC WRITE OPERATION NOT FOUND / NOT PROVEN（不得写无条件的 NOT_AVAILABLE/官方不存在）；CHANGE B 补 operation-level negative evidence matrix（Finances/FBA Inventory/Reports/Fulfillment Inbound/Fulfillment Outbound/Notifications/reimbursement·adjustment 读取来源 → inspected operations → closest candidate → why NOT recovery submission）；CHANGE C 三级状态 PROVEN_AVAILABLE / PROVEN_UNAVAILABLE / NOT_PROVEN，本轮落 NOT_PROVEN + executionDisposition=NEEDS_MANUAL；同时先把 MSG-20261001-28 原文逐字归档（FULL_COPY_OK）→ 提交 R42 RE-REVIEW（docs-only，Issue #2 + 唤醒）。通过后进入 R43 — Amazon Manual Recovery Handoff Design（ClaimItem → evidence completeness → recovery package → human approval → submission instructions/export → submitted-manual recording → outcome/reimbursement reconciliation）",
-  "current_head": "cb822a1",
+  "last_action": "MSG-20261001-28 = REVISE 执行完成：归档 FULL_COPY_OK + CHANGE A/B/C 落文档（PUBLIC WRITE OPERATION NOT FOUND / NOT_PROVEN；negative matrix；三级状态）",
+  "last_action_at": "2026-10-01T10:33:47.128Z",
+  "next_action": "提交 R42 RE-REVIEW（docs-only；Issue #2 + 唤醒）：CHANGE A 结论语言 + B operation-level negative matrix + C 三级状态（本轮 NOT_PROVEN + NEEDS_MANUAL）已落文档；通过后进入 R43 — Amazon Manual Recovery Handoff Design（ClaimItem → evidence completeness → recovery package → human approval → submission instructions/export → submitted-manual recording → outcome/reimbursement reconciliation）。",
+  "current_head": "e710c88",
   "reviewed_head": "549dba8",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -579,12 +579,13 @@
     "message_id": "MSG-20261001-28",
     "decision": "REVISE",
     "reviewed_head": "5c0591d",
-    "archival": "PENDING（下一轮逐字归档 + FULL_COPY_OK）",
+    "archived": "FULL_COPY_OK（逐行一致，缺失 0 / 多出 0）",
     "changes": {
-      "A": "结论语言收紧为 PUBLIC WRITE OPERATION NOT FOUND / NOT PROVEN",
-      "B": "补 operation-level negative evidence matrix",
-      "C": "三级状态 PROVEN_AVAILABLE / PROVEN_UNAVAILABLE / NOT_PROVEN；本轮 NOT_PROVEN + NEEDS_MANUAL"
+      "A": "结论语言收紧为 PUBLIC WRITE OPERATION NOT FOUND / NOT_PROVEN（不使用无条件 NOT_AVAILABLE）",
+      "B": "新增 operation-level negative evidence matrix（Finances / FBA Inventory / Reports / Fulfillment Inbound / Fulfillment Outbound / Notifications / reimbursement·adjustment 读取来源）",
+      "C": "三级状态 PROVEN_AVAILABLE / PROVEN_UNAVAILABLE / NOT_PROVEN；本轮落 NOT_PROVEN + executionDisposition=NEEDS_MANUAL"
     },
+    "next_after_rereview": "R43 — Amazon Manual Recovery Handoff Design",
     "holds": "AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · CUSTOMER SUBMISSION HOLD"
   }
 }

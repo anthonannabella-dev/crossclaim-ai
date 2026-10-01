@@ -8,7 +8,11 @@
 
 > **Amazon 官方当前是否提供一个第三方应用可使用的、用于 FBA inventory-loss / reimbursement recovery 的明确写 operation（即能创建/提交 recovery action）？**
 
-**答：没有找到。结论 = `NOT_AVAILABLE / NOT_PROVEN` → Amazon 保持 READ-ONLY，`platform.write` 保持 NEEDS_MANUAL。**
+**答：在本次检索的官方公开文档索引及已核查 reference 范围内，没有发现符合要求的公开 FBA recovery write operation。**
+
+**最终结论 = `PUBLIC WRITE OPERATION NOT FOUND / NOT_PROVEN` → Amazon 保持 READ-ONLY，`platform.write` 保持 NEEDS_MANUAL（`executionDisposition = NEEDS_MANUAL`）。**
+
+> 按 MSG-20261001-28 CHANGE A：仅凭索引零命中 + 分册抽样**不能**严格证明「官方不存在第三方可用的 operation」，因此不使用无条件的 `NOT_AVAILABLE` / 「官方不存在」，除非 Amazon 官方文档明确声明该能力不存在或不开放第三方调用。
 
 ## 1. 检索证据（可复现）
 
@@ -49,7 +53,7 @@
 | 9 | ambiguous timeout / 5xx recovery | n/a（无 operation） |
 | 10 | sandbox / test capability | 仅存在 sandbox-only 库存操作（`createInventoryItem` / `deleteInventoryItem` / `addInventory`），不是恢复写入口 |
 | 11 | 六项 transport prerequisites 最终矩阵 | 全部 **NOT_PROVEN**（无 operation 可逐项验证） |
-| 12 | 最终结论 | **`NOT_AVAILABLE / NOT_PROVEN` → NEEDS_MANUAL** |
+| 12 | 最终结论 | **`PUBLIC WRITE OPERATION NOT FOUND / NOT_PROVEN` → NEEDS_MANUAL**（按 CHANGE A，不使用无条件 `NOT_AVAILABLE`） |
 
 ### 六项 transport prerequisites 矩阵（MSG-20261001-25 CHANGE C 冻结）
 
@@ -61,6 +65,30 @@
 | write 后可查询最终状态或等价确认机制 | NOT_PROVEN |
 | ambiguous（timeout / reset / 5xx）不重复写恢复策略 | NOT_PROVEN |
 | sandbox/test evidence + CrossClaim PG/H/D 基线 | NOT_PROVEN（无 write 对象） |
+
+## 2b. operation-level negative evidence matrix（CHANGE B）
+
+| domain / API | inspected operations | closest candidate | why it does NOT satisfy recovery submission |
+| --- | --- | --- | --- |
+| Finances（v0 / v2024-06-19 / Finance Remittance） | `listFinancialEvents` 等检索类；Remittance `getRemittanceHeaders` / `getRemittance` | 财务事件/汇款的**读取** | 只读检索；不提供“创建/提交 recovery action”的写语义 |
+| FBA Inventory v1 | `getInventorySummaries`（只读）；`createInventoryItem` / `deleteInventoryItem` / `addInventory`（官方标注 **sandbox-only**） | 沙盒库存写入 | sandbox-only，作用于沙盒库存数据，非真实索赔提交 |
+| Reports API | `createReport` / `getReport` / `getReportDocument` | `createReport` | 仅创建/下载**报表任务**；不产生 recovery action，也无 claim 语义 |
+| Fulfillment Inbound | 入仓计划/货件类操作（create/update inbound） | 入仓计划写入 | 物流入仓指令，与 FBA 库存损失索赔无关 |
+| Fulfillment Outbound | `createFulfillmentOrder` / `getFulfillmentOrder` | 出库订单创建 | 出库履约指令，不是索赔/追回提交 |
+| Notifications（SNS/EventBridge 类） | 事件订阅/推送配置 | 事件订阅写入 | 只配置**通知投递**；不构成 recovery submission |
+| reimbursement / adjustment 数据读取来源（如报表中的 reimbursement/adjustment 行） | 报表与财务检索路径 | 读取历史赔付/调整数据 | 只能**读取**既有结果，不能创建新的 claim 或推进 recovery action |
+
+**矩阵结论**：在本次核查范围内，**没有发现任何一个 operation 同时满足** `third-party callable` + `recovery/claim submission semantics` + `documented write behavior`。
+
+## 2c. 三级状态定义（CHANGE C）
+
+| 状态 | 含义 | 本轮取值 |
+| --- | --- | --- |
+| `PROVEN_AVAILABLE` | 有官方文档明确证明存在第三方可调用的 recovery/claim 写 operation | ✗ |
+| `PROVEN_UNAVAILABLE` | 有官方文档**明确声明**该能力不存在或不开放第三方调用 | ✗ |
+| `NOT_PROVEN` | 无上述任一明确证据 | **✔ 本轮落此状态** |
+
+本轮记录：`capabilityStatus = NOT_PROVEN`、`executionDisposition = NEEDS_MANUAL`；六项 transport prerequisites 全部 fail-closed，不因本状态创建 write adapter、不修改 `TRANSPORT=false`、不新增组合根/凭据/网络调用/Schema。未来若发现邀请制 / private / partner API，只产生新的 evidence revision，不推翻历史审计。
 
 ## 3. 明确排除（不得误判为写入口）
 
