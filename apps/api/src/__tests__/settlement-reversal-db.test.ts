@@ -225,3 +225,54 @@ describe('R46 S3 MSG-57 CHANGE 2/3：evidence 自证与 approval exactly-once', 
     expect(consumed).toBe(1);
   });
 });
+
+describe('R46 S3 MSG-58 CHANGE A：approval 漂移（锁定 full reversal 事实）', () => {
+  const capturing = () => {
+    const seen: { digest?: string } = {};
+    return {
+      seen,
+      deps: {
+        prisma,
+        assertActiveMembership: deps.assertActiveMembership,
+        verifyApproval: async (request: { boundExtra: Record<string, string | null> }) => {
+          seen.digest = request.boundExtra.reversalSnapshotDigest ?? undefined;
+          return true;
+        },
+      } as never,
+    };
+  };
+
+  const strict = (locked: { digest?: string }) =>
+    ({
+      prisma,
+      assertActiveMembership: deps.assertActiveMembership,
+      verifyApproval: async (request: { boundExtra: Record<string, string | null> }) =>
+        Boolean(locked.digest) && request.boundExtra.reversalSnapshotDigest === locked.digest,
+    }) as never;
+
+  it('identity / occurredAt / evidence / reasonCode 任一在审批后变化 → 旧 approval 失效且零写入', async () => {
+    const cases: Record<string, unknown>[] = [
+      { externalIdentityValueHash: hex64() },
+      { occurredAt: '2026-10-01T03:00:00.000Z' },
+      { evidenceReferences: undefined },
+      { reasonCode: 'DIFFERENT_REASON' },
+    ];
+    for (const variant of cases) {
+      const s = await seedSettlement(ORG_A);
+      const base = input({ originalSettlementId: s });
+      const cap = capturing();
+      await recordSettlementReversal(cap.deps, base as never);
+      const locked = cap.seen;
+
+      const s2 = await seedSettlement(ORG_A);
+      const before = await prisma.settlementAdjustment.count({ where: { organizationId: ORG_A } });
+      const drifted = variant.evidenceReferences === undefined
+        ? { ...input({ originalSettlementId: s2 }), evidenceReferences: [{ evidenceArtifactId: uuid() }] }
+        : { ...input({ originalSettlementId: s2 }), ...variant };
+      await expect(recordSettlementReversal(strict(locked), drifted as never)).rejects.toMatchObject({
+        code: 'APPROVAL_REQUIRED',
+      });
+      expect(await prisma.settlementAdjustment.count({ where: { organizationId: ORG_A } })).toBe(before);
+    }
+  });
+});
