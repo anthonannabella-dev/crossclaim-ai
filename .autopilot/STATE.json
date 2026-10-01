@@ -1,6 +1,6 @@
 {
   "gate": "B2-FIX R1",
-  "head": "3515021",
+  "head": "6b5ec65",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
   "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
@@ -9,13 +9,13 @@
   "last_chatgpt_message": "MSG-20261001-36",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T11:53:23.417Z",
+  "updated_at": "2026-10-01T11:58:01.792Z",
   "previous_head": "4c6c865",
-  "architect_decision_pending": false,
+  "architect_decision_pending": true,
   "blocked_scope": null,
-  "last_send_head": "4c6c865",
-  "last_sent_at": "2026-10-01T11:52:15.073Z",
-  "last_sent_fingerprint": "R43-S3-REREVIEW:Audit-Fault-Injection-Basis-Version",
+  "last_send_head": "6b5ec65",
+  "last_sent_at": "2026-10-01T11:58:01.792Z",
+  "last_sent_fingerprint": "R43-S4:Provider-Case-Reference-Canonical-Backfill",
   "final_head": "1144401",
   "ci_run": "36833002042",
   "ci_result": "SUCCESS",
@@ -51,10 +51,10 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-01T11:52:44.258Z",
   "state": "IMPLEMENT",
-  "last_action": "MSG-20261001-36 = PASS 已逐字归档并 FULL_COPY_OK —— R43 S3 正式关闭（CHANGE A/B/C 全部收口）；下一批 = R43 S4（providerCaseRef canonical 补录 + protected action）",
-  "last_action_at": "2026-10-01T11:53:23.417Z",
-  "next_action": "R43 S4 — providerCaseRef canonical 补录 + protected action：已有 RecoveryManualSubmission → 受保护的 reference 补录动作 → canonicalization（trim → NFKC → 去零宽 → 折叠空白；不 lower-case）→ RecoveryManualSubmissionReference append-only INSERT → 审计 → 读取/展示语义；12 项要求全部满足（不 UPDATE Submission、raw+canonical 分开、DB 唯一约束兼底、空 ref 拒绝、跨租户/错 submission/非 ACTIVE 成员 fail-closed、并发至多一次、不产生 accepted/reimbursed/recovered、不改 ClaimItem 状态、不消费旧 approval、需审批则独立 action+binding）；不得进入 outcome/reconciliation。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
-  "current_head": "3515021",
+  "last_action": "R43 S4（providerCaseRef canonical 补录）已实现并送审：独立受保护动作 + canonical 化 + raw/canonical 分开 + append-only INSERT + 独立 approval binding；S4 测试 7 项覆盖 12 项要求；回归 35 files / 336 tests PASS；tsc PASS；等待 S4 Checkpoint 裁决",
+  "last_action_at": "2026-10-01T11:58:01.792Z",
+  "next_action": "等待 S4 Checkpoint 裁决：①PASS → 进入 S5（只读一致性 checker + CI 接线：状态⇔submission 双向、digest 一致、caseId 一致、同租户同 approval 唯一、canonical ref 无重复、证据引用同租户；只报告不修复）②REVISE → 按 CHANGE 修改后重送 ③BLOCK → 停止该方案。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
+  "current_head": "6b5ec65",
   "reviewed_head": "07b7009",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -903,5 +903,22 @@
       "若需 human approval：独立 action + 独立 approval binding（不得复用 S3 approval）"
     ],
     "s4_boundary": "S4 不得顺带 outcome / reimbursement reconciliation（后续独立边界）"
+  },
+  "r43s4_submission": {
+    "submission_comment": "5930826355",
+    "ci_run": "36858596490",
+    "reviewed_head": "6b5ec65",
+    "module": "apps/api/src/services/recovery/manual-reference.ts",
+    "test": "apps/api/src/__tests__/recovery-manual-reference-db.test.ts（7 个用例覆盖 12 项要求）",
+    "action": "recovery.manual_submit_reference_recorded（INTERNAL_WRITE + humanApproval）",
+    "binding": "rmr1:<submissionId>:<claimItemId>:<providerCaseRefCanonical>（与 S3 的 rmp1: 分离）",
+    "canonicalization": "trim → NFKC → 去零宽 → 折叠空白；不 lower-case；canonical duplicate 由 DB UNIQUE 兜底",
+    "evidence": {
+      "s4_tests": "7/7 PASS",
+      "affected_families": "35 files / 336 tests PASS（recovery-manual-* + action-guard 全量）",
+      "tsc": "PASS"
+    },
+    "wakeup_channel": "https://chatgpt.com/c/6ab9ee1b-fd54-83ee-b363-b67750afcedd",
+    "wakeup_delivery": "DELIVERED_VERIFIED（输入框清空 / 新用户消息在底部）"
   }
 }

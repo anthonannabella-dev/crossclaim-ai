@@ -938,3 +938,12 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 永久基线：READY_TO_APPEAL → SUBMITTED_MANUAL + Submission + Evidence + manual_submitted + approval_consumed 全有或全无；两条故障注入测试不得删除。
 - 档案：`AI-ARCHITECT-INBOX.md` → `MSG-20261001-36`；`tools/verdict-diff/compare.mjs` = **FULL_COPY_OK**。
 - NEXT：**R43 S4 — providerCaseRef canonical 补录 + protected action**（12 项要求）；S4 不得进入 outcome/reconciliation。
+
+## 2026-10-01 JST — R43 S4（providerCaseRef canonical 补录）实现 + Checkpoint 送审
+
+- 交付：`services/recovery/manual-reference.ts` + Action Guard 注册（独立动作）+ S4 数据库测试 7 项。
+- 动作：`recovery.manual_submit_reference_recorded`（INTERNAL_WRITE + humanApproval）；独立 binding `rmr1:<submissionId>:<claimItemId>:<canonical>`（不得复用 S3 approval）。
+- canonical：trim → NFKC → 去零宽 → 折叠空白；**不 lower-case**；canonical duplicate 由 DB UNIQUE 兜底（PROVIDER_CASE_REF_CONFLICT）。
+- 12 项要求：不 UPDATE Submission / raw+canonical 分开 / 空 ref 拒绝 / 跨租户·错 submission·非 ACTIVE 成员 fail-closed / 并发至多一次 / 不产生 accepted·reimbursed·recovered / 不改 ClaimItem 状态 / 不消费旧 approval / 独立 action+binding / 读取展示语义。
+- 证据：S4 7/7 PASS；回归 35 files / 336 tests PASS；tsc PASS；未改 Schema/migration/触发器清单；无新增依赖。
+- 送审：REVIEWED_HEAD 6b5ec65（Issue #2 comment 5930826355 / CI 36858596490）；唤醒已投递并验证。
