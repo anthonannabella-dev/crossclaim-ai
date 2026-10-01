@@ -39,7 +39,7 @@
 | --- | --- | --- | --- | --- | --- |
 | `claim.submit` | `POST /cases/:id/claim/submit`（http-routes + server WORKFLOW_PATH） | 平台外写（当前 HOLD，传输开关 false；入口恒返回 `NEEDS_MANUAL`） | approvalId 服务端校验（租户/动作/对象/有效期/消费）+ 锁后角色/主体重验 | HTTP 级 22/22（拒绝零副作用 / 并发恰一次 / 等锁失效 / 审计失败注入 / 审计留痕与原始错误保留） | **已验收 PASS（MSG-20261001-07 / REVIEWED_REF 28e0cd9；CI run 36805839845）** |
 | `appeal.submit` | `POST /cases/:id/appeal/submit`（http-routes + server WORKFLOW_PATH） | 平台外写（当前 HOLD；入口仅登记内部结果 `platformWriteExecuted=false` / `NEEDS_MANUAL`） | approvalId 服务端校验（租户/动作/对象/轮次/版本化提交快照摘要）+ 案件锁 → Appeal 行锁后重验主体/角色/审批生命周期 + 锁后重算快照比对 | HTTP 级 **13/13**（缺审批 / 动作不通用 / 重复 / 缺 guard / 锁期撤销 / 轮次歧义 / 空正文 / 审批后正文变化 / 独立审批人+执行人行锁期降权 / 并发恰一次 / 审计失败整笔回滚 / 错误绑定拒绝） | **已验收 PASS（MSG-20261001-16 / REVIEWED_HEAD 7d888cc；CI 36820104474）** |
-| `platform.write` | 边界模块 `services/platform-write/*`（编排 + 端口；**未接线任何对外路由**） | 平台外写（**HOLD**；硬开关 `PLATFORM_WRITE_TRANSPORT_ENABLED=false`，拒绝路径恒 `sinkCalls=0`） | Action Guard 决策 + 审批绑定服务端快照摘要 + 传输闸门（关闭即 `NEEDS_MANUAL`） | 离线 fail-closed **17/17**；Action Guard 回归 22/22 | **PASS WITH REVISE（MSG-20261001-17 / REVIEWED_HEAD e113307 / CI 36822728548）**：CHANGE A 本轮不得接线 HTTP；CHANGE B/C/D 见 §11；真实外写继续 HOLD |
+| `platform.write` | 边界模块 `services/platform-write/*`（未接线对外路由）+ 设计稿 | 平台外写（**HOLD**；`PLATFORM_WRITE_TRANSPORT_ENABLED=false` 恒关） | Action Guard + 审批绑定快照 + 传输闸门 | 离线 fail-closed 17/17；Action Guard 22/22 | **PASS WITH REVISE（MSG-20261001-17）→ CHANGE B/C/D 设计已交付（R34 送审中）**；真实外写继续 HOLD |
 | `commission.charge` | 待定（结算/佣金路径） | 资金动作（HOLD） | 同上 + 财务复核 | 待补 | TODO |
 | `payment.capture` | 账单登记入口（HTTP 受保护入口） | 资金动作（HOLD） | Action Guard 审批绑定 + 锁内事实 CAS + 快照交错校验 | HTTP 级：拒绝零副作用 / 允许恰一次（含并发与等锁失效） | **已验收 PASS（MSG-20260930-24 / REVIEWED_REF 73115a3）** |
 | `secret.rotate` | 待定（运维路径） | 凭据操作（HOST ONLY） | HOST APPROVAL | 待补 | TODO |
@@ -232,3 +232,12 @@
 | D | `PLATFORM_WRITE_TRANSPORT_ENABLED=true` 不单独构成真实写入授权；需独立 Production Enablement 裁决 | 已登记为硬边界（设计§9/§11 保持） |
 
 > 并发不变量（CHANGE B 必须回答）：①同一幂等键最多一条有效执行链；②同一审批不得授权两个不同 snapshot；③崩溃/超时重试不得产生两个 `SUCCEEDED`。账本禁止保存 credential / token / secret 或非必要原始平台 payload。
+
+### 11.2 CHANGE B/C/D 设计交付（R34 送审内容）
+
+| 交付物 | 内容 | 状态 |
+| --- | --- | --- |
+| `docs/releases/PLATFORM-WRITE-ATTEMPT-LEDGER-DESIGN.md` | 现状对齐（内存账本 / 审批=AuditLog 事件 / 快照幂等键 / transport 恒关）；`PlatformWriteAttempt` 字段草案；三条并发不变量落地方式；**T1 数据库事务（重验审批 → 唯一 attempt → CAS IN_FLIGHT → 同事务写 approval_consumed）+ T2 事务外调用 + T3 结果收敛**；`UNKNOWN_PROVIDER_RESPONSE` 与对账/恢复语义；安全与最小化；索引与保留期；迁移回滚；验收清单 | 已交付 |
+| `docs/releases/PLATFORM-WRITE-SCHEMA-DELTA-REQUEST.md` | 正式 Schema Delta Request（仅请求批准）：新枚举 `PlatformWriteAttemptStatus`（含 `UNKNOWN_PROVIDER_RESPONSE`）；新表 `PlatformWriteAttempt` 字段表；C1–C6 约束/索引（含 partial unique index 请求）；与既有模型关系（仅 `organizationId` FK，其余弱引用）；明确不含 migration/HTTP/transport；回滚方案；5 个待批问题 | 已交付 |
+
+> 本轮**未**改 Prisma Schema、**未**写 migration、**未**接线 HTTP、**未**开启 transport、**未**消费审批、**未**调用真实平台。

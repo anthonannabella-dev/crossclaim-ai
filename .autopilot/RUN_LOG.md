@@ -578,3 +578,11 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 归档：两段原文按原样合并（`[CONTINUATION]` 分隔）写入 `AI-ARCHITECT-INBOX.md` 的 `### [MSG-20261001-17]`（94 非空行）→ compare.mjs **FULL_COPY_OK**；Issue #2 comment 5925786916。
 - 裁定：KEEP 安全骨架；CHANGE A 暂不接 HTTP；CHANGE B 先提交 PlatformWriteAttempt 账本 Design/Schema Delta（不写 migration）；CHANGE C 审批消费与执行权原子边界 + UNKNOWN_PROVIDER_RESPONSE；CHANGE D `PLATFORM_WRITE_TRANSPORT_ENABLED=true` 不单独构成授权。
 - 下一步：产出账本设计 + Schema Delta Request 后重新送审；期间不接 HTTP / 不接真实 adapter / 不开启 transport。
+
+## 2026-10-01 JST — CHANGE B/C/D 设计交付（platform.write 账本与审批消费原子边界）
+
+- 新增 `docs/releases/PLATFORM-WRITE-ATTEMPT-LEDGER-DESIGN.md`：三条并发不变量落地（I1 唯一幂等键 / I2 一审批一 snapshot / I3 成功不可重复）、T1 数据库事务边界（重验审批 → 唯一 attempt → CAS IN_FLIGHT → 同事务写 approval_consumed）、T2 事务外调用、T3 结果收敛、`UNKNOWN_PROVIDER_RESPONSE` 与崩溃恢复对账语义、安全最小化、索引与保留期、迁移回滚、验收清单。
+- 新增 `docs/releases/PLATFORM-WRITE-SCHEMA-DELTA-REQUEST.md`：正式请求批准（新枚举 + 新表 + C1–C6 约束/索引，含 Postgres partial unique index 请求），明确不含 migration / HTTP / transport。
+- 现状对齐要点：审批事实来源是 `AuditLog` 的 `recovery.review_approved` 事件 id，消费是追加 `recovery.approval_consumed`（`changes.approvalId`）——因此消费必须与 attempt 占位/CAS 同事务。
+- 未改 Prisma Schema、未写 migration、未接线 HTTP、未开启 transport、未消费审批、未调用真实平台。
+- 下一步：R34 送审两份设计稿。
