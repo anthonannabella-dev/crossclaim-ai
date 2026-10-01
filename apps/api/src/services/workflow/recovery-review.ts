@@ -24,6 +24,7 @@ import {
   CLAIM_SUBMIT_ACTION,
   PLATFORM_WRITE_ACTION,
   RECOVERY_CONFIRMATION_ACTION,
+  RECOVERY_MANUAL_SUBMIT_ACTION,
 } from '../action-guard/approval-verifier';
 import { WorkflowError } from './opportunity-review';
 import { assertPermission } from './permissions';
@@ -193,6 +194,20 @@ export async function getRecoveryReviewStatus(
   };
 }
 
+/**
+ * 服务端额外绑定键规范化（R44-A）：仅保留字符串与 null，裁剪空白；
+ * 用于把五元 basis 片段与 boundPayload 一起落库（客户端无法自证，恒由入口计算）。
+ */
+export function normalizeBoundExtra(raw?: Record<string, unknown>): Record<string, string | null> | null {
+  if (!raw || typeof raw !== 'object') return null;
+  const out: Record<string, string | null> = {};
+  for (const [key, value] of Object.entries(raw)) {
+    if (typeof value === 'string' && value.trim() !== '') out[key] = value.trim();
+    else if (value === null) out[key] = null;
+  }
+  return Object.keys(out).length > 0 ? out : null;
+}
+
 export interface SubmitRecoveryReviewInput {
   organizationId: string;
   actorUserId: string;
@@ -209,6 +224,11 @@ export interface SubmitRecoveryReviewInput {
     basisReference?: unknown;
     evidenceArtifactId?: unknown;
   };
+  /**
+   * 服务端计算的操作额外绑定键（R44-A）：与 boundPayload 一起落库，执行时逐项比对。
+   * 仅由服务端入口提供（客户端不得自证）；缺省不写。
+   */
+  boundExtra?: Record<string, unknown>;
   /** 审批有效期（毫秒）；缺省 24h */
   approvalTtlMs?: number;
   /** CHANGE A：本次审批授权的动作（由入口显式声明；缺省 commission.charge = 回收资金确认） */
@@ -370,10 +390,22 @@ export async function submitRecoveryReview(
         if (bound.amount === null || bound.currency === null || bound.basisReference === null) {
           throw new WorkflowError('INVALID_INPUT', '审批必须绑定完整操作载荷（金额/币种/依据）');
         }
-      } else if ((NON_MONEY_APPROVAL_ACTIONS as readonly string[]).includes(requestedAction)) {
+      } else if (
+        (NON_MONEY_APPROVAL_ACTIONS as readonly string[]).includes(requestedAction) ||
+        requestedAction === RECOVERY_MANUAL_SUBMIT_ACTION
+      ) {
         // 非资金动作（claim.submit / appeal.submit）：无金额语义，但必须绑定操作依据；
         if (bound.basisReference === null) {
           throw new WorkflowError('INVALID_INPUT', '审批必须绑定操作依据（basisReference）');
+        }
+        if (requestedAction === RECOVERY_MANUAL_SUBMIT_ACTION) {
+          // R44-A：人工提交审批必须绑定五元 versioned basis（与执行时核验逐项一致）
+          const extra = normalizeBoundExtra(input.boundExtra);
+          for (const key of ['claimItemId', 'caseId', 'packageVersion', 'digestVersion', 'packageDigest']) {
+            if (!extra || extra[key] === undefined || extra[key] === null || extra[key] === '') {
+              throw new WorkflowError('INVALID_INPUT', '人工提交审批必须绑定完整五元 basis：' + key);
+            }
+          }
         }
       } else {
         throw new WorkflowError('INVALID_INPUT', `审批动作不受支持：${requestedAction}`);
@@ -382,6 +414,7 @@ export async function submitRecoveryReview(
         throw new WorkflowError('INVALID_INPUT', '未知的审批载荷指纹版本');
       }
     }
+    const boundExtra = decision === 'APPROVE' ? normalizeBoundExtra(input.boundExtra) : null;
     const ttlMs = normalizeApprovalTtl(input.approvalTtlMs);
     const expiresAt = decision === 'APPROVE' ? new Date(at.getTime() + ttlMs) : null;
     const approvalEventId = await writeReviewAudit(tx, {
@@ -395,7 +428,7 @@ export async function submitRecoveryReview(
         ...(reason ? { reason } : {}),
         ...(bound
           ? {
-              boundPayload: bound,
+              boundPayload: boundExtra ? { ...bound, ...boundExtra } : bound,
               expiresAt: expiresAt?.toISOString() ?? null,
               boundAction:
                 typeof input.boundAction === 'string' && input.boundAction.trim() !== ''

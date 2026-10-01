@@ -56,6 +56,7 @@ import {
   RecoveryManualHttpError,
   requestManualRecoveryReference,
   requestManualRecoverySubmit,
+  requestManualRecoverySubmitApproval,
 } from '../recovery/http-request';
 import { ManualReferenceError } from '../recovery/manual-reference';
 import type { AuditWriter } from '../audit';
@@ -171,6 +172,8 @@ const CASE_PLATFORM_WRITE_PATH = /^\/cases\/([^/]+)\/platform\/write$/;
 // R44（MSG-20261001-39 NEXT）：人工追回提交入口（受保护动作 · 复用 R43 S3/S4 服务，不复制事务逻辑）
 const CASE_RECOVERY_MANUAL_SUBMIT_PATH = /^\/cases\/([^/]+)\/recovery\/manual-submit$/;
 const CASE_RECOVERY_MANUAL_REFERENCE_PATH = /^\/cases\/([^/]+)\/recovery\/manual-reference$/;
+// R44-A（MSG-20261001-41 NEXT）：人工提交审批创建入口（只创建审批事实，不执行提交）
+const CASE_RECOVERY_MANUAL_APPROVAL_PATH = /^\/cases\/([^/]+)\/recovery\/manual-submit-approval$/;
 // MSG-20260929-30：运营看板（只读投影，GET only）
 const OPERATIONS_DASHBOARD_PATH = /^\/operations\/dashboard$/;
 const OPERATIONS_CLAIMS_PATH = /^\/operations\/claims$/;
@@ -384,6 +387,7 @@ export async function handleWorkflowRequest(
   const casePlatformWrite = CASE_PLATFORM_WRITE_PATH.exec(path);
   const caseRecoveryManualSubmit = CASE_RECOVERY_MANUAL_SUBMIT_PATH.exec(path);
   const caseRecoveryManualReference = CASE_RECOVERY_MANUAL_REFERENCE_PATH.exec(path);
+  const caseRecoveryManualApproval = CASE_RECOVERY_MANUAL_APPROVAL_PATH.exec(path);
   const operationsDashboard = OPERATIONS_DASHBOARD_PATH.test(path);
   const operationsClaims = OPERATIONS_CLAIMS_PATH.test(path);
   const operationsRecovery = OPERATIONS_RECOVERY_PATH.test(path);
@@ -416,7 +420,7 @@ export async function handleWorkflowRequest(
     adminPermissionMatrix ||
     adminMemberDetail !== null ||
     adminKillSwitch;
-  if (!adminAny && !operationsDashboard && !operationsClaims && !operationsRecovery && !review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !paymentReviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !replayPath && !replayReviewPath && !retryDuePath && !retryDueFreezePath && !retryDueReviewPath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim && !caseClaimSubmit && !caseClaimPrepare && !caseBillingDraft && !caseAppealSubmit && !casePlatformWrite && !caseRecoveryManualSubmit && !caseRecoveryManualReference) {
+  if (!adminAny && !operationsDashboard && !operationsClaims && !operationsRecovery && !review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !paymentReviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !replayPath && !replayReviewPath && !retryDuePath && !retryDueFreezePath && !retryDueReviewPath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim && !caseClaimSubmit && !caseClaimPrepare && !caseBillingDraft && !caseAppealSubmit && !casePlatformWrite && !caseRecoveryManualSubmit && !caseRecoveryManualReference && !caseRecoveryManualApproval) {
     return false;
   }
 
@@ -1103,6 +1107,27 @@ export async function handleWorkflowRequest(
       const body = await readJsonBody(req);
       const caseId = caseRecoveryManualSubmit[1] ?? '';
       const result = await requestManualRecoverySubmit(
+        {
+          organizationId: actor.organizationId,
+          actorUserId: actor.actorUserId,
+          role: actor.role,
+          caseId,
+        },
+        body,
+        {
+          prisma: deps.prisma,
+          ...(deps.actionGuard ? { actionGuard: deps.actionGuard } : {}),
+          ...(deps.now ? { now: deps.now } : {}),
+        },
+      );
+      sendJson(res, result.httpStatus, result.body);
+      return true;
+    }
+    if (caseRecoveryManualApproval) {
+      // R44-A：创建人工提交审批（REQUEST / APPROVE；不执行提交、不消费审批）
+      const body = await readJsonBody(req);
+      const caseId = caseRecoveryManualApproval[1] ?? '';
+      const result = await requestManualRecoverySubmitApproval(
         {
           organizationId: actor.organizationId,
           actorUserId: actor.actorUserId,

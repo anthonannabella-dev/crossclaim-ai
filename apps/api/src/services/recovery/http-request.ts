@@ -27,6 +27,7 @@ import {
   recordManualRecoveryReference,
 } from './manual-reference';
 import { submitManualRecoveryWithApproval } from './manual-submission';
+import { submitRecoveryReview } from '../workflow/recovery-review';
 import { buildRecoveryPackageBasisReference } from './recovery-package';
 
 export const RECOVERY_MANUAL_HTTP_CODES = [
@@ -38,6 +39,8 @@ export const RECOVERY_MANUAL_HTTP_CODES = [
   'RECOVERY_MANUAL_NO_SUBMITTABLE_PACKAGE',
   'RECOVERY_MANUAL_SUBMISSION_NOT_FOUND',
   'RECOVERY_MANUAL_REFERENCE_REQUIRED',
+  'RECOVERY_MANUAL_APPROVAL_INVALID_DECISION',
+  'RECOVERY_MANUAL_APPROVAL_PACKAGE_TERMINAL',
 ] as const;
 export type RecoveryManualHttpCode = (typeof RECOVERY_MANUAL_HTTP_CODES)[number];
 
@@ -123,6 +126,23 @@ export interface ManualReferenceHttpResponse {
   recordedAt: string;
   approvalBasisReference: string;
   providerAccepted: false;
+  platformWriteExecuted: false;
+}
+
+
+export interface ManualSubmitApprovalHttpResponse {
+  decision: 'REQUEST' | 'APPROVE';
+  caseId: string;
+  claimItemId: string;
+  packageId: string;
+  approvalBasisReference: string;
+  /** REVIEW 阶段为 PENDING；APPROVE 阶段为 approvalId */
+  state?: 'PENDING';
+  approvalId?: string;
+  expiresAt?: string | null;
+  /** true = 复用了同 action + 同 basis 的既有未消费未过期审批（幂等） */
+  idempotent: boolean;
+  /** 审批创建恒不产生任何执行/资金副作用 */
   platformWriteExecuted: false;
 }
 
@@ -414,4 +434,161 @@ export async function requestManualRecoveryReference(
       platformWriteExecuted: false,
     },
   };
+}
+
+/**
+ * `POST /cases/:caseId/recovery/manual-submit-approval`（R44-A）
+ * -----------------------------------------------------------------
+ * 职责：**只创建审批事实**，不执行提交、不改变 ClaimItem、不产生 Submission、不消费审批。
+ * 与 execution 使用**同一个** server-side package/basis builder（resolveManualSubmissionTarget），
+ * 客户端不得自证 digest / basis / version；creation 与 execution 的事实构造逻辑完全同源。
+ *
+ * decision：
+ *   · `REQUEST` —— 建立待审批请求（PENDING）
+ *   · `APPROVE` —— 在既有 PENDING 之上创建 approval（含 boundAction 与五元 versioned basis）
+ *     · 幂等：同 action + 同 basis 的既有未消费且未过期 approval 直接复用（不新建事件）
+ */
+export async function requestManualRecoverySubmitApproval(
+  context: RecoveryManualRouteContext,
+  body: Record<string, unknown>,
+  deps: RecoveryManualRequestDeps,
+): Promise<{ httpStatus: number; body: ManualSubmitApprovalHttpResponse }> {
+  rejectClientAssertions(body, context.caseId);
+
+  const claimItemId = str(body.claimItemId);
+  if (claimItemId === '') throw invalidBody('claimItemId 必填');
+
+  const rawDecision = str(body.decision).toUpperCase();
+  const decision = rawDecision === '' ? 'APPROVE' : rawDecision;
+  if (decision !== 'REQUEST' && decision !== 'APPROVE') {
+    throw new RecoveryManualHttpError(
+      'RECOVERY_MANUAL_APPROVAL_INVALID_DECISION',
+      400,
+      'decision 必须是 REQUEST 或 APPROVE',
+    );
+  }
+
+  const packageId = str(body.packageId);
+  // 与 execution 同一个服务端解析器 / 同一个 basis builder（不得出现第二套事实构造）
+  const target = await resolveManualSubmissionTarget(deps.prisma, {
+    organizationId: context.organizationId,
+    caseId: context.caseId,
+    claimItemId,
+    ...(packageId !== '' ? { packageId } : {}),
+  });
+
+  // 终态 package 不得创建新 approval（execution 侧同样拒绝使用终态 package）
+  const pkg = await deps.prisma.recoveryPackage.findFirst({
+    where: { id: target.packageId, organizationId: context.organizationId },
+    select: { status: true },
+  });
+  if (!pkg) throw notFound('RECOVERY_MANUAL_PACKAGE_NOT_FOUND', '目标 RecoveryPackage 不存在');
+  if (!RECOVERY_MANUAL_SUBMITTABLE_PACKAGE_STATUSES.includes(pkg.status)) {
+    throw new RecoveryManualHttpError(
+      'RECOVERY_MANUAL_APPROVAL_PACKAGE_TERMINAL',
+      409,
+      'RecoveryPackage 已处于终态（' + pkg.status + '），不得创建新 approval',
+    );
+  }
+
+  const base = {
+    caseId: context.caseId,
+    claimItemId: target.claimItemId,
+    packageId: target.packageId,
+    approvalBasisReference: target.basisReference,
+  };
+
+  if (decision === 'APPROVE') {
+    const reusable = await findReusableManualSubmitApproval(deps.prisma, {
+      organizationId: context.organizationId,
+      caseId: context.caseId,
+      basisReference: target.basisReference,
+    });
+    if (reusable) {
+      return {
+        httpStatus: 200,
+        body: { ...base, decision: 'APPROVE', approvalId: reusable.approvalId, expiresAt: reusable.expiresAt, idempotent: true, platformWriteExecuted: false },
+      };
+    }
+  }
+
+  const ttlRaw = body.approvalTtlMs;
+  const note = str(body.note);
+  const review = (await submitRecoveryReview(
+    deps.prisma,
+    {
+      organizationId: context.organizationId,
+      actorUserId: context.actorUserId,
+      role: context.role,
+      caseId: context.caseId,
+      decision,
+      ...(note !== '' ? { reason: undefined } : {}),
+      ...(decision === 'APPROVE'
+        ? {
+            boundAction: RECOVERY_MANUAL_SUBMIT_ACTION,
+            boundPayload: { basisReference: target.basisReference },
+            boundExtra: {
+              claimItemId: target.claimItemId,
+              caseId: target.caseId,
+              packageVersion: target.packageVersion,
+              digestVersion: target.digestVersion,
+              packageDigest: target.packageDigest,
+            },
+            ...(typeof ttlRaw === 'number' ? { approvalTtlMs: ttlRaw } : {}),
+          }
+        : {}),
+    } as never,
+    deps.now ?? (() => new Date()),
+  )) as { approvalId?: string; state?: string; lastEventAt?: Date };
+
+  if (decision === 'REQUEST') {
+    return {
+      httpStatus: 200,
+      body: { ...base, decision: 'REQUEST', state: 'PENDING', idempotent: false, platformWriteExecuted: false },
+    };
+  }
+
+  if (!review.approvalId) throw invalidBody('审批创建失败（未返回 approvalId）');
+  return {
+    httpStatus: 200,
+    body: {
+      ...base,
+      decision: 'APPROVE',
+      approvalId: review.approvalId,
+      expiresAt: null,
+      idempotent: false,
+      platformWriteExecuted: false,
+    },
+  };
+}
+
+/** 复用同一 action + 同一 versioned basis 的既有审批（未消费、未过期）——creation 幂等 */
+async function findReusableManualSubmitApproval(
+  prisma: PrismaClient,
+  args: { organizationId: string; caseId: string; basisReference: string },
+): Promise<{ approvalId: string; expiresAt: string | null } | null> {
+  const rows = await prisma.$queryRawUnsafe<Array<{ id: string; expires_at: Date | null }>>(
+    'SELECT a.id AS id, (a.changes ->> \'expiresAt\')::timestamptz AS expires_at\n' +
+      '  FROM "AuditLog" a\n' +
+      ' WHERE a."organizationId" = $1\n' +
+      "   AND a.action = 'recovery.review_approved'\n" +
+      "   AND a.\"entityType\" = 'Case' AND a.\"entityId\" = $2\n" +
+      "   AND a.changes ->> 'boundAction' = $3\n" +
+      "   AND a.changes -> 'boundPayload' ->> 'basisReference' = $4\n" +
+      '   AND (a.changes ->> \'expiresAt\')::timestamptz > now()\n' +
+      '   AND NOT EXISTS (\n' +
+      '     SELECT 1 FROM "AuditLog" c\n' +
+      '      WHERE c."organizationId" = a."organizationId"\n' +
+      "        AND c.action = 'recovery.approval_consumed'\n" +
+      "        AND c.changes ->> 'approvalId' = a.id)\n" +
+      ' ORDER BY a."createdAt" DESC\n' +
+      ' LIMIT 1',
+    args.organizationId,
+    args.caseId,
+    RECOVERY_MANUAL_SUBMIT_ACTION,
+    args.basisReference,
+  );
+  const row = rows[0];
+  if (!row) return null;
+  return { approvalId: row.id, expiresAt: row.expires_at ? new Date(row.expires_at).toISOString() : null };
 }
