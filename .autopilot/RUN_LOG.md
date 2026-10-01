@@ -514,3 +514,11 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 口径披露：①「同 Claim 不同审批并发」无法构造两个同时有效的审批（新 REQUEST 取代旧审批 → APPROVAL_NOT_APPROVED），并发正确性由案件锁 + CAS 结构性保证；②零外写为「静态无写入面引用 + 注册表拒绝写入面适配器」探针口径，不宣称运行期调用计数。
 - 待恢复动作：`HOST_ACTION_REQUIRED: gh auth login`（gh CLI 令牌失效 401，Issue #2 写回暂缓；`git push` 正常）。
 
+
+## 2026-10-01T00:58:02.237Z — 真实 tick 记录（R20 送审后空转根因核实）
+
+- **根因**：Codex 自动化 `crossclaim-ai-bridge-5min` 在核实瞬间为 **status = PAUSED**（rrule 仍为 `FREQ=MINUTELY;INTERVAL=5`）→ 定时循环并未在跑，故 R20 送出后既无新心跳也无新裁决轮次。已在核实后立即恢复为 **ACTIVE**（同一线程 `01a0e6b2-…`、同一 5 分钟周期），并顺带把「逐 surface 通道诊断」写进 prompt。
+- 调度/进程证据：无 Windows 计划任务（`Get-ScheduledTask` 仅返回无关且 Disabled 的项）；唯一调度器即上述 Codex heartbeat；`.autopilot/HEARTBEAT.json` 最后动作时间 `2026-09-30T23:37:35Z`（runner `resume-from-state`）。
+- R20 通道核实：Issue #2 请求 comment **5922360473** 已写回（STATUS=201）；ChatGPT 会话中 R20 消息确为最后一条、无 assistant 回复、无 generating、无错误横幅；按规程先 `reload()` 复读一次，再发送**轻量重试**「请处理刚才的 R20 复审请求：REVIEWED_HEAD=e8ba20e，Issue #2 comment 5922360473，请给出新的 PASS / REVISE / BLOCK。」，并验证其出现在会话底部（送达）。
+- 重复实例：本轮未再观测到第二个活跃自动化实例；此前出现的并行提交（如 ecd8f50）来自另一执行实例，已通过保持单一 ACTIVE 自动化收敛。
+- 边界：Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据继续 HOLD。
