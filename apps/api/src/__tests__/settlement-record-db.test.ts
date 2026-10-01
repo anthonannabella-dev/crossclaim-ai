@@ -353,3 +353,29 @@ describe('R46 S2 生产装配工厂（createSettlementRecordDeps）', () => {
     ).rejects.toMatchObject({ code: 'APPROVAL_REQUIRED' });
   });
 });
+
+describe('R46 S2 生产装配：action-guard verifier 注入', () => {
+  const guardVerifier = (valid: boolean) => ({
+    verify: async () => ({ valid }),
+  });
+
+  it('verifier 通过 → CREATED；verifier 拒绝 → APPROVAL_REQUIRED 且零写入', async () => {
+    const ok = createSettlementRecordDeps(prisma, guardVerifier(true) as never);
+    const created = await recordSettlement(ok, input() as never);
+    expect(created.status).toBe('CREATED');
+
+    const deny = createSettlementRecordDeps(prisma, guardVerifier(false) as never);
+    const before = await counts();
+    await expect(recordSettlement(deny, input() as never)).rejects.toMatchObject({
+      code: 'APPROVAL_REQUIRED',
+    });
+    expect(await counts()).toEqual(before);
+  });
+
+  it('缺少 verifier → fail-closed（ACTION_GUARD_APPROVAL_VERIFIER_MISSING）', async () => {
+    const missing = createSettlementRecordDeps(prisma, undefined as never);
+    const before = await counts();
+    await expect(recordSettlement(missing, input() as never)).rejects.toThrow();
+    expect(await counts()).toEqual(before);
+  });
+});

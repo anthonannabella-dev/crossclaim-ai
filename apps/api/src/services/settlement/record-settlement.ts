@@ -17,6 +17,11 @@
 import type { PrismaClient } from '@prisma/client';
 
 import {
+  verifyApprovalOrThrow,
+  type ActionGuardApprovalVerifier,
+} from '../action-guard/approval-verifier';
+
+import {
   buildReceiptSnapshot,
   ReceiptSnapshotError,
   type ReceiptEvidenceRefInput,
@@ -430,11 +435,37 @@ class ReusedAfterRace extends Error {
  */
 export function createSettlementRecordDeps(
   prisma: PrismaClient,
-  verifyApproval: SettlementRecordDeps['verifyApproval'],
+  approval: SettlementRecordDeps['verifyApproval'] | ActionGuardApprovalVerifier,
 ): SettlementRecordDeps {
   return {
     prisma,
-    verifyApproval,
+    // 生产装配：action-guard verifier 走 verifyApprovalOrThrow（缺失 verifier → fail-closed）；
+    // 仅当调用方显式传入函数时（测试/受控注入）才直接使用。
+    verifyApproval: async (request) => {
+      if (typeof approval === 'function') {
+        return approval(request);
+      }
+      let decision;
+      try {
+        decision = await verifyApprovalOrThrow({
+        verifier: approval,
+        query: {
+          approvalId: request.approvalId,
+          organizationId: request.organizationId,
+          action: request.action,
+          actorUserId: request.actorUserId,
+          targetRef: request.boundExtra.receiptSnapshotDigest ?? undefined,
+          payload: {
+            recoveredAmount: request.boundExtra.amount,
+            currency: request.boundExtra.currency,
+          },
+        },
+        });
+      } catch (error) {
+        throw new SettlementRecordError('APPROVAL_REQUIRED', (error as Error)?.message ?? 'approval rejected');
+      }
+      return decision.valid === true;
+    },
     assertActiveMembership: async (organizationId: string, userId: string) => {
       const row = await prisma.membership.findFirst({
         where: { organizationId, userId, isActive: true },
