@@ -32,7 +32,8 @@ export type ReversalErrorCode =
   | 'REVERSAL_ALREADY_APPLIED'
   | 'EVENT_IDENTITY_CONFLICT'
   | 'EVIDENCE_REQUIRED'
-  | 'EVIDENCE_NOT_FOUND';
+  | 'EVIDENCE_NOT_FOUND'
+  | 'CLIENT_EVIDENCE_NOT_TRUSTED';
 
 export class ReversalError extends Error {
   constructor(
@@ -77,7 +78,8 @@ export interface RecordReversalInput {
   externalIdentityValueHash?: string | null;
   externalIdentityVersion?: string | null;
   financialEventFingerprint?: string | null;
-  evidenceReferences: { evidenceArtifactId: string; digest: string; kind: string }[];
+  /** CHANGE 2：客户端只提交 evidenceArtifactId；digest / kind 一律由服务端从 EvidenceArtifact 事实派生 */
+  evidenceReferences: { evidenceArtifactId: string }[];
   reasonCode: string;
   reasonText?: string | null;
   clientDerivedFields?: Record<string, unknown> | null;
@@ -139,6 +141,12 @@ export async function recordSettlementReversal(
   }
   if (!input.evidenceReferences || input.evidenceReferences.length < 1) {
     throw new ReversalError('EVIDENCE_REQUIRED', 'at least one evidence reference is required');
+  }
+  for (const ref of input.evidenceReferences) {
+    const extra = ref as { digest?: unknown; kind?: unknown };
+    if (extra.digest || extra.kind) {
+      throw new ReversalError('CLIENT_EVIDENCE_NOT_TRUSTED', 'client-supplied evidence digest/kind is not trusted');
+    }
   }
   const organizationId = String(input.organizationId ?? '').trim();
   if (!organizationId) throw new ReversalError('INVALID_INPUT', 'organizationId is required');
@@ -248,15 +256,41 @@ export async function recordSettlementReversal(
       throw new ReversalError('REVERSAL_ALREADY_APPLIED', 'this settlement has already been fully reversed');
     }
 
+    const derivedEvidence: { evidenceArtifactId: string; digest: string; kind: string }[] = [];
     for (const ref of input.evidenceReferences) {
       const artifact = await tx.evidenceArtifact.findFirst({
         where: { id: ref.evidenceArtifactId },
-        select: { organizationId: true },
+        select: {
+          id: true,
+          organizationId: true,
+          kind: true,
+          fileAssetId: true,
+          externalUrl: true,
+          title: true,
+          capturedAt: true,
+        },
       });
       if (!artifact) throw new ReversalError('EVIDENCE_NOT_FOUND', 'evidence artifact not found');
       if (artifact.organizationId !== organizationId) {
         throw new ReversalError('CROSS_TENANT_REFERENCE', 'evidence belongs to another tenant');
       }
+      derivedEvidence.push({
+        evidenceArtifactId: artifact.id,
+        kind: String(artifact.kind),
+        digest: createHash('sha256')
+          .update(
+            canonicalJson({
+              evidenceArtifactId: artifact.id,
+              organizationId: artifact.organizationId,
+              kind: String(artifact.kind),
+              fileAssetId: artifact.fileAssetId,
+              externalUrl: artifact.externalUrl,
+              title: artifact.title,
+              capturedAtUtc: artifact.capturedAt ? artifact.capturedAt.toISOString() : null,
+            }),
+          )
+          .digest('hex'),
+      });
     }
 
     await tx.auditLog
@@ -293,7 +327,7 @@ export async function recordSettlementReversal(
         externalIdentityValueHash: valueHash,
         externalIdentityVersion: input.externalIdentityVersion ?? null,
         financialEventFingerprint: fingerprint,
-        evidenceReferences: input.evidenceReferences,
+        evidenceReferences: derivedEvidence,
         reasonCode: input.reasonCode,
         reasonText: input.reasonText ?? null,
         approvalId: input.approvalId,

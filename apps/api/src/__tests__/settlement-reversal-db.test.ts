@@ -89,7 +89,7 @@ function input(overrides: Record<string, unknown> = {}) {
     externalIdentityKind: 'BANK_TRANSACTION' as const,
     externalIdentityValueHash: hex64(),
     externalIdentityVersion: 'v1',
-    evidenceReferences: [{ evidenceArtifactId: evidenceA, digest: hex64(), kind: 'BANK_STATEMENT' }],
+    evidenceReferences: [{ evidenceArtifactId: evidenceA }],
     reasonCode: 'PROVIDER_CHARGEBACK',
     ...overrides,
   };
@@ -186,5 +186,42 @@ describe('R46 S3 settlement reversal（真实 PostgreSQL）', () => {
       recordSettlementReversal(deny, input({ originalSettlementId: s4 }) as never),
     ).rejects.toMatchObject({ code: 'APPROVAL_REQUIRED' });
     expect(await prisma.settlementAdjustment.count({ where: { organizationId: ORG_A, originalSettlementId: s4 } })).toBe(0);
+  });
+});
+
+describe('R46 S3 MSG-57 CHANGE 2/3：evidence 自证与 approval exactly-once', () => {
+  it('客户端自证 evidence digest/kind → 拒绝且零写入', async () => {
+    const s5 = await seedSettlement(ORG_A);
+    const before = await prisma.settlementAdjustment.count({ where: { organizationId: ORG_A } });
+    await expect(
+      recordSettlementReversal(deps, input({
+        originalSettlementId: s5,
+        evidenceReferences: [{ evidenceArtifactId: evidenceA, digest: hex64(), kind: 'BANK_STATEMENT' }],
+      }) as never),
+    ).rejects.toMatchObject({ code: 'CLIENT_EVIDENCE_NOT_TRUSTED' });
+    expect(await prisma.settlementAdjustment.count({ where: { organizationId: ORG_A } })).toBe(before);
+  });
+
+  it('same approvalId + 两个不同有效 execution → 恰好一次消费（loser APPROVAL_ALREADY_CONSUMED，零残留）', async () => {
+    const a = await seedSettlement(ORG_A);
+    const b = await seedSettlement(ORG_A);
+    const approvalId = uuid();
+    ALLOW.add(approvalId);
+    const before = await prisma.settlementAdjustment.count({ where: { organizationId: ORG_A } });
+    const results = await Promise.allSettled([
+      recordSettlementReversal(deps, input({ originalSettlementId: a, approvalId }) as never),
+      recordSettlementReversal(deps, input({ originalSettlementId: b, approvalId }) as never),
+    ]);
+    const ok = results.filter((r) => r.status === 'fulfilled');
+    const failed = results.filter((r) => r.status === 'rejected') as PromiseRejectedResult[];
+    expect(ok.length).toBe(1);
+    for (const f of failed) {
+      expect((f.reason as { code?: string })?.code).toBe('APPROVAL_ALREADY_CONSUMED');
+    }
+    expect(await prisma.settlementAdjustment.count({ where: { organizationId: ORG_A } })).toBe(before + 1);
+    const consumed = await prisma.auditLog.count({
+      where: { id: 'settlement-reversal-approval-' + approvalId },
+    });
+    expect(consumed).toBe(1);
   });
 });
