@@ -1,15 +1,15 @@
 {
   "gate": "B2-FIX R1",
-  "head": "61b95f1",
+  "head": "505f433",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
-  "next_task": "S1 Schema/M1：新增 PlatformWriteAttemptStatus 枚举（含 RECONCILING/FAILED_CONFIRMED/MANUAL_REVIEW）与 PlatformWriteAttempt 表 + migration；随后 S2 约束（C1/C2/C4–C6 + C3 partial unique index raw SQL）；不接 HTTP、不接真实 adapter、transport 恒关",
+  "next_task": "S2（约束/M2）：为 PlatformWriteAttempt 增加 C1 @@unique([organizationId, idempotencyKey])、C2 @@unique([organizationId, approvalId])、C4–C6 索引，生成并应用 M2 迁移；随后 M3 partial unique index（raw SQL）",
   "send_head": "7d888cc",
   "decision_head": "7d888cc",
   "last_chatgpt_message": "MSG-20261001-19",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T06:22:27.583Z",
+  "updated_at": "2026-10-01T06:28:24.616Z",
   "previous_head": "caf2fac",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -49,12 +49,12 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-01T06:21:39.264Z",
+  "last_tick_at": "2026-10-01T06:26:40.914Z",
   "state": "IMPLEMENT",
-  "last_action": "MSG-20261001-19（R35 Implementation Plan）= PASS WITH REVISE：逐字归档 + FULL_COPY_OK + Issue #2 comment 5925918882；三态与 M1/M2/M3 获批，进入 S1–S5 实现",
-  "last_action_at": "2026-10-01T06:22:27.583Z",
-  "next_action": "S1 Schema/M1：新增 PlatformWriteAttemptStatus 枚举（含 RECONCILING/FAILED_CONFIRMED/MANUAL_REVIEW）与 PlatformWriteAttempt 表 + migration；随后 S2 约束（C1/C2/C4–C6 + C3 partial unique index raw SQL）；不接 HTTP、不接真实 adapter、transport 恒关",
-  "current_head": "61b95f1",
+  "last_action": "S1（Schema/M1）完成：新增 PlatformWriteAttemptStatus 枚举 + PlatformWriteAttempt 表 + Organization 反向关系；migration 20261001062736 已生成并应用到 dev DB；prisma validate/generate、tsc、既有 39 项测试全绿",
+  "last_action_at": "2026-10-01T06:28:24.616Z",
+  "next_action": "S2（约束/M2）：为 PlatformWriteAttempt 增加 C1 @@unique([organizationId, idempotencyKey])、C2 @@unique([organizationId, approvalId])、C4–C6 索引，生成并应用 M2 迁移；随后 M3 partial unique index（raw SQL）",
+  "current_head": "505f433",
   "reviewed_head": "549dba8",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-01T06:19:06.436Z",
-    "gapMs": 152829,
+    "previousTickAt": "2026-10-01T06:22:44.364Z",
+    "gapMs": 236551,
     "stale": false,
-    "checkedAt": "2026-10-01T06:21:39.264Z"
+    "checkedAt": "2026-10-01T06:26:40.914Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -160,6 +160,12 @@
       "B": "T1 = 原子授权点（六项同时成立，任一步失败整笔回滚；消费即事务事实）",
       "C": "FAILED_CONFIRMED 严格定义；无法证明成功/失败一律 MANUAL_REVIEW"
     },
-    "order": "S1 Schema/M1 → S2 constraints/M2 → S3 service/M3 → S4 PG1–PG10+新增断言 → S5 回归/CI/送审"
+    "order": "S1 Schema/M1 → S2 constraints/M2 → S3 service/M3 → S4 PG1–PG10+新增断言 → S5 回归/CI/送审",
+    "s1": {
+      "status": "DONE",
+      "migration": "20261001062736_platform_write_attempt_ledger（枚举 + 表 + FK；无唯一约束/无索引）",
+      "verify": "prisma validate valid；migrate deploy 成功（dev DB 21 migrations，schema up to date）；prisma generate OK；tsc --noEmit PASS；platform-write 17/17 + Action Guard 22/22 PASS",
+      "boundary": "未接线 HTTP、未接真实 adapter、transport 恒关；未含任何凭据字段"
+    }
   }
 }

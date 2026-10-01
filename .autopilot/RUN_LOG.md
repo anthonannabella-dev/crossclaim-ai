@@ -604,3 +604,11 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - CHANGE C：`FAILED_CONFIRMED` 严格定义；timeout/404/次数耗尽/24h 到期 → `MANUAL_REVIEW`。
 - NEXT：S1 Schema/M1 → S2 constraints/M2 → S3 service/M3 → S4 PG1–PG10+新增断言 → S5 回归/CI/送审 Implementation Checkpoint。
 - 硬边界不变：NO HTTP WIRING · NO REAL ADAPTER · TRANSPORT=FALSE · NO PRODUCTION CREDENTIALS · NO REAL EXTERNAL WRITE · NO CUSTOMER SUBMISSION。
+
+## 2026-10-01 JST — S1（Schema/M1）完成：PlatformWriteAttempt 表落地
+
+- `apps/api/prisma/schema.prisma`：新增枚举 `PlatformWriteAttemptStatus`（11 值，含 `UNKNOWN_PROVIDER_RESPONSE` / `RECONCILING` / `FAILED_CONFIRMED` / `MANUAL_REVIEW`）与模型 `PlatformWriteAttempt`（快照摘要/幂等键/审批引用/对账字段；**无任何凭据或原始 payload 字段**）；Organization 增加反向关系。
+- 迁移：`20261001062736_platform_write_attempt_ledger`（M1：枚举 + 表 + FK；唯一约束与索引留给 M2，partial unique index 留给 M3）。
+- 验证：`prisma validate` valid；`prisma migrate deploy` 成功（21 migrations，schema up to date）；`prisma generate` OK；`tsc --noEmit` PASS；platform-write 17/17 + Action Guard 22/22（39 项）PASS。
+- 边界不变：未接线 HTTP、未接真实 adapter、`PLATFORM_WRITE_TRANSPORT_ENABLED=false`、未消费审批、无真实外写。
+- 下一步：S2 约束（C1/C2/C4–C6）→ M3 partial unique index → S3 服务层。

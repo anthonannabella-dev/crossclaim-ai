@@ -342,6 +342,7 @@ model Organization {
   claimItemEvidences ClaimItemEvidence[]
   recoveryPayouts   RecoveryPayout[]
   killSwitchRequests KillSwitchRequest[]
+  platformWriteAttempts PlatformWriteAttempt[]
 
   @@index([status])
 }
@@ -1516,4 +1517,76 @@ model KillSwitchRequest {
   /// 普通索引（「同 scope 仅一个 PENDING_ENABLE」由迁移中的部分唯一索引保证）
   @@index([organizationId, scope, state])
   @@index([expiresAt])
+}
+
+// ============================================================
+// C-PLATFORM-WRITE-LEDGER — 持久化执行账本（MSG-20261001-19 授权）
+// ------------------------------------------------------------
+// 约束/索引按 M1 → M2 → M3 三步落地：
+//   M1（本迁移）：新增枚举 + 新增表（无唯一约束、无索引）
+//   M2：C1 幂等键唯一、C2 approval 唯一、C4–C6 查询索引
+//   M3：C3 SUCCEEDED partial unique index（迁移内 raw SQL）
+// 硬边界：不接线 HTTP、不接真实 adapter、transport 恒关；
+//         账本禁止存放 credential / token / secret / 原始平台 payload。
+// ============================================================
+
+enum PlatformWriteAttemptStatus {
+  PENDING
+  IN_FLIGHT
+  SUCCEEDED
+  RETRYABLE
+  FAILED
+  DEAD_LETTER
+  BLOCKED
+  UNKNOWN_PROVIDER_RESPONSE
+  RECONCILING
+  FAILED_CONFIRMED
+  MANUAL_REVIEW
+}
+
+model PlatformWriteAttempt {
+  id                 String                      @id @default(uuid())
+  organizationId     String
+  /// 受保护动作名（单一来源常量 platform.write）
+  action             String
+  /// 服务端提交快照版本（platform-write-request/v1）
+  snapshotVersion    String
+  /// 服务端提交快照摘要（64 hex）
+  snapshotDigest     String
+  /// 幂等键 pw1-*（同一逻辑提交恒定）
+  idempotencyKey     String
+  /// 同一逻辑执行链内的投递/对账计数（不产生第二条可独立成功的链）
+  attemptNo          Int                         @default(1)
+  status             PlatformWriteAttemptStatus  @default(PENDING)
+  /// CLAIM / APPEAL（应用层枚举；弱引用，不建 FK）
+  targetKind         String
+  targetId           String
+  platform           String
+  /// 是否模拟通道；真实通道必须显式为 false 才允许真实调用
+  simulated          Boolean                     @default(true)
+  /// 审批事件 id（AuditLog.id；非 FK，仅引用 + 复制摘要事实）
+  approvalId         String?
+  /// 审批绑定的快照摘要，必须等于 snapshotDigest
+  basisReference     String?
+  errorClass         String?
+  errorCode          String?
+  /// 限长短句；禁止 payload / token / secret
+  errorSummary       String?
+  startedAt          DateTime?
+  finishedAt         DateTime?
+  nextRetryAt        DateTime?
+  providerRef        String?
+  reconcileAttempts  Int                         @default(0)
+  reconcileNextAt    DateTime?
+  reconcileLastActor String?
+  /// CONFIRMED_SUCCEEDED / CONFIRMED_FAILED / INCONCLUSIVE
+  reconciledStatus   String?
+  reconciledAt       DateTime?
+  /// SYSTEM / USER
+  convergedBy        String?
+  convergedReason    String?
+  createdAt          DateTime                    @default(now())
+  updatedAt          DateTime                    @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 }
