@@ -1272,3 +1272,16 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 15 问答复：以外部到账证据 + 受保护动作作为 Settlement 入口；FULLY_RECONCILED 既非充分也非独立必要；v1 不允许 FX；override 不得触发资金域；重跑幂等四道防线；动作闸门建议（settlement.record / billing.fee_calculate / billing.invoice_issue = INTERNAL_WRITE + humanApproval；payment.capture = MONEY_MOVEMENT + productionGate）。
 - 边界：NO Settlement creation from R45 · NO FeeCalculation · NO BillingInvoice · NO Payment activation · NO autopay · NO platform write；R13 Payment Activation Gate 继续 HOLD。
 - 送审：REVIEWED_HEAD 51b27ff（Issue #2 comment 5935875894）；唤醒已投递并三要素验证（输入框清空 / 新消息在底部 / 生成中）。
+
+## 2026-10-02 JST — MSG-20261002-52 = PASS WITH REVISE：R46 Design 原则批准 → 进入 R46-A Schema Delta Request
+
+- 裁决：**PASS WITH REVISE**（REVIEWED_HEAD 51b27ff）；归档 FULL_COPY_OK；全文见 AI-ARCHITECT-INBOX.md 的 MSG-20261002-52。
+- KEEP：事实分层与硬不变量（OBSERVED/RECONCILED ≠ Settlement RECEIVED ≠ Fee earned ≠ Invoice payable ≠ Payment collected）。
+- 批准 Q2 / Q11：FULLY_RECONCILED 既非充分也非独立必要（但仍需可追溯 claim/linkage basis）；override 不得触发资金域。
+- CHANGE A：Settlement 不可变外部资金身份（same receipt replay → reuse；different receipt → distinct）。
+- CHANGE B：reversal 必须建为独立财务事实（引用原 Settlement / 幂等 / 禁重复 full reversal）。
+- CHANGE C：Fee 必须经 FeeCalculationSettlement membership 从 Settlement 明细推导。
+- CHANGE D：不得在 R46-A 顺便改 BillingInvoice 状态机；VOID / CREDIT / WRITTEN_OFF 需单列 semantics。
+- CHANGE E：settlement.record 的 approval 必须绑定 receipt snapshot；审批后关键字段变化 → approval 失效。
+- NEXT：R46-A Schema Delta Request（docs-only，一次完整定义），之后 R46-B Implementation Plan。
+- 红线不变：NO Settlement creation from R45 · NO FeeCalculation · NO BillingInvoice issuance · NO Payment activation · NO autopay · NO platform write · TRANSPORT=false · NO production credentials；R13 Payment Activation Gate 继续 HOLD。

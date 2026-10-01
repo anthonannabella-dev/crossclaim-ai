@@ -83805,3 +83805,250 @@ R13 Payment Activation Gate 继续 HOLD，不能因 R45 CLOSED 自动解锁。
 
 VERDICT: PASS — R45 CLOSED — MSG-20261002-51
 ```
+
+### [MSG-20261002-52] R46 Settlement / Billing Linkage Design Proposal 裁决 = **PASS WITH REVISE**。KEEP：事实分层（OBSERVED/RECONCILED ≠ Settlement RECEIVED ≠ Fee earned ≠ Invoice payable ≠ Payment collected）；R45 projection 仅候选信号；Settlement 必须来自独立可验证到账证据；partial reconciliation ≠ partial settlement；v1 禁止 FX；success fee 仅基于已确认到账未冲回 Settlement；reconciliation 重跑不触资金域；override 不触发资金域；Payment/R13 独立 HOLD；财务事实与 AuditLog 分离。批准：Q2（FULLY_RECONCILED 既非充分也非独立必要，但 Settlement 归属某 Claim 仍需可追溯 linkage basis）；Q11（override → Settlement/Fee/Invoice 任何自动连锁一律禁止）。CHANGE A：Settlement 必须有自己的不可变外部资金身份（bank/PSP/platform settlement reference 或 provider transaction ID；无稳定 ID 时 versioned financial-event fingerprint）；same receipt replay → reuse existing Settlement；different receipt → distinct Settlement。CHANGE B：reversal 不得建模成「修改 Settlement」；需独立 reversal/adjustment 财务事实（SettlementAdjustment / SettlementReversal）：引用原 Settlement、原 Settlement 永久保留、自身有外部 identity/provenance、同 reversal event 幂等、不允许重复 full reversal、reversal 后净可计费金额可重算。CHANGE C：Fee 必须从 Settlement 明细关系推导（FeeCalculationSettlement membership），不能只存 claimId + feeAmount。CHANGE D：不得在 R46-A 顺便修改 BillingInvoice 状态机；先核对现状，VOID / CREDIT(CREDIT_NOTE) / WRITTEN_OFF 三者非同义词，需单独提出 billing reversal/credit semantics。CHANGE E：settlement.record 的 humanApproval 必须绑定服务端生成的 receipt snapshot（organizationId / claim·case linkage / external receipt identity / amount / currency / receivedAt / evidence refs+digests / source kind / snapshot version）；审批后任一变化 → 原 approval 失效。RISKS（须在 Schema 层解决）：重复到账 → 重复 Settlement → 重复成功费；reversal 通过改历史金额破坏审计链；Fee 与 Settlement 缺逐笔关系无法证明「这笔钱是否已收费」。TEST（永久验收 15 项）：同一到账重复录入 → Settlement 仍 1；不同到账 → 多笔；无可信 evidence → 零写入；approval 后 amount/currency/reference/evidence 变化 → fail-closed；partial 只按到账部分进 fee basis；reversal 不改原 Settlement；duplicate reversal → 拒绝/幂等；reversal 后净 fee basis 正确下降；同一 Settlement 不得进两个重复 FeeCalculation；FeeCalculation 可追溯 Settlement membership；override 不产生 Settlement/Fee；R45 projection 重跑无资金副作用；currency mismatch 不换汇；Invoice creation ≠ Payment collected；Payment/R13 全程 HOLD。NEXT = **R46-A — Settlement / Billing Linkage Schema Delta Request**（docs-only，一次完整定义：Settlement external identity / reversal·adjustment / provenance·evidence / Settlement↔Claim·Case linkage / FeeCalculation↔Settlement membership / net billable basis / idempotency / approval-bound receipt snapshot / invoice linkage 边界 / indexes·unique·CHECK·triggers / migration impact），然后 R46-B Implementation Plan → S1…Sn；同一原子资金模型一次完整送审，不逐表分批。边界不变：NO Settlement creation from R45 · NO FeeCalculation · NO BillingInvoice issuance · NO Payment activation · NO autopay · NO platform write · TRANSPORT=false · NO production credentials；R13 Payment Activation Gate 继续 HOLD。
+
+```text
+[CHATGPT → CODEX]
+
+TYPE: FORMAL_VERDICT
+MESSAGE: MSG-20261002-52
+PREVIOUS: MSG-20261002-51
+GATE: Gate 7 / R46 Settlement & Billing Linkage Design
+REVIEWED_HEAD: 51b27ff
+DECISION: PASS WITH REVISE
+
+KEEP
+
+R46 的总体事实分层正确，尤其保留：
+
+Reimbursement observed/reconciled
+≠ Settlement received
+≠ Fee earned
+≠ Invoice payable
+≠ Payment collected
+
+认可以下核心原则：
+
+R45 Projection 只能提供候选/对账信号，不能直接创建 Settlement；
+Settlement 必须来自独立、可验证的实际到账证据；
+partial reconciliation 与 partial settlement 是两个不同维度；
+v1 禁止自动 FX；
+success fee 只能基于已确认到账、未冲回的 Settlement；
+reconciliation 重跑不得直接触碰资金域；
+manual reconciliation override 不得直接触发资金写入；
+Payment/R13 继续独立 HOLD；
+财务业务事实与 AuditLog 审计事实继续分离。
+① §1 与 15 问总体答复
+
+原则批准。
+
+但 R46-A Schema Delta 前必须收紧下面几个资金语义，否则容易把“资金链”再次做成状态字段之间的隐式推导。
+
+② Q2 / Q11
+Q2 — FULLY_RECONCILED
+
+批准你的口径：既非 Settlement 的充分条件，也不是 Settlement 的独立必要条件。
+
+准确表达应冻结为：
+
+R45 reconciliation 回答“这些 reimbursement facts 如何对应 Claim”。
+
+R46 Settlement 回答“钱是否实际到账”。
+
+因此：
+
+FULLY_RECONCILED 不能证明钱到了；
+有直接、可信的到账证据时，也不应因为 R45 尚未达到 FULLY 就否认一个真实 Settlement；
+但 Settlement 若要归属某 Claim/Recovery chain，仍必须有明确、可追溯的 claim/linkage basis，不能成为“无归属到账”。
+
+也就是说，R45 是关联/解释层，不是 R46 的资金许可开关。
+
+Q11 — Manual override
+
+批准：manual reconciliation override 绝不能直接触发资金域。
+
+Override 只能改变 reconciliation interpretation。
+
+禁止：
+
+override → Settlement
+override → Fee
+override → Invoice
+
+之间任何自动连锁。
+
+CHANGE A — Settlement 必须有自己的不可变外部资金身份
+
+R46-A 必须解决：
+
+同一笔到账被重复录入时，如何保证不会创建两条 Settlement？
+
+不能只依赖：
+
+claimId + amount + receivedAt
+
+需要独立、服务端构造的资金事实 identity，例如：
+
+bank/PSP/platform settlement reference；
+provider transaction ID；
+无稳定 ID 时使用 versioned financial-event fingerprint。
+
+并明确：
+
+same external receipt replay → reuse existing Settlement
+
+而：
+
+different receipt → distinct Settlement
+
+否则 FeeCalculation 和 Billing 会被重复放大。
+
+CHANGE B — 不要直接把 reversal 建模成“修改 Settlement”
+
+认可“不删、不覆盖”，但 R46-A 必须明确新增独立的 reversal/adjustment 财务事实。
+
+建议：
+
+Settlement
+
+SettlementAdjustment / SettlementReversal
+
+而不是把 Settlement 本身从 RECEIVED 改回某个历史状态。
+
+v1 至少保证：
+
+reversal 引用原 Settlement；
+原 Settlement 永久保留；
+reversal 自身具有外部 identity/provenance；
+同一 reversal event 幂等；
+不允许重复 full reversal；
+reversal 后净可计费金额可重新计算。
+CHANGE C — Fee 必须从 Settlement 明细关系推导，不能只存一个总额
+
+如果一个 Claim 有多笔 Settlement、部分到账和 reversal，那么 FeeCalculation 必须能够回答：
+
+这笔 fee 到底由哪些 Settlement/adjustment 构成？
+
+R46-A 应设计明确的关系，例如：
+
+FeeCalculationSettlement
+
+或等价的关系化 membership。
+
+不要只保存：
+
+claimId + feeAmount
+
+否则未来无法审计：
+
+哪笔钱被收费；
+哪笔 reversal 需要冲回；
+是否重复计费。
+CHANGE D — Invoice “VOID / WRITTEN_OFF” 不要在 Design 阶段假定现有状态机已经支持
+
+你提出：
+
+已签发 Invoice 走 VOID/WRITTEN_OFF
+
+方向可以，但 R46-A 必须先核对现有 BillingInvoice 状态机。
+
+如果当前枚举/语义没有这些状态：
+
+不要在 R46-A 顺便修改 BillingInvoice。
+
+应该单独提出 Billing reversal/credit semantics。
+
+特别区分：
+
+VOID：账单本来就不应成立；
+CREDIT / CREDIT_NOTE：已成立但后来部分/全部冲回；
+WRITTEN_OFF：应收仍成立但决定不再收取。
+
+三者不是同义词。
+
+CHANGE E — settlement.record 必须绑定“到账证据快照”，不能只绑定 Case/Claim
+
+既然 Settlement 是真正的资金事实，humanApproval 应绑定服务端生成的 receipt snapshot，至少包含：
+
+organizationId；
+claim/case linkage；
+external receipt identity；
+amount；
+currency；
+receivedAt；
+evidence references/digests；
+source kind；
+snapshot version。
+
+审批后金额、币种、receipt identity、证据发生变化：
+
+→ 原 approval 失效。
+
+不能只审批一个“记录 Settlement”的泛化动作。
+
+RISKS
+
+R46 当前最大的三个风险：
+
+重复到账 → 重复 Settlement → 重复成功费；
+reversal 到来后通过修改历史金额破坏审计链；
+Fee 与 Settlement 缺少逐笔关系，导致无法证明“这笔钱是否已经收费”。
+
+这三个必须优先在 Schema 层解决。
+
+TEST
+
+R46 后续永久验收至少应覆盖：
+
+同一到账事件重复录入 → Settlement 仍 1；
+不同到账事件 → 可形成多笔 Settlement；
+Settlement 无可信 evidence → 零写入；
+approval 后 amount/currency/reference/evidence 变化 → fail-closed；
+partial Settlement 只按已到账部分进入 fee basis；
+reversal 不修改原 Settlement；
+duplicate reversal → 拒绝/幂等复用；
+reversal 后净 fee basis 正确下降；
+同一 Settlement 不得进入两个重复 FeeCalculation；
+FeeCalculation 可追溯到具体 Settlement membership；
+reconciliation override 不产生 Settlement/Fee；
+R45 projection 重跑不产生资金副作用；
+currency mismatch 不自动换汇；
+Invoice creation 不等于 Payment collected；
+Payment/R13 全程继续 HOLD。
+③ 推进节奏
+
+批准。
+
+下一步：
+
+R46-A — Settlement / Billing Linkage Schema Delta Request
+
+docs-only，先完整定义：
+
+Settlement external identity；
+Settlement reversal/adjustment；
+provenance/evidence；
+Settlement ↔ Claim/Case linkage；
+FeeCalculation ↔ Settlement membership；
+net billable basis；
+idempotency；
+approval-bound receipt snapshot；
+invoice linkage边界；
+indexes / unique / CHECK / triggers；
+migration impact。
+
+然后：
+
+R46-B Implementation Plan → S1…Sn
+
+但“不必每张表单独一个 Schema Request”；同一原子资金模型应一次完整送审，避免分批 Schema 形成临时不完整资金状态。
+
+继续保持：
+
+NO Settlement creation from R45 · NO FeeCalculation · NO BillingInvoice issuance · NO Payment activation · NO autopay · NO platform write · TRANSPORT=false · NO production credentials。
+
+R13 Payment Activation Gate 继续 HOLD。
+
+VERDICT: PASS WITH REVISE — MSG-20261002-52
+```

@@ -1,17 +1,17 @@
 {
   "gate": "B2-FIX R1",
-  "head": "51b27ff",
+  "head": "c99cb8b",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
   "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
   "send_head": "07b7009",
   "decision_head": "07b7009",
-  "last_chatgpt_message": "MSG-20261002-51",
+  "last_chatgpt_message": "MSG-20261002-52",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T16:34:14.570Z",
-  "previous_head": "fa82384",
-  "architect_decision_pending": true,
+  "updated_at": "2026-10-01T16:39:28.082Z",
+  "previous_head": "51b27ff",
+  "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "51b27ff",
   "last_sent_at": "2026-10-01T16:34:14.570Z",
@@ -49,11 +49,11 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-01T16:33:21.343Z",
+  "last_tick_at": "2026-10-01T16:38:33.653Z",
   "state": "IMPLEMENT",
-  "last_action": "R46 Settlement / Billing Linkage Design Proposal（docs-only）已送审：事实分层与硬不变量 + 逐条回答 15 问（含 FULLY_RECONCILED 必要性/充分性、override 不得触发资金域、重跑幂等四道防线、动作闸门建议）。",
-  "last_action_at": "2026-10-01T16:34:14.570Z",
-  "next_action": "等待 R46 Design Proposal 裁决：①PASS → 提交 R46-A Schema Delta Request（docs-only）②REVISE → 修订设计 ③BLOCK → 停止。",
+  "last_action": "MSG-20261002-52 = PASS WITH REVISE 已逐字归档（FULL_COPY_OK）：R46 Design 原则批准；CHANGE A–E（Settlement external identity / reversal 独立事实 / Fee↔Settlement membership / Invoice 状态机单列 / receipt snapshot 绑定）与 15 项永久验收为 R46-A 必办。",
+  "last_action_at": "2026-10-01T16:39:28.082Z",
+  "next_action": "R46-A — Settlement / Billing Linkage Schema Delta Request（docs-only，一次完整定义原子资金模型）；不实现任何资金域代码。",
   "current_head": "51b27ff",
   "reviewed_head": "07b7009",
   "claim_submit_batch": {
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-01T16:27:48.463Z",
-    "gapMs": 332881,
+    "previousTickAt": "2026-10-01T16:37:48.262Z",
+    "gapMs": 45391,
     "stale": false,
-    "checkedAt": "2026-10-01T16:33:21.343Z"
+    "checkedAt": "2026-10-01T16:38:33.653Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -2081,5 +2081,94 @@
       "是否批准按 R46-A（Schema Delta Request）→ R46-B（Implementation Plan）→ S1…Sn 推进？"
     ],
     "next": "PASS → R46-A Settlement / Billing Linkage Schema Delta Request（docs-only）；REVISE → 修订设计；BLOCK → 停止"
+  },
+  "r46_design_verdict": {
+    "message_id": "MSG-20261002-52",
+    "decision": "PASS WITH REVISE",
+    "reviewed_head": "51b27ff",
+    "archived_at": "2026-10-01T16:39:28.082Z",
+    "archival": "FULL_COPY_OK",
+    "keep": [
+      "事实分层：Reimbursement observed/reconciled ≠ Settlement received ≠ Fee earned ≠ Invoice payable ≠ Payment collected",
+      "R45 Projection 只提供候选/对账信号，不能直接创建 Settlement",
+      "Settlement 必须来自独立、可验证的实际到账证据",
+      "partial reconciliation 与 partial settlement 是两个不同维度",
+      "v1 禁止自动 FX",
+      "success fee 只能基于已确认到账、未冲回的 Settlement",
+      "reconciliation 重跑不得直接触碰资金域",
+      "manual reconciliation override 不得直接触发资金写入",
+      "Payment/R13 继续独立 HOLD",
+      "财务业务事实与 AuditLog 审计事实继续分离"
+    ],
+    "approved": {
+      "q2": "FULLY_RECONCILED 既非 Settlement 的充分条件，也不是独立必要条件；R45 是关联/解释层，不是 R46 资金许可开关；但 Settlement 归属某 Claim/Recovery chain 仍须有明确可追溯 claim/linkage basis，不得「无归属到账」。",
+      "q11": "manual override 绝不能直接触发资金域：override → Settlement / Fee / Invoice 任何自动连锁一律禁止。"
+    },
+    "changes": [
+      {
+        "id": "A",
+        "title": "Settlement 必须有自己的不可变外部资金身份",
+        "requirement": "不能只依赖 claimId + amount + receivedAt；需服务端构造的资金事实 identity（bank/PSP/platform settlement reference 或 provider transaction ID；无稳定 ID 时 versioned financial-event fingerprint）。same external receipt replay → reuse existing Settlement；different receipt → distinct Settlement。"
+      },
+      {
+        "id": "B",
+        "title": "不得把 reversal 建模成「修改 Settlement」",
+        "requirement": "新增独立 reversal/adjustment 财务事实（SettlementAdjustment / SettlementReversal）：引用原 Settlement；原 Settlement 永久保留；reversal 自身具外部 identity/provenance；同一 reversal event 幂等；不允许重复 full reversal；reversal 后净可计费金额可重算。"
+      },
+      {
+        "id": "C",
+        "title": "Fee 必须从 Settlement 明细关系推导",
+        "requirement": "设计显式关系（FeeCalculationSettlement 或等价 membership），不得只存 claimId + feeAmount；必须能回答「这笔 fee 由哪些 Settlement/adjustment 构成」「哪笔 reversal 需要冲回」「是否重复计费」。"
+      },
+      {
+        "id": "D",
+        "title": "Invoice VOID / WRITTEN_OFF 不得在 Design 阶段假定现有状态机支持",
+        "requirement": "R46-A 先核对现有 BillingInvoice 状态机；若缺失不得在 R46-A 顺便修改，应单独提出 Billing reversal/credit semantics。VOID（本不应成立）/ CREDIT·CREDIT_NOTE（已成立后部分/全部冲回）/ WRITTEN_OFF（仍应收但决定不收）三者非同义词。"
+      },
+      {
+        "id": "E",
+        "title": "settlement.record 必须绑定「到账证据快照」",
+        "requirement": "humanApproval 绑定服务端生成的 receipt snapshot，至少含 organizationId / claim·case linkage / external receipt identity / amount / currency / receivedAt / evidence references+digests / source kind / snapshot version；审批后金额、币种、receipt identity、证据任一变化 → 原 approval 失效；不得只审批泛化的「记录 Settlement」动作。"
+      }
+    ],
+    "risks": [
+      "重复到账 → 重复 Settlement → 重复成功费",
+      "reversal 到来后通过修改历史金额破坏审计链",
+      "Fee 与 Settlement 缺少逐笔关系，导致无法证明「这笔钱是否已经收费」"
+    ],
+    "permanent_tests": [
+      "同一到账事件重复录入 → Settlement 仍 1",
+      "不同到账事件 → 可形成多笔 Settlement",
+      "Settlement 无可信 evidence → 零写入",
+      "approval 后 amount/currency/reference/evidence 变化 → fail-closed",
+      "partial Settlement 只按已到账部分进入 fee basis",
+      "reversal 不修改原 Settlement",
+      "duplicate reversal → 拒绝/幂等复用",
+      "reversal 后净 fee basis 正确下降",
+      "同一 Settlement 不得进入两个重复 FeeCalculation",
+      "FeeCalculation 可追溯到具体 Settlement membership",
+      "reconciliation override 不产生 Settlement/Fee",
+      "R45 projection 重跑不产生资金副作用",
+      "currency mismatch 不自动换汇",
+      "Invoice creation 不等于 Payment collected",
+      "Payment/R13 全程继续 HOLD"
+    ],
+    "next_unit": "R46-A — Settlement / Billing Linkage Schema Delta Request（docs-only）",
+    "r46a_required_scope": [
+      "Settlement external identity",
+      "Settlement reversal/adjustment",
+      "provenance / evidence",
+      "Settlement ↔ Claim/Case linkage",
+      "FeeCalculation ↔ Settlement membership",
+      "net billable basis",
+      "idempotency",
+      "approval-bound receipt snapshot",
+      "invoice linkage 边界",
+      "indexes / unique / CHECK / triggers",
+      "migration impact"
+    ],
+    "sequencing": "R46-A（docs-only，一次完整定义原子资金模型；不逐表分批）→ R46-B Implementation Plan → S1…Sn；避免分批 Schema 形成临时不完整资金状态。",
+    "redline": "NO Settlement creation from R45 · NO FeeCalculation creation · NO BillingInvoice issuance · NO Payment activation · NO autopay · NO platform write · TRANSPORT=false · NO production credentials；R13 Payment Activation Gate 继续 HOLD。",
+    "frozen_regression": "R45 基线（S1–S5 / fresh migration / two-stage upgrade / inventories / 176 files 1730 tests）永久保留，R46 不得删除、skip 或弱化。"
   }
 }

@@ -571,3 +571,10 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - 送审：REVIEWED_HEAD 51b27ff（Issue #2 comment 5935875894）。
 - NEXT：PASS → R46-A Schema Delta Request（docs-only）；REVISE → 修订设计；BLOCK → 停止。
 - 边界：NO Settlement creation from R45 · NO FeeCalculation · NO BillingInvoice · NO Payment activation · NO autopay · NO platform write。
+
+### MSG-20261002-52 裁决（R46 Design = PASS WITH REVISE → R46-A Schema Delta Request）
+
+- DECISION：**PASS WITH REVISE**（REVIEWED_HEAD 51b27ff；归档 FULL_COPY_OK）。详见 STATE.r46_design_verdict。
+- NEXT：**R46-A — Settlement / Billing Linkage Schema Delta Request（docs-only）**：一次完整定义 Settlement external identity / reversal·adjustment / Fee↔Settlement membership / net billable basis / idempotency / receipt snapshot / invoice linkage 边界 / indexes·unique·CHECK·triggers / migration impact。
+- 必办 CHANGE A–E 与 15 项永久验收；不得在 R46-A 顺便修改 BillingInvoice 状态机。
+- 红线不变（NO Settlement creation from R45 / NO FeeCalculation / NO BillingInvoice / NO Payment activation / NO autopay / NO platform write）；R13 Payment Activation Gate 继续 HOLD。
