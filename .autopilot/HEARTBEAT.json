@@ -2,10 +2,10 @@
   "runner_status": "RUNNING",
   "current_gate": "B2-FIX R1",
   "current_task": "Gate 7 / ② claim.prepare（INTERNAL_WRITE）—— MSG-20261001-08 CHANGE A/B 已实现并送审 R25",
-  "current_head": "9f3df8a",
-  "last_action": "implemented MSG-20261001-08 CHANGE A/B (case lock cc-recovery-case + Claim row lock + status=DRAFT CAS; locked re-read of ACTIVE user/active membership/current role); claim.prepare 18/18; regression 29 files/260; tsc PASS; prisma valid",
-  "last_action_at": "2026-10-01T04:45:36.461Z",
-  "next_action": "R25 已投递（Issue #2 七段式 + 右侧 ChatGPT 轻量唤醒）；取新裁决 → 逐字归档 + FULL_COPY_OK → PASS 则 claim.prepare 收口并进入 billing.draft，REVISE 则按新 CHANGE 收敛",
+  "current_head": "814f5cd",
+  "last_action": "appeal.submit 批次完成并送审 R31（Issue #2 comment 5925044853 / CI run 36817215750 success / HEAD 814f5cd）；专项 6/6、回归 32 files/300、tsc/prisma PASS",
+  "last_action_at": "2026-10-01T04:58:38.917Z",
+  "next_action": "等待 MSG-20261001-15（R31 裁决）：PASS → appeal.submit 收口并进入 ② 剩余最后一项 platform.write（EXTERNAL_WRITE，HOLD）；REVISE → 按新 CHANGE 收敛",
   "retry_count": 0,
   "last_error": null,
   "reconcile": "RECONCILE_REQUIRED",
@@ -17,7 +17,7 @@
     "customer_submission": false,
     "production_credentials": "HOST_ONLY"
   },
-  "last_tick_at": "2026-10-01T04:45:36.461Z",
+  "last_tick_at": "2026-10-01T04:58:38.917Z",
   "state": "REVIEW_WAIT",
   "last_chatgpt_message": "MSG-20261001-08",
   "architect_decision_pending": true
