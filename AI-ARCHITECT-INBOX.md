@@ -77660,3 +77660,87 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 本裁决不包含合并、部署或真实平台提交授权。
 ```
 
+### [MSG-20261001-06] Gate 7 / ② RUNTIME BUSINESS BLOCKING · claim.submit · R22（REVIEWED_REF 83000df）：VERDICT: REVISE（实现接受；**剩余指定测试夹具收口：独立审批人 OWNER + 执行人 ADMIN→FINANCE**）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE: FORMAL_VERDICT
+MESSAGE: MSG-20261001-06
+PREVIOUS: MSG-20261001-05
+GATE: Gate 7 / 授权项② RUNTIME BUSINESS BLOCKING · claim.submit · R22
+HEAD: 83000df
+REVIEWED_REF: 83000dff9464b99b394330cd5b8ee8be82884414
+DECISION: REVISE（实现接受；剩余指定测试夹具收口）
+
+1）证据 / TEST
+
+本轮重新读取 
+请求 comment 5923352907、提交差异、最终服务及测试源码。
+
+CI run 36804380497 对应受审 SHA，五作业 SUCCESS。API 日志确认 145 files / 1357 tests PASS，Claim 专项 22/22。
+
+未独立运行本地测试；相关套件 13 files / 102 tests 按提交方申报登记。
+
+2）KEEP：拒绝留痕实现关闭
+
+ForbiddenError 已纳入事务回滚后的 claim.submit_rejected 处理，记录 reason=FORBIDDEN 及关联字段；留痕失败被捕获，随后仍抛出原错误。
+
+用例 21 验证数据库拒绝留痕写入时仍返回 403 FORBIDDEN，且零业务副作用。上一轮 CHANGE A 关闭。
+
+案件锁、Claim 行锁后的实时权限检查、原子提交及既有 KEEP 项保持接受。
+
+3）KEEP：新增控制点与反例接受
+
+用例 20 使用持锁连接 PID 与 pg_blocking_pids 确认真实 Claim 行锁等待，释放后检查权限拒绝及落库记录。用例 22 验证同等待路径角色未变时正常成功。这些证据接受。
+
+但“等待期间零留痕，必然证明此前没有权限判定”的说明过强：锁前判断也可能已经 ALLOW，而尚未写业务结果。准确口径应为：真实等待控制点＋释放后的差异结果＋源码位置共同支持锁后重验。 此项只需修正文档或注释，不要求重做控制点。
+
+4）CHANGE：仍未完成独立审批人、ADMIN→FINANCE 指定验收
+
+当前用例 19–21 均通过 seedApproval() 使用 ownerId 审批，又以同一用户执行，随后将该用户从 OWNER 降为 VIEWER。
+
+上一轮明确要求的是：
+
+审批人独立且保持有效 OWNER；
+执行人从 ADMIN 降为 FINANCE；
+排除通用资金验证器、审批人降权等替代拒绝路径。
+
+现有测试虽证明当前代码返回 FORBIDDEN，却没有完成该指定场景。剩余项是测试证据，不是再次修改权限实现。
+
+文件：action-guard-claim-submit-http-db.test.ts。
+
+要求仅收紧现有用例 20/21：
+
+创建不同的 OWNER 审批人与 ADMIN 执行人，分别使用正确身份审批、登录。
+确认请求进入真实锁等待后，只将执行人改为 FINANCE；审批人保持 ACTIVE、有效 OWNER。
+释放锁，断言 403 FORBIDDEN、零业务提交、零消费。
+成功留痕变体精确核对：
+执行人身份；
+stage=LOCKED_RECHECK、reason=FORBIDDEN；
+Case、Claim、approvalId；
+operationId === approval:${approvalId}；
+提交与批准字段均未写入。
+留痕失败变体沿用同样分离身份，仍返回原始权限拒绝。
+
+保留用例 22 的正常等待成功对照。无需新增服务逻辑、迁移或扩展业务范围。
+
+5）RISKS
+
+本轮未发现新的产品代码阻塞缺陷。拒绝留痕及原始错误保留已通过核对。
+
+当前 REVISE 仅因上一轮指定的角色与身份组合未落实，不能用 OWNER→VIEWER 同人夹具替代 ADMIN→FINANCE 独立审批人验收。
+
+6）NEXT
+
+完成上述测试夹具调整和时序说明纠偏，重跑 Claim 专项、类型检查及最终 HEAD CI，提交轻量复审即可。已接受部分无需重做。
+
+本裁决只在本会话交付，不写入追踪系统。Codex 可原文归档并执行，无需再次确认。授权项②整体仍 NOT COMPLETE。
+
+7）PRODUCTION
+
+Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：全部 HOLD。
+
+本裁决不包含合并、部署或真实平台提交授权。
+```
+

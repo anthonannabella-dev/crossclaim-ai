@@ -463,6 +463,36 @@ async function holdClaimRowLock(): Promise<{ release: () => void; pid: Promise<n
   return { release, pid };
 }
 
+/** 在默认租户内新增一名独立成员（审批人 / 执行人分离用；密码与 OWNER 相同） */
+async function createMember(role: 'OWNER' | 'ADMIN' | 'FINANCE' | 'VIEWER'): Promise<{ userId: string; email: string }> {
+  const suffix = randomUUID().replace(/-/g, '').slice(0, 10);
+  const email = `claim-submit-${role.toLowerCase()}-${suffix}@example.com`;
+  const user = await prisma.user.create({
+    data: {
+      email,
+      passwordHash: hashPassword(PASSWORD, FAST_PARAMS),
+      displayName: role,
+      status: 'ACTIVE',
+      emailVerified: true,
+    },
+  });
+  await prisma.membership.create({
+    data: { organizationId: ORG, userId: user.id, role, isActive: true },
+  });
+  return { userId: user.id, email };
+}
+
+/** 以指定邮箱登录（独立身份执行人） */
+async function loginAs(base: string, email: string): Promise<string> {
+  const res = await fetch(`${base}/auth/login`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email, password: PASSWORD }),
+  });
+  expect(res.status).toBe(200);
+  return (res.headers.get('set-cookie') ?? '').split(';')[0];
+}
+
 /** 注入数据库层「某审计动作不可写」的失败；用后必然拆除约束 */
 async function withAuditActionBlocked<T>(action: string, run: () => Promise<T>): Promise<T> {
   await prisma.$executeRawUnsafe(
@@ -909,43 +939,53 @@ describe('R19 CHANGE A–D — claim.submit 原子性 / 锁内重验 / 装配路
     });
   }, 60_000);
 
-  it('20 等 Claim 行锁期间执行角色被降级（成员仍有效）→ 锁后拒绝 + 留痕（②）', async () => {
+  it('20 等案件锁期间执行角色被降级（独立审批人 OWNER + 执行人 ADMIN→FINANCE）→ 锁后拒绝 + 留痕（②⑤）', async () => {
     await withServer(async (base) => {
-      const cookie = await login(base);
-      const approvalId = await seedApproval();
-      const holder = await holdClaimRowLock();
-      const blockerPid = await holder.pid;
+      // 身份分离（MSG-20261001-06 §4）：审批人 = 既有 OWNER；执行人 = 另一名 ADMIN
+      const executor = await createMember('ADMIN');
+      const cookie = await loginAs(base, executor.email);
+      const approvalId = await seedApproval(); // 由 OWNER 审批，且全程保持有效
+      const release = await holdCaseLock();
       const pending = submit(base, cookie, { approvalId });
       try {
-        // 控制点：请求已通过事务外只读校验、已取得案件锁，正阻塞在 Claim 行锁上
         await waitFor(
-          async () => (await blockedByPidCount(blockerPid)) >= 1,
+          async () => (await advisoryLockCount(caseLockKey(), false)) >= 1,
           10_000,
-          'SUBMIT_WAITING_ON_CLAIM_ROW_LOCK',
+          'SUBMIT_WAITING_ON_CASE_LOCK',
         );
-        // ⑤ 时序证据：此刻尚未发生最终权限判定 —— 无拒绝留痕、Claim 未推进。
-        // 若实现复用锁前 role/permission 快照在锁外判定，这里就会有留痕或状态变化。
+        // 时序口径（MSG-20261001-06 §3 纠偏）：不断言"零留痕必然证明此前没有权限判定"；
+        // 真实等待控制点 + 释放后的差异结果 + 源码位置（锁后 assertPermission）共同支持锁后重验。
         expect(
           await prisma.auditLog.count({ where: { organizationId: ORG, action: 'claim.submit_rejected' } }),
         ).toBe(0);
         expect((await prisma.claim.findUniqueOrThrow({ where: { id: claimId } })).status).toBe('DRAFT');
-        // 降级：OWNER → VIEWER（成员仍 isActive，但权限矩阵不再允许 Claim 提交）
+        // 只把**执行人**降为 FINANCE；审批人保持有效 OWNER。
+        // 通用资金验证器接受 OWNER/ADMIN/FINANCE，因此这里唯一可能的拒绝路径是锁后 Claim 提交权限重验。
         await prisma.membership.updateMany({
-          where: { organizationId: ORG, userId: ownerId },
-          data: { role: 'VIEWER' },
+          where: { organizationId: ORG, userId: executor.userId },
+          data: { role: 'FINANCE' },
         });
       } finally {
-        holder.release();
+        release();
       }
       const res = await pending;
       expect(res.status).toBe(403);
       expect(res.body.error).toBe('FORBIDDEN');
+      // 排除"审批人降权先行拒绝"：审批人仍是有效 OWNER
+      const approverMember = await prisma.membership.findFirstOrThrow({
+        where: { organizationId: ORG, userId: ownerId },
+        select: { role: true, isActive: true },
+      });
+      expect(approverMember).toMatchObject({ role: 'OWNER', isActive: true });
       expect(await sideEffects()).toMatchObject(ZERO);
       const rejectedRows = await prisma.auditLog.findMany({
         where: { organizationId: ORG, action: 'claim.submit_rejected' },
       });
       expect(rejectedRows).toHaveLength(1);
-      expect(rejectedRows[0]?.changes as Record<string, unknown>).toMatchObject({
+      // 留痕主体 = 执行人（而非审批人）
+      expect(rejectedRows[0]?.actorUserId).toBe(executor.userId);
+      const changes = (rejectedRows[0]?.changes ?? {}) as Record<string, unknown>;
+      expect(changes).toMatchObject({
         stage: 'LOCKED_RECHECK',
         result: 'REJECTED',
         reason: 'FORBIDDEN',
@@ -953,13 +993,16 @@ describe('R19 CHANGE A–D — claim.submit 原子性 / 锁内重验 / 装配路
         claimId,
         approvalId,
       });
+      expect(changes.operationId).toBe(`approval:${approvalId}`);
       const claimRow = await prisma.claim.findUniqueOrThrow({
         where: { id: claimId },
-        select: { status: true, submittedAt: true, submittedBy: true },
+        select: { status: true, submittedAt: true, submittedBy: true, approvedByUserId: true, approvedAt: true },
       });
       expect(claimRow.status).toBe('DRAFT');
       expect(claimRow.submittedAt).toBeNull();
       expect(claimRow.submittedBy).toBeNull();
+      expect(claimRow.approvedByUserId).toBeNull();
+      expect(claimRow.approvedAt).toBeNull();
       expect(await prisma.auditLog.count({ where: { organizationId: ORG, action: { contains: 'consumed' } } })).toBe(0);
       expect(
         await prisma.auditLog.count({ where: { organizationId: ORG, action: 'claim.submitted_by_human' } }),
@@ -967,9 +1010,10 @@ describe('R19 CHANGE A–D — claim.submit 原子性 / 锁内重验 / 装配路
     });
   }, 60_000);
 
-  it('21 锁后权限拒绝时「拒绝留痕写入失败」不得覆盖原始拒绝 → 仍 403 FORBIDDEN（⑥）', async () => {
+  it('21 拒绝留痕写入失败不得覆盖原始权限拒绝（独立审批人 OWNER + 执行人 ADMIN→FINANCE）→ 仍 403 FORBIDDEN（⑥）', async () => {
     await withServer(async (base) => {
-      const cookie = await login(base);
+      const executor = await createMember('ADMIN');
+      const cookie = await loginAs(base, executor.email);
       const approvalId = await seedApproval();
       const res = await withAuditActionBlocked('claim.submit_rejected', async () => {
         const release = await holdCaseLock();
@@ -981,8 +1025,8 @@ describe('R19 CHANGE A–D — claim.submit 原子性 / 锁内重验 / 装配路
             'SUBMIT_WAITING_ON_CASE_LOCK',
           );
           await prisma.membership.updateMany({
-            where: { organizationId: ORG, userId: ownerId },
-            data: { role: 'VIEWER' },
+            where: { organizationId: ORG, userId: executor.userId },
+            data: { role: 'FINANCE' },
           });
         } finally {
           release();
@@ -1000,10 +1044,12 @@ describe('R19 CHANGE A–D — claim.submit 原子性 / 锁内重验 / 装配路
     });
   }, 60_000);
 
-  it('22 等 Claim 行锁期间角色未变 → 锁后正常提交成功（⑤ 反证：拒绝源于锁后判定而非等待本身）', async () => {
+  it('22 等 Claim 行锁期间角色未变 → 锁后正常提交成功（对照：执行人 ADMIN 未降权即被接受）', async () => {
     await withServer(async (base) => {
-      const cookie = await login(base);
-      const approvalId = await seedApproval();
+      // 等待成功对照：执行人 ADMIN 未降权 —— 与用例 20/21 的唯一差异就是"执行人被降为 FINANCE"
+      const executor = await createMember('ADMIN');
+      const cookie = await loginAs(base, executor.email);
+      const approvalId = await seedApproval(); // 审批人 = 有效 OWNER
       const holder = await holdClaimRowLock();
       const blockerPid = await holder.pid;
       const pending = submit(base, cookie, { approvalId });
