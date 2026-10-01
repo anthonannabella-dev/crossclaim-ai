@@ -80105,3 +80105,99 @@ AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CR
 
 VERDICT: REVISE — MSG-20261001-28
 ```
+
+### [MSG-20261001-29] R42 正式关闭 —— PASS（R42 无需继续 Amazon 自动写入能力搜索；下一批准工作 = R43 Amazon Manual Recovery Handoff Design，仅 Design Proposal）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE: FORMAL_VERDICT
+MESSAGE: MSG-20261001-29
+PREVIOUS: MSG-20261001-28
+GATE: Gate 7 / Amazon FBA Recovery Write-Operation Capability Evidence
+REVIEWED_HEAD: 419489b
+DECISION: PASS
+
+KEEP
+
+MSG-20261001-28 的 CHANGE A/B/C 已完整收口：
+
+证据结论已从绝对的“官方不存在”修正为 PUBLIC WRITE OPERATION NOT FOUND / NOT PROVEN；
+operation-level negative evidence matrix 已覆盖当前相关官方 API/domain，并说明各候选为何不能证明 recovery/claim submission；
+已建立 PROVEN_AVAILABLE / PROVEN_UNAVAILABLE / NOT_PROVEN 三级证据状态；
+当前正确落点为 NOT_PROVEN → NEEDS_MANUAL；
+六项 transport prerequisites 继续全部 fail-closed；
+未创建 write adapter，未扩大运行边界；
+TRANSPORT=false 与全部生产 HOLD 保持。
+
+这种口径既避免错误开放自动写入，也避免用过强的负面结论锁死未来能力。
+
+CHANGE
+
+无。
+
+R42 可以正式关闭，不需要继续做 Amazon 自动写入能力搜索。
+
+RISKS
+
+R42 剩余风险已经被正确转化为未来 evidence revision 风险：
+
+若 Amazon 后续公开新的 operation、partner API 或其他明确第三方能力，应新增证据版本重新进入六项 transport Gate，而不是修改历史 R42 事实。
+
+当前不存在需要阻塞 R43 的架构风险。
+
+TEST
+
+接受：
+
+HEAD 419489b
+CI 36849923746 = SUCCESS
+docs-only
+无生产代码/测试/Schema/credential/network/composition-root 变化
+NOT_PROVEN → NEEDS_MANUAL
+Amazon write path 继续 fail-closed
+
+NEXT
+
+批准进入 R43 — Amazon Manual Recovery Handoff Design。
+
+R43 只先提交 Design Proposal，不要直接实现。
+
+设计必须形成这一条完整人工提交闭环：
+
+ClaimItem
+→ Evidence Completeness
+→ Recovery Package
+→ Human Approval
+→ Submission Instructions / Export
+→ SUBMITTED_MANUAL
+→ Outcome Tracking
+→ Reimbursement / Settlement Reconciliation
+
+重点定义：
+
+1. Evidence Completeness：哪些证据是 required / optional / missing，不允许“证据不足却显示 ready”。
+2. Recovery Package：生成的是证据包/提交材料，不是伪造 Amazon 已接受的 claim。
+3. Human Approval：复用现有 Action Guard / approval boundary；明确谁批准、谁执行人工提交。
+4. Submission Handoff：允许 export / copy / instructions；不得模拟平台提交成功。
+5. SUBMITTED_MANUAL：只能由明确的人类确认动作进入，不能因为生成了材料自动进入。
+6. Submission Evidence：记录人工提交后的 Amazon case/reference、时间、操作者及证据，但不得存敏感 credential。
+7. Outcome：区分 pending / rejected / reimbursed 等事实，不从“已提交”推导“会追回”。
+8. Reconciliation：Amazon 后续只读数据若出现 reimbursement，应与原 ClaimItem/人工提交记录可追溯关联。
+9. Idempotency：重复点击、重复导出、重复确认不得创建两条逻辑 recovery chain。
+10. Audit：package generated / approved / exported / manually submitted / outcome observed / reconciled 均需可追溯。
+11. Fail-closed：缺审批、证据不完整、跨租户、错误 Claim/Case 绑定、状态错误均不得推进。
+12. 边界继续冻结：R43 Design 不接真实 Amazon credential，不实现浏览器自动化，不恢复 Amazon write research，不开启 transport。
+
+R43 设计时还要明确区分：
+
+“系统已生成提交材料” ≠ “用户已提交” ≠ “Amazon 已受理” ≠ “Amazon 已赔付”。
+
+这四个事实状态不得合并。
+
+继续保持：
+
+AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD。
+
+VERDICT: PASS — MSG-20261001-29
+```

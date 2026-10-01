@@ -815,3 +815,11 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - CHANGE B：新增 operation-level negative evidence matrix（7 类 domain/API → closest candidate → why NOT recovery submission），使 negative evidence 可复审。
 - CHANGE C：三级状态（PROVEN_AVAILABLE / PROVEN_UNAVAILABLE / NOT_PROVEN）；本轮 NOT_PROVEN + executionDisposition=NEEDS_MANUAL。
 - 后续：提交 R42 RE-REVIEW（docs-only）；通过后不再研究 Amazon 自动写入，转入 R43 — Amazon Manual Recovery Handoff Design（把已证明可做的只读能力连成可用闭环）。
+
+## 2026-10-01 JST — 裁决 MSG-20261001-29 = PASS（R42 关闭 → R43 设计授权）
+
+- 送审：R42 RE-REVIEW（REVIEWED_HEAD 419489b；Issue #2 comment 5929706917；CI 36849923746 SUCCESS）。
+- 归档：AI-ARCHITECT-INBOX.md §MSG-20261001-29；`tools/verdict-diff/compare.mjs` = **FULL_COPY_OK**。
+- 裁决：CHANGE 无；**R42 正式关闭**（不再继续 Amazon 自动写入能力搜索）；风险转为「未来 evidence revision」。
+- NEXT：**R43 — Amazon Manual Recovery Handoff Design（仅 Design Proposal，不实现）**：ClaimItem → Evidence Completeness → Recovery Package → Human Approval → Submission Instructions/Export → SUBMITTED_MANUAL → Outcome Tracking → Reimbursement/Settlement Reconciliation；12 项重点 + 四事实分离（生成材料 ≠ 已提交 ≠ 已受理 ≠ 已赔付）。
+- 边界冻结：AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD。
