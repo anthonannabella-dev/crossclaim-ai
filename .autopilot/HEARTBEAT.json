@@ -2,9 +2,9 @@
   "runner_status": "RUNNING",
   "current_gate": "B2-FIX R1",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
-  "current_head": "b2b6431",
+  "current_head": "5dc6508",
   "last_action": "MSG-20261002-49 = PASS WITH REVISE 已逐字归档（FULL_COPY_OK）：S3 主体 CLOSED；REVISE 三项（AMOUNT_EXCEEDS_EXPECTED 结构化异常 / cross-tenant·dangling 引用不得降级 / inputDigest 全覆盖）；批准进入 R45 S4。",
-  "last_action_at": "2026-10-01T15:38:49.565Z",
+  "last_action_at": "2026-10-01T15:43:38.780Z",
   "next_action": "R45 S3 REVISE 落地（结构化金额异常 + 弱引用 fail-closed + digest 覆盖 algorithmVersion 与全输入 + MATCHED 语义文档约束）→ 随后进入 R45 S4 受保护动作（basis_set / basis_supersede / override / provider_outcome_record）。",
   "retry_count": 0,
   "last_error": null,
@@ -12,7 +12,7 @@
   "remaining_tasks": 2,
   "automation_status": "ACTIVE",
   "interval_minutes": 5,
-  "tick_at": "2026-10-01T15:38:49.563Z",
+  "tick_at": "2026-10-01T15:43:38.778Z",
   "schedule_stale_previous": false,
   "state_machine": "IMPLEMENT",
   "continue_required": true,
@@ -66,6 +66,41 @@
       "NEW_RISK_BOUNDARY",
       "ARCH_REVIEW_REQUIRED"
     ]
+  },
+  "payment_authorization_policy": {
+    "directive": "HOST DIRECTIVE 2026-10-02（补充二）",
+    "contract_doc": "docs/releases/PAYMENT-AUTHORIZATION-AND-ONBOARDING-CONTRACT.md",
+    "headline": "Platform OAuth ≠ Payment Authorization",
+    "onboarding_flow": [
+      "注册",
+      "平台授权（Platform OAuth / Seller Authorization）",
+      "免费扫描 / 发现 Recovery Opportunity（不得强制绑卡）",
+      "客户点击「开始追回」",
+      "接受 Success Fee 条款",
+      "设置付款方式 / 签署有效 Payment Mandate",
+      "进入正式追回执行"
+    ],
+    "auto_charge_chain": [
+      "FULLY_RECONCILED",
+      "Settlement confirmed/received",
+      "RecoveryLedger",
+      "FeeCalculation",
+      "BillingInvoice",
+      "有效 Payment Authorization / PaymentMethod / Mandate",
+      "Payment Provider 自动收取成功费"
+    ],
+    "without_authorization": "只生成 BillingInvoice / Payment Request，不得自动扣款",
+    "activation_gate": {
+      "status": "HOLD",
+      "kind": "PAYMENT_ACTIVATION_GATE",
+      "prerequisites": [
+        "R46 Settlement/Billing linkage 完成",
+        "客户明确预授权（Payment Mandate）",
+        "支付通道正式验收（生产凭据 / webhook 验签 / 对账 / 退款与争议路径）",
+        "架构方与宿主书面放行"
+      ]
+    },
+    "queue_impact": "NONE —— 不打断 R45 → R46；PaymentMethod/Mandate/autopay 在 R46 完成后由独立 Payment Activation Gate 实施"
   },
   "billing_redline_policy": {
     "directive": "HOST DIRECTIVE 2026-10-02",

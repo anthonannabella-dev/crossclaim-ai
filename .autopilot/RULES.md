@@ -193,3 +193,27 @@ partial recovery 按 full recovery 收费 · reversal / correction 后继续按�
 
 **R12.6 不改变队列**：本红线不改变 R45 执行队列（S1 CLOSED → S2 → S3 → S4 → S5）与 R46 排期，不重新规划，
 不重复审计已 PASS 底座；R46 设计/计划必须显式引用本文件并逐条对应 R12.2 / R12.3。
+
+## R13 Success Fee 支付授权分离 与 Onboarding/自动收费契约（HOST DIRECTIVE 2026-10-02 补充二）
+
+**落盘位置**：`docs/releases/PAYMENT-AUTHORIZATION-AND-ONBOARDING-CONTRACT.md`（与 R12 的 `SUCCESS-FEE-BILLING-REDLINE.md` 配套）。
+**机器可读镜像**：`.autopilot/rules.json#payment_authorization_separation`；runner 每轮输出 `payment_authorization_policy`；
+校验器 `tools/autopilot/check-autopilot-rules.mjs` 在 CI 强制。
+
+**R13.1 两条授权链严格分离**：Platform OAuth / Seller Authorization **只**用于平台数据与 API 能力，**不得**视为成功费扣款授权，
+**不得**依赖平台卖家余额直接扣取 CrossClaim 佣金，**不得**从 OAuth 权限推导支付授权；平台若存在独立 App Billing，也必须作为独立 Billing Authorization。
+
+**R13.2 Onboarding 收费体验（冻结）**：注册 → 平台授权 → **免费扫描/发现 Recovery Opportunity（不得强制绑卡）** → 客户点击「开始追回」
+→ 接受 Success Fee 条款 → 设置付款方式 / 签署有效 Payment Mandate → 进入正式追回执行。
+
+**R13.3 自动收费唯一链路**：`FULLY_RECONCILED → Settlement confirmed/received → RecoveryLedger → FeeCalculation → BillingInvoice →
+已存在有效 Payment Authorization / PaymentMethod / Mandate → Payment Provider 自动收取成功费`；
+**没有有效 Payment Authorization 时只生成 BillingInvoice / Payment Request，不得自动扣款**。`FULLY_RECONCILED` 不是可计费充分条件（仍受 R12 约束）。
+
+**R13.4 不保存支付敏感数据**：不保存 PAN / card number / CVV / 网银密码；只保存 provider 返回的 Customer ID / PaymentMethod ID / Mandate ID /
+authorization status 等引用；卡数据输入必须在支付服务商侧完成。
+
+**R13.5 不可逆升级禁令**：平台账号授权**永远不能自动升级为**支付授权；两类授权生命周期独立登记、可分别撤销；撤销支付授权后立即停止自动扣款（仅保留账单事实）。
+
+**R13.6 现在只登记、不实施**：本契约不打断 R45 → R46 队列；PaymentMethod / Mandate / autopay enablement 在 R46 完成后作为
+**独立 Payment Activation Gate** 实施、测试与审计（当前 **HOLD**；生产凭据与真实扣款 HOST APPROVAL REQUIRED）。

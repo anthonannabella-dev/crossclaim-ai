@@ -1208,3 +1208,12 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - REVISE ③（CHANGE B）：inputDigest 必须覆盖 fact identity/content、reversal、basis id/version/amount/currency、policy id/version/abs/rel、override、projection algorithm/version；顺序变化而语义相同 → digest 不变。
 - MATCHED 语义冻结：仅表示「事实已唯一关联但缺有效 basis」，不得被描述为 recovered / fully recovered / reimbursement complete / billable。
 - NEXT：**R45 S4 — Protected Reconciliation Actions**（四个动作；全部 INTERNAL_WRITE + humanApproval + 锁后 ACTIVE membership/role 重验；含人工 outcome 的 evidence 逐条校验与 supersede 顺序要求）。
+
+## 2026-10-02 JST — HOST DIRECTIVE（补充二）：R13 Success Fee 支付授权分离与 Onboarding/自动收费契约落盘
+
+- 两条授权链严格分离：Platform OAuth / Seller Authorization 只用于平台数据/API 能力，**不得**视为成功费扣款授权，不得依赖平台卖家余额直接扣取佣金，不得从 OAuth 推导支付授权；平台独立 App Billing 也须作为独立 Billing Authorization。
+- Onboarding 收费体验冻结：注册 → 平台授权 → **免费扫描（不得强制绑卡）** → 点击「开始追回」→ 接受 Success Fee 条款 → 设置付款方式 / 签署有效 Payment Mandate → 正式追回执行。
+- 自动收费唯一链路：`FULLY_RECONCILED → Settlement confirmed/received → RecoveryLedger → FeeCalculation → BillingInvoice → 有效 Payment Authorization/PaymentMethod/Mandate → Provider 自动收费`；**无有效支付授权时只生成 BillingInvoice / Payment Request，不得自动扣款**。
+- 不保存 PAN / card number / CVV / 网银密码；只保存 provider 引用（Customer ID / PaymentMethod ID / Mandate ID / authorization status）。
+- 落盘：`docs/releases/PAYMENT-AUTHORIZATION-AND-ONBOARDING-CONTRACT.md` + `.autopilot/RULES.md` R13 + `.autopilot/rules.json#payment_authorization_separation`；runner 每轮输出 `payment_authorization_policy`；checker 在 CI 强制（含 activation_gate=HOLD 与 irreversible_upgrade_forbidden=true）。
+- 队列：R45 → R46 不变；PaymentMethod / Mandate / autopay enablement 在 R46 完成后由**独立 Payment Activation Gate** 实施、测试与审计（当前 HOLD）。

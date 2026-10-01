@@ -25,6 +25,7 @@ const statePath = path.join(AP, 'STATE.json');
 if (!fs.existsSync(rulesMdPath)) failures.push('MISSING .autopilot/RULES.md');
 else {
   const md = fs.readFileSync(rulesMdPath, 'utf8');
+  if (!/R13/.test(md)) failures.push('RULES.md 缺少 R13（Success Fee 支付授权分离契约）');
   if (!/R12/.test(md)) failures.push('RULES.md 缺少 R12（Success Fee / Billing 永久红线）');
   if (!md.includes('Reobserved_not_billable') && !md.includes('≠ recovered ≠ billable')) {
     failures.push('RULES.md R12 缺少一句话红线（Reimbursement observed ≠ recovered ≠ billable）');
@@ -122,6 +123,28 @@ if (!billingRedline) {
   }
   if (billingRedline.auto_debit_gate?.status !== 'HOLD') {
     failures.push('success_fee_billing_redline.auto_debit_gate.status 必须为 HOLD（自动扣款属独立 Gate）');
+  }
+}
+
+// R13_BLOCK：Success Fee 支付授权分离与 Onboarding/自动收费契约（HOST DIRECTIVE 2026-10-02 补充二）
+const paymentSeparation = rules?.payment_authorization_separation ?? null;
+if (!paymentSeparation) {
+  failures.push('rules.json 缺少 payment_authorization_separation（R13 未落盘）');
+} else {
+  const rel = paymentSeparation.contract_doc;
+  if (!rel || !fs.existsSync(path.join(ROOT, rel))) failures.push('缺少 R13 契约文档: ' + rel);
+  const doc = rel && fs.existsSync(path.join(ROOT, rel)) ? fs.readFileSync(path.join(ROOT, rel), 'utf8') : '';
+  for (const token of ['Platform OAuth', 'Payment Mandate', 'FULLY_RECONCILED', 'CVV', 'Payment Activation Gate']) {
+    if (!doc.includes(token)) failures.push('R13 契约文档缺少关键口径: ' + token);
+  }
+  for (const key of ['onboarding_flow', 'auto_charge_chain', 'forbidden_data_storage', 'allowed_references', 'status_fields']) {
+    if (!Array.isArray(paymentSeparation[key]) || paymentSeparation[key].length === 0) failures.push('payment_authorization_separation 缺少非空数组: ' + key);
+  }
+  if (paymentSeparation.activation_gate?.status !== 'HOLD') {
+    failures.push('payment_authorization_separation.activation_gate.status 必须为 HOLD（独立 Payment Activation Gate）');
+  }
+  if (paymentSeparation.irreversible_upgrade_forbidden !== true) {
+    failures.push('payment_authorization_separation 必须声明 irreversible_upgrade_forbidden=true');
   }
 }
 

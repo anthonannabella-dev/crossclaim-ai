@@ -517,3 +517,11 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - REVISE 落地：① `AMOUNT_EXCEEDS_EXPECTED` 结构化金额异常（区别于匹配歧义）② cross-tenant / dangling basis·policy → fail-closed（不得降级为无 basis）③ inputDigest 覆盖 algorithmVersion 与全部有效输入。
 - NEXT：**R45 S4 — Protected Reconciliation Actions**（basis_set / basis_supersede / override / provider_outcome_record；INTERNAL_WRITE + humanApproval + 锁后角色重验；人工 outcome evidence 逐条校验；supersede 顺序与后置失败恢复）。
 - 禁止：Settlement / Billing / Fee / RecoveryLedger 改写 / 平台外写 / transport / 生产凭据。
+
+### R13（Success Fee 支付授权分离 / Onboarding / 自动收费契约）—— HOST DIRECTIVE 2026-10-02 补充二
+
+- 授权分离：Platform OAuth ≠ Payment Authorization（不得推导、不得依赖平台余额扣取佣金）。
+- Onboarding：免费扫描不得强制绑卡；「开始追回 + 条款 + Payment Mandate」之后才进入正式执行。
+- 自动收费：仅当存在有效 Payment Authorization / PaymentMethod / Mandate 才可自动扣款；否则只出账单。
+- 支付数据：不保存 PAN / CVV / 网银密码；只保存 provider 引用。
+- 实施时点：R46 完成后由独立 Payment Activation Gate 实施（当前 HOLD）；R45 → R46 队列不变。

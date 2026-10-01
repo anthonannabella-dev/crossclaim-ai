@@ -1,5 +1,7 @@
 # Success Fee / Billing **永久红线**（R46 前置约束）
 
+> 配套契约：**R13** —— `docs/releases/PAYMENT-AUTHORIZATION-AND-ONBOARDING-CONTRACT.md`（Platform OAuth ≠ Payment Authorization；Onboarding 免费扫描不得强制绑卡；无有效 Payment Authorization 只出账单不扣款；不保存 PAN/CVV；autopay 属独立 Payment Activation Gate · HOLD）。
+
 > 依据：**HOST DIRECTIVE 2026-10-02**（宿主补充的永久红线，独立于任何单批裁决）。
 > 状态：**永久生效** —— 写入 `.autopilot/RULES.md` R12 与 `.autopilot/rules.json#success_fee_billing_redline`，
 > 由 `tools/autopilot/check-autopilot-rules.mjs` 在 CI 强制。
