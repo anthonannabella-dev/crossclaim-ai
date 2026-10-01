@@ -95,3 +95,38 @@
 - `NEW_RISK_BOUNDARY` = **YES**（新增四个受保护写动作 = 审批/HITL 边界 + 一致性边界；无新 Schema）。
 - `ARCH_REVIEW_REQUIRED` = **YES**。
 - 下一步：PASS → **R45 S5（只读 consistency checker + full regression 收口）**；REVISE → 按 CHANGE 修订；BLOCK → 停止。
+
+## 附录 · MSG-20261002-50 裁决结果与 REVISE 落地
+
+> 裁决：**PASS WITH REVISE — MSG-20261002-50**（REVIEWED_HEAD `e4dcee3`；归档 FULL_COPY_OK）。**S4 主体 CLOSED**。
+
+### 1. 认可项（KEEP）
+
+四个动作独立注册为 INTERNAL_WRITE + humanApproval · approval binding 由服务端构造 · ACTIVE membership/role 锁后重验 · set 与 supersede 分离 · supersede 保留旧 basis 且同事务 · override 每笔独立审批且不改 immutable fact · 人工 outcome 强制 MANUAL_WITH_EVIDENCE + evidence 逐条校验 + structured reason · 失败时事实/成功审计/approval consumption 零推进 · 未进入 Settlement/Billing/Fee/RecoveryLedger/payment/platform write。
+
+### 2. CHANGE A（已落地）：人工 outcome 的「重复」语义与 S2 对齐
+
+| 场景 | 行为 |
+| --- | --- |
+| **完全重放**（同 event identity + 同 kind/occurredAt/evidence/case·claim） | 返回 `outcome = REUSED` + 既有 `providerOutcomeFactId`；**不创建第二 fact、不写第二成功审计、不再次消费 approval**（`approvalConsumed: false`）—— 这是 **execution replay rejection/reuse**，不是第二个业务事件 |
+| **身份冲突**（同 event identity 但关键内容不同，例：evidence 集合不同 / occurredAt 不同） | `EVENT_IDENTITY_CONFLICT` fail-closed，零写入 |
+| 不同 `kind` | **不是 identity 冲突**：`eventKind` 属于指纹输入，ACCEPTED 与 ACCEPTANCE_REVOKED 是两个不同事件（各自独立事实） |
+
+实现：`recordManualProviderOutcomeFact` 在锁内按 `providerEventFingerprint` 查既有事实，逐项比对 `caseId / claimItemId / provider / kind / occurredAt / evidence 集合`；完全一致 → REUSED；不一致 → `EVENT_IDENTITY_CONFLICT`（新增 `ReconciliationManualActionError`，不污染既有 `WorkflowErrorCode` 词表）。
+
+### 3. CHANGE B / C（转 S5 落地）
+
+- **CHANGE B**：S5 checker 必须验证 S4 的 **approval 语义**（action / tenant / target Case·Claim / basis·boundExtra 与保存事实一致 / approval 已正确消费且仅一次 / 不得同时授权另一 basis·override·outcome / 人工 outcome 的 approval identity 与 provider·kind·event identity 对应）。
+- **CHANGE C**：S5 checker 必须落实 MSG-49 状态语义（真正无 effective basis → `MATCHED` 成立；dangling/cross-tenant basis → inconsistency；dangling/cross-tenant policy → inconsistency；`FULLY_RECONCILED` 必须有有效 basis；over-recovery 必须带 `AMOUNT_EXCEEDS_EXPECTED`；`MATCHED` 不得衍生 recovered/billable）。
+
+### 4. CHANGE A 复验
+
+| 项 | 结果 |
+| --- | --- |
+| 人工动作 DB 验收 | **10/10 PASS**（新增：完全重放 → REUSED 且零新建/零二次消费；身份冲突 → EVENT_IDENTITY_CONFLICT） |
+| basis 动作 DB 验收 | 9/9 PASS |
+| `tsc --noEmit` | PASS（0 error） |
+
+### 5. NEXT
+
+**R45 S5 —— read-only consistency checker + permanent regression closure**（19 项最低检查面；DETECT ≠ REPAIR，不得自动修复任何事实/basis/projection/membership/approval/evidence；执行前后 DB 快照一致；漂移 → 非零、clean → 零；保留 S1–S4 与 PG/H/D/M/R43/R44 永久基线）。完成后提交 **R45 Full Regression / Release Implementation Checkpoint**。

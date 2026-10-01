@@ -542,3 +542,11 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - 费用独立：Broker Fee 与 CrossClaim Fee 可独立表达；禁止默认分佣模式（需专门合规审查）。
 - 退款：优先直达 claimant/customer 账户；不得默认代收/资金池/截留。
 - 实施时点：进入 Customs/BrokerConnector 批次时另行提交设计/Schema Delta/合规审计/测试；R45 → R46 不变。
+
+### MSG-20261002-50 裁决（R45 S4 = PASS WITH REVISE → S4 主体 CLOSED → 进入 R45 S5）
+
+- DECISION：**PASS WITH REVISE**（REVIEWED_HEAD e4dcee3；归档 FULL_COPY_OK）。S4 主体 CLOSED；详见 STATE.r45_s4_verdict。
+- CHANGE A（先落地）：人工 outcome 完全重放 → `REUSED`；身份冲突 → `EVENT_IDENTITY_CONFLICT`（零推进）。
+- CHANGE B/C：S5 checker 必须覆盖 approval 语义与状态语义（19 项最低检查面）。
+- NEXT：**R45 S5**（只读 checker + 全量回归收口）→ R45 Full Regression / Release Implementation Checkpoint。
+- 禁止：任何自动修复（DETECT ≠ REPAIR）；Settlement / Billing / Fee / RecoveryLedger 改写 / 平台外写 / transport / 生产凭据。

@@ -372,21 +372,25 @@ describe('R45 S4 · recovery.reconciliation_override', () => {
 
 describe('R45 S4 · recovery.reconciliation_provider_outcome_record（人工录入）', () => {
   async function outcomeScenario(overrides: Record<string, unknown> = {}) {
-    const evidenceId = await seedEvidence(ORG_A);
-    const occurredAt = new Date('2026-09-06T00:00:00.000Z');
+    const evidenceId = typeof overrides.evidenceId === 'string' ? overrides.evidenceId : await seedEvidence(ORG_A);
+    const occurredAt =
+      overrides.occurredAt instanceof Date ? (overrides.occurredAt as Date) : new Date('2026-09-06T00:00:00.000Z');
     // 允许用例固定 canonicalSourceIdentity（重复事件场景需要 approval 绑定同一身份）
     const canonicalSourceIdentity =
       typeof overrides.canonicalSourceIdentity === 'string' ? overrides.canonicalSourceIdentity : 'manual-case:' + uuid();
+    const kind = (overrides.kind as 'ACCEPTED' | 'ACCEPTANCE_REVOKED' | undefined) ?? 'ACCEPTED';
+    const caseId = typeof overrides.caseId === 'string' ? (overrides.caseId as string) : caseA;
+    const claimItemId = typeof overrides.claimItemId === 'string' ? (overrides.claimItemId as string) : claimA;
     const approvalId = await issueApproval({
       organizationId: ORG_A,
-      caseId: caseA,
+      caseId,
       approverUserId: ownerId,
       action: RECONCILIATION_PROVIDER_OUTCOME_ACTION,
       payload: { amount: null, currency: null, basisReference: canonicalSourceIdentity, evidenceArtifactId: evidenceId },
       extra: {
-        caseId: caseA,
+        caseId,
         provider: 'amazon',
-        kind: 'ACCEPTED',
+        kind,
         occurredAt: occurredAt.toISOString(),
         canonicalSourceIdentity,
       },
@@ -395,10 +399,10 @@ describe('R45 S4 · recovery.reconciliation_provider_outcome_record（人工录�
       organizationId: ORG_A,
       role: 'OWNER',
       actorUserId: ownerId,
-      caseId: caseA,
-      claimItemId: claimA,
+      caseId,
+      claimItemId,
       provider: 'AMAZON',
-      kind: 'ACCEPTED' as const,
+      kind,
       sourceResource: 'returns/outcomes',
       canonicalSourceIdentity,
       occurredAt,
@@ -451,16 +455,54 @@ describe('R45 S4 · recovery.reconciliation_provider_outcome_record（人工录�
     expect(await prisma.auditLog.count({ where: { organizationId: ORG_A, action: 'recovery.approval_consumed' } })).toBe(0);
   });
 
-  it('同一人工事件重复录入 → ILLEGAL_TRANSITION（不新建第二条事实）', async () => {
+  // MSG-20261002-50 CHANGE A：完全重放 = execution replay → REUSED（不新建 fact / 不写第二成功审计 / 不再次消费 approval）
+  it('同一人工事件完全重放 → REUSED existing fact（零新建、零二次消费）', async () => {
+    const first = await outcomeScenario();
+    const created = await recordManualProviderOutcomeFact({ prisma }, first.input);
+    expect(created.outcome).toBe('CREATED');
+    const factsAfterCreate = await prisma.providerOutcomeFact.count({ where: { organizationId: ORG_A } });
+    const auditsAfterCreate = await prisma.auditLog.count({
+      where: { organizationId: ORG_A, action: RECONCILIATION_PROVIDER_OUTCOME_RECORDED_ACTION },
+    });
+    const consumedAfterCreate = await prisma.auditLog.count({ where: { organizationId: ORG_A, action: 'recovery.approval_consumed' } });
+
+    // 完全重放：同一 identity + 同一证据 + 同一 kind/occurredAt
+    const second = await outcomeScenario({
+      canonicalSourceIdentity: first.input.canonicalSourceIdentity,
+      evidenceId: first.evidenceId,
+    });
+    const replay = await recordManualProviderOutcomeFact({ prisma }, second.input);
+    expect(replay.outcome).toBe('REUSED');
+    expect(replay.providerOutcomeFactId).toBe(created.providerOutcomeFactId);
+    expect(replay.approvalConsumed).toBe(false);
+
+    expect(await prisma.providerOutcomeFact.count({ where: { organizationId: ORG_A } })).toBe(1);
+    expect(await prisma.providerOutcomeFact.count({ where: { organizationId: ORG_A } })).toBe(factsAfterCreate);
+    expect(
+      await prisma.auditLog.count({ where: { organizationId: ORG_A, action: RECONCILIATION_PROVIDER_OUTCOME_RECORDED_ACTION } }),
+    ).toBe(auditsAfterCreate);
+    expect(await prisma.auditLog.count({ where: { organizationId: ORG_A, action: 'recovery.approval_consumed' } })).toBe(
+      consumedAfterCreate,
+    );
+  });
+
+  // CHANGE A：identity 相同但关键内容不同（此处 evidence 集合不同）→ EVENT_IDENTITY_CONFLICT fail-closed（零写入）
+  // 注：kind 属于 identity 输入（eventKind），因此换 kind 是**另一个事件**，不构成 identity 冲突。
+  it('同一 event identity 但 evidence 不同 → EVENT_IDENTITY_CONFLICT（不新建第二事实）', async () => {
     const first = await outcomeScenario();
     await recordManualProviderOutcomeFact({ prisma }, first.input);
 
-    const second = await outcomeScenario({ canonicalSourceIdentity: first.input.canonicalSourceIdentity });
+    const conflicting = await outcomeScenario({
+      canonicalSourceIdentity: first.input.canonicalSourceIdentity,
+    });
     await expectRejection(
-      () => recordManualProviderOutcomeFact({ prisma }, second.input),
-      /ILLEGAL_TRANSITION|已录入/,
+      () => recordManualProviderOutcomeFact({ prisma }, conflicting.input),
+      /EVENT_IDENTITY_CONFLICT/,
     );
     expect(await prisma.providerOutcomeFact.count({ where: { organizationId: ORG_A } })).toBe(1);
+    expect(
+      await prisma.auditLog.count({ where: { organizationId: ORG_A, action: RECONCILIATION_PROVIDER_OUTCOME_RECORDED_ACTION } }),
+    ).toBe(1);
   });
 
   it('claimItem 与 caseId 不一致 → fail-closed（零写入）', async () => {

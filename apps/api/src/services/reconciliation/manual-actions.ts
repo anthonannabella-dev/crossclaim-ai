@@ -38,6 +38,17 @@ import { providerEventFingerprintV1 } from './fingerprint';
 export const RECONCILIATION_OVERRIDE_RECORDED_ACTION = 'reconciliation.override_recorded';
 export const RECONCILIATION_PROVIDER_OUTCOME_RECORDED_ACTION = 'reconciliation.provider_outcome_recorded';
 
+/** 人工动作的领域错误（携带稳定 code；不影响既有 WorkflowError 词表） */
+export class ReconciliationManualActionError extends Error {
+  readonly code: string;
+
+  constructor(code: string, message: string) {
+    super(code + ': ' + message);
+    this.name = 'ReconciliationManualActionError';
+    this.code = code;
+  }
+}
+
 export interface ManualActionDeps {
   prisma: PrismaClient;
   now?: () => Date;
@@ -299,6 +310,8 @@ export interface RecordManualProviderOutcomeInput {
 }
 
 export interface RecordManualOutcomeResult {
+  /** CREATED = 本次创建；REUSED = 同一 event identity 的完全重放（execution replay，不新建事实） */
+  outcome: 'CREATED' | 'REUSED';
   providerOutcomeFactId: string;
   caseId: string;
   provider: string;
@@ -306,9 +319,17 @@ export interface RecordManualOutcomeResult {
   sourceKind: 'MANUAL_WITH_EVIDENCE';
   evidenceArtifactIds: string[];
   providerEventFingerprint: string;
-  approvalConsumed: true;
+  approvalConsumed: boolean;
   providerAcceptedInferred: false;
   platformWriteExecuted: false;
+}
+
+/** 规范化比较用：evidence 集合按 id 升序（REPLAY 判定） */
+function sameEvidenceSet(left: readonly string[], right: readonly string[]): boolean {
+  if (left.length !== right.length) return false;
+  const a = [...left].sort();
+  const b = [...right].sort();
+  return a.every((value, index) => value === b[index]);
 }
 
 /**
@@ -388,10 +409,44 @@ export async function recordManualProviderOutcomeFact(
       // ingest 幂等：同指纹已存在 → 复用既有事实（不新建、不双计）
       const existing = await tx.providerOutcomeFact.findFirst({
         where: { organizationId, providerEventFingerprint: fingerprint },
-        select: { id: true },
+        select: {
+          id: true,
+          caseId: true,
+          claimItemId: true,
+          provider: true,
+          kind: true,
+          occurredAt: true,
+          evidenceArtifactIds: true,
+        },
       });
       if (existing) {
-        throw new WorkflowError('ILLEGAL_TRANSITION', '同一人工 provider outcome 事件已录入（幂等复用既有事实）');
+        // MSG-20261002-50 CHANGE A：完全重放 → REUSED（execution replay，不创建第二 fact / 成功审计，也不再消费 approval）
+        const identical =
+          existing.caseId === caseId &&
+          (existing.claimItemId ?? null) === claimItemId &&
+          existing.provider === provider &&
+          existing.kind === input.kind &&
+          existing.occurredAt.getTime() === input.occurredAt.getTime() &&
+          sameEvidenceSet(existing.evidenceArtifactIds, evidenceIds);
+        if (!identical) {
+          throw new ReconciliationManualActionError(
+            'EVENT_IDENTITY_CONFLICT',
+            '同一 provider event identity 已存在但关键事实内容不同（kind/evidence/occurredAt 等）→ fail-closed',
+          );
+        }
+        return {
+          outcome: 'REUSED' as const,
+          providerOutcomeFactId: existing.id,
+          caseId,
+          provider,
+          kind: input.kind,
+          sourceKind: 'MANUAL_WITH_EVIDENCE' as const,
+          evidenceArtifactIds: evidenceIds,
+          providerEventFingerprint: fingerprint,
+          approvalConsumed: false,
+          providerAcceptedInferred: false as const,
+          platformWriteExecuted: false as const,
+        };
       }
 
       const created = await tx.providerOutcomeFact.create({
@@ -448,6 +503,7 @@ export async function recordManualProviderOutcomeFact(
       });
 
       return {
+        outcome: 'CREATED' as const,
         providerOutcomeFactId: created.id,
         caseId,
         provider,

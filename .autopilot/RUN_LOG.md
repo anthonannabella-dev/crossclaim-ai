@@ -1237,3 +1237,13 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 退款资金：优先直接进入 claimant/customer 合法账户；不得默认代收、形成资金池或截留佣金（否则另开 Funds Custody / Money Movement 合规审计）。CrossClaim 成功费仍按 R12/R13（无有效授权只出 Invoice）。
 - 落盘：`docs/releases/CUSTOMS-BROKER-CONNECTOR-CONTRACT.md` + `.autopilot/RULES.md` R14 + `.autopilot/rules.json#customs_broker_connector`；runner 每轮输出 `customs_broker_policy`；checker 在 CI 强制（含 crossclaim_is_customs_broker=false、三授权域齐备、refund custody=NONE）。
 - 队列：R45 → R46 不变；Customs/BrokerConnector 实施批次另行提交独立设计 / Schema Delta / 合规审计 / 测试。
+
+## 2026-10-02 JST — MSG-20261002-50 = PASS WITH REVISE（R45 S4 主体 CLOSED）→ CHANGE A/B/C + 批准进入 R45 S5
+
+- 裁决：**PASS WITH REVISE**（REVIEWED_HEAD e4dcee3）；归档 FULL_COPY_OK；全文见 `AI-ARCHITECT-INBOX.md` 的 `MSG-20261002-50`。
+- S4 主体：**CLOSED**（四个动作注册/审批服务端绑定/锁后角色重验/set 与 supersede 分离/supersede 同事务保留旧 basis/override 独立审批且不改 fact/人工 outcome 强制 MANUAL_WITH_EVIDENCE + evidence 逐条校验 + 失败零推进）。
+- CHANGE A：人工 outcome「重复」语义对齐 S2 —— 完全重放 → `REUSED`（非业务错误）；identity 相同但内容不同（kind/evidence/occurredAt）→ `EVENT_IDENTITY_CONFLICT` fail-closed；execution replay rejection 不得创建第二 fact/成功审计或再次消费 approval。
+- CHANGE B：S5 checker 必须验证 S4 approval 语义（action/tenant/target/boundExtra/消费且仅一次/不得跨授权/manual outcome identity 对应 provider·kind·event）。
+- CHANGE C：S5 必须落实 MSG-49 状态语义（无 basis → MATCHED；dangling·cross-tenant basis·policy → inconsistency；FULLY 必须有有效 basis；over-recovery 必须带 `AMOUNT_EXCEEDS_EXPECTED`；MATCHED 不得衍生 recovered/billable）。
+- NEXT：**R45 S5 —— read-only consistency checker + permanent regression closure**（19 项最低检查面；DETECT ≠ REPAIR；执行前后 DB 快照一致；漂移 → 非零、clean → 零）；完成后提交 R45 Full Regression / Release Implementation Checkpoint。
+- 边界：NO Settlement · NO Billing · NO Fee · NO RecoveryLedger mutation · NO platform write · TRANSPORT=false · NO production credentials。
