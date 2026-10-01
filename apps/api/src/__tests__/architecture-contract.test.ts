@@ -104,11 +104,26 @@ describe('模型清单一致性（C-0002 CHANGE #1）', () => {
     'RecoveryPackageArtifact',
     'RecoveryManualSubmission',
     'RecoveryManualSubmissionReference',
+    // MSG-20261001-45 / -46：Outcome / Reimbursement Reconciliation（R45 S1）
+    'ProviderOutcomeFact',
+    'ReimbursementFact',
+    'ExpectedRecoveryBasis',
+    'ReconciliationOverrideDecision',
+    'ClaimReconciliationProjection',
+    'ReconciliationTolerancePolicy',
   ];
-  const JOIN_MODELS = ['CaseEvidence', 'CanonicalFactSource', 'ClaimItemEvidence', 'RecoveryManualSubmissionEvidence'];
+  const JOIN_MODELS = [
+    'CaseEvidence',
+    'CanonicalFactSource',
+    'ClaimItemEvidence',
+    'RecoveryManualSubmissionEvidence',
+    // R45 S1：投影 ↔ 事实成员关系
+    'ClaimReconciliationProjectionFact',
+  ];
+
 
   it(`核心模型恰好 ${CORE.length} 个`, () => {
-    expect(CORE).toHaveLength(40);
+    expect(CORE).toHaveLength(46);
     for (const name of CORE) expect(modelBlock(name), `缺少核心模型 ${name}`).not.toBe('');
   });
 
@@ -116,8 +131,8 @@ describe('模型清单一致性（C-0002 CHANGE #1）', () => {
     for (const name of JOIN_MODELS) expect(modelBlock(name), `缺少联结模型 ${name}`).not.toBe('');
   });
 
-  it('模型总数为 44（40 core + 4 join）—— 与 README/DOMAIN_MODEL 表述一致', () => {
-    expect(modelNames()).toHaveLength(44);
+  it('模型总数为 51（46 core + 5 join）—— 与 README/DOMAIN_MODEL 表述一致', () => {
+    expect(modelNames()).toHaveLength(51);
   });
 });
 
@@ -154,6 +169,12 @@ describe('租户归属（C-0002 CHANGE #2）', () => {
     'ClaimItemEvidence',
     'RecoveryPayout',
     'KillSwitchRequest',
+    // R45 S1：Outcome / Reimbursement Reconciliation
+    'ProviderOutcomeFact',
+    'ReimbursementFact',
+    'ExpectedRecoveryBasis',
+    'ReconciliationOverrideDecision',
+    'ClaimReconciliationProjection',
   ];
 
   it.each(TENANT_OWNED)('%s 带 organizationId', (name) => {

@@ -348,6 +348,14 @@ model Organization {
   manualRecoverySubmissions RecoveryManualSubmission[]
   manualRecoverySubmissionReferences RecoveryManualSubmissionReference[]
   manualRecoverySubmissionEvidences RecoveryManualSubmissionEvidence[]
+  // R45 S1（MSG-20261001-45 / -46）：Outcome / Reimbursement Reconciliation
+  providerOutcomeFacts          ProviderOutcomeFact[]
+  reimbursementFacts            ReimbursementFact[]
+  expectedRecoveryBases         ExpectedRecoveryBasis[]
+  reconciliationOverrides       ReconciliationOverrideDecision[]
+  reconciliationProjections     ClaimReconciliationProjection[]
+  reconciliationProjectionFacts ClaimReconciliationProjectionFact[]
+  reconciliationTolerancePolicies ReconciliationTolerancePolicy[]
 
   @@index([status])
 }
@@ -1396,6 +1404,10 @@ model ClaimItem {
   evidenceLinks ClaimItemEvidence[]
   recoveryPackages  RecoveryPackage[]
   manualSubmissions RecoveryManualSubmission[]
+  // R45 S1
+  expectedRecoveryBases   ExpectedRecoveryBasis[]
+  reconciliationOverrides ReconciliationOverrideDecision[]
+  reconciliationProjections ClaimReconciliationProjection[]
 
   @@unique([organizationId, platformType, platformRef, claimType])
   @@unique([organizationId, id])
@@ -1775,4 +1787,279 @@ model RecoveryManualSubmissionEvidence {
 
   @@unique([organizationId, submissionId, evidenceId])
   @@unique([organizationId, id])
+}
+
+// ============================================================
+// R45 S1（MSG-20261001-45 / MSG-20261001-46）
+// Outcome / Reimbursement Reconciliation —— 七表模型
+//   Facts / Basis / Policy / Override 为不可变事实；Projection 为 derived materialization。
+// 边界：NO Settlement · NO Billing · NO Fee · NO RecoveryLedger mutation · NO platform write。
+// 数据库级不变量（触发器 / partial unique / CHECK）见 M2–M5 迁移；Prisma 无法表达的部分
+// 以原生 SQL 落库（与既有 partial index 惯例一致）。
+// ============================================================
+
+/// provider 受理 / 撤销事实（Immutable，append-only）。
+/// 撤销以**新事实**表达，绝不改写历史 ACCEPTED（MSG-20261001-44 Q4）。
+model ProviderOutcomeFact {
+  id                       String                     @id @default(uuid())
+  organizationId           String
+  /// 弱引用（与 R43 同口径，不建 FK）
+  caseId                   String
+  claimItemId              String?
+  /// 平台 / 承运商标识（参与指纹输入与 reversal 同源性校验）
+  provider                 String
+  kind                     ProviderOutcomeFactKind
+  /// 复用 R43 S4 canonical（服务端构造）
+  providerCaseRefCanonical String?
+  /// provider 侧事件时间
+  occurredAt               DateTime
+  /// provider 原生稳定事件 ID（可空：并非所有来源都提供）
+  providerEventId          String?
+  /// 版本化服务端指纹（CHANGE B）：64 hex
+  providerEventFingerprint String
+  /// 指纹算法版本（当前恒为 v1）
+  fingerprintVersion       String                     @default("v1")
+  /// 来源类型；人工录入必须 MANUAL_WITH_EVIDENCE 且带 ≥1 证据（受保护路径，Q④）
+  sourceKind               ProviderOutcomeSourceKind
+  sourceRef                String
+  capturedAt               DateTime
+  parserVersion            String?
+  ingestedByUserId         String
+  /// 只引用既有 EvidenceArtifact（不复制证据仓库）
+  evidenceArtifactIds      String[]
+  reasonCode               String?
+  note                     String?
+  createdAt                DateTime                   @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  /// ingest 幂等：同一租户同一指纹只允许一条事实（重复 ingest 复用既有事实，不双计）
+  @@unique([organizationId, providerEventFingerprint])
+  @@unique([organizationId, id])
+  @@index([organizationId, claimItemId, occurredAt])
+  @@index([organizationId, providerCaseRefCanonical])
+}
+
+/// 赔付观察 / 冲正事实（Immutable，append-only）。
+/// CHANGE A（MSG-20261001-46）：`OBSERVED.amount > 0`；冲正行**不携带独立金额语义**（amount IS NULL），
+/// 金额一律由 `reversesFactId` 指向的事实取得。v1 仅支持 full reversal。
+model ReimbursementFact {
+  id                       String                  @id @default(uuid())
+  organizationId           String
+  claimItemId              String?
+  caseId                   String?
+  provider                 String
+  kind                     ReimbursementFactKind
+  /// 被冲正的 OBSERVED 事实（同租户 / 同 provider / 同 currency；不得自指）
+  reversesFactId           String?
+  /// 仅 OBSERVED 行有值（CHECK 保证）
+  amount                   Decimal?                @db.Decimal(18, 4)
+  currency                 String
+  occurredAt               DateTime
+  providerEventId          String?
+  /// CHANGE B：冲正自身也是 provider event，必须有自己的指纹
+  providerEventFingerprint String
+  fingerprintVersion       String                  @default("v1")
+  providerCaseRefCanonical String?
+  orderRef                 String?
+  rawRefs                  Json?
+  sourceKind               ReimbursementSourceKind
+  sourceRef                String
+  capturedAt               DateTime
+  parserVersion            String?
+  ingestedByUserId         String
+  evidenceArtifactIds      String[]
+  reasonCode               String?
+  note                     String?
+  createdAt                DateTime                @default(now())
+
+  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  reversesFact ReimbursementFact?  @relation("ReimbursementReversal", fields: [reversesFactId], references: [id])
+  reversedBy   ReimbursementFact[] @relation("ReimbursementReversal")
+  projectionMembers ClaimReconciliationProjectionFact[]
+  overrideDecisions ReconciliationOverrideDecision[]
+
+  @@unique([organizationId, providerEventFingerprint])
+  @@unique([organizationId, id])
+  @@index([organizationId, claimItemId, occurredAt])
+  @@index([organizationId, providerCaseRefCanonical])
+}
+
+/// 期望可追回基准（版本化 Immutable；仅允许受控 supersede）。
+/// CHANGE C（MSG-20261001-45）：effective 由 `supersededAt IS NULL` 判定，
+/// partial unique 仅作最终防线；supersede 必须在**同一事务**内按 CAS 顺序执行。
+model ExpectedRecoveryBasis {
+  id                     String                    @id @default(uuid())
+  organizationId         String
+  claimItemId            String
+  caseId                 String
+  expectedRecoveryAmount Decimal                   @db.Decimal(18, 4)
+  currency               String
+  basisKind              ExpectedRecoveryBasisKind
+  /// 基准版本（版本化）
+  basisVersion           String
+  /// 依据来源（文档 / 报告 / 人工，含证据引用）
+  basisSource            String
+  effectiveAt            DateTime
+  createdByUserId        String
+  createdAt              DateTime                  @default(now())
+  /// null = effective；受控 supersede 时置为时间（白名单仅此两列）
+  supersededAt           DateTime?
+  supersededByBasisId    String?
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  claimItem    ClaimItem    @relation(fields: [claimItemId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, id])
+  @@index([organizationId, claimItemId, supersededAt])
+}
+
+/// 对账人工覆盖决策（Immutable，append-only）：v1 每笔 reimbursement 单独审批（MSG-20261001-44 Q⑤）。
+model ReconciliationOverrideDecision {
+  id                  String                            @id @default(uuid())
+  organizationId      String
+  claimItemId         String
+  reimbursementFactId String
+  decisionKind        ReconciliationOverrideDecisionKind
+  reasonCode          String
+  reasonText          String
+  /// 必填：recovery.review_approved 事件 id（humanApproval）
+  approvalId          String
+  decidedByUserId     String
+  decidedAt           DateTime
+  createdAt           DateTime                          @default(now())
+
+  organization      Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  claimItem         ClaimItem         @relation(fields: [claimItemId], references: [id], onDelete: Cascade)
+  reimbursementFact ReimbursementFact @relation(fields: [reimbursementFactId], references: [id], onDelete: Cascade)
+
+  /// v1：一笔 reimbursement 至多一条覆盖决策
+  @@unique([organizationId, reimbursementFactId])
+  /// 同一 approval 不得授权两条覆盖决策
+  @@unique([organizationId, approvalId])
+  @@unique([organizationId, id])
+  @@index([organizationId, claimItemId])
+}
+
+/// 对账投影（derived materialization / 可重算缓存，**不是**不可逆历史事实）。
+/// MSG-20261001-46 Q3：重算 = 同事务整体替换；DELETE 仅限 derived ProjectionFact。
+model ClaimReconciliationProjection {
+  id                       String                       @id @default(uuid())
+  organizationId           String
+  claimItemId              String
+  status                   ReconciliationProjectionStatus
+  /// 本次计算使用的 effective 基准（可追溯）
+  basisId                  String?
+  expectedAmount           Decimal?                     @db.Decimal(18, 4)
+  currency                 String?
+  /// 有效且未被冲正抵销的已匹配金额
+  netMatchedObservedAmount Decimal                      @default(0) @db.Decimal(18, 4)
+  /// 摘要缓存；一致性以关系表 ClaimReconciliationProjectionFact 为准（checker 校验）
+  matchedFactIds           String[]
+  /// CHANGE C：每个投影必须能引用实际使用的策略（不得代码隐式 fallback）
+  tolerancePolicyId        String
+  policyVersion            String
+  /// 输入摘要（sha256，64 hex）
+  inputDigest              String
+  /// 投影版本（单调 +1；与成员关系 generation 绑定）
+  projectionVersion        Int                          @default(1)
+  computedAt               DateTime
+  createdAt                DateTime                     @default(now())
+  updatedAt                DateTime                     @updatedAt
+
+  organization Organization                        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  claimItem    ClaimItem                           @relation(fields: [claimItemId], references: [id], onDelete: Cascade)
+  members      ClaimReconciliationProjectionFact[]
+
+  @@unique([organizationId, claimItemId])
+  @@unique([organizationId, id])
+  @@index([organizationId, status])
+}
+
+/// 投影成员关系（derived 关联，CHANGE A / D）：事实成员关系不得只存 JSON。
+/// 每行绑定具体的 projection generation（projectionVersion），
+/// 提交时全会话一致（DEFERRABLE 约束触发器）；重算时同一事务整体替换。
+model ClaimReconciliationProjectionFact {
+  id                  String   @id @default(uuid())
+  organizationId      String
+  projectionId        String
+  /// CHANGE A：成员关系必须绑定 projection 版本
+  projectionVersion   Int
+  reimbursementFactId String
+  createdAt           DateTime @default(now())
+
+  organization      Organization                    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  projection        ClaimReconciliationProjection   @relation(fields: [projectionId], references: [id], onDelete: Cascade)
+  reimbursementFact ReimbursementFact               @relation(fields: [reimbursementFactId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, projectionId, projectionVersion, reimbursementFactId])
+  @@unique([organizationId, id])
+  @@index([organizationId, projectionId])
+}
+
+/// 对账容差策略（Immutable / versioned；append-only）。
+/// CHANGE C（MSG-20261001-46）：scope = provider + operation/resource + version，
+/// 同一 scope 只能有一个 effective policy；无 provider-specific policy 时使用
+/// **显式系统 exact policy 记录**（provider / operation 为空），不得代码隐式 fallback。
+model ReconciliationTolerancePolicy {
+  id                String    @id @default(uuid())
+  /// 空 = 系统级（跨租户显式常量记录）
+  organizationId    String?
+  provider          String?
+  operation         String?
+  policyVersion     String
+  absoluteTolerance Decimal   @default(0) @db.Decimal(18, 4)
+  relativeTolerance Decimal   @default(0) @db.Decimal(9, 6)
+  effectiveAt       DateTime
+  createdByUserId   String
+  createdAt         DateTime  @default(now())
+  supersededAt      DateTime?
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, id])
+  @@index([organizationId, provider, operation])
+}
+
+enum ProviderOutcomeFactKind {
+  ACCEPTED
+  ACCEPTANCE_REVOKED
+}
+
+/// 人工录入不存在「客户端自证」取值：人工路径恒为 MANUAL_WITH_EVIDENCE（Q④）
+enum ProviderOutcomeSourceKind {
+  OFFICIAL_API
+  PLATFORM_REPORT
+  MANUAL_WITH_EVIDENCE
+}
+
+enum ReimbursementFactKind {
+  OBSERVED
+  REIMBURSEMENT_REVERSED
+}
+
+enum ReimbursementSourceKind {
+  OFFICIAL_API
+  PLATFORM_REPORT
+  MANUAL_WITH_EVIDENCE
+}
+
+/// 基准种类（R45-A §2.3 列出的三种；新增种类需另一次 Schema 变更）
+enum ExpectedRecoveryBasisKind {
+  CARRIER_CLAIM
+  PROVIDER_POLICY
+  CONTRACTUAL
+}
+
+enum ReconciliationOverrideDecisionKind {
+  MATCHED
+  UNMATCHED
+}
+
+enum ReconciliationProjectionStatus {
+  UNMATCHED
+  AMBIGUOUS
+  MATCHED
+  PARTIALLY_RECONCILED
+  FULLY_RECONCILED
 }

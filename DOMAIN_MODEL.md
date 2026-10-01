@@ -5,7 +5,7 @@
 
 ---
 
-## 一、模型总览（44 个 = 40 个核心模型 + 4 个联结模型）
+## 一、模型总览（51 个 = 46 个核心模型 + 5 个联结模型）
 
 > **口径统一**：**29 个核心模型**（架构章程 §六 的清单 + C-0006-A 的 `CanonicalFact` + C-0006-B1 的 `RuleEvaluationShadow` + C-0008-A 的 `Session`、`UserInvitation`）**+ 2 个联结模型 `CaseEvidence`、`CanonicalFactSource`**。
 > README、本文、PR 描述、架构契约测试全部按此口径，不允许 29/31 混用。
@@ -144,6 +144,19 @@
 > 四事实分离：材料包已生成 ≠ 用户已提交 ≠ provider 已受理 ≠ provider 已赔付；业务真值 = `ClaimItem.status` + `RecoveryManualSubmission`，`AuditLog` 仅 append-only 证据。
 
 
+### Outcome / Reimbursement Reconciliation（R45 S1 / MSG-20261001-45 / -46）
+
+| 模型 | 说明 |
+| --- | --- |
+| `ProviderOutcomeFact` | provider 受理 / 撤销事实（append-only）；撤销以新事实表达，不改写历史 `ACCEPTED` |
+| `ReimbursementFact` | 赔付观察 / 冲正事实（append-only）；`OBSERVED.amount > 0`，冲正行不携带独立金额（`reversesFactId`）|
+| `ExpectedRecoveryBasis` | 版本化期望基准；`supersededAt IS NULL` 为 effective，仅允许一次单向受控 supersede |
+| `ReconciliationOverrideDecision` | 每笔 reimbursement 单独审批的人工覆盖决策（append-only，`approvalId` 必填）|
+| `ClaimReconciliationProjection` | derived materialization（可重算缓存，非历史事实）；`inputDigest` / `projectionVersion` / `tolerancePolicyId + policyVersion` |
+| `ClaimReconciliationProjectionFact` | 投影 ↔ 赔付事实成员关系（联结）；绑定 projection generation，重算时同事务整体替换 |
+| `ReconciliationTolerancePolicy` | 版本化容差策略（append-only）；scope = 租户 + provider + operation + version，至多一个 effective；含显式系统 exact policy |
+
+> 四事实分离：受理 ≠ 赔付观察 ≠ 对账 ≠ 结算；投影不是真值，drift 必须可被 checker 发现并重算。
 ### 联结模型
 
 | 模型 | 说明 |
@@ -239,7 +252,7 @@ DRAFT → SUBMITTED → ACKNOWLEDGED →
 |---|---|
 | 校验函数 | `crossclaim_assert_tenant_integrity()` |
 | 迁移 | `20260928060000_tenant_integrity/migration.sql` |
-| 覆盖 | **42 个** `cc_tenant_*` 引用完整性触发器 + **42 个** `cc_tenant_immutable__*` 归属不可变触发器（R43 S1 新增人工追回提交域 5 表） |
+| 覆盖 | **56 个** `cc_tenant_*` 引用完整性触发器 + **49 个** `cc_tenant_immutable__*` 归属不可变触发器（R43 S1 新增人工追回提交域 5 表；R45 S1 新增 reconciliation 域 7 表） |
 | CI 断言 | 按名称 / 所属表 / 事件类型 / 启用状态**清单**断言（`tools/tenant-triggers/`），不使用数量下限 |
 
 另外两类**规则所有权**约束（同属数据库级强制）：

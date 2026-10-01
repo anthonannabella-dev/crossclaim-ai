@@ -1,5 +1,5 @@
 {
-  "note": "B2-FIX R1 / MSG-20260930-06 CHANGE D —— 必需租户保护触发器清单（名称 + 所属表 + 事件类型）。tgtype 23 = ROW|BEFORE|INSERT|UPDATE；19 = ROW|BEFORE|UPDATE。清单来自 docs/releases/TASK2-TENANT-TRIGGER-INVENTORY.md 的运行库取证（2026-09-30）。新增 tenant-owned 表时必须同步补迁移并更新本清单，否则 CI 失败。 R43 S1（MSG-20261001-31/-32）：新增人工追回提交 5 张表的租户保护触发器；append-only/受控变更触发器见 append-only-triggers.json（独立清单，刻意不与本清单混用）。",
+  "note": "B2-FIX R1 / MSG-20260930-06 CHANGE D —— 必需租户保护触发器清单（名称 + 所属表 + 事件类型）。tgtype 23 = ROW|BEFORE|INSERT|UPDATE；19 = ROW|BEFORE|UPDATE。清单来自 docs/releases/TASK2-TENANT-TRIGGER-INVENTORY.md 的运行库取证（2026-09-30）。新增 tenant-owned 表时必须同步补迁移并更新本清单，否则 CI 失败。 R43 S1（MSG-20261001-31/-32）：新增人工追回提交 5 张表的租户保护触发器；append-only/受控变更触发器见 append-only-triggers.json（独立清单，刻意不与本清单混用）。 R45 S1（MSG-20261001-45 / -46）：新增 Outcome / Reimbursement Reconciliation 七表的租户保护触发器；append-only / 受控 supersede / generation 守卫见 append-only-triggers.json。",
   "immutablePrefix": "cc_tenant_immutable__",
   "immutableTgtype": 19,
   "baselineTgtype": 23,
@@ -171,6 +171,62 @@
     {
       "name": "cc_tenant_recoverymanualsubmissionevidence_evidenceid",
       "table": "RecoveryManualSubmissionEvidence"
+    },
+    {
+      "name": "cc_tenant_provideroutcomefact",
+      "table": "ProviderOutcomeFact"
+    },
+    {
+      "name": "cc_tenant_reimbursementfact",
+      "table": "ReimbursementFact"
+    },
+    {
+      "name": "cc_tenant_reimbursementfact_reversesfactid",
+      "table": "ReimbursementFact"
+    },
+    {
+      "name": "cc_tenant_expectedrecoverybasis",
+      "table": "ExpectedRecoveryBasis"
+    },
+    {
+      "name": "cc_tenant_expectedrecoverybasis_claimitemid",
+      "table": "ExpectedRecoveryBasis"
+    },
+    {
+      "name": "cc_tenant_reconciliationoverridedecision",
+      "table": "ReconciliationOverrideDecision"
+    },
+    {
+      "name": "cc_tenant_reconciliationoverridedecision_claimitemid",
+      "table": "ReconciliationOverrideDecision"
+    },
+    {
+      "name": "cc_tenant_reconciliationoverridedecision_reimbursementfactid",
+      "table": "ReconciliationOverrideDecision"
+    },
+    {
+      "name": "cc_tenant_claimreconciliationprojection",
+      "table": "ClaimReconciliationProjection"
+    },
+    {
+      "name": "cc_tenant_claimreconciliationprojection_claimitemid",
+      "table": "ClaimReconciliationProjection"
+    },
+    {
+      "name": "cc_tenant_claimreconciliationprojectionfact",
+      "table": "ClaimReconciliationProjectionFact"
+    },
+    {
+      "name": "cc_tenant_claimreconciliationprojectionfact_projectionid",
+      "table": "ClaimReconciliationProjectionFact"
+    },
+    {
+      "name": "cc_tenant_claimreconciliationprojectionfact_reimbursementfactid",
+      "table": "ClaimReconciliationProjectionFact"
+    },
+    {
+      "name": "cc_tenant_reconciliationtolerancepolicy",
+      "table": "ReconciliationTolerancePolicy"
     }
   ],
   "scopedTriggers": [
