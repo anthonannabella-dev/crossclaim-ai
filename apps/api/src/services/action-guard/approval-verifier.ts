@@ -32,6 +32,13 @@ export const CLAIM_SUBMIT_ACTION = 'claim.submit';
 export const APPEAL_SUBMIT_ACTION = 'appeal.submit';
 
 /**
+ * 受保护动作名（单一来源）：平台真实写回（② 下一批次 platform.write，MSG-20261001-16 NEXT）。
+ * Phase 1 通道恒关（PLATFORM_WRITE_TRANSPORT_ENABLED = false）：本批次只做接口 / 状态机 / 权限 /
+ * 幂等 / 审批绑定 / 模拟适配器与 fail-closed 测试，不启用任何真实平台写入。
+ */
+export const PLATFORM_WRITE_ACTION = 'platform.write';
+
+/**
  * 受保护动作名（单一来源）：支付捕获/资金确认（POST /billing/:id/status、/payments/events/:id/replay、
  * /payments/processing/retry-due）。非守卫文件必须引用本常量（② 第二批 P1）。
  */

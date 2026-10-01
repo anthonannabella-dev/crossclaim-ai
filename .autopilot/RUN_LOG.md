@@ -561,3 +561,12 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 回写：Issue #2 comment 5925593971。
 - 裁定要点：CHANGE A/B/C 全部关闭；无阻塞 CHANGE；非阻塞边界两条（用例 06 仅证明消费侧拒绝、本 PASS 不授权真实平台写入）。
 - NEXT：appeal.submit 批次收口 = PASS；② 剩余仅 `platform.write`（EXTERNAL_WRITE，HOLD）——先做接口/状态机/权限/幂等/审批绑定/模拟适配器与 fail-closed 测试。
+
+## 2026-10-01 JST — platform.write 边界批次（PROGRESS，MSG-20261001-16 NEXT 授权）
+
+- 新增 `apps/api/src/services/platform-write/{types,snapshot,state-machine,ledger,simulated-adapter,index}.ts`：版本化提交快照、幂等键派生、尝试状态机（上限 3）、审批绑定核验、模拟投递端口、fail-closed 编排。
+- 动作名 `PLATFORM_WRITE_ACTION` 收敛到 `services/action-guard/approval-verifier.ts` 单一来源；有限静态约定检查（受保护动作字面量必须与守卫同文件）通过。
+- 验收：`platform-write.test.ts` 17/17 PASS；`tsc --noEmit` PASS；`prisma validate` valid（未改 Schema）；action-guard 回归 22/22 PASS。
+- 硬开关 `PLATFORM_WRITE_TRANSPORT_ENABLED=false`：默认路径 NEEDS_MANUAL，拒绝路径 `sinkCalls=0`；真实通道在类型（simulated 字面量）与运行时（SIMULATED_SINK_REQUIRED）双重拒绝。
+- 设计稿：`docs/releases/ACTION-GUARD-PLATFORM-WRITE-DESIGN.md`（非目标 + 后续需架构方裁决 4 条）。
+- 下一步（下一 tick）：接线对外 HTTP 入口 + 真实 HTTP + PostgreSQL fail-closed 验收 → R33 送审；真实平台外写、凭据、生产启用继续 HOLD。

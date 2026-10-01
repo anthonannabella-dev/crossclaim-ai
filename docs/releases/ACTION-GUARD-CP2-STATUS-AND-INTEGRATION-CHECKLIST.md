@@ -39,7 +39,7 @@
 | --- | --- | --- | --- | --- | --- |
 | `claim.submit` | `POST /cases/:id/claim/submit`（http-routes + server WORKFLOW_PATH） | 平台外写（当前 HOLD，传输开关 false；入口恒返回 `NEEDS_MANUAL`） | approvalId 服务端校验（租户/动作/对象/有效期/消费）+ 锁后角色/主体重验 | HTTP 级 22/22（拒绝零副作用 / 并发恰一次 / 等锁失效 / 审计失败注入 / 审计留痕与原始错误保留） | **已验收 PASS（MSG-20261001-07 / REVIEWED_REF 28e0cd9；CI run 36805839845）** |
 | `appeal.submit` | `POST /cases/:id/appeal/submit`（http-routes + server WORKFLOW_PATH） | 平台外写（当前 HOLD；入口仅登记内部结果 `platformWriteExecuted=false` / `NEEDS_MANUAL`） | approvalId 服务端校验（租户/动作/对象/轮次/版本化提交快照摘要）+ 案件锁 → Appeal 行锁后重验主体/角色/审批生命周期 + 锁后重算快照比对 | HTTP 级 **13/13**（缺审批 / 动作不通用 / 重复 / 缺 guard / 锁期撤销 / 轮次歧义 / 空正文 / 审批后正文变化 / 独立审批人+执行人行锁期降权 / 并发恰一次 / 审计失败整笔回滚 / 错误绑定拒绝） | **已验收 PASS（MSG-20261001-16 / REVIEWED_HEAD 7d888cc；CI 36820104474）** |
-| `platform.write` | 待定（适配器写路径） | 平台外写（HOLD） | 同上 | 待补 | TODO |
+| `platform.write` | 边界模块 `services/platform-write/*`（编排 + 端口；**未接线任何对外路由**） | 平台外写（**HOLD**；硬开关 `PLATFORM_WRITE_TRANSPORT_ENABLED=false`，拒绝路径恒 `sinkCalls=0`） | Action Guard 决策 + 审批绑定服务端快照摘要 + 传输闸门（关闭即 `NEEDS_MANUAL`） | 离线 fail-closed **17/17**（`platform-write.test.ts`） | **边界批次进行中（MSG-20261001-16 NEXT）**：未送审；真实外写、凭据、生产启用继续 HOLD |
 | `commission.charge` | 待定（结算/佣金路径） | 资金动作（HOLD） | 同上 + 财务复核 | 待补 | TODO |
 | `payment.capture` | 账单登记入口（HTTP 受保护入口） | 资金动作（HOLD） | Action Guard 审批绑定 + 锁内事实 CAS + 快照交错校验 | HTTP 级：拒绝零副作用 / 允许恰一次（含并发与等锁失效） | **已验收 PASS（MSG-20260930-24 / REVIEWED_REF 73115a3）** |
 | `secret.rotate` | 待定（运维路径） | 凭据操作（HOST ONLY） | HOST APPROVAL | 待补 | TODO |
@@ -202,3 +202,22 @@
 | 零外写口径 | 已实现 | 仅登记内部结果 `platformWriteExecuted=false` / `NEEDS_MANUAL`；专项中 `platformWrites` 已改为真实口径 `billingInvoices` |
 | 专项测试 | **13/13 PASS** | `action-guard-appeal-submit-http-db.test.ts`（真实 HTTP + PostgreSQL） |
 | 架构方裁决 | **PASS（MSG-20261001-16 / REVIEWED_HEAD 7d888cc / CI 36820104474）** | appeal.submit 批次收口；非阻塞边界：用例 06 仅证明消费侧拒绝能力（非完整撤销入口 E2E）、本 PASS 不授权真实平台写入；② 剩余 = `platform.write`（EXTERNAL_WRITE，继续 HOLD） |
+
+## 11. ② 最后一项 `platform.write` 边界批次记录（MSG-20261001-16 NEXT）
+
+裁决授权：只做接口 / 状态机 / 权限 / 幂等 / 审批绑定 / 模拟适配器 / fail-closed 测试；**不得启用任何真实平台写**。
+
+| 项 | 状态 | 证据 |
+| --- | --- | --- |
+| 接口（端口） | 已完成 | `services/platform-write/{types,snapshot,state-machine,ledger,simulated-adapter,index}.ts`；依赖注入 `guard / approvals / ledger / sink / capabilities / audit / now` |
+| 动作名单一来源 | 已完成 | `PLATFORM_WRITE_ACTION` 定义在 `services/action-guard/approval-verifier.ts`，平台写模块仅再导出（有限静态约定检查通过） |
+| 状态机 | 已完成 | `PENDING→IN_FLIGHT→SUCCEEDED/FAILED/RETRYABLE`；`RETRYABLE→DEAD_LETTER`（上限 3）；终态不可离开；非法迁移抛 `ILLEGAL_TRANSITION` |
+| 权限 | 已完成（离线） | `EXTERNAL_WRITE` 门闸 + `writeEnabled`；决策非 ALLOW 即 BLOCKED，`sinkCalls=0` |
+| 幂等 | 已完成 | 版本化快照 `platform-write-request/v1`（canonicalJson+sha256）→ `pw1-*` 幂等键；同键同摘要重放 `REPLAYED`，同键不同摘要 `IDEMPOTENCY_CONFLICT` |
+| 审批绑定 | 已完成（只读核验） | 租户 / 动作 / 未消费 / 未过期 / `basisReference === snapshotDigest`；消费与落库留待后续增量 |
+| 模拟适配器 | 已完成 | `createSimulatedPlatformWritePort`：`simulated: true` 字面量类型 + 运行时 `SIMULATED_SINK_REQUIRED`；无网络 / 无 env / 无凭据 |
+| fail-closed 验收 | **17/17 PASS** | `apps/api/src/__tests__/platform-write.test.ts`（含静态探针：模块内无 `fetch(`/axios/`node:http`/env/凭据解析） |
+| 类型与 Schema | PASS | `npx tsc --noEmit` PASS；`npx prisma validate` valid（**未改 Schema**） |
+| 回归 | 22/22 PASS | `action-guard-enforcement` / `action-guard-catalog-integrity` / `action-guard` |
+| 设计稿 | 已完成 | `docs/releases/ACTION-GUARD-PLATFORM-WRITE-DESIGN.md`（含非目标、后续需架构方裁决事项 4 条） |
+| 待补（下一增量） | 未完成 | 对外 HTTP 入口接线 + 真实 HTTP + PostgreSQL fail-closed 验收；完成后才可 READY_FOR_REVIEW 送审 |
