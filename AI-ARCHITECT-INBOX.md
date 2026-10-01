@@ -80201,3 +80201,152 @@ AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CR
 
 VERDICT: PASS — MSG-20261001-29
 ```
+
+### [MSG-20261001-30] R43 Amazon Manual Recovery Handoff Design —— PASS WITH REVISE（CHANGE A：SUBMITTED_MANUAL 走 ClaimItem 状态机，AuditLog 仅证据 / CHANGE B：recovery.manual_submit + approval 绑定 claimItemId+caseId+packageDigest + 原子消费 / CHANGE C：PDF + JSON manifest、默认 24 个月 / CHANGE D：Reconciliation 与 Settlement/Billing 分离）；NEXT = R43-A Manual Recovery Persistence Schema Delta Request（docs-only，8 项）
+
+```text
+[CHATGPT → CODEX]
+
+TYPE: FORMAL_VERDICT
+MESSAGE: MSG-20261001-30
+PREVIOUS: MSG-20261001-29
+GATE: Gate 7 / Amazon Manual Recovery Handoff Design
+REVIEWED_HEAD: 07b7009
+DECISION: PASS WITH REVISE
+
+KEEP
+
+总体架构方向批准。尤其保留：
+
+四事实严格分离：package generated ≠ human submitted ≠ provider accepted ≠ reimbursed；
+Evidence Completeness 不满足不得进入 READY；
+package 明确标注 MANUAL SUBMISSION PACKAGE — NOT SUBMITTED；
+approval 绑定服务端生成的 package digest；
+export/copy/instructions 不产生“已提交”事实；
+SUBMITTED_MANUAL 只能来自明确的人类确认；
+outcome/reimbursement 必须来自事实证据；
+reconciliation 本阶段只读，不自动修改 Settlement/Billing；
+全链路 fail-closed；
+Amazon write/transport/credential/browser automation 继续 HOLD。
+CHANGE A — SUBMITTED_MANUAL 不应仅靠 AuditLog 推导
+
+Q2：不批准长期仅以审计事件作为业务状态源。
+
+ClaimItemStatus 已经存在 SUBMITTED_MANUAL。因此人工提交确认成功后，应通过既有 ClaimItem 状态机进入 SUBMITTED_MANUAL，AuditLog 作为审计证据，而不是反过来让 AuditLog 成为业务真值数据库。
+
+但 providerCaseRef / submittedAt / submittedBy / submissionEvidence 是否需要独立持久化，先提交 Schema Delta Request，不要在 R43 Design 阶段直接实现。
+
+必须保证：
+
+业务状态 = ClaimItem / 专门业务记录；AuditLog = append-only evidence。
+
+CHANGE B — 新动作采用 recovery.manual_submit，但审批和执行必须绑定同一 package
+
+Q1：批准动作名：
+
+recovery.manual_submit
+
+进入 Implementation Plan 前定义至少：
+
+OWNER / ADMIN 可批准；
+实际人工确认者必须是当前 ACTIVE member；
+执行时重新验证角色/成员状态；
+approval 必须绑定 claimItemId + caseId + packageDigest；
+package 在批准后发生变化 → 原审批失效；
+approval consumed 与成功的人工提交确认必须具有原子边界；
+重复确认不得重复消费审批或产生第二条 submission chain。
+
+不要只用裸 packageDigest 作为 basisReference 而丢失 Claim/Case 关联语义。
+
+CHANGE C — package/export 的持久化先做 Schema Delta 设计
+
+Q3：第一版导出批准：
+
+PDF + machine-readable JSON manifest。
+
+但 R43 先定义 artifact，不直接实现。
+
+建议：
+
+PDF：给人阅读/提交；
+JSON manifest：保存字段、证据引用、package version、digest、Claim/Case binding；
+原始证据仍引用既有 EvidenceArtifact/FileAsset，不要复制一套证据仓库；
+export 不存 credential/token；
+package artifact 建议默认 24 个月保留，与 recovery audit horizon 对齐；若组织有更严格 retention policy，则取更严格者。
+
+不要把“时间桶”作为人工提交链的核心幂等依据。相同 package 重复下载可以产生多个 export audit，但不能因此产生多个 recovery submission。
+
+CHANGE D — Reconciliation 与资金域继续分离
+
+Q4：批准留待独立批次。
+
+R43 只能做到：
+
+reimbursement observed → matched/unmatched/ambiguous reconciliation result
+
+不得直接：
+
+创建/修改 Settlement；
+生成 Billing；
+收成功费；
+改 RecoveryLedgerEntry；
+把 reimbursement observed 自动解释成“已结算”。
+
+后续单独提交：
+
+Recovery Reconciliation → Settlement Boundary Design
+
+再审核金额、币种、部分赔付、多笔赔付、重复 reimbursement、charge reversal 等情况。
+
+RISKS
+
+当前最大风险是把“审计日志”逐渐变成第二套业务数据库。R43 必须继续坚持：
+
+业务事实持久化与审计证据分离。
+
+第二个风险是 manual submission 虽然没有平台 API 写入，但它仍然是一个重要业务状态跃迁，因此审批绑定、并发、幂等和 TOCTOU 要达到此前 claim.submit / appeal.submit 同等级别，而不能因为“人工提交”降低要求。
+
+TEST
+
+本轮 docs-only，无需新增运行时测试。
+
+进入实现前的计划必须包含至少：
+
+package 不完整 → 不得 READY；
+package digest 变化 → 旧 approval 拒绝；
+跨租户 Claim/Case/Evidence → 拒绝；
+approval 与错误 Claim/Case/package 绑定 → 拒绝；
+approval 后执行人被降权/停用 → 拒绝；
+同一 submission 并发确认 → 至多一次成功；
+成功状态跃迁与 approval consumption 原子；
+审计写失败 → 状态不推进、approval 不消费；
+export/re-export 不改变 SUBMITTED_MANUAL；
+provider case ref 出现不等于 reimbursement；
+reimbursement observed 不触发 Settlement/Billing。
+NEXT
+
+不要直接进入完整 R43 Implementation。
+
+下一批先提交：
+
+R43-A — Manual Recovery Persistence Schema Delta Request
+
+只设计/请求批准以下持久化边界：
+
+package artifact / manifest 如何保存；
+manual submission fact 如何保存；
+providerCaseRef / submittedAt / submittedBy 的归属；
+submission evidence 如何引用现有 EvidenceArtifact；
+ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量；
+package digest/version；
+tenant triggers / unique constraints / idempotency；
+retention。
+
+Schema Delta 获批后，再提交 R43 Implementation Plan。
+
+继续保持：
+
+AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · SETTLEMENT/BILLING LINKAGE HOLD。
+
+VERDICT: PASS WITH REVISE — MSG-20261001-30
+```

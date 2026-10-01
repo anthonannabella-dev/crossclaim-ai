@@ -830,3 +830,15 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 裁决：方向批准；CHANGE A（SUBMITTED_MANUAL 走 ClaimItem 状态机，AuditLog 仅证据；新字段先提 Schema Delta）/ B（`recovery.manual_submit`；approval 绑定 claimItemId+caseId+packageDigest；原子消费；并发至多一次）/ C（PDF + JSON manifest；24 个月；时间桶不作幂等依据）/ D（Reconciliation 与 Settlement/Billing 分离）。
 - NEXT：R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，8 项持久化边界）；获批后再提交 R43 Implementation Plan。
 - 风险提示（架构方）：最大风险是把 AuditLog 变成第二套业务数据库 —— 业务事实持久化与审计证据必须分离；人工提交虽无平台写 API，其审批绑定/并发/幂等/TOCTOU 必须达到 claim.submit / appeal.submit 同级。
+
+## 2026-10-01 JST — 档案 MSG-20261001-30 = PASS WITH REVISE（R43 设计）
+
+- 来源：R43 Design Proposal 送审（REVIEWED_HEAD 07b7009；Issue #2 comment 5929951886；CI 36851952191）。
+- 归档：`AI-ARCHITECT-INBOX.md` → `MSG-20261001-30`；`tools/verdict-diff/compare.mjs` = **FULL_COPY_OK**。
+- CHANGE A：SUBMITTED_MANUAL 不得只靠 AuditLog 推导，必須走既有 `ClaimItemStatus.SUBMITTED_MANUAL` 状态機；AuditLog = append-only 证據；providerCaseRef/submittedAt/submittedBy/submissionEvidence 先提 Schema Delta。
+- CHANGE B：動作名批准 `recovery.manual_submit`；OWNER/ADMIN 可批准，執行者須當前 ACTIVE member 且執行時重驗；approval 绑定 `claimItemId + caseId + packageDigest`（不得裸 digest）；package 變化 → 舊批准失效；消费與確認原子。
+- CHANGE C：第一版導出 = PDF + machine-readable JSON manifest（先定義 artifact）；证據只引用既有 EvidenceArtifact/FileAsset；默认 24 個月保留；時間桶不作為提交鏈核心幂等依據。
+- CHANGE D：Reconciliation 與資金域繼續分離（只輸出 matched/unmatched/ambiguous）；後續單獨提交 Recovery Reconciliation → Settlement Boundary Design。
+- TEST 清單（11 條）納入 R43-A 驗收要求。
+- NEXT：**R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，8 項持久化邊界）**；Schema Delta 獲批後才提 R43 Implementation Plan。
+- 邊界：AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · SETTLEMENT/BILLING LINKAGE HOLD。
