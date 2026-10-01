@@ -90,6 +90,17 @@ const heartbeat = {
   next_action: state.next_action ?? pending[0] ?? null,
   continue_required: (state.state ?? '') === 'IMPLEMENT' && Boolean(state.next_action),
   rules_loaded: Boolean(AUTOPILOT_RULES),
+  platform_readiness_policy: {
+    track: AUTOPILOT_RULES?.platform_api_approval_readiness?.track ?? null,
+    dir: AUTOPILOT_RULES?.platform_api_approval_readiness?.dir ?? null,
+    v1_policy: AUTOPILOT_RULES?.platform_api_approval_readiness?.v1_policy ?? null,
+    priority_p1: AUTOPILOT_RULES?.platform_api_approval_readiness?.priorities?.P1 ?? [],
+    priority_p2: AUTOPILOT_RULES?.platform_api_approval_readiness?.priorities?.P2 ?? [],
+    priority_p3_later: AUTOPILOT_RULES?.platform_api_approval_readiness?.priorities?.P3_LATER ?? [],
+    evidence_rule: AUTOPILOT_RULES?.platform_api_approval_readiness?.evidence_rule ?? null,
+    host_approval_required: AUTOPILOT_RULES?.platform_api_approval_readiness?.host_approval_required ?? [],
+    status_fields: AUTOPILOT_RULES?.platform_api_approval_readiness?.platform_status_fields ?? [],
+  },
   reuse_policy: {
     matrix_path: AUTOPILOT_RULES?.open_source_reuse?.matrix_path ?? null,
     registry_path: AUTOPILOT_RULES?.open_source_reuse?.registry_path ?? null,

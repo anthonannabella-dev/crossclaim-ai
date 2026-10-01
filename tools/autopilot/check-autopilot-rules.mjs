@@ -78,6 +78,29 @@ if (rules && fs.existsSync(statePath)) {
   }
 }
 
+// R11：平台 API 准入准备线（docs/platform-approval）必须存在，且覆盖五个平台
+const platform = rules?.platform_api_approval_readiness ?? null;
+if (!platform) {
+  failures.push('rules.json 缺少 platform_api_approval_readiness（R11 未落盘）');
+} else {
+  for (const rel of platform.required_docs ?? []) {
+    if (!fs.existsSync(path.join(ROOT, rel))) failures.push('缺少平台准备文档: ' + rel);
+  }
+  const matrixPath = path.join(ROOT, 'docs', 'platform-approval', 'PLATFORM_SCOPE_MATRIX.md');
+  const matrixText = fs.existsSync(matrixPath) ? fs.readFileSync(matrixPath, 'utf8') : '';
+  for (const key of ['AMAZON', 'TIKTOK_SHOP', 'WALMART', 'SHOPIFY', 'WOOCOMMERCE']) {
+    const rel = platform.platform_matrices?.[key];
+    if (!rel || !fs.existsSync(path.join(ROOT, rel))) failures.push('缺少平台 scope 矩阵: ' + key);
+    const token = key === 'TIKTOK_SHOP' ? 'TIKTOK' : key;
+    if (matrixText !== '' && !matrixText.toUpperCase().includes(token)) {
+      failures.push('PLATFORM_SCOPE_MATRIX 未覆盖平台: ' + token);
+    }
+  }
+  if (!Array.isArray(platform.platform_status_fields) || platform.platform_status_fields.length === 0) {
+    failures.push('platform_api_approval_readiness 缺少 platform_status_fields');
+  }
+}
+
 if (failures.length > 0) {
   process.stderr.write('AUTOPILOT_RULES_CHECK_FAILED\n - ' + failures.join('\n - ') + '\n');
   process.exit(1);

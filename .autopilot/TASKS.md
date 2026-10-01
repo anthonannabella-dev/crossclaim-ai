@@ -1,6 +1,8 @@
 
 ### HOST DIRECTIVE 2026-10-01「冻结底座 + 加速交付」（长期有效）
 
+- **TRACK B · 平台 API 准入准备线（R11）**：`docs/platform-approval/`（总纲 + 五平台 scope 矩阵 + 数据流 + 安全证据 + 隐私生命周期 + OAuth 生命周期 + IR + 宿主清单）；**不得阻塞 TRACK A**（R44 → R45 → R46 → Full Regression → Production Candidate）。
+
 - **开源优先复用 + 商用许可统一机制（R10）**：矩阵 `docs/releases/OPEN_SOURCE_REUSE_MATRIX.md`；登记表 `tools/license-gate/oss-registry.json`；校验 `node tools/license-gate/check-oss-registry.mjs --root .`（挂在既有 license-gate CI job）；模型权重 `MODEL_LICENSES.md`。新模块开工前必须分类 EXISTING / LEGACY_REUSE / OSS_NOW / OSS_LATER / REJECT，并做 A/B/C 许可判定；**不阻塞当前队列**。
 
 - **持久自治规则（跨轮次/会话/runner 重启生效）**：`.autopilot/RULES.md` + `.autopilot/rules.json`；runner 每轮写入 HEARTBEAT，CI 由 `tools/autopilot/check-autopilot-rules.mjs` 校验。

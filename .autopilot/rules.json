@@ -209,5 +209,88 @@
       "多平台追回逻辑",
       "结果交付闭环"
     ]
+  },
+  "platform_api_approval_readiness": {
+    "track": "TRACK B（并行准备线；不得阻塞 TRACK A = R44 → R45 → R46 → Full Regression → Production Candidate）",
+    "dir": "docs/platform-approval",
+    "required_docs": [
+      "docs/platform-approval/PLATFORM_API_APPROVAL_READINESS.md",
+      "docs/platform-approval/PLATFORM_SCOPE_MATRIX.md",
+      "docs/platform-approval/DATA_FLOW_DIAGRAM.md",
+      "docs/platform-approval/SECURITY_CONTROLS_EVIDENCE.md",
+      "docs/platform-approval/PRIVACY_DATA_LIFECYCLE.md",
+      "docs/platform-approval/OAUTH_TOKEN_LIFECYCLE.md",
+      "docs/platform-approval/INCIDENT_RESPONSE_PLAN.md",
+      "docs/platform-approval/HOST_ACTION_CHECKLIST.md"
+    ],
+    "platform_matrices": {
+      "AMAZON": "docs/platform-approval/AMAZON_SCOPE_MATRIX.md",
+      "TIKTOK_SHOP": "docs/platform-approval/TIKTOK_SCOPE_MATRIX.md",
+      "WALMART": "docs/platform-approval/WALMART_SCOPE_MATRIX.md",
+      "SHOPIFY": "docs/platform-approval/SHOPIFY_SCOPE_MATRIX.md",
+      "WOOCOMMERCE": "docs/platform-approval/WOOCOMMERCE_SCOPE_MATRIX.md"
+    },
+    "priorities": {
+      "P1": [
+        "AMAZON",
+        "TIKTOK_SHOP",
+        "WALMART",
+        "SHOPIFY"
+      ],
+      "P2": [
+        "WOOCOMMERCE"
+      ],
+      "P3_LATER": [
+        "BIGCOMMERCE",
+        "OTHER_DTC",
+        "OTHER_PSP",
+        "OTHER_CARRIER"
+      ]
+    },
+    "v1_policy": "READ-ONLY FIRST + LEAST PRIVILEGE + MINIMUM DATA；REAL EXTERNAL WRITE HOLD；Claim/Appeal 自动对外提交 HOLD",
+    "forbidden": [
+      "平台 SDK 直接进入 Recovery OS 核心",
+      "平台字段污染核心领域模型",
+      "客户密码进入 CrossClaim / 保存后台登录密码",
+      "未授权抓取 / Cookie 偷取 / 模拟登录作为生产方式",
+      "绕过官方 API 风控",
+      "LLM 决定金额 / Deadline / Settlement / Fee / Ledger",
+      "绕过 Tenant Isolation / RBAC / Audit / HITL / Action Guard",
+      "浏览器自动化作为主 API 路线"
+    ],
+    "evidence_rule": "IMPLEMENTED + TESTED + EVIDENCE AVAILABLE（「代码支持」不算证据）",
+    "host_approval_required": [
+      "正式提交平台申请",
+      "创建付费平台账号",
+      "使用真实客户账户",
+      "写入真实 Client Secret",
+      "写入真实 Refresh Token",
+      "开启真实 write scope",
+      "提交真实 Claim / Appeal",
+      "开启生产支付接入",
+      "使用生产凭据"
+    ],
+    "parallel_tracks": {
+      "TRACK_A": "R44 → R45 → R46 → Full Regression → Production Candidate（不受本线阻塞）",
+      "TRACK_B": "平台要求清单 → Scope 最小化 → Security Evidence → Privacy/Terms → OAuth 设计 → Data lifecycle → Application package ready"
+    },
+    "platform_status_fields": [
+      "PLATFORM",
+      "INTEGRATION_MODE",
+      "OFFICIAL_API",
+      "READ_ONLY",
+      "MINIMUM_SCOPE",
+      "PII_REQUIRED",
+      "PROTECTED_OR_RESTRICTED_DATA",
+      "OAUTH_READY",
+      "TOKEN_STORAGE_READY",
+      "REVOCATION_READY",
+      "DATA_DELETION_READY",
+      "SECURITY_EVIDENCE_READY",
+      "APPROVAL_PACKAGE_READY",
+      "HOST_ACTION_REQUIRED",
+      "NEW_RISK_BOUNDARY",
+      "ARCH_REVIEW_REQUIRED"
+    ]
   }
 }

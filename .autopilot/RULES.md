@@ -132,3 +132,32 @@ model_weight_license / decision(ACCEPT|REVIEW|REJECT) / reason`，外加复用�
 
 规则落盘后，当前执行队列继续推进；只有真正进入**新模块**时才执行对应的 OSS / License 判定。
 进入新大模块时，本轮回报在上述三项之外增加：`LEGACY_REUSED / OSS_CANDIDATE / OSS_DECISION / LICENSE / COMMERCIAL_USE / LICENSE_RISK`。
+
+## R11 Platform API Approval Readiness（并行准备线，HOST DIRECTIVE 2026-10-01 补充）
+
+**定位**：TRACK B。**不得打断** TRACK A（R44 → R45 → R46 → Full Regression → Production Candidate）。
+落盘位置：`docs/platform-approval/`（总纲 + 五平台 scope 矩阵 + 数据流 + 安全证据 + 隐私生命周期 + OAuth 生命周期 + IR + 宿主清单）。
+机器可读镜像：`.autopilot/rules.json` → `platform_api_approval_readiness`；runner 每轮写入 HEARTBEAT；校验器 `tools/autopilot/check-autopilot-rules.mjs` 强制文档与平台覆盖存在。
+
+**R11.1 平台范围**：P1 = Amazon SP-API / TikTok Shop / Walmart Marketplace / Shopify；P2 = WooCommerce；P3·OSS_LATER = BigCommerce、其他独立站、其他 PSP、其他物流商。优先级不得改变 Recovery OS 主线。
+
+**R11.2 统一接入原则**：Official API / Official OAuth → Platform Adapter → SourceConnection → Raw SourceTransaction → CanonicalFact → Rule Engine → RecoveryOpportunity → Recovery OS → Evidence/Case/Claim/Appeal → Settlement → RecoveryLedger → Billing。
+禁止：平台 SDK 直接进入核心；平台字段污染核心领域模型；客户密码进入 CrossClaim；保存后台登录密码；未授权抓取 / Cookie 偷取 / 模拟登录作为生产方式；绕过官方风控；LLM 决定金额·Deadline·Settlement·Fee·Ledger；绕过 Tenant Isolation / RBAC / Audit / HITL / Action Guard。浏览器自动化只可作为极特殊辅助能力评估。
+
+**R11.3 V1 = READ-ONLY FIRST**：READ-ONLY + LEAST PRIVILEGE + MINIMUM DATA；不参与 Recovery 的字段默认不申请；**REAL EXTERNAL WRITE HOLD**、**Claim/Appeal 自动对外提交 HOLD**；链路保持 AI Prepare → Human Review → Human Approve → Manual/Approved Submission。
+
+**R11.4 平台专属约束**：
+
+- Amazon：Public Developer 路线；V1 尽最大可能不申请 Restricted PII（buyer name/address/phone/email 与 Recovery 无直接关系 → 不申请）；仅当不可替代需求出现时单独评估 Restricted Role / RDT。
+- TikTok Shop：Official API + Seller Authorization；**Custom app 可运行 ≠ 商业/Connector 批准**；TPRM/数据安全协议材料需齐备。
+- Walmart：Solution Provider 路线；不申请与追回无关的 listing/price/inventory write 与 order mutation。
+- Shopify：Public App 方向；**Protected Customer Data 分层**；V1 避免直接身份类 Protected Customer Fields；App Review 清单齐备（HTTPS/OAuth/Privacy/ToS/emergency contact/demo/uninstall·revoke/data deletion/OWASP/encryption/token handling/minimal network）。
+- WooCommerce：官方 REST API + 商户授权（或商户生成的只读 REST Key）；默认 `READ`；凭据只进 Secret Manager（CredentialRef），支持 revoke/reconnect/rotate/health/last sync/error state/audit/rate·retry。
+
+**R11.5 独立站多源**：StoreAdapter + PaymentAdapter + CarrierAdapter → Canonical Fact → Recovery Opportunity；Chargeback 不得硬编码为 Shopify 专属模型；CrossClaim 自身计费的 Stripe Billing 与客户业务 PSP 连接严格分离。
+
+**R11.6 生产安全证据**：平台申请要求 IMPLEMENTED + TESTED + EVIDENCE AVAILABLE（「代码支持」不算证据）；清单见 `SECURITY_CONTROLS_EVIDENCE.md` 与 `HOST_ACTION_CHECKLIST.md`。
+
+**R11.7 宿主控制**：未经 HOST APPROVAL 不得：提交平台申请、创建付费账号、使用真实客户账户、写入真实 Client Secret / Refresh Token、开启真实 write scope、提交真实 Claim/Appeal、开启生产支付接入、使用生产凭据。
+
+**R11.8 每轮涉及平台接入时输出平台状态字段**（见 rules.json `platform_status_fields`）。

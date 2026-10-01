@@ -1122,3 +1122,10 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - CHANGE A–D 落实：reversal 非负金额 + reversesFactId 约束；providerEventId + fingerprint 双概念；supersededAt + partial unique 与 supersede 事务顺序；projection↔fact 关系化。
 - 四个受保护动作：basis_set / basis_supersede / override / provider_outcome_record（均 INTERNAL_WRITE + humanApproval）。
 - 送审：REVIEWED_HEAD 25389be（Issue #2 comment 5933149170）；唤醒已投递并三要素验证。
+
+## 2026-10-01 JST — TRACK B 启动：PLATFORM_API_APPROVAL_READINESS（平台 API 准入准备体系）
+
+- 落盘：`docs/platform-approval/`（PLATFORM_API_APPROVAL_READINESS / PLATFORM_SCOPE_MATRIX / DATA_FLOW_DIAGRAM / SECURITY_CONTROLS_EVIDENCE / PRIVACY_DATA_LIFECYCLE / OAUTH_TOKEN_LIFECYCLE / INCIDENT_RESPONSE_PLAN / HOST_ACTION_CHECKLIST + AMAZON·TIKTOK_SHOP·WALMART·SHOPIFY·WOOCOMMERCE 五份 scope 矩阵）。
+- 持久规则：`.autopilot/RULES.md` R11 + `.autopilot/rules.json#platform_api_approval_readiness`；runner HEARTBEAT 增加 `platform_readiness_policy`；`check-autopilot-rules.mjs` 强制 8 份文档存在且五平台覆盖。
+- 原则：READ-ONLY FIRST + LEAST PRIVILEGE + MINIMUM DATA；REAL EXTERNAL WRITE / Claim·Appeal 自动对外提交 继续 HOLD；平台接入必须成为 Adapter，不得改 Recovery OS 核心。
+- TRACK A 未受影响：R45-B Implementation Plan 已送审，继续按裁决推进。
