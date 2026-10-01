@@ -52,7 +52,9 @@ export type WorkflowErrorCode =
   /** C-0013-A：Connector 路径必须至少带 platformRef 或 sourceFingerprint */
   | 'SOURCE_IDENTITY_REQUIRED'
   /** MSG-20260929-30：运营看板 window 越界（只允许 1d/7d/14d/30d） */
-  | 'INVALID_WINDOW';
+  | 'INVALID_WINDOW'
+  /** MSG-20261001-10 §5：billing.draft 缺少已确认的费用依据（FeeCalculation）→ 409 */
+  | 'BILLING_BASIS_REQUIRED';
 
 export class WorkflowError extends Error {
   readonly code: WorkflowErrorCode;

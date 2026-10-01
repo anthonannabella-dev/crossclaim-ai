@@ -49,6 +49,7 @@ import { ApprovalBoundaryError } from '../action-guard/approval-tx-verify';
 import { createPrismaActionGuardAuditPort } from '../action-guard/runtime-guard-composition';
 import type { AuditWriter } from '../audit';
 import { submitClaimWithApproval } from '../claims/claim-submission';
+import { BILLING_DRAFT_ACTION, createBillingDraft } from '../billing/billing-draft';
 import { CLAIM_PREPARE_ACTION, prepareClaimDraft } from '../claims/claim-preparation';
 import {
   ActionGuardApprovalRequiredError,
@@ -147,6 +148,8 @@ const CASE_CLAIM_PATH = /^\/cases\/([^/]+)\/claim$/;
 const CASE_CLAIM_SUBMIT_PATH = /^\/cases\/([^/]+)\/claim\/submit$/;
 // ② 下一小批次（MSG-20261001-07 §6）：claim.prepare（内部准备写入 · INTERNAL_WRITE · 无人审批）
 const CASE_CLAIM_PREPARE_PATH = /^\/cases\/([^/]+)\/claim\/prepare$/;
+// ② 下一小批次（MSG-20261001-10 §5）：billing.draft（账单草稿写入 · INTERNAL_WRITE · 无人审批）
+const CASE_BILLING_DRAFT_PATH = /^\/cases\/([^/]+)\/billing\/draft$/;
 // MSG-20260929-30：运营看板（只读投影，GET only）
 const OPERATIONS_DASHBOARD_PATH = /^\/operations\/dashboard$/;
 const OPERATIONS_CLAIMS_PATH = /^\/operations\/claims$/;
@@ -256,6 +259,7 @@ function statusFor(error: unknown): { code: number; error: string } {
       case 'PAYMENT_SOURCE_CONFLICT':
       case 'ATTEMPT_ALREADY_RUNNING':
       case 'CLAIM_ITEM_CASE_REQUIRED':
+      case 'BILLING_BASIS_REQUIRED':
         return { code: 409, error: error.code };
       case 'FORBIDDEN':
         return { code: 403, error: error.code };
@@ -345,6 +349,7 @@ export async function handleWorkflowRequest(
   const caseClaim = CASE_CLAIM_PATH.exec(path);
   const caseClaimSubmit = CASE_CLAIM_SUBMIT_PATH.exec(path);
   const caseClaimPrepare = CASE_CLAIM_PREPARE_PATH.exec(path);
+  const caseBillingDraft = CASE_BILLING_DRAFT_PATH.exec(path);
   const operationsDashboard = OPERATIONS_DASHBOARD_PATH.test(path);
   const operationsClaims = OPERATIONS_CLAIMS_PATH.test(path);
   const operationsRecovery = OPERATIONS_RECOVERY_PATH.test(path);
@@ -377,7 +382,7 @@ export async function handleWorkflowRequest(
     adminPermissionMatrix ||
     adminMemberDetail !== null ||
     adminKillSwitch;
-  if (!adminAny && !operationsDashboard && !operationsClaims && !operationsRecovery && !review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !paymentReviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !replayPath && !replayReviewPath && !retryDuePath && !retryDueFreezePath && !retryDueReviewPath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim && !caseClaimSubmit && !caseClaimPrepare) {
+  if (!adminAny && !operationsDashboard && !operationsClaims && !operationsRecovery && !review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !paymentReviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !replayPath && !replayReviewPath && !retryDuePath && !retryDueFreezePath && !retryDueReviewPath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim && !caseClaimSubmit && !caseClaimPrepare && !caseBillingDraft) {
     return false;
   }
 
@@ -961,6 +966,38 @@ export async function handleWorkflowRequest(
       );
       // 内部准备写入：恒不触达平台，也不推进 Claim 状态
       sendJson(res, 200, prepared);
+      return true;
+    }
+
+    if (caseBillingDraft) {
+      // ② 下一小批次：账单草稿写入（受保护动作 billing.draft · INTERNAL_WRITE）
+      const body = await readJsonBody(req);
+      const caseId = caseBillingDraft[1] ?? '';
+      if (!deps.actionGuard) {
+        // fail closed：受保护入口必须在组合根注入 Action Guard
+        throw new ActionGuardNotConfiguredError(BILLING_DRAFT_ACTION);
+      }
+      // INTERNAL_WRITE：只需能力闸门（Kill Switch scope=billing + 动作 feature + 控制面模式），
+      // 不引入人工审批；本批次不推进收款/到账/扣划，也不触达平台。
+      await deps.actionGuard.assertAllowed({
+        action: BILLING_DRAFT_ACTION,
+        actorUserId: actor.actorUserId,
+        organizationId: actor.organizationId,
+      });
+      const drafted = await createBillingDraft(
+        {
+          organizationId: actor.organizationId,
+          actorUserId: actor.actorUserId,
+          role: actor.role,
+          caseId,
+          ...(typeof body.note === 'string' ? { note: body.note } : {}),
+        },
+        {
+          prisma: deps.prisma,
+          ...(deps.now ? { now: deps.now } : {}),
+        },
+      );
+      sendJson(res, 200, drafted);
       return true;
     }
 

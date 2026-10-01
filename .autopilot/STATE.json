@@ -1,6 +1,6 @@
 {
   "gate": "B2-FIX R1",
-  "head": "e1183a3",
+  "head": "64e404b",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
   "next_task": "billing.draft：核对真实入口与调用路径 → Action Guard 接线（缺装配/能力不足失败关闭）→ 锁后重读执行事实 → 草稿写入与业务审计同事务（失败回滚、并发不重复生成）→ 真实 HTTP + PostgreSQL 验收（不推进收款/到账/扣划/平台外写）→ 专项/回归/tsc/prisma → CI → 七段式送审",
