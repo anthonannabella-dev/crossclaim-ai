@@ -1,6 +1,6 @@
 {
   "gate": "B2-FIX R1",
-  "head": "ebdfd45",
+  "head": "e4dcee3",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
   "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
@@ -9,13 +9,13 @@
   "last_chatgpt_message": "MSG-20261002-49",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T15:43:54.696Z",
+  "updated_at": "2026-10-01T16:04:44.017Z",
   "previous_head": "0de8882",
-  "architect_decision_pending": false,
+  "architect_decision_pending": true,
   "blocked_scope": null,
-  "last_send_head": "46074bd",
-  "last_sent_at": "2026-10-01T15:32:56.199Z",
-  "last_sent_fingerprint": "R45-S3:Reconciliation-Projector-Checkpoint",
+  "last_send_head": "e4dcee3",
+  "last_sent_at": "2026-10-01T16:04:44.017Z",
+  "last_sent_fingerprint": "R45-S4:Protected-Reconciliation-Actions-Checkpoint",
   "final_head": "1144401",
   "ci_run": "36833002042",
   "ci_result": "SUCCESS",
@@ -51,10 +51,10 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-01T15:54:46.390Z",
   "state": "IMPLEMENT",
-  "last_action": "HOST DIRECTIVE 2026-10-02（补充二）落盘为 R13：Platform OAuth ≠ Payment Authorization（不得推导扣款授权）；Onboarding 免费扫描不得强制绑卡；自动收费链路唯一化（无有效支付授权只出账单不扣款）；不保存 PAN/CVV；autopay 属独立 Payment Activation Gate 且 HOLD。队列不变。",
-  "last_action_at": "2026-10-01T15:43:54.696Z",
-  "next_action": "R45 S3 REVISE 落地（结构化金额异常 + 弱引用 fail-closed + digest 覆盖 algorithmVersion 与全输入 + MATCHED 语义文档约束）→ 随后进入 R45 S4 受保护动作（basis_set / basis_supersede / override / provider_outcome_record）。",
-  "current_head": "5dc6508",
+  "last_action": "R45 S4 已实施并送审 Implementation Checkpoint：四个受保护动作（basis set / supersede / override / 人工 provider outcome）全量落盘，含 supersede 后置失败完整回滚、evidence 逐条校验与失败零推进；18 项新增 DB 验收（9+9）、R45 家族 68/68、全量 175 files / 1717 tests PASS。",
+  "last_action_at": "2026-10-01T16:04:44.017Z",
+  "next_action": "等待 R45 S4 Implementation Checkpoint 裁决：①PASS → 进入 S5（只读 checker + 全量回归收口）②REVISE → 按 CHANGE 修订 ③BLOCK → 停止。",
+  "current_head": "e4dcee3",
   "reviewed_head": "07b7009",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -1900,5 +1900,41 @@
     "activation_gate": "HOLD（独立 Payment Activation Gate；R46 完成后才实施/测试/审计；生产凭据与真实扣款 HOST APPROVAL REQUIRED）",
     "queue_impact": "NONE —— 不打断 R45 → R46 队列",
     "landed_at": "2026-10-01T15:43:54.696Z"
+  },
+  "r45_s4_submission": {
+    "submission_comment": "5935348764",
+    "reviewed_head": "e4dcee3",
+    "doc": "docs/releases/R45-S4-PROTECTED-RECONCILIATION-ACTIONS-CHECKPOINT.md",
+    "kind": "Implementation Checkpoint（四个受保护动作；零 Schema 变更）",
+    "actions": [
+      "recovery.reconciliation_basis_set",
+      "recovery.reconciliation_basis_supersede",
+      "recovery.reconciliation_override",
+      "recovery.reconciliation_provider_outcome_record"
+    ],
+    "files": [
+      "apps/api/src/services/reconciliation/basis-actions.ts",
+      "apps/api/src/services/reconciliation/manual-actions.ts",
+      "apps/api/src/services/action-guard/action-guard.ts（catalog）",
+      "apps/api/src/services/action-guard/approval-verifier.ts（动作常量）",
+      "apps/api/src/services/workflow/recovery-review.ts（审批创建绑定要求）",
+      "apps/api/src/__tests__/reconciliation-basis-actions-db.test.ts（9）",
+      "apps/api/src/__tests__/reconciliation-manual-actions-db.test.ts（9）"
+    ],
+    "evidence": {
+      "prisma_validate": "valid（零 Schema 变更）",
+      "tsc": "PASS（0 error）",
+      "basis_db": "9/9 PASS",
+      "manual_db": "9/9 PASS",
+      "r45_family": "68/68 PASS",
+      "full_suite": "175 files / 1717 tests PASS（本地全量）"
+    },
+    "risk_classification": {
+      "FOUNDATION_REUSED": "R43/R44 受保护动作范式（advisory/行锁 + 锁后角色重验 + verifyApprovalBoundary + approval 消费 + prepareAuditInsert）+ R45 S1 数据库不变量 + S2 身份口径 + S3 projector",
+      "NEW_RISK_BOUNDARY": "YES —— 四个受保护写动作（审批/HITL 边界 + 一致性边界）；无新 Schema",
+      "ARCH_REVIEW_REQUIRED": "YES"
+    },
+    "boundary": "NO Settlement · NO Billing · NO Fee · NO RecoveryLedger mutation · NO platform write · TRANSPORT=false · NO production credentials",
+    "next": "PASS → R45 S5（只读 consistency checker + full regression 收口）；REVISE → 按 CHANGE 修订；BLOCK → 停止"
   }
 }

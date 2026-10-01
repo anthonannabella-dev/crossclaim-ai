@@ -1217,3 +1217,12 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 不保存 PAN / card number / CVV / 网银密码；只保存 provider 引用（Customer ID / PaymentMethod ID / Mandate ID / authorization status）。
 - 落盘：`docs/releases/PAYMENT-AUTHORIZATION-AND-ONBOARDING-CONTRACT.md` + `.autopilot/RULES.md` R13 + `.autopilot/rules.json#payment_authorization_separation`；runner 每轮输出 `payment_authorization_policy`；checker 在 CI 强制（含 activation_gate=HOLD 与 irreversible_upgrade_forbidden=true）。
 - 队列：R45 → R46 不变；PaymentMethod / Mandate / autopay enablement 在 R46 完成后由**独立 Payment Activation Gate** 实施、测试与审计（当前 HOLD）。
+
+## 2026-10-02 JST — R45 S4（Protected Reconciliation Actions）实施 + Implementation Checkpoint 送审
+
+- 交付：`action-guard` 四个 catalog 条目（INTERNAL_WRITE + humanApproval）+ 动作常量 + 审批创建必填绑定；`basis-actions.ts`（set / supersede）；`manual-actions.ts`（override / 人工 provider outcome）。
+- supersede 顺序：lock current effective FOR UPDATE → 审批边界重验 → UPDATE old（受控 CAS）→ INSERT new → 业务审计 + approval 消费 → commit；后置失败整体回滚（旧 basis 仍 effective / 无新 basis / approval 未消费）。
+- override：每笔独立审批（一票制）、不改原事实、错误绑定/跨租户 fail-closed、reason + ≥1 evidence。
+- 人工 outcome：MANUAL_WITH_EVIDENCE + evidence 逐条校验（存在/同租户/不重复/可用来源）+ structured reason + approval binding；重复事件幂等 fail-closed；失败事实/审计/消费零推进；不推导 providerAccepted。
+- 证据：prisma validate valid · tsc PASS · basis 9/9 · 人工 9/9 · R45 家族 68/68 · 全量 175 files / 1717 tests PASS。
+- 送审：REVIEWED_HEAD e4dcee3（Issue #2 comment 5935348764）；唤醒已投递并三要素验证（输入框清空 / 新消息在底部 / 正在生成）。

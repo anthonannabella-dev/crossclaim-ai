@@ -525,3 +525,11 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - 自动收费：仅当存在有效 Payment Authorization / PaymentMethod / Mandate 才可自动扣款；否则只出账单。
 - 支付数据：不保存 PAN / CVV / 网银密码；只保存 provider 引用。
 - 实施时点：R46 完成后由独立 Payment Activation Gate 实施（当前 HOLD）；R45 → R46 队列不变。
+
+### R45 S4（Protected Reconciliation Actions）—— Implementation Checkpoint 待裁决
+
+- 交付：四个受保护动作（basis set / supersede / override / 人工 provider outcome）+ 审批绑定 + evidence 逐条校验 + 失败零推进。
+- 范围纪律：零 Schema 变更；未开放 Settlement/Billing/Fee/RecoveryLedger/平台外写。
+- 送审：REVIEWED_HEAD e4dcee3（Issue #2 comment 5935348764）。
+- NEXT：PASS → R45 S5（只读 checker + 全量回归收口）；REVISE → 修订；BLOCK → 停止。
+- 禁止：Settlement / Billing / Fee / RecoveryLedger 改写 / 平台外写 / transport / 生产凭据。
