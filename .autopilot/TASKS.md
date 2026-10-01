@@ -400,3 +400,10 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - DECISION：**PASS**（REVIEWED_HEAD 4c43b41；归档 FULL_COPY_OK）。R44-A 关闭。
 - NEXT：**R44-B**：为 `recovery.manual_submit_reference_recorded` 建独立 approval creation 入口；raw→canonical 由服务端；extra 绑 submissionId + claimItemId + providerCaseRefCanonical；action isolation 双向；幂等；creation 不创建 Reference；canonical 变化 → execution fail-closed。
 - 范围外：outcome tracking · reimbursement reconciliation · Settlement/Billing linkage · Amazon write · provider acceptance inference。
+
+### R44-B（Reference Approval Creation Boundary）—— 已实现，增量风险审计待裁决
+
+- 交付：`services/recovery/http-request.ts`（requestManualRecoveryReferenceApproval）+ `services/workflow/recovery-review.ts`（接受 reference 动作 + 三项 extra 校验）+ 路由/白名单；`recovery-manual-reference-approval-http-db.test.ts` 12 项。
+- 证据：12/12 新用例；家族回归 114/114；tsc PASS；prisma validate valid；无新增依赖。
+- 送审：REVIEWED_HEAD f5c322e（Issue #2 comment 5932871096 / CI 36870628101）。
+- NEXT：PASS → R44-B CLOSED；若确认 Manual Recovery HTTP approval+execution 边界整体闭合 → 按排序进入 R45（需先 Design + Schema Delta）。

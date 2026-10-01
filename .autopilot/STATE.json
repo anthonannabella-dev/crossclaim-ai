@@ -1,6 +1,6 @@
 {
   "gate": "B2-FIX R1",
-  "head": "5c66e91",
+  "head": "f5c322e",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
   "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
@@ -9,13 +9,13 @@
   "last_chatgpt_message": "MSG-20261001-42",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T13:39:15.842Z",
+  "updated_at": "2026-10-01T13:52:59.400Z",
   "previous_head": "4c43b41",
-  "architect_decision_pending": false,
+  "architect_decision_pending": true,
   "blocked_scope": null,
-  "last_send_head": "4c43b41",
-  "last_sent_at": "2026-10-01T13:37:50.685Z",
-  "last_sent_fingerprint": "R44-A:Manual-Recovery-Approval-Creation-Boundary",
+  "last_send_head": "f5c322e",
+  "last_sent_at": "2026-10-01T13:52:59.400Z",
+  "last_sent_fingerprint": "R44-B:Manual-Recovery-Reference-Approval-Creation",
   "final_head": "1144401",
   "ci_run": "36833002042",
   "ci_result": "SUCCESS",
@@ -49,12 +49,12 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-01T13:38:45.375Z",
+  "last_tick_at": "2026-10-01T13:52:59.732Z",
   "state": "IMPLEMENT",
-  "last_action": "MSG-20261001-42 = PASS 已逐字归档并 FULL_COPY_OK —— R44-A CLOSED；NEXT = R44-B Manual Recovery Reference Approval Creation",
-  "last_action_at": "2026-10-01T13:39:15.842Z",
-  "next_action": "R44-B — Manual Recovery Reference Approval Creation Boundary：为 recovery.manual_submit_reference_recorded 建独立 approval creation 入口（raw 由客户端、canonical 恒服务端构造；extra = submissionId + claimItemId + providerCaseRefCanonical；action isolation 双向；幂等；creation 不创建 Reference / 不改 Submission·ClaimItem / 不消费 approval / 不产生 providerAccepted；创建后 canonical 变化 → execution fail-closed）。",
-  "current_head": "5c66e91",
+  "last_action": "SCHEDULER_STALE_RECOVERED（gap=14min）→ 本轮已恢复执行",
+  "last_action_at": "2026-10-01T13:52:59.400Z",
+  "next_action": "等待 R44-B 增量裁决：①PASS → R44-B CLOSED；若架构方确认 Manual Recovery HTTP approval+execution 边界整体闭合，则按排序进入 R45（Outcome / Reimbursement Reconciliation，需先 Design + Schema Delta）②REVISE → 按 CHANGE 重送 ③BLOCK → 停止该入口。",
+  "current_head": "f5c322e",
   "reviewed_head": "07b7009",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-01T13:37:50.957Z",
-    "gapMs": 54419,
-    "stale": false,
-    "checkedAt": "2026-10-01T13:38:45.375Z"
+    "previousTickAt": "2026-10-01T13:38:45.375Z",
+    "gapMs": 854358,
+    "stale": true,
+    "checkedAt": "2026-10-01T13:52:59.732Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -250,7 +250,7 @@
     "integration_boundary_review": "AUTHORIZED_TO_PLAN（先提交设计/实施计划，不直接开放真实 transport）"
   },
   "r36_submission_comment": "5927087320",
-  "stale_recovered_at": "2026-10-01T13:37:50.957Z",
+  "stale_recovered_at": "2026-10-01T13:52:59.732Z",
   "engineering_regression_policy": {
     "source": "HOST PRODUCT DIRECTION 2026-10-01",
     "doc": "docs/releases/ENGINEERING-REGRESSION-POLICY.md",
@@ -1324,5 +1324,34 @@
       "Amazon write",
       "provider acceptance inference"
     ]
+  },
+  "r44b_submission": {
+    "submission_comment": "5932871096",
+    "ci_run": "36870628101",
+    "ci_conclusion": "success 5/5",
+    "reviewed_head": "f5c322e",
+    "submitted_under_rules": true,
+    "risk_classification": {
+      "FOUNDATION_REUSED": "R43 S4 补录服务（canonicalizeProviderCaseRef + rmr1: basis builder）+ 既有 recovery-review 审批服务 + R44 入口范式",
+      "NEW_RISK_BOUNDARY": "YES —— 新增 POST /cases/:caseId/recovery/manual-reference-approval（reference 审批创建入口）",
+      "ARCH_REVIEW_REQUIRED": "YES —— 触发项：审批 / HITL 边界变化（reference 动作的独立审批创建 + canonical/extra 强绑定 + 双向 action isolation）；仅送增量"
+    },
+    "implementation": {
+      "route": "POST /cases/:caseId/recovery/manual-reference-approval（decision=REQUEST|APPROVE）",
+      "canonical": "raw 由客户端提交；canonical 恒服务端构造（复用 S4 canonicalizeProviderCaseRef；请求体出现 providerCaseRefCanonical → 400）",
+      "extra": "服务层对 recovery.manual_submit_reference_recorded 强制校验 submissionId + claimItemId + providerCaseRefCanonical（缺任一 INVALID_INPUT）",
+      "isolation": "与 recovery.manual_submit 审批严格隔离（不同 boundAction + rmr1: / rmp1: 不同 basis 前缀；双向复用 fail-closed）",
+      "idempotency": "同 action + 同 basis 的既有未消费未过期 approval 直接复用（不新增事件）",
+      "no_side_effects": "creation 不创建 Reference、不改 Submission/ClaimItem、不消费 approval、不产生 providerAccepted，资金域零变化"
+    },
+    "evidence": {
+      "tests": "recovery-manual-reference-approval-http-db.test.ts 12/12 PASS（覆盖 MSG-20261001-42 的 17 项要求）",
+      "regression": "recovery-manual-* + admin-recovery-review 家族 114/114 PASS",
+      "gates": "tsc PASS；prisma validate valid（未改 Schema）；无新增依赖"
+    },
+    "oss_note": "OSS_CANDIDATE 无新增；OSS_DECISION = EXISTING；LICENSE/COMMERCIAL_USE/LICENSE_RISK = n/a",
+    "wakeup_channel": "https://chatgpt.com/c/6ab9ee1b-fd54-83ee-b363-b67750afcedd",
+    "wakeup_delivery": "DELIVERED_VERIFIED（输入框清空 / 新用户消息在底部 / 生成中）",
+    "question_to_architect": "R44-B 关闭后，Manual Recovery 的 HTTP approval + execution 边界是否可整体评估为闭合，从而按排序进入新的独立业务域（例如 R45 Outcome / Reimbursement Reconciliation）。"
   }
 }

@@ -1064,3 +1064,11 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - R44-B 必须：canonical 由服务端构造（客户端只交 raw）；approval extra 绑定 submissionId + claimItemId + providerCaseRefCanonical；与 S3/R44-A approval 严格 action isolation（双向）；同 canonical 重复创建幂等；canonical 变化后 execution fail-closed；creation 不创建 Reference / 不改 Submission·ClaimItem / 不消费 approval / 不产生 providerAccepted·reimbursed·recovered；资金域零变化；创建的 approval 可被 R44 reference execution 消费一次。
 - 档案：`AI-ARCHITECT-INBOX.md` → `MSG-20261001-42`；`compare.mjs` = **FULL_COPY_OK**。
 - HOLD 保持：AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · SETTLEMENT/BILLING LINKAGE HOLD。
+
+## 2026-10-01 JST — R44-B Reference Approval Creation Boundary 实现 + 增量风险审计送审
+
+- 新增入口：`POST /cases/:caseId/recovery/manual-reference-approval`（decision=REQUEST|APPROVE）—— 只创建 reference 补录审批。
+- 冻结规则：客户端只交 raw，canonical 恒服务端构造（复用 S4 canonicalize）；extra 强制 submissionId + claimItemId + providerCaseRefCanonical；与 manual-submit 审批双向 action isolation；同 basis 幂等；creation 不创建 Reference / 不改 Submission·ClaimItem / 不消费 approval / 不产生 providerAccepted；资金域零变化。
+- 证据：`recovery-manual-reference-approval-http-db.test.ts` 12/12（覆盖 MSG-42 的 17 项要求，含端到端消费一次、canonical 变化 fail-closed、双向 isolation）；家族回归 114/114；tsc PASS；prisma validate valid；无新增依赖。
+- 送审：REVIEWED_HEAD f5c322e（Issue #2 comment 5932871096 / CI 36870628101 success 5/5）；唤醒已投递并三要素验证。
+- HOLD 保持：AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · SETTLEMENT/BILLING LINKAGE HOLD。
