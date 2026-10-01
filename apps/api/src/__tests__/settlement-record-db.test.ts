@@ -301,3 +301,42 @@ describe('R46 S2 settlement.record 受保护写路径（真实 PostgreSQL）', (
     expect(await counts()).toEqual(before);
   });
 });
+
+describe('R46 S2 approval 绑定漂移 与 snapshot 不可漂移（DB 级）', () => {
+  it('approval 绑定的是另一组到账事实（digest 漂移）→ 拒绝，零写入', async () => {
+    const payload = input();
+    const staleDigest = computeReceiptSnapshotDigest({ ...payload, amount: '999.0000' } as never);
+    const strictDeps: SettlementRecordDeps = {
+      prisma,
+      assertActiveMembership: deps.assertActiveMembership,
+      verifyApproval: async (request) => request.boundExtra.receiptSnapshotDigest === staleDigest,
+    };
+    const before = await counts();
+    await expect(recordSettlement(strictDeps, payload as never)).rejects.toMatchObject({
+      code: 'APPROVAL_REQUIRED',
+    });
+    expect(await counts()).toEqual(before);
+  });
+
+  it('Settlement.receiptSnapshotId 与 Snapshot 行创建后不可改（DB 触发器）', async () => {
+    const result = await recordSettlement(deps, input() as never);
+    const other = await recordSettlement(deps, input() as never);
+
+    await expect(
+      prisma.settlement.update({
+        where: { id: result.settlementId },
+        data: { receiptSnapshotId: other.receiptSnapshotId },
+      }),
+    ).rejects.toThrow();
+
+    await expect(
+      prisma.settlementReceiptSnapshot.update({
+        where: { id: result.receiptSnapshotId },
+        data: { snapshotDigest: 'f'.repeat(64) },
+      }),
+    ).rejects.toThrow();
+
+    const row = await prisma.settlement.findFirstOrThrow({ where: { id: result.settlementId } });
+    expect(row.receiptSnapshotId).toBe(result.receiptSnapshotId);
+  });
+});
