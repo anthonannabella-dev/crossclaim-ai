@@ -92,3 +92,18 @@ export {
   supersedeReconciliationBasis,
 } from './basis-actions';
 export type { BasisActionDeps, ReconBasisKind, ReconciliationBasisInput, ReconciliationBasisResult } from './basis-actions';
+
+// R45 S4 —— 对账期受保护动作（第二批：人工 override / 人工 provider outcome 录入）
+export {
+  RECONCILIATION_OVERRIDE_RECORDED_ACTION,
+  RECONCILIATION_PROVIDER_OUTCOME_RECORDED_ACTION,
+  recordManualProviderOutcomeFact,
+  recordReconciliationOverride,
+} from './manual-actions';
+export type {
+  ManualActionDeps,
+  RecordManualOutcomeResult,
+  RecordManualProviderOutcomeInput,
+  RecordOverrideResult,
+  RecordReconciliationOverrideInput,
+} from './manual-actions';
