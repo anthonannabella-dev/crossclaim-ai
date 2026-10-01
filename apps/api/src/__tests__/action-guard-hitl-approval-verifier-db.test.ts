@@ -12,7 +12,11 @@ const prisma = new PrismaClient();
 const ORG = 'cf000000-0000-4000-8000-0000000000b1';
 const ORG_B = 'cf000000-0000-4000-8000-0000000000b2';
 const RATE = '0.1500';
-const NOW = new Date('2026-09-30T03:00:00Z');
+/**
+ * CI 修复：审批有效期按**真实时钟**判定，固定 NOW 会让用例在「NOW + TTL」之后必然失败。
+ * 改为以真实时钟为基准（-60s），所有相对偏移与断言语义保持不变。
+ */
+const NOW = new Date(Date.now() - 60_000);
 
 let ownerId = '';
 let outsiderId = '';

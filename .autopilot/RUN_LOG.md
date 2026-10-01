@@ -532,9 +532,14 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 边界：Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据继续 HOLD。
 
 
-## 2026-10-01 · R25 准备期：本地环境已存在的 2 项失败（非本批次引入）
+## 2026-10-01 · R25 准备期：审批有效期「时间炸弹」（非本批次引入；已修复）
 
 - 现象：本机全量运行出现 2 个失败 —— `action-guard-hitl-approval-verifier-db.test.ts > 03`（`{ valid: false }`）与 `action-guard-hitl-route-db.test.ts > 04`（期望 200/201，实际 403）。
 - 归因验证：`git stash push -u` 回到基线 `cabdead`（CI 五作业 SUCCESS，本地此前全量 146 files/1369 tests 全绿）后，**同样两个用例仍失败**（2 failed | 15 passed），恢复工作区后重复运行仍失败；因此这两个失败与 MSG-20261001-08 CHANGE A/B **无因果**。
 - 两个文件共同特征：固定时间常量 `NOW = 2026-09-30T03:00:00Z` + 真实时钟做审批有效期/绑定判定；随本地墙钟推进（今日为 2026-10-01）逐步进入失败窗口，属**时钟相关本地 flake**。
 - 处置：不修改既有已验收文件的时间夹具（避免掩盖)；本批次证据以 **claim.prepare 专项 18/18 + 回归 29 files/260 PASS + CI（权威）** 为准，本地全量失败按上表登记并在 R25 七段式中披露。
+
+
+- **根因更正（CI 复现后定论）**：这不是本地 flake —— 同一 2 个用例在 GitHub CI（run 36809566281 / job 110201374093，2026-10-01T03:16Z）同样失败。根因是这些用例用**固定** `NOW` 创建操作级审批，而审批有效期按**真实时钟**判定；当真实时间越过 `NOW + TTL(24h)` 后，审批一律 EXPIRED → 403 / `valid:false`。首个进入失败窗口的是 `NOW = 2026-09-30T03:00:00Z`（= 2026-10-01T03:00Z 到期），与 CI 在 03:16Z 变红完全吻合。
+- **修复**：把全部「用固定 NOW 创建带有效期审批」的测试夹具改为**时钟相对基准** `const NOW = new Date(Date.now() - 60_000);`，所有相对偏移（+1s/+5s/+60s/+90s/+120s/3.6s）与断言语义保持不变；共 10 个文件（hitl-approval-verifier / hitl-route / hitl-concurrency / hitl-http-chain / hitl-r3-race / hitl-r4-ordering / claim-submit / payment-capture / payment-replay / payment-retry-due）。
+- **验证**：本机全量 146 files / 1375 tests PASS；tsc PASS；prisma validate valid；CI 以新 HEAD 为准。

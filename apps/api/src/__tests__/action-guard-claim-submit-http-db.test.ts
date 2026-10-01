@@ -45,7 +45,8 @@ const FAST_PARAMS = { N: 1024, r: 8, p: 1, keyLength: 64 };
 const PASSWORD = 'claim-submit-pass-1';
 let EMAIL = '';
 const ACTION = 'claim.submit';
-const NOW = new Date('2026-09-30T06:00:00Z');
+/** CI 修复：审批有效期按真实时钟判定；固定 NOW 会在 NOW + TTL 之后必然失败，故以真实时钟（-60s）为基准，断言语义不变。 */
+const NOW = new Date(Date.now() - 60_000);
 
 const audit = createAuditWriter(createPrismaAuditSink(prisma), { ipSalt: SALT });
 const log = createLogger({ level: 'error', sink: () => undefined });

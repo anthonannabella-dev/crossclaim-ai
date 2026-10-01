@@ -23,7 +23,8 @@ const FAST_PARAMS = { N: 1024, r: 8, p: 1, keyLength: 64 };
 const PASSWORD = 'hitl-chain-pass-1';
 const EMAIL = 'hitl-chain-owner@example.com';
 const RATE = '0.1500';
-const NOW = new Date('2026-09-30T05:00:00Z');
+/** CI 修复：审批有效期按真实时钟判定；固定 NOW 会在 NOW + TTL 之后必然失败，故以真实时钟（-60s）为基准，断言语义不变。 */
+const NOW = new Date(Date.now() - 60_000);
 const AMOUNT = '3000.0000';
 const BASIS = 'chain-basis';
 

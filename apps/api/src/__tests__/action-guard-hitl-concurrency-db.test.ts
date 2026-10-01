@@ -10,7 +10,8 @@ import { submitRecoveryReview } from '../services/workflow/recovery-review';
 const prisma = new PrismaClient();
 const ORG = 'cf000000-0000-4000-8000-0000000000c1';
 const RATE = '0.1500';
-const NOW = new Date('2026-09-30T04:00:00Z');
+/** CI 修复：审批有效期按真实时钟判定；固定 NOW 会在 NOW + TTL 之后必然失败，故以真实时钟（-60s）为基准，断言语义不变。 */
+const NOW = new Date(Date.now() - 60_000);
 const AMOUNT = '3000.0000';
 const BASIS = 'concurrency-basis';
 

@@ -1,11 +1,11 @@
 {
   "runner_status": "RUNNING",
   "current_gate": "B2-FIX R1",
-  "current_task": "Gate 7 / ② RUNTIME BUSINESS BLOCKING · 下一小批次 = claim.prepare（INTERNAL_WRITE 内部准备写入：入口接线 + 能力闸门 + 租户/权限/审计 + 拒绝零副作用验收）",
-  "current_head": "5bc06fe",
-  "last_action": "MSG-20261001-07 (R23) = PASS；claim.submit 本批次收口并登记（REVIEWED_REF 28e0cd9）；裁决逐字归档 + compare.mjs FULL_COPY_OK；Issue #2 comment 5923562554",
-  "last_action_at": "2026-10-01T02:34:15.723Z",
-  "next_action": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
+  "current_task": "Gate 7 / ② claim.prepare（INTERNAL_WRITE）—— MSG-20261001-08 CHANGE A/B 已实现并送审 R25",
+  "current_head": "3fc8783",
+  "last_action": "implemented MSG-20261001-08 CHANGE A/B (case lock cc-recovery-case + Claim row lock + status=DRAFT CAS; locked re-read of ACTIVE user/active membership/current role); claim.prepare 18/18; regression 29 files/260; tsc PASS; prisma valid",
+  "last_action_at": "2026-10-01T03:14:09.498Z",
+  "next_action": "R25 已投递（Issue #2 七段式 + 右侧 ChatGPT 轻量唤醒）；取新裁决 → 逐字归档 + FULL_COPY_OK → PASS 则 claim.prepare 收口并进入 billing.draft，REVISE 则按新 CHANGE 收敛",
   "retry_count": 0,
   "last_error": null,
   "reconcile": "RECONCILE_REQUIRED",
@@ -16,5 +16,9 @@
     "real_money": false,
     "customer_submission": false,
     "production_credentials": "HOST_ONLY"
-  }
+  },
+  "last_tick_at": "2026-10-01T03:14:09.498Z",
+  "state": "REVIEW_WAIT",
+  "last_chatgpt_message": "MSG-20261001-08",
+  "architect_decision_pending": true
 }
