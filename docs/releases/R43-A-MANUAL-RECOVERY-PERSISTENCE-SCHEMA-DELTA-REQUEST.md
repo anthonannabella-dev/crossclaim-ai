@@ -392,3 +392,43 @@ SUBMITTED_MANUAL ──(结果事实，R43 阶段仅登记)──▶ RECOVERED |
 - 主要风险从「平台外写」转为**业务状态与四张新表之间的漂移**（`ClaimItem = SUBMITTED_MANUAL` 无 submission，或有 submission 但状态仍为 `READY_TO_APPEAL`）→ 由只读一致性 checker 纳入长期 CI。
 - 本请求获批后，**无需再提交一轮 Schema Request**；下一批直接提交 **R43-B — Manual Recovery Persistence Implementation Plan**（docs-only，经审后才编码）。
 - HOLD 保持：AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · SETTLEMENT/BILLING LINKAGE HOLD。
+
+---
+
+## §R43-A-11. 修订记录：MSG-20261001-32（R43-B 裁决回填到 Schema 边界）—— 本节为准
+
+> 来源：**MSG-20261001-32 = PASS WITH REVISE**（REVIEWED_HEAD `409dbd0`）。以下三项直接改变 R43-A 的持久化边界。
+
+### 11.1 CHANGE A —— 新增第五张 append-only 表（provider reference 事实）
+
+| 项 | 最终口径 |
+| --- | --- |
+| 新表 | **`RecoveryManualSubmissionReference`**（append-only） |
+| 职责 | 保存人工提交**之后**补录的 provider case reference 事实（`providerCaseRefRaw` / `providerCaseRefCanonical` / `recordedAt` / `recordedByUserId` / `approvalId` / `note`） |
+| 与 Submission 的关系 | `FK submissionId → RecoveryManualSubmission`；**Submission 本体保持完全 immutable** |
+| 明确禁止 | 不得在 append-only 的 `RecoveryManualSubmission` 上直接 `UPDATE providerCaseRef`（不得为补录在 append-only 触发器上打洞） |
+| 唯一性 | `UNIQUE(organizationId, providerCaseRefCanonical)`（partial：canonical 非空）迁移到**本表**；同一 submission 至多一条有效 reference（`UNIQUE(organizationId, submissionId)`，替换后由新行 + 状态表达时再单独裁决） |
+| 语义红线 | 补录**不得**解释为 provider accepted；不改变 `submittedAt` / `submittedByUserId`；outcome 仍只能由事实证据驱动 |
+| 影响 | 模型计数由 43 变为 **44（40 core + 4 join）**；`Submission.providerCaseRef*` 字段从 Submission 表移除 |
+
+### 11.2 CHANGE B —— `RecoveryPackage.EXPORTED` 不是不可逆终态
+
+- **终态仅 `SUPERSEDED` / `WITHDRAWN`**；`EXPORTED` 只表示「发生过导出」，**不得阻止**后续重复导出、审批或人工提交。
+- 导出建议表达为 **append-only export event / artifact**（`RecoveryPackageArtifact` 已是 append-only，天然满足），package 本身保持可用。
+- 状态机修正：`GENERATED → EXPORTED`（可多次导出，状态不变）、`GENERATED/EXPORTED → SUPERSEDED | WITHDRAWN`（终态）。
+- 业务含义：**「下载过 PDF」不改变 package 是否仍可提交**。
+
+### 11.3 CHANGE C —— approval basis 必须绑定 package/digest 版本
+
+- basis 最终格式（至少）：`rmp1:<claimItemId>:<caseId>:<packageVersion>:<digestVersion>:<packageDigest>`。
+- 审批**创建**与**执行**必须调用**同一个服务端 canonical builder**（禁止两处分别拼字符串）。
+- 任一元数据版本变化（packageVersion / digestVersion / digest）→ 审批载荷不匹配 → 拒绝且零推进、零消费。
+
+### 11.4 实施细节四问结论（回填）
+
+| 问 | 结论 |
+| --- | --- |
+| risk class | **INTERNAL_WRITE** + `requires=[humanApproval]` 批准；humanApproval **不替代** authn → ACTIVE user → ACTIVE membership → 当前角色 → tenant boundary → action permission |
+| append-only 命名 | `cc_append_only__<Table>` 不进 `required-triggers.json` **有条件批准**：必须新建**独立 append-only / controlled-mutation trigger checklist**，CI 显式验证（三张 append-only 表 + package controlled-mutation；fresh deploy 与 upgrade path 都验证） |
+| checker | CI 中 inconsistency = **hard failure**；生产/运维 **detect + report + alert only**（不得自动改状态、补 submission、消费 approval、修 evidence linkage） |
+| PDF/依赖 | S2 前先做现有依赖能力检查并优先复用；若需新增依赖单独提 dependency delta；**JSON manifest = 规范事实载体，PDF = human-readable derivative**，二者不得形成两个业务真值 |

@@ -243,3 +243,54 @@ SUPERSEDED / WITHDRAWN = 终态（不得回到 GENERATED/EXPORTED）
 3. **内部路由的暴露面**：`recovery.manual_submit` 及其配套路由均属内部动作（零平台外写），但必须与既有受保护动作同等 fail-closed；是否需要额外的 production gate 由架构方在实现批次裁决（当前建议：仅 `humanApproval`）。
 4. **PDF 生成**：本计划只定义 artifact 与 manifest 身份；排版引擎与文件生成方式属实现细节，在 S2 前单独说明（不引入新依赖前先向架构方报备）。
 5. **checker 的长期成本**：作为长期 CI 基线保留；若未来数据量增大，可改为抽样 + 全量周检（需架构方同意）。
+
+---
+
+## 12. 修订记录：MSG-20261001-32 裁决（CHANGE A/B/C）—— 本节为准（进入 S1 前的最终状态）
+
+> 来源：**MSG-20261001-32 = PASS WITH REVISE**（REVIEWED_HEAD `409dbd0`）。
+> 结论：完成本节 CHANGE A/B/C 后**无需再提交 docs-only 复审**，可直接进入 **R43 Implementation S1**；S1 = Schema + migration + triggers + **trigger inventories** + **fresh/upgrade tests** → **单独 Implementation Checkpoint**；S1 通过后才进入 S2–S5。
+
+### 12.1 计划增量（相对 §1–§11）
+
+| 项 | 增量 |
+| --- | --- |
+| 表 | 由 4 张 → **5 张**：新增 `RecoveryManualSubmissionReference`（append-only） |
+| 迁移 | 新增 **M6** `20261001092500_recovery_manual_submission_reference`（表 + FK + canonical partial unique + 租户触发器 + `cc_append_only__RecoveryManualSubmissionReference`） |
+| Submission 表 | 移除 `providerCaseRefRaw` / `providerCaseRefCanonical`（改由 M6 表承载）；`approvalId` 仍 required + `UNIQUE(organizationId, approvalId)` |
+| 模型计数 | 39 → **44（40 core + 4 join）**（原计划 43 已作废） |
+| Package 生命周期 | `EXPORTED` **非终态**；终态仅 `SUPERSEDED` / `WITHDRAWN`；导出走 append-only `RecoveryPackageArtifact` |
+| approval basis | `rmp1:<claimItemId>:<caseId>:<packageVersion>:<digestVersion>:<packageDigest>`，创建与执行共用同一 canonical builder |
+
+### 12.2 S1 交付清单（Checkpoint 送审内容）
+
+1. 5 张表 + 2 枚举（`RecoveryPackageStatus` / `RecoveryPackageArtifactKind`）+ 全部 FK/unique/index；
+2. 6 支迁移（M1 表结构 → M2 租户触发器 → M3 package 受控变更 → M4 append-only（artifact/submission/evidence）→ M5 唯一性收口（approvalId）→ M6 reference 表与 canonical 唯一性）；
+3. **`tools/tenant-triggers/required-triggers.json`**（baseline 条目）与**新增独立清单** `tools/tenant-triggers/append-only-triggers.json`（三张 append-only 表 + package controlled-mutation）；配合 `emit-check-sql.mjs` 生成校验 SQL；
+4. **fresh deploy 与 upgrade path 双重取证**：触发器存在、启用、tgtype 正确（不得只靠测试碰巧触发）；
+5. 架构契约与文档同步（模型计数 44、DOMAIN_MODEL / README）；
+6. 本地与 CI 证据：`prisma validate` valid、`migrate deploy` 幂等、tenant-trigger checklist 通过、architecture-contract 通过。
+
+### 12.3 验收增量（M21–M28，与 M1–M20 合并为长期基线）
+
+1. submission 创建后**所有字段**直接 UPDATE 均被数据库拒绝；
+2. 后补 providerCaseRef **不 UPDATE 原 Submission**（新 reference 行）；
+3. 同一 provider reference canonical identity 不得重复绑定；
+4. package export 一次/多次均**不使** package 无法继续人工提交；
+5. export 后 package 仍可完成合法 approval / manual-submit；
+6. `SUPERSEDED` / `WITHDRAWN` package 不得用于新 manual submit；
+7. approval 的 `packageVersion` 或 `digestVersion` 任一变化 → 拒绝且**零推进、零消费**；
+8. fresh deploy **与** upgrade path 均检查 append-only / controlled-mutation trigger inventory。
+
+### 12.4 其余裁决要点
+
+| 项 | 结论 |
+| --- | --- |
+| risk class | `INTERNAL_WRITE` + `requires=[humanApproval]`（humanApproval 不替代 RBAC 层） |
+| append-only 清单 | 不得只靠测试覆盖；必须显式 CI 校验（fresh + upgrade） |
+| checker | CI 不一致 = hard failure；生产只 report/alert，禁止自动修复 |
+| PDF/manifest | 优先复用现有依赖；JSON manifest 为规范事实载体，PDF 为派生物；如需新依赖单独提 dependency delta |
+
+### 12.5 边界（继续冻结）
+
+AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · PRODUCTION CREDENTIALS HOLD · REAL EXTERNAL WRITE HOLD · SETTLEMENT/BILLING LINKAGE HOLD；S1 本身**不接真实凭据、不开启 transport、不改资金域**。
