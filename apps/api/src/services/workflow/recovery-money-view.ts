@@ -65,7 +65,10 @@ export interface CaseMoneyView {
   status: MoneyStatus;
   statusLabel: string;
   currency: string;
-  bucket: CurrencyBucket;
+  /** PC-05 REVISE：金额一律按事实币种分桶；不做跨币种相加。 */
+  byCurrency: CurrencyBucket[];
+  /** case 自身币种的 bucket（若该币种无事实则为 null）。 */
+  primaryBucket: CurrencyBucket | null;
   timeline: {
     discoveredAt: string | null;
     submittedAt: string | null;
@@ -245,9 +248,30 @@ export async function getRecoveryMoneyView(
   const caseViews: CaseMoneyView[] = [];
 
   for (const row of cases) {
-    const currency = row.currency;
-    const bucket = newBucket();
-    const orgBucket = orgBuckets.get(currency) ?? newBucket();
+    // PC-05 REVISE（MSG-20261003-87）：每个 case 维护「按事实币种」的 bucket 集合，
+    // Settlement / Adjustment / Invoice / ClaimItem 都按各自 currency 落入各自 bucket，
+    // 绝不允许把不同币种金额加进同一个 bucket。
+    const caseBuckets = new Map<string, BucketAccumulator>();
+    const bucketOf = (currency: string): BucketAccumulator => {
+      const existing = caseBuckets.get(currency);
+      if (existing) return existing;
+      const created = newBucket();
+      caseBuckets.set(currency, created);
+      return created;
+    };
+    const addToOrg = (currency: string, source: BucketAccumulator): void => {
+      const target = orgBuckets.get(currency) ?? newBucket();
+      target.discovered = target.discovered.plus(source.discovered);
+      target.expected = target.expected.plus(source.expected);
+      target.claimed = target.claimed.plus(source.claimed);
+      target.approved = target.approved.plus(source.approved);
+      target.recovered = target.recovered.plus(source.recovered);
+      target.disputed = target.disputed.plus(source.disputed);
+      target.adjustments = target.adjustments.plus(source.adjustments);
+      target.feeCalculated = target.feeCalculated.plus(source.feeCalculated);
+      target.feeCollected = target.feeCollected.plus(source.feeCollected);
+      orgBuckets.set(currency, target);
+    };
 
     let hasSubmission = false;
     let discoveredAt: Date | null = null;
@@ -257,6 +281,7 @@ export async function getRecoveryMoneyView(
 
     for (const item of row.claimItems) {
       const recoverable = item.recoverableAmount ?? ZERO;
+      const bucket = bucketOf(item.currency); // 事实自身币种
       bucket.discovered = bucket.discovered.plus(recoverable);
       if (item.status === 'SUBMITTED_MANUAL') {
         bucket.claimed = bucket.claimed.plus(recoverable);
@@ -270,6 +295,7 @@ export async function getRecoveryMoneyView(
     }
 
     for (const settlement of row.settlements) {
+      const bucket = bucketOf(settlement.currency); // 事实自身币种
       const reversed = settlement.reversedBySettlementId !== null;
       if (settlement.status === 'EXPECTED') {
         bucket.expected = bucket.expected.plus(settlement.amount);
@@ -294,6 +320,7 @@ export async function getRecoveryMoneyView(
     for (const settlement of row.settlements) {
       for (const adjustment of adjustmentsBySettlement.get(settlement.id) ?? []) {
         if (adjustment.adjustmentKind === 'REVERSAL') {
+          const bucket = bucketOf(adjustment.currency); // 事实自身币种
           bucket.adjustments = bucket.adjustments.plus(adjustment.amount);
         }
       }
@@ -301,27 +328,23 @@ export async function getRecoveryMoneyView(
 
     for (const invoice of row.billingInvoices) {
       if (invoice.status === 'VOID') continue;
+      const bucket = bucketOf(invoice.currency); // 事实自身币种
       bucket.feeCalculated = bucket.feeCalculated.plus(invoice.total);
       bucket.feeCollected = bucket.feeCollected.plus(invoice.paidAmount); // 当前恒为 0
     }
 
-    orgBucket.discovered = orgBucket.discovered.plus(bucket.discovered);
-    orgBucket.expected = orgBucket.expected.plus(bucket.expected);
-    orgBucket.claimed = orgBucket.claimed.plus(bucket.claimed);
-    orgBucket.approved = orgBucket.approved.plus(bucket.approved);
-    orgBucket.recovered = orgBucket.recovered.plus(bucket.recovered);
-    orgBucket.disputed = orgBucket.disputed.plus(bucket.disputed);
-    orgBucket.adjustments = orgBucket.adjustments.plus(bucket.adjustments);
-    orgBucket.feeCalculated = orgBucket.feeCalculated.plus(bucket.feeCalculated);
-    orgBucket.feeCollected = orgBucket.feeCollected.plus(bucket.feeCollected);
-    orgBuckets.set(currency, orgBucket);
+    for (const [currency, bucket] of caseBuckets) addToOrg(currency, bucket);
 
+    const currencyKeys = [...caseBuckets.keys()].sort();
+    const primaryKey = caseBuckets.has(row.currency) ? row.currency : currencyKeys[0];
+    const primary = primaryKey ? (caseBuckets.get(primaryKey) as BucketAccumulator) : null;
+    const statusSource = primary ?? newBucket();
     const status = deriveMoneyStatus({
-      recovered: bucket.recovered,
-      disputed: bucket.disputed,
-      adjustments: bucket.adjustments,
-      approved: bucket.approved,
-      claimed: bucket.claimed,
+      recovered: statusSource.recovered,
+      disputed: statusSource.disputed,
+      adjustments: statusSource.adjustments,
+      approved: statusSource.approved,
+      claimed: statusSource.claimed,
       hasDiscovered: row.claimItems.length > 0,
       hasSubmission,
     });
@@ -332,8 +355,9 @@ export async function getRecoveryMoneyView(
       title: row.title,
       status,
       statusLabel: MONEY_STATUS_LABEL[status],
-      currency,
-      bucket: finalizeBucket(currency, bucket),
+      currency: row.currency,
+      byCurrency: currencyKeys.map((key) => finalizeBucket(key, caseBuckets.get(key) as BucketAccumulator)),
+      primaryBucket: primary ? finalizeBucket(primaryKey as string, primary) : null,
       timeline: {
         discoveredAt: discoveredAt ? discoveredAt.toISOString() : null,
         submittedAt: submittedAt ? submittedAt.toISOString() : null,

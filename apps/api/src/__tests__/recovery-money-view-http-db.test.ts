@@ -250,9 +250,9 @@ describe('PC-05 — recovered money visibility', () => {
     await withServer(async (base) => {
       const cookie = await login(base, 'ops-pc05@example.com');
       const body = (await (await fetch(base + '/recovery-money', { headers: { cookie } })).json()) as {
-        cases: Array<{ bucket: { expected: string; recovered: string; disputed: string }; status: string }>;
+        cases: Array<{ primaryBucket: { expected: string; recovered: string; disputed: string }; status: string }>;
       };
-      const bucket = body.cases[0].bucket;
+      const bucket = body.cases[0].primaryBucket;
       expect(bucket.expected).toBe('30.0000');
       expect(bucket.recovered).toBe('40.0000'); // PARTIAL 计入；EXPECTED / VOID 不计
       expect(bucket.disputed).toBe('20.0000');
@@ -267,9 +267,9 @@ describe('PC-05 — recovered money visibility', () => {
     await withServer(async (base) => {
       const cookie = await login(base, 'ops-pc05@example.com');
       const body = (await (await fetch(base + '/recovery-money', { headers: { cookie } })).json()) as {
-        cases: Array<{ bucket: { recovered: string; adjustments: string; netRecovered: string; outstanding: string }; status: string }>;
+        cases: Array<{ primaryBucket: { recovered: string; adjustments: string; netRecovered: string; outstanding: string }; status: string }>;
       };
-      const bucket = body.cases[0].bucket;
+      const bucket = body.cases[0].primaryBucket;
       expect(bucket.recovered).toBe('100.0000');
       expect(bucket.adjustments).toBe('100.0000');
       expect(bucket.netRecovered).toBe('0.0000');
@@ -286,7 +286,7 @@ describe('PC-05 — recovered money visibility', () => {
       const cookie = await login(base, 'ops-pc05@example.com');
       const body = (await (await fetch(base + '/recovery-money', { headers: { cookie } })).json()) as {
         organization: { byCurrency: Array<{ currency: string; recovered: string }> };
-        cases: Array<{ currency: string; bucket: { recovered: string } }>;
+        cases: Array<{ currency: string; primaryBucket: { recovered: string } | null }>;
       };
       const byCurrency = new Map(body.organization.byCurrency.map((bucket) => [bucket.currency, bucket.recovered]));
       expect(byCurrency.get('USD')).toBe('50.0000');
@@ -315,6 +315,28 @@ describe('PC-05 — recovered money visibility', () => {
       expect(body.organization.byCurrency[0].feeCalculated).toBe('20.0000'); // VOID 账单排除
       expect(body.organization.byCurrency[0].feeCollected).toBe('0.0000');
       expect(body.feeNote).toContain('NOT_ENABLED');
+    });
+  });
+
+  it('跨币种污染回归：同一 case 的 USD / EUR 事实必须落在不同 bucket（MSG-20261003-87）', async () => {
+    const kase = await seedCase({ currency: 'USD', recoverable: '100.0000' });
+    await seedSettlement({ caseId: kase, amount: '50.0000', currency: 'USD', status: 'RECEIVED' });
+    await seedSettlement({ caseId: kase, amount: '70.0000', currency: 'EUR', status: 'RECEIVED' });
+    await withServer(async (base) => {
+      const cookie = await login(base, 'ops-pc05@example.com');
+      const body = (await (await fetch(base + '/recovery-money', { headers: { cookie } })).json()) as {
+        organization: { byCurrency: Array<{ currency: string; recovered: string }> };
+        cases: Array<{ currency: string; byCurrency: Array<{ currency: string; recovered: string }>; primaryBucket: { recovered: string } | null }>;
+      };
+      const orgMap = new Map(body.organization.byCurrency.map((bucket) => [bucket.currency, bucket.recovered]));
+      expect(orgMap.get('USD')).toBe('50.0000');
+      expect(orgMap.get('EUR')).toBe('70.0000');
+      const row = body.cases[0];
+      expect(row.currency).toBe('USD');
+      const caseMap = new Map(row.byCurrency.map((bucket) => [bucket.currency, bucket.recovered]));
+      expect(caseMap.get('USD')).toBe('50.0000');
+      expect(caseMap.get('EUR')).toBe('70.0000');
+      expect(row.primaryBucket?.recovered).toBe('50.0000');
     });
   });
 
