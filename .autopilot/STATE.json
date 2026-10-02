@@ -1,6 +1,6 @@
 {
   "gate": "B2-FIX R1",
-  "head": "8ebc320",
+  "head": "9a6efb0",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
   "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
@@ -10,7 +10,7 @@
   "production_enabled": false,
   "external_write_enabled": false,
   "updated_at": "2026-10-02T05:30:34.490Z",
-  "previous_head": "691635e",
+  "previous_head": "8ebc320",
   "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "8ebc320",
@@ -49,10 +49,10 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-02T05:40:51.133Z",
+  "last_tick_at": "2026-10-02T05:50:51.249Z",
   "state": "IMPLEMENT",
-  "last_action": "MSG-20261002-68 = REVISE 已归档（FULL_COPY_OK）：C2 = FINALIZATION，收口三条 Evidence write path + Settlement lineage",
-  "last_action_at": "2026-10-02T05:41:26.201Z",
+  "last_action": "CHANGE A 路径分类完成：三条 Evidence 写路径均可达且缺 account 上下文，需接线 + PLATFORM_ACCOUNT_REQUIRED；pod-upload 首次接线因夹具断言 NULL 行为而回退，待连同夹具一起提交",
+  "last_action_at": "2026-10-02T06:38:51.123Z",
   "next_action": "C2 FINAL 送审（Issue #2 + ChatGPT 唤醒 + 裁决归档）；通过后进入 TRACK B，并在 C2 收口后执行 PHASE X1 Architecture Audit。",
   "current_head": "691635e",
   "reviewed_head": "07b7009",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-02T05:35:52.189Z",
-    "gapMs": 298945,
-    "stale": false,
-    "checkedAt": "2026-10-02T05:40:51.133Z"
+    "previousTickAt": "2026-10-02T05:40:51.133Z",
+    "gapMs": 600117,
+    "stale": true,
+    "checkedAt": "2026-10-02T05:50:51.249Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -250,7 +250,7 @@
     "integration_boundary_review": "AUTHORIZED_TO_PLAN（先提交设计/实施计划，不直接开放真实 transport）"
   },
   "r36_submission_comment": "5927087320",
-  "stale_recovered_at": "2026-10-02T05:21:52.726Z",
+  "stale_recovered_at": "2026-10-02T05:50:51.249Z",
   "engineering_regression_policy": {
     "source": "HOST PRODUCT DIRECTION 2026-10-01",
     "doc": "docs/releases/ENGINEERING-REGRESSION-POLICY.md",
@@ -3587,5 +3587,15 @@
     "change_a": "pod-upload / closure-service / recovery-outcome 的 Evidence account provenance 必须 server-derived；无法唯一确定 account → PLATFORM_ACCOUNT_REQUIRED fail-closed；不得写 NULL 新事实；若路径不可达则用证据证明 + 回归",
     "change_b": "Settlement 端到端 account lineage 证明（不强制加字段）",
     "next": "TRACK C2 FINAL-2 / Closure Checkpoint → C2 CLOSED → PHASE X1 Architecture Audit → TRACK B"
+  },
+  "c2_change_a_classification": {
+    "checked_at": "2026-10-02T06:38:51.122Z",
+    "paths": {
+      "prisma-ports.evidence.create": "REACHABLE + ALREADY WIRED (connection -> platformAccountId)",
+      "pod-upload.evidence.create": "REACHABLE + NO ACCOUNT CONTEXT (registerPodEvidence has no connection arg; FileAsset.connectionId always NULL per pod-evidence.test.ts:81 assertion) -> must add explicit account scope + PLATFORM_ACCOUNT_REQUIRED fail-closed; fixtures must be updated (they currently assert the now-forbidden NULL behaviour)",
+      "closure-service.evidence.create x2 + recovery-outcome.evidence.create": "REACHABLE + NO ACCOUNT CONTEXT (manual closure/confirmation paths) -> derive from case -> ClaimItem.accountId when unambiguous; otherwise PLATFORM_ACCOUNT_REQUIRED"
+    },
+    "conclusion": "all three are reachable production write paths, so the unreachable exception does not apply; wiring touches the Evidence creation API contract (explicitly authorised by MSG-68 CHANGE A) and requires fixture updates",
+    "next": "implement wiring + fail-closed + fixtures, then CHANGE B settlement lineage test"
   }
 }
