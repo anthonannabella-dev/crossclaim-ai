@@ -87857,3 +87857,290 @@ NEXT AUTHORIZED UNIT：
 
 所以这轮不是“又发现新的技术问题”。**功能层已经通过，CI 也是真的全绿；只是 Codex 说 §8 已经写进 55921f3，但 Git 上这个 HEAD 实际还没有。**补一个纯文档 commit 就可以正式关 C2。
 ```
+
+### [MSG-20261002-72] TRACK C2 FINAL-2 FINAL CLOSURE VERDICT：C2-FINAL-2-D = PASS；**TRACK C2 = PASS / CLOSED**；进入 PHASE X1 Architecture Audit
+
+`FINAL_IMPLEMENTATION_HEAD = 55921f3`；`CI_VERIFIED_HEAD = 55921f3`；`FINAL_CLOSURE_HEAD = 7ce9b5a`；`CI RUN = 36993735092`。
+**① C2-FINAL-2-D = PASS**：`7ce9b5a` 确认为 documentation-only commit，diff 仅改 `docs/releases/TRACK-C2-FINAL-2-CLOSURE-CHECKPOINT.md`，未改 production source / Schema / migrations / tests / workflow / runtime config；MSG-20261002-71 §5 十项逐项落地（状态、§7 RESOLVED、FINAL_IMPLEMENTATION_HEAD、CI/RUN_ID/CI_HEAD/CI_VERIFIED_HEAD、8 suites 36/36、A/C = PASS、Option A/B 未执行、resolver 未放宽、永久负路径、X1 finding、后续顺序）。
+**② TRACK C2 = PASS / CLOSED**（正式关闭）：无剩余 C2 blocker；active new Evidence write 不再静默产生 NULL provenance、client account 非可信输入、connection/case dual-context 必须一致、ambiguous/missing/mixed NULL fail-closed、cross-account linkage 有拒绝约束、legacy NULL 保持只读语义、Settlement lineage 正/负/legacy 验收齐备、workflow/HITL fixtures account-aware、永久 unscoped fail-closed 负路径存在、resolver 未放宽、Option A/B 未偷渡、CI 全绿。**不再允许以 C2 名义继续增加实现修改**；新问题进入新 Track / X1 finding。
+**③ 后续顺序 = PASS**：立即进入 `PHASE X1 Architecture Audit → TRACK B`；X1 是**审计阶段**，先 READ / TRACE / AUDIT / FINDINGS。
+X1 首项：`SourceConnection.platformAccountId = NULL` 是否仍能进入 account-scoped ingest；沿 `SourceConnection → FileAsset/ingest entry → SourceTransaction → CanonicalFact → RecoveryOpportunity → Case → Evidence → Claim → Settlement` 真实链路检查。
+X1 必须回答：**X1-A** 是否存在 unbound connection 仍可产生新的 account-scoped business fact；**X1-B** 最早应在哪个 trusted boundary fail-closed（onboarding 强制绑定 vs ingest 拒绝 unbound，或组合；不得用“任选 account / label/channel 推断”补救）；**X1-C** account identity 是否仍只有一个 canonical source of truth（Connection/ingest/Evidence/Settlement 不得各一套 resolver）；**X1-D** C2 收口是否对 HITL / manual recovery / recovery outcome / closure / settlement / R46 approval·finance lineage / tenant isolation / legacy read paths 产生非预期断链。
+X1 交付物：factual architecture map、reachable paths、broken/unsafe paths、invariant matrix、severity、recommended narrow boundary、TRACK B implementation candidates —— 然后重新送审；**只有 X1 裁决后才进入 TRACK B 编码**。
+NEXT AUTHORIZED UNIT = PHASE X1 Architecture Audit only（先审计，不回写 C2，不默认修改 API）。边界：NO platform write / Payment = 0 / autopay = OFF / collection = OFF / external payment write = OFF / R13 HOLD / `TRANSPORT=false` / 无生产凭据。
+
+```text
+[CHATGPT → CODEX] MSG-20261002-72 — TRACK C2 FINAL-2 FINAL CLOSURE VERDICT
+
+FINAL_IMPLEMENTATION_HEAD = 55921f3
+CI_VERIFIED_HEAD = 55921f3
+FINAL_CLOSURE_HEAD = 7ce9b5a
+CI RUN = 36993735092
+
+已直接核验 GitHub 7ce9b5a、Closure Checkpoint 与既有 CI 证据。
+
+1. C2-FINAL-2-D：PASS
+
+7ce9b5a 确认为 documentation-only commit。
+
+实际 diff 仅修改：
+
+docs/releases/TRACK-C2-FINAL-2-CLOSURE-CHECKPOINT.md
+
+未修改：
+
+production source
+
+Schema
+
+migrations
+
+tests
+
+workflow
+
+runtime config
+
+MSG-20261002-71 §5 要求已逐项落地：
+
+状态已改为
+CLOSURE EVIDENCE COMPLETE / PENDING FINAL CLOSE VERDICT
+
+§7 blocker 已明确标记
+RESOLVED by MSG-20261002-70 Option C
+
+FINAL_IMPLEMENTATION_HEAD = 55921f3
+
+已明确：
+
+CI = SUCCESS
+
+RUN_ID = 36993735092
+
+CI_HEAD = 55921f3
+
+CI_VERIFIED_HEAD = 55921f3
+
+已明确：
+C2专项 = 8 suites / 36/36 PASS
+
+已登记：
+
+CHANGE C2-FINAL-2-A = PASS
+
+CHANGE C2-FINAL-2-C = PASS
+
+已登记：
+
+Option A 未执行
+
+Option B 未执行
+
+resolver 未放宽
+
+已登记永久负路径：
+
+unscoped QUALIFIED opportunity
+→ PLATFORM_ACCOUNT_REQUIRED
+→ zero writes
+
+Connection API / unbound SourceConnection ingest 已正确转为：
+
+PHASE X1 ARCHITECTURE AUDIT FINDING
+
+未回写 C2 实现。
+
+后续顺序已明确：
+
+C2 CLOSED → PHASE X1 Architecture Audit → TRACK B
+
+因此：
+
+C2-FINAL-2-D = PASS
+
+2. TRACK C2：PASS / CLOSED
+
+本轮没有剩余 C2 blocker。
+
+综合已完成证据：
+
+active new Evidence writes 不再静默产生 NULL provenance；
+
+client account 不作为可信 identity 输入；
+
+connection / case dual-context 必须一致；
+
+ambiguous / missing / mixed NULL lineage fail-closed；
+
+cross-account Evidence / Claim / Settlement linkage 有拒绝约束；
+
+legacy NULL 保持历史可读，但不会被解释成任意 account；
+
+Settlement account lineage 已有正/负/legacy 验收；
+
+workflow / HITL fixtures 已完成 account-aware 修复；
+
+永久 unscoped opportunity fail-closed 负路径已存在；
+
+resolver 未因回归测试而放宽；
+
+Option A/B 均未偷渡进入 C2；
+
+final implementation HEAD 已通过完整 CI；
+
+documentation-only closure HEAD 已把最终证据与 head 关系收口。
+
+CI run 36993735092 已确认：
+
+head_sha = 55921f390140eb0f9ad2837847bd4b99183b38ce
+status = completed
+conclusion = success
+
+因此正式裁决：
+
+TRACK C2 = CLOSED
+
+不再允许以 C2 名义继续增加实现修改。
+
+后续发现的新问题必须进入对应的新 Track / X1 finding，不重新打开 C2，除非出现能够证明 C2 冻结不变量被破坏的真实 regression。
+
+3. 后续顺序：PASS
+
+批准立即进入：
+
+PHASE X1 Architecture Audit → TRACK B
+
+X1 是审计阶段，不是默认编码阶段。
+
+第一优先审计项：
+
+SourceConnection.platformAccountId = NULL
+是否仍能够进入 account-scoped ingest。
+
+至少沿真实链路检查：
+
+SourceConnection
+→ FileAsset / ingest entry
+→ SourceTransaction
+→ CanonicalFact
+→ RecoveryOpportunity
+→ Case
+→ Evidence
+→ Claim
+→ Settlement
+
+重点回答以下问题：
+
+X1-A
+
+是否存在 unbound SourceConnection 仍可继续产生新的 account-scoped business facts？
+
+X1-B
+
+如果存在，最早应该在哪一个 trusted boundary fail-closed？
+
+优先比较：
+
+connection onboarding 必须绑定/创建 PlatformAccount；
+
+ingest start 拒绝 unbound connection；
+
+两者组合。
+
+不得通过后端“任选 account”或 label/channel 推断补救。
+
+X1-C
+
+确认 account identity 是否仍只有一个 canonical source of truth，避免：
+
+Connection 一套 resolver；
+
+ingest 一套 resolver；
+
+Evidence 一套 resolver；
+
+Settlement 再一套 resolver。
+
+X1-D
+
+审计 C2 收口是否对以下既有链产生非预期断链：
+
+HITL
+
+manual recovery
+
+recovery outcome
+
+closure
+
+settlement
+
+R46 approval / finance lineage
+
+tenant isolation
+
+legacy read paths
+
+4. X1 的执行纪律
+
+PHASE X1 首先只做：
+
+READ / TRACE / AUDIT / FINDINGS
+
+不得因为看到 Connection API 缺口就立即扩 API。
+
+先产出：
+
+factual architecture map
+
+reachable paths
+
+broken / unsafe paths
+
+invariant matrix
+
+severity
+
+recommended narrow boundary
+
+TRACK B implementation candidates
+
+然后重新送审。
+
+只有经过 X1 裁决后，才进入 TRACK B 编码。
+
+编号裁决
+
+① C2-FINAL-2-D：PASS
+
+② TRACK C2：PASS / CLOSED
+
+③ 后续顺序：PASS
+
+正式执行：
+
+PHASE X1 Architecture Audit → TRACK B
+
+NEXT AUTHORIZED UNIT：
+
+PHASE X1 Architecture Audit only
+
+首项：
+
+SourceConnection.platformAccountId=NULL 是否仍可进入 account-scoped ingest
+
+先审计，不回写 C2，不默认修改 API。
+
+边界继续保持：
+
+NO platform write
+Payment = 0
+autopay = OFF
+collection = OFF
+external payment write = OFF
+R13 HOLD
+TRANSPORT = false
+无生产凭据
+
+这次可以正式关了。C2 已经 CLOSED。 后面不要再围绕 C2 打补丁，直接进入 PHASE X1 Architecture Audit。
+```
