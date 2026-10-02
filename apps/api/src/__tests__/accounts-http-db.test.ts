@@ -73,7 +73,7 @@ async function seedAccount(organizationId: string, platform: 'AMAZON' | 'UPS', e
 async function seedConnection(input: {
   organizationId?: string;
   platformAccountId: string | null;
-  status: 'ACTIVE' | 'PAUSED' | 'NEEDS_AUTH' | 'ERROR';
+  status: 'ACTIVE' | 'PAUSED' | 'NEEDS_AUTH' | 'ERROR' | 'REVOKED';
   label: string;
   channel?: 'AMAZON_OTHER' | 'UPS';
   lastError?: string | null;
@@ -207,6 +207,53 @@ describe('PC-06 — account management projection', () => {
       // 已绑定连接不可重绑（binding immutable）
       const bound = body.platforms[0].accounts[0].connections.find((connection) => connection.label === 'bound-conn');
       expect(bound?.rebind).toEqual({ available: false, reason: 'ALREADY_BOUND_IMMUTABLE' });
+    });
+  });
+
+  it('CHANGE A：账户维度导航只对真实支持 account filter 的入口声明可执行（不得伪造）', async () => {
+    const account = await seedAccount(ORG, 'AMAZON', 'AMZ-NAV', 'Amazon Nav');
+    await seedConnection({ platformAccountId: account, status: 'ACTIVE', label: 'nav-conn' });
+    await withServer(async (base) => {
+      const cookie = await login(base, 'admin-pc06@example.com');
+      const body = (await (await fetch(base + '/accounts', { headers: { cookie } })).json()) as {
+        platforms: Array<{ accounts: Array<{ id: string; navigation: Record<string, { available: boolean; entry: string; reason: string }> }> }>;
+      };
+      const nav = body.platforms[0].accounts[0].navigation;
+      // /opportunities 真实支持 accountId 过滤（PC-02）→ executable
+      expect(nav.opportunities.available).toBe(true);
+      expect(nav.opportunities.entry).toBe('/opportunities?accountId=' + account);
+      expect(nav.opportunities.reason).toBe('SUPPORTED_ACCOUNT_FILTER');
+      // /money、/cases、/connections 当前没有 accountId 过滤 → 只给 guidance，不伪造
+      expect(nav.recoveryMoney.available).toBe(false);
+      expect(nav.recoveryMoney.reason).toBe('NO_ACCOUNT_FILTER');
+      expect(nav.cases.reason).toBe('NO_ACCOUNT_FILTER');
+      expect(nav.connections.reason).toBe('NO_ACCOUNT_FILTER');
+    });
+  });
+
+  it('CHANGE B：reconnect / rebind 能力由服务端按事实推导（前端不得猜）', async () => {
+    const account = await seedAccount(ORG, 'AMAZON', 'AMZ-ACT', 'Amazon Act');
+    await seedConnection({ platformAccountId: account, status: 'ACTIVE', label: 'active-conn' });
+    await seedConnection({ platformAccountId: account, status: 'NEEDS_AUTH', label: 'needs-auth-conn' });
+    await seedConnection({ platformAccountId: account, status: 'REVOKED', label: 'revoked-conn' });
+    await seedConnection({ platformAccountId: null, status: 'NEEDS_AUTH', label: 'legacy-conn' });
+    await withServer(async (base) => {
+      const cookie = await login(base, 'admin-pc06@example.com');
+      const body = (await (await fetch(base + '/accounts', { headers: { cookie } })).json()) as {
+        platforms: Array<{ accounts: Array<{ connections: Array<{ label: string; actions: { reconnect: { available: boolean; reason: string }; rebind: { available: boolean; reason: string } } }> }> }>;
+        unboundLegacyConnections: Array<{ label: string; actions: { reconnect: { available: boolean }; rebind: { available: boolean; reason: string } } }>;
+      };
+      const connections = new Map(
+        body.platforms[0].accounts[0].connections.map((connection) => [connection.label, connection]),
+      );
+      expect(connections.get('active-conn')?.actions.reconnect.available).toBe(false);
+      expect(connections.get('needs-auth-conn')?.actions.reconnect).toEqual({ available: true, reason: 'CONNECTION_REQUIRES_REAUTH', entry: '/connections' });
+      expect(connections.get('revoked-conn')?.actions.reconnect.available).toBe(true);
+      // 已绑定连接 rebind 不可用（binding immutable）
+      expect(connections.get('active-conn')?.actions.rebind).toEqual({ available: false, reason: 'ALREADY_BOUND_IMMUTABLE', entry: '/connections' });
+      // legacy unbound 的 rebind 可用；reconnect 也可用（NEEDS_AUTH）
+      expect(body.unboundLegacyConnections[0].actions.rebind).toEqual({ available: true, reason: 'LEGACY_UNBOUND_EXPLICIT_REBIND', entry: '/connections' });
+      expect(body.unboundLegacyConnections[0].actions.reconnect.available).toBe(true);
     });
   });
 

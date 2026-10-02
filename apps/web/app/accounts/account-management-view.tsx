@@ -13,6 +13,10 @@ interface Connection {
   lastErrorAt: string | null;
   accountState: 'BOUND_ACTIVE' | 'BOUND_INACTIVE' | 'UNBOUND_LEGACY';
   safeHealthNote: string | null;
+  actions: {
+    reconnect: { available: boolean; reason: string; entry: string };
+    rebind: { available: boolean; reason: string; entry: string };
+  };
   rebind: { available: boolean; reason: string };
 }
 
@@ -26,6 +30,7 @@ interface Account {
   createdAt: string;
   connections: Connection[];
   activeConnectionCount: number;
+  navigation: Record<string, { available: boolean; entry: string; reason: string }>;
 }
 
 interface Response {
@@ -101,6 +106,19 @@ export default function AccountManagementView() {
                   identity {account.identityVersion} · 状态 {account.status} · 创建 {fmt(account.createdAt)} · 活跃连接{' '}
                   {account.activeConnectionCount}/{account.connections.length}
                 </div>
+                <div className="mt-1 text-[11px] text-slate-600">
+                  下游入口：
+                  {account.navigation.opportunities.available ? (
+                    <a className="text-blue-700 underline" href={account.navigation.opportunities.entry}>
+                      该账户的机会
+                    </a>
+                  ) : null}
+                  {!account.navigation.recoveryMoney.available ? (
+                    <span className="text-slate-500">
+                      　金额视图暂不支持按账户过滤（{account.navigation.recoveryMoney.reason}）
+                    </span>
+                  ) : null}
+                </div>
                 {account.connections.length === 0 ? (
                   <div className="mt-1 text-amber-700">该账户尚无连接（transport 层未建立）。</div>
                 ) : (
@@ -126,6 +144,11 @@ export default function AccountManagementView() {
                           <td className="py-1">{fmt(connection.lastSyncAt)}</td>
                           <td className="py-1">{connection.safeHealthNote ?? '—'}</td>
                           <td className="py-1">
+                            {connection.actions.reconnect.available ? (
+                              <a className="mr-1 text-blue-700 underline" href={connection.actions.reconnect.entry}>
+                                重新连接
+                              </a>
+                            ) : null}
                             {connection.rebind.available ? (
                               <a className="text-blue-700 underline" href={data.onboarding.explicitRebindEntry}>
                                 显式重绑

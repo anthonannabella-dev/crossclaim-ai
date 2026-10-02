@@ -22,6 +22,35 @@ import { assertPermission } from './permissions';
 
 export type ConnectionAccountState = 'BOUND_ACTIVE' | 'BOUND_INACTIVE' | 'UNBOUND_LEGACY';
 
+/**
+ * PC-06 CHANGE B（MSG-20261003-90）：连接的客户动作能力面，**一律 server-derived**，
+ * 前端不得自行猜测（例如不能仅凭 status 文本决定展示重连按钮）。
+ */
+export interface ConnectionActionCapability {
+  available: boolean;
+  reason: string;
+  entry: string;
+}
+
+export interface ManagedConnectionActions {
+  reconnect: ConnectionActionCapability;
+  rebind: ConnectionActionCapability;
+}
+
+/** PC-06 CHANGE A：账户维度的下游业务入口；只有真实支持 account filter 的入口才 executable。 */
+export interface AccountNavigationEntry {
+  available: boolean;
+  entry: string;
+  reason: string;
+}
+
+export interface ManagedAccountNavigation {
+  opportunities: AccountNavigationEntry;
+  recoveryMoney: AccountNavigationEntry;
+  cases: AccountNavigationEntry;
+  connections: AccountNavigationEntry;
+}
+
 export interface ManagedConnectionView {
   id: string;
   label: string;
@@ -34,6 +63,8 @@ export interface ManagedConnectionView {
   accountState: ConnectionAccountState;
   /** 安全摘要：只说明「最近一次同步失败」，绝不返回原始错误文本。 */
   safeHealthNote: string | null;
+  /** 统一动作能力面（CHANGE B）；`rebind` 字段保留为兼容别名。 */
+  actions: ManagedConnectionActions;
   rebind: { available: boolean; reason: string };
 }
 
@@ -47,6 +78,8 @@ export interface ManagedAccountView {
   createdAt: string;
   connections: ManagedConnectionView[];
   activeConnectionCount: number;
+  /** 账户维度下游入口（CHANGE A）。 */
+  navigation: ManagedAccountNavigation;
 }
 
 export interface AccountManagementView {
@@ -117,6 +150,39 @@ export async function getAccountManagementView(
     },
   });
 
+  /** CHANGE B：由服务端按事实推导 reconnect / rebind 能力（前端不得猜）。 */
+  const connectionActions = (input: { status: string; state: ConnectionAccountState }): ManagedConnectionActions => {
+    const reconnectAvailable =
+      input.status === 'NEEDS_AUTH' || input.status === 'ERROR' || input.status === 'REVOKED';
+    const rebindAvailable = input.state === 'UNBOUND_LEGACY';
+    return {
+      reconnect: reconnectAvailable
+        ? { available: true, reason: 'CONNECTION_REQUIRES_REAUTH', entry: '/connections' }
+        : { available: false, reason: 'NO_REAUTH_REQUIRED', entry: '/connections' },
+      rebind: rebindAvailable
+        ? { available: true, reason: 'LEGACY_UNBOUND_EXPLICIT_REBIND', entry: '/connections' }
+        : { available: false, reason: 'ALREADY_BOUND_IMMUTABLE', entry: '/connections' },
+    };
+  };
+
+  /**
+   * CHANGE A：账户维度导航。
+   * 只有**真实支持** account filter 的入口才 `available: true`：
+   *   - /opportunities 支持 accountId 过滤（PC-02）→ executable
+   *   - /money（recovery-money）当前只有 caseId 过滤 → 不得伪造 account 入口
+   *   - /cases、/connections 列表当前无 accountId 过滤 → 同样只给 guidance
+   */
+  const accountNavigation = (accountId: string): ManagedAccountNavigation => ({
+    opportunities: { available: true, entry: '/opportunities?accountId=' + accountId, reason: 'SUPPORTED_ACCOUNT_FILTER' },
+    recoveryMoney: {
+      available: false,
+      entry: '/money',
+      reason: 'NO_ACCOUNT_FILTER',
+    },
+    cases: { available: false, entry: '/cases', reason: 'NO_ACCOUNT_FILTER' },
+    connections: { available: false, entry: '/connections', reason: 'NO_ACCOUNT_FILTER' },
+  });
+
   const toView = (connection: (typeof connections)[number]): ManagedConnectionView => {
     const state = connectionState(connection);
     return {
@@ -130,6 +196,7 @@ export async function getAccountManagementView(
       lastErrorAt: connection.lastErrorAt ? connection.lastErrorAt.toISOString() : null,
       accountState: state,
       safeHealthNote: connection.lastErrorAt ? '最近一次同步失败（详细信息仅内部可见）。' : null,
+      actions: connectionActions({ status: connection.status, state }),
       rebind:
         state === 'UNBOUND_LEGACY'
           ? { available: true, reason: 'LEGACY_UNBOUND_EXPLICIT_REBIND' }
@@ -163,6 +230,7 @@ export async function getAccountManagementView(
       createdAt: account.createdAt.toISOString(),
       connections: accountConnections,
       activeConnectionCount: accountConnections.filter((item) => item.status === 'ACTIVE').length,
+      navigation: accountNavigation(account.id),
     };
     const list = platformGroups.get(account.platform) ?? [];
     list.push(view);
