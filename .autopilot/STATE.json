@@ -1,16 +1,16 @@
 {
   "gate": "B2-FIX R1",
-  "head": "5c15df3",
+  "head": "aa6ee6e",
   "status": "RECONCILED",
-  "current_task": "Carrier Queue #4 — TRACKING READ ADAPTER：CarrierTrackingReadPort + normalized CarrierTrackingSnapshot（UPS/FedEx provider adapter 分离）+ 状态/事件归一化（确定性排序 + 去重）+ 失败原因分类 + tenant/account lineage 归属；**read-only**（无 mutation / claim / pickup / refund，TRANSPORT=false）。",
+  "current_task": "CARRIER QUEUE #5 — INVOICE + POD READ PLANE（MSG-20261003-109 ⑪–㉖ 授权）",
   "next_task": "PC-12A 实施 → 本地测试 + tsc api/web + API contract + full CI → PC-12A CHECKPOINT 送审。",
   "send_head": "07b7009",
   "decision_head": "07b7009",
   "last_chatgpt_message": "MSG-20261003-102",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-02T22:46:16.553Z",
-  "previous_head": "b020ac0",
+  "updated_at": "2026-10-02T22:50:09.151Z",
+  "previous_head": "5c15df3",
   "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "9a2592a",
@@ -49,11 +49,11 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-02T22:33:04.950Z",
+  "last_tick_at": "2026-10-02T22:47:07.314Z",
   "state": "IMPLEMENT",
-  "last_action": "SCHEDULER_STALE_RECOVERED（gap=15min）→ 本轮已恢复执行",
+  "last_action": "SCHEDULER_STALE_RECOVERED（gap=13min）→ 本轮已恢复执行",
   "last_action_at": "2026-10-02T09:01:54.693Z",
-  "next_action": "Carrier Queue #4 送审（Issue #2 comment + ChatGPT 唤醒 + 裁决归档：FULL_COPY_OK）；通过后按 VERDICT 进入下一内部单元（Carrier Queue #5 或架构方指定；SAFE_CONTINUATION_QUEUE 的 PHASE B1 仍排队）。",
+  "next_action": "Carrier Queue #5 送审（Issue #2 comment + ChatGPT 唤醒 + 裁决归档：FULL_COPY_OK）；通过后按 VERDICT 进入 Queue #6（SLA Evidence Assembly，待架构方裁定）。",
   "current_head": "b55f13b",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-02T22:32:20.604Z",
-    "gapMs": 44347,
+    "previousTickAt": "2026-10-02T22:46:21.074Z",
+    "gapMs": 46241,
     "stale": false,
-    "checkedAt": "2026-10-02T22:33:04.950Z"
+    "checkedAt": "2026-10-02T22:47:07.314Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -250,7 +250,7 @@
     "integration_boundary_review": "AUTHORIZED_TO_PLAN（先提交设计/实施计划，不直接开放真实 transport）"
   },
   "r36_submission_comment": "5927087320",
-  "stale_recovered_at": "2026-10-02T22:32:20.604Z",
+  "stale_recovered_at": "2026-10-02T22:46:21.074Z",
   "engineering_regression_policy": {
     "source": "HOST PRODUCT DIRECTION 2026-10-01",
     "doc": "docs/releases/ENGINEERING-REGRESSION-POLICY.md",
@@ -3729,11 +3729,13 @@
     "queue_impact": "NONE_ON_CURRENT_UNIT —— 当前 Carrier Queue #3 送审中；本指令排队到 SAFE_CONTINUATION_QUEUE，当前单元收口后自动进入 PHASE B1",
     "boundary": "NO platform write · Payment = 0 · autopay = OFF · collection = OFF · external payment write = OFF · R13 HOLD · TRANSPORT=false · 无生产凭据"
   },
-  "carrier_queue_4_status": "READY_FOR_REVIEW（MSG-20261003-107 ⑲–㉞ 已实现；Wait ChatGPT verdict）",
+  "carrier_queue_4_status": "PASS / CLOSED（MSG-20261003-109 ④；FINAL_IMPLEMENTATION_HEAD df191a3 / CI 37073303640 / CHECKPOINT_DOC_HEAD 9a2592a）",
   "carrier_queue_4_boundary": "READ-ONLY：禁止 modify shipment / reroute / intercept / claim / pickup / refund；TRANSPORT=false · platformWriteEnabled=false · productionCredentials=ABSENT；provider 返回值必须反绑请求 account/tracking（不一致一律 reject，不得覆盖）",
   "carrier_queue_4_implementation_head": "df191a3",
   "carrier_queue_4_ci_result": "SUCCESS",
   "carrier_queue_4_ci_run": "37073303640",
   "carrier_queue_4_checkpoint_doc_head": "9a2592a",
-  "carrier_queue_4_audit_comment_id": "5962656767"
+  "carrier_queue_4_audit_comment_id": "5962656767",
+  "carrier_queue_5_status": "AUTHORIZED → IMPLEMENTED（MSG-20261003-109 ⑪–㉖；invoice + POD read plane；HOLD_EXTERNAL 不变）",
+  "carrier_queue_5_boundary": "READ-ONLY：不计算赔付资格 / 不提交 claim / 不执行外写；TRANSPORT=false · platformWriteEnabled=false · productionCredentials=ABSENT"
 }

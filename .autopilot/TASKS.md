@@ -2,7 +2,8 @@
 
 - 裁决：MSG-20261003-105 ⑤⑭ —— PC-12A = PASS/CLOSED；正式授权 **CARRIER QUEUE #3**；PC-12B / Carrier 生产凭据继续 HOLD_EXTERNAL。
 - [x] Carrier Queue #3：CARRIER QUEUE #3 = **PASS / CLOSED**（MSG-20261003-107 ④；implementation dc0edf6 / CI 37069842384 / checkpoint b020ac0）
-- [ ] Carrier Queue #4 — TRACKING READ ADAPTER：CarrierTrackingReadPort + normalized CarrierTrackingSnapshot（UPS/FedEx provider adapter 分离）+ 状态/事件归一化（确定性排序 + 去重）+ 失败原因分类 + tenant/account lineage 归属；**read-only**（无 mutation / claim / pickup / refund，TRANSPORT=false）。
+- [x] Carrier Queue #4：CARRIER QUEUE #4 = **PASS / CLOSED**（MSG-20261003-109 ④；implementation df191a3 / CI 37073303640 / checkpoint 9a2592a）
+- [ ] Carrier Queue #5 — INVOICE + POD READ PLANE：CarrierInvoiceReadPort + CarrierPODReadPort（verified account lineage、request/response 双向绑定、十进制金额、charge kind 归一化 + raw code 保留、POD 掩码与隐私、safe rawReference）；**read-only**，不做 SLA/退款资格推导。CarrierTrackingReadPort + normalized CarrierTrackingSnapshot（UPS/FedEx provider adapter 分离）+ 状态/事件归一化（确定性排序 + 去重）+ 失败原因分类 + tenant/account lineage 归属；**read-only**（无 mutation / claim / pickup / refund，TRANSPORT=false）。
 - [x] （已完成）Carrier Queue #3 原始任务描述：UPS / FedEx auth contract（authKind / endpoint 抽象 / token expiry / refresh / 只读 scope 意图，分别声明）+ CarrierAccountDiscoveryPort（server-derived identity、0/1/多账号分支、幂等、tenant lineage）+ carrier readiness 投影；20 项回归；**不调用真实 UPS/FedEx API、不写生产凭据、不开启 TRANSPORT / claim submission**。
 - 边界：NO platform write · Payment = 0 · autopay = OFF · collection = OFF · external payment write = OFF · R13 HOLD · TRANSPORT=false · 无生产凭据。
 - HOLD_EXTERNAL（真实接入闸门）：UPS / FedEx developer credentials · callback / config registration · 真实 seller / carrier 账户授权 · sandbox / production provider 调用。
