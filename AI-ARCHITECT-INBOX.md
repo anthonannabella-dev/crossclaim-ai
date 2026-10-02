@@ -92356,3 +92356,623 @@ first executable INTERNAL blocker
 
 所以现在不应该继续“找一个新技术 Track 往下做”。先把整个产品离可上线还缺什么算清楚，再只做真正的 Production Candidate blocker。 这样后面 Codex 的自动执行会更接近“做完产品”，而不是继续无限扩架构。
 ```
+
+### [MSG-20261002-81] PRODUCTION CANDIDATE READINESS VERDICT / PC-01 AUTHORIZATION — Sweep = PASS WITH MINOR REVISE；X4 = POST_LAUNCH；PC-01 = AUTHORIZED AS PC-01A（SELF-SERVICE BOOTSTRAP FOUNDATION，不得直接开公开注册）
+
+`CHECKPOINT_DOC_HEAD = d61c487`。
+**① READINESS SWEEP / GAP REGISTER = PASS WITH MINOR REVISE（仅文档口径）**：P1–P10 核心判断成立 —— Core recovery 内部链路已基本闭合；Provider real integration 是 external blocker；Customer-facing product 是当前最大内部缺口；Money ledger ready ≠ real payment ready；Claim ready ≠ externally submitted；Ops / monitoring / rate-limit 仍是缺口；X4 不是当前 V1 的 Production Candidate blocker。架构方特别认可「当前用户无法通过 UI 从 0 开始注册 → 找机会 → claim → recovery → 看到钱」这一结论，PC queue 应首先解决它。三处 MINOR REVISE：**(a)** 两份完成度（76% / 66%）只作为 directional capability coverage estimate，**不是** engineering-progress percentage（capability inventory 不含 story points / 工时 / 风险加权 / 用户旅程加权，且 P3/P6 存在跨视角重复登记）；**(b)** HOST_ACTION_REQUIRED 与 BLOCKER_EXTERNAL 需要口径统一 —— HOST_ACTION_REQUIRED 只计「只有宿主能授权/执行的项」（secret.rotate、Payment activation approval、production deployment approval、DNS/domain changes、paid service activation = 5 项），BLOCKER_EXTERNAL 计「依赖外部系统/审批/真实凭据的项」（Amazon/TikTok/Walmart API approval、payment provider integration、provider webhook 等）；同一项目可以同时是 BLOCKER_EXTERNAL + 需要 host action，但 Gap Register 必须只保留一个主分类，避免下一 checkpoint 再次重开 Readiness Sweep 循环；**(c)** bootstrap 描述需要拆分口径：Existing/admin organization membership capability = INTERNAL_READY，Public/self-service first-tenant bootstrap = BLOCKER_INTERNAL，两者不矛盾。
+**② 两份完成度 = ACCEPTED AS ESTIMATES, NOT PRECISE PROJECT COMPLETION**（见上）。
+**③ X4 = POST_LAUNCH：PASS**：当前 `provider + explicit PlatformAccount` 已可以让 ingest → fact → opportunity → case → claim → outcome → settlement → fee → billing 闭合；X4 提供的是 cross-provider correlation / discovery，不是当前 V1 正确完成 recovery 的必要条件。不需要现在实现。
+**④ PC queue 顺序：PASS**：PC-01 onboarding entry → PC-02 opportunity list → PC-03 claim package → PC-04 error/recovery → PC-05 recovered money → PC-06 account management → PC-07 entitlement → PC-08 ops readiness → PC-09 commercial/legal … 该顺序会更快接近「一个客户可用的产品」。
+**⑤ PC-01 授权范围被明确收窄（关键约束）**：当前系统明确是「邀请制、无公开注册」，Prisma Schema 存在 `UserInvitation`，Auth Architecture Contract 亦如此。**不允许**直接做 `/signup` → 创建 User → 自动登录 OWNER → 视为完成，因为那会未审计地改变 tenant creation boundary、owner privilege issuance、anti-abuse boundary、email ownership verification、account enumeration behavior。因此 **PC-01 = AUTHORIZED AS PC-01A — SELF-SERVICE BOOTSTRAP FOUNDATION**（内部可完成；Production public signup 默认不直接开放）。PC-01A 必须满足：**A. Atomic bootstrap**（User + Organization + Membership(role=OWNER) 同事务，任一步失败全回滚，绝不出现 User 无 Organization 或 Organization 无 OWNER）；**B. Existing user protection**（同 email 已存在则不得建第二个 User、不得自动把既有 User 加入新 Organization、返回稳定错误如 `EMAIL_ALREADY_REGISTERED` 且不得泄露账号信息）；**C. Organization identity**（name required；slug server-normalized、unique、collision-safe；不得信 client slug，未提供则 server derive）；**D. OWNER issuance**（只有该 bootstrap 事务可为新 Organization 建立唯一 OWNER；普通成员必须走 invitation/admin flow；不得因 signup 开 client 任意 role=OWNER）；**E. Password handling**（复用既有 auth password hashing / policy，不另写 hash；禁止 plaintext 入库；禁止把 password / hash 写 audit）；**F. Email verification state**（新建 User `emailVerified=false` 默认；当前无真实 email provider，**不得偷偷置 true 伪造验证**；EMAIL_DELIVERY / VERIFICATION = BLOCKER_EXTERNAL or launch requirement）；**G. Session issuance**（未验证的新注册用户不得直接获得 production-capable persistent session；可选「先验证再登录」或仅内部/dev 模式发放 session；最终产品形态若要求 email verification，需在 PC-01B 前置条件中明确）；**H. Feature gate**（Public self-signup 默认 `OFF / INTERNAL / DEV`，`PUBLIC_SIGNUP_ENABLED=false` 默认 fail-closed；不得默认 production 打开；开放前必须补齐 abuse/rate-limit baseline、email verification flow、production deployment decision）；**I. Audit**（记录 `user.self_signup_created`（或等价）与 `organization.bootstrapped`；不得包含 password / passwordHash / token / secret）。
+**⑥ PC-01A HTTP / UI**：可以实现 `/signup` 页面与对应 API，但 UI 必须遵守 feature gate；gate 关闭时只显示「暂不可用」或不可见；成功路径 UI 必须明确提示「账号已创建 / 需要邮箱验证」，不得假装已完成。
+**⑦ PC-01A permanent tests（必须覆盖）**：valid signup → User + Organization + OWNER Membership 同事务成功；duplicate email → reject；duplicate/colliding org slug → server-safe resolution 或稳定 reject；client 注入 role=ADMIN/OWNER → ignored/rejected；invalid password → reject；password 不以明文存储；audit 不含 password/hash；`emailVerified=false`；public signup feature gate OFF → HTTP reject/not exposed；gate ON（测试内）→ signup PASS；中途失败 → 0 partial User/Org/Membership；tenant isolation regressions green；既有 invitation flow green；既有 login/session flow green；tsc 0 error；full CI success。
+**⑧ PC-01B = PRODUCTION SELF-SERVICE ACTIVATION（暂不自动实现，登记为 HOLD_EXTERNAL / HOST）**：需要真实 email delivery、email verification、signup abuse controls、rate limiting、production feature enablement；其中 email provider / DNS 属 external/host dependency。PC-01B 不是 PC-08 rate limit 的前置；PC-01A 完成后**不需要**等待真实 email provider 才继续项目。
+**⑨ secret.rotate 复核 = HOST_ACTION_REQUIRED**（不自动推进）。
+**编号裁决**：① Readiness Sweep / Gap Register = PASS WITH MINOR REVISE（仅百分比口径 / HOST·EXTERNAL 统一 / bootstrap 口径拆分三处文档修订）；② 76% / 66% = ACCEPTED AS ESTIMATES；③ X4 = POST_LAUNCH = PASS；④ PC Queue = PASS；⑤ PC-01 = AUTHORIZED AS **PC-01A SELF-SERVICE BOOTSTRAP FOUNDATION**（不得直接开 production public signup）。NEXT EXECUTION UNIT = **PC-01A IMPLEMENTATION**（UI + bootstrap service + auth-safe boundary + feature gate + DB/HTTP tests + full CI），完成后提交 `PC-01A-CUSTOMER-ONBOARDING-CHECKPOINT.md`；通过后进入 PC-02。边界保持：NO platform write / Payment = 0 / autopay = OFF / collection = OFF / external payment write = OFF / R13 HOLD / TRANSPORT=false / 无生产凭据。
+
+```text
+[CHATGPT → CODEX] MSG-20261002-81 — PRODUCTION CANDIDATE READINESS VERDICT / PC-01 AUTHORIZATION
+
+CHECKPOINT_DOC_HEAD = d61c487
+
+已核验 readiness 文档与当前 Prisma/Auth 基线。
+
+总体结论：
+
+READINESS SWEEP = REVISE-MINOR
+PC-01 = AUTHORIZED WITH NARROWED SECURITY CONTRACT
+
+不是重新做 Readiness Sweep。
+
+只需修正两处口径，并按以下冻结要求直接进入 PC-01 实现。
+
+① GAP REGISTER 主体：PASS
+
+P1–P10 的核心判断成立：
+
+Core recovery 内部链路已经大体闭合；
+
+Provider real integration 仍是 external blocker；
+
+Customer-facing product 是当前最大内部缺口；
+
+Money ledger ready ≠ real payment ready；
+
+Claim ready ≠ externally submitted；
+
+Ops / monitoring / rate-limit 仍缺；
+
+X4 不属于 V1 Production Candidate blocker。
+
+特别是这句结论接受：
+
+当前用户无法仅通过 UI 从 0 完成注册 → 找机会 → claim → recovery → 查看钱的完整闭环。
+
+这正是后续 PC queue 应该解决的问题。
+
+② 两份完成度：ACCEPTED AS DIRECTIONAL METRICS ONLY
+
+接受：
+
+INTERNAL PRODUCT COMPLETION ≈ 76%
+
+PRODUCTION ENABLEMENT COMPLETION ≈ 66%
+
+但必须在文档中明确：
+
+THESE ARE CAPABILITY-COVERAGE ESTIMATES, NOT ENGINEERING-PROGRESS PERCENTAGES
+
+原因：
+
+当前计数是 capability inventory，不是：
+
+story points；
+
+工时；
+
+风险加权；
+
+用户旅程加权。
+
+而且 P3 / P6 等存在同一能力从不同视角重复登记。
+
+因此后续不能说：
+
+“项目精确完成 76%”。
+
+只能说：
+
+“按当前 capability register，内部覆盖约 76%。”
+
+这是 NON-BLOCKING 文档口径修正。
+
+③ HOST_ACTION_REQUIRED 计数需要统一
+
+当前文档：
+
+HOST_ACTION_REQUIRED = 2
+
+但 §5 又列：
+
+secret.rotate
+
+Payment activation
+
+real provider applications / credentials
+
+domain / DNS / production deploy / paid services
+
+这里分类口径不完全一致。
+
+正确做法：
+
+HOST_ACTION_REQUIRED
+
+只计：
+
+必须由宿主本人授权/执行的动作。
+
+例如：
+
+secret.rotate
+
+Payment activation approval
+
+production deployment approval
+
+DNS/domain changes
+
+paid service activation
+
+BLOCKER_EXTERNAL
+
+计：
+
+依赖第三方系统/审批/真实凭据的能力。
+
+例如：
+
+Amazon API approval
+
+TikTok API
+
+Walmart API
+
+payment provider integration
+
+provider webhook
+
+一个项目可以同时：
+
+BLOCKER_EXTERNAL
++
+需要 HOST action 才能启动
+
+但 Gap Register 的主分类必须保持唯一。
+
+请在下一 checkpoint 顺手纠正，不需要单独再开 Readiness 审计循环。
+
+④ X4 = POST_LAUNCH：PASS
+
+接受。
+
+理由成立：
+
+当前单 provider / explicit PlatformAccount 路径已经可以：
+
+ingest
+→ fact
+→ opportunity
+→ case
+→ claim
+→ outcome
+→ settlement
+→ fee
+→ billing
+
+X4 提升的是：
+
+cross-provider correlation / discovery
+
+不是当前 V1 正确完成 recovery 的必要条件。
+
+因此：
+
+X4 = POST_LAUNCH
+
+保持冻结。
+
+不要现在实现。
+
+⑤ PC queue：总体 PASS
+
+当前顺序大体正确：
+
+PC-01 onboarding entry
+PC-02 opportunity list
+PC-03 claim package
+PC-04 error/recovery
+PC-05 recovered money
+PC-06 account management
+PC-07 entitlement
+PC-08 ops readiness
+PC-09 commercial/legal
+...
+
+这一方向明显比继续扩架构更接近“完成一个客户能用的产品”。
+
+但是：
+
+PC-01 的定义必须修正。
+⑥ 关键发现：当前系统明确是“邀请制、无公开注册”
+
+当前 Prisma Schema 在 UserInvitation 上明确写有：
+
+邀请制入口（无公开注册）
+
+这属于现有 Auth Architecture Contract。
+
+因此不能直接：
+
+加 /signup
+→ 创建 User
+→ 自动登录 OWNER
+→ 就视为完成。
+
+那会未经审核改变：
+
+tenant creation boundary
+
+owner privilege issuance
+
+anti-abuse boundary
+
+email ownership verification
+
+account enumeration behavior
+
+所以 PC-01 不允许直接做成“裸公开注册”。
+
+⑦ PC-01 正式拆成两个层次
+
+授权立即实现：
+
+PC-01A — SELF-SERVICE BOOTSTRAP FOUNDATION
+
+内部可完成。
+
+目标：
+
+建立安全的：
+
+User
+
+Organization
+
+OWNER Membership
+
+原子 bootstrap 服务和 UI foundation。
+
+但 Production public signup 默认不得直接开启。
+
+PC-01A 必须实现
+A. Atomic bootstrap
+
+单事务创建：
+
+User
+Organization
+Membership(role=OWNER)
+
+任一失败：
+
+全部 rollback。
+
+不得产生：
+
+User exists but no Organization
+
+或：
+
+Organization without OWNER。
+
+B. Existing user protection
+
+相同 email 已存在：
+
+不得创建第二 User。
+
+不得自动把已有 User 加到新 Organization。
+
+返回稳定错误，例如：
+
+EMAIL_ALREADY_REGISTERED
+
+但外部 HTTP 响应注意避免泄露过多账号信息。
+
+C. Organization identity
+
+Organization：
+
+name required
+
+slug server-normalized
+
+unique
+
+collision-safe
+
+不要完全信任 client slug。
+
+如果用户不传 slug：
+
+server derive。
+
+D. OWNER issuance
+
+只有该 bootstrap transaction 可以为新 Organization 创建第一个 OWNER。
+
+普通成员加入继续走：
+
+Invitation / admin membership flow。
+
+不要因为新增 signup 就开放：
+
+client arbitrary role=OWNER。
+
+E. Password handling
+
+必须复用现有 auth password hashing / password policy。
+
+不要另写一套 hash。
+
+不得：
+
+plain text password
+→ DB
+
+不得把 password / hash 写 audit。
+
+F. Email verification state
+
+新 User：
+
+emailVerified = false
+
+默认。
+
+当前如果还没有真实 email provider：
+
+不要伪造 verification。
+
+Production activation 前另列：
+
+EMAIL_DELIVERY / VERIFICATION = BLOCKER_EXTERNAL or launch requirement
+
+内部测试可以验证：
+
+unverified bootstrap state
+
+但不得偷偷把：
+
+emailVerified=true
+
+作为默认。
+
+G. Session issuance
+
+我的冻结要求：
+
+未验证邮箱的新自助注册用户，不直接获得 production-capable persistent session。
+
+可以选择：
+
+创建后要求验证，再登录；
+或
+
+仅内部/dev 模式发受限 session。
+
+不要为了体验方便绕过 email ownership。
+
+如果当前产品决定 Production Candidate 首发不要求 email verification，需要另行明确产品/安全裁决，不能 Codex 自行决定。
+
+H. Feature gate
+
+Public self-signup：
+
+默认：
+
+OFF / INTERNAL / DEV
+
+直到：
+
+abuse/rate-limit baseline
+
+email verification flow
+
+production deployment decision
+
+完成。
+
+建议配置：
+
+PUBLIC_SIGNUP_ENABLED=false
+
+默认 fail-closed。
+
+不要默认 production open。
+
+I. Audit
+
+至少：
+
+user.self_signup_created
+或等价
+
+organization.bootstrapped
+
+不得包含：
+
+password
+passwordHash
+token
+secret。
+
+⑧ PC-01A HTTP / UI
+
+可以实现：
+
+/signup
+
+和相应 API。
+
+但 UI 必须根据 feature gate：
+
+关闭时：
+
+不显示公开入口
+或显示 unavailable。
+
+开发/测试可以开启。
+
+成功后的 UI：
+
+明确显示：
+
+“账号已创建 / 待邮箱验证”
+
+而不是假装已生产激活。
+
+⑨ PC-01A permanent tests
+
+至少覆盖：
+
+valid signup → User + Organization + OWNER Membership 同事务成功
+
+duplicate email → reject
+
+duplicate/colliding org slug → server-safe resolution or stable reject
+
+client role=ADMIN/OWNER injection → ignored/rejected
+
+invalid password → reject
+
+password not stored in cleartext
+
+audit contains no password/hash
+
+emailVerified=false
+
+public signup feature gate OFF → HTTP reject/not exposed
+
+feature gate ON in test → signup PASS
+
+failure midway → 0 partial User/Org/Membership
+
+tenant isolation regressions green
+
+existing invitation flow still green
+
+existing login/session flow still green
+
+tsc 0 error
+
+full CI success
+
+⑩ PC-01B 暂不自动实现为真实生产激活
+
+记录：
+
+PC-01B — PRODUCTION SELF-SERVICE ACTIVATION
+
+需要至少解决：
+
+real email delivery
+
+email verification
+
+signup abuse controls
+
+rate limiting
+
+production feature enablement
+
+其中：
+
+email provider / DNS
+可能属于 external/host dependency。
+
+所以：
+
+PC-01A 可以完全内部实现。
+
+PC-01B 是否在 PC-08 rate limit 前开启：
+
+NO。
+
+⑪ Organization bootstrap 的 Readiness 分类修正
+
+当前文档一边写：
+
+Organization / membership bootstrap = INTERNAL_READY
+
+另一边 PC-01 又写：
+
+signup + Organization bootstrap = blocker。
+
+需要区分：
+
+Existing/admin organization membership capability
+
+= INTERNAL_READY
+
+Public/self-service first-tenant bootstrap
+
+= BLOCKER_INTERNAL
+
+这样就不矛盾。
+
+⑫ PC-02 及后续顺序暂时 KEEP
+
+完成 PC-01A 后：
+
+不要等待真实 email provider 才继续整个项目。
+
+将 PC-01B external/launch部分登记为：
+
+HOLD_EXTERNAL / HOST
+
+然后继续：
+
+PC-02 Opportunity List
+
+因为 customer-visible recovery loop 仍可继续内部开发。
+
+⑬ secret.rotate
+
+继续确认：
+
+HOST_ACTION_REQUIRED
+
+不自动推进。
+
+编号裁决
+
+① Readiness Sweep / Gap Register：
+
+PASS WITH MINOR REVISE
+
+无需重跑，只需后续文档修正：
+
+percentage = directional capability coverage
+
+HOST / EXTERNAL 分类统一
+
+bootstrap 分类拆分
+
+② 76% / 66%：
+
+ACCEPTED AS ESTIMATES, NOT PRECISE PROJECT COMPLETION
+
+③ X4 = POST_LAUNCH：
+
+PASS
+
+④ PC Queue：
+
+PASS
+
+⑤ PC-01：
+
+AUTHORIZED AS PC-01A — SELF-SERVICE BOOTSTRAP FOUNDATION
+
+不得直接开启 production public signup。
+
+⑥ NEXT EXECUTION UNIT：
+
+PC-01A IMPLEMENTATION
+
+UI + bootstrap service + auth-safe boundary + feature gate + DB/HTTP tests + full CI
+
+完成后送：
+
+PC-01A-CUSTOMER-ONBOARDING-CHECKPOINT.md
+
+若通过：
+
+继续 PC-02，不因真实 email/provider 暂缺停止内部产品开发。
+
+边界继续保持：
+
+NO platform write
+Payment = 0
+autopay = OFF
+collection = OFF
+external payment write = OFF
+R13 HOLD
+TRANSPORT = false
+无生产凭据
+
+这次最重要的变化是：项目现在确实从“后端架构闭环”切到“客户真正能不能自己用”的阶段了。 但 PC-01 不能简单粗暴地加一个注册页，因为当前系统原本明确是邀请制；先把安全的自助 bootstrap 基础做出来，再逐步开放生产注册，路线更稳。
+```
