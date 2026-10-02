@@ -1,6 +1,6 @@
 {
   "gate": "B2-FIX R1",
-  "head": "4d5380f",
+  "head": "63879ce",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
   "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
@@ -9,8 +9,8 @@
   "last_chatgpt_message": "MSG-20261002-65",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-02T02:59:17.303Z",
-  "previous_head": "56abd47",
+  "updated_at": "2026-10-02T03:06:44.011Z",
+  "previous_head": "4d5380f",
   "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "56abd47",
@@ -49,10 +49,10 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-02T02:47:51.510Z",
+  "last_tick_at": "2026-10-02T02:59:51.556Z",
   "state": "IMPLEMENT",
-  "last_action": "TRACK C2 行为基线交付（7/7）+ TRACK S 提交状态投影；全量 187 files / 1846 tests PASS（无 Schema 变更）",
-  "last_action_at": "2026-10-02T02:59:17.303Z",
+  "last_action": "交付 TRACK C2-A 实施计划（docs-only，待裁决）+ 记录 CI 63879ce success",
+  "last_action_at": "2026-10-02T03:06:44.011Z",
   "next_action": "TRACK C2 第一批：以 MSG-65 的 8 个问题与 12 项最低验收重述/补齐 multi-account 现状取证与 gap matrix，并据此提交是否需要 Schema Delta 的决策请求（不直接改 Schema）。",
   "current_head": "4d5380f",
   "reviewed_head": "07b7009",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-02T02:22:52.443Z",
-    "gapMs": 1499068,
+    "previousTickAt": "2026-10-02T02:47:51.510Z",
+    "gapMs": 720046,
     "stale": true,
-    "checkedAt": "2026-10-02T02:47:51.510Z"
+    "checkedAt": "2026-10-02T02:59:51.556Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -250,7 +250,7 @@
     "integration_boundary_review": "AUTHORIZED_TO_PLAN（先提交设计/实施计划，不直接开放真实 transport）"
   },
   "r36_submission_comment": "5927087320",
-  "stale_recovered_at": "2026-10-02T02:47:51.510Z",
+  "stale_recovered_at": "2026-10-02T02:59:51.556Z",
   "engineering_regression_policy": {
     "source": "HOST PRODUCT DIRECTION 2026-10-01",
     "doc": "docs/releases/ENGINEERING-REGRESSION-POLICY.md",
@@ -3381,6 +3381,14 @@
       "TRACK S：内部提交状态 vs 平台真实提交状态投影 A–E；platformWriteExecuted=false 恒显示 NOT SENT TO PLATFORM；providerCaseRef 才代表平台 ACK"
     ],
     "evidence": "c2-account-boundary-baseline 7/7 · 全量 187 files / 1846 tests PASS · tsc 0 error · 无 Schema 变更",
-    "remaining_for_c2": "account 维度下推（PlatformAccount / accountId / factKey 账户作用域）仍待架构方对 TRACK C2 Delta 的裁决；裁决前不实施"
+    "remaining_for_c2": "account 维度下推（PlatformAccount / accountId / factKey 账户作用域）仍待架构方对 TRACK C2 Delta 的裁决；裁决前不实施",
+    "ci": "HEAD 63879ce → CI success"
+  },
+  "c2_implementation_plan": {
+    "doc": "docs/releases/TRACK-C2-A-IMPLEMENTATION-PLAN.md",
+    "status": "PLAN_DRAFT（docs-only；未改 Schema）",
+    "scope": "M1 Platform 枚举 + PlatformAccount（org-scoped identity，含 identityVersion）· M2 SourceConnection.platformAccountId · M3 accountId 下推（Transaction/CanonicalFact/Opportunity/ClaimItem/Evidence）· M4 factKey 账户作用域 + partial unique 兼容 legacy · M5 回填与 fail-closed 重复审计 · M6 触发器/清单/架构契约同步",
+    "gate": "等待架构方对 TRACK C2 Delta 的裁决；裁决前不写 migration",
+    "acceptance": "MSG-65 的 12 项 C2 验收（其中 #3/#8/#9/#12 已由行为基线 7/7 提前覆盖）"
   }
 }
