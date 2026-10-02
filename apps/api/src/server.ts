@@ -40,6 +40,7 @@ import {
 } from './services/acquisition';
 import { createPrismaImportRepository } from './services/ingest';
 import {
+  bootstrapSelfServiceAccount,
   createPrismaAuthUserPort,
   createPrismaMembershipLookup,
   createPrismaSessionPort,
@@ -150,6 +151,12 @@ export function createServer(deps: ServerDeps): http.Server {
           audit,
           // C-0008-A 裁定：未知邮箱失败登录没有租户归属 → 只写结构化安全日志
           log: (event, fields) => log.warn(event, fields),
+          // PC-01A：默认关闭（PUBLIC_SIGNUP_ENABLED=false），fail-closed。
+          signupEnabled: process.env.PUBLIC_SIGNUP_ENABLED === 'true',
+          selfSignup: (input) =>
+            bootstrapSelfServiceAccount(prisma, input, {
+              enabled: process.env.PUBLIC_SIGNUP_ENABLED === 'true',
+            }),
         }
       : undefined);
 

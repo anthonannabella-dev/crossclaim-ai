@@ -12,6 +12,17 @@ export {
   type ScryptParams,
 } from './password';
 export {
+  PUBLIC_SIGNUP_FLAG,
+  SelfSignupError,
+  bootstrapSelfServiceAccount,
+  isPublicSignupEnabled,
+  normalizeEmail,
+  normalizeOrganizationSlug,
+  type SelfSignupErrorCode,
+  type SelfSignupInput,
+  type SelfSignupResult,
+} from './self-signup';
+export {
   DEFAULT_SESSION_POLICY,
   hashSessionToken,
   issueSession,
