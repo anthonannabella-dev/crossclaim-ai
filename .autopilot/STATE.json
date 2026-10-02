@@ -1,6 +1,6 @@
 {
   "gate": "B2-FIX R1",
-  "head": "4f0941b",
+  "head": "44f2760",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
   "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261002-59",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-01T22:26:48.440Z",
+  "updated_at": "2026-10-02T01:05:55.684Z",
   "previous_head": "a57b54e",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -20,8 +20,15 @@
   "ci_run": "36833002042",
   "ci_result": "SUCCESS",
   "fix_pr": "https://github.com/anthonannabella-dev/crossclaim-ai/pull/10",
-  "channel_status": "CHATGPT_WEB_AVAILABLE（in-app browser 可用；须逐 surface 判读：聚合 getState() 会被 Edge 扩展 surface 的 token 错误毒化）",
-  "pending_verdict_unarchived": null,
+  "channel_status": "CHATGPT_WEB_CHALLENGE_BLOCKED（in-app browser 审计标签与新建标签均停在 Cloudflare 「请稍候…」turnstile 挑战页，DOM 为空、composer 不存在；非 Codex auth token 故障。按 chatgpt-web-audit-bridge 处置：本轮通道 DOWN，禁止自动解 CAPTCHA/绕过人机校验 → 需宿主在右侧窗口完成人机校验或重新打开会话）",
+  "pending_verdict_unarchived": {
+    "message_id": "MSG-20261002-60",
+    "decision": "REVISE",
+    "reviewed_head": "a1aa42e",
+    "captured_at": "2026-10-02T00:26Z（DOM 导出 work/stage/msg-60-raw.txt）",
+    "reason": "抽取到的 MSG-60 正文缺少编号头（TYPE/MESSAGE/PREVIOUS/GATE/REVIEWED_HEAD/DECISION 行）且带 UI 折叠尾巴，无法满足逐字归档 + FULL_COPY_OK；CHANGE 内容已可直接执行，但归档必须等通道恢复后重新全文读取。",
+    "action": "通道恢复后：以 [CHATGPT → CODEX] lastIndexOf 抽取干净正文 → 归档 AI-ARCHITECT-INBOX.md → 跑 tools/verdict-diff/compare.mjs 取得 FULL_COPY_OK"
+  },
   "b2_status": "PASS（MSG-20260930-10 工程修复 + MSG-20260930-11 集成 PASS/MERGE APPROVED）",
   "protocol": "DUAL_CHANNEL_WAKEUP（GitHub = 正式总线 / ChatGPT Web = 仅唤醒）",
   "integration_pr": "https://github.com/anthonannabella-dev/crossclaim-ai/pull/11",
@@ -51,10 +58,10 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-02T00:57:20.016Z",
   "state": "IMPLEMENT",
-  "last_action": "SCHEDULER_STALE_RECOVERED（gap=10min）→ 本轮已恢复执行",
-  "last_action_at": "2026-10-01T22:26:48.440Z",
-  "next_action": "R46 S2：receipt snapshot + Settlement record/ingest 受保护写边界（可信到账证据 → server-side canonical snapshot → humanApproval → Settlement）。",
-  "current_head": "ab00cd9",
+  "last_action": "R46 S4 MSG-20261002-60 REVISE 执行：CHANGE A 服务端 policy 可信来源 DB 级验收 + CHANGE C 事务原子性注入验收完成；CHANGE B 真实 PostgreSQL 并发取证确认缺证（无唯一约束兜底）→ 提交 R46 S4-A Schema Delta 决策请求",
+  "last_action_at": "2026-10-02T01:05:55.684Z",
+  "next_action": "R46 S4-A：等待架构方对 membership 并发边界（反规范化 feeChainId + 部分唯一索引 / advisory lock 纵深防御）的 Schema Delta 裁决；裁决前不改 Schema、S4 保持 OPEN、不进入 S5。队列内其余安全工作：S4 Checkpoint 文档同步 MSG-60 三项 CHANGE 的验收映射。",
+  "current_head": "44f2760",
   "reviewed_head": "07b7009",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -2706,5 +2713,82 @@
     "fee_policy": "server-side rate/policyRef/feeBasisVersion；客户端不得自报",
     "approval_rule": "Settlement approval ≠ Fee approval；financial write 继续 Action Guard / humanApproval",
     "redline": "BillingInvoice=0 · Payment=0 · no autopay · R13 Payment Activation Gate HOLD"
+  },
+  "channel_failure_playbook": {
+    "reference": "C:/Users/os/.codex/skills/chatgpt-web-audit-bridge/references/channel-failures.md",
+    "observation": "listBrowsers() 正常返回 in-app browser(id=1) 与 Edge 扩展(id=2)；listTabs() 正常返回标签；标签 URL 正确但页面为 Cloudflare challenge（<title>请稍候…</title>，body innerText 长度 0，ProseMirror composer=0，iframe=0，meta refresh 360s）",
+    "classification": "CLOUDFLARE_HUMAN_VERIFICATION_INTERSTITIAL（既非 session token 缺失，也非标签回收）",
+    "human_ask": "请在右侧 in-app browser 的 ChatGPT 标签完成人机校验（或重新打开会话 https://chatgpt.com/c/6ab9ee1b-fd54-83ee-b363-b67750afcedd）；通道恢复后 Codex 会自动重发唤醒并三要素验证"
+  },
+  "r46_s4_verdict": {
+    "message_id": "MSG-20261002-60",
+    "decision": "REVISE",
+    "reviewed_head": "a1aa42e",
+    "s4_status": "OPEN（不得进入 S5）",
+    "changes": {
+      "A": "Fee policy 必须由服务端可信、版本化 policy source 解析；approval digest 绑定解析后的 server policy（仅拒绝 clientSuppliedRate/PolicyRef 不够）",
+      "B": "真实 PostgreSQL membership 并发证明：同一 Settlement + 同一 logical feeChain 两个独立事务最多一个成功 + 合法不同 fee-chain positive control",
+      "C": "same approval + distinct executions exactly-once；approval consumption / FeeCalculation / membership / success audit 任一失败全部 rollback"
+    },
+    "test_requirements": [
+      "伪造 policy.rate/basis/policyRef/feeBasisVersion 无法影响持久化结果",
+      "server policy 漂移使旧 approval 失效",
+      "same-settlement/same-chain race",
+      "合法 supersession positive control",
+      "same-approval race",
+      "完整事务 rollback"
+    ],
+    "redline": "BillingInvoice=0 · Payment=0 · RecoveryLedger 无变化 · 不触发 autopay · R13 Payment Activation HOLD",
+    "next": "收口上述项目并完成真实 PostgreSQL S4 suite + S2/S3 regression + tsc 后再提交 S4 Checkpoint"
+  },
+  "r46_s4_revise_progress": {
+    "change_a": {
+      "status": "CLOSED（待架构方复核）",
+      "implementation": [
+        "9c47b74（FeePolicySource：客户端只提交 policyRef/feeBasisVersion；basis/rate/fixedAmount/currency/policyDigest → CLIENT_POLICY_FIELDS_NOT_TRUSTED）",
+        "4f0941b（record-fee 只接受 policy 引用；approval digest 绑定 server policy + policyDigest；createFeeRecordDeps 装配 resolveFeePolicy）"
+      ],
+      "db_acceptance": "fee-record-db › 「伪造 policy 字段无法影响持久化结果」（费率恒为 server 0.15/USD；两次伪造提交零写入）+「server policy 漂移 → 旧 approval APPROVAL_REQUIRED 且零新增写入；未漂移 → APPROVAL_ALREADY_CONSUMED」"
+    },
+    "change_c": {
+      "status": "CLOSED（待架构方复核）",
+      "db_acceptance": "fee-record-db › same approval + 两个不同有效 execution 并发 → 恰好一次提交（loser APPROVAL_ALREADY_CONSUMED、无 raw P2002）+ it.each 四个注入点（approval consumption / FeeCalculation / membership / success audit）任一失败 → 事务整体回滚（零残留、Invoice=0、Payment=0、Ledger 不变）"
+    },
+    "change_b": {
+      "status": "BLOCKED_SCHEMA_DELTA_ADJUDICATION",
+      "evidence": "fee-record-db › 「同一 Settlement + 同一 feeChain 两个并发 membership」当前两项都插入成功（rows=2，期望 1）；触发器 cc_feecalculationsettlement_chain_unique 为先查后插，membership 行无 chain 身份列 → 无唯一约束兜底",
+      "marked_as": "it.fails（显式缺证标记：当前仍失败；唯一约束落地后会转为意外通过，强制把 it.fails 改回 it）",
+      "positive_control": "fee-record-db › 同一 Settlement 的合法不同 fee chain 不被阻断（2/2 允许）",
+      "decision_request": "docs/releases/R46-S4-A-MEMBERSHIP-CONCURRENCY-DECISION-REQUEST.md",
+      "note": "Schema Delta（幂等/事务/并发一致性边界 + 资金链路）→ 按规则必须先回架构方；裁决前不写 migration"
+    },
+    "suite": {
+      "fee_record_db": "14/14",
+      "fee_adjustment_db": "3/3",
+      "fee_compute": "6/6",
+      "fee_eligibility": "3/3",
+      "fee_policy_source": "2/2",
+      "settlement_record_db": "15/15",
+      "settlement_reversal_db": "10/10",
+      "settlement_receipt_snapshot": "12/12",
+      "action_guard": "32/32",
+      "tsc": "0 error"
+    }
+  },
+  "r46_s4a_decision_request": {
+    "doc": "docs/releases/R46-S4-A-MEMBERSHIP-CONCURRENCY-DECISION-REQUEST.md",
+    "status": "READY_FOR_REVIEW（GitHub 留档已发；ChatGPT 唤醒待通道恢复）",
+    "questions": [
+      "是否批准方案 A（Schema Delta：FeeCalculationSettlement.feeChainId + UNIQUE(org, feeChainId, settlementId) / (org, feeChainId, adjustmentId) 部分唯一索引 + 回填 + 触发器降级为补充）",
+      "是否同时批准方案 B（受保护写路径 pg_advisory_xact_lock 序列化）作为纵深防御",
+      "复核：全局 UNIQUE(org, settlementId) 仍禁止（会错误阻断合法 supersession / 新 fee chain）"
+    ],
+    "boundary": "NO Invoice mutation · NO Payment activation · NO autopay · NO platform write · TRANSPORT=false · NO production credentials；R13 Payment Activation Gate = HOLD"
+  },
+  "r46_s4_revise_submission": {
+    "comment_id": "5943658850",
+    "commented_at": "2026-10-02T01:05:56.939Z",
+    "reviewed_head": "44f2760",
+    "url": "https://github.com/anthonannabella-dev/crossclaim-ai/issues/2#issuecomment-5943658850"
   }
 }
