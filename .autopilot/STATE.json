@@ -6,12 +6,12 @@
   "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
   "send_head": "07b7009",
   "decision_head": "07b7009",
-  "last_chatgpt_message": "MSG-20261002-63",
+  "last_chatgpt_message": "MSG-20261002-64",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-02T01:50:59.162Z",
+  "updated_at": "2026-10-02T01:52:10.827Z",
   "previous_head": "b042754",
-  "architect_decision_pending": true,
+  "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "8bcd35c",
   "last_sent_at": "2026-10-02T01:51:00.497Z",
@@ -50,10 +50,10 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-02T01:43:46.348Z",
-  "state": "AWAITING_ADJUDICATION",
-  "last_action": "R46 S5 FINAL 提交：Invoice Linkage 最小 Schema Delta + canonical basis + billing.invoice_issue + 24 项验收 + 全量回归 330 PASS",
-  "last_action_at": "2026-10-02T01:50:59.162Z",
-  "next_action": "等待架构方对 R46 S5 FINAL 的裁决（是否批准 S5 CLOSED；Invoice Adjustment/Credit Note 是否留给独立 gate）。",
+  "state": "IMPLEMENT",
+  "last_action": "MSG-20261002-64 = PASS 已归档（FULL_COPY_OK）：R46 S5 CLOSED · Invoice Linkage Boundary 接受 · Credit Note/Adjustment 延后独立 gate",
+  "last_action_at": "2026-10-02T01:52:10.827Z",
+  "next_action": "R46 S5 已 CLOSED；等待架构方指定下一单元（Credit/Adjustment 独立 gate 设计，或 Gate 7 ② 队列的下一小批次）。Payment domain 继续关闭，R13 HOLD。",
   "current_head": "8bcd35c",
   "reviewed_head": "07b7009",
   "claim_submit_batch": {
@@ -3015,5 +3015,22 @@
     "commented_at": "2026-10-02T01:51:00.497Z",
     "reviewed_head": "8bcd35c",
     "url": "https://github.com/anthonannabella-dev/crossclaim-ai/issues/2#issuecomment-5944100119"
+  },
+  "r46_s5_final_verdict": {
+    "message_id": "MSG-20261002-64",
+    "decision": "PASS",
+    "reviewed_head": "8bcd35c",
+    "archival": "FULL_COPY_OK",
+    "archived_at": "2026-10-02T01:52:10.827Z",
+    "s5_status": "CLOSED",
+    "accepted": [
+      "basis identity 不可复用（UNIQUE(org, invoiceBasisDigest)，VOID 不释放）",
+      "INVOICE_BASIS_DUPLICATE_FOUND fail-closed duplicate audit",
+      "canonical invoice basis 服务端唯一构造（10 字段绑定）",
+      "billing.invoice_issue 独立 protected action + 锁后重建 + exact replay REUSED + 原子提交",
+      "24 项 TEST 全部接受"
+    ],
+    "deferred": "Credit Note / Invoice Adjustment 留给独立 gate；Payment domain 保持关闭",
+    "next_unit": "R46 S6（或产品队列下一单元）—— 待架构方指定；Payment Activation Gate 继续 HOLD"
   }
 }

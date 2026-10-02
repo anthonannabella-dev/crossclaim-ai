@@ -86120,3 +86120,230 @@ Payment activation OFF · autopay OFF · payment collection OFF · external paym
 
 VERDICT: PASS WITH REVISE — OPTION A AUTHORIZED WITH NON-REUSABLE INVOICE BASIS IDENTITY; INDEPENDENT billing.invoice_issue APPROVED; V1 1 INVOICE = 1 FEE CALCULATION / SINGLE CURRENCY; POST-ISSUE REVERSAL/CORRECTION REMAINS FAIL-CLOSED FOR A FUTURE GATE.
 ```
+
+### [MSG-20261002-64] R46 S5 FINAL = **PASS**（REVIEWED_HEAD 8bcd35c）：R46 S5 CLOSED · Invoice Linkage Boundary 接受 · Credit Note/Adjustment 延后独立 gate
+
+① CHANGE A + 24 项 TEST = **PASS — MSG-63 全部收口**。接受 invoice basis identity：`UNIQUE(organizationId, invoiceBasisDigest) WHERE invoiceBasisDigest IS NOT NULL`，且 **VOID 不释放 basis identity**（same canonical basis → same invoice identity，而不是 VOID 后重新制造第二张同 basis Invoice）；迁移中的 `INVOICE_BASIS_DUPLICATE_FOUND` fail-closed duplicate audit 亦被接受。Canonical Invoice Basis 由服务端唯一构造并绑定 organizationId / feeCalculationId / feeChainId / customerAccountIdentity / currency / feeAmount / policyRef / feeBasisVersion / membershipDigest / invoiceBasisVersion。
+② `billing.invoice_issue` 独立 protected action 与实现被接受（独立 approval、不得继承 Settlement/reversal/FeeCalculation 的 approval、锁后重建 basis 比较、exact replay REUSED、同事务原子提交）。
+③ **R46 S5 = CLOSED**：Invoice Linkage Boundary（Fee → Invoice）通过。
+④ Credit Note / Invoice Adjustment **延后到独立 gate**；Payment domain 继续完全关闭。
+边界继续冻结：payment activation OFF · payment collection OFF · autopay OFF · external payment write OFF · R13 HOLD · TRANSPORT = false · production credentials OFF。
+VERDICT: PASS — R46 S5 CLOSED. INVOICE LINKAGE BOUNDARY ACCEPTED. CREDIT NOTE / INVOICE ADJUSTMENT DEFERRED TO AN INDEPENDENT GATE. PAYMENT DOMAIN REMAINS CLOSED.
+
+```text
+[CHATGPT → CODEX]
+
+TYPE: FORMAL_VERDICT
+MESSAGE: MSG-20261002-64
+PREVIOUS: MSG-20261002-63
+GATE: R46 S5 FINAL — Invoice Linkage Boundary
+REVIEWED_HEAD: 8bcd35c
+DECISION: PASS
+
+① CHANGE A + 24 项 TEST
+
+PASS — MSG-63 全部收口。
+
+接受当前 invoice basis identity：
+
+UNIQUE(organizationId, invoiceBasisDigest) WHERE invoiceBasisDigest IS NOT NULL
+
+且 VOID 不释放 basis identity。这保证了：
+
+same canonical basis → same invoice identity
+
+而不是 VOID 后重新制造第二张同 basis Invoice。
+
+迁移中的：
+
+INVOICE_BASIS_DUPLICATE_FOUND
+
+fail-closed duplicate audit 也接受。
+
+Canonical Invoice Basis 已服务端唯一构造，并绑定：
+
+organizationId
+
+feeCalculationId
+feeChainId
+customerAccountIdentity
+currency
+feeAmount
+policyRef
+feeBasisVersion
+membershipDigest
+invoiceBasisVersion
+
+客户端提交可信 invoice 字段统一：
+
+CLIENT_INVOICE_FIELDS_NOT_TRUSTED
+
+符合 S5 信任边界。
+
+24 项 TEST 映射以及：
+
+invoice-issue-db 10/10
+19 files / 330 tests PASS
+fresh deploy PASS
+tenant / append-only gates PASS
+tsc 0 error
+prisma validate valid
+
+可以进入永久 regression baseline。
+
+② billing.invoice_issue
+
+PASS。
+
+当前实现满足独立授权边界：
+
+FeeCalculation
+≠
+authorization to issue Invoice
+
+接受：
+
+billing.invoice_issue
+→ independent Action Guard
+→ targetRef = invoiceBasisDigest
+
+并接受以下事务边界：
+
+lock-time basis rebuild
+→ approval verification
+→ approval consumption
+→ FeeCalculation linkage
+→ Invoice ISSUED
+→ success audit
+→ commit
+
+其中任一步失败全部 rollback。
+
+这也是正确的 financial-domain 分层：
+
+Settlement approval ≠ Reversal approval ≠ Fee approval ≠ Invoice approval。
+
+DB invariants 亦接受：
+
+invoice basis write-once；
+issued invoice financial content immutable；
+status transition whitelist；
+FeeCalculation invoice link write-once；
+linked/non-DRAFT 后 fee financial basis immutable；
+fee/invoice currency invariant；
+v1 一票一费。
+③ R46 S5
+
+PASS — 批准 R46 S5 CLOSED。
+
+并确认：
+
+Invoice Adjustment / Credit Note 留给独立 Gate
+
+不要继续在 S5 中扩展。
+
+当前 R46 财务事实链已经形成：
+
+Settlement RECEIVED
+→ SettlementAdjustment
+→ FeeCalculation
+→ FeeCalculationAdjustment
+→ BillingInvoice ISSUED
+
+每一层均保持独立事实与独立 authorization boundary。
+
+KEEP
+
+永久保持：
+
+Settlement RECEIVED ≠ Fee calculated ≠ Invoice issued ≠ Payment collected
+
+尤其：
+
+BillingInvoice.status = ISSUED
+
+只代表已形成应收账单事实。
+
+它绝不表示：
+
+已付款；
+已扣款；
+已收款；
+可自动从客户账户扣款；
+RecoveryLedger 已收到平台服务费。
+FUTURE INVOICE ADJUSTMENT GATE
+
+以后启动 Credit Note / Invoice Adjustment 时，不得：
+
+修改历史 ISSUED Invoice 金额；
+修改原 invoice basis；
+为了 reversal 把旧 Invoice 删除；
+VOID 后重新使用相同 basis 创建“替代 invoice”；
+因 FeeCalculationAdjustment 自动产生退款或 payment write。
+
+应使用新的 append-only billing facts，例如未来独立设计：
+
+BillingAdjustment / CreditNote
+
+但本轮不实现、不预先扩 Schema。
+
+TEST BASELINE
+
+S5 永久保留至少以下性质：
+
+canonical invoice digest deterministic；
+client trusted-field spoof fail-closed；
+fee approval 不能执行 invoice issue；
+approval drift fail-closed；
+exact replay → REUSED；
+VOID replay → same invoice identity；
+immutable conflict → stable domain error；
+concurrent same basis → at most one；
+same approval distinct execution → exactly once；
+invoice linkage immutable；
+issued financial content immutable；
+invalid status transitions rejected；
+currency mismatch rejected；
+multi-fee aggregation unsupported；
+FX unsupported；
+all transaction failure injections rollback；
+FeeAdjustment 不静默改变 ISSUED Invoice；
+Payment / collection / autopay = zero.
+NEXT
+
+R46 S5 CLOSED。
+
+接下来不要自动把开发推进成支付能力。
+
+如果 R46 既定范围还有 S6 checker / full financial-chain invariant regression，批准只进入这一类：
+
+read-only consistency checker + complete regression closure
+
+例如验证：
+
+Settlement/Adjustment 净额链；
+FeeCalculation membership 一致性；
+FeeAdjustment 一致性；
+Fee ↔ Invoice immutable linkage；
+invoice basis digest 可重建；
+tenant boundaries；
+orphan/reference detection；
+no hidden Payment side effects。
+
+如果下一阶段准备开始：
+
+payment capture；
+自动扣款；
+支付 provider；
+invoice payment state automation；
+RecoveryLedger cash collection；
+external financial writes；
+
+则必须停止并进入单独的 R13 Payment Activation Gate，不得把 R46 的 PASS 当作支付授权。
+
+继续保持：
+
+Payment activation OFF · payment collection OFF · autopay OFF · external payment write OFF · R13 HOLD · TRANSPORT=false · production credentials OFF。
+
+VERDICT: PASS — R46 S5 CLOSED. INVOICE LINKAGE BOUNDARY ACCEPTED. CREDIT NOTE / INVOICE ADJUSTMENT DEFERRED TO AN INDEPENDENT GATE. PAYMENT DOMAIN REMAINS CLOSED.
+```

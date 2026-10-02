@@ -1429,3 +1429,9 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - CHANGE A：唯一索引改为 UNIQUE(org, invoiceBasisDigest) WHERE invoiceBasisDigest IS NOT NULL（不得用 status <> VOID；VOID 不释放 basis identity）。
 - billing.invoice_issue 独立入口批准（targetRef = invoiceBasisDigest；不得继承任何上游 approval）。
 - 归档：AI-ARCHITECT-INBOX.md（逐字 ```text + FULL_COPY_OK）。
+
+## 2026-10-02 JST — MSG-20261002-64 = PASS（R46 S5 CLOSED）
+
+- S5 FINAL 通过：basis identity 不可复用（VOID 不释放）、canonical invoice basis、billing.invoice_issue 独立 approval、24 项 TEST 全部接受。
+- Credit Note / Invoice Adjustment 延后独立 gate；Payment domain 完全关闭；R13 HOLD。
+- 归档：AI-ARCHITECT-INBOX.md（逐字 ```text + FULL_COPY_OK）。
