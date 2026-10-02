@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261002-64",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-02T02:19:23.452Z",
+  "updated_at": "2026-10-02T02:19:44.941Z",
   "previous_head": "8bcd35c",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -3096,5 +3096,10 @@
     "boundary": "Payment activation OFF · autopay OFF · payment collection OFF · external payment write OFF · R13 HOLD · TRANSPORT=false · 无生产凭据；任何 Schema/对外/支付变更仍需架构方审计",
     "github_comment": "5944393226",
     "github_url": "https://github.com/anthonannabella-dev/crossclaim-ai/issues/2#issuecomment-5944393226"
+  },
+  "r46_s5_ci_incident": {
+    "detected": "run 36952877697 (HEAD 8bcd35c) FAILED — 既有 payment.capture / payment.replay 对抗性夹具在 ISSUED 发票上改 total，被新守卫 INVOICE_CONTENT_IMMUTABLE_AFTER_ISSUE 拒绝",
+    "resolution": "SELF_RESOLVE：夹具内临时停用 cc_billinginvoice_issue_guard 以模拟锁协议之外的直接 DB 写入者（显式注明，生产路径不受影响）+ 既有 billing.draft 用例 14 按 v1 一票一费/合法状态顺序更新",
+    "verification": "payment 两套件 35/35 · 全量 npm test 185 files / 1831 tests PASS · HEAD e5202d6 run 36954356275 success"
   }
 }
