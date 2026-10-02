@@ -646,3 +646,14 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - 范围：Settlement → verified reversal evidence → SettlementAdjustment(kind=REVERSAL)；v1 仅 full reversal。
 - 禁止：Fee 重算 / Invoice VOID / Payment·refund / autopay / 平台外写 / 生产支付。
 - 验收：原 Settlement 不变；等额同币种；重放 REUSED；第二个不同 reversal event fail-closed；跨租户拒绝；并发仅一个有效 full reversal；事务失败零残留；下游零副作用。
+
+### TRACK C — Growth / Programmatic SEO / Recovery Database（HOST DIRECTIVE 2026-10-02，长期约束）
+
+- 文档：`docs/releases/GROWTH-PROGRAMMATIC-SEO-RECOVERY-DATABASE-CONSTRAINT.md`；STATE.growth_architecture_directive。
+- 目标模型：Recovery Rule → 产品规则判断 → Audit/Checker → Calculator → Claim/Evidence Package → SEO Landing Page（**单源**，禁止内容站与产品两套数据）。
+- P1 核查结论：现有 `RuleSet` / `RuleVersion` / `RuleEvaluation` + `apps/web` i18n + fee/billing + Customs 定价契约**不阻碍**该模型；缺口为 typed rule contract、country/region、locale 内容层、SEO 元数据与索引策略、只读 checker/calculator 端点（均 P3 实施）。
+- frozen 命名：platform / category / recoveryType / country / region / title / slug / problemDescription / eligibility / requiredEvidence / calculationMethod / filingDeadline / submissionMethod / feeModel / supportedMode / ruleVersion / effectiveFrom / effectiveTo / sourceReferences / calculatorCapability / checkerCapability / ctaMode。
+- CTA 模型：A SUCCESS_FEE（平台/物流）；B PAID_CLAIM_PACKAGE（Customs，沿用既有定价契约）；两者都不触发外写/扣款。
+- 分阶段：P0 不影响主线（已满足）· P1 架构不阻碍（已完成）· P2 记录设计（已完成）· **P3 首批 20–30 高意图页（待核心引擎稳定，先提最小 Schema Delta）** · P4 100+（待转化验证）。
+- 明确不做：批量页面 / AI 博客 / 改事实模型 / 页面内复制规则 / 大型 CMS / 降低审计·安全·HITL·资金边界。
+- 队列影响：**NONE**（与 Gate 7 / R46 并行，不占用主线队列）。

@@ -1,6 +1,6 @@
 {
   "gate": "B2-FIX R1",
-  "head": "8bcd35c",
+  "head": "e5202d6",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
   "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
@@ -9,8 +9,8 @@
   "last_chatgpt_message": "MSG-20261002-64",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-02T01:52:10.827Z",
-  "previous_head": "b042754",
+  "updated_at": "2026-10-02T02:19:23.452Z",
+  "previous_head": "8bcd35c",
   "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "8bcd35c",
@@ -49,10 +49,10 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-02T01:43:46.348Z",
+  "last_tick_at": "2026-10-02T02:17:58.548Z",
   "state": "IMPLEMENT",
-  "last_action": "MSG-20261002-64 = PASS 已归档（FULL_COPY_OK）：R46 S5 CLOSED · Invoice Linkage Boundary 接受 · Credit Note/Adjustment 延后独立 gate",
-  "last_action_at": "2026-10-02T01:52:10.827Z",
+  "last_action": "登记 TRACK C —— Growth / Programmatic SEO / Recovery Database 长期约束（docs-only；P1 核查：现有架构不阻碍统一模型）",
+  "last_action_at": "2026-10-02T02:19:23.452Z",
   "next_action": "R46 S5 已 CLOSED；等待架构方指定下一单元（Credit/Adjustment 独立 gate 设计，或 Gate 7 ② 队列的下一小批次）。Payment domain 继续关闭，R13 HOLD。",
   "current_head": "8bcd35c",
   "reviewed_head": "07b7009",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-02T01:38:38.763Z",
-    "gapMs": 307586,
-    "stale": false,
-    "checkedAt": "2026-10-02T01:43:46.348Z"
+    "previousTickAt": "2026-10-02T01:43:46.348Z",
+    "gapMs": 2052200,
+    "stale": true,
+    "checkedAt": "2026-10-02T02:17:58.548Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -250,7 +250,7 @@
     "integration_boundary_review": "AUTHORIZED_TO_PLAN（先提交设计/实施计划，不直接开放真实 transport）"
   },
   "r36_submission_comment": "5927087320",
-  "stale_recovered_at": "2026-10-02T01:38:38.763Z",
+  "stale_recovered_at": "2026-10-02T02:17:58.548Z",
   "engineering_regression_policy": {
     "source": "HOST PRODUCT DIRECTION 2026-10-01",
     "doc": "docs/releases/ENGINEERING-REGRESSION-POLICY.md",
@@ -3032,5 +3032,67 @@
     ],
     "deferred": "Credit Note / Invoice Adjustment 留给独立 gate；Payment domain 保持关闭",
     "next_unit": "R46 S6（或产品队列下一单元）—— 待架构方指定；Payment Activation Gate 继续 HOLD"
+  },
+  "growth_architecture_directive": {
+    "directive": "HOST DIRECTIVE 2026-10-02（Growth Architecture / 高级版本）",
+    "contract_doc": "docs/releases/GROWTH-PROGRAMMATIC-SEO-RECOVERY-DATABASE-CONSTRAINT.md",
+    "registered_at": "2026-10-02T02:19:23.452Z",
+    "track": "TRACK C（与 TRACK A/B 并行；不打断 R46 → Full Regression）",
+    "queue_impact": "NONE",
+    "model": "Recovery Rule → 产品规则判断 → Audit/Checker → Calculator → Claim/Evidence Package → SEO Landing Page（单源）",
+    "target_routes": [
+      "/recover/{platform}/",
+      "/recover/{platform}/{recoveryType}"
+    ],
+    "platforms": [
+      "amazon",
+      "tiktok",
+      "walmart",
+      "shopify",
+      "stripe",
+      "paypal",
+      "ups",
+      "fedex",
+      "dhl",
+      "customs"
+    ],
+    "p1_assessment": "NOT_BLOCKING —— RuleSet/RuleVersion/RuleEvaluation + apps/web i18n + fee/billing + Customs 定价契约已构成单源基础；缺口：typed rule contract / country·region / locale 内容层 / SEO 元数据与索引策略 / 只读 checker·calculator 端点",
+    "reserved_fields": [
+      "platform",
+      "category",
+      "recoveryType",
+      "country",
+      "region",
+      "title",
+      "slug",
+      "problemDescription",
+      "eligibility",
+      "requiredEvidence",
+      "calculationMethod",
+      "filingDeadline",
+      "submissionMethod",
+      "feeModel",
+      "supportedMode",
+      "ruleVersion",
+      "effectiveFrom",
+      "effectiveTo",
+      "sourceReferences",
+      "calculatorCapability",
+      "checkerCapability",
+      "ctaMode"
+    ],
+    "cta_models": {
+      "A": "SUCCESS_FEE —— Free Audit → Recovery → 实际到账 → Success Fee（Amazon/TikTok/Walmart/Shopify/Stripe/PayPal/UPS/FedEx/DHL）",
+      "B": "PAID_CLAIM_PACKAGE —— Free Audit → Estimated Recoverable → Pay to Unlock → Claim-Ready Package（Customs；沿用既有定价契约；支付域仍关闭）"
+    },
+    "phases": {
+      "P0": "不影响当前主线（满足）",
+      "P1": "架构不阻碍（已完成核查）",
+      "P2": "记录设计（已完成）",
+      "P3": "首批 20–30 高意图页面（待核心引擎稳定；先提最小 Schema Delta：RuleVersion.country/region + RecoveryRuleContent + 索引策略 + 只读端点）",
+      "P4": "100+ 页面（待 Search → Checker → Case → Recovery 转化验证）"
+    },
+    "implementation_started": "NO",
+    "boundary": "Payment activation OFF · autopay OFF · payment collection OFF · external payment write OFF · R13 HOLD · TRANSPORT=false · 无生产凭据；任何 Schema/对外/支付变更仍需架构方审计"
   }
 }
