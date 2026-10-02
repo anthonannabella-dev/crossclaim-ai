@@ -134,6 +134,7 @@ export type CarrierTrackingFailureCode =
   | 'UNVERIFIED_ACCOUNT_LINEAGE'
   | 'CROSS_TENANT_ACCOUNT'
   | 'PROVIDER_ACCOUNT_MISMATCH'
+  | 'TRACKING_IDENTITY_MISMATCH'
   | 'RAW_PAYLOAD_INVALID'
   | 'RAW_PAYLOAD_UNSAFE'
   | CarrierProviderReadErrorCode;
@@ -224,6 +225,10 @@ function mapEventFor(
   raw: CarrierRawTrackingEvent,
 ): CarrierTrackingEvent | null {
   if (typeof raw !== 'object' || raw === null) return null;
+  // MSG-108 ㉑：event 内部字段同样 allowlist；额外字段（尤其 credential-like）fail-closed。
+  for (const key of Object.keys(raw as unknown as Record<string, unknown>)) {
+    if (!ALLOWED_RAW_EVENT_KEYS.has(key)) return null;
+  }
   const occurredAt = typeof raw.occurredAt === 'string' ? raw.occurredAt.trim() : '';
   const rawStatusCode = typeof raw.rawStatusCode === 'string' ? raw.rawStatusCode.trim() : '';
   if (occurredAt === '' || rawStatusCode === '') return null;
@@ -302,6 +307,7 @@ const ALLOWED_RAW_KEYS = new Set([
   'events',
   'rawReference',
 ]);
+const ALLOWED_RAW_EVENT_KEYS = new Set(['occurredAt', 'rawStatusCode', 'description', 'location', 'source']);
 const CREDENTIAL_MATERIAL_KEY = /(token|secret|password|passwd|apikey|api[-_]?key|client[-_]?secret|credential)/i;
 
 function scanKeys(source: unknown, allowed: Set<string>): CarrierTrackingFailureCode | null {
@@ -418,6 +424,13 @@ export async function readCarrierTracking(
     if (error instanceof CarrierProviderReadError) return { ok: false, reason: error.code };
     return { ok: false, reason: 'PROVIDER_ERROR' };
   }
+
+  if (typeof raw !== 'object' || raw === null) return { ok: false, reason: 'RAW_PAYLOAD_INVALID' };
+  // MSG-108 ⑰⑱⑲：provider 返回值必须反绑本次请求身份；不一致一律 reject，**不得**用请求值覆盖来掩盖。
+  const rawAccountId = typeof raw.externalAccountId === 'string' ? raw.externalAccountId.trim() : '';
+  if (rawAccountId !== externalAccountId) return { ok: false, reason: 'ACCOUNT_MISMATCH' };
+  const rawTrackingNumber = typeof raw.trackingNumber === 'string' ? raw.trackingNumber.trim() : '';
+  if (rawTrackingNumber !== trackingNumber) return { ok: false, reason: 'TRACKING_IDENTITY_MISMATCH' };
 
   const snapshot = normalizeCarrierTracking(adapter, raw, (deps.now ?? (() => new Date()))());
   if (!snapshot) return { ok: false, reason: 'RAW_PAYLOAD_INVALID' };

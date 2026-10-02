@@ -323,6 +323,54 @@ describe('CARRIER QUEUE #4 — failure taxonomy + boundaries', () => {
   });
 });
 
+describe('CARRIER QUEUE #4 FINAL — provider response identity binding', () => {
+  it('requested account A / raw account B → ACCOUNT_MISMATCH（无 snapshot，且不泄漏返回的 raw identity）', async () => {
+    const spy = spyPort(async () => ({ ...UPS_RAW, externalAccountId: 'UPS-ACCT-OTHER' }));
+    const outcome = await readCarrierTracking({ port: spy.port, accounts: upsRegistry(), now: () => NOW }, baseInput());
+    expect(outcome.ok).toBe(false);
+    expect(outcome.ok ? null : outcome.reason).toBe('ACCOUNT_MISMATCH');
+    const serialized = JSON.stringify(outcome);
+    expect(serialized).not.toContain('UPS-ACCT-OTHER');
+    expect(serialized).not.toContain('snapshot');
+  });
+
+  it('requested tracking A / raw tracking B → TRACKING_IDENTITY_MISMATCH（无 snapshot，且不泄漏返回单号）', async () => {
+    const spy = spyPort(async () => ({ ...UPS_RAW, trackingNumber: '1Z999AA10123456799' }));
+    const outcome = await readCarrierTracking({ port: spy.port, accounts: upsRegistry(), now: () => NOW }, baseInput());
+    expect(outcome.ok).toBe(false);
+    expect(outcome.ok ? null : outcome.reason).toBe('TRACKING_IDENTITY_MISMATCH');
+    expect(JSON.stringify(outcome)).not.toContain('1Z999AA10123456799');
+    expect(JSON.stringify(outcome)).not.toContain('snapshot');
+  });
+
+  it('不采用「用请求值覆盖 provider 返回值」的做法：返回账号不符时绝不返回 snapshot', async () => {
+    const spy = spyPort(async () => ({ ...UPS_RAW, externalAccountId: 'FEDEX-ACCT-X', provider: 'UPS' }));
+    const outcome = await readCarrierTracking({ port: spy.port, accounts: upsRegistry(), now: () => NOW }, baseInput());
+    expect(outcome.ok ? null : outcome.reason).toBe('ACCOUNT_MISMATCH');
+    expect(Object.prototype.hasOwnProperty.call(outcome, 'snapshot')).toBe(false);
+  });
+
+  it('正确 account + 正确 tracking → 既有成功路径不变', async () => {
+    const outcome = await readCarrierTracking({ port: UPS_PORT, accounts: upsRegistry(), now: () => NOW }, baseInput());
+    if (!outcome.ok) throw new Error('expected ok');
+    expect(outcome.snapshot.externalAccountId).toBe('UPS-ACCT-1');
+    expect(outcome.snapshot.trackingNumber).toBe(UPS_TRACKING);
+    expect(outcome.snapshot.shipmentStatus).toBe('DELIVERED');
+  });
+
+  it('㉑ event 内部额外字段（尤其 credential-like）fail-closed', async () => {
+    const adapter = resolveCarrierTrackingAdapter('UPS')!;
+    const tampered = {
+      ...UPS_RAW,
+      events: [{ ...UPS_RAW.events![0], accessToken: 'PRIVATE-EVENT-TOKEN' }],
+    } as unknown as CarrierRawTrackingRecord;
+    expect(normalizeCarrierTracking(adapter, tampered, NOW)).toBeNull();
+    const spy = spyPort(async () => tampered);
+    const outcome = await readCarrierTracking({ port: spy.port, accounts: upsRegistry() }, baseInput());
+    expect(outcome.ok ? null : outcome.reason).toBe('RAW_PAYLOAD_INVALID');
+    expect(JSON.stringify(outcome)).not.toContain('PRIVATE-EVENT-TOKEN');
+  });
+});
 afterEach(() => {
   vi.unstubAllGlobals();
 });
