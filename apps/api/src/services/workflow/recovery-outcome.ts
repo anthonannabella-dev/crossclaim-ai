@@ -21,6 +21,7 @@
  *   FeeCalculation (our service fee) → BillingInvoice (what we charge the client).
  */
 
+import { resolveAccountIdFromCase } from '../evidence/account-scope';
 import { Prisma, type PrismaClient } from '@prisma/client';
 
 import { prepareAuditInsert } from '../audit';
@@ -375,9 +376,16 @@ export async function confirmRecoveryOutcome(
     // 凭证：优先使用用户指定的 EvidenceArtifact，否则为本次人工确认留一条可追溯凭证
     let evidenceId = requestedEvidenceId;
     if (!evidenceId) {
+      // MSG-20261002-68 CHANGE A：人工确认凭证必须带 server-derived account provenance。
+      // 由 case 的主张链派生；无法唯一确定 → PLATFORM_ACCOUNT_REQUIRED（不得写 NULL 新事实）。
+      const evidenceAccountId = await resolveAccountIdFromCase(tx as never, {
+        organizationId: input.organizationId,
+        caseId: kase.id,
+      });
       const created = await tx.evidenceArtifact.create({
         data: {
           organizationId: input.organizationId,
+          accountId: evidenceAccountId,
           kind: 'CREDIT_NOTE',
           title: `Manual recovery confirmation — ${kase.caseNo}`,
           description: `basisReference: ${basisReference}`,
