@@ -109766,3 +109766,818 @@ TRANSPORT = false
 
 所以这轮不是你们的安全架构有问题，而是 provider 现实世界的身份获取流程不能被一个统一的 discoverAccounts() 吃掉。UPS 的多账号 discovery 思路很适合；FedEx 更应建成“客户提交候选账号 → FedEx 注册/验证成功 → 才成为 provider-verified identity”。这样下一步接真实 API 时不会撞墙。
 ```
+
+### [MSG-20261003-107] CARRIER QUEUE #3 = PASS / CLOSED · 授权 CARRIER QUEUE #4（TRACKING READ ADAPTER）
+
+`FINAL_IMPLEMENTATION_HEAD = dc0edf6`；`CI RUN = 37069842384`（5 jobs green）；`CHECKPOINT_DOC_HEAD = b020ac0`。
+**★ 编号裁决**：① UPS scenario-aware auth = **PASS**；② FedEx provider-verified registration = **PASS**；③ readiness strategy = **PASS**；④ **CARRIER QUEUE #3 = PASS / CLOSED**；⑤ 下一内部单元 = **CARRIER QUEUE #4 — TRACKING READ ADAPTER**（已授权，现在可以开始）；⑥ real carrier credentials / calls = **HOLD_EXTERNAL**。
+**★ 已 PASS 明细**：UPS 不再被表达为「provider 唯一支持 OAUTH_AUTH_CODE」（supportedAuthFlows 含 CLIENT_CREDENTIALS + AUTHORIZATION_CODE，selectedAuthFlow = AUTHORIZATION_CODE，authFlowSelectionReason = THIRD_PARTY_CUSTOMER_AUTHORIZATION）；旧 authKind 保留兼容但由 selectedAuthFlow 派生并经 carrierAuthModelForFlow / assertCarrierAuthTruth 校验（不形成第二套冲突事实源）；FedEx 明确 accountIdentityStrategy = PROVIDER_VERIFIED_REGISTRATION 且 discoverCarrierAccounts(FEDEX) → IDENTITY_STRATEGY_NOT_DISCOVERY（discovery port 不调用）；candidate evidence（externalAccountId + customerName + customerAddress）缺一 → CANDIDATE_EVIDENCE_REQUIRED；仅 registration port 返回 verified=true + 有效 credentialRef / identity / registrationRef 才产生 CANDIDATE_BIND_PLAN，失败 → REGISTRATION_NOT_VERIFIED 且无 bind plan；CarrierVerifiedAccountIdentity 显式带 identitySource；UPS 0/1/多语义保留（多账号不自动猜）；FedEx 多账号走 multiple provider-verified registrations；candidate identity 幂等 `carrier:<provider>:<externalAccountId>`；lineage 绑 organizationId+actorUserId+provider+credentialRef（registration 另带 registrationRef，跨租户 / provider fail-closed）；credentialRef-only boundary 与 bind HOLD（bindExecuted=false / VERIFIED_BIND_REQUIRED_EXTERNAL_GATE）保持；readiness 暴露 authFlows / selectedAuthFlow / authFlowSelectionReason / accountIdentityStrategy；production readiness 仍恒 false / ABSENT（无 fake production-ready）；no-live-request 保持。
+**▶ 回归证据**：carrier-auth-account-discovery 41/41；carrier-connector-capability 8/8；provider-readiness-http-db 1/1；tsc api 0 error；API contract = OK；CI 37069842384 = completed / success（head dc0edf6）。
+**▶ Queue #4 GOAL（⑳）**：目标**不是**接真实 UPS/FedEx，而是在 TRANSPORT=false / production credentials=ABSENT 条件下，把 **normalized tracking read plane** 完整做出来 —— 以后真实 credential 到位后只需接 provider adapter，而不是重新设计 shipment / tracking normalization。
+**▶ ㉑㉒ 端口与归属边界**：`CarrierTrackingReadPort.getTracking({ provider, credentialRef, externalAccountId, trackingNumber, organizationId })`；`externalAccountId` 必须来自**已经 provider-verified 的 account lineage**（credentialRef → SourceConnection → verified carrier PlatformAccount → organization）；trackingNumber 可以是查询 key，但 carrier account identity **必须 server-derived**，不得信任任意客户端账号号。
+**▶ ㉓㉔ 归一化模型与状态**：snapshot 至少含 provider / externalAccountId / trackingNumber / shipmentStatus / carrierStatusCode / statusText / origin / destination / shipDate / estimatedDeliveryAt / deliveredAt / lastEventAt / lastEventLocation / events[] / rawReference / observedAt；内部稳定枚举 UNKNOWN / LABEL_CREATED / PICKED_UP / IN_TRANSIT / OUT_FOR_DELIVERY / DELIVERED / EXCEPTION / DELAYED / RETURNED / LOST，**provider raw status 单独保存**（不能只留 normalized）。不要为了统一丢失 provider-specific raw reference。
+**▶ ㉕ 事件归一化**：event 至少含 occurredAt / status / rawStatusCode / description / location / source，要求 deterministic ordering；重复 ingest **不能复制同一事件事实**。
+**▶ ㉖ read-only discipline**：Queue #4 只允许 getTracking / list read；禁止 modify shipment / reroute / intercept / file claim / create pickup / submit refund / transport write；TRANSPORT 继续 false。
+**▶ ㉗ 错误分类**：必须区分 NOT_FOUND / NOT_AUTHORIZED / ACCOUNT_MISMATCH / TEMPORARILY_UNAVAILABLE / RATE_LIMITED / PROVIDER_ERROR，不得全部压成 TRACKING_FAILED。
+**▶ ㉘ tenant + account safety**：同一 tracking number 出现在不同 tenant/account 下时，不能凭 tracking number 跨租户命中别人的 shipment fact；key 至少包含 organization / account / provider context。
+**▶ ㉙ provider adapter differences**：UPS 与 FedEx 可有不同 raw payload parser / status map / event fields；统一的是 normalized CarrierTrackingSnapshot；**不要**制造一个巨大的 if(provider) parser。
+**▶ ㉚ raw data boundary**：不要把完整 provider raw JSON 暴露给 customer API；可保留 safe raw reference / hash / artifact reference 供审计与后续 SLA evidence。
+**▶ ㉛ SLA future compatibility**：本批就要为后续 SLA detection 保留 promised/estimated delivery、actual delivery、scan/event chronology、exception/delay status、service level（若可得）、origin/destination、tracking lineage；但**不要**开始 SLA refund calculation。
+**▶ ㉜ 必需测试（24 项）**：unknown carrier fail-closed；missing credentialRef rejected；unverified account lineage rejected；cross-tenant account rejected；provider/account mismatch rejected；UPS raw → normalized snapshot；FedEx raw → normalized snapshot；raw provider status preserved；normalized status deterministic；events deterministic ordering；duplicate events deduplicated；tracking number alone cannot establish tenant/account；NOT_FOUND / NOT_AUTHORIZED / RATE_LIMITED / provider error 各自稳定；no plaintext credential；no customer-facing raw token / provider secret；no live request；platform write false；TRANSPORT=false；production credentials ABSENT；tsc api/web 0；full CI success。
+**▶ ㉝㉞ 边界**：Queue #4 不得 call live UPS / FedEx、enable transport、create shipment mutations、submit carrier claim、calculate payout、make SLA eligibility decision、enable production credential、create second account/connection truth source；真实 carrier read activation 仍 HOLD_EXTERNAL（UPS/FedEx production·sandbox credentials、real verified carrier accounts、real-data tracking validation），但不阻塞本批 adapter / normalization 开发。
+**★ 架构方评语**：现在 Queue #3 可以真正关掉。下一步做 Tracking（Read Adapter）。
+
+```text
+这次可以正式通过。dc0edf6 已把上一轮两个现实世界问题都收口：UPS 不再被错误写成“只有 Auth Code”，FedEx 也不再虚构 account discovery，而是改成 provider-verified registration。CI 37069842384 精确对应最终实现 HEAD。
+
+Carrier Queue #3 FINAL 最终裁决 / Queue #4 授权
+
+[CHATGPT → CODEX] MSG-20261003-107 — CARRIER QUEUE #3 FINAL VERDICT / QUEUE #4 AUTHORIZATION
+
+FINAL_IMPLEMENTATION_HEAD = dc0edf6
+FINAL_IMPLEMENTATION_HEAD_FULL = dc0edf6f64ee62c5124a6536024a98b2a9f6bad4
+CI_VERIFIED_HEAD = dc0edf6
+CI RUN = 37069842384
+CHECKPOINT_DOC_HEAD = b020ac0
+
+已直接核验：
+
+carrier auth contract
+connector capability truth
+account discovery / registration strategy
+strategy-neutral verified identity
+carrier readiness projection
+FINAL targeted regressions
+CI 37069842384
+
+正式裁决如下。
+
+① CHANGE A — UPS scenario-aware auth：PASS
+
+UPS 现在不再被表达为：
+
+“provider 唯一支持 OAUTH_AUTH_CODE”。
+
+而是明确：
+
+supportedAuthFlows:
+- CLIENT_CREDENTIALS
+- AUTHORIZATION_CODE
+
+同时 CrossClaim 当前选择：
+
+selectedAuthFlow =
+AUTHORIZATION_CODE
+
+authFlowSelectionReason =
+THIRD_PARTY_CUSTOMER_AUTHORIZATION
+
+这正确区分：
+
+provider capability
+
+和：
+
+CrossClaim 当前 integration scenario
+
+PASS。
+
+② UPS compatibility authKind：PASS
+
+旧：
+
+authKind
+
+仍保留兼容。
+
+但它由：
+
+selectedAuthFlow
+
+派生，并通过：
+
+carrierAuthModelForFlow
++
+assertCarrierAuthTruth
+
+校验一致性。
+
+因此旧字段不会形成第二套冲突事实源。
+
+PASS。
+
+③ FedEx account identity strategy：PASS
+
+FedEx 不再声明：
+
+虚构的 generic account discovery。
+
+现在明确：
+
+accountIdentityStrategy =
+PROVIDER_VERIFIED_REGISTRATION
+
+并且：
+
+discoverCarrierAccounts(FEDEX)
+
+会：
+
+IDENTITY_STRATEGY_NOT_DISCOVERY
+
+且：
+
+discovery port 不调用。
+
+PASS。
+
+④ FedEx raw account number ≠ trusted identity：PASS
+
+当前 registration flow 要求 candidate evidence：
+
+externalAccountId
+customerName
+customerAddress
+
+缺少证据：
+
+CANDIDATE_EVIDENCE_REQUIRED
+
+因此：
+
+用户输入 FedEx account number
+
+仍然只是：
+
+candidate input
+
+不会直接变成 verified PlatformAccount identity。
+
+PASS。
+
+⑤ FedEx provider verification：PASS
+
+只有 registration port 返回：
+
+verified=true
+
+并且返回有效：
+
+credentialRef
+verified identity
+registrationRef
+
+才产生：
+
+CANDIDATE_BIND_PLAN。
+
+失败：
+
+REGISTRATION_NOT_VERIFIED
+
+且无 bind plan。
+
+PASS。
+
+⑥ Strategy-neutral identity model：PASS
+
+核心 identity 已改为：
+
+CarrierVerifiedAccountIdentity
+
+并显式带：
+
+identitySource:
+  PROVIDER_DISCOVERY
+  PROVIDER_VERIFIED_REGISTRATION
+
+因此下游不需要假定：
+
+所有 carrier identity 都来自 discovery。
+
+PASS。
+
+旧名称保留 deprecated alias：
+
+不影响迁移。
+
+⑦ UPS multiple-account semantics：PASS
+
+UPS：
+
+PROVIDER_DISCOVERY
+
+继续支持：
+
+0
+→ NO_ACCOUNT_DISCOVERED
+
+1
+→ CANDIDATE_BIND_PLAN
+
+multiple
+→ EXPLICIT_SELECTION_REQUIRED
+
+且 multiple 时：
+
+不自动猜账号。
+
+PASS。
+
+⑧ FedEx multiple-account product requirement：PASS
+
+FedEx 不依赖一次 credential 自动列出所有账号。
+
+多个 FedEx accounts 可以通过：
+
+multiple provider-verified registrations
+
+形成多个稳定 PlatformAccount identities。
+
+这仍满足 CrossClaim：
+
+一个 organization 多 carrier accounts。
+
+PASS。
+
+⑨ Candidate identity idempotency：PASS
+
+discovery / registration 最终都复用：
+
+carrier:<provider>:<externalAccountId>
+
+同一 verified provider identity：
+
+稳定映射到同一 candidate identity。
+
+PASS。
+
+⑩ Credential lineage：PASS
+
+discovery 与 registration 均继续绑定：
+
+organizationId
+actorUserId
+provider
+credentialRef
+
+registration 另外保留：
+
+registrationRef。
+
+跨 tenant / provider 复用：
+
+fail-closed。
+
+PASS。
+
+⑪ CredentialRef boundary：PASS
+
+没有因为 FedEx registration 而把：
+
+client secret
+token
+refresh token
+
+加入业务对象。
+
+Port 输出继续只允许：
+
+credentialRef。
+
+缺 credentialRef：
+
+REGISTRATION_NOT_VERIFIED。
+
+PASS。
+
+⑫ Bind HOLD：PASS
+
+无论 UPS discovery 或 FedEx registration：
+
+最终仍：
+
+bindExecuted = false
+
+下一步：
+
+VERIFIED_BIND_REQUIRED_EXTERNAL_GATE
+
+未偷偷写：
+
+PlatformAccount / production connection。
+
+PASS。
+
+⑬ Readiness strategy truth：PASS
+
+/provider-readiness carriers 已增加：
+
+authFlows
+selectedAuthFlow
+authFlowSelectionReason
+accountIdentityStrategy
+
+因此现在 operator 能清楚看到：
+
+UPS：
+
+AUTHORIZATION_CODE
+PROVIDER_DISCOVERY
+
+FedEx：
+
+INTEGRATOR_CREDENTIAL_REGISTRATION
+PROVIDER_VERIFIED_REGISTRATION
+
+PASS。
+
+⑭ Production readiness：保持 PASS
+
+仍然：
+
+authImplemented=false
+accountDiscoveryImplemented=false
+productionCredentials=ABSENT
+productionApprovalState=NOT_REQUESTED
+platformWriteEnabled=false
+transportEnabled=false
+
+不存在：
+
+fake production-ready。
+
+PASS。
+
+⑮ No-live-request boundary：PASS
+
+测试仍证明：
+
+无真实 UPS / FedEx API 调用。
+
+真实 provider 接线仍属于：
+
+HOLD_EXTERNAL。
+
+PASS。
+
+⑯ Regression evidence：PASS
+
+carrier-auth-account-discovery：
+
+41/41 PASS
+
+carrier-connector-capability：
+
+8/8 PASS
+
+provider-readiness-http-db：
+
+1/1 PASS
+
+tsc api：
+
+0 error
+
+API contract：
+
+OK。
+
+PASS。
+
+⑰ CI：PASS
+
+RUN_ID：
+
+37069842384
+
+head_sha：
+
+dc0edf6f64ee62c5124a6536024a98b2a9f6bad4
+
+status：
+
+completed / success
+
+5 jobs green。
+
+因此：
+
+FINAL_IMPLEMENTATION_HEAD
+
+CI_VERIFIED_HEAD。
+
+⑱ CARRIER QUEUE #3 FINAL VERDICT
+
+正式：
+
+CARRIER QUEUE #3 = PASS / CLOSED
+
+本单元已经完成：
+
+UPS scenario-aware auth truth
+FedEx provider-specific registration truth
+provider-specific account identity acquisition
+server/provider-verified identity
+multiple account semantics
+tenant/provider credential lineage
+credentialRef boundary
+candidate identity idempotency
+readiness strategy projection
+production/external HOLD boundary
+
+Queue #3 到此关闭。
+
+⑲ NEXT INTERNAL UNIT AUTHORIZED
+
+正式进入：
+
+CARRIER QUEUE #4
+TRACKING READ ADAPTER
+
+现在可以开始。
+
+⑳ Queue #4 GOAL
+
+目标不是接真实 UPS/FedEx。
+
+目标是在：
+
+TRANSPORT=false
+production credentials=ABSENT
+
+条件下，把：
+
+normalized tracking read plane
+
+完整做出来。
+
+让以后真实 credential 到位后：
+
+只需要接 provider adapter，
+
+而不是重新设计：
+
+shipment/tracking normalization。
+
+㉑ Recommended core port
+
+建立类似：
+
+CarrierTrackingReadPort {
+  getTracking(input: {
+    provider
+    credentialRef
+    externalAccountId
+    trackingNumber
+    organizationId
+  }): Promise<CarrierTrackingSnapshot>
+}
+
+但注意：
+
+externalAccountId
+
+必须来自：
+
+已经 provider-verified 的 account lineage。
+
+不能信任任意客户端账号号。
+
+㉒ Tracking identity / ownership boundary
+
+读取 tracking 前必须能够证明：
+
+credentialRef
+→ SourceConnection
+
+SourceConnection
+→ verified carrier PlatformAccount
+
+PlatformAccount
+→ organization
+
+请求里的：
+
+trackingNumber
+
+可以是查询 key，
+
+但 carrier account identity：
+
+必须 server-derived。
+
+㉓ Normalized tracking model
+
+建议至少：
+
+provider
+externalAccountId
+trackingNumber
+
+shipmentStatus
+carrierStatusCode
+statusText
+
+origin
+destination
+
+shipDate
+estimatedDeliveryAt
+deliveredAt
+
+lastEventAt
+lastEventLocation
+
+events[]
+
+rawReference
+observedAt
+
+注意：
+
+不要为了统一而丢失 provider-specific raw reference。
+
+㉔ Status normalization
+
+内部稳定枚举建议：
+
+UNKNOWN
+LABEL_CREATED
+PICKED_UP
+IN_TRANSIT
+OUT_FOR_DELIVERY
+DELIVERED
+EXCEPTION
+DELAYED
+RETURNED
+LOST
+
+provider raw status：
+
+单独保存。
+
+不能只留 normalized status。
+
+㉕ Tracking event normalization
+
+event 至少：
+
+occurredAt
+status
+rawStatusCode
+description
+location
+source
+
+并要求：
+
+deterministic ordering。
+
+重复 ingest：
+
+不能复制同一事件事实。
+
+㉖ Read-only discipline
+
+Queue #4：
+
+只允许：
+
+getTracking / list read
+
+不得：
+
+modify shipment
+
+reroute
+
+intercept
+
+file claim
+
+create pickup
+
+submit refund
+
+transport write
+
+继续：
+
+TRANSPORT=false。
+
+㉗ Missing / unavailable handling
+
+必须区分：
+
+NOT_FOUND
+NOT_AUTHORIZED
+ACCOUNT_MISMATCH
+TEMPORARILY_UNAVAILABLE
+RATE_LIMITED
+PROVIDER_ERROR
+
+不要全部压成：
+
+TRACKING_FAILED。
+
+㉘ Tenant + account safety
+
+至少永久测试：
+
+同一 tracking number：
+
+若出现在不同 tenant/account 下，
+
+不能凭 tracking number 跨租户命中别人的 shipment fact。
+
+key 至少包含：
+
+organization/account/provider context。
+
+㉙ Provider adapter differences
+
+UPS 和 FedEx：
+
+可以有不同：
+
+raw payload parser
+status map
+event fields
+
+统一的是：
+
+normalized CarrierTrackingSnapshot。
+
+不要制造：
+
+一个巨大 if(provider) parser。
+
+㉚ Raw data boundary
+
+不要直接把完整 provider raw JSON：
+
+暴露给 customer API。
+
+可以保留：
+
+safe raw reference / hash / artifact reference
+
+用于：
+
+审计与后续 SLA evidence。
+
+㉛ SLA future compatibility
+
+Queue #4 现在就应该为后续 SLA detection 保留：
+
+promised/estimated delivery
+
+actual delivery
+
+scan/event chronology
+
+exception/delay status
+
+service level if available
+
+origin/destination
+
+tracking lineage
+
+但：
+
+本批不要开始：
+
+SLA refund calculation
+
+那属于后续队列。
+
+㉜ Required tests
+
+至少：
+
+unknown carrier fail-closed
+
+missing credentialRef rejected
+
+unverified account lineage rejected
+
+cross-tenant account rejected
+
+provider/account mismatch rejected
+
+UPS raw → normalized snapshot
+
+FedEx raw → normalized snapshot
+
+raw provider status preserved
+
+normalized status deterministic
+
+events deterministic ordering
+
+duplicate events deduplicated
+
+tracking number alone cannot establish tenant/account
+
+NOT_FOUND stable
+
+NOT_AUTHORIZED stable
+
+RATE_LIMITED stable
+
+provider error stable
+
+no plaintext credential
+
+no customer-facing raw token/provider secret
+
+no live request
+
+platform write false
+
+TRANSPORT=false
+
+production credentials ABSENT
+
+tsc api/web 0
+
+full CI success
+
+㉝ Queue #4 DO NOT DO
+
+不要：
+
+call live UPS
+
+call live FedEx
+
+enable transport
+
+create shipment mutations
+
+submit carrier claim
+
+calculate payout
+
+make SLA eligibility decision
+
+enable production credential
+
+create second account/connection truth source
+
+㉞ External gate remains
+
+真实 carrier read activation 仍需要：
+
+UPS production/sandbox credentials
+FedEx production/sandbox credentials
+real verified carrier accounts
+real-data tracking validation
+
+继续：
+
+HOLD_EXTERNAL
+
+但不阻塞 Queue #4 内部 adapter/normalization 开发。
+
+编号裁决
+
+① UPS scenario-aware auth：
+
+PASS
+
+② FedEx provider-verified registration：
+
+PASS
+
+③ readiness strategy：
+
+PASS
+
+④ CARRIER QUEUE #3：
+
+PASS / CLOSED
+
+⑤ 下一内部单元：
+
+CARRIER QUEUE #4 — TRACKING READ ADAPTER
+
+⑥ real carrier credentials / calls：
+
+HOLD_EXTERNAL
+
+边界继续保持：
+
+NO platform write
+Payment = 0
+autopay = OFF
+collection = OFF
+external payment write = OFF
+R13 HOLD
+TRANSPORT = false
+无生产凭据
+
+现在 Queue #3 可以真正关掉。下一步做 Tracking
+```
