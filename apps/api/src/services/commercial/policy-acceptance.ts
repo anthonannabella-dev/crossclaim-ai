@@ -12,7 +12,13 @@
 
 import type { PrismaClient } from '@prisma/client';
 
-import { REQUIRED_ACCEPTANCE_KEYS, listCurrentPolicies, findPolicy, type PolicyDocument } from './policy-registry';
+import {
+  CONSENT_GATED_CAPABILITIES,
+  REQUIRED_ACCEPTANCE_KEYS,
+  listCurrentPolicies,
+  findPolicy,
+  type PolicyDocument,
+} from './policy-registry';
 
 export type PolicyAcceptanceErrorCode =
   | 'POLICY_NOT_FOUND'
@@ -191,4 +197,41 @@ export async function getAcceptanceStatus(
     });
   const outstanding = items.filter((item) => !item.accepted).map((item) => item.key);
   return { complete: outstanding.length === 0, outstanding, items };
+}
+
+/** 需要显式同意但尚未完成 → CONSENT_REQUIRED（fail-closed）。 */
+export class ConsentRequiredError extends Error {
+  constructor(
+    readonly capability: string,
+    readonly missing: string[],
+  ) {
+    super('CONSENT_REQUIRED');
+    this.name = 'ConsentRequiredError';
+  }
+}
+
+/**
+ * 服务端同意闸门：capability 未登记 → 不拦截（显式 no-op，不猜测）；
+ * 已登记 → 必须已接受全部 CURRENT 文档版本，否则抛 ConsentRequiredError。
+ * 绝不依赖 UI checkbox；调用方无法通过请求体绕过（身份来自会话）。
+ */
+export async function requireConsentFor(
+  prisma: PrismaClient,
+  actor: CommercialActor,
+  capability: string,
+): Promise<void> {
+  const required = CONSENT_GATED_CAPABILITIES[capability];
+  if (!required || required.length === 0) return;
+  const acceptances = await listMyPolicyAcceptances(prisma, actor);
+  const accepted = new Set(acceptances.map((row) => row.documentKey + '@' + row.documentVersion));
+  const missing: string[] = [];
+  for (const key of required) {
+    const document = findPolicy(key);
+    if (!document) {
+      missing.push(key);
+      continue;
+    }
+    if (!accepted.has(document.key + '@' + document.version)) missing.push(key);
+  }
+  if (missing.length > 0) throw new ConsentRequiredError(capability, missing);
 }

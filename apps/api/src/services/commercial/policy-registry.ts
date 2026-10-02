@@ -143,6 +143,13 @@ export const REQUIRED_ACCEPTANCE_KEYS: readonly string[] = POLICY_DOCUMENTS.filt
   (doc) => doc.status === "CURRENT" && doc.requiresExplicitAcceptance,
 ).map((doc) => doc.key);
 
+/**
+ * 需要客户显式同意的能力 → 必需的 CURRENT 文档 key。
+ * 当前为空：本批次不改变任何既有能力的准入（gate 边界属 ARCH_REVIEW）。
+ * 一旦登记，requireConsentFor() 会 **fail-closed** 拒绝未完成同意的调用。
+ */
+export const CONSENT_GATED_CAPABILITIES: Record<string, readonly string[]> = {};
+
 /** 商业/法律披露目录（供 /commercial-readiness 引用）。 */
 export const COMMERCIAL_DISCLOSURES = {
   feeDisclosure: { available: true, documentKey: 'refund-and-fee-policy' },
