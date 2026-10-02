@@ -1,6 +1,6 @@
 {
   "gate": "B2-FIX R1",
-  "head": "56abd47",
+  "head": "5df82ab",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
   "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
@@ -10,7 +10,7 @@
   "production_enabled": false,
   "external_write_enabled": false,
   "updated_at": "2026-10-02T02:46:57.022Z",
-  "previous_head": "e5202d6",
+  "previous_head": "56abd47",
   "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "56abd47",
@@ -49,9 +49,9 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-02T02:22:52.443Z",
+  "last_tick_at": "2026-10-02T02:47:51.510Z",
   "state": "IMPLEMENT",
-  "last_action": "登记 TRACK S —— Platform Safety / External Submission Boundary（P0 Safety；轻量审计 6/6 PASS，不改代码）",
+  "last_action": "SCHEDULER_STALE_RECOVERED（gap=25min）→ 本轮已恢复执行",
   "last_action_at": "2026-10-02T02:46:57.022Z",
   "next_action": "TRACK C2 第一批：以 MSG-65 的 8 个问题与 12 项最低验收重述/补齐 multi-account 现状取证与 gap matrix，并据此提交是否需要 Schema Delta 的决策请求（不直接改 Schema）。",
   "current_head": "56abd47",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-02T02:17:58.548Z",
-    "gapMs": 293896,
-    "stale": false,
-    "checkedAt": "2026-10-02T02:22:52.443Z"
+    "previousTickAt": "2026-10-02T02:22:52.443Z",
+    "gapMs": 1499068,
+    "stale": true,
+    "checkedAt": "2026-10-02T02:47:51.510Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -250,7 +250,7 @@
     "integration_boundary_review": "AUTHORIZED_TO_PLAN（先提交设计/实施计划，不直接开放真实 transport）"
   },
   "r36_submission_comment": "5927087320",
-  "stale_recovered_at": "2026-10-02T02:17:58.548Z",
+  "stale_recovered_at": "2026-10-02T02:47:51.510Z",
   "engineering_regression_policy": {
     "source": "HOST PRODUCT DIRECTION 2026-10-01",
     "doc": "docs/releases/ENGINEERING-REGRESSION-POLICY.md",
