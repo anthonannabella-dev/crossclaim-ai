@@ -2,6 +2,7 @@ import { cookies } from 'next/headers';
 import Link from 'next/link';
 
 import ConnectionManager, { type ConnectionItem } from '../components/connection-manager';
+import RecoveryBanner from '../components/recovery-banner';
 
 const API_BASE = process.env.CROSSCLAIM_API_URL ?? 'http://127.0.0.1:3000';
 
@@ -49,6 +50,9 @@ export default async function ConnectionsPage() {
           返回工作台
         </Link>
       </section>
+
+      {/* PC-04：客户可见的失败 / 恢复状态（连接维度） */}
+      <RecoveryBanner scope="CONNECTION" />
 
       {forbidden ? (
         <section className="rounded-lg border bg-white p-6 text-sm text-slate-600">

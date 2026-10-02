@@ -86,6 +86,7 @@ C-0008-B2（Case / Evidence / Claim Draft / Billing）的端点尚未实现。
 | GET | `/imports` | 200 `{ items: [{ id, status, rowsTotal, rowsOk, rowsFailed, startedAt, finishedAt, fileAssetId, connectionId }] }` |
 | GET | `/imports/:id/error-report` | 200 `{ batchId, status, rowsTotal, rowsOk, rowsFailed, failureStage, issues: [{ rowNumber, errorCode, errorCategory, field, action }], issuesTruncated, duplicates, emptyRowsSkipped }`（**只回错误码/行号/动作，不回原始值、PII、原始文件内容**；MSG-20260929-10 Q1） |
 | GET | `/opportunities` | 200 `{ items: [{ id, status, opportunityType, title, amountExpected, amountActual, recoverableAmount, currency, detectedAt }] }`（金额为 4 位小数字符串） |
+| GET | `/recovery-states` | — | 200 `{ items: [{ scope, refId, title, code, label, explanation, nextAction, recoverable, safeSummary, occurredAt, details, retry }], catalog }`（PC-04 客户可见失败/恢复投影；稳定 code；不含 raw internal error / secret） | 401 `UNAUTHENTICATED`；403 `FORBIDDEN`（FINANCE / VIEWER） |
 
 三者都按会话 `organizationId` 过滤，最多 100 条（默认 20）。非 GET 请求不匹配该处理器，按 404 处理。
 

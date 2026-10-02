@@ -130,12 +130,15 @@ import {
   toExportRows,
 } from './opportunity-insight';
 import { getCaseClaimPackage } from './claim-package-view';
+import { listRecoveryStates } from './recovery-states';
 import { listOpportunities } from './opportunity-list';
 import { REJECT_REASONS, WorkflowError, reviewOpportunity } from './opportunity-review';
 import { ForbiddenError, assertPermission } from './permissions';
 
 const MAX_BODY_BYTES = 16 * 1024;
 const REVIEW_PATH = /^\/opportunities\/([^/]+)\/(qualify|reject|case)$/;
+/** PC-04：客户可见的失败 / 恢复状态投影。 */
+const RECOVERY_STATES_PATH = /^\/recovery-states$/;
 /** PC-03：客户可见的 Claim Package 只读视图。 */
 const CASE_CLAIM_PACKAGE_PATH = /^\/cases\/([^/]+)\/claim-package$/;
 /** PC-02：客户可见的机会列表（read-only projection）。 */
@@ -373,6 +376,7 @@ export async function handleWorkflowRequest(
   const review = REVIEW_PATH.exec(path);
   const opportunityList = OPPORTUNITY_LIST_PATH.test(path);
   const caseClaimPackage = CASE_CLAIM_PACKAGE_PATH.exec(path);
+  const recoveryStates = RECOVERY_STATES_PATH.test(path);
   const insightList = INSIGHT_LIST_PATH.test(path);
   const insightCsv = INSIGHT_CSV_PATH.test(path);
   const insight = INSIGHT_PATH.exec(path);
@@ -438,7 +442,7 @@ export async function handleWorkflowRequest(
     adminPermissionMatrix ||
     adminMemberDetail !== null ||
     adminKillSwitch;
-  if (!adminAny && !opportunityList && !caseClaimPackage && !operationsDashboard && !operationsClaims && !operationsRecovery && !review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !paymentReviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !replayPath && !replayReviewPath && !retryDuePath && !retryDueFreezePath && !retryDueReviewPath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim && !caseClaimSubmit && !caseClaimPrepare && !caseBillingDraft && !caseAppealSubmit && !casePlatformWrite && !caseRecoveryManualSubmit && !caseRecoveryManualReference && !caseRecoveryManualApproval && !caseRecoveryManualReferenceApproval) {
+  if (!adminAny && !opportunityList && !caseClaimPackage && !recoveryStates && !operationsDashboard && !operationsClaims && !operationsRecovery && !review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !paymentReviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !replayPath && !replayReviewPath && !retryDuePath && !retryDueFreezePath && !retryDueReviewPath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim && !caseClaimSubmit && !caseClaimPrepare && !caseBillingDraft && !caseAppealSubmit && !casePlatformWrite && !caseRecoveryManualSubmit && !caseRecoveryManualReference && !caseRecoveryManualApproval && !caseRecoveryManualReferenceApproval) {
     return false;
   }
 
@@ -491,6 +495,7 @@ export async function handleWorkflowRequest(
           : billingPath && !billingPath[1]
             ? ['GET']
             : opportunityList ||
+                recoveryStates ||
                 caseClaimPackage !== null ||
                 insightList ||
                 insightCsv ||
@@ -850,6 +855,12 @@ export async function handleWorkflowRequest(
         deps.now ? { now: deps.now } : {},
       );
       sendJson(res, 200, result);
+      return true;
+    }
+
+    if (recoveryStates && method === 'GET') {
+      // PC-04：客户可见的失败 / 恢复状态（只读投影；不触发任何写操作或重试）。
+      sendJson(res, 200, await listRecoveryStates(deps.prisma, actor));
       return true;
     }
 
