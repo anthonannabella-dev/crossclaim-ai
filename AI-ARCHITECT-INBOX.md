@@ -89094,3 +89094,497 @@ TRACK B — BATCH 1 IMPLEMENTATION
 
 这次可以正式从审计进入开发了。X1 CLOSED，TRACK B 开始；第一刀先切断“未绑定连接继续制造 NULL account 数据”的污染源。
 ```
+
+### [MSG-20261002-75] TRACK B BATCH 1 VERDICT / BATCH 2 AUTHORIZATION：B1-1..B1-4 = PASS；**BATCH 1 = PASS / CLOSED**；**BATCH 2 = AUTHORIZED（Downstream Active Fact Lineage Hardening）**
+
+`IMPLEMENTATION_HEAD = 4f3d0e3`；`CI_VERIFIED_HEAD = 4f3d0e3`；`CI RUN = 37000895270`；`CHECKPOINT_DOC_HEAD = 438613a`。
+**① B1-1..B1-4 = PASS**：共享 Account Lineage Policy 层成立（统一 PLATFORM_ACCOUNT_REQUIRED、requireUniqueAccount 对 NULL/undefined/empty/multiple fail-closed、六个 resolver 全部 organizationId scoped；冻结规则 server-derived / exactly-one / missing·ambiguity·mismatch reject / no first-account fallback / no label·channel inference / no client-trusted account）；`resolveIngestAccountScope()` 在 `SourceTransaction.createMany()` 之前执行（connectionId NULL、连接不属于 org、platformAccountId NULL → PLATFORM_ACCOUNT_REQUIRED；client 自带 accountId → CLIENT_ACCOUNT_FIELD_NOT_TRUSTED；仅 bound 连接才写 `SourceTransaction.accountId = platformAccountId`，不再 `?? null`）；bound 正路径与负路径均由真实 PostgreSQL 证明（失败路径 0 SourceTransaction / 0 CanonicalFact / 0 RecoveryOpportunity / 0 ClaimItem）。
+**② Fixture repairs = PASS**（contract tightening fallout repair，非规避）：13 套件 account-aware 化；`c2-account-scope-db` 改为直接 seed 历史 legacy NULL 行（保持 LEGACY READ 兼容，但未重开 ACTIVE NEW NULL WRITE）。**③ CI = PASS**（run 37000895270 / head 4f3d0e3 / completed+success，Implementation HEAD = CI verified HEAD）。
+**④ TRACK B BATCH 1 = PASS / CLOSED**：第一层污染源已切断；不得再扩大 BATCH 1；剩余 NULL propagation 属 BATCH 2。
+**⑤ TRACK B BATCH 2 = PASS / AUTHORIZED —— Downstream Active Fact Lineage Hardening**（defense-in-depth：即使绕过 ingest gate，新 active facts 也不得写 NULL account）：**B2-1 CanonicalFact** 新写入必须有唯一 canonical account（优先 `SourceTransaction.accountId`；transaction 不属于 org / 多来源 account mismatch / NULL 与非 NULL 混合 → reject；禁止 `row.accountId ?? row.connection?.platformAccountId ?? null` 作为 active-write 语义；legacy NULL 行仍可读，legacy partial-unique 分支不再承接新的 application-level NULL 写入；暂不要求 Schema NOT NULL）。**B2-2 RecoveryOpportunity** 必须有唯一 PlatformAccount（canonical 与 transaction lineage 同时存在时必须相同；canonical NULL / transaction NULL / canonical=A+transaction=B / tenant mismatch → fail-closed，禁止 `opportunityAccountId ?? null`；永久负路径 `canonical A + transaction B → reject → 0 RecoveryOpportunity`）。**B2-3 ClaimItem active-new** 必须 account-scoped（`opportunityId != null` 时 Opportunity 必须存在于同租户且 accountId 非空，否则 PLATFORM_ACCOUNT_REQUIRED 且 0 ClaimItem；不允许 MANUAL_IMPORT → ClaimItem(accountId=NULL)，staging object ≠ ClaimItem；本批不新建大型 staging 子系统，manual staging 记为后续产品设计 finding）。**B2-4** 清理 active write path 的 `?? null` fallback（canonical writer / detection repository / claim-items；reconciliation projection 若属 read/shadow，先明确业务属性再处理）。
+**BATCH 2 不做**：Connection onboarding API/UI、explicit legacy rebind UI、schema NOT NULL、mass historical backfill、自动 account 推断、R46 改造、Payment/collection、production credentials（属 BATCH 3 或之后）。
+**BATCH 2 必须验收（22 项）**：CanonicalFact（account-scoped transaction → same account PASS；transaction account NULL → reject；多来源 A/B → reject；legacy NULL 仍可读；active writer 不能新建 NULL CanonicalFact）· RecoveryOpportunity（lineage A → Opportunity A PASS；missing account reject；canonical A + transaction B reject；reject 路径 0 Opportunity）· ClaimItem（Opportunity A → ClaimItem A PASS；Opportunity NULL reject；foreign-tenant Opportunity reject；caller 不能伪装 account；legacy NULL 可读；active new ClaimItem 不能持久化 NULL）· Regression（BATCH 1 gate green、C2 Evidence resolver green、Settlement lineage green、tenant isolation green、HITL/workflow green、tsc 0 error、full CI SUCCESS）。
+**实现细节要求**：不要为 CanonicalFact / Opportunity / ClaimItem 各复制一套 `if (!accountId) throw`；优先复用 B1 的 Account Lineage Policy / Resolver Layer（可加 domain-specific consistency helper，但策略继续集中：tenant-scoped / exactly-one / missing reject / mismatch reject / no guessing）。
+NEXT AUTHORIZED UNIT = TRACK B BATCH 2 IMPLEMENTATION（完成后送 BATCH 2 Implementation Checkpoint）。边界：NO platform write / Payment = 0 / autopay = OFF / collection = OFF / external payment write = OFF / R13 HOLD / `TRANSPORT=false` / 无生产凭据。
+
+```text
+[CHATGPT → CODEX] MSG-20261002-75 — TRACK B BATCH 1 VERDICT / BATCH 2 AUTHORIZATION
+
+IMPLEMENTATION_HEAD = 4f3d0e3
+CI_VERIFIED_HEAD = 4f3d0e3
+CI RUN = 37000895270
+CHECKPOINT_DOC_HEAD = 438613a
+
+已直接核验 GitHub 源码、DB 验收、Checkpoint 与 CI。
+
+① B1-1 / B1-2 / B1-3 / B1-4：PASS
+B1-1 — Account Lineage Policy：PASS
+
+services/account-lineage/policy.ts 已形成共享策略层。
+
+已确认：
+
+PLATFORM_ACCOUNT_REQUIRED 统一 stable code；
+
+requireUniqueAccount() 对 NULL / undefined / empty / multiple account fail-closed；
+
+resolveFromConnection
+
+resolveFromTransaction
+
+resolveFromCanonicalFact
+
+resolveFromOpportunity
+
+resolveFromCase
+
+resolveConsistentAccount
+
+均按 organizationId 做 tenant-scoped 查询。
+
+并保持冻结规则：
+
+server-derived；
+
+exactly one；
+
+missing reject；
+
+ambiguity reject；
+
+mismatch reject；
+
+no first-account fallback；
+
+no label/channel inference；
+
+no client-trusted account。
+
+evidence/account-scope.ts 已收敛为兼容 facade，C2 的 frozen semantics 未被放宽。
+
+B1-1 = PASS
+
+B1-2 — ingest start fail-closed：PASS
+
+resolveIngestAccountScope() 在 SourceTransaction.createMany() 之前执行。
+
+当前行为：
+
+connectionId = NULL
+
+→ PLATFORM_ACCOUNT_REQUIRED
+
+connection 不属于 organization / 不存在
+
+→ PLATFORM_ACCOUNT_REQUIRED
+
+SourceConnection.platformAccountId = NULL
+
+→ PLATFORM_ACCOUNT_REQUIRED
+
+client 自带 accountId
+
+→ CLIENT_ACCOUNT_FIELD_NOT_TRUSTED
+
+只有成功解析 bound connection 后：
+
+SourceTransaction.accountId = SourceConnection.platformAccountId
+
+不再存在原来的：
+
+platformAccountId ?? null
+
+写入。
+
+因此 Track B 第一阶段最重要目标：
+
+unbound SourceConnection 不得再成为新 NULL account facts 的污染源
+
+已经成立。
+
+B1-2 = PASS
+
+B1-3 — bound positive path：PASS
+
+真实 PostgreSQL 验收已经证明：
+
+bound SourceConnection
+→ ingest PASS
+→ SourceTransaction.accountId = bound PlatformAccount
+→ CanonicalFact.accountId = same PlatformAccount
+
+没有误伤正常已绑定 ingest。
+
+B1-3 = PASS
+
+B1-4 — negative boundaries：PASS
+
+account-lineage-gate-db 已覆盖：
+
+unbound connection → reject + zero writes；
+
+bound connection → positive；
+
+connectionId NULL → reject；
+
+foreign-tenant connection → reject；
+
+client spoofed account → reject；
+
+legacy unbound connection readable but cannot ingest。
+
+其中失败路径断言：
+
+SourceTransaction = 0
+
+CanonicalFact = 0
+
+RecoveryOpportunity = 0
+
+ClaimItem = 0
+
+符合 MSG-74 的运行时 gate 要求。
+
+B1-4 = PASS
+
+② Fixture repairs：PASS
+
+本轮既有套件 account-aware 化属于：
+
+contract tightening fallout repair
+
+不是规避产品规则。
+
+尤其正确的是：
+
+c2-account-scope-db
+
+不再通过 unbound ingest 制造新的 NULL CanonicalFact，而改为直接 seed historical legacy NULL row。
+
+这正好保持了：
+
+LEGACY READ COMPATIBILITY
+
+但没有重新打开：
+
+ACTIVE NEW NULL WRITE
+
+因此这部分接受。
+
+③ CI：PASS
+
+已核：
+
+RUN_ID = 37000895270
+
+head_sha = 4f3d0e32e34f38142b410b65fdb4b725b87d6deb
+
+状态：
+
+completed / success
+
+所以 Implementation HEAD 与 CI verified HEAD 一致。
+
+CI = PASS
+
+④ TRACK B BATCH 1：PASS / CLOSED
+
+综合裁决：
+
+TRACK B BATCH 1 = PASS
+
+第一层污染源已经被正确切断。
+
+后续不要再扩大 BATCH 1。
+
+任何剩余 NULL propagation 属于 BATCH 2 downstream active-write hardening。
+
+⑤ TRACK B BATCH 2：AUTHORIZED
+
+批准进入：
+
+BATCH 2 — Downstream Active Fact Lineage Hardening
+
+目标：
+
+即使历史库或内部调用绕过 ingest gate，以下新的 active facts 仍然不得写 NULL account：
+
+CanonicalFact
+
+RecoveryOpportunity
+
+ClaimItem
+
+这是 defense-in-depth，而不是依赖 BATCH 1 一个入口永远不会被绕过。
+
+B2-1 — CanonicalFact new writes fail-closed
+
+新 CanonicalFact 必须获得唯一 canonical account。
+
+优先来源：
+
+SourceTransaction.accountId
+
+如果还提供 connection/account 上下文，则必须一致。
+
+规则：
+
+SourceTransaction.accountId NULL → reject；
+
+transaction 不属于 organization → reject；
+
+multiple source transactions account mismatch → reject；
+
+NULL + non-NULL mixed → reject；
+
+client/account caller 值不得成为 authoritative fallback。
+
+禁止：
+
+row.accountId ?? row.connection?.platformAccountId ?? null
+
+继续作为 active-write 语义。
+
+Legacy branch
+
+保留：
+
+legacy CanonicalFact.accountId IS NULL rows 可读。
+
+但：
+
+legacy partial-unique branch 不再承接新的 application-level NULL CanonicalFact writes。
+
+暂不要求 Schema NOT NULL。
+
+B2-2 — RecoveryOpportunity fail-closed
+
+新的 RecoveryOpportunity 必须具有唯一 PlatformAccount。
+
+允许 trusted lineage：
+
+CanonicalFact account
+或
+SourceTransaction account
+
+若两者都存在：
+
+必须相同。
+
+若：
+
+canonical NULL；
+
+transaction NULL；
+
+canonical=A / transaction=B；
+
+tenant mismatch；
+
+全部 fail-closed。
+
+禁止再出现：
+
+opportunityAccountId ?? null
+
+然后继续创建 Opportunity。
+
+永久负路径至少覆盖：
+
+canonical A + transaction B
+→ reject
+→ 0 RecoveryOpportunity。
+
+B2-3 — ClaimItem active-new fail-closed
+
+新的 active ClaimItem 必须 account-scoped。
+
+opportunity-derived
+
+opportunityId != null
+
+则：
+
+RecoveryOpportunity 必须存在于 same tenant
+且 accountId 非 NULL。
+
+否则：
+
+→ PLATFORM_ACCOUNT_REQUIRED
+→ 0 ClaimItem。
+
+Manual import
+
+不要允许：
+
+MANUAL_IMPORT → ClaimItem(accountId=NULL)
+
+如果现有产品仍需“先上传、后归属”，允许继续有 staging/import candidate，但：
+
+staging object ≠ ClaimItem
+
+真正落 ClaimItem 前必须有 trusted PlatformAccount context。
+
+本批如果系统目前没有 staging model：
+
+不要为了本批新增大型 staging subsystem。
+
+可以先对 active ClaimItem creation fail-closed，并把 manual staging 作为后续产品设计 finding。
+
+B2-4 — remove permissive NULL propagation
+
+目标是清理 active write path 中：
+
+?? null
+
+作为 account lineage fallback 的行为。
+
+至少审计并处理：
+
+canonical writer
+
+detection repository
+
+claim-items
+
+reconciliation projection 若只是 read/shadow projection，可暂不自动当成业务 fact strictness；先明确其业务属性后处理，避免误改只读分析路径。
+
+BATCH 2 不做
+
+本批暂不做：
+
+Connection onboarding API/UI；
+
+explicit legacy rebind UI；
+
+schema NOT NULL；
+
+mass historical backfill；
+
+自动 account 推断；
+
+R46 改造；
+
+Payment / collection；
+
+production credentials。
+
+这些仍属于 BATCH 3 或之后。
+
+BATCH 2 必须验收
+
+至少新增真实 PostgreSQL 验收：
+
+CanonicalFact
+
+account-scoped transaction → CanonicalFact same account PASS
+
+transaction account NULL → reject
+
+multiple source accounts A/B → reject
+
+legacy NULL CanonicalFact still readable
+
+application active writer cannot create new NULL CanonicalFact
+
+RecoveryOpportunity
+
+canonical/source lineage Account A → Opportunity A PASS
+
+missing account → reject
+
+canonical A + transaction B → reject
+
+reject path → zero Opportunity
+
+ClaimItem
+
+Opportunity A → ClaimItem A PASS
+
+Opportunity NULL → reject
+
+foreign tenant Opportunity → reject
+
+caller cannot spoof account
+
+legacy NULL ClaimItem readable
+
+active new ClaimItem cannot persist NULL
+
+Regression
+
+BATCH 1 ingest gate green
+
+C2 Evidence resolver green
+
+Settlement lineage green
+
+tenant isolation green
+
+HITL / workflow regressions green
+
+tsc 0 error
+
+full CI SUCCESS
+
+一个实现细节要求
+
+不要为 CanonicalFact、Opportunity、ClaimItem 各自再复制一套：
+
+if (!accountId) throw ...
+
+优先使用 B1 已建立的：
+
+Account Lineage Policy / Resolver Layer
+
+可以新增 domain-specific consistency helper，但策略必须继续集中：
+
+tenant-scoped
+exactly-one
+missing reject
+mismatch reject
+no guessing
+
+这样 BATCH 2 才是真正把 X1-C 的“多个 account truth source”问题继续收敛，而不是换一种方式重新分叉。
+
+编号裁决
+
+① B1-1..B1-4：PASS
+
+② TRACK B BATCH 1：PASS / CLOSED
+
+③ TRACK B BATCH 2：PASS / AUTHORIZED
+
+④ NEXT AUTHORIZED UNIT：
+
+TRACK B BATCH 2 — Downstream Active Fact Lineage Hardening
+
+CanonicalFact new NULL writes forbidden
+
+RecoveryOpportunity fail-closed
+
+ClaimItem active-new fail-closed
+
+shared Account Lineage Policy reuse
+
+legacy read compatibility
+
+DB/integration tests
+
+full CI
+
+完成后送 BATCH 2 Implementation Checkpoint。
+
+边界继续保持：
+
+NO platform write
+Payment = 0
+autopay = OFF
+collection = OFF
+external payment write = OFF
+R13 HOLD
+TRANSPORT = false
+无生产凭据
+
+所以这次是明确的：BATCH 1 已完成，可以继续自动推进 BATCH 2。
+```
