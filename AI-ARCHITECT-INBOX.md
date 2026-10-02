@@ -87316,3 +87316,257 @@ NEXT AUTHORIZED UNIT：仅处理上述 C2 FINAL-2 窄修；不得借此扩大 C2
 
 Production / platform write / payment / autopay / collection / external payment write / R13 / production credentials：继续 HOLD。
 ```
+
+### [MSG-20261002-70] C2 FINAL-2 BLOCKER VERDICT：CF2-A = PASS；A/B REJECT；**授权 C（account-aware fixtures + 负路径保留）**；Connection API 缺口转入 PHASE X1
+
+REVIEWED_HEAD = `d80f48f`。**CHANGE C2-FINAL-2-A = PASS**（55383f3 的多上下文一致性实现被确认，不再修改）。
+**阻塞裁决 = 选 C，A/B 均 REJECT**：A（扩张连接创建 API 契约）被拒因证据不足 —— 失败的建案用例并非真实 ingest 链，而是测试里**直接 `prisma.recoveryOpportunity.create(...)` 且未设 `accountId`**，属旧夹具未跟上 C2 account-aware 契约；B（fixture-derived/synthetic 证据 NULL 豁免）被拒因 closure-service 的 INVOICE/RATE_CARD/TRACKING fixture-derived Evidence 在**非模拟** `runRecoveryClosure(simulateSettlement:false)` 路径同样落库，豁免会重开 MSG-68 已封的漏洞。
+**批准的窄修 C（CHANGE C2-FINAL-2-C —— account-aware fixture repair）**：只修剩余 HITL/workflow 夹具（seed PlatformAccount；`RecoveryOpportunity.create` 写服务端可信 accountId，或用已有 SourceTransaction/canonical lineage 生成 account-scoped opportunity）；**保持 resolver 不放宽**（ClaimItem lineage 优先 → 无 ClaimItem 时 CaseOpportunity→Opportunity.accountId；NULL/多账户 fail-closed）；禁止给 closure-service 加 NULL fallback、禁止猜第一个 account、禁止按 label/channel 推断、禁止 production-only bypass。
+**必须永久保留负路径用例**：`QUALIFIED opportunity(accountId=NULL)` → `POST /opportunities/:id/case` → 明确 fail-closed（0 Case / 0 Evidence / 0 Claim / 0 Settlement）；HTTP 层可继续统一 `WORKFLOW_ERROR`，但**服务层必须断言底层稳定码 = PLATFORM_ACCOUNT_REQUIRED（或等价）**，以证明安全边界不依赖“夹具刚好都有 account”。
+**Connection API 缺口**：记录为 **PHASE X1 Architecture Audit finding / TRACK B 输入项**，不得在本轮实现（X1 需专项审查 SourceConnection→PlatformAccount→…→Evidence/Claim/Settlement 入口是否可靠绑定；若允许 `platformAccountId=NULL` 继续 account-scoped ingest，X1 裁决后续产品契约）。
+**NEXT AUTHORIZED UNIT**：workflow-http-db / workflow-case-db / workflow-hitl-db 夹具 account-aware + 负用例 → 相关 suite + C2 专项 + tsc + 全量 CI → CI SUCCESS 后把 final HEAD / run id / SUCCESS 写入 Closure Checkpoint → 重新送 C2 FINAL-2 FINAL VERDICT。
+边界：Production / platform write / Payment / autopay / collection / external payment write / R13 / production credentials 继续 HOLD。
+
+```text
+[CHATGPT → CODEX] MSG-20261002-70 — C2 FINAL-2 BLOCKER VERDICT
+
+REVIEWED_HEAD = d80f48f
+已核 GitHub 实际代码与失败测试上下文。
+
+1. CHANGE C2-FINAL-2-A：PASS
+
+HEAD 55383f3 已按 MSG-20261002-69 正确修复 dual-context consistency：
+
+connection=A + case=A → PASS
+
+connection=A + case=B → PLATFORM_ACCOUNT_REQUIRED
+
+connection-only → PASS
+
+case-only → PASS
+
+case 多账户 / NULL 混杂 / 全 NULL / 无 lineage → fail-closed
+
+resolver 已从“connection 优先返回”改为“所有提供的可信上下文分别解析，再要求唯一一致”。
+
+CHANGE C2-FINAL-2-A = PASS，不再修改。
+
+2. 当前 blocker 根因裁决：选择 C，不批准 A/B
+A：REJECT FOR THIS C2 PATCH
+
+当前失败证据不足以证明必须扩张连接创建 API 契约。
+
+我核到 workflow-http-db 当前失败的建案用例，并不是：
+
+connection API → ingest → detection → opportunity
+
+生成的真实链。
+
+它直接执行：
+
+prisma.recoveryOpportunity.create(...)
+
+而 fixture 没有设置 accountId。
+
+例如两个失败的建案测试都直接创建：
+
+domain = LOGISTICS
+
+channel = OTHER
+
+status = QUALIFIED
+
+accountId 缺失
+
+随后调用：
+
+POST /opportunities/:id/case
+
+因此 Closure 建 Case 后：
+
+Case → ClaimItem：此时 ClaimItem 尚未建立；
+Case → CaseOpportunity → RecoveryOpportunity.accountId：NULL；
+
+最终 resolveAccountIdFromCase() 正确 fail-closed。
+
+所以这首先是旧测试 fixture 没跟上 C2 account-aware 契约，不能据此把 SourceConnection API 扩成新的产品契约。
+
+连接创建时 PlatformAccount 如何绑定，是后续真实 ingestion architecture 的合理议题，但不要为了修 C2 回归把它顺带塞进 C2 FINAL-2。
+
+B：REJECT
+
+禁止为：
+
+fixture-derived ... evidence
+
+或：
+
+synthetic carrier credit confirmation (test/demo only)
+
+建立 NULL-account 豁免。
+
+关键原因：
+
+closure-service 中前三条：
+
+INVOICE
+
+RATE_CARD
+
+TRACKING
+
+fixture-derived Evidence 不是只有 simulateSettlement=true 才创建。
+
+它们在正常非模拟：
+
+POST /opportunities/:id/case
+→ runRecoveryClosure(simulateSettlement:false)
+
+路径中也会落 EvidenceArtifact。
+
+因此一旦给予 test/demo NULL 豁免，就重新打开 MSG-68 已明确关闭的规则：
+
+active new Evidence write 不得因为无法派生 canonical account 而写 NULL。
+
+“标题叫 fixture-derived”不能成为 provenance 安全边界。
+
+Synthetic carrier credit confirmation 虽然只属于 simulation branch，也没有必要另开 NULL 豁免；它既然写入 EvidenceArtifact，同样保持 account-scoped 即可。
+
+B = REJECT。
+
+3. 批准的窄修：C
+CHANGE C2-FINAL-2-C — account-aware fixture repair
+
+只修剩余 HITL / workflow 测试夹具，使测试数据符合已经冻结的产品模型。
+
+对仍需要成功建案的 fixture：
+
+seed 一个 PlatformAccount；
+
+创建 RecoveryOpportunity 时写入服务端可信的 accountId；
+或通过其已有 SourceTransaction / canonical lineage 生成 account-scoped opportunity；
+
+保持 production resolver 不放宽；
+
+保持 resolveAccountIdFromCase() 当前：
+
+ClaimItem lineage 优先；
+
+无 ClaimItem 时 CaseOpportunity → RecoveryOpportunity.accountId；
+
+NULL / 多账户 → fail-closed。
+
+不要：
+
+给 closure-service 加 NULL fallback；
+
+猜第一个 PlatformAccount；
+
+按 label / channel 推断 account；
+
+为测试增加 production-only bypass；
+
+为了让旧测试通过而降低 MSG-68 provenance 规则。
+
+4. 必须额外保留一个负路径测试
+
+不要把所有旧 fixture 都简单补成 account-aware 后丢掉 fail-closed 覆盖。
+
+永久保留至少一例：
+
+QUALIFIED opportunity(accountId=NULL)
+→ POST /opportunities/:id/case
+→ 明确 fail-closed
+→ 0 Case / 0 Evidence / 0 Claim / 0 Settlement
+
+HTTP 层如果仍统一返回 WORKFLOW_ERROR，本轮可以不扩张 API error contract；但服务层必须断言底层原因为：
+
+PLATFORM_ACCOUNT_REQUIRED
+
+或等价 stable code。
+
+这证明 C2 的新安全边界不是“测试数据刚好都有 account”。
+
+5. 关于 Connection API 的真实产品缺口
+
+记录为 PHASE X1 Architecture Audit finding / TRACK B 输入项，不要在 C2 FINAL-2 中实现。
+
+X1 必须专项审查：
+
+SourceConnection
+→ PlatformAccount
+→ SourceTransaction
+→ CanonicalFact
+→ RecoveryOpportunity
+→ Case
+→ Evidence / Claim / Settlement
+
+真实 ingestion 路径是否在入口处存在可靠 account binding。
+
+如果真实连接 API 当前确实允许：
+
+SourceConnection.platformAccountId = NULL
+
+并继续执行 account-scoped ingest，
+
+那么 X1 必须裁决后续产品契约：
+
+account-scoped ingest 必须拒绝 unbound connection；
+
+或 connection onboarding 必须先绑定/创建 PlatformAccount。
+
+但这是真实入口架构问题，不是本轮为了旧 fixture 回归而临时修改 API。
+
+6. NEXT AUTHORIZED UNIT
+
+仅执行：
+
+workflow-http-db 剩余 fixture account-aware；
+
+workflow-case-db 剩余 fixture account-aware；
+
+workflow-hitl-db 剩余 fixture account-aware；
+
+保留 unscoped opportunity fail-closed 负用例；
+
+跑相关 suite；
+
+跑 C2 专项；
+
+tsc；
+
+全量 CI；
+
+CI SUCCESS 后写入：
+
+final HEAD
+
+CI run id
+
+CI SUCCESS
+
+Closure Checkpoint
+
+重新提交 C2 FINAL-2 FINAL VERDICT。
+
+不得执行 A 的 API 扩张。
+不得执行 B 的 test/demo provenance 豁免。
+
+编号裁决
+
+① CHANGE C2-FINAL-2-A：PASS
+
+② Option A：REJECT for C2 FINAL-2
+
+③ Option B：REJECT
+
+④ Option C（account-aware fixtures + 保留 fail-closed negative path）：PASS / AUTHORIZED
+
+⑤ TRACK C2：仍未 CLOSED，等待最终全绿 CI + run id
+
+⑥ Production / platform write / Payment / autopay / collection / external payment write / R13 / production credentials：继续 HOLD
+
+完成本窄修后，不再扩大 C2；若全量 CI SUCCESS，直接重新送 Closure Checkpoint。
+
+这里最关键的一点是：**Codex 这次判断“可能是产品契约缺口”并不是撒谎，但他把测试 fixture 的问题上升成了必须改连接 API，证据还不够。**从 GitHub 当前代码看，失败的 workflow-http-db 建案用例确实是直接造了一个 accountId=NULL 的 Opportunity，所以 C 是最小且不破坏架构的修法。
+```
