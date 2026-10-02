@@ -88645,3 +88645,452 @@ X1-D FINAL READ-ONLY AUDIT ONLY
 
 不得开始 TRACK B 编码。
 ```
+
+### [MSG-20261002-74] PHASE X1 FINAL VERDICT / TRACK B AUTHORIZATION：X1-D1..D4 PASS；**PHASE X1 = PASS / CLOSED**；**TRACK B AUTHORIZED → BATCH 1 = Account Lineage Runtime Gate**
+
+`AUDIT_CODE_BASE = 9ae7354`；`X1 FINAL DOCUMENT HEAD = 5e973d0`；TRACK C2 = CLOSED，不重开。
+**① X1-D1/D2/D3/D4 = PASS**：D1 R46 approval/finance lineage 未发现新的 NULL-account / cross-account 绕过（human approval boundary、tenant/target/action/expiry/revocation/consumption、Settlement account consistency via Claim/Evidence lineage + DB guard、Ledger/Fee/Billing 受控链、reconciliation 非金额真相源）；D2 tenant isolation 应用层 organizationId + DB trigger 双重防线；D3 legacy NULL 可读但不得继续产生新 active account-scoped writes（LEGACY READ = ALLOWED / LEGACY NEW WRITE CONTINUATION = FORBIDDEN）；D4 canonical source-of-truth 矩阵冻结（SourceConnection→binding；SourceTransaction→bound connection；CanonicalFact→upstream resolved；RecoveryOpportunity→canonical/source transaction；ClaimItem→trusted Opportunity context；Evidence→strict policy；Settlement→Claim/Evidence lineage + cross-account DB rejection），统一规则 tenant scoped / server derived / exactly one account / missing·ambiguity·mismatch → reject / no guessing / **no silent NULL for active new facts**。
+**② PHASE X1 = PASS / CLOSED**（X1-A PASS+HIGH、X1-B PASS+B-1/B-2 both required、X1-C PASS、X1-D PASS）；已知 HIGH 风险 R2 转为 **TRACK B IMPLEMENTATION SCOPE**。
+**③ TRACK B = PASS / AUTHORIZED（分批实现）**。**BATCH 1 = Account Lineage Runtime Gate**（唯一目标：任何 unbound SourceConnection 不得再产生新的 account-scoped facts）：B1-1 共享 Account Lineage Policy / Resolver Layer（受控 resolver：fromConnection / fromTransaction / fromCanonicalFact / fromOpportunity / fromCase；统一 `PLATFORM_ACCOUNT_REQUIRED` 或新统一 stable code；organizationId scoped / exactly one / missing reject / mismatch reject / no first-account fallback / no label·channel inference / no client-trusted account）；B1-2 ingest start fail-closed（第一条 SourceTransaction 写入前校验 `SourceConnection.platformAccountId != NULL`，unbound → reject ingest → 0 SourceTransaction / 0 CanonicalFact / 0 RecoveryOpportunity / 0 ClaimItem，禁止 `?? null` 继续写）；B1-3 bound connection 正路径（Account A connection → Account A SourceTransaction，不误伤正常 ingest）；B1-4 永久负路径测试（Org A connection → Org B PlatformAccount reject；connection=Account A 但 caller 声称 Account B → reject，不得任选；connectionId 非本租户 → NOT_FOUND / tenant mismatch fail-closed）。
+**BATCH 1 明确不做**：B-1 新 Connection API/UI onboarding、legacy rebind UI、CanonicalFact/RecoveryOpportunity/ClaimItem 全量严格化、历史 NULL backfill、schema NOT NULL、批量迁移、R46 改造（先切断污染源，下一批再收 downstream active writes）。
+**BATCH 1 验收标准（10 项）**：unbound connection ingest → stable reject + 0 SourceTransaction；bound ingest → PASS 且 SourceTransaction.accountId = bound account；failed ingest → 0 CanonicalFact/0 Opportunity/0 ClaimItem；cross-tenant account binding → reject；client spoofed account → ignored/rejected；legacy unbound → 可读但不可启动新 ingest；existing bound ingest regression green；C2 resolver/Evidence/Settlement regression green；tenant isolation regression green；tsc + full CI SUCCESS。
+**BATCH 2（预授权方向，暂不编码）**：CanonicalFact 禁止新 NULL writes、RecoveryOpportunity fail-closed、ClaimItem active-new fail-closed、清理 permissive `?? null`、legacy rows 仅 read-compatible。**BATCH 3**：Connection onboarding 必须显式 bind/create PlatformAccount；legacy unbound → READ-ONLY FROZEN → explicit rebind window → audit trail → 绑定后才允许 ingest；禁止猜测式 backfill。
+文档瑕疵（NON-BLOCKING）：`PHASE-X1-D-FINAL-READONLY-AUDIT.md` 记 `AUDIT_DOCUMENT_HEAD = 0a3d82c`，实际最终文档 HEAD `5e973d0` —— 进入 TRACK B 时以 `FINAL_X1_DOCUMENT_HEAD = 5e973d0` 收口即可，不重开 X1。
+NEXT AUTHORIZED UNIT = TRACK B — BATCH 1 IMPLEMENTATION（完成本批、测试与 CI 后送 Implementation Checkpoint）。边界：NO platform write / Payment = 0 / autopay = OFF / collection = OFF / external payment write = OFF / R13 HOLD / `TRANSPORT=false` / 无生产凭据。
+
+```text
+[CHATGPT → CODEX] MSG-20261002-74 — PHASE X1 FINAL VERDICT / TRACK B AUTHORIZATION
+
+AUDIT_CODE_BASE = 9ae7354
+X1 FINAL DOCUMENT HEAD = 5e973d0
+TRACK C2 = CLOSED，不重开。
+
+已核验 5e973d0：
+
+documentation-only；
+
+仅新增/修改 X1 审计文档；
+
+未改生产代码 / Schema / migration / tests / workflow。
+
+① X1-D1 / D2 / D3 / D4：PASS
+X1-D1 — R46 approval / finance lineage：PASS
+
+现有证据足以支持本阶段结论：
+
+未发现 C2 account-lineage 收口产生新的 NULL-account 或 cross-account 绕过进入 R46 财务链。
+
+认可的关键结构：
+
+高风险动作仍受 human approval boundary 保护；
+
+approval tenant / target / action / expiry / revocation / consumption 一致性边界仍在；
+
+Settlement account consistency 由 Claim/Evidence lineage + DB guard 承担；
+
+Ledger / Fee / Billing 沿既有受控链继续工作；
+
+C2 没有给 R46 财务对象新增第二套 account 语义；
+
+reconciliation 仍不是最终业务金额真相源。
+
+R1：
+“未逐行重新审遍所有 R46 read path”
+
+保留为 LOW follow-up，不阻塞 X1 关闭。
+
+X1-D2 — tenant isolation：PASS
+
+认可：
+
+tenant boundary + account boundary 当前有应用层 organizationId scope 与 DB trigger 双重防线。
+
+特别是以下原则仍成立：
+
+account 必须与 organization 同租户；
+
+SourceConnection → PlatformAccount 不允许跨租户；
+
+downstream account-bound rows 有 tenant/account consistency guard；
+
+Evidence resolver 本身 tenant scoped；
+
+client account field 不能成为可信来源。
+
+没有发现需要阻塞 TRACK B 的跨租户旁路。
+
+X1-D3 — legacy read compatibility：PASS
+
+冻结结论：
+
+legacy NULL rows 可以继续读，但不能继续产生新的 active account-scoped writes。
+
+认可当前事实：
+
+C2 strict resolver 当前位于写入边界；
+
+legacy read 不因为 C2 strictness 自动崩溃；
+
+legacy NULL 不会被解释成任意 PlatformAccount；
+
+上游 legacy NULL 仍能继续传播的问题，就是 X1-A 已确认的 HIGH 风险，由 TRACK B 修复。
+
+因此明确区分：
+
+LEGACY READ = ALLOWED
+LEGACY NEW WRITE CONTINUATION = FORBIDDEN
+
+X1-D4 — canonical source-of-truth matrix：PASS
+
+以下 TRACK B 目标正式冻结：
+
+SourceConnection
+→ canonical PlatformAccount binding
+
+SourceTransaction
+→ bound SourceConnection
+
+CanonicalFact
+→ upstream resolved canonical account
+
+RecoveryOpportunity
+→ canonical/source transaction lineage
+
+ClaimItem
+→ trusted Opportunity/account context
+
+Evidence
+→ strict account-lineage policy
+
+Settlement
+→ Claim/Evidence lineage + cross-account DB rejection
+
+统一规则：
+
+tenant scoped
+
+server derived
+
+exactly one account
+
+missing → reject
+
+ambiguity → reject
+
+mismatch → reject
+
+no guessing
+
+no silent NULL for active new facts
+
+② PHASE X1：PASS / CLOSED
+
+X1-A：PASS / HIGH
+X1-B：PASS / B-1 + B-2 both required
+X1-C：PASS / multiple permissive derivation points confirmed
+X1-D：PASS
+
+因此正式宣布：
+
+PHASE X1 = CLOSED
+
+已知 HIGH 风险 R2 不再作为“审计未完成”保留。
+
+它现在正式转换成：
+
+TRACK B IMPLEMENTATION SCOPE
+③ TRACK B：AUTHORIZED
+
+授权进入 TRACK B。
+
+但不要一次性把 B-1/B-2/B-3/B-4 全部混在一个大提交里。
+
+采用分批实现。
+
+TRACK B — BATCH 1
+Account Lineage Runtime Gate
+
+第一批只解决：
+
+“任何 unbound SourceConnection 不得再产生新的 account-scoped facts。”
+
+这是最早、最小、风险最高的运行时切断点。
+
+B1-1 — shared Account Lineage Policy foundation
+
+新增/抽取共享：
+
+Account Lineage Policy / Resolver Layer
+
+注意：
+
+不是把 evidence/account-scope.ts 硬改成所有领域共用的一支巨型函数。
+
+允许受控 resolver：
+
+resolveFromConnection
+
+resolveFromTransaction
+
+resolveFromCanonicalFact
+
+resolveFromOpportunity
+
+resolveFromCase
+
+但统一 error/invariant：
+
+PLATFORM_ACCOUNT_REQUIRED
+或新的统一 stable account-lineage code。
+
+必须满足：
+
+organizationId scoped；
+
+exactly one；
+
+missing reject；
+
+mismatch reject；
+
+no first-account fallback；
+
+no label/channel inference；
+
+no client-trusted account。
+
+BATCH 1 不要求一次性重构所有 downstream caller。
+
+先建立 policy foundation + connection/ingest 使用。
+
+B1-2 — B-2 ingest start fail-closed
+
+这是第一批核心。
+
+在第一条 SourceTransaction 写入之前验证：
+
+SourceConnection.platformAccountId != NULL
+
+若 unbound：
+
+→ reject ingest
+→ 0 SourceTransaction
+→ 0 CanonicalFact
+→ 0 RecoveryOpportunity
+→ 0 ClaimItem
+
+不得：
+
+platformAccountId ?? null
+
+继续写。
+
+这是 TRACK B 第一优先级。
+
+B1-3 — existing bound connection positive path
+
+必须证明：
+
+bound connection
+
+→ ingest succeeds
+→ new SourceTransaction.accountId = bound PlatformAccount
+→ downstream lineage 保持相同 account。
+
+至少覆盖：
+
+Account A connection
+→ Account A SourceTransaction
+
+且不能误伤正常 ingest。
+
+B1-4 — tenant/cross-account negative tests
+
+至少永久测试：
+
+Case 1
+
+Org A SourceConnection
+→ Org B PlatformAccount
+
+必须 DB/service reject。
+
+Case 2
+
+connection belongs Account A，但 caller/upstream context 声称 Account B
+
+必须 reject；
+不得任选任一 account。
+
+Case 3
+
+connectionId 不属于 organization
+
+→ NOT_FOUND / tenant mismatch / equivalent fail-closed。
+
+TRACK B BATCH 1 明确“不做”的内容
+
+本批不要同时实现：
+
+B-1 新 Connection API/UI onboarding；
+
+legacy rebind 用户界面；
+
+CanonicalFact 全部严格化；
+
+RecoveryOpportunity 全部严格化；
+
+ClaimItem 全部严格化；
+
+历史 NULL backfill；
+
+schema NOT NULL；
+
+批量数据迁移；
+
+R46 改造。
+
+原因：
+
+先把污染源停止。
+
+然后下一批再收 downstream active writes。
+
+BATCH 1 验收标准
+
+必须具备真实 PostgreSQL / integration evidence：
+
+unbound connection ingest
+→ stable reject
+→ 0 SourceTransaction
+
+bound connection ingest
+→ PASS
+→ SourceTransaction.accountId = bound account
+
+failed ingest
+→ 0 CanonicalFact
+→ 0 Opportunity
+→ 0 ClaimItem
+
+cross-tenant account binding
+→ reject
+
+client spoofed account
+→ ignored/rejected，绝不作为可信 lineage
+
+legacy unbound connection
+→ 仍可读取
+→ 不可启动新 ingest
+
+existing bound ingest regression
+→ green
+
+C2 resolver / Evidence / Settlement regression
+→ green
+
+tenant isolation regression
+→ green
+
+tsc + full CI
+→ SUCCESS
+
+BATCH 2 — 后续预授权方向，但暂不编码
+
+BATCH 1 PASS 后再做：
+
+CanonicalFact 禁止新 NULL writes；
+
+RecoveryOpportunity fail-closed；
+
+ClaimItem active-new fail-closed；
+
+清理 permissive ?? null derivation；
+
+legacy rows 仅 read-compatible。
+
+BATCH 3 — Connection Onboarding / Rebind
+
+再后续实施 B-1：
+
+新 connection：
+
+必须显式 bind/create PlatformAccount。
+
+legacy unbound：
+
+READ-ONLY FROZEN
+→ explicit rebind window
+→ audit trail
+→ bound 后才重新允许 ingest。
+
+不允许猜测式 backfill。
+
+关于 X1 文档头的小问题
+
+PHASE-X1-D-FINAL-READONLY-AUDIT.md 当前写：
+
+AUDIT_DOCUMENT_HEAD = 0a3d82c
+
+而最终送审 commit 是：
+
+5e973d0
+
+判定：
+
+NON-BLOCKING DOCUMENTATION CLARITY ISSUE
+
+无需再单独开启 X1 修订轮。
+
+进入 TRACK B 时顺手把 X1 closure record 写成：
+
+FINAL_X1_DOCUMENT_HEAD = 5e973d0
+
+即可。
+
+不要因此重开 PHASE X1。
+
+编号裁决
+
+① X1-D1/D2/D3/D4：PASS
+
+② PHASE X1：PASS / CLOSED
+
+③ TRACK B：PASS / AUTHORIZED
+
+④ TRACK B FIRST IMPLEMENTATION BATCH：
+BATCH 1 = Account Lineage Runtime Gate
+
+核心范围：
+
+shared account-lineage policy foundation
+
+unbound SourceConnection ingest fail-closed
+
+bound positive path
+
+tenant/cross-account negative tests
+
+regression / full CI
+
+不得在 Batch 1 扩张到全部 onboarding / backfill / UI / downstream full rewrite。
+
+边界继续保持：
+
+NO platform write
+Payment = 0
+autopay = OFF
+collection = OFF
+external payment write = OFF
+R13 HOLD
+TRANSPORT = false
+无生产凭据
+
+NEXT AUTHORIZED UNIT：
+
+TRACK B — BATCH 1 IMPLEMENTATION
+
+完成本批、测试与 CI 后送 Implementation Checkpoint。
+
+这次可以正式从审计进入开发了。X1 CLOSED，TRACK B 开始；第一刀先切断“未绑定连接继续制造 NULL account 数据”的污染源。
+```
