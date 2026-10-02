@@ -16,6 +16,7 @@
  *   #52 金额 / 成功率 fail closed
  */
 
+import { resolveAccountIdFromCase } from '../evidence/account-scope';
 import { Prisma, type PrismaClient } from '@prisma/client';
 
 import { prepareAuditInsert } from '../audit';
@@ -395,6 +396,7 @@ export async function runRecoveryClosure(input: RunClosureInput): Promise<Closur
           (await tx.evidenceArtifact.create({
             data: {
               organizationId,
+              accountId: await resolveAccountIdFromCase(tx as never, { organizationId, caseId: kase.id }),
               kind: spec.kind,
               title: spec.title,
               description: `fixture-derived ${spec.kind} evidence for ${caseNo}`,
@@ -502,6 +504,7 @@ export async function runRecoveryClosure(input: RunClosureInput): Promise<Closur
             (await tx.evidenceArtifact.create({
               data: {
                 organizationId,
+                accountId: await resolveAccountIdFromCase(tx as never, { organizationId, caseId: kase.id }),
                 kind: 'CREDIT_NOTE',
                 title: creditTitle,
                 description: 'synthetic carrier credit confirmation (test/demo only)',

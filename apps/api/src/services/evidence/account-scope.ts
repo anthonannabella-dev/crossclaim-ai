@@ -79,12 +79,20 @@ export async function resolveAccountIdFromCase(
     where: { organizationId: input.organizationId, caseId: input.caseId },
     select: { accountId: true },
   });
-  if (items.length === 0) {
-    throw new PlatformAccountRequiredError('case 下没有任何 account-scoped 主张，无法派生 provenance');
-  }
   const accounts = new Set(items.map((item) => item.accountId));
-  if (accounts.size !== 1 || accounts.has(null)) {
+  if (accounts.size === 1 && !accounts.has(null)) {
+    return [...accounts][0] as string;
+  }
+  if (items.length > 0) {
     throw new PlatformAccountRequiredError('case 下的主张未收敛到唯一 PlatformAccount');
   }
-  return [...accounts][0] as string;
+  const links = await tx.caseOpportunity.findMany({
+    where: { organizationId: input.organizationId, caseId: input.caseId },
+    select: { opportunity: { select: { accountId: true } } },
+  });
+  const oppAccounts = new Set(links.map((link) => link.opportunity?.accountId ?? null));
+  if (oppAccounts.size !== 1 || oppAccounts.has(null)) {
+    throw new PlatformAccountRequiredError('case 的 opportunity 链未收敛到唯一 PlatformAccount');
+  }
+  return [...oppAccounts][0] as string;
 }

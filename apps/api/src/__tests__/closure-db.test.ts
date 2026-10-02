@@ -44,9 +44,31 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await prisma.$executeRawUnsafe(
-    'TRUNCATE TABLE "AuditLog", "FeeCalculation", "BillingInvoice", "RecoveryLedgerEntry", "Settlement", "Claim", "CaseEvidence", "EvidenceArtifact", "RecoveryRoute", "CaseOpportunity", "Case", "RuleEvaluation", "RecoveryOpportunity", "RuleVersion", "RuleSet", "SourceTransaction", "ImportBatch", "Organization" CASCADE;',
+    'TRUNCATE TABLE "AuditLog", "FeeCalculation", "BillingInvoice", "RecoveryLedgerEntry", "Settlement", "Claim", "CaseEvidence", "EvidenceArtifact", "RecoveryRoute", "CaseOpportunity", "Case", "RuleEvaluation", "RecoveryOpportunity", "RuleVersion", "RuleSet", "SourceTransaction", "ImportBatch", "SourceConnection", "PlatformAccount", "Organization" CASCADE;',
   );
   await prisma.organization.create({ data: { id: ORG, name: '闭环租户', slug: 'closure-org' } });
+  // MSG-20261002-68 CHANGE A：夹具 account-aware 化（闭环链必须有 account provenance）。
+  const closureAccount = await prisma.platformAccount.create({
+    data: {
+      organizationId: ORG,
+      platform: 'OTHER',
+      externalAccountId: 'CLOSURE-ACCOUNT',
+      displayName: 'closure carrier account',
+    },
+  });
+  const closureConnection = await prisma.sourceConnection.create({
+    data: {
+      organizationId: ORG,
+      domain: 'LOGISTICS',
+      channel: 'OTHER',
+      kind: 'FILE_UPLOAD',
+      status: 'ACTIVE',
+      label: 'closure-conn',
+      platformAccountId: closureAccount.id,
+    },
+  });
+  const closureAccountId = closureAccount.id;
+  const closureConnectionId = closureConnection.id;
 
   const ruleSeed = readJson('rules.json') as {
     ruleSets: Array<{
@@ -86,7 +108,8 @@ beforeEach(async () => {
   for (const row of rowsOf('carrier-invoice.csv')) {
     await prisma.sourceTransaction.create({
       data: {
-        organizationId: ORG, domain: 'LOGISTICS', channel: 'OTHER', referenceType: 'INVOICE',
+        organizationId: ORG, connectionId: closureConnectionId, accountId: closureAccountId,
+        domain: 'LOGISTICS', channel: 'OTHER', referenceType: 'INVOICE',
         externalId: row['Invoice No'], occurredAt: new Date(`${row['Invoice Date']}T00:00:00Z`),
         amount: new Prisma.Decimal(row['Net Charge']), currency: row.Currency,
         dedupeKey: `closure-invoice-${row['Invoice No']}`, raw: row as Prisma.InputJsonValue,
@@ -96,7 +119,8 @@ beforeEach(async () => {
   for (const row of rowsOf('tracking.csv')) {
     await prisma.sourceTransaction.create({
       data: {
-        organizationId: ORG, domain: 'LOGISTICS', channel: 'OTHER', referenceType: 'TRACKING',
+        organizationId: ORG, connectionId: closureConnectionId, accountId: closureAccountId,
+        domain: 'LOGISTICS', channel: 'OTHER', referenceType: 'TRACKING',
         externalId: row['Tracking Number'], occurredAt: new Date(`${row['Pickup Date']}T00:00:00Z`),
         currency: 'USD', dedupeKey: `closure-tracking-${row['Tracking Number']}`,
         raw: row as Prisma.InputJsonValue,
