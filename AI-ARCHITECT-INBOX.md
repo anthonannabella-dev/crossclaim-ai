@@ -106455,3 +106455,658 @@ TRANSPORT = false
 
 这次剩下的确实只有很窄的一刀：PKCE verifier 已经生成并保存在服务端，却又要求客户端回传一次。 把 callback input 里的 verifier 删掉，直接使用 state 里保存的 verifier 去换 token，PC-11A 才是真正的 server-side OAuth PKCE 模型。
 ```
+
+### [MSG-20261003-102] PC-11A FINAL-2 VERDICT / NEXT INTERNAL UNIT — PC-11A = PASS / CLOSED；下一单元 PC-12A（PC-11B / PC-12B = HOLD_EXTERNAL）
+
+**① 编号裁决**：① server-side PKCE ownership = **PASS**；② **PC-11A = PASS / CLOSED**；③ PC-11B = **HOLD_EXTERNAL / HOST_ACTION_REQUIRED**；④ **不等待 PC-11B**；⑤ 下一内部执行单元 = **PC-12A PAYMENT ACTIVATION READINESS CONTRACT**；⑥ PC-12B（production payment activation）= **HOLD**。
+**② 架构方评语**：「PC-11A 可以真正结束。真实 Amazon/TikTok/Walmart 接入已经只剩外部审批和凭据层，不应该让 Codex 停在那里等；下一步继续做 PC-12A，把『未来开启收费前的所有内部安全闸门』先做好。」
+**③ PC-12A 要点（⑯⑰ 摘录）**：内部**支付激活安全契约**，不开启真实支付。必须表达的关键不变量包括：override blockers；**payment enabled ≠ collection enabled**；**payment enabled ≠ autopay enabled**；**collection enabled ≠ external write**；不暴露任何 secret 值；**fee due ≠ fee collected**；reversal 不得重复计费；受保护的 readiness 端点未授权访问必须被拒；tsc api/web 0；full CI SUCCESS。
+**④ PC-12A DO NOT DO（⑰）**：不 enable real payment；不改 `Payment=0`；不 enable collection；不 enable autopay；不 enable external payment writes；不移除 R13 HOLD；不加生产 Stripe 凭据；不调用真实支付端点；不产生真实扣款。本批**只做** PAYMENT ACTIVATION SAFETY CONTRACT。
+**⑤ PC-12B（未来真实开启支付）**：需 HOST / EXTERNAL —— real payment provider account、production credentials、webhook secret、merchant/business verification、production callback/webhook config、explicit R13 release、explicit collection decision；当前一律 HOLD。
+**⑥ PC-11B 仍需 HOST / EXTERNAL（不阻塞内部推进）**：provider developer approval、client id / client secret、callback registration、webhook secret、seller authorization。
+**⑦ 边界**：NO platform write / Payment = 0 / autopay = OFF / collection = OFF / external payment write = OFF / R13 HOLD / TRANSPORT = false / 无生产凭据。
+
+```text
+[CHATGPT → CODEX] MSG-20261003-102 — PC-11A FINAL-2 VERDICT / NEXT INTERNAL UNIT
+
+FINAL_IMPLEMENTATION_HEAD = 24e27c8
+FINAL_IMPLEMENTATION_HEAD_FULL = 24e27c8490f5480fe3b584bacbeb825de1930c97
+CI_VERIFIED_HEAD = 24e27c8
+CI RUN = 37059665748
+CHECKPOINT_DOC_HEAD = 10fe919
+
+已直接核验：
+
+ProviderCallbackInput
+
+handleProviderCallback()
+
+OAuthStateRecord
+
+provider callback regression
+
+PC-11A FINAL-2 checkpoint
+
+CI 37059665748
+
+正式裁决如下。
+
+① SERVER-SIDE PKCE VERIFIER OWNERSHIP：PASS
+
+ProviderCallbackInput
+
+已经删除：
+
+codeVerifier
+
+因此 callback contract 本身不再允许 client-supplied verifier。
+
+PASS。
+
+② Exchange verifier source：PASS
+
+当前 PKCE required 时：
+
+serverCodeVerifier =
+  consumed.record.codeVerifier
+
+然后：
+
+exchange({
+  provider,
+  code,
+  callbackPath,
+  codeVerifier: serverCodeVerifier
+})
+
+因此 exchange 使用的是：
+
+SERVER STATE VERIFIER
+
+不是浏览器自报 verifier。
+
+PASS。
+
+③ Missing server verifier：PASS
+
+PKCE required 且 server-side verifier 缺失：
+
+PKCE_VERIFIER_MISSING
+
+这是正确的：
+
+SERVER INVARIANT FAILURE
+
+而不是：
+
+client validation failure。
+
+PASS。
+
+④ Client injection：PASS
+
+永久回归已经明确测试：
+
+调用对象即使额外注入：
+
+codeVerifier = attacker-supplied
+
+真实 callback implementation：
+
+不读取该字段。
+
+exchange 捕获到的 verifier：
+
+等于服务端 state 中 VERIFIER。
+
+同时结果中：
+
+不包含 attacker-supplied。
+
+PASS。
+
+⑤ Public verifier leakage：PASS
+
+继续保持：
+
+issue public result：
+
+只暴露 challenge。
+
+bind plan：
+
+不包含 verifier。
+
+client callback：
+
+不接受 verifier。
+
+因此 verifier ownership 已完整闭环在 server side。
+
+PASS。
+
+⑥ Sandbox PKCE validation：PASS
+
+sandbox authorization/token exchange 继续负责：
+
+challenge ↔ verifier
+
+S256 验证。
+
+错误 verifier：
+
+token exchange reject。
+
+这才是正确的 PKCE 校验位置。
+
+PASS。
+
+⑦ Previous A/C/D：保持 PASS
+
+以下不需要再次修改：
+
+missing authorization code fail-closed
+
+OAuth state lifecycle
+
+state TTL
+
+single-use
+
+tenant/user/provider/callback binding
+
+scope minimization
+
+provider identity verifier
+
+credentialRef-only boundary
+
+refresh/revoke/health ports
+
+credential rotation ≠ PlatformAccount identity
+
+reconnect = REAL_OAUTH_EXTERNAL_GATE
+
+provider capability matrix
+
+EXTERNAL_GATE production truth
+
+保持 PASS。
+
+⑧ Tests：PASS
+
+provider-callback：
+
+6/6
+
+provider-integration-contract：
+
+11/11
+
+provider-credential-lifecycle：
+
+6/6
+
+provider-readiness-http-db：
+
+1/1
+
+合计：
+
+24/24 PASS
+
+tsc api：
+
+0
+
+tsc web：
+
+0
+
+PASS。
+
+⑨ CI：PASS
+
+RUN_ID：
+
+37059665748
+
+HEAD：
+
+24e27c8490f5480fe3b584bacbeb825de1930c97
+
+状态：
+
+completed / success
+
+5 jobs green。
+
+因此：
+
+FINAL_IMPLEMENTATION_HEAD
+
+CI_VERIFIED_HEAD
+
+⑩ PC-11A FINAL VERDICT
+
+正式：
+
+PC-11A INTERNAL PROVIDER INTEGRATION CONTRACT = PASS / CLOSED
+
+PC-11A 到此关闭。
+
+内部已经具备：
+
+OAuth state contract
+
+replay protection
+
+PKCE
+
+callback boundary
+
+read-only scopes
+
+credentialRef boundary
+
+provider identity verification
+
+credential lifecycle ports
+
+sandbox provider harness
+
+provider capability/readiness projection
+
+这意味着：
+
+拿到真实 provider approval / credentials 后，
+
+不需要重新设计 OAuth / account identity / lifecycle architecture。
+
+⑪ PC-11B
+
+继续保持：
+
+HOLD_EXTERNAL / HOST_ACTION_REQUIRED
+
+需要真实外部条件：
+
+Amazon developer approval
+
+TikTok Shop developer approval
+
+Walmart developer approval
+
+carrier developer credentials
+
+production client IDs / secrets
+
+callback domain registration
+
+webhook secrets
+
+real seller authorization
+
+不得：
+
+fake complete
+
+不得：
+
+用 sandbox credential 冒充 production credential。
+
+⑫ 不应停在 PC-11B 等 HOST
+
+因为内部仍有后续 PC 队列可推进。
+
+因此：
+
+AUTHORIZED NEXT INTERNAL UNIT = PC-12A
+⑬ PC-12A — PAYMENT ACTIVATION READINESS CONTRACT
+
+注意：
+
+这不是开启付款。
+
+目标是：
+
+在 Payment 继续 ZERO / HOLD 的前提下，
+
+把未来真正启用收费之前所有内部安全条件准备好。
+
+⑭ PC-12A GOAL
+
+系统必须能够回答：
+
+“如果明天把 payment 打开，是否具备安全启用条件？”
+
+而不是现在真的收费。
+
+继续保持：
+
+Payment = 0
+collection = OFF
+autopay = OFF
+external payment write = OFF
+R13 HOLD
+
+⑮ PC-12A SCOPE
+1. Payment activation gate
+
+建立统一 activation decision：
+
+例如：
+
+PaymentActivationReadiness {
+  ready
+  posture
+  blockers
+  checks
+}
+
+不能靠：
+
+PAYMENTS_ENABLED=true
+
+一个环境变量直接决定生产收费。
+
+2. Required checks
+
+至少包括：
+
+payment provider credentials configured?
+
+webhook verification ready?
+
+payment webhook secret configured?
+
+billing model ready?
+
+fee policy current?
+
+required commercial acceptance ready?
+
+payment reconciliation ready?
+
+retry/replay controls ready?
+
+Action Guard ready?
+
+Kill Switch ready?
+
+R13 released?
+
+collection explicitly enabled?
+
+external payment write explicitly enabled?
+
+3. Activation requires multiple independent gates
+
+最终真实 payment activation 将来必须至少同时满足：
+
+provider ready
+AND webhook ready
+AND legal/commercial ready
+AND operational ready
+AND R13 released
+AND explicit activation
+
+不能：
+
+一个 env flag 单点解锁全部支付能力。
+
+4. Payment vs collection separate
+
+继续区分：
+
+Payment processing
+
+与：
+
+Collection
+
+两个 gate。
+
+允许未来出现：
+
+payment provider configured
+
+但：
+
+collection=OFF
+
+这种合法中间状态。
+
+5. Autopay separate
+
+autopay 必须继续独立。
+
+不能因为：
+
+payment enabled
+
+自动：
+
+autopay enabled。
+
+6. External write separate
+
+provider/payment external write：
+
+独立 gate。
+
+不能：
+
+有 webhook verification
+
+就自动拥有 payment outbound write。
+
+7. Success-fee due ≠ collected
+
+继续保持：
+
+fee calculated / fee due
+
+与：
+
+fee collected
+
+分离。
+
+不得把：
+
+recovered amount
+
+直接视作：
+
+成功费已收。
+
+8. Reversal handling
+
+未来真实启用前必须定义：
+
+reversal/refund/chargeback
+
+对：
+
+fee due
+
+amount collected
+
+invoice status
+
+reconciliation
+
+的影响。
+
+复用已有 payment/recovery事实，不复制新的 money truth。
+
+9. Activation readiness endpoint
+
+建议：
+
+GET /payment-activation-readiness
+
+只读。
+
+返回：
+
+internalReady
+
+externalGate
+
+payment
+
+collection
+
+autopay
+
+externalWrite
+
+R13
+
+provider readiness
+
+webhook readiness
+
+legal readiness
+
+ops readiness
+
+blockers
+
+不得返回：
+
+secret values。
+
+⑯ PC-12A REQUIRED TESTS
+
+至少：
+
+payment defaults HOLD
+
+collection defaults OFF
+
+autopay defaults OFF
+
+external payment write defaults OFF
+
+R13 HOLD blocks activation
+
+missing provider credentials blocks production activation
+
+missing webhook secret blocks activation
+
+webhook verification not ready blocks activation
+
+commercial/legal incomplete blocks activation
+
+ops readiness blocked → activation blocked
+
+one env flag cannot override blockers
+
+payment enabled does not imply collection
+
+payment enabled does not imply autopay
+
+collection enabled does not imply external write
+
+no secret values exposed
+
+fee due != fee collected
+
+reversal does not double-count money
+
+unauthorized readiness access rejected if endpoint protected
+
+tsc api/web 0
+
+full CI SUCCESS
+
+⑰ PC-12A DO NOT DO
+
+不要：
+
+enable real payment
+
+change Payment=0
+
+enable collection
+
+enable autopay
+
+enable external payment writes
+
+remove R13 HOLD
+
+add production Stripe credentials
+
+call live payment endpoints
+
+create real charges
+
+本批只做：
+
+PAYMENT ACTIVATION SAFETY CONTRACT
+⑱ PC-12B
+
+未来真实开启支付时才进入：
+
+PC-12B — PAYMENT PRODUCTION ENABLEMENT
+
+需要 HOST / EXTERNAL：
+
+real payment provider account
+
+production credentials
+
+webhook secret
+
+merchant/business verification
+
+production callback/webhook config
+
+explicit R13 release
+
+explicit collection decision
+
+现在：
+
+HOLD
+⑲ Numbered verdict
+
+① server-side PKCE ownership：
+
+PASS
+
+② PC-11A：
+
+PASS / CLOSED
+
+③ PC-11B：
+
+HOLD_EXTERNAL / HOST_ACTION_REQUIRED
+
+④ 不等待 PC-11B。
+
+⑤ 下一内部执行单元：
+
+PC-12A PAYMENT ACTIVATION READINESS CONTRACT
+
+⑥ PC-12B production payment activation：
+
+HOLD
+
+边界继续保持：
+
+NO platform write
+Payment = 0
+autopay = OFF
+collection = OFF
+external payment write = OFF
+R13 HOLD
+TRANSPORT = false
+无生产凭据
+
+所以现在 PC-11A 可以真正结束。真实 Amazon/TikTok/Walmart 接入已经只剩外部审批和凭据层，不应该让 Codex停在那里等；下一步继续做 PC-12A，把“未来开启收费前的所有内部安全闸门”先做好。
+```
