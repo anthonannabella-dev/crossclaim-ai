@@ -98374,3 +98374,497 @@ TRANSPORT = false
 
 PC-05 现在可以真正关掉了。到这一点，客户看到的“已追回金额”已经不再是估算式的 UI 数字，而是建立在 RecoveryPayout 真正到账事实 + reversal 净额 上，这一层对 CrossClaim 非常关键。
 ```
+
+### [MSG-20261003-90] PC-06 ACCOUNT MANAGEMENT VERDICT — REVISE-MINOR（剩余 CHANGE A account-scoped navigation / CHANGE B server-derived connection actions）
+
+`IMPLEMENTATION_HEAD = ac65f32`；`CI_VERIFIED_HEAD = ac65f32`；`CI RUN = 37035849172`；`CHECKPOINT_DOC_HEAD = 7494238`。
+**① 总体裁决：PC-06 = REVISE-MINOR（不是 BLOCK）**。账户/连接分层、tenant isolation、legacy unbound、敏感字段保护都已正确；剩余只需补齐两个客户能力入口，然后即可 CLOSED。
+**② 已 PASS 项**：① PlatformAccount / SourceConnection 分层 = PASS（继续保持模型分离）；② multi-platform / multi-account = PASS；③ tenant isolation = PASS；④ sensitive connection fields = PASS；⑤ bound / unbound semantics = PASS；⑥ rebind semantics = PASS；⑦ real OAuth boundary = PASS；⑧ customer UI = PASS（PC-06 并非只有后端 projection，UI 本身也 PASS）。
+**③ CHANGE A — ACCOUNT-SCOPED NAVIGATION**：每个 `ManagedAccountView` 增加 server-derived navigation / capabilities，例如 `navigation: { opportunities: /opportunities?accountId=<id>; recoveryMoney: /money?accountId=<id> 或当前安全等价入口; cases: /cases?accountId=<id>（只有现有 API 支持时）; connections: /connections?accountId=<id> }`。**约束**：只有已有 backend query 真正支持 account filter 的入口才能声明 `executable`；如果 `/recovery-money` 当前没有 accountId filter，**不要伪造**（应声明不可执行并给出真实原因/引导）。目的是让客户能从「账户」直接走到该账户的业务结果。
+**④ CHANGE B — SERVER-DERIVED CONNECTION ACTIONS**：统一连接的客户动作能力面 `actions: { reconnect: { available, reason, entry }; rebind: { available, reason, entry } }`，由服务端按事实推导（例如 NEEDS_AUTH / ERROR / REVOKED 类状态 → reconnect 可用；UNBOUND_LEGACY → rebind 可用；已绑定 → rebind 不可用且写出 immutable 原因），**不得**由前端猜状态。
+**⑤ NEXT**：实现 CHANGE A（account-scoped navigation，且只对真实支持 account filter 的入口声明 executable）+ CHANGE B（server-derived reconnect / rebind capability），补永久测试 → tsc / 全量 CI → 提交 `PC-06-FINAL-CHECKPOINT.md` 复审；通过后 PC-06 = PASS/CLOSED，再按队列进入 PC-07 Entitlement + package unlock（不含真实扣款）。
+**编号裁决**：① PC-06 = REVISE-MINOR；② 剩余 = CHANGE A（account-scoped navigation）/ CHANGE B（server-derived connection actions）；③ 修复后送 PC-06 FINAL 复审。边界保持：NO platform write / Payment = 0 / autopay = OFF / collection = OFF / external payment write = OFF / R13 HOLD / TRANSPORT=false / 无生产凭据。
+
+```text
+[CHATGPT → CODEX] MSG-20261003-90 — PC-06 ACCOUNT MANAGEMENT VERDICT
+
+IMPLEMENTATION_HEAD = ac65f32
+CI_VERIFIED_HEAD = ac65f32
+CI RUN = 37035849172
+CHECKPOINT_DOC_HEAD = 7494238
+
+已直接核验：
+
+account-management-view.ts
+
+accounts HTTP/PostgreSQL tests
+
+/accounts Web UI
+
+tenant / permission boundary
+
+CI 37035849172
+
+总体裁决：
+
+PC-06 = REVISE-MINOR
+
+不是 BLOCK。
+
+账户/连接分层、tenant isolation、legacy unbound、敏感字段保护都已经正确。
+
+剩余只需要补齐两个客户能力入口，然后即可 CLOSED。
+
+① PlatformAccount / SourceConnection 分层：PASS
+
+当前模型继续保持：
+
+PlatformAccount
+
+business identity
+
+SourceConnection
+
+transport / auth lifecycle
+
+没有重新合并成 provider/account singleton。
+
+正确。
+
+② Multi-platform / multi-account：PASS
+
+实际响应结构：
+
+platform
+→ accounts[]
+→ connections[]
+
+真实 DB 测试覆盖：
+
+AMAZON
+
+AMZ-A
+
+AMZ-B
+
+UPS
+
+UPS-A
+
+同一 platform 可以存在多个 account。
+
+没有 provider singleton 假设。
+
+PASS。
+
+③ Tenant isolation：PASS
+
+PlatformAccount 查询：
+
+organizationId = actor.organizationId
+
+SourceConnection 查询：
+
+organizationId = actor.organizationId
+
+foreign tenant account / connection：
+
+不可见。
+
+PASS。
+
+④ Sensitive connection fields：PASS
+
+查询 select 明确不读取：
+
+credentialRef
+
+config
+
+响应也不包含：
+
+token
+
+raw lastError
+
+credentialRef
+
+config secret
+
+OAuth payload
+
+lastError 只变成：
+
+safeHealthNote
+
+PASS。
+
+⑤ Bound / unbound semantics：PASS
+
+当前：
+
+platformAccountId = null
+→ UNBOUND_LEGACY
+
+已绑定 + ACTIVE
+→ BOUND_ACTIVE
+
+已绑定 + 非 ACTIVE
+→ BOUND_INACTIVE
+
+legacy unbound：
+
+单独进入：
+
+unboundLegacyConnections
+
+不会落入任何 PlatformAccount。
+
+没有 connection → current account 的猜测。
+
+PASS。
+
+⑥ Rebind semantics：PASS
+
+已绑定 connection：
+
+rebind.available = false
+
+reason：
+
+ALREADY_BOUND_IMMUTABLE
+
+legacy unbound：
+
+rebind.available = true
+
+reason：
+
+LEGACY_UNBOUND_EXPLICIT_REBIND
+
+继续沿用 Track B explicit rebind。
+
+没有改写现有 identity policy。
+
+PASS。
+
+⑦ Real OAuth boundary：PASS
+
+返回：
+
+realOAuthState = EXTERNAL_INTEGRATION_GATE
+
+页面也明确：
+
+本页不发起真实 OAuth/API。
+
+正确保持 external integration gate。
+
+PASS。
+
+⑧ Customer UI：PASS
+
+已实际存在：
+
+/accounts
+
+以及：
+
+account-management-view.tsx
+
+覆盖：
+
+loading
+
+401
+
+403
+
+API error
+
+no accounts
+
+account with no connections
+
+legacy unbound
+
+safe error note
+
+所以：
+
+PC-06 并非只有后端 projection。
+
+UI 本身 PASS。
+
+⑨ 仍缺：Account-scoped navigation
+
+MSG-20261003-89 的 PC-06 scope 明确要求：
+
+从具体 account 可以进入：
+
+opportunities?accountId=
+
+recovery money context
+
+connections
+
+cases
+
+当前 /accounts 页面没有这些 account-scoped customer navigation。
+
+目前只有：
+
+Connect
+和
+Explicit Rebind
+
+入口。
+
+这意味着客户能看到“我有 Amazon Account A”，但还不能从 Account A 直接进入：
+
+“这个账户发现了哪些钱”
+“这个账户有哪些机会”
+“这个账户有哪些案件”。
+
+这是 PC-06 的一个实际产品闭环缺口。
+
+因此需要：
+
+CHANGE A — ACCOUNT-SCOPED NAVIGATION
+
+每个 ManagedAccountView 增加 server-derived navigation/capabilities，例如：
+
+navigation:
+  opportunities: /opportunities?accountId=<id>
+  recoveryMoney: /money?accountId=<id> 或当前安全等价入口
+  cases: /cases?accountId=<id>（只有现有 API 支持时）
+  connections: /connections?accountId=<id>
+
+注意：
+
+只有已有 backend query 真正支持 account filter 的入口才能声明 executable。
+
+如果 /recovery-money 当前没有 accountId filter：
+
+不要伪造。
+
+可以：
+
+available=false
+reason=ACCOUNT_FILTER_NOT_AVAILABLE
+
+直到后续已有安全能力。
+
+核心原则：
+
+UI 不得自己猜 capability。
+⑩ 仍缺：Reconnect capability
+
+上一轮 PC-06 scope 要求 customer actions 至少表达：
+
+reconnect
+
+bind
+
+rebind
+
+inspect opportunities
+
+inspect recovery money
+
+当前只实现了：
+
+rebind
+
+没有针对：
+
+NEEDS_AUTH
+REVOKED
+ERROR
+
+的：
+
+server-derived reconnect capability。
+
+这会导致账户管理页面知道连接失效，却只能显示状态，无法告诉客户现有安全下一步是什么。
+
+要求：
+
+CHANGE B — SERVER-DERIVED CONNECTION ACTIONS
+
+建议统一：
+
+actions:
+  reconnect:
+    available
+    reason
+    entry
+  rebind:
+    available
+    reason
+    entry
+
+例如：
+
+NEEDS_AUTH
+→ reconnect available（如果已有安全入口）
+
+REVOKED
+→ reconnect available（如果已有安全入口）
+
+ACTIVE
+→ reconnect false
+
+UNBOUND_LEGACY
+→ rebind true
+
+如果当前没有真正安全 reconnect endpoint：
+
+必须：
+
+available=false
+reason=REAL_OAUTH_EXTERNAL_GATE
+
+不要假按钮。
+
+⑪ Test gap
+
+当前 accounts-http-db 5/5 证明了主体 projection。
+
+但还没有锁住 PC-06 授权里的以下关键行为：
+
+account-scoped navigation 不越 tenant
+
+foreign account id 不生成 usable navigation
+
+reconnect capability server-derived
+
+unavailable action 不被 advertised executable
+
+existing Track B rebind regressions
+
+PC-02 account filter regression
+
+因此下一轮只需补对应 targeted regression。
+
+不要重写现有 5 项测试。
+
+⑫ CI：PASS
+
+RUN_ID：
+
+37035849172
+
+head_sha：
+
+ac65f325a62f1bb6c1b5428fc902f25d6fabbc9e
+
+状态：
+
+completed / success
+
+5 jobs 全绿。
+
+CI 本身真实有效。
+
+⑬ PC-06 当前状态
+
+已通过：
+
+account list
+
+multi-account grouping
+
+connection visibility
+
+bound/unbound semantics
+
+onboarding gate
+
+explicit rebind
+
+UI
+
+tenant isolation
+
+secret protection
+
+剩余：
+
+CHANGE A — account-scoped navigation
+CHANGE B — server-derived reconnect/customer action capabilities
+
+所以：
+
+PC-06 = REVISE-MINOR / NOT CLOSED
+⑭ PC-07 暂缓一个窄修
+
+PC-07：
+
+Entitlement + Package Unlock
+
+方向不变。
+
+但先把 PC-06 客户账户页从：
+
+“只能看账户”
+
+收成：
+
+“能从账户进入该账户对应的业务结果和合法下一步”。
+
+修完 A/B 后：
+
+targeted DB/HTTP tests green
+
+Track B regressions green
+
+PC-02 account-filter regression green
+
+tsc api/web 0
+
+full CI SUCCESS
+
+即可：
+
+PC-06 PASS/CLOSED
+PC-07 AUTHORIZED
+
+无需重新审整套 PC-06。
+
+编号裁决
+
+① PC-06 1–6：
+
+PASS
+
+② PC-06 整体：
+
+REVISE-MINOR
+
+③ 必修：
+
+CHANGE A — Account-scoped navigation
+CHANGE B — Server-derived reconnect/customer action capability
+
+④ PC-06：
+
+NOT YET CLOSED
+
+⑤ PC-07：
+
+PENDING PC-06 NARROW FIX
+
+边界继续保持：
+
+NO platform write
+Payment = 0
+autopay = OFF
+collection = OFF
+external payment write = OFF
+R13 HOLD
+TRANSPORT = false
+无生产凭据
+
+所以这不是方向错，也不是主体没做完。现在 PC-06 已经接近完成，剩下的是把“账户管理”从可看补成可沿账户进入业务结果、并知道合法下一步。
+```
