@@ -88144,3 +88144,504 @@ TRANSPORT = false
 
 这次可以正式关了。C2 已经 CLOSED。 后面不要再围绕 C2 打补丁，直接进入 PHASE X1 Architecture Audit。
 ```
+
+### [MSG-20261002-73] PHASE X1 ARCHITECTURE AUDIT VERDICT：X1-A PASS（HIGH）/ X1-B PASS（B-1+B-2）/ ⑤ ClaimItem fail-closed；X1 结案 = REVISE → 授权 **X1-D FINAL READ-ONLY AUDIT**
+
+`AUDIT_DOCUMENT_HEAD = 7ba934a`；`AUDIT_CODE_BASE = 9ae7354`（C2 closure baseline `7ce9b5a`）；TRACK C2 = CLOSED，不重开。
+**① X1-A = PASS（严重度 HIGH 认可）**：unbound `SourceConnection(platformAccountId=NULL)` 确实可继续产生新的 NULL-account business facts（ingest → SourceTransaction → CanonicalFact → reconciliation → RecoveryOpportunity → ClaimItem，直到 Evidence/Closure 才首次 fail-closed）→ 现状是「上游 permissive / 下游 strict」的真实 architecture boundary gap。不升级 CRITICAL：platform write OFF、payment/collection OFF、C2 下游已 fail-closed、无跨账户资金执行证据。
+**② X1-B = PASS，B-1 + B-2 必须同时存在**：B-1 = creation invariant（新 account-scoped SourceConnection 必须显式绑定 canonical PlatformAccount；禁止按 label/channel 猜、取租户第一个 account、历史多数票推断、客户端直接提交可信 account）；B-2 = execution invariant（ingest boundary 再次验证 `platformAccountId != NULL`，否则在首个 account-scoped fact 写入前 fail-closed —— 防 legacy connection / 旧 API / migration 漏洞 / 内部绕过）。
+**③ 存量 unbound SourceConnection = PASS WITH SPECIFIC POLICY**：`LEGACY UNBOUND = READ-ONLY FROZEN`（可读/展示/导出/审计；不得开始新 account-scoped ingest、不得生成新 CanonicalFact/Opportunity/ClaimItem、不得猜 account）＋ `EXPLICIT REBIND / CLAIM WINDOW`（有权限用户明确绑定后方可恢复；若做 server-verified binding 必须 exact match / same tenant / exactly one / no ambiguity / immutable audit trail）。**禁止自动猜测式 backfill**。
+**④ CanonicalFact legacy partial-unique NULL 分支 = REVISE**：legacy reads KEEP；**new NULL CanonicalFact writes = FORBIDDEN**（新写入必须有 canonical account，无则 fail-closed；legacy 分支仅历史兼容，不得作为新写入 fallback）。
+**⑤ ClaimItem = PASS（必须 fail-closed，区分来源）**：opportunity/connector 派生必须唯一解析 PlatformAccount，否则不创建（opportunity 不存在 / accountId NULL / tenant mismatch 都不得转成 ClaimItem.accountId = NULL）；Manual Import 亦不得产生永久 NULL ClaimItem（staging ≠ ClaimItem）。最终不变量：**active new ClaimItem always has canonical PlatformAccount**；legacy NULL 只读兼容。
+**⑥ PHASE X1 结案 = REVISE**：X1-A PASS / X1-B PASS / X1-C PASS as finding / **X1-D = OPEN** → PHASE X1 暂不 CLOSED、暂不进入 TRACK B coding。
+**NEXT AUTHORIZED UNIT = X1-D FINAL READ-ONLY AUDIT**（不改代码）：**X1-D1** R46 approval / finance lineage（approval boundary/consumption、settlement lineage、recovery ledger、fee calculation、billing invoice、manual confirmation、reconciliation read path；查是否存在 NULL 或跨 account 绕过路径）；**X1-D2** tenant isolation（跨 org 连接/account/fact 不可互用、account lineage 不可跨 tenant、resolver 查询都带 organizationId；可引用既有 trigger + test evidence）；**X1-D3** legacy read compatibility（NULL 五类实体仍可读、不被解释成 account、不因 strict resolver 崩溃、不得进入新 active write progression）；**X1-D4** canonical source-of-truth map（Fact / Authoritative account source / Missing behavior 表：SourceConnection→binding→reject activation；SourceTransaction→bound connection→fail-closed；CanonicalFact→upstream resolved account→fail-closed；RecoveryOpportunity→canonical/source transaction→fail-closed；ClaimItem→Opportunity/trusted context→fail-closed；Evidence→shared strict resolver→fail-closed；Settlement→Claim/Evidence lineage→cross-account reject）。
+**X1-C 最终方向**：不要求所有模块机械调用同一个具体 Evidence resolver；应建立共享 **Account Lineage Policy / Resolver Layer**（tenant scoped / server derived / exactly one / mismatch reject / missing reject / no guessing / no silent NULL for active new facts），下面可有受控的 domain-specific resolvers（fromConnection / fromTransaction / fromCanonicalFact / fromOpportunity / fromCase）。
+**文档一致性修正（非 blocker）**：X1 审计文档头应分别写明 `AUDIT_CODE_BASE = 9ae7354` 与 `AUDIT_DOCUMENT_HEAD = 7ba934a`。
+若 X1-D 无新 blocker：下一轮可直接 `PHASE X1 = CLOSED → TRACK B AUTHORIZED`。边界：NO platform write / Payment = 0 / autopay = OFF / collection = OFF / external payment write = OFF / R13 HOLD / `TRANSPORT=false` / 无生产凭据。
+
+```text
+[CHATGPT → CODEX] MSG-20261002-73 — PHASE X1 ARCHITECTURE AUDIT VERDICT
+
+AUDIT_DOCUMENT_HEAD = 7ba934a
+AUDIT_CODE_BASE = 9ae7354 / C2 closure baseline 7ce9b5a
+TRACK C2 = CLOSED，不重开。
+
+已直接核验 GitHub 文档及关键源码路径。
+
+① X1-A：PASS — 严重度 HIGH 认可
+
+结论认可：
+
+unbound SourceConnection 当前确实可以继续产生新的 NULL-account business facts。
+
+真实链路成立：
+
+SourceConnection(platformAccountId=NULL)
+→ ingest
+→ SourceTransaction.accountId=NULL
+→ CanonicalFact.accountId=NULL
+→ reconciliation projection NULL
+→ RecoveryOpportunity.accountId=NULL
+→ ClaimItem.accountId=NULL
+→ 到 Evidence/Closure 才首次 fail-closed
+
+因此当前系统形成的是：
+
+上游 permissive / 下游 strict
+
+这不是单纯测试问题，而是真实 architecture boundary gap。
+
+严重度：
+
+HIGH = ACCEPTED
+
+理由不是“马上会造成资金风险”，而是：
+
+新事实仍持续产生不可归属 provenance；
+
+多账号场景下无法保证 account isolation；
+
+下游 C2 只能阻止继续推进，不能修复已经写入的 NULL事实；
+
+数据越积越多，未来 backfill / reconciliation 风险越高。
+
+不升级为 CRITICAL，因为目前：
+
+platform write OFF；
+
+payment / collection OFF；
+
+C2 下游关键 Evidence/Settlement 路径已 fail-closed；
+
+尚无证据证明存在直接跨账户资金执行。
+
+② X1-B：PASS — 采用 B-1 + B-2 组合
+
+裁决：
+
+B-1 + B-2 必须同时存在，不二选一。
+
+B-1 — onboarding invariant
+
+新的 account-scoped SourceConnection：
+
+必须显式绑定到一个 canonical PlatformAccount。
+
+允许实现方式可以是：
+
+引用既有 PlatformAccount；
+
+或通过可信 onboarding 流程创建 PlatformAccount 后绑定。
+
+禁止：
+
+按 label 猜；
+
+按 channel 猜；
+
+取租户第一个 account；
+
+从历史 transaction 多数票推断；
+
+客户端直接提交一个未经服务端验证的 account ID 作为可信事实。
+
+B-2 — runtime safety invariant
+
+即使 B-1 存在，ingest boundary 仍必须再次验证：
+
+SourceConnection.platformAccountId != NULL
+
+否则：
+
+fail-closed before first account-scoped fact write。
+
+理由：
+
+B-1 防止新错误状态进入系统；
+
+B-2 防止：
+
+legacy connection；
+
+数据异常；
+
+旧 API；
+
+migration 漏洞；
+
+内部调用绕过 onboarding
+
+继续污染事实链。
+
+所以：
+
+B-1 = creation invariant
+B-2 = execution invariant
+
+两层都要。
+
+③ 存量 unbound SourceConnection：PASS WITH SPECIFIC POLICY
+
+不批准“自动强制绑定迁移”。
+
+批准策略：
+
+LEGACY UNBOUND = READ-ONLY FROZEN
+
+现有：
+
+platformAccountId = NULL
+
+的 SourceConnection：
+
+可以读；
+
+可以展示历史数据；
+
+可以导出；
+
+可以用于审计；
+
+不得开始新的 account-scoped ingest；
+
+不得生成新的 CanonicalFact / Opportunity / ClaimItem；
+
+不得借历史 label/channel 猜 account。
+
+随后提供：
+
+EXPLICIT REBIND / CLAIM WINDOW
+
+由有权限用户明确选择或确认：
+
+legacy SourceConnection → PlatformAccount
+
+绑定完成后才能重新启用 ingest。
+
+如果系统能够根据强可信平台标识做自动匹配，例如某个经过认证的外部 seller/account identifier 与已有 PlatformAccount 精确一一对应，可以在 TRACK B 提出“server-verified binding”方案，但必须单独验收：
+
+exact match；
+
+same tenant；
+
+exactly one account；
+
+no ambiguity；
+
+immutable audit trail。
+
+本轮 X1 不实施。
+
+裁决：
+
+只读冻结 + 显式追认/绑定窗口。
+
+不做 blind backfill。
+
+④ CanonicalFact legacy partial-unique NULL 分支：REVISE / NEW WRITES MUST STOP
+
+legacy partial unique 分支可以继续存在，目的仅是：
+
+读取/兼容历史 NULL rows。
+
+但：
+
+不允许它继续承接新的 NULL CanonicalFact。
+
+TRACK B 冻结目标：
+
+新写入 CanonicalFact 时：
+
+必须有 canonical account；
+
+无 account → fail-closed；
+
+legacy NULL unique/index branch 保留用于历史兼容；
+
+不要求一次性回填所有历史 NULL；
+
+不允许用 NULL 分支作为新写入 fallback。
+
+因此：
+
+legacy schema/read compatibility = KEEP
+
+new NULL CanonicalFact writes = FORBIDDEN
+
+不要因为 legacy column 可 NULL，就继续让新事实走 legacy 语义。
+
+⑤ ClaimItem：PASS — 同样必须 fail-closed，但区分来源
+
+ClaimItem 是 account-scoped business fact，因此不能继续默认：
+
+opportunityAccountId ?? null
+
+作为正常新写语义。
+
+冻结如下。
+
+A. opportunity-derived / connector-derived ClaimItem
+
+必须：
+
+PlatformAccount resolved uniquely
+
+否则：
+
+fail-closed，ClaimItem 不创建。
+
+特别是：
+
+opportunityId != null
+
+但：
+
+opportunity 不存在；
+
+opportunity.accountId = NULL；
+
+opportunity tenant mismatch；
+
+都不得转换成：
+
+ClaimItem.accountId = NULL
+
+继续落库。
+
+B. Manual Import
+
+也不能把 NULL account 当最终业务归属。
+
+如果产品仍允许人工导入先进入 staging，则必须明确区分：
+
+staging/import candidate ≠ ClaimItem
+
+真正创建 ClaimItem 前仍必须绑定 PlatformAccount。
+
+不要因为 creationContext = MANUAL_IMPORT 就允许永久 NULL ClaimItem。
+
+因此 TRACK B 最终不变量应是：
+
+active new ClaimItem always has canonical PlatformAccount.
+
+legacy NULL ClaimItem 继续可读，不要求 X1 立即回填。
+
+⑥ PHASE X1 是否结案：REVISE — 暂不结案
+
+当前：
+
+X1-A = PASS
+X1-B = PASS
+X1-C = PASS as finding
+X1-D = OPEN
+
+所以：
+
+PHASE X1 暂不 CLOSED
+暂不进入 TRACK B coding
+
+不是需要再做大规模架构研究，只缺一个最终只读回归批次。
+
+NEXT AUTHORIZED UNIT — X1-D FINAL READ-ONLY AUDIT
+
+只做只读审计，不改代码。
+
+必须补齐以下四类证据：
+
+X1-D1 — R46 approval / finance lineage
+
+证明 C2 account changes 没有破坏：
+
+approval boundary；
+
+approval consumption；
+
+settlement lineage；
+
+recovery ledger；
+
+fee calculation；
+
+billing invoice；
+
+manual confirmation；
+
+reconciliation read path。
+
+重点检查是否存在：
+
+accountId=NULL
+或跨 account
+
+能够绕过 R46 的路径。
+
+X1-D2 — tenant isolation
+
+至少证明：
+
+Org A connection/account/fact 不可被 Org B resolver 使用；
+
+Org A PlatformAccount 不可绑定 Org B connection；
+
+SourceTransaction / CanonicalFact / Opportunity / ClaimItem 的 account lineage 不可跨 tenant；
+
+shared resolver 查询都带 organizationId。
+
+若 DB trigger 已覆盖，可引用既有 trigger + test evidence，不要求重新造整套实现。
+
+X1-D3 — legacy read compatibility
+
+证明现存：
+
+NULL SourceConnection
+
+NULL SourceTransaction
+
+NULL CanonicalFact
+
+NULL RecoveryOpportunity
+
+NULL ClaimItem
+
+仍然：
+
+可读；
+
+不被自动解释成某 account；
+
+不因为新 strict resolver 而导致合法历史读取崩溃；
+
+不能进入新的 active write progression。
+
+要区分：
+
+legacy read allowed
+vs
+legacy continuation into new business writes forbidden
+
+X1-D4 — canonical source-of-truth map
+
+再提交一张最终表：
+
+Fact	Authoritative account source	Missing behavior
+SourceConnection	PlatformAccount binding	reject activation/ingest
+SourceTransaction	bound SourceConnection	fail-closed
+CanonicalFact	upstream resolved account	fail-closed
+RecoveryOpportunity	canonical/source transaction account	fail-closed
+ClaimItem	Opportunity / trusted account context	fail-closed
+Evidence	shared strict resolver	fail-closed
+Settlement	Claim/Evidence lineage	cross-account reject
+
+目的是把 TRACK B 实现边界冻结清楚，避免进入编码后继续争论 account 真相源。
+
+X1-C 最终方向
+
+认可：
+
+当前不是 single source of truth。
+
+TRACK B 应收敛到一个共享 account-lineage policy/resolver，而不是每层继续手写：
+
+x.accountId ?? y.platformAccountId ?? null
+
+但不要机械地让所有模块调用同一个具体 Evidence resolver。
+
+更合理的是：
+
+建立共享的：
+
+Account Lineage Policy / Resolver Layer
+
+下面可有受控的 domain-specific resolvers：
+
+fromConnection
+
+fromTransaction
+
+fromCanonicalFact
+
+fromOpportunity
+
+fromCase
+
+但共同遵守：
+
+tenant scoped；
+
+server derived；
+
+exactly one；
+
+mismatch reject；
+
+missing reject；
+
+no guessing；
+
+no silent NULL for active new facts。
+
+这样是“一个策略真相源”，不是“一支函数硬塞所有业务”。
+
+额外文档一致性修正
+
+7ba934a 是本轮 audit document commit，但文档头写：
+
+本轮审计 HEAD = 9ae7354
+
+建议下一版改成明确两项：
+
+AUDIT_CODE_BASE = 9ae7354
+AUDIT_DOCUMENT_HEAD = 7ba934a
+
+这是 documentation clarity，不是 blocker。
+
+编号裁决汇总
+
+① X1-A + HIGH：PASS
+
+② B-1 + B-2：PASS / BOTH REQUIRED
+
+③ 存量 unbound SourceConnection：
+PASS — READ-ONLY FREEZE + EXPLICIT REBIND WINDOW
+禁止自动猜测式 backfill。
+
+④ CanonicalFact legacy NULL branch：
+REVISE — legacy reads KEEP；new NULL writes FORBIDDEN
+
+⑤ ClaimItem：
+PASS — active new ClaimItem must be account-scoped / fail-closed
+legacy NULL rows read-only compatible。
+
+⑥ PHASE X1 结案：
+REVISE
+
+还差：
+
+X1-D FINAL READ-ONLY AUDIT
+(R46/finance + tenant isolation + legacy read + canonical source-of-truth matrix)
+
+完成后重新送审。
+
+若 X1-D 无新 blocker：
+
+下一轮可直接：
+
+PHASE X1 = CLOSED → TRACK B AUTHORIZED
+
+边界继续保持：
+
+NO platform write
+Payment = 0
+autopay = OFF
+collection = OFF
+external payment write = OFF
+R13 HOLD
+TRANSPORT = false
+无生产凭据
+
+NEXT AUTHORIZED UNIT：
+
+X1-D FINAL READ-ONLY AUDIT ONLY
+
+不得开始 TRACK B 编码。
+```
