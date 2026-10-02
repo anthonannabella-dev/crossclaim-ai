@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261002-65",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-02T02:39:54.135Z",
+  "updated_at": "2026-10-02T02:45:08.178Z",
   "previous_head": "e5202d6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -51,8 +51,8 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-02T02:22:52.443Z",
   "state": "IMPLEMENT",
-  "last_action": "MSG-20261002-65 = PASS 已归档（FULL_COPY_OK）：R46 S1–S6 CLOSED；NEXT = TRACK C2 Multi-Account Boundary Audit（第一批：现状取证 → gap matrix → Schema Delta 决策请求）",
-  "last_action_at": "2026-10-02T02:39:54.135Z",
+  "last_action": "TRACK C2 第一批交付：对齐 MSG-65 的 8 问 + gap matrix + 最小 Schema Delta 决策请求（docs-only）；并记录 R46 S6 CI success",
+  "last_action_at": "2026-10-02T02:45:08.178Z",
   "next_action": "TRACK C2 第一批：以 MSG-65 的 8 个问题与 12 项最低验收重述/补齐 multi-account 现状取证与 gap matrix，并据此提交是否需要 Schema Delta 的决策请求（不直接改 Schema）。",
   "current_head": "56abd47",
   "reviewed_head": "07b7009",
@@ -3242,6 +3242,52 @@
       "organization-level aggregate view remains possible",
       "R46 full regression remains green"
     ],
-    "order": "C2 account foundation → Track B provider readiness（Amazon read adapter / TikTok·Walmart read 可行性 / carrier evidence / customs documents / credential lifecycle / sandbox·mock·certification；仍不授权 platform real-write）→ Gate 7 remaining business entries → Track C Growth SEO（可并行 docs/research，不得改核心 domain model）"
+    "order": "C2 account foundation → Track B provider readiness（Amazon read adapter / TikTok·Walmart read 可行性 / carrier evidence / customs documents / credential lifecycle / sandbox·mock·certification；仍不授权 platform real-write）→ Gate 7 remaining business entries → Track C Growth SEO（可并行 docs/research，不得改核心 domain model）",
+    "ci": "HEAD 56abd47 → CI success"
+  },
+  "r46_s6_implementation_ci": {
+    "head": "56abd47",
+    "result": "success",
+    "checked_at": "2026-10-02T02:45:08.178Z"
+  },
+  "c2_batch1": {
+    "doc": "docs/releases/TRACK-C2-BATCH1-AUDIT-GAP-MATRIX-AND-DELTA-REQUEST.md",
+    "status": "DELIVERED（对齐 MSG-20261002-65；docs-only，无 Schema 变更）",
+    "verdicts": {
+      "q1_multi_accounts_same_org": "PARTIAL（仅能靠同 channel 不同 label 的多条连接近似；无 account 实体/外部账号身份）",
+      "q2_multi_platform": "BLOCKED（Channel 枚举缺 TIKTOK_SHOP / WALMART / SHOPIFY / STRIPE / PAYPAL / CUSTOMS）",
+      "q3_credential_lifecycle": "PARTIAL（连接级独立；缺账号级聚合与状态）",
+      "q4_server_side_account_identity": "FAIL（canonical 层无账户维度；transaction 层 dedupeKey 含 connectionId 但该列可空）",
+      "q5_client_spoof": "N/A → 引入 PlatformAccount 时必须服务端派生、拒绝客户端字段",
+      "q6_claim_evidence_account_provenance": "FAIL（ClaimItem/Evidence/Settlement 无账户维度；canonical fact 已丢归属）",
+      "q7_reconnect_traceability": "PARTIAL/FAIL（连接行保留，但 label 改名即失身份，历史 fact 无归属）",
+      "q8_cross_org_external_id": "PASS（CanonicalFact 唯一键含 organizationId）"
+    },
+    "gap_matrix": "见文档 §2（12 项 C2 能力逐项：现有支持 / 缺口 / 结论）",
+    "uniqueness_alignment": "禁止全局 UNIQUE(platform, externalAccountId)；采用 organization-scoped identity（organizationId + provider + externalAccountIdentity + identityVersion）",
+    "delta_request": [
+      "新枚举 Platform（保留 Channel 兼容）",
+      "PlatformAccount（organizationId, platform, externalAccountId, identityVersion, marketplace?, region?, displayName, status）唯一键含 org 与 identityVersion；token 不入此表",
+      "SourceConnection.platformAccountId?（一个 Store 多 Connection）",
+      "accountId 下推：SourceTransaction / CanonicalFact / RecoveryOpportunity / ClaimItem / EvidenceArtifact（服务端派生）",
+      "factKey 账户作用域 + (organizationId, accountId, factKey) 唯一 + partial unique 兼容 legacy",
+      "回填 fail-closed：重复审计输出冲突清单，禁止静默合并；新写入强制账户维度"
+    ],
+    "acceptance_tests": [
+      "one org / two Amazon accounts",
+      "one org / Amazon + TikTok",
+      "same externalAccountId across two orgs → allowed/isolation",
+      "cross-account claim access → reject",
+      "cross-account evidence binding → reject",
+      "cross-account settlement linkage → reject",
+      "client account spoof → reject",
+      "revoked account cannot ingest new facts",
+      "reconnect/credential rotation 不重写历史 provenance",
+      "account-level concurrency/idempotency",
+      "organization-level aggregate view remains possible",
+      "R46 full regression remains green"
+    ],
+    "schema_changed": false,
+    "implementation_started": "NO（等待裁决）"
   }
 }
