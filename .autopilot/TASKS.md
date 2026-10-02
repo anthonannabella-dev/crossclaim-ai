@@ -1,3 +1,11 @@
+## CARRIER QUEUE #3 — UPS / FEDEX AUTH + ACCOUNT DISCOVERY INTERNAL CONTRACT（当前执行单元）
+
+- 裁决：MSG-20261003-105 ⑤⑭ —— PC-12A = PASS/CLOSED；正式授权 **CARRIER QUEUE #3**；PC-12B / Carrier 生产凭据继续 HOLD_EXTERNAL。
+- [ ] Carrier Queue #3：UPS / FedEx auth contract（authKind / endpoint 抽象 / token expiry / refresh / 只读 scope 意图，分别声明）+ CarrierAccountDiscoveryPort（server-derived identity、0/1/多账号分支、幂等、tenant lineage）+ carrier readiness 投影；20 项回归；**不调用真实 UPS/FedEx API、不写生产凭据、不开启 TRANSPORT / claim submission**。
+- 边界：NO platform write · Payment = 0 · autopay = OFF · collection = OFF · external payment write = OFF · R13 HOLD · TRANSPORT=false · 无生产凭据。
+- HOLD_EXTERNAL（真实接入闸门）：UPS / FedEx developer credentials · callback / config registration · 真实 seller / carrier 账户授权 · sandbox / production provider 调用。
+
+---
 
 ### HOST DIRECTIVE 2026-10-01「冻结底座 + 加速交付」（长期有效）
 

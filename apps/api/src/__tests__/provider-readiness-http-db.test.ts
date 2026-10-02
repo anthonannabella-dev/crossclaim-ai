@@ -117,6 +117,34 @@ describe('PC-11A — /provider-readiness', () => {
       }
       // requiredHostActions 只描述宿主需要完成的动作（可含 credential 名称概念），不含任何取值。
       expect(raw).not.toContain('client_secret=');
+      // CARRIER QUEUE #3（MSG-20261003-105 ㉗）：carrier readiness 按 provider 分别投影，
+      // 恒 ABSENT / platformWrite=false / transport=false（合同就绪 ≠ 生产可用）。
+      const carriers = (
+        payload as unknown as {
+          carriers: Array<{
+            provider: string;
+            authContractReady: boolean;
+            accountDiscoveryContractReady: boolean;
+            productionCredentials: string;
+            productionApprovalState: string;
+            sandboxState: string;
+            platformWriteEnabled: boolean;
+            transportEnabled: boolean;
+            requiredHostActions: string[];
+          }>;
+        }
+      ).carriers;
+      expect(carriers.map((view) => view.provider).sort()).toEqual(['FEDEX', 'UPS']);
+      for (const carrier of carriers) {
+        expect(carrier.authContractReady).toBe(true);
+        expect(carrier.accountDiscoveryContractReady).toBe(true);
+        expect(carrier.productionCredentials).toBe('ABSENT');
+        expect(carrier.productionApprovalState).toBe('NOT_REQUESTED');
+        expect(carrier.sandboxState).toBe('AVAILABLE');
+        expect(carrier.platformWriteEnabled).toBe(false);
+        expect(carrier.transportEnabled).toBe(false);
+        expect(carrier.requiredHostActions.length).toBeGreaterThan(0);
+      }
     });
   });
 });

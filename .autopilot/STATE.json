@@ -1,16 +1,16 @@
 {
   "gate": "B2-FIX R1",
-  "head": "b55f13b",
-  "status": "IMPLEMENT",
-  "current_task": "PC-12A — PAYMENT ACTIVATION READINESS CONTRACT：表达 override blockers / payment enabled ≠ collection ≠ autopay ≠ external write / fee due ≠ fee collected / reversal 不重复计费 / 不暴露 secret / readiness 端点未授权拒绝 等内部安全闸门；不改 Payment=0、不启用 collection·autopay·external write、不动 R13 HOLD、不加生产 Stripe 凭据、不调用真实支付端点。",
+  "head": "28b4f95",
+  "status": "RECONCILED",
+  "current_task": "Carrier Queue #3：UPS / FedEx auth contract（authKind / endpoint 抽象 / token expiry / refresh / 只读 scope 意图，分别声明）+ CarrierAccountDiscoveryPort（server-derived identity、0/1/多账号分支、幂等、tenant lineage）+ carrier readiness 投影；20 项回归；**不调用真实 UPS/FedEx API、不写生产凭据、不开启 TRANSPORT / claim submission**。",
   "next_task": "PC-12A 实施 → 本地测试 + tsc api/web + API contract + full CI → PC-12A CHECKPOINT 送审。",
   "send_head": "07b7009",
   "decision_head": "07b7009",
   "last_chatgpt_message": "MSG-20261003-102",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-02T20:35:05.795Z",
-  "previous_head": "8ff413b",
+  "updated_at": "2026-10-02T21:37:48.245Z",
+  "previous_head": "b1b4835",
   "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "c8a5c71",
@@ -49,11 +49,11 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-02T20:18:34.152Z",
+  "last_tick_at": "2026-10-02T21:38:19.224Z",
   "state": "IMPLEMENT",
   "last_action": "SCHEDULER_STALE_RECOVERED（gap=15min）→ 本轮已恢复执行",
   "last_action_at": "2026-10-02T09:01:54.693Z",
-  "next_action": "C2 FINAL 送审（Issue #2 + ChatGPT 唤醒 + 裁决归档）；通过后进入 TRACK B，并在 C2 收口后执行 PHASE X1 Architecture Audit。",
+  "next_action": "Carrier Queue #3 送审（Issue #2 comment + ChatGPT 唤醒 + 裁决归档：FULL_COPY_OK）；通过后按 VERDICT 进入下一内部单元（Carrier Queue #4 tracking read adapter 或架构方指定）。",
   "current_head": "b55f13b",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-02T20:03:35.071Z",
-    "gapMs": 899081,
-    "stale": true,
-    "checkedAt": "2026-10-02T20:18:34.152Z"
+    "previousTickAt": "2026-10-02T21:31:12.287Z",
+    "gapMs": 426938,
+    "stale": false,
+    "checkedAt": "2026-10-02T21:38:19.224Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -250,7 +250,7 @@
     "integration_boundary_review": "AUTHORIZED_TO_PLAN（先提交设计/实施计划，不直接开放真实 transport）"
   },
   "r36_submission_comment": "5927087320",
-  "stale_recovered_at": "2026-10-02T20:18:34.152Z",
+  "stale_recovered_at": "2026-10-02T21:16:38.895Z",
   "engineering_regression_policy": {
     "source": "HOST PRODUCT DIRECTION 2026-10-01",
     "doc": "docs/releases/ENGINEERING-REGRESSION-POLICY.md",
@@ -3637,8 +3637,8 @@
   "pc11a_status": "PASS / CLOSED（MSG-20261003-102 ②；FINAL-2 IMPLEMENTATION_HEAD 24e27c8 / CI 37059665748 / DOC 10fe919）",
   "pc11a_notes": "PC-11A 内部 provider 接入契约闭环：provider registry + callback boundary + OAuth state lifecycle（一次性/TTL/burn-on-mismatch）+ PKCE（server-side verifier ownership）+ 凭据生命周期 port + 能力矩阵 lifecycle truth + sandbox harness；测试 24/24。真实 provider 调用与生产凭据 = PC-11B HOLD_EXTERNAL。",
   "pc11b_status": "HOLD_EXTERNAL / HOST_ACTION_REQUIRED（provider developer approval / client id·secret / callback registration / webhook secret / seller authorization）—— 不阻塞内部推进",
-  "pc12a_status": "AUTHORIZED（MSG-20261003-102 ⑤）— PAYMENT ACTIVATION READINESS CONTRACT（只做内部安全契约，不开启真实支付）",
-  "pc12b_status": "HOLD（production payment activation：需 real provider account / production credentials / webhook secret / merchant verification / callback·webhook config / explicit R13 release / explicit collection decision）",
+  "pc12a_status": "PASS / CLOSED（MSG-20261003-105 ③；FINAL_IMPLEMENTATION_HEAD 8555d8f / CI 37066022817 / CHECKPOINT_DOC_HEAD b1b4835）",
+  "pc12b_status": "HOLD_EXTERNAL / HOST_ACTION_REQUIRED（real payment provider account / production credentials / production webhook secret / merchant verification / explicit R13 release / explicit collection decision / explicit external-write activation）",
   "carrier_directive": {
     "directive": "HOST DIRECTIVE 2026-10-02（Carrier SLA / Dual-Path / Customs Recovery 增量要求）",
     "doc": "docs/releases/CARRIER-SLA-DUAL-PATH-CUSTOMS-DIRECTIVE.md",
@@ -3675,5 +3675,9 @@
       "任何真实外写 / 真实提交 / 付费服务"
     ],
     "boundary": "NO platform write · TRANSPORT=false · Payment = 0 · collection/autopay OFF · R13 HOLD · 无生产凭据"
-  }
+  },
+  "carrier_queue_3_status": "AUTHORIZED → IMPLEMENTED（MSG-20261003-105 ⑤⑭；UPS / FedEx auth + account discovery internal contract；真实凭据与 provider 调用仍 HOLD_EXTERNAL）",
+  "carrier_queue_3_head": "b1b4835",
+  "carrier_queue_3_updated_at": "2026-10-02T21:37:48.244Z",
+  "carrier_queue_3_boundary": "NO platform write · Payment = 0 · autopay = OFF · collection = OFF · external payment write = OFF · R13 HOLD · TRANSPORT=false · 无生产凭据"
 }

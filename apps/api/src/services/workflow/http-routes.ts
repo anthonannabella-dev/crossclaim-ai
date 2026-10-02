@@ -81,6 +81,7 @@ import {
 } from '../commercial/policy-acceptance';
 import { findPolicy, listCurrentPolicies, listPolicyDocuments, listPolicyVersions } from '../commercial/policy-registry';
 import { paymentsEnabled } from './payment';
+import { projectCarrierReadiness } from '../carriers/carrier-auth-contract';
 import { projectProviderReadiness } from '../connect/provider-integration-contract';
 import { getAcceptanceStatus } from '../commercial/policy-acceptance';
 import {
@@ -1780,6 +1781,8 @@ export async function handleWorkflowRequest(
     if (providerReadinessPath) {
       sendJson(res, 200, {
         providers: projectProviderReadiness(),
+        // CARRIER QUEUE #3（MSG-20261003-105 ㉗）：carrier readiness 按 provider 分别投影（不含 secret）。
+        carriers: projectCarrierReadiness(),
         checkedAt: (deps.now ? deps.now() : new Date()).toISOString(),
       });
       return true;
