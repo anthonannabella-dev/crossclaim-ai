@@ -51,8 +51,8 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-02T06:48:22.442Z",
   "state": "IMPLEMENT",
-  "last_action": "CHANGE A 仍为 3/4：closure-service 待夹具 account-aware 化（已回滚保持绿）",
-  "last_action_at": "2026-10-02T08:17:20.847Z",
+  "last_action": "CI 修复进行中：4/8 套件（action-guard HITL）已绿并提交 0f900e1；workflow-* 4 套待用 fixtureAccountId 字面量注入机会创建点",
+  "last_action_at": "2026-10-02T09:01:54.693Z",
   "next_action": "C2 FINAL 送审（Issue #2 + ChatGPT 唤醒 + 裁决归档）；通过后进入 TRACK B，并在 C2 收口后执行 PHASE X1 Architecture Audit。",
   "current_head": "691635e",
   "reviewed_head": "07b7009",
@@ -3608,5 +3608,11 @@
     "moved_at": "2026-10-02T08:11:55.840Z",
     "url": "https://chatgpt.com/",
     "note": "宿主开启新会话；旧审计会话 6ab9ee1b-... 已不在标签内。裁决留档真源 = AI-ARCHITECT-INBOX.md + GitHub Issue #2；下次唤醒必须自包含（REVIEWED_HEAD + Issue #2 comment id + checkpoint 文档路径），且仅在真实 checkpoint 发送。"
+  },
+  "c2_final2_blockers": {
+    "ci_failed_head": "55383f3",
+    "failed": "action-guard-hitl-* (4 套) + workflow-* (4 套)",
+    "fixed": "action-guard-hitl-* 4 套夹具 account-aware → 23/23 PASS，已提交 0f900e1",
+    "remaining": "workflow-* 4 套：机会对象在多个点创建且其 accountId 为空（case→opportunity 链出现 NULL 混杂 → resolver 按 MSG-69 fail-closed）。第二次尝试在 recoveryOpportunity.create 注入 await fixtureAccountIdFor(organizationId) 反而全失败，已回滚（工作树干净）。NEXT: 改为在 beforeEach 建 fixture PlatformAccount 得到 fixtureAccountId，并在每个 recoveryOpportunity.create 的 data 块注入字面量 accountId: fixtureAccountId（避免变量作用域/await 问题）"
   }
 }
