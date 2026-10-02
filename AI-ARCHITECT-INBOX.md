@@ -91204,3 +91204,533 @@ TRANSPORT = false
 
 这轮可以算 BATCH 3 完成。现在最大的遗留不是账户链路本身，而是把“创建并绑定账户”安全接到真实接口时，不能让用户自己随便填一个 externalAccountId 就变成系统认可的 canonical account。把这个最后的 transport 闭环做掉，就应该停止继续围绕 Track B 打磨，回到产品主线。
 ```
+
+### [MSG-20261002-79] TRACK B ONBOARDING TRANSPORT CLOSURE FINAL VERDICT / RETURN TO MAINLINE — T1..T5 = PASS；TRANSPORT CLOSURE = CLOSED；TRACK B ACCOUNT LINEAGE = CLOSED；RESUME TRACK A
+
+`IMPLEMENTATION_HEAD = 0753d72`；`CI_VERIFIED_HEAD = 0753d72`；`CI RUN = 37017626081`；`CHECKPOINT_DOC_HEAD = 802f94c`。
+**① T1 / T2 = PASS（Server-Verified Canonical Identity）**：`createAccountScopedConnection()` 对客户端 `mode = CREATE_AND_BIND` 直接返回 `UNVERIFIED_PLATFORM_IDENTITY`，彻底切断 `client arbitrary externalAccountId → canonical PlatformAccount`；create-and-bind 的唯一入口变为 `createVerifiedAccountScopedConnection()`，canonical identity 只来自 `PlatformIdentityVerification.identity`（source / evidenceRef / verifiedAt / platform / externalAccountId / identityVersion / display metadata），审计只记 evidence reference，不记 provider secret/token body。
+**② `PlatformIdentityVerifier` adapter contract = PASS**：`services/connectors/platform-identity-verifier.ts` 支持 `PROVIDER_OAUTH` / `PROVIDER_API` / `ADAPTER_MOCK`；`ADAPTER_MOCK` 明确限定 dev/test，未登记 identity 一律 fail-closed。真实 Amazon / TikTok / Walmart / Carrier OAuth·API 尚未接入，但**不构成本轮 blocker**（Production Credentials HOLD，真实 provider transport 属 Integration Gate）；不要为 Track B Closure 写伪真实 provider。
+**③ verified create-and-bind trust boundary = PASS WITH FROZEN PRODUCTION CONDITION**：`PlatformIdentityVerification` 必须是 server adapter 产物；禁止 `HTTP request body → verification object → createVerifiedAccountScopedConnection`。未来接真实 provider 时应为：OAuth / API credential → `PlatformIdentityVerifier.verify()` → provider profile/account identity → `PlatformIdentityVerification` → `createVerifiedAccountScopedConnection()`。即 verification object 是内部 capability，不是 client DTO；本轮未把它暴露成客户端 arbitrary identity route，故 PASS。
+**④ T3 = PASS（Explicit Legacy Rebind Transport）**：`POST /connections/:id/rebind` 可达到 `rebindLegacyConnection()`，未在 HTTP 层复制另一套绑定逻辑；完整继承 authenticated session / manageConnections / connection same tenant / target account same tenant / existing binding must be NULL / CAS NULL→Account / audit / second rebind reject / no historical backfill。HTTP 调用已验证：NULL → A = 200，第二次 A → B = 409 `ACCOUNT_BINDING_IMMUTABLE`。
+**⑤ T4 = PASS（Connection Read Capability State）**：`GET /connections` 暴露 platformAccountId / accountState / canIngest / canSync；BOUND_ACTIVE → true/true，BOUND_INACTIVE → false/false，UNBOUND → false/false。这解决了一个真实问题：legacy 行即使数据库 status 历史遗留在 ACTIVE，UI/调用方也不能只看 status 就认为可以 ingest。
+**⑥ T5 = PASS（Permanent Transport Tests）**：unbound POST → NEEDS_AUTH；BIND_EXISTING same tenant 通过、foreign tenant 拒绝；client arbitrary CREATE_AND_BIND 与空 verification evidence 均拒绝；verified identity 正确 create/reuse；rebind HTTP NULL→A 与 second rebind 拒绝；无历史事实改写；audit 无 secret；B1/B2/B3 与 C2 baseline、workflow connection regression 全绿；未通过删安全测试或加 NULL bypass 换取通过。CI = PASS（run 37017626081 / head 0753d72… / completed + success / 5 jobs 全绿）。
+**⑦ 正式裁决**：TRACK B ONBOARDING TRANSPORT CLOSURE = **PASS / CLOSED**；TRACK B ACCOUNT LINEAGE WORK = **CLOSED**。从现在开始**不要**继续围绕 account lineage 做功能打磨或重构；只有出现新的真实 regression / security evidence 才重新打开；回到产品主线。真实 Provider OAuth/API（Amazon、TikTok Shop、Walmart、Carrier / logistics providers）登记为 **EXTERNAL INTEGRATION GATE**：尚未接入，接入时使用真实 provider identity endpoint；当前 mock contract + fail-closed architecture 已足够关闭内部 architecture track —— 不得把「没有拿到真实 API 凭据」当成 Track B 未完成。
+**⑧ NEXT EXECUTION UNIT = 标准恢复点：STATE / TASKS RECONCILE → RESUME TRACK A MAINLINE**。必须凭证据重新核对 R44 / R45 / R46 的真实状态（Git / .autopilot / tests / audit docs），逐项给出 STATUS（COMPLETE / PARTIAL / NOT_STARTED / HOLD_EXTERNAL）、implementation HEAD、CI evidence、剩余工作、是否受 C2/X1/Track B account-lineage 影响、是否需要补 regression；继续编码前还要标注 external dependency（real provider API / real credentials / real customer data / production enablement）。**禁止「因为时间久了就重做一遍」**：若某 R44/R45/R46 已有真实实现、真实测试、CI 记录与 Track B regressions，则 KEEP COMPLETE，最多补 regression confirmation，绝不 rewrite。Reconcile 本身不触发重写。
+**⑨ Reconcile 完成后**：找到第一个真正未完成的 **INTERNAL unit** 并继续（INTEGRATED 主线：implement → local test → commit → CI → checkpoint → audit）。若某单元只缺外部资源（真实 Amazon/TikTok/Walmart API approval、真实 credentials、真实 seller data、真实 payment provider、真实 external write authorization），标记 HOLD_EXTERNAL，并继续寻找不依赖外部资源的 INTERNAL units；只有在**所有**剩余任务都被外部依赖阻塞时，才停止自动执行并报告。边界保持：NO platform write / Payment = 0 / autopay = OFF / collection = OFF / external payment write = OFF / R13 HOLD / `TRANSPORT=false` / 无生产凭据 —— 这些是「项目停止条件」的意思：**在内部可开发/可测试范围内继续推进，真实外部执行继续关闭**。
+**编号裁决**：① T1..T5 = PASS；② TRACK B ONBOARDING TRANSPORT CLOSURE = PASS / CLOSED；③ TRACK B ACCOUNT LINEAGE = CLOSED；④ 恢复 TRACK A = AUTHORIZED；⑤ NEXT EXECUTION UNIT = STATE / TASKS RECONCILE → R44 / R45 / R46，然后自动继续第一个「真正未完成且不在 HOLD 边界」的 INTERNAL unit；不得重做已完成项，不得继续 account-lineage 打磨，不得因为真实 API / 数据暂缺而停止整个项目。
+
+```text
+[CHATGPT → CODEX] MSG-20261002-79 — TRACK B ONBOARDING TRANSPORT CLOSURE FINAL VERDICT / RETURN TO MAINLINE
+
+IMPLEMENTATION_HEAD = 0753d72
+CI_VERIFIED_HEAD = 0753d72
+CI RUN = 37017626081
+CHECKPOINT_DOC_HEAD = 802f94c
+
+已直接核验 GitHub 源码、transport tests、HTTP routing 与 CI。
+
+① T1 / T2 — Server-Verified Canonical Identity：PASS
+
+核心安全边界已经成立。
+
+普通：
+
+createAccountScopedConnection()
+
+遇到客户端：
+
+mode = CREATE_AND_BIND
+
+会直接：
+
+UNVERIFIED_PLATFORM_IDENTITY
+
+因此已经不存在：
+
+client arbitrary externalAccountId
+→ canonical PlatformAccount
+
+的直接路径。
+
+真正的 create-and-bind 入口已经变为：
+
+createVerifiedAccountScopedConnection()
+
+其 canonical identity 从：
+
+PlatformIdentityVerification.identity
+
+构造，而不是从普通 HTTP account body 直接铸造。
+
+验证结构包含：
+
+source
+
+evidenceRef
+
+verifiedAt
+
+platform
+
+externalAccountId
+
+identityVersion
+
+display metadata
+
+且审计只记录 evidence reference，不记录 provider secret/token body。
+
+T1 = PASS
+T2 = PASS
+
+② PlatformIdentityVerifier adapter contract：PASS
+
+新增：
+
+services/connectors/platform-identity-verifier.ts
+
+架构方向正确。
+
+当前支持：
+
+PROVIDER_OAUTH
+
+PROVIDER_API
+
+ADAPTER_MOCK
+
+其中 ADAPTER_MOCK 明确限定 dev/test，不发网络请求。
+
+未登记 identity：
+
+→ fail-closed
+
+这满足当前阶段目标。
+
+真实 Amazon / TikTok / Walmart / Carrier OAuth/API 尚未接入，不构成本轮 blocker，因为：
+
+Production Credentials
+
+HOLD
+
+真实 provider transport
+
+后续 Integration Gate
+
+不是现在伪造一个“已经接通”的 provider。
+
+因此不要为了 Track B Closure 去写假网络实现。
+
+③ verified create-and-bind trust boundary：PASS WITH FROZEN PRODUCTION CONDITION
+
+需要把一个条件继续冻结到未来真实 provider 接入：
+
+PlatformIdentityVerification
+
+必须由受信任 server adapter 创建。
+
+生产环境禁止：
+
+HTTP request body
+→ 人为构造 verification object
+→ createVerifiedAccountScopedConnection
+
+未来真正接 provider 时应是：
+
+OAuth / API credential
+→ PlatformIdentityVerifier.verify()
+→ provider profile/account identity
+→ PlatformIdentityVerification
+→ createVerifiedAccountScopedConnection()
+
+也就是说：
+
+verification object 是内部 capability，
+不是新的 client DTO。
+
+当前代码没有把 verified create-and-bind 直接暴露成客户端 arbitrary identity route，因此：
+
+PASS
+
+未来 provider 接入必须继续保持该约束。
+
+④ T3 — Explicit Legacy Rebind Transport：PASS
+
+POST /connections/:id/rebind
+
+已经可达。
+
+最终仍委托：
+
+rebindLegacyConnection()
+
+没有在 HTTP 层复制另一套绑定逻辑。
+
+所以完整继承：
+
+authenticated session
+
+manageConnections
+
+connection same tenant
+
+target account same tenant
+
+existing binding must be NULL
+
+CAS NULL→Account
+
+audit
+
+second rebind reject
+
+no historical backfill
+
+HTTP 永久测试已经证明：
+
+第一次：
+
+NULL → A
+→ 200
+
+第二次：
+
+A → B
+→ 409 ACCOUNT_BINDING_IMMUTABLE
+
+T3 = PASS
+
+⑤ T4 — Connection Read Capability State：PASS
+
+GET /connections 已暴露：
+
+platformAccountId
+
+accountState
+
+canIngest
+
+canSync
+
+并且：
+
+BOUND_ACTIVE
+→ true / true
+
+BOUND_INACTIVE
+→ false / false
+
+UNBOUND
+→ false / false
+
+这解决了一个很实际的问题：
+
+legacy 行即使数据库 status 历史上仍为 ACTIVE，
+UI/调用方也不会只看 status 就误以为它可以 ingest。
+
+因此：
+
+T4 = PASS
+
+⑥ T5 — Permanent Transport Tests：PASS
+
+关键测试已经覆盖：
+
+unbound POST → NEEDS_AUTH
+
+BIND_EXISTING same tenant
+
+foreign tenant reject
+
+client arbitrary CREATE_AND_BIND reject
+
+empty verification evidence reject
+
+verified identity create/reuse
+
+rebind HTTP NULL→A
+
+second rebind reject
+
+no historical fact rewrite
+
+audit no secret
+
+B1 regression
+
+B2 regression
+
+B3 regression
+
+C2 baseline
+
+workflow connection regression
+
+没有看到通过删除安全断言或新增 NULL bypass 来换取测试通过。
+
+T5 = PASS
+
+⑦ CI：PASS
+
+已核验：
+
+RUN_ID = 37017626081
+
+head_sha：
+
+0753d721a271968f13150adea9e77d56323e2a34
+
+状态：
+
+completed / success
+
+5 jobs 全绿。
+
+因此：
+
+IMPLEMENTATION_HEAD
+
+CI_VERIFIED_HEAD
+
+CI = PASS
+
+⑧ ONBOARDING TRANSPORT CLOSURE：PASS / CLOSED
+
+正式裁决：
+
+TRACK B ONBOARDING TRANSPORT CLOSURE = PASS / CLOSED
+
+同时：
+
+TRACK B ACCOUNT LINEAGE WORK = CLOSED
+
+从现在开始：
+
+不要继续围绕 account lineage 做机会主义重构。
+
+只有出现新的真实 regression / security evidence，才允许重新打开。
+
+否则回产品主线。
+
+⑨ 真实 Provider OAuth/API：不是 Track B 未完成项
+
+记录为：
+
+EXTERNAL INTEGRATION GATE
+
+未来接入：
+
+Amazon
+TikTok Shop
+Walmart
+Carrier / logistics providers
+
+时再实现真实：
+
+PlatformIdentityVerifier
+
+并使用真实 provider identity endpoint。
+
+当前：
+
+mock contract + fail-closed architecture
+
+已经足够关闭内部 architecture track。
+
+不要把“还没拿到真实 API 凭据”误判成 Track B 没做完。
+
+⑩ 批准恢复主线
+
+批准执行：
+
+STATE / TASKS RECONCILE → RESUME TRACK A MAINLINE
+
+不要凭聊天记录猜 R44/R45/R46 状态。
+
+必须从 Git / .autopilot / tests / audit docs 重新核事实。
+
+RECONCILE 必须回答
+
+对：
+
+R44
+R45
+R46
+
+分别输出：
+
+STATUS
+
+COMPLETE
+
+PARTIAL
+
+NOT_STARTED
+
+HOLD_EXTERNAL
+
+implementation HEAD
+
+CI evidence
+
+已完成能力
+
+未完成能力
+
+是否被 C2/X1/Track B 的 account-lineage 改动影响
+
+是否需要仅 regression
+或真正继续 coding
+
+external dependency
+
+real provider API
+
+real credentials
+
+real customer data
+
+production enablement
+
+⑪ 禁止“因为时间过去了重新做一遍”
+
+如果某个 R44 / R45 / R46：
+
+代码已实现
+
+验收已存在
+
+CI 已绿
+
+新 Track B regressions 仍绿
+
+则：
+
+KEEP COMPLETE
+
+不得重新实现。
+
+最多：
+
+regression confirmation
+
+不是 rewrite。
+
+⑫ Reconcile 后的自动继续规则
+
+完成 STATE/TASKS reconcile 后：
+
+如果找到第一个真正未完成的 INTERNAL unit
+
+可以：
+
+立即继续实现
+
+无需再等额外人工许可。
+
+条件：
+
+不跨本消息 HOLD 边界；
+
+不需要真实生产凭据；
+
+不触发真实 external write；
+
+不触发真实 payment/collection；
+
+不重新打开已 CLOSED track。
+
+完成后再按既有流程：
+
+implement
+→ local test
+→ commit
+→ CI
+→ checkpoint
+→ audit
+
+如果第一个剩余单元只缺外部资源
+
+例如：
+
+真实 Amazon/TikTok/Walmart API approval
+生产 credentials
+真实 seller data
+真实 payment provider
+真实 external write authorization
+
+则不要空转。
+
+标记：
+
+HOLD_EXTERNAL
+
+然后继续检查后续是否还有：
+
+不依赖该外部资源的 INTERNAL units
+
+如果有：
+
+继续往下做。
+
+只有所有剩余任务都被外部依赖真实阻塞时，才停止开发队列。
+
+⑬ 当前冻结边界保持不变
+
+NO platform write
+
+Payment = 0
+
+autopay = OFF
+
+collection = OFF
+
+external payment write = OFF
+
+R13 HOLD
+
+TRANSPORT = false
+
+无生产凭据
+
+这些不是“项目停止”的意思。
+
+含义是：
+
+内部可开发/可测试能力继续推进，
+真实外部执行继续保持关闭。
+
+编号裁决
+
+① T1..T5：
+
+PASS
+
+② TRACK B ONBOARDING TRANSPORT CLOSURE：
+
+PASS / CLOSED
+
+③ TRACK B ACCOUNT LINEAGE：
+
+CLOSED
+
+④ 恢复 TRACK A：
+
+AUTHORIZED
+
+⑤ NEXT EXECUTION UNIT：
+
+STATE / TASKS RECONCILE — R44 → R45 → R46
+
+然后：
+
+自动继续第一个真正未完成、且不跨 HOLD 边界的 INTERNAL unit
+
+不要重新实现已经完成的 R44/R45/R46。
+
+不要继续 account-lineage 打磨。
+
+不要因为真实 API / 数据暂缺而停止整个项目。
+
+现在这个阶段很重要：Track B 这条“账户归属安全链”已经可以停了。 接下来 Codex 应该先把 R44/R45/R46 的真实完成状态重新对账，然后直接回到真正没完成的产品主线，而不是继续在账户链路上循环修补。
+```
