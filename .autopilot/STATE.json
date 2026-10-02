@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261002-66",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-02T03:09:17.646Z",
+  "updated_at": "2026-10-02T03:24:23.964Z",
   "previous_head": "63879ce",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -51,8 +51,8 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-02T03:07:22.446Z",
   "state": "IMPLEMENT",
-  "last_action": "MSG-20261002-66 = PASS WITH REVISE 已归档（FULL_COPY_OK）：C2 Gap Matrix 接受，M1–M6 获批实施（含 identityVersion 语义与 migration-only 触发器禁用条件）",
-  "last_action_at": "2026-10-02T03:09:17.646Z",
+  "last_action": "TRACK C2 M1–M3 完成（Platform 枚举 + PlatformAccount + platformAccountId + 租户/不可变触发器 + 清单/契约同步）；全量 187/1846 绿",
+  "last_action_at": "2026-10-02T03:24:23.964Z",
   "next_action": "TRACK C2 实施（M1–M6 + CHANGE A/B）：Platform 枚举 + PlatformAccount（identityVersion=身份规范版本）+ SourceConnection.platformAccountId + accountId 下推 + 结构化唯一 (org, platformAccountId, factKey) + account identity immutable DB 不变量 + fail-closed 回填（migration ordering 优先）→ C2 FINAL 验收（MSG-66 清单）→ 送审。",
   "current_head": "4d5380f",
   "reviewed_head": "07b7009",
@@ -3404,5 +3404,30 @@
     "trigger_disable": "CONDITIONAL PASS：仅版本化 migration / isolated fixture / controlled backfill transaction；禁止 runtime API·admin endpoint·生产服务方法；须列出被禁用 trigger、限定目标表、同 flow 重新 enable、迁移前查询确认恢复、tenant/account-lineage/duplicate 三类 scan，任一失败 fail-closed；fresh deploy 无需人工操作、upgrade 可重复验证",
     "c2_final_tests": "MSG-65 的 12 项 + 本轮补充（同 provider 不同账户同 fact ID → 两条独立事实；client supplied platformAccountId 不得成为 trusted provenance；ingest 身份从 authenticated SourceConnection 派生；cross-account Claim/Evidence/Settlement → reject；revoked Connection 不得 ingest；reconnect/rotate 不改写 provenance 且 identityVersion 不变；account 级并发幂等；org 级聚合仍可行；R46 回归绿）",
     "next_after_c2": "TRACK B — Platform Readiness（按 MSG-65）"
+  },
+  "c2_implementation": {
+    "slice1": {
+      "status": "DONE（M1–M3）",
+      "head": "02ad99d",
+      "schema": [
+        "enum Platform",
+        "model PlatformAccount（unique: org+platform+externalAccountId+identityVersion）",
+        "SourceConnection.platformAccountId（FK ON DELETE SET NULL）"
+      ],
+      "migration": "20261002040000_platform_account_identity",
+      "invariants": [
+        "cc_tenant_platformaccount",
+        "cc_tenant_immutable__PlatformAccount",
+        "cc_tenant_sourceconnection_platformaccountid"
+      ],
+      "backfill": "迁移不做 label→account 猜测式回填（M6：legacy 保持 unresolved）",
+      "sync": [
+        "required-triggers.json 71→73",
+        "architecture-contract 49→50 core / 55→56 total",
+        "DOMAIN_MODEL.md 同步"
+      ],
+      "evidence": "tsc 0 · 全量 187 files / 1846 tests PASS · tenant/append-only 门禁 PASS · upgrade deploy OK"
+    },
+    "slice2_next": "M4–M6：accountId 下推（SourceTransaction/CanonicalFact/RecoveryOpportunity/ClaimItem/EvidenceArtifact）+ 结构化唯一 (org, platformAccountId, factKey) + account identity immutable（CHANGE A）+ fail-closed 回填 + writer/ingest 服务端派生 + 12+ 项 C2 验收 → C2 FINAL 送审"
   }
 }
