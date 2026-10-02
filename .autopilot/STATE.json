@@ -1,16 +1,16 @@
 {
   "gate": "B2-FIX R1",
-  "head": "c05bfe9",
+  "head": "1a9fe85",
   "status": "IMPLEMENT",
-  "current_task": "PC-11A — INTERNAL PROVIDER INTEGRATION CONTRACT：interfaces / OAuth state lifecycle / callback boundary / credential reference boundary / identity verification port / adapter capability registry / account bind integration / status lifecycle / provider-readiness / tests / sandbox(fake) provider harness。禁止 fake PRODUCTION_READY、禁止硬编码生产 token、禁止启用 platform write / TRANSPORT / payment、禁止合并 PlatformAccount 与 SourceConnection、禁止用浏览器自动化替代 OAuth。",
-  "next_task": "PC-11A 实施 → 本地测试 + tsc api/web + API contract + full CI → PC-11A CHECKPOINT 送审；PC-11B 待宿主完成上述外部审批/凭据（HOST_ACTION_REQUIRED）。",
+  "current_task": "PC-12A — PAYMENT ACTIVATION READINESS CONTRACT：表达 override blockers / payment enabled ≠ collection ≠ autopay ≠ external write / fee due ≠ fee collected / reversal 不重复计费 / 不暴露 secret / readiness 端点未授权拒绝 等内部安全闸门；不改 Payment=0、不启用 collection·autopay·external write、不动 R13 HOLD、不加生产 Stripe 凭据、不调用真实支付端点。",
+  "next_task": "PC-12A 实施 → 本地测试 + tsc api/web + API contract + full CI → PC-12A CHECKPOINT 送审。",
   "send_head": "07b7009",
   "decision_head": "07b7009",
-  "last_chatgpt_message": "MSG-20261003-99",
+  "last_chatgpt_message": "MSG-20261003-102",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-02T19:34:38.388Z",
-  "previous_head": "767199b",
+  "updated_at": "2026-10-02T20:32:41.123Z",
+  "previous_head": "8ff413b",
   "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "c8a5c71",
@@ -49,13 +49,13 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-02T19:22:33.429Z",
+  "last_tick_at": "2026-10-02T20:18:34.152Z",
   "state": "IMPLEMENT",
   "last_action": "SCHEDULER_STALE_RECOVERED（gap=15min）→ 本轮已恢复执行",
   "last_action_at": "2026-10-02T09:01:54.693Z",
   "next_action": "C2 FINAL 送审（Issue #2 + ChatGPT 唤醒 + 裁决归档）；通过后进入 TRACK B，并在 C2 收口后执行 PHASE X1 Architecture Audit。",
-  "current_head": "c05bfe9",
-  "reviewed_head": "e7902fd",
+  "current_head": "1a9fe85",
+  "reviewed_head": "24e27c8",
   "claim_submit_batch": {
     "verdict": "PASS",
     "message_id": "MSG-20261001-07",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-02T19:07:32.149Z",
-    "gapMs": 901281,
+    "previousTickAt": "2026-10-02T20:03:35.071Z",
+    "gapMs": 899081,
     "stale": true,
-    "checkedAt": "2026-10-02T19:22:33.429Z"
+    "checkedAt": "2026-10-02T20:18:34.152Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -250,7 +250,7 @@
     "integration_boundary_review": "AUTHORIZED_TO_PLAN（先提交设计/实施计划，不直接开放真实 transport）"
   },
   "r36_submission_comment": "5927087320",
-  "stale_recovered_at": "2026-10-02T19:22:33.429Z",
+  "stale_recovered_at": "2026-10-02T20:18:34.152Z",
   "engineering_regression_policy": {
     "source": "HOST PRODUCT DIRECTION 2026-10-01",
     "doc": "docs/releases/ENGINEERING-REGRESSION-POLICY.md",
@@ -3633,5 +3633,10 @@
     "callback-domain registration",
     "production webhook secrets",
     "real seller authorization"
-  ]
+  ],
+  "pc11a_status": "PASS / CLOSED（MSG-20261003-102 ②；FINAL-2 IMPLEMENTATION_HEAD 24e27c8 / CI 37059665748 / DOC 10fe919）",
+  "pc11a_notes": "PC-11A 内部 provider 接入契约闭环：provider registry + callback boundary + OAuth state lifecycle（一次性/TTL/burn-on-mismatch）+ PKCE（server-side verifier ownership）+ 凭据生命周期 port + 能力矩阵 lifecycle truth + sandbox harness；测试 24/24。真实 provider 调用与生产凭据 = PC-11B HOLD_EXTERNAL。",
+  "pc11b_status": "HOLD_EXTERNAL / HOST_ACTION_REQUIRED（provider developer approval / client id·secret / callback registration / webhook secret / seller authorization）—— 不阻塞内部推进",
+  "pc12a_status": "AUTHORIZED（MSG-20261003-102 ⑤）— PAYMENT ACTIVATION READINESS CONTRACT（只做内部安全契约，不开启真实支付）",
+  "pc12b_status": "HOLD（production payment activation：需 real provider account / production credentials / webhook secret / merchant verification / callback·webhook config / explicit R13 release / explicit collection decision）"
 }
