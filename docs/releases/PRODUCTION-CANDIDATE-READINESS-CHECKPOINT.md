@@ -3,6 +3,7 @@
 授权：MSG-20261002-80（A/X4 = NOT NEXT；下一单元 = TRACK A PRODUCTION CANDIDATE READINESS SWEEP，READ-ONLY / DOCS-ONLY；secret.rotate = HOST_ACTION_REQUIRED）。
 对账基线：`docs/releases/TRACK-A-MAINLINE-RECONCILE.md`（HEAD `0792e38`）；REQUEST `docs/releases/TRACK-A-NEXT-UNIT-AUTHORIZATION-REQUEST.md`（HEAD `e0293c0`）。
 本轮**未**改代码、**未**改 Schema、**未**加 migration、**未**加测试、**未**接真实 transport、**未**写 Payment、**未**新增 feature implementation。
+MSG-20261002-81 三处 MINOR REVISE（百分比口径 / HOST·EXTERNAL 统一 / bootstrap 拆分）已在本文件应用（docs-only）。
 证据来源（只读）：`.github/workflows/{ci,audit-bridge}.yml`、`apps/web/app/**`、`apps/api/src/services/**`、`apps/api/prisma/migrations/**`、`tools/**`、`docs/releases/**`、`docs/platform-approval/**`、`AI-ARCHITECT-INBOX.md`、各 Checkpoint 与 CI run 记录。
 边界：NO platform write · Payment = 0 · autopay = OFF · collection = OFF · external payment write = OFF · R13 HOLD · TRANSPORT=false · 无生产凭据。
 
@@ -13,14 +14,18 @@
 | `INTERNAL_READY` | 在内部可控 / 可测范围内已实现并有证据（迁移 + DB/HTTP 验收 + CI） |
 | `BLOCKER_INTERNAL` | 仍是 Production Candidate 前置，且**可**在内部完成（无需外部凭据 / 审批 / 真实数据） |
 | `BLOCKER_EXTERNAL` | Production Candidate 前置，但需要 provider approval / 真实凭据 / 真实数据 / legal / payment provider |
-| `HOST_ACTION_REQUIRED` | 只有宿主能完成或授权（付费服务、生产部署、Secret 轮换、真实外写放行等） |
+| `HOST_ACTION_REQUIRED` | 只有宿主能**授权或执行**的项（secret.rotate、Payment activation approval、production deployment approval、DNS/domain changes、paid service activation） |
 | `POST_LAUNCH` | 有价值但不是 Production Candidate blocker（V1.1 / 规模化 / 智能化增强） |
+
+> MSG-20261002-81 §①(b) 统一口径：`BLOCKER_EXTERNAL` 计「依赖外部系统 / 审批 / 真实凭据」的项（Amazon·TikTok·Walmart API approval、payment provider integration、provider webhook 等）；同一项**可以**同时是 `BLOCKER_EXTERNAL` 且需要 host action，但 Gap Register 只保留**一个主分类**，避免下一 checkpoint 重开 Readiness Sweep 循环。
 
 ## 1. 两份完成度（口径显式）
 
+> MSG-20261002-81 §①(a)/②：以下百分比是 **directional capability coverage estimate（能力覆盖估算）**，**不是** engineering-progress percentage —— capability inventory 不含 story points / 工时 / 风险加权 / 用户旅程加权，且 P3/P6 等存在跨视角重复登记。
+
 - **INTERNAL PRODUCT COMPLETION = `INTERNAL_READY / (INTERNAL_READY + BLOCKER_INTERNAL)` = 59 / 78 ≈ 76%**
   （只回答「内部可测范围内的产品闭环是否做完」，不含任何外部依赖项）
-- **PRODUCTION ENABLEMENT COMPLETION = `INTERNAL_READY / (INTERNAL_READY + BLOCKER_INTERNAL + BLOCKER_EXTERNAL + HOST_ACTION_REQUIRED)` = 59 / 90 ≈ 66%**
+- **PRODUCTION ENABLEMENT COMPLETION = `INTERNAL_READY / (INTERNAL_READY + BLOCKER_INTERNAL + BLOCKER_EXTERNAL + HOST_ACTION_REQUIRED)` = 59 / 93 ≈ 63%**
   （把真实 provider API / 凭据 / 支付 / legal / production ops 纳入分母；`POST_LAUNCH` 不计入）
 
 | 计数 | 值 |
@@ -28,10 +33,10 @@
 | `INTERNAL_READY` | **59** |
 | `BLOCKER_INTERNAL` | **19** |
 | `BLOCKER_EXTERNAL` | **10** |
-| `HOST_ACTION_REQUIRED` | **2**（`secret.rotate`、success-fee collection / payment activation） |
+| `HOST_ACTION_REQUIRED` | **5**（`secret.rotate`、Payment activation approval、production deployment approval、DNS/domain changes、paid service activation） |
 | `POST_LAUNCH` | **4**（X4 Entity Resolution v1、Growth P3、Carrier V1、Customs V1） |
 
-> 口径说明：百分比只统计已登记能力项，不代表工时；`INTERNAL PRODUCT COMPLETION` 与 `PRODUCTION ENABLEMENT COMPLETION` 的差值主要来自真实 provider / 支付 / legal。
+> 口径说明：百分比只统计已登记能力项，不代表工时，也不代表「项目完成度」；`INTERNAL PRODUCT COMPLETION` 与 `PRODUCTION ENABLEMENT COMPLETION` 的差值主要来自真实 provider / 支付 / legal / production ops。
 
 ## 2. GAP REGISTER（单一真相源）
 
@@ -71,8 +76,9 @@
 
 | 能力 | 现状 | 分类 |
 |---|---|---|
-| 注册 / signup | `apps/web` 只有 `login`；无注册页、无自助 Organization 创建入口 | `BLOCKER_INTERNAL` |
-| Organization / membership bootstrap | `admin/members` + 服务层已具备 | `INTERNAL_READY` |
+| 注册 / signup（= PC-01A self-service bootstrap foundation） | `apps/web` 只有 `login`；无注册页、无自助 Organization 创建入口 | `BLOCKER_INTERNAL` |
+| Organization / membership bootstrap（**既有 / admin 路径**） | `admin/members` + 服务层已具备（邀请制） | `INTERNAL_READY` |
+| Public / self-service first-tenant bootstrap（**新客户自助首个 Organization**） | 未实现；当前系统为邀请制（`UserInvitation`） | `BLOCKER_INTERNAL` → PC-01A |
 | connection creation | `apps/web/app/connections/page.tsx` + `POST /connections` | `INTERNAL_READY` |
 | bind PlatformAccount | Track B BATCH 3（`BIND_EXISTING` + `POST /connections`） | `INTERNAL_READY` |
 | OAuth / API authorization flow | 未实现（`PlatformIdentityVerifier` 仅 contract + mock） | `BLOCKER_EXTERNAL` |
