@@ -80,7 +80,13 @@ import {
   recordPolicyAcceptance,
 } from '../commercial/policy-acceptance';
 import { findPolicy, listCurrentPolicies, listPolicyDocuments, listPolicyVersions } from '../commercial/policy-registry';
+import { paymentsEnabled } from './payment';
 import { projectProviderReadiness } from '../connect/provider-integration-contract';
+import { getAcceptanceStatus } from '../commercial/policy-acceptance';
+import {
+  defaultPaymentActivationFacts,
+  projectPaymentActivationReadiness,
+} from '../payments/activation-readiness';
 import { getRecoveryReviewStatus, submitRecoveryReview } from './recovery-review';
 import { readReplaySnapshot, submitPaymentReplayReview, submitPaymentReview } from './payment';
 import {
@@ -172,6 +178,8 @@ const COMMERCIAL_ACCEPTANCES_PATH = /^\/commercial\/acceptances$/;
 const COMMERCIAL_READINESS_PATH = /^\/commercial-readiness$/;
 /** PC-11A（MSG-20261003-99 ⑲）：provider 接入就绪投影（只读；合同就绪 ≠ 生产可用）。 */
 const PROVIDER_READINESS_PATH = /^\/provider-readiness$/;
+/** PC-12A（MSG-20261003-102 ⑮.9）：支付激活就绪（只读；OWNER/ADMIN）。 */
+const PAYMENT_ACTIVATION_READINESS_PATH = /^\/payment-activation-readiness$/;
 const COMMERCIAL_TERMS_PATH = /^\/cases\/([^/]+)\/commercial-terms$/;
 const RECOVERY_OUTCOME_PATH = /^\/cases\/([^/]+)\/recovery-outcome$/;
 const RECOVERY_REVIEW_PATH = /^\/cases\/([^/]+)\/recovery-review$/;
@@ -411,6 +419,7 @@ export async function handleWorkflowRequest(
   const commercialAcceptancesPath = COMMERCIAL_ACCEPTANCES_PATH.test(path);
   const commercialReadinessPath = COMMERCIAL_READINESS_PATH.test(path);
   const providerReadinessPath = PROVIDER_READINESS_PATH.test(path);
+  const paymentActivationReadinessPath = PAYMENT_ACTIVATION_READINESS_PATH.test(path);
   const insightList = INSIGHT_LIST_PATH.test(path);
   const insightCsv = INSIGHT_CSV_PATH.test(path);
   const insight = INSIGHT_PATH.exec(path);
@@ -482,7 +491,8 @@ export async function handleWorkflowRequest(
     !commercialPolicyAcceptPath &&
     !commercialAcceptancesPath &&
     !commercialReadinessPath &&
-    !providerReadinessPath) {
+    !providerReadinessPath &&
+    !paymentActivationReadinessPath) {
     return false;
   }
 
@@ -532,7 +542,7 @@ export async function handleWorkflowRequest(
     // PC-09：接受事实是唯一写入口（显式 accept），其余商业/法律面只读。
     commercialPolicyAcceptPath
       ? ['POST']
-      : commercialPoliciesPath || commercialPolicyPath || commercialAcceptancesPath || commercialReadinessPath || providerReadinessPath
+      : commercialPoliciesPath || commercialPolicyPath || commercialAcceptancesPath || commercialReadinessPath || providerReadinessPath || paymentActivationReadinessPath
       ? ['GET']
     : adminKillSwitch
       ? ['GET', 'POST']
@@ -1729,6 +1739,32 @@ export async function handleWorkflowRequest(
           ),
       });
       sendJson(res, outcome.created ? 201 : 200, outcome);
+      return true;
+    }
+
+    // PC-12A（MSG-20261003-102 ⑮.9）：支付激活就绪 —— 多 gate 独立；单一 env flag 不解锁生产收费。
+    if (paymentActivationReadinessPath) {
+      if (actor.role !== 'OWNER' && actor.role !== 'ADMIN') {
+        sendJson(res, 403, { error: 'FORBIDDEN' });
+        return true;
+      }
+      let killSwitchReady = false;
+      try {
+        const sentinel = '00000000-0000-4000-8000-000000000000';
+        const resolved = await resolveKillSwitchResolver(deps).resolveAll(sentinel);
+        killSwitchReady = resolved.every((item) => item.degraded !== true);
+      } catch {
+        killSwitchReady = false;
+      }
+      const acceptance = await getAcceptanceStatus(deps.prisma, actor);
+      const facts = defaultPaymentActivationFacts({
+        paymentProcessingEnabled: paymentsEnabled(process.env),
+        paymentWebhookSecretConfigured: Boolean(process.env.PAYMENT_WEBHOOK_SECRET),
+        commercialAcceptanceReady: acceptance.complete,
+        actionGuardReady: Boolean(deps.actionGuard),
+        killSwitchReady,
+      });
+      sendJson(res, 200, projectPaymentActivationReadiness(facts, { ...(deps.now ? { now: deps.now } : {}) }));
       return true;
     }
 
