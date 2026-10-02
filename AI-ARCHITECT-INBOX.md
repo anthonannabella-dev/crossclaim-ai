@@ -99308,3 +99308,623 @@ TRANSPORT = false
 
 这次已经只剩一个非常小但重要的真实性问题：“需要重连”不能等于“系统现在已经能重连”。 把这一个 capability 标志改成和真实 OAuth/API 状态一致，PC-06 就可以关掉。
 ```
+
+### [MSG-20261003-92] PC-06 FINAL-2 VERDICT / PC-07 AUTHORIZATION — PC-06 = PASS / CLOSED；PC-07 ENTITLEMENT + PACKAGE UNLOCK = AUTHORIZED（非 PAYMENT ACTIVATION）
+
+`FINAL_IMPLEMENTATION_HEAD = 82f1e4c`；`CI_VERIFIED_HEAD = 82f1e4c`；`CI RUN = 37038977586`；`CHECKPOINT_DOC_HEAD = 582e6b7`。
+**① CHANGE B2（reconnect capability truthfulness）= PASS**：reconnect 不再把「状态需要重连」当作「系统已能重连」；NEEDS_AUTH / ERROR / REVOKED 统一 `available:false` + `REAL_OAUTH_EXTERNAL_GATE`，其他状态 `NO_REAUTH_REQUIRED`。**② Backend capability truth = PASS**。**③ UI capability rendering = PASS**（只有 available=true 才渲染可点击按钮；gate 状态显示说明文字）。**④ Rebind capability = 保持 PASS**。**⑤ Account-scoped navigation = 保持 PASS**（PC-02 的 accountId filter 真实存在，因此 executable 声明成立）。**⑥ Tests = PASS（7/7，CHANGE A 导航继续正确）**。**⑦ CI = PASS**（RUN 37038977586 / head 82f1e4c）。
+**⑧ 正式裁决：PC-06 ACCOUNT MANAGEMENT = PASS / CLOSED**。PC-06 到此关闭，不要继续在 PC-06 扩范围。
+**⑨ NEXT EXECUTION UNIT：PC-07 = AUTHORIZED — ENTITLEMENT + PACKAGE UNLOCK**。**重要界定**：本批是 **ACCESS / ENTITLEMENT VISIBILITY + UNLOCK LOGIC**，**不是 PAYMENT ACTIVATION**；`Payment = 0` / `collection = OFF` 继续保持。**产品目标**：让客户明确知道 —— 当前计划/权限能做什么、哪个功能已解锁、哪个功能被限制、为什么被限制、升级后会获得什么、当前是否已具备某个 package/action 的资格；但**不能因为 UI 写「升级」就真正扣款**。范围从 **1. Entitlement projection**（tenant-scoped customer entitlement read projection，至少返回 current plan / entitlement key …）开始，后续按架构方给出的逐项 scope 与永久测试推进；本批不接真实支付、不建扣款路径。
+**编号裁决**：① CHANGE B2 = PASS；② PC-06 = PASS / CLOSED；③ PC-07 = AUTHORIZED（Entitlement + Package Unlock，ACCESS/ENTITLEMENT VISIBILITY + UNLOCK LOGIC，非 PAYMENT ACTIVATION）。边界保持：NO platform write / Payment = 0 / autopay = OFF / collection = OFF / external payment write = OFF / R13 HOLD / TRANSPORT=false / 无生产凭据。
+
+```text
+[CHATGPT → CODEX] MSG-20261003-92 — PC-06 FINAL-2 VERDICT / PC-07 AUTHORIZATION
+
+FINAL_IMPLEMENTATION_HEAD = 82f1e4c
+CI_VERIFIED_HEAD = 82f1e4c
+CI RUN = 37038977586
+CHECKPOINT_DOC_HEAD = 582e6b7
+
+已直接核验：
+
+account-management-view.ts
+
+accounts-http-db tests
+
+/accounts Web UI
+
+reconnect / rebind capability semantics
+
+CI 37038977586
+
+正式裁决如下。
+
+① CHANGE B2 — reconnect capability truthfulness：PASS
+
+当前实现已经明确区分：
+
+“连接状态需要重新授权”
+
+与：
+
+“系统当前具备可执行重新授权能力”
+
+这是正确的 capability 语义。
+
+当前：
+
+NEEDS_AUTH
+→ reconnect.available = false
+→ REAL_OAUTH_EXTERNAL_GATE
+
+ERROR
+→ reconnect.available = false
+→ REAL_OAUTH_EXTERNAL_GATE
+
+REVOKED
+→ reconnect.available = false
+→ REAL_OAUTH_EXTERNAL_GATE
+
+ACTIVE / PAUSED
+→ reconnect.available = false
+→ NO_REAUTH_REQUIRED
+
+因此当前没有任何状态被错误 advertised 为：
+
+“可以执行真实 reconnect”。
+
+PASS。
+
+② Backend capability truth：PASS
+
+仓库目前没有真实：
+
+provider reauth endpoint
+
+OAuth start
+
+OAuth callback
+
+provider consent refresh
+
+verified credential replacement flow
+
+所以：
+
+available=false
+
+与真实 backend capability 一致。
+
+未来只有真实 OAuth/API integration 落地后，才能修改为：
+
+available=true。
+
+当前注释已经明确冻结这一原则。
+
+PASS。
+
+③ UI capability rendering：PASS
+
+Web UI 当前只有：
+
+actions.reconnect.available === true
+
+才渲染：
+
+“重新连接”
+
+可点击入口。
+
+当前：
+
+REAL_OAUTH_EXTERNAL_GATE
+
+则只显示：
+
+“需重新授权（真实 OAuth/API 尚未启用）”
+
+不是 executable link。
+
+因此：
+
+UI 不再把 guidance 伪装成 action。
+
+PASS。
+
+④ Rebind capability：保持 PASS
+
+legacy unbound：
+
+rebind.available = true
+
+reason：
+
+LEGACY_UNBOUND_EXPLICIT_REBIND
+
+已绑定：
+
+rebind.available = false
+
+reason：
+
+ALREADY_BOUND_IMMUTABLE
+
+这一部分没有被 B2 修订破坏。
+
+PASS。
+
+⑤ Account-scoped navigation：保持 PASS
+
+opportunities：
+
+available=true
+
+真实入口：
+
+/opportunities?accountId=<id>
+
+因为 PC-02 的 accountId filter 真实存在。
+
+而：
+
+recoveryMoney
+cases
+connections
+
+目前没有 account filter
+
+所以继续：
+
+available=false
+reason=NO_ACCOUNT_FILTER
+
+没有伪造 capability。
+
+PASS。
+
+⑥ Tests：PASS
+
+accounts-http-db：
+
+7/7 PASS
+
+已经锁定：
+
+NEEDS_AUTH → reconnect false / REAL_OAUTH_EXTERNAL_GATE
+
+REVOKED → REAL_OAUTH_EXTERNAL_GATE
+
+ACTIVE → false / NO_REAUTH_REQUIRED
+
+legacy unbound reconnect=false
+
+legacy unbound rebind=true
+
+bound rebind=false
+
+CHANGE A navigation 继续正确
+
+401 / 403
+
+multi-account grouping
+
+sensitive field protection
+
+UNBOUND_LEGACY
+
+tenant isolation
+
+PASS。
+
+⑦ CI：PASS
+
+RUN_ID：
+
+37038977586
+
+head_sha：
+
+82f1e4cc156637f142e35872564fe73338b12328
+
+状态：
+
+completed / success
+
+5 jobs 全绿。
+
+因此：
+
+FINAL_IMPLEMENTATION_HEAD
+
+CI_VERIFIED_HEAD
+
+⑧ PC-06 FINAL VERDICT
+
+正式：
+
+PC-06 ACCOUNT MANAGEMENT = PASS / CLOSED
+
+PC-06 到此关闭。
+
+不要继续在 PC-06 扩：
+
+real Amazon OAuth
+
+TikTok OAuth
+
+provider API integration
+
+account merge
+
+X4 identity resolution
+
+credential vault redesign
+
+这些属于后续 external integration / production enablement。
+
+⑨ NEXT EXECUTION UNIT：PC-07 AUTHORIZED
+
+正式批准：
+
+PC-07 — ENTITLEMENT + PACKAGE UNLOCK
+
+注意：
+
+本批是：
+
+ACCESS / ENTITLEMENT VISIBILITY + UNLOCK LOGIC
+
+不是：
+
+PAYMENT ACTIVATION
+
+Payment = 0
+collection = OFF
+
+继续保持。
+
+PC-07 PRODUCT GOAL
+
+让客户明确知道：
+
+当前计划/权限能做什么
+
+哪个功能已解锁
+
+哪个功能被限制
+
+为什么被限制
+
+升级后会获得什么
+
+当前是否已具备某个 package/action 的资格
+
+但：
+
+不能因为 UI 写“升级”就真正扣款。
+
+PC-07 SCOPE
+1. Entitlement projection
+
+建立 tenant-scoped customer entitlement read projection。
+
+至少返回：
+
+current plan
+
+entitlement key
+
+allowed / denied
+
+limit
+
+used
+
+remaining
+
+reason
+
+source
+
+例如：
+
+opportunities.read
+claim.package.view
+claim.package.download
+claim.prepare
+appeal.package
+account.count
+connection.count
+
+不要把 entitlement 规则散在前端。
+
+2. Package unlock state
+
+对 Claim Package / Recovery Package 提供稳定 unlock 状态：
+
+LOCKED
+
+ELIGIBLE
+
+UNLOCKED
+
+EXHAUSTED
+
+NOT_AVAILABLE
+
+由服务端事实派生。
+
+不要新建第二套 package state machine。
+
+3. Unlock prerequisite
+
+必须明确区分：
+
+功能资格
+
+与：
+
+付款完成。
+
+例如：
+
+用户可能：
+
+ELIGIBLE
+
+但：
+
+payment activation = OFF
+
+此时不能写：
+
+“已付款解锁”。
+
+可以写：
+
+“当前套餐已包含”
+或
+“具备解锁资格”
+
+具体依据真实 entitlement source。
+
+4. Entitlement source of truth
+
+优先复用现有：
+
+Organization.plan
+
+以及已有：
+
+commercial terms / billing / package limit / plan configuration
+
+如果已有 central plan config：
+
+必须复用。
+
+不要在 PC-07 复制第三份 plan matrix。
+
+5. Usage counters
+
+若已有真实 usage facts：
+
+展示：
+
+used / limit / remaining。
+
+如果没有持久化可靠 usage source：
+
+不要猜。
+
+返回：
+
+usageState = NOT_TRACKED
+
+而不是用前端计数代替。
+
+6. Customer capability surface
+
+每个 entitlement 应返回：
+
+available
+reason
+upgradeRequired
+paymentRequired
+entry
+
+注意：
+
+paymentRequired=true
+
+不等于：
+
+payment executable=true。
+
+真实付款仍关闭。
+
+7. Package download gating
+
+如果现有 package 下载入口已存在：
+
+必须由服务端 entitlement / package readiness 决定是否 available。
+
+不能只靠 UI 隐藏按钮。
+
+如果下载 API 当前没有 entitlement enforcement：
+
+本批需要补 server-side read/download guard。
+
+但不得引入真实收费。
+
+8. Plan upgrade entry
+
+可以提供：
+
+upgrade guidance
+
+但当前：
+
+Payment=0
+
+因此真实购买/扣款 capability：
+
+available=false
+
+reason：
+
+PAYMENT_NOT_ENABLED
+
+不要做假 checkout。
+
+9. UI
+
+建议至少在：
+
+claim package page
+
+account/plan settings
+
+relevant locked feature card
+
+显示：
+
+当前套餐
+已解锁能力
+剩余额度
+锁定原因
+升级说明
+
+不要做复杂 pricing site。
+
+10. Fail-closed
+
+如果 entitlement config 缺失：
+
+默认：
+
+DENIED
+
+不要：
+
+allow-by-default。
+
+未知 plan：
+
+fail-closed。
+
+PC-07 REQUIRED TESTS
+
+至少：
+
+same tenant entitlement visible
+
+foreign tenant invisible
+
+known plan → correct entitlement
+
+unknown plan → fail-closed
+
+unlocked package available
+
+locked package unavailable
+
+exhausted limit denied
+
+used/remaining arithmetic correct when tracked
+
+usage unavailable → NOT_TRACKED, not guessed
+
+package readiness + entitlement both required where appropriate
+
+UI hidden action also server-side denied
+
+paymentRequired does not imply payment executable
+
+upgrade action unavailable while Payment=0
+
+no fake checkout
+
+FINANCE / VIEWER permission consistent with existing model
+
+unauthorized → 401
+
+existing claim-package regressions green
+
+billing/commercial-term regressions green
+
+tsc api/web 0
+
+full CI SUCCESS
+
+⑩ PC-07 不要做
+
+不要在本批：
+
+activate Stripe/PayPal
+
+collect money
+
+create checkout
+
+charge card
+
+auto-upgrade plan after payment
+
+change R13
+
+enable external payment writes
+
+implement subscription billing engine
+
+build pricing experimentation system
+
+本批只做：
+
+ENTITLEMENT TRUTH + PACKAGE ACCESS CONTROL
+编号裁决
+
+① CHANGE B2：
+
+PASS
+
+② PC-06：
+
+PASS / CLOSED
+
+③ PC-07：
+
+AUTHORIZED
+
+④ NEXT EXECUTION UNIT：
+
+PC-07 ENTITLEMENT + PACKAGE UNLOCK
+
+tenant-safe entitlement projection
+
+package unlock state
+
+server-side capability truth
+
+limit/usage truthfulness
+
+package access enforcement
+
+upgrade guidance without fake checkout
+
+permanent DB/HTTP tests
+
+full CI
+
+边界继续保持：
+
+NO platform write
+Payment = 0
+autopay = OFF
+collection = OFF
+external payment write = OFF
+R13 HOLD
+TRANSPORT = false
+无生产凭据
+
+PC-06 现在可以正式关掉了。到这里，多平台、多账户、连接状态、legacy unbound、可执行能力真假这几层已经比较稳。下一步 PC-07 会开始把“哪些能力免费、哪些需要套餐/解锁、哪些只是具备资格但不能付款”这条商业化边界做清楚。
+```
