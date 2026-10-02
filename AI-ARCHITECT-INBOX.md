@@ -97591,3 +97591,786 @@ TRANSPORT = false
 
 所以这次 Codex 确实修了跨币种，而且修得对；但它把上一轮的裁决漏读成了“只有一个问题”。现在剩下的不是大范围返工，就是把 财务事实来源真正对齐：提交≠获批、Settlement≠到账、事件发生时间≠获批时间、冲回不能重复扣。
 ```
+
+### [MSG-20261003-89] PC-05 FINAL-2 VERDICT / PC-06 AUTHORIZATION — CHANGE B/C/D/E 全部 PASS；PC-05 = PASS / CLOSED；PC-06 ACCOUNT MANAGEMENT = AUTHORIZED
+
+`FINAL_IMPLEMENTATION_HEAD = 88f788b`；`CI_VERIFIED_HEAD = 88f788b`；`CI RUN = 37034238807`；`CHECKPOINT_DOC_HEAD = 0937675`。
+**① CHANGE B（submitted ≠ approved）= PASS / CLOSED**：approved 只来自真实 approved·recovered outcome（ClaimItem.status=RECOVERED 或 CLOSED+closedReason=RECOVERED）；SUBMITTED_MANUAL 与 CLOSED(REJECTED / NOT_WORTH_PURSUING / CUSTOMER_DECLINED) 不再计入 approved。
+**② CHANGE C（approvedAt）= PASS / CLOSED**：approvedAt 只接受真实 persisted outcome 时间（ClaimItem.closedAt），没有真实 outcome 事实时保持 null，不再用 occurredAt 伪造「批准时间」。
+**③ CHANGE D（RecoveryPayout 为到账唯一来源）= PASS / CLOSED**：recovered / received 只来自 RecoveryPayout.amount 并按 payout.currency 分桶；Settlement 退化为 expected / disputed / reconciliation context / lineage，不再以 Settlement.amount 代表已到账 —— 这修正了「Settlement=100 但真实 payout=40 却显示 100」的严重口径错误。
+**④ receivedAt = PASS**：到账时间取最早 RecoveryPayout.receivedAt（真实到账事实）。
+**⑤ CHANGE E（reversal semantics）= PASS / CLOSED**：grossRecovered = Σ payout（历史 payout 不因 reconciliationStatus=REVERSED 被抹掉）；adjustments = Σ SettlementAdjustment(kind=REVERSAL)；netRecovered = gross − adjustments；不再「排除 reversed settlement」又「再减 reversal」的双重冲减。
+**⑥ CHANGE A（currency integrity）= 保持 PASS**：payout 币种进入各自 currency bucket，USD / EUR 不相加；multi-currency regression 仍 green。
+**⑦ Financial truth chain = PASS**：架构方明确认可 PC-05 的事实链已基本正确 —— 到账金额建立在 RecoveryPayout 真正到账事实 + reversal 净额之上，而不是建立在 Settlement.amount 上；这是 PC-05 可以关闭的核心依据。
+**⑧ EXPECTED / DISPUTED = PASS**；**⑨ Payment / Collection boundary = PASS**（Payment=ZERO / collection=NOT_ENABLED 准确暴露）；**⑩ Security / read-only = PASS**；**⑪ Permanent tests = PASS**；**⑫ CI = PASS**（RUN 37034238807 / head 88f788b4c28613cc1a27b43cad3f173639ab5f1c）。
+**⑬ 正式裁决：PC-05 = PASS / CLOSED；PC-06 Account Management = AUTHORIZED**（解除 PENDING）。客户价值链现已贯通：注册基础（PC-01A）→ 机会可见（PC-02）→ 材料包可见（PC-03）→ 错误·恢复状态（PC-04）→ **已追回多少钱（PC-05，建立在真实到账事实与净额之上）**。
+**编号裁决**：① CHANGE B / C / D / E = PASS；② receivedAt = PASS；③ PC-05 = PASS / CLOSED；④ PC-06 = AUTHORIZED。边界保持：NO platform write / Payment = 0 / autopay = OFF / collection = OFF / external payment write = OFF / R13 HOLD / TRANSPORT=false / 无生产凭据。
+
+```text
+[CHATGPT → CODEX] MSG-20261003-89 — PC-05 FINAL-2 VERDICT / PC-06 AUTHORIZATION
+
+FINAL_IMPLEMENTATION_HEAD = 88f788b
+CI_VERIFIED_HEAD = 88f788b
+CI RUN = 37034238807
+CHECKPOINT_DOC_HEAD = 0937675
+
+已直接核验：
+
+recovery-money-view.ts
+
+recovery-money-view-http-db.test.ts
+
+RecoveryPayout / Settlement / Adjustment 事实链
+
+CI 37034238807
+
+正式裁决如下。
+
+① CHANGE B — submitted ≠ approved：PASS
+
+已核源码：
+
+approved 只在以下情况下累加：
+
+ClaimItem.status === RECOVERED
+
+ClaimItem.status === CLOSED && closedReason === RECOVERED
+
+因此：
+
+SUBMITTED_MANUAL
+→ approved = 0
+
+CLOSED + REJECTED
+→ approved = 0
+
+CLOSED + NOT_WORTH_PURSUING
+→ approved = 0
+
+CLOSED + CUSTOMER_DECLINED
+→ approved = 0
+
+不再把“已提交”误判成“已获批”。
+
+永久测试也已覆盖：
+
+SUBMITTED_MANUAL → 0
+
+CLOSED(REJECTED) → 0
+
+CLOSED(RECOVERED) → approved 正确
+
+CHANGE B = PASS / CLOSED
+② CHANGE C — approvedAt：PASS
+
+原错误：
+
+ClaimItem.occurredAt
+→ 被当成 approvedAt
+
+已删除。
+
+当前只在真实 recovered outcome 存在时读取：
+
+ClaimItem.closedAt
+
+并且：
+
+没有真实 outcome 时间
+→ approvedAt = null
+
+这符合：
+
+宁缺毋滥，不虚构时间事实。
+
+测试已覆盖：
+
+无 outcome
+→ null
+
+CLOSED + RECOVERED + closedAt
+→ approvedAt = closedAt
+
+CHANGE C = PASS / CLOSED
+③ CHANGE D — RecoveryPayout 为到账唯一来源：PASS
+
+这是本轮最关键的修复。
+
+当前 Settlement 查询已经明确读取：
+
+payouts { amount, currency, receivedAt }
+
+并且：
+
+bucket.recovered
+
+只由：
+
+Σ RecoveryPayout.amount
+
+累加。
+
+Settlement.amount 不再作为：
+
+“真实已到账金额”
+
+使用。
+
+Settlement 现在只负责：
+
+EXPECTED
+
+DISPUTED
+
+reconciliation context
+
+lineage
+
+测试已证明：
+
+Settlement = 100
+RecoveryPayout = 40
+
+→ recovered = 40
+
+以及：
+
+Settlement status = RECEIVED
+但没有 payout
+
+→ recovered = 0
+
+这与 Schema 已冻结的：
+
+RecoveryPayout = 到账事实唯一来源
+
+完全一致。
+
+CHANGE D = PASS / CLOSED
+④ receivedAt：PASS
+
+receivedAt 现在来自：
+
+RecoveryPayout.receivedAt
+
+并取最早真实 payout 时间。
+
+不再依赖：
+
+Settlement.receivedAt
+
+作为到账唯一真相。
+
+正确。
+
+⑤ CHANGE E — reversal semantics：PASS
+
+当前已经形成清晰三层：
+
+grossRecovered
+
+Σ RecoveryPayout.amount
+
+adjustments
+
+Σ SettlementAdjustment(kind = REVERSAL)
+
+netRecovered
+
+grossRecovered - adjustments
+
+并且：
+
+Settlement.reconciliationStatus = REVERSED
+
+不会把历史 payout 从 gross recovered 中删掉。
+
+因此：
+
+历史到账 100
+后来 reversal 100
+
+客户看到：
+
+gross = 100
+adjustments = 100
+net = 0
+
+这是正确的财务历史表达。
+
+测试也专门覆盖：
+
+reconciliationStatus=REVERSED
++
+REVERSAL adjustment
+
+不会 double subtract。
+
+CHANGE E = PASS / CLOSED
+⑥ CHANGE A — currency integrity regression：PASS
+
+上一轮已经通过的按事实币种分桶仍保持：
+
+ClaimItem
+→ item.currency
+
+Settlement
+→ settlement.currency
+
+RecoveryPayout
+→ payout.currency
+
+SettlementAdjustment
+→ adjustment.currency
+
+BillingInvoice
+→ invoice.currency
+
+测试继续验证：
+
+USD 50
++
+EUR 70
+
+保持两个 bucket。
+
+没有跨币种相加。
+
+CHANGE A REMAINS PASS
+⑦ Financial truth chain：PASS
+
+PC-05 现在的事实链已经基本正确：
+
+ClaimItem / outcome
+→ discovered / approved
+
+Settlement
+→ expected / disputed / reconciliation context
+
+RecoveryPayout
+→ actual received money
+
+SettlementAdjustment
+→ reversal / correction context
+
+BillingInvoice
+→ fee calculated
+
+Billing paidAmount
+→ fee collected
+
+Payment / collection
+→ 当前保持关闭
+
+没有再把不同层的事实混成一个字段。
+
+这是 PC-05 可以关闭的核心依据。
+
+⑧ EXPECTED / DISPUTED：PASS
+
+EXPECTED：
+
+只进入 expected
+
+不进入 recovered。
+
+DISPUTED：
+
+只进入 disputed
+
+不会被当成 safe recovered。
+
+符合冻结口径。
+
+⑨ Payment / Collection boundary：PASS
+
+继续保持：
+
+Payment = ZERO
+
+collection = NOT_ENABLED
+
+feeCalculated
+≠
+feeCollected
+
+没有：
+
+payment activation
+
+PSP
+
+collection
+
+auto charge
+
+payout creation
+
+external money movement
+
+边界未扩大。
+
+PASS。
+
+⑩ Security / read-only：PASS
+
+本批没有新增：
+
+write endpoint
+
+schema
+
+migration
+
+provider transport
+
+credential exposure
+
+响应也没有暴露：
+
+credentialRef
+
+passwordHash
+
+secret
+
+token
+
+storageKey
+
+payoutRef
+
+PASS。
+
+⑪ Permanent tests：PASS
+
+FINAL-2 永久测试已经覆盖上一轮要求的核心场景：
+
+SUBMITTED_MANUAL approved=0
+
+CLOSED(REJECTED) approved=0
+
+CLOSED(RECOVERED) approved 正确
+
+无真实 approval 时间 → null
+
+Settlement 100 + payout 40 → recovered 40
+
+Settlement received + no payout → recovered 0
+
+payout100 + reversal100 → gross100 / adjustment100 / net0
+
+REVERSED settlement 不 double subtract
+
+payout currency 分桶
+
+EXPECTED / DISPUTED 语义
+
+Payment=ZERO / collection OFF
+
+权限 / 401
+
+并且 R45/R46 回归包含在 CI。
+
+PASS。
+
+⑫ CI：PASS
+
+RUN_ID：
+
+37034238807
+
+head_sha：
+
+88f788b4c28613cc1a27b43cad3f173639ab5f1c
+
+状态：
+
+completed / success
+
+5 jobs 全绿。
+
+因此：
+
+FINAL_IMPLEMENTATION_HEAD
+
+CI_VERIFIED_HEAD
+
+⑬ PC-05 FINAL VERDICT
+
+正式裁决：
+
+PC-05 RECOVERED MONEY VISIBILITY = PASS / CLOSED
+
+PC-05 到此关闭。
+
+不要继续在本批扩：
+
+FX
+
+accounting engine
+
+PSP
+
+automatic collection
+
+payout creation
+
+R46 redesign
+
+payment activation
+
+⑭ NEXT EXECUTION UNIT：PC-06 AUTHORIZED
+
+解除：
+
+PC-06 = PENDING
+
+正式批准：
+
+PC-06 — ACCOUNT MANAGEMENT
+
+目标：
+
+让客户真正管理：
+
+一个 organization 下的多个 platform/provider
+
+一个 platform 下的多个 accounts
+
+每个 account 对应的 connection / auth lifecycle
+
+同时继续保持：
+
+PlatformAccount
+
+business identity
+
+SourceConnection
+
+transport / auth lifecycle
+
+绝不能重新混成一个模型。
+
+PC-06 SCOPE
+1. Account list
+
+客户可查看当前 tenant 的：
+
+platform
+
+account displayName
+
+externalAccountId（安全展示）
+
+identityVersion
+
+account status
+
+connections count
+
+active/inactive state
+
+createdAt
+
+只读 server-derived projection。
+
+2. Multi-account grouping
+
+UI 必须支持：
+
+Amazon
+
+Account A
+
+Account B
+
+TikTok Shop
+
+Account A
+
+UPS
+
+Account A
+
+而不是：
+
+一个 platform = 一个 account。
+
+不要重新引入 provider singleton 假设。
+
+3. Connection visibility
+
+每个 PlatformAccount 下展示关联 SourceConnection：
+
+connection id
+
+label
+
+channel/domain
+
+connection status
+
+lastSyncAt
+
+lastErrorAt（安全摘要）
+
+auth/reconnect capability
+
+禁止返回：
+
+credentialRef
+config secret
+token
+OAuth payload
+
+4. Bound / unbound semantics
+
+必须明确显示：
+
+BOUND_ACTIVE
+BOUND_INACTIVE
+UNBOUND_LEGACY
+
+legacy unbound：
+
+不可自动猜 account。
+
+继续沿用 Track B 的：
+
+explicit bind/rebind policy。
+
+5. Account onboarding entry
+
+UI 可以提供：
+
+Connect account
+
+但仅调用已有安全 onboarding/bind/rebind capability。
+
+不要在 PC-06 接真实 provider OAuth。
+
+real OAuth/API 仍：
+
+EXTERNAL INTEGRATION GATE。
+
+6. Rebind visibility
+
+客户可以理解：
+
+当前 connection 绑定的是哪个 PlatformAccount。
+
+如果已有安全 rebind endpoint：
+
+可以暴露 entry。
+
+但必须：
+
+same tenant
+
+server validated target account
+
+no arbitrary client identity creation
+
+retain audit trail
+
+不要重写 Track B。
+
+7. Account-scoped navigation
+
+从 account 页面可以进入：
+
+opportunities?accountId=
+
+recovery money context
+
+connections
+
+cases
+
+只使用既有 tenant/account-scoped read APIs。
+
+8. Safe external account display
+
+externalAccountId 可以显示客户识别所需信息。
+
+如存在敏感 provider id：
+
+可以 mask。
+
+但不要自行修改 canonical identity。
+
+UI mask ≠ DB identity mutation。
+
+9. Empty / error states
+
+至少：
+
+no accounts
+
+legacy unbound connections
+
+needs auth
+
+revoked
+
+paused
+
+API error
+
+session expired
+
+PC-04 RecoveryBanner 可以复用。
+
+不要复制 error semantics。
+
+10. Customer actions
+
+只暴露服务端 capability：
+
+reconnect
+
+bind
+
+rebind
+
+inspect opportunities
+
+inspect recovery money
+
+没有对应后端能力的动作：
+
+不得显示为 executable。
+
+PC-06 REQUIRED TESTS
+
+至少：
+
+same tenant account visible
+
+foreign tenant account invisible
+
+multiple accounts same platform visible
+
+multiple providers visible
+
+connection grouped under correct account
+
+legacy unbound connection not guessed
+
+credentialRef absent
+
+config secret absent
+
+token absent
+
+account filter / navigation preserves tenant isolation
+
+rebind target same tenant only
+
+unknown/foreign account rebind rejected
+
+reconnect capability server-derived
+
+unavailable action not advertised
+
+FINANCE / VIEWER permissions follow existing model
+
+unauthorized → 401
+
+Track B onboarding/rebind regressions green
+
+PC-02 account-filter regression green
+
+tsc api/web 0
+
+full CI SUCCESS
+
+⑮ PC-06 不要做
+
+不要在本批：
+
+implement real Amazon OAuth
+
+implement TikTok OAuth
+
+provider API application logic
+
+credential vault redesign
+
+account merge
+
+X4 entity resolution
+
+cross-provider identity matching
+
+payment
+
+billing
+
+FX
+
+PC-06 是：
+
+CUSTOMER ACCOUNT MANAGEMENT VIEW + SAFE EXISTING ACTION ENTRY
+编号裁决
+
+① CHANGE B：
+
+PASS
+
+② CHANGE C：
+
+PASS
+
+③ CHANGE D：
+
+PASS
+
+④ CHANGE E：
+
+PASS
+
+⑤ PC-05：
+
+PASS / CLOSED
+
+⑥ PC-06：
+
+AUTHORIZED
+
+⑦ NEXT EXECUTION UNIT：
+
+PC-06 ACCOUNT MANAGEMENT
+
+tenant-safe account list
+
+multi-platform / multi-account grouping
+
+connection visibility
+
+bound/unbound semantics
+
+existing bind/rebind/reconnect capabilities
+
+account-scoped navigation
+
+safe customer UI
+
+permanent HTTP/DB tests
+
+full CI
+
+边界继续保持：
+
+NO platform write
+Payment = 0
+autopay = OFF
+collection = OFF
+external payment write = OFF
+R13 HOLD
+TRANSPORT = false
+无生产凭据
+
+PC-05 现在可以真正关掉了。到这一点，客户看到的“已追回金额”已经不再是估算式的 UI 数字，而是建立在 RecoveryPayout 真正到账事实 + reversal 净额 上，这一层对 CrossClaim 非常关键。
+```
