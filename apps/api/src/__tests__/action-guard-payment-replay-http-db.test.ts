@@ -567,10 +567,16 @@ describe('② 第二批 — replay（payment.replay）真实 HTTP + PostgreSQL',
           10_000,
           'REPLAY_WAITING_ON_INVOICE_LOCK',
         );
-        await prisma.billingInvoice.update({
-          where: { id: invoiceId },
-          data: { total: new Prisma.Decimal('950.0000') },
-        });
+        // R46 S5-A：模拟锁协议之外的直接 DB 写入者（临时停用 ISSUED 内容守卫）
+        await prisma.$executeRawUnsafe('ALTER TABLE "BillingInvoice" DISABLE TRIGGER cc_billinginvoice_issue_guard');
+        try {
+          await prisma.billingInvoice.update({
+            where: { id: invoiceId },
+            data: { total: new Prisma.Decimal('950.0000') },
+          });
+        } finally {
+          await prisma.$executeRawUnsafe('ALTER TABLE "BillingInvoice" ENABLE TRIGGER cc_billinginvoice_issue_guard');
+        }
       } finally {
         release();
       }
@@ -605,10 +611,16 @@ describe('② 第二批 — replay（payment.replay）真实 HTTP + PostgreSQL',
                     if (!injected) {
                       injected = true;
                       // 模拟"不遵守发票锁协议"的写入者：在 CAS 之前提交新的发票事实
-                      await prisma.billingInvoice.update({
-                        where: { id: invoiceId },
-                        data: { total: new Prisma.Decimal('950.0000') },
-                      });
+                      // R46 S5-A：模拟锁协议之外的直接 DB 写入者（临时停用 ISSUED 内容守卫）
+                      await prisma.$executeRawUnsafe('ALTER TABLE "BillingInvoice" DISABLE TRIGGER cc_billinginvoice_issue_guard');
+                      try {
+                        await prisma.billingInvoice.update({
+                          where: { id: invoiceId },
+                          data: { total: new Prisma.Decimal('950.0000') },
+                        });
+                      } finally {
+                        await prisma.$executeRawUnsafe('ALTER TABLE "BillingInvoice" ENABLE TRIGGER cc_billinginvoice_issue_guard');
+                      }
                     }
                     return (d.updateMany as (a: unknown) => Promise<unknown>)(args);
                   };

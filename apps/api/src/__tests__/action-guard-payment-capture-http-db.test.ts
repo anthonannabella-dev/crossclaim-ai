@@ -446,10 +446,16 @@ describe('② 第二批 — payment.capture（账单入口）真实 HTTP + Postg
       try {
         // 控制点：请求已完成锁外读取、正阻塞在发票锁上
         await waitFor(async () => (await advisoryLockCount(false)) >= 1, 10_000, 'ADVANCE_WAITING_ON_INVOICE_LOCK');
-        await prisma.billingInvoice.update({
-          where: { id: invoiceId },
-          data: { total: new Prisma.Decimal('1600.0000') },
-        });
+        // R46 S5-A：模拟锁协议之外的直接 DB 写入者（临时停用 ISSUED 内容守卫）
+        await prisma.$executeRawUnsafe('ALTER TABLE "BillingInvoice" DISABLE TRIGGER cc_billinginvoice_issue_guard');
+        try {
+          await prisma.billingInvoice.update({
+            where: { id: invoiceId },
+            data: { total: new Prisma.Decimal('1600.0000') },
+          });
+        } finally {
+          await prisma.$executeRawUnsafe('ALTER TABLE "BillingInvoice" ENABLE TRIGGER cc_billinginvoice_issue_guard');
+        }
       } finally {
         release();
       }
@@ -482,10 +488,16 @@ describe('② 第二批 — payment.capture（账单入口）真实 HTTP + Postg
       const pending = advance(base, cookie, { approvalId, amount: '1600.0000' });
       try {
         await waitFor(async () => (await advisoryLockCount(false)) >= 1, 10_000, 'ADVANCE_WAITING_ON_INVOICE_LOCK');
-        await prisma.billingInvoice.update({
-          where: { id: invoiceId },
-          data: { total: new Prisma.Decimal('1600.0000') },
-        });
+        // R46 S5-A：模拟锁协议之外的直接 DB 写入者（临时停用 ISSUED 内容守卫）
+        await prisma.$executeRawUnsafe('ALTER TABLE "BillingInvoice" DISABLE TRIGGER cc_billinginvoice_issue_guard');
+        try {
+          await prisma.billingInvoice.update({
+            where: { id: invoiceId },
+            data: { total: new Prisma.Decimal('1600.0000') },
+          });
+        } finally {
+          await prisma.$executeRawUnsafe('ALTER TABLE "BillingInvoice" ENABLE TRIGGER cc_billinginvoice_issue_guard');
+        }
       } finally {
         release();
       }
