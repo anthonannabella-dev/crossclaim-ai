@@ -19,19 +19,31 @@ export async function resolveEvidenceAccountId(
   tx: Tx,
   input: { organizationId: string; connectionId?: string | null; caseId?: string | null },
 ): Promise<string> {
+  // MSG-20261002-69：多上下文必须**各自解析后一致性验证**，不得“连接优先即返回”。
+  const resolved: string[] = [];
   if (input.connectionId) {
-    return resolveAccountIdFromConnection(tx, {
-      organizationId: input.organizationId,
-      connectionId: input.connectionId,
-    });
+    resolved.push(
+      await resolveAccountIdFromConnection(tx, {
+        organizationId: input.organizationId,
+        connectionId: input.connectionId,
+      }),
+    );
   }
   if (input.caseId) {
-    return resolveAccountIdFromCase(tx, {
-      organizationId: input.organizationId,
-      caseId: input.caseId,
-    });
+    resolved.push(
+      await resolveAccountIdFromCase(tx, {
+        organizationId: input.organizationId,
+        caseId: input.caseId,
+      }),
+    );
   }
-  throw new PlatformAccountRequiredError('既无连接上下文也无 case 主张链，无法派生 provenance');
+  if (resolved.length === 0) {
+    throw new PlatformAccountRequiredError('既无连接上下文也无 case 主张链，无法派生 provenance');
+  }
+  if (new Set(resolved).size !== 1) {
+    throw new PlatformAccountRequiredError('多身份上下文不一致（connection 与 case 指向不同 PlatformAccount）');
+  }
+  return resolved[0];
 }
 
 export const PLATFORM_ACCOUNT_REQUIRED = 'PLATFORM_ACCOUNT_REQUIRED';
