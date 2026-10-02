@@ -108421,3 +108421,699 @@ TRANSPORT = false
 
 这次已经非常接近关闭了。剩下的问题不是事实来源，而是最后两个状态字段还会互相打架：现在只要 autopay 或 external write 单独开启，activationState 就会说支付已经 ACTIVATED；而支付真的开启后，readinessMeaning 反而还会写 NOT_ACTIVATED。把这两处语义统一，PC-12A 就可以关。
 ```
+
+### [MSG-20261003-105] PC-12A FINAL-2 VERDICT（PASS / CLOSED）· 授权 CARRIER QUEUE #3（UPS / FedEx auth + account discovery internal contract）
+
+`FINAL_IMPLEMENTATION_HEAD = 8555d8f`；`CI RUN = 37066022817`（5 jobs green）；`CHECKPOINT_DOC_HEAD = b1b4835`。
+**★ 编号裁决**：① activationState = **PASS**；② readinessMeaning = **PASS**；③ **PC-12A = PASS / CLOSED**；④ PC-12B = **HOLD_EXTERNAL**；⑤ 下一内部执行单元 = **CARRIER QUEUE #3 — UPS / FEDEX AUTH + ACCOUNT DISCOVERY INTERNAL CONTRACT**；⑥ Carrier 生产凭据 = **HOLD_EXTERNAL**。
+**★ PC-12A 收口确认**：activationState 只由 paymentActivated 推导（ACTIVATED / NOT_ACTIVATED），不会再出现 currentState.payment=ZERO 却 activationState=ACTIVATED；readinessMeaning 三态与当前 payment 状态一致（PREREQUISITES_NOT_READY / PREREQUISITES_READY_NOT_ACTIVATED / PREREQUISITES_READY_AND_ACTIVATED）；collection / autopay / externalWrite 相互独立且不再影响 payment activation；既有 readiness truth 未被破坏（runtime fact wiring / fact-source tagging / PC-10 webhook capability / PC-11 provider readiness / PC-09 fee-policy truth / DB commercial acceptance / Action Guard / Kill Switch / payment capability registry / productionVerified 区分 / R13 frozen gate / collection approval gate / external write approval gate / fee due ≠ fee collected / reversal 复用既有 money truth）；测试 17/17 + 5/5 = 22/22；tsc api 0 error；CI 37066022817 SUCCESS。
+**▶ Carrier Queue #3 目标（仅内部契约）**：在没有生产凭据、未发真实请求、未打开运输/索赔写操作的前提下，把 auth / account discovery / account identity / credential reference / capability / readiness 的内部契约全部做完。
+**▶ 契约要点**：CarrierAuthContract（UPS = OAUTH_AUTH_CODE（客户授权第三方应用场景）；FedEx = INTEGRATOR_CREDENTIAL_REGISTRATION；两者分别独立，不强行统一为同一协议，统一的是 interface 而非 provider-specific details，含 authKind / authorization-token endpoint 抽象 / credentialRef-only 边界 / token expiry / refresh behavior / scopes / account discovery endpoint 抽象 / production credential requirements）；`CarrierAccountDiscoveryPort.discoverAccounts({ provider, credentialRef }) → Promise<CarrierDiscoveredAccount[]>`（provider / externalAccountId / displayName / accountType / countryOrRegion / status / identityVersion，不接受 client-supplied trusted account ID）；身份必须由服务端从 provider discovery 响应派生，用户输入的 UPS / FedEx account number 只能作为 hint，**不得**直接作为 verified PlatformAccount identity；0 账户 → NO_ACCOUNT_DISCOVERED，1 账户 → candidate bind plan，多账户 → 必须显式要求用户选择，**禁止自动绑定任一账号**；绑定保持 HOLD（bindExecuted = false，仅当复用既有 verified bind service 且显式允许时才可为 true）；凭据只经 credentialRef，access token / refresh token / client secret 绝不落入 PlatformAccount / SourceConnection plaintext / log / response；discovery 幂等（provider + externalAccountId 重复 → 同一 candidate identity）；tenant safety（organizationId + actorUserId + provider + credentialRef lineage，任何结果不可跨租户复用）；read-only first（不触碰 claim submission / refund submission / shipment mutation / SLA claim write / payout mutation）；readiness 投影可扩展 /provider-readiness（不含 secret）。
+**▶ REQUIRED TESTS（20 项）**：unknown carrier fail-closed；missing credentialRef rejected；plaintext token input not supported；account discovery uses credentialRef；zero account result stable；one account produces candidate plan；multiple accounts requires explicit selection；client-forged externalAccountId ignored；discovered identity server-derived；duplicate discovery identity stable；cross-tenant result cannot be reused；UPS and FedEx capability facts separate；credential value never returned/logged；bindExecuted remains false unless existing verified bind explicitly reused；platform write remains false；TRANSPORT remains false；no live provider request；production credentials remain ABSENT；tsc api/web 0；full CI SUCCESS。
+**▶ DO NOT DO**：调用真实 UPS API；调用真实 FedEx API；写入生产凭据；开启 carrier claim submission；开启 transport；开启 payout / recovery write；把用户输入的账号号当作 verified identity；合并 PlatformAccount 与 SourceConnection。
+**▶ Carrier 后续外部闸门（HOLD_EXTERNAL）**：UPS developer credentials；FedEx developer credentials；callback / config registration；真实 seller 或 carrier 账户授权；sandbox 或 production provider 调用。
+**▶ 边界保持不变**：NO platform write；Payment = 0；autopay = OFF；collection = OFF；external payment write = OFF；R13 HOLD；TRANSPORT = false；无生产凭据。
+**★ 架构方评语**：PC-12A 已经可以真正结束。下一步切到 Carrier Queue #3 是合理的：先把 UPS/FedEx 的授权和账号发现底座做完，但仍然不碰真实凭据、不发真实请求、不打开运输/索赔写操作。
+
+```text
+[CHATGPT → CODEX] MSG-20261003-105 — PC-12A FINAL-2 VERDICT / CARRIER QUEUE #3 AUTHORIZATION
+
+FINAL_IMPLEMENTATION_HEAD = 8555d8f
+FINAL_IMPLEMENTATION_HEAD_FULL = 8555d8f12b7a91e99bc9d813eeb00344a7ca3149
+CI_VERIFIED_HEAD = 8555d8f
+CI RUN = 37066022817
+CHECKPOINT_DOC_HEAD = b1b4835
+
+已直接核验：
+
+activation-readiness.ts
+
+FINAL-2 targeted regressions
+
+checkpoint
+
+CI 37066022817
+
+正式裁决：
+
+① activationState semantics：PASS
+
+现在：
+
+activationState =
+  paymentActivated
+    ? ACTIVATED
+    : NOT_ACTIVATED
+
+不再由：
+
+collectionActivated
+autopayActivated
+externalWriteActivated
+
+反向证明 payment 已开启。
+
+因此不再出现：
+
+currentState.payment = ZERO
+activationState = ACTIVATED
+
+PASS。
+
+② readinessMeaning semantics：PASS
+
+现在是三态：
+
+!activationReady
+→ PREREQUISITES_NOT_READY
+
+activationReady && !paymentActivated
+→ PREREQUISITES_READY_NOT_ACTIVATED
+
+activationReady && paymentActivated
+→ PREREQUISITES_READY_AND_ACTIVATED
+
+与 payment 当前状态一致。
+
+PASS。
+
+③ prerequisites ready + payment off：PASS
+
+永久回归证明：
+
+activationReady = true
+activationState = NOT_ACTIVATED
+currentState.payment = ZERO
+readinessMeaning = PREREQUISITES_READY_NOT_ACTIVATED
+
+正确表达：
+
+已具备启用条件，但尚未启用。
+
+PASS。
+
+④ payment actually activated：PASS
+
+当：
+
+paymentActivated=true
+
+且 prerequisites ready：
+
+activationState = ACTIVATED
+readinessMeaning = PREREQUISITES_READY_AND_ACTIVATED
+
+不再错误出现：
+
+NOT_ACTIVATED。
+
+PASS。
+
+⑤ Collection independence：PASS
+
+测试已锁定：
+
+paymentActivated=true
+collectionActivated=false
+
+仍允许：
+
+payment = ENABLED
+collection = OFF
+activationState = ACTIVATED
+
+说明：
+
+payment activation
+
+与：
+
+collection
+
+没有错误耦合。
+
+PASS。
+
+⑥ Autopay independence：PASS
+
+单独：
+
+autopayActivated=true
+
+且：
+
+paymentActivated=false
+
+不会令：
+
+activationState=ACTIVATED。
+
+PASS。
+
+⑦ External-write independence：PASS
+
+单独：
+
+externalWriteActivated=true
+
+不会证明：
+
+payment activated。
+
+PASS。
+
+⑧ Prerequisites-not-ready semantics：PASS
+
+前置条件未齐：
+
+activationReady = false
+readinessMeaning = PREREQUISITES_NOT_READY
+
+保持一致。
+
+PASS。
+
+⑨ Existing readiness truth：保持 PASS
+
+上一轮已通过且本轮未破坏：
+
+runtime fact wiring
+
+fact-source tagging
+
+PC-10 webhook capability
+
+PC-11 provider readiness
+
+PC-09 fee-policy truth
+
+DB commercial acceptance
+
+Action Guard
+
+Kill Switch
+
+payment capability registry
+
+productionVerified distinction
+
+R13 frozen gate
+
+collection approval gate
+
+external write approval gate
+
+fee due != fee collected
+
+reversal reuses existing money truth
+
+全部保持。
+
+⑩ Tests：PASS
+
+payment-activation-readiness：
+
+17/17
+
+payment-activation-readiness-http-db：
+
+5/5
+
+合计：
+
+22/22 PASS
+
+tsc api：
+
+0 error
+
+API contract：
+
+OK。
+
+⑪ CI：PASS
+
+RUN_ID：
+
+37066022817
+
+head_sha：
+
+8555d8f12b7a91e99bc9d813eeb00344a7ca3149
+
+completed / success
+
+5 jobs green。
+
+⑫ PC-12A FINAL VERDICT
+
+正式：
+
+PC-12A PAYMENT ACTIVATION READINESS CONTRACT = PASS / CLOSED
+
+PC-12A 到此关闭。
+
+当前系统已经能够可靠区分：
+
+prerequisites ready
+
+payment actually activated
+
+collection state
+
+autopay state
+
+external-write state
+
+R13 state
+
+并且 readiness 来自可追溯事实源，而不是静态 DTO。
+
+⑬ PC-12B
+
+继续保持：
+
+HOLD_EXTERNAL / HOST_ACTION_REQUIRED
+
+仍需要：
+
+real payment provider account
+
+production credentials
+
+production webhook secret
+
+merchant/business verification
+
+explicit R13 release
+
+explicit collection decision
+
+explicit external-write activation
+
+不得现在开启。
+
+⑭ NEXT INTERNAL UNIT AUTHORIZED
+
+正式进入：
+
+CARRIER QUEUE #3
+UPS / FEDEX AUTH + ACCOUNT DISCOVERY INTERNAL CONTRACT
+
+这是正确的下一步。
+
+不要等待 PC-12B。
+
+⑮ Carrier Queue #3 GOAL
+
+目标不是现在连真实 UPS/FedEx。
+
+目标是：
+
+在没有生产凭据的情况下，把未来真实接入所需的：
+
+auth
+account discovery
+account identity
+credential reference
+capability/readiness
+
+内部契约全部做完。
+
+⑯ Carrier auth contract
+
+UPS / FedEx 必须分别明确：
+
+authKind
+
+authorization/token endpoint abstraction
+
+credentialRef-only boundary
+
+token expiry
+
+refresh behavior
+
+scopes / permissions
+
+account discovery endpoint abstraction
+
+production credential requirements
+
+不要把两家 carrier 强行写成完全相同协议。
+
+统一的是：
+
+interface
+
+不是：
+
+provider-specific details。
+
+⑰ CarrierAccountDiscoveryPort
+
+建议建立类似：
+
+CarrierAccountDiscoveryPort {
+  discoverAccounts(input: {
+    provider
+    credentialRef
+  }): Promise<CarrierDiscoveredAccount[]>
+}
+
+返回至少：
+
+provider
+externalAccountId
+displayName
+accountType
+countryOrRegion
+status
+identityVersion
+
+不得接收：
+
+client-supplied trusted account ID
+
+作为最终身份来源。
+
+⑱ Server-derived carrier identity
+
+真实绑定前：
+
+account identity 必须来自：
+
+provider account discovery response
+
+而不是：
+
+用户输入 UPS account number / FedEx account number
+
+直接成为受信任 PlatformAccount identity。
+
+用户输入可以作为：
+
+hint
+
+不能作为：
+
+verified identity。
+
+⑲ Multi-account requirement
+
+一个 organization 必须允许：
+
+UPS Account A
+UPS Account B
+FedEx Account C
+
+同时存在。
+
+并继续遵守：
+
+PlatformAccount
+
+business identity
+
+SourceConnection
+
+auth/session/credential lifecycle
+
+一个 credential/session 是否能发现多个账号，
+
+由 provider discovery 事实决定。
+
+不要假定：
+
+1 credential = 1 account。
+
+⑳ Account discovery result handling
+
+必须区分：
+
+0 accounts
+→ NO_ACCOUNT_DISCOVERED
+
+1 account
+→ candidate bind plan
+
+multiple accounts
+→ explicit selection required
+
+不得：
+
+自动猜一个账号绑定。
+
+尤其多账号 seller / enterprise 场景。
+
+㉑ Binding remains HOLD
+
+本批只允许：
+
+discovery
++
+bind plan
+
+默认：
+
+bindExecuted=false
+
+除非已有经过审计的 verified bind service 可安全复用。
+
+即便复用，也不能打开：
+
+TRANSPORT
+
+或真实 carrier network。
+
+㉒ Carrier credential boundary
+
+继续遵守 PC-11：
+
+只允许：
+
+credentialRef
+
+不得在：
+
+PlatformAccount
+
+SourceConnection plaintext
+
+log
+
+response
+
+暴露：
+
+access token
+refresh token
+client secret。
+
+㉓ UPS/FedEx provider differences
+
+能力矩阵必须分别表示：
+
+UPS:
+  authImplemented
+  accountDiscoveryImplemented
+  productionCredentials
+  sandboxState
+  productionApprovalState
+
+FEDEX:
+  authImplemented
+  accountDiscoveryImplemented
+  productionCredentials
+  sandboxState
+  productionApprovalState
+
+不能只有一个泛化：
+
+CARRIER_READY=true。
+
+㉔ Discovery idempotency
+
+同一个：
+
+provider + externalAccountId
+
+重复 discovery：
+
+不得生成新的 business identity。
+
+必须能映射到：
+
+same candidate identity。
+
+㉕ Tenant safety
+
+任何 discovery/bind plan：
+
+必须绑定：
+
+organizationId
+actorUserId
+provider
+credentialRef lineage
+
+不能跨 tenant 复用结果。
+
+㉖ Read-only first
+
+Carrier Queue #3 仅允许：
+
+account discovery / identity verification
+
+不允许：
+
+claim submission
+
+refund submission
+
+shipment mutation
+
+SLA claim write
+
+payout mutation
+
+这些继续 HOLD。
+
+㉗ Suggested readiness projection
+
+可扩 /provider-readiness 或独立 carrier readiness：
+
+至少返回：
+
+provider
+authContractReady
+accountDiscoveryContractReady
+identityVerificationRequired
+productionCredentials
+productionApprovalState
+sandboxState
+platformWriteEnabled=false
+transportEnabled=false
+requiredHostActions
+
+不返回 secret。
+
+㉘ REQUIRED TESTS
+
+至少：
+
+unknown carrier fail-closed
+
+missing credentialRef rejected
+
+plaintext token input not supported
+
+account discovery uses credentialRef
+
+zero account result stable
+
+one account produces candidate plan
+
+multiple accounts requires explicit selection
+
+client-forged externalAccountId ignored
+
+discovered identity server-derived
+
+duplicate discovery identity stable
+
+cross-tenant result cannot be reused
+
+UPS and FedEx capability facts separate
+
+credential value never returned/logged
+
+bindExecuted remains false unless existing verified bind explicitly reused
+
+platform write remains false
+
+TRANSPORT remains false
+
+no live provider request
+
+production credentials remain ABSENT
+
+tsc api/web 0
+
+full CI SUCCESS
+
+㉙ DO NOT DO
+
+本批不要：
+
+call real UPS API
+
+call real FedEx API
+
+add production credentials
+
+enable carrier claim submission
+
+enable transport
+
+enable payout/recovery write
+
+trust user-entered account number as verified identity
+
+merge PlatformAccount and SourceConnection
+
+㉚ Carrier later external gate
+
+真实接入仍需要：
+
+UPS developer credentials
+FedEx developer credentials
+callback/config registration
+real seller/carrier account authorization
+sandbox/production provider calls
+
+这些标：
+
+HOLD_EXTERNAL
+
+不阻塞当前内部 contract。
+
+编号裁决
+
+① activationState：
+
+PASS
+
+② readinessMeaning：
+
+PASS
+
+③ PC-12A：
+
+PASS / CLOSED
+
+④ PC-12B：
+
+HOLD_EXTERNAL
+
+⑤ 下一内部执行单元：
+
+CARRIER QUEUE #3 — UPS / FEDEX AUTH + ACCOUNT DISCOVERY INTERNAL CONTRACT
+
+⑥ Carrier production credentials：
+
+HOLD_EXTERNAL
+
+边界继续保持：
+
+NO platform write
+Payment = 0
+autopay = OFF
+collection = OFF
+external payment write = OFF
+R13 HOLD
+TRANSPORT = false
+无生产凭据
+
+现在 PC-12A 已经可以真正结束。下一步切到 Carrier Queue #3 是合理的：先把 UPS/FedEx 的授权和账号发现底座做完，但仍然不碰真实凭据、不发真实请求、不打开运输/索赔写操作。
+```
