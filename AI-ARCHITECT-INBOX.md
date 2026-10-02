@@ -111878,3 +111878,646 @@ TRANSPORT = false
 
 现在 Queue #4 可以真正关闭。下一步做 Invoice + POD Read Plane 比直接跳去算 SLA 更稳：tracking 告诉我们“发生了什么”，invoice 告诉我们“收了多少钱”，POD 告诉我们“交付证据是什么”。这三块齐了，下一阶段才适合开始组 SLA 证据与判定输入。
 ```
+
+### [MSG-20261003-110] CARRIER QUEUE #5 = REVISE-MINOR / NOT CLOSED · 授权 QUEUE #5 FINAL（CURRENCY TRUTH）
+
+`FINAL_IMPLEMENTATION_HEAD = ccc4345`；`CI RUN = 37074580689`（5 jobs green）；`CHECKPOINT_DOC_HEAD = db6725c`。
+**★ 编号裁决**：① Invoice read plane = **PASS（除 currency integrity）**；② POD read plane = **PASS**；③ provenance / raw boundary = **PASS**；④ **CARRIER QUEUE #5 = REVISE-MINOR / NOT CLOSED**；⑤ 下一执行 = **CARRIER QUEUE #5 FINAL — CURRENCY TRUTH + MIXED-CURRENCY GUARD**；⑥ Queue #6（SLA Evidence Assembly）暂不授权。
+**★ 已 PASS（㉓ 不重做）**：verified account lineage / credentialRef-only / tenant isolation / provider·account binding / invoice reference binding / tracking binding / provider-specific adapter / raw charge code preservation / unknown charge → OTHER / read-only / 无 refund·recovery·success-fee 推导；BigInt 十进制加总（无 float，`0.1 + 0.2 = 0.3`）；INVALID_AMOUNT（科学计数法 `41.3e2` 不算合法 money）；billingTruthOnly = true；invoice response provenance（ACCOUNT_MISMATCH / INVOICE_IDENTITY_MISMATCH / TRACKING_IDENTITY_MISMATCH，reject 不覆盖）；POD plane（deliveryEvidenceOnly = true，不推导 claim invalid / refund not due / successful receipt）；POD privacy（`Jane Doe → J***`，signature image 与完整 raw payload 不返回，document 只作 reference）；POD provenance（POD_TRACKING_IDENTITY_MISMATCH）；三处 raw allowlist（未知字段 fail-closed，credential-like → PLAINTEXT_CREDENTIAL_NOT_SUPPORTED）；failure taxonomy 与 PROVIDER_ERROR sanitization；read-only 三恒值；CI 37074580689 全绿。
+**▶ ⑬⑭ 剩余问题 A（顶层 currency 声称与实现不一致）**：checkpoint 声称「非 3 位大写货币 → CURRENCY_REQUIRED」，但实现是 `raw.currency.trim().toUpperCase()` 后再校验，因此 `"usd"` 会被接受 —— 实际语义是 normalize lowercase → uppercase，而非要求 raw canonical。建议改为**严格 canonical**：`const rawCurrency = raw.currency.trim(); if (!/^[A-Z]{3}$/.test(rawCurrency)) return CURRENCY_REQUIRED; currency = rawCurrency;`（provider adapter 负责 provider-specific canonicalization，核心 truth plane 只接受 canonical facts）。
+**▶ ⑮⑯⑰⑱⑲ 剩余问题 B（charge currency 未校验 + 混币加总风险）**：charge 的 currency 仅 `.toUpperCase()` 后参与加总，既未校验 3 位币种，也未校验与 invoice currency 一致 —— 可能把 USD 与 EUR 直接 BigInt 相加（数值精确但币种语义错误）。CHANGE A：charge 无 currency → 继承 invoice currency；显式有 currency → 必须满足 `^[A-Z]{3}$}`，否则 CURRENCY_REQUIRED。CHANGE B：当前模型是 single-currency invoice fact，任何 charge currency 必须等于 invoice currency，否则 **CHARGE_CURRENCY_MISMATCH**（比复用 CURRENCY_REQUIRED 语义更清楚）。**禁止**汇率换算 / 自动转币 / 忽略 charge currency / 直接把不同币种相加 —— Queue #5 不承担 FX conversion。
+**▶ ⑳㉑ 非阻塞说明**：不强制 `sum(charges) == totalCharge`（provider invoice 可能有 discount / rounding / unmapped adjustment / invoice-level credit），后续 SLA evidence 可保留 reconciliation delta；POD `document/reference` 暂不强制 `artifact:`/`sha256:` 语法，后续 Evidence Assembly 阶段统一接既有 artifact/storage reference validator，本轮不扩大范围。
+**▶ ㉒ 必需 FINAL 测试**：invoice currency USD → PASS；`usd` → CURRENCY_REQUIRED；`US` → CURRENCY_REQUIRED；charge 无 currency → 继承 invoice currency；charge USD + invoice USD → PASS；charge `usd` → CURRENCY_REQUIRED；charge EUR + invoice USD → CHARGE_CURRENCY_MISMATCH；mixed-currency charges → 不产生成功 fact 且**绝不被加总**；既有 decimal exactness / invoice provenance / POD / raw allowlist 测试保持 green；no live request；tsc api/web 0；full CI SUCCESS。
+**▶ ㉕㉖ 边界**：只做 Queue #5 FINAL（canonical invoice currency + canonical charge currency + same-currency invariant + targeted regressions + CI）；Queue #6 暂不授权（Queue #5 FINAL PASS 后再进入 SLA Evidence Assembly + Eligibility Input Plane）。
+**★ 架构方评语**：这次不是金额算法的问题，BigInt 十进制加总本身是对的；问题在于金额必须连同币种一起成立。现在只要把 invoice currency 和每条 charge currency 的 canonical/same-currency invariant 锁死，就能把 Queue #5 真正关闭。
+
+```text
+这轮我判 REVISE-MINOR，暂时不能 CLOSED。主体已经很完整，但我核到一个会直接影响金额事实正确性的窄问题：currency discipline 还没有真正收口。
+
+当前代码把 invoice 顶层 currency 先 .toUpperCase() 再校验，所以 "usd" 实际会被接受；这与 checkpoint 声称的“非 3 位大写货币 → CURRENCY_REQUIRED”不一致。更重要的是，每条 charge 的 currency 只是 .toUpperCase()，既没有校验是不是 3 位币种，也没有校验是否和 invoice currency 一致，然后就参与 baseCharge/fuel/accessorial/tax 的加总。这样理论上可能把 USD 与 EUR 直接 BigInt 相加，数值精确但币种语义错误。
+
+Carrier Queue #5 审计裁决
+
+[CHATGPT → CODEX] MSG-20261003-110 — CARRIER QUEUE #5 VERDICT
+
+FINAL_IMPLEMENTATION_HEAD = ccc4345
+FINAL_IMPLEMENTATION_HEAD_FULL = ccc4345b1a1b492feac0361fde76299c37cb8e6d
+CI_VERIFIED_HEAD = ccc4345
+CI RUN = 37074580689
+CHECKPOINT_DOC_HEAD = db6725c
+
+总体裁决：
+
+CARRIER QUEUE #5 = REVISE-MINOR / NOT CLOSED
+
+Invoice / POD 主体架构均已通过。
+
+唯一剩余：
+
+INVOICE CURRENCY TRUTH / MIXED-CURRENCY SAFETY
+① Invoice read plane：PASS
+
+以下已核验：
+
+verified account lineage
+credentialRef-only
+tenant isolation
+provider/account binding
+invoice reference binding
+tracking binding
+provider-specific adapter
+raw charge code preservation
+unknown charge → OTHER
+read-only
+no refund/recovery/success-fee derivation
+
+PASS。
+
+② Decimal arithmetic：PASS
+
+addDecimalStrings()
+
+使用：
+
+BigInt + scale
+
+没有经过 JS float。
+
+例如：
+
+0.1 + 0.2
+→ 0.3
+
+因此不存在普通 binary floating-point 误差。
+
+PASS。
+
+③ INVALID_AMOUNT discipline：PASS
+
+科学计数法：
+
+41.3e2
+
+不会被当成合法 money decimal。
+
+非法 decimal：
+
+INVALID_AMOUNT。
+
+PASS。
+
+④ Carrier billed truth only：PASS
+
+当前输出明确：
+
+billingTruthOnly = true
+
+没有生成：
+
+refundDue
+recoveryDue
+claimValue
+successFee
+
+PASS。
+
+⑤ Invoice response provenance：PASS
+
+provider response：
+
+externalAccountId
+
+必须与请求 verified account 一致。
+
+否则：
+
+ACCOUNT_MISMATCH。
+
+invoiceReference 有查询约束时：
+
+不一致：
+
+INVOICE_IDENTITY_MISMATCH。
+
+trackingNumber 有查询约束时：
+
+不一致：
+
+TRACKING_IDENTITY_MISMATCH。
+
+并且：
+
+reject mismatch
+
+而不是覆盖。
+
+PASS。
+
+⑥ POD plane：PASS
+
+POD 输出只建立：
+
+delivery evidence facts。
+
+明确：
+
+deliveryEvidenceOnly = true
+
+没有把：
+
+POD exists
+
+推导为：
+
+claim invalid
+refund not due
+successful customer receipt
+
+PASS。
+
+⑦ POD privacy：PASS
+
+完整 recipient name：
+
+不返回。
+
+例如：
+
+Jane Doe
+→
+J***
+
+signature image：
+
+不允许进入 response。
+
+完整 provider raw payload：
+
+不返回。
+
+document 只作为 reference 字段存在。
+
+PASS。
+
+⑧ POD provenance：PASS
+
+POD provider/account/tracking identity 都有反向绑定。
+
+tracking mismatch：
+
+POD_TRACKING_IDENTITY_MISMATCH。
+
+PASS。
+
+⑨ Raw allowlists：PASS
+
+已覆盖：
+
+invoice record
+invoice charge
+POD record
+
+未知字段：
+
+fail-closed。
+
+credential-like field：
+
+PLAINTEXT_CREDENTIAL_NOT_SUPPORTED。
+
+PASS。
+
+⑩ Failure taxonomy：PASS
+
+稳定保留：
+
+NOT_FOUND
+NOT_AUTHORIZED
+TEMPORARILY_UNAVAILABLE
+RATE_LIMITED
+PROVIDER_ERROR
+
+未知上游异常：
+
+PROVIDER_ERROR
+
+且不泄露 upstream message。
+
+PASS。
+
+⑪ Read-only boundary：PASS
+
+invoice / POD success outcome 均：
+
+readOnly = true
+transportEnabled = false
+platformWriteEnabled = false
+productionCredentials = ABSENT
+
+PASS。
+
+⑫ CI：PASS
+
+RUN_ID：
+
+37074580689
+
+HEAD：
+
+ccc4345b1a1b492feac0361fde76299c37cb8e6d
+
+completed / success
+
+5 jobs green。
+
+⑬ Remaining issue A — top-level currency claim and implementation disagree
+
+Checkpoint 声称：
+
+非 3 位大写货币 → CURRENCY_REQUIRED
+
+但实际代码：
+
+const currency =
+  raw.currency.trim().toUpperCase()
+
+if (!/^[A-Z]{3}$/.test(currency))
+  CURRENCY_REQUIRED
+
+因此：
+
+raw.currency = "usd"
+
+会被转换为：
+
+USD
+
+然后通过。
+
+所以当前实际语义是：
+
+normalize lowercase currency to uppercase
+
+而不是：
+
+require raw uppercase ISO-style currency
+
+两者必须统一。
+
+⑭ Preferred fix
+
+为了 money truth 更严格，建议：
+
+直接要求 provider adapter 输出 canonical currency：
+
+^[A-Z]{3}$
+
+不要在 normalized truth boundary 自动纠正。
+
+即：
+
+const rawCurrency = raw.currency.trim()
+
+if (!/^[A-Z]{3}$/.test(rawCurrency))
+  return CURRENCY_REQUIRED
+
+然后：
+
+currency = rawCurrency。
+
+这样：
+
+provider adapter
+
+负责 provider-specific canonicalization，
+
+核心 truth plane
+
+只接受 canonical facts。
+
+⑮ Remaining issue B — charge currency currently not validated
+
+当前 charge：
+
+currency:
+  optionalText(charge.currency)?.toUpperCase()
+  ?? invoiceCurrency
+
+但没有验证：
+
+是否 3 位币种
+
+是否与 invoice currency 相同
+
+这是实际 money-integrity 缺口。
+
+⑯ Why this matters
+
+例如：
+
+invoice.currency = USD
+
+BASE:
+  35.00 USD
+
+FUEL:
+  10.00 EUR
+
+当前：
+
+sumKinds(BASE/FUEL/...)
+
+只取：
+
+amount
+
+于是可能直接做：
+
+35.00 + 10.00
+
+并作为同一 invoice currency 的 subtotal。
+
+数值计算虽然精确，
+
+但：
+
+money semantics 是错误的。
+
+⑰ CHANGE A — validate charge currency
+
+对于每个 charge：
+
+如果没有 currency：
+
+继承 invoice currency。
+
+如果显式有 currency：
+
+必须先满足：
+
+^[A-Z]{3}$
+
+否则：
+
+CURRENCY_REQUIRED。
+
+⑱ CHANGE B — prevent mixed-currency aggregation
+
+当前 CarrierInvoiceFact 只有一个：
+
+currency
+
+所以当前模型实际上是：
+
+single-currency invoice fact
+
+因此任何 charge currency：
+
+必须等于：
+
+invoice currency。
+
+否则建议：
+
+CURRENCY_MISMATCH
+
+如果不想新增 taxonomy，
+
+也可以复用：
+
+CURRENCY_REQUIRED
+
+但更推荐：
+
+CHARGE_CURRENCY_MISMATCH
+
+语义更清楚。
+
+⑲ Do NOT silently convert cross-currency charges
+
+不要：
+
+汇率换算
+
+自动转币
+
+忽略 charge currency
+
+把不同币种直接相加
+
+Queue #5 不应承担 FX conversion。
+
+⑳ Total charge reconciliation
+
+当前：
+
+totalCharge
+
+是 provider billed fact。
+
+charges 的分类 subtotal：
+
+也是 provider billed component facts。
+
+本轮：
+
+不强制要求 sum(charges) == totalCharge
+
+可以接受。
+
+原因：
+
+provider invoice 可能存在：
+
+discount
+rounding
+unmapped adjustment
+invoice-level credit
+
+因此：
+
+不应因为 component sum 不等于 total 而擅自判断 provider 数据错误。
+
+这一点：
+
+NOT BLOCKING
+
+后续 SLA evidence 可以保留 reconciliation delta。
+
+㉑ POD document/raw reference syntax
+
+当前只做：
+
+非空 string
+
+没有强制：
+
+artifact:/sha256:
+
+这不是本单元 blocking issue，
+
+因为它们仍然只是 reference 字段且 raw payload 不回传。
+
+建议后续 Evidence Assembly 阶段统一接已有 artifact/storage reference validator。
+
+无需本轮扩大范围。
+
+㉒ Required FINAL tests
+
+只补 currency 定点测试：
+
+invoice currency USD → PASS
+
+invoice currency usd
+→ CURRENCY_REQUIRED
+（如果决定保持 normalization，则必须明确修改 contract；但推荐 strict canonical）
+
+invoice currency US
+→ CURRENCY_REQUIRED
+
+charge currency absent
+→ inherits invoice currency
+
+charge currency USD
+with invoice USD
+→ PASS
+
+charge currency usd
+→ CURRENCY_REQUIRED
+
+charge currency EUR
+with invoice USD
+→ CHARGE_CURRENCY_MISMATCH（或选定稳定 taxonomy）
+
+mixed-currency charges
+→ no successful fact
+
+mixed currencies must never be aggregated
+
+existing decimal exactness tests remain green
+
+invoice provenance tests remain green
+
+POD tests remain green
+
+raw allowlist tests remain green
+
+no live request
+
+tsc api/web 0
+
+full CI SUCCESS
+
+㉓ Do NOT rework
+
+不要重做：
+
+account lineage
+
+invoice/POD ports
+
+amount BigInt helpers
+
+charge taxonomy
+
+POD masking
+
+provenance binding
+
+raw allowlists
+
+read-only flags
+
+这些均已 PASS。
+
+㉔ Queue #5 current verdict
+
+Invoice architecture：
+
+PASS
+
+Invoice decimal arithmetic：
+
+PASS
+
+Invoice currency integrity：
+
+REVISE-MINOR
+
+POD plane：
+
+PASS
+
+Provenance：
+
+PASS
+
+Raw/privacy boundaries：
+
+PASS
+
+因此：
+
+CARRIER QUEUE #5 = REVISE-MINOR / NOT CLOSED
+㉕ NEXT EXECUTION UNIT
+
+只做：
+
+CARRIER QUEUE #5 FINAL
+CURRENCY TRUTH + MIXED-CURRENCY GUARD
+
+补：
+
+canonical invoice currency
+
+canonical charge currency
+
+same-currency invariant
+
+targeted regressions
+
+CI
+
+㉖ Queue #6
+
+暂不授权。
+
+Queue #5 FINAL PASS 后再进入：
+
+CARRIER QUEUE #6
+SLA EVIDENCE ASSEMBLY + ELIGIBILITY INPUT PLANE
+编号裁决
+
+① Invoice read plane：
+
+PASS，除 currency integrity
+
+② POD read plane：
+
+PASS
+
+③ provenance / raw boundary：
+
+PASS
+
+④ CARRIER QUEUE #5：
+
+REVISE-MINOR / NOT CLOSED
+
+⑤ 下一执行：
+
+CARRIER QUEUE #5 FINAL — CURRENCY TRUTH
+
+边界继续保持：
+
+NO platform write
+Payment = 0
+autopay = OFF
+collection = OFF
+external payment write = OFF
+R13 HOLD
+TRANSPORT = false
+无生产凭据
+
+这次不是金额算法的问题，BigInt 十进制加总本身是对的；问题在于金额必须连同币种一起成立。现在只要把 invoice currency 和每条 charge currency 的 canonical/same-currency invariant 锁死，就能把 Queue #5 真正关闭。**
+```
