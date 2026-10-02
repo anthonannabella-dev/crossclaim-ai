@@ -124,6 +124,8 @@ describe('模型清单一致性（C-0002 CHANGE #1）', () => {
     'SettlementReceiptSnapshot',
     'SettlementAdjustment',
     'FeeCalculationAdjustment',
+    // TRACK C2（MSG-20261002-66 M2）：PlatformAccount
+    'PlatformAccount',
   ];
   const JOIN_MODELS = [
     'CaseEvidence',
@@ -138,7 +140,7 @@ describe('模型清单一致性（C-0002 CHANGE #1）', () => {
 
 
   it(`核心模型恰好 ${CORE.length} 个`, () => {
-    expect(CORE).toHaveLength(49);
+    expect(CORE).toHaveLength(50);
     for (const name of CORE) expect(modelBlock(name), `缺少核心模型 ${name}`).not.toBe('');
   });
 
@@ -147,7 +149,7 @@ describe('模型清单一致性（C-0002 CHANGE #1）', () => {
   });
 
   it('模型总数为 55（49 core + 6 join）—— 与 README/DOMAIN_MODEL 表述一致', () => {
-    expect(modelNames()).toHaveLength(55);
+    expect(modelNames()).toHaveLength(56);
   });
 });
 

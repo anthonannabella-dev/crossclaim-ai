@@ -5,7 +5,7 @@
 
 ---
 
-## 一、模型总览（55 个 = 49 个核心模型 + 6 个联结模型）
+## 一、模型总览（56 个 = 50 个核心模型 + 6 个联结模型）
 
 > **口径统一**：**29 个核心模型**（架构章程 §六 的清单 + C-0006-A 的 `CanonicalFact` + C-0006-B1 的 `RuleEvaluationShadow` + C-0008-A 的 `Session`、`UserInvitation`）**+ 2 个联结模型 `CaseEvidence`、`CanonicalFactSource`**。
 > README、本文、PR 描述、架构契约测试全部按此口径，不允许 29/31 混用。

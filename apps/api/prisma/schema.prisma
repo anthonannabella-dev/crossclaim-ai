@@ -358,6 +358,7 @@ model Organization {
   sessions                           Session[]
   invitations                        UserInvitation[]
   connections                        SourceConnection[]
+  platformAccounts                   PlatformAccount[]
   fileAssets                         FileAsset[]
   importBatches                      ImportBatch[]
   transactions                       SourceTransaction[]
@@ -455,6 +456,46 @@ model Membership {
 // 二、数据进入系统
 // ============================================================
 
+/// TRACK C2（MSG-20261002-66 M1）：显式 platform/provider 维度；保留 Channel 作为兼容层
+enum Platform {
+  AMAZON
+  TIKTOK_SHOP
+  WALMART
+  SHOPIFY
+  STRIPE
+  PAYPAL
+  UPS
+  FEDEX
+  DHL
+  CUSTOMS
+  OTHER
+}
+
+/// TRACK C2（MSG-20261002-66 M2）：PlatformAccount = business provenance identity。
+/// 身份 = organizationId + platform + externalAccountId + identityVersion；
+/// identityVersion 是「外部账户身份规范/canonicalization scheme」版本，**不是**凭据版本
+/// （credential rotation 不得制造新的 PlatformAccount identity）。
+/// token / secret **不入此表**（仍由 SourceConnection.credentialRef 承担）。
+model PlatformAccount {
+  id                  String   @id @default(uuid())
+  organizationId      String
+  platform            Platform
+  externalAccountId   String
+  identityVersion     String   @default("v1")
+  marketplace         String?
+  region              String?
+  displayName         String
+  status              String   @default("NEEDS_AUTH")
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  connections  SourceConnection[]
+
+  @@unique([organizationId, platform, externalAccountId, identityVersion])
+  @@index([organizationId, platform, status])
+}
+
 model SourceConnection {
   id             String                 @id @default(uuid())
   organizationId String
@@ -465,13 +506,16 @@ model SourceConnection {
   label          String
   credentialRef  String?
   config         Json?
+  /// TRACK C2 M3：Connection = transport/auth lifecycle；PlatformAccount = business provenance identity
+  platformAccountId String?
   lastSyncAt     DateTime?
   lastErrorAt    DateTime?
   lastError      String?
   createdAt      DateTime               @default(now())
   updatedAt      DateTime               @updatedAt
 
-  organization Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization    Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  platformAccount PlatformAccount?     @relation(fields: [platformAccountId], references: [id], onDelete: SetNull)
   fileAssets   FileAsset[]
   batches      ImportBatch[]
   transactions SourceTransaction[]
@@ -480,6 +524,7 @@ model SourceConnection {
   @@unique([organizationId, channel, label])
   @@unique([organizationId, id])
   @@index([organizationId, status])
+  @@index([organizationId, platformAccountId])
 }
 
 model FileAsset {

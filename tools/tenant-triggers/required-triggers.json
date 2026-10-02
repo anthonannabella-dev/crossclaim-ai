@@ -287,6 +287,14 @@
     {
       "name": "cc_tenant_sourcetransaction",
       "table": "SourceTransaction"
+    },
+    {
+      "name": "cc_tenant_platformaccount",
+      "table": "PlatformAccount"
+    },
+    {
+      "name": "cc_tenant_sourceconnection_platformaccountid",
+      "table": "SourceConnection"
     }
   ],
   "scopedTriggers": [
