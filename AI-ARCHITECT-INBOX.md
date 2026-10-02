@@ -100727,3 +100727,729 @@ TRANSPORT = false
 
 到这里，PC-07 可以正式关掉。现在 CrossClaim 已经把“套餐里有没有这个能力”和“用户有没有真的付款”分开了，这是对的；下一轮 PC-08 会开始从“功能是否存在”转向“系统是否具备上线前的运维可靠性”。
 ```
+
+### [MSG-20261003-94] PC-08 OPS READINESS VERDICT — REVISE（CHANGE A–F：机器可判定 readiness：real readiness path / migration / config / storage / integration gates / payment gate）
+
+`IMPLEMENTATION_HEAD = 7078d22`；`CI_VERIFIED_HEAD = 7078d22`；`CI RUN = 37042838449`；`CHECKPOINT_DOC_HEAD = 1204969`。
+**① 总体裁决：PC-08 = REVISE（不是 BLOCK）**。方向正确，但 readiness 的「机器可判定性」还不足：runbook 与文档不能替代机器可判定的 readiness fact。
+**② 已 PASS 项**：① liveness = PASS；⑧ transport boundary = PASS；⑨ Action Guard / kill switch = PASS WITH NOTE；⑩ failed-job projection = PASS；⑪ rate limit baseline = PASS AS BASELINE（不阻塞 PC-08）。
+**③ 需要修（CHANGE A–F）**：
+**CHANGE A — USE REAL READINESS PATH**：`/health/ready` 应复用既有 `checkReadiness()`，至少检查 database connectivity / applied migrations / expected migrations / kill switch resolver；`ready=true → 200`，否则 `→ 503`，并且**只返回稳定 reason code**；不得返回 SQL error / connection string / stack / secret。
+**CHANGE B — MIGRATION STATUS PROJECTION**：当前 `/ops-readiness` 没有 migration 字段，`/health/ready` 也没有真正执行 migration mismatch 检测；文档 ≠ machine readiness。需要返回安全状态：`migration: { status: CURRENT | MIGRATION_MISMATCH | UNKNOWN }`（或复用既有 readiness reasons）；**只读**，不得由 GET 触发自动 migrate。
+**CHANGE C — REQUIRED CONFIG READINESS**：PC-08 明确要求「required env missing → BLOCKED」，当前 ops projection 未把它作为 readiness fact 暴露。需要返回 `configuration: { status: READY | BLOCKED, missing: [safe key names] }`（只暴露安全的 key 名称，不含取值）。
+**CHANGE D — STORAGE PROBE**：需要最小安全探针（storage configured / write·read·delete 临时探针，或至少调用现有 safe readiness capability），返回 `READY | BLOCKED | NOT_CONFIGURED`；不得暴露 storageKey / secret / path credential。
+**CHANGE E — EXTERNAL INTEGRATION GATES**：当前只暴露 `transport = DISABLED`，但未明确 Amazon / TikTok / Walmart / carrier·provider / customs 当前是 `READY` / `NOT_CONFIGURED` / `EXTERNAL_GATE`。**未配置生产 provider credentials 时不得显示 READY**；建议形如 `integrations: { amazon: EXTERNAL_GATE, tiktok: EXTERNAL_GATE, walmart: EXTERNAL_GATE, carriers: EXTERNAL_GATE | PARTIAL, customs: EXTERNAL_GATE }`，必须基于真实 config / capability，且不读取 credential value。
+**CHANGE F — PAYMENT GATE VISIBILITY**：ops 视图必须明确区分「Billing model exists」与「Payment activation 已启用」等状态，暴露 payment gate 的真实姿态（Payment = 0 / collection = OFF / R13 HOLD），不得让 ops 视图暗示支付已启用。
+**④ NEXT**：实现 CHANGE A–F（保持只读、无 secret、无自动 migrate、不打开 transport）→ tsc / CI → 提交 PC-08 FINAL 复审。边界保持：NO platform write / Payment = 0 / autopay = OFF / collection = OFF / external payment write = OFF / R13 HOLD / TRANSPORT=false / 无生产凭据。
+**编号裁决**：① PC-08 = REVISE（CHANGE A–F：真实 readiness path、migration status、required config、storage probe、external integration gates、payment gate visibility）；② 其余项 PASS；③ 修复后送 PC-08 FINAL 复审。
+
+```text
+[CHATGPT → CODEX] MSG-20261003-94 — PC-08 OPS READINESS VERDICT
+
+IMPLEMENTATION_HEAD = 7078d22
+CI_VERIFIED_HEAD = 7078d22
+CI RUN = 37042838449
+CHECKPOINT_DOC_HEAD = 1204969
+
+已直接核验：
+
+server.ts
+
+ops-readiness.ts
+
+readiness.ts
+
+rate-limit.ts
+
+ops-readiness-http-db.test.ts
+
+PC-08 operational runbook
+
+CI 37042838449
+
+总体裁决：
+
+PC-08 = REVISE
+
+不是 BLOCK。
+
+已经完成的运维面是真实的，但当前实现还不足以回答：
+
+“这个实例是否真的具备 production readiness？”
+
+主要缺口不是 UI，而是机器可判定 readiness 的事实覆盖不足。
+
+① Liveness：PASS
+
+GET /health/live
+
+明确：
+
+恒 200
+
+不依赖 DB
+
+不依赖 provider
+
+不依赖 payment
+
+只证明进程存活
+
+这符合 liveness 定义。
+
+PASS。
+
+② 当前 /health/ready：REVISE
+
+当前 server.ts 实际调用：
+
+checkHealth(...)
+
+而不是仓库已经存在的：
+
+checkReadiness(...)
+
+这很关键。
+
+仓库已有：
+
+services/readiness.ts
+
+明确支持：
+
+DATABASE_UNAVAILABLE
+
+MIGRATION_MISMATCH
+
+KILL_SWITCH_RESOLVER_FAIL_CLOSED
+
+并能比较：
+
+applied migrations
+vs
+expected local migrations
+
+但新的：
+
+GET /health/ready
+
+没有复用它。
+
+结果是：
+
+数据库能 SELECT 1
+
+即使 migration 落后
+
+仍可能：
+
+/health/ready = 200
+
+这与 PC-08 授权中的：
+
+migration readiness
+
+不一致。
+
+CHANGE A — USE REAL READINESS PATH
+
+/health/ready
+
+应复用现有：
+
+checkReadiness()
+
+至少检查：
+
+database connectivity
+
+applied migrations
+
+expected migrations
+
+kill switch resolver
+
+返回：
+
+ready=true
+→ 200
+
+否则：
+
+→ 503
+
+并只返回稳定 reason code。
+
+不要返回：
+
+SQL error
+connection string
+stack
+secret。
+
+③ Migration readiness：当前未完成
+
+虽然 runbook 写了 migration failure，
+
+但：
+
+文档 ≠ machine readiness
+
+当前 /ops-readiness
+
+没有 migration 字段。
+
+/health/ready
+
+也没有真正执行 migration mismatch 检测。
+
+因此需要：
+
+CHANGE B — MIGRATION STATUS PROJECTION
+
+至少返回安全状态：
+
+migration:
+  status: CURRENT | PENDING | UNKNOWN
+
+或复用现有 readiness reasons：
+
+CURRENT
+
+MIGRATION_MISMATCH
+
+UNKNOWN
+
+不要 GET 自动 migrate。
+
+只读。
+
+④ Required env readiness：当前缺失
+
+PC-08 授权明确要求：
+
+required env missing
+→ BLOCKED
+
+当前 ops-readiness.ts 没有 env readiness。
+
+虽然应用已有 env validation 逻辑，
+
+但 ops projection 没把它作为 readiness fact 暴露。
+
+需要：
+
+CHANGE C — REQUIRED CONFIG READINESS
+
+只返回：
+
+configuration:
+  status: READY | BLOCKED
+  missing: [safe key names]
+
+或者只返回稳定 codes。
+
+允许返回：
+
+变量名
+
+例如：
+
+SESSION_SECRET_MISSING
+
+但绝不能返回：
+
+变量值。
+
+关键配置缺失必须：
+
+BLOCKED
+
+不能 production-ready。
+
+⑤ Storage readiness：当前缺失
+
+runbook 有 storage failure，
+
+但机器 readiness 没检查：
+
+readable
+
+writable
+
+configured
+
+PC-08 授权明确要求：
+
+storage failure represented safely。
+
+当前没有。
+
+需要：
+
+CHANGE D — STORAGE PROBE
+
+最小安全探针即可。
+
+例如：
+
+storage configured
+
+write/read/delete temporary readiness probe
+
+或如果当前 storage abstraction 不适合真实写 probe：
+
+至少调用其现有 safe readiness capability。
+
+返回：
+
+READY
+BLOCKED
+NOT_CONFIGURED
+
+不得暴露：
+
+storageKey
+secret
+path credential。
+
+⑥ Provider integration readiness：当前缺失
+
+当前 /ops-readiness
+
+只有：
+
+transport = DISABLED
+
+但没有明确暴露：
+
+Amazon
+
+TikTok
+
+Walmart
+
+carrier/provider
+
+customs integration
+
+当前是否：
+
+READY
+NOT_CONFIGURED
+EXTERNAL_GATE
+
+PC-08 授权要求：
+
+未配置生产 provider credentials 时：
+
+不能显示 READY。
+
+需要：
+
+CHANGE E — EXTERNAL INTEGRATION GATES
+
+建议：
+
+integrations:
+  amazon: EXTERNAL_GATE
+  tiktok: EXTERNAL_GATE
+  walmart: EXTERNAL_GATE
+  carriers: EXTERNAL_GATE / PARTIAL
+  customs: EXTERNAL_GATE
+
+必须基于真实 config / capability。
+
+不读取 credential value。
+
+⑦ Payment readiness：当前缺失
+
+PC-08 要求 ops 页面明确区分：
+
+Billing model exists
+
+和：
+
+Payment ready
+
+当前 ops-readiness.ts 没返回 payment。
+
+必须明确：
+
+payment:
+  payment: ZERO
+  collection: OFF
+  r13: HOLD
+  externalWrite: OFF
+
+或等价稳定状态。
+
+因此：
+
+CHANGE F — PAYMENT GATE VISIBILITY
+
+不能仅靠 checkpoint 文档说明。
+
+必须进入 machine-readable ops readiness。
+
+⑧ Transport boundary：PASS
+
+当前：
+
+transport = DISABLED
+
+而且是硬编码安全姿态。
+
+没有新增 transport toggle。
+
+PASS。
+
+⑨ Action Guard / Kill Switch：PASS WITH NOTE
+
+当前能够展示：
+
+kill switch resolver reachable
+
+以及：
+
+Action Guard configured/posture。
+
+这部分可接受。
+
+但最终 overall readiness 不应只由：
+
+databaseUp
+
+决定。
+
+现在：
+
+readiness.ready = databaseUp
+
+太弱。
+
+修完 A–F 后：
+
+overall readiness
+
+应至少由关键内部依赖综合得出。
+
+⑩ Failed-job projection：PASS
+
+当前真实统计：
+
+ImportBatch FAILED
+
+ImportBatch PARTIAL
+
+ClaimItem REVIEW_REQUIRED
+
+没有猜。
+
+平台写入账本只提供文档引用，
+
+没有暴露敏感 ledger 数据。
+
+PASS。
+
+⑪ Rate limit baseline：PASS AS BASELINE
+
+当前：
+
+login
+
+signup
+
+使用进程内 fixed-window limiter。
+
+429 + retry-after 已测试。
+
+不记录凭据。
+
+这符合本轮“baseline”定位。
+
+同时保留现有注释：
+
+多实例部署需要：
+
+gateway / shared storage
+
+当前不能把它称为 distributed production rate limiter。
+
+但这不阻塞 PC-08。
+
+⑫ 一个非阻塞注意项：remoteAddress
+
+当前限流 key：
+
+req.socket.remoteAddress
+
+如果未来部署在 reverse proxy 后：
+
+可能所有用户都表现成代理 IP。
+
+这属于 deployment integration concern。
+
+当前 baseline 可以接受。
+
+未来生产部署必须确认：
+
+trusted proxy / forwarded IP strategy
+
+但本轮不要求扩大实现。
+
+NON-BLOCKING。
+
+⑬ Operational runbook：PASS
+
+已核：
+
+DB failure
+
+migration failure
+
+storage failure
+
+login/session
+
+import failure
+
+provider auth
+
+reconciliation
+
+settlement mismatch
+
+kill switch
+
+rollback
+
+并明确 HOST APPROVAL 边界。
+
+PASS。
+
+⑭ Logging sanity：PASS
+
+本轮没有新造日志系统。
+
+继续复用现有：
+
+createLogger
+request-level logging
+
+ops endpoint 不返回：
+
+raw stack
+
+token
+
+credentialRef
+
+secret
+
+storageKey
+
+PASS。
+
+⑮ Test gap
+
+当前 ops-readiness-http-db 只有 4 项，
+
+没有覆盖 PC-08 REQUIRED TESTS 中以下关键项：
+
+DB unavailable → BLOCKED
+
+required env missing → BLOCKED
+
+optional provider missing → NOT_CONFIGURED
+
+migration mismatch → 503 / BLOCKED
+
+storage failure → BLOCKED
+
+payment HOLD visible
+
+provider credentials absent but not leaked
+
+readiness critical dependency failure
+
+unknown readiness state fail-closed
+
+这些需要补成永久回归。
+
+⑯ Required narrow fix
+
+下一批只做：
+
+PC-08 FINAL — PRODUCTION READINESS TRUTH
+
+CHANGE A
+→ /health/ready 改用 checkReadiness()
+
+CHANGE B
+→ migration readiness machine-readable
+
+CHANGE C
+→ required env/config readiness
+
+CHANGE D
+→ storage readiness
+
+CHANGE E
+→ external provider/integration gate visibility
+
+CHANGE F
+→ Payment=0 / collection=OFF / R13 HOLD visibility
+
+不要重做：
+
+rate limiter
+
+runbook
+
+failedJobs
+
+transport
+
+logging
+
+liveness
+
+⑰ Required tests
+
+至少增加：
+
+DB unavailable → /health/ready 503
+
+migration mismatch → 503
+
+migration current → ready
+
+required config missing → BLOCKED
+
+storage probe failure → BLOCKED
+
+provider not configured → NOT_CONFIGURED / EXTERNAL_GATE
+
+provider absence does not crash liveness
+
+payment = ZERO visible
+
+collection = OFF visible
+
+R13 = HOLD visible
+
+transport = DISABLED
+
+no env value leaked
+
+no provider credential leaked
+
+unknown readiness check → fail-closed / BLOCKED
+
+existing admin/system-health regressions green
+
+current rate-limit tests green
+
+tsc api/web 0
+
+full CI SUCCESS
+
+⑱ PC-08 current verdict
+
+已通过：
+
+liveness
+
+DB probe
+
+kill switch visibility
+
+Action Guard visibility
+
+transport hold
+
+failed-job counts
+
+auth rate limit baseline
+
+runbook
+
+secret-safe response
+
+未完成：
+
+migration readiness
+
+required config readiness
+
+storage readiness
+
+provider readiness
+
+payment readiness
+
+因此：
+
+PC-08 = REVISE / NOT CLOSED
+⑲ PC-09
+
+PC-09 Commercial / Legal：
+
+PENDING PC-08 FINAL
+
+先把 ops readiness 收成真正 machine-checkable。
+
+否则会出现：
+
+文档说“不具备生产条件”
+
+但：
+
+/health/ready = 200
+
+这种矛盾。
+
+修完 A–F 后即可送：
+
+PC-08-FINAL-CHECKPOINT.md
+
+若通过：
+
+PC-08 PASS/CLOSED
+PC-09 AUTHORIZED
+编号裁决
+
+① PC-08：
+
+REVISE
+
+② 已通过：
+
+liveness / rate limit / runbook / failedJobs / transport / Action Guard / kill switch
+
+③ 必修：
+
+CHANGE A–F
+
+④ 核心问题：
+
+readiness 目前过窄，只看 DB，无法代表真正 production readiness
+
+⑤ PC-09：
+
+PENDING
+
+边界继续保持：
+
+NO platform write
+Payment = 0
+autopay = OFF
+collection = OFF
+external payment write = OFF
+R13 HOLD
+TRANSPORT = false
+无生产凭据
+
+这轮 Codex 确实做了不少真实工作，但还差最关键的一层：现在的 /health/ready 更像“数据库活着吗”，还不是“这个实例能不能安全接生产流量”。 把 migration、env、storage、provider gate、payment gate 一起纳入机器可判定状态后，PC-08 才能真正关闭。
+```
