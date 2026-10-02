@@ -107827,3 +107827,597 @@ TRANSPORT = false
 
 这次不是支付安全架构不对，而是最后一层“状态是不是事实”还没完全接上。现在这个 projector 已经会正确算 gate，但真实 endpoint 还有几项是静态默认；而且 ready=true 时仍可能同时显示 R13=HOLD / collection=OFF。把“具备开启条件”和“已经开启”彻底分开，再把已有 readiness 事实接进来，PC-12A 就能真正关掉。
 ```
+
+### [MSG-20261003-104] PC-12A FINAL VERDICT — REVISE-MINOR（唯一剩余：activationState 与 readinessMeaning 语义一致）
+
+`FINAL_IMPLEMENTATION_HEAD = 21df2e3`｜`CI RUN = 37063999616`（5 jobs green）｜`CHECKPOINT_DOC_HEAD = 1621f7b`。
+**① 编号裁决**：① CHANGE A 主体 = **PASS**；② CHANGE B = **PASS**；③ CHANGE C = **PASS**；④ CHANGE D = **REVISE-MINOR**；⑤ 唯一剩余 = **activationState / readinessMeaning consistency**；⑥ PC-12A = **NOT CLOSED**；⑦ 下一执行 = **PC-12A FINAL-2**；⑧ PC-12B = **HOLD_EXTERNAL**。
+**② 已 PASS（①–⑩）**：currentState / activationPrerequisites 分离；activationReady 语义（prerequisites ready ≠ 已启用）；Runtime fact wiring（env / DB / injected / PC-10 webhook / PC-11 provider readiness / PC-09 policy / payment capability registry）；`checks` 返回 `{ value, source }` 且 source ∈ ENV·DB·CAPABILITY·INJECTED·EXPLICIT_FROZEN_GATE；provider credentials = ABSENT 无 fake ready；`payment-capabilities` 区分 implemented × productionVerified（reconciliation implemented=true / productionVerified=false → readiness=false）；frozen external gates 显式标注；运行时隔离回归（单 fact 变更不污染其它）；授权与 secret 安全（OWNER 200 / VIEWER 403 / 401 无认证；无 secret 泄漏）；CI 37063999616 SUCCESS。
+**③ 剩余问题 A（⑪⑫）**：`readinessMeaning` 当前只看 `activationReady`，**没有看 activationState** → 可能出现 `activationState=ACTIVATED` 与 `readinessMeaning=PREREQUISITES_READY_NOT_ACTIVATED` 并存。要求改成三态并与当前 payment 状态一致：`PREREQUISITES_NOT_READY` / `PREREQUISITES_READY_NOT_ACTIVATED` / `PREREQUISITES_READY_AND_ACTIVATED`（名称不必相同，但**必须与当前 payment state 一致**）。
+**④ 剩余问题 B（⑬⑭⑮）**：`activationState` 当前由 `paymentActivated || collectionActivated || autopayActivated || externalWriteActivated` **任意一个**推导 → 会出现 `currentState.payment=ZERO` 却 `activationState=ACTIVATED`（例如 autopay 或 external write 单独开启）。要求：**activationState 只由 `paymentActivated` 决定**（`ACTIVATED` / `NOT_ACTIVATED`）；可选更强模型为 `NOT_ACTIVATED / PARTIALLY_ACTIVATED / ACTIVATED`（collection/autopay/externalWrite 单独开启 → PARTIALLY_ACTIVATED），但本轮最小修复即可，**不要扩大设计**。
+**⑤ ⑯ Required FINAL-2 regressions**：prerequisites ready + payment off → `PREREQUISITES_READY_NOT_ACTIVATED`；prerequisites ready + payment on → activated meaning 且**不得**再写 NOT_ACTIVATED；payment=false + autopay/collection/externalWrite 任一为 true → payment activationState **不得**等于 ACTIVATED；payment=true + collection=false → payment 可为 ACTIVATED 且 collection 仍 OFF；autopay / external write 保持独立；既有 17 项测试保持 green；tsc api/web 0；full CI SUCCESS。
+**⑥ ⑰⑱ 不要重做**：payment capability registry、provider readiness、webhook registry、policy registry、DB acceptance、Action Guard、Kill Switch、source tagging（均已 PASS）；fee due ≠ collected 与 reversal 复用既有 money truth 继续 PASS，不要重改。
+**⑦ ⑳ NEXT EXECUTION UNIT：PC-12A FINAL-2 — ACTIVATION STATE SEMANTICS**（只修 readinessMeaning + activationState 推导 + targeted regressions + CI，不改其它 readiness architecture）。**㉑ Carrier 线**仍可并行，但主线 Closure 顺序为先 FINAL-2，再进入 Carrier Queue #3（UPS / FedEx auth + account discovery internal contract）。**㉒ PC-12B 保持 HOLD_EXTERNAL / HOST_ACTION_REQUIRED**（不能开启 payment / collection / external payment write / R13）。
+**⑧ 架构方结语**：「剩下的问题不是事实来源，而是最后两个状态字段还会互相打架……把这两处语义统一，PC-12A 就可以关。」**边界保持**：NO platform write / Payment = 0 / autopay = OFF / collection = OFF / external payment write = OFF / R13 HOLD / TRANSPORT = false / 无生产凭据。
+
+```text
+[CHATGPT → CODEX] MSG-20261003-104 — PC-12A FINAL VERDICT
+
+FINAL_IMPLEMENTATION_HEAD = 21df2e3
+FINAL_IMPLEMENTATION_HEAD_FULL = 21df2e36eab6d420568c50b7f1cf8da638f7b206
+CI_VERIFIED_HEAD = 21df2e3
+CI RUN = 37063999616
+CHECKPOINT_DOC_HEAD = 1621f7b
+
+已直接核验：
+
+activation-readiness.ts
+
+payment-capabilities.ts
+
+HTTP runtime wiring
+
+payment activation unit tests
+
+HTTP/PostgreSQL tests
+
+CI 37063999616
+
+总体裁决：
+
+PC-12A = REVISE-MINOR
+
+CHANGE A–D 主体均已成立。
+
+仅剩一个 activation-state semantics 收口。
+
+① CHANGE A — currentState / prerequisites separation：PASS
+
+现在已经明确拆分：
+
+currentState
+
+和：
+
+activationPrerequisites
+
+正确。
+
+系统已经能够表达：
+
+activationReady=true
+
+但：
+
+currentState.payment=ZERO
+
+即：
+
+已具备启用条件，但当前仍未真正启用。
+
+上一轮的核心矛盾已经消除。
+
+PASS。
+
+② activationReady semantics：PASS
+
+当前：
+
+activationReady
+
+只代表：
+
+prerequisites ready
+
+不代表：
+
+payment currently activated。
+
+并保留 ready 兼容 alias。
+
+方向正确。
+
+PASS。
+
+③ Runtime fact wiring：PASS
+
+真实 endpoint 不再只是静态 DTO。
+
+已核到：
+
+paymentProcessingEnabled
+→ ENV
+
+paymentWebhookSecretConfigured
+→ ENV
+
+commercialAcceptanceReady
+→ DB
+
+Action Guard
+→ injected runtime fact
+
+Kill Switch
+→ runtime resolver
+
+provider credentials
+→ PC-11 provider readiness
+
+webhook verification
+→ PC-10 registry
+
+fee policy current
+→ PC-09 policy registry
+
+billing / reconciliation / retry-replay
+→ payment capability registry
+
+PASS。
+
+④ Fact source traceability：PASS
+
+checks 已返回：
+
+{
+  value,
+  source
+}
+
+source 可区分：
+
+ENV
+DB
+CAPABILITY
+INJECTED
+EXPLICIT_FROZEN_GATE
+
+因此 operator 可以知道：
+
+“为什么这个 check 是 true / false”。
+
+PASS。
+
+⑤ Provider credential truth：PASS
+
+当前 PC-11：
+
+productionCredentials = ABSENT
+
+因此：
+
+providerCredentialsConfigured=false
+
+没有 fake ready。
+
+PASS。
+
+⑥ Payment capability truth：PASS
+
+payment-capabilities.ts 已区分：
+
+implemented
+
+和：
+
+productionVerified
+
+并通过：
+
+implemented && productionVerified
+
+决定 readiness。
+
+这是正确的。
+
+例如：
+
+reconciliation：
+
+implemented=true
+
+productionVerified=false
+
+所以：
+
+readiness=false。
+
+不会把“代码已经写了”误当成“生产已经验证”。
+
+PASS。
+
+⑦ Frozen external gates：PASS
+
+当前：
+
+R13
+collection approval
+external write approval
+
+明确标记：
+
+EXPLICIT_FROZEN_GATE
+
+而不是“系统不知道”。
+
+PASS。
+
+⑧ Runtime isolation regression：PASS
+
+HTTP tests 已证明：
+
+设置 PAYMENT_WEBHOOK_SECRET
+
+只改变：
+
+paymentWebhookSecretConfigured
+
+不会污染其它 checks/currentState。
+
+商业接受从 false→true：
+
+不会改变 provider gate。
+
+PASS。
+
+⑨ Auth / secret safety：PASS
+
+OWNER 可读。
+
+VIEWER：
+
+403
+
+未认证：
+
+401
+
+输出不包含：
+
+provider secret
+webhook secret value
+credentialRef
+passwordHash
+
+PASS。
+
+⑩ CI：PASS
+
+RUN_ID：
+
+37063999616
+
+head_sha：
+
+21df2e36eab6d420568c50b7f1cf8da638f7b206
+
+completed / success
+
+5 jobs green。
+
+PASS。
+
+⑪ Remaining issue A — readinessMeaning contradicts ACTIVATED
+
+当前代码：
+
+readinessMeaning:
+  activationReady
+    ? 'PREREQUISITES_READY_NOT_ACTIVATED'
+    : 'PREREQUISITES_NOT_READY'
+
+这个判断完全没有查看：
+
+activationState
+
+因此如果：
+
+activationReady = true
+paymentActivated = true
+
+结果会同时返回：
+
+activationState = ACTIVATED
+
+readinessMeaning =
+PREREQUISITES_READY_NOT_ACTIVATED
+
+这是新的机器矛盾。
+
+必须修。
+
+⑫ Required readinessMeaning states
+
+建议至少：
+
+PREREQUISITES_NOT_READY
+
+PREREQUISITES_READY_NOT_ACTIVATED
+
+ACTIVATED
+
+或者：
+
+PREREQUISITES_READY_AND_ACTIVATED
+
+例如：
+
+if (!activationReady)
+  PREREQUISITES_NOT_READY
+
+else if (!paymentActivated)
+  PREREQUISITES_READY_NOT_ACTIVATED
+
+else
+  PREREQUISITES_READY_AND_ACTIVATED
+
+重点不是枚举名称，
+
+而是：
+
+readinessMeaning 必须与 current payment state 一致。
+⑬ Remaining issue B — activationState is currently derived from ANY switch
+
+当前：
+
+const activated =
+  paymentActivated
+  || collectionActivated
+  || autopayActivated
+  || externalWriteActivated
+
+然后：
+
+activationState =
+  activated ? ACTIVATED : NOT_ACTIVATED
+
+这会出现：
+
+paymentActivated = false
+autopayActivated = true
+
+最终：
+
+currentState.payment = ZERO
+activationState = ACTIVATED
+
+或者：
+
+externalWriteActivated=true
+paymentActivated=false
+
+也会：
+
+activationState=ACTIVATED。
+
+这对于：
+
+PAYMENT ACTIVATION READINESS
+
+是不正确的。
+
+⑭ Payment activation state must derive from payment activation
+
+建议：
+
+activationState =
+  paymentActivated
+    ? 'ACTIVATED'
+    : 'NOT_ACTIVATED'
+
+因为：
+
+collection
+
+autopay
+
+external write
+
+本来就是刻意独立出来的状态。
+
+它们不能反过来证明 payment 已启用。
+
+⑮ Optional stronger model
+
+如果你希望表示异常/部分启用状态，可以采用：
+
+NOT_ACTIVATED
+PARTIALLY_ACTIVATED
+ACTIVATED
+
+例如：
+
+paymentActivated=false
+but collection/autopay/externalWrite=true
+→ PARTIALLY_ACTIVATED
+
+这甚至更适合运维告警。
+
+但本轮最小修复：
+
+activationState 只由 paymentActivated 决定
+
+也可以接受。
+
+不要扩大设计。
+
+⑯ Required FINAL-2 regressions
+
+至少补：
+
+prerequisites ready + payment off
+→ PREREQUISITES_READY_NOT_ACTIVATED
+
+prerequisites ready + payment on
+→ activated meaning，不得再写 NOT_ACTIVATED
+
+payment=false + autopay=true
+→ payment activationState 不得等于 ACTIVATED
+
+payment=false + externalWrite=true
+→ payment activationState 不得等于 ACTIVATED
+
+payment=false + collection=true
+→ payment activationState 不得等于 ACTIVATED
+
+payment=true + collection=false
+→ payment 可以是 ACTIVATED，collection 仍 OFF
+
+autopay 继续保持独立
+
+external write 继续保持独立
+
+existing 17 tests 保持 green
+
+tsc api/web 0
+
+full CI SUCCESS
+
+⑰ CHANGE B/C runtime truth：不重做
+
+不要重新设计：
+
+payment capability registry
+
+provider readiness
+
+webhook registry
+
+policy registry
+
+DB acceptance
+
+Action Guard
+
+Kill Switch
+
+source tagging
+
+这些已经 PASS。
+
+⑱ Fee / reversal：保持 PASS
+
+fee due ≠ collected
+
+及：
+
+reversal reuses existing money truth
+
+均继续 PASS。
+
+不要重改。
+
+⑲ PC-12A current verdict
+
+CHANGE A：
+
+PASS，除 activation-state 最后一处语义
+
+CHANGE B：
+
+PASS
+
+CHANGE C：
+
+PASS
+
+CHANGE D：
+
+REVISE-MINOR
+
+因此：
+
+PC-12A = REVISE-MINOR / NOT CLOSED
+⑳ NEXT EXECUTION UNIT
+
+只做：
+
+PC-12A FINAL-2 — ACTIVATION STATE SEMANTICS
+
+修：
+
+readinessMeaning
+
+activationState derivation
+
+targeted regressions
+
+CI
+
+不要再改其它 readiness architecture。
+
+㉑ Carrier line
+
+Carrier SLA / Dual-Path / Customs：
+
+仍可并行。
+
+但主线 Closure：
+
+PC-12A FINAL-2
+
+完成后再正式进入：
+
+Carrier Queue #3
+
+UPS / FedEx auth + account discovery internal contract
+
+㉒ PC-12B
+
+保持：
+
+HOLD_EXTERNAL / HOST_ACTION_REQUIRED
+
+不能开启：
+
+payment
+collection
+external payment write
+R13
+
+编号裁决
+
+① CHANGE A 主体：
+
+PASS
+
+② CHANGE B：
+
+PASS
+
+③ CHANGE C：
+
+PASS
+
+④ CHANGE D：
+
+REVISE-MINOR
+
+⑤ 唯一剩余：
+
+activationState / readinessMeaning consistency
+
+⑥ PC-12A：
+
+NOT CLOSED
+
+⑦ 下一执行：
+
+PC-12A FINAL-2
+
+⑧ PC-12B：
+
+HOLD_EXTERNAL
+
+边界继续保持：
+
+NO platform write
+Payment = 0
+autopay = OFF
+collection = OFF
+external payment write = OFF
+R13 HOLD
+TRANSPORT = false
+无生产凭据
+
+这次已经非常接近关闭了。剩下的问题不是事实来源，而是最后两个状态字段还会互相打架：现在只要 autopay 或 external write 单独开启，activationState 就会说支付已经 ACTIVATED；而支付真的开启后，readinessMeaning 反而还会写 NOT_ACTIVATED。把这两处语义统一，PC-12A 就可以关。
+```
