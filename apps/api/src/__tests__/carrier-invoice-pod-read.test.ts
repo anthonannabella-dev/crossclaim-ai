@@ -348,6 +348,48 @@ describe('CARRIER QUEUE #5 — taxonomy + read-only boundaries', () => {
   });
 });
 
+describe('CARRIER QUEUE #5 FINAL — currency truth', () => {
+  it('invoice currency canonical：USD → PASS；usd / US → CURRENCY_REQUIRED', async () => {
+    const ok = await readCarrierInvoiceFacts({ port: INVOICE_PORT, accounts: registry(), now: () => NOW }, invoiceInput());
+    if (!ok.ok) throw new Error('expected ok');
+    expect(ok.facts[0].currency).toBe('USD');
+    const lower = spyInvoicePort([{ ...UPS_INVOICE, currency: 'usd' }]);
+    const lowerOutcome = await readCarrierInvoiceFacts({ port: lower.port, accounts: registry() }, invoiceInput());
+    expect(lowerOutcome.ok ? null : lowerOutcome.reason).toBe('CURRENCY_REQUIRED');
+    const short = spyInvoicePort([{ ...UPS_INVOICE, currency: 'US' }]);
+    const shortOutcome = await readCarrierInvoiceFacts({ port: short.port, accounts: registry() }, invoiceInput());
+    expect(shortOutcome.ok ? null : shortOutcome.reason).toBe('CURRENCY_REQUIRED');
+  });
+
+  it('charge currency：缺省继承 invoice currency；USD 与 invoice 一致 → PASS', async () => {
+    const inherited = spyInvoicePort([{ ...UPS_INVOICE, charges: [{ rawChargeCode: 'BASE', amount: '10.00' }] }]);
+    const inheritOutcome = await readCarrierInvoiceFacts({ port: inherited.port, accounts: registry() }, invoiceInput());
+    if (!inheritOutcome.ok) throw new Error('expected ok');
+    expect(inheritOutcome.facts[0].charges[0].currency).toBe('USD');
+    const explicit = spyInvoicePort([{ ...UPS_INVOICE, charges: [{ rawChargeCode: 'BASE', amount: '10.00', currency: 'USD' }] }]);
+    const explicitOutcome = await readCarrierInvoiceFacts({ port: explicit.port, accounts: registry() }, invoiceInput());
+    expect(explicitOutcome.ok).toBe(true);
+  });
+
+  it('charge currency 非 canonical → CURRENCY_REQUIRED；与 invoice 不同币种 → CHARGE_CURRENCY_MISMATCH（绝不加总）', async () => {
+    const lower = spyInvoicePort([{ ...UPS_INVOICE, charges: [{ rawChargeCode: 'BASE', amount: '10.00', currency: 'usd' }] }]);
+    const lowerOutcome = await readCarrierInvoiceFacts({ port: lower.port, accounts: registry() }, invoiceInput());
+    expect(lowerOutcome.ok ? null : lowerOutcome.reason).toBe('CURRENCY_REQUIRED');
+    const mixed = spyInvoicePort([
+      {
+        ...UPS_INVOICE,
+        charges: [
+          { rawChargeCode: 'BASE', amount: '35.00', currency: 'USD' },
+          { rawChargeCode: 'FUEL', amount: '10.00', currency: 'EUR' },
+        ],
+      },
+    ]);
+    const mixedOutcome = await readCarrierInvoiceFacts({ port: mixed.port, accounts: registry() }, invoiceInput());
+    expect(mixedOutcome.ok ? null : mixedOutcome.reason).toBe('CHARGE_CURRENCY_MISMATCH');
+    expect(Object.prototype.hasOwnProperty.call(mixedOutcome, 'facts')).toBe(false);
+    expect(addDecimalStrings(['0.1', '0.2'])).toBe('0.3');
+  });
+});
 afterEach(() => {
   vi.unstubAllGlobals();
 });

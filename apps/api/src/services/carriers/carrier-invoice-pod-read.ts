@@ -157,6 +157,7 @@ export type CarrierInvoicePODFailureCode =
   | 'POD_TRACKING_IDENTITY_MISMATCH'
   | 'INVALID_AMOUNT'
   | 'CURRENCY_REQUIRED'
+  | 'CHARGE_CURRENCY_MISMATCH'
   | 'RAW_PAYLOAD_INVALID'
   | CarrierProviderReadErrorCode;
 
@@ -391,7 +392,8 @@ function normalizeInvoice(
   if (request.invoiceReference && invoiceReference !== request.invoiceReference) return 'INVOICE_IDENTITY_MISMATCH';
   const rawTracking = optionalText(raw.trackingNumber);
   if (request.trackingNumber && rawTracking !== request.trackingNumber) return 'TRACKING_IDENTITY_MISMATCH';
-  const currency = typeof raw.currency === 'string' ? raw.currency.trim().toUpperCase() : '';
+  // MSG-110 ⑭：核心 truth plane 只接受 canonical（provider adapter 负责 canonicalization）。
+  const currency = typeof raw.currency === 'string' ? raw.currency.trim() : '';
   if (!/^[A-Z]{3}$/.test(currency)) return 'CURRENCY_REQUIRED';
   const totalCharge = typeof raw.totalCharge === 'string' ? raw.totalCharge.trim() : '';
   if (!isDecimalString(totalCharge)) return 'INVALID_AMOUNT';
@@ -406,12 +408,17 @@ function normalizeInvoice(
     const rawChargeCode = typeof charge.rawChargeCode === 'string' ? charge.rawChargeCode.trim() : '';
     const amount = typeof charge.amount === 'string' ? charge.amount.trim() : '';
     if (rawChargeCode === '' || !isDecimalString(amount)) return 'INVALID_AMOUNT';
+    // MSG-110 ⑰⑱：charge currency 必须 canonical 且与 invoice currency 一致（禁止混币加总）。
+    const explicitCurrency = optionalText(charge.currency);
+    if (explicitCurrency !== null && !/^[A-Z]{3}$/.test(explicitCurrency)) return 'CURRENCY_REQUIRED';
+    if (explicitCurrency !== null && explicitCurrency !== currency) return 'CHARGE_CURRENCY_MISMATCH';
+    const chargeCurrency = explicitCurrency ?? currency;
     rawChargeCodes.push(rawChargeCode);
     charges.push({
       kind: adapter.chargeKind(rawChargeCode),
       rawChargeCode,
       amount,
-      currency: optionalText(charge.currency)?.toUpperCase() ?? currency,
+      currency: chargeCurrency,
     });
   }
 
