@@ -10,6 +10,30 @@
 
 import type { Prisma } from '@prisma/client';
 
+/**
+ * 统一入口：Evidence / downstream fact 写入方只需调用这一个函数。
+ * 顺序 = 连接上下文（最可信）→ case 主张链；两者都无法唯一确定 → fail-closed。
+ * 客户端传入的任何 account 值都不参与判定。
+ */
+export async function resolveEvidenceAccountId(
+  tx: Tx,
+  input: { organizationId: string; connectionId?: string | null; caseId?: string | null },
+): Promise<string> {
+  if (input.connectionId) {
+    return resolveAccountIdFromConnection(tx, {
+      organizationId: input.organizationId,
+      connectionId: input.connectionId,
+    });
+  }
+  if (input.caseId) {
+    return resolveAccountIdFromCase(tx, {
+      organizationId: input.organizationId,
+      caseId: input.caseId,
+    });
+  }
+  throw new PlatformAccountRequiredError('既无连接上下文也无 case 主张链，无法派生 provenance');
+}
+
 export const PLATFORM_ACCOUNT_REQUIRED = 'PLATFORM_ACCOUNT_REQUIRED';
 
 export class PlatformAccountRequiredError extends Error {
