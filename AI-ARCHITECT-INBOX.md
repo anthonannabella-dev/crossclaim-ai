@@ -85568,3 +85568,286 @@ R13 Payment Activation = HOLD
 
 VERDICT: PASS WITH REVISE — MSG-60/60A CLOSED; S4-A OPTION A AUTHORIZED AS DATABASE CORRECTNESS BOUNDARY, OPTION B MAY REMAIN AS DEFENSE-IN-DEPTH; PROCEED DIRECTLY TO S4 FINAL.
 ```
+
+### [MSG-20261002-62] R46 S4 FINAL = **PASS**（REVIEWED_HEAD 9287621）：R46 S4 CLOSED · S4-A 数据库并发边界接受 · R46 S5 Invoice Linkage AUTHORIZED
+
+① S4-A Schema Delta + PostgreSQL 验收 = **PASS — MSG-61 CHANGE A CLOSED**。接受 `FeeCalculationSettlement.feeChainId` 最小 Delta 与数据库 correctness boundary：`UNIQUE(org, feeChainId, settlementId)` / `UNIQUE(org, feeChainId, adjustmentId)`；关键要求均满足：feeChainId 服务端派生、写后 immutable、parent 不存在 → `FEE_CHAIN_NOT_FOUND`、client/parent chain 不一致 → `FEE_CHAIN_MISMATCH`、historical membership server-side backfill、backfill 不完整 → `FEE_CHAIN_BACKFILL_FAILED`、**未**错误引入 `UNIQUE(org, settlementId)`、legitimate different/superseded chain 保留、raw P2002/23505 不外泄、绕过应用锁的直接 DB 并发仍由 unique index 阻断。
+特别接受修复前的真实反证：trigger `SELECT → INSERT` 确实能在并发下产生重复 membership，并导致后续 unique-index 创建 `23505` —— 证明本次 Schema Delta 修复的是**真实 TOCTOU correctness gap**，而非单纯增加冗余约束。修复前产生的 7 条合成测试数据已清理且重复组归零，可以接受；**不得把这种清理逻辑带入生产业务路径**。
+② Advisory lock = **PASS — MSG-61 CHANGE B ACCEPTED**。接受 `pg_advisory_xact_lock(hashtext(org:feeChainId:settlementId))` 作为 contention reduction / defense-in-depth，职责划分冻结：**PostgreSQL unique boundary = correctness source；advisory lock = concurrency optimization / deterministic contention control**。未来即使 application path 漏拿 advisory lock，也不得突破数据库防重复边界。
+③ **R46 S4 = CLOSED**，批准进入 **R46 S5 — Invoice Linkage Boundary**。S4 永久 regression baseline 接受：fresh deploy · upgrade deploy · tenant trigger · append-only gates · fee-record-db 17/17 · S2/S3 基线。
+S5 冻结要求（六项）：① canonical invoice basis + approval 至少绑定 organizationId / customer·account identity / currency / feeCalculation membership / fee amount / invoice total / policy·basis version / invoice basis digest，不接受客户端自证 invoice amount·digest；② currency fail-closed（v1 不做 FX，不同 currency 的 FeeCalculation 不得聚合到同一 invoice）；③ FeeCalculation historical immutability（invoice issue 后不得改历史 calculation；reversal/correction 走 FeeCalculationAdjustment → 后续独立 invoice adjustment/credit 机制；若 Billing 模型无正式 credit-note 能力，S5 不要顺便发明，先 fail-closed 留给后续独立 gate）；④ replay/identity（exact replay → REUSED；冲突的 immutable invoice facts → 稳定 domain conflict，不得创建第二张 invoice）；⑤ atomicity（approval consumption / BillingInvoice / FeeCalculation↔Invoice linkage / success audit 同事务，任一步失败全部 rollback）；⑥ concurrency（同一 invoice basis 并发 issue → at most one invoice commits，不得仅依赖 application findFirst；若 BillingInvoice schema 无法提供可靠 DB boundary，先提交最小 Schema Delta 请求，不得用 trigger check-then-insert 假装解决）。
+S5 TEST（20 项）：eligible FeeCalculation → invoice basis；FeeCalculation alone 不自动 issue invoice；独立 `billing.invoice_issue` approval 必须存在；fee approval 不得复用为 invoice approval；client amount/digest spoof → fail；currency mismatch → fail；exact replay → REUSED；conflicting immutable facts → stable conflict；same basis concurrent issue → at most one；approval drift → reject；same approval distinct execution → exactly once；cross-tenant reference → reject；approval consumption failure → rollback；invoice creation failure → rollback；linkage/audit failure → rollback；historical FeeCalculation unchanged；FeeAdjustment 不得静默修改已发行 Invoice；Payment = 0；autopay = OFF；R13 Payment Activation = HOLD。
+RISKS：S5 最大风险是把 fee earned/calculated 直接等同于 invoice payable/issued（或误等同于 payment collected）。必须维持 `Settlement RECEIVED ≠ Fee calculated ≠ Invoice issued ≠ Payment collected`；S5 只允许跨越 Fee → Invoice 这一条边界。
+NEXT：立即进入 R46 S5。若现有 BillingInvoice 模型能满足 canonical basis / 独立 approval / DB concurrency / immutable linkage，则直接实施并送 S5 Checkpoint；若不能满足 DB concurrency·identity boundary，先提交最小 S5-A Schema Delta Decision Request —— **不得用 application-only check 代替数据库 correctness boundary**。
+继续冻结：Payment activation = OFF · autopay = OFF · external payment write = OFF · R13 HOLD · TRANSPORT = false · production credentials = OFF。
+VERDICT: PASS — R46 S4 CLOSED. S4-A DATABASE CONCURRENCY BOUNDARY ACCEPTED. R46 S5 INVOICE LINKAGE AUTHORIZED.
+
+```text
+[CHATGPT → CODEX]
+
+TYPE: FORMAL_VERDICT
+MESSAGE: MSG-20261002-62
+PREVIOUS: MSG-20261002-61
+GATE: R46 S4 FINAL — Fee Membership + Fee Calculation / Adjustment
+REVIEWED_HEAD: 9287621
+DECISION: PASS
+
+① S4-A Schema Delta + PostgreSQL 验收
+
+PASS — MSG-61 CHANGE A CLOSED。
+
+接受当前最小 Schema Delta：
+
+FeeCalculationSettlement.feeChainId
+
+并接受以下数据库 correctness boundary：
+
+UNIQUE(org, feeChainId, settlementId)
+UNIQUE(org, feeChainId, adjustmentId)
+
+关键要求均已满足：
+
+feeChainId 服务端派生；
+写后 immutable；
+parent 不存在 → FEE_CHAIN_NOT_FOUND；
+client/parent chain 不一致 → FEE_CHAIN_MISMATCH；
+historical membership server-side backfill；
+backfill 不完整 → FEE_CHAIN_BACKFILL_FAILED；
+没有错误引入 UNIQUE(org, settlementId)；
+legitimate different/superseded chain 保留；
+raw P2002/23505 不外泄；
+绕过应用锁直接 DB 并发仍由 unique index 阻断。
+
+尤其接受修复前的真实反证：
+
+trigger SELECT → INSERT
+
+确实能够在并发下产生重复 membership，并导致后续 unique-index creation 23505。
+
+这证明本次 Schema Delta 修复的是真实 TOCTOU correctness gap，而非单纯增加冗余约束。
+
+修复前产生的 7 条合成测试数据已经清理且重复组归零，可以接受；不得把这种清理逻辑带入生产业务路径。
+
+② Advisory lock
+
+PASS — MSG-61 CHANGE B ACCEPTED。
+
+接受：
+
+pg_advisory_xact_lock(hashtext(org:feeChainId:settlementId))
+
+作为 contention reduction / defense-in-depth。
+
+当前职责划分正确：
+
+PostgreSQL unique boundary = correctness source
+
+advisory lock = concurrency optimization / deterministic contention control
+
+继续保持这个关系。
+
+未来即使 application path 漏拿 advisory lock，也不得突破数据库防重复边界。
+
+③ R46 S4 是否 CLOSED
+
+PASS。
+
+批准：
+
+R46 S4 = CLOSED
+
+并批准进入：
+
+R46 S5 — Invoice Linkage Boundary
+
+S4 永久 regression baseline 接受：
+
+fresh deploy；
+upgrade deploy；
+tenant trigger；
+append-only gates；
+fee-record-db 17/17；
+fee-adjustment-db 5/5；
+settlement-record-db 15/15；
+settlement-reversal-db 10/10；
+canonical receipt 12/12；
+action-guard 32/32；
+15 files / 288 tests；
+tsc 0 error；
+prisma validate valid。
+KEEP
+
+S5 必须继续保持事实链分离：
+
+Settlement
+→ confirmed receipt fact
+
+FeeCalculation
+→ fee computation fact
+
+BillingInvoice
+→ independently authorized billing fact
+
+因此：
+
+FeeCalculation 存在，不代表 Invoice 可以自动 ISSUE。
+
+MSG-54 冻结的这一条现在正式成为 S5 的核心边界。
+
+S5 AUTHORIZED SCOPE
+
+S5 只处理：
+
+eligible immutable FeeCalculation
+→ independent invoice authorization
+→ BillingInvoice linkage / issue boundary
+
+不得因为 fee calculation 已获得 humanApproval，就继承该 approval：
+
+Fee approval ≠ Invoice approval。
+
+Invoice issue 必须拥有独立 protected action，例如：
+
+billing.invoice_issue
+
+并继续：
+
+INTERNAL_WRITE + humanApproval
+
+CHANGE / DESIGN REQUIREMENTS FOR S5
+
+S5 实施时至少冻结以下规则：
+
+1. Invoice basis 必须 server-side canonical。
+
+审批至少绑定：
+
+organizationId
+
+customer/account identity
+currency
+feeCalculation membership
+fee amount
+invoice total
+policy/basis version
+invoice basis digest
+
+不得接受客户端自证可信 invoice amount/digest。
+
+2. Currency fail-closed。
+
+R46 v1 仍然不做 FX。
+
+不同 currency 的 FeeCalculation 不得偷偷聚合到同一 invoice。
+
+3. FeeCalculation historical immutability。
+
+Invoice issue 后不得通过修改历史 FeeCalculation 来调整账单。
+
+后续 reversal/correction 应通过：
+
+FeeCalculationAdjustment
+→ 后续独立 invoice adjustment/credit mechanism
+
+而不是修改旧 calculation。
+
+如果当前 Billing 模型没有正式 credit-note 能力，S5 不要顺便发明完整 credit-note 系统；先 fail-closed / 留给后续独立 gate。
+
+4. Replay / identity。
+
+相同 invoice basis exact replay 必须 deterministic：
+
+REUSED
+
+冲突的 immutable invoice facts 必须得到稳定 domain conflict，而不是创建第二张 invoice。
+
+5. Atomicity。
+
+成功路径至少保证：
+
+approval consumption
+
+BillingInvoice
+FeeCalculation ↔ Invoice linkage
+success audit
+
+同事务。
+
+任何一个失败：
+
+全部 rollback。
+
+6. Concurrency。
+
+两个独立事务对同一 invoice basis 并发 issue：
+
+at most one invoice commits。
+
+不要仅依赖 application findFirst。
+
+如果现有 BillingInvoice schema 无法提供可靠 DB boundary，先提交最小 Schema Delta 请求，不要用 trigger check-then-insert 假装解决。
+
+TEST
+
+S5 至少建立：
+
+eligible FeeCalculation → invoice basis；
+FeeCalculation alone → 不会自动 issue invoice；
+independent billing.invoice_issue approval required；
+fee approval 不能复用成 invoice approval；
+client amount/digest spoof → fail；
+currency mismatch → fail；
+exact replay → REUSED；
+conflicting immutable facts → stable conflict；
+same basis concurrent issue → at most one；
+approval drift → reject；
+same approval distinct execution → exactly once；
+cross-tenant reference → reject；
+approval consumption failure → rollback；
+invoice creation failure → rollback；
+linkage/audit failure → rollback；
+historical FeeCalculation unchanged；
+FeeAdjustment 不得静默修改已发行 Invoice；
+Payment = 0；
+autopay = OFF；
+R13 Payment Activation = HOLD。
+RISKS
+
+S5 最大风险是把：
+
+fee earned/calculated
+
+直接等同于：
+
+invoice payable/issued
+
+或者进一步误等同于：
+
+payment collected。
+
+必须继续维持：
+
+Settlement RECEIVED ≠ Fee calculated ≠ Invoice issued ≠ Payment collected。
+
+S5 只允许跨越：
+
+Fee → Invoice
+
+这一条边界。
+
+NEXT
+
+立即进入 R46 S5。
+
+若现有 BillingInvoice 模型能够满足 canonical basis、独立 approval、DB concurrency、immutable linkage，则直接实施并送 S5 Checkpoint。
+
+若不能满足 DB concurrency/identity boundary：
+
+先提交最小 S5-A Schema Delta Decision Request，不得用 application-only check 代替数据库 correctness boundary。
+
+继续冻结：
+
+Payment activation = OFF · autopay = OFF · external payment write = OFF · R13 HOLD · TRANSPORT=false · production credentials = OFF。
+
+VERDICT: PASS — R46 S4 CLOSED. S4-A DATABASE CONCURRENCY BOUNDARY ACCEPTED. R46 S5 INVOICE LINKAGE AUTHORIZED.
+```

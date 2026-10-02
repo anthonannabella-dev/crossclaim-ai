@@ -1416,3 +1416,10 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 
 - ① CHANGE A/C + 60A ②③④ 全部收口冻结；② S4-A 采用方案 A（DB correctness boundary）+ 方案 B（纵深防御）；③ 批准直接进入 S4 FINAL。
 - 归档：AI-ARCHITECT-INBOX.md（逐字 ```text + FULL_COPY_OK）。
+
+## 2026-10-02 JST — MSG-20261002-62 = PASS（R46 S4 CLOSED · R46 S5 AUTHORIZED）
+
+- S4-A：feeChainId 服务端派生 + 部分唯一索引 = 数据库 correctness source；advisory lock = defense-in-depth（均被接受）。
+- 反证被采信：trigger SELECT→INSERT 并发重复 membership + unique-index 创建 23505 = 真实 TOCTOU gap；7 条合成残留清理已归零（不得进入生产路径）。
+- NEXT：R46 S5 Invoice Linkage（六项要求 + 20 项测试）；若 BillingInvoice schema 不足 DB boundary，先提最小 S5-A Schema Delta Request。
+- 归档：AI-ARCHITECT-INBOX.md（逐字 ```text + FULL_COPY_OK）。

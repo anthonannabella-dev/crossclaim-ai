@@ -6,12 +6,12 @@
   "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
   "send_head": "07b7009",
   "decision_head": "07b7009",
-  "last_chatgpt_message": "MSG-20261002-61",
+  "last_chatgpt_message": "MSG-20261002-62",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-02T01:29:58.022Z",
+  "updated_at": "2026-10-02T01:31:18.564Z",
   "previous_head": "4a207d5",
-  "architect_decision_pending": true,
+  "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "9287621",
   "last_sent_at": "2026-10-02T01:29:59.402Z",
@@ -50,10 +50,10 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-02T01:24:41.121Z",
-  "state": "AWAITING_ADJUDICATION",
-  "last_action": "R46 S4 FINAL 提交：S4-A 最小 Schema Delta（feeChainId + 部分唯一索引 + 派生守卫 + backfill 校验）+ advisory lock 纵深防御 + 12 项真实 PostgreSQL 验收 + 全量回归 288 PASS",
-  "last_action_at": "2026-10-02T01:29:58.022Z",
-  "next_action": "等待架构方对 R46 S4 FINAL 的裁决（是否批准 S4 CLOSED → S5 Invoice linkage）。",
+  "state": "IMPLEMENT",
+  "last_action": "MSG-20261002-62 = PASS 已归档（FULL_COPY_OK）：R46 S4 CLOSED · S4-A 数据库并发边界接受 · R46 S5 Invoice Linkage AUTHORIZED",
+  "last_action_at": "2026-10-02T01:31:18.564Z",
+  "next_action": "R46 S5 — Invoice Linkage Boundary：先核查现有 BillingInvoice 模型是否满足 canonical basis / 独立 approval / DB concurrency / immutable linkage；满足则直接实施 + S5 Checkpoint，不满足则先提交最小 S5-A Schema Delta Decision Request。",
   "current_head": "9287621",
   "reviewed_head": "07b7009",
   "claim_submit_batch": {
@@ -2886,5 +2886,61 @@
     "commented_at": "2026-10-02T01:29:59.402Z",
     "reviewed_head": "9287621",
     "url": "https://github.com/anthonannabella-dev/crossclaim-ai/issues/2#issuecomment-5943894619"
+  },
+  "r46_s4_final_verdict": {
+    "message_id": "MSG-20261002-62",
+    "decision": "PASS",
+    "reviewed_head": "9287621",
+    "archival": "FULL_COPY_OK",
+    "archived_at": "2026-10-02T01:31:18.564Z",
+    "s4_status": "CLOSED",
+    "s4a": "AUTHORIZED_AND_ACCEPTED（feeChainId 派生 + 部分唯一索引 = correctness source；advisory lock = defense-in-depth）",
+    "accepted_evidence": [
+      "修复前真实反证：trigger SELECT→INSERT 并发产生重复 membership + unique-index 创建 23505 → 真实 TOCTOU correctness gap",
+      "7 条合成残留清理可接受，但不得把清理逻辑带入生产业务路径",
+      "fresh deploy · upgrade deploy · tenant trigger · append-only gates · fee-record-db 17/17 进入永久 regression baseline"
+    ],
+    "next_unit": "R46 S5 — Invoice Linkage Boundary（AUTHORIZED）"
+  },
+  "r46_s5_authorization": {
+    "authorized_by": "MSG-20261002-62",
+    "scope": "Fee → Invoice 只允许跨越这一条边界（Settlement RECEIVED ≠ Fee calculated ≠ Invoice issued ≠ Payment collected）",
+    "requirements": {
+      "canonical_basis": "approval 至少绑定 organizationId / customer·account identity / currency / feeCalculation membership / fee amount / invoice total / policy·basis version / invoice basis digest；不接受客户端自证 invoice amount·digest",
+      "currency": "fail-closed；v1 不做 FX；不同 currency 的 FeeCalculation 不得聚合到同一 invoice",
+      "fee_immutability": "invoice issue 后不得改历史 FeeCalculation；reversal/correction 走 FeeCalculationAdjustment → 后续独立 invoice adjustment/credit；无正式 credit-note 能力时不得顺带发明，先 fail-closed",
+      "replay": "exact replay → REUSED；conflicting immutable facts → 稳定 domain conflict",
+      "atomicity": "approval consumption / BillingInvoice / linkage / success audit 同事务；任一失败全部 rollback",
+      "concurrency": "同一 invoice basis 并发 issue → at most one invoice commits；不得仅依赖 application findFirst；若 schema 不足先提最小 Schema Delta，禁用 trigger check-then-insert 伪解"
+    },
+    "tests": [
+      "eligible FeeCalculation → invoice basis",
+      "FeeCalculation alone 不自动 issue invoice",
+      "独立 billing.invoice_issue approval",
+      "fee approval 不得复用为 invoice approval",
+      "client amount/digest spoof → fail",
+      "currency mismatch → fail",
+      "exact replay → REUSED",
+      "conflicting immutable facts → stable conflict",
+      "same basis concurrent issue → at most one",
+      "approval drift → reject",
+      "same approval distinct execution → exactly once",
+      "cross-tenant reference → reject",
+      "approval consumption failure → rollback",
+      "invoice creation failure → rollback",
+      "linkage/audit failure → rollback",
+      "historical FeeCalculation unchanged",
+      "FeeAdjustment 不得静默修改已发行 Invoice",
+      "Payment = 0",
+      "autopay = OFF",
+      "R13 = HOLD"
+    ],
+    "redline": "Payment activation = OFF · autopay = OFF · external payment write = OFF · R13 HOLD · TRANSPORT=false · production credentials = OFF"
+  },
+  "wakeup_s4final_delivery": {
+    "sent_at": "2026-10-02T01:35Z",
+    "channel": "https://chatgpt.com/c/6ab9ee1b-fd54-83ee-b363-b67750afcedd",
+    "verification": "DELIVERED_VERIFIED（输入框清空 / 新用户消息在底部 / 生成中）→ 已收到编号裁决 MSG-20261002-62",
+    "reviewed_head": "9287621"
   }
 }
