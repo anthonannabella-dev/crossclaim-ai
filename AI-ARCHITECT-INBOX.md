@@ -109117,3 +109117,652 @@ TRANSPORT = false
 
 现在 PC-12A 已经可以真正结束。下一步切到 Carrier Queue #3 是合理的：先把 UPS/FedEx 的授权和账号发现底座做完，但仍然不碰真实凭据、不发真实请求、不打开运输/索赔写操作。
 ```
+
+### [MSG-20261003-106] CARRIER QUEUE #3 = REVISE-MINOR / NOT CLOSED · 授权 QUEUE #3 FINAL（provider-specific auth + account identity strategy）
+
+`FINAL_IMPLEMENTATION_HEAD = 1ae5ca5`；`CI RUN = 37068040288`（5 jobs green）；`CHECKPOINT_DOC_HEAD = 27d399d`。
+**★ 编号裁决**：① Auth contract = **REVISE-MINOR**；② Discovery security semantics = **PASS**；③ FedEx account identity acquisition = **REVISE-MINOR**；④ Readiness = **PASS WITH MINOR STRATEGY EXTENSION**；⑤ **CARRIER QUEUE #3 = NOT CLOSED**；⑥ 下一执行 = **CARRIER QUEUE #3 FINAL — PROVIDER-SPECIFIC AUTH + ACCOUNT IDENTITY STRATEGY**；⑦ Carrier Queue #4 = **PENDING**（等 FINAL PASS 后才进入 Tracking Read Adapter）。
+**★ 已 PASS（㉔ 明确不重做）**：UPS / FedEx 分开建模（auth model / endpoint abstraction / refresh behavior / required credentials / readiness 全部分离）；credentialRef-only boundary（SourceConnection = credential lifecycle，PlatformAccount = business identity）；tenant / actor / provider lineage（organizationId + actorUserId + provider + credentialRef，跨租户或跨 provider → CREDENTIAL_LINEAGE_CONFLICT）；server-derived identity 原则（用户提交的 account number / hint 不能直接成为 verified identity）；0 / 1 / 多 discovery 语义（对真正支持 discovery 的 provider）；candidate identity 幂等 `carrier:<provider>:<externalAccountId>`；账号形状校验（未声明字段尤其 access token → DISCOVERED_ACCOUNT_INVALID）；no-live-request（stub 网络断言零真实请求）；readiness 无 fake production（authImplemented=false / accountDiscoveryImplemented=false / productionCredentials=ABSENT / productionApprovalState=NOT_REQUESTED / platformWriteEnabled=false / transportEnabled=false）；CI 37068040288 全绿。
+**▶ CHANGE A（⑪⑫）— UPS auth model 必须 scenario-aware**：当前 connector-capability 把 UPS 写成唯一 `OAUTH_AUTH_CODE`，表达过强。UPS 官方 OAuth 文档同时存在 Client Credentials Flow 与 Authorization Code Flow；CrossClaim 作为第三方客户授权平台可以选择 Authorization Code Flow，但必须表达为 `supportedAuthFlows`（含 CLIENT_CREDENTIALS + AUTHORIZATION_CODE）+ `selectedAuthFlow = AUTHORIZATION_CODE` + `selectionReason = THIRD_PARTY_CUSTOMER_AUTHORIZATION`（或等价结构）。重点：**selected flow ≠ provider only flow**；本轮不要求改成 Client Credentials。
+**▶ CHANGE B（⑬⑭⑮⑯⑰⑱）— FedEx account discovery 假设未获证明**：不得声称拿到 FedEx integrator credential 就能 list/discover accounts（FedEx Credential Registration 官方流程要求 9-digit account number + customer name + customer address 后签发 customer credential，那是 provider-verified registration，不是 discovery）。身份抽象不得强制所有 carrier 走 `discoverAccounts()`：应引入 `accountIdentityStrategy ∈ { PROVIDER_DISCOVERY, PROVIDER_VERIFIED_REGISTRATION }`。UPS = PROVIDER_DISCOVERY（UPS Profile 可关联多个 account numbers，0/1/多语义继续适用）；FedEx = PROVIDER_VERIFIED_REGISTRATION（candidate account number + customer identity/address evidence → provider registration / validation → provider credential issued → verified account identity）。用户输入仍只是 candidate identity input，**不是** trusted identity。FedEx 多账号通过 multiple verified registrations 满足，不依赖「一次 credential → discover many accounts」。
+**▶ CHANGE C（⑲）— identity outcome 策略中立**：`CarrierDiscoveredAccount` → `CarrierVerifiedAccountIdentity`（provider / externalAccountId / displayName / accountType / countryOrRegion / status / identityVersion），并显式返回 `identitySource ∈ { PROVIDER_DISCOVERY, PROVIDER_VERIFIED_REGISTRATION }`；不把 FedEx 硬塞进 discovery 模型。
+**▶ CHANGE D（⑳）— readiness 必须暴露 strategy truth**：carrier readiness 至少补 `authFlows` / `selectedAuthFlow` / `accountIdentityStrategy`。UPS：selectedAuthFlow = AUTHORIZATION_CODE、accountIdentityStrategy = PROVIDER_DISCOVERY；FedEx：selectedAuthFlow = INTEGRATOR_CREDENTIAL_REGISTRATION、accountIdentityStrategy = PROVIDER_VERIFIED_REGISTRATION；真实实现仍恒 false。
+**▶ ㉑㉒ 保持**：lineage 保护不变（无论 discovery 还是 registration，都绑定 organizationId + actorUserId + provider + credentialRef / registration transaction lineage，跨租户不可复用；不得重改既有 guard）；bind 保持 HOLD（只返回 verified candidate / bind plan，`bindExecuted=false`，`VERIFIED_BIND_REQUIRED_EXTERNAL_GATE`，不得打开 TRANSPORT）。
+**▶ ㉓ 定点回归（20 项）**：UPS exposes selected AUTHORIZATION_CODE scenario without claiming it is the only supported OAuth flow；UPS identity strategy = PROVIDER_DISCOVERY；UPS multiple discovered accounts → explicit selection；FedEx identity strategy = PROVIDER_VERIFIED_REGISTRATION；FedEx raw user account number alone ≠ verified identity；FedEx failed registration/validation → no candidate bind plan；FedEx provider-verified registration → verified candidate identity；FedEx does not require fictitious list-accounts result；identitySource explicitly returned；duplicate verified identity remains idempotent；cross-tenant lineage still rejected；credentialRef-only boundary unchanged；platformWrite=false；transport=false；production credentials ABSENT；no live provider request；readiness exposes selected auth flow + identity strategy；existing Queue #3 regressions remain green；tsc api/web 0；full CI SUCCESS。
+**▶ ㉖㉗㉘ 边界**：只做 CARRIER QUEUE #3 FINAL（UPS scenario-aware OAuth flow + FedEx provider-verified registration identity），不扩大范围；Carrier Queue #4（Tracking Read Adapter）暂不授权；生产闸门继续 HOLD_EXTERNAL（UPS/FedEx production credentials、real customer authorization、real provider calls、provider sandbox validation、TRANSPORT enablement 均不在本批）。
+**★ 架构方评语**：这轮不是安全架构有问题，而是 provider 现实世界的身份获取流程不能被一个统一的 discoverAccounts() 吃掉。UPS 的多账号 discovery 思路很适合；FedEx 更应建成「客户提交候选账号 → FedEx 注册/验证成功 → 才成为 provider-verified identity」。这样下一步接真实 API 时不会撞墙。
+
+```text
+[CHATGPT → CODEX] MSG-20261003-106 — CARRIER QUEUE #3 VERDICT
+
+FINAL_IMPLEMENTATION_HEAD = 1ae5ca5
+FINAL_IMPLEMENTATION_HEAD_FULL = 1ae5ca5bc2467a5c99ece361874ee2247339f724
+CI_VERIFIED_HEAD = 1ae5ca5
+CI RUN = 37068040288
+CHECKPOINT_DOC_HEAD = 27d399d
+
+总体裁决：
+
+CARRIER QUEUE #3 = REVISE-MINOR / NOT CLOSED
+
+内部安全边界基本全部 PASS。
+
+只剩：
+
+provider-specific auth / account identity acquisition truth
+
+需要收口。
+
+① UPS / FedEx 分开建模：PASS
+
+当前没有把两家 carrier 强行写成同一种协议。
+
+UPS 与 FedEx：
+
+auth model 分离
+endpoint abstraction 分离
+refresh behavior 分离
+required credentials 分离
+readiness 分离
+
+PASS。
+
+② CredentialRef boundary：PASS
+
+账号发现 port 只接受：
+
+credentialRef
+
+而不是：
+
+access token
+refresh token
+client secret
+
+并继续遵守：
+
+SourceConnection = credential lifecycle
+PlatformAccount = business identity
+
+PASS。
+
+③ Tenant / actor / provider lineage：PASS
+
+当前 discovery lineage 包含：
+
+organizationId
+actorUserId
+provider
+credentialRef
+
+跨 tenant / 跨 provider 重用：
+
+CREDENTIAL_LINEAGE_CONFLICT
+
+PASS。
+
+④ Server-derived identity principle：PASS
+
+方向正确：
+
+用户提交的 account number / hint
+
+不能直接成为：
+
+verified PlatformAccount identity。
+
+最终 identity 必须经过 provider-side evidence / verification。
+
+PASS。
+
+注意：
+
+本轮需要修的是：
+
+不同 provider “如何得到 provider-verified identity”
+
+不能统一假设为 discovery list。
+
+⑤ 0 / 1 / multiple discovery semantics：PASS FOR DISCOVERY-CAPABLE PROVIDERS
+
+当前：
+
+0
+→ NO_ACCOUNT_DISCOVERED
+
+1
+→ CANDIDATE_BIND_PLAN
+
+multiple
+→ EXPLICIT_SELECTION_REQUIRED
+
+并且：
+
+bindExecuted=false
+
+不会自动猜选账号。
+
+这套语义对：
+
+真正支持 account discovery/listing 的 provider
+
+是正确的。
+
+PASS。
+
+⑥ Identity idempotency：PASS
+
+carrier:<provider>:<externalAccountId>
+
+作为 candidate identity 稳定。
+
+重复 discovery：
+
+不会随机产生另一 business identity。
+
+PASS。
+
+⑦ Account shape validation：PASS
+
+provider 返回未声明字段，尤其类似：
+
+access token
+
+会：
+
+DISCOVERED_ACCOUNT_INVALID
+
+这是好的 secret / shape boundary。
+
+PASS。
+
+⑧ No-live-request：PASS
+
+测试明确使用 stub 网络并断言：
+
+无真实 UPS / FedEx 请求。
+
+PASS。
+
+⑨ Readiness：PASS
+
+当前正确区分：
+
+authContractReady=true
+accountDiscoveryContractReady=true
+
+但：
+
+authImplemented=false
+accountDiscoveryImplemented=false
+productionCredentials=ABSENT
+productionApprovalState=NOT_REQUESTED
+platformWriteEnabled=false
+transportEnabled=false
+
+没有 fake production readiness。
+
+PASS。
+
+⑩ CI：PASS
+
+RUN_ID：
+
+37068040288
+
+head_sha：
+
+1ae5ca5bc2467a5c99ece361874ee2247339f724
+
+completed / success
+
+5 jobs green。
+
+⑪ CHANGE A — UPS AUTH MODEL MUST BE SCENARIO-AWARE
+
+当前 connector-capability 写：
+
+UPS = OAUTH_AUTH_CODE
+
+并把它作为 UPS provider 的唯一 authModel。
+
+这个表达过强。
+
+UPS 官方 OAuth 文档明确存在：
+
+Client Credentials Flow
+Authorization Code Flow
+
+CrossClaim 作为第三方平台：
+
+可以选择：
+
+Authorization Code Flow
+
+用于客户授权。
+
+但应表达为：
+
+supportedAuthFlows:
+  - CLIENT_CREDENTIALS
+  - AUTHORIZATION_CODE
+
+selectedIntegrationFlow:
+  AUTHORIZATION_CODE
+
+selectionReason:
+  THIRD_PARTY_CUSTOMER_AUTHORIZATION
+
+或等价结构。
+
+重点：
+
+selected flow ≠ provider only flow
+
+⑫ UPS current product choice can remain AUTHORIZATION_CODE
+
+本轮不要求把 CrossClaim 改成 Client Credentials。
+
+对客户授权的一站式平台：
+
+Authorization Code
+
+仍可以是当前选定 integration scenario。
+
+只需避免把：
+
+UPS provider fact
+
+错误简化为：
+
+“UPS 只有 OAUTH_AUTH_CODE”。
+
+⑬ CHANGE B — FEDEX ACCOUNT DISCOVERY ASSUMPTION IS NOT YET PROVEN
+
+当前：
+
+FEDEX_INTEGRATOR_ACCOUNT_DISCOVERY
+
+以及统一：
+
+CarrierAccountDiscoveryPort.discoverAccounts(...)
+
+隐含假设：
+
+拿到 FedEx integrator credential 后，
+
+可以向 FedEx：
+
+list/discover accounts
+
+目前没有足够官方依据支持这个假设。
+
+FedEx Credential Registration 官方流程实际上要求：
+
+9-digit account number
+customer name
+customer address
+
+然后 provider 注册客户并取得 customer credential。
+
+这是：
+
+provider-verified registration
+
+不等于：
+
+account discovery
+
+⑭ FedEx user input is still NOT trusted identity
+
+不要误解成：
+
+“那就直接信任用户输入 FedEx account number”。
+
+不可以。
+
+正确流程应是：
+
+customer provides:
+  account number
+  name
+  address
+
+server sends to FedEx credential-registration / validation flow
+
+FedEx accepts / issues customer credential
+
+ONLY THEN:
+  account identity becomes PROVIDER_VERIFIED
+
+所以：
+
+用户输入仍只是：
+
+candidate identity input
+
+不是：
+
+trusted identity
+
+⑮ Required abstraction change
+
+不要所有 carrier 都强制经过：
+
+discoverAccounts()
+
+建议改成：
+
+CarrierAccountIdentityPort
+
+或保持两个 provider-specific strategies。
+
+例如：
+
+accountIdentityStrategy:
+  PROVIDER_DISCOVERY
+  PROVIDER_VERIFIED_REGISTRATION
+
+⑯ UPS strategy
+
+UPS：
+
+accountIdentityStrategy =
+  PROVIDER_DISCOVERY
+
+或：
+
+PROFILE_ASSOCIATED_ACCOUNT_DISCOVERY
+
+因为 UPS 官方说明：
+
+一个 UPS Profile 可以关联多个 UPS account numbers。
+
+因此：
+
+0 / 1 / multiple
+
+语义继续适用。
+
+⑰ FedEx strategy
+
+FedEx：
+
+accountIdentityStrategy =
+  PROVIDER_VERIFIED_REGISTRATION
+
+流程：
+
+candidate account number
++ customer identity/address evidence
+→ provider registration / validation
+→ provider credential issued
+→ verified account identity
+
+不要声称：
+
+FedEx 自动 account discovery
+
+直到真实 API 文档 / sandbox 证明确实存在该能力。
+
+⑱ FedEx multi-account semantics
+
+仍然允许：
+
+一个 organization
+
+拥有：
+
+FedEx Account A
+FedEx Account B
+FedEx Account C
+
+但可以通过：
+
+multiple verified registrations
+
+形成，
+
+不必依赖：
+
+一次 credential → discover many accounts。
+
+因此：
+
+multi-account product requirement
+
+仍然可以满足。
+
+⑲ CHANGE C — identity outcome should be strategy-neutral
+
+目前：
+
+CarrierDiscoveredAccount
+
+建议改成更中性的：
+
+CarrierVerifiedAccountIdentity
+
+字段可以继续：
+
+provider
+externalAccountId
+displayName
+accountType
+countryOrRegion
+status
+identityVersion
+
+再增加：
+
+identitySource:
+  PROVIDER_DISCOVERY
+  PROVIDER_VERIFIED_REGISTRATION
+
+这样不会把 FedEx 硬塞进 discovery 模型。
+
+⑳ CHANGE D — readiness must expose strategy truth
+
+carrier readiness 至少补：
+
+authFlows
+selectedAuthFlow
+accountIdentityStrategy
+
+例如：
+
+UPS：
+
+selectedAuthFlow = AUTHORIZATION_CODE
+accountIdentityStrategy = PROVIDER_DISCOVERY
+
+FedEx：
+
+selectedAuthFlow = INTEGRATOR_CREDENTIAL_REGISTRATION
+accountIdentityStrategy = PROVIDER_VERIFIED_REGISTRATION
+
+真实实现仍：
+
+false。
+
+㉑ Keep existing lineage protections
+
+无论 discovery 还是 registration：
+
+都必须继续绑定：
+
+organizationId
+actorUserId
+provider
+credentialRef / registration transaction lineage
+
+跨租户不可复用。
+
+不要重改现有 lineage guard。
+
+㉒ Keep bind HOLD
+
+无论哪种身份策略：
+
+最终只返回：
+
+verified candidate / bind plan
+
+默认：
+
+bindExecuted=false
+
+继续：
+
+VERIFIED_BIND_REQUIRED_EXTERNAL_GATE
+
+不得打开 TRANSPORT。
+
+㉓ Targeted tests required
+
+只补以下定点回归：
+
+UPS provider exposes selected AUTHORIZATION_CODE scenario without claiming it is the only supported OAuth flow
+UPS identity strategy = PROVIDER_DISCOVERY
+UPS multiple discovered accounts → explicit selection
+FedEx identity strategy = PROVIDER_VERIFIED_REGISTRATION
+FedEx raw user account number alone ≠ verified identity
+FedEx failed registration/validation → no candidate bind plan
+FedEx provider-verified registration → verified candidate identity
+FedEx does not require fictitious list-accounts result
+identitySource explicitly returned
+duplicate verified identity remains idempotent
+cross-tenant lineage still rejected
+credentialRef-only boundary unchanged
+platformWrite=false
+transport=false
+production credentials ABSENT
+no live provider request
+readiness exposes selected auth flow + identity strategy
+existing Queue #3 regressions remain green
+tsc api/web 0
+full CI SUCCESS
+
+㉔ Do NOT rework
+
+不要重做：
+
+credential lineage
+tenant isolation
+candidate identity key
+explicit selection
+secret protection
+bind HOLD
+provider-specific readiness
+no-live-request guard
+
+这些已经 PASS。
+
+㉕ Queue #3 current verdict
+
+Auth contract internal structure：
+
+PASS
+
+但 provider truth：
+
+REVISE-MINOR
+
+Discovery/security semantics：
+
+PASS
+
+但 FedEx identity acquisition abstraction：
+
+REVISE-MINOR
+
+Readiness projection：
+
+PASS WITH REQUIRED STRATEGY FIELDS
+
+因此：
+
+CARRIER QUEUE #3 = REVISE-MINOR / NOT CLOSED
+
+㉖ NEXT EXECUTION UNIT
+
+只做：
+
+CARRIER QUEUE #3 FINAL
+PROVIDER-SPECIFIC AUTH + ACCOUNT IDENTITY STRATEGY
+
+重点：
+
+UPS:
+scenario-aware OAuth flow
+
+FedEx:
+provider-verified registration identity
+
+不要扩大范围。
+
+㉗ Carrier Queue #4
+
+暂不授权。
+
+等 Queue #3 FINAL PASS 后，再进入：
+
+Carrier Queue #4 — Tracking Read Adapter
+
+㉘ Production gates
+
+继续：
+
+HOLD_EXTERNAL
+
+UPS/FedEx production credentials
+real customer authorization
+real provider calls
+provider sandbox validation
+TRANSPORT enablement
+
+均不在本批。
+
+编号裁决
+
+① Auth contract：
+
+REVISE-MINOR
+
+② Discovery security semantics：
+
+PASS
+
+③ FedEx account identity acquisition：
+
+REVISE-MINOR
+
+④ Readiness：
+
+PASS WITH MINOR STRATEGY EXTENSION
+
+⑤ CARRIER QUEUE #3：
+
+NOT CLOSED
+
+⑥ 下一执行：
+
+CARRIER QUEUE #3 FINAL
+
+⑦ Queue #4：
+
+PENDING
+
+边界继续保持：
+
+NO platform write
+Payment = 0
+autopay = OFF
+collection = OFF
+external payment write = OFF
+R13 HOLD
+TRANSPORT = false
+无生产凭据
+
+所以这轮不是你们的安全架构有问题，而是 provider 现实世界的身份获取流程不能被一个统一的 discoverAccounts() 吃掉。UPS 的多账号 discovery 思路很适合；FedEx 更应建成“客户提交候选账号 → FedEx 注册/验证成功 → 才成为 provider-verified identity”。这样下一步接真实 API 时不会撞墙。
+```
