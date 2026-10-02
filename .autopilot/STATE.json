@@ -3174,6 +3174,8 @@
     "billing": "继续按 Recovery Outcome；不做 per-seat / per-store 订阅；多账户不重复收费",
     "permissions": "仍以 Organization 为租户边界；platformAccountId 仅预留挂点，不实现 account-scoped ACL",
     "implementation_started": "NO（Schema Delta 需架构方先裁决）",
-    "boundary": "Payment activation OFF · autopay OFF · payment collection OFF · external payment write OFF · R13 HOLD · TRANSPORT=false · 无生产凭据"
+    "boundary": "Payment activation OFF · autopay OFF · payment collection OFF · external payment write OFF · R13 HOLD · TRANSPORT=false · 无生产凭据",
+    "github_comment": "5944419815",
+    "github_url": "https://github.com/anthonannabella-dev/crossclaim-ai/issues/2#issuecomment-5944419815"
   }
 }
