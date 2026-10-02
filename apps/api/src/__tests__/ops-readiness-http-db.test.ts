@@ -31,7 +31,11 @@ const storage = new LocalFileSystemStorage({ rootDir: storageRoot, secret: SALT,
 
 interface OpsReadinessBody {
   liveness: string;
-  readiness: { ready: boolean; checks: { database: string } };
+  readiness: {
+    ready: boolean;
+    posture: string;
+    checks: { database: string; migration: string; configuration: string; storage: string; killSwitch: string; actionGuard: string };
+  };
   killSwitch: { resolverReachable: boolean; posture: string };
   actionGuard: { configured: boolean; posture: string };
   failedJobs: { importFailed: number; importPartial: number; claimItemReviewRequired: number; platformWriteLedgerRef: string };
@@ -140,6 +144,13 @@ describe('PC-08 — ops readiness', () => {
       expect(body.liveness).toBe('UP');
       expect(body.readiness.ready).toBe(true);
       expect(body.readiness.checks.database).toBe('UP');
+      // PC-08 FINAL-2：overall readiness 由关键内部依赖聚合
+      expect(body.readiness.posture).toBe('READY');
+      expect(body.readiness.checks.migration).toBe('CURRENT');
+      expect(body.readiness.checks.configuration).toBe('READY');
+      expect(body.readiness.checks.storage).toBe('READY');
+      expect(body.readiness.checks.killSwitch).toBe('UP');
+      expect(body.readiness.checks.actionGuard).toBe('UP');
       expect(typeof body.killSwitch.resolverReachable).toBe('boolean');
       expect(['READ_ONLY_DEFAULT', 'CONFIGURED']).toContain(body.killSwitch.posture);
       expect(body.actionGuard.configured).toBe(true);
@@ -239,6 +250,10 @@ describe('PC-08 — ops readiness', () => {
         const body = JSON.parse(raw) as OpsReadinessBody;
         expect(body.facts.configuration.status).toBe('BLOCKED');
         expect(body.facts.configuration.missing).toContain('DATABASE_URL');
+        // PC-08 FINAL-2：config BLOCKED 时整体 readiness 必须为 false / BLOCKED
+        expect(body.readiness.ready).toBe(false);
+        expect(body.readiness.posture).toBe('BLOCKED');
+        expect(body.readiness.checks.configuration).toBe('BLOCKED');
         expect(raw).not.toContain('postgresql://');
       } finally {
         if (original === undefined) delete process.env.DATABASE_URL;

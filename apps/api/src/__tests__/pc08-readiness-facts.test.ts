@@ -16,6 +16,7 @@ import {
   projectReadinessFacts,
   REQUIRED_CONFIG_KEYS,
 } from '../services/ops/readiness-facts';
+import { getOpsReadiness } from '../services/ops/ops-readiness';
 import { checkReadiness, readinessHttpStatus } from '../services/readiness';
 
 const VERSION = 'pc08-final-test';
@@ -251,5 +252,108 @@ describe('PC-08 FINAL — readiness facts projection', () => {
     expect(facts.configuration.status).toBe('BLOCKED');
     expect(facts.configuration.missing).toEqual(['DATABASE_URL']);
     expect(JSON.stringify(facts.configuration)).not.toContain('postgresql://');
+  });
+});
+
+describe('PC-08 FINAL-2 — overall readiness aggregation（MSG-95 ⑨）', () => {
+  function fakeOpsPrisma(input: FakePrismaInput): PrismaClient {
+    return {
+      ...(fakePrisma(input) as unknown as Record<string, unknown>),
+      importBatch: { count: async () => 0 },
+      claimItem: { count: async () => 0 },
+    } as unknown as PrismaClient;
+  }
+
+  async function readOps(overrides: {
+    select1?: 'ok' | 'throw';
+    count?: number | 'throw';
+    storageProbe?: () => Promise<boolean>;
+    resolverReachable?: boolean;
+    actionGuardConfigured?: boolean;
+    env?: Record<string, string | undefined>;
+  }) {
+    return getOpsReadiness({
+      prisma: fakeOpsPrisma({
+        ...(overrides.select1 ? { select1: overrides.select1 } : {}),
+        count: overrides.count ?? 46,
+      }),
+      killSwitchProbe: async () => overrides.resolverReachable ?? true,
+      actionGuardConfigured: overrides.actionGuardConfigured ?? true,
+      expectedMigrations: 46,
+      ...(overrides.storageProbe ? { storageProbe: overrides.storageProbe } : {}),
+      env: overrides.env ?? { DATABASE_URL: "postgresql://x" },
+    });
+  }
+
+  it('全部关键内部依赖正常 → ready=true / posture=READY', async () => {
+    const ops = await readOps({ storageProbe: async () => true });
+    expect(ops.readiness.ready).toBe(true);
+    expect(ops.readiness.posture).toBe('READY');
+    expect(ops.readiness.checks).toEqual({
+      database: 'UP',
+      migration: 'CURRENT',
+      configuration: 'READY',
+      storage: 'READY',
+      killSwitch: 'UP',
+      actionGuard: 'UP',
+    });
+  });
+
+  it('migration mismatch → ready=false / BLOCKED（不再与 ready=true 并存）', async () => {
+    const ops = await readOps({ count: 45, storageProbe: async () => true });
+    expect(ops.readiness.ready).toBe(false);
+    expect(ops.readiness.posture).toBe('BLOCKED');
+    expect(ops.readiness.checks.migration).toBe('MIGRATION_MISMATCH');
+  });
+
+  it('config BLOCKED → ready=false / BLOCKED', async () => {
+    const ops = await readOps({ storageProbe: async () => true, env: {} });
+    expect(ops.facts.configuration.status).toBe('BLOCKED');
+    expect(ops.readiness.ready).toBe(false);
+    expect(ops.readiness.posture).toBe('BLOCKED');
+    expect(ops.readiness.checks.configuration).toBe('BLOCKED');
+  });
+
+  it('storage BLOCKED → ready=false / BLOCKED；storage 未注入 → ready=false / DEGRADED', async () => {
+    const blocked = await readOps({ storageProbe: async () => false });
+    expect(blocked.readiness.ready).toBe(false);
+    expect(blocked.readiness.posture).toBe('BLOCKED');
+    expect(blocked.readiness.checks.storage).toBe('BLOCKED');
+
+    const notConfigured = await readOps({});
+    expect(notConfigured.facts.storage.status).toBe('NOT_CONFIGURED');
+    expect(notConfigured.readiness.ready).toBe(false);
+    expect(notConfigured.readiness.posture).toBe('DEGRADED');
+  });
+
+  it('DB DOWN → ready=false / BLOCKED', async () => {
+    const ops = await readOps({ select1: 'throw', storageProbe: async () => true });
+    expect(ops.facts.database.ok).toBe(false);
+    expect(ops.readiness.ready).toBe(false);
+    expect(ops.readiness.posture).toBe('BLOCKED');
+    expect(ops.readiness.checks.database).toBe('DOWN');
+  });
+
+  it('kill switch resolver fail-closed / Action Guard 缺失 → ready=false / BLOCKED', async () => {
+    const resolverDown = await readOps({ storageProbe: async () => true, resolverReachable: false });
+    expect(resolverDown.readiness.ready).toBe(false);
+    expect(resolverDown.readiness.posture).toBe('BLOCKED');
+    expect(resolverDown.readiness.checks.killSwitch).toBe('DOWN');
+
+    const guardMissing = await readOps({ storageProbe: async () => true, actionGuardConfigured: false });
+    expect(guardMissing.readiness.ready).toBe(false);
+    expect(guardMissing.readiness.posture).toBe('BLOCKED');
+    expect(guardMissing.readiness.checks.actionGuard).toBe('DOWN');
+  });
+
+  it('provider EXTERNAL_GATE / Payment HOLD / transport DISABLED 不把内部 runtime readiness 拉成 false', async () => {
+    const ops = await readOps({ storageProbe: async () => true });
+    expect(ops.facts.integrations.amazon).toBe('EXTERNAL_GATE');
+    expect(ops.facts.payment.payment).toBe('ZERO');
+    expect(ops.facts.payment.activation).toBe('HOLD');
+    expect(ops.facts.payment.collection).toBe('OFF');
+    expect(ops.transport).toBe('DISABLED');
+    expect(ops.readiness.ready).toBe(true);
+    expect(ops.readiness.posture).toBe('READY');
   });
 });

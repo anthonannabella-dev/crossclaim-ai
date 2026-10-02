@@ -14,7 +14,13 @@
 import type { PrismaClient } from '@prisma/client';
 
 import { rateLimitPolicyFromEnv, type RateLimitPolicy } from '../ops/rate-limit';
-import { projectReadinessFacts, type ReadinessFacts } from '../ops/readiness-facts';
+import {
+  projectReadinessFacts,
+  type ConfigStatus,
+  type MigrationStatus,
+  type ReadinessFacts,
+  type StorageStatus,
+} from '../ops/readiness-facts';
 
 export interface OpsReadinessDeps {
   prisma: PrismaClient;
@@ -27,12 +33,27 @@ export interface OpsReadinessDeps {
   expectedMigrations?: number;
   /** storage 探针（组合根注入；缺省 → NOT_CONFIGURED）。 */
   storageProbe?: () => Promise<boolean>;
+  /** 可选 env 覆盖（默认 process.env；仅供测试确定性注入）。 */
+  env?: Record<string, string | undefined>;
   now?: () => Date;
+}
+
+/** PC-08 FINAL-2（MSG-20261003-95 ⑨）：总姿态。 */
+export type ReadinessPosture = 'READY' | 'BLOCKED' | 'DEGRADED';
+
+/** 关键内部依赖逐项状态（外部 provider / payment gate 不在此列）。 */
+export interface OpsReadinessChecks {
+  database: 'UP' | 'DOWN';
+  migration: MigrationStatus;
+  configuration: ConfigStatus;
+  storage: StorageStatus;
+  killSwitch: 'UP' | 'DOWN';
+  actionGuard: 'UP' | 'DOWN';
 }
 
 export interface OpsReadiness {
   liveness: 'UP';
-  readiness: { ready: boolean; checks: { database: 'UP' | 'DOWN' } };
+  readiness: { ready: boolean; posture: ReadinessPosture; checks: OpsReadinessChecks };
   killSwitch: { resolverReachable: boolean; posture: 'READ_ONLY_DEFAULT' | 'CONFIGURED' };
   actionGuard: { configured: boolean; posture: 'READ_ONLY_DEFAULT' | 'ENFORCING' };
   failedJobs: {
@@ -80,12 +101,43 @@ export async function getOpsReadiness(deps: OpsReadinessDeps): Promise<OpsReadin
     prisma: deps.prisma,
     ...(deps.expectedMigrations === undefined ? {} : { expectedMigrations: deps.expectedMigrations }),
     ...(deps.storageProbe ? { storageProbe: deps.storageProbe } : {}),
+    ...(deps.env ? { env: deps.env } : {}),
     rateLimit: policy,
   });
 
+  /**
+   * PC-08 FINAL-2（MSG-20261003-95 ⑨）— overall readiness aggregation：
+   * 由**关键内部依赖**聚合，不再只看 databaseUp。
+   * 外部 provider gate（EXTERNAL_GATE）与 Payment=ZERO / activation=HOLD 属
+   * production enablement status，**不参与**内部 runtime readiness。
+   */
+  const checks: OpsReadinessChecks = {
+    database: databaseUp ? 'UP' : 'DOWN',
+    migration: facts.migration.status,
+    configuration: facts.configuration.status,
+    storage: facts.storage.status,
+    killSwitch: resolverReachable ? 'UP' : 'DOWN',
+    actionGuard: deps.actionGuardConfigured ? 'UP' : 'DOWN',
+  };
+  const internalReady =
+    databaseUp &&
+    facts.migration.status === 'CURRENT' &&
+    facts.configuration.status === 'READY' &&
+    facts.storage.status === 'READY' &&
+    resolverReachable &&
+    deps.actionGuardConfigured;
+  const hardBlocked =
+    !databaseUp ||
+    facts.migration.status === 'MIGRATION_MISMATCH' ||
+    facts.configuration.status === 'BLOCKED' ||
+    facts.storage.status === 'BLOCKED' ||
+    !resolverReachable ||
+    !deps.actionGuardConfigured;
+  const posture: ReadinessPosture = internalReady ? 'READY' : hardBlocked ? 'BLOCKED' : 'DEGRADED';
+
   return {
     liveness: 'UP',
-    readiness: { ready: databaseUp, checks: { database: databaseUp ? 'UP' : 'DOWN' } },
+    readiness: { ready: internalReady, posture, checks },
     killSwitch: {
       resolverReachable,
       posture: resolverReachable ? 'CONFIGURED' : 'READ_ONLY_DEFAULT',
