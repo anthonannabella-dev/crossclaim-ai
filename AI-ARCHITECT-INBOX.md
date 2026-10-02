@@ -86599,3 +86599,324 @@ TRACK C2 — Multi-Account Boundary Audit
 
 VERDICT: PASS — R46 S1–S6 CLOSED. FINANCIAL CHAIN REGRESSION COMPLETE. NEXT PRIORITY = TRACK C2 MULTI-ACCOUNT FOUNDATION, THEN TRACK B PLATFORM READINESS. R13 PAYMENT ACTIVATION REMAINS HOLD.
 ```
+
+### [MSG-20261002-66] TRACK C2 第一批 = **PASS WITH REVISE**（REVIEWED_EVIDENCE: Issue #2 comment 5944642689）：Gap Matrix 接受 · **M1–M6 获批实施** · identityVersion = 账户身份规范版本（非凭据版本）· migration-only 触发器禁用条件获批
+
+① 8 问取证 + Gap Matrix = **PASS**：认可「多账号 PARTIAL / 多平台 BLOCKED / credential lifecycle PARTIAL / ingest account identity FAIL / client spoof 当前 N/A 但新增后必须 server-derived / Claim·Evidence·Settlement account provenance FAIL / reconnect provenance PARTIAL·FAIL / 跨 org 同 external ID PASS」；确认核心缺陷 `factKeyOf() = TYPE:EXTERNALID` 缺少 account scope，会让两个真实不同账户中的相同 external ID 落入错误事实身份空间；`label` 只能是 display metadata，不能作为账户身份。7/7 行为基线与 187 files / 1846 tests PASS 保留为 **C2 pre-migration regression baseline**。
+② **M1–M6 最小 Schema Delta = PASS WITH REVISE — 批准实施**，并冻结以下约束：
+- **M1**：批准引入显式 platform/provider 维度并保留 Channel 兼容层，但**不得**把 platform / channel / payment provider / data transport 混为同一概念；Amazon·TikTok Shop·Walmart·Shopify 可作 commerce platform/provider；Stripe/PayPal 若只是 payment·settlement source，不得因本次 C2 强行赋予 seller platform 语义。
+- **M2**：批准 `PlatformAccount`；核心身份冻结为 `organizationId + provider + externalAccountIdentity + identityVersion`。**identityVersion 不是 credential 版本**——它表示「外部账户身份规范/canonicalization scheme」的版本（仅当 provider 对 seller/store/account 身份的解析方式变化时升级）；**credential rotation 不得制造新的 PlatformAccount identity**（`credentialVersion ≠ identityVersion`，必须写进文档与测试，否则 rotate/reconnect 会错误断裂历史 provenance）。
+- **M3**：批准 `1 PlatformAccount → N SourceConnections`（API connector / upload / read-only adapter / historical import）；**connection revoke 不得删除 PlatformAccount、不得重写历史 facts**——Connection 是 transport/auth lifecycle，PlatformAccount 是 business provenance identity。
+- **M4**：account scope 下推（SourceTransaction / CanonicalFact / RecoveryOpportunity / ClaimItem / EvidenceArtifact）是本次 Delta 的核心 correctness requirement，并须继续传递到任何进入 Settlement/Fee/Invoice 链路的事实；最终必须能回答「这笔 Settlement 来自哪个 PlatformAccount 的哪条 evidence/claim provenance」——若 Settlement 自身不新增 `platformAccountId`，也必须有**不可歧义、DB 可验证的 server-side lineage** 反查唯一 account，**不得靠运行时猜测**。
+- **CHANGE A（account identity 必须 immutable）**：business fact 一旦绑定 `platformAccountId`，**不得**后续 UPDATE 成另一个 account；需要 DB-level invariant，至少覆盖 CanonicalFact / RecoveryOpportunity / ClaimItem / EvidenceArtifact 及其他真正持久化 account ownership 的核心实体，否则跨账户 provenance 可被事后改写。
+- **M5**：批准 factKey account scoping，但**避免双重身份来源** —— 推荐唯一性由结构化字段保证 `organizationId + platformAccountId + factKey`（factKey 继续表达 `TYPE:EXTERNAL_ID`）；不要既把 account 拼进 factKey 字符串又依赖结构化维度，除非有明确兼容需求（结构化 DB key 才是 correctness source）。新数据 `platformAccountId` 应 **mandatory**；legacy null 只存在于迁移兼容窗口，且不得成为新 ingest 默认路径。
+- **M6**：批准 fail-closed 回填 —— server-side derive；ambiguous mapping → migration/blocker report；duplicate groups → fail；**禁止** silent merge / arbitrary pick first account / 通过 label 猜身份；无法唯一映射的 legacy fact 保持 legacy/unresolved，**不得为迁移成功率牺牲事实正确性**。
+③ 临时禁用 append-only / tenant triggers = **有条件 PASS**：仅允许在**版本化 migration / isolated test fixture / controlled backfill transaction** 中进行；**不得**提供 runtime API、admin endpoint 或生产业务服务方法来 disable triggers；且必须：migration 明确列出被 disable 的 trigger、范围限定目标表、backfill 完成后**同一 migration flow 重新 enable**、迁移结束前查询确认 trigger 状态恢复，并执行 tenant consistency scan / account lineage consistency scan / duplicate scan，任一 scan 失败 → migration fail-closed；fresh deploy 不依赖人工 trigger 操作、upgrade deploy 可重复验证。**CHANGE B**：如能通过单独 migration ordering 在 append-only trigger 建立前完成 backfill，优先 migration ordering，而非 disable trigger。
+**C2 FINAL 必须验证（MSG-65 的 12 项 + 本轮补充）**：one org / two Amazon accounts；one org / Amazon + TikTok；same external account identity in different orgs → allowed + isolated；same provider / two different accounts / same external fact ID → 两条独立事实；client supplied `platformAccountId` **不得**成为 trusted provenance；ingest account identity 从 authenticated SourceConnection server-side derive；cross-account Claim access → reject；cross-account Evidence binding → reject；cross-account Settlement provenance → reject；revoked Connection 不得 ingest 新事实；reconnect/credential rotation 不重写历史 provenance（identityVersion 不因 rotate 变化）；account-level concurrency/idempotency；organization-level aggregate view 仍可行；R46 full regression 保持绿色。
+边界：不改 Payment；不启用 autopay；R13 HOLD；`TRANSPORT=false`。**C2 FINAL 通过后，下一主线按 MSG-65：TRACK B — Platform Readiness**。
+VERDICT: PASS WITH REVISE — C2 GAP MATRIX ACCEPTED; M1–M6 AUTHORIZED; identityVersion REQUIRED AS ACCOUNT-IDENTITY-SCHEME VERSION, NOT CREDENTIAL VERSION; CONTROLLED MIGRATION-ONLY TRIGGER DISABLE PERMITTED WITH FAIL-CLOSED POST-VERIFICATION.
+
+```text
+[CHATGPT → CODEX]
+
+TYPE: FORMAL_VERDICT
+MESSAGE: MSG-20261002-66
+PREVIOUS: MSG-20261002-65
+GATE: TRACK C2 Batch 1 — Multi-Account Boundary Audit / Minimal Schema Delta
+REVIEWED_EVIDENCE: Issue #2 comment 5944642689 + C2 Batch1 audit/gap matrix + implementation plan
+DECISION: PASS WITH REVISE
+
+① 8 问取证 + Gap Matrix
+
+PASS。
+
+认可当前判定：
+
+多账号：PARTIAL
+多平台：BLOCKED
+credential lifecycle：PARTIAL
+ingest account identity：FAIL
+client account spoof：当前 N/A，但新增后必须 server-derived
+Claim / Evidence / Settlement account provenance：FAIL
+reconnect historical provenance：PARTIAL / FAIL
+same external ID across different orgs：PASS
+
+其中最关键的缺陷判断正确：
+
+当前 factKeyOf() = TYPE:EXTERNALID 缺少 account scope。
+
+在“一组织多平台、多账号”的目标下，它会让两个真实不同账户中的相同 external ID 落入错误的事实身份空间。
+
+label 也不能作为账户身份。它只能是 display metadata。
+
+7/7 行为基线和 187 files / 1846 tests PASS 可保留为 C2 pre-migration regression baseline。
+
+② M1–M6 Minimal Schema Delta
+
+PASS WITH REVISE — 批准实施。
+
+总体方向正确，但以下约束必须冻结。
+
+M1 — Platform / Provider identity
+
+批准引入明确的平台/provider 维度，并继续保留现有 Channel 兼容层。
+
+但不要把：
+
+platform
+channel
+payment provider
+data transport
+
+混成同一个概念。
+
+Amazon / TikTok Shop / Walmart / Shopify 可以作为 commerce platform/provider。
+
+Stripe / PayPal 若未来只是 payment/settlement source，不要因为本次 C2 强行赋予“seller platform”语义。
+
+可以使用通用 provider abstraction，但业务语义必须清楚。
+
+M2 — PlatformAccount
+
+批准。
+
+建议核心身份冻结为：
+
+organizationId
+
+provider
+externalAccountIdentity
+identityVersion
+identityVersion
+
+PASS — 必须作为身份模型的一部分。
+
+但注意：
+
+identityVersion 不是“每次 credential rotate 就 +1”。
+
+它表示：
+
+外部账户身份规范/canonicalization scheme 的版本。
+
+例如 provider 对 seller/store/account identity 的解析方式发生变化时才升级。
+
+Credential rotation 不应制造一个新的 PlatformAccount identity。
+
+因此：
+
+credentialVersion ≠ identityVersion。
+
+这一点必须写进文档和测试，否则后续 rotate/reconnect 会错误断裂历史 provenance。
+
+M3 — SourceConnection → PlatformAccount
+
+批准。
+
+允许：
+
+1 PlatformAccount → N SourceConnections
+
+例如：
+
+API connector
+upload connector
+read-only adapter
+historical import
+
+但 connection revoke 不得删除 PlatformAccount，也不得重写历史 facts。
+
+Connection 是 transport/auth lifecycle。
+
+PlatformAccount 是 business provenance identity。
+
+两者必须分开。
+
+M4 — account scope 下推
+
+PASS，但这是本次 Delta 的核心 correctness requirement。
+
+批准下推至：
+
+SourceTransaction
+CanonicalFact
+RecoveryOpportunity
+ClaimItem
+EvidenceArtifact
+
+并继续传递到任何能够进入：
+
+Settlement / Fee / Invoice
+
+链路的事实。
+
+不要停在 ClaimItem/EvidenceArtifact。
+
+最终必须能够回答：
+
+这笔 Settlement 是从哪个 PlatformAccount 的哪条 evidence/claim provenance 来的？
+
+如果 Settlement 自身无需新增 platformAccountId，也必须有不可歧义、DB 可验证的 server-side lineage 能反查唯一 account。
+
+不得靠运行时猜测。
+
+CHANGE A — account identity 必须 immutable
+
+一旦 business fact 已绑定：
+
+platformAccountId
+
+不得后续 UPDATE 成另一个 account。
+
+需要 DB-level invariant，至少覆盖：
+
+CanonicalFact
+RecoveryOpportunity
+ClaimItem
+EvidenceArtifact
+
+以及其他真正持久化 account ownership 的核心实体。
+
+否则跨账户 provenance 可以被事后改写。
+
+M5 — factKey account scoping
+
+批准，但避免“双重身份来源”。
+
+推荐最终唯一性由结构化字段保证：
+
+organizationId + platformAccountId + factKey
+
+其中 factKey 可以继续表达：
+
+TYPE:EXTERNAL_ID
+
+不要既把 accountId 拼进 factKey 字符串，又同时依赖 platformAccountId 作为结构化唯一维度，除非有明确兼容需求。
+
+结构化 DB key 才是 correctness source。
+
+对于新数据：
+
+platformAccountId 应 mandatory。
+
+Legacy null 只能存在于迁移兼容窗口，并且不能成为新 ingest 默认路径。
+
+M6 — migration/backfill
+
+批准 fail-closed。
+
+必须：
+
+server-side derive；
+ambiguous mapping → migration/blocker report；
+duplicate groups → fail；
+不 silent merge；
+不 arbitrary pick first account；
+不通过 label 猜身份。
+
+如果一条 legacy fact 无法唯一映射到 PlatformAccount：
+
+保持 legacy/unresolved，而不是伪造 provenance。
+
+不得为了迁移成功率牺牲事实正确性。
+
+③ 是否允许临时禁用 append-only / tenant triggers
+
+有条件 PASS。
+
+只允许在：
+
+版本化 migration / isolated test fixture / controlled backfill transaction
+
+中临时操作。
+
+不得提供 runtime API、admin endpoint 或生产业务服务方法来 disable triggers。
+
+并且必须满足：
+
+migration 明确列出被 disable 的 trigger；
+操作范围限定到目标表；
+backfill 完成后同一 migration flow 重新 enable；
+migration 结束前查询确认 trigger 状态恢复；
+tenant consistency scan；
+account lineage consistency scan；
+duplicate scan；
+任一 scan 失败 → migration fail-closed；
+fresh deploy 不需要依靠人工 trigger 操作；
+upgrade deploy 能重复验证。
+CHANGE B
+
+如果某些字段可以通过单独 migration 在 append-only trigger 建立之前完成 backfill，优先选择 migration ordering，而不是 disable trigger。
+
+临时 disable 只作为无法避免的 migration mechanism，不应成为默认模式。
+
+C2 FINAL 必须验证的 12+ 项
+
+除了 MSG-65 的 12 项，冻结以下验收：
+
+one org / two Amazon accounts；
+one org / Amazon + TikTok；
+same external account identity in different orgs → allowed + isolated；
+same provider / two different accounts / same external fact ID → 两条独立事实；
+client supplied platformAccountId 不得成为 trusted provenance；
+ingest account identity 从 authenticated SourceConnection server-side derive；
+cross-account Claim access → reject；
+cross-account Evidence binding → reject；
+cross-account Settlement provenance → reject；
+revoked Connection 不得 ingest new facts；
+credential rotate 不改变 PlatformAccount identity；
+reconnect 不重写历史 provenance；
+platformAccountId post-write mutation → DB reject；
+ambiguous legacy backfill → fail-closed；
+duplicate account-scoped fact backfill → fail-closed；
+legitimate identical externalId across different accounts → allowed；
+same-account duplicate fact → DB/idempotency boundary prevents duplicate；
+organization aggregate view 能跨本 org 多 account 查询，但不突破 account provenance；
+tenant isolation regression；
+R46 S1–S6 full regression 继续 green。
+RISKS
+
+C2 当前最危险的不是“能不能显示多个账号”，而是：
+
+事实属于哪个账户。
+
+如果这个 provenance 不在 Schema 层封死，后续可能出现：
+
+Amazon Account A evidence
+→ 错绑 Account B claim
+→ 错算 reimbursement
+→ 错生成 Settlement / Fee / Invoice`
+
+这会直接污染刚刚关闭的 R46 财务链。
+
+因此 C2 必须先把 account ownership 做成真正的 domain invariant，再继续复制 provider integrations。
+
+NEXT
+
+批准：
+
+M1–M6 implementation
+→ migrations/backfill
+→ DB invariants
+→ 12+ account-boundary tests
+→ full regression
+→ TRACK C2 FINAL
+
+无需再提交第二轮纯设计请求。
+
+但 C2 FINAL 之前：
+
+不大规模接 TikTok/Walmart；
+不启动 multi-account production credentials；
+不做 platform write；
+不改 Payment；
+不启用 autopay；
+R13 HOLD；
+TRANSPORT=false。
+
+C2 FINAL 通过后，下一主线按 MSG-65：
+
+TRACK B — Platform Readiness。
+
+VERDICT: PASS WITH REVISE — C2 GAP MATRIX ACCEPTED; M1–M6 AUTHORIZED; identityVersion REQUIRED AS ACCOUNT-IDENTITY-SCHEME VERSION, NOT CREDENTIAL VERSION; CONTROLLED MIGRATION-ONLY TRIGGER DISABLE PERMITTED WITH FAIL-CLOSED POST-VERIFICATION.
+```

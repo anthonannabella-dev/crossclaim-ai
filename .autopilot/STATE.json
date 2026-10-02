@@ -1,16 +1,16 @@
 {
   "gate": "B2-FIX R1",
-  "head": "63879ce",
+  "head": "af76192",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
   "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
   "send_head": "07b7009",
   "decision_head": "07b7009",
-  "last_chatgpt_message": "MSG-20261002-65",
+  "last_chatgpt_message": "MSG-20261002-66",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-02T03:06:44.011Z",
-  "previous_head": "4d5380f",
+  "updated_at": "2026-10-02T03:09:17.646Z",
+  "previous_head": "63879ce",
   "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "56abd47",
@@ -49,11 +49,11 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-02T02:59:51.556Z",
+  "last_tick_at": "2026-10-02T03:07:22.446Z",
   "state": "IMPLEMENT",
-  "last_action": "交付 TRACK C2-A 实施计划（docs-only，待裁决）+ 记录 CI 63879ce success",
-  "last_action_at": "2026-10-02T03:06:44.011Z",
-  "next_action": "TRACK C2 第一批：以 MSG-65 的 8 个问题与 12 项最低验收重述/补齐 multi-account 现状取证与 gap matrix，并据此提交是否需要 Schema Delta 的决策请求（不直接改 Schema）。",
+  "last_action": "MSG-20261002-66 = PASS WITH REVISE 已归档（FULL_COPY_OK）：C2 Gap Matrix 接受，M1–M6 获批实施（含 identityVersion 语义与 migration-only 触发器禁用条件）",
+  "last_action_at": "2026-10-02T03:09:17.646Z",
+  "next_action": "TRACK C2 实施（M1–M6 + CHANGE A/B）：Platform 枚举 + PlatformAccount（identityVersion=身份规范版本）+ SourceConnection.platformAccountId + accountId 下推 + 结构化唯一 (org, platformAccountId, factKey) + account identity immutable DB 不变量 + fail-closed 回填（migration ordering 优先）→ C2 FINAL 验收（MSG-66 清单）→ 送审。",
   "current_head": "4d5380f",
   "reviewed_head": "07b7009",
   "claim_submit_batch": {
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-02T02:47:51.510Z",
-    "gapMs": 720046,
-    "stale": true,
-    "checkedAt": "2026-10-02T02:59:51.556Z"
+    "previousTickAt": "2026-10-02T02:59:51.556Z",
+    "gapMs": 450891,
+    "stale": false,
+    "checkedAt": "2026-10-02T03:07:22.446Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -3386,9 +3386,23 @@
   },
   "c2_implementation_plan": {
     "doc": "docs/releases/TRACK-C2-A-IMPLEMENTATION-PLAN.md",
-    "status": "PLAN_DRAFT（docs-only；未改 Schema）",
+    "status": "AUTHORIZED_TO_IMPLEMENT（MSG-20261002-66）",
     "scope": "M1 Platform 枚举 + PlatformAccount（org-scoped identity，含 identityVersion）· M2 SourceConnection.platformAccountId · M3 accountId 下推（Transaction/CanonicalFact/Opportunity/ClaimItem/Evidence）· M4 factKey 账户作用域 + partial unique 兼容 legacy · M5 回填与 fail-closed 重复审计 · M6 触发器/清单/架构契约同步",
     "gate": "等待架构方对 TRACK C2 Delta 的裁决；裁决前不写 migration",
-    "acceptance": "MSG-65 的 12 项 C2 验收（其中 #3/#8/#9/#12 已由行为基线 7/7 提前覆盖）"
+    "acceptance": "MSG-65 的 12 项 C2 验收（其中 #3/#8/#9/#12 已由行为基线 7/7 提前覆盖）",
+    "note": "实施时须按 CHANGE A/B 与 M1–M6 冻结约束执行；account identity immutable 的 DB 不变量与结构化唯一键为 correctness source"
+  },
+  "c2_batch1_verdict": {
+    "message_id": "MSG-20261002-66",
+    "decision": "PASS WITH REVISE",
+    "archival": "FULL_COPY_OK",
+    "archived_at": "2026-10-02T03:09:17.646Z",
+    "gap_matrix": "ACCEPTED（含 factKeyOf 缺 account scope 的核心判定；label 仅 display metadata；7/7 + 187 files / 1846 tests 作为 pre-migration baseline）",
+    "m1_m6": "AUTHORIZED（M1 provider 语义不得混用；M2 identityVersion = 身份规范版本且 credential rotation 不得创建新身份；M3 1 account → N connections 且 revoke 不改写历史；M4 下推至 Settlement/Fee/Invoice 链路并可 DB 反查唯一 account；M5 结构化唯一 (org, platformAccountId, factKey)，新数据 mandatory；M6 回填 fail-closed 且禁止 silent merge/pick first/label 猜身份）",
+    "change_a": "account identity immutable（platformAccountId 绑定后不得 UPDATE 改账户；DB-level invariant 至少覆盖 CanonicalFact/RecoveryOpportunity/ClaimItem/EvidenceArtifact 等）",
+    "change_b": "优先 migration ordering 在 append-only trigger 建立前完成 backfill，而非 disable trigger",
+    "trigger_disable": "CONDITIONAL PASS：仅版本化 migration / isolated fixture / controlled backfill transaction；禁止 runtime API·admin endpoint·生产服务方法；须列出被禁用 trigger、限定目标表、同 flow 重新 enable、迁移前查询确认恢复、tenant/account-lineage/duplicate 三类 scan，任一失败 fail-closed；fresh deploy 无需人工操作、upgrade 可重复验证",
+    "c2_final_tests": "MSG-65 的 12 项 + 本轮补充（同 provider 不同账户同 fact ID → 两条独立事实；client supplied platformAccountId 不得成为 trusted provenance；ingest 身份从 authenticated SourceConnection 派生；cross-account Claim/Evidence/Settlement → reject；revoked Connection 不得 ingest；reconnect/rotate 不改写 provenance 且 identityVersion 不变；account 级并发幂等；org 级聚合仍可行；R46 回归绿）",
+    "next_after_c2": "TRACK B — Platform Readiness（按 MSG-65）"
   }
 }

@@ -1442,3 +1442,10 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - R46 财务链闭环完成：trusted receipt → Settlement → SettlementAdjustment → FeeCalculation → FeeCalculationAdjustment → BillingInvoice → checker；Payment domain 未激活，R13 HOLD。
 - NEXT：TRACK C2 Multi-Account Boundary Audit（第一批：现状取证 → gap matrix → Schema Delta 决策请求；不改 Schema），其后 Track B → Gate 7 剩余入口 → Growth SEO。
 - 归档：AI-ARCHITECT-INBOX.md（逐字 ```text + FULL_COPY_OK）。
+
+## 2026-10-02 JST — MSG-20261002-66 = PASS WITH REVISE（C2 M1–M6 获批实施）
+
+- Gap Matrix 接受；factKeyOf 缺 account scope 为核心缺陷判定被认可；identityVersion = 账户身份规范版本（≠ credential 版本）。
+- CHANGE A：account identity immutable（DB-level invariant）；CHANGE B：优先 migration ordering，触发器禁用仅限 migration/fixture/controlled backfill 且须 fail-closed 复核。
+- NEXT：按 M1–M6 实施 → C2 FINAL 验收（MSG-66 清单）→ 送审；C2 通过后进入 TRACK B。
+- 归档：AI-ARCHITECT-INBOX.md（逐字 ```text + FULL_COPY_OK）。
