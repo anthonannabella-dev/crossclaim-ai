@@ -96,6 +96,7 @@ C-0008-B2（Case / Evidence / Claim Draft / Billing）的端点尚未实现。
 | 方法 | 路径 | 请求体 | 成功 |
 |---|---|---|---|
 | POST | `/opportunities/:id/qualify` | — | 200 `{ opportunityId, from: "DETECTED", to: "QUALIFIED", reason: null }` |
+| GET | `/opportunities` | query：`status` / `domain` / `channel` / `accountId` / `detectedFrom` / `detectedTo` / `minRecoverable` / `limit`(1..100) / `cursor` | 200 `{ items, nextCursor, hasMore, appliedFilters, pageSize }`（只读客户可见机会列表；tenant-scoped；legacy NULL account 标记 `LEGACY_UNATTRIBUTED`，不推断） | 400 `INVALID_INPUT`（非法过滤值 / cursor / limit）；401 `UNAUTHENTICATED`；403 `FORBIDDEN`（FINANCE / VIEWER） |
 | POST | `/opportunities/:id/reject` | `{ reason }` | 200 `{ opportunityId, from: "DETECTED", to: "REJECTED", reason }` |
 
 - 仅允许 `DETECTED → QUALIFIED` / `DETECTED → REJECTED`；`DETECTED → CONVERTED` 只能由 Recovery Closure 建案流程触发

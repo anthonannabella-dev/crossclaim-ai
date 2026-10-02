@@ -129,11 +129,14 @@ import {
   listOpportunityInsights,
   toExportRows,
 } from './opportunity-insight';
+import { listOpportunities } from './opportunity-list';
 import { REJECT_REASONS, WorkflowError, reviewOpportunity } from './opportunity-review';
 import { ForbiddenError, assertPermission } from './permissions';
 
 const MAX_BODY_BYTES = 16 * 1024;
 const REVIEW_PATH = /^\/opportunities\/([^/]+)\/(qualify|reject|case)$/;
+/** PC-02：客户可见的机会列表（read-only projection）。 */
+const OPPORTUNITY_LIST_PATH = /^\/opportunities$/;
 const INSIGHT_LIST_PATH = /^\/opportunities\/insights$/;
 const INSIGHT_CSV_PATH = /^\/opportunities\/insights\.csv$/;
 const INSIGHT_PATH = /^\/opportunities\/([^/]+)\/basis$/;
@@ -364,6 +367,7 @@ export async function handleWorkflowRequest(
 ): Promise<boolean> {
   const path = (req.url ?? '/').split('?')[0];
   const review = REVIEW_PATH.exec(path);
+  const opportunityList = OPPORTUNITY_LIST_PATH.test(path);
   const insightList = INSIGHT_LIST_PATH.test(path);
   const insightCsv = INSIGHT_CSV_PATH.test(path);
   const insight = INSIGHT_PATH.exec(path);
@@ -429,7 +433,7 @@ export async function handleWorkflowRequest(
     adminPermissionMatrix ||
     adminMemberDetail !== null ||
     adminKillSwitch;
-  if (!adminAny && !operationsDashboard && !operationsClaims && !operationsRecovery && !review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !paymentReviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !replayPath && !replayReviewPath && !retryDuePath && !retryDueFreezePath && !retryDueReviewPath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim && !caseClaimSubmit && !caseClaimPrepare && !caseBillingDraft && !caseAppealSubmit && !casePlatformWrite && !caseRecoveryManualSubmit && !caseRecoveryManualReference && !caseRecoveryManualApproval && !caseRecoveryManualReferenceApproval) {
+  if (!adminAny && !opportunityList && !operationsDashboard && !operationsClaims && !operationsRecovery && !review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !paymentReviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !replayPath && !replayReviewPath && !retryDuePath && !retryDueFreezePath && !retryDueReviewPath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim && !caseClaimSubmit && !caseClaimPrepare && !caseBillingDraft && !caseAppealSubmit && !casePlatformWrite && !caseRecoveryManualSubmit && !caseRecoveryManualReference && !caseRecoveryManualApproval && !caseRecoveryManualReferenceApproval) {
     return false;
   }
 
@@ -481,7 +485,8 @@ export async function handleWorkflowRequest(
           ? ['GET', 'POST']
           : billingPath && !billingPath[1]
             ? ['GET']
-            : insightList ||
+            : opportunityList ||
+                insightList ||
                 insightCsv ||
                 insight ||
                 appealPath ||
@@ -838,6 +843,24 @@ export async function handleWorkflowRequest(
         },
         deps.now ? { now: deps.now } : {},
       );
+      sendJson(res, 200, result);
+      return true;
+    }
+
+    if (opportunityList && method === 'GET') {
+      // PC-02：客户可见机会列表；只读、tenant-scoped、cursor 分页、字段安全集合。
+      const url = new URL(req.url ?? '/opportunities', 'http://localhost');
+      const result = await listOpportunities(deps.prisma, actor, {
+        status: url.searchParams.get('status') ?? undefined,
+        domain: url.searchParams.get('domain') ?? undefined,
+        channel: url.searchParams.get('channel') ?? undefined,
+        accountId: url.searchParams.get('accountId') ?? undefined,
+        detectedFrom: url.searchParams.get('detectedFrom') ?? undefined,
+        detectedTo: url.searchParams.get('detectedTo') ?? undefined,
+        minRecoverable: url.searchParams.get('minRecoverable') ?? undefined,
+        limit: url.searchParams.get('limit') ?? undefined,
+        cursor: url.searchParams.get('cursor') ?? undefined,
+      });
       sendJson(res, 200, result);
       return true;
     }
