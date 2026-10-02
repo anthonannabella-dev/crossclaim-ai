@@ -91734,3 +91734,625 @@ STATE / TASKS RECONCILE — R44 → R45 → R46
 
 现在这个阶段很重要：Track B 这条“账户归属安全链”已经可以停了。 接下来 Codex 应该先把 R44/R45/R46 的真实完成状态重新对账，然后直接回到真正没完成的产品主线，而不是继续在账户链路上循环修补。
 ```
+
+### [MSG-20261002-80] TRACK A NEXT EXECUTION UNIT VERDICT — A/X4 = NOT NEXT；下一单元 = PRODUCTION CANDIDATE READINESS SWEEP（READ-ONLY / DOCS-ONLY）；secret.rotate = HOST_ACTION_REQUIRED
+
+`RECONCILE_HEAD = 0792e38`；`AUTHORIZATION_REQUEST_HEAD = e0293c0`。
+**① 候选 A（X4 Entity Resolution v1）= NOT NEXT / HOLD**：架构方不否决 X4，但它不能作为下一个执行单元。C2 / X1 / Track B 已结束后，机械地继续新技术 Track 会无限扩架构，而没有先回答「CrossClaim 当前离 Production Candidate 还差什么」。优先级应从「还能造什么」切换为「离可上线/候选版本还缺哪些内部能力 / 外部依赖 / 产品验收」。
+**② 下一执行单元 = TRACK A PRODUCTION CANDIDATE READINESS SWEEP（READ-ONLY / DOCS-ONLY）**：不得改代码、不得改 Schema、不得加 migration、不得加测试、不得接真实 transport、不得写 Payment、不得新增 feature implementation。目标产出单一真相源 **PRODUCTION CANDIDATE GAP REGISTER**：说明「离可上线还应该开发什么」。
+**③ Readiness Sweep 必须覆盖 10 个区域**：P1 Core Recovery Workflow（ingest → canonical fact → detection → opportunity → case → evidence → claim → manual submission / appeal → outcome → settlement → billing；区分已真实产品闭环 / 仅 mock·adapter·internal boundary / 缺真实 product flow）；P2 Provider / Platform Integration（Amazon / TikTok Shop / Walmart / Carrier·logistics / Customs，逐项标 INTERNAL_READY / MOCK_ONLY / EXTERNAL_API_REQUIRED / CREDENTIAL_REQUIRED / NOT_IMPLEMENTED，严禁把「已有 adapter contract」写成「平台已接通」）；P3 Customer Onboarding（注册 / Organization / connection creation / bind PlatformAccount / OAuth·API authorization / file upload fallback / multi-account / connection state / legacy rebind；回答「真实客户从 0 开始还缺什么」）；P4 Claim Execution（CLAIM READY ≠ CLAIM ACTUALLY SUBMITTED；区分 package / 人工提交 / external transport abstraction / 真实 provider write HOLD）；P5 Money / Monetization（recoverable amount → settlement → fee calculation → billing invoice → entitlement → checkout → payment → success fee collection → commission charge；区分 INTERNAL_LEDGER_READY 与 REAL MONEY FLOW ENABLED，Payment=0 / collection OFF 是正式登记）；P6 Customer-Facing Product（onboarding UI / opportunity list / case view / claim package / status tracking / recovered money visibility / billing·invoice / account management / error·recovery states；回答「能否通过界面自己完成整个流程」）；P7 Admin / Operations（tenant admin / audit / recovery review / kill switch / import diagnostics / system health / manual intervention / failed job recovery；哪些已 Production Candidate ready）；P8 Security / Compliance（tenant isolation / account isolation / credential storage / audit secret leakage / approval boundaries / external write kill switch / payment guards / webhook verification / secret rotation；其中 **secret.rotate = HOST_ACTION_REQUIRED，不自动执行**）；P9 Reliability / Production Operations（migrations / backups / restore verification / CI / deploy smoke / idempotency / retries / dead-letter·failed task recovery / monitoring / rate limit / concurrency；区分 code exists 与 production operational configuration exists）；P10 Commercial / Launch Requirements（pricing / free audit / package unlock / success fee / legal·compliance notices / provider terms / customer consent / claims authorization / privacy·data retention / customer support·manual exception flow；只登记缺口，不实现）。
+**④ 每个缺口必须四选一分类**：BLOCKER_INTERNAL（可在本地可测范围内完成、是 Production Candidate 前置）/ BLOCKER_EXTERNAL（需 provider approval / credential / real data / legal / payment provider）/ POST_LAUNCH（有价值但不是 blocker）/ HOST_ACTION_REQUIRED（只有宿主能完成或授权）；禁止模糊 TODO / later / maybe。X4 必须在本口径下重判：默认应为 **POST_LAUNCH**，只有当「没有 X4 会导致当前 V1 无法正确完成 recovery」才可升为 BLOCKER_INTERNAL。
+**⑤ 两份完成度必须分别给出**：INTERNAL PRODUCT COMPLETION（只在内部可测范围）与 PRODUCTION ENABLEMENT COMPLETION（真实 provider API / credentials / payment / legal / production ops）；并同时给出 blocker 数、内部 blocker 数、外部 blocker 数、host action 数、post-launch 数，明确说明百分比口径。
+**⑥ 唯一优先级队列**：只允许一个顺序 PC-01、PC-02、PC-03…；排序原则 = Production Candidate blocker → 内部可完成 → 产品闭环 → customer-visible 能力 → 依赖更少。NEXT EXECUTION UNIT = PC-01；若 PC-01 为 INTERNAL 则直接执行；若 PC-01 为 EXTERNAL/HOST，则扫描 PC-02 找第一个可内部推进的 blocker，**不得因为 PC-01 外部依赖而停止整个项目**。
+**⑦ secret.rotate 判定 = HOST_ACTION_REQUIRED**：SECRET_ACCESS / production secret rotation 不得由 Codex 自动取得真实 secret、自动轮换生产凭据、自动创建 production credential 或自动绕过 HOST approval；不作为 autonomous execution unit，只登记为 readiness gap / launch checklist。
+**⑧ C / D / E 当前状态**：Growth P3、Carrier Top-10、Customs Checkout/Entitlement 均未被否决，但全部先进入 Readiness Sweep 分类；只有被证明是 Production Candidate blocker 才进 PC queue，否则归为 POST_LAUNCH / GROWTH TRACK。
+**⑨ 本轮硬边界**：READ-ONLY / DOCS-ONLY；不写 X4 coding、不写 Growth Schema、不写 Carrier rules implementation、不写 Customs checkout implementation；不回开 Track B、不回开 R44/R45/R46、不触发 payment activation、不做 external write、不使用生产凭据。
+**编号裁决**：① A / X4 = NOT NEXT / HOLD PENDING READINESS CLASSIFICATION；② 下一执行单元 = **PRODUCTION CANDIDATE READINESS SWEEP（READ-ONLY / DOCS-ONLY）**；③ secret.rotate = HOST_ACTION_REQUIRED；④ NEXT AUTHORIZED UNIT = 完成后提交 `PRODUCTION-CANDIDATE-READINESS-CHECKPOINT.md`（含 internal completion % / production enablement % / blocker register / X4 classification / unique PC priority queue / first executable INTERNAL blocker），然后再进入真正的下一项开发。
+
+```text
+[CHATGPT → CODEX] MSG-20261002-80 — TRACK A NEXT EXECUTION UNIT VERDICT
+
+RECONCILE_HEAD = 0792e38
+AUTHORIZATION_REQUEST_HEAD = e0293c0
+
+已核验两份 GitHub 文档。
+
+① 候选 A（X4 Entity Resolution v1）：暂不批准为下一执行单元
+
+裁决：
+
+A = HOLD / NOT NEXT
+
+这不是否决 X4。
+
+X4 Cross-Provider Entity Resolution 可能仍然是后续重要能力，但当前不应因为：
+
+C2 → X1 → Track B 已结束
+
+就机械地继续：
+
+→ X4
+
+否则容易重新进入架构轨连续扩张，而没有先回答：
+
+CrossClaim 当前离 Production Candidate 到底还差什么。
+
+现在优先级应该从：
+
+“还有什么架构可以继续做”
+
+切换成：
+
+“上线候选版本真正还缺哪些内部能力 / 外部依赖 / 产品闭环”。
+
+② 下一执行单元批准 B
+
+正式批准：
+
+TRACK A — PRODUCTION CANDIDATE READINESS SWEEP
+
+模式：
+
+READ / TRACE / AUDIT / GAP LIST ONLY
+
+本单元：
+
+不改生产代码；
+
+不新增 Schema；
+
+不做 migration；
+
+不部署；
+
+不开启真实 transport；
+
+不写 Payment；
+
+不进入新的 feature implementation。
+
+目标：
+
+形成一份：
+
+SINGLE SOURCE OF TRUTH — PRODUCTION CANDIDATE GAP REGISTER
+
+用于决定后续真正应该开发什么。
+
+③ 为什么必须先做 Readiness Sweep
+
+当前已确认 CLOSED：
+
+R44 / R44-A / R44-B
+
+R45
+
+R46
+
+C2
+
+X1
+
+Track B Batch 1/2/3
+
+Onboarding Transport Closure
+
+Gate 7 多个 Runtime Business Blocking actions
+
+此时如果直接开 X4，缺少一个关键判断：
+
+X4 到底属于：
+
+A. Production Candidate blocker
+
+还是：
+
+B. V1.1 / scalability / intelligence enhancement
+
+两者完全不同。
+
+如果 X4 不是上线阻塞项，就不应继续占用主线。
+
+④ Readiness Sweep 必须覆盖的 10 个领域
+
+至少逐项审计：
+
+P1 — Core Recovery Workflow
+
+从：
+
+ingest
+→ canonical fact
+→ detection
+→ opportunity
+→ case
+→ evidence
+→ claim
+→ manual submission / appeal
+→ outcome
+→ settlement
+→ billing
+
+回答：
+
+哪些已经真实闭环？
+哪些只是 mock / adapter / internal boundary？
+哪些还缺实际 product flow？
+
+P2 — Provider / Platform Integration
+
+逐平台列：
+
+Amazon
+
+TikTok Shop
+
+Walmart
+
+Carrier / logistics
+
+Customs
+
+每个标：
+
+INTERNAL_READY
+MOCK_ONLY
+EXTERNAL_API_REQUIRED
+CREDENTIAL_REQUIRED
+NOT_IMPLEMENTED
+
+不要把“架构已经有 adapter contract”写成“平台已接通”。
+
+P3 — Customer Onboarding
+
+核：
+
+注册
+
+Organization
+
+connection creation
+
+bind PlatformAccount
+
+OAuth/API authorization
+
+file upload fallback
+
+multi-account
+
+connection state
+
+legacy rebind
+
+回答真实客户从 0 到可用还缺什么。
+
+P4 — Claim Execution
+
+区分：
+
+CLAIM READY
+
+与：
+
+CLAIM ACTUALLY SUBMITTED
+
+必须明确：
+
+哪些只能生成 package；
+
+哪些能人工提交；
+
+哪些已有 external transport abstraction；
+
+哪些真实 provider write 仍 HOLD。
+
+P5 — Money / Monetization
+
+检查：
+
+recoverable amount
+
+settlement
+
+fee calculation
+
+billing invoice
+
+entitlement
+
+checkout
+
+payment
+
+success fee collection
+
+commission charge
+
+区分：
+
+INTERNAL_LEDGER_READY
+
+与：
+
+REAL MONEY FLOW ENABLED
+
+Payment=0 / collection OFF 必须显式登记。
+
+P6 — Customer-Facing Product
+
+检查：
+
+onboarding UI
+
+opportunity list
+
+case view
+
+claim package
+
+status tracking
+
+recovered money visibility
+
+billing/invoice
+
+account management
+
+error/recovery states
+
+不能只看 API/test。
+
+需要回答：
+
+“普通卖家现在是否能自己完成整个流程？”
+
+P7 — Admin / Operations
+
+检查：
+
+tenant admin
+
+audit
+
+recovery review
+
+kill switch
+
+import diagnostics
+
+system health
+
+manual intervention
+
+failed job recovery
+
+标出哪些已经 Production Candidate ready。
+
+P8 — Security / Compliance
+
+检查：
+
+tenant isolation
+
+account isolation
+
+credential storage
+
+audit secret leakage
+
+approval boundaries
+
+external write kill switch
+
+payment guards
+
+webhook verification
+
+secret rotation
+
+其中：
+
+secret.rotate
+
+单独登记为：
+
+HOST_ACTION_REQUIRED
+
+但不要把它当自动开发单元。
+
+P9 — Reliability / Production Operations
+
+检查：
+
+migrations
+
+backups
+
+restore verification
+
+CI
+
+deploy smoke
+
+idempotency
+
+retries
+
+dead-letter / failed task recovery
+
+monitoring
+
+rate limit
+
+concurrency
+
+区分：
+
+code exists
+
+与：
+
+production operational configuration exists。
+
+P10 — Commercial / Launch Requirements
+
+检查：
+
+pricing
+
+free audit
+
+package unlock
+
+success fee
+
+legal/compliance notices
+
+provider terms
+
+customer consent
+
+claims authorization
+
+privacy/data retention
+
+customer support/manual exception flow
+
+只登记缺口，不在本轮实现。
+
+⑤ 每个缺口必须按四类分类
+
+每个 gap 只能属于以下之一：
+
+BLOCKER_INTERNAL
+
+现在即可开发，且 Production Candidate 必须有。
+
+BLOCKER_EXTERNAL
+
+上线前必须有，但依赖：
+provider approval / credential / real data / legal / payment provider 等。
+
+POST_LAUNCH
+
+有价值，但不是 Production Candidate blocker。
+
+HOST_ACTION_REQUIRED
+
+只能宿主本人完成或授权。
+
+不要使用模糊的：
+
+TODO / later / maybe。
+
+⑥ X4 必须在本轮被重新分类
+
+对：
+
+Cross-Provider Entity Resolution v1
+
+必须回答：
+
+它是否是：
+
+BLOCKER_INTERNAL
+
+还是：
+
+POST_LAUNCH
+
+判断依据：
+
+如果没有 X4，当前 MVP 是否仍能：
+
+按单个平台/单连接/明确 account context
+→ 找钱
+→ 生成证据
+→ 建 claim
+→ 追回结果
+→ 结算收费
+
+如果可以：
+
+X4 默认应为 POST_LAUNCH。
+
+只有证明：
+
+“没有 X4 会导致当前核心 V1 无法正确完成 recovery”
+
+才能列为 BLOCKER_INTERNAL。
+
+不要因为 roadmap 文件曾写 P0-2 就自动认为现在必须做。
+
+⑦ 输出必须包含 Production Candidate 百分比
+
+给出两个独立完成度：
+
+INTERNAL PRODUCT COMPLETION
+
+只算内部可开发能力。
+
+PRODUCTION ENABLEMENT COMPLETION
+
+包含真实 provider API、credentials、payment、legal、production ops。
+
+不要混成一个百分比。
+
+同时列：
+
+已完成项
+
+内部 blocker 数
+
+外部 blocker 数
+
+host action 数
+
+post-launch 数
+
+百分比必须说明估算口径，不伪造精确度。
+
+⑧ 输出最终唯一优先队列
+
+最终只能给一个顺序：
+
+PC-01
+PC-02
+PC-03
+...
+
+排序原则：
+
+Production Candidate blocker
+
+内部可做优先
+
+主链闭环优先
+
+customer-visible 优先
+
+不做锦上添花架构
+
+不重做 CLOSED 单元
+
+并指出：
+
+NEXT EXECUTION UNIT = PC-01
+
+如果 PC-01 是 INTERNAL：
+
+完成 Readiness Sweep 后允许直接编码 PC-01。
+
+如果 PC-01 是 EXTERNAL/HOST：
+
+继续扫描 PC-02，找到第一个可内部推进的 blocker。
+
+不要因为 PC-01 外部阻塞就停止整个项目。
+
+⑨ secret.rotate 裁决
+
+确认：
+
+secret.rotate = HOST_ACTION_REQUIRED
+
+原因：
+
+SECRET_ACCESS / production secret rotation 属宿主控制域。
+
+Codex 不应：
+
+自动读取真实 secret
+
+自动轮换生产凭据
+
+自动启用 production credential
+
+自动绕过 HOST approval
+
+因此：
+
+不作为 autonomous execution unit。
+
+只登记 readiness gap / launch checklist。
+
+⑩ C / D / E 当前状态
+
+Growth P3
+Carrier Top-10
+Customs Checkout/Entitlement
+
+本轮均不授权实施。
+
+全部先进入 Readiness Sweep 分类。
+
+如果证明其中之一是 Production Candidate blocker，再进入 PC queue。
+
+否则放 POST_LAUNCH / GROWTH TRACK。
+
+⑪ 本轮边界
+
+READ-ONLY / DOCS-ONLY。
+
+不得：
+
+开 X4 coding
+
+做 Growth Schema
+
+做 Carrier rules implementation
+
+做 Customs checkout implementation
+
+重开 Track B
+
+重做 R44/R45/R46
+
+触碰 payment activation
+
+开启 external write
+
+使用生产凭据
+
+编号裁决
+
+① A / X4：
+
+NOT NEXT / HOLD PENDING READINESS CLASSIFICATION
+
+② 下一执行单元：
+
+B — TRACK A PRODUCTION CANDIDATE READINESS SWEEP
+
+③ secret.rotate：
+
+HOST_ACTION_REQUIRED
+
+④ NEXT AUTHORIZED UNIT：
+
+PRODUCTION CANDIDATE READINESS SWEEP
+
+READ-ONLY / DOCS-ONLY
+
+完成后提交：
+
+PRODUCTION-CANDIDATE-READINESS-CHECKPOINT.md
+
+必须包含：
+
+internal completion %
+
+production enablement %
+
+blocker register
+
+X4 classification
+
+unique PC priority queue
+
+first executable INTERNAL blocker
+
+然后再进入真正的下一项开发。
+
+所以现在不应该继续“找一个新技术 Track 往下做”。先把整个产品离可上线还缺什么算清楚，再只做真正的 Production Candidate blocker。 这样后面 Codex 的自动执行会更接近“做完产品”，而不是继续无限扩架构。
+```
