@@ -263,6 +263,8 @@ describe('R46 S4 余下永久验收（digest 可重建 + 下游零副作用）',
 
 
 
+
+
 describe('R46 S4 MSG-60 CHANGE B/C：真并发边界与 same-approval exactly-once', () => {
   async function seedFeeCalcWithChain(organizationId: string, claimItemId: string, feeChainId: string) {
     return (
@@ -313,13 +315,12 @@ describe('R46 S4 MSG-60 CHANGE B/C：真并发边界与 same-approval exactly-on
   });
 
   /**
-   * CHANGE B —— 数据库层并发边界。
-   * 当前 `cc_feecalculationsettlement_chain_unique` 触发器是「先查后插」，两个并发事务各读到 0 条即都提交，
-   * membership 行上没有可做唯一索引的 chain 身份列 → 该用例**当前必然失败**，是 R46 S4-A 的缺证事实。
-   * 一旦 S4-A 的 UNIQUE(organizationId, feeChainId, settlementId) 落地，本用例会转为通过；
-   * 届时把 `it.fails` 改回 `it` 并删除本注释（forced flip）。
+   * CHANGE B —— 数据库层并发边界（R46 S4-A 已授权并落地：MSG-20261002-61 CHANGE A）。
+   * 旧行为（实测）：`cc_feecalculationsettlement_chain_unique` 触发器「先查后插」→ 两个并发事务各读到 0 条、双双提交，
+   * 本地测试库因此留下 7 组 (org, chain, settlement) 重复 membership。
+   * 现行为：部分唯一索引 FeeCalculationSettlement_org_chain_settlement_key 是真正的并发边界。
    */
-  it.fails('CHANGE B（缺证：R46 S4-A）：同一 Settlement + 同一 feeChain 两个并发 membership → 数据库层最多一个成功', async () => {
+  it('CHANGE B（R46 S4-A 已落地）：同一 Settlement + 同一 feeChain 两个并发 membership → 数据库层最多一个成功', async () => {
     const claim1 = await newClaim(ORG_A);
     const claim2 = await newClaim(ORG_A);
     const st = await seedEligibleSettlement(ORG_A, '500.0000', claim1);
@@ -406,6 +407,81 @@ describe('R46 S4 MSG-60 CHANGE B/C：真并发边界与 same-approval exactly-on
       });
     }
     expect(await prisma.feeCalculationSettlement.count({ where: { organizationId: ORG_A, settlementId: st } })).toBe(2);
+  });
+
+  it('R46 S4-A：membership.feeChainId 由服务端派生；客户端提交不一致值 → FEE_CHAIN_MISMATCH；写入后 mutation → DB 拒绝', async () => {
+    const claim = await newClaim(ORG_A);
+    const st = await seedEligibleSettlement(ORG_A, '500.0000', claim);
+    const chain = uuid();
+    const feeId = await seedFeeCalcWithChain(ORG_A, claim, chain);
+
+    // 客户端完全不提供 chain → 服务端从父 FeeCalculation 派生
+    const derivedId = uuid();
+    const derived = await prisma.$queryRawUnsafe<{ feeChainId: string }[]>(
+      'INSERT INTO "FeeCalculationSettlement"'
+        + ' ("id","organizationId","feeCalculationId","settlementId","basisRole","amountContribution","currency")'
+        + " VALUES ($1, $2, $3, $4, 'POSITIVE', 500.0000, 'USD')"
+        + ' RETURNING "feeChainId"',
+      derivedId,
+      ORG_A,
+      feeId,
+      st,
+    );
+    expect(derived[0].feeChainId).toBe(chain);
+
+    // 客户端伪造 chain → 数据库拒绝（客户端不得提供或覆盖）
+    const st2 = await seedEligibleSettlement(ORG_A, '500.0000', claim);
+    await expect(
+      prisma.$executeRawUnsafe(
+        'INSERT INTO "FeeCalculationSettlement"'
+          + ' ("id","organizationId","feeChainId","feeCalculationId","settlementId","basisRole","amountContribution","currency")'
+          + " VALUES ($1, $2, $3, $4, $5, 'POSITIVE', 500.0000, 'USD')",
+        uuid(),
+        ORG_A,
+        uuid(),
+        feeId,
+        st2,
+      ),
+    ).rejects.toThrow(/FEE_CHAIN_MISMATCH/);
+
+    // 写入后 mutation → append-only 触发器拒绝（feeChainId 写入即 immutable）
+    await expect(
+      prisma.$executeRawUnsafe(
+        'UPDATE "FeeCalculationSettlement" SET "feeChainId" = $1 WHERE "id" = $2',
+        uuid(),
+        derivedId,
+      ),
+    ).rejects.toThrow(/APPEND_ONLY_TABLE/);
+  });
+
+  it('R46 S4-A：受保护写路径并发（同 claimItem + 同 feeChain + 同 Settlement，不同 approval）→ 恰好一个提交，loser 稳定领域错误且零残留', async () => {
+    const claim = await newClaim(ORG_A);
+    const st = await seedEligibleSettlement(ORG_A, '1000.0000', claim);
+    const chain = uuid();
+    const before = await counts();
+
+    const results = await Promise.allSettled([
+      recordFeeCalculation(deps, input({ claimItemId: claim, settlementIds: [st], feeChainId: chain }) as never),
+      recordFeeCalculation(deps, input({ claimItemId: claim, settlementIds: [st], feeChainId: chain }) as never),
+    ]);
+    const ok = results.filter((r) => r.status === 'fulfilled');
+    const failed = results.filter((r) => r.status === 'rejected') as PromiseRejectedResult[];
+    expect(ok.length).toBe(1);
+    for (const f of failed) {
+      // 稳定领域错误：membership 唯一索引 → FEE_MEMBERSHIP_ALREADY_EXISTS；
+      // 同 claimItem 单 active chain 唯一索引 → MEMBERSHIP_CHAIN_CONFLICT（两条路径都不得泄漏 raw P2002）
+      expect(['FEE_MEMBERSHIP_ALREADY_EXISTS', 'MEMBERSHIP_CHAIN_CONFLICT']).toContain(
+        (f.reason as { code?: string })?.code,
+      );
+      expect(String(f.reason)).not.toMatch(/P2002|23505|Unique constraint|APPEND_ONLY/);
+    }
+    expect(await prisma.feeCalculationSettlement.count({ where: { organizationId: ORG_A, settlementId: st } })).toBe(1);
+    expect(await prisma.feeCalculation.count({ where: { organizationId: ORG_A, claimItemId: claim } })).toBe(1);
+    const after = await counts();
+    expect(after.fees).toBe(before.fees + 1);
+    expect(after.memberships).toBe(before.memberships + 1);
+    expect(after.invoices).toBe(0);
+    expect(after.payments).toBe(0);
   });
 
   /**

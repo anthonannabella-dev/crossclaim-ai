@@ -32,6 +32,8 @@ export type FeeRecordErrorCode =
   | 'CROSS_TENANT_REFERENCE'
   | 'SETTLEMENT_NOT_FEE_ELIGIBLE'
   | 'MEMBERSHIP_CHAIN_CONFLICT'
+  // MSG-20261002-61 CHANGE A：数据库唯一约束的稳定领域结果（禁止 raw P2002/23505 泄漏）
+  | 'FEE_MEMBERSHIP_ALREADY_EXISTS'
   | 'FEE_POLICY_INVALID';
 
 export class FeeRecordError extends Error {
@@ -178,6 +180,14 @@ export async function recordFeeCalculation(
   return deps.prisma.$transaction(async (tx) => {
     await deps.assertActiveMembership(organizationId, input.actorUserId);
 
+    // MSG-20261002-61 CHANGE B（纵深防御）：transaction-scoped advisory lock，
+    // 锁键稳定绑定 organizationId + feeChainId + settlementId。
+    // 注意：advisory lock 不是 correctness source；数据库部分唯一索引才是最终边界。
+    for (const settlementId of input.settlementIds) {
+      const lockKey = organizationId + ':' + input.feeChainId + ':' + settlementId;
+      await tx.$queryRaw`WITH lock AS (SELECT pg_advisory_xact_lock(hashtext(${lockKey})::bigint)) SELECT true AS acquired`;
+    }
+
     // 同一个 claimItem 至多一条 active（未被 supersede）fee chain —— 防「互不相关 active chain 双计费」
     const activeChain = await tx.feeCalculation.findFirst({
       where: { organizationId, claimItemId: input.claimItemId, supersededByFeeCalculationId: null },
@@ -255,7 +265,8 @@ export async function recordFeeCalculation(
         throw error;
       });
 
-    const fee = await tx.feeCalculation.create({
+    const fee = await tx.feeCalculation
+      .create({
       data: {
         organizationId,
         caseId: null,
@@ -277,30 +288,61 @@ export async function recordFeeCalculation(
         policyRef: computed.policyRef,
       },
       select: { id: true },
-    });
+      })
+      .catch((error: unknown) => {
+        if ((error as { code?: string }).code === 'P2002') {
+          throw new FeeRecordError(
+            'MEMBERSHIP_CHAIN_CONFLICT',
+            'another active fee calculation exists for this claim item',
+          );
+        }
+        throw error;
+      });
+
+    // membership 写入：DB unique violation / chain 触发器 → 稳定领域结果（MSG-20261002-61）
+    const writeMembership = async (data: Record<string, unknown>) => {
+      try {
+        await tx.feeCalculationSettlement.create({ data: data as never });
+      } catch (error) {
+        const code = (error as { code?: string })?.code;
+        const text = String(error);
+        if (
+          code === 'P2002' ||
+          code === '23505' ||
+          text.includes('FEE_CHAIN_SETTLEMENT_ALREADY_CONSUMED') ||
+          text.includes('FeeCalculationSettlement_org_chain_settlement_key') ||
+          text.includes('FeeCalculationSettlement_org_chain_adjustment_key')
+        ) {
+          throw new FeeRecordError(
+            'FEE_MEMBERSHIP_ALREADY_EXISTS',
+            'this settlement is already consumed in the same fee chain',
+          );
+        }
+        if (text.includes('FEE_CHAIN_MISMATCH') || text.includes('FEE_CHAIN_NOT_FOUND')) {
+          throw new FeeRecordError('MEMBERSHIP_CHAIN_CONFLICT', text.slice(0, 200));
+        }
+        throw error;
+      }
+    };
 
     for (const m of memberships) {
-      await tx.feeCalculationSettlement.create({
-        data: {
-          organizationId,
-          feeCalculationId: fee.id,
-          settlementId: m.settlementId,
-          basisRole: 'POSITIVE',
-          amountContribution: m.amount,
-          currency: m.currency,
-        },
+      await writeMembership({
+        organizationId,
+        feeCalculationId: fee.id,
+        settlementId: m.settlementId,
+        basisRole: 'POSITIVE',
+        amountContribution: m.amount,
+        currency: m.currency,
       });
     }
     for (const a of adjustments) {
-      await tx.feeCalculationSettlement.create({
-        data: {
-          organizationId,
-          feeCalculationId: fee.id,
-          adjustmentId: a.settlementId,
-          basisRole: 'NEGATIVE',
-          amountContribution: '-' + a.amount.replace(/^-/, ''),
-          currency: a.currency,
-        },
+      await writeMembership({
+        organizationId,
+        feeCalculationId: fee.id,
+        adjustmentId: a.settlementId,
+        basisRole: 'NEGATIVE',
+        amountContribution: '-' + a.amount.replace(/^-/, ''),
+        currency: a.currency,
       });
     }
 

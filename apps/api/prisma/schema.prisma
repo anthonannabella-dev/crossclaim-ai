@@ -1349,6 +1349,8 @@ model SettlementAdjustment {
 model FeeCalculationSettlement {
   id                 String                 @id @default(uuid())
   organizationId     String
+  /// R46 S4-A（MSG-20261002-61 CHANGE A）：由服务端从父 FeeCalculation.feeChainId 派生；写入后 immutable
+  feeChainId         String?
   feeCalculationId   String
   settlementId       String?
   adjustmentId       String?
@@ -1367,6 +1369,7 @@ model FeeCalculationSettlement {
   @@index([organizationId, feeCalculationId])
   @@index([organizationId, settlementId])
   @@index([organizationId, adjustmentId])
+  @@index([organizationId, feeChainId])
 }
 
 /// R46 S1 —— Fee 作废/调整事实（append-only；MSG-20261002-54 ① / CHANGE C1）
