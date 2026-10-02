@@ -10,7 +10,15 @@
  * 边界：productionCredentials 恒 ABSENT · platformWriteEnabled=false · transportEnabled=false · TRANSPORT=false。
  */
 
-import { resolveCarrierConnector, type CarrierAuthModel, type CarrierProvider } from './connector-capability';
+import {
+  assertCarrierAuthTruth,
+  resolveCarrierConnector,
+  type CarrierAccountIdentityStrategy,
+  type CarrierAuthFlow,
+  type CarrierAuthFlowSelectionReason,
+  type CarrierAuthModel,
+  type CarrierProvider,
+} from './connector-capability';
 
 export type { CarrierProvider } from './connector-capability';
 
@@ -41,6 +49,12 @@ export interface CarrierAuthContract {
   provider: CarrierProvider;
   /** 与 connector-capability 的 provider 事实同源（UPS = OAuth Auth-Code；FedEx = Integrator Credential Registration）。 */
   authKind: CarrierAuthModel;
+  /** MSG-106 ⑪⑫：provider 支持的授权流程 ≠ 唯一流程；selectedAuthFlow 是 CrossClaim 的 integration 选择。 */
+  supportedAuthFlows: readonly CarrierAuthFlow[];
+  selectedAuthFlow: CarrierAuthFlow;
+  authFlowSelectionReason: CarrierAuthFlowSelectionReason;
+  /** MSG-106 ⑮–⑱：账号身份获取策略（UPS = discovery；FedEx = provider-verified registration）。 */
+  accountIdentityStrategy: CarrierAccountIdentityStrategy;
   authorizationEndpoint: CarrierEndpointAbstraction;
   tokenEndpoint: CarrierEndpointAbstraction;
   accountDiscoveryEndpoint: CarrierEndpointAbstraction;
@@ -130,9 +144,14 @@ function buildCarrierAuthContract(provider: CarrierProvider): CarrierAuthContrac
   const descriptor = resolveCarrierConnector(provider);
   if (!descriptor) throw new CarrierAuthContractError('CARRIER_PROVIDER_UNKNOWN', provider);
   const specifics = CARRIER_PROVIDER_SPECIFICS[provider];
+  assertCarrierAuthTruth(descriptor);
   return {
     provider,
     authKind: descriptor.authModel,
+    supportedAuthFlows: descriptor.supportedAuthFlows,
+    selectedAuthFlow: descriptor.selectedAuthFlow,
+    authFlowSelectionReason: descriptor.authFlowSelectionReason,
+    accountIdentityStrategy: descriptor.accountIdentityStrategy,
     authorizationEndpoint: { abstraction: specifics.authorization, configuredBy: 'HOST', value: null },
     tokenEndpoint: { abstraction: specifics.token, configuredBy: 'HOST', value: null },
     accountDiscoveryEndpoint: { abstraction: specifics.discovery, configuredBy: 'HOST', value: null },
@@ -189,6 +208,11 @@ export function assertCarrierReadOnlyScopeIntents(provider: string, intents: rea
 export interface CarrierReadinessView {
   provider: CarrierProvider;
   authKind: CarrierAuthModel;
+  /** MSG-106 ⑳：readiness 必须暴露 strategy truth（authFlows / selectedAuthFlow / accountIdentityStrategy）。 */
+  authFlows: readonly CarrierAuthFlow[];
+  selectedAuthFlow: CarrierAuthFlow;
+  authFlowSelectionReason: CarrierAuthFlowSelectionReason;
+  accountIdentityStrategy: CarrierAccountIdentityStrategy;
   authContractReady: true;
   accountDiscoveryContractReady: true;
   authImplemented: false;
@@ -210,6 +234,10 @@ export function projectCarrierReadiness(): CarrierReadinessView[] {
   return CARRIER_AUTH_CONTRACTS.map((contract) => ({
     provider: contract.provider,
     authKind: contract.authKind,
+    authFlows: contract.supportedAuthFlows,
+    selectedAuthFlow: contract.selectedAuthFlow,
+    authFlowSelectionReason: contract.authFlowSelectionReason,
+    accountIdentityStrategy: contract.accountIdentityStrategy,
     authContractReady: true,
     accountDiscoveryContractReady: true,
     authImplemented: false,

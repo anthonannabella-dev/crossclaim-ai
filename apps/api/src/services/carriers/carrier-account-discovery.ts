@@ -1,20 +1,23 @@
 /**
- * CARRIER QUEUE #3（MSG-20261003-105 ⑰–㉕）— UPS / FedEx 账号发现**内部契约**（read-only first）。
+ * CARRIER QUEUE #3 / #3 FINAL（MSG-20261003-105 ⑰–㉕ + MSG-20261003-106 ⑬–㉓）
+ * — UPS / FedEx 账号身份获取**内部契约**（read-only first，provider-specific strategy）。
  * ---------------------------------------------------------------
- * 顺序（任何一步失败都 fail-closed，且不产生任何业务事实）：
- *   provider 解析（未知 carrier 拒绝）
- *     → 输入形状校验（**不接受**明文凭据；未声明字段拒绝）
- *     → credentialRef 必需（只允许引用，不接受取值）
- *     → credential lineage 登记（organizationId + actorUserId + provider + credentialRef；跨租户拒绝）
- *     → 调 discovery port（本批只有 sandbox / fixture 实现，**无任何真实网络请求**）
- *     → 账号形状校验（provider 必须一致、externalAccountId 非空、不得携带任何凭据字段）
- *     → 按 candidateIdentity(provider + externalAccountId) 去重（幂等）
- *     → 0 / 1 / 多账号分支（多账号必须显式选择，**禁止自动绑定**）
+ * 身份策略（MSG-106 ⑮–⑱）：
+ *   · UPS   = PROVIDER_DISCOVERY            —— 一个 UPS Profile 可关联多个 account numbers，0 / 1 / 多语义适用。
+ *   · FedEx = PROVIDER_VERIFIED_REGISTRATION —— 客户提交候选账号 + 姓名 + 地址 → provider 注册/验证 → 签发凭据
+ *                                              → **才**成为 provider-verified identity。
+ * **不得**把 FedEx 塞进 discovery 模型，也不得声称「拿 credential 自动列出客户全部账号」。
+ * ---------------------------------------------------------------
+ * 通用顺序（任何一步失败都 fail-closed，且不产生任何业务事实）：
+ *   provider 解析 → 输入形状（**不接受**明文凭据 / 未声明字段）→ tenant 上下文
+ *     → 策略守卫（discovery 只服务 PROVIDER_DISCOVERY；registration 只服务 PROVIDER_VERIFIED_REGISTRATION）
+ *     → 身份形状校验（provider 一致 / externalAccountId 非空 / identitySource 显式且与策略一致 / 无凭据字段）
+ *     → candidateIdentity(provider + externalAccountId) 去重（幂等）→ 0 / 1 / 多分支（多账号必须显式选择）
  * 硬约束：bindExecuted=false · transportEnabled=false · platformWriteEnabled=false · productionCredentials=ABSENT。
- * 用户输入的账号号永远只是 hint，**不得**成为 verified identity。
+ * 用户输入的账号号永远只是 candidate identity input，**不得**成为 trusted identity。
  */
 
-import type { CarrierProvider } from './connector-capability';
+import type { CarrierAccountIdentityStrategy, CarrierProvider } from './connector-capability';
 import { resolveCarrierAuthContract } from './carrier-auth-contract';
 
 export const CARRIER_ACCOUNT_TYPES = ['SHIPPER', 'PAYER', 'THIRD_PARTY', 'UNKNOWN'] as const;
@@ -23,11 +26,15 @@ export type CarrierAccountType = (typeof CARRIER_ACCOUNT_TYPES)[number];
 export const CARRIER_ACCOUNT_STATUSES = ['ACTIVE', 'INACTIVE', 'SUSPENDED'] as const;
 export type CarrierAccountStatus = (typeof CARRIER_ACCOUNT_STATUSES)[number];
 
-/** carrier 账号身份版本默认值（真实接入时由 provider discovery 返回）。 */
+/** carrier 账号身份版本默认值（真实接入时由 provider 返回）。 */
 export const CARRIER_IDENTITY_VERSION = 'carrier-identity-v1';
 
-/** provider discovery 返回的账号 —— identity 只能来自这里。 */
-export interface CarrierDiscoveredAccount {
+/** MSG-106 ⑲：身份来源必须显式返回（策略中立，不把 FedEx 硬塞进 discovery 模型）。 */
+export const CARRIER_ACCOUNT_IDENTITY_SOURCES = ['PROVIDER_DISCOVERY', 'PROVIDER_VERIFIED_REGISTRATION'] as const;
+export type CarrierAccountIdentitySource = (typeof CARRIER_ACCOUNT_IDENTITY_SOURCES)[number];
+
+/** provider 已验证账号身份（策略中立命名，MSG-106 ⑲）。 */
+export interface CarrierVerifiedAccountIdentity {
   provider: CarrierProvider;
   externalAccountId: string;
   displayName: string;
@@ -35,11 +42,15 @@ export interface CarrierDiscoveredAccount {
   countryOrRegion: string;
   status: CarrierAccountStatus;
   identityVersion: string;
+  identitySource: CarrierAccountIdentitySource;
 }
 
+/** @deprecated 使用策略中立的 CarrierVerifiedAccountIdentity。 */
+export type CarrierDiscoveredAccount = CarrierVerifiedAccountIdentity;
+
 /**
- * 账号发现端口：真实实现属 HOLD_EXTERNAL（需要 UPS / FedEx developer credentials）。
- * 端口只接受 credentialRef —— 明文 token / client secret 永不进入本接口。
+ * 账号发现端口（**仅** PROVIDER_DISCOVERY 策略：UPS）。
+ * 真实实现属 HOLD_EXTERNAL；只接受 credentialRef，明文 token / client secret 永不进入本接口。
  */
 export interface CarrierAccountDiscoveryPort {
   discoverAccounts(input: {
@@ -47,7 +58,35 @@ export interface CarrierAccountDiscoveryPort {
     credentialRef: string;
     organizationId: string;
     actorUserId: string;
-  }): Promise<readonly CarrierDiscoveredAccount[]>;
+  }): Promise<readonly CarrierVerifiedAccountIdentity[]>;
+}
+
+/** MSG-106 ⑭：客户提交的候选账号 —— 只是 candidate identity input，不是 trusted identity。 */
+export interface CarrierAccountRegistrationCandidate {
+  externalAccountId: string;
+  customerName: string;
+  customerAddress: string;
+}
+
+/** provider 注册/验证结果（credentialRef 由 provider 签发；明文永不出现）。 */
+export interface CarrierRegistrationResult {
+  verified: boolean;
+  credentialRef: string | null;
+  identity: CarrierVerifiedAccountIdentity | null;
+  registrationRef: string;
+}
+
+/**
+ * 账号注册/验证端口（**仅** PROVIDER_VERIFIED_REGISTRATION 策略：FedEx）。
+ * 真实实现属 HOLD_EXTERNAL（需 FedEx Credential Registration 资质）。
+ */
+export interface CarrierAccountRegistrationPort {
+  registerAccount(input: {
+    provider: CarrierProvider;
+    organizationId: string;
+    actorUserId: string;
+    candidate: CarrierAccountRegistrationCandidate;
+  }): Promise<CarrierRegistrationResult>;
 }
 
 export type CarrierDiscoveryFailureCode =
@@ -56,9 +95,15 @@ export type CarrierDiscoveryFailureCode =
   | 'UNSUPPORTED_INPUT'
   | 'CREDENTIAL_REF_REQUIRED'
   | 'TENANT_CONTEXT_REQUIRED'
+  | 'IDENTITY_STRATEGY_NOT_DISCOVERY'
+  | 'IDENTITY_STRATEGY_NOT_REGISTRATION'
+  | 'CANDIDATE_EVIDENCE_REQUIRED'
   | 'CREDENTIAL_LINEAGE_CONFLICT'
   | 'DISCOVERY_FAILED'
-  | 'DISCOVERED_ACCOUNT_INVALID';
+  | 'REGISTRATION_FAILED'
+  | 'REGISTRATION_NOT_VERIFIED'
+  | 'DISCOVERED_ACCOUNT_INVALID'
+  | 'IDENTITY_INVALID';
 
 /** credentialRef 的租户血脉：organizationId + actorUserId + provider + credentialRef。 */
 export interface CarrierCredentialLineage {
@@ -78,7 +123,7 @@ export interface CarrierCredentialLineageStore {
 
 /**
  * 进程内血脉登记表：同一 credentialRef 首次登记决定归属；
- * 后续若出现其它 organization（跨租户）或其它 provider，一律拒绝复用。
+ * 后续若出现其它 organization（跨租户）或其它 provider，一律拒绝复用（MSG-106 ㉑ 保持）。
  */
 export function createInMemoryCarrierCredentialLineageStore(): CarrierCredentialLineageStore {
   const registry = new Map<string, CarrierCredentialLineage>();
@@ -110,8 +155,8 @@ export interface CarrierDiscoveryCandidate {
   countryOrRegion: string;
   status: CarrierAccountStatus;
   identityVersion: string;
-  identitySource: 'PROVIDER_DISCOVERY';
-  /** 幂等键：provider + externalAccountId（重复 discovery 必须映射到同一候选身份）。 */
+  identitySource: CarrierAccountIdentitySource;
+  /** 幂等键：provider + externalAccountId（重复 discovery / registration 必须映射到同一候选身份）。 */
   candidateIdentity: string;
 }
 
@@ -122,6 +167,9 @@ export interface CarrierBindPlan {
   actorUserId: string;
   credentialRef: string;
   credentialLineage: CarrierCredentialLineage;
+  identityStrategy: CarrierAccountIdentityStrategy;
+  /** FedEx 注册事务 lineage（discovery 为 null）。 */
+  registrationRef: string | null;
   candidates: readonly CarrierDiscoveryCandidate[];
   bindExecuted: false;
   transportEnabled: false;
@@ -181,51 +229,154 @@ export interface CarrierDiscoveryInput {
   hint?: { externalAccountId?: string | null } | null;
 }
 
-const ALLOWED_INPUT_KEYS = new Set(['provider', 'credentialRef', 'organizationId', 'actorUserId', 'hint']);
-const CREDENTIAL_MATERIAL_KEY = /(token|secret|password|passwd|apikey|api[-_]?key|client[-_]?id|client[-_]?secret|credential)/i;
-const DISCOVERED_ACCOUNT_KEYS = new Set(['provider', 'externalAccountId', 'displayName', 'accountType', 'countryOrRegion', 'status', 'identityVersion']);
+export interface CarrierAccountRegistrationDeps {
+  port: CarrierAccountRegistrationPort;
+  lineage?: CarrierCredentialLineageStore;
+}
 
-/** 幂等候选身份：provider + externalAccountId（与 credentialRef / 租户无关）。 */
+export interface CarrierAccountRegistrationInput {
+  provider: string;
+  organizationId?: string | null;
+  actorUserId?: string | null;
+  /** 客户提交的候选账号 + 姓名 + 地址（缺任一项即 fail-closed）。 */
+  candidate?: Partial<CarrierAccountRegistrationCandidate> | null;
+}
+
+const ALLOWED_INPUT_KEYS = new Set(['provider', 'credentialRef', 'organizationId', 'actorUserId', 'hint']);
+const ALLOWED_REGISTRATION_INPUT_KEYS = new Set(['provider', 'organizationId', 'actorUserId', 'candidate']);
+const ALLOWED_CANDIDATE_KEYS = new Set(['externalAccountId', 'customerName', 'customerAddress']);
+const CREDENTIAL_MATERIAL_KEY = /(token|secret|password|passwd|apikey|api[-_]?key|client[-_]?id|client[-_]?secret|credential)/i;
+const IDENTITY_KEYS = new Set([
+  'provider',
+  'externalAccountId',
+  'displayName',
+  'accountType',
+  'countryOrRegion',
+  'status',
+  'identityVersion',
+  'identitySource',
+]);
+
+/** 幂等候选身份：provider + externalAccountId（与 credentialRef / 租户 / 策略无关）。 */
 export function carrierCandidateIdentity(provider: CarrierProvider, externalAccountId: string): string {
   return 'carrier:' + provider + ':' + externalAccountId.trim();
 }
 
-function scanInputShape(input: CarrierDiscoveryInput): CarrierDiscoveryFailureCode | null {
-  for (const key of Object.keys(input as unknown as Record<string, unknown>)) {
-    if (ALLOWED_INPUT_KEYS.has(key)) continue;
+function scanKeys(source: unknown, allowed: Set<string>): CarrierDiscoveryFailureCode | null {
+  if (typeof source !== 'object' || source === null) return 'UNSUPPORTED_INPUT';
+  for (const key of Object.keys(source as Record<string, unknown>)) {
+    if (allowed.has(key)) continue;
     return CREDENTIAL_MATERIAL_KEY.test(key) ? 'PLAINTEXT_CREDENTIAL_NOT_SUPPORTED' : 'UNSUPPORTED_INPUT';
   }
   return null;
 }
 
-function toCandidate(provider: CarrierProvider, raw: unknown): CarrierDiscoveryCandidate | null {
+function toCandidate(
+  provider: CarrierProvider,
+  raw: unknown,
+  expectedSource: CarrierAccountIdentitySource,
+): CarrierDiscoveryCandidate | null {
   if (typeof raw !== 'object' || raw === null) return null;
-  const account = raw as Record<string, unknown>;
-  for (const key of Object.keys(account)) {
+  const identity = raw as Record<string, unknown>;
+  for (const key of Object.keys(identity)) {
     // 任何额外字段（尤其 access token / client secret）一律拒绝：凭据绝不进入本层。
-    if (!DISCOVERED_ACCOUNT_KEYS.has(key)) return null;
+    if (!IDENTITY_KEYS.has(key)) return null;
   }
-  if (account.provider !== provider) return null;
-  const externalAccountId = typeof account.externalAccountId === 'string' ? account.externalAccountId.trim() : '';
+  if (identity.provider !== provider) return null;
+  if (identity.identitySource !== expectedSource) return null;
+  const externalAccountId = typeof identity.externalAccountId === 'string' ? identity.externalAccountId.trim() : '';
   if (externalAccountId === '') return null;
-  if (typeof account.accountType !== 'string' || !CARRIER_ACCOUNT_TYPES.includes(account.accountType as CarrierAccountType)) return null;
-  if (typeof account.status !== 'string' || !CARRIER_ACCOUNT_STATUSES.includes(account.status as CarrierAccountStatus)) return null;
-  const displayName = typeof account.displayName === 'string' && account.displayName.trim() !== '' ? account.displayName.trim() : externalAccountId;
-  const countryOrRegion = typeof account.countryOrRegion === 'string' && account.countryOrRegion.trim() !== '' ? account.countryOrRegion.trim() : 'UNKNOWN';
-  const identityVersion = typeof account.identityVersion === 'string' && account.identityVersion.trim() !== '' ? account.identityVersion.trim() : CARRIER_IDENTITY_VERSION;
+  if (typeof identity.accountType !== 'string' || !CARRIER_ACCOUNT_TYPES.includes(identity.accountType as CarrierAccountType)) return null;
+  if (typeof identity.status !== 'string' || !CARRIER_ACCOUNT_STATUSES.includes(identity.status as CarrierAccountStatus)) return null;
+  const displayName = typeof identity.displayName === 'string' && identity.displayName.trim() !== '' ? identity.displayName.trim() : externalAccountId;
+  const countryOrRegion = typeof identity.countryOrRegion === 'string' && identity.countryOrRegion.trim() !== '' ? identity.countryOrRegion.trim() : 'UNKNOWN';
+  const identityVersion = typeof identity.identityVersion === 'string' && identity.identityVersion.trim() !== '' ? identity.identityVersion.trim() : CARRIER_IDENTITY_VERSION;
   return {
     provider,
     externalAccountId,
     displayName,
-    accountType: account.accountType as CarrierAccountType,
+    accountType: identity.accountType as CarrierAccountType,
     countryOrRegion,
-    status: account.status as CarrierAccountStatus,
+    status: identity.status as CarrierAccountStatus,
     identityVersion,
-    identitySource: 'PROVIDER_DISCOVERY',
+    identitySource: expectedSource,
     candidateIdentity: carrierCandidateIdentity(provider, externalAccountId),
   };
 }
 
+function dedupeCandidates(candidates: readonly CarrierDiscoveryCandidate[]): CarrierDiscoveryCandidate[] {
+  const seen = new Set<string>();
+  const unique: CarrierDiscoveryCandidate[] = [];
+  for (const candidate of candidates) {
+    if (seen.has(candidate.candidateIdentity)) continue;
+    seen.add(candidate.candidateIdentity);
+    unique.push(candidate);
+  }
+  unique.sort((left, right) =>
+    left.candidateIdentity < right.candidateIdentity ? -1 : left.candidateIdentity > right.candidateIdentity ? 1 : 0,
+  );
+  return unique;
+}
+
+function tenantContext(input: { organizationId?: string | null; actorUserId?: string | null }): {
+  organizationId: string;
+  actorUserId: string;
+} | null {
+  const organizationId = typeof input.organizationId === 'string' ? input.organizationId.trim() : '';
+  const actorUserId = typeof input.actorUserId === 'string' ? input.actorUserId.trim() : '';
+  if (organizationId === '' || actorUserId === '') return null;
+  return { organizationId, actorUserId };
+}
+
+function buildPlan(input: {
+  provider: CarrierProvider;
+  organizationId: string;
+  actorUserId: string;
+  credentialRef: string;
+  strategy: CarrierAccountIdentityStrategy;
+  registrationRef: string | null;
+  candidate: CarrierDiscoveryCandidate;
+}): CarrierBindPlan {
+  return {
+    provider: input.provider,
+    organizationId: input.organizationId,
+    actorUserId: input.actorUserId,
+    credentialRef: input.credentialRef,
+    credentialLineage: {
+      provider: input.provider,
+      organizationId: input.organizationId,
+      actorUserId: input.actorUserId,
+      credentialRef: input.credentialRef,
+    },
+    identityStrategy: input.strategy,
+    registrationRef: input.registrationRef,
+    candidates: [input.candidate],
+    bindExecuted: false,
+    transportEnabled: false,
+    platformWriteEnabled: false,
+    productionCredentials: 'ABSENT',
+    requiredNextStep: 'VERIFIED_BIND_REQUIRED_EXTERNAL_GATE',
+  };
+}
+
+function buildPlanOutcome(plan: CarrierBindPlan, candidates: readonly CarrierDiscoveryCandidate[]): CarrierDiscoveryOutcome {
+  return {
+    ok: true,
+    status: 'CANDIDATE_BIND_PLAN',
+    provider: plan.provider,
+    candidates,
+    plan,
+    identityHintAccepted: false,
+    transportEnabled: false,
+    platformWriteEnabled: false,
+    productionCredentials: 'ABSENT',
+  };
+}
+
+/**
+ * 账号发现（**仅** PROVIDER_DISCOVERY 策略）：UPS 一个 profile 可关联多个 account numbers。
+ * 0 → NO_ACCOUNT_DISCOVERED；1 → CANDIDATE_BIND_PLAN；多 → EXPLICIT_SELECTION_REQUIRED（禁止自动绑定）。
+ */
 export async function discoverCarrierAccounts(
   deps: CarrierDiscoveryDeps,
   input: CarrierDiscoveryInput,
@@ -234,85 +385,192 @@ export async function discoverCarrierAccounts(
   if (!contract) return { ok: false, reason: 'UNKNOWN_CARRIER' };
   const provider = contract.provider;
 
-  const shapeFailure = scanInputShape(input);
+  const shapeFailure = scanKeys(input, ALLOWED_INPUT_KEYS);
   if (shapeFailure) return { ok: false, reason: shapeFailure };
 
   const credentialRef = typeof input.credentialRef === 'string' ? input.credentialRef.trim() : '';
   if (credentialRef === '') return { ok: false, reason: 'CREDENTIAL_REF_REQUIRED' };
 
-  const organizationId = typeof input.organizationId === 'string' ? input.organizationId.trim() : '';
-  const actorUserId = typeof input.actorUserId === 'string' ? input.actorUserId.trim() : '';
-  if (organizationId === '' || actorUserId === '') return { ok: false, reason: 'TENANT_CONTEXT_REQUIRED' };
+  const tenant = tenantContext(input);
+  if (!tenant) return { ok: false, reason: 'TENANT_CONTEXT_REQUIRED' };
+
+  // MSG-106 ⑬⑮⑯：discovery 只服务 PROVIDER_DISCOVERY（UPS）；FedEx 不得被塞进 discovery 模型。
+  if (contract.accountIdentityStrategy !== 'PROVIDER_DISCOVERY') {
+    return { ok: false, reason: 'IDENTITY_STRATEGY_NOT_DISCOVERY' };
+  }
 
   if (deps.lineage) {
-    const registration = deps.lineage.register({ provider, organizationId, actorUserId, credentialRef });
+    const registration = deps.lineage.register({ provider, ...tenant, credentialRef });
     if (!registration.ok) return { ok: false, reason: 'CREDENTIAL_LINEAGE_CONFLICT' };
   }
 
   let discovered: readonly unknown[];
   try {
-    discovered = await deps.port.discoverAccounts({ provider, credentialRef, organizationId, actorUserId });
+    discovered = await deps.port.discoverAccounts({ provider, credentialRef, ...tenant });
   } catch {
     return { ok: false, reason: 'DISCOVERY_FAILED' };
   }
   if (!Array.isArray(discovered)) return { ok: false, reason: 'DISCOVERY_FAILED' };
 
   const candidates: CarrierDiscoveryCandidate[] = [];
-  const seen = new Set<string>();
-  for (const account of discovered) {
-    const candidate = toCandidate(provider, account);
+  for (const identity of discovered) {
+    const candidate = toCandidate(provider, identity, 'PROVIDER_DISCOVERY');
     if (!candidate) return { ok: false, reason: 'DISCOVERED_ACCOUNT_INVALID' };
-    if (seen.has(candidate.candidateIdentity)) continue;
-    seen.add(candidate.candidateIdentity);
     candidates.push(candidate);
   }
-  candidates.sort((left, right) =>
-    left.candidateIdentity < right.candidateIdentity ? -1 : left.candidateIdentity > right.candidateIdentity ? 1 : 0,
-  );
+  const unique = dedupeCandidates(candidates);
 
-  const common = {
-    provider,
-    identityHintAccepted: false,
-    transportEnabled: false,
-    platformWriteEnabled: false,
-    productionCredentials: 'ABSENT',
-  } as const;
-
-  if (candidates.length === 0) {
-    return { ok: true, status: 'NO_ACCOUNT_DISCOVERED', candidates: [], plan: null, ...common };
-  }
-  if (candidates.length === 1) {
-    const plan: CarrierBindPlan = {
+  if (unique.length === 0) {
+    return {
+      ok: true,
+      status: 'NO_ACCOUNT_DISCOVERED',
       provider,
-      organizationId,
-      actorUserId,
-      credentialRef,
-      credentialLineage: { provider, organizationId, actorUserId, credentialRef },
-      candidates: [candidates[0]],
-      bindExecuted: false,
+      candidates: [],
+      plan: null,
+      identityHintAccepted: false,
       transportEnabled: false,
       platformWriteEnabled: false,
       productionCredentials: 'ABSENT',
-      requiredNextStep: 'VERIFIED_BIND_REQUIRED_EXTERNAL_GATE',
     };
-    return { ok: true, status: 'CANDIDATE_BIND_PLAN', candidates, plan, ...common };
   }
-  // 多个账号：必须显式选择；hint 不参与选择，也绝不自动绑定。
-  return { ok: true, status: 'EXPLICIT_SELECTION_REQUIRED', candidates, plan: null, ...common };
+  if (unique.length > 1) {
+    // 多个账号：必须显式选择；hint 不参与选择，也绝不自动绑定。
+    return {
+      ok: true,
+      status: 'EXPLICIT_SELECTION_REQUIRED',
+      provider,
+      candidates: unique,
+      plan: null,
+      identityHintAccepted: false,
+      transportEnabled: false,
+      platformWriteEnabled: false,
+      productionCredentials: 'ABSENT',
+    };
+  }
+  const plan = buildPlan({
+    provider,
+    ...tenant,
+    credentialRef,
+    strategy: 'PROVIDER_DISCOVERY',
+    registrationRef: null,
+    candidate: unique[0],
+  });
+  return buildPlanOutcome(plan, unique);
 }
 
 /**
- * 测试 / 本地 fixture port：**不发起任何网络请求**，只按注入的 fixture 返回。
+ * 账号身份注册/验证（**仅** PROVIDER_VERIFIED_REGISTRATION 策略）：FedEx。
+ * 客户提交候选账号 + 姓名 + 地址 → provider 注册/验证 → 签发凭据 → 才成为 verified identity。
+ * 任意一步缺失或未通过：不产生 candidate bind plan。
+ */
+export async function registerCarrierAccountIdentity(
+  deps: CarrierAccountRegistrationDeps,
+  input: CarrierAccountRegistrationInput,
+): Promise<CarrierDiscoveryOutcome> {
+  const contract = resolveCarrierAuthContract(input.provider);
+  if (!contract) return { ok: false, reason: 'UNKNOWN_CARRIER' };
+  const provider = contract.provider;
+
+  const shapeFailure = scanKeys(input, ALLOWED_REGISTRATION_INPUT_KEYS);
+  if (shapeFailure) return { ok: false, reason: shapeFailure };
+  if (input.candidate !== undefined && input.candidate !== null) {
+    const candidateShapeFailure = scanKeys(input.candidate, ALLOWED_CANDIDATE_KEYS);
+    if (candidateShapeFailure) return { ok: false, reason: candidateShapeFailure };
+  }
+
+  const tenant = tenantContext(input);
+  if (!tenant) return { ok: false, reason: 'TENANT_CONTEXT_REQUIRED' };
+
+  if (contract.accountIdentityStrategy !== 'PROVIDER_VERIFIED_REGISTRATION') {
+    return { ok: false, reason: 'IDENTITY_STRATEGY_NOT_REGISTRATION' };
+  }
+
+  const candidate = input.candidate ?? {};
+  const externalAccountId = typeof candidate.externalAccountId === 'string' ? candidate.externalAccountId.trim() : '';
+  const customerName = typeof candidate.customerName === 'string' ? candidate.customerName.trim() : '';
+  const customerAddress = typeof candidate.customerAddress === 'string' ? candidate.customerAddress.trim() : '';
+  if (externalAccountId === '' || customerName === '' || customerAddress === '') {
+    // MSG-106 ⑭：裸账号号（缺姓名/地址证据）不是 verified identity。
+    return { ok: false, reason: 'CANDIDATE_EVIDENCE_REQUIRED' };
+  }
+
+  let registered: Awaited<ReturnType<CarrierAccountRegistrationPort["registerAccount"]>>;
+  try {
+    registered = await deps.port.registerAccount({
+      provider,
+      ...tenant,
+      candidate: { externalAccountId, customerName, customerAddress },
+    });
+  } catch {
+    return { ok: false, reason: 'REGISTRATION_FAILED' };
+  }
+  if (!registered || !registered.verified || !registered.identity || !registered.credentialRef) {
+    return { ok: false, reason: 'REGISTRATION_NOT_VERIFIED' };
+  }
+
+  const verified = toCandidate(provider, registered.identity, 'PROVIDER_VERIFIED_REGISTRATION');
+  if (!verified) return { ok: false, reason: 'IDENTITY_INVALID' };
+
+  if (deps.lineage) {
+    const lineage = deps.lineage.register({ provider, ...tenant, credentialRef: registered.credentialRef });
+    if (!lineage.ok) return { ok: false, reason: 'CREDENTIAL_LINEAGE_CONFLICT' };
+  }
+
+  const plan = buildPlan({
+    provider,
+    ...tenant,
+    credentialRef: registered.credentialRef,
+    strategy: 'PROVIDER_VERIFIED_REGISTRATION',
+    registrationRef: registered.registrationRef,
+    candidate: verified,
+  });
+  return buildPlanOutcome(plan, [verified]);
+}
+
+/**
+ * 测试 / 本地 fixture：discovery port（**不发起任何网络请求**）。
  * 未登记的 credentialRef → 空数组（由编排层映射为 NO_ACCOUNT_DISCOVERED）。
  */
 export function createSandboxCarrierAccountDiscoveryPort(
-  fixtures: Partial<Record<CarrierProvider, Readonly<Record<string, readonly CarrierDiscoveredAccount[]>>>> = {},
+  fixtures: Partial<Record<CarrierProvider, Readonly<Record<string, readonly CarrierVerifiedAccountIdentity[]>>>> = {},
 ): CarrierAccountDiscoveryPort {
   return {
     async discoverAccounts(input) {
       const byCredentialRef = fixtures[input.provider];
       if (!byCredentialRef) return [];
       return byCredentialRef[input.credentialRef] ?? [];
+    },
+  };
+}
+
+/**
+ * 测试 / 本地 fixture：registration port（**不发起任何网络请求**）。
+ * 只有登记在 verifiedAccounts 中的候选账号才会「通过 provider 验证」并拿到确定性 credentialRef。
+ */
+export function createSandboxCarrierAccountRegistrationPort(
+  verifiedAccounts: readonly CarrierVerifiedAccountIdentity[] = [],
+): CarrierAccountRegistrationPort {
+  return {
+    async registerAccount(input) {
+      const found = verifiedAccounts.find(
+        (account) =>
+          account.provider === input.provider &&
+          account.externalAccountId === input.candidate.externalAccountId,
+      );
+      if (!found) {
+        return {
+          verified: false,
+          credentialRef: null,
+          identity: null,
+          registrationRef: 'sandbox-registration:' + input.candidate.externalAccountId + ':rejected',
+        };
+      }
+      return {
+        verified: true,
+        credentialRef: 'SANDBOX:' + input.provider + ':registration:' + found.externalAccountId.toLowerCase(),
+        identity: { ...found, identitySource: 'PROVIDER_VERIFIED_REGISTRATION' },
+        registrationRef: 'sandbox-registration:' + found.externalAccountId,
+      };
     },
   };
 }

@@ -39,6 +39,26 @@ export type SubmissionMode = (typeof SUBMISSION_MODES)[number];
 
 /** UPS = OAuth Auth-Code；FedEx = Integrator Provider / Credential Registration（两者**不同**）。 */
 export type CarrierAuthModel = 'OAUTH_AUTH_CODE' | 'INTEGRATOR_CREDENTIAL_REGISTRATION';
+
+/**
+ * CARRIER QUEUE #3 FINAL（MSG-20261003-106 ⑪⑫）：provider **支持**的授权流程 ≠ CrossClaim 选定的 integration flow。
+ * UPS 官方同时存在 Client Credentials Flow 与 Authorization Code Flow；把 UPS 写成「只有 OAUTH_AUTH_CODE」是过强表达。
+ */
+export const CARRIER_AUTH_FLOWS = ['CLIENT_CREDENTIALS', 'AUTHORIZATION_CODE', 'INTEGRATOR_CREDENTIAL_REGISTRATION'] as const;
+export type CarrierAuthFlow = (typeof CARRIER_AUTH_FLOWS)[number];
+
+/** 选定该 integration flow 的原因（第三方客户授权 vs provider integrator 注册）。 */
+export const CARRIER_AUTH_FLOW_SELECTION_REASONS = ['THIRD_PARTY_CUSTOMER_AUTHORIZATION', 'PROVIDER_INTEGRATOR_REGISTRATION'] as const;
+export type CarrierAuthFlowSelectionReason = (typeof CARRIER_AUTH_FLOW_SELECTION_REASONS)[number];
+
+/**
+ * CARRIER QUEUE #3 FINAL（MSG-20261003-106 ⑮–⑱）：账号身份获取策略按 provider 分别成立。
+ *   PROVIDER_DISCOVERY            —— 一个 profile / credential 可发现多个账号（UPS：Profile 可关联多个 account numbers）。
+ *   PROVIDER_VERIFIED_REGISTRATION —— 客户提交候选账号 + 姓名 + 地址，provider 注册/验证后才签发凭据（FedEx）。
+ * **不得**假定所有 carrier 都能 discover accounts。
+ */
+export const CARRIER_ACCOUNT_IDENTITY_STRATEGIES = ['PROVIDER_DISCOVERY', 'PROVIDER_VERIFIED_REGISTRATION'] as const;
+export type CarrierAccountIdentityStrategy = (typeof CARRIER_ACCOUNT_IDENTITY_STRATEGIES)[number];
 export type CarrierProvider = 'UPS' | 'FEDEX';
 
 /** 能力声明必须区分「provider 支持」与「我们已取证」——「代码支持」不算证据。 */
@@ -50,6 +70,13 @@ export interface CapabilityAudit {
 export interface CarrierConnectorDescriptor {
   provider: CarrierProvider;
   authModel: CarrierAuthModel;
+  /** provider 支持的授权流程集合（不是「只有一种」）。 */
+  supportedAuthFlows: readonly CarrierAuthFlow[];
+  /** CrossClaim 当前选定的 integration flow（selected flow ≠ provider only flow）。 */
+  selectedAuthFlow: CarrierAuthFlow;
+  authFlowSelectionReason: CarrierAuthFlowSelectionReason;
+  /** 账号身份获取策略（UPS = discovery；FedEx = provider-verified registration）。 */
+  accountIdentityStrategy: CarrierAccountIdentityStrategy;
   operations: readonly CarrierConnectorOperation[];
   capabilities: Record<CarrierCapabilityFlag, boolean>;
   capabilityAudit: Record<CarrierCapabilityFlag, CapabilityAudit>;
@@ -81,6 +108,10 @@ export const CARRIER_CONNECTOR_DESCRIPTORS: readonly CarrierConnectorDescriptor[
   {
     provider: 'UPS',
     authModel: 'OAUTH_AUTH_CODE',
+    supportedAuthFlows: ['CLIENT_CREDENTIALS', 'AUTHORIZATION_CODE'],
+    selectedAuthFlow: 'AUTHORIZATION_CODE',
+    authFlowSelectionReason: 'THIRD_PARTY_CUSTOMER_AUTHORIZATION',
+    accountIdentityStrategy: 'PROVIDER_DISCOVERY',
     operations: CARRIER_CONNECTOR_OPERATIONS,
     capabilities: {
       supportsTrackingRead: true,
@@ -107,6 +138,10 @@ export const CARRIER_CONNECTOR_DESCRIPTORS: readonly CarrierConnectorDescriptor[
   {
     provider: 'FEDEX',
     authModel: 'INTEGRATOR_CREDENTIAL_REGISTRATION',
+    supportedAuthFlows: ['INTEGRATOR_CREDENTIAL_REGISTRATION'],
+    selectedAuthFlow: 'INTEGRATOR_CREDENTIAL_REGISTRATION',
+    authFlowSelectionReason: 'PROVIDER_INTEGRATOR_REGISTRATION',
+    accountIdentityStrategy: 'PROVIDER_VERIFIED_REGISTRATION',
     operations: CARRIER_CONNECTOR_OPERATIONS,
     capabilities: {
       supportsTrackingRead: true,
@@ -135,7 +170,8 @@ export type CarrierCapabilityErrorCode =
   | 'CARRIER_PROVIDER_UNKNOWN'
   | 'CAPABILITY_NOT_SUPPORTED'
   | 'SUBMISSION_MODE_NOT_SUPPORTED'
-  | 'DIRECT_CLAIM_SUBMISSION_NOT_AUDITED';
+  | 'DIRECT_CLAIM_SUBMISSION_NOT_AUDITED'
+  | 'CARRIER_AUTH_FLOW_INCONSISTENT';
 
 export class CarrierCapabilityError extends Error {
   constructor(readonly code: CarrierCapabilityErrorCode, readonly detail?: string) {
@@ -201,4 +237,27 @@ export function assertCarrierSubmissionModeAllowed(provider: string, mode: Submi
 /** 当前阶段恒 false（Step 10 独立审计后才可能为 true）。 */
 export function supportsDirectClaimSubmission(provider: string): boolean {
   return negotiateCarrierCapabilities(provider).directSubmissionAllowed;
+}
+
+/** selected integration flow → 既有 authModel 名称（保持既有消费方兼容）。 */
+export function carrierAuthModelForFlow(flow: CarrierAuthFlow): CarrierAuthModel {
+  if (flow === 'CLIENT_CREDENTIALS') return 'OAUTH_AUTH_CODE';
+  if (flow === 'AUTHORIZATION_CODE') return 'OAUTH_AUTH_CODE';
+  return 'INTEGRATOR_CREDENTIAL_REGISTRATION';
+}
+
+/**
+ * 防御式断言：selected flow 必须属于 supported flows，且 authModel 必须与 selected flow 一致。
+ * 防止再次出现「把 provider 支持流程集合错误简化成唯一 authModel」。
+ */
+export function assertCarrierAuthTruth(descriptor: CarrierConnectorDescriptor): void {
+  if (!descriptor.supportedAuthFlows.includes(descriptor.selectedAuthFlow)) {
+    throw new CarrierCapabilityError('CARRIER_AUTH_FLOW_INCONSISTENT', descriptor.provider + ':selected-not-supported');
+  }
+  if (descriptor.authModel !== carrierAuthModelForFlow(descriptor.selectedAuthFlow)) {
+    throw new CarrierCapabilityError('CARRIER_AUTH_FLOW_INCONSISTENT', descriptor.provider + ':authModel-mismatch');
+  }
+  if (!CARRIER_ACCOUNT_IDENTITY_STRATEGIES.includes(descriptor.accountIdentityStrategy)) {
+    throw new CarrierCapabilityError('CARRIER_AUTH_FLOW_INCONSISTENT', descriptor.provider + ':identity-strategy');
+  }
 }

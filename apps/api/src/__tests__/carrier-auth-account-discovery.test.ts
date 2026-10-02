@@ -23,13 +23,16 @@ import {
   carrierCandidateIdentity,
   createInMemoryCarrierCredentialLineageStore,
   createSandboxCarrierAccountDiscoveryPort,
+  createSandboxCarrierAccountRegistrationPort,
   discoverCarrierAccounts,
+  registerCarrierAccountIdentity,
   type CarrierAccountDiscoveryPort,
   type CarrierDiscoveredAccount,
   type CarrierDiscoveryInput,
   type CarrierDiscoveryOutcome,
+  type CarrierVerifiedAccountIdentity,
 } from '../services/carriers/carrier-account-discovery';
-import { resolveCarrierConnector } from '../services/carriers/connector-capability';
+import { assertCarrierAuthTruth, resolveCarrierConnector } from '../services/carriers/connector-capability';
 
 const UPS_ACCOUNT: CarrierDiscoveredAccount = {
   provider: 'UPS',
@@ -39,6 +42,7 @@ const UPS_ACCOUNT: CarrierDiscoveredAccount = {
   countryOrRegion: 'US',
   status: 'ACTIVE',
   identityVersion: 'carrier-identity-v1',
+  identitySource: 'PROVIDER_DISCOVERY',
 };
 
 const FEDEX_ACCOUNT: CarrierDiscoveredAccount = {
@@ -49,6 +53,7 @@ const FEDEX_ACCOUNT: CarrierDiscoveredAccount = {
   countryOrRegion: 'US',
   status: 'ACTIVE',
   identityVersion: 'carrier-identity-v1',
+  identitySource: 'PROVIDER_VERIFIED_REGISTRATION',
 };
 
 function baseInput(overrides: Partial<CarrierDiscoveryInput> = {}): CarrierDiscoveryInput {
@@ -334,8 +339,17 @@ describe('CARRIER QUEUE #3 — discovery result handling（0 / 1 / 多账号 + �
     expect(crossTenant.ok ? null : crossTenant.reason).toBe('CREDENTIAL_LINEAGE_CONFLICT');
     const sameTenant = await discoverCarrierAccounts({ port: spy.port, lineage }, baseInput({ organizationId: 'org-a' }));
     expect(sameTenant.ok).toBe(true);
-    const providerMismatch = await discoverCarrierAccounts({ port: spy.port, lineage }, baseInput({ provider: 'FEDEX' }));
-    expect(providerMismatch.ok ? null : providerMismatch.reason).toBe('CREDENTIAL_LINEAGE_CONFLICT');
+    const directLineage = createInMemoryCarrierCredentialLineageStore();
+    expect(
+      directLineage.register({ provider: 'UPS', organizationId: 'org-a', actorUserId: 'user-a', credentialRef: 'SANDBOX:shared' }).ok,
+    ).toBe(true);
+    const providerMismatch = directLineage.register({
+      provider: 'FEDEX',
+      organizationId: 'org-a',
+      actorUserId: 'user-a',
+      credentialRef: 'SANDBOX:shared',
+    });
+    expect(providerMismatch.ok ? null : providerMismatch.reason).toBe('PROVIDER_MISMATCH');
   });
 
   it('凭据值绝不回显：outcome 只含 credentialRef 引用，不含任何凭据字段；port 只收到引用', async () => {
@@ -351,10 +365,10 @@ describe('CARRIER QUEUE #3 — discovery result handling（0 / 1 / 多账号 + �
   });
 
   it('边界恒关：bindExecuted / platform write / TRANSPORT 恒 false，production credentials 恒 ABSENT', async () => {
-    const spy = spyPort([FEDEX_ACCOUNT]);
+    const spy = spyPort([UPS_ACCOUNT]);
     const outcome = await discoverCarrierAccounts(
       { port: spy.port },
-      baseInput({ provider: 'FEDEX', credentialRef: 'SANDBOX:FEDEX:cred-9' }),
+      baseInput({ provider: 'UPS', credentialRef: 'SANDBOX:UPS:cred-9' }),
     );
     if (!outcome.ok) throw new Error('expected ok');
     expect(outcome.transportEnabled).toBe(false);
@@ -389,6 +403,250 @@ describe('CARRIER QUEUE #3 — discovery result handling（0 / 1 / 多账号 + �
   });
 });
 
+describe('CARRIER QUEUE #3 FINAL — provider-specific auth + account identity strategy', () => {
+  const FEDEX_VERIFIED: CarrierVerifiedAccountIdentity = FEDEX_ACCOUNT;
+
+  it('UPS：selected AUTHORIZATION_CODE 场景 ≠ 唯一支持流程（supportedAuthFlows 含 CLIENT_CREDENTIALS）', () => {
+    const ups = requireCarrierAuthContract('UPS');
+    expect(ups.selectedAuthFlow).toBe('AUTHORIZATION_CODE');
+    expect(ups.authFlowSelectionReason).toBe('THIRD_PARTY_CUSTOMER_AUTHORIZATION');
+    expect([...ups.supportedAuthFlows]).toEqual(['CLIENT_CREDENTIALS', 'AUTHORIZATION_CODE']);
+    expect(ups.supportedAuthFlows.length).toBeGreaterThan(1);
+    expect(ups.authKind).toBe('OAUTH_AUTH_CODE');
+    expect(() => assertCarrierAuthTruth(resolveCarrierConnector('UPS')!)).not.toThrow();
+  });
+
+  it('UPS identity strategy = PROVIDER_DISCOVERY（profile 关联多账号语义继续适用）', () => {
+    expect(requireCarrierAuthContract('UPS').accountIdentityStrategy).toBe('PROVIDER_DISCOVERY');
+    expect(resolveCarrierConnector('UPS')?.accountIdentityStrategy).toBe('PROVIDER_DISCOVERY');
+  });
+
+  it('UPS 多账号 discovery → EXPLICIT_SELECTION_REQUIRED（策略不变）', async () => {
+    const spy = spyPort([UPS_ACCOUNT, { ...UPS_ACCOUNT, externalAccountId: 'UPS-ACCT-2' }]);
+    const outcome = await discoverCarrierAccounts({ port: spy.port }, baseInput());
+    expect(outcome.ok ? outcome.status : null).toBe('EXPLICIT_SELECTION_REQUIRED');
+    expect(outcome.ok ? outcome.plan : null).toBeNull();
+  });
+
+  it('FedEx identity strategy = PROVIDER_VERIFIED_REGISTRATION，不再声称可 discover accounts', () => {
+    const fedex = requireCarrierAuthContract('FEDEX');
+    expect(fedex.accountIdentityStrategy).toBe('PROVIDER_VERIFIED_REGISTRATION');
+    expect(fedex.selectedAuthFlow).toBe('INTEGRATOR_CREDENTIAL_REGISTRATION');
+    expect([...fedex.supportedAuthFlows]).toEqual(['INTEGRATOR_CREDENTIAL_REGISTRATION']);
+    expect(fedex.authFlowSelectionReason).toBe('PROVIDER_INTEGRATOR_REGISTRATION');
+    expect(() => assertCarrierAuthTruth(resolveCarrierConnector('FEDEX')!)).not.toThrow();
+  });
+
+  it('FedEx 裸账号号（缺姓名 / 地址证据）≠ verified identity', async () => {
+    const port = createSandboxCarrierAccountRegistrationPort([FEDEX_VERIFIED]);
+    const base = { provider: 'FEDEX', organizationId: 'org-a', actorUserId: 'user-a' };
+    const bare = await registerCarrierAccountIdentity(
+      { port },
+      { ...base, candidate: { externalAccountId: 'FDX-ACCT-9' } },
+    );
+    expect(bare.ok ? null : bare.reason).toBe('CANDIDATE_EVIDENCE_REQUIRED');
+    const missingAddress = await registerCarrierAccountIdentity(
+      { port },
+      { ...base, candidate: { externalAccountId: 'FDX-ACCT-9', customerName: 'Acme' } },
+    );
+    expect(missingAddress.ok ? null : missingAddress.reason).toBe('CANDIDATE_EVIDENCE_REQUIRED');
+  });
+
+  it('FedEx 注册 / 验证未通过 → 不产生 candidate bind plan', async () => {
+    const port = createSandboxCarrierAccountRegistrationPort([FEDEX_VERIFIED]);
+    const outcome = await registerCarrierAccountIdentity(
+      { port },
+      {
+        provider: 'FEDEX',
+        organizationId: 'org-a',
+        actorUserId: 'user-a',
+        candidate: { externalAccountId: 'FDX-UNKNOWN', customerName: 'Acme', customerAddress: '1 Main St' },
+      },
+    );
+    expect(outcome.ok).toBe(false);
+    expect(outcome.ok ? null : outcome.reason).toBe('REGISTRATION_NOT_VERIFIED');
+  });
+
+  it('FedEx provider-verified registration → verified candidate identity + bind plan（bindExecuted=false）', async () => {
+    const port = createSandboxCarrierAccountRegistrationPort([FEDEX_VERIFIED]);
+    const outcome = await registerCarrierAccountIdentity(
+      { port },
+      {
+        provider: 'FEDEX',
+        organizationId: 'org-a',
+        actorUserId: 'user-a',
+        candidate: { externalAccountId: 'FDX-ACCT-9', customerName: 'Acme', customerAddress: '1 Main St' },
+      },
+    );
+    if (!outcome.ok || outcome.status !== 'CANDIDATE_BIND_PLAN') throw new Error('expected CANDIDATE_BIND_PLAN');
+    expect(outcome.candidates).toHaveLength(1);
+    expect(outcome.candidates[0].identitySource).toBe('PROVIDER_VERIFIED_REGISTRATION');
+    expect(outcome.candidates[0].externalAccountId).toBe('FDX-ACCT-9');
+    expect(outcome.plan.identityStrategy).toBe('PROVIDER_VERIFIED_REGISTRATION');
+    expect(outcome.plan.bindExecuted).toBe(false);
+    expect(outcome.plan.registrationRef).toContain('sandbox-registration:FDX-ACCT-9');
+    expect(outcome.plan.requiredNextStep).toBe('VERIFIED_BIND_REQUIRED_EXTERNAL_GATE');
+  });
+
+  it('FedEx 不需要虚构的 list-accounts 结果：discovery 路径 fail-closed 且 discovery port 未被调用', async () => {
+    const spy = spyPort([FEDEX_VERIFIED]);
+    const outcome = await discoverCarrierAccounts(
+      { port: spy.port },
+      baseInput({ provider: 'FEDEX', credentialRef: 'SANDBOX:FEDEX:cred-9' }),
+    );
+    expect(outcome.ok).toBe(false);
+    expect(outcome.ok ? null : outcome.reason).toBe('IDENTITY_STRATEGY_NOT_DISCOVERY');
+    expect(spy.calls).toHaveLength(0);
+  });
+
+  it('UPS 不会走注册路径：registration 路径 fail-closed', async () => {
+    const port = createSandboxCarrierAccountRegistrationPort([]);
+    const outcome = await registerCarrierAccountIdentity(
+      { port },
+      {
+        provider: 'UPS',
+        organizationId: 'org-a',
+        actorUserId: 'user-a',
+        candidate: { externalAccountId: 'UPS-ACCT-1', customerName: 'Acme', customerAddress: '1 Main St' },
+      },
+    );
+    expect(outcome.ok ? null : outcome.reason).toBe('IDENTITY_STRATEGY_NOT_REGISTRATION');
+  });
+
+  it('identitySource 显式返回（discovery vs registration）', async () => {
+    const discoverySpy = spyPort([UPS_ACCOUNT]);
+    const discovered = await discoverCarrierAccounts({ port: discoverySpy.port }, baseInput());
+    expect(discovered.ok ? discovered.candidates[0].identitySource : null).toBe('PROVIDER_DISCOVERY');
+    const registrationPort = createSandboxCarrierAccountRegistrationPort([FEDEX_VERIFIED]);
+    const registered = await registerCarrierAccountIdentity(
+      { port: registrationPort },
+      {
+        provider: 'FEDEX',
+        organizationId: 'org-a',
+        actorUserId: 'user-a',
+        candidate: { externalAccountId: 'FDX-ACCT-9', customerName: 'Acme', customerAddress: '1 Main St' },
+      },
+    );
+    expect(registered.ok ? registered.candidates[0].identitySource : null).toBe('PROVIDER_VERIFIED_REGISTRATION');
+  });
+
+  it('重复 verified identity 保持幂等（registration 两次 → 同一 candidateIdentity）', async () => {
+    const port = createSandboxCarrierAccountRegistrationPort([FEDEX_VERIFIED]);
+    const input = {
+      provider: 'FEDEX',
+      organizationId: 'org-a',
+      actorUserId: 'user-a',
+      candidate: { externalAccountId: 'FDX-ACCT-9', customerName: 'Acme', customerAddress: '1 Main St' },
+    };
+    const first = await registerCarrierAccountIdentity({ port }, input);
+    const second = await registerCarrierAccountIdentity({ port }, input);
+    const ids = (outcome: CarrierDiscoveryOutcome): string[] =>
+      outcome.ok ? outcome.candidates.map((item) => item.candidateIdentity) : [];
+    expect(ids(first)).toEqual(['carrier:FEDEX:FDX-ACCT-9']);
+    expect(ids(second)).toEqual(ids(first));
+  });
+
+  it('registration lineage 跨租户不可复用（同一 credentialRef 换 organization → CREDENTIAL_LINEAGE_CONFLICT）', async () => {
+    const port = createSandboxCarrierAccountRegistrationPort([FEDEX_VERIFIED]);
+    const lineage = createInMemoryCarrierCredentialLineageStore();
+    const candidate = { externalAccountId: 'FDX-ACCT-9', customerName: 'Acme', customerAddress: '1 Main St' };
+    const first = await registerCarrierAccountIdentity(
+      { port, lineage },
+      { provider: 'FEDEX', organizationId: 'org-a', actorUserId: 'user-a', candidate },
+    );
+    expect(first.ok).toBe(true);
+    const crossTenant = await registerCarrierAccountIdentity(
+      { port, lineage },
+      { provider: 'FEDEX', organizationId: 'org-b', actorUserId: 'user-b', candidate },
+    );
+    expect(crossTenant.ok ? null : crossTenant.reason).toBe('CREDENTIAL_LINEAGE_CONFLICT');
+  });
+
+  it('credentialRef-only boundary 不因 registration 改变（端口不接收明文；无 credentialRef 的结果 → REGISTRATION_NOT_VERIFIED）', async () => {
+    const calls: unknown[] = [];
+    const port = {
+      async registerAccount(input: {
+        provider: string;
+        organizationId: string;
+        actorUserId: string;
+        candidate: { externalAccountId: string; customerName: string; customerAddress: string };
+      }) {
+        calls.push(input);
+        return { verified: true, credentialRef: null, identity: FEDEX_VERIFIED, registrationRef: 'ref-1' };
+      },
+    };
+    const outcome = await registerCarrierAccountIdentity(
+      { port: port as never },
+      {
+        provider: 'FEDEX',
+        organizationId: 'org-a',
+        actorUserId: 'user-a',
+        candidate: { externalAccountId: 'FDX-ACCT-9', customerName: 'Acme', customerAddress: '1 Main St' },
+      },
+    );
+    expect(outcome.ok ? null : outcome.reason).toBe('REGISTRATION_NOT_VERIFIED');
+    expect(Object.keys(calls[0] as object).sort()).toEqual(['actorUserId', 'candidate', 'organizationId', 'provider']);
+    expect(JSON.stringify(outcome)).not.toContain('secret');
+  });
+
+  it('registration 场景 platformWrite=false / transport=false / production credentials ABSENT', async () => {
+    const port = createSandboxCarrierAccountRegistrationPort([FEDEX_VERIFIED]);
+    const outcome = await registerCarrierAccountIdentity(
+      { port },
+      {
+        provider: 'FEDEX',
+        organizationId: 'org-a',
+        actorUserId: 'user-a',
+        candidate: { externalAccountId: 'FDX-ACCT-9', customerName: 'Acme', customerAddress: '1 Main St' },
+      },
+    );
+    if (!outcome.ok || outcome.status !== 'CANDIDATE_BIND_PLAN') throw new Error('expected CANDIDATE_BIND_PLAN');
+    expect(outcome.transportEnabled).toBe(false);
+    expect(outcome.platformWriteEnabled).toBe(false);
+    expect(outcome.productionCredentials).toBe('ABSENT');
+    expect(outcome.plan.transportEnabled).toBe(false);
+    expect(outcome.plan.platformWriteEnabled).toBe(false);
+    expect(outcome.plan.productionCredentials).toBe('ABSENT');
+  });
+
+  it('registration 全流程无真实 provider 请求', async () => {
+    const fetchSpy = vi.fn(() => {
+      throw new Error('NETWORK_FORBIDDEN');
+    });
+    vi.stubGlobal('fetch', fetchSpy);
+    const port = createSandboxCarrierAccountRegistrationPort([FEDEX_VERIFIED]);
+    const outcome = await registerCarrierAccountIdentity(
+      { port },
+      {
+        provider: 'FEDEX',
+        organizationId: 'org-a',
+        actorUserId: 'user-a',
+        candidate: { externalAccountId: 'FDX-ACCT-9', customerName: 'Acme', customerAddress: '1 Main St' },
+      },
+    );
+    expect(outcome.ok).toBe(true);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('readiness 暴露 authFlows / selectedAuthFlow / accountIdentityStrategy（真实实现仍 false）', () => {
+    const views = projectCarrierReadiness();
+    const ups = views.find((view) => view.provider === 'UPS')!;
+    const fedex = views.find((view) => view.provider === 'FEDEX')!;
+    expect([...ups.authFlows]).toEqual(['CLIENT_CREDENTIALS', 'AUTHORIZATION_CODE']);
+    expect(ups.selectedAuthFlow).toBe('AUTHORIZATION_CODE');
+    expect(ups.accountIdentityStrategy).toBe('PROVIDER_DISCOVERY');
+    expect([...fedex.authFlows]).toEqual(['INTEGRATOR_CREDENTIAL_REGISTRATION']);
+    expect(fedex.selectedAuthFlow).toBe('INTEGRATOR_CREDENTIAL_REGISTRATION');
+    expect(fedex.accountIdentityStrategy).toBe('PROVIDER_VERIFIED_REGISTRATION');
+    for (const view of views) {
+      expect(view.authImplemented).toBe(false);
+      expect(view.accountDiscoveryImplemented).toBe(false);
+      expect(view.productionCredentials).toBe('ABSENT');
+      expect(view.platformWriteEnabled).toBe(false);
+      expect(view.transportEnabled).toBe(false);
+    }
+  });
+});
 afterEach(() => {
   vi.unstubAllGlobals();
 });
