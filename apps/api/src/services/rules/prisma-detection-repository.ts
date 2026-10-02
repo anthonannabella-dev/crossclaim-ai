@@ -232,12 +232,14 @@ export function createPrismaDetectionRepository(
 
           const canonicalIdentity = resolvedIdentity;
           // TRACK C2 M4：Opportunity 的 account 归属由服务端从 canonical fact 派生。
-          const transactionAccountId = (
-            await tx.sourceTransaction.findFirst({
-              where: { organizationId: input.organizationId, id: input.sourceTransactionId },
-              select: { accountId: true },
-            })
-          )?.accountId ?? null;
+          const transactionAccountId = input.sourceTransactionId
+            ? ((
+                await tx.sourceTransaction.findFirst({
+                  where: { organizationId: input.organizationId, id: input.sourceTransactionId },
+                  select: { accountId: true },
+                })
+              )?.accountId ?? null)
+            : null;
           const opportunityAccountId = canonicalIdentity
             ? ((
                 await tx.canonicalFact.findFirst({
