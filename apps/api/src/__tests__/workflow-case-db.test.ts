@@ -301,4 +301,42 @@ describe('C-0008-B2-1 — Case 创建（真实 PostgreSQL）', () => {
     expect(await prisma.billingInvoice.count()).toBe(0);
     expect(await prisma.settlement.count()).toBe(0);
   });
+  it('负路径（永久保留）：accountId=NULL 的 QUALIFIED opportunity → 建案 fail-closed 且零写入', async () => {
+    const unscoped = await prisma.recoveryOpportunity.create({
+      data: {
+        organizationId: ORG,
+        domain: 'LOGISTICS',
+        channel: 'OTHER',
+        status: 'QUALIFIED',
+        opportunityType: 'FREIGHT_RATE_VARIANCE',
+        title: 'unscoped opportunity（无 account 归属）',
+        amountExpected: new Prisma.Decimal('17.7500'),
+        amountActual: new Prisma.Decimal('20.4125'),
+        recoverableAmount: new Prisma.Decimal('2.6625'),
+        currency: 'USD',
+        detectedAt: NOW,
+      },
+    });
+
+    // C2 CHANGE A 之后：无法派生 canonical PlatformAccount → 服务层必须 fail-closed
+    await expect(
+      createCaseForOpportunity(
+        prisma,
+        {
+          organizationId: ORG,
+          actorUserId: adminId,
+          role: 'ADMIN',
+          opportunityId: unscoped.id,
+          commercialTerms: TERMS,
+        },
+        () => NOW,
+      ),
+    ).rejects.toThrow(/PLATFORM_ACCOUNT_REQUIRED/);
+
+    expect(await prisma.case.count({ where: { organizationId: ORG } })).toBe(0);
+    expect(await prisma.evidenceArtifact.count({ where: { organizationId: ORG } })).toBe(0);
+    expect(await prisma.claim.count({ where: { organizationId: ORG } })).toBe(0);
+    expect(await prisma.settlement.count({ where: { organizationId: ORG } })).toBe(0);
+  });
+
 });
