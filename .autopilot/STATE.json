@@ -1,19 +1,19 @@
 {
   "gate": "B2-FIX R1",
-  "head": "07544e1",
-  "status": "IMPLEMENT",
-  "current_task": "PC-09 — COMMERCIAL / LEGAL CONTENT LAYER（授权：MSG-20261003-96 ⑬）：版本化 policy 内容层 + explicit acceptance facts + fee disclosure + customs broker limitation + provider authorization disclosure + data handling disclosure + 只读 GET /commercial-readiness；不启用 payment / transport / provider OAuth，不做 legal advice、不 auto-sign、不收费。",
-  "next_task": "PC-09 实施（Scope 1–10 / REQUIRED TESTS 见 MSG-20261003-96 ⑬）→ 本地测试 + tsc api/web + API contract + full CI → PC-09 CHECKPOINT 送审（Issue #2 comment + ChatGPT 唤醒三要素 + 裁决逐字归档 FULL_COPY_OK）。",
+  "head": "586ff5f",
+  "status": "READY_FOR_REVIEW",
+  "current_task": "PC-09 送审完成 → 等待架构方裁决（MSG-20261003-97 预期）",
+  "next_task": "收到裁决后：REVISE → 逐项 CHANGE 修复；PASS → PC-09 CLOSED 并按队列进入 PC-10 Webhook Verification。",
   "send_head": "07b7009",
   "decision_head": "07b7009",
   "last_chatgpt_message": "MSG-20261003-96",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-02T18:31:52.669Z",
-  "previous_head": "8a4aca1",
+  "updated_at": "2026-10-02T18:55:25.114Z",
+  "previous_head": "66d376d",
   "architect_decision_pending": false,
   "blocked_scope": null,
-  "last_send_head": "8ce71ef",
+  "last_send_head": "c8a5c71",
   "last_sent_at": "2026-10-02T02:38:05.434Z",
   "last_sent_fingerprint": "R46-S1:Settlement-Billing-Linkage-Schema-Checkpoint",
   "final_head": "1144401",
@@ -49,12 +49,12 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-02T18:04:39.071Z",
+  "last_tick_at": "2026-10-02T18:45:01.793Z",
   "state": "IMPLEMENT",
-  "last_action": "SCHEDULER_STALE_RECOVERED（gap=20min）→ 本轮已恢复执行",
+  "last_action": "SCHEDULER_STALE_RECOVERED（gap=28min）→ 本轮已恢复执行",
   "last_action_at": "2026-10-02T09:01:54.693Z",
   "next_action": "C2 FINAL 送审（Issue #2 + ChatGPT 唤醒 + 裁决归档）；通过后进入 TRACK B，并在 C2 收口后执行 PHASE X1 Architecture Audit。",
-  "current_head": "07544e1",
+  "current_head": "586ff5f",
   "reviewed_head": "8ce71ef",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-02T18:00:07.201Z",
-    "gapMs": 271871,
+    "previousTickAt": "2026-10-02T18:40:02.933Z",
+    "gapMs": 298861,
     "stale": false,
-    "checkedAt": "2026-10-02T18:04:39.071Z"
+    "checkedAt": "2026-10-02T18:45:01.793Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -250,7 +250,7 @@
     "integration_boundary_review": "AUTHORIZED_TO_PLAN（先提交设计/实施计划，不直接开放真实 transport）"
   },
   "r36_submission_comment": "5927087320",
-  "stale_recovered_at": "2026-10-02T18:00:07.201Z",
+  "stale_recovered_at": "2026-10-02T18:33:01.424Z",
   "engineering_regression_policy": {
     "source": "HOST PRODUCT DIRECTION 2026-10-01",
     "doc": "docs/releases/ENGINEERING-REGRESSION-POLICY.md",
@@ -3618,5 +3618,6 @@
   "pc07_status": "PASS/CLOSED",
   "pc08_status": "PASS/CLOSED（MSG-20261003-96 ⑫；IMPLEMENTATION_HEAD 8ce71ef / CI RUN 37046804532 / CHECKPOINT_DOC e25e9c5）",
   "pc08_notes": "PC-08 OPS READINESS 收口：CHANGE A–F（real readiness path / migration projection / required config / storage probe / integration gates / payment gate）+ CHANGE G overall readiness aggregation（internalReady = database.ok && migration CURRENT && configuration READY && storage READY && resolver UP && Action Guard UP；posture READY|BLOCKED|DEGRADED）。外部 provider EXTERNAL_GATE 与 Payment HOLD 不参与内部 runtime readiness。测试 pc08-readiness-facts 17/17 + ops-readiness-http-db 6/6 + health/admin 66/66。",
-  "pc09_status": "AUTHORIZED（MSG-20261003-96 ⑬）— COMMERCIAL / LEGAL CONTENT LAYER（versioned policies / explicit acceptance / fee disclosure / customs boundary / provider authorization disclosure / data handling disclosure / GET /commercial-readiness）"
+  "pc09_status": "READY_FOR_REVIEW（IMPLEMENTATION_HEAD c8a5c71 / CI RUN 37049672758 5-5 / CHECKPOINT_DOC 3954ac1+586ff5f / Issue #2 comment 5959262551）",
+  "pc09_notes": "PC-09 Commercial/Legal content layer：版本化 registry（7 份 CURRENT + 1 份 SUPERSEDED 历史版本）+ PolicyAcceptance（Schema/迁移/租户成员守卫/归属不可变/append-only）+ 显式接受（禁止隐式；幂等）+ requireConsentFor fail-closed 闸门（CONSENT_GATED_CAPABILITIES 当前为空，待裁决）+ GET /commercial/policies[/:key] / POST .../accept / GET /commercial/acceptances / GET /commercial-readiness。测试 commercial-policy-http-db 8/8 + commercial-consent-gate 2/2；回归 ops/accounts/entitlements/architecture/tenant 全绿。"
 }
