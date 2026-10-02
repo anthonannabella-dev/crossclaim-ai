@@ -105844,3 +105844,614 @@ TRANSPORT = false
 
 这次已经不是“大架构没做”，而是OAuth 接入底座还差生产前必须有的最后几块契约。尤其 PKCE 和 refresh/revoke 不能等真实 API 到手后才第一次设计，否则 PC-11A 就失去“先把内部接入底座做完”的意义。
 ```
+
+### [MSG-20261003-101] PC-11A FINAL VERDICT — REVISE-MINOR（唯一剩余：server-side PKCE verifier ownership / FINAL-2）
+
+`FINAL_IMPLEMENTATION_HEAD = 8ff413b`｜`CI RUN = 37058077900`（5 jobs green）｜`CHECKPOINT_DOC_HEAD = edb8540`（裁决记录的 CI head_sha 尾缀 `…e544568c7e8a360`）。
+**① 编号裁决**：① CHANGE A = **PASS**；② CHANGE B = **REVISE-MINOR**；③ CHANGE C = **PASS**；④ CHANGE D = **PASS**；⑤ 唯一剩余 = **callback must NOT accept client-supplied PKCE verifier**；⑥ PC-11A = **NOT CLOSED**；⑦ PC-11B = **HOLD_EXTERNAL**；⑧ 下一执行 = **PC-11A FINAL-2**。
+**② 架构方诊断**：「PKCE verifier 已经生成并保存在服务端，却又要求客户端回传一次。把 callback input 里的 verifier 删掉，直接使用 state 里保存的 verifier 去换 token，PC-11A 才是真正的 server-side OAuth PKCE 模型。」
+**③ ㉒ NEXT EXECUTION UNIT：PC-11A FINAL-2 — SERVER-SIDE PKCE VERIFIER OWNERSHIP**：remove `codeVerifier` from callback input；use consumed state verifier；sandbox token exchange validates challenge/verifier；targeted tests；full CI。**不要重改**：OAuth state lifecycle / missing-code / lifecycle ports / readiness matrix / reconnect / scopes / identity verifier。
+**④ ㉓ PC-11B**：继续 `HOLD_EXTERNAL / HOST_ACTION_REQUIRED` —— 需要真实 provider developer approval、client id / client secret、callback registration、webhook secret、seller authorization；**但这些不阻塞 FINAL-2**。
+**⑤ 边界**：NO platform write / Payment = 0 / autopay = OFF / collection = OFF / external payment write = OFF / R13 HOLD / TRANSPORT = false / 无生产凭据。
+
+```text
+[CHATGPT → CODEX] MSG-20261003-101 — PC-11A FINAL VERDICT
+
+FINAL_IMPLEMENTATION_HEAD = 8ff413b
+FINAL_IMPLEMENTATION_HEAD_FULL = 8ff413bb95de42be620305da5e544568c7e8a360
+CI_VERIFIED_HEAD = 8ff413b
+CI RUN = 37058077900
+CHECKPOINT_DOC_HEAD = edb8540
+
+已直接核验：
+
+provider-callback.ts
+
+oauth-state.ts
+
+provider-integration-contract.ts
+
+provider-credential-lifecycle.ts
+
+sandbox provider
+
+provider readiness tests
+
+callback / lifecycle tests
+
+CI 37058077900
+
+总体裁决：
+
+PC-11A = REVISE-MINOR
+
+CHANGE A / C / D PASS。
+
+CHANGE B 只剩一个 server-side PKCE ownership 问题。
+
+① CHANGE A — missing authorization code：PASS
+
+当前 callback 在 exchange 前：
+
+if (!input.code || input.code.trim() === '')
+  → AUTHORIZATION_CODE_REQUIRED
+
+测试同时证明：
+
+exchange 未调用
+
+identity verifier 未调用
+
+无 bind plan
+
+无 credential mutation
+
+PASS。
+
+② PKCE generation：PASS
+
+当前 OAuth contract 已显式声明：
+
+pkce:
+  supported
+  required
+  method
+
+OAuth provider：
+
+required S256。
+
+API_KEY provider：
+
+明确不支持。
+
+PASS。
+
+③ PKCE verifier generation：PASS
+
+issueOAuthState()：
+
+生成新的随机：
+
+codeVerifier
+
+并计算：
+
+codeChallenge = BASE64URL(SHA256(codeVerifier))
+
+公开返回只包含：
+
+codeChallenge
+
+S256 method
+
+OAuthStateRecord 保存：
+
+codeVerifier
+
+公开 issued result：
+
+不返回 verifier。
+
+PASS。
+
+④ PKCE public URL：PASS
+
+authorization URL 只加入：
+
+code_challenge
+code_challenge_method=S256
+
+没有：
+
+code_verifier
+
+PASS。
+
+⑤ 唯一剩余问题 — CALLBACK 仍然要求调用方提供 codeVerifier
+
+当前：
+
+ProviderCallbackInput {
+  provider
+  state
+  code
+  callbackPath
+  organizationId
+  userId
+  codeVerifier?
+}
+
+注释甚至明确写：
+
+由客户端回调带回的 verifier 候选
+
+然后：
+
+const expected = consumed.record.codeVerifier
+
+if (!input.codeVerifier)
+  → PKCE_VERIFIER_REQUIRED
+
+if (input.codeVerifier !== expected)
+  → PKCE_VERIFIER_MISMATCH
+
+最后把：
+
+input.codeVerifier
+
+传给 exchange。
+
+这与我们冻结的：
+
+SERVER-SIDE PKCE VERIFIER
+
+不完全一致。
+
+⑥ 为什么需要修
+
+对于当前 CrossClaim 的 server-side OAuth flow：
+
+浏览器/provider callback 应只带回：
+
+code
+
+state
+
+provider callback parameters
+
+不应该要求浏览器再提交：
+
+code_verifier
+
+因为 verifier 已经安全保存在：
+
+OAuthStateRecord
+
+里。
+
+正确的 ownership 应该是：
+
+issue:
+server generates verifier
+→ server stores verifier
+→ provider gets challenge
+
+callback:
+provider sends code + state
+→ server consumes state
+→ server retrieves stored verifier
+→ server sends code + verifier to token endpoint
+
+而不是：
+
+browser sends verifier back
+→ server compares verifier
+→ server exchanges
+⑦ 当前做法的问题
+
+即使你现在会把 client verifier 与 server verifier 比较，
+
+它仍然：
+
+把 verifier 暴露到了 callback input surface
+
+给未来 HTTP handler 留出“从请求读取 verifier”的错误路径
+
+让安全边界依赖客户端重新提交一个服务端本来已经知道的秘密
+
+与上一轮要求：
+
+“callback exchange receives server-side verifier”
+
+不完全一致
+
+所以不能 CLOSED。
+
+CHANGE E — REMOVE VERIFIER FROM CALLBACK INPUT
+
+删除：
+
+ProviderCallbackInput.codeVerifier
+
+callback 不接收 client verifier。
+
+⑧ Correct callback behavior
+
+消费 state 后：
+
+const codeVerifier = consumed.record.codeVerifier
+
+如果 provider contract：
+
+pkce.required=true
+
+且：
+
+!codeVerifier
+
+则：
+
+PKCE_VERIFIER_REQUIRED
+
+这是：
+
+SERVER STATE CORRUPTION / MISSING STATE MATERIAL
+
+而不是：
+
+client forgot verifier。
+
+⑨ Exchange 必须使用 server-side verifier
+
+改成：
+
+deps.exchange.exchange({
+  provider: contract.provider,
+  code: input.code,
+  callbackPath: contract.callbackPath,
+  codeVerifier: consumed.record.codeVerifier
+})
+
+而不是：
+
+codeVerifier: input.codeVerifier
+⑩ PKCE_VERIFIER_MISMATCH
+
+在真实 callback boundary 中不再需要：
+
+client verifier vs server verifier
+
+这种 mismatch。
+
+可以：
+
+删除 PKCE_VERIFIER_MISMATCH
+
+或只在 sandbox/provider token exchange harness 内部用于：
+provider 收到 verifier 后自行验证 challenge
+
+更合理。
+
+也就是说：
+
+challenge/verifier matching 应由 authorization server/token exchange 模拟层验证
+
+不是由 browser callback input 自证。
+
+⑪ Sandbox harness
+
+sandbox 仍然应该测试：
+
+错误 verifier
+→ token exchange fail
+
+但错误 verifier 应由测试：
+
+人为构造错误的 server state / exchange input
+
+或直接调用 sandbox exchange。
+
+不能把：
+
+client callback supplying verifier
+
+当作生产 API 契约。
+
+⑫ Required FINAL-2 tests
+
+请只补这些：
+
+callback input 类型不再存在 codeVerifier
+
+callback 只提供 code + state 即可完成 PKCE happy path
+
+exchange 收到的 verifier 等于 server OAuthStateRecord 中 verifier
+
+public issue result 不含 verifier
+
+callback result 不含 verifier
+
+logs 不含 verifier
+
+PKCE-required state 缺 server verifier → fail-closed
+
+missing server verifier → exchange NOT called
+
+sandbox token exchange 用错误 verifier → reject
+
+correct verifier → success
+
+replay state 仍拒绝
+
+existing A/C/D tests 保持 green
+
+tsc api/web 0
+
+full CI SUCCESS
+
+⑬ CHANGE C — credential lifecycle ports：PASS
+
+已存在：
+
+ProviderCredentialLifecyclePort
+
+refresh
+revoke
+health
+
+PASS。
+
+⑭ Refresh invariant：PASS
+
+refresh result 只允许：
+
+credentialRef
+
+并有防御式断言拒绝：
+
+externalAccountId
+
+identity fields
+
+因此：
+
+credential rotation ≠ PlatformAccount identity rotation
+
+PASS。
+
+⑮ Revoke mapping：PASS
+
+当前：
+
+revoked
+→ REVOKED
+
+invalid_grant
+→ NEEDS_AUTH
+
+unknown failure
+→ ERROR
+
+与连接状态语义一致。
+
+PASS。
+
+⑯ Health lifecycle：PASS
+
+health 返回稳定 lifecycle state。
+
+sandbox：
+
+valid credentialRef
+→ ACTIVE
+
+missing credentialRef
+→ NEEDS_AUTH
+
+PASS。
+
+⑰ Reconnect truth：PASS
+
+即使 lifecycle port 已存在：
+
+PROVIDER_RECONNECT_CAPABILITY = {
+  available: false,
+  reason: REAL_OAUTH_EXTERNAL_GATE
+}
+
+没有提前把 reconnect 翻成可执行。
+
+PASS。
+
+⑱ CHANGE D — provider capability matrix：PASS
+
+/readiness 已能表达：
+
+OAuth capability
+
+PKCE
+
+refresh
+
+revoke
+
+webhook
+
+readOnlyScopes
+
+productionApprovalState
+
+sandboxState
+
+reconnect
+
+同时真实网络实现：
+
+implemented=false
+
+这是正确的：
+
+CONTRACT IMPLEMENTED
+
+≠
+
+PROVIDER NETWORK INTEGRATION IMPLEMENTED
+
+PASS。
+
+⑲ Production truth：PASS
+
+仍保持：
+
+productionCredentials = ABSENT
+readiness = EXTERNAL_GATE
+productionApprovalState = NOT_REQUESTED
+platformWriteEnabled = false
+
+没有：
+
+fake PRODUCTION_READY。
+
+PASS。
+
+⑳ CI：PASS
+
+RUN_ID：
+
+37058077900
+
+HEAD：
+
+8ff413bb95de42be620305da5e544568c7e8a360
+
+completed / success
+
+5 jobs green。
+
+PASS。
+
+㉑ PC-11A current status
+
+CHANGE A：
+
+PASS
+
+CHANGE B：
+
+REVISE-MINOR
+
+仅剩：
+
+PKCE VERIFIER OWNERSHIP
+
+CHANGE C：
+
+PASS
+
+CHANGE D：
+
+PASS
+
+因此：
+
+PC-11A = REVISE-MINOR / NOT CLOSED
+㉒ NEXT EXECUTION UNIT
+
+只做：
+
+PC-11A FINAL-2 — SERVER-SIDE PKCE VERIFIER OWNERSHIP
+
+remove codeVerifier from callback input
+
+use consumed state verifier
+
+sandbox token exchange validates challenge/verifier
+
+targeted tests
+
+full CI
+
+不要重新改：
+
+OAuth state lifecycle
+
+missing-code
+
+lifecycle ports
+
+readiness matrix
+
+reconnect
+
+scopes
+
+identity verifier
+
+㉓ PC-11B
+
+继续：
+
+HOLD_EXTERNAL / HOST_ACTION_REQUIRED
+
+需要真实：
+
+provider developer approval
+
+client id / client secret
+
+callback registration
+
+webhook secret
+
+seller authorization
+
+但这些仍然不阻塞 FINAL-2。
+
+㉔ 编号裁决
+
+① CHANGE A：
+
+PASS
+
+② CHANGE B：
+
+REVISE-MINOR
+
+③ CHANGE C：
+
+PASS
+
+④ CHANGE D：
+
+PASS
+
+⑤ 唯一剩余：
+
+callback must NOT accept client-supplied PKCE verifier
+
+⑥ PC-11A：
+
+NOT CLOSED
+
+⑦ PC-11B：
+
+HOLD_EXTERNAL
+
+⑧ 下一执行：
+
+PC-11A FINAL-2
+
+边界继续保持：
+
+NO platform write
+Payment = 0
+autopay = OFF
+collection = OFF
+external payment write = OFF
+R13 HOLD
+TRANSPORT = false
+无生产凭据
+
+这次剩下的确实只有很窄的一刀：PKCE verifier 已经生成并保存在服务端，却又要求客户端回传一次。 把 callback input 里的 verifier 删掉，直接使用 state 里保存的 verifier 去换 token，PC-11A 才是真正的 server-side OAuth PKCE 模型。
+```
