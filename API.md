@@ -88,6 +88,7 @@ C-0008-B2（Case / Evidence / Claim Draft / Billing）的端点尚未实现。
 | GET | `/opportunities` | 200 `{ items: [{ id, status, opportunityType, title, amountExpected, amountActual, recoverableAmount, currency, detectedAt }] }`（金额为 4 位小数字符串） |
 | GET | `/recovery-states` | — | 200 `{ items: [{ scope, refId, title, code, label, explanation, nextAction, recoverable, safeSummary, occurredAt, details, retry }], catalog }`（PC-04 客户可见失败/恢复投影；稳定 code；不含 raw internal error / secret） | 401 `UNAUTHENTICATED`；403 `FORBIDDEN`（FINANCE / VIEWER） |
 | GET | `/recovery-money` | query：`caseId`（可选） | 200 `{ organization: { byCurrency, collection, payment }, cases, feeNote }`（PC-05 客户可见追回金额只读投影；按币种分组、无 FX、EXPECTED≠RECEIVED、fee calculated≠collected、collection=NOT_ENABLED） | 401 `UNAUTHENTICATED`；403 `FORBIDDEN`（VIEWER；FINANCE 可见账单金额）；404 `NOT_FOUND`（caseId 跨租户 / 不存在） |
+| GET | `/accounts` | — | 200 `{ organizationId, platforms: [{ platform, accounts: [{ id, platform, externalAccountId, displayName, identityVersion, status, createdAt, connections, activeConnectionCount }] }], unboundLegacyConnections, onboarding, legend }`（PC-06 账户管理只读投影；PlatformAccount 与 SourceConnection 分层；多平台多账户分组；不含 credentialRef / token / config） | 401 `UNAUTHENTICATED`；403 `FORBIDDEN`（非 OWNER / ADMIN） |
 
 三者都按会话 `organizationId` 过滤，最多 100 条（默认 20）。非 GET 请求不匹配该处理器，按 404 处理。
 

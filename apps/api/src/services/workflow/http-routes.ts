@@ -130,6 +130,7 @@ import {
   toExportRows,
 } from './opportunity-insight';
 import { getCaseClaimPackage } from './claim-package-view';
+import { getAccountManagementView } from './account-management-view';
 import { getRecoveryMoneyView } from './recovery-money-view';
 import { listRecoveryStates } from './recovery-states';
 import { listOpportunities } from './opportunity-list';
@@ -138,6 +139,8 @@ import { ForbiddenError, assertPermission } from './permissions';
 
 const MAX_BODY_BYTES = 16 * 1024;
 const REVIEW_PATH = /^\/opportunities\/([^/]+)\/(qualify|reject|case)$/;
+/** PC-06：账户管理只读投影（PlatformAccount 与 SourceConnection 分层展示）。 */
+const ACCOUNTS_PATH = /^\/accounts$/;
 /** PC-05：客户可见的追回金额只读投影。 */
 const RECOVERY_MONEY_PATH = /^\/recovery-money$/;
 /** PC-04：客户可见的失败 / 恢复状态投影。 */
@@ -381,6 +384,7 @@ export async function handleWorkflowRequest(
   const caseClaimPackage = CASE_CLAIM_PACKAGE_PATH.exec(path);
   const recoveryStates = RECOVERY_STATES_PATH.test(path);
   const recoveryMoney = RECOVERY_MONEY_PATH.test(path);
+  const accountsPath = ACCOUNTS_PATH.test(path);
   const insightList = INSIGHT_LIST_PATH.test(path);
   const insightCsv = INSIGHT_CSV_PATH.test(path);
   const insight = INSIGHT_PATH.exec(path);
@@ -446,7 +450,7 @@ export async function handleWorkflowRequest(
     adminPermissionMatrix ||
     adminMemberDetail !== null ||
     adminKillSwitch;
-  if (!adminAny && !opportunityList && !caseClaimPackage && !recoveryStates && !recoveryMoney && !operationsDashboard && !operationsClaims && !operationsRecovery && !review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !paymentReviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !replayPath && !replayReviewPath && !retryDuePath && !retryDueFreezePath && !retryDueReviewPath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim && !caseClaimSubmit && !caseClaimPrepare && !caseBillingDraft && !caseAppealSubmit && !casePlatformWrite && !caseRecoveryManualSubmit && !caseRecoveryManualReference && !caseRecoveryManualApproval && !caseRecoveryManualReferenceApproval) {
+  if (!adminAny && !opportunityList && !caseClaimPackage && !recoveryStates && !recoveryMoney && !accountsPath && !operationsDashboard && !operationsClaims && !operationsRecovery && !review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !paymentReviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !replayPath && !replayReviewPath && !retryDuePath && !retryDueFreezePath && !retryDueReviewPath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim && !caseClaimSubmit && !caseClaimPrepare && !caseBillingDraft && !caseAppealSubmit && !casePlatformWrite && !caseRecoveryManualSubmit && !caseRecoveryManualReference && !caseRecoveryManualApproval && !caseRecoveryManualReferenceApproval) {
     return false;
   }
 
@@ -499,6 +503,7 @@ export async function handleWorkflowRequest(
           : billingPath && !billingPath[1]
             ? ['GET']
             : opportunityList ||
+                accountsPath ||
                 recoveryStates ||
                 recoveryMoney ||
                 caseClaimPackage !== null ||
@@ -860,6 +865,12 @@ export async function handleWorkflowRequest(
         deps.now ? { now: deps.now } : {},
       );
       sendJson(res, 200, result);
+      return true;
+    }
+
+    if (accountsPath && method === 'GET') {
+      // PC-06：账户管理只读投影（多平台 / 多账户；不写入、不绑定、不触发外写）。
+      sendJson(res, 200, await getAccountManagementView(deps.prisma, actor));
       return true;
     }
 
