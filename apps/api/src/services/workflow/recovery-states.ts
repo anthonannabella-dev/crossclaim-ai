@@ -17,6 +17,10 @@
 import type { PrismaClient } from '@prisma/client';
 
 import { assertPermission } from './permissions';
+import {
+  CLAIM_RECOVERY_SUMMARY,
+  deriveClaimRecoveryCode,
+} from './claim-recovery-semantics';
 
 export type RecoveryCode =
   | 'RECONNECT_REQUIRED'
@@ -267,28 +271,17 @@ export async function listRecoveryStates(
     byCase.set(caseId, list);
   }
   for (const [caseId, list] of byCase) {
-    const needsAppeal = list.some(
-      (claimItem) => claimItem.status === 'READY_TO_APPEAL' || claimItem.closedReason === 'REJECTED',
-    );
-    const needsReview = list.some((claimItem) => claimItem.status === 'REVIEW_REQUIRED');
-    const needsEvidence = list.some((claimItem) => claimItem.status === 'DISCOVERED');
-    if (!needsAppeal && !needsReview && !needsEvidence) continue;
-    const code: RecoveryCode = needsAppeal
-      ? 'APPEAL_REQUIRED'
-      : needsReview
-        ? 'MANUAL_ACTION_REQUIRED'
-        : 'EVIDENCE_REQUIRED';
+    // PC-04 REVISE：claim 状态语义只在 claim-recovery-semantics.ts 定义一次。
+    const derived = deriveClaimRecoveryCode(list);
+    if (!derived) continue;
+    const code: RecoveryCode = derived;
     items.push(
       item({
         scope: 'CASE',
         refId: caseId,
         title: '案件 · ' + caseId.slice(0, 8),
         code,
-        safeSummary: needsAppeal
-          ? '该案件中有主张被拒绝，可进入申诉流程。'
-          : needsReview
-            ? '该案件中有主张需要人工复核。'
-            : '该案件中有主张尚未完成验证，可能需要补充材料。',
+        safeSummary: CLAIM_RECOVERY_SUMMARY[derived],
         occurredAt: null,
         details: { claimItems: list.length },
       }),

@@ -17,6 +17,11 @@ import { createLogger } from '../config/logger';
 import { createServer } from '../server';
 import { hashPassword } from '../services/auth';
 import { createAuditWriter, createPrismaAuditSink } from '../services/audit';
+import {
+  CLAIM_READINESS_TO_RECOVERY_CODE,
+  deriveClaimReadiness,
+  deriveClaimRecoveryCode,
+} from '../services/workflow/claim-recovery-semantics';
 import { LocalFileSystemStorage } from '../services/storage';
 
 const prisma = new PrismaClient();
@@ -321,5 +326,27 @@ describe('PC-04 — error / recovery states HTTP contract', () => {
       };
       expect(body.items.some((item) => item.title.includes('foreign'))).toBe(false);
     });
+  });
+});
+
+describe('PC-04 REVISE — claim 状态语义只有一份来源（MSG-20261003-85 ④）', () => {
+  it('readiness ↔ recovery code 由同一映射派生，两个消费者结果一致', () => {
+    const cases = [
+      { items: [{ status: 'DISCOVERED', closedReason: null }], context: { hasActivePackage: true, missingItemsCount: 1 }, code: 'EVIDENCE_REQUIRED' },
+      { items: [{ status: 'REVIEW_REQUIRED', closedReason: null }], context: { hasActivePackage: true }, code: 'MANUAL_ACTION_REQUIRED' },
+      { items: [{ status: 'READY_TO_APPEAL', closedReason: null }], context: { hasActivePackage: true }, code: 'APPEAL_REQUIRED' },
+      { items: [{ status: 'CLOSED', closedReason: 'REJECTED' }], context: { hasActivePackage: true }, code: 'APPEAL_REQUIRED' },
+    ] as const;
+    for (const item of cases) {
+      const readiness = deriveClaimReadiness(item.items, item.context);
+      // 两个消费者必须得到同一结论（readiness → code 的唯一映射）
+      expect(CLAIM_READINESS_TO_RECOVERY_CODE[readiness]).toBe(item.code);
+      expect(deriveClaimRecoveryCode(item.items)).toBe(item.code);
+    }
+    // 不需要客户提示的 readiness 不得产生 recovery code（避免重复打扰）
+    expect(CLAIM_READINESS_TO_RECOVERY_CODE.READY_TO_SUBMIT).toBeNull();
+    expect(CLAIM_READINESS_TO_RECOVERY_CODE.SUBMITTED).toBeNull();
+    expect(CLAIM_READINESS_TO_RECOVERY_CODE.APPROVED).toBeNull();
+    expect(deriveClaimRecoveryCode([{ status: 'VERIFIED', closedReason: null }])).toBeNull();
   });
 });

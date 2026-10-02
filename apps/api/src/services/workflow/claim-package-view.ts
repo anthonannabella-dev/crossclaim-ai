@@ -21,30 +21,17 @@ import { Prisma, type PrismaClient } from '@prisma/client';
 
 import { WorkflowError } from './opportunity-review';
 import { assertPermission } from './permissions';
+import {
+  READINESS_LABEL,
+  deriveClaimReadiness,
+  type ClaimPackageReadiness,
+} from './claim-recovery-semantics';
 
 export const CLAIM_PACKAGE_ACCOUNT_MISMATCH = 'CLAIM_PACKAGE_ACCOUNT_MISMATCH';
+/** PC-04 REVISE：readiness 语义的唯一来源在 claim-recovery-semantics.ts。 */
+export { READINESS_LABEL, type ClaimPackageReadiness };
 export const PROVIDER_WRITE_STATE = 'HOLD_NEEDS_MANUAL';
 
-export type ClaimPackageReadiness =
-  | 'READY_TO_SUBMIT'
-  | 'NEEDS_EVIDENCE'
-  | 'NEEDS_REVIEW'
-  | 'SUBMITTED'
-  | 'ACKNOWLEDGED'
-  | 'APPROVED'
-  | 'REJECTED'
-  | 'APPEAL_REQUIRED';
-
-export const READINESS_LABEL: Record<ClaimPackageReadiness, string> = {
-  READY_TO_SUBMIT: '可提交（材料已就绪）',
-  NEEDS_EVIDENCE: '还需补充材料',
-  NEEDS_REVIEW: '需要人工复核',
-  SUBMITTED: '已人工提交',
-  ACKNOWLEDGED: '平台已受理',
-  APPROVED: '已获批',
-  REJECTED: '被拒绝',
-  APPEAL_REQUIRED: '需要申诉',
-};
 
 export interface ClaimPackageActor {
   organizationId: string;
@@ -133,24 +120,6 @@ function missingFromSnapshot(snapshot: Prisma.JsonValue | null): string[] {
   return value.filter((item): item is string => typeof item === 'string' && item.trim() !== '');
 }
 
-function deriveReadiness(input: {
-  claimItemStatuses: string[];
-  claimItemClosedReasons: Array<string | null>;
-  hasSubmission: boolean;
-  hasActivePackage: boolean;
-  missingItems: string[];
-}): ClaimPackageReadiness {
-  const { claimItemStatuses, claimItemClosedReasons, hasSubmission, hasActivePackage, missingItems } = input;
-
-  if (claimItemStatuses.includes('READY_TO_APPEAL') || claimItemClosedReasons.includes('REJECTED')) {
-    return 'APPEAL_REQUIRED';
-  }
-  if (claimItemStatuses.includes('RECOVERED')) return 'APPROVED';
-  if (hasSubmission || claimItemStatuses.includes('SUBMITTED_MANUAL')) return 'SUBMITTED';
-  if (!hasActivePackage) return 'NEEDS_REVIEW';
-  if (missingItems.length > 0) return 'NEEDS_EVIDENCE';
-  return 'READY_TO_SUBMIT';
-}
 
 export async function getCaseClaimPackage(
   prisma: PrismaClient,
@@ -295,12 +264,11 @@ export async function getCaseClaimPackage(
     sha256: artifact.sha256,
   }));
 
-  const state = deriveReadiness({
-    claimItemStatuses: claimItems.map((item) => item.status),
-    claimItemClosedReasons: claimItems.map((item) => item.closedReason),
+  // PC-04 REVISE：与 PC-04 recovery code 共用同一份 claim 状态语义。
+  const state = deriveClaimReadiness(claimItems, {
     hasSubmission,
     hasActivePackage: activePackage !== null,
-    missingItems: [...missingItems],
+    missingItemsCount: missingItems.size,
   });
 
   const firstOpportunity = opportunities[0] ?? null;
