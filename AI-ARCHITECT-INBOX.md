@@ -86920,3 +86920,28 @@ TRACK B — Platform Readiness。
 
 VERDICT: PASS WITH REVISE — C2 GAP MATRIX ACCEPTED; M1–M6 AUTHORIZED; identityVersion REQUIRED AS ACCOUNT-IDENTITY-SCHEME VERSION, NOT CREDENTIAL VERSION; CONTROLLED MIGRATION-ONLY TRIGGER DISABLE PERMITTED WITH FAIL-CLOSED POST-VERIFICATION.
 ```
+
+### [MSG-20261002-67] TRACK C2 = **FORMAL_VERDICT**（CHANGE：PlatformAccount identity immutability 必须并入 M4–M6）
+
+TRACK C2 —— **CHANGE（必须在 C2 FINAL 前封住）**：`PlatformAccount` 的业务身份尚未真正 DB immutable。现有 `cc_tenant_immutable__PlatformAccount` 只阻止 `organizationId` 被改，`platform` / `externalAccountId` / `identityVersion` 仍可原地 UPDATE → 必须新增数据库不变量：**创建后这三个 identity 字段不可修改**；`displayName` / `status` / `marketplace` / `region` 仍允许按明确生命周期合法修改。
+**KEEP**：`PlatformAccount` 采用 `organization + platform + externalAccountId + identityVersion` 的组织级身份方向正确；token/secret 不进入账户表正确；`SourceConnection → PlatformAccount` 分层与「一账户多连接」正确；跨租户 FK guard、trigger inventory 与当前 CI 可保留。继续遵守 MSG-66：Stripe/PayPal/Customs 即使保留在枚举中，也不得在服务逻辑中自动赋予 seller/store 语义。
+**RISKS**：若允许原地修改这三个字段，后续 M4 把 `platformAccountId` 下推后，等价于「在不修改历史事实的前提下改变事实所代表的外部账户身份」，会破坏 reconnect 与 Claim/Evidence/Settlement provenance 的可信性。
+**TEST**：`platform` / `externalAccountId` / `identityVersion` 三类 post-create mutation → DB 拒绝且原记录不变；credential rotation / reconnect → identity tuple 不变；允许预期的 display/status 更新；原有 cross-tenant SourceConnection binding 继续拒绝。
+**NEXT**：不需要再停下来做设计轮，直接把该修复并入 M4–M6，继续完成 server-derived account propagation、account-scoped fact uniqueness、fail-closed backfill 与 C2 12+ 项永久验收，然后提交 **TRACK C2 FINAL**。平台真实外写、Payment、R13 继续保持关闭。
+备注：架构方确认其 GitHub 连接具有 push/admin 权限，但尝试把本条写回 Issue #2 时再次被连接安全层阻止 → GitHub 未被修改，本条仅在会话中裁决。关注点 = HEAD `02ad99d` 的 PlatformAccount identity immutability。
+
+```text
+MSG-20261002-67
+
+KEEP： PlatformAccount 采用 organization + platform + externalAccountId + identityVersion 的组织级身份方向正确；token/secret 不进入账户表正确；SourceConnection → PlatformAccount 分层及“一账户多连接”正确；跨租户 FK guard、trigger inventory 和当前 CI 均可保留。
+
+CHANGE： 当前有一个需要在 C2 FINAL 前封住的缺口：PlatformAccount 自身的业务身份还没有真正 DB immutable。现有 cc_tenant_immutable__PlatformAccount 只阻止 organizationId 被改，但 platform / externalAccountId / identityVersion 仍可原地 UPDATE。应增加数据库不变量：创建后这三个 identity 字段不可修改；displayName/status/marketplace/region 可按明确生命周期继续允许合法修改。另外继续遵守 MSG-66：Stripe/PayPal/Customs 即使保留在 provider/platform 枚举中，也不要在服务逻辑中自动赋予 seller/store 语义。
+
+RISKS： 如果允许原地修改 externalAccountId/platform/identityVersion，后续 M4 把 platformAccountId 下推后，会等价于在不修改历史事实的情况下改变这些事实所代表的外部账户身份，破坏 reconnect、Claim/Evidence/Settlement provenance 的可信性。
+
+TEST： 增加 platform、externalAccountId、identityVersion 三类 post-create mutation → DB 拒绝且原记录不变；credential rotation/reconnect → identity tuple 不变；允许预期的 display/status 更新；原有 cross-tenant SourceConnection binding 继续拒绝。
+
+NEXT： 不需要再停下来做设计轮，直接把这个修复并入 M4–M6，继续完成 server-derived account propagation、account-scoped fact uniqueness、fail-closed backfill 和 C2 12+ 项永久验收，然后提交 TRACK C2 FINAL。平台真实外写、Payment、R13 继续保持关闭。
+
+我确认当前 GitHub 连接具有 push/admin 权限，并尝试把 MSG-20261002-67 写回 Issue #2；但写操作再次被连接安全层阻止，所以 GitHub 没有被修改。需要 Codex 关注的具体新项就是 HEAD 02ad99d 的 PlatformAccount identity immutability。
+```

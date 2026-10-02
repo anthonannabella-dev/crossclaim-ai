@@ -1,16 +1,16 @@
 {
   "gate": "B2-FIX R1",
-  "head": "9496d3e",
+  "head": "e40bd1a",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
   "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
   "send_head": "07b7009",
   "decision_head": "07b7009",
-  "last_chatgpt_message": "MSG-20261002-66",
+  "last_chatgpt_message": "MSG-20261002-67",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-02T04:40:16.863Z",
-  "previous_head": "af76192",
+  "updated_at": "2026-10-02T04:57:57.048Z",
+  "previous_head": "9496d3e",
   "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "56abd47",
@@ -49,11 +49,11 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-02T03:26:10.267Z",
+  "last_tick_at": "2026-10-02T04:56:49.558Z",
   "state": "IMPLEMENT",
-  "last_action": "登记 CROSS-SYSTEM RECOVERY LAYER（R46 后核心主线 / 长期 Architecture Constraint，docs-only）",
-  "last_action_at": "2026-10-02T04:48:14.545Z",
-  "next_action": "TRACK C2 slice 2b（Opportunity / ClaimItem / EvidenceArtifact 服务端 account 接线 + cross-account 拒绝 + 12 项最低验收）→ C2 FINAL 送审 → PHASE X1 Architecture Audit。",
+  "last_action": "MSG-20261002-67 已归档（FULL_COPY_OK）：PlatformAccount identity immutability 必须并入 M4–M6",
+  "last_action_at": "2026-10-02T04:57:57.048Z",
+  "next_action": "TRACK C2 slice 2b：①PlatformAccount identity immutability（MSG-67 CHANGE，DB 不变量 + 测试）②RecoveryOpportunity / ClaimItem / EvidenceArtifact 服务端 account 接线 + cross-account 拒绝 ③C2 12+ 项永久验收 → C2 FINAL 送审 → PHASE X1。",
   "current_head": "9496d3e",
   "reviewed_head": "07b7009",
   "claim_submit_batch": {
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-02T03:25:24.203Z",
-    "gapMs": 46065,
-    "stale": false,
-    "checkedAt": "2026-10-02T03:26:10.267Z"
+    "previousTickAt": "2026-10-02T03:26:10.267Z",
+    "gapMs": 5439291,
+    "stale": true,
+    "checkedAt": "2026-10-02T04:56:49.558Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -250,7 +250,7 @@
     "integration_boundary_review": "AUTHORIZED_TO_PLAN（先提交设计/实施计划，不直接开放真实 transport）"
   },
   "r36_submission_comment": "5927087320",
-  "stale_recovered_at": "2026-10-02T03:25:24.203Z",
+  "stale_recovered_at": "2026-10-02T04:56:49.558Z",
   "engineering_regression_policy": {
     "source": "HOST PRODUCT DIRECTION 2026-10-01",
     "doc": "docs/releases/ENGINEERING-REGRESSION-POLICY.md",
@@ -3496,5 +3496,23 @@
     ],
     "acceptance_matrix_18": "见文档 §10，并入后续永久回归基线",
     "success_criteria": "可演示 TikTok Order + TikTok Settlement/Refund + UPS/FedEx Shipment + POD → 同一 commerce entity → Cross-System Recovery Opportunity → Claim-Ready Package"
+  },
+  "platform_account_identity_immutability": {
+    "message_id": "MSG-20261002-67",
+    "decision": "CHANGE（无需设计轮，直接并入 M4–M6）",
+    "archival": "FULL_COPY_OK",
+    "archived_at": "2026-10-02T04:57:57.048Z",
+    "change": "PlatformAccount 的 platform / externalAccountId / identityVersion 创建后不可 UPDATE 修改；displayName / status / marketplace / region 允许合法修改",
+    "keep": "org-scoped identity 方向、token 不入表、1 account → N connections、跨租户 FK guard 与 trigger inventory 全部保留",
+    "risk": "允许原地改这三个字段会让已下推的 platformAccountId 与历史事实所代表的外部账户身份脱钩，破坏 reconnect / Claim·Evidence·Settlement provenance",
+    "tests_required": [
+      "platform mutation → DB reject 且原记录不变",
+      "externalAccountId mutation → DB reject",
+      "identityVersion mutation → DB reject",
+      "credential rotation / reconnect → identity tuple 不变",
+      "displayName / status 更新仍允许",
+      "cross-tenant SourceConnection binding 继续拒绝"
+    ],
+    "next": "并入 M4–M6 → 继续 server-derived account propagation / account-scoped fact uniqueness / fail-closed backfill / C2 12+ 项永久验收 → TRACK C2 FINAL 送审"
   }
 }

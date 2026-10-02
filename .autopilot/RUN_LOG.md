@@ -1449,3 +1449,10 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - CHANGE A：account identity immutable（DB-level invariant）；CHANGE B：优先 migration ordering，触发器禁用仅限 migration/fixture/controlled backfill 且须 fail-closed 复核。
 - NEXT：按 M1–M6 实施 → C2 FINAL 验收（MSG-66 清单）→ 送审；C2 通过后进入 TRACK B。
 - 归档：AI-ARCHITECT-INBOX.md（逐字 ```text + FULL_COPY_OK）。
+
+## 2026-10-02 JST — MSG-20261002-67 = PlatformAccount identity immutability（并入 M4–M6）
+
+- CHANGE：PlatformAccount 的 platform / externalAccountId / identityVersion 创建后不可修改（DB 不变量）；display/status 仍可合法更新。
+- TEST：三类 mutation → DB 拒绝且原记录不变；rotate/reconnect → identity tuple 不变；cross-tenant binding 继续拒绝。
+- NEXT：并入 M4–M6 → C2 FINAL 验收（12+ 项）→ 送审。
+- 归档：AI-ARCHITECT-INBOX.md（逐字 ```text + FULL_COPY_OK）。
