@@ -148,6 +148,8 @@ export default function AccountManagementView() {
                               <a className="mr-1 text-blue-700 underline" href={connection.actions.reconnect.entry}>
                                 重新连接
                               </a>
+                            ) : connection.actions.reconnect.reason === 'REAL_OAUTH_EXTERNAL_GATE' ? (
+                              <span className="mr-1 text-slate-500">需重新授权（真实 OAuth/API 尚未启用）</span>
                             ) : null}
                             {connection.rebind.available ? (
                               <a className="text-blue-700 underline" href={data.onboarding.explicitRebindEntry}>

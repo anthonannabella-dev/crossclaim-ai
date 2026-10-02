@@ -247,13 +247,18 @@ describe('PC-06 — account management projection', () => {
         body.platforms[0].accounts[0].connections.map((connection) => [connection.label, connection]),
       );
       expect(connections.get('active-conn')?.actions.reconnect.available).toBe(false);
-      expect(connections.get('needs-auth-conn')?.actions.reconnect).toEqual({ available: true, reason: 'CONNECTION_REQUIRES_REAUTH', entry: '/connections' });
-      expect(connections.get('revoked-conn')?.actions.reconnect.available).toBe(true);
+      // CHANGE B2：真实 OAuth/API 仍被 gate 阻塞 → 不得声称可执行，只给原因
+      expect(connections.get('needs-auth-conn')?.actions.reconnect).toEqual({
+        available: false,
+        reason: 'REAL_OAUTH_EXTERNAL_GATE',
+        entry: '/connections',
+      });
+      expect(connections.get('revoked-conn')?.actions.reconnect.reason).toBe('REAL_OAUTH_EXTERNAL_GATE');
       // 已绑定连接 rebind 不可用（binding immutable）
       expect(connections.get('active-conn')?.actions.rebind).toEqual({ available: false, reason: 'ALREADY_BOUND_IMMUTABLE', entry: '/connections' });
       // legacy unbound 的 rebind 可用；reconnect 也可用（NEEDS_AUTH）
       expect(body.unboundLegacyConnections[0].actions.rebind).toEqual({ available: true, reason: 'LEGACY_UNBOUND_EXPLICIT_REBIND', entry: '/connections' });
-      expect(body.unboundLegacyConnections[0].actions.reconnect.available).toBe(true);
+      expect(body.unboundLegacyConnections[0].actions.reconnect.available).toBe(false);
     });
   });
 

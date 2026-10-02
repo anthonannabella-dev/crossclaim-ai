@@ -150,14 +150,21 @@ export async function getAccountManagementView(
     },
   });
 
-  /** CHANGE B：由服务端按事实推导 reconnect / rebind 能力（前端不得猜）。 */
+  /**
+   * CHANGE B / B2（MSG-20261003-90 / -91）：由服务端按事实推导 reconnect / rebind 能力。
+   *
+   * **reconnect 能力必须与真实 backend capability 一致**：当前仓库没有真正完成 reauth/reconnect 的
+   * capability（真实 provider OAuth/API 仍被 EXTERNAL INTEGRATION GATE 阻塞），因此即使连接状态
+   * 需要重新授权，也**不得**把 available=true 当作能力声明；只能给出原因与说明。
+   * 未来真实 reauth capability 落地后，才可在此处按真实能力返回 available=true。
+   */
   const connectionActions = (input: { status: string; state: ConnectionAccountState }): ManagedConnectionActions => {
-    const reconnectAvailable =
+    const reauthRequired =
       input.status === 'NEEDS_AUTH' || input.status === 'ERROR' || input.status === 'REVOKED';
     const rebindAvailable = input.state === 'UNBOUND_LEGACY';
     return {
-      reconnect: reconnectAvailable
-        ? { available: true, reason: 'CONNECTION_REQUIRES_REAUTH', entry: '/connections' }
+      reconnect: reauthRequired
+        ? { available: false, reason: 'REAL_OAUTH_EXTERNAL_GATE', entry: '/connections' }
         : { available: false, reason: 'NO_REAUTH_REQUIRED', entry: '/connections' },
       rebind: rebindAvailable
         ? { available: true, reason: 'LEGACY_UNBOUND_EXPLICIT_REBIND', entry: '/connections' }
