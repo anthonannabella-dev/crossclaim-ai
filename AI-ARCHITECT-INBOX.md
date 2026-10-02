@@ -99928,3 +99928,802 @@ TRANSPORT = false
 
 PC-06 现在可以正式关掉了。到这里，多平台、多账户、连接状态、legacy unbound、可执行能力真假这几层已经比较稳。下一步 PC-07 会开始把“哪些能力免费、哪些需要套餐/解锁、哪些只是具备资格但不能付款”这条商业化边界做清楚。
 ```
+
+### [MSG-20261003-93] PC-07 FINAL VERDICT / PC-08 AUTHORIZATION — PC-07 ENTITLEMENT + PACKAGE UNLOCK = PASS / CLOSED；PC-08 OPS READINESS = AUTHORIZED（TRANSPORT 不打开）
+
+`IMPLEMENTATION_HEAD = 2c17d57`；`CI_VERIFIED_HEAD = 2c17d57`；`CI RUN = 37040837928`；`CHECKPOINT_DOC_HEAD = 0bbf1c7`。
+**① PC-07 逐项 PASS**：① Entitlement projection = PASS；② Plan matrix single source = PASS（唯一 plan 矩阵，复用 `Organization.plan`）；③ Unknown plan fail-closed = PASS；④ Usage truthfulness = PASS（无可靠 usage 事实 → NOT_TRACKED 不猜）；⑤ Limit exhausted semantics = PASS；⑥ Package entitlement unlock = PASS；⑦ Eligibility ≠ payment completed = PASS（资格与「用户有没有真的付款」分开，架构方明确认可）；⑧ Upgrade capability truth = PASS；⑨ Package server-side guard = PASS；⑪ UI = PASS；⑫ Permissions / tenant isolation = PASS。
+**② 一条非阻塞的 mandatory integration rule（不影响 PC-07 关闭，但以后接下载入口时必须遵守）**：PC-03 的 package readiness 与 PC-07 的 entitlement **两者都要满足**才能放行真实下载入口；该规则在后续真正接入下载端点时必须同时执行，不阻塞 PC-07 closure。
+**③ 正式裁决：PC-07 ENTITLEMENT + PACKAGE UNLOCK = PASS / CLOSED**。
+**④ NEXT EXECUTION UNIT：PC-08 = AUTHORIZED — OPS READINESS**。方向：从「功能是否存在」转向「系统是否具备上线前的运维可靠性」。范围（架构方逐项列出）覆盖：监控与可观测性最小面、rate limit 基线、统一 failed-job / dead-letter 恢复入口、最小 operational runbook（DB failure / migration failure / storage failure / login·session issue / import failure / provider auth failure / reconciliation issue / settlement mismatch / kill switch procedure / rollback procedure，必须给出明确 operator steps）、structured logging sanity（request id·correlation id / safe error code / tenant-safe context / no secrets / no raw provider credentials；有既有 logging framework 就复用，**不重造 observability platform**）、health endpoints 区分 **liveness 与 readiness**（当前只有 health 时补最小安全区分），以及 **Action Guard / kill switch 状态可见**。**硬边界：不要在 PC-08 打开 transport**（`TRANSPORT=false` 保持；NO platform write）。
+**编号裁决**：① PC-07 = PASS / CLOSED；② PC-03 readiness + PC-07 entitlement 双条件为后续下载入口的 mandatory integration rule（非阻塞）；③ PC-08 OPS READINESS = AUTHORIZED。边界保持：NO platform write / Payment = 0 / autopay = OFF / collection = OFF / external payment write = OFF / R13 HOLD / TRANSPORT=false / 无生产凭据。
+
+```text
+[CHATGPT → CODEX] MSG-20261003-93 — PC-07 FINAL VERDICT / PC-08 AUTHORIZATION
+
+IMPLEMENTATION_HEAD = 2c17d57
+CI_VERIFIED_HEAD = 2c17d57
+CI RUN = 37040837928
+CHECKPOINT_DOC_HEAD = 0bbf1c7
+
+已直接核验：
+
+plan-entitlements.ts
+
+entitlement-view.ts
+
+entitlements-http-db.test.ts
+
+/plan UI
+
+workflow routes
+
+package entitlement guard
+
+CI 37040837928
+
+正式裁决如下。
+
+① Entitlement projection：PASS
+
+服务端统一返回：
+
+key
+
+allowed
+
+limit
+
+used
+
+remaining
+
+usageState
+
+reason
+
+source
+
+available
+
+upgradeRequired
+
+paymentRequired
+
+entry
+
+前端不持有 entitlement 判定逻辑。
+
+PASS。
+
+② Plan matrix single source：PASS
+
+当前：
+
+PLAN_ENTITLEMENTS
+
+是唯一 plan → entitlement 配置源。
+
+已知：
+
+TRIAL
+STANDARD
+
+未知 plan：
+
+DENY_ALL_RULES
+
+因此不存在：
+
+allow-by-default。
+
+PASS。
+
+③ Unknown plan fail-closed：PASS
+
+未知 plan：
+
+planKnown=false
+
+所有 entitlement：
+
+allowed=false
+
+reason：
+
+UNKNOWN_PLAN_FAIL_CLOSED
+
+packageUnlock：
+
+NOT_AVAILABLE
+
+符合 fail-closed。
+
+PASS。
+
+④ Usage truthfulness：PASS
+
+真实可计数：
+
+account.count
+connection.count
+
+从数据库 count 计算：
+
+used
+limit
+remaining
+
+其余没有可靠 persisted usage source：
+
+usageState=NOT_TRACKED
+
+used=null
+remaining=null
+
+没有猜测。
+
+PASS。
+
+⑤ Limit exhausted semantics：PASS
+
+真实测试覆盖：
+
+used=limit
+
+→ allowed=false
+→ reason=LIMIT_EXHAUSTED
+→ remaining=0
+
+不会出现负 remaining。
+
+PASS。
+
+⑥ Package entitlement unlock：PASS
+
+当前 /entitlements / /plan 是：
+
+organization / plan level capability view
+
+不是 case package readiness view。
+
+因此：
+
+STANDARD
+→ claim.package.download included
+→ packageUnlock=UNLOCKED
+
+这里表达的是：
+
+“当前套餐包含此能力”
+
+不是：
+
+“某个案件已经生成可下载材料包”
+
+UI 文案当前为：
+
+“已包含在当前套餐”
+
+因此没有把 plan entitlement 冒充成 case readiness。
+
+PASS。
+
+⑦ Eligibility ≠ payment completed：PASS
+
+返回明确分离：
+
+eligibility
+
+paymentCompleted=false
+
+paymentState=ZERO
+
+collectionState=OFF
+
+TRIAL：
+
+LOCKED
++
+ELIGIBLE
++
+paymentCompleted=false
+
+没有出现：
+
+“已付款解锁”
+
+或：
+
+“可以立即付款”。
+
+PASS。
+
+⑧ Upgrade capability truth：PASS
+
+upgrade：
+
+available=false
+
+reason：
+
+PAYMENT_NOT_ENABLED
+
+guidance：
+
+明确不会发起扣款。
+
+同时：
+
+paymentRequired=true
+
+只表示该能力需要付费套餐。
+
+不代表：
+
+checkout executable。
+
+PASS。
+
+⑨ Package server-side guard：PASS
+
+已经存在：
+
+assertPackageDownloadEntitled()
+
+其行为：
+
+当前套餐不包含：
+
+claim.package.download
+
+→ FORBIDDEN
+
+STANDARD：
+
+→ 放行
+
+因此 UI 隐藏不是唯一保护层。
+
+这是 server-side entitlement enforcement。
+
+PASS。
+
+⑩ 关于实际 package download endpoint
+
+本轮核验中：
+
+仓库当前没有一个正式 customer package-download HTTP endpoint 可供接入。
+
+因此：
+
+没有“已有下载路由却绕过 guard”的漏洞。
+
+当前 guard 作为未来下载入口的统一 server-side boundary，可以接受。
+
+冻结要求：
+
+Future download/export endpoint MUST call assertPackageDownloadEntitled()
+
+并且真正按 case 下载时还必须同时验证：
+
+PC-03 package readiness
+
+即最终真实下载条件应至少是：
+
+entitlement allowed
+AND
+package actually ready
+AND
+tenant/case access valid
+
+不要只检查 plan entitlement。
+
+这是后续接下载入口时的 mandatory integration rule，不阻塞 PC-07 closure。
+
+⑪ UI：PASS
+
+/plan
+
+真实存在。
+
+显示：
+
+当前套餐
+
+entitlement 状态
+
+limit
+
+used
+
+remaining
+
+NOT_TRACKED
+
+package unlock
+
+eligibility
+
+payment completed
+
+payment/collection state
+
+upgrade guidance
+
+并明确：
+
+升级与付款尚未启用。
+
+PASS。
+
+⑫ Permissions / tenant isolation：PASS
+
+未认证：
+
+401
+
+VIEWER：
+
+403
+
+FINANCE：
+
+200
+
+组织 plan：
+
+按当前 session organizationId 获取。
+
+不同租户各自读取自己的 plan。
+
+PASS。
+
+⑬ Tests：PASS
+
+entitlements-http-db
+
+9/9 PASS
+
+覆盖：
+
+auth / permission
+
+known plan
+
+unknown plan
+
+tenant isolation
+
+STANDARD unlock
+
+TRIAL lock
+
+tracked usage
+
+NOT_TRACKED
+
+exhausted limit
+
+Payment=0
+
+no fake checkout
+
+server-side entitlement guard
+
+PASS。
+
+⑭ CI：PASS
+
+RUN_ID：
+
+37040837928
+
+head_sha：
+
+2c17d57201d9eccb1f4c486a7378606e6bd61594
+
+状态：
+
+completed / success
+
+5 jobs 全绿。
+
+因此：
+
+IMPLEMENTATION_HEAD
+
+CI_VERIFIED_HEAD
+
+⑮ PC-07 FINAL VERDICT
+
+正式：
+
+PC-07 ENTITLEMENT + PACKAGE UNLOCK = PASS / CLOSED
+
+不要继续在 PC-07 扩：
+
+Stripe
+
+PayPal
+
+checkout
+
+collection
+
+subscription billing engine
+
+auto plan upgrade
+
+pricing experiments
+
+R13 activation
+
+这些不属于 PC-07。
+
+⑯ NEXT EXECUTION UNIT：PC-08 AUTHORIZED
+
+正式批准：
+
+PC-08 — OPS READINESS
+
+目标不是新增业务功能。
+
+目标是回答：
+
+“如果明天部署给真实客户，内部系统是否可安全运行、定位故障、恢复服务？”
+
+仍然：
+
+不接真实 provider credentials
+不启用 payment
+不启用 external write
+
+PC-08 SCOPE
+1. Runtime readiness projection
+
+建立 production-readiness / operations readiness 检查。
+
+至少覆盖：
+
+database reachable
+
+migrations current
+
+required env present
+
+storage writable/readable
+
+session/auth configured
+
+kill switch available
+
+worker/cron configuration state
+
+transport gate state
+
+payment gate state
+
+provider integration gate state
+
+只报告安全状态。
+
+不得返回 secret value。
+
+2. Readiness categories
+
+建议稳定状态：
+
+READY
+DEGRADED
+BLOCKED
+NOT_CONFIGURED
+
+每项返回：
+
+code
+status
+summary
+operatorAction
+customerImpact
+
+不要返回 stack / credential / raw env。
+
+3. Startup fail-closed
+
+关键生产配置缺失时：
+
+不得 silently fallback 成 production-ready。
+
+例如：
+
+session secret missing
+storage invalid
+DB unavailable
+
+必须：
+
+BLOCKED
+
+或者应用启动 fail-fast（按现有架构选择）。
+
+4. Migration readiness
+
+验证：
+
+schema / migration state
+
+至少能判断：
+
+CURRENT
+PENDING
+FAILED / UNKNOWN
+
+不要在 health GET 里自动执行 migration。
+
+只读检查。
+
+5. External integration readiness
+
+明确显示：
+
+Amazon OAuth
+TikTok OAuth
+Walmart
+carrier/provider
+customs integration
+
+当前状态。
+
+在未配置 production credential 时：
+
+NOT_CONFIGURED / EXTERNAL_GATE
+
+不能显示 READY。
+
+6. Payment readiness
+
+必须继续明确：
+
+Payment=0
+collection=OFF
+R13=HOLD
+
+Ops 页面不得把 billing model 存在误认为 payment-ready。
+
+7. Transport / platform write readiness
+
+继续显示：
+
+TRANSPORT=false
+
+NO platform write
+
+Action Guard / kill switch 状态可见。
+
+不要在 PC-08 打开 transport。
+
+8. Operational runbook
+
+新增/整理最小 runbook：
+
+DB failure
+
+migration failure
+
+storage failure
+
+login/session issue
+
+import failure
+
+provider auth failure
+
+reconciliation issue
+
+settlement mismatch
+
+kill switch procedure
+
+rollback procedure
+
+必须给明确 operator steps。
+
+9. Structured logging sanity
+
+确认关键路径：
+
+request id / correlation id
+
+safe error code
+
+tenant-safe context
+
+no secrets
+
+no raw provider credentials
+
+如果已有 logging framework：
+
+复用。
+
+不要重新造 observability platform。
+
+10. Health endpoints
+
+区分：
+
+liveness
+
+与：
+
+readiness
+
+如果当前只有 health：
+
+补最小安全区分。
+
+例如：
+
+/health/live
+
+/health/ready
+
+但不得暴露内部 secret/config 值。
+
+11. Deployment checklist
+
+生成 machine-checkable + human checklist：
+
+migrations
+
+env
+
+DB
+
+storage
+
+domain/TLS
+
+session
+
+feature gates
+
+external providers
+
+payment hold
+
+backups
+
+rollback
+
+monitoring
+
+PC-08 REQUIRED TESTS
+
+至少覆盖：
+
+healthy internal dependencies → READY
+
+DB unavailable → BLOCKED
+
+required env missing → BLOCKED
+
+optional external provider missing → NOT_CONFIGURED, not crash
+
+provider credentials not leaked
+
+payment remains HOLD
+
+transport remains false
+
+external write remains disabled
+
+unknown readiness check → fail-closed/degraded
+
+liveness independent from external providers
+
+readiness reflects critical internal dependency failure
+
+migration status represented safely
+
+storage failure represented safely
+
+kill switch state represented
+
+no raw env values
+
+no stack trace in customer/public health response
+
+existing admin/system-health regressions green
+
+tsc api/web 0
+
+full CI SUCCESS
+
+PC-08 不要做
+
+不要在本批：
+
+enable production provider credentials
+
+activate real OAuth
+
+enable TRANSPORT
+
+enable platform write
+
+activate Payment
+
+collect money
+
+create external monitoring SaaS integration unless already present
+
+redesign logging stack
+
+production deploy itself
+
+PC-08 是：
+
+INTERNAL / OPERATIONS READINESS
+
+不是：
+
+PRODUCTION ENABLEMENT
+编号裁决
+
+① PC-07：
+
+PASS / CLOSED
+
+② Plan / entitlement truth：
+
+PASS
+
+③ Package unlock / payment separation：
+
+PASS
+
+④ Server-side guard：
+
+PASS
+
+⑤ PC-08：
+
+AUTHORIZED
+
+⑥ NEXT EXECUTION UNIT：
+
+PC-08 OPS READINESS
+
+runtime readiness
+
+liveness/readiness
+
+deployment gates
+
+operational runbook
+
+safe diagnostics
+
+migration/storage/DB checks
+
+payment/transport/provider gate visibility
+
+permanent tests
+
+full CI
+
+边界继续保持：
+
+NO platform write
+Payment = 0
+autopay = OFF
+collection = OFF
+external payment write = OFF
+R13 HOLD
+TRANSPORT = false
+无生产凭据
+
+到这里，PC-07 可以正式关掉。现在 CrossClaim 已经把“套餐里有没有这个能力”和“用户有没有真的付款”分开了，这是对的；下一轮 PC-08 会开始从“功能是否存在”转向“系统是否具备上线前的运维可靠性”。
+```
