@@ -41,6 +41,29 @@ beforeEach(async () => {
       { id: ORG_B, name: '外部租户', slug: 'case-org-b' },
     ],
   });
+  // MSG-20261002-70 CHANGE C：夹具 account-aware 化。
+  fixtureAccountId = (
+    await prisma.platformAccount.create({
+      data: {
+        organizationId: ORG,
+        platform: 'OTHER',
+        externalAccountId: 'C2-FIXTURE-ACCOUNT',
+        displayName: 'c2 fixture account',
+      },
+      select: { id: true },
+    })
+  ).id;
+  fixtureAccountIdB = (
+    await prisma.platformAccount.create({
+      data: {
+        organizationId: ORG_B,
+        platform: 'OTHER',
+        externalAccountId: 'C2-FIXTURE-ACCOUNT',
+        displayName: 'c2 fixture account B',
+      },
+      select: { id: true },
+    })
+  ).id;
   const admin = await prisma.user.create({
     data: { email: 'case-admin@example.com', displayName: '管理员', status: 'ACTIVE' },
   });
@@ -57,10 +80,14 @@ beforeEach(async () => {
   });
 });
 
+let fixtureAccountId = '';
+let fixtureAccountIdB = '';
+
 async function seedOpportunity(organizationId = ORG, status: 'QUALIFIED' | 'CONVERTED' | 'DETECTED' = 'QUALIFIED') {
   return prisma.recoveryOpportunity.create({
     data: {
       organizationId,
+      accountId: organizationId === ORG ? fixtureAccountId : fixtureAccountIdB,
       domain: 'LOGISTICS',
       channel: 'OTHER',
       status,
