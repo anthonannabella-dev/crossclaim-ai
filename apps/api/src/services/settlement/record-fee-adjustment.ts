@@ -23,7 +23,8 @@ export type FeeAdjustmentErrorCode =
   | 'CROSS_TENANT_REFERENCE'
   | 'REVERSAL_ADJUSTMENT_NOT_FOUND'
   | 'ADJUSTMENT_REPLAYED'
-  | 'VOID_AMOUNT_MISMATCH';
+  | 'VOID_AMOUNT_MISMATCH'
+  | 'EVIDENCE_REQUIRED';
 
 export class FeeAdjustmentError extends Error {
   constructor(
@@ -76,6 +77,9 @@ export async function recordFeeAdjustment(
 ): Promise<RecordFeeAdjustmentResult> {
   if (!input.targetFeeCalculationId || !input.reasonCode) {
     throw new FeeAdjustmentError('INVALID_INPUT', 'targetFeeCalculationId and reasonCode are required');
+  }
+  if (!input.evidenceReferences || input.evidenceReferences.length < 1) {
+    throw new FeeAdjustmentError('EVIDENCE_REQUIRED', 'at least one evidence reference is required');
   }
   if (input.adjustmentKind === 'REVERSAL' && (!input.triggerSettlementAdjustmentIds || input.triggerSettlementAdjustmentIds.length < 1)) {
     throw new FeeAdjustmentError('INVALID_INPUT', 'REVERSAL requires triggerSettlementAdjustmentIds');
