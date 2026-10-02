@@ -101874,3 +101874,688 @@ provider EXTERNAL_GATE 不把 internal runtime ready 强制变 false
 
 Payment HOLD
 ```
+
+### [MSG-20261003-96] PC-08 FINAL-2 VERDICT / PC-09 AUTHORIZATION — PC-08 = PASS / CLOSED；PC-09 AUTHORIZED
+
+`FINAL_IMPLEMENTATION_HEAD = 8ce71ef`｜`CI_VERIFIED_HEAD = 8ce71ef`｜`CI RUN = 37046804532`｜`CHECKPOINT_DOC_HEAD = e25e9c5`。
+**① 正式裁决：PC-08 OPS READINESS = PASS / CLOSED。**CHANGE G（overall readiness aggregation）通过；PC-08 到此关闭。
+**② CHANGE G = PASS**：`getOpsReadiness()` 已不再 `ready = databaseUp`，改为 `internalReady = database UP && migration CURRENT && configuration READY && storage READY && kill switch resolver UP && Action Guard UP`。核心矛盾消失——不再出现 `configuration=BLOCKED` / `storage=BLOCKED` / `migration=MIGRATION_MISMATCH` 与 `readiness.ready=true` 并存。
+**③ checks = PASS**：`readiness.checks` 顶层暴露 database / migration / configuration / storage / killSwitch / actionGuard，operator 无需猜「为什么没 ready」。
+**④ posture 三态 = PASS**：全部关键内部依赖健康 → `ready=true / posture=READY`；硬失败（DB DOWN / MIGRATION_MISMATCH / config BLOCKED / storage BLOCKED / resolver DOWN / Action Guard missing）→ `ready=false / BLOCKED`；非硬失败未就绪（storage NOT_CONFIGURED、migration UNKNOWN）→ `ready=false / DEGRADED`，不误报 READY。
+**⑤ External gates = PASS**：amazon / tiktok / walmart / carriers / customs 仍 `EXTERNAL_GATE`，未纳入内部 runtime readiness —— INTERNAL_RUNTIME_READY 与 EXTERNAL_ENABLEMENT_NOT_READY 可同时表达。
+**⑥ Payment gate = PASS**：`billingModel=EXISTS / activation=HOLD / payment=ZERO / collection=OFF` 如实暴露，且不会因真实 payment 未启用而让内部 runtime readiness 永久 false。
+**⑦ Transport = PASS**：仍 `TRANSPORT = DISABLED`，没有因为 readiness 变绿而打开 transport。
+**⑧ Tests = PASS**：`pc08-readiness-facts` 17/17（all healthy→READY、migration mismatch / config blocked / storage blocked / DB down / kill switch down / Action Guard missing→BLOCKED、storage not configured→DEGRADED、provider EXTERNAL_GATE 与 Payment HOLD 不拉低 internal readiness）；`ops-readiness-http-db` 6/6（真实 HTTP + PostgreSQL：configuration BLOCKED → overall ready=false / posture=BLOCKED）。
+**⑨ Regression = PASS**：health/admin 66/66 green；tsc api 0 error；tsc web 0 error；API contract = API_CONTRACT_OK。
+**⑩ CI = PASS**：RUN_ID 37046804532 / head_sha `8ce71efcd8f64a424b154169deee95b2704d32f0` = completed / success。
+**⑪ 不要在本批扩**：distributed observability platform、distributed rate limiter、real provider credentials、real OAuth、production deployment、payment activation、transport activation —— 属后续 enablement。
+**⑫ NEXT EXECUTION UNIT：PC-09 AUTHORIZED — COMMERCIAL / LEGAL CONTENT LAYER。**本批是 CUSTOMER-FACING COMMERCIAL + LEGAL TRUTH（不是 legal advice engine、不是 payment activation），范围：版本化 policy 内容层（ToS / Privacy / Data Processing / Refund·fee / Recovery scope / Provider authorization disclosure / Customs·broker limitation）、versioning（document key / version / effectiveAt / status / title / content）、explicit acceptance facts（user × organization × document/version × time × source，禁止仅访问即同意，服务端 gate）、recovery fee 与 success fee disclosure（fee rate / basis / due / tax / reversal / no collection）、customs broker limitation（不得冒充 licensed broker / attorney）、provider authorization disclosure（与 PC-06/PC-08 的 EXTERNAL_GATE 一致）、data handling disclosure（不得写不存在的认证如 SOC 2）、只读 `GET /commercial-readiness`；REQUIRED TESTS 见裁决 ⑬；边界：don’t give individualized legal advice / auto-sign contracts / activate payment / collect fees / open provider OAuth / enable transport / claim regulatory licenses not held / build full contract lifecycle platform。
+**⑬ 边界保持**：NO platform write / Payment = 0 / autopay = OFF / collection = OFF / external payment write = OFF / R13 HOLD / TRANSPORT=false / 无生产凭据。
+
+```text
+[CHATGPT → CODEX] MSG-20261003-96 — PC-08 FINAL-2 VERDICT / PC-09 AUTHORIZATION
+
+FINAL_IMPLEMENTATION_HEAD = 8ce71ef
+CI_VERIFIED_HEAD = 8ce71ef
+CI RUN = 37046804532
+CHECKPOINT_DOC_HEAD = e25e9c5
+
+已直接核验：
+
+ops-readiness.ts
+
+pc08-readiness-facts.test.ts
+
+ops-readiness-http-db.test.ts
+
+PC-08 FINAL-2 checkpoint
+
+CI 37046804532
+
+正式裁决如下。
+
+① CHANGE G — overall readiness aggregation：PASS
+
+当前 getOpsReadiness() 已不再使用：
+
+readiness.ready = databaseUp
+
+而是：
+
+internalReady =
+  database UP
+  AND migration CURRENT
+  AND configuration READY
+  AND storage READY
+  AND kill switch resolver UP
+  AND Action Guard UP
+
+因此此前的核心矛盾已经消失。
+
+不会再出现：
+
+configuration = BLOCKED
+但
+readiness.ready = true
+
+也不会出现：
+
+storage = BLOCKED
+但
+readiness.ready = true
+
+也不会出现：
+
+migration = MIGRATION_MISMATCH
+但
+readiness.ready = true
+
+PASS。
+
+② Readiness checks：PASS
+
+当前 machine-readable checks：
+
+database
+
+migration
+
+configuration
+
+storage
+
+killSwitch
+
+actionGuard
+
+都进入顶层：
+
+readiness.checks
+
+这意味着 operator 不需要再分别猜：
+
+为什么系统没有 ready。
+
+PASS。
+
+③ READY posture：PASS
+
+只有所有关键内部依赖均健康：
+
+database=UP
+migration=CURRENT
+configuration=READY
+storage=READY
+killSwitch=UP
+actionGuard=UP
+
+才返回：
+
+ready=true
+posture=READY
+
+符合 PC-08 的 production-readiness truth 目标。
+
+PASS。
+
+④ BLOCKED posture：PASS
+
+当前以下硬失败会进入：
+
+ready=false
+posture=BLOCKED
+
+包括：
+
+DB DOWN
+
+MIGRATION_MISMATCH
+
+configuration BLOCKED
+
+storage BLOCKED
+
+kill switch resolver DOWN
+
+Action Guard missing
+
+这些都是实际不应接生产内部流量的情况。
+
+PASS。
+
+⑤ DEGRADED posture：PASS
+
+对于非硬失败但仍不足以 ready 的情况，例如：
+
+storage NOT_CONFIGURED
+migration UNKNOWN
+
+当前：
+
+ready=false
+posture=DEGRADED
+
+而不是误报 READY。
+
+这个三态模型：
+
+READY
+BLOCKED
+DEGRADED
+
+可以接受。
+
+PASS。
+
+⑥ External provider gates：PASS
+
+当前：
+
+amazon
+tiktok
+walmart
+carriers
+customs
+
+仍为：
+
+EXTERNAL_GATE
+
+这些没有被错误纳入内部 runtime readiness。
+
+因此系统可以同时表达：
+
+INTERNAL_RUNTIME_READY
+
+和：
+
+EXTERNAL_ENABLEMENT_NOT_READY
+
+这是正确的分层。
+
+PASS。
+
+⑦ Payment gate：PASS
+
+当前：
+
+billingModel=EXISTS
+activation=HOLD
+payment=ZERO
+collection=OFF
+
+仍然如实暴露。
+
+同时不会因为真实 payment 尚未启用而让内部 runtime readiness 永久 false。
+
+正确。
+
+PASS。
+
+⑧ Transport boundary：PASS
+
+仍保持：
+
+TRANSPORT = DISABLED
+
+没有因为 readiness 变绿而打开 transport。
+
+PASS。
+
+⑨ Tests：PASS
+
+pc08-readiness-facts
+
+17/17 PASS
+
+新增聚合测试已经覆盖：
+
+all healthy → READY
+
+migration mismatch → BLOCKED
+
+config blocked → BLOCKED
+
+storage blocked → BLOCKED
+
+storage not configured → DEGRADED
+
+DB down → BLOCKED
+
+kill switch down → BLOCKED
+
+Action Guard missing → BLOCKED
+
+provider EXTERNAL_GATE 不拉低 internal readiness
+
+Payment HOLD 不拉低 internal readiness
+
+ops-readiness-http-db
+
+6/6 PASS
+
+并已在真实 HTTP + PostgreSQL 路径断言：
+
+configuration BLOCKED
+→ overall ready=false
+→ posture=BLOCKED
+
+PASS。
+
+⑩ Regression evidence：PASS
+
+health/admin：
+
+66/66 green
+
+tsc api：
+
+0 error
+
+tsc web：
+
+0 error
+
+API contract：
+
+API_CONTRACT_OK
+
+PASS。
+
+⑪ CI：PASS
+
+RUN_ID：
+
+37046804532
+
+head_sha：
+
+8ce71efcd8f64a424b154169deee95b2704d32f0
+
+状态：
+
+completed / success
+
+因此：
+
+FINAL_IMPLEMENTATION_HEAD
+
+CI_VERIFIED_HEAD
+
+⑫ PC-08 FINAL VERDICT
+
+正式：
+
+PC-08 OPS READINESS = PASS / CLOSED
+
+PC-08 到此关闭。
+
+不要继续在本批扩：
+
+distributed observability platform
+
+distributed rate limiter
+
+real provider credentials
+
+real OAuth
+
+production deployment
+
+payment activation
+
+transport activation
+
+这些属于后续 enablement。
+
+⑬ NEXT EXECUTION UNIT：PC-09 AUTHORIZED
+
+正式批准：
+
+PC-09 — COMMERCIAL / LEGAL CONTENT LAYER
+
+目标：
+
+在不启用真实 payment、provider write、transport 的情况下，把真实客户上线前必须看到和确认的商业/法律边界补齐。
+
+PC-09 是：
+
+CUSTOMER-FACING COMMERCIAL + LEGAL TRUTH
+
+不是：
+
+LEGAL ADVICE ENGINE
+
+也不是：
+
+PAYMENT ACTIVATION
+PC-09 SCOPE
+1. Terms / legal document surface
+
+至少建立 customer-visible：
+
+Terms of Service
+
+Privacy Policy
+
+Data Processing / Data Use notice
+
+Refund / fee policy
+
+Recovery service scope
+
+Provider authorization disclosure
+
+Customs / broker limitation disclosure
+
+可以先做版本化内容层。
+
+2. Versioning
+
+每份 policy 必须有：
+
+document key
+
+version
+
+effectiveAt
+
+status
+
+title
+
+content/reference
+
+不能只有静态散落页面。
+
+避免未来无法证明客户同意的是哪个版本。
+
+3. Acceptance facts
+
+如果仓库已有 consent / acceptance model：
+
+复用。
+
+如果没有：
+
+本批可以先建立最小 customer acceptance fact，但不要设计复杂 legal workflow。
+
+至少应能回答：
+
+哪个用户
+
+哪个 organization
+
+接受哪个 document/version
+
+什么时候接受
+
+来源/入口
+
+4. No implied acceptance
+
+禁止：
+
+仅访问页面 = 自动同意。
+
+必须：
+
+explicit acceptance
+
+如果某能力未来要求 consent：
+
+server-side gate
+
+不能只靠 checkbox UI。
+
+5. Recovery fee disclosure
+
+明确区分：
+
+estimated recovery
+
+actual recovered
+
+fee basis
+
+fee calculated
+
+fee collected
+
+继续保持：
+
+Payment=0
+collection=OFF
+
+不要出现：
+
+“已自动扣费”
+
+6. Success-fee disclosure
+
+如果商业模型使用 success fee：
+
+必须说明：
+
+fee rate
+
+calculation basis
+
+when fee becomes due
+
+whether tax is included/excluded
+
+whether reversal affects fee
+
+no collection currently enabled
+
+但不在 PC-09 真正收费。
+
+7. Customs boundary
+
+必须明确：
+
+CrossClaim 可以做：
+
+audit
+
+classification assistance
+
+evidence preparation
+
+claim-ready package
+
+但：
+
+不得冒充 licensed customs broker / attorney。
+
+需要持牌代理或客户自行提交的场景：
+
+明确 disclosure。
+
+8. Provider authorization disclosure
+
+说明：
+
+future Amazon / TikTok / Walmart / carrier authorization
+
+是客户主动授权。
+
+CrossClaim 不得声称：
+
+当前已经拥有 provider authorization。
+
+与 PC-06 / PC-08 的：
+
+EXTERNAL_GATE
+
+保持一致。
+
+9. Data handling disclosure
+
+至少覆盖：
+
+account metadata
+
+transaction/order/shipment data
+
+claim/evidence files
+
+provider identifiers
+
+retention
+
+deletion/request path
+
+security posture
+
+third-party processor/provider use
+
+不要写不存在的安全认证。
+
+例如：
+
+如果没有 SOC 2
+
+不能写 SOC 2 certified。
+
+10. Customer-visible commercial status
+
+建议新增只读 projection：
+
+GET /commercial-readiness
+
+至少返回：
+
+legal documents current?
+
+required acceptance complete?
+
+fee disclosure available?
+
+provider authorization disclosure available?
+
+customs boundary disclosure available?
+
+payment currently enabled?
+
+collection enabled?
+
+external integrations enabled?
+
+仍然不返回 secret。
+
+PC-09 REQUIRED TESTS
+
+至少：
+
+current document versions visible
+
+superseded versions remain historically addressable
+
+unknown document → fail-closed
+
+explicit acceptance creates exact version fact
+
+acceptance cross-tenant forbidden
+
+acceptance cannot target inactive/superseded version unless policy allows explicitly
+
+no implicit acceptance
+
+required consent missing → gated capability denied where required
+
+fee disclosure consistent with PC-05/PC-07
+
+Payment=ZERO visible
+
+collection=OFF visible
+
+provider EXTERNAL_GATE visible
+
+customs broker limitation visible
+
+no false legal/financial certification claims
+
+no sensitive data leakage
+
+unauthorized → 401
+
+tenant isolation
+
+tsc api/web 0
+
+full CI SUCCESS
+
+⑭ PC-09 boundaries
+
+不要在本批：
+
+give individualized legal advice
+
+auto-sign contracts
+
+activate payment
+
+collect fees
+
+open provider OAuth
+
+enable transport
+
+claim regulatory licenses not actually held
+
+create a full contract lifecycle platform
+
+本批只做：
+
+COMMERCIAL / LEGAL DISCLOSURE + CONSENT TRUTH
+编号裁决
+
+① CHANGE G：
+
+PASS
+
+② PC-08：
+
+PASS / CLOSED
+
+③ PC-09：
+
+AUTHORIZED
+
+④ NEXT EXECUTION UNIT：
+
+PC-09 COMMERCIAL / LEGAL CONTENT LAYER
+
+versioned policies
+
+explicit acceptance
+
+fee disclosure
+
+customs boundary
+
+provider authorization disclosure
+
+data handling disclosure
+
+customer-visible commercial readiness
+
+permanent tests
+
+full CI
+
+边界继续保持：
+
+NO platform write
+Payment = 0
+autopay = OFF
+collection = OFF
+external payment write = OFF
+R13 HOLD
+TRANSPORT = false
+无生产凭据
+
+PC-08 现在可以正式关闭了。到这里，系统已经能把“内部运行是否真的 ready”和“外部商业/支付/provider 还没启用”分开表达，这正是上线前运维层应该具备的状态模型。
+```
