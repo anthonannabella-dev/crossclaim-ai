@@ -72,4 +72,29 @@ CHANGE A 落地后 CI 暴露的产品契约缺口：`POST /opportunities/:id/cas
 
 选项：A) 连接创建 API 增加 server-derived account 绑定（新 API 契约）；B) closure-service 的 `fixture-derived` / `synthetic … (test/demo only)` 占位证据豁免，仅真实 ingest 强制 fail-closed；C) 架构方指定其它窄修。
 
-**CI 状态**：待该 Ask 裁决并修完后，本节将补记 `REVIEWED_HEAD` 对应的 **CI = SUCCESS + run id**（CHANGE C2-FINAL-2-B）。
+## 8. CHANGE C2-FINAL-2-B —— 最终 CI 状态（MSG-20261002-70 裁决 C 执行后）
+
+| 项 | 值 |
+|---|---|
+| final REVIEWED_HEAD | `55921f3` |
+| CI | **SUCCESS** |
+| CI run id | **36993735092**（CI · gate/7-commercial-validation） |
+| C2 专项（8 套件） | **36/36 PASS** |
+| tsc --noEmit | 0 error |
+
+### 8.1 CHANGE C（account-aware fixture repair，MSG-20261002-70 授权）
+
+- `workflow-http-db`：seed `PlatformAccount` 并在 opportunity 创建处写服务端可信 `accountId` → 7/7（`4e1405a`）。
+- `workflow-case-db`：按租户绑定 fixture account（跨租户用例用 ORG_B 的 account）→ 7/7（`0381e3b` + 负路径 `55921f3`）。
+- `workflow-hitl-db`：`seedReadyCase` 增 account-scoped `ClaimItem`（case 主张链派生）→ 5/5（`eb5119d`）。
+- 早前已修：`action-guard-hitl-*` 4 套（`0f900e1`，23/23）、`workflow-outcome-db`（`c612d83`，7/7）。
+
+### 8.2 永久 fail-closed 负路径（MSG-70 §4）
+
+`workflow-case-db` 新增并永久保留：`QUALIFIED opportunity(accountId=NULL)` → `createCaseForOpportunity` → **rejects `PLATFORM_ACCOUNT_REQUIRED`**，且断言 **0 Case / 0 Evidence / 0 Claim / 0 Settlement** —— 证明 C2 的安全边界不依赖“夹具刚好都有 account”。
+
+### 8.3 转入 PHASE X1 的 finding（MSG-70 §5）
+
+Connection API 当前无 account 绑定入口（`SourceConnection.platformAccountId` 可为 NULL 并继续被 ingest 使用）—— 记录为 **PHASE X1 Architecture Audit finding / TRACK B 输入项**，本轮不实现；X1 需裁决后续产品契约（account-scoped ingest 拒绝 unbound connection，或 onboarding 先绑定/创建 PlatformAccount）。
+
+未采纳：Option A（扩张连接创建 API 契约）REJECT；Option B（test/demo NULL provenance 豁免）REJECT（closure-service 的 fixture-derived Evidence 在非模拟建案路径同样落库）。
