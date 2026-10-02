@@ -80,6 +80,7 @@ import {
   recordPolicyAcceptance,
 } from '../commercial/policy-acceptance';
 import { findPolicy, listCurrentPolicies, listPolicyDocuments, listPolicyVersions } from '../commercial/policy-registry';
+import { projectProviderReadiness } from '../connect/provider-integration-contract';
 import { getRecoveryReviewStatus, submitRecoveryReview } from './recovery-review';
 import { readReplaySnapshot, submitPaymentReplayReview, submitPaymentReview } from './payment';
 import {
@@ -169,6 +170,8 @@ const COMMERCIAL_POLICY_PATH = /^\/commercial\/policies\/([^/]+)$/;
 const COMMERCIAL_POLICY_ACCEPT_PATH = /^\/commercial\/policies\/([^/]+)\/accept$/;
 const COMMERCIAL_ACCEPTANCES_PATH = /^\/commercial\/acceptances$/;
 const COMMERCIAL_READINESS_PATH = /^\/commercial-readiness$/;
+/** PC-11A（MSG-20261003-99 ⑲）：provider 接入就绪投影（只读；合同就绪 ≠ 生产可用）。 */
+const PROVIDER_READINESS_PATH = /^\/provider-readiness$/;
 const COMMERCIAL_TERMS_PATH = /^\/cases\/([^/]+)\/commercial-terms$/;
 const RECOVERY_OUTCOME_PATH = /^\/cases\/([^/]+)\/recovery-outcome$/;
 const RECOVERY_REVIEW_PATH = /^\/cases\/([^/]+)\/recovery-review$/;
@@ -407,6 +410,7 @@ export async function handleWorkflowRequest(
   const commercialPolicyAcceptPath = COMMERCIAL_POLICY_ACCEPT_PATH.exec(path);
   const commercialAcceptancesPath = COMMERCIAL_ACCEPTANCES_PATH.test(path);
   const commercialReadinessPath = COMMERCIAL_READINESS_PATH.test(path);
+  const providerReadinessPath = PROVIDER_READINESS_PATH.test(path);
   const insightList = INSIGHT_LIST_PATH.test(path);
   const insightCsv = INSIGHT_CSV_PATH.test(path);
   const insight = INSIGHT_PATH.exec(path);
@@ -477,7 +481,8 @@ export async function handleWorkflowRequest(
     !commercialPolicyPath &&
     !commercialPolicyAcceptPath &&
     !commercialAcceptancesPath &&
-    !commercialReadinessPath) {
+    !commercialReadinessPath &&
+    !providerReadinessPath) {
     return false;
   }
 
@@ -527,7 +532,7 @@ export async function handleWorkflowRequest(
     // PC-09：接受事实是唯一写入口（显式 accept），其余商业/法律面只读。
     commercialPolicyAcceptPath
       ? ['POST']
-      : commercialPoliciesPath || commercialPolicyPath || commercialAcceptancesPath || commercialReadinessPath
+      : commercialPoliciesPath || commercialPolicyPath || commercialAcceptancesPath || commercialReadinessPath || providerReadinessPath
       ? ['GET']
     : adminKillSwitch
       ? ['GET', 'POST']
@@ -1724,6 +1729,15 @@ export async function handleWorkflowRequest(
           ),
       });
       sendJson(res, outcome.created ? 201 : 200, outcome);
+      return true;
+    }
+
+    // PC-11A（MSG-20261003-99 ⑲）：provider 接入就绪投影 —— 合同就绪 ≠ 生产可用（恒 EXTERNAL_GATE）。
+    if (providerReadinessPath) {
+      sendJson(res, 200, {
+        providers: projectProviderReadiness(),
+        checkedAt: (deps.now ? deps.now() : new Date()).toISOString(),
+      });
       return true;
     }
 

@@ -98,6 +98,7 @@ C-0008-B2（Case / Evidence / Claim Draft / Billing）的端点尚未实现。
 | POST | `/commercial/policies/:key/accept` | 是 | 201/200 `{ created, document, acceptance }`（显式接受事实，append-only；重复接受幂等） | 400 `EXPLICIT_ACCEPTANCE_REQUIRED`（禁止隐式接受）；404 `POLICY_NOT_FOUND`；409 `POLICY_VERSION_NOT_ACCEPTABLE` |
 | GET | `/commercial/acceptances` | 是 | 200 `{ items: [...] }`（当前 actor 的接受事实；跨租户不可见） | 401 `UNAUTHENTICATED` |
 | GET | `/commercial-readiness` | 是 | 200 `{ policies, acceptance, disclosures, feeCollection, integrations, transport, checkedAt }`（payment=ZERO / collection=OFF / activation=HOLD / integrations=EXTERNAL_GATE / transport=DISABLED） | 401 `UNAUTHENTICATED` |
+| GET | `/provider-readiness` | 是 | 200 `{ providers: [{ provider, authKind, contractReady, productionCredentials: ABSENT, readiness: EXTERNAL_GATE, reason, requiredHostActions, platformWriteEnabled: false, callbackPath }], checkedAt }`（合同就绪 ≠ 生产可用） | 401 `UNAUTHENTICATED` |
 
 三者都按会话 `organizationId` 过滤，最多 100 条（默认 20）。非 GET 请求不匹配该处理器，按 404 处理。
 
