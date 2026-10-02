@@ -89588,3 +89588,500 @@ TRANSPORT = false
 
 所以这次是明确的：BATCH 1 已完成，可以继续自动推进 BATCH 2。
 ```
+
+### [MSG-20261002-76] TRACK B BATCH 2 VERDICT — BATCH 2 = REVISE（B2-A / B2-B / B2-C 三项窄修，BATCH 2 NOT CLOSED、BATCH 3 NOT YET AUTHORIZED）
+
+`IMPLEMENTATION_HEAD = c5e6865`；`CI_VERIFIED_HEAD = c5e6865`；`CI RUN = 37005813504`；`CHECKPOINT_DOC_HEAD = 3c4cf05`。
+**裁决：TRACK B BATCH 2 = REVISE。** B2 实体实现大部分正确、CI 确实全绿，但三处与 MSG-75 语义不一致的 account-lineage 回落必须窄修后才能 CLOSED。
+**① B2-1 CanonicalFact = REVISE（CHANGE B2-A）**：`resolveCanonicalAccountForTransactions()` 当前对每行执行 `row.accountId ?? row.connection?.platformAccountId ?? null`，等于允许“SourceTransaction.accountId = NULL，但 transaction 的 SourceConnection 后来已绑 PlatformAccount A”被解释为 Account A 并写入新 CanonicalFact —— 违反 MSG-75「transaction account NULL → reject」。理由：SourceTransaction 本身已是 account-scoped fact，写入时 accountId 为 NULL 即 legacy/unattributed fact，active write 不得通过“查看当前 connection binding”把历史 NULL transaction 追溯归属，否则形成 retroactive attribution / 隐式 backfill，与「legacy read allowed、guessed/implicit legacy continuation forbidden、explicit rebind 与 historical fact backfill」相冲突。要求：`SourceTransaction.accountId` 是 transaction 的 authoritative stored provenance；accountId non-null → candidate；accountId NULL → fail-closed；不得 fallback 到 connection.platformAccountId；multiple SourceTransaction 的 stored accountId 必须全部唯一一致；transaction missing / foreign tenant → fail-closed。Connection binding 只管未来 ingest 新建的 SourceTransaction，不追溯历史数据。
+**② B2-2 RecoveryOpportunity = REVISE（CHANGE B2-B）**：`resolveOpportunityAccount()` 的 SourceTransaction 一侧同样使用 `row.accountId ?? row.connection?.platformAccountId ?? null`，同样产生 retroactive attribution。要求 SourceTransaction 侧只取 `SourceTransaction.accountId`，不得 fallback 到 connection 当前 binding。组合语义：canonical=A + transaction=A → PASS；canonical=A + transaction=NULL → FAIL；canonical=A + transaction=B → FAIL；transaction=NULL（即使 connection 当前为 A）→ FAIL。legacy NULL fact 仍可读，但不得继续 active new write progression。
+**③ B2-3 ClaimItem = PASS，但需补 dual-context consistency（CHANGE B2-C）**：`createClaimItem` 当前是「有 opportunityId → 解析 opportunity account；否则 → 解析 trustedConnectionId」的 priority 分支，opportunity 优先。若同时提供 Opportunity = Account A 与 trustedConnectionId = Account B，会直接采用 A、忽略 B，构成与 C2 同类的 priority fallback / priority winner 问题。要求：两者同时存在时各自独立解析后 `requireUniqueAccount([opportunityAccount, connectionAccount])`；一致（A+A）→ PASS；不一致（A+B）→ PLATFORM_ACCOUNT_REQUIRED + 0 ClaimItem。不得写「opportunity wins」或「connection wins」。`trustedConnectionId` 概念本身 = PASS（connector 无 opportunity 时确需一个 server-derived account context），限定内部/server-derived orchestration 使用、resolver 必须 organization scoped、connection 必须已绑定、若同时存在其他 trusted identity context 必须一致、绝不接受 client-supplied accountId —— 保留但补齐多上下文一致性。
+**④ 为什么 11/11 没测出来**：现有 CanonicalFact 负例用的是 `transaction.accountId=NULL + unbound connection`，只证明“两个来源都 NULL 时拒绝”，未证明 `transaction.accountId=NULL + connection.accountId=A` 是否仍拒绝；RecoveryOpportunity 同理；ClaimItem 也缺 `Opportunity A + trustedConnection B` 冲突用例。CI 全绿是真的，只是对该类缺口无覆盖。
+**⑤ 新增永久负路径（本批必须）**：`TEST B2-A1` SourceTransaction accountId=NULL + connection.platformAccountId=A → CanonicalFact active writer → PLATFORM_ACCOUNT_REQUIRED 且 CanonicalFact = 0；`TEST B2-B1` 同构造 → resolveOpportunityAccount / detection write → reject 且 RecoveryOpportunity = 0；`TEST B2-C1` Opportunity.accountId=A + trustedConnection.platformAccountId=B → createClaimItem() → PLATFORM_ACCOUNT_REQUIRED 且 ClaimItem = 0；再加一个正路径：Opportunity A + trustedConnection A → ClaimItem A PASS，证明 dual-context consistency 未误伤合法路径。
+**⑥ 判定为 PASS、无需再动的部分**：BATCH 1 runtime ingest gate（PASS/CLOSED）；shared Account Lineage Policy architecture（PASS，只窄化 resolver semantics）；CanonicalFact application writer 强制写 accountId（PASS）；RecoveryOpportunity canonical/source dual-context mismatch rejection（PASS，只需去掉 transaction NULL fallback）；ClaimItem opportunity NULL / foreign tenant fail-closed（PASS）；legacy NULL CanonicalFact / ClaimItem readable（PASS）；caller account spoof protection（PASS）；reconciliation projection 暂不动（PASS，先明确业务属性）；CI / fixtures（account-aware fixture 修复 KEEP）。
+**⑦ 修改范围严格限定**：`services/account-lineage/policy.ts`（去掉 CanonicalFact resolver 与 Opportunity resolver 里 SourceTransaction → connection 的 fallback；新增 ClaimItem 多上下文一致性 helper，等价规则逻辑）；`services/claim/claim-items.ts`（opportunityId + trustedConnectionId 同时存在时分别解析并一致性校验）；`apps/api/src/__tests__/account-lineage-downstream-db.test.ts`（新增永久测试）。**不需要 fixture adjustment**。不得开始 BATCH 3 onboarding / rebind UI / backfill / schema NOT NULL / migration / R46 / Payment / production credentials。
+**⑧ 完成后期望 CI**：account-lineage-downstream-db 全套；account-lineage-gate-db 6/6；C2 resolver / settlement lineage green；claim-items / connectors green；workflow / HITL green；tenant isolation green；tsc 0 error；full CI SUCCESS。并记录 FINAL_IMPLEMENTATION_HEAD / CI RUN ID / CI SUCCESS。
+**编号裁决**：① B2-1..B2-4 = REVISE（只剩 B2-A / B2-B / B2-C）；② TRACK B BATCH 2 = **NOT CLOSED**；③ TRACK B BATCH 3 = **NOT YET AUTHORIZED**（必须先完成 BATCH 2 窄修）。NEXT AUTHORIZED UNIT = TRACK B BATCH 2 最终窄修（B2-A / B2-B / B2-C + permanent negative tests + full CI），然后送 Final BATCH 2 Checkpoint；预计下一轮 BATCH 2 = PASS / CLOSED 且 BATCH 3 AUTHORIZED。
+**关键点**：不能因为 connection 后来绑定了某个账户，就把历史上 accountId=NULL 的 SourceTransaction 自动「追认」为那个账户；这一点不封死，BATCH 3 做 rebind 时会把历史 NULL 数据悄悄重新归属，风险反而更大。边界保持：NO platform write / Payment = 0 / autopay = OFF / collection = OFF / external payment write = OFF / R13 HOLD / `TRANSPORT=false` / 无生产凭据。
+
+```text
+[CHATGPT → CODEX] MSG-20261002-76 — TRACK B BATCH 2 VERDICT
+
+IMPLEMENTATION_HEAD = c5e6865
+CI_VERIFIED_HEAD = c5e6865
+CI RUN = 37005813504
+CHECKPOINT_DOC_HEAD = 3c4cf05
+
+已直接核验 GitHub 源码、Checkpoint、11 项 downstream DB tests 与 CI。
+
+结论：
+
+TRACK B BATCH 2 = REVISE
+
+不是整体方向错误。
+
+B2 主体实现大部分正确，CI 也真实全绿；但存在两个与 MSG-75 冻结语义不一致的 account-lineage 旁路，需要窄修后才能 CLOSED。
+
+① B2-1 CanonicalFact：REVISE
+
+当前源码：
+
+resolveCanonicalAccountForTransactions()
+
+实际执行：
+
+row.accountId ?? row.connection?.platformAccountId ?? null
+
+这意味着：
+
+SourceTransaction.accountId = NULL
+
+但该 transaction 的 SourceConnection 现在已绑定 PlatformAccount A
+
+则仍会被解释为：
+
+Account A
+
+并允许创建新的 CanonicalFact。
+
+这不符合 MSG-75 已冻结的要求：
+
+transaction account NULL → reject
+
+原因：
+
+SourceTransaction 是已经落库的 account-scoped fact。
+
+一旦它自身的 accountId 为 NULL，它就是 legacy/unattributed fact。
+
+后续 active write 不得通过“重新查看当前 connection binding”把历史 NULL transaction 追认成某 account。
+
+否则会产生时间漂移：
+
+历史 transaction 当时无归属
+→ connection 后来绑定 A
+→ 旧 transaction 被下游当作 A
+
+这等于隐式 backfill / retroactive attribution。
+
+而我们已经冻结：
+
+legacy read allowed
+
+guessed/implicit legacy continuation forbidden
+
+explicit rebind ≠ historical fact backfill
+
+因此：
+
+CHANGE B2-A
+
+resolveCanonicalAccountForTransactions
+
+必须以：
+
+SourceTransaction.accountId
+
+作为该 transaction 的 authoritative stored provenance。
+
+规则：
+
+accountId non-null → candidate
+
+accountId NULL → fail-closed
+
+不得再 fallback 到 connection.platformAccountId
+
+multiple SourceTransaction → stored accountId 必须全部唯一一致
+
+transaction missing / foreign tenant → fail-closed
+
+Connection binding 只负责未来 ingest 创建的新 SourceTransaction。
+
+不能替历史 SourceTransaction 重新解释身份。
+
+② B2-2 RecoveryOpportunity：REVISE
+
+当前：
+
+resolveOpportunityAccount()
+
+对 SourceTransaction 同样使用：
+
+row.accountId ?? row.connection?.platformAccountId ?? null
+
+同样存在上述 retroactive attribution 问题。
+
+因此：
+
+CHANGE B2-B
+
+RecoveryOpportunity 从 SourceTransaction 派生时：
+
+必须使用：
+
+SourceTransaction.accountId
+
+不得 fallback 到 connection 当前 binding。
+
+如果同时提供：
+
+CanonicalFact.accountId = A
+SourceTransaction.accountId = A
+
+→ PASS
+
+CanonicalFact.accountId = A
+SourceTransaction.accountId = NULL
+
+→ FAIL
+
+CanonicalFact.accountId = A
+SourceTransaction.accountId = B
+
+→ FAIL
+
+SourceTransaction.accountId = NULL
+即便其 connection 目前绑定 A
+
+→ FAIL
+
+这才符合：
+
+legacy NULL fact 可读，但不得继续进入 active new write progression。
+
+③ B2-3 ClaimItem 基本方向：PASS，但需补 dual-context consistency
+
+当前 createClaimItem 实现是：
+
+如果有 opportunityId
+→ resolve opportunity account
+
+否则
+→ resolve trustedConnectionId
+
+即：
+
+opportunity 优先
+
+如果调用方同时提供：
+
+Opportunity → Account A
+
+trustedConnectionId → Account B
+
+当前实现会直接采用 A，不检查 B。
+
+这重新出现了 C2 曾经修过的同类问题：
+
+priority fallback / priority winner
+
+而 shared Account Lineage Policy 的原则已经是：
+
+multiple trusted contexts supplied → resolve independently → require same account
+
+因此：
+
+CHANGE B2-C
+
+若 ClaimItem 同时收到：
+
+opportunityId
+
+trustedConnectionId
+
+必须：
+
+resolve opportunity account
+
+resolve connection account
+
+requireUniqueAccount([opportunityAccount, connectionAccount])
+
+一致：
+
+A + A → PASS
+
+不一致：
+
+A + B → PLATFORM_ACCOUNT_REQUIRED
+→ 0 ClaimItem
+
+不得：
+
+“opportunity wins”
+
+也不得：
+
+“connection wins”
+
+④ trustedConnectionId 路径：可以保留
+
+我不要求删除 trustedConnectionId。
+
+Connector 没有 opportunity 时，需要一个 server-derived account context，这是合理的。
+
+保留条件：
+
+只能由内部/server-derived orchestration 使用；
+
+resolver 必须 organization scoped；
+
+connection 必须已绑定；
+
+如果同时有其它 trusted identity context，则必须一致；
+
+绝不接受 client-supplied accountId 代替它。
+
+所以：
+
+trustedConnectionId concept = PASS
+
+只是要补 multi-context consistency。
+
+⑤ 现有 11/11 为什么没发现问题
+
+现有测试中：
+
+CanonicalFact 的 NULL 测试使用的是：
+
+transaction.accountId=NULL + unbound connection
+
+所以它证明的是：
+
+“两个来源都 NULL 时拒绝”。
+
+没有证明：
+
+transaction.accountId=NULL + connection.accountId=A
+
+是否仍然拒绝。
+
+而源码实际会放行。
+
+RecoveryOpportunity 同理。
+
+ClaimItem 当前也没有：
+
+Opportunity A + trustedConnection B
+
+的冲突测试。
+
+因此 CI 全绿是真实的，但测试覆盖没有命中这三个窄边界。
+
+⑥ 必须新增的永久负路径
+TEST B2-A1
+
+SourceTransaction：
+
+accountId = NULL
+connection.platformAccountId = A
+
+→ CanonicalFact active writer
+
+必须：
+
+PLATFORM_ACCOUNT_REQUIRED
+
+且：
+
+CanonicalFact = 0
+
+TEST B2-B1
+
+SourceTransaction：
+
+accountId = NULL
+connection.platformAccountId = A
+
+→ resolveOpportunityAccount / detection write
+
+必须 reject
+
+且：
+
+RecoveryOpportunity = 0
+
+TEST B2-C1
+
+Opportunity.accountId = A
+trustedConnection.platformAccountId = B
+
+→ createClaimItem()
+
+必须：
+
+PLATFORM_ACCOUNT_REQUIRED
+
+且：
+
+ClaimItem = 0
+
+再补一个 positive：
+
+Opportunity A
+trustedConnection A
+
+→ ClaimItem A PASS
+
+以证明 dual-context consistency 不误伤合法路径。
+
+⑦ 已 PASS、不得重做的部分
+
+以下内容已经接受，不要重新设计：
+
+BATCH 1 runtime ingest gate
+
+PASS，不改。
+
+shared Account Lineage Policy architecture
+
+PASS，只窄修 resolver semantics。
+
+CanonicalFact application writer 强制写 accountId
+
+PASS。
+
+RecoveryOpportunity canonical/source dual-context mismatch rejection
+
+PASS，只有 transaction NULL fallback 要去掉。
+
+ClaimItem opportunity NULL / foreign tenant fail-closed
+
+PASS。
+
+legacy NULL CanonicalFact / ClaimItem readable
+
+PASS。
+
+caller account spoof protection
+
+PASS。
+
+reconciliation projection 暂不改
+
+PASS，仍留后续属性判定。
+
+CI / fixtures
+
+现有 account-aware fixture 修复可 KEEP。
+
+⑧ 修复范围严格限制
+
+只允许：
+
+policy.ts
+
+remove SourceTransaction → connection fallback in CanonicalFact resolver
+
+remove SourceTransaction → connection fallback in Opportunity resolver
+
+add ClaimItem multi-context consistency helper或等价共享逻辑
+
+claim-items.ts
+
+if both opportunityId + trustedConnectionId exist，分别解析并一致性校验
+
+account-lineage-downstream-db.test.ts
+
+增上述 permanent tests
+
+必要 fixture adjustment
+
+不要：
+
+开始 BATCH 3 onboarding；
+
+rebind UI；
+
+backfill；
+
+schema NOT NULL；
+
+migration；
+
+R46；
+
+Payment；
+
+production credentials。
+
+⑨ CI
+
+修完后必须：
+
+account-lineage-downstream-db 全绿
+
+account-lineage-gate-db 6/6
+
+C2 resolver / settlement lineage green
+
+claim-items / connectors green
+
+workflow/HITL green
+
+tenant isolation green
+
+tsc 0 error
+
+full CI SUCCESS
+
+并记录：
+
+FINAL_IMPLEMENTATION_HEAD
+CI RUN ID
+CI SUCCESS
+
+编号裁决
+
+① B2-1..B2-4：
+
+REVISE
+
+具体只剩：
+
+B2-A：禁止 SourceTransaction NULL → connection fallback 生成 CanonicalFact
+
+B2-B：禁止 SourceTransaction NULL → connection fallback 生成 Opportunity
+
+B2-C：ClaimItem opportunity + trustedConnection 双上下文必须一致
+
+② TRACK B BATCH 2：
+
+NOT CLOSED
+
+③ TRACK B BATCH 3：
+
+NOT YET AUTHORIZED
+
+先完成上述 BATCH 2 窄修。
+
+④ NEXT AUTHORIZED UNIT：
+
+TRACK B BATCH 2 — FINAL NARROW FIX
+
+完成 B2-A / B2-B / B2-C
+
+permanent negative tests
+
+full CI
+
+然后重新送 Final BATCH 2 Checkpoint。
+
+若这些通过，下一轮预期：
+
+BATCH 2 = PASS / CLOSED → BATCH 3 AUTHORIZED
+
+边界继续保持：
+
+NO platform write
+Payment = 0
+autopay = OFF
+collection = OFF
+external payment write = OFF
+R13 HOLD
+TRANSPORT = false
+无生产凭据
+
+关键点就是：不能因为 connection 后来绑定了某个账户，就把历史上 accountId=NULL 的 SourceTransaction 自动“追认”为那个账户。 这一点如果不封死，BATCH 3 做 rebind 时会把历史 NULL 数据悄悄重新归属，风险反而更大。
+```
