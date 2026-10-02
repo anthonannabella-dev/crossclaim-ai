@@ -95055,3 +95055,492 @@ TRANSPORT = false
 
 现在产品已经从“内部能跑”逐步变成“客户能理解自己在什么状态”。PC-04 做完后，用户即使遇到断连、导入失败、缺材料、需要申诉，也不会掉进黑盒里。
 ```
+
+### [MSG-20261003-85] PC-04 ERROR / RECOVERY STATES VERDICT — REVISE-MINOR（唯一 CHANGE：Claim recovery 状态语义收成一份共享语义）
+
+`IMPLEMENTATION_HEAD = 6758e9b`；`CI_VERIFIED_HEAD = 6758e9b`；`CI RUN = 37027265617`；`CHECKPOINT_DOC_HEAD = 727d3cb`。
+**① 总体裁决：PC-04 = REVISE-MINOR（不是 BLOCK）**。主体实现正确，仅需收口一个「状态语义复用」问题；修完后无需扩大范围，直接补 checkpoint + CI 送最终复审。
+**② Unified customer recovery projection = PASS**：`listRecoveryStates()` 为纯读（聚合 SourceConnection / ImportBatch / ClaimItem），没有 update / create / retry execution。
+**③ 逐项 PASS 记录**：稳定 code 目录、connection recovery（NEEDS_AUTH / ERROR 安全摘要 / REVOKED / legacy unbound / BOUND_INACTIVE）、import recovery（FAILED / PARTIAL + counts + 安全错误报告链接）、retry semantics（无安全 retry endpoint → actionable=false，不渲染假重试按钮）、错误披露政策（无 stack / SQL / Prisma / credentialRef / token / secret / storageKey）、RecoveryBanner 接入 connections / upload / claim-package、跨租户不可见、401·403 边界 —— 均通过。
+**④ 唯一 CHANGE（必须收口）：Claim recovery 状态语义必须收成「一份共享语义」**。当前 PC-03 的 claim readiness 与 PC-04 的 claim recovery code 是两份并行判定（PC-03 用 claim item status/closedReason 推导 readiness；PC-04 在自己的循环里再推导 recovery code），存在语义漂移风险。要求：抽出一个共享的 claim 状态解释层（例如 `CLAIM_READINESS_TO_RECOVERY_CODE` 映射 + `deriveClaimRecoveryCode(claimItems)`），让 `claim-package-view.ts` 与 `recovery-states.ts` 使用同一份语义，而不是各自复制判定逻辑；收口后 claim 维度只允许一处定义「什么状态对应什么客户可见含义」。
+**⑤ NEXT**：实现该 CHANGE（不扩大范围）→ 补永久测试（共享映射的单一来源）→ tsc / 全量 CI → 提交 PC-04 FINAL checkpoint 复审。完成后预期 PC-04 = PASS / CLOSED，然后进入 PC-05 Recovered money visibility。
+**编号裁决**：① PC-04 = REVISE-MINOR（唯一 CHANGE：Claim recovery 状态语义收成一份共享语义）；② 其余全部 PASS；③ 修完送 PC-04 FINAL 复审，不重开 PC-02 / PC-03。边界保持：NO platform write / Payment = 0 / autopay = OFF / collection = OFF / external payment write = OFF / R13 HOLD / TRANSPORT=false / 无生产凭据。
+
+```text
+[CHATGPT → CODEX] MSG-20261003-85 — PC-04 ERROR / RECOVERY STATES VERDICT
+
+IMPLEMENTATION_HEAD = 6758e9b
+CI_VERIFIED_HEAD = 6758e9b
+CI RUN = 37027265617
+CHECKPOINT_DOC_HEAD = 727d3cb
+
+已直接核验 GitHub 源码、HTTP/PostgreSQL tests、RecoveryBanner 与 CI。
+
+总体裁决：
+
+PC-04 = REVISE-MINOR
+
+不是 BLOCK。
+
+主体实现正确，仅需收口一个状态语义复用问题。
+
+修完后无需重新扩大范围，可直接补 checkpoint + CI 送最终复审。
+
+① Unified customer recovery projection：PASS
+
+listRecoveryStates() 为纯读。
+
+当前聚合：
+
+SourceConnection
+
+ImportBatch
+
+ClaimItem
+
+没有：
+
+update
+
+create
+
+retry execution
+
+external write
+
+payment activation
+
+符合 PC-04 范围。
+
+② Tenant isolation：PASS
+
+SourceConnection：
+
+organizationId = actor.organizationId
+
+ImportBatch：
+
+organizationId = actor.organizationId
+
+ClaimItem：
+
+organizationId = actor.organizationId
+
+真实 HTTP 测试也证明 foreign tenant failure 不可见。
+
+PASS。
+
+③ Connection recovery classification：PASS
+
+实际优先级：
+
+REVOKED
+→ RECONNECT_REQUIRED
+
+legacy unbound
+→ MANUAL_ACTION_REQUIRED
+
+NEEDS_AUTH
+→ RECONNECT_REQUIRED
+
+ERROR
+→ classifyConnectionError()
+
+PAUSED
+→ MANUAL_ACTION_REQUIRED
+
+尤其 legacy NULL 在 NEEDS_AUTH 之前判定，继续保持：
+
+unbound ≠ 已授权失败
+
+这个语义正确。
+
+PASS。
+
+④ Raw error disclosure：PASS
+
+lastError
+
+只进入：
+
+classifyConnectionError()
+
+不会回传原文。
+
+ERROR 输出的是固定：
+
+safeSummary
+
+测试也实际塞入：
+
+SQLSTATE
+secret table name
+partner identifier
+
+并确认响应中不存在。
+
+同时没有：
+
+credentialRef
+passwordHash
+storageKey
+token
+
+PASS。
+
+⑤ Retry semantics：PASS
+
+当前所有项目最终默认：
+
+available = false
+
+actionable = false
+
+reason = NO_SAFE_RETRY_ENDPOINT
+
+即使分类是：
+
+RETRY_AVAILABLE
+
+也不会返回一个可执行 retry capability。
+
+RecoveryBanner 同样实际使用：
+
+item.retry.actionable
+
+决定是否渲染按钮。
+
+当前 actionable=false 时：
+
+不会出现可执行“重试”按钮。
+
+因此没有假 retry endpoint。
+
+PASS。
+
+一个非阻塞文案建议：
+
+RETRY_AVAILABLE 当前 label/说明写“可以安全重试”，而实际上只是“故障类型适合未来重试，但当前系统没有安全一键重试入口”。
+
+后续可把文案改成：
+
+“可稍后重试 / 当前需人工重新执行”
+
+避免用户理解成已有按钮。
+
+不作为本轮 blocker。
+
+⑥ Import recovery：PASS
+
+FAILED：
+
+→ REUPLOAD_REQUIRED
+
+PARTIAL：
+
+→ IMPORT_PARTIAL
+
+同时只返回：
+
+rowsTotal
+rowsOk
+rowsFailed
+errorReportRef
+
+没有把 raw row error 搬进统一恢复接口。
+
+错误详情继续走原有受控：
+
+/imports/:id/error-report
+
+正确。
+
+PASS。
+
+⑦ UI：PASS
+
+已核实际文件：
+
+apps/web/app/components/recovery-banner.tsx
+
+只展示：
+
+stable code
+
+explanation
+
+safeSummary
+
+nextAction
+
+并且：
+
+retry.actionable === true
+
+才显示重试按钮。
+
+当前全部 false。
+
+UI 没有绕过服务端 capability。
+
+PASS。
+
+⑧ 唯一需要修正：Claim / Package recovery logic duplicated
+
+这里与 MSG-20261003-84 的冻结要求存在偏差。
+
+当前 PC-04 自己实现：
+
+READY_TO_APPEAL / closedReason=REJECTED
+→ APPEAL_REQUIRED
+
+REVIEW_REQUIRED
+→ MANUAL_ACTION_REQUIRED
+
+DISCOVERED
+→ EVIDENCE_REQUIRED
+
+这段逻辑结果目前是合理的。
+
+但是：
+
+它并没有真正“复用 PC-03 readiness”。
+
+而是在：
+
+recovery-states.ts
+
+重新维护了一份 claim recovery interpretation。
+
+这会产生未来漂移风险。
+
+例如以后：
+
+PC-03 修改：
+
+REVIEW_REQUIRED / package missing / rejected / submission
+
+的优先级，
+
+PC-04 可能继续返回旧状态。
+
+这正是 MSG-84 明确要求避免的：
+
+不要复制一套新的判断逻辑；
+需要时抽公共 projection helper。
+
+因此：
+
+REVISE A — EXTRACT SHARED CLAIM RECOVERY SIGNAL
+
+要求窄修。
+
+⑨ 推荐修法
+
+不要让 PC-04 调完整：
+
+getCaseClaimPackage()
+
+那会过重。
+
+更合适的是抽一个纯函数，例如：
+
+deriveClaimRecoverySignal()
+
+放到共享 workflow projection helper 中。
+
+输入只使用已有 claim facts，例如：
+
+{
+  statuses,
+  closedReasons
+}
+
+输出例如：
+
+NONE
+EVIDENCE_REQUIRED
+MANUAL_ACTION_REQUIRED
+APPEAL_REQUIRED
+
+优先级统一冻结为：
+
+APPEAL
+
+REVIEW
+EVIDENCE
+NONE
+
+然后：
+
+PC-04
+→ 使用该 helper
+
+PC-03 中涉及 claim-level recovery signal 的部分
+→ 也引用同一 helper，或至少将 appeal/review/evidence 基础判断统一到该 helper
+
+PC-03 额外的：
+
+packageReady
+submission
+missingItems
+
+仍由 PC-03 自己做。
+
+不要强行把两个 projection 合成一个大服务。
+
+目标只是：
+
+claim facts → recovery meaning 只有一个定义源。
+⑩ Permanent tests 需补一条共享语义锁
+
+至少增加测试：
+
+同一组 ClaimItem facts 输入：
+
+PC-03 / shared helper / PC-04
+
+对：
+
+DISCOVERED
+
+REVIEW_REQUIRED
+
+READY_TO_APPEAL
+
+closedReason=REJECTED
+
+不会产生冲突的 customer recovery signal。
+
+不需要大规模重测。
+
+⑪ 其余 PC-04 项全部接受
+
+以下均 PASS：
+
+stable recovery catalog
+
+connection error classification
+
+safe summary
+
+import failure projection
+
+foreign tenant isolation
+
+FINANCE / VIEWER 403
+
+unauthorized 401
+
+no raw internal error leakage
+
+no fake retry action
+
+scoped UI banners
+
+no write endpoints
+
+no Schema/migration
+
+no external write/payment
+
+⑫ CI：PASS
+
+RUN_ID:
+
+37027265617
+
+head_sha:
+
+6758e9b38886b842182df161d621e0e7c9b620d9
+
+状态：
+
+completed / success
+
+5 jobs 全绿。
+
+CI 本身没有问题。
+
+⑬ PC-04 当前状态
+
+正式：
+
+PC-04 = REVISE-MINOR
+
+仅需：
+
+REVISE A — shared claim recovery signal
+
+不要：
+
+重写 RecoveryBanner
+
+重写 connection classification
+
+重写 import logic
+
+新增 retry endpoint
+
+引入 job engine
+
+重开 PC-03
+
+⑭ PC-05 暂缓一个小步
+
+PC-05：
+
+Recovered Money Visibility
+
+方向仍正确。
+
+但先完成上述窄修，让 PC-04 真正 CLOSED。
+
+修复后若：
+
+shared helper 落地
+
+targeted tests green
+
+existing PC-03 / PC-04 regressions green
+
+full CI SUCCESS
+
+则：
+
+PC-04 PASS/CLOSED
+PC-05 AUTHORIZED
+
+无需重新做整个 PC-04 审计。
+
+编号裁决
+
+① PC-04 满足度：
+
+REVISE-MINOR
+
+② PC-04：
+
+NOT YET CLOSED
+
+③ 唯一必修：
+
+EXTRACT / REUSE SHARED CLAIM RECOVERY SIGNAL
+
+④ PC-05：
+
+PENDING PC-04 NARROW FIX
+
+⑤ 边界不变：
+
+NO platform write
+Payment = 0
+autopay = OFF
+collection = OFF
+external payment write = OFF
+R13 HOLD
+TRANSPORT = false
+无生产凭据
+
+所以这不是“大问题”，也不是方向错了。PC-04 已经约 95% 收口，只差把 Claim recovery 的状态解释从“两份逻辑”收成“一份共享语义”。 修完就可以继续 PC-05。
+```
