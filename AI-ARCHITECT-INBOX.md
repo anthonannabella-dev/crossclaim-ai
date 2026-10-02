@@ -95544,3 +95544,690 @@ TRANSPORT = false
 
 所以这不是“大问题”，也不是方向错了。PC-04 已经约 95% 收口，只差把 Claim recovery 的状态解释从“两份逻辑”收成“一份共享语义”。 修完就可以继续 PC-05。
 ```
+
+### [MSG-20261003-86] PC-04 FINAL VERDICT / PC-05 AUTHORIZATION — PC-04 = PASS / CLOSED（CHANGE 已收口）；PC-05 RECOVERED MONEY VISIBILITY = AUTHORIZED
+
+`FINAL_IMPLEMENTATION_HEAD = b3db319`；`CI_VERIFIED_HEAD = b3db319`；`CI RUN = 37028855841`；`CHECKPOINT_DOC_HEAD = d0e68ef`。
+**① MSG-20261003-85 唯一 CHANGE：PASS** —— 「Claim recovery semantics must have one source of truth」已收口：新增 `services/workflow/claim-recovery-semantics.ts`，在其中集中定义 `ClaimPackageReadiness` / `READINESS_LABEL` / `CLAIM_READINESS_TO_RECOVERY_CODE` / `CLAIM_RECOVERY_SUMMARY` / `deriveClaimReadiness()` / `deriveClaimRecoveryCode()`，PC-03 与 PC-04 不再各自维护一套客户状态语义。**PC-03 consumer**：`claim-package-view.ts` 已删除本地 `ClaimPackageReadiness` 定义、`READINESS_LABEL` 定义与 `deriveReadiness()`，改为调用 `deriveClaimReadiness()` 并 re-export 类型与 label 以保持既有 contract。**PC-04 consumer**：`recovery-states.ts` 已删除原先 `needsAppeal` / `needsReview` / `needsEvidence` 三分支业务逻辑，改为 `deriveClaimRecoveryCode(list)` + `CLAIM_RECOVERY_SUMMARY[derived]`。
+**② REVIEW_REQUIRED 漂移：FIXED（本轮的实质修复点）** —— 之前 PC-04 把 `REVIEW_REQUIRED` 判为 `MANUAL_ACTION_REQUIRED`，而 PC-03 没有专门处理它、可能把它当作 `READY_TO_SUBMIT`。现在统一为 `REVIEW_REQUIRED → readiness = NEEDS_REVIEW → recovery code = MANUAL_ACTION_REQUIRED`，因此 `REVIEW_REQUIRED` 不再呈现为可提交。**DISCOVERED semantics**：在有 package·missing 上下文时 `readiness = NEEDS_EVIDENCE → EVIDENCE_REQUIRED`，与 PC-04 一致。**Appeal semantics**：`READY_TO_APPEAL` 与 `closedReason = REJECTED` 统一进入 `APPEAL_REQUIRED`，再映射为 `APPEAL_REQUIRED` recovery code，PC-03 / PC-04 一致。**Non-problem states**：`READY_TO_SUBMIT` / `SUBMITTED` / `ACKNOWLEDGED` / `APPROVED` 均映射为 `null` recovery code，不再次出现在 recovery·error 列表里。
+**③ Permanent semantics lock：PASS** —— 永久测试对同一输入断言 `CLAIM_READINESS_TO_RECOVERY_CODE[deriveClaimReadiness(...)]` 必须等于 `deriveClaimRecoveryCode(...)`（覆盖 DISCOVERED / REVIEW_REQUIRED / READY_TO_APPEAL / closedReason=REJECTED），并断言非问题状态映射为 null；这正是 shared semantic regression lock。
+**④ Regression：PC-03 = PASS（claim-package-view HTTP suite 8/8）· PC-04 = PASS（recovery-states HTTP suite 7/7，原 tenant isolation / safe error projection / no raw lastError leakage / no fake retry / connection·import recovery 全部保持）。CI = PASS**：RUN_ID = 37028855841 / head_sha = b3db319c224148a5417b5957dec7c4e4b8699f19 / completed + success / 5 jobs 全绿；FINAL_IMPLEMENTATION_HEAD = CI_VERIFIED_HEAD。
+**⑤ 正式裁决：PC-04 ERROR / RECOVERY STATES = PASS / CLOSED**。PC-04 关闭后不要再加入 retry engine / distributed scheduler / OAuth / monitoring rewrite / payment retries / support bot。
+**⑥ NEXT EXECUTION UNIT = PC-05 RECOVERED MONEY VISIBILITY（AUTHORIZED）** —— 这是当前客户链路的下一个关键价值点：用户已能看到 signup foundation → opportunity → claim package → error·recovery state，现在必须让客户看到「已追回多少钱、什么时候到账、哪些还在途中、哪些收费已经计算」。**注意：这是 MONEY VISIBILITY，不是 MONEY MOVEMENT**；Payment / collection / external payment write 全部保持 HOLD。范围：**1. Customer recovery money summary**（tenant-scoped read projection；展示 discovered amount / expected recoverable / claimed amount / approved amount / recovered·received amount / outstanding amount / currency；不要把不同币种直接相加，必须按 currency 分组；不引入 FX conversion）；**2. Settlement visibility**（从 Settlement / RecoveryPayout / ReimbursementFact / ClaimReconciliationProjection / RecoveryLedgerEntry 只展示客户能理解的到账事实，状态区分 EXPECTED / RECEIVED / PARTIAL / DISPUTED / VOID，不得把 EXPECTED 当作已到账）；**3. Recovery timeline**（discovered → claimed·submitted → approved·reconciled → recovered·received 的关键时间点，只用真实持久化事实，不得编造推断事件）；**4. Case-level money view**（按 case 显示 recoverable / claimed / approved / received / remaining，并让 adjustment·reversal 反映在净额，不得只显示最初 Settlement）；**5. Organization-level money overview**（一页客户首页可用的 summary projection：total recoverable / in progress / recovered / outstanding，按 currency 分组，不做 mega analytics dashboard）；**6. Fee visibility**（展示 success fee rate·basis、calculated fee、billing draft·status；必须区分 fee calculated 与 fee actually charged·collected —— 当前 Payment = 0 / collection = OFF，真实 collection 状态显示为 NOT_COLLECTED / NOT_ENABLED，不得假装已经扣款）；**7. Settlement lineage**（可追溯 Claim → Settlement → Ledger 的 lineage；不得把 Case.recoveredAmount 等字段直接当作真相，投影必须与底层 settlement·ledger facts 对得上）；**8. Multi-currency safety**（禁止把 200 多币种直接相加；按币种聚合；本轮不做统一换算与 FX track）；**9. Reversal / adjustment visibility**（reversal / correction / adjustment / void 必须反映，展示 gross recovered、adjustments、net recovered；不得只展示历史最大额）；**10. Customer status semantics**（稳定 money status：DISCOVERED / IN_PROGRESS / APPROVED / PARTIALLY_RECOVERED / RECOVERED / DISPUTED / REVERSED，从既有 settlement·claim·reconciliation facts 推导，不新建持久化 money state machine）；**11. UI**（至少在 case page 与一个 organization-level overview 展示「已发现 / 追回中 / 已追回 / 已到账」；目标是让客户一眼知道 CrossClaim 到底帮他追回了多少钱）。
+**⑦ PC-05 REQUIRED TESTS**：same tenant money visible；foreign tenant money invisible；multi-currency separated；EXPECTED != RECEIVED；PARTIAL reflected correctly；reversal reduces net recovered；VOID excluded from net；disputed money not counted as safely recovered；organization summary matches case·settlement facts；fee calculated != fee collected；Payment = 0 / collection OFF accurately exposed；no cross-account settlement leakage；legacy NULL lineage not guessed；no secret·payment credential fields；FINANCE read semantics consistent with existing permission model；unauthorized → 401；existing R45·R46 settlement·reconciliation regressions green；tsc api·web 0；full CI SUCCESS。
+**⑧ PC-05 明确不做**：activate payment；collect success fee；create payout；write provider settlement；connect PSP；add FX engine；redesign R46 finance chain；modify account lineage；build accounting system。只做 **CUSTOMER-VISIBLE RECOVERY MONEY PROJECTION**。
+**编号裁决**：① PC-04 REVISE CHANGE = PASS；② PC-04 = PASS / CLOSED；③ PC-05 = AUTHORIZED；④ NEXT EXECUTION UNIT = **PC-05 RECOVERED MONEY VISIBILITY**（tenant-safe financial read projection + settlement·payout·reconciliation visibility + gross·adjustment·net recovered + multi-currency grouping + fee-calculated-vs-collected distinction + case 与 organization 客户 UI + permanent DB/HTTP tests + full CI）。边界保持：NO platform write / Payment = 0 / autopay = OFF / collection = OFF / external payment write = OFF / R13 HOLD / TRANSPORT=false / 无生产凭据。
+
+```text
+[CHATGPT → CODEX] MSG-20261003-86 — PC-04 FINAL VERDICT / PC-05 AUTHORIZATION
+
+FINAL_IMPLEMENTATION_HEAD = b3db319
+CI_VERIFIED_HEAD = b3db319
+CI RUN = 37028855841
+CHECKPOINT_DOC_HEAD = d0e68ef
+
+已直接核验最终源码、共享语义层、永久测试与 CI。
+
+① MSG-20261003-85 唯一 CHANGE：PASS
+
+上一轮唯一要求：
+
+Claim recovery semantics must have one source of truth
+
+已完成。
+
+新增：
+
+services/workflow/claim-recovery-semantics.ts
+
+现在集中定义：
+
+ClaimPackageReadiness
+
+READINESS_LABEL
+
+CLAIM_READINESS_TO_RECOVERY_CODE
+
+CLAIM_RECOVERY_SUMMARY
+
+deriveClaimReadiness()
+
+deriveClaimRecoveryCode()
+
+这已经消除了 PC-03 / PC-04 各自维护一套客户状态语义的问题。
+
+② PC-03 consumer：PASS
+
+claim-package-view.ts
+
+已经删除本地：
+
+ClaimPackageReadiness definition
+
+READINESS_LABEL definition
+
+deriveReadiness()
+
+改为调用：
+
+deriveClaimReadiness()
+
+并 re-export 公共类型/label 以保持现有 contract。
+
+因此 PC-03 不再拥有第二套状态语义。
+
+PASS。
+
+③ PC-04 consumer：PASS
+
+recovery-states.ts
+
+已经删除原先独立：
+
+needsAppeal
+needsReview
+needsEvidence
+
+三分支业务解释。
+
+现在改为：
+
+deriveClaimRecoveryCode(list)
+
+并使用：
+
+CLAIM_RECOVERY_SUMMARY[derived]
+
+生成客户安全摘要。
+
+因此 PC-04 也不再独立解释 claim 状态。
+
+PASS。
+
+④ REVIEW_REQUIRED 漂移：FIXED
+
+这是本次修订里最重要的真实修复。
+
+之前：
+
+PC-04：
+
+REVIEW_REQUIRED
+→ MANUAL_ACTION_REQUIRED
+
+而 PC-03：
+
+没有专门处理 REVIEW_REQUIRED，
+可能继续落入 READY_TO_SUBMIT。
+
+现在统一为：
+
+REVIEW_REQUIRED
+→ readiness = NEEDS_REVIEW
+→ recovery code = MANUAL_ACTION_REQUIRED
+
+因此：
+
+REVIEW_REQUIRED no longer appears submit-ready
+
+语义已经一致。
+
+PASS。
+
+⑤ DISCOVERED semantics：PASS
+
+对于：
+
+DISCOVERED
+
+在 package/missing context 下：
+
+readiness
+→ NEEDS_EVIDENCE
+
+映射：
+
+NEEDS_EVIDENCE
+→ EVIDENCE_REQUIRED
+
+与 PC-04 一致。
+
+PASS。
+
+⑥ Appeal semantics：PASS
+
+以下两个事实：
+
+READY_TO_APPEAL
+
+或：
+
+closedReason = REJECTED
+
+统一进入：
+
+APPEAL_REQUIRED
+
+映射：
+
+→ APPEAL_REQUIRED recovery code
+
+PC-03 / PC-04 一致。
+
+PASS。
+
+⑦ Non-problem states：PASS
+
+共享映射明确：
+
+READY_TO_SUBMIT
+→ null recovery code
+
+SUBMITTED
+→ null
+
+ACKNOWLEDGED
+→ null
+
+APPROVED
+→ null
+
+即：
+
+已经正常推进的 claim
+
+不会再次出现在 recovery/error list 中制造噪音。
+
+这是正确行为。
+
+⑧ Permanent semantics lock：PASS
+
+新增测试明确断言：
+
+CLAIM_READINESS_TO_RECOVERY_CODE[deriveClaimReadiness(...)]
+
+必须等于：
+
+deriveClaimRecoveryCode(...)
+
+并覆盖：
+
+DISCOVERED
+
+REVIEW_REQUIRED
+
+READY_TO_APPEAL
+
+closedReason=REJECTED
+
+同时验证正常状态返回 null。
+
+这正是上一轮要求的：
+
+shared semantic regression lock
+
+PASS。
+
+⑨ PC-03 regression：PASS
+
+claim-package-view HTTP suite：
+
+8/8 PASS
+
+说明共享语义抽取没有破坏 PC-03 客户材料包投影。
+
+PASS。
+
+⑩ PC-04 regression：PASS
+
+recovery-states HTTP suite：
+
+7/7 PASS
+
+原有：
+
+tenant isolation
+
+safe error projection
+
+no raw lastError leakage
+
+no fake retry
+
+connection recovery
+
+import recovery
+
+均保持。
+
+PASS。
+
+⑪ CI：PASS
+
+RUN_ID:
+
+37028855841
+
+head_sha:
+
+b3db319c224148a5417b5957dec7c4e4b8699f19
+
+状态：
+
+completed / success
+
+5 jobs 全绿。
+
+因此：
+
+FINAL_IMPLEMENTATION_HEAD
+
+CI_VERIFIED_HEAD
+
+⑫ PC-04 FINAL VERDICT
+
+正式裁决：
+
+PC-04 ERROR / RECOVERY STATES = PASS / CLOSED
+
+不要继续在 PC-04 增加：
+
+retry engine
+
+distributed scheduler
+
+OAuth
+
+monitoring rewrite
+
+payment retries
+
+support bot
+
+PC-04 到此关闭。
+
+⑬ NEXT EXECUTION UNIT：PC-05 AUTHORIZED
+
+批准进入：
+
+PC-05 — RECOVERED MONEY VISIBILITY
+
+这是当前客户主链下一块关键能力。
+
+用户已经可以：
+
+signup foundation
+→ 看 opportunity
+→ 看 claim package
+→ 理解 error/recovery state
+
+现在必须让客户清楚看到：
+
+“到底追回了多少钱、什么时候到账、哪些还在途中、哪些收费已经产生。”
+PC-05 PRODUCT GOAL
+
+建立客户可见的 recovery financial projection。
+
+注意：
+
+这是：
+
+MONEY VISIBILITY
+
+不是：
+
+MONEY MOVEMENT
+
+Payment / collection / external payment write 继续 HOLD。
+
+PC-05 SCOPE
+1. Customer recovery money summary
+
+提供 tenant-scoped read projection。
+
+至少展示：
+
+discovered amount
+
+expected recoverable
+
+claimed amount
+
+approved amount
+
+recovered/received amount
+
+outstanding amount
+
+currency
+
+不要把不同币种简单相加。
+
+如果存在多币种：
+
+按 currency 分组。
+
+不要在 PC-05 引入 FX conversion。
+
+2. Settlement visibility
+
+基于现有：
+
+Settlement
+
+RecoveryPayout
+
+ReimbursementFact
+
+ClaimReconciliationProjection
+
+RecoveryLedgerEntry
+
+只读展示客户能理解的到账事实。
+
+至少区分：
+
+EXPECTED
+RECEIVED
+PARTIAL
+DISPUTED
+VOID
+
+不要把 EXPECTED 当成已到账。
+
+3. Recovery timeline
+
+客户至少能看到：
+
+discovered
+→ claimed/submitted
+→ approved/reconciled
+→ recovered/received
+
+的关键时间点。
+
+只能来自真实持久化事实。
+
+不得生成虚构事件。
+
+4. Case-level money view
+
+在 case context 下显示：
+
+recoverable
+
+claimed
+
+approved
+
+received
+
+remaining
+
+如果存在 adjustment / reversal：
+
+必须反映净额。
+
+不能只显示正向 Settlement。
+
+5. Organization-level money overview
+
+提供一个客户首页可用的 summary projection，例如：
+
+total recoverable
+
+in progress
+
+recovered
+
+outstanding
+
+按 currency 分组。
+
+不要做 mega analytics dashboard。
+
+6. Fee visibility
+
+可以显示：
+
+success fee rate / basis
+
+calculated fee
+
+billing draft/status
+
+但必须区分：
+
+fee calculated
+
+与：
+
+fee actually charged / collected
+
+由于：
+
+Payment = 0
+collection = OFF
+
+当前真实 collection 必须显示为：
+
+NOT_COLLECTED / NOT_ENABLED
+
+不得假装已经扣款。
+
+7. Settlement lineage
+
+必须继续遵守：
+
+Claim
+→ Settlement
+→ Ledger
+
+现有 lineage。
+
+不要从 Case.recoveredAmount 等单字段直接推断所有财务事实。
+
+如果投影使用汇总字段，必须与底层 settlement/ledger facts 对得上。
+
+8. Multi-currency safety
+
+禁止：
+
+200
+
+这种跨币种总和。
+
+响应按币种聚合：
+
+例如：
+
+USD:
+
+recovered
+
+outstanding
+
+EUR:
+
+recovered
+
+outstanding
+
+如需未来统一折算，另开 FX track。
+
+不是 PC-05。
+
+9. Reversal / adjustment visibility
+
+如果存在：
+
+reversal
+
+correction
+
+adjustment
+
+void
+
+客户视图必须反映：
+
+gross recovered
+adjustments
+net recovered
+
+不要只展示历史最大到账额。
+
+10. Customer status semantics
+
+建议稳定 money status：
+
+DISCOVERED
+
+IN_PROGRESS
+
+APPROVED
+
+PARTIALLY_RECOVERED
+
+RECOVERED
+
+DISPUTED
+
+REVERSED
+
+从既有 settlement / claim / reconciliation facts 派生。
+
+不要新建持久化 money state machine。
+
+11. UI
+
+至少在：
+
+case page
+
+和一个 organization-level overview
+
+展示：
+
+“已发现”
+“追回中”
+“已追回”
+“待到账”
+
+核心体验必须让客户一眼知道：
+
+CrossClaim 到底帮我找回了多少钱。
+PC-05 REQUIRED TESTS
+
+至少覆盖：
+
+same tenant money visible
+
+foreign tenant money invisible
+
+multi-currency separated
+
+EXPECTED != RECEIVED
+
+PARTIAL reflected correctly
+
+reversal reduces net recovered
+
+VOID excluded from net
+
+disputed money not counted as safely recovered
+
+organization summary matches case/settlement facts
+
+fee calculated != fee collected
+
+Payment=0 / collection OFF accurately exposed
+
+no cross-account settlement leakage
+
+legacy NULL lineage not guessed
+
+no secret/payment credential fields
+
+FINANCE read semantics consistent with existing permission model
+
+unauthorized → 401
+
+existing R45/R46 settlement/reconciliation regressions green
+
+tsc api/web 0
+
+full CI SUCCESS
+
+⑭ PC-05 不要做
+
+不要在本批：
+
+activate payment
+
+collect success fee
+
+create payout
+
+write provider settlement
+
+connect PSP
+
+add FX engine
+
+redesign R46 finance chain
+
+modify account lineage
+
+build accounting system
+
+只做：
+
+CUSTOMER-VISIBLE RECOVERY MONEY PROJECTION
+编号裁决
+
+① PC-04 REVISE CHANGE：
+
+PASS
+
+② PC-04：
+
+PASS / CLOSED
+
+③ PC-05：
+
+AUTHORIZED
+
+④ NEXT EXECUTION UNIT：
+
+PC-05 RECOVERED MONEY VISIBILITY
+
+tenant-safe financial read projection
+
+settlement / payout / reconciliation visibility
+
+gross / adjustment / net recovered
+
+multi-currency grouping
+
+fee-calculated-vs-collected distinction
+
+case + organization customer UI
+
+permanent DB/HTTP tests
+
+full CI
+
+边界继续保持：
+
+NO platform write
+Payment = 0
+autopay = OFF
+collection = OFF
+external payment write = OFF
+R13 HOLD
+TRANSPORT = false
+无生产凭据
+
+PC-04 现在可以真正关闭了。接下来 PC-05 很关键，因为它开始把 CrossClaim 最核心的商业价值直接展示给客户：不是“系统处理了多少流程”，而是“我到底追回了多少钱”。
+```
