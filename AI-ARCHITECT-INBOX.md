@@ -110581,3 +110581,614 @@ TRANSPORT = false
 
 现在 Queue #3 可以真正关掉。下一步做 Tracking
 ```
+
+### [MSG-20261003-108] CARRIER QUEUE #4 = REVISE-MINOR / NOT CLOSED · 授权 QUEUE #4 FINAL（provider response identity binding）
+
+`FINAL_IMPLEMENTATION_HEAD = cfb327e`；`CI RUN = 37072044352`（5 jobs green）；`CHECKPOINT_DOC_HEAD = 3296717`。
+**★ 编号裁决**：① Port / lineage boundary = **PASS**；② normalized snapshot / status / events = **PASS**；③ failure taxonomy / read-only / raw boundary = **PASS**；④ **provider response identity binding = REVISE-MINOR**；⑤ **CARRIER QUEUE #4 = NOT CLOSED**；⑥ 下一执行 = **CARRIER QUEUE #4 FINAL — PROVIDER RESPONSE IDENTITY BINDING**；⑦ Queue #5 暂不授权（FINAL PASS 后再裁定，候选：Shipment/Invoice/POD Read Plane 或 SLA Evidence Preparation）。
+**★ 已 PASS（㉒ 不重做）**：verified account registry（credentialRef + externalAccountId → provider-verified binding；未登记 → UNVERIFIED_ACCOUNT_LINEAGE；provider 不符 → PROVIDER_ACCOUNT_MISMATCH；tenant 不符 → CROSS_TENANT_ACCOUNT，三类均不调用 provider port）；trackingNumber 不能反推 tenant/account；port 只接收 credentialRef（不接收 accessToken / refreshToken / clientSecret）；明文凭据输入 → PLAINTEXT_CREDENTIAL_NOT_SUPPORTED；UPS / FedEx 各自 status map（核心 normalization 无巨大 if(provider)）；稳定状态枚举（未登记 raw status → UNKNOWN 不猜）；raw status 保留（carrierStatusCode + event rawStatusCode）；事件确定性排序（occurredAt → rawStatusCode → eventKey）与去重键（provider + trackingNumber + occurredAt + rawStatusCode + location）；raw top-level allowlist（未知字段 → 归一化失败；完整 raw JSON 不入 customer-facing snapshot，只保留 rawReference）；失败分类 NOT_FOUND / NOT_AUTHORIZED / ACCOUNT_MISMATCH / TEMPORARILY_UNAVAILABLE / RATE_LIMITED / PROVIDER_ERROR（未知异常 → PROVIDER_ERROR，不回显上游 message）；read-only 边界（readOnly=true / platformWriteEnabled=false / transportEnabled=false / productionCredentials=ABSENT；无 mutation / reroute / intercept / claim / pickup / refund）；no-live-request；CI 37072044352 全绿。
+**▶ ⑮⑯ 唯一剩余问题（RESPONSE ACCOUNT/TRACKING BINDING）**：当前 normalize 只验证 `raw.provider === adapter.provider`，**没有**验证 `raw.externalAccountId === 请求 externalAccountId` 与 `raw.trackingNumber === 请求 trackingNumber`。因此若 adapter / 上游错误返回另一个账号或另一个 tracking number 的记录，请求侧 lineage 虽然正确，仍可能把**别的 account / tracking 事实**返回给本次请求，破坏 tenant/account provenance closure。
+**▶ ⑰⑱⑲ CHANGE A/B 与禁止覆盖**：provider port 返回后（normalize 前或后）必须断言 `raw.externalAccountId === externalAccountId`，否则 **ACCOUNT_MISMATCH**（复用既有稳定 taxonomy，不新造 RESPONSE_ACCOUNT_MISMATCH）；必须断言 `raw.trackingNumber === trackingNumber`，否则 **TRACKING_IDENTITY_MISMATCH**（独立 code，不归类为普通 PROVIDER_ERROR）。**禁止**用 `snapshot.externalAccountId = requested` / `snapshot.trackingNumber = requested` 覆盖来掩盖不一致 —— 必须 reject mismatch，不得覆盖。
+**▶ ⑳ Required FINAL regressions**：requested account A / raw account B → reject；mismatch account → 无成功 snapshot；requested tracking A / raw tracking B → reject；mismatched response **不得泄漏** provider 返回的 raw identity；correct account + correct tracking → 既有成功路径不变；provider mismatch / cross-tenant guard / raw status retention / event ordering·dedupe / failure taxonomy / read-only flags / no-live-request 全部保持 green；tsc api/web 0；full CI SUCCESS。
+**▶ ㉑ 建议（NOT BLOCKING）**：`CarrierRawTrackingEvent` 增加 allowed-key 校验（occurredAt / rawStatusCode / description / location / source），额外字段尤其 credential-like key fail-closed；本轮可顺手做，也可排入 Queue #4 hardening。
+**▶ ㉔㉕㉖ 边界**：只做 Queue #4 FINAL（raw.externalAccountId binding + raw.trackingNumber binding + targeted tests + full CI）；Queue #5 暂不授权；真实 carrier read activation 继续 HOLD_EXTERNAL（UPS/FedEx credentials、real verified accounts、real-data validation、TRANSPORT enablement 均不在本批）。
+**★ 架构方评语**：这次问题已经很窄：不是请求侧 lineage 没做，而是 provider 返回值还需要再反绑一次请求身份。把「请求账号/单号」和「返回账号/单号」强制一致，Queue #4 就可以真正关。
+
+```text
+这轮我判 REVISE-MINOR，暂时不能 CLOSED。
+
+大部分都已经通过：verified account lineage、tenant/provider 前置校验、UPS/FedEx 分离归一化、失败分类、raw top-level 白名单、read-only 边界、CI 都没有问题。现在只剩一个真正影响 lineage 完整性的点：provider port 返回的 raw record 没有再次绑定到本次请求的 externalAccountId + trackingNumber。
+
+也就是说，前置阶段虽然证明了“请求账号属于这个租户”，但如果 adapter/上游错误地返回了另一个账号或另一个 tracking number 的记录，当前 normalizeCarrierTracking() 仍可能接受并返回。这需要在 Queue #4 FINAL 补一个很窄的 response-binding guard。
+
+Carrier Queue #4 审计裁决
+
+[CHATGPT → CODEX] MSG-20261003-108 — CARRIER QUEUE #4 VERDICT
+
+FINAL_IMPLEMENTATION_HEAD = cfb327e
+FINAL_IMPLEMENTATION_HEAD_FULL = cfb327e0a6236a2e4368d3bd16364b99afddf0c6
+CI_VERIFIED_HEAD = cfb327e
+CI RUN = 37072044352
+CHECKPOINT_DOC_HEAD = 3296717
+
+已直接核验：
+
+carrier-tracking-read.ts
+provider adapters / normalization
+lineage registry
+failure taxonomy
+raw payload boundary
+carrier-tracking-read regressions
+CI 37072044352
+
+总体裁决：
+
+CARRIER QUEUE #4 = REVISE-MINOR / NOT CLOSED
+
+主体已经通过。
+
+只剩：
+
+provider response must be bound back to requested account + tracking identity
+
+① Verified account lineage：PASS
+
+读取前已经要求：
+
+credentialRef
+externalAccountId
+organizationId
+
+并通过：
+
+CarrierVerifiedAccountRegistry.resolve({
+credentialRef,
+externalAccountId
+})
+
+验证账号 lineage。
+
+未登记：
+
+UNVERIFIED_ACCOUNT_LINEAGE
+
+provider 不符：
+
+PROVIDER_ACCOUNT_MISMATCH
+
+tenant 不符：
+
+CROSS_TENANT_ACCOUNT
+
+且三类错误都不会调用 provider port。
+
+PASS。
+
+② tracking number cannot establish ownership：PASS
+
+trackingNumber 仅作为查询 key。
+
+没有：
+
+trackingNumber → tenant
+
+或：
+
+trackingNumber → account
+
+的反向推断。
+
+PASS。
+
+③ CarrierTrackingReadPort credential boundary：PASS
+
+provider port 输入只含：
+
+provider
+credentialRef
+externalAccountId
+trackingNumber
+organizationId
+
+不接收：
+
+accessToken
+refreshToken
+clientSecret
+
+PASS。
+
+④ plaintext credential input：PASS
+
+输入如果注入：
+
+accessToken / secret / password / apiKey 等字段
+
+会：
+
+PLAINTEXT_CREDENTIAL_NOT_SUPPORTED
+
+并且 provider port 不调用。
+
+PASS。
+
+⑤ UPS / FedEx adapter separation：PASS
+
+UPS / FedEx：
+
+各自 status map。
+
+核心 normalization 不使用巨大：
+
+if(provider)
+
+来硬编码 provider payload。
+
+PASS。
+
+⑥ Stable normalized status：PASS
+
+内部状态枚举：
+
+UNKNOWN
+LABEL_CREATED
+PICKED_UP
+IN_TRANSIT
+OUT_FOR_DELIVERY
+DELIVERED
+EXCEPTION
+DELAYED
+RETURNED
+LOST
+
+未登记 raw status：
+
+UNKNOWN
+
+不猜测。
+
+PASS。
+
+⑦ Raw status retention：PASS
+
+snapshot 保留：
+
+carrierStatusCode
+
+event 保留：
+
+rawStatusCode
+
+没有只留 normalized status。
+
+PASS。
+
+⑧ Event ordering：PASS
+
+events 按：
+
+occurredAt
+→ rawStatusCode
+→ eventKey
+
+确定性排序。
+
+重复 normalize：
+
+结果一致。
+
+PASS。
+
+⑨ Event deduplication：PASS FOR CURRENT CONTRACT
+
+当前 dedupe key：
+
+provider
+trackingNumber
+occurredAt
+rawStatusCode
+location
+
+与本单元冻结的 dedupe 规则一致。
+
+PASS。
+
+未来真实数据若证明同一时间/状态/地点可能有多个业务不同 scan，再调整 key，不阻塞本批。
+
+⑩ Raw payload top-level boundary：PASS
+
+CarrierRawTrackingRecord 使用明确 allowlist。
+
+未知 top-level raw 字段：
+
+归一化失败。
+
+完整 provider raw JSON：
+
+不会进入 customer-facing snapshot。
+
+只保留：
+
+rawReference。
+
+PASS。
+
+⑪ Failure taxonomy：PASS
+
+已区分：
+
+NOT_FOUND
+NOT_AUTHORIZED
+ACCOUNT_MISMATCH
+TEMPORARILY_UNAVAILABLE
+RATE_LIMITED
+PROVIDER_ERROR
+
+未知异常：
+
+PROVIDER_ERROR
+
+且不会把：
+
+上游 error.message
+
+回显。
+
+PASS。
+
+⑫ Read-only boundary：PASS
+
+成功结果恒：
+
+readOnly=true
+platformWriteEnabled=false
+transportEnabled=false
+productionCredentials=ABSENT
+
+没有：
+
+shipment mutation
+reroute
+intercept
+claim submission
+pickup
+refund
+
+PASS。
+
+⑬ No-live-request：PASS
+
+测试证明：
+
+UPS / FedEx sandbox path
+
+均不触发真实 fetch。
+
+PASS。
+
+⑭ CI：PASS
+
+RUN_ID：
+
+37072044352
+
+HEAD：
+
+cfb327e0a6236a2e4368d3bd16364b99afddf0c6
+
+completed / success
+
+5 jobs green。
+
+⑮ Remaining integrity issue — RESPONSE ACCOUNT/TRACKING BINDING
+
+当前流程：
+
+验证请求中的：
+
+credentialRef + externalAccountId + organizationId
+
+调用：
+
+port.getTracking(...)
+
+得到：
+
+CarrierRawTrackingRecord
+
+normalize
+
+问题：
+
+normalize 目前只验证：
+
+raw.provider === adapter.provider
+
+但没有验证：
+
+raw.externalAccountId === requested externalAccountId
+
+以及：
+
+raw.trackingNumber === requested trackingNumber
+
+⑯ Why this matters
+
+例如请求：
+
+organization = org-a
+account = UPS-ACCT-1
+tracking = TRACK-A
+
+lineage 验证正确。
+
+但 buggy / compromised 当前 normalize 仍可能成功，
+
+然后把：
+
+另一个 account / tracking 的事实
+
+返回给本次请求。
+
+这会破坏：
+
+tenant/account provenance closure
+
+即使 request-side lineage 本身是正确的。
+
+⑰ CHANGE A — RESPONSE MUST MATCH REQUEST ACCOUNT
+
+provider port 返回后、normalize 前或 normalize 后必须断言：
+
+raw.externalAccountId === externalAccountId
+
+否则：
+
+ACCOUNT_MISMATCH
+
+或更明确：
+
+RESPONSE_ACCOUNT_MISMATCH
+
+但建议优先复用现有稳定 taxonomy：
+
+ACCOUNT_MISMATCH
+
+⑱ CHANGE B — RESPONSE MUST MATCH REQUEST TRACKING NUMBER
+
+同样必须：
+
+raw.trackingNumber === trackingNumber
+
+否则拒绝。
+
+建议稳定 code：
+
+TRACKING_IDENTITY_MISMATCH
+
+或者若不想扩 taxonomy：
+
+PROVIDER_ERROR
+
+但更推荐独立：
+
+TRACKING_IDENTITY_MISMATCH
+
+因为这不是普通 upstream availability error。
+
+⑲ Normalization must not silently rewrite identity
+
+不要采用：
+
+snapshot.externalAccountId = requested externalAccountId
+snapshot.trackingNumber = requested trackingNumber
+
+来掩盖 provider 返回不一致。
+
+必须：
+
+reject mismatch
+
+而不是覆盖。
+
+⑳ Required FINAL regressions
+
+只补以下：
+
+requested account A / raw account B
+→ reject
+
+mismatch account
+→ no successful snapshot
+
+requested tracking A / raw tracking B
+→ reject
+
+mismatched response must not leak returned raw identity
+
+correct account + correct tracking
+→ existing success unchanged
+
+provider mismatch existing guard stays green
+
+cross-tenant guard stays green
+
+raw status retention stays green
+
+event ordering/dedupe stays green
+
+failure taxonomy stays green
+
+read-only flags unchanged
+
+no live request
+
+tsc api/web 0
+
+full CI SUCCESS
+
+㉑ Optional hardening — nested event raw-field whitelist
+
+当前 top-level raw record 有 allowlist。
+
+event 内部额外字段目前会被 mapEvent 忽略。
+
+这不会直接泄漏到 snapshot，所以：
+
+NOT BLOCKING
+
+但建议本次顺手增加：
+
+CarrierRawTrackingEvent allowed-key validation
+
+允许：
+
+occurredAt
+rawStatusCode
+description
+location
+source
+
+额外字段尤其 credential-like key：
+
+fail-closed。
+
+如果不做，可排 Queue #4 hardening，不阻塞 FINAL。
+
+㉒ Do NOT rework
+
+不要重做：
+
+verified account registry
+
+tenant checks
+
+provider adapters
+
+status enum
+
+event ordering
+
+event dedupe key
+
+failure taxonomy
+
+rawReference model
+
+read-only boundaries
+
+这些已经 PASS。
+
+㉓ Queue #4 current verdict
+
+Port + request-side lineage：
+
+PASS
+
+Normalized snapshot：
+
+PASS
+
+Status/events normalization：
+
+PASS
+
+Failure taxonomy：
+
+PASS
+
+Read-only/raw boundary：
+
+PASS
+
+Response identity binding：
+
+REVISE-MINOR
+
+因此：
+
+CARRIER QUEUE #4 = REVISE-MINOR / NOT CLOSED
+㉔ NEXT EXECUTION UNIT
+
+只做：
+
+CARRIER QUEUE #4 FINAL — PROVIDER RESPONSE IDENTITY BINDING
+
+补：
+
+raw.externalAccountId binding
+
+raw.trackingNumber binding
+
+targeted tests
+
+full CI
+
+㉕ Queue #5
+
+暂不授权。
+
+Queue #4 FINAL PASS 后再进入下一内部单元。
+
+建议候选：
+
+Carrier Queue #5 — Shipment/Invoice/POD Read Plane
+
+或：
+
+SLA Evidence Preparation
+
+但以 Queue #4 FINAL 后再正式裁定。
+
+㉖ External gate
+
+真实 carrier read activation 继续：
+
+HOLD_EXTERNAL
+
+UPS/FedEx credentials
+real verified accounts
+real-data validation
+TRANSPORT enablement
+
+均不在本批。
+
+编号裁决
+
+① Port / lineage boundary：
+
+PASS
+
+② normalized snapshot / status / events：
+
+PASS
+
+③ failure taxonomy / read-only / raw boundary：
+
+PASS
+
+④ provider response identity binding：
+
+REVISE-MINOR
+
+⑤ CARRIER QUEUE #4：
+
+NOT CLOSED
+
+⑥ 下一执行：
+
+CARRIER QUEUE #4 FINAL
+
+边界继续保持：
+
+NO platform write
+Payment = 0
+autopay = OFF
+collection = OFF
+external payment write = OFF
+R13 HOLD
+TRANSPORT = false
+无生产凭据
+
+这次问题已经很窄：不是请求侧 lineage 没做，而是 provider 返回值还需要再反绑一次请求身份。把“请求账号/单号”和“返回账号/单号”强制一致，Queue #4 就可以真正关。
+```
