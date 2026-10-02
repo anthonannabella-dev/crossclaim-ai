@@ -38,9 +38,19 @@ export function createPrismaEvidencePromotionPorts(
       },
 
       async create(draft: EvidenceDraft) {
+        // TRACK C2 M4：证据的 account 归属只由服务端从连接上下文派生。
+        const accountId = draft.connectionId
+          ? ((
+              await prisma.sourceConnection.findFirst({
+                where: { organizationId: draft.organizationId, id: draft.connectionId },
+                select: { platformAccountId: true },
+              })
+            )?.platformAccountId ?? null)
+          : null;
         const created = await prisma.evidenceArtifact.create({
           data: {
             organizationId: draft.organizationId,
+            accountId,
             kind: draft.kind,
             fileAssetId: draft.fileAssetId,
             connectionId: draft.connectionId,

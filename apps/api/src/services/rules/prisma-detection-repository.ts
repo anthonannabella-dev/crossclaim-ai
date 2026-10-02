@@ -231,6 +231,18 @@ export function createPrismaDetectionRepository(
           }
 
           const canonicalIdentity = resolvedIdentity;
+          // TRACK C2 M4：Opportunity 的 account 归属由服务端从 canonical fact 派生。
+          const opportunityAccountId = canonicalIdentity
+            ? ((
+                await tx.canonicalFact.findFirst({
+                  where: {
+                    organizationId: input.organizationId,
+                    id: canonicalIdentity.canonicalFactId,
+                  },
+                  select: { accountId: true },
+                })
+              )?.accountId ?? null)
+            : null;
 
           const evaluation = await tx.ruleEvaluation.create({
             data: {
@@ -256,6 +268,7 @@ export function createPrismaDetectionRepository(
             const opportunity = await tx.recoveryOpportunity.create({
               data: {
                 organizationId: input.opportunity.organizationId,
+                accountId: opportunityAccountId,
                 domain: input.opportunity.domain,
                 channel: input.opportunity.channel,
                 opportunityType: input.opportunity.opportunityType,

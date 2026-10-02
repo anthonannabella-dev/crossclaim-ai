@@ -253,9 +253,19 @@ export async function createClaimItem(
 
   try {
     const created = await prisma.$transaction(async (tx) => {
+      // TRACK C2 M4：claim 的 account 归属只由服务端从 opportunity 派生（客户端不可提交）。
+      const opportunityAccountId = input.opportunityId
+        ? ((
+            await tx.recoveryOpportunity.findFirst({
+              where: { organizationId: input.organizationId, id: input.opportunityId },
+              select: { accountId: true },
+            })
+          )?.accountId ?? null)
+        : null;
       const item = await tx.claimItem.create({
       data: {
         organizationId: input.organizationId,
+        accountId: opportunityAccountId,
         caseId: input.caseId ?? null,
         opportunityId: input.opportunityId ?? null,
         platformType: input.platformType,
