@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261002-67",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-02T05:07:18.772Z",
+  "updated_at": "2026-10-02T05:12:20.919Z",
   "previous_head": "21b5b8c",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -51,9 +51,9 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-02T05:08:52.938Z",
   "state": "IMPLEMENT",
-  "last_action": "SCHEDULER_STALE_RECOVERED（gap=11min）→ 本轮已恢复执行",
-  "last_action_at": "2026-10-02T04:59:41.543Z",
-  "next_action": "TRACK C2 slice 2b：RecoveryOpportunity / ClaimItem / EvidenceArtifact 服务端 account 接线 + cross-account 拒绝 + C2 12+ 项永久验收 → C2 FINAL 送审 → PHASE X1 Architecture Audit。",
+  "last_action": "TRACK C2 slice 2b part 1 交付：跨账户一致性守卫（3 条 DB 触发器）+ 服务端 account 派生接线（Opportunity / ClaimItem / Evidence）",
+  "last_action_at": "2026-10-02T05:12:20.919Z",
+  "next_action": "TRACK C2 slice 2b part 2：其余 Evidence 创建路径接线 + C2 12+ 项永久验收矩阵 → C2 FINAL 送审。",
   "current_head": "21b5b8c",
   "reviewed_head": "07b7009",
   "claim_submit_batch": {
@@ -3527,5 +3527,26 @@
       "region"
     ],
     "evidence": "c2-platform-account-identity-db 4/4 · c2-account-scope-db 8/8 · tsc 0 · prisma validate valid · upgrade deploy PASS · tenant + append-only 门禁 PASS"
+  },
+  "c2_slice2b": {
+    "status": "IN_PROGRESS（part 1 已交付：一致性守卫 + 服务端派生接线）",
+    "authorized_by": "MSG-20261002-66 M4/M5 + MSG-20261002-67（并入 M4–M6 后提交 C2 FINAL）",
+    "migration": "20261002090000_account_consistency_guards",
+    "guards": [
+      "ClaimItem.accountId == RecoveryOpportunity.accountId",
+      "ClaimItemEvidence: claim 与 evidence 同 account",
+      "Settlement: claimItem 与 evidence 同 account"
+    ],
+    "derivations": [
+      "RecoveryOpportunity.accountId ← canonical fact（detection）",
+      "ClaimItem.accountId ← opportunity（claim-items）",
+      "EvidenceArtifact.accountId ← SourceConnection.platformAccountId（evidence port）"
+    ],
+    "evidence": "c2-cross-account-guards-db 4/4 · c2-account-scope-db 8/8 · c2-platform-account-identity-db 4/4 · tsc 0 · upgrade deploy PASS",
+    "remaining_for_c2_final": [
+      "pod-upload / closure-service / recovery-outcome 三处 EvidenceArtifact 创建的 account 派生接线",
+      "C2 12+ 项永久验收矩阵（one org/two accounts · Amazon+TikTok · 跨 org 同 externalId · cross-account reject · revoked 不得 ingest · reconnect/rotate provenance · account 级并发幂等 · org 级聚合 · R46 回归绿）",
+      "C2 FINAL 送审（Issue #2 + ChatGPT 唤醒 + 全文裁决归档 + FULL_COPY_OK）"
+    ]
   }
 }
