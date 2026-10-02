@@ -1,6 +1,6 @@
 {
   "gate": "B2-FIX R1",
-  "head": "9569ce3",
+  "head": "9496d3e",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
   "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261002-66",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-02T03:24:23.964Z",
+  "updated_at": "2026-10-02T04:40:16.863Z",
   "previous_head": "af76192",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -51,10 +51,10 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-02T03:26:10.267Z",
   "state": "IMPLEMENT",
-  "last_action": "SCHEDULER_STALE_RECOVERED（gap=18min）→ 本轮已恢复执行",
-  "last_action_at": "2026-10-02T03:24:23.964Z",
-  "next_action": "TRACK C2 实施（M1–M6 + CHANGE A/B）：Platform 枚举 + PlatformAccount（identityVersion=身份规范版本）+ SourceConnection.platformAccountId + accountId 下推 + 结构化唯一 (org, platformAccountId, factKey) + account identity immutable DB 不变量 + fail-closed 回填（migration ordering 优先）→ C2 FINAL 验收（MSG-66 清单）→ 送审。",
-  "current_head": "4d5380f",
+  "last_action": "TRACK C2 slice 2a 交付：account scope 下推 + 事实身份账户作用域（M4–M6 / CHANGE A/B）→ 全量 188 files / 1854 tests PASS + fresh deploy PASS",
+  "last_action_at": "2026-10-02T04:40:16.863Z",
+  "next_action": "TRACK C2 slice 2b：RecoveryOpportunity / ClaimItem / EvidenceArtifact 服务端 account 接线 + cross-account 拒绝 + account 级并发幂等 + C2 12 项最低验收 → C2 FINAL 送审。",
+  "current_head": "9496d3e",
   "reviewed_head": "07b7009",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -3429,5 +3429,34 @@
       "evidence": "tsc 0 · 全量 187 files / 1846 tests PASS · tenant/append-only 门禁 PASS · upgrade deploy OK"
     },
     "slice2_next": "M4–M6：accountId 下推（SourceTransaction/CanonicalFact/RecoveryOpportunity/ClaimItem/EvidenceArtifact）+ 结构化唯一 (org, platformAccountId, factKey) + account identity immutable（CHANGE A）+ fail-closed 回填 + writer/ingest 服务端派生 + 12+ 项 C2 验收 → C2 FINAL 送审"
+  },
+  "c2_slice2a": {
+    "status": "DELIVERED（PROGRESS；schema + service + DB 不变量 + 验收测试）",
+    "authorized_by": "MSG-20261002-66 PASS WITH REVISE（M4–M6 + CHANGE A/B）",
+    "migration": "20261002060000_account_scope_downstream",
+    "files": [
+      "apps/api/prisma/migrations/20261002060000_account_scope_downstream/migration.sql",
+      "apps/api/src/__tests__/c2-account-scope-db.test.ts",
+      "apps/api/src/services/canonical/writer.ts",
+      "apps/api/src/services/canonical/derive.ts",
+      "apps/api/src/services/reconciliation/reconcile.ts",
+      "apps/api/src/services/ingest/prisma-repository.ts"
+    ],
+    "covered": [
+      "M4 accountId 下推到 SourceTransaction / CanonicalFact / RecoveryOpportunity / ClaimItem / EvidenceArtifact（服务端派生；客户端提交 → CLIENT_ACCOUNT_FIELD_NOT_TRUSTED）",
+      "M5 结构化唯一 (organizationId, accountId, factKey) + legacy (org, factKey) partial unique；account 不拼进 factKey",
+      "M6 fail-closed 回填（唯一推断才回填；ambiguous → NULL + NOTICE blocker report；duplicate → 迁移失败）",
+      "CHANGE A account 绑定写一次（6 条 cc_account_binding_immutable__*）",
+      "CHANGE B 迁移全程未使用 DISABLE TRIGGER（migration ordering 优先）",
+      "跨租户 account 引用守卫 5 条（required-triggers 73 → 78）",
+      "同 org 两账户同 externalId → 两条独立 ACTIVE 事实（不合并、不互判冲突）"
+    ],
+    "evidence": "c2-account-scope-db 8/8 · 全量 188 files / 1854 tests PASS · tsc 0 error · prisma validate valid · upgrade deploy PASS · fresh deploy PASS + tenant/append-only 门禁 PASS",
+    "remaining_for_c2_final": [
+      "RecoveryOpportunity / ClaimItem / EvidenceArtifact 的服务端写入接线（accountId 从 case/claim/evidence 生成路径派生）",
+      "cross-account claim / evidence / settlement linkage → reject（C2 12 项最低验收依赖项）",
+      "account 级并发幂等 + org 级聚合视图回归",
+      "credentialVersion ≠ identityVersion 的文档 + 测试断言"
+    ]
   }
 }
