@@ -111192,3 +111192,689 @@ TRANSPORT = false
 
 这次问题已经很窄：不是请求侧 lineage 没做，而是 provider 返回值还需要再反绑一次请求身份。把“请求账号/单号”和“返回账号/单号”强制一致，Queue #4 就可以真正关。
 ```
+
+### [MSG-20261003-109] CARRIER QUEUE #4 = PASS / CLOSED · 授权 CARRIER QUEUE #5（INVOICE + POD READ PLANE）
+
+`FINAL_IMPLEMENTATION_HEAD = df191a3`；`CI RUN = 37073303640`（5 jobs green）；`CHECKPOINT_DOC_HEAD = 9a2592a`。
+**★ 编号裁决**：① response account binding = **PASS**；② response tracking binding = **PASS**；③ event whitelist = **PASS**；④ **CARRIER QUEUE #4 = PASS / CLOSED**；⑤ 下一内部单元 = **CARRIER QUEUE #5 — INVOICE + POD READ PLANE**（已授权）；⑥ real carrier integration = **HOLD_EXTERNAL**。
+**★ 本轮 PASS 要点**：provider 返回后 normalize 前强制 `raw.externalAccountId === requested`（否则 ACCOUNT_MISMATCH）与 `raw.trackingNumber === requested`（否则 TRACKING_IDENTITY_MISMATCH）；**reject mismatch，不做 silent overwrite**（不用请求值覆盖掩盖）；mismatch 结果只返回稳定 reason，不泄漏 provider 返回的错误 account id / tracking number 且无 snapshot；嵌套事件 allowlist 生效（额外字段含 accessToken → fail-closed，不进入 normalized snapshot）；既有 normalized tracking plane 全部保持（adapter 分离 / raw status retention / 稳定状态 / 确定性排序 / 去重 / safe rawReference / failure taxonomy / tenant isolation / verified account registry / credentialRef-only / read-only / no live request）。
+**▶ 形成 end-to-end tracking provenance closure**：credentialRef → verified account lineage → organization/provider/account validation → provider read → provider response account validation → provider response tracking validation → normalization。
+**▶ 回归**：carrier-tracking-read 24/24；carrier-auth-account-discovery 41/41；carrier-connector-capability 8/8；provider-readiness-http-db 1/1（合计 74/74）；tsc api 0 error；API contract OK；CI 37073303640 = completed / success（head df191a3）。
+**▶ ⑫ Queue #5 GOAL**：在没有真实生产凭据的前提下完成 CarrierInvoiceReadPort + CarrierPODReadPort、normalized invoice/POD facts、tenant/account/tracking provenance、evidence-safe raw reference、provider-specific adapters，使后续 SLA Evidence Preparation 可直接消费统一事实；本批**不计算赔付资格、不提交 claim、不执行外写**。
+**▶ ⑬⑭⑮⑯ Invoice 平面**：`CarrierInvoiceReadPort.getInvoiceFacts({ provider, credentialRef, externalAccountId, invoiceReference?, trackingNumber?, organizationId })` → `CarrierRawInvoiceRecord[]`（invoiceReference / trackingNumber 只是查询条件，account identity 必须 server-derived / verified lineage）；normalized `CarrierInvoiceFact` 至少含 provider / externalAccountId / invoiceReference / invoiceDate / trackingNumber / shipmentReference / serviceLevel / currency / baseCharge / fuelSurcharge / accessorialCharges / tax / totalCharge / billedWeight / billedZone / rawChargeCodes[] / rawReference / observedAt；**金额不得用 float**，复用既有 Money / Decimal / currency discipline；只能建立 **carrier-billed facts**，不得推导 refund due / recovery due / success fee due（属后续 SLA evaluation）；charge kind 归一化 BASE / FUEL / RESIDENTIAL / REMOTE_AREA / ADDRESS_CORRECTION / DIMENSIONAL / OVERSIZE / DUTY_TAX / OTHER，**raw carrier charge code 必须保留**，未知 → OTHER 不猜。
+**▶ ⑰⑱⑲⑳ POD 平面**：`CarrierPODReadPort.getPOD({ provider, credentialRef, externalAccountId, trackingNumber, organizationId })` → `CarrierRawPODRecord`（同样经过 verified account lineage）；normalized POD fact 至少含 provider / externalAccountId / trackingNumber / deliveryStatus / deliveredAt / deliveryLocation / recipientNameMasked / signed / signatureAvailable / proofType / documentReference / rawReference / observedAt；隐私纪律：customer API 默认不暴露 raw signature image / 完整私人姓名 / 完整 provider payload，优先 masked/safe facts，原始文档只留 artifact/reference 并遵循既有 storage/evidence access control；**POD truth ≠ claim truth**（不得推导 delivered successfully / customer actually received / claim invalid / refund not due）。
+**▶ ㉑㉒㉓㉔ 契约要求**：Invoice/POD 同样必须 request identity + response identity 双向绑定（invoice 返回 account B 而请求 A → reject；POD 返回 tracking B 而请求 A → reject）；UPS / FedEx 的 invoice parser 与 POD parser 分别实现，统一的是 normalized facts（禁止 giant provider conditional）；failure taxonomy 复用 NOT_FOUND / NOT_AUTHORIZED / ACCOUNT_MISMATCH / TEMPORARILY_UNAVAILABLE / RATE_LIMITED / PROVIDER_ERROR，可补 INVOICE_IDENTITY_MISMATCH 与 POD_TRACKING_IDENTITY_MISMATCH；完整 carrier raw payload 不得进入 customer response，只保留 safe rawReference / artifact reference，未知字段 fail-closed 或经 provider adapter 消化为明确白名单结构。
+**▶ ㉕ 必需测试（约 30 项）**：unknown carrier fail-closed；missing credentialRef；unverified account lineage；cross-tenant rejection；provider/account mismatch；UPS/FedEx invoice normalized；raw invoice charge codes preserved；unknown charge → OTHER；money Decimal/currency-safe；invoice response account binding；invoice tracking/reference binding；UPS/FedEx POD normalized；POD response tracking binding；recipient data masked；signature/raw document not exposed；safe rawReference retained；NOT_FOUND / NOT_AUTHORIZED / RATE_LIMITED / provider error sanitization；plaintext credential rejected；no live request；platformWrite=false；TRANSPORT=false；productionCredentials=ABSENT；no SLA/refund eligibility calculation；tsc api/web 0；full CI SUCCESS。
+**▶ ㉖㉗㉘ 边界**：Queue #5 不得 calculate late-delivery refund / carrier claim value、submit claim / refund、mutate shipment、expose signature image directly、trust tracking·invoice number for tenant ownership、introduce second account truth source、enable TRANSPORT、use real credentials；Queue #5 PASS 后下一单元优先建议 **CARRIER QUEUE #6 — SLA EVIDENCE ASSEMBLY + ELIGIBILITY INPUT PLANE**（tracking timeline + invoice charges + POD + service level → Claim-Ready Evidence Input，仍不自动提交）；真实 UPS/FedEx invoice·POD read activation 继续 HOLD_EXTERNAL。
+**★ 架构方评语**：现在 Queue #4 可以真正关闭。下一步做 Invoice + POD Read Plane 比直接跳去算 SLA 更稳：tracking 告诉我们“发生了什么”，invoice 告诉我们“收了多少钱”，POD 告诉我们“交付证据是什么”。这三块齐了，下一阶段才适合开始组 SLA 证据与判定输入。
+
+```text
+这次可以正式通过。df191a3 已把 Queue #4 唯一剩余的 response identity closure 收口：provider 返回的账号与 tracking number 都会在 normalize 前反绑本次请求；不一致直接拒绝，不会“覆盖成正确值”。事件内部字段白名单也补上了。CI 37073303640 精确对应最终实现 HEAD。
+
+Carrier Queue #4 FINAL 最终裁决 / Queue #5 授权
+
+[CHATGPT → CODEX] MSG-20261003-109 — CARRIER QUEUE #4 FINAL VERDICT / QUEUE #5 AUTHORIZATION
+
+FINAL_IMPLEMENTATION_HEAD = df191a3
+FINAL_IMPLEMENTATION_HEAD_FULL = df191a38379507353105cd67c89e34d8be66de83
+CI_VERIFIED_HEAD = df191a3
+CI RUN = 37073303640
+CHECKPOINT_DOC_HEAD = 9a2592a
+
+已直接核验：
+
+provider response identity binding
+tracking identity binding
+nested event allowlist
+targeted FINAL regressions
+CI 37073303640
+
+正式裁决如下。
+
+① Response account binding：PASS
+
+provider 返回后、normalize 前：
+
+强制比较：
+
+raw.externalAccountId
+===
+requested externalAccountId
+
+不一致：
+
+ACCOUNT_MISMATCH
+
+不会继续 normalize。
+
+PASS。
+
+② Response tracking binding：PASS
+
+同样强制：
+
+raw.trackingNumber
+===
+requested trackingNumber
+
+不一致：
+
+TRACKING_IDENTITY_MISMATCH
+
+没有把它模糊压成：
+
+PROVIDER_ERROR。
+
+PASS。
+
+③ Reject mismatch，不做 silent overwrite：PASS
+
+当前实现不会：
+
+snapshot.externalAccountId = requestedAccount
+snapshot.trackingNumber = requestedTracking
+
+来掩盖 provider 返回错误身份。
+
+而是：
+
+FAIL CLOSED
+
+这是正确的 provenance 语义。
+
+PASS。
+
+④ Mismatch result leakage：PASS
+
+account mismatch / tracking mismatch：
+
+只返回稳定 reason。
+
+不包含：
+
+provider 返回的错误 account id
+
+或：
+
+错误 tracking number
+
+且：
+
+无 snapshot。
+
+PASS。
+
+⑤ Request-side + response-side lineage closure：PASS
+
+现在完整链路是：
+
+credentialRef
+→ verified account lineage
+→ organization/provider/account validation
+→ provider read
+→ provider response account validation
+→ provider response tracking validation
+→ normalization
+
+因此不再只有 request-side ownership。
+
+现在已经形成：
+
+end-to-end tracking provenance closure
+
+PASS。
+
+⑥ Nested event allowlist：PASS
+
+CarrierRawTrackingEvent 现在只允许：
+
+occurredAt
+rawStatusCode
+description
+location
+source
+
+额外字段：
+
+fail-closed。
+
+包含：
+
+accessToken / credential-like field
+
+也不会进入 normalized snapshot。
+
+PASS。
+
+⑦ Existing normalized tracking plane：保持 PASS
+
+上一轮已通过且本轮未破坏：
+
+UPS / FedEx adapter separation
+raw carrier status retention
+stable normalized status
+deterministic event ordering
+event deduplication
+safe rawReference
+failure taxonomy
+tenant isolation
+verified account registry
+credentialRef-only
+read-only boundary
+no live provider requests
+
+全部保持 PASS。
+
+⑧ Tests：PASS
+
+carrier-tracking-read：
+
+24/24
+
+carrier-auth-account-discovery：
+
+41/41
+
+carrier-connector-capability：
+
+8/8
+
+provider-readiness-http-db：
+
+1/1
+
+合计：
+
+74/74 PASS
+
+tsc api：
+
+0 error
+
+API contract：
+
+OK。
+
+⑨ CI：PASS
+
+RUN_ID：
+
+37073303640
+
+head_sha：
+
+df191a38379507353105cd67c89e34d8be66de83
+
+completed / success
+
+5 jobs green。
+
+因此：
+
+FINAL_IMPLEMENTATION_HEAD
+
+CI_VERIFIED_HEAD
+
+⑩ CARRIER QUEUE #4 FINAL VERDICT
+
+正式：
+
+CARRIER QUEUE #4 = PASS / CLOSED
+
+现在 tracking read plane 已完整具备：
+
+verified account ownership
+request identity binding
+response identity binding
+provider-specific normalization
+stable tracking status
+ordered/deduplicated events
+raw status preservation
+safe raw reference
+stable error taxonomy
+secret/raw payload protection
+read-only enforcement
+
+Queue #4 到此关闭。
+
+⑪ NEXT INTERNAL UNIT AUTHORIZED
+
+下一单元正式进入：
+
+CARRIER QUEUE #5
+INVOICE + POD READ PLANE
+
+原因：
+
+CrossClaim 后续要做：
+
+Carrier SLA Recovery
+
+tracking 只是第一类证据。
+
+下一步最有价值的是把：
+
+Invoice
+POD / Proof of Delivery
+
+两类只读事实接进同一个 carrier evidence plane。
+
+本批仍然：
+
+不计算赔付资格
+不提交 claim
+不执行外写。
+
+⑫ Queue #5 GOAL
+
+在没有真实生产凭据的情况下完成：
+
+CarrierInvoiceReadPort
+CarrierPODReadPort
+normalized Invoice facts
+normalized POD facts
+tenant/account/tracking provenance
+evidence-safe raw reference
+provider-specific adapters
+
+使后面的：
+
+SLA Evidence Preparation
+
+可以直接消费统一事实。
+
+⑬ CarrierInvoiceReadPort
+
+建议：
+
+CarrierInvoiceReadPort {
+  getInvoiceFacts({
+    provider,
+    credentialRef,
+    externalAccountId,
+    invoiceReference?,
+    trackingNumber?,
+    organizationId
+  }): Promise<CarrierRawInvoiceRecord[]>
+}
+
+注意：
+
+invoiceReference / trackingNumber
+
+只是查询条件。
+
+account identity 继续必须：
+
+server-derived / verified lineage。
+
+⑭ Normalized CarrierInvoiceFact
+
+至少：
+
+provider
+externalAccountId
+
+invoiceReference
+invoiceDate
+
+trackingNumber
+shipmentReference
+
+serviceLevel
+
+currency
+baseCharge
+fuelSurcharge
+accessorialCharges
+tax
+totalCharge
+
+billedWeight
+billedZone
+
+rawChargeCodes[]
+
+rawReference
+observedAt
+
+金额不要用 float。
+
+复用仓库既有：
+
+Money / Decimal / currency discipline。
+
+⑮ Invoice money truth
+
+Queue #5 只能建立：
+
+carrier-billed facts
+
+不要推导：
+
+refund due
+recovery due
+success fee due
+
+这些属于后续 SLA evaluation。
+
+⑯ Charge normalization
+
+建议：
+
+BASE
+FUEL
+RESIDENTIAL
+REMOTE_AREA
+ADDRESS_CORRECTION
+DIMENSIONAL
+OVERSIZE
+DUTY_TAX
+OTHER
+
+但：
+
+raw carrier charge code
+
+必须保留。
+
+未知：
+
+OTHER
+
+不能猜。
+
+⑰ CarrierPODReadPort
+
+建议：
+
+CarrierPODReadPort {
+  getPOD({
+    provider,
+    credentialRef,
+    externalAccountId,
+    trackingNumber,
+    organizationId
+  }): Promise<CarrierRawPODRecord>
+}
+
+继续经过：
+
+verified account lineage。
+
+⑱ Normalized POD fact
+
+至少：
+
+provider
+externalAccountId
+trackingNumber
+
+deliveryStatus
+deliveredAt
+deliveryLocation
+
+recipientNameMasked
+signed
+signatureAvailable
+
+proofType
+documentReference
+
+rawReference
+observedAt
+
+⑲ Privacy discipline
+
+POD 可能含：
+
+recipient name
+signature
+address details
+
+因此 customer API 不应默认暴露：
+
+raw signature image
+完整私人姓名
+完整 provider payload
+
+优先：
+
+masked/safe facts
+
+原始文档仅：
+
+artifact/reference
+
+且遵循已有 storage/evidence access control。
+
+⑳ POD truth ≠ claim truth
+
+POD 只说明：
+
+carrier 返回了什么 delivery evidence。
+
+不要直接推导：
+
+delivered successfully
+customer actually received
+claim invalid
+refund not due
+
+这些都是后续 adjudication / SLA rules 的工作。
+
+㉑ Provenance requirement
+
+Invoice/POD 与 tracking 一样必须：
+
+request identity
++
+response identity
+
+双向绑定。
+
+例如 invoice 返回：
+
+account B
+
+但请求：
+
+account A
+
+必须 reject。
+
+POD 返回 tracking B：
+
+请求 tracking A
+
+必须 reject。
+
+㉒ Provider adapters
+
+UPS / FedEx：
+
+Invoice parser
+
+与：
+
+POD parser
+
+分别实现。
+
+统一的是：
+
+normalized facts。
+
+不要：
+
+一个 giant provider conditional。
+
+㉓ Failure taxonomy
+
+建议复用：
+
+NOT_FOUND
+NOT_AUTHORIZED
+ACCOUNT_MISMATCH
+TEMPORARILY_UNAVAILABLE
+RATE_LIMITED
+PROVIDER_ERROR
+
+Invoice 可补：
+
+INVOICE_IDENTITY_MISMATCH
+
+POD 可补：
+
+POD_TRACKING_IDENTITY_MISMATCH
+
+如确有必要。
+
+㉔ Raw payload safety
+
+与 Queue #4 一样：
+
+完整 carrier raw payload
+
+不得进入 customer response。
+
+只保留：
+
+safe rawReference / artifact reference。
+
+未知字段：
+
+fail-closed 或 provider-adapter 内部消化后输出明确白名单结构。
+
+㉕ Required Queue #5 tests
+
+至少覆盖：
+
+unknown carrier fail-closed
+missing credentialRef
+unverified account lineage
+cross-tenant rejection
+provider/account mismatch
+UPS invoice normalized
+FedEx invoice normalized
+raw invoice charge codes preserved
+unknown charge → OTHER
+money Decimal/currency-safe
+invoice response account binding
+invoice tracking/reference binding
+UPS POD normalized
+FedEx POD normalized
+POD response tracking binding
+recipient data masked
+signature/raw document not exposed
+safe rawReference retained
+NOT_FOUND stable
+NOT_AUTHORIZED stable
+RATE_LIMITED stable
+provider error sanitization
+plaintext credential rejected
+no live request
+platformWrite=false
+TRANSPORT=false
+productionCredentials=ABSENT
+no SLA/refund eligibility calculation
+tsc api/web 0
+full CI SUCCESS
+
+㉖ Queue #5 DO NOT DO
+
+不要：
+
+calculate late-delivery refund
+calculate carrier claim value
+submit claim
+submit refund
+mutate shipment
+expose signature image directly
+trust tracking/invoice number for tenant ownership
+introduce second account truth source
+enable TRANSPORT
+use real credentials
+
+㉗ Following unit
+
+Queue #5 PASS 后，
+
+下一单元优先建议：
+
+CARRIER QUEUE #6
+SLA EVIDENCE ASSEMBLY + ELIGIBILITY INPUT PLANE
+
+届时把：
+
+tracking timeline
++
+invoice charges
++
+POD
++
+service level
+
+组成：
+
+Claim-Ready Evidence Input
+
+但仍先不自动提交。
+
+㉘ External gate
+
+真实 UPS/FedEx：
+
+invoice/POD read activation
+
+继续需要：
+
+provider credentials
+real verified accounts
+real-data validation
+
+标记：
+
+HOLD_EXTERNAL
+
+不阻塞 Queue #5 内部实现。
+
+编号裁决
+
+① response account binding：
+
+PASS
+
+② response tracking binding：
+
+PASS
+
+③ event whitelist：
+
+PASS
+
+④ CARRIER QUEUE #4：
+
+PASS / CLOSED
+
+⑤ 下一内部单元：
+
+CARRIER QUEUE #5 — INVOICE + POD READ PLANE
+
+⑥ real carrier integration：
+
+HOLD_EXTERNAL
+
+边界继续保持：
+
+NO platform write
+Payment = 0
+autopay = OFF
+collection = OFF
+external payment write = OFF
+R13 HOLD
+TRANSPORT = false
+无生产凭据
+
+现在 Queue #4 可以真正关闭。下一步做 Invoice + POD Read Plane 比直接跳去算 SLA 更稳：tracking 告诉我们“发生了什么”，invoice 告诉我们“收了多少钱”，POD 告诉我们“交付证据是什么”。这三块齐了，下一阶段才适合开始组 SLA 证据与判定输入。
+```
