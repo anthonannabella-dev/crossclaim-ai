@@ -134,6 +134,14 @@ beforeEach(async () => {
     'TRUNCATE TABLE "AuditLog", "RuleEvaluationShadow", "CanonicalFactSource", "CanonicalFact", "RuleEvaluation", "RecoveryOpportunity", "Case", "Claim", "Settlement", "RuleVersion", "RuleSet", "SourceTransaction", "ImportBatch", "FileAsset", "SourceConnection", "Organization" CASCADE;',
   );
   await prisma.organization.create({ data: { id: ORG, name: '双写租户', slug: 'step2-org' } });
+  const account = await prisma.platformAccount.create({
+    data: {
+      organizationId: ORG,
+      platform: 'AMAZON',
+      externalAccountId: 'fixture-' + ORG,
+      displayName: 'fixture account',
+    },
+  });
   const connection = await prisma.sourceConnection.create({
     data: {
       organizationId: ORG,
@@ -141,6 +149,7 @@ beforeEach(async () => {
       channel: 'OTHER',
       kind: 'FILE_UPLOAD',
       status: 'ACTIVE',
+      platformAccountId: account.id,
       label: 'step2 upload',
     },
   });
@@ -266,7 +275,7 @@ describe('C-0006-B2 Step 2 — dual write + identity parity（真实 PostgreSQL�
 
   it('事实为 CONFLICT 时新评估没有身份 → 计数告警而非静默回退', async () => {
     await prisma.canonicalFact.updateMany({
-      where: { organizationId: ORG, accountId: null, factKey: 'INVOICE:INV-1002' },
+      where: { organizationId: ORG, factKey: 'INVOICE:INV-1002' },
       data: { status: 'CONFLICT' },
     });
 
@@ -340,7 +349,7 @@ describe('C-0006-B2 Step 2 — dual write + identity parity（真实 PostgreSQL�
 
   it('canonical 模式缺身份：fail closed（CANONICAL_IDENTITY_REQUIRED），不退化到旧键', async () => {
     await prisma.canonicalFact.updateMany({
-      where: { organizationId: ORG, accountId: null, factKey: 'INVOICE:INV-1002' },
+      where: { organizationId: ORG, factKey: 'INVOICE:INV-1002' },
       data: { status: 'CONFLICT' },
     });
     const canonicalRepo = createPrismaDetectionRepository(prisma, { identityMode: 'canonical' });

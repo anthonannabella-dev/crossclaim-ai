@@ -72,6 +72,14 @@ beforeEach(async () => {
     'TRUNCATE TABLE "AuditLog", "RuleEvaluationShadow", "CanonicalFactSource", "CanonicalFact", "RuleEvaluation", "RecoveryOpportunity", "Case", "Claim", "Settlement", "RuleVersion", "RuleSet", "SourceTransaction", "ImportBatch", "FileAsset", "SourceConnection", "Organization" CASCADE;',
   );
   await prisma.organization.create({ data: { id: ORG, name: '影子租户', slug: 'shadow-org' } });
+  const account = await prisma.platformAccount.create({
+    data: {
+      organizationId: ORG,
+      platform: 'AMAZON',
+      externalAccountId: 'fixture-' + ORG,
+      displayName: 'fixture account',
+    },
+  });
   const connection = await prisma.sourceConnection.create({
     data: {
       organizationId: ORG,
@@ -79,6 +87,7 @@ beforeEach(async () => {
       channel: 'OTHER',
       kind: 'FILE_UPLOAD',
       status: 'ACTIVE',
+      platformAccountId: account.id,
       label: 'shadow upload',
     },
   });
@@ -194,7 +203,7 @@ describe('C-0006-B1 — canonical shadow run（真实 PostgreSQL）', () => {
 
   it('CONFLICT 事实被排除并逐条审计', async () => {
     await prisma.canonicalFact.updateMany({
-      where: { organizationId: ORG, accountId: null, factKey: 'INVOICE:INV-1002' },
+      where: { organizationId: ORG, factKey: 'INVOICE:INV-1002' },
       data: { status: 'CONFLICT' },
     });
 

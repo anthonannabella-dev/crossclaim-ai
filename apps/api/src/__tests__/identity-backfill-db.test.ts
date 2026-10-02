@@ -76,6 +76,14 @@ beforeEach(async () => {
     'TRUNCATE TABLE "AuditLog", "RuleEvaluationShadow", "CanonicalFactSource", "CanonicalFact", "RuleEvaluation", "RecoveryOpportunity", "RuleVersion", "RuleSet", "SourceTransaction", "ImportBatch", "FileAsset", "SourceConnection", "Organization" CASCADE;',
   );
   await prisma.organization.create({ data: { id: ORG, name: '身份租户', slug: 'identity-org' } });
+  const account = await prisma.platformAccount.create({
+    data: {
+      organizationId: ORG,
+      platform: 'AMAZON',
+      externalAccountId: 'fixture-' + ORG,
+      displayName: 'fixture account',
+    },
+  });
   const connection = await prisma.sourceConnection.create({
     data: {
       organizationId: ORG,
@@ -83,6 +91,7 @@ beforeEach(async () => {
       channel: 'OTHER',
       kind: 'FILE_UPLOAD',
       status: 'ACTIVE',
+      platformAccountId: account.id,
       label: 'identity upload',
     },
   });
@@ -199,7 +208,7 @@ describe('C-0006-B2 — identity backfill planner（真实 PostgreSQL）', () =>
 
     // INV-1002 的事实置为 CONFLICT
     await prisma.canonicalFact.updateMany({
-      where: { organizationId: ORG, accountId: null, factKey: 'INVOICE:INV-1002' },
+      where: { organizationId: ORG, factKey: 'INVOICE:INV-1002' },
       data: { status: 'CONFLICT' },
     });
 

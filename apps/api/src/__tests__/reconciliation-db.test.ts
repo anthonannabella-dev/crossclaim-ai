@@ -108,6 +108,14 @@ beforeEach(async () => {
     'TRUNCATE TABLE "AuditLog", "SourceTransaction", "ImportBatch", "FileAsset", "SourceConnection", "Organization" CASCADE;',
   );
   await prisma.organization.create({ data: { id: ORG, name: '对账租户', slug: 'recon-org' } });
+  const account = await prisma.platformAccount.create({
+    data: {
+      organizationId: ORG,
+      platform: 'AMAZON',
+      externalAccountId: 'fixture-' + ORG,
+      displayName: 'fixture account',
+    },
+  });
   const upload = await prisma.sourceConnection.create({
     data: {
       organizationId: ORG,
@@ -115,6 +123,7 @@ beforeEach(async () => {
       channel: 'UPS',
       kind: 'FILE_UPLOAD',
       status: 'ACTIVE',
+      platformAccountId: account.id,
       label: 'invoice upload',
     },
   });
@@ -126,6 +135,7 @@ beforeEach(async () => {
       channel: 'UPS',
       kind: 'API',
       status: 'ACTIVE',
+      platformAccountId: account.id,
       label: 'ups api',
     },
   });
