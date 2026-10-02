@@ -14,7 +14,11 @@ import {
   type ActionGuardApprovalVerifier,
 } from '../action-guard/approval-verifier';
 import { canonicalJson } from '../platform-write/snapshot';
-import { computeSettlementFee, type FeePolicyInput } from './fee-compute';
+import { computeSettlementFee } from './fee-compute';
+import {
+  assertNoClientPolicyFields,
+  type FeePolicyRecord,
+} from './fee-policy-source';
 import { isSettlementFeeEligible } from './fee-eligibility';
 
 export const FEE_CALCULATE_ACTION = 'billing.fee_calculate';
@@ -50,6 +54,12 @@ export interface FeeRecordDeps {
     boundExtra: Record<string, string | null>;
   }) => Promise<boolean>;
   assertActiveMembership: (organizationId: string, userId: string) => Promise<void>;
+  /** 服务端可信、版本化 fee policy 解析（MSG-60 CHANGE A） */
+  resolveFeePolicy: (request: {
+    organizationId: string;
+    policyRef: string;
+    feeBasisVersion: string;
+  }) => Promise<FeePolicyRecord>;
 }
 
 export interface RecordFeeInput {
@@ -59,7 +69,11 @@ export interface RecordFeeInput {
   feeChainId: string;
   claimItemId: string;
   settlementIds: string[];
-  policy: FeePolicyInput;
+  /** 只允许提交 policy 引用；费率/币种等可信字段由服务端解析（MSG-60 CHANGE A） */
+  policyRef: string;
+  feeBasisVersion: string;
+  /** 任何客户端提交的 policy 字段 → CLIENT_POLICY_FIELDS_NOT_TRUSTED */
+  clientPolicyFields?: Record<string, unknown> | null;
   clientSuppliedRate?: string | null;
   clientSuppliedPolicyRef?: string | null;
 }
@@ -75,9 +89,11 @@ export interface RecordFeeResult {
 export function createFeeRecordDeps(
   prisma: PrismaClient,
   approval: FeeRecordDeps['verifyApproval'] | ActionGuardApprovalVerifier,
+  resolveFeePolicy: FeeRecordDeps['resolveFeePolicy'],
 ): FeeRecordDeps {
   return {
     prisma,
+    resolveFeePolicy,
     verifyApproval: async (request) => {
       if (typeof approval === 'function') return approval(request);
       try {
@@ -114,6 +130,7 @@ export async function recordFeeCalculation(
   deps: FeeRecordDeps,
   input: RecordFeeInput,
 ): Promise<RecordFeeResult> {
+  assertNoClientPolicyFields((input.clientPolicyFields ?? {}) as Record<string, unknown>);
   if (input.clientSuppliedRate || input.clientSuppliedPolicyRef) {
     throw new FeeRecordError('CLIENT_FEE_INPUT_NOT_TRUSTED', 'client-supplied rate/policy is not trusted');
   }
@@ -124,6 +141,11 @@ export async function recordFeeCalculation(
     throw new FeeRecordError('INVALID_INPUT', 'feeChainId and claimItemId are required');
   }
   const organizationId = String(input.organizationId ?? '').trim();
+  const policy = await deps.resolveFeePolicy({
+    organizationId,
+    policyRef: input.policyRef,
+    feeBasisVersion: input.feeBasisVersion,
+  });
   const feeSnapshotDigest = createHash('sha256')
     .update(
       canonicalJson({
@@ -131,7 +153,8 @@ export async function recordFeeCalculation(
         claimItemId: input.claimItemId,
         feeChainId: input.feeChainId,
         settlementIds: [...input.settlementIds].sort(),
-        policy: input.policy,
+        policy,
+        policyDigest: policy.policyDigest,
       }),
     )
     .digest('hex');
@@ -145,9 +168,9 @@ export async function recordFeeCalculation(
       feeSnapshotDigest,
       claimItemId: input.claimItemId,
       feeChainId: input.feeChainId,
-      policyRef: input.policy.policyRef,
-      feeBasisVersion: input.policy.feeBasisVersion,
-      currency: input.policy.currency,
+      policyRef: policy.policyRef,
+      feeBasisVersion: policy.feeBasisVersion,
+      currency: policy.currency,
     },
   });
   if (!approved) throw new FeeRecordError('APPROVAL_REQUIRED', 'human approval is required for fee calculation');
@@ -209,7 +232,7 @@ export async function recordFeeCalculation(
       }
     }
 
-    const computed = computeSettlementFee({ memberships, adjustments, policy: input.policy });
+    const computed = computeSettlementFee({ memberships, adjustments, policy });
 
     await tx.auditLog
       .create({
@@ -238,8 +261,8 @@ export async function recordFeeCalculation(
         caseId: null,
         claimItemId: input.claimItemId,
         feeChainId: input.feeChainId,
-        basis: input.policy.basis,
-        rate: input.policy.rate ?? null,
+        basis: policy.basis,
+        rate: policy.rate ?? null,
         baseAmount: computed.baseAmount,
         feeAmount: computed.feeAmount,
         currency: computed.currency,

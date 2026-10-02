@@ -22,8 +22,22 @@ let ORG_B = '';
 let actor = '';
 let claimA = '';
 
+const STUB_POLICY = {
+  organizationId: '',
+  policyRef: 'policy-2026-01',
+  feeBasisVersion: 'v1',
+  basis: 'RECOVERED_AMOUNT_PCT' as const,
+  rate: '0.15',
+  currency: 'USD',
+  sourceKind: 'RATE_CARD' as const,
+  policyDigest: 'd'.repeat(64),
+  effectiveFrom: '2026-01-01T00:00:00.000Z',
+  effectiveTo: null,
+};
+
 const deps: FeeRecordDeps = {
   prisma,
+  resolveFeePolicy: async (request) => ({ ...STUB_POLICY, organizationId: request.organizationId }),
   verifyApproval: async (r) => ALLOW.has(r.approvalId),
   assertActiveMembership: async (organizationId, userId) => {
     const row = await prisma.membership.findFirst({
@@ -100,13 +114,8 @@ function input(over: Record<string, unknown> = {}) {
     feeChainId: uuid(),
     claimItemId: claimA,
     settlementIds: [] as string[],
-    policy: {
-      basis: 'RECOVERED_AMOUNT_PCT' as const,
-      rate: '0.15',
-      policyRef: 'policy-2026-01',
-      feeBasisVersion: 'v1',
-      currency: 'USD',
-    },
+    policyRef: 'policy-2026-01',
+    feeBasisVersion: 'v1',
     ...over,
   };
 }
