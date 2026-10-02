@@ -44,6 +44,20 @@ beforeEach(async () => {
       { id: ORG_B, name: '外部租户', slug: 'outcome-org-b' },
     ],
   });
+  // MSG-20261002-69：夹具 account-aware 化 —— 机会创建即绑定本租户 fixture account。
+  fixtureAccountA = (
+    await prisma.platformAccount.create({
+      data: { organizationId: ORG, platform: 'OTHER', externalAccountId: 'HITL-FIXTURE-A', displayName: 'hitl A' },
+      select: { id: true },
+    })
+  ).id;
+  fixtureAccountB = (
+    await prisma.platformAccount.create({
+      data: { organizationId: ORG_B, platform: 'OTHER', externalAccountId: 'HITL-FIXTURE-B', displayName: 'hitl B' },
+      select: { id: true },
+    })
+  ).id;
+
   const [admin, finance, ops] = await Promise.all([
     prisma.user.create({ data: { email: 'outcome-admin@example.com', displayName: '管理员', status: 'ACTIVE' } }),
     prisma.user.create({ data: { email: 'outcome-finance@example.com', displayName: '财务', status: 'ACTIVE' } }),
@@ -62,11 +76,15 @@ beforeEach(async () => {
 });
 
 /** Case at WON + Claim APPROVED + confirmed commercial terms (the manual facts). */
+let fixtureAccountA = '';
+let fixtureAccountB = '';
+
 async function seedSettledCase(options: { caseStatus?: string; claimStatus?: string; withTerms?: boolean; claimedAmount?: string; organizationId?: string } = {}) {
   const organizationId = options.organizationId ?? ORG;
   const opportunity = await prisma.recoveryOpportunity.create({
     data: {
       organizationId,
+      accountId: organizationId === ORG ? fixtureAccountA : fixtureAccountB,
       domain: 'LOGISTICS',
       channel: 'OTHER',
       status: 'CONVERTED',
