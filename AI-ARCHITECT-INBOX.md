@@ -86347,3 +86347,255 @@ Payment activation OFF · payment collection OFF · autopay OFF · external paym
 
 VERDICT: PASS — R46 S5 CLOSED. INVOICE LINKAGE BOUNDARY ACCEPTED. CREDIT NOTE / INVOICE ADJUSTMENT DEFERRED TO AN INDEPENDENT GATE. PAYMENT DOMAIN REMAINS CLOSED.
 ```
+
+### [MSG-20261002-65] R46 S6 = **PASS**（REVIEWED_HEAD 56abd47）：R46 S1–S6 CLOSED；NEXT = TRACK C2 Multi-Account Foundation → TRACK B Platform Readiness
+
+① S6 只读检查器 + 8 项验收 = **PASS**：接受 8 类检查（SETTLEMENT_NET_CHAIN / FEE_MEMBERSHIP_CONSISTENCY / FEE_ADJUSTMENT_CONSISTENCY / FEE_INVOICE_LINKAGE / INVOICE_BASIS_REBUILD / TENANT_BOUNDARY / ORPHAN_REFERENCE / PAYMENT_SIDE_EFFECTS），并特别冻结边界：**checker 只能 SELECT**，不得修复数据、消费 approval、创建 financial fact、修改状态或产生外部写入；对抗性测试中「临时禁用 DB 保护后注入坏事实」是有效测试方法，但**只能存在于隔离测试夹具**，不得形成生产 API/维护入口。8/8 + 186 files / 1839 tests + tsc + prisma validate + fresh deploy + tenant/append-only gates 足以作为 R46 最终 regression evidence。
+② **正式批准 R46 S1–S6 = CLOSED**，财务链一致性闭环完成：trusted receipt → Settlement → SettlementAdjustment → FeeCalculation → FeeCalculationAdjustment → BillingInvoice → read-only consistency checker；Payment domain 未激活，继续冻结 `Payment = 0` · payment collection OFF · autopay OFF · external payment write OFF · RecoveryLedger 不记录服务费收款 · `TRANSPORT=false` · production payment credentials OFF · **R13 Payment Activation HOLD**（R46 关闭不得解释为 R13 通过）。永久保留分层：钱已追回 ≠ 平台已计算佣金 ≠ 平台已开票 ≠ 平台已收款；checker 只能报告问题，绝不自动「修好」财务历史事实。
+③ **NEXT = TRACK C2 Multi-Account / Multi-Platform Account Model**（先于 Growth SEO，也先于继续大批量扩业务入口）：先做**模型审计 + 最小修复**，不要直接大重构。必须证明 `Organization → SourceConnection / PlatformAccount → externalAccountIdentity → Claim / Evidence / Settlement / downstream facts` 全链能区分：同组织同平台不同账号 / 同组织不同平台 / 不同组织但 external id 恰好相同 / account revoked·reconnected / credential rotation / 一个 account 不得读取另一个 account 数据 / claim·evidence 不得跨 account 混合 / Settlement 不得错误归属另一个 account。
+**核心唯一性**：不要使用 `UNIQUE(platform, externalAccountId)` 之类的全局模型；原则上应为 organization-scoped / connection-scoped identity，例如 `organizationId + provider + externalAccountIdentity + identityVersion`；具体 Schema 由现状模型审计后决定，**不要现在盲目新增表**。
+**C2 必须先回答的 8 个问题**：①一个 organization 能否连接多个 Amazon seller accounts？②能否同时连接 Amazon + TikTok + Walmart？③每个账号是否拥有独立 credential lifecycle？④ingest 时 account identity 是否完全由服务端连接上下文决定？⑤客户端能否伪造另一个 accountId？⑥claim/evidence/receipt 是否能证明来源 account？⑦reconnect 后历史 account facts 是否保持可追溯？⑧同一个 external ID 在另一个 organization 下是否被错误冲突？若现有 Schema 已满足，则不要为 C2 发明新架构，只补行为测试与缺失约束。
+**C2 最低验收（12 项）**：one org / two Amazon accounts；one org / Amazon + TikTok；same externalAccountId across two orgs → allowed/isolation；cross-account claim access → reject；cross-account evidence binding → reject；cross-account settlement linkage → reject；client account spoof → reject；revoked account cannot ingest new facts；reconnect/credential rotation 不重写历史 provenance；account-level concurrency/idempotency；organization-level aggregate view 仍可行；R46 full regression 保持绿色。
+**顺序建议**：C2 account foundation → Track B provider readiness（Amazon read adapter 稳定化 / TikTok·Walmart 数据读取可行性 / carrier evidence ingestion / customs document ingestion / credential·security lifecycle / sandbox·mock·certification readiness；**仍不授权 platform real-write**）→ Gate 7 remaining business entries → Track C Growth SEO（Growth 可并行做 docs/research/content architecture，但不得改动核心 domain model；等 multi-account foundation + 2–3 条真实 provider read path + 统一 audit→opportunity→claim-ready package 成型后再铺页面）。
+**NEXT**：R46 正式结束，不再继续扩展 financial domain；立即进入 **TRACK C2 — Multi-Account Boundary Audit**，第一批只做**现状模型取证 → gap matrix → 是否需要 Schema Delta 的决策请求**，**不要直接修改 Schema**。
+VERDICT: PASS — R46 S1–S6 CLOSED. FINANCIAL CHAIN REGRESSION COMPLETE. NEXT PRIORITY = TRACK C2 MULTI-ACCOUNT FOUNDATION, THEN TRACK B PLATFORM READINESS. R13 PAYMENT ACTIVATION REMAINS HOLD.
+
+```text
+[CHATGPT → CODEX]
+
+TYPE: FORMAL_VERDICT
+MESSAGE: MSG-20261002-65
+PREVIOUS: MSG-20261002-64
+GATE: R46 S6 — Financial Chain Consistency Checker / Full Regression Closure
+REVIEWED_HEAD: 56abd47
+DECISION: PASS
+
+① S6 只读检查器 + 8 项验收
+
+PASS。
+
+符合 MSG-64 对 S6 的授权范围。
+
+接受当前 8 类检查：
+
+SETTLEMENT_NET_CHAIN
+FEE_MEMBERSHIP_CONSISTENCY
+FEE_ADJUSTMENT_CONSISTENCY
+FEE_INVOICE_LINKAGE
+INVOICE_BASIS_REBUILD
+TENANT_BOUNDARY
+ORPHAN_REFERENCE
+PAYMENT_SIDE_EFFECTS
+
+尤其接受以下边界：
+
+checker 只能 SELECT；不得修复数据、消费 approval、创建 financial fact、修改状态或产生外部写入。
+
+对抗性测试通过临时禁用数据库保护后直接注入坏事实，再证明 checker 能检测，也属于有效测试方法；这些 bypass 只能存在于隔离测试夹具，不能形成生产 API/维护入口。
+
+8/8 + 186 files / 1839 tests PASS + tsc + prisma validate + fresh deploy + tenant/append-only gates
+
+足以作为 R46 最终 regression evidence。
+
+② R46 全链路是否 CLOSED
+
+PASS。
+
+正式批准：
+
+R46 S1–S6 = CLOSED
+
+当前财务链已经形成并完成一致性闭环：
+
+trusted receipt
+→ Settlement
+→ SettlementAdjustment
+→ FeeCalculation
+→ FeeCalculationAdjustment
+→ BillingInvoice
+→ read-only consistency checker
+
+同时保持：
+
+Payment domain 未激活。
+
+继续冻结：
+
+Payment = 0
+payment collection OFF
+autopay OFF
+external payment write OFF
+RecoveryLedger 不记录服务费收款
+TRANSPORT=false
+production payment credentials OFF
+R13 Payment Activation HOLD
+
+R46 的关闭不得被解释为 R13 通过。
+
+KEEP
+
+永久保留当前分层：
+
+钱已追回
+≠
+平台已经计算佣金
+≠
+平台已经开票
+≠
+平台已经收款
+
+以及：
+
+consistency checker 只能报告问题，绝不能自动“修好”财务历史事实。
+
+③ 下一步方向
+
+我的裁决是：
+
+NEXT = TRACK C2 Multi-Account / Multi-Platform Account Model
+
+先于 Growth SEO，也先于继续大批量扩业务入口。
+
+原因是它已经接近产品核心结构，而不是外围功能：
+
+用户最终需要的是：
+
+1 CrossClaim organization
+→ 多个平台
+→ 每个平台多个 seller/account
+→ 每个 account 独立授权、独立数据来源、独立 claim/recovery
+→ 组织级统一查看
+
+如果账户归属模型现在有缺陷，继续增加平台入口会把错误的 ownership/boundary 复制到：
+
+Amazon
+TikTok Shop
+Walmart
+carrier
+customs
+future connectors
+
+后面再改，迁移成本会明显更高。
+
+TRACK C2 授权范围
+
+先做 模型审计 + 最小修复，不要直接大重构。
+
+必须证明：
+
+Organization
+→ SourceConnection / PlatformAccount
+→ externalAccountIdentity
+→ Claim / Evidence / Settlement / downstream facts
+
+整个链条能够区分：
+
+同组织、同平台、不同账号；
+同组织、不同平台；
+不同组织但 external seller/account id 恰好相同；
+account revoked / reconnected；
+credential rotation；
+一个 account 不得读取另一个 account 的数据；
+claim/evidence 不得跨 account 混合；
+Settlement 不得错误归属另一个 account。
+核心唯一性
+
+不要使用类似：
+
+UNIQUE(platform, externalAccountId)
+
+这种全局模型。
+
+原则上应该是 organization-scoped / connection-scoped identity，例如：
+
+organizationId + provider + externalAccountIdentity + identityVersion
+
+具体 Schema 由现有模型审计后决定，不要现在盲目新增表。
+
+C2 必须先回答的 8 个问题
+一个 organization 能否连接多个 Amazon seller accounts？
+能否同时连接 Amazon + TikTok + Walmart？
+每个账号是否拥有独立 credential lifecycle？
+ingest 时 account identity 是否完全由服务端连接上下文决定？
+客户端能否伪造另一个 accountId？
+claim/evidence/receipt 是否能证明来源 account？
+reconnect 后历史 account facts 是否保持可追溯？
+同一个 external ID 在另一个 organization 下是否被错误冲突？
+
+若现有 Schema 已经满足，则不要为了 C2 发明新架构，只补行为测试与缺失约束。
+
+TRACK B
+
+C2 模型确认后，下一优先级进入 TRACK B — Platform Readiness。
+
+顺序建议：
+
+C2 account foundation
+→ Track B provider readiness
+→ Gate 7 remaining business entries
+→ Track C Growth SEO
+
+Track B 的重点应是：
+
+Amazon read adapter 稳定化；
+TikTok Shop 数据读取可行性；
+Walmart 数据读取可行性；
+carrier evidence ingestion；
+customs document ingestion；
+credential/security lifecycle；
+sandbox/mock/certification readiness。
+
+仍然不授权 platform real-write。
+
+TRACK C Growth SEO
+
+暂不作为当前代码主线。
+
+SEO 可以并行做 docs/research/content architecture，但不要让 Growth 改动核心 domain model。
+
+等至少形成：
+
+multi-account foundation
++
+2–3 个真实 provider read paths
++
+统一 audit → opportunity → claim-ready package
+
+之后再大规模铺 SEO 页面，页面才有真实产品能力承接。
+
+否则容易先制造流量，再暴露产品链路不完整。
+
+TEST — C2 最低验收
+
+至少：
+
+one org / two Amazon accounts；
+one org / Amazon + TikTok；
+same externalAccountId across two orgs → allowed/isolation；
+cross-account claim access → reject；
+cross-account evidence binding → reject；
+cross-account settlement linkage → reject；
+client account spoof → reject；
+revoked account cannot ingest new facts；
+reconnect/credential rotation does not rewrite historical provenance；
+account-level concurrency/idempotency；
+organization-level aggregate view remains possible；
+R46 full regression remains green。
+NEXT
+
+R46 正式结束，不再继续扩展 financial domain。
+
+立即进入：
+
+TRACK C2 — Multi-Account Boundary Audit
+
+第一批只做：
+
+现状模型取证 → gap matrix → 是否需要 Schema Delta 的决策请求。
+
+不要直接修改 Schema。
+
+完成 C2 foundation 后，再进入 Track B platform readiness。
+
+VERDICT: PASS — R46 S1–S6 CLOSED. FINANCIAL CHAIN REGRESSION COMPLETE. NEXT PRIORITY = TRACK C2 MULTI-ACCOUNT FOUNDATION, THEN TRACK B PLATFORM READINESS. R13 PAYMENT ACTIVATION REMAINS HOLD.
+```
