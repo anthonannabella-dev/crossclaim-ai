@@ -42,7 +42,7 @@ function readArchiveBody(archivePath, selector) {
   // 归档段落标题：### [MSG-YYYYMMDD-NN] + 标题文本（正文里的裸 `### [MSG-…]` 不算）
   const headings = lines
     .map((line, index) => ({ line, index }))
-    .filter((item) => /^#{2,3} \[MSG-\d{8}-\d{2}\]\s+\S/.test(item.line));
+    .filter((item) => /^#{2,3} \[MSG-\d{8}-\d{2}[A-Z]?\]\s+\S/.test(item.line));
   const target = selector
     ? headings.filter((item) => item.line.includes(selector)).pop()
     : headings

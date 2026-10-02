@@ -85333,3 +85333,57 @@ S4 只解决第二层。
 
 VERDICT: PASS — MSG-20261002-58 CHANGE A/B/C CLOSED. R46 S3 CLOSED. R46 S4 AUTHORIZED. R13 PAYMENT ACTIVATION REMAINS HOLD.
 ```
+
+### [MSG-20261002-60] R46 S4 Fee Membership（REVIEWED_HEAD a1aa42e）= **REVISE**（CHANGE A/B/C；S4 保持 OPEN，不进入 S5）
+
+CHANGE A：`RecordFeeInput.policy` 仍直接进入 digest / rate / basis / policyRef / feeBasisVersion 与最终 FeeCalculation —— 仅拒绝 clientSuppliedRate/clientSuppliedPolicyRef 不能阻止调用方用 `policy` 对象伪造费率；fee policy 必须由服务端可信、版本化 policy source 解析，approval digest 绑定解析后的 server policy。
+CHANGE B：MSG-59 要求的真实 PostgreSQL membership 并发证明未完成 —— 同一 Settlement + 同一 logical feeChain 两个独立事务最多一个成功，并补合法不同 fee-chain / supersession positive control。
+CHANGE C：补 same approval + distinct executions exactly-once，以及 approval consumption / FeeCalculation / membership / success audit 任一步失败全部 rollback 的原子性验收。
+RISKS：fee-rate/policy tampering；application-level `activeChain.findFirst` 本身不能作为并发防双计费边界。
+NEXT：R46 S4 保持 OPEN，不进入 S5；收口后完成真实 PostgreSQL S4 suite + S2/S3 regression + tsc 再提交 S4 Checkpoint。R13 Payment Activation 继续 HOLD。
+
+```text
+发现新的可执行审计项：活动分支 gate/7-commercial-validation 已推进到 R46 S4 HEAD a1aa42e，新增 FeeCalculation 受保护写路径；该提交自身也明确标注 DB 验收尚未补齐。
+
+DECISION: REVISE — MSG-20261002-60
+
+KEEP： FeeCalculation + append-only membership 的方向正确；Settlement eligibility、租户检查、approval consumption，以及 BillingInvoice / Payment / autopay / R13 继续隔离均应保留。
+
+CHANGE： 第一，当前 RecordFeeInput.policy 仍直接进入 digest、rate、basis、policyRef、feeBasisVersion 和最终 FeeCalculation；仅拒绝 clientSuppliedRate/clientSuppliedPolicyRef 并不能阻止调用方通过 policy 对象伪造费率。Fee policy 必须由服务端可信、版本化 policy source 解析，approval digest 绑定解析后的 server policy。第二，MSG-59 要求的真实 PostgreSQL membership 并发证明尚未完成：同一 Settlement + 同一 logical feeChain 两个独立事务最多只能一个成功，同时补合法不同 fee-chain/supersession 的 positive control。第三，补 same approval + distinct executions exactly-once，以及 approval consumption / FeeCalculation / membership / success audit 任一步失败全部 rollback 的原子性验收。
+
+RISKS： 当前最大风险是 fee-rate/policy tampering；另外 application-level activeChain.findFirst 本身不能作为并发防双计费边界。
+
+TEST： 增加伪造 policy.rate/basis/policyRef/feeBasisVersion 无法影响持久化结果、server policy 漂移使旧 approval 失效、same-settlement/same-chain race、合法 supersession positive control、same-approval race、完整事务 rollback；继续断言 BillingInvoice=0、Payment=0、RecoveryLedger 无变化。
+
+NEXT：R46 S4 保持 OPEN，不进入 S5。 收口上述项目并完成真实 PostgreSQL S4 suite + S2/S3 regression + tsc 后再提交 S4 Checkpoint。R13 Payment Activation 继续 HOLD。
+
+我已尝试将 MSG-20261002-60 直接写回 Issue #2；仓库连接显示当前账户具有写权限，但本次写操作被连接安全层拦截，因此 GitHub 没有被修改。需要 Codex 读取本条裁决继续执行。
+```
+
+### [MSG-20261002-60A] R46 S4 Implementation Checkpoint（HEAD 6e432cd）= **REVISE**（五项 CHANGE；S4 保持 OPEN，不进入 S5）
+
+① `RecordFeeInput.policy` 仍直接决定 basis/rate/policyRef/feeBasisVersion 并进入 digest —— 必须改为服务端可信 policy store/registry 解析并绑定 canonical server policy。
+② Fee adjustment 的 `evidenceReferences` 目前只要求非空后原样写库，没有逐条从 EvidenceArtifact 验证存在、同租户与可信 provenance。
+③ adjustment approval digest 未绑定 `evidenceReferences` / `reasonText` / `correctionDirection`，存在「审批 A、落库 B」漂移路径。
+④ same-chain 并发测试丢弃 `Promise.allSettled()` 结果，只验证最终 membership=1 —— 需明确证明 exactly-one success、稳定 loser domain error、loser 零残留，并补合法不同 / superseded fee-chain positive control。
+⑤ 当前 HEAD 无可见 CI run/status，因此不能关闭 S4。
+RISKS / TEST：policy rate·basis·ref·version spoof；server policy 漂移使旧 approval 失效；evidence missing/cross-tenant/spoof；evidence·reasonText·correctionDirection approval drift；same settlement + same logical fee-chain 真并发；合法 supersession positive control；same approval + distinct fee executions exactly-once；approval consumption / calculation / membership / success audit 任一步失败全部 rollback；继续断言 Invoice=0 · Payment=0 · RecoveryLedger=0。
+NEXT：R46 S4 保持 OPEN，不进入 S5；完成真实 PostgreSQL S4 suite、S2/S3 regression、tsc 与 CI 后提交 S4 FINAL。
+
+```text
+发现新的可执行审计项：Issue #2 新增 R46 S4 Implementation Checkpoint，HEAD 6e432cd，相对上次检查的 a1aa42e 前进 5 个 commits。本轮实际检查了新增 record-fee-adjustment.ts、fee-record-db.test.ts、fee-adjustment-db.test.ts；该 HEAD 当前未发现 GitHub Actions workflow run 或 commit status。
+
+DECISION: REVISE — MSG-20261002-60A
+
+KEEP： Settlement → FeeCalculation membership → append-only FeeCalculationAdjustment 的分层正确；BillingInvoice / Payment / RecoveryLedger 继续零副作用，R13 Payment Activation Gate 保持 HOLD。
+
+CHANGE： ① RecordFeeInput.policy 仍直接决定 basis/rate/policyRef/feeBasisVersion 并进入 digest，仅拒绝 clientSuppliedRate/clientSuppliedPolicyRef 不能阻止调用方通过 policy 本身篡改费率；必须改成服务端可信 policy store/registry 解析并绑定 canonical server policy。② Fee adjustment 的 evidenceReferences 目前只要求非空，随后原样写库，没有逐条从 EvidenceArtifact 验证存在、同租户和可信 provenance。③ adjustment approval digest 没有绑定 evidenceReferences / reasonText / correctionDirection，存在“审批 A、落库 B”的漂移路径。④ same-chain 并发测试把 Promise.allSettled() 结果直接丢弃，只验证最终 membership=1；需要明确证明 exactly-one success、稳定 loser domain error、loser 零残留，并补合法不同/superseded fee-chain positive control。⑤ 当前 HEAD 没有可见 CI run/status，因此不能关闭 S4。
+
+RISKS： 当前最重要的是 success-fee policy tampering、FeeAdjustment 审批后业务字段漂移，以及 evidence provenance 尚未达到财务事实链的可信等级；application-level activeChain.findFirst 也不能替代真实 DB concurrency proof。
+
+**TEST：**补 policy rate/basis/ref/version spoof；server policy 漂移使旧 approval 失效；evidence missing/cross-tenant/spoof；evidence/reasonText/correctionDirection approval drift；same settlement + same logical fee-chain 真并发；合法 supersession positive control；same approval + distinct fee executions exactly-once；以及 approval consumption / calculation / membership / success audit 任一步失败全部 rollback。继续断言 Invoice=0、Payment=0、RecoveryLedger=0。
+
+NEXT：R46 S4 保持 OPEN，不进入 S5。 收口以上项目并完成真实 PostgreSQL S4 suite、S2/S3 regression、tsc 和 CI 后提交 S4 FINAL。
+
+仓库连接显示具有写权限，我尝试将该裁决写回 Issue #2，但写操作被当前连接的安全检查阻止，因此 GitHub 未被修改。需要关注的具体项就是 Issue #2 的 R46 S4 / 6e432cd。
+```

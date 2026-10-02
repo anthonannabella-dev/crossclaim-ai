@@ -1405,3 +1405,9 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 
 - CHANGE A/B/C CLOSED；10/10 + S2 基线 + canonical 12/12 + action-guard 15/15 + tsc 0 进入永久回归基线。
 - NEXT：R46 S4（Fee membership + Fee calculation/adjustment；fee basis 限 confirmed+unreversed+eligible Settlement；不得全局 UNIQUE(org, settlementId)；reversal → FeeCalculationAdjustment；Settlement approval ≠ Fee approval；18 项永久验收；BillingInvoice=0 / Payment=0 / R13 Gate HOLD）。
+
+## 2026-10-02 JST — MSG-20261002-60 / 60A 归档（R46 S4 保持 OPEN）
+
+- 60（a1aa42e）= REVISE：CHANGE A 服务端 policy 可信来源 / CHANGE B 真并发 membership / CHANGE C 事务原子性。
+- 60A（6e432cd）= REVISE：①policy tampering ②adjustment evidence provenance ③adjustment approval digest 绑定点 ④same-chain 并发证据强度 ⑤CI 可见性。
+- 归档：AI-ARCHITECT-INBOX.md（逐字 ```text + FULL_COPY_OK）；compare.mjs 放宽 MSG 编号尾缀以保留架构方原始编号。
