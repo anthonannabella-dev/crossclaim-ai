@@ -17,6 +17,7 @@ import type { PrismaClient } from '@prisma/client';
 import type { AuditWriter } from '../audit';
 import type { StorageAdapter } from '../storage';
 import { promoteEvidence, type EvidencePromotionPorts } from './promotion';
+import { resolveEvidenceAccountId } from './account-scope';
 
 export const POD_MAX_BYTES_DEFAULT = 10 * 1024 * 1024;
 
@@ -41,6 +42,8 @@ export interface PodUploadInput {
   capturedAt?: Date;
   /** 可选：把证据挂到某个案件（必须同租户） */
   caseId?: string;
+  /** MSG-20261002-68 CHANGE A：可信连接上下文；服务端据此派生 PlatformAccount（客户端不得传 account）。 */
+  connectionId?: string | null;
   role?: string;
   createdBy?: string;
 }
@@ -104,9 +107,15 @@ function buildPorts(prisma: PrismaClient, audit: AuditWriter, now?: () => Date):
         return row ?? null;
       },
       async create(draft) {
+        // MSG-20261002-68 CHANGE A：新写入 Evidence 必须带 server-derived account provenance。
+        const accountId = await resolveEvidenceAccountId(prisma as never, {
+          organizationId: draft.organizationId,
+          connectionId: draft.connectionId,
+        });
         return prisma.evidenceArtifact.create({
           data: {
             organizationId: draft.organizationId,
+            accountId,
             kind: draft.kind,
             fileAssetId: draft.fileAssetId,
             connectionId: draft.connectionId,
@@ -187,8 +196,8 @@ export async function registerPodEvidence(
     data: {
       id: fileAssetId,
       organizationId: input.organizationId,
-      // POD 证据不挂采集连接（它不是导入批次）
-      connectionId: null,
+      // MSG-20261002-68 CHANGE A：POD 证据必须带可追溯的连接上下文（服务端据此派生 PlatformAccount）。
+      connectionId: input.connectionId ?? null,
       kind: fileKind,
       storageKey: stored.storageKey,
       originalName: input.fileName,

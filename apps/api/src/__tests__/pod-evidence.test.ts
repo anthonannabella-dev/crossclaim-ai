@@ -37,6 +37,8 @@ const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a
 const JPEG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(16, 2)]);
 
 let caseId = '';
+let accountId = '';
+let connectionId = '';
 
 beforeAll(async () => {
   await prisma.$connect();
@@ -48,7 +50,7 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await prisma.$executeRawUnsafe(
-    'TRUNCATE TABLE "CaseEvidence", "EvidenceArtifact", "EvidenceEdge", "Case", "FileAsset", "AuditLog", "Organization" CASCADE;',
+    'TRUNCATE TABLE "CaseEvidence", "EvidenceArtifact", "EvidenceEdge", "Case", "FileAsset", "AuditLog", "SourceConnection", "PlatformAccount", "Organization" CASCADE;',
   );
   await prisma.organization.createMany({
     data: [
@@ -60,6 +62,28 @@ beforeEach(async () => {
     data: { organizationId: ORG, caseNo: 'CASE-POD-1', title: 'POD 案件', domain: 'LOGISTICS' },
   });
   caseId = created.id;
+  // MSG-20261002-68 CHANGE A：POD 证据夹具 account-aware 化（连接 → PlatformAccount 服务端派生）。
+  const account = await prisma.platformAccount.create({
+    data: {
+      organizationId: ORG,
+      platform: 'AMAZON',
+      externalAccountId: 'SELLER-POD',
+      displayName: 'POD store',
+    },
+  });
+  accountId = account.id;
+  const connection = await prisma.sourceConnection.create({
+    data: {
+      organizationId: ORG,
+      domain: 'LOGISTICS',
+      channel: 'UPS',
+      kind: 'FILE_UPLOAD',
+      status: 'ACTIVE',
+      label: 'pod-conn',
+      platformAccountId: account.id,
+    },
+  });
+  connectionId = connection.id;
 });
 
 function deps() {
@@ -69,7 +93,7 @@ function deps() {
 describe('MSG-17 Q3 · POD 证据文件上传登记', () => {
   it('01 PDF 上传 → FileAsset 落库 + EvidenceArtifact(kind=POD)', async () => {
     const result = await registerPodEvidence(
-      { organizationId: ORG, fileName: 'pod-1.pdf', bytes: PDF, mimeType: 'application/pdf' },
+      { organizationId: ORG, fileName: 'pod-1.pdf', bytes: PDF, mimeType: 'application/pdf', connectionId },
       deps(),
     );
     expect(result.fileKind).toBe('PDF');
@@ -78,11 +102,14 @@ describe('MSG-17 Q3 · POD 证据文件上传登记', () => {
 
     const asset = await prisma.fileAsset.findUniqueOrThrow({ where: { id: result.fileAssetId } });
     expect(asset.kind).toBe('PDF');
-    expect(asset.connectionId).toBeNull();
+    // CHANGE A：POD 证据的 FileAsset 现在承载连接上下文（服务端据此派生 PlatformAccount）
+    expect(asset.connectionId).toBe(connectionId);
     const evidence = await prisma.evidenceArtifact.findUniqueOrThrow({
       where: { id: result.evidenceId },
     });
     expect(evidence.kind).toBe('POD');
+    // CHANGE A：证据必须携带 server-derived account provenance
+    expect(evidence.accountId).toBe(accountId);
     expect(evidence.fileAssetId).toBe(result.fileAssetId);
   });
 
@@ -119,6 +146,7 @@ describe('MSG-17 Q3 · POD 证据文件上传登记', () => {
         bytes: PDF,
         caseId,
         role: 'DELIVERY_PROOF',
+        connectionId,
       },
       deps(),
     );
@@ -130,7 +158,7 @@ describe('MSG-17 Q3 · POD 证据文件上传登记', () => {
     });
     await expect(
       registerPodEvidence(
-        { organizationId: ORG, fileName: 'pod-3.pdf', bytes: PDF, caseId: otherCase.id },
+        { organizationId: ORG, fileName: 'pod-3.pdf', bytes: PDF, caseId: otherCase.id, connectionId },
         deps(),
       ),
     ).rejects.toBeTruthy();
@@ -138,7 +166,7 @@ describe('MSG-17 Q3 · POD 证据文件上传登记', () => {
 
   it('05 仅登记：结果不含金额/规则/责任字段，且写入审计', async () => {
     const result = await registerPodEvidence(
-      { organizationId: ORG, fileName: 'pod-4.pdf', bytes: PDF },
+      { organizationId: ORG, fileName: 'pod-4.pdf', bytes: PDF, connectionId },
       deps(),
     );
     const serialized = JSON.stringify(result);
