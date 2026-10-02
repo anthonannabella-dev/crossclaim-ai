@@ -45,7 +45,7 @@
 
 | 模型 / 字段 | 说明 |
 |---|---|
-| `PlatformAccount` | 业务归属身份：`organizationId + platform + externalAccountId + identityVersion`。**不是**凭据容器（token/secret 不入表，仍由 `SourceConnection.credentialRef` 承担）；`identityVersion` 是外部账户身份规范版本，凭据轮换**不得**产生新身份 |
+| `PlatformAccount` | 业务归属身份：`organizationId + platform + externalAccountId + identityVersion`。**不是**凭据容器（token/secret 不入表，仍由 `SourceConnection.credentialRef` 承担）；`identityVersion` 是外部账户身份规范版本，凭据轮换**不得**产生新身份。`platform` / `externalAccountId` / `identityVersion` **创建后不可修改**（DB 不变量 `cc_platformaccount_identity_immutable`，MSG-20261002-67）；`displayName` / `status` / `marketplace` / `region` 仍可合法更新 |
 | `SourceConnection.platformAccountId` | 1 个 account → N 条连接（API / 上传 / 历史导入）；连接是 transport/auth 生命周期，account 是 business provenance identity。绑定后不可改写 |
 | `accountId` 下推 | `SourceTransaction` / `CanonicalFact` / `RecoveryOpportunity` / `ClaimItem` / `EvidenceArtifact` 均由**服务端**从连接上下文派生，客户端提交即拒绝（`CLIENT_ACCOUNT_FIELD_NOT_TRUSTED`）；绑定后不可改写（DB 不变量 `cc_account_binding_immutable__*`） |
 | 事实身份 | 唯一性使用**结构化字段** `(organizationId, accountId, factKey)`；account **不**拼进 `factKey`。`accountId IS NULL` 的历史行继续走 legacy partial unique `(organizationId, factKey)`（迁移窗口专用） |
