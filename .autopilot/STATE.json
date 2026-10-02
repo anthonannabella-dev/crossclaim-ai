@@ -1,6 +1,6 @@
 {
   "gate": "B2-FIX R1",
-  "head": "1a9fe85",
+  "head": "b55f13b",
   "status": "IMPLEMENT",
   "current_task": "PC-12A — PAYMENT ACTIVATION READINESS CONTRACT：表达 override blockers / payment enabled ≠ collection ≠ autopay ≠ external write / fee due ≠ fee collected / reversal 不重复计费 / 不暴露 secret / readiness 端点未授权拒绝 等内部安全闸门；不改 Payment=0、不启用 collection·autopay·external write、不动 R13 HOLD、不加生产 Stripe 凭据、不调用真实支付端点。",
   "next_task": "PC-12A 实施 → 本地测试 + tsc api/web + API contract + full CI → PC-12A CHECKPOINT 送审。",
@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261003-102",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-02T20:32:41.123Z",
+  "updated_at": "2026-10-02T20:35:05.795Z",
   "previous_head": "8ff413b",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -54,7 +54,7 @@
   "last_action": "SCHEDULER_STALE_RECOVERED（gap=15min）→ 本轮已恢复执行",
   "last_action_at": "2026-10-02T09:01:54.693Z",
   "next_action": "C2 FINAL 送审（Issue #2 + ChatGPT 唤醒 + 裁决归档）；通过后进入 TRACK B，并在 C2 收口后执行 PHASE X1 Architecture Audit。",
-  "current_head": "1a9fe85",
+  "current_head": "b55f13b",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -3638,5 +3638,42 @@
   "pc11a_notes": "PC-11A 内部 provider 接入契约闭环：provider registry + callback boundary + OAuth state lifecycle（一次性/TTL/burn-on-mismatch）+ PKCE（server-side verifier ownership）+ 凭据生命周期 port + 能力矩阵 lifecycle truth + sandbox harness；测试 24/24。真实 provider 调用与生产凭据 = PC-11B HOLD_EXTERNAL。",
   "pc11b_status": "HOLD_EXTERNAL / HOST_ACTION_REQUIRED（provider developer approval / client id·secret / callback registration / webhook secret / seller authorization）—— 不阻塞内部推进",
   "pc12a_status": "AUTHORIZED（MSG-20261003-102 ⑤）— PAYMENT ACTIVATION READINESS CONTRACT（只做内部安全契约，不开启真实支付）",
-  "pc12b_status": "HOLD（production payment activation：需 real provider account / production credentials / webhook secret / merchant verification / callback·webhook config / explicit R13 release / explicit collection decision）"
+  "pc12b_status": "HOLD（production payment activation：需 real provider account / production credentials / webhook secret / merchant verification / callback·webhook config / explicit R13 release / explicit collection decision）",
+  "carrier_directive": {
+    "directive": "HOST DIRECTIVE 2026-10-02（Carrier SLA / Dual-Path / Customs Recovery 增量要求）",
+    "doc": "docs/releases/CARRIER-SLA-DUAL-PATH-CUSTOMS-DIRECTIVE.md",
+    "registered_head": "b55f13b",
+    "registered_at": "2026-10-02T20:35:05.794Z",
+    "reuse_audit": "NO_SCHEMA_CHANGE_REQUIRED（Platform.UPS/FEDEX/CUSTOMS、RecoveryDomain.LOGISTICS/CUSTOMS、RuleScope.FREIGHT_RATE/SLA/DIM_WEIGHT/FUEL_SURCHARGE/ACCESSORIAL/DUPLICATE_CHARGE/CUSTOMS_DUTY、RouteTarget.PLATFORM/CARRIER/CUSTOMS_AUTHORITY/CUSTOMS_BROKER/CUSTOMER_SELF、EvidenceKind.CUSTOMS_DOC/BROKER_CORRESPONDENCE 均已存在）",
+    "queue_impact": "NONE_ON_MAINLINE（不打断当前主线 PC-12A）",
+    "delivery_order": [
+      "1 不打断主线（C2 account provenance 已 CLOSED；当前主线 PC-12A）",
+      "2 Carrier Connector Capability Interface — DONE（services/carriers/connector-capability.ts + 8/8 测试）",
+      "3 UPS / FedEx auth + account discovery（auth 流程设计优先送审；凭据只走 SourceConnection.credentialRef）",
+      "4 Tracking read adapter",
+      "5 Invoice ingestion adapter",
+      "6 SLA evaluator + suspension / exclusion（ARCH REVIEW）",
+      "7 Dual-Path Routing（责任方判定 ARCH REVIEW）",
+      "8 Progressive Recovery Preview（Stage 1 ESTIMATED ≠ verified）",
+      "9 Claim package preparation",
+      "10 Direct submission capability（须独立审计后才可开启；当前 supportsDirectClaimSubmission=false）",
+      "11 Customs China connector（V1 deep-link / customer self submit → V2 机构 Connector → V3 官方 API）",
+      "12 每个生产外写 Provider：DESIGN → IMPLEMENTATION → FIXTURE/SANDBOX → REAL DATA READ VALIDATION → SUBMISSION DRY RUN → ACTION GUARD → PRODUCTION ENABLEMENT"
+    ],
+    "arch_review_required": [
+      "SLA evaluator 语义（suspension / exclusions / deadline）",
+      "responsibleParty / payer 的服务端判定规则",
+      "Dual-Path routing 规则与既有 RecoveryRoute 的一致性",
+      "任何 Schema / Projection 变更（当前评估：V1 不需要）",
+      "Direct submission capability 开启（Step 10）"
+    ],
+    "host_approval_required": [
+      "真实承运商账号授权（UPS OAuth / FedEx Integrator Provider 注册）",
+      "生产 client id / client secret / 生产 webhook secret",
+      "callback 域名注册（DNS / 域名）",
+      "真实客户数据读取（REAL DATA READ VALIDATION）",
+      "任何真实外写 / 真实提交 / 付费服务"
+    ],
+    "boundary": "NO platform write · TRANSPORT=false · Payment = 0 · collection/autopay OFF · R13 HOLD · 无生产凭据"
+  }
 }
