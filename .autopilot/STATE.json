@@ -51,8 +51,8 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-02T06:48:22.442Z",
   "state": "IMPLEMENT",
-  "last_action": "CHANGE A 3/4 完成（prisma-ports / pod-upload / manual confirmation）；closure-service 为合成路径，接线后 9/13 失败因合成夹具无 account-scoped 主张，已回滚待连同夹具提交",
-  "last_action_at": "2026-10-02T08:11:25.952Z",
+  "last_action": "审计通道切换到新 ChatGPT 会话（https://chatgpt.com/）；本轮不向 ChatGPT 发送（非 checkpoint），继续本地 CHANGE A",
+  "last_action_at": "2026-10-02T08:11:55.841Z",
   "next_action": "C2 FINAL 送审（Issue #2 + ChatGPT 唤醒 + 裁决归档）；通过后进入 TRACK B，并在 C2 收口后执行 PHASE X1 Architecture Audit。",
   "current_head": "691635e",
   "reviewed_head": "07b7009",
@@ -3603,5 +3603,10 @@
     "pod_upload": "DONE (5c06d7e, pod-evidence 5/5)",
     "manual_confirmation": "DONE (522a12f, recovery-confirmation-db + closure-db 23/23)",
     "closure_service": "PENDING - synthetic-only path (titles fixture-derived / synthetic test-demo only); wiring requires SYNTHETIC FIXTURE to seed an account-scoped ClaimItem, otherwise 9/13 closure-db fail with PLATFORM_ACCOUNT_REQUIRED"
+  },
+  "audit_channel": {
+    "moved_at": "2026-10-02T08:11:55.840Z",
+    "url": "https://chatgpt.com/",
+    "note": "宿主开启新会话；旧审计会话 6ab9ee1b-... 已不在标签内。裁决留档真源 = AI-ARCHITECT-INBOX.md + GitHub Issue #2；下次唤醒必须自包含（REVIEWED_HEAD + Issue #2 comment id + checkpoint 文档路径），且仅在真实 checkpoint 发送。"
   }
 }
