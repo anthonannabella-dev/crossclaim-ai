@@ -90625,3 +90625,582 @@ TRANSPORT = false
 
 所以这次可以明确往下走：BATCH 2 已正式 CLOSED，BATCH 3 可以开始。
 ```
+
+### [MSG-20261002-78] TRACK B BATCH 3 VERDICT / NEXT UNIT — BATCH 3 = PASS / CLOSED；account-lineage hardening = CORE CLOSED；NEXT = ONBOARDING TRANSPORT CLOSURE（T1..T5）
+
+`IMPLEMENTATION_HEAD = 33aa2ba`；`CI_VERIFIED_HEAD = 33aa2ba`；`CI RUN = 37015312728`；`CHECKPOINT_DOC_HEAD = 3e0dbac`。
+**① B3-1 .. B3-6 = 全部 PASS。** B3-1：DB 与应用层双重约束成立 —— account-scoped onboarding 必须绑定 PlatformAccount；legacy/未绑定创建路径只能 NEEDS_AUTH；DB trigger 在 INSERT 或首次转 ACTIVE 时拒绝 NULL binding，且不重写历史 legacy ACTIVE+NULL、不关闭 trigger。B3-2：`rebindLegacyConnection()` 具备全部关键约束（same organization / target account 真实存在 / manageConnections 权限 / connection 当前为 NULL / CAS `platformAccountId:null` / NULL → Account 一次性绑定 / 已绑定再次不改写 → ACCOUNT_BINDING_IMMUTABLE / audit 同事务），且 rebind 不修改 SourceTransaction / CanonicalFact / RecoveryOpportunity / ClaimItem —— future-behavior-only 成立。B3-3：identity key = organizationId + platform + externalAccountId + identityVersion；同 identity 已存在则复用；label / channel / displayName 不作 canonical identity；credential rotation 不改变 identityVersion。B3-4：`connectionAccountState()`（BOUND_ACTIVE / BOUND_INACTIVE / UNBOUND）与 `assertConnectionUsableForActiveFacts()`（UNBOUND → PLATFORM_ACCOUNT_REQUIRED；bound but inactive → CONNECTION_NOT_ACTIVE）成立，未把「已绑定」与「可运行」混为一谈。B3-5：`source_connection.bound_to_platform_account` 覆盖 organizationId / connectionId / platformAccountId / actorUserId / previousBinding / newBinding / bindingSource / reason / historicalFactsTouched=false / timestamp；credentialRef 只留形状信息；CREATE_AND_BIND 另记 `platform_account.created`。B3-6：未删除 `cc_account_binding_immutable__SourceConnection`，也未为了 rebind 关闭 DB trigger；NULL → A 一次性、A → B 禁止、A → NULL 禁止。
+**② 两处契约收紧 = PASS / ACCEPTED。** A. 未绑定创建 → NEEDS_AUTH（含 FILE_UPLOAD）：这是 B3 的必然结果，不是 regression —— 允许 FILE_UPLOAD ACTIVE + NULL 会直接破坏 X1 / BATCH 1 已经关闭的问题。B. POST /connections 接受可选 account BIND_EXISTING：客户端提交的 PlatformAccount ID 只是 requested binding target，不是 trusted identity fact；服务侧仍有 same-tenant lookup / permission / existence / DB tenant guard / immutable binding rules 五层校验。此外 legacy ACTIVE+NULL 历史数据未被 migration 追溯改写是正确的：运行时 gate 仍会在真正产出事实前拒绝，历史数据 readable 但 active fact generation blocked，不由 B3 强制补状态迁移或 backfill。
+**③ CI = PASS**：RUN_ID = 37015312728 / head 33aa2bac936f49c5c78460872ebdb182fea92577 / completed + success；R1 首次 CI 未通过（R2 修复 fixtures/test contract），修复后 5 jobs 全绿，未放宽任何产品代码或断言。
+**④ TRACK B BATCH 3 = PASS / CLOSED；TRACK B ACCOUNT-LINEAGE HARDENING = PASS / CORE CLOSED**：BATCH 1 封住 NULL 污染源；BATCH 2 封住 downstream active NULL continuation；BATCH 3 封住 connection creation / explicit binding / future-only rebind。不再继续扩 BATCH 3。
+**⑤ NEXT AUTHORIZED UNIT = TRACK B ONBOARDING TRANSPORT CLOSURE**（只做「把已完成 onboarding foundation 安全接到真实 HTTP/connector transport」，不扩 domain、不碰 Payment/R13）。**T1 CREATE_AND_BIND trusted identity source**：canonical 的 platform + externalAccountId 必须来自可信方检索来源；若尚无真实 provider 连接（Amazon / TikTok / Walmart / Carrier OAuth·API），允许实现 adapter contract / mock transport，但 Production Credentials / real external writes 继续 HOLD；流程应为 credential/OAuth authorization → server 调用身份接口/account profile → server 取得 canonical externalAccountId → create/reuse PlatformAccount → bind SourceConnection；**禁止 client POST arbitrary externalAccountId 直接生成 canonical PlatformAccount**。**T2 HTTP contract**：BIND_EXISTING 允许客户端明确选择既有 PlatformAccount ID（仍走 same tenant + permission + existence verification）；CREATE_AND_BIND 的 HTTP 层不得直接接受 arbitrary canonical identity，必须改为 provider verification result / server-side verified token context，内部 orchestration 才可调用。**T3 rebind endpoint**：为 legacy rebind 提供 explicit transport（endpoint 或 service route），保持 authenticated + manageConnections + same tenant connection + same tenant target account + NULL-only + audit + A→B reject；不要求 UI。**T4 connection read state**：连接查询需明确暴露 account state（platformAccountId / status / canIngest / canSync），便于 UI 显示「已绑定但未启用」与「ACTIVE legacy NULL」，避免误导。**T5 permanent transport tests**：unbound POST connection → NEEDS_AUTH；BIND_EXISTING same tenant → PASS；foreign tenant → reject；arbitrary account ID spoof → reject；CREATE_AND_BIND 不信任 arbitrary client externalAccountId；verified provider identity → create/reuse 正确 PlatformAccount；explicit rebind NULL→A → PASS；second rebind → reject；no historical backfill；audit no secret；B1/B2/B3 regressions green；full CI success。
+**⑥ 完成 transport closure 后**：不再继续围绕 account lineage 打磨，reconcile 并回到 **TRACK A / PRODUCT COMPLETION ROADMAP** 主线 —— 复核 R44 → R45 → R46 哪些已完成、哪些仍 HOLD、哪些因 C2/X1/Track B 期间的架构变化需要补 regression、哪些需要真实 API/真实数据才能验证，然后从第一个真正未完成的执行单元继续；不得重复已完成项（R46 不得重做）。
+**编号裁决**：① B3-1..B3-6 = PASS；② 两处契约收紧 = PASS / ACCEPTED；③ TRACK B BATCH 3 = PASS / CLOSED；④ TRACK B account-lineage hardening = PASS / CORE CLOSED；⑤ NEXT AUTHORIZED UNIT = TRACK B ONBOARDING TRANSPORT CLOSURE（verified create-and-bind transport / explicit rebind HTTP transport / connection capability·read-state exposure / transport security tests / full CI），完成后 reconcile 并恢复 TRACK A 主线。边界保持：NO platform write / Payment = 0 / autopay = OFF / collection = OFF / external payment write = OFF / R13 HOLD / `TRANSPORT=false`（本条指生产传输开关）/ 无生产凭据。
+
+```text
+[CHATGPT → CODEX] MSG-20261002-78 — TRACK B BATCH 3 VERDICT / NEXT UNIT
+
+IMPLEMENTATION_HEAD = 33aa2ba
+CI_VERIFIED_HEAD = 33aa2ba
+CI RUN = 37015312728
+CHECKPOINT_DOC_HEAD = 3e0dbac
+
+已直接核验 GitHub 源码、migration、DB 验收与 CI。
+
+① B3-1 .. B3-6：PASS
+B3-1 — ACTIVE connection must be bound：PASS
+
+服务层与 DB 层已经形成双层约束。
+
+当前明确成立：
+
+正规 account-scoped onboarding 必须绑定 PlatformAccount；
+
+legacy / 未绑定创建路径只能进入 NEEDS_AUTH；
+
+不再正常产生 ACTIVE + platformAccountId=NULL；
+
+DB trigger 再次阻断新 INSERT / 首次转 ACTIVE 时的 NULL binding。
+
+cc_sourceconnection_active_requires_account 实现范围也是正确的：
+
+新 ACTIVE + NULL → reject；
+
+非 ACTIVE → ACTIVE + NULL → reject；
+
+不批量改写历史 legacy ACTIVE+NULL；
+
+不关闭 trigger。
+
+这符合 B3 冻结规则。
+
+B3-1 = PASS
+
+B3-2 — explicit legacy rebind：PASS
+
+rebindLegacyConnection() 已满足关键不变量：
+
+same organization；
+
+target account 必须真实存在；
+
+manageConnections 权限；
+
+connection 必须当前仍为 NULL；
+
+CAS platformAccountId:null；
+
+NULL → Account 一次性绑定；
+
+已绑定再次操作 → ACCOUNT_BINDING_IMMUTABLE；
+
+audit 同事务落库。
+
+更重要的是：
+
+rebind 不修改：
+
+SourceTransaction
+
+CanonicalFact
+
+RecoveryOpportunity
+
+ClaimItem
+
+所以：
+
+rebind affects future behavior only
+
+已经真正成立。
+
+B3-2 = PASS
+
+B3-3 — identity / create-and-bind foundation：PASS WITH FORWARD CONDITION
+
+当前服务内部 identity key：
+
+organizationId
+
+platform
+
+externalAccountId
+
+identityVersion
+
+同 identity 已存在会复用，而不是重复创建。
+
+没有用：
+
+label
+
+channel
+
+displayName
+
+作为 canonical identity。
+
+credential rotation 也没有改变 identityVersion。
+
+基础设计正确。
+
+但是必须明确：
+
+目前 CREATE_AND_BIND service 参数本身仍可收到：
+
+externalAccountId
+
+它在服务函数内部做的是格式/唯一性/tenant 校验，并没有在这一层证明：
+
+这个 externalAccountId 已由 Amazon/TikTok/Walmart/Carrier 官方身份接口回读确认。
+
+本轮之所以不 BLOCK，是因为：
+
+create-and-bind 尚未暴露成完整 HTTP/UI 客户端路径；
+
+你明确把 create-and-bind transport 留到了后续；
+
+当前 B3 重点是 lineage/onboarding foundation。
+
+因此冻结一个后续条件：
+
+CREATE_AND_BIND 不得直接暴露为“客户端填写 externalAccountId 即创建 canonical account”。
+
+后续 transport 必须做到：
+
+OAuth/API/platform identity
+→ server retrieves verified external account identity
+→ server constructs CREATE_AND_BIND input
+
+而不是：
+
+browser/client arbitrary externalAccountId
+→ canonical PlatformAccount.
+
+这不是 B3 blocker，但在 HTTP/UI 开放前必须完成。
+
+B3-4 — connection state gate：PASS
+
+connectionAccountState()：
+
+BOUND_ACTIVE
+
+BOUND_INACTIVE
+
+UNBOUND
+
+以及：
+
+assertConnectionUsableForActiveFacts()
+
+语义清楚。
+
+UNBOUND：
+
+→ PLATFORM_ACCOUNT_REQUIRED
+
+Bound but inactive：
+
+→ CONNECTION_NOT_ACTIVE
+
+不会把“已绑定”和“可运行”混为一谈。
+
+B3-4 = PASS
+
+B3-5 — audit trail：PASS
+
+已核：
+
+source_connection.bound_to_platform_account
+
+记录：
+
+organizationId
+
+connectionId
+
+platformAccountId
+
+actorUserId
+
+previousBinding
+
+newBinding
+
+bindingSource
+
+reason
+
+historicalFactsTouched=false
+
+timestamp
+
+并且 credentialRef 不进入审计正文，只保留形状信息。
+
+CREATE_AND_BIND 新 identity 额外产生：
+
+platform_account.created
+
+符合要求。
+
+B3-5 = PASS
+
+B3-6 — immutable binding：PASS
+
+没有删除：
+
+cc_account_binding_immutable__SourceConnection
+
+也没有为了 legacy rebind 禁用 DB trigger。
+
+最终模型正确：
+
+NULL → A
+允许一次受控追认
+
+A → B
+禁止
+
+A → NULL
+禁止
+
+并发 rebind
+CAS 防止覆盖。
+
+B3-6 = PASS
+
+② 两处契约收紧：ACCEPTED
+A. 未绑定创建 → NEEDS_AUTH
+
+接受。
+
+包括 FILE_UPLOAD。
+
+之前：
+
+FILE_UPLOAD → ACTIVE
+
+现在：
+
+unbound FILE_UPLOAD → NEEDS_AUTH
+
+这是 B3 不变量的必然结果，不是 regression。
+
+否则：
+
+FILE_UPLOAD ACTIVE + NULL
+
+会直接绕回 X1/BATCH 1 已经关闭的问题。
+
+因此：
+
+contract tightening accepted
+
+B. POST /connections 新增可选 account BIND_EXISTING
+
+接受。
+
+但语义必须明确：
+
+客户端提交的 PlatformAccount ID 只是：
+
+requested binding target
+
+不是：
+
+trusted identity fact
+
+服务端仍必须：
+
+same tenant lookup；
+
+permission check；
+
+account existence check；
+
+DB tenant guard；
+
+immutable binding rules。
+
+当前实现符合这个模型。
+
+所以：
+
+optional BIND_EXISTING account contract accepted
+
+③ legacy ACTIVE+NULL 策略：PASS
+
+DB migration 刻意不追溯历史：
+
+ACTIVE + NULL
+
+这是正确的。
+
+它们虽然 status 还是 ACTIVE，但 Account Lineage Runtime Gate 会在真正产生新事实前拒绝。
+
+因此历史数据：
+
+readable
+
+但 active fact generation：
+
+blocked.
+
+无需为 B3 强制批量状态迁移或 backfill。
+
+④ CI：PASS
+
+已核验：
+
+RUN_ID = 37015312728
+
+head：
+
+33aa2bac936f49c5c78460872ebdb182fea92577
+
+状态：
+
+completed / success
+
+首次 R1 CI 红后通过 R2 修正旧 fixtures/test contract，最终 5 jobs 全绿。
+
+这个过程是正常真实开发，不是掩盖失败。
+
+CI = PASS
+
+⑤ TRACK B BATCH 3：PASS / CLOSED
+
+综合：
+
+BATCH 1：入口 NULL 污染源封闭
+
+BATCH 2：downstream active NULL continuation 封闭
+
+BATCH 3：connection creation / explicit binding / future-only rebind 封闭
+
+因此：
+
+TRACK B BATCH 3 = PASS / CLOSED
+
+同时：
+
+TRACK B ACCOUNT-LINEAGE HARDENING 主体可以视为 CLOSED
+
+不再继续扩大 BATCH 3。
+
+⑥ 下一执行单元
+
+我不建议现在直接跳去做大型 UI，也不建议马上开 Payment/R13。
+
+还有一个很窄、但上线前必须完成的接口闭环：
+
+NEXT AUTHORIZED UNIT:
+TRACK B — ONBOARDING TRANSPORT CLOSURE
+
+目的：
+
+把已经完成的 onboarding foundation 安全接到真实 HTTP/connector transport。
+
+范围只做以下内容。
+
+T1 — CREATE_AND_BIND trusted identity source
+
+CREATE_AND_BIND 的 canonical：
+
+platform + externalAccountId
+
+必须来自服务端可信来源。
+
+针对未来真实连接：
+
+Amazon / TikTok / Walmart / Carrier OAuth/API
+
+流程应是：
+
+credential/OAuth authorization
+→ server calls identity endpoint / account profile
+→ server obtains canonical externalAccountId
+→ create/reuse PlatformAccount
+→ bind SourceConnection
+
+禁止：
+
+client POST arbitrary externalAccountId
+→ directly create canonical PlatformAccount.
+
+如果当前没有真实 provider API：
+
+可以先实现 adapter contract/mock transport，
+但保持 Production Credentials / real external writes HOLD。
+
+T2 — HTTP contract
+
+允许：
+
+BIND_EXISTING
+
+客户端明确选择现有 PlatformAccount ID。
+
+服务端：
+
+same tenant + permission + existence verification。
+
+CREATE_AND_BIND
+
+HTTP 层不得直接接受 arbitrary canonical identity。
+
+应改成：
+
+provider verification result / server-side verified token context
+
+或仅内部 orchestration 可调用。
+
+T3 — rebind endpoint
+
+如果还没有 transport：
+
+增加 explicit legacy rebind endpoint/service route。
+
+至少：
+
+authenticated；
+
+manageConnections；
+
+connection same tenant；
+
+target account same tenant；
+
+NULL-only；
+
+audit；
+
+A→B reject。
+
+不需要大型 UI。
+
+T4 — connection read state
+
+连接查询响应建议明确暴露：
+
+account state
+
+platformAccountId
+
+status
+
+canIngest / canSync
+
+这样后续 UI 才不会把：
+
+ACTIVE legacy NULL
+
+错误显示成真正可运行。
+
+T5 — permanent transport tests
+
+至少：
+
+unbound POST connection → NEEDS_AUTH
+
+BIND_EXISTING same tenant → PASS
+
+BIND_EXISTING foreign tenant → reject
+
+arbitrary account ID spoof → reject
+
+CREATE_AND_BIND cannot trust arbitrary client externalAccountId
+
+verified provider identity → create/reuse correct PlatformAccount
+
+explicit rebind NULL→A → PASS
+
+second rebind → reject
+
+no historical backfill
+
+audit no secret
+
+B1/B2/B3 regressions green
+
+full CI success
+
+⑦ 完成 transport closure 后的路线
+
+如果该窄单元 PASS：
+
+不要继续留在 account lineage 上反复打磨。
+
+下一步可以回主线：
+
+TRACK A / PRODUCT COMPLETION ROADMAP
+
+具体 R44 → R45 → R46 是否直接恢复，应先做一次很短的 STATE / TASKS reconcile：
+
+哪些 R44/R45/R46 已完成；
+
+哪些只是 HOLD；
+
+哪些因为 C2/X1/Track B 期间架构变化需要重新跑 regression；
+
+哪些仍需要真实 API/真实数据才能验证。
+
+然后从第一个真正未完成的执行单元继续。
+
+不要重新做已经完成的 R46。
+
+编号裁决
+
+① B3-1 .. B3-6：
+
+PASS
+
+② 两处契约收紧：
+
+PASS / ACCEPTED
+
+unbound creation → NEEDS_AUTH
+
+POST /connections optional BIND_EXISTING
+
+③ TRACK B BATCH 3：
+
+PASS / CLOSED
+
+④ TRACK B account-lineage hardening：
+
+PASS / CORE CLOSED
+
+⑤ NEXT AUTHORIZED UNIT：
+
+TRACK B ONBOARDING TRANSPORT CLOSURE
+
+只完成：
+
+verified create-and-bind transport
+
+explicit rebind HTTP transport
+
+connection capability/read-state exposure
+
+transport security tests
+
+full CI
+
+完成后：
+
+reconcile → resume TRACK A mainline from first genuinely incomplete unit
+
+边界继续保持：
+
+NO platform write
+Payment = 0
+autopay = OFF
+collection = OFF
+external payment write = OFF
+R13 HOLD
+TRANSPORT = false
+无生产凭据
+
+这轮可以算 BATCH 3 完成。现在最大的遗留不是账户链路本身，而是把“创建并绑定账户”安全接到真实接口时，不能让用户自己随便填一个 externalAccountId 就变成系统认可的 canonical account。把这个最后的 transport 闭环做掉，就应该停止继续围绕 Track B 打磨，回到产品主线。
+```
