@@ -302,6 +302,8 @@ describe('C-0008-B1 — 机会复核端点（真实 HTTP + PostgreSQL）', () =>
           kind: 'FILE_UPLOAD',
           domain: 'LOGISTICS',
           channel: 'UPS',
+          // MSG-20261002-77 B3-1：ACTIVE 连接必须绑定 canonical PlatformAccount。
+          account: { mode: 'BIND_EXISTING', platformAccountId: fixtureAccountA },
         }),
       });
       expect(created.status).toBe(201);

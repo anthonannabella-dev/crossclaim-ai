@@ -71,7 +71,8 @@ async function seedConnection(
       domain: 'PLATFORM',
       channel,
       kind: 'FILE_UPLOAD',
-      status: 'ACTIVE',
+      // MSG-20261002-77：未绑定账户的连接不得是 ACTIVE。
+      status: platformAccountId ? 'ACTIVE' : 'NEEDS_AUTH',
       label,
       platformAccountId,
     },

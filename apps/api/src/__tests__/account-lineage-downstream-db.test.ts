@@ -53,7 +53,8 @@ async function seedConnection(organizationId: string, platformAccountId: string 
       domain: 'PLATFORM',
       channel: 'AMAZON_OTHER',
       kind: 'FILE_UPLOAD',
-      status: 'ACTIVE',
+      // MSG-20261002-77：未绑定账户的连接不得是 ACTIVE（legacy unbound = READ-ONLY FROZEN）。
+      status: platformAccountId ? 'ACTIVE' : 'NEEDS_AUTH',
       label: 'conn ' + (platformAccountId ? 'bound ' : 'unbound ') + uuid().slice(0, 8),
       platformAccountId,
     },

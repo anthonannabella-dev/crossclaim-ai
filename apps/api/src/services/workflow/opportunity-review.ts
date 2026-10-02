@@ -57,6 +57,12 @@ export type WorkflowErrorCode =
   | 'BILLING_BASIS_REQUIRED'
   /** MSG-20261001-11 CHANGE B：仅有 VOID/WRITTEN_OFF 历史账单时重新起草需新编号策略 → 409 */
   | 'BILLING_REISSUE_REQUIRES_NEW_NUMBER'
+  /** MSG-20261002-77 B3-1 / B3-4：新建或启用连接必须绑定 canonical PlatformAccount */
+  | 'PLATFORM_ACCOUNT_REQUIRED'
+  /** MSG-20261002-77 B3-6：已绑定连接不可改绑（legacy NULL → account 仅允许一次受控追认） */
+  | 'ACCOUNT_BINDING_IMMUTABLE'
+  /** MSG-20261002-77 B3-4：连接未处于 ACTIVE（未启用或已暂停），不得执行 ingest / sync */
+  | 'CONNECTION_NOT_ACTIVE'
   /** MSG-20261001-15 CHANGE A：Appeal 正文为空，不能作为有效提交内容 → 409 */
   | 'APPEAL_BODY_REQUIRED';
 

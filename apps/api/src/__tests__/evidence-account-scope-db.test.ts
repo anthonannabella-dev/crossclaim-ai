@@ -116,7 +116,8 @@ describe('MSG-20261002-68 CHANGE A —— account provenance 解析', () => {
         domain: 'PLATFORM',
         channel: 'AMAZON_FBA',
         kind: 'FILE_UPLOAD',
-        status: 'ACTIVE',
+        // MSG-20261002-77：未绑定账户的连接不得是 ACTIVE。
+        status: 'NEEDS_AUTH',
         label: 'orphan',
       },
     });

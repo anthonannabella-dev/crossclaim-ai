@@ -64,6 +64,8 @@ export interface ConnectionLifecyclePort {
     label: string;
     credentialRef: string | null;
     status: ConnectionStatus;
+    /** TRACK B BATCH 3（MSG-20261002-77）：ACTIVE 连接必须已绑定 canonical PlatformAccount。 */
+    platformAccountId?: string | null;
   }): Promise<{ id: string }>;
   update(
     organizationId: string,
@@ -111,6 +113,8 @@ export async function createConnection(
     kind: SourceConnectionKind;
     label: string;
     credentialRef?: string | null;
+    /** TRACK B BATCH 3：绑定的 canonical PlatformAccount；缺省时连接只能以 NEEDS_AUTH 存在。 */
+    platformAccountId?: string | null;
   },
   deps: ConnectionLifecycleDeps,
 ): Promise<{ id: string; status: ConnectionStatus }> {
@@ -119,7 +123,10 @@ export async function createConnection(
   const credentialRef = input.credentialRef ?? null;
   assertCredentialRef(credentialRef);
 
-  const status = initialStatusFor(input.kind);
+  // TRACK B BATCH 3（MSG-20261002-77 B3-1 / B3-4）：
+  // 未绑定 PlatformAccount 的连接不得是 ACTIVE —— 只能停留在 NEEDS_AUTH（只读冻结，不得 ingest）。
+  const platformAccountId = input.platformAccountId ?? null;
+  const status: ConnectionStatus = platformAccountId ? initialStatusFor(input.kind) : 'NEEDS_AUTH';
   const created = await deps.connections.create({
     organizationId: input.organizationId,
     domain: input.domain,
@@ -128,6 +135,7 @@ export async function createConnection(
     label,
     credentialRef,
     status,
+    platformAccountId,
   });
 
   await deps.audit.record({
@@ -144,6 +152,7 @@ export async function createConnection(
       channel: input.channel,
       status,
       hasCredentialRef: credentialRef !== null,
+      hasPlatformAccount: platformAccountId !== null,
     },
   });
 

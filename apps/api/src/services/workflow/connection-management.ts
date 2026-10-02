@@ -72,7 +72,7 @@ export interface ConnectionActor {
   role: string;
 }
 
-function assertLabel(label: unknown): string {
+export function assertLabel(label: unknown): string {
   const value = typeof label === 'string' ? label.trim() : '';
   if (value === '' || value.length > LABEL_MAX) {
     throw new WorkflowError('INVALID_INPUT', `label 必须为 1..${LABEL_MAX} 个字符`);
@@ -80,7 +80,7 @@ function assertLabel(label: unknown): string {
   return value;
 }
 
-function assertEnum<T extends string>(value: unknown, allowed: readonly string[], field: string): T {
+export function assertEnum<T extends string>(value: unknown, allowed: readonly string[], field: string): T {
   if (typeof value !== 'string' || !allowed.includes(value)) {
     throw new WorkflowError('INVALID_INPUT', `${field} 非法：${String(value)}`);
   }
@@ -92,7 +92,7 @@ function assertEnum<T extends string>(value: unknown, allowed: readonly string[]
  * actual secret value is not. Rotation therefore can never be used to smuggle
  * a live credential into the database from the browser.
  */
-function assertCredentialRef(value: unknown): string | null {
+export function assertCredentialRef(value: unknown): string | null {
   if (value === null || value === undefined) return null;
   if (typeof value !== 'string') {
     throw new WorkflowError('INVALID_INPUT', 'credentialRef 必须是字符串或 null');
@@ -122,7 +122,7 @@ function platformOf(config: Prisma.JsonValue | null | undefined): string | null 
   return null;
 }
 
-function assertPlatform(input: {
+export function assertPlatform(input: {
   kind: SourceConnectionKind;
   platform: unknown;
   registeredPlatforms: readonly string[];
@@ -182,6 +182,13 @@ export interface CreateManagedConnectionInput extends ConnectionActor {
   channel: unknown;
   platform?: unknown;
   credentialRef?: unknown;
+  /**
+   * TRACK B BATCH 3（MSG-20261002-77 B3-1）：
+   * 只接受 BIND_EXISTING（引用本租户已存在的 PlatformAccount）；
+   * 缺省时连接以 NEEDS_AUTH 创建（只读冻结，不得 ingest，直到 binding 建立）。
+   * 客户端提交的 account 只是「目标引用」，服务端仍必须复核同租户存在性。
+   */
+  account?: unknown;
 }
 
 export async function createManagedConnection(
@@ -203,7 +210,6 @@ export async function createManagedConnection(
   });
 
   const at = (deps.now ?? (() => new Date()))();
-  const status = initialStatusFor(kind);
   if (kind === 'API' && credentialRef === null) {
     throw new WorkflowError('INVALID_INPUT', 'API 连接必须提供 credentialRef（引用名，不是密钥）');
   }
@@ -217,6 +223,42 @@ export async function createManagedConnection(
       throw new WorkflowError('DUPLICATE_CONNECTION', `同一渠道下已存在同名连接：${label}`);
     }
 
+    const requestedAccount = input.account as
+      | { mode?: unknown; platformAccountId?: unknown }
+      | undefined;
+    let boundAccountId: string | null = null;
+    if (requestedAccount !== undefined && requestedAccount !== null) {
+      if (requestedAccount.mode !== 'BIND_EXISTING') {
+        throw new WorkflowError(
+          'PLATFORM_ACCOUNT_REQUIRED',
+          'PLATFORM_ACCOUNT_REQUIRED: 只接受 BIND_EXISTING（引用本租户已存在的 PlatformAccount）',
+        );
+      }
+      const targetId =
+        typeof requestedAccount.platformAccountId === 'string'
+          ? requestedAccount.platformAccountId.trim()
+          : '';
+      if (!targetId) {
+        throw new WorkflowError(
+          'PLATFORM_ACCOUNT_REQUIRED',
+          'PLATFORM_ACCOUNT_REQUIRED: BIND_EXISTING 必须提供 platformAccountId',
+        );
+      }
+      const target = await tx.platformAccount.findFirst({
+        where: { id: targetId, organizationId: input.organizationId },
+        select: { id: true },
+      });
+      if (!target) {
+        throw new WorkflowError(
+          'PLATFORM_ACCOUNT_REQUIRED',
+          'PLATFORM_ACCOUNT_REQUIRED: PlatformAccount 不存在或不属于该租户',
+        );
+      }
+      boundAccountId = target.id;
+    }
+    // MSG-20261002-77 B3-1 / B3-4：未绑定账户的连接不得是 ACTIVE。
+    const status = boundAccountId ? initialStatusFor(kind) : 'NEEDS_AUTH';
+
     const created = await tx.sourceConnection.create({
       data: {
         organizationId: input.organizationId,
@@ -226,6 +268,7 @@ export async function createManagedConnection(
         label,
         credentialRef,
         status,
+        platformAccountId: boundAccountId,
         ...(platform ? { config: { platform } } : {}),
       },
       select: { id: true },
@@ -247,6 +290,8 @@ export async function createManagedConnection(
           status,
           platform,
           hasCredentialRef: credentialRef !== null,
+          platformAccountId: boundAccountId,
+          bindingMode: boundAccountId ? 'BIND_EXISTING' : null,
         },
       },
       { maxStringLength: 512 },

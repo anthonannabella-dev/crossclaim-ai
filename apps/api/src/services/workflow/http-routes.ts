@@ -296,6 +296,9 @@ function statusFor(error: unknown): { code: number; error: string } {
       case 'BILLING_BASIS_REQUIRED':
       case 'BILLING_REISSUE_REQUIRES_NEW_NUMBER':
       case 'APPEAL_BODY_REQUIRED':
+      case 'PLATFORM_ACCOUNT_REQUIRED':
+      case 'ACCOUNT_BINDING_IMMUTABLE':
+      case 'CONNECTION_NOT_ACTIVE':
         return { code: 409, error: error.code };
       case 'FORBIDDEN':
         return { code: 403, error: error.code };
@@ -1642,6 +1645,7 @@ export async function handleWorkflowRequest(
             channel: body.channel,
             platform: body.platform,
             credentialRef: body.credentialRef,
+            account: body.account,
           },
           { ...(deps.registeredPlatforms ? { registeredPlatforms: deps.registeredPlatforms } : {}), ...(deps.now ? { now: deps.now } : {}) },
         );

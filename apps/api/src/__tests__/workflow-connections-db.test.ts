@@ -62,7 +62,26 @@ beforeEach(async () => {
       { organizationId: ORG_B, userId: admin.id, role: 'ADMIN', isActive: true },
     ],
   });
+  // MSG-20261002-77：ACTIVE 连接必须绑定 canonical PlatformAccount（每个租户各自的账户）。
+  acctA = (
+    await prisma.platformAccount.create({
+      data: { organizationId: ORG, platform: 'OTHER', externalAccountId: 'WF-CONN-A', displayName: 'wf A' },
+      select: { id: true },
+    })
+  ).id;
+  acctB = (
+    await prisma.platformAccount.create({
+      data: { organizationId: ORG_B, platform: 'OTHER', externalAccountId: 'WF-CONN-B', displayName: 'wf B' },
+      select: { id: true },
+    })
+  ).id;
 });
+
+let acctA = '';
+let acctB = '';
+
+const bindA = () => ({ mode: 'BIND_EXISTING', platformAccountId: acctA });
+const bindB = () => ({ mode: 'BIND_EXISTING', platformAccountId: acctB });
 
 const auditRows = (entityId: string) =>
   prisma.auditLog.findMany({
@@ -82,6 +101,7 @@ describe('C-0008-B1 — 连接管理（真实 PostgreSQL）', () => {
         kind: 'FILE_UPLOAD',
         domain: 'LOGISTICS',
         channel: 'UPS',
+        account: bindA(),
       },
       deps,
     );
@@ -105,6 +125,8 @@ describe('C-0008-B1 — 连接管理（真实 PostgreSQL）', () => {
       channel: 'UPS',
       status: 'ACTIVE',
       platform: null,
+      platformAccountId: acctA,
+      bindingMode: 'BIND_EXISTING',
       // 含 "credentialref" 的键会被审计脱敏（与 Gate 5 一致），布尔值不可见
       hasCredentialRef: '[REDACTED]',
     });
@@ -133,7 +155,7 @@ describe('C-0008-B1 — 连接管理（真实 PostgreSQL）', () => {
         channel: 'UPS',
         kind: 'FILE_UPLOAD',
         label: '外部租户连接',
-        status: 'ACTIVE',
+        status: 'NEEDS_AUTH',
       },
     });
 
@@ -164,6 +186,7 @@ describe('C-0008-B1 — 连接管理（真实 PostgreSQL）', () => {
         kind: 'FILE_UPLOAD',
         domain: 'LOGISTICS',
         channel: 'FEDEX',
+        account: bindA(),
       },
       deps,
     );
@@ -218,6 +241,7 @@ describe('C-0008-B1 — 连接管理（真实 PostgreSQL）', () => {
         kind: 'FILE_UPLOAD',
         domain: 'LOGISTICS',
         channel: 'DHL',
+        account: bindA(),
       },
       deps,
     );
@@ -290,7 +314,7 @@ describe('C-0008-B1 — 连接管理（真实 PostgreSQL）', () => {
 
     const other = await createManagedConnection(
       prisma,
-      { ...input, organizationId: ORG_B },
+      { ...input, organizationId: ORG_B, account: bindB() },
       deps,
     );
     expect(other.status).toBe('ACTIVE');
@@ -308,6 +332,7 @@ describe('C-0008-B1 — 连接管理（真实 PostgreSQL）', () => {
         kind: 'FILE_UPLOAD',
         domain: 'LOGISTICS',
         channel: 'UPS',
+        account: bindA(),
       },
       deps,
     );
@@ -350,6 +375,7 @@ describe('C-0008-B1 — 连接管理（真实 PostgreSQL）', () => {
         kind: 'FILE_UPLOAD',
         domain: 'LOGISTICS',
         channel: 'UPS',
+        account: bindA(),
       },
       deps,
     );

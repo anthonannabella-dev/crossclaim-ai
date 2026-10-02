@@ -52,13 +52,15 @@ async function seedConnection(
   label: string,
   platformAccountId: string | null,
 ): Promise<string> {
+  // TRACK B BATCH 3 / MSG-20261002-77：未绑定账户的连接不得是 ACTIVE（DB trigger 亦拒绝）。
+  // legacy unbound 一律 NEEDS_AUTH = 只读冻结；BATCH 1 的 runtime gate 仍按 platformAccountId 判定。
   const created = await prisma.sourceConnection.create({
     data: {
       organizationId,
       domain: 'PLATFORM',
       channel,
       kind: 'FILE_UPLOAD',
-      status: 'ACTIVE',
+      status: platformAccountId === null ? 'NEEDS_AUTH' : 'ACTIVE',
       label,
       platformAccountId,
     },
