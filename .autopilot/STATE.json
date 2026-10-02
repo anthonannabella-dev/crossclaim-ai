@@ -51,8 +51,8 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-02T06:48:22.442Z",
   "state": "IMPLEMENT",
-  "last_action": "审计通道切换到新 ChatGPT 会话（https://chatgpt.com/）；本轮不向 ChatGPT 发送（非 checkpoint），继续本地 CHANGE A",
-  "last_action_at": "2026-10-02T08:11:55.841Z",
+  "last_action": "CHANGE A 仍为 3/4：closure-service 待夹具 account-aware 化（已回滚保持绿）",
+  "last_action_at": "2026-10-02T08:17:20.847Z",
   "next_action": "C2 FINAL 送审（Issue #2 + ChatGPT 唤醒 + 裁决归档）；通过后进入 TRACK B，并在 C2 收口后执行 PHASE X1 Architecture Audit。",
   "current_head": "691635e",
   "reviewed_head": "07b7009",
@@ -3602,7 +3602,7 @@
     "prisma_ports": "DONE (b8b730a)",
     "pod_upload": "DONE (5c06d7e, pod-evidence 5/5)",
     "manual_confirmation": "DONE (522a12f, recovery-confirmation-db + closure-db 23/23)",
-    "closure_service": "PENDING - synthetic-only path (titles fixture-derived / synthetic test-demo only); wiring requires SYNTHETIC FIXTURE to seed an account-scoped ClaimItem, otherwise 9/13 closure-db fail with PLATFORM_ACCOUNT_REQUIRED"
+    "closure_service": "PENDING - closure-db 合成闭环链在**任何层级都没有 account provenance**（无 ClaimItem、opportunity.accountId 亦为 null，因为 detection 夹具的连接未绑定 PlatformAccount）。已实现并回滚的两种派生兜底：case→ClaimItem 与 case→CaseOpportunity→Opportunity.accountId；均无法派生。NEXT: 在 closure-db 的导入/检测夹具中把连接绑定到 seed 的 PlatformAccount，使 opportunity.accountId 落值后再接线（否则该 test/demo 闭环路径只能 fail-closed）。"
   },
   "audit_channel": {
     "moved_at": "2026-10-02T08:11:55.840Z",
