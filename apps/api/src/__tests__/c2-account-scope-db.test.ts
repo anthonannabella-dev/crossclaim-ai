@@ -334,11 +334,33 @@ describe('TRACK C2 M4/M5 —— 隔离、不变量与 legacy 兼容', () => {
     const externalId = 'LEGACY-' + uuid().slice(0, 8);
     const factKey = 'ORDER:' + externalId.toUpperCase();
     // 未绑定 account 的连接 → 事实保持 legacy（accountId NULL）
-    await ingestRow(ORG_A, CONN_LEGACY, externalId);
+    // TRACK B BATCH 1：unbound 连接已不能通过 ingest 写入（Account Lineage Runtime Gate fail-closed），
+    // 因此 legacy NULL 事实改为直接落库模拟历史数据；DB 层 partial unique 仍是防重复 correctness boundary。
+    await prisma.canonicalFact.create({
+      data: {
+        organizationId: ORG_A,
+        domain: 'PLATFORM',
+        channel: 'AMAZON_OTHER',
+        factKey,
+        referenceType: 'ORDER',
+        externalId,
+        currency: 'USD',
+      },
+    });
     const legacy = await prisma.canonicalFact.findFirstOrThrow({
       where: { organizationId: ORG_A, factKey },
     });
     expect(legacy.accountId).toBeNull();
+
+    // 同时验证：legacy unbound 连接仍可读，但不得再启动新的 ingest（TRACK B BATCH 1 gate）。
+    const legacyConnection = await prisma.sourceConnection.findFirstOrThrow({
+      where: { id: CONN_LEGACY, organizationId: ORG_A },
+      select: { platformAccountId: true },
+    });
+    expect(legacyConnection.platformAccountId).toBeNull();
+    await expect(ingestRow(ORG_A, CONN_LEGACY, externalId + '-blocked')).rejects.toThrow(
+      /PLATFORM_ACCOUNT_REQUIRED/,
+    );
 
     // 绕过应用层直接写第二条同 (org, factKey) 的 legacy 事实 → partial unique index 拒绝
     // （应用层对同作用域同 factKey 是幂等合并，DB 层才是防重复 correctness boundary）

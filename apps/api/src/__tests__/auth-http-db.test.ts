@@ -47,9 +47,29 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await prisma.$executeRawUnsafe(
-    'TRUNCATE TABLE "AuditLog", "Session", "UserInvitation", "Membership", "User", "Organization" CASCADE;',
+    'TRUNCATE TABLE "AuditLog", "Session", "UserInvitation", "Membership", "User", "PlatformAccount", "SourceConnection", "Organization" CASCADE;',
   );
   await prisma.organization.create({ data: { id: ORG, name: 'HTTP 租户', slug: 'auth-http-org' } });
+  // TRACK B BATCH 1：上传端点复用本租户已绑定的 FILE_UPLOAD 连接（account 由服务端派生）。
+  const uploadAccount = await prisma.platformAccount.create({
+    data: {
+      organizationId: ORG,
+      platform: 'UPS',
+      externalAccountId: 'fixture-' + ORG,
+      displayName: 'fixture account',
+    },
+  });
+  await prisma.sourceConnection.create({
+    data: {
+      organizationId: ORG,
+      domain: 'LOGISTICS',
+      channel: 'OTHER',
+      kind: 'FILE_UPLOAD',
+      status: 'ACTIVE',
+      label: 'bound upload connection',
+      platformAccountId: uploadAccount.id,
+    },
+  });
   const user = await prisma.user.create({
     data: {
       email: EMAIL,
