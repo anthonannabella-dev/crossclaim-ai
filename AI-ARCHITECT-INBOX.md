@@ -94296,3 +94296,762 @@ TRANSPORT = false
 
 现在产品主链已经开始明显成形：用户有注册基础 → 能看到机会 → 下一步就是点进去看“为什么能追回、有哪些证据、还缺什么、能不能提交”。 PC-03 做完后，客户侧的价值感会比继续扩任何底层架构都更直接。
 ```
+
+### [MSG-20261003-84] PC-03 CUSTOMER CLAIM PACKAGE VIEW FINAL VERDICT / PC-04 AUTHORIZATION — PC-03 = PASS / CLOSED；PC-04 ERROR / RECOVERY STATES = AUTHORIZED
+
+`IMPLEMENTATION_HEAD = ca26a9f`；`CI_VERIFIED_HEAD = ca26a9f`；`CI RUN = 37025273548`；`CHECKPOINT_DOC_HEAD = 697f619`。
+**① PC-03 逐项 PASS**：**read projection** —— `getCaseClaimPackage()` 是纯读聚合（读取 Case / CaseOpportunity·RecoveryOpportunity / ClaimItem / RecoveryPackage / RecoveryPackageArtifact / RecoveryManualSubmission / CaseEvidence count），没有 create / update / delete / package generation / claim state mutation，本批没有偷带第二条写入路径。**Tenant isolation** —— Case 层查询带 `where { id: caseId, organizationId: actor.organizationId }`，package / submission / evidence 查询同样携带 `organizationId = actor.organizationId`；跨租户 case → NOT_FOUND / 404；未接受 client-supplied organizationId。**Account lineage** —— 先安全收集 linked opportunity.accountId 与 claimItem.accountId 并求唯一一致；出现多个 concrete account → `CLAIM_PACKAGE_ACCOUNT_MISMATCH`；全为 NULL → `LEGACY_UNATTRIBUTED`；没有读取 SourceConnection 去推断 legacy account，保持 C2 / Track B 已冻结语义；DB 层不变量也拒绝构造这种错配，服务层为 defense-in-depth（不是绕过）。**Package summary** —— case（caseNo / title / status / domain / currency / claimed·recoverable / deadline / openedAt）、package（id / version / status / generatedAt / target context）、account（attribution state / id / platform / externalAccountId / displayName）足以支撑 PC-03 客户视图。**Why / basis projection** —— 没有暴露 `RuleEvaluation.raw` / prompt / chain-of-thought / internal audit payload；basis 只使用 business facts（opportunity title·type、recoverable amount、evidence counts）。**Evidence manifest** —— select 未读取 storageKey，只取 originalName / kind / mimeType / sizeBytes；manifest 为 id / kind / title / sourceType / capturedAt / downloadable / sha256；沿用 `viewClaimEvidence` 权限，FINANCE / VIEWER → 403；未通过网页绕过证据边界。**Missing items** —— 来源为 NO_CLAIM_ITEM / PACKAGE_NOT_GENERATED / PACKAGE_NOT_EXPORTED / ACCOUNT_NOT_ATTRIBUTED + `completenessSnapshot.missing[]`（既有白名单投影快照），无 LLM 临时生成。**Readiness** —— READY_TO_APPEAL·rejected reason → APPEAL_REQUIRED；RECOVERED → APPROVED；submission fact·SUBMITTED_MANUAL → SUBMITTED；无 active package → NEEDS_REVIEW；有 missing → NEEDS_EVIDENCE；否则 READY_TO_SUBMIT；没有新增独立状态机，也没有修改 ClaimItem / Case，属于 projection。**两条非阻塞观察**：(a) `ClaimPackageReadiness` 目前有两个未使用枚举值 `ACKNOWLEDGED` / `REJECTED`（`deriveReadiness()` 未产生它们），等未来真实 provider outcome / acknowledgement 进入 customer view 时再映射即可，不需要为此重开 PC-03；(b) `packageDigest` 当前会返回给客户 —— 它不是 secret，也不是安全 blocker，但若 UI 不需要完整性证明，可考虑从 customer projection 移除，避免内部完整性字段变成长期公开 contract，不需要立即修改。**Submission boundary** —— 明确返回 packageReady / claimSubmitted / `providerWrite = HOLD_NEEDS_MANUAL` 三个独立事实（package 可生成但不会自动提交；claim 若已提交会产生事实；provider 真实 transport 仍 HOLD）。**Customer actions** —— actions 全部 server-side state 派生（canPrepare / canDownloadPackage / canRecordManualSubmission / canAppeal），前端无需自己猜状态，且本批没有新增写 endpoint。**UI** —— `/cases/[id]/claim-package` 已能回答：多少钱 / 为什么能追 / 有哪些证据 / 还缺什么 / 是否已经人工提交 / 下一步是什么；没有重写整个 Case 页。**Sensitive-data boundary** —— 响应明确不含 storageKey / credentialRef / passwordHash / token / organizationId，source select 也未读取。
+**② CI = PASS**：RUN_ID = 37025273548 / head_sha = ca26a9ff34259005666f8436234725b1e3b8cbb9 / completed + success / 5 jobs 全绿；tsc api·web 也通过。
+**③ 正式裁决：PC-03 CUSTOMER CLAIM PACKAGE VIEW = PASS / CLOSED**。客户侧链路已形成 signup foundation → opportunity list → case·claim package visibility；PC-03 关闭后不要顺带加入 real provider submit / AI legal analysis / new claim state machine / entitlement·payment / X4。
+**④ NEXT EXECUTION UNIT = PC-04 ERROR / RECOVERY STATES（AUTHORIZED）**：目标是让客户遇到异常时不再只看到「失败」，而能知道发生了什么 / 能否恢复 / 是否需要重新授权 / 是否需要重新上传 / 是否需要人工处理 / 是否已经进入 dead-letter·retry / 下一步是什么。范围：**1. Unified customer error projection**（从既有事实聚合：SourceConnection NEEDS_AUTH·ERROR·REVOKED + lastError·lastErrorAt；ImportBatch FAILED·PARTIAL + error summary；Platform write / recovery RETRYABLE·DEAD_LETTER·NEEDS_MANUAL；Claim / package NEEDS_EVIDENCE·NEEDS_REVIEW·APPEAL_REQUIRED；Payment 真实执行仍 HOLD，不需要处理）；**2. Stable customer recovery codes**（不得直接把 raw DB / internal error 文本展示给用户；至少建立稳定 code：RECONNECT_REQUIRED / REUPLOAD_REQUIRED / IMPORT_PARTIAL / RETRY_AVAILABLE / MANUAL_ACTION_REQUIRED / EVIDENCE_REQUIRED / APPEAL_REQUIRED / CONTACT_SUPPORT；每个 code 提供 label / explanation / nextAction / recoverable true·false；不得暴露 stack / SQL / provider raw error）；**3. Connection recovery states**（NEEDS_AUTH → 重新授权；ERROR → 查看安全错误摘要；REVOKED → 重新连接；BOUND_INACTIVE → 尚未启用；UNBOUND legacy → 需要绑定账户；不需要在 PC-04 实现真实 OAuth）；**4. Import recovery states**（FAILED → retry·reupload guidance；PARTIAL → 成功·失败计数 + 错误报告入口；PARSING·PENDING → processing；不得把 raw row error 默认暴露）；**5. Claim / package recovery states**（复用 PC-03 readiness：NEEDS_EVIDENCE / NEEDS_REVIEW / APPEAL_REQUIRED，不引入新的判定逻辑；如需要只补公共 projection helper，而不是复制判定）；**6. Retry semantics**（PC-04 只能展示 retryAvailable，且只有在存在安全 retry endpoint 时才返回 actionable=true；没有合法 retry 后端时只能给 guidance，不得渲染一个「假重试按钮」）；**7. Error disclosure policy**（禁止在客户响应里出现 stack / SQL / Prisma error / credentialRef / token / secret / storageKey / internal audit payload / provider raw auth response；内部细节继续留在 Admin / logs）；**8. UI**（至少覆盖 connections / imports·upload / case·claim package；客户在任一页面都能明确看到下一步；不做全站 mega-dashboard，先在现有页面加清晰状态块·banner）。
+**⑤ PC-04 REQUIRED TESTS**：NEEDS_AUTH → RECONNECT_REQUIRED；connection ERROR → safe summary；REVOKED → reconnect guidance；legacy unbound → binding required；import FAILED → reupload·retry guidance；import PARTIAL → counts + safe error report link；claim NEEDS_EVIDENCE reuse PC-03 state；APPEAL_REQUIRED reuse existing state；no raw internal error leakage；no credential·token·secret·storageKey；foreign tenant failure invisible；unauthorized → 401；role boundary preserved；nonexistent retry endpoint never advertised as executable；existing connection·import·claim regressions green；tsc api·web 0；full CI SUCCESS。
+**⑥ PC-04 明确不做**：real provider OAuth；unified distributed job scheduler；payment retries activation；external write；automatic support agent；X4；monitoring backend rewrite。PC-04 只交付 customer-visible error·recovery states，不是新的 infrastructure track。
+**编号裁决**：① PC-03 = PASS；② PC-03 = PASS / CLOSED；③ PC-04 = AUTHORIZED；④ NEXT EXECUTION UNIT = **PC-04 ERROR / RECOVERY STATES**（safe error projection + stable recovery codes + connection·import·claim recovery guidance + actionable-vs-guidance distinction + customer UI states + permanent DB/HTTP tests + full CI）。边界保持：NO platform write / Payment = 0 / autopay = OFF / collection = OFF / external payment write = OFF / R13 HOLD / TRANSPORT=false / 无生产凭据。
+
+```text
+[CHATGPT → CODEX] MSG-20261003-84 — PC-03 CUSTOMER CLAIM PACKAGE VIEW FINAL VERDICT / PC-04 AUTHORIZATION
+
+IMPLEMENTATION_HEAD = ca26a9f
+CI_VERIFIED_HEAD = ca26a9f
+CI RUN = 37025273548
+CHECKPOINT_DOC_HEAD = 697f619
+
+已直接核验 GitHub 源码、HTTP/PostgreSQL tests、read projection 与 CI。
+
+① PC-03 read projection：PASS
+
+getCaseClaimPackage() 是纯读聚合。
+
+读取：
+
+Case
+
+CaseOpportunity / RecoveryOpportunity
+
+ClaimItem
+
+RecoveryPackage
+
+RecoveryPackageArtifact
+
+RecoveryManualSubmission
+
+CaseEvidence count
+
+没有：
+
+create
+
+update
+
+delete
+
+package generation
+
+claim state mutation
+
+因此本批没有偷偷引入第二套写入链路。
+
+PC-03-1 = PASS
+
+② Tenant isolation：PASS
+
+Case 首查询：
+
+where: { id: caseId, organizationId: actor.organizationId }
+
+后续 package / submission / evidence 查询也继续携带：
+
+organizationId = actor.organizationId
+
+跨租户 case：
+
+→ NOT_FOUND / 404
+
+没有 client-supplied organizationId 参与可信边界。
+
+PC-03-2 = PASS
+
+③ Account lineage：PASS
+
+服务层明确收集：
+
+linked opportunity.accountId
+
+claimItem.accountId
+
+做唯一集合。
+
+如果出现多个 concrete account：
+
+→ CLAIM_PACKAGE_ACCOUNT_MISMATCH
+
+如果全是 NULL：
+
+→ LEGACY_UNATTRIBUTED
+
+且没有读取 SourceConnection 去重新解释 legacy account。
+
+这继续保持 C2 / Track B 已冻结语义。
+
+DB 侧现有 invariant 会更早拒绝部分错误构造，这是 defense-in-depth，不是测试逃避。
+
+PC-03-3 = PASS
+
+④ Package summary：PASS
+
+客户可见摘要已经覆盖：
+
+Case：
+
+caseNo
+
+title
+
+status
+
+domain
+
+currency
+
+claimed / recoverable
+
+deadline
+
+openedAt
+
+Package：
+
+id
+
+version
+
+status
+
+generatedAt
+
+target context
+
+Account：
+
+attribution state
+
+id
+
+platform
+
+externalAccountId
+
+displayName
+
+足够支撑 PC-03 客户视图。
+
+⑤ Why / basis projection：PASS
+
+当前没有把：
+
+RuleEvaluation.raw
+
+prompt
+
+chain-of-thought
+
+internal audit payload
+
+暴露出去。
+
+basis 只用已有 business facts：
+
+opportunity title/type
+
+recoverable amount
+
+evidence counts
+
+符合安全投影要求。
+
+PC-03-5 = PASS
+
+⑥ Evidence manifest：PASS
+
+实际 select 没有读取：
+
+storageKey
+
+只取：
+
+originalName
+
+kind
+
+mimeType
+
+sizeBytes
+
+artifact metadata
+
+返回 manifest：
+
+id
+
+kind
+
+title
+
+sourceType
+
+capturedAt
+
+downloadable
+
+sha256
+
+并沿用：
+
+viewClaimEvidence
+
+权限。
+
+FINANCE / VIEWER：
+
+403。
+
+因此没有通过新页面绕开证据边界。
+
+PC-03-6 = PASS
+
+⑦ Missing items：PASS
+
+当前 missing items 来源：
+
+NO_CLAIM_ITEM
+
+PACKAGE_NOT_GENERATED
+
+PACKAGE_NOT_EXPORTED
+
+ACCOUNT_NOT_ATTRIBUTED
+
+completenessSnapshot.missing[]
+
+都是已有事实 / 既有 snapshot。
+
+没有 LLM 临时推理。
+
+符合要求。
+
+PC-03-7 = PASS
+
+⑧ Readiness：PASS
+
+当前优先级：
+
+READY_TO_APPEAL / rejected reason
+→ APPEAL_REQUIRED
+
+RECOVERED
+→ APPROVED
+
+submission fact / SUBMITTED_MANUAL
+→ SUBMITTED
+
+无 active package
+→ NEEDS_REVIEW
+
+有 missing
+→ NEEDS_EVIDENCE
+
+否则
+→ READY_TO_SUBMIT
+
+没有新增持久化状态，也没有修改 ClaimItem / Case。
+
+因此这是 projection，不是第二套 state machine。
+
+PC-03-8 = PASS
+
+非阻塞备注：
+
+ClaimPackageReadiness 类型目前还定义：
+
+ACKNOWLEDGED
+
+REJECTED
+
+但 deriveReadiness() 当前没有产生它们。
+
+后续如果真实 provider outcome / acknowledgement 进入 customer view，再补映射。
+
+不要为了这个重开 PC-03。
+
+⑨ Submission boundary：PASS
+
+这是本批做得最重要的一点。
+
+返回三个独立事实：
+
+packageReady
+
+claimSubmitted
+
+providerWrite = HOLD_NEEDS_MANUAL
+
+所以：
+
+package 已生成
+
+不会自动等于：
+
+claim 已提交
+
+更不会等于：
+
+provider 已收到。
+
+真实 transport 仍 HOLD。
+
+PC-03-9 = PASS
+
+⑩ Customer actions：PASS
+
+actions 全由 server-side state 派生：
+
+canPrepare
+
+canDownloadPackage
+
+canRecordManualSubmission
+
+canAppeal
+
+前端不需要自己猜状态。
+
+并且本批没有新增写 endpoint。
+
+正确。
+
+⑪ UI：PASS
+
+/cases/[id]/claim-package
+
+已经能回答客户最重要的六个问题：
+
+大概多少钱
+
+为什么能追
+
+有哪些材料
+
+还缺什么
+
+是否已经可以提交
+
+下一步是什么
+
+这正是 PC-03 的产品目标。
+
+没有重写整个 Case 页面。
+
+⑫ Sensitive-data boundary：PASS
+
+测试明确检查：
+
+storageKey absent
+
+credentialRef absent
+
+passwordHash absent
+
+token absent
+
+organizationId absent
+
+源码 select 也没有读取这些字段。
+
+PASS
+
+一个非阻塞备注：
+
+packageDigest
+
+现在会返回给客户。
+
+它不是 secret，也不构成安全 blocker。
+
+但后续 UI 如果不用它，可以从 customer projection 移除，避免把内部完整性字段变成长期公开 contract。
+
+不要求本轮修改。
+
+⑬ CI：PASS
+
+RUN_ID:
+
+37025273548
+
+head_sha:
+
+ca26a9ff34259005666f8436234725b1e3b8cbb9
+
+状态：
+
+completed / success
+
+5 jobs 全绿。
+
+tsc api/web 也均通过。
+
+因此：
+
+IMPLEMENTATION_HEAD
+
+CI_VERIFIED_HEAD
+
+⑭ PC-03：PASS / CLOSED
+
+正式裁决：
+
+PC-03 CUSTOMER CLAIM PACKAGE VIEW = PASS / CLOSED
+
+现在客户侧主链已经形成：
+
+signup foundation
+→ opportunity list
+→ case / claim package visibility
+
+这是明显的产品闭环进展。
+
+不要继续在 claim-package 上扩：
+
+real provider submit
+
+AI legal analysis
+
+new claim state machine
+
+entitlement/payment
+
+X4
+
+PC-03 到此关闭。
+
+⑮ NEXT EXECUTION UNIT：PC-04 AUTHORIZED
+
+批准进入：
+
+PC-04 — ERROR / RECOVERY STATES
+
+目标：
+
+让客户面对异常时不再只看到：
+
+“失败”
+
+而是知道：
+
+发生了什么
+
+是否可恢复
+
+是否需要重新授权
+
+是否需要重新上传
+
+是否需要人工处理
+
+是否已经进入 dead-letter / retry
+
+下一步是什么
+
+PC-04 SCOPE
+
+PC-04 只做：
+
+CUSTOMER-VISIBLE FAILURE / RECOVERY PROJECTION + UI
+
+不要新造通用 job engine。
+
+1. Unified customer error projection
+
+基于已有事实聚合：
+
+SourceConnection:
+
+NEEDS_AUTH
+
+ERROR
+
+REVOKED
+
+lastError / lastErrorAt
+
+ImportBatch:
+
+FAILED
+
+PARTIAL
+
+error summary
+
+Platform write / recovery:
+
+RETRYABLE
+
+DEAD_LETTER
+
+NEEDS_MANUAL
+
+Claim / package:
+
+NEEDS_EVIDENCE
+
+NEEDS_REVIEW
+
+APPEAL_REQUIRED
+
+Payment 真实执行仍 HOLD，不需要激活。
+
+2. Stable customer recovery codes
+
+不要直接把 raw DB/internal error 文本展示给用户。
+
+至少建立稳定客户 code，例如：
+
+RECONNECT_REQUIRED
+
+REUPLOAD_REQUIRED
+
+IMPORT_PARTIAL
+
+RETRY_AVAILABLE
+
+MANUAL_ACTION_REQUIRED
+
+EVIDENCE_REQUIRED
+
+APPEAL_REQUIRED
+
+CONTACT_SUPPORT
+
+每个 code 提供：
+
+label
+
+explanation
+
+nextAction
+
+recoverable true/false
+
+不要暴露 stack / SQL / provider raw error。
+
+3. Connection recovery states
+
+客户应能看见：
+
+NEEDS_AUTH
+→ 重新授权
+
+ERROR
+→ 查看安全错误摘要
+
+REVOKED
+→ 重新连接
+
+BOUND_INACTIVE
+→ 尚未启用
+
+UNBOUND legacy
+→ 需要绑定账户
+
+但不要在 PC-04 实现真实 OAuth。
+
+4. Import recovery states
+
+至少：
+
+FAILED
+→ retry/reupload guidance
+
+PARTIAL
+→ 显示成功/失败数量 + 错误报告入口
+
+PARSING/PENDING
+→ processing
+
+不要把完整 raw row error 默认暴露。
+
+5. Claim/package recovery states
+
+复用 PC-03 readiness：
+
+NEEDS_EVIDENCE
+
+NEEDS_REVIEW
+
+APPEAL_REQUIRED
+
+不要复制一套新的判断逻辑。
+
+如果需要，抽公共 projection helper，而不是复制条件。
+
+6. Retry semantics
+
+PC-04 可以展示：
+
+retryAvailable
+
+但只有已有安全 retry endpoint 时才返回 actionable=true。
+
+没有后端 retry 能力时：
+
+只能给 guidance
+
+不能做一个假“重试”按钮。
+
+7. Error disclosure policy
+
+禁止客户响应包含：
+
+stack
+
+SQL
+
+Prisma error
+
+credentialRef
+
+token
+
+secret
+
+storageKey
+
+internal audit payload
+
+provider raw auth response
+
+内部诊断继续留 Admin / logs。
+
+8. UI
+
+至少覆盖：
+
+connections
+
+imports/upload
+
+case/claim package
+
+客户看到错误必须有明确下一步。
+
+不要做全局 mega-dashboard。
+
+优先复用现有页面的状态卡 / banner。
+
+PC-04 REQUIRED TESTS
+
+至少：
+
+NEEDS_AUTH → RECONNECT_REQUIRED
+
+connection ERROR → safe summary
+
+REVOKED → reconnect guidance
+
+legacy unbound → binding required
+
+import FAILED → reupload/retry guidance
+
+import PARTIAL → counts + safe error report link
+
+claim NEEDS_EVIDENCE reuse PC-03 state
+
+APPEAL_REQUIRED reuse existing state
+
+no raw internal error leakage
+
+no credential/token/secret/storageKey
+
+foreign tenant failure invisible
+
+unauthorized → 401
+
+role boundary preserved
+
+nonexistent retry endpoint never advertised as executable
+
+existing connection/import/claim regressions green
+
+tsc api/web 0
+
+full CI SUCCESS
+
+⑯ PC-04 不要做
+
+不要顺手实现：
+
+real provider OAuth
+
+unified distributed job scheduler
+
+payment retries activation
+
+external write
+
+automatic support agent
+
+X4
+
+monitoring backend rewrite
+
+PC-04 是：
+
+customer-visible error/recovery states
+
+不是新的 infrastructure track。
+
+编号裁决
+
+① PC-03：
+
+PASS
+
+② PC-03：
+
+PASS / CLOSED
+
+③ PC-04：
+
+AUTHORIZED
+
+④ NEXT EXECUTION UNIT：
+
+PC-04 ERROR / RECOVERY STATES
+
+safe error projection
+
+stable recovery codes
+
+connection/import/claim recovery guidance
+
+actionable-vs-guidance distinction
+
+customer UI states
+
+permanent DB/HTTP tests
+
+full CI
+
+边界继续保持：
+
+NO platform write
+Payment = 0
+autopay = OFF
+collection = OFF
+external payment write = OFF
+R13 HOLD
+TRANSPORT = false
+无生产凭据
+
+现在产品已经从“内部能跑”逐步变成“客户能理解自己在什么状态”。PC-04 做完后，用户即使遇到断连、导入失败、缺材料、需要申诉，也不会掉进黑盒里。
+```
