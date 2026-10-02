@@ -26,6 +26,8 @@ const uuid = (): string => randomUUID();
 
 let ORG_A = '';
 let ORG_B = '';
+let ACCOUNT_A = '';
+let ACCOUNT_B = '';
 
 /** 只记录审计载荷的假写入器（便于断言「凭据值不进入审计」） */
 function recordingAudit() {
@@ -55,7 +57,12 @@ async function seedOrg(suffix: string) {
     },
   });
   await prisma.membership.create({ data: { organizationId: id, userId: user.id, role: 'OWNER', isActive: true } });
-  return { organizationId: id, userId: user.id };
+  // MSG-20261002-77：连接夹具需要 canonical PlatformAccount（ACTIVE 必须已绑定）。
+  const account = await prisma.platformAccount.create({
+    data: { organizationId: id, platform: 'OTHER', externalAccountId: 'C2-BASE-' + suffix, displayName: 'c2 base ' + suffix },
+    select: { id: true },
+  });
+  return { organizationId: id, userId: user.id, accountId: account.id };
 }
 
 function lifecycleDeps(): { deps: ConnectionLifecycleDeps; audit: ReturnType<typeof recordingAudit> } {
@@ -69,8 +76,10 @@ function lifecycleDeps(): { deps: ConnectionLifecycleDeps; audit: ReturnType<typ
 beforeAll(async () => {
   const a = await seedOrg('a');
   ORG_A = a.organizationId;
+  ACCOUNT_A = a.accountId;
   const b = await seedOrg('b');
   ORG_B = b.organizationId;
+  ACCOUNT_B = b.accountId;
 });
 
 afterAll(async () => {
@@ -82,11 +91,11 @@ describe('TRACK C2 行为基线 —— 租户/账号边界（现有 Schema，无
     const externalId = 'ORDER-' + uuid().slice(0, 8);
     const { deps } = lifecycleDeps();
     const connA = await createConnection(
-      { organizationId: ORG_A, domain: 'PLATFORM', channel: 'AMAZON_OTHER', kind: 'FILE_UPLOAD', label: 'Store A' },
+      { organizationId: ORG_A, platformAccountId: ACCOUNT_A, domain: 'PLATFORM', channel: 'AMAZON_OTHER', kind: 'FILE_UPLOAD', label: 'Store A' },
       deps,
     );
     const connB = await createConnection(
-      { organizationId: ORG_B, domain: 'PLATFORM', channel: 'AMAZON_OTHER', kind: 'FILE_UPLOAD', label: 'Store A' },
+      { organizationId: ORG_B, platformAccountId: ACCOUNT_B, domain: 'PLATFORM', channel: 'AMAZON_OTHER', kind: 'FILE_UPLOAD', label: 'Store A' },
       deps,
     );
 
@@ -138,18 +147,18 @@ describe('TRACK C2 行为基线 —— 租户/账号边界（现有 Schema，无
   it('连接身份为 (org, channel, label)：同 org 同 channel 重复 label 被拒绝，label 仅是展示名', async () => {
     const { deps } = lifecycleDeps();
     await createConnection(
-      { organizationId: ORG_A, domain: 'PLATFORM', channel: 'AMAZON_FBA', kind: 'FILE_UPLOAD', label: 'Store X' },
+      { organizationId: ORG_A, platformAccountId: ACCOUNT_A, domain: 'PLATFORM', channel: 'AMAZON_FBA', kind: 'FILE_UPLOAD', label: 'Store X' },
       deps,
     );
     await expect(
       createConnection(
-        { organizationId: ORG_A, domain: 'PLATFORM', channel: 'AMAZON_FBA', kind: 'FILE_UPLOAD', label: 'Store X' },
+        { organizationId: ORG_A, platformAccountId: ACCOUNT_A, domain: 'PLATFORM', channel: 'AMAZON_FBA', kind: 'FILE_UPLOAD', label: 'Store X' },
         deps,
       ),
     ).rejects.toThrow(/Unique constraint|P2002/);
     // 同 label 在别的 channel 下允许 —— 说明 label 不承担身份语义
     const other = await createConnection(
-      { organizationId: ORG_A, domain: 'PLATFORM', channel: 'AMAZON_OTHER', kind: 'FILE_UPLOAD', label: 'Store X' },
+      { organizationId: ORG_A, platformAccountId: ACCOUNT_A, domain: 'PLATFORM', channel: 'AMAZON_OTHER', kind: 'FILE_UPLOAD', label: 'Store X' },
       deps,
     );
     expect(other.id).toBeTruthy();
@@ -158,7 +167,7 @@ describe('TRACK C2 行为基线 —— 租户/账号边界（现有 Schema，无
   it('REVOKED 连接不得再拉取（revoked account cannot ingest new facts）', async () => {
     const { deps } = lifecycleDeps();
     const created = await createConnection(
-      { organizationId: ORG_A, domain: 'PLATFORM', channel: 'AMAZON_OTHER', kind: 'API', label: 'API ' + uuid().slice(0, 6), credentialRef: 'CROSSCLAIM_FIXTURE_RO' },
+      { organizationId: ORG_A, platformAccountId: ACCOUNT_A, domain: 'PLATFORM', channel: 'AMAZON_OTHER', kind: 'API', label: 'API ' + uuid().slice(0, 6), credentialRef: 'CROSSCLAIM_FIXTURE_RO' },
       deps,
     );
     await transitionConnection({ organizationId: ORG_A, connectionId: created.id, to: 'ACTIVE' }, deps);
@@ -175,7 +184,7 @@ describe('TRACK C2 行为基线 —— 租户/账号边界（现有 Schema，无
   it('凭据轮换不重写历史 provenance，且审计载荷不含凭据值', async () => {
     const { deps, audit } = lifecycleDeps();
     const created = await createConnection(
-      { organizationId: ORG_A, domain: 'PLATFORM', channel: 'AMAZON_OTHER', kind: 'FILE_UPLOAD', label: 'Rotate ' + uuid().slice(0, 6) },
+      { organizationId: ORG_A, platformAccountId: ACCOUNT_A, domain: 'PLATFORM', channel: 'AMAZON_OTHER', kind: 'FILE_UPLOAD', label: 'Rotate ' + uuid().slice(0, 6) },
       deps,
     );
     const tx = await prisma.sourceTransaction.create({
