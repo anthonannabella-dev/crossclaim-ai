@@ -73,6 +73,13 @@ import {
   type RuntimeActionGuard,
 } from '../action-guard/runtime-guard';
 import { rebindLegacyConnection } from './connection-onboarding';
+import { getCommercialReadiness } from '../commercial/commercial-readiness';
+import {
+  PolicyAcceptanceError,
+  listMyPolicyAcceptances,
+  recordPolicyAcceptance,
+} from '../commercial/policy-acceptance';
+import { findPolicy, listCurrentPolicies, listPolicyDocuments, listPolicyVersions } from '../commercial/policy-registry';
 import { getRecoveryReviewStatus, submitRecoveryReview } from './recovery-review';
 import { readReplaySnapshot, submitPaymentReplayReview, submitPaymentReview } from './payment';
 import {
@@ -156,6 +163,12 @@ const INSIGHT_LIST_PATH = /^\/opportunities\/insights$/;
 const INSIGHT_CSV_PATH = /^\/opportunities\/insights\.csv$/;
 const INSIGHT_PATH = /^\/opportunities\/([^/]+)\/basis$/;
 const CONNECTION_PATH = /^\/connections(?:\/([^/]+)\/(status|credential-ref|rebind))?$/;
+/** PC-09（MSG-20261003-96 ⑬）：商业/法律披露与显式接受事实。 */
+const COMMERCIAL_POLICIES_PATH = /^\/commercial\/policies$/;
+const COMMERCIAL_POLICY_PATH = /^\/commercial\/policies\/([^/]+)$/;
+const COMMERCIAL_POLICY_ACCEPT_PATH = /^\/commercial\/policies\/([^/]+)\/accept$/;
+const COMMERCIAL_ACCEPTANCES_PATH = /^\/commercial\/acceptances$/;
+const COMMERCIAL_READINESS_PATH = /^\/commercial-readiness$/;
 const COMMERCIAL_TERMS_PATH = /^\/cases\/([^/]+)\/commercial-terms$/;
 const RECOVERY_OUTCOME_PATH = /^\/cases\/([^/]+)\/recovery-outcome$/;
 const RECOVERY_REVIEW_PATH = /^\/cases\/([^/]+)\/recovery-review$/;
@@ -389,6 +402,11 @@ export async function handleWorkflowRequest(
   const recoveryMoney = RECOVERY_MONEY_PATH.test(path);
   const accountsPath = ACCOUNTS_PATH.test(path);
   const entitlementsPath = ENTITLEMENTS_PATH.test(path);
+  const commercialPoliciesPath = COMMERCIAL_POLICIES_PATH.test(path);
+  const commercialPolicyPath = COMMERCIAL_POLICY_PATH.exec(path);
+  const commercialPolicyAcceptPath = COMMERCIAL_POLICY_ACCEPT_PATH.exec(path);
+  const commercialAcceptancesPath = COMMERCIAL_ACCEPTANCES_PATH.test(path);
+  const commercialReadinessPath = COMMERCIAL_READINESS_PATH.test(path);
   const insightList = INSIGHT_LIST_PATH.test(path);
   const insightCsv = INSIGHT_CSV_PATH.test(path);
   const insight = INSIGHT_PATH.exec(path);
@@ -454,7 +472,12 @@ export async function handleWorkflowRequest(
     adminPermissionMatrix ||
     adminMemberDetail !== null ||
     adminKillSwitch;
-  if (!adminAny && !opportunityList && !caseClaimPackage && !recoveryStates && !recoveryMoney && !accountsPath && !entitlementsPath && !operationsDashboard && !operationsClaims && !operationsRecovery && !review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !paymentReviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !replayPath && !replayReviewPath && !retryDuePath && !retryDueFreezePath && !retryDueReviewPath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim && !caseClaimSubmit && !caseClaimPrepare && !caseBillingDraft && !caseAppealSubmit && !casePlatformWrite && !caseRecoveryManualSubmit && !caseRecoveryManualReference && !caseRecoveryManualApproval && !caseRecoveryManualReferenceApproval) {
+  if (!adminAny && !opportunityList && !caseClaimPackage && !recoveryStates && !recoveryMoney && !accountsPath && !entitlementsPath && !operationsDashboard && !operationsClaims && !operationsRecovery && !review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !paymentReviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !replayPath && !replayReviewPath && !retryDuePath && !retryDueFreezePath && !retryDueReviewPath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim && !caseClaimSubmit && !caseClaimPrepare && !caseBillingDraft && !caseAppealSubmit && !casePlatformWrite && !caseRecoveryManualSubmit && !caseRecoveryManualReference && !caseRecoveryManualApproval && !caseRecoveryManualReferenceApproval &&
+    !commercialPoliciesPath &&
+    !commercialPolicyPath &&
+    !commercialPolicyAcceptPath &&
+    !commercialAcceptancesPath &&
+    !commercialReadinessPath) {
     return false;
   }
 
@@ -495,8 +518,12 @@ export async function handleWorkflowRequest(
   // MSG-20260929-40：Admin Console 与 Operations 看板都是只读 GET 面。
   // 此前未登记，GET 请求在方法闸门处直接 405（与端点内的 GET-only 校验重复）。
   const allowed =
-    // MSG-20260929-60：Kill Switch 变更入口是唯一的 Admin POST 面；其余 Admin 端点保持只读 GET
-    adminKillSwitch
+    // PC-09：接受事实是唯一写入口（显式 accept），其余商业/法律面只读。
+    commercialPolicyAcceptPath
+      ? ['POST']
+      : commercialPoliciesPath || commercialPolicyPath || commercialAcceptancesPath || commercialReadinessPath
+      ? ['GET']
+    : adminKillSwitch
       ? ['GET', 'POST']
       : adminAny || operationsDashboard || operationsClaims || operationsRecovery
       ? ['GET']
@@ -1691,6 +1718,102 @@ export async function handleWorkflowRequest(
           ),
       });
       sendJson(res, outcome.created ? 201 : 200, outcome);
+      return true;
+    }
+
+    // PC-09（MSG-20261003-96 ⑬）：商业/法律披露 + 显式接受事实 + 客户可见商业就绪（只读为主）。
+    if (
+      commercialPoliciesPath ||
+      commercialPolicyPath ||
+      commercialPolicyAcceptPath ||
+      commercialAcceptancesPath ||
+      commercialReadinessPath
+    ) {
+      const query = new URLSearchParams((req.url ?? '').split('?')[1] ?? '');
+      if (commercialReadinessPath) {
+        const readiness = await getCommercialReadiness(deps.prisma, actor, {
+          ...(deps.now ? { now: deps.now } : {}),
+        });
+        sendJson(res, 200, readiness);
+        return true;
+      }
+      if (commercialAcceptancesPath) {
+        sendJson(res, 200, { items: await listMyPolicyAcceptances(deps.prisma, actor) });
+        return true;
+      }
+      if (commercialPoliciesPath) {
+        const includeSuperseded = query.get('includeSuperseded') === 'true';
+        sendJson(res, 200, {
+          items: (includeSuperseded ? listPolicyDocuments() : listCurrentPolicies()).map((document) => ({
+            key: document.key,
+            version: document.version,
+            effectiveAt: document.effectiveAt,
+            status: document.status,
+            title: document.title,
+            summary: document.summary,
+            documentRef: document.documentRef,
+            requiresExplicitAcceptance: document.requiresExplicitAcceptance,
+          })),
+        });
+        return true;
+      }
+      if (commercialPolicyPath) {
+        const key = decodeURIComponent(commercialPolicyPath[1] ?? '');
+        const version = query.get('version') ?? undefined;
+        const document = findPolicy(key, version);
+        if (!document) {
+          sendJson(res, 404, { error: 'POLICY_NOT_FOUND' });
+          return true;
+        }
+        sendJson(res, 200, {
+          document: {
+            key: document.key,
+            version: document.version,
+            effectiveAt: document.effectiveAt,
+            status: document.status,
+            title: document.title,
+            summary: document.summary,
+            documentRef: document.documentRef,
+            requiresExplicitAcceptance: document.requiresExplicitAcceptance,
+          },
+          versions: listPolicyVersions(key).map((entry) => ({
+            version: entry.version,
+            status: entry.status,
+            effectiveAt: entry.effectiveAt,
+          })),
+        });
+        return true;
+      }
+      // POST /commercial/policies/:key/accept —— 显式接受事实（append-only）
+      const key = decodeURIComponent(commercialPolicyAcceptPath?.[1] ?? '');
+      const body = await readJsonBody(req);
+      try {
+        const result = await recordPolicyAcceptance(
+          deps.prisma,
+          actor,
+          {
+            documentKey: key,
+            documentVersion: body.documentVersion,
+            accept: body.accept,
+            source: body.source,
+            evidenceRef: body.evidenceRef,
+          },
+          { ...(deps.now ? { now: deps.now } : {}) },
+        );
+        sendJson(res, result.created ? 201 : 200, result);
+      } catch (error) {
+        if (error instanceof PolicyAcceptanceError) {
+          const status =
+            error.code === 'POLICY_NOT_FOUND'
+              ? 404
+              : error.code === 'EXPLICIT_ACCEPTANCE_REQUIRED'
+                ? 400
+                : 409;
+          sendJson(res, status, { error: error.code });
+          return true;
+        }
+        throw error;
+      }
       return true;
     }
 

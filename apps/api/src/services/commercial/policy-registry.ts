@@ -29,6 +29,17 @@ export interface PolicyDocument {
 
 export const POLICY_DOCUMENTS: readonly PolicyDocument[] = [
   {
+    // 历史版本：superseded 后**仍然可寻址**（不得删除；只允许接受 CURRENT 版本）。
+    key: 'terms-of-service',
+    version: '2026-09-01',
+    effectiveAt: '2026-09-01',
+    status: 'SUPERSEDED',
+    title: 'Terms of Service',
+    summary: '（历史版本）服务范围与客户责任；已被 2026-10-01 版本取代。',
+    documentRef: 'docs/commercial/TERMS-OF-SERVICE.md',
+    requiresExplicitAcceptance: true,
+  },
+  {
     key: 'terms-of-service',
     version: '2026-10-01',
     effectiveAt: '2026-10-01',

@@ -93,6 +93,11 @@ C-0008-B2（Case / Evidence / Claim Draft / Billing）的端点尚未实现。
 | GET | `/health/live` | — | 200 `{ status: 'ok', kind: 'liveness', checkedAt }`（liveness：只证明进程存活，不依赖任何下游） | — |
 | GET | `/health/ready` | — | 200 `{ kind: 'readiness', status, checks, killSwitchResolver, ... }`（readiness：数据库连通性等下游检查） | 503 `degraded`（依赖不可用，便于负载均衡摘除） |
 | GET | `/ops-readiness` | — | 200 `{ liveness, readiness, killSwitch, actionGuard, failedJobs, rateLimit, transport, runbookRef, checkedAt }`（PC-08 只读运维就绪视图；`transport` 恒为 `DISABLED`；不含 secret） | 401 `UNAUTHENTICATED`；403 `FORBIDDEN`（非 OWNER / ADMIN）；503 `ops_unavailable` |
+| GET | `/commercial/policies` | 是 | 200 `{ items: [...] }`（CURRENT 商业/法律文档；`?includeSuperseded=true` 含历史版本） | 401 `UNAUTHENTICATED` |
+| GET | `/commercial/policies/:key` | 是 | 200 `{ document, versions }`（`?version=` 可寻址 superseded 历史版本） | 401 `UNAUTHENTICATED`；404 `POLICY_NOT_FOUND`（未知 key/version fail-closed） |
+| POST | `/commercial/policies/:key/accept` | 是 | 201/200 `{ created, document, acceptance }`（显式接受事实，append-only；重复接受幂等） | 400 `EXPLICIT_ACCEPTANCE_REQUIRED`（禁止隐式接受）；404 `POLICY_NOT_FOUND`；409 `POLICY_VERSION_NOT_ACCEPTABLE` |
+| GET | `/commercial/acceptances` | 是 | 200 `{ items: [...] }`（当前 actor 的接受事实；跨租户不可见） | 401 `UNAUTHENTICATED` |
+| GET | `/commercial-readiness` | 是 | 200 `{ policies, acceptance, disclosures, feeCollection, integrations, transport, checkedAt }`（payment=ZERO / collection=OFF / activation=HOLD / integrations=EXTERNAL_GATE / transport=DISABLED） | 401 `UNAUTHENTICATED` |
 
 三者都按会话 `organizationId` 过滤，最多 100 条（默认 20）。非 GET 请求不匹配该处理器，按 404 处理。
 
