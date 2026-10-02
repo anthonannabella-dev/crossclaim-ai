@@ -1411,3 +1411,8 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 60（a1aa42e）= REVISE：CHANGE A 服务端 policy 可信来源 / CHANGE B 真并发 membership / CHANGE C 事务原子性。
 - 60A（6e432cd）= REVISE：①policy tampering ②adjustment evidence provenance ③adjustment approval digest 绑定点 ④same-chain 并发证据强度 ⑤CI 可见性。
 - 归档：AI-ARCHITECT-INBOX.md（逐字 ```text + FULL_COPY_OK）；compare.mjs 放宽 MSG 编号尾缀以保留架构方原始编号。
+
+## 2026-10-02 JST — MSG-20261002-61 = PASS WITH REVISE（R46 S4-A 方案 A 授权）
+
+- ① CHANGE A/C + 60A ②③④ 全部收口冻结；② S4-A 采用方案 A（DB correctness boundary）+ 方案 B（纵深防御）；③ 批准直接进入 S4 FINAL。
+- 归档：AI-ARCHITECT-INBOX.md（逐字 ```text + FULL_COPY_OK）。

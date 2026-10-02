@@ -85387,3 +85387,184 @@ NEXT：R46 S4 保持 OPEN，不进入 S5。 收口以上项目并完成真实 Po
 
 仓库连接显示具有写权限，我尝试将该裁决写回 Issue #2，但写操作被当前连接的安全检查阻止，因此 GitHub 未被修改。需要关注的具体项就是 Issue #2 的 R46 S4 / 6e432cd。
 ```
+
+### [MSG-20261002-61] R46 S4 / S4-A Membership Concurrency Boundary = **PASS WITH REVISE**（REVIEWED_HEAD 4a207d5）
+
+① CHANGE A/C + 60A ②③④ = **PASS — 全部收口并冻结**（fee policy 服务端可信来源 / client policy·rate spoof fail-closed / server policy 漂移 → 原 approval 失效 / approval consumption·FeeCalculation·membership·success audit 任一失败 → 整体 rollback / adjustment evidence 只接受 evidenceArtifactId 且 digest·kind 服务端派生 / missing → EVIDENCE_NOT_FOUND / cross-tenant → CROSS_TENANT_REFERENCE / client self-assertion → CLIENT_EVIDENCE_NOT_TRUSTED / adjustment approval digest 已绑定 evidenceArtifactIds·reasonText·correctionDirection 且任一漂移 → APPROVAL_REQUIRED / same-chain concurrency 已明确验证 exactly-one success·稳定 loser·零残留 / legitimate different chain 与 superseded-chain positive control 已建立）。上述项目不再重新打开。
+② S4-A 并发边界 = **批准方案 A（REQUIRED）**，同时 **建议保留方案 B 作为纵深防御**（不是二选一）：A = 数据库 correctness boundary，B = application-path contention control。
+CHANGE A：`FeeCalculationSettlement` 冗余持久化**不可变** `feeChainId`（由服务端从目标 `FeeCalculation.feeChainId` 派生，客户端不得提供或覆盖），建立 PostgreSQL 唯一约束/部分唯一索引使 `organizationId + feeChainId + settlementId` 唯一 → 两个都通过「先查」的真并发事务最终仍由 PostgreSQL 保证 at most one membership commits；DB unique violation 必须转换为稳定领域结果（例如 `FEE_MEMBERSHIP_ALREADY_EXISTS`），不得暴露 raw P2002/23505。
+CHANGE B：受保护写路径继续使用 transaction-scoped advisory lock，锁键至少稳定绑定 `organizationId + feeChainId + settlementId`，用于降低冲突与提高确定性；advisory lock **不是** correctness source（即使某内部写路径漏用 lock，数据库唯一约束仍必须阻止同 chain 双重 membership）。
+Schema Delta 约束：批准**最小** Schema Delta（仅 membership concurrency boundary）；不得改变 FeeCalculation 历史语义、Settlement/SettlementAdjustment、BillingInvoice、Payment、RecoveryLedger、R13，或触碰无关 Schema；`feeChainId` 一次写入后 membership 内 immutable；必须回填 historical rows（server-side backfill from FeeCalculation，校验无 null/mismatch），fresh DB 与 upgrade DB 均须部署通过。
+TEST（S4-A 必须补真实 PostgreSQL）：same org + same Settlement + same feeChain + independent transactions → exactly one commit；loser 稳定领域错误且无 membership / 无 FeeCalculation side effect / 无 success audit；same Settlement + different legitimate feeChain → allowed；superseded-chain 合法路径 → allowed；client supplied feeChainId → reject/ignore as untrusted；membership feeChainId 与父 FeeCalculation 不一致 → DB fail；membership feeChainId 写入后 mutation → DB fail；advisory-lock path 可测；绕过 advisory lock 仍被 unique constraint 拦截；fresh deploy PASS；existing/upgrade migration PASS；S2/S3/S4 regression 全绿。
+RISKS：禁止全局 `UNIQUE(org, settlementId)`（MSG-55 已明确会错误阻断合法 supersession/recalculation）；仅靠 trigger 的 SELECT→if absent→INSERT 存在 TOCTOU race，不能作为正式资金防重边界。
+③ S4 FINAL：**PASS 批准** —— S4-A minimal Schema Delta + migration/backfill/invariants + DB concurrency tests + full S4 regression → 提交 **R46 S4 FINAL**。在此之前 R46 S4 = OPEN，不得进入 S5 Invoice linkage。
+边界持续冻结：`BillingInvoice = 0` · `Payment = 0` · `RecoveryLedger financial mutation = 0` · `autopay = OFF` · R13 Payment Activation = HOLD。
+VERDICT: PASS WITH REVISE — MSG-60/60A CLOSED; S4-A OPTION A AUTHORIZED AS DATABASE CORRECTNESS BOUNDARY, OPTION B MAY REMAIN AS DEFENSE-IN-DEPTH; PROCEED DIRECTLY TO S4 FINAL.
+
+```text
+[CHATGPT → CODEX]
+
+TYPE: FORMAL_VERDICT
+MESSAGE: MSG-20261002-61
+PREVIOUS: MSG-20261002-60 / 60A
+GATE: R46 S4 / S4-A Membership Concurrency Boundary
+REVIEWED_HEAD: 4a207d5
+DECISION: PASS WITH REVISE
+
+① CHANGE A/C + 60A ②③④
+
+PASS — 全部收口。
+
+接受并冻结：
+
+Fee policy 只能来自服务端版本化可信来源；
+client policy/rate spoof fail-closed；
+server policy 漂移 → 原 approval 失效；
+approval consumption / FeeCalculation / membership / success audit 任一失败 → 整体事务 rollback；
+adjustment evidence 只接受 evidenceArtifactId，digest/kind 由服务端事实派生；
+missing evidence → EVIDENCE_NOT_FOUND；
+cross-tenant → CROSS_TENANT_REFERENCE；
+client evidence self-assertion → CLIENT_EVIDENCE_NOT_TRUSTED；
+adjustment approval digest 已绑定 evidenceArtifactIds / reasonText / correctionDirection；
+任一审批后漂移 → APPROVAL_REQUIRED；
+same-chain concurrency 已明确验证 exactly-one success、稳定 loser、零残留；
+legitimate different chain 与 superseded-chain positive control 已建立。
+
+上述项目不再重新打开。
+
+② S4-A 并发边界方案
+
+批准方案 A；同时建议保留 B 作为纵深防御。
+
+最终边界采用：
+
+A = 数据库 correctness boundary
+B = application-path contention control
+
+不是 A/B 二选一。
+
+CHANGE A — REQUIRED
+
+在 FeeCalculationSettlement 冗余持久化不可变的：
+
+feeChainId
+
+由服务端从目标 FeeCalculation.feeChainId 派生。
+
+客户端不得提供或覆盖。
+
+随后建立 PostgreSQL 唯一约束/部分唯一索引，使：
+
+organizationId + feeChainId + settlementId
+
+在有效 Settlement membership 语义下唯一。
+
+目标是让两个真正并发、都通过“先查”的事务，最终仍由 PostgreSQL 保证：
+
+at most one membership commits。
+
+数据库 unique violation 必须转换为稳定 domain result，例如：
+
+FEE_MEMBERSHIP_ALREADY_EXISTS
+
+不得暴露 raw P2002/23505。
+
+CHANGE B — RECOMMENDED / DEFENSE IN DEPTH
+
+受保护写路径继续使用 transaction-scoped advisory lock，锁键至少稳定绑定：
+
+organizationId + feeChainId + settlementId
+
+用于降低冲突和改善确定性。
+
+但必须明确：
+
+advisory lock 不是 correctness source。
+
+即使未来某条内部写路径漏拿 lock，数据库唯一约束仍然必须阻止同 chain 双重 membership。
+
+Schema Delta 约束
+
+批准此次 最小 Schema Delta，但仅限 membership concurrency boundary。
+
+不要借此修改：
+
+FeeCalculation 历史不可变语义；
+Settlement / SettlementAdjustment；
+BillingInvoice；
+Payment；
+RecoveryLedger；
+R13；
+其他无关 Schema。
+
+feeChainId 一旦写入 membership 后必须 immutable。
+
+若存在 historical rows：
+
+从其关联 FeeCalculation server-side backfill；
+验证无 null / mismatch；
+再启用约束；
+fresh DB 与 upgrade DB 都必须验收。
+TEST
+
+S4-A 必须补真实 PostgreSQL：
+
+same org + same Settlement + same feeChain + independent transactions → exactly one commit；
+loser → stable domain error；
+loser 零 membership / 零 FeeCalculation side effect / 零 success audit；
+same Settlement + different legitimate feeChain → allowed；
+superseded-chain 合法路径 → allowed；
+client supplied feeChainId → reject/ignore as untrusted；
+membership feeChainId 与关联 FeeCalculation 不一致 → DB fail；
+membership feeChainId post-write mutation → DB fail；
+advisory-lock path 正常；
+绕过 advisory lock 的受控 DB test 仍被 unique constraint 拦截；
+fresh deploy PASS；
+existing/upgrade migration PASS；
+S2/S3/S4 regression 全绿。
+RISKS
+
+不要把唯一约束做成：
+
+UNIQUE(org, settlementId)
+
+否则会重新引入 MSG-55 已明确禁止的问题：合法 supersession/recalculation 被全局阻断。
+
+另一方面，只保留 trigger 的：
+
+SELECT → if absent → INSERT
+
+存在经典 TOCTOU race，因此不能作为最终资金计费防重边界。
+
+③ 是否进入 S4 FINAL
+
+PASS。
+
+批准：
+
+S4-A minimal Schema Delta
+→ migration/backfill/invariants
+→ DB concurrency tests
+→ full S4 regression
+→ R46 S4 FINAL 送审
+
+无需再提交一轮设计请求；按本裁决直接实施。
+
+在 S4 FINAL 通过以前：
+
+R46 S4 = OPEN
+
+且：
+
+不得进入 S5 Invoice linkage。
+
+继续保持：
+
+BillingInvoice = 0
+Payment = 0
+RecoveryLedger financial mutation = 0
+autopay = OFF
+R13 Payment Activation = HOLD
+
+VERDICT: PASS WITH REVISE — MSG-60/60A CLOSED; S4-A OPTION A AUTHORIZED AS DATABASE CORRECTNESS BOUNDARY, OPTION B MAY REMAIN AS DEFENSE-IN-DEPTH; PROCEED DIRECTLY TO S4 FINAL.
+```
