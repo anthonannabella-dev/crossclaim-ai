@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261002-61",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-02T01:19:08.881Z",
+  "updated_at": "2026-10-02T01:24:20.075Z",
   "previous_head": "44f2760",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -51,8 +51,8 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-02T01:13:43.389Z",
   "state": "IMPLEMENT",
-  "last_action": "MSG-20261002-61 收到并归档（FULL_COPY_OK）：①CHANGE A/C + 60A ②③④ 全部收口；②S4-A 方案 A 授权为数据库正确性边界 + 方案 B 纵深防御；③批准直接进入 S4 FINAL",
-  "last_action_at": "2026-10-02T01:19:08.881Z",
+  "last_action": "R46 S4 MSG-60A 批次 CI 证据回填（4a207d5 run 36950211957 success）+ S4-A 执行计划登记（8 步）",
+  "last_action_at": "2026-10-02T01:24:20.075Z",
   "next_action": "R46 S4-A：实现最小 Schema Delta（FeeCalculationSettlement.feeChainId 服务端派生 + 部分唯一索引 + 回填 + 不变量触发器/清单同步）+ advisory lock 纵深防御 + 真实 PostgreSQL 并发验收（12 项）→ 全量 S4 回归 → 提交 R46 S4 FINAL。S5 仍不得开启。",
   "current_head": "4a207d5",
   "reviewed_head": "07b7009",
@@ -2771,8 +2771,17 @@
       "evidence": "DB 层 same-chain 并发用例断言 exactly-one success + 稳定 loser 错误 + loser 零残留（当前 it.fails＝缺 UNIQUE(org, feeChainId, settlementId)）；新增合法不同 chain 与 superseded chain 两个 positive control 均通过"
     },
     "change_60a_5": {
-      "status": "PENDING_CI",
-      "evidence": "本轮 HEAD 4a207d5 推送后取 CI 结果回填"
+      "status": "DONE（CI 可见）",
+      "evidence": "HEAD 4a207d5 → run 36950211957 completed success；记录提交 973bb47 → run 36950219746 completed success；归档提交 8435958 → run 36950001544 completed success"
+    },
+    "ci": {
+      "code_head": "4a207d5",
+      "run": "36950211957",
+      "result": "success",
+      "record_head": "973bb47",
+      "record_run": "36950219746",
+      "archive_head": "8435958",
+      "archive_run": "36950001544"
     }
   },
   "r46_s4a_decision_request": {
@@ -2832,5 +2841,20 @@
     "channel": "https://chatgpt.com/c/6ab9ee1b-fd54-83ee-b363-b67750afcedd",
     "verification": "DELIVERED_VERIFIED（输入框清空 / 新用户消息在底部 / 生成中）→ 已收到编号裁决 MSG-20261002-61",
     "reviewed_head": "4a207d5"
+  },
+  "r46_s4a_execution_plan": {
+    "authorized_by": "MSG-20261002-61",
+    "steps": [
+      "S4-A1 Schema Delta：FeeCalculationSettlement.feeChainId（服务端派生、immutable）+ 部分唯一索引 (org, feeChainId, settlementId) / (org, feeChainId, adjustmentId)",
+      "S4-A2 migration：backfill from FeeCalculation（需临时禁用 append-only 触发器）+ FEE_CHAIN_MISMATCH 守卫 + fresh/upgrade 双路径部署验证",
+      "S4-A3 服务端派生：record-fee 写入 membership 时由服务端从 FeeCalculation.feeChainId 派生；客户端提交 feeChainId → 不受信",
+      "S4-A4 change ①：DB unique violation 收敛为 FEE_MEMBERSHIP_ALREADY_EXISTS（禁止 raw P2002/23505）",
+      "S4-A5 方案 B 纵深防御：record-fee 事务内 pg_advisory_xact_lock（organizationId + feeChainId + settlementId）",
+      "S4-A6 真实 PostgreSQL 并发验收 12 项（含绕过 advisory lock 仍被唯一约束拦截）",
+      "S4-A7 清单同步：required-triggers / append-only-triggers；S2/S3/S4 全量回归 + tsc + prisma validate + CI",
+      "S4-A8 提交 R46 S4 FINAL"
+    ],
+    "inventory_note": "FeeCalculationSettlement 已是 append-only（cc_append_only__FeeCalculationSettlement，BEFORE UPDATE OR DELETE → 异常），因此 backfill 必须先 DISABLE 该触发器再重建；mutation 用例天然由该触发器保证。",
+    "boundary": "S5 Invoice linkage 仍不得开启；BillingInvoice=0 · Payment=0 · RecoveryLedger mutation=0 · autopay OFF · R13 HOLD"
   }
 }
