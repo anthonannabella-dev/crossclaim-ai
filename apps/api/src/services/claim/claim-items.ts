@@ -13,6 +13,7 @@
  *     `ClaimItemEvidence` 对 FINANCE 与 VIEWER 一律不可读（防止绕过证据边界）
  */
 
+import { resolveClaimItemAccount, resolveFromConnection } from '../account-lineage/policy';
 import { Prisma, type PrismaClient } from '@prisma/client';
 
 import { prepareAuditInsert } from '../audit';
@@ -164,6 +165,12 @@ export interface CreateClaimItemInput {
   normalizerVersion: string;
   caseId?: string | null;
   opportunityId?: string | null;
+  /**
+   * TRACK B BATCH 2 / B2-3：可信连接上下文（server-derived）。
+   * 由连接器编排器等内部调用方提供（其 connectionRef 必须指向同租户已绑定 PlatformAccount 的连接）；
+   * 客户端不得用它绕过 account 归属判定。
+   */
+  trustedConnectionId?: string | null;
   ruleVersionId?: string | null;
 }
 
@@ -253,15 +260,18 @@ export async function createClaimItem(
 
   try {
     const created = await prisma.$transaction(async (tx) => {
-      // TRACK C2 M4：claim 的 account 归属只由服务端从 opportunity 派生（客户端不可提交）。
+      // TRACK B BATCH 2 / B2-3：active new ClaimItem 必须 account-scoped。
+      // 归属由共享 Account Lineage Policy 派生：opportunity 上下文优先，其次可信连接上下文；
+      // 两者皆无（manual staging / 未绑定连接）→ fail-closed，不写 NULL。
       const opportunityAccountId = input.opportunityId
-        ? ((
-            await tx.recoveryOpportunity.findFirst({
-              where: { organizationId: input.organizationId, id: input.opportunityId },
-              select: { accountId: true },
-            })
-          )?.accountId ?? null)
-        : null;
+        ? await resolveClaimItemAccount(tx as never, {
+            organizationId: input.organizationId,
+            opportunityId: input.opportunityId,
+          })
+        : await resolveFromConnection(tx as never, {
+            organizationId: input.organizationId,
+            connectionId: input.trustedConnectionId ?? null,
+          });
       const item = await tx.claimItem.create({
       data: {
         organizationId: input.organizationId,

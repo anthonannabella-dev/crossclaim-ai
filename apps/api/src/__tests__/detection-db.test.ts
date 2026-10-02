@@ -27,6 +27,8 @@ const prisma = new PrismaClient();
 const repository = createPrismaDetectionRepository(prisma);
 
 const ORG = '33333333-3333-4333-8333-333333333333';
+let FIXTURE_ACCOUNT_ID = '';
+let FIXTURE_CONNECTION_ID = '';
 const fixtures = path.join(__dirname, '..', '..', 'fixtures', 'logistics');
 
 const readJson = (name: string) => JSON.parse(fs.readFileSync(path.join(fixtures, name), 'utf8'));
@@ -124,6 +126,8 @@ async function seedTransactions(): Promise<void> {
         occurredAt: new Date(`${row['Invoice Date']}T00:00:00Z`),
         amount: new Prisma.Decimal(row['Net Charge']),
         currency: row.Currency,
+        accountId: FIXTURE_ACCOUNT_ID,
+        connectionId: FIXTURE_CONNECTION_ID,
         dedupeKey: `fixture-invoice-${row['Invoice No']}`,
         raw: row as Prisma.InputJsonValue,
       },
@@ -139,6 +143,8 @@ async function seedTransactions(): Promise<void> {
         externalId: row['Tracking Number'],
         occurredAt: new Date(`${row['Pickup Date']}T00:00:00Z`),
         currency: 'USD',
+        accountId: FIXTURE_ACCOUNT_ID,
+        connectionId: FIXTURE_CONNECTION_ID,
         dedupeKey: `fixture-tracking-${row['Tracking Number']}`,
         raw: row as Prisma.InputJsonValue,
       },
@@ -148,9 +154,31 @@ async function seedTransactions(): Promise<void> {
 
 beforeEach(async () => {
   await prisma.$executeRawUnsafe(
-    'TRUNCATE TABLE "RuleEvaluation", "RecoveryOpportunity", "RuleVersion", "RuleSet", "SourceTransaction", "ImportBatch", "Organization" CASCADE;',
+    'TRUNCATE TABLE "RuleEvaluation", "RecoveryOpportunity", "RuleVersion", "RuleSet", "CanonicalFactSource", "CanonicalFact", "SourceTransaction", "ImportBatch", "SourceConnection", "PlatformAccount", "Organization" CASCADE;',
   );
   await prisma.organization.create({ data: { id: ORG, name: '检测租户', slug: 'detect-org' } });
+  // TRACK B BATCH 2：检测链要求事实已归因到 canonical PlatformAccount。
+  const account = await prisma.platformAccount.create({
+    data: {
+      organizationId: ORG,
+      platform: 'UPS',
+      externalAccountId: 'fixture-' + ORG,
+      displayName: 'fixture account',
+    },
+  });
+  const connection = await prisma.sourceConnection.create({
+    data: {
+      organizationId: ORG,
+      domain: 'LOGISTICS',
+      channel: 'OTHER',
+      kind: 'FILE_UPLOAD',
+      status: 'ACTIVE',
+      label: 'detection fixture',
+      platformAccountId: account.id,
+    },
+  });
+  FIXTURE_ACCOUNT_ID = account.id;
+  FIXTURE_CONNECTION_ID = connection.id;
   await seedRules();
   await seedTransactions();
 });

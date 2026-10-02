@@ -33,6 +33,7 @@ const FAST_PARAMS = { N: 1024, r: 8, p: 1, keyLength: 64 };
 const PASSWORD = 'amazon-connector-pass-1';
 
 let ORG = '';
+let B2_CONNECTION_ID = '';
 let ownerId = '';
 let EMAIL = '';
 
@@ -111,7 +112,7 @@ async function pull(input: {
       actorUserId: ownerId,
       role: 'OWNER',
       connector: AMAZON_SP_READ_ONLY_CONNECTOR,
-      connectionRef: 'amazon-sp-fixture-connection',
+      connectionRef: B2_CONNECTION_ID,
       resource: input.resource ?? 'orders',
       fetcher: createAmazonConnectorFetcher({ transport: input.transport, credentials }),
       normalizer: createAmazonConnectorNormalizer(),
@@ -158,6 +159,27 @@ beforeEach(async () => {
   await prisma.organization.create({
     data: { id: ORG, name: 'Amazon connector 租户', slug: 'amazon-connector-' + suffix },
   });
+  // TRACK B BATCH 2：连接器/内部调用方必须提供可信连接上下文（同租户 + 已绑定 PlatformAccount）。
+  const b2Account = await prisma.platformAccount.create({
+    data: {
+      organizationId: ORG,
+      platform: 'AMAZON',
+      externalAccountId: 'fixture-' + ORG,
+      displayName: 'fixture account',
+    },
+  });
+  const b2Connection = await prisma.sourceConnection.create({
+    data: {
+      organizationId: ORG,
+      domain: 'LOGISTICS',
+      channel: 'OTHER',
+      kind: 'API',
+      status: 'ACTIVE',
+      label: 'amazon connector fixture',
+      platformAccountId: b2Account.id,
+    },
+  });
+  B2_CONNECTION_ID = b2Connection.id;
   const owner = await prisma.user.create({
     data: {
       email: EMAIL,

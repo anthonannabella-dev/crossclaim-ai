@@ -9,6 +9,7 @@
  *      数据库唯一键 `RuleEvaluation.dedupeKey` 仍是最终幂等防线（P2002 → 回读已存在行）。
  */
 
+import { resolveOpportunityAccount } from '../account-lineage/policy';
 import { Prisma, type PrismaClient } from '@prisma/client';
 
 import { canonicalDedupeKeyFor } from '../canonical/identity-key';
@@ -231,26 +232,15 @@ export function createPrismaDetectionRepository(
           }
 
           const canonicalIdentity = resolvedIdentity;
-          // TRACK C2 M4：Opportunity 的 account 归属由服务端从 canonical fact 派生。
-          const transactionAccountId = input.sourceTransactionId
-            ? ((
-                await tx.sourceTransaction.findFirst({
-                  where: { organizationId: input.organizationId, id: input.sourceTransactionId },
-                  select: { accountId: true },
-                })
-              )?.accountId ?? null)
+          // TRACK B BATCH 2 / B2-2：Opportunity 归属由共享 Account Lineage Policy 派生；
+          // canonical / transaction lineage 必须唯一一致，否则 fail-closed（零 Opportunity）。
+          const opportunityAccountId = input.opportunity
+            ? await resolveOpportunityAccount(tx as never, {
+                organizationId: input.organizationId,
+                canonicalFactId: canonicalIdentity?.canonicalFactId ?? null,
+                sourceTransactionId: input.sourceTransactionId ?? null,
+              })
             : null;
-          const opportunityAccountId = canonicalIdentity
-            ? ((
-                await tx.canonicalFact.findFirst({
-                  where: {
-                    organizationId: input.organizationId,
-                    id: canonicalIdentity.canonicalFactId,
-                  },
-                  select: { accountId: true },
-                })
-              )?.accountId ?? transactionAccountId)
-            : transactionAccountId;
 
           const evaluation = await tx.ruleEvaluation.create({
             data: {

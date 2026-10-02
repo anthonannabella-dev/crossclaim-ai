@@ -167,3 +167,94 @@ export async function resolveConsistentAccount(
   }
   return requireUniqueAccount(resolved, '提供的身份上下文未收敛到唯一 PlatformAccount');
 }
+
+// ---------------------------------------------------------------------------
+// TRACK B BATCH 2 —— domain-specific consistency helpers（策略仍集中在本层）
+// ---------------------------------------------------------------------------
+
+/**
+ * B2-1：新 CanonicalFact 的 canonical account。
+ * 由同一事实的全部 SourceTransaction 派生：每行取 stored accountId，缺失时回落连接上下文
+ * （迁移窗口内的历史行）；全部行必须收敛到唯一非空 account，否则 fail-closed。
+ */
+export async function resolveCanonicalAccountForTransactions(
+  tx: Tx,
+  input: { organizationId: string; transactionIds: readonly string[] },
+): Promise<string> {
+  const ids = [...new Set(input.transactionIds)];
+  if (ids.length === 0) throw new AccountLineageError('缺少 SourceTransaction 上下文');
+  const rows = await tx.sourceTransaction.findMany({
+    where: { organizationId: input.organizationId, id: { in: ids } },
+    select: {
+      id: true,
+      accountId: true,
+      connection: { select: { platformAccountId: true } },
+    },
+  });
+  if (rows.length !== ids.length) {
+    throw new AccountLineageError('SourceTransaction 不属于该组织或不存在');
+  }
+  return requireUniqueAccount(
+    rows.map((row) => row.accountId ?? row.connection?.platformAccountId ?? null),
+    'SourceTransaction 归因未收敛到唯一 PlatformAccount',
+  );
+}
+
+/**
+ * B2-2：新 RecoveryOpportunity 的 canonical account。
+ * 允许 trusted lineage = canonical fact account 或 source transaction account；
+ * 两者同时存在时必须相同；缺失 / 不一致 / 跨租户 → fail-closed。
+ */
+export async function resolveOpportunityAccount(
+  tx: Tx,
+  input: {
+    organizationId: string;
+    canonicalFactId?: string | null;
+    sourceTransactionId?: string | null;
+  },
+): Promise<string> {
+  const candidates: (string | null)[] = [];
+  if (input.canonicalFactId) {
+    const fact = await tx.canonicalFact.findFirst({
+      where: { id: input.canonicalFactId, organizationId: input.organizationId },
+      select: { accountId: true },
+    });
+    if (!fact) throw new AccountLineageError('CanonicalFact 不属于该组织或不存在');
+    candidates.push(fact.accountId);
+  }
+  if (input.sourceTransactionId) {
+    const row = await tx.sourceTransaction.findFirst({
+      where: { id: input.sourceTransactionId, organizationId: input.organizationId },
+      select: { accountId: true, connection: { select: { platformAccountId: true } } },
+    });
+    if (!row) throw new AccountLineageError('SourceTransaction 不属于该组织或不存在');
+    candidates.push(row.accountId ?? row.connection?.platformAccountId ?? null);
+  }
+  if (candidates.length === 0) {
+    throw new AccountLineageError('缺少可信身份上下文（canonical fact 或 source transaction）');
+  }
+  return requireUniqueAccount(candidates, 'Opportunity lineage 未收敛到唯一 PlatformAccount');
+}
+
+/**
+ * B2-3：active new ClaimItem 的 canonical account。
+ * opportunityId 必须存在、属于同一租户、且已归因；否则 fail-closed。
+ * manual staging（无 opportunity 上下文）不属于 ClaimItem —— 本批直接 fail-closed。
+ */
+export async function resolveClaimItemAccount(
+  tx: Tx,
+  input: { organizationId: string; opportunityId?: string | null },
+): Promise<string> {
+  if (!input.opportunityId) {
+    throw new AccountLineageError('缺少可信 opportunity 上下文（manual staging 不等于 ClaimItem）');
+  }
+  const opportunity = await tx.recoveryOpportunity.findFirst({
+    where: { id: input.opportunityId, organizationId: input.organizationId },
+    select: { accountId: true },
+  });
+  if (!opportunity) throw new AccountLineageError('RecoveryOpportunity 不属于该组织或不存在');
+  if (!opportunity.accountId) {
+    throw new AccountLineageError('RecoveryOpportunity 未归因到 PlatformAccount');
+  }
+  return opportunity.accountId;
+}

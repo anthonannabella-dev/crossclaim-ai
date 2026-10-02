@@ -18,6 +18,7 @@ import type { ConnectorDescriptor, FetcherRecord, Normalizer } from '../services
 
 const prisma = new PrismaClient();
 const ORG = 'b7000000-0000-4000-8000-000000000001';
+let B2_CONNECTION_ID = '';
 const NOW = new Date('2026-09-28T18:00:00Z');
 
 let ownerId = '';
@@ -31,9 +32,30 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await prisma.$executeRawUnsafe(
-    'TRUNCATE TABLE "ClaimItemEvidence", "ClaimItem", "RuleEvaluation", "PaymentProcessingAttempt", "Payment", "PaymentEvent", "AuditLog", "BillingInvoice", "FeeCalculation", "RecoveryLedgerEntry", "Settlement", "Claim", "CaseEvidence", "EvidenceArtifact", "RecoveryRoute", "CaseOpportunity", "Case", "RecoveryOpportunity", "Membership", "User", "Organization" CASCADE;',
+    'TRUNCATE TABLE "ClaimItemEvidence", "ClaimItem", "RuleEvaluation", "PaymentProcessingAttempt", "Payment", "PaymentEvent", "AuditLog", "BillingInvoice", "FeeCalculation", "RecoveryLedgerEntry", "Settlement", "Claim", "CaseEvidence", "EvidenceArtifact", "RecoveryRoute", "CaseOpportunity", "Case", "RecoveryOpportunity", "SourceConnection", "PlatformAccount", "Membership", "User", "Organization" CASCADE;',
   );
   await prisma.organization.create({ data: { id: ORG, name: '连接器租户', slug: 'connector-org' } });
+  // TRACK B BATCH 2：连接器/内部调用方必须提供可信连接上下文（同租户 + 已绑定 PlatformAccount）。
+  const b2Account = await prisma.platformAccount.create({
+    data: {
+      organizationId: ORG,
+      platform: 'AMAZON',
+      externalAccountId: 'fixture-' + ORG,
+      displayName: 'fixture account',
+    },
+  });
+  const b2Connection = await prisma.sourceConnection.create({
+    data: {
+      organizationId: ORG,
+      domain: 'LOGISTICS',
+      channel: 'OTHER',
+      kind: 'API',
+      status: 'ACTIVE',
+      label: 'connector fixture',
+      platformAccountId: b2Account.id,
+    },
+  });
+  B2_CONNECTION_ID = b2Connection.id;
   const owner = await prisma.user.create({
     data: { email: 'connector-owner@example.com', displayName: '负责人', status: 'ACTIVE' },
   });
@@ -124,7 +146,7 @@ describe('C-0013-B — 编排器（真实 PostgreSQL）', () => {
       {
         ...base(),
         connector: descriptor,
-        connectionRef: 'conn-1',
+        connectionRef: B2_CONNECTION_ID,
         resource: 'inventory-ledger',
         fetcher: new FixtureFetcher(file, () => NOW),
         normalizer: makeNormalizer(),
@@ -138,7 +160,7 @@ describe('C-0013-B — 编排器（真实 PostgreSQL）', () => {
     expect(await prisma.claimItem.count({ where: { organizationId: ORG } })).toBe(2);
     const withFingerprint = await prisma.claimItem.findMany({ where: { organizationId: ORG } });
     expect(withFingerprint.every((row) => row.sourceFingerprint !== null && row.fingerprintVersion === 'v1')).toBe(true);
-    expect(await d.cursorStore.read({ connectionRef: 'conn-1', resource: 'inventory-ledger' })).toBeNull(); // 已到末尾不再写新游标
+    expect(await d.cursorStore.read({ connectionRef: B2_CONNECTION_ID, resource: 'inventory-ledger' })).toBeNull(); // 已到末尾不再写新游标
   });
 
   it('重复拉取同一页 → 全部幂等，ClaimItem 计数不变', async () => {
@@ -146,13 +168,13 @@ describe('C-0013-B — 编排器（真实 PostgreSQL）', () => {
     const first = deps();
     await runConnectorPull(
       prisma,
-      { ...base(), connector: descriptor, connectionRef: 'conn-1', resource: 'inventory-ledger', fetcher: new FixtureFetcher(file, () => NOW), normalizer: makeNormalizer() },
+      { ...base(), connector: descriptor, connectionRef: B2_CONNECTION_ID, resource: 'inventory-ledger', fetcher: new FixtureFetcher(file, () => NOW), normalizer: makeNormalizer() },
       { ...first, now: () => NOW },
     );
     const second = deps();
     const again = await runConnectorPull(
       prisma,
-      { ...base(), connector: descriptor, connectionRef: 'conn-1', resource: 'inventory-ledger', fetcher: new FixtureFetcher(file, () => NOW), normalizer: makeNormalizer() },
+      { ...base(), connector: descriptor, connectionRef: B2_CONNECTION_ID, resource: 'inventory-ledger', fetcher: new FixtureFetcher(file, () => NOW), normalizer: makeNormalizer() },
       { ...second, now: () => NOW },
     );
     expect(again).toMatchObject({ created: 0, idempotent: 2, quarantined: 1 });
@@ -163,13 +185,13 @@ describe('C-0013-B — 编排器（真实 PostgreSQL）', () => {
     const file = makeFixture();
     await runConnectorPull(
       prisma,
-      { ...base(), connector: descriptor, connectionRef: 'conn-1', resource: 'inventory-ledger', fetcher: new FixtureFetcher(file, () => NOW), normalizer: makeNormalizer('v1') },
+      { ...base(), connector: descriptor, connectionRef: B2_CONNECTION_ID, resource: 'inventory-ledger', fetcher: new FixtureFetcher(file, () => NOW), normalizer: makeNormalizer('v1') },
       { ...deps(), now: () => NOW },
     );
     const before = await prisma.claimItem.count({ where: { organizationId: ORG } });
     await runConnectorPull(
       prisma,
-      { ...base(), connector: descriptor, connectionRef: 'conn-1', resource: 'inventory-ledger', fetcher: new FixtureFetcher(file, () => NOW), normalizer: makeNormalizer('v2') },
+      { ...base(), connector: descriptor, connectionRef: B2_CONNECTION_ID, resource: 'inventory-ledger', fetcher: new FixtureFetcher(file, () => NOW), normalizer: makeNormalizer('v2') },
       { ...deps(), now: () => NOW },
     );
     expect(await prisma.claimItem.count({ where: { organizationId: ORG } })).toBe(before);
@@ -190,7 +212,7 @@ describe('C-0013-B — 编排器（真实 PostgreSQL）', () => {
     };
     await runConnectorPull(
       prisma,
-      { ...base(), connector: descriptor, connectionRef: 'conn-1', resource: 'inventory-ledger', fetcher: new FixtureFetcher(file, () => NOW), normalizer: makeNormalizer() },
+      { ...base(), connector: descriptor, connectionRef: B2_CONNECTION_ID, resource: 'inventory-ledger', fetcher: new FixtureFetcher(file, () => NOW), normalizer: makeNormalizer() },
       { ...deps(), now: () => NOW },
     );
     expect({
@@ -214,7 +236,7 @@ describe('C-0013-B — 编排器（真实 PostgreSQL）', () => {
         {
           ...base(),
           connector: { ...descriptor, connectorId: ' ' },
-          connectionRef: 'conn-1',
+          connectionRef: B2_CONNECTION_ID,
           resource: 'inventory-ledger',
           fetcher: new FixtureFetcher(file, () => NOW),
           normalizer: makeNormalizer(),

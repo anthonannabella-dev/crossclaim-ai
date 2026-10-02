@@ -13,6 +13,7 @@
  * so Detection can never observe a half state (raw row without its fact).
  */
 
+import { resolveCanonicalAccountForTransactions } from '../account-lineage/policy';
 import { Prisma, type Channel, type RecoveryDomain } from '@prisma/client';
 
 import { deriveFactsFromTransactions, toFactSourceTransaction, type DerivedFact, type TransactionProjection } from './derive';
@@ -216,6 +217,11 @@ export async function writeCanonicalFactsForTransactions(
   const seedRows = await loadRows(tx, input);
   if (seedRows.length === 0) return { factsWritten: 0, conflicts: [] };
   const seed = seedRows.map(project);
+  // TRACK B BATCH 2 / B2-1：新事实必须有唯一 canonical account（缺失 / 多账户 / 含 NULL → fail-closed）。
+  const canonicalAccountId = await resolveCanonicalAccountForTransactions(tx, {
+    organizationId: input.organizationId,
+    transactionIds: seedRows.map((row) => row.id),
+  });
   const relatedRows = await loadRelatedRows(tx, input, seed);
   // TRACK C2 M4：只保留与本次 seed 同一 account 作用域的关联行（内存判定，不写进 SQL）。
   const seedScopes = new Set(seedRows.map((row) => accountScopeOf(row)));
@@ -229,7 +235,8 @@ export async function writeCanonicalFactsForTransactions(
   const conflicts: DerivedFact[] = [];
 
   for (const fact of derived) {
-    const persistedId = await persistCanonicalFact(tx, input, fact);
+    // 作用域由策略层派生：不再使用 fact.accountId ?? null 作为 active-write 语义。
+    const persistedId = await persistCanonicalFact(tx, input, { ...fact, accountId: canonicalAccountId });
     factsWritten += 1;
 
     for (const transactionId of fact.transactionIds) {
