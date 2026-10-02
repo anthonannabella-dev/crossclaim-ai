@@ -207,7 +207,7 @@ describe('TRACK C2 M4/M5 —— account scope 下推与事实身份', () => {
     ).toBe(0);
   });
 
-  it('历史行 accountId 为空但连接已有 account → 服务端回退派生，事实仍归属该 account', async () => {
+  it('历史行 accountId 为空但连接已有 account → 不得回退派生（MSG-20261002-76 CHANGE B2-A），legacy 行仍可读', async () => {
     const externalId = 'ORDER-' + uuid().slice(0, 8);
     // 直接写原始行（模拟迁移窗口内 accountId 尚未落库的历史行）
     await prisma.sourceTransaction.create({
@@ -230,20 +230,30 @@ describe('TRACK C2 M4/M5 —— account scope 下推与事实身份', () => {
     });
     expect(tx.accountId).toBeNull();
 
-    await prisma.$transaction(async (client) => {
-      await writeCanonicalFactsForTransactions(client as never, {
-        organizationId: ORG_A,
-        domain: 'PLATFORM',
-        channel: 'AMAZON_OTHER',
-        transactionIds: [tx.id],
-        observedAt: new Date('2026-09-09T00:00:00.000Z'),
-      });
-    });
+    // CONN_A1 当前已绑定 ACCOUNT_A1，但 transaction 自身 stored provenance = NULL：
+    // active write 不得据此追溯归属（禁止 implicit backfill / retroactive attribution）。
+    await expect(
+      prisma.$transaction(async (client) => {
+        await writeCanonicalFactsForTransactions(client as never, {
+          organizationId: ORG_A,
+          domain: 'PLATFORM',
+          channel: 'AMAZON_OTHER',
+          transactionIds: [tx.id],
+          observedAt: new Date('2026-09-09T00:00:00.000Z'),
+        });
+      }),
+    ).rejects.toThrow(/PLATFORM_ACCOUNT_REQUIRED/);
 
-    const fact = await prisma.canonicalFact.findFirstOrThrow({
-      where: { organizationId: ORG_A, factKey: 'ORDER:' + externalId.toUpperCase() },
-    });
-    expect(fact.accountId).toBe(ACCOUNT_A1);
+    // LEGACY READ = ALLOWED：历史行本身仍可读，且不被重新归属
+    const reread = await prisma.sourceTransaction.findUniqueOrThrow({ where: { id: tx.id } });
+    expect(reread.accountId).toBeNull();
+
+    // LEGACY NEW WRITE CONTINUATION = FORBIDDEN：不得新增 NULL 归因 CanonicalFact
+    expect(
+      await prisma.canonicalFact.count({
+        where: { organizationId: ORG_A, factKey: 'ORDER:' + externalId.toUpperCase() },
+      }),
+    ).toBe(0);
   });
 });
 

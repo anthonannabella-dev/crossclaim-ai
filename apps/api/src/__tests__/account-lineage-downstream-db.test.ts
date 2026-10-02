@@ -328,3 +328,66 @@ describe('TRACK B BATCH 2 — ClaimItem lineage (B2-3)', () => {
     expect(read.accountId).toBeNull();
   });
 });
+
+describe(
+  'TRACK B BATCH 2 R1 —— MSG-20261002-76 永久负路径（B2-A1 / B2-B1 / B2-C1）',
+  () => {
+    it('B2-A1 transaction.accountId=NULL 但 connection 已绑定 A → CanonicalFact 仍 reject 且零事实', async () => {
+      const txId = await seedTransaction({
+        organizationId: ORG,
+        connectionId: CONN_BOUND, // connection 当前绑定 ACCOUNT_A
+        accountId: null, // transaction 自身 stored provenance = NULL
+        externalId: 'ORDER-NULL-TX-BOUND-CONN',
+      });
+      await expect(writeFacts([txId])).rejects.toThrow(/PLATFORM_ACCOUNT_REQUIRED/);
+      expect(await prisma.canonicalFact.count({ where: { organizationId: ORG } })).toBe(0);
+    });
+
+    it('B2-B1 同构造 → Opportunity lineage 仍 reject 且零 Opportunity（不得追溯 connection binding）', async () => {
+      const txId = await seedTransaction({
+        organizationId: ORG,
+        connectionId: CONN_BOUND,
+        accountId: null,
+        externalId: 'ORDER-OPP-NULL-TX-BOUND-CONN',
+      });
+      await expect(
+        resolveOpportunityAccount(prisma as never, { organizationId: ORG, sourceTransactionId: txId }),
+      ).rejects.toThrow(/PLATFORM_ACCOUNT_REQUIRED/);
+      expect(await prisma.recoveryOpportunity.count({ where: { organizationId: ORG } })).toBe(0);
+    });
+
+    it('B2-C1 Opportunity A + trustedConnection B → reject 且零 ClaimItem（禁止 priority winner）', async () => {
+      const opportunityId = await seedOpportunity(ORG, ACCOUNT_A);
+      const connToB = await seedConnection(ORG, ACCOUNT_B);
+      await expect(
+        createClaimItem(
+          prisma,
+          claimInput({ opportunityId, trustedConnectionId: connToB }),
+          { now: () => NOW },
+        ),
+      ).rejects.toThrow(/PLATFORM_ACCOUNT_REQUIRED/);
+      expect(await prisma.claimItem.count({ where: { organizationId: ORG } })).toBe(0);
+    });
+
+    it('B2-C2 正路径 Opportunity A + trustedConnection A → ClaimItem A PASS（一致性校验不误伤合法路径）', async () => {
+      const opportunityId = await seedOpportunity(ORG, ACCOUNT_A);
+      const result = await createClaimItem(
+        prisma,
+        claimInput({ opportunityId, trustedConnectionId: CONN_BOUND }),
+        { now: () => NOW },
+      );
+      expect(result.created).toBe(true);
+      const created = await prisma.claimItem.findUniqueOrThrow({ where: { id: result.id } });
+      expect(created.accountId).toBe(ACCOUNT_A);
+    });
+
+    it('B2-C3 connector 路径（仅 trustedConnectionId，无 opportunity）→ ClaimItem 使用连接绑定账户', async () => {
+      const result = await createClaimItem(prisma, claimInput({ trustedConnectionId: CONN_BOUND }), {
+        now: () => NOW,
+      });
+      expect(result.created).toBe(true);
+      const created = await prisma.claimItem.findUniqueOrThrow({ where: { id: result.id } });
+      expect(created.accountId).toBe(ACCOUNT_A);
+    });
+  },
+);
