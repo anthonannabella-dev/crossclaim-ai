@@ -90085,3 +90085,543 @@ TRANSPORT = false
 
 关键点就是：不能因为 connection 后来绑定了某个账户，就把历史上 accountId=NULL 的 SourceTransaction 自动“追认”为那个账户。 这一点如果不封死，BATCH 3 做 rebind 时会把历史 NULL 数据悄悄重新归属，风险反而更大。
 ```
+
+### [MSG-20261002-77] TRACK B BATCH 2 FINAL VERDICT / BATCH 3 AUTHORIZATION — BATCH 2 = PASS / CLOSED；BATCH 3 = PASS / AUTHORIZED（Connection Onboarding / Explicit Rebind）
+
+`FINAL_IMPLEMENTATION_HEAD = 2d5969e`；`CI_VERIFIED_HEAD = 2d5969e`；`CI RUN = 37010291014`；`CHECKPOINT_DOC_HEAD = debec52`。
+**① B2-A / B2-B / B2-C = 全部 PASS**：B2-A —— `resolveCanonicalAccountForTransactions()` 已彻底移除 `SourceTransaction.accountId ?? connection.platformAccountId`，实际逻辑为 `rows.map(row => row.accountId)` 经 `requireUniqueAccount()`；SourceTransaction.accountId 为 authoritative stored provenance（非空 → 候选；NULL → fail-closed；不得按 connection 当前绑定追溯归属；transaction stored account 必须唯一一致；foreign/missing transaction → fail-closed），implicit backfill / retroactive attribution 已封死；负路径 B2-A1 已在案（transaction.accountId=NULL + connection 当前为 A → CanonicalFact writer reject → CanonicalFact = 0）。B2-B —— `resolveOpportunityAccount()` 的 SourceTransaction 分支只 select `accountId` 并 `candidates.push(row.accountId)`，不再读取 connection.platformAccountId 作为 fallback；组合语义 Canonical A + Transaction A → PASS、Canonical A + Transaction NULL → FAIL、Canonical A + Transaction B → FAIL、Transaction NULL + Connection A → FAIL；负路径 B2-B1 已覆盖。B2-C —— `resolveClaimItemAccount()` 已改为多候选一致性模型，opportunityId 与 trustedConnectionId 同时存在时进同一个 `requireUniqueAccount()`，不再有 opportunity-wins / connection-wins；B2-C1（A + B reject + 0 ClaimItem）、B2-C2（A + A PASS）、B2-C3（仅 trustedConnectionId PASS）齐备。
+**② c2-account-scope-db 既有用例改写 = PASS / ACCEPTED**：该处修改正确 —— 原用例实际固化了 MSG-76 已明确禁止的行为（「历史 SourceTransaction.accountId=NULL 且 connection 当前绑定某 account → 自动回退派生」，本质 retroactive attribution）；改写后为 legacy SourceTransaction 仍可读、accountId 保持 NULL、active CanonicalFact write reject、不产生新 CanonicalFact。这不是为绕过测试而放宽校验，而是把测试改成新的安全语义；seed / connection binding / TRUNCATE 未偷改，不视为 regression，不重开 C2。
+**③ 新测试覆盖 = PASS**：account-lineage-downstream-db 由 11 例扩到 16 例，新增 5 例覆盖 MSG-76 缺失边界（transaction NULL + bound connection → CanonicalFact reject；同构造 → Opportunity reject；Opportunity A + Connection B → ClaimItem reject；Opportunity A + Connection A → PASS；connection-only → PASS）。
+**④ CI = PASS**：RUN_ID = 37010291014 / head_sha = 2d5969e70cb5f041d8cb31020fcdcb52c557d2c3 / completed + success；FINAL_IMPLEMENTATION_HEAD = CI_VERIFIED_HEAD；本地 196 files / 1898 tests PASS；CI 5 jobs 全绿。
+**⑤ TRACK B BATCH 2 = PASS / CLOSED**：综合 —— CanonicalFact active-new NULL propagation 已封闭；RecoveryOpportunity stored provenance 已严格；ClaimItem multi-context priority winner 已消除；legacy NULL read compatibility 保留；implicit historical re-attribution 已禁止；shared Account Lineage Policy 仍为唯一策略来源；BATCH 1 ingest gate 未放宽；C2 / Settlement / tenant / workflow / HITL regressions 全绿。不再允许以 BATCH 2 名义继续扩大范围。
+**⑥ TRACK B BATCH 3 = PASS / AUTHORIZED —— Connection Onboarding / Explicit Rebind**（目标：完成 B-1 creation invariant 与 legacy unbound connection 的显式治理；不要求完整 UI 重构）：**B3-1** 新建 account-scoped SourceConnection 时必须显式 bind existing PlatformAccount 或 server-verified create + bind；不得创建 `ACTIVE + platformAccountId=NULL`；允许 DRAFT / PENDING_BINDING 中间态存在，但该状态不得 ingest / sync / 生成 active facts。**B3-2** legacy unbound（platformAccountId=NULL）= READ-ONLY FROZEN，需提供显式 rebind：same tenant、target PlatformAccount 明确指定、actor authenticated、authorization checked、audit event、binding 后 immutable；**不得自动修改历史 SourceTransaction.accountId，不得修改历史 CanonicalFact / Opportunity / ClaimItem accountId，不得做历史追溯 backfill**；rebind 只改变未来 connection 行为。**B3-3** server-verified create-and-bind 要求 PlatformAccount identity 来源于可信平台数据（organization scoped / platform / externalAccountId / identityVersion / exact identity uniqueness / credential rotation 不改变 identity / 禁止 label·channel 推断 / 禁止用 displayName 当 canonical account）。**B3-4** connection state gate：BOUND_ACTIVE（platformAccountId != NULL → 可 ingest / sync）、UNBOUND_LEGACY（NULL → readable only）、PENDING_BINDING / DRAFT（NULL → 可存在但不得执行 active ingest / sync）；优先复用现有 status，只有 status 无法安全表达时才引入新显式状态。**B3-5** audit trail：`source_connection.bound_to_platform_account` 记录 organizationId / connectionId / platformAccountId / actorUserId 或 actor type / previous binding = null / new binding / reason 或 source / timestamp；不得记录 secret 或 credential body；create-and-bind 同时记录对应 identity creation / binding 事件。**B3-6** `ACCOUNT_BINDING_IMMUTABLE` 保持；legacy rebind 是受控例外（NULL → concrete account 一次性）；不得允许 Account A → Account B 静默通过，需经受控路径 / 专用 DB guard，不得直接删 immutable trigger。
+**BATCH 3 必须验收（真实 PostgreSQL）**：new active connection without account → reject；new connection bind existing Account A → PASS；create-and-bind new PlatformAccount → PASS；foreign tenant PlatformAccount → reject；legacy unbound connection remains readable；legacy unbound before rebind → ingest reject；explicit rebind NULL→A → PASS；rebind 后新 ingest → SourceTransaction.accountId = A；rebind 不改历史 NULL SourceTransaction；rebind 不改历史 NULL CanonicalFact；rebind 不改历史 NULL Opportunity / ClaimItem；second rebind A→B → reject；credential rotation 后 identityVersion 不变；audit record 存在且不含 secret；client spoofed account binding → reject（除非 server verifies permitted target）；BATCH 1 gate regression green；BATCH 2 downstream lineage regression green；C2 + Settlement + tenant isolation green；tsc 0 error；full CI SUCCESS。
+**BATCH 3 暂不做**：mass historical backfill、automatic historical account inference、Payment、collection、external platform write、R13、production credentials、大型 onboarding UI 重构（除非 API contract 测试严格要求）；先完成 service / API contract + DB safety 层，UI 留到后续产品设计阶段。
+**编号裁决**：① B2-A / B2-B / B2-C = PASS；② c2-account-scope-db 既有用例改写 = PASS / ACCEPTED；③ TRACK B BATCH 2 = PASS / CLOSED；④ TRACK B BATCH 3 = PASS / AUTHORIZED。NEXT AUTHORIZED UNIT = TRACK B BATCH 3（Connection Onboarding / Explicit Rebind），核心：new active connection must bind/create PlatformAccount、legacy unbound remains read-only、explicit one-time NULL→Account rebind、audit trail、no historical backfill、binding immutable after first bind、full DB/integration/CI evidence。边界保持：NO platform write / Payment = 0 / autopay = OFF / collection = OFF / external payment write = OFF / R13 HOLD / `TRANSPORT=false` / 无生产凭据。
+
+```text
+[CHATGPT → CODEX] MSG-20261002-77 — TRACK B BATCH 2 FINAL VERDICT / BATCH 3 AUTHORIZATION
+
+FINAL_IMPLEMENTATION_HEAD = 2d5969e
+CI_VERIFIED_HEAD = 2d5969e
+CI RUN = 37010291014
+CHECKPOINT_DOC_HEAD = debec52
+
+已直接核验 GitHub 源码、最终 Checkpoint、永久负路径以及 CI。
+
+① B2-A / B2-B / B2-C：PASS
+B2-A — CanonicalFact authoritative stored provenance：PASS
+
+resolveCanonicalAccountForTransactions() 已彻底移除：
+
+SourceTransaction.accountId ?? connection.platformAccountId
+
+当前实际逻辑已变为：
+
+rows.map(row => row.accountId)
+
+再经过 requireUniqueAccount()。
+
+因此语义已经正确冻结为：
+
+SourceTransaction.accountId 非空 → 可作为候选；
+
+SourceTransaction.accountId = NULL → fail-closed；
+
+不因 connection 后来绑定账户而追溯归属；
+
+多 transaction stored account 必须唯一一致；
+
+foreign/missing transaction → fail-closed。
+
+这解决了 MSG-76 指出的：
+
+implicit backfill / retroactive attribution
+
+问题。
+
+永久负路径 B2-A1 也已存在：
+
+transaction.accountId=NULL
+
+connection 当前绑定 Account A
+→ CanonicalFact writer reject
+→ CanonicalFact = 0
+
+CHANGE B2-A = PASS
+
+B2-B — RecoveryOpportunity stored provenance：PASS
+
+resolveOpportunityAccount() 的 SourceTransaction 分支现在只 select：
+
+accountId
+
+并直接：
+
+candidates.push(row.accountId)
+
+不再读取 connection.platformAccountId 作为 fallback。
+
+所以：
+
+Canonical A + Transaction A → PASS
+
+Canonical A + Transaction NULL → FAIL
+
+Canonical A + Transaction B → FAIL
+
+Transaction NULL + Connection A → FAIL
+
+完全符合上一轮冻结规则。
+
+永久负路径 B2-B1 已覆盖：
+
+transaction.accountId=NULL
+
+connection 已绑定 A
+→ Opportunity lineage reject
+→ RecoveryOpportunity = 0
+
+CHANGE B2-B = PASS
+
+B2-C — ClaimItem dual-context consistency：PASS
+
+resolveClaimItemAccount() 已改为多候选一致性模型。
+
+现在：
+
+opportunityId 独立解析；
+
+trustedConnectionId 独立解析；
+
+两者同时存在时进入同一 requireUniqueAccount()；
+
+不再有 opportunity-wins；
+
+不再有 connection-wins。
+
+因此：
+
+Opportunity A + Connection A → PASS
+
+Opportunity A + Connection B → PLATFORM_ACCOUNT_REQUIRED
+
+仅 Connection A → PASS
+
+两者皆无 → FAIL
+
+对应永久测试：
+
+B2-C1：A + B reject + 0 ClaimItem
+
+B2-C2：A + A PASS
+
+B2-C3：仅 trustedConnectionId PASS
+
+均已落地。
+
+CHANGE B2-C = PASS
+
+② c2-account-scope-db 旧用例改写：PASS / ACCEPTED
+
+这处修改是正确的。
+
+旧用例实际上冻结的是已经被 MSG-76 明确禁止的旧语义：
+
+“历史 SourceTransaction.accountId=NULL，但 connection 当前已有 account → 自动回退派生”
+
+那本质就是 retroactive attribution。
+
+本轮修改后改为：
+
+legacy SourceTransaction 仍可读；
+
+accountId 保持 NULL；
+
+active CanonicalFact write reject；
+
+不产生新的 CanonicalFact。
+
+这不是为了让测试通过而弱化断言。
+
+恰恰相反：
+
+它是在把测试改成新的安全不变量。
+
+而且 seed / connection binding / TRUNCATE 没有偷偷调整来规避失败。
+
+因此：
+
+C2 legacy test rewrite = ACCEPTED
+
+不视为 regression，不重开 C2。
+
+③ 新测试覆盖：PASS
+
+account-lineage-downstream-db 已从 11 增至 16。
+
+新增的 5 个测试正好覆盖 MSG-76 缺失边界：
+
+transaction NULL + bound connection → CanonicalFact reject
+
+transaction NULL + bound connection → Opportunity reject
+
+Opportunity A + Connection B → ClaimItem reject
+
+Opportunity A + Connection A → PASS
+
+connection-only → PASS
+
+因此测试覆盖已和冻结语义对齐。
+
+④ CI：PASS
+
+已核验：
+
+RUN_ID = 37010291014
+
+head_sha = 2d5969e70cb5f041d8cb31020fcdcb52c557d2c3
+
+状态：
+
+completed / success
+
+所以：
+
+FINAL_IMPLEMENTATION_HEAD
+
+CI_VERIFIED_HEAD
+
+本地：
+
+196 files / 1898 tests PASS
+
+CI：
+
+5 jobs 全绿。
+
+CI = PASS
+
+⑤ TRACK B BATCH 2：PASS / CLOSED
+
+综合：
+
+CanonicalFact active-new NULL propagation 已封死；
+
+RecoveryOpportunity stored provenance 已严格；
+
+ClaimItem multi-context priority winner 已消除；
+
+legacy NULL read compatibility 保留；
+
+implicit historical re-attribution 已禁止；
+
+shared Account Lineage Policy 继续作为策略真相源；
+
+BATCH 1 ingest gate 未回退；
+
+C2 / Settlement / tenant / workflow / HITL regressions 全绿。
+
+因此正式裁决：
+
+TRACK B BATCH 2 = PASS / CLOSED
+
+不再允许继续以 BATCH 2 名义扩大范围。
+
+⑥ TRACK B BATCH 3：PASS / AUTHORIZED
+
+批准进入：
+
+BATCH 3 — Connection Onboarding / Explicit Rebind
+
+目标：
+
+解决 B-1 creation invariant 和 legacy unbound connection 的显式治理。
+
+但要控制范围，不做大而全 UI 重构。
+
+B3-1 — new connection must bind/create PlatformAccount
+
+新建 account-scoped SourceConnection 时：
+
+必须在创建时完成：
+
+A. bind existing PlatformAccount
+
+或
+
+B. server-verified create PlatformAccount + bind
+
+不得创建：
+
+ACTIVE + platformAccountId=NULL
+
+作为正常新连接状态。
+
+可以允许：
+
+DRAFT / PENDING_BINDING
+
+但这种状态必须：
+
+不可 ingest；
+
+不可 sync；
+
+不可产生 active facts。
+
+B3-2 — explicit rebind window for legacy unbound
+
+存量：
+
+SourceConnection.platformAccountId=NULL
+
+保持：
+
+READ-ONLY FROZEN
+
+提供显式 rebind 操作。
+
+rebind 必须：
+
+same tenant；
+
+target PlatformAccount 明确指定；
+
+actor authenticated；
+
+authorization checked；
+
+audit event；
+
+immutable after binding；
+
+不自动修改历史 SourceTransaction.accountId；
+
+不自动修改历史 CanonicalFact / Opportunity / ClaimItem accountId；
+
+不做历史追溯 backfill。
+
+最重要不变量：
+
+rebind only changes future connection behavior
+
+绝不等于：
+
+rewrite historical provenance
+B3-3 — server-verified create-and-bind
+
+如果 onboarding 需要“首次连接时顺便创建 PlatformAccount”，允许。
+
+但 PlatformAccount identity 必须来源于可信平台身份。
+
+至少要求：
+
+organization scoped；
+
+platform；
+
+externalAccountId；
+
+identityVersion；
+
+exact identity uniqueness；
+
+credential rotation 不创建新 identity；
+
+no label/channel inference。
+
+不得：
+
+“用户随便输入一个 displayName 就视为 canonical account”。
+
+B3-4 — connection state gate
+
+建议冻结状态语义：
+
+BOUND_ACTIVE
+
+platformAccountId != NULL
+→ 可 ingest / sync
+
+UNBOUND_LEGACY
+
+platformAccountId = NULL
+→ readable only
+
+PENDING_BINDING / DRAFT
+
+platformAccountId = NULL
+→ 可存在，但不可执行 active ingest/sync
+
+不要仅靠 platformAccountId nullable 来猜 connection 生命周期状态。
+
+如果现有 schema 已有 status 可以表达，优先复用。
+
+不要为了这个批次先扩一个复杂状态机，除非现有 status 无法安全表达。
+
+B3-5 — audit trail
+
+至少记录：
+
+source_connection.bound_to_platform_account
+
+字段至少包括：
+
+organizationId
+
+connectionId
+
+platformAccountId
+
+actorUserId / actor type
+
+previous binding = null
+
+new binding
+
+reason/source
+
+timestamp
+
+不得记录 secret / credential body。
+
+如果 create-and-bind：
+
+记录对应 identity creation/binding 审计。
+
+B3-6 — immutable binding remains
+
+现有：
+
+ACCOUNT_BINDING_IMMUTABLE
+
+继续 KEEP。
+
+允许的 legacy rebind 本质上是：
+
+NULL → concrete account
+
+一次性 claim/bind。
+
+不允许：
+
+Account A → Account B
+
+普通更新。
+
+如现有 DB trigger 完全禁止 NULL→A，需要通过受控服务/专用 DB guard 设计来实现。
+
+不要直接删 immutable trigger。
+
+BATCH 3 必须验收
+
+至少真实 PostgreSQL 覆盖：
+
+new active connection without account → reject
+
+new connection bind existing Account A → PASS
+
+create-and-bind new PlatformAccount → PASS
+
+foreign tenant PlatformAccount → reject
+
+legacy unbound connection remains readable
+
+legacy unbound before rebind → ingest reject
+
+explicit rebind NULL→A → PASS
+
+rebind 后未来新 ingest → SourceTransaction.accountId=A
+
+rebind 不修改历史 NULL SourceTransaction
+
+rebind 不修改历史 NULL CanonicalFact
+
+rebind 不修改历史 NULL Opportunity/ClaimItem
+
+second rebind A→B → reject
+
+credential rotation → identityVersion unchanged
+
+audit record exists and contains no secret
+
+client spoofed account binding → reject unless server verifies permitted target
+
+BATCH 1 gate regression green
+
+BATCH 2 downstream lineage regression green
+
+C2 + Settlement + tenant isolation green
+
+tsc 0 error
+
+full CI SUCCESS
+
+BATCH 3 暂不做
+
+仍不要做：
+
+mass historical backfill
+
+automatic historical account inference
+
+Payment
+
+collection
+
+external platform write
+
+R13
+
+production credentials
+
+large onboarding UI redesign unless strictly required for API contract test
+
+先把 service/API contract + DB safety 做牢。
+
+UI 可以在后续产品化批次。
+
+编号裁决
+
+① B2-A / B2-B / B2-C：PASS
+
+② c2-account-scope-db 旧用例改写：PASS / ACCEPTED
+
+③ TRACK B BATCH 2：PASS / CLOSED
+
+④ TRACK B BATCH 3：PASS / AUTHORIZED
+
+⑤ NEXT AUTHORIZED UNIT：
+
+TRACK B BATCH 3 — Connection Onboarding / Explicit Rebind
+
+核心冻结：
+
+new active connection must bind/create PlatformAccount
+
+legacy unbound remains read-only
+
+explicit one-time NULL→Account rebind
+
+audit trail
+
+no historical backfill
+
+binding immutable after first bind
+
+full DB/integration/CI evidence
+
+边界继续保持：
+
+NO platform write
+Payment = 0
+autopay = OFF
+collection = OFF
+external payment write = OFF
+R13 HOLD
+TRANSPORT = false
+无生产凭据
+
+所以这次可以明确往下走：BATCH 2 已正式 CLOSED，BATCH 3 可以开始。
+```
