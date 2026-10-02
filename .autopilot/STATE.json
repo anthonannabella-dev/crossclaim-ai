@@ -1,19 +1,19 @@
 {
   "gate": "B2-FIX R1",
-  "head": "691635e",
+  "head": "8ebc320",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
   "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
   "send_head": "07b7009",
   "decision_head": "07b7009",
-  "last_chatgpt_message": "MSG-20261002-67",
+  "last_chatgpt_message": "MSG-20261002-68",
   "production_enabled": false,
   "external_write_enabled": false,
   "updated_at": "2026-10-02T05:30:34.490Z",
-  "previous_head": "d78603f",
+  "previous_head": "691635e",
   "architect_decision_pending": false,
   "blocked_scope": null,
-  "last_send_head": "56abd47",
+  "last_send_head": "8ebc320",
   "last_sent_at": "2026-10-02T02:38:05.434Z",
   "last_sent_fingerprint": "R46-S1:Settlement-Billing-Linkage-Schema-Checkpoint",
   "final_head": "1144401",
@@ -49,10 +49,10 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-02T05:21:52.726Z",
+  "last_tick_at": "2026-10-02T05:40:51.133Z",
   "state": "IMPLEMENT",
-  "last_action": "TRACK C2 FINAL 包就绪（5 个 C2 套件 + 12 项验收映射 + fresh/upgrade deploy 全绿，CI 691635e success）",
-  "last_action_at": "2026-10-02T05:30:34.490Z",
+  "last_action": "MSG-20261002-68 = REVISE 已归档（FULL_COPY_OK）：C2 = FINALIZATION，收口三条 Evidence write path + Settlement lineage",
+  "last_action_at": "2026-10-02T05:41:26.201Z",
   "next_action": "C2 FINAL 送审（Issue #2 + ChatGPT 唤醒 + 裁决归档）；通过后进入 TRACK B，并在 C2 收口后执行 PHASE X1 Architecture Audit。",
   "current_head": "691635e",
   "reviewed_head": "07b7009",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-02T05:08:52.938Z",
-    "gapMs": 779788,
-    "stale": true,
-    "checkedAt": "2026-10-02T05:21:52.726Z"
+    "previousTickAt": "2026-10-02T05:35:52.189Z",
+    "gapMs": 298945,
+    "stale": false,
+    "checkedAt": "2026-10-02T05:40:51.133Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -3571,5 +3571,21 @@
     "deferred": [
       "pod-upload / closure-service / recovery-outcome 的 EvidenceArtifact account 派生（不影响正确性；任一端 NULL 时守卫跳过）"
     ]
+  },
+  "c2_final_submission": {
+    "comment_id": "5946167769",
+    "comment_url": "https://github.com/anthonannabella-dev/crossclaim-ai/issues/2#issuecomment-5946167769",
+    "wakeup": "DELIVERED（composer cleared + marker at bottom）",
+    "sent_at": "2026-10-02T05:36:11.245Z"
+  },
+  "c2_final_verdict": {
+    "message_id": "MSG-20261002-68",
+    "decision": "REVISE",
+    "reviewed_head": "8ebc320",
+    "archival": "FULL_COPY_OK",
+    "status": "TRACK C2 = FINALIZATION",
+    "change_a": "pod-upload / closure-service / recovery-outcome 的 Evidence account provenance 必须 server-derived；无法唯一确定 account → PLATFORM_ACCOUNT_REQUIRED fail-closed；不得写 NULL 新事实；若路径不可达则用证据证明 + 回归",
+    "change_b": "Settlement 端到端 account lineage 证明（不强制加字段）",
+    "next": "TRACK C2 FINAL-2 / Closure Checkpoint → C2 CLOSED → PHASE X1 Architecture Audit → TRACK B"
   }
 }

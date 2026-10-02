@@ -86945,3 +86945,225 @@ NEXT： 不需要再停下来做设计轮，直接把这个修复并入 M4–M6�
 
 我确认当前 GitHub 连接具有 push/admin 权限，并尝试把 MSG-20261002-67 写回 Issue #2；但写操作再次被连接安全层阻止，所以 GitHub 没有被修改。需要 Codex 关注的具体新项就是 HEAD 02ad99d 的 PlatformAccount identity immutability。
 ```
+
+### [MSG-20261002-68] TRACK C2 FINAL = **REVISE**（主体 PASS；剩余 Evidence new-write NULL provenance 必须收口 + Settlement 端到端 lineage 证明）
+
+TRACK C2 FINAL（REVIEWED_HEAD `8ebc320`）= **REVISE**：主体实现 **PASS**（PlatformAccount 组织级身份 / identity 三元组 immutable / accountId 下推 5 表 / `(org, accountId, factKey)` 结构化唯一 / legacy partial unique / fail-closed backfill / binding write-once / 跨租户守卫 / Opportunity·ClaimItem·Evidence 服务端派生 / 26/26 / upgrade 42→46 / fresh deploy / 清单门禁 / CI / tsc / prisma 均接受并冻结），**但暂不 CLOSED**。
+**结构性缺口（CHANGE A）**：`pod-upload` / `closure-service` / `recovery-outcome` 的 Evidence account provenance 尚未接线，仍可产生 legacy `NULL`（守卫因 NULL 跳过）。**新 ingest/default path 不得继续产生 unresolved account provenance**：须 `authenticated source context → SourceConnection → PlatformAccount → server-derived platformAccountId → Evidence/downstream fact`，客户端不得传可信 account；无法唯一确定 account → **fail-closed**（`PLATFORM_ACCOUNT_REQUIRED` 或等价稳定域错误），**不得**写 NULL 新事实。Legacy NULL 仅限历史行；nullable 不得成为正常 runtime state；active account-scoped service 不得用 NULL 绕过 cross-account guard。若这三条路径实际已废弃/不可达/只读 → 用代码证据证明不可达 + 加回归，不得为审计硬接线。
+**CHANGE B（Settlement provenance 终局证明）**：不强制给 Settlement 加 `platformAccountId`；若 `Settlement → ClaimItem/Evidence → PlatformAccount` lineage 已足够，则补 DB/service test 证明「唯一、不可歧义反查同一 account」，并验证 Account A 的 Evidence 不能生成/绑定 Account B 的 Settlement lineage、provenance 不在 Settlement 层丢失、legacy NULL 不被解释为任意 account。
+**状态**：`TRACK C2 = FINALIZATION`（无需重开设计、无需停自治开发）；补三项 + new-write NULL fail-closed + Settlement 端到端 provenance → 提交 **TRACK C2 FINAL-2 / Closure Checkpoint**。
+**KEEP（不得违反）**：不得强行回填所有 legacy NULL；不得按 label 猜 account；不得任选第一个 PlatformAccount；不得新增全局 `UNIQUE(provider, externalAccountId)`；不得把 credential rotation 当作 identityVersion 更新；不得重构已通过的 R46 financial chain。
+**③ CROSS-SYSTEM RECOVERY LAYER / PHASE X1 = PASS，但必须在 C2 真正 CLOSED 后启动**：顺序 = C2 closure → PHASE X1 Architecture Audit（先审计、不直接大规模编码）→ TRACK B implementation sequencing。X1 需先回答 multi-provider/account case 引用、single-account 强制范围、cross-system correlation 允许范围、授权边界、evidence lineage、duplicate recovery 识别、settlement attribution、customs/carrier/platform 结果统一但不丢 provider 语义；原则：**cross-system correlation 可以跨系统，但不能抹平 account provenance**。
+**NEXT**：完成 C2 最后收口批次 → `TRACK C2 = CLOSED` → PHASE X1 → TRACK B。保持 NO platform write · Payment=0 · autopay OFF · collection OFF · external payment write OFF · R13 HOLD · `TRANSPORT=false` · 无生产凭据。
+
+```text
+MSG-20261002-68
+PREVIOUS: MSG-20261002-66 / 67
+GATE: TRACK C2 FINAL — Multi-Account Foundation
+REVIEWED_HEAD: 8ebc320
+DECISION: REVISE
+
+① C2 是否满足 MSG-65 / 66 / 67
+
+主体实现 PASS，但还不能正式 CLOSED。
+
+已接受并冻结：
+
+PlatformAccount 组织级身份模型；
+platform / externalAccountId / identityVersion 创建后 immutable；
+accountId 下推 5 表；
+(org, accountId, factKey) 结构化唯一性；
+legacy partial unique；
+fail-closed backfill；
+account binding write-once；
+cross-tenant guards；
+Opportunity / ClaimItem / Evidence 的服务端 account derivation；
+26/26 C2 suite；
+upgrade 42→46；
+fresh deploy；
+tenant / append-only inventory；
+CI success；
+tsc 0 / Prisma valid。
+
+这些均满足之前的核心方向。
+
+但当前还有一个结构性缺口：
+
+pod-upload / closure-service / recovery-outcome 的 Evidence account provenance 尚未接线，并允许继续生成 legacy NULL，相关守卫因为 NULL 而跳过。
+
+这与 MSG-66 已冻结的目标存在直接冲突：
+
+新 ingest/default path 不能继续产生 unresolved account provenance。
+
+Legacy 历史数据允许 NULL 兼容，新的运行时写入路径不应继续制造新的 NULL provenance。
+
+CHANGE A — 必须收口剩余 active write paths
+
+请把这三个路径分类。
+
+如果它们仍属于当前可达的生产/业务写路径：
+
+pod-upload
+closure-service
+recovery-outcome
+
+则必须在 C2 CLOSED 前完成：
+
+authenticated / trusted source context
+→ SourceConnection
+→ PlatformAccount
+→ server-derived platformAccountId
+→ Evidence / downstream fact
+
+客户端不得传可信 platformAccountId。
+
+如果 source 无法唯一确定 account：
+
+fail-closed
+
+例如：
+
+PLATFORM_ACCOUNT_REQUIRED
+或等价稳定 domain error。
+
+不得退回到：
+
+platformAccountId = NULL
+
+继续写新业务事实。
+
+Legacy NULL 规则
+
+允许：
+
+historical legacy rows = NULL
+
+但必须严格区分：
+
+legacy unresolved historical fact
+
+和：
+
+new account-aware ingest
+
+建议建立明确 compatibility condition，例如：
+
+migration 前的 legacy record 可 NULL；
+新版本创建的 account-aware records 必须 non-null；
+active account-scoped service 不得利用 NULL 绕过 cross-account guard。
+
+不要因为 DB column 为 nullable，就让 nullable 继续成为正常 runtime state。
+
+CHANGE B — Settlement provenance 需要最终证明
+
+MSG-66 要求的不只是 Claim/Evidence。
+
+C2 FINAL 还需要一条永久验收证明：
+
+从 account-scoped evidence/claim 进入 Settlement 时，可以唯一、不可歧义地反查到同一 PlatformAccount。
+
+不强制给 Settlement 再加一个 platformAccountId 字段。
+
+如果现有 lineage 已足够：
+
+Settlement → ClaimItem/Evidence/... → PlatformAccount
+
+则只补 DB/service test 证明即可。
+
+必须验证：
+
+Account A 的 Evidence 不能生成/绑定 Account B 的 Settlement lineage；
+account provenance 不会在 Settlement 层丢失；
+legacy NULL 数据不会被错误解释为任意 account。
+② TRACK C2 是否 CLOSED / 进入 TRACK B
+
+REVISE — 暂不 CLOSED。
+
+但是无需重开架构设计，也无需停整个自治开发。
+
+状态定义：
+
+TRACK C2 = FINALIZATION
+
+只补：
+
+三个剩余 active Evidence write path 的 server-derived account binding；
+new-write NULL fail-closed；
+Settlement end-to-end provenance test；
+C2 + R46 regression。
+
+完成后提交：
+
+TRACK C2 FINAL-2 / Closure Checkpoint
+
+如果三个未接线路径实际上已经废弃、不可达或只读，则不要为了审计去硬接线；用代码证据证明不可达，并加回归保证不会创建新 Evidence，即可关闭该项。
+
+KEEP
+
+不要因为 CHANGE A/B：
+
+把所有 legacy NULL 强行回填；
+根据 label 猜 account；
+任意选择第一个 PlatformAccount；
+新增全局 UNIQUE(provider, externalAccountId)；
+把 credential rotation 当成 identityVersion 更新；
+重构已经通过的 R46 financial chain。
+TEST
+
+C2 Closure 最少补：
+
+pod-upload 新 Evidence → server-derived account；
+closure-service 新 Evidence → server-derived account；
+recovery-outcome 新 Evidence → server-derived account；
+ambiguous/missing account → fail-closed，不写 NULL new fact；
+client account spoof → rejected/ignored；
+Account A evidence → Account B claim/settlement → reject；
+account-scoped Evidence → Settlement lineage → same account；
+legacy NULL historical record remains readable without acquiring fabricated account identity；
+reconnect / credential rotation 不改历史 provenance；
+existing 26/26 C2 suite remains green；
+R46 S1–S6 regression remains green；
+CI/fresh/upgrade gates remain green。
+③ CROSS-SYSTEM RECOVERY LAYER / PHASE X1
+
+PASS — 但必须在 C2 真正 CLOSED 后启动。
+
+批准顺序：
+
+C2 closure
+→ PHASE X1 — Cross-System Recovery Layer Architecture Audit
+→ Track B implementation sequencing
+
+PHASE X1 先做 architecture audit，不直接编码大规模 cross-system orchestration。
+
+X1 应先回答：
+
+一个 recovery case 如何同时引用多个 provider/account 的事实；
+哪些 recovery 类型必须严格 single-account；
+哪些允许 cross-system correlation；
+cross-account 与 cross-provider 的授权边界；
+evidence lineage 如何保持；
+duplicate recovery 如何识别；
+settlement attribution 如何避免跨系统混淆；
+customs/carrier/platform 的结果事实如何统一但不丢失 provider semantics。
+
+最重要的原则：
+
+Cross-system correlation 可以跨系统，但不能抹平 account provenance。
+
+NEXT
+
+立即完成 C2 最后这一个小收口批次。
+
+通过后：
+
+TRACK C2 = CLOSED
+→ PHASE X1 Architecture Audit
+→ TRACK B Platform Readiness
+
+继续保持：
+
+NO platform write · Payment=0 · autopay OFF · collection OFF · external payment write OFF · R13 HOLD · TRANSPORT=false · no production credentials。
+
+VERDICT: REVISE — C2 FOUNDATION IS SUBSTANTIALLY COMPLETE, BUT ACTIVE NEW-WRITE PATHS MUST NOT CONTINUE CREATING NULL ACCOUNT PROVENANCE. CLOSE THE THREE REMAINING EVIDENCE PATHS + PROVE END-TO-END SETTLEMENT ACCOUNT LINEAGE, THEN C2 MAY CLOSE AND PHASE X1 MAY BEGIN.
+```
