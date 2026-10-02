@@ -48,6 +48,7 @@ C-0008-B2（Case / Evidence / Claim Draft / Billing）的端点尚未实现。
 | POST | `/auth/login` | `{ email, password, organizationId? }` | 200 `{ userId, organizationId, role }` + `Set-Cookie` | 401 `INVALID_CREDENTIALS`（统一文案，不区分账号是否存在）；403 `ACCOUNT_LOCKED` / `ACCOUNT_DISABLED` |
 | POST | `/auth/logout` | — | 204 + 清除 Cookie（写 `auth.session_revoked`） | — |
 | GET | `/auth/me` | — | 200 `{ userId, organizationId, role }` | 401 `UNAUTHENTICATED` |
+| POST | `/auth/signup` | `{ email, password, organizationName, displayName? }` | 201 `{ userId, organizationId, role, emailVerified, sessionIssued, nextStep }`（**不发放 session**；`emailVerified=false`，nextStep=`EMAIL_VERIFICATION_REQUIRED`） | 403 `SIGNUP_DISABLED`（PC-01A feature gate 默认关闭）；409 `EMAIL_ALREADY_REGISTERED`；400 `INVALID_EMAIL` / `INVALID_INPUT` / `ORGANIZATION_NAME_REQUIRED` |
 
 其他方法：405 `METHOD_NOT_ALLOWED`。
 
