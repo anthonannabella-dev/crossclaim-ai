@@ -16,11 +16,13 @@
  * without a resolvable tenant).
  */
 
-import { createHmac, timingSafeEqual } from 'node:crypto';
-import { createHash } from 'node:crypto';
 
 import { Prisma, type PrismaClient } from '@prisma/client';
 
+import {
+  payloadHashOf as payloadHashOfBytes,
+  verifyWebhookRequest,
+} from '../webhooks/verification';
 import { paymentsEnabled } from './payment';
 import { executeAttempt } from './payment-attempt';
 
@@ -38,7 +40,8 @@ export const WEBHOOK_WHITELIST = [
 ] as const;
 
 export interface SignatureInput {
-  rawBody: string;
+  /** PC-10：允许传入**原始字节**（Buffer）以杜绝 canonicalization 漂移。 */
+  rawBody: string | Buffer;
   signatureHeader: string | undefined;
   secret: string | undefined;
   toleranceSeconds?: number;
@@ -48,42 +51,24 @@ export interface SignatureInput {
 export type SignatureResult = 'VALID' | 'MISSING_SECRET' | 'MALFORMED' | 'EXPIRED' | 'MISMATCH';
 
 export function verifyProviderSignature(input: SignatureInput): SignatureResult {
-  if (!input.secret || input.secret.trim() === '') return 'MISSING_SECRET';
-  const header = input.signatureHeader;
-  if (!header) return 'MALFORMED';
-
-  const parts = new Map<string, string[]>();
-  for (const segment of header.split(',')) {
-    const [key, value] = segment.split('=');
-    if (!key || !value) continue;
-    const list = parts.get(key.trim()) ?? [];
-    list.push(value.trim());
-    parts.set(key.trim(), list);
-  }
-  const timestamp = parts.get('t')?.[0];
-  const signatures = parts.get('v1') ?? [];
-  if (!timestamp || signatures.length === 0) return 'MALFORMED';
-
-  const timestampSeconds = Number(timestamp);
-  if (!Number.isFinite(timestampSeconds)) return 'MALFORMED';
-  const tolerance = input.toleranceSeconds ?? DEFAULT_TOLERANCE_SECONDS;
-  const nowSeconds = Math.floor((input.now ? input.now() : new Date()).getTime() / 1000);
-  if (Math.abs(nowSeconds - timestampSeconds) > tolerance) return 'EXPIRED';
-
-  const expected = createHmac('sha256', input.secret)
-    .update(`${timestamp}.${input.rawBody}`, 'utf8')
-    .digest('hex');
-
-  for (const candidate of signatures) {
-    const a = Buffer.from(expected, 'utf8');
-    const b = Buffer.from(candidate, 'utf8');
-    if (a.length === b.length && timingSafeEqual(a, b)) return 'VALID';
-  }
-  return 'MISMATCH';
+  // PC-10：委托统一 verification boundary（provider registry + raw-byte 验签 + 版本 / 时间窗判定）。
+  const result = verifyWebhookRequest({
+    provider: 'STRIPE',
+    rawBody: input.rawBody,
+    headers: input.signatureHeader ? { 'stripe-signature': input.signatureHeader } : {},
+    env: input.secret ? { PAYMENT_WEBHOOK_SECRET: input.secret } : {},
+    ...(input.now ? { now: input.now } : {}),
+    ...(input.toleranceSeconds === undefined ? {} : { toleranceSeconds: input.toleranceSeconds }),
+  });
+  if (result.outcome === 'VERIFIED') return 'VALID';
+  if (result.outcome === 'MISSING_SECRET') return 'MISSING_SECRET';
+  if (result.outcome === 'TIMESTAMP_EXPIRED' || result.outcome === 'TIMESTAMP_IN_FUTURE') return 'EXPIRED';
+  if (result.outcome === 'SIGNATURE_MISMATCH') return 'MISMATCH';
+  return 'MALFORMED';
 }
 
-export function payloadHashOf(rawBody: string): string {
-  return createHash('sha256').update(rawBody, 'utf8').digest('hex');
+export function payloadHashOf(rawBody: string | Buffer): string {
+  return payloadHashOfBytes(rawBody);
 }
 
 function isUniqueViolation(error: unknown): boolean {
@@ -138,21 +123,40 @@ interface ProviderEvent {
 
 export async function handlePaymentWebhook(
   prisma: PrismaClient,
-  raw: { rawBody: string; signatureHeader: string | undefined },
+  raw: {
+    rawBody: string;
+    rawBodyBytes?: Buffer;
+    signatureHeader: string | undefined;
+    providerHeader?: string;
+    /** PC-10：完整请求头由 HTTP 层透传，回归 harness 与真实路径一致。 */
+    headers?: Record<string, string | string[] | undefined>;
+  },
   deps: WebhookDeps = {},
 ): Promise<WebhookResult> {
   const env = deps.env ?? process.env;
-  const provider = deps.provider ?? 'STRIPE';
+  const provider = deps.provider ?? raw.providerHeader ?? 'STRIPE';
   const at = (deps.now ?? (() => new Date()))();
   const log = deps.log ?? (() => undefined);
-  const payloadHash = payloadHashOf(raw.rawBody);
+  const rawBytes = raw.rawBodyBytes ?? raw.rawBody;
+  const payloadHash = payloadHashOf(rawBytes);
 
-  const signature = verifyProviderSignature({
-    rawBody: raw.rawBody,
-    signatureHeader: raw.signatureHeader,
-    secret: env.PAYMENT_WEBHOOK_SECRET,
+  // PC-10：统一 verification boundary —— 未知 provider / 未知 signature version / 时间窗失败一律拒绝。
+  const verification = verifyWebhookRequest({
+    provider,
+    rawBody: rawBytes,
+    headers: raw.headers ?? (raw.signatureHeader ? { 'stripe-signature': raw.signatureHeader } : {}),
+    env,
     ...(deps.now ? { now: deps.now } : {}),
   });
+  const signature: SignatureResult = verification.verified
+    ? 'VALID'
+    : verification.outcome === 'MISSING_SECRET'
+      ? 'MISSING_SECRET'
+      : verification.outcome === 'TIMESTAMP_EXPIRED' || verification.outcome === 'TIMESTAMP_IN_FUTURE'
+        ? 'EXPIRED'
+        : verification.outcome === 'SIGNATURE_MISMATCH'
+          ? 'MISMATCH'
+          : 'MALFORMED';
   if (signature !== 'VALID') {
     // 无法归属租户（验签失败/缺密钥）→ 只写结构化安全日志，不落库
     log('payment_webhook_rejected', { reason: signature, payloadHash });

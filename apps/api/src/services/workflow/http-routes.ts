@@ -498,12 +498,18 @@ export async function handleWorkflowRequest(
       }
       chunks.push(buffer);
     }
+    // PC-10：验签必须针对**原始字节**（禁止 parse→stringify 后再验签）。
+    const rawBytes = Buffer.concat(chunks);
     const result = await handlePaymentWebhook(
       deps.prisma,
       {
-        rawBody: Buffer.concat(chunks).toString('utf8'),
+        rawBody: rawBytes.toString('utf8'),
+        rawBodyBytes: rawBytes,
         signatureHeader:
           typeof req.headers['stripe-signature'] === 'string' ? req.headers['stripe-signature'] : undefined,
+        providerHeader:
+          typeof req.headers['x-webhook-provider'] === 'string' ? req.headers['x-webhook-provider'] : undefined,
+        headers: req.headers,
       },
       {
         ...(deps.now ? { now: deps.now } : {}),
