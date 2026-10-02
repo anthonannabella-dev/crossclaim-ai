@@ -64,6 +64,18 @@ beforeEach(async () => {
       { id: ORG_B, name: '外部租户', slug: 'workflow-http-org-b' },
     ],
   });
+  // MSG-20261002-70 CHANGE C：夹具 account-aware 化（opportunity 必须带服务端可信 accountId）。
+  fixtureAccountA = (
+    await prisma.platformAccount.create({
+      data: {
+        organizationId: ORG,
+        platform: 'OTHER',
+        externalAccountId: 'C2-FIXTURE-ACCOUNT',
+        displayName: 'c2 fixture account',
+      },
+      select: { id: true },
+    })
+  ).id;
   const ops = await prisma.user.create({
     data: {
       email: 'ops-http@example.com',
@@ -101,6 +113,8 @@ beforeEach(async () => {
     ],
   });
 });
+
+let fixtureAccountA = '';
 
 async function seedOpportunity(organizationId = ORG) {
   return prisma.recoveryOpportunity.create({
@@ -378,6 +392,7 @@ describe('C-0008-B1 — 机会复核端点（真实 HTTP + PostgreSQL）', () =>
     const opportunity = await prisma.recoveryOpportunity.create({
       data: {
         organizationId: ORG,
+        accountId: fixtureAccountA,
         domain: 'LOGISTICS',
         channel: 'OTHER',
         status: 'QUALIFIED',
@@ -437,6 +452,7 @@ describe('C-0008-B1 — 机会复核端点（真实 HTTP + PostgreSQL）', () =>
     const opportunity = await prisma.recoveryOpportunity.create({
       data: {
         organizationId: ORG,
+        accountId: fixtureAccountA,
         domain: 'LOGISTICS',
         channel: 'OTHER',
         status: 'QUALIFIED',
@@ -503,6 +519,7 @@ describe('C-0008-B1 — 机会复核端点（真实 HTTP + PostgreSQL）', () =>
     const opportunity = await prisma.recoveryOpportunity.create({
       data: {
         organizationId: ORG,
+        accountId: fixtureAccountA,
         domain: 'LOGISTICS',
         channel: 'OTHER',
         status: 'CONVERTED',
