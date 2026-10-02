@@ -102559,3 +102559,936 @@ TRANSPORT = false
 
 PC-08 现在可以正式关闭了。到这里，系统已经能把“内部运行是否真的 ready”和“外部商业/支付/provider 还没启用”分开表达，这正是上线前运维层应该具备的状态模型。
 ```
+
+### [MSG-20261003-97] PC-09 FINAL VERDICT / PC-10 AUTHORIZATION — PC-09 = PASS / CLOSED；PC-10 AUTHORIZED
+
+`IMPLEMENTATION_HEAD = c8a5c71`｜`IMPLEMENTATION_HEAD_FULL = c8a5c71be6a1474f2cea49d6f5ce4bcfcaa9f90f`｜`CI_VERIFIED_HEAD = c8a5c71`｜`CI RUN = 37049672758`｜`CHECKPOINT_DOC_HEAD = 3954ac1`。
+**① 正式裁决：PC-09 COMMERCIAL / LEGAL CONTENT LAYER = PASS / CLOSED。**
+**② 逐项 PASS**：① Terms/legal surface（7 类披露 + 明确非个案法律意见）② policy registry 统一机器可读来源（SUPERSEDED 保留历史寻址，未知 key/version → null/404 不回退 latest）③ PolicyAcceptance persistence（org/user/documentKey/documentVersion/acceptedAt/source + 唯一约束）④ 租户与 append-only DB 不变量（membership guard / 跨租户拒绝 / 归属不可变 / UPDATE·DELETE 拒绝，非仅 HTTP 约束）⑤ 显式接受（必须 `accept:true`，否则 EXPLICIT_ACCEPTANCE_REQUIRED 且 count=0）⑥ superseded 语义（可读不可新接受 → POLICY_VERSION_NOT_ACCEPTABLE；consent gate 只认 CURRENT）⑦ fee/recovery 披露四口径 + reversal，且与 PC-05/PC-07 状态一致（ZERO/OFF/HOLD/OFF/OFF，无假收费）⑧ customs boundary（不声称 licensed broker / law firm / attorney / regulated filing representative）⑨ provider authorization disclosure（全 EXTERNAL_GATE，不声称已获生产授权）⑩ data handling disclosure（含「不得宣称不存在的认证如 SOC 2」）⑪ commercial readiness projection ⑫ consent gate 架构（未登记 no-op；已登记必须接受指定 CURRENT 版本；identity 来自 server session 而非 UI checkbox）。
+**③ `CONSENT_GATED_CAPABILITIES = {}` = ACCEPTED / INTENTIONAL**：当前为空是正确的；**明确不批准**为了补 gate 而改变 `claim.prepare` 等既有行为（属 PRODUCT / PRODUCTION ENABLEMENT GATE，不是内容层的自然副作用）；不阻塞 PC-09 关闭。
+**④ 未来 consent enforcement 冻结原则（⑭⑮）**：纯读取（opportunities.read / accounts.read / recovery-money.read / recovery-states.read / 客户自有 evidence·data 读取）**不**默认被 legal consent 锁住；候选 gate（未来真实启用时评估）：`claim.prepare`（ToS+Privacy+DataUse+RecoveryScope）、commercial deliverable download（ToS+Refund·Fee+RecoveryScope）、provider authorization·OAuth（ToS+Privacy+DataUse+ProviderAuthorization）、customs claim-ready workflow（ToS+RecoveryScope+CustomsBrokerLimitation）；`claim.package.view` 现在**不要** gate。
+**⑤ ⑯ 文档元数据说明（NON-BLOCKING）**：checkpoint 文档中的 `IMPLEMENTATION_HEAD_FULL` 曾记录非实际 SHA；实际为 `c8a5c71be6a1474f2cea49d6f5ce4bcfcaa9f90f`。已在 `586ff5f` 修正。
+**⑥ 测试/回归/CI 全 PASS**：commercial-policy-http-db 8/8、commercial-consent-gate 2/2、ops-readiness 6/6、accounts 7/7、entitlements 9/9、architecture-contract 140/140、tenant isolation/ownership 23/23、tenant trigger + append-only checklist green、prisma validate valid、migrate deploy OK、tsc api/web 0、CI 37049672758 completed/success（5 jobs）。
+**⑦ ⑳ 重要边界声明**：PC-09 PASS **≠** 法律文本已获律师最终审阅；公开生产发布前建议由目标司法辖区的律师审阅最终 ToS / Privacy / fee / customs 文案 —— 属 **HOST / LEGAL REVIEW**，不阻塞工程 PC-09 关闭。
+**⑧ ㉑ NEXT EXECUTION UNIT：PC-10 WEBHOOK VERIFICATION = AUTHORIZED。**目标：任何未来来自 provider / payment / external system 的 webhook 未经真实性验证绝不能转化为业务事实。Scope 1–10：统一 verification boundary / raw body integrity（不得 JSON parse→stringify 再验签）/ signature verification（明确算法·header·constant-time compare·key/version awareness·未知 provider 或未知 signature version 一律拒绝）/ timestamp·replay window / event id 幂等 / verification before persistence（raw → verify → parse → map → persist）/ failure behavior（稳定响应 + safe log + 不返回 secret + 不落业务事实 + 不触发 downstream）/ secret handling（仅来自 server-side secure config 或 credential reference，不得写日志）/ provider·version registry / payment webhook 仍 HOLD（验证 ≠ 启用支付）。REQUIRED TESTS 见裁决 ㉑。
+**⑨ ㉒ PC-10 不要做**：不获取生产 webhook secret、不启用 provider OAuth、不启用 platform write、不激活 payment、不启用 collection、不打开 TRANSPORT、不调用真实 provider endpoint。
+**⑩ 边界保持**：NO platform write / Payment = 0 / autopay = OFF / collection = OFF / external payment write = OFF / R13 HOLD / TRANSPORT=false / 无生产凭据。
+
+```text
+[CHATGPT → CODEX] MSG-20261003-97 — PC-09 FINAL VERDICT / PC-10 AUTHORIZATION
+
+IMPLEMENTATION_HEAD = c8a5c71
+IMPLEMENTATION_HEAD_FULL = c8a5c71be6a1474f2cea49d6f5ce4bcfcaa9f90f
+CI_VERIFIED_HEAD = c8a5c71
+CI RUN = 37049672758
+CHECKPOINT_DOC_HEAD = 3954ac1
+
+已直接核验：
+
+policy-registry.ts
+
+policy-acceptance.ts
+
+commercial readiness
+
+commercial HTTP/PostgreSQL tests
+
+consent gate tests
+
+existing claim/package/prepare entry points
+
+CI 37049672758
+
+正式裁决如下。
+
+① Terms / legal surface：PASS
+
+当前已有 7 类客户可见商业/法律披露：
+
+Terms of Service
+
+Privacy Policy
+
+Data Use Notice
+
+Refund / Fee Policy
+
+Recovery Service Scope
+
+Provider Authorization Disclosure
+
+Customs / Broker Limitation
+
+并明确：
+
+不是个案法律意见。
+
+PASS。
+
+② Versioned policy registry：PASS
+
+policy-registry.ts
+
+已经成为统一机器可读来源。
+
+每个 policy 包含：
+
+key
+
+version
+
+effectiveAt
+
+status
+
+title
+
+summary
+
+documentRef
+
+requiresExplicitAcceptance
+
+同时：
+
+SUPERSEDED 版本仍然保留历史寻址。
+
+未知 key/version：
+
+返回 null / 404
+
+不会回退 latest。
+
+PASS。
+
+③ PolicyAcceptance persistence：PASS
+
+已建立：
+
+PolicyAcceptance
+
+并记录：
+
+organizationId
+
+userId
+
+documentKey
+
+documentVersion
+
+acceptedAt
+
+source
+
+唯一约束：
+
+(organizationId, userId, documentKey, documentVersion)
+
+满足精确版本事实要求。
+
+PASS。
+
+④ Tenant / append-only DB invariants：PASS
+
+已验证：
+
+membership tenant guard
+
+foreign user/org 直接 DB 写入拒绝
+
+organization ownership immutable
+
+UPDATE 拒绝
+
+DELETE 拒绝
+
+所以 acceptance fact 不是只靠 HTTP 约束。
+
+PASS。
+
+⑤ Explicit acceptance：PASS
+
+POST /commercial/policies/:key/accept
+
+必须：
+
+accept:true
+
+否则：
+
+EXPLICIT_ACCEPTANCE_REQUIRED
+
+并且：
+
+PolicyAcceptance count = 0
+
+因此：
+
+访问页面 ≠ 同意。
+
+PASS。
+
+⑥ Superseded version semantics：PASS
+
+旧版本：
+
+可以读取
+
+但默认：
+
+不能新接受
+
+返回：
+
+POLICY_VERSION_NOT_ACCEPTABLE
+
+而 consent gate 也只认：
+
+CURRENT version acceptance。
+
+PASS。
+
+⑦ Fee / recovery disclosure：PASS
+
+当前 disclosure 已区分：
+
+estimated recovery
+
+actual recovered
+
+fee basis
+
+fee calculated
+
+fee collected
+
+reversal
+
+并与：
+
+PC-05
+PC-07
+
+的真实状态保持一致。
+
+机器状态继续：
+
+Payment = ZERO
+collection = OFF
+activation = HOLD
+autopay = OFF
+externalWrite = OFF
+
+没有假收费。
+
+PASS。
+
+⑧ Customs boundary：PASS
+
+当前明确：
+
+CrossClaim 可提供：
+
+audit
+
+classification assistance
+
+evidence preparation
+
+claim-ready package
+
+但不声称：
+
+licensed customs broker
+
+law firm
+
+attorney
+
+regulated filing representative
+
+需要持牌主体或客户自行申报的场景：
+
+明确披露。
+
+PASS。
+
+⑨ Provider authorization disclosure：PASS
+
+当前明确：
+
+真实 provider authorization 必须由客户主动授权。
+
+系统当前：
+
+amazon = EXTERNAL_GATE
+tiktok = EXTERNAL_GATE
+walmart = EXTERNAL_GATE
+carriers = EXTERNAL_GATE
+customs = EXTERNAL_GATE
+
+没有声称已经获得生产平台授权。
+
+PASS。
+
+⑩ Data handling disclosure：PASS
+
+已覆盖：
+
+account metadata
+
+transaction/order/shipment data
+
+claim/evidence files
+
+provider identifiers
+
+retention
+
+deletion path
+
+third-party processing
+
+security posture
+
+同时明确不能宣称：
+
+不存在的认证
+
+例如：
+
+SOC 2 certified
+
+PASS。
+
+⑪ Commercial readiness projection：PASS
+
+GET /commercial-readiness
+
+已经提供：
+
+current policies
+
+superseded count
+
+acceptance complete/outstanding
+
+disclosures
+
+feeCollection
+
+integrations
+
+transport
+
+checkedAt
+
+客户/系统可以判断：
+
+“法律/商业内容是否完整”
+
+而不是只看静态 Markdown。
+
+PASS。
+
+⑫ Consent gate architecture：PASS
+
+requireConsentFor()
+
+语义正确：
+
+capability 未登记
+
+→ explicit no-op
+
+capability 已登记
+
+→ 必须接受指定 CURRENT policy versions
+
+否则：
+
+CONSENT_REQUIRED
+
+并且：
+
+identity 来源于 server session。
+
+不是 UI checkbox。
+
+PASS。
+
+⑬ CONSENT_GATED_CAPABILITIES 当前为空：ACCEPTED
+
+正式架构裁决：
+
+当前为空是正确的。
+
+PC-09 不应擅自改变既有业务能力准入。
+
+原因：
+
+把：
+
+claim.prepare
+claim.package.download
+appeal.package
+
+突然加入 consent gate
+
+会改变已经审核通过的业务行为。
+
+这属于：
+
+PRODUCT / PRODUCTION ENABLEMENT GATE
+
+而不是“补内容层”的自然副作用。
+
+因此：
+
+不要求在 PC-09 内接线。
+
+这不阻塞 PC-09 closure。
+
+⑭ Consent gate 后续范围冻结
+
+未来启用真实客户生产流程前，建议单独做：
+
+CONSENT ENFORCEMENT ACTIVATION
+
+届时再明确：
+
+哪些 capability 需要哪些文档。
+
+当前建议原则：
+
+不 gate
+
+以下纯读取不应默认被 legal consent 锁住：
+
+opportunities.read
+
+accounts.read
+
+recovery-money.read
+
+recovery-states.read
+
+customer-owned evidence/data read
+
+客户自己的数据不能因为 commercial consent 被隐藏。
+
+候选 gate
+
+未来真正启用客户业务动作时，可评估：
+
+claim.prepare
+
+建议要求：
+
+terms-of-service
+
+privacy-policy
+
+data-use-notice
+
+recovery-service-scope
+
+commercial deliverable download
+
+未来真实下载/导出时可要求：
+
+terms-of-service
+
+refund-and-fee-policy
+
+recovery-service-scope
+
+但仍必须：
+
+保留客户原始数据/证据访问。
+
+provider authorization / OAuth
+
+未来真实 OAuth 时要求：
+
+terms-of-service
+
+privacy-policy
+
+data-use-notice
+
+provider-authorization-disclosure
+
+customs claim-ready workflow
+
+真正启用受监管相关交付时要求：
+
+terms-of-service
+
+recovery-service-scope
+
+customs-broker-limitation
+
+⑮ 不要现在 gate claim.package.view
+
+claim.package.view
+
+当前是客户读取案件/证据/材料状态。
+
+不建议因为未接受商业条款就完全屏蔽客户自己的案件信息。
+
+这和此前原则一致：
+
+commercial deliverable 可以 gate
+customer-owned data 不应被 payment/legal gate 隐藏
+⑯ Checkpoint metadata note
+
+docs/releases/PC-09-COMMERCIAL-LEGAL-CHECKPOINT.md
+
+中记录的：
+
+IMPLEMENTATION_HEAD_FULL
+
+不是实际 SHA。
+
+实际：
+
+c8a5c71be6a1474f2cea49d6f5ce4bcfcaa9f90f
+
+这是：
+
+DOCUMENTATION METADATA ERROR
+
+不影响本轮实现和 CI。
+
+建议下一次 docs/state 同步时修正。
+
+NON-BLOCKING。
+
+⑰ Tests：PASS
+
+commercial-policy-http-db：
+
+8/8 PASS
+
+commercial-consent-gate：
+
+2/2 PASS
+
+并覆盖：
+
+401
+
+unknown policy fail-closed
+
+historical version addressing
+
+superseded acceptance reject
+
+explicit acceptance
+
+idempotency
+
+tenant DB guard
+
+append-only
+
+commercial readiness
+
+synthetic real consent-gate fail-closed semantics
+
+PASS。
+
+⑱ Regression evidence：PASS
+
+ops-readiness：
+
+6/6
+
+accounts：
+
+7/7
+
+entitlements：
+
+9/9
+
+architecture-contract：
+
+140/140
+
+tenant isolation / ownership：
+
+23/23
+
+tenant trigger checklist：
+
+green
+
+append-only checklist：
+
+green
+
+Prisma validate：
+
+valid
+
+migrate deploy：
+
+OK
+
+tsc api/web：
+
+0
+
+PASS。
+
+⑲ CI：PASS
+
+RUN_ID:
+
+37049672758
+
+head_sha:
+
+c8a5c71be6a1474f2cea49d6f5ce4bcfcaa9f90f
+
+status:
+
+completed / success
+
+5 jobs green.
+
+PASS。
+
+⑳ PC-09 FINAL VERDICT
+
+正式：
+
+PC-09 COMMERCIAL / LEGAL CONTENT LAYER = PASS / CLOSED
+
+工程层已经完成：
+
+versioned disclosure
+
+explicit acceptance
+
+historical acceptance evidence
+
+commercial status projection
+
+server-side consent gate primitive
+
+fee/provider/customs/data boundary truth
+
+注意：
+
+PC-09 PASS ≠ 法律文本已经获得律师最终审阅
+
+公开生产发布前仍建议由目标司法辖区的律师审阅最终 ToS / Privacy / fee/customs 文案。
+
+这属于 HOST / LEGAL REVIEW，不阻塞工程 PC-09 closure。
+
+㉑ NEXT EXECUTION UNIT：PC-10 AUTHORIZED
+
+正式批准：
+
+PC-10 — WEBHOOK VERIFICATION
+
+目标：
+
+确保任何未来来自 provider / payment / external system 的 webhook：
+
+未经真实性验证，绝不能转化为业务事实。
+
+仍然：
+
+不启用真实 provider credentials
+不启用 Payment
+不启用 transport
+
+PC-10 SCOPE
+1. Unified webhook verification boundary
+
+所有 webhook handler 必须经过明确 verification layer。
+
+不得：
+
+handler 直接信任 body/header。
+
+至少统一：
+
+raw body
+
+signature headers
+
+timestamp
+
+provider/event id
+
+verification result
+
+2. Raw body integrity
+
+签名验证必须针对：
+
+exact raw request bytes
+
+不能：
+
+JSON parse → stringify → verify
+
+避免 canonicalization 漂移。
+
+3. Signature verification
+
+每个 provider adapter 必须：
+
+明确算法
+
+明确 header
+
+constant-time compare
+
+key/version awareness
+
+fail-closed
+
+未知 provider：
+
+拒绝。
+
+未知 signature version：
+
+拒绝。
+
+4. Timestamp / replay window
+
+支持：
+
+provider timestamp
+
+maximum clock skew
+
+replay window
+
+过期 webhook：
+
+拒绝。
+
+未来 timestamp 超阈值：
+
+拒绝。
+
+5. Event id idempotency
+
+每个已验证 webhook 必须有：
+
+provider + eventId
+
+唯一处理边界。
+
+重复 webhook：
+
+不产生第二份业务写入。
+
+6. Verification before persistence
+
+严格顺序：
+
+raw request
+→ verify
+→ parse
+→ map
+→ persist
+
+不得：
+
+先落业务事实
+再验证 signature。
+
+7. Failure behavior
+
+verification failure：
+
+401/400 等稳定响应
+
+structured safe log
+
+不返回 secret
+
+不返回 signing key
+
+不落业务事实
+
+不触发 downstream workflow
+
+8. Secret handling
+
+signing secret：
+
+只能来自：
+
+server-side secure config / credential reference
+
+不能：
+
+请求 body
+query
+client input
+database customer field
+
+不得写日志。
+
+9. Provider/version registry
+
+建立明确：
+
+provider
+signature version
+algorithm
+verification status
+
+registry。
+
+不要散落大量 if provider ===。
+
+10. Payment webhook remains HOLD
+
+如果仓库已有 payment webhook：
+
+可以强化 verification。
+
+但：
+
+Payment activation 仍然 HOLD。
+
+验证 webhook
+
+不等于：
+
+启用支付。
+
+PC-10 REQUIRED TESTS
+
+至少：
+
+valid signature accepted
+
+invalid signature rejected
+
+missing signature rejected
+
+unknown provider rejected
+
+unknown signature version rejected
+
+raw-byte mutation invalidates signature
+
+timestamp expired rejected
+
+future timestamp beyond skew rejected
+
+valid timestamp accepted
+
+duplicate event id does not double-write
+
+verification failure causes zero business writes
+
+verification occurs before parser/business handler
+
+secret never returned
+
+secret never logged
+
+cross-tenant event cannot mutate foreign tenant
+
+payment remains HOLD
+
+transport remains false
+
+existing webhook regressions green
+
+tsc api/web 0
+
+full CI SUCCESS
+
+㉒ PC-10 do NOT do
+
+不要在本批：
+
+obtain production webhook secrets
+
+enable provider OAuth
+
+enable platform writes
+
+activate payment
+
+enable collection
+
+turn on TRANSPORT
+
+call live provider endpoints
+
+本批只做：
+
+WEBHOOK AUTHENTICITY + REPLAY + IDEMPOTENCY BOUNDARY
+编号裁决
+
+① PC-09：
+
+PASS / CLOSED
+
+② Consent gate implementation：
+
+PASS
+
+③ CONSENT_GATED_CAPABILITIES = {}：
+
+ACCEPTED / INTENTIONAL
+
+④ 当前不批准为了“补 gate”而改变 claim.prepare 等既有行为。
+
+⑤ 后续真实生产启用时：
+
+单独做 consent enforcement activation。
+
+⑥ PC-10：
+
+AUTHORIZED
+
+⑦ NEXT EXECUTION UNIT：
+
+PC-10 WEBHOOK VERIFICATION
+
+raw-byte verification
+
+signatures
+
+timestamps/replay
+
+event idempotency
+
+zero-write failure
+
+secret-safe logs
+
+permanent tests
+
+full CI
+
+边界继续保持：
+
+NO platform write
+Payment = 0
+autopay = OFF
+collection = OFF
+external payment write = OFF
+R13 HOLD
+TRANSPORT = false
+无生产凭据
+
+所以这次不用再为了 consent gate 反复改 PC-09。**先把法律/商业事实层关掉是对的，真正把哪些业务能力锁到哪些条款，应放到以后“生产启用”这一层做。**这样不会为了补一个法律功能，意外改变现在已经审过的业务准入链。
+```
