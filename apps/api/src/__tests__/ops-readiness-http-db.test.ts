@@ -38,6 +38,13 @@ interface OpsReadinessBody {
   rateLimit: { enabled: boolean; windowMs: number; max: number; scope: string[] };
   transport: string;
   runbookRef: string;
+  facts: {
+    migration: { status: string };
+    configuration: { status: string; missing: string[] };
+    storage: { status: string };
+    integrations: Record<string, string>;
+    payment: { billingModel: string; activation: string; payment: string; collection: string };
+  };
 }
 
 async function withServer<T>(run: (base: string) => Promise<T>): Promise<T> {
@@ -97,12 +104,12 @@ describe('PC-08 — ops readiness', () => {
       expect(live.status).toBe(200);
       expect(((await live.json()) as { kind: string }).kind).toBe('liveness');
 
+      // PC-08 CHANGE A：/health/ready 复用既有真实 readiness path（ready + 稳定 reason codes）
       const ready = await fetch(base + '/health/ready');
       expect(ready.status).toBe(200);
-      const body = (await ready.json()) as { kind: string; status: string; checks: { database: { ok: boolean } } };
-      expect(body.kind).toBe('readiness');
-      expect(body.status).toBe('ok');
-      expect(body.checks.database.ok).toBe(true);
+      const body = (await ready.json()) as { ready: boolean; reasons: string[]; version: string };
+      expect(body.ready).toBe(true);
+      expect(body.reasons).toEqual([]);
     });
   });
 
@@ -144,8 +151,19 @@ describe('PC-08 — ops readiness', () => {
       // PC-08 硬边界：不打开 transport
       expect(body.transport).toBe('DISABLED');
       expect(body.runbookRef).toContain('PC-08-OPERATIONAL-RUNBOOK');
+      // PC-08 CHANGE B/C/D/E/F：机器可判定 readiness facts
+      expect(['CURRENT', 'MIGRATION_MISMATCH', 'UNKNOWN']).toContain(body.facts.migration.status);
+      expect(['READY', 'BLOCKED']).toContain(body.facts.configuration.status);
+      expect(['READY', 'BLOCKED', 'NOT_CONFIGURED']).toContain(body.facts.storage.status);
+      expect(body.facts.integrations.amazon).toBe('EXTERNAL_GATE');
+      expect(body.facts.integrations.tiktok).toBe('EXTERNAL_GATE');
+      expect(body.facts.integrations.walmart).toBe('EXTERNAL_GATE');
+      expect(body.facts.payment.billingModel).toBe('EXISTS');
+      expect(body.facts.payment.activation).toBe('HOLD');
+      expect(body.facts.payment.payment).toBe('ZERO');
+      expect(body.facts.payment.collection).toBe('OFF');
       // 无 secret / 凭据泄漏
-      for (const forbidden of ['passwordHash', 'credentialRef', 'token', 'secret', 'storageKey']) {
+      for (const forbidden of ['passwordHash', 'credentialRef', 'token', 'secret', 'storageKey', 'SQLSTATE']) {
         expect(raw).not.toContain(forbidden);
       }
     });
@@ -168,6 +186,64 @@ describe('PC-08 — ops readiness', () => {
       expect(third.headers.get('retry-after')).toBeTruthy();
       const body = (await third.json()) as { error: string };
       expect(body.error).toBe('RATE_LIMITED');
+    });
+  });
+
+  it('DB 不可用 → /health/ready 503（复用真实 readiness path；fail-closed；无原始错误）', async () => {
+    const brokenPrisma = new Proxy(prisma, {
+      get(target, prop) {
+        if (prop === '$queryRaw') {
+          return async () => {
+            throw new Error('ECONNREFUSED 127.0.0.1:5432 secret=leak');
+          };
+        }
+        const value = Reflect.get(target, prop, target);
+        return typeof value === "function" ? value.bind(target) : value;
+      },
+    });
+    const server = createServer({ prisma: brokenPrisma, log, audit, storage });
+    await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+    const { port } = server.address() as AddressInfo;
+    try {
+      const ready = await fetch('http://127.0.0.1:' + port + '/health/ready');
+      expect(ready.status).toBe(503);
+      const raw = await ready.text();
+      const body = JSON.parse(raw) as { ready: boolean; reasons: string[] };
+      expect(body.ready).toBe(false);
+      expect(body.reasons).toEqual(['DATABASE_UNAVAILABLE']);
+      for (const leak of ['ECONNREFUSED', '5432', '127.0.0.1', 'SQLSTATE', 'secret=leak']) {
+        expect(raw).not.toContain(leak);
+      }
+    } finally {
+      await new Promise<void>((resolve) => server.close(() => resolve()));
+    }
+  });
+
+  it('required config 缺失 → facts.configuration = BLOCKED（只回 key 名）；liveness 不受影响', async () => {
+    await withServer(async (base) => {
+      const owner = await login(base, 'owner-pc08@example.com');
+      const original = process.env.DATABASE_URL;
+      process.env.DATABASE_URL = 'postgresql://placeholder-do-not-leak@db/app';
+      try {
+        const configured = await fetch(base + "/ops-readiness", { headers: { cookie: owner } });
+        const configuredRaw = await configured.text();
+        const configuredBody = JSON.parse(configuredRaw) as OpsReadinessBody;
+        expect(configuredBody.facts.configuration.status).toBe('READY');
+        expect(configuredRaw).not.toContain('placeholder-do-not-leak');
+
+        process.env.DATABASE_URL = '';
+        const live = await fetch(base + "/health/live");
+        expect(live.status).toBe(200);
+        const response = await fetch(base + "/ops-readiness", { headers: { cookie: owner } });
+        const raw = await response.text();
+        const body = JSON.parse(raw) as OpsReadinessBody;
+        expect(body.facts.configuration.status).toBe('BLOCKED');
+        expect(body.facts.configuration.missing).toContain('DATABASE_URL');
+        expect(raw).not.toContain('postgresql://');
+      } finally {
+        if (original === undefined) delete process.env.DATABASE_URL;
+        else process.env.DATABASE_URL = original;
+      }
     });
   });
 });

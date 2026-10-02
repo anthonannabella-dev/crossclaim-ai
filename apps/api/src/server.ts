@@ -134,6 +134,24 @@ export function createServer(deps: ServerDeps): http.Server {
     controlRequests: { findMany: (args) => prisma.killSwitchRequest.findMany(args) },
     config: killSwitchConfigFromEnv(),
   });
+  /**
+   * PC-08 CHANGE B：期望迁移数复用既有 countLocalMigrations()（只读；不执行 migrate）。
+   * 不可读时返回 -1，由 readiness 事实投影映射为 UNKNOWN / MIGRATION_MISMATCH。
+   */
+  const expectedMigrations = countLocalMigrations();
+  /**
+   * PC-08 CHANGE D：最小安全 storage 探针（只读 head：验证读取路径与 key 形状，不写入、不删除）。
+   * 不返回 storageKey / secret / path。
+   */
+  const storageProbe = storage
+    ? async (): Promise<boolean> => {
+        const probeOrg = '00000000-0000-4000-8000-000000000000';
+        const probeKey = probeOrg + '/00/' + probeOrg;
+        const meta = await storage.head(probeKey, probeOrg);
+        return meta === null || typeof meta === 'object';
+      }
+    : undefined;
+
   /** PC-08：匿名入口的 rate limit 基线（每次装配读取环境；进程内固定窗口）。 */
   const rateLimitPolicy = rateLimitPolicyFromEnv();
   const authRateLimiter = createRateLimiter(rateLimitPolicy);
@@ -298,7 +316,8 @@ export function createServer(deps: ServerDeps): http.Server {
     }
 
     // P2-1（MSG-20260929-70 D1）：readiness 独立于 liveness；只返回原因码
-    if (req.method === 'GET' && url === '/readyz') {
+    // PC-08 CHANGE A：/health/ready 复用既有真实 readiness path（与 /readyz 同一实现）。
+    if (req.method === 'GET' && (url === '/readyz' || url === '/health/ready')) {
       checkReadiness({
         databaseProbe: async () => {
           await prisma.$queryRaw`SELECT 1`;
@@ -330,18 +349,6 @@ export function createServer(deps: ServerDeps): http.Server {
       send(200, { status: 'ok', kind: 'liveness', checkedAt: new Date().toISOString() });
       return;
     }
-    if (req.method === 'GET' && url === '/health/ready') {
-      checkHealth({
-        db: prisma,
-        version: VERSION,
-        killSwitch: () => probeKillSwitchResolver(killSwitchResolver),
-      })
-        .then((result) =>
-          send(healthHttpStatus(result), { kind: 'readiness', ...result }),
-        )
-        .catch(() => send(503, { kind: 'readiness', status: 'degraded' }));
-      return;
-    }
 
     // PC-08：只读运维就绪视图（需要 OWNER / ADMIN 会话）。
     if (req.method === 'GET' && url === '/ops-readiness') {
@@ -369,6 +376,8 @@ export function createServer(deps: ServerDeps): http.Server {
             killSwitchProbe: () => probeKillSwitchResolver(killSwitchResolver),
             actionGuardConfigured: Boolean(actionGuard),
             rateLimit: rateLimitPolicy,
+            ...(expectedMigrations >= 0 ? { expectedMigrations } : {}),
+            ...(storageProbe ? { storageProbe } : {}),
           });
           send(200, readiness);
         })

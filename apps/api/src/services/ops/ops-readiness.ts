@@ -14,6 +14,7 @@
 import type { PrismaClient } from '@prisma/client';
 
 import { rateLimitPolicyFromEnv, type RateLimitPolicy } from '../ops/rate-limit';
+import { projectReadinessFacts, type ReadinessFacts } from '../ops/readiness-facts';
 
 export interface OpsReadinessDeps {
   prisma: PrismaClient;
@@ -22,6 +23,10 @@ export interface OpsReadinessDeps {
   /** Action Guard 是否已装配（缺省装配为 READ_ONLY 姿态）。 */
   actionGuardConfigured: boolean;
   rateLimit?: RateLimitPolicy;
+  /** 期望的已应用迁移数量（组合根统计；不可读时省略 → UNKNOWN）。 */
+  expectedMigrations?: number;
+  /** storage 探针（组合根注入；缺省 → NOT_CONFIGURED）。 */
+  storageProbe?: () => Promise<boolean>;
   now?: () => Date;
 }
 
@@ -39,6 +44,8 @@ export interface OpsReadiness {
   };
   rateLimit: { enabled: boolean; windowMs: number; max: number; scope: readonly string[] };
   transport: 'DISABLED';
+  /** PC-08 CHANGE B/C/D/E/F：机器可判定的 readiness facts。 */
+  facts: ReadinessFacts;
   runbookRef: string;
   checkedAt: string;
 }
@@ -69,6 +76,13 @@ export async function getOpsReadiness(deps: OpsReadinessDeps): Promise<OpsReadin
       ])
     : [0, 0, 0];
 
+  const facts = await projectReadinessFacts({
+    prisma: deps.prisma,
+    ...(deps.expectedMigrations === undefined ? {} : { expectedMigrations: deps.expectedMigrations }),
+    ...(deps.storageProbe ? { storageProbe: deps.storageProbe } : {}),
+    rateLimit: policy,
+  });
+
   return {
     liveness: 'UP',
     readiness: { ready: databaseUp, checks: { database: databaseUp ? 'UP' : 'DOWN' } },
@@ -94,6 +108,7 @@ export async function getOpsReadiness(deps: OpsReadinessDeps): Promise<OpsReadin
     },
     // PC-08 硬边界：不打开 transport。
     transport: 'DISABLED',
+    facts,
     runbookRef: 'docs/releases/PC-08-OPERATIONAL-RUNBOOK.md',
     checkedAt: at.toISOString(),
   };
