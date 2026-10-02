@@ -45,8 +45,7 @@ export type ProviderCallbackFailure =
   | 'SCOPE_ESCALATION_REJECTED'
   | 'IDENTITY_NOT_VERIFIED'
   | 'AUTHORIZATION_CODE_REQUIRED'
-  | 'PKCE_VERIFIER_REQUIRED'
-  | 'PKCE_VERIFIER_MISMATCH';
+  | 'PKCE_VERIFIER_MISSING';
 
 export interface ProviderBindPlan {
   provider: string;
@@ -88,8 +87,8 @@ export interface ProviderCallbackInput {
   callbackPath: string;
   organizationId: string;
   userId: string;
-  /** PKCE：由客户端回调带回的 verifier 候选；服务端会与 state 记录比对。 */
-  codeVerifier?: string;
+  // PC-11A FINAL-2（MSG-20261003-101）：**不接受** client-supplied PKCE verifier；
+  // verifier 一律来自服务端 consume 后的 state 记录。
 }
 
 function stateFailureReason(reason: string): ProviderCallbackFailure {
@@ -141,11 +140,11 @@ export async function handleProviderCallback(
     return { ok: false, reason: 'STATE_CALLBACK_MISMATCH' };
   }
 
-  // PC-11A FINAL（CHANGE B）：PKCE required 时，verifier 必须来自服务端 state 记录且一致。
-  if (contract.pkce.required) {
-    if (!input.codeVerifier || input.codeVerifier.trim() === '') return { ok: false, reason: 'PKCE_VERIFIER_REQUIRED' };
-    const expected = consumed.record.codeVerifier;
-    if (!expected || input.codeVerifier !== expected) return { ok: false, reason: 'PKCE_VERIFIER_MISMATCH' };
+  // PC-11A FINAL-2（MSG-20261003-101）：PKCE verifier 归服务端所有 ——
+  // 不接受客户端回传值，直接使用 consume 后 state 记录里的 verifier。
+  const serverCodeVerifier = contract.pkce.required ? consumed.record.codeVerifier : null;
+  if (contract.pkce.required && (!serverCodeVerifier || serverCodeVerifier.trim() === '')) {
+    return { ok: false, reason: 'PKCE_VERIFIER_MISSING' };
   }
 
   let exchanged: { credentialRef: string; scopes: readonly string[]; sandbox: boolean };
@@ -154,7 +153,7 @@ export async function handleProviderCallback(
       provider: contract.provider,
       code: input.code,
       callbackPath: contract.callbackPath,
-      ...(input.codeVerifier ? { codeVerifier: input.codeVerifier } : {}),
+      ...(serverCodeVerifier ? { codeVerifier: serverCodeVerifier } : {}),
     });
   } catch {
     return { ok: false, reason: 'EXCHANGE_FAILED' };

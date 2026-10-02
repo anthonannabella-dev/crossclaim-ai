@@ -61,7 +61,6 @@ const input = (state: string) => ({
   callbackPath: base.callbackPath,
   organizationId: 'org-1',
   userId: 'user-1',
-  codeVerifier: VERIFIER,
 });
 
 describe('PC-11A — provider callback boundary', () => {
@@ -102,27 +101,25 @@ describe('PC-11A — provider callback boundary', () => {
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it('PKCE：缺 verifier → PKCE_VERIFIER_REQUIRED；verifier 错误 → PKCE_VERIFIER_MISMATCH（均不调用 exchange）', async () => {
-    for (const [override, reason] of [
-      [{ codeVerifier: undefined }, 'PKCE_VERIFIER_REQUIRED'],
-      [{ codeVerifier: 'wrong' }, 'PKCE_VERIFIER_MISMATCH'],
-    ] as const) {
-      const store = new InMemoryOAuthStateStore();
-      const issued = await issue(store);
-      const spy = vi.fn();
-      const exchange: CodeExchangePort = {
-        async exchange() {
-          spy();
-          return { credentialRef: 'x', scopes: [], sandbox: true };
-        },
-      };
-      const outcome = await handleProviderCallback(
-        { store, exchange, identityVerifier: identityVerifier(), now: () => NOW },
-        { ...input(issued.state), ...override },
-      );
-      expect(outcome.ok === false ? outcome.reason : null).toBe(reason);
-      expect(spy).not.toHaveBeenCalled();
-    }
+  it('FINAL-2：PKCE verifier 归服务端所有 —— exchange 收到 state 里的 verifier，客户端自报值被忽略', async () => {
+    const store = new InMemoryOAuthStateStore();
+    const issued = await issue(store);
+    const received: Array<string | undefined> = [];
+    const exchange: CodeExchangePort = {
+      async exchange(input) {
+        received.push(input.codeVerifier);
+        return { credentialRef: 'SANDBOX:AMAZON:1', scopes: [], sandbox: true };
+      },
+    };
+    // 攻击者试图自带 verifier：类型上已不接受该字段；即使注入也必须被忽略。
+    const forged = { ...input(issued.state), codeVerifier: 'attacker-supplied' } as never;
+    const outcome = await handleProviderCallback(
+      { store, exchange, identityVerifier: identityVerifier(), now: () => NOW },
+      forged,
+    );
+    expect(outcome.ok).toBe(true);
+    expect(received).toEqual([VERIFIER]);
+    expect(JSON.stringify(outcome)).not.toContain('attacker-supplied');
   });
 
   it('state 一次性：重放 → STATE_UNKNOWN', async () => {
