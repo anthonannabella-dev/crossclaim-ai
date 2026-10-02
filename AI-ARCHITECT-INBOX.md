@@ -105003,3 +105003,844 @@ TRANSPORT = false
 
 这次 PC-10 已经真正闭环：不是“验签函数写好了”，而是从 HTTP 入口到状态码、零写入、tenant attribution、数据库幂等全部一致。 下一阶段可以开始把真实 Amazon/TikTok/Walmart 接入前的内部 OAuth/Adapter 底座做完，但真实密钥和平台审批仍留到最后的外部门槛。
 ```
+
+### [MSG-20261003-100] PC-11A VERDICT — REVISE-MINOR（CHANGE A 缺 code fail-closed；B PKCE 契约；C 凭据生命周期 port；D 能力矩阵 lifecycle truth）
+
+`IMPLEMENTATION_HEAD = 89a9505`｜`CI_VERIFIED_HEAD = 89a9505`｜`CI RUN = 37056295942`｜`CHECKPOINT_DOC_HEAD = 91f831d`。
+**① 总体裁决：PC-11A = REVISE-MINOR（主体架构通过；剩余均为内部契约窄修，不需要真实 provider credentials）。**编号裁决：① OAuth state lifecycle = PASS；② callback boundary = PASS；③ credentialRef / identity / scope = PASS；④ sandbox / provider readiness = PASS；⑤ PC-11A = REVISE-MINOR；⑥ Required = CHANGE A–D；⑦ PC-11B = HOLD_EXTERNAL / HOST_ACTION_REQUIRED；⑧ **不要停机等待真实 API**，继续完成 PC-11A FINAL。
+**② 已 PASS 项（⑩–⑫）**：state 256-bit 随机且不含 PII/secret、绑定 provider+org+user+callbackPath；`take()` get→delete **进程内**一次性（明确冻结：这是 PROCESS-LOCAL atomicity，不是 distributed；多实例生产必须在 PC-11B 用共享/持久化原子 store）；mismatch 一律先 take 再拒绝（burn-on-mismatch）；TTL 600s；callback 执行顺序（consume → resolve → exchange → scope → identity → bind plan）无「先绑定再验证」；scope 最小化（禁 write，越权 SCOPE_ESCALATION_REJECTED）；externalAccountId 只来自 verifier（不信任客户端）；credentialRef 边界（无 raw token 入 DB/log/response）；bindExecuted=false；provider readiness 恒 EXTERNAL_GATE；sandbox harness 不产生生产凭据；CI 37056295942 SUCCESS。
+**③ CHANGE A — MISSING AUTHORIZATION CODE MUST FAIL CLOSED**：`handleProviderCallback()` 必须在任何 exchange 之前显式校验 `input.code`（undefined / 空串 / 仅空白）→ 返回稳定原因码 **`AUTHORIZATION_CODE_REQUIRED`**；并保证 **exchange 不被调用、verifier 不被调用、无 bind plan、无 credential mutation**。state 仍可维持「一次 callback attempt 即消费」的现有策略。
+**④ CHANGE B — PKCE CONTRACT IS MISSING**：`ProviderIntegrationContract` 必须显式表达 `pkce: { supported, required, method: 'S256' | null }`（不得靠猜）；`required=true` 的 provider 在 issue state 时生成 `code_verifier` 并派生 `code_challenge=S256(...)`，state record **只保存 server-side verifier/reference**；callback exchange 必须接收 **server-side** `codeVerifier`（不是让浏览器提交可信 verifier）；不支持 PKCE 的 provider 明确 `supported=false / required=false`。重点：**CAPABILITY MUST BE EXPLICIT**。
+**⑤ CHANGE C — CREDENTIAL LIFECYCLE PORTS MISSING**：需要 `ProviderCredentialLifecyclePort`（只建 port，不实现真实网络调用）：`refresh(input) → { credentialRef, expiresAt? }`、`revoke(input) → { revoked }`、`health(input) → { state: ACTIVE | NEEDS_AUTH | REVOKED | ERROR }`；真实实现属 PC-11B，sandbox/fake 在 PC-11A 可验证契约。**⑯ refresh invariant**：refresh 成功**不得**创建新的 PlatformAccount identity，只允许未来更新 SourceConnection credentialRef / lifecycle；credential rotation ≠ business identity rotation。**⑰ revoke invariant**：provider revoke / invalid grant 必须能映射到 REVOKED 或 NEEDS_AUTH，并与 PC-06 已冻结的 reconnect truth 对齐 —— 真实 OAuth 尚不存在时 `reconnect.available` 仍 **false / REAL_OAUTH_EXTERNAL_GATE**，不得因新增接口提前翻 true。
+**⑥ CHANGE D — CAPABILITY MATRIX SHOULD EXPRESS LIFECYCLE TRUTH**：`/provider-readiness` 需补能力矩阵：`oauth {supported, implemented}`、`pkce {supported, required}`、`refresh {supported, implemented}`、`revoke {supported, implemented}`、`webhook {supported, verificationReady}`、`readOnlyScopes`、`productionApprovalState`、`sandboxState`；production 仍必须 EXTERNAL_GATE，**不得出现假 production-ready**。
+**⑦ ⑲ Required targeted tests（永久）**：empty code → AUTHORIZATION_CODE_REQUIRED；empty code → exchange NOT called；provider PKCE capability explicit；PKCE-required provider issue → verifier generated；verifier 不出现在 public result/log；callback exchange receives server-side verifier；wrong/missing verifier fail-closed in sandbox harness；refresh contract only returns credentialRef；refresh does not create/change PlatformAccount identity；revoke maps to REVOKED / NEEDS_AUTH semantics；health contract returns stable lifecycle state；reconnect remains REAL_OAUTH_EXTERNAL_GATE；provider readiness exposes capability truth；no write scopes；productionCredentials remains ABSENT；platformWriteEnabled remains false；tsc api/web 0；full CI SUCCESS。
+**⑧ ⑳ 不要重做**：32B state、TTL、state binding、burn-on-mismatch、callback replay prevention、callback ordering 等已通过项。**边界保持**：NO platform write / Payment = 0 / autopay = OFF / collection = OFF / external payment write = OFF / R13 HOLD / TRANSPORT = false / 无生产凭据。
+
+```text
+[CHATGPT → CODEX] MSG-20261003-100 — PC-11A VERDICT
+
+IMPLEMENTATION_HEAD = 89a9505
+CI_VERIFIED_HEAD = 89a9505
+CI RUN = 37056295942
+CHECKPOINT_DOC_HEAD = 91f831d
+
+已直接核验：
+
+oauth-state.ts
+
+provider-callback.ts
+
+provider-integration-contract.ts
+
+sandbox-provider.ts
+
+connector types
+
+provider callback tests
+
+provider readiness HTTP tests
+
+CI 37056295942
+
+总体裁决：
+
+PC-11A = REVISE-MINOR
+
+主体架构通过。
+
+剩余均为内部契约窄修，不需要真实 provider credentials。
+
+① OAuth state entropy / binding：PASS
+
+state 使用：
+
+randomBytes(32)
+
+→ 256-bit 随机值。
+
+state 本身不含：
+
+userId
+
+orgId
+
+provider secret
+
+credential
+
+PII
+
+并绑定：
+
+provider
+
+organizationId
+
+userId
+
+callbackPath
+
+issuedAt
+
+expiresAt
+
+PASS。
+
+② OAuth state single-use：PASS FOR PC-11A
+
+OAuthStateStore.take()
+
+语义是：
+
+读取
++
+删除
+
+一次性消费。
+
+当前默认：
+
+InMemoryOAuthStateStore
+
+在单 Node.js 进程内，Map 的：
+
+get → delete
+
+在同一次同步执行段完成。
+
+因此单实例里：
+
+并发 callback 只有一个请求能取得 state。
+
+重放：
+
+STATE_UNKNOWN。
+
+PASS。
+
+但明确冻结：
+
+这是 PROCESS-LOCAL atomicity
+
+不是：
+
+distributed atomicity。
+
+多实例生产环境必须在 PC-11B 使用：
+
+共享/持久化原子 store
+
+例如 DB / Redis 等具备原子 consume 语义的实现。
+
+当前不阻塞 PC-11A。
+
+③ State mismatch burns state：PASS
+
+已确认：
+
+provider mismatch
+tenant mismatch
+user mismatch
+callback mismatch
+
+都会：
+
+先 take()
+
+再拒绝。
+
+因此攻击者不能不断试探同一 state。
+
+PASS。
+
+④ TTL：PASS
+
+默认：
+
+600 秒。
+
+过期：
+
+STATE_EXPIRED。
+
+PASS。
+
+⑤ Callback execution order：PASS
+
+当前明确：
+
+consume state
+→ resolve contract
+→ exchange code
+→ scope validation
+→ verified provider identity
+→ return bind plan
+
+没有：
+
+先绑定
+再验证。
+
+PASS。
+
+⑥ Scope minimization：PASS
+
+当前 provider contract 明确只有：
+
+readOnlyScopes
+
+callback 对 exchange 返回 scopes 做：
+
+contract.readOnlyScopes.includes(scope)
+
+同时禁止：
+
+/write/i
+
+越权：
+
+SCOPE_ESCALATION_REJECTED。
+
+PASS。
+
+⑦ Client externalAccountId trust：PASS
+
+callback input 没有：
+
+externalAccountId
+
+绑定计划中的：
+
+identity.externalAccountId
+
+来自：
+
+PlatformIdentityVerifier.verify(...)
+
+因此不会信任客户输入平台账号。
+
+PASS。
+
+⑧ Credential-reference boundary：PASS
+
+exchange 返回的是：
+
+credentialRef
+
+不是：
+
+accessToken
+refreshToken
+clientSecret
+
+callback plan 也只携带：
+
+credentialRef。
+
+当前没有把 raw token 写：
+
+DB
+
+log
+
+bind plan response
+
+PASS。
+
+⑨ Bind execution HOLD：PASS
+
+成功 callback：
+
+只返回：
+
+ProviderBindPlan
+
+且：
+
+bindExecuted=false
+
+不执行：
+
+PlatformAccount mutation
+SourceConnection mutation
+credential persistence
+transport activation
+
+符合 PC-11A。
+
+PASS。
+
+⑩ Provider readiness truth：PASS
+
+/provider-readiness
+
+明确：
+
+contractReady=true
+
+但：
+
+productionCredentials=ABSENT
+
+readiness=EXTERNAL_GATE
+
+platformWriteEnabled=false
+
+这正确表达：
+
+INTERNAL CONTRACT READY
+
+≠
+
+PRODUCTION READY
+
+并且没有 PRODUCTION_READY 假状态。
+
+PASS。
+
+⑪ Sandbox harness：PASS
+
+sandbox provider：
+
+approve
+
+authorization code
+
+one-time code exchange
+
+SANDBOX credentialRef
+
+sandbox=true
+
+不会产生：
+
+production credentials
+
+也不会改变：
+
+provider readiness。
+
+PASS。
+
+⑫ CI：PASS
+
+RUN_ID：
+
+37056295942
+
+head_sha：
+
+89a9505c3c53532a6bd09110c6962dc4d1623455
+
+completed / success
+
+5 jobs green。
+
+PASS。
+
+⑬ CHANGE A — MISSING AUTHORIZATION CODE MUST FAIL CLOSED
+
+当前 handleProviderCallback()：
+
+没有显式验证：
+
+input.code
+
+是否：
+
+undefined / missing
+
+empty
+
+whitespace-only
+
+而是直接把它交给：
+
+CodeExchangePort.exchange()
+
+这意味着：
+
+“缺 code 是否拒绝”
+
+由 adapter 自己决定。
+
+这不符合 MSG-99：
+
+missing code rejected
+
+这个边界应该属于统一 callback boundary。
+
+Required fix
+
+在任何 exchange 前：
+
+if (!input.code || input.code.trim() === '') {
+  return {
+    ok: false,
+    reason: 'AUTHORIZATION_CODE_REQUIRED'
+  }
+}
+
+或者等价稳定 code。
+
+必须保证：
+
+exchange not called
+
+verifier not called
+
+no bind plan
+
+no credential mutation
+
+注意：
+
+state 可以继续维持“一次 callback attempt 即消费”的现有策略。
+
+⑭ CHANGE B — PKCE CONTRACT IS MISSING
+
+MSG-99 明确要求：
+
+PKCE where provider supports
+
+当前仓库搜索：
+
+PKCE
+
+codeVerifier
+
+codeChallenge
+
+均没有实现。
+
+这不是要求现在连真实 Amazon/TikTok。
+
+而是要求内部 contract 能表达：
+
+某 provider：
+
+supports PKCE = true/false
+
+以及支持时的 state flow。
+
+Required design
+
+ProviderIntegrationContract 增加类似：
+
+pkce:
+  supported: boolean
+  required: boolean
+  method: 'S256' | null
+
+不能靠猜。
+
+当 provider required=true 时
+
+issue state 时生成：
+
+code_verifier
+
+并派生：
+
+code_challenge=S256(...)
+
+state record 内只保存：
+
+server-side verifier/reference。
+
+callback exchange 必须接收：
+
+codeVerifier
+
+而不是让浏览器提交可信 verifier。
+
+当 provider 不支持 PKCE
+
+明确：
+
+supported=false
+required=false
+
+即可。
+
+重点是：
+
+CAPABILITY MUST BE EXPLICIT
+
+不能完全缺失。
+
+⑮ CHANGE C — CREDENTIAL LIFECYCLE PORTS MISSING
+
+MSG-99 的内部 provider contract 还要求至少能承载：
+
+refresh credential
+
+revoke credential
+
+connection health
+
+当前我核到：
+
+connectors/types.ts
+
+已有：
+
+Fetcher / Normalizer
+
+这是 read-only data plane。
+
+但仓库搜索：
+
+refreshCredential
+
+revokeCredential
+
+getConnectionHealth
+
+均没有 contract。
+
+所以 checkpoint 中：
+
+“status lifecycle 复用既有实现”
+
+不能替代：
+
+provider credential lifecycle contract
+
+SourceConnection 有状态机是一回事。
+
+provider adapter 能否：
+
+refresh / revoke / health-check
+
+是另一回事。
+
+Required narrow interface
+
+不需要实现真实网络调用。
+
+只需建立 port，例如：
+
+interface ProviderCredentialLifecyclePort {
+  refresh(input): Promise<{
+    credentialRef: string
+    expiresAt?: Date
+  }>
+
+  revoke(input): Promise<{
+    revoked: boolean
+  }>
+
+  health(input): Promise<{
+    state:
+      | 'ACTIVE'
+      | 'NEEDS_AUTH'
+      | 'REVOKED'
+      | 'ERROR'
+  }>
+}
+
+真实实现：
+
+PC-11B。
+
+sandbox/fake：
+
+PC-11A 可验证契约。
+
+⑯ refresh invariant
+
+必须永久测试：
+
+refresh 成功：
+
+不创建新的 PlatformAccount identity
+
+只允许未来更新：
+
+SourceConnection credentialRef / lifecycle
+
+且仍遵守：
+
+credential rotation
+≠
+business identity rotation。
+
+⑰ revoke invariant
+
+provider revoke / invalid grant 等情况必须能够映射到：
+
+REVOKED
+
+或：
+
+NEEDS_AUTH
+
+并与 PC-06 已冻结的 reconnect truth 对齐。
+
+在真实 OAuth 尚不存在时：
+
+reconnect.available 仍：
+
+false
+REAL_OAUTH_EXTERNAL_GATE
+
+不要因为新增接口就提前翻 true。
+
+⑱ CHANGE D — CAPABILITY MATRIX SHOULD EXPRESS LIFECYCLE TRUTH
+
+当前 /provider-readiness 主要返回：
+
+contractReady
+
+productionCredentials
+
+readiness
+
+host actions
+
+callback
+
+platformWriteEnabled
+
+但 MSG-99 要求 provider capability matrix 能回答：
+
+OAuth supported?
+
+refresh supported?
+
+webhook supported?
+
+read scopes
+
+requested scopes
+
+implementation state
+
+建议至少补：
+
+oauth:
+  supported
+  implemented
+
+pkce:
+  supported
+  required
+
+refresh:
+  supported
+  implemented
+
+revoke:
+  supported
+  implemented
+
+webhook:
+  supported
+  verificationReady
+
+readOnlyScopes
+
+productionApprovalState
+
+sandboxState
+
+目前 production 仍必须：
+
+EXTERNAL_GATE。
+
+不要出现假 production-ready。
+
+⑲ Required targeted tests
+
+不用重跑大设计，只补以下永久测试：
+
+empty code → AUTHORIZATION_CODE_REQUIRED
+
+empty code → exchange NOT called
+
+provider PKCE capability explicit
+
+PKCE-required provider issue → verifier generated
+
+verifier 不出现在 public result/log
+
+callback exchange receives server-side verifier
+
+wrong/missing verifier fail-closed in sandbox harness
+
+refresh contract only returns credentialRef
+
+refresh does not create/change PlatformAccount identity
+
+revoke maps to REVOKED / NEEDS_AUTH semantics
+
+health contract returns stable lifecycle state
+
+reconnect remains REAL_OAUTH_EXTERNAL_GATE
+
+provider readiness exposes capability truth
+
+no write scopes
+
+productionCredentials remains ABSENT
+
+platformWriteEnabled remains false
+
+tsc api/web 0
+
+full CI SUCCESS
+
+⑳ Existing items NOT TO REWORK
+
+以下已经通过，不要重新设计：
+
+32B OAuth state
+
+TTL
+
+state binding
+
+burn-on-mismatch
+
+callback replay prevention
+
+callback ordering
+
+read-only scope enforcement
+
+identity verifier requirement
+
+credentialRef boundary
+
+sandbox harness
+
+bindExecuted=false
+
+provider readiness EXTERNAL_GATE
+
+只做 CHANGE A–D。
+
+㉑ PC-11A current verdict
+
+已通过：
+
+OAuth state lifecycle
+callback boundary
+scope boundary
+identity verification
+credential reference boundary
+sandbox harness
+production gate truth
+
+剩余：
+
+CHANGE A
+
+explicit missing-code rejection
+
+CHANGE B
+
+PKCE capability + state/exchange contract
+
+CHANGE C
+
+credential refresh/revoke/health ports
+
+CHANGE D
+
+capability/readiness projection for those lifecycle abilities
+
+因此：
+
+PC-11A = REVISE-MINOR / NOT CLOSED
+㉒ PC-11B
+
+保持：
+
+HOST / EXTERNAL GATE
+
+仍然需要：
+
+Amazon/TikTok/Walmart developer approval
+
+real client ids/secrets
+
+callback domain registration
+
+webhook secrets
+
+seller authorization
+
+provider sandbox/production calls
+
+这些不要求本轮完成。
+
+但：
+
+不要因为 PC-11B 缺凭据而停止内部开发。
+
+先把 A–D 做完。
+
+㉓ NEXT EXECUTION UNIT
+PC-11A FINAL
+
+missing-code fail-closed
+
+PKCE capability contract
+
+credential lifecycle ports
+
+provider capability projection
+
+targeted tests
+
+full CI
+
+PC-11B 继续 HOLD_EXTERNAL。
+
+编号裁决
+
+① OAuth state lifecycle：
+
+PASS
+
+② callback boundary：
+
+PASS
+
+③ credentialRef / identity / scope：
+
+PASS
+
+④ sandbox / provider readiness：
+
+PASS
+
+⑤ PC-11A：
+
+REVISE-MINOR
+
+⑥ Required：
+
+CHANGE A–D
+
+⑦ PC-11B：
+
+HOLD_EXTERNAL / HOST_ACTION_REQUIRED
+
+⑧ 不要停机等待真实 API；继续完成 PC-11A FINAL。
+
+边界继续保持：
+
+NO platform write
+Payment = 0
+autopay = OFF
+collection = OFF
+external payment write = OFF
+R13 HOLD
+TRANSPORT = false
+无生产凭据
+
+这次已经不是“大架构没做”，而是OAuth 接入底座还差生产前必须有的最后几块契约。尤其 PKCE 和 refresh/revoke 不能等真实 API 到手后才第一次设计，否则 PC-11A 就失去“先把内部接入底座做完”的意义。
+```
