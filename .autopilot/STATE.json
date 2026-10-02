@@ -1,6 +1,6 @@
 {
   "gate": "B2-FIX R1",
-  "head": "a30c9d4",
+  "head": "4a207d5",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
   "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261002-60A",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-02T01:14:44.616Z",
+  "updated_at": "2026-10-02T01:17:22.000Z",
   "previous_head": "44f2760",
   "architect_decision_pending": true,
   "blocked_scope": null,
@@ -51,10 +51,10 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-02T01:13:43.389Z",
   "state": "AWAITING_ADJUDICATION",
-  "last_action": "通道恢复（Cloudflare 校验通过）→ 抽取并归档 MSG-20261002-60 / MSG-20261002-60A（逐字 + compare.mjs FULL_COPY_OK）",
-  "last_action_at": "2026-10-02T01:14:44.616Z",
+  "last_action": "R46 S4 MSG-60A CHANGE ②③④ 落地：adjustment evidence provenance 服务端派生 + approval digest 绑定 evidence/reasonText/correctionDirection + same-chain 并发证据强化与 superseded positive control",
+  "last_action_at": "2026-10-02T01:17:22.000Z",
   "next_action": "R46 S4-A：等待架构方对 membership 并发边界（反规范化 feeChainId + 部分唯一索引 / advisory lock 纵深防御）的 Schema Delta 裁决；裁决前不改 Schema、S4 保持 OPEN、不进入 S5。队列内其余安全工作：S4 Checkpoint 文档同步 MSG-60 三项 CHANGE 的验收映射。",
-  "current_head": "44f2760",
+  "current_head": "4a207d5",
   "reviewed_head": "07b7009",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -2743,8 +2743,8 @@
       "note": "Schema Delta（幂等/事务/并发一致性边界 + 资金链路）→ 按规则必须先回架构方；裁决前不写 migration"
     },
     "suite": {
-      "fee_record_db": "14/14",
-      "fee_adjustment_db": "3/3",
+      "fee_record_db": "15/15",
+      "fee_adjustment_db": "5/5",
       "fee_compute": "6/6",
       "fee_eligibility": "3/3",
       "fee_policy_source": "2/2",
@@ -2753,6 +2753,26 @@
       "settlement_receipt_snapshot": "12/12",
       "action_guard": "32/32",
       "tsc": "0 error"
+    },
+    "change_60a_1": {
+      "status": "DONE",
+      "evidence": "fee-policy-source.ts + record-fee.ts（服务端 policy 解析与 digest 绑定）；fee-record-db › 伪造 policy 字段不影响持久化 + server policy 漂移 → APPROVAL_REQUIRED"
+    },
+    "change_60a_2": {
+      "status": "DONE",
+      "evidence": "record-fee-adjustment.ts 逐条验证 EvidenceArtifact（存在/同租户）并服务端派生 digest/kind；fee-adjustment-db › CLIENT_EVIDENCE_NOT_TRUSTED / EVIDENCE_NOT_FOUND / CROSS_TENANT_REFERENCE 零写入"
+    },
+    "change_60a_3": {
+      "status": "DONE",
+      "evidence": "adjustment approval digest 现绑定 evidenceArtifactIds/reasonText/correctionDirection；fee-adjustment-db › 四项漂移 → APPROVAL_REQUIRED 且零新增写入"
+    },
+    "change_60a_4": {
+      "status": "PARTIAL（并发边界待 S4-A 裁决）",
+      "evidence": "DB 层 same-chain 并发用例断言 exactly-one success + 稳定 loser 错误 + loser 零残留（当前 it.fails＝缺 UNIQUE(org, feeChainId, settlementId)）；新增合法不同 chain 与 superseded chain 两个 positive control 均通过"
+    },
+    "change_60a_5": {
+      "status": "PENDING_CI",
+      "evidence": "本轮 HEAD 4a207d5 推送后取 CI 结果回填"
     }
   },
   "r46_s4a_decision_request": {
@@ -2789,5 +2809,11 @@
       "5": "HEAD 必须有可见 CI run/status"
     },
     "next": "R46 S4 保持 OPEN；S4 FINAL = 上述收口 + 真实 PostgreSQL S4 suite + S2/S3 regression + tsc + CI"
+  },
+  "r46_s4_revise_submission_2": {
+    "comment_id": "5943772578",
+    "commented_at": "2026-10-02T01:17:23.239Z",
+    "reviewed_head": "4a207d5",
+    "url": "https://github.com/anthonannabella-dev/crossclaim-ai/issues/2#issuecomment-5943772578"
   }
 }
