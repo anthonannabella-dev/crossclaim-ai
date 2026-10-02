@@ -16,7 +16,6 @@ const uuid = (): string => randomUUID();
 let ORG_A = '';
 let ORG_B = '';
 let actor = '';
-let claimA = '';
 
 const deps: FeeAdjustmentDeps = {
   prisma,
@@ -137,18 +136,6 @@ beforeAll(async () => {
   actor = a.userId;
   const b = await seedOrg('b');
   ORG_B = b.organizationId;
-  claimA = (
-    await prisma.claimItem.create({
-      data: {
-        organizationId: ORG_A,
-        platformType: 'AMAZON',
-        claimType: 'FBA_REIMBURSEMENT',
-        occurredAt: new Date('2026-08-01T00:00:00.000Z'),
-        normalizerVersion: 'v1',
-      },
-      select: { id: true },
-    })
-  ).id;
 });
 
 afterAll(async () => {
