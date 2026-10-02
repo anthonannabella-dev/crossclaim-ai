@@ -1,16 +1,16 @@
 {
   "gate": "B2-FIX R1",
-  "head": "a4e308a",
+  "head": "c05bfe9",
   "status": "IMPLEMENT",
-  "current_task": "PC-10 — WEBHOOK VERIFICATION（授权 MSG-20261003-97 ㉑）：统一 verification boundary + raw body integrity + signature verification（未知 provider / 未知 signature version 拒绝）+ timestamp/replay window + event id 幂等 + verification before persistence + failure behavior + secret handling + provider/version registry；payment webhook 仍 HOLD。",
-  "next_task": "PC-10 实施 → 本地测试 + tsc api/web + API contract + full CI → PC-10 CHECKPOINT 送审（Issue #2 + ChatGPT 唤醒三要素 + 裁决逐字归档 FULL_COPY_OK）。",
+  "current_task": "PC-11A — INTERNAL PROVIDER INTEGRATION CONTRACT：interfaces / OAuth state lifecycle / callback boundary / credential reference boundary / identity verification port / adapter capability registry / account bind integration / status lifecycle / provider-readiness / tests / sandbox(fake) provider harness。禁止 fake PRODUCTION_READY、禁止硬编码生产 token、禁止启用 platform write / TRANSPORT / payment、禁止合并 PlatformAccount 与 SourceConnection、禁止用浏览器自动化替代 OAuth。",
+  "next_task": "PC-11A 实施 → 本地测试 + tsc api/web + API contract + full CI → PC-11A CHECKPOINT 送审；PC-11B 待宿主完成上述外部审批/凭据（HOST_ACTION_REQUIRED）。",
   "send_head": "07b7009",
   "decision_head": "07b7009",
-  "last_chatgpt_message": "MSG-20261003-97",
+  "last_chatgpt_message": "MSG-20261003-99",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-02T18:58:03.219Z",
-  "previous_head": "66d376d",
+  "updated_at": "2026-10-02T19:34:38.388Z",
+  "previous_head": "767199b",
   "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "c8a5c71",
@@ -49,13 +49,13 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-02T18:45:01.793Z",
+  "last_tick_at": "2026-10-02T19:22:33.429Z",
   "state": "IMPLEMENT",
-  "last_action": "SCHEDULER_STALE_RECOVERED（gap=28min）→ 本轮已恢复执行",
+  "last_action": "SCHEDULER_STALE_RECOVERED（gap=15min）→ 本轮已恢复执行",
   "last_action_at": "2026-10-02T09:01:54.693Z",
   "next_action": "C2 FINAL 送审（Issue #2 + ChatGPT 唤醒 + 裁决归档）；通过后进入 TRACK B，并在 C2 收口后执行 PHASE X1 Architecture Audit。",
-  "current_head": "a4e308a",
-  "reviewed_head": "c8a5c71",
+  "current_head": "c05bfe9",
+  "reviewed_head": "e7902fd",
   "claim_submit_batch": {
     "verdict": "PASS",
     "message_id": "MSG-20261001-07",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-02T18:40:02.933Z",
-    "gapMs": 298861,
-    "stale": false,
-    "checkedAt": "2026-10-02T18:45:01.793Z"
+    "previousTickAt": "2026-10-02T19:07:32.149Z",
+    "gapMs": 901281,
+    "stale": true,
+    "checkedAt": "2026-10-02T19:22:33.429Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -250,7 +250,7 @@
     "integration_boundary_review": "AUTHORIZED_TO_PLAN（先提交设计/实施计划，不直接开放真实 transport）"
   },
   "r36_submission_comment": "5927087320",
-  "stale_recovered_at": "2026-10-02T18:33:01.424Z",
+  "stale_recovered_at": "2026-10-02T19:22:33.429Z",
   "engineering_regression_policy": {
     "source": "HOST PRODUCT DIRECTION 2026-10-01",
     "doc": "docs/releases/ENGINEERING-REGRESSION-POLICY.md",
@@ -3620,5 +3620,18 @@
   "pc08_notes": "PC-08 OPS READINESS 收口：CHANGE A–F（real readiness path / migration projection / required config / storage probe / integration gates / payment gate）+ CHANGE G overall readiness aggregation（internalReady = database.ok && migration CURRENT && configuration READY && storage READY && resolver UP && Action Guard UP；posture READY|BLOCKED|DEGRADED）。外部 provider EXTERNAL_GATE 与 Payment HOLD 不参与内部 runtime readiness。测试 pc08-readiness-facts 17/17 + ops-readiness-http-db 6/6 + health/admin 66/66。",
   "pc09_status": "PASS / CLOSED（MSG-20261003-97 ⑳；IMPLEMENTATION_HEAD c8a5c71 / CI 37049672758 / DOC 3954ac1+586ff5f）",
   "pc09_notes": "CONSENT_GATED_CAPABILITIES={} 被判定 ACCEPTED/INTENTIONAL；明确不批准为补 gate 改变既有准入（claim.prepare 等属 PRODUCTION ENABLEMENT GATE）。未来 consent enforcement 冻结原则见 MSG-97 ⑭⑮。PC-09 PASS ≠ 法律文本已获律师审阅：公开生产前需 HOST / LEGAL REVIEW（不阻塞工程关闭）。",
-  "pc10_status": "AUTHORIZED（MSG-20261003-97 ㉑）— WEBHOOK VERIFICATION（raw-byte 验签 / timestamp·replay / event id 幂等 / verification before persistence / secret-safe logs；payment 仍 HOLD、TRANSPORT=false）"
+  "pc10_status": "PASS / CLOSED（MSG-20261003-99；CHANGE A/B 收口：IMPLEMENTATION_HEAD e7902fd / CI 37053471042 / DOC 473a93d）",
+  "pc10_notes": "失败状态端到端一致（缺 secret→503 / 签名不匹配→401 / 其余 400）+ 服务端租户归属回归；测试 40/40（webhook-verification 10、http-db 8、workflow-payment 13、provider-shapes 9）。架构方：PC-10 真正闭环（HTTP 入口→状态码→零写入→tenant attribution→DB 幂等一致）。",
+  "pc11_status": "AUTHORIZED（MSG-20261003-99 ⑲㉑）— PC-11A INTERNAL PROVIDER INTEGRATION CONTRACT（内部可全部完成）；PC-11B（真实 provider credentials / approvals）= HOST / EXTERNAL GATE",
+  "pc11b_host_gate": [
+    "provider developer account approval",
+    "Amazon app approval",
+    "TikTok Shop developer approval",
+    "Walmart developer approval",
+    "production client IDs",
+    "production secrets",
+    "callback-domain registration",
+    "production webhook secrets",
+    "real seller authorization"
+  ]
 }
