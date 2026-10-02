@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261003-102",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-02T22:35:25.131Z",
+  "updated_at": "2026-10-02T22:45:45.002Z",
   "previous_head": "b020ac0",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -3731,9 +3731,9 @@
   },
   "carrier_queue_4_status": "QUEUE #4 FINAL IMPLEMENTED（MSG-20261003-108 ⑰–㉑；provider response identity binding + event key whitelist；Wait CI/送审）",
   "carrier_queue_4_boundary": "READ-ONLY：禁止 modify shipment / reroute / intercept / claim / pickup / refund；TRANSPORT=false · platformWriteEnabled=false · productionCredentials=ABSENT；provider 返回值必须反绑请求 account/tracking（不一致一律 reject，不得覆盖）",
-  "carrier_queue_4_implementation_head": "cfb327e",
+  "carrier_queue_4_implementation_head": "df191a3",
   "carrier_queue_4_ci_result": "SUCCESS",
-  "carrier_queue_4_ci_run": "37072044352",
+  "carrier_queue_4_ci_run": "37073303640",
   "carrier_queue_4_checkpoint_doc_head": "3296717",
   "carrier_queue_4_audit_comment_id": "5962508160"
 }
