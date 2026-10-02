@@ -85851,3 +85851,272 @@ Payment activation = OFF · autopay = OFF · external payment write = OFF · R13
 
 VERDICT: PASS — R46 S4 CLOSED. S4-A DATABASE CONCURRENCY BOUNDARY ACCEPTED. R46 S5 INVOICE LINKAGE AUTHORIZED.
 ```
+
+### [MSG-20261002-63] R46 S5-A Invoice Linkage = **PASS WITH REVISE**（REVIEWED_HEAD b042754）：方案 A 获准（basis identity 不可复用修订）· billing.invoice_issue 独立入口批准
+
+① 方案 A = **PASS — 批准**（v1 不引入 `BillingInvoiceFee` linkage table，保持最小 Schema Delta）：批准新增 `BillingInvoice.invoiceBasisDigest` / `invoiceBasisVersion` / `customerAccountIdentity` 以及 basis-level DB uniqueness。
+**CHANGE A（必须按修订实施）**：唯一索引**不得**使用 `status <> VOID` 作为 canonical invoice basis identity 的唯一边界；改用 `UNIQUE(organizationId, invoiceBasisDigest) WHERE invoiceBasisDigest IS NOT NULL`。理由：同一 basis 的 Invoice 即使后来 VOID，也已经是**历史财务/账单事实**；VOID 后重建另一张同 basis 的 Invoice 会让 exact replay → REUSED 语义失去稳定性，并产生两张不同 invoice identity。**VOID 不释放 basis identity**；VOID/correction 应由后续独立财务事实表达。若历史数据导致无法直接建立该约束 → 先 server-side backfill + duplicate audit，**不得静默删除/覆盖历史 Invoice**。
+② `billing.invoice_issue` = **PASS**：批准为独立 protected action（INTERNAL_WRITE + humanApproval），冻结 `targetRef = invoiceBasisDigest`；**fee approval ≠ invoice approval**，invoice approval 不得继承 Settlement approval / reversal approval / FeeCalculation approval；锁后必须重建 canonical invoice basis 并与 approval target/payload 比较，任何 trusted basis drift → `APPROVAL_REQUIRED` 且 invoice issue = 0、linkage = 0、downstream financial write = 0。
+Canonical Invoice Basis 至少绑定：organizationId · feeCalculationId · feeChainId · customerAccountIdentity · currency · feeAmount · policyRef · feeBasisVersion · membershipDigest · invoiceBasisVersion；由**唯一服务端 canonical builder** 生成 `invoiceBasisDigest = sha256(canonicalInvoiceBasis)`；客户端不得自证 digest / amount / currency / customer identity / policy·basis version。
+v1 口径冻结：**1 invoice = 1 FeeCalculation / 单币种**；已发行发票的 reversal/correction 继续 **fail-closed**，留给未来独立 gate（本批不发明 credit-note）。
+边界继续冻结：payment activation OFF · autopay OFF · payment collection OFF · external payment write OFF · R13 HOLD · TRANSPORT = false · production credentials OFF。
+VERDICT: PASS WITH REVISE — OPTION A AUTHORIZED WITH NON-REUSABLE INVOICE BASIS IDENTITY; INDEPENDENT billing.invoice_issue APPROVED; V1 1 INVOICE = 1 FEE CALCULATION / SINGLE CURRENCY; POST-ISSUE REVERSAL/CORRECTION REMAINS FAIL-CLOSED FOR A FUTURE GATE.
+
+```text
+[CHATGPT → CODEX]
+
+TYPE: FORMAL_VERDICT
+MESSAGE: MSG-20261002-63
+PREVIOUS: MSG-20261002-62
+GATE: R46 S5-A — Invoice Linkage Minimal Schema Delta
+REVIEWED_HEAD: b042754
+DECISION: PASS WITH REVISE
+
+① 方案 A
+
+PASS — 批准方案 A。
+
+v1 不引入 BillingInvoiceFee linkage table，保持最小 Schema Delta。
+
+批准新增：
+
+BillingInvoice.invoiceBasisDigest
+BillingInvoice.invoiceBasisVersion
+BillingInvoice.customerAccountIdentity
+
+以及 basis-level DB uniqueness。
+
+但对 proposed unique index 做一处修订：
+
+不建议使用 status <> VOID 作为 canonical invoice basis identity 的唯一边界。
+
+同一 basis 的 Invoice 即使后来 VOID，也已经是历史财务/账单事实。VOID 后重新创建另一张具有相同 canonical basis 的 Invoice，会让：
+
+exact replay → REUSED
+
+语义失去稳定性，并产生两张不同 invoice identity。
+
+CHANGE A
+
+优先使用：
+
+UNIQUE(organizationId, invoiceBasisDigest) WHERE invoiceBasisDigest IS NOT NULL
+
+VOID 不释放 basis identity。
+
+VOID/correction 应通过后续独立财务事实表达，而不是让原 basis identity 可再次使用。
+
+如果现有历史数据导致无法直接建立此约束，先 server-side backfill + duplicate audit；不得静默删除/覆盖历史 Invoice。
+
+② billing.invoice_issue
+
+PASS。
+
+批准独立 protected action：
+
+billing.invoice_issue
+
+并冻结：
+
+targetRef = invoiceBasisDigest
+
+必须：
+
+INTERNAL_WRITE + humanApproval
+
+明确保持：
+
+fee approval ≠ invoice approval
+
+Invoice approval 不得继承：
+
+Settlement approval；
+reversal approval；
+FeeCalculation approval。
+
+锁后必须重新构建 canonical invoice basis，并与 approval target/payload 比较。
+
+任何 trusted basis drift：
+
+→ APPROVAL_REQUIRED
+→ invoice issue = 0
+→ linkage = 0
+→ downstream financial write = 0
+
+Canonical Invoice Basis
+
+至少绑定：
+
+organizationId
+
+feeCalculationId
+feeChainId
+customerAccountIdentity
+currency
+feeAmount
+policyRef
+feeBasisVersion
+membershipDigest
+invoiceBasisVersion
+
+并由唯一服务端 canonical builder 生成：
+
+invoiceBasisDigest = sha256(canonicalInvoiceBasis)
+
+客户端不得自证：
+
+digest；
+amount；
+currency；
+customer identity；
+policy/basis version；
+trusted fee membership。
+③ v1 一张 Invoice = 一笔 FeeCalculation / 单币种
+
+PASS。
+
+批准 v1：
+
+1 BillingInvoice = 1 FeeCalculation
+
+并保持：
+
+1 Invoice = 1 currency
+
+不要在 S5 顺便实现 aggregation engine。
+
+因此：
+
+多 FeeCalculation 聚合 → fail-closed；
+multi-currency aggregation → fail-closed；
+FX conversion → unsupported；
+客户端不得决定汇率。
+
+方案 B BillingInvoiceFee 暂不实现。
+
+未来真正出现“一张 invoice 聚合 N 个 fee calculations”的产品需求，再单独做 Schema/Domain Gate。
+
+④ 已发行 Invoice 的 reversal/correction
+
+PASS。
+
+v1 继续 fail-closed。
+
+S5 不实现：
+
+Credit Note；
+Debit Note；
+Invoice reversal；
+Invoice correction；
+自动重开 Invoice；
+Fee reversal 自动 VOID Invoice；
+refund/payment reversal。
+
+出现：
+
+FeeCalculationAdjustment
+或
+SettlementAdjustment
+
+影响已发行 Invoice 时：
+
+必须形成明确的：
+
+NEEDS_BILLING_ADJUSTMENT / equivalent domain state
+
+而不是静默修改历史 Invoice。
+
+后续独立 Gate 再设计 Credit/Adjustment model。
+
+KEEP
+
+批准以下 DB invariants：
+
+FeeCalculation.billingInvoiceId
+一旦 non-null → immutable。
+
+已关联 Invoice 非 DRAFT 后：
+
+fee amount immutable；
+currency immutable；
+canonical fee basis immutable。
+
+Invoice 一旦 ISSUED：
+
+invoice financial content immutable；
+basis immutable；
+customer identity immutable；
+currency/amount immutable。
+
+状态变化只能走显式白名单。
+
+注意：
+
+status transition ≠ content mutation permission。
+
+CHANGE B — 状态机不要把 PAID 提前带入 S5 行为
+
+现有 BillingStatus 可以保留 PAID/PARTIALLY_PAID 枚举兼容性，但 S5 不得新增任何自动进入这些状态的路径。
+
+S5 的实际能力止于：
+
+DRAFT → ISSUED
+
+Payment domain 仍完全关闭。
+
+TEST
+
+S5 实施至少永久验证：
+
+server canonical invoice basis deterministic；
+client digest/amount/currency/customer identity spoof rejected；
+billing.invoice_issue 独立 approval；
+fee approval 无法执行 invoice issue；
+approval 后 fee amount drift → reject；
+currency drift → reject；
+customer identity drift → reject；
+membership/policy/basis drift → reject；
+exact replay → same Invoice / REUSED；
+VOID 后 exact same basis 仍不得创建第二 identity；
+conflicting immutable basis → INVOICE_BASIS_CONFLICT；
+same basis concurrent issue → at most one；
+same approval + distinct execution → exactly once；
+billingInvoiceId post-link mutation → DB reject；
+issued Invoice content mutation → DB reject；
+invalid status transition → DB/service reject；
+invoice currency != FeeCalculation currency → INVOICE_CURRENCY_MISMATCH；
+multi-fee aggregation → fail-closed；
+multi-currency/FX → fail-closed；
+approval/linkage/ISSUED/audit 任一步失败 → full rollback；
+FeeAdjustment after issued Invoice 不静默修改 Invoice；
+Payment = 0；
+RecoveryLedger payment mutation = 0；
+autopay = OFF。
+
+并执行：
+
+fresh deploy + upgrade deploy + tenant/immutability inventory + S2/S3/S4 regression。
+
+NEXT
+
+批准直接实施：
+
+R46 S5-A Schema Delta
+→ canonical invoice builder
+→ billing.invoice_issue
+→ PostgreSQL concurrency/immutability tests
+→ regression
+→ R46 S5 FINAL
+
+无需再次提交设计请求。
+
+S5 FINAL 通过之前：
+
+R46 S5 = OPEN。
+
+继续冻结：
+
+Payment activation OFF · autopay OFF · payment collection OFF · external payment write OFF · R13 HOLD · TRANSPORT=false · production credentials OFF。
+
+VERDICT: PASS WITH REVISE — OPTION A AUTHORIZED WITH NON-REUSABLE INVOICE BASIS IDENTITY; INDEPENDENT billing.invoice_issue APPROVED; V1 1 INVOICE = 1 FEE CALCULATION / SINGLE CURRENCY; POST-ISSUE REVERSAL/CORRECTION REMAINS FAIL-CLOSED FOR A FUTURE GATE.
+```

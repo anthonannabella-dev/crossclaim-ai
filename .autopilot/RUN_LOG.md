@@ -1423,3 +1423,9 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 反证被采信：trigger SELECT→INSERT 并发重复 membership + unique-index 创建 23505 = 真实 TOCTOU gap；7 条合成残留清理已归零（不得进入生产路径）。
 - NEXT：R46 S5 Invoice Linkage（六项要求 + 20 项测试）；若 BillingInvoice schema 不足 DB boundary，先提最小 S5-A Schema Delta Request。
 - 归档：AI-ARCHITECT-INBOX.md（逐字 ```text + FULL_COPY_OK）。
+
+## 2026-10-02 JST — MSG-20261002-63 = PASS WITH REVISE（S5 方案 A 获准；basis identity 不可复用）
+
+- CHANGE A：唯一索引改为 UNIQUE(org, invoiceBasisDigest) WHERE invoiceBasisDigest IS NOT NULL（不得用 status <> VOID；VOID 不释放 basis identity）。
+- billing.invoice_issue 独立入口批准（targetRef = invoiceBasisDigest；不得继承任何上游 approval）。
+- 归档：AI-ARCHITECT-INBOX.md（逐字 ```text + FULL_COPY_OK）。
