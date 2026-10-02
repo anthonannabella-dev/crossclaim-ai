@@ -173,6 +173,49 @@ describe('PC-12A FINAL — money truth', () => {
     expect(result.reversalPolicy.reusesExistingMoneyTruth).toBe(true);
   });
 
+  it('FINAL-2：prerequisites 就绪但 payment 未开启 → PREREQUISITES_READY_NOT_ACTIVATED', () => {
+    const result = project({ ...defaultPaymentActivationFacts(), ...allGreen });
+    expect(result.activationReady).toBe(true);
+    expect(result.activationState).toBe('NOT_ACTIVATED');
+    expect(result.readinessMeaning).toBe('PREREQUISITES_READY_NOT_ACTIVATED');
+    expect(result.currentState.payment).toBe('ZERO');
+  });
+
+  it('FINAL-2：payment 真正开启 → ACTIVATED 且 readinessMeaning 不得再写 NOT_ACTIVATED', () => {
+    const result = project({ ...defaultPaymentActivationFacts(), ...allGreen, paymentActivated: true });
+    expect(result.activationState).toBe('ACTIVATED');
+    expect(result.readinessMeaning).toBe('PREREQUISITES_READY_AND_ACTIVATED');
+    expect(result.readinessMeaning).not.toContain('NOT_ACTIVATED');
+  });
+
+  it('FINAL-2：activationState 只由 paymentActivated 决定（autopay / collection / externalWrite 单独开启不算）', () => {
+    for (const key of ['autopayActivated', 'collectionActivated', 'externalWriteActivated'] as const) {
+      const result = project({ ...defaultPaymentActivationFacts(), ...allGreen, [key]: true });
+      expect(result.currentState.payment).toBe('ZERO');
+      expect(result.activationState).not.toBe('ACTIVATED');
+      expect(result.readinessMeaning).not.toBe('PREREQUISITES_READY_AND_ACTIVATED');
+    }
+  });
+
+  it('FINAL-2：payment 开启但 collection 仍关是合法状态（payment 可 ACTIVATED，collection 仍 OFF）', () => {
+    const result = project({
+      ...defaultPaymentActivationFacts(),
+      ...allGreen,
+      paymentActivated: true,
+      collectionActivated: false,
+    });
+    expect(result.activationState).toBe('ACTIVATED');
+    expect(result.currentState.payment).toBe('ENABLED');
+    expect(result.currentState.collection).toBe('OFF');
+  });
+
+  it('FINAL-2：prerequisites 未就绪时 readinessMeaning = PREREQUISITES_NOT_READY（与 activationState 不冲突）', () => {
+    const result = project(defaultPaymentActivationFacts());
+    expect(result.activationReady).toBe(false);
+    expect(result.activationState).toBe('NOT_ACTIVATED');
+    expect(result.readinessMeaning).toBe('PREREQUISITES_NOT_READY');
+  });
+
   it('输出不含任何 secret 取值', () => {
     const raw = JSON.stringify(project({ ...defaultPaymentActivationFacts(), ...allGreen }));
     for (const forbidden of ['sk_', 'whsec', 'client_secret', 'password']) {

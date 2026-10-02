@@ -72,7 +72,16 @@ const ACTIVATION_PREREQUISITES = [
 export interface PaymentActivationReadiness {
   activationReady: boolean;
   ready: boolean;
-  readinessMeaning: 'PREREQUISITES_READY_NOT_ACTIVATED' | 'PREREQUISITES_NOT_READY';
+  /**
+   * 必须与**当前 payment 状态**一致（PC-12A FINAL-2 / MSG-20261003-104 ⑪⑫）：
+   *   !activationReady                                   → PREREQUISITES_NOT_READY
+   *   activationReady && !paymentActivated               → PREREQUISITES_READY_NOT_ACTIVATED
+   *   activationReady && paymentActivated                → PREREQUISITES_READY_AND_ACTIVATED
+   */
+  readinessMeaning:
+    | 'PREREQUISITES_NOT_READY'
+    | 'PREREQUISITES_READY_NOT_ACTIVATED'
+    | 'PREREQUISITES_READY_AND_ACTIVATED';
   posture: PaymentActivationPosture;
   internalReady: boolean;
   currentState: {
@@ -133,13 +142,17 @@ export function projectPaymentActivationReadiness(
   for (const key of [...INTERNAL_CHECKS, ...ACTIVATION_PREREQUISITES, 'paymentProcessingEnabled'] as const) {
     checks[key] = { value: facts[key], source: sources[key] ?? 'CAPABILITY' };
   }
-  const activated =
-    facts.paymentActivated || facts.collectionActivated || facts.autopayActivated || facts.externalWriteActivated;
+  // PC-12A FINAL-2（MSG-20261003-104 ⑬⑭）：activationState 只由 **paymentActivated** 决定；
+  // collection / autopay / externalWrite 是刻意独立的状态，不得反过来证明 payment 已启用。
   const at = (options.now ?? (() => new Date()))();
   return {
     activationReady,
     ready: activationReady,
-    readinessMeaning: activationReady ? 'PREREQUISITES_READY_NOT_ACTIVATED' : 'PREREQUISITES_NOT_READY',
+    readinessMeaning: !activationReady
+      ? 'PREREQUISITES_NOT_READY'
+      : facts.paymentActivated
+        ? 'PREREQUISITES_READY_AND_ACTIVATED'
+        : 'PREREQUISITES_READY_NOT_ACTIVATED',
     posture,
     internalReady,
     currentState: {
@@ -149,7 +162,7 @@ export function projectPaymentActivationReadiness(
       externalWrite: facts.externalWriteActivated ? 'ON' : 'OFF',
       r13: facts.r13Released ? 'RELEASED' : 'HOLD',
     },
-    activationState: activated ? 'ACTIVATED' : 'NOT_ACTIVATED',
+    activationState: facts.paymentActivated ? 'ACTIVATED' : 'NOT_ACTIVATED',
     activationPrerequisites: {
       providerCredentialsConfigured: facts.providerCredentialsConfigured,
       r13Released: facts.r13Released,
