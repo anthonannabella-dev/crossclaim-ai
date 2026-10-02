@@ -18,6 +18,8 @@ import { PrismaClient } from '@prisma/client';
 import { loadEnv } from './config/env';
 import { createLogger, type Logger, type LogLevel } from './config/logger';
 import { checkHealth, healthHttpStatus } from './services/health';
+import { getOpsReadiness } from './services/ops/ops-readiness';
+import { createRateLimiter, rateLimitPolicyFromEnv } from './services/ops/rate-limit';
 import { checkReadiness, countLocalMigrations, readinessHttpStatus } from './services/readiness';
 import { killSwitchConfigFromEnv } from './services/operations/kill-switch';
 import { EnvValuesError, validateEnvValues } from './config/env';
@@ -47,6 +49,9 @@ import {
   handleAuthRequest,
   handleDataRequest,
   handleUploadRequest,
+  parseCookies,
+  resolveSession,
+  SESSION_COOKIE,
 } from './services/auth';
 import { handleWorkflowRequest } from './services/workflow';
 import { createAppActionGuard } from './services/action-guard/runtime-guard-composition';
@@ -115,6 +120,7 @@ let metrics: ReturnType<typeof createMetrics> | undefined;
  * MSG-20260929-68 S3：进程级只读探针 —— 能否完成一次控制面读取与生效值解析。
  * 使用哨兵租户 id（不存在的组织），不读取任何真实租户数据，也不外泄任何租户信息。
  */
+
 async function probeKillSwitchResolver(resolver: EffectiveKillSwitchResolver): Promise<boolean> {
   const sentinelOrganizationId = '00000000-0000-4000-8000-000000000000';
   const results = await resolver.resolveAll(sentinelOrganizationId);
@@ -128,6 +134,11 @@ export function createServer(deps: ServerDeps): http.Server {
     controlRequests: { findMany: (args) => prisma.killSwitchRequest.findMany(args) },
     config: killSwitchConfigFromEnv(),
   });
+  /** PC-08：匿名入口的 rate limit 基线（每次装配读取环境；进程内固定窗口）。 */
+  const rateLimitPolicy = rateLimitPolicyFromEnv();
+  const authRateLimiter = createRateLimiter(rateLimitPolicy);
+  /** PC-08：Action Guard 单例（缺省装配为 READ_ONLY 姿态），供 workflow 分支与 ops 视图共享。 */
+  const actionGuard = deps.actionGuard ?? createAppActionGuard({ prisma, killSwitchResolver });
   // 审计 IP 盐值只影响“谁”的哈希；缺失时保持空值（不阻塞服务启动）
   const auditIpSalt = (() => {
     try {
@@ -187,6 +198,20 @@ export function createServer(deps: ServerDeps): http.Server {
     };
 
     // C-0008-A 内部认证端点：仅服务本地/内部 Web 应用，未做公网暴露
+    // PC-08：最敏感的匿名入口限流基线（只拒绝过量请求，不读取/记录任何凭据）。
+    if (req.method === 'POST' && (url === '/auth/login' || url === '/auth/signup')) {
+      const clientKey = (req.socket.remoteAddress ?? 'unknown') + '|' + url;
+      const decision = authRateLimiter.check(url, clientKey);
+      if (!decision.allowed) {
+        res.writeHead(429, {
+          'content-type': 'application/json; charset=utf-8',
+          'retry-after': String(Math.ceil(decision.retryAfterMs / 1000)),
+        });
+        res.end(JSON.stringify({ error: 'RATE_LIMITED', retryAfterMs: decision.retryAfterMs }));
+        return;
+      }
+    }
+
     if (auth && url.startsWith('/auth/')) {
       handleAuthRequest(req, res, auth)
         .then((handled) => {
@@ -244,7 +269,7 @@ export function createServer(deps: ServerDeps): http.Server {
         prisma,
         session: auth.session,
         // 授权项 ②（MSG-20260930-16 §6）：受保护入口的运行时闸门；缺省 READ_ONLY → 拒绝写入
-        actionGuard: deps.actionGuard ?? createAppActionGuard({ prisma, killSwitchResolver }),
+        actionGuard,
         // ② claim.submit：人工提交（claim.submitted_by_human）沿用同一个 AuditWriter；
         // 未注入时由路由按同策略自建，盐值不足则 fail closed
         ...(audit ? { audit } : {}),
@@ -297,6 +322,57 @@ export function createServer(deps: ServerDeps): http.Server {
             version: VERSION,
           }),
         );
+      return;
+    }
+
+    // PC-08：liveness 与 readiness 分离（liveness 只证明进程存活，不依赖任何下游）。
+    if (req.method === 'GET' && url === '/health/live') {
+      send(200, { status: 'ok', kind: 'liveness', checkedAt: new Date().toISOString() });
+      return;
+    }
+    if (req.method === 'GET' && url === '/health/ready') {
+      checkHealth({
+        db: prisma,
+        version: VERSION,
+        killSwitch: () => probeKillSwitchResolver(killSwitchResolver),
+      })
+        .then((result) =>
+          send(healthHttpStatus(result), { kind: 'readiness', ...result }),
+        )
+        .catch(() => send(503, { kind: 'readiness', status: 'degraded' }));
+      return;
+    }
+
+    // PC-08：只读运维就绪视图（需要 OWNER / ADMIN 会话）。
+    if (req.method === 'GET' && url === '/ops-readiness') {
+      if (!auth) {
+        send(503, { error: 'ops_unavailable' });
+        return;
+      }
+      const cookie = parseCookies(req.headers.cookie)[SESSION_COOKIE];
+      if (!cookie) {
+        send(401, { error: 'UNAUTHENTICATED' });
+        return;
+      }
+      resolveSession(cookie, auth.session)
+        .then(async (context) => {
+          if (!context) {
+            send(401, { error: 'UNAUTHENTICATED' });
+            return;
+          }
+          if (context.role !== 'OWNER' && context.role !== 'ADMIN') {
+            send(403, { error: 'FORBIDDEN' });
+            return;
+          }
+          const readiness = await getOpsReadiness({
+            prisma,
+            killSwitchProbe: () => probeKillSwitchResolver(killSwitchResolver),
+            actionGuardConfigured: Boolean(actionGuard),
+            rateLimit: rateLimitPolicy,
+          });
+          send(200, readiness);
+        })
+        .catch(() => send(503, { error: 'ops_unavailable' }));
       return;
     }
 

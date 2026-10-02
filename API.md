@@ -90,6 +90,9 @@ C-0008-B2（Case / Evidence / Claim Draft / Billing）的端点尚未实现。
 | GET | `/recovery-money` | query：`caseId`（可选） | 200 `{ organization: { byCurrency, collection, payment }, cases, feeNote }`（PC-05 客户可见追回金额只读投影；按币种分组、无 FX、EXPECTED≠RECEIVED、fee calculated≠collected、collection=NOT_ENABLED） | 401 `UNAUTHENTICATED`；403 `FORBIDDEN`（VIEWER；FINANCE 可见账单金额）；404 `NOT_FOUND`（caseId 跨租户 / 不存在） |
 | GET | `/accounts` | — | 200 `{ organizationId, platforms: [{ platform, accounts: [{ id, platform, externalAccountId, displayName, identityVersion, status, createdAt, connections, activeConnectionCount }] }], unboundLegacyConnections, onboarding, legend }`（PC-06 账户管理只读投影；PlatformAccount 与 SourceConnection 分层；多平台多账户分组；不含 credentialRef / token / config） | 401 `UNAUTHENTICATED`；403 `FORBIDDEN`（非 OWNER / ADMIN） |
 | GET | `/entitlements` | — | 200 `{ plan, planKnown, entitlements: [{ key, allowed, limit, used, remaining, usageState, reason, source, available, upgradeRequired, paymentRequired, entry }], packageUnlock, upgrade }`（PC-07 客户权益 / 套餐解锁只读投影；未知 plan → 全部 DENIED；`paymentRequired` ≠ 可付款；升级 available=false + `PAYMENT_NOT_ENABLED`） | 401 `UNAUTHENTICATED`；403 `FORBIDDEN`（VIEWER） |
+| GET | `/health/live` | — | 200 `{ status: 'ok', kind: 'liveness', checkedAt }`（liveness：只证明进程存活，不依赖任何下游） | — |
+| GET | `/health/ready` | — | 200 `{ kind: 'readiness', status, checks, killSwitchResolver, ... }`（readiness：数据库连通性等下游检查） | 503 `degraded`（依赖不可用，便于负载均衡摘除） |
+| GET | `/ops-readiness` | — | 200 `{ liveness, readiness, killSwitch, actionGuard, failedJobs, rateLimit, transport, runbookRef, checkedAt }`（PC-08 只读运维就绪视图；`transport` 恒为 `DISABLED`；不含 secret） | 401 `UNAUTHENTICATED`；403 `FORBIDDEN`（非 OWNER / ADMIN）；503 `ops_unavailable` |
 
 三者都按会话 `organizationId` 过滤，最多 100 条（默认 20）。非 GET 请求不匹配该处理器，按 404 处理。
 
