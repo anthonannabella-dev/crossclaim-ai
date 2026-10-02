@@ -657,3 +657,13 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - 分阶段：P0 不影响主线（已满足）· P1 架构不阻碍（已完成）· P2 记录设计（已完成）· **P3 首批 20–30 高意图页（待核心引擎稳定，先提最小 Schema Delta）** · P4 100+（待转化验证）。
 - 明确不做：批量页面 / AI 博客 / 改事实模型 / 页面内复制规则 / 大型 CMS / 降低审计·安全·HITL·资金边界。
 - 队列影响：**NONE**（与 Gate 7 / R46 并行，不占用主线队列）。
+
+### TRACK C2 — Multi-Platform / Multi-Account（HOST PRODUCT ARCHITECTURE REQUIREMENT，长期约束）
+
+- 文档：`docs/releases/MULTI-PLATFORM-MULTI-ACCOUNT-AUDIT-AND-SCHEMA-DELTA-PROPOSAL.md`；STATE.multi_account_directive。
+- 目标模型：Organization → Platform → PlatformAccount/Store → SourceConnection(s) → SourceTransaction/CanonicalFact → RecoveryOpportunity → Case → Claim → Settlement。
+- STEP 1/2 结论（审计已完成）：Organization / Connection / SourceTransaction（dedupeKey 含 connectionId）基本可支撑；**PlatformAccount 实体缺失**；`Channel` 枚举混装平台与用途；**`CanonicalFact.factKey = TYPE:EXTERNALID`（org 级）→ 同 org 不同账户同号单据会被合并（真实缺陷）**；RecoveryOpportunity / Case 缺 account 归因。
+- STEP 3 判定：模型不足 → 已提交**最小 Schema Delta Proposal**（Platform 枚举 + PlatformAccount 表 + SourceConnection.platformAccountId + accountId 下推到 Transaction/CanonicalFact/Opportunity + factKey 账户作用域 + partial unique 兼容 legacy + 回填 fail-closed）。
+- 冻结：token 不入 PlatformAccount；label 不做身份；不同账户不得合并 CanonicalFact；当前不做 Enterprise RBAC / account-scoped ACL（仅预留挂点）；费率仍按 Recovery Outcome，不做 per-seat/per-store。
+- 10 项验收场景已列为未来永久回归基线（见文档 §6）。
+- 队列影响：**NONE**；实施需架构方先裁决 Schema Delta（未开始）。

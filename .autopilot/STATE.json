@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261002-64",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-02T02:19:44.941Z",
+  "updated_at": "2026-10-02T02:22:00.709Z",
   "previous_head": "8bcd35c",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -51,8 +51,8 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-02T02:17:58.548Z",
   "state": "IMPLEMENT",
-  "last_action": "登记 TRACK C —— Growth / Programmatic SEO / Recovery Database 长期约束（docs-only；P1 核查：现有架构不阻碍统一模型）",
-  "last_action_at": "2026-10-02T02:19:23.452Z",
+  "last_action": "登记 TRACK C2 —— Multi-Platform/Multi-Account 审计（STEP 1/2 完成，发现 CanonicalFact 跨账户合并缺陷）+ 最小 Schema Delta Proposal（未实施）",
+  "last_action_at": "2026-10-02T02:22:00.709Z",
   "next_action": "R46 S5 已 CLOSED；等待架构方指定下一单元（Credit/Adjustment 独立 gate 设计，或 Gate 7 ② 队列的下一小批次）。Payment domain 继续关闭，R13 HOLD。",
   "current_head": "8bcd35c",
   "reviewed_head": "07b7009",
@@ -3101,5 +3101,79 @@
     "detected": "run 36952877697 (HEAD 8bcd35c) FAILED — 既有 payment.capture / payment.replay 对抗性夹具在 ISSUED 发票上改 total，被新守卫 INVOICE_CONTENT_IMMUTABLE_AFTER_ISSUE 拒绝",
     "resolution": "SELF_RESOLVE：夹具内临时停用 cc_billinginvoice_issue_guard 以模拟锁协议之外的直接 DB 写入者（显式注明，生产路径不受影响）+ 既有 billing.draft 用例 14 按 v1 一票一费/合法状态顺序更新",
     "verification": "payment 两套件 35/35 · 全量 npm test 185 files / 1831 tests PASS · HEAD e5202d6 run 36954356275 success"
+  },
+  "multi_account_directive": {
+    "directive": "HOST PRODUCT ARCHITECTURE REQUIREMENT — MULTI-PLATFORM / MULTI-ACCOUNT",
+    "doc": "docs/releases/MULTI-PLATFORM-MULTI-ACCOUNT-AUDIT-AND-SCHEMA-DELTA-PROPOSAL.md",
+    "registered_at": "2026-10-02T02:22:00.709Z",
+    "track": "TRACK C2（与 TRACK A/B 并行；不打断 R46 → Full Regression）",
+    "queue_impact": "NONE",
+    "model": "Organization → Platform → PlatformAccount/Store → SourceConnection(s) → SourceTransaction/CanonicalFact → RecoveryOpportunity → Case → Claim → Settlement",
+    "step1_audit": {
+      "organization": "OK",
+      "platform": "PARTIAL —— Channel 枚举混装平台与用途（AMAZON_FBA/AMAZON_OTHER vs UPS/FEDEX/DHL），缺 TIKTOK_SHOP/WALMART/SHOPIFY/STRIPE/PAYPAL/CUSTOMS",
+      "platform_account": "MISSING —— 无 Store/Account 实体，只能用 SourceConnection.label 近似",
+      "source_connection": "PARTIAL —— 一 Store 多连接可行（label 区分），但无 account 归属列 / external account id / marketplace",
+      "source_transaction": "OK（dedupeKey 含 connectionId）；WARN：connectionId 可空 → 回退 org 级",
+      "canonical_fact": "GAP —— factKey = REFERENCETYPE:EXTERNALID（org 级），@@unique([organizationId, factKey]) → 跨账户合并",
+      "opportunity_case": "PARTIAL —— 无 account 归因（无法 per-store 小计）"
+    },
+    "step2_finding": {
+      "verdict": "CROSS_ACCOUNT_MERGE_RISK_CONFIRMED",
+      "evidence": [
+        "apps/api/src/services/reconciliation/reconcile.ts :: factKeyOf() = `${type}:${externalId}`（无 connection/account）",
+        "apps/api/prisma/schema.prisma :: CanonicalFact @@unique([organizationId, factKey])",
+        "apps/api/src/services/canonical/writer.ts:145 :: upsert 以 organizationId_factKey 为键",
+        "SourceConnection @@unique([organizationId, channel, label]) —— label 是展示名，非稳定身份"
+      ],
+      "impact": "同一 Organization 下两个 Amazon 账户（或 TikTok Shop / Walmart Seller）上报相同 orderId/INV-1001 → 被判为同一 canonical fact 并被合并/冲突仲裁"
+    },
+    "step3_decision": "MODEL_INSUFFICIENT → 提交最小 Schema Delta Proposal（未实施）",
+    "proposal": {
+      "platform_enum": [
+        "AMAZON",
+        "TIKTOK_SHOP",
+        "WALMART",
+        "SHOPIFY",
+        "STRIPE",
+        "PAYPAL",
+        "UPS",
+        "FEDEX",
+        "DHL",
+        "CUSTOMS",
+        "OTHER"
+      ],
+      "platform_account_table": "PlatformAccount(id, organizationId, platform, externalAccountId, marketplace?, region?, displayName, status, createdAt, updatedAt) @@unique([organizationId, platform, externalAccountId])；token 不入此表",
+      "connection_link": "SourceConnection.platformAccountId String?（一个 Store 多 Connection）",
+      "scope_down": "SourceTransaction.accountId / CanonicalFact.accountId / RecoveryOpportunity.accountId（服务端派生）",
+      "fact_key_upgrade": "factKey = ACCOUNT{externalAccountId}|{type}:{externalId}；@@unique([organizationId, accountId, factKey]) + partial unique 兼容 legacy（accountId IS NULL）",
+      "backfill": "迁移内置重复审计（同 org 同 factKey 不同 account → 冲突清单，禁止静默合并）；无法推断保持 NULL；新写入强制 account 维度",
+      "not_doing": [
+        "不批量重写 Schema",
+        "不为每平台写并行系统",
+        "不实现全量同步模块",
+        "token/secret 不入 PlatformAccount",
+        "label 不做身份",
+        "不合并跨账户 CanonicalFact",
+        "当前不做 Enterprise RBAC / account-scoped ACL",
+        "不开放 Production API / external write"
+      ]
+    },
+    "acceptance_scenarios": [
+      "1 Org 同时接入 Amazon + TikTok + Shopify + UPS",
+      "同一平台两个 Seller Account 独立",
+      "两账户相同 orderId → 不得合并",
+      "一个 Store 挂多条 Connection",
+      "Store A revoke 不影响 Store B",
+      "Connection 凭据轮换/重连不影响同账户其它连接既有事实",
+      "Opportunity / Case 可追溯至 Account 与 Connection",
+      "Platform 小计 = 各 Account 小计之和",
+      "Account 停用/删除不破坏历史追溯",
+      "跨租户严格 fail-closed"
+    ],
+    "billing": "继续按 Recovery Outcome；不做 per-seat / per-store 订阅；多账户不重复收费",
+    "permissions": "仍以 Organization 为租户边界；platformAccountId 仅预留挂点，不实现 account-scoped ACL",
+    "implementation_started": "NO（Schema Delta 需架构方先裁决）",
+    "boundary": "Payment activation OFF · autopay OFF · payment collection OFF · external payment write OFF · R13 HOLD · TRANSPORT=false · 无生产凭据"
   }
 }
