@@ -491,6 +491,11 @@ model PlatformAccount {
 
   organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   connections  SourceConnection[]
+  transactions SourceTransaction[]
+  canonicalFacts CanonicalFact[]
+  opportunities  RecoveryOpportunity[]
+  claimItems     ClaimItem[]
+  evidenceArtifacts EvidenceArtifact[]
 
   @@unique([organizationId, platform, externalAccountId, identityVersion])
   @@index([organizationId, platform, status])
@@ -585,6 +590,9 @@ model SourceTransaction {
   id             String         @id @default(uuid())
   organizationId String
   connectionId   String?
+  /// TRACK C2 M4：account provenance（服务端从 connection.platformAccountId 派生；不接受客户端提交）
+  /// 绑定后不可改写（DB 不变量 cc_account_binding_immutable__SourceTransaction）。
+  accountId      String?
   importBatchId  String?
   domain         RecoveryDomain
   channel        Channel
@@ -601,6 +609,7 @@ model SourceTransaction {
 
   organization         Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   connection           SourceConnection?      @relation(fields: [connectionId], references: [id])
+  platformAccount      PlatformAccount?       @relation(fields: [accountId], references: [id], onDelete: SetNull)
   importBatch          ImportBatch?           @relation(fields: [importBatchId], references: [id])
   evaluations          RuleEvaluation[]
   canonicalFactSources CanonicalFactSource[]
@@ -610,6 +619,7 @@ model SourceTransaction {
   @@unique([organizationId, id])
   @@index([organizationId, channel, occurredAt])
   @@index([organizationId, externalId])
+  @@index([organizationId, accountId])
 }
 
 // ============================================================
@@ -671,6 +681,10 @@ model CanonicalFact {
   organizationId       String
   domain               RecoveryDomain
   channel              Channel
+  /// TRACK C2 M4/M5：account scope 是**结构化字段**，不拼进 factKey；
+  /// 非空时身份 = (organizationId, accountId, factKey)；accountId 为 NULL 时走 legacy 索引
+  /// CanonicalFact_org_factkey_legacy_key（由迁移创建）。绑定后不可改写。
+  accountId            String?
   /// REFERENCETYPE:EXTERNALID（统一大写），与 reconciliation 的事实键一致
   factKey              String
   referenceType        String?
@@ -685,14 +699,16 @@ model CanonicalFact {
   lastUpdatedAt        DateTime            @updatedAt
 
   organization      Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  platformAccount   PlatformAccount?        @relation(fields: [accountId], references: [id], onDelete: SetNull)
   sources           CanonicalFactSource[]
   evaluations       RuleEvaluation[]
   shadowEvaluations RuleEvaluationShadow[]
 
-  @@unique([organizationId, factKey])
+  @@unique([organizationId, accountId, factKey])
   @@unique([organizationId, id])
   @@index([organizationId, domain, channel, occurredAt])
   @@index([organizationId, status])
+  @@index([organizationId, accountId])
 }
 
 /// 事实 ↔ 原始行（溯源不被销毁）：原始数据永远保留在 SourceTransaction。
@@ -755,6 +771,8 @@ model RecoveryOpportunity {
   organizationId    String
   domain            RecoveryDomain
   channel           Channel
+  /// TRACK C2 M4：account provenance（服务端派生；绑定后不可改写）
+  accountId         String?
   status            OpportunityStatus @default(DETECTED)
   opportunityType   String
   title             String
@@ -772,6 +790,7 @@ model RecoveryOpportunity {
   updatedAt         DateTime          @updatedAt
 
   organization  Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  platformAccount PlatformAccount?      @relation(fields: [accountId], references: [id], onDelete: SetNull)
   evaluations   RuleEvaluation[]
   caseLinks     CaseOpportunity[]
   claimItems    ClaimItem[]
@@ -781,6 +800,7 @@ model RecoveryOpportunity {
   @@unique([organizationId, id])
   @@index([organizationId, status])
   @@index([organizationId, channel, detectedAt])
+  @@index([organizationId, accountId])
   @@index([organizationId, claimDeadline])
 }
 
@@ -835,6 +855,8 @@ model RecoveryGraphEdge {
 model EvidenceArtifact {
   id             String       @id @default(uuid())
   organizationId String
+  /// TRACK C2 M4：证据必须能追溯到具体 platform account（服务端派生；绑定后不可改写）
+  accountId      String?
   kind           EvidenceKind
   fileAssetId    String?
   connectionId   String?
@@ -846,6 +868,7 @@ model EvidenceArtifact {
   createdAt      DateTime     @default(now())
 
   organization          Organization                       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  platformAccount       PlatformAccount?                    @relation(fields: [accountId], references: [id], onDelete: SetNull)
   fileAsset             FileAsset?                         @relation(fields: [fileAssetId], references: [id])
   connection            SourceConnection?                  @relation(fields: [connectionId], references: [id])
   caseLinks             CaseEvidence[]
@@ -858,6 +881,7 @@ model EvidenceArtifact {
   @@unique([organizationId, id])
   @@index([organizationId, kind])
   @@index([organizationId, fileAssetId])
+  @@index([organizationId, accountId])
 }
 
 model EvidenceEdge {
@@ -1636,6 +1660,8 @@ enum ClaimEvidenceType {
 model ClaimItem {
   id                 String                 @id @default(uuid())
   organizationId     String
+  /// TRACK C2 M4：claim 必须能追溯到具体 platform account（服务端派生；绑定后不可改写）
+  accountId          String?
   /// REVIEW_REQUIRED 起必须存在（服务层不变量，不用数据库 CHECK）
   caseId             String?
   opportunityId      String?
@@ -1666,6 +1692,7 @@ model ClaimItem {
   updatedAt          DateTime               @updatedAt
 
   organization               Organization                     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  platformAccount            PlatformAccount?                 @relation(fields: [accountId], references: [id], onDelete: SetNull)
   case                       Case?                            @relation(fields: [caseId], references: [id])
   opportunity                RecoveryOpportunity?             @relation(fields: [opportunityId], references: [id])
   ruleVersion                RuleVersion?                     @relation(fields: [ruleVersionId], references: [id])
@@ -1684,6 +1711,7 @@ model ClaimItem {
   @@unique([organizationId, id])
   @@index([organizationId, status, occurredAt])
   @@index([caseId])
+  @@index([organizationId, accountId])
 }
 
 model ClaimItemEvidence {

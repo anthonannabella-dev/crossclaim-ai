@@ -198,8 +198,8 @@ describe('C-0006-B2 — identity backfill planner（真实 PostgreSQL）', () =>
     });
 
     // INV-1002 的事实置为 CONFLICT
-    await prisma.canonicalFact.update({
-      where: { organizationId_factKey: { organizationId: ORG, factKey: 'INVOICE:INV-1002' } },
+    await prisma.canonicalFact.updateMany({
+      where: { organizationId: ORG, accountId: null, factKey: 'INVOICE:INV-1002' },
       data: { status: 'CONFLICT' },
     });
 

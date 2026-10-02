@@ -193,8 +193,8 @@ describe('C-0006-B1 — canonical shadow run（真实 PostgreSQL）', () => {
   });
 
   it('CONFLICT 事实被排除并逐条审计', async () => {
-    await prisma.canonicalFact.update({
-      where: { organizationId_factKey: { organizationId: ORG, factKey: 'INVOICE:INV-1002' } },
+    await prisma.canonicalFact.updateMany({
+      where: { organizationId: ORG, accountId: null, factKey: 'INVOICE:INV-1002' },
       data: { status: 'CONFLICT' },
     });
 

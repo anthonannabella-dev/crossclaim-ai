@@ -265,8 +265,8 @@ describe('C-0006-B2 Step 2 — dual write + identity parity（真实 PostgreSQL�
   });
 
   it('事实为 CONFLICT 时新评估没有身份 → 计数告警而非静默回退', async () => {
-    await prisma.canonicalFact.update({
-      where: { organizationId_factKey: { organizationId: ORG, factKey: 'INVOICE:INV-1002' } },
+    await prisma.canonicalFact.updateMany({
+      where: { organizationId: ORG, accountId: null, factKey: 'INVOICE:INV-1002' },
       data: { status: 'CONFLICT' },
     });
 
@@ -339,8 +339,8 @@ describe('C-0006-B2 Step 2 — dual write + identity parity（真实 PostgreSQL�
   });
 
   it('canonical 模式缺身份：fail closed（CANONICAL_IDENTITY_REQUIRED），不退化到旧键', async () => {
-    await prisma.canonicalFact.update({
-      where: { organizationId_factKey: { organizationId: ORG, factKey: 'INVOICE:INV-1002' } },
+    await prisma.canonicalFact.updateMany({
+      where: { organizationId: ORG, accountId: null, factKey: 'INVOICE:INV-1002' },
       data: { status: 'CONFLICT' },
     });
     const canonicalRepo = createPrismaDetectionRepository(prisma, { identityMode: 'canonical' });

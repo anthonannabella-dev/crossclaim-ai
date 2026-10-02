@@ -207,8 +207,8 @@ describe('C-0006-A — shadow detection parity（真实 PostgreSQL）', () => {
   });
 
   it('某个事实变成 CONFLICT 后，shadow 路径排除该发票并报出 MISMATCH', async () => {
-    await prisma.canonicalFact.update({
-      where: { organizationId_factKey: { organizationId: ORG, factKey: 'INVOICE:INV-1002' } },
+    await prisma.canonicalFact.updateMany({
+      where: { organizationId: ORG, accountId: null, factKey: 'INVOICE:INV-1002' },
       data: { status: 'CONFLICT' },
     });
 

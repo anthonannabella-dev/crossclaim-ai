@@ -295,6 +295,26 @@
     {
       "name": "cc_tenant_sourceconnection_platformaccountid",
       "table": "SourceConnection"
+    },
+    {
+      "name": "cc_tenant_claimitem_accountid",
+      "table": "ClaimItem"
+    },
+    {
+      "name": "cc_tenant_canonicalfact_accountid",
+      "table": "CanonicalFact"
+    },
+    {
+      "name": "cc_tenant_evidenceartifact_accountid",
+      "table": "EvidenceArtifact"
+    },
+    {
+      "name": "cc_tenant_recoveryopportunity_accountid",
+      "table": "RecoveryOpportunity"
+    },
+    {
+      "name": "cc_tenant_sourcetransaction_accountid",
+      "table": "SourceTransaction"
     }
   ],
   "scopedTriggers": [

@@ -35,11 +35,23 @@
 
 | 模型 | 说明 |
 |---|---|
-| `CanonicalFact` | 统一后的业务事实（金额 / 币种 / 日期 / 外部引用 + 来源计数）。`status=ACTIVE` 才能进入检测；`CONFLICT` 只进审计与对账复核 |
+| `CanonicalFact` | 统一后的业务事实（金额 / 币种 / 日期 / 外部引用 + 来源计数）。`status=ACTIVE` 才能进入检测；`CONFLICT` 只进审计与对账复核。TRACK C2：`accountId` 非空时身份为 `(organizationId, accountId, factKey)` |
 | `CanonicalFactSource` | 事实 ↔ 原始行（`SourceTransaction`）的联结，保存来源类型快照与 `observedAt`；原始数据永不丢失 |
 
 > 相同业务事实可以同时来自 FILE_UPLOAD 与 API：两条原始行都保留，只计 1 个 ACTIVE 事实；
 > 数值冲突 → `CONFLICT` fail closed，禁止进入 Detection / RuleEvaluation / RecoveryOpportunity。
+
+### 多账户作用域（TRACK C2 / MSG-20261002-66 M4–M6）
+
+| 模型 / 字段 | 说明 |
+|---|---|
+| `PlatformAccount` | 业务归属身份：`organizationId + platform + externalAccountId + identityVersion`。**不是**凭据容器（token/secret 不入表，仍由 `SourceConnection.credentialRef` 承担）；`identityVersion` 是外部账户身份规范版本，凭据轮换**不得**产生新身份 |
+| `SourceConnection.platformAccountId` | 1 个 account → N 条连接（API / 上传 / 历史导入）；连接是 transport/auth 生命周期，account 是 business provenance identity。绑定后不可改写 |
+| `accountId` 下推 | `SourceTransaction` / `CanonicalFact` / `RecoveryOpportunity` / `ClaimItem` / `EvidenceArtifact` 均由**服务端**从连接上下文派生，客户端提交即拒绝（`CLIENT_ACCOUNT_FIELD_NOT_TRUSTED`）；绑定后不可改写（DB 不变量 `cc_account_binding_immutable__*`） |
+| 事实身份 | 唯一性使用**结构化字段** `(organizationId, accountId, factKey)`；account **不**拼进 `factKey`。`accountId IS NULL` 的历史行继续走 legacy partial unique `(organizationId, factKey)`（迁移窗口专用） |
+
+> 跨租户引用由 DB 守卫（`cc_tenant_*_accountid`）拒绝：account 必须与行同租户。
+> 回填 fail-closed：只有「来源唯一且一致」才推断 account；不唯一/缺失 → 保持 NULL 并输出 blocker report；重复 → 迁移直接失败（禁止静默合并）。
 
 ### 核心业务实体
 

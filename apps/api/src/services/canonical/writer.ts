@@ -35,23 +35,25 @@ export interface WriteCanonicalFactsResult {
 const ROW_SELECT = {
   id: true,
   connectionId: true,
+  accountId: true,
   referenceType: true,
   externalId: true,
   occurredAt: true,
   amount: true,
   currency: true,
-  connection: { select: { kind: true } },
+  connection: { select: { kind: true, platformAccountId: true } },
 } as const;
 
 type SelectedRow = {
   id: string;
   connectionId: string | null;
+  accountId: string | null;
   referenceType: string | null;
   externalId: string | null;
   occurredAt: Date | null;
   amount: Prisma.Decimal | null;
   currency: string;
-  connection: { kind: string } | null;
+  connection: { kind: string; platformAccountId: string | null } | null;
 };
 
 function project(row: SelectedRow): TransactionProjection {
@@ -59,6 +61,8 @@ function project(row: SelectedRow): TransactionProjection {
     id: row.id,
     connectionId: row.connectionId,
     connectionKind: (row.connection?.kind ?? null) as TransactionProjection['connectionKind'],
+    // 服务端派生：优先已持久化的 accountId，其次连接上下文（迁移窗口内的历史行）。
+    accountId: row.accountId ?? row.connection?.platformAccountId ?? null,
     referenceType: row.referenceType,
     externalId: row.externalId,
     occurredAt: row.occurredAt,
@@ -82,19 +86,38 @@ async function loadRows(
   }) as Promise<SelectedRow[]>;
 }
 
+/**
+ * TRACK C2 M4：作用域相等 ≠ 字段相等。
+ * scope(row) = stored accountId ?? connection.platformAccountId（迁移窗口内历史行的 accountId 仍为 NULL）。
+ * 在内存中判定，而不是写成 SQL 的 relation OR —— 后者会让 1 万行导入退化成超时。
+ */
+function accountScopeOf(row: SelectedRow): string | null {
+  return row.accountId ?? row.connection?.platformAccountId ?? null;
+}
+
 /** Every raw row that belongs to the same fact keys, so conflict detection sees all sources. */
 async function loadRelatedRows(
   tx: Prisma.TransactionClient,
   input: WriteCanonicalFactsInput,
   seed: readonly TransactionProjection[],
 ): Promise<SelectedRow[]> {
-  const referenced = new Map<string, { referenceType: string | null; externalId: string }>();
+  // TRACK C2 M4：关联行必须在**同一 account 作用域**内加载；否则同一 externalId
+  // 在不同 account 之间会被错误地合并成一条事实（或误判为来源冲突）。
+  const referenced = new Map<
+    string,
+    { referenceType: string | null; externalId: string; accountId: string | null }
+  >();
   const unkeyedIds: string[] = [];
   for (const row of seed) {
     if (row.externalId) {
-      const key = `${(row.referenceType ?? 'UNKNOWN').toUpperCase()}:${row.externalId.toUpperCase()}`;
+      const scope = row.accountId ?? '';
+      const key = `${scope}\u0000${(row.referenceType ?? 'UNKNOWN').toUpperCase()}:${row.externalId.toUpperCase()}`;
       if (!referenced.has(key)) {
-        referenced.set(key, { referenceType: row.referenceType, externalId: row.externalId });
+        referenced.set(key, {
+          referenceType: row.referenceType,
+          externalId: row.externalId,
+          accountId: row.accountId ?? null,
+        });
       }
     } else {
       unkeyedIds.push(row.id);
@@ -121,6 +144,69 @@ async function loadRelatedRows(
   }) as Promise<SelectedRow[]>;
 }
 
+/**
+ * TRACK C2 M4/M5：事实身份在 account 作用域内唯一。
+ *
+ * 复合唯一键 (organizationId, accountId, factKey) 在 accountId 为 NULL 时**不**构成
+ * PostgreSQL 唯一约束（NULL 互不相等），因此：
+ *   - accountId 非空 → CanonicalFact_organizationId_accountId_factKey_key 保证；
+ *   - accountId 为空 → CanonicalFact_org_factkey_legacy_key（partial index）保证。
+ * 这里使用 find-first + create，并在 P2002 时**重读同一条事实**再更新；并发下仍然最多
+ * 落一条行 —— 数据库唯一索引才是 correctness source，应用层检查不是。
+ */
+async function persistCanonicalFact(
+  tx: Prisma.TransactionClient,
+  input: WriteCanonicalFactsInput,
+  fact: DerivedFact,
+): Promise<string> {
+  const accountId = fact.accountId ?? null;
+  const identity = {
+    organizationId: input.organizationId,
+    accountId,
+    factKey: fact.factKey,
+  };
+  const update = {
+    referenceType: fact.referenceType,
+    externalId: fact.externalId,
+    occurredAt: fact.occurredAt,
+    amount: fact.amount === null ? null : new Prisma.Decimal(fact.amount),
+    currency: fact.currency,
+    status: fact.status,
+    sourceCount: fact.sourceCount,
+    confirmedAcrossModes: fact.confirmedAcrossModes,
+  };
+
+  const existing = await tx.canonicalFact.findFirst({ where: identity, select: { id: true } });
+  if (existing) {
+    await tx.canonicalFact.update({ where: { id: existing.id }, data: update });
+    return existing.id;
+  }
+
+  try {
+    const created = await tx.canonicalFact.create({
+      data: {
+        organizationId: input.organizationId,
+        domain: input.domain,
+        channel: input.channel,
+        accountId,
+        factKey: fact.factKey,
+        firstSeenAt: input.observedAt,
+        ...update,
+      },
+      select: { id: true },
+    });
+    return created.id;
+  } catch (error) {
+    if (!(error instanceof Prisma.PrismaClientKnownRequestError) || error.code !== 'P2002') {
+      throw error;
+    }
+    const raced = await tx.canonicalFact.findFirst({ where: identity, select: { id: true } });
+    if (!raced) throw error;
+    await tx.canonicalFact.update({ where: { id: raced.id }, data: update });
+    return raced.id;
+  }
+}
+
 export async function writeCanonicalFactsForTransactions(
   tx: Prisma.TransactionClient,
   input: WriteCanonicalFactsInput,
@@ -131,7 +217,9 @@ export async function writeCanonicalFactsForTransactions(
   if (seedRows.length === 0) return { factsWritten: 0, conflicts: [] };
   const seed = seedRows.map(project);
   const relatedRows = await loadRelatedRows(tx, input, seed);
-  const related = relatedRows.map(project);
+  // TRACK C2 M4：只保留与本次 seed 同一 account 作用域的关联行（内存判定，不写进 SQL）。
+  const seedScopes = new Set(seedRows.map((row) => accountScopeOf(row)));
+  const related = relatedRows.filter((row) => seedScopes.has(accountScopeOf(row))).map(project);
 
   const derived = deriveFactsFromTransactions(related.map(toFactSourceTransaction));
   const batchIds = new Set(input.transactionIds);
@@ -141,35 +229,7 @@ export async function writeCanonicalFactsForTransactions(
   const conflicts: DerivedFact[] = [];
 
   for (const fact of derived) {
-    const persisted = await tx.canonicalFact.upsert({
-      where: { organizationId_factKey: { organizationId: input.organizationId, factKey: fact.factKey } },
-      create: {
-        organizationId: input.organizationId,
-        domain: input.domain,
-        channel: input.channel,
-        factKey: fact.factKey,
-        referenceType: fact.referenceType,
-        externalId: fact.externalId,
-        occurredAt: fact.occurredAt,
-        amount: fact.amount === null ? null : new Prisma.Decimal(fact.amount),
-        currency: fact.currency,
-        status: fact.status,
-        sourceCount: fact.sourceCount,
-        confirmedAcrossModes: fact.confirmedAcrossModes,
-        firstSeenAt: input.observedAt,
-      },
-      update: {
-        referenceType: fact.referenceType,
-        externalId: fact.externalId,
-        occurredAt: fact.occurredAt,
-        amount: fact.amount === null ? null : new Prisma.Decimal(fact.amount),
-        currency: fact.currency,
-        status: fact.status,
-        sourceCount: fact.sourceCount,
-        confirmedAcrossModes: fact.confirmedAcrossModes,
-      },
-      select: { id: true },
-    });
+    const persistedId = await persistCanonicalFact(tx, input, fact);
     factsWritten += 1;
 
     for (const transactionId of fact.transactionIds) {
@@ -178,13 +238,13 @@ export async function writeCanonicalFactsForTransactions(
       await tx.canonicalFactSource.upsert({
         where: {
           canonicalFactId_sourceTransactionId: {
-            canonicalFactId: persisted.id,
+            canonicalFactId: persistedId,
             sourceTransactionId: transactionId,
           },
         },
         create: {
           organizationId: input.organizationId,
-          canonicalFactId: persisted.id,
+          canonicalFactId: persistedId,
           sourceTransactionId: transactionId,
           connectionKind: kindOf.get(transactionId) ?? null,
           observedAt: input.observedAt,

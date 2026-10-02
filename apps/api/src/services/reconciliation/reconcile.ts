@@ -18,6 +18,11 @@ export interface FactSourceTransaction {
   id: string;
   connectionId: string | null;
   connectionKind: SourceConnectionKind | null;
+  /**
+   * TRACK C2 M4：account scope。null 表示 legacy（迁移窗口内的历史行）。
+   * account 只作为**结构化维度**参与分组/唯一性，绝不拼进 factKey。
+   */
+  accountId?: string | null;
   referenceType: string | null;
   externalId: string | null;
   occurredAt: Date | null;
@@ -31,6 +36,8 @@ export type FactMode = 'FILE_UPLOAD' | 'API' | 'OTHER';
 export interface CanonicalFact {
   /** `REFERENCETYPE:EXTERNALID` (upper-cased) or `UNKEYED:<transactionId>`. */
   factKey: string;
+  /** TRACK C2 M4：account scope（null = legacy 行）。 */
+  accountId: string | null;
   referenceType: string | null;
   externalId: string | null;
   occurredAt: Date | null;
@@ -59,6 +66,7 @@ export interface SourceConflictEntry {
 
 export interface SourceConflict {
   factKey: string;
+  accountId: string | null;
   referenceType: string | null;
   externalId: string | null;
   reason: SourceConflictReason;
@@ -94,6 +102,14 @@ export function modeOf(kind: SourceConnectionKind | null): FactMode {
   if (kind === 'FILE_UPLOAD') return 'FILE_UPLOAD';
   if (kind === 'API') return 'API';
   return 'OTHER';
+}
+
+/**
+ * TRACK C2 M4：分组 / 冲突检测必须在 account 作用域内进行。
+ * 两个不同 account 里的同一 externalId 是**两条事实**，既不合并也不互判冲突。
+ */
+export function accountScopedKeyOf(transaction: FactSourceTransaction, factKey: string): string {
+  return `${transaction.accountId ?? ''}\u0000${factKey}`;
 }
 
 /** External references are matched case-insensitively; blank ids stay unkeyed. */
@@ -140,6 +156,7 @@ function conflictFor(
   const first = group[0];
   return {
     factKey: factKeyOf(first) ?? `UNKEYED:${first.id}`,
+    accountId: first.accountId ?? null,
     referenceType: first.referenceType,
     externalId: first.externalId,
     reason,
@@ -164,26 +181,32 @@ export function reconcileSourceFacts(rows: readonly FactSourceTransaction[]): Re
   const groups = new Map<string, FactSourceTransaction[]>();
   const unkeyed: FactSourceTransaction[] = [];
 
+  const accountByScopedKey = new Map<string, string | null>();
   for (const row of rows) {
     const key = factKeyOf(row);
     if (key === null) {
       unkeyed.push(row);
       continue;
     }
-    const group = groups.get(key);
+    const scoped = accountScopedKeyOf(row, key);
+    const group = groups.get(scoped);
     if (group) group.push(row);
-    else groups.set(key, [row]);
+    else {
+      groups.set(scoped, [row]);
+      accountByScopedKey.set(scoped, row.accountId ?? null);
+    }
   }
 
   const facts: CanonicalFact[] = [];
   const conflicts: SourceConflict[] = [];
 
-  for (const [factKey, group] of groups) {
+  for (const [scopedKey, group] of groups) {
     const conflict = groupConflict(group);
     if (conflict) {
       conflicts.push(conflict);
       continue;
     }
+    const factKey = factKeyOf(group[0]) ?? `UNKEYED:${group[0].id}`;
     const first = group[0];
     const modes: Record<FactMode, number> = { FILE_UPLOAD: 0, API: 0, OTHER: 0 };
     for (const row of group) modes[modeOf(row.connectionKind)] += 1;
@@ -191,6 +214,7 @@ export function reconcileSourceFacts(rows: readonly FactSourceTransaction[]): Re
     const dated = group.filter((row) => row.occurredAt !== null);
     facts.push({
       factKey,
+      accountId: accountByScopedKey.get(scopedKey) ?? first.accountId ?? null,
       referenceType: first.referenceType,
       externalId: first.externalId,
       occurredAt: dated.length > 0 ? dated[0].occurredAt : null,
@@ -211,6 +235,7 @@ export function reconcileSourceFacts(rows: readonly FactSourceTransaction[]): Re
     modes[modeOf(row.connectionKind)] += 1;
     facts.push({
       factKey: `UNKEYED:${row.id}`,
+      accountId: row.accountId ?? null,
       referenceType: row.referenceType,
       externalId: null,
       occurredAt: row.occurredAt,

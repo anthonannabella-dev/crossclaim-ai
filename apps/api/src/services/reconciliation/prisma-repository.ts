@@ -32,12 +32,13 @@ export function createPrismaReconciliationRepository(
         select: {
           id: true,
           connectionId: true,
+          accountId: true,
           referenceType: true,
           externalId: true,
           occurredAt: true,
           amount: true,
           currency: true,
-          connection: { select: { kind: true } },
+          connection: { select: { kind: true, platformAccountId: true } },
         },
       });
 
@@ -45,6 +46,7 @@ export function createPrismaReconciliationRepository(
         id: row.id,
         connectionId: row.connectionId,
         connectionKind: row.connection?.kind ?? null,
+        accountId: row.accountId ?? row.connection?.platformAccountId ?? null,
         referenceType: row.referenceType,
         externalId: row.externalId,
         occurredAt: row.occurredAt,

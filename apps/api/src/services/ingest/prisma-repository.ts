@@ -55,6 +55,30 @@ export const DEFAULT_IMPORT_CHUNK_SIZE = 1000;
 export const DEFAULT_IMPORT_TRANSACTION_TIMEOUT_MS = 60_000;
 export const DEFAULT_IMPORT_TRANSACTION_MAX_WAIT_MS = 30_000;
 
+/**
+ * TRACK C2 M4：把「连接 → PlatformAccount」读成服务端派生上下文。
+ * 只读取当前 organization 的连接；跨租户连接 id 不会命中（返回 null → legacy 行为）。
+ */
+async function loadAccountScope(
+  tx: Prisma.TransactionClient,
+  organizationId: string,
+  rows: readonly TransactionInsert[],
+): Promise<Map<string, string | null>> {
+  const connectionIds = [
+    ...new Set(rows.map((row) => row.connectionId).filter((id): id is string => id !== null)),
+  ];
+  const scope = new Map<string, string | null>();
+  if (connectionIds.length === 0) return scope;
+  const connections = await tx.sourceConnection.findMany({
+    where: { organizationId, id: { in: connectionIds } },
+    select: { id: true, platformAccountId: true },
+  });
+  for (const connection of connections) {
+    scope.set(connection.id, connection.platformAccountId ?? null);
+  }
+  return scope;
+}
+
 export function createPrismaImportRepository(
   prisma: PrismaClient,
   options: PrismaImportRepositoryOptions = {},
@@ -118,10 +142,19 @@ export function createPrismaImportRepository(
 
         const result = await prisma.$transaction(
           async (tx) => {
+            // TRACK C2 M4：accountId 只由服务端从连接上下文派生；客户端提交即拒绝。
+            for (const row of chunk) {
+              if ((row as { accountId?: unknown }).accountId !== undefined) {
+                throw new Error('CLIENT_ACCOUNT_FIELD_NOT_TRUSTED');
+              }
+            }
+            const accountByConnection = await loadAccountScope(tx, first.organizationId, chunk);
+
             const written = await tx.sourceTransaction.createMany({
               data: chunk.map((row) => ({
                 organizationId: row.organizationId,
                 connectionId: row.connectionId,
+                accountId: row.connectionId ? accountByConnection.get(row.connectionId) ?? null : null,
                 importBatchId: row.importBatchId,
                 domain: row.domain,
                 channel: row.channel,
