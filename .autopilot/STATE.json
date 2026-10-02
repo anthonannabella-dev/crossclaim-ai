@@ -1,6 +1,6 @@
 {
   "gate": "B2-FIX R1",
-  "head": "d78603f",
+  "head": "691635e",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
   "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
@@ -9,8 +9,8 @@
   "last_chatgpt_message": "MSG-20261002-67",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-02T05:12:20.919Z",
-  "previous_head": "21b5b8c",
+  "updated_at": "2026-10-02T05:30:34.490Z",
+  "previous_head": "d78603f",
   "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "56abd47",
@@ -49,12 +49,12 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-02T05:08:52.938Z",
+  "last_tick_at": "2026-10-02T05:21:52.726Z",
   "state": "IMPLEMENT",
-  "last_action": "TRACK C2 slice 2b part 1 交付：跨账户一致性守卫（3 条 DB 触发器）+ 服务端 account 派生接线（Opportunity / ClaimItem / Evidence）",
-  "last_action_at": "2026-10-02T05:12:20.919Z",
-  "next_action": "TRACK C2 slice 2b part 2：其余 Evidence 创建路径接线 + C2 12+ 项永久验收矩阵 → C2 FINAL 送审。",
-  "current_head": "21b5b8c",
+  "last_action": "TRACK C2 FINAL 包就绪（5 个 C2 套件 + 12 项验收映射 + fresh/upgrade deploy 全绿，CI 691635e success）",
+  "last_action_at": "2026-10-02T05:30:34.490Z",
+  "next_action": "C2 FINAL 送审（Issue #2 + ChatGPT 唤醒 + 裁决归档）；通过后进入 TRACK B，并在 C2 收口后执行 PHASE X1 Architecture Audit。",
+  "current_head": "691635e",
   "reviewed_head": "07b7009",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-02T05:07:23.552Z",
-    "gapMs": 89387,
-    "stale": false,
-    "checkedAt": "2026-10-02T05:08:52.938Z"
+    "previousTickAt": "2026-10-02T05:08:52.938Z",
+    "gapMs": 779788,
+    "stale": true,
+    "checkedAt": "2026-10-02T05:21:52.726Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -250,7 +250,7 @@
     "integration_boundary_review": "AUTHORIZED_TO_PLAN（先提交设计/实施计划，不直接开放真实 transport）"
   },
   "r36_submission_comment": "5927087320",
-  "stale_recovered_at": "2026-10-02T05:07:23.552Z",
+  "stale_recovered_at": "2026-10-02T05:21:52.726Z",
   "engineering_regression_policy": {
     "source": "HOST PRODUCT DIRECTION 2026-10-01",
     "doc": "docs/releases/ENGINEERING-REGRESSION-POLICY.md",
@@ -3547,6 +3547,29 @@
       "pod-upload / closure-service / recovery-outcome 三处 EvidenceArtifact 创建的 account 派生接线",
       "C2 12+ 项永久验收矩阵（one org/two accounts · Amazon+TikTok · 跨 org 同 externalId · cross-account reject · revoked 不得 ingest · reconnect/rotate provenance · account 级并发幂等 · org 级聚合 · R46 回归绿）",
       "C2 FINAL 送审（Issue #2 + ChatGPT 唤醒 + 全文裁决归档 + FULL_COPY_OK）"
+    ]
+  },
+  "c2_final": {
+    "status": "READY_FOR_REVIEW（本地 + CI 全绿；尚未送审）",
+    "checkpoint_doc": "docs/releases/TRACK-C2-FINAL-CHECKPOINT.md",
+    "ci_head": "691635e",
+    "suites": {
+      "c2-account-boundary-baseline": "7/7",
+      "c2-account-scope-db": "8/8",
+      "c2-platform-account-identity-db": "4/4",
+      "c2-cross-account-guards-db": "4/4",
+      "c2-acceptance-matrix-db": "3/3"
+    },
+    "migrations": [
+      "20261002040000_platform_account_identity",
+      "20261002060000_account_scope_downstream",
+      "20261002080000_platform_account_identity_immutable",
+      "20261002090000_account_consistency_guards",
+      "20261002090500_account_consistency_trigger_rename"
+    ],
+    "next": "C2 FINAL 送审：Issue #2 comment + ChatGPT 唤醒（三要素验证）→ 全文读取裁决 → 逐字归档 + compare.mjs FULL_COPY_OK → 按 VERDICT 执行",
+    "deferred": [
+      "pod-upload / closure-service / recovery-outcome 的 EvidenceArtifact account 派生（不影响正确性；任一端 NULL 时守卫跳过）"
     ]
   }
 }
