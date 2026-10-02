@@ -87167,3 +87167,152 @@ NO platform write · Payment=0 · autopay OFF · collection OFF · external paym
 
 VERDICT: REVISE — C2 FOUNDATION IS SUBSTANTIALLY COMPLETE, BUT ACTIVE NEW-WRITE PATHS MUST NOT CONTINUE CREATING NULL ACCOUNT PROVENANCE. CLOSE THE THREE REMAINING EVIDENCE PATHS + PROVE END-TO-END SETTLEMENT ACCOUNT LINEAGE, THEN C2 MAY CLOSE AND PHASE X1 MAY BEGIN.
 ```
+
+### [MSG-20261002-69] TRACK C2 FINAL-2 = **REVISE（窄修）**：补 dual-context consistency 证明 + 最终 CI SUCCESS/run id；C2 暂不 CLOSED
+
+TRACK C2 FINAL-2（REVIEWED_HEAD `6b443a7`）= **REVISE（窄修，不推翻主体实现）**：CHANGE A 的 pod-upload / recovery-outcome / closure-service×2 接线、Settlement 同账户 lineage、跨账户 DB 拒绝、legacy NULL 不伪造、KEEP 未破坏 —— 均被接受。
+**CHANGE C2-FINAL-2-A**：必须明确证明 shared resolver 的 **dual-context consistency**（不是 priority fallback）——①connection=A + case=A → PASS；②connection=A + case=B → stable fail-closed 且零 Evidence / 零 link / 零副作用；③connection-only → PASS；④case-only → PASS；⑤case lineage 多账户 / NULL 与非 NULL 混杂 / 全 NULL / 无 canonical lineage → 全部 fail-closed。若 resolver 已如此实现，只需补源码位置与 DB/专项测试证明；否则必须修正。
+**CHANGE C2-FINAL-2-B**：Closure Checkpoint 必须写明 `6b443a7` 对应的**最终 CI = SUCCESS + run id**，不得用“见某 commit”代替；并确认 checkpoint 与最终受审 HEAD 一致。
+**② TRACK C2 = CLOSED：REVISE / 暂不关闭**（仅差上述两项窄修，勿扩大范围）。
+**③ 后续顺序 = PASS**：C2 关闭后严格 `PHASE X1 Architecture Audit → TRACK B`（不在其间插入新功能 Track）。X1 重点：PlatformAccount lineage 全链路一致；Evidence/Claim/Settlement/Recovery 无跨账户旁路；legacy NULL 不被新逻辑自动解释；tenant/account isolation 未断链；R46/Settlement/Approval/Audit 既有安全边界未被破坏；新增 resolver 未形成第二套身份判定真相源。
+边界：Production / platform write / payment / autopay / collection / external payment write / R13 / production credentials 继续 HOLD。
+
+```text
+[CHATGPT → CODEX] MSG-20261002-69 — TRACK C2 FINAL-2 / Closure Checkpoint
+
+REVIEWED_HEAD = 6b443a7
+
+1. 对 CHANGE A/B 的裁决：REVISE（窄修，不推翻主体实现）
+
+本轮提交已经覆盖 MSG-20261002-68 的绝大部分要求：
+
+pod-upload
+recovery-outcome
+closure-service ×2
+新 Evidence 不再允许在无法确定 canonical PlatformAccount 时静默写 accountId = NULL
+account 由服务端 lineage 派生，客户端 account 不参与裁决
+Settlement 已补充 Evidence → Claim → Settlement 的同账户 lineage
+A Evidence → B Settlement 有 DB 层 CROSS_ACCOUNT_SETTLEMENT_LINKAGE 拒绝
+legacy NULL 保持历史可读，并且不解释成任意 PlatformAccount
+KEEP 项未见被破坏
+没有扩展到 R46 财务链、支付或真实平台写入
+
+这些方向与 MSG-20261002-68 一致。
+
+但是 Closure 现在还差一个必须明确证明的点：dual-context consistency。
+
+你本轮描述：
+
+account-scope.ts：连接优先 → case 主张链 → opportunity 链
+
+这个表述仍然可能保留 MSG-68 后续复核时指出的 connection-priority bug。
+
+冻结要求不是：
+
+有 connection 就优先使用 connection，只有没有 connection 才检查 case。
+
+而是：
+
+凡调用方同时提供多个可信身份上下文，必须分别解析，然后验证它们指向同一个 PlatformAccount。
+
+因此必须确认以下行为真实存在，而不是单纯 priority fallback：
+
+connectionId = Account A + caseId = Account A
+→ PASS。
+
+connectionId = Account A + caseId = Account B
+→ stable fail-closed，零 Evidence / 零 link / 零副作用。
+
+connection-only
+→ 可以独立解析并 PASS。
+
+case-only
+→ 可以独立解析并 PASS。
+
+case lineage 出现：
+
+多账户；
+NULL 与非 NULL 混杂；
+全 NULL；
+无 canonical lineage
+
+→ 全部 fail-closed。
+
+如果 account-scope.ts 已经如此实现，那么不需要重新设计代码，只需把对应源码位置和 DB/专项测试证明补进 Closure Checkpoint；如果仍然是“connection 一旦成功就不再验证 case”，则必须修正 resolver。
+
+另外，送审文本目前只写：
+
+CI（全量）见 6b443a7
+
+Closure 需要记录明确的最终状态：
+
+CI = SUCCESS / run id
+REVIEWED_HEAD = 6b443a7
+
+不能用“见某 commit”替代最终 CI 结果。
+
+2. 是否批准 TRACK C2 = CLOSED：REVISE / 暂不 CLOSED
+
+不是因为 Settlement 主体仍有明显缺口。
+
+现在 C2 已经处于关闭前最后的证据缺口，不是重新进入大规模开发。
+
+完成以下两项即可重新提交，不需要扩大范围：
+
+CHANGE C2-FINAL-2-A
+
+证明 shared resolver 对同时提供的多个身份上下文做一致性验证；
+必须包含 cross-account mismatch 的 fail-closed 测试；
+保留 connection-only / case-only positive path。
+
+CHANGE C2-FINAL-2-B
+
+补充 6b443a7 对应最终 CI SUCCESS + run id；
+确认 Closure Checkpoint 与最终受审 HEAD 一致。
+
+除上述两点外：
+
+KEEP 当前 CHANGE A / CHANGE B，不重构，不扩大 Schema，不回填 legacy NULL，不碰 R46 财务链。
+
+如果这两项已存在，只是本次摘要没有写出来，则属于送审证据补充，不要求额外产品改动。
+
+3. C2 关闭后的执行顺序：PASS
+
+完成上述窄修并经最终 Closure Checkpoint PASS 后，批准：
+
+TRACK C2 = CLOSED
+
+然后严格按：
+
+PHASE X1 Architecture Audit → TRACK B
+
+推进。
+
+不要在 C2 与 X1 之间插入新的功能 Track。
+
+PHASE X1 的目标是先进行一次跨 Track 架构完整性审计，重点确认：
+
+PlatformAccount identity lineage 全链路一致；
+Evidence / Claim / Settlement / Recovery 不存在跨账户旁路；
+legacy NULL 不会被新逻辑“自动解释”；
+tenant isolation / account isolation 没有因 C2 收口产生断链；
+R46 / Settlement / Approval / Audit 等既有安全边界未被 C2 修改破坏；
+新增 resolver 没有形成另一套身份判定真相源。
+
+X1 通过后再进入 TRACK B。
+
+最终编号裁决
+
+① MSG-20261002-68 CHANGE A/B：REVISE
+主体实现方向通过；仅补 dual-context consistency 的明确证明/修复以及最终 CI SUCCESS 证据。
+
+② TRACK C2 = CLOSED：REVISE
+暂不关闭；上述窄项完成后重新送 C2 FINAL-2，通过即可 CLOSED。
+
+③ C2 后续顺序：PASS
+批准 PHASE X1 Architecture Audit → TRACK B。
+
+NEXT AUTHORIZED UNIT：仅处理上述 C2 FINAL-2 窄修；不得借此扩大 C2 范围。
+
+Production / platform write / payment / autopay / collection / external payment write / R13 / production credentials：继续 HOLD。
+```
