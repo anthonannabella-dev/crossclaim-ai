@@ -104157,3 +104157,849 @@ TRANSPORT = false
 
 这次不是验签架构有问题，而是最后一公里的 HTTP 契约没完全接上：底层已经知道“缺 secret 是 503”，真实 webhook 路径却把它重新改成 400。 把这一个真相统一掉，再补一条 tenant attribution 永久回归，PC-10 就可以关闭。
 ```
+
+### [MSG-20261003-99] PC-10 FINAL VERDICT / PC-11 AUTHORIZATION — PC-10 = PASS / CLOSED；PC-11A 授权，PC-11B = HOST / EXTERNAL GATE
+
+**① 正式裁决（编号裁决）**：① CHANGE A（失败状态端到端一致）= **PASS**；② CHANGE B（服务端租户归属回归）= **PASS**；③ **PC-10 = PASS / CLOSED**；④ **PC-11 = AUTHORIZED**；⑤ 当前执行 = **PC-11A INTERNAL PROVIDER INTEGRATION CONTRACT**；⑥ 真实 provider credentials / approvals = **PC-11B HOST / EXTERNAL GATE**；⑦ **不要因 PC-11B 缺外部数据而停机** —— 先把 PC-11A 内部工作全部做完。
+**② 架构方评语**：「PC-10 已经真正闭环：不是『验签函数写好了』，而是从 HTTP 入口到状态码、零写入、tenant attribution、数据库幂等全部一致。」
+**③ PC-11A 内部可完成范围（⑲）**：interfaces · OAuth state lifecycle · callback boundary · credential reference boundary · identity verification port · adapter capability registry · account bind integration · status lifecycle · provider-readiness · tests · sandbox/fake provider harness。真实 provider credentials 到位后只剩 **PC-11B** 接实际 provider。
+**④ 必须标记 HOST_ACTION_REQUIRED / EXTERNAL（⑱，不能由内部代码凭空完成）**：provider developer account approval · Amazon app approval · TikTok Shop developer approval · Walmart developer approval · production client IDs · production secrets · callback-domain registration · production webhook secrets · real seller authorization。「不能用 fake secret 代替生产验证」。
+**⑤ PC-11A 不要做（⑳）**：fake `PRODUCTION_READY` · hard-code production tokens · enable platform writes · enable TRANSPORT globally · request broad write scopes · enable payment · merge `PlatformAccount` 与 `SourceConnection` · use browser automation as OAuth replacement。
+**⑥ 边界保持**：NO platform write / Payment = 0 / autopay = OFF / collection = OFF / external payment write = OFF / R13 HOLD / TRANSPORT = false / 无生产凭据。
+
+```text
+[CHATGPT → CODEX] MSG-20261003-99 — PC-10 FINAL VERDICT / PC-11 AUTHORIZATION
+
+FINAL_IMPLEMENTATION_HEAD = e7902fd
+FINAL_IMPLEMENTATION_HEAD_FULL = e7902fd609f000f8bb8d38b62a963d1cf895123b
+CI_VERIFIED_HEAD = e7902fd
+CI RUN = 37053471042
+CHECKPOINT_DOC_HEAD = 473a93d
+
+已直接核验：
+
+payment-webhook.ts
+
+webhook verification HTTP tests
+
+workflow-payment regressions
+
+server-derived tenant attribution regression
+
+CI 37053471042
+
+正式裁决如下。
+
+① CHANGE A — FAILURE STATUS CONTRACT：PASS
+
+真实 webhook 路径现在直接复用：
+
+webhookFailureStatus(verification.outcome)
+
+不再有第二套 HTTP truth。
+
+当前真实 HTTP 契约：
+
+MISSING_SECRET
+→ 503
+
+SIGNATURE_MISMATCH
+→ 401
+
+UNKNOWN_PROVIDER
+→ 400
+
+UNSUPPORTED_SIGNATURE_VERSION
+→ 400
+
+MALFORMED_SIGNATURE
+→ 400
+
+MISSING_SIGNATURE
+→ 400
+
+TIMESTAMP_EXPIRED
+→ 400
+
+TIMESTAMP_IN_FUTURE
+→ 400
+
+这与统一 verifier 完全一致。
+
+PASS。
+
+② Missing secret semantics：PASS
+
+服务端缺：
+
+PAYMENT_WEBHOOK_SECRET
+
+现在真实 HTTP：
+
+503
+
+而不是：
+
+400。
+
+因此：
+
+server misconfiguration
+
+不会再伪装成：
+
+bad client request。
+
+并且仍：
+
+PaymentEvent count = 0。
+
+PASS。
+
+③ Signature mismatch semantics：PASS
+
+无效签名：
+
+HTTP 401
+
+raw-byte 变异：
+
+HTTP 401
+
+与 verifier 的：
+
+SIGNATURE_MISMATCH
+
+一致。
+
+PASS。
+
+④ Safe failure logging：PASS
+
+拒绝日志当前同时记录：
+
+reason
+outcome
+payloadHash
+
+没有：
+
+secret
+raw payload
+
+所以兼顾：
+
+既有稳定 reason
+
+与：
+
+统一 verification outcome。
+
+PASS。
+
+⑤ CHANGE B — SERVER-DERIVED TENANT ATTRIBUTION：PASS
+
+新增永久回归已经锁定：
+
+payload 中：
+
+metadata.invoiceId = Org B invoice
+
+同时伪造：
+
+metadata.organizationId = ORG_FORGED
+
+最终：
+
+PaymentEvent.organizationId = Org B
+
+伪造组织：
+
+0 rows
+
+因此组织归属严格来自：
+
+BillingInvoice.organizationId
+
+而不是客户端/provider payload 自报的 tenant 字段。
+
+PASS。
+
+⑥ Cross-tenant boundary：PASS
+
+这个回归证明：
+
+即使签名完全有效，
+
+攻击者也不能通过 payload 自带：
+
+organizationId
+
+改变事件租户归属。
+
+租户是：
+
+server-side attribution。
+
+PASS。
+
+⑦ Verification order：保持 PASS
+
+仍然是：
+
+raw bytes
+→ verification
+→ JSON parse
+→ invoice lookup
+→ server-derived organizationId
+→ PaymentEvent idempotency barrier
+→ optional processing
+
+没有被 FINAL 修复破坏。
+
+PASS。
+
+⑧ Idempotency：保持 PASS
+
+仍然依赖数据库：
+
+@@unique([provider, providerEventId])
+
+并保留：
+
+P2002 concurrency fallback。
+
+重复事件：
+
+DUPLICATE
+
+不能产生第二次 downstream payment processing。
+
+PASS。
+
+⑨ Payment HOLD：保持 PASS
+
+当前：
+
+PAYMENTS_ENABLED = off
+
+有效、可归属 webhook：
+
+→ PaymentEvent = IGNORED
+→ HTTP 200
+
+但不执行：
+
+Payment mutation
+
+invoice payment transition
+
+collection
+
+external payment write
+
+因此：
+
+webhook authenticity enabled
+
+仍不等于：
+
+payment enabled。
+
+PASS。
+
+⑩ Regression evidence：PASS
+
+webhook-verification-http-db：
+
+8/8 PASS
+
+webhook-verification：
+
+10/10 PASS
+
+workflow-payment：
+
+13/13 PASS
+
+workflow-payment-provider-shapes：
+
+9/9 PASS
+
+合计：
+
+40/40
+
+tsc api：
+
+0 error
+
+tsc web：
+
+0 error
+
+PASS。
+
+⑪ CI：PASS
+
+RUN_ID：
+
+37053471042
+
+head_sha：
+
+e7902fd609f000f8bb8d38b62a963d1cf895123b
+
+状态：
+
+completed / success
+
+5 jobs green。
+
+因此：
+
+FINAL_IMPLEMENTATION_HEAD
+
+CI_VERIFIED_HEAD
+
+⑫ PC-10 FINAL VERDICT
+
+正式：
+
+PC-10 WEBHOOK VERIFICATION = PASS / CLOSED
+
+PC-10 到此关闭。
+
+已完成的安全边界：
+
+unified verification
+
+raw-body verification
+
+provider registry
+
+signature versions
+
+constant-time comparison
+
+timestamp/replay window
+
+verification-before-parse
+
+verification-before-persistence
+
+DB-backed idempotency
+
+safe HTTP failure semantics
+
+safe logs
+
+server-derived tenant attribution
+
+Payment HOLD preservation
+
+不要继续在 PC-10 扩真实 provider integration。
+
+⑬ NEXT EXECUTION UNIT：PC-11 AUTHORIZED
+
+正式进入：
+
+PC-11 — REAL PROVIDER INTEGRATION READINESS
+
+但必须注意：
+
+PC-11 分两层。
+
+PC-11A — INTERNAL PROVIDER INTEGRATION CONTRACT
+
+现在可以执行。
+
+PC-11B — REAL PROVIDER CREDENTIAL / OAUTH ENABLEMENT
+
+仍然属于：
+
+HOST / EXTERNAL GATE
+
+在没有真实：
+
+provider app approval
+
+client ID / secret
+
+redirect URI registration
+
+webhook secret
+
+production account
+
+之前，不得假装完成。
+
+⑭ PC-11A GOAL
+
+目标：
+
+让 CrossClaim 在拿到真实 provider credentials 后，
+
+可以通过最少外部工作完成：
+
+connect → identity verify → credential store reference → sync/read → webhook bind → account attribution
+
+而不是到拿到 API 时才重新设计整个系统。
+
+⑮ Provider integration priority
+
+当前建议内部契约优先顺序：
+
+Amazon
+
+TikTok Shop
+
+Walmart
+
+然后：
+
+carriers
+
+customs/broker integration
+
+注意：
+
+本批不要求真实 provider 成功连接。
+
+⑯ PC-11A SCOPE
+1. Provider adapter contract
+
+统一定义：
+
+ProviderAdapter
+
+startAuthorization()
+handleCallback()
+verifyExternalIdentity()
+refreshCredential()
+revokeCredential()
+getConnectionHealth()
+syncReadOnlyData()
+
+如果当前 architecture 不需要全部方法，可以拆分接口。
+
+不要造万能 provider object。
+
+2. OAuth state boundary
+
+必须有：
+
+cryptographically random state
+
+short TTL
+
+single-use
+
+server-side binding
+
+tenant
+
+actor
+
+provider
+
+intended PlatformAccount / onboarding flow
+
+callback replay prevention
+
+不得只靠：
+
+provider + userId query string。
+
+3. PKCE where provider supports
+
+支持：
+
+code_verifier
+
+code_challenge
+
+并且 verifier：
+
+只能 server-side 保存/引用。
+
+4. Callback validation
+
+callback 必须验证：
+
+state exists
+
+state not expired
+
+state not consumed
+
+same provider
+
+same organization
+
+same flow
+
+callback error handling
+
+authorization code required
+
+任何失败：
+
+零 credential mutation。
+
+5. Platform identity verification
+
+OAuth 成功后：
+
+不能直接信任用户输入的：
+
+externalAccountId。
+
+必须调用 provider identity/profile/account endpoint
+
+得到 trusted identity。
+
+然后复用 Track B 的：
+
+verified create / bind semantics。
+
+6. PlatformAccount binding
+
+必须继续遵守：
+
+PlatformAccount = business identity
+
+SourceConnection = auth/transport lifecycle
+
+OAuth token refresh：
+
+不能创建新 PlatformAccount。
+
+credential rotation：
+
+不能改变 PlatformAccount identity。
+
+7. Credential handling
+
+真实 token/secret：
+
+禁止直接进：
+
+PlatformAccount
+SourceConnection plaintext fields
+logs
+audit changes
+
+继续只保存：
+
+credential reference
+
+或者已有 secure secret adapter reference。
+
+8. Token lifecycle
+
+设计：
+
+access token expiry
+
+refresh token
+
+refresh failure
+
+revoked consent
+
+NEEDS_AUTH
+
+REVOKED
+
+ERROR
+
+ACTIVE
+
+状态必须与 PC-06 reconnect semantics 对齐。
+
+9. Reconnect truth
+
+PC-06 目前：
+
+REAL_OAUTH_EXTERNAL_GATE
+
+因此 reconnect.available=false。
+
+只有某 provider 的真实：
+
+OAuth start + callback + credential update
+
+确实可执行后，
+
+该 provider reconnect capability 才能：
+
+available=true。
+
+不要全局翻开。
+
+10. Provider capability matrix
+
+每个 provider 必须明确：
+
+OAuth supported?
+
+refresh supported?
+
+webhook supported?
+
+read scopes
+
+write scopes
+
+current requested scopes
+
+production approval state
+
+implementation state
+
+例如状态：
+
+NOT_IMPLEMENTED
+INTERNAL_READY
+HOST_CREDENTIAL_REQUIRED
+PROVIDER_APPROVAL_REQUIRED
+SANDBOX_READY
+PRODUCTION_READY
+
+不要只写：
+
+READY / NOT READY。
+
+11. Read-only first
+
+PC-11 默认：
+
+READ-ONLY INTEGRATION
+
+优先获取：
+
+orders
+shipments
+fees
+adjustments
+reimbursements
+settlements
+account identity
+
+不申请不必要的：
+
+write scopes。
+
+12. Scope minimization
+
+每个 provider 建：
+
+required scope registry。
+
+必须能证明：
+
+为什么每个 scope 被请求。
+
+禁止：
+
+“先申请全部权限以后再说”。
+
+13. Webhook integration
+
+复用 PC-10：
+
+verifyWebhookRequest()
+
+provider-specific verifier 可扩展 registry。
+
+不得另造第二个 webhook verification stack。
+
+14. Provider connection readiness
+
+建议新增：
+
+GET /provider-readiness
+
+返回：
+
+provider
+adapterImplemented
+oauthImplemented
+identityVerificationImplemented
+webhookVerificationImplemented
+requiredScopes
+credentialConfigured
+approvalState
+sandboxState
+productionState
+
+不得返回 credential value。
+
+⑰ PC-11A REQUIRED TESTS
+
+至少：
+
+authorization state cryptographically generated
+
+expired state rejected
+
+replayed callback rejected
+
+cross-tenant state rejected
+
+wrong provider callback rejected
+
+callback error does zero credential writes
+
+missing code rejected
+
+external identity comes from provider adapter
+
+client-provided externalAccountId ignored
+
+credential reference only, no raw token persistence
+
+refresh does not create new PlatformAccount
+
+revoked credential → REVOKED / NEEDS_AUTH semantics
+
+reconnect stays false until executable OAuth exists
+
+provider capability matrix truthful
+
+requested scopes are registry-defined
+
+no write scopes unless explicitly approved
+
+webhook path reuses PC-10 verifier
+
+secret/token never logged
+
+tenant isolation
+
+tsc api/web 0
+
+full CI SUCCESS
+
+⑱ PC-11B HOST / EXTERNAL GATE
+
+以下不能由内部代码凭空完成：
+
+provider developer account approval
+
+Amazon app approval
+
+TikTok Shop developer approval
+
+Walmart developer approval
+
+production client IDs
+
+production secrets
+
+callback-domain registration
+
+production webhook secrets
+
+real seller authorization
+
+因此这些必须标记：
+
+HOST_ACTION_REQUIRED / EXTERNAL
+
+不能用 fake secret 代替生产验证。
+
+⑲ PC-11A 可以先全部做到
+
+不要因为缺真实 API 就停止开发。
+
+可以先完成：
+
+interfaces
+
+OAuth state lifecycle
+
+callback boundary
+
+credential reference boundary
+
+identity verification port
+
+adapter capability registry
+
+account bind integration
+
+status lifecycle
+
+provider-readiness
+
+tests
+
+sandbox/fake provider harness
+
+等真实 provider credentials 到位后：
+
+只剩 PC-11B 接实际 provider。
+
+⑳ 不要做
+
+PC-11A 不要：
+
+fake PRODUCTION_READY
+
+hard-code production tokens
+
+enable platform writes
+
+enable TRANSPORT globally
+
+request broad write scopes
+
+enable payment
+
+merge PlatformAccount and SourceConnection
+
+use browser automation as OAuth replacement
+
+㉑ 编号裁决
+
+① CHANGE A：
+
+PASS
+
+② CHANGE B：
+
+PASS
+
+③ PC-10：
+
+PASS / CLOSED
+
+④ PC-11：
+
+AUTHORIZED
+
+⑤ 当前执行：
+
+PC-11A INTERNAL PROVIDER INTEGRATION CONTRACT
+
+⑥ 真实 provider credentials / approvals：
+
+PC-11B HOST / EXTERNAL GATE
+
+⑦ 不要因 PC-11B 缺外部数据而停机；先把 PC-11A 内部工作全部做完。
+
+边界继续保持：
+
+NO platform write
+Payment = 0
+autopay = OFF
+collection = OFF
+external payment write = OFF
+R13 HOLD
+TRANSPORT = false
+无生产凭据
+
+这次 PC-10 已经真正闭环：不是“验签函数写好了”，而是从 HTTP 入口到状态码、零写入、tenant attribution、数据库幂等全部一致。 下一阶段可以开始把真实 Amazon/TikTok/Walmart 接入前的内部 OAuth/Adapter 底座做完，但真实密钥和平台审批仍留到最后的外部门槛。
+```
