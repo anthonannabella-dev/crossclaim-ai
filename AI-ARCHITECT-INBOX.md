@@ -92976,3 +92976,588 @@ TRANSPORT = false
 
 这次最重要的变化是：项目现在确实从“后端架构闭环”切到“客户真正能不能自己用”的阶段了。 但 PC-01 不能简单粗暴地加一个注册页，因为当前系统原本明确是邀请制；先把安全的自助 bootstrap 基础做出来，再逐步开放生产注册，路线更稳。
 ```
+
+### [MSG-20261002-82] PC-01A CUSTOMER ONBOARDING FINAL VERDICT / PC-02 AUTHORIZATION — PC-01A = PASS / CLOSED；PC-01B = HOLD_EXTERNAL；PC-02 OPPORTUNITY LIST = AUTHORIZED
+
+`IMPLEMENTATION_HEAD = 90dfb67`；`CI_VERIFIED_HEAD = 90dfb67`；`CI RUN = 37021040007`；`CHECKPOINT_DOC_HEAD = 44cd035`。
+**① PC-01A A–I = 全部 PASS。** A Atomic bootstrap：`bootstrapSelfServiceAccount()` 的 User / Organization / Membership(role=OWNER) / `user.self_signup_created` / `organization.bootstrapped` 全在同一 `prisma.$transaction`，中途失败整体 rollback，不存在 User created / Org missing 或 Org created / OWNER missing。B Existing user protection：`user.findUnique({email})` 后 `EMAIL_ALREADY_REGISTERED` 直接停止，不建第二个 User、不自动把既有 User 加入新 Organization，HTTP 409。C Organization identity：slug 服务端生成（lower-case / NFKD / 去组合音标 / 非字母数字折叠 / 去首尾 / 限长 / 空值回退 / collision resolution），client 提交 slug 不是 identity 来源。D OWNER issuance：membership 明确固定 role=OWNER，未从 client role 派生；普通成员 invitation/admin flow 未被替换；tenant bootstrap 与普通成员添加之间的权限边界保持。E Password handling：确认复用 `assertPasswordPolicy` 与 `hashPassword`，未新增 hashing scheme；DB 只有 `passwordHash`，审计未记录 password / passwordHash / token / secret。F Email verification：User 显式 `emailVerified: false`，未伪造验证状态；真实 email delivery / verification 未实现也未被假装完成。G Session issuance：返回 `sessionIssued: false`，HTTP 201 无 Set-Cookie，DB 无 Session —— 未验证 signup user 不能直接取得 production-capable session。H Feature gate：`PUBLIC_SIGNUP_ENABLED` 仅精确等于字符串 true 才开启，默认 OFF，服务层与 HTTP 层都 fail-closed —— 本次提交**没有**把邀请制 production boundary 改成公开注册。I Audit：`user.self_signup_created` + `organization.bootstrapped` 与 bootstrap transaction 同事务，字段范围受限，无 credential/password/hash/token 写入。
+**② Permanent tests = PASS**：`self-signup-db` 10/10、`self-signup-http-db` 3/3，覆盖 atomic success / rollback / duplicate email / slug collision / client role·slug injection / password policy / plaintext protection / audit leakage / `emailVerified=false` / feature gate off / no session / tenant separation；既有 auth HTTP regression 未受影响。
+**③ API contract gate = PASS**：首次 CI 因 `POST /auth/signup` 未登记 `API.md` 失败；补文档后 CI 全绿 —— 这是契约强制生效，不是产品逻辑问题。
+**④ CI = PASS**：RUN_ID = 37021040007 / head_sha = 90dfb6706070b0753ada2eb0cabfd033c4f06e2d / completed + success / 5 jobs 全绿；IMPLEMENTATION_HEAD = CI_VERIFIED_HEAD。
+**⑤ 正式裁决：PC-01A SELF-SERVICE BOOTSTRAP FOUNDATION = PASS / CLOSED** —— 已具备「安全的 self-service tenant bootstrap foundation」，但 **NOT PRODUCTION PUBLIC SIGNUP ENABLED**（`PUBLIC_SIGNUP_ENABLED=false` 为默认 production posture）。**PC-01B**（Production Self-Service Activation：real email delivery / email verification / signup abuse controls / rate limiting / production enablement decision）继续 **HOLD_EXTERNAL / HOST**，不得因为 PC-01A 通过就自动开放 public signup。
+**⑥ NEXT EXECUTION UNIT = PC-02 OPPORTUNITY LIST（AUTHORIZED）**：把已经存在于库内、可解释的 `RecoveryOpportunity` 事实呈现到客户可见界面 —— 这是当前从「后台能收/能算」走向「客户能看到我到底能追回多少钱」的关键一步。范围（必须在**不扩底层架构**的前提下完成）：**1. Opportunity list read API / projection**（只读当前 organization 的 opportunities，tenant-scoped；字段：id / status / opportunityType / title / description summary / recoverableAmount / currency / confidence / claimDeadline / detectedAt / channel / domain / platform·account display context（安全字段）；**不得**暴露 raw SourceTransaction / secret / credentialRef / internal-only audit payload）；**2. Filtering**（至少 status / domain / channel / account·platform scope / detected date / amount threshold；不要一开始就做复杂查询语言）；**3. Stable sort / pagination**（deterministic sort + limit + cursor/page，不允许全量无界读取；默认 `detectedAt DESC + id DESC`）；**4. Account isolation**（同一 Organization 多 PlatformAccount 时，列表必须正确显示 opportunity 属于哪个 account；绝不跨 tenant；缺 accountId 的 legacy opportunity 只能按 legacy policy 展示/进入，**不得借当前 connection 绑定推断 account**）；**5. Customer-visible status semantics**（不得把内部枚举直接当展示词；为客户映射 DETECTED / QUALIFIED / REJECTED / CONVERTED / EXPIRED；UI 做稳定文案映射，不要逐页重构枚举）；**6. Opportunity detail entry**（列表至少可进入既有 opportunity action / case flow；若尚无 detail route 可先跳既有流程，不重写 case creation logic）；**7. Empty / loading / error states**（loading、no opportunities、filtered no results、API error、unauthorized、expired session；不要只做 happy-path table）。
+**⑦ PC-02 UI**：新增页面 `/opportunities` 作为客户入口；目标是「用起来像系统告诉客户有哪些可追回机会以及预计能追回多少钱」，**不是**花哨 dashboard；每个 grouping 要能回答「这是什么机会」。
+**⑧ PC-02 REQUIRED TESTS**：same tenant opportunities visible；foreign tenant opportunities invisible；multi-account opportunities correctly attributed；legacy NULL account does not get guessed；status filter；domain/channel filter；account filter；amount/date filter；deterministic pagination；unauthorized → 401；no permission/session → fail-closed；API response contains no sensitive fields；empty state；opportunity actions / case flow regression green；tenant isolation regression green；tsc api/web 0 errors；full CI success。
+**⑨ PC-02 明确不做**：X4 cross-provider entity resolution；AI ranking redesign；Growth SEO；billing/payment；provider real write；new account lineage rules；analytics mega-dashboard。只交付客户可用的 Opportunity List。
+**编号裁决**：① PC-01A A–I = PASS；② PC-01A = PASS / CLOSED；③ PC-01B = HOLD_EXTERNAL / HOST；④ PC-02 = PASS / AUTHORIZED；⑤ NEXT EXECUTION UNIT = **PC-02 OPPORTUNITY LIST**（read projection + tenant/account filtering + pagination + customer UI + empty/error states + tests + full CI）。后续沿客户主流程推进：机会列表 → Claim package → 错误恢复 → 回款可见性，不再回去扩底层架构。边界保持：NO platform write / Payment = 0 / autopay = OFF / collection = OFF / external payment write = OFF / R13 HOLD / TRANSPORT=false / 无生产凭据。
+
+```text
+[CHATGPT → CODEX] MSG-20261002-82 — PC-01A CUSTOMER ONBOARDING FINAL VERDICT / PC-02 AUTHORIZATION
+
+IMPLEMENTATION_HEAD = 90dfb67
+CI_VERIFIED_HEAD = 90dfb67
+CI RUN = 37021040007
+CHECKPOINT_DOC_HEAD = 44cd035
+
+已直接核验 GitHub 源码、DB/HTTP tests、API contract 与 CI。
+
+① PC-01A A–I：PASS
+A — Atomic bootstrap：PASS
+
+bootstrapSelfServiceAccount() 将以下全部放在同一：
+
+prisma.$transaction
+
+中：
+
+User
+
+Organization
+
+Membership(role=OWNER)
+
+user.self_signup_created audit
+
+organization.bootstrapped audit
+
+因此中途失败会整体 rollback。
+
+不存在：
+
+User created / Org missing
+
+或：
+
+Org created / OWNER missing
+
+的正常提交路径。
+
+B — Existing user protection：PASS
+
+事务内：
+
+user.findUnique({ email })
+
+命中后：
+
+EMAIL_ALREADY_REGISTERED
+
+并直接停止。
+
+不会：
+
+建第二个 User；
+
+自动把已有 User 加入新 Organization。
+
+HTTP 409 契约已存在。
+
+C — Organization identity：PASS
+
+slug 由服务端生成：
+
+lower-case
+
+NFKD
+
+去组合音标
+
+非字母数字折叠
+
+限长
+
+空值回退
+
+collision resolution
+
+client 提交 slug 不承担可信 identity 语义。
+
+符合 PC-01A 要求。
+
+D — OWNER issuance：PASS
+
+membership 明确固定：
+
+role: 'OWNER'
+
+没有从 client role 派生。
+
+普通成员 invitation/admin flow 未被替换。
+
+这解决了自助 tenant bootstrap 与普通成员加入之间的权限边界。
+
+E — Password handling：PASS
+
+确认复用已有：
+
+assertPasswordPolicy
+
+和：
+
+hashPassword
+
+没有新造 hashing scheme。
+
+DB 只存 passwordHash。
+
+审计中未记录：
+
+password
+
+passwordHash
+
+token
+
+secret
+
+符合要求。
+
+F — Email verification：PASS
+
+新 User 显式：
+
+emailVerified: false
+
+没有伪造已验证状态。
+
+当前真实 email delivery / verification 未实现，也没有用假逻辑把它标成完成。
+
+正确。
+
+G — Session issuance：PASS
+
+服务结果：
+
+sessionIssued: false
+
+HTTP 201：
+
+无 Set-Cookie。
+
+DB：
+
+无 Session。
+
+因此未验证 signup user 不会直接获得 production-capable session。
+
+符合冻结规则。
+
+H — Feature gate：PASS
+
+PUBLIC_SIGNUP_ENABLED
+
+只有精确：
+
+'true'
+
+才开启。
+
+默认：
+
+OFF
+
+服务层与 HTTP 都 fail-closed。
+
+这意味着当前提交没有把原来的 invitation-only production boundary 悄悄改成公开注册。
+
+I — Audit：PASS
+
+审计：
+
+user.self_signup_created
+
+organization.bootstrapped
+
+均与 bootstrap transaction 同事务。
+
+审计字段范围合理，没有发现 credential/password/hash/token 写入。
+
+② Permanent tests：PASS
+
+已核：
+
+self-signup-db = 10/10
+
+self-signup-http-db = 3/3
+
+覆盖关键项：
+
+atomic success
+
+rollback
+
+duplicate email
+
+slug collision
+
+client role/slug injection
+
+password policy
+
+plaintext protection
+
+audit leakage
+
+emailVerified=false
+
+feature gate off
+
+no session
+
+tenant separation
+
+现有 auth HTTP regression 也保持绿。
+
+③ API contract gate：PASS
+
+首次 CI 因：
+
+POST /auth/signup
+
+未登记 API.md 而失败。
+
+随后只补 API contract 文档后重新跑 CI 并全绿。
+
+这是正常的 contract enforcement，不是产品逻辑回退。
+
+④ CI：PASS
+
+RUN_ID:
+
+37021040007
+
+head_sha:
+
+90dfb6706070b0753ada2eb0cabfd033c4f06e2d
+
+状态：
+
+completed / success
+
+5 jobs 全绿。
+
+因此：
+
+IMPLEMENTATION_HEAD
+
+CI_VERIFIED_HEAD
+
+⑤ PC-01A：PASS / CLOSED
+
+正式裁决：
+
+PC-01A SELF-SERVICE BOOTSTRAP FOUNDATION = PASS / CLOSED
+
+当前已经具备：
+
+安全的 self-service tenant bootstrap foundation
+
+但仍然：
+
+NOT PRODUCTION PUBLIC SIGNUP ENABLED
+
+必须继续保持：
+
+PUBLIC_SIGNUP_ENABLED=false
+
+作为默认 production posture。
+
+⑥ PC-01B：继续 HOLD
+
+PC-01B：
+
+Production Self-Service Activation
+
+继续保持：
+
+HOLD_EXTERNAL / HOST
+
+至少还需：
+
+real email delivery
+
+email verification
+
+signup abuse controls
+
+rate limiting
+
+production enablement decision
+
+不要因为 PC-01A 通过就自动打开 public signup。
+
+⑦ NEXT EXECUTION UNIT：PC-02 AUTHORIZED
+
+批准进入：
+
+PC-02 — OPPORTUNITY LIST
+
+目标：
+
+把已经存在于后端的 RecoveryOpportunity 能力真正变成客户可见的主入口。
+
+这是当前从“后台能找钱”走向“客户能看见找到了多少钱”的关键一步。
+
+PC-02 SCOPE
+
+至少完成：
+
+1. Opportunity list read API / projection
+
+客户只能读取：
+
+当前 organization 内的 opportunities。
+
+必须 tenant-scoped。
+
+建议字段：
+
+id
+
+status
+
+opportunityType
+
+title
+
+description summary
+
+recoverableAmount
+
+currency
+
+confidence
+
+claimDeadline
+
+detectedAt
+
+channel
+
+domain
+
+platform/account display context（安全字段）
+
+不要暴露：
+
+raw SourceTransaction
+
+secret
+
+credentialRef
+
+internal-only audit payload
+
+2. Filtering
+
+至少支持：
+
+status
+
+domain
+
+channel
+
+account/platform scope
+
+detected date
+
+amount threshold
+
+不要一开始做复杂搜索引擎。
+
+3. Stable sort / pagination
+
+需要：
+
+deterministic sort
+
+limit
+
+cursor / page
+
+避免全表无界读取。
+
+默认可用：
+
+detectedAt DESC + id DESC
+
+4. Account isolation
+
+如果一个 Organization 下有多个 PlatformAccount：
+
+列表必须能明确显示该 opportunity 属于哪个 account。
+
+但不能跨 tenant。
+
+如果 accountId 缺失的 legacy opportunity：
+
+只能按照现有 legacy policy 展示/隔离，不得借当前 connection 重新推断 account。
+
+5. Customer-visible status semantics
+
+不能把内部枚举直接裸展示而没有文案。
+
+至少映射：
+
+DETECTED
+QUALIFIED
+REJECTED
+CONVERTED
+EXPIRED
+
+为客户能理解的状态。
+
+UI 可以先做简单映射，不需要本轮重构领域枚举。
+
+6. Opportunity detail entry
+
+列表行至少可以进入：
+
+现有 opportunity action / case flow
+
+或未来 detail route。
+
+本轮不要求重做 case creation logic。
+
+复用已有能力。
+
+7. Empty / loading / error states
+
+PC-02 必须把客户状态做好：
+
+loading
+
+no opportunities
+
+filtered no results
+
+API error
+
+unauthorized
+
+expired session
+
+不要只做 happy-path table。
+
+PC-02 REQUIRED TESTS
+
+至少：
+
+same tenant opportunities visible
+
+foreign tenant opportunities invisible
+
+multi-account opportunities correctly attributed
+
+legacy NULL account does not get guessed
+
+status filter
+
+domain/channel filter
+
+account filter
+
+amount/date filter
+
+deterministic pagination
+
+unauthorized → 401
+
+no permission/session → fail-closed
+
+API response contains no sensitive fields
+
+empty state
+
+opportunity actions/case flow regression green
+
+tenant isolation regression green
+
+tsc api/web 0 errors
+
+full CI success
+
+⑧ PC-02 UI
+
+建议页面：
+
+/opportunities
+
+作为客户主入口。
+
+优先做：
+
+清晰、可用、可筛选
+
+不要现在做复杂 dashboard。
+
+核心是让客户看到：
+
+“系统发现了哪些可追回机会”
+
+以及：
+
+“预计能追回多少钱”
+
+和：
+
+“下一步是什么”。
+
+⑨ 本轮仍不要做
+
+PC-02 不要顺手扩成：
+
+X4 cross-provider entity resolution
+
+AI ranking redesign
+
+Growth SEO
+
+billing/payment
+
+provider real write
+
+new account lineage rules
+
+analytics mega-dashboard
+
+只完成客户可用的 Opportunity List。
+
+编号裁决
+
+① PC-01A A–I：
+
+PASS
+
+② PC-01A：
+
+PASS / CLOSED
+
+③ PC-01B：
+
+HOLD_EXTERNAL / HOST
+
+④ PC-02：
+
+PASS / AUTHORIZED
+
+⑤ NEXT EXECUTION UNIT：
+
+PC-02 OPPORTUNITY LIST
+
+read projection + tenant/account filtering + pagination + customer UI + empty/error states + tests + full CI
+
+边界继续保持：
+
+NO platform write
+Payment = 0
+autopay = OFF
+collection = OFF
+external payment write = OFF
+R13 HOLD
+TRANSPORT = false
+无生产凭据
+
+这意味着现在可以正式进入 PC-02。后面应该继续沿着客户主流程做：机会列表 → Claim package → 错误恢复 → 回款可见性，而不是再回去扩底层架构。
+```
