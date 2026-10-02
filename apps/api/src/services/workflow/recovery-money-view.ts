@@ -7,7 +7,8 @@
  *   1. 这是 MONEY VISIBILITY，不是 MONEY MOVEMENT：只读投影，不做 payment / collection /
  *      payout / PSP / FX / R46 重构 / account lineage 变更。
  *   2. 多币种安全：一律按 currency 分组，**不做**跨币种相加，也**不做** FX 换算。
- *   3. EXPECTED ≠ RECEIVED：EXPECTED 只进入 expected，不计入 recovered；DISPUTED 单独计数，
+ *   3. EXPECTED ≠ RECEIVED：EXPECTED 只进入 expected；到账金额（recovered）**只来自 RecoveryPayout**
+ *      （CHANGE D）；DISPUTED 单独计数，
  *      不得当作「已安全追回」；VOID 从净额中排除；REVERSAL 冲减 netRecovered。
  *   4. Fee：区分 fee calculated（BillingInvoice.total）与 fee actually collected
  *      （BillingInvoice.paidAmount）；当前 collection = OFF → 恒定 `NOT_ENABLED`，不得假装已扣款。
@@ -189,6 +190,8 @@ export async function getRecoveryMoneyView(
           recoverableAmount: true,
           closedReason: true,
           occurredAt: true,
+          /** PC-05 FINAL-2 CHANGE C：唯一可用作 approvedAt 的真实 outcome 时间。 */
+          closedAt: true,
         },
       },
       settlements: {
@@ -201,6 +204,8 @@ export async function getRecoveryMoneyView(
           amount: true,
           currency: true,
           receivedAt: true,
+          /** PC-05 FINAL-2 CHANGE D：到账事实的唯一来源。 */
+          payouts: { select: { id: true, amount: true, currency: true, receivedAt: true } },
         },
       },
       ledgerEntries: { select: { id: true, amount: true, currency: true, occurredAt: true } },
@@ -287,31 +292,34 @@ export async function getRecoveryMoneyView(
         bucket.claimed = bucket.claimed.plus(recoverable);
         hasSubmission = true;
       }
-      if (item.status === 'SUBMITTED_MANUAL' || item.status === 'RECOVERED' || item.status === 'CLOSED') {
+      // CHANGE B（MSG-20261003-88）：approved 只来自真实 approved·recovered outcome；
+      // SUBMITTED_MANUAL / CLOSED(REJECTED | NOT_WORTH_PURSUING | CUSTOMER_DECLINED) 一律不计。
+      const isRecoveredOutcome =
+        item.status === 'RECOVERED' ||
+        (item.status === 'CLOSED' && item.closedReason === 'RECOVERED');
+      if (isRecoveredOutcome) {
         bucket.approved = bucket.approved.plus(recoverable);
-        approvedAt = approvedAt ?? item.occurredAt;
+        // CHANGE C：approvedAt 只接受真实 persisted outcome 时间；无则为 null（不得用 occurredAt 顶替）。
+        if (item.closedAt && (!approvedAt || item.closedAt < approvedAt)) approvedAt = item.closedAt;
       }
       if (!discoveredAt || item.occurredAt < discoveredAt) discoveredAt = item.occurredAt;
     }
 
     for (const settlement of row.settlements) {
-      const bucket = bucketOf(settlement.currency); // 事实自身币种
-      const reversed = settlement.reversedBySettlementId !== null;
+      // CHANGE D（MSG-20261003-88）：Settlement 只提供 expected / disputed / reconciliation context；
+      // 到账金额一律来自 RecoveryPayout，绝不再用 Settlement.amount 代表「已收到钱」。
+      const contextBucket = bucketOf(settlement.currency);
       if (settlement.status === 'EXPECTED') {
-        bucket.expected = bucket.expected.plus(settlement.amount);
-        continue;
+        contextBucket.expected = contextBucket.expected.plus(settlement.amount);
+      } else if (settlement.status === 'DISPUTED' || settlement.reconciliationStatus === 'DISPUTED') {
+        contextBucket.disputed = contextBucket.disputed.plus(settlement.amount);
       }
-      if (settlement.status === 'VOID') continue; // VOID 不计入净额
-      if (settlement.status === 'DISPUTED' || settlement.reconciliationStatus === 'DISPUTED') {
-        bucket.disputed = bucket.disputed.plus(settlement.amount);
-        continue;
-      }
-      if (reversed || settlement.reconciliationStatus === 'REVERSED') continue;
-      if (settlement.confirmationStatus === 'REJECTED_BY_REVIEW') continue;
-      if (settlement.status === 'RECEIVED' || settlement.status === 'PARTIAL') {
-        bucket.recovered = bucket.recovered.plus(settlement.amount);
-        if (settlement.receivedAt && (!receivedAt || settlement.receivedAt < receivedAt)) {
-          receivedAt = settlement.receivedAt;
+      // CHANGE E：历史 payout 永不因 reconciliationStatus=REVERSED 而被抹掉（gross 历史保留）。
+      for (const payout of settlement.payouts) {
+        const payoutBucket = bucketOf(payout.currency);
+        payoutBucket.recovered = payoutBucket.recovered.plus(payout.amount);
+        if (payout.receivedAt && (!receivedAt || payout.receivedAt < receivedAt)) {
+          receivedAt = payout.receivedAt;
         }
       }
     }
@@ -340,7 +348,7 @@ export async function getRecoveryMoneyView(
     const primary = primaryKey ? (caseBuckets.get(primaryKey) as BucketAccumulator) : null;
     const statusSource = primary ?? newBucket();
     const status = deriveMoneyStatus({
-      recovered: statusSource.recovered,
+      recovered: statusSource.recovered, // gross：历史 payout 合计
       disputed: statusSource.disputed,
       adjustments: statusSource.adjustments,
       approved: statusSource.approved,
