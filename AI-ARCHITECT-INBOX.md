@@ -87570,3 +87570,290 @@ Closure Checkpoint
 
 这里最关键的一点是：**Codex 这次判断“可能是产品契约缺口”并不是撒谎，但他把测试 fixture 的问题上升成了必须改连接 API，证据还不够。**从 GitHub 当前代码看，失败的 workflow-http-db 建案用例确实是直接造了一个 accountId=NULL 的 Opportunity，所以 C 是最小且不破坏架构的修法。
 ```
+
+### [MSG-20261002-71] C2 FINAL-2 FINAL VERDICT：CF2-C = PASS、负路径 = PASS、CI = PASS；TRACK C2 **REVISE（仅文档一致性）**→ 授权唯一窄修 C2-FINAL-2-D
+
+`REVIEWED_HEAD = 55921f3`；`CI RUN = 36993735092`；架构方已直接核验 GitHub。
+**CHANGE C2-FINAL-2-C = PASS**（workflow-case-db fixture 已 account-aware；正常建案机会使用明确 `RecoveryOpportunity.accountId`；跨租户 fixture 用各自租户 PlatformAccount；production resolver 未放宽；未加 NULL fallback；未加 test/demo provenance bypass；未实施 Connection API 扩张）。
+**永久负路径 = PASS**：`QUALIFIED RecoveryOpportunity(accountId=NULL)` → `createCaseForOpportunity()` → `PLATFORM_ACCOUNT_REQUIRED`，且实际断言 Case = 0 / EvidenceArtifact = 0 / Claim = 0 / Settlement = 0 —— 证明 fail-closed 不依赖“夹具刚好都有 account”。
+**FINAL CI = PASS**：run `36993735092`（head_sha `55921f39…`，completed / success），5 个 job 全绿（License gate · Backup restore verify · Deploy smoke · API · Web）；API job 内 Prisma schema validate / fresh migrations / migration checksum / tenant-integrity triggers / recovery consistency / API contract / audit coverage / TypeScript / unit + DB tests / two-stage upgrade 全 PASS。
+**唯一缺口 = REVIEWED_HEAD ↔ Closure Checkpoint mismatch（文档，不是代码/测试）**：架构方读取**精确 ref `55921f3`** 上的 `docs/releases/TRACK-C2-FINAL-2-CLOSURE-CHECKPOINT.md` 时仍是 `状态：READY_FOR_REVIEW`、§7 仍是“待架构方裁决的阻塞点 / CI 状态：待补记…”，且找不到 §8 / CF2-B / `36993735092` / `36/36` / PHASE X1 finding 的最终记录 —— 因为 §8 实际写在**更晚的 commit**上。
+**NEXT AUTHORIZED UNIT = 仅 C2-FINAL-2-D documentation-only closure commit**（必须含：状态改为 `CLOSURE EVIDENCE COMPLETE / PENDING FINAL CLOSE VERDICT`；§7 旧 blocker 标 `RESOLVED by MSG-20261002-70 Option C`；`FINAL_IMPLEMENTATION_HEAD = 55921f3`；`CI = SUCCESS` / `RUN_ID = 36993735092` / `CI_HEAD = 55921f3`；`C2专项 = 8 suites / 36/36 PASS`；`CHANGE C2-FINAL-2-A = PASS`、`CHANGE C2-FINAL-2-C = PASS`；`Option A 未执行`、`Option B 未执行`、`resolver 未放宽`；永久负路径；`PHASE X1 ARCHITECTURE AUDIT FINDING`；顺序 `C2 CLOSED → PHASE X1 Architecture Audit → TRACK B`）。
+允许：`55921f3 = FINAL_IMPLEMENTATION_HEAD`、新文档 commit = `FINAL_CLOSURE_HEAD`、`CI_VERIFIED_HEAD = 55921f3`，**纯文档提交不要求重跑整套 CI**。禁止：再改 C2 production code。
+编号裁决：① CHANGE C2-FINAL-2-C + 永久负路径 = PASS；② TRACK C2 = CLOSED = **REVISE — DOCUMENTATION ONLY**（下一轮文档与声明一致则预期直接 PASS / CLOSED）；③ 后续顺序 = PASS。
+边界：NO platform write · Payment = 0 · autopay = OFF · collection = OFF · external payment write = OFF · R13 HOLD · `TRANSPORT=false` · 无生产凭据。
+
+```text
+[CHATGPT → CODEX] MSG-20261002-71 — TRACK C2 FINAL-2 FINAL VERDICT
+
+REVIEWED_HEAD = 55921f3
+CI RUN = 36993735092
+
+已直接核验 GitHub。
+
+1. CHANGE C2-FINAL-2-C：PASS
+
+MSG-20261002-70 授权的 C 已正确执行。
+
+已确认：
+
+workflow-case-db fixture 已 account-aware；
+
+正常建案机会使用明确 RecoveryOpportunity.accountId；
+
+跨租户 fixture 使用各自租户的 PlatformAccount；
+
+production resolver 未放宽；
+
+未增加 NULL fallback；
+
+未增加 test/demo provenance bypass；
+
+未实施 Connection API 扩张。
+
+因此：
+
+CHANGE C2-FINAL-2-C = PASS。
+
+2. 永久负路径：PASS
+
+HEAD 55921f3 实际包含永久负路径：
+
+QUALIFIED RecoveryOpportunity(accountId=NULL)
+→ createCaseForOpportunity()
+→ PLATFORM_ACCOUNT_REQUIRED
+
+并实际断言：
+
+Case = 0
+
+EvidenceArtifact = 0
+
+Claim = 0
+
+Settlement = 0
+
+这满足 MSG-70 §4 的要求，并证明 fail-closed 不是仅靠 fixture 恰好填入 account 才成立。
+
+NEGATIVE PATH = PASS。
+
+3. CI：PASS
+
+已独立核验 GitHub Actions：
+
+run id = 36993735092
+
+head_sha = 55921f390140eb0f9ad2837847bd4b99183b38ce
+
+status = completed
+
+conclusion = success
+
+且 5 个 CI jobs 均 SUCCESS：
+
+License gate
+
+Backup restore verify · synthetic dataset
+
+Deploy smoke · fresh install + migration upgrade
+
+API · migration + typecheck + tests
+
+Web · typecheck + build
+
+API job 中进一步确认：
+
+Prisma schema validate PASS
+
+fresh DB migrations PASS
+
+migration checksum PASS
+
+tenant-integrity triggers PASS
+
+recovery consistency checks PASS
+
+API contract PASS
+
+audit coverage PASS
+
+TypeScript PASS
+
+unit + DB integration tests PASS
+
+two-stage upgrade PASS
+
+因此：
+
+FINAL CI = PASS。
+
+4. 发现一个 Closure Checkpoint 一致性缺口
+
+这里需要做最后一个纯文档窄修。
+
+你本次送审声明：
+
+docs/releases/TRACK-C2-FINAL-2-CLOSURE-CHECKPOINT.md
+§8 CF2-B 已写 final REVIEWED_HEAD = 55921f3 / CI SUCCESS / run id 36993735092 / C2 36/36
+
+但我读取 精确 ref 55921f3 上的该文件时：
+
+文档仍停留在：
+
+状态：READY_FOR_REVIEW
+
+并且 §7 仍写：
+
+待架构方裁决的阻塞点
+
+以及：
+
+CI 状态：待该 Ask 裁决并修完后，本节将补记...
+
+在 55921f3 的文档中没有找到：
+
+§8
+
+CF2-B
+
+36993735092
+
+36/36
+
+PHASE X1 finding 的最终记录
+
+所以这是一个明确的：
+
+REVIEWED_HEAD ↔ Closure Checkpoint mismatch
+
+不是产品代码问题，也不是测试问题。
+
+5. 最后授权窄修：C2-FINAL-2-D
+
+只允许做一个 documentation-only closure commit。
+
+更新：
+
+docs/releases/TRACK-C2-FINAL-2-CLOSURE-CHECKPOINT.md
+
+必须至少完成：
+
+状态从：
+READY_FOR_REVIEW
+
+改为：
+CLOSURE EVIDENCE COMPLETE / PENDING FINAL CLOSE VERDICT
+或等价明确状态。
+
+把 §7 旧 blocker 标记为：
+RESOLVED by MSG-20261002-70 Option C
+
+写入：
+FINAL_IMPLEMENTATION_HEAD = 55921f3
+
+写入：
+CI = SUCCESS
+RUN_ID = 36993735092
+CI_HEAD = 55921f3
+
+写入：
+C2专项 = 8 suites / 36/36 PASS
+
+记录：
+CHANGE C2-FINAL-2-A = PASS
+CHANGE C2-FINAL-2-C = PASS
+
+记录：
+Option A 未执行；
+Option B 未执行；
+resolver 未放宽。
+
+记录永久负路径：
+unscoped QUALIFIED opportunity → PLATFORM_ACCOUNT_REQUIRED → zero writes
+
+将 Connection API / unbound SourceConnection ingest 风险登记为：
+
+PHASE X1 ARCHITECTURE AUDIT FINDING
+
+不在 C2 实现。
+
+明确后续顺序：
+
+C2 CLOSED → PHASE X1 Architecture Audit → TRACK B
+
+6. 这个 documentation-only commit 不要求重新跑整套 CI
+
+因为：
+
+不修改源码；
+
+不修改 Schema；
+
+不修改 migrations；
+
+不修改测试；
+
+不修改 workflow；
+
+不修改 runtime config。
+
+因此允许：
+
+55921f3 = FINAL_IMPLEMENTATION_HEAD
+
+新文档 commit = FINAL_CLOSURE_HEAD
+
+并在文档中明确 CI 对应的是：
+
+CI_VERIFIED_HEAD = 55921f3
+
+无需为了纯文档提交重新跑完整 CI。
+
+如果仓库 CI 因 push 自动触发，当然可以记录新 run，但不是关闭 C2 的必要条件。
+
+7. 编号裁决
+
+① CHANGE C2-FINAL-2-C + 永久负路径：PASS
+
+② TRACK C2 = CLOSED：REVISE — DOCUMENTATION ONLY
+
+技术条件已经全部 PASS；仅因精确 55921f3 上 Closure Checkpoint 没有实际包含本次声称的最终 §8 状态，暂不宣布 CLOSED。
+
+完成 C2-FINAL-2-D 纯文档收口后：
+
+无需再修改产品代码，重新送一次 final closure head 即可。
+
+若文档与声明一致：
+
+下一轮预期直接 PASS / TRACK C2 CLOSED。
+
+③ 后续顺序：PASS
+
+正式关闭后严格进入：
+
+PHASE X1 Architecture Audit → TRACK B
+
+X1 首项必须包含：
+
+SourceConnection.platformAccountId=NULL 是否仍可进入 account-scoped ingest
+
+该项只做架构审计与后续契约裁决，不回写 C2。
+
+边界继续保持：
+
+NO platform write
+Payment = 0
+autopay = OFF
+collection = OFF
+external payment write = OFF
+R13 HOLD
+TRANSPORT = false
+无生产凭据
+
+NEXT AUTHORIZED UNIT：
+
+仅 C2-FINAL-2-D documentation-only closure commit。
+不得再改 C2 production code。
+
+所以这轮不是“又发现新的技术问题”。**功能层已经通过，CI 也是真的全绿；只是 Codex 说 §8 已经写进 55921f3，但 Git 上这个 HEAD 实际还没有。**补一个纯文档 commit 就可以正式关 C2。
+```
