@@ -1,0 +1,365 @@
+/**
+ * TRACK A / PC-05 — RECOVERED MONEY VISIBILITY（customer-visible financial read projection）.
+ * ---------------------------------------------------------------
+ * 授权：MSG-20261003-86 ⑥（PC-05 RECOVERED MONEY VISIBILITY）。
+ *
+ * 冻结规则：
+ *   1. 这是 MONEY VISIBILITY，不是 MONEY MOVEMENT：只读投影，不做 payment / collection /
+ *      payout / PSP / FX / R46 重构 / account lineage 变更。
+ *   2. 多币种安全：一律按 currency 分组，**不做**跨币种相加，也**不做** FX 换算。
+ *   3. EXPECTED ≠ RECEIVED：EXPECTED 只进入 expected，不计入 recovered；DISPUTED 单独计数，
+ *      不得当作「已安全追回」；VOID 从净额中排除；REVERSAL 冲减 netRecovered。
+ *   4. Fee：区分 fee calculated（BillingInvoice.total）与 fee actually collected
+ *      （BillingInvoice.paidAmount）；当前 collection = OFF → 恒定 `NOT_ENABLED`，不得假装已扣款。
+ *   5. 只读、tenant-scoped；不返回 secret / payment credential 字段。
+ *
+ * 边界：NO platform write · Payment = 0 · autoplay = OFF · collection = OFF · R13 HOLD · TRANSPORT=false。
+ */
+
+import { Prisma, type PrismaClient } from '@prisma/client';
+
+import { WorkflowError } from './opportunity-review';
+import { assertPermission } from './permissions';
+
+export type MoneyStatus =
+  | 'DISCOVERED'
+  | 'IN_PROGRESS'
+  | 'APPROVED'
+  | 'PARTIALLY_RECOVERED'
+  | 'RECOVERED'
+  | 'DISPUTED'
+  | 'REVERSED';
+
+export const MONEY_STATUS_LABEL: Record<MoneyStatus, string> = {
+  DISCOVERED: '已发现',
+  IN_PROGRESS: '追回中',
+  APPROVED: '已获批',
+  PARTIALLY_RECOVERED: '部分已追回',
+  RECOVERED: '已追回',
+  DISPUTED: '有争议',
+  REVERSED: '已冲回',
+};
+
+/** 客户 collection 状态：当前 collection = OFF，恒定 NOT_ENABLED。 */
+export const COLLECTION_STATE = 'NOT_ENABLED' as const;
+
+export interface CurrencyBucket {
+  currency: string;
+  discovered: string;
+  expected: string;
+  claimed: string;
+  approved: string;
+  recovered: string;
+  disputed: string;
+  adjustments: string;
+  netRecovered: string;
+  outstanding: string;
+  feeCalculated: string;
+  feeCollected: string;
+}
+
+export interface CaseMoneyView {
+  caseId: string;
+  caseNo: string;
+  title: string;
+  status: MoneyStatus;
+  statusLabel: string;
+  currency: string;
+  bucket: CurrencyBucket;
+  timeline: {
+    discoveredAt: string | null;
+    submittedAt: string | null;
+    approvedAt: string | null;
+    receivedAt: string | null;
+  };
+  lineage: { claimItems: number; settlements: number; ledgerEntries: number; adjustments: number };
+}
+
+export interface RecoveryMoneyView {
+  organization: {
+    byCurrency: CurrencyBucket[];
+    collection: typeof COLLECTION_STATE;
+    payment: 'ZERO' ;
+  };
+  cases: CaseMoneyView[];
+  feeNote: string;
+}
+
+const ZERO = new Prisma.Decimal(0);
+const money = (value: InstanceType<typeof Prisma.Decimal>): string =>
+  value.toDecimalPlaces(4, Prisma.Decimal.ROUND_HALF_UP).toFixed(4);
+
+interface BucketAccumulator {
+  discovered: InstanceType<typeof Prisma.Decimal>;
+  expected: InstanceType<typeof Prisma.Decimal>;
+  claimed: InstanceType<typeof Prisma.Decimal>;
+  approved: InstanceType<typeof Prisma.Decimal>;
+  recovered: InstanceType<typeof Prisma.Decimal>;
+  disputed: InstanceType<typeof Prisma.Decimal>;
+  adjustments: InstanceType<typeof Prisma.Decimal>;
+  feeCalculated: InstanceType<typeof Prisma.Decimal>;
+  feeCollected: InstanceType<typeof Prisma.Decimal>;
+}
+
+const newBucket = (): BucketAccumulator => ({
+  discovered: ZERO,
+  expected: ZERO,
+  claimed: ZERO,
+  approved: ZERO,
+  recovered: ZERO,
+  disputed: ZERO,
+  adjustments: ZERO,
+  feeCalculated: ZERO,
+  feeCollected: ZERO,
+});
+
+function finalizeBucket(currency: string, bucket: BucketAccumulator): CurrencyBucket {
+  const netRecovered = bucket.recovered.minus(bucket.adjustments);
+  const outstanding = Prisma.Decimal.max(bucket.approved.minus(netRecovered), ZERO);
+  return {
+    currency,
+    discovered: money(bucket.discovered),
+    expected: money(bucket.expected),
+    claimed: money(bucket.claimed),
+    approved: money(bucket.approved),
+    recovered: money(bucket.recovered),
+    disputed: money(bucket.disputed),
+    adjustments: money(bucket.adjustments),
+    netRecovered: money(netRecovered),
+    outstanding: money(outstanding),
+    feeCalculated: money(bucket.feeCalculated),
+    feeCollected: money(bucket.feeCollected),
+  };
+}
+
+function deriveMoneyStatus(input: {
+  recovered: InstanceType<typeof Prisma.Decimal>;
+  disputed: InstanceType<typeof Prisma.Decimal>;
+  adjustments: InstanceType<typeof Prisma.Decimal>;
+  approved: InstanceType<typeof Prisma.Decimal>;
+  claimed: InstanceType<typeof Prisma.Decimal>;
+  hasDiscovered: boolean;
+  hasSubmission: boolean;
+}): MoneyStatus {
+  const net = input.recovered.minus(input.adjustments);
+  if (input.disputed.greaterThan(ZERO)) return 'DISPUTED';
+  if (input.adjustments.greaterThan(ZERO) && net.lessThanOrEqualTo(ZERO)) return 'REVERSED';
+  if (input.recovered.greaterThan(ZERO)) {
+    const outstanding = input.approved.minus(net);
+    return outstanding.lessThanOrEqualTo(ZERO) ? 'RECOVERED' : 'PARTIALLY_RECOVERED';
+  }
+  if (input.approved.greaterThan(ZERO)) return 'APPROVED';
+  if (input.claimed.greaterThan(ZERO) || input.hasSubmission) return 'IN_PROGRESS';
+  return input.hasDiscovered ? 'DISCOVERED' : 'IN_PROGRESS';
+}
+
+export interface RecoveryMoneyActor {
+  organizationId: string;
+  actorUserId: string;
+  role: string;
+}
+
+export async function getRecoveryMoneyView(
+  prisma: PrismaClient,
+  actor: RecoveryMoneyActor,
+  options: { caseId?: string } = {},
+): Promise<RecoveryMoneyView> {
+  // 与账单/金额读取同一权限口径（OWNER / ADMIN / OPS / FINANCE 可见金额；VIEWER 不可）。
+  assertPermission(actor.role, 'viewBilling');
+
+  const cases = await prisma.case.findMany({
+    where: { organizationId: actor.organizationId, ...(options.caseId ? { id: options.caseId } : {}) },
+    orderBy: [{ openedAt: 'desc' }, { id: 'desc' }],
+    take: options.caseId ? 1 : 100,
+    select: {
+      id: true,
+      caseNo: true,
+      title: true,
+      currency: true,
+      status: true,
+      openedAt: true,
+      claimItems: {
+        select: {
+          id: true,
+          status: true,
+          currency: true,
+          recoverableAmount: true,
+          closedReason: true,
+          occurredAt: true,
+        },
+      },
+      settlements: {
+        select: {
+          id: true,
+          status: true,
+          confirmationStatus: true,
+          reconciliationStatus: true,
+          reversedBySettlementId: true,
+          amount: true,
+          currency: true,
+          receivedAt: true,
+        },
+      },
+      ledgerEntries: { select: { id: true, amount: true, currency: true, occurredAt: true } },
+      billingInvoices: {
+        select: { id: true, status: true, total: true, paidAmount: true, currency: true, invoiceNo: true },
+      },
+    },
+  });
+  if (options.caseId && cases.length === 0) {
+    throw new WorkflowError('NOT_FOUND', '案件不存在或不属于该租户');
+  }
+
+  const caseIds = cases.map((row) => row.id);
+  const adjustments = caseIds.length
+    ? await prisma.settlementAdjustment.findMany({
+        where: {
+          organizationId: actor.organizationId,
+          originalSettlement: { caseId: { in: caseIds } },
+        },
+        select: { id: true, amount: true, currency: true, adjustmentKind: true, originalSettlementId: true },
+      })
+    : [];
+  const adjustmentsBySettlement = new Map<string, typeof adjustments>();
+  // PC-05 ③：submittedAt 必须来自真实人工提交事实，不得由 claim item 状态猜测。
+  const submissions = caseIds.length
+    ? await prisma.recoveryManualSubmission.findMany({
+        where: { organizationId: actor.organizationId, caseId: { in: caseIds } },
+        select: { caseId: true, submittedAt: true },
+      })
+    : [];
+  const submittedAtByCase = new Map<string, Date>();
+  for (const submission of submissions) {
+    const current = submittedAtByCase.get(submission.caseId);
+    if (!current || submission.submittedAt < current) {
+      submittedAtByCase.set(submission.caseId, submission.submittedAt);
+    }
+  }
+  for (const adjustment of adjustments) {
+    const list = adjustmentsBySettlement.get(adjustment.originalSettlementId) ?? [];
+    list.push(adjustment);
+    adjustmentsBySettlement.set(adjustment.originalSettlementId, list);
+  }
+
+  const orgBuckets = new Map<string, BucketAccumulator>();
+  const caseViews: CaseMoneyView[] = [];
+
+  for (const row of cases) {
+    const currency = row.currency;
+    const bucket = newBucket();
+    const orgBucket = orgBuckets.get(currency) ?? newBucket();
+
+    let hasSubmission = false;
+    let discoveredAt: Date | null = null;
+    const submittedAt: Date | null = submittedAtByCase.get(row.id) ?? null;
+    let approvedAt: Date | null = null;
+    let receivedAt: Date | null = null;
+
+    for (const item of row.claimItems) {
+      const recoverable = item.recoverableAmount ?? ZERO;
+      bucket.discovered = bucket.discovered.plus(recoverable);
+      if (item.status === 'SUBMITTED_MANUAL') {
+        bucket.claimed = bucket.claimed.plus(recoverable);
+        hasSubmission = true;
+      }
+      if (item.status === 'SUBMITTED_MANUAL' || item.status === 'RECOVERED' || item.status === 'CLOSED') {
+        bucket.approved = bucket.approved.plus(recoverable);
+        approvedAt = approvedAt ?? item.occurredAt;
+      }
+      if (!discoveredAt || item.occurredAt < discoveredAt) discoveredAt = item.occurredAt;
+    }
+
+    for (const settlement of row.settlements) {
+      const reversed = settlement.reversedBySettlementId !== null;
+      if (settlement.status === 'EXPECTED') {
+        bucket.expected = bucket.expected.plus(settlement.amount);
+        continue;
+      }
+      if (settlement.status === 'VOID') continue; // VOID 不计入净额
+      if (settlement.status === 'DISPUTED' || settlement.reconciliationStatus === 'DISPUTED') {
+        bucket.disputed = bucket.disputed.plus(settlement.amount);
+        continue;
+      }
+      if (reversed || settlement.reconciliationStatus === 'REVERSED') continue;
+      if (settlement.confirmationStatus === 'REJECTED_BY_REVIEW') continue;
+      if (settlement.status === 'RECEIVED' || settlement.status === 'PARTIAL') {
+        bucket.recovered = bucket.recovered.plus(settlement.amount);
+        if (settlement.receivedAt && (!receivedAt || settlement.receivedAt < receivedAt)) {
+          receivedAt = settlement.receivedAt;
+        }
+      }
+    }
+
+    // REVERSAL / CORRECTION 冲减净额（v1 只有 REVERSAL 生效于 net；VOID 语义为原计算不存在）
+    for (const settlement of row.settlements) {
+      for (const adjustment of adjustmentsBySettlement.get(settlement.id) ?? []) {
+        if (adjustment.adjustmentKind === 'REVERSAL') {
+          bucket.adjustments = bucket.adjustments.plus(adjustment.amount);
+        }
+      }
+    }
+
+    for (const invoice of row.billingInvoices) {
+      if (invoice.status === 'VOID') continue;
+      bucket.feeCalculated = bucket.feeCalculated.plus(invoice.total);
+      bucket.feeCollected = bucket.feeCollected.plus(invoice.paidAmount); // 当前恒为 0
+    }
+
+    orgBucket.discovered = orgBucket.discovered.plus(bucket.discovered);
+    orgBucket.expected = orgBucket.expected.plus(bucket.expected);
+    orgBucket.claimed = orgBucket.claimed.plus(bucket.claimed);
+    orgBucket.approved = orgBucket.approved.plus(bucket.approved);
+    orgBucket.recovered = orgBucket.recovered.plus(bucket.recovered);
+    orgBucket.disputed = orgBucket.disputed.plus(bucket.disputed);
+    orgBucket.adjustments = orgBucket.adjustments.plus(bucket.adjustments);
+    orgBucket.feeCalculated = orgBucket.feeCalculated.plus(bucket.feeCalculated);
+    orgBucket.feeCollected = orgBucket.feeCollected.plus(bucket.feeCollected);
+    orgBuckets.set(currency, orgBucket);
+
+    const status = deriveMoneyStatus({
+      recovered: bucket.recovered,
+      disputed: bucket.disputed,
+      adjustments: bucket.adjustments,
+      approved: bucket.approved,
+      claimed: bucket.claimed,
+      hasDiscovered: row.claimItems.length > 0,
+      hasSubmission,
+    });
+
+    caseViews.push({
+      caseId: row.id,
+      caseNo: row.caseNo,
+      title: row.title,
+      status,
+      statusLabel: MONEY_STATUS_LABEL[status],
+      currency,
+      bucket: finalizeBucket(currency, bucket),
+      timeline: {
+        discoveredAt: discoveredAt ? discoveredAt.toISOString() : null,
+        submittedAt: submittedAt ? submittedAt.toISOString() : null,
+        approvedAt: approvedAt ? approvedAt.toISOString() : null,
+        receivedAt: receivedAt ? receivedAt.toISOString() : null,
+      },
+      lineage: {
+        claimItems: row.claimItems.length,
+        settlements: row.settlements.length,
+        ledgerEntries: row.ledgerEntries.length,
+        adjustments: row.settlements.reduce(
+          (total, settlement) => total + (adjustmentsBySettlement.get(settlement.id)?.length ?? 0),
+          0,
+        ),
+      },
+    });
+  }
+
+  return {
+    organization: {
+      byCurrency: [...orgBuckets.entries()].map(([currency, bucket]) => finalizeBucket(currency, bucket)),
+      collection: COLLECTION_STATE,
+      payment: 'ZERO',
+    },
+    cases: caseViews,
+    feeNote:
+      'feeCalculated = 已计算的成功费；feeCollected = 实际已收取。当前 collection = NOT_ENABLED（Payment = 0），因此 feeCollected 恒为 0，不代表已扣款。',
+  };
+}

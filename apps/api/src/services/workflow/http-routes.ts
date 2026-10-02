@@ -130,6 +130,7 @@ import {
   toExportRows,
 } from './opportunity-insight';
 import { getCaseClaimPackage } from './claim-package-view';
+import { getRecoveryMoneyView } from './recovery-money-view';
 import { listRecoveryStates } from './recovery-states';
 import { listOpportunities } from './opportunity-list';
 import { REJECT_REASONS, WorkflowError, reviewOpportunity } from './opportunity-review';
@@ -137,6 +138,8 @@ import { ForbiddenError, assertPermission } from './permissions';
 
 const MAX_BODY_BYTES = 16 * 1024;
 const REVIEW_PATH = /^\/opportunities\/([^/]+)\/(qualify|reject|case)$/;
+/** PC-05：客户可见的追回金额只读投影。 */
+const RECOVERY_MONEY_PATH = /^\/recovery-money$/;
 /** PC-04：客户可见的失败 / 恢复状态投影。 */
 const RECOVERY_STATES_PATH = /^\/recovery-states$/;
 /** PC-03：客户可见的 Claim Package 只读视图。 */
@@ -377,6 +380,7 @@ export async function handleWorkflowRequest(
   const opportunityList = OPPORTUNITY_LIST_PATH.test(path);
   const caseClaimPackage = CASE_CLAIM_PACKAGE_PATH.exec(path);
   const recoveryStates = RECOVERY_STATES_PATH.test(path);
+  const recoveryMoney = RECOVERY_MONEY_PATH.test(path);
   const insightList = INSIGHT_LIST_PATH.test(path);
   const insightCsv = INSIGHT_CSV_PATH.test(path);
   const insight = INSIGHT_PATH.exec(path);
@@ -442,7 +446,7 @@ export async function handleWorkflowRequest(
     adminPermissionMatrix ||
     adminMemberDetail !== null ||
     adminKillSwitch;
-  if (!adminAny && !opportunityList && !caseClaimPackage && !recoveryStates && !operationsDashboard && !operationsClaims && !operationsRecovery && !review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !paymentReviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !replayPath && !replayReviewPath && !retryDuePath && !retryDueFreezePath && !retryDueReviewPath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim && !caseClaimSubmit && !caseClaimPrepare && !caseBillingDraft && !caseAppealSubmit && !casePlatformWrite && !caseRecoveryManualSubmit && !caseRecoveryManualReference && !caseRecoveryManualApproval && !caseRecoveryManualReferenceApproval) {
+  if (!adminAny && !opportunityList && !caseClaimPackage && !recoveryStates && !recoveryMoney && !operationsDashboard && !operationsClaims && !operationsRecovery && !review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !paymentReviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !replayPath && !replayReviewPath && !retryDuePath && !retryDueFreezePath && !retryDueReviewPath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim && !caseClaimSubmit && !caseClaimPrepare && !caseBillingDraft && !caseAppealSubmit && !casePlatformWrite && !caseRecoveryManualSubmit && !caseRecoveryManualReference && !caseRecoveryManualApproval && !caseRecoveryManualReferenceApproval) {
     return false;
   }
 
@@ -496,6 +500,7 @@ export async function handleWorkflowRequest(
             ? ['GET']
             : opportunityList ||
                 recoveryStates ||
+                recoveryMoney ||
                 caseClaimPackage !== null ||
                 insightList ||
                 insightCsv ||
@@ -855,6 +860,14 @@ export async function handleWorkflowRequest(
         deps.now ? { now: deps.now } : {},
       );
       sendJson(res, 200, result);
+      return true;
+    }
+
+    if (recoveryMoney && method === 'GET') {
+      // PC-05：客户可见追回金额（只读；按币种分组；不做 payment / collection / FX）。
+      const url = new URL(req.url ?? '/recovery-money', 'http://localhost');
+      const caseId = url.searchParams.get('caseId') ?? undefined;
+      sendJson(res, 200, await getRecoveryMoneyView(deps.prisma, actor, caseId ? { caseId } : {}));
       return true;
     }
 
