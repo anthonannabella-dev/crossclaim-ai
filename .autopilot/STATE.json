@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261002-65",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-02T02:45:08.178Z",
+  "updated_at": "2026-10-02T02:46:57.022Z",
   "previous_head": "e5202d6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -51,8 +51,8 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-02T02:22:52.443Z",
   "state": "IMPLEMENT",
-  "last_action": "TRACK C2 第一批交付：对齐 MSG-65 的 8 问 + gap matrix + 最小 Schema Delta 决策请求（docs-only）；并记录 R46 S6 CI success",
-  "last_action_at": "2026-10-02T02:45:08.178Z",
+  "last_action": "登记 TRACK S —— Platform Safety / External Submission Boundary（P0 Safety；轻量审计 6/6 PASS，不改代码）",
+  "last_action_at": "2026-10-02T02:46:57.022Z",
   "next_action": "TRACK C2 第一批：以 MSG-65 的 8 个问题与 12 项最低验收重述/补齐 multi-account 现状取证与 gap matrix，并据此提交是否需要 Schema Delta 的决策请求（不直接改 Schema）。",
   "current_head": "56abd47",
   "reviewed_head": "07b7009",
@@ -3291,5 +3291,78 @@
     "implementation_started": "NO（等待裁决）",
     "submission_comment": "5944642689",
     "submission_url": "https://github.com/anthonannabella-dev/crossclaim-ai/issues/2#issuecomment-5944642689"
+  },
+  "platform_safety_directive": {
+    "directive": "HOST ARCHITECTURE DELTA — PLATFORM SAFETY / EXTERNAL SUBMISSION BOUNDARY",
+    "doc": "docs/releases/PLATFORM-SAFETY-EXTERNAL-SUBMISSION-BOUNDARY.md",
+    "registered_at": "2026-10-02T02:46:57.022Z",
+    "priority": "长期 P0 Safety Constraint（不得被「全自动化 / 无人值守」需求覆盖）",
+    "queue_impact": "NONE",
+    "audit_head": "e99717c",
+    "audit_result": {
+      "browser_automation_dependency": "PASS（apps/api 与 apps/web 无 playwright/puppeteer/selenium/cdp 依赖或引用）",
+      "seller_credential_cookie_session": "PASS（仅 SourceConnection.credentialRef 引用；无 seller cookie/session 列；Session 模型为平台自身登录会话）",
+      "real_platform_write_calls": "PASS（src 无平台 endpoint 命中；amazon adapter 只读且注入式 transport；adapters/types.ts submitClaim() → NEEDS_MANUAL）",
+      "platform_write_executed_false": "PASS（claim-submission / appeal-submission / recovery http-request / billing-draft 源码级均为 NEEDS_MANUAL + platformWriteExecuted=false）",
+      "credential_ref_only": "PASS（credentialRef 仅逻辑引用与轮换引用，无真实 token/password/cookie）",
+      "production_credentials_hold": "PASS（capability-source 生产闸门默认 NOT_SATISFIED；EXTERNAL_WRITE 需 humanApproval+platformEnablement+productionGate；产品源码不读平台密钥 env）",
+      "verdict": "ALL_PASS → 记录 PASS + 约束入库；不改代码"
+    },
+    "priority_order": [
+      "OFFICIAL_OAUTH_API",
+      "OFFICIAL_FILE_EXPORT",
+      "CLAIM_READY_PACKAGE_HUMAN_SUBMIT",
+      "BROWSER_AUTOMATION（默认禁用；需独立 Gate + 合规审核 + 架构审批）"
+    ],
+    "forbidden_without_gate": [
+      "保存 Seller Center 用户名/密码",
+      "保存浏览器 Cookie/Session",
+      "模拟登录 Seller Center",
+      "绕 CAPTCHA/MFA",
+      "Playwright/Puppeteer/Selenium 批量代登录",
+      "未授权页面抓取",
+      "UI 自动点击批量提交 Claim",
+      "多商户共用 session/token"
+    ],
+    "state_semantics": {
+      "A_internal_approved": "Action Guard approval + approval_consumed 审计",
+      "B_package_ready": "RecoveryManualSubmission + RecoveryManualSubmissionReference",
+      "C_recorded_ready_to_submit": "RecoveryManualSubmission 提交事实",
+      "D_sent_to_platform": "platformWriteExecuted=false（+ PlatformWriteAttempt 账本）",
+      "E_provider_ack_case_ref": "RecoveryManualSubmissionReference.providerCaseRefRaw/Canonical",
+      "verdict": "现有 Schema 可可靠区分 → 保留 Schema，仅需补 projection/UI/contract（禁止含糊单一 SUBMITTED）"
+    },
+    "production_write_gate": {
+      "per_platform_requirements": [
+        "Terms 文档证据",
+        "第三方应用代表 Seller 执行该动作的许可确认",
+        "官方 OAuth/API",
+        "最小权限 scope",
+        "每个 Platform Account 独立授权",
+        "Token/Secret 入外部 Secret Manager（不入业务表/日志）",
+        "Sandbox/Test Account 验证",
+        "Action Guard",
+        "Human Approval",
+        "payload fingerprint / idempotency",
+        "duplicate submission protection",
+        "rate limit / retry / backoff",
+        "tenant/platform/account kill switch",
+        "audit trail",
+        "单次灰度真实提交成功后逐步放开"
+      ],
+      "note": "内部 claim.submit 完成不等于可接真实 endpoint；R46 PASS 不等于 R13 Payment Activation 通过"
+    },
+    "account_isolation": "每 Platform Account 的 OAuth/credential lifecycle/revoke/reconnect/rate limit/case ref 独立；Claim/Appeal/外提交须可追溯 Organization→Platform→Account→Connection→Case→Claim/Appeal→Submission；与 TRACK C2 缺口联动（待裁决）",
+    "not_doing_this_batch": [
+      "真实平台外写",
+      "生产凭据",
+      "浏览器机器人",
+      "修改 Production HOLD",
+      "打断 R46/C2 主线",
+      "假 endpoint",
+      "为自动化降低 HITL"
+    ],
+    "implementation_started": "NO（约束登记；未发现缺口，无需修复）",
+    "boundary": "NO platform write · TRANSPORT=false · NO production credentials · platformWriteExecuted=false · externalSubmission=NEEDS_MANUAL · R13 HOLD"
   }
 }

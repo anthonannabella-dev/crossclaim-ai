@@ -667,3 +667,14 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - 冻结：token 不入 PlatformAccount；label 不做身份；不同账户不得合并 CanonicalFact；当前不做 Enterprise RBAC / account-scoped ACL（仅预留挂点）；费率仍按 Recovery Outcome，不做 per-seat/per-store。
 - 10 项验收场景已列为未来永久回归基线（见文档 §6）。
 - 队列影响：**NONE**；实施需架构方先裁决 Schema Delta（未开始）。
+
+### TRACK S — Platform Safety / External Submission Boundary（HOST P0 Safety Constraint，长期不可覆盖）
+
+- 文档：`docs/releases/PLATFORM-SAFETY-EXTERNAL-SUBMISSION-BOUNDARY.md`；STATE.platform_safety_directive。
+- 接入优先级（永久固定）：Official OAuth/API → 官方导出文件 → Claim-Ready Package + Human Submit → Browser Automation **不得作为默认生产 fallback**。
+- 禁止（除非独立合规审核 + 架构审批的专门 Gate）：保存 Seller 用户名/密码 · Cookie/Session · 模拟登录 · 绕 CAPTCHA/MFA · Playwright/Puppeteer/Selenium 批量代登录 · 未授权页面抓取 · UI 批量提交 Claim · 多商户共用 session/token。
+- 内部状态 vs 平台真实状态必须可区分（A–E）：现有 Schema 已通过 approval / package / submission fact / `platformWriteExecuted` / `providerCaseRef*` 可靠区分 → 保留 Schema，后续仅补 projection/UI/contract，禁止含糊的单一 SUBMITTED。
+- 真实 platform write 前必须逐平台满足 15 项 Production Gate（Terms 证据 / 官方 API / 最小 scope / 每账号独立授权 / Secret Manager / Sandbox / Action Guard / Human Approval / fingerprint·idempotency / 去重 / 限流退避 / kill switch / audit / 灰度）。
+- 平台账号隔离（与 TRACK C2 联动）：每账号 OAuth/凭据生命周期/revoke/reconnect/rate limit/case ref 独立；Claim/Appeal/外提交必须可追溯 Organization→Platform→Account→Connection→Case→Claim/Appeal→Submission。
+- 轻量审计（HEAD e99717c）：6/6 **PASS**，未发现缺口 → 不改代码。
+- 队列影响：**NONE**（约束登记，不打断 R46/C2 主线）。
