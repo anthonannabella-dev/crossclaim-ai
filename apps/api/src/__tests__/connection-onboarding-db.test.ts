@@ -30,13 +30,17 @@ import { rotateConnectionCredentialRef } from '../services/workflow/connection-m
 import {
   assertConnectionUsableForActiveFacts,
   connectionAccountState,
+  connectionCapabilities,
   createAccountScopedConnection,
+  createVerifiedAccountScopedConnection,
   rebindLegacyConnection,
 } from '../services/workflow/connection-onboarding';
 
 const prisma = new PrismaClient();
 const imports = createPrismaImportRepository(prisma);
 const uuid = (): string => randomUUID();
+
+const NOW = new Date('2026-09-08T00:00:00.000Z');
 
 let ORG_A = '';
 let ORG_B = '';
@@ -185,20 +189,31 @@ describe('TRACK B BATCH 3 — B3-1 / B3-4 创建侧不变量', () => {
     const stored = await prisma.sourceConnection.findUniqueOrThrow({ where: { id: created.id } });
     expect(stored.platformAccountId).toBe(ACCOUNT_A);
     expect(connectionAccountState(stored)).toBe('BOUND_ACTIVE');
+    const capabilities = connectionCapabilities(stored);
+    expect(capabilities).toEqual({
+      platformAccountId: ACCOUNT_A,
+      accountState: 'BOUND_ACTIVE',
+      canIngest: true,
+      canSync: true,
+    });
   });
 
-  it('CREATE_AND_BIND 新 PlatformAccount → PASS，identity 来自 platform + externalAccountId + identityVersion', async () => {
-    const created = await createAccountScopedConnection(prisma, {
+  it('server-verified create-and-bind 新 PlatformAccount → PASS，identity 来自 platform + externalAccountId + identityVersion', async () => {
+    const created = await createVerifiedAccountScopedConnection(prisma, {
       ...actor(),
       label: 'create-and-bind',
       kind: 'FILE_UPLOAD',
       domain: 'PLATFORM',
       channel: 'AMAZON_OTHER',
-      account: {
-        mode: 'CREATE_AND_BIND',
-        platform: 'AMAZON',
-        externalAccountId: 'SELLER-NEW',
-        displayName: '展示名（非 identity）',
+      verification: {
+        source: 'ADAPTER_MOCK',
+        evidenceRef: 'mock:amazon:onboard-1',
+        verifiedAt: NOW,
+        identity: {
+          platform: 'AMAZON',
+          externalAccountId: 'SELLER-NEW',
+          displayName: '展示名（非 identity）',
+        },
       },
     });
     expect(created.platformAccountCreated).toBe(true);
@@ -223,26 +238,61 @@ describe('TRACK B BATCH 3 — B3-1 / B3-4 创建侧不变量', () => {
     expect(await prisma.sourceConnection.count({ where: { organizationId: ORG_A } })).toBe(0);
   });
 
-  it('client 提供的 platformAccountId 不能冒充 CREATE_AND_BIND 的 identity', async () => {
-    const created = await createAccountScopedConnection(prisma, {
+  it('client 直接提交 CREATE_AND_BIND canonical identity → UNVERIFIED_PLATFORM_IDENTITY（B3/T1）', async () => {
+    await expect(
+      createAccountScopedConnection(prisma, {
+        ...actor(),
+        label: 'spoofed',
+        kind: 'FILE_UPLOAD',
+        domain: 'PLATFORM',
+        channel: 'AMAZON_OTHER',
+        account: {
+          mode: 'CREATE_AND_BIND',
+          platform: 'AMAZON',
+          externalAccountId: 'SELLER-SPOOF',
+          displayName: 'spoof attempt',
+          platformAccountId: ACCOUNT_B,
+        },
+      }),
+    ).rejects.toThrow(/UNVERIFIED_PLATFORM_IDENTITY/);
+    expect(await prisma.sourceConnection.count({ where: { organizationId: ORG_A } })).toBe(0);
+
+    // 同一 identity 经 server-verified transport 才会被接受，且 identity 取自 verification
+    const verified = await createVerifiedAccountScopedConnection(prisma, {
       ...actor(),
-      label: 'spoofed',
+      label: 'verified-spoof-proof',
       kind: 'FILE_UPLOAD',
       domain: 'PLATFORM',
       channel: 'AMAZON_OTHER',
-      account: {
-        mode: 'CREATE_AND_BIND',
-        platform: 'AMAZON',
-        externalAccountId: 'SELLER-SPOOF',
-        displayName: 'spoof attempt',
-        // 冒充字段：服务端必须忽略它，identity 只取自 platform + externalAccountId + identityVersion
-        platformAccountId: ACCOUNT_B,
+      verification: {
+        source: 'ADAPTER_MOCK',
+        evidenceRef: 'mock:amazon:onboard-2',
+        verifiedAt: NOW,
+        identity: { platform: 'AMAZON', externalAccountId: 'SELLER-SPOOF', displayName: 'verified' },
       },
     });
-    expect(created.platformAccountId).not.toBe(ACCOUNT_B);
-    const account = await prisma.platformAccount.findUniqueOrThrow({ where: { id: created.platformAccountId } });
+    expect(verified.platformAccountId).not.toBe(ACCOUNT_B);
+    const account = await prisma.platformAccount.findUniqueOrThrow({ where: { id: verified.platformAccountId } });
     expect(account.organizationId).toBe(ORG_A);
     expect(account.externalAccountId).toBe('SELLER-SPOOF');
+  });
+
+  it('缺少 / 空 evidenceRef 的 verification → UNVERIFIED_PLATFORM_IDENTITY', async () => {
+    await expect(
+      createVerifiedAccountScopedConnection(prisma, {
+        ...actor(),
+        label: 'bad-verification',
+        kind: 'FILE_UPLOAD',
+        domain: 'PLATFORM',
+        channel: 'AMAZON_OTHER',
+        verification: {
+          source: 'ADAPTER_MOCK',
+          evidenceRef: '   ',
+          verifiedAt: NOW,
+          identity: { platform: 'AMAZON', externalAccountId: 'SELLER-X', displayName: 'x' },
+        },
+      }),
+    ).rejects.toThrow(/UNVERIFIED_PLATFORM_IDENTITY/);
   });
 });
 
@@ -410,22 +460,30 @@ describe('TRACK B BATCH 3 — B3-2 / B3-5 / B3-6 legacy 显式 rebind', () => {
 
 describe('TRACK B BATCH 3 — B3-3 / B3-4 身份与状态语义', () => {
   it('credential rotation 不改变 PlatformAccount identityVersion', async () => {
-    const created = await createAccountScopedConnection(prisma, {
-      ...actor(),
-      label: 'rotate-me',
-      kind: 'API',
-      domain: 'PLATFORM',
-      channel: 'AMAZON_OTHER',
-      platform: 'AMAZON',
-      credentialRef: 'ref-before',
-      account: {
-        mode: 'CREATE_AND_BIND',
+    const created = await createVerifiedAccountScopedConnection(
+      prisma,
+      {
+        ...actor(),
+        label: 'rotate-me',
+        kind: 'API',
+        domain: 'PLATFORM',
+        channel: 'AMAZON_OTHER',
         platform: 'AMAZON',
-        externalAccountId: 'SELLER-ROTATE',
-        displayName: 'rotate identity',
-        identityVersion: 'v1',
+        credentialRef: 'ref-before',
+        verification: {
+          source: 'ADAPTER_MOCK',
+          evidenceRef: 'mock:amazon:rotate',
+          verifiedAt: NOW,
+          identity: {
+            platform: 'AMAZON',
+            externalAccountId: 'SELLER-ROTATE',
+            displayName: 'rotate identity',
+            identityVersion: 'v1',
+          },
+        },
       },
-    }, { registeredPlatforms: ['AMAZON'] });
+      { registeredPlatforms: ['AMAZON'] },
+    );
 
     await rotateConnectionCredentialRef(prisma, {
       ...actor(),

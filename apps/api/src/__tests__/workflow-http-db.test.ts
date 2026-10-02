@@ -373,6 +373,44 @@ describe('C-0008-B1 — 机会复核端点（真实 HTTP + PostgreSQL）', () =>
       expect(items).toHaveLength(1);
       expect(items[0]).toMatchObject({ status: 'PAUSED', hasCredentialRef: true, platform: null });
       expect(JSON.stringify(items)).not.toContain('vault:ups-2026');
+      // MSG-20261002-78 T4：read state 明确区分「已绑定」与「可运行」
+      expect(items[0]).toMatchObject({ accountState: 'BOUND_INACTIVE', canIngest: false, canSync: false });
+      expect(items[0].platformAccountId).toBe(fixtureAccountA);
+
+      // MSG-20261002-78 T3：legacy unbound 的显式 rebind transport（NULL → account，一次性）
+      const legacy = await prisma.sourceConnection.create({
+        data: {
+          organizationId: ORG,
+          domain: 'LOGISTICS',
+          channel: 'DHL',
+          kind: 'FILE_UPLOAD',
+          status: 'NEEDS_AUTH',
+          label: 'legacy unbound http',
+          platformAccountId: null,
+        },
+        select: { id: true },
+      });
+      const rebound = await fetch(`${base}/connections/${legacy.id}/rebind`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', cookie: adminCookie },
+        body: JSON.stringify({ targetPlatformAccountId: fixtureAccountA, reason: '客户确认历史连接归属' }),
+      });
+      expect(rebound.status).toBe(200);
+      expect(await rebound.json()).toEqual({ id: legacy.id, platformAccountId: fixtureAccountA });
+
+      const secondAccount = (
+        await prisma.platformAccount.create({
+          data: { organizationId: ORG, platform: 'OTHER', externalAccountId: 'HTTP-SECOND', displayName: 'second' },
+          select: { id: true },
+        })
+      ).id;
+      const secondRebind = await fetch(`${base}/connections/${legacy.id}/rebind`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', cookie: adminCookie },
+        body: JSON.stringify({ targetPlatformAccountId: secondAccount }),
+      });
+      expect(secondRebind.status).toBe(409);
+      expect(((await secondRebind.json()) as { error: string }).error).toBe('ACCOUNT_BINDING_IMMUTABLE');
     });
 
     // 用户触发：写入与审计同事务，actor 就是登录用户
@@ -385,6 +423,8 @@ describe('C-0008-B1 — 机会复核端点（真实 HTTP + PostgreSQL）', () =>
         'source_connection.created',
         'source_connection.status_changed',
         'source_connection.credential_rotated',
+        // MSG-20261002-78 T3/T5：rebind transport 必须同样留审计（NULL → account，一次性）
+        'source_connection.bound_to_platform_account',
       ].sort(),
     );
     expect(audits.every((row) => row.actorUserId === adminUserId)).toBe(true);

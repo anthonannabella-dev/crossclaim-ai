@@ -72,6 +72,7 @@ import {
   ActionGuardDeniedError,
   type RuntimeActionGuard,
 } from '../action-guard/runtime-guard';
+import { rebindLegacyConnection } from './connection-onboarding';
 import { getRecoveryReviewStatus, submitRecoveryReview } from './recovery-review';
 import { readReplaySnapshot, submitPaymentReplayReview, submitPaymentReview } from './payment';
 import {
@@ -136,7 +137,7 @@ const REVIEW_PATH = /^\/opportunities\/([^/]+)\/(qualify|reject|case)$/;
 const INSIGHT_LIST_PATH = /^\/opportunities\/insights$/;
 const INSIGHT_CSV_PATH = /^\/opportunities\/insights\.csv$/;
 const INSIGHT_PATH = /^\/opportunities\/([^/]+)\/basis$/;
-const CONNECTION_PATH = /^\/connections(?:\/([^/]+)\/(status|credential-ref))?$/;
+const CONNECTION_PATH = /^\/connections(?:\/([^/]+)\/(status|credential-ref|rebind))?$/;
 const COMMERCIAL_TERMS_PATH = /^\/cases\/([^/]+)\/commercial-terms$/;
 const RECOVERY_OUTCOME_PATH = /^\/cases\/([^/]+)\/recovery-outcome$/;
 const RECOVERY_REVIEW_PATH = /^\/cases\/([^/]+)\/recovery-review$/;
@@ -299,6 +300,7 @@ function statusFor(error: unknown): { code: number; error: string } {
       case 'PLATFORM_ACCOUNT_REQUIRED':
       case 'ACCOUNT_BINDING_IMMUTABLE':
       case 'CONNECTION_NOT_ACTIVE':
+      case 'UNVERIFIED_PLATFORM_IDENTITY':
         return { code: 409, error: error.code };
       case 'FORBIDDEN':
         return { code: 403, error: error.code };
@@ -1654,6 +1656,21 @@ export async function handleWorkflowRequest(
       }
 
       const body = await readJsonBody(req);
+      if (sub === 'rebind') {
+        // MSG-20261002-78 T3：legacy unbound 的显式一次性追认（NULL → account，只影响未来行为）。
+        const rebound = await rebindLegacyConnection(
+          deps.prisma,
+          {
+            ...actor,
+            connectionId,
+            targetPlatformAccountId: body.targetPlatformAccountId,
+            reason: body.reason,
+          },
+          { ...(deps.now ? { now: deps.now } : {}) },
+        );
+        sendJson(res, 200, rebound);
+        return true;
+      }
       if (sub === 'status') {
         const result = await setConnectionStatus(
           deps.prisma,

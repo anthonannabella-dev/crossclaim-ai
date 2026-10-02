@@ -37,6 +37,7 @@ import {
 import { initialStatusFor } from '../acquisition';
 import { prepareAuditInsert } from '../audit';
 import { WorkflowError } from './opportunity-review';
+import type { PlatformIdentityVerification } from '../connectors/platform-identity-verifier';
 import { assertPermission } from './permissions';
 import {
   assertCredentialRef,
@@ -50,6 +51,9 @@ export const PLATFORM_ACCOUNT_REQUIRED = 'PLATFORM_ACCOUNT_REQUIRED';
 
 /** 已绑定连接不得再改绑（DB trigger cc_account_binding_immutable__SourceConnection 的 service 侧镜像）。 */
 export const ACCOUNT_BINDING_IMMUTABLE = 'ACCOUNT_BINDING_IMMUTABLE';
+
+/** T1/T2：canonical identity 只能来自 server-verified transport（MSG-20261002-78）。 */
+export const UNVERIFIED_PLATFORM_IDENTITY = 'UNVERIFIED_PLATFORM_IDENTITY';
 
 const CHANNELS = Object.values(Channel) as readonly string[];
 const DOMAINS = Object.values(RecoveryDomain) as readonly string[];
@@ -80,7 +84,8 @@ export interface ConnectionOnboardingDeps {
 export type ConnectionAccountBinding =
   | { mode: 'BIND_EXISTING'; platformAccountId: string }
   | {
-      mode: 'CREATE_AND_BIND';
+      /** 只允许 server-verified transport 内部构造；HTTP / 客户端不能直接提交 canonical identity。 */
+      mode: 'VERIFIED_CREATE_AND_BIND';
       platform: Platform;
       externalAccountId: string;
       identityVersion?: string;
@@ -143,6 +148,13 @@ function assertAccountBinding(binding: unknown): ConnectionAccountBinding {
     return { mode: 'BIND_EXISTING', platformAccountId };
   }
   if (candidate.mode === 'CREATE_AND_BIND') {
+    // MSG-20261002-78 T1/T2：拒绝客户端直接铸造 canonical PlatformAccount identity。
+    throw new WorkflowError(
+      UNVERIFIED_PLATFORM_IDENTITY,
+      'UNVERIFIED_PLATFORM_IDENTITY: CREATE_AND_BIND 不接受客户端提交的 externalAccountId',
+    );
+  }
+  if (candidate.mode === 'VERIFIED_CREATE_AND_BIND') {
     const platform = assertEnum<Platform>(candidate.platform, PLATFORMS, 'account.platform');
     const externalAccountId =
       typeof candidate.externalAccountId === 'string' ? candidate.externalAccountId.trim() : '';
@@ -168,7 +180,7 @@ function assertAccountBinding(binding: unknown): ConnectionAccountBinding {
       throw new WorkflowError('INVALID_INPUT', 'account.identityVersion 过长');
     }
     return {
-      mode: 'CREATE_AND_BIND',
+      mode: 'VERIFIED_CREATE_AND_BIND',
       platform,
       externalAccountId,
       identityVersion,
@@ -276,6 +288,122 @@ async function resolveOrCreatePlatformAccount(
   return { platformAccountId: created.id, created: true, externalAccountId: created.externalAccountId };
 }
 
+/** T1/T2：server-verified identity 的结构校验（缺失 / 空 evidenceRef 一律 fail-closed）。 */
+function assertPlatformIdentityVerification(verification: unknown): PlatformIdentityVerification {
+  if (!verification || typeof verification !== 'object') {
+    throw new WorkflowError(
+      UNVERIFIED_PLATFORM_IDENTITY,
+      'UNVERIFIED_PLATFORM_IDENTITY: 缺少 server-verified platform identity',
+    );
+  }
+  const candidate = verification as Record<string, unknown>;
+  const source = candidate.source;
+  if (source !== 'PROVIDER_OAUTH' && source !== 'PROVIDER_API' && source !== 'ADAPTER_MOCK') {
+    throw new WorkflowError(
+      UNVERIFIED_PLATFORM_IDENTITY,
+      'UNVERIFIED_PLATFORM_IDENTITY: 未知的 identity verification source',
+    );
+  }
+  const evidenceRef = typeof candidate.evidenceRef === 'string' ? candidate.evidenceRef.trim() : '';
+  if (!evidenceRef) {
+    throw new WorkflowError(
+      UNVERIFIED_PLATFORM_IDENTITY,
+      'UNVERIFIED_PLATFORM_IDENTITY: 缺少 verification evidence 引用',
+    );
+  }
+  if (!(candidate.verifiedAt instanceof Date)) {
+    throw new WorkflowError(UNVERIFIED_PLATFORM_IDENTITY, 'UNVERIFIED_PLATFORM_IDENTITY: 缺少 verifiedAt');
+  }
+  const identity = candidate.identity as Record<string, unknown> | undefined;
+  if (!identity || typeof identity !== 'object') {
+    throw new WorkflowError(UNVERIFIED_PLATFORM_IDENTITY, 'UNVERIFIED_PLATFORM_IDENTITY: 缺少 verified identity');
+  }
+  const platform = assertEnum<Platform>(identity.platform, PLATFORMS, 'identity.platform');
+  const externalAccountId =
+    typeof identity.externalAccountId === 'string' ? identity.externalAccountId.trim() : '';
+  if (!externalAccountId || externalAccountId.length > EXTERNAL_ACCOUNT_ID_MAX) {
+    throw new WorkflowError(
+      UNVERIFIED_PLATFORM_IDENTITY,
+      'UNVERIFIED_PLATFORM_IDENTITY: verified externalAccountId 非法',
+    );
+  }
+  const displayName =
+    typeof identity.displayName === 'string' && identity.displayName.trim() !== ''
+      ? identity.displayName.trim()
+      : externalAccountId;
+  return {
+    source,
+    evidenceRef,
+    verifiedAt: candidate.verifiedAt as Date,
+    identity: {
+      platform,
+      externalAccountId,
+      displayName,
+      identityVersion:
+        typeof identity.identityVersion === 'string' ? identity.identityVersion : undefined,
+      marketplace: typeof identity.marketplace === 'string' ? identity.marketplace : null,
+      region: typeof identity.region === 'string' ? identity.region : null,
+    },
+  };
+}
+
+/** T4：对外暴露的连接能力投影（UI 不得把「已绑定」误读成「可运行」）。 */
+export interface ConnectionCapabilities {
+  platformAccountId: string | null;
+  accountState: ConnectionAccountState;
+  canIngest: boolean;
+  canSync: boolean;
+}
+
+export function connectionCapabilities(row: {
+  status: string;
+  platformAccountId: string | null;
+}): ConnectionCapabilities {
+  const accountState = connectionAccountState(row);
+  const active = accountState === 'BOUND_ACTIVE';
+  return {
+    platformAccountId: row.platformAccountId,
+    accountState,
+    canIngest: active,
+    canSync: active,
+  };
+}
+
+export interface VerifiedOnboardConnectionInput extends ConnectionOnboardingActor {
+  label: unknown;
+  kind: unknown;
+  domain: unknown;
+  channel: unknown;
+  platform?: unknown;
+  credentialRef?: unknown;
+  /** 只能来自 provider transport（OAuth / API / adapter mock）的检索结果。 */
+  verification: unknown;
+}
+
+/**
+ * T1 / T2：server-verified create-and-bind 的唯一入口。
+ * canonical identity 由 verification 提供（platform + externalAccountId）；
+ * HTTP / 客户端无法直接提交 canonical identity。
+ */
+export async function createVerifiedAccountScopedConnection(
+  prisma: PrismaClient,
+  input: VerifiedOnboardConnectionInput,
+  deps: ConnectionOnboardingDeps = {},
+): Promise<OnboardConnectionResult> {
+  const verification = assertPlatformIdentityVerification(input.verification);
+  const binding: ConnectionAccountBinding = {
+    mode: 'VERIFIED_CREATE_AND_BIND',
+    platform: verification.identity.platform,
+    externalAccountId: verification.identity.externalAccountId,
+    identityVersion: verification.identity.identityVersion ?? 'v1',
+    displayName: verification.identity.displayName,
+    marketplace: verification.identity.marketplace ?? null,
+    region: verification.identity.region ?? null,
+  };
+  return createAccountScopedConnection(prisma, { ...input, account: binding }, deps, { verification });
+}
+
+
 export interface OnboardConnectionInput extends ConnectionOnboardingActor {
   label: unknown;
   kind: unknown;
@@ -301,6 +429,7 @@ export async function createAccountScopedConnection(
   prisma: PrismaClient,
   input: OnboardConnectionInput,
   deps: ConnectionOnboardingDeps = {},
+  trust?: { verification?: PlatformIdentityVerification },
 ): Promise<OnboardConnectionResult> {
   assertPermission(input.role, 'manageConnections');
 
@@ -386,7 +515,12 @@ export async function createAccountScopedConnection(
         newBinding: bound.platformAccountId,
         reason: binding.mode,
         bindingSource:
-          binding.mode === 'BIND_EXISTING' ? 'ONBOARDING_BIND_EXISTING' : 'ONBOARDING_CREATE_AND_BIND',
+          binding.mode === 'BIND_EXISTING'
+            ? 'ONBOARDING_BIND_EXISTING'
+            : 'ONBOARDING_VERIFIED_CREATE_AND_BIND',
+        verificationSource: trust?.verification?.source ?? null,
+        verificationEvidenceRef: trust?.verification?.evidenceRef ?? null,
+        verifiedAt: trust?.verification ? trust.verification.verifiedAt.toISOString() : null,
         externalAccountId: bound.externalAccountId,
         historicalFactsTouched: false,
         at: at.toISOString(),
@@ -394,7 +528,7 @@ export async function createAccountScopedConnection(
       at,
     });
 
-    if (bound.created && binding.mode === 'CREATE_AND_BIND') {
+    if (bound.created && binding.mode === 'VERIFIED_CREATE_AND_BIND') {
       await writeUserAudit(tx, {
         organizationId: input.organizationId,
         actorUserId: input.actorUserId,

@@ -42,6 +42,11 @@ const CREATABLE_KINDS: readonly string[] = ['FILE_UPLOAD', 'API'];
 
 export interface ConnectionView {
   id: string;
+  /** MSG-20261002-78 T4：account 绑定状态与能力投影（「已绑定」≠「可运行」）。 */
+  platformAccountId: string | null;
+  accountState: 'BOUND_ACTIVE' | 'BOUND_INACTIVE' | 'UNBOUND';
+  canIngest: boolean;
+  canSync: boolean;
   label: string;
   kind: SourceConnectionKind;
   domain: RecoveryDomain;
@@ -159,6 +164,7 @@ export async function listConnections(
       status: true,
       credentialRef: true,
       config: true,
+      platformAccountId: true,
       lastError: true,
       lastErrorAt: true,
       lastSyncAt: true,
@@ -168,11 +174,22 @@ export async function listConnections(
   });
 
   // credentialRef itself is never returned to the browser — only whether it exists.
-  return rows.map(({ credentialRef, config, ...row }) => ({
-    ...row,
-    hasCredentialRef: credentialRef !== null,
-    platform: platformOf(config),
-  }));
+  return rows.map(({ credentialRef, config, ...row }) => {
+    const boundActive = row.platformAccountId !== null && row.status === 'ACTIVE';
+    return {
+      ...row,
+      hasCredentialRef: credentialRef !== null,
+      platform: platformOf(config),
+      accountState:
+        row.platformAccountId === null
+          ? ('UNBOUND' as const)
+          : boundActive
+            ? ('BOUND_ACTIVE' as const)
+            : ('BOUND_INACTIVE' as const),
+      canIngest: boundActive,
+      canSync: boundActive,
+    };
+  });
 }
 
 export interface CreateManagedConnectionInput extends ConnectionActor {

@@ -61,6 +61,8 @@ export type WorkflowErrorCode =
   | 'PLATFORM_ACCOUNT_REQUIRED'
   /** MSG-20261002-77 B3-6：已绑定连接不可改绑（legacy NULL → account 仅允许一次受控追认） */
   | 'ACCOUNT_BINDING_IMMUTABLE'
+  /** MSG-20261002-78 T1/T2：canonical identity 必须来自 server-verified transport */
+  | 'UNVERIFIED_PLATFORM_IDENTITY'
   /** MSG-20261002-77 B3-4：连接未处于 ACTIVE（未启用或已暂停），不得执行 ingest / sync */
   | 'CONNECTION_NOT_ACTIVE'
   /** MSG-20261001-15 CHANGE A：Appeal 正文为空，不能作为有效提交内容 → 409 */
