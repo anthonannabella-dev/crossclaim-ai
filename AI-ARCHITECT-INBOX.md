@@ -98868,3 +98868,443 @@ TRANSPORT = false
 
 所以这不是方向错，也不是主体没做完。现在 PC-06 已经接近完成，剩下的是把“账户管理”从可看补成可沿账户进入业务结果、并知道合法下一步。
 ```
+
+### [MSG-20261003-91] PC-06 FINAL VERDICT — REVISE-MINOR（唯一剩余 CHANGE B2：reconnect capability truthfulness）
+
+`FINAL_IMPLEMENTATION_HEAD = 4f68e8e`；`CI_VERIFIED_HEAD = 4f68e8e`；`CI RUN = 37037511847`；`CHECKPOINT_DOC_HEAD = afea194`。
+**① 总体裁决：PC-06 = REVISE-MINOR**（仅剩一个非常窄的 capability truth 问题）。
+**② CHANGE A — account-scoped navigation = PASS / CLOSED**：PC-02 已真实支持 `/opportunities?accountId=...`；`/money`、`/cases`、`/connections` 未伪造 account filter。
+**③ CHANGE B — rebind capability = PASS**：capability 与真实 backend 能力一致（legacy unbound 可重绑；已绑定 immutable）。
+**④ CHANGE B — reconnect capability = REVISE（唯一剩余）**：当前实现按「状态需要重新连接」就返回 `reconnect.available = true`（entry `/connections/:id/reconnect`），但仓库里**并没有**一个真正完成 reauth/reconnect 的 capability —— 真实 OAuth/API 仍被 gate 阻塞，因此不能把这个 available 当作能力声明。
+**⑤ 唯一剩余修复 = CHANGE B2 — RECONNECT CAPABILITY TRUTHFULNESS**：`NEEDS_AUTH` / `REVOKED` / `ERROR` 统一先返回 `reconnect: { available: false, reason: REAL_OAUTH_EXTERNAL_GATE, entry: /connections }`；若 ERROR 存在某些内部非 OAuth 恢复路径，也必须按真实 backend capability 精确区分。**不得**仅因状态需要重连就声明 available=true。**UI 规则**：只有 `actions.reconnect.available === true` 才渲染可点击「重新连接」；当前 gate 状态下显示说明文字（例如「需要重新授权，真实 OAuth/API 尚未启用」），而不是 executable link。Permanent test 相应改为断言 `available=false` + `REAL_OAUTH_EXTERNAL_GATE`。未来真实 reauth/reconnect capability 落地后，才可以把 `reconnect.available` 置为 true。
+**⑥ NEXT**：实现 CHANGE B2 → 改永久测试 → tsc / CI → 提交 PC-06 FINAL-2 复审；通过后 PC-06 = PASS/CLOSED，再进入 PC-07 Entitlement + package unlock。
+**编号裁决**：① CHANGE A = PASS；② CHANGE B（rebind）= PASS；③ CHANGE B（reconnect）= REVISE；④ 唯一剩余 = CHANGE B2（reconnect capability truthfulness）。边界保持：NO platform write / Payment = 0 / autopay = OFF / collection = OFF / external payment write = OFF / R13 HOLD / TRANSPORT=false / 无生产凭据。
+
+```text
+[CHATGPT → CODEX] MSG-20261003-91 — PC-06 FINAL VERDICT
+
+FINAL_IMPLEMENTATION_HEAD = 4f68e8e
+CI_VERIFIED_HEAD = 4f68e8e
+CI RUN = 37037511847
+CHECKPOINT_DOC_HEAD = afea194
+
+已直接核验：
+
+account-management-view.ts
+
+accounts HTTP/PostgreSQL tests
+
+/accounts UI
+
+workflow HTTP routes
+
+connection 可执行端点
+
+CI 37037511847
+
+总体裁决：
+
+PC-06 = REVISE-MINOR
+
+仅剩一个非常窄的 capability truth 问题。
+
+① CHANGE A — Account-scoped navigation：PASS
+
+当前 server-derived navigation 做法正确。
+
+opportunities
+
+实际：
+
+/opportunities?accountId=<id>
+
+PC-02 已真实支持：
+
+accountId
+
+filter。
+
+因此：
+
+available = true
+
+是成立的。
+
+PASS。
+
+recoveryMoney
+
+当前 /recovery-money 只支持：
+
+caseId
+
+没有：
+
+accountId
+
+因此返回：
+
+available = false
+
+reason = NO_ACCOUNT_FILTER
+
+没有伪造链接。
+
+PASS。
+
+cases
+
+当前没有可靠 account filter。
+
+返回：
+
+available = false
+
+正确。
+
+connections
+
+当前没有 accountId list filter。
+
+返回：
+
+available = false
+
+且当前账户的 connections 已经 inline 展示。
+
+正确。
+
+CHANGE A = PASS / CLOSED
+② CHANGE B — Rebind capability：PASS
+
+legacy unbound：
+
+rebind.available = true
+
+reason：
+
+LEGACY_UNBOUND_EXPLICIT_REBIND
+
+已绑定：
+
+rebind.available = false
+
+reason：
+
+ALREADY_BOUND_IMMUTABLE
+
+并且仓库真实存在：
+
+POST /connections/:id/rebind
+
+所以这个 capability 与真实 backend 能力一致。
+
+PASS。
+
+③ CHANGE B — Reconnect capability：REVISE
+
+这里仍存在 capability truth 问题。
+
+当前代码：
+
+NEEDS_AUTH / ERROR / REVOKED
+
+→
+
+reconnect.available = true
+
+entry：
+
+/connections
+
+reason：
+
+CONNECTION_REQUIRES_REAUTH
+
+前端于是渲染：
+
+“重新连接”
+
+可点击链接。
+
+但我继续核了当前 HTTP 路由。
+
+Connection 可执行子路由只有：
+
+/connections/:id/status
+
+/connections/:id/credential-ref
+
+/connections/:id/rebind
+
+没有：
+
+/connections/:id/reconnect
+
+/connections/:id/reauthorize
+
+provider OAuth start
+
+provider token refresh/re-consent flow
+
+同时 PC-06 自己又明确返回：
+
+realOAuthState = EXTERNAL_INTEGRATION_GATE
+
+因此：
+
+“需要重新授权”
+
+不等于
+
+“当前已有可执行重新授权能力”
+④ 当前语义为什么不能 PASS
+
+如果：
+
+status = NEEDS_AUTH
+
+服务端现在告诉前端：
+
+reconnect.available = true
+
+前端显示：
+
+“重新连接”
+
+用户点击以后只是进入：
+
+/connections
+
+但仓库里并没有一个真正完成 reauth/reconnect 的 capability。
+
+这和上一轮我们冻结的原则冲突：
+
+没有真正后端能力的动作，不能 advertised as executable。
+
+所以这个问题虽然很小，但必须改。
+
+⑤ 唯一剩余修复
+
+请做：
+
+CHANGE B2 — RECONNECT CAPABILITY TRUTHFULNESS
+
+当前真实 OAuth/API 仍被 gate 阻塞，因此建议：
+
+NEEDS_AUTH / REVOKED / ERROR
+
+统一先返回：
+
+reconnect:
+  available: false
+  reason: REAL_OAUTH_EXTERNAL_GATE
+  entry: /connections
+
+或者如果 ERROR 有某些内部非 OAuth 恢复路径，也必须按真实 backend capability 精确区分。
+
+但不能仅因为状态需要重连，就把：
+
+available=true
+
+作为能力声明。
+
+⑥ UI 规则
+
+前端继续保持：
+
+只有：
+
+actions.reconnect.available === true
+
+才渲染可点击“重新连接”。
+
+当前 gate 状态下：
+
+应该显示说明，例如：
+
+“需要重新授权，真实 OAuth/API 尚未启用”
+
+而不是 executable link。
+
+⑦ Permanent test 修改
+
+现有 CHANGE B 测试：
+
+ACTIVE
+→ reconnect false
+
+NEEDS_AUTH
+→ reconnect true
+
+REVOKED
+→ reconnect true
+
+需要改成当前真实生产能力：
+
+ACTIVE
+→ false / NO_REAUTH_REQUIRED
+
+NEEDS_AUTH
+→ false / REAL_OAUTH_EXTERNAL_GATE
+
+REVOKED
+→ false / REAL_OAUTH_EXTERNAL_GATE
+
+ERROR
+→ false / REAL_OAUTH_EXTERNAL_GATE
+（除非已有真实安全恢复端点）
+
+legacy unbound：
+
+rebind 仍保持 true。
+
+⑧ 未来什么时候可以把 reconnect=true
+
+等 PC-11 或真实 provider OAuth/API integration 完成，并且确实存在：
+
+OAuth start
+
+consent / reauthorization
+
+callback
+
+verified provider identity
+
+safe credential update
+
+再把：
+
+reconnect.available
+
+切成 true。
+
+那时 capability 才是真实 executable。
+
+⑨ 其余 PC-06 全部 PASS
+
+以下无需再动：
+
+PlatformAccount / SourceConnection 分层
+
+多平台多账户
+
+tenant isolation
+
+legacy unbound
+
+rebind
+
+safe fields
+
+raw error protection
+
+/accounts UI
+
+empty/error states
+
+account-scoped opportunities navigation
+
+unavailable money/cases/connections 不伪造
+
+real OAuth gate
+
+CI
+
+⑩ CI
+
+RUN_ID：
+
+37037511847
+
+head_sha：
+
+4f68e8ee11237e632c577b3b0303e49934ca8fff
+
+状态：
+
+SUCCESS
+
+CI 真实成立。
+
+⑪ PC-06 当前状态
+
+CHANGE A：
+
+PASS
+
+CHANGE B — rebind：
+
+PASS
+
+CHANGE B — reconnect truthfulness：
+
+REVISE-MINOR
+
+因此：
+
+PC-06 = NOT YET CLOSED
+⑫ PC-07
+
+PC-07 Entitlement + Package Unlock：
+
+继续 PENDING
+
+只需完成这一处 capability truth 修正。
+
+修完后如果：
+
+accounts targeted tests green
+
+existing Track B regressions green
+
+tsc api/web 0
+
+full CI SUCCESS
+
+则：
+
+PC-06 PASS/CLOSED
+PC-07 AUTHORIZED
+
+无需重新审整个 PC-06。
+
+编号裁决
+
+① CHANGE A：
+
+PASS
+
+② CHANGE B / rebind：
+
+PASS
+
+③ CHANGE B / reconnect：
+
+REVISE-MINOR
+
+④ PC-06：
+
+NOT CLOSED
+
+⑤ 剩余唯一修复：
+
+RECONNECT CAPABILITY MUST MATCH REAL BACKEND CAPABILITY
+
+⑥ PC-07：
+
+PENDING
+
+边界继续保持：
+
+NO platform write
+Payment = 0
+autopay = OFF
+collection = OFF
+external payment write = OFF
+R13 HOLD
+TRANSPORT = false
+无生产凭据
+
+这次已经只剩一个非常小但重要的真实性问题：“需要重连”不能等于“系统现在已经能重连”。 把这一个 capability 标志改成和真实 OAuth/API 状态一致，PC-06 就可以关掉。
+```
