@@ -678,3 +678,14 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - 平台账号隔离（与 TRACK C2 联动）：每账号 OAuth/凭据生命周期/revoke/reconnect/rate limit/case ref 独立；Claim/Appeal/外提交必须可追溯 Organization→Platform→Account→Connection→Case→Claim/Appeal→Submission。
 - 轻量审计（HEAD e99717c）：6/6 **PASS**，未发现缺口 → 不改代码。
 - 队列影响：**NONE**（约束登记，不打断 R46/C2 主线）。
+
+### TRACK R46+ — CROSS-SYSTEM RECOVERY LAYER（R46 后高级版本核心主线；HOST 长期 Architecture Constraint）
+
+- 文档：`docs/releases/CROSS-SYSTEM-RECOVERY-LAYER-DIRECTIVE.md`（含宿主原文 verbatim）；STATE.cross_system_recovery_directive。
+- 目标：Cross-System Reconciliation + Recovery Graph + Cross-Domain Recovery Engine —— 判断「理论应回来多少」vs「实际回来多少」，发现单平台看不到的资金损耗。
+- 四项 P0：P0-1 PlatformAccount Identity（= 当前 TRACK C2，slice 2a 已交付 `9496d3e`；slice 2b 待补）· P0-2 Cross-Provider Entity Resolution（缺，X4）· P0-3 Recovery Graph Builder（Schema 在、能力缺，X5）· P0-4 Cross-Domain Recovery Rules（缺，X6）。
+- 执行顺序：完成 TRACK C2（slice 2b → C2 FINAL 送审）→ PHASE X1 Architecture Audit（只出报告）→ X2 最小提案送审 → X3 PlatformAccount/Account Isolation → X4 Entity Resolution v1（仅确定性匹配）→ X5 Graph Builder v1 → X6 First Cross-System Rule（TikTok + Carrier，1–3 条）→ X7 End-to-End Validation。
+- 冻结：禁止平行系统（必须复用 CanonicalFact / RecoveryGraph / Reconciliation 等既有底座）；Schema 变更 Design First；低置信度匹配不得自动确认，AMBIGUOUS fail-closed；LLM 只能产生 candidate，不得直接写高可信 Graph Edge / 事实；「多平台菜单」不算完成。
+- 永久验收矩阵 18 项见文档 §10，直接并入后续 C2/X 阶段回归基线。
+- HOLD 不变：Production / external write / payment / real credentials / TRANSPORT=false / R13 HOLD / Payment = 0。
+- 队列影响：R46 = NONE（已关闭）；TRACK C2 = NONE（不打断，仅验收口径对齐）。

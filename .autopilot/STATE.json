@@ -51,9 +51,9 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-02T03:26:10.267Z",
   "state": "IMPLEMENT",
-  "last_action": "TRACK C2 slice 2a 交付：account scope 下推 + 事实身份账户作用域（M4–M6 / CHANGE A/B）→ 全量 188 files / 1854 tests PASS + fresh deploy PASS",
-  "last_action_at": "2026-10-02T04:40:16.863Z",
-  "next_action": "TRACK C2 slice 2b：RecoveryOpportunity / ClaimItem / EvidenceArtifact 服务端 account 接线 + cross-account 拒绝 + account 级并发幂等 + C2 12 项最低验收 → C2 FINAL 送审。",
+  "last_action": "登记 CROSS-SYSTEM RECOVERY LAYER（R46 后核心主线 / 长期 Architecture Constraint，docs-only）",
+  "last_action_at": "2026-10-02T04:48:14.545Z",
+  "next_action": "TRACK C2 slice 2b（Opportunity / ClaimItem / EvidenceArtifact 服务端 account 接线 + cross-account 拒绝 + 12 项最低验收）→ C2 FINAL 送审 → PHASE X1 Architecture Audit。",
   "current_head": "9496d3e",
   "reviewed_head": "07b7009",
   "claim_submit_batch": {
@@ -3458,5 +3458,43 @@
       "account 级并发幂等 + org 级聚合视图回归",
       "credentialVersion ≠ identityVersion 的文档 + 测试断言"
     ]
+  },
+  "cross_system_recovery_directive": {
+    "directive": "HOST PRODUCT / ARCHITECTURE PRIORITY UPDATE — CROSS-SYSTEM RECOVERY LAYER",
+    "doc": "docs/releases/CROSS-SYSTEM-RECOVERY-LAYER-DIRECTIVE.md",
+    "registered_at": "2026-10-02T04:48:14.545Z",
+    "registered_head": "be579fd",
+    "priority": "R46 后高级版本核心主线 + 长期 Architecture Constraint",
+    "queue_impact": {
+      "r46": "NONE（S1–S6 已 CLOSED）",
+      "track_c2": "NONE（不打断；C2 = 本指令 P0-1）",
+      "order_after_c2_final": [
+        "X1 Architecture Audit（只出报告）",
+        "X2 Minimal Architecture Proposal（送审）",
+        "X3 PlatformAccount + Account Isolation",
+        "X4 Entity Resolution v1（仅确定性匹配）",
+        "X5 Recovery Graph Builder v1",
+        "X6 First Cross-System Rule（TikTok + Carrier）",
+        "X7 End-to-End Validation"
+      ]
+    },
+    "p0_gaps": {
+      "platform_account_identity": "覆盖中 —— TRACK C2（MSG-66 M1–M6）；slice 2a 已交付 9496d3e；slice 2b 待补 Opportunity/ClaimItem/EvidenceArtifact 服务端接线 + 跨账户拒绝",
+      "cross_provider_entity_resolution": "MISSING —— 无跨 provider 确定性关联机制（X4）",
+      "recovery_graph_builder": "MISSING —— RecoveryGraphNode/Edge Schema 在，但没有 builder（X5）",
+      "cross_domain_recovery_rules": "MISSING —— Rule Engine 目前面向单 fact / 单 provider（X6）"
+    },
+    "frozen_rules": [
+      "禁止平行系统：复用 CanonicalFact / CanonicalFactSource / RecoveryGraph / RecoveryOpportunity / ClaimItem / EvidenceArtifact / Reconciliation / Settlement 链",
+      "Schema 变更 Design First（先送架构方裁决）",
+      "Entity Resolution：HIGH/MEDIUM/LOW 置信度分级；AUTO_MATCH / CANDIDATE_MATCH / AMBIGUOUS；AMBIGUOUS fail-closed",
+      "仅金额+时间相近不得自动高可信合并",
+      "每条 Graph Edge 必须有 builder / identity basis / confidence / provenance / rule version / evidence",
+      "LLM 只能产生 candidate，不得直接写高可信 Graph Edge 或事实",
+      "「多平台菜单」不算完成；完成标准是平台之间的数据发生关系",
+      "HOLD 不变：Production / external write / payment / real credentials / TRANSPORT=false / R13 HOLD / Payment = 0"
+    ],
+    "acceptance_matrix_18": "见文档 §10，并入后续永久回归基线",
+    "success_criteria": "可演示 TikTok Order + TikTok Settlement/Refund + UPS/FedEx Shipment + POD → 同一 commerce entity → Cross-System Recovery Opportunity → Claim-Ready Package"
   }
 }
