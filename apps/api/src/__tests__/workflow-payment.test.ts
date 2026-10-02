@@ -127,14 +127,14 @@ function fakeWebhookPrisma(options: { flagOn: boolean; invoice?: boolean; existi
 }
 
 describe('C-0010-A — Webhook 处理（开关 / 幂等 / 归属）', () => {
-  it('缺密钥 → 400 REJECTED 且不落库', async () => {
+  it('缺密钥 → 503 REJECTED 且不落库（PC-10 FINAL / MSG-98 CHANGE A：失败状态端到端一致）', async () => {
     const { prisma, eventCreate } = fakeWebhookPrisma();
     const result = await handlePaymentWebhook(
       prisma,
       { rawBody: succeededBody, signatureHeader: sign(succeededBody) },
       { env: { PAYMENTS_ENABLED: 'true' }, now: () => NOW },
     );
-    expect(result).toMatchObject({ httpStatus: 400, processingResult: 'REJECTED', reason: 'MISSING_SECRET' });
+    expect(result).toMatchObject({ httpStatus: 503, processingResult: 'REJECTED', reason: 'MISSING_SECRET' });
     expect(eventCreate).not.toHaveBeenCalled();
   });
 

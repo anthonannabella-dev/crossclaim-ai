@@ -22,6 +22,7 @@ import { Prisma, type PrismaClient } from '@prisma/client';
 import {
   payloadHashOf as payloadHashOfBytes,
   verifyWebhookRequest,
+  webhookFailureStatus,
 } from '../webhooks/verification';
 import { paymentsEnabled } from './payment';
 import { executeAttempt } from './payment-attempt';
@@ -158,9 +159,12 @@ export async function handlePaymentWebhook(
           ? 'MISMATCH'
           : 'MALFORMED';
   if (signature !== 'VALID') {
-    // 无法归属租户（验签失败/缺密钥）→ 只写结构化安全日志，不落库
-    log('payment_webhook_rejected', { reason: signature, payloadHash });
-    return { httpStatus: 400, processingResult: 'REJECTED', reason: signature };
+    // 无法归属租户（验签失败/缺密钥）→ 只写结构化安全日志，不落库。
+    // PC-10 FINAL（MSG-20261003-98 CHANGE A）：失败状态端到端一致 —— 直接复用统一边界的失败映射
+    // （缺 secret → 503；签名不匹配 → 401；未知 provider / 版本 / 格式 / 时间窗 → 400）。
+    const httpStatus = webhookFailureStatus(verification.outcome);
+    log('payment_webhook_rejected', { reason: signature, outcome: verification.outcome, payloadHash });
+    return { httpStatus, processingResult: 'REJECTED', reason: signature };
   }
 
   let event: ProviderEvent;

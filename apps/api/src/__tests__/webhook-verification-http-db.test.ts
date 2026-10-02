@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 
-import { PrismaClient } from '@prisma/client';
+import { Prisma, PrismaClient } from '@prisma/client';
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { createLogger } from '../config/logger';
@@ -20,6 +20,10 @@ import { LocalFileSystemStorage } from '../services/storage';
 
 const prisma = new PrismaClient();
 const SALT = 'pc10-webhook-salt-0123456789';
+const ORG_B = 'cc555555-0000-4000-8000-00000000000d';
+const ORG_FORGED = 'cc555555-0000-4000-8000-00000000000e';
+const INVOICE_B = 'cc555555-0000-4000-8000-00000000000f';
+const NOW = new Date(1_770_000_000_000);
 const SECRET = 'whsec_pc10_http_test_value';
 // HTTP 路径使用服务端真实时钟；签名时间戳必须在容忍窗口内（PC-10 timestamp window）。
 const T = String(Math.floor(Date.now() / 1000));
@@ -77,14 +81,31 @@ afterAll(async () => {
 
 beforeEach(async () => {
   logLines.length = 0;
-  await prisma.paymentEvent.deleteMany({});
+  delete process.env.PAYMENTS_ENABLED;
+  process.env.PAYMENT_WEBHOOK_SECRET = SECRET;
+  await prisma.$executeRawUnsafe(
+    'TRUNCATE TABLE "PaymentProcessingAttempt", "Payment", "PaymentEvent", "AuditLog", "BillingInvoice", "Organization" CASCADE;',
+  );
+  await prisma.organization.create({ data: { id: ORG_B, name: 'PC10 租户 B', slug: 'pc10-org-b' } });
+  await prisma.billingInvoice.create({
+    data: {
+      id: INVOICE_B,
+      organizationId: ORG_B,
+      invoiceNo: 'BILL-PC10-B-1',
+      status: 'ISSUED',
+      subtotal: new Prisma.Decimal('100.0000'),
+      total: new Prisma.Decimal('100.0000'),
+      currency: 'USD',
+      issuedAt: NOW,
+    },
+  });
 });
 
 describe('PC-10 — webhook verification（HTTP + PostgreSQL）', () => {
-  it('无效签名 → 400（既有稳定失败面），零业务写入，响应与日志不含 secret', async () => {
+  it('无效签名 → 401（统一失败映射 SIGNATURE_MISMATCH），零业务写入，响应与日志不含 secret', async () => {
     await withServer(async (base) => {
       const result = await post(base, { signature: 't=' + T + ',v1=' + sign('tampered') });
-      expect(result.status).toBe(400);
+      expect(result.status).toBe(401);
       expect(result.raw).not.toContain(SECRET);
       expect(await prisma.paymentEvent.count()).toBe(0);
       expect(logLines.join('\n')).not.toContain(SECRET);
@@ -107,10 +128,10 @@ describe('PC-10 — webhook verification（HTTP + PostgreSQL）', () => {
     });
   });
 
-  it('raw-byte 变异（原 body 加空格）→ 400，零业务写入', async () => {
+  it('raw-byte 变异（原 body 加空格）→ 401，零业务写入', async () => {
     await withServer(async (base) => {
       const result = await post(base, { signature: 't=' + T + ',v1=' + sign(BODY), body: BODY + ' ' });
-      expect(result.status).toBe(400);
+      expect(result.status).toBe(401);
       expect(await prisma.paymentEvent.count()).toBe(0);
     });
   });
@@ -122,6 +143,48 @@ describe('PC-10 — webhook verification（HTTP + PostgreSQL）', () => {
       expect(result.status).toBe(400);
       expect(await prisma.paymentEvent.count()).toBe(0);
     });
+  });
+
+  it('缺 signing secret → 503（统一映射 missing_secret）且零业务写入', async () => {
+    const saved = process.env.PAYMENT_WEBHOOK_SECRET;
+    delete process.env.PAYMENT_WEBHOOK_SECRET;
+    try {
+      await withServer(async (base) => {
+        const result = await post(base, { signature: 't=' + T + ',v1=' + sign(BODY) });
+        expect(result.status).toBe(503);
+        expect(await prisma.paymentEvent.count()).toBe(0);
+      });
+    } finally {
+      process.env.PAYMENT_WEBHOOK_SECRET = saved ?? SECRET;
+    }
+  });
+
+  it('租户归属由服务端派生：事件写入 invoice 所属组织，客户端自报 organizationId 被忽略', async () => {
+    const payload = JSON.stringify({
+      id: 'evt_pc10_attribution',
+      type: 'payment_intent.succeeded',
+      data: {
+        object: {
+          id: 'pi_attr',
+          amount: 100,
+          currency: 'usd',
+          metadata: {
+            invoiceId: INVOICE_B,
+            organizationId: ORG_FORGED,
+          },
+        },
+      },
+    });
+    await withServer(async (base) => {
+      const result = await post(base, { signature: 't=' + T + ',v1=' + sign(payload), body: payload });
+      expect(result.status).toBe(200);
+      expect(JSON.parse(result.raw).processingResult).toBe('IGNORED');
+    });
+    // 归属来自 BillingInvoice.organizationId（服务端事实），不是请求体自报字段
+    const rows = await prisma.paymentEvent.findMany({ select: { organizationId: true } });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.organizationId).toBe(ORG_B);
+    expect(await prisma.paymentEvent.count({ where: { organizationId: ORG_FORGED } })).toBe(0);
   });
 
   it('验签通过但无法归属租户 → 200 IGNORED，仍零业务写入（verification 先于持久化）', async () => {
