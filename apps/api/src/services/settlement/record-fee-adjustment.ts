@@ -24,7 +24,10 @@ export type FeeAdjustmentErrorCode =
   | 'REVERSAL_ADJUSTMENT_NOT_FOUND'
   | 'ADJUSTMENT_REPLAYED'
   | 'VOID_AMOUNT_MISMATCH'
-  | 'EVIDENCE_REQUIRED';
+  | 'EVIDENCE_REQUIRED'
+  // MSG-20261002-60A CHANGE ②：evidence provenance 必须服务端派生
+  | 'EVIDENCE_NOT_FOUND'
+  | 'CLIENT_EVIDENCE_NOT_TRUSTED';
 
 export class FeeAdjustmentError extends Error {
   constructor(
@@ -84,6 +87,16 @@ export async function recordFeeAdjustment(
   if (input.adjustmentKind === 'REVERSAL' && (!input.triggerSettlementAdjustmentIds || input.triggerSettlementAdjustmentIds.length < 1)) {
     throw new FeeAdjustmentError('INVALID_INPUT', 'REVERSAL requires triggerSettlementAdjustmentIds');
   }
+  // MSG-60A CHANGE ②：只允许 evidence 引用；digest / kind 一律由服务端从 EvidenceArtifact 派生
+  for (const ref of input.evidenceReferences) {
+    const extra = ref as { digest?: unknown; kind?: unknown };
+    if (extra.digest || extra.kind) {
+      throw new FeeAdjustmentError(
+        'CLIENT_EVIDENCE_NOT_TRUSTED',
+        'client-supplied evidence digest/kind is not trusted',
+      );
+    }
+  }
   const organizationId = String(input.organizationId ?? '').trim();
   const feeSnapshotDigest = createHash('sha256')
     .update(
@@ -95,6 +108,10 @@ export async function recordFeeAdjustment(
         currency: input.currency,
         triggerSettlementAdjustmentIds: [...(input.triggerSettlementAdjustmentIds ?? [])].sort(),
         reasonCode: input.reasonCode,
+        // MSG-60A CHANGE ③：审批必须绑定业务字段，而非只绑 kind/amount/currency
+        reasonText: input.reasonText ?? null,
+        correctionDirection: input.correctionDirection ?? null,
+        evidenceArtifactIds: [...input.evidenceReferences].map((r) => r.evidenceArtifactId).sort(),
       }),
     )
     .digest('hex');
@@ -110,6 +127,7 @@ export async function recordFeeAdjustment(
       adjustmentKind: input.adjustmentKind,
       amount: input.amount,
       currency: input.currency,
+      evidenceArtifactIds: [...input.evidenceReferences].map((r) => r.evidenceArtifactId).sort().join(','),
     },
   });
   if (!approved) throw new FeeAdjustmentError('APPROVAL_REQUIRED', 'human approval is required for fee adjustment');
@@ -137,6 +155,44 @@ export async function recordFeeAdjustment(
         select: { id: true },
       });
       if (replayed) throw new FeeAdjustmentError('ADJUSTMENT_REPLAYED', 'this reversal already produced a fee adjustment');
+    }
+
+    // MSG-60A CHANGE ②：逐条验证 evidence 存在 + 同租户，并派生服务端 provenance（写入库的是派生结果）
+    const derivedEvidence: { evidenceArtifactId: string; digest: string; kind: string }[] = [];
+    for (const ref of input.evidenceReferences ?? []) {
+      const artifact = await tx.evidenceArtifact.findFirst({
+        where: { id: ref.evidenceArtifactId },
+        select: {
+          id: true,
+          organizationId: true,
+          kind: true,
+          fileAssetId: true,
+          externalUrl: true,
+          title: true,
+          capturedAt: true,
+        },
+      });
+      if (!artifact) throw new FeeAdjustmentError('EVIDENCE_NOT_FOUND', 'evidence artifact not found');
+      if (artifact.organizationId !== organizationId) {
+        throw new FeeAdjustmentError('CROSS_TENANT_REFERENCE', 'evidence belongs to another tenant');
+      }
+      derivedEvidence.push({
+        evidenceArtifactId: artifact.id,
+        kind: String(artifact.kind),
+        digest: createHash('sha256')
+          .update(
+            canonicalJson({
+              evidenceArtifactId: artifact.id,
+              organizationId: artifact.organizationId,
+              kind: String(artifact.kind),
+              fileAssetId: artifact.fileAssetId,
+              externalUrl: artifact.externalUrl,
+              title: artifact.title,
+              capturedAtUtc: artifact.capturedAt ? artifact.capturedAt.toISOString() : null,
+            }),
+          )
+          .digest('hex'),
+      });
     }
 
     let netFeeEffect: string;
@@ -180,7 +236,7 @@ export async function recordFeeAdjustment(
         amount: input.amount,
         currency: input.currency,
         triggerSettlementAdjustmentIds: input.triggerSettlementAdjustmentIds ?? undefined,
-        evidenceReferences: input.evidenceReferences ?? [],
+        evidenceReferences: derivedEvidence,
         reasonCode: input.reasonCode,
         reasonText: input.reasonText ?? null,
         approvalId: input.approvalId,

@@ -261,6 +261,8 @@ describe('R46 S4 余下永久验收（digest 可重建 + 下游零副作用）',
 
 
 
+
+
 describe('R46 S4 MSG-60 CHANGE B/C：真并发边界与 same-approval exactly-once', () => {
   async function seedFeeCalcWithChain(organizationId: string, claimItemId: string, feeChainId: string) {
     return (
@@ -339,6 +341,15 @@ describe('R46 S4 MSG-60 CHANGE B/C：真并发边界与 same-approval exactly-on
     for (const f of failed) {
       expect(String(f.reason)).toMatch(/FEE_CHAIN_SETTLEMENT_ALREADY_CONSUMED|23505|unique/i);
     }
+    // loser 零残留：失败方不得留下 membership / 成功审计
+    const okIndex = results.findIndex((r) => r.status === 'fulfilled');
+    for (const [index, feeId] of [f1, f2].entries()) {
+      if (index === okIndex) continue;
+      expect(
+        await prisma.feeCalculationSettlement.count({ where: { organizationId: ORG_A, feeCalculationId: feeId } }),
+      ).toBe(0);
+      expect(await prisma.auditLog.count({ where: { organizationId: ORG_A, entityId: feeId } })).toBe(0);
+    }
     expect(await prisma.feeCalculationSettlement.count({ where: { organizationId: ORG_A, settlementId: st } })).toBe(1);
   });
 
@@ -354,6 +365,46 @@ describe('R46 S4 MSG-60 CHANGE B/C：真并发边界与 same-approval exactly-on
     await prisma.feeCalculationSettlement.create({
       data: { organizationId: ORG_A, feeCalculationId: f2, settlementId: st, basisRole: 'POSITIVE', amountContribution: '500.0000', currency: 'USD' },
     });
+    expect(await prisma.feeCalculationSettlement.count({ where: { organizationId: ORG_A, settlementId: st } })).toBe(2);
+  });
+
+  it('CHANGE B positive control：superseded fee chain 的后继 chain 依旧可合法持有同一 Settlement', async () => {
+    const claim = await newClaim(ORG_A);
+    const st = await seedEligibleSettlement(ORG_A, '500.0000', claim);
+    const next = await seedFeeCalcWithChain(ORG_A, claim, uuid());
+    // 历史 chain：创建时即标记被后继 supersede（避免 (org, claimItemId) WHERE superseded IS NULL 冲突）
+    const previous = (
+      await prisma.feeCalculation.create({
+        data: {
+          organizationId: ORG_A,
+          claimItemId: claim,
+          feeChainId: uuid(),
+          basis: 'RECOVERED_AMOUNT_PCT',
+          rate: '0.15',
+          baseAmount: '1000.0000',
+          feeAmount: '150.0000',
+          currency: 'USD',
+          computation: { algorithmVersion: 'settlement-fee/v1' },
+          membershipDigest: 'e'.repeat(64),
+          feeBasisVersion: 'v1',
+          policyRef: 'policy-2026-01',
+          supersededByFeeCalculationId: next,
+        },
+        select: { id: true },
+      })
+    ).id;
+    for (const feeCalculationId of [previous, next]) {
+      await prisma.feeCalculationSettlement.create({
+        data: {
+          organizationId: ORG_A,
+          feeCalculationId,
+          settlementId: st,
+          basisRole: 'POSITIVE',
+          amountContribution: '500.0000',
+          currency: 'USD',
+        },
+      });
+    }
     expect(await prisma.feeCalculationSettlement.count({ where: { organizationId: ORG_A, settlementId: st } })).toBe(2);
   });
 

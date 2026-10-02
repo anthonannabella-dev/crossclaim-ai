@@ -212,3 +212,120 @@ describe('R46 S4 FeeCalculationAdjustment（真实 PostgreSQL）', () => {
     expect(await prisma.feeCalculationAdjustment.count({ where: { organizationId: ORG_A } })).toBe(before + 1);
   });
 });
+
+describe('R46 S4 MSG-20261002-60A CHANGE ②/③：evidence provenance 与 adjustment approval 绑定点', () => {
+  it('客户端自证 evidence digest/kind → CLIENT_EVIDENCE_NOT_TRUSTED；evidence 缺失 → EVIDENCE_NOT_FOUND；跨租户 evidence → CROSS_TENANT_REFERENCE（零写入）', async () => {
+    const local = await seedFeeCalculation(ORG_A);
+    const foreign = await seedFeeCalculation(ORG_B);
+    const before = await prisma.feeCalculationAdjustment.count({ where: { organizationId: ORG_A } });
+    const auditBefore = await prisma.auditLog.count({
+      where: { organizationId: ORG_A, action: 'billing.fee_adjust.approval_consumed' },
+    });
+
+    await expect(
+      recordFeeAdjustment(
+        deps,
+        input({
+          targetFeeCalculationId: local.feeCalculationId,
+          triggerSettlementAdjustmentIds: [local.settlementAdjustmentId],
+          evidenceReferences: [{ evidenceArtifactId: local.evidenceArtifactId, digest: 'f'.repeat(64), kind: 'BANK_STATEMENT' }],
+        }) as never,
+      ),
+    ).rejects.toMatchObject({ code: 'CLIENT_EVIDENCE_NOT_TRUSTED' });
+
+    await expect(
+      recordFeeAdjustment(
+        deps,
+        input({
+          targetFeeCalculationId: local.feeCalculationId,
+          triggerSettlementAdjustmentIds: [local.settlementAdjustmentId],
+          evidenceReferences: [{ evidenceArtifactId: uuid() }],
+        }) as never,
+      ),
+    ).rejects.toMatchObject({ code: 'EVIDENCE_NOT_FOUND' });
+
+    await expect(
+      recordFeeAdjustment(
+        deps,
+        input({
+          targetFeeCalculationId: local.feeCalculationId,
+          triggerSettlementAdjustmentIds: [local.settlementAdjustmentId],
+          evidenceReferences: [{ evidenceArtifactId: foreign.evidenceArtifactId }],
+        }) as never,
+      ),
+    ).rejects.toMatchObject({ code: 'CROSS_TENANT_REFERENCE' });
+
+    expect(await prisma.feeCalculationAdjustment.count({ where: { organizationId: ORG_A } })).toBe(before);
+    expect(
+      await prisma.auditLog.count({ where: { organizationId: ORG_A, action: 'billing.fee_adjust.approval_consumed' } }),
+    ).toBe(auditBefore);
+  });
+
+  it('reasonText / correctionDirection / evidenceReferences 审批后漂移 → 旧 approval 失效（APPROVAL_REQUIRED，零新增写入）；落库 provenance 为服务端派生', async () => {
+    const bound = new Map<string, string>();
+    const tofu: FeeAdjustmentDeps = {
+      ...deps,
+      verifyApproval: async (r) => {
+        const digest = r.boundExtra.feeAdjustmentSnapshotDigest ?? '';
+        const prior = bound.get(r.approvalId);
+        if (prior === undefined) {
+          bound.set(r.approvalId, digest);
+          return true;
+        }
+        return prior === digest;
+      },
+    };
+    const target = await seedFeeCalculation(ORG_A);
+    const secondEvidence = await prisma.evidenceArtifact.create({
+      data: { organizationId: ORG_A, kind: 'OTHER', title: 'second evidence' },
+      select: { id: true },
+    });
+    const approvalId = uuid();
+    const frozen = {
+      organizationId: ORG_A,
+      actorUserId: actor,
+      approvalId,
+      targetFeeCalculationId: target.feeCalculationId,
+      adjustmentKind: 'REVERSAL' as const,
+      amount: '150.0000',
+      currency: 'USD',
+      reasonCode: 'REVERSAL_APPLIED',
+      reasonText: 'provider chargeback observed',
+      correctionDirection: 'DECREASE' as const,
+      triggerSettlementAdjustmentIds: [target.settlementAdjustmentId],
+      evidenceReferences: [{ evidenceArtifactId: target.evidenceArtifactId }],
+    };
+
+    const first = await recordFeeAdjustment(tofu, frozen as never);
+    expect(first.netFeeEffect).toBe('-150.0000');
+    const afterFirst = await prisma.feeCalculationAdjustment.count({ where: { organizationId: ORG_A } });
+
+    // 服务端派生 provenance（客户端从未提交 digest/kind）
+    const stored = await prisma.feeCalculationAdjustment.findFirstOrThrow({
+      where: { organizationId: ORG_A, targetFeeCalculationId: target.feeCalculationId },
+      select: { evidenceReferences: true, reasonText: true },
+    });
+    const refs = stored.evidenceReferences as { evidenceArtifactId: string; digest: string; kind: string }[];
+    expect(refs.length).toBe(1);
+    expect(refs[0].evidenceArtifactId).toBe(target.evidenceArtifactId);
+    expect(refs[0].digest).toMatch(/^[0-9a-f]{64}$/);
+    expect(refs[0].kind).toBe('OTHER');
+    expect(stored.reasonText).toBe('provider chargeback observed');
+
+    for (const drift of [
+      { reasonText: 'provider chargeback observed (edited)' },
+      { correctionDirection: 'INCREASE' as const },
+      { evidenceReferences: [{ evidenceArtifactId: secondEvidence.id }] },
+      { reasonCode: 'REVERSAL_EDITED' },
+    ]) {
+      await expect(
+        recordFeeAdjustment(tofu, { ...frozen, ...drift } as never),
+      ).rejects.toMatchObject({ code: 'APPROVAL_REQUIRED' });
+    }
+
+    expect(await prisma.feeCalculationAdjustment.count({ where: { organizationId: ORG_A } })).toBe(afterFirst);
+    expect(await prisma.billingInvoice.count({ where: { organizationId: ORG_A } })).toBe(0);
+    expect(await prisma.payment.count({ where: { organizationId: ORG_A } })).toBe(0);
+    expect(await prisma.recoveryLedgerEntry.count({ where: { organizationId: ORG_A } })).toBe(0);
+  });
+});
