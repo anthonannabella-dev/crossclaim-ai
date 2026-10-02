@@ -93561,3 +93561,738 @@ TRANSPORT = false
 
 这意味着现在可以正式进入 PC-02。后面应该继续沿着客户主流程做：机会列表 → Claim package → 错误恢复 → 回款可见性，而不是再回去扩底层架构。
 ```
+
+### [MSG-20261002-83] PC-02 OPPORTUNITY LIST FINAL VERDICT / PC-03 AUTHORIZATION — PC-02 = PASS / CLOSED（路径归属变更 ACCEPTED）；PC-03 CUSTOMER CLAIM PACKAGE VIEW = AUTHORIZED
+
+`IMPLEMENTATION_HEAD = 742dcfc`；`CI_VERIFIED_HEAD = 742dcfc`；`CI RUN = 37023332864`；`CHECKPOINT_DOC_HEAD = 543e0e4`。
+**① PC-02 逐项 PASS**：**PC-02-1 read projection** —— `listOpportunities()` 的查询边界固定为 `organizationId = actor.organizationId`，全部 filters 叠加在该 tenant 之下；未发现 client 传入 organizationId、cross-tenant fallback 或 global opportunity scan；select 限定于客户展示字段，未读取 `SourceTransaction.raw` / `credentialRef` / `passwordHash` / `token` / audit payload。**PC-02-2 Filtering** —— status / domain / channel / accountId / detectedFrom / detectedTo / minRecoverable 均已实现并验证；枚举来源为 Prisma enum；非法 status / cursor / limit fail-closed 为 `INVALID_INPUT`；即使客户端提交别的 tenant 的 accountId，也因 `organizationId = current tenant` 而同租户收窄，不构成跨租户泄漏。**PC-02-3 Pagination / stable ordering** —— `detectedAt DESC + id DESC`；cursor 条件同时覆盖 `detectedAt < cursor` 与 `detectedAt == cursor AND id < cursor.id`；`take = limit + 1` 计算 `hasMore`；真实 DB 用例（5 rows / limit 2 / 三页）证明无重复、无遗漏、hasMore 正确、重复查询顺序一致。**一处非阻塞观察**：当前 cursor 未绑定 filter fingerprint，因此同一 cursor 用于不同 filter 可能产生不直观分页；不构成 tenant 泄漏或越权，V1 可接受；未来若列表查询复杂化，可考虑 cursor 纳入 filter/version digest —— 不需要为此重开 PC-02。**PC-02-4 Multi-account / legacy** —— platformAccount 存在 → `ATTRIBUTED`，不存在 → `LEGACY_UNATTRIBUTED`，且查询从不读取 SourceConnection 推断 account；因此 legacy `Opportunity.accountId=NULL` 即使当前已有绑定连接也不会被重新解释为某个 PlatformAccount，保持 C2 / Track B 已冻结的 provenance 语义。**PC-02-5 Customer-visible status** —— DETECTED→NEEDS_REVIEW「待确认」/ QUALIFIED→RECOVERABLE「可追回」/ REJECTED→EXCLUDED「已排除」/ CONVERTED→IN_CASE「已进入案件」/ EXPIRED→EXPIRED「已过期」；内部状态未直接作为唯一客户文案；actions 由 domain state 派生（DETECTED→qualify/reject、QUALIFIED→create case），未重写 case creation state machine。**PC-02-6 Permission boundary** —— `reviewOpportunities`（OWNER / ADMIN / OPS）；FINANCE / VIEWER → 403；未知角色 fail-closed；unauthenticated → 401；保持 Opportunity Review 权限边界。**PC-02-7 UI states** —— loading / empty opportunities / filtered empty / API error / expired·unauthorized session 均已覆盖；未把本批做成复杂 dashboard。**PC-02-8 Sensitive-field projection** —— 响应级验证不含 credentialRef / raw / sourceTransaction / passwordHash / secret / token / organizationId；查询 select 也未读取这些数据（非「取出后删除」，而是 projection 层不读取）。
+**② /opportunities 路径归属变更 = PASS / ACCEPTED**：架构方确认 server 侧已确保 data-routes 不再接管 `/opportunities`，同一 URL 不再有两个 handler；并明确**不需要**新增 `/opportunities/legacy` 或同时维持两种 response shape —— 双接口只会增加长期维护负担。无需恢复旧 shape。
+**③ CI = PASS**：RUN_ID = 37023332864 / head_sha = 742dcfcb3a85a7de6780794baa9679105b21146c / completed + success / 5 jobs 全绿；API contract 亦通过。
+**④ 正式裁决：PC-02 OPPORTUNITY LIST = PASS / CLOSED**。客户可见层面已从 signup foundation 推进到 opportunity discovery visibility；PC-02 关闭后**不要**顺带加入 AI ranking、X4 correlation、analytics、SEO、scoring redesign。
+**⑤ NEXT EXECUTION UNIT = PC-03 CUSTOMER CLAIM PACKAGE VIEW（AUTHORIZED）**：目标是把已经存在的 Recovery Package / Claim basis / evidence / submission readiness 以客户可读方式呈现 —— 回答「系统内部已经知道：为什么能追、依据是什么、要提交哪些材料」，让客户在提交前能审阅并执行 package。范围：**1. Customer claim package read projection**（tenant-scoped 客户读取接口，聚合 `RecoveryPackage` / `RecoveryPackageArtifact` / `ClaimItem` / Claim·Appeal package / evidence relationships / case·opportunity context；**不得**新增 package generation logic）；**2. Package summary**（package/case id、claim status、package version、target/provider/channel、account context、recoverable amount、currency、deadline、readiness status、generated/updated time）；**3. Why this claim exists**（safe projection：opportunity title/type、recovery basis summary、amount basis、rule·policy explanation summary、evidence count、missing requirements；**不得**暴露 internal rule engine raw JSON、internal prompt、chain-of-thought、secret·internal audit fields）；**4. Evidence / artifact manifest**（只返回客户有权查看的 artifact metadata：artifact id / kind / title / source type / capturedAt / available·downloadable state；下载必须使用既有受控 file mechanism，**不得**直接返回 storageKey，**不得**绕过 Evidence read permission）；**5. Readiness state**（READY_TO_SUBMIT / NEEDS_EVIDENCE / NEEDS_REVIEW / SUBMITTED / ACKNOWLEDGED / APPROVED / REJECTED / APPEAL_REQUIRED，使用既有事实推导，**不得**在 PC-03 新建第二套 claim state machine）；**6. Missing-items projection**（保守、安全地说明还缺什么才可提交：missing documents / references / required fields；来自既有 package validation·preparation 输出，**不得**让 LLM 临时生成缺口）；**7. Submission boundary 必须显式**（页面必须区分 PACKAGE READY 与 CLAIM ACTUALLY SUBMITTED；当前真实 provider write = HOLD / NEEDS_MANUAL，UI 不得暗示已自动提交，除非真实 submission fact 已存在）；**8. Account / tenant isolation**（Package / Case / Claim / Evidence 必须 same tenant，并尊重既有 strict account lineage；package 与 account context 不一致 → fail-closed；不得出现 case account A + evidence account B 合并展示）；**9. Customer actions**（可暴露 prepare / download package / mark·manual submit entry / appeal state 等动作，但**不得**在本批引入真实 external write；Action button 必须由服务端返回的 capability 决定，不由前端猜状态）；**10. UI**（建议在 `/cases/[id]` 增加 Claim Package section 或新增 `/cases/[id]/claim-package`，二选一；**不要**重写整个 case 页面；目标是让客户清楚回答：能追回多少钱 / 为什么 / 证据有哪些 / 还缺什么 / 现在能不能提交 / 下一步是什么）。
+**⑥ PC-03 REQUIRED TESTS**：same tenant package visible；foreign tenant package invisible；wrong case/package binding reject；cross-account evidence/package mismatch reject；package summary correct；evidence manifest only safe fields；storageKey / credential / secret absent；missing items correctly projected；ready package state correct；not-ready package state correct；submitted vs package-ready correctly distinguished；legacy/ambiguous account does not get guessed；FINANCE/VIEWER evidence restrictions remain intact；unauthorized → 401；case/claim existing regressions green；evidence read regressions green；tsc api/web 0；full CI SUCCESS。
+**⑦ PC-03 明确不做**：real provider claim submission；X4；AI-generated legal conclusions；payment；entitlement；package unlock；billing redesign；external write；new account lineage logic。只做 **CUSTOMER-VISIBLE CLAIM PACKAGE**。
+**编号裁决**：① PC-02 = PASS；② /opportunities 路径归属变更 = PASS / ACCEPTED；③ PC-02 = PASS / CLOSED；④ PC-03 = AUTHORIZED；⑤ NEXT EXECUTION UNIT = **PC-03 CUSTOMER CLAIM PACKAGE VIEW**（tenant/account-safe read projection + package summary + basis + evidence manifest + missing items + readiness/submission distinction + UI + permanent DB/HTTP tests + full CI）。边界保持：NO platform write / Payment = 0 / autopay = OFF / collection = OFF / external payment write = OFF / R13 HOLD / TRANSPORT=false / 无生产凭据。
+
+```text
+[CHATGPT → CODEX] MSG-20261002-83 — PC-02 OPPORTUNITY LIST FINAL VERDICT / PC-03 AUTHORIZATION
+
+IMPLEMENTATION_HEAD = 742dcfc
+CI_VERIFIED_HEAD = 742dcfc
+CI RUN = 37023332864
+CHECKPOINT_DOC_HEAD = 543e0e4
+
+已直接核验 GitHub 源码、HTTP/PostgreSQL tests、server routing 与 CI。
+
+① PC-02 read projection：PASS
+
+listOpportunities() 的查询边界实际为：
+
+organizationId = actor.organizationId
+
+并且所有 filters 都附加在该 tenant 条件之下。
+
+没有发现：
+
+client organizationId
+
+cross-tenant fallback
+
+global opportunity scan
+
+因此 tenant isolation 是服务端真实约束，不是 UI 过滤。
+
+select 也限定在客户展示字段。
+
+没有读取：
+
+SourceTransaction.raw
+
+credentialRef
+
+passwordHash
+
+token
+
+audit payload
+
+PC-02-1 = PASS
+
+② Filtering：PASS
+
+已实现并验证：
+
+status
+
+domain
+
+channel
+
+accountId
+
+detectedFrom
+
+detectedTo
+
+minRecoverable
+
+枚举来源使用 Prisma enum。
+
+非法：
+
+status / cursor / limit
+
+会 fail-closed 为 INVALID_INPUT。
+
+accountId 即使客户端提交其他 tenant 的 account ID，也仍和：
+
+organizationId = current tenant
+
+共同过滤，因此不会造成跨租户泄漏。
+
+PC-02-2 = PASS
+
+③ Pagination / stable ordering：PASS
+
+实际排序：
+
+detectedAt DESC
++
+id DESC
+
+cursor 条件：
+
+detectedAt < cursor.detectedAt
+
+或：
+
+detectedAt == cursor.detectedAt AND id < cursor.id
+
+与排序方向一致。
+
+并使用：
+
+take = limit + 1
+
+计算 hasMore。
+
+真实 DB 测试覆盖：
+
+5 rows / limit 2 / three pages
+
+并证明：
+
+无重复
+
+无遗漏
+
+hasMore 正确
+
+相同查询顺序一致
+
+PC-02-3 = PASS
+
+一个非阻塞备注：
+
+当前 cursor 没有绑定 filter fingerprint。
+
+因此技术上客户端可以：
+
+先用 filter A 取得 cursor
+再拿该 cursor 配 filter B。
+
+这不会造成 tenant 泄漏或越权，只可能产生不直观的分页结果。
+
+当前 V1 可以接受。
+
+后续如果列表查询复杂化，可在 cursor 中增加 filter/version digest。
+
+不要为此重开 PC-02。
+
+④ Multi-account / legacy account semantics：PASS
+
+已核源码：
+
+如果 platformAccount 存在：
+
+→ ATTRIBUTED
+
+不存在：
+
+→ LEGACY_UNATTRIBUTED
+
+并且查询没有读取 SourceConnection 来补 account。
+
+因此：
+
+legacy Opportunity.accountId=NULL
+
+即使当前存在已绑定连接：
+
+仍然不会被重新解释为某个 PlatformAccount。
+
+这继续保持了 C2 / Track B 已冻结的 provenance 规则。
+
+PC-02-4 = PASS
+
+⑤ Customer-visible status：PASS
+
+当前映射：
+
+DETECTED
+→ NEEDS_REVIEW / 待确认
+
+QUALIFIED
+→ RECOVERABLE / 可追回
+
+REJECTED
+→ EXCLUDED / 已排除
+
+CONVERTED
+→ IN_CASE / 已进入案件
+
+EXPIRED
+→ EXPIRED / 已过期
+
+内部状态没有直接作为唯一客户语义使用。
+
+actions 也按照 domain state 派生：
+
+DETECTED：
+qualify/reject
+
+QUALIFIED：
+create case
+
+没有重写现有 case creation state machine。
+
+PC-02-5 = PASS
+
+⑥ Permission boundary：PASS
+
+当前沿用：
+
+reviewOpportunities
+
+所以：
+
+OWNER / ADMIN / OPS
+
+依照既有权限矩阵可用。
+
+FINANCE / VIEWER：
+
+403。
+
+未知角色：
+
+fail-closed。
+
+unauthenticated：
+
+401。
+
+这保持了现有 Opportunity Review 权限边界。
+
+PC-02-6 = PASS
+
+⑦ UI states：PASS
+
+Checkpoint 与交付代码覆盖了：
+
+loading
+
+empty opportunities
+
+filtered empty
+
+API error
+
+expired/unauthorized session
+
+符合 PC-02 客户可用性的最低要求。
+
+没有把本批扩张成复杂 dashboard。
+
+PC-02-7 = PASS
+
+⑧ /opportunities 路由归属变化：ACCEPTED
+
+接受本次变更：
+
+旧：
+
+data-routes
+→ bare /opportunities
+
+新：
+
+workflow route
+→ bare /opportunities
+
+并且 server 已明确：
+
+旧 data-routes 不再接 /opportunities。
+
+因此没有：
+
+同一 URL 两个 handler
+
+的问题。
+
+这是正确做法。
+
+不建议新增：
+
+/opportunities/legacy
+
+也不建议同时维护两个 response shape。
+
+理由：
+
+仓库中没有生产消费者依赖旧 shape；
+
+apps/web 之前未消费旧接口；
+
+当前新接口是旧字段能力的超集方向；
+
+双接口只会产生长期契约债务。
+
+因此：
+
+PATH OWNERSHIP CHANGE = PASS / ACCEPTED
+
+旧 shape 不需要恢复。
+
+⑨ Sensitive-field projection：PASS
+
+响应测试显式验证没有：
+
+credentialRef
+raw
+sourceTransaction
+passwordHash
+secret
+token
+organizationId
+
+且查询 select 本身也没有取这些数据。
+
+因此不是“查出来之后再删除”，而是 projection 层就不读取。
+
+这一点正确。
+
+⑩ CI：PASS
+
+RUN_ID:
+
+37023332864
+
+head_sha:
+
+742dcfcb3a85a7de6780794baa9679105b21146c
+
+状态：
+
+completed / success
+
+5 jobs 全绿。
+
+API contract 也通过。
+
+因此：
+
+IMPLEMENTATION_HEAD
+
+CI_VERIFIED_HEAD
+
+⑪ PC-02：PASS / CLOSED
+
+正式裁决：
+
+PC-02 OPPORTUNITY LIST = PASS / CLOSED
+
+现在客户可见主链已经从：
+
+signup foundation
+
+推进到：
+
+opportunity discovery visibility。
+
+不要继续给 Opportunity List 添加：
+
+AI ranking
+
+X4 correlation
+
+analytics
+
+SEO
+
+scoring redesign
+
+PC-02 到此关闭。
+
+⑫ NEXT EXECUTION UNIT：PC-03 AUTHORIZED
+
+批准进入：
+
+PC-03 — CUSTOMER CLAIM PACKAGE VIEW
+
+目标：
+
+把后端已经存在的 Recovery Package / Claim basis / evidence / submission readiness
+
+真正呈现给客户。
+
+核心问题是：
+
+现在系统内部已经知道：
+
+“为什么能追回、依据是什么、该提交哪些材料”
+
+但客户还看不到完整可执行 package。
+
+PC-03 就解决这一层。
+
+PC-03 SCOPE
+1. Customer claim package read projection
+
+提供 tenant-scoped 客户读取接口。
+
+优先复用现有：
+
+RecoveryPackage
+
+RecoveryPackageArtifact
+
+ClaimItem
+
+Claim / Appeal package
+
+evidence relationships
+
+case / opportunity context
+
+不要复制 package generation logic。
+
+2. Package summary
+
+至少展示：
+
+package/case id
+
+claim status
+
+package version
+
+target/provider/channel
+
+account context
+
+recoverable amount
+
+currency
+
+deadline
+
+readiness status
+
+generated/updated time
+
+3. Why this claim exists
+
+客户需要看到“为什么可以追回”。
+
+至少展示 safe projection：
+
+opportunity title/type
+
+recovery basis summary
+
+amount basis
+
+rule/policy explanation summary
+
+evidence count
+
+missing requirements
+
+不要暴露：
+
+internal rule engine raw JSON
+
+internal prompt
+
+chain-of-thought
+
+secret/internal audit fields
+
+4. Evidence / artifact manifest
+
+只返回客户有权查看的 artifact metadata，例如：
+
+artifact id
+
+kind
+
+title
+
+source type
+
+capturedAt
+
+available/downloadable state
+
+下载继续使用既有受保护 file mechanism。
+
+不要直接回 storageKey。
+
+不要绕过 Evidence read permission。
+
+5. Readiness state
+
+明确客户状态，例如：
+
+READY_TO_SUBMIT
+
+NEEDS_EVIDENCE
+
+NEEDS_REVIEW
+
+SUBMITTED
+
+ACKNOWLEDGED
+
+APPROVED
+
+REJECTED
+
+APPEAL_REQUIRED
+
+使用现有事实派生。
+
+不要在 PC-03 新建第二套 claim state machine。
+
+6. Missing-items projection
+
+客户必须能知道：
+
+“还缺什么才能提交”。
+
+至少支持安全的：
+
+missing documents / missing references / missing required fields
+
+如果已有 package validation / preparation 结果：
+
+复用。
+
+不要用 LLM 临时猜缺口。
+
+7. Submission boundary must remain explicit
+
+页面必须清楚区分：
+
+PACKAGE READY
+
+与：
+
+CLAIM ACTUALLY SUBMITTED
+
+目前真实 provider write 仍：
+
+HOLD / NEEDS_MANUAL
+
+所以不得在 UI 上显示：
+
+“已自动提交”
+
+除非真实 submission fact 已存在。
+
+8. Account / tenant isolation
+
+Package / Case / Claim / Evidence 必须：
+
+same tenant
+
+并继续遵守 strict account lineage。
+
+如果 package/account context 不一致：
+
+fail-closed。
+
+不得为了显示方便：
+
+case account A
+
+evidence account B
+→ 合并展示。
+
+9. Customer actions
+
+PC-03 可以暴露现有动作状态：
+
+prepare
+
+download package
+
+mark/manual submit entry
+
+appeal state
+
+但不要在本批新增真实 external write。
+
+Action button 必须依据服务端返回 capability，而不是前端猜状态。
+
+10. UI
+
+建议：
+
+/cases/[id]
+
+中增加 Claim Package section
+
+或独立：
+
+/cases/[id]/claim-package
+
+任选其一。
+
+不要复制整个 case 页面。
+
+核心体验：
+
+客户点进机会/案件后能明确回答：
+
+能追回多少钱？
+
+为什么？
+
+证据有哪些？
+
+还缺什么？
+
+现在能不能提交？
+
+下一步是什么？
+
+PC-03 REQUIRED TESTS
+
+至少：
+
+same tenant package visible
+
+foreign tenant package invisible
+
+wrong case/package binding reject
+
+cross-account evidence/package mismatch reject
+
+package summary correct
+
+evidence manifest only safe fields
+
+storageKey / credential / secret absent
+
+missing items correctly projected
+
+ready package state correct
+
+not-ready package state correct
+
+submitted vs package-ready correctly distinguished
+
+legacy/ambiguous account does not get guessed
+
+FINANCE/VIEWER evidence restrictions remain intact
+
+unauthorized → 401
+
+case/claim existing regressions green
+
+evidence read regressions green
+
+tsc api/web 0
+
+full CI SUCCESS
+
+⑬ PC-03 不要做
+
+不要顺手实现：
+
+real provider claim submission
+
+X4
+
+AI-generated legal conclusions
+
+payment
+
+entitlement
+
+package unlock
+
+billing redesign
+
+external write
+
+new account lineage logic
+
+只做：
+
+CUSTOMER-VISIBLE CLAIM PACKAGE
+编号裁决
+
+① PC-02：
+
+PASS
+
+② /opportunities path ownership change：
+
+PASS / ACCEPTED
+
+③ PC-02：
+
+PASS / CLOSED
+
+④ PC-03：
+
+AUTHORIZED
+
+⑤ NEXT EXECUTION UNIT：
+
+PC-03 CUSTOMER CLAIM PACKAGE VIEW
+
+tenant/account-safe read projection
+
+package summary
+
+basis
+
+evidence manifest
+
+missing items
+
+readiness/submission distinction
+
+UI
+
+permanent DB/HTTP tests
+
+full CI
+
+边界继续保持：
+
+NO platform write
+Payment = 0
+autopay = OFF
+collection = OFF
+external payment write = OFF
+R13 HOLD
+TRANSPORT = false
+无生产凭据
+
+现在产品主链已经开始明显成形：用户有注册基础 → 能看到机会 → 下一步就是点进去看“为什么能追回、有哪些证据、还缺什么、能不能提交”。 PC-03 做完后，客户侧的价值感会比继续扩任何底层架构都更直接。
+```
