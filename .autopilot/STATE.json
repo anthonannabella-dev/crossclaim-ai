@@ -3093,6 +3093,8 @@
       "P4": "100+ 页面（待 Search → Checker → Case → Recovery 转化验证）"
     },
     "implementation_started": "NO",
-    "boundary": "Payment activation OFF · autopay OFF · payment collection OFF · external payment write OFF · R13 HOLD · TRANSPORT=false · 无生产凭据；任何 Schema/对外/支付变更仍需架构方审计"
+    "boundary": "Payment activation OFF · autopay OFF · payment collection OFF · external payment write OFF · R13 HOLD · TRANSPORT=false · 无生产凭据；任何 Schema/对外/支付变更仍需架构方审计",
+    "github_comment": "5944393226",
+    "github_url": "https://github.com/anthonannabella-dev/crossclaim-ai/issues/2#issuecomment-5944393226"
   }
 }
