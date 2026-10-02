@@ -689,3 +689,10 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - 永久验收矩阵 18 项见文档 §10，直接并入后续 C2/X 阶段回归基线。
 - HOLD 不变：Production / external write / payment / real credentials / TRANSPORT=false / R13 HOLD / Payment = 0。
 - 队列影响：R46 = NONE（已关闭）；TRACK C2 = NONE（不打断，仅验收口径对齐）。
+
+### TRACK C2 FINALIZATION（MSG-20261002-68 REVISE，收口后提交 FINAL-2 / Closure Checkpoint）
+
+- CHANGE A：pod-upload / closure-service / recovery-outcome 三条 Evidence 写路径改为 server-derived account（authenticated source context -> SourceConnection -> PlatformAccount）；无法唯一确定 account -> PLATFORM_ACCOUNT_REQUIRED fail-closed，不得写 NULL 新事实；若路径不可达/只读，用代码证据 + 回归证明，不硬接线。
+- CHANGE B：Settlement 端到端 account lineage 永久验收证明（Settlement -> ClaimItem/Evidence -> PlatformAccount 唯一可反查；A 账户 evidence 不得绑定 B 账户 settlement）。
+- KEEP：不回填全部 legacy NULL、不按 label 猜 account、不任选第一个 account、不加全局 UNIQUE(provider, externalAccountId)、不把 rotation 当 identityVersion、不重构 R46 财务链。
+- 完成即提交 TRACK C2 FINAL-2 -> C2 CLOSED -> PHASE X1 Architecture Audit -> TRACK B。
