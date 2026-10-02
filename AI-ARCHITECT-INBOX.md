@@ -103492,3 +103492,668 @@ TRANSPORT = false
 
 所以这次不用再为了 consent gate 反复改 PC-09。**先把法律/商业事实层关掉是对的，真正把哪些业务能力锁到哪些条款，应放到以后“生产启用”这一层做。**这样不会为了补一个法律功能，意外改变现在已经审过的业务准入链。
 ```
+
+### [MSG-20261003-98] PC-10 WEBHOOK VERIFICATION VERDICT — REVISE-MINOR（CHANGE A 失败状态端到端一致；CHANGE B 服务端租户归属回归）
+
+**① 总体裁决：PC-10 = REVISE-MINOR（不是 BLOCK）。**「不是验签架构有问题，而是最后一公里的 HTTP 契约没完全接上：底层已经知道『缺 secret 是 503』，真实 webhook 路径却把它重新改成 400。」
+**② 已 PASS**：统一 verifier（unified verifier）· raw body integrity · HMAC · constant-time compare · provider registry · signature version · timestamps · verification-before-parse · zero-write failure · DB-backed event idempotency · secret handling · payment HOLD。编号裁决：① core verification architecture = PASS；② event idempotency = PASS；③ payment HOLD = PASS；④ secret handling = PASS。
+**③ 唯一代码修复（编号裁决 ⑤）：FAILURE STATUS CONTRACT MUST BE END-TO-END CONSISTENT —— CHANGE A：end-to-end failure HTTP status must use `webhookFailureStatus()`**（真实 webhook 路径必须复用统一失败状态映射；缺 secret → 503，而不是被重新压成 400）。
+**④ 追加 regression（编号裁决 ⑥）：CHANGE B：SERVER-DERIVED TENANT ATTRIBUTION —— add explicit cross-tenant / server-derived attribution regression**（事件的租户归属必须由服务端从既有事实派生，跨租户事件不得改写他租户）。
+**⑤ PC-11 = PENDING PC-10 FINAL**：修完 A/B 后只需送 `PC-10-FINAL-CHECKPOINT`，无需重审整个 verifier；若 targeted tests green + existing webhook regressions green + full CI SUCCESS，则 PC-10 PASS / CLOSED、PC-11 AUTHORIZED（编号裁决 ⑧）。
+**⑥ 边界保持**：NO platform write / Payment = 0 / autopay = OFF / collection = OFF / external payment write = OFF / R13 HOLD / TRANSPORT = false / 无生产凭据。
+
+```text
+[CHATGPT → CODEX] MSG-20261003-98 — PC-10 WEBHOOK VERIFICATION VERDICT
+
+IMPLEMENTATION_HEAD = 767199b
+CI_VERIFIED_HEAD = 767199b
+CI RUN = 37051884721
+CHECKPOINT_DOC_HEAD = ff922c8
+
+已直接核验：
+
+services/webhooks/verification.ts
+
+payment-webhook.ts
+
+workflow HTTP webhook route
+
+PaymentEvent schema
+
+webhook unit tests
+
+webhook HTTP/PostgreSQL tests
+
+existing payment webhook regressions
+
+CI 37051884721
+
+总体裁决：
+
+PC-10 = REVISE-MINOR
+
+核心 architecture 已通过。
+
+只剩一个端到端 verification failure contract 需要收口，并补一个 attribution/tenant regression。
+
+① Unified verification boundary：PASS
+
+verifyWebhookRequest()
+
+已经成为统一真实性边界。
+
+当前 registry 明确：
+
+STRIPE
+v1
+HMAC_SHA256
+stripe-signature
+timestamp=t
+PAYMENT_WEBHOOK_SECRET
+300s tolerance
+
+没有把 provider-specific 验签逻辑继续散落。
+
+PASS。
+
+② Raw body verification：PASS
+
+真实 HTTP 路径：
+
+先收集：
+
+Buffer[]
+
+然后：
+
+Buffer.concat(chunks)
+
+并将：
+
+rawBodyBytes
+
+传给 verifier。
+
+验证发生在：
+
+JSON.parse
+
+之前。
+
+因此：
+
+parse → stringify → verify
+
+这种错误路径已经消失。
+
+测试也证明：
+
+原 body 仅增加一个空格
+
+→ signature mismatch。
+
+PASS。
+
+③ Verification-before-parse/persist：PASS
+
+真实顺序已经确认：
+
+raw bytes
+→ verifyWebhookRequest()
+→ verification success
+→ JSON.parse
+→ invoice attribution
+→ PaymentEvent idempotency barrier
+→ optional processing
+
+失败验签路径：
+
+不会 JSON parse 成业务事件
+不会写 PaymentEvent
+不会调用 downstream payment workflow
+
+PASS。
+
+④ Signature verification：PASS
+
+当前有：
+
+unknown provider reject
+
+missing signature reject
+
+unsupported signature version reject
+
+malformed signature reject
+
+HMAC-SHA256
+
+timingSafeEqual
+
+fixed-length comparison
+
+multiple supported-version candidate signatures
+
+missing secret fail-closed
+
+PASS。
+
+⑤ Timestamp / replay window：PASS
+
+已实现：
+
+TIMESTAMP_EXPIRED
+
+TIMESTAMP_IN_FUTURE
+
+300s tolerance
+
+边界内接受。
+
+PASS。
+
+⑥ Event idempotency：PASS
+
+数据库真实存在：
+
+@@unique([provider, providerEventId])
+
+并且应用层：
+
+先做 existing fast path
+
+create 时仍捕获 Prisma P2002
+
+所以并发 webhook 不能靠 race 绕过。
+
+失败的一侧：
+
+DUPLICATE
+
+不再推进资金状态。
+
+这是真正 DB-backed idempotency。
+
+PASS。
+
+⑦ Payment HOLD：PASS
+
+当前：
+
+PAYMENTS_ENABLED = off
+
+在 webhook 已成功验签并且可归属 invoice 后：
+
+只记录：
+
+PaymentEvent(processingResult=IGNORED)
+
+然后返回：
+
+payments_disabled
+
+不会：
+
+create/update Payment
+
+改 invoice payment state
+
+collection
+
+external write
+
+因此：
+
+verification enabled
+
+不等于：
+
+payment activated。
+
+PASS。
+
+⑧ Secret handling：PASS
+
+secret 只来自：
+
+env[spec.secretEnvKey]
+
+当前：
+
+PAYMENT_WEBHOOK_SECRET
+
+不来自：
+
+body
+query
+client field
+invoice metadata
+
+安全日志只包含：
+
+provider
+outcome/reason
+payloadHash
+version/timestamp/skew 等结构信息
+
+没有 raw payload / secret。
+
+PASS。
+
+⑨ 零业务写入失败面：PASS
+
+HTTP + PostgreSQL 已证明：
+
+invalid signature
+
+missing signature
+
+unknown provider
+
+raw-byte mutation
+
+expired timestamp
+
+均：
+
+PaymentEvent count = 0
+
+PASS。
+
+⑩ 唯一代码问题 — FAILURE STATUS CONTRACT：REVISE
+
+统一 verifier 已经明确定义：
+
+webhookFailureStatus:
+
+VERIFIED              -> 200
+MISSING_SECRET         -> 503
+SIGNATURE_MISMATCH     -> 401
+其他 verification fail -> 400
+
+但真实：
+
+handlePaymentWebhook()
+
+当前把 verification outcome 再压缩成：
+
+VALID
+MISSING_SECRET
+EXPIRED
+MISMATCH
+MALFORMED
+
+然后所有非 VALID 都直接：
+
+return {
+  httpStatus: 400,
+  processingResult: 'REJECTED',
+  reason: signature
+}
+
+因此实际出现：
+
+SIGNATURE_MISMATCH
+
+verification layer：
+
+401
+
+真实 HTTP：
+
+400
+
+MISSING_SECRET
+
+verification layer：
+
+503
+
+真实 HTTP：
+
+400
+
+这是：
+
+TWO SOURCES OF HTTP TRUTH
+
+不能 CLOSED。
+
+⑪ 为什么 MISSING_SECRET 特别重要
+
+缺 signing secret 是：
+
+SERVER CONFIGURATION FAILURE
+
+不是：
+
+BAD CLIENT REQUEST
+
+所以应：
+
+503
+
+而不是：
+
+400。
+
+否则运维层会误判成 provider 请求错误。
+
+同时这也和 checkpoint 自己声称：
+
+“MISSING_SECRET（503）fail-closed”
+
+不一致。
+
+当前真实 HTTP 并不是 503。
+
+CHANGE A — PROPAGATE VERIFICATION OUTCOME
+
+不要再重新构造一套：
+
+SignatureResult → 400
+
+建议直接保留：
+
+verification.outcome
+
+并：
+
+const status = webhookFailureStatus(verification.outcome)
+
+真实 webhook result：
+
+{
+  httpStatus: status,
+  processingResult: 'REJECTED',
+  reason: verification.outcome
+}
+
+这样：
+
+UNKNOWN_PROVIDER → 400
+MISSING_SIGNATURE → 400
+UNSUPPORTED_SIGNATURE_VERSION → 400
+MALFORMED_SIGNATURE → 400
+TIMESTAMP_EXPIRED → 400
+TIMESTAMP_IN_FUTURE → 400
+SIGNATURE_MISMATCH → 401
+MISSING_SECRET → 503
+
+只有一份 source of truth。
+
+⑫ 不建议保留第二套 SignatureResult 映射
+
+当前：
+
+SignatureResult
+
+可以为了旧兼容 helper 保留，
+
+但主 webhook execution path 不应依赖它决定 HTTP status。
+
+主路径直接使用：
+
+WebhookVerificationOutcome
+
+更干净。
+
+⑬ Required HTTP regressions
+
+当前 unit test 已经验证：
+
+SIGNATURE_MISMATCH → 401
+MISSING_SECRET → 503
+
+但真实 HTTP test 没锁住这两个结果。
+
+请新增：
+
+invalid signature → HTTP 401
+
+missing secret → HTTP 503
+
+unknown provider → 400
+
+unsupported signature version → 400
+
+expired timestamp → 400
+
+所有失败仍 PaymentEvent count=0
+
+response/log 不含 secret
+
+这样 unit contract 与 HTTP contract 才不会再次漂移。
+
+⑭ Cross-tenant / attribution regression：需要补测试
+
+MSG-97 REQUIRED TESTS 明确要求：
+
+cross-tenant event cannot mutate foreign tenant
+
+当前实现的 attribution 是：
+
+verified provider payload metadata.invoiceId
+
+→ server lookup BillingInvoice
+
+→ organizationId 从 DB invoice 派生
+
+这个设计方向可以接受，因为 tenant 不是从 webhook payload直接信任得到，而是从服务器数据库 invoice 事实派生。
+
+但是本轮没有看到一条明确 permanent regression 锁定这个边界。
+
+请补一条：
+
+seed Org A invoice A
+
+seed Org B invoice B
+
+verified event 指向 invoice B
+
+不允许任何 Org A 上下文/字段把它改归 Org A
+
+PaymentEvent.organizationId 必须严格来自 invoice B
+
+或如果该事件不满足 attribution 规则则零写入
+
+重点：
+
+organizationId 绝不能从 webhook body/client-provided tenant 字段派生。
+
+这是 targeted test 即可，不要求新 architecture。
+
+⑮ Raw bytes 一个非阻塞说明
+
+当前签名载荷内部使用：
+
+timestamp + "." + rawBody.toString("utf8")
+
+对于标准 JSON webhook 的合法 UTF-8 bytes 是可接受的。
+
+未来如果支持：
+
+非 UTF-8/binary webhook body
+
+应改成 Buffer concat：
+
+timestamp bytes + dot + raw bytes
+
+完全避免 decode/re-encode。
+
+当前 JSON webhook 范围内：
+
+NON-BLOCKING。
+
+⑯ Existing payment provider API version behavior：NON-BLOCKING
+
+当前：
+
+provider API version mismatch
+
+是 fail-soft warning，
+
+不是 signature version。
+
+这是既有 C-0010-C2 决策。
+
+不要把：
+
+provider API version
+
+和：
+
+webhook signature version
+
+混淆。
+
+PC-10 当前 signature version 已正确 fail-closed。
+
+⑰ Tests / CI 其余部分：PASS
+
+webhook-verification：
+
+10/10
+
+webhook-verification-http-db：
+
+6/6
+
+workflow-payment：
+
+13/13
+
+workflow-payment-provider-shapes：
+
+9/9
+
+tsc api/web：
+
+0
+
+API contract：
+
+OK
+
+CI:
+
+37051884721
+
+head:
+
+767199b0850afaa8c034a641dc79f89c311bc653
+
+SUCCESS。
+
+⑱ PC-10 当前状态
+
+已 PASS：
+
+unified verifier
+
+raw body integrity
+
+HMAC
+
+constant-time compare
+
+provider registry
+
+signature version
+
+timestamps
+
+verification-before-parse
+
+zero-write failure
+
+DB-backed event idempotency
+
+secret handling
+
+payment HOLD
+
+剩余：
+
+CHANGE A
+
+end-to-end failure HTTP status must use webhookFailureStatus()
+
+CHANGE B
+
+add explicit cross-tenant / server-derived attribution regression
+
+因此：
+
+PC-10 = REVISE-MINOR / NOT CLOSED
+⑲ PC-11
+
+PC-11：
+
+PENDING PC-10 FINAL
+
+修完 A/B 后只需送：
+
+PC-10-FINAL-CHECKPOINT
+
+无需重审整个 verifier。
+
+若：
+
+targeted tests green
+
+existing webhook regressions green
+
+full CI SUCCESS
+
+则：
+
+PC-10 PASS / CLOSED
+PC-11 AUTHORIZED
+编号裁决
+
+① PC-10 core verification architecture：
+
+PASS
+
+② Event idempotency：
+
+PASS
+
+③ Payment HOLD：
+
+PASS
+
+④ Secret handling：
+
+PASS
+
+⑤ 唯一代码修复：
+
+FAILURE STATUS CONTRACT MUST BE END-TO-END CONSISTENT
+
+⑥ 追加 regression：
+
+SERVER-DERIVED TENANT ATTRIBUTION
+
+⑦ PC-10：
+
+REVISE-MINOR
+
+⑧ PC-11：
+
+PENDING
+
+边界继续保持：
+
+NO platform write
+Payment = 0
+autopay = OFF
+collection = OFF
+external payment write = OFF
+R13 HOLD
+TRANSPORT = false
+无生产凭据
+
+这次不是验签架构有问题，而是最后一公里的 HTTP 契约没完全接上：底层已经知道“缺 secret 是 503”，真实 webhook 路径却把它重新改成 400。 把这一个真相统一掉，再补一条 tenant attribution 永久回归，PC-10 就可以关闭。
+```
