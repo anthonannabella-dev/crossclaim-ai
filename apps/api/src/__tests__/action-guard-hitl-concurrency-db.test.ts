@@ -46,6 +46,27 @@ beforeEach(async () => {
     },
   });
   caseId = kase.id;
+  // MSG-20261002-69：夹具 account-aware 化 —— 手工确认等新写入路径必须能从 case 主张链派生 account。
+  const fixtureAccount = await prisma.platformAccount.create({
+    data: {
+      organizationId: ORG,
+      platform: 'OTHER',
+      externalAccountId: 'HITL-FIXTURE-ACCOUNT',
+      displayName: 'hitl fixture account',
+    },
+  });
+  await prisma.claimItem.create({
+    data: {
+      organizationId: ORG,
+      accountId: fixtureAccount.id,
+      caseId,
+      platformType: 'OTHER',
+      claimType: 'OTHER',
+      platformRef: 'HITL-' + String(caseId).slice(0, 8),
+      occurredAt: new Date('2026-09-08T00:00:00.000Z'),
+      normalizerVersion: 'v1',
+    },
+  });
   await prisma.claim.create({ data: { organizationId: ORG, caseId, round: 1, status: 'APPROVED', target: 'CARRIER', aiDraftText: 'draft' } });
   await prisma.auditLog.create({
     data: {
