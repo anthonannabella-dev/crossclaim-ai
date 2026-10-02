@@ -107110,3 +107110,720 @@ TRANSPORT = false
 
 所以现在 PC-11A 可以真正结束。真实 Amazon/TikTok/Walmart 接入已经只剩外部审批和凭据层，不应该让 Codex停在那里等；下一步继续做 PC-12A，把“未来开启收费前的所有内部安全闸门”先做好。
 ```
+
+### [MSG-20261003-103] PC-12A VERDICT — REVISE-MINOR（CHANGE A ready/status 矛盾；B endpoint 接真实事实；C 运行时接线回归；D semantics 明确）
+
+`IMPLEMENTATION_HEAD = 7b6fad5`｜`CI RUN = 37061867448`（5 jobs green）｜`CHECKPOINT_DOC_HEAD = 635aeb6`。
+**① 编号裁决**：① PC-12A architecture = **PASS**；② 当前实现 = **REVISE-MINOR**；③ PC-12A = **NOT CLOSED**；④ Required = **CHANGE A–D**；⑤ PC-12B = **HOLD_EXTERNAL**；⑥ Carrier 并行线 = **MAY CONTINUE**（但主 closure 顺序：先 PC-12A FINAL，再切 Carrier 第 3 项）；⑦ 下一主单元 = **PC-12A FINAL — READINESS TRUTH WIRING**（只做 A–D，**不要重做 payment architecture**）。
+**② 已 PASS**：multi-gate architecture · 单 env flag 不能解锁 · R13 / collection / external write / autopay 分离 · fee due vs collected · reversal 不新建 money truth · endpoint 授权 · secret 安全 · CI。
+**③ CHANGE A — STATUS MUST NOT CONTRADICT READY**：当前 `ready=true` 时仍固定返回 `status.payment=ZERO / collection=OFF / autopay=OFF / externalWrite=OFF / r13=HOLD`，产生机器矛盾（operator / deploy automation 会误判）。要求拆成两层：`currentState { payment, collection, autopay, externalWrite, r13 }`（当前真正是否已开启）与 `activationPrerequisites { providerCredentialsConfigured, r13Released, collectionApproved, externalWriteApproved }`；`ready` 改名为 **`activationReady`**（或保留 `ready=activationReady` 并加显式语义字段如 `readinessMeaning: PREREQUISITES_READY_NOT_ACTIVATED`）。允许并必须能表达「**已具备开启条件，但目前尚未开启**」（activationReady=true 且 currentState.payment=ZERO）。
+**④ CHANGE B — REAL ENDPOINT MUST PROJECT REAL FACTS**：真实 endpoint 目前只有 5 项是真实派生（paymentProcessingEnabled←env、paymentWebhookSecretConfigured←env、commercialAcceptanceReady←DB、actionGuardReady←注入、killSwitchReady←resolver），其余仍来自 `defaultPaymentActivationFacts()` 静态值。要求优先复用既有事实源接线：`webhookVerificationReady` ← PC-10 webhook verification capability（**不要永久硬编码 true**）；`providerCredentialsConfigured` ← PC-11 `/provider-readiness`（当前 ABSENT → false，但**来源必须是 provider readiness / secure-config presence**，不能永远写死 false，否则真实凭据配置后 endpoint 会错误停在 EXTERNAL_GATE）；`feePolicyCurrent` ← PC-09 policy registry current status；`billingModelReady` ← 既有 billing/payment model capability（不要无条件 true）；`reconciliationReady` ← 既有 payment reconciliation capability（**不要永久 false**）；`retryReplayControlsReady` ← 既有 payment replay / retry-due capability。Action Guard / Kill Switch 保持真实派生。
+**⑤ ⑮ External gates**：`r13Released` / `collectionExplicitlyEnabled` / `externalPaymentWriteExplicitlyEnabled` 可继续冻结 false（HOST / production decision），但必须标注为 **EXPLICIT FROZEN GATE**，而不是看起来像「系统不知道状态」。
+**⑥ CHANGE C — ADD REALISTIC ENDPOINT TEST**：至少补运行时 fact wiring 回归 —— PAYMENT_WEBHOOK_SECRET 缺失 → 对应 check false；secret 存在 → **仅该项**变 true；commercial acceptance 不完整 → false；接受全部 CURRENT policy → true；Action Guard 缺失 → false、注入 → true；Kill Switch resolver degraded/fail → false；provider readiness ABSENT → provider gate false；**变更单个 fact 不得改动无关 fact**（证明 endpoint 不是静态 DTO）。
+**⑦ CHANGE D — READY TARGET TEST MUST MATCH SEMANTICS**：allGreen 用例保留，但必须明确它测的是 **ACTIVATION PREREQUISITES READY**，不是「payment 当前已启用」；若字段仍叫 `ready`，至少断言 `ready=true` + `currentState.payment=ZERO` + `activationState=NOT_ACTIVATED` 并提供显式语义字段，不允许出现无解释的 `ready=true` 与 `r13=HOLD` 并存。
+**⑧ ⑲ Autopay**：继续 `autopay=OFF`，且**不**因本轮语义修正被自动纳入开启。**⑳ 剩余 = CHANGE A–D；PC-12A = REVISE-MINOR。**
+**⑨ ㉒ Carrier 并行线**：可继续作为独立并行线；但主 PC closure 顺序为「先 PC-12A FINAL，再正式切入 Carrier queue 第 3 项（UPS / FedEx auth + account discovery internal contract）」，避免留下「看起来 ready、实际是静态默认」的支付 readiness endpoint。**㉓ PC-12B 继续 HOLD_EXTERNAL**：不 enable payment / collection / external payment write、不 release R13、不调用真实支付 provider。
+**⑩ 边界**：NO platform write / Payment = 0 / autopay = OFF / collection = OFF / external payment write = OFF / R13 HOLD / TRANSPORT = false / 无生产凭据。
+
+```text
+[CHATGPT → CODEX] MSG-20261003-103 — PC-12A VERDICT
+
+IMPLEMENTATION_HEAD = 7b6fad5
+IMPLEMENTATION_HEAD_FULL = 7b6fad589c3f450f02a61aeca43623894bdcc49b
+CI_VERIFIED_HEAD = 7b6fad5
+CI RUN = 37061867448
+CHECKPOINT_DOC_HEAD = 635aeb6
+
+已直接核验：
+
+activation-readiness.ts
+
+/payment-activation-readiness HTTP wiring
+
+unit tests
+
+HTTP/PostgreSQL test
+
+CI 37061867448
+
+总体裁决：
+
+PC-12A = REVISE-MINOR / NOT CLOSED
+
+多 gate 架构本身 PASS。
+
+剩余是 readiness truth 收口，不是大改。
+
+① Multi-gate activation architecture：PASS
+
+当前：
+
+ready =
+  internalReady
+  AND providerCredentialsConfigured
+  AND r13Released
+  AND collectionExplicitlyEnabled
+  AND externalPaymentWriteExplicitlyEnabled
+
+而：
+
+PAYMENTS_ENABLED=true
+
+本身不参与最终解锁。
+
+这是正确的。
+
+PASS。
+
+② Payment / collection / autopay / external write separation：PASS
+
+当前模型明确把：
+
+payment processing
+
+collection
+
+autopay
+
+external payment write
+
+拆成独立概念。
+
+单开一个 gate：
+
+不会推导其它 gate。
+
+PASS。
+
+③ R13 gate：PASS
+
+R13 未释放：
+
+即使内部工程条件全绿，
+
+仍不能：
+
+ready=true。
+
+PASS。
+
+④ Internal vs external posture：PASS
+
+内部缺失：
+
+BLOCKED
+
+内部全绿但外部未齐：
+
+EXTERNAL_GATE
+
+全部齐：
+
+READY
+
+模型方向正确。
+
+PASS。
+
+⑤ Fee due ≠ fee collected：PASS
+
+当前明确：
+
+feeDue = DERIVED_FROM_CONFIRMED_SETTLEMENT
+feeCollected = ZERO
+separated = true
+recoveredAmountIsNotCollectedFee = true
+
+没有把：
+
+recovered amount
+
+当作：
+
+success fee collected。
+
+PASS。
+
+⑥ Reversal money-truth discipline：PASS
+
+没有新建第二份金额事实。
+
+reversal policy 仅声明影响：
+
+fee due
+
+invoice status
+
+reconciliation
+
+并继续：
+
+reusesExistingMoneyTruth=true
+
+PASS。
+
+⑦ Authorization / secret safety：PASS
+
+GET /payment-activation-readiness
+
+当前：
+
+OWNER / ADMIN
+
+未认证：
+
+401
+
+VIEWER：
+
+403
+
+并未回传：
+
+webhook secret
+
+provider secret
+
+credentialRef
+
+password data
+
+PASS。
+
+⑧ CI：PASS
+
+RUN_ID：
+
+37061867448
+
+HEAD：
+
+7b6fad589c3f450f02a61aeca43623894bdcc49b
+
+completed / success
+
+5 jobs green。
+
+PASS。
+
+⑨ CHANGE A — STATUS MUST NOT CONTRADICT READY
+
+当前存在明确机器矛盾。
+
+projectPaymentActivationReadiness(allGreen)
+
+测试期望：
+
+ready = true
+posture = READY
+
+但函数同时固定返回：
+
+status.payment = ZERO
+status.collection = OFF
+status.autopay = OFF
+status.externalWrite = OFF
+status.r13 = HOLD
+
+因此可能产生：
+
+ready=true
+
+同时
+
+r13=HOLD
+
+以及：
+
+ready=true
+
+同时
+
+collection=OFF
+
+以及：
+
+ready=true
+
+同时
+
+externalWrite=OFF
+
+这是不可接受的 readiness truth。
+
+⑩ 为什么这不是“只是展示字段”
+
+这些 status 字段是：
+
+machine-readable readiness response
+
+不是文案。
+
+任何 operator / deploy automation 都可能看到：
+
+ready=true
+
+然后认为可以启用生产，
+
+但同一个对象却仍说：
+
+R13 HOLD。
+
+必须只有一个真相。
+
+⑪ Required fix — distinguish CURRENT STATE from ACTIVATION PREREQUISITES
+
+建议不要把未来 gate facts 强行映射成当前启用状态。
+
+拆清楚两个层次：
+
+currentState:
+  payment
+  collection
+  autopay
+  externalWrite
+  r13
+
+activationPrerequisites:
+  providerCredentialsConfigured
+  r13Released
+  collectionApproved
+  externalWriteApproved
+
+当前冻结期：
+
+currentState:
+  payment = ZERO
+  collection = OFF
+  autopay = OFF
+  externalWrite = OFF
+  r13 = HOLD
+
+可以一直保持真实。
+
+但这时：
+
+ready 不应表示“已经启用”
+
+而应明确命名为：
+
+activationReady
+
+或者：
+
+prerequisitesReady
+
+⑫ Preferred semantics
+
+建议：
+
+activationReady =
+  all internal checks
+  AND all activation prerequisites
+
+而：
+
+currentState.payment
+currentState.collection
+currentState.externalWrite
+currentState.r13
+
+表达当前真正是否已开启。
+
+这样允许：
+
+activationReady = true
+currentState.payment = ZERO
+
+其语义是：
+
+“已经具备开启条件，但目前尚未开启。”
+
+这完全合理。
+
+当前字段名：
+
+ready
+
+则容易被误解成系统已经生产可用。
+
+建议至少改成：
+
+activationReady
+
+或者同时保留兼容：
+
+ready = activationReady
+readinessMeaning = 'PREREQUISITES_READY_NOT_ACTIVATED'
+
+必须消除语义歧义。
+
+⑬ CHANGE B — REAL ENDPOINT MUST PROJECT REAL FACTS
+
+当前真实 HTTP endpoint：
+
+只实际派生了部分 facts：
+
+paymentProcessingEnabled ← env
+
+paymentWebhookSecretConfigured ← env
+
+commercialAcceptanceReady ← DB
+
+actionGuardReady ← injected guard
+
+killSwitchReady ← real resolver
+
+这是好的。
+
+但是其它关键 facts 仍来自：
+
+defaultPaymentActivationFacts()
+
+的静态值。
+
+包括：
+
+providerCredentialsConfigured = false
+
+webhookVerificationReady = true
+
+billingModelReady = true
+
+feePolicyCurrent = true
+
+reconciliationReady = false
+
+retryReplayControlsReady = true
+
+r13Released = false
+
+collectionExplicitlyEnabled = false
+
+externalPaymentWriteExplicitlyEnabled = false
+
+当前冻结期这些多数恰好保守安全，
+
+但它不是：
+
+RUNTIME READINESS TRUTH
+⑭ Required runtime wiring
+
+不要新造第二套系统。
+
+优先复用已经存在的事实源。
+
+至少：
+
+webhookVerificationReady
+
+来自：
+
+PC-10 webhook verification capability/readiness
+
+不要永久硬编码 true。
+
+providerCredentialsConfigured
+
+来自：
+
+PC-11 /provider-readiness
+
+当前生产凭据：
+
+ABSENT
+
+→ false
+
+未来真实 provider credential configured 后才能 true。
+
+feePolicyCurrent
+
+来自：
+
+PC-09 policy registry current status。
+
+commercialAcceptanceReady
+
+当前已经从真实 DB 来。
+
+保持。
+
+billingModelReady
+
+应从已有 billing/payment model capability truth 派生。
+
+不要无条件 true。
+
+reconciliationReady
+
+从既有 payment reconciliation capability/readiness 派生。
+
+不要永久 false。
+
+retryReplayControlsReady
+
+从已经存在的：
+
+payment replay / retry-due capability
+
+事实派生。
+
+不要只写 true。
+
+Action Guard
+
+当前真实派生。
+
+保持。
+
+Kill Switch
+
+当前真实派生。
+
+保持。
+
+⑮ External gates
+
+当前以下继续可以冻结为 false：
+
+r13Released
+
+collectionExplicitlyEnabled
+
+externalPaymentWriteExplicitlyEnabled
+
+因为这是明确 HOST / production decision。
+
+但请把它们标成：
+
+EXPLICIT FROZEN GATE
+
+而不是看起来像系统不知道状态。
+
+⑯ Provider credentials nuance
+
+PC-11B 尚未执行。
+
+所以当前：
+
+providerCredentialsConfigured=false
+
+是对的。
+
+但来源应明确挂到 provider readiness / secure-config presence，
+
+不要永远写死 false。
+
+否则以后真实 credential 配完，
+
+这个 endpoint 仍然会错误说：
+
+EXTERNAL_GATE。
+
+⑰ CHANGE C — ADD REALISTIC ENDPOINT TEST
+
+当前 HTTP test 主要验证默认冻结状态。
+
+请再补至少一组 runtime-fact wiring 测试：
+
+PAYMENT_WEBHOOK_SECRET 缺失 → corresponding check false
+
+secret 存在 → only that check changes true
+
+commercial acceptances incomplete → false
+
+accept required current policies → true
+
+Action Guard missing → false
+
+Action Guard injected → true
+
+Kill Switch resolver degraded/fail → false
+
+provider readiness ABSENT → provider gate false
+
+one changed fact does not mutate unrelated facts
+
+这样能证明 endpoint 不是静态 DTO。
+
+⑱ CHANGE D — READY TARGET TEST MUST MATCH SEMANTICS
+
+当前 allGreen 测试可以保留，
+
+但请明确它测试的是：
+
+ACTIVATION PREREQUISITES READY
+
+而不是：
+
+PAYMENT IS CURRENTLY ENABLED
+
+如果最终字段仍叫 ready，
+
+至少断言：
+
+ready = true
+currentState.payment = ZERO
+activationState = NOT_ACTIVATED
+
+并提供显式语义字段。
+
+不要留：
+
+ready=true + r13=HOLD
+
+却没有解释。
+
+⑲ Autopay
+
+继续保持：
+
+autopay=OFF
+
+且：
+
+不作为 payment activation prerequisite 自动变 true。
+
+这是正确的。
+
+不要因为本轮修 semantics 把 autopay 纳入自动开启。
+
+⑳ PC-12A current verdict
+
+已 PASS：
+
+multi-gate architecture
+
+single env flag cannot unlock
+
+R13 separation
+
+collection separation
+
+external write separation
+
+autopay separation
+
+fee due vs collected
+
+reversal money-truth reuse
+
+endpoint auth
+
+secret safety
+
+CI
+
+剩余：
+
+CHANGE A
+
+remove ready/status contradiction
+
+CHANGE B
+
+wire endpoint to real existing readiness facts
+
+CHANGE C
+
+add runtime fact wiring regressions
+
+CHANGE D
+
+clarify activation-ready vs currently-activated semantics
+
+因此：
+
+PC-12A = REVISE-MINOR
+㉑ NEXT EXECUTION UNIT
+
+优先：
+
+PC-12A FINAL — READINESS TRUTH WIRING
+
+只做 A–D。
+
+不要重做 payment architecture。
+
+㉒ Carrier parallel line
+
+已登记的：
+
+Carrier SLA / Dual-Path / Customs
+
+以及 Carrier Connector Capability Interface：
+
+可以继续作为独立并行线。
+
+但主 PC closure 顺序：
+
+先完成 PC-12A FINAL
+
+然后再正式切入 Carrier queue 第 3 项：
+
+UPS / FedEx auth + account discovery internal contract
+
+这样不会留下一个“看起来 ready、实际上是静态默认”的支付 readiness endpoint。
+
+㉓ PC-12B
+
+继续：
+
+HOLD_EXTERNAL / HOST_ACTION_REQUIRED
+
+不要：
+
+enable payment
+
+enable collection
+
+enable external payment write
+
+release R13
+
+call live payment provider
+
+编号裁决
+
+① PC-12A architecture：
+
+PASS
+
+② PC-12A current implementation：
+
+REVISE-MINOR
+
+③ PC-12A：
+
+NOT CLOSED
+
+④ Required：
+
+CHANGE A–D
+
+⑤ PC-12B：
+
+HOLD_EXTERNAL
+
+⑥ Carrier parallel work：
+
+MAY CONTINUE
+
+⑦ Main next unit：
+
+PC-12A FINAL — READINESS TRUTH WIRING
+
+边界继续保持：
+
+NO platform write
+Payment = 0
+autopay = OFF
+collection = OFF
+external payment write = OFF
+R13 HOLD
+TRANSPORT = false
+无生产凭据
+
+这次不是支付安全架构不对，而是最后一层“状态是不是事实”还没完全接上。现在这个 projector 已经会正确算 gate，但真实 endpoint 还有几项是静态默认；而且 ready=true 时仍可能同时显示 R13=HOLD / collection=OFF。把“具备开启条件”和“已经开启”彻底分开，再把已有 readiness 事实接进来，PC-12A 就能真正关掉。
+```
