@@ -171,6 +171,7 @@ C-0008-B2（Case / Evidence / Claim Draft / Billing）的端点尚未实现。
 | GET | `/cases/:caseId` | 200 案件详情（含关联机会与 Claim **元数据**：round / status / target / dueAt） | OWNER / ADMIN / OPS |
 | GET | `/cases/:caseId/evidence` | 200 `{ items: [{ evidenceId, role, kind, title, description, reliability, capturedAt, addedAt, hasFile }] }` | OWNER / ADMIN / OPS |
 | GET | `/cases/:caseId/claim` | 200 `{ id, caseId, round, version, status, generatedAt, isFinal, sections }` | **仅 OWNER / ADMIN / OPS** |
+| GET | `/cases/<id>/claim-package` | — | 200 `{ case, account, package, why, evidence, missingItems, readiness, actions }`（PC-03 客户可见材料包只读投影；PACKAGE READY ≠ CLAIM ACTUALLY SUBMITTED，`providerWrite=HOLD_NEEDS_MANUAL`） | 401 `UNAUTHENTICATED`；403 `FORBIDDEN`（FINANCE / VIEWER，沿用证据权限）；404 `NOT_FOUND`（跨租户 / 不存在）；409 `CLAIM_PACKAGE_ACCOUNT_MISMATCH` |
 
 - **Claim 正文只在此端点返回**；`/cases` 与 `/cases/:caseId` 一律不含正文（FINANCE / VIEWER 也因此看不到）
 - FINANCE / VIEWER 访问案件与证据 → 403（财务事实请走 `/billing`）

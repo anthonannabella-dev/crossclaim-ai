@@ -129,12 +129,15 @@ import {
   listOpportunityInsights,
   toExportRows,
 } from './opportunity-insight';
+import { getCaseClaimPackage } from './claim-package-view';
 import { listOpportunities } from './opportunity-list';
 import { REJECT_REASONS, WorkflowError, reviewOpportunity } from './opportunity-review';
 import { ForbiddenError, assertPermission } from './permissions';
 
 const MAX_BODY_BYTES = 16 * 1024;
 const REVIEW_PATH = /^\/opportunities\/([^/]+)\/(qualify|reject|case)$/;
+/** PC-03：客户可见的 Claim Package 只读视图。 */
+const CASE_CLAIM_PACKAGE_PATH = /^\/cases\/([^/]+)\/claim-package$/;
 /** PC-02：客户可见的机会列表（read-only projection）。 */
 const OPPORTUNITY_LIST_PATH = /^\/opportunities$/;
 const INSIGHT_LIST_PATH = /^\/opportunities\/insights$/;
@@ -304,6 +307,7 @@ function statusFor(error: unknown): { code: number; error: string } {
       case 'ACCOUNT_BINDING_IMMUTABLE':
       case 'CONNECTION_NOT_ACTIVE':
       case 'UNVERIFIED_PLATFORM_IDENTITY':
+      case 'CLAIM_PACKAGE_ACCOUNT_MISMATCH':
         return { code: 409, error: error.code };
       case 'FORBIDDEN':
         return { code: 403, error: error.code };
@@ -368,6 +372,7 @@ export async function handleWorkflowRequest(
   const path = (req.url ?? '/').split('?')[0];
   const review = REVIEW_PATH.exec(path);
   const opportunityList = OPPORTUNITY_LIST_PATH.test(path);
+  const caseClaimPackage = CASE_CLAIM_PACKAGE_PATH.exec(path);
   const insightList = INSIGHT_LIST_PATH.test(path);
   const insightCsv = INSIGHT_CSV_PATH.test(path);
   const insight = INSIGHT_PATH.exec(path);
@@ -433,7 +438,7 @@ export async function handleWorkflowRequest(
     adminPermissionMatrix ||
     adminMemberDetail !== null ||
     adminKillSwitch;
-  if (!adminAny && !opportunityList && !operationsDashboard && !operationsClaims && !operationsRecovery && !review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !paymentReviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !replayPath && !replayReviewPath && !retryDuePath && !retryDueFreezePath && !retryDueReviewPath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim && !caseClaimSubmit && !caseClaimPrepare && !caseBillingDraft && !caseAppealSubmit && !casePlatformWrite && !caseRecoveryManualSubmit && !caseRecoveryManualReference && !caseRecoveryManualApproval && !caseRecoveryManualReferenceApproval) {
+  if (!adminAny && !opportunityList && !caseClaimPackage && !operationsDashboard && !operationsClaims && !operationsRecovery && !review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !paymentReviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !replayPath && !replayReviewPath && !retryDuePath && !retryDueFreezePath && !retryDueReviewPath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim && !caseClaimSubmit && !caseClaimPrepare && !caseBillingDraft && !caseAppealSubmit && !casePlatformWrite && !caseRecoveryManualSubmit && !caseRecoveryManualReference && !caseRecoveryManualApproval && !caseRecoveryManualReferenceApproval) {
     return false;
   }
 
@@ -486,6 +491,7 @@ export async function handleWorkflowRequest(
           : billingPath && !billingPath[1]
             ? ['GET']
             : opportunityList ||
+                caseClaimPackage !== null ||
                 insightList ||
                 insightCsv ||
                 insight ||
@@ -844,6 +850,13 @@ export async function handleWorkflowRequest(
         deps.now ? { now: deps.now } : {},
       );
       sendJson(res, 200, result);
+      return true;
+    }
+
+    if (caseClaimPackage) {
+      // PC-03：客户可见 Claim Package 只读投影（tenant/account-safe；不生成 package、不触发外写）。
+      const view = await getCaseClaimPackage(deps.prisma, actor, caseClaimPackage[1] ?? '');
+      sendJson(res, 200, view);
       return true;
     }
 
