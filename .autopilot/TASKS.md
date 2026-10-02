@@ -704,3 +704,23 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - CHANGE B：Settlement 端到端 account lineage 永久验收证明（Settlement -> ClaimItem/Evidence -> PlatformAccount 唯一可反查；A 账户 evidence 不得绑定 B 账户 settlement）。
 - KEEP：不回填全部 legacy NULL、不按 label 猜 account、不任选第一个 account、不加全局 UNIQUE(provider, externalAccountId)、不把 rotation 当 identityVersion、不重构 R46 财务链。
 - 完成即提交 TRACK C2 FINAL-2 -> C2 CLOSED -> PHASE X1 Architecture Audit -> TRACK B。
+
+---
+
+### SAFE_CONTINUATION_QUEUE — HOST BACKEND ARCHITECTURE DIRECTIVE（STATUS = QUEUED_AFTER_CURRENT_C2）
+
+- 文档：`docs/releases/BACKEND-ARCHITECTURE-DIRECTIVE.md`（含 HOST 原文 verbatim）；STATE.backend_architecture_directive。
+- 硬约束：技术栈不变（TypeScript / PostgreSQL / Prisma / Vitest）；禁止 Python / FastAPI / Pydantic / Celery；禁止第二事实源；token 只进 SecretVault；AI 不得直接产生金额/结算事实。
+- **不打断当前 execution unit**：当前 = Carrier Queue #3（UPS / FedEx auth + account discovery internal contract，送审中）；本队列在当前单元收口后**自动**开始。
+- Schema Delta 审核（架构方）后方可落 Prisma migration 的 8 个模型：OAuthAuthorizationSession / ConnectionCapability / ConnectionSyncState / DomainFactSnapshot / DomainFactSnapshotSource / DocumentExtraction / AsyncJob / OutboxEvent。
+
+- [ ] PHASE B1 — HTTP Layer 迁移设计：Fastify + `/api/v1` + 兼容计划（只换 adapter / routing，无 domain 重写）
+- [ ] PHASE B2 — Integration Foundation：ProviderAdapter / OAuthAuthorizationSession / ConnectionCapability / ConnectionSyncState / SecretVault 抽象
+- [ ] PHASE B3 — UPS / FedEx：OAuth + Account Discovery + Tracking Read + Capability Detection（**不启用** Direct Claim API）
+- [ ] PHASE B4 — Invoice / POD / Rate / SLA data 接入
+- [ ] PHASE B5 — Structured Domain Facts：shipment/v1、customs-entry/v1
+- [ ] PHASE B6 — Dual-Path Routing：Platform Shipping vs Independent Carrier
+- [ ] PHASE B7 — Document AI：7501 / C88 / 中国报关单 / invoice / POD
+- [ ] PHASE B8 — AsyncJob + Outbox（PostgreSQL 原生；暂不引入 Redis / Temporal）
+- [ ] PHASE B9 — Submission Adapter（一期仅 CLAIM_READY_PACKAGE / PORTAL_DEEPLINK；DIRECT_API 需官方资质 + Action Guard 全绿）
+- [ ] PHASE B10 — Customer Projection APIs（Overview / Action Center / Recoveries / Integrations / Executive Report）

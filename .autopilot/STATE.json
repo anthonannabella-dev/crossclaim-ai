@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261003-102",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-02T21:47:12.122Z",
+  "updated_at": "2026-10-02T21:49:28.585Z",
   "previous_head": "b1b4835",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -53,7 +53,7 @@
   "state": "IMPLEMENT",
   "last_action": "SCHEDULER_STALE_RECOVERED（gap=15min）→ 本轮已恢复执行",
   "last_action_at": "2026-10-02T09:01:54.693Z",
-  "next_action": "Carrier Queue #3 送审（Issue #2 comment + ChatGPT 唤醒 + 裁决归档：FULL_COPY_OK）；通过后按 VERDICT 进入下一内部单元（Carrier Queue #4 tracking read adapter 或架构方指定）。",
+  "next_action": "Carrier Queue #3 送审（Issue #2 comment + ChatGPT 唤醒 + 裁决归档：FULL_COPY_OK）；通过后按 VERDICT 进入下一内部单元 —— 若无其它裁决插入，则按 SAFE_CONTINUATION_QUEUE 进入 PHASE B1（Fastify / /api/v1 兼容设计）。",
   "current_head": "b55f13b",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
@@ -3684,5 +3684,49 @@
   "carrier_queue_3_ci_run": "37068040288",
   "carrier_queue_3_ci_result": "SUCCESS",
   "carrier_queue_3_checkpoint_doc_head": "27d399d",
-  "carrier_queue_3_audit_comment_id": "5961993026"
+  "carrier_queue_3_audit_comment_id": "5961993026",
+  "backend_architecture_directive": {
+    "source": "HOST BACKEND ARCHITECTURE DIRECTIVE",
+    "status": "QUEUED_AFTER_CURRENT_C2",
+    "doc": "docs/releases/BACKEND-ARCHITECTURE-DIRECTIVE.md",
+    "registered_head": "93114f1",
+    "registered_at": "2026-10-02T21:49:28.585Z",
+    "queue": [
+      "PHASE B0 完成当前 C2 / Settlement / Action Guard / Closure（已 CLOSED）与当前 execution unit",
+      "PHASE B1 HTTP Layer 迁移设计（Node HTTP → Fastify / /api/v1 兼容计划 / 无 domain 重写）",
+      "PHASE B2 Integration Foundation（ProviderAdapter / OAuthAuthorizationSession / ConnectionCapability / ConnectionSyncState / SecretVault）",
+      "PHASE B3 UPS / FedEx OAuth + Account Discovery + Tracking Read + Capability Detection（不启用 Direct Claim API）",
+      "PHASE B4 Invoice / POD / Rate / SLA data",
+      "PHASE B5 Structured Domain Facts（shipment/v1、customs-entry/v1）",
+      "PHASE B6 Dual-Path Routing（Platform Shipping vs Independent Carrier）",
+      "PHASE B7 Document AI（7501 / C88 / 中国报关单 / invoice / POD）",
+      "PHASE B8 AsyncJob + Outbox（PostgreSQL；暂不引入 Redis / Temporal / Celery）",
+      "PHASE B9 Submission Adapter（一期仅 CLAIM_READY_PACKAGE / PORTAL_DEEPLINK）",
+      "PHASE B10 Customer Projection APIs（Overview / Action Center / Recoveries / Integrations / Executive Report）"
+    ],
+    "schema_delta_review_required": true,
+    "arch_review_required": true,
+    "recommended_models_pending_schema_delta_review": [
+      "OAuthAuthorizationSession",
+      "ConnectionCapability",
+      "ConnectionSyncState",
+      "DomainFactSnapshot",
+      "DomainFactSnapshotSource",
+      "DocumentExtraction",
+      "AsyncJob",
+      "OutboxEvent"
+    ],
+    "forbidden": [
+      "Python / FastAPI / Pydantic / Celery",
+      "第二事实源（tenants / users / store_integrations / carrier_accounts / claims / sla_disputes / carrier_invoices 重复建模）",
+      "真实 token 入 PostgreSQL / AuditLog / HTTP response",
+      "AI output 直接生成 recoverableAmount / Settlement / RecoveryPayout",
+      "PDF → LLM → Claim",
+      "缺 OAuth 时把 CARRIER 路由降级成 PLATFORM",
+      "一期引入 Redis / Temporal 作为唯一事件证据来源"
+    ],
+    "conflict_check": "NO_ROADMAP_CONFLICT：Carrier Queue #3（UPS / FedEx auth + account discovery）与本指令 PHASE B3 同向；既有不变量（tenant isolation / account provenance / evidence lineage / idempotency / masking / audit / Action Guard / HITL / settlement·payout truth / fee·billing 分离）不受影响",
+    "queue_impact": "NONE_ON_CURRENT_UNIT —— 当前 Carrier Queue #3 送审中；本指令排队到 SAFE_CONTINUATION_QUEUE，当前单元收口后自动进入 PHASE B1",
+    "boundary": "NO platform write · Payment = 0 · autopay = OFF · collection = OFF · external payment write = OFF · R13 HOLD · TRANSPORT=false · 无生产凭据"
+  }
 }
