@@ -6,6 +6,7 @@
 import type { PrismaClient } from '@prisma/client';
 
 import type { EvidenceDraft, EvidencePromotionPorts } from './promotion';
+import { resolveAccountIdFromConnection } from './account-scope';
 
 export function createPrismaEvidencePromotionPorts(
   prisma: PrismaClient,
@@ -38,15 +39,11 @@ export function createPrismaEvidencePromotionPorts(
       },
 
       async create(draft: EvidenceDraft) {
-        // TRACK C2 M4：证据的 account 归属只由服务端从连接上下文派生。
-        const accountId = draft.connectionId
-          ? ((
-              await prisma.sourceConnection.findFirst({
-                where: { organizationId: draft.organizationId, id: draft.connectionId },
-                select: { platformAccountId: true },
-              })
-            )?.platformAccountId ?? null)
-          : null;
+        // MSG-20261002-68 CHANGE A：统一走共享解析器；无法唯一确定 account → fail-closed。
+        const accountId = await resolveAccountIdFromConnection(prisma as never, {
+          organizationId: draft.organizationId,
+          connectionId: draft.connectionId,
+        });
         const created = await prisma.evidenceArtifact.create({
           data: {
             organizationId: draft.organizationId,
