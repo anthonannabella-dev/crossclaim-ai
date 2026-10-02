@@ -20,7 +20,13 @@ import { resolveProviderContract, type ProviderIntegrationContract } from './pro
 
 /** code → 凭据引用 / scope 的交换端口（真实实现在 PC-11B；本批只提供 sandbox 实现）。 */
 export interface CodeExchangePort {
-  exchange(input: { provider: string; code: string; callbackPath: string }): Promise<{
+  exchange(input: {
+    provider: string;
+    code: string;
+    callbackPath: string;
+    /** PKCE：由服务端 state 记录提供的 code_verifier（绝不是浏览器自证值）。 */
+    codeVerifier?: string;
+  }): Promise<{
     credentialRef: string;
     scopes: readonly string[];
     sandbox: boolean;
@@ -37,7 +43,10 @@ export type ProviderCallbackFailure =
   | 'UNKNOWN_PROVIDER'
   | 'EXCHANGE_FAILED'
   | 'SCOPE_ESCALATION_REJECTED'
-  | 'IDENTITY_NOT_VERIFIED';
+  | 'IDENTITY_NOT_VERIFIED'
+  | 'AUTHORIZATION_CODE_REQUIRED'
+  | 'PKCE_VERIFIER_REQUIRED'
+  | 'PKCE_VERIFIER_MISMATCH';
 
 export interface ProviderBindPlan {
   provider: string;
@@ -79,6 +88,8 @@ export interface ProviderCallbackInput {
   callbackPath: string;
   organizationId: string;
   userId: string;
+  /** PKCE：由客户端回调带回的 verifier 候选；服务端会与 state 记录比对。 */
+  codeVerifier?: string;
 }
 
 function stateFailureReason(reason: string): ProviderCallbackFailure {
@@ -121,9 +132,20 @@ export async function handleProviderCallback(
   if (!consumed.ok) return { ok: false, reason: stateFailureReason(consumed.reason) };
 
   const contract = resolveProviderContract(input.provider);
+  // PC-11A FINAL（MSG-20261003-100 CHANGE A）：缺 code 必须在 exchange 之前 fail-closed。
+  // 保证：exchange 不被调用、verifier 不被调用、无 bind plan、无 credential mutation。
+  if (!input.code || input.code.trim() === '') return { ok: false, reason: 'AUTHORIZATION_CODE_REQUIRED' };
+
   if (!contract) return { ok: false, reason: 'UNKNOWN_PROVIDER' };
   if (contract.callbackPath !== input.callbackPath) {
     return { ok: false, reason: 'STATE_CALLBACK_MISMATCH' };
+  }
+
+  // PC-11A FINAL（CHANGE B）：PKCE required 时，verifier 必须来自服务端 state 记录且一致。
+  if (contract.pkce.required) {
+    if (!input.codeVerifier || input.codeVerifier.trim() === '') return { ok: false, reason: 'PKCE_VERIFIER_REQUIRED' };
+    const expected = consumed.record.codeVerifier;
+    if (!expected || input.codeVerifier !== expected) return { ok: false, reason: 'PKCE_VERIFIER_MISMATCH' };
   }
 
   let exchanged: { credentialRef: string; scopes: readonly string[]; sandbox: boolean };
@@ -132,6 +154,7 @@ export async function handleProviderCallback(
       provider: contract.provider,
       code: input.code,
       callbackPath: contract.callbackPath,
+      ...(input.codeVerifier ? { codeVerifier: input.codeVerifier } : {}),
     });
   } catch {
     return { ok: false, reason: 'EXCHANGE_FAILED' };

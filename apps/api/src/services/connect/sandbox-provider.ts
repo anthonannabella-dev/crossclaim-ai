@@ -8,7 +8,7 @@
  *   · 不发起任何真实网络请求；不写平台；不启用 transport。
  */
 
-import { randomBytes as randomBytesImpl } from 'node:crypto';
+import { createHash, randomBytes as randomBytesImpl } from 'node:crypto';
 
 import { resolveProviderContract } from './provider-integration-contract';
 
@@ -33,27 +33,37 @@ export interface SandboxExchangeResult {
 
 export interface SandboxProviderHarness {
   readonly sandbox: true;
-  approve(input: { state: string; externalAccountId?: string; displayName?: string }): SandboxAuthorization;
-  exchangeCode(input: { code: string }): SandboxExchangeResult;
+  approve(input: { state: string; externalAccountId?: string; displayName?: string; codeChallenge?: string }): SandboxAuthorization;
+  exchangeCode(input: { code: string; codeVerifier?: string }): SandboxExchangeResult;
 }
 
 /** 未知 provider → fail-closed（返回 null，不猜测）。 */
 export function createSandboxProviderHarness(provider: string): SandboxProviderHarness | null {
   const contract = resolveProviderContract(provider);
   if (!contract) return null;
-  const codes = new Map<string, { externalAccountId: string; displayName: string }>();
+  const codes = new Map<string, { externalAccountId: string; displayName: string; codeChallenge: string | null }>();
   return {
     sandbox: true,
     approve(input) {
+      // PKCE required 的 provider：approve 必须携带 challenge（否则 fail-closed）。
+      if (contract.pkce.required && (!input.codeChallenge || input.codeChallenge.trim() === '')) {
+        throw new Error('SANDBOX_PKCE_CHALLENGE_REQUIRED');
+      }
       const code = 'SANDBOX-CODE-' + randomBytesImpl(12).toString('hex');
       const externalAccountId = input.externalAccountId ?? 'sandbox-account-' + randomBytesImpl(4).toString('hex');
       const displayName = input.displayName ?? 'Sandbox Account';
-      codes.set(code, { externalAccountId, displayName });
+      codes.set(code, { externalAccountId, displayName, codeChallenge: input.codeChallenge ?? null });
       return { sandbox: true, provider: contract.provider, code, scopes: contract.readOnlyScopes, callbackPath: contract.callbackPath };
     },
     exchangeCode(input) {
       const found = codes.get(input.code);
       if (!found) throw new Error('SANDBOX_CODE_NOT_FOUND');
+      // PKCE 校验先于消费授权码：失败不烧码（sandbox 语义），成功才删除。
+      if (contract.pkce.required) {
+        if (!input.codeVerifier || input.codeVerifier.trim() === '') throw new Error('SANDBOX_PKCE_VERIFIER_REQUIRED');
+        const derived = createHash('sha256').update(input.codeVerifier, 'utf8').digest('base64url');
+        if (!found.codeChallenge || derived !== found.codeChallenge) throw new Error('SANDBOX_PKCE_VERIFIER_MISMATCH');
+      }
       codes.delete(input.code);
       return {
         sandbox: true,

@@ -10,7 +10,7 @@
  * 这属于生产启用项（PC-11B），本批只提供端口与契约。
  */
 
-import { randomBytes as randomBytesImpl } from 'node:crypto';
+import { createHash, randomBytes as randomBytesImpl } from 'node:crypto';
 
 import { resolveProviderContract } from './provider-integration-contract';
 
@@ -23,6 +23,11 @@ export interface OAuthStateRecord {
   userId: string;
   /** 该 state 绑定的回调路径（必须命中 provider 契约登记的边界） */
   callbackPath: string;
+  /**
+   * PC-11A FINAL（CHANGE B）：PKCE code_verifier —— **仅保存在服务端**，
+   * 绝不进入 URL / 浏览器可读字段 / 日志 / 公开返回。
+   */
+  codeVerifier: string | null;
   issuedAt: Date;
   expiresAt: Date;
 }
@@ -69,6 +74,9 @@ export interface IssuedOAuthState {
   callbackPath: string;
   authorizationUrl: string;
   expiresAt: Date;
+  /** PKCE challenge（公开值；可放 URL）。verifier 永不出现在此处。 */
+  codeChallenge: string | null;
+  codeChallengeMethod: 'S256' | null;
   /** 生产可用性恒 false：本批只发 state，不发起真实授权。 */
   productionAuthorizationEnabled: false;
 }
@@ -84,12 +92,19 @@ export async function issueOAuthState(
   const now = (deps.now ?? (() => new Date()))();
   const ttl = input.ttlSeconds ?? DEFAULT_OAUTH_STATE_TTL_SECONDS;
   const state = (deps.randomBytes ?? randomBytesImpl)(32).toString('hex');
+  const pkce = contract.pkce;
+  const codeVerifier = pkce.required ? (deps.randomBytes ?? randomBytesImpl)(32).toString('base64url') : null;
+  const codeChallenge =
+    codeVerifier && pkce.method === 'S256'
+      ? createHash('sha256').update(codeVerifier, 'utf8').digest('base64url')
+      : null;
   const record: OAuthStateRecord = {
     state,
     provider: contract.provider,
     organizationId: input.organizationId,
     userId: input.userId,
     callbackPath: contract.callbackPath,
+    codeVerifier,
     issuedAt: now,
     expiresAt: new Date(now.getTime() + ttl * 1000),
   };
@@ -99,8 +114,11 @@ export async function issueOAuthState(
     provider: contract.provider,
     callbackPath: contract.callbackPath,
     // 授权 URL 只是边界占位（真实 provider 端点属 PC-11B）；不含 client id / secret。
-    authorizationUrl: contract.callbackPath + '?state=' + state,
+    authorizationUrl:
+      contract.callbackPath + '?state=' + state + (codeChallenge ? '&code_challenge=' + codeChallenge + '&code_challenge_method=S256' : ''),
     expiresAt: record.expiresAt,
+    codeChallenge,
+    codeChallengeMethod: codeChallenge ? 'S256' : null,
     productionAuthorizationEnabled: false,
   };
 }

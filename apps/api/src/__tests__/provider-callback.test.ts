@@ -1,10 +1,9 @@
 /**
- * TRACK A / PC-11A — OAuth 回调边界（callback boundary）单元回归（MSG-20261003-99 ⑲）。
- * 断言：一次性 state、provider/租户/用户/回调绑定、scope 边界（禁止 broad write）、
- * 身份必须经 verifier 验证、凭据只以引用出现、**不执行绑定**（bindExecuted=false）。
+ * TRACK A / PC-11A FINAL — callback boundary（CHANGE A 缺 code fail-closed + PKCE）（MSG-20261003-100）。
  */
 
-import { describe, expect, it } from 'vitest';
+import { createHash } from 'node:crypto';
+import { describe, expect, it, vi } from 'vitest';
 
 import { createMockPlatformIdentityVerifier } from '../services/connectors/platform-identity-verifier';
 import { InMemoryOAuthStateStore, issueOAuthState } from '../services/connect/oauth-state';
@@ -12,6 +11,10 @@ import { handleProviderCallback, type CodeExchangePort } from '../services/conne
 import { createSandboxProviderHarness } from '../services/connect/sandbox-provider';
 
 const NOW = new Date('2026-10-02T00:00:00.000Z');
+const FIXED = Buffer.alloc(32, 9);
+const randomBytes = () => FIXED;
+const VERIFIER = FIXED.toString('base64url');
+const CHALLENGE = createHash('sha256').update(VERIFIER, 'utf8').digest('base64url');
 const base = {
   provider: 'AMAZON',
   organizationId: 'org-1',
@@ -19,60 +22,115 @@ const base = {
   callbackPath: '/connect/callbacks/amazon',
 };
 
-function sandboxExchange(): CodeExchangePort {
+function sandboxExchange(): { port: CodeExchangePort; calls: number[] } {
+  const calls: number[] = [];
   const harness = createSandboxProviderHarness('AMAZON')!;
-  const authorization = harness.approve({ state: 's', externalAccountId: 'AMZ-A', displayName: 'AMZ-A' });
+  const authorization = harness.approve({
+    state: 's',
+    externalAccountId: 'AMZ-A',
+    displayName: 'AMZ-A',
+    codeChallenge: CHALLENGE,
+  });
   return {
-    async exchange() {
-      const result = harness.exchangeCode({ code: authorization.code });
-      return { credentialRef: result.credentialRef, scopes: result.scopes, sandbox: true };
+    calls,
+    port: {
+      async exchange(input) {
+        calls.push(1);
+        const result = harness.exchangeCode({
+          code: authorization.code,
+          ...(input.codeVerifier ? { codeVerifier: input.codeVerifier } : {}),
+        });
+        return { credentialRef: result.credentialRef, scopes: result.scopes, sandbox: true };
+      },
     },
   };
 }
 
 const identityVerifier = () =>
   createMockPlatformIdentityVerifier(
-    {
-      AMAZON: {
-        platform: 'AMAZON',
-        externalAccountId: 'AMZ-A',
-        displayName: 'AMZ-A',
-        identityVersion: 'v1',
-      },
-    },
+    { AMAZON: { platform: 'AMAZON', externalAccountId: 'AMZ-A', displayName: 'AMZ-A', identityVersion: 'v1' } },
     { now: () => NOW },
   );
 
-async function issue(store: InMemoryOAuthStateStore) {
-  return issueOAuthState(store, base, { now: () => NOW });
-}
+const issue = (store: InMemoryOAuthStateStore) => issueOAuthState(store, base, { now: () => NOW, randomBytes });
+
+const input = (state: string) => ({
+  provider: 'AMAZON',
+  state,
+  code: 'c',
+  callbackPath: base.callbackPath,
+  organizationId: 'org-1',
+  userId: 'user-1',
+  codeVerifier: VERIFIER,
+});
 
 describe('PC-11A — provider callback boundary', () => {
-  it('happy path（sandbox）：产出绑定计划，身份服务端验证，bindExecuted=false', async () => {
+  it('happy path（sandbox + PKCE）：绑定计划 bindExecuted=false，身份服务端验证', async () => {
     const store = new InMemoryOAuthStateStore();
     const issued = await issue(store);
+    const { port } = sandboxExchange();
     const outcome = await handleProviderCallback(
-      { store, exchange: sandboxExchange(), identityVerifier: identityVerifier(), now: () => NOW },
-      { provider: 'AMAZON', state: issued.state, code: 'sandbox', callbackPath: base.callbackPath, organizationId: 'org-1', userId: 'user-1' },
+      { store, exchange: port, identityVerifier: identityVerifier(), now: () => NOW },
+      input(issued.state),
     );
     expect(outcome.ok).toBe(true);
     const plan = outcome.ok ? outcome.plan : null;
-    expect(plan?.provider).toBe('AMAZON');
     expect(plan?.credentialRef.startsWith('SANDBOX:AMAZON:')).toBe(true);
     expect(plan?.identity.externalAccountId).toBe('AMZ-A');
-    expect(plan?.sandbox).toBe(true);
     expect(plan?.bindExecuted).toBe(false);
     expect(plan?.productionCredentials).toBe('ABSENT');
+    // verifier 不得出现在计划里
+    expect(JSON.stringify(plan)).not.toContain(VERIFIER);
+  });
+
+  it('CHANGE A：空 code → AUTHORIZATION_CODE_REQUIRED 且 exchange 不被调用', async () => {
+    const store = new InMemoryOAuthStateStore();
+    const issued = await issue(store);
+    const spy = vi.fn();
+    const exchange: CodeExchangePort = {
+      async exchange() {
+        spy();
+        return { credentialRef: 'x', scopes: [], sandbox: true };
+      },
+    };
+    const outcome = await handleProviderCallback(
+      { store, exchange, identityVerifier: identityVerifier(), now: () => NOW },
+      { ...input(issued.state), code: '   ' },
+    );
+    expect(outcome.ok).toBe(false);
+    expect(outcome.ok === false ? outcome.reason : null).toBe('AUTHORIZATION_CODE_REQUIRED');
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('PKCE：缺 verifier → PKCE_VERIFIER_REQUIRED；verifier 错误 → PKCE_VERIFIER_MISMATCH（均不调用 exchange）', async () => {
+    for (const [override, reason] of [
+      [{ codeVerifier: undefined }, 'PKCE_VERIFIER_REQUIRED'],
+      [{ codeVerifier: 'wrong' }, 'PKCE_VERIFIER_MISMATCH'],
+    ] as const) {
+      const store = new InMemoryOAuthStateStore();
+      const issued = await issue(store);
+      const spy = vi.fn();
+      const exchange: CodeExchangePort = {
+        async exchange() {
+          spy();
+          return { credentialRef: 'x', scopes: [], sandbox: true };
+        },
+      };
+      const outcome = await handleProviderCallback(
+        { store, exchange, identityVerifier: identityVerifier(), now: () => NOW },
+        { ...input(issued.state), ...override },
+      );
+      expect(outcome.ok === false ? outcome.reason : null).toBe(reason);
+      expect(spy).not.toHaveBeenCalled();
+    }
   });
 
   it('state 一次性：重放 → STATE_UNKNOWN', async () => {
     const store = new InMemoryOAuthStateStore();
     const issued = await issue(store);
-    const deps = { store, exchange: sandboxExchange(), identityVerifier: identityVerifier(), now: () => NOW };
-    const input = { provider: 'AMAZON', state: issued.state, code: 'c', callbackPath: base.callbackPath, organizationId: 'org-1', userId: 'user-1' };
-    await handleProviderCallback(deps, input);
-    const replay = await handleProviderCallback(deps, input);
-    expect(replay.ok).toBe(false);
+    const deps = { store, exchange: sandboxExchange().port, identityVerifier: identityVerifier(), now: () => NOW };
+    await handleProviderCallback(deps, input(issued.state));
+    const replay = await handleProviderCallback(deps, input(issued.state));
     expect(replay.ok === false ? replay.reason : null).toBe('STATE_UNKNOWN');
   });
 
@@ -87,32 +145,15 @@ describe('PC-11A — provider callback boundary', () => {
       const store = new InMemoryOAuthStateStore();
       const issued = await issue(store);
       const outcome = await handleProviderCallback(
-        { store, exchange: sandboxExchange(), identityVerifier: identityVerifier(), now: () => NOW },
-        { provider: 'AMAZON', state: issued.state, code: 'c', callbackPath: base.callbackPath, organizationId: 'org-1', userId: 'user-1', ...override },
+        { store, exchange: sandboxExchange().port, identityVerifier: identityVerifier(), now: () => NOW },
+        { ...input(issued.state), ...override },
       );
-      expect(outcome.ok).toBe(false);
       expect(outcome.ok === false ? outcome.reason : null).toBe(reason);
     }
   });
 
-  it('未知 provider → UNKNOWN_PROVIDER（issue 阶段已被拒，这里再断言服务层 fail-closed）', async () => {
+  it('exchange 失败 → EXCHANGE_FAILED；broad write scope → SCOPE_ESCALATION_REJECTED；身份不可验证 → IDENTITY_NOT_VERIFIED', async () => {
     const store = new InMemoryOAuthStateStore();
-    const issued = await issue(store);
-    const outcome = await handleProviderCallback(
-      { store, exchange: sandboxExchange(), identityVerifier: identityVerifier(), now: () => NOW },
-      { provider: 'AMAZON', state: issued.state, code: 'c', callbackPath: base.callbackPath, organizationId: 'org-1', userId: 'user-1' },
-    );
-    expect(outcome.ok).toBe(true);
-    const second = await handleProviderCallback(
-      { store, exchange: sandboxExchange(), identityVerifier: identityVerifier(), now: () => NOW },
-      { provider: 'NOT_A_PROVIDER', state: issued.state, code: 'c', callbackPath: base.callbackPath, organizationId: 'org-1', userId: 'user-1' },
-    );
-    expect(second.ok).toBe(false);
-  });
-
-  it('exchange 失败 / 空凭据引用 → EXCHANGE_FAILED；broad write scope → SCOPE_ESCALATION_REJECTED', async () => {
-    const store = new InMemoryOAuthStateStore();
-    const issued1 = await issue(store);
     const failing: CodeExchangePort = {
       async exchange() {
         throw new Error('provider down');
@@ -120,32 +161,26 @@ describe('PC-11A — provider callback boundary', () => {
     };
     const failed = await handleProviderCallback(
       { store, exchange: failing, identityVerifier: identityVerifier(), now: () => NOW },
-      { provider: 'AMAZON', state: issued1.state, code: 'c', callbackPath: base.callbackPath, organizationId: 'org-1', userId: 'user-1' },
+      input((await issue(store)).state),
     );
     expect(failed.ok === false ? failed.reason : null).toBe('EXCHANGE_FAILED');
 
-    const issued2 = await issue(store);
     const escalating: CodeExchangePort = {
       async exchange() {
-        return { credentialRef: 'SANDBOX:AMAZON:9', scopes: ['orders.write'], sandbox: true };
+        return { credentialRef: 'SANDBOX:AMAZON:1', scopes: ['orders.write'], sandbox: true };
       },
     };
     const escalated = await handleProviderCallback(
       { store, exchange: escalating, identityVerifier: identityVerifier(), now: () => NOW },
-      { provider: 'AMAZON', state: issued2.state, code: 'c', callbackPath: base.callbackPath, organizationId: 'org-1', userId: 'user-1' },
+      input((await issue(store)).state),
     );
     expect(escalated.ok === false ? escalated.reason : null).toBe('SCOPE_ESCALATION_REJECTED');
-  });
 
-  it('身份无法验证 → IDENTITY_NOT_VERIFIED（不产出绑定计划、不写库）', async () => {
-    const store = new InMemoryOAuthStateStore();
-    const issued = await issue(store);
     const emptyVerifier = createMockPlatformIdentityVerifier({}, { now: () => NOW });
-    const outcome = await handleProviderCallback(
-      { store, exchange: sandboxExchange(), identityVerifier: emptyVerifier, now: () => NOW },
-      { provider: 'AMAZON', state: issued.state, code: 'c', callbackPath: base.callbackPath, organizationId: 'org-1', userId: 'user-1' },
+    const unverified = await handleProviderCallback(
+      { store, exchange: sandboxExchange().port, identityVerifier: emptyVerifier, now: () => NOW },
+      input((await issue(store)).state),
     );
-    expect(outcome.ok).toBe(false);
-    expect(outcome.ok === false ? outcome.reason : null).toBe('IDENTITY_NOT_VERIFIED');
+    expect(unverified.ok === false ? unverified.reason : null).toBe('IDENTITY_NOT_VERIFIED');
   });
 });

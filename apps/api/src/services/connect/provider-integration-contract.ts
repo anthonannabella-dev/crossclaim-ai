@@ -23,8 +23,20 @@ export interface ProviderIntegrationContract {
   credentialReferenceOnly: true;
   /** 平台身份必须经 verifier 验证后才允许绑定账户 */
   identityVerificationRequired: true;
-  /** 本阶段对外写能力恒关 */
+  /** 对外提交/写入能力：本阶段恒 false */
   platformWriteEnabled: false;
+  /**
+   * PC-11A FINAL（MSG-20261003-100 CHANGE B）：PKCE 能力必须**显式**声明（不得运行时猜测）。
+   * required=true 的 provider 在 issue state 时必须生成 server-side code_verifier 并派生 S256 challenge。
+   */
+  pkce: { supported: boolean; required: boolean; method: 'S256' | null };
+  /** PC-11A FINAL（CHANGE D）：能力矩阵（supported=平台/协议是否支持；implemented=本仓库是否已实现真实调用）。 */
+  capabilities: {
+    oauth: { supported: boolean; implemented: boolean };
+    refresh: { supported: boolean; implemented: boolean };
+    revoke: { supported: boolean; implemented: boolean };
+    webhook: { supported: boolean; verificationReady: boolean };
+  };
 }
 
 export const PROVIDER_INTEGRATION_CONTRACTS: readonly ProviderIntegrationContract[] = [
@@ -37,6 +49,13 @@ export const PROVIDER_INTEGRATION_CONTRACTS: readonly ProviderIntegrationContrac
     credentialReferenceOnly: true,
     identityVerificationRequired: true,
     platformWriteEnabled: false,
+    pkce: { supported: true, required: true, method: 'S256' },
+    capabilities: {
+      oauth: { supported: true, implemented: false },
+      refresh: { supported: true, implemented: false },
+      revoke: { supported: true, implemented: false },
+      webhook: { supported: false, verificationReady: false },
+    },
   },
   {
     provider: 'TIKTOK_SHOP',
@@ -47,6 +66,13 @@ export const PROVIDER_INTEGRATION_CONTRACTS: readonly ProviderIntegrationContrac
     credentialReferenceOnly: true,
     identityVerificationRequired: true,
     platformWriteEnabled: false,
+    pkce: { supported: true, required: true, method: 'S256' },
+    capabilities: {
+      oauth: { supported: true, implemented: false },
+      refresh: { supported: true, implemented: false },
+      revoke: { supported: true, implemented: false },
+      webhook: { supported: false, verificationReady: false },
+    },
   },
   {
     provider: 'WALMART',
@@ -57,6 +83,13 @@ export const PROVIDER_INTEGRATION_CONTRACTS: readonly ProviderIntegrationContrac
     credentialReferenceOnly: true,
     identityVerificationRequired: true,
     platformWriteEnabled: false,
+    pkce: { supported: true, required: true, method: 'S256' },
+    capabilities: {
+      oauth: { supported: true, implemented: false },
+      refresh: { supported: true, implemented: false },
+      revoke: { supported: true, implemented: false },
+      webhook: { supported: false, verificationReady: false },
+    },
   },
   {
     provider: 'UPS',
@@ -67,6 +100,13 @@ export const PROVIDER_INTEGRATION_CONTRACTS: readonly ProviderIntegrationContrac
     credentialReferenceOnly: true,
     identityVerificationRequired: true,
     platformWriteEnabled: false,
+    pkce: { supported: false, required: false, method: null },
+    capabilities: {
+      oauth: { supported: false, implemented: false },
+      refresh: { supported: false, implemented: false },
+      revoke: { supported: false, implemented: false },
+      webhook: { supported: false, verificationReady: false },
+    },
   },
   {
     provider: 'FEDEX',
@@ -77,6 +117,13 @@ export const PROVIDER_INTEGRATION_CONTRACTS: readonly ProviderIntegrationContrac
     credentialReferenceOnly: true,
     identityVerificationRequired: true,
     platformWriteEnabled: false,
+    pkce: { supported: false, required: false, method: null },
+    capabilities: {
+      oauth: { supported: false, implemented: false },
+      refresh: { supported: false, implemented: false },
+      revoke: { supported: false, implemented: false },
+      webhook: { supported: false, verificationReady: false },
+    },
   },
 ] as const;
 
@@ -91,9 +138,30 @@ export function isAllowedCallbackPath(path: string): boolean {
   return PROVIDER_INTEGRATION_CONTRACTS.some((entry) => entry.callbackPath === path);
 }
 
+/** PC-11A FINAL（MSG-100 ⑰）：reconnect 能力在真实 OAuth 落地前恒不可执行。 */
+export const PROVIDER_RECONNECT_CAPABILITY = {
+  available: false,
+  reason: 'REAL_OAUTH_EXTERNAL_GATE',
+} as const;
+
+/** 生产审批状态：本仓库永远不声称已获批。 */
+export type ProductionApprovalState = 'NOT_REQUESTED' | 'PENDING' | 'APPROVED';
+
 export interface ProviderReadinessView {
   provider: string;
   authKind: ConnectorAuthKind;
+  /** PC-11A FINAL（CHANGE D）：能力矩阵（生命周期真相） */
+  capabilities: {
+    oauth: { supported: boolean; implemented: boolean };
+    pkce: { supported: boolean; required: boolean; method: 'S256' | null };
+    refresh: { supported: boolean; implemented: boolean };
+    revoke: { supported: boolean; implemented: boolean };
+    webhook: { supported: boolean; verificationReady: boolean };
+  };
+  readOnlyScopes: readonly string[];
+  productionApprovalState: ProductionApprovalState;
+  sandboxState: 'AVAILABLE';
+  reconnect: typeof PROVIDER_RECONNECT_CAPABILITY;
   /** 内部契约是否就绪（接口 / 边界 / 生命周期已定义并测试） */
   contractReady: true;
   /** 生产凭据是否存在（本仓库恒为 ABSENT —— 只能由 HOST 提供） */
@@ -114,6 +182,17 @@ export function projectProviderReadiness(): ProviderReadinessView[] {
   return PROVIDER_INTEGRATION_CONTRACTS.map((entry) => ({
     provider: entry.provider,
     authKind: entry.authKind,
+    capabilities: {
+      oauth: entry.capabilities.oauth,
+      pkce: entry.pkce,
+      refresh: entry.capabilities.refresh,
+      revoke: entry.capabilities.revoke,
+      webhook: entry.capabilities.webhook,
+    },
+    readOnlyScopes: entry.readOnlyScopes,
+    productionApprovalState: 'NOT_REQUESTED',
+    sandboxState: 'AVAILABLE',
+    reconnect: PROVIDER_RECONNECT_CAPABILITY,
     contractReady: true,
     productionCredentials: 'ABSENT',
     readiness: 'EXTERNAL_GATE',
