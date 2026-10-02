@@ -1,6 +1,6 @@
 {
   "gate": "B2-FIX R1",
-  "head": "5df82ab",
+  "head": "4d5380f",
   "status": "RECONCILED",
   "current_task": "13. Gate 7 授权队列推进：① ACTION GUARD = 已完成（CP1）；③ PRODUCTION CONTROL PLANE = **PASS**（MSG-20260930-16 / REVIEWED_HEAD e460a82）；**支付域三类受保护内部入口（capture / replay / retry-due）当前工程范围已收口**（retry-due = PASS，MSG-20261001-01 / REVIEWED_REF 9a806eb）；**当前动作 = ② 剩余业务入口的下一小批次**（按 `docs/releases/ACTION-GUARD-CP2-STATUS-AND-INTEGRATION-CHECKLIST.md` §3 选择，逐批次送审）；**② 整体 NOT COMPLETE 之前不开 ⑤/⑥/⑦**（MSG-20260930-16 与 MSG-20261001-01 §7）。",
   "next_task": "R43-A — Manual Recovery Persistence Schema Delta Request（docs-only，先设计/请求批准，不实现）：8 项持久化边界 —— ①package artifact/manifest 如何保存 ②manual submission fact 如何保存 ③providerCaseRef/submittedAt/submittedBy 的归属 ④submission evidence 如何引用现有 EvidenceArtifact ⑤ClaimItem SUBMITTED_MANUAL 与 submission record 的一致性不变量 ⑥package digest/version ⑦tenant triggers/unique constraints/idempotency ⑧retention；Schema Delta 获批后再提交 R43 Implementation Plan。期间保持 AMAZON WRITE HOLD · REAL WRITE ADAPTER HOLD · TRANSPORT=false · 生产凭据/真实外写 HOLD · SETTLEMENT/BILLING LINKAGE HOLD。",
@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261002-65",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-02T02:46:57.022Z",
+  "updated_at": "2026-10-02T02:59:17.303Z",
   "previous_head": "56abd47",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -51,10 +51,10 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-02T02:47:51.510Z",
   "state": "IMPLEMENT",
-  "last_action": "SCHEDULER_STALE_RECOVERED（gap=25min）→ 本轮已恢复执行",
-  "last_action_at": "2026-10-02T02:46:57.022Z",
+  "last_action": "TRACK C2 行为基线交付（7/7）+ TRACK S 提交状态投影；全量 187 files / 1846 tests PASS（无 Schema 变更）",
+  "last_action_at": "2026-10-02T02:59:17.303Z",
   "next_action": "TRACK C2 第一批：以 MSG-65 的 8 个问题与 12 项最低验收重述/补齐 multi-account 现状取证与 gap matrix，并据此提交是否需要 Schema Delta 的决策请求（不直接改 Schema）。",
-  "current_head": "56abd47",
+  "current_head": "4d5380f",
   "reviewed_head": "07b7009",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -3365,5 +3365,22 @@
     "implementation_started": "NO（约束登记；未发现缺口，无需修复）",
     "boundary": "NO platform write · TRANSPORT=false · NO production credentials · platformWriteExecuted=false · externalSubmission=NEEDS_MANUAL · R13 HOLD",
     "github_comment": "5944660808"
+  },
+  "c2_baseline_tests": {
+    "status": "DELIVERED（PROGRESS；无 Schema 变更）",
+    "authorized_by": "MSG-20261002-65（「若现有 Schema 已经满足，则不要为了 C2 发明新架构，只补行为测试与缺失约束」）",
+    "files": [
+      "apps/api/src/__tests__/c2-account-boundary-baseline.test.ts",
+      "apps/api/src/services/billing/submission-state-projection.ts"
+    ],
+    "covered": [
+      "同一 externalId 在两个 organization → SourceTransaction 与 CanonicalFact 均按 org 隔离，互不冲突",
+      "连接身份为 (organizationId, channel, label)：同 org 同 channel 重复 label 被拒；同 label 换 channel 允许（label 仅展示）",
+      "REVOKED 连接调用 runConnectorPull → CONNECTION_STATUS_BLOCKED（撤销账号不得继续 ingest）",
+      "凭据轮换不重写历史 provenance（SourceTransaction connectionId/dedupeKey/createdAt/raw 不变），且审计载荷不含凭据值",
+      "TRACK S：内部提交状态 vs 平台真实提交状态投影 A–E；platformWriteExecuted=false 恒显示 NOT SENT TO PLATFORM；providerCaseRef 才代表平台 ACK"
+    ],
+    "evidence": "c2-account-boundary-baseline 7/7 · 全量 187 files / 1846 tests PASS · tsc 0 error · 无 Schema 变更",
+    "remaining_for_c2": "account 维度下推（PlatformAccount / accountId / factKey 账户作用域）仍待架构方对 TRACK C2 Delta 的裁决；裁决前不实施"
   }
 }
