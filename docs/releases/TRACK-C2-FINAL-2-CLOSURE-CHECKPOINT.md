@@ -1,6 +1,6 @@
 # TRACK C2 FINAL-2 — Closure Checkpoint（MSG-20261002-68 CHANGE A/B 收口）
 
-状态：**READY_FOR_REVIEW（本地全绿；等待架构方裁决）**
+状态：**CLOSURE EVIDENCE COMPLETE / PENDING FINAL CLOSE VERDICT**（实现与 CI 全部 PASS；等待架构方最终关闭裁决）
 依据：MSG-20261002-68（REVISE：C2 主体 PASS，但 active new-write paths 不得继续产生 NULL account provenance；须补 Settlement 端到端 lineage 证明）
 边界：NO platform write · Payment = 0 · collection / autopay / external payment write OFF · R13 HOLD · `TRANSPORT=false` · 无生产凭据。
 
@@ -66,11 +66,13 @@
 - 既有解析器测试：`apps/api/src/__tests__/evidence-account-scope-db.test.ts`（连接派生成功 / 缺连接 / 连接未绑定 / case 唯一主张成功 / 无主张·多账户·含 NULL fail-closed）。
 - 本地结果：上述两套件 **7/7 PASS**（HEAD `55383f3`）。
 
-## 7. 待架构方裁决的阻塞点（Ask，Issue #2 comment 5949608255）
+## 7. [RESOLVED by MSG-20261002-70 Option C] 原阻塞点（Ask，Issue #2 comment 5949608255）
 
 CHANGE A 落地后 CI 暴露的产品契约缺口：`POST /opportunities/:id/case` → `services/workflow/case-creation.ts:158 runRecoveryClosure(...)` → closure-service 新建 Evidence 现在按 MSG-68 fail-closed；而这条 HTTP 路径的机会来自「HTTP 建连接 + 导入/检测」，**连接创建 API 没有 account 绑定入口**（无法把 `SourceConnection` 关联到 `PlatformAccount`）→ 机会/事实必然 account 为空 → 500（探针取证：`{"error":"WORKFLOW_ERROR"}`）。
 
 选项：A) 连接创建 API 增加 server-derived account 绑定（新 API 契约）；B) closure-service 的 `fixture-derived` / `synthetic … (test/demo only)` 占位证据豁免，仅真实 ingest 强制 fail-closed；C) 架构方指定其它窄修。
+
+**RESOLVED by MSG-20261002-70 Option C**：架构方 REJECT A（证据不足以扩张连接创建 API 契约 —— 失败用例是直接 `prisma.recoveryOpportunity.create(...)` 且未写 `accountId`，属旧夹具未跟上 C2 account-aware 契约）、REJECT B（fixture-derived Evidence 在非模拟建案路径同样落库，豁免会重开 MSG-68 已封的规则），**授权 Option C：只修剩余 HITL/workflow 夹具 + 永久保留 fail-closed 负路径**。执行证据见 §8；最终裁决与 final head 见 §9。
 
 ## 8. CHANGE C2-FINAL-2-B —— 最终 CI 状态（MSG-20261002-70 裁决 C 执行后）
 
@@ -98,3 +100,29 @@ CHANGE A 落地后 CI 暴露的产品契约缺口：`POST /opportunities/:id/cas
 Connection API 当前无 account 绑定入口（`SourceConnection.platformAccountId` 可为 NULL 并继续被 ingest 使用）—— 记录为 **PHASE X1 Architecture Audit finding / TRACK B 输入项**，本轮不实现；X1 需裁决后续产品契约（account-scoped ingest 拒绝 unbound connection，或 onboarding 先绑定/创建 PlatformAccount）。
 
 未采纳：Option A（扩张连接创建 API 契约）REJECT；Option B（test/demo NULL provenance 豁免）REJECT（closure-service 的 fixture-derived Evidence 在非模拟建案路径同样落库）。
+
+## 9. CHANGE C2-FINAL-2-D —— 纯文档收口（MSG-20261002-71 §5 逐项）
+
+本轮为 **documentation-only closure commit**：不改源码 / Schema / migrations / 测试 / workflow / runtime config。
+
+| MSG-20261002-71 §5 要求 | 本文档记录 |
+|---|---|
+| 状态 | `CLOSURE EVIDENCE COMPLETE / PENDING FINAL CLOSE VERDICT` |
+| §7 旧 blocker | `RESOLVED by MSG-20261002-70 Option C` |
+| FINAL_IMPLEMENTATION_HEAD | `55921f3` |
+| CI | **SUCCESS** |
+| RUN_ID | `36993735092` |
+| CI_HEAD | `55921f3`（= `CI_VERIFIED_HEAD`；纯文档 commit 不要求重跑整套 CI） |
+| C2专项 | **8 suites / 36/36 PASS** |
+| CHANGE C2-FINAL-2-A | **PASS**（MSG-20261002-70 §1；实现见 §6） |
+| CHANGE C2-FINAL-2-C | **PASS**（MSG-20261002-71 §1；执行见 §8.1） |
+| Option A | **未执行**（REJECT for C2 FINAL-2） |
+| Option B | **未执行**（REJECT） |
+| resolver | **未放宽** |
+| 永久负路径 | `unscoped QUALIFIED opportunity → PLATFORM_ACCOUNT_REQUIRED → zero writes`（§8.2） |
+| Connection API / unbound SourceConnection ingest | **PHASE X1 ARCHITECTURE AUDIT FINDING**；不在 C2 实现（§8.3） |
+| 后续顺序 | `C2 CLOSED → PHASE X1 Architecture Audit → TRACK B` |
+
+**CI 对应关系**：CI（run `36993735092`）验证的是 `55921f3`（`CI_VERIFIED_HEAD`）—— 即 `FINAL_IMPLEMENTATION_HEAD`；本纯文档 commit 产生 `FINAL_CLOSURE_HEAD`，两者应在最终关闭裁决中被明确区分。
+
+**边界**：NO platform write · Payment = 0 · autopay = OFF · collection = OFF · external payment write = OFF · R13 HOLD · `TRANSPORT=false` · 无生产凭据。
