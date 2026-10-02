@@ -626,7 +626,6 @@ describe('② RUNTIME BUSINESS BLOCKING — billing.draft（真实 HTTP + Postgr
       const cookie = await login(base);
       const feeId = await seedFee();
       // 第二个关联费用（断言返回集合精确完整且排序）
-      const secondFee = await prisma.feeCalculation.create({ data: { organizationId: ORG, caseId, basis: 'FIXED', baseAmount: new Prisma.Decimal('10.0000'), feeAmount: new Prisma.Decimal('10.0000'), currency: 'USD', computation: { source: 'second' } as never } });
       const paidAt = new Date('2026-09-30T10:00:00Z');
       const issuedAt = new Date('2026-09-30T09:00:00Z');
       // 账单只建一次（删除账单会级联删除其费用行）；循环内仅翻转状态
@@ -643,10 +642,10 @@ describe('② RUNTIME BUSINESS BLOCKING — billing.draft（真实 HTTP + Postgr
             paidAmount: new Prisma.Decimal('120.0000'),
             paidAt,
             issuedAt,
-            fees: { connect: [{ id: feeId }, { id: secondFee.id }] },
+            fees: { connect: { id: feeId } }, // R46 S5-A（MSG-20261002-63）：v1 = 1 invoice = 1 FeeCalculation
           },
         });
-      for (const status of ['ISSUED', 'PAID', 'PARTIALLY_PAID'] as const) {
+      for (const status of ['ISSUED', 'PARTIALLY_PAID', 'PAID'] as const) { // R46 S5-A：按状态机白名单顺序
         await prisma.billingInvoice.update({ where: { id: invoice.id }, data: { status } });
         const auditsBefore = await prisma.auditLog.count({ where: { organizationId: ORG, action: 'billing.drafted' } });
         const res = await draft(base, cookie);
@@ -659,7 +658,7 @@ describe('② RUNTIME BUSINESS BLOCKING — billing.draft（真实 HTTP + Postgr
           paymentCollectedByThisCall: false,
         });
         // CHANGE A/C 验收：返回集合精确完整且按 id 升序
-        const expectedBasis = [feeId, secondFee.id].sort();
+        const expectedBasis = [feeId]; // R46 S5-A：v1 单笔 basis（多费聚合 fail-closed）
         expect(res.body.basisFeeCalculationIds).toEqual(expectedBasis);
         const after = await prisma.billingInvoice.findUniqueOrThrow({ where: { id: invoice.id } });
         expect(after.status).toBe(status);

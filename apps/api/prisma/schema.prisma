@@ -1217,6 +1217,10 @@ model BillingInvoice {
   externalRef    String?
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
+  /// R46 S5-A（MSG-20261002-63）：canonical invoice basis identity；服务端派生、写入后 immutable、VOID 不释放
+  invoiceBasisDigest      String?
+  invoiceBasisVersion     String?
+  customerAccountIdentity String?
 
   organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   case         Case?            @relation(fields: [caseId], references: [id])
