@@ -52,3 +52,24 @@
 ## 5. KEEP（未违反）
 
 未强行回填 legacy NULL；未按 label 猜 account；未任选第一个 PlatformAccount；未新增全局 `UNIQUE(provider, externalAccountId)`；未把 credential rotation 当作 identityVersion 更新；未重构 R46 财务链。
+
+## 6. CHANGE C2-FINAL-2-A —— dual-context consistency（源码与测试证明，MSG-20261002-69）
+
+冻结要求不是“连接优先”，而是**多上下文各自解析后必须指向同一 PlatformAccount**。实现与证明如下：
+
+- 源码：`apps/api/src/services/evidence/account-scope.ts` → `resolveEvidenceAccountId()`：对 `connectionId` 与 `caseId` **分别解析**（`resolveAccountIdFromConnection` / `resolveAccountIdFromCase`），再要求解析结果集合大小为 1；否则抛 `PLATFORM_ACCOUNT_REQUIRED`（不写任何事实）。
+- 专项测试：`apps/api/src/__tests__/c2-dual-context-resolver-db.test.ts`（真实 PostgreSQL，4 项）：
+  1. `connection=A + case=A` → PASS（返回该 account）；
+  2. `connection=A + case=B` → **stable fail-closed**，且断言零 `EvidenceArtifact` / 零 `CaseEvidence` 副作用；
+  3. connection-only 与 case-only → 均可独立解析 PASS；
+  4. case lineage：多账户 / NULL 与非 NULL 混杂 / 全 NULL / 无 lineage → 全部 fail-closed。
+- 既有解析器测试：`apps/api/src/__tests__/evidence-account-scope-db.test.ts`（连接派生成功 / 缺连接 / 连接未绑定 / case 唯一主张成功 / 无主张·多账户·含 NULL fail-closed）。
+- 本地结果：上述两套件 **7/7 PASS**（HEAD `55383f3`）。
+
+## 7. 待架构方裁决的阻塞点（Ask，Issue #2 comment 5949608255）
+
+CHANGE A 落地后 CI 暴露的产品契约缺口：`POST /opportunities/:id/case` → `services/workflow/case-creation.ts:158 runRecoveryClosure(...)` → closure-service 新建 Evidence 现在按 MSG-68 fail-closed；而这条 HTTP 路径的机会来自「HTTP 建连接 + 导入/检测」，**连接创建 API 没有 account 绑定入口**（无法把 `SourceConnection` 关联到 `PlatformAccount`）→ 机会/事实必然 account 为空 → 500（探针取证：`{"error":"WORKFLOW_ERROR"}`）。
+
+选项：A) 连接创建 API 增加 server-derived account 绑定（新 API 契约）；B) closure-service 的 `fixture-derived` / `synthetic … (test/demo only)` 占位证据豁免，仅真实 ingest 强制 fail-closed；C) 架构方指定其它窄修。
+
+**CI 状态**：待该 Ask 裁决并修完后，本节将补记 `REVIEWED_HEAD` 对应的 **CI = SUCCESS + run id**（CHANGE C2-FINAL-2-B）。
