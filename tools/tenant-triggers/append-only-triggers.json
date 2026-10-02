@@ -1,6 +1,12 @@
 {
-  "note": "R43 Implementation S1（MSG-20261001-31 CHANGE A + MSG-20261001-32 CHANGE A/B）—— 人工追回提交域的 append-only / 受控变更触发器清单。与 required-triggers.json（租户保护）刻意分离：cc_append_only__* 不得以 cc_tenant_ 前缀命名，以免触发租户清单的反向校验；本清单由 tools/tenant-triggers/emit-check-append-only-sql.mjs 在 CI 显式校验（fresh deploy 与 upgrade path 都跑），不得只靠测试碰巧触发。 R45 S1（MSG-20261001-45 / -46）：新增 reconciliation 域的 append-only / 受控 supersede / generation 验证触发器，并登记 cc_reconciliation% 与 cc_reimbursementfact_% 前缀。说明：generation 一致性一律使用**立即判定**（BEFORE），不使用 DEFERRABLE 约束触发器 —— 实测 Prisma 客户端会吞掉 COMMIT 阶段 deferred 约束错误（静默回滚、调用方无感）。",
+  "note": "R43 Implementation S1（MSG-20261001-31 CHANGE A + MSG-20261001-32 CHANGE A/B）—— 人工追回提交域的 append-only / 受控变更触发器清单。与 required-triggers.json（租户保护）刻意分离：cc_append_only__* 不得以 cc_tenant_ 前缀命名，以免触发租户清单的反向校验；本清单由 tools/tenant-triggers/emit-check-append-only-sql.mjs 在 CI 显式校验（fresh deploy 与 upgrade path 都跑），不得只靠测试碰巧触发。 PC-09（MSG-20261003-96 ⑬）：新增 PolicyAcceptance 的 append-only 守卫。 R45 S1（MSG-20261001-45 / -46）：新增 reconciliation 域的 append-only / 受控 supersede / generation 验证触发器，并登记 cc_reconciliation% 与 cc_reimbursementfact_% 前缀。说明：generation 一致性一律使用**立即判定**（BEFORE），不使用 DEFERRABLE 约束触发器 —— 实测 Prisma 客户端会吞掉 COMMIT 阶段 deferred 约束错误（静默回滚、调用方无感）。",
   "triggers": [
+    {
+      "name": "cc_append_only__PolicyAcceptance",
+      "table": "PolicyAcceptance",
+      "tgtype": 27,
+      "semantics": "BEFORE UPDATE OR DELETE → 拒绝（PC-09：客户接受事实不可改；重新接受同一版本为幂等 no-op）"
+    },
     {
       "name": "cc_append_only__RecoveryPackageArtifact",
       "table": "RecoveryPackageArtifact",

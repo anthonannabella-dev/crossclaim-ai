@@ -359,6 +359,7 @@ model Organization {
   invitations                        UserInvitation[]
   connections                        SourceConnection[]
   platformAccounts                   PlatformAccount[]
+  policyAcceptances                  PolicyAcceptance[]
   fileAssets                         FileAsset[]
   importBatches                      ImportBatch[]
   transactions                       SourceTransaction[]
@@ -431,6 +432,8 @@ model User {
   memberships Membership[]
   sessions    Session[]
   auditLogs   AuditLog[]
+
+  policyAcceptances PolicyAcceptance[]
 
   @@index([status])
 }
@@ -2360,4 +2363,27 @@ enum ReconciliationProjectionStatus {
   MATCHED
   PARTIALLY_RECONCILED
   FULLY_RECONCILED
+}
+
+/// TRACK A / PC-09（MSG-20261003-96 ⑬）—— 客户对**版本化商业/法律文档**的显式接受事实。
+/// 只回答：哪个 user、在哪个 organization、接受了哪个 documentKey / documentVersion、何时、以何入口（source）。
+/// 不含隐式接受（仅访问页面不产生事实）；不承载合同生命周期；由 DB 触发器保证 append-only + 租户归属不可变。
+model PolicyAcceptance {
+  id              String   @id @default(uuid())
+  organizationId  String
+  userId          String
+  documentKey     String
+  documentVersion String
+  acceptedAt      DateTime @default(now())
+  /// 接受入口（例如 /commercial/policies/:key/accept 的服务端标识）
+  source          String
+  evidenceRef     String?
+  createdAt       DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, userId, documentKey, documentVersion])
+  @@index([organizationId, documentKey, documentVersion])
+  @@index([organizationId, userId])
 }
