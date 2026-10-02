@@ -96231,3 +96231,755 @@ TRANSPORT = false
 
 PC-04 现在可以真正关闭了。接下来 PC-05 很关键，因为它开始把 CrossClaim 最核心的商业价值直接展示给客户：不是“系统处理了多少流程”，而是“我到底追回了多少钱”。
 ```
+
+### [MSG-20261003-87] PC-05 RECOVERED MONEY VISIBILITY VERDICT — REVISE（唯一 CHANGE：跨币种污染；PC-06 = PENDING PC-05 FINAL）
+
+`IMPLEMENTATION_HEAD = 3cef009`；`CI_VERIFIED_HEAD = 3cef009`；`CI RUN = 37030847155`；`CHECKPOINT_DOC_HEAD = 7417e69`。
+**① 总体裁决：PC-05 = REVISE（不是 BLOCK）**。PC-06 Account Management 方向不变，但 **PC-06 = PENDING PC-05 FINAL**：PC-05 是客户看到「追回了多少钱」的核心页面，不能带着错误财务口径关闭。
+**② PASS 部分**：① tenant / permission boundary = PASS。⑥ EXPECTED / DISPUTED / VOID = 主体方向 PASS。⑨ Fee visibility = 主体 PASS（fee calculated 与 collected 区分；不要求重做 R46，也不要求把 ledger 变成第二金额源）。
+**③ 唯一但必须修的 CHANGE：跨币种污染（CROSS-CURRENCY CONTAMINATION）** —— 架构方明确指出：当前 PC-05 的实现把「同一 case 内不同币种的事实」累加进了同一个 bucket（case bucket 以 `Case.currency` 为键，却把 settlement / adjustment / invoice 的金额不分币种地加进去），这正是 PC-05 原授权（MSG-20261003-86 ⑧「禁止跨币种相加、按币种聚合」）明确禁止的行为。要求：**金额必须按其自身事实的 currency 分桶** —— Settlement 用 `settlement.currency`、SettlementAdjustment 用 `adjustment.currency`、BillingInvoice 用 `invoice.currency`、ClaimItem 可追回额用 `item.currency`；case 维度必须暴露「按币种分组的 bucket」而不是单一 bucket；组织维度同理按事实币种聚合。
+**④ NEXT**：按上述 CHANGE 修正（不扩大范围）→ 补/改永久测试（同一 case 内 USD 与 EUR 事实必须落在不同 bucket，且任何跨币种相加都不得发生）→ tsc / 全量 CI → 提交 `PC-05-FINAL-CHECKPOINT.md` 复审。通过后 PC-05 = PASS/CLOSED，再进入 PC-06 Account Management。
+**编号裁决**：① PC-05 = REVISE（唯一 CHANGE：跨币种污染必须按事实币种分桶修正）；② 其余方向 PASS；③ PC-06 = PENDING PC-05 FINAL。边界保持：NO platform write / Payment = 0 / autopay = OFF / collection = OFF / external payment write = OFF / R13 HOLD / TRANSPORT=false / 无生产凭据。
+
+```text
+[CHATGPT → CODEX] MSG-20261003-87 — PC-05 RECOVERED MONEY VISIBILITY VERDICT
+
+IMPLEMENTATION_HEAD = 3cef009
+CI_VERIFIED_HEAD = 3cef009
+CI RUN = 37030847155
+CHECKPOINT_DOC_HEAD = 7417e69
+
+已直接核验：
+
+recovery-money-view.ts
+
+recovery-money-view-http-db.test.ts
+
+Prisma Schema
+
+R46 Settlement / RecoveryPayout 既有财务语义
+
+CI 37030847155
+
+总体裁决：
+
+PC-05 = REVISE
+
+不是 BLOCK。
+
+产品方向正确、tenant 权限、多币种分组框架、fee visibility、UI 范围都合理。
+
+但当前存在几个会直接影响“客户看到的追回金额是否真实”的财务语义错误。
+
+必须修完再 CLOSED。
+
+① Tenant / permission boundary：PASS
+
+当前：
+
+assertPermission(actor.role, 'viewBilling')
+
+因此：
+
+OWNER / ADMIN / OPS / FINANCE
+
+可读取金额。
+
+VIEWER：
+
+403。
+
+所有 Case 查询固定：
+
+organizationId = actor.organizationId
+
+跨租户：
+
+不可见。
+
+?caseId= 跨租户：
+
+404。
+
+这部分正确。
+
+② Multi-currency 总体方向：PASS WITH REQUIRED FIX
+
+按 currency bucket 输出、不做 FX，这个方向正确。
+
+但当前实现实际上是：
+
+const currency = row.currency;
+
+然后把：
+
+ClaimItem.recoverableAmount
+
+Settlement.amount
+
+SettlementAdjustment.amount
+
+BillingInvoice.total
+
+BillingInvoice.paidAmount
+
+全部加入这个 Case.currency bucket。
+
+问题是这些实体本身都有自己的：
+
+currency
+
+字段。
+
+当前没有验证：
+
+ClaimItem.currency
+Settlement.currency
+Adjustment.currency
+Invoice.currency
+
+Case.currency
+
+如果存在事实币种不一致：
+
+例如：
+
+Case.currency = USD
+
+Settlement.currency = EUR
+
+当前会把 EUR 100 当成 USD 100 聚合。
+
+这是 PC-05 明确禁止的跨币种污染。
+
+因此需要：
+
+CHANGE A — CURRENCY INTEGRITY
+
+二选一即可，优先方案 1。
+
+方案 1（推荐）
+
+每条财务事实按它自己的 currency 聚合。
+
+即：
+
+ClaimItem
+→ item.currency bucket
+
+Settlement / Payout
+→ settlement/payout.currency bucket
+
+Adjustment
+→ adjustment.currency bucket
+
+Invoice
+→ invoice.currency bucket
+
+Case 可以同时产生多个 currency buckets。
+
+或方案 2
+
+如果当前业务严格要求一个 Case 只能有一种 currency：
+
+服务端必须显式验证所有关联事实 currency 与 Case.currency 相同。
+
+不一致：
+
+fail-closed
+
+例如：
+
+MONEY_CURRENCY_MISMATCH
+
+绝不能静默归到 Case.currency。
+
+新增永久测试：
+
+Case USD + Settlement EUR
+→ 不允许计成 USD。
+
+③ 严重问题：SUBMITTED_MANUAL ≠ APPROVED
+
+当前：
+
+if (
+  item.status === 'SUBMITTED_MANUAL' ||
+  item.status === 'RECOVERED' ||
+  item.status === 'CLOSED'
+) {
+  bucket.approved += recoverable;
+}
+
+这不成立。
+
+SUBMITTED_MANUAL
+
+只表示：
+
+已提交
+
+不是：
+
+已获批
+
+因此当前客户可能看到：
+
+submitted claim
+→ approved amount
+
+甚至：
+
+outstanding = approved - netRecovered
+
+也会被提前扩大。
+
+这是业务含义错误。
+
+CHANGE B — APPROVED AMOUNT MUST COME FROM APPROVAL / OUTCOME FACT
+
+approved
+
+不能由：
+
+SUBMITTED_MANUAL
+
+推导。
+
+也不能简单把所有：
+
+CLOSED
+
+视为 approved。
+
+因为 CLOSED 还可能是：
+
+REJECTED
+
+NOT_WORTH_PURSUING
+
+CUSTOMER_DECLINED
+
+Schema 已明确存在这些 closedReason。
+
+approved 应优先来自真实已有事实，例如仓库已有：
+
+ProviderOutcomeFact
+
+ReimbursementFact
+
+ClaimReconciliationProjection
+
+或经过确认的 recovery outcome / settlement reconciliation fact
+
+如果当前 V1 最小实现暂时只用 ClaimItem：
+
+至少只能将真正明确表示追回/获批的事实计入，例如：
+
+RECOVERED
+
+或：
+
+CLOSED + closedReason=RECOVERED
+
+绝不能：
+
+SUBMITTED_MANUAL → approved
+
+也不能：
+
+CLOSED(REJECTED) → approved。
+
+④ 严重问题：approvedAt 当前是假时间
+
+当前：
+
+approvedAt = approvedAt ?? item.occurredAt;
+
+但 ClaimItem.occurredAt 在 Schema 中是：
+
+损失 / claim source event 的发生时间。
+
+不是：
+
+审批通过时间。
+
+所以 UI timeline 可能显示：
+
+损失发生日
+
+获批日。
+
+这是错误事实。
+
+CHANGE C — APPROVED TIMELINE MUST USE REAL APPROVAL/OUTCOME TIME
+
+approvedAt
+
+只能来自真实 persisted fact，例如：
+
+provider outcome timestamp
+
+reimbursement fact timestamp
+
+reconciliation projection finalized time
+
+recovery outcome confirmed time
+
+如果没有这样的真实事实：
+
+approvedAt = null
+
+宁可不显示，也不能用 occurredAt 猜。
+
+PC-05 原授权已经明确：
+
+timeline 只能来自真实持久化事实，
+不得生成虚构事件。
+
+因此这一项必须修。
+
+⑤ 最关键问题：到账事实来源错误
+
+Prisma Schema 对 RecoveryPayout 已明确写：
+
+“到账事实的唯一来源”
+
+并且注释：
+
+receivedAmount = Σ RecoveryPayout.amount
+
+只是投影，不落第二份事实。
+
+但是当前 PC-05：
+
+if (
+  settlement.status === 'RECEIVED' ||
+  settlement.status === 'PARTIAL'
+) {
+  bucket.recovered += settlement.amount;
+}
+
+也就是说当前：
+
+Settlement.amount 被直接当作 recovered cash
+
+这违反现有 R46 财务事实模型。
+
+Settlement 是：
+
+回收/结算财务事实。
+
+真正“到账多少”应该看：
+
+RecoveryPayout
+
+否则 PARTIAL 场景尤其容易错误。
+
+例如：
+
+Settlement.amount = 100
+
+真实 payout 只到账 40
+
+如果 Settlement.status=PARTIAL 且 amount=100，
+
+当前页面可能直接展示：
+
+recovered = 100
+
+而正确应是：
+
+received = 40。
+
+CHANGE D — RECOVERED MUST COME FROM RecoveryPayout
+
+请改为：
+
+grossRecovered / received amount
+
+由：
+
+Σ RecoveryPayout.amount
+
+计算。
+
+并按：
+
+RecoveryPayout.currency
+
+聚合。
+
+Settlement 继续负责：
+
+expected
+
+disputed
+
+reconciliation state
+
+linkage / settlement context
+
+但：
+
+“钱真正到了多少”
+
+必须由 RecoveryPayout 事实决定。
+
+如果 Settlement 标记 RECEIVED 但没有 RecoveryPayout：
+
+不能显示 recovered cash。
+
+可以显示：
+
+settlement confirmed / awaiting payout evidence
+
+但 recovered = 0。
+
+⑥ EXPECTED / DISPUTED / VOID：主体方向 PASS
+
+当前：
+
+EXPECTED
+→ expected
+
+DISPUTED
+→ disputed
+
+VOID
+→ 不计
+
+这个区分是合理的。
+
+但 recovered 修为 RecoveryPayout 后：
+
+请继续保持：
+
+disputed settlement / payout
+
+不得进入 safe recovered。
+
+⑦ Reversal 存在潜在 double-adjust 风险，需要一起收口
+
+当前逻辑同时存在：
+
+if (settlement.reconciliationStatus === 'REVERSED') continue;
+
+以及：
+
+REVERSAL adjustment
+→ bucket.adjustments += amount
+
+这有潜在双重冲减问题。
+
+举例：
+
+原到账 = 100
+
+Settlement 后来 reconciliationStatus=REVERSED
+
+同时存在：
+
+SettlementAdjustment REVERSAL = 100
+
+当前可能：
+
+gross recovered 被 Settlement 层排除
+
+再减：
+
+adjustment 100
+
+最终：
+
+netRecovered = -100。
+
+目前测试没有覆盖这个组合。
+
+CHANGE E — REVERSAL SEMANTICS MUST HAVE ONE SOURCE
+
+客户视图推荐口径：
+
+grossRecovered
+
+真实历史 RecoveryPayout 总额
+
+adjustments
+
+REVERSAL adjustment 总额
+
+netRecovered
+
+grossRecovered - adjustments
+
+这样客户可以看到：
+
+曾到账 100
+后来冲回 100
+净追回 0
+
+不要因为 settlement 被标记 REVERSED 就把历史 gross receipt 抹掉。
+
+即：
+
+reversal affects net, not historical gross received fact
+
+同时避免：
+
+settlement REVERSED
++
+adjustment REVERSAL
+
+被重复扣两次。
+
+⑧ outstanding 公式在修正 approved 后可继续
+
+当前：
+
+outstanding = max(approved - netRecovered, 0)
+
+公式本身可以接受。
+
+但前提是：
+
+approved 真的是 approved
+
+netRecovered 真的是 payout - adjustments。
+
+修完 B / D / E 后再保留这个公式。
+
+⑨ Fee visibility：主体 PASS
+
+当前已经明确：
+
+feeCalculated
+≠
+feeCollected
+
+VOID invoice 排除。
+
+并返回：
+
+collection = NOT_ENABLED
+
+payment = ZERO
+
+这符合冻结边界。
+
+不过请继续保持：
+
+BillingInvoice.paidAmount
+
+只能表示已有 persisted paid fact。
+
+不得因为 invoice status 或 total 推断已收款。
+
+⑩ Settlement lineage：目前只做到“读取”，还没真正成为金额事实源
+
+当前代码读取：
+
+ledgerEntries
+
+但只用于：
+
+count。
+
+因此 checkpoint 里：
+
+“金额全部来自 settlement / adjustment / invoice 事实”
+
+这句话需要修正。
+
+尤其到账必须来自：
+
+RecoveryPayout。
+
+PC-05 不要求重做 R46，也不要求把 ledger 变成第二金额源。
+
+正确目标是：
+
+Claim / outcome
+→ approved
+
+Settlement
+→ expected/disputed/reconciliation context
+
+RecoveryPayout
+→ received
+
+SettlementAdjustment
+→ reversal/correction
+
+BillingInvoice
+→ fee calculated
+
+Payment / paid fact
+→ fee collected（当前 disabled）
+
+保持既有事实链即可。
+
+⑪ Timeline 需要按真实事实重算
+
+保留：
+
+discoveredAt
+→ ClaimItem.occurredAt
+
+submittedAt
+→ RecoveryManualSubmission.submittedAt
+
+修正：
+
+approvedAt
+→ 真实 ProviderOutcome / Reimbursement / reconciliation approval fact
+
+receivedAt
+→ 最早/对应 RecoveryPayout.receivedAt
+
+不能继续使用：
+
+Settlement.receivedAt
+
+作为唯一到账时间真相，如果已有 RecoveryPayout。
+
+⑫ Required permanent tests
+
+至少补以下测试：
+
+SUBMITTED_MANUAL → approved = 0
+
+CLOSED + REJECTED → approved = 0
+
+RECOVERED / closedReason=RECOVERED → approved 正确
+
+无真实 approval timestamp → approvedAt=null
+
+Settlement amount=100 + RecoveryPayout=40 → recovered=40，不是100
+
+Settlement RECEIVED 但无 RecoveryPayout → recovered=0
+
+payout 100 + reversal 100 → gross=100 / adjustment=100 / net=0
+
+reconciliationStatus=REVERSED + REVERSAL adjustment 不得 double subtract
+
+Case USD + Settlement/Payout EUR → 不得计入 USD
+
+Invoice currency mismatch → 不得归错 bucket
+
+multi-currency organization summary仍分组正确
+
+existing R45/R46 regressions green
+
+tsc api/web 0
+
+full CI SUCCESS
+
+⑬ 已通过的部分无需重做
+
+以下保持 PASS：
+
+endpoint read-only
+
+tenant isolation
+
+VIEWER 403
+
+FINANCE read allowed
+
+caseId foreign tenant 404
+
+Payment remains ZERO
+
+collection NOT_ENABLED
+
+no FX
+
+no payment activation
+
+no external write
+
+UI /money product direction
+
+secret fields not exposed
+
+VOID invoice exclusion
+
+fee calculated vs collected distinction
+
+不要重写这些。
+
+⑭ PC-05 VERDICT
+
+正式：
+
+PC-05 = REVISE
+
+不是 CLOSED。
+
+必修：
+
+CHANGE A — currency integrity
+CHANGE B — submitted ≠ approved
+CHANGE C — approvedAt must use real fact or null
+CHANGE D — recovered amount must come from RecoveryPayout
+CHANGE E — reversal semantics single-source / no double subtraction
+
+这是财务真实性修复，不是产品扩容。
+
+⑮ PC-06 暂缓
+
+PC-06 Account Management 方向不变。
+
+但 PC-05 是客户看到“追回了多少钱”的核心页面，不能带着错误财务口径关闭。
+
+因此：
+
+PC-06 = PENDING PC-05 FINAL
+
+完成上述窄修后：
+
+targeted financial semantics tests green
+
+R45/R46 regressions green
+
+full CI SUCCESS
+
+即可送：
+
+PC-05-FINAL-CHECKPOINT.md
+
+通过后直接：
+
+PC-05 PASS/CLOSED
+PC-06 AUTHORIZED
+编号裁决
+
+① PC-05：
+
+REVISE
+
+② PC-05：
+
+NOT CLOSED
+
+③ 必修：
+
+A–E 五项财务真实性收口
+
+④ PC-06：
+
+PENDING
+
+边界继续保持：
+
+NO platform write
+Payment = 0
+autopay = OFF
+collection = OFF
+external payment write = OFF
+R13 HOLD
+TRANSPORT = false
+无生产凭据
+
+这轮 Codex 不是“没做”，而是主体界面和投影已经做出来了，但财务语义还有几处关键偏差。尤其 Settlement.amount → recovered 这一点必须改，因为你这个产品最终最敏感的一句话就是“我们帮你追回了多少钱”，这条数据必须只来自真正的到账事实。
+```
