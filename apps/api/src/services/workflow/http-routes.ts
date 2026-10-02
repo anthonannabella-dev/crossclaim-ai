@@ -84,6 +84,7 @@ import { paymentsEnabled } from './payment';
 import { projectProviderReadiness } from '../connect/provider-integration-contract';
 import { getAcceptanceStatus } from '../commercial/policy-acceptance';
 import {
+  DEFAULT_FACT_SOURCES,
   defaultPaymentActivationFacts,
   projectPaymentActivationReadiness,
 } from '../payments/activation-readiness';
@@ -1764,7 +1765,14 @@ export async function handleWorkflowRequest(
         actionGuardReady: Boolean(deps.actionGuard),
         killSwitchReady,
       });
-      sendJson(res, 200, projectPaymentActivationReadiness(facts, { ...(deps.now ? { now: deps.now } : {}) }));
+      sendJson(
+        res,
+        200,
+        projectPaymentActivationReadiness(facts, {
+          sources: DEFAULT_FACT_SOURCES,
+          ...(deps.now ? { now: deps.now } : {}),
+        }),
+      );
       return true;
     }
 

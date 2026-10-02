@@ -1,15 +1,21 @@
 /**
- * TRACK A / PC-12A — 支付激活就绪投影单元回归（MSG-20261003-102 ⑮–⑯）。
- * 断言：默认全 HOLD/OFF；单一 env flag 不解锁；多 gate 独立；fee due ≠ collected；无 secret。
+ * TRACK A / PC-12A FINAL — readiness truth wiring 单元回归（MSG-20261003-103 CHANGE A/B/D）。
+ * 断言：currentState 与 activationPrerequisites 分离；activationReady ≠ 当前已开启；
+ * 单 env flag 不解锁；每项 check 带 source；fee due ≠ collected；无 secret。
  */
 
 import { describe, expect, it } from 'vitest';
 
 import {
+  DEFAULT_FACT_SOURCES,
   REVERSAL_POLICY_DOCUMENT,
   defaultPaymentActivationFacts,
+  deriveFeePolicyCurrent,
+  deriveProviderCredentialsConfigured,
+  deriveWebhookVerificationReady,
   projectPaymentActivationReadiness,
 } from '../services/payments/activation-readiness';
+import { PAYMENT_OPERATION_CAPABILITIES, capabilityReady } from '../services/payments/payment-capabilities';
 
 const NOW = new Date('2026-10-02T00:00:00.000Z');
 const allGreen = {
@@ -25,92 +31,137 @@ const allGreen = {
   actionGuardReady: true,
   killSwitchReady: true,
   r13Released: true,
-  collectionExplicitlyEnabled: true,
-  externalPaymentWriteExplicitlyEnabled: true,
+  collectionApproved: true,
+  externalWriteApproved: true,
 };
+const project = (facts: Parameters<typeof projectPaymentActivationReadiness>[0]) =>
+  projectPaymentActivationReadiness(facts, { sources: DEFAULT_FACT_SOURCES, now: () => NOW });
 
-describe('PC-12A — payment activation readiness', () => {
-  it('默认：payment=ZERO / collection=OFF / autopay=OFF / externalWrite=OFF / r13=HOLD，且 ready=false', () => {
-    const result = projectPaymentActivationReadiness(defaultPaymentActivationFacts(), { now: () => NOW });
+describe('PC-12A FINAL — readiness semantics（CHANGE A / D）', () => {
+  it('默认：currentState 全冻结（ZERO/OFF/OFF/OFF/HOLD），activationReady=false，activationState=NOT_ACTIVATED', () => {
+    const result = project(defaultPaymentActivationFacts());
+    expect(result.activationReady).toBe(false);
     expect(result.ready).toBe(false);
     expect(result.posture).toBe('BLOCKED');
-    expect(result.status).toEqual({
+    expect(result.currentState).toEqual({
       payment: 'ZERO',
       collection: 'OFF',
       autopay: 'OFF',
       externalWrite: 'OFF',
       r13: 'HOLD',
-      paymentProcessingEnabled: false,
     });
+    expect(result.activationState).toBe('NOT_ACTIVATED');
+    expect(result.readinessMeaning).toBe('PREREQUISITES_NOT_READY');
     expect(result.blockers).toContain('EXTERNAL:R13_NOT_RELEASED');
   });
 
-  it('单一 env flag（PAYMENTS_ENABLED=true）不解锁：ready 仍 false，collection/autopay/externalWrite 不变', () => {
-    const result = projectPaymentActivationReadiness(
-      defaultPaymentActivationFacts({ paymentProcessingEnabled: true }),
-      { now: () => NOW },
-    );
-    expect(result.ready).toBe(false);
-    expect(result.status.paymentProcessingEnabled).toBe(true);
-    expect(result.status.collection).toBe('OFF');
-    expect(result.status.autopay).toBe('OFF');
-    expect(result.status.externalWrite).toBe('OFF');
-    expect(result.blockers).toContain('EXTERNAL:collectionExplicitlyEnabled');
-    expect(result.blockers).toContain('EXTERNAL:externalPaymentWriteExplicitlyEnabled');
+  it('CHANGE A/D：前置条件齐备但尚未开启 → activationReady=true 且 currentState 仍冻结（不再是矛盾）', () => {
+    const result = project({ ...defaultPaymentActivationFacts(), ...allGreen, paymentActivated: false, collectionActivated: false, autopayActivated: false, externalWriteActivated: false });
+    expect(result.activationReady).toBe(true);
+    expect(result.readinessMeaning).toBe('PREREQUISITES_READY_NOT_ACTIVATED');
+    expect(result.activationState).toBe('NOT_ACTIVATED');
+    expect(result.currentState.payment).toBe('ZERO');
+    expect(result.currentState.collection).toBe('OFF');
+    expect(result.currentState.externalWrite).toBe('OFF');
+    expect(result.currentState.r13).toBe('RELEASED');
+    expect(result.blockers).toEqual([]);
   });
 
-  it('R13 未释放 / 缺 provider 凭据：即使内部全绿也停在 EXTERNAL_GATE', () => {
-    const internalOnly = projectPaymentActivationReadiness(
-      { ...allGreen, r13Released: false, providerCredentialsConfigured: false },
-      { now: () => NOW },
-    );
-    expect(internalOnly.internalReady).toBe(true);
-    expect(internalOnly.ready).toBe(false);
-    expect(internalOnly.posture).toBe('EXTERNAL_GATE');
-    expect(internalOnly.blockers).toEqual([
-      'EXTERNAL:providerCredentialsConfigured',
-      'EXTERNAL:R13_NOT_RELEASED',
-    ]);
+  it('真正开启后 activationState=ACTIVATED（currentState 反映真实开关）', () => {
+    const result = project({
+      ...defaultPaymentActivationFacts(),
+      ...allGreen,
+      paymentActivated: true,
+      collectionActivated: true,
+    });
+    expect(result.activationState).toBe('ACTIVATED');
+    expect(result.currentState.payment).toBe('ENABLED');
+    expect(result.currentState.collection).toBe('ON');
   });
 
-  it('内部条件缺失 → BLOCKED（外部 gate 齐全也不例外）', () => {
-    const blocked = projectPaymentActivationReadiness(
-      { ...allGreen, reconciliationReady: false },
-      { now: () => NOW },
-    );
-    expect(blocked.ready).toBe(false);
-    expect(blocked.posture).toBe('BLOCKED');
-    expect(blocked.blockers).toContain('INTERNAL:reconciliationReady');
+  it('单 env flag（PAYMENTS_ENABLED=true）不解锁，且不影响 currentState', () => {
+    const result = project(defaultPaymentActivationFacts({ paymentProcessingEnabled: true }));
+    expect(result.activationReady).toBe(false);
+    expect(result.checks.paymentProcessingEnabled).toEqual({ value: true, source: 'ENV' });
+    expect(result.currentState).toEqual({
+      payment: 'ZERO',
+      collection: 'OFF',
+      autopay: 'OFF',
+      externalWrite: 'OFF',
+      r13: 'HOLD',
+    });
+    expect(result.blockers).toContain('EXTERNAL:collectionApproved');
+    expect(result.blockers).toContain('EXTERNAL:externalWriteApproved');
   });
 
-  it('「provider 已配置但 collection=OFF」是合法中间态：ready=false、posture=EXTERNAL_GATE', () => {
-    const result = projectPaymentActivationReadiness(
-      { ...allGreen, collectionExplicitlyEnabled: false },
-      { now: () => NOW },
-    );
-    expect(result.gates.providerCredentials).toBe(true);
-    expect(result.gates.collectionExplicitlyEnabled).toBe(false);
-    expect(result.ready).toBe(false);
+  it('R13 未释放 / 缺 provider 凭据：内部全绿也停在 EXTERNAL_GATE', () => {
+    const result = project({ ...defaultPaymentActivationFacts(), ...allGreen, r13Released: false, providerCredentialsConfigured: false });
+    expect(result.internalReady).toBe(true);
+    expect(result.activationReady).toBe(false);
     expect(result.posture).toBe('EXTERNAL_GATE');
-    expect(result.blockers).toEqual(['EXTERNAL:collectionExplicitlyEnabled']);
+    expect(result.blockers).toEqual(['EXTERNAL:providerCredentialsConfigured', 'EXTERNAL:R13_NOT_RELEASED']);
   });
 
-  it('四个 gate 彼此独立：单独打开任一项都不等于全部就绪', () => {
+  it('内部条件缺失 → BLOCKED', () => {
+    const result = project({ ...defaultPaymentActivationFacts(), ...allGreen, reconciliationReady: false });
+    expect(result.posture).toBe('BLOCKED');
+    expect(result.blockers).toContain('INTERNAL:reconciliationReady');
+  });
+
+  it('「provider 已配置 + collection 未批准」是合法中间态', () => {
+    const result = project({ ...defaultPaymentActivationFacts(), ...allGreen, collectionApproved: false });
+    expect(result.activationPrerequisites.providerCredentialsConfigured).toBe(true);
+    expect(result.activationPrerequisites.collectionApproved).toBe(false);
+    expect(result.activationReady).toBe(false);
+    expect(result.posture).toBe('EXTERNAL_GATE');
+    expect(result.blockers).toEqual(['EXTERNAL:collectionApproved']);
+  });
+
+  it('四个前置条件彼此独立：单独打开任一项都不构成 activationReady', () => {
     for (const key of [
       'providerCredentialsConfigured',
       'r13Released',
-      'collectionExplicitlyEnabled',
-      'externalPaymentWriteExplicitlyEnabled',
+      'collectionApproved',
+      'externalWriteApproved',
     ] as const) {
-      const result = projectPaymentActivationReadiness(defaultPaymentActivationFacts({ [key]: true }), {
-        now: () => NOW,
-      });
-      expect(result.ready).toBe(false);
+      const result = project(defaultPaymentActivationFacts({ [key]: true }));
+      expect(result.activationReady).toBe(false);
     }
   });
+});
 
-  it('fee due ≠ fee collected；reversal 影响面复用既有 money truth', () => {
-    const result = projectPaymentActivationReadiness(allGreen, { now: () => NOW });
+describe('PC-12A FINAL — fact provenance（CHANGE B）', () => {
+  it('冻结 gate 明确标记 EXPLICIT_FROZEN_GATE（不是「系统不知道状态」）', () => {
+    const result = project(defaultPaymentActivationFacts());
+    expect(result.checks.r13Released.source).toBe('EXPLICIT_FROZEN_GATE');
+    expect(result.checks.collectionApproved.source).toBe('EXPLICIT_FROZEN_GATE');
+    expect(result.checks.externalWriteApproved.source).toBe('EXPLICIT_FROZEN_GATE');
+    expect(result.checks.actionGuardReady.source).toBe('INJECTED');
+    expect(result.checks.killSwitchReady.source).toBe('INJECTED');
+    expect(result.checks.commercialAcceptanceReady.source).toBe('DB');
+    expect(result.checks.paymentWebhookSecretConfigured.source).toBe('ENV');
+  });
+
+  it('既有能力事实源：webhook 验签 / provider 凭据 / 费用政策 / 计费 / retry·replay 均为派生值', () => {
+    expect(deriveWebhookVerificationReady()).toBe(true);
+    expect(deriveProviderCredentialsConfigured()).toBe(false);
+    expect(deriveFeePolicyCurrent()).toBe(true);
+    expect(capabilityReady('billingModel')).toBe(true);
+    expect(capabilityReady('retryReplay')).toBe(true);
+    expect(capabilityReady('reconciliation')).toBe(false);
+    expect(PAYMENT_OPERATION_CAPABILITIES.reconciliation.productionVerified).toBe(false);
+    const facts = defaultPaymentActivationFacts();
+    expect(facts.webhookVerificationReady).toBe(true);
+    expect(facts.billingModelReady).toBe(true);
+    expect(facts.retryReplayControlsReady).toBe(true);
+    expect(facts.feePolicyCurrent).toBe(true);
+    expect(facts.reconciliationReady).toBe(false);
+  });
+});
+
+describe('PC-12A FINAL — money truth', () => {
+  it('fee due ≠ fee collected；reversal 复用既有 money truth', () => {
+    const result = project(defaultPaymentActivationFacts());
     expect(result.feeDueVsCollected).toEqual({
       feeDue: 'DERIVED_FROM_CONFIRMED_SETTLEMENT',
       feeCollected: 'ZERO',
@@ -122,15 +173,8 @@ describe('PC-12A — payment activation readiness', () => {
     expect(result.reversalPolicy.reusesExistingMoneyTruth).toBe(true);
   });
 
-  it('全绿时 ready=true / posture=READY（仅作为未来目标态断言，当前仓库默认不会达成）', () => {
-    const result = projectPaymentActivationReadiness(allGreen, { now: () => NOW });
-    expect(result.ready).toBe(true);
-    expect(result.posture).toBe('READY');
-    expect(result.blockers).toEqual([]);
-  });
-
-  it('输出不含任何 secret 取值（只有状态码与 blocker code）', () => {
-    const raw = JSON.stringify(projectPaymentActivationReadiness(allGreen, { now: () => NOW }));
+  it('输出不含任何 secret 取值', () => {
+    const raw = JSON.stringify(project({ ...defaultPaymentActivationFacts(), ...allGreen }));
     for (const forbidden of ['sk_', 'whsec', 'client_secret', 'password']) {
       expect(raw).not.toContain(forbidden);
     }
