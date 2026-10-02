@@ -1,6 +1,8 @@
 # PHASE X1 — Architecture Audit（首轮：account binding 入口可信边界）
 
-状态：**AUDIT FINDINGS / PENDING ARCHITECT VERDICT**（只读审计，未改任何生产代码 / Schema / migration / test / workflow）
+状态：**AUDIT FINDINGS / PENDING ARCHITECT VERDICT**
+AUDIT_CODE_BASE = `9ae7354`
+AUDIT_DOCUMENT_HEAD = `7ba934a`（只读审计，未改任何生产代码 / Schema / migration / test / workflow）
 审计基线：`FINAL_CLOSURE_HEAD = 7ce9b5a`（TRACK C2 = CLOSED，MSG-20261002-72）；本轮审计 HEAD = `9ae7354`
 授权来源：MSG-20261002-72 §3/§4 —— X1 只做 READ / TRACE / AUDIT / FINDINGS，不得因发现 Connection API 缺口就立即扩 API。
 边界：NO platform write · Payment = 0 · autopay = OFF · collection = OFF · external payment write = OFF · R13 HOLD · `TRANSPORT=false` · 无生产凭据。
