@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261003-119",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-03T05:54:16.430Z",
+  "updated_at": "2026-10-03T05:54:59.519Z",
   "previous_head": "7f807c2",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -53,7 +53,7 @@
   "state": "IMPLEMENT",
   "last_action": "SCHEDULER_STALE_RECOVERED（gap=11min）→ 本轮已恢复执行",
   "last_action_at": "2026-10-02T09:01:54.693Z",
-  "next_action": "接入 router + createServer 依赖注入 + 端到端 HTTP 测试 → 全量本地验证 → commit/push → CI → 送审 READY_FOR_REVIEW",
+  "next_action": "先完成 CARRIER QUEUE #9B FINAL（router 接线 + 端到端 HTTP 测试 → 送审）；随后按架构方放行进入 CUSTOMS RECOVERY QUEUE C1（CustomsEntryFact Schema Delta + 规则包契约设计送审）",
   "current_head": "b55f13b",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
@@ -3866,5 +3866,53 @@
   "carrier_queue_9b_final_perms_done": "权限矩阵新增 recordCarrierManualSubmission（OWNER/ADMIN/OPS = true；FINANCE/VIEWER/未知角色 = false，fail closed）+ workflow 测试同步；tsc 0、workflow 12/12、CI 5/5",
   "carrier_queue_9b_final_http_head": "be52fac",
   "carrier_queue_9b_final_http_ci": "37100812970 SUCCESS",
-  "carrier_queue_9b_final_http_done": "HTTP 边界单元 carrier-manual-submission-http.ts（角色→PERMISSIONS.recordCarrierManualSubmission；稳定映射 400/403/404(含 anti-enumeration)/409/201/200 幂等重放；错误体仅 code；client 注入忽略）+ 9/9 测试；货架合计 222/222；CI 5/5"
+  "carrier_queue_9b_final_http_done": "HTTP 边界单元 carrier-manual-submission-http.ts（角色→PERMISSIONS.recordCarrierManualSubmission；稳定映射 400/403/404(含 anti-enumeration)/409/201/200 幂等重放；错误体仅 code；client 注入忽略）+ 9/9 测试；货架合计 222/222；CI 5/5",
+  "customs_recovery_directive": {
+    "source": "HOST DIRECTIVE 2026-10-03 — MULTI-JURISDICTION CUSTOMS RECOVERY PIPELINE",
+    "doc": "docs/releases/CUSTOMS-MULTI-JURISDICTION-RECOVERY-DIRECTIVE.md",
+    "registered_at": "2026-10-03T05:54:59.518Z",
+    "reference_head_at_registration": "cda3d30",
+    "product_boundary": "不做正常法定退税/出口退税；只做异常·历史·增量 Customs/Duty Recovery；一套全球 Recovery Engine + jurisdiction rule packs；增量到账后才可收 Success Fee（默认 20%）；真实外写/海关申报/牌照代理继续 HOLD",
+    "existing_reuse": "NO_NEW_CASE_BILLING_SETTLEMENT_FEE_SYSTEM（复用 RecoveryDomain.CUSTOMS / Platform.CUSTOMS / Channel.CUSTOMS_BROKER / EvidenceKind.CUSTOMS_DOC·BROKER_CORRESPONDENCE / RuleScope.CUSTOMS_DUTY / RouteTarget.CUSTOMS_AUTHORITY·CUSTOMS_BROKER·CUSTOMER_SELF 与统一主链）",
+    "new_invariants": [
+      "UNKNOWN != FAIL",
+      "PARTIAL != NOT_ELIGIBLE",
+      "CONFLICT != SILENTLY_RESOLVED",
+      "UNKNOWN != BILLABLE"
+    ],
+    "queue": [
+      "C1 Multi-Jurisdiction Customs Entry Contract",
+      "C2 Customs Provider Interface + Fixture/File Adapter",
+      "C3 Customs Evidence Bundle",
+      "C4 Jurisdiction Rule Pack Contract",
+      "C5 US Rule Pack v1",
+      "C6 Customs Eligibility Evaluation",
+      "C7 Customs Amount Calculation",
+      "C8 Customs Remedy Router",
+      "C9 Customs Recovery Package",
+      "C10 Commercial Eligibility Guard",
+      "C11 统一所有 FeeCalculation 创建路径",
+      "C12 UK Rule Pack",
+      "C13 EU Rule Pack",
+      "C14+ Canada/Australia/Singapore/Japan"
+    ],
+    "wave_order": "C1 US → C2 UK·EU → C3 Canada·Australia → C4 Singapore·Japan·other（实现顺序，非产品边界；不得写死 country == US）",
+    "arch_review_required": [
+      "CustomsEntryFact + jurisdictionSpecific（Schema/Projection）",
+      "Jurisdiction Rule Pack 语义",
+      "Customs Recovery Classification 与自动确认边界",
+      "Remedy Router 与既有 RecoveryRoute/RouteTarget 一致性",
+      "Success Fee 商业归因闸门组合语义",
+      "IOR / Importer Rights 判定",
+      "Platform 信号仅 CUSTOMS_OPPORTUNITY_SIGNAL"
+    ],
+    "host_approval_required": [
+      "真实海关/broker 账号授权与真实数据读取",
+      "真实外写/海关申报/牌照代理（HOLD）",
+      "付费数据源/API 申请",
+      "生产凭据/DNS/不可逆外部操作"
+    ],
+    "boundary": "NO platform write · TRANSPORT=false · Payment = 0 · autopay = OFF · collection = OFF · R13 HOLD · 无生产凭据",
+    "queue_impact": "NONE_ON_CURRENT_UNIT（不中断 CARRIER QUEUE #9B FINAL）"
+  }
 }
