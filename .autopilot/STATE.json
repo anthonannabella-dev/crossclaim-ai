@@ -4993,19 +4993,17 @@
   "awaiting_verdict": true,
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-03T17:25:04.568Z",
-    "head": "4f58a4e",
-    "acceptance_head": "4f58a4e",
+    "computed_at": "2026-10-03T17:25:21.478Z",
+    "head": "56cb5ce",
+    "acceptance_head": "56cb5ce",
     "protocol_layer1_items": 14,
-    "CODE_COMPLETE": "NO",
+    "CODE_COMPLETE": "YES",
     "INTEGRATION_COMPLETE": "NO",
     "REAL_VALIDATION_COMPLETE": "NO",
     "PRODUCTION_READY": "NO",
-    "INTERNAL_CODE_COMPLETE": false,
+    "INTERNAL_CODE_COMPLETE": true,
     "INDEPENDENT_FINAL_AUDIT_REQUIRED": true,
-    "OPEN_INTERNAL_ITEMS": [
-      "CHECK:L1-10_git_working_tree_clean"
-    ],
+    "OPEN_INTERNAL_ITEMS": [],
     "HOST_ACTION_REQUIRED": [
       "BG-006-production-candidate-preflight"
     ],
@@ -5051,7 +5049,7 @@
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": true,
-        "evidence": "acceptance_head=4f58a4e ci_head=2316f71 ci=queued run=37140370019 last_success=503b106/37139449952"
+        "evidence": "acceptance_head=56cb5ce ci_head=2316f71 ci=queued run=37140370019 last_success=503b106/37139449952"
       },
       "L1-05_pg_regression_passed": {
         "status": true,
@@ -5075,8 +5073,8 @@
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
-        "status": false,
-        "evidence": "dirty entries: 5"
+        "status": true,
+        "evidence": "porcelain empty"
       },
       "L1-11_docs_state_consistent": {
         "status": true,
@@ -5095,8 +5093,8 @@
         "evidence": "真实 PostgreSQL 套件全绿（customs 26 / IOR 9 / PS04 8 / Phase-1 3 / state-read 6 / qualification 3 / runtime E2E 2） @a0d33fe"
       }
     },
-    "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
-    "INTERNAL_READY": "NO",
+    "AUTONOMOUS_INTERNAL_WORK": "EXHAUSTED",
+    "INTERNAL_READY": "YES",
     "EXTERNAL_GATES_REMAINING": {
       "HOST_ACTION_REQUIRED": [
         "BG-006-production-candidate-preflight"
@@ -5127,13 +5125,13 @@
       "ARCH_REVIEW_REQUIRED": []
     }
   },
-  "code_complete": "NO",
+  "code_complete": "YES",
   "integration_complete": "NO",
   "real_validation_complete": "NO",
   "production_ready": "NO",
   "independent_final_audit_required": true,
   "final_acceptance_protocol": "ACTIVE（docs/releases/FINAL-ACCEPTANCE-PROTOCOL.md；三层验收 + 4 状态重算 + 独立审计）",
-  "autonomous_internal_work": "RUNNING",
+  "autonomous_internal_work": "EXHAUSTED",
   "arch_review_pending": [],
   "arch_review_request": {
     "id": "BG-021-independent-site-persistence-schema-delta",
