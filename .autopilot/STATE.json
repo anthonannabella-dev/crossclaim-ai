@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "ed004ca",
+  "head": "b468372",
   "status": "RECONCILED",
   "current_task": "Carrier Queue #6 — SLA EVIDENCE ASSEMBLY + ELIGIBILITY INPUT PLANE：Tracking Fact + Invoice Fact + POD Fact + Carrier Terms Evidence + Service Level Evidence → **ShipmentEvidenceBundle**（只建证据输入层；不得自动认定赔付 / 自动提交 claim / 自动退款 / 调用 carrier write API / 自动产生 recovery amount）。**逐字归档 MSG-111 为第一步。**CarrierInvoiceReadPort + CarrierPODReadPort（verified account lineage、request/response 双向绑定、十进制金额、charge kind 归一化 + raw code 保留、POD 掩码与隐私、safe rawReference）；**read-only**，不做 SLA/退款资格推导。CarrierTrackingReadPort + normalized CarrierTrackingSnapshot（UPS/FedEx provider adapter 分离）+ 状态/事件归一化（确定性排序 + 去重）+ 失败原因分类 + tenant/account lineage 归属；**read-only**（无 mutation / claim / pickup / refund，TRANSPORT=false）。",
   "next_task": "PC-12A 实施 → 本地测试 + tsc api/web + API contract + full CI → PC-12A CHECKPOINT 送审。",
@@ -10,7 +10,7 @@
   "production_enabled": false,
   "external_write_enabled": false,
   "updated_at": "2026-10-03T09:26:08.099Z",
-  "previous_head": "6599a10",
+  "previous_head": "ed004ca",
   "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "0c35106",
@@ -49,12 +49,12 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-03T09:58:48.913Z",
+  "last_tick_at": "2026-10-03T10:03:44.906Z",
   "state": "IMPLEMENT",
-  "last_action": "G4/C7：新增 customs-handoff-boundary（handoff-only：artifact/manifest/checklist/instructions + forbiddenActions 清单 + 人工 acknowledgement 归一化；不提交/不外写/不产生 recovered truth）与 6/6 回归（C1–C7 = 85/85）",
-  "last_action_at": "2026-10-03T10:00:19.035Z",
-  "next_action": "Q2 Schema Delta 落地：Decimal(38,6) 金额、append-only CustomsEntryFactRecord/DutyLineRecord（CHANGE C：UNIQUE(factId,lineOrdinal) + INDEX(factId,rawCode,currency)）与四个 append-only 计算投影（inputDigest/algorithmVersion/resultDigest + policyId/policyVersion）→ 送 G4 checkpoint",
-  "current_head": "ed004ca",
+  "last_action": "G7 复核：新增 customs-g4-chain（C1→C7 端到端 7/7：合法闭环 / 少缴拒绝估算 / INDETERMINATE 传播 / 混币与 PII 入口拒绝 / 篡改事实全链 fail-closed / 证据引用 PII 拒绝 / 链路确定性）；customs 全套 154/154",
+  "last_action_at": "2026-10-03T10:09:49.483Z",
+  "next_action": "Q2 Schema Delta 落地（Decimal(38,6) + append-only 事实/投影 + CHANGE C lineOrdinal 唯一键）→ 落 migration 后合并 CHANGE A/B + migration + C6/C7 送 G4 checkpoint",
+  "current_head": "b468372",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-03T09:53:48.131Z",
-    "gapMs": 300783,
+    "previousTickAt": "2026-10-03T09:58:48.913Z",
+    "gapMs": 295994,
     "stale": false,
-    "checkedAt": "2026-10-03T09:58:48.913Z"
+    "checkedAt": "2026-10-03T10:03:44.906Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -4666,6 +4666,12 @@
         ],
         "boundary": "handoffOnly=true / filingPerformed=false / submissionPerformed=false / externalWritePerformed=false / transportEnabled=false / productionCredentials=ABSENT"
       }
+    },
+    "g7": {
+      "status": "IN_PROGRESS（Customs 全链覆盖已补）",
+      "artifact": "apps/api/src/__tests__/customs-g4-chain.test.ts",
+      "tests": "7/7 PASS；customs 全套 154/154",
+      "note": "覆盖 fail-closed 传播（C1 入口 / C2 守卫 / C4 三态 / C5 不估算 / C6 缺口 / C7 拒绝交接）与确定性重放"
     }
   },
   "audit_channel_url": "https://chatgpt.com/c/6ac0c3b8-30a4-83ec-a529-4d9b04ffa0e7",
