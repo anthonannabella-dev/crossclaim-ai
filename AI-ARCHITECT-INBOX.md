@@ -113442,3 +113442,845 @@ TRANSPORT = false
 
 这次问题很明确：Queue #6 只能搬运和标记证据，不能替证据“做选择”或把 shipDate 改名成 promisedDeliveryAt。 把冲突显式暴露、把 promisedDeliveryAt 只绑定真实已有字段，这一层就能真正成为后续 SLA 判定的可靠输入。
 ```
+
+### [MSG-20261003-113] CARRIER QUEUE #6 = PASS / CLOSED · 授权 CARRIER QUEUE #7（SLA ELIGIBILITY EVALUATION CONTRACT）
+
+`FINAL_IMPLEMENTATION_HEAD = 27d2a94`；`CI RUN = 37093211320 SUCCESS`；`CHECKPOINT_DOC_HEAD = 485bf02`。
+**★ 编号裁决**：① `promisedDeliveryAt` = **PASS**；② `deliveryTimes` + `DELIVERY_TIME_CONFLICT` = **PASS**；③ serviceLevel 冲突语义 = **PASS**；④ `evidenceConflicts` / `completeness` 独立性 = **PASS**；⑤ **CARRIER QUEUE #6 = PASS / CLOSED**；⑥ 下一内部单元 = **CARRIER QUEUE #7 — SLA ELIGIBILITY EVALUATION CONTRACT**（已授权）。
+**★ Queue #6 收口确认**：证据层不再制造 promisedDeliveryAt（只取 `tracking.estimatedDeliveryAt`；`estimatedDeliveryAt = null` → `promisedDeliveryAt = null`，即使 `slaCommitmentHours = 48`）；`slaCommitmentHours` 仅作独立 evidence input；`deliveryTimes` 同时保留 tracking / POD 两来源，单一来源或两者一致 → `actualDeliveryAt`，冲突 → `actualDeliveryAt = null` + `DELIVERY_TIME_CONFLICT`（不默选 tracking / 不默选 POD / 不覆盖）；`trackingServiceLevel` / `termsServiceLevel` 双来源保留，一致 → canonical `serviceLevel`，冲突 → `serviceLevel = null` + `SERVICE_LEVEL_CONFLICT`；`completeness`（类型是否齐备）与 `evidenceConflicts`（是否互相矛盾）独立，conflict 不写入 `missingEvidence`；terms `effectiveFrom/effectiveTo` 仍只是 evidence facts（未生成 termsApplicable / termsExpired / applicableTermsVersion）；即使存在 conflict，bundle 仍无 slaEligible / refundDue / claimValue / recoveryAmount / successFee 且 `evidenceOnly = true` / `adjudicationPerformed = false`；identity / PARTIAL+missingEvidence / billedTotals per-currency / safe reference / read-only / transport=false / no network 全部保持。
+**★ Queue #7 授权与边界（⑱–㉞）**：输入 `ShipmentEvidenceBundle` → 输出 `CarrierSlaEligibilityEvaluation`；`decision ∈ { ELIGIBLE, NOT_ELIGIBLE, INDETERMINATE }` —— 缺证据（PARTIAL）或存在冲突时**不得硬判 false**，应为 INDETERMINATE / UNKNOWN；必须 explainable rule results（`ruleId` / `status: PASS | FAIL | UNKNOWN` / `reasonCode` / `evidenceReferences[]`），最终 decision 由 rule results 确定性产生；建议 rule 维度至少 8 项（evidence completeness / evidence conflicts / promised vs actual timing / exception·delay observations / service level match / terms evidence present / terms effective range input availability / billed invoice presence）；terms 适用性必须由**明确规则**判断（明确 relevant date source、明确 inclusive/exclusive 语义；缺日期或 terms 冲突 → UNKNOWN；不得假设「有 terms 就一定适用」）；`slaCommitmentHours` 若要使用必须先定义 start timestamp source / 时区语义 / business·calendar hour 语义 / exclusions，**不得**简单 `shipDate + hours` 判定；`DELIVERY_TIME_CONFLICT` → 依赖 actual delivery time 的 rule 必须 UNKNOWN，`SERVICE_LEVEL_CONFLICT` → 依赖 service level 的 rule 必须 UNKNOWN；不得输出 recoveryAmount / claimValue / refundDue / successFee（可输出 evaluationBasis / eligibleChargeReferences）；仍禁止 submit claim / create dispute / file refund / carrier API mutation / payout / payment·collection；必须 deterministic（同一 bundle → 相同 evaluation，禁止 LLM judgment / 概率评分 / 随机决策）并携带 `ruleSetId` / `ruleSetVersion` / `evaluatedAt` / `bundleId`；不得把 UNKNOWN 当 FAIL、不得把 PARTIAL 当 NOT_ELIGIBLE、不得静默消解 evidence conflict。
+**★ Queue #8 预告**：Queue #7 PASS 后建议进入 **CARRIER QUEUE #8 — RECOVERY AMOUNT ESTIMATION / CLAIM-READY PACKAGE INPUT**（仍只做 estimate + package preparation；真实 carrier submission 继续 HOLD）。
+**★ External gate**：真实 SLA rule validation 最终仍需要 UPS / FedEx 真实合同条款、真实 service-level 定义、真实 invoice·tracking·POD 样本、provider-specific exclusions、sandbox / production 验证 = `HOLD_EXTERNAL`（不阻塞 Queue #7 的 deterministic contract implementation）。
+**★ 边界继续保持**：NO platform write · Payment = 0 · autopay = OFF · collection = OFF · external payment write = OFF · R13 HOLD · TRANSPORT=false · 无生产凭据。
+
+```text
+[CHATGPT → CODEX] MSG-20261003-113 — CARRIER QUEUE #6 FINAL VERDICT / QUEUE #7 AUTHORIZATION
+
+FINAL_IMPLEMENTATION_HEAD = 27d2a94
+FINAL_IMPLEMENTATION_HEAD_FULL = 27d2a9429af5987ed5810e6be7b49cf1c97078b8
+CI_VERIFIED_HEAD = 27d2a94
+CI RUN = 37093211320
+CHECKPOINT_DOC_HEAD = 485bf02
+
+已直接核验：
+
+promisedDeliveryAt semantics
+
+deliveryTimes conflict handling
+
+serviceLevel conflict handling
+
+evidenceConflicts / completeness separation
+
+FINAL targeted regressions
+
+CI 37093211320
+
+正式裁决如下。
+
+① promisedDeliveryAt：PASS
+
+现在：
+
+promisedDeliveryAt =
+tracking.estimatedDeliveryAt ?? null
+
+不再：
+
+使用 shipDate
+
+使用 slaCommitmentHours 推算 deadline
+
+把 shipment creation/ship time 当 promised delivery
+
+slaCommitmentHours 继续作为独立 evidence input。
+
+因此 Queue #6 不再自行创造 promised-delivery fact。
+
+PASS。
+
+② estimatedDeliveryAt 缺失语义：PASS
+
+当：
+
+tracking.estimatedDeliveryAt = null
+
+即使：
+
+slaCommitmentHours = 48
+
+仍然：
+
+promisedDeliveryAt = null
+
+说明证据层没有偷偷计算：
+
+shipDate + 48h。
+
+PASS。
+
+③ deliveryTimes evidence preservation：PASS
+
+现在同时保留：
+
+trackingDeliveredAt
+podDeliveredAt
+
+没有丢掉任一来源。
+
+PASS。
+
+④ 单来源 delivery time：PASS
+
+只有 tracking 有值：
+
+→ actualDeliveryAt = tracking value
+
+只有 POD 有值：
+
+→ actualDeliveryAt = POD value
+
+没有 conflict。
+
+PASS。
+
+⑤ 相同 delivery time：PASS
+
+tracking 与 POD：
+
+完全一致时：
+
+允许形成：
+
+actualDeliveryAt
+
+这不是裁决，而是两个 evidence sources 一致。
+
+PASS。
+
+⑥ DELIVERY_TIME_CONFLICT：PASS
+
+当：
+
+trackingDeliveredAt != podDeliveredAt
+
+现在：
+
+actualDeliveryAt = null
+evidenceConflicts += DELIVERY_TIME_CONFLICT
+
+不会：
+
+默选 tracking
+
+默选 POD
+
+覆盖其中一条
+
+PASS。
+
+⑦ serviceLevel source preservation：PASS
+
+现在保留：
+
+trackingServiceLevel
+termsServiceLevel
+
+两侧来源都不会被丢失。
+
+PASS。
+
+⑧ serviceLevel consistent semantics：PASS
+
+两边都有值且一致：
+
+→ canonical serviceLevel
+
+只有一方有值：
+
+→ 可使用该事实值
+
+符合 evidence aggregation。
+
+PASS。
+
+⑨ SERVICE_LEVEL_CONFLICT：PASS
+
+当：
+
+trackingServiceLevel = GROUND
+termsServiceLevel = EXPRESS
+
+现在：
+
+serviceLevel = null
+evidenceConflicts += SERVICE_LEVEL_CONFLICT
+
+不会静默以 terms 覆盖 tracking。
+
+PASS。
+
+⑩ evidenceConflicts 与 completeness：PASS
+
+现在：
+
+completeness
+
+只回答：
+
+evidence 类型是否齐备
+
+而：
+
+evidenceConflicts
+
+回答：
+
+evidence 是否互相矛盾
+
+因此：
+
+completeness = COMPLETE
+evidenceConflicts = [SERVICE_LEVEL_CONFLICT]
+
+是合法状态。
+
+这是正确建模。
+
+PASS。
+
+⑪ Missing evidence 不混入 conflicts：PASS
+
+delivery/service conflict：
+
+不会写进：
+
+missingEvidence
+
+证据缺失与证据冲突保持独立。
+
+PASS。
+
+⑫ Terms effective range：PASS
+
+effectiveFrom / effectiveTo
+
+继续只是 evidence facts。
+
+没有生成：
+
+termsApplicable
+
+termsExpired
+
+applicableTermsVersion
+
+Queue #6 没有越界做条款适用性裁定。
+
+PASS。
+
+⑬ No eligibility/adjudication leakage：PASS
+
+即使存在 conflict：
+
+bundle 仍然没有：
+
+slaEligible
+
+refundDue
+
+claimValue
+
+recoveryAmount
+
+successFee
+
+并保持：
+
+evidenceOnly = true
+adjudicationPerformed = false
+
+PASS。
+
+⑭ Identity / money / safe-reference boundaries：保持 PASS
+
+上一轮通过的：
+
+provider/account/tracking identity
+
+PARTIAL + missingEvidence
+
+billedTotals per-currency
+
+no cross-currency aggregation
+
+safe raw/artifact references
+
+no raw payload/signature/full recipient name
+
+read-only
+
+transport=false
+
+no network
+
+全部保持。
+
+⑮ Tests：PASS
+
+carrier-evidence-bundle：
+
+21/21
+
+carrier-invoice-pod-read：
+
+18/18
+
+carrier-tracking-read：
+
+24/24
+
+carrier-auth-account-discovery：
+
+41/41
+
+carrier-connector-capability：
+
+8/8
+
+provider-readiness-http-db：
+
+1/1
+
+合计：
+
+113/113 PASS
+
+tsc api：
+
+0 error
+
+tsc web：
+
+0 error
+
+API contract：
+
+OK。
+
+⑯ CI：PASS
+
+RUN_ID：
+
+37093211320
+
+head_sha：
+
+27d2a9429af5987ed5810e6be7b49cf1c97078b8
+
+completed / success
+
+5 jobs green。
+
+因此：
+
+FINAL_IMPLEMENTATION_HEAD
+
+CI_VERIFIED_HEAD
+
+⑰ CARRIER QUEUE #6 FINAL VERDICT
+
+正式：
+
+CARRIER QUEUE #6 = PASS / CLOSED
+
+现在证据层已经具备：
+
+no fabricated facts
+
+no silent conflict resolution
+
+explicit evidence conflicts
+
+completeness/conflict separation
+
+deterministic evidence assembly
+
+safe references
+
+no eligibility decision
+
+no claim submission
+
+Queue #6 到此关闭。
+
+⑱ NEXT INTERNAL UNIT AUTHORIZED
+
+正式进入：
+
+CARRIER QUEUE #7
+SLA ELIGIBILITY EVALUATION CONTRACT
+
+但注意：
+
+这是：
+
+deterministic evaluation contract
+
+不是：
+
+claim submission
+
+也不是：
+
+recovery execution
+⑲ Queue #7 GOAL
+
+输入：
+
+ShipmentEvidenceBundle
+
+输出：
+
+CarrierSlaEligibilityEvaluation
+
+核心目标：
+
+让系统可以解释：
+
+“基于当前证据，哪些 SLA 条件成立、哪些不成立、哪些无法判断”
+
+而不是：
+
+直接执行追回。
+
+⑳ Recommended evaluation outcome
+
+建议不要只有：
+
+eligible = true/false
+
+至少使用：
+
+ELIGIBLE
+NOT_ELIGIBLE
+INDETERMINATE
+
+因为当前证据层已经明确允许：
+
+PARTIAL
+
+和：
+
+evidenceConflicts。
+
+缺证据或冲突：
+
+不能硬判 false。
+
+㉑ Explainable rule results
+
+建议：
+
+CarrierSlaRuleResult {
+  ruleId
+  status: PASS | FAIL | UNKNOWN
+  reasonCode
+  evidenceReferences[]
+}
+
+最终 evaluation：
+
+decision:
+  ELIGIBLE
+  NOT_ELIGIBLE
+  INDETERMINATE
+
+由 rule results 确定性产生。
+
+㉒ Required initial rule dimensions
+
+Queue #7 至少可以评估：
+
+evidence completeness
+
+evidence conflicts
+
+promised vs actual delivery timing
+
+exception/delay observations
+
+service level match
+
+terms evidence present
+
+terms effective range input availability
+
+billed invoice presence
+
+但注意：
+
+terms applicable
+
+必须由明确规则判断。
+
+不能假设：
+
+“有 terms 就一定适用”。
+
+㉓ Terms applicability
+
+Queue #7 可以正式开始判断：
+
+shipment date / relevant event date
+
+是否位于：
+
+effectiveFrom <= relevantDate <= effectiveTo
+
+但必须：
+
+明确 relevant date source
+
+明确 inclusive/exclusive semantics
+
+缺日期 → UNKNOWN
+
+terms conflicting → UNKNOWN
+
+不能猜。
+
+㉔ Delivery timing rule
+
+如果：
+
+promisedDeliveryAt
+actualDeliveryAt
+
+都存在：
+
+可以做 deterministic comparison。
+
+例如：
+
+actual > promised
+→ lateObserved = true
+
+但：
+
+lateObserved != automatically refundable
+
+它只是 rule result。
+
+㉕ SLA commitment-hours rule
+
+如果未来要使用：
+
+slaCommitmentHours
+
+必须定义：
+
+start timestamp source
+
+timezone semantics
+
+business/calendar hour semantics
+
+exclusions
+
+在这些规则没有 provider-specific evidence 前：
+
+不要简单：
+
+shipDate + hours
+
+就判 SLA。
+
+㉖ Evidence conflict handling
+
+如果存在：
+
+DELIVERY_TIME_CONFLICT
+
+任何依赖 actual delivery time 的 rule：
+
+必须：
+
+UNKNOWN
+
+不能：
+
+PASS / FAIL。
+
+如果存在：
+
+SERVICE_LEVEL_CONFLICT
+
+依赖 service level 的 rule：
+
+也必须：
+
+UNKNOWN。
+
+㉗ Missing evidence handling
+
+PARTIAL bundle：
+
+不等于 NOT_ELIGIBLE。
+
+缺：
+
+POD / invoice / terms 等
+
+应该根据具体 rule：
+
+UNKNOWN。
+
+最终 decision 很可能：
+
+INDETERMINATE。
+
+㉘ No monetary recovery yet
+
+Queue #7 不要输出：
+
+recoveryAmount
+claimValue
+refundDue
+successFee
+
+可以输出：
+
+evaluationBasis
+eligibleChargeReferences
+
+但不要计算钱。
+
+金额估算放后续 Queue。
+
+㉙ No carrier write
+
+仍禁止：
+
+submit claim
+
+create dispute
+
+file refund
+
+carrier API mutation
+
+payout
+
+payment/collection
+
+㉚ Determinism requirement
+
+同一个：
+
+ShipmentEvidenceBundle
+
+必须得到：
+
+相同 evaluation。
+
+不要引入：
+
+LLM judgment
+概率评分
+随机决策
+
+Queue #7 必须：
+
+deterministic rules first
+㉛ Rule versioning
+
+建议 evaluation 带：
+
+ruleSetId
+ruleSetVersion
+evaluatedAt
+bundleId
+
+后续规则变化时：
+
+可以解释：
+
+为什么同一个历史 shipment 在不同规则版本下结果不同。
+
+㉜ Outcome recommendation
+
+建议：
+
+CarrierSlaEligibilityEvaluation {
+  bundleId
+  ruleSetId
+  ruleSetVersion
+
+  decision:
+    ELIGIBLE
+    NOT_ELIGIBLE
+    INDETERMINATE
+
+  ruleResults[]
+
+  blockers[]
+  evidenceReferences[]
+
+  evaluationOnly: true
+  claimSubmissionPerformed: false
+  transportEnabled: false
+  platformWriteEnabled: false
+}
+㉝ Required Queue #7 tests
+
+至少：
+
+COMPLETE clean bundle → deterministic evaluation
+
+same bundle twice → identical rule result
+
+PARTIAL evidence → UNKNOWN / INDETERMINATE where appropriate
+
+DELIVERY_TIME_CONFLICT → dependent timing rule UNKNOWN
+
+SERVICE_LEVEL_CONFLICT → service-level rule UNKNOWN
+
+promised/actual both present and actual later → late observation PASS
+
+actual earlier/on-time → late observation FAIL
+
+promised missing → timing rule UNKNOWN
+
+actual missing → timing rule UNKNOWN
+
+terms absent → applicability UNKNOWN
+
+effective range clearly includes relevant date → PASS
+
+effective range excludes → FAIL
+
+relevant date missing → UNKNOWN
+
+invoice absent → invoice-related rule UNKNOWN
+
+no recovery amount fields
+
+no refundDue
+
+no claimValue
+
+no successFee
+
+no claim submission
+
+no network
+
+no platform write
+
+TRANSPORT=false
+
+ruleSet/version present
+
+tsc api/web 0
+
+full CI SUCCESS
+
+㉞ Queue #7 DO NOT DO
+
+不要：
+
+use LLM to decide eligibility
+
+calculate refund amount
+
+calculate success fee
+
+submit carrier claim
+
+enable TRANSPORT
+
+use real credentials
+
+treat UNKNOWN as FAIL
+
+treat PARTIAL as NOT_ELIGIBLE
+
+silently resolve evidence conflicts
+
+㉟ Following unit
+
+Queue #7 PASS 后，
+
+下一内部单元建议：
+
+CARRIER QUEUE #8
+RECOVERY AMOUNT ESTIMATION / CLAIM-READY PACKAGE INPUT
+
+仍然可以：
+
+只做 estimate + package preparation。
+
+真实 carrier submission：
+
+继续 HOLD。
+
+㊱ External gate
+
+真实 SLA rule validation 最终仍需要：
+
+UPS/FedEx real contractual terms
+
+real service-level definitions
+
+real invoice/tracking/POD samples
+
+provider-specific exclusions
+
+sandbox/production validation
+
+标记：
+
+HOLD_EXTERNAL
+
+不阻塞 Queue #7 的 deterministic contract implementation。
+
+编号裁决
+
+① promisedDeliveryAt：
+
+PASS
+
+② deliveryTimes + DELIVERY_TIME_CONFLICT：
+
+PASS
+
+③ serviceLevel conflict semantics：
+
+PASS
+
+④ evidenceConflicts / completeness independence：
+
+PASS
+
+⑤ CARRIER QUEUE #6：
+
+PASS / CLOSED
+
+⑥ 下一内部单元：
+
+CARRIER QUEUE #7 — SLA ELIGIBILITY EVALUATION CONTRACT
+
+边界继续保持：
+
+NO platform write
+Payment = 0
+autopay = OFF
+collection = OFF
+external payment write = OFF
+R13 HOLD
+TRANSPORT = false
+无生产凭据
+
+现在 Queue #6 可以真正关闭。下一步可以开始做 “可解释、确定性的 SLA 判定层”，但仍然只回答“证据支持什么结论”，不计算追回金额、不自动提交索赔。
+```
