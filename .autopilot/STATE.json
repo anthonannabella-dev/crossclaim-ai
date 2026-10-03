@@ -51,9 +51,9 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-03T14:11:19.420Z",
   "state": "IMPLEMENT",
-  "last_action": "INTERNAL_CODE_COMPLETE = TRUE（12/12 检查通过；HEAD 9e84737 CI success run 37133358856）→ AUTONOMOUS_INTERNAL_WORK = EXHAUSTED；FINAL-ACCEPTANCE-REPORT 已刷新",
+  "last_action": "INDEPENDENT FINAL AUDIT 请求已留档：Issue #2 comment 5970674608（HEAD b0fffe5）",
   "last_action_at": "2026-10-03T14:17:18.723Z",
-  "next_action": "独立审计：将 FINAL-ACCEPTANCE-REPORT + HEAD/commits/migrations/schema/tests/CI/routes/frontend/backlog 送 ChatGPT 反查（INDEPENDENT_FINAL_AUDIT_REQUIRED=TRUE）；其余为四类外部依赖",
+  "next_action": "发送审计唤醒并读取独立审计裁决；PASS → 记录 INDEPENDENT FINAL AUDIT = PASS（PRODUCTION_READY 仍由宿主决定）；REVISE → 建 backlog 重新执行",
   "current_head": "3d80d60",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
@@ -5040,5 +5040,14 @@
   "ci_status_head": "9e84737",
   "ci_status": "success",
   "ci_run_id": "37133358856",
-  "internal_code_complete_at": "2026-10-03T15:36:47.862Z"
+  "internal_code_complete_at": "2026-10-03T15:36:47.862Z",
+  "independent_final_audit": {
+    "required": true,
+    "requested_at": "2026-10-03T15:40:33.504Z",
+    "head": "b0fffe5",
+    "doc": "docs/releases/INDEPENDENT-FINAL-AUDIT-REQUEST.md",
+    "github_comment_id": "5970674608",
+    "wakeup_sent_at": null,
+    "verdict": null
+  }
 }
