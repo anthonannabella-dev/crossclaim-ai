@@ -55,6 +55,14 @@ export interface CustomsLoadedEntryFact {
   id: string;
   organizationId: string;
   entryNumber: string;
+  entryDate: string;
+  jurisdiction: string;
+  portOfEntry: string;
+  importerOfRecordRef: string;
+  source: string;
+  rawReference: string;
+  observedAt: string;
+  totalDutyAmountByCurrency: Record<string, string>;
   contentDigest: string;
   lines: readonly { lineOrdinal: number; kind: string; rawCode: string; amount: string; currency: string }[];
 }
@@ -193,6 +201,7 @@ type FactRowLike = {
   rawReference: string;
   observedAt: Date;
   contentDigest: string;
+  totalDutyAmountByCurrency?: unknown;
   dutyLines?: readonly { lineOrdinal: number; kind: string; rawCode: string; amount: unknown; currency: string }[];
 };
 
@@ -311,6 +320,14 @@ export function createPrismaCustomsEntryFactStore(
         id: row.id,
         organizationId: row.organizationId,
         entryNumber: row.entryNumber,
+        entryDate: row.entryDate.toISOString().slice(0, 10),
+        jurisdiction: row.jurisdiction,
+        portOfEntry: row.portOfEntry,
+        importerOfRecordRef: row.importerOfRecordRef,
+        source: row.source,
+        rawReference: row.rawReference,
+        observedAt: row.observedAt.toISOString(),
+        totalDutyAmountByCurrency: (row.totalDutyAmountByCurrency as Record<string, string>) ?? {},
         contentDigest: row.contentDigest,
         lines: (row.dutyLines ?? []).map((line) => ({
           lineOrdinal: line.lineOrdinal,
