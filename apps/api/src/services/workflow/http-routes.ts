@@ -1336,10 +1336,10 @@ export async function handleWorkflowRequest(
       }
       if (!deps.actionGuard) {
         // fail closed：受保护入口必须在组合根注入 Action Guard
-        throw new ActionGuardNotConfiguredError(CARRIER_MANUAL_SUBMISSION_ACTION);
+        throw new ActionGuardNotConfiguredError('carrier.manual_submission.record');
       }
       await deps.actionGuard.assertAllowed({
-        action: CARRIER_MANUAL_SUBMISSION_ACTION,
+        action: 'carrier.manual_submission.record',
         actorUserId: actor.actorUserId,
         organizationId: actor.organizationId,
       });
