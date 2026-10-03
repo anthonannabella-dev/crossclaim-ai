@@ -363,6 +363,10 @@
     {
       "name": "cc_tenant_customsreturnfactrecord",
       "table": "CustomsReturnFactRecord"
+    },
+    {
+      "name": "cc_tenant_recoveryqualificationassessmentrecord",
+      "table": "RecoveryQualificationAssessmentRecord"
     }
   ],
   "scopedTriggers": [

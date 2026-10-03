@@ -366,6 +366,7 @@ model Organization {
   customsEntryFacts                  CustomsEntryFactRecord[]
   customsEntryDutyLines              CustomsEntryDutyLineRecord[]
   customsReturnFacts                 CustomsReturnFactRecord[]
+  recoveryQualificationAssessments   RecoveryQualificationAssessmentRecord[]
   customsDutyTruthRecordList CustomsDutyTruthRecord[]
   customsDiscrepancyRecordList CustomsDiscrepancyRecord[]
   customsEligibilityRecordList CustomsEligibilityRecord[]
@@ -2679,4 +2680,35 @@ model CustomsReturnFactRecord {
   @@unique([organizationId, contentDigest])
   @@index([organizationId, entryNumber])
   @@index([organizationId, platformAccountId, htsCode])
+}
+
+// ============================================================
+// P0-2（BUSINESS SURVIVAL GATE）：Customer Qualification / Recovery Economics 判定投影
+//   · append-only：每次判定新增历史（policyId/policyVersion + inputDigest/resultDigest），latest 由 computedAt 推导
+//   · 判定 ≠ filing 授权：本表只记录“是否值得进入昂贵追回”，不记录任何外写结果
+// ============================================================
+model RecoveryQualificationAssessmentRecord {
+  id                       String   @id
+  organizationId           String
+  platformAccountId        String
+  policyId                 String
+  policyVersion            String
+  algorithmVersion         String
+  inputDigest              String
+  resultDigest             String
+  qualificationStatus      String
+  currency                 String
+  estimatedRecoveryAmount  Decimal  @db.Decimal(38, 6)
+  estimatedExternalApiCost Decimal  @db.Decimal(38, 6)
+  estimatedBrokerCost      Decimal  @db.Decimal(38, 6)
+  expectedNetRecovery      Decimal  @db.Decimal(38, 6)
+  costRatio                Decimal? @db.Decimal(38, 6)
+  payload                  Json
+  computedAt               DateTime
+  createdAt                DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, platformAccountId, computedAt])
+  @@index([organizationId, inputDigest])
 }
