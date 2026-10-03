@@ -57,6 +57,10 @@ import {
 import { createPrismaCarrierClaimResponseStore } from '../carriers/carrier-claim-response-prisma-store';
 import { createPrismaCarrierClaimResponseSubmissionSource } from '../carriers/carrier-claim-response-submissions';
 import {
+  handleCustomsFilingStatusReadRequest,
+  handleCustomsRecoveryStartRequest,
+} from '../customs/customs-recovery-http';
+import {
   PlatformWriteRequestError,
   requestPlatformWrite,
 } from '../platform-write/http-request';
@@ -223,6 +227,8 @@ const CASE_BILLING_DRAFT_PATH = /^\/cases\/([^/]+)\/billing\/draft$/;
 const CARRIER_MANUAL_SUBMISSION_PATH = /^\/carrier-claim-packages\/([^/]+)\/manual-submission$/;
 // CARRIER QUEUE #10 FINAL（MSG-20261003-122 ㉙㉛）：carrier response 人工补录 + 读模型
 const CARRIER_CLAIM_RESPONSES_PATH = /^\/carrier-claim-packages\/([^/]+)\/responses$/;
+// C21（MSG-20261003-124 ⑭–㉑）：one-click 内部准备 + filing status 读模型
+const CUSTOMS_RECOVERY_PATH = /^\/customs-opportunities\/([^/]+)\/(start-recovery|filing-status)$/;
 // ② 下一小批次（MSG-20261001-14 §5）：appeal.submit（Appeal 人工提交 · 独立动作与审批绑定）
 const CASE_APPEAL_SUBMIT_PATH = /^\/cases\/([^/]+)\/appeal\/submit$/;
 // R37 P1（MSG-20261001-22 CHANGE A）：平台真实写回入口（EXTERNAL_WRITE · transport 恒关）
@@ -293,6 +299,14 @@ export interface WorkflowRouteDeps {
   carrierClaimResponseStore?: import('../carriers/carrier-claim-response').CarrierClaimResponseStore;
   /** CARRIER QUEUE #10 FINAL：server-side submission truth（缺省读 CarrierManualSubmission）。 */
   carrierClaimResponseSubmissions?: import('../carriers/carrier-claim-response-submissions').CarrierClaimResponseSubmissionSource;
+  /** C21：server-side customs opportunity truth（缺省返回 null → 404，不伪造）。 */
+  customsOpportunities?: import('../customs/customs-recovery-http').CustomsRecoveryHttpDeps['opportunities'];
+  /** C21：授权就绪判定输入（缺省全部 false → AUTHORIZATION_NOT_READY）。 */
+  customsAuthorization?: import('../customs/customs-authorization-readiness').CustomsAuthorizationFlags;
+  /** C21：已登记 filing provider（缺省 null → BROKER_HANDOFF）。 */
+  customsFilingProvider?: { providerId: string; capabilities: import('../customs/customs-filing-provider').CustomsFilingCapabilities } | null;
+  /** C21：filing status 事实读取（缺省空集合）。 */
+  customsFilingStatus?: import('../customs/customs-recovery-http').CustomsRecoveryHttpDeps['filingStatus'];
 }
 
 function sendJson(res: ServerResponse, code: number, payload: unknown): void {
@@ -471,6 +485,7 @@ export async function handleWorkflowRequest(
   const caseBillingDraft = CASE_BILLING_DRAFT_PATH.exec(path);
   const carrierManualSubmission = CARRIER_MANUAL_SUBMISSION_PATH.exec(path);
   const carrierClaimResponses = CARRIER_CLAIM_RESPONSES_PATH.exec(path);
+  const customsRecovery = CUSTOMS_RECOVERY_PATH.exec(path);
   const caseAppealSubmit = CASE_APPEAL_SUBMIT_PATH.exec(path);
   const casePlatformWrite = CASE_PLATFORM_WRITE_PATH.exec(path);
   const caseRecoveryManualSubmit = CASE_RECOVERY_MANUAL_SUBMIT_PATH.exec(path);
@@ -509,7 +524,7 @@ export async function handleWorkflowRequest(
     adminPermissionMatrix ||
     adminMemberDetail !== null ||
     adminKillSwitch;
-  if (!adminAny && !opportunityList && !caseClaimPackage && !recoveryStates && !recoveryMoney && !accountsPath && !entitlementsPath && !operationsDashboard && !operationsClaims && !operationsRecovery && !review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !paymentReviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !replayPath && !replayReviewPath && !retryDuePath && !retryDueFreezePath && !retryDueReviewPath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim && !caseClaimSubmit && !caseClaimPrepare && !carrierManualSubmission && !carrierClaimResponses && !caseBillingDraft && !caseAppealSubmit && !casePlatformWrite && !caseRecoveryManualSubmit && !caseRecoveryManualReference && !caseRecoveryManualApproval && !caseRecoveryManualReferenceApproval &&
+  if (!adminAny && !opportunityList && !caseClaimPackage && !recoveryStates && !recoveryMoney && !accountsPath && !entitlementsPath && !operationsDashboard && !operationsClaims && !operationsRecovery && !review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !paymentReviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !replayPath && !replayReviewPath && !retryDuePath && !retryDueFreezePath && !retryDueReviewPath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim && !caseClaimSubmit && !caseClaimPrepare && !carrierManualSubmission && !carrierClaimResponses && !customsRecovery && !caseBillingDraft && !caseAppealSubmit && !casePlatformWrite && !caseRecoveryManualSubmit && !caseRecoveryManualReference && !caseRecoveryManualApproval && !caseRecoveryManualReferenceApproval &&
     !commercialPoliciesPath &&
     !commercialPolicyPath &&
     !commercialPolicyAcceptPath &&
@@ -597,7 +612,9 @@ export async function handleWorkflowRequest(
               ? ['GET']
               : carrierClaimResponses
                 ? ['GET', 'POST']
-                : ['POST'];
+                : customsRecovery
+                  ? ['GET', 'POST']
+                  : ['POST'];
   if (!allowed.includes(method)) {
     sendJson(res, 405, { error: 'METHOD_NOT_ALLOWED' });
     return true;
@@ -1427,6 +1444,59 @@ export async function handleWorkflowRequest(
         { packageId, request: body as never, session },
         { submissions, store, now: deps.now ?? (() => new Date()) },
       );
+      sendJson(res, result.status, result.body);
+      return true;
+    }
+
+    // C21（MSG-20261003-124 ⑭–㉑）：one-click 内部准备（不 filing）+ filing status 读模型。
+    if (customsRecovery) {
+      const opportunityId = decodeURIComponent(customsRecovery[1] ?? '');
+      const action = customsRecovery[2] === 'start-recovery' ? 'start-recovery' : 'filing-status';
+      const session = {
+        organizationId: actor.organizationId,
+        actorUserId: actor.actorUserId,
+        role: actor.role,
+      };
+      const customsDeps = {
+        opportunities: deps.customsOpportunities ?? { async load() { return null; } },
+        authorization:
+          deps.customsAuthorization ?? {
+            customsAgreementSigned: false,
+            importerOfRecordConfirmed: false,
+            claimantConfirmed: false,
+            recoveryRightConfirmed: false,
+            brokerConnected: false,
+            brokerAuthorizationValid: false,
+            filingPermissionValid: false,
+            providerCapabilityReady: false,
+          },
+        provider: deps.customsFilingProvider ?? null,
+        filingStatus: deps.customsFilingStatus ?? { async listFacts() { return []; } },
+        ...(deps.now ? { now: deps.now } : {}),
+      };
+      if (action === 'filing-status') {
+        if ((req.method ?? 'GET') !== 'GET') {
+          sendJson(res, 405, { error: 'METHOD_NOT_ALLOWED' });
+          return true;
+        }
+        const result = await handleCustomsFilingStatusReadRequest({ opportunityId, session }, customsDeps);
+        sendJson(res, result.status, result.body);
+        return true;
+      }
+      if ((req.method ?? 'GET') !== 'POST') {
+        sendJson(res, 405, { error: 'METHOD_NOT_ALLOWED' });
+        return true;
+      }
+      if (!deps.actionGuard) {
+        throw new ActionGuardNotConfiguredError('customs.recovery.start');
+      }
+      await deps.actionGuard.assertAllowed({
+        action: 'customs.recovery.start',
+        actorUserId: actor.actorUserId,
+        organizationId: actor.organizationId,
+      });
+      const body = await readJsonBody(req);
+      const result = await handleCustomsRecoveryStartRequest({ opportunityId, request: body, session }, customsDeps);
       sendJson(res, result.status, result.body);
       return true;
     }

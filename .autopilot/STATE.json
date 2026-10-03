@@ -1,16 +1,16 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "0693821",
-  "status": "READY_FOR_REVIEW",
-  "current_task": "MASTER GAP CLOSURE G2：C17 ledger 已完成（Schema + store + PG 10/10）→ 下一步送 C17 FINAL SCHEMA CHECKPOINT（MSG-20261003-124 ⑬）",
+  "head": "a02d089",
+  "status": "RECONCILED",
+  "current_task": "Carrier Queue #6 — SLA EVIDENCE ASSEMBLY + ELIGIBILITY INPUT PLANE：Tracking Fact + Invoice Fact + POD Fact + Carrier Terms Evidence + Service Level Evidence → **ShipmentEvidenceBundle**（只建证据输入层；不得自动认定赔付 / 自动提交 claim / 自动退款 / 调用 carrier write API / 自动产生 recovery amount）。**逐字归档 MSG-111 为第一步。**CarrierInvoiceReadPort + CarrierPODReadPort（verified account lineage、request/response 双向绑定、十进制金额、charge kind 归一化 + raw code 保留、POD 掩码与隐私、safe rawReference）；**read-only**，不做 SLA/退款资格推导。CarrierTrackingReadPort + normalized CarrierTrackingSnapshot（UPS/FedEx provider adapter 分离）+ 状态/事件归一化（确定性排序 + 去重）+ 失败原因分类 + tenant/account lineage 归属；**read-only**（无 mutation / claim / pickup / refund，TRANSPORT=false）。",
   "next_task": "PC-12A 实施 → 本地测试 + tsc api/web + API contract + full CI → PC-12A CHECKPOINT 送审。",
   "send_head": "07b7009",
   "decision_head": "07b7009",
   "last_chatgpt_message": "MSG-20261003-125",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-03T09:07:52.876Z",
-  "previous_head": "8cab430",
+  "updated_at": "2026-10-03T09:12:23.776Z",
+  "previous_head": "0693821",
   "architect_decision_pending": true,
   "blocked_scope": null,
   "last_send_head": "0c35106",
@@ -49,11 +49,11 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-03T09:07:18.832Z",
+  "last_tick_at": "2026-10-03T09:12:23.776Z",
   "state": "AWAIT_VERDICT",
-  "last_action": "按 HOST DIRECTIVE（CONTINUOUS EXECUTION）+ MSG-20261003-125 实施 C17 CHANGE A/B/C：并发原子（root FOR UPDATE + exactly-one-accepted 并发测试）、idempotencyKey immutable payload 冲突（IDEMPOTENCY_KEY_CONFLICT）、fact 完整等价（FACT_IMMUTABLE_MISMATCH）→ PG 13/13（原 10/10 保持）→ tsc api/web 0 → API contract/audit/autopilot gates OK → commit/push",
-  "last_action_at": "2026-10-03T09:07:18.831Z",
-  "next_action": "写 C17 FINAL-2 CHECKPOINT 并立即送 ChatGPT 新会话（引用 CHANGE A/B/C 与 13/13 证据）；随后按 CONTINUOUS_EXECUTION 继续 C21 HTTP（G3，filingSubmitted=false）。",
+  "last_action": "G3：实施 C21 HTTP 边界（start-recovery 只做内部准备：server validation / 授权就绪 / route 决策 / immutable snapshot；filing status 读模型）+ Action Guard customs.recovery.start 注册 + RBAC startCustomsRecovery + router 接线 + server 路径门禁 + API.md 记录（contract 88/75）→ 单测 6/6 + 守卫/workflow 套件 19/19 → tsc api/web 0 → commit/push",
+  "last_action_at": "2026-10-03T09:12:23.776Z",
+  "next_action": "G3 收尾：补真实 HTTP E2E（DB，含 401/403/404/400/200/409 与 GET 读模型）；随后按 CONTINUOUS_EXECUTION 继续 G5（前端接线核查）/ G6（文档同步）/ G4（Customs C1–C7 内部链），并读取 C17 FINAL-2 裁决（PASS → C17 CLOSED）。",
   "current_head": "e060a5f",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-03T08:40:27.441Z",
-    "gapMs": 21169,
+    "previousTickAt": "2026-10-03T09:07:18.832Z",
+    "gapMs": 132887,
     "stale": false,
-    "checkedAt": "2026-10-03T08:40:48.609Z"
+    "checkedAt": "2026-10-03T09:09:31.718Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -4454,8 +4454,7 @@
     "registered_at": "2026-10-03T08:41:22.475Z",
     "recomputed_at_head": "0693821",
     "internal_remaining_gap": [
-      "G2-CHECKPOINT-SEND",
-      "G3",
+      "G3-E2E",
       "G4",
       "G5",
       "G6",
@@ -4520,6 +4519,21 @@
           "账本不含 credential / raw payload / 资金字段；边界常量自证 filingSubmitted=false / externalWritePerformed=false"
         ]
       }
+    },
+    "g3": {
+      "status": "DONE（HTTP + Action Guard + RBAC + 路由 + API.md + 单测；E2E DB 待补）",
+      "authorization": "MSG-20261003-124 ⑭–㉑：C21 HTTP PASS/AUTHORIZED（不执行 filing、filingSubmitted=false、externalExecutionStatus=NOT_STARTED）",
+      "module": "apps/api/src/services/customs/customs-recovery-http.ts（capability customs.recovery.one_click_start 与 action customs.recovery.start 分离）",
+      "routes": [
+        "POST /customs-opportunities/:id/start-recovery（Action Guard customs.recovery.start / INTERNAL_WRITE；client 领域字段注入 400）",
+        "GET /customs-opportunities/:id/filing-status（C19 读模型，tenant-scoped，无 credential）"
+      ],
+      "guard": "catalog + capability-source（workflow kill switch）+ GUARD_ENFORCED_ACTIONS 已注册；RBAC startCustomsRecovery（OWNER/ADMIN/OPS；FINANCE/VIEWER/未知拒绝）",
+      "tests": "customs-recovery-http 6/6；workflow 12/12；action-guard-enforcement 7/7；tsc api/web 0；API contract 88/75",
+      "boundary": "filingSubmitted=false / externalWritePerformed=false / transportEnabled=false / externalExecutionStatus=NOT_STARTED；真实 filing HOLD_EXTERNAL",
+      "pending": [
+        "真实 HTTP E2E（401/403/404/400/200/409 + GET 读模型）"
+      ]
     }
   },
   "audit_channel_url": "https://chatgpt.com/c/6ac0c3b8-30a4-83ec-a529-4d9b04ffa0e7",

@@ -33,6 +33,7 @@ export const ACTION_SCOPE_MAP: Record<string, ActionKillSwitchScope[]> = {
   'claim.prepare': ['workflow'],
   'carrier.manual_submission.record': ['workflow'],
   'carrier.claim_response.record': ['workflow'],
+  'customs.recovery.start': ['workflow'],
   'billing.draft': ['billing'],
   'claim.submit': ['submission'],
   'appeal.submit': ['submission'],

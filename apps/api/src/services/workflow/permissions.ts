@@ -60,6 +60,11 @@ export interface PermissionMatrix {
    * OWNER / ADMIN / OPS 可；FINANCE / VIEWER / 未知角色不可。
    */
   recordCarrierClaimResponse: boolean;
+  /**
+   * C21（MSG-20261003-124 ⑲）：启动 Customs 内部追回准备（不执行 filing）。
+   * OWNER / ADMIN / OPS 可；FINANCE / VIEWER / 未知不可。
+   */
+  startCustomsRecovery: boolean;
 }
 
 const DENY_ALL: PermissionMatrix = {
@@ -79,6 +84,7 @@ const DENY_ALL: PermissionMatrix = {
   recoveryPayoutRecord: false,
   recordCarrierManualSubmission: false,
   recordCarrierClaimResponse: false,
+  startCustomsRecovery: false,
 };
 
 export const PERMISSIONS: Record<AppRole, PermissionMatrix> = {
@@ -99,6 +105,7 @@ export const PERMISSIONS: Record<AppRole, PermissionMatrix> = {
     recoveryPayoutRecord: true,
     recordCarrierManualSubmission: true,
     recordCarrierClaimResponse: true,
+    startCustomsRecovery: true,
   },
   ADMIN: {
     manageConnections: true,
@@ -117,6 +124,7 @@ export const PERMISSIONS: Record<AppRole, PermissionMatrix> = {
     recoveryPayoutRecord: true,
     recordCarrierManualSubmission: true,
     recordCarrierClaimResponse: true,
+    startCustomsRecovery: true,
   },
   OPS: {
     manageConnections: false,
@@ -135,6 +143,7 @@ export const PERMISSIONS: Record<AppRole, PermissionMatrix> = {
     recoveryPayoutRecord: false,
     recordCarrierManualSubmission: true,
     recordCarrierClaimResponse: true,
+    startCustomsRecovery: true,
   },
   FINANCE: {
     manageConnections: false,
@@ -153,6 +162,7 @@ export const PERMISSIONS: Record<AppRole, PermissionMatrix> = {
     recoveryPayoutRecord: true,
     recordCarrierManualSubmission: false,
     recordCarrierClaimResponse: false,
+    startCustomsRecovery: false,
   },
   VIEWER: { ...DENY_ALL },
 };

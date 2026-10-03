@@ -428,3 +428,17 @@ C-0008-B2（Case / Evidence / Claim Draft / Billing）的端点尚未实现。
 - 状态映射：400 `INVALID_REQUEST` / `PROVIDER_REFERENCE_REQUIRED` / `INVALID_TIMESTAMP` / `FUTURE_TIMESTAMP`；403 `CAPABILITY_REQUIRED`；404 `SUBMISSION_NOT_FOUND`；201 `RECORDED`；200 `ALREADY_RECORDED`。
 - 存储：`CarrierClaimResponseFact` append-only（UPDATE / DELETE 由 DB 触发器拒绝）+ `UNIQUE(organizationId, packageId, idempotencyKey)` 幂等 + DB CHECK 真值（未知枚举拒绝；`USER_REPORTED` → `UNVERIFIED`；provider 来源必须带 provider reference）；business audit `carrier.claim_response_recorded` 与事实同事务、恰好一次。
 - 边界：`APPROVED != PAID != recovered cash`（PAID 事实不写 RecoveryPayout / actualRecovered / FeeCalculation）、不产生 successFee、不发起 payment collection、不调用 carrier API / portal、`TRANSPORT=false`、无生产凭据。
+
+## Customs 内部追回准备（C21 / MSG-20261003-124 ⑭–㉑）
+
+| 方法 | 路径 | 请求体 | 成功 | 权限 |
+|---|---|---|---|---|
+| POST | `/customs-opportunities/:id/start-recovery` | `{}`（仅必要确认字段；领域字段一律 400） | 200 `{ recoveryStatus: READY_TO_FILE, filingSubmitted: false, externalExecutionStatus: NOT_STARTED, submissionSnapshot }` | OWNER / ADMIN / OPS |
+| GET | `/customs-opportunities/:id/filing-status` | — | 200 `{ filingStatus: { currentStatus, currentSourceLevel, history, factCount } }` | 任意已认证成员（tenant-scoped） |
+
+- 语义：该端点**只做内部准备**（server-side validation / qualification / 授权就绪 / filing route 决策 / immutable snapshot / 内部工作流状态）；**不调用 C18 provider、不执行 filing**：`filingSubmitted=false`、`externalWritePerformed=false`、`transportEnabled=false`、`externalExecutionStatus=NOT_STARTED`。
+- Action Guard：动作 `customs.recovery.start`（`INTERNAL_WRITE` + `workflow` kill switch）；未注入 Action Guard → fail closed；不启用 `TRANSPORT`。
+- client 不得提供 `recoverableAmount` / `classification` / `eligibility` / `ruleVersion` / `ior` / `claimant` / `broker` / `packageDigest` / `feeRate` / `filingRoute` / `deadline` / 身份字段（出现即 400 `INVALID_REQUEST`）。
+- 状态映射：400 `INVALID_REQUEST`；403 `CAPABILITY_REQUIRED`；404 `OPPORTUNITY_NOT_FOUND`（anti-enumeration）；409 `ENTRY_FACT_MISSING` / `EVIDENCE_INCOMPLETE` / `NOT_ELIGIBLE` / `AMOUNT_NOT_READY` / `REMEDY_ROUTE_MISSING` / `DEADLINE_PASSED` / `PACKAGE_NOT_READY` / `AUTHORIZATION_NOT_READY` / `FILING_CAPABILITY_MISSING`。
+- 读模型不含 credential / broker secret / authority token / raw PII；状态与来源等级分离（`USER_REPORTED` / `PROVIDER_VERIFIED` / `AUTHORITY_VERIFIED`），禁止 `submitted → accepted`、`APPROVED → PAID` 的隐含升级。
+- 边界：真实 customs filing = `HOLD_EXTERNAL` / `HOST APPROVAL REQUIRED`；`Payment = 0` / `collection = OFF` / 无生产凭据。
