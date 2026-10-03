@@ -1,6 +1,6 @@
 {
   "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。",
-  "updatedAt": "2026-10-03T14:45:21.400Z",
+  "updatedAt": "2026-10-03T14:50:44.905Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -162,6 +162,62 @@
       "boundary": "SKIP_AND_REGISTER_ONLY",
       "required_tests": [],
       "template": "host-required-register"
+    },
+    {
+      "id": "BG-007-evidence-graph-closure-evidence",
+      "priority": "P2",
+      "source_backlog_id": "REGISTER-A6（Evidence / Recovery Graph PARTIAL）",
+      "title": "Evidence / Recovery Graph 证据层现状核对（evidence artifact / promotion / POD evidence）",
+      "scope": "核对 evidence 层与图结构相关套件当前实现状态并留档",
+      "acceptance_criteria": "evidence 相关套件全绿；证据写入 RUN_LOG",
+      "dependencies": [],
+      "risk_class": "LOW",
+      "ARCH_REVIEW_REQUIRED": false,
+      "HOST_ACTION_REQUIRED": false,
+      "HOLD_EXTERNAL": true,
+      "allowed_files": [
+        "apps/api/src/**（只读测试）",
+        ".autopilot/RUN_LOG.md"
+      ],
+      "boundary": "READ_ONLY",
+      "required_tests": [
+        "evidence",
+        "pod-evidence",
+        "canonical"
+      ],
+      "template": "suite-evidence",
+      "filters": [
+        "evidence",
+        "pod-evidence",
+        "canonical"
+      ]
+    },
+    {
+      "id": "BG-008-platform-write-amazon-evidence",
+      "priority": "P2",
+      "source_backlog_id": "REGISTER-A1/A10（Platform Recovery + Action Guard PARTIAL）",
+      "title": "Platform write 账本与 Amazon 只读 adapter 证据核对",
+      "scope": "核对 platform.write 账本（CAS/no-blind-retry）与 Amazon 只读 adapter 现状并留档",
+      "acceptance_criteria": "platform-write / amazon 相关套件全绿；零外写",
+      "dependencies": [],
+      "risk_class": "MEDIUM",
+      "ARCH_REVIEW_REQUIRED": false,
+      "HOST_ACTION_REQUIRED": false,
+      "HOLD_EXTERNAL": true,
+      "allowed_files": [
+        "apps/api/src/**（只读测试）",
+        ".autopilot/RUN_LOG.md"
+      ],
+      "boundary": "NO_EXTERNAL_WRITE / NO_PRODUCTION_CREDENTIALS",
+      "required_tests": [
+        "platform-write",
+        "amazon"
+      ],
+      "template": "suite-evidence",
+      "filters": [
+        "platform-write",
+        "amazon"
+      ]
     }
   ]
 }

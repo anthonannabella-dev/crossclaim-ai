@@ -54,7 +54,7 @@
   "last_action": "GLOBAL BACKLOG DISPATCHER 落地并验收：静态单元耗尽后自动 materialize 并执行 backlog（BG-001 72 用例 / BG-002 132 用例 / BG-005 19 用例）",
   "last_action_at": "2026-10-03T14:17:18.723Z",
   "next_action": "继续消费 SAFE_CONTINUATION_QUEUE：BG-003 / BG-004；BG-006（Production Candidate 预检）为 HOST_ACTION_REQUIRED，已登记并跳过",
-  "current_head": "40d66fc",
+  "current_head": "f7768ec",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -4870,14 +4870,16 @@
     "BG-002-settlement-billing-linkage-evidence",
     "BG-005-customs-g4-evidence-chain-verification",
     "BG-003-dashboard-ops-readonly-evidence",
-    "BG-004-docs-release-evidence-sync"
+    "BG-004-docs-release-evidence-sync",
+    "BG-007-evidence-graph-closure-evidence",
+    "BG-008-platform-write-amazon-evidence"
   ],
   "last_unit": {
-    "id": "BG-004-docs-release-evidence-sync",
-    "at": "2026-10-03T14:49:18.098Z",
-    "head_before": "40d66fc",
-    "head_after": "40d66fc",
-    "detail": "BG-004-docs-release-evidence-sync doc-sync=OK"
+    "id": "BG-008-platform-write-amazon-evidence",
+    "at": "2026-10-03T14:51:38.698Z",
+    "head_before": "f7768ec",
+    "head_after": "f7768ec",
+    "detail": " Test Files  10 passed (10) |       Tests  97 passed (97)"
   },
   "autopilot_mode": "CONTINUOUS",
   "heartbeat_role": "LIVENESS_ONLY",
@@ -4909,7 +4911,9 @@
     "BG-002-settlement-billing-linkage-evidence",
     "BG-005-customs-g4-evidence-chain-verification",
     "BG-003-dashboard-ops-readonly-evidence",
-    "BG-004-docs-release-evidence-sync"
+    "BG-004-docs-release-evidence-sync",
+    "BG-007-evidence-graph-closure-evidence",
+    "BG-008-platform-write-amazon-evidence"
   ],
   "host_action_required": [
     "BG-006-production-candidate-preflight"
@@ -4919,7 +4923,9 @@
     "BG-002-settlement-billing-linkage-evidence",
     "BG-005-customs-g4-evidence-chain-verification",
     "BG-003-dashboard-ops-readonly-evidence",
-    "BG-004-docs-release-evidence-sync"
+    "BG-004-docs-release-evidence-sync",
+    "BG-007-evidence-graph-closure-evidence",
+    "BG-008-platform-write-amazon-evidence"
   ],
   "runner_status": "RUNNING",
   "global_backlog_dispatcher": "VERIFIED",

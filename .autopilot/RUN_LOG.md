@@ -1600,3 +1600,11 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 
 ## 2026-10-03T14:49:18.065Z — BACKLOG BG-004-docs-release-evidence-sync
 - BG-004-docs-release-evidence-sync doc-sync=OK
+
+## 2026-10-03T14:51:24.366Z — BACKLOG BG-007-evidence-graph-closure-evidence
+- Evidence / Recovery Graph 证据层现状核对（evidence artifact / promotion / POD evidence）
+-  Test Files  13 passed (13) |       Tests  71 passed (71)
+
+## 2026-10-03T14:51:38.664Z — BACKLOG BG-008-platform-write-amazon-evidence
+- Platform write 账本与 Amazon 只读 adapter 证据核对
+-  Test Files  10 passed (10) |       Tests  97 passed (97)

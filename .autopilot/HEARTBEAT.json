@@ -1,8 +1,8 @@
 {
   "runner_status": "RUNNING",
   "current_gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "current_task": "BG-004-docs-release-evidence-sync",
-  "current_head": "40d66fc",
+  "current_task": "BG-008-platform-write-amazon-evidence",
+  "current_head": "f7768ec",
   "last_action": "A3 PASS（MSG-20261003-132 已归档 FULL_COPY_OK）→ A/B 及 P0 BUSINESS SURVIVAL GATES 正式 CLOSED；登记表与 STATE 已更新",
   "last_action_at": "2026-10-03T14:11:19.424Z",
   "next_action": "读 3c5fac6 CI（红则 SELF_RESOLVE）并补记 CI-confirmed；随后按 MASTER GAP CLOSURE 取下一内部缺口（重算差集：平台域 / 物流域 / 独立站支付域尚未闭环的内部链）",
@@ -12,7 +12,7 @@
   "remaining_tasks": 13,
   "automation_status": "ACTIVE",
   "interval_minutes": 5,
-  "tick_at": "2026-10-03T14:49:18.101Z",
+  "tick_at": "2026-10-03T14:51:38.702Z",
   "schedule_stale_previous": false,
   "state_machine": "CONTINUOUS",
   "continue_required": true,
@@ -252,8 +252,8 @@
     "production_credentials": "HOST_ONLY"
   },
   "remaining_units": 0,
-  "runner_pid": 20684,
+  "runner_pid": 44888,
   "mode": "CONTINUOUS",
-  "last_unit": "BG-004-docs-release-evidence-sync",
-  "last_unit_at": "2026-10-03T14:49:18.100Z"
+  "last_unit": "BG-008-platform-write-amazon-evidence",
+  "last_unit_at": "2026-10-03T14:51:38.701Z"
 }
