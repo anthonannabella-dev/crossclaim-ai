@@ -1,5 +1,10 @@
 /**
  * CARRIER QUEUE #6（MSG-20261003-111 ⑤）— SLA Evidence Assembly / Eligibility Input Plane。
+ * CARRIER QUEUE #6 FINAL（MSG-20261003-112 ⑫⑬⑭⑮⑯⑱⑲）— EVIDENCE FACT / CONFLICT SEMANTICS：
+ *   · promisedDeliveryAt 只取自 tracking.estimatedDeliveryAt；不得用 shipDate 替代，也不得用 slaCommitmentHours 在本层推算 deadline。
+ *   · deliveryTimes 暴露 tracking / POD 两个交付时间来源；冲突 → DELIVERY_TIME_CONFLICT 且 actualDeliveryAt = null（不静默择一）。
+ *   · serviceLevel 冲突 → SERVICE_LEVEL_CONFLICT 且 serviceLevel = null（同时暴露 trackingServiceLevel / termsServiceLevel）。
+ *   · completeness（证据类型是否齐备）与 evidenceConflicts（证据是否互相一致）相互独立；conflict 不得塞进 missingEvidence。
  * ---------------------------------------------------------------
  * 目标：把已存在的只读事实（tracking / invoice / POD / carrier terms / service level）装配为一个**证据输入包**，
  *       供后续 eligibility evaluation 消费 —— **不是** claim submission。
@@ -37,6 +42,13 @@ export const SHIPMENT_EVIDENCE_GAPS = [
 ] as const;
 export type ShipmentEvidenceGap = (typeof SHIPMENT_EVIDENCE_GAPS)[number];
 
+/** 证据互相冲突（≠ 证据缺失）：只暴露冲突，不在证据层裁决“谁更可信”（MSG-112 ⑱⑲）。 */
+export const SHIPMENT_EVIDENCE_CONFLICTS = [
+  'DELIVERY_TIME_CONFLICT',
+  'SERVICE_LEVEL_CONFLICT',
+] as const;
+export type ShipmentEvidenceConflict = (typeof SHIPMENT_EVIDENCE_CONFLICTS)[number];
+
 export interface CarrierBilledTotal {
   currency: string;
   totalCharge: string;
@@ -49,13 +61,24 @@ export interface CarrierBilledTotal {
   deltaFromComponents: string | null;
 }
 
+/** 交付时间来源（两类只读事实各自保留；证据层不择一）。 */
+export interface ShipmentEvidenceDeliveryTimes {
+  trackingDeliveredAt: string | null;
+  podDeliveredAt: string | null;
+}
+
 /** 供 eligibility evaluation 使用的**证据**输入（不含任何判定结论）。 */
 export interface ShipmentEvidenceSlaInputs {
   promisedDeliveryAt: string | null;
   actualDeliveryAt: string | null;
+  /** tracking / POD 各自的交付时间事实（冲突时 actualDeliveryAt 为 null）。 */
+  deliveryTimes: ShipmentEvidenceDeliveryTimes;
   exceptionOrDelayObserved: boolean;
   scanEventCount: number;
+  /** 仅在 tracking / terms 一致（或仅一方有值）时为 canonical value；冲突时为 null。 */
   serviceLevel: string | null;
+  trackingServiceLevel: string | null;
+  termsServiceLevel: string | null;
   slaCommitmentHours: number | null;
   billedTotals: readonly CarrierBilledTotal[];
 }
@@ -68,6 +91,8 @@ export interface ShipmentEvidenceBundle {
   trackingNumber: string;
   completeness: 'COMPLETE' | 'PARTIAL';
   missingEvidence: readonly ShipmentEvidenceGap[];
+  /** 证据互相冲突；与 completeness 独立（COMPLETE + SERVICE_LEVEL_CONFLICT 为合法状态）。 */
+  evidenceConflicts: readonly ShipmentEvidenceConflict[];
   tracking: CarrierTrackingSnapshot;
   invoices: readonly CarrierInvoiceFact[];
   pod: CarrierPODFact | null;
@@ -180,6 +205,30 @@ export function assembleShipmentEvidence(
   const observedAt = (options.now ?? (() => new Date()))().toISOString();
   const bundleId = ['carrier-evidence', provider, externalAccountId, trackingNumber, ...invoiceReferences, ...evidenceReferences].join('|');
 
+  // MSG-112 ⑬⑭ CHANGE B：交付时间冲突必须暴露，证据层不得裁定“谁更可信”。
+  const trackingDeliveredAt = tracking.deliveredAt ?? null;
+  const podDeliveredAt = pod?.deliveredAt ?? null;
+  const deliveryTimes: ShipmentEvidenceDeliveryTimes = { trackingDeliveredAt, podDeliveredAt };
+  const deliveryTimeConflict =
+    trackingDeliveredAt !== null && podDeliveredAt !== null && trackingDeliveredAt !== podDeliveredAt;
+  const actualDeliveryAt = deliveryTimeConflict
+    ? null
+    : trackingDeliveredAt !== null && podDeliveredAt !== null
+      ? trackingDeliveredAt
+      : trackingDeliveredAt ?? podDeliveredAt;
+
+  // MSG-112 ⑮⑯ CHANGE C：service level 冲突必须暴露，证据层不得静默覆盖。
+  const trackingServiceLevel = tracking.serviceLevel ?? null;
+  const termsServiceLevel = terms?.serviceLevel ?? null;
+  const serviceLevelConflict =
+    trackingServiceLevel !== null && termsServiceLevel !== null && trackingServiceLevel !== termsServiceLevel;
+  const serviceLevel = serviceLevelConflict ? null : termsServiceLevel ?? trackingServiceLevel;
+
+  // MSG-112 ⑱：conflict 与 missing evidence 分离。
+  const evidenceConflicts: ShipmentEvidenceConflict[] = [];
+  if (deliveryTimeConflict) evidenceConflicts.push('DELIVERY_TIME_CONFLICT');
+  if (serviceLevelConflict) evidenceConflicts.push('SERVICE_LEVEL_CONFLICT');
+
   return {
     ok: true,
     bundle: {
@@ -190,18 +239,21 @@ export function assembleShipmentEvidence(
       trackingNumber,
       completeness: missing.length === 0 ? 'COMPLETE' : 'PARTIAL',
       missingEvidence: missing,
+      evidenceConflicts,
       tracking,
       invoices,
       pod,
       terms,
       slaInputs: {
-        promisedDeliveryAt: terms?.slaCommitmentHours != null
-          ? [tracking.shipDate, tracking.estimatedDeliveryAt].find((value) => value !== null) ?? tracking.estimatedDeliveryAt
-          : tracking.estimatedDeliveryAt,
-        actualDeliveryAt: tracking.deliveredAt ?? pod?.deliveredAt ?? null,
+        // MSG-112 ⑫ CHANGE A：只绑定真实已存在的承诺/预计送达事实；slaCommitmentHours 仅作独立 evidence input。
+        promisedDeliveryAt: tracking.estimatedDeliveryAt ?? null,
+        actualDeliveryAt,
+        deliveryTimes,
         exceptionOrDelayObserved,
         scanEventCount: tracking.events.length,
-        serviceLevel: terms?.serviceLevel ?? tracking.serviceLevel ?? null,
+        serviceLevel,
+        trackingServiceLevel,
+        termsServiceLevel,
         slaCommitmentHours: terms?.slaCommitmentHours ?? null,
         billedTotals,
       },

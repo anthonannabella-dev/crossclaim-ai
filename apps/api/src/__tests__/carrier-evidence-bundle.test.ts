@@ -195,3 +195,121 @@ describe('CARRIER QUEUE #6 — evidence assembly', () => {
 afterEach(() => {
   vi.unstubAllGlobals();
 });
+
+describe('CARRIER QUEUE #6 FINAL — EVIDENCE FACT / CONFLICT SEMANTICS（MSG-20261003-112 ⑫–⑲㉒）', () => {
+  it('⑫ CHANGE A：slaCommitmentHours != null 时 shipDate 不得成为 promisedDeliveryAt', () => {
+    const outcome = assemble({ terms: { ...TERMS, slaCommitmentHours: 72, serviceLevel: 'GROUND' } });
+    if (!outcome.ok) throw new Error('expected ok');
+    expect(outcome.bundle.slaInputs.promisedDeliveryAt).toBe('2026-10-01T12:00:00.000Z');
+    expect(outcome.bundle.slaInputs.promisedDeliveryAt).not.toBe(TRACKING_FACT.shipDate);
+    expect(outcome.bundle.slaInputs.promisedDeliveryAt).not.toBe('2026-09-28');
+    // slaCommitmentHours 仍作为独立 evidence input 保留（不被用于推算 deadline）
+    expect(outcome.bundle.slaInputs.slaCommitmentHours).toBe(72);
+  });
+
+  it('⑫：estimatedDeliveryAt 存在 → promisedDeliveryAt = estimatedDeliveryAt', () => {
+    const outcome = assemble();
+    if (!outcome.ok) throw new Error('expected ok');
+    expect(outcome.bundle.slaInputs.promisedDeliveryAt).toBe(TRACKING_FACT.estimatedDeliveryAt);
+  });
+
+  it('⑫：estimatedDeliveryAt = null → promisedDeliveryAt = null（即使 slaCommitmentHours 存在）', () => {
+    const outcome = assemble({ tracking: { ...TRACKING_FACT, estimatedDeliveryAt: null }, terms: { ...TERMS, slaCommitmentHours: 48 } });
+    if (!outcome.ok) throw new Error('expected ok');
+    expect(outcome.bundle.slaInputs.promisedDeliveryAt).toBeNull();
+    expect(outcome.bundle.slaInputs.slaCommitmentHours).toBe(48);
+    expect(outcome.bundle.slaInputs.promisedDeliveryAt).not.toBe(TRACKING_FACT.shipDate);
+  });
+
+  it('⑭ CHANGE B：仅 tracking deliveredAt → actualDeliveryAt = tracking 值（无冲突）', () => {
+    const outcome = assemble({ pod: { ...POD, deliveredAt: null } });
+    if (!outcome.ok) throw new Error('expected ok');
+    expect(outcome.bundle.slaInputs.actualDeliveryAt).toBe("2026-10-01T14:00:00.000Z");
+    expect(outcome.bundle.slaInputs.deliveryTimes).toEqual({ trackingDeliveredAt: "2026-10-01T14:00:00.000Z", podDeliveredAt: null });
+    expect(outcome.bundle.evidenceConflicts).toEqual([]);
+  });
+
+  it('⑭：仅 POD deliveredAt → actualDeliveryAt = POD 值（无冲突）', () => {
+    const outcome = assemble({ tracking: { ...TRACKING_FACT, deliveredAt: null } });
+    if (!outcome.ok) throw new Error('expected ok');
+    expect(outcome.bundle.slaInputs.actualDeliveryAt).toBe("2026-10-01T14:00:00.000Z");
+    expect(outcome.bundle.slaInputs.deliveryTimes).toEqual({ trackingDeliveredAt: null, podDeliveredAt: "2026-10-01T14:00:00.000Z" });
+    expect(outcome.bundle.evidenceConflicts).toEqual([]);
+  });
+
+  it('⑭：tracking / POD deliveredAt 一致 → actualDeliveryAt 输出该值', () => {
+    const outcome = assemble({ pod: { ...POD, deliveredAt: '2026-10-01T14:00:00.000Z' } });
+    if (!outcome.ok) throw new Error('expected ok');
+    expect(outcome.bundle.slaInputs.actualDeliveryAt).toBe('2026-10-01T14:00:00.000Z');
+    expect(outcome.bundle.evidenceConflicts).toEqual([]);
+  });
+
+  it('⑭：tracking / POD deliveredAt 冲突 → DELIVERY_TIME_CONFLICT 且不得静默择一', () => {
+    const outcome = assemble({ pod: { ...POD, deliveredAt: '2026-10-01T16:00:00.000Z' } });
+    if (!outcome.ok) throw new Error('expected ok');
+    expect(outcome.bundle.evidenceConflicts).toContain('DELIVERY_TIME_CONFLICT');
+    expect(outcome.bundle.slaInputs.actualDeliveryAt).toBeNull();
+    expect(outcome.bundle.slaInputs.deliveryTimes).toEqual({ trackingDeliveredAt: "2026-10-01T14:00:00.000Z", podDeliveredAt: '2026-10-01T16:00:00.000Z' });
+    expect(outcome.bundle.slaInputs.actualDeliveryAt).not.toBe('2026-10-01T14:00:00.000Z');
+    // 冲突不得被塞进 missing evidence
+    expect(outcome.bundle.missingEvidence).toEqual([]);
+    expect(outcome.bundle.completeness).toBe('COMPLETE');
+  });
+
+  it('⑯ CHANGE C：tracking / terms serviceLevel 一致 → canonical serviceLevel（无冲突）', () => {
+    const outcome = assemble({ tracking: { ...TRACKING_FACT, serviceLevel: 'GROUND' }, terms: { ...TERMS, serviceLevel: 'GROUND' } });
+    if (!outcome.ok) throw new Error('expected ok');
+    expect(outcome.bundle.slaInputs.serviceLevel).toBe('GROUND');
+    expect(outcome.bundle.slaInputs.trackingServiceLevel).toBe('GROUND');
+    expect(outcome.bundle.slaInputs.termsServiceLevel).toBe('GROUND');
+    expect(outcome.bundle.evidenceConflicts).toEqual([]);
+  });
+
+  it('⑯：serviceLevel 冲突 → SERVICE_LEVEL_CONFLICT 且 serviceLevel=null（暴露两来源，不静默覆盖）', () => {
+    const outcome = assemble({ tracking: { ...TRACKING_FACT, serviceLevel: 'GROUND' }, terms: { ...TERMS, serviceLevel: 'EXPRESS' } });
+    if (!outcome.ok) throw new Error('expected ok');
+    expect(outcome.bundle.evidenceConflicts).toContain('SERVICE_LEVEL_CONFLICT');
+    expect(outcome.bundle.slaInputs.serviceLevel).toBeNull();
+    expect(outcome.bundle.slaInputs.trackingServiceLevel).toBe('GROUND');
+    expect(outcome.bundle.slaInputs.termsServiceLevel).toBe('EXPRESS');
+  });
+
+  it('⑲：conflict 与 completeness 独立（COMPLETE + SERVICE_LEVEL_CONFLICT 合法）', () => {
+    const outcome = assemble({ tracking: { ...TRACKING_FACT, serviceLevel: 'GROUND' }, terms: { ...TERMS, serviceLevel: 'EXPRESS' } });
+    if (!outcome.ok) throw new Error('expected ok');
+    expect(outcome.bundle.completeness).toBe('COMPLETE');
+    expect(outcome.bundle.missingEvidence).toEqual([]);
+    expect(outcome.bundle.evidenceConflicts).toEqual(['SERVICE_LEVEL_CONFLICT']);
+  });
+
+  it('⑰：terms effectiveFrom / effectiveTo 仅作 evidence 保留，不做条款适用性判断', () => {
+    const outcome = assemble({ terms: { ...TERMS, effectiveFrom: '2020-01-01', effectiveTo: '2020-12-31' } });
+    if (!outcome.ok) throw new Error('expected ok');
+    expect(outcome.bundle.terms?.effectiveFrom).toBe('2020-01-01');
+    expect(outcome.bundle.terms?.effectiveTo).toBe('2020-12-31');
+    expect(outcome.bundle.slaInputs.serviceLevel).toBe('GROUND');
+    const serialized = JSON.stringify(outcome.bundle);
+    for (const forbidden of ['termsApplicable', 'termsExpired', 'slaEligible']) {
+      expect(serialized).not.toContain(forbidden);
+    }
+  });
+
+  it('㉑ 冲突字段加入后 bundleId 仍 deterministic', () => {
+    const first = assemble({ pod: { ...POD, deliveredAt: '2026-10-01T16:00:00.000Z' } });
+    const second = assemble({ pod: { ...POD, deliveredAt: '2026-10-01T16:00:00.000Z' } });
+    if (!first.ok || !second.ok) throw new Error('expected ok');
+    expect(first.bundle.bundleId).toBe(second.bundle.bundleId);
+  });
+
+  it('⑲：冲突状态下仍不产生任何判定字段', () => {
+    const outcome = assemble({ pod: { ...POD, deliveredAt: '2026-10-01T16:00:00.000Z' }, terms: { ...TERMS, serviceLevel: 'EXPRESS' } });
+    if (!outcome.ok) throw new Error('expected ok');
+    const serialized = JSON.stringify(outcome.bundle);
+    for (const forbidden of ['refundDue', 'slaEligible', 'claimValue', 'recoveryAmount', 'successFee']) {
+      expect(serialized).not.toContain(forbidden);
+    }
+    expect(outcome.bundle.evidenceConflicts).toEqual(['DELIVERY_TIME_CONFLICT', 'SERVICE_LEVEL_CONFLICT']);
+    expect(outcome.bundle.evidenceOnly).toBe(true);
+    expect(outcome.bundle.adjudicationPerformed).toBe(false);
+  });
+});
