@@ -48,6 +48,9 @@ import {
 } from '../action-guard/approval-tx-verify';
 import { ApprovalBoundaryError } from '../action-guard/approval-tx-verify';
 import { createPrismaActionGuardAuditPort } from '../action-guard/runtime-guard-composition';
+import { handleCarrierManualSubmissionRequest } from '../carriers/carrier-manual-submission-http';
+import { createPrismaCarrierManualSubmissionStore } from '../carriers/carrier-manual-submission-prisma-store';
+import { CARRIER_MANUAL_SUBMISSION_ACTION } from '../carriers/carrier-manual-submission';
 import {
   PlatformWriteRequestError,
   requestPlatformWrite,
@@ -211,6 +214,8 @@ const CASE_CLAIM_SUBMIT_PATH = /^\/cases\/([^/]+)\/claim\/submit$/;
 const CASE_CLAIM_PREPARE_PATH = /^\/cases\/([^/]+)\/claim\/prepare$/;
 // ② 下一小批次（MSG-20261001-10 §5）：billing.draft（账单草稿写入 · INTERNAL_WRITE · 无人审批）
 const CASE_BILLING_DRAFT_PATH = /^\/cases\/([^/]+)\/billing\/draft$/;
+// CARRIER QUEUE #9B FINAL（MSG-20261003-119 ㉕）：人工提交记录入口（human attestation；无 carrier 外写）。
+const CARRIER_MANUAL_SUBMISSION_PATH = /^\/carrier-claim-packages\/([^/]+)\/manual-submission$/;
 // ② 下一小批次（MSG-20261001-14 §5）：appeal.submit（Appeal 人工提交 · 独立动作与审批绑定）
 const CASE_APPEAL_SUBMIT_PATH = /^\/cases\/([^/]+)\/appeal\/submit$/;
 // R37 P1（MSG-20261001-22 CHANGE A）：平台真实写回入口（EXTERNAL_WRITE · transport 恒关）
@@ -273,6 +278,10 @@ export interface WorkflowRouteDeps {
   audit?: AuditWriter;
   /** C-0010-C2：结构化安全日志出口（webhook 验签失败、版本不一致等） */
   log?: (event: string, fields: Record<string, unknown>) => void;
+  /** CARRIER QUEUE #9B FINAL：server-side claim package truth（缺省返回 null → 404，不伪造 package）。 */
+  carrierClaimPackages?: import('../carriers/carrier-manual-submission').CarrierClaimPackageSource;
+  /** CARRIER QUEUE #9B FINAL：人工提交记录存储（缺省使用 Prisma/PostgreSQL 实现）。 */
+  carrierManualSubmissionStore?: import('../carriers/carrier-manual-submission').CarrierManualSubmissionStore;
 }
 
 function sendJson(res: ServerResponse, code: number, payload: unknown): void {
@@ -449,6 +458,7 @@ export async function handleWorkflowRequest(
   const caseClaimSubmit = CASE_CLAIM_SUBMIT_PATH.exec(path);
   const caseClaimPrepare = CASE_CLAIM_PREPARE_PATH.exec(path);
   const caseBillingDraft = CASE_BILLING_DRAFT_PATH.exec(path);
+  const carrierManualSubmission = CARRIER_MANUAL_SUBMISSION_PATH.exec(path);
   const caseAppealSubmit = CASE_APPEAL_SUBMIT_PATH.exec(path);
   const casePlatformWrite = CASE_PLATFORM_WRITE_PATH.exec(path);
   const caseRecoveryManualSubmit = CASE_RECOVERY_MANUAL_SUBMIT_PATH.exec(path);
@@ -487,7 +497,7 @@ export async function handleWorkflowRequest(
     adminPermissionMatrix ||
     adminMemberDetail !== null ||
     adminKillSwitch;
-  if (!adminAny && !opportunityList && !caseClaimPackage && !recoveryStates && !recoveryMoney && !accountsPath && !entitlementsPath && !operationsDashboard && !operationsClaims && !operationsRecovery && !review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !paymentReviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !replayPath && !replayReviewPath && !retryDuePath && !retryDueFreezePath && !retryDueReviewPath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim && !caseClaimSubmit && !caseClaimPrepare && !caseBillingDraft && !caseAppealSubmit && !casePlatformWrite && !caseRecoveryManualSubmit && !caseRecoveryManualReference && !caseRecoveryManualApproval && !caseRecoveryManualReferenceApproval &&
+  if (!adminAny && !opportunityList && !caseClaimPackage && !recoveryStates && !recoveryMoney && !accountsPath && !entitlementsPath && !operationsDashboard && !operationsClaims && !operationsRecovery && !review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !paymentReviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !replayPath && !replayReviewPath && !retryDuePath && !retryDueFreezePath && !retryDueReviewPath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim && !caseClaimSubmit && !caseClaimPrepare && !carrierManualSubmission && !caseBillingDraft && !caseAppealSubmit && !casePlatformWrite && !caseRecoveryManualSubmit && !caseRecoveryManualReference && !caseRecoveryManualApproval && !caseRecoveryManualReferenceApproval &&
     !commercialPoliciesPath &&
     !commercialPolicyPath &&
     !commercialPolicyAcceptPath &&
@@ -1318,6 +1328,52 @@ export async function handleWorkflowRequest(
       sendJson(res, result.httpStatus, result.body);
       return true;
     }
+    // CARRIER QUEUE #9B FINAL（MSG-20261003-119 ㉔㉕㉖㉗）：记录 human attestation（不提交 carrier claim）。
+    if (carrierManualSubmission) {
+      if ((req.method ?? 'GET') !== 'POST') {
+        sendJson(res, 405, { error: 'METHOD_NOT_ALLOWED' });
+        return true;
+      }
+      if (!deps.actionGuard) {
+        // fail closed：受保护入口必须在组合根注入 Action Guard
+        throw new ActionGuardNotConfiguredError(CARRIER_MANUAL_SUBMISSION_ACTION);
+      }
+      await deps.actionGuard.assertAllowed({
+        action: CARRIER_MANUAL_SUBMISSION_ACTION,
+        actorUserId: actor.actorUserId,
+        organizationId: actor.organizationId,
+      });
+      const body = await readJsonBody(req);
+      const result = await handleCarrierManualSubmissionRequest(
+        {
+          packageId: carrierManualSubmission[1] ?? '',
+          request: {
+            ...(typeof body.carrierReference === 'string' ? { carrierReference: body.carrierReference } : {}),
+            ...(typeof body.reportedCarrierSubmissionAt === 'string'
+              ? { reportedCarrierSubmissionAt: body.reportedCarrierSubmissionAt }
+              : {}),
+            ...(typeof body.note === 'string' ? { note: body.note } : {}),
+          },
+          // ㉓：身份一律 server-derived（client 只能提交上述三个业务字段）。
+          session: {
+            organizationId: actor.organizationId,
+            actorUserId: actor.actorUserId,
+            role: actor.role,
+          },
+        },
+        {
+          // ㉓㉔㉕：package truth 由服务端提供；本批次尚无持久 package 实体 → 缺省 404（不伪造）。
+          packages: deps.carrierClaimPackages ?? { async load() { return null; } },
+          store: deps.carrierManualSubmissionStore ?? createPrismaCarrierManualSubmissionStore(deps.prisma),
+          // store 已在同一事务内写入 business audit（handlesAuditAtomically），此处无需再 emit。
+          audit: { async emit() {} },
+          now: deps.now ?? (() => new Date()),
+        },
+      );
+      sendJson(res, result.status, result.body);
+      return true;
+    }
+
     if (caseBillingDraft) {
       // ② 下一小批次：账单草稿写入（受保护动作 billing.draft · INTERNAL_WRITE）
       const body = await readJsonBody(req);

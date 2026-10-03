@@ -26,6 +26,9 @@ import type { CarrierClaimPackage } from './carrier-claim-package';
 /** ⑲㉔ 记录人工提交所需的 capability（走既有 RBAC / Action Guard 模式）。 */
 export const CARRIER_MANUAL_SUBMISSION_CAPABILITY = 'carrier.claim_package.manual_submission.record';
 
+/** ㉗ Action Guard 动作名（已注册：INTERNAL_WRITE + workflow kill switch + enforced actions）。 */
+export const CARRIER_MANUAL_SUBMISSION_ACTION = 'carrier.manual_submission.record';
+
 /** ㉗ 审计事件名（不使用 CLAIM_SUBMITTED_CONFIRMED）。 */
 export const CARRIER_MANUAL_SUBMISSION_AUDIT_EVENT = 'carrier.manual_submission_recorded';
 
