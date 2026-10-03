@@ -1,20 +1,20 @@
 {
-  "generated_at": "2026-10-03T17:02:17.223Z",
+  "generated_at": "2026-10-03T17:06:46.781Z",
   "rule": "COVERED 需存在命名证据文件；否则 GAP",
   "domains": [
     {
       "id": "platform",
       "name": "Platform Recovery",
-      "domain_test_files": 12,
+      "domain_test_files": 13,
       "domain_web_files": 11,
       "cells": {
         "http": {
           "status": "COVERED",
           "evidence": [
             "apps/api/src/__tests__/platform-qualification-read.test.ts",
+            "apps/api/src/__tests__/platform-qualification-runtime-http-e2e-db.test.ts",
             "apps/api/src/__tests__/platform-write-golden-path-db.test.ts",
-            "apps/api/src/__tests__/platform-write-http-db.test.ts",
-            "apps/api/src/__tests__/platform-write-orchestrator-db.test.ts"
+            "apps/api/src/__tests__/platform-write-http-db.test.ts"
           ]
         },
         "persistence": {
@@ -23,7 +23,7 @@
             "apps/api/src/__tests__/amazon-sp-connector-runner-db.test.ts",
             "apps/api/src/__tests__/c2-platform-account-identity-db.test.ts",
             "apps/api/src/__tests__/platform-qualification-read.test.ts",
-            "apps/api/src/__tests__/platform-write-golden-path-db.test.ts"
+            "apps/api/src/__tests__/platform-qualification-runtime-http-e2e-db.test.ts"
           ]
         },
         "db_invariant": {
@@ -36,7 +36,8 @@
           "status": "COVERED",
           "evidence": [
             "apps/web/app/integration-status/page.tsx",
-            "apps/web/app/platform-recovery-state/page.tsx"
+            "apps/web/app/platform-recovery-state/page.tsx",
+            "apps/api/src/__tests__/platform-qualification-runtime-http-e2e-db.test.ts"
           ]
         },
         "happy": {
@@ -97,8 +98,8 @@
           "evidence": [
             "apps/api/src/__tests__/amazon-sp-connector-runner-db.test.ts",
             "apps/api/src/__tests__/platform-qualification-read.test.ts",
-            "apps/api/src/__tests__/platform-write-golden-path-db.test.ts",
-            "apps/api/src/__tests__/platform-write-http-db.test.ts"
+            "apps/api/src/__tests__/platform-qualification-runtime-http-e2e-db.test.ts",
+            "apps/api/src/__tests__/platform-write-golden-path-db.test.ts"
           ]
         },
         "amount_ledger": {
@@ -106,8 +107,8 @@
           "evidence": [
             "apps/api/src/__tests__/amazon-sp-connector-runner-db.test.ts",
             "apps/api/src/__tests__/platform-qualification-read.test.ts",
-            "apps/api/src/__tests__/platform-write-golden-path-db.test.ts",
-            "apps/api/src/__tests__/platform-write-http-db.test.ts"
+            "apps/api/src/__tests__/platform-qualification-runtime-http-e2e-db.test.ts",
+            "apps/api/src/__tests__/platform-write-golden-path-db.test.ts"
           ]
         }
       }
@@ -338,13 +339,14 @@
     {
       "id": "independent_site",
       "name": "Independent-site / Chargeback",
-      "domain_test_files": 5,
+      "domain_test_files": 6,
       "domain_web_files": 2,
       "cells": {
         "http": {
           "status": "COVERED",
           "evidence": [
             "apps/api/src/__tests__/independent-site-internal-closure.test.ts",
+            "apps/api/src/__tests__/independent-site-phase1-runtime-http-e2e-db.test.ts",
             "apps/api/src/__tests__/independent-site-state-read.test.ts"
           ]
         },
@@ -353,6 +355,7 @@
           "evidence": [
             "apps/api/src/__tests__/independent-site-facts-db.test.ts",
             "apps/api/src/__tests__/independent-site-internal-closure.test.ts",
+            "apps/api/src/__tests__/independent-site-phase1-runtime-http-e2e-db.test.ts",
             "apps/api/src/__tests__/ps04-phase1-projection.test.ts"
           ]
         },
@@ -361,13 +364,15 @@
           "evidence": [
             "apps/api/src/__tests__/independent-site-facts-db.test.ts",
             "apps/api/src/__tests__/independent-site-internal-closure.test.ts",
+            "apps/api/src/__tests__/independent-site-phase1-runtime-http-e2e-db.test.ts",
             "apps/api/src/__tests__/ps04-phase1-projection.test.ts"
           ]
         },
         "frontend": {
           "status": "COVERED",
           "evidence": [
-            "apps/web/app/integration-status/page.tsx"
+            "apps/web/app/integration-status/page.tsx",
+            "apps/api/src/__tests__/independent-site-phase1-runtime-http-e2e-db.test.ts"
           ]
         },
         "happy": {
@@ -376,7 +381,7 @@
             "apps/api/src/__tests__/chargeback-recovery-chain.test.ts",
             "apps/api/src/__tests__/independent-site-facts-db.test.ts",
             "apps/api/src/__tests__/independent-site-internal-closure.test.ts",
-            "apps/api/src/__tests__/independent-site-state-read.test.ts"
+            "apps/api/src/__tests__/independent-site-phase1-runtime-http-e2e-db.test.ts"
           ]
         },
         "negative": {
@@ -393,6 +398,7 @@
           "evidence": [
             "apps/api/src/__tests__/independent-site-facts-db.test.ts",
             "apps/api/src/__tests__/independent-site-internal-closure.test.ts",
+            "apps/api/src/__tests__/independent-site-phase1-runtime-http-e2e-db.test.ts",
             "apps/api/src/__tests__/ps04-phase1-projection.test.ts"
           ]
         },
@@ -422,6 +428,7 @@
           "status": "COVERED",
           "evidence": [
             "apps/api/src/__tests__/independent-site-internal-closure.test.ts",
+            "apps/api/src/__tests__/independent-site-phase1-runtime-http-e2e-db.test.ts",
             "apps/api/src/__tests__/independent-site-state-read.test.ts",
             "apps/api/src/__tests__/ps04-phase1-projection.test.ts"
           ]
@@ -432,7 +439,7 @@
             "apps/api/src/__tests__/chargeback-recovery-chain.test.ts",
             "apps/api/src/__tests__/independent-site-facts-db.test.ts",
             "apps/api/src/__tests__/independent-site-internal-closure.test.ts",
-            "apps/api/src/__tests__/independent-site-state-read.test.ts"
+            "apps/api/src/__tests__/independent-site-phase1-runtime-http-e2e-db.test.ts"
           ]
         }
       }

@@ -24,10 +24,10 @@ const OUT_MD = path.join(ROOT, 'docs', 'releases', 'LAYER2-GOLDEN-PATH-MATRIX.md
 const BACKLOG = path.join(ROOT, 'tools', 'autopilot', 'backlog.json');
 
 const DOMAINS = [
-  { id: 'platform', name: 'Platform Recovery', keywords: ['platform', 'amazon'], webTokens: ['claim-package', '/recovery-money'], frontendRequiredTokens: ['qualification'] },
+  { id: 'platform', name: 'Platform Recovery', keywords: ['platform', 'amazon'], webTokens: ['claim-package', '/recovery-money'], frontendRequiredTokens: ['qualification'], frontendRuntimeEvidence: ['platform-qualification-runtime-http-e2e-db.test.ts'] },
   { id: 'logistics_carrier', name: 'Logistics / Carrier Recovery', keywords: ['carrier'], webTokens: ['carrier-claim-packages', 'carrier'] },
   { id: 'customs', name: 'Customs / Trade Recovery', keywords: ['customs'], webTokens: ['customs-opportunities', 'customs-entry-facts'] },
-  { id: 'independent_site', name: 'Independent-site / Chargeback', keywords: ['independent-site', 'chargeback', 'ps04', 'dispute'], webTokens: ['independent', 'chargeback', 'dispute'], frontendRequiredTokens: ['phase1'] },
+  { id: 'independent_site', name: 'Independent-site / Chargeback', keywords: ['independent-site', 'chargeback', 'ps04', 'dispute'], webTokens: ['independent', 'chargeback', 'dispute'], frontendRequiredTokens: ['phase1'], frontendRuntimeEvidence: ['independent-site-phase1-runtime-http-e2e-db.test.ts'] },
 ];
 
 const AXES = [
@@ -95,7 +95,10 @@ for (const domain of DOMAINS) {
   for (const axis of AXES) {
     let evidence = [];
     if (axis.id === 'frontend') {
-      evidence = domainWebWired.map((entry) => entry.file);
+      // CHANGE C/D/E 加严：必须存在**命名的 runtime E2E 证据**，否则「页面写对了但默认 runtime 404」仍会假阳性。
+      const runtimeEvidence = (domain.frontendRuntimeEvidence ?? []).map((file) => 'apps/api/src/__tests__/' + file);
+      const runtimePresent = runtimeEvidence.every((file) => fs.existsSync(path.join(ROOT, file)));
+      evidence = runtimePresent ? domainWebWired.map((entry) => entry.file).concat(runtimeEvidence) : [];
     } else {
       evidence = domainTests.filter((entry) => axis.patterns.some((pattern) => entry.hay.includes(pattern))).map((entry) => entry.file);
     }

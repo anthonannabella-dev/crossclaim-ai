@@ -15,6 +15,9 @@
 
 import http from 'node:http';
 import { PrismaClient } from '@prisma/client';
+import { createPrismaCustomsEntryFactStore } from './services/customs/customs-entry-fact-store';
+import { createPrismaQualificationAssessmentStore } from './services/commercial/recovery-qualification-store';
+import { createPrismaPs04StateLoaders } from './services/independent-site/ps04-state-loaders';
 import { loadEnv } from './config/env';
 import { createLogger, type Logger, type LogLevel } from './config/logger';
 import { checkHealth, healthHttpStatus } from './services/health';
@@ -522,6 +525,22 @@ export interface Runtime {
   audit: AuditWriter | null;
 }
 
+/**
+ * CHANGE C/E（MSG-20261003-142）— **默认只读运行时装配**。
+ * createRuntime 与 runtime E2E 共用同一函数，杜绝「service/HTTP 已实现但 composition root 没接」。
+ * 全部只读：只装配 store / loader，不引入任何外部调用。
+ */
+export function createDefaultReadDeps(prisma: PrismaClient) {
+  const qualificationStore = createPrismaQualificationAssessmentStore(prisma);
+  return {
+    customsEntryFactStore: createPrismaCustomsEntryFactStore(prisma),
+    qualificationRead: {
+      loadLatest: (args: { organizationId: string; platformAccountId: string }) => qualificationStore.loadLatestAssessment(args),
+    },
+    independentSiteState: createPrismaPs04StateLoaders(prisma),
+  };
+}
+
 export function createRuntime(options: RuntimeOptions): Runtime {
   const { env, prisma, log } = options;
 
@@ -548,7 +567,11 @@ export function createRuntime(options: RuntimeOptions): Runtime {
     log.warn('audit_disabled', { reason: 'AUDIT_IP_SALT / STORAGE_URL_SECRET 均未配置' });
   }
 
-  return { server: createServer({ prisma, log, storage, ...(audit ? { audit } : {}) }), storage, audit };
+  return {
+    server: createServer({ prisma, log, storage, ...(audit ? { audit } : {}), ...createDefaultReadDeps(prisma) } as never),
+    storage,
+    audit,
+  };
 }
 
 /* istanbul ignore next -- 入口引导，测试不覆盖 */

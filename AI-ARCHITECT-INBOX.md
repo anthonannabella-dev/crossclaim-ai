@@ -125243,3 +125243,246 @@ Independent-site：Dispute → Qualification → Evidence/Claim-ready → Submit
 
 External Write=HOLD · Real Money=HOLD · Customer Submission=HOLD · Production Credentials=HOST_ONLY。
 ```
+
+### [MSG-20261003-142] BG-019 重新送审 = REVISE（仅 CHANGE C + D + E + runtime E2E guard；Customs/Carrier 维持 CLOSED）
+
+```text
+BG-019 重新送审：REVISE。
+
+CHANGE A、CHANGE B、Matrix Guard 本身都做对了，但独立反查发现还有两个“最后一公里”的真实接线缺口，所以现在还不能把 Platform / Independent-site frontend cell 正式 CLOSED。
+
+Customs：PASS / COVERED / CLOSED
+
+保持上一轮结论，不重开。
+
+Carrier：PASS / COVERED / CLOSED
+
+保持上一轮结论，不重开。
+
+Platform CHANGE A：实现本身 PASS，但运行时接线仍缺一层
+
+platform-qualification-read.test.ts 已证明：
+
+从 RecoveryQualificationAssessmentRecord 读取真实持久化判定；
+QUALIFIED / INDETERMINATE / NOT_QUALIFIED 原样返回；
+policy/version/algorithm/computedAt 可见；
+recomputedOnRead=false；
+cross-tenant / RBAC 正确。
+
+UI 也确实调用：
+
+GET /platform-accounts/:platformAccountId/qualification
+
+并显示 qualification。
+
+但实际 server.ts 中：
+
+TypeScript
+qualificationRead?: ...
+
+只是可选注入。
+
+createRuntime() 当前并没有默认装配它。
+
+workflow 路由缺依赖时又会退化为：
+
+TypeScript
+deps.qualificationRead ?? {
+  async loadLatest() {
+    return null;
+  }
+}
+
+所以默认实际运行路径会得到 404，而不是持久化 qualification。
+
+这正是 Final Acceptance Protocol 要避免的：
+
+“service / HTTP 已实现，但 composition root 没接。”
+
+CHANGE C — Platform runtime composition
+
+在正式 runtime composition 中默认接：
+
+createPrismaQualificationAssessmentStore(prisma)
+→ loadLatestAssessment
+→ qualificationRead
+
+并补一个不手工注入 qualificationRead 的 server/runtime PostgreSQL E2E：
+
+真实登录会话
+→ HTTP GET /platform-accounts/:id/qualification
+→ 200
+→ 返回预先持久化 qualification
+→ 读取前后记录数不变。
+
+Independent-site CHANGE B：Schema / store / read model PASS，但真实 Phase-1 写入链仍未闭合
+
+我确认以下都已经正确：
+
+IndependentSitePhase1Projection 存在；
+append-only；
+resultDigest 幂等；
+latest 推导；
+tenant/immutable trigger；
+DB CHECK 强制：
+externalWritePerformed=false
+autoSubmitAllowed=false
+state endpoint 已支持 loadLatestPhase1Projection；
+UI 已真实显示：
+qualification
+evidence readiness
+claim-ready
+policy/version/algorithm
+computedAt。
+
+但是当前 chargeback-recovery-chain.ts 的真实 Phase-1：
+
+assembleChargebackRecoveryPackage(...)
+
+仍只是返回内存中的 package。
+
+我没有看到它在正常 Phase-1 执行路径结束后调用：
+
+纯文本
+createPrismaPs04Phase1ProjectionStore(...).appendProjection(...)
+
+当前 PG 3/3 是测试直接调用 store.appendProjection() 后再验证 state endpoint 能读到。
+
+所以现在证明的是：
+
+“投影能写、能读、UI 能显示”
+
+但还没有证明：
+
+“用户正常跑一次 Independent-site Phase 1 后，投影会自动产生”。
+
+正常流程下仍有可能一直：
+
+纯文本
+phase1 = null
+notPersisted = [...]
+CHANGE D — Phase-1 producer wiring
+
+把现有 Phase-1 计算结果接到 projection store：
+
+assemble / qualification / evidence / claim-ready
+→ server-side canonical projection
+→ appendProjection()
+
+必须保持幂等：
+
+同一 immutable Phase-1 result → ALREADY_APPENDED
+结果变化 → append 新历史。
+
+然后补真实 PG E2E：
+
+Phase1 input
+→ 执行现有内部链
+→ projection 自动产生
+→ GET /independent-site-disputes/:ref/state
+→ phase1 != null
+→ notPersisted=[]
+
+不能由测试先手工 seed projection。
+
+Independent-site runtime read composition 也要一起补
+
+与 Platform 相同，server.ts 当前：
+
+TypeScript
+independentSiteState?: ...
+
+也是可选 deps。
+
+缺省时 workflow 回退成：
+
+TypeScript
+loadHandoff() => null
+loadLatestResponse() => null
+loadLatestSettlement() => null
+
+而且连 loadLatestPhase1Projection 都不存在。
+
+所以默认 runtime 下 state endpoint 实际也不可用。
+
+CHANGE E — Independent-site runtime composition
+
+正式 composition root 默认装配：
+
+HandoffFact loader
+latest ResponseFact loader
+latest SettlementFact loader
+latest Phase1Projection loader
+
+全部 tenant scoped。
+
+并补不人工注入 independentSiteState 的 runtime HTTP + PostgreSQL E2E。
+
+Matrix Guard：方向 PASS，但还要再加一层
+
+现在 guard 已经从：
+
+有 frontend 文件
+
+升级成：
+
+有 backend 调用 + domain token + qualification/phase1 token
+
+这是明显进步。
+
+但它仍然检测不到上面两个问题：
+
+route 有，但 runtime deps 没装；
+projection store 有，但 producer 没接。
+
+因此 frontend cell 的 CLOSED guard 最好再要求一份命名 E2E 证据，例如：
+
+Platform：
+
+platform-qualification-runtime-http-e2e-db.test.ts
+
+Independent-site：
+
+independent-site-phase1-runtime-http-e2e-db.test.ts
+
+否则 token guard 依然可能出现“页面写对了，但实际默认服务永远 404”的假阳性。
+
+因此本轮编号裁决：
+
+① Customs = PASS / CLOSED
+② Carrier = PASS / CLOSED
+③ Platform Qualification read model + UI = PASS
+④ Independent-site Phase1 schema/store/read/UI = PASS
+⑤ Runtime composition = REVISE
+⑥ Phase1 producer wiring = REVISE
+⑦ Matrix Guard = PASS WITH REVISE
+
+最终：
+
+BG-019 = REVISE（仅 CHANGE C + D + E + runtime E2E guard）
+
+这次已经不是业务逻辑问题，也不用再设计新 Schema。
+
+修完后要证明的只有两条真实链：
+
+纯文本
+Platform persisted qualification
+→ default runtime
+→ HTTP
+→ UI
+
+以及：
+
+纯文本
+Independent-site Phase1 computation
+→ automatic projection persistence
+→ default runtime
+→ HTTP state
+→ UI
+
+这两条一旦跑通，四域 frontend cell 就可以全部判 COVERED / CLOSED，无需继续扩大 UI 范围。
+
+边界仍保持：
+
+External Write=HOLD · Real Money=HOLD · Customer Submission=HOLD · Production Credentials=HOST_ONLY。
+```
