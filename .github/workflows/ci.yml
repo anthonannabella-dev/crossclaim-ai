@@ -92,6 +92,8 @@ jobs:
 
       - name: Verify autopilot persistent rules (.autopilot/RULES.md + rules.json)
         run: node tools/autopilot/check-autopilot-rules.mjs --root .
+      - name: Verify i18n (dictionary parity / blank / status localization / customer hardcode ratchet)
+        run: node tools/i18n/check-i18n.mjs --root .
       - name: Verify acceptance consistency (ACCEPTANCE-MATRIX vs STATE/REGISTER/REPORT)
         run: node tools/autopilot/acceptance-consistency.mjs
 

@@ -14,6 +14,10 @@ const de: Messages = {
     permissionDenied: 'Ihre Rolle darf diesen Inhalt nicht ansehen',
     loadFailed: 'Laden fehlgeschlagen',
     export: 'Exportieren',
+    loading: "Wird geladen…",
+    networkError: "Netzwerkfehler, bitte später erneut versuchen",
+    sessionExpired: "Sitzung abgelaufen, bitte erneut anmelden",
+    retry: "Erneut versuchen",
   },
   nav: {
     dashboard: 'Dashboard',
@@ -187,6 +191,22 @@ const de: Messages = {
     reject: 'Ablehnen',
     reason: 'Ablehnungsgrund (erforderlich)',
     hint: 'Übersteigt eine einzelne Rückforderung den Schwellenwert (oder ist sie nicht in USD), ist vor der Bestätigung des Eingangs eine Freigabe durch OWNER / ADMIN erforderlich.',
+  },
+  status: {
+    DETECTED: "Erkannt",
+    QUALIFIED: "Qualifiziert",
+    REJECTED: "Abgelehnt",
+    CONVERTED: "Umgewandelt",
+    EXPIRED: "Abgelaufen",
+    SUBMITTED: "Eingereicht",
+    APPROVED: "Genehmigt",
+    PAID: "Bezahlt",
+    RECEIVED: "Eingegangen",
+    NEEDS_DATA: "Daten erforderlich",
+    NEEDS_REVIEW: "Prüfung erforderlich",
+    PROCESSING: "In Bearbeitung",
+    FAILED: "Fehlgeschlagen",
+    UNKNOWN: "Unbekannter Status",
   },
 };
 

@@ -14,6 +14,10 @@ const enUS: Messages = {
     permissionDenied: 'Your role cannot view this content',
     loadFailed: 'Failed to load',
     export: 'Export',
+    loading: "Loading…",
+    networkError: "Network error, please try again",
+    sessionExpired: "Session expired, please sign in again",
+    retry: "Retry",
   },
   nav: {
     dashboard: 'Dashboard',
@@ -187,6 +191,22 @@ const enUS: Messages = {
     reject: 'Reject',
     reason: 'Reject reason (required)',
     hint: 'When a single recovery exceeds the threshold (or uses a non-USD currency), an OWNER / ADMIN approval is required before the receipt can be confirmed.',
+  },
+  status: {
+    DETECTED: "Detected",
+    QUALIFIED: "Qualified",
+    REJECTED: "Rejected",
+    CONVERTED: "Converted",
+    EXPIRED: "Expired",
+    SUBMITTED: "Submitted",
+    APPROVED: "Approved",
+    PAID: "Paid",
+    RECEIVED: "Received",
+    NEEDS_DATA: "Needs data",
+    NEEDS_REVIEW: "Needs review",
+    PROCESSING: "Processing",
+    FAILED: "Failed",
+    UNKNOWN: "Unknown status",
   },
 };
 

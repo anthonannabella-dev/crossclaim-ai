@@ -14,6 +14,10 @@ const ja: Messages = {
     permissionDenied: '現在のロールではこの内容を閲覧できません',
     loadFailed: '読み込みに失敗しました',
     export: 'エクスポート',
+    loading: "読み込み中…",
+    networkError: "ネットワークエラーです。しばらくして再試行してください",
+    sessionExpired: "セッションが切れました。再度ログインしてください",
+    retry: "再試行",
   },
   nav: {
     dashboard: 'ダッシュボード',
@@ -187,6 +191,22 @@ const ja: Messages = {
     reject: '却下',
     reason: '却下理由（必須）',
     hint: '1 件の回収額がしきい値を超える場合（または USD 以外の通貨の場合）、入金確認の前に OWNER / ADMIN の承認が必要です。',
+  },
+  status: {
+    DETECTED: "検出済み",
+    QUALIFIED: "適格",
+    REJECTED: "却下",
+    CONVERTED: "成約済み",
+    EXPIRED: "期限切れ",
+    SUBMITTED: "提出済み",
+    APPROVED: "承認済み",
+    PAID: "支払済み",
+    RECEIVED: "入金済み",
+    NEEDS_DATA: "データが必要",
+    NEEDS_REVIEW: "レビューが必要",
+    PROCESSING: "処理中",
+    FAILED: "失敗",
+    UNKNOWN: "不明なステータス",
   },
 };
 

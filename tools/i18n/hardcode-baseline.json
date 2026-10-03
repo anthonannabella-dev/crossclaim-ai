@@ -1,0 +1,18 @@
+{
+  "note": "Customer UI 硬编码棘轮基线：只允许下降。迁移完成后必须同步下调此值。",
+  "customerHardcodedStrings": 169,
+  "recordedAt": "2026-10-04",
+  "scannedRoots": [
+    "apps/web/app/page.tsx",
+    "signup",
+    "login",
+    "accounts",
+    "opportunities",
+    "connections",
+    "money",
+    "billing",
+    "plan",
+    "cases",
+    "upload"
+  ]
+}

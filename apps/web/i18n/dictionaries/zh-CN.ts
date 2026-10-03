@@ -15,6 +15,10 @@ const zhCN = {
     permissionDenied: '当前角色无权查看该内容',
     loadFailed: '读取失败',
     export: '导出',
+    loading: "加载中…",
+    networkError: "网络错误，请稍后重试",
+    sessionExpired: "会话已失效，请重新登录",
+    retry: "重试",
   },
   nav: {
     dashboard: '工作台',
@@ -184,6 +188,22 @@ const zhCN = {
     reject: '驳回',
     reason: '驳回原因（必填）',
     hint: '单笔回收金额超过阈值（或非 USD 币种）时，需 OWNER / ADMIN 复核通过后才能确认到账。',
+  },
+  status: {
+    DETECTED: "已发现",
+    QUALIFIED: "已通过资格判定",
+    REJECTED: "已拒绝",
+    CONVERTED: "已转化",
+    EXPIRED: "已过期",
+    SUBMITTED: "已提交",
+    APPROVED: "已批准",
+    PAID: "已付款",
+    RECEIVED: "已到账",
+    NEEDS_DATA: "需要补充资料",
+    NEEDS_REVIEW: "需要人工复核",
+    PROCESSING: "处理中",
+    FAILED: "失败",
+    UNKNOWN: "未知状态",
   },
 };
 

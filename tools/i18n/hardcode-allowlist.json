@@ -1,0 +1,16 @@
+{
+  "note": "Customer UI 硬编码 guard 的受控 allowlist。仅允许：品牌名、技术标识符、测试 id、enum 字面量所在文件；Customer 文案必须进 dictionary。",
+  "files": [],
+  "patterns": [
+    "CrossClaim AI",
+    "Amazon",
+    "TikTok Shop",
+    "Walmart",
+    "Shopify",
+    "UPS",
+    "FedEx",
+    "DHL",
+    "Stripe",
+    "PayPal"
+  ]
+}

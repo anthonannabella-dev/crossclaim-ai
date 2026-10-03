@@ -14,6 +14,10 @@ const es: Messages = {
     permissionDenied: 'Su rol no puede ver este contenido',
     loadFailed: 'No se pudo cargar',
     export: 'Exportar',
+    loading: "Cargando…",
+    networkError: "Error de red, inténtalo de nuevo",
+    sessionExpired: "Sesión caducada, vuelve a iniciar sesión",
+    retry: "Reintentar",
   },
   nav: {
     dashboard: 'Panel',
@@ -187,6 +191,22 @@ const es: Messages = {
     reject: 'Rechazar',
     reason: 'Motivo del rechazo (obligatorio)',
     hint: 'Cuando una recuperación individual supera el umbral (o no está en USD), se requiere la aprobación de OWNER / ADMIN antes de confirmar el cobro.',
+  },
+  status: {
+    DETECTED: "Detectado",
+    QUALIFIED: "Calificado",
+    REJECTED: "Rechazado",
+    CONVERTED: "Convertido",
+    EXPIRED: "Caducado",
+    SUBMITTED: "Enviado",
+    APPROVED: "Aprobado",
+    PAID: "Pagado",
+    RECEIVED: "Recibido",
+    NEEDS_DATA: "Faltan datos",
+    NEEDS_REVIEW: "Requiere revisión",
+    PROCESSING: "En proceso",
+    FAILED: "Fallido",
+    UNKNOWN: "Estado desconocido",
   },
 };
 
