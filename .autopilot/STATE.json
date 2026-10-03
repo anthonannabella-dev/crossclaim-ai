@@ -51,9 +51,9 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-03T14:11:19.420Z",
   "state": "IMPLEMENT",
-  "last_action": "G9 追加批次：为 FileAsset.mimeType/sourceRef、AuditLog.entityType、SourceTransaction/CanonicalFact.referenceType、RecoveryOpportunity.opportunityType、ClaimItem.claimType/platformType、ExpectedRecoveryBasis.basisSource、ProviderOutcomeFact.sourceRef 补形状/非空 DB 约束（migration 20261003190000），守卫 26/26",
-  "last_action_at": "2026-10-03T13:36:38.439Z",
-  "next_action": "继续 MASTER GAP CLOSURE：读 CI 并取下一内部缺口（候选：Carrier 结果→对账闭环、平台域 adapter 闭环、独立站 chargeback 内部链）",
+  "last_action": "AUTOPILOT 执行模型改造完成并验证：CONTINUOUS runner + singleton lock + watchdog(RECOVERY_ONLY) + CI/审计非阻塞语义；单次启动连续执行 A→B→C 后因队列空停止",
+  "last_action_at": "2026-10-03T14:17:18.723Z",
+  "next_action": "按 GLOBAL BACKLOG 继续下一内部缺口：为 continuous runner 注册新的安全单元（下一条内部链），并保持 heartbeat 仅作 liveness",
   "current_head": "749040c",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
@@ -4855,5 +4855,31 @@
     "p0_business_survival_gates": "PASS / CLOSED（MSG-20261003-132）",
     "ci_note": "3c5fac6 的 CI run 37128253037 待生成结果；架构方已基于代码与回归 PASS，若流程要求可补记 CI-confirmed",
     "closed_at": "2026-10-03T14:06:43.956Z"
+  },
+  "units_completed": [
+    "u1-customs-suite",
+    "u2-full-gates",
+    "u3-ci-triage"
+  ],
+  "last_unit": {
+    "id": "u3-ci-triage",
+    "at": "2026-10-03T14:16:37.586Z",
+    "head_before": "b78f64c",
+    "head_after": "b78f64c",
+    "detail": "pending=0 red=0"
+  },
+  "autopilot_mode": "CONTINUOUS",
+  "heartbeat_role": "LIVENESS_ONLY",
+  "watchdog_role": "RECOVERY_ONLY",
+  "singleton_runner": "VERIFIED",
+  "ci_pending": [],
+  "ci_red": [],
+  "ci_checked_at": "2026-10-03T14:16:37.551Z",
+  "continuous_verification": {
+    "at": "2026-10-03T14:17:18.723Z",
+    "a_to_b_to_c": "VERIFIED（单次启动连续执行 u1→u2→u3，无 heartbeat 唤醒；停止条件 = SAFE_CONTINUATION_QUEUE_EMPTY）",
+    "singleton": "VERIFIED（ACTIVE_RUNNER_PRESENT 时拒绝启动第二实例）",
+    "watchdog": "VERIFIED（RUNNER_HEALTHY 时不重启；无剩余任务不重启；死亡/stale 且有余量才恢复）",
+    "evidence_doc": "docs/releases/AUTOPILOT-CONTINUOUS-MODE.md"
   }
 }

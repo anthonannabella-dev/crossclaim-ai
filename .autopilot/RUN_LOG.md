@@ -1528,3 +1528,25 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 
 ## 2026-10-03T13:32:17.381Z — P0 checkpoint 留档
 - Issue #2 comment 5969656379；待发 ChatGPT 唤醒。
+
+## 2026-10-03T14:15:07.397Z — CONTINUOUS u1-customs-suite
+-  Test Files  9 passed (9) |       Tests  79 passed (79)
+
+## 2026-10-03T14:15:21.977Z — CONTINUOUS u2-full-gates
+- tsc api=OK tsc web=OK api-contract=OK audit-coverage=OK autopilot-rules=OK
+
+## 2026-10-03T14:15:43.399Z — CONTINUOUS u3-ci-triage
+- pending=0 red=0
+
+## 2026-10-03T14:16:22.555Z — CONTINUOUS u1-customs-suite
+-  Test Files  9 passed (9) |       Tests  79 passed (79)
+
+## 2026-10-03T14:16:37.122Z — CONTINUOUS u2-full-gates
+- tsc api=OK tsc web=OK api-contract=OK audit-coverage=OK autopilot-rules=OK
+
+## 2026-10-03T14:16:37.555Z — CONTINUOUS u3-ci-triage
+- pending=0 red=0
+
+## 2026-10-03T14:17:18.723Z — AUTOPILOT CONTINUOUS MODE 落地
+- continuous-runner + singleton lock + watchdog 已实现并验证（A→B→C 单次启动连续执行；SINGLETON_RUNNER=VERIFIED）。
+- 记录：AUTOPILOT_MODE=CONTINUOUS / HEARTBEAT_ROLE=LIVENESS_ONLY / WATCHDOG_ROLE=RECOVERY_ONLY。

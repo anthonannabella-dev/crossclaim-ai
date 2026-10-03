@@ -12,9 +12,9 @@
   "remaining_tasks": 13,
   "automation_status": "ACTIVE",
   "interval_minutes": 5,
-  "tick_at": "2026-10-03T14:11:19.420Z",
+  "tick_at": "2026-10-03T14:16:46.251Z",
   "schedule_stale_previous": false,
-  "state_machine": "IMPLEMENT",
+  "state_machine": "CONTINUOUS",
   "continue_required": true,
   "rules_loaded": true,
   "platform_readiness_policy": {
@@ -250,5 +250,10 @@
     "real_money": false,
     "customer_submission": false,
     "production_credentials": "HOST_ONLY"
-  }
+  },
+  "remaining_units": 0,
+  "runner_pid": 16032,
+  "mode": "CONTINUOUS",
+  "last_unit": "u3-ci-triage",
+  "last_unit_at": "2026-10-03T14:16:37.590Z"
 }
