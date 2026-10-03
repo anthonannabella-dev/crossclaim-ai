@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261003-142",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-03T17:06:46.492Z",
+  "updated_at": "2026-10-03T17:07:28.215Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -51,7 +51,7 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-03T14:11:19.420Z",
   "state": "IMPLEMENT",
-  "last_action": "CHANGE C/D/E 实施：默认 runtime composition + Phase-1 producer + 两个命名 runtime E2E（均通过）",
+  "last_action": "BG-019 checkpoint 3 已送审：Issue #2 comment 5971439869（HEAD 291b5dd）",
   "last_action_at": "2026-10-03T14:17:18.723Z",
   "next_action": "实施 CHANGE C（Platform runtime composition）→ CHANGE D（Phase-1 producer）→ CHANGE E（Independent-site runtime composition）→ guard 加 runtime E2E 证据",
   "current_head": "8902185",
@@ -4988,12 +4988,12 @@
       "④ Production Candidate register only"
     ]
   },
-  "awaiting_verdict": false,
+  "awaiting_verdict": true,
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-03T17:06:46.938Z",
-    "head": "3bd6cae",
-    "acceptance_head": "3bd6cae",
+    "computed_at": "2026-10-03T17:07:28.694Z",
+    "head": "291b5dd",
+    "acceptance_head": "291b5dd",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5058,53 +5058,53 @@
       "L1-03_no_open_markers": {
         "label": "不存在 TODO/IN_PROGRESS/PARTIAL/READY_FOR_REVIEW/WAITING_FOR_VERDICT/未处理 REVISE·BLOCK",
         "status": false,
-        "evidence": "arch_pending=0 awaiting_verdict=false"
+        "evidence": "arch_pending=0 awaiting_verdict=true"
       },
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=3bd6cae ci_head=c07ff84 ci=UNKNOWN run="
+        "evidence": "acceptance_head=291b5dd ci_head=c07ff84 ci=UNKNOWN run="
       },
       "L1-05_pg_regression_passed": {
         "status": "UNVERIFIED",
-        "evidence": "pg_regression recorded at 9e57ba3 ≠ acceptance head 3bd6cae"
+        "evidence": "pg_regression recorded at 9e57ba3 ≠ acceptance head 291b5dd"
       },
       "L1-06_fresh_db_migration_passed": {
         "status": "UNVERIFIED",
-        "evidence": "fresh_db_migration recorded at 9e57ba3 ≠ acceptance head 3bd6cae"
+        "evidence": "fresh_db_migration recorded at 9e57ba3 ≠ acceptance head 291b5dd"
       },
       "L1-07_api_typecheck_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_api recorded at 9e57ba3 ≠ acceptance head 3bd6cae"
+        "evidence": "typecheck_api recorded at 9e57ba3 ≠ acceptance head 291b5dd"
       },
       "L1-08_web_typecheck_build_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_web recorded at 4af3432 ≠ acceptance head 3bd6cae"
+        "evidence": "typecheck_web recorded at 4af3432 ≠ acceptance head 291b5dd"
       },
       "L1-09_no_skipped_critical_tests": {
         "status": "UNVERIFIED",
-        "evidence": "tests_no_skipped recorded at 4af3432 ≠ acceptance head 3bd6cae"
+        "evidence": "tests_no_skipped recorded at 4af3432 ≠ acceptance head 291b5dd"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
         "status": false,
-        "evidence": "dirty entries: 12"
+        "evidence": "dirty entries: 6"
       },
       "L1-11_docs_state_consistent": {
         "status": "UNVERIFIED",
-        "evidence": "docs_sync recorded at 9e57ba3 ≠ acceptance head 3bd6cae"
+        "evidence": "docs_sync recorded at 9e57ba3 ≠ acceptance head 291b5dd"
       },
       "L1-12_schema_invariants_verified": {
         "status": "UNVERIFIED",
-        "evidence": "schema_invariants recorded at 9e57ba3 ≠ acceptance head 3bd6cae"
+        "evidence": "schema_invariants recorded at 9e57ba3 ≠ acceptance head 291b5dd"
       },
       "L1-13_negative_paths_covered": {
         "status": "UNVERIFIED",
-        "evidence": "negative_paths recorded at 9e57ba3 ≠ acceptance head 3bd6cae"
+        "evidence": "negative_paths recorded at 9e57ba3 ≠ acceptance head 291b5dd"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
         "status": "UNVERIFIED",
-        "evidence": "pg_e2e_real recorded at 9e57ba3 ≠ acceptance head 3bd6cae"
+        "evidence": "pg_e2e_real recorded at 9e57ba3 ≠ acceptance head 291b5dd"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
@@ -5374,7 +5374,7 @@
     "boundary": "readOnly / filingSubmitted=false / transportEnabled=false / externalWritePerformed=false / productionCredentials=ABSENT；不重算（读取前后投影行数不变）"
   },
   "bg019": {
-    "status": "CHANGE_C+D+E IMPLEMENTED（待重新送审）",
+    "status": "CHECKPOINT3_SUBMITTED（CHANGE C+D+E）",
     "done": [
       "Carrier response + customs filing status 只读卡片（既有）",
       "Customs entry fact + 四类 latest 投影只读卡片（本轮，消费 BG-020 的 GET /customs-entry-facts/:id）",
@@ -5390,10 +5390,10 @@
       "github_comment_id": "5971280514",
       "verdict": null
     },
-    "wakeup_sent_at": "2026-10-03T17:02:16.949Z",
+    "wakeup_sent_at": "2026-10-03T17:07:28.214Z",
     "wakeup_verification": [
       "composer cleared",
-      "marker 5971358769 at bottom",
+      "marker 5971439869 at bottom",
       "generating"
     ],
     "customs": "COVERED / CLOSED",
@@ -5415,7 +5415,14 @@
     "change_e": "Independent-site runtime composition：默认装配 handoff/response/settlement/phase1 loaders（tenant scoped）；补不手工注入的 runtime HTTP + PG E2E",
     "guard": "matrix frontend 另需命名 runtime E2E 证据（platform-qualification-runtime-http-e2e-db / independent-site-phase1-runtime-http-e2e-db）",
     "runtime_composition": "createDefaultReadDeps(prisma) 已由 createRuntime 默认装配（customsEntryFactStore / qualificationRead / independentSiteState），runtime E2E 不手工注入仍 200",
-    "phase1_producer": "runPs04Phase1：正常执行 Phase-1 → 自动 appendProjection（幂等），runtime HTTP state 读出 phase1 != null、notPersisted=[]"
+    "phase1_producer": "runPs04Phase1：正常执行 Phase-1 → 自动 appendProjection（幂等），runtime HTTP state 读出 phase1 != null、notPersisted=[]",
+    "checkpoint3": {
+      "at": "2026-10-03T17:07:11.249Z",
+      "head": "291b5dd",
+      "doc": "docs/releases/BG019-CHECKPOINT-3-RUNTIME-COMPOSITION.md",
+      "github_comment_id": "5971439869",
+      "verdict": null
+    }
   },
   "bg021": {
     "status": "PASS / CLOSED",
