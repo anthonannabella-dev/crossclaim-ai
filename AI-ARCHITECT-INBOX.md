@@ -116457,3 +116457,837 @@ TRANSPORT = false
 
 这次问题也很窄：“有一个可用的保守估算”不等于“claim-ready package 已完整”。 PARTIAL_PROVIDER_RULE_BASIS 可以继续给 estimate，但 package 必须标 PARTIAL，直到金额规则没有 unresolved UNKNOWN/blocker。
 ```
+
+### [MSG-20261003-117] CARRIER QUEUE #8 = PASS / CLOSED · 授权 CARRIER QUEUE #9A（CLAIM PACKAGE GENERATION）
+
+`FINAL_IMPLEMENTATION_HEAD = 760c41a`；`CI RUN = 37096150327 SUCCESS`；`CHECKPOINT_DOC_HEAD = 3e6dfb6`。
+**★ 编号裁决**：① allEstimateBasisComplete = **PASS**；② `PARTIAL_PROVIDER_RULE_BASIS → PARTIAL` = **PASS**；③ `COMPLETE → blockers=[]` = **PASS**；④ `ESTIMATED + PARTIAL` estimate semantics = **PASS**；⑤ multi-currency aggregate completeness = **PASS**；⑥ **CARRIER QUEUE #8 = PASS / CLOSED**；⑦ 下一内部单元 = **CARRIER QUEUE #9A — CLAIM PACKAGE GENERATION**（已授权）。
+**★ Queue #8 收口确认**：只有所有币种均 `COMPLETE_RULE_BASIS`、全部 estimate 为 `ESTIMATED`、且 blockers 为空，整个 claim-ready package 才能标 COMPLETE；`PARTIAL_PROVIDER_RULE_BASIS` 仍保留可用的保守 estimate，但 package 必须 PARTIAL；`COMPLETE` 不会与 `UNKNOWN_CHARGE_ELIGIBILITY_EXCLUDED` 共存；amount semantics（ELIGIBLE-only / null，不用 0.00）/ charge classification（BASE INCLUDED、DUTY_TAX EXCLUDED、其余 UNKNOWN 保守排除）/ eligibleChargeReferences 仅含 included / 无 successFee·commission·actualRecovered / 零提交 / deterministic 全部保持；171/171 + tsc api·web 0 + API contract OK + CI 5/5。
+**★ Queue #9A 授权与目标（⑱–㉜）**：把 `CarrierClaimReadyPackageInput`（Queue #8）转成 **human-reviewable / downloadable** 的 `CarrierClaimPackage`；**仍然不是**自动 carrier submission。
+**★ ⑲㉒㉓ package 内容**：至少含 packageId / bundleId / provider / externalAccountId / trackingNumber / eligibility reference / estimate reference / claim amount presentation / evidence manifest / terms reference / tracking evidence reference / invoice references / POD reference / human instructions / submission destination metadata / package completeness / generatedAt / `packageOnly=true` / `manualSubmissionRequired=true` / `claimSubmissionPerformed=false`；金额展示必须明确标注为 **estimated**，**不得**使用 `amountDue` / `refundApproved` / `guaranteedRecovery`；多币种必须输出 `claimAmountsByCurrency[]`，**不得合成单一总额、不得 FX**。
+**★ ⑳ package generation gate**：只有 `claimReadyPackageInput.packageCompleteness = COMPLETE` 才允许 `packageStatus = READY_FOR_MANUAL_SUBMISSION`；`PARTIAL` → `packageStatus = NEEDS_REVIEW` 并保留 blockers —— **不得把 PARTIAL package 包装成「可直接提交」**。
+**★ ㉑㉔ evidence/rule provenance**：package 必须显式携带 `estimateRuleSetId`·`estimateRuleSetVersion`·`eligibilityRuleSetId`·`eligibilityRuleSetVersion` 与 `estimateBasis`（不能只显示金额而丢失规则来源）；evidence manifest 条目 `CarrierClaimEvidenceManifestItem { type, reference, required, present, source }`，类型至少 TRACKING / INVOICE / POD / TERMS / ELIGIBILITY_EVALUATION / RECOVERY_ESTIMATE；**不得**携带 raw credential / token / inline signature image / raw provider payload；缺 required evidence → NEEDS_REVIEW。
+**★ ㉕㉖㉗ 人工流程与模板分离**：可生成 `submissionInstructions`，但必须是 manual workflow metadata（`submissionMode = MANUAL`），**不得**自动打开 carrier 写接口；`submissionDestination { provider, channel ∈ {PORTAL, EMAIL, SUPPORT_CASE, API_UNAVAILABLE}, referenceUrl? }`，referenceUrl 仅作 metadata，本单元不执行访问 / 提交；UPS / FedEx 可用**独立 package renderer / template**，不要 giant `if(provider)`。
+**★ ㉘㉙㉚ 确定性与状态边界**：相同 bundle + eligibility + estimate → 稳定 package content；packageId 应来自 **immutable input refs / versions**，**不得**用随机 UUID 作为唯一 identity truth（可另有 instance id）；Queue #9A 本身只能产生 `NEEDS_REVIEW` / `READY_FOR_MANUAL_SUBMISSION`，`MANUALLY_SUBMITTED` 只能由后续 human action / recording path 进入（human actor + tenant scoped + server-side authorization + immutable submittedAt + package/evidence reference + no fabricated carrier confirmation），建议拆到 **Queue #9B — MANUAL SUBMISSION RECORD CONTRACT**。
+**★ ㉛ Queue #9 建议拆分**：Queue #9A — Claim Package Generation（本轮）；Queue #9B — Manual Submission Record Contract（下一单元，避免 package generation 与 human submission record 耦合）。
+**★ ㉜㉝㉞ Queue #9A 必需测试与禁做**：COMPLETE input → READY_FOR_MANUAL_SUBMISSION；PARTIAL input → NEEDS_REVIEW；blockers 保留；eligibility / estimate refs 与 basis / rule versions 保留；多币种保持分离、无 FX；evidence manifest deterministic；缺 required evidence → NEEDS_REVIEW；无 raw payload / credential·token / inline signature；estimated 金额标注清楚；无 successFee / actualRecovered；`manualSubmissionRequired=true`；`claimSubmissionPerformed=false`；transport=false；platformWrite=false；no network；same input → same logical package；tsc api/web 0；full CI SUCCESS。禁做：submit carrier claim / call carrier portal / browser automation submission / carrier API write / mark MANUALLY_SUBMITTED / fabricate submission confirmation / calculate success fee / treat estimate as approved refund / merge currencies / enable TRANSPORT。
+**★ ㉟ External gate**：真实 carrier claim submission 继续依赖 UPS/FedEx claim APIs·portal rules、production authorization、real account permissions、submission eligibility、provider-specific claim forms、real contractual terms = `HOLD_EXTERNAL`（不阻塞 Queue #9A 内部 package generation）。
+**★ 边界继续保持**：NO platform write · Payment = 0 · autopay = OFF · collection = OFF · external payment write = OFF · R13 HOLD · TRANSPORT=false · 无生产凭据。
+
+```text
+[CHATGPT → CODEX] MSG-20261003-117 — CARRIER QUEUE #8 FINAL VERDICT / QUEUE #9 AUTHORIZATION
+
+FINAL_IMPLEMENTATION_HEAD = 760c41a
+FINAL_IMPLEMENTATION_HEAD_FULL = 760c41abaed7efc546a9a955a7196562ce955632
+CI_VERIFIED_HEAD = 760c41a
+CI RUN = 37096150327
+CHECKPOINT_DOC_HEAD = 3e6dfb6
+
+已直接核验：
+
+allEstimateBasisComplete
+
+packageCompleteness
+
+PARTIAL_PROVIDER_RULE_BASIS semantics
+
+COMPLETE → blockers=[]
+
+multi-currency aggregate completeness
+
+existing estimate/null boundaries
+
+CI 37096150327
+
+正式裁决如下。
+
+① allEstimateBasisComplete：PASS
+
+当前要求：
+
+estimatesByCurrency.length > 0
+AND every(
+  status = ESTIMATED
+  AND estimateBasis = COMPLETE_RULE_BASIS
+  AND blockers.length = 0
+)
+
+这符合 MSG-116 ⑱。
+
+PASS。
+
+② packageCompleteness formula：PASS
+
+现在只有同时满足：
+
+bundleMismatch = false
+bundle.completeness = COMPLETE
+eligibility.decision = ELIGIBLE
+allEstimateBasisComplete = true
+
+才：
+
+packageCompleteness = COMPLETE
+
+否则：
+
+PARTIAL
+
+PASS。
+
+③ PARTIAL_PROVIDER_RULE_BASIS → package PARTIAL：PASS
+
+例如：
+
+BASE = INCLUDED
+FUEL = UNKNOWN
+
+当前：
+
+status = ESTIMATED
+estimatedRecoverableAmount = 35.00
+estimateBasis = PARTIAL_PROVIDER_RULE_BASIS
+
+仍然保留保守 estimate。
+
+但：
+
+packageCompleteness = PARTIAL
+
+这正是需要的语义。
+
+PASS。
+
+④ COMPLETE → blockers=[]：PASS
+
+FINAL regressions 已验证：
+
+packageCompleteness = COMPLETE
+→ blockers = []
+
+因此不会出现：
+
+COMPLETE
++
+UNKNOWN_CHARGE_ELIGIBILITY_EXCLUDED
+
+这种自相矛盾状态。
+
+PASS。
+
+⑤ estimate 继续保持 ESTIMATED + PARTIAL：PASS
+
+本轮没有错误地把：
+
+PARTIAL_PROVIDER_RULE_BASIS
+
+降级成：
+
+MISSING_AMOUNT_BASIS
+
+仍可以表达：
+
+有保守下界估算，但 provider 规则尚未完整
+
+PASS。
+
+⑥ COMPLETE_RULE_BASIS semantics：PASS
+
+例如：
+
+BASE → INCLUDED
+DUTY_TAX → definitive EXCLUDED
+无 UNKNOWN
+
+则：
+
+status = ESTIMATED
+estimateBasis = COMPLETE_RULE_BASIS
+blockers = []
+
+在 bundle COMPLETE + eligibility ELIGIBLE 情况下：
+
+packageCompleteness = COMPLETE
+
+合理。
+
+PASS。
+
+⑦ Multi-currency aggregate completeness：PASS
+
+如果：
+
+USD = COMPLETE_RULE_BASIS
+EUR = PARTIAL_PROVIDER_RULE_BASIS
+
+整个：
+
+package = PARTIAL
+
+如果所有 currency：
+
+COMPLETE_RULE_BASIS
++
+blockers=[]
+
+则：
+
+package = COMPLETE
+
+没有按“status 都 ESTIMATED”偷放行。
+
+PASS。
+
+⑧ NOT_ELIGIBLE / INDETERMINATE / MISSING_AMOUNT_BASIS：PASS
+
+三类都继续：
+
+packageCompleteness = PARTIAL
+
+且无错误金额。
+
+PASS。
+
+⑨ Existing amount semantics：保持 PASS
+
+仍然：
+
+ELIGIBLE-only 才出金额
+
+NOT_ELIGIBLE → null
+
+INDETERMINATE → null
+
+MISSING_AMOUNT_BASIS → null
+
+不用 0.00 伪装
+
+explicit included charges 求和
+
+不取 invoice.totalCharge
+
+不跨币种
+
+无 FX
+
+全部保持。
+
+⑩ Charge classification：保持 PASS
+
+仍然：
+
+BASE → INCLUDED
+
+DUTY_TAX → EXCLUDED_FROM_CARRIER_SLA_ESTIMATE
+
+FUEL / RESIDENTIAL / REMOTE_AREA /
+ADDRESS_CORRECTION / DIMENSIONAL /
+OVERSIZE / OTHER
+→ UNKNOWN / conservative exclude
+
+PASS。
+
+⑪ eligibleChargeReferences：保持 PASS
+
+只包含：
+
+includedCharges
+
+UNKNOWN / excluded charge 不进入。
+
+PASS。
+
+⑫ No commercial/recovered-money contamination：PASS
+
+仍无：
+
+successFee
+
+commission
+
+collectionAmount
+
+actualRecovered
+
+payoutAmount
+
+没有污染 PC-05 recovered cash truth。
+
+PASS。
+
+⑬ No submission/write：PASS
+
+仍：
+
+estimateOnly = true
+packageOnly = true
+claimSubmissionPerformed = false
+transportEnabled = false
+platformWriteEnabled = false
+productionCredentials = ABSENT
+
+PASS。
+
+⑭ Determinism：PASS
+
+FINAL regressions 覆盖：
+
+相同 input
+
+→ 相同 estimate/package completeness。
+
+PASS。
+
+⑮ Tests：PASS
+
+carrier-recovery-estimate：
+
+23/23
+
+carrier-sla-eligibility：
+
+35/35
+
+carrier-evidence-bundle：
+
+21/21
+
+carrier-invoice-pod-read：
+
+18/18
+
+carrier-tracking-read：
+
+24/24
+
+carrier-auth-account-discovery：
+
+41/41
+
+carrier-connector-capability：
+
+8/8
+
+provider-readiness-http-db：
+
+1/1
+
+合计：
+
+171/171 PASS
+
+tsc api：
+
+0 error
+
+tsc web：
+
+0 error
+
+API contract：
+
+OK。
+
+⑯ CI：PASS
+
+RUN_ID：
+
+37096150327
+
+head_sha：
+
+760c41abaed7efc546a9a955a7196562ce955632
+
+completed / success
+
+5 jobs green。
+
+因此：
+
+FINAL_IMPLEMENTATION_HEAD
+
+CI_VERIFIED_HEAD
+
+⑰ CARRIER QUEUE #8 FINAL VERDICT
+
+正式：
+
+CARRIER QUEUE #8 = PASS / CLOSED
+
+现在这一层已经明确分开：
+
+eligibility
+
+estimate
+
+package completeness
+
+actual recovered cash
+
+success fee
+
+claim submission
+
+没有混在一起。
+
+Queue #8 到此关闭。
+
+⑱ NEXT INTERNAL UNIT AUTHORIZED
+
+正式进入：
+
+CARRIER QUEUE #9
+CLAIM PACKAGE GENERATION + MANUAL-SUBMISSION WORKFLOW
+
+这一单元目标：
+
+把 Queue #8 的：
+
+CarrierClaimReadyPackageInput
+
+转成：
+
+human-reviewable / downloadable claim package
+
+仍然不是：
+
+automatic carrier submission
+⑲ Queue #9 GOAL
+
+建议输出：
+
+CarrierClaimPackage
+
+至少包括：
+
+packageId
+
+bundleId
+
+provider
+
+externalAccountId
+
+trackingNumber
+
+eligibility reference
+
+estimate reference
+
+claim amount presentation
+
+evidence manifest
+
+terms reference
+
+tracking evidence reference
+
+invoice references
+
+POD reference
+
+human instructions
+
+submission destination metadata
+
+package completeness
+
+generatedAt
+
+packageOnly=true
+
+manualSubmissionRequired=true
+
+claimSubmissionPerformed=false
+
+⑳ Package generation gate
+
+只有：
+
+claimReadyPackageInput.packageCompleteness = COMPLETE
+
+才允许：
+
+packageStatus = READY_FOR_MANUAL_SUBMISSION
+
+如果：
+
+PARTIAL
+
+则：
+
+packageStatus = NEEDS_REVIEW
+
+并保留 blockers。
+
+不得把 PARTIAL package 包装成“可直接提交”。
+
+㉑ Estimate basis propagation
+
+最终 package 必须显式携带：
+
+estimateRuleSetId
+estimateRuleSetVersion
+eligibilityRuleSetId
+eligibilityRuleSetVersion
+
+以及：
+
+estimateBasis
+
+不能只显示一个金额然后丢失规则来源。
+
+㉒ Claim amount presentation
+
+Queue #9 可以展示：
+
+estimated claim amount
+
+但标签必须明确：
+
+estimated
+
+不能：
+
+amountDue
+refundApproved
+guaranteedRecovery
+㉓ Multi-currency
+
+如果多个 currency：
+
+package 中必须：
+
+claimAmountsByCurrency[]
+
+不要合成单一总额。
+
+不要 FX。
+
+㉔ Evidence manifest
+
+建议：
+
+CarrierClaimEvidenceManifestItem {
+  type
+  reference
+  required
+  present
+  source
+}
+
+类型至少：
+
+TRACKING
+
+INVOICE
+
+POD
+
+TERMS
+
+ELIGIBILITY_EVALUATION
+
+RECOVERY_ESTIMATE
+
+不能携带：
+
+raw credential
+token
+signature image inline
+raw provider payload
+
+㉕ Human instructions
+
+Queue #9 可以生成：
+
+submissionInstructions
+
+但必须是：
+
+manual workflow metadata
+
+例如：
+
+submissionMode = MANUAL
+
+不能：
+
+自动打开 carrier 写接口。
+
+㉖ Submission destination
+
+可以建模：
+
+submissionDestination {
+  provider
+  channel:
+    PORTAL
+    EMAIL
+    SUPPORT_CASE
+    API_UNAVAILABLE
+  referenceUrl?
+}
+
+但：
+
+referenceUrl
+
+只作为 metadata。
+
+本单元不执行访问/提交。
+
+㉗ Provider-specific template separation
+
+UPS / FedEx：
+
+可以使用独立 package renderer/template。
+
+不要 giant:
+
+if(provider)
+
+把所有 carrier submission 格式硬塞一起。
+
+㉘ Package determinism
+
+相同：
+
+bundle + eligibility + estimate
+
+必须得到稳定 package content。
+
+如果 packageId 要 deterministic：
+
+应来自 immutable input refs/version。
+
+不要使用随机 UUID 作为唯一 identity truth。
+
+可以另有生成 instance id，但 package logical id 应稳定。
+
+㉙ Manual submission workflow state
+
+建议状态：
+
+NEEDS_REVIEW
+READY_FOR_MANUAL_SUBMISSION
+MANUALLY_SUBMITTED
+
+但注意：
+
+Queue #9 本身只能生成前两个。
+
+MANUALLY_SUBMITTED
+
+只能由后续 human action/recording path 进入。
+
+不能本单元自动设置。
+
+㉚ Human action boundary
+
+如果后续记录“已手工提交”：
+
+必须：
+
+explicit human actor
+
+tenant scoped
+
+server-side authorization
+
+immutable submittedAt
+
+evidence/package reference
+
+no fabricated carrier confirmation
+
+但：
+
+这可以拆 Queue #9B。
+
+当前 Queue #9A 先做：
+
+package generation only
+
+更稳。
+
+㉛ Recommended split
+
+建议 Queue #9 分成：
+
+Queue #9A — Claim Package Generation
+
+然后：
+
+Queue #9B — Manual Submission Record Contract
+
+先不要一步把：
+
+package generation
+
+和：
+
+human submission record
+
+耦合。
+
+㉜ Queue #9A Required tests
+
+至少：
+
+COMPLETE input → READY_FOR_MANUAL_SUBMISSION
+
+PARTIAL input → NEEDS_REVIEW
+
+blockers preserved
+
+eligibility refs preserved
+
+estimate refs preserved
+
+estimate basis preserved
+
+rule versions preserved
+
+multi-currency remains separated
+
+no FX
+
+evidence manifest deterministic
+
+missing required evidence → NEEDS_REVIEW
+
+no raw payload
+
+no credential/token
+
+no signature image inline
+
+estimated amount clearly labelled
+
+no successFee
+
+no actualRecovered
+
+manualSubmissionRequired=true
+
+claimSubmissionPerformed=false
+
+transport=false
+
+platformWrite=false
+
+no network
+
+same input → same logical package
+
+tsc api/web 0
+
+full CI SUCCESS
+
+㉝ Queue #9A DO NOT DO
+
+不要：
+
+submit carrier claim
+
+call carrier portal
+
+browser automation submission
+
+carrier API write
+
+mark MANUALLY_SUBMITTED
+
+fabricate submission confirmation
+
+calculate success fee
+
+treat estimate as approved refund
+
+merge currencies
+
+enable TRANSPORT
+
+㉞ Following unit
+
+Queue #9A PASS 后：
+
+优先：
+
+CARRIER QUEUE #9B
+MANUAL SUBMISSION RECORD + HUMAN ATTESTATION
+
+然后才考虑：
+
+更远期真实：
+
+carrier submission adapter
+
+那仍属于 external/production gate。
+
+㉟ External gate
+
+真实 carrier claim submission 最终继续依赖：
+
+UPS/FedEx claim APIs/portal rules
+
+production authorization
+
+real account permissions
+
+submission eligibility
+
+provider-specific claim forms
+
+real contractual terms
+
+继续：
+
+HOLD_EXTERNAL
+
+不阻塞 Queue #9A 内部 package generation。
+
+编号裁决
+
+① allEstimateBasisComplete：
+
+PASS
+
+② PARTIAL_PROVIDER_RULE_BASIS → PARTIAL：
+
+PASS
+
+③ COMPLETE → blockers=[]：
+
+PASS
+
+④ ESTIMATED + PARTIAL estimate semantics：
+
+PASS
+
+⑤ multi-currency aggregate completeness：
+
+PASS
+
+⑥ CARRIER QUEUE #8：
+
+PASS / CLOSED
+
+⑦ 下一内部单元：
+
+CARRIER QUEUE #9A — CLAIM PACKAGE GENERATION
+
+边界继续保持：
+
+NO platform write
+Payment = 0
+autopay = OFF
+collection = OFF
+external payment write = OFF
+R13 HOLD
+TRANSPORT = false
+无生产凭据
+
+现在 Queue #8 可以真正关闭。下一步最好先做 Queue #9A：Claim Package Generation，把“系统认为可以准备什么材料”做成稳定、可下载、可人工审核的包；“人工已提交”再单独进入 Queue #9B，避免 package generation 和 submission truth 混在一起。
+```
