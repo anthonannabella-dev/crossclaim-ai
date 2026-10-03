@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "c4370ea",
+  "head": "7b55a0a",
   "status": "RECONCILED",
   "current_task": "Carrier Queue #6 — SLA EVIDENCE ASSEMBLY + ELIGIBILITY INPUT PLANE：Tracking Fact + Invoice Fact + POD Fact + Carrier Terms Evidence + Service Level Evidence → **ShipmentEvidenceBundle**（只建证据输入层；不得自动认定赔付 / 自动提交 claim / 自动退款 / 调用 carrier write API / 自动产生 recovery amount）。**逐字归档 MSG-111 为第一步。**CarrierInvoiceReadPort + CarrierPODReadPort（verified account lineage、request/response 双向绑定、十进制金额、charge kind 归一化 + raw code 保留、POD 掩码与隐私、safe rawReference）；**read-only**，不做 SLA/退款资格推导。CarrierTrackingReadPort + normalized CarrierTrackingSnapshot（UPS/FedEx provider adapter 分离）+ 状态/事件归一化（确定性排序 + 去重）+ 失败原因分类 + tenant/account lineage 归属；**read-only**（无 mutation / claim / pickup / refund，TRANSPORT=false）。",
   "next_task": "PC-12A 实施 → 本地测试 + tsc api/web + API contract + full CI → PC-12A CHECKPOINT 送审。",
@@ -10,7 +10,7 @@
   "production_enabled": false,
   "external_write_enabled": false,
   "updated_at": "2026-10-03T09:26:08.099Z",
-  "previous_head": "a02d089",
+  "previous_head": "c4370ea",
   "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "0c35106",
@@ -49,12 +49,12 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-03T09:31:09.704Z",
+  "last_tick_at": "2026-10-03T09:45:42.418Z",
   "state": "IMPLEMENT",
-  "last_action": "G4/C5：新增 customs-recovery-estimate（仅 ELIGIBLE 估算；逐币种 ratio/cap/min；cents 向下取整；estimateOnly=true / billable=false）与 14/14 回归；C1–C5 = 67/67",
-  "last_action_at": "2026-10-03T09:42:42.589Z",
-  "next_action": "G4 续：C6 claim-ready package（确定性装配，不提交）→ C7 handoff 边界；随后把 G4 C1–C6 + Schema Delta（CustomsEntryFact/Fact 持久化）作为 READY_FOR_REVIEW 送架构方审计；期间继续 G7/G8/G9 复核",
-  "current_head": "c4370ea",
+  "last_action": "G4 READY_FOR_REVIEW：C1–C5（67/67）+ 差集/checkpoint 文档 + GitHub Issue #2 留档评论 5967928916；CI 修复 deploy-smoke 就绪竞态（7b55a0a）",
+  "last_action_at": "2026-10-03T09:48:44.432Z",
+  "next_action": "向审计会话（https://chatgpt.com/c/6ac0c3b8-30a4-83ec-a529-4d9b04ffa0e7）发送 G4 READY_FOR_REVIEW 唤醒（指向 Issue #2 comment 5967928916），验证三要素后读取裁决：PASS→C6，REVISE→按 CHANGE 改，BLOCK→停止该方案",
+  "current_head": "7b55a0a",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-03T09:26:08.099Z",
-    "gapMs": 301606,
-    "stale": false,
-    "checkedAt": "2026-10-03T09:31:09.704Z"
+    "previousTickAt": "2026-10-03T09:31:09.704Z",
+    "gapMs": 872715,
+    "stale": true,
+    "checkedAt": "2026-10-03T09:45:42.418Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -250,7 +250,7 @@
     "integration_boundary_review": "AUTHORIZED_TO_PLAN（先提交设计/实施计划，不直接开放真实 transport）"
   },
   "r36_submission_comment": "5927087320",
-  "stale_recovered_at": "2026-10-03T06:36:14.776Z",
+  "stale_recovered_at": "2026-10-03T09:45:42.418Z",
   "engineering_regression_policy": {
     "source": "HOST PRODUCT DIRECTION 2026-10-01",
     "doc": "docs/releases/ENGINEERING-REGRESSION-POLICY.md",
@@ -4681,5 +4681,22 @@
     "changeB": "PASS（immutable identity snapshot 比较 → IDEMPOTENCY_KEY_CONFLICT；同 key 不同 digest 不产生第二根）",
     "changeC": "PASS（同 fact id 完整 immutable equality；差异 → FACT_IMMUTABLE_MISMATCH）",
     "note": "架构方明确：不需要再送 C17 checkpoint；可直接进入 C21 HTTP（保持 filingSubmitted=false / TRANSPORT=false / HOLD_EXTERNAL）"
+  },
+  "g4_review": {
+    "reviewed_head": "7b55a0a",
+    "impl_heads": [
+      "f7b85ee",
+      "d8fd6c3",
+      "6768952",
+      "c4370ea",
+      "18cd3a6"
+    ],
+    "ci_fix_head": "7b55a0a",
+    "tests": "67/67（customs 全套 129/129）",
+    "doc": "docs/releases/CUSTOMS-G4-C1-C5-REVIEW-REQUEST.md",
+    "github_comment_id": "5967928916",
+    "github_comment_url": "https://github.com/anthonannabella-dev/crossclaim-ai/issues/2#issuecomment-5967928916",
+    "wakeup_sent_at": null,
+    "verdict": null
   }
 }

@@ -1482,3 +1482,8 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 交付：`customs-recovery-estimate.ts`（仅 ELIGIBLE；ratio/cap/min；cents 向下；estimateOnly、不可计费）+ 14/14 回归。
 - 累计：C1–C5 = **67/67**；无 Schema / 无路由 / 无外写。
 - 下一步：C6 claim-ready package。
+
+## 2026-10-03T09:48:44.432Z — G4 C1–C5 READY_FOR_REVIEW（HEAD 7b55a0a）
+- 留档：Issue #2 comment 5967928916（完整请求见 `docs/releases/CUSTOMS-G4-C1-C5-REVIEW-REQUEST.md`）。
+- CI 修复：deploy-smoke 就绪判定新增宿主端口可达性检查（docker-proxy 竞态 → P1001），本地 smoke 通过（51 migrations / 142 triggers）。
+- 待办：发送 ChatGPT 唤醒 → 三要素验证 → 读取裁决（PASS/REVISE/BLOCK）。
