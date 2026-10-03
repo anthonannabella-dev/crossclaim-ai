@@ -360,6 +360,7 @@ model Organization {
   connections                        SourceConnection[]
   platformAccounts                   PlatformAccount[]
   policyAcceptances                  PolicyAcceptance[]
+  carrierManualSubmissions           CarrierManualSubmission[]
   fileAssets                         FileAsset[]
   importBatches                      ImportBatch[]
   transactions                       SourceTransaction[]
@@ -434,6 +435,7 @@ model User {
   auditLogs   AuditLog[]
 
   policyAcceptances PolicyAcceptance[]
+  carrierManualSubmissions CarrierManualSubmission[]
 
   @@index([status])
 }
@@ -2386,4 +2388,41 @@ model PolicyAcceptance {
   @@unique([organizationId, userId, documentKey, documentVersion])
   @@index([organizationId, documentKey, documentVersion])
   @@index([organizationId, userId])
+}
+
+/// CARRIER QUEUE #9B FINAL（MSG-20261003-119 ⑲–㉜）：人工提交事实（human attestation）。
+/// 只记录「用户声称自己已完成人工提交」；carrierConfirmationStatus 恒为 NOT_VERIFIED。
+/// append-only（DB 层拒绝 UPDATE/DELETE）+ 租户归属不可变；
+/// 不存 credential / access token / raw claim payload / raw package payload / carrier secret。
+model CarrierManualSubmission {
+  id                          String    @id
+  organizationId              String
+  packageId                   String
+  bundleId                    String
+  provider                    String
+  externalAccountId           String
+  trackingNumber              String
+  submittedByUserId           String
+  submittedAt                 DateTime
+  recordedAt                  DateTime
+  reportedCarrierSubmissionAt DateTime?
+  carrierReference            String?
+  carrierReferenceProvenance  String?
+  note                        String?
+  carrierConfirmationStatus   String
+  submissionMode              String
+  channel                     String
+  eligibilityRuleSetId        String
+  eligibilityRuleSetVersion   String
+  estimateRuleSetId           String
+  estimateRuleSetVersion      String
+  packageSnapshotReference    String
+  createdAt                   DateTime  @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  submittedBy  User         @relation(fields: [submittedByUserId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, packageId])
+  @@index([organizationId, submittedAt])
+  @@index([organizationId, trackingNumber])
 }

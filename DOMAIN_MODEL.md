@@ -5,7 +5,7 @@
 
 ---
 
-## 一、模型总览（57 个 = 51 个核心模型 + 6 个联结模型）
+## 一、模型总览（58 个 = 52 个核心模型 + 6 个联结模型）
 
 > **口径统一**：**29 个核心模型**（架构章程 §六 的清单 + C-0006-A 的 `CanonicalFact` + C-0006-B1 的 `RuleEvaluationShadow` + C-0008-A 的 `Session`、`UserInvitation`）**+ 2 个联结模型 `CaseEvidence`、`CanonicalFactSource`**。
 > README、本文、PR 描述、架构契约测试全部按此口径，不允许 29/31 混用。
@@ -46,6 +46,7 @@
 | 模型 / 字段 | 说明 |
 |---|---|
 | `PolicyAcceptance` | PC-09（MSG-20261003-96 ⑬）：客户对版本化商业/法律文档的**显式接受事实**（user × organization × documentKey/version × acceptedAt × source）；append-only，仅访问不产生事实，不承载合同生命周期。 |
+| `CarrierManualSubmission` | CARRIER QUEUE #9B FINAL（MSG-20261003-119 ⑲–㉜）：人工提交事实（human attestation）——只记录「用户声称自己已完成人工提交」，`carrierConfirmationStatus` 恒为 `NOT_VERIFIED`；`UNIQUE(organizationId, packageId)` 幂等；append-only + 租户归属不可变；不存 credential / raw claim payload |
 | `PlatformAccount` | 业务归属身份：`organizationId + platform + externalAccountId + identityVersion`。**不是**凭据容器（token/secret 不入表，仍由 `SourceConnection.credentialRef` 承担）；`identityVersion` 是外部账户身份规范版本，凭据轮换**不得**产生新身份。`platform` / `externalAccountId` / `identityVersion` **创建后不可修改**（DB 不变量 `cc_platformaccount_identity_immutable`，MSG-20261002-67）；`displayName` / `status` / `marketplace` / `region` 仍可合法更新 |
 | `SourceConnection.platformAccountId` | 1 个 account → N 条连接（API / 上传 / 历史导入）；连接是 transport/auth 生命周期，account 是 business provenance identity。绑定后不可改写 |
 | `accountId` 下推 | `SourceTransaction` / `CanonicalFact` / `RecoveryOpportunity` / `ClaimItem` / `EvidenceArtifact` 均由**服务端**从连接上下文派生，客户端提交即拒绝（`CLIENT_ACCOUNT_FIELD_NOT_TRUSTED`）；绑定后不可改写（DB 不变量 `cc_account_binding_immutable__*`） |
