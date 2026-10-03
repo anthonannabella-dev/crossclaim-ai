@@ -302,3 +302,55 @@ export async function postReturnClaimEvidence(input: {
     body: { ...result, boundary, error: 'CLAIM_EVIDENCE_NOT_READY' },
   };
 }
+
+export const CUSTOMS_RETURN_EVIDENCE_READ_ROLES = ['OWNER', 'ADMIN', 'OPS', 'FINANCE'] as const;
+
+/**
+ * HTTP GET /customs-entry-facts/:entryFactId/return-claim-evidence —— **只读**已持久化结果。
+ *  · 绝不在此层重算匹配 / 金额；前端只能消费这里返回的已裁决数据。
+ *  · 无记录 → 404；角色不允许 → 403；跨租户由 deps 的 tenant-scoped 查询保证不可见。
+ */
+export async function getReturnClaimEvidenceView(input: {
+  session: { organizationId: string; actorUserId: string; role: string };
+  deps: { latest: (args: { organizationId: string; entryFactId: string }) => Promise<Record<string, unknown> | null> };
+  entryFactId: string;
+}): Promise<{ status: number; body: Record<string, unknown> }> {
+  if (!(CUSTOMS_RETURN_EVIDENCE_READ_ROLES as readonly string[]).includes(input.session.role)) {
+    return { status: 403, body: { error: 'FORBIDDEN', reason: 'ROLE_NOT_PERMITTED' } };
+  }
+  if (typeof input.entryFactId !== 'string' || input.entryFactId.trim() === '') {
+    return { status: 400, body: { error: 'INVALID_REQUEST', reason: 'ENTRY_FACT_ID_REQUIRED' } };
+  }
+  const row = await input.deps.latest({
+    organizationId: input.session.organizationId,
+    entryFactId: input.entryFactId,
+  });
+  if (!row) return { status: 404, body: { error: 'NOT_FOUND' } };
+  return {
+    status: 200,
+    body: {
+      evidence: {
+        evidenceId: row.id,
+        status: row.status,
+        statusReasons: row.reasonCodes,
+        confirmedRecoverableAmountByCurrency: row.confirmedRecoverableAmountByCurrency,
+        eligibleQuantityByLine: row.eligibleQuantityByLine,
+        qualificationStatus: row.qualificationStatus,
+        policyId: row.policyId,
+        policyVersion: row.policyVersion,
+        algorithmVersion: row.algorithmVersion,
+        computedAt: (row.computedAt as Date).toISOString(),
+        payload: row.payload,
+      },
+      boundary: {
+        readOnly: true,
+        recomputedOnRead: false,
+        frontendMayRecalculate: false,
+        filingSubmitted: false,
+        transportEnabled: false,
+        externalWritePerformed: false,
+        productionCredentials: 'ABSENT',
+      },
+    },
+  };
+}
