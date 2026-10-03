@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "a247495",
+  "head": "b41afe7",
   "status": "RECONCILED",
   "current_task": "Carrier Queue #6 — SLA EVIDENCE ASSEMBLY + ELIGIBILITY INPUT PLANE：Tracking Fact + Invoice Fact + POD Fact + Carrier Terms Evidence + Service Level Evidence → **ShipmentEvidenceBundle**（只建证据输入层；不得自动认定赔付 / 自动提交 claim / 自动退款 / 调用 carrier write API / 自动产生 recovery amount）。**逐字归档 MSG-111 为第一步。**CarrierInvoiceReadPort + CarrierPODReadPort（verified account lineage、request/response 双向绑定、十进制金额、charge kind 归一化 + raw code 保留、POD 掩码与隐私、safe rawReference）；**read-only**，不做 SLA/退款资格推导。CarrierTrackingReadPort + normalized CarrierTrackingSnapshot（UPS/FedEx provider adapter 分离）+ 状态/事件归一化（确定性排序 + 去重）+ 失败原因分类 + tenant/account lineage 归属；**read-only**（无 mutation / claim / pickup / refund，TRANSPORT=false）。",
   "next_task": "PC-12A 实施 → 本地测试 + tsc api/web + API contract + full CI → PC-12A CHECKPOINT 送审。",
@@ -10,7 +10,7 @@
   "production_enabled": false,
   "external_write_enabled": false,
   "updated_at": "2026-10-03T09:26:08.099Z",
-  "previous_head": "749040c",
+  "previous_head": "a247495",
   "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "0c35106",
@@ -49,11 +49,11 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-03T11:44:01.330Z",
+  "last_tick_at": "2026-10-03T11:58:55.820Z",
   "state": "IMPLEMENT",
-  "last_action": "G4 checkpoint #3 留档：Issue #2 comment 5968835060（CHANGE A/B + Schema Delta 两批 + C6/C7；REVIEWED_HEAD a247495）",
-  "last_action_at": "2026-10-03T11:44:01.425Z",
-  "next_action": "G4 已 CLOSED → 进入 MASTER GAP CLOSURE 下一内部缺口（G2/G7/G8/G9 复核收口 + 下一个目标域内部链），真实 filing 必须另开 Production/Transport Enablement Gate",
+  "last_action": "G4 CLOSED 收尾：差集登记表 G4 → DONE/CLOSED（MSG-20261003-128 PASS；C1–C7 + 两批 Schema Delta + CI 5/5）",
+  "last_action_at": "2026-10-03T11:58:55.936Z",
+  "next_action": "MASTER GAP CLOSURE 继续：优先收口 G2/G7/G8/G9 复核项（G2 已随 C17 完成、G7 已补全链回归、G8/G9 逐模块核对），再取下一个目标域内部缺口进入 SAFE_CONTINUATION_QUEUE",
   "current_head": "749040c",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-03T11:38:45.019Z",
-    "gapMs": 316312,
-    "stale": false,
-    "checkedAt": "2026-10-03T11:44:01.330Z"
+    "previousTickAt": "2026-10-03T11:44:01.330Z",
+    "gapMs": 894491,
+    "stale": true,
+    "checkedAt": "2026-10-03T11:58:55.820Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -250,7 +250,7 @@
     "integration_boundary_review": "AUTHORIZED_TO_PLAN（先提交设计/实施计划，不直接开放真实 transport）"
   },
   "r36_submission_comment": "5927087320",
-  "stale_recovered_at": "2026-10-03T11:28:47.417Z",
+  "stale_recovered_at": "2026-10-03T11:58:55.820Z",
   "engineering_regression_policy": {
     "source": "HOST PRODUCT DIRECTION 2026-10-01",
     "doc": "docs/releases/ENGINEERING-REGRESSION-POLICY.md",
@@ -4552,7 +4552,7 @@
       "note": "service→route 映射见 FRONTEND-WIRING-MAP §3"
     },
     "g4": {
-      "status": "IN_PROGRESS（C1–C7 DONE；Schema Delta 待落）",
+      "status": "DONE / CLOSED（MSG-20261003-128）",
       "step": "C1 = Customs Entry Data / Evidence Contract（只读事实归一化）",
       "artifact": "apps/api/src/services/customs/customs-entry-contract.ts",
       "tests": "apps/api/src/__tests__/customs-entry-contract.test.ts → 16/16 PASS",
@@ -4677,7 +4677,8 @@
         "triggers": "89 baseline / 30 append-only（psql 校验 OK）",
         "counts": "模型 67（61 core + 6 join）；迁移 50 条",
         "latest_rule": "latest 由 ORDER BY computedAt DESC / view 推导，投影 append-only 不 UPDATE"
-      }
+      },
+      "closed_at": "2026-10-03T11:58:55.936Z"
     },
     "g7": {
       "status": "IN_PROGRESS（Customs 全链覆盖已补）",
