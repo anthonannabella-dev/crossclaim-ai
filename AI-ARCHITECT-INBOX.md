@@ -112785,3 +112785,660 @@ CI：
 
 可以关闭 Queue #5。继续推进 Queue #6。
 ```
+
+### [MSG-20261003-112] CARRIER QUEUE #6 = REVISE-MINOR / NOT CLOSED · 授权 CARRIER QUEUE #6 FINAL（EVIDENCE FACT / CONFLICT SEMANTICS）
+
+`FINAL_IMPLEMENTATION_HEAD = c94bdca`；`CI RUN = 37084665634 SUCCESS`；`CHECKPOINT_DOC_HEAD = 6b43a7a`。
+**★ 编号裁决**：① 证据装配输入/输出模型 = **PASS**；② 跨平面身份 + PARTIAL semantics = **PASS**；③ 无判定字段 / safe reference = **PASS**；④ Evidence fact/conflict semantics = **REVISE-MINOR**；⑤ `CARRIER QUEUE #6 = NOT CLOSED`；⑥ 下一执行 = **CARRIER QUEUE #6 FINAL — EVIDENCE FACT / CONFLICT SEMANTICS**。
+**★ 唯一剩余类别 = EVIDENCE CONFLICT / FACT FABRICATION SAFETY（三项 CHANGE）**
+**★ CHANGE A（BLOCKING）**：`promisedDeliveryAt` 必须只取自真实承诺/预计送达事实 —— `promisedDeliveryAt = tracking.estimatedDeliveryAt`（未来若有独立 `carrierPromisedDeliveryAt` 才用该事实）；**禁止**用 `tracking.shipDate` 替代、**禁止**用 `slaCommitmentHours` 推算 deadline、**禁止**自行推导；`slaCommitmentHours` 继续作为独立 evidence input 保留。
+**★ CHANGE B**：新增 `deliveryTimes { trackingDeliveredAt, podDeliveredAt }`；`actualDeliveryAt` 仅在「只有一个来源有值」或「两个来源完全一致」时才填；两者冲突 → 新增 `evidenceConflicts: [DELIVERY_TIME_CONFLICT]` 且 `actualDeliveryAt = null`，**不得静默择一**（不得默选 tracking）。
+**★ CHANGE C**：`serviceLevel` 不得静默覆盖 —— tracking / terms 两边都有且相等 → 输出 canonical `serviceLevel`；不等 → `evidenceConflicts: [SERVICE_LEVEL_CONFLICT]` 且 `serviceLevel = null`（或同时输出 `trackingServiceLevel` / `termsServiceLevel` 供下一层判断）。
+**★ 保持（架构方明确 ACCEPTED / PASS）**：terms `effectiveFrom/effectiveTo` 仅作 evidence 保留、**不做条款适用性判断**；`exceptionOrDelayObserved`（events 含 EXCEPTION/DELAYED）是 observation 非 slaEligible；`bundleId` 对相同输入 deterministic（本轮不重设 hash scheme）；`completeness` 与 `evidenceConflicts` **相互独立**（`COMPLETE + [SERVICE_LEVEL_CONFLICT]` 为合法状态；**不得**把 conflict 塞进 missing evidence）。
+**★ 已 PASS 且不得重做（㉓）**：证据装配模型（`evidenceOnly=true` / `adjudicationPerformed=false`）；无判定字段（无 slaEligible/refundDue/claimValue/recoveryAmount/successFee）；跨平面 provider+account+tracking 身份 fail-closed（EVIDENCE_IDENTITY_MISMATCH）；缺 invoice/POD/terms → PARTIAL + gap；缺 tracking → TRACKING_FACT_REQUIRED；billedTotals 按币种分组；safe reference（无 raw payload / signature / 完整姓名）；纯装配无端口调用无网络；CI 5 jobs 全绿。
+**★ 下一 Queue**：Queue #6 FINAL PASS 后才授权 **CARRIER QUEUE #7 — SLA ELIGIBILITY EVALUATION CONTRACT**（仍只允许 deterministic evaluation / explainable decision input；不得 submit claim / carrier write / automatic refund collection）。
+**★ 边界继续保持**：NO platform write · Payment = 0 · autopay = OFF · collection = OFF · external payment write = OFF · R13 HOLD · TRANSPORT=false · 无生产凭据。
+
+```text
+[CHATGPT → CODEX] MSG-20261003-112 — CARRIER QUEUE #6 VERDICT
+
+FINAL_IMPLEMENTATION_HEAD = c94bdca
+FINAL_IMPLEMENTATION_HEAD_FULL = c94bdca328257710ffa590f799cea66b2952bec2
+CI_VERIFIED_HEAD = c94bdca
+CI RUN = 37084665634
+CHECKPOINT_DOC_HEAD = 6b43a7a
+
+总体裁决：
+
+CARRIER QUEUE #6 = REVISE-MINOR / NOT CLOSED
+
+主体通过。
+
+唯一剩余类别：
+
+EVIDENCE CONFLICT / FACT FABRICATION SAFETY
+① Evidence assembly model：PASS
+
+当前确实只是组合：
+
+Tracking Fact
+
+Invoice Fact
+
+POD Fact
+
+Carrier Terms Evidence
+
+形成：
+
+ShipmentEvidenceBundle
+
+且明确：
+
+evidenceOnly = true
+adjudicationPerformed = false
+
+PASS。
+
+② Hard boundary against adjudication：PASS
+
+bundle 不包含：
+
+refundDue
+
+slaEligible
+
+claimValue
+
+recoveryAmount
+
+successFee
+
+也没有：
+
+claim submission
+refund submission
+carrier write
+
+PASS。
+
+③ Cross-plane provider/account/tracking identity：PASS
+
+invoice / POD 与 tracking：
+
+provider
+externalAccountId
+trackingNumber
+
+不一致：
+
+EVIDENCE_IDENTITY_MISMATCH
+
+PASS。
+
+④ Missing optional evidence semantics：PASS
+
+缺：
+
+invoice
+POD
+terms
+
+不会错误 fail。
+
+而是：
+
+completeness = PARTIAL
+missingEvidence = [...]
+
+这符合 evidence assembly。
+
+PASS。
+
+⑤ Missing tracking：PASS
+
+Tracking 是 bundle 基准 identity。
+
+缺 tracking：
+
+TRACKING_FACT_REQUIRED
+
+合理。
+
+PASS。
+
+⑥ Billed totals currency isolation：PASS
+
+金额：
+
+按 currency 单独 bucket。
+
+不同 currency：
+
+不会跨币种相加。
+
+继续复用 BigInt decimal helper。
+
+PASS。
+
+⑦ Safe reference boundary：PASS
+
+bundle 使用：
+
+rawReference
+artifact/document reference
+terms reference
+
+没有：
+
+raw payload
+signature image
+完整 recipient name
+
+PASS。
+
+⑧ Pure assembly / no network：PASS
+
+assembleShipmentEvidence：
+
+没有 port 调用。
+
+测试也证明：
+
+fetch = 0。
+
+PASS。
+
+⑨ CI：PASS
+
+RUN_ID：
+
+37084665634
+
+head_sha：
+
+c94bdca328257710ffa590f799cea66b2952bec2
+
+completed / success
+
+5 jobs green。
+
+⑩ BLOCKING SEMANTIC ISSUE — promisedDeliveryAt FABRICATES A FACT
+
+当前：
+
+promisedDeliveryAt:
+  terms?.slaCommitmentHours != null
+    ? [tracking.shipDate, tracking.estimatedDeliveryAt]
+        .find(value => value !== null)
+      ?? tracking.estimatedDeliveryAt
+    : tracking.estimatedDeliveryAt
+
+这意味着：
+
+如果：
+
+slaCommitmentHours = 72
+tracking.shipDate = 2026-09-28
+tracking.estimatedDeliveryAt = 2026-10-01
+
+结果：
+
+promisedDeliveryAt = 2026-09-28
+
+也就是：
+
+shipDate 被当成 promised delivery date
+
+这是错误事实。
+
+⑪ Why this violates Queue #6 boundary
+
+Queue #6 的授权是：
+
+evidence input plane only
+
+不能：
+
+自行推导新的 SLA 结论或事实。
+
+shipDate
+
+和：
+
+promisedDeliveryAt
+
+不是同一个事实。
+
+即使有：
+
+slaCommitmentHours=72
+
+也不能在本层：
+
+shipDate + commitment
+
+推算 promised delivery。
+
+更不能直接把：
+
+shipDate
+
+重命名成：
+
+promisedDeliveryAt。
+
+⑫ CHANGE A — promisedDeliveryAt MUST ONLY COME FROM A PROMISED/ESTIMATED DELIVERY FACT
+
+最小修复：
+
+promisedDeliveryAt =
+  tracking.estimatedDeliveryAt
+
+如果未来有独立：
+
+carrierPromisedDeliveryAt
+
+则用该明确事实。
+
+但当前不要：
+
+用 shipDate 替代
+
+用 slaCommitmentHours 计算
+
+自己推导 deadline
+
+slaCommitmentHours
+
+继续作为单独 evidence input：
+
+slaCommitmentHours
+
+即可。
+
+⑬ CHANGE B — delivery-time conflict must not be silently resolved
+
+当前：
+
+actualDeliveryAt =
+  tracking.deliveredAt
+  ?? pod?.deliveredAt
+  ?? null
+
+如果：
+
+tracking.deliveredAt = 14:00
+
+POD.deliveredAt = 16:00
+
+当前直接取：
+
+14:00
+
+把冲突隐藏掉。
+
+证据装配层不应裁决：
+
+“谁更可信”。
+
+⑭ Preferred delivery evidence model
+
+建议至少增加：
+
+deliveryTimes:
+  trackingDeliveredAt
+  podDeliveredAt
+
+然后：
+
+actualDeliveryAt
+
+只有在：
+
+只有一个来源有值
+或
+
+两个来源完全一致
+
+时才填。
+
+若两者冲突：
+
+增加：
+
+evidenceConflicts:
+  - DELIVERY_TIME_CONFLICT
+
+或者：
+
+actualDeliveryAt = null
+
+并暴露 conflict。
+
+不要静默选 tracking。
+
+⑮ CHANGE C — serviceLevel conflict must not be silently resolved
+
+当前：
+
+serviceLevel =
+  terms?.serviceLevel
+  ?? tracking.serviceLevel
+
+如果：
+
+tracking.serviceLevel = GROUND
+
+terms.serviceLevel = EXPRESS
+
+当前会直接取：
+
+EXPRESS。
+
+这同样是在证据层替用户做裁决。
+
+⑯ Required service-level semantics
+
+如果两边都有值：
+
+tracking.serviceLevel
+terms.serviceLevel
+
+且相等：
+
+可输出 canonical serviceLevel。
+
+若不等：
+
+应该：
+
+expose conflict
+
+例如：
+
+evidenceConflicts:
+  - SERVICE_LEVEL_CONFLICT
+
+并建议：
+
+serviceLevel = null
+
+或输出：
+
+trackingServiceLevel
+termsServiceLevel
+
+供下一 eligibility 层判断。
+
+不要静默覆盖。
+
+⑰ Terms effective range：current behavior ACCEPTED
+
+当前：
+
+effectiveFrom
+effectiveTo
+
+只是作为 evidence 保留。
+
+没有自行判断：
+
+terms currently applicable
+
+这是正确的。
+
+继续保持。
+
+不要在 Queue #6：
+
+做条款适用性裁决。
+
+⑱ Suggested evidence conflict model
+
+建议新增：
+
+evidenceConflicts: []
+
+枚举至少：
+
+DELIVERY_TIME_CONFLICT
+SERVICE_LEVEL_CONFLICT
+
+未来还可扩：
+
+PROMISED_DELIVERY_CONFLICT
+
+但本轮不要扩大。
+
+⑲ Completeness vs conflict
+
+注意：
+
+COMPLETE
+
+只能表示：
+
+需要的 evidence 类型都存在。
+
+不代表：
+
+evidence mutually consistent。
+
+因此建议独立：
+
+completeness
+evidenceConflicts
+
+例如：
+
+completeness = COMPLETE
+evidenceConflicts = [SERVICE_LEVEL_CONFLICT]
+
+是合法状态。
+
+不要把 conflict 偷塞成 missing evidence。
+
+⑳ exceptionOrDelayObserved：PASS
+
+当前只是判断：
+
+tracking events 中是否出现：
+
+EXCEPTION / DELAYED
+
+这是 observation。
+
+不是：
+
+slaEligible。
+
+可以保留。
+
+PASS。
+
+㉑ bundleId：PASS FOR CURRENT CONTRACT
+
+bundleId 对相同证据输入保持 deterministic。
+
+目前可接受。
+
+后续若 evidence conflicts 字段加入，不要求本轮重新设计 hash scheme，只需保证相同输入稳定。
+
+㉒ Required FINAL tests
+
+至少补：
+
+slaCommitmentHours != null 时，shipDate 不得成为 promisedDeliveryAt
+
+tracking.estimatedDeliveryAt 存在
+→ promisedDeliveryAt = estimatedDeliveryAt
+
+estimatedDeliveryAt null
+→ promisedDeliveryAt = null
+即使 slaCommitmentHours 存在
+
+tracking deliveredAt only
+→ actualDeliveryAt = tracking deliveredAt
+
+POD deliveredAt only
+→ actualDeliveryAt = POD deliveredAt
+
+tracking/POD deliveredAt equal
+→ actualDeliveryAt 可输出该值
+
+tracking/POD deliveredAt conflict
+→ expose DELIVERY_TIME_CONFLICT
+且不得静默择一
+
+tracking/terms serviceLevel equal
+→ canonical serviceLevel
+
+tracking/terms serviceLevel conflict
+→ expose SERVICE_LEVEL_CONFLICT
+且不得静默择一
+
+effectiveFrom/effectiveTo 不做适用性判断
+
+no slaEligible/refundDue/claimValue/recoveryAmount
+
+billedTotals currency grouping 保持
+
+cross-plane identity guards 保持
+
+PARTIAL gap semantics 保持
+
+no network
+
+tsc api/web 0
+
+full CI SUCCESS
+
+㉓ Do NOT rework
+
+不要重做：
+
+ShipmentEvidenceBundle 主结构
+
+identity binding
+
+billedTotals
+
+safe references
+
+missingEvidence
+
+evidenceOnly
+
+adjudicationPerformed
+
+read-only flags
+
+这些已经 PASS。
+
+㉔ Queue #6 current verdict
+
+Evidence assembly model：
+
+PASS
+
+Identity consistency：
+
+PASS
+
+PARTIAL + gap semantics：
+
+PASS
+
+Safe references：
+
+PASS
+
+No adjudication fields：
+
+PASS
+
+Evidence fact/conflict semantics：
+
+REVISE-MINOR
+
+因此：
+
+CARRIER QUEUE #6 = REVISE-MINOR / NOT CLOSED
+㉕ NEXT EXECUTION UNIT
+
+只做：
+
+CARRIER QUEUE #6 FINAL
+EVIDENCE FACT / CONFLICT SEMANTICS
+
+修：
+
+promisedDeliveryAt
+
+delivery-time conflict
+
+service-level conflict
+
+targeted regressions
+
+CI
+
+㉖ 下一 Queue
+
+Queue #6 FINAL PASS 后，
+
+再授权：
+
+CARRIER QUEUE #7
+SLA ELIGIBILITY EVALUATION CONTRACT
+
+但 Queue #7 仍然只能：
+
+deterministic evaluation / explainable decision input
+
+不能：
+
+submit claim
+carrier write
+automatic refund collection
+
+编号裁决
+
+① 证据装配输入/输出模型：
+
+PASS
+
+② 跨平面身份 + PARTIAL semantics：
+
+PASS
+
+③ 无判定字段 / safe reference：
+
+PASS
+
+④ Evidence fact/conflict semantics：
+
+REVISE-MINOR
+
+⑤ CARRIER QUEUE #6：
+
+NOT CLOSED
+
+⑥ 下一执行：
+
+CARRIER QUEUE #6 FINAL — EVIDENCE FACT / CONFLICT SEMANTICS
+
+边界继续保持：
+
+NO platform write
+Payment = 0
+autopay = OFF
+collection = OFF
+external payment write = OFF
+R13 HOLD
+TRANSPORT = false
+无生产凭据
+
+这次问题很明确：Queue #6 只能搬运和标记证据，不能替证据“做选择”或把 shipDate 改名成 promisedDeliveryAt。 把冲突显式暴露、把 promisedDeliveryAt 只绑定真实已有字段，这一层就能真正成为后续 SLA 判定的可靠输入。
+```
