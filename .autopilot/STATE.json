@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "749040c",
+  "head": "a247495",
   "status": "RECONCILED",
   "current_task": "Carrier Queue #6 — SLA EVIDENCE ASSEMBLY + ELIGIBILITY INPUT PLANE：Tracking Fact + Invoice Fact + POD Fact + Carrier Terms Evidence + Service Level Evidence → **ShipmentEvidenceBundle**（只建证据输入层；不得自动认定赔付 / 自动提交 claim / 自动退款 / 调用 carrier write API / 自动产生 recovery amount）。**逐字归档 MSG-111 为第一步。**CarrierInvoiceReadPort + CarrierPODReadPort（verified account lineage、request/response 双向绑定、十进制金额、charge kind 归一化 + raw code 保留、POD 掩码与隐私、safe rawReference）；**read-only**，不做 SLA/退款资格推导。CarrierTrackingReadPort + normalized CarrierTrackingSnapshot（UPS/FedEx provider adapter 分离）+ 状态/事件归一化（确定性排序 + 去重）+ 失败原因分类 + tenant/account lineage 归属；**read-only**（无 mutation / claim / pickup / refund，TRANSPORT=false）。",
   "next_task": "PC-12A 实施 → 本地测试 + tsc api/web + API contract + full CI → PC-12A CHECKPOINT 送审。",
@@ -10,7 +10,7 @@
   "production_enabled": false,
   "external_write_enabled": false,
   "updated_at": "2026-10-03T09:26:08.099Z",
-  "previous_head": "pending",
+  "previous_head": "749040c",
   "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "0c35106",
@@ -49,11 +49,11 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-03T11:38:45.019Z",
+  "last_tick_at": "2026-10-03T11:44:01.330Z",
   "state": "IMPLEMENT",
-  "last_action": "Q2 Schema Delta 全部收口并 CI 通过：事实层（append-only + Decimal(38,6) + CHANGE C lineOrdinal）+ 四个 append-only 计算投影；模型 67、迁移 50、触发器清单 89/30",
-  "last_action_at": "2026-10-03T10:28:09.779Z",
-  "next_action": "把 CHANGE A/B + 全部 migration + C6/C7 合并为下一次 G4 checkpoint：写 checkpoint 文档 + GitHub Issue #2 留档 + ChatGPT 唤醒送审",
+  "last_action": "G4 checkpoint #3 留档：Issue #2 comment 5968835060（CHANGE A/B + Schema Delta 两批 + C6/C7；REVIEWED_HEAD a247495）",
+  "last_action_at": "2026-10-03T11:44:01.425Z",
+  "next_action": "在审计会话发送 G4 checkpoint #3 唤醒（指向 Issue #2 comment 5968835060）→ 三要素验证 → 读取并逐字归档裁决",
   "current_head": "749040c",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-03T11:33:44.642Z",
-    "gapMs": 300378,
+    "previousTickAt": "2026-10-03T11:38:45.019Z",
+    "gapMs": 316312,
     "stale": false,
-    "checkedAt": "2026-10-03T11:38:45.019Z"
+    "checkedAt": "2026-10-03T11:44:01.330Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -4778,6 +4778,15 @@
       "status": "PASS",
       "c6": "可立即做纯契约/装配层；A/B 修复前不得把 C5 金额固化为可信金额",
       "c7": "handoff-only：handoff package + checklist + manifest；禁止自动 filing / broker API write / ABI-EDI write / 自动付政府费用"
+    },
+    "checkpoint3": {
+      "reviewed_head": "a247495",
+      "doc": "docs/releases/CUSTOMS-G4-CHANGE-AB-SCHEMA-C6-C7-CHECKPOINT.md",
+      "github_comment_id": "5968835060",
+      "github_comment_url": "https://github.com/anthonannabella-dev/crossclaim-ai/issues/2#issuecomment-5968835060",
+      "created_at": "2026-10-03T11:44:01.425Z",
+      "wakeup_sent_at": null,
+      "verdict": null
     }
   },
   "g4_q2_ci": "success（37117140552 / 4ed8714：API migration+append-only 清单、deploy smoke、web、license、backup-restore 全绿）",

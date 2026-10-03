@@ -1518,3 +1518,6 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 新增 `CustomsEntryFactRecord` + `CustomsEntryDutyLineRecord`：Decimal(38,6)、append-only、CHANGE C `UNIQUE(factId,lineOrdinal)` + `INDEX(factId,rawCode,currency)`。
 - 迁移 20261003100000 已 apply；prisma validate/migrate deploy/generate OK；architecture-contract 142/142；触发器清单 85/26 + psql 校验 OK。
 - 下一批：四个 append-only 计算投影。
+
+## 2026-10-03T11:44:01.425Z — G4 checkpoint #3 留档
+- Issue #2 comment 5968835060（REVIEWED_HEAD a247495）；待发 ChatGPT 唤醒。
