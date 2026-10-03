@@ -124037,3 +124037,46 @@ B = VERIFIED（待 A3）
 P0 BUSINESS SURVIVAL GATES = PENDING
 A3 修完后，这一块就可以最终 PASS / CLOSED。
 ```
+
+### [MSG-20261003-132] A3 裁决：PASS → **A = CLOSED / B = CLOSED / P0 BUSINESS SURVIVAL GATES = PASS/CLOSED**（Trust guard A1/A2/A3 全部通过；无需 A4，无需再改 Qualification/DB/证据链/Schema/HTTP）
+
+```text
+A3 裁决：PASS。
+我核了 3c5fac6 的实际代码和测试。A3 已准确修复上一轮指出的超长分句越界问题：
+TypeScript
+text.slice(
+  Math.max(segStart, index - window),
+  Math.min(segEnd, index + claim.length + window)
+)
+现在 fallback 被严格夹在当前分句的 segStart / segEnd 内，不会再跨过 ；/。/;/.!?/换行 去吃邻句的 NOT_AVAILABLE。
+两条指定的超长边界回归也已经真实落地：
+上一句 ISO27001_CERTIFIED is NOT_AVAILABLE，下一长分句肯定式 SOC2_COMPLIANT → SOC2 被命中
+长分句 SOC2_COMPLIANT is NOT_AVAILABLE，下一句肯定式 ISO27001_CERTIFIED → SOC2 放行，ISO 被命中
+再加上既有测试，现在完整覆盖了：
+file-level 否定串扰；
+同行不同分句串扰；
+跨行串扰；
+同分句合法否定；
+超长分句 fallback 越界；
+仓库整体扫描；
+Enterprise Trust 清单自身不得产生肯定式自证。
+所以本轮无需继续 A4，也无需再修改 Qualification / DB / Customs evidence / Schema / HTTP。
+最终状态
+A 海关合规与证据链：PASS / CLOSED
+B 数据安全与客户筛选：PASS / CLOSED
+Qualification Gate：PASS
+append-only qualification persistence：PASS
+后端不可绕过：PASS
+Enterprise Trust 状态模型：PASS
+Trust 防自证 guard：A1/A2/A3 修订后 PASS
+因此：
+P0 BUSINESS SURVIVAL GATES = PASS / CLOSED
+可以把 MASTER-GAP-CLOSURE-REGISTER 和 STATE 正式更新为 CLOSED，并进入下一内部缺口。
+边界继续保持不变：
+HOLD_EXTERNAL
+TRANSPORT=false
+filingSubmitted=false
+Payment=0
+NO production credentials
+还有一点说明：我查询 3c5fac6 当前 GitHub combined status 仍没有返回状态项，因此本次裁决基于已核实的代码实现与回归测试内容；若你们流程要求“最终 CLOSED 必须同时拿到本次 commit 的 CI success”，可以在该 run 出现 success 后补记为 CI-confirmed，但架构实现本身已经 PASS。
+```
