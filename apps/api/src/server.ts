@@ -75,6 +75,8 @@ export interface ServerDeps {
   customsAuthorization?: import('./services/customs/customs-authorization-readiness').CustomsAuthorizationFlags;
   customsFilingProvider?: { providerId: string; capabilities: import('./services/customs/customs-filing-provider').CustomsFilingCapabilities } | null;
   customsFilingStatus?: import('./services/customs/customs-recovery-http').CustomsRecoveryHttpDeps['filingStatus'];
+  /** P0-1：已持久化的 claim evidence 读取。 */
+  customsReturnEvidence?: { latest(args: { organizationId: string; entryFactId: string }): Promise<Record<string, unknown> | null> };
   /** 可选：C-0008-A 内部认证端口（/auth/*）的依赖覆写 */
   auth?: import('./services/auth').AuthRouteDeps;
   /**
@@ -301,6 +303,7 @@ export function createServer(deps: ServerDeps): http.Server {
 ...(deps.customsAuthorization ? { customsAuthorization: deps.customsAuthorization } : {}),
 ...(deps.customsFilingProvider !== undefined ? { customsFilingProvider: deps.customsFilingProvider } : {}),
 ...(deps.customsFilingStatus ? { customsFilingStatus: deps.customsFilingStatus } : {}),
+...(deps.customsReturnEvidence ? { customsReturnEvidence: deps.customsReturnEvidence } : {}),
         session: auth.session,
         // 授权项 ②（MSG-20260930-16 §6）：受保护入口的运行时闸门；缺省 READ_ONLY → 拒绝写入
         actionGuard,
