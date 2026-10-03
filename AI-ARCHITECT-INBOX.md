@@ -114284,3 +114284,730 @@ TRANSPORT = false
 
 现在 Queue #6 可以真正关闭。下一步可以开始做 “可解释、确定性的 SLA 判定层”，但仍然只回答“证据支持什么结论”，不计算追回金额、不自动提交索赔。
 ```
+
+### [MSG-20261003-114] CARRIER QUEUE #7 = REVISE-MINOR / NOT CLOSED · 授权 CARRIER QUEUE #7 FINAL（OBSERVATIONAL RULE NON-GATING SEMANTICS）
+
+`FINAL_IMPLEMENTATION_HEAD = cda3d30`；`CI RUN = 37093979530 SUCCESS`；`CHECKPOINT_DOC_HEAD = 3d5ed6a`。
+**★ 编号裁决**：① 三值 decision = **PASS**；② 八条规则 / reasonCode = **PASS，除 EXCEPTION_OR_DELAY_OBSERVED gating semantics**；③ `TERMS_EFFECTIVE_RANGE` = **PASS**；④ conflict → UNKNOWN = **PASS**；⑤ no amount / no submit / deterministic / versioning = **PASS**；⑥ **CARRIER QUEUE #7 = REVISE-MINOR / NOT CLOSED**；⑦ 下一执行 = **CARRIER QUEUE #7 FINAL — OBSERVATIONAL RULE NON-GATING SEMANTICS**。
+**★ 唯一剩余问题（⑮⑯）= OBSERVATION RULE MUST NOT BECOME A HARD ELIGIBILITY GATE**：当前 `EXCEPTION_OR_DELAY_OBSERVED` 在「未观察到」时返回 FAIL，而总体聚合是「任一 FAIL → NOT_ELIGIBLE」，因此它事实上成了资格硬门槛 —— 即使时间事实已独立证明 late delivery（actual > promised），只要 tracking events 没有 EXCEPTION/DELAYED scan，最终仍会被判 NOT_ELIGIBLE。「没有异常扫描」不能推出「没有发生 late delivery」。
+**★ CHANGE A（⑰，最小修复）**：保留规则 `EXCEPTION_OR_DELAY_OBSERVED`，但**不让「未观察到」成为 FAIL** —— 观察到 → PASS/`EXCEPTION_OR_DELAY_OBSERVED`；未观察到 → **PASS**/`EXCEPTION_DELAY_NOT_OBSERVED`（该规则表达「观察结果是什么」，不是「资格条件是否通过」）。不建议用 UNKNOWN（那会让总体聚合变成 INDETERMINATE，仍然阻塞 otherwise-valid late delivery）。
+**★ ⑱ 可选更强设计（本轮不要求扩大）**：`effect: GATING | INFORMATIONAL`（DELIVERY_TIMING / TERMS_EFFECTIVE_RANGE = GATING；EXCEPTION_OR_DELAY_OBSERVED = INFORMATIONAL），decision 只聚合 GATING rules —— 本轮仅需最小修复。
+**★ ⑲⑳ 必改回归**：Case A（promised 12:00 / actual 14:00 / exceptionOrDelayObserved = false / 其他 gating rules PASS）→ `DELIVERY_TIMING = PASS`、`EXCEPTION_OR_DELAY_OBSERVED = PASS`（informational）、**decision = ELIGIBLE**，不得 NOT_ELIGIBLE；现有「events = [] → FAIL」测试必须改为 status 不再导致资格 FAIL（可保留 reasonCode = `EXCEPTION_DELAY_NOT_OBSERVED`）。
+**★ ㉑ 保持不变（仍是真实 gating conditions）**：`TERMS_EFFECTIVE_RANGE = FAIL`（条款明确不适用）与 `DELIVERY_TIMING = FAIL`（时间事实明确未迟到）**仍可**决定 NOT_ELIGIBLE；㉒ PARTIAL → UNKNOWN → INDETERMINATE 的保守性 **ACCEPTED**；㉓ reasonCode 命名整体接受（仅 `EXCEPTION_DELAY_NOT_OBSERVED` 的 status/gating 语义调整）。
+**★ ㉖ 必需 FINAL 测试**：late + no exception scan → ELIGIBLE；late + exception scan → ELIGIBLE；on-time + no exception scan → NOT_ELIGIBLE（因 DELIVERY_TIMING FAIL）；on-time + exception scan → NOT_ELIGIBLE；no exception scan 不得本身成为 gating blocker；exception observed 可保持 informational PASS；terms-out-of-range 仍 NOT_ELIGIBLE；PARTIAL 仍 INDETERMINATE；conflict 仍 INDETERMINATE；deterministic；无金额字段；无 submission/network/write；ruleSet/version 一致或按语义变更**刻意 bump**；tsc api/web 0；full CI SUCCESS。
+**★ ㉗ Rule version**：因 eligibility semantics 改变，`ruleSetVersion` 由 `1.0.0` → **`1.0.1`**（架构方推荐：这是修复 observation 被错误当作 gating 的语义 bug，不是新增规则维度）。
+**★ ㉕㉘ 不重做 / 不提前**：不要重做 terms range / decision enum / delivery timing / conflicts / versioning / no-money boundaries；**Queue #8 暂不授权**，Queue #7 FINAL PASS 后才进入 CARRIER QUEUE #8 — RECOVERY AMOUNT ESTIMATION + CLAIM-READY PACKAGE INPUT。
+**★ 边界继续保持**：NO platform write · Payment = 0 · autopay = OFF · collection = OFF · external payment write = OFF · R13 HOLD · TRANSPORT=false · 无生产凭据。
+
+```text
+[CHATGPT → CODEX] MSG-20261003-114 — CARRIER QUEUE #7 VERDICT
+
+FINAL_IMPLEMENTATION_HEAD = cda3d30
+FINAL_IMPLEMENTATION_HEAD_FULL = cda3d30561e4f183b2eeb582c6a77a0f30190369
+CI_VERIFIED_HEAD = cda3d30
+CI RUN = 37093979530
+CHECKPOINT_DOC_HEAD = 3d5ed6a
+
+已直接核验：
+
+CarrierSlaEligibilityEvaluation
+
+8 条 rule results
+
+decision 聚合
+
+terms effective range
+
+conflict propagation
+
+no-money / no-write boundary
+
+rule versioning
+
+targeted regressions
+
+CI 37093979530
+
+总体裁决：
+
+CARRIER QUEUE #7 = REVISE-MINOR / NOT CLOSED
+
+主体 PASS。
+
+唯一剩余：
+
+OBSERVATION RULE MUST NOT BECOME A HARD ELIGIBILITY GATE
+① 三值 decision 模型：PASS
+
+当前：
+
+任一 FAIL
+→ NOT_ELIGIBLE
+
+无 FAIL 但存在 UNKNOWN
+→ INDETERMINATE
+
+全部 PASS
+→ ELIGIBLE
+
+这个总体聚合模型本身接受。
+
+PASS。
+
+② UNKNOWN ≠ FAIL：PASS
+
+缺：
+
+terms
+
+invoice
+
+promisedDeliveryAt
+
+actualDeliveryAt
+
+以及：
+
+evidence conflict
+
+都不会被强行变成 FAIL。
+
+PASS。
+
+③ PARTIAL ≠ NOT_ELIGIBLE：PASS
+
+PARTIAL bundle：
+
+EVIDENCE_COMPLETENESS = UNKNOWN
+
+而不是 FAIL。
+
+因此缺证据：
+
+不会直接判 NOT_ELIGIBLE。
+
+PASS。
+
+④ EVIDENCE_CONFLICTS：PASS
+
+存在：
+
+DELIVERY_TIME_CONFLICT
+SERVICE_LEVEL_CONFLICT
+
+时：
+
+EVIDENCE_CONFLICTS = UNKNOWN
+
+并且依赖规则也分别：
+
+DELIVERY_TIMING = UNKNOWN
+
+SERVICE_LEVEL_MATCH = UNKNOWN
+
+没有静默消解。
+
+PASS。
+
+⑤ TERMS_EVIDENCE_PRESENT：PASS
+
+有 terms：
+
+PASS
+
+无 terms：
+
+UNKNOWN
+
+符合：
+
+“缺证据 ≠ 不符合”。
+
+PASS。
+
+⑥ TERMS_EFFECTIVE_RANGE：PASS
+
+当前 relevant date source：
+
+TRACKING_SHIP_DATE
+
+并显式输出：
+
+relevantDateSource
+relevantDate
+
+接受。
+
+当前 v1 规则明确规定：
+
+effectiveFrom <= shipDate <= effectiveTo
+
+闭区间。
+
+缺 relevantDate：
+
+UNKNOWN。
+
+terms 两端都缺：
+
+UNKNOWN。
+
+超出区间：
+
+FAIL。
+
+PASS。
+
+⑦ 不假设有 terms 就一定适用：PASS
+
+terms 存在：
+
+不等于：
+
+TERMS_EFFECTIVE_RANGE PASS。
+
+实际还会检查 relevant date。
+
+PASS。
+
+⑧ SERVICE_LEVEL_MATCH：PASS
+
+SERVICE_LEVEL_CONFLICT：
+
+UNKNOWN。
+
+无 serviceLevel：
+
+UNKNOWN。
+
+两来源一致或当前只有一来源：
+
+PASS。
+
+作为 v1 deterministic contract 可以接受。
+
+PASS。
+
+⑨ DELIVERY_TIMING：PASS
+
+当前：
+
+actual > promised
+
+→ PASS / LATE_DELIVERY_OBSERVED
+
+actual <= promised
+
+→ FAIL / ON_TIME_OR_EARLY
+
+任一时间缺失：
+
+UNKNOWN。
+
+冲突：
+
+UNKNOWN。
+
+且没有使用：
+
+slaCommitmentHours
+
+推算 deadline。
+
+PASS。
+
+⑩ Rule versioning：PASS
+
+存在：
+
+ruleSetId
+ruleSetVersion
+evaluatedAt
+bundleId
+
+满足规则历史可解释性。
+
+PASS。
+
+⑪ Determinism：PASS
+
+相同 bundle：
+
+ruleResults 与 decision 稳定。
+
+没有：
+
+LLM judgment
+
+probability
+
+random scoring
+
+PASS。
+
+⑫ No money boundary：PASS
+
+evaluation 不输出：
+
+recoveryAmount
+
+claimValue
+
+refundDue
+
+successFee
+
+billedTotals
+
+totalCharge
+
+PASS。
+
+⑬ No execution boundary：PASS
+
+仍：
+
+evaluationOnly = true
+claimSubmissionPerformed = false
+readOnly = true
+transportEnabled = false
+platformWriteEnabled = false
+productionCredentials = ABSENT
+
+PASS。
+
+⑭ CI：PASS
+
+RUN_ID：
+
+37093979530
+
+HEAD：
+
+cda3d30561e4f183b2eeb582c6a77a0f30190369
+
+completed / success
+
+5 jobs green。
+
+⑮ REMAINING SEMANTIC ISSUE
+
+当前代码：
+
+if exceptionOrDelayObserved
+  EXCEPTION_OR_DELAY_OBSERVED = PASS
+else
+  EXCEPTION_OR_DELAY_OBSERVED = FAIL
+
+同时：
+
+任一 FAIL
+→ NOT_ELIGIBLE
+
+所以现在：
+
+即使 shipment 已明确：
+
+actualDeliveryAt > promisedDeliveryAt
+
+只要 tracking events 没有：
+
+EXCEPTION / DELAYED scan
+
+最终仍会因为：
+
+EXCEPTION_OR_DELAY_OBSERVED = FAIL
+
+得到：
+
+NOT_ELIGIBLE
+⑯ Why this is incorrect
+
+Queue #7 自己的注释已经写：
+
+exception / delay observation
+（observation，不是 slaEligible）
+
+但现在代码实际上把它变成了：
+
+mandatory eligibility predicate
+
+两者矛盾。
+
+“没有 exception scan”
+
+不能推出：
+
+“没有发生 late delivery”。
+
+例如：
+
+promised = 12:00
+actual = 14:00
+events = PICKED_UP → IN_TRANSIT → DELIVERED
+
+这依然是：
+
+late delivery observation
+
+即使 carrier 没产生 DELAYED scan。
+
+因此：
+
+absence of exception scan
+
+不能自动成为：
+
+NOT_ELIGIBLE。
+
+⑰ CHANGE A — observation rule must be non-gating
+
+推荐最小修复：
+
+保留规则：
+
+EXCEPTION_OR_DELAY_OBSERVED
+
+但不让它的“未观察到”成为 FAIL。
+
+建议：
+
+观察到：
+
+PASS
+EXCEPTION_OR_DELAY_OBSERVED
+
+未观察到：
+
+PASS
+EXCEPTION_DELAY_NOT_OBSERVED
+
+或者如果希望表达“不知道是否有异常”：
+
+UNKNOWN
+EXCEPTION_DELAY_NOT_OBSERVED
+
+但如果用 UNKNOWN，
+
+当前总体聚合会变成 INDETERMINATE，
+
+仍然会阻塞 otherwise-valid late delivery。
+
+因此更推荐：
+
+PASS + observational reasonCode
+
+即：
+
+该规则表达：
+
+“观察结果是什么”
+
+而不是：
+
+“资格条件是否通过”。
+
+⑱ Alternative stronger design
+
+如果想长期区分：
+
+hard eligibility rules
+
+与：
+
+observational rules
+
+可以增加：
+
+effect:
+  GATING
+  INFORMATIONAL
+
+例如：
+
+DELIVERY_TIMING
+effect = GATING
+
+TERMS_EFFECTIVE_RANGE
+effect = GATING
+
+EXCEPTION_OR_DELAY_OBSERVED
+effect = INFORMATIONAL
+
+然后 decision 只聚合：
+
+GATING rules。
+
+这是更干净的模型。
+
+但：
+
+本轮不要求扩大设计。
+
+最小修复即可。
+
+⑲ Required regression
+
+必须新增至少：
+
+Case A
+promised = 12:00
+actual = 14:00
+exceptionOrDelayObserved = false
+其他 gating rules PASS
+
+预期：
+
+DELIVERY_TIMING = PASS
+EXCEPTION_OR_DELAY_OBSERVED = PASS/INFORMATIONAL
+decision = ELIGIBLE
+
+不得：
+
+NOT_ELIGIBLE。
+
+⑳ Existing current test must change
+
+当前测试：
+
+events = []
+→ EXCEPTION_OR_DELAY_OBSERVED = FAIL
+
+这条需要修改。
+
+可以仍断言：
+
+reasonCode = EXCEPTION_DELAY_NOT_OBSERVED
+
+但 status 不应再导致资格 FAIL。
+
+㉑ Hard FAIL rules remain valid
+
+以下 FAIL 仍可以决定：
+
+NOT_ELIGIBLE
+
+例如：
+
+TERMS_EFFECTIVE_RANGE = FAIL
+DELIVERY_TIMING = FAIL
+
+即：
+
+明确条款不适用
+
+或：
+
+明确按现有时间事实没有迟到。
+
+这些属于真实 gating conditions。
+
+不要改。
+
+㉒ Completeness conservatism：ACCEPTED
+
+当前：
+
+任何 PARTIAL bundle
+
+会使：
+
+EVIDENCE_COMPLETENESS = UNKNOWN
+
+从而整体 INDETERMINATE。
+
+这是偏保守，但符合当前 v1 契约。
+
+不阻塞本轮。
+
+㉓ Rule reasonCode naming：PASS
+
+目前 reasonCode 整体清晰：
+
+EVIDENCE_COMPLETE
+
+EVIDENCE_INCOMPLETE
+
+TERMS_NOT_EFFECTIVE
+
+SERVICE_LEVEL_CONFLICT
+
+LATE_DELIVERY_OBSERVED
+
+ON_TIME_OR_EARLY
+
+PROMISED_DELIVERY_UNAVAILABLE
+
+ACTUAL_DELIVERY_UNAVAILABLE
+
+INVOICE_EVIDENCE_MISSING
+
+接受。
+
+唯一需要调整的是：
+
+EXCEPTION_DELAY_NOT_OBSERVED
+
+对应的 status / gating semantics。
+
+㉔ Queue #7 current verdict
+
+三值 decision：
+
+PASS
+
+Eight-rule structure：
+
+PASS WITH ONE SEMANTIC FIX
+
+Terms relevant date / closed interval：
+
+PASS
+
+Conflict → UNKNOWN：
+
+PASS
+
+No money / no submission / deterministic / versioning：
+
+PASS
+
+Exception/delay observation gating：
+
+REVISE-MINOR
+
+因此：
+
+CARRIER QUEUE #7 = REVISE-MINOR / NOT CLOSED
+㉕ NEXT EXECUTION UNIT
+
+只做：
+
+CARRIER QUEUE #7 FINAL
+OBSERVATIONAL RULE NON-GATING SEMANTICS
+
+不要重做：
+
+terms range
+
+decision enum
+
+delivery timing
+
+conflicts
+
+versioning
+
+no-money boundaries
+
+㉖ Required FINAL tests
+
+至少：
+
+late delivery + no exception scan → ELIGIBLE
+
+late delivery + exception scan → ELIGIBLE
+
+on-time + no exception scan → NOT_ELIGIBLE because DELIVERY_TIMING FAIL
+
+on-time + exception scan → NOT_ELIGIBLE because DELIVERY_TIMING FAIL
+
+no exception scan must not itself appear as gating blocker
+
+exception observed may stay informational PASS
+
+terms-out-of-range still NOT_ELIGIBLE
+
+PARTIAL still INDETERMINATE
+
+conflict still INDETERMINATE
+
+deterministic output
+
+no amount fields
+
+no submission/network/write
+
+ruleSet/version unchanged or intentionally bumped if semantics changed
+
+tsc api/web 0
+
+full CI SUCCESS
+
+㉗ Rule version
+
+因为 eligibility semantics 改变：
+
+建议把：
+
+1.0.0
+
+更新为：
+
+1.0.1
+
+或：
+
+1.1.0
+
+二选一。
+
+我更推荐：
+
+1.0.1
+
+因为是修复 observation 被错误当 gating 的语义 bug，
+
+不是新增规则维度。
+
+㉘ Queue #8
+
+暂不授权。
+
+Queue #7 FINAL PASS 后再进入：
+
+CARRIER QUEUE #8
+RECOVERY AMOUNT ESTIMATION + CLAIM-READY PACKAGE INPUT
+编号裁决
+
+① 三值 decision：
+
+PASS
+
+② 八条规则 / reasonCode：
+
+PASS，除 EXCEPTION_OR_DELAY_OBSERVED gating semantics
+
+③ TERMS_EFFECTIVE_RANGE：
+
+PASS
+
+④ conflict → UNKNOWN：
+
+PASS
+
+⑤ no amount / no submit / deterministic / versioning：
+
+PASS
+
+⑥ CARRIER QUEUE #7：
+
+REVISE-MINOR / NOT CLOSED
+
+⑦ 下一执行：
+
+CARRIER QUEUE #7 FINAL — OBSERVATIONAL RULE NON-GATING SEMANTICS
+
+边界继续保持：
+
+NO platform write
+Payment = 0
+autopay = OFF
+collection = OFF
+external payment write = OFF
+R13 HOLD
+TRANSPORT = false
+无生产凭据
+
+这轮问题非常窄：“没有异常扫描”不能等价于“没有延误资格”。 现在时间事实已经能独立证明 late delivery，所以 EXCEPTION_OR_DELAY_OBSERVED 应该保持为辅助观察，而不是资格硬门槛。
+```
