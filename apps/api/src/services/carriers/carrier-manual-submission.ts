@@ -18,6 +18,8 @@
  * 说明：本文件是**契约层**（纯服务 + 注入端口），不含 Schema / DB / HTTP 绑定；持久化与路由需另行 Schema Delta 审核。
  */
 
+import { createHash } from 'node:crypto';
+
 import type { CarrierProvider } from './connector-capability';
 import type { CarrierClaimPackage } from './carrier-claim-package';
 
@@ -92,6 +94,11 @@ export interface CarrierClaimPackageSource {
 
 /** ㉚㊲ 存储端口：create 必须对 (organizationId, packageId) 原子（unique / CAS）。 */
 export interface CarrierManualSubmissionStore {
+  /**
+   * MSG-20261003-119 ㉛：若 store 在同一事务内写入 business audit（复用既有 audit primitive），
+   * 则置为 true —— 此时 service 不再单独 emit，避免「row 已建但 audit 永久缺失」的窗口。
+   */
+  readonly handlesAuditAtomically?: boolean;
   find(organizationId: string, packageId: string): Promise<CarrierManualSubmissionRecord | null>;
   create(record: CarrierManualSubmissionRecord): Promise<{ created: boolean; record: CarrierManualSubmissionRecord }>;
 }
@@ -181,7 +188,9 @@ export async function recordCarrierManualSubmission(
   const note = normalizeText(input.request.note);
 
   const record: CarrierManualSubmissionRecord = {
-    submissionRecordId: ['carrier-manual-submission', organizationId, packageId].join('|'),
+    // 逻辑幂等 identity 仍是 (organizationId, packageId)；记录 id 用其确定性哈希
+    // （短且无控制字符，可安全作为 audit entityId；相同输入 → 相同 id）。
+    submissionRecordId: 'cms-' + createHash('sha256').update(organizationId + '|' + packageId).digest('hex').slice(0, 32),
     packageId: pkg.packageId,
     bundleId: pkg.bundleId,
     organizationId,
@@ -217,8 +226,9 @@ export async function recordCarrierManualSubmission(
   const created = await deps.store.create(record);
   if (!created.created) return { ok: true, status: 'ALREADY_RECORDED', record: created.record };
 
-  // ㉜ 审计恰好一次（仅真实创建时）。
-  await deps.audit.emit({
+  // ㉜ 审计恰好一次（仅真实创建时）；store 若已同事务写入 business audit 则跳过（㉛）。
+  if (deps.store.handlesAuditAtomically !== true) {
+    await deps.audit.emit({
     event: CARRIER_MANUAL_SUBMISSION_AUDIT_EVENT,
     organizationId,
     actorUserId,
@@ -226,8 +236,9 @@ export async function recordCarrierManualSubmission(
     submissionRecordId: record.submissionRecordId,
     trackingNumber: pkg.trackingNumber,
     recordedAt,
-    result: 'RECORDED',
-  });
+      result: 'RECORDED',
+    });
+  }
 
   return { ok: true, status: 'RECORDED', record: created.record };
 }
