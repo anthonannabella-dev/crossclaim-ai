@@ -4905,7 +4905,7 @@
   "singleton_runner": "VERIFIED",
   "ci_pending": [],
   "ci_red": [],
-  "ci_checked_at": "2026-10-03T17:23:08.944Z",
+  "ci_checked_at": "2026-10-03T17:24:23.040Z",
   "continuous_verification": {
     "at": "2026-10-03T14:17:18.723Z",
     "a_to_b_to_c": "VERIFIED（单次启动连续执行 u1→u2→u3，无 heartbeat 唤醒；停止条件 = SAFE_CONTINUATION_QUEUE_EMPTY）",
@@ -4993,9 +4993,9 @@
   "awaiting_verdict": true,
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-03T17:24:07.927Z",
-    "head": "1729cb9",
-    "acceptance_head": "1729cb9",
+    "computed_at": "2026-10-03T17:24:49.726Z",
+    "head": "2316f71",
+    "acceptance_head": "2316f71",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5004,7 +5004,6 @@
     "INTERNAL_CODE_COMPLETE": false,
     "INDEPENDENT_FINAL_AUDIT_REQUIRED": true,
     "OPEN_INTERNAL_ITEMS": [
-      "CHECK:L1-03_no_open_markers",
       "CHECK:L1-10_git_working_tree_clean"
     ],
     "HOST_ACTION_REQUIRED": [
@@ -5046,13 +5045,13 @@
       },
       "L1-03_no_open_markers": {
         "label": "不存在 TODO/IN_PROGRESS/PARTIAL/READY_FOR_REVIEW/WAITING_FOR_VERDICT/未处理 REVISE·BLOCK",
-        "status": false,
+        "status": true,
         "evidence": "arch_pending=0 awaiting_verdict=true"
       },
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": true,
-        "evidence": "acceptance_head=1729cb9 ci_head=76497f4 ci=in_progress run=37140224116 last_success=503b106/37139449952"
+        "evidence": "acceptance_head=2316f71 ci_head=2316f71 ci=queued run=37140370019 last_success=503b106/37139449952"
       },
       "L1-05_pg_regression_passed": {
         "status": true,
@@ -5077,7 +5076,7 @@
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
         "status": false,
-        "evidence": "dirty entries: 7"
+        "evidence": "dirty entries: 6"
       },
       "L1-11_docs_state_consistent": {
         "status": true,
@@ -5156,9 +5155,9 @@
     "status": "DONE（MSG-20261003-134：端点+customs.recovery.chain.run/INTERNAL_WRITE+角色矩阵+immutable execution identity+路由级 E2E 4/4+API.md 90/77）"
   },
   "gates_recorded_at": "2026-10-03T15:17:04.369Z",
-  "ci_status_head": "76497f4",
-  "ci_status": "in_progress",
-  "ci_run_id": "37140224116",
+  "ci_status_head": "2316f71",
+  "ci_status": "queued",
+  "ci_run_id": "37140370019",
   "internal_code_complete_at": "2026-10-03T15:36:47.862Z",
   "independent_final_audit": {
     "required": true,

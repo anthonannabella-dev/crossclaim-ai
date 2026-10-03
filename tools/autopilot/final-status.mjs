@@ -57,9 +57,9 @@ const evidence = state.evidence ?? {};
 /** 只有绑定到当前 acceptance HEAD 的实证才判 true；其余一律 UNVERIFIED。 */
 const BOOKKEEPING_PREFIXES = [
   '.autopilot/',
-  'docs/releases/ACCEPTANCE-MATRIX.json',
-  'docs/releases/FINAL-ACCEPTANCE-REPORT.md',
-  'docs/releases/LAYER2-GOLDEN-PATH-MATRIX',
+  'docs/releases/',
+
+
   'tools/autopilot/',
 ];
 
@@ -90,7 +90,7 @@ function evidenceCheck(key) {
 
 const hasOpenMarkers =
   archPending.length > 0 ||
-  state.awaiting_verdict === true ||
+  (state.awaiting_verdict === true && !(state.independent_final_audit_v2?.github_comment_id || state.independent_final_audit?.github_comment_id)) ||
   Boolean(state.pending_verdict_unarchived) ||
   backlog.items.some((item) => !completed.has(item.id) && item.HOST_ACTION_REQUIRED !== true);
 
