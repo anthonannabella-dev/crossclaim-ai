@@ -41,6 +41,12 @@ describe('G9 — 关键 DB 约束覆盖', () => {
   requireCheck('CustomsDutyTruthRecord_input_digest_shape', /CHECK \("inputDigest" ~ /);
   requireCheck('CustomsRecoveryEstimateRecord_result_digest_shape', /CHECK \("resultDigest" ~ /);
   requireCheck('ReimbursementFact_currency_shape', /CHECK \("currency" ~ /);
+  requireCheck('PlatformWriteAttempt_reconciledStatus_check', /CHECK \("reconciledStatus" IS NULL OR "reconciledStatus" IN \(/);
+  requireCheck('PlatformWriteAttempt_targetKind_non_empty_check', /CHECK \(length\("targetKind"\) > 0\)/);
+  requireCheck('FileAsset_sourceRef_non_empty_check', /CHECK \(length\("sourceRef"\) > 0\)/);
+  requireCheck('ClaimItem_sourceFingerprint_non_empty_check', /CHECK \(length\("sourceFingerprint"\) > 0\)/);
+  requireCheck('ProviderOutcomeFact_sourceRef_non_empty_check', /CHECK \(length\("sourceRef"\) > 0\)/);
+  requireCheck('ReimbursementFact_sourceRef_non_empty_check', /CHECK \(length\("sourceRef"\) > 0\)/);
   requireCheck('ExpectedRecoveryBasis_currency_shape', /CHECK \("currency" ~ /);
   requireCheck('ClaimReconciliationProjection_currency_shape', /CHECK \("currency" ~ /);
 

@@ -51,9 +51,9 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-03T12:18:47.117Z",
   "state": "IMPLEMENT",
-  "last_action": "G9：currency 形状 CHECK（3 列，migration 20261003120000）+ DB 约束覆盖守卫测试 14/14 + G9-CONSTRAINT-GAP-SCAN 文档（27 候选，余下枚举列待逐个核对）",
+  "last_action": "G9 第二单元：PlatformWriteAttempt.reconciledStatus（7 值枚举，nullable 保留）+ targetKind/sourceRef/sourceFingerprint 非空 CHECK（migration 20261003130000）；守卫测试 20/20；运行库 10/10 约束已核实",
   "last_action_at": "2026-10-03T12:03:56.528Z",
-  "next_action": "G9 续：逐项核对枚举候选的允许值并补 CHECK；随后评估下一目标域内部缺口",
+  "next_action": "G9 续：核对剩余枚举候选（ClaimItem.claimType/platformType、RecoveryOpportunity.opportunityType、RecoveryPayout.sourceType、PaymentProcessingAttempt.resultStatus、ExpectedRecoveryBasis.basisSource 等）允许值后补 CHECK",
   "current_head": "749040c",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
@@ -4692,7 +4692,7 @@
       "tests": "apps/api/src/__tests__/customs-entry-fact-store-db.test.ts → 7/7 PASS（duplicate→exactly one / digest 冲突 fail-closed / 投影重算留历史 / 幂等 append / UPDATE·DELETE 触发器拒绝 / 跨租户拒绝 / latest 选择）"
     },
     "g9": {
-      "status": "IN_PROGRESS（currency 形状已补 + 守卫测试；枚举候选 27 项待核对）",
+      "status": "IN_PROGRESS（currency 形状 + platform-write 状态 + 引用非空 已补；剩余枚举候选待核对）",
       "migration": "20261003120000_currency_shape_checks",
       "guard": "apps/api/src/__tests__/db-constraint-coverage.test.ts → 14/14 PASS",
       "doc": "docs/releases/G9-CONSTRAINT-GAP-SCAN.md"
