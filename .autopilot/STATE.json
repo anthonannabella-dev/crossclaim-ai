@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261003-126",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-03T15:01:33.598Z",
+  "updated_at": "2026-10-03T15:06:37.798Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -51,9 +51,9 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-03T14:11:19.420Z",
   "state": "IMPLEMENT",
-  "last_action": "BG-010 真实实现落地：chargeback-recovery-chain（PS04 Phase 1 只读链：事实→证据装配→资格输入→claim-ready 证据包→只读视图）8/8 通过；BG-012 标记为需架构方再审 Action Guard 边界",
+  "last_action": "BG-012 送审：Action Guard 边界再审请求已留档（Issue #2 comment 5970404735）",
   "last_action_at": "2026-10-03T14:17:18.723Z",
-  "next_action": "执行 final-status 重算；若无其它安全项则进入 HOST_ACTION_REQUIRED/ARCH_REVIEW 停止态；等待架构方对 BG-012 的裁决",
+  "next_action": "发送审计唤醒并读取 BG-012 裁决；期间无其它安全内部项（dispatcher 已 skip BG-012）",
   "current_head": "3d80d60",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
@@ -5032,5 +5032,13 @@
   "autonomous_internal_work": "RUNNING",
   "arch_review_pending": [
     "BG-012-customs-g4-http-trigger-wiring"
-  ]
+  ],
+  "arch_review_request": {
+    "head": "1bf8d7b",
+    "doc": "docs/releases/ARCH-REVIEW-REQUEST-BG012.md",
+    "github_comment_id": "5970404735",
+    "created_at": "2026-10-03T15:06:37.798Z",
+    "wakeup_sent_at": null,
+    "verdict": null
+  }
 }
