@@ -54,6 +54,7 @@ import {
   SESSION_COOKIE,
 } from './services/auth';
 import { handleWorkflowRequest } from './services/workflow';
+import type { CarrierClaimPackageSource } from './services/carriers/carrier-manual-submission';
 import { createAppActionGuard } from './services/action-guard/runtime-guard-composition';
 
 const VERSION = '0.1.0';
@@ -65,6 +66,10 @@ export interface ServerDeps {
   storage?: StorageAdapter;
   /** 可选：注入审计写入器后，成功下载会写入 AuditLog */
   audit?: AuditWriter;
+  /**
+   * CARRIER QUEUE #9B FINAL：server-side claim package truth（测试/部署可注入；缺省返回 null → 404，不伪造 package）。
+   */
+  carrierClaimPackages?: CarrierClaimPackageSource;
   /** 可选：C-0008-A 内部认证端口（/auth/*）的依赖覆写 */
   auth?: import('./services/auth').AuthRouteDeps;
   /**
@@ -100,7 +105,7 @@ const IMPORT_ERROR_REPORT_PATH = /^\/imports\/[^/]+\/error-report$/;
 /** MSG-20260929-40：只读的 /operations/*（看板）与 /admin/*（Admin Console）也要进工作流分发，
  *  否则请求在 server 层就落到默认 404 —— 端点「纸面存在、实际不可达」。 */
 const WORKFLOW_PATH =
-  /^(?:\/opportunities(?:\/(?:insights(?:\.csv)?|[^/]+\/(?:qualify|reject|case|basis)))?|\/connections(?:\/[^/]+\/(?:status|credential-ref|rebind))?|\/recovery-states|\/recovery-money|\/accounts|\/entitlements|\/commercial-readiness|\/commercial\/(?:policies(?:\/[^/]+(?:\/accept)?)?|acceptances)|\/provider-readiness|\/payment-activation-readiness|\/cases(?:\/[^/]+\/(?:commercial-terms|recovery-outcome|recovery-review|appeal\/(?:submit|package)|claim(?:\/(?:submit|prepare|package))?|claim-package|billing\/draft|evidence|platform\/write|recovery\/(?:manual-submit|manual-reference|manual-submit-approval|manual-reference-approval))|\/[^/]+)?|\/billing(?:\/[^/]+\/(?:status|payment-review))?|\/commissions\/reconcile|\/payments(?:\/webhook|\/reconciliation(?:\.csv)?|\/events\/[^/]+\/(?:replay|replay-review)|\/processing\/retry-due(?:\/(?:freeze|review))?)?|\/operations\/(?:dashboard|claims|recovery)|\/admin\/(?:tenant-overview|audit(?:\/[^/]+)?|system-health|imports(?:\/[^/]+(?:\/errors)?)?|recovery-review(?:\/[^/]+)?|members(?:\/[^/]+)?|permission-matrix|kill-switch))$/;
+  /^(?:\/carrier-claim-packages\/[^/]+\/manual-submission|\/opportunities(?:\/(?:insights(?:\.csv)?|[^/]+\/(?:qualify|reject|case|basis)))?|\/connections(?:\/[^/]+\/(?:status|credential-ref|rebind))?|\/recovery-states|\/recovery-money|\/accounts|\/entitlements|\/commercial-readiness|\/commercial\/(?:policies(?:\/[^/]+(?:\/accept)?)?|acceptances)|\/provider-readiness|\/payment-activation-readiness|\/cases(?:\/[^/]+\/(?:commercial-terms|recovery-outcome|recovery-review|appeal\/(?:submit|package)|claim(?:\/(?:submit|prepare|package))?|claim-package|billing\/draft|evidence|platform\/write|recovery\/(?:manual-submit|manual-reference|manual-submit-approval|manual-reference-approval))|\/[^/]+)?|\/billing(?:\/[^/]+\/(?:status|payment-review))?|\/commissions\/reconcile|\/payments(?:\/webhook|\/reconciliation(?:\.csv)?|\/events\/[^/]+\/(?:replay|replay-review)|\/processing\/retry-due(?:\/(?:freeze|review))?)?|\/operations\/(?:dashboard|claims|recovery)|\/admin\/(?:tenant-overview|audit(?:\/[^/]+)?|system-health|imports(?:\/[^/]+(?:\/errors)?)?|recovery-review(?:\/[^/]+)?|members(?:\/[^/]+)?|permission-matrix|kill-switch))$/;
 
 /** CHANGE #20：Unicode 文件名走 RFC 5987 的 filename*=UTF-8''，同时给 ASCII 回退名 */
 export function buildContentDisposition(
@@ -285,6 +290,8 @@ export function createServer(deps: ServerDeps): http.Server {
     if (auth && WORKFLOW_PATH.test(url.split('?')[0] ?? '')) {
       handleWorkflowRequest(req, res, {
         prisma,
+        // CARRIER QUEUE #9B FINAL：人工提交记录路由的 server-side package truth
+        ...(deps.carrierClaimPackages ? { carrierClaimPackages: deps.carrierClaimPackages } : {}),
         session: auth.session,
         // 授权项 ②（MSG-20260930-16 §6）：受保护入口的运行时闸门；缺省 READ_ONLY → 拒绝写入
         actionGuard,

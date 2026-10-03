@@ -1345,7 +1345,7 @@ export async function handleWorkflowRequest(
       const body = await readJsonBody(req);
       const result = await handleCarrierManualSubmissionRequest(
         {
-          packageId: carrierManualSubmission[1] ?? '',
+          packageId: decodeURIComponent(carrierManualSubmission[1] ?? ''),
           request: {
             ...(typeof body.carrierReference === 'string' ? { carrierReference: body.carrierReference } : {}),
             ...(typeof body.reportedCarrierSubmissionAt === 'string'
