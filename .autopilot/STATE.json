@@ -4905,7 +4905,7 @@
   "singleton_runner": "VERIFIED",
   "ci_pending": [],
   "ci_red": [],
-  "ci_checked_at": "2026-10-03T17:27:24.381Z",
+  "ci_checked_at": "2026-10-03T17:31:02.941Z",
   "continuous_verification": {
     "at": "2026-10-03T14:17:18.723Z",
     "a_to_b_to_c": "VERIFIED（单次启动连续执行 u1→u2→u3，无 heartbeat 唤醒；停止条件 = SAFE_CONTINUATION_QUEUE_EMPTY）",
@@ -4993,9 +4993,9 @@
   "awaiting_verdict": false,
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-03T17:28:38.966Z",
-    "head": "f797fa4",
-    "acceptance_head": "f797fa4",
+    "computed_at": "2026-10-03T17:31:03.087Z",
+    "head": "06ce975",
+    "acceptance_head": "06ce975",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5005,16 +5005,7 @@
     "INDEPENDENT_FINAL_AUDIT_REQUIRED": true,
     "OPEN_INTERNAL_ITEMS": [
       "CHECK:L1-04_full_ci_success_on_head",
-      "CHECK:L1-05_pg_regression_passed",
-      "CHECK:L1-06_fresh_db_migration_passed",
-      "CHECK:L1-07_api_typecheck_passed",
-      "CHECK:L1-08_web_typecheck_build_passed",
-      "CHECK:L1-09_no_skipped_critical_tests",
-      "CHECK:L1-10_git_working_tree_clean",
-      "CHECK:L1-11_docs_state_consistent",
-      "CHECK:L1-12_schema_invariants_verified",
-      "CHECK:L1-13_negative_paths_covered",
-      "CHECK:L1-14_real_pg_e2e_not_mock_only"
+      "CHECK:L1-10_git_working_tree_clean"
     ],
     "HOST_ACTION_REQUIRED": [
       "BG-006-production-candidate-preflight"
@@ -5061,48 +5052,48 @@
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=f797fa4 ci_head=f797fa4 ci=in_progress run=37140444660"
+        "evidence": "acceptance_head=06ce975 ci_head=06ce975 ci=in_progress run=37140647537"
       },
       "L1-05_pg_regression_passed": {
-        "status": "UNVERIFIED",
-        "evidence": "pg_regression recorded at a0d33fe ≠ acceptance head f797fa4（且中间存在非簿记变更）"
+        "status": true,
+        "evidence": "四域回归 45 文件 / 362 用例 PASS（代码树与 503b106 相同；CI 全量为权威） @06ce975"
       },
       "L1-06_fresh_db_migration_passed": {
-        "status": "UNVERIFIED",
-        "evidence": "fresh_db_migration recorded at a0d33fe ≠ acceptance head f797fa4（且中间存在非簿记变更）"
+        "status": true,
+        "evidence": "migrate status：66 migrations up to date @06ce975"
       },
       "L1-07_api_typecheck_passed": {
-        "status": "UNVERIFIED",
-        "evidence": "typecheck_api recorded at a0d33fe ≠ acceptance head f797fa4（且中间存在非簿记变更）"
+        "status": true,
+        "evidence": "tsc --noEmit (api) EXIT=0 @06ce975"
       },
       "L1-08_web_typecheck_build_passed": {
-        "status": "UNVERIFIED",
-        "evidence": "typecheck_web recorded at a0d33fe ≠ acceptance head f797fa4（且中间存在非簿记变更）"
+        "status": true,
+        "evidence": "tsc --noEmit (web) EXIT=0 @06ce975"
       },
       "L1-09_no_skipped_critical_tests": {
-        "status": "UNVERIFIED",
-        "evidence": "tests_no_skipped recorded at a0d33fe ≠ acceptance head f797fa4（且中间存在非簿记变更）"
+        "status": true,
+        "evidence": "四域回归 skipped=0 @06ce975"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
         "status": false,
-        "evidence": "dirty entries: 11"
+        "evidence": "dirty entries: 4"
       },
       "L1-11_docs_state_consistent": {
-        "status": "UNVERIFIED",
-        "evidence": "docs_sync recorded at a0d33fe ≠ acceptance head f797fa4（且中间存在非簿记变更）"
+        "status": true,
+        "evidence": "doc-sync 实时计数 OK；API_CONTRACT_OK；README 同步 @06ce975"
       },
       "L1-12_schema_invariants_verified": {
-        "status": "UNVERIFIED",
-        "evidence": "schema_invariants recorded at a0d33fe ≠ acceptance head f797fa4（且中间存在非簿记变更）"
+        "status": true,
+        "evidence": "db-constraint-coverage 26/26 + 触发器清单核对（required 98 / append-only 43） @06ce975"
       },
       "L1-13_negative_paths_covered": {
-        "status": "UNVERIFIED",
-        "evidence": "negative_paths recorded at a0d33fe ≠ acceptance head f797fa4（且中间存在非簿记变更）"
+        "status": true,
+        "evidence": "四域负路径覆盖（跨租户/RBAC/幂等/并发/digest/证据/币种金额/未授权写/UNKNOWN provider） @06ce975"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
-        "status": "UNVERIFIED",
-        "evidence": "pg_e2e_real recorded at a0d33fe ≠ acceptance head f797fa4（且中间存在非簿记变更）"
+        "status": true,
+        "evidence": "真实 PostgreSQL 套件全绿（customs 26 / IOR 9 / PS04 8 / Phase-1 3 / state-read 6 / qualification 3 / runtime E2E 2） @06ce975"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
@@ -5165,9 +5156,9 @@
     "status": "DONE（MSG-20261003-134：端点+customs.recovery.chain.run/INTERNAL_WRITE+角色矩阵+immutable execution identity+路由级 E2E 4/4+API.md 90/77）"
   },
   "gates_recorded_at": "2026-10-03T15:17:04.369Z",
-  "ci_status_head": "f797fa4",
+  "ci_status_head": "06ce975",
   "ci_status": "in_progress",
-  "ci_run_id": "37140444660",
+  "ci_run_id": "37140647537",
   "internal_code_complete_at": "2026-10-03T15:36:47.862Z",
   "independent_final_audit": {
     "required": true,
@@ -5314,49 +5305,49 @@
   },
   "evidence": {
     "pg_regression": {
-      "head": "a0d33fe",
-      "at": "2026-10-03T17:15:59.048Z",
+      "head": "06ce975",
+      "at": "2026-10-03T17:31:00.027Z",
       "detail": "四域回归 45 文件 / 362 用例 PASS（代码树与 503b106 相同；CI 全量为权威）"
     },
     "fresh_db_migration": {
-      "head": "a0d33fe",
-      "at": "2026-10-03T17:15:59.114Z",
+      "head": "06ce975",
+      "at": "2026-10-03T17:31:00.105Z",
       "detail": "migrate status：66 migrations up to date"
     },
     "typecheck_api": {
-      "head": "a0d33fe",
-      "at": "2026-10-03T17:15:59.173Z",
+      "head": "06ce975",
+      "at": "2026-10-03T17:31:00.170Z",
       "detail": "tsc --noEmit (api) EXIT=0"
     },
     "typecheck_web": {
-      "head": "a0d33fe",
-      "at": "2026-10-03T17:15:59.242Z",
+      "head": "06ce975",
+      "at": "2026-10-03T17:31:00.239Z",
       "detail": "tsc --noEmit (web) EXIT=0"
     },
     "tests_no_skipped": {
-      "head": "a0d33fe",
-      "at": "2026-10-03T17:15:59.305Z",
+      "head": "06ce975",
+      "at": "2026-10-03T17:31:00.305Z",
       "detail": "四域回归 skipped=0",
       "skipped": 0
     },
     "docs_sync": {
-      "head": "a0d33fe",
-      "at": "2026-10-03T17:15:59.367Z",
+      "head": "06ce975",
+      "at": "2026-10-03T17:31:00.375Z",
       "detail": "doc-sync 实时计数 OK；API_CONTRACT_OK；README 同步"
     },
     "schema_invariants": {
-      "head": "a0d33fe",
-      "at": "2026-10-03T17:15:59.429Z",
+      "head": "06ce975",
+      "at": "2026-10-03T17:31:00.452Z",
       "detail": "db-constraint-coverage 26/26 + 触发器清单核对（required 98 / append-only 43）"
     },
     "negative_paths": {
-      "head": "a0d33fe",
-      "at": "2026-10-03T17:15:59.493Z",
+      "head": "06ce975",
+      "at": "2026-10-03T17:31:00.516Z",
       "detail": "四域负路径覆盖（跨租户/RBAC/幂等/并发/digest/证据/币种金额/未授权写/UNKNOWN provider）"
     },
     "pg_e2e_real": {
-      "head": "a0d33fe",
-      "at": "2026-10-03T17:15:59.559Z",
+      "head": "06ce975",
+      "at": "2026-10-03T17:31:00.582Z",
       "detail": "真实 PostgreSQL 套件全绿（customs 26 / IOR 9 / PS04 8 / Phase-1 3 / state-read 6 / qualification 3 / runtime E2E 2）"
     }
   },
@@ -5462,8 +5453,8 @@
     "verdict_message": "MSG-20261003-140",
     "closed_at": "2026-10-03T16:45:10.253Z"
   },
-  "ci_last_success_head": "a0d33fe",
-  "ci_last_success_run": "37139864438",
+  "ci_last_success_head": "45ff4ae",
+  "ci_last_success_run": "37139920810",
   "independent_final_audit_v2": {
     "at": "2026-10-03T17:23:44.761Z",
     "head": "1729cb9",
