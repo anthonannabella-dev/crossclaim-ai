@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "6599a10",
+  "head": "ed004ca",
   "status": "RECONCILED",
   "current_task": "Carrier Queue #6 — SLA EVIDENCE ASSEMBLY + ELIGIBILITY INPUT PLANE：Tracking Fact + Invoice Fact + POD Fact + Carrier Terms Evidence + Service Level Evidence → **ShipmentEvidenceBundle**（只建证据输入层；不得自动认定赔付 / 自动提交 claim / 自动退款 / 调用 carrier write API / 自动产生 recovery amount）。**逐字归档 MSG-111 为第一步。**CarrierInvoiceReadPort + CarrierPODReadPort（verified account lineage、request/response 双向绑定、十进制金额、charge kind 归一化 + raw code 保留、POD 掩码与隐私、safe rawReference）；**read-only**，不做 SLA/退款资格推导。CarrierTrackingReadPort + normalized CarrierTrackingSnapshot（UPS/FedEx provider adapter 分离）+ 状态/事件归一化（确定性排序 + 去重）+ 失败原因分类 + tenant/account lineage 归属；**read-only**（无 mutation / claim / pickup / refund，TRANSPORT=false）。",
   "next_task": "PC-12A 实施 → 本地测试 + tsc api/web + API contract + full CI → PC-12A CHECKPOINT 送审。",
@@ -10,7 +10,7 @@
   "production_enabled": false,
   "external_write_enabled": false,
   "updated_at": "2026-10-03T09:26:08.099Z",
-  "previous_head": "21f07e9",
+  "previous_head": "6599a10",
   "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "0c35106",
@@ -49,12 +49,12 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-03T09:53:48.131Z",
+  "last_tick_at": "2026-10-03T09:58:48.913Z",
   "state": "IMPLEMENT",
-  "last_action": "G4/C6：新增 customs-claim-ready-package（确定性装配：packageId/inputDigest/resultDigest + checklist + 缺口码；estimateOnly 且不固化为可信金额；不提交/不外写）与 8/8 回归（C1–C6 = 79/79）",
-  "last_action_at": "2026-10-03T09:55:49.215Z",
-  "next_action": "G4 续：C7 handoff-only 契约 + Q2 Schema Delta（Decimal(38,6)、append-only 事实与投影、CHANGE C lineOrdinal 唯一键）→ 合并送 G4 checkpoint",
-  "current_head": "6599a10",
+  "last_action": "G4/C7：新增 customs-handoff-boundary（handoff-only：artifact/manifest/checklist/instructions + forbiddenActions 清单 + 人工 acknowledgement 归一化；不提交/不外写/不产生 recovered truth）与 6/6 回归（C1–C7 = 85/85）",
+  "last_action_at": "2026-10-03T10:00:19.035Z",
+  "next_action": "Q2 Schema Delta 落地：Decimal(38,6) 金额、append-only CustomsEntryFactRecord/DutyLineRecord（CHANGE C：UNIQUE(factId,lineOrdinal) + INDEX(factId,rawCode,currency)）与四个 append-only 计算投影（inputDigest/algorithmVersion/resultDigest + policyId/policyVersion）→ 送 G4 checkpoint",
+  "current_head": "ed004ca",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-03T09:45:42.418Z",
-    "gapMs": 485714,
+    "previousTickAt": "2026-10-03T09:53:48.131Z",
+    "gapMs": 300783,
     "stale": false,
-    "checkedAt": "2026-10-03T09:53:48.131Z"
+    "checkedAt": "2026-10-03T09:58:48.913Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -4552,7 +4552,7 @@
       "note": "service→route 映射见 FRONTEND-WIRING-MAP §3"
     },
     "g4": {
-      "status": "IN_PROGRESS（C1–C6 DONE；CHANGE A/B 已修；Schema Delta 待落）",
+      "status": "IN_PROGRESS（C1–C7 DONE；Schema Delta 待落）",
       "step": "C1 = Customs Entry Data / Evidence Contract（只读事实归一化）",
       "artifact": "apps/api/src/services/customs/customs-entry-contract.ts",
       "tests": "apps/api/src/__tests__/customs-entry-contract.test.ts → 16/16 PASS",
@@ -4650,6 +4650,21 @@
           "NO_DISCREPANCY_EVIDENCE"
         ],
         "boundary": "filingPerformed=false / submissionPerformed=false / transportEnabled=false / estimateOnly=true / billable=false / productionCredentials=ABSENT"
+      },
+      "c7": {
+        "artifact": "apps/api/src/services/customs/customs-handoff-boundary.ts",
+        "tests": "apps/api/src/__tests__/customs-handoff-boundary.test.ts → 6/6 PASS（累计 85/85）",
+        "checkpoint": "docs/releases/CUSTOMS-G4-C7-HANDOFF-BOUNDARY-CHECKPOINT.md",
+        "forbiddenActions": [
+          "AUTO_FILING",
+          "AUTO_PORTAL_SUBMIT",
+          "BROKER_API_WRITE",
+          "ABI_EDI_WRITE",
+          "GOVERNMENT_FEE_PAYMENT",
+          "TREAT_PACKAGE_AS_FILING",
+          "TREAT_HANDOFF_AS_RECOVERED_TRUTH"
+        ],
+        "boundary": "handoffOnly=true / filingPerformed=false / submissionPerformed=false / externalWritePerformed=false / transportEnabled=false / productionCredentials=ABSENT"
       }
     }
   },

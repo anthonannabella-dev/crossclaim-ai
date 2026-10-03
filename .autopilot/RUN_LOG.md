@@ -1503,3 +1503,8 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 交付：`customs-claim-ready-package.ts`（确定性装配 + checklist + 缺口码 + sha256 摘要；estimateOnly，不固化金额）+ 8/8 回归。
 - 累计：C1–C6 = **79/79**；无 Schema / 无路由 / 无外写。
 - 下一步：C7 handoff-only + Q2 Schema Delta migration。
+
+## 2026-10-03T10:00:19.035Z — G4/C7 Handoff-Only 边界（HEAD ed004ca）
+- 交付：`customs-handoff-boundary.ts`（artifact + manifest + checklist + forbiddenActions + acknowledgement 归一化）+ 6/6 回归。
+- 累计：C1–C7 = **85/85**；无 Schema / 无路由 / 无外写。
+- 下一步：Q2 Schema Delta migration。
