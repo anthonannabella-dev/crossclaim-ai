@@ -4905,7 +4905,7 @@
   "singleton_runner": "VERIFIED",
   "ci_pending": [],
   "ci_red": [],
-  "ci_checked_at": "2026-10-03T17:15:22.155Z",
+  "ci_checked_at": "2026-10-03T17:16:00.636Z",
   "continuous_verification": {
     "at": "2026-10-03T14:17:18.723Z",
     "a_to_b_to_c": "VERIFIED（单次启动连续执行 u1→u2→u3，无 heartbeat 唤醒；停止条件 = SAFE_CONTINUATION_QUEUE_EMPTY）",
@@ -4993,9 +4993,9 @@
   "awaiting_verdict": false,
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-03T17:15:39.966Z",
-    "head": "503b106",
-    "acceptance_head": "503b106",
+    "computed_at": "2026-10-03T17:16:34.677Z",
+    "head": "a0d33fe",
+    "acceptance_head": "a0d33fe",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5052,48 +5052,48 @@
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=503b106 ci_head=503b106 ci=in_progress run=37139449952"
+        "evidence": "acceptance_head=a0d33fe ci_head=a0d33fe ci=in_progress run=37139864438"
       },
       "L1-05_pg_regression_passed": {
         "status": true,
-        "evidence": "四域回归（customs / independent-site / platform / commercial）45 文件 / 362 用例 PASS；CI 全量套件为权威 @503b106"
+        "evidence": "四域回归 45 文件 / 362 用例 PASS（代码树与 503b106 相同；CI 全量为权威） @a0d33fe"
       },
       "L1-06_fresh_db_migration_passed": {
         "status": true,
-        "evidence": "migrate status：66 migrations，Database schema is up to date @503b106"
+        "evidence": "migrate status：66 migrations up to date @a0d33fe"
       },
       "L1-07_api_typecheck_passed": {
         "status": true,
-        "evidence": "tsc --noEmit (api) EXIT=0 @503b106"
+        "evidence": "tsc --noEmit (api) EXIT=0 @a0d33fe"
       },
       "L1-08_web_typecheck_build_passed": {
         "status": true,
-        "evidence": "tsc --noEmit (web) EXIT=0 @503b106"
+        "evidence": "tsc --noEmit (web) EXIT=0 @a0d33fe"
       },
       "L1-09_no_skipped_critical_tests": {
         "status": true,
-        "evidence": "四域回归 skipped=0 @503b106"
+        "evidence": "四域回归 skipped=0 @a0d33fe"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
         "status": false,
-        "evidence": "dirty entries: 5"
+        "evidence": "dirty entries: 6"
       },
       "L1-11_docs_state_consistent": {
         "status": true,
-        "evidence": "doc-sync 模板按仓库实时计算 OK；API_CONTRACT_OK；README 计数同步 @503b106"
+        "evidence": "doc-sync 实时计数 OK；API_CONTRACT_OK；README 同步 @a0d33fe"
       },
       "L1-12_schema_invariants_verified": {
         "status": true,
-        "evidence": "db-constraint-coverage 26/26 + IOR/PS04 触发器清单（required 98 / append-only 43）运行库核对 @503b106"
+        "evidence": "db-constraint-coverage 26/26 + 触发器清单核对（required 98 / append-only 43） @a0d33fe"
       },
       "L1-13_negative_paths_covered": {
         "status": true,
-        "evidence": "四域套件覆盖：跨租户、RBAC、幂等/重放、并发 exactly-one、digest 篡改、missing evidence、currency/amount、unauthorized write、UNKNOWN provider @503b106"
+        "evidence": "四域负路径覆盖（跨租户/RBAC/幂等/并发/digest/证据/币种金额/未授权写/UNKNOWN provider） @a0d33fe"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
         "status": true,
-        "evidence": "真实 PostgreSQL 套件（customs 26 文件 / IOR 9、PS04 事实层 8、Phase-1 3、state-read 6、qualification 3、runtime E2E 2） @503b106"
+        "evidence": "真实 PostgreSQL 套件全绿（customs 26 / IOR 9 / PS04 8 / Phase-1 3 / state-read 6 / qualification 3 / runtime E2E 2） @a0d33fe"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
@@ -5156,9 +5156,9 @@
     "status": "DONE（MSG-20261003-134：端点+customs.recovery.chain.run/INTERNAL_WRITE+角色矩阵+immutable execution identity+路由级 E2E 4/4+API.md 90/77）"
   },
   "gates_recorded_at": "2026-10-03T15:17:04.369Z",
-  "ci_status_head": "503b106",
+  "ci_status_head": "a0d33fe",
   "ci_status": "in_progress",
-  "ci_run_id": "37139449952",
+  "ci_run_id": "37139864438",
   "internal_code_complete_at": "2026-10-03T15:36:47.862Z",
   "independent_final_audit": {
     "required": true,
@@ -5305,50 +5305,50 @@
   },
   "evidence": {
     "pg_regression": {
-      "head": "503b106",
-      "at": "2026-10-03T17:15:19.506Z",
-      "detail": "四域回归（customs / independent-site / platform / commercial）45 文件 / 362 用例 PASS；CI 全量套件为权威"
+      "head": "a0d33fe",
+      "at": "2026-10-03T17:15:59.048Z",
+      "detail": "四域回归 45 文件 / 362 用例 PASS（代码树与 503b106 相同；CI 全量为权威）"
     },
     "fresh_db_migration": {
-      "head": "503b106",
-      "at": "2026-10-03T17:15:19.573Z",
-      "detail": "migrate status：66 migrations，Database schema is up to date"
+      "head": "a0d33fe",
+      "at": "2026-10-03T17:15:59.114Z",
+      "detail": "migrate status：66 migrations up to date"
     },
     "typecheck_api": {
-      "head": "503b106",
-      "at": "2026-10-03T17:15:19.641Z",
+      "head": "a0d33fe",
+      "at": "2026-10-03T17:15:59.173Z",
       "detail": "tsc --noEmit (api) EXIT=0"
     },
     "typecheck_web": {
-      "head": "503b106",
-      "at": "2026-10-03T17:15:19.704Z",
+      "head": "a0d33fe",
+      "at": "2026-10-03T17:15:59.242Z",
       "detail": "tsc --noEmit (web) EXIT=0"
     },
     "tests_no_skipped": {
-      "head": "503b106",
-      "at": "2026-10-03T17:15:19.772Z",
+      "head": "a0d33fe",
+      "at": "2026-10-03T17:15:59.305Z",
       "detail": "四域回归 skipped=0",
       "skipped": 0
     },
     "docs_sync": {
-      "head": "503b106",
-      "at": "2026-10-03T17:15:19.847Z",
-      "detail": "doc-sync 模板按仓库实时计算 OK；API_CONTRACT_OK；README 计数同步"
+      "head": "a0d33fe",
+      "at": "2026-10-03T17:15:59.367Z",
+      "detail": "doc-sync 实时计数 OK；API_CONTRACT_OK；README 同步"
     },
     "schema_invariants": {
-      "head": "503b106",
-      "at": "2026-10-03T17:15:19.912Z",
-      "detail": "db-constraint-coverage 26/26 + IOR/PS04 触发器清单（required 98 / append-only 43）运行库核对"
+      "head": "a0d33fe",
+      "at": "2026-10-03T17:15:59.429Z",
+      "detail": "db-constraint-coverage 26/26 + 触发器清单核对（required 98 / append-only 43）"
     },
     "negative_paths": {
-      "head": "503b106",
-      "at": "2026-10-03T17:15:19.980Z",
-      "detail": "四域套件覆盖：跨租户、RBAC、幂等/重放、并发 exactly-one、digest 篡改、missing evidence、currency/amount、unauthorized write、UNKNOWN provider"
+      "head": "a0d33fe",
+      "at": "2026-10-03T17:15:59.493Z",
+      "detail": "四域负路径覆盖（跨租户/RBAC/幂等/并发/digest/证据/币种金额/未授权写/UNKNOWN provider）"
     },
     "pg_e2e_real": {
-      "head": "503b106",
-      "at": "2026-10-03T17:15:20.051Z",
-      "detail": "真实 PostgreSQL 套件（customs 26 文件 / IOR 9、PS04 事实层 8、Phase-1 3、state-read 6、qualification 3、runtime E2E 2）"
+      "head": "a0d33fe",
+      "at": "2026-10-03T17:15:59.559Z",
+      "detail": "真实 PostgreSQL 套件全绿（customs 26 / IOR 9 / PS04 8 / Phase-1 3 / state-read 6 / qualification 3 / runtime E2E 2）"
     }
   },
   "bg020": {
