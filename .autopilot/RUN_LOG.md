@@ -1661,3 +1661,6 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 
 ## 2026-10-03T15:59:59.364Z — CHANGE C
 - Layer 2 四域 Golden Path Matrix 落地；gaps 自动 materialize；guard 增加 GOLDEN_PATH_GAP_NOT_MATERIALIZED 检查。
+
+## 2026-10-03T16:02:05.923Z — CHANGE D
+- Independent-site 内部闭环落地（8/8）；Layer 2 矩阵 6 缺口闭合；残留 HTTP/持久化转 BG-021（需架构审计）。

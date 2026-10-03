@@ -1,6 +1,6 @@
 {
   "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。",
-  "updatedAt": "2026-10-03T15:59:59.478Z",
+  "updatedAt": "2026-10-03T16:02:05.923Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -458,7 +458,7 @@
       "id": "BG-018-independent-site-internal-closure",
       "priority": "P1",
       "source_backlog_id": "MSG-20261003-135 CHANGE D",
-      "title": "Independent-site 内部闭环（chargeback → qualification → evidence → start recovery → manual dispute handoff → status fact → settlement reconciliation → RecoveryLedger → 15% fee → BillingInvoice），fixture/manual-handoff 版",
+      "title": "Independent-site 内部闭环（已交付：chargeback-recovery-flow 8/8）；HTTP/持久化残留见 BG-021",
       "scope": "纯内部/夹具/manual-handoff；保持 submitted ≠ won ≠ settled ≠ recovered ≠ billable；真实 PSP 提交仍属 API/LEGAL/HOST",
       "acceptance_criteria": "内部闭环 E2E + 负路径 + 跨租户 + RBAC + 金额/账本一致性；零真实 PSP 写入",
       "dependencies": [],
@@ -535,154 +535,25 @@
       ]
     },
     {
-      "id": "GP-independent_site-http",
+      "id": "BG-021-independent-site-persistence-schema-delta",
       "priority": "P1",
-      "source_backlog_id": "MSG-20261003-135 CHANGE C（Layer 2 Golden Path Matrix）",
-      "title": "Layer 2 Golden Path 缺口：independent_site / http 无命名证据",
-      "scope": "为该能力轴补真实 E2E/测试证据（HTTP·persistence·DB invariant·frontend·happy·negative·replay·concurrency·failure-recovery·cross-tenant·RBAC·amount-ledger）",
-      "acceptance_criteria": "存在命名证据文件且断言真实；否则该域 Layer 2 不得判完整",
+      "source_backlog_id": "MSG-20261003-135 CHANGE D（残留：HTTP + DB 持久化）",
+      "title": "Independent-site / Chargeback 事实持久化 + HTTP 接线（Schema Delta，需架构方审计）",
+      "scope": "append-only dispute/handoff/response/settlement 事实表 + tenant/immutable 触发器 + 只读 GET/POST 路由 + 前端只读页；不含真实 PSP 调用",
+      "acceptance_criteria": "Schema Delta 获批后落 migration；真实 PG E2E（幂等、append-only、跨租户拒绝、并发 exactly-one）+ 路由契约同步",
       "dependencies": [],
-      "risk_class": "MEDIUM",
-      "ARCH_REVIEW_REQUIRED": false,
+      "risk_class": "HIGH",
+      "ARCH_REVIEW_REQUIRED": true,
       "HOST_ACTION_REQUIRED": false,
       "HOLD_EXTERNAL": true,
       "allowed_files": [
-        "apps/api/src/__tests__/**",
+        "apps/api/prisma/**",
+        "apps/api/src/**",
         "apps/web/**"
       ],
-      "boundary": "NO_EXTERNAL_CALL",
+      "boundary": "SCHEMA_CHANGE_REQUIRES_AUDIT",
       "required_tests": [
-        "independent_site"
-      ],
-      "template": "suite-evidence",
-      "filters": [
         "independent-site"
-      ],
-      "materializable": false
-    },
-    {
-      "id": "GP-independent_site-persistence",
-      "priority": "P1",
-      "source_backlog_id": "MSG-20261003-135 CHANGE C（Layer 2 Golden Path Matrix）",
-      "title": "Layer 2 Golden Path 缺口：independent_site / persistence 无命名证据",
-      "scope": "为该能力轴补真实 E2E/测试证据（HTTP·persistence·DB invariant·frontend·happy·negative·replay·concurrency·failure-recovery·cross-tenant·RBAC·amount-ledger）",
-      "acceptance_criteria": "存在命名证据文件且断言真实；否则该域 Layer 2 不得判完整",
-      "dependencies": [],
-      "risk_class": "MEDIUM",
-      "ARCH_REVIEW_REQUIRED": false,
-      "HOST_ACTION_REQUIRED": false,
-      "HOLD_EXTERNAL": true,
-      "allowed_files": [
-        "apps/api/src/__tests__/**",
-        "apps/web/**"
-      ],
-      "boundary": "NO_EXTERNAL_CALL",
-      "required_tests": [
-        "independent_site"
-      ],
-      "template": "suite-evidence",
-      "filters": [
-        "independent-site"
-      ],
-      "materializable": false
-    },
-    {
-      "id": "GP-independent_site-db_invariant",
-      "priority": "P1",
-      "source_backlog_id": "MSG-20261003-135 CHANGE C（Layer 2 Golden Path Matrix）",
-      "title": "Layer 2 Golden Path 缺口：independent_site / db_invariant 无命名证据",
-      "scope": "为该能力轴补真实 E2E/测试证据（HTTP·persistence·DB invariant·frontend·happy·negative·replay·concurrency·failure-recovery·cross-tenant·RBAC·amount-ledger）",
-      "acceptance_criteria": "存在命名证据文件且断言真实；否则该域 Layer 2 不得判完整",
-      "dependencies": [],
-      "risk_class": "MEDIUM",
-      "ARCH_REVIEW_REQUIRED": false,
-      "HOST_ACTION_REQUIRED": false,
-      "HOLD_EXTERNAL": true,
-      "allowed_files": [
-        "apps/api/src/__tests__/**",
-        "apps/web/**"
-      ],
-      "boundary": "NO_EXTERNAL_CALL",
-      "required_tests": [
-        "independent_site"
-      ],
-      "template": "suite-evidence",
-      "filters": [
-        "independent-site"
-      ],
-      "materializable": false
-    },
-    {
-      "id": "GP-independent_site-replay",
-      "priority": "P1",
-      "source_backlog_id": "MSG-20261003-135 CHANGE C（Layer 2 Golden Path Matrix）",
-      "title": "Layer 2 Golden Path 缺口：independent_site / replay 无命名证据",
-      "scope": "为该能力轴补真实 E2E/测试证据（HTTP·persistence·DB invariant·frontend·happy·negative·replay·concurrency·failure-recovery·cross-tenant·RBAC·amount-ledger）",
-      "acceptance_criteria": "存在命名证据文件且断言真实；否则该域 Layer 2 不得判完整",
-      "dependencies": [],
-      "risk_class": "MEDIUM",
-      "ARCH_REVIEW_REQUIRED": false,
-      "HOST_ACTION_REQUIRED": false,
-      "HOLD_EXTERNAL": true,
-      "allowed_files": [
-        "apps/api/src/__tests__/**",
-        "apps/web/**"
-      ],
-      "boundary": "NO_EXTERNAL_CALL",
-      "required_tests": [
-        "independent_site"
-      ],
-      "template": "suite-evidence",
-      "filters": [
-        "independent-site"
-      ],
-      "materializable": false
-    },
-    {
-      "id": "GP-independent_site-concurrency",
-      "priority": "P1",
-      "source_backlog_id": "MSG-20261003-135 CHANGE C（Layer 2 Golden Path Matrix）",
-      "title": "Layer 2 Golden Path 缺口：independent_site / concurrency 无命名证据",
-      "scope": "为该能力轴补真实 E2E/测试证据（HTTP·persistence·DB invariant·frontend·happy·negative·replay·concurrency·failure-recovery·cross-tenant·RBAC·amount-ledger）",
-      "acceptance_criteria": "存在命名证据文件且断言真实；否则该域 Layer 2 不得判完整",
-      "dependencies": [],
-      "risk_class": "MEDIUM",
-      "ARCH_REVIEW_REQUIRED": false,
-      "HOST_ACTION_REQUIRED": false,
-      "HOLD_EXTERNAL": true,
-      "allowed_files": [
-        "apps/api/src/__tests__/**",
-        "apps/web/**"
-      ],
-      "boundary": "NO_EXTERNAL_CALL",
-      "required_tests": [
-        "independent_site"
-      ],
-      "template": "suite-evidence",
-      "filters": [
-        "independent-site"
-      ],
-      "materializable": false
-    },
-    {
-      "id": "GP-independent_site-rbac",
-      "priority": "P1",
-      "source_backlog_id": "MSG-20261003-135 CHANGE C（Layer 2 Golden Path Matrix）",
-      "title": "Layer 2 Golden Path 缺口：independent_site / rbac 无命名证据",
-      "scope": "为该能力轴补真实 E2E/测试证据（HTTP·persistence·DB invariant·frontend·happy·negative·replay·concurrency·failure-recovery·cross-tenant·RBAC·amount-ledger）",
-      "acceptance_criteria": "存在命名证据文件且断言真实；否则该域 Layer 2 不得判完整",
-      "dependencies": [],
-      "risk_class": "MEDIUM",
-      "ARCH_REVIEW_REQUIRED": false,
-      "HOST_ACTION_REQUIRED": false,
-      "HOLD_EXTERNAL": true,
-      "allowed_files": [
-        "apps/api/src/__tests__/**",
-        "apps/web/**"
-      ],
-      "boundary": "NO_EXTERNAL_CALL",
-      "required_tests": [
-        "independent_site"
       ],
       "template": "suite-evidence",
       "filters": [

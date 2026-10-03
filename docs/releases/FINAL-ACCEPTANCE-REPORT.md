@@ -1,8 +1,8 @@
 # FINAL ACCEPTANCE REPORT（自动生成，请勿手改）
 
-- 生成时间：2026-10-03T15:59:59.773Z
-- 单一权威矩阵：`docs/releases/ACCEPTANCE-MATRIX.json` @4831a13
-- acceptance HEAD：`4831a13`
+- 生成时间：2026-10-03T16:02:18.258Z
+- 单一权威矩阵：`docs/releases/ACCEPTANCE-MATRIX.json` @c15d2e2
+- acceptance HEAD：`c15d2e2`
 - 协议：`docs/releases/FINAL-ACCEPTANCE-PROTOCOL.md`（三层验收；禁止自证）
 - 状态：CODE_COMPLETE=NO · INTEGRATION_COMPLETE=NO · REAL_VALIDATION_COMPLETE=NO · PRODUCTION_READY=NO
 - INTERNAL_READY=NO；AUTONOMOUS_INTERNAL_WORK=RUNNING
@@ -16,7 +16,7 @@
 | Platform Recovery | PARTIAL | BG-001 只读闭环 72 用例 | 真实 OAuth adapter = API_INTEGRATION_REQUIRED |
 | Logistics / Carrier Recovery | INTERNAL_COMPLETE | u6 carrier 289 用例 + BG-009 只读对账 7/7 | 真实 provider = EXTERNAL |
 | Customs / Trade Recovery | PARTIAL | G4 C1–C7 CLOSED（MSG-20261003-128）；BG-012 chain trigger + return-claim-evidence GET + filing-status/start-recovery 已接线 | 只读投影 GET（duty truth / discrepancy / eligibility / estimate / claim-ready）与 IOR 全链 HTTP 待接：BG-020 |
-| Independent-site / Chargeback | PARTIAL | PS04 Phase 1 只读链（BG-010） | 内部闭环 start recovery → handoff → status → settlement → ledger → fee → invoice = BG-018 |
+| Independent-site / Chargeback | PARTIAL | PS04 Phase 1 只读链（BG-010）+ 内部闭环服务与回归（chargeback-recovery-flow，8/8：submitted≠won≠settled≠recovered≠billable、15% 仅对验证到账计费） | HTTP 路由与 DB 持久化未接：BG-021（Schema Delta → ARCH_REVIEW_REQUIRED）；PSP 真实提交 = API/LEGAL/HOST |
 | Evidence Graph | INTERNAL_COMPLETE | BG-007 71 用例 |  |
 | Qualification | CLOSED | GATE B CLOSED；11/11 + PG 5/5 + 后端强制 Gate；IOR readiness 接线（BG-014） |  |
 | Settlement（只读对账） | INTERNAL_COMPLETE | BG-009 7/7（APPROVED/PAID ≠ RECEIVED） | 真实到账 = HOLD |
@@ -37,29 +37,22 @@
 ## 2. 打开的内部项（SAFE_CONTINUATION_QUEUE）
 
 - BG-013-ior-facts-persistence-schema-delta
-- BG-017-layer2-golden-path-matrix
-- BG-018-independent-site-internal-closure
 - BG-019-frontend-http-wiring-closure
 - BG-020-customs-readonly-projection-http
-- GP-independent_site-http
-- GP-independent_site-persistence
-- GP-independent_site-db_invariant
-- GP-independent_site-replay
-- GP-independent_site-concurrency
-- GP-independent_site-rbac
+- BG-021-independent-site-persistence-schema-delta
 
 ### Layer 1 未通过检查（final-status 计算器输出；UNVERIFIED = 未绑定当前 HEAD 的实证）
 
-- L1-01_safe_continuation_queue_zero → false（open backlog items: 11）
-- L1-02_no_open_internal_items → false（open internal: BG-013-ior-facts-persistence-schema-delta,BG-017-layer2-golden-path-matrix,BG-018-independent-site-internal-closure,BG-019-frontend-http-wiring-closure,BG-020-customs-readonly-projection-http,GP-independent_site-http,GP-independent_site-persistence,GP-independent_site-db_invariant,GP-independent_site-replay,GP-independent_site-concurrency,GP-independent_site-rbac）
-- L1-03_no_open_markers → false（arch_pending=1 awaiting_verdict=false）
-- L1-04_full_ci_success_on_head → false（acceptance_head=4831a13 ci_head=928fa36 ci=in_progress run=37134995413）
+- L1-01_safe_continuation_queue_zero → false（open backlog items: 4）
+- L1-02_no_open_internal_items → false（open internal: BG-013-ior-facts-persistence-schema-delta,BG-019-frontend-http-wiring-closure,BG-020-customs-readonly-projection-http,BG-021-independent-site-persistence-schema-delta）
+- L1-03_no_open_markers → false（arch_pending=2 awaiting_verdict=false）
+- L1-04_full_ci_success_on_head → false（acceptance_head=c15d2e2 ci_head=928fa36 ci=in_progress run=37134995413）
 - L1-05_pg_regression_passed → UNVERIFIED（no evidence recorded for pg_regression）
 - L1-06_fresh_db_migration_passed → UNVERIFIED（no evidence recorded for fresh_db_migration）
 - L1-07_api_typecheck_passed → UNVERIFIED（no evidence recorded for typecheck_api）
 - L1-08_web_typecheck_build_passed → UNVERIFIED（no evidence recorded for typecheck_web）
 - L1-09_no_skipped_critical_tests → UNVERIFIED（no evidence recorded for tests_no_skipped）
-- L1-10_git_working_tree_clean → false（dirty entries: 8）
+- L1-10_git_working_tree_clean → false（dirty entries: 10）
 - L1-11_docs_state_consistent → UNVERIFIED（no evidence recorded for docs_sync）
 - L1-12_schema_invariants_verified → UNVERIFIED（no evidence recorded for schema_invariants）
 - L1-13_negative_paths_covered → UNVERIFIED（no evidence recorded for negative_paths）
@@ -100,6 +93,7 @@
 ### ARCH_REVIEW_REQUIRED
 
 - BG-013-ior-facts-persistence-schema-delta
+- BG-021-independent-site-persistence-schema-delta
 
 ## 4. 边界
 

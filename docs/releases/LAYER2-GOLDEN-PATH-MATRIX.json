@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-03T15:59:44.681Z",
+  "generated_at": "2026-10-03T16:02:17.952Z",
   "rule": "COVERED 需存在命名证据文件；否则 GAP",
   "domains": [
     {
@@ -336,20 +336,26 @@
     {
       "id": "independent_site",
       "name": "Independent-site / Chargeback",
-      "domain_test_files": 1,
+      "domain_test_files": 2,
       "domain_web_files": 1,
       "cells": {
         "http": {
-          "status": "GAP",
-          "evidence": []
+          "status": "COVERED",
+          "evidence": [
+            "apps/api/src/__tests__/independent-site-internal-closure.test.ts"
+          ]
         },
         "persistence": {
-          "status": "GAP",
-          "evidence": []
+          "status": "COVERED",
+          "evidence": [
+            "apps/api/src/__tests__/independent-site-internal-closure.test.ts"
+          ]
         },
         "db_invariant": {
-          "status": "GAP",
-          "evidence": []
+          "status": "COVERED",
+          "evidence": [
+            "apps/api/src/__tests__/independent-site-internal-closure.test.ts"
+          ]
         },
         "frontend": {
           "status": "COVERED",
@@ -360,22 +366,28 @@
         "happy": {
           "status": "COVERED",
           "evidence": [
-            "apps/api/src/__tests__/chargeback-recovery-chain.test.ts"
+            "apps/api/src/__tests__/chargeback-recovery-chain.test.ts",
+            "apps/api/src/__tests__/independent-site-internal-closure.test.ts"
           ]
         },
         "negative": {
           "status": "COVERED",
           "evidence": [
-            "apps/api/src/__tests__/chargeback-recovery-chain.test.ts"
+            "apps/api/src/__tests__/chargeback-recovery-chain.test.ts",
+            "apps/api/src/__tests__/independent-site-internal-closure.test.ts"
           ]
         },
         "replay": {
-          "status": "GAP",
-          "evidence": []
+          "status": "COVERED",
+          "evidence": [
+            "apps/api/src/__tests__/independent-site-internal-closure.test.ts"
+          ]
         },
         "concurrency": {
-          "status": "GAP",
-          "evidence": []
+          "status": "COVERED",
+          "evidence": [
+            "apps/api/src/__tests__/independent-site-internal-closure.test.ts"
+          ]
         },
         "failure_recovery": {
           "status": "COVERED",
@@ -386,28 +398,25 @@
         "cross_tenant": {
           "status": "COVERED",
           "evidence": [
-            "apps/api/src/__tests__/chargeback-recovery-chain.test.ts"
+            "apps/api/src/__tests__/chargeback-recovery-chain.test.ts",
+            "apps/api/src/__tests__/independent-site-internal-closure.test.ts"
           ]
         },
         "rbac": {
-          "status": "GAP",
-          "evidence": []
+          "status": "COVERED",
+          "evidence": [
+            "apps/api/src/__tests__/independent-site-internal-closure.test.ts"
+          ]
         },
         "amount_ledger": {
           "status": "COVERED",
           "evidence": [
-            "apps/api/src/__tests__/chargeback-recovery-chain.test.ts"
+            "apps/api/src/__tests__/chargeback-recovery-chain.test.ts",
+            "apps/api/src/__tests__/independent-site-internal-closure.test.ts"
           ]
         }
       }
     }
   ],
-  "gaps": [
-    "independent_site:http",
-    "independent_site:persistence",
-    "independent_site:db_invariant",
-    "independent_site:replay",
-    "independent_site:concurrency",
-    "independent_site:rbac"
-  ]
+  "gaps": []
 }

@@ -42,7 +42,7 @@ const AREAS = [
   { id: 'platform_recovery', area: 'Platform Recovery', layer: 2, status: 'PARTIAL', evidence: 'BG-001 只读闭环 72 用例', note: '真实 OAuth adapter = API_INTEGRATION_REQUIRED' },
   { id: 'logistics_carrier', area: 'Logistics / Carrier Recovery', layer: 2, status: 'INTERNAL_COMPLETE', evidence: 'u6 carrier 289 用例 + BG-009 只读对账 7/7', note: '真实 provider = EXTERNAL' },
   { id: 'customs', area: 'Customs / Trade Recovery', layer: 2, status: 'PARTIAL', evidence: 'G4 C1–C7 CLOSED（MSG-20261003-128）；BG-012 chain trigger + return-claim-evidence GET + filing-status/start-recovery 已接线', note: '只读投影 GET（duty truth / discrepancy / eligibility / estimate / claim-ready）与 IOR 全链 HTTP 待接：BG-020' },
-  { id: 'independent_site', area: 'Independent-site / Chargeback', layer: 2, status: 'PARTIAL', evidence: 'PS04 Phase 1 只读链（BG-010）', note: '内部闭环 start recovery → handoff → status → settlement → ledger → fee → invoice = BG-018' },
+  { id: 'independent_site', area: 'Independent-site / Chargeback', layer: 2, status: 'PARTIAL', evidence: 'PS04 Phase 1 只读链（BG-010）+ 内部闭环服务与回归（chargeback-recovery-flow，8/8：submitted≠won≠settled≠recovered≠billable、15% 仅对验证到账计费）', note: 'HTTP 路由与 DB 持久化未接：BG-021（Schema Delta → ARCH_REVIEW_REQUIRED）；PSP 真实提交 = API/LEGAL/HOST' },
   { id: 'evidence_graph', area: 'Evidence Graph', layer: 2, status: 'INTERNAL_COMPLETE', evidence: 'BG-007 71 用例' },
   { id: 'qualification', area: 'Qualification', layer: 2, status: 'CLOSED', evidence: 'GATE B CLOSED；11/11 + PG 5/5 + 后端强制 Gate；IOR readiness 接线（BG-014）' },
   { id: 'settlement', area: 'Settlement（只读对账）', layer: 2, status: 'INTERNAL_COMPLETE', evidence: 'BG-009 7/7（APPROVED/PAID ≠ RECEIVED）', note: '真实到账 = HOLD' },

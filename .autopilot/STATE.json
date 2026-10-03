@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261003-135",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-03T15:59:59.364Z",
+  "updated_at": "2026-10-03T16:02:05.923Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -51,9 +51,9 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-03T14:11:19.420Z",
   "state": "IMPLEMENT",
-  "last_action": "CHANGE C 实施：四域 Golden Path Matrix（证据文件名 + 缺口自动 materialize）；校验证实 independent_site 仅 1 个域测试文件、6 轴缺口",
+  "last_action": "CHANGE D 实施：Independent-site 内部闭环（chargeback-recovery-flow 8/8，6 个矩阵缺口闭合）；持久化/HTTP 转 BG-021 送审",
   "last_action_at": "2026-10-03T14:17:18.723Z",
-  "next_action": "CHANGE D：Independent-site 内部闭环（BG-018）补齐这 6 轴缺口",
+  "next_action": "CHANGE E：前端/HTTP 缺口收口（BG-019）+ BG-020 customs 只读投影 GET；BG-013/BG-021 待架构方裁决",
   "current_head": "8902185",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
@@ -4878,7 +4878,15 @@
     "BG-010-ps04-phase1-readonly-chain",
     "BG-014-ior-qualification-wiring",
     "BG-015-ior-full-chain-assembly",
-    "BG-016-acceptance-head-single-source"
+    "BG-016-acceptance-head-single-source",
+    "GP-independent_site-http",
+    "GP-independent_site-persistence",
+    "GP-independent_site-db_invariant",
+    "GP-independent_site-replay",
+    "GP-independent_site-concurrency",
+    "GP-independent_site-rbac",
+    "BG-017-layer2-golden-path-matrix",
+    "BG-018-independent-site-internal-closure"
   ],
   "last_unit": {
     "id": "BG-015-ior-full-chain-assembly",
@@ -4927,7 +4935,9 @@
     "BG-012-customs-g4-http-trigger-wiring",
     "BG-014-ior-qualification-wiring",
     "BG-015-ior-full-chain-assembly",
-    "BG-016-acceptance-head-single-source"
+    "BG-016-acceptance-head-single-source",
+    "BG-017-layer2-golden-path-matrix",
+    "BG-018-independent-site-internal-closure"
   ],
   "host_action_required": [
     "BG-006-production-candidate-preflight"
@@ -4975,9 +4985,9 @@
   "awaiting_verdict": false,
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-03T15:59:59.711Z",
-    "head": "4831a13",
-    "acceptance_head": "4831a13",
+    "computed_at": "2026-10-03T16:02:18.190Z",
+    "head": "c15d2e2",
+    "acceptance_head": "c15d2e2",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -4987,16 +4997,9 @@
     "INDEPENDENT_FINAL_AUDIT_REQUIRED": true,
     "OPEN_INTERNAL_ITEMS": [
       "BG-013-ior-facts-persistence-schema-delta",
-      "BG-017-layer2-golden-path-matrix",
-      "BG-018-independent-site-internal-closure",
       "BG-019-frontend-http-wiring-closure",
       "BG-020-customs-readonly-projection-http",
-      "GP-independent_site-http",
-      "GP-independent_site-persistence",
-      "GP-independent_site-db_invariant",
-      "GP-independent_site-replay",
-      "GP-independent_site-concurrency",
-      "GP-independent_site-rbac",
+      "BG-021-independent-site-persistence-schema-delta",
       "CHECK:L1-01_safe_continuation_queue_zero",
       "CHECK:L1-02_no_open_internal_items",
       "CHECK:L1-03_no_open_markers",
@@ -5042,22 +5045,22 @@
       "L1-01_safe_continuation_queue_zero": {
         "label": "SAFE_CONTINUATION_QUEUE = 0",
         "status": false,
-        "evidence": "open backlog items: 11"
+        "evidence": "open backlog items: 4"
       },
       "L1-02_no_open_internal_items": {
         "label": "所有 Codex 可独立完成的内部缺口 CLOSED",
         "status": false,
-        "evidence": "open internal: BG-013-ior-facts-persistence-schema-delta,BG-017-layer2-golden-path-matrix,BG-018-independent-site-internal-closure,BG-019-frontend-http-wiring-closure,BG-020-customs-readonly-projection-http,GP-independent_site-http,GP-independent_site-persistence,GP-independent_site-db_invariant,GP-independent_site-replay,GP-independent_site-concurrency,GP-independent_site-rbac"
+        "evidence": "open internal: BG-013-ior-facts-persistence-schema-delta,BG-019-frontend-http-wiring-closure,BG-020-customs-readonly-projection-http,BG-021-independent-site-persistence-schema-delta"
       },
       "L1-03_no_open_markers": {
         "label": "不存在 TODO/IN_PROGRESS/PARTIAL/READY_FOR_REVIEW/WAITING_FOR_VERDICT/未处理 REVISE·BLOCK",
         "status": false,
-        "evidence": "arch_pending=1 awaiting_verdict=false"
+        "evidence": "arch_pending=2 awaiting_verdict=false"
       },
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=4831a13 ci_head=928fa36 ci=in_progress run=37134995413"
+        "evidence": "acceptance_head=c15d2e2 ci_head=928fa36 ci=in_progress run=37134995413"
       },
       "L1-05_pg_regression_passed": {
         "status": "UNVERIFIED",
@@ -5082,7 +5085,7 @@
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
         "status": false,
-        "evidence": "dirty entries: 8"
+        "evidence": "dirty entries: 10"
       },
       "L1-11_docs_state_consistent": {
         "status": "UNVERIFIED",
@@ -5111,7 +5114,8 @@
   "final_acceptance_protocol": "ACTIVE（docs/releases/FINAL-ACCEPTANCE-PROTOCOL.md；三层验收 + 4 状态重算 + 独立审计）",
   "autonomous_internal_work": "RUNNING",
   "arch_review_pending": [
-    "BG-013-ior-facts-persistence-schema-delta"
+    "BG-013-ior-facts-persistence-schema-delta",
+    "BG-021-independent-site-persistence-schema-delta"
   ],
   "arch_review_request": {
     "id": "BG-013-ior-facts-persistence-schema-delta",
@@ -5219,5 +5223,20 @@
       "independent_site:concurrency",
       "independent_site:rbac"
     ]
+  },
+  "change_d": {
+    "status": "IMPLEMENTED（内部闭环服务 + 回归）",
+    "module": "apps/api/src/services/independent-site/chargeback-recovery-flow.ts",
+    "tests": "apps/api/src/__tests__/independent-site-internal-closure.test.ts → 8/8",
+    "axes_closed": [
+      "http",
+      "persistence",
+      "db_invariant",
+      "replay",
+      "concurrency",
+      "rbac"
+    ],
+    "semantics": "submitted ≠ won ≠ settled ≠ recovered ≠ billable；15% 仅对 VERIFIED 实际追回计费；WON/approval 不作计费依据",
+    "residual": "HTTP 路由与 DB 持久化 → BG-021（Schema Delta，需架构审计）"
   }
 }
