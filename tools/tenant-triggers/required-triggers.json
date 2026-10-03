@@ -335,6 +335,14 @@
     {
       "name": "cc_tenant_customssubmissionattemptfact",
       "table": "CustomsSubmissionAttemptFact"
+    },
+    {
+      "name": "cc_tenant_customsentryfactrecord",
+      "table": "CustomsEntryFactRecord"
+    },
+    {
+      "name": "cc_tenant_customsentrydutylinerecord",
+      "table": "CustomsEntryDutyLineRecord"
     }
   ],
   "scopedTriggers": [

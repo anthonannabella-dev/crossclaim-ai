@@ -1513,3 +1513,8 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 新增 `customs-g4-chain.test.ts` 7/7：happy path + 少缴方向 + INDETERMINATE 传播 + 混币/PII/篡改事实/证据引用 fail-closed + 确定性。
 - customs 全套 14 文件 / **154 用例全绿**。
 - 下一步：Q2 Schema Delta。
+
+## 2026-10-03T10:28:09.779Z — Q2 Schema Delta 第一批（Customs Entry 事实层，HEAD fe4b6ed）
+- 新增 `CustomsEntryFactRecord` + `CustomsEntryDutyLineRecord`：Decimal(38,6)、append-only、CHANGE C `UNIQUE(factId,lineOrdinal)` + `INDEX(factId,rawCode,currency)`。
+- 迁移 20261003100000 已 apply；prisma validate/migrate deploy/generate OK；architecture-contract 142/142；触发器清单 85/26 + psql 校验 OK。
+- 下一批：四个 append-only 计算投影。

@@ -363,6 +363,8 @@ model Organization {
   carrierManualSubmissions           CarrierManualSubmission[]
   carrierClaimResponseFacts          CarrierClaimResponseFact[]
   customsSubmissionAttempts          CustomsSubmissionAttempt[]
+  customsEntryFacts                  CustomsEntryFactRecord[]
+  customsEntryDutyLines              CustomsEntryDutyLineRecord[]
   customsSubmissionAttemptFacts      CustomsSubmissionAttemptFact[]
   fileAssets                         FileAsset[]
   importBatches                      ImportBatch[]
@@ -2514,4 +2516,52 @@ model CustomsSubmissionAttemptFact {
   attempt      CustomsSubmissionAttempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
 
   @@index([organizationId, attemptId, observedAt])
+}
+
+// ============================================================
+// CUSTOMS GAP G4 / Q2（MSG-20261003-127 Q2 APPROVED WITH CHANGES）— Customs Entry 事实层
+//   · append-only evidence snapshot（事实 + duty lines）；不得 UPDATE 修正旧事实，新版本 = 新 Fact + lineage
+//   · 金额 = Decimal(38,6) + 独立 currency（禁止无 currency 的裸金额；禁止 DB 内跨币种 SUM）
+//   · CHANGE C：DutyLine 唯一键 = (factId, lineOrdinal)；rawCode 仅索引（真实世界的重复 rawCode 必须可落库）
+//   · 无 credential / raw payload / raw PII（仅 safe reference / digest）
+// ============================================================
+model CustomsEntryFactRecord {
+  id                        String   @id
+  organizationId            String
+  source                    String
+  entryNumber               String
+  entryDate                 DateTime @db.Date
+  jurisdiction              String
+  portOfEntry               String
+  importerOfRecordRef       String
+  rawReference              String
+  contentDigest             String
+  totalDutyAmountByCurrency Json
+  observedAt                DateTime
+  createdAt                 DateTime @default(now())
+
+  organization Organization                @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  dutyLines    CustomsEntryDutyLineRecord[]
+
+  @@unique([organizationId, contentDigest])
+  @@index([organizationId, entryNumber])
+}
+
+model CustomsEntryDutyLineRecord {
+  id             String   @id
+  organizationId String
+  factId         String
+  lineOrdinal    Int
+  kind           String
+  rawCode        String
+  amount         Decimal  @db.Decimal(38, 6)
+  currency       String
+  createdAt      DateTime @default(now())
+
+  organization Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  fact         CustomsEntryFactRecord @relation(fields: [factId], references: [id], onDelete: Cascade)
+
+  @@unique([factId, lineOrdinal])
+  @@index([factId, rawCode, currency])
+  @@index([organizationId, factId])
 }

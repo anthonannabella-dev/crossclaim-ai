@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "b468372",
+  "head": "fe4b6ed",
   "status": "RECONCILED",
   "current_task": "Carrier Queue #6 — SLA EVIDENCE ASSEMBLY + ELIGIBILITY INPUT PLANE：Tracking Fact + Invoice Fact + POD Fact + Carrier Terms Evidence + Service Level Evidence → **ShipmentEvidenceBundle**（只建证据输入层；不得自动认定赔付 / 自动提交 claim / 自动退款 / 调用 carrier write API / 自动产生 recovery amount）。**逐字归档 MSG-111 为第一步。**CarrierInvoiceReadPort + CarrierPODReadPort（verified account lineage、request/response 双向绑定、十进制金额、charge kind 归一化 + raw code 保留、POD 掩码与隐私、safe rawReference）；**read-only**，不做 SLA/退款资格推导。CarrierTrackingReadPort + normalized CarrierTrackingSnapshot（UPS/FedEx provider adapter 分离）+ 状态/事件归一化（确定性排序 + 去重）+ 失败原因分类 + tenant/account lineage 归属；**read-only**（无 mutation / claim / pickup / refund，TRANSPORT=false）。",
   "next_task": "PC-12A 实施 → 本地测试 + tsc api/web + API contract + full CI → PC-12A CHECKPOINT 送审。",
@@ -10,7 +10,7 @@
   "production_enabled": false,
   "external_write_enabled": false,
   "updated_at": "2026-10-03T09:26:08.099Z",
-  "previous_head": "ed004ca",
+  "previous_head": "7737c41",
   "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "0c35106",
@@ -49,12 +49,12 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-03T10:03:44.906Z",
+  "last_tick_at": "2026-10-03T10:23:47.868Z",
   "state": "IMPLEMENT",
-  "last_action": "G7 复核：新增 customs-g4-chain（C1→C7 端到端 7/7：合法闭环 / 少缴拒绝估算 / INDETERMINATE 传播 / 混币与 PII 入口拒绝 / 篡改事实全链 fail-closed / 证据引用 PII 拒绝 / 链路确定性）；customs 全套 154/154",
-  "last_action_at": "2026-10-03T10:09:49.483Z",
-  "next_action": "Q2 Schema Delta 落地（Decimal(38,6) + append-only 事实/投影 + CHANGE C lineOrdinal 唯一键）→ 落 migration 后合并 CHANGE A/B + migration + C6/C7 送 G4 checkpoint",
-  "current_head": "b468372",
+  "last_action": "Q2 Schema Delta 第一批（事实层）：新增 CustomsEntryFactRecord + CustomsEntryDutyLineRecord（Decimal(38,6)、append-only、CHANGE C lineOrdinal 唯一键 + rawCode 仅索引）+ migration 20261003100000；prisma validate/migrate deploy/generate OK；architecture-contract 142/142；tenant/append-only 触发器清单 85/26 且 psql 校验 OK；模型总数 63、迁移 49",
+  "last_action_at": "2026-10-03T10:28:09.779Z",
+  "next_action": "Q2 Schema Delta 第二批：四个 append-only 计算投影（DutyTruth/Discrepancy/Eligibility/Estimate，带 inputDigest/algorithmVersion/resultDigest + 政策型 policyId/policyVersion）→ 完成后把 CHANGE A/B + migration + C6/C7 合并送 G4 checkpoint",
+  "current_head": "fe4b6ed",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-03T09:58:48.913Z",
-    "gapMs": 295994,
+    "previousTickAt": "2026-10-03T10:18:45.011Z",
+    "gapMs": 302858,
     "stale": false,
-    "checkedAt": "2026-10-03T10:03:44.906Z"
+    "checkedAt": "2026-10-03T10:23:47.868Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -250,7 +250,7 @@
     "integration_boundary_review": "AUTHORIZED_TO_PLAN（先提交设计/实施计划，不直接开放真实 transport）"
   },
   "r36_submission_comment": "5927087320",
-  "stale_recovered_at": "2026-10-03T09:45:42.418Z",
+  "stale_recovered_at": "2026-10-03T10:13:48.343Z",
   "engineering_regression_policy": {
     "source": "HOST PRODUCT DIRECTION 2026-10-01",
     "doc": "docs/releases/ENGINEERING-REGRESSION-POLICY.md",
@@ -4665,6 +4665,14 @@
           "TREAT_HANDOFF_AS_RECOVERED_TRUTH"
         ],
         "boundary": "handoffOnly=true / filingPerformed=false / submissionPerformed=false / externalWritePerformed=false / transportEnabled=false / productionCredentials=ABSENT"
+      },
+      "q2_schema": {
+        "status": "IN_PROGRESS（事实层已落库并验证）",
+        "first_batch": "CustomsEntryFactRecord + CustomsEntryDutyLineRecord（append-only；Decimal(38,6)；UNIQUE(factId,lineOrdinal)；INDEX(factId,rawCode,currency)）",
+        "migration": "apps/api/prisma/migrations/20261003100000_customs_entry_fact/migration.sql",
+        "triggers": "tenant 完整性 + 归属不可变 + append-only（清单 85 baseline / 26 append-only；psql 校验 OK）",
+        "counts": "模型 63（57 core + 6 join）；迁移 49 条",
+        "next_batch": "DutyTruth/Discrepancy/Eligibility/Estimate 四个 append-only 计算投影（inputDigest/algorithmVersion/resultDigest + policyId/policyVersion）"
       }
     },
     "g7": {

@@ -135,6 +135,9 @@ describe('模型清单一致性（C-0002 CHANGE #1）', () => {
     // C17（MSG-20261003-124 ③④⑤）：Customs submission 执行身份根 + append-only 状态事实
     'CustomsSubmissionAttempt',
     'CustomsSubmissionAttemptFact',
+    // CUSTOMS GAP G4 / Q2（MSG-20261003-127）：Customs entry 事实层（append-only evidence snapshot）
+    'CustomsEntryFactRecord',
+    'CustomsEntryDutyLineRecord',
   ];
   const JOIN_MODELS = [
     'CaseEvidence',
@@ -149,7 +152,7 @@ describe('模型清单一致性（C-0002 CHANGE #1）', () => {
 
 
   it(`核心模型恰好 ${CORE.length} 个`, () => {
-    expect(CORE).toHaveLength(55);
+    expect(CORE).toHaveLength(57);
     for (const name of CORE) expect(modelBlock(name), `缺少核心模型 ${name}`).not.toBe('');
   });
 
@@ -157,8 +160,8 @@ describe('模型清单一致性（C-0002 CHANGE #1）', () => {
     for (const name of JOIN_MODELS) expect(modelBlock(name), `缺少联结模型 ${name}`).not.toBe('');
   });
 
-  it('模型总数为 61（55 core + 6 join）—— 与 README/DOMAIN_MODEL 表述一致', () => {
-    expect(modelNames()).toHaveLength(61);
+  it('模型总数为 63（57 core + 6 join）—— 与 README/DOMAIN_MODEL 表述一致', () => {
+    expect(modelNames()).toHaveLength(63);
   });
 });
 
