@@ -1487,3 +1487,14 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 留档：Issue #2 comment 5967928916（完整请求见 `docs/releases/CUSTOMS-G4-C1-C5-REVIEW-REQUEST.md`）。
 - CI 修复：deploy-smoke 就绪判定新增宿主端口可达性检查（docker-proxy 竞态 → P1001），本地 smoke 通过（51 migrations / 142 triggers）。
 - 待办：发送 ChatGPT 唤醒 → 三要素验证 → 读取裁决（PASS/REVISE/BLOCK）。
+
+## 2026-10-03T09:50:23.251Z — G4 唤醒发送 + 三要素验证
+- 通道：https://chatgpt.com/c/6ac0c3b8-30a4-83ec-a529-4d9b04ffa0e7；指向 Issue #2 comment 5967928916。
+- 验证：composer 清空 / marker 出现在对话底部 / 生成中（停止按钮存在）。
+- 架构方已在生成中，并预告两点 CHANGE（C3 delta 方向语义；唯一键会禁止重复 rawCode 落库）。
+
+## 2026-10-03T09:53:20.848Z — G4 CHANGE A/B 执行（MSG-20261003-127 REVISE，HEAD 21f07e9）
+- CHANGE A：C4 方向语义（signed 审计 + 正向 overpayment candidate + NO_POSITIVE_OVERPAYMENT_DISCREPANCY）。
+- CHANGE B：C5 消费 C4 候选，杜绝负差额被当可追回金额。
+- 验收：eligibility 16/16、estimate 16/16（C1–C5 = 71/71）；tsc api/web 0；API contract 88/75；audit/autopilot OK。
+- Q2 批准（Decimal(38,6) + append-only 投影 + CHANGE C lineOrdinal），Q3 PASS（C6 纯契约 / C7 handoff-only）。

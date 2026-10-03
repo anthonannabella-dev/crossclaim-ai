@@ -14,7 +14,6 @@
 
 import { isDecimalString, type CustomsEntryFact } from './customs-entry-contract';
 import { assertReadOnlyEntryFact, CustomsDutyTruthError } from './customs-duty-truth';
-import type { CustomsClassificationDiscrepancyReport } from './customs-classification-discrepancy';
 import type { CustomsEligibilityAssessment } from './customs-recovery-eligibility';
 
 export const CUSTOMS_ESTIMATE_STATUSES = ['ESTIMATED', 'NOT_ESTIMATED', 'INDETERMINATE'] as const;
@@ -198,7 +197,6 @@ function normalizePolicy(policy: unknown): CustomsEstimatePolicy {
 export function estimateCustomsRecovery(input: {
   fact: CustomsEntryFact;
   assessment: CustomsEligibilityAssessment;
-  discrepancy: CustomsClassificationDiscrepancyReport;
   policy: CustomsEstimatePolicy;
 }): CustomsRecoveryEstimate {
   const fact = input?.fact;
@@ -210,18 +208,10 @@ export function estimateCustomsRecovery(input: {
   }
   const policy = normalizePolicy(input.policy);
   const assessment = input?.assessment;
-  const discrepancy = input?.discrepancy;
   const reasons: { code: CustomsEstimateReason; detail: string }[] = [];
 
-  const disputedByCurrency: Record<string, string> = {};
-  for (const item of discrepancy?.items ?? []) {
-    if (item.code !== 'AMOUNT_MISMATCH' || !item.currency || !item.deltaAmount) continue;
-    const absolute = item.deltaAmount.startsWith('-') ? item.deltaAmount.slice(1) : item.deltaAmount;
-    const existing = disputedByCurrency[item.currency];
-    disputedByCurrency[item.currency] = existing
-      ? formatScaled(toScaled(existing) + toScaled(absolute))
-      : formatScaled(toScaled(absolute));
-  }
+  // CHANGE B：只消费 C4 已裁定的**正向多缴候选**金额，绝不把负差额取绝对值当可追回金额。
+  const disputedByCurrency: Record<string, string> = { ...(assessment?.overpaymentCandidateAmountByCurrency ?? {}) };
 
   const base = {
     entryNumber: fact.entryNumber,

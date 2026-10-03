@@ -33,6 +33,7 @@ export const CUSTOMS_ELIGIBILITY_REASONS = [
   'NO_DUTY_LINES',
   'REQUIRED_DISCREPANCY_MISSING',
   'BELOW_MIN_DISPUTED_AMOUNT',
+  'NO_POSITIVE_OVERPAYMENT_DISCREPANCY',
   'MIN_THRESHOLD_NOT_DEFINED_FOR_CURRENCY',
   'OTHER_KIND_LINES_PRESENT',
 ] as const;
@@ -86,7 +87,10 @@ export interface CustomsEligibilityAssessment {
   status: CustomsEligibilityStatus;
   reasons: readonly CustomsEligibilityReasonEntry[];
   entryAgeDays: number | null;
-  observedDiscrepancyAmountByCurrency: Readonly<Record<string, string>>;
+  /** 审计用：保留正负号的金额差异合计（delta = actual − expected）。 */
+  signedDiscrepancyAmountByCurrency: Readonly<Record<string, string>>;
+  /** 只累计 delta > 0 的多缴候选金额；负差额（少缴）绝不进入恢复阈值。 */
+  overpaymentCandidateAmountByCurrency: Readonly<Record<string, string>>;
   examinedLineCount: number;
   readonly eligibilityDetermined: true;
   readonly adjudicationPerformed: false;
@@ -105,6 +109,7 @@ const NOT_ELIGIBLE_REASONS: readonly CustomsEligibilityReason[] = [
   'NO_DUTY_LINES',
   'REQUIRED_DISCREPANCY_MISSING',
   'BELOW_MIN_DISPUTED_AMOUNT',
+  'NO_POSITIVE_OVERPAYMENT_DISCREPANCY',
 ];
 const INDETERMINATE_REASONS: readonly CustomsEligibilityReason[] = [
   'MIN_THRESHOLD_NOT_DEFINED_FOR_CURRENCY',
@@ -166,8 +171,8 @@ function normalizePolicy(policy: unknown): CustomsEligibilityPolicy {
   };
 }
 
-function absoluteDecimal(value: string): string {
-  return value.startsWith('-') ? value.slice(1) : value;
+function isPositiveAmount(value: string): boolean {
+  return compareDecimal(value, '0.00') > 0;
 }
 
 function compareDecimal(left: string, right: string): number {
@@ -242,14 +247,30 @@ export function evaluateCustomsEligibility(input: {
     });
   }
 
-  const observedDiscrepancyAmountByCurrency: Record<string, string> = {};
+  const signedDiscrepancyAmountByCurrency: Record<string, string> = {};
+  const overpaymentCandidateAmountByCurrency: Record<string, string> = {};
+  let mismatchCount = 0;
   for (const item of discrepancy.items) {
     if (item.code !== 'AMOUNT_MISMATCH' || !item.currency || !item.deltaAmount) continue;
-    const current = observedDiscrepancyAmountByCurrency[item.currency];
-    const absolute = absoluteDecimal(item.deltaAmount);
-    observedDiscrepancyAmountByCurrency[item.currency] = current
-      ? sumDecimalStrings([current, absolute])
-      : sumDecimalStrings([absolute]);
+    mismatchCount += 1;
+    const delta = item.deltaAmount;
+    const signed = signedDiscrepancyAmountByCurrency[item.currency];
+    signedDiscrepancyAmountByCurrency[item.currency] = signed
+      ? sumDecimalStrings([signed, delta])
+      : sumDecimalStrings([delta]);
+    // CHANGE A：只有 delta > 0（多缴方向）才可能构成可追回候选；delta < 0 不得进入阈值。
+    if (isPositiveAmount(delta)) {
+      const candidate = overpaymentCandidateAmountByCurrency[item.currency];
+      overpaymentCandidateAmountByCurrency[item.currency] = candidate
+        ? sumDecimalStrings([candidate, delta])
+        : sumDecimalStrings([delta]);
+    }
+  }
+  if (mismatchCount > 0 && Object.keys(overpaymentCandidateAmountByCurrency).length === 0) {
+    reasons.push({
+      code: 'NO_POSITIVE_OVERPAYMENT_DISCREPANCY',
+      detail: 'all observed amount mismatches are non-positive (underpayment direction): no recovery candidate',
+    });
   }
 
   if (policy.requiredDiscrepancyCodes.length > 0) {
@@ -266,7 +287,7 @@ export function evaluateCustomsEligibility(input: {
   const currencies = truth.currencies.map((entry) => entry.currency).sort();
   for (const currency of currencies) {
     const threshold = policy.minDisputedAmountByCurrency[currency];
-    const observed = observedDiscrepancyAmountByCurrency[currency] ?? '0.00';
+    const observed = overpaymentCandidateAmountByCurrency[currency] ?? '0.00';
     if (threshold === undefined) {
       reasons.push({
         code: 'MIN_THRESHOLD_NOT_DEFINED_FOR_CURRENCY',
@@ -304,7 +325,8 @@ export function evaluateCustomsEligibility(input: {
     status,
     reasons,
     entryAgeDays,
-    observedDiscrepancyAmountByCurrency,
+    signedDiscrepancyAmountByCurrency,
+    overpaymentCandidateAmountByCurrency,
     examinedLineCount: lineCount,
     eligibilityDetermined: true,
     adjudicationPerformed: false,

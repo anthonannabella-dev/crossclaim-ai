@@ -88,7 +88,6 @@ function estimateWith(
       discrepancy,
       policy: eligibilityPolicy(eligibilityOverrides),
     }),
-    discrepancy,
     policy: estimatePolicy(estimateOverrides),
   });
 }
@@ -204,7 +203,6 @@ describe('estimateCustomsRecovery', () => {
         discrepancy,
         policy: eligibilityPolicy(),
       }),
-      discrepancy,
     };
     expect(codeOf({ ...base, policy: null })).toBe('INVALID_POLICY');
     expect(codeOf({ ...base, policy: estimatePolicy({ ratioByCurrency: { USD: '1.50' } }) })).toBe('INVALID_RATIO');
@@ -221,7 +219,7 @@ describe('estimateCustomsRecovery', () => {
       discrepancy,
       policy: eligibilityPolicy(),
     });
-    expect(codeOf({ fact: { ...fact, readOnly: false }, assessment, discrepancy, policy: estimatePolicy() })).toBe(
+    expect(codeOf({ fact: { ...fact, readOnly: false }, assessment, policy: estimatePolicy() })).toBe(
       'NOT_A_READ_ONLY_FACT',
     );
   });
@@ -252,5 +250,39 @@ describe('estimateCustomsRecovery', () => {
     expect(estimate).not.toHaveProperty('billableAmount');
     expect(estimate).not.toHaveProperty('successFee');
     expect(CUSTOMS_ESTIMATE_REASONS).toHaveLength(8);
+  });
+
+  it('CHANGE B：多缴方向 → 估算 20；少缴方向 → 绝不估算（候选为 0）', () => {
+    const overpaid = estimateWith(factOf([{ kind: 'DUTY', rawCode: 'DUTY-9901', amount: '120.00', currency: 'USD' }]), [
+      expectation({ expectedAmount: '100.00' }),
+    ]);
+    expect(overpaid.status).toBe('ESTIMATED');
+    expect(overpaid.byCurrency[0].disputedAmount).toBe('20.00');
+    expect(overpaid.byCurrency[0].estimatedAmount).toBe('20.00');
+
+    const underpaid = estimateWith(factOf([{ kind: 'DUTY', rawCode: 'DUTY-9901', amount: '80.00', currency: 'USD' }]), [
+      expectation({ expectedAmount: '100.00' }),
+    ]);
+    expect(underpaid.status).toBe('NOT_ESTIMATED');
+    expect(underpaid.byCurrency).toEqual([]);
+    expect(underpaid.reasons.map((reason) => reason.code)).toEqual(['NOT_ELIGIBLE_INPUT']);
+  });
+
+  it('CHANGE B：正负混存 → 只按正向候选估算（+20 与 -15 → 20，不是 35/5）', () => {
+    const estimate = estimateWith(
+      factOf([
+        { kind: 'DUTY', rawCode: 'DUTY-9901', amount: '120.00', currency: 'USD' },
+        { kind: 'DUTY', rawCode: 'DUTY-9902', amount: '85.00', currency: 'USD' },
+      ]),
+      [
+        expectation({ expectedAmount: '100.00' }),
+        expectation({ lineRawCode: 'DUTY-9902', expectedAmount: '100.00' }),
+      ],
+      {},
+      { minDisputedAmountByCurrency: { USD: '10.00' } },
+    );
+    expect(estimate.status).toBe('ESTIMATED');
+    expect(estimate.byCurrency[0].disputedAmount).toBe('20.00');
+    expect(estimate.byCurrency[0].estimatedAmount).toBe('20.00');
   });
 });

@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "7b55a0a",
+  "head": "21f07e9",
   "status": "RECONCILED",
   "current_task": "Carrier Queue #6 — SLA EVIDENCE ASSEMBLY + ELIGIBILITY INPUT PLANE：Tracking Fact + Invoice Fact + POD Fact + Carrier Terms Evidence + Service Level Evidence → **ShipmentEvidenceBundle**（只建证据输入层；不得自动认定赔付 / 自动提交 claim / 自动退款 / 调用 carrier write API / 自动产生 recovery amount）。**逐字归档 MSG-111 为第一步。**CarrierInvoiceReadPort + CarrierPODReadPort（verified account lineage、request/response 双向绑定、十进制金额、charge kind 归一化 + raw code 保留、POD 掩码与隐私、safe rawReference）；**read-only**，不做 SLA/退款资格推导。CarrierTrackingReadPort + normalized CarrierTrackingSnapshot（UPS/FedEx provider adapter 分离）+ 状态/事件归一化（确定性排序 + 去重）+ 失败原因分类 + tenant/account lineage 归属；**read-only**（无 mutation / claim / pickup / refund，TRANSPORT=false）。",
   "next_task": "PC-12A 实施 → 本地测试 + tsc api/web + API contract + full CI → PC-12A CHECKPOINT 送审。",
@@ -51,10 +51,10 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-03T09:45:42.418Z",
   "state": "IMPLEMENT",
-  "last_action": "G4 READY_FOR_REVIEW：C1–C5（67/67）+ 差集/checkpoint 文档 + GitHub Issue #2 留档评论 5967928916；CI 修复 deploy-smoke 就绪竞态（7b55a0a）",
-  "last_action_at": "2026-10-03T09:48:44.432Z",
-  "next_action": "向审计会话（https://chatgpt.com/c/6ac0c3b8-30a4-83ec-a529-4d9b04ffa0e7）发送 G4 READY_FOR_REVIEW 唤醒（指向 Issue #2 comment 5967928916），验证三要素后读取裁决：PASS→C6，REVISE→按 CHANGE 改，BLOCK→停止该方案",
-  "current_head": "7b55a0a",
+  "last_action": "G4 REVISE 执行：CHANGE A（C4 只累计 delta>0 的 overpayment candidate + NO_POSITIVE_OVERPAYMENT_DISCREPANCY）+ CHANGE B（C5 消费 C4 候选，不再 abs(delta)）→ eligibility 16/16、estimate 16/16（C1–C5 = 71/71）",
+  "last_action_at": "2026-10-03T09:53:20.848Z",
+  "next_action": "Q2 落地：Schema Delta（Decimal(38,6) + append-only 事实/投影 + CHANGE C lineOrdinal 唯一键 + inputDigest/algorithmVersion/resultDigest）→ migration 送审；并行 Q3：C6 claim-ready package（纯契约）+ C7 handoff-only",
+  "current_head": "21f07e9",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -4696,7 +4696,42 @@
     "doc": "docs/releases/CUSTOMS-G4-C1-C5-REVIEW-REQUEST.md",
     "github_comment_id": "5967928916",
     "github_comment_url": "https://github.com/anthonannabella-dev/crossclaim-ai/issues/2#issuecomment-5967928916",
-    "wakeup_sent_at": null,
-    "verdict": null
+    "wakeup_sent_at": "2026-10-03T09:50:23.251Z",
+    "verdict": "REVISE（MSG-20261003-127）",
+    "wakeup_channel": "https://chatgpt.com/c/6ac0c3b8-30a4-83ec-a529-4d9b04ffa0e7",
+    "wakeup_verification": [
+      "composer cleared",
+      "marker message present at transcript bottom",
+      "generating (stop button present)"
+    ],
+    "architect_progress": "正在生成：已预告两点 CHANGE（① C3 delta 方向语义：C4/C5 不应把 delta 取绝对值累计，负差额不得成为可追回金额；② 拟议 (factId, rawCode, currency) 唯一键会禁止 C2 要观察的重复 rawCode 落库）",
+    "verdict_archived": "AI-ARCHITECT-INBOX ### [MSG-20261003-127]，FULL_COPY_OK（204 行）",
+    "changes": {
+      "A": "C4：禁止 abs(delta)；只允许 delta > 0 进入 overpaymentCandidateAmountByCurrency；新增 NO_POSITIVE_OVERPAYMENT_DISCREPANCY（NOT_ELIGIBLE）",
+      "B": "C5：只消费 C4 overpaymentCandidateAmountByCurrency，不再自行解释 C3 delta",
+      "C": "Schema：DutyLine 不得 UNIQUE(factId, rawCode, currency)；改 lineOrdinal/deterministic line id 唯一 + rawCode 仅索引"
+    },
+    "q2": {
+      "status": "APPROVED WITH CHANGES",
+      "amountType": "Decimal(38,6)（不采用 text + CHECK）",
+      "fact": "append-only（新版本 = 新 FactRecord + lineage）",
+      "projections": "DutyTruth/Discrepancy/Eligibility/Estimate 全部 append-only 落库；latest 由 query/view 推导",
+      "projectionColumns": [
+        "organizationId",
+        "inputFactId",
+        "inputDigest",
+        "policyId?",
+        "policyVersion?",
+        "algorithmVersion",
+        "resultDigest",
+        "computedAt",
+        "payload"
+      ]
+    },
+    "q3": {
+      "status": "PASS",
+      "c6": "可立即做纯契约/装配层；A/B 修复前不得把 C5 金额固化为可信金额",
+      "c7": "handoff-only：handoff package + checklist + manifest；禁止自动 filing / broker API write / ABI-EDI write / 自动付政府费用"
+    }
   }
 }

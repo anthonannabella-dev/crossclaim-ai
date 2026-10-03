@@ -123384,3 +123384,328 @@ NO payment write
 
 C21 当前应做的是把已经关闭的 C17 能力暴露成安全的 HTTP orchestration/read surface，而不是提前打开真实 Customs filing。
 ```
+
+### [MSG-20261003-127] CUSTOMS G4 C1–C5 裁决：REVISE（CHANGE A/B + Schema Delta 修改批准 / Q3 PASS）— REVIEWED_HEAD 21f07e9 / Issue #2 comment 5967928916
+
+```text
+CUSTOMS G4 C1–C5 裁决：REVISE，但不是架构重做。
+我核了实际 C1–C5 服务实现。C1–C3 的基础方向可以批准；C4/C5 有一个会直接造成“把少缴也算成可追回”的金额方向问题，需要先修。Q2 的 Schema 可以授权落地，但要改两处设计。
+
+Q1 — C1–C5 语义裁决
+
+C1：PASS。
+只读事实契约、递归拒绝 PII/credential、Decimal-string + BigInt scale-6、不做 FX、不做 filing/payment，这些边界成立。
+
+C2：PASS。
+逐币种、逐 kind 精确计算；输入声明值不覆盖计算真值；只产生 observation、不做 adjudication，批准。
+
+C3：PASS。
+deltaAmount = actual − expected 这个定义正确，而且必须保留这个有方向的 delta：
+
+delta > 0：actual 高于 expected，才可能存在 overpayment / recovery candidate
+delta = 0：无金额差异
+delta < 0：actual 低于 expected，属于 underpayment direction，不能当成退款机会
+
+问题出现在下游。
+
+C4：REVISE — CHANGE A。
+
+当前代码：
+
+absoluteDecimal(item.deltaAmount)
+
+然后把正负 delta 都加入：
+
+observedDiscrepancyAmountByCurrency
+
+这意味着：
+
+actual = 80
+expected = 100
+delta = -20
+
+现在会被 C4 变成 20，并可能满足 minimum disputed amount，从而走向 ELIGIBLE。
+
+对于“退关税/追回多缴税款”这个链路，这个方向是错误的。
+
+CHANGE A：恢复金额方向语义。
+
+建议明确拆成：
+
+signedDiscrepancyAmountByCurrency：可选，用于审计，保留正负；
+overpaymentCandidateAmountByCurrency：只累计 delta > 0；
+delta < 0 不得计入 recovery threshold。
+
+至少要求：
+
+recoveryCandidate = Σ max(actual - expected, 0)
+
+而不是：
+
+Σ abs(actual - expected)。
+
+如果所有 amount mismatch 都是负方向，应当不能因为这些负差额进入 ELIGIBLE。
+
+最好新增原因码，例如：
+
+NO_POSITIVE_OVERPAYMENT_DISCREPANCY
+
+具体最终归入 NOT_ELIGIBLE 还是“无 recovery candidate”均可，但必须 fail-closed，不能估算退款。
+
+C5：REVISE — CHANGE B。
+
+当前 C5 同样：
+
+纯文本
+absolute = item.deltaAmount.startsWith('-')
+  ? item.deltaAmount.slice(1)
+  : item.deltaAmount
+
+所以同样会把 -20 当成 $20 disputed amount，甚至再乘 ratio 得出“预计追回金额”。
+
+必须改成：
+
+只有 deltaAmount > 0 才进入 estimated recoverable base。
+
+C5 最好不要重新独立解释 C3 原始 delta，而是消费 C4 已明确的：
+
+overpaymentCandidateAmountByCurrency
+
+这样 C4/C5 不会以后出现两个不同的金额口径。
+
+新增至少三类测试：
+
+纯文本
+actual 120 / expected 100 → candidate 20
+actual 80 / expected 100 → candidate 0，绝不能 estimate 20
++20 与 -15 同时存在 → candidate 20，不是 35，也不是 5
+
+因此 Q1 总裁决 = REVISE。
+仅要求 CHANGE A/B，C1–C3 不重做。
+
+Q2 — Schema Delta 裁决
+
+批准落 Schema，但按以下版本实施。
+
+1. 金额类型：批准 Decimal(38,6)
+
+选择：
+
+Decimal(38,6)，不要 text + CHECK。
+
+理由是 PostgreSQL NUMERIC/DECIMAL 本身就是精确十进制，不存在 float 精度问题，同时：
+
+可原生比较；
+可 SUM；
+可排序；
+可做 CHECK；
+不需要业务层反复 cast；
+比 text 更适合作为数据库计算事实。
+
+服务层仍可继续使用 decimal string + BigInt 做确定性计算；DB 是精确持久化层，二者并不冲突。
+
+货币金额必须继续单独保存：
+
+amount + currency
+
+禁止无 currency 的裸金额，也禁止 DB 内跨币种 SUM。
+
+2. CustomsEntryDutyLineRecord 当前 UNIQUE 设计必须修改 — CHANGE C
+
+拟议：
+
+UNIQUE(factId, rawCode, currency)
+
+不批准。
+
+因为 C2 自己明确有：
+
+DUPLICATE_RAW_CODE
+
+这个 observation。
+
+如果 schema 直接禁止同 fact 下相同 rawCode/currency 出现，那么你会在持久化层删除一个真实世界可能发生的异常状态，导致 C2 永远无法从数据库事实重建该 observation。
+
+改成例如：
+
+纯文本
+id
+factId
+lineOrdinal
+kind
+rawCode
+amount Decimal(38,6)
+currency
+
+UNIQUE(factId, lineOrdinal)
+INDEX(factId, rawCode, currency)
+
+或者使用确定性的 line ID。
+
+原则是：
+
+原始事实层必须能够忠实保存重复、冲突和异常事实，不能为了数据库整洁把异常先消灭。
+
+3. 投影策略：批准“全部 append-only 落库”
+
+选择：
+
+事实 + 全部历史计算投影 append-only 保存。
+
+不要只存“最新投影”。
+
+也不要维护一个会 UPDATE 的“latest projection row”。
+
+原因很简单：后面政策版本、算法版本、差异表版本变化后，需要回答：
+
+当时为什么判 ELIGIBLE？
+当时用的是哪个政策？
+当时预计多少钱？
+后来为什么变了？
+
+所以：
+
+CustomsDutyTruthRecord
+CustomsDiscrepancyRecord
+CustomsEligibilityRecord
+CustomsRecoveryEstimateRecord
+
+全部 append-only。
+
+“最新结果”通过：
+
+ORDER BY computedAt DESC
+
+或 read-model/view 取得。
+
+4. 投影不能只保存 policyVersion
+
+每个计算投影建议至少带：
+
+纯文本
+organizationId
+inputFactId
+inputDigest
+policyId?
+policyVersion?
+algorithmVersion
+resultDigest
+computedAt
+payload
+
+其中：
+
+C2 可能无 policy；
+C3 应记录 expectation snapshot/reference/digest；
+C4/C5 必须记录 policyId + policyVersion；
+algorithmVersion 很重要，否则以后代码算法变了，仅靠 policyVersion 无法解释旧结果；
+inputDigest/resultDigest 用于重放和审计。
+
+关键可查询字段用 typed column；详细结果可以 JSON/JSONB payload。
+
+5. Fact 本身必须 append-only
+
+批准：
+
+CustomsEntryFactRecord + CustomsEntryDutyLineRecord
+
+作为一个 immutable evidence snapshot。
+
+不能 UPDATE 修正旧事实。
+
+如果后来得到新版报关事实，应创建：
+
+新的 FactRecord + lineage/reference
+
+而不是修改旧 entry。
+
+Q3 — C6 / C7 裁决
+
+C6：可以立即继续，不需要等 Q2 migration。
+
+但有限制：
+
+C6 Claim-Ready Package 可以先做纯契约层和确定性装配层，因为它不需要 DB schema 才能定义。
+
+不过在 CHANGE A/B 修完前：
+
+不要把现有 C5 的 estimated amount 固化成 Claim-Ready Package 的可信金额。
+
+建议 C6 做成：
+
+纯文本
+Entry Fact
++ Duty Truth
++ Discrepancy
++ Eligibility
++ Estimate
++ Policy/version provenance
++ Evidence references
+→ deterministic Claim-Ready Package
+
+并显式保持：
+
+纯文本
+filingPerformed=false
+submissionPerformed=false
+estimateOnly=true
+billable=false
+C7：批准该边界
+
+按你提出的方式做：
+
+C7 = handoff only
+
+允许：
+
+生成客户可下载的 claim-ready package；
+生成 broker handoff package；
+生成 checklist / required fields / supporting documents manifest；
+生成提交说明；
+客户自主提交；
+broker 人工承接；
+记录 handoff fact / acknowledgement。
+
+不允许：
+
+自动 filing；
+自动点击海关/报关系统提交；
+broker API write；
+ABI/EDI write；
+自动支付政府费用；
+把 package generated 当成 filing succeeded；
+把 handoff 当成 recovered truth。
+
+边界继续：
+
+HOLD_EXTERNAL
+TRANSPORT=false
+filingSubmitted=false
+
+给 Codex 的最终编号裁决
+
+Q1：REVISE
+
+C1 PASS
+C2 PASS
+C3 PASS
+CHANGE A：C4 禁止 abs(delta) 作为 recovery eligibility 金额；只允许 delta > 0 进入 overpayment candidate
+CHANGE B：C5 禁止负 delta 取绝对值估算追回；只消费正向 overpayment candidate
+
+Q2：APPROVED WITH CHANGES
+
+金额：Decimal(38,6)
+事实：append-only
+投影：全部历史 append-only 落库
+latest 通过 query/view 推导，不 UPDATE
+CHANGE C：DutyLine 不得 UNIQUE(factId, rawCode, currency)，改为 lineOrdinal/deterministic-line-id 唯一；rawCode 仅索引
+每个计算投影增加 inputDigest + algorithmVersion + resultDigest，政策型投影再带 policyId/policyVersion
+
+Q3：PASS
+
+C6 可立即并行做纯契约层
+C7 按 handoff-only 实现
+真实 filing 继续 HOLD_EXTERNAL
+
+修完 CHANGE A/B 后，不需要重送 C1–C3；可以把 A/B + Schema Delta migration + C6/C7 一并作为下一次 G4 checkpoint。
+```

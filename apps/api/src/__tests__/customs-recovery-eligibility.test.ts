@@ -93,7 +93,8 @@ describe('evaluateCustomsEligibility', () => {
     const assessment = evaluateWith(factOf([line]), [expectation()]);
     expect(assessment.status).toBe('ELIGIBLE');
     expect(assessment.reasons.map((reason) => reason.code)).toEqual(['OK']);
-    expect(assessment.observedDiscrepancyAmountByCurrency).toEqual({ USD: '30.00' });
+    expect(assessment.overpaymentCandidateAmountByCurrency).toEqual({ USD: '30.00' });
+    expect(assessment.signedDiscrepancyAmountByCurrency).toEqual({ USD: '30.00' });
     expect(assessment.examinedLineCount).toBe(1);
     expect(assessment.entryAgeDays).toBe(1);
   });
@@ -121,7 +122,7 @@ describe('evaluateCustomsEligibility', () => {
     const assessment = evaluateWith(factOf([line]), [expectation({ expectedAmount: '100.00' })]);
     expect(assessment.status).toBe('NOT_ELIGIBLE');
     expect(assessment.reasons.map((reason) => reason.code)).toContain('REQUIRED_DISCREPANCY_MISSING');
-    expect(assessment.observedDiscrepancyAmountByCurrency).toEqual({});
+    expect(assessment.overpaymentCandidateAmountByCurrency).toEqual({});
   });
 
   it('低于最小争议金额 → NOT_ELIGIBLE BELOW_MIN_DISPUTED_AMOUNT', () => {
@@ -170,7 +171,7 @@ describe('evaluateCustomsEligibility', () => {
       { minDisputedAmountByCurrency: { USD: '10.00', CAD: '10.00' } },
     );
     expect(assessment.status).toBe('ELIGIBLE');
-    expect(assessment.observedDiscrepancyAmountByCurrency).toEqual({ CAD: '30.00', USD: '30.00' });
+    expect(assessment.overpaymentCandidateAmountByCurrency).toEqual({ CAD: '30.00', USD: '30.00' });
   });
 
   it('政策非法 / 阈值非法 → fail-closed（不静默默认）', () => {
@@ -218,6 +219,33 @@ describe('evaluateCustomsEligibility', () => {
     expect(assessment.productionCredentials).toBe('ABSENT');
     expect(assessment).not.toHaveProperty('recoverableAmount');
     expect(assessment).not.toHaveProperty('successFee');
-    expect(CUSTOMS_ELIGIBILITY_REASONS).toHaveLength(9);
+    expect(CUSTOMS_ELIGIBILITY_REASONS).toHaveLength(10);
+  });
+
+  it('CHANGE A：全部为负差额（少缴方向）→ NOT_ELIGIBLE + NO_POSITIVE_OVERPAYMENT_DISCREPANCY（候选为 0）', () => {
+    // actual 80 / expected 100 → delta = -20：绝不能变成 +20 的“争议金额”
+    const assessment = evaluateWith(factOf([line]), [expectation({ expectedAmount: "120.00" })]);
+    expect(assessment.status).toBe('NOT_ELIGIBLE');
+    expect(assessment.reasons.map((reason) => reason.code)).toContain('NO_POSITIVE_OVERPAYMENT_DISCREPANCY');
+    expect(assessment.overpaymentCandidateAmountByCurrency).toEqual({});
+    expect(assessment.signedDiscrepancyAmountByCurrency).toEqual({ USD: '-20.00' });
+  });
+
+  it('CHANGE A：正负混存 → 候选只累计正差额（+20 与 -15 → 20，不是 35/5）', () => {
+    const fact = factOf([
+      { kind: 'DUTY', rawCode: 'DUTY-9901', amount: '120.00', currency: 'USD' },
+      { kind: 'DUTY', rawCode: 'DUTY-9902', amount: '85.00', currency: 'USD' },
+    ]);
+    const assessment = evaluateWith(
+      fact,
+      [
+        expectation({ expectedAmount: '100.00' }),
+        expectation({ lineRawCode: 'DUTY-9902', expectedAmount: '100.00' }),
+      ],
+      { minDisputedAmountByCurrency: { USD: '10.00' } },
+    );
+    expect(assessment.status).toBe('ELIGIBLE');
+    expect(assessment.overpaymentCandidateAmountByCurrency).toEqual({ USD: '20.00' });
+    expect(assessment.signedDiscrepancyAmountByCurrency).toEqual({ USD: '5.00' });
   });
 });
