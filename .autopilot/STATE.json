@@ -6,10 +6,10 @@
   "next_task": null,
   "send_head": "07b7009",
   "decision_head": "07b7009",
-  "last_chatgpt_message": "MSG-20261003-148",
+  "last_chatgpt_message": "MSG-20261003-149",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-03T23:43:46.757Z",
+  "updated_at": "2026-10-03T23:53:09.312Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -5043,9 +5043,9 @@
   "awaiting_verdict": false,
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-03T23:43:10.617Z",
-    "head": "7c3bcfd",
-    "acceptance_head": "7c3bcfd",
+    "computed_at": "2026-10-03T23:53:10.019Z",
+    "head": "6e6e697",
+    "acceptance_head": "6e6e697",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5111,48 +5111,48 @@
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=7c3bcfd ci_head=f5bdd92 ci=in_progress run=37143524364"
+        "evidence": "acceptance_head=6e6e697 ci_head=f5bdd92 ci=in_progress run=37143524364"
       },
       "L1-05_pg_regression_passed": {
         "status": "UNVERIFIED",
-        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head 7c3bcfd（且中间存在非簿记变更）"
+        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head 6e6e697（且中间存在非簿记变更）"
       },
       "L1-06_fresh_db_migration_passed": {
         "status": "UNVERIFIED",
-        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head 7c3bcfd（且中间存在非簿记变更）"
+        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head 6e6e697（且中间存在非簿记变更）"
       },
       "L1-07_api_typecheck_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head 7c3bcfd（且中间存在非簿记变更）"
+        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head 6e6e697（且中间存在非簿记变更）"
       },
       "L1-08_web_typecheck_build_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head 7c3bcfd（且中间存在非簿记变更）"
+        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head 6e6e697（且中间存在非簿记变更）"
       },
       "L1-09_no_skipped_critical_tests": {
         "status": "UNVERIFIED",
-        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head 7c3bcfd（且中间存在非簿记变更）"
+        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head 6e6e697（且中间存在非簿记变更）"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
         "status": false,
-        "evidence": "dirty entries: 10"
+        "evidence": "dirty entries: 15"
       },
       "L1-11_docs_state_consistent": {
         "status": "UNVERIFIED",
-        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head 7c3bcfd（且中间存在非簿记变更）"
+        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head 6e6e697（且中间存在非簿记变更）"
       },
       "L1-12_schema_invariants_verified": {
         "status": "UNVERIFIED",
-        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head 7c3bcfd（且中间存在非簿记变更）"
+        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head 6e6e697（且中间存在非簿记变更）"
       },
       "L1-13_negative_paths_covered": {
         "status": "UNVERIFIED",
-        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head 7c3bcfd（且中间存在非簿记变更）"
+        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head 6e6e697（且中间存在非簿记变更）"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
         "status": "UNVERIFIED",
-        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head 7c3bcfd（且中间存在非簿记变更）"
+        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head 6e6e697（且中间存在非簿记变更）"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
@@ -5807,5 +5807,90 @@
       "checkedAt": "2026-10-03T23:43:46.757Z"
     }
   ],
-  "ci_policy": "非阻塞：commit 后记录 pending，不等待；仅红灯时 SELF_RESOLVE → 修复 → 重跑"
+  "ci_policy": "非阻塞：commit 后记录 pending，不等待；仅红灯时 SELF_RESOLVE → 修复 → 重跑",
+  "post_acceptance_final_verdict": {
+    "at": "2026-10-03T23:44:46.841Z",
+    "reviewed_request": "5974535504",
+    "reviewed_design_head": "9f6fbcf",
+    "observed_implementation_head": "9819bb7",
+    "verdict": "PASS_WITH_REVISIONS",
+    "implementation_authorized": "YES",
+    "production_enablement": "HOLD",
+    "customer_ui_i18n_ack": "P0-I18N-01（9819bb7）被明确接受为真实推进；169→177 系扫描器覆盖扩大，非产品倒退；此后棘轮只允许下降，目标 CUSTOMER_UI_HARDCODED_STRING_COUNT = 0",
+    "execution_order": [
+      "P0-I18N 继续（已达成 0）",
+      "Email Verification + Password Reset",
+      "Claim / Appeal Language Metadata",
+      "Unified CSRF Guard",
+      "BullMQ PostgreSQL Worker / Scheduler",
+      "Notification Phase 1",
+      "Data Lifecycle Foundation",
+      "Customer Shell / Navigation",
+      "Provider Cards / Customs Customer UX",
+      "Customer Product P0 全量回归",
+      "Freeze CUSTOMER_PRODUCT_BASELINE",
+      "P1 Customs Data Provider"
+    ],
+    "report_fields": [
+      "CUSTOMER_UI_HARDCODED_STRING_COUNT",
+      "CUSTOMER_UI_LOCALIZATION",
+      "STATUS_LOCALIZATION",
+      "DATE_MONEY_LOCALIZATION",
+      "EMAIL_VERIFICATION_LIFECYCLE",
+      "PASSWORD_RECOVERY",
+      "CLAIM_LANGUAGE_METADATA",
+      "MUTATION_CSRF",
+      "DURABLE_WORKER_RUNTIME",
+      "SCHEDULER_RUNTIME",
+      "IN_APP_NOTIFICATION",
+      "DATA_LIFECYCLE",
+      "CUSTOMER_NAVIGATION",
+      "CUSTOMER_PROVIDER_UX",
+      "CUSTOMS_CUSTOMER_UX",
+      "CURRENT_HEAD",
+      "CI_RUN",
+      "CI_CONCLUSION",
+      "P0_REMAINING",
+      "ARCHITECT_REVIEW_REQUIRED",
+      "NEXT_EXECUTION_UNIT"
+    ],
+    "frozen_core": "FINAL_ACCEPTANCE_HEAD = 0f7f7ac 不变；Tenant/Lineage/Canonical Fact/Opportunity/Case/Evidence/HITL/Action Guard/Settlement/Money Ledger/Payment Boundary/Production Gate 禁止无理由重构",
+    "production_boundary": "INTEGRATION_COMPLETE=NO / REAL_VALIDATION_COMPLETE=NO / PRODUCTION_READY=NO；真实 OAuth、provider network、filing、支付、生产凭据、真实客户数据、资金动作全部 HOLD"
+  },
+  "email_lifecycle": {
+    "at": "2026-10-03T23:53:09.312Z",
+    "authorization": "MSG-20261003-148 / MSG-20261003-149（APPROVE_WITH_REVISIONS）",
+    "EMAIL_VERIFICATION_LIFECYCLE": "PASS",
+    "PASSWORD_RECOVERY": "PASS",
+    "EMAIL_DELIVERY": "EXTERNAL_GATE（运行时默认 disabled 适配器；测试用 fake 适配器捕获 token）",
+    "schema": [
+      "EmailVerificationToken",
+      "PasswordResetToken"
+    ],
+    "model_count": "77 → 79（73 core + 6 join）",
+    "migration": "20261004010000_email_verification_password_reset（66 → 67 migrations applied）",
+    "invariants": [
+      "A. token 256-bit；库内只存 SHA-256 digest（UNIQUE）；明文 token 不入库/日志/AuditLog",
+      "B. resend supersede 既有未消费 token",
+      "C. verify 原子（CAS consume + emailVerified=true；并发只有一个成功）",
+      "D. verify 不改 passwordChangedAt",
+      "E. reset 原子（consume + hash + passwordChangedAt + 撤销全部 session）",
+      "F. forgot 不暴露邮箱存在性（同形响应）"
+    ],
+    "routes": [
+      "POST /auth/verify-email",
+      "POST /auth/resend-verification",
+      "POST /auth/forgot-password",
+      "POST /auth/reset-password"
+    ],
+    "tests": {
+      "unit": "apps/api/src/__tests__/email-verification.test.ts（9）",
+      "pg": "apps/api/src/__tests__/email-verification-db.test.ts（8，真实 PostgreSQL）",
+      "http": "apps/api/src/__tests__/email-lifecycle-http-db.test.ts（3，真实 HTTP + PostgreSQL：未验证 403 → verify → 登录成功；reset 撤销 session）",
+      "total": "20/20 PASS",
+      "regression": "auth 系列 5 文件 / 37 tests PASS；architecture-contract 142/142 PASS"
+    },
+    "unverified_login_gate_link": "EMAIL_NOT_VERIFIED（P0-1）与 verify 生命周期端到端打通"
+  },
+  "next_execution_unit": "Claim / Appeal Language Metadata（MSG-20261003-148 §6）"
 }

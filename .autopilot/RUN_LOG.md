@@ -1774,3 +1774,9 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 
 ## 2026-10-03T23:43:09.891Z — P0-I18N-09
 - 客户 UI 硬编码 36 → 0（9 批次）：signup/accounts/opportunities/connections/money/plan/cases/:id/claim-package + 共享组件。
+
+## 2026-10-03T23:44:46.841Z — MSG-20261003-149
+- 收到 POST-ACCEPTANCE GAP CLOSURE FINAL VERDICT（PASS_WITH_REVISIONS / IMPLEMENTATION_AUTHORIZED=YES）；6 项修订 + 12 步执行顺序 + 汇报字段已登记。
+
+## 2026-10-03T23:53:09.312Z — EMAIL LIFECYCLE
+- Email 验证 + 密码重置落地（Schema + migration 67 + service + HTTP + 20 tests）；EMAIL_DELIVERY 保持 EXTERNAL_GATE。

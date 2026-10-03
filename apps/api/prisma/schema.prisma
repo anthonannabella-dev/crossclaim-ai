@@ -453,6 +453,8 @@ model User {
 
   memberships Membership[]
   sessions    Session[]
+  emailVerificationTokens EmailVerificationToken[]
+  passwordResetTokens     PasswordResetToken[]
   auditLogs   AuditLog[]
 
   policyAcceptances PolicyAcceptance[]
@@ -2989,4 +2991,39 @@ model IndependentSitePhase1Projection {
 
   @@unique([organizationId, disputeReference, resultDigest])
   @@index([organizationId, disputeReference, computedAt])
+}
+
+/// PC-01B（MSG-20261003-148/149）：邮箱验证令牌。库内只存 SHA-256 digest，明文 token 永不落库。
+model EmailVerificationToken {
+  id              String    @id @default(uuid())
+  userId          String
+  tokenHash       String    @unique
+  expiresAt       DateTime
+  consumedAt      DateTime?
+  supersededAt    DateTime?
+  /// 请求方 IP 只存加盐哈希（原始 IP 永不落库）
+  requesterIpHash String?
+  createdAt       DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@index([userId, consumedAt])
+}
+
+/// PC-01B：密码重置令牌（同上：只存 digest；消费必须原子）。
+model PasswordResetToken {
+  id              String    @id @default(uuid())
+  userId          String
+  tokenHash       String    @unique
+  expiresAt       DateTime
+  consumedAt      DateTime?
+  supersededAt    DateTime?
+  requesterIpHash String?
+  createdAt       DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, expiresAt])
+  @@index([userId, consumedAt])
 }

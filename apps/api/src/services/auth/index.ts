@@ -12,6 +12,31 @@ export {
   type ScryptParams,
 } from './password';
 export {
+  AUTH_TOKEN_BYTES,
+  EMAIL_VERIFICATION_TTL_MS,
+  PASSWORD_RESET_TTL_MS,
+  createDisabledEmailDelivery,
+  createFakeEmailDelivery,
+  hashAuthToken,
+  hashRequesterIp,
+  isVerifiedOutcome,
+  newAuthToken,
+  normalizeAuthEmail,
+  requestEmailVerification,
+  requestPasswordReset,
+  resetPasswordWithToken,
+  verifyEmailWithToken,
+  type AuthAccountRow,
+  type AuthLifecycleDeps,
+  type AuthTokenAccountPort,
+  type AuthTokenOutcome,
+  type AuthTokenPurpose,
+  type EmailDeliveryPort,
+  type EmailDeliveryResult,
+  type EmailVerificationPort,
+  type PasswordResetPort,
+} from './email-verification';
+export {
   PUBLIC_SIGNUP_FLAG,
   SelfSignupError,
   bootstrapSelfServiceAccount,
@@ -51,7 +76,10 @@ export {
   type LoginResult,
 } from './login';
 export {
+  createPrismaAuthTokenAccountPort,
   createPrismaAuthUserPort,
+  createPrismaEmailVerificationPort,
+  createPrismaPasswordResetPort,
   createPrismaInvitationMembershipPort,
   createPrismaInvitationPort,
   createPrismaInvitationUserPort,

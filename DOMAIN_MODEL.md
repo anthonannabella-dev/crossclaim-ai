@@ -440,3 +440,18 @@ I3  一笔 Payment 最多一个成功执行来源（SUCCEEDED + paymentId 上的
 
 > 约束口径：`(organizationId, idempotencyKey)` 唯一 = 唯一逻辑执行链；`(organizationId, approvalId)` 唯一 = 一个非空审批最多绑定一个能取得真实执行权的 attempt；`SUCCEEDED` 另有 partial unique index 兜底（迁移内 raw SQL）。
 > 边界：真实外写、真实 adapter、HTTP 入口、生产凭据全部保持 HOLD；`PLATFORM_WRITE_TRANSPORT_ENABLED = false`。
+
+## PC-01B — Email 验证 / 密码重置令牌（MSG-20261003-148 / MSG-20261003-149）
+
+| 模型 | 作用 | 关键不变量 |
+|---|---|---|
+| `EmailVerificationToken` | 邮箱验证一次性令牌 | 库内只存 `tokenHash`（SHA-256，`UNIQUE`）；`expiresAt` / `consumedAt` / `supersededAt`；`(userId, expiresAt)` 索引；消费与 `User.emailVerified=true` 同一事务（CAS，同一 token 并发最多一次成功）；**不得改写 `passwordChangedAt`** |
+| `PasswordResetToken` | 密码重置一次性令牌 | 同上（只存 digest + `UNIQUE`）；消费事务内必须同时完成：改 `passwordHash` + 置 `passwordChangedAt` + 撤销该用户全部 `Session`；任一步失败整体回滚 |
+
+共同规则：
+
+- 明文 token 永不入库 / 入日志 / 入 `AuditLog`；`requesterIpHash` 只存加盐哈希（原始 IP 不落库）。
+- 重发（resend / forgot）必须 supersede 该用户此前全部未消费令牌（不得并存多条有效链接）。
+- `forgot-password` 对存在 / 不存在 / 已停用邮箱返回完全相同的对外结果（不暴露存在性）。
+- 两张表按 `userId` 归属（无 `organizationId`，与 `Session` 同族），因此不挂租户触发器；`tokenHash` / `userId` 由 DB 触发器保证不可改写。
+- `EMAIL_DELIVERY = EXTERNAL_GATE`：运行时默认装配 disabled 适配器（零投递）；测试注入 fake 适配器捕获 token。

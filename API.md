@@ -48,6 +48,10 @@ C-0008-B2（Case / Evidence / Claim Draft / Billing）的端点尚未实现。
 | POST | `/auth/login` | `{ email, password, organizationId? }` | 200 `{ userId, organizationId, role }` + `Set-Cookie` | 401 `INVALID_CREDENTIALS`（统一文案，不区分账号是否存在）；403 `ACCOUNT_LOCKED` / `ACCOUNT_DISABLED` |
 | POST | `/auth/logout` | — | 204 + 清除 Cookie（写 `auth.session_revoked`） | — |
 | GET | `/auth/me` | — | 200 `{ userId, organizationId, role }` | 401 `UNAUTHENTICATED` |
+| POST | `/auth/verify-email` | `{ token }` | 200 `{ verified: true }`（原子消费：consume + `emailVerified=true`，**不改** `passwordChangedAt`；写 `user.email_verified`） | 400 `INVALID` / `ALREADY_CONSUMED` / `SUPERSEDED`；410 `EXPIRED`；503 `EMAIL_LIFECYCLE_UNAVAILABLE` |
+| POST | `/auth/resend-verification` | `{ email }` | 202 `{ accepted: true }`（重发会 supersede 该用户既有未消费 token） | 503 `EMAIL_LIFECYCLE_UNAVAILABLE` |
+| POST | `/auth/forgot-password` | `{ email }` | 202 `{ accepted: true }`（**统一口径**：不暴露邮箱是否存在 / 是否已停用） | 503 `EMAIL_LIFECYCLE_UNAVAILABLE` |
+| POST | `/auth/reset-password` | `{ token, password }` | 200 `{ reset: true, revokedSessions }`（原子：consume + 新 hash + `passwordChangedAt` + 撤销全部 session；写 `user.password_reset_completed`） | 400 `INVALID` / `ALREADY_CONSUMED` / `SUPERSEDED` / `PASSWORD_POLICY`；410 `EXPIRED`；503 `EMAIL_LIFECYCLE_UNAVAILABLE` |
 | POST | `/auth/signup` | `{ email, password, organizationName, displayName? }` | 201 `{ userId, organizationId, role, emailVerified, sessionIssued, nextStep }`（**不发放 session**；`emailVerified=false`，nextStep=`EMAIL_VERIFICATION_REQUIRED`） | 403 `SIGNUP_DISABLED`（PC-01A feature gate 默认关闭）；409 `EMAIL_ALREADY_REGISTERED`；400 `INVALID_EMAIL` / `INVALID_INPUT` / `ORGANIZATION_NAME_REQUIRED` |
 
 其他方法：405 `METHOD_NOT_ALLOWED`。

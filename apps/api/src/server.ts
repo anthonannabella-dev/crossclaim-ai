@@ -46,7 +46,11 @@ import {
 import { createPrismaImportRepository } from './services/ingest';
 import {
   bootstrapSelfServiceAccount,
+  createDisabledEmailDelivery,
+  createPrismaAuthTokenAccountPort,
   createPrismaAuthUserPort,
+  createPrismaEmailVerificationPort,
+  createPrismaPasswordResetPort,
   createPrismaMembershipLookup,
   createPrismaSessionPort,
   handleAuthRequest,
@@ -209,6 +213,16 @@ export function createServer(deps: ServerDeps): http.Server {
             bootstrapSelfServiceAccount(prisma, input, {
               enabled: process.env.PUBLIC_SIGNUP_ENABLED === 'true',
             }),
+          // PC-01B（MSG-20261003-148/149）：邮箱验证 / 密码重置生命周期；EMAIL_DELIVERY 仍为 EXTERNAL_GATE。
+          lifecycle: {
+            accounts: createPrismaAuthTokenAccountPort(prisma),
+            emailVerification: createPrismaEmailVerificationPort(prisma),
+            passwordReset: createPrismaPasswordResetPort(prisma),
+            delivery: createDisabledEmailDelivery(),
+            audit,
+            log: (event, fields) => log.warn(event, fields),
+            ipSalt: auditIpSalt,
+          },
         }
       : undefined);
 
@@ -240,7 +254,15 @@ export function createServer(deps: ServerDeps): http.Server {
 
     // C-0008-A 内部认证端点：仅服务本地/内部 Web 应用，未做公网暴露
     // PC-08：最敏感的匿名入口限流基线（只拒绝过量请求，不读取/记录任何凭据）。
-    if (req.method === 'POST' && (url === '/auth/login' || url === '/auth/signup')) {
+    const anonymousAuthPaths = [
+      '/auth/login',
+      '/auth/signup',
+      '/auth/forgot-password',
+      '/auth/reset-password',
+      '/auth/resend-verification',
+      '/auth/verify-email',
+    ];
+    if (req.method === 'POST' && anonymousAuthPaths.includes(url)) {
       const clientKey = (req.socket.remoteAddress ?? 'unknown') + '|' + url;
       const decision = authRateLimiter.check(url, clientKey);
       if (!decision.allowed) {

@@ -12,6 +12,11 @@ import type {
   InvitationUserPort,
 } from './invitation';
 import type { ActiveMembership, MembershipLookupPort, SessionPort } from './session';
+import type {
+  AuthTokenAccountPort,
+  EmailVerificationPort,
+  PasswordResetPort,
+} from './email-verification';
 
 export function createPrismaAuthUserPort(prisma: PrismaClient): AuthUserPort {
   return {
@@ -251,6 +256,148 @@ export function createPrismaInvitationMembershipPort(
         select: { id: true },
       });
       return { id: created.id };
+    },
+  };
+}
+
+const AUTH_ACCOUNT_SELECT = { id: true, email: true, emailVerified: true, status: true } as const;
+
+/** PC-01B：账号解析端口（带主租户，用于审计归属；无成员身份时 organizationId = null）。 */
+export function createPrismaAuthTokenAccountPort(prisma: PrismaClient): AuthTokenAccountPort {
+  const withOrganization = async (
+    row: { id: string; email: string; emailVerified: boolean; status: string } | null,
+  ) => {
+    if (!row) return null;
+    const membership = await prisma.membership.findFirst({
+      where: { userId: row.id, isActive: true },
+      select: { organizationId: true },
+      orderBy: { joinedAt: 'asc' },
+    });
+    return { ...row, organizationId: membership?.organizationId ?? null };
+  };
+  return {
+    async findByEmail(email) {
+      return withOrganization(await prisma.user.findUnique({ where: { email }, select: AUTH_ACCOUNT_SELECT }));
+    },
+    async findById(userId) {
+      return withOrganization(await prisma.user.findUnique({ where: { id: userId }, select: AUTH_ACCOUNT_SELECT }));
+    },
+  };
+}
+
+/** PC-01B：邮箱验证令牌端口（C：consume 与 emailVerified 在同一事务内）。 */
+export function createPrismaEmailVerificationPort(prisma: PrismaClient): EmailVerificationPort {
+  return {
+    async supersedeUnconsumed(userId, at) {
+      const result = await prisma.emailVerificationToken.updateMany({
+        where: { userId, consumedAt: null, supersededAt: null },
+        data: { supersededAt: at },
+      });
+      return result.count;
+    },
+
+    async create(row) {
+      const created = await prisma.emailVerificationToken.create({
+        data: {
+          userId: row.userId,
+          tokenHash: row.tokenHash,
+          expiresAt: row.expiresAt,
+          createdAt: row.createdAt,
+          requesterIpHash: row.requesterIpHash,
+        },
+        select: { id: true },
+      });
+      return { id: created.id };
+    },
+
+    async consumeAndVerify(input) {
+      return prisma.$transaction(async (tx) => {
+        const row = await tx.emailVerificationToken.findUnique({
+          where: { tokenHash: input.tokenHash },
+          select: { id: true, userId: true, expiresAt: true, consumedAt: true, supersededAt: true },
+        });
+        if (!row) return { outcome: 'INVALID' as const, userId: null };
+        if (row.consumedAt) return { outcome: 'ALREADY_CONSUMED' as const, userId: row.userId };
+        if (row.supersededAt) return { outcome: 'SUPERSEDED' as const, userId: row.userId };
+        if (row.expiresAt.getTime() <= input.at.getTime()) {
+          return { outcome: 'EXPIRED' as const, userId: row.userId };
+        }
+        const claimed = await tx.emailVerificationToken.updateMany({
+          where: { id: row.id, consumedAt: null, supersededAt: null },
+          data: { consumedAt: input.at },
+        });
+        if (claimed.count !== 1) return { outcome: 'ALREADY_CONSUMED' as const, userId: row.userId };
+        // D：只置 emailVerified；不得改写 passwordChangedAt
+        await tx.user.update({ where: { id: row.userId }, data: { emailVerified: true } });
+        return { outcome: 'OK' as const, userId: row.userId };
+      });
+    },
+  };
+}
+
+/** PC-01B：密码重置令牌端口（E：consume + hash + passwordChangedAt + 撤销全部 session 同事务）。 */
+export function createPrismaPasswordResetPort(prisma: PrismaClient): PasswordResetPort {
+  return {
+    async supersedeUnconsumed(userId, at) {
+      const result = await prisma.passwordResetToken.updateMany({
+        where: { userId, consumedAt: null, supersededAt: null },
+        data: { supersededAt: at },
+      });
+      return result.count;
+    },
+
+    async create(row) {
+      const created = await prisma.passwordResetToken.create({
+        data: {
+          userId: row.userId,
+          tokenHash: row.tokenHash,
+          expiresAt: row.expiresAt,
+          createdAt: row.createdAt,
+          requesterIpHash: row.requesterIpHash,
+        },
+        select: { id: true },
+      });
+      return { id: created.id };
+    },
+
+    async consumeAndResetPassword(input) {
+      return prisma.$transaction(async (tx) => {
+        const row = await tx.passwordResetToken.findUnique({
+          where: { tokenHash: input.tokenHash },
+          select: { id: true, userId: true, expiresAt: true, consumedAt: true, supersededAt: true },
+        });
+        if (!row) return { outcome: 'INVALID' as const, userId: null, revokedSessions: 0 };
+        if (row.consumedAt) {
+          return { outcome: 'ALREADY_CONSUMED' as const, userId: row.userId, revokedSessions: 0 };
+        }
+        if (row.supersededAt) {
+          return { outcome: 'SUPERSEDED' as const, userId: row.userId, revokedSessions: 0 };
+        }
+        if (row.expiresAt.getTime() <= input.at.getTime()) {
+          return { outcome: 'EXPIRED' as const, userId: row.userId, revokedSessions: 0 };
+        }
+        const claimed = await tx.passwordResetToken.updateMany({
+          where: { id: row.id, consumedAt: null, supersededAt: null },
+          data: { consumedAt: input.at },
+        });
+        if (claimed.count !== 1) {
+          return { outcome: 'ALREADY_CONSUMED' as const, userId: row.userId, revokedSessions: 0 };
+        }
+        await tx.user.update({
+          where: { id: row.userId },
+          data: {
+            passwordHash: input.newPasswordHash,
+            passwordChangedAt: input.at,
+            failedLogins: 0,
+            lockedUntil: null,
+          },
+        });
+        const revoked = await tx.session.updateMany({
+          where: { userId: row.userId, revokedAt: null },
+          data: { revokedAt: input.at, lastRotatedAt: input.at },
+        });
+        return { outcome: 'OK' as const, userId: row.userId, revokedSessions: revoked.count };
+      });
     },
   };
 }

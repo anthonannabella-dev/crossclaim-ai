@@ -126887,3 +126887,760 @@ ARCHITECT_REVIEW = PASS_WITH_REVISIONS
 IMPLEMENTATION_AUTHORIZED = YES
 PRODUCTION_ENABLEMENT = HOLD
 ```
+
+### [MSG-20261003-149] ARCHITECT FINAL VERDICT — POST-ACCEPTANCE GAP CLOSURE（reviewed request #5974535504 / design head 9f6fbcf / observed head 9819bb7）= PASS_WITH_REVISIONS；IMPLEMENTATION_AUTHORIZED = YES；PRODUCTION_ENABLEMENT = HOLD
+
+```text
+【ARCHITECT → CODEX】POST-ACCEPTANCE GAP CLOSURE — FINAL VERDICT
+
+Reviewed request:
+Issue #2 comment 5974535504
+
+Reviewed design head:
+9f6fbcf
+
+Current observed implementation head:
+9819bb7
+
+总体裁决：
+
+1. Email Verification / Password Reset Schema
+   = APPROVE_WITH_REVISIONS
+
+2. Notification Phase 1 Schema
+   = REVISE
+
+3. Durable Worker / Scheduler
+   = APPROVE_WITH_REVISIONS
+
+4. Mutation CSRF
+   = REVISE
+
+5. Data Retention / Export / Delete
+   = APPROVE_WITH_REVISIONS
+
+6. Claim / Appeal immutable language metadata
+   = APPROVE_WITH_REVISIONS
+
+IMPLEMENTATION_AUTHORIZED = YES
+PRODUCTION_ENABLEMENT = HOLD
+
+Customer UI / i18n 不需要等待本裁决，可继续并行执行。
+
+==================================================
+
+1. EMAIL VERIFICATION / PASSWORD RESET
+   VERDICT = APPROVE_WITH_REVISIONS
+   ==================================================
+
+批准：
+
+EmailVerificationToken
+PasswordResetToken
+
+但按以下规则实施。
+
+A. Token
+
+随机熵至少 256-bit。
+
+数据库只存 digest。
+
+推荐：
+
+SHA-256(token)
+
+或者：
+
+HMAC-SHA256(serverSecret, token)
+
+禁止：
+
+明文 token 入库
+明文 token 进日志
+明文 token 进 AuditLog
+
+tokenHash 必须 UNIQUE。
+
+建议索引：
+
+tokenHash UNIQUE
+(userId, expiresAt)
+
+B. Verification resend
+
+生成新 verification token 后：
+
+该用户之前所有未消费 verification token 必须失效或 superseded。
+
+不得同时存在大量有效验证链接。
+
+C. Email Verification 原子消费
+
+必须事务化：
+
+读取 token
+→ expiry check
+→ consumedAt == null
+→ consume token
+→ User.emailVerified=true
+
+同一 token 并发最多一个成功。
+
+D. email verification 不得修改：
+
+passwordChangedAt
+
+passwordChangedAt 只在真正密码变化时修改。
+
+E. Password Reset
+
+必须原子：
+
+validate reset token
+→ consume
+→ new password hash
+→ passwordChangedAt
+→ revoke all sessions
+
+任一步失败：
+
+全部 rollback。
+
+F. forgot-password
+
+不得通过：
+
+HTTP status
+response body
+error code
+
+暴露邮箱是否存在。
+
+G. EMAIL DELIVERY
+
+仍：
+
+EXTERNAL_GATE
+
+允许：
+
+test/fake delivery adapter
+
+不得接生产邮件服务。
+
+目标：
+
+EMAIL_VERIFICATION_LIFECYCLE = PASS
+PASSWORD_RECOVERY = PASS
+EMAIL_DELIVERY = EXTERNAL_GATE
+
+==================================================
+2. NOTIFICATION PHASE 1
+VERDICT = REVISE
+
+第一阶段不要：
+
+Notification
++
+NotificationRead
+
+两张表。
+
+当前每条通知本身已有 recipientUserId，
+因此 Phase 1 使用单 recipient row：
+
+Notification {
+id
+organizationId
+recipientUserId
+kind
+severity
+titleKey
+deepLink
+dedupeKey
+createdAt
+readAt?
+acknowledgedAt?
+}
+
+DB UNIQUE：
+
+organizationId
+recipientUserId
+dedupeKey
+
+要求：
+
+A. deepLink 只能是系统内部 relative path。
+
+禁止：
+
+http://
+https://
+javascript:
+外域 URL
+
+B. titleKey 必须来自合法 i18n key。
+
+C. Notification 绝不是业务事实 Source of Truth。
+
+事实仍来源：
+
+Claim
+Review
+Settlement
+Recovery
+Audit
+etc.
+
+D. dedupe 必须 DB-level unique。
+
+不得仅靠 memory 判断。
+
+E. read / acknowledge 必须：
+
+tenant scoped
++
+recipient scoped
+
+任何用户不能改别人的通知。
+
+F. NotificationDelivery 留到 Phase 2。
+
+Email 仍 EXTERNAL_GATE。
+
+==================================================
+3. DURABLE WORKER / SCHEDULER
+VERDICT = APPROVE_WITH_REVISIONS
+
+更新原 ADR：
+
+不要继续卡在：
+
+BullMQ + Redis
+
+第一阶段优先采用：
+
+BullMQ v6 + PostgreSQL backend
+
+原因：
+
+当前 CrossClaim 已经运行 PostgreSQL。
+
+Solo-founder 阶段优先减少额外基础设施。
+
+第一阶段不要额外引入：
+
+Redis
+Valkey
+
+除非后续真实指标证明 PostgreSQL queue 出现吞吐或延迟瓶颈。
+
+要求：
+
+A. BullMQ OSS。
+
+不得使用 BullMQ Pro。
+
+B. 新依赖必须通过现有 license gate。
+
+C. Queue tables 使用：
+
+独立 bullmq schema
+
+条件允许时可独立 database。
+
+禁止和 Prisma 业务表直接混在 public schema。
+
+D. 使用 BullMQ 正式 migration mechanism。
+
+禁止：
+
+用 Prisma 自己模拟 BullMQ 内部表
+worker 启动时偷偷改 production schema
+
+E. 必须支持：
+
+jobId
+executionKey
+tenantId
+accountId?
+provider?
+idempotencyKey
+attempts
+retry
+exponential backoff
+maxAttempts
+timeout
+concurrency
+failed terminal state
+restart recovery
+graceful shutdown
+
+F. Job payload 禁止存放：
+
+OAuth access token
+API secret
+payment secret
+客户原始文件正文
+
+只能存：
+
+credentialRef
+entityId
+tenantId
+accountId
+provider
+安全的 operation metadata
+
+G. Worker 不得绕过现有：
+
+Production Gate
+Action Guard
+Idempotency
+External Write Boundary
+
+Queue 只是执行器，
+不能成为新的安全旁路。
+
+H. 必须增加 restart tests：
+
+queued job 重启后不丢
+delayed job 不丢
+retry job 不丢
+completed job 不重复产生业务副作用
+
+目标：
+
+DURABLE_WORKER_RUNTIME = PASS
+SCHEDULER_RUNTIME = PASS
+
+==================================================
+4. MUTATION CSRF / ORIGIN
+VERDICT = REVISE
+
+不要只按：
+
+“存在 session cookie 才检查 Origin”
+
+作为唯一规则。
+
+统一制定：
+
+Browser-facing state-changing endpoints：
+
+POST
+PUT
+PATCH
+DELETE
+
+默认 same-origin protection。
+
+A. Cookie-authenticated mutation
+
+必须：
+
+Origin / Referer same-origin validation
+
+高风险路径继续允许额外：
+
+x-crossclaim-csrf
+
+B. Login
+
+虽然请求前没有用户 session，
+仍需做 Origin validation。
+
+避免 login-CSRF / session confusion。
+
+C. Signup / forgot / resend verification
+
+Origin validation
++
+rate limit
+
+D. OAuth Callback
+
+不走 Origin。
+
+继续使用：
+
+state
+PKCE
+provider binding
+
+E. Provider webhook
+
+不走 Origin。
+
+必须：
+
+signature verification
+timestamp/replay protection
+idempotency
+
+F. Bearer-only machine API
+
+未来若：
+
+Authorization: Bearer
+
+且完全不依赖浏览器 cookie，
+
+可以 exempt browser Origin requirement。
+
+G. 实现统一 helper，例如：
+
+assertBrowserMutationOrigin()
+
+禁止每个 endpoint 自己写不同逻辑。
+
+Negative tests：
+
+missing Origin
+foreign Origin
+forged Host
+valid same-origin
+OAuth exemption
+webhook exemption
+Bearer-only exemption
+
+==================================================
+5. DATA RETENTION / EXPORT / DELETE
+VERDICT = APPROVE_WITH_REVISIONS
+
+禁止定义一个全球统一固定 retention 天数。
+
+建立：
+
+Retention Policy / Retention Class
+
+至少：
+
+USER_PROFILE
+CONNECTION_CREDENTIAL_REFERENCE
+RAW_UPLOAD
+EVIDENCE
+CUSTOMS_DOCUMENT
+BILLING_FINANCIAL
+AUDIT_SECURITY
+NOTIFICATION
+GENERATED_REPORT
+
+每类支持：
+
+retentionClass
+retentionUntil?
+legalHold?
+deletionState
+
+规则：
+
+legalHold=true
+→ 禁止删除
+
+财务 / Customs / Audit：
+
+如法规或合同要求保留，
+使用：
+
+PII minimization
+anonymization
+
+不得破坏：
+
+金额事实
+审计连续性
+证据链完整性
+
+Organization deletion：
+
+request
+→ OWNER confirmation
+→ cooling period
+→ revoke connections
+→ stop future sync
+→ revoke sessions
+→ deletion pending
+→ durable deletion worker
+→ delete/anonymize by retention policy
+
+如果用户是唯一 OWNER：
+
+不得删除用户后留下 orphan organization。
+
+必须：
+
+transfer ownership
+或
+organization deletion flow
+
+Data Export：
+
+至少支持：
+
+JSON
+CSV
+
+并且：
+
+tenant scoped
+audited
+
+真实具体保留年限：
+
+交由 jurisdiction / legal policy 配置。
+
+工程不得自行猜测。
+
+==================================================
+6. CLAIM / APPEAL LANGUAGE METADATA
+VERDICT = APPROVE_WITH_REVISIONS
+
+批准最小字段：
+
+Claim:
+
+contentLocale?
+providerLocale?
+generationVersion?
+templateVersion?
+
+Appeal:
+
+contentLocale?
+providerLocale?
+generationVersion?
+templateVersion?
+
+规则：
+
+A. DRAFT 阶段
+
+允许重新生成。
+
+每次重新生成记录 AuditLog：
+
+old metadata digest
+new metadata digest
+
+禁止把完整 prompt 放入 AuditLog。
+
+B. 一旦：
+
+finalText frozen
+
+或：
+
+claim package frozen
+
+或：
+
+进入 approved/submitted 等不可逆提交阶段
+
+则：
+
+contentLocale
+providerLocale
+generationVersion
+templateVersion
+
+全部 immutable。
+
+C. uiLocale 永远不得自动修改上述 metadata。
+
+D. Provider locale resolver：
+
+只负责推荐/解析。
+
+真正生成时：
+
+必须把最终 resolver result 持久化。
+
+不能每次读取 Claim 时重新推断。
+
+E. Claim Package / submission：
+
+必须使用冻结 metadata。
+
+不得根据当前用户 UI 语言重新决定。
+
+F. 历史数据：
+
+如果 locale metadata 为空，
+
+允许：
+
+LEGACY_UNSPECIFIED
+
+禁止批量猜测或伪造历史 locale。
+
+G. 当前仍保持：
+
+REAL_MULTILINGUAL_CLAIM_GENERATION = NO
+
+直到真实生成/Provider 路径接入。
+
+==================================================
+7. CUSTOMER UI / I18N
+
+当前 P0-I18N-01：
+
+9819bb7
+
+属于有效真实推进。
+
+169 → 177 的原因是 scanner coverage 扩大，
+该解释接受。
+
+这不是产品倒退。
+
+但从当前统一 coverage 起：
+
+硬编码 Ratchet 必须只能下降。
+
+继续执行：
+
+plan
+→ accounts
+→ money
+→ opportunities
+→ signup
+→ cases
+→ cases/:id
+→ claim-package
+→ upload
+
+并同步处理漏扫出的：
+
+recovery-banner
+opportunity-actions
+billing-actions
+
+最终：
+
+CUSTOMER_UI_HARDCODED_STRING_COUNT = 0
+
+不得：
+
+扩大 allowlist 藏硬编码
+拆字符串逃避扫描
+把文案挪到其他文件
+用双语文本冒充 i18n
+
+==================================================
+8. 执行顺序
+
+建议：
+
+1. P0-I18N 当前批次继续
+2. Email Verification + Password Reset
+3. Claim / Appeal Language Metadata
+4. Unified CSRF Guard
+5. BullMQ PostgreSQL Worker / Scheduler
+6. Notification Phase 1
+7. Data Lifecycle Foundation
+8. Customer Shell / Navigation
+9. Provider Cards / Customs Customer UX
+10. Customer Product P0 全量回归
+11. Freeze CUSTOMER_PRODUCT_BASELINE
+12. 再进入 P1 Customs Data Provider
+
+不得为了等某一个 CI 或架构小项，
+停止其他安全可并行工作的 P0。
+
+==================================================
+9. 核心冻结
+
+Frozen Core 仍保持：
+
+FINAL_ACCEPTANCE_HEAD = 0f7f7ac
+
+禁止无理由重构：
+
+Tenant
+Lineage
+Canonical Fact
+Opportunity
+Case
+Evidence
+HITL
+Action Guard
+Settlement
+Money Ledger
+Payment Boundary
+Production Gate
+
+只有：
+
+可复现真实 defect
+
+才允许申请修改。
+
+==================================================
+10. Production Boundary
+
+仍然：
+
+INTEGRATION_COMPLETE = NO
+REAL_VALIDATION_COMPLETE = NO
+PRODUCTION_READY = NO
+
+以下全部 HOLD：
+
+真实 Amazon/TikTok/Walmart/Shopify OAuth
+真实 UPS/FedEx/DHL network
+真实 Customs Provider
+真实 Broker/Filing
+真实 Stripe/PayPal
+生产 credentials
+真实 customer production data
+真实 money movement
+
+本裁决只批准：
+
+内部 implementation。
+
+==================================================
+11. 下一正式汇报
+
+只汇报：
+
+CUSTOMER_UI_HARDCODED_STRING_COUNT =
+CUSTOMER_UI_LOCALIZATION =
+STATUS_LOCALIZATION =
+DATE_MONEY_LOCALIZATION =
+
+EMAIL_VERIFICATION_LIFECYCLE =
+PASSWORD_RECOVERY =
+
+CLAIM_LANGUAGE_METADATA =
+
+MUTATION_CSRF =
+DURABLE_WORKER_RUNTIME =
+SCHEDULER_RUNTIME =
+IN_APP_NOTIFICATION =
+DATA_LIFECYCLE =
+
+CUSTOMER_NAVIGATION =
+CUSTOMER_PROVIDER_UX =
+CUSTOMS_CUSTOMER_UX =
+
+CURRENT_HEAD =
+CI_RUN =
+CI_CONCLUSION =
+
+P0_REMAINING =
+ARCHITECT_REVIEW_REQUIRED =
+NEXT_EXECUTION_UNIT =
+
+不要再重复 FINAL PRE-INTEGRATION ACCEPTANCE。
+不要 heartbeat。
+不要停在计划层。
+继续真实执行。
+
+ARCHITECT_REVIEW = PASS_WITH_REVISIONS
+IMPLEMENTATION_AUTHORIZED = YES
+PRODUCTION_ENABLEMENT = HOLD
+```

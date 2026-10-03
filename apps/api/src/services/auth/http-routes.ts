@@ -15,6 +15,14 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { AuditWriter } from '../audit';
 import { AuthError, loginWithPassword, type AuthUserPort } from './login';
 import { resolveSession, revokeSession, type SessionDeps } from './session';
+import {
+  normalizeAuthEmail,
+  requestEmailVerification,
+  requestPasswordReset,
+  resetPasswordWithToken,
+  verifyEmailWithToken,
+  type AuthLifecycleDeps,
+} from './email-verification';
 
 export const SESSION_COOKIE = 'cc_session';
 export const SESSION_COOKIE_MAX_AGE_SECONDS = 12 * 60 * 60;
@@ -36,6 +44,8 @@ export interface AuthRouteDeps {
     organizationName: string;
     displayName?: string;
   }) => Promise<{ userId: string; organizationId: string; role: string; emailVerified: boolean }>;
+  /** PC-01B：邮箱验证 / 密码重置生命周期（未装配时相关端点 fail-closed 503）。 */
+  lifecycle?: AuthLifecycleDeps;
 }
 
 export function parseCookies(header: string | undefined): Record<string, string> {
@@ -264,6 +274,108 @@ export async function handleAuthRequest(
     return true;
   }
 
+  if (path === '/auth/verify-email' && method === 'POST') {
+    if (!deps.lifecycle) {
+      sendJson(res, 503, { error: 'EMAIL_LIFECYCLE_UNAVAILABLE' });
+      return true;
+    }
+    let body: Record<string, unknown>;
+    try {
+      body = await readJsonBody(req);
+    } catch {
+      sendJson(res, 400, { verified: false, error: 'INVALID_INPUT' });
+      return true;
+    }
+    const result = await verifyEmailWithToken({ token: body.token }, deps.lifecycle);
+    if (result.outcome === 'OK') {
+      sendJson(res, 200, { verified: true });
+      return true;
+    }
+    // B/C：过期与非法/已消费/被替代分别给出稳定 code，不泄漏账号信息
+    sendJson(res, result.outcome === 'EXPIRED' ? 410 : 400, {
+      verified: false,
+      error: result.outcome,
+    });
+    return true;
+  }
+
+  if (path === '/auth/resend-verification' && method === 'POST') {
+    if (!deps.lifecycle) {
+      sendJson(res, 503, { error: 'EMAIL_LIFECYCLE_UNAVAILABLE' });
+      return true;
+    }
+    let body: Record<string, unknown>;
+    try {
+      body = await readJsonBody(req);
+    } catch {
+      sendJson(res, 400, { error: 'INVALID_INPUT' });
+      return true;
+    }
+    const account = await deps.lifecycle.accounts.findByEmail(normalizeAuthEmail(body.email));
+    if (account && !account.emailVerified) {
+      await requestEmailVerification(
+        { userId: account.id, ip: req.socket.remoteAddress ?? undefined },
+        deps.lifecycle,
+      );
+    }
+    // B：统一口径（不暴露邮箱是否存在 / 是否已验证）
+    sendJson(res, 202, { accepted: true });
+    return true;
+  }
+
+  if (path === '/auth/forgot-password' && method === 'POST') {
+    if (!deps.lifecycle) {
+      sendJson(res, 503, { error: 'EMAIL_LIFECYCLE_UNAVAILABLE' });
+      return true;
+    }
+    let body: Record<string, unknown>;
+    try {
+      body = await readJsonBody(req);
+    } catch {
+      sendJson(res, 400, { error: 'INVALID_INPUT' });
+      return true;
+    }
+    await requestPasswordReset(
+      { email: body.email, ip: req.socket.remoteAddress ?? undefined },
+      deps.lifecycle,
+    );
+    // F：永远同一响应（不暴露邮箱是否存在）
+    sendJson(res, 202, { accepted: true });
+    return true;
+  }
+
+  if (path === '/auth/reset-password' && method === 'POST') {
+    if (!deps.lifecycle) {
+      sendJson(res, 503, { error: 'EMAIL_LIFECYCLE_UNAVAILABLE' });
+      return true;
+    }
+    let body: Record<string, unknown>;
+    try {
+      body = await readJsonBody(req);
+    } catch {
+      sendJson(res, 400, { reset: false, error: 'INVALID_INPUT' });
+      return true;
+    }
+    try {
+      const result = await resetPasswordWithToken(
+        { token: body.token, newPassword: body.password },
+        deps.lifecycle,
+      );
+      if (result.outcome === 'OK') {
+        sendJson(res, 200, { reset: true, revokedSessions: result.revokedSessions });
+        return true;
+      }
+      sendJson(res, result.outcome === 'EXPIRED' ? 410 : 400, { reset: false, error: result.outcome });
+      return true;
+    } catch (error) {
+      sendJson(res, 400, {
+        reset: false,
+        error: 'PASSWORD_POLICY',
+        message: error instanceof Error ? error.message : '密码不满足安全策略',
+      });
+      return true;
+    }
+  }
   sendJson(res, 405, { error: 'METHOD_NOT_ALLOWED' });
   return true;
 }
