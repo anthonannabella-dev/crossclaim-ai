@@ -620,7 +620,9 @@ export async function handleWorkflowRequest(
               ? ['GET']
               : carrierClaimResponses
                 ? ['GET', 'POST']
-                : customsRecovery
+                : customsReturnEvidence
+                  ? ['GET']
+                  : customsRecovery
                   ? ['GET', 'POST']
                   : ['POST'];
   if (!allowed.includes(method)) {
