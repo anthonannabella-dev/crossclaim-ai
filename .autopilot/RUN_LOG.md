@@ -1685,3 +1685,6 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 
 ## 2026-10-03T16:17:11.858Z — MSG-20261003-138
 - BG-013 FINAL = PASS / CLOSED（已归档 FULL_COPY_OK）。
+
+## 2026-10-03T16:27:07.663Z — BG-020
+- GET /customs-entry-facts/:id 只读读模型接线（事实 + 四类 latest 投影）；PG 4/4；customs 220 用例通过。

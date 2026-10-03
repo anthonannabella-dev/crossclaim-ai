@@ -1,6 +1,6 @@
 {
   "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。",
-  "updatedAt": "2026-10-03T16:10:31.114Z",
+  "updatedAt": "2026-10-03T16:27:07.663Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -535,7 +535,9 @@
       "template": "suite-evidence",
       "filters": [
         "customs"
-      ]
+      ],
+      "status": "COMPLETED",
+      "completed_at": "2026-10-03T16:27:07.663Z"
     },
     {
       "id": "BG-021-independent-site-persistence-schema-delta",

@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261003-138",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-03T16:17:11.858Z",
+  "updated_at": "2026-10-03T16:27:07.663Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -51,9 +51,9 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-03T14:11:19.420Z",
   "state": "IMPLEMENT",
-  "last_action": "MSG-20261003-138 已逐字归档（FULL_COPY_OK）：BG-013 = PASS / CLOSED",
+  "last_action": "BG-020 完成：Customs 只读读模型接线（GET /customs-entry-facts/:id），4/4 真实 PostgreSQL + customs 回归 26 文件 220 用例",
   "last_action_at": "2026-10-03T14:17:18.723Z",
-  "next_action": "继续 BG-020（customs 只读投影 GET）；另需修复 HEAD 3e0e7d5 的 CI 红灯",
+  "next_action": "BG-019 前端收口（仍为 registered-only）；BG-021 independent-site 持久化待架构审计",
   "current_head": "8902185",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
@@ -4887,7 +4887,8 @@
     "GP-independent_site-rbac",
     "BG-017-layer2-golden-path-matrix",
     "BG-018-independent-site-internal-closure",
-    "BG-013-ior-facts-persistence-schema-delta"
+    "BG-013-ior-facts-persistence-schema-delta",
+    "BG-020-customs-readonly-projection-http"
   ],
   "last_unit": {
     "id": "BG-015-ior-full-chain-assembly",
@@ -4902,7 +4903,7 @@
   "singleton_runner": "VERIFIED",
   "ci_pending": [],
   "ci_red": [],
-  "ci_checked_at": "2026-10-03T16:21:52.613Z",
+  "ci_checked_at": "2026-10-03T16:23:46.388Z",
   "continuous_verification": {
     "at": "2026-10-03T14:17:18.723Z",
     "a_to_b_to_c": "VERIFIED（单次启动连续执行 u1→u2→u3，无 heartbeat 唤醒；停止条件 = SAFE_CONTINUATION_QUEUE_EMPTY）",
@@ -4939,7 +4940,8 @@
     "BG-016-acceptance-head-single-source",
     "BG-017-layer2-golden-path-matrix",
     "BG-018-independent-site-internal-closure",
-    "BG-013-ior-facts-persistence-schema-delta"
+    "BG-013-ior-facts-persistence-schema-delta",
+    "BG-020-customs-readonly-projection-http"
   ],
   "host_action_required": [
     "BG-006-production-candidate-preflight"
@@ -5189,9 +5191,9 @@
     "status": "DONE（MSG-20261003-134：端点+customs.recovery.chain.run/INTERNAL_WRITE+角色矩阵+immutable execution identity+路由级 E2E 4/4+API.md 90/77）"
   },
   "gates_recorded_at": "2026-10-03T15:17:04.369Z",
-  "ci_status_head": "75d18d7",
-  "ci_status": "failure",
-  "ci_run_id": "37136351044",
+  "ci_status_head": "7ce06d8",
+  "ci_status": "in_progress",
+  "ci_run_id": "37136635120",
   "internal_code_complete_at": "2026-10-03T15:36:47.862Z",
   "independent_final_audit": {
     "required": true,
@@ -5383,5 +5385,16 @@
       "at": "2026-10-03T16:14:18.619Z",
       "detail": "customs-ior-facts-db 9/9 真实 PostgreSQL"
     }
+  },
+  "bg020": {
+    "status": "COMPLETED",
+    "route": "GET /customs-entry-facts/:entryFactId（事实 + DUTY_TRUTH / DISCREPANCY / ELIGIBILITY / ESTIMATE latest 投影）",
+    "files": [
+      "apps/api/src/services/workflow/http-routes.ts",
+      "apps/api/src/server.ts",
+      "API.md"
+    ],
+    "tests": "apps/api/src/__tests__/customs-entry-fact-read-http.test.ts → 4/4（真实 PostgreSQL）",
+    "boundary": "readOnly / filingSubmitted=false / transportEnabled=false / externalWritePerformed=false / productionCredentials=ABSENT；不重算（读取前后投影行数不变）"
   }
 }

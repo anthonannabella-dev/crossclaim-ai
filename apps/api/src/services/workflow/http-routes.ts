@@ -62,6 +62,8 @@ import {
 } from '../customs/customs-recovery-http';
 import { getReturnClaimEvidenceView } from '../customs/customs-return-claim-evidence';
 import { postCustomsRecoveryChain } from '../customs/customs-recovery-chain-http';
+import { getCustomsEntryFactReadModel } from '../customs/customs-claim-ready-http';
+import type { CustomsEntryFactStore } from '../customs/customs-entry-fact-store';
 import {
   PlatformWriteRequestError,
   requestPlatformWrite,
@@ -235,6 +237,8 @@ const CUSTOMS_RECOVERY_PATH = /^\/customs-opportunities\/([^/]+)\/(start-recover
 const CUSTOMS_RETURN_EVIDENCE_PATH = /^\/customs-entry-facts\/([^/]+)\/return-claim-evidence$/;
 /** BG-012：Customs 恢复链**内部触发**（INTERNAL_WRITE；customs.recovery.chain.run）。 */
 const CUSTOMS_CHAIN_RUN_PATH = /^\/customs-entry-facts\/([^/]+)\/recovery-chain$/;
+/** BG-020：Customs 事实 + 四类 latest 计算投影的只读读模型（G11 补齐 HTTP 接线）。 */
+const CUSTOMS_ENTRY_FACT_READ_PATH = /^\/customs-entry-facts\/([^/]+)$/;
 // ② 下一小批次（MSG-20261001-14 §5）：appeal.submit（Appeal 人工提交 · 独立动作与审批绑定）
 const CASE_APPEAL_SUBMIT_PATH = /^\/cases\/([^/]+)\/appeal\/submit$/;
 // R37 P1（MSG-20261001-22 CHANGE A）：平台真实写回入口（EXTERNAL_WRITE · transport 恒关）
@@ -326,6 +330,8 @@ export interface WorkflowRouteDeps {
   customsReturnEvidence?: {
     latest(args: { organizationId: string; entryFactId: string }): Promise<Record<string, unknown> | null>;
   };
+  /** BG-020：Customs 事实 + 四类 latest 投影（只读）。 */
+  customsEntryFactStore?: CustomsEntryFactStore;
 }
 
 function sendJson(res: ServerResponse, code: number, payload: unknown): void {
@@ -507,6 +513,7 @@ export async function handleWorkflowRequest(
   const customsRecovery = CUSTOMS_RECOVERY_PATH.exec(path);
   const customsReturnEvidence = CUSTOMS_RETURN_EVIDENCE_PATH.exec(path);
   const customsChainRun = CUSTOMS_CHAIN_RUN_PATH.exec(path);
+  const customsEntryFactRead = CUSTOMS_ENTRY_FACT_READ_PATH.exec(path);
   const caseAppealSubmit = CASE_APPEAL_SUBMIT_PATH.exec(path);
   const casePlatformWrite = CASE_PLATFORM_WRITE_PATH.exec(path);
   const caseRecoveryManualSubmit = CASE_RECOVERY_MANUAL_SUBMIT_PATH.exec(path);
@@ -545,7 +552,7 @@ export async function handleWorkflowRequest(
     adminPermissionMatrix ||
     adminMemberDetail !== null ||
     adminKillSwitch;
-  if (!adminAny && !opportunityList && !caseClaimPackage && !recoveryStates && !recoveryMoney && !accountsPath && !entitlementsPath && !operationsDashboard && !operationsClaims && !operationsRecovery && !review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !paymentReviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !replayPath && !replayReviewPath && !retryDuePath && !retryDueFreezePath && !retryDueReviewPath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim && !caseClaimSubmit && !caseClaimPrepare && !carrierManualSubmission && !carrierClaimResponses && !customsRecovery && !customsReturnEvidence && !customsChainRun && !caseBillingDraft && !caseAppealSubmit && !casePlatformWrite && !caseRecoveryManualSubmit && !caseRecoveryManualReference && !caseRecoveryManualApproval && !caseRecoveryManualReferenceApproval &&
+  if (!adminAny && !opportunityList && !caseClaimPackage && !recoveryStates && !recoveryMoney && !accountsPath && !entitlementsPath && !operationsDashboard && !operationsClaims && !operationsRecovery && !review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !paymentReviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !replayPath && !replayReviewPath && !retryDuePath && !retryDueFreezePath && !retryDueReviewPath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim && !caseClaimSubmit && !caseClaimPrepare && !carrierManualSubmission && !carrierClaimResponses && !customsRecovery && !customsReturnEvidence && !customsChainRun && !customsEntryFactRead && !caseBillingDraft && !caseAppealSubmit && !casePlatformWrite && !caseRecoveryManualSubmit && !caseRecoveryManualReference && !caseRecoveryManualApproval && !caseRecoveryManualReferenceApproval &&
     !commercialPoliciesPath &&
     !commercialPolicyPath &&
     !commercialPolicyAcceptPath &&
@@ -635,7 +642,7 @@ export async function handleWorkflowRequest(
                 ? ['GET', 'POST']
                 : customsChainRun
                   ? ['POST']
-                : customsReturnEvidence
+                : customsReturnEvidence || customsEntryFactRead
                   ? ['GET']
                   : customsRecovery
                   ? ['GET', 'POST']
@@ -1501,6 +1508,30 @@ export async function handleWorkflowRequest(
           latest:
             deps.customsReturnEvidence?.latest ??
             (async () => null),
+        },
+        entryFactId,
+      });
+      sendJson(res, result.status, result.body);
+      return true;
+    }
+
+    // BG-020（G11 补齐）：Customs 事实 + DUTY_TRUTH / DISCREPANCY / ELIGIBILITY / ESTIMATE latest 投影（只读）。
+    if (customsEntryFactRead && method === 'GET') {
+      const entryFactId = decodeURIComponent(customsEntryFactRead[1] ?? '');
+      const store = deps.customsEntryFactStore;
+      const result = await getCustomsEntryFactReadModel({
+        session: { organizationId: actor.organizationId, actorUserId: actor.actorUserId, role: actor.role },
+        deps: {
+          store:
+            store ??
+            ({
+              async loadFact() {
+                return null;
+              },
+              async loadLatestProjection() {
+                return null;
+              },
+            } as never),
         },
         entryFactId,
       });
