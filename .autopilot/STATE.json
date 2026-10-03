@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261003-147",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-03T22:29:29.049Z",
+  "updated_at": "2026-10-03T22:59:47.170Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -5602,5 +5602,24 @@
       "next_task": null
     }
   },
-  "safe_continuation_queue_note": "内部 backлог 已清零；dispatcher 无安全可执行项（hostPending/archPending 均为空）。"
+  "safe_continuation_queue_note": "内部 backлог 已清零；dispatcher 无安全可执行项（hostPending/archPending 均为空）。",
+  "release_integration": {
+    "at": "2026-10-03T22:59:47.170Z",
+    "method": "PR #12 merge commit (no force push)",
+    "merge_commit_on_gate": "a6ba5e8",
+    "main_head": "5a340bc",
+    "main_ci_run": "37159776098",
+    "main_ci_conclusion": "success",
+    "release_candidate_head": "0f7f7ac",
+    "branch_protection": "ENABLED_MAIN（PR-only + strict required checks + enforce_admins + no force/deletion + conversation resolution）",
+    "host_decisions_pending": [
+      "required approvals ≥1（当前 0，单一维护者；设 1 会阻塞自审 PR）",
+      "release tag 绑定生产候选 commit（宿主生产决策）",
+      "仓库可见性（当前 public；变更为宿主授权项）"
+    ]
+  },
+  "final_pre_integration_acceptance": "PASS",
+  "internal_blocker_count": 0,
+  "autopilot_state_consistency": "PASS",
+  "release_baseline_ready": "YES"
 }

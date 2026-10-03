@@ -1753,3 +1753,6 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 ## 2026-10-03T22:29:16.413Z — STATE 台账救济
 - 分类：STALE_AUTOPILOT_STATE（automation_status=ACTIVE / state=IMPLEMENT / 旧 Carrier Queue current_task / 旧 PC-12A next_task）。
 - 处置：改为 STOPPED_INTERNAL_COMPLETE / TERMINAL_INTERNAL_COMPLETE，清空 current/next task 并写入 Layer 3 优先级与 provider 真实状态；未触碰 FINAL_ACCEPTANCE_HEAD。
+
+## 2026-10-03T22:59:47.170Z — RELEASE INTEGRATION
+- PR #12 merged → main 5a340bc；main CI 37159776098 success；branch protection 已启用。RELEASE_BASELINE_READY=YES。
