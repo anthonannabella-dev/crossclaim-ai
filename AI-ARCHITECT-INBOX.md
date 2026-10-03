@@ -123828,3 +123828,124 @@ Acknowledgement ≠ Recovered Truth
 HOLD_EXTERNAL · TRANSPORT=false · filingSubmitted=false · Payment=0 · NO production credentials
 下一阶段如果开始真正的 Customs 外部提交能力，必须作为独立 Production/Transport Enablement Gate处理，不能因为 G4 CLOSED 自动视为获得真实 filing 授权。
 ```
+
+### [MSG-20261003-129] P0 BUSINESS SURVIVAL GATES 裁决：A = PASS/CLOSED；B Qualification Gate = PASS；Enterprise Trust 状态模型 = PASS；Trust 防自证 guard = REVISE（CHANGE A：file-level → occurrence/local-context + 负向反例测试）— Issue #2 comment 5969656379
+
+```text
+P0 BUSINESS SURVIVAL GATES 裁决：A = PASS/CLOSED；B 核心 Gate = PASS，但 Enterprise Trust guard 需要一次窄修，因此 B 暂不整体 CLOSED。
+我核了实际服务实现、PG E2E、HTTP 路由接线、qualification 逻辑和 Trust guard，不只是 checkpoint 摘要。
+
+① A：海关合规与证据链 —— PASS / CLOSED
+这条链现在满足 fail-closed。
+实际实现里：
+EXACT / PARTIAL 才会计入 confirmed amount；
+AMBIGUOUS / NO_MATCH 不计入 confirmed；
+Return Fact digest 重算失败直接进入 RECONCILIATION_REQUIRED；
+RECONCILIATION_REQUIRED 时 confirmedRecoverableAmountByCurrency = {}；
+qualification 非 QUALIFIED 时整体状态不能成为 READY；
+服务端 POST 语义对非 READY 返回 409；
+VIEWER 直接调用返回 403；
+GET 路由只读取持久化结果，明确 recomputedOnRead=false，前端不能自行重算；
+跨租户查询返回不可见/404。
+PG E2E 也覆盖了关键生死情况：
+EXACT → 200
+PARTIAL → 80
+AMBIGUOUS → NOT_READY + {}
+digest tamper → RECONCILIATION_REQUIRED + {}
+这一条已经满足“不确定的数据不得进入 claim-ready”。
+① PASS。A = CLOSED。
+
+② B：客户 Qualification Gate —— PASS
+qualification 的服务端逻辑是正确的四态：
+QUALIFIED
+CONDITIONAL
+NOT_QUALIFIED
+INDETERMINATE
+而且真正决定昂贵能力的是后端字段：
+expensiveAdapterCallAllowed = status === 'QUALIFIED'
+其他状态：
+CONDITIONAL → requiredConfirmation=true
+NOT_QUALIFIED / INDETERMINATE → advisory only
+filingAuthorized=false
+transportEnabled=false
+appliedCosts=false
+productionCredentials=ABSENT
+所以不存在“前端把按钮打开就绕过 qualification”的设计。
+真实 PG 也验证：
+assessment append-only；
+UPDATE/DELETE 被 DB trigger 拒绝；
+policyVersion 重算保留历史，latest 指向新版本；
+跨租户写入/读取隔离。
+在当前：
+HOLD_EXTERNAL
+前提下，也没有付费 Customs API、broker write、filing、外呼或资金动作会因为 qualification 运行而被触发。
+② PASS。
+
+③ Enterprise Trust 状态模型 —— 状态模型 PASS，但 guard REVISE
+状态模型本身是对的：
+IMPLEMENTED
+VERIFIED
+EXTERNAL_AUDITED
+NOT_AVAILABLE
+并且现在明确：
+SOC 2 = NOT_AVAILABLE
+ISO 27001 = NOT_AVAILABLE
+penetration test = NOT_AVAILABLE
+DPA = NOT_AVAILABLE
+EXTERNAL_AUDITED 当前 0 项
+这些表述是合适的，也没有拿内部 CI 冒充第三方认证。
+但静态 guard 目前有一个真实漏洞。
+现在测试逻辑大致是：
+纯文本
+如果整个文件包含
+“禁止 / 不得 / 未取得 / NOT_AVAILABLE / EXTERNAL_AUDITED”
+那么这个文件里的
+SOC2_COMPLIANT
+ISO27001_CERTIFIED
+BANK_GRADE_SECURITY
+都不会被判违规。
+也就是说一个文件完全可能写：
+SOC2_COMPLIANT
+然后在文件另一处出现一次：
+NOT_AVAILABLE
+整个文件就被豁免。
+这是文件级否定上下文，不是声明级否定上下文，所以 2/2 PASS 并不能真正证明“绝不自证”。
+CHANGE A — Trust guard 改为局部语境判断
+不要：
+hasNegationContext(fileText)
+然后豁免整个文件。
+至少改成逐 occurrence 检查，例如：
+取 forbidden claim 前后固定窗口；
+仅当同一句/邻近窗口中存在 未取得 / 不得宣称 / NOT_AVAILABLE / 禁止 才放行；
+否则 fail。
+更稳妥的是对外可展示的 trust claims 不再靠自由文本扫描，而是统一从结构化 status registry 生成。
+必须新增反例测试：
+纯文本
+SOC2_COMPLIANT
+...
+SOC 2 status = NOT_AVAILABLE
+必须 FAIL。
+以及：
+纯文本
+SOC2_COMPLIANT is NOT_AVAILABLE / 未取得，不得对外宣称
+才可以 PASS。
+因此：
+③ 状态模型 PASS；禁自证 guard = REVISE（CHANGE A）。
+
+④ A/B 是否 CLOSED
+最终裁决：
+A 海关合规与证据链：PASS / CLOSED
+B Qualification Gate：PASS
+Enterprise Trust 状态模型：PASS
+Enterprise Trust 防自证守卫：REVISE
+所以目前不能把整个 B 生死线最终标记 CLOSED，因为 B 的“安全背书不虚假”这一部分还有一个可绕过的静态守卫缺口。
+只需要一个非常窄的 FINAL 修订：
+CHANGE A：将 Enterprise Trust forbidden-claim guard 从 file-level negation 改成 occurrence/local-context 判断，并新增“同文件别处存在 NOT_AVAILABLE 但肯定式 SOC2_COMPLIANT 仍必须失败”的负向测试。
+无需修改 Qualification、数据库、海关 evidence、Schema 或 HTTP。
+修完这一项、测试通过后，可以直接：
+A = CLOSED
+B = CLOSED
+P0 BUSINESS SURVIVAL GATES = PASS/CLOSED
+同时继续保持：
+HOLD_EXTERNAL · TRANSPORT=false · filingSubmitted=false · Payment=0 · NO production credentials。
+```

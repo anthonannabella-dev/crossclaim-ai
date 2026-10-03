@@ -1,16 +1,27 @@
 /**
- * P0-3 — Enterprise Trust 表述守卫。
- * 禁止在没有外部证据的情况下对外声称 SOC2 / ISO 27001 / BANK_GRADE 合规。
- * 只允许 ENTERPRISE-TRUST-READINESS.md 自身在“禁止/未取得”语境中出现这些词。
+ * CHANGE A（MSG-20261003-129）— Enterprise Trust 禁自证 guard 回归。
+ *  · 仓库扫描：所有出现必须处于否定/未取得局部语境；
+ *  · 反例（必须 FAIL）：同文件别处有 NOT_AVAILABLE，但某处是肯定式 SOC2_COMPLIANT；
+ *  · 正例（必须 PASS）：SOC2_COMPLIANT is NOT_AVAILABLE / 未取得，不得对外宣称。
  */
 
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
+import { findSelfAssertedClaims } from '../services/compliance/trust-claim-guard';
+
 const REPO_ROOT = join(__dirname, '..', '..', '..', '..');
-const ALLOWED_FILE = 'docs/releases/ENTERPRISE-TRUST-READINESS.md';
-const FORBIDDEN_CLAIMS = ['SOC2_COMPLIANT', 'ISO27001_CERTIFIED', 'BANK_GRADE_SECURITY'];
+/**
+ * 非“对外声明”来源（定义机制 / 裁决归档），不作为自证扫描对象：
+ *  · guard 模块自身与其测试；
+ *  · 架构方裁决归档（引用他的原话，不是我们的对外表述）。
+ */
+const NON_CLAIM_SOURCES = [
+  'enterprise-trust-claims.test.ts',
+  join('services', 'compliance', 'trust-claim-guard.ts'),
+  'AI-ARCHITECT-INBOX.md',
+];
 
 function collectFiles(dir: string, acc: string[] = []): string[] {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -22,11 +33,31 @@ function collectFiles(dir: string, acc: string[] = []): string[] {
   return acc;
 }
 
-describe('P0-3 — enterprise trust claims guard', () => {
-  it('仓库内不得出现 SOC2_COMPLIANT / ISO27001_CERTIFIED / BANK_GRADE_SECURITY 自证（清单文件除外）', () => {
-    const files = collectFiles(REPO_ROOT).filter(
-    (file) => !file.includes('ENTERPRISE-TRUST-READINESS.md') && !file.includes('enterprise-trust-claims.test.ts'),
-  );
+describe('CHANGE A — trust claim guard (occurrence/local-context)', () => {
+  it('反例必须 FAIL：同文件别处出现 NOT_AVAILABLE 不能豁免肯定式 SOC2_COMPLIANT', () => {
+    const text = [
+      'Our platform is SOC2_COMPLIANT and bank grade.',
+      '',
+      'SOC 2 status = NOT_AVAILABLE',
+    ].join('\n');
+    const hits = findSelfAssertedClaims(text);
+    expect(hits.map((hit) => hit.claim)).toContain('SOC2_COMPLIANT');
+  });
+
+  it('正例必须 PASS：未取得 / 不得对外宣称 / NOT_AVAILABLE 同句', () => {
+    const text = 'SOC2_COMPLIANT is NOT_AVAILABLE / 未取得，不得对外宣称；ISO27001_CERTIFIED 亦未取得，不得宣称。';
+    expect(findSelfAssertedClaims(text)).toEqual([]);
+  });
+
+  it('局部语境边界：跨行否定不豁免，同行否定才豁免', () => {
+    const crossLine = 'SOC2_COMPLIANT\n未取得';
+    expect(findSelfAssertedClaims(crossLine).length).toBe(1);
+    const sameLine = 'SOC2_COMPLIANT 未取得';
+    expect(findSelfAssertedClaims(sameLine).length).toBe(0);
+  });
+
+  it('仓库扫描：不得存在肯定式自证（清单文件/本测试自身除外）', () => {
+    const files = collectFiles(REPO_ROOT).filter((file) => !NON_CLAIM_SOURCES.some((source) => file.endsWith(source)));
     const offenders: string[] = [];
     for (const file of files) {
       let text = '';
@@ -35,27 +66,21 @@ describe('P0-3 — enterprise trust claims guard', () => {
       } catch {
         continue;
       }
-      // 允许在「禁止 / 未取得 / 状态模型」语境中出现这些词（例如内部清单、裁决归档、心跳记录）；
-      // 只有把它们当成事实声称时才判为违规。
-      const hasNegationContext = /禁止|不得|未取得|NOT_AVAILABLE|EXTERNAL_AUDITED/.test(text);
-      for (const claim of FORBIDDEN_CLAIMS) {
-        if (text.includes(claim) && !hasNegationContext) {
-          offenders.push(file.replace(REPO_ROOT, '') + ' :: ' + claim);
-        }
+      for (const hit of findSelfAssertedClaims(text)) {
+        offenders.push(file.replace(REPO_ROOT, '') + ' :: ' + hit.claim + ' :: ' + hit.excerpt);
       }
     }
-    expect(offenders, '禁止对外自证的合规表述：' + offenders.join(', ')).toEqual([]);
+    expect(offenders, '肯定式自证合规表述：' + offenders.join(' | ')).toEqual([]);
   });
 
-  it('清单文件存在，且状态词汇严格限定在四种', () => {
-    const path = join(REPO_ROOT, ...ALLOWED_FILE.split('/'));
+  it('清单文件存在且状态词汇严格限定在四种', () => {
+    const path = join(REPO_ROOT, 'docs', 'releases', 'ENTERPRISE-TRUST-READINESS.md');
     expect(statSync(path).isFile()).toBe(true);
     const text = readFileSync(path, 'utf8');
     for (const status of ['IMPLEMENTED', 'VERIFIED', 'EXTERNAL_AUDITED', 'NOT_AVAILABLE']) {
       expect(text).toContain(status);
     }
     expect(text).toContain('SECURITY_CONTROLS_IMPLEMENTED');
-    expect(text).toMatch(/NOT_AVAILABLE[\s\S]{0,80}SOC 2|SOC 2[\s\S]{0,80}NOT_AVAILABLE/);
-    expect(text).toMatch(/NOT_AVAILABLE[\s\S]{0,80}ISO 27001|ISO 27001[\s\S]{0,80}NOT_AVAILABLE/);
+    expect(findSelfAssertedClaims(text)).toEqual([]);
   });
 });
