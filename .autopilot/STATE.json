@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261003-123",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-03T08:21:15.862Z",
+  "updated_at": "2026-10-03T08:25:56.833Z",
   "previous_head": "35ef87f",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -49,10 +49,10 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-03T08:21:15.862Z",
+  "last_tick_at": "2026-10-03T08:25:56.833Z",
   "state": "IMPLEMENT",
-  "last_action": "P2 并行续做：Customs C16（授权就绪判定 fail-closed）+ C19（状态/来源分离读模型，禁止隐含升级）+ C21（one-click 编排全 server-derived、逐项 fail-closed、绝不提交 filing）契约层 → 15/15 测试 → tsc api/web 0 → API contract OK → commit/push（PROGRESS）",
-  "last_action_at": "2026-10-03T08:21:15.862Z",
+  "last_action": "P2 并行续做：C19 可信 ingest port（provider/authority 分离、sourceLevel 由 adapter 固定、幂等、时间校验）+ C20 refund→settlement→15% fee 契约层（USER_REPORTED 拒绝、无 verified receipt 拒绝、verified receipt 才产出 15% 且带 provenance、非计费策略 FEE_GUARD_REJECTED）→ 9/9 测试 → tsc api/web 0 → API contract OK → commit/push（PROGRESS）",
+  "last_action_at": "2026-10-03T08:25:56.832Z",
   "next_action": "按 P2 并行开工：① Commercial C10–C11（FeePolicy=15% versioned + estimated fee preview + fee guard + policy provenance；payment/collection 继续 OFF）；② Customs C1+ 与 C15–C21 契约层（C15 已完成；C16 授权就绪、C19 状态/来源、C21 one-click 编排 fail-closed；C17 Schema Delta 与 C18 真实 provider 先送审/待宿主授权）。任一单元完成即 commit/push；READY_FOR_REVIEW 才送审。",
   "current_head": "e060a5f",
   "reviewed_head": "24e27c8",
@@ -4398,6 +4398,23 @@
       "C17 submission attempt ledger Schema Delta（append-only / tenant / idempotent）—— 需架构方审计",
       "C18 真实 Filing/Broker provider 选型与接入 —— HOST APPROVAL REQUIRED",
       "C21 HTTP 路由（POST /customs-opportunities/:id/start-recovery）+ Action Guard 注册 —— 需先确认权限模型"
+    ]
+  },
+  "customs_queue_c19_ingest_c20": {
+    "status": "PROGRESS（契约层完成；真实 webhook/provider 与真实资金链路继续 HOLD）",
+    "modules": [
+      "apps/api/src/services/customs/customs-filing-status-ingest.ts（C19 可信 ingest port）",
+      "apps/api/src/services/customs/customs-refund-settlement-linkage.ts（C20 refund → settlement → 15% fee）"
+    ],
+    "tests": "apps/api/src/__tests__/customs-refund-linkage.test.ts 9/9（+ customs-execution-contract 15/15）",
+    "c19_ingest": "provider/authority 事实必须走独立可信 ingest port（sourceLevel 由 adapter 固定，client 不可指定）；USER_REPORTED / 未知来源 → UNKNOWN_SOURCE；缺 providerReference / 非法或未来时间 → 稳定失败码；同 idempotencyKey → ALREADY_RECORDED",
+    "c20": "refund → fee 链路 fail-closed：USER_REPORTED refund evidence → REFUND_EVIDENCE_UNVERIFIED；无 verified receipt → NO_VERIFIED_RECEIPT；verified receipt + CUSTOMS_SUCCESS_15 → 15%（18620.00 → 2793.00，带 settlementId/policy 版本 provenance）；非计费策略 → FEE_GUARD_REJECTED(POLICY_NOT_BILLABLE)；契约层不写 Settlement / RecoveryPayout、不扣款",
+    "boundary": "真实 webhook / provider 集成与真实资金链路 = HOLD_EXTERNAL；无生产凭据",
+    "pending": [
+      "C17 submission attempt ledger Schema Delta（需架构方审计）",
+      "C21 HTTP 路由 + Action Guard（需先确认权限模型；建议与 C17 一并送审）",
+      "Commercial fee guard 接入既有 FeeCalculation 创建路径（资金链路，需审计）",
+      "C18 真实 Filing/Broker provider 接入（HOST APPROVAL REQUIRED）"
     ]
   }
 }
