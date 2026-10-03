@@ -6,10 +6,10 @@
   "next_task": "PC-12A 实施 → 本地测试 + tsc api/web + API contract + full CI → PC-12A CHECKPOINT 送审。",
   "send_head": "07b7009",
   "decision_head": "07b7009",
-  "last_chatgpt_message": "MSG-20261003-136",
+  "last_chatgpt_message": "MSG-20261003-137",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-03T16:11:09.799Z",
+  "updated_at": "2026-10-03T16:13:49.891Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -51,9 +51,9 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-03T14:11:19.420Z",
   "state": "IMPLEMENT",
-  "last_action": "BG-013 Implementation Checkpoint 已送审：Issue #2 comment 5970930612（HEAD dc1fe85）",
+  "last_action": "CHANGE A 实施完成：两条 Identity VERIFIED CHECK + migration 20261003220000 + PG 负向/非过度约束测试（9/9）",
   "last_action_at": "2026-10-03T14:17:18.723Z",
-  "next_action": "发送 ChatGPT 审计唤醒并读取 BG-013 checkpoint 裁决；同时继续 BG-020（customs 只读投影 GET）",
+  "next_action": "提交 BG-013 FINAL 送审；继续 BG-020 customs 只读投影 GET",
   "current_head": "8902185",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
@@ -4902,7 +4902,7 @@
   "singleton_runner": "VERIFIED",
   "ci_pending": [],
   "ci_red": [],
-  "ci_checked_at": "2026-10-03T16:10:36.279Z",
+  "ci_checked_at": "2026-10-03T16:11:59.557Z",
   "continuous_verification": {
     "at": "2026-10-03T14:17:18.723Z",
     "a_to_b_to_c": "VERIFIED（单次启动连续执行 u1→u2→u3，无 heartbeat 唤醒；停止条件 = SAFE_CONTINUATION_QUEUE_EMPTY）",
@@ -4984,7 +4984,7 @@
       "④ Production Candidate register only"
     ]
   },
-  "awaiting_verdict": true,
+  "awaiting_verdict": false,
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
     "computed_at": "2026-10-03T16:11:30.400Z",
@@ -5189,9 +5189,9 @@
     "status": "DONE（MSG-20261003-134：端点+customs.recovery.chain.run/INTERNAL_WRITE+角色矩阵+immutable execution identity+路由级 E2E 4/4+API.md 90/77）"
   },
   "gates_recorded_at": "2026-10-03T15:17:04.369Z",
-  "ci_status_head": "2a62a10",
-  "ci_status": "UNKNOWN",
-  "ci_run_id": "",
+  "ci_status_head": "cff222b",
+  "ci_status": "in_progress",
+  "ci_run_id": "37135945104",
   "internal_code_complete_at": "2026-10-03T15:36:47.862Z",
   "independent_final_audit": {
     "required": true,
@@ -5293,7 +5293,7 @@
     "residual": "HTTP 路由与 DB 持久化 → BG-021（Schema Delta，需架构审计）"
   },
   "bg013": {
-    "status": "IMPLEMENTED（待 Implementation Checkpoint 送审）",
+    "status": "CHANGE_A_IMPLEMENTED（待 BG-013 FINAL 裁决）",
     "verdict": "MSG-20261003-136",
     "next": "Prisma Schema + migration + tenant/immutable triggers + PostgreSQL E2E → Implementation Checkpoint",
     "schema": "3 模型 + 5 枚举；模型总数 73（67 core + 6 join）",
@@ -5313,7 +5313,18 @@
       "head": "dc1fe85",
       "doc": "docs/releases/BG013-IOR-IMPLEMENTATION-CHECKPOINT.md",
       "github_comment_id": "5970930612",
-      "verdict": null
+      "verdict": "REVISE",
+      "verdict_message": "MSG-20261003-137",
+      "archived": "FULL_COPY_OK"
+    },
+    "change_a": {
+      "status": "IMPLEMENTED",
+      "migration": "20261003220000_customs_ior_identity_verified_invariant",
+      "constraints": [
+        "CustomsIorIdentityFact_verified_needs_source",
+        "CustomsIorIdentityFact_verified_needs_verified_at"
+      ],
+      "tests": "customs-ior-facts-db 9/9（含 PENDING/UNVERIFIED + verifiedAt NULL 接受，证明非过度约束）"
     }
   },
   "evidence": {

@@ -28,6 +28,7 @@ const insertIdentity = async (opts: {
   status?: string;
   source?: string;
   observedAt?: string;
+  verifiedAt?: string | null;
   effectiveFrom?: string | null;
   effectiveTo?: string | null;
 }) => {
@@ -37,6 +38,7 @@ const insertIdentity = async (opts: {
   const status = opts.status ?? 'VERIFIED';
   const source = opts.source ?? 'ACE_LOOKUP';
   const observedAt = opts.observedAt ?? NOW;
+  const verifiedAt = opts.verifiedAt === undefined ? NOW : opts.verifiedAt;
   const from = opts.effectiveFrom === undefined ? '2026-01-01T00:00:00.000Z' : opts.effectiveFrom;
   const to = opts.effectiveTo === undefined ? null : opts.effectiveTo;
   return prisma.$executeRawUnsafe(
@@ -51,7 +53,7 @@ const insertIdentity = async (opts: {
     'ace:acct:1',
     status,
     source,
-    NOW,
+    verifiedAt,
     from,
     to,
     digest,
@@ -196,6 +198,19 @@ describe('BG-013 — Enterprise IOR facts（真实 PostgreSQL，DB 级不变量�
         NOW,
       ),
     ).rejects.toThrow();
+  });
+
+
+  it('CHANGE A（MSG-20261003-137）：IOR 身份的 VERIFIED 不变量由 DB 保证，且不过度约束', async () => {
+    // VERIFIED + source = NONE → 拒绝
+    await expect(insertIdentity({ id: 'idf-v-none', source: 'NONE' })).rejects.toThrow();
+    // VERIFIED + verifiedAt = NULL → 拒绝
+    await expect(insertIdentity({ id: 'idf-v-no-time', verifiedAt: null })).rejects.toThrow();
+    // 非 VERIFIED（PENDING / UNVERIFIED）+ verifiedAt = NULL → 可接受（证明不是过度约束）
+    await insertIdentity({ id: 'idf-pending', status: 'PENDING', source: 'CUSTOMER_DOCUMENT', verifiedAt: null });
+    await insertIdentity({ id: 'idf-unverified', status: 'UNVERIFIED', source: 'NONE', verifiedAt: null, digest: DIGEST_B });
+    const rows = await prisma.$queryRawUnsafe<{ id: string }[]>('SELECT "id" FROM "CustomsIorIdentityFact" WHERE "organizationId" = $1 ORDER BY "id"', ORG);
+    expect(rows.map((row) => row.id)).toEqual(['idf-pending', 'idf-unverified']);
   });
 
   it('organizationId 隔离：B 租户看不到 A 租户事实', async () => {

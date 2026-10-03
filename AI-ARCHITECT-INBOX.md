@@ -124642,3 +124642,96 @@ productionCredentials=ABSENT
 
 IOR verified ≠ claimant rights verified ≠ Broker POA verified ≠ filing authorized ≠ filing submitted ≠ refund received。
 ```
+
+### [MSG-20261003-137] BG-013 Implementation Checkpoint = REVISE（仅 CHANGE A：IOR Identity 的 VERIFIED 不变量 + PG 负向测试）（reviewed ref 2a62a10）
+
+```text
+BG-013 IMPLEMENTATION CHECKPOINT：REVISE。
+
+整体实现基本正确，问题只剩一个很窄的 DB invariant 漏项，不需要重做三表或 migration 结构。
+
+我核了 2a62a10 的实际 migration 和 customs-ior-facts-db.test.ts。以下都可以判 PASS：
+
+三张事实表独立拆分正确；
+5 个枚举正确；
+Broker POA enum 明确没有 CBP_FORM_4811；
+UNIQUE(organizationId, contentDigest) 已落；
+corrected fact 可以追加历史；
+UPDATE / DELETE append-only trigger 已落；
+tenant trigger 与 lineage trigger 已落；
+raw EIN / numeric importer number / 自由文本引用 DB CHECK 已落；
+POA VERIFIED → evidenceArtifactRef != NULL 已落；
+POA VERIFIED → verificationSource != NONE 已落；
+expiresAt >= effectiveAt 已落；
+scope 非空数组已落；
+Right lineage 三态 CHECK 已落；
+无 isLatest；
+无 GIN；
+4811 DB 级负向测试已落；
+真实 PostgreSQL E2E 确实存在。
+
+但上一轮 MSG-20261003-136 明确要求 IOR Identity 本身：
+
+VERIFIED 时 verificationSource != NONE
+VERIFIED 时 verifiedAt IS NOT NULL
+
+当前 migration 的 CustomsIorIdentityFact 没有这两条 CHECK。
+
+现在实际上允许下面这种 DB 事实落库：
+
+纯文本
+verificationStatus = VERIFIED
+verificationSource = NONE
+verifiedAt = NULL
+
+而 service 层即使不主动生成这种值，也不能替代 DB invariant，因为这张表已经被定义成身份“事实真值”。
+
+所以只需要一个窄修：
+
+CHANGE A — 补 Identity VERIFIED 不变量
+
+migration 增补：
+
+SQL
+CHECK (
+  "verificationStatus" <> 'VERIFIED'
+  OR "verificationSource" <> 'NONE'
+)
+
+以及：
+
+SQL
+CHECK (
+  "verificationStatus" <> 'VERIFIED'
+  OR "verifiedAt" IS NOT NULL
+)
+
+并补真实 PostgreSQL 负向测试：
+
+VERIFIED + source=NONE → DB reject
+VERIFIED + verifiedAt=NULL → DB reject
+PENDING/UNVERIFIED + verifiedAt=NULL → 可接受，证明不是过度约束
+
+此外，现有 8/8 可以扩成 9/9 或 10/10，不要求重写。
+
+还有一个小点不阻塞本次：credential 自由文本 当前是因为 machine-safe regex 中不允许空格而被拒绝，例如 Bearer sk_live...。这足够满足当前 DB 边界；以后如果允许更宽 reference charset，再单独加强 secret-pattern CHECK 即可。
+
+因此编号裁决：
+
+三模型 / 五枚举：PASS
+append-only / tenant / lineage：PASS
+machine-safe reference / EIN / numeric importer number：PASS
+Broker POA 5291 / 4811 排除 / evidence / source / scope / window：PASS
+digest / corrected history / latest 语义：PASS
+IOR Identity VERIFIED DB invariant：REVISE — CHANGE A
+
+最终：
+
+BG-013 = REVISE（仅 CHANGE A）
+
+修完这两条 Identity CHECK + PG regression 后，可以直接提交 BG-013 FINAL；无需再走 Schema Design 审批。
+
+其余边界继续保持：
+
+filingSubmitted=false · externalWritePerformed=false · transportEnabled=false · Payment=0 · collection=OFF · productionCredentials=ABSENT。
+```

@@ -1676,3 +1676,9 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 
 ## 2026-10-03T16:11:09.799Z — BG-013 Implementation Checkpoint
 - Issue #2 comment 5970930612（HEAD dc1fe85）；待发唤醒。
+
+## 2026-10-03T16:12:33.176Z — MSG-20261003-137（BG-013 checkpoint）
+- REVISE（仅 CHANGE A）：补 Identity VERIFIED 两条 CHECK + PG 负向测试。已归档 FULL_COPY_OK。
+
+## 2026-10-03T16:13:49.891Z — BG-013 CHANGE A
+- 两条 Identity VERIFIED CHECK + migration 20261003220000；PG 套件 9/9；迁移总数 63→64。
