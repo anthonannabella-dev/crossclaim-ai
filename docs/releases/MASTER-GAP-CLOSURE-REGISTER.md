@@ -60,3 +60,12 @@
 ## D. INTERNAL_CODE_COMPLETE 判定
 
 当前：**FALSE**（内部缺口 G1–G10 未清零）。判定条件见 `docs/releases/MASTER-GAP-CLOSURE-DIRECTIVE.md` §0。
+
+## E. BUSINESS SURVIVAL GATES（生死线，HOST FINAL ACCEPTANCE RULES 2026-10-03）
+
+| 生死线 | 状态 | 证据 |
+|---|---|---|
+| **A. 海关合规与证据链比对**（Import ↔ Return/Export/Destruction） | **VERIFIED**（CLOSED 待 `3417377` CI） | 匹配契约 10/10；Return 事实 append-only 持久化 PG 5/5；全链 evidence PG E2E 8/8（EXACT 只计匹配数量 / PARTIAL 按比例 / AMBIGUOUS 与 digest 篡改一律零计入 / qualification 未过 409 / VIEWER 绕过 403 / policyVersion 重算 latest 生效 / 跨租户不可见）；只读视图单测 3/3；**路由级 HTTP E2E 4/4**（401/403/404/200 + 跨租户 404）；migration `20261003160000`/`20261003180000`；CI：`33d8633` success（含全部上述单测/DB 套件） |
+| **B. 数据安全与客户筛选** | **CLOSED** | Qualification Gate 单测 11/11（qualified/conditional/not-qualified/indeterminate + 成本占比 + 政策版本）；判定 append-only 持久化 PG 5/5（幂等、历史与 latest、触发器拒绝 UPDATE/DELETE、跨租户隔离）；**后端强制 Gate**：未通过 → HTTP 409，VIEWER 绕过 → 403（PG E2E 断言）；Enterprise Trust 状态模型 + 禁自证守卫 2/2（`SOC2_COMPLIANT`/`ISO27001_CERTIFIED`/`BANK_GRADE_SECURITY` 仅允许在否定/未取得语境出现；`EXTERNAL_AUDITED` 当前 0 项）；CI：`33d8633` success |
+
+说明：A 的最终一项（路由级 HTTP E2E）位于提交 `3417377`，其 CI 结果确认后 A 即置 CLOSED；两条生死线均**不改变** HOLD_EXTERNAL（真实 filing / broker 提交 / 外呼 / 生产凭据 / 资金动作仍关闭）。
