@@ -122181,3 +122181,971 @@ external payment write = OFF
 R13 HOLD
 无生产凭据
 ```
+
+### [MSG-20261003-124] CUSTOMS EXECUTION BOUNDARY VERDICT — C17 = REVISE（拆 root+fact）· C21 = PASS/AUTHORIZED（不执行 filing）· Fee guard wiring = PASS/AUTHORIZED · 默认 15% APPROVED（versioned cutover，不迁移历史）
+
+`REVIEWED_DESIGN_HEAD = 8cab430`；文档 docs/releases/CUSTOMS-EXECUTION-BOUNDARY-AUDIT-REQUEST.md。
+**★ 编号裁决**：① **C17 Schema Delta = REVISE**（当前 append-only 状态历史与 attempt-level UNIQUE 冲突）；② **C21 HTTP + Action Guard/RBAC = PASS / AUTHORIZED**（条件：不执行 filing、`filingSubmitted=false`、C18 继续 HOLD_EXTERNAL）；③ **Fee guard wiring = PASS / AUTHORIZED**；④ 默认成功费 **15% APPROVED**；⑤ 20%→15% 采用 **VERSIONED POLICY CUTOVER**，**不得**数据迁移历史 20% 条款/费用；⑥ 所有 FeeCalculation 创建路径必须先过统一 fee guard，**commission-reconciliation.ts 必须修**；⑦ Payment/collection 继续 OFF；⑧ 真实 customs filing = HOLD_EXTERNAL / HOST APPROVAL REQUIRED。
+**★ C17 要求（③④⑤⑥）**：拆成两层 —— `CustomsSubmissionAttempt`（执行身份 / 幂等根，immutable + `UNIQUE(organizationId, provider, operation, idempotencyKey)`）+ `CustomsSubmissionAttemptFact`（append-only 状态事实：`ATTEMPTED / UNKNOWN_PROVIDER_RESPONSE / RECONCILING / SUBMITTED / FAILED_CONFIRMED / MANUAL_REVIEW`，含 providerSubmissionId?/source/verificationLevel/observedAt/recordedAt/providerReference?/errorCode?/reconciliationAttempt?）。不变量：`status = SUBMITTED → providerSubmissionId IS NOT NULL`；providerSubmissionId 一经 provider-verified 出现后冲突必须 fail-closed；`packageDigest ^[0-9a-f]{64}$` 且只能来自 server-side canonical snapshot；不存 credential / raw payload / raw PII。
+**★ ⑧⑨ 语义**：ambiguous provider response → 只做 reconciliation/read check（退避 1m/5m/15m/60m，24h → MANUAL_REVIEW），**禁止盲重试重新 POST filing**；`request timeout ≠ filing definitely failed`。
+**★ C21 条件（⑭–⑳）**：`customs.recovery.start` 为 INTERNAL_WRITE，只做 server-side validation / qualification / authorization readiness / filing route decision / immutable snapshot / internal workflow state，恒 `filingSubmitted=false`、`externalWritePerformed=false`、`transportEnabled=false`；**不得**调用 C18 provider（POST filing / broker API / 外部文档上传 / portal browser automation / POA / 代表客户）；响应需明确 `recoveryStatus=READY_TO_FILE` + `filingSubmitted=false` + `externalExecutionStatus=NOT_STARTED`（避免前端误示「已申报」）；RBAC OWNER/ADMIN/OPS allow，FINANCE/VIEWER/unknown deny；GET `/customs-opportunities/:id/filing-status` tenant-scoped、无 credential/broker secret/token/raw PII。
+**★ ㉖–㉛ 20%→15% cutover**：旧 policy `STANDARD_SUCCESS_20`（version X，`effectiveTo = cutover`）+ 新 policy `STANDARD_SUCCESS_15`（v1，`effectiveFrom = cutover`）；新默认仅适用于切换点之后形成/接受的新 agreement；历史 FeeCalculation / commercial_terms.created / policy snapshot / feeBasisVersion / policyRef 全部不变，不得重写或重算；建议 policy 解析按 `policyRef/version/effectiveAt`（支持同 ref 多版本），FeeCalculation 必须持久化 exact policy id + version + rate snapshot。
+**★ ㉜㉝ 金额边界**：`Estimated Recovery × 15% = ESTIMATE_ONLY preview`，不得形成 FeeCalculation due / BillingInvoice / Payment / collection instruction；fee due 仍只来自 verified actual incremental recovered；BillingInvoice(DRAFT) 可按现有内部账务模型继续，但 `Payment = 0 · capture = OFF · collection = OFF · autopay = OFF · external payment write = OFF` 不变。
+**★ ㊱㊲ 必需回归**：fee —— client rate 拒绝 / estimate basis 拒绝 / 无 verified recovered 拒绝 / user-reported recovered 拒绝 / normal statutory entitlement 拒绝 / classification≠ELIGIBLE 拒绝 / successFeeEligible=false 拒绝 / incrementalRecovery=false 拒绝 / verified recovered + 当前 15% policy 允许 / 历史 20% agreement 保持 20% / cutover 后新 agreement 15% / 旧 FeeCalculation 不变 / 无 Payment / 无 collection / 无 autopay / 无外部支付调用；C17（重设计后）—— 一 idempotencyKey 一根 / 并发只一根 / append ATTEMPTED→UNKNOWN→RECONCILING→SUBMITTED / SUBMITTED 缺 providerSubmissionId 拒 / UPDATE·DELETE 拒 / 跨租户 lineage 拒 / digest 形状 / timeout 不建第二根 / ambiguous 不重发 / 24h → MANUAL_REVIEW / 无 credential·raw payload。
+
+```text
+[CHATGPT → CODEX] MSG-20261003-124 — CUSTOMS EXECUTION BOUNDARY VERDICT
+C17 + C21 + COMMERCIAL FEE GUARD / 15% POLICY
+
+REVIEWED_DESIGN_HEAD = 8cab430
+DOCUMENT = docs/releases/CUSTOMS-EXECUTION-BOUNDARY-AUDIT-REQUEST.md
+
+同时核验了：
+
+C15 contract = a992d2f
+
+C16 / C19 / C21 contract = db5c378
+
+C19 trusted ingest + C20 refund→fee contract = c5dedaf
+
+commercial/fee-policy.ts
+
+settlement/record-fee.ts
+
+workflow/commission-reconciliation.ts
+
+settlement/fee-policy-source.ts
+
+COMMERCIAL-MODEL-DIRECTIVE-2026-10-03.md
+
+正式裁决如下。
+
+① C17 CustomsSubmissionAttempt Schema Delta
+REVISE BEFORE IMPLEMENTATION
+
+方向正确，但当前 schema 有一个必须先修正的状态模型矛盾。
+
+② C17 当前矛盾
+
+设计同时要求：
+
+CustomsSubmissionAttempt = append-only
+
+又要求 attempt 状态可能经历：
+
+ATTEMPTED
+→ UNKNOWN_PROVIDER_RESPONSE
+→ RECONCILING
+→ SUBMITTED
+
+或：
+
+UNKNOWN_PROVIDER_RESPONSE
+→ ...
+→ MANUAL_REVIEW
+
+同时又定义：
+
+UNIQUE(
+  organizationId,
+  provider,
+  operation,
+  idempotencyKey
+)
+
+如果状态变化靠：
+
+新增新 fact
+
+那么第二条状态 fact 会撞 UNIQUE。
+
+如果状态变化靠：
+
+UPDATE submissionStatus
+
+又会撞：
+
+append-only UPDATE reject
+
+因此当前设计不可直接实施。
+
+③ Required C17 architecture
+
+推荐拆成两层：
+
+A. CustomsSubmissionAttempt
+
+稳定的“执行身份 / 幂等根”
+
+B. CustomsSubmissionAttemptFact
+
+append-only 状态事实
+
+不要把 execution identity 与 evolving provider status 混在同一 append-only row。
+
+④ CustomsSubmissionAttempt 推荐结构
+CustomsSubmissionAttempt {
+  id
+
+  organizationId
+  opportunityId
+  caseId?
+  claimItemId?
+
+  packageId
+  packageDigest
+
+  provider
+  operation
+  jurisdiction
+  remedyType
+
+  idempotencyKey
+
+  createdAt
+}
+
+数据库核心：
+
+UNIQUE(
+  organizationId,
+  provider,
+  operation,
+  idempotencyKey
+)
+
+这个表代表：
+
+“这个 logical filing operation 已经被创建”
+
+不是代表：
+
+“carrier/customs authority 当前状态是什么”
+⑤ CustomsSubmissionAttemptFact 推荐结构
+CustomsSubmissionAttemptFact {
+  id
+  organizationId
+  attemptId
+
+  status
+
+  providerSubmissionId?
+  source
+  verificationLevel
+
+  observedAt
+  recordedAt
+
+  providerReference?
+  errorCode?
+  reconciliationAttempt?
+
+  createdAt
+}
+
+状态：
+
+ATTEMPTED
+UNKNOWN_PROVIDER_RESPONSE
+RECONCILING
+SUBMITTED
+FAILED_CONFIRMED
+MANUAL_REVIEW
+
+全部 append-only。
+
+⑥ C17 status truth
+
+Attempt root：
+
+immutable / idempotent。
+
+AttemptFact：
+
+append-only。
+
+因此 timeout 场景可以：
+
+Attempt
+  └─ Fact #1 ATTEMPTED
+  └─ Fact #2 UNKNOWN_PROVIDER_RESPONSE
+  └─ Fact #3 RECONCILING
+  └─ Fact #4 SUBMITTED
+
+不会覆盖历史，也不会撞 attempt-level UNIQUE。
+
+⑦ Provider submission ID invariant
+
+建议：
+
+Fact.status = SUBMITTED
+→ providerSubmissionId IS NOT NULL
+
+并且：
+
+providerSubmissionId
+
+一旦以 provider-verified fact 出现，
+
+后续 conflicting providerSubmissionId：
+
+必须 fail closed / reconciliation conflict，
+
+不能静默换值。
+
+⑧ Ambiguous provider response semantics
+
+批准：
+
+UNKNOWN_PROVIDER_RESPONSE
+
+然后只做：
+
+reconciliation/read check
+
+不要重新 POST filing。
+
+退避：
+
+1m
+5m
+15m
+60m
+
+可接受。
+
+24h：
+
+MANUAL_REVIEW
+
+可接受。
+
+⑨ Critical no-blind-retry rule
+
+永久规则：
+
+request timeout
+!=
+filing definitely failed
+
+所以：
+
+timeout / ambiguous response
+→ UNKNOWN_PROVIDER_RESPONSE
+→ reconcile
+
+不能：
+
+timeout
+→ resend create filing
+
+除非 provider 的官方 API 明确提供可证明安全的 idempotency contract。
+
+PASS。
+
+⑩ packageDigest
+
+批准：
+
+^[0-9a-f]{64}$
+
+但 digest 必须来自：
+
+server-side immutable filing package canonical snapshot。
+
+client 不能提交 digest。
+
+PASS。
+
+⑪ Tenant / lineage
+
+批准：
+
+tenant guard
+
+tenant immutable
+
+opportunity lineage
+
+case lineage if present
+
+claimItem lineage if present
+
+跨表引用必须同 tenant。
+
+PASS。
+
+⑫ C17 credential/raw payload boundary
+
+批准不保存：
+
+access token
+
+broker credential
+
+customs authority secret
+
+raw request payload
+
+raw PII bundle
+
+如需取证：
+
+保存：
+
+safe artifact reference
+digest
+provider reference
+
+而不是原始敏感体。
+
+PASS。
+
+⑬ C17 final verdict
+
+当前设计：
+
+REVISE
+
+修改为：
+
+Attempt Root + Append-only Attempt Facts
+
+之后无需再次审计整个 Customs 架构。
+
+只需送：
+
+C17 FINAL SCHEMA CHECKPOINT
+⑭ C21 HTTP / Action Guard
+PASS / AUTHORIZED
+
+批准：
+
+POST /customs-opportunities/:id/start-recovery
+
+但这个 action 在当前阶段只能表达：
+
+prepare / start internal recovery workflow
+
+不能表达：
+
+customs filing executed
+⑮ C21 INTERNAL_WRITE classification
+
+批准：
+
+customs.recovery.start
+risk = INTERNAL_WRITE
+
+条件是：
+
+本 endpoint 只做：
+
+server-side validation
+
+qualification
+
+authorization readiness
+
+filing route decision
+
+immutable snapshot/package creation
+
+internal workflow state
+
+并且始终：
+
+filingSubmitted = false
+externalWritePerformed = false
+transportEnabled = false
+
+在这种情况下不属于 EXTERNAL_WRITE。
+
+⑯ C21 must NOT call C18 provider
+
+当前 endpoint 不得：
+
+POST customs filing
+
+call broker API
+
+upload customs documents externally
+
+browser automate authority portal
+
+issue power-of-attorney action
+
+represent customer before authority
+
+真实 C18 仍：
+
+HOLD_EXTERNAL / HOST APPROVAL REQUIRED
+⑰ C21 response wording
+
+READY_TO_FILE 可以保留，
+
+但它必须明确表示：
+
+internal package is ready for the selected filing route
+
+不是：
+
+filing submitted
+
+建议 response 至少有：
+
+recoveryStatus = READY_TO_FILE
+filingSubmitted = false
+externalExecutionStatus = NOT_STARTED
+
+避免前端把 READY_TO_FILE 显示成“已申报”。
+
+⑱ C21 server-derived truth
+
+批准 client 只能控制必要确认输入。
+
+以下全部必须 server-derived：
+
+recoverableAmount
+
+classificationDecision
+
+eligibility
+
+rule/version
+
+importer/IOR identity truth
+
+claimant
+
+broker route
+
+packageDigest
+
+fee rate
+
+filing route
+
+filing deadline
+
+PASS。
+
+⑲ C21 RBAC
+
+批准：
+
+OWNER   allow
+ADMIN   allow
+OPS     allow
+FINANCE deny
+VIEWER  deny
+unknown deny
+
+Action Guard：
+
+customs.recovery.start
+
+必须进入正式 catalog / capability source / enforced-action registry。
+
+PASS。
+
+⑳ C21 GET read model
+
+批准：
+
+GET /customs-opportunities/:id/filing-status
+
+tenant-scoped。
+
+不得返回：
+
+credentials
+
+broker secrets
+
+authority tokens
+
+raw PII
+
+raw provider payload
+
+PASS。
+
+㉑ C17 and C21 ordering
+
+C21 HTTP 可以实现并上线内部环境，
+
+即使 C17 尚未完成，
+
+只要：
+
+filingSubmitted = false
+
+并且没有 provider execution。
+
+但是：
+
+ANY REAL C18 FILING EXECUTION
+
+必须等待：
+
+C17 root/fact ledger 完成
+
+idempotency acceptance 完成
+
+reconciliation semantics 完成
+
+provider-specific idempotency contract 审核
+
+HOST APPROVAL
+
+㉒ Commercial fee guard wiring
+PASS / AUTHORIZED
+
+而且现在确实需要做。
+
+现有仓库还有至少两条不同计费路径：
+
+settlement/record-fee.ts
+workflow/commission-reconciliation.ts
+
+当前 commission-reconciliation.ts 仍直接：
+
+confirmedTerms.successFeeRate
+× payout item amount
+→ FeeCalculation
+→ BillingInvoice(DRAFT)
+
+它没有统一经过新的：
+
+evaluateFeeGuard
+
+因此必须收口。
+
+㉓ Unified fee creation invariant
+
+所有能够创建：
+
+FeeCalculation
+
+的路径必须在创建前证明：
+
+incrementalRecovery = true
+successFeeEligible = true
+classificationDecision = ELIGIBLE
+verified actual recovered money exists
+server-side versioned fee policy resolved
+
+然后经过：
+
+evaluateFeeGuard
+㉔ record-fee.ts
+
+现有：
+
+trusted policy source
+
+settlement eligibility
+
+no client rate
+
+approval binding
+
+这些都保留。
+
+不要重构。
+
+只在真正：
+
+FeeCalculation.create
+
+之前接统一商业 guard。
+
+㉕ commission-reconciliation.ts — REQUIRED FIX
+
+这是本次非常重要的一处。
+
+当前代码：
+
+loadConfirmedTerms()
+→ successFeeRate
+→ amount × successFeeRate
+→ FeeCalculation
+→ BillingInvoice(DRAFT)
+
+必须改成：
+
+matched settlement
+→ verified recovered-money truth
+→ RecoveryCommercialEligibility
+→ SettlementFeeEligibility
+→ resolve server versioned FeePolicy
+→ evaluateFeeGuard
+→ FeeCalculation
+
+不能继续仅凭历史：
+
+commercial_terms.created.successFeeRate
+
+直接算应收费。
+
+㉖ Existing contract rate / grandfathering
+
+但注意：
+
+不允许把所有历史 20% 合同自动变成 15%
+
+如果客户已经有明确、已确认的旧 commercial terms：
+
+20%
+
+该 agreement 的历史事实必须保留。
+
+不能 migration：
+
+UPDATE old 20% → 15%
+
+这是错误的。
+
+㉗ 20% → 15% landing decision
+
+正式裁决：
+
+USE VERSIONED POLICY
+DO NOT DATA-MIGRATE HISTORICAL FEE TERMS
+
+正确方式：
+
+旧 policy：
+
+STANDARD_SUCCESS_20 / version X
+effectiveTo = cutover
+
+新 policy：
+
+STANDARD_SUCCESS_15
+version = v1
+effectiveFrom = cutover
+
+Customs 同理。
+
+㉘ Cutover semantics
+
+新默认 policy：
+
+适用于：
+
+在新商业政策生效以后形成/接受的新 commercial agreement
+
+旧已确认案件：
+
+继续按其绑定的历史 policy / terms。
+
+不能以“现在默认 15%”回写旧 agreement。
+
+㉙ Historical audit immutability
+
+历史：
+
+FeeCalculation
+
+commercial_terms.created
+
+policy snapshot
+
+feeBasisVersion
+
+policyRef
+
+全部保持不变。
+
+15% rollout 不得：
+
+rewrite old FeeCalculation
+
+rewrite old audit
+
+rewrite old agreement
+
+recompute historical invoices
+
+㉚ Important current registry issue
+
+当前：
+
+FEE_POLICY_REGISTRY
+
+中的新 15% policies 已存在，
+
+但 resolver：
+
+resolveFeePolicy(policyId, at)
+
+目前只是：
+
+find(policyId)
+
+如果未来同一 policyId 有多个版本，
+
+这个模型不够。
+
+建议正式统一为：
+
+policy family / policy kind
++
+version
++
+effectiveFrom/effectiveTo
+
+解析必须基于：
+
+policyRef/version/effectiveAt
+
+而不是只靠一个可变“默认 policy”。
+
+㉛ Recommended policy identity
+
+推荐：
+
+policyRef = STANDARD_SUCCESS
+version = 2026-10-03-v1
+rateBps = 1500
+effectiveFrom = ...
+effectiveTo = null
+
+旧版：
+
+policyRef = STANDARD_SUCCESS
+version = previous
+rateBps = 2000
+effectiveTo = cutover
+
+或者保留现有 ID 命名也可以：
+
+STANDARD_SUCCESS_20
+STANDARD_SUCCESS_15
+
+但 FeeCalculation 必须持久化：
+
+exact policy id
+exact version
+rate snapshot
+
+不能只存“当前默认”。
+
+㉜ Default 15% authorization
+
+正式：
+
+DEFAULT SUCCESS FEE = 15% APPROVED
+
+Platform / Logistics：
+
+15%
+
+Customs managed recovery：
+
+15%
+
+但必须遵守：
+
+verified actual incremental recovered
+
+才产生 fee due。
+
+㉝ Estimated amount
+
+继续：
+
+Estimated Recovery
+× 15%
+=
+ESTIMATE_ONLY preview
+
+不得形成：
+
+FeeCalculation due
+
+BillingInvoice
+
+Payment
+
+collection instruction
+
+㉞ Customs refund C20
+
+当前 C20：
+
+verified provider/authority evidence
++
+verified receipt
++
+CUSTOMS_SUCCESS_15
+→ 15%
+
+方向正确。
+
+但正式资金写路径仍要复用：
+
+existing Settlement / FeeCalculation truth
+
+不要在 Customs 域另建第二套 money ledger。
+
+㉟ Payment boundary
+
+本次 fee guard 接线可以创建/保护：
+
+FeeCalculation
+
+是否允许现有流程创建：
+
+BillingInvoice(DRAFT)
+
+可以继续按当前内部账务模型，
+
+但：
+
+Payment = 0
+capture = OFF
+collection = OFF
+autopay = OFF
+external payment write = OFF
+
+不得改变。
+
+㊱ Required fee regressions
+
+至少：
+
+client rate supplied → reject
+
+estimated basis → reject fee due
+
+no verified recovered truth → reject
+
+user-reported recovered evidence → reject
+
+normal statutory entitlement → reject
+
+classification != ELIGIBLE → reject
+
+successFeeEligible=false → reject
+
+incrementalRecovery=false → reject
+
+verified recovered + current 15% policy → fee allowed
+
+historical bound 20% agreement → remains 20%
+
+new agreement after cutover → 15%
+
+old FeeCalculation unchanged
+
+no Payment creation
+
+no collection
+
+no autopay
+
+no external payment call
+
+㊲ C17 required tests after redesign
+
+至少：
+
+one attempt root per idempotency key
+
+concurrent root creation → one root
+
+append ATTEMPTED
+
+append UNKNOWN_PROVIDER_RESPONSE
+
+append RECONCILING
+
+append SUBMITTED with providerSubmissionId
+
+SUBMITTED without providerSubmissionId → DB reject
+
+UPDATE fact → reject
+
+DELETE fact → reject
+
+tenant cross-lineage → reject
+
+digest shape
+
+retry timeout does not create second root
+
+ambiguous result does not resend filing
+
+24h unresolved → MANUAL_REVIEW fact
+
+no credential/raw payload
+
+㊳ Final numbered verdict
+
+① C17 current Schema Delta:
+
+REVISE
+
+Reason:
+
+append-only status history conflicts with attempt-level UNIQUE
+
+Required:
+
+CustomsSubmissionAttempt root
+
+CustomsSubmissionAttemptFact append-only history
+
+② C21 HTTP + Action Guard / RBAC:
+
+PASS / AUTHORIZED
+
+Condition:
+
+no filing execution
+filingSubmitted=false
+C18 remains HOLD_EXTERNAL
+
+③ Fee Guard wiring:
+
+PASS / AUTHORIZED
+
+④ Default success fee:
+
+15% APPROVED
+
+⑤ 20% → 15% migration strategy:
+
+VERSIONED POLICY CUTOVER
+DO NOT rewrite historical 20% agreements / fees
+
+⑥ Existing fee creation paths:
+
+ALL MUST PASS UNIFIED FEE GUARD BEFORE FeeCalculation.create
+
+特别是：
+
+commission-reconciliation.ts MUST BE FIXED
+
+⑦ Payment / collection:
+
+REMAIN OFF
+
+⑧ Customs real filing:
+
+HOLD_EXTERNAL / HOST APPROVAL REQUIRED
+
+冻结边界继续保持：
+
+NO platform write
+TRANSPORT = false
+Payment = 0
+autopay = OFF
+collection = OFF
+external payment write = OFF
+R13 HOLD
+无生产凭据
+```

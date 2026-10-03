@@ -1,17 +1,17 @@
 {
-  "gate": "Gate 7 / Carrier Queue #10 CLOSED → P2 并行（Commercial C10–C11 + Customs C1+/C15–C21）",
-  "head": "3e80b52",
-  "status": "READY_FOR_REVIEW",
-  "current_task": "Carrier Queue #6 — SLA EVIDENCE ASSEMBLY + ELIGIBILITY INPUT PLANE：Tracking Fact + Invoice Fact + POD Fact + Carrier Terms Evidence + Service Level Evidence → **ShipmentEvidenceBundle**（只建证据输入层；不得自动认定赔付 / 自动提交 claim / 自动退款 / 调用 carrier write API / 自动产生 recovery amount）。**逐字归档 MSG-111 为第一步。**CarrierInvoiceReadPort + CarrierPODReadPort（verified account lineage、request/response 双向绑定、十进制金额、charge kind 归一化 + raw code 保留、POD 掩码与隐私、safe rawReference）；**read-only**，不做 SLA/退款资格推导。CarrierTrackingReadPort + normalized CarrierTrackingSnapshot（UPS/FedEx provider adapter 分离）+ 状态/事件归一化（确定性排序 + 去重）+ 失败原因分类 + tenant/account lineage 归属；**read-only**（无 mutation / claim / pickup / refund，TRANSPORT=false）。",
+  "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
+  "head": "8cab430",
+  "status": "IMPLEMENT",
+  "current_task": "P2：① 按 MSG-124 ⑥㉓㉕ 修 commission-reconciliation.ts 并让所有 FeeCalculation 路径过统一 fee guard；② 按 MSG-124 ③④⑤ 重设计 C17 为 Attempt root + AttemptFact 后送 C17 FINAL SCHEMA CHECKPOINT；③ 按 MSG-124 ⑭–⑳ 实施 C21 HTTP + customs.recovery.start Action Guard（不执行 filing）；④ 20%→15% 采用 versioned policy cutover（不迁移历史）。",
   "next_task": "PC-12A 实施 → 本地测试 + tsc api/web + API contract + full CI → PC-12A CHECKPOINT 送审。",
   "send_head": "07b7009",
   "decision_head": "07b7009",
-  "last_chatgpt_message": "MSG-20261003-123",
+  "last_chatgpt_message": "MSG-20261003-124",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-03T08:29:35.448Z",
-  "previous_head": "35ef87f",
-  "architect_decision_pending": true,
+  "updated_at": "2026-10-03T08:34:49.096Z",
+  "previous_head": "3e80b52",
+  "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "c5dedaf",
   "last_sent_at": "2026-10-03T08:11:14.015Z",
@@ -49,11 +49,11 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-03T08:29:35.448Z",
+  "last_tick_at": "2026-10-03T08:34:49.096Z",
   "state": "IMPLEMENT",
-  "last_action": "把实施前必须审计的三项边界整理为设计/授权请求（C17 Schema Delta / C21 HTTP+Action Guard / fee guard 接入 + 15% 默认策略）→ 写 docs/releases/CUSTOMS-EXECUTION-BOUNDARY-AUDIT-REQUEST.md → 登记 STATE → 进入送审",
-  "last_action_at": "2026-10-03T08:29:35.448Z",
-  "next_action": "按 P2 并行开工：① Commercial C10–C11（FeePolicy=15% versioned + estimated fee preview + fee guard + policy provenance；payment/collection 继续 OFF）；② Customs C1+ 与 C15–C21 契约层（C15 已完成；C16 授权就绪、C19 状态/来源、C21 one-click 编排 fail-closed；C17 Schema Delta 与 C18 真实 provider 先送审/待宿主授权）。任一单元完成即 commit/push；READY_FOR_REVIEW 才送审。",
+  "last_action": "MSG-20261003-124 逐字归档（FULL_COPY_OK）→ 裁决：C17 REVISE（root+fact 拆分）、C21 PASS/AUTHORIZED（不 filing）、fee guard wiring PASS/AUTHORIZED、默认 15% APPROVED（versioned cutover 不迁移历史）、Payment/collection 继续 OFF",
+  "last_action_at": "2026-10-03T08:34:49.095Z",
+  "next_action": "立即开工：先做 fee guard 统一收口（record-fee.ts 不改重构、只在 FeeCalculation.create 前接 guard；commission-reconciliation.ts 改为 matched settlement → verified recovered truth → RecoveryCommercialEligibility → SettlementFeeEligibility → resolve versioned FeePolicy → evaluateFeeGuard → FeeCalculation），补 ㊱ 回归；随后 C17 attempt root+fact 重设计并送 C17 FINAL SCHEMA CHECKPOINT；再实施 C21 HTTP + Action Guard（filingSubmitted=false）。",
   "current_head": "e060a5f",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-03T08:13:36.041Z",
-    "gapMs": 46773,
+    "previousTickAt": "2026-10-03T08:29:35.448Z",
+    "gapMs": 282554,
     "stale": false,
-    "checkedAt": "2026-10-03T08:14:22.813Z"
+    "checkedAt": "2026-10-03T08:34:18.001Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -4418,13 +4418,25 @@
     ]
   },
   "customs_boundary_audit_request": {
-    "status": "SENT_PENDING_VERDICT",
+    "status": "VERDICT_RECEIVED（MSG-20261003-124）",
     "doc": "docs/releases/CUSTOMS-EXECUTION-BOUNDARY-AUDIT-REQUEST.md",
     "asks": [
       "C17 CustomsSubmissionAttempt Schema Delta",
       "C21 HTTP 路由 + customs.recovery.start Action Guard / RBAC（C17 落地前不执行 filing）",
       "Commercial fee guard 接入既有 FeeCalculation 路径 + 默认 FeePolicy 15% 落地方式"
     ],
-    "sent_at": "2026-10-03T08:29:35.416Z"
-  }
+    "sent_at": "2026-10-03T08:29:35.416Z",
+    "verdict": {
+      "c17_schema_delta": "REVISE — 拆 CustomsSubmissionAttempt（幂等根，immutable + UNIQUE(org,provider,operation,idempotencyKey)）+ CustomsSubmissionAttemptFact（append-only 状态事实）",
+      "c21_http": "PASS / AUTHORIZED（条件：INTERNAL_WRITE、不调用 C18 provider、filingSubmitted=false、externalExecutionStatus=NOT_STARTED；RBAC OWNER/ADMIN/OPS）",
+      "fee_guard_wiring": "PASS / AUTHORIZED（所有 FeeCalculation 创建路径先过统一 guard；commission-reconciliation.ts 必须修）",
+      "default_fee": "15% APPROVED（Platform / Logistics / Customs managed recovery 均 15%）",
+      "cutover": "VERSIONED POLICY CUTOVER；旧 20% policy effectiveTo=cutover，新 15% policy effectiveFrom=cutover；不得迁移/重写历史 agreement、FeeCalculation、audit、invoice",
+      "payment_boundary": "Payment = 0 · capture = OFF · collection = OFF · autopay = OFF · external payment write = OFF（不变）",
+      "customs_real_filing": "HOLD_EXTERNAL / HOST APPROVAL REQUIRED"
+    }
+  },
+  "customs_queue_c17": "REVISE（MSG-20261003-124 ③④⑤⑥⑬）：改为 CustomsSubmissionAttempt（幂等根）+ CustomsSubmissionAttemptFact（append-only 状态事实）；重设计后送 C17 FINAL SCHEMA CHECKPOINT",
+  "customs_queue_c21": "PASS / AUTHORIZED（MSG-20261003-124 ⑭–㉑）：HTTP + customs.recovery.start（INTERNAL_WRITE；不调用 C18；filingSubmitted=false；externalExecutionStatus=NOT_STARTED）；C17 完成前不得有真实 filing",
+  "commercial_c10_c11_remaining": "fee guard 统一收口（commission-reconciliation.ts 必须修）+ 15% versioned cutover（不迁移历史 20%）+ ㊱ 回归"
 }
