@@ -1703,3 +1703,7 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 
 ## 2026-10-03T16:45:10.253Z — MSG-20261003-140
 - BG-021 PASS / CLOSED（已归档 FULL_COPY_OK）；下一步 CHANGE E / BG-019。
+
+## 2026-10-03T16:47:46.416Z — BG-019 route constant 修正
+- 契约检查器常量正则只接受 [A-Z_]*_PATH（不含数字）；PS04_STATE_PATH → INDEPENDENT_SITE_STATE_PATH。
+- commit-with-acceptance 助手已内置契约/审计/规则预提交闸门。

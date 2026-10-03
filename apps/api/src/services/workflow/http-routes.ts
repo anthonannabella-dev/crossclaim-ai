@@ -241,7 +241,7 @@ const CUSTOMS_CHAIN_RUN_PATH = /^\/customs-entry-facts\/([^/]+)\/recovery-chain$
 /** BG-020：Customs 事实 + 四类 latest 计算投影的只读读模型（G11 补齐 HTTP 接线）。 */
 const CUSTOMS_ENTRY_FACT_READ_PATH = /^\/customs-entry-facts\/([^/]+)$/;
 /** BG-019（CHANGE E）：Independent-site Golden Path Critical-State Read Surface（只读）。 */
-const PS04_STATE_PATH = /^\/independent-site-disputes\/([^/]+)\/state$/;
+const INDEPENDENT_SITE_STATE_PATH = /^\/independent-site-disputes\/([^/]+)\/state$/;
 // ② 下一小批次（MSG-20261001-14 §5）：appeal.submit（Appeal 人工提交 · 独立动作与审批绑定）
 const CASE_APPEAL_SUBMIT_PATH = /^\/cases\/([^/]+)\/appeal\/submit$/;
 // R37 P1（MSG-20261001-22 CHANGE A）：平台真实写回入口（EXTERNAL_WRITE · transport 恒关）
@@ -519,7 +519,7 @@ export async function handleWorkflowRequest(
   const customsReturnEvidence = CUSTOMS_RETURN_EVIDENCE_PATH.exec(path);
   const customsChainRun = CUSTOMS_CHAIN_RUN_PATH.exec(path);
   const customsEntryFactRead = CUSTOMS_ENTRY_FACT_READ_PATH.exec(path);
-  const ps04StateRead = PS04_STATE_PATH.exec(path);
+  const ps04StateRead = INDEPENDENT_SITE_STATE_PATH.exec(path);
   const caseAppealSubmit = CASE_APPEAL_SUBMIT_PATH.exec(path);
   const casePlatformWrite = CASE_PLATFORM_WRITE_PATH.exec(path);
   const caseRecoveryManualSubmit = CASE_RECOVERY_MANUAL_SUBMIT_PATH.exec(path);

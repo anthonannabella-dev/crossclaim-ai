@@ -1,8 +1,8 @@
 # FINAL ACCEPTANCE REPORT（自动生成，请勿手改）
 
-- 生成时间：2026-10-03T16:46:43.597Z
-- 单一权威矩阵：`docs/releases/ACCEPTANCE-MATRIX.json` @7223700
-- acceptance HEAD：`7223700`
+- 生成时间：2026-10-03T16:47:46.905Z
+- 单一权威矩阵：`docs/releases/ACCEPTANCE-MATRIX.json` @a0fb52c
+- acceptance HEAD：`a0fb52c`
 - 协议：`docs/releases/FINAL-ACCEPTANCE-PROTOCOL.md`（三层验收；禁止自证）
 - 状态：CODE_COMPLETE=NO · INTEGRATION_COMPLETE=NO · REAL_VALIDATION_COMPLETE=NO · PRODUCTION_READY=NO
 - INTERNAL_READY=NO；AUTONOMOUS_INTERNAL_WORK=RUNNING
@@ -43,17 +43,17 @@
 - L1-01_safe_continuation_queue_zero → false（open backlog items: 1）
 - L1-02_no_open_internal_items → false（open internal: BG-019-frontend-http-wiring-closure）
 - L1-03_no_open_markers → false（arch_pending=0 awaiting_verdict=false）
-- L1-04_full_ci_success_on_head → false（acceptance_head=7223700 ci_head=c07ff84 ci=UNKNOWN run=）
-- L1-05_pg_regression_passed → UNVERIFIED（pg_regression recorded at 9e57ba3 ≠ acceptance head 7223700）
-- L1-06_fresh_db_migration_passed → UNVERIFIED（fresh_db_migration recorded at 9e57ba3 ≠ acceptance head 7223700）
-- L1-07_api_typecheck_passed → UNVERIFIED（typecheck_api recorded at 9e57ba3 ≠ acceptance head 7223700）
-- L1-08_web_typecheck_build_passed → UNVERIFIED（typecheck_web recorded at 4af3432 ≠ acceptance head 7223700）
-- L1-09_no_skipped_critical_tests → UNVERIFIED（tests_no_skipped recorded at 4af3432 ≠ acceptance head 7223700）
-- L1-10_git_working_tree_clean → false（dirty entries: 12）
-- L1-11_docs_state_consistent → UNVERIFIED（docs_sync recorded at 9e57ba3 ≠ acceptance head 7223700）
-- L1-12_schema_invariants_verified → UNVERIFIED（schema_invariants recorded at 9e57ba3 ≠ acceptance head 7223700）
-- L1-13_negative_paths_covered → UNVERIFIED（negative_paths recorded at 9e57ba3 ≠ acceptance head 7223700）
-- L1-14_real_pg_e2e_not_mock_only → UNVERIFIED（pg_e2e_real recorded at 9e57ba3 ≠ acceptance head 7223700）
+- L1-04_full_ci_success_on_head → false（acceptance_head=a0fb52c ci_head=c07ff84 ci=UNKNOWN run=）
+- L1-05_pg_regression_passed → UNVERIFIED（pg_regression recorded at 9e57ba3 ≠ acceptance head a0fb52c）
+- L1-06_fresh_db_migration_passed → UNVERIFIED（fresh_db_migration recorded at 9e57ba3 ≠ acceptance head a0fb52c）
+- L1-07_api_typecheck_passed → UNVERIFIED（typecheck_api recorded at 9e57ba3 ≠ acceptance head a0fb52c）
+- L1-08_web_typecheck_build_passed → UNVERIFIED（typecheck_web recorded at 4af3432 ≠ acceptance head a0fb52c）
+- L1-09_no_skipped_critical_tests → UNVERIFIED（tests_no_skipped recorded at 4af3432 ≠ acceptance head a0fb52c）
+- L1-10_git_working_tree_clean → false（dirty entries: 5）
+- L1-11_docs_state_consistent → UNVERIFIED（docs_sync recorded at 9e57ba3 ≠ acceptance head a0fb52c）
+- L1-12_schema_invariants_verified → UNVERIFIED（schema_invariants recorded at 9e57ba3 ≠ acceptance head a0fb52c）
+- L1-13_negative_paths_covered → UNVERIFIED（negative_paths recorded at 9e57ba3 ≠ acceptance head a0fb52c）
+- L1-14_real_pg_e2e_not_mock_only → UNVERIFIED（pg_e2e_real recorded at 9e57ba3 ≠ acceptance head a0fb52c）
 
 ## 3. 外部 / 宿主依赖（不得自证完成）
 
