@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / Carrier Queue #10 FINAL",
-  "head": "a992d2f",
+  "head": "8b08f5d",
   "status": "RECONCILED",
   "current_task": "Carrier Queue #6 — SLA EVIDENCE ASSEMBLY + ELIGIBILITY INPUT PLANE：Tracking Fact + Invoice Fact + POD Fact + Carrier Terms Evidence + Service Level Evidence → **ShipmentEvidenceBundle**（只建证据输入层；不得自动认定赔付 / 自动提交 claim / 自动退款 / 调用 carrier write API / 自动产生 recovery amount）。**逐字归档 MSG-111 为第一步。**CarrierInvoiceReadPort + CarrierPODReadPort（verified account lineage、request/response 双向绑定、十进制金额、charge kind 归一化 + raw code 保留、POD 掩码与隐私、safe rawReference）；**read-only**，不做 SLA/退款资格推导。CarrierTrackingReadPort + normalized CarrierTrackingSnapshot（UPS/FedEx provider adapter 分离）+ 状态/事件归一化（确定性排序 + 去重）+ 失败原因分类 + tenant/account lineage 归属；**read-only**（无 mutation / claim / pickup / refund，TRANSPORT=false）。",
   "next_task": "PC-12A 实施 → 本地测试 + tsc api/web + API contract + full CI → PC-12A CHECKPOINT 送审。",
@@ -9,8 +9,8 @@
   "last_chatgpt_message": "MSG-20261003-122",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-03T07:45:32.195Z",
-  "previous_head": "e060a5f",
+  "updated_at": "2026-10-03T07:48:43.141Z",
+  "previous_head": "a992d2f",
   "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "e060a5f",
@@ -49,10 +49,10 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-03T07:45:32.195Z",
+  "last_tick_at": "2026-10-03T07:48:43.141Z",
   "state": "IMPLEMENT",
-  "last_action": "CARRIER QUEUE #10 FINAL 起步：Schema Delta 落地（Prisma CarrierClaimResponseFact + migration 20261003040000 + DB CHECK 真值约束 + UNIQUE idempotency + tenant/immutable/append-only 触发器 + 两条清单 + 模型计数 59 + 文档同步）→ prisma validate/migrate/generate OK → 触发器清单本地校验 OK → architecture-contract + carrier 213/213 → tsc api/web 0 → commit/push",
-  "last_action_at": "2026-10-03T07:45:32.194Z",
+  "last_action": "CARRIER QUEUE #10 FINAL 续做：Prisma store（append-only + 同事务 fact/business audit + P2002→ALREADY_RECORDED）+ 真实 PostgreSQL 回归 12/12（CHECK 真值 / provider reference / append-only / tenant guard / 跨租户读隔离 / 真实并发一行 / 投影确定性 / APPROVED!=PAID / 资金零写入 / 无网络）→ 契约层 23/23 → tsc api/web 0 → API contract OK → commit/push",
+  "last_action_at": "2026-10-03T07:48:43.140Z",
   "next_action": "继续 CARRIER QUEUE #10 FINAL（MSG-20261003-122 ⑦⑧ 授权）：Schema Delta（Prisma append-only CarrierClaimResponseFact + migration + tenant guard + append-only）→ PG 回归 → Action Guard capability → 人工补录 HTTP → 读模型投影 → tsc/API contract → commit/push → CI → checkpoint → 送审。随后按 P2 推进 Customs C15/C16/C19/C21 契约层与 Commercial C10–C11；C17 Schema Delta 与 C18 真实 provider 接入先送审/待宿主授权。",
   "current_head": "e060a5f",
   "reviewed_head": "24e27c8",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-03T07:41:27.531Z",
-    "gapMs": 50440,
+    "previousTickAt": "2026-10-03T07:45:32.195Z",
+    "gapMs": 108494,
     "stale": false,
-    "checkedAt": "2026-10-03T07:42:17.970Z"
+    "checkedAt": "2026-10-03T07:47:20.689Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -4294,6 +4294,31 @@
       "可信 provider ingestion port（recordTrustedCarrierResponse）—— 真实 adapter 仍 HOLD_EXTERNAL",
       "读模型 HTTP GET /carrier-claim-packages/:packageId/responses",
       "checkpoint + 送审"
-    ]
+    ],
+    "store": {
+      "status": "DONE（本地真实 PostgreSQL 12/12）",
+      "module": "apps/api/src/services/carriers/carrier-claim-response-prisma-store.ts",
+      "tests": "apps/api/src/__tests__/carrier-claim-response-db.test.ts 12/12（+ 契约层 23/23 = 35/35）",
+      "invariants": [
+        "append-only store（只有 append / listByPackage；无 update/delete/upsert）",
+        "fact + business audit 同事务（prepareAuditInsert；handlesAuditAtomically=true）",
+        "P2002 → created=false → service 映射 ALREADY_RECORDED",
+        "DB 真值 CHECK：未知枚举拒绝；USER_REPORTED + PROVIDER_VERIFIED 拒绝；provider 来源必须带 providerReference",
+        "append-only 触发器拒绝 UPDATE / DELETE",
+        "tenant guard：跨租户引用（submission 属于他租户）被数据库拒绝",
+        "tenant-scoped 读：不返回他租户事实",
+        "真实并发（两个独立连接）→ 恰好一行 + 审计恰好一次 + RECORDED/ALREADY_RECORDED",
+        "投影确定性（含乱序输入）+ APPROVED != PAID（不派生资金真值）",
+        "PAID 事实不产生 RecoveryPayout / FeeCalculation / Settlement（零行）",
+        "记录路径无网络、无 carrier write、TRANSPORT=false"
+      ],
+      "pending": [
+        "Action Guard 注册 carrier.claim_response.record（INTERNAL_WRITE）+ RBAC 矩阵",
+        "人工补录 HTTP POST /carrier-claim-packages/:packageId/responses（只允许 USER_REPORTED）",
+        "读模型 HTTP GET /carrier-claim-packages/:packageId/responses（tenant-scoped）",
+        "可信 provider ingestion port（recordTrustedCarrierResponse；真实 adapter HOLD_EXTERNAL）",
+        "checkpoint + 送审"
+      ]
+    }
   }
 }
