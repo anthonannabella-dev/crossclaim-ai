@@ -166,7 +166,7 @@ describe('customs G4 C1→C7 chain', () => {
 
   it('被篡改的事实：C2 起全链 fail-closed（NOT_A_READ_ONLY_FACT）', () => {
     const chain = runChain();
-    const tampered = { ...chain.fact, readOnly: false } as typeof chain.fact;
+    const tampered = { ...chain.fact, readOnly: false } as unknown as typeof chain.fact;
     expect(codeOf(() => computeCustomsDutyTruth(tampered))).toBe('NOT_A_READ_ONLY_FACT');
     expect(codeOf(() => compareCustomsClassification({ fact: tampered, expectations: [expectation()] }))).toBe('NOT_A_READ_ONLY_FACT');
     expect(codeOf(() => estimateCustomsRecovery({ fact: tampered, assessment: chain.assessment, policy: ESTIMATE_POLICY }))).toBe(
