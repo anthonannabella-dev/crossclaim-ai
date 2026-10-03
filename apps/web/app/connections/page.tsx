@@ -54,7 +54,7 @@ export default async function ConnectionsPage() {
       </section>
 
       {/* PC-04：客户可见的失败 / 恢复状态（连接维度） */}
-      <RecoveryBanner scope="CONNECTION" />
+      <RecoveryBanner scope="CONNECTION" t={t} />
 
       {forbidden ? (
         <section className="rounded-lg border bg-white p-6 text-sm text-slate-600">

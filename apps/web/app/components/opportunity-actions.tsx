@@ -6,18 +6,14 @@ import { useState } from 'react';
 /** 与后端 REJECT_REASONS 保持一致（架构方批准的拒绝词表）。 */
 const REJECT_REASONS = ['wrong_amount', 'duplicate', 'not_recoverable', 'other'] as const;
 
-const LABELS: Record<(typeof REJECT_REASONS)[number], string> = {
-  wrong_amount: '金额有误',
-  duplicate: '重复',
-  not_recoverable: '不可追回',
-  other: '其他',
-};
-
 export interface OpportunityActionLabels {
   qualify: string;
   reject: string;
   reasonLabel: string;
   reasons: Record<string, string>;
+  /** 客户可见的失败文案模板（含 {status} 占位），由页面从字典注入。 */
+  requestFailed: string;
+  networkError: string;
 }
 
 export default function OpportunityActions({
@@ -43,12 +39,12 @@ export default function OpportunityActions({
       });
       if (!response.ok) {
         const body = (await response.json().catch(() => ({}))) as { error?: string };
-        setError(body.error ?? `请求失败（${response.status}）`);
+        setError(body.error ?? labels.requestFailed.replace('{status}', String(response.status)));
         return;
       }
       router.refresh();
     } catch {
-      setError('网络异常，请稍后重试');
+      setError(labels.networkError);
     } finally {
       setBusy(false);
     }
@@ -72,7 +68,7 @@ export default function OpportunityActions({
       >
         {REJECT_REASONS.map((value) => (
           <option key={value} value={value}>
-            {labels.reasons[value] ?? LABELS[value]}
+            {labels.reasons[value] ?? value}
           </option>
         ))}
       </select>

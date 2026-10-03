@@ -18,6 +18,7 @@ const ja: Messages = {
     networkError: "ネットワークエラーです。しばらくして再試行してください",
     sessionExpired: "セッションが切れました。再度ログインしてください",
     retry: "再試行",
+    requestFailed: "リクエストに失敗しました（HTTP {status}）",
   },
   nav: {
     dashboard: 'ダッシュボード',
@@ -123,6 +124,13 @@ const ja: Messages = {
     colStatus: "状態",
     colCredentialRef: "資格情報の参照",
     colActions: "操作",
+  },
+  recoveryBanner: {
+    loadFailed: "復旧状態を読み込めません",
+    titleWithCode: "{title} · {label}（{code}）",
+    nextStep: "次のステップ：{action}",
+    retry: "再試行",
+    retryUnavailable: "この問題はワンクリック再試行に対応していません（{reason}）",
   },
   opportunitiesPage: {
     title: "回収の機会",

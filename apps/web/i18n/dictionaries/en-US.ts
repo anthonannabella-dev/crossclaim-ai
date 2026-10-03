@@ -18,6 +18,7 @@ const enUS: Messages = {
     networkError: "Network error, please try again",
     sessionExpired: "Session expired, please sign in again",
     retry: "Retry",
+    requestFailed: "Request failed (HTTP {status})",
   },
   nav: {
     dashboard: 'Dashboard',
@@ -123,6 +124,13 @@ const enUS: Messages = {
     colStatus: "Status",
     colCredentialRef: "Credential reference",
     colActions: "Actions",
+  },
+  recoveryBanner: {
+    loadFailed: "Unable to load recovery states",
+    titleWithCode: "{title} · {label} ({code})",
+    nextStep: "Next step: {action}",
+    retry: "Retry",
+    retryUnavailable: "One-click retry is not available for this issue ({reason})",
   },
   opportunitiesPage: {
     title: "Recovery opportunities",

@@ -18,6 +18,9 @@ export interface BillingActionLabels {
   markPaid: string;
   paymentReference: string;
   note: string;
+  /** 客户可见的失败文案模板（含 {status} 占位），由页面从字典注入。 */
+  requestFailed: string;
+  networkError: string;
 }
 
 export default function BillingActions({
@@ -51,12 +54,12 @@ export default function BillingActions({
       });
       if (!response.ok) {
         const payload = (await response.json().catch(() => ({}))) as { error?: string };
-        setError(payload.error ?? `请求失败（${response.status}）`);
+        setError(payload.error ?? labels.requestFailed.replace('{status}', String(response.status)));
         return;
       }
       router.refresh();
     } catch {
-      setError('网络异常，请稍后重试');
+      setError(labels.networkError);
     } finally {
       setBusy(false);
     }

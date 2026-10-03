@@ -1,5 +1,6 @@
 import ClaimPackageView from './claim-package-view';
 import RecoveryBanner from '../../../components/recovery-banner';
+import { getServerMessages } from '../../../../i18n/server';
 
 /**
  * TRACK A / PC-03 —— 客户可见 Claim Package（/cases/[id]/claim-package）。
@@ -7,6 +8,7 @@ import RecoveryBanner from '../../../components/recovery-banner';
  */
 export default async function CaseClaimPackagePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
+  const t = await getServerMessages();
   return (
     <div className="space-y-4">
       <div>
@@ -16,7 +18,7 @@ export default async function CaseClaimPackagePage({ params }: { params: Promise
         </p>
       </div>
       {/* PC-04：案件维度的失败 / 恢复状态 */}
-      <RecoveryBanner scope="CASE" />
+      <RecoveryBanner scope="CASE" t={t} />
       <ClaimPackageView caseId={id} />
     </div>
   );

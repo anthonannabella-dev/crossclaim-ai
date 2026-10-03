@@ -18,6 +18,7 @@ const es: Messages = {
     networkError: "Error de red, inténtalo de nuevo",
     sessionExpired: "Sesión caducada, vuelve a iniciar sesión",
     retry: "Reintentar",
+    requestFailed: "La solicitud falló (HTTP {status})",
   },
   nav: {
     dashboard: 'Panel',
@@ -123,6 +124,13 @@ const es: Messages = {
     colStatus: "Estado",
     colCredentialRef: "Referencia de credencial",
     colActions: "Acciones",
+  },
+  recoveryBanner: {
+    loadFailed: "No se pudieron cargar los estados de recuperación",
+    titleWithCode: "{title} · {label} ({code})",
+    nextStep: "Siguiente paso: {action}",
+    retry: "Reintentar",
+    retryUnavailable: "Este problema no admite reintento con un clic ({reason})",
   },
   opportunitiesPage: {
     title: "Oportunidades de recuperación",

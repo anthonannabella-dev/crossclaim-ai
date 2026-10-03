@@ -18,6 +18,7 @@ const de: Messages = {
     networkError: "Netzwerkfehler, bitte später erneut versuchen",
     sessionExpired: "Sitzung abgelaufen, bitte erneut anmelden",
     retry: "Erneut versuchen",
+    requestFailed: "Anfrage fehlgeschlagen (HTTP {status})",
   },
   nav: {
     dashboard: 'Dashboard',
@@ -123,6 +124,13 @@ const de: Messages = {
     colStatus: "Status",
     colCredentialRef: "Anmeldedaten-Referenz",
     colActions: "Aktionen",
+  },
+  recoveryBanner: {
+    loadFailed: "Wiederherstellungsstatus konnte nicht geladen werden",
+    titleWithCode: "{title} · {label} ({code})",
+    nextStep: "Nächster Schritt: {action}",
+    retry: "Erneut versuchen",
+    retryUnavailable: "Für dieses Problem ist kein Ein-Klick-Wiederholen verfügbar ({reason})",
   },
   opportunitiesPage: {
     title: "Rückholmöglichkeiten",

@@ -19,6 +19,7 @@ const zhCN = {
     networkError: "网络错误，请稍后重试",
     sessionExpired: "会话已失效，请重新登录",
     retry: "重试",
+    requestFailed: "请求失败（HTTP {status}）",
   },
   nav: {
     dashboard: '工作台',
@@ -122,6 +123,13 @@ const zhCN = {
     colStatus: "状态",
     colCredentialRef: "凭据引用",
     colActions: "操作",
+  },
+  recoveryBanner: {
+    loadFailed: "无法加载恢复状态",
+    titleWithCode: "{title} · {label}（{code}）",
+    nextStep: "下一步：{action}",
+    retry: "重试",
+    retryUnavailable: "该问题暂不支持一键重试（{reason}）",
   },
   opportunitiesPage: {
     title: "可追回机会",

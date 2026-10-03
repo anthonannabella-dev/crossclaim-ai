@@ -115,6 +115,8 @@ export default async function BillingPage() {
                           markPaid: t.billingPage.markPaid,
                           paymentReference: t.billingPage.paymentReference,
                           note: t.billingPage.note,
+                          requestFailed: t.common.requestFailed,
+                          networkError: t.common.networkError,
                         }}
                       />
                     </td>

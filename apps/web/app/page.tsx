@@ -227,6 +227,8 @@ export default async function DashboardPage() {
                           reject: t.dashboard.reviewReject,
                           reasonLabel: t.dashboard.rejectReason,
                           reasons: t.dashboard.rejectReasons as unknown as Record<string, string>,
+                          requestFailed: t.common.requestFailed,
+                          networkError: t.common.networkError,
                         }}
                       />
                     ) : (
