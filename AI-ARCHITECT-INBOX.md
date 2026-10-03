@@ -123997,3 +123997,43 @@ Trust guard = REVISE（CHANGE A2）
 P0 BUSINESS SURVIVAL GATES 暂不要最终标 CLOSED
 另外，当前 MASTER-GAP-CLOSURE-REGISTER 和 STATE 已提前写成 B/P0 CLOSED，这个状态应在 A2 通过后再保留；在此之前应视为“待最终 guard 验收”。
 ```
+
+### [MSG-20261003-131] CHANGE A3（极窄修）：超长分句 fallback 必须夹在 segStart/segEnd 内，防止把邻句 NOT_AVAILABLE 吃进来；补 2 个超长分句回归；A 继续 CLOSED、B 待 A3、P0 PENDING
+
+```text
+这次我核到一个最后的边界漏洞，所以 A2 还差一个极窄修复，暂不能最终 CLOSED。
+核心分句逻辑本身是对的，双向反例也已正确覆盖。但 trust-claim-guard.ts 对超长分句的 fallback 目前是：
+TypeScript
+text.slice(index - 160, index + claim.length + 160)
+这个窗口没有被 segStart / segEnd 限制，因此可能重新跨过 ；/。 等分句边界，把邻句里的 NOT_AVAILABLE 吃进来。
+例如：
+纯文本
+ISO27001_CERTIFIED is NOT_AVAILABLE；SOC2_COMPLIANT xxxxxxxxx...(很长)
+当 SOC2_COMPLIANT 所在分句超过 320 字符时，fallback 的前 160 字符可能跨过 ；，看到上一分句的 NOT_AVAILABLE，从而错误放行 SOC2_COMPLIANT。
+所以最终裁决：
+CHANGE A2 = REVISE — CHANGE A3（极窄修）
+只需把 fallback 限制在已经算出的分句边界内，例如：
+TypeScript
+text.slice(
+  Math.max(segStart, index - window),
+  Math.min(segEnd, index + claim.length + window)
+)
+这样即使超长分句，也永远不会跨进上一句/下一句。
+再补 2 个超长分句回归即可：
+上一句 NOT_AVAILABLE + ； + 超长肯定式 SOC2_COMPLIANT → 必须命中
+超长 SOC2_COMPLIANT is NOT_AVAILABLE + ； + 下一句肯定式 ISO → SOC2 PASS、ISO 必须命中
+其余我确认没有问题：
+file-level 漏洞已修；
+同行分句串扰已修；
+双向反例正确；
+A 海关生死线继续 CLOSED；
+B Qualification 继续 PASS；
+Enterprise Trust 状态模型继续 PASS；
+Qualification / DB / Customs evidence / Schema / HTTP 均无需改。
+另外，我查当前 98536dc 的 GitHub combined status，没有返回可独立确认的状态项，所以我不能把“CI 已通过”作为已核实事实；但代码差异本身已核到。
+当前应保持：
+A = CLOSED
+B = VERIFIED（待 A3）
+P0 BUSINESS SURVIVAL GATES = PENDING
+A3 修完后，这一块就可以最终 PASS / CLOSED。
+```

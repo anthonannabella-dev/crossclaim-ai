@@ -59,7 +59,7 @@ export function findSelfAssertedClaims(
       const context =
         segment.length <= window * 2
           ? segment
-          : text.slice(Math.max(0, index - window), Math.min(text.length, index + claim.length + window));
+          : text.slice(Math.max(segStart, index - window), Math.min(segEnd, index + claim.length + window));
       const negated = NEGATION_MARKERS.some((marker) => context.includes(marker));
       if (!negated) {
         hits.push({ claim, index, excerpt: context.replace(/\s+/g, ' ').slice(0, 240) });

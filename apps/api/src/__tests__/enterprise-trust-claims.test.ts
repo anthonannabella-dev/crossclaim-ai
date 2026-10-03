@@ -49,6 +49,18 @@ describe('CHANGE A — trust claim guard (occurrence/local-context)', () => {
     expect(findSelfAssertedClaims(text)).toEqual([]);
   });
 
+  it('CHANGE A3 超长分句：fallback 不得跨分句吃掉邻句否定', () => {
+    const longAssertive = 'SOC2_COMPLIANT ' + 'x'.repeat(400);
+    const prevNegated = 'ISO27001_CERTIFIED is NOT_AVAILABLE；' + longAssertive;
+    const prevHits = findSelfAssertedClaims(prevNegated).map((hit) => hit.claim);
+    expect(prevHits).toContain('SOC2_COMPLIANT');
+
+    const longNegated = 'SOC2_COMPLIANT is NOT_AVAILABLE ' + 'x'.repeat(400) + '；ISO27001_CERTIFIED';
+    const nextHits = findSelfAssertedClaims(longNegated).map((hit) => hit.claim);
+    expect(nextHits).not.toContain('SOC2_COMPLIANT');
+    expect(nextHits).toContain('ISO27001_CERTIFIED');
+  });
+
   it('CHANGE A2 双向反例：同行串扰不得豁免', () => {
     const first = 'SOC2_COMPLIANT；ISO27001_CERTIFIED is NOT_AVAILABLE';
     const firstHits = findSelfAssertedClaims(first).map((hit) => hit.claim);
