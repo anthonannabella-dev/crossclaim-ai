@@ -16,8 +16,9 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\//, '')), '..', '..');
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const OUT_JSON = path.join(ROOT, 'docs', 'releases', 'LAYER2-GOLDEN-PATH-MATRIX.json');
 const OUT_MD = path.join(ROOT, 'docs', 'releases', 'LAYER2-GOLDEN-PATH-MATRIX.md');
 const BACKLOG = path.join(ROOT, 'tools', 'autopilot', 'backlog.json');

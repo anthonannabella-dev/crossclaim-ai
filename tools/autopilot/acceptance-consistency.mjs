@@ -14,8 +14,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
-const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\//, '')), '..', '..');
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const MATRIX = path.join(ROOT, 'docs', 'releases', 'ACCEPTANCE-MATRIX.json');
 const REGISTER = path.join(ROOT, 'docs', 'releases', 'MASTER-GAP-CLOSURE-REGISTER.md');
 const REPORT = path.join(ROOT, 'docs', 'releases', 'FINAL-ACCEPTANCE-REPORT.md');

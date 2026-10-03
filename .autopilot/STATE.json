@@ -4902,7 +4902,7 @@
   "singleton_runner": "VERIFIED",
   "ci_pending": [],
   "ci_red": [],
-  "ci_checked_at": "2026-10-03T16:16:55.175Z",
+  "ci_checked_at": "2026-10-03T16:21:52.613Z",
   "continuous_verification": {
     "at": "2026-10-03T14:17:18.723Z",
     "a_to_b_to_c": "VERIFIED（单次启动连续执行 u1→u2→u3，无 heartbeat 唤醒；停止条件 = SAFE_CONTINUATION_QUEUE_EMPTY）",
@@ -4987,9 +4987,9 @@
   "awaiting_verdict": false,
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-03T16:18:08.777Z",
-    "head": "3e0e7d5",
-    "acceptance_head": "3e0e7d5",
+    "computed_at": "2026-10-03T16:22:47.665Z",
+    "head": "75d18d7",
+    "acceptance_head": "75d18d7",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5061,48 +5061,48 @@
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=3e0e7d5 ci_head=3e0e7d5 ci=failure run=37136117691"
+        "evidence": "acceptance_head=75d18d7 ci_head=75d18d7 ci=failure run=37136351044"
       },
       "L1-05_pg_regression_passed": {
         "status": "UNVERIFIED",
-        "evidence": "pg_regression recorded at 7d73154 ≠ acceptance head 3e0e7d5"
+        "evidence": "pg_regression recorded at 7d73154 ≠ acceptance head 75d18d7"
       },
       "L1-06_fresh_db_migration_passed": {
         "status": "UNVERIFIED",
-        "evidence": "fresh_db_migration recorded at 7d73154 ≠ acceptance head 3e0e7d5"
+        "evidence": "fresh_db_migration recorded at 7d73154 ≠ acceptance head 75d18d7"
       },
       "L1-07_api_typecheck_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_api recorded at 7d73154 ≠ acceptance head 3e0e7d5"
+        "evidence": "typecheck_api recorded at 7d73154 ≠ acceptance head 75d18d7"
       },
       "L1-08_web_typecheck_build_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_web recorded at 7d73154 ≠ acceptance head 3e0e7d5"
+        "evidence": "typecheck_web recorded at 7d73154 ≠ acceptance head 75d18d7"
       },
       "L1-09_no_skipped_critical_tests": {
         "status": "UNVERIFIED",
-        "evidence": "tests_no_skipped recorded at 7d73154 ≠ acceptance head 3e0e7d5"
+        "evidence": "tests_no_skipped recorded at 7d73154 ≠ acceptance head 75d18d7"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
         "status": false,
-        "evidence": "dirty entries: 6"
+        "evidence": "dirty entries: 10"
       },
       "L1-11_docs_state_consistent": {
         "status": "UNVERIFIED",
-        "evidence": "docs_sync recorded at 7d73154 ≠ acceptance head 3e0e7d5"
+        "evidence": "docs_sync recorded at 7d73154 ≠ acceptance head 75d18d7"
       },
       "L1-12_schema_invariants_verified": {
         "status": "UNVERIFIED",
-        "evidence": "schema_invariants recorded at 7d73154 ≠ acceptance head 3e0e7d5"
+        "evidence": "schema_invariants recorded at 7d73154 ≠ acceptance head 75d18d7"
       },
       "L1-13_negative_paths_covered": {
         "status": "UNVERIFIED",
-        "evidence": "negative_paths recorded at 7d73154 ≠ acceptance head 3e0e7d5"
+        "evidence": "negative_paths recorded at 7d73154 ≠ acceptance head 75d18d7"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
         "status": "UNVERIFIED",
-        "evidence": "pg_e2e_real recorded at 7d73154 ≠ acceptance head 3e0e7d5"
+        "evidence": "pg_e2e_real recorded at 7d73154 ≠ acceptance head 75d18d7"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
@@ -5189,9 +5189,9 @@
     "status": "DONE（MSG-20261003-134：端点+customs.recovery.chain.run/INTERNAL_WRITE+角色矩阵+immutable execution identity+路由级 E2E 4/4+API.md 90/77）"
   },
   "gates_recorded_at": "2026-10-03T15:17:04.369Z",
-  "ci_status_head": "3e0e7d5",
+  "ci_status_head": "75d18d7",
   "ci_status": "failure",
-  "ci_run_id": "37136117691",
+  "ci_run_id": "37136351044",
   "internal_code_complete_at": "2026-10-03T15:36:47.862Z",
   "independent_final_audit": {
     "required": true,

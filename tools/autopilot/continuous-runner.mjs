@@ -18,11 +18,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import process from 'node:process';
 import { execFileSync } from 'node:child_process';
-import { pathToFileURL } from 'node:url';
+import { pathToFileURL, fileURLToPath } from 'node:url';
 
 import { acquireLock, releaseLock, readHeartbeatAgeMs } from './lib/lock.mjs';
 
-const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\//, '')), '..', '..');
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const STATE = path.join(ROOT, '.autopilot', 'STATE.json');
 const HEARTBEAT = path.join(ROOT, '.autopilot', 'HEARTBEAT.json');
 const UNITS_INDEX = path.join(ROOT, 'tools', 'autopilot', 'units', 'index.json');

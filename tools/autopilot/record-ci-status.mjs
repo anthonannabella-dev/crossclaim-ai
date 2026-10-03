@@ -7,8 +7,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
-const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\//, '')), '..', '..');
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const STATE = path.join(ROOT, '.autopilot', 'STATE.json');
 const REPO = 'anthonannabella-dev/crossclaim-ai';
 

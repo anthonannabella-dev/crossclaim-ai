@@ -7,8 +7,9 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
-const ROOT = path.resolve(path.dirname(new URL(import.meta.url).pathname.replace(/^\//, '')), '..', '..');
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const STATE = path.join(ROOT, '.autopilot', 'STATE.json');
 const MATRIX = path.join(ROOT, 'docs', 'releases', 'ACCEPTANCE-MATRIX.json');
 const OUT = path.join(ROOT, 'docs', 'releases', 'FINAL-ACCEPTANCE-REPORT.md');
