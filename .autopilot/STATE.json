@@ -51,9 +51,9 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-03T14:11:19.420Z",
   "state": "IMPLEMENT",
-  "last_action": "CI 补记：CHANGE A3（3c5fac6）与 A/B/P0 收口提交（42be8f6）均已 CI success —— 满足「最终 CLOSED 需 CI-confirmed」的流程要求",
+  "last_action": "u8 Full Regression（TRACK A 具名项）通过：全量 API 套件 263 文件 / 2637 用例全绿（约 17 分钟），由 CONTINUOUS runner 连续执行并留档",
   "last_action_at": "2026-10-03T14:17:18.723Z",
-  "next_action": "按 GLOBAL BACKLOG 继续下一内部缺口：为 continuous runner 注册新的安全单元（下一条内部链），并保持 heartbeat 仅作 liveness",
+  "next_action": "继续消费 SAFE_CONTINUATION_QUEUE：注册下一批 backlog 单元（customs G4 HTTP 写入侧接线验证 / 平台域 adapter 只读闭环 / 独立站支付域内部链证据），并保持 CI 非阻塞巡检",
   "current_head": "749040c",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
@@ -4864,14 +4864,15 @@
     "u4-fresh-db-verify",
     "u5-doc-sync-guard",
     "u6-carrier-suite",
-    "u7-money-chain-suite"
+    "u7-money-chain-suite",
+    "u8-full-regression"
   ],
   "last_unit": {
-    "id": "u7-money-chain-suite",
-    "at": "2026-10-03T14:23:31.971Z",
-    "head_before": "4f810ac",
-    "head_after": "4f810ac",
-    "detail": " Test Files  30 passed (30) |       Tests  287 passed (287)"
+    "id": "u8-full-regression",
+    "at": "2026-10-03T14:43:54.718Z",
+    "head_before": "0d71cb4",
+    "head_after": "b30f3e2",
+    "detail": "FULL_REGRESSION_PASS  Test Files  263 passed (263) |       Tests  2637 passed (2637) durationMs=1020255"
   },
   "autopilot_mode": "CONTINUOUS",
   "heartbeat_role": "LIVENESS_ONLY",
@@ -4893,7 +4894,9 @@
     "u6": "16 files / 289 tests passed",
     "u7": "30 files / 287 tests passed",
     "carrier": "Queue #3–#10 全链套件回归通过",
-    "money_chain": "R45/R46 settlement·billing·fee·commission·platform-write 套件回归通过"
+    "money_chain": "R45/R46 settlement·billing·fee·commission·platform-write 套件回归通过",
+    "u8_full_regression": "FULL_REGRESSION_PASS 263 files / 2637 tests passed（durationMs=1020255）",
+    "track_a_full_regression": "DONE（本地全量回归通过；CI 侧每笔 commit 亦 success）"
   },
   "ci_confirmed_at": "2026-10-03T14:43:07.357Z"
 }

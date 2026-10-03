@@ -12,7 +12,7 @@
   "remaining_tasks": 13,
   "automation_status": "ACTIVE",
   "interval_minutes": 5,
-  "tick_at": "2026-10-03T14:26:54.392Z",
+  "tick_at": "2026-10-03T14:43:54.726Z",
   "schedule_stale_previous": false,
   "state_machine": "CONTINUOUS",
   "continue_required": true,
@@ -251,9 +251,9 @@
     "customer_submission": false,
     "production_credentials": "HOST_ONLY"
   },
-  "remaining_units": 1,
+  "remaining_units": 0,
   "runner_pid": 27592,
   "mode": "CONTINUOUS",
-  "last_unit": "u7-money-chain-suite",
-  "last_unit_at": "2026-10-03T14:23:31.974Z"
+  "last_unit": "u8-full-regression",
+  "last_unit_at": "2026-10-03T14:43:54.721Z"
 }

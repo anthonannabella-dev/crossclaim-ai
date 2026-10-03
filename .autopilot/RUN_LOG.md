@@ -1574,3 +1574,6 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 
 ## 2026-10-03T14:23:31.940Z — CONTINUOUS u7-money-chain-suite
 -  Test Files  30 passed (30) |       Tests  287 passed (287)
+
+## 2026-10-03T14:43:54.682Z — CONTINUOUS u8-full-regression
+- FULL_REGRESSION_PASS  Test Files  263 passed (263) |       Tests  2637 passed (2637) durationMs=1020255

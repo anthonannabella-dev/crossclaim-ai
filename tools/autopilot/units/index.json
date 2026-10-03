@@ -41,6 +41,12 @@
       "title": "资金链回归（R45/R46 settlement·billing·fee guard·commission reconciliation·platform write ledger）",
       "kind": "TEST_EVIDENCE",
       "safe": true
+    },
+    {
+      "id": "u8-full-regression",
+      "title": "Full Regression（TRACK A）：全量 API 套件（含全部 DB/HTTP/E2E）一次跑完并留档",
+      "kind": "FULL_REGRESSION",
+      "safe": true
     }
   ]
 }
