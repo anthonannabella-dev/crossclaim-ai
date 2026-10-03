@@ -1633,3 +1633,6 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 
 ## 2026-10-03T15:40:33.504Z — INDEPENDENT FINAL AUDIT 请求
 - Issue #2 comment 5970674608；待发唤醒。
+
+## 2026-10-03T15:45:08.544Z — ENTERPRISE IOR RECOVERY LAYER 第一增量
+- 契约层六模块落地 + 8/8 测试；登记表新增 F 段（I1–I5）；backlog 新增 BG-013/BG-014。

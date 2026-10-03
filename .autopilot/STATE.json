@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261003-126",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-03T15:06:37.798Z",
+  "updated_at": "2026-10-03T15:45:08.544Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -51,9 +51,9 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-03T14:11:19.420Z",
   "state": "IMPLEMENT",
-  "last_action": "INDEPENDENT FINAL AUDIT 请求已留档：Issue #2 comment 5970674608（HEAD b0fffe5）",
+  "last_action": "ENTERPRISE IOR RECOVERY LAYER 第一增量：六个契约模块落地（identity / right lineage / broker POA 5291 / remedy deadline policy / evidence taxonomy / refund destination readiness），8/8 测试通过，tsc api 绿",
   "last_action_at": "2026-10-03T14:17:18.723Z",
-  "next_action": "发送审计唤醒并读取独立审计裁决；PASS → 记录 INDEPENDENT FINAL AUDIT = PASS（PRODUCTION_READY 仍由宿主决定）；REVISE → 建 backlog 重新执行",
+  "next_action": "按指令继续：BG-014 IOR qualification 接线（复用现有 gate）→ BG-013 持久化 Schema Delta 送架构方审计 → I3 全链装配",
   "current_head": "3d80d60",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
@@ -5049,5 +5049,16 @@
     "github_comment_id": "5970674608",
     "wakeup_sent_at": null,
     "verdict": null
+  },
+  "enterprise_ior_layer": {
+    "directive_doc": "docs/releases/ENTERPRISE-IOR-RECOVERY-LAYER-DIRECTIVE.md",
+    "contract_layer": "DONE（ior-identity / right-lineage / broker-poa / remedy-deadline / evidence-taxonomy / refund-destination；8/8 测试）",
+    "pending": [
+      "I1 持久化（Schema Delta 需审计）",
+      "I2 qualification 接线",
+      "I3 全链装配",
+      "I5 VAT/GST（future backlog）"
+    ],
+    "boundary": "filingSubmitted=false / externalWritePerformed=false / transportEnabled=false / Payment=0 / collection=OFF / productionCredentials=ABSENT"
   }
 }

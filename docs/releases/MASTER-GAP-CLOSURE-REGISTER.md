@@ -69,3 +69,13 @@
 | **B. 数据安全与客户筛选** | **CLOSED（MSG-20261003-132：A1/A2/A3 修订后 Trust guard PASS）** | Qualification Gate 单测 11/11（qualified/conditional/not-qualified/indeterminate + 成本占比 + 政策版本）；判定 append-only 持久化 PG 5/5（幂等、历史与 latest、触发器拒绝 UPDATE/DELETE、跨租户隔离）；**后端强制 Gate**：未通过 → HTTP 409，VIEWER 绕过 → 403（PG E2E 断言）；Enterprise Trust 状态模型 + 禁自证守卫 2/2（`SOC2_COMPLIANT`/`ISO27001_CERTIFIED`/`BANK_GRADE_SECURITY` 仅允许在否定/未取得语境出现；`EXTERNAL_AUDITED` 当前 0 项）；CI：`33d8633` success |
 
 说明：A 的路由级 HTTP E2E 提交 `3417377` 已 CI success；B 的 Trust guard 已通过 A1/A2/A3 三轮修订（分句/邻近窗口 + fallback 夹边界）并获架构方 PASS；两条生死线均**不改变** HOLD_EXTERNAL（真实 filing / broker 提交 / 外呼 / 生产凭据 / 资金动作仍关闭）。
+
+## F. ENTERPRISE IOR RECOVERY LAYER（HOST DIRECTIVE 增量）
+
+| ID | 缺口 | 来源 | 状态 |
+|---|---|---|---|
+| I1 | IOR identity / right lineage / broker POA **持久化**（append-only + tenant + digest） | 指令 ①②③ | PENDING（需 Schema Delta 审计） |
+| I2 | Enterprise IOR readiness 输入接入现有 Qualification / Economics Gate | 指令 ⑥ | PENDING（接线） |
+| I3 | IOR 全链装配（Entry→IOR→claimant/right→remedy+deadline→qualification→evidence→estimate→claim-ready→broker authorization→filing provider→refund destination），fail-closed | 指令 ⑪ | PENDING |
+| I4 | 契约层（identity / right lineage / POA / deadline / evidence taxonomy / refund destination） | 指令 ①②③④⑤⑦ | **DONE**（`enterprise-ior-layer` 8/8；见 `docs/releases/ENTERPRISE-IOR-RECOVERY-LAYER-DIRECTIVE.md`） |
+| I5 | VAT/GST Recovery（future backlog，不得在 C18 闭环前开辟主线） | 指令 ⑩ | REGISTERED（not started） |

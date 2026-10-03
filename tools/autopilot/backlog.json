@@ -1,6 +1,6 @@
 {
   "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。",
-  "updatedAt": "2026-10-03T15:01:33.598Z",
+  "updatedAt": "2026-10-03T15:45:08.544Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -328,6 +328,54 @@
       ],
       "dispatcher_skip": true,
       "dispatcher_skip_reason": "EXTERNAL_WRITE/Action Guard 边界需架构方再审（MSG-20261003-133 Q3）"
+    },
+    {
+      "id": "BG-013-ior-facts-persistence-schema-delta",
+      "priority": "P1",
+      "source_backlog_id": "IOR 指令 ①②③ / I1",
+      "title": "IOR identity / right lineage / broker POA 事实持久化（Schema Delta，需架构方审计）",
+      "scope": "append-only 事实表 + tenant/immutable/append-only 触发器 + digest；不含外部写入",
+      "acceptance_criteria": "Schema Delta 获批后落 migration；PG 回归（幂等、append-only、跨租户拒绝）",
+      "dependencies": [],
+      "risk_class": "HIGH",
+      "ARCH_REVIEW_REQUIRED": true,
+      "HOST_ACTION_REQUIRED": false,
+      "HOLD_EXTERNAL": true,
+      "allowed_files": [
+        "apps/api/prisma/**"
+      ],
+      "boundary": "SCHEMA_CHANGE_REQUIRES_AUDIT",
+      "required_tests": [
+        "architecture-contract"
+      ],
+      "template": "suite-evidence",
+      "filters": [
+        "architecture-contract"
+      ]
+    },
+    {
+      "id": "BG-014-ior-qualification-wiring",
+      "priority": "P1",
+      "source_backlog_id": "IOR 指令 ⑥ / I2",
+      "title": "Enterprise IOR readiness 输入接入现有 Qualification / Economics Gate（复用，不建第二套）",
+      "scope": "只增输入平面与判定接线；不改变既有 gate 语义",
+      "acceptance_criteria": "IOR readiness 缺失/歧义 → INDETERMINATE/NOT_QUALIFIED；昂贵调用仍在 gate 之后",
+      "dependencies": [],
+      "risk_class": "MEDIUM",
+      "ARCH_REVIEW_REQUIRED": false,
+      "HOST_ACTION_REQUIRED": false,
+      "HOLD_EXTERNAL": true,
+      "allowed_files": [
+        "apps/api/src/services/**"
+      ],
+      "boundary": "NO_EXTERNAL_CALL",
+      "required_tests": [
+        "customer-qualification-gate"
+      ],
+      "template": "suite-evidence",
+      "filters": [
+        "customer-qualification-gate"
+      ]
     }
   ],
   "authorization_note": "MSG-20261003-133 Q3：dispatcher 获授权自动扩 backlog 并执行安全单元（契约/已批准 D1–D3 Schema/append-only 持久化/deterministic normalization/qualification·evidence·package/测试/文档/fixture/只读 HTTP/只读 reconciliation projection）；遇到未批准 Schema、EXTERNAL_WRITE Action Guard、真实 adapter/webhook、submission、真实资金语义写入、生产 credential、收费时必须停该分支并重新送审。"
