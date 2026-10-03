@@ -116,7 +116,10 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
         <ul className="mt-3 space-y-1 text-sm">
           {body.claims.map((item) => (
             <li key={item.id}>
-              第 {item.round} 轮 · {item.target} · {item.status}
+              {t.caseDetail.claimRound
+                .replace('{round}', String(item.round))
+                .replace('{target}', item.target)
+                .replace('{status}', item.status)}
             </li>
           ))}
         </ul>
@@ -203,9 +206,12 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
         ) : claim.ok && claim.body ? (
           <>
             <p className="mt-2 text-xs text-slate-500">
-              第 {claim.body.round} 轮 · 版本 {claim.body.version} · 状态 {claim.body.status} ·{' '}
-              {claim.body.isFinal ? t.caseDetail.claimFinal : t.caseDetail.claimDraft} ·{' '}
-              {new Date(claim.body.generatedAt).toLocaleString('zh-CN')}
+              {t.caseDetail.claimRoundMeta
+                .replace('{round}', String(claim.body.round))
+                .replace('{version}', String(claim.body.version))
+                .replace('{status}', claim.body.status)
+                .replace('{kind}', claim.body.isFinal ? t.caseDetail.claimFinal : t.caseDetail.claimDraft)
+                .replace('{generatedAt}', new Date(claim.body.generatedAt).toLocaleString('zh-CN'))}
             </p>
             <pre className="mt-3 whitespace-pre-wrap rounded bg-slate-50 p-4 text-xs text-slate-800">
               {claim.body.sections.join('\n')}

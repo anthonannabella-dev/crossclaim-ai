@@ -322,6 +322,8 @@ const es: Messages = {
     evidenceChain: 'Cadena de evidencia',
     auditTrail: 'Registro de auditoría',
     available: 'Disponible',
+    claimRound: "Ronda {round} · {target} · {status}",
+    claimRoundMeta: "Ronda {round} · versión {version} · estado {status} · {kind} · {generatedAt}",
   },
   recoveryReview: {
     title: 'Revisión de recuperaciones elevadas',

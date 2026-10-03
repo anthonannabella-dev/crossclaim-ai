@@ -322,6 +322,8 @@ const ja: Messages = {
     evidenceChain: '証拠チェーン',
     auditTrail: '監査記録',
     available: 'アクセス可能',
+    claimRound: "第 {round} ラウンド · {target} · {status}",
+    claimRoundMeta: "第 {round} ラウンド · バージョン {version} · 状態 {status} · {kind} · {generatedAt}",
   },
   recoveryReview: {
     title: '高額回収の確認',

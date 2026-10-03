@@ -322,6 +322,8 @@ const enUS: Messages = {
     evidenceChain: 'Evidence chain',
     auditTrail: 'Audit trail',
     available: 'Available',
+    claimRound: "Round {round} · {target} · {status}",
+    claimRoundMeta: "Round {round} · version {version} · status {status} · {kind} · {generatedAt}",
   },
   recoveryReview: {
     title: 'High-value recovery review',

@@ -319,6 +319,8 @@ const zhCN = {
     evidenceChain: '证据链',
     auditTrail: '审计记录',
     available: '可访问',
+    claimRound: "第 {round} 轮 · {target} · {status}",
+    claimRoundMeta: "第 {round} 轮 · 版本 {version} · 状态 {status} · {kind} · {generatedAt}",
   },
   recoveryReview: {
     title: '高额回收复核',

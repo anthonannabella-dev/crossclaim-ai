@@ -322,6 +322,8 @@ const de: Messages = {
     evidenceChain: 'Belegkette',
     auditTrail: 'Audit-Trail',
     available: 'Verfügbar',
+    claimRound: "Runde {round} · {target} · {status}",
+    claimRoundMeta: "Runde {round} · Version {version} · Status {status} · {kind} · {generatedAt}",
   },
   recoveryReview: {
     title: 'Prüfung hoher Rückforderungen',
