@@ -90,6 +90,8 @@ jobs:
 
       - name: Verify autopilot persistent rules (.autopilot/RULES.md + rules.json)
         run: node tools/autopilot/check-autopilot-rules.mjs --root .
+      - name: Verify acceptance consistency (ACCEPTANCE-MATRIX vs STATE/REGISTER/REPORT)
+        run: node tools/autopilot/acceptance-consistency.mjs
 
       - name: API contract (API.md ↔ implemented routes)
         run: node tools/api-contract/check-routes.mjs --root .

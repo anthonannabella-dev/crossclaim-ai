@@ -1655,3 +1655,6 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 
 ## 2026-10-03T15:55:56.307Z — BG-013 唤醒投递
 - 三要素验证通过（composer 清空 / marker 在底部 / 生成中）；等待编号裁决。
+
+## 2026-10-03T15:57:55.813Z — CHANGE B
+- 单一权威矩阵 ACCEPTANCE-MATRIX.json + acceptance-consistency guard（CI 接线）；报告改为派生；register G3/G10 更正为 DONE、G11 写明真实剩余并转 BG-020。

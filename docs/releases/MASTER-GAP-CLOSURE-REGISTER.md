@@ -1,6 +1,8 @@
 # MASTER GAP CLOSURE REGISTER（目标 → 实现 → 缺口）
 
-维护规则：每完成一个单元即重算；本表是 SAFE_CONTINUATION_QUEUE 的唯一权威来源。
+维护规则：每完成一个单元即重算。
+**单一权威验收矩阵：`docs/releases/ACCEPTANCE-MATRIX.json`**（由 `tools/autopilot/acceptance-matrix.mjs` 生成）；
+本表、`.autopilot/STATE.json`、`docs/releases/FINAL-ACCEPTANCE-REPORT.md` 必须与它一致，由 `tools/autopilot/acceptance-consistency.mjs` 强制校验（CI）。
 最近重算：2026-10-03（HEAD `c4370ea`；依据 MSG-20261003-126 与全部已交付批次；G4 C1–C5 已收口）。
 
 ## A. 目标 → 状态
@@ -34,17 +36,17 @@
 |---|---|---|---|
 | ~~G1~~ **DONE** | 统一 fee guard 收口：所有 `FeeCalculation` 创建路径必须过 `evaluateFeeGuard`（`commission-reconciliation.ts` 已按 ㉕ 改造：matched settlement → verified recovered truth → 绑定 agreement policy → guard → FeeCalculation；`record-fee.ts` 既有装配保留） | MSG-20261003-124 ㉓㉔㉕⑥ | `record-fee.ts` 保留既有装配、只在 create 前接 guard；`commission-reconciliation.ts` 改为 matched settlement → verified recovered truth → RecoveryCommercialEligibility → SettlementFeeEligibility → resolve versioned policy → guard → FeeCalculation；补 ㊱ 回归 |
 | ~~G2~~ **DONE** | C17 `CustomsSubmissionAttempt`（幂等根）+ `CustomsSubmissionAttemptFact`（append-only） | MSG-20261003-126 PASS/CLOSED | 已收口：root UNIQUE + fact append-only + tenant lineage + SUBMITTED 必带 providerSubmissionId + 并发原子（FOR UPDATE）+ IDEMPOTENCY_KEY_CONFLICT + FACT_IMMUTABLE_MISMATCH；真实 PG 13/13 |
-| G3 | C21 HTTP：`POST /customs-opportunities/:id/start-recovery` + `GET .../filing-status` + `customs.recovery.start` Action Guard/RBAC | MSG-20261003-124 ⑭–㉑ | 实现并按 `filingSubmitted=false` / `externalExecutionStatus=NOT_STARTED` 语义暴露；真实 DB E2E（401/403/404/400/200/409 语义） |
+| ~~G3~~ **DONE** | C21 HTTP：`POST /customs-opportunities/:id/start-recovery` + `GET .../filing-status` + `customs.recovery.start` Action Guard/RBAC | MSG-20261003-124 ⑭–㉑ | **已实现**（2026-10-04 复核）：`services/customs/customs-recovery-http.ts` + `server.ts` 路由白名单 + `action-guard`（`customs.recovery.start` = INTERNAL_WRITE，guard-enforcement 登记）+ `customs-recovery-http.test.ts`（6）+ `customs-recovery-http-e2e-db.test.ts`（PG E2E）+ 前端 `apps/web/app/integration-status/start-recovery-form.tsx`；`filingSubmitted=false` / TRANSPORT=false |
 | ~~G4~~ **DONE / CLOSED** | Customs C1–C7 内部链：**C1** 事实契约 → **C2** duty 真值 → **C3** 分类/税率差异 → **C4** 三态资格（SHANGE A 方向语义）→ **C5** 估算（estimateOnly、消费 C4 候选）→ **C6** claim-ready package（确定性装配）→ **C7** handoff-only | HOST DIRECTIVE 2026-10-03 补充四 §3 ㉓ + **MSG-20261003-127 REVISE → MSG-20261003-128 PASS/CLOSED** | 全部收口：契约 85/85、customs 全套 154/154、两批 Schema Delta（事实层 append-only + 四个 append-only 计算投影）迁移 50 条、触发器清单 89/30、CI 5/5（4ed8714 / 749040c）；架构方明确**无需再送 G4 checkpoint** |
 | ~~G5~~ **DONE** | 前端真实接线（只读页 + 人工补录表单 + start-recovery 表单全部上线） | MASTER GAP CLOSURE 检查项 E | **已核查并记录**：`apps/web` 49 文件 / 34 条后端路径，均不含 Queue #10 与 C21/C19 新能力 → 结论 **CONFIRMED_GAP（只读 UI 接线待做）**；映射见 `docs/releases/FRONTEND-WIRING-MAP.md` |
 | ~~G6~~ **DONE** | 文档同步（README / FINAL-GATE / PRODUCTION-READINESS / API BACKLOG ↔ 代码） | 检查项 F | 逐文档比对最近实现（Queue #10、Customs C15–C21、15% cutover）并更新 |
 | ~~G7~~ **DONE（Customs）** | 非 happy-path 覆盖复核 | 检查项「测试只覆盖 happy path」 | Customs：新增 C1→C7 全链回归 7/7（少缴拒绝估算 / INDETERMINATE 传播 / 混币·PII·篡改事实·证据引用 fail-closed / 确定性）；Carrier 侧此前已覆盖租户/幂等/并发/超时；**剩余**：下一目标域接入时同步补非 happy-path |
 | ~~G8~~ **DONE** | contract-only → 持久化复核 | 检查项「contract-only 未持久化」 | 已收口：Customs C1–C5 具备 append-only 持久化（`customs-entry-fact-store`：contentDigest 幂等、投影只追加、latest 由 computedAt 推导），真实 PG 验收 7/7（重复 ingest→exactly one、digest 冲突 fail-closed、投影重算留历史、UPDATE/DELETE 触发器拒绝、跨租户 lineage 拒绝） |
 | ~~G9~~ **DONE** | Schema 字段无 DB constraint 复核 | 检查项「Schema 有字段但无 DB constraint」 | 已收口：扫描 27 候选 → 补 currency 形状 CHECK（3 列）、platform-write 状态 CHECK、引用/类型非空 CHECK（4 列）、`RecoveryPayout.sourceType` 闭合枚举 CHECK；动态字符串判定为非缺口并留档；守卫 `db-constraint-coverage` 21/21，运行库 10/10 约束经 psql 核实 |
-| G10 | service→HTTP 未接线复核 | 检查项「service 有但 HTTP 未接线」 | **映射已建立**（`FRONTEND-WIRING-MAP.md` §3）：已接线 carrier manual/response、customs start-recovery/filing-status、platform write、claim、billing、evidence、provider readiness；未接线者为 C15/C16/C19 ingest/C20/fee preview（均按设计供上层使用或 HOLD_EXTERNAL） |
+| ~~G10~~ **DONE** | service→HTTP 未接线复核 | 检查项「service 有但 HTTP 未接线」 | **已复核**（2026-10-04）：映射见 `FRONTEND-WIRING-MAP.md` §3；已接线 carrier manual/response、customs start-recovery/filing-status/recovery-chain/return-claim-evidence、platform write、claim、billing、evidence、provider readiness；实际仍缺的 customs 只读投影 GET（duty truth / discrepancy / eligibility / estimate / claim-ready）与 IOR 全链 HTTP 转登记为 **BG-020**（不再以「映射存在」充当收口） |
 
 
-| G11 | Customs G4 能力 HTTP/前端接线（C1–C7 目前只有 service/契约层） | 检查项「service 已实现但 HTTP 未接线」「UI 无真实 backend」 | 计划：只读 GET（entry fact / duty truth / discrepancy / eligibility / estimate / claim-ready package）+ 受 Action Guard 保护的 handoff 记录端点；前端只读页接线；全程 filingSubmitted=false / TRANSPORT=false |
+| G11 | Customs 只读投影 HTTP/前端接线（**未关闭，已 materialize 为 BG-020**） | 检查项「service 已实现但 HTTP 未接线」「UI 无真实 backend」 | 已交付部分：`GET /customs-entry-facts/:id/return-claim-evidence`、`POST /customs-entry-facts/:id/recovery-chain`、`/customs-opportunities/:id/start-recovery`、`/customs-opportunities/:id/filing-status`。**仍缺**：duty truth / discrepancy / eligibility / estimate / claim-ready package 的只读 GET + 对应前端只读页；全程 filingSubmitted=false / TRANSPORT=false |
 
 ## C. 外部 / 宿主依赖（不进入 SAFE_CONTINUATION_QUEUE）
 
@@ -59,7 +61,10 @@
 
 ## D. INTERNAL_CODE_COMPLETE 判定
 
-当前：**FALSE**（内部缺口 G1–G10 未清零）。判定条件见 `docs/releases/MASTER-GAP-CLOSURE-DIRECTIVE.md` §0。
+本段不再手写布尔值：`INTERNAL_CODE_COMPLETE` 由 `tools/autopilot/final-status.mjs` 按协议 Layer 1 的 **14 项逐条**计算，
+每条必须绑定当前 acceptance HEAD 的实证（`tools/autopilot/record-evidence.mjs` 记录），未绑定 → `UNVERIFIED`。
+当前打开的内部项见 `docs/releases/ACCEPTANCE-MATRIX.json` 的 `open_internal_items`。
+历史说明：G1–G10 的旧布尔结论已作废，避免与 STATE/报告冲突。
 
 ## E. BUSINESS SURVIVAL GATES（生死线，HOST FINAL ACCEPTANCE RULES 2026-10-03）— **P0 = PASS / CLOSED（MSG-20261003-132）**
 

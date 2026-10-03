@@ -1,6 +1,6 @@
 {
   "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。",
-  "updatedAt": "2026-10-03T15:54:17.396Z",
+  "updatedAt": "2026-10-03T15:57:55.813Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -507,6 +507,32 @@
         "web"
       ],
       "materializable": false
+    },
+    {
+      "id": "BG-020-customs-readonly-projection-http",
+      "priority": "P1",
+      "source_backlog_id": "G11 / MSG-20261003-135 CHANGE C（Customs 域矩阵缺口）",
+      "title": "Customs 只读投影 GET + IOR 全链 HTTP 接线（duty truth / discrepancy / eligibility / estimate / claim-ready package / IOR recovery chain）",
+      "scope": "只读 GET 端点 + tenant-scoped 读模型 + 前端只读页；零外部写、零 filing",
+      "acceptance_criteria": "每端点 401/403/404/200 + 跨租户 fail-closed + 重算口径 recomputedOnRead=false；路由契约同步；filingSubmitted=false",
+      "dependencies": [],
+      "risk_class": "MEDIUM",
+      "ARCH_REVIEW_REQUIRED": false,
+      "HOST_ACTION_REQUIRED": false,
+      "HOLD_EXTERNAL": true,
+      "allowed_files": [
+        "apps/api/src/services/**",
+        "apps/api/src/__tests__/**",
+        "apps/web/**"
+      ],
+      "boundary": "NO_EXTERNAL_CALL",
+      "required_tests": [
+        "customs"
+      ],
+      "template": "suite-evidence",
+      "filters": [
+        "customs"
+      ]
     }
   ],
   "authorization_note": "MSG-20261003-133 Q3：dispatcher 获授权自动扩 backlog 并执行安全单元（契约/已批准 D1–D3 Schema/append-only 持久化/deterministic normalization/qualification·evidence·package/测试/文档/fixture/只读 HTTP/只读 reconciliation projection）；遇到未批准 Schema、EXTERNAL_WRITE Action Guard、真实 adapter/webhook、submission、真实资金语义写入、生产 credential、收费时必须停该分支并重新送审。"

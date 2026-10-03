@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261003-135",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-03T15:55:56.307Z",
+  "updated_at": "2026-10-03T15:57:55.813Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -51,9 +51,9 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-03T14:11:19.420Z",
   "state": "IMPLEMENT",
-  "last_action": "BG-013 Schema Delta 唤醒已投递并三要素验证（composer 清空 / marker 在底部 / 生成中）",
+  "last_action": "CHANGE B 实施：单一权威矩阵 + 四份一致 guard + 报告派生 + register reconcile（G3/G10/G11）",
   "last_action_at": "2026-10-03T14:17:18.723Z",
-  "next_action": "CHANGE B：单一 Acceptance Head + 四份状态一致 guard（BG-016）；随后 CHANGE C（BG-017）→ CHANGE D（BG-018）→ CHANGE E（BG-019）；BG-013 待架构方裁决",
+  "next_action": "CHANGE C：Layer 2 四域 Golden Path Matrix（BG-017）",
   "current_head": "8902185",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
@@ -4877,7 +4877,8 @@
     "BG-011-ps04-enum-migration-d1-d3",
     "BG-010-ps04-phase1-readonly-chain",
     "BG-014-ior-qualification-wiring",
-    "BG-015-ior-full-chain-assembly"
+    "BG-015-ior-full-chain-assembly",
+    "BG-016-acceptance-head-single-source"
   ],
   "last_unit": {
     "id": "BG-015-ior-full-chain-assembly",
@@ -4892,7 +4893,7 @@
   "singleton_runner": "VERIFIED",
   "ci_pending": [],
   "ci_red": [],
-  "ci_checked_at": "2026-10-03T15:50:07.370Z",
+  "ci_checked_at": "2026-10-03T15:56:31.103Z",
   "continuous_verification": {
     "at": "2026-10-03T14:17:18.723Z",
     "a_to_b_to_c": "VERIFIED（单次启动连续执行 u1→u2→u3，无 heartbeat 唤醒；停止条件 = SAFE_CONTINUATION_QUEUE_EMPTY）",
@@ -4925,7 +4926,8 @@
     "BG-010-ps04-phase1-readonly-chain",
     "BG-012-customs-g4-http-trigger-wiring",
     "BG-014-ior-qualification-wiring",
-    "BG-015-ior-full-chain-assembly"
+    "BG-015-ior-full-chain-assembly",
+    "BG-016-acceptance-head-single-source"
   ],
   "host_action_required": [
     "BG-006-production-candidate-preflight"
@@ -4973,9 +4975,9 @@
   "awaiting_verdict": false,
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-03T15:54:38.981Z",
-    "head": "376d64c",
-    "acceptance_head": "376d64c",
+    "computed_at": "2026-10-03T15:58:16.335Z",
+    "head": "928fa36",
+    "acceptance_head": "928fa36",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -4985,10 +4987,10 @@
     "INDEPENDENT_FINAL_AUDIT_REQUIRED": true,
     "OPEN_INTERNAL_ITEMS": [
       "BG-013-ior-facts-persistence-schema-delta",
-      "BG-016-acceptance-head-single-source",
       "BG-017-layer2-golden-path-matrix",
       "BG-018-independent-site-internal-closure",
       "BG-019-frontend-http-wiring-closure",
+      "BG-020-customs-readonly-projection-http",
       "CHECK:L1-01_safe_continuation_queue_zero",
       "CHECK:L1-02_no_open_internal_items",
       "CHECK:L1-03_no_open_markers",
@@ -5039,7 +5041,7 @@
       "L1-02_no_open_internal_items": {
         "label": "所有 Codex 可独立完成的内部缺口 CLOSED",
         "status": false,
-        "evidence": "open internal: BG-013-ior-facts-persistence-schema-delta,BG-016-acceptance-head-single-source,BG-017-layer2-golden-path-matrix,BG-018-independent-site-internal-closure,BG-019-frontend-http-wiring-closure"
+        "evidence": "open internal: BG-013-ior-facts-persistence-schema-delta,BG-017-layer2-golden-path-matrix,BG-018-independent-site-internal-closure,BG-019-frontend-http-wiring-closure,BG-020-customs-readonly-projection-http"
       },
       "L1-03_no_open_markers": {
         "label": "不存在 TODO/IN_PROGRESS/PARTIAL/READY_FOR_REVIEW/WAITING_FOR_VERDICT/未处理 REVISE·BLOCK",
@@ -5049,7 +5051,7 @@
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=376d64c ci_head=8902185 ci=in_progress run=37134404828"
+        "evidence": "acceptance_head=928fa36 ci_head=928fa36 ci=in_progress run=37134995413"
       },
       "L1-05_pg_regression_passed": {
         "status": "UNVERIFIED",
@@ -5074,7 +5076,7 @@
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
         "status": false,
-        "evidence": "dirty entries: 9"
+        "evidence": "dirty entries: 10"
       },
       "L1-11_docs_state_consistent": {
         "status": "UNVERIFIED",
@@ -5124,9 +5126,9 @@
     "status": "DONE（MSG-20261003-134：端点+customs.recovery.chain.run/INTERNAL_WRITE+角色矩阵+immutable execution identity+路由级 E2E 4/4+API.md 90/77）"
   },
   "gates_recorded_at": "2026-10-03T15:17:04.369Z",
-  "ci_status_head": "8902185",
+  "ci_status_head": "928fa36",
   "ci_status": "in_progress",
-  "ci_run_id": "37134404828",
+  "ci_run_id": "37134995413",
   "internal_code_complete_at": "2026-10-03T15:36:47.862Z",
   "independent_final_audit": {
     "required": true,
@@ -5179,5 +5181,17 @@
     "file": "tools/autopilot/final-status.mjs",
     "detail": "14 项逐条显式；evidence 必须绑定 acceptance HEAD；无默认 true；CI 必须对应当前 HEAD；工作树不做静默豁免",
     "evidence_recorder": "tools/autopilot/record-evidence.mjs"
+  },
+  "change_b": {
+    "status": "IMPLEMENTED",
+    "single_source": "docs/releases/ACCEPTANCE-MATRIX.json",
+    "guard": "tools/autopilot/acceptance-consistency.mjs（CI 接线）",
+    "report": "tools/autopilot/final-report.mjs 派生自矩阵（不再手写）",
+    "reconciled": [
+      "G3 → DONE（已实现，陈旧行已更正）",
+      "G10 → DONE（映射复核，剩余转 BG-020）",
+      "G11 → 保留 open 并写明真实剩余",
+      "D 段 → 改由 final-status 计算"
+    ]
   }
 }
