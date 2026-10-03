@@ -48,13 +48,17 @@ export function findSelfAssertedClaims(
     for (;;) {
       const index = text.indexOf(claim, from);
       if (index < 0) break;
-      const lineStart = text.lastIndexOf('\n', index) + 1;
-      const lineEndRaw = text.indexOf('\n', index);
-      const lineEnd = lineEndRaw < 0 ? text.length : lineEndRaw;
-      const line = text.slice(lineStart, lineEnd);
+      // CHANGE A2：语境 = 该 occurrence 所在的**分句/句子**（以 。；;.!?\n 为边界）；
+      // 同一行内另一项认证的 NOT_AVAILABLE 不得豁免本 occurrence。
+      const SEGMENT_BOUNDARY = /[\u3002\uFF1B;.!?\n]/;
+      let segStart = index;
+      while (segStart > 0 && !SEGMENT_BOUNDARY.test(text[segStart - 1] ?? "")) segStart -= 1;
+      let segEnd = index + claim.length;
+      while (segEnd < text.length && !SEGMENT_BOUNDARY.test(text[segEnd] ?? "")) segEnd += 1;
+      const segment = text.slice(segStart, segEnd);
       const context =
-        line.length <= window * 4
-          ? line
+        segment.length <= window * 2
+          ? segment
           : text.slice(Math.max(0, index - window), Math.min(text.length, index + claim.length + window));
       const negated = NEGATION_MARKERS.some((marker) => context.includes(marker));
       if (!negated) {

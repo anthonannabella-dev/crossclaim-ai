@@ -123949,3 +123949,51 @@ P0 BUSINESS SURVIVAL GATES = PASS/CLOSED
 同时继续保持：
 HOLD_EXTERNAL · TRANSPORT=false · filingSubmitted=false · Payment=0 · NO production credentials。
 ```
+
+### [MSG-20261003-130] CHANGE A = REVISE（CHANGE A2：guard 需按**分句/邻近窗口**判断，禁止整行串扰；补双向反例测试；B/P0 在 A2 通过前不得标 CLOSED）— A 海关生死线仍 CLOSED
+
+```text
+这次 CHANGE A 还不能最终 PASS。已经比上一版明显正确，但我核实际 trust-claim-guard.ts 后，发现还剩一个很窄的同一行串扰漏洞。
+当前实现是：
+纯文本
+找到某个 forbidden claim
+→ 取“整行”作为 context
+→ 只要这一整行任意位置存在 NOT_AVAILABLE / 未取得 / 不得宣称
+→ 当前 occurrence 就被放行
+因此下面这种仍可能漏过：
+纯文本
+SOC2_COMPLIANT；ISO27001_CERTIFIED is NOT_AVAILABLE
+对 SOC2_COMPLIANT 这个 occurrence 来说，它本身是肯定式声明，但因为同一行后半段存在 NOT_AVAILABLE，当前实现会把 SOC2 也一起豁免。
+所以裁决是：
+CHANGE A = REVISE，最后一个窄修。
+需要 CHANGE A2：真正按 occurrence 的邻近语境判断，而不是整行判断。
+建议直接采用以下任一规则：
+以当前 claim 为中心，只看前后例如 80–120 字符；
+更好：截取当前 claim 所在的句子/分句，以 。；;.!?\n 等边界切分；
+否定词必须与当前 occurrence 在同一分句/近邻窗口内，不能因为同行另一项认证是 NOT_AVAILABLE 就豁免它。
+必须再补一个负向测试：
+纯文本
+SOC2_COMPLIANT；ISO27001_CERTIFIED is NOT_AVAILABLE
+期望：
+SOC2_COMPLIANT → FAIL / 命中
+ISO27001_CERTIFIED → PASS
+再补反向：
+纯文本
+SOC2_COMPLIANT is NOT_AVAILABLE；ISO27001_CERTIFIED
+期望：
+SOC2 → PASS
+ISO27001 → FAIL / 命中
+其余部分我确认：
+之前的 file-level 漏洞已经修掉；
+跨行 NOT_AVAILABLE 已不能豁免；
+指定的“文件别处 NOT_AVAILABLE”反例已覆盖；
+Qualification / DB / Customs evidence / Schema / HTTP 均无需再动；
+A 海关生死线仍然 CLOSED。
+所以当前状态应记为：
+A = PASS/CLOSED
+B Qualification = PASS
+Enterprise Trust 状态模型 = PASS
+Trust guard = REVISE（CHANGE A2）
+P0 BUSINESS SURVIVAL GATES 暂不要最终标 CLOSED
+另外，当前 MASTER-GAP-CLOSURE-REGISTER 和 STATE 已提前写成 B/P0 CLOSED，这个状态应在 A2 通过后再保留；在此之前应视为“待最终 guard 验收”。
+```
