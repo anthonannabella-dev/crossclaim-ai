@@ -51,9 +51,9 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-03T12:55:22.089Z",
   "state": "IMPLEMENT",
-  "last_action": "P0-2 持久化：新增 RecoveryQualificationAssessmentRecord（append-only 判定投影：policyId/version + inputDigest/resultDigest + 四态 + 成本/净额）+ migration 20261003170000 + store + 真实 PG 5/5",
+  "last_action": "P0-3：新增 ENTERPRISE-TRUST-READINESS 清单（四种状态；SOC2/ISO/BANK_GRADE 一律 NOT_AVAILABLE 并禁止自证）+ 守卫测试 2/2（扫描全仓库禁止出现 SOC2_COMPLIANT/ISO27001_CERTIFIED/BANK_GRADE_SECURITY）",
   "last_action_at": "2026-10-03T12:03:56.528Z",
-  "next_action": "P0-2 续：qualification 判定接 HTTP/前端；随后 P0-3 Enterprise Trust Readiness（外部认证只允许 EXTERNAL_AUDITED/NOT_AVAILABLE）",
+  "next_action": "P0-2 判定接 HTTP/前端；随后 P0-1 匹配结果接入 claim-ready package",
   "current_head": "749040c",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
@@ -4829,5 +4829,11 @@
     "boundary": "expensiveAdapterCallAllowed 仅 QUALIFIED；CONDITIONAL 需人工确认；INDETERMINATE/NOT_QUALIFIED 不触发外呼；判定 ≠ filing 授权",
     "migration": "20261003170000_recovery_qualification_assessment",
     "pgTests": "recovery-qualification-store-db 5/5（幂等、历史追加与 latest、append-only 触发器拒绝、跨租户隔离、可重放 id）"
+  },
+  "p0_3": {
+    "status": "DONE（清单 + 守卫）",
+    "doc": "docs/releases/ENTERPRISE-TRUST-READINESS.md",
+    "guard": "apps/api/src/__tests__/enterprise-trust-claims.test.ts → 2/2 PASS",
+    "note": "EXTERNAL_AUDITED 当前为零项；任何第三方报告到位前不得上调"
   }
 }
