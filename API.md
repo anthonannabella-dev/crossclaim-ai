@@ -414,3 +414,17 @@ C-0008-B2（Case / Evidence / Claim Draft / Billing）的端点尚未实现。
 - 状态映射：400 `INVALID_REQUEST`；403 `CAPABILITY_REQUIRED`；404 `PACKAGE_NOT_FOUND` 或 `TENANT_MISMATCH`（沿用 anti-enumeration 约定，不区分存在性）；409 `PACKAGE_NOT_READY`（NEEDS_REVIEW 包不得记录）；201 `RECORDED`；200 `ALREADY_RECORDED`（幂等重放不得视为错误）。
 - 存储：`CarrierManualSubmission` 表 `UNIQUE(organizationId, packageId)` 幂等；append-only（创建后不可 UPDATE/DELETE）；business audit `carrier.manual_submission_recorded` 与记录同事务写入。
 - 边界：不改动 recovered cash truth（RecoveryPayout / actualRecovered / Settlement）、不产生 successFee、不访问 carrier portal / API、`TRANSPORT=false`。
+
+## Carrier response（CARRIER QUEUE #10 FINAL / MSG-20261003-122）
+
+| 方法 | 路径 | 请求体 | 成功 | 权限 |
+|---|---|---|---|---|
+| POST | `/carrier-claim-packages/:packageId/responses` | `{ status, providerReference?, observedAt?, note? }` | 201（首次）/ 200（幂等重放）`{ status, responseFact }` | OWNER / ADMIN / OPS |
+| GET | `/carrier-claim-packages/:packageId/responses` | — | 200 `{ responses: { currentStatus, currentVerificationLevel, history, provenance, timestamps } }` | 任意已认证成员（tenant-scoped） |
+
+- 语义：**carrier claim 后续响应事实**（status 与 provenance 分离）；人工补录入口**只允许** `source = USER_REPORTED`（恒 `verificationLevel = UNVERIFIED`）——client body 出现 `source` / `verificationLevel` / 身份字段一律 400，provider 验证必须走独立可信 ingest 路径（真实 provider 集成 = `HOLD_EXTERNAL`）。
+- Action Guard：动作 `carrier.claim_response.record`（`INTERNAL_WRITE` + `workflow` kill switch）；未注入 Action Guard → fail closed；不启用 `TRANSPORT`。
+- 身份与 submission truth 一律服务端派生（`organizationId` / `actorUserId` / `role` / provider / account / tracking 不由 client 提供）；`(:packageId)` 来自 route param，submission truth 由 `CarrierManualSubmission` 按 `(organizationId, packageId)` 读取，不存在 → 404（anti-enumeration）。
+- 状态映射：400 `INVALID_REQUEST` / `PROVIDER_REFERENCE_REQUIRED` / `INVALID_TIMESTAMP` / `FUTURE_TIMESTAMP`；403 `CAPABILITY_REQUIRED`；404 `SUBMISSION_NOT_FOUND`；201 `RECORDED`；200 `ALREADY_RECORDED`。
+- 存储：`CarrierClaimResponseFact` append-only（UPDATE / DELETE 由 DB 触发器拒绝）+ `UNIQUE(organizationId, packageId, idempotencyKey)` 幂等 + DB CHECK 真值（未知枚举拒绝；`USER_REPORTED` → `UNVERIFIED`；provider 来源必须带 provider reference）；business audit `carrier.claim_response_recorded` 与事实同事务、恰好一次。
+- 边界：`APPROVED != PAID != recovered cash`（PAID 事实不写 RecoveryPayout / actualRecovered / FeeCalculation）、不产生 successFee、不发起 payment collection、不调用 carrier API / portal、`TRANSPORT=false`、无生产凭据。

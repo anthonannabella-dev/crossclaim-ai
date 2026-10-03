@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261003-122",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-03T07:55:36.381Z",
+  "updated_at": "2026-10-03T08:01:49.913Z",
   "previous_head": "8b08f5d",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -49,10 +49,10 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-03T07:55:36.381Z",
+  "last_tick_at": "2026-10-03T08:01:49.912Z",
   "state": "IMPLEMENT",
-  "last_action": "CARRIER QUEUE #10 FINAL 续做：Action Guard 注册（carrier.claim_response.record / INTERNAL_WRITE）+ RBAC 矩阵（OWNER/ADMIN/OPS）+ HTTP 边界单元（POST 人工补录强制 USER_REPORTED、客户端提交 source/verificationLevel/身份字段一律 400；GET 读模型 tenant-scoped）+ 单测 11/11 → 修复两处回归（capability 与 action 命名分离；workflow 测试矩阵同步）→ 相关套件 70/70 → tsc api/web 0 → API contract OK → commit/push",
-  "last_action_at": "2026-10-03T07:55:36.380Z",
+  "last_action": "CARRIER QUEUE #10 FINAL 续做：router 接线（POST/GET /carrier-claim-packages/:packageId/responses + server 路径门禁 + 方法闸门）+ server-side submission truth loader + 真实 HTTP E2E 8/8 + API.md 记录 → 回归 468/468 → tsc api/web 0 → API contract 86/73 → commit/push",
+  "last_action_at": "2026-10-03T08:01:49.912Z",
   "next_action": "继续 CARRIER QUEUE #10 FINAL（MSG-20261003-122 ⑦⑧ 授权）：Schema Delta（Prisma append-only CarrierClaimResponseFact + migration + tenant guard + append-only）→ PG 回归 → Action Guard capability → 人工补录 HTTP → 读模型投影 → tsc/API contract → commit/push → CI → checkpoint → 送审。随后按 P2 推进 Customs C15/C16/C19/C21 契约层与 Commercial C10–C11；C17 Schema Delta 与 C18 真实 provider 接入先送审/待宿主授权。",
   "current_head": "e060a5f",
   "reviewed_head": "24e27c8",
@@ -4339,6 +4339,21 @@
         "可信 provider ingestion port（recordTrustedCarrierResponse；真实 adapter HOLD_EXTERNAL）",
         "checkpoint + 送审"
       ]
+    },
+    "router_and_e2e": {
+      "status": "DONE（本地真实 HTTP E2E 8/8；待 CI 后 checkpoint 送审）",
+      "routes": [
+        "POST /carrier-claim-packages/:packageId/responses（人工补录；Action Guard carrier.claim_response.record；client 提交 source/verificationLevel/身份字段 → 400）",
+        "GET /carrier-claim-packages/:packageId/responses（读模型；tenant-scoped；不含 credential）"
+      ],
+      "wiring": [
+        "workflow/http-routes.ts：path 常量 + 路由集合守卫 + 方法闸门（GET/POST）+ 分支（server-derived session）",
+        "server.ts：WORKFLOW_PATH 路径门禁加入 /carrier-claim-packages/:id/(manual-submission|responses)",
+        "新增 carrier-claim-response-submissions.ts：server-side submission truth（读 CarrierManualSubmission；缺省即真实 Prisma 实现）",
+        "缺省 store = createPrismaCarrierClaimResponseStore(deps.prisma)"
+      ],
+      "e2e": "carrier-claim-response-http-e2e-db 8/8：401 / 403 / 404 / 400(client source) / 201(DB row + 审计恰好一次，source 恒 USER_REPORTED) / 200 幂等 / GET 读模型 200（currentStatus + history） / GET 404 + 未认证 401",
+      "regression": "carrier 全家族 + action-guard + architecture-contract + workflow + C15 契约层 = 21 files / 468 tests PASS；tsc api/web 0；API contract 86/73"
     }
   }
 }
