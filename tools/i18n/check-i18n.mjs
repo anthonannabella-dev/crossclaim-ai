@@ -117,6 +117,7 @@ const CUSTOMER_ROOTS = [
   'apps/web/app/plan',
   'apps/web/app/cases',
   'apps/web/app/upload',
+  'apps/web/app/components',
 ];
 function walk(target, out = []) {
   const full = path.join(ROOT, target);

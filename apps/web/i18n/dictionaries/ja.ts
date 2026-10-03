@@ -116,6 +116,13 @@ const ja: Messages = {
     noticeRefUpdated: '資格情報の参照を更新しました',
     requestFailed: 'リクエストに失敗しました',
     networkError: 'ネットワークエラーです。しばらくして再試行してください',
+    loadFailed: "接続の読み込みに失敗しました（HTTP {status}）。",
+    colName: "名称",
+    colChannel: "チャネル",
+    colKind: "種別",
+    colStatus: "状態",
+    colCredentialRef: "資格情報の参照",
+    colActions: "操作",
   },
   billingPage: {
     title: '請求（サービス手数料）',

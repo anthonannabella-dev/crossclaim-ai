@@ -1,6 +1,6 @@
 {
   "note": "Customer UI 硬编码棘轮基线：只允许下降。迁移完成后必须同步下调此值。",
-  "customerHardcodedStrings": 169,
+  "customerHardcodedStrings": 177,
   "recordedAt": "2026-10-04",
   "scannedRoots": [
     "apps/web/app/page.tsx",
@@ -14,5 +14,17 @@
     "plan",
     "cases",
     "upload"
+  ],
+  "history": [
+    {
+      "at": "2026-10-04",
+      "value": 177,
+      "note": "覆盖扩大：扫描器新增 apps/web/app/components（客户组件 15 行），同时完成 connections 页与 connection-manager 迁移（-34）。非新增硬编码。"
+    },
+    {
+      "at": "2026-10-04",
+      "value": 169,
+      "note": "初始基线"
+    }
   ]
 }

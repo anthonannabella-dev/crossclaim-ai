@@ -116,6 +116,13 @@ const es: Messages = {
     noticeRefUpdated: 'Referencia de credencial actualizada',
     requestFailed: 'La solicitud falló',
     networkError: 'Error de red, inténtelo más tarde',
+    loadFailed: "No se pudieron cargar las conexiones (HTTP {status}).",
+    colName: "Nombre",
+    colChannel: "Canal",
+    colKind: "Tipo",
+    colStatus: "Estado",
+    colCredentialRef: "Referencia de credencial",
+    colActions: "Acciones",
   },
   billingPage: {
     title: 'Facturación (tarifa de servicio)',

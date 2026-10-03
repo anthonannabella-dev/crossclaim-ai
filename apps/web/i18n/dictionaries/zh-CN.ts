@@ -115,6 +115,13 @@ const zhCN = {
     noticeRefUpdated: '凭据引用已更新',
     requestFailed: '请求失败',
     networkError: '网络异常，请稍后重试',
+    loadFailed: "读取连接失败（HTTP {status}）。",
+    colName: "名称",
+    colChannel: "渠道",
+    colKind: "类型",
+    colStatus: "状态",
+    colCredentialRef: "凭据引用",
+    colActions: "操作",
   },
   billingPage: {
     title: '账单（服务费）',

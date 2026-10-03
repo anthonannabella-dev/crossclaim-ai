@@ -116,6 +116,13 @@ const enUS: Messages = {
     noticeRefUpdated: 'Credential reference updated',
     requestFailed: 'Request failed',
     networkError: 'Network error, please retry',
+    loadFailed: "Failed to load connections (HTTP {status}).",
+    colName: "Name",
+    colChannel: "Channel",
+    colKind: "Kind",
+    colStatus: "Status",
+    colCredentialRef: "Credential reference",
+    colActions: "Actions",
   },
   billingPage: {
     title: 'Billing (service fee)',

@@ -116,6 +116,13 @@ const de: Messages = {
     noticeRefUpdated: 'Anmeldedaten-Referenz aktualisiert',
     requestFailed: 'Anfrage fehlgeschlagen',
     networkError: 'Netzwerkfehler, bitte später erneut versuchen',
+    loadFailed: "Verbindungen konnten nicht geladen werden (HTTP {status}).",
+    colName: "Name",
+    colChannel: "Kanal",
+    colKind: "Typ",
+    colStatus: "Status",
+    colCredentialRef: "Anmeldedaten-Referenz",
+    colActions: "Aktionen",
   },
   billingPage: {
     title: 'Abrechnung (Servicegebühr)',
