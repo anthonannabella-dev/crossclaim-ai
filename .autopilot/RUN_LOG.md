@@ -1673,3 +1673,6 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 
 ## 2026-10-03T16:10:31.114Z — BG-013 IOR 事实持久化
 - 3 表 5 枚举 + migration 20261003210000；DB CHECK/触发器 11 枚；PG E2E 8/8；模型总数 70→73、迁移 62→63。
+
+## 2026-10-03T16:11:09.799Z — BG-013 Implementation Checkpoint
+- Issue #2 comment 5970930612（HEAD dc1fe85）；待发唤醒。
