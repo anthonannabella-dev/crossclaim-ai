@@ -401,3 +401,16 @@ C-0008-B2（Case / Evidence / Claim Draft / Billing）的端点尚未实现。
 - **邮箱默认掩码**（如 `a***@example.com`）；不返回完整邮箱，也不提供解掩码入口
 - 仅 `locked` 布尔；不返回失败次数、锁定时间或解锁入口；邀请不返回 tokenHash 与邀请链接
 - 仅 GET；无写路径、不写 AuditLog、无新表、无导出
+
+## Carrier 人工提交记录（CARRIER QUEUE #9B FINAL / MSG-20261003-119）
+
+| 方法 | 路径 | 请求体 | 成功 | 权限 |
+|---|---|---|---|---|
+| POST | `/carrier-claim-packages/:packageId/manual-submission` | `{ carrierReference?, reportedCarrierSubmissionAt?, note? }` | 201（首次）/ 200（幂等复用）`{ status, submissionRecord }` | OWNER / ADMIN / OPS |
+
+- 语义：**human attestation**（用户自称已完成人工提交），**不提交 carrier claim**；`carrierConfirmationStatus` 恒为 `NOT_VERIFIED`；不产生 providerAccepted / claimApproved / refundApproved。
+- Action Guard：动作 `carrier.manual_submission.record`（`INTERNAL_WRITE` + `workflow` kill switch）；未注入 Action Guard → fail closed。
+- 身份、租户与 package 事实一律服务端派生（`organizationId` / `actorUserId` / `role` / provider / account / tracking 均不由 client 提供）；client 只能提交上述三个业务字段。
+- 状态映射：400 `INVALID_REQUEST`；403 `CAPABILITY_REQUIRED`；404 `PACKAGE_NOT_FOUND` 或 `TENANT_MISMATCH`（沿用 anti-enumeration 约定，不区分存在性）；409 `PACKAGE_NOT_READY`（NEEDS_REVIEW 包不得记录）；201 `RECORDED`；200 `ALREADY_RECORDED`（幂等重放不得视为错误）。
+- 存储：`CarrierManualSubmission` 表 `UNIQUE(organizationId, packageId)` 幂等；append-only（创建后不可 UPDATE/DELETE）；business audit `carrier.manual_submission_recorded` 与记录同事务写入。
+- 边界：不改动 recovered cash truth（RecoveryPayout / actualRecovered / Settlement）、不产生 successFee、不访问 carrier portal / API、`TRANSPORT=false`。
