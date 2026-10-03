@@ -36,7 +36,7 @@
 | G2 | C17 `CustomsSubmissionAttempt`（幂等根）+ `CustomsSubmissionAttemptFact`（append-only 状态） | MSG-20261003-124 ③④⑤⑥㊲ | Schema/migration + tenant/append-only 清单 + store + PG 回归（timeout 不建第二根、ambiguous 不重发、SUBMITTED 必带 providerSubmissionId）→ 送 **C17 FINAL SCHEMA CHECKPOINT** |
 | G3 | C21 HTTP：`POST /customs-opportunities/:id/start-recovery` + `GET .../filing-status` + `customs.recovery.start` Action Guard/RBAC | MSG-20261003-124 ⑭–㉑ | 实现并按 `filingSubmitted=false` / `externalExecutionStatus=NOT_STARTED` 语义暴露；真实 DB E2E（401/403/404/400/200/409 语义） |
 | G4 | Customs C1–C7 内部链（evidence/data contract → duty truth → classification discrepancy → eligibility → estimate → claim-ready package） | HOST DIRECTIVE 2026-10-03 补充四 §3 ㉓ | 逐单元契约→持久化→HTTP→测试；真实 filing 不在此范围 |
-| G5 | 前端真实接线核查 | MASTER GAP CLOSURE 检查项 E | **已核查并记录**：`apps/web` 49 文件 / 34 条后端路径，均不含 Queue #10 与 C21/C19 新能力 → 结论 **CONFIRMED_GAP（只读 UI 接线待做）**；映射见 `docs/releases/FRONTEND-WIRING-MAP.md` |
+| G5 | 前端真实接线（只读首个小批次已完成；POST 表单批次待做） | MASTER GAP CLOSURE 检查项 E | **已核查并记录**：`apps/web` 49 文件 / 34 条后端路径，均不含 Queue #10 与 C21/C19 新能力 → 结论 **CONFIRMED_GAP（只读 UI 接线待做）**；映射见 `docs/releases/FRONTEND-WIRING-MAP.md` |
 | ~~G6~~ **DONE** | 文档同步（README / FINAL-GATE / PRODUCTION-READINESS / API BACKLOG ↔ 代码） | 检查项 F | 逐文档比对最近实现（Queue #10、Customs C15–C21、15% cutover）并更新 |
 | G7 | 非 happy-path 覆盖复核（跨租户 / 幂等 / 并发 / 失败恢复）针对新增模块 | 检查项「测试只覆盖 happy path」 | 复核并补测 |
 | G8 | contract-only → 持久化复核 | 检查项「contract-only 未持久化」 | 逐模块核对（Carrier 已闭环；Customs C16/C19/C21 依赖 G2/G3） |
