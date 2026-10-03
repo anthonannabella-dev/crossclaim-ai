@@ -2,14 +2,14 @@
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
   "head": "0693821",
   "status": "RECONCILED",
-  "current_task": "MASTER GAP CLOSURE G2：C17 store + 真实 PG 回归 → C17 FINAL SCHEMA CHECKPOINT 送审（Schema 已落地）",
+  "current_task": "MASTER GAP CLOSURE G2：C17 ledger 已完成（Schema + store + PG 10/10）→ 下一步送 C17 FINAL SCHEMA CHECKPOINT（MSG-20261003-124 ⑬）",
   "next_task": "PC-12A 实施 → 本地测试 + tsc api/web + API contract + full CI → PC-12A CHECKPOINT 送审。",
   "send_head": "07b7009",
   "decision_head": "07b7009",
   "last_chatgpt_message": "MSG-20261003-124",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-03T08:46:23.584Z",
+  "updated_at": "2026-10-03T08:52:28.095Z",
   "previous_head": "8cab430",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -49,11 +49,11 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-03T08:46:23.584Z",
+  "last_tick_at": "2026-10-03T08:52:28.095Z",
   "state": "IMPLEMENT",
-  "last_action": "G2 第一批：按 MSG-20261003-124 ③④⑤ 落地 C17 Schema Delta —— CustomsSubmissionAttempt（幂等根，UNIQUE(org,provider,operation,idempotencyKey) + digest CHECK）+ CustomsSubmissionAttemptFact（append-only 状态事实，6 状态 + SUBMITTED→providerSubmissionId 强制）；tenant/immutable/append-only 触发器与两条清单同步；模型计数 61（55 core）→ prisma validate/migrate/generate OK → 清单校验 OK → architecture-contract 142/142 → tsc/API contract OK → commit/push",
-  "last_action_at": "2026-10-03T08:46:23.583Z",
-  "next_action": "G2 第二批：实现 CustomsSubmissionAttempt/Fact 的 Prisma store（root 幂等 + fact append；P2002 映射既有根）+ 真实 PostgreSQL 回归（㊲ 全部 15 项）→ 写 C17 FINAL SCHEMA CHECKPOINT 并送架构方；随后 G3（C21 HTTP + customs.recovery.start + GET filing-status）。",
+  "last_action": "G2 第二批：实现 C17 ledger —— customs-submission-ledger.ts（root 幂等 + fact 校验 + providerSubmissionId 冲突防护 + 退避对账 1/5/15/60 分钟、24h→MANUAL_REVIEW + 边界常量）与 customs-submission-ledger-prisma-store.ts（P2002 → 既有根/事实）→ 真实 PostgreSQL 回归 10/10（并发一根、SUBMITTED 缺 id 拒、append-only、跨租户 lineage、digest 形状、timeout 不建第二根、ambiguous 不重发、24h→MANUAL_REVIEW、无凭据字段）→ tsc api/web 0 → API contract OK → commit/push",
+  "last_action_at": "2026-10-03T08:52:28.095Z",
+  "next_action": "送 C17 FINAL SCHEMA CHECKPOINT（引用 MSG-20261003-124 ③④⑤⑥⑬ 与本次 schema/store/回归证据）→ 读裁决；同时可并行启动 G3（C21 HTTP + customs.recovery.start + GET filing-status，filingSubmitted=false）。",
   "current_head": "e060a5f",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
@@ -4454,7 +4454,7 @@
     "registered_at": "2026-10-03T08:41:22.475Z",
     "recomputed_at_head": "0693821",
     "internal_remaining_gap": [
-      "G2",
+      "G2-CHECKPOINT-SEND",
       "G3",
       "G4",
       "G5",
@@ -4481,7 +4481,7 @@
       "tests": "commercial-fee-guard-wiring 6/6 + commercial-fee-policy 14/14 + commercial-fee-policy-cutover 7/7；回归 commission/settlement/workflow/carrier-claim-response 11 files / 118 tests PASS"
     },
     "g2": {
-      "status": "SCHEMA_DONE（store + PG 回归 + C17 FINAL SCHEMA CHECKPOINT 送审待续）",
+      "status": "DONE（Schema + store + 真实 PG 回归；C17 FINAL SCHEMA CHECKPOINT 送审待发）",
       "authorization": "MSG-20261003-124 ③④⑤⑥⑪⑫⑬：C17 拆为 Attempt root + AttemptFact（重设计后只需送 C17 FINAL SCHEMA CHECKPOINT）",
       "migration": "20261003050000_customs_submission_attempt",
       "models": [
@@ -4504,7 +4504,22 @@
         "Prisma store（root 幂等创建 + fact append；P2002 → 既有根）",
         "真实 PG 回归（㊲ 15 项：并发一根 / SUBMITTED 缺 id 拒 / append-only / 跨租户 lineage / digest 形状 / timeout 不建第二根 / ambiguous 不重发 / 24h → MANUAL_REVIEW）",
         "C17 FINAL SCHEMA CHECKPOINT 送审"
-      ]
+      ],
+      "store": {
+        "module": "apps/api/src/services/customs/customs-submission-ledger.ts + customs-submission-ledger-prisma-store.ts",
+        "tests": "apps/api/src/__tests__/customs-submission-ledger-db.test.ts 10/10",
+        "invariants": [
+          "同一 idempotencyKey 只建一根（service 幂等 + DB UNIQUE）；并发（两个独立连接）同样只建一根",
+          "状态事实逐条追加：ATTEMPTED → UNKNOWN_PROVIDER_RESPONSE → RECONCILING → SUBMITTED（append-only，不覆盖历史）",
+          "SUBMITTED 缺 providerSubmissionId → service 拒绝 + DB CHECK 拒绝",
+          "append-only：事实 UPDATE / DELETE 被 DB 触发器拒绝",
+          "跨租户 lineage（fact.org 与 attempt 所属租户不一致）→ DB 拒绝",
+          "packageDigest 形状：service 与 DB 双重拒绝",
+          "timeout 不建第二根；ambiguous → 只对账（evaluateReconciliationSchedule 1/5/15/60 分钟，24h → MANUAL_REVIEW），不重发 filing",
+          "providerSubmissionId 冲突（已有 PROVIDER_VERIFIED 不同 id）→ 拒绝（不静默换值）",
+          "账本不含 credential / raw payload / 资金字段；边界常量自证 filingSubmitted=false / externalWritePerformed=false"
+        ]
+      }
     }
   }
 }
