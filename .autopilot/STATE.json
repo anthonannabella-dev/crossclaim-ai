@@ -2,14 +2,14 @@
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
   "head": "0693821",
   "status": "RECONCILED",
-  "current_task": "MASTER GAP CLOSURE：G1 DONE → 执行 G2（C17 CustomsSubmissionAttempt root + CustomsSubmissionAttemptFact append-only → C17 FINAL SCHEMA CHECKPOINT 送审）",
+  "current_task": "MASTER GAP CLOSURE G2：C17 store + 真实 PG 回归 → C17 FINAL SCHEMA CHECKPOINT 送审（Schema 已落地）",
   "next_task": "PC-12A 实施 → 本地测试 + tsc api/web + API contract + full CI → PC-12A CHECKPOINT 送审。",
   "send_head": "07b7009",
   "decision_head": "07b7009",
   "last_chatgpt_message": "MSG-20261003-124",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-03T08:44:15.496Z",
+  "updated_at": "2026-10-03T08:46:23.584Z",
   "previous_head": "8cab430",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -49,11 +49,11 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-03T08:44:15.496Z",
+  "last_tick_at": "2026-10-03T08:46:23.584Z",
   "state": "IMPLEMENT",
-  "last_action": "G1 完成：统一 fee guard 收口 —— 新增 policyFromConfirmedAgreementRate（agreement 绑定，历史 20% 不回写），commission-reconciliation.ts 在 FeeCalculation.create 前接 evaluateFeeGuard（未通过则拒绝计费并记录原因）→ 27/27 fee 相关测试 + 118/118 回归 → tsc api/web 0 → API contract OK → register 标记 G1 DONE",
-  "last_action_at": "2026-10-03T08:44:15.496Z",
-  "next_action": "G2：按 MSG-20261003-124 ③④⑤ 设计并实现 CustomsSubmissionAttempt（幂等根，immutable + UNIQUE(org,provider,operation,idempotencyKey)）与 CustomsSubmissionAttemptFact（append-only 状态事实 ATTEMPTED/UNKNOWN_PROVIDER_RESPONSE/RECONCILING/SUBMITTED/FAILED_CONFIRMED/MANUAL_REVIEW；SUBMITTED → providerSubmissionId NOT NULL）→ migration + tenant/append-only 清单 + store + PG 回归（timeout 不建第二根 / ambiguous 不重发 / 24h → MANUAL_REVIEW）→ 送 C17 FINAL SCHEMA CHECKPOINT。",
+  "last_action": "G2 第一批：按 MSG-20261003-124 ③④⑤ 落地 C17 Schema Delta —— CustomsSubmissionAttempt（幂等根，UNIQUE(org,provider,operation,idempotencyKey) + digest CHECK）+ CustomsSubmissionAttemptFact（append-only 状态事实，6 状态 + SUBMITTED→providerSubmissionId 强制）；tenant/immutable/append-only 触发器与两条清单同步；模型计数 61（55 core）→ prisma validate/migrate/generate OK → 清单校验 OK → architecture-contract 142/142 → tsc/API contract OK → commit/push",
+  "last_action_at": "2026-10-03T08:46:23.583Z",
+  "next_action": "G2 第二批：实现 CustomsSubmissionAttempt/Fact 的 Prisma store（root 幂等 + fact append；P2002 映射既有根）+ 真实 PostgreSQL 回归（㊲ 全部 15 项）→ 写 C17 FINAL SCHEMA CHECKPOINT 并送架构方；随后 G3（C21 HTTP + customs.recovery.start + GET filing-status）。",
   "current_head": "e060a5f",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
@@ -4479,6 +4479,32 @@
       "change": "commission-reconciliation.ts：FeeCalculation.create 前接 evaluateFeeGuard（费率由已确认 agreement 绑定，历史 20% 保持；verified recovered truth = status RECEIVED 的精确匹配 settlement；未通过则 billingStatus=NOT_APPLICABLE + confidenceReason 记录 guard 原因，不创建 Fee/Billing）",
       "helper": "commercial/fee-policy.ts::policyFromConfirmedAgreementRate（15%→STANDARD_SUCCESS_15/v1；20%→STANDARD_SUCCESS_20/v0；其它→AGREEMENT_BOUND_<bps>；非法费率抛错）",
       "tests": "commercial-fee-guard-wiring 6/6 + commercial-fee-policy 14/14 + commercial-fee-policy-cutover 7/7；回归 commission/settlement/workflow/carrier-claim-response 11 files / 118 tests PASS"
+    },
+    "g2": {
+      "status": "SCHEMA_DONE（store + PG 回归 + C17 FINAL SCHEMA CHECKPOINT 送审待续）",
+      "authorization": "MSG-20261003-124 ③④⑤⑥⑪⑫⑬：C17 拆为 Attempt root + AttemptFact（重设计后只需送 C17 FINAL SCHEMA CHECKPOINT）",
+      "migration": "20261003050000_customs_submission_attempt",
+      "models": [
+        "CustomsSubmissionAttempt（幂等根：organizationId/opportunityId/caseId?/claimItemId?/packageId/packageDigest/provider/operation/jurisdiction/remedyType/idempotencyKey/createdAt；UNIQUE(org,provider,operation,idempotencyKey)；packageDigest hex64 CHECK）",
+        "CustomsSubmissionAttemptFact（append-only：status ∈ ATTEMPTED/UNKNOWN_PROVIDER_RESPONSE/RECONCILING/SUBMITTED/FAILED_CONFIRMED/MANUAL_REVIEW；source ∈ PROVIDER_API/PROVIDER_WEBHOOK/PROVIDER_DOCUMENT/PROVIDER_PORTAL_ARTIFACT/MANUAL；verificationLevel ∈ UNVERIFIED/PROVIDER_VERIFIED；CHECK SUBMITTED → providerSubmissionId NOT NULL；providerReference?/errorCode?/reconciliationAttempt?）"
+      ],
+      "triggers": [
+        "cc_tenant_customssubmissionattempt + cc_tenant_immutable__CustomsSubmissionAttempt",
+        "cc_tenant_customssubmissionattemptfact（含 attemptId → CustomsSubmissionAttempt 跨租户归属校验）+ cc_tenant_immutable__CustomsSubmissionAttemptFact",
+        "cc_append_only__CustomsSubmissionAttemptFact（UPDATE/DELETE 拒绝）"
+      ],
+      "manifests": "required-triggers baseline 83；append-only 24",
+      "counts": "Prisma 模型 61（55 core + 6 join）；README / DOMAIN_MODEL / architecture-contract 同步（142/142）",
+      "verification": [
+        "prisma validate valid；migrate deploy 成功（含新迁移）；prisma generate OK",
+        "tenant checklist OK（83 baseline / 59 immutable / 2 scoped）；append-only checklist OK（24）",
+        "architecture-contract 142/142；tsc api/web 0；API contract 86/73"
+      ],
+      "pending": [
+        "Prisma store（root 幂等创建 + fact append；P2002 → 既有根）",
+        "真实 PG 回归（㊲ 15 项：并发一根 / SUBMITTED 缺 id 拒 / append-only / 跨租户 lineage / digest 形状 / timeout 不建第二根 / ambiguous 不重发 / 24h → MANUAL_REVIEW）",
+        "C17 FINAL SCHEMA CHECKPOINT 送审"
+      ]
     }
   }
 }

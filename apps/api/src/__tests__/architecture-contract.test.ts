@@ -132,6 +132,9 @@ describe('模型清单一致性（C-0002 CHANGE #1）', () => {
     'CarrierManualSubmission',
     // CARRIER QUEUE #10 FINAL（MSG-20261003-122 ⑳–㉖）：carrier response 事实（append-only / status-provenance 分离）
     'CarrierClaimResponseFact',
+    // C17（MSG-20261003-124 ③④⑤）：Customs submission 执行身份根 + append-only 状态事实
+    'CustomsSubmissionAttempt',
+    'CustomsSubmissionAttemptFact',
   ];
   const JOIN_MODELS = [
     'CaseEvidence',
@@ -146,7 +149,7 @@ describe('模型清单一致性（C-0002 CHANGE #1）', () => {
 
 
   it(`核心模型恰好 ${CORE.length} 个`, () => {
-    expect(CORE).toHaveLength(53);
+    expect(CORE).toHaveLength(55);
     for (const name of CORE) expect(modelBlock(name), `缺少核心模型 ${name}`).not.toBe('');
   });
 
@@ -154,8 +157,8 @@ describe('模型清单一致性（C-0002 CHANGE #1）', () => {
     for (const name of JOIN_MODELS) expect(modelBlock(name), `缺少联结模型 ${name}`).not.toBe('');
   });
 
-  it('模型总数为 59（53 core + 6 join）—— 与 README/DOMAIN_MODEL 表述一致', () => {
-    expect(modelNames()).toHaveLength(59);
+  it('模型总数为 61（55 core + 6 join）—— 与 README/DOMAIN_MODEL 表述一致', () => {
+    expect(modelNames()).toHaveLength(61);
   });
 });
 

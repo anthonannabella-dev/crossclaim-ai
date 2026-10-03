@@ -362,6 +362,8 @@ model Organization {
   policyAcceptances                  PolicyAcceptance[]
   carrierManualSubmissions           CarrierManualSubmission[]
   carrierClaimResponseFacts          CarrierClaimResponseFact[]
+  customsSubmissionAttempts          CustomsSubmissionAttempt[]
+  customsSubmissionAttemptFacts      CustomsSubmissionAttemptFact[]
   fileAssets                         FileAsset[]
   importBatches                      ImportBatch[]
   transactions                       SourceTransaction[]
@@ -2462,4 +2464,54 @@ model CarrierClaimResponseFact {
 
   @@unique([organizationId, packageId, idempotencyKey])
   @@index([organizationId, packageId, observedAt])
+}
+
+// ============================================================
+// C17（HOST DIRECTIVE 2026-10-03 补充四；MSG-20261003-124 ③④⑤）
+// 执行身份（幂等根，immutable） + append-only 状态事实：
+//   root  = 「这个 logical filing operation 已被创建」（UNIQUE 收敛并发）
+//   fact  = carrier/customs authority 状态演进（append-only，不覆盖历史）
+// 不存 credential / raw payload / raw PII（仅 safe reference / digest / provider reference）。
+// ============================================================
+model CustomsSubmissionAttempt {
+  id             String   @id
+  organizationId String
+  opportunityId  String
+  caseId         String?
+  claimItemId    String?
+  packageId      String
+  packageDigest  String
+  provider       String
+  operation      String
+  jurisdiction   String
+  remedyType     String
+  idempotencyKey String
+  createdAt      DateTime @default(now())
+
+  organization Organization                      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  facts        CustomsSubmissionAttemptFact[]
+
+  @@unique([organizationId, provider, operation, idempotencyKey])
+  @@index([organizationId, opportunityId])
+}
+
+model CustomsSubmissionAttemptFact {
+  id                    String   @id
+  organizationId        String
+  attemptId             String
+  status                String
+  providerSubmissionId  String?
+  source                String
+  verificationLevel     String
+  observedAt            DateTime
+  recordedAt            DateTime
+  providerReference     String?
+  errorCode             String?
+  reconciliationAttempt Int?
+  createdAt             DateTime @default(now())
+
+  organization Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  attempt      CustomsSubmissionAttempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, attemptId, observedAt])
 }
