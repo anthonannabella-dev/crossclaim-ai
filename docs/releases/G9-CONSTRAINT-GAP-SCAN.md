@@ -17,3 +17,9 @@
 ## 守卫
 
 - `apps/api/src/__tests__/db-constraint-coverage.test.ts`：静态断言关键 CHECK 与 append-only 触发器存在，且投影表不存在 UPDATE 语句（防止「latest 覆盖」式回归）。
+
+## 收口结论（G9 第三单元后）
+
+- 已补：`RecoveryPayout.sourceType`（代码内闭合枚举 `PAYOUT_SOURCE_TYPES`）→ `CHECK ("sourceType" IN ('PLATFORM_SETTLEMENT', 'BANK_TRANSFER', 'OTHER'))`。
+- 判定为**非缺口**（外部/平台提供的动态字符串，无闭合值集合，DB 枚举 CHECK 不适用）：`ClaimItem.claimType` / `ClaimItem.platformType`、`RecoveryOpportunity.opportunityType`、`ExpectedRecoveryBasis.basisSource`、`PaymentProcessingAttempt.resultStatus`、`AuditLog.entityType`、`PaymentEvent.eventType`、`SourceTransaction.referenceType`、`CanonicalFact.referenceType`、`ProviderOutcomeFact.sourceRef`、`ReimbursementFact.sourceRef`、`FileAsset.mimeType` 等——保留形状/非空约束 + 应用层校验。
+- 守卫断言现为 **21** 项（`db-constraint-coverage`）。
