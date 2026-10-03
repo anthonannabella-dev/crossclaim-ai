@@ -1,17 +1,17 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
   "head": "a02d089",
-  "status": "RECONCILED",
+  "status": "IMPLEMENT",
   "current_task": "Carrier Queue #6 — SLA EVIDENCE ASSEMBLY + ELIGIBILITY INPUT PLANE：Tracking Fact + Invoice Fact + POD Fact + Carrier Terms Evidence + Service Level Evidence → **ShipmentEvidenceBundle**（只建证据输入层；不得自动认定赔付 / 自动提交 claim / 自动退款 / 调用 carrier write API / 自动产生 recovery amount）。**逐字归档 MSG-111 为第一步。**CarrierInvoiceReadPort + CarrierPODReadPort（verified account lineage、request/response 双向绑定、十进制金额、charge kind 归一化 + raw code 保留、POD 掩码与隐私、safe rawReference）；**read-only**，不做 SLA/退款资格推导。CarrierTrackingReadPort + normalized CarrierTrackingSnapshot（UPS/FedEx provider adapter 分离）+ 状态/事件归一化（确定性排序 + 去重）+ 失败原因分类 + tenant/account lineage 归属；**read-only**（无 mutation / claim / pickup / refund，TRANSPORT=false）。",
   "next_task": "PC-12A 实施 → 本地测试 + tsc api/web + API contract + full CI → PC-12A CHECKPOINT 送审。",
   "send_head": "07b7009",
   "decision_head": "07b7009",
-  "last_chatgpt_message": "MSG-20261003-125",
+  "last_chatgpt_message": "MSG-20261003-126",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-03T09:12:23.776Z",
+  "updated_at": "2026-10-03T09:13:10.093Z",
   "previous_head": "0693821",
-  "architect_decision_pending": true,
+  "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "0c35106",
   "last_sent_at": "2026-10-03T09:07:52.875Z",
@@ -49,11 +49,11 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-03T09:12:23.776Z",
-  "state": "AWAIT_VERDICT",
-  "last_action": "G3：实施 C21 HTTP 边界（start-recovery 只做内部准备：server validation / 授权就绪 / route 决策 / immutable snapshot；filing status 读模型）+ Action Guard customs.recovery.start 注册 + RBAC startCustomsRecovery + router 接线 + server 路径门禁 + API.md 记录（contract 88/75）→ 单测 6/6 + 守卫/workflow 套件 19/19 → tsc api/web 0 → commit/push",
-  "last_action_at": "2026-10-03T09:12:23.776Z",
-  "next_action": "G3 收尾：补真实 HTTP E2E（DB，含 401/403/404/400/200/409 与 GET 读模型）；随后按 CONTINUOUS_EXECUTION 继续 G5（前端接线核查）/ G6（文档同步）/ G4（Customs C1–C7 内部链），并读取 C17 FINAL-2 裁决（PASS → C17 CLOSED）。",
+  "last_tick_at": "2026-10-03T09:13:10.093Z",
+  "state": "IMPLEMENT",
+  "last_action": "读取并归档 C17 FINAL-2 裁决（PASS / CLOSED；FULL_COPY_OK）→ C17 闭环；架构方授权直接进入 C21 HTTP（安全 HTTP orchestration/read surface）",
+  "last_action_at": "2026-10-03T09:13:10.092Z",
+  "next_action": "按 CONTINUOUS_EXECUTION 继续：G3 收尾（真实 HTTP E2E：401/403/404/400/200/409 + GET 读模型；C21 已实现 start-recovery/filing-status + Action Guard + RBAC）→ 随后 G5（前端接线核查）/ G6（文档同步）/ G4（Customs C1–C7 内部链）。",
   "current_head": "e060a5f",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
@@ -4480,7 +4480,7 @@
       "tests": "commercial-fee-guard-wiring 6/6 + commercial-fee-policy 14/14 + commercial-fee-policy-cutover 7/7；回归 commission/settlement/workflow/carrier-claim-response 11 files / 118 tests PASS"
     },
     "g2": {
-      "status": "FINAL2_SENT（CHANGE A/B/C + PG 13/13）",
+      "status": "DONE（C17 = PASS/CLOSED）",
       "authorization": "MSG-20261003-124 ③④⑤⑥⑪⑫⑬：C17 拆为 Attempt root + AttemptFact（重设计后只需送 C17 FINAL SCHEMA CHECKPOINT）",
       "migration": "20261003050000_customs_submission_attempt",
       "models": [
@@ -4568,5 +4568,14 @@
     "changeB": "openCustomsSubmissionAttempt 在 ROOT_EXISTING 时比对 immutable identity snapshot（opportunityId/caseId/claimItemId/packageId/packageDigest/provider/operation/jurisdiction/remedyType）→ 任一不同返回 IDEMPOTENCY_KEY_CONFLICT",
     "changeC": "fact P2002/同 id 回读改为完整 immutable equality 比对（status/providerSubmissionId/source/verificationLevel/observedAt/providerReference/errorCode/reconciliationAttempt）→ 不一致 FACT_IMMUTABLE_MISMATCH",
     "tests": "customs-submission-ledger-db 13/13（原 10/10 保持 + CHANGE A/B/C 各 1 条新断言）"
+  },
+  "c17_status": "PASS / CLOSED（MSG-20261003-126；impl 0c35106 / doc a02d089）",
+  "c17_final2_verdict": {
+    "message": "MSG-20261003-126",
+    "result": "PASS / CLOSED",
+    "changeA": "PASS（root FOR UPDATE + 锁内重读 + append；PROV-A||PROV-B exactly one accepted）",
+    "changeB": "PASS（immutable identity snapshot 比较 → IDEMPOTENCY_KEY_CONFLICT；同 key 不同 digest 不产生第二根）",
+    "changeC": "PASS（同 fact id 完整 immutable equality；差异 → FACT_IMMUTABLE_MISMATCH）",
+    "note": "架构方明确：不需要再送 C17 checkpoint；可直接进入 C21 HTTP（保持 filingSubmitted=false / TRANSPORT=false / HOLD_EXTERNAL）"
   }
 }

@@ -123257,3 +123257,130 @@ ACCEPTANCE：补上述真实 PostgreSQL 回归，原 10/10 保持全绿；不需
 
 这三项完成并送一个 C17 FINAL-2 后，若测试吻合，可以直接 C17 PASS/CLOSED → 进入 C21 HTTP。C21 继续保持 filingSubmitted=false / TRANSPORT=false / HOLD_EXTERNAL。
 ```
+
+### [MSG-20261003-126] C17 FINAL-2 = PASS / CLOSED（CHANGE A/B/C 全 PASS）· 授权直接进入 C21 HTTP（安全 HTTP orchestration/read surface，不打开真实 filing）
+
+来源：审计会话 https://chatgpt.com/c/6ac0c3b8-30a4-83ec-a529-4d9b04ffa0e7（「裁决 C17 架构」）。送审为 C17 FINAL-2 CHECKPOINT（impl `0c35106` / doc `a02d089` / Issue #2 comment 5967537906）。
+**★ 裁决：C17 FINAL-2 = PASS / CLOSED**。① CHANGE A（并发原子）= **PASS**：`appendFactGuarded` 把关键区放进同一 Prisma 事务并以 `SELECT … FOR UPDATE` 锁同一 attempt 的 root 行，锁内重读 facts → 冲突判定 → append，两个独立连接被串行化；新增真实 PG 用例 `PROV-A || PROV-B → exactly one accepted`，另一请求返回 `PROVIDER_SUBMISSION_ID_CONFLICT`，库里最终只有 1 个 PROVIDER_VERIFIED providerSubmissionId —— 上一轮的 TOCTOU（`listFacts → compare → append`）已消除。
+**★ ② CHANGE B = PASS**：`openCustomsSubmissionAttempt` 在 UNIQUE/P2002 收敛到既有 root 后比较 immutable identity（opportunityId / caseId / claimItemId / packageId / packageDigest / provider / operation / jurisdiction / remedyType），任一不同 → `IDEMPOTENCY_KEY_CONFLICT`；完全相同才 `ROOT_EXISTING`。测试验证不同 packageDigest 同 key：root 总数 1、返回冲突、不产生第二根。
+**★ ③ CHANGE C = PASS**：`appendFactGuarded` 在 root lock 事务内，同 fact id 时比较 organizationId / attemptId / status / providerSubmissionId / source / verificationLevel / observedAt / providerReference / errorCode / reconciliationAttempt；完全相同才 `ALREADY_RECORDED`，任一差异 → `FACT_IMMUTABLE_MISMATCH`（测试用相同 fact identity + 不同 errorCode 验证第二次写入被拒且 fact 数保持 1）。
+**★ ④ C17 = PASS / CLOSED**：C17 整体闭环（immutable idempotency root → append-only facts → tenant-scoped lineage → SUBMITTED requires providerSubmissionId → concurrency-safe provider identity → immutable idempotency payload → immutable fact replay → UNKNOWN_PROVIDER_RESPONSE → reconciliation only → 1/5/15/60min backoff → 24h MANUAL_REVIEW → no blind filing retry）。**不需要再送 C17 checkpoint**。
+**★ 下一步（架构方指示）**：`可以直接进入 C21 HTTP`；C21 边界保持 `filingSubmitted=false` / `TRANSPORT=false` / `HOLD_EXTERNAL` / 无 provider filing 调用 / 无生产凭据 / 无 payment write；C21 当前应做的是把已关闭的 C17 能力暴露成**安全的 HTTP orchestration/read surface**，而不是提前打开真实 Customs filing。
+
+```text
+C17 FINAL-2 最终裁决：PASS / CLOSED。
+
+我已核验 IMPLEMENTATION_HEAD = 0c35106 的实际 diff、服务实现、Prisma store 和新增 PostgreSQL 并发测试，不只是读取 checkpoint。上一轮要求的 CHANGE A/B/C 均已按要求落到真实执行路径。
+
+① CHANGE A — PASS。
+appendFactGuarded() 已把关键区放进同一个 Prisma transaction，并以：
+
+SELECT ... FROM CustomsSubmissionAttempt ... FOR UPDATE
+
+锁定同一 attempt 的 root 行。随后在锁内重新读取 facts → 检查 providerSubmissionId 冲突 → append。这样两个独立连接针对同一 attempt 的写入会被串行化。
+
+新增真实 PG 用例也正好覆盖上一轮要求的竞争条件：
+
+PROV-A || PROV-B → exactly one accepted
+
+另一请求返回：
+
+PROVIDER_SUBMISSION_ID_CONFLICT
+
+并验证数据库最终只有 1 个 PROVIDER_VERIFIED providerSubmissionId。
+
+因此上一轮指出的 TOCTOU：
+
+listFacts → compare → append
+
+已经消除。
+
+② CHANGE B — PASS。
+
+现在 openCustomsSubmissionAttempt() 在 UNIQUE/P2002 收敛到已有 root 后，不再直接认为是正常 retry，而是比较 immutable identity：
+
+opportunityId
+caseId
+claimItemId
+packageId
+packageDigest
+provider
+operation
+jurisdiction
+remedyType
+
+只要不同即：
+
+IDEMPOTENCY_KEY_CONFLICT
+
+完全相同才返回：
+
+ROOT_EXISTING
+
+新增测试也验证不同 packageDigest 使用同一 idempotencyKey 时：
+
+root 总数仍为 1；
+返回 IDEMPOTENCY_KEY_CONFLICT；
+不产生第二根。
+
+符合要求。
+
+③ CHANGE C — PASS。
+
+appendFactGuarded() 在 root lock 事务内部，若发现相同 fact ID，现在会比较：
+
+organizationId / attemptId / status / providerSubmissionId / source / verificationLevel / observedAt / providerReference / errorCode / reconciliationAttempt
+
+完全相同才允许：
+
+ALREADY_RECORDED
+
+有任意业务事实差异则：
+
+FACT_IMMUTABLE_MISMATCH
+
+新增测试使用相同 fact identity、不同 errorCode，已经验证：
+
+第二次写入被拒绝；
+fact 数量保持 1；
+不再把不同事实误判为正常 replay。
+
+这满足上一轮 CHANGE C。
+
+④ C17 — PASS / CLOSED。
+
+本轮不是重新设计 C17，而是完成上一轮三个窄修复。结合上一轮已经 PASS 的部分，现在 C17 整体闭环为：
+
+immutable idempotency root
+→ append-only facts
+→ tenant-scoped lineage
+→ SUBMITTED requires providerSubmissionId
+→ concurrency-safe provider identity
+→ immutable idempotency payload
+→ immutable fact replay
+→ UNKNOWN_PROVIDER_RESPONSE
+→ reconciliation only
+→ 1/5/15/60 min backoff
+→ 24h MANUAL_REVIEW
+→ no blind filing retry
+
+因此正式裁决：
+
+① PASS
+② PASS
+③ PASS
+④ PASS — C17 = CLOSED
+
+可以直接进入 C21 HTTP，不需要再送 C17 checkpoint。
+
+C21 的授权边界继续保持不变：
+
+filingSubmitted = false
+TRANSPORT = false
+HOLD_EXTERNAL
+NO provider filing call
+NO production credential
+NO payment write
+
+C21 当前应做的是把已经关闭的 C17 能力暴露成安全的 HTTP orchestration/read surface，而不是提前打开真实 Customs filing。
+```
