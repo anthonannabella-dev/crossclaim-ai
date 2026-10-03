@@ -1,17 +1,17 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
   "head": "0693821",
-  "status": "READY_FOR_REVIEW",
+  "status": "IMPLEMENT",
   "current_task": "MASTER GAP CLOSURE G2：C17 ledger 已完成（Schema + store + PG 10/10）→ 下一步送 C17 FINAL SCHEMA CHECKPOINT（MSG-20261003-124 ⑬）",
   "next_task": "PC-12A 实施 → 本地测试 + tsc api/web + API contract + full CI → PC-12A CHECKPOINT 送审。",
   "send_head": "07b7009",
   "decision_head": "07b7009",
-  "last_chatgpt_message": "MSG-20261003-124",
+  "last_chatgpt_message": "MSG-20261003-125",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-03T08:59:21.937Z",
+  "updated_at": "2026-10-03T09:00:47.722Z",
   "previous_head": "8cab430",
-  "architect_decision_pending": true,
+  "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "60ad182",
   "last_sent_at": "2026-10-03T08:55:45.512Z",
@@ -20,7 +20,7 @@
   "ci_run": "36949295897",
   "ci_result": "completed_success",
   "fix_pr": "https://github.com/anthonannabella-dev/crossclaim-ai/pull/10",
-  "channel_status": "HEALTHY（宿主新开 ChatGPT 会话；C17 FINAL SCHEMA CHECKPOINT 已投递并三要素验证：输入框清空 / 消息出现在底部 / 生成中或已回复）",
+  "channel_status": "HEALTHY（新会话 https://chatgpt.com/c/6ac0c3b8-30a4-83ec-a529-4d9b04ffa0e7；C17 FINAL 裁决已读取并归档）",
   "pending_verdict_unarchived": null,
   "b2_status": "PASS（MSG-20260930-10 工程修复 + MSG-20260930-11 集成 PASS/MERGE APPROVED）",
   "protocol": "DUAL_CHANNEL_WAKEUP（GitHub = 正式总线 / ChatGPT Web = 仅唤醒）",
@@ -49,11 +49,11 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-03T08:59:21.937Z",
-  "state": "AWAIT_VERDICT",
-  "last_action": "宿主新开 ChatGPT 会话 → 将 C17 FINAL SCHEMA CHECKPOINT 投递到新会话并三要素验证成功（输入框清空 / 消息在底部 / 已创建新会话 6ac0c3b8-30a4-83ec-a529-4d9b04ffa0e7）→ 架构方回复将做实现事实核验后给编号裁决",
-  "last_action_at": "2026-10-03T08:59:21.937Z",
-  "next_action": "读取 C17 CHECKPOINT 的编号裁决：PASS → 按 MSG-124 ㉑ 实施 G3（C21 HTTP + customs.recovery.start + GET filing-status，filingSubmitted=false）；REVISE → 立即按 CHANGE 修改并重送；BLOCK → 停止该方案并建替代。裁决到达前按 SAFE_CONTINUATION_QUEUE 推进不受审任务（G5 前端接线核查 / G6 文档同步 / G7 非 happy-path 复核）。",
+  "last_tick_at": "2026-10-03T09:00:47.722Z",
+  "state": "IMPLEMENT",
+  "last_action": "读取新会话 C17 FINAL 裁决（REVISE）并逐字归档（FULL_COPY_OK）→ 需 CHANGE A（providerSubmissionId 并发原子）/ B（idempotencyKey payload 冲突 fail-closed）/ C（fact P2002 完整等价校验）后送 C17 FINAL-2",
+  "last_action_at": "2026-10-03T09:00:47.721Z",
+  "next_action": "实施 CHANGE A/B/C：① root 行 SELECT … FOR UPDATE（或 advisory lock）内完成事实重读 + ID 校验 + append，补双连接并发 exactly-one-accepted 测试；② openCustomsSubmissionAttempt 在 ROOT_EXISTING 时比对 immutable identity snapshot，不一致 → IDEMPOTENCY_KEY_CONFLICT；③ appendFact 的 P2002 回读比对完整事实字段，不一致 fail-closed；跑真实 PG 回归（原 10/10 保持 + 新增）→ 送 C17 FINAL-2。",
   "current_head": "e060a5f",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
@@ -4481,7 +4481,7 @@
       "tests": "commercial-fee-guard-wiring 6/6 + commercial-fee-policy 14/14 + commercial-fee-policy-cutover 7/7；回归 commission/settlement/workflow/carrier-claim-response 11 files / 118 tests PASS"
     },
     "g2": {
-      "status": "CHECKPOINT_SENT（root + append-only fact + PG 10/10）",
+      "status": "REVISE_RECEIVED（C17 = REVISE：CHANGE A/B/C）",
       "authorization": "MSG-20261003-124 ③④⑤⑥⑪⑫⑬：C17 拆为 Attempt root + AttemptFact（重设计后只需送 C17 FINAL SCHEMA CHECKPOINT）",
       "migration": "20261003050000_customs_submission_attempt",
       "models": [
@@ -4533,5 +4533,18 @@
       "conversation created (new chat id)"
     ],
     "architect_ack": "架构方已回复确认将做实现事实核验（schema / 迁移约束 / 服务逻辑 / 测试证据），随后给编号裁决；裁决尚未产生"
+  },
+  "c17_final_verdict": {
+    "message": "MSG-20261003-125",
+    "root_fact_split": "PASS",
+    "submitted_provider_id": "REVISE（providerSubmissionId 冲突需并发原子保护）",
+    "backoff_no_blind_retry": "PASS",
+    "tenant_digest_credential": "PASS",
+    "overall": "NOT CLOSED（需 CHANGE A/B/C 后送 C17 FINAL-2）",
+    "changes": {
+      "A": "providerSubmissionId 冲突下沉为 DB/事务级串行化（root FOR UPDATE 或 advisory lock）+ 双连接并发测试 exactly-one-accepted",
+      "B": "同 idempotencyKey 的 immutable payload 不一致 → IDEMPOTENCY_KEY_CONFLICT（不得静默 ROOT_EXISTING）",
+      "C": "fact P2002 回读需完整 immutable fact equality，不一致 fail-closed"
+    }
   }
 }

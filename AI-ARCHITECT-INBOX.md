@@ -123149,3 +123149,111 @@ external payment write = OFF
 R13 HOLD
 无生产凭据
 ```
+
+### [MSG-20261003-125] C17 FINAL = REVISE（①③④ PASS；② REVISE；⑤ 不 CLOSED）· 需 CHANGE A/B/C 并发与幂等收口后送 C17 FINAL-2
+
+来源：宿主新开 ChatGPT 会话 https://chatgpt.com/c/6ac0c3b8-30a4-83ec-a529-4d9b04ffa0e7（会话标题「裁决 C17 架构」；原会话仍保留历史）。本轮送审为 C17 FINAL SCHEMA CHECKPOINT（impl `60ad182` / doc `7385209` / Issue #2 comment 5967397179）。
+**★ 编号裁决**：① root + append-only fact 拆分 = **PASS**；② `SUBMITTED → providerSubmissionId` = **REVISE**（冲突检测非原子）；③ 退避对账 + no-blind-retry = **PASS**；④ tenant / digest / credential / external-write 边界 = **PASS**；⑤ **C17 暂不 CLOSED**（只需很窄的修订批次）。
+**★ CHANGE A（并发原子）**：把 providerSubmissionId 冲突守卫下沉为并发安全不变量 —— 推荐之一：对 root 行 `SELECT … FOR UPDATE`（同事务内重读事实、验证 ID、append fact）；或 PostgreSQL advisory transaction lock（锁键 organizationId + attemptId）；或等价 DB-level serialized guard。并补真实 PG 双连接测试：`PROV-A` 与 `PROV-B` 并发 `PROVIDER_VERIFIED` → **exactly one accepted，另一个 fail-closed**，不得留下两个互相冲突的 verified id。
+**★ CHANGE B（幂等键语义）**：同一 idempotencyKey 但 immutable payload 不同（opportunityId / caseId / claimItemId / packageId / packageDigest / provider / operation / jurisdiction / remedyType 任一不同）→ 必须返回 **`IDEMPOTENCY_KEY_CONFLICT`**，**不得静默返回 `ROOT_EXISTING`**，且零新 fact、零外写。
+**★ CHANGE C（事实幂等）**：fact P2002 回读必须验证**完整 immutable fact equality**（当前 factId 未包含 source / verificationLevel / providerReference / errorCode）；不一致必须 fail-closed，不得把不同事实当 `ALREADY_RECORDED` 静默吞掉。
+**★ ACCEPTANCE**：补上述真实 PostgreSQL 回归，原 C17 10/10 保持全绿；**不需要重做 C17 架构**。三项完成并送 **C17 FINAL-2** 后，若测试吻合可直接 C17 PASS/CLOSED → 进入 C21 HTTP（继续 `filingSubmitted=false` / `TRANSPORT=false` / `HOLD_EXTERNAL`）。
+
+```text
+裁决：REVISE。
+我已直接核验 IMPLEMENTATION_HEAD = 60ad182 的 migration、Prisma schema、customs-submission-ledger.ts、Prisma store 和真实 PostgreSQL 测试。整体设计方向已经正确，C17 基本成型，但现在还不能 PASS/CLOSED，有两个并发/幂等一致性缺口需要补掉。
+
+① root + fact 拆分：PASS。
+CustomsSubmissionAttempt 作为幂等身份根、CustomsSubmissionAttemptFact 作为 append-only 状态事实，这次已经解决上一版“状态历史与 attempt UNIQUE 冲突”的根本问题。DB 里也确实存在 root UNIQUE、fact append-only trigger、tenant lineage guard、digest CHECK。
+
+② SUBMITTED → providerSubmissionId：部分 PASS，但整体 REVISE。
+单线程路径是正确的：service 层拒绝缺 ID，DB CHECK 也拒绝缺 ID；已有 PROVIDER_VERIFIED 的不同 providerSubmissionId 时，service 会返回 PROVIDER_SUBMISSION_ID_CONFLICT。
+
+但当前冲突检测是：
+
+listFacts() → application 比对 → appendFact()
+
+这不是原子的。两个并发请求完全可能同时看到“尚无 verified ID”，随后分别写入 PROV-A 和 PROV-B。数据库目前没有约束能够阻止这种情况。
+
+因此“providerSubmissionId 冲突 fail-closed”尚未在并发条件下成立。
+
+CHANGE A：必须把 providerSubmissionId 冲突守卫下沉为并发安全的不变量。
+
+推荐任选一种：
+
+对 CustomsSubmissionAttempt root 行 SELECT ... FOR UPDATE，在同一事务内重新读取事实、验证 ID、append fact；
+或 PostgreSQL advisory transaction lock，以 organizationId + attemptId 为锁键；
+或等价的 DB-level serialized guard。
+
+并新增真实 PG 双连接测试：
+
+PROV-A || PROV-B concurrent PROVIDER_VERIFIED → exactly one accepted; the other fail-closed
+
+不能最后留下两个互相冲突的 verified providerSubmissionId。
+
+③ 退避对账 + no-blind-retry：PASS。
+当前实现确实只有：
+
+UNKNOWN_PROVIDER_RESPONSE → reconciliation schedule
+
+退避为 1 / 5 / 15 / 60 min，≥24h 转 MANUAL_REVIEW。C17 模块没有 provider transport，也没有重新 POST filing 的执行函数；测试也验证 ambiguous 后 root 仍只有一根。
+
+这一项符合 ⑧⑨。
+
+④ tenant / digest / credential 边界：PASS。
+已经确认：
+fact → attempt 跨租户关系由 DB trigger 拒绝；
+packageDigest 有 service + DB 双层验证；
+fact UPDATE/DELETE 被 append-only trigger 拒绝；
+ledger schema 中没有 credential/token/raw payload/资金真值字段；
+CUSTOMS_SUBMISSION_LEDGER_BOUNDARY 仍是 filingSubmitted=false / externalWritePerformed=false / productionCredentials=ABSENT。
+
+符合当前 HOLD_EXTERNAL 边界。
+
+另外还有一个必须一起修的小缺口：
+
+当前 root 的 deterministic ID 只基于：
+
+organizationId + provider + operation + idempotencyKey
+
+而 createRoot() 遇到 P2002 后直接把旧 root 返回为 ROOT_EXISTING。
+
+因此：
+
+同一 idempotencyKey + 不同 packageDigest/packageId/jurisdiction/remedyType
+
+目前会静默复用旧 root。
+
+这不是理想的幂等语义。相同 idempotencyKey 但语义 payload 不同，应该 fail-closed，而不是当成正常 retry。
+
+CHANGE B：加入 IDEMPOTENCY_KEY_CONFLICT。
+
+P2002/read-existing 后，对以下 immutable identity snapshot 至少做完整比较：
+
+opportunityId / caseId / claimItemId / packageId / packageDigest / provider / operation / jurisdiction / remedyType
+
+任一不同：
+
+IDEMPOTENCY_KEY_CONFLICT
+
+并且零新 fact、零外写。
+
+同时建议补一个事实 ID 的一致性保护。目前 customsSubmissionFactId() 没有包含 source / verificationLevel / providerReference / errorCode；相同 status/observedAt 等字段但 provenance 不同可能被 P2002 当成 ALREADY_RECORDED。最低要求是在 P2002 回读 fact 后做完整 immutable payload equality，比对不一致必须 fail-closed，不能静默吞掉不同事实。
+
+最终编号裁决
+
+① PASS — root + append-only fact 架构批准。
+② REVISE — SUBMITTED 必须 ID 已成立，但 providerSubmissionId 冲突尚缺并发原子保护。
+③ PASS — reconciliation backoff + no-blind-retry 批准。
+④ PASS — tenant / digest / credential / external-write boundary 批准。
+⑤ REVISE — C17 暂不 CLOSED。
+
+只要求一个很窄的修订批次：
+
+CHANGE A：providerSubmissionId conflict 变成 transaction/DB concurrency-safe fail-closed，并补双连接并发测试。
+CHANGE B：同一 idempotencyKey 的 immutable payload mismatch → IDEMPOTENCY_KEY_CONFLICT，不得静默返回 ROOT_EXISTING。
+CHANGE C：fact P2002 回读必须验证完整 immutable fact equality；不一致 fail-closed。
+ACCEPTANCE：补上述真实 PostgreSQL 回归，原 10/10 保持全绿；不需要重做 C17 架构。
+
+这三项完成并送一个 C17 FINAL-2 后，若测试吻合，可以直接 C17 PASS/CLOSED → 进入 C21 HTTP。C21 继续保持 filingSubmitted=false / TRANSPORT=false / HOLD_EXTERNAL。
+```
