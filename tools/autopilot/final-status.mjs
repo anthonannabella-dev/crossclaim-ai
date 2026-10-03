@@ -56,11 +56,13 @@ const evidence = state.evidence ?? {};
 
 /** 只有绑定到当前 acceptance HEAD 的实证才判 true；其余一律 UNVERIFIED。 */
 const BOOKKEEPING_PREFIXES = [
-  '.autopilot/',
-  'docs/releases/',
-
-
-  'tools/autopilot/',
+  // CHANGE A（MSG-20261003-144）：只允许**静态生成物**。
+  // 任何 .mjs / .ts / workflow / 校验逻辑的变更都必须重新跑 CI，不得继承历史成功。
+  '.autopilot/STATE.json',
+  '.autopilot/HEARTBEAT.json',
+  'docs/releases/ACCEPTANCE-MATRIX.json',
+  'docs/releases/FINAL-ACCEPTANCE-REPORT.md',
+  'docs/releases/LAYER2-GOLDEN-PATH-MATRIX',
 ];
 
 /** entry.head 与 HEAD 之间是否**只有验收簿记文件**发生变化（不含代码/Schema/测试）。 */
@@ -113,16 +115,13 @@ const checks = {
   'L1-04_full_ci_success_on_head': {
     label: '最新 HEAD 全量 CI SUCCESS',
     status:
-      (function () {
-        const candidate = state.ci_status === 'success' && state.ci_status_head === head ? state.ci_status_head : state.ci_last_success_head;
-        return Boolean(candidate) && (candidate === head || isBookkeepingOnlyDiff(String(candidate)));
-      })()
+      state.ci_status_head === head && state.ci_status === 'success'
         ? true
         : state.ci_status_head || state.ci_status
           ? false
           : 'UNVERIFIED',
     evidence:
-      'acceptance_head=' + head + ' ci_head=' + String(state.ci_status_head ?? 'none') + ' ci=' + String(state.ci_status ?? 'none') + ' run=' + String(state.ci_run_id ?? 'none') + ' last_success=' + String(state.ci_last_success_head ?? 'none') + '/' + String(state.ci_last_success_run ?? 'none'),
+      'acceptance_head=' + head + ' ci_head=' + String(state.ci_status_head ?? 'none') + ' ci=' + String(state.ci_status ?? 'none') + ' run=' + String(state.ci_run_id ?? 'none'),
   },
   'L1-05_pg_regression_passed': evidenceCheck('pg_regression'),
   'L1-06_fresh_db_migration_passed': evidenceCheck('fresh_db_migration'),

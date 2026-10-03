@@ -1,11 +1,11 @@
 # FINAL ACCEPTANCE REPORT（自动生成，请勿手改）
 
-- 生成时间：2026-10-03T17:25:21.554Z
-- 单一权威矩阵：`docs/releases/ACCEPTANCE-MATRIX.json` @4f58a4e
-- acceptance HEAD：`56cb5ce`
+- 生成时间：2026-10-03T17:28:39.042Z
+- 单一权威矩阵：`docs/releases/ACCEPTANCE-MATRIX.json` @f797fa4
+- acceptance HEAD：`f797fa4`
 - 协议：`docs/releases/FINAL-ACCEPTANCE-PROTOCOL.md`（三层验收；禁止自证）
-- 状态：CODE_COMPLETE=YES · INTEGRATION_COMPLETE=NO · REAL_VALIDATION_COMPLETE=NO · PRODUCTION_READY=NO
-- INTERNAL_READY=YES；AUTONOMOUS_INTERNAL_WORK=EXHAUSTED
+- 状态：CODE_COMPLETE=NO · INTEGRATION_COMPLETE=NO · REAL_VALIDATION_COMPLETE=NO · PRODUCTION_READY=NO
+- INTERNAL_READY=NO；AUTONOMOUS_INTERNAL_WORK=RUNNING
 - INDEPENDENT_FINAL_AUDIT_REQUIRED = TRUE（独立审计完成前不得置 PRODUCTION_READY=YES）
 
 ## 1. 验收项（派生自 ACCEPTANCE-MATRIX.json）
@@ -13,10 +13,10 @@
 | 验收项 | 状态 | 证据 | 备注 |
 |---|---|---|---|
 | P0 Business Survival Gates | CLOSED | MSG-20261003-132；lifelines A/B CLOSED |  |
-| Platform Recovery | PARTIAL | BG-001 只读闭环 72 用例 | 真实 OAuth adapter = API_INTEGRATION_REQUIRED |
-| Logistics / Carrier Recovery | INTERNAL_COMPLETE | u6 carrier 289 用例 + BG-009 只读对账 7/7 | 真实 provider = EXTERNAL |
-| Customs / Trade Recovery | PARTIAL | G4 C1–C7 CLOSED（MSG-20261003-128）；BG-012 chain trigger + return-claim-evidence GET + filing-status/start-recovery 已接线 | 只读投影 GET（duty truth / discrepancy / eligibility / estimate / claim-ready）与 IOR 全链 HTTP 待接：BG-020 |
-| Independent-site / Chargeback | PARTIAL | PS04 Phase 1 只读链（BG-010）+ 内部闭环服务与回归（chargeback-recovery-flow，8/8：submitted≠won≠settled≠recovered≠billable、15% 仅对验证到账计费） | HTTP 路由与 DB 持久化未接：BG-021（Schema Delta → ARCH_REVIEW_REQUIRED）；PSP 真实提交 = API/LEGAL/HOST |
+| Platform Recovery | COVERED | BG-001 只读闭环 + qualification 只读投影（CHANGE A）+ runtime HTTP E2E；critical-state read surface | 内部 Golden Path = COVERED；真实 OAuth adapter = Layer 3 API_INTEGRATION_REQUIRED（HOLD） |
+| Logistics / Carrier Recovery | COVERED | u6 carrier 289 用例 + BG-009 只读对账 7/7 + carrier response critical-state 面 | 内部链 = COVERED；真实 provider = Layer 3 API_INTEGRATION_REQUIRED（HOLD） |
+| Customs / Trade Recovery | COVERED | G4 C1–C7 CLOSED + BG-012 chain trigger + BG-020 只读读模型（事实 + 四类 latest 投影，PG 4/4）+ BG-019 关键状态面 | 内部链 = COVERED；真实 filing / broker = HOLD_EXTERNAL |
+| Independent-site / Chargeback | COVERED | BG-010 只读链 + BG-021 事实层（PG 8/8）+ Phase-1 只读投影与 producer（PG 3/3）+ state read surface（PG 6/6）+ runtime HTTP E2E | 内部链 = COVERED（submitted ≠ won ≠ settled ≠ recovered ≠ billable）；真实 PSP 提交 = API/LEGAL/HOST |
 | Evidence Graph | INTERNAL_COMPLETE | BG-007 71 用例 |  |
 | Qualification | CLOSED | GATE B CLOSED；11/11 + PG 5/5 + 后端强制 Gate；IOR readiness 接线（BG-014） |  |
 | Settlement（只读对账） | INTERNAL_COMPLETE | BG-009 7/7（APPROVED/PAID ≠ RECEIVED） | 真实到账 = HOLD |
@@ -27,8 +27,8 @@
 | Idempotency / Concurrency / Failure Recovery | VERIFIED | C17 13/13；platform-write CAS；u7 套件 |  |
 | Fresh DB Migration | VERIFIED | u4 deploy-smoke（空库全迁移） |  |
 | DB Constraints | VERIFIED | db-constraint-coverage + 运行库 psql |  |
-| Backend HTTP wiring | PARTIAL | implemented=90 / documented=77 路由契约 OK | customs 只读投影 GET 待接（BG-020） |
-| Frontend wiring | PARTIAL | integration-status 只读接线 + start-recovery 表单 | 四域内部 Golden Path 所需最小前端接线 = BG-019 |
+| Backend HTTP wiring | INTERNAL_COMPLETE | 路由契约 implemented=92 / documented=79 OK；BG-020 + BG-019 端点均已接线并有 runtime E2E | 真实外部 provider 接线属 Layer 3（HOLD） |
+| Frontend wiring | INTERNAL_COMPLETE | 四域 critical-state read surface（Customs / Carrier / Platform / Independent-site）+ 命名的 runtime HTTP E2E 证据；架构方判四域 frontend cell 全 COVERED（MSG-20261003-143） |  |
 | Full CI | VERIFIED | 每 commit GitHub Actions（HEAD 绑定见 STATE.ci_status_head） |  |
 | Documentation sync | VERIFIED | u5 doc-sync 5 checks OK；BG-004 |  |
 | Security / Credential boundary | VERIFIED | 无凭据落库；Trust guard；HOST_ONLY |  |
@@ -40,6 +40,17 @@
 
 ### Layer 1 未通过检查（final-status 计算器输出；UNVERIFIED = 未绑定当前 HEAD 的实证）
 
+- L1-04_full_ci_success_on_head → false（acceptance_head=f797fa4 ci_head=f797fa4 ci=in_progress run=37140444660）
+- L1-05_pg_regression_passed → UNVERIFIED（pg_regression recorded at a0d33fe ≠ acceptance head f797fa4（且中间存在非簿记变更））
+- L1-06_fresh_db_migration_passed → UNVERIFIED（fresh_db_migration recorded at a0d33fe ≠ acceptance head f797fa4（且中间存在非簿记变更））
+- L1-07_api_typecheck_passed → UNVERIFIED（typecheck_api recorded at a0d33fe ≠ acceptance head f797fa4（且中间存在非簿记变更））
+- L1-08_web_typecheck_build_passed → UNVERIFIED（typecheck_web recorded at a0d33fe ≠ acceptance head f797fa4（且中间存在非簿记变更））
+- L1-09_no_skipped_critical_tests → UNVERIFIED（tests_no_skipped recorded at a0d33fe ≠ acceptance head f797fa4（且中间存在非簿记变更））
+- L1-10_git_working_tree_clean → false（dirty entries: 11）
+- L1-11_docs_state_consistent → UNVERIFIED（docs_sync recorded at a0d33fe ≠ acceptance head f797fa4（且中间存在非簿记变更））
+- L1-12_schema_invariants_verified → UNVERIFIED（schema_invariants recorded at a0d33fe ≠ acceptance head f797fa4（且中间存在非簿记变更））
+- L1-13_negative_paths_covered → UNVERIFIED（negative_paths recorded at a0d33fe ≠ acceptance head f797fa4（且中间存在非簿记变更））
+- L1-14_real_pg_e2e_not_mock_only → UNVERIFIED（pg_e2e_real recorded at a0d33fe ≠ acceptance head f797fa4（且中间存在非簿记变更））
 
 ## 3. 外部 / 宿主依赖（不得自证完成）
 

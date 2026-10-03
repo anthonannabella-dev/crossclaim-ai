@@ -79,8 +79,8 @@
 
 | ID | 缺口 | 来源 | 状态 |
 |---|---|---|---|
-| I1 | IOR identity / right lineage / broker POA **持久化**（append-only + tenant + digest） | 指令 ①②③ | PENDING（需 Schema Delta 审计） |
-| I2 | Enterprise IOR readiness 输入接入现有 Qualification / Economics Gate | 指令 ⑥ | PENDING（接线） |
-| I3 | IOR 全链装配（Entry→IOR→claimant/right→remedy+deadline→qualification→evidence→estimate→claim-ready→broker authorization→filing provider→refund destination），fail-closed | 指令 ⑪ | PENDING |
+| ~~I1~~ **DONE** | IOR identity / right lineage / broker POA **持久化**（append-only + tenant + digest） | 指令 ①②③ | **已收口**：BG-013 三表五枚举 + DB CHECK/触发器 + 真实 PG 9/9；架构方 **PASS / CLOSED**（MSG-20261003-138/140） |
+| ~~I2~~ **DONE** | Enterprise IOR readiness 输入接入现有 Qualification / Economics Gate | 指令 ⑥ | **已收口**：BG-014（复用既有 gate，未建第二套引擎；PG 17/17 门禁） |
+| ~~I3~~ **DONE** | IOR 全链装配（fail-closed，零外写） | 指令 ⑪ | **已收口**：BG-015 `ior-recovery-chain`（claimPackageReady / filingReady / autoSubmitAllowed=false；16/16 用例） |
 | I4 | 契约层（identity / right lineage / POA / deadline / evidence taxonomy / refund destination） | 指令 ①②③④⑤⑦ | **DONE**（`enterprise-ior-layer` 8/8；见 `docs/releases/ENTERPRISE-IOR-RECOVERY-LAYER-DIRECTIVE.md`） |
 | I5 | VAT/GST Recovery（future backlog，不得在 C18 闭环前开辟主线） | 指令 ⑩ | REGISTERED（not started） |

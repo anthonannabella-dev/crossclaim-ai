@@ -125610,3 +125610,302 @@ External Write=HOLD · Real Money=HOLD · Customer Submission=HOLD · Production
 
 需要特别区分：BG-019 CLOSED / Layer 2 frontend 0 gap，并不等于整个 CrossClaim 已 CODE_COMPLETE 或 PRODUCTION_READY。 接下来应回到之前的 Independent Final Audit CHANGE A–E 总验收流程，重新核 Layer 1 的 14/14、Acceptance Head/CI、状态文件一致性和剩余内部 backlog。
 ```
+
+### [MSG-20261003-144] INDEPENDENT FINAL AUDIT v2 = REVISE（Layer 2 PASS / Layer 3 PASS；CHANGE A CI 自证漏洞 + B 矩阵/报告 stale + C REGISTER stale 且 guard 需语义化 + D 单一 Final Acceptance Head）
+
+```text
+INDEPENDENT FINAL AUDIT v2：REVISE。
+
+这次不是业务主链没做完，而是最终验收层仍存在自证与状态一致性问题。我反查了 REVIEWED_HEAD=1729cb9、FINAL-ACCEPTANCE-REPORT、ACCEPTANCE-MATRIX、STATE.final_status、MASTER-GAP-CLOSURE-REGISTER、Layer 2 matrix 和 final-status.mjs。
+
+编号裁决如下。
+
+Layer 2 四域 Golden Path：PASS
+
+这一部分我认可。
+
+Platform：runtime qualification + UI + runtime HTTP/PG E2E 已闭合。
+Carrier：COVERED。
+Customs：BG-020 + BG-019 已闭合。
+Independent-site：事实层、Phase1 producer、runtime composition、状态 read surface 已闭合。
+Layer 2 matrix 当前 0 GAP，且 frontend 不再只是“文件存在”判定。
+
+所以：
+
+Platform / Carrier / Customs / Independent-site Layer 2 = PASS / COVERED。
+
+Layer 3 HOLD：PASS
+
+当前仍明确保留：
+
+HOST_ACTION_REQUIRED
+API_INTEGRATION_REQUIRED
+REAL_DATA_REQUIRED
+LEGAL_OR_LICENSE_REQUIRED
+
+并且：
+
+INTEGRATION_COMPLETE=NO
+REAL_VALIDATION_COMPLETE=NO
+PRODUCTION_READY=NO
+
+这个边界是正确的，没有把真实 OAuth、Carrier API、Customs Broker/Filing、真实资金或法律授权假装 CLOSED。
+
+Layer 1 14/14：FAIL，目前实际不是 14/14
+
+仓库真实 STATE.final_status 在 1729cb9 明确显示：
+
+纯文本
+CODE_COMPLETE=NO
+INTERNAL_CODE_COMPLETE=false
+INTERNAL_READY=NO
+AUTONOMOUS_INTERNAL_WORK=RUNNING
+
+而且：
+
+纯文本
+L1-10_git_working_tree_clean = false
+dirty entries: 6
+
+因此当前真实状态最多是：
+
+Layer 1 = 13/14
+
+不是 14/14。
+
+你这条消息里写的：
+
+CODE_COMPLETE=YES / INTERNAL_READY=YES / EXHAUSTED
+
+与 GitHub 上本次 v2 请求和仓库状态都不一致。
+
+L1-04 CI 判定仍存在自证漏洞：REVISE
+
+这是本轮最重要的问题之一。
+
+协议原文明确要求：
+
+最新 HEAD 全量 CI SUCCESS
+
+但 1729cb9 新修改的 final-status.mjs 现在允许：
+
+纯文本
+current HEAD 没成功 CI
++
+历史 successful ancestor
++
+ancestor→HEAD 仅“bookkeeping files”
+=
+L1-04 PASS
+
+问题是 BOOKKEEPING_PREFIXES 里面包括：
+
+纯文本
+tools/autopilot/
+
+而 1729cb9 本身恰恰修改了：
+
+tools/autopilot/final-status.mjs
+tools/autopilot/record-ci-status.mjs
+
+也就是说：
+
+验收判定器本身变了，却可以使用旧 HEAD 的 CI 给新判定器自己发 PASS。
+
+这是典型自证漏洞。
+
+CHANGE A
+
+二选一，我建议第一种：
+
+A1 推荐：恢复严格规则
+
+纯文本
+L1-04 = 当前 acceptance HEAD 自身 GitHub Actions SUCCESS
+
+不要 ancestor inheritance。
+
+或者至少：
+
+A2 若保留 ancestor 规则：
+
+tools/autopilot/** 绝不能被认定为 harmless bookkeeping。
+
+只能允许真正静态生成物，例如：
+
+纯文本
+.autopilot/STATE.json
+docs/releases/ACCEPTANCE-MATRIX.json
+docs/releases/FINAL-ACCEPTANCE-REPORT.md
+docs/releases/LAYER2-GOLDEN-PATH-MATRIX.*
+
+任何：
+
+.mjs
+.ts
+CI workflow
+validation logic
+
+变化，都必须重新跑 CI。
+
+L1-11 docs/state consistency 当前是假阳性：REVISE
+
+final_status 把：
+
+纯文本
+L1-11_docs_state_consistent = true
+
+但实际仓库明显不一致。
+
+FINAL-ACCEPTANCE-REPORT.md 和 ACCEPTANCE-MATRIX.json 仍然写：
+
+Platform Recovery = PARTIAL
+Customs = PARTIAL
+Independent-site = PARTIAL
+Backend HTTP wiring = PARTIAL
+Frontend wiring = PARTIAL
+
+甚至还写：
+
+Customs BG-020 待接
+Independent-site BG-021 待做
+Frontend BG-019 待做
+
+但这些刚刚都已经被我们逐项审计并 CLOSED。
+
+所以现在：
+
+Layer 2 matrix = 0 GAP
+
+与：
+
+Acceptance Matrix = 多个 PARTIAL
+
+直接冲突。
+
+CHANGE B
+
+必须重生成 ACCEPTANCE-MATRIX.json 和 FINAL-ACCEPTANCE-REPORT.md，使其反映：
+
+Platform internal golden path = INTERNAL_COMPLETE/COVERED
+Carrier = INTERNAL_COMPLETE/COVERED
+Customs = INTERNAL_COMPLETE/COVERED
+Independent-site = INTERNAL_COMPLETE/COVERED
+Backend HTTP wiring = INTERNAL_COMPLETE
+Frontend wiring = INTERNAL_COMPLETE
+
+真实外部 API 仍通过 note 指向 Layer 3 HOLD，而不是把内部域状态继续写 PARTIAL。
+
+MASTER-GAP-CLOSURE-REGISTER 仍然 stale：REVISE
+
+同样存在明显旧状态。
+
+例如 Enterprise IOR 部分仍写：
+
+纯文本
+I1 PENDING
+I2 PENDING
+I3 PENDING
+
+但实际：
+
+BG-013 已 PASS/CLOSED；
+IOR qualification wiring 已完成；
+IOR full-chain assembly 已完成。
+
+另外表格上方很多 FINAL TARGET 仍保留旧的 GAP C4/C5/C6/G1/G2 等描述。
+
+这说明所谓“四份状态一致 guard”还没有真正做到语义一致性。
+
+CHANGE C
+
+更新或重新派生 MASTER-GAP-CLOSURE-REGISTER.md。
+
+更重要的是 consistency guard 必须能捕捉：
+
+纯文本
+STATE: BG-019 CLOSED
+ACCEPTANCE-MATRIX: frontend PARTIAL
+MASTER REGISTER: old GAP
+
+这种冲突。
+
+不能只验证文件存在、计数或生成成功。
+
+Reviewed Head / Acceptance Head 仍需要最终收敛
+
+当前：
+
+纯文本
+REVIEWED_HEAD = 1729cb9
+acceptance_head = 76497f4
+
+1729cb9 是 76497f4 的后一提交。
+
+这本身如果只是静态报告可以接受，但这次它修改了验收计算逻辑代码，所以不能把 76497f4 当最终验收 HEAD。
+
+CHANGE D
+
+最终必须产生一个单一 Final Acceptance Head，例如：
+
+纯文本
+FINAL_ACCEPTANCE_HEAD = X
+
+然后在这个 X 上：
+
+working tree clean；
+CI SUCCESS；
+Layer1 14/14；
+matrix/report/state/master register 一致；
+没有后续修改验收逻辑的提交。
+SAFE_CONTINUATION_QUEUE=0：当前可以认可，但不能 EXHAUSTED
+
+业务 backlog 已经没有我能发现的新安全内部产品缺口。
+
+但是现在仍有上述 验收基础设施内部修复：
+
+CI self-certification rule；
+stale acceptance matrix；
+stale final report；
+stale master register；
+clean working tree；
+final HEAD CI。
+
+因此目前不能：
+
+AUTONOMOUS_INTERNAL_WORK=EXHAUSTED
+
+应保持：
+
+RUNNING
+
+直到这些最终验收修复完成。
+
+最终裁决
+INDEPENDENT FINAL AUDIT v2 = REVISE
+
+不是产品架构返工，只剩最终验收层的 CHANGE A–D：
+
+CHANGE A：修掉 CI ancestor/self-certification 漏洞；
+CHANGE B：重生成 Acceptance Matrix / Final Report，消除已 CLOSED 域仍 PARTIAL；
+CHANGE C：更新 Master Gap Register，并加强跨四状态源的语义一致性 guard；
+CHANGE D：得到单一 clean Final Acceptance Head，并在该 HEAD 上 CI SUCCESS + Layer1 真正 14/14。
+
+修完后再送 INDEPENDENT FINAL AUDIT v3。
+
+到那时如果满足：
+
+纯文本
+Layer 1 = 14/14
+Layer 2 = four domains COVERED
+Layer 3 = explicit HOLD
+working tree = clean
+current final head CI = SUCCESS
+all state sources consistent
+
+我就可以判：
+
+INTERNAL CODE COMPLETE = PASS / AUTONOMOUS INTERNAL WORK = EXHAUSTED
+
+但仍然只能是内部代码完成，不是 PRODUCTION_READY=YES。
+```

@@ -6,10 +6,10 @@
   "next_task": "PC-12A 实施 → 本地测试 + tsc api/web + API contract + full CI → PC-12A CHECKPOINT 送审。",
   "send_head": "07b7009",
   "decision_head": "07b7009",
-  "last_chatgpt_message": "MSG-20261003-143",
+  "last_chatgpt_message": "MSG-20261003-144",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-03T17:24:07.136Z",
+  "updated_at": "2026-10-03T17:27:46.224Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -51,9 +51,9 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-03T14:11:19.420Z",
   "state": "IMPLEMENT",
-  "last_action": "INDEPENDENT FINAL AUDIT REQUEST v2 已送审：Issue #2 comment 5971618294（HEAD 1729cb9，Layer 1 14/14）",
+  "last_action": "MSG-20261003-144 已逐字归档（FULL_COPY_OK）：v2 = REVISE，仅验收层 CHANGE A–D",
   "last_action_at": "2026-10-03T14:17:18.723Z",
-  "next_action": "发送唤醒并读取 v2 裁决；PASS → 记录（PRODUCTION_READY 仍由宿主决定）；REVISE → 逐项修",
+  "next_action": "实施 CHANGE A（严格 CI 规则）→ B（矩阵/报告去 PARTIAL）→ C（REGISTER 更新 + guard 语义化）→ D（单一 Final Acceptance Head）→ 送 v3",
   "current_head": "8902185",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
@@ -4905,7 +4905,7 @@
   "singleton_runner": "VERIFIED",
   "ci_pending": [],
   "ci_red": [],
-  "ci_checked_at": "2026-10-03T17:24:23.040Z",
+  "ci_checked_at": "2026-10-03T17:27:24.381Z",
   "continuous_verification": {
     "at": "2026-10-03T14:17:18.723Z",
     "a_to_b_to_c": "VERIFIED（单次启动连续执行 u1→u2→u3，无 heartbeat 唤醒；停止条件 = SAFE_CONTINUATION_QUEUE_EMPTY）",
@@ -4990,20 +4990,32 @@
       "④ Production Candidate register only"
     ]
   },
-  "awaiting_verdict": true,
+  "awaiting_verdict": false,
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-03T17:25:21.478Z",
-    "head": "56cb5ce",
-    "acceptance_head": "56cb5ce",
+    "computed_at": "2026-10-03T17:28:38.966Z",
+    "head": "f797fa4",
+    "acceptance_head": "f797fa4",
     "protocol_layer1_items": 14,
-    "CODE_COMPLETE": "YES",
+    "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
     "REAL_VALIDATION_COMPLETE": "NO",
     "PRODUCTION_READY": "NO",
-    "INTERNAL_CODE_COMPLETE": true,
+    "INTERNAL_CODE_COMPLETE": false,
     "INDEPENDENT_FINAL_AUDIT_REQUIRED": true,
-    "OPEN_INTERNAL_ITEMS": [],
+    "OPEN_INTERNAL_ITEMS": [
+      "CHECK:L1-04_full_ci_success_on_head",
+      "CHECK:L1-05_pg_regression_passed",
+      "CHECK:L1-06_fresh_db_migration_passed",
+      "CHECK:L1-07_api_typecheck_passed",
+      "CHECK:L1-08_web_typecheck_build_passed",
+      "CHECK:L1-09_no_skipped_critical_tests",
+      "CHECK:L1-10_git_working_tree_clean",
+      "CHECK:L1-11_docs_state_consistent",
+      "CHECK:L1-12_schema_invariants_verified",
+      "CHECK:L1-13_negative_paths_covered",
+      "CHECK:L1-14_real_pg_e2e_not_mock_only"
+    ],
     "HOST_ACTION_REQUIRED": [
       "BG-006-production-candidate-preflight"
     ],
@@ -5044,57 +5056,57 @@
       "L1-03_no_open_markers": {
         "label": "不存在 TODO/IN_PROGRESS/PARTIAL/READY_FOR_REVIEW/WAITING_FOR_VERDICT/未处理 REVISE·BLOCK",
         "status": true,
-        "evidence": "arch_pending=0 awaiting_verdict=true"
+        "evidence": "arch_pending=0 awaiting_verdict=false"
       },
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
-        "status": true,
-        "evidence": "acceptance_head=56cb5ce ci_head=2316f71 ci=queued run=37140370019 last_success=503b106/37139449952"
+        "status": false,
+        "evidence": "acceptance_head=f797fa4 ci_head=f797fa4 ci=in_progress run=37140444660"
       },
       "L1-05_pg_regression_passed": {
-        "status": true,
-        "evidence": "四域回归 45 文件 / 362 用例 PASS（代码树与 503b106 相同；CI 全量为权威） @a0d33fe"
+        "status": "UNVERIFIED",
+        "evidence": "pg_regression recorded at a0d33fe ≠ acceptance head f797fa4（且中间存在非簿记变更）"
       },
       "L1-06_fresh_db_migration_passed": {
-        "status": true,
-        "evidence": "migrate status：66 migrations up to date @a0d33fe"
+        "status": "UNVERIFIED",
+        "evidence": "fresh_db_migration recorded at a0d33fe ≠ acceptance head f797fa4（且中间存在非簿记变更）"
       },
       "L1-07_api_typecheck_passed": {
-        "status": true,
-        "evidence": "tsc --noEmit (api) EXIT=0 @a0d33fe"
+        "status": "UNVERIFIED",
+        "evidence": "typecheck_api recorded at a0d33fe ≠ acceptance head f797fa4（且中间存在非簿记变更）"
       },
       "L1-08_web_typecheck_build_passed": {
-        "status": true,
-        "evidence": "tsc --noEmit (web) EXIT=0 @a0d33fe"
+        "status": "UNVERIFIED",
+        "evidence": "typecheck_web recorded at a0d33fe ≠ acceptance head f797fa4（且中间存在非簿记变更）"
       },
       "L1-09_no_skipped_critical_tests": {
-        "status": true,
-        "evidence": "四域回归 skipped=0 @a0d33fe"
+        "status": "UNVERIFIED",
+        "evidence": "tests_no_skipped recorded at a0d33fe ≠ acceptance head f797fa4（且中间存在非簿记变更）"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
-        "status": true,
-        "evidence": "porcelain empty"
+        "status": false,
+        "evidence": "dirty entries: 11"
       },
       "L1-11_docs_state_consistent": {
-        "status": true,
-        "evidence": "doc-sync 实时计数 OK；API_CONTRACT_OK；README 同步 @a0d33fe"
+        "status": "UNVERIFIED",
+        "evidence": "docs_sync recorded at a0d33fe ≠ acceptance head f797fa4（且中间存在非簿记变更）"
       },
       "L1-12_schema_invariants_verified": {
-        "status": true,
-        "evidence": "db-constraint-coverage 26/26 + 触发器清单核对（required 98 / append-only 43） @a0d33fe"
+        "status": "UNVERIFIED",
+        "evidence": "schema_invariants recorded at a0d33fe ≠ acceptance head f797fa4（且中间存在非簿记变更）"
       },
       "L1-13_negative_paths_covered": {
-        "status": true,
-        "evidence": "四域负路径覆盖（跨租户/RBAC/幂等/并发/digest/证据/币种金额/未授权写/UNKNOWN provider） @a0d33fe"
+        "status": "UNVERIFIED",
+        "evidence": "negative_paths recorded at a0d33fe ≠ acceptance head f797fa4（且中间存在非簿记变更）"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
-        "status": true,
-        "evidence": "真实 PostgreSQL 套件全绿（customs 26 / IOR 9 / PS04 8 / Phase-1 3 / state-read 6 / qualification 3 / runtime E2E 2） @a0d33fe"
+        "status": "UNVERIFIED",
+        "evidence": "pg_e2e_real recorded at a0d33fe ≠ acceptance head f797fa4（且中间存在非簿记变更）"
       }
     },
-    "AUTONOMOUS_INTERNAL_WORK": "EXHAUSTED",
-    "INTERNAL_READY": "YES",
+    "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
+    "INTERNAL_READY": "NO",
     "EXTERNAL_GATES_REMAINING": {
       "HOST_ACTION_REQUIRED": [
         "BG-006-production-candidate-preflight"
@@ -5125,13 +5137,13 @@
       "ARCH_REVIEW_REQUIRED": []
     }
   },
-  "code_complete": "YES",
+  "code_complete": "NO",
   "integration_complete": "NO",
   "real_validation_complete": "NO",
   "production_ready": "NO",
   "independent_final_audit_required": true,
   "final_acceptance_protocol": "ACTIVE（docs/releases/FINAL-ACCEPTANCE-PROTOCOL.md；三层验收 + 4 状态重算 + 独立审计）",
-  "autonomous_internal_work": "EXHAUSTED",
+  "autonomous_internal_work": "RUNNING",
   "arch_review_pending": [],
   "arch_review_request": {
     "id": "BG-021-independent-site-persistence-schema-delta",
@@ -5153,9 +5165,9 @@
     "status": "DONE（MSG-20261003-134：端点+customs.recovery.chain.run/INTERNAL_WRITE+角色矩阵+immutable execution identity+路由级 E2E 4/4+API.md 90/77）"
   },
   "gates_recorded_at": "2026-10-03T15:17:04.369Z",
-  "ci_status_head": "2316f71",
-  "ci_status": "queued",
-  "ci_run_id": "37140370019",
+  "ci_status_head": "f797fa4",
+  "ci_status": "in_progress",
+  "ci_run_id": "37140444660",
   "internal_code_complete_at": "2026-10-03T15:36:47.862Z",
   "independent_final_audit": {
     "required": true,
@@ -5450,19 +5462,32 @@
     "verdict_message": "MSG-20261003-140",
     "closed_at": "2026-10-03T16:45:10.253Z"
   },
-  "ci_last_success_head": "503b106",
-  "ci_last_success_run": "37139449952",
+  "ci_last_success_head": "a0d33fe",
+  "ci_last_success_run": "37139864438",
   "independent_final_audit_v2": {
     "at": "2026-10-03T17:23:44.761Z",
     "head": "1729cb9",
     "doc": "docs/releases/INDEPENDENT-FINAL-AUDIT-REQUEST-V2.md",
     "github_comment_id": "5971618294",
-    "verdict": null,
+    "verdict": "REVISE",
     "wakeup_sent_at": "2026-10-03T17:24:07.135Z",
     "wakeup_verification": [
       "composer cleared",
       "marker 5971618294 at bottom",
       "generating"
-    ]
+    ],
+    "verdict_message": "MSG-20261003-144",
+    "archived": "FULL_COPY_OK"
+  },
+  "layer_verdicts": {
+    "layer1": "FAIL（仅 13/14 且 L1-04 存在自证漏洞）",
+    "layer2": "PASS（四域 COVERED）",
+    "layer3": "PASS（明确 HOLD）"
+  },
+  "acceptance_fix": {
+    "change_a": "CI ancestor/自证漏洞：L1-04 恢复严格（= 当前 acceptance HEAD 自身 CI SUCCESS）；簿记白名单只允许静态生成物（STATE.json / ACCEPTANCE-MATRIX.json / FINAL-ACCEPTANCE-REPORT.md / LAYER2-GOLDEN-PATH-MATRIX.*），任何 .mjs/.ts/workflow/校验逻辑变更都必须重跑 CI",
+    "change_b": "重生成 ACCEPTANCE-MATRIX + FINAL-ACCEPTANCE-REPORT：已 CLOSED 域不得再写 PARTIAL",
+    "change_c": "更新 MASTER-GAP-CLOSURE-REGISTER（I1–I3 等 stale）+ consistency guard 增加跨源语义一致性检查",
+    "change_d": "产出单一 clean FINAL_ACCEPTANCE_HEAD：working tree clean + CI SUCCESS + Layer1 14/14 + 四源一致，且之后不得再改验收逻辑"
   }
 }

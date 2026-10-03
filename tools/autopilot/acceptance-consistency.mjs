@@ -152,6 +152,24 @@ if (Array.isArray(fs2.OPEN_INTERNAL_ITEMS)) {
   if (!hasOpenItems && matrixHasOpen) conflicts.push('STATE_OPEN_ITEMS_EMPTY_BUT_MATRIX_HAS_OPEN');
 }
 
+
+// CHANGE C（MSG-20261003-144）：语义一致性——已被审计 CLOSED 的域不得在矩阵里继续写 PARTIAL/IN_PROGRESS。
+const AREA_COMPLETION_MAP = {
+  frontend_wiring: ['BG-019-frontend-http-wiring-closure'],
+  backend_http_wiring: ['BG-020-customs-readonly-projection-http'],
+  customs: ['BG-020-customs-readonly-projection-http'],
+  independent_site: ['BG-021-independent-site-persistence-schema-delta'],
+};
+for (const [areaId, requiredIds] of Object.entries(AREA_COMPLETION_MAP)) {
+  const area = (matrix.areas ?? []).find((item) => item.id === areaId);
+  if (!area) continue;
+  const looksOpen = /PARTIAL|IN_PROGRESS/.test(String(area.status));
+  const allCompleted = requiredIds.every((id) => completed.has(id));
+  if (looksOpen && allCompleted) {
+    conflicts.push('SEMANTIC_STALE_AREA: ' + areaId + ' = ' + String(area.status) + ' 但其依赖项已全部 CLOSED（' + requiredIds.join(',') + '）');
+  }
+}
+
 if (conflicts.length > 0) {
   console.log('ACCEPTANCE_CONSISTENCY=FAIL head=' + head + ' conflicts=' + conflicts.length);
   for (const conflict of conflicts) console.log(' - ' + conflict);
