@@ -159,7 +159,12 @@ describe('CARRIER QUEUE #6 — evidence assembly', () => {
   it('金额按币种分组合计（不跨币种相加）', () => {
     const outcome = assemble({ invoices: [INVOICE, SECOND_INVOICE] });
     if (!outcome.ok) throw new Error('expected ok');
-    expect(outcome.bundle.slaInputs.billedTotals).toEqual([{ currency: 'USD', totalCharge: '51.50', invoiceCount: 2 }]);
+    expect(outcome.bundle.slaInputs.billedTotals).toHaveLength(1);
+    expect(outcome.bundle.slaInputs.billedTotals[0].currency).toBe('USD');
+    expect(outcome.bundle.slaInputs.billedTotals[0].totalCharge).toBe('51.50');
+    expect(outcome.bundle.slaInputs.billedTotals[0].invoiceCount).toBe(2);
+    // total − Σ(components) 只作为事实保留（组件齐全时非 null；不据此判定 provider 数据错误）
+    expect(outcome.bundle.slaInputs.billedTotals[0].deltaFromComponents).not.toBeNull();
   });
 
   it('bundleId 确定性 + 只带 safe reference（无 raw payload / signature / 完整姓名）', () => {

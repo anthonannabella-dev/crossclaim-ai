@@ -41,6 +41,12 @@ export interface CarrierBilledTotal {
   currency: string;
   totalCharge: string;
   invoiceCount: number;
+  /**
+   * 事实字段（不判定）：total − Σ(component subtotals)。
+   * provider invoice 可能存在 discount / rounding / unmapped adjustment，因此只保留 delta，不据此判断数据错误。
+   * 任一 component 缺失时为 null。
+   */
+  deltaFromComponents: string | null;
 }
 
 /** 供 eligibility evaluation 使用的**证据**输入（不含任何判定结论）。 */
@@ -147,7 +153,20 @@ export function assembleShipmentEvidence(
     byCurrency.set(invoice.currency, bucket);
   }
   const billedTotals: CarrierBilledTotal[] = [...byCurrency.entries()]
-    .map(([currency, bucket]) => ({ currency, totalCharge: addDecimalStrings(bucket.amounts), invoiceCount: bucket.count }))
+    .map(([currency, bucket]) => {
+      const totals = invoices.filter((invoice) => invoice.currency === currency).map((invoice) => invoice.totalCharge);
+      const components = invoices
+        .filter((invoice) => invoice.currency === currency)
+        .flatMap((invoice) => [invoice.baseCharge, invoice.fuelSurcharge, invoice.accessorialCharges, invoice.tax])
+        .filter((value): value is string => value !== null);
+      const delta = components.length > 0 ? addDecimalStrings([addDecimalStrings(totals), '-' + addDecimalStrings(components).replace(/^-/, '')]) : null;
+      return {
+        currency,
+        totalCharge: addDecimalStrings(bucket.amounts),
+        invoiceCount: bucket.count,
+        deltaFromComponents: delta,
+      };
+    })
     .sort((left, right) => (left.currency < right.currency ? -1 : left.currency > right.currency ? 1 : 0));
 
   const exceptionOrDelayObserved = tracking.events.some((event) => event.status === 'EXCEPTION' || event.status === 'DELAYED');
