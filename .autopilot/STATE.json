@@ -4985,9 +4985,9 @@
   "awaiting_verdict": false,
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-03T16:02:57.874Z",
-    "head": "09a6859",
-    "acceptance_head": "09a6859",
+    "computed_at": "2026-10-03T16:03:26.883Z",
+    "head": "caa8b92",
+    "acceptance_head": "caa8b92",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5060,7 +5060,7 @@
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=09a6859 ci_head=928fa36 ci=in_progress run=37134995413"
+        "evidence": "acceptance_head=caa8b92 ci_head=928fa36 ci=in_progress run=37134995413"
       },
       "L1-05_pg_regression_passed": {
         "status": "UNVERIFIED",
@@ -5085,7 +5085,7 @@
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
         "status": false,
-        "evidence": "dirty entries: 5"
+        "evidence": "dirty entries: 2"
       },
       "L1-11_docs_state_consistent": {
         "status": "UNVERIFIED",
@@ -5104,7 +5104,39 @@
         "evidence": "no evidence recorded for pg_e2e_real"
       }
     },
-    "AUTONOMOUS_INTERNAL_WORK": "RUNNING"
+    "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
+    "INTERNAL_READY": "NO",
+    "EXTERNAL_GATES_REMAINING": {
+      "HOST_ACTION_REQUIRED": [
+        "BG-006-production-candidate-preflight"
+      ],
+      "API_INTEGRATION_REQUIRED": [
+        "AMAZON_OAUTH_READ",
+        "TIKTOK_SHOP_OAUTH_READ",
+        "WALMART_OAUTH_READ",
+        "SHOPIFY_OAUTH_READ",
+        "UPS_API",
+        "FEDEX_API",
+        "DHL_API",
+        "CUSTOMS_DATA_PROVIDER",
+        "CUSTOMS_FILING_BROKER",
+        "STRIPE_DISPUTE_READ",
+        "PAYPAL_DISPUTE_READ"
+      ],
+      "REAL_DATA_REQUIRED": [
+        "REAL_CUSTOMER_DATA",
+        "REAL_SETTLEMENT_RECEIPT",
+        "REAL_RECOVERED_CASH"
+      ],
+      "LEGAL_OR_LICENSE_REQUIRED": [
+        "BROKER_POA",
+        "IOR_RIGHT_CONFIRMATION",
+        "DISPUTE_SUBMISSION_AUTHORITY"
+      ],
+      "ARCH_REVIEW_REQUIRED": [
+        "BG-021-independent-site-persistence-schema-delta"
+      ]
+    }
   },
   "code_complete": "NO",
   "integration_complete": "NO",
