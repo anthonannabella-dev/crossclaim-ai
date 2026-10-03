@@ -2,14 +2,14 @@
   "gate": "B2-FIX R1",
   "head": "93817a1",
   "status": "RECONCILED",
-  "current_task": "CARRIER QUEUE #6 — SLA EVIDENCE ASSEMBLY + ELIGIBILITY INPUT PLANE（MSG-20261003-111 ⑤ 授权）",
+  "current_task": "CARRIER QUEUE #6 — SLA EVIDENCE ASSEMBLY + ELIGIBILITY INPUT PLANE（已实现，送审中）",
   "next_task": "PC-12A 实施 → 本地测试 + tsc api/web + API contract + full CI → PC-12A CHECKPOINT 送审。",
   "send_head": "07b7009",
   "decision_head": "07b7009",
   "last_chatgpt_message": "MSG-20261003-102",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-03T00:53:15.979Z",
+  "updated_at": "2026-10-03T01:04:21.580Z",
   "previous_head": "c98a513",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -53,7 +53,7 @@
   "state": "IMPLEMENT",
   "last_action": "SCHEDULER_STALE_RECOVERED（gap=91min）→ 本轮已恢复执行",
   "last_action_at": "2026-10-02T09:01:54.693Z",
-  "next_action": "① 逐字归档 MSG-20261003-111（raw → FULL_COPY_OK → commit/push）；② 实现 Queue #6 ShipmentEvidenceBundle 证据输入层并送审。",
+  "next_action": "Carrier Queue #6 送审（checkpoint doc + Issue #2 comment + ChatGPT 唤醒 + 裁决归档 FULL_COPY_OK）。",
   "current_head": "b55f13b",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
@@ -3743,6 +3743,6 @@
   "carrier_queue_5_ci_result": "SUCCESS",
   "carrier_queue_5_checkpoint_doc_head": "db6725c",
   "carrier_queue_5_audit_comment_id": "5962804928",
-  "carrier_queue_6_status": "AUTHORIZED（MSG-20261003-111 ⑤；SLA Evidence Assembly + Eligibility Input Plane；待逐字归档 MSG-111）",
+  "carrier_queue_6_status": "AUTHORIZED → IMPLEMENTED（MSG-20261003-111 ⑤；ShipmentEvidenceBundle 证据输入层；adjudicationPerformed=false；Wait CI/送审）",
   "carrier_queue_6_boundary": "只建证据输入层（ShipmentEvidenceBundle）；禁止自动认定赔付 / 自动提交 claim / 自动退款 / carrier write API / 自动 recovery amount；TRANSPORT=false · platformWriteEnabled=false · productionCredentials=ABSENT"
 }
