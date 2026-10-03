@@ -46,7 +46,7 @@
 | ~~G10~~ **DONE** | service→HTTP 未接线复核 | 检查项「service 有但 HTTP 未接线」 | **已复核**（2026-10-04）：映射见 `FRONTEND-WIRING-MAP.md` §3；已接线 carrier manual/response、customs start-recovery/filing-status/recovery-chain/return-claim-evidence、platform write、claim、billing、evidence、provider readiness；实际仍缺的 customs 只读投影 GET（duty truth / discrepancy / eligibility / estimate / claim-ready）与 IOR 全链 HTTP 转登记为 **BG-020**（不再以「映射存在」充当收口） |
 
 
-| G11 | Customs 只读投影 HTTP/前端接线（**未关闭，已 materialize 为 BG-020**） | 检查项「service 已实现但 HTTP 未接线」「UI 无真实 backend」 | 已交付部分：`GET /customs-entry-facts/:id/return-claim-evidence`、`POST /customs-entry-facts/:id/recovery-chain`、`/customs-opportunities/:id/start-recovery`、`/customs-opportunities/:id/filing-status`。**仍缺**：duty truth / discrepancy / eligibility / estimate / claim-ready package 的只读 GET + 对应前端只读页；全程 filingSubmitted=false / TRANSPORT=false |
+| ~~G11~~ **DONE** | Customs 只读投影 HTTP/前端接线 | 检查项「service 已实现但 HTTP 未接线」「UI 无真实 backend」 | **已收口**：BG-020 交付 `GET /customs-entry-facts/:entryFactId`（事实 + DUTY_TRUTH/DISCREPANCY/ELIGIBILITY/ESTIMATE latest 投影，只读不重算，PG 4/4）；BG-019 交付四域 Golden Path Critical-State Read Surface（Platform `/platform-recovery-state`、Independent-site `/integration-status?disputeReference=`），架构方判 **BG-019 = PASS / CLOSED**（MSG-20261003-143，四域 frontend cell 全部 COVERED）。全程 filingSubmitted=false / TRANSPORT=false |
 
 ## C. 外部 / 宿主依赖（不进入 SAFE_CONTINUATION_QUEUE）
 

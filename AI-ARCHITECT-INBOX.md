@@ -125486,3 +125486,127 @@ Independent-site Phase1 computation
 
 External Write=HOLD · Real Money=HOLD · Customer Submission=HOLD · Production Credentials=HOST_ONLY。
 ```
+
+### [MSG-20261003-143] BG-019 CHECKPOINT 3 = PASS / CLOSED（四域 frontend cell 全部 COVERED；回到 Independent Final Audit 总验收）（reviewed ref 291b5dd）
+
+```text
+BG-019 CHECKPOINT 3：PASS / CLOSED。
+
+这次上轮剩余的“最后一公里”已经真正闭合。可以把 四域 frontend cell 全部判定为 COVERED / CLOSED。
+
+编号裁决：
+
+CHANGE C — Platform runtime composition：PASS
+
+createDefaultReadDeps(prisma) 已成为正式生产代码；
+createRuntime() 明确调用它，而不是测试专用 helper；
+默认装配真实 RecoveryQualificationAssessmentRecord store；
+runtime HTTP+PostgreSQL E2E 没有手工传入 qualificationRead，仍可：
+持久化判定 → HTTP GET → 200 → qualification 真值
+401 / 403 / 404 和“不重算”也有验证。
+
+Platform frontend cell = COVERED / CLOSED。
+
+CHANGE E — Independent-site runtime composition：PASS
+
+createDefaultReadDeps() 默认装配 createPrismaPs04StateLoaders(prisma)；
+因此 Handoff / Response / Settlement / Phase1 projection 不再依赖外部手工注入；
+runtime HTTP E2E 使用与 createRuntime() 相同的正式 composition function；
+state endpoint 可以真实从 PostgreSQL 读取 Phase1。
+
+CHANGE D — Phase-1 producer wiring：PASS
+
+新增的 runPs04Phase1() 确实不是“手工 seed projection”；
+它先调用现有：
+assembleChargebackRecoveryPackage()
+再服务端构造：
+qualification / evidence readiness / claim-ready projection；
+最后自动：
+appendProjection()。
+
+E2E 证明：
+0 行 → 正常执行 Phase1 → APPENDED → 1 行
+
+再执行相同 immutable input：
+ALREADY_APPENDED → 仍 1 行
+
+然后通过默认 runtime：
+GET /independent-site-disputes/:ref/state
+
+得到：
+
+phase1 != null
+notPersisted=[]
+qualification READY/QUALIFIED 真值；
+evidence readiness 真值；
+claim-ready 真值。
+
+这正好闭合了上一轮发现的 producer 缺口。
+
+只读/安全边界：PASS
+
+IndependentSitePhase1Projection 继续由 DB 强制：
+
+externalWritePerformed=false
+
+autoSubmitAllowed=false
+
+所以新增持久化没有偷偷把 Phase1 升级成 PSP submit。
+
+Matrix Guard：PASS
+
+现在 Platform / Independent-site frontend 的判定不再只是“文件存在”或“出现 token”。
+
+已形成三层条件：
+
+真实 frontend backend 调用
+
++ critical-state token
+
++ 命名 runtime HTTP E2E
+
+Platform 必须存在：
+
+platform-qualification-runtime-http-e2e-db.test.ts
+
+Independent-site 必须存在：
+
+independent-site-phase1-runtime-http-e2e-db.test.ts
+
+这已经足以阻止之前那种：
+
+页面代码写好了，但默认 runtime 实际 404
+
+的假阳性。
+
+四域最终 frontend 裁定
+
+Platform：COVERED / CLOSED
+Logistics / Carrier：COVERED / CLOSED
+Customs：COVERED / CLOSED
+Independent-site：COVERED / CLOSED
+
+因此：
+
+BG-019 = PASS / CLOSED
+
+四域 Layer 2 的 frontend cell 可以正式全部标记 COVERED。
+
+Independent-site 当前关键链已经能观察：
+
+Dispute → Qualification → Evidence readiness → Claim-ready → Submitted → Won → Settled → Recovered → Billable → Fee/Invoice draft
+
+Platform 也已经能观察：
+
+Opportunity → Qualification → Claim-ready → Submission state → Recovered → Fee/Billing
+
+同时仍然严格保持：
+
+submitted ≠ won ≠ settled ≠ recovered ≠ billable
+
+以及：
+
+External Write=HOLD · Real Money=HOLD · Customer Submission=HOLD · Production Credentials=HOST_ONLY
+
+需要特别区分：BG-019 CLOSED / Layer 2 frontend 0 gap，并不等于整个 CrossClaim 已 CODE_COMPLETE 或 PRODUCTION_READY。 接下来应回到之前的 Independent Final Audit CHANGE A–E 总验收流程，重新核 Layer 1 的 14/14、Acceptance Head/CI、状态文件一致性和剩余内部 backlog。
+```

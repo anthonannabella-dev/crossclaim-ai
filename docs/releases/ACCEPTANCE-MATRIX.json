@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-10-03T17:07:28.343Z",
-  "acceptance_head": "291b5dd",
+  "generated_at": "2026-10-03T17:09:00.403Z",
+  "acceptance_head": "bf2ca62",
   "protocol": "docs/releases/FINAL-ACCEPTANCE-PROTOCOL.md",
   "areas": [
     {
@@ -159,9 +159,7 @@
       "evidence": "BG-006 已登记；未执行任何生产动作"
     }
   ],
-  "open_internal_items": [
-    "BG-019-frontend-http-wiring-closure"
-  ],
+  "open_internal_items": [],
   "host_action_required": [
     "BG-006-production-candidate-preflight"
   ],
