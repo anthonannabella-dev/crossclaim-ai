@@ -124080,3 +124080,19 @@ Payment=0
 NO production credentials
 还有一点说明：我查询 3c5fac6 当前 GitHub combined status 仍没有返回状态项，因此本次裁决基于已核实的代码实现与回归测试内容；若你们流程要求“最终 CLOSED 必须同时拿到本次 commit 的 CI success”，可以在该 run 出现 success 后补记为 CI-confirmed，但架构实现本身已经 PASS。
 ```
+
+### [MSG-20261003-133] PS04 / NEXT-GAP 裁决：PASS WITH CONDITIONS —— 执行顺序 ③Carrier Settlement 只读对账 → ①PS04 Phase 1 内部只读链（仅批准 D1–D3 枚举 Schema）→ ②Customs G4 HTTP 写入侧接线 → ④Production Candidate 仅登记；dispatcher 获授权自动扩 backlog（限定范围）
+
+```text
+PS04 / NEXT-GAP 裁决：PASS WITH CONDITIONS。 可以继续自动推进，但顺序调整为“先收口已有资金真实性链，再扩新业务域”。
+Q1 — PS04 内部只读链：PASS，授权启动。 第一阶段只允许 支付/拒付事实 → Evidence Assembly → Qualification Input → Claim-Ready Evidence Package → 只读查询。优先使用 fixture / CSV / FILE_UPLOAD，不接 Shopify/Stripe/PayPal 真实 API、Webhook、生产凭据，也不实现 dispute.submit。Schema 仅批准最小 D1–D3：RecoveryDomain += INDEPENDENT_SITE、Channel += SHOPIFY/STRIPE/PAYPAL、RouteTarget += PAYMENT_PROCESSOR；枚举迁移必须先独立落地，再允许业务代码使用新值。D4 暂不批准，先复用现有 claimDeadline / deadlineSource / Claim/Appeal 状态表达争议生命周期，证明不足后再提 Schema Delta。另加四条硬边界：支付账户必须有 tenant + merchant/payment-account lineage；缺失/歧义 lineage 或 evidence due date → INDETERMINATE/NOT_READY；dispute amount ≠ recoverable amount ≠ won amount ≠ settled amount ≠ billable amount；Claim-Ready Package 只能表示“材料已准备”，绝不能表示已提交、已胜诉或已到账。不得存 PAN/CVV、完整支付凭据或 PSP secret。拒付资金归属本阶段只做事实归属模型：确认该 merchant/payment account 属于当前 tenant；不托管、不划转、不代收代付。未来代客户提交 dispute 必须单独走 External Write / Customer Submission Gate。
+Q2 — 下一内部缺口顺序：③ → ① → ② → ④。 第一优先做 Carrier 结果 → Settlement 只读对账，因为它是在补现有 Recovery 链最关键的“结果事实 → 到账事实”断点，直接关系 Recovered Truth / Billing Truth，且可以在 Real Money HOLD 下安全完成。要求只读：provider/carrier outcome 只能生成 reconciliation projection / discrepancy，不允许创建“已到账”事实，不允许改 Payment、Billing 或真实资金；没有银行/支付/结算证据时不得把 carrier APPROVED/PAID 文本直接升级为 Settlement.RECEIVED。第二优先进入 PS04 内部链，按 Q1 范围推进。第三才做 Customs G4 HTTP 写入侧接线；G4 已 CLOSED，这个接线有价值，但对当前产品完整度的边际收益低于 Carrier settlement truth 与新域 PS04。第四 Production Candidate 预检继续只登记。
+Q3 — GLOBAL BACKLOG DISPATCHER：PASS / AUTHORIZED。 可以依据本裁决自动扩 backlog、materialize 并连续执行安全单元，不需要每个小单元重新等我裁决。自动权限限定为：契约、上述明确批准的 D1–D3 Schema/migration、append-only/internal persistence、deterministic normalization、qualification/evidence/package、测试、文档、fixture、只读 HTTP、只读 reconciliation projection。遇到以下任一项必须停止该分支并重新送审：新的未批准 Schema 变化；EXTERNAL_WRITE Action Guard 接线；真实 PSP/carrier/customs adapter；Webhook 生产接入；submission；Settlement/RecoveryLedger/Payment/Billing 的真实资金语义写入；生产 credential；收费或资金动作。Dispatcher 可以跳过被 HOLD 的项继续执行其他安全 backlog，不应因此整体停机。
+Q4 — HOST_ACTION_REQUIRED：确认维持。 生产部署、DNS/域名、付费服务开通、生产凭据、生产支付接入、真实 PSP/Carrier/Customs 外部写入、真实客户 submission，以及任何会触发真实资金或收费的能力，都继续要求宿主书面放行。Dispatcher 只能登记 prerequisite/readiness/checklist，不得执行、不得因“代码已准备好”自动开闸。
+因此下一执行序列应落成：
+Carrier Settlement Read-Only Reconciliation → PS04 Phase 1 Internal Read-Only Chain → Customs Internal HTTP Trigger Wiring → Production Candidate Register Only。
+PS04 第一阶段完成的验收口径也固定下来：事实可追溯、tenant/account lineage 完整、deadline fail-closed、证据包 deterministic、qualification 后端强制、零外部调用、零 customer submission、零 recovered/billable 自证。
+当前永久边界继续：
+Production Enablement=HOLD · External Write=HOLD · Real Money=HOLD · Customer Submission=HOLD · Production Credentials=HOST_ONLY
+本裁决授权 dispatcher 继续自治推进，不需要因静态 TASKS 耗尽再次停住。
+```

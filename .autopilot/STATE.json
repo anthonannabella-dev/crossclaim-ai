@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261003-126",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-03T14:55:54.165Z",
+  "updated_at": "2026-10-03T15:01:33.598Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -51,9 +51,9 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-03T14:11:19.420Z",
   "state": "IMPLEMENT",
-  "last_action": "PS04/NEXT-GAP 决策请求已留档：Issue #2 comment 5970317248（待发审计唤醒）",
+  "last_action": "依 MSG-20261003-133 执行 Q2①：新增 carrier-settlement-reconciliation-readonly（APPROVED/PAID ≠ RECEIVED；只读投影；无资金写入）与 7/7 测试；backlog 依裁决扩充（BG-009/010/011/012）",
   "last_action_at": "2026-10-03T14:17:18.723Z",
-  "next_action": "发送审计唤醒（指向 Issue #2 comment 5970317248）并读取裁决；期间 dispatcher 无新增安全项，遵 HOST_ACTION_REQUIRED 停止条件",
+  "next_action": "继续按 ③→①→②→④ 顺序：BG-010 PS04 Phase 1（先 BG-011 D1–D3 枚举迁移）→ BG-012 Customs 内部触发接线",
   "current_head": "f7768ec",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
@@ -4944,7 +4944,14 @@
     "github_comment_id": "5970317248",
     "created_at": "2026-10-03T14:55:54.165Z",
     "awake_sent_at": null,
-    "verdict": null
+    "verdict": "PASS WITH CONDITIONS（MSG-20261003-133）",
+    "order": [
+      "③ Carrier settlement read-only reconciliation",
+      "① PS04 Phase 1 internal read-only chain",
+      "② Customs G4 HTTP trigger wiring",
+      "④ Production Candidate register only"
+    ]
   },
-  "awaiting_verdict": true
+  "awaiting_verdict": true,
+  "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）"
 }

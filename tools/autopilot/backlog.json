@@ -1,6 +1,6 @@
 {
   "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。",
-  "updatedAt": "2026-10-03T14:50:44.905Z",
+  "updatedAt": "2026-10-03T15:01:33.598Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -218,6 +218,115 @@
         "platform-write",
         "amazon"
       ]
+    },
+    {
+      "id": "BG-009-carrier-settlement-readonly-reconciliation",
+      "priority": "P0",
+      "source_backlog_id": "MSG-20261003-133 Q2① / REGISTER-A13「结果事实 → 到账事实」断点",
+      "title": "Carrier 结果 → Settlement 只读对账投影（APPROVED/PAID ≠ RECEIVED）",
+      "scope": "只读 reconciliation projection / discrepancy；不创建 Settlement 事实、不改 Payment/Billing、无银行证据不得升级为 RECEIVED",
+      "acceptance_criteria": "投影语义与边界测试全绿（APPROVED/PAID 无证据→AWAITING_SETTLEMENT_EVIDENCE；金额不一致→DISCREPANCY；币种不一致→INDETERMINATE；跨租户→拒绝）",
+      "dependencies": [],
+      "risk_class": "MEDIUM",
+      "ARCH_REVIEW_REQUIRED": false,
+      "HOST_ACTION_REQUIRED": false,
+      "HOLD_EXTERNAL": true,
+      "allowed_files": [
+        "apps/api/src/services/settlement/**",
+        "apps/api/src/__tests__/**"
+      ],
+      "boundary": "READ_ONLY / NO_MONEY_WRITE / NO_FX",
+      "required_tests": [
+        "carrier-settlement-reconciliation-readonly"
+      ],
+      "template": "suite-evidence",
+      "filters": [
+        "carrier-settlement-reconciliation-readonly"
+      ]
+    },
+    {
+      "id": "BG-010-ps04-phase1-readonly-chain",
+      "priority": "P1",
+      "source_backlog_id": "MSG-20261003-133 Q1 / Q2②（PS04 第一阶段）",
+      "title": "PS04 Phase 1：独立站/拒付内部只读链（事实 → 证据装配 → 资格输入 → claim-ready 证据包 → 只读查询）",
+      "scope": "仅 fixture/CSV/FILE_UPLOAD；不接真实 PSP、不实现 dispute.submit；lineage/deadline fail-closed；金额口径互不等同",
+      "acceptance_criteria": "事实可追溯、tenant/account lineage 完整、deadline fail-closed、证据包 deterministic、qualification 后端强制、零外调/零 submission/零 recovered-billable 自证",
+      "dependencies": [
+        "BG-011-ps04-enum-migration-d1-d3"
+      ],
+      "risk_class": "MEDIUM",
+      "ARCH_REVIEW_REQUIRED": false,
+      "HOST_ACTION_REQUIRED": false,
+      "HOLD_EXTERNAL": true,
+      "allowed_files": [
+        "apps/api/src/services/**",
+        "apps/api/src/__tests__/**"
+      ],
+      "boundary": "READ_ONLY / NO_EXTERNAL_PSP / NO_DISPUTE_SUBMIT",
+      "required_tests": [
+        "payment",
+        "chargeback",
+        "evidence"
+      ],
+      "template": "suite-evidence",
+      "filters": [
+        "settlement",
+        "evidence"
+      ]
+    },
+    {
+      "id": "BG-011-ps04-enum-migration-d1-d3",
+      "priority": "P1",
+      "source_backlog_id": "MSG-20261003-133 Q1（仅批准 D1–D3 枚举）",
+      "title": "PS04 D1–D3 枚举迁移（RecoveryDomain += INDEPENDENT_SITE；Channel += SHOPIFY/STRIPE/PAYPAL；RouteTarget += PAYMENT_PROCESSOR）",
+      "scope": "枚举迁移必须先独立落地；不含 D4；不改其它 Schema",
+      "acceptance_criteria": "migration 可从空库执行；architecture-contract 通过；业务代码使用新值前先完成本项",
+      "dependencies": [],
+      "risk_class": "MEDIUM",
+      "ARCH_REVIEW_REQUIRED": false,
+      "HOST_ACTION_REQUIRED": false,
+      "HOLD_EXTERNAL": true,
+      "allowed_files": [
+        "apps/api/prisma/migrations/**",
+        "apps/api/prisma/schema.prisma"
+      ],
+      "boundary": "APPROVED_SCHEMA_ONLY_D1_D3",
+      "required_tests": [
+        "architecture-contract"
+      ],
+      "template": "suite-evidence",
+      "filters": [
+        "architecture-contract"
+      ]
+    },
+    {
+      "id": "BG-012-customs-g4-http-trigger-wiring",
+      "priority": "P2",
+      "source_backlog_id": "MSG-20261003-133 Q2③（GAP G11）",
+      "title": "Customs G4 HTTP **内部触发**接线（受 Action Guard 保护；仍不 filing）",
+      "scope": "内部触发端点 + RBAC/Action Guard；不接真实 filing、不 EXTERNAL_WRITE",
+      "acceptance_criteria": "路由级 E2E（401/403/404/409/200）+ API.md 同步；filingSubmitted=false",
+      "dependencies": [
+        "BG-009-carrier-settlement-readonly-reconciliation"
+      ],
+      "risk_class": "MEDIUM",
+      "ARCH_REVIEW_REQUIRED": true,
+      "HOST_ACTION_REQUIRED": false,
+      "HOLD_EXTERNAL": true,
+      "allowed_files": [
+        "apps/api/src/services/workflow/**",
+        "apps/api/src/server.ts",
+        "API.md"
+      ],
+      "boundary": "NO_FILING / NO_EXTERNAL_WRITE",
+      "required_tests": [
+        "customs-return-claim-evidence-http-e2e-db"
+      ],
+      "template": "suite-evidence",
+      "filters": [
+        "customs-return-claim-evidence-http-e2e-db"
+      ]
     }
-  ]
+  ],
+  "authorization_note": "MSG-20261003-133 Q3：dispatcher 获授权自动扩 backlog 并执行安全单元（契约/已批准 D1–D3 Schema/append-only 持久化/deterministic normalization/qualification·evidence·package/测试/文档/fixture/只读 HTTP/只读 reconciliation projection）；遇到未批准 Schema、EXTERNAL_WRITE Action Guard、真实 adapter/webhook、submission、真实资金语义写入、生产 credential、收费时必须停该分支并重新送审。"
 }
