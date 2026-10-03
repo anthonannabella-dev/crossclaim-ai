@@ -1623,3 +1623,7 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 ## 2026-10-03T15:02:43.642Z — BACKLOG BG-011-ps04-enum-migration-d1-d3
 - PS04 D1–D3 枚举迁移（RecoveryDomain += INDEPENDENT_SITE；Channel += SHOPIFY/STRIPE/PAYPAL；RouteTarget += PAYMENT_PROCESSOR）
 -  Test Files  1 passed (1) |       Tests  142 passed (142)
+
+## 2026-10-03T15:04:38.211Z — BACKLOG BG-010-ps04-phase1-readonly-chain
+- PS04 Phase 1：独立站/拒付内部只读链（事实 → 证据装配 → 资格输入 → claim-ready 证据包 → 只读查询）
+-  Test Files  13 passed (13) |       Tests  103 passed (103)

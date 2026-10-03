@@ -55,6 +55,23 @@ function git(argsList) {
   }
 }
 
+/** FINAL ACCEPTANCE 协议：每单元后重算最终状态；停止时生成/刷新 FINAL-ACCEPTANCE-REPORT。 */
+function runFinalTools(options = {}) {
+  try {
+    execFileSync(process.execPath, [path.join(ROOT, 'tools', 'autopilot', 'final-status.mjs')], { cwd: ROOT, stdio: 'ignore' });
+  } catch {
+    /* 计算失败不阻塞执行；下一轮重试 */
+  }
+  if (options.report === true) {
+    try {
+      execFileSync(process.execPath, [path.join(ROOT, 'tools', 'autopilot', 'final-report.mjs')], { cwd: ROOT, stdio: 'ignore' });
+      console.log("FINAL_ACCEPTANCE_REPORT_REFRESHED");
+    } catch {
+      console.log("FINAL_ACCEPTANCE_REPORT_FAILED");
+    }
+  }
+}
+
 function touchHeartbeat(extra = {}) {
   const previous = readJson(HEARTBEAT, {});
   writeJson(HEARTBEAT, {
@@ -162,9 +179,11 @@ async function main() {
       writeJson(STATE, latestState);
       executed += 1;
       touchHeartbeat({ last_unit: unit.id, last_unit_at: new Date().toISOString() });
+      runFinalTools();
       console.log('CONTINUE_IMMEDIATELY next_unit_pending=true');
     }
   } finally {
+    runFinalTools({ report: true });
     const released = releaseLock(ROOT);
     console.log('RUNNER_EXIT executed=' + executed + ' lockReleased=' + String(released) + ' heartbeatAgeMs=' + String(readHeartbeatAgeMs(ROOT)));
   }

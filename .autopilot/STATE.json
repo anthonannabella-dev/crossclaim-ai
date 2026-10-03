@@ -51,10 +51,10 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-03T14:11:19.420Z",
   "state": "IMPLEMENT",
-  "last_action": "依 MSG-20261003-133 执行 Q2①：新增 carrier-settlement-reconciliation-readonly（APPROVED/PAID ≠ RECEIVED；只读投影；无资金写入）与 7/7 测试；backlog 依裁决扩充（BG-009/010/011/012）",
+  "last_action": "FINAL ACCEPTANCE & STOP PROTOCOL 已落库并接入 runner：final-status 每单元重算、停止时自动刷新 FINAL-ACCEPTANCE-REPORT；BG-010 PS04 Phase 1 证据 103 用例通过",
   "last_action_at": "2026-10-03T14:17:18.723Z",
-  "next_action": "继续按 ③→①→②→④ 顺序：BG-010 PS04 Phase 1（先 BG-011 D1–D3 枚举迁移）→ BG-012 Customs 内部触发接线",
-  "current_head": "07ff664",
+  "next_action": "继续按裁决顺序执行 BG-012（Customs 内部触发接线，需架构方审计 Action Guard 边界）；BG-010 的真实实现（PS04 事实契约/证据/资格/证据包）作为下一实现单元",
+  "current_head": "3d80d60",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -4874,14 +4874,15 @@
     "BG-007-evidence-graph-closure-evidence",
     "BG-008-platform-write-amazon-evidence",
     "BG-009-carrier-settlement-readonly-reconciliation",
-    "BG-011-ps04-enum-migration-d1-d3"
+    "BG-011-ps04-enum-migration-d1-d3",
+    "BG-010-ps04-phase1-readonly-chain"
   ],
   "last_unit": {
-    "id": "BG-011-ps04-enum-migration-d1-d3",
-    "at": "2026-10-03T15:02:43.673Z",
-    "head_before": "07ff664",
-    "head_after": "07ff664",
-    "detail": " Test Files  1 passed (1) |       Tests  142 passed (142)"
+    "id": "BG-010-ps04-phase1-readonly-chain",
+    "at": "2026-10-03T15:04:38.244Z",
+    "head_before": "3d80d60",
+    "head_after": "3d80d60",
+    "detail": " Test Files  13 passed (13) |       Tests  103 passed (103)"
   },
   "autopilot_mode": "CONTINUOUS",
   "heartbeat_role": "LIVENESS_ONLY",
@@ -4917,7 +4918,8 @@
     "BG-007-evidence-graph-closure-evidence",
     "BG-008-platform-write-amazon-evidence",
     "BG-009-carrier-settlement-readonly-reconciliation",
-    "BG-011-ps04-enum-migration-d1-d3"
+    "BG-011-ps04-enum-migration-d1-d3",
+    "BG-010-ps04-phase1-readonly-chain"
   ],
   "host_action_required": [
     "BG-006-production-candidate-preflight"
@@ -4932,7 +4934,8 @@
     "BG-008-platform-write-amazon-evidence",
     "BG-009-carrier-settlement-readonly-reconciliation",
     "BG-011-ps04-enum-migration-d1-d3",
-    "BG-010-ps04-phase1-readonly-chain"
+    "BG-010-ps04-phase1-readonly-chain",
+    "BG-012-customs-g4-http-trigger-wiring"
   ],
   "runner_status": "RUNNING",
   "global_backlog_dispatcher": "VERIFIED",
@@ -4960,5 +4963,71 @@
     ]
   },
   "awaiting_verdict": true,
-  "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）"
+  "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
+  "final_status": {
+    "computed_at": "2026-10-03T15:04:38.595Z",
+    "head": "3d80d60",
+    "CODE_COMPLETE": "NO",
+    "INTEGRATION_COMPLETE": "NO",
+    "REAL_VALIDATION_COMPLETE": "NO",
+    "PRODUCTION_READY": "NO",
+    "INTERNAL_CODE_COMPLETE": false,
+    "INDEPENDENT_FINAL_AUDIT_REQUIRED": true,
+    "OPEN_INTERNAL_ITEMS": [
+      "BG-012-customs-g4-http-trigger-wiring",
+      "CHECK:safe_continuation_queue_zero",
+      "CHECK:no_open_internal_items",
+      "CHECK:git_working_tree_clean",
+      "CHECK:full_ci_success_on_head",
+      "CHECK:api_typecheck_recorded",
+      "CHECK:web_typecheck_recorded"
+    ],
+    "HOST_ACTION_REQUIRED": [
+      "BG-006-production-candidate-preflight"
+    ],
+    "API_INTEGRATION_REQUIRED": [
+      "AMAZON_OAUTH_READ",
+      "TIKTOK_SHOP_OAUTH_READ",
+      "WALMART_OAUTH_READ",
+      "SHOPIFY_OAUTH_READ",
+      "UPS_API",
+      "FEDEX_API",
+      "DHL_API",
+      "CUSTOMS_DATA_PROVIDER",
+      "CUSTOMS_FILING_BROKER",
+      "STRIPE_DISPUTE_READ",
+      "PAYPAL_DISPUTE_READ"
+    ],
+    "REAL_DATA_REQUIRED": [
+      "REAL_CUSTOMER_DATA",
+      "REAL_SETTLEMENT_RECEIPT",
+      "REAL_RECOVERED_CASH"
+    ],
+    "LEGAL_OR_LICENSE_REQUIRED": [
+      "BROKER_POA",
+      "IOR_RIGHT_CONFIRMATION",
+      "DISPUTE_SUBMISSION_AUTHORITY"
+    ],
+    "checks": {
+      "safe_continuation_queue_zero": false,
+      "no_open_internal_items": false,
+      "git_working_tree_clean": false,
+      "full_ci_success_on_head": false,
+      "pg_regression_recorded": true,
+      "fresh_db_migration_recorded": true,
+      "api_typecheck_recorded": false,
+      "web_typecheck_recorded": false,
+      "docs_sync_recorded": true,
+      "schema_invariants_recorded": true,
+      "negative_paths_recorded": true
+    },
+    "AUTONOMOUS_INTERNAL_WORK": "RUNNING"
+  },
+  "code_complete": "NO",
+  "integration_complete": "NO",
+  "real_validation_complete": "NO",
+  "production_ready": "NO",
+  "independent_final_audit_required": true,
+  "final_acceptance_protocol": "ACTIVE（docs/releases/FINAL-ACCEPTANCE-PROTOCOL.md；三层验收 + 4 状态重算 + 独立审计）",
+  "autonomous_internal_work": "RUNNING"
 }
