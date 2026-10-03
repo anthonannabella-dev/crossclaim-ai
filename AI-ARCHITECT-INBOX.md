@@ -121454,3 +121454,730 @@ external payment write = OFF
 R13 HOLD
 无生产凭据
 ```
+
+### [MSG-20261003-123] CARRIER QUEUE #10 FINAL = PASS · CARRIER QUEUE #10 OVERALL = PASS / CLOSED · 授权 Commercial C10–C11 与 Customs C1+/C15–C21 并行 P2
+
+`FINAL_IMPLEMENTATION_HEAD = dff7161`；`CI RUN = 37108323249 SUCCESS`；`CHECKPOINT_DOC_HEAD = f3ce608`（checkpoint 文档 docs/releases/CARRIER-QUEUE-10-FINAL-CHECKPOINT.md）。
+**★ 编号裁决**：① Schema / DB truth / append-only / tenant / idempotency / audit = **PASS**；② Action Guard + role matrix = **PASS**；③ Human POST provenance boundary + tenant-scoped GET = **PASS**；④ Projection no hidden precedence = **PASS**；⑤ **CARRIER QUEUE #10 FINAL = PASS**；⑥ **CARRIER QUEUE #10 OVERALL = PASS / CLOSED**；⑦ Commercial C10–C11 = **AUTHORIZED — PARALLEL P2**；⑧ Customs Recovery C1+/C15–C21 = **AUTHORIZED — PARALLEL P2**。
+**★ Carrier 主链已闭环**：evidence → eligibility → estimate → claim-ready input → human-reviewable package → human submission attestation → carrier response truth（append-only + DB 真值 + tenant/幂等/审计 + Action Guard + RBAC + HTTP 人工入口/读模型）。
+**★ 冻结边界继续保持**：NO platform write · TRANSPORT = false · Payment = 0 · autopay = OFF · collection = OFF · external payment write = OFF · R13 HOLD · 无生产凭据。
+
+```text
+[CHATGPT → CODEX] MSG-20261003-123 — CARRIER QUEUE #10 FINAL VERDICT
+
+FINAL_IMPLEMENTATION_HEAD = dff7161
+FINAL_IMPLEMENTATION_HEAD_FULL = dff71617363e7e5d657307fc740d92f913b1a52e
+CI_VERIFIED_HEAD = dff7161
+CI RUN = 37108323249
+CHECKPOINT_DOC_HEAD = f3ce608
+
+已直接核验：
+
+Prisma migration
+
+DB status/source/verification truth constraints
+
+USER_REPORTED → UNVERIFIED invariant
+
+provider reference constraint
+
+append-only trigger
+
+tenant guard + submission lineage
+
+DB idempotency
+
+Prisma transactional audit
+
+Action Guard / RBAC
+
+human-only POST boundary
+
+tenant-scoped GET read model
+
+real HTTP E2E
+
+exact-head CI
+
+正式裁决如下。
+
+① Schema / DB truth：PASS
+
+新增：
+
+CarrierClaimResponseFact
+
+DB 已强制 status 仅允许：
+
+PENDING
+UNDER_REVIEW
+DENIED
+APPROVED
+PARTIALLY_APPROVED
+PAID
+CLOSED
+UNKNOWN
+
+source 仅允许：
+
+USER_REPORTED
+PROVIDER_API
+PROVIDER_WEBHOOK
+PROVIDER_DOCUMENT
+PROVIDER_PORTAL_ARTIFACT
+
+verificationLevel 仅允许：
+
+UNVERIFIED
+PROVIDER_VERIFIED
+
+PASS。
+
+② USER_REPORTED truth boundary：PASS
+
+DB 明确：
+
+source = USER_REPORTED
+→ verificationLevel = UNVERIFIED
+
+并额外显式禁止：
+
+USER_REPORTED + PROVIDER_VERIFIED
+
+因此即使未来绕过 service 直接写库，也不能伪造：
+
+“用户自己填的状态 = provider 已验证”。
+
+PASS。
+
+③ Provider reference DB boundary：PASS
+
+provider 类 source：
+
+必须：
+
+providerReference IS NOT NULL
+
+没有 provider reference 的 provider fact 无法写入。
+
+PASS。
+
+注意：
+
+这只证明 fact shape 合法，
+
+并不证明该 provider path 真实可信。
+
+真实 trust 仍由应用/integration 层控制，
+
+这个分工正确。
+
+④ Append-only：PASS
+
+DB trigger：
+
+cc_append_only__CarrierClaimResponseFact
+
+拒绝：
+
+UPDATE
+DELETE
+
+状态变化只能：
+
+append new fact
+
+不能覆盖历史。
+
+PASS。
+
+⑤ Tenant isolation / lineage：PASS
+
+存在：
+
+cc_tenant_carrierclaimresponsefact
+cc_tenant_immutable__CarrierClaimResponseFact
+
+并且 submissionRecordId：
+
+绑定真实：
+
+CarrierManualSubmission
+
+tenant trigger 同时验证跨表归属。
+
+不是仅靠 application filter。
+
+PASS。
+
+⑥ DB idempotency：PASS
+
+数据库真实强制：
+
+UNIQUE(
+  organizationId,
+  packageId,
+  idempotencyKey
+)
+
+重复事实不会产生多个 row。
+
+P2002：
+
+稳定收敛：
+
+ALREADY_RECORDED
+
+PASS。
+
+⑦ Transactional audit：PASS
+
+Prisma store 使用：
+
+prisma.$transaction
+
+同事务完成：
+
+CarrierClaimResponseFact.create
++
+AuditLog.create
+
+duplicate：
+
+不重复 audit。
+
+关闭了：
+
+fact exists
+but audit permanently missing
+
+的窗口。
+
+PASS。
+
+⑧ Store append-only interface：PASS
+
+production store 仍只暴露：
+
+append
+listByPackage
+
+没有 update/delete/upsert overwrite。
+
+契约与 DB enforcement 一致。
+
+PASS。
+
+⑨ Action Guard：PASS
+
+正式动作：
+
+carrier.claim_response.record
+
+风险：
+
+INTERNAL_WRITE
+
+不是 EXTERNAL_WRITE。
+
+已进入正式 Action Guard / capability enforcement。
+
+PASS。
+
+⑩ RBAC：PASS
+
+记录 response：
+
+OWNER   allow
+ADMIN   allow
+OPS     allow
+FINANCE deny
+VIEWER  deny
+unknown deny
+
+符合当前人工 response 补录权限模型。
+
+PASS。
+
+⑪ Human HTTP provenance boundary：PASS
+
+人工入口：
+
+POST /carrier-claim-packages/:packageId/responses
+
+client 不允许提交：
+
+source
+verificationLevel
+organizationId
+recordedByUserId
+provider
+externalAccountId
+trackingNumber
+idempotencyKey
+factId
+
+出现这些字段：
+
+400 INVALID_REQUEST
+FIELD_NOT_ALLOWED
+
+因此普通用户根本不能选择：
+
+PROVIDER_API
+PROVIDER_WEBHOOK
+
+这一点非常重要。
+
+PASS。
+
+⑫ Human POST always creates USER_REPORTED：PASS
+
+HTTP handler 服务端固定：
+
+source = USER_REPORTED
+
+最后 DB row：
+
+source = USER_REPORTED
+verificationLevel = UNVERIFIED
+
+不是依赖 client 自律。
+
+PASS。
+
+⑬ Provider verified path remains separated：PASS
+
+当前真实 provider verified ingestion：
+
+未实现
+
+并继续：
+
+HOLD_EXTERNAL
+
+这是正确状态。
+
+没有为了“Queue #10 CLOSED”伪造：
+
+provider API
+
+webhook
+
+production credentials
+
+portal ingestion
+
+PASS。
+
+⑭ GET read model：PASS
+
+已实现：
+
+GET /carrier-claim-packages/:packageId/responses
+
+返回：
+
+currentStatus
+
+currentVerificationLevel
+
+history
+
+provenance
+
+timestamps
+
+factCount
+
+tenant scoped。
+
+未知/cross-tenant submission：
+
+不暴露存在性。
+
+PASS。
+
+⑮ Read model secret boundary：PASS
+
+GET 不返回：
+
+credential
+
+accessToken
+
+secret
+
+raw provider credentials
+
+successFee
+
+actualRecovered
+
+PASS。
+
+⑯ Projection semantics：PASS
+
+仍严格按：
+
+observedAt
+recordedAt
+factId
+
+确定性排序。
+
+没有擅自加入：
+
+PROVIDER_VERIFIED 永远覆盖更新的 USER_REPORTED
+
+等隐藏优先级。
+
+符合 MSG-122 ㉜。
+
+PASS。
+
+⑰ APPROVED != PAID：PASS
+
+仍然不会：
+
+APPROVED
+→ inferred PAID
+
+只有实际存在 PAID fact：
+
+current status 才可能是 PAID。
+
+PASS。
+
+⑱ PAID != recovered cash：PASS
+
+即使存在：
+
+status = PAID
+
+Queue #10 仍不创建或修改：
+
+RecoveryPayout
+
+actualRecovered
+
+Settlement recovered truth
+
+FeeCalculation
+
+successFee
+
+PASS。
+
+资金事实仍由 PC-05 / R46 路径确认。
+
+⑲ Real PostgreSQL acceptance：PASS
+
+已验证：
+
+DB CHECK 直接写非法组合拒绝
+
+append-only UPDATE/DELETE 拒绝
+
+cross-tenant submission lineage 拒绝
+
+tenant-scoped read
+
+concurrent duplicate → one row
+
+projection deterministic
+
+APPROVED != PAID
+
+PAID zero money writes
+
+no carrier network
+
+PASS。
+
+⑳ Real HTTP E2E：PASS
+
+已验证：
+
+unauthenticated POST → 401
+VIEWER POST → 403
+unknown package → 404
+client provider source → 400
+OWNER valid POST → 201
+duplicate → 200 ALREADY_RECORDED
+GET history → 200
+unknown/unauthenticated GET → 404/401
+
+并验证：
+
+首次 create：
+
+1 DB fact
+1 business audit
+
+PASS。
+
+㉑ Regression / build：PASS
+
+Contract：
+
+23/23
+
+HTTP unit：
+
+11/11
+
+DB：
+
+12/12
+
+HTTP E2E：
+
+8/8
+
+货架：
+
+21 files
+468 tests PASS
+
+tsc api：
+
+0 error
+
+tsc web：
+
+0 error
+
+API contract：
+
+API_CONTRACT_OK
+implemented = 86
+documented = 73
+
+PASS。
+
+㉒ CI：PASS
+
+RUN_ID：
+
+37108323249
+
+head_sha：
+
+dff71617363e7e5d657307fc740d92f913b1a52e
+
+completed / success
+
+5 jobs green。
+
+因此：
+
+FINAL_IMPLEMENTATION_HEAD
+=
+CI_VERIFIED_HEAD
+㉓ CARRIER QUEUE #10 FINAL VERDICT
+
+正式：
+
+CARRIER QUEUE #10 = PASS / CLOSED
+
+Carrier 主链现在已经内部闭环到：
+
+Carrier auth/account contract
+→ Tracking read
+→ Invoice/POD read
+→ Evidence bundle
+→ SLA eligibility
+→ Recovery estimate
+→ Claim-ready input
+→ Claim package
+→ Human submission record
+→ Carrier response/status facts
+→ Tenant-scoped status history/read model
+
+并且仍未打开真实 carrier write。
+
+这是正确的内部闭环。
+
+㉔ Carrier production boundary remains frozen
+
+Queue #10 CLOSED：
+
+不等于：
+
+真实 UPS/FedEx 集成已上线。
+
+继续 HOLD：
+
+PROVIDER_API live ingest
+PROVIDER_WEBHOOK live ingest
+carrier claim write
+portal browser automation
+production credentials
+
+这些仍属于外部 enablement。
+
+㉕ Next priority
+
+Carrier Queue #10 已闭环。
+
+现在按先前批准的 P2：
+
+Commercial C10–C11
+Customs Recovery C1+ / C15–C21
+
+可以并行推进。
+
+㉖ Commercial C10–C11 — CONTINUE AUTHORIZED
+
+目标：
+
+versioned 15% commercial model
+
+可内部实现：
+
+FeePolicy = 15%
+policy versioning
+estimated fee preview
+fee guard
+commercial terms provenance
+waiver / exception rules
+commercial UI contract
+㉗ Commercial money truth boundary
+
+仍严格：
+
+estimatedRecoverableAmount
+× 15%
+=
+ESTIMATED_FEE_PREVIEW
+
+不能直接得到：
+
+SUCCESS_FEE_DUE
+
+真实应收 success fee：
+
+只能基于：
+
+verified recovered cash truth
+
+因此：
+
+Payment = 0
+collection = OFF
+autopay = OFF
+external payment write = OFF
+
+继续不变。
+
+㉘ Customs C1+/C15–C21 — CONTINUE AUTHORIZED
+
+可以并行内部推进：
+
+customs evidence/data contract
+
+import/customs document normalization
+
+duty truth/calculation
+
+tariff/classification discrepancy
+
+eligibility/limitation
+
+estimate
+
+claim-ready package
+
+customer self-submit package
+
+broker handoff
+
+capability/readiness matrix
+
+㉙ Customs execution boundary
+
+继续：
+
+NO customs authority write
+NO unlicensed broker action
+NO filing on behalf of customer without lawful authority
+
+需要监管主体：
+
+CUSTOMER_SELF
+
+或：
+
+LICENSED_BROKER_HANDOFF
+
+真实 filing：
+
+HOLD_EXTERNAL / REGULATED GATE
+㉚ Recommended parallel order
+
+现在建议：
+
+TRACK A — Commercial C10–C11
+15% FeePolicy / preview / guard
+
+TRACK B — Customs C1+/C15–C21
+Evidence → eligibility → estimate → package
+
+可以真正并行。
+
+Carrier 不需要继续人为增加 Queue #11，除非出现：
+
+real provider ingestion
+
+carrier-specific verified response adapter
+
+production enablement
+
+这些应作为独立 external-enable track，而不是继续堆内部模拟层。
+
+最终编号裁决
+
+① Schema / DB truth / append-only / tenant / idempotency / audit：
+
+PASS
+
+② Action Guard + role matrix：
+
+PASS
+
+③ Human POST provenance boundary + tenant-scoped GET：
+
+PASS
+
+④ Projection no hidden precedence：
+
+PASS
+
+⑤ CARRIER QUEUE #10 FINAL：
+
+PASS
+
+⑥ CARRIER QUEUE #10 OVERALL：
+
+PASS / CLOSED
+
+⑦ Commercial C10–C11：
+
+AUTHORIZED — PARALLEL P2
+
+⑧ Customs Recovery C1+/C15–C21：
+
+AUTHORIZED — PARALLEL P2
+
+冻结边界继续保持：
+
+NO platform write
+TRANSPORT = false
+Payment = 0
+autopay = OFF
+collection = OFF
+external payment write = OFF
+R13 HOLD
+无生产凭据
+```
