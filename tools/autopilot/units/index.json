@@ -29,6 +29,18 @@
       "title": "文档同步守卫：README/API.md 与最新能力（模型计数、只读路由、CONTINUOUS AUTOPILOT）",
       "kind": "DOC_SYNC",
       "safe": true
+    },
+    {
+      "id": "u6-carrier-suite",
+      "title": "Carrier Queue #3–#10 全链套件回归（auth/tracking/invoice+POD/evidence/SLA/estimate/package/manual submission/response）",
+      "kind": "TEST_EVIDENCE",
+      "safe": true
+    },
+    {
+      "id": "u7-money-chain-suite",
+      "title": "资金链回归（R45/R46 settlement·billing·fee guard·commission reconciliation·platform write ledger）",
+      "kind": "TEST_EVIDENCE",
+      "safe": true
     }
   ]
 }
