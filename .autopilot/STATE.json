@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "2859792",
+  "head": "c918e1b",
   "status": "RECONCILED",
   "current_task": "Carrier Queue #6 — SLA EVIDENCE ASSEMBLY + ELIGIBILITY INPUT PLANE：Tracking Fact + Invoice Fact + POD Fact + Carrier Terms Evidence + Service Level Evidence → **ShipmentEvidenceBundle**（只建证据输入层；不得自动认定赔付 / 自动提交 claim / 自动退款 / 调用 carrier write API / 自动产生 recovery amount）。**逐字归档 MSG-111 为第一步。**CarrierInvoiceReadPort + CarrierPODReadPort（verified account lineage、request/response 双向绑定、十进制金额、charge kind 归一化 + raw code 保留、POD 掩码与隐私、safe rawReference）；**read-only**，不做 SLA/退款资格推导。CarrierTrackingReadPort + normalized CarrierTrackingSnapshot（UPS/FedEx provider adapter 分离）+ 状态/事件归一化（确定性排序 + 去重）+ 失败原因分类 + tenant/account lineage 归属；**read-only**（无 mutation / claim / pickup / refund，TRANSPORT=false）。",
   "next_task": "PC-12A 实施 → 本地测试 + tsc api/web + API contract + full CI → PC-12A CHECKPOINT 送审。",
@@ -10,7 +10,7 @@
   "production_enabled": false,
   "external_write_enabled": false,
   "updated_at": "2026-10-03T09:26:08.099Z",
-  "previous_head": "5a1e12f",
+  "previous_head": "2859792",
   "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "0c35106",
@@ -49,11 +49,11 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-03T12:55:22.089Z",
+  "last_tick_at": "2026-10-03T13:03:54.185Z",
   "state": "IMPLEMENT",
-  "last_action": "P0-3：新增 ENTERPRISE-TRUST-READINESS 清单（四种状态；SOC2/ISO/BANK_GRADE 一律 NOT_AVAILABLE 并禁止自证）+ 守卫测试 2/2（扫描全仓库禁止出现 SOC2_COMPLIANT/ISO27001_CERTIFIED/BANK_GRADE_SECURITY）",
+  "last_action": "P0-1 收尾 E2E：Return 事实→确定性匹配→qualification 门→claim-ready evidence package→HTTP（403/409/200）→真实 PG E2E 8/8；新增 CustomsReturnClaimEvidenceRecord 表（append-only，migration 20261003180000）",
   "last_action_at": "2026-10-03T12:03:56.528Z",
-  "next_action": "P0-2 判定接 HTTP/前端；随后 P0-1 匹配结果接入 claim-ready package",
+  "next_action": "两条生死线复核：A 全链已 VERIFIED（待 CI 确认）；B qualification persistence + backend Gate + bypass regression 已 VERIFIED（待 CI）；随后把 matching/evidence 结果接入 web 只读页并准备 READY_FOR_REVIEW 送审",
   "current_head": "749040c",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-03T12:45:18.754Z",
-    "gapMs": 603336,
-    "stale": true,
-    "checkedAt": "2026-10-03T12:55:22.089Z"
+    "previousTickAt": "2026-10-03T12:55:22.089Z",
+    "gapMs": 512096,
+    "stale": false,
+    "checkedAt": "2026-10-03T13:03:54.185Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -4815,12 +4815,13 @@
   "g4_q2_ci2": "success（37119595670 / 749040c：API migration+触发器清单、deploy smoke、web、license、backup-restore 全绿）",
   "g4_status": "PASS / CLOSED（MSG-20261003-128）",
   "p0_1": {
-    "status": "IN_PROGRESS（匹配契约 + 持久化完成；与 claim-ready 装配 / HTTP 待接）",
+    "status": "IN_PROGRESS→待 CI 确认后 CLOSED（E2E 全链已通过）",
     "module": "apps/api/src/services/customs/customs-return-matching.ts",
     "store": "apps/api/src/services/customs/customs-return-fact-store.ts",
-    "migration": "20261003160000_customs_return_fact",
+    "migration": "20261003180000_customs_return_claim_evidence",
     "tests": "customs-return-matching 10/10（unit）+ customs-return-fact-store-db 5/5（PG）",
-    "boundary": "AMBIGUOUS/NO_MATCH 不产生可追回数量；PARTIAL 不放大；跨租户/跨账户拒绝；无 PII/凭据；不 filing/transport"
+    "boundary": "AMBIGUOUS/NO_MATCH 不产生可追回数量；PARTIAL 不放大；跨租户/跨账户拒绝；无 PII/凭据；不 filing/transport",
+    "e2e": "customs-return-claim-evidence-db 8/8（READY 只计已匹配数量；PARTIAL 按比例；AMBIGUOUS 归零 NOT_READY；digest 篡改→RECONCILIATION_REQUIRED 归零；qualification 未过→409；VIEWER 绕过→403；policyVersion 重算 latest 生效；跨租户不可见）"
   },
   "p0_2": {
     "status": "IN_PROGRESS（判定引擎 + 持久化完成；HTTP/前端待接）",

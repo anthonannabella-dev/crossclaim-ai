@@ -367,6 +367,10 @@
     {
       "name": "cc_tenant_recoveryqualificationassessmentrecord",
       "table": "RecoveryQualificationAssessmentRecord"
+    },
+    {
+      "name": "cc_tenant_customsreturnclaimevidencerecord",
+      "table": "CustomsReturnClaimEvidenceRecord"
     }
   ],
   "scopedTriggers": [

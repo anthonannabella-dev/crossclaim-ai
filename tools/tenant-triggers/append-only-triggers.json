@@ -192,6 +192,12 @@
       "table": "RecoveryQualificationAssessmentRecord",
       "tgtype": 27,
       "semantics": "BEFORE UPDATE OR DELETE → 拒绝（P0-2：qualification 判定 append-only；重算必须新增历史）"
+    },
+    {
+      "name": "cc_append_only__CustomsReturnClaimEvidenceRecord",
+      "table": "CustomsReturnClaimEvidenceRecord",
+      "tgtype": 27,
+      "semantics": "BEFORE UPDATE OR DELETE → 拒绝（P0-1：claim evidence append-only；重算必须新增历史）"
     }
   ],
   "unexpectedPrefixes": [

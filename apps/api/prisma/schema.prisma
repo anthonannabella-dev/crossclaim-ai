@@ -367,6 +367,7 @@ model Organization {
   customsEntryDutyLines              CustomsEntryDutyLineRecord[]
   customsReturnFacts                 CustomsReturnFactRecord[]
   recoveryQualificationAssessments   RecoveryQualificationAssessmentRecord[]
+  customsReturnClaimEvidence          CustomsReturnClaimEvidenceRecord[]
   customsDutyTruthRecordList CustomsDutyTruthRecord[]
   customsDiscrepancyRecordList CustomsDiscrepancyRecord[]
   customsEligibilityRecordList CustomsEligibilityRecord[]
@@ -2548,6 +2549,7 @@ model CustomsEntryFactRecord {
 
   organization Organization                @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   dutyLines    CustomsEntryDutyLineRecord[]
+  returnClaimEvidence CustomsReturnClaimEvidenceRecord[]
   dutyTruthRecords    CustomsDutyTruthRecord[]
   discrepancyRecords  CustomsDiscrepancyRecord[]
   eligibilityRecords  CustomsEligibilityRecord[]
@@ -2711,4 +2713,34 @@ model RecoveryQualificationAssessmentRecord {
 
   @@index([organizationId, platformAccountId, computedAt])
   @@index([organizationId, inputDigest])
+}
+
+// ============================================================
+// P0-1（BUSINESS SURVIVAL GATE）收尾：Return/Export/Destruction → 匹配 → 证据包 的**已裁决**结果
+//   · append-only：每次组装新增历史；latest 由 computedAt 推导（HTTP 只读该结果，不重算）
+//   · confirmedRecoverableAmountByCurrency 只为 EXACT/PARTIAL 行计算；AMBIGUOUS / NO_MATCH / 
+//     RECONCILIATION_REQUIRED 一律零计入，且不得进入 claim-ready 状态
+// ============================================================
+model CustomsReturnClaimEvidenceRecord {
+  id                                 String   @id
+  organizationId                     String
+  entryFactId                        String
+  policyId                           String
+  policyVersion                      String
+  algorithmVersion                   String
+  inputDigest                        String
+  resultDigest                       String
+  status                             String
+  qualificationStatus                String
+  confirmedRecoverableAmountByCurrency Json
+  eligibleQuantityByLine             Json
+  reasonCodes                        Json
+  payload                            Json
+  computedAt                         DateTime
+  createdAt                          DateTime @default(now())
+
+  organization Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  entryFact    CustomsEntryFactRecord @relation(fields: [entryFactId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, entryFactId, computedAt])
 }

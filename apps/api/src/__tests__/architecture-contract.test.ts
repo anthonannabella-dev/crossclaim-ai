@@ -142,6 +142,8 @@ describe('模型清单一致性（C-0002 CHANGE #1）', () => {
     'CustomsReturnFactRecord',
     // P0-2（BUSINESS SURVIVAL GATE）：Customer Qualification / Recovery Economics 判定投影
     'RecoveryQualificationAssessmentRecord',
+    // P0-1 收尾：Return→matching→evidence→claim-ready 结果
+    'CustomsReturnClaimEvidenceRecord',
     // CUSTOMS GAP G4 / Q2 第二批（MSG-20261003-127）：四个 append-only 计算投影
     'CustomsDutyTruthRecord',
     'CustomsDiscrepancyRecord',
@@ -161,7 +163,7 @@ describe('模型清单一致性（C-0002 CHANGE #1）', () => {
 
 
   it(`核心模型恰好 ${CORE.length} 个`, () => {
-    expect(CORE).toHaveLength(63);
+    expect(CORE).toHaveLength(64);
     for (const name of CORE) expect(modelBlock(name), `缺少核心模型 ${name}`).not.toBe('');
   });
 
@@ -169,8 +171,8 @@ describe('模型清单一致性（C-0002 CHANGE #1）', () => {
     for (const name of JOIN_MODELS) expect(modelBlock(name), `缺少联结模型 ${name}`).not.toBe('');
   });
 
-  it('模型总数为 69（63 core + 6 join）—— 与 README/DOMAIN_MODEL 表述一致', () => {
-    expect(modelNames()).toHaveLength(69);
+  it('模型总数为 70（64 core + 6 join）—— 与 README/DOMAIN_MODEL 表述一致', () => {
+    expect(modelNames()).toHaveLength(70);
   });
 });
 
