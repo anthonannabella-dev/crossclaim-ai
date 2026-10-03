@@ -1,6 +1,11 @@
 /**
  * CARRIER QUEUE #7（MSG-20261003-113 ⑱–㉞）— SLA ELIGIBILITY EVALUATION CONTRACT。
- * ---------------------------------------------------------------
+ * CARRIER QUEUE #7 FINAL（MSG-20261003-114 ⑰⑲㉑㉖㉗）— OBSERVATIONAL RULE NON-GATING SEMANTICS：
+ *   · `EXCEPTION_OR_DELAY_OBSERVED` 只是 observation，**不得**成为资格硬门槛：未观察到异常扫描时 status 仍为 PASS，
+ *     语义差异只体现在 reasonCode（未观察到 → EXCEPTION_DELAY_NOT_OBSERVED）。
+ *   · 理由：「没有 exception scan」不能推出「没有发生 late delivery」；时间事实（actual > promised）可独立证明 late delivery。
+ *   · ruleSetVersion 由 1.0.0 → 1.0.1（修复 observation 被错误当作 gating 的语义 bug，非新增规则维度）。
+ * --------------------------------------------------------------- * ---------------------------------------------------------------
  * 目标：把 ShipmentEvidenceBundle 转成**可解释、确定性**的 CarrierSlaEligibilityEvaluation，
  *       只回答「基于当前证据，哪些 SLA 条件成立 / 不成立 / 无法判断」—— 不执行任何追回动作。
  * 硬边界（㉘㉙㉚㉞）：
@@ -16,7 +21,8 @@ import type { ShipmentEvidenceBundle, ShipmentEvidenceConflict } from './carrier
 
 /** ㉛ rule versioning：规则集标识 / 版本（规则变化后可解释历史结果差异）。 */
 export const CARRIER_SLA_RULE_SET_ID = 'carrier-sla-eligibility';
-export const CARRIER_SLA_RULE_SET_VERSION = '1.0.0';
+/** ㉗ MSG-114：eligibility semantics 变更（observation 不再 gating）→ 1.0.0 升至 1.0.1。 */
+export const CARRIER_SLA_RULE_SET_VERSION = '1.0.1';
 
 /** ⑳ evaluation outcome：不能只有 true/false。 */
 export const CARRIER_SLA_DECISIONS = ['ELIGIBLE', 'NOT_ELIGIBLE', 'INDETERMINATE'] as const;
@@ -164,9 +170,11 @@ export function evaluateCarrierSlaEligibility(
   else if (sla.actualDeliveryAt > sla.promisedDeliveryAt) push('DELIVERY_TIMING', 'PASS', 'LATE_DELIVERY_OBSERVED', deliveryReferences);
   else push('DELIVERY_TIMING', 'FAIL', 'ON_TIME_OR_EARLY', deliveryReferences);
 
-  // ㉒ⓖ exception / delay observation（observation，不是 slaEligible）。
+  // ㉒ⓖ exception / delay observation —— 只作 observation，**不是** gating condition（MSG-114 ⑰ CHANGE A）。
+  // 「没有 exception scan」不能推出「没有发生 late delivery」，因此两种观察结果的 status 都是 PASS，
+  // 语义差异只体现在 reasonCode 上；该规则永远不会把 otherwise-valid late delivery 判成 NOT_ELIGIBLE。
   if (sla.exceptionOrDelayObserved) push('EXCEPTION_OR_DELAY_OBSERVED', 'PASS', 'EXCEPTION_OR_DELAY_OBSERVED', deliveryReferences);
-  else push('EXCEPTION_OR_DELAY_OBSERVED', 'FAIL', 'EXCEPTION_DELAY_NOT_OBSERVED', deliveryReferences);
+  else push('EXCEPTION_OR_DELAY_OBSERVED', 'PASS', 'EXCEPTION_DELAY_NOT_OBSERVED', deliveryReferences);
 
   // ㉒ⓗ billed invoice presence（缺 invoice → UNKNOWN）。
   if (bundle.invoices.length > 0) push('BILLED_INVOICE_PRESENT', 'PASS', 'BILLED_INVOICE_PRESENT', invoiceReferences);

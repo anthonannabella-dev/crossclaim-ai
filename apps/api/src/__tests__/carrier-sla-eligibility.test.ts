@@ -287,12 +287,15 @@ describe('CARRIER QUEUE #7 — SLA eligibility evaluation', () => {
     expect(statusOf(termsOnly, 'SERVICE_LEVEL_MATCH')).toBe('PASS');
   });
 
-  it('⑭ exception/delay observation 只作观察，不产生 eligibility 结论', () => {
+  it('⑭⑰ exception/delay observation 只作观察；未观察到也不得成为 gating FAIL（MSG-114 ⑰⑳）', () => {
     const observed = evaluateWith();
     expect(statusOf(observed, 'EXCEPTION_OR_DELAY_OBSERVED')).toBe('PASS');
+    expect(reasonOf(observed, 'EXCEPTION_OR_DELAY_OBSERVED')).toBe('EXCEPTION_OR_DELAY_OBSERVED');
     const noEvents = evaluateWith({ tracking: { ...TRACKING_FACT, events: [] } });
-    expect(statusOf(noEvents, 'EXCEPTION_OR_DELAY_OBSERVED')).toBe('FAIL');
+    // 未观察到异常扫描仍是 informational PASS（reasonCode 表达观察结果），不得导致 NOT_ELIGIBLE
+    expect(statusOf(noEvents, 'EXCEPTION_OR_DELAY_OBSERVED')).toBe('PASS');
     expect(reasonOf(noEvents, 'EXCEPTION_OR_DELAY_OBSERVED')).toBe('EXCEPTION_DELAY_NOT_OBSERVED');
+    expect(noEvents.decision).toBe('ELIGIBLE');
   });
 
   it('⑭ 纯评估：不触发任何网络请求', () => {
@@ -308,4 +311,93 @@ describe('CARRIER QUEUE #7 — SLA eligibility evaluation', () => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+});
+
+describe('CARRIER QUEUE #7 FINAL — OBSERVATIONAL RULE NON-GATING SEMANTICS（MSG-20261003-114 ⑰⑲㉑㉖㉗）', () => {
+  const NO_SCAN = { ...TRACKING_FACT, events: [] };
+
+  it('⑲㉖ late delivery + 无异常扫描 → ELIGIBLE（不得 NOT_ELIGIBLE）', () => {
+    const evaluation = evaluateWith({ tracking: NO_SCAN });
+    expect(statusOf(evaluation, 'DELIVERY_TIMING')).toBe('PASS');
+    expect(statusOf(evaluation, 'EXCEPTION_OR_DELAY_OBSERVED')).toBe('PASS');
+    expect(reasonOf(evaluation, 'EXCEPTION_OR_DELAY_OBSERVED')).toBe('EXCEPTION_DELAY_NOT_OBSERVED');
+    expect(evaluation.decision).toBe('ELIGIBLE');
+  });
+
+  it('㉖ late delivery + 有异常扫描 → ELIGIBLE', () => {
+    const evaluation = evaluateWith();
+    expect(statusOf(evaluation, 'EXCEPTION_OR_DELAY_OBSERVED')).toBe('PASS');
+    expect(reasonOf(evaluation, 'EXCEPTION_OR_DELAY_OBSERVED')).toBe('EXCEPTION_OR_DELAY_OBSERVED');
+    expect(evaluation.decision).toBe('ELIGIBLE');
+  });
+
+  it('⑰ 未观察到异常扫描不得本身成为 gating blocker', () => {
+    const evaluation = evaluateWith({ tracking: NO_SCAN });
+    expect(evaluation.blockers).toEqual([]);
+    expect(evaluation.blockers).not.toContain('EXCEPTION_OR_DELAY_OBSERVED:EXCEPTION_DELAY_NOT_OBSERVED');
+  });
+
+  it('㉑㉖ on-time + 无异常扫描 → NOT_ELIGIBLE（由 DELIVERY_TIMING FAIL 决定，非 observation）', () => {
+    const evaluation = evaluateWith({
+      tracking: { ...NO_SCAN, deliveredAt: '2026-10-01T12:00:00.000Z' },
+      pod: { ...POD, deliveredAt: '2026-10-01T12:00:00.000Z' },
+    });
+    expect(statusOf(evaluation, 'DELIVERY_TIMING')).toBe('FAIL');
+    expect(statusOf(evaluation, 'EXCEPTION_OR_DELAY_OBSERVED')).toBe('PASS');
+    expect(evaluation.blockers).toEqual(['DELIVERY_TIMING:ON_TIME_OR_EARLY']);
+    expect(evaluation.decision).toBe('NOT_ELIGIBLE');
+  });
+
+  it('㉑㉖ on-time + 有异常扫描 → NOT_ELIGIBLE（仍由 DELIVERY_TIMING FAIL 决定）', () => {
+    const evaluation = evaluateWith({
+      tracking: { ...TRACKING_FACT, deliveredAt: '2026-10-01T12:00:00.000Z' },
+      pod: { ...POD, deliveredAt: '2026-10-01T12:00:00.000Z' },
+    });
+    expect(evaluation.blockers).toEqual(['DELIVERY_TIMING:ON_TIME_OR_EARLY']);
+    expect(evaluation.decision).toBe('NOT_ELIGIBLE');
+  });
+
+  it('㉑ terms-out-of-range 仍 NOT_ELIGIBLE（真实 gating condition 不变）', () => {
+    const evaluation = evaluateWith({ terms: { ...TERMS, effectiveTo: '2020-12-31' } });
+    expect(statusOf(evaluation, 'TERMS_EFFECTIVE_RANGE')).toBe('FAIL');
+    expect(evaluation.decision).toBe('NOT_ELIGIBLE');
+  });
+
+  it('㉒㉖ PARTIAL 仍 INDETERMINATE', () => {
+    expect(evaluateWith({ pod: null }).decision).toBe('INDETERMINATE');
+  });
+
+  it('㉖ evidence conflict 仍 INDETERMINATE', () => {
+    const evaluation = evaluateWith({ pod: { ...POD, deliveredAt: '2026-10-01T16:00:00.000Z' } });
+    expect(evaluation.decision).toBe('INDETERMINATE');
+  });
+
+  it('㉖ deterministic（含无异常扫描情形）', () => {
+    const first = evaluateWith({ tracking: NO_SCAN });
+    const second = evaluateWith({ tracking: NO_SCAN });
+    expect(JSON.stringify(first.ruleResults)).toBe(JSON.stringify(second.ruleResults));
+    expect(first.decision).toBe(second.decision);
+  });
+
+  it('㉖ 无金额字段 / 无提交 / 无 write / 无 network', () => {
+    const fetchSpy = vi.fn(() => {
+      throw new Error('NETWORK_FORBIDDEN');
+    });
+    vi.stubGlobal('fetch', fetchSpy);
+    const evaluation = evaluateWith({ tracking: NO_SCAN });
+    const serialized = JSON.stringify(evaluation);
+    for (const forbidden of ['recoveryAmount', 'claimValue', 'refundDue', 'successFee']) {
+      expect(serialized).not.toContain(forbidden);
+    }
+    expect(evaluation.claimSubmissionPerformed).toBe(false);
+    expect(evaluation.transportEnabled).toBe(false);
+    expect(evaluation.platformWriteEnabled).toBe(false);
+    expect(evaluation.productionCredentials).toBe('ABSENT');
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it('㉗ ruleSetVersion bumped to 1.0.1（语义变更刻意 bump）', () => {
+    expect(CARRIER_SLA_RULE_SET_VERSION).toBe('1.0.1');
+    expect(evaluateWith().ruleSetVersion).toBe('1.0.1');
+  });
 });
