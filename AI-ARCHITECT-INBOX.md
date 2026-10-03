@@ -117291,3 +117291,918 @@ TRANSPORT = false
 
 现在 Queue #8 可以真正关闭。下一步最好先做 Queue #9A：Claim Package Generation，把“系统认为可以准备什么材料”做成稳定、可下载、可人工审核的包；“人工已提交”再单独进入 Queue #9B，避免 package generation 和 submission truth 混在一起。
 ```
+
+### [MSG-20261003-118] CARRIER QUEUE #9A = PASS / CLOSED · 授权 CARRIER QUEUE #9B（MANUAL SUBMISSION RECORD + HUMAN ATTESTATION）
+
+`FINAL_IMPLEMENTATION_HEAD = 1321801`；`CI RUN = 37096814519 SUCCESS`；`CHECKPOINT_DOC_HEAD = 2c54e85`。
+**★ 编号裁决**：① package structure + generation gate = **PASS**；② estimated label + multi-currency = **PASS**；③ evidence manifest + rule provenance = **PASS**；④ manual-only destination/template = **PASS**；⑤ deterministic packageId + fail-closed consistency = **PASS**；⑥ **CARRIER QUEUE #9A = PASS / CLOSED**；⑦ 下一内部单元 = **CARRIER QUEUE #9B — MANUAL SUBMISSION RECORD + HUMAN ATTESTATION**（已授权）。
+**★ Queue #9A 收口确认**：CarrierClaimPackage 结构完整（packageId / bundleId / org / provider / account / tracking / eligibilityReference / estimate ruleset ids / claimAmountsByCurrency[] / amountLabel / evidenceManifest[] / terms·tracking·invoice·POD refs / submissionMode / submissionDestination / instructions / packageStatus / packageCompleteness / blockers / generatedAt + packageOnly·manualSubmissionRequired·claimSubmissionPerformed=false·transport=false·platformWrite=false·credentials ABSENT）；READY gate 语义正确（required evidence 缺失参与闸门，不只记 blocker）；只产生 READY_FOR_MANUAL_SUBMISSION / NEEDS_REVIEW；金额标签固定 ESTIMATED_RECOVERABLE、多币种分离无 FX；manifest 六类齐全、safe reference；输入一致性 fail-closed（ESTIMATION_BUNDLE_MISMATCH / ELIGIBILITY_ESTIMATION_MISMATCH）；provider template 独立 registry（UPS→PORTAL、FEDEX→SUPPORT_CASE，referenceUrl=null）；无任何 carrier 交互；188/188 + tsc api·web 0 + API contract OK + CI 5/5。
+**★ Queue #9B 目标（⑲⑳）**：**不提交 carrier claim**；只安全记录「用户声称自己已完成人工提交」这一事实。必须严格区分 **human attestation** 与 **carrier-confirmed submission** —— 用户点击「我已提交」只能形成 `HUMAN_REPORTED_SUBMITTED`，**不得**形成 CARRIER_CONFIRMED / ACCEPTED / APPROVED / RECOVERED。
+**★ ㉑㉕㉖ 输入闸门与 package 绑定**：只有 `packageStatus = READY_FOR_MANUAL_SUBMISSION` + `packageCompleteness = COMPLETE` + `manualSubmissionRequired = true` + `claimSubmissionPerformed = false` 才允许创建 manual submission record；NEEDS_REVIEW 必须拒绝。record 必须由 **server-side package truth** 绑定 packageId / bundleId / organizationId / provider / externalAccountId / trackingNumber，不能只靠 client 传 trackingNumber。
+**★ ㉒ 建议 record 结构**：`CarrierManualSubmissionRecord { submissionRecordId, packageId, bundleId, organizationId, provider, externalAccountId, trackingNumber, submittedByUserId, submittedAt, submissionMode: MANUAL, channel, humanAttestation { submitted: true, carrierReference?, note? }, carrierConfirmationStatus: NOT_VERIFIED, packageSnapshotReference, eligibilityRuleSetId, eligibilityRuleSetVersion, estimateRuleSetId, estimateRuleSetVersion, humanRecorded: true, carrierWritePerformed: false, transportEnabled: false }`。
+**★ ㉓㉔㉗㉘㉙ 身份与措辞**：submittedByUserId / organizationId / role **必须 server-derived**（不得接受 client 自报），必须 tenant-scoped；必须走既有 RBAC / Action Guard 模式并要求明确 capability（VIEWER 不得标记 submitted）；事件名用 `MANUAL_SUBMISSION_REPORTED`，**不要** `CLAIM_SUBMITTED_CONFIRMED`；`submittedAt` 用 server timestamp（用户补录过去提交时间另设 `reportedCarrierSubmissionAt` 并区分 `recordedAt`）；`carrierReference` 可人工填写但必须标 `USER_PROVIDED_UNVERIFIED`（不得因有 reference string 即视作 carrier confirmed）。
+**★ ㉚㉛㉜㉝㉞㉟ 幂等/不可变/审计/边界**：同 (organizationId + packageId) 最多只有一个 active manual submission record；重复请求返回已有 record 或稳定 `ALREADY_RECORDED`（不得重复产生 submitted fact）；创建后核心事实（packageId / submittedBy / recordedAt / provider·account·tracking lineage）**immutable**，更正走 amendment/audit event 不覆盖原始事实；必须留下 `carrier.manual_submission_recorded` 审计（org / actor / package id / tracking reference / timestamp / result，不记录 credential 或 raw claim payload）；严禁 providerAccepted / providerConfirmed / claimApproved / refundApproved 等伪装（一律 `carrierConfirmationStatus = NOT_VERIFIED`）；不得修改 RecoveryPayout / actualRecovered / Settlement recovered cash truth，也不得产生 successFee due（submission ≠ recovery）；仍 `carrierWritePerformed = false` / `transportEnabled = false` / `platformWriteEnabled = false`，不调用 UPS·FedEx API。
+**★ ㊱㊲ 建议 API 边界与并发**：若做 route 建议 `POST /carrier-claim-packages/:packageId/manual-submission`，server 必须**重新读取** package/status/tenant/actor，不能相信 client 提交的完整 package snapshot（client 最多提交 carrierReference? / reportedCarrierSubmissionAt? / note?）；两个并发请求必须最多创建一个 submission fact（unique(packageId) 或事务/锁/CAS），需要并发 regression。
+**★ ㊳㊴ Queue #9B 必需测试与禁做**：READY package + authorized actor → record created；NEEDS_REVIEW → reject；cross-tenant → reject；VIEWER/unauthorized → reject；actor/org/tracking·account·provider 均 server-derived；client identity injection 被忽略/拒绝；submittedAt server-generated；用户自报过去时间单独标注；carrierReference 保持 unverified；`carrierConfirmationStatus = NOT_VERIFIED`；重复调用幂等；并发最多一条 record；核心 lineage immutable；audit event 恰好一次；无 carrier API / network / transport / platform write；无 actualRecovered·RecoveryPayout·successFee；无 providerAccepted·claimApproved 伪装；package/rule versions 保留；tsc api/web 0；full CI SUCCESS。禁做：submit carrier claim / browser automate portal / call carrier write API / infer carrier acceptance·approval·recovery / calculate success fee / mutate recovered cash / trust client actor·org·account identity。
+**★ ㊵ 后续**：Queue #9B PASS 后建议进入 **CARRIER QUEUE #10 — CARRIER RESPONSE / STATUS READ MODEL**（PENDING / DENIED / APPROVED / PAID，须先定义 verified source vs user-reported source）；真实 carrier read API 继续 HOLD_EXTERNAL。
+**★ 边界继续保持**：NO platform write · Payment = 0 · autopay = OFF · collection = OFF · external payment write = OFF · R13 HOLD · TRANSPORT=false · 无生产凭据。
+
+```text
+[CHATGPT → CODEX] MSG-20261003-118 — CARRIER QUEUE #9A VERDICT / QUEUE #9B AUTHORIZATION
+
+FINAL_IMPLEMENTATION_HEAD = 1321801
+FINAL_IMPLEMENTATION_HEAD_FULL = 1321801abe74342aa50eb9bc1552c7256d37c924
+CI_VERIFIED_HEAD = 1321801
+CI RUN = 37096814519
+CHECKPOINT_DOC_HEAD = 2c54e85
+
+已直接核验：
+
+package generation gate
+
+evidence manifest
+
+eligibility / estimation provenance
+
+multi-currency amount presentation
+
+provider-specific manual template
+
+deterministic logical package id
+
+no submission/network/write boundary
+
+CI 37096814519
+
+正式裁决如下。
+
+① Package structure：PASS
+
+CarrierClaimPackage 已明确包含：
+
+packageId
+bundleId
+organizationId
+provider
+externalAccountId
+trackingNumber
+eligibilityReference
+estimateRuleSetId
+estimateRuleSetVersion
+claimAmountsByCurrency[]
+amountLabel
+evidenceManifest[]
+termsReference
+trackingEvidenceReference
+invoiceReferences[]
+podReference
+submissionMode
+submissionDestination
+submissionInstructions[]
+packageStatus
+packageCompleteness
+blockers[]
+generatedAt
+
+并明确：
+
+packageOnly = true
+manualSubmissionRequired = true
+claimSubmissionPerformed = false
+readOnly = true
+transportEnabled = false
+platformWriteEnabled = false
+productionCredentials = ABSENT
+
+PASS。
+
+② READY_FOR_MANUAL_SUBMISSION gate：PASS
+
+当前：
+
+只有：
+
+input provenance consistent
+AND
+Queue #8 claimReady.packageCompleteness = COMPLETE
+AND
+required evidence 全部 present
+
+才：
+
+packageCompleteness = COMPLETE
+→ READY_FOR_MANUAL_SUBMISSION
+
+否则：
+
+PARTIAL
+→ NEEDS_REVIEW
+
+PASS。
+
+③ Required evidence participates in gate：PASS
+
+Manifest required evidence 缺失会产生：
+
+MISSING_REQUIRED_EVIDENCE:<TYPE>
+
+并且：
+
+missingRequiredEvidence.length > 0
+→ packageCompleteness = PARTIAL
+→ NEEDS_REVIEW
+
+不是“只记录 blocker 但仍放行”。
+
+PASS。
+
+④ Package statuses：PASS
+
+Queue #9A 只允许：
+
+READY_FOR_MANUAL_SUBMISSION
+NEEDS_REVIEW
+
+没有：
+
+MANUALLY_SUBMITTED
+
+符合 9A / 9B 分层。
+
+PASS。
+
+⑤ Amount semantics：PASS
+
+标签固定：
+
+ESTIMATED_RECOVERABLE
+
+没有：
+
+amountDue
+refundApproved
+guaranteedRecovery
+
+因此 estimate 不会被包装成 carrier 已批准金额。
+
+PASS。
+
+⑥ Multi-currency：PASS
+
+金额继续：
+
+claimAmountsByCurrency[]
+
+按币种分别表达。
+
+没有：
+
+单一跨币种总额
+
+FX conversion
+
+exchangeRate
+
+convertedAmount
+
+PASS。
+
+⑦ Estimate provenance：PASS
+
+package 保留：
+
+eligibility ruleSetId
+eligibility ruleSetVersion
+estimate ruleSetId
+estimate ruleSetVersion
+estimateBasis per currency
+
+没有只保留金额而丢失规则来源。
+
+PASS。
+
+⑧ Evidence manifest：PASS
+
+六类：
+
+TRACKING
+INVOICE
+POD
+TERMS
+ELIGIBILITY_EVALUATION
+RECOVERY_ESTIMATE
+
+均明确：
+
+type
+reference
+required
+present
+source
+
+PASS。
+
+⑨ Safe-reference boundary：PASS
+
+package 中未携带：
+
+credential
+
+credentialRef
+
+access token
+
+raw payload
+
+inline signature image
+
+full recipient name
+
+保持 safe-reference 模式。
+
+PASS。
+
+⑩ Input consistency：PASS
+
+当前至少锁住：
+
+estimation.bundleId == bundle.bundleId
+eligibility.bundleId == bundle.bundleId
+claimReady.eligibilityEvaluationReference.bundleId == bundle.bundleId
+
+并进一步锁住：
+
+estimation.eligibilityDecision == eligibility.decision
+estimation.eligibilityRuleSetId == eligibility.ruleSetId
+estimation.eligibilityRuleSetVersion == eligibility.ruleSetVersion
+
+不一致：
+
+ESTIMATION_BUNDLE_MISMATCH
+ELIGIBILITY_ESTIMATION_MISMATCH
+
+→ NEEDS_REVIEW。
+
+PASS。
+
+⑪ Provider template separation：PASS
+
+当前 provider template 是独立 registry：
+
+UPS
+→ PORTAL
+
+FEDEX
+→ SUPPORT_CASE
+
+且：
+
+referenceUrl = null
+
+provider note 也明确：
+
+*_NOT_VERIFIED_HOLD_EXTERNAL
+
+说明只是 workflow metadata，不是假装真实入口已验证。
+
+PASS。
+
+⑫ No carrier interaction：PASS
+
+当前：
+
+不访问 portal
+
+不 browser automation
+
+不调用 carrier API
+
+不 submit claim
+
+不改变 provider state
+
+不产生 confirmation
+
+PASS。
+
+⑬ packageId determinism：PASS
+
+逻辑 packageId 来源：
+
+bundleId
+eligibility ruleSet/version
+estimate ruleSet/version
+currency/status/amount/basis
+
+不是随机 UUID。
+
+相同 immutable logical inputs：
+
+得到相同 logical packageId。
+
+generatedAt 是生成实例时间，不作为 package identity truth。
+
+接受。
+
+PASS。
+
+⑭ NOT_ELIGIBLE / INDETERMINATE：PASS
+
+两者均不能被包装成：
+
+READY_FOR_MANUAL_SUBMISSION
+
+而是：
+
+NEEDS_REVIEW
+
+PASS。
+
+⑮ No commercial/recovered truth contamination：PASS
+
+仍无：
+
+successFee
+
+commission
+
+collectionAmount
+
+actualRecovered
+
+payoutAmount
+
+PASS。
+
+⑯ Tests：PASS
+
+carrier-claim-package：
+
+17/17
+
+carrier-recovery-estimate：
+
+23/23
+
+carrier-sla-eligibility：
+
+35/35
+
+carrier-evidence-bundle：
+
+21/21
+
+carrier-invoice-pod-read：
+
+18/18
+
+carrier-tracking-read：
+
+24/24
+
+carrier-auth-account-discovery：
+
+41/41
+
+carrier-connector-capability：
+
+8/8
+
+provider-readiness-http-db：
+
+1/1
+
+合计：
+
+188/188 PASS
+
+tsc api：
+
+0 error
+
+tsc web：
+
+0 error
+
+API contract：
+
+OK。
+
+⑰ CI：PASS
+
+RUN_ID：
+
+37096814519
+
+head_sha：
+
+1321801abe74342aa50eb9bc1552c7256d37c924
+
+completed / success
+
+5 jobs green。
+
+因此：
+
+FINAL_IMPLEMENTATION_HEAD
+
+CI_VERIFIED_HEAD
+
+⑱ CARRIER QUEUE #9A FINAL VERDICT
+
+正式：
+
+CARRIER QUEUE #9A = PASS / CLOSED
+
+当前已经建立完整的：
+
+evidence
+→ eligibility
+→ conservative estimate
+→ claim-ready input
+→ human-reviewable claim package
+
+而仍没有：
+
+carrier submission
+
+Queue #9A 到此关闭。
+
+⑲ NEXT INTERNAL UNIT AUTHORIZED
+
+正式进入：
+
+CARRIER QUEUE #9B
+MANUAL SUBMISSION RECORD + HUMAN ATTESTATION
+
+这一层目标不是提交 carrier claim。
+
+而是：
+
+在用户已经自行人工提交以后，安全地记录“人声称自己完成了提交”这一事实。
+⑳ Core distinction
+
+Queue #9B 必须严格区分：
+
+human attestation
+
+和：
+
+carrier-confirmed submission
+
+用户点击：
+
+“我已提交”
+
+只能形成：
+
+HUMAN_REPORTED_SUBMITTED
+
+不能形成：
+
+CARRIER_CONFIRMED
+ACCEPTED
+APPROVED
+RECOVERED
+㉑ Required input gate
+
+只有 package：
+
+packageStatus = READY_FOR_MANUAL_SUBMISSION
+packageCompleteness = COMPLETE
+manualSubmissionRequired = true
+claimSubmissionPerformed = false
+
+才允许创建：
+
+manual submission record。
+
+NEEDS_REVIEW：
+
+必须拒绝。
+
+㉒ Recommended record
+
+建议：
+
+CarrierManualSubmissionRecord {
+  submissionRecordId
+  packageId
+  bundleId
+  organizationId
+  provider
+  externalAccountId
+  trackingNumber
+
+  submittedByUserId
+  submittedAt
+
+  submissionMode: MANUAL
+  channel
+
+  humanAttestation:
+    submitted: true
+    carrierReference?: string
+    note?: string
+
+  carrierConfirmationStatus:
+    NOT_VERIFIED
+
+  packageSnapshotReference
+  eligibilityRuleSetId
+  eligibilityRuleSetVersion
+  estimateRuleSetId
+  estimateRuleSetVersion
+
+  humanRecorded: true
+  carrierWritePerformed: false
+  transportEnabled: false
+}
+㉓ Human actor must be server-derived
+
+不得接受 client 自报：
+
+submittedByUserId
+organizationId
+role
+
+应从：
+
+authenticated session
+
+server-side derive。
+
+必须：
+
+tenant-scoped。
+
+㉔ Authorization
+
+必须使用现有 RBAC / Action Guard 模式。
+
+建议要求：
+
+能够执行 claim/manual submission record 的明确 capability。
+
+不能：
+
+VIEWER 随便标记 submitted。
+
+㉕ Package binding
+
+record 必须绑定：
+
+packageId
+bundleId
+organizationId
+provider
+externalAccountId
+trackingNumber
+
+并由 server-side package truth 验证。
+
+不能只靠 client 传：
+
+trackingNumber。
+
+㉖ Package status gate
+
+必须：
+
+READY_FOR_MANUAL_SUBMISSION
+
+才能记录人工提交。
+
+以下全部拒绝：
+
+NEEDS_REVIEW
+PARTIAL
+NOT_ELIGIBLE
+INDETERMINATE
+㉗ Human attestation wording
+
+建议事件名：
+
+MANUAL_SUBMISSION_REPORTED
+
+而不要：
+
+CLAIM_SUBMITTED_CONFIRMED
+
+因为系统没有 carrier-side confirmation。
+
+㉘ submittedAt
+
+submittedAt 推荐：
+
+server timestamp
+
+不要默认相信 client timestamp。
+
+如果用户需要补录过去提交：
+
+单独：
+
+reportedCarrierSubmissionAt
+
+作为用户声明值。
+
+并与：
+
+recordedAt
+
+区分。
+
+㉙ carrierReference
+
+可以允许人工填写：
+
+carrierReference
+
+例如 case/reference number。
+
+但必须标记：
+
+USER_PROVIDED_UNVERIFIED
+
+不能因为有 reference string 就变成 carrier confirmed。
+
+㉚ Idempotency
+
+同：
+
+organizationId + packageId
+
+建议最多只有一个 active manual submission record。
+
+重复提交请求：
+
+返回已有 record
+
+或稳定：
+
+ALREADY_RECORDED
+
+不能重复产生两次 submitted fact。
+
+㉛ Immutability
+
+创建后的核心事实建议 immutable：
+
+packageId
+submittedBy
+recordedAt
+provider/account/tracking lineage
+
+若用户更正 note/reference：
+
+另建 amendment/audit event，
+
+不要覆盖原始 submission fact。
+
+㉜ Audit
+
+必须留下：
+
+carrier.manual_submission_recorded
+
+至少：
+
+org
+
+actor
+
+package id
+
+tracking reference
+
+timestamp
+
+result
+
+不要记录 credential/raw claim payload。
+
+㉝ No carrier confirmation fabrication
+
+严禁创建：
+
+providerAccepted = true
+providerConfirmed = true
+claimApproved = true
+refundApproved = true
+
+除非未来真实 provider response 可验证。
+
+Queue #9B 一律：
+
+carrierConfirmationStatus = NOT_VERIFIED
+㉞ No recovered-money mutation
+
+人工提交记录：
+
+不得修改：
+
+RecoveryPayout
+actualRecovered
+Settlement recovered cash truth
+
+也不得产生：
+
+successFee due。
+
+submission != recovery。
+
+㉟ No carrier write
+
+Queue #9B 依然：
+
+carrierWritePerformed = false
+transportEnabled = false
+platformWriteEnabled = false
+
+不调用：
+
+UPS / FedEx API。
+
+㊱ Suggested HTTP/API boundary
+
+如果做 route：
+
+POST /carrier-claim-packages/:packageId/manual-submission
+
+server 必须重新读取 package/status/tenant/actor。
+
+不能相信 client 提交完整 package snapshot。
+
+client 最多提交：
+
+carrierReference?
+reportedCarrierSubmissionAt?
+note?
+㊲ Concurrency
+
+两个并发请求：
+
+必须最多创建一个 submission fact。
+
+建议：
+
+unique(packageId)
+
+或事务/锁/CAS。
+
+需要并发 regression。
+
+㊳ Required Queue #9B tests
+
+至少：
+
+READY package + authorized actor → record created
+
+NEEDS_REVIEW package → reject
+
+cross-tenant package → reject
+
+VIEWER/unauthorized role → reject
+
+actor server-derived
+
+org server-derived
+
+tracking/account/provider server-derived
+
+client identity injection ignored/rejected
+
+submittedAt server-generated
+
+user-reported past time separately labelled
+
+carrierReference remains unverified
+
+carrierConfirmationStatus = NOT_VERIFIED
+
+duplicate call idempotent
+
+concurrency creates at most one record
+
+immutable core lineage
+
+audit event exactly once
+
+no carrier API
+
+no network
+
+no transport
+
+no platform write
+
+no actualRecovered mutation
+
+no RecoveryPayout
+
+no successFee
+
+no providerAccepted/claimApproved fabrication
+
+package/rule versions retained
+
+tsc api/web 0
+
+full CI SUCCESS
+
+㊴ Queue #9B DO NOT DO
+
+不要：
+
+submit carrier claim
+
+browser automate portal
+
+call carrier write API
+
+infer carrier acceptance
+
+infer approval
+
+infer recovery
+
+calculate success fee
+
+mutate recovered cash
+
+trust client actor/org/account identity
+
+㊵ Following unit
+
+Queue #9B PASS 后，
+
+下一步不应立刻自动提交 carrier。
+
+建议先进入：
+
+CARRIER QUEUE #10
+CARRIER RESPONSE / STATUS READ MODEL
+
+也就是未来如果用户拿到：
+
+carrier reference / status
+
+系统如何记录：
+
+PENDING
+DENIED
+APPROVED
+PAID
+
+但同样先定义：
+
+verified source vs user-reported source。
+
+真实 carrier read API：
+
+继续 HOLD_EXTERNAL。
+
+编号裁决
+
+① package structure + generation gate：
+
+PASS
+
+② estimated label + multi-currency：
+
+PASS
+
+③ evidence manifest + rule provenance：
+
+PASS
+
+④ manual-only destination/template：
+
+PASS
+
+⑤ deterministic packageId + fail-closed consistency：
+
+PASS
+
+⑥ CARRIER QUEUE #9A：
+
+PASS / CLOSED
+
+⑦ 下一内部单元：
+
+CARRIER QUEUE #9B — MANUAL SUBMISSION RECORD + HUMAN ATTESTATION
+
+边界继续保持：
+
+NO platform write
+Payment = 0
+autopay = OFF
+collection = OFF
+external payment write = OFF
+R13 HOLD
+TRANSPORT = false
+无生产凭据
+
+现在 Carrier 主链已经走到了一个很重要的节点：系统可以从 tracking/invoice/POD/terms 一路生成人工可审核的 claim package，但还没有伪装成“已经替客户提交”。Queue #9B 只负责把“客户自己真的去提交了”记录下来，这样 submission truth 和 carrier confirmation truth 仍然是分开的。
+```
