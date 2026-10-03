@@ -1,6 +1,11 @@
 /**
  * CARRIER QUEUE #8（MSG-20261003-115 ⑯–㉝）— RECOVERY AMOUNT ESTIMATION + CLAIM-READY PACKAGE INPUT。
- * ---------------------------------------------------------------
+ * CARRIER QUEUE #8 FINAL（MSG-20261003-116 ⑱⑲⑳㉑㉒㉓）— CLAIM-READY PACKAGE COMPLETENESS SEMANTICS：
+ *   · package COMPLETE 要求 estimate basis 也完整：status=ESTIMATED && estimateBasis=COMPLETE_RULE_BASIS && blockers 为空；
+ *     因此 ANY PARTIAL_PROVIDER_RULE_BASIS / unresolved blocker → package = PARTIAL。
+ *   · estimate 本身**仍可**是 ESTIMATED + PARTIAL_PROVIDER_RULE_BASIS（保守下界估算），只是 claim-ready package 不完整。
+ *   · invariant：package COMPLETE → blockers.length === 0。
+ * --------------------------------------------------------------- * ---------------------------------------------------------------
  * 目标：在**已确定性判定**的基础上给出可追回金额的**估算值**，并准备 claim-ready 输入 —— 仅此而已。
  * 硬边界：
  *   · 只有 eligibility.decision = ELIGIBLE 才允许产生金额；INDETERMINATE → BLOCKED_INDETERMINATE + null + blockers；
@@ -228,10 +233,19 @@ export function estimateCarrierRecovery(
     ...bundleBlockers,
     ...estimatesByCurrency.flatMap((estimate) => estimate.blockers.map((blocker) => estimate.currency + ':' + blocker)),
   ];
-  const allEstimated =
-    estimatesByCurrency.length > 0 && estimatesByCurrency.every((estimate) => estimate.status === 'ESTIMATED');
+  // MSG-116 ⑱⑲⑳ CHANGE A：COMPLETE 要求 estimate basis 完整（COMPLETE_RULE_BASIS 且无 unresolved blocker）。
+  const allEstimateBasisComplete =
+    estimatesByCurrency.length > 0 &&
+    estimatesByCurrency.every(
+      (estimate) =>
+        estimate.status === 'ESTIMATED' &&
+        estimate.estimateBasis === 'COMPLETE_RULE_BASIS' &&
+        estimate.blockers.length === 0,
+    );
   const packageCompleteness: 'COMPLETE' | 'PARTIAL' =
-    !bundleMismatch && bundle.completeness === 'COMPLETE' && allEstimated ? 'COMPLETE' : 'PARTIAL';
+    !bundleMismatch && bundle.completeness === 'COMPLETE' && decision === 'ELIGIBLE' && allEstimateBasisComplete
+      ? 'COMPLETE'
+      : 'PARTIAL';
 
   const claimReadyPackageInput: CarrierClaimReadyPackageInput = {
     provider: bundle.provider,

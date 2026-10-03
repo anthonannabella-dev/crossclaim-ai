@@ -235,7 +235,8 @@ describe('CARRIER QUEUE #8 — recovery amount estimation', () => {
     expect(pkg.trackingEvidenceReference).toBe('sha256:track-1');
     expect(pkg.invoiceEvidenceReferences).toContain('sha256:inv-1');
     expect(pkg.podReference).toBe('sha256:pod-1');
-    expect(pkg.packageCompleteness).toBe('COMPLETE');
+    // MSG-116 ⑲：本 fixture 含 FUEL(UNKNOWN) → basis 为 PARTIAL_PROVIDER_RULE_BASIS，package 必须 PARTIAL
+    expect(pkg.packageCompleteness).toBe('PARTIAL');
   });
 
   it('㉕㉚ package 不含 credential / raw payload / signature image', () => {
@@ -282,4 +283,100 @@ describe('CARRIER QUEUE #8 — recovery amount estimation', () => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+});
+
+describe('CARRIER QUEUE #8 FINAL — CLAIM-READY PACKAGE COMPLETENESS SEMANTICS（MSG-20261003-116 ⑱–㉔）', () => {
+  const BASE_AND_DUTY: CarrierInvoiceFact = {
+    ...INVOICE,
+    charges: [
+      { kind: 'BASE', rawChargeCode: 'BASE', amount: '35.00', currency: 'USD' },
+      { kind: 'DUTY_TAX', rawChargeCode: 'DUTY', amount: '1.05', currency: 'USD' },
+    ],
+  };
+  const EUR_COMPLETE: CarrierInvoiceFact = {
+    ...EUR_INVOICE,
+    charges: [
+      { kind: 'BASE', rawChargeCode: 'BASE', amount: '20.00', currency: 'EUR' },
+      { kind: 'DUTY_TAX', rawChargeCode: 'DUTY', amount: '1.00', currency: 'EUR' },
+    ],
+  };
+  const EUR_PARTIAL: CarrierInvoiceFact = {
+    ...EUR_INVOICE,
+    charges: [
+      { kind: 'BASE', rawChargeCode: 'BASE', amount: '20.00', currency: 'EUR' },
+      { kind: 'FUEL', rawChargeCode: 'FUEL', amount: '2.00', currency: 'EUR' },
+    ],
+  };
+
+  it('⑱㉒㉔ ELIGIBLE + BASE/DUTY only → COMPLETE_RULE_BASIS 且 package COMPLETE', () => {
+    const { estimation } = estimateWith({ invoices: [BASE_AND_DUTY] });
+    const usd = estimation.estimatesByCurrency[0];
+    expect(usd.status).toBe('ESTIMATED');
+    expect(usd.estimateBasis).toBe('COMPLETE_RULE_BASIS');
+    expect(usd.blockers).toEqual([]);
+    expect(estimation.claimReadyPackageInput.packageCompleteness).toBe('COMPLETE');
+    expect(estimation.claimReadyPackageInput.blockers).toEqual([]);
+  });
+
+  it('⑲㉔ BASE + FUEL(UNKNOWN) → estimate 仍 ESTIMATED，但 package PARTIAL 且 blocker 透传', () => {
+    const { estimation } = estimateWith();
+    const usd = estimation.estimatesByCurrency[0];
+    expect(usd.status).toBe('ESTIMATED');
+    expect(usd.estimateBasis).toBe('PARTIAL_PROVIDER_RULE_BASIS');
+    expect(estimation.claimReadyPackageInput.packageCompleteness).toBe('PARTIAL');
+    expect(estimation.claimReadyPackageInput.blockers).toContain('USD:UNKNOWN_CHARGE_ELIGIBILITY_EXCLUDED');
+  });
+
+  it('⑳ invariant：package COMPLETE → blockers 必须为空', () => {
+    const complete = estimateWith({ invoices: [BASE_AND_DUTY] }).estimation.claimReadyPackageInput;
+    expect(complete.packageCompleteness).toBe('COMPLETE');
+    expect(complete.blockers).toEqual([]);
+    const partial = estimateWith().estimation.claimReadyPackageInput;
+    expect(partial.packageCompleteness).toBe('PARTIAL');
+    expect(partial.blockers.length).toBeGreaterThan(0);
+  });
+
+  it('㉑ PARTIAL_PROVIDER_RULE_BASIS 不得被改判成 MISSING_AMOUNT_BASIS', () => {
+    const usd = estimateWith().estimation.estimatesByCurrency[0];
+    expect(usd.status).not.toBe('MISSING_AMOUNT_BASIS');
+    expect(usd.estimatedRecoverableAmount).toBe('35.00');
+  });
+
+  it('㉓㉔ 多币种：一个 complete + 一个 partial → package PARTIAL', () => {
+    const { estimation } = estimateWith({ invoices: [BASE_AND_DUTY, EUR_PARTIAL] });
+    expect(estimation.estimatesByCurrency.map((entry) => entry.currency)).toEqual(['EUR', 'USD']);
+    expect(estimation.estimatesByCurrency[0].estimateBasis).toBe('PARTIAL_PROVIDER_RULE_BASIS');
+    expect(estimation.estimatesByCurrency[1].estimateBasis).toBe('COMPLETE_RULE_BASIS');
+    expect(estimation.claimReadyPackageInput.packageCompleteness).toBe('PARTIAL');
+  });
+
+  it('㉓㉔ 多币种：全部 complete → package COMPLETE', () => {
+    const { estimation } = estimateWith({ invoices: [BASE_AND_DUTY, EUR_COMPLETE] });
+    expect(estimation.estimatesByCurrency.every((entry) => entry.estimateBasis === 'COMPLETE_RULE_BASIS')).toBe(true);
+    expect(estimation.claimReadyPackageInput.packageCompleteness).toBe('COMPLETE');
+    expect(estimation.claimReadyPackageInput.blockers).toEqual([]);
+  });
+
+  it('㉔ NOT_ELIGIBLE / INDETERMINATE / MISSING_AMOUNT_BASIS 均保持 PARTIAL 且无金额', () => {
+    const notEligible = estimateWith({
+      tracking: { ...TRACKING_FACT, deliveredAt: '2026-10-01T12:00:00.000Z' },
+      pod: { ...POD, deliveredAt: '2026-10-01T12:00:00.000Z' },
+    }).estimation;
+    expect(notEligible.claimReadyPackageInput.packageCompleteness).toBe('PARTIAL');
+    expect(notEligible.estimatesByCurrency[0].estimatedRecoverableAmount).toBeNull();
+    const indeterminate = estimateWith({ pod: null }).estimation;
+    expect(indeterminate.claimReadyPackageInput.packageCompleteness).toBe('PARTIAL');
+    expect(indeterminate.estimatesByCurrency[0].estimatedRecoverableAmount).toBeNull();
+    const missing = estimateWith({ invoices: [{ ...INVOICE, charges: [] }] }).estimation;
+    expect(missing.claimReadyPackageInput.packageCompleteness).toBe('PARTIAL');
+    expect(missing.estimatesByCurrency[0].estimatedRecoverableAmount).toBeNull();
+  });
+
+  it('㉔ deterministic（含 completeness 语义）', () => {
+    expect(JSON.stringify(estimateWith().estimation)).toBe(JSON.stringify(estimateWith().estimation));
+    const first = estimateWith({ invoices: [BASE_AND_DUTY] }).estimation;
+    const second = estimateWith({ invoices: [BASE_AND_DUTY] }).estimation;
+    expect(JSON.stringify(first)).toBe(JSON.stringify(second));
+    expect(first.claimReadyPackageInput.packageCompleteness).toBe('COMPLETE');
+  });
 });
