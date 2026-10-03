@@ -1,6 +1,6 @@
 # CUSTOMS G4 / C4 — Customs Recovery Eligibility CHECKPOINT
 
-- 时间：2026-10-03T09:41:24.607Z（HEAD 6768952；C1 `f7b85ee` / C2 `d8fd6c3` / C3 `6768952`）
+- 时间：2026-10-03T09:41:24.607Z（HEAD c4370ea；C1 `f7b85ee` / C2 `d8fd6c3` / C3 `6768952`）
 - 单元：G4 内部链第四环 **C4 = 确定性资格判定**（政策驱动；无 Schema、无路由、无外写）
 - 输入：C1 事实 + C2 真值 + C3 差异报告 + 版本化政策（policyId / policyVersion / jurisdiction / allowlist / 时效 / 必需差异码 / 最小争议金额 / OTHER 行策略）
 

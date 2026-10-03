@@ -1477,3 +1477,8 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 交付：`customs-recovery-eligibility.ts`（政策驱动三态判定 + 9 原因码 + 逐币种观察差异金额）+ 14/14 回归。
 - 累计：C1 16 + C2 11 + C3 12 + C4 14 = **53/53**；无 Schema / 无路由 / 无外写。
 - 下一步：C5 estimated recoverable amount。
+
+## 2026-10-03T09:42:42.589Z — G4/C5 Estimated Recoverable Amount（HEAD c4370ea）
+- 交付：`customs-recovery-estimate.ts`（仅 ELIGIBLE；ratio/cap/min；cents 向下；estimateOnly、不可计费）+ 14/14 回归。
+- 累计：C1–C5 = **67/67**；无 Schema / 无路由 / 无外写。
+- 下一步：C6 claim-ready package。
