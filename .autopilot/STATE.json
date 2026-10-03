@@ -4905,7 +4905,7 @@
   "singleton_runner": "VERIFIED",
   "ci_pending": [],
   "ci_red": [],
-  "ci_checked_at": "2026-10-03T17:34:10.494Z",
+  "ci_checked_at": "2026-10-03T17:34:24.558Z",
   "continuous_verification": {
     "at": "2026-10-03T14:17:18.723Z",
     "a_to_b_to_c": "VERIFIED（单次启动连续执行 u1→u2→u3，无 heartbeat 唤醒；停止条件 = SAFE_CONTINUATION_QUEUE_EMPTY）",
@@ -4993,9 +4993,9 @@
   "awaiting_verdict": false,
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-03T17:34:10.635Z",
-    "head": "58a1737",
-    "acceptance_head": "58a1737",
+    "computed_at": "2026-10-03T17:35:19.268Z",
+    "head": "268dc8a",
+    "acceptance_head": "268dc8a",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5052,7 +5052,7 @@
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=58a1737 ci_head=58a1737 ci=in_progress run=37140854628"
+        "evidence": "acceptance_head=268dc8a ci_head=268dc8a ci=in_progress run=37140993376"
       },
       "L1-05_pg_regression_passed": {
         "status": true,
@@ -5156,9 +5156,9 @@
     "status": "DONE（MSG-20261003-134：端点+customs.recovery.chain.run/INTERNAL_WRITE+角色矩阵+immutable execution identity+路由级 E2E 4/4+API.md 90/77）"
   },
   "gates_recorded_at": "2026-10-03T15:17:04.369Z",
-  "ci_status_head": "58a1737",
+  "ci_status_head": "268dc8a",
   "ci_status": "in_progress",
-  "ci_run_id": "37140854628",
+  "ci_run_id": "37140993376",
   "internal_code_complete_at": "2026-10-03T15:36:47.862Z",
   "independent_final_audit": {
     "required": true,
@@ -5453,8 +5453,8 @@
     "verdict_message": "MSG-20261003-140",
     "closed_at": "2026-10-03T16:45:10.253Z"
   },
-  "ci_last_success_head": "1729cb9",
-  "ci_last_success_run": "37140320977",
+  "ci_last_success_head": "f797fa4",
+  "ci_last_success_run": "37140444660",
   "independent_final_audit_v2": {
     "at": "2026-10-03T17:23:44.761Z",
     "head": "1729cb9",

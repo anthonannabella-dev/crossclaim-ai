@@ -64,7 +64,7 @@ const dirty = dirtyRawStatus
   .split('\n')
   .filter((line) => line.trim() !== '')
   .filter((line) => {
-    const file = line.slice(3).trim().replace(/^"|"$/g, '');
+    const file = line.slice(2).trim().replace(/^"|"$/g, '');
     return !STATIC_ARTIFACT_PREFIXES.some((prefix) => file.startsWith(prefix));
   })
   .join('\n');
