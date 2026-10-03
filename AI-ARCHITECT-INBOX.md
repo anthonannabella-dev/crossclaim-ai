@@ -124380,3 +124380,265 @@ INDEPENDENT FINAL AUDIT REQUEST v2
 
 14/14 Layer 1 实证 + 四域 Layer 2 Golden Path 完整 + Layer 3 明确继续 HOLD。
 ```
+
+### [MSG-20261003-136] ENTERPRISE IOR I1 Schema Delta = PASS WITH REVISE（三表五枚举 APPROVE；DB invariant 必须一起落；APPROVED TO IMPLEMENT）（reviewed ref 376d64c）
+
+```text
+ENTERPRISE IOR RECOVERY LAYER — I1 Schema Delta 裁决：PASS WITH REVISE。
+
+总体方向批准，可以开始 migration；但有几条 DB invariant 必须一起落，不接受“Schema 有字段、关键语义只靠 service 校验”。
+
+① 三张 append-only 事实表 + 5 个枚举：APPROVE。
+
+批准：
+
+CustomsIorIdentityFact
+CustomsRightLineageFact
+CustomsBrokerPoaFact
+
+三者必须是独立事实，不能合并成一张“customs authorization”万能表，因为它们分别表示：
+
+身份事实 ≠ 权利归属事实 ≠ Broker 授权事实
+
+永久规则：
+
+tenant scoped；
+append-only；
+UPDATE / DELETE DB trigger 拒绝；
+corrected/reverified 信息只能追加新 fact；
+不设 mutable isLatest；
+不允许这些事实直接产生 filing/submission/recovered truth。
+
+Broker POA 枚举只允许：
+
+CBP_FORM_5291
+EQUIVALENT_REGULATORY_POA
+
+明确禁止 4811 进入 Broker POA enum。
+
+Form 4811 如后续需要，只能属于 refund destination / special address / third-party designation 语义。
+
+② machine-safe reference CHECK：APPROVE WITH REVISE。
+
+必须下沉数据库，不只靠 scanRawSensitive()。
+
+至少覆盖这些引用列：
+
+importerOfRecordRef
+legalEntityRef
+aceAccountRef
+claimantRef
+entryReference
+principalRef
+brokerRef
+evidenceArtifactRef
+
+DB 必须拒绝：
+
+EIN 形状 NN-NNNNNNN
+纯数字 importer-number 类字符串
+空字符串
+含明显自由文本/换行
+credential/password/api-key 形式的原文
+
+建议采用正向 machine-reference shape + 明确敏感形状排除，不要只做黑名单。
+
+例如要求引用是 opaque identifier/reference，而非自然语言或原始业务号码。
+
+银行账号 shape 不要加在这三张表里。
+原因是 IOR Identity / Rights / Broker POA 本身不应该存在银行账号字段。银行账号属于 Refund Destination 独立边界；在那里应继续实行：
+
+raw bank account = forbidden
+
+而不是为了“安全”在无关表中塞银行账号 CHECK。
+
+③ aceAccountRef tokenized 存储：APPROVE。
+
+允许保存的只能是：
+
+opaque token；
+vault reference；
+internal account reference；
+
+例如语义类似：
+
+ace:account:<opaque-id>
+
+不能保存：
+
+ACE credential；
+username/password；
+API token；
+raw importer number；
+EIN；
+可直接登录/调用 ACE 的秘密值。
+
+并建议 DB 增加一条约束：
+
+aceAccountRef IS NULL OR machine_safe_ref(aceAccountRef)
+
+它只是引用，不得因为存在 aceAccountRef 就推导“ACE 已授权/已验证”。
+
+④ digest / 唯一键：APPROVE，但按 immutable fact identity 做。
+
+每张表建议统一：
+
+contentDigest = SHA-256(canonical immutable payload)
+
+DB：
+
+UNIQUE (organizationId, contentDigest)
+
+语义：
+
+完全相同事实重放 → 返回既有 fact；
+payload 任一 immutable 字段变化 → 新 fact；
+不 UPDATE 老 fact。
+
+不要把 observedAt / recordedAt / computedAt 这种本地写入时间作为幂等 identity 的主要组成，否则重试会产生新事实。
+
+但如果 effectiveFrom / effectiveTo / verifiedAt 是业务事实本身，它们应进入 canonical payload。
+
+特别要求：
+
+CustomsBrokerPoaFact 的 digest 必须覆盖：
+
+principalRef
+brokerRef
+jurisdiction
+authorizationType
+scope
+effectiveAt / expiresAt
+evidenceArtifactRef
+verificationStatus/source
+
+不能仅用 POA reference 做唯一键，因为同一授权可能后续被撤销/重新验证。
+
+⑤ latest：选择 query/view，不要物化 mutable latest 列。APPROVE。
+
+继续沿用你们 Customs 现有模式：
+
+ORDER BY effective/observed/recorded time DESC, id DESC
+
+得到 latest。
+
+如果查询频繁，可以建 DB view，例如：
+
+CustomsIorIdentityLatest
+
+但不要：
+
+isLatest=true/false
+
+因为这会要求 UPDATE 老事实，破坏 append-only。
+
+还要注意 latest ≠ usable：
+
+最新一条可能是：
+
+REVOKED
+
+所以读取层必须是：
+
+latest fact → evaluate usability
+
+不能为了方便直接“latest VERIFIED”。
+
+⑥ scopeJson GIN：当前 NOT REQUIRED。
+
+第一版不批准为了“未来也许查询”就加 GIN。
+
+POA scope 通常规模很小，而且当前主要访问方式应该是：
+
+tenant + principal/broker + jurisdiction + latest → service 检查 scope
+
+先用普通组合索引：
+
+(organizationId, principalRef, recordedAt)
+(organizationId, brokerRef, recordedAt)
+必要时 (organizationId, jurisdiction, recordedAt)
+
+即可。
+
+等出现真实 query pattern，例如：
+
+大量按 JSON scope containment 检索所有具备 DRAWBACK 权限的 POA
+
+再单独增加 GIN migration。
+
+当前加 GIN 会增加写放大，却没有已证明的查询需求。
+
+另外要求一起下沉的 DB invariants
+
+这是本轮批准的条件。
+
+Identity Fact：
+
+VERIFIED 时 verificationSource != NONE
+VERIFIED 时 verifiedAt IS NOT NULL
+effectiveTo >= effectiveFrom（两者均存在时）
+principal type/status/source 由 DB enum 限定
+
+Right Lineage Fact：
+
+iorRightsForRemedy、claimantRightsForRemedy 必须是闭合集合
+filingAuthorized=true 不能等价为 filing performed
+不得存在 filingSubmitted / provider result 等外部执行字段
+tenant lineage 必须与引用的 identity/evidence tenant 一致
+
+Broker POA Fact：
+
+authorization type 只允许 5291 / equivalent regulatory POA
+expiresAt >= effectiveAt
+VERIFIED POA 必须有 evidenceArtifactRef
+VERIFIED POA 必须有非 NONE verification source
+scope 不能为空
+4811 必须有 migration-level negative test，证明 DB 写入会失败，而不只是 service 返回 unusable。
+必测 PostgreSQL 验收
+
+实施后至少要证明：
+
+同 fact 重放 exactly-one；
+corrected fact 追加历史；
+UPDATE 拒绝；
+DELETE 拒绝；
+cross-tenant lineage 拒绝；
+raw EIN 拒绝；
+numeric importer number 拒绝；
+raw credential/ref free text 拒绝；
+CBP_FORM_4811 Broker POA DB 写入拒绝；
+VERIFIED + source NONE 拒绝；
+VERIFIED + missing evidence（POA）拒绝；
+过期窗口形状非法拒绝；
+latest 查询返回新 fact、历史仍保留。
+
+所以编号结论：
+
+① PASS — 三表五枚举批准
+② PASS WITH REVISE — machine-safe CHECK 必须 DB 化；银行账号不属于这三表
+③ PASS — aceAccountRef 仅允许 tokenized/opaque reference
+④ PASS — UNIQUE(org, contentDigest) 的 immutable fact idempotency
+⑤ PASS — latest query/view，禁止 mutable isLatest
+⑥ PASS / NO GIN FOR V1 — 有真实 containment query 再加
+
+因此：
+
+BG-013 I1 Schema Delta = APPROVED TO IMPLEMENT
+
+Codex 可以开始 Prisma Schema + migration + tenant/immutable triggers + PostgreSQL E2E。
+
+不需要再提交 Design Request；完成后提交 Implementation Checkpoint 即可。
+
+边界继续保持：
+
+filingSubmitted=false
+externalWritePerformed=false
+transportEnabled=false
+Payment=0
+collection=OFF
+productionCredentials=ABSENT
+
+并且：
+
+IOR verified ≠ claimant rights verified ≠ Broker POA verified ≠ filing authorized ≠ filing submitted ≠ refund received。
+```

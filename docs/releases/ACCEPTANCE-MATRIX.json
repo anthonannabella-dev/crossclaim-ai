@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-10-03T16:02:18.032Z",
-  "acceptance_head": "c15d2e2",
+  "generated_at": "2026-10-03T16:02:57.705Z",
+  "acceptance_head": "09a6859",
   "protocol": "docs/releases/FINAL-ACCEPTANCE-PROTOCOL.md",
   "areas": [
     {
@@ -193,7 +193,6 @@
       "DISPUTE_SUBMISSION_AUTHORITY"
     ],
     "arch_review_required": [
-      "BG-013-ior-facts-persistence-schema-delta",
       "BG-021-independent-site-persistence-schema-delta"
     ]
   }

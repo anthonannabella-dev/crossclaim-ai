@@ -1664,3 +1664,6 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 
 ## 2026-10-03T16:02:05.923Z — CHANGE D
 - Independent-site 内部闭环落地（8/8）；Layer 2 矩阵 6 缺口闭合；残留 HTTP/持久化转 BG-021（需架构审计）。
+
+## 2026-10-03T16:02:46.125Z — MSG-20261003-136（BG-013 Schema Delta）
+- PASS WITH REVISE / APPROVED_TO_IMPLEMENT；已归档 FULL_COPY_OK；BG-013 离开 arch pending，转为可执行实现。

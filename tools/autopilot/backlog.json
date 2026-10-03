@@ -1,6 +1,6 @@
 {
   "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。",
-  "updatedAt": "2026-10-03T16:02:05.923Z",
+  "updatedAt": "2026-10-03T16:02:46.125Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -334,8 +334,8 @@
       "priority": "P1",
       "source_backlog_id": "IOR 指令 ①②③ / I1",
       "title": "IOR identity / right lineage / broker POA 事实持久化（Schema Delta，需架构方审计）",
-      "scope": "append-only 事实表 + tenant/immutable/append-only 触发器 + digest；不含外部写入",
-      "acceptance_criteria": "Schema Delta 获批后落 migration；PG 回归（幂等、append-only、跨租户拒绝）",
+      "scope": "append-only 事实表 + 5 枚举 + tenant/immutable 触发器 + DB 级 CHECK（machine-safe 引用、4811 拒绝、POA 一致性）+ 不含外部写入（已获架构方批准：MSG-20261003-136）",
+      "acceptance_criteria": "Prisma + migration + PostgreSQL E2E：同 fact 重放 exactly-one、corrected 追加历史、UPDATE/DELETE 拒绝、跨租户 lineage 拒绝、raw EIN / numeric importer number / credential-free-text 拒绝、CBP_FORM_4811 拒绝、VERIFIED+NONE 拒绝、VERIFIED 缺 evidence 拒绝、过期窗口非法拒绝、latest 返回新 fact",
       "dependencies": [],
       "risk_class": "HIGH",
       "ARCH_REVIEW_REQUIRED": true,
@@ -351,7 +351,8 @@
       "template": "suite-evidence",
       "filters": [
         "architecture-contract"
-      ]
+      ],
+      "materializable": true
     },
     {
       "id": "BG-014-ior-qualification-wiring",
