@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "b84351f",
+  "head": "7b38dd5",
   "status": "RECONCILED",
   "current_task": "Carrier Queue #6 — SLA EVIDENCE ASSEMBLY + ELIGIBILITY INPUT PLANE：Tracking Fact + Invoice Fact + POD Fact + Carrier Terms Evidence + Service Level Evidence → **ShipmentEvidenceBundle**（只建证据输入层；不得自动认定赔付 / 自动提交 claim / 自动退款 / 调用 carrier write API / 自动产生 recovery amount）。**逐字归档 MSG-111 为第一步。**CarrierInvoiceReadPort + CarrierPODReadPort（verified account lineage、request/response 双向绑定、十进制金额、charge kind 归一化 + raw code 保留、POD 掩码与隐私、safe rawReference）；**read-only**，不做 SLA/退款资格推导。CarrierTrackingReadPort + normalized CarrierTrackingSnapshot（UPS/FedEx provider adapter 分离）+ 状态/事件归一化（确定性排序 + 去重）+ 失败原因分类 + tenant/account lineage 归属；**read-only**（无 mutation / claim / pickup / refund，TRANSPORT=false）。",
   "next_task": "PC-12A 实施 → 本地测试 + tsc api/web + API contract + full CI → PC-12A CHECKPOINT 送审。",
@@ -10,7 +10,7 @@
   "production_enabled": false,
   "external_write_enabled": false,
   "updated_at": "2026-10-03T09:26:08.099Z",
-  "previous_head": "b41afe7",
+  "previous_head": "b84351f",
   "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "0c35106",
@@ -49,11 +49,11 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-03T12:03:56.444Z",
+  "last_tick_at": "2026-10-03T12:18:47.117Z",
   "state": "IMPLEMENT",
-  "last_action": "MASTER GAP CLOSURE 复核状态更新：G2 → DONE（随 C17）、G7 → DONE（Customs 全链回归）、G8/G9 → IN_PROGRESS（含具体下一步）",
+  "last_action": "G8：新增 customs-entry-fact-store（事实层 contentDigest 幂等 + 四类计算投影只追加 + latest 由 computedAt 推导）与真实 PostgreSQL 验收 7/7",
   "last_action_at": "2026-10-03T12:03:56.528Z",
-  "next_action": "G8 收口：为 Customs C1–C5 增加 Prisma store（append-only 写入 + contentDigest 幂等 + 投影写入）与 DB 回归；随后 G9 逐表扫描应用层校验字段；再评估下一目标域内部缺口",
+  "next_action": "G9：逐表扫描仅有应用层校验的字段；随后评估下一目标域内部缺口",
   "current_head": "749040c",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-03T11:58:55.820Z",
-    "gapMs": 300625,
+    "previousTickAt": "2026-10-03T12:13:47.886Z",
+    "gapMs": 299232,
     "stale": false,
-    "checkedAt": "2026-10-03T12:03:56.444Z"
+    "checkedAt": "2026-10-03T12:18:47.117Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -4685,6 +4685,11 @@
       "artifact": "apps/api/src/__tests__/customs-g4-chain.test.ts",
       "tests": "7/7 PASS；customs 全套 154/154",
       "note": "覆盖 fail-closed 传播（C1 入口 / C2 守卫 / C4 三态 / C5 不估算 / C6 缺口 / C7 拒绝交接）与确定性重放"
+    },
+    "g8": {
+      "status": "DONE",
+      "artifact": "apps/api/src/services/customs/customs-entry-fact-store.ts",
+      "tests": "apps/api/src/__tests__/customs-entry-fact-store-db.test.ts → 7/7 PASS（duplicate→exactly one / digest 冲突 fail-closed / 投影重算留历史 / 幂等 append / UPDATE·DELETE 触发器拒绝 / 跨租户拒绝 / latest 选择）"
     }
   },
   "audit_channel_url": "https://chatgpt.com/c/6ac0c3b8-30a4-83ec-a529-4d9b04ffa0e7",
