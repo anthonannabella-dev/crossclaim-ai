@@ -51,7 +51,23 @@ const openStatic = units.units.filter((unit) => !completed.has(unit.id)).map((un
 const openInternal = [...new Set([...openStatic, ...openBacklog, ...archPending])];
 
 const head = git(['rev-parse', '--short', 'HEAD']);
-const dirty = git(['status', '--porcelain']);
+const dirtyRawStatus = git(['status', '--porcelain']);
+/** 验收计算器自身的静态输出（MSG-20261003-144 CHANGE A 认可的簿记范围）。 */
+const STATIC_ARTIFACT_PREFIXES = [
+  '.autopilot/STATE.json',
+  '.autopilot/HEARTBEAT.json',
+  'docs/releases/ACCEPTANCE-MATRIX.json',
+  'docs/releases/FINAL-ACCEPTANCE-REPORT.md',
+  'docs/releases/LAYER2-GOLDEN-PATH-MATRIX',
+];
+const dirty = dirtyRawStatus
+  .split('\n')
+  .filter((line) => line.trim() !== '')
+  .filter((line) => {
+    const file = line.slice(3).trim().replace(/^"|"$/g, '');
+    return !STATIC_ARTIFACT_PREFIXES.some((prefix) => file.startsWith(prefix));
+  })
+  .join('\n');
 const evidence = state.evidence ?? {};
 
 /** 只有绑定到当前 acceptance HEAD 的实证才判 true；其余一律 UNVERIFIED。 */
