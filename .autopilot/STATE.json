@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261003-126",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-03T09:21:18.164Z",
+  "updated_at": "2026-10-03T09:26:08.099Z",
   "previous_head": "0693821",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -49,11 +49,11 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-03T09:21:18.164Z",
+  "last_tick_at": "2026-10-03T09:26:08.099Z",
   "state": "IMPLEMENT",
-  "last_action": "G5-UI：新增只读接线页 apps/web/app/integration-status/page.tsx（carrier response 读模型 + customs filing status，GET-only / no-store / 显式只读声明；错误按状态码与稳定 code 展示）→ web tsc 0 error → 更新 FRONTEND-WIRING-MAP 与差集登记（G5 = PARTIAL_DONE）→ commit/push",
-  "last_action_at": "2026-10-03T09:21:18.163Z",
-  "next_action": "按 CONTINUOUS_EXECUTION 继续：G5-POST-FORMS（人工补录与 start-recovery 表单接线，仍只 USER_REPORTED / 不 filing）→ G4（Customs C1–C7 内部链）→ G7/G8/G9 复核。",
+  "last_action": "G5-POST-FORMS：新增 manual-response-form.tsx 与 start-recovery-form.tsx 并内嵌只读页（只提交允许字段；服务端仍强制 USER_REPORTED / 不 filing；UI 明示无对外动作与扣款）→ web tsc 0 error → G5 标记 DONE → commit/push",
+  "last_action_at": "2026-10-03T09:26:08.098Z",
+  "next_action": "按 CONTINUOUS_EXECUTION 继续 G4（Customs C1–C7 内部链：evidence/data contract → duty truth → classification discrepancy → eligibility → estimate → claim-ready package），随后 G7/G8/G9 复核。",
   "current_head": "e060a5f",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
@@ -4455,7 +4455,6 @@
     "recomputed_at_head": "0693821",
     "internal_remaining_gap": [
       "G4",
-      "G5-POST-FORMS",
       "G7",
       "G8",
       "G9"
@@ -4535,15 +4534,13 @@
       "server_forward": "server.ts 新增 C21 deps 转发（customsOpportunities / customsAuthorization / customsFilingProvider / customsFilingStatus）"
     },
     "g5": {
-      "status": "PARTIAL_DONE（只读接线已上线：integration-status 页；POST 表单批次待做）",
-      "artifact": "apps/web/app/integration-status/page.tsx",
+      "status": "DONE（只读页 + 两个表单全部上线；web tsc 0 error）",
+      "artifact": "apps/web/app/integration-status/{page.tsx,manual-response-form.tsx,start-recovery-form.tsx}",
       "covers": [
         "GET /carrier-claim-packages/:packageId/responses",
-        "GET /customs-opportunities/:id/filing-status"
-      ],
-      "pending": [
-        "POST /carrier-claim-packages/:packageId/responses 表单（只允许 USER_REPORTED）",
-        "POST /customs-opportunities/:id/start-recovery 表单（不 filing）"
+        "GET /customs-opportunities/:id/filing-status",
+        "POST /carrier-claim-packages/:packageId/responses（只 USER_REPORTED）",
+        "POST /customs-opportunities/:id/start-recovery（不 filing）"
       ]
     },
     "g6": {

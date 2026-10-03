@@ -32,7 +32,7 @@
 
 - 新增只读页 `apps/web/app/integration-status/page.tsx`：`/integration-status?packageId=<id>&opportunityId=<id>` 同时渲染 **carrier response 读模型**（currentStatus / currentVerificationLevel / factCount / hasProviderVerifiedFact / status history）与 **customs filing status 读模型**（currentStatus / currentSourceLevel / hasAuthorityVerifiedFact / history）。
 - 页面仅做 GET、`cache: no-store`，并在 UI 内显式声明「不会提交 claim、不会执行 filing、不会触发扣款/外部写」；401/403/404 等错误按状态码与稳定 code 展示。
-- 仍待做（下一批）：人工补录（POST /carrier-claim-packages/:id/responses）与 start-recovery（POST /customs-opportunities/:id/start-recovery）的**表单接线**——需要 package/opportunity 选择 UX 与确认语义，且只允许 USER_REPORTED / 不 filing。
+- 已实施（G5-POST-FORMS）：`manual-response-form.tsx`（POST /carrier-claim-packages/:id/responses，只提交 status/providerReference/note，服务端强制 USER_REPORTED+UNVERIFIED）与 `start-recovery-form.tsx`（POST /customs-opportunities/:id/start-recovery，只提交 opportunityId；响应显式展示 filingSubmitted=false / externalExecutionStatus=NOT_STARTED 或 blockers）。两者均内嵌于同一只读页，且 UI 明确标注不触发对外动作或扣款。
 
 ## 3. 后端 service → 路由映射（G10 复核）
 

@@ -1,5 +1,8 @@
 import { cookies } from 'next/headers';
 
+import ManualResponseForm from './manual-response-form';
+import StartRecoveryForm from './start-recovery-form';
+
 /**
  * G5-UI（MASTER GAP CLOSURE）：只读接线 —— carrier response 读模型 + customs filing status。
  * 本页**只读**：不提交 claim、不执行 filing、不触发扣款、不修改任何事实；仅展示既有事实与投影。
@@ -164,8 +167,12 @@ export default async function IntegrationStatusPage({
         )}
       </section>
 
+      <ManualResponseForm />
+
+      <StartRecoveryForm />
+
       <p className="text-xs text-slate-500">
-        边界：真实 carrier provider 读取与 customs filing 仍为 HOLD_EXTERNAL；本页不触发任何对外动作。
+        边界：真实 carrier provider 读取与 customs filing 仍为 HOLD_EXTERNAL；上述两个表单只产生内部事实/准备状态，不触发任何对外动作或扣款。
       </p>
     </div>
   );
