@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261003-102",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-03T01:31:24.887Z",
+  "updated_at": "2026-10-03T01:51:22.170Z",
   "previous_head": "93817a1",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -3754,5 +3754,6 @@
     "ci_run": "37084665634",
     "note": "通道恢复后重发唤醒并按三要素验证；Issue #2 comment 为唯一留档面"
   },
-  "phase_b1_status": "DESIGN_ONLY（docs/releases/PHASE-B1-FASTIFY-HTTP-LAYER-DESIGN.md；待架构方就依赖放行与双注册策略裁决）"
+  "phase_b1_status": "DESIGN_ONLY（docs/releases/PHASE-B1-FASTIFY-HTTP-LAYER-DESIGN.md；待架构方就依赖放行与双注册策略裁决）",
+  "phase_b2_status": "DESIGN_ONLY（docs/releases/PHASE-B2-INTEGRATION-FOUNDATION-DESIGN.md；8 模型待 Schema Delta 审核）"
 }
