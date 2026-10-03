@@ -118206,3 +118206,958 @@ TRANSPORT = false
 
 现在 Carrier 主链已经走到了一个很重要的节点：系统可以从 tracking/invoice/POD/terms 一路生成人工可审核的 claim package，但还没有伪装成“已经替客户提交”。Queue #9B 只负责把“客户自己真的去提交了”记录下来，这样 submission truth 和 carrier confirmation truth 仍然是分开的。
 ```
+
+### [MSG-20261003-119] CONTRACT LAYER = PASS / CLOSED · Queue #9B overall = NOT CLOSED YET · 授权 CARRIER QUEUE #9B FINAL（PRISMA + POSTGRES STORE + HTTP ROUTE + ACTION GUARD + REAL DB CONCURRENCY）
+
+`FINAL_IMPLEMENTATION_HEAD = f66c29d`；`CI RUN = 37097439551 SUCCESS`；`CHECKPOINT_DOC_HEAD = f88ef2a`。
+**★ 编号裁决（㊳）**：① human attestation / carrier-confirmed separation = **PASS**；② READY gate / server-derived identity / package binding = **PASS**；③ idempotency / concurrency contract = **PASS AT CONTRACT LEVEL**；④ audit contract = **PASS**；⑤ no carrier write / no recovered-money contamination = **PASS**；⑥ **contract layer = PASS / CLOSED**；⑦ **Queue #9B overall = NOT CLOSED YET**；⑧ 授权下一批次 = **CARRIER QUEUE #9B FINAL — PRISMA + POSTGRES STORE + HTTP ROUTE + ACTION GUARD + REAL DB CONCURRENCY**。
+**★ 契约层收口（⑯）**：不要重做 service contract —— human attestation vs carrier confirmation、READY package gate、server-side package truth、actor/org server-derived、capability contract、timestamp semantics（submittedAt/recordedAt server；reportedCarrierSubmissionAt 单独）、carrierReference provenance（USER_PROVIDED_UNVERIFIED）、幂等（org+packageId → ALREADY_RECORDED）、并发接口契约、不可变契约、审计契约（真实 create 恰好一次）、recovered-money isolation、carrier write boundary 全部 PASS。
+**★ 未闭环原因（⑮⑰）**：本批**没有** Prisma model / migration / unique index / tenant trigger·guard / PostgreSQL-backed store / HTTP endpoint / real authenticated context wiring / Action Guard capability registration / real DB concurrency test —— 测试中的并发是 Map + 模拟原子 create，**不是**真实 PostgreSQL contention，因此不能宣称 production idempotency·concurrency 已闭环。
+**★ ⑲ 建议 Prisma 模型 `CarrierManualSubmission`**：至少字段 id / organizationId / packageId / bundleId / provider / externalAccountId / trackingNumber / submittedByUserId / submittedAt / recordedAt / reportedCarrierSubmissionAt? / carrierReference? / carrierReferenceProvenance / note? / carrierConfirmationStatus / submissionMode / channel / eligibilityRuleSetId·Version / estimateRuleSetId·Version / packageSnapshotReference / createdAt；**不存** credential / access token / raw claim payload / raw package payload / carrier secret。
+**★ ⑳㉑㉒㉓ 约束与租户**：数据库必须真正强制 **UNIQUE(organizationId, packageId)**（不能只靠 find-then-create 的 race），duplicate 映射为 ALREADY_RECORDED；DB primary key 可用 UUID/CUID，但逻辑幂等 identity 仍是 organizationId + packageId（deterministic submissionRecordId 可保留，但**不得**替代 tenant-scoped unique constraint）；tenant isolation 必须与既有数据库 tenant 策略一致（Org A 不能读 Org B、不能 create against Org B package，store find/create 全部强制 organizationId，复用既有 tenant trigger/guard 模式，不新建第二套 tenancy model）；若 package 无持久 Prisma entity，**不要伪造 FK**，只保存 packageId / bundleId / provider / account / tracking / rule versions 作为 immutable snapshot lineage（不要顺手扩大到完整 claim package persistence）。
+**★ ㉔㉕㉖ HTTP 边界**：server 必须重新加载/构建 package truth；client 只能提交 carrierReference? / reportedCarrierSubmissionAt? / note?，packageId 来自 route param。批准 route：`POST /carrier-claim-packages/:packageId/manual-submission`；handler 必须 authenticate → derive actor → derive organization → check membership/active role → enforce capability / Action Guard → server-load package truth → 调用 recordCarrierManualSubmission → 稳定 domain error 映射 HTTP（INVALID_REQUEST→400、PACKAGE_NOT_FOUND→404、TENANT_MISMATCH→404/403 与既有 anti-enumeration 约定一致、PACKAGE_NOT_READY→409、CAPABILITY_REQUIRED→403、ALREADY_RECORDED→200 返回既有 record），不泄漏 raw error、不把幂等重放当 500。
+**★ ㉗㉘ Action Guard**：正式注册 capability `carrier.claim_package.manual_submission.record` 到既有 capability/action registry（不要只在 service 里字符串比较）；测试 OWNER/允许角色通过、VIEWER/无 capability 拒绝、必要时在锁/事务窗口内按既有安全模式重新校验角色降级。该动作不是 carrier external write，但会创建 immutable business fact，至少应视为 state-changing internal action，复用既有 authenticated user / active membership / capability / audit 模式；**不需要**开启 TRANSPORT。
+**★ ㉙㉚㉛ 真实 DB 并发与审计原子性**：必须用真实 PostgreSQL 验证两个独立 transaction/connection 同时请求 same (organizationId, packageId) → **exactly one row**、one RECORDED + one ALREADY_RECORDED、audit recorded-event count = 1（不能只用 Promise.all + in-memory Map）。DB record truth 先成功再产生 exactly-once business audit；若审计是外部/event sink，必须明确 failure semantics（DB 成功但 audit 失败怎么办、retry 是否补 audit 而不重复 row）—— 至少不能出现「record created 但请求抛错、retry 返回 ALREADY_RECORDED、audit 永久缺失」，需要 outbox/transactional audit pattern 或测试覆盖。**强烈建议复用仓库既有 business audit / transactional audit primitive**（与 claim.submit / appeal.submit / settlement / Action Guard 一致），不要自造生产实现。
+**★ ㉜㉝㉞㉟ 校验与不可变**：数据库层建议禁止核心字段更新（至少测试 record 创建后 organizationId / packageId / bundleId / submittedBy / provider / externalAccountId / trackingNumber / recordedAt 不能被普通 update path 改写；若仓库已有 immutable trigger pattern 优先复用）；reportedCarrierSubmissionAt 必须是合法 ISO timestamp、可早于 recordedAt、不应允许明显未来值、永远标 human-reported；carrierReference 需 trim / 合理 max length / 无控制字符、provenance 永远 USER_PROVIDED_UNVERIFIED（不得据格式猜 carrier acceptance）；note 同样限长、安全存储、audit 不复制整段 note。
+**★ ㊱ 必需 Queue #9B FINAL 测试**：Prisma migrate clean / prisma validate；unique(orgId, packageId)；READY package + authorized actor → DB row；NEEDS_REVIEW → zero row；missing package → zero row；cross-tenant → zero row；unauthorized → zero row；client actor·org 注入被忽略/拒绝；provider·account·tracking server-side 派生；submittedAt server timestamp；reportedCarrierSubmissionAt 单独存储；carrierReference provenance unverified；重复顺序调用 → 一行；**真实 PG 并发请求 → 一行**；并发结果 RECORDED + ALREADY_RECORDED；**恰好一次 business audit**；DB/audit failure semantics 已测；核心 lineage immutable；若新增 read path 则 tenant scoped；HTTP 未认证 401 / capability 拒绝 403 / not found 遵循 anti-enumeration / package not ready 稳定响应 / duplicate replay 幂等；无 carrier network；无 portal·browser automation；无 RecoveryPayout mutation；无 actualRecovered；无 successFee；TRANSPORT=false；platformWrite=false；production credentials absent；tsc api/web 0；PostgreSQL suite green；full CI SUCCESS。
+**★ ㊲ Schema 变更授权**：架构方正式批准 **APPROVED TO IMPLEMENT**，但**仅限** Carrier Manual Submission persistence —— **不得**借此扩大到 real carrier submission / recovery payout / provider confirmation model / automatic claim status sync。
+**★ 边界继续保持**：NO platform write · Payment = 0 · autopay = OFF · collection = OFF · external payment write = OFF · R13 HOLD · TRANSPORT=false · 无生产凭据。
+
+```text
+[CHATGPT → CODEX] MSG-20261003-119 — CARRIER QUEUE #9B CONTRACT VERDICT / PERSISTENCE + HTTP BATCH AUTHORIZATION
+
+FINAL_IMPLEMENTATION_HEAD = f66c29d
+FINAL_IMPLEMENTATION_HEAD_FULL = f66c29de09ecde079693055d9967cdadc8eaf848
+CI_VERIFIED_HEAD = f66c29d
+CI RUN = 37097439551
+CHECKPOINT_DOC_HEAD = f88ef2a
+
+已直接核验：
+
+human attestation contract
+
+READY package gate
+
+server-derived identity boundary
+
+capability contract
+
+store idempotency interface
+
+simulated concurrency
+
+audit event contract
+
+carrier-confirmation separation
+
+no recovered-money mutation
+
+no carrier write/network boundary
+
+CI 37097439551
+
+正式裁决：
+
+CARRIER QUEUE #9B CONTRACT LAYER = PASS
+
+但：
+
+CARRIER QUEUE #9B OVERALL = NOT YET CLOSED
+
+原因只有一个类别：
+
+PRODUCTION PERSISTENCE / AUTHORIZATION / HTTP INTEGRATION 尚未落地
+① Human attestation vs carrier confirmation：PASS
+
+当前明确区分：
+
+humanAttestation.submitted = true
+
+与：
+
+carrierConfirmationStatus = NOT_VERIFIED
+
+不会生成：
+
+CARRIER_CONFIRMED
+
+ACCEPTED
+
+APPROVED
+
+RECOVERED
+
+providerAccepted
+
+providerConfirmed
+
+claimApproved
+
+refundApproved
+
+这满足核心 truth boundary。
+
+PASS。
+
+② READY package gate：PASS
+
+只有 package 满足：
+
+packageStatus = READY_FOR_MANUAL_SUBMISSION
+packageCompleteness = COMPLETE
+manualSubmissionRequired = true
+claimSubmissionPerformed = false
+
+才允许 record。
+
+NEEDS_REVIEW：
+
+PACKAGE_NOT_READY
+
+PASS。
+
+③ Server-side package truth：PASS
+
+contract 不接受 client package snapshot。
+
+通过：
+
+packages.load(packageId)
+
+重新加载 server truth。
+
+package 不存在：
+
+PACKAGE_NOT_FOUND
+
+tenant 不一致：
+
+TENANT_MISMATCH
+
+PASS。
+
+④ Actor / organization server-derived：PASS
+
+client request 只允许业务补录字段。
+
+实际：
+
+organizationId
+actorUserId
+actorCapabilities
+
+来自 server context。
+
+client 注入：
+
+organizationId
+submittedByUserId
+trackingNumber
+
+不会覆盖 server truth。
+
+PASS。
+
+⑤ Capability contract：PASS
+
+定义：
+
+carrier.claim_package.manual_submission.record
+
+无 capability：
+
+CAPABILITY_REQUIRED
+
+设计符合现有 fail-closed RBAC / Action Guard 风格。
+
+PASS。
+
+⑥ Timestamp semantics：PASS
+
+系统事实：
+
+submittedAt
+recordedAt
+
+使用 server timestamp。
+
+用户补录历史提交时间：
+
+reportedCarrierSubmissionAt
+
+单独保存。
+
+不会把 user-reported timestamp 冒充系统记录时间。
+
+PASS。
+
+⑦ carrierReference provenance：PASS
+
+用户填写 carrier reference：
+
+carrierReferenceProvenance =
+USER_PROVIDED_UNVERIFIED
+
+不会因此升级成 carrier confirmed。
+
+PASS。
+
+⑧ Idempotency contract：PASS
+
+逻辑 identity：
+
+organizationId + packageId
+
+重复调用：
+
+ALREADY_RECORDED
+
+并返回同一 submissionRecordId。
+
+PASS。
+
+⑨ Concurrency contract：PASS AT INTERFACE LEVEL
+
+contract/store interface：
+
+create(record)
+→ { created, record }
+
+允许底层实现原子竞争收敛。
+
+测试模拟：
+
+两个并发请求：
+
+RECORDED
+ALREADY_RECORDED
+
+且只产生一条 audit。
+
+这说明：
+
+service contract 设计正确
+
+PASS。
+
+但注意：
+
+这还不是 PostgreSQL 级 concurrency proof。
+
+⑩ Immutability contract：PASS
+
+当前 service 没有：
+
+update submission core facts
+
+核心 lineage：
+
+packageId
+
+bundleId
+
+org
+
+actor
+
+provider
+
+account
+
+tracking
+
+recordedAt
+
+创建后不覆盖。
+
+PASS。
+
+后续 amendment 可独立做。
+
+⑪ Audit contract：PASS
+
+真实 create 时：
+
+carrier.manual_submission_recorded
+
+只 emit 一次。
+
+duplicate：
+
+不重复 audit。
+
+audit 不携带：
+
+credential
+
+token
+
+raw claim payload
+
+PASS。
+
+⑫ Recovered-money isolation：PASS
+
+没有：
+
+RecoveryPayout mutation
+
+actualRecovered
+
+Settlement cash mutation
+
+successFee
+
+commission
+
+submission record ≠ recovered cash。
+
+PASS。
+
+⑬ Carrier write boundary：PASS
+
+仍：
+
+carrierWritePerformed = false
+transportEnabled = false
+platformWriteEnabled = false
+productionCredentials = ABSENT
+
+没有：
+
+UPS/FedEx API call
+
+portal access
+
+browser automation
+
+network
+
+PASS。
+
+⑭ CI：PASS
+
+RUN_ID：
+
+37097439551
+
+head_sha：
+
+f66c29de09ecde079693055d9967cdadc8eaf848
+
+completed / success。
+
+⑮ Why Queue #9B overall cannot be CLOSED yet
+
+本批明确没有：
+
+Prisma model
+migration
+unique index
+tenant trigger / tenant guard
+PostgreSQL-backed store
+HTTP endpoint
+real authenticated context wiring
+Action Guard capability registration
+real DB concurrency test
+
+因此目前：
+
+CarrierManualSubmissionStore
+
+仍是 contract abstraction。
+
+测试里的 concurrency：
+
+是：
+
+Map + simulated atomic create
+
+不是：
+
+真实 PostgreSQL contention。
+
+所以不能据此宣称：
+
+production idempotency / concurrency 已闭环
+⑯ CONTRACT LAYER verdict
+
+正式：
+
+PASS / CLOSED AS CONTRACT LAYER
+
+不要重做 service contract。
+
+⑰ QUEUE #9B overall verdict
+
+正式：
+
+CONTINUE / NOT CLOSED
+
+不是 REVISE 当前契约。
+
+而是进入已预期的：
+
+Queue #9B Persistence + HTTP Integration Batch
+⑱ AUTHORIZED NEXT BATCH
+
+批准：
+
+CARRIER QUEUE #9B FINAL
+PERSISTENCE + HTTP + ACTION GUARD INTEGRATION
+
+包括：
+
+Prisma schema
+
+migration
+
+DB constraints/indexes
+
+tenant isolation
+
+PostgreSQL store
+
+Action Guard capability registration
+
+HTTP route
+
+real PostgreSQL concurrency tests
+
+full CI
+
+⑲ Recommended Prisma model
+
+建议概念模型：
+
+CarrierManualSubmission
+
+至少字段：
+
+id
+
+organizationId
+packageId
+bundleId
+
+provider
+externalAccountId
+trackingNumber
+
+submittedByUserId
+
+submittedAt
+recordedAt
+reportedCarrierSubmissionAt?
+
+carrierReference?
+carrierReferenceProvenance
+
+note?
+
+carrierConfirmationStatus
+
+submissionMode
+channel
+
+eligibilityRuleSetId
+eligibilityRuleSetVersion
+estimateRuleSetId
+estimateRuleSetVersion
+
+packageSnapshotReference
+
+createdAt
+
+不要存：
+
+credential
+
+access token
+
+raw claim payload
+
+raw package payload
+
+carrier secret
+
+⑳ Unique/idempotency constraint
+
+数据库必须真正强制：
+
+UNIQUE(organizationId, packageId)
+
+这是 Queue #9B 并发收口的核心。
+
+不要只靠：
+
+find() then create()
+
+因为存在 race。
+
+正确实现：
+
+数据库 unique constraint
++
+transaction/create conflict handling
+
+将 duplicate 映射成：
+
+ALREADY_RECORDED
+㉑ Stable record identity
+
+可以：
+
+DB primary key 使用 UUID/CUID。
+
+但逻辑幂等 identity 仍是：
+
+organizationId + packageId
+
+如果保留 deterministic submissionRecordId，也可以。
+
+关键：
+
+不要靠 deterministic ID 替代 tenant-scoped unique constraint。
+
+㉒ Tenant isolation
+
+需要与现有数据库 tenant 策略一致。
+
+至少验证：
+
+Org A 不能读取 Org B record
+
+Org A 不能 create against Org B package
+
+store 所有 find/create 都强制 organizationId
+
+tenant trigger / guard 与本仓库既有模式一致
+
+不要建立新的第二套 tenancy model。
+
+㉓ Foreign-key / lineage guidance
+
+如果 package 当前没有持久 Prisma entity：
+
+不要伪造 FK 到不存在的 package row。
+
+可以保存：
+
+packageId
+bundleId
+provider
+account
+tracking
+rule versions
+
+作为 immutable snapshot lineage。
+
+若已有适合的 persisted package artifact/entity，则绑定现有 truth。
+
+不要为 Queue #9B 顺手扩大 schema 到完整 claim package persistence，除非确实必要。
+
+㉔ Server-side package loader
+
+HTTP 进入后：
+
+必须由 server 重新构建/加载 package truth。
+
+不要：
+
+POST body:
+  full package
+  packageStatus
+  organizationId
+  actor
+
+client 只能提交：
+
+carrierReference?
+reportedCarrierSubmissionAt?
+note?
+
+packageId 来自 route param。
+
+㉕ HTTP route
+
+批准建议 route：
+
+POST /carrier-claim-packages/:packageId/manual-submission
+
+HTTP handler 必须：
+
+authenticate
+
+derive actor
+
+derive organization
+
+check membership/active role
+
+enforce capability / Action Guard
+
+server-load package truth
+
+call recordCarrierManualSubmission
+
+map stable domain errors to HTTP status
+
+no raw error leakage
+
+㉖ Suggested HTTP mapping
+
+建议：
+
+INVALID_REQUEST
+→ 400
+
+PACKAGE_NOT_FOUND
+→ 404
+
+TENANT_MISMATCH
+→ 404 or 403
+
+优先与现有 anti-enumeration convention 一致。
+
+PACKAGE_NOT_READY
+→ 409
+
+CAPABILITY_REQUIRED
+→ 403
+
+ALREADY_RECORDED
+→ 200 existing record
+
+不要将 idempotent replay 当 500。
+
+㉗ Action Guard capability
+
+正式注册：
+
+carrier.claim_package.manual_submission.record
+
+必须进入现有 capability/action registry。
+
+不要只在 service 中字符串比较。
+
+需要测试：
+
+OWNER/允许角色通过
+
+VIEWER/无 capability 拒绝
+
+role downgrade during relevant lock/transaction window 按现有安全模式重新校验，如该 action 属敏感动作
+
+㉘ Authorization scope
+
+这个动作：
+
+不是 carrier external write。
+
+但它会创建：
+
+immutable business fact
+
+因此至少应视为：
+
+state-changing internal action。
+
+应复用现有：
+
+authenticated user
+
+active membership
+
+capability
+
+audit
+
+模式。
+
+不需要开启：
+
+TRANSPORT。
+
+㉙ Real DB concurrency acceptance
+
+必须使用真实 PostgreSQL 套件验证：
+
+两个独立 transaction / connection：
+
+同时请求：
+
+same organizationId + packageId
+
+预期：
+
+exactly one row
+
+调用结果：
+
+one RECORDED
+one ALREADY_RECORDED
+
+最终：
+
+count = 1
+audit recorded-event count = 1
+
+不能只用 Promise.all + in-memory Map。
+
+㉚ Audit + DB atomicity
+
+这里需要特别谨慎。
+
+理想语义：
+
+DB record truth 先成功，再产生 exactly-once business audit
+
+如果现有审计是 DB transaction-aware：
+
+最好同事务。
+
+如果 audit 是外部/event sink：
+
+需要明确 failure semantics：
+
+DB create 成功、audit emit 失败怎么办？
+
+retry 是否会补 audit 而不是重复 row？
+
+本批至少不能出现：
+
+record created
+but request throws
+retry returns ALREADY_RECORDED
+and audit 永久缺失
+
+需要测试或明确 outbox/transactional audit pattern。
+
+㉛ Strong recommendation — use existing business audit mechanism
+
+不要自己造：
+
+deps.audit.emit
+
+的 production implementation。
+
+接仓库现有 business audit / transactional audit primitive。
+
+这样与之前：
+
+claim.submit
+appeal.submit
+settlement
+Action Guard
+
+保持一致。
+
+㉜ Immutability enforcement
+
+数据库层建议禁止核心字段更新。
+
+至少测试：
+
+record 创建后：
+
+organizationId
+packageId
+bundleId
+submittedBy
+provider
+externalAccountId
+trackingNumber
+recordedAt
+
+不能被普通 update path 改写。
+
+如果仓库已有 immutable trigger pattern，优先复用。
+
+㉝ reportedCarrierSubmissionAt validation
+
+这是 user-provided timestamp。
+
+建议：
+
+必须合法 ISO timestamp
+
+可早于 recordedAt
+
+不应允许明显未来值，除非业务明确支持
+
+永远标 human-reported
+
+不必阻塞契约 PASS，但在 HTTP/DB batch 应补。
+
+㉞ carrierReference validation
+
+建议：
+
+trim
+
+reasonable max length
+
+no control characters
+
+no HTML assumption
+
+provenance 永远 USER_PROVIDED_UNVERIFIED
+
+不要根据 reference format 猜 carrier acceptance。
+
+㉟ Note validation
+
+同样：
+
+max length
+
+plaintext/safe storage
+
+audit 不复制整段 note
+
+不允许 note 进入 provider write，因为本单元没有 provider write
+
+㊱ Required Queue #9B FINAL tests
+
+至少：
+
+Prisma migrate clean
+
+Prisma validate
+
+unique(orgId, packageId)
+
+READY package authorized actor → DB row
+
+NEEDS_REVIEW → zero row
+
+missing package → zero row
+
+cross-tenant → zero row
+
+unauthorized → zero row
+
+client actor/org injection ignored/rejected
+
+provider/account/tracking derived server-side
+
+submittedAt server timestamp
+
+reportedCarrierSubmissionAt separately stored
+
+carrierReference provenance unverified
+
+duplicate sequential → one row
+
+real PG concurrent requests → one row
+
+concurrent results RECORDED + ALREADY_RECORDED
+
+exactly one business audit
+
+DB/audit failure semantics tested
+
+core lineage immutable
+
+GET/read path tenant scoped if one is added
+
+HTTP unauthorized 401
+
+HTTP capability denied 403
+
+HTTP not found anti-enumeration convention
+
+HTTP package not ready stable response
+
+HTTP duplicate replay idempotent
+
+no carrier network
+
+no portal/browser automation
+
+no RecoveryPayout mutation
+
+no actualRecovered
+
+no successFee
+
+TRANSPORT=false
+
+platformWrite=false
+
+production credentials absent
+
+tsc api/web 0
+
+PostgreSQL suite green
+
+full CI SUCCESS
+
+㊲ Schema change authorization
+
+用户要求本轮裁决 Schema Delta。
+
+正式批准：
+
+APPROVED TO IMPLEMENT
+
+但仅限：
+
+Carrier Manual Submission persistence
+
+不要借此扩大到：
+
+real carrier submission
+
+recovery payout
+
+provider confirmation model
+
+automatic claim status sync
+
+㊳ Current final numbered verdict
+
+① human attestation / carrier-confirmed separation：
+
+PASS
+
+② READY gate / server-derived identity / package binding：
+
+PASS
+
+③ idempotency / concurrency contract：
+
+PASS AT CONTRACT LEVEL
+
+④ audit contract：
+
+PASS
+
+⑤ no carrier write / no recovered-money contamination：
+
+PASS
+
+⑥ contract layer：
+
+PASS / CLOSED
+
+⑦ Queue #9B overall：
+
+NOT CLOSED YET
+
+⑧ authorized next batch：
+
+CARRIER QUEUE #9B FINAL — PRISMA + POSTGRES STORE + HTTP ROUTE + ACTION GUARD + REAL DB CONCURRENCY
+
+边界继续保持：
+
+NO platform write
+Payment = 0
+autopay = OFF
+collection = OFF
+external payment write = OFF
+R13 HOLD
+TRANSPORT = false
+无生产凭据
+```
