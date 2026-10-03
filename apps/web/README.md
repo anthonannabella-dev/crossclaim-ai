@@ -5,7 +5,7 @@
 ## 硬边界（C-0008-A 裁定）
 
 - **不得**直接导入 Prisma、数据库客户端或存储适配器；所有业务数据都经 API 层。
-- 不做公网部署、不做自助注册、不接 OAuth；邀请制 + Email/密码由 `apps/api` 负责。
+- 不做公网部署、不接真实 OAuth；认证由 `apps/api` 负责（邀请制为默认路径，`/signup` 存在但仅在 `PUBLIC_SIGNUP_ENABLED=true` 时可用）。
 - 浏览器只持有 HttpOnly 会话 Cookie（由 API 签发），不得在前端存储令牌。
 
 ## 本地命令
@@ -23,7 +23,7 @@ npm run typecheck
 
 | 路由 | 说明 | 允许角色 |
 | --- | --- | --- |
-| `/login` | 邀请制 Email/密码登录（HttpOnly 会话 Cookie） | — |
+| `/login` | Email/密码登录（HttpOnly 会话 Cookie；未验证邮箱返回 EMAIL_NOT_VERIFIED） | — |
 | `/` | 工作台：导入批次 + 机会复核（确认 / 拒绝，拒绝必须选原因） | 全部已登录成员 |
 | `/upload` | CSV 账单上传（字节级扫描 → 存储 → 导入） | 全部已登录成员 |
 | `/connections` | 采集连接管理：创建 / 暂停 / 恢复 / 吊销 / 凭据引用轮换 | OWNER / ADMIN |

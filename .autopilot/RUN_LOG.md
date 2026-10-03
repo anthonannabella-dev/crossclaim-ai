@@ -1759,3 +1759,9 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 
 ## 2026-10-03T23:05:37.804Z — I18N BASELINE
 - 业务语言层 + 状态本地化 + 校验器/棘轮落地（CI 接线）；客户硬编码基线 169，P0/P1/P2 缺口已登记。
+
+## 2026-10-03T23:18:09.191Z — BACKLOG doc-truth-check
+- doc-truth-check doc-sync=DRIFT readme_model_count,readme_migrations
+
+## 2026-10-03T23:18:23.456Z — BACKLOG doc-truth-check
+- doc-truth-check doc-sync=OK

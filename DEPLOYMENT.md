@@ -90,7 +90,7 @@ Seed 会创建（已存在则跳过）：一个组织、一个 OWNER 用户与 M
 | 检查 | 期望 |
 |---|---|
 | `GET /health` | `200`，`status=ok`；依赖不可用时 `status=degraded`（不泄露连接串） |
-| 迁移 | `npx prisma migrate status` 显示 19 条迁移已应用 |
+| 迁移 | `npx prisma migrate status` 显示全部迁移已应用（**条数由 runtime/CI 检测，文档不写死**） |
 | 租户触发器 | CI 断言 28 个触发器存在；生产可用同 SQL 核对 |
 | 审计 | 登录、上传、建案、账单、支付等动作均落 `AuditLog` |
 | 日志 | 每个请求一条 `http_request`；`/files/<token>` 路径已脱敏 |

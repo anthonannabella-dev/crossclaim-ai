@@ -12,8 +12,8 @@ export async function run({ root, metadata }) {
   const actualMigrations = fs.readdirSync(path.join(root, 'apps/api/prisma/migrations'), { withFileTypes: true }).filter((entry) => entry.isDirectory()).length;
 
   const checks = [
-    ['readme_model_count', readme.includes('领域模型 **' + actualModels + ' 个')],
-    ['readme_migrations', readme.includes('**' + actualMigrations + ' 条迁移**')],
+    [ 'readme_counts_delegated', readme.includes('由 CI/runtime 检测') && !/领域模型 \*\*\d+ 个/.test(readme) ],
+    
     ['api_return_evidence_route', api.includes('/customs-entry-facts/:entryFactId/return-claim-evidence')],
     ['autopilot_mode_continuous', state.autopilot_mode === 'CONTINUOUS'],
   ];

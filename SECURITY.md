@@ -6,7 +6,11 @@
 
 ## 1. 认证与会话
 
-- 邀请制：不存在公开注册。流程为 管理员建邀请 → 被邀请人凭 token + 密码接受 → `User` + `Membership` + 审计。
+- 认证方式（与代码同步，source of truth = `apps/api/src/services/auth/*`）：
+  - **邀请制**：管理员建邀请 → 被邀请人凭 token + 密码接受 → `User` + `Membership` + 审计（默认且推荐路径）。
+  - **自助注册**：`POST /auth/signup` 存在但默认**关闭**（`PUBLIC_SIGNUP_ENABLED=false`，fail-closed）；开启时新用户 `emailVerified=false`、`sessionIssued=false`、`nextStep=EMAIL_VERIFICATION_REQUIRED`。
+  - **邮箱验证闸门（P0-1）**：登录在**发放 session 前**强制 `emailVerified === true`，未验证返回稳定错误码 `EMAIL_NOT_VERIFIED`（HTTP 403）；该检查放在密码校验之后以避免邮箱枚举。
+  - 会话 Cookie：`HttpOnly` + `SameSite=Lax` + `Path=/` + `Max-Age`；**生产/HTTPS 自动追加 `Secure`**，并可通过 `SESSION_COOKIE_HOST_PREFIX=true` 使用 `__Host-cc_session`（读取端同时接受两种名字，切换不踢掉既有会话）。
 - 口令：`scrypt`（默认 N=32768, r=8, p=1，可用 `PASSWORD_SCRYPT_N/_R/_P` 调整），存储格式自描述
   `scrypt$N$r$p$salt$hash`；从不记录明文。
 - 口令策略：至少 12 字符，且同时含字母与数字。

@@ -4,7 +4,7 @@
 C-0008-B2（Case / Evidence / Claim Draft / Billing）的端点尚未实现。
 
 > **边界**：`apps/api` 目前**只在本机/内部使用**（未做公网部署、未做生产加固）。
-> 认证是邀请制 Email/密码 + HttpOnly 会话 Cookie；没有任何端点接受第三方平台凭据明文。
+> 认证：邀请制 Email/密码为默认路径；自助注册 `POST /auth/signup` 存在但由 `PUBLIC_SIGNUP_ENABLED` 控制（默认关闭），注册后需完成邮箱验证才能登录（`EMAIL_NOT_VERIFIED`）。任何端点都不接受第三方平台凭据明文。
 
 ---
 

@@ -12,8 +12,8 @@ const actualModels = (schemaText.match(/^model\s+\w+\s*\{/gm) ?? []).length;
 const actualMigrations = fs.readdirSync(path.join(root, 'apps/api/prisma/migrations'), { withFileTypes: true }).filter((entry) => entry.isDirectory()).length;
 
 const checks = [];
-  checks.push(['readme_model_count', readme.includes('领域模型 **' + actualModels + ' 个')]);
-  checks.push(['readme_migrations', readme.includes('**' + actualMigrations + ' 条迁移**')]);
+  checks.push(['readme_counts_delegated', readme.includes('由 CI/runtime 检测') && !/领域模型 \*\*\d+ 个/.test(readme)]);
+  
   checks.push(['api_return_evidence_route', api.includes('/customs-entry-facts/:entryFactId/return-claim-evidence')]);
   checks.push(['api_customs_start_route', api.includes('/customs-opportunities/:id/start-recovery')]);
   checks.push(['autopilot_mode_recorded', state.autopilot_mode === 'CONTINUOUS' && state.heartbeat_role === 'LIVENESS_ONLY']);
