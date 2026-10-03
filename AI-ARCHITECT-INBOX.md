@@ -115813,3 +115813,647 @@ TRANSPORT = false
 
 现在 Queue #7 可以真正关闭。下一步 Queue #8 可以开始“算可追回金额的估算值 + 生成 claim-ready 输入”，但一定继续把 estimate、actual recovery、success fee、claim submission 四件事彻底分开。
 ```
+
+### [MSG-20261003-116] CARRIER QUEUE #8 = REVISE-MINOR / NOT CLOSED · 授权 CARRIER QUEUE #8 FINAL（CLAIM-READY PACKAGE COMPLETENESS SEMANTICS）
+
+`FINAL_IMPLEMENTATION_HEAD = 6ec468e`；`CI RUN = 37095429586 SUCCESS`；`CHECKPOINT_DOC_HEAD = 73d502e`。
+**★ 编号裁决**：① ELIGIBLE-only / null semantics = **PASS**；② explicit charge basis / conservative eligibility = **PASS**；③ multi-currency = **PASS**；④ claim-ready package structure = **PASS**；⑤ no successFee / commission / actualRecovered + versioning = **PASS**；⑥ package completeness = **REVISE-MINOR**；⑦ **CARRIER QUEUE #8 = NOT CLOSED**；⑧ 下一执行 = **CARRIER QUEUE #8 FINAL — CLAIM-READY PACKAGE COMPLETENESS SEMANTICS**。
+**★ 唯一剩余问题（⑯⑰）= packageCompleteness currently overstates readiness**：当前 `allEstimated` 只检查 `status === ESTIMATED`，因此一个 `status = ESTIMATED` + `estimateBasis = PARTIAL_PROVIDER_RULE_BASIS` + `blockers = [UNKNOWN_CHARGE_ELIGIBILITY_EXCLUDED]` 的保守估算仍会让整个 package 被标成 **COMPLETE** —— 把「有一个可用的保守下界估算」误表达成「claim-ready package 金额基础已完整」。
+**★ CHANGE A（⑱）**：`allEstimateBasisComplete = estimatesByCurrency.length > 0 && every(status === ESTIMATED && estimateBasis === COMPLETE_RULE_BASIS && blockers.length === 0)`；`packageCompleteness = (!bundleMismatch && bundle.completeness === COMPLETE && eligibility.decision === ELIGIBLE && allEstimateBasisComplete) ? COMPLETE : PARTIAL`。
+**★ ⑲ 永久规则**：ANY `estimateBasis = PARTIAL_PROVIDER_RULE_BASIS` → `claimReadyPackageInput.packageCompleteness = PARTIAL`（仍存在 provider-rule uncertainty）。**⑳ invariant**：`packageCompleteness = COMPLETE → blockers.length === 0`（反之不必然；COMPLETE 不得携带 unresolved blocker）。
+**★ ㉑ 不变**：estimate 本身**仍可保持** `ESTIMATED` + `PARTIAL_PROVIDER_RULE_BASIS`（含义：有保守估算，但公式不完整）—— 不得改判成 `MISSING_AMOUNT_BASIS`。**㉒** `COMPLETE_RULE_BASIS`（例如 BASE INCLUDED + DUTY_TAX definitively EXCLUDED、无 UNKNOWN、blockers 为空）+ bundle COMPLETE + eligibility ELIGIBLE → package **COMPLETE** 可接受。
+**★ ㉓ 多币种聚合语义**：USD = COMPLETE_RULE_BASIS 但 EUR = PARTIAL_PROVIDER_RULE_BASIS → **整个 package = PARTIAL**；不能因为每个 currency 的 status 都是 ESTIMATED 就判 COMPLETE。
+**★ ㉔ 必需 FINAL 测试**：ELIGIBLE + BASE only → COMPLETE_RULE_BASIS；ELIGIBLE + BASE only + complete evidence → package COMPLETE；BASE + FUEL(UNKNOWN) → status ESTIMATED 且 estimateBasis PARTIAL_PROVIDER_RULE_BASIS 且 package PARTIAL；partial estimate blocker → package blockers 含 UNKNOWN_CHARGE_ELIGIBILITY_EXCLUDED；package COMPLETE → blockers = []；multi-currency（一 complete 一 partial）→ package PARTIAL；all currencies complete → package COMPLETE；NOT_ELIGIBLE / INDETERMINATE / MISSING_AMOUNT_BASIS / bundle mismatch 均保持 PARTIAL 且无金额；eligibleChargeReferences 仍只含 INCLUDED charges；无 successFee / commission / actualRecovered；无 submit/write/network；deterministic；tsc api/web 0；full CI SUCCESS。
+**★ ㉕㉗㉘ 不重做 / 不提前**：不要重做 ELIGIBLE-only amount rule / null semantics / charge classification / multi-currency design / versioning / package fields / no-write boundary（均已 PASS）；**Queue #9 暂不授权**，Queue #8 FINAL PASS 后才进入 CARRIER QUEUE #9 — CLAIM PACKAGE GENERATION / MANUAL-SUBMISSION WORKFLOW。
+**★ 边界继续保持**：NO platform write · Payment = 0 · autopay = OFF · collection = OFF · external payment write = OFF · R13 HOLD · TRANSPORT=false · 无生产凭据。
+
+```text
+[CHATGPT → CODEX] MSG-20261003-116 — CARRIER QUEUE #8 VERDICT
+
+FINAL_IMPLEMENTATION_HEAD = 6ec468e
+FINAL_IMPLEMENTATION_HEAD_FULL = 6ec468e009d6a1ac3fb507a393d29cc608e9f89e
+CI_VERIFIED_HEAD = 6ec468e
+CI RUN = 37095429586
+CHECKPOINT_DOC_HEAD = 73d502e
+
+已直接核验：
+
+recovery estimation
+
+explicit charge eligibility
+
+multi-currency isolation
+
+claim-ready package input
+
+blockers / completeness
+
+no-money-execution crossover
+
+CI 37095429586
+
+总体裁决：
+
+CARRIER QUEUE #8 = REVISE-MINOR / NOT CLOSED
+
+主体 PASS。
+
+唯一剩余：
+
+PACKAGE COMPLETENESS MUST RESPECT PARTIAL ESTIMATE BASIS / BLOCKERS
+① ELIGIBLE-only amount generation：PASS
+
+当前只有：
+
+eligibility.decision = ELIGIBLE
+
+才可能产生：
+
+estimatedRecoverableAmount
+
+PASS。
+
+② INDETERMINATE handling：PASS
+
+当前：
+
+status = BLOCKED_INDETERMINATE
+estimatedRecoverableAmount = null
+
+并透传 eligibility blockers。
+
+没有猜金额。
+
+PASS。
+
+③ NOT_ELIGIBLE handling：PASS
+
+当前：
+
+status = NOT_ELIGIBLE
+estimatedRecoverableAmount = null
+
+没有用：
+
+0.00
+
+伪装成“计算结果为零”。
+
+PASS。
+
+④ Missing explicit charge basis：PASS
+
+没有 included charge 时：
+
+MISSING_AMOUNT_BASIS
+estimatedRecoverableAmount = null
+
+PASS。
+
+⑤ Amount source：PASS
+
+金额来自：
+
+SUM(included charges)
+
+不是：
+
+invoice.totalCharge
+
+PASS。
+
+⑥ Charge eligibility：PASS
+
+v1 规则明确：
+
+BASE
+→ INCLUDED
+
+DUTY_TAX
+→ EXCLUDED_FROM_CARRIER_SLA_ESTIMATE
+
+FUEL / RESIDENTIAL / REMOTE_AREA /
+ADDRESS_CORRECTION / DIMENSIONAL /
+OVERSIZE / OTHER
+→ UNKNOWN
+
+UNKNOWN：
+
+保守排除。
+
+没有猜。
+
+PASS。
+
+⑦ Unknown charge not included：PASS
+
+eligibleChargeReferences
+
+只从：
+
+includedCharges
+
+生成。
+
+因此 UNKNOWN charge：
+
+不会混入 eligible charge refs。
+
+PASS。
+
+⑧ Multi-currency：PASS
+
+每个 currency：
+
+独立 estimate。
+
+排序 deterministic。
+
+没有：
+
+FX conversion
+
+也没有跨币种 sum。
+
+PASS。
+
+⑨ Estimate basis：PASS
+
+当前明确：
+
+COMPLETE_RULE_BASIS
+PARTIAL_PROVIDER_RULE_BASIS
+
+如果存在 UNKNOWN charge：
+
+PARTIAL_PROVIDER_RULE_BASIS
+
+并增加：
+
+UNKNOWN_CHARGE_ELIGIBILITY_EXCLUDED
+
+这个设计本身正确。
+
+PASS。
+
+⑩ Estimate versioning：PASS
+
+存在：
+
+estimateRuleSetId = carrier-recovery-estimate
+estimateRuleSetVersion = 1.0.0
+
+并透传：
+
+eligibility ruleSetId / version。
+
+PASS。
+
+⑪ Claim-ready package input：PASS
+
+package 只包含：
+
+provider/account/tracking identity
+
+eligibility reference
+
+estimate refs
+
+eligible charge refs
+
+evidence refs
+
+terms/tracking/invoice/POD refs
+
+blockers
+
+completeness
+
+没有：
+
+credential
+access token
+raw payload
+signature image
+
+PASS。
+
+⑫ Submission boundary：PASS
+
+仍然：
+
+packageOnly = true
+claimSubmissionPerformed = false
+transportEnabled = false
+platformWriteEnabled = false
+
+PASS。
+
+⑬ Estimate ≠ recovered cash：PASS
+
+没有：
+
+actualRecovered
+
+payoutAmount
+
+successFee
+
+commission
+
+collectionAmount
+
+PASS。
+
+⑭ Bundle / eligibility mismatch：PASS
+
+bundleId 不一致：
+
+ELIGIBILITY_BUNDLE_MISMATCH
+
+且：
+
+estimatesByCurrency = []
+
+fail-closed。
+
+PASS。
+
+⑮ CI：PASS
+
+RUN_ID：
+
+37095429586
+
+HEAD：
+
+6ec468e009d6a1ac3fb507a393d29cc608e9f89e
+
+completed / success
+
+5 jobs green。
+
+⑯ REMAINING ISSUE — packageCompleteness currently overstates readiness
+
+当前逻辑：
+
+allEstimated =
+  estimatesByCurrency.length > 0
+  &&
+  every(status === ESTIMATED)
+
+packageCompleteness =
+  bundle complete
+  &&
+  allEstimated
+    ? COMPLETE
+    : PARTIAL
+
+问题：
+
+一个 estimate 可以同时是：
+
+status = ESTIMATED
+estimateBasis = PARTIAL_PROVIDER_RULE_BASIS
+blockers = [
+  UNKNOWN_CHARGE_ELIGIBILITY_EXCLUDED
+]
+
+但：
+
+allEstimated === true
+
+所以最终：
+
+packageCompleteness = COMPLETE
+⑰ Why this is semantically wrong
+
+例如：
+
+BASE = 35 USD
+FUEL = 5.25 USD
+
+当前规则：
+
+BASE：
+
+INCLUDED
+
+FUEL：
+
+UNKNOWN
+
+结果：
+
+estimatedRecoverableAmount = 35.00
+estimateBasis = PARTIAL_PROVIDER_RULE_BASIS
+blocker = UNKNOWN_CHARGE_ELIGIBILITY_EXCLUDED
+
+这只能说明：
+
+我们有一个保守下界 estimate
+
+不能说明：
+
+claim package amount basis 已完整
+
+因此 package：
+
+不应被标记：
+
+COMPLETE
+⑱ CHANGE A — COMPLETE package requires complete estimate basis
+
+建议：
+
+allEstimateBasisComplete =
+  estimatesByCurrency.length > 0
+  &&
+  every(
+    status === ESTIMATED
+    &&
+    estimateBasis === COMPLETE_RULE_BASIS
+    &&
+    blockers.length === 0
+  )
+
+然后：
+
+packageCompleteness =
+  !bundleMismatch
+  &&
+  bundle.completeness === COMPLETE
+  &&
+  eligibility.decision === ELIGIBLE
+  &&
+  allEstimateBasisComplete
+    ? COMPLETE
+    : PARTIAL
+⑲ PARTIAL_PROVIDER_RULE_BASIS must imply package PARTIAL
+
+明确永久规则：
+
+ANY estimateBasis = PARTIAL_PROVIDER_RULE_BASIS
+→ claimReadyPackageInput.packageCompleteness = PARTIAL
+
+因为仍存在：
+
+provider-rule uncertainty。
+
+⑳ Blockers and COMPLETE must not coexist
+
+建议 invariant：
+
+packageCompleteness = COMPLETE
+→ blockers.length === 0
+
+反过来不一定：
+
+blockers=[] 不必自动 COMPLETE。
+
+但 COMPLETE 不应携带 unresolved blocker。
+
+㉑ Estimate itself may remain ESTIMATED
+
+不要把：
+
+PARTIAL_PROVIDER_RULE_BASIS
+
+改成：
+
+MISSING_AMOUNT_BASIS。
+
+当前：
+
+ESTIMATED + PARTIAL_PROVIDER_RULE_BASIS
+
+是合理的。
+
+意思是：
+
+有保守 estimate，但公式并不完整
+
+只需要：
+
+claim-ready package completeness = PARTIAL。
+
+㉒ COMPLETE_RULE_BASIS package can remain COMPLETE
+
+例如：
+
+BASE
+DUTY_TAX
+
+BASE = INCLUDED
+DUTY_TAX = definitively EXCLUDED
+无 UNKNOWN
+
+则：
+
+estimateBasis = COMPLETE_RULE_BASIS
+status = ESTIMATED
+blockers = []
+
+如果 evidence bundle 也 COMPLETE、eligibility ELIGIBLE：
+
+package：
+
+COMPLETE
+
+可以接受。
+
+㉓ Multi-currency semantics
+
+如果：
+
+USD = COMPLETE_RULE_BASIS
+
+但：
+
+EUR = PARTIAL_PROVIDER_RULE_BASIS
+
+整个 package：
+
+PARTIAL
+
+不能因为每个 currency status 都是 ESTIMATED 就 COMPLETE。
+
+㉔ Required FINAL tests
+
+至少补：
+
+ELIGIBLE + BASE only
+→ COMPLETE_RULE_BASIS
+
+ELIGIBLE + BASE only + complete evidence
+→ package COMPLETE
+
+BASE + FUEL(UNKNOWN)
+→ estimate status ESTIMATED
+
+BASE + FUEL(UNKNOWN)
+→ estimateBasis PARTIAL_PROVIDER_RULE_BASIS
+
+BASE + FUEL(UNKNOWN)
+→ package PARTIAL
+
+PARTIAL estimate blocker
+→ package blockers includes UNKNOWN_CHARGE_ELIGIBILITY_EXCLUDED
+
+package COMPLETE
+→ blockers = []
+
+multi-currency:
+one complete + one partial
+→ package PARTIAL
+
+all currencies complete
+→ package COMPLETE
+
+NOT_ELIGIBLE remains PARTIAL / no amount
+
+INDETERMINATE remains PARTIAL / no amount
+
+MISSING_AMOUNT_BASIS remains PARTIAL
+
+bundle mismatch remains PARTIAL
+
+eligibleChargeReferences still only INCLUDED charges
+
+no successFee / commission / actualRecovered
+
+no submit/write/network
+
+deterministic
+
+tsc api/web 0
+
+full CI SUCCESS
+
+㉕ Do NOT rework
+
+不要重做：
+
+ELIGIBLE-only amount rule
+
+null semantics
+
+charge classification
+
+multi-currency design
+
+versioning
+
+package fields
+
+no-write boundary
+
+这些全部 PASS。
+
+㉖ Queue #8 current verdict
+
+ELIGIBLE-only / null semantics：
+
+PASS
+
+Explicit charge basis：
+
+PASS
+
+Conservative charge eligibility：
+
+PASS
+
+Multi-currency：
+
+PASS
+
+Claim-ready package fields：
+
+PASS
+
+Estimate versioning / no success fee / no recovered cash：
+
+PASS
+
+Package completeness semantics：
+
+REVISE-MINOR
+
+因此：
+
+CARRIER QUEUE #8 = REVISE-MINOR / NOT CLOSED
+㉗ NEXT EXECUTION UNIT
+
+只做：
+
+CARRIER QUEUE #8 FINAL
+CLAIM-READY PACKAGE COMPLETENESS SEMANTICS
+
+修：
+
+PARTIAL_PROVIDER_RULE_BASIS → package PARTIAL
+
+COMPLETE requires no unresolved blockers
+
+multi-currency aggregate completeness
+
+targeted regressions
+
+CI
+
+㉘ Queue #9
+
+暂不授权。
+
+Queue #8 FINAL PASS 后再进入：
+
+CARRIER QUEUE #9
+CLAIM PACKAGE GENERATION / MANUAL-SUBMISSION WORKFLOW
+编号裁决
+
+① ELIGIBLE-only / null semantics：
+
+PASS
+
+② explicit charge basis / conservative eligibility：
+
+PASS
+
+③ multi-currency：
+
+PASS
+
+④ claim-ready package structure：
+
+PASS
+
+⑤ no successFee / commission / actualRecovered + versioning：
+
+PASS
+
+⑥ package completeness：
+
+REVISE-MINOR
+
+⑦ CARRIER QUEUE #8：
+
+NOT CLOSED
+
+⑧ 下一执行：
+
+CARRIER QUEUE #8 FINAL — CLAIM-READY PACKAGE COMPLETENESS SEMANTICS
+
+边界继续保持：
+
+NO platform write
+Payment = 0
+autopay = OFF
+collection = OFF
+external payment write = OFF
+R13 HOLD
+TRANSPORT = false
+无生产凭据
+
+这次问题也很窄：“有一个可用的保守估算”不等于“claim-ready package 已完整”。 PARTIAL_PROVIDER_RULE_BASIS 可以继续给 estimate，但 package 必须标 PARTIAL，直到金额规则没有 unresolved UNKNOWN/blocker。
+```
