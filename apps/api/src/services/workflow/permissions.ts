@@ -48,6 +48,12 @@ export interface PermissionMatrix {
   claimTrackingReceive: boolean;
   /** MSG-20260929-27 F2：录入到账事实 RecoveryPayout（OWNER/ADMIN/FINANCE） */
   recoveryPayoutRecord: boolean;
+  /**
+   * CARRIER QUEUE #9B FINAL（MSG-20261003-119 ㉔㉗）：记录「用户自称已人工提交 claim package」的事实。
+   * 只是 human attestation（carrierConfirmationStatus = NOT_VERIFIED），不是 carrier 外写；
+   * OWNER / ADMIN / OPS 可（与 claimTrackingReceive 同档），FINANCE / VIEWER 不可。
+   */
+  recordCarrierManualSubmission: boolean;
 }
 
 const DENY_ALL: PermissionMatrix = {
@@ -65,6 +71,7 @@ const DENY_ALL: PermissionMatrix = {
   claimTrackingApprove: false,
   claimTrackingReceive: false,
   recoveryPayoutRecord: false,
+  recordCarrierManualSubmission: false,
 };
 
 export const PERMISSIONS: Record<AppRole, PermissionMatrix> = {
@@ -83,6 +90,7 @@ export const PERMISSIONS: Record<AppRole, PermissionMatrix> = {
     claimTrackingApprove: true,
     claimTrackingReceive: true,
     recoveryPayoutRecord: true,
+    recordCarrierManualSubmission: true,
   },
   ADMIN: {
     manageConnections: true,
@@ -99,6 +107,7 @@ export const PERMISSIONS: Record<AppRole, PermissionMatrix> = {
     claimTrackingApprove: true,
     claimTrackingReceive: true,
     recoveryPayoutRecord: true,
+    recordCarrierManualSubmission: true,
   },
   OPS: {
     manageConnections: false,
@@ -115,6 +124,7 @@ export const PERMISSIONS: Record<AppRole, PermissionMatrix> = {
     claimTrackingApprove: false,
     claimTrackingReceive: true,
     recoveryPayoutRecord: false,
+    recordCarrierManualSubmission: true,
   },
   FINANCE: {
     manageConnections: false,
@@ -131,6 +141,7 @@ export const PERMISSIONS: Record<AppRole, PermissionMatrix> = {
     claimTrackingApprove: false,
     claimTrackingReceive: false,
     recoveryPayoutRecord: true,
+    recordCarrierManualSubmission: false,
   },
   VIEWER: { ...DENY_ALL },
 };
