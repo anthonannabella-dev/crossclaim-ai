@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261003-140",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-03T16:52:06.573Z",
+  "updated_at": "2026-10-03T16:52:33.455Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -4991,9 +4991,9 @@
   "awaiting_verdict": true,
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-03T16:52:08.175Z",
-    "head": "fb37b85",
-    "acceptance_head": "fb37b85",
+    "computed_at": "2026-10-03T16:52:33.886Z",
+    "head": "5f801b9",
+    "acceptance_head": "5f801b9",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5063,48 +5063,48 @@
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=fb37b85 ci_head=c07ff84 ci=UNKNOWN run="
+        "evidence": "acceptance_head=5f801b9 ci_head=c07ff84 ci=UNKNOWN run="
       },
       "L1-05_pg_regression_passed": {
         "status": "UNVERIFIED",
-        "evidence": "pg_regression recorded at 9e57ba3 ≠ acceptance head fb37b85"
+        "evidence": "pg_regression recorded at 9e57ba3 ≠ acceptance head 5f801b9"
       },
       "L1-06_fresh_db_migration_passed": {
         "status": "UNVERIFIED",
-        "evidence": "fresh_db_migration recorded at 9e57ba3 ≠ acceptance head fb37b85"
+        "evidence": "fresh_db_migration recorded at 9e57ba3 ≠ acceptance head 5f801b9"
       },
       "L1-07_api_typecheck_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_api recorded at 9e57ba3 ≠ acceptance head fb37b85"
+        "evidence": "typecheck_api recorded at 9e57ba3 ≠ acceptance head 5f801b9"
       },
       "L1-08_web_typecheck_build_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_web recorded at 4af3432 ≠ acceptance head fb37b85"
+        "evidence": "typecheck_web recorded at 4af3432 ≠ acceptance head 5f801b9"
       },
       "L1-09_no_skipped_critical_tests": {
         "status": "UNVERIFIED",
-        "evidence": "tests_no_skipped recorded at 4af3432 ≠ acceptance head fb37b85"
+        "evidence": "tests_no_skipped recorded at 4af3432 ≠ acceptance head 5f801b9"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
         "status": false,
-        "evidence": "dirty entries: 6"
+        "evidence": "dirty entries: 4"
       },
       "L1-11_docs_state_consistent": {
         "status": "UNVERIFIED",
-        "evidence": "docs_sync recorded at 9e57ba3 ≠ acceptance head fb37b85"
+        "evidence": "docs_sync recorded at 9e57ba3 ≠ acceptance head 5f801b9"
       },
       "L1-12_schema_invariants_verified": {
         "status": "UNVERIFIED",
-        "evidence": "schema_invariants recorded at 9e57ba3 ≠ acceptance head fb37b85"
+        "evidence": "schema_invariants recorded at 9e57ba3 ≠ acceptance head 5f801b9"
       },
       "L1-13_negative_paths_covered": {
         "status": "UNVERIFIED",
-        "evidence": "negative_paths recorded at 9e57ba3 ≠ acceptance head fb37b85"
+        "evidence": "negative_paths recorded at 9e57ba3 ≠ acceptance head 5f801b9"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
         "status": "UNVERIFIED",
-        "evidence": "pg_e2e_real recorded at 9e57ba3 ≠ acceptance head fb37b85"
+        "evidence": "pg_e2e_real recorded at 9e57ba3 ≠ acceptance head 5f801b9"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
@@ -5389,7 +5389,13 @@
       "doc": "docs/releases/BG019-CRITICAL-STATE-READ-SURFACE-CHECKPOINT.md",
       "github_comment_id": "5971280514",
       "verdict": null
-    }
+    },
+    "wakeup_sent_at": "2026-10-03T16:52:33.454Z",
+    "wakeup_verification": [
+      "composer cleared",
+      "marker 5971280514 at bottom",
+      "generating"
+    ]
   },
   "bg021": {
     "status": "PASS / CLOSED",
