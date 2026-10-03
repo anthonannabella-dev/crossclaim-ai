@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261003-102",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-03T01:04:21.580Z",
+  "updated_at": "2026-10-03T01:21:53.427Z",
   "previous_head": "93817a1",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -20,7 +20,7 @@
   "ci_run": "36949295897",
   "ci_result": "completed_success",
   "fix_pr": "https://github.com/anthonannabella-dev/crossclaim-ai/pull/10",
-  "channel_status": "CHATGPT_WEB_CHALLENGE_BLOCKED（in-app browser 审计标签与新建标签均停在 Cloudflare 「请稍候…」turnstile 挑战页，DOM 为空、composer 不存在；非 Codex auth token 故障。按 chatgpt-web-audit-bridge 处置：本轮通道 DOWN，禁止自动解 CAPTCHA/绕过人机校验 → 需宿主在右侧窗口完成人机校验或重新打开会话）",
+  "channel_status": "CHANNEL_DEGRADED（in-app browser 无法加载 chatgpt.com：标签停在「请稍候…」、无 composer；原标签 reload/强制导航失败，新建 2 个标签同样失败；已达 HOST_ACTION_REQUIRED 并已通知宿主）",
   "pending_verdict_unarchived": null,
   "b2_status": "PASS（MSG-20260930-10 工程修复 + MSG-20260930-11 集成 PASS/MERGE APPROVED）",
   "protocol": "DUAL_CHANNEL_WAKEUP（GitHub = 正式总线 / ChatGPT Web = 仅唤醒）",
@@ -3743,6 +3743,15 @@
   "carrier_queue_5_ci_result": "SUCCESS",
   "carrier_queue_5_checkpoint_doc_head": "db6725c",
   "carrier_queue_5_audit_comment_id": "5962804928",
-  "carrier_queue_6_status": "AUTHORIZED → IMPLEMENTED（MSG-20261003-111 ⑤；ShipmentEvidenceBundle 证据输入层；adjudicationPerformed=false；Wait CI/送审）",
-  "carrier_queue_6_boundary": "只建证据输入层（ShipmentEvidenceBundle）；禁止自动认定赔付 / 自动提交 claim / 自动退款 / carrier write API / 自动 recovery amount；TRANSPORT=false · platformWriteEnabled=false · productionCredentials=ABSENT"
+  "carrier_queue_6_status": "IMPLEMENTED / READY_FOR_REVIEW（c94bdca / CI 37084665634 / doc 6b43a7a / comment 5963988987；ChatGPT 唤醒因通道故障未送达）",
+  "carrier_queue_6_boundary": "只建证据输入层（ShipmentEvidenceBundle）；禁止自动认定赔付 / 自动提交 claim / 自动退款 / carrier write API / 自动 recovery amount；TRANSPORT=false · platformWriteEnabled=false · productionCredentials=ABSENT",
+  "channel_degraded_since": "2026-10-03T01:21:53.426Z",
+  "pending_wakeup": {
+    "kind": "QUEUE #6 CHECKPOINT",
+    "issue_comment_id": "5963988987",
+    "doc": "docs/releases/CARRIER-QUEUE-6-CHECKPOINT.md",
+    "implementation_head": "c94bdca",
+    "ci_run": "37084665634",
+    "note": "通道恢复后重发唤醒并按三要素验证；Issue #2 comment 为唯一留档面"
+  }
 }
