@@ -1,6 +1,6 @@
 # CUSTOMS G4 / C1 — Customs Entry Data / Evidence Contract CHECKPOINT
 
-- 时间：2026-10-03T09:34:56.145Z（HEAD 3f5b9e3）
+- 时间：2026-10-03T09:34:56.145Z（HEAD f7b85ee；记录时点 3f5b9e3）
 - 单元：G4 内部链第一环 **C1 = Customs Entry 事实契约层**（无 Schema 变更、无路由、无外写）
 - 边界：readOnly=true · filingPerformed=false · paymentPerformed=false · productionCredentials=ABSENT · TRANSPORT=false
 

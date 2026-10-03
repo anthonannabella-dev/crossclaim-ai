@@ -1462,3 +1462,8 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 闸门：tsc api/web 0 error；API contract 88/75；audit coverage OK；autopilot rules OK（本地 migration-checksums 为 CRLF 基线噪声，CI 权威）。
 - 边界：无 Schema 变更 / 无路由 / 无外写；filingPerformed=false、paymentPerformed=false、productionCredentials=ABSENT。
 - 下一步：C2 duty calculation truth；C1 持久化先送 Schema Delta。
+
+## 2026-10-03T09:36:48.317Z — G4/C2 Duty Calculation Truth（HEAD f7b85ee）
+- 交付：`customs-duty-truth.ts`（逐币种逐 kind BigInt 合计、8 类观察项、只读事实守卫）+ 11/11 回归；C1+C2 = 27/27。
+- 边界：adjudication=false、recoverableAmount=false、noFx、noFiling、noPayment；无 Schema / 无路由变更。
+- 下一步：C3 classification / rate discrepancy。
