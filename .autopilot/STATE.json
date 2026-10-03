@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261003-147",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-03T23:05:37.804Z",
+  "updated_at": "2026-10-03T23:19:49.069Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -5678,6 +5678,37 @@
     ],
     "p2_gaps": [
       "Marketing/SEO locale 路由 + hreflang/canonical/sitemap/landing pages"
+    ]
+  },
+  "post_acceptance": {
+    "at": "2026-10-03T23:19:20.551Z",
+    "design_pack": "docs/releases/POST-ACCEPTANCE-DESIGN-PACK.md",
+    "review_comment_id": "5974535504",
+    "done": [
+      "P0-1 EMAIL_NOT_VERIFIED login gate（PASS，4 回归）",
+      "P1-6 production cookie hardening（PASS，4 回归）",
+      "P1-11 documentation truth reconciliation（PASS）"
+    ],
+    "awaiting_arch": [
+      "EmailVerificationToken / PasswordResetToken Schema Delta",
+      "Notification Phase 1 Schema Delta",
+      "Durable worker runtime（BullMQ+Redis 依赖与许可证）",
+      "Mutation CSRF 统一口径",
+      "Data retention/export/delete 语义",
+      "Claim immutable language metadata"
+    ],
+    "external_gate": [
+      "EMAIL_DELIVERY",
+      "REAL_BACKUP_DRILL",
+      "REAL_SECRET_ROTATION_DRILL",
+      "DISTRIBUTED_RATE_LIMIT（infra）",
+      "PRODUCTION_ALERTING（infra）"
+    ],
+    "wakeup_sent_at": "2026-10-03T23:19:49.069Z",
+    "wakeup_verification": [
+      "composer cleared",
+      "marker 5974535504 at bottom",
+      "generating"
     ]
   }
 }
