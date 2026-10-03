@@ -124735,3 +124735,49 @@ BG-013 = REVISE（仅 CHANGE A）
 
 filingSubmitted=false · externalWritePerformed=false · transportEnabled=false · Payment=0 · collection=OFF · productionCredentials=ABSENT。
 ```
+
+### [MSG-20261003-138] BG-013 ENTERPRISE IOR I1 — FINAL CHECKPOINT = PASS / CLOSED（reviewed ref 7d73154）
+
+```text
+BG-013 ENTERPRISE IOR I1 — FINAL CHECKPOINT：PASS / CLOSED。
+
+我已核对 7d73154 的实际提交，CHANGE A 已准确收口上一轮唯一缺口，而且采用的是新增 migration，没有修改既有已应用迁移，这一点正确。
+
+编号裁决如下：
+
+IOR Identity VERIFIED → source ≠ NONE：PASS
+新约束 CustomsIorIdentityFact_verified_needs_source 已落到 DB。
+
+IOR Identity VERIFIED → verifiedAt NOT NULL：PASS
+新约束 CustomsIorIdentityFact_verified_needs_verified_at 已落到 DB。
+
+负向测试：PASS
+VERIFIED + source=NONE → DB reject。
+VERIFIED + verifiedAt=NULL → DB reject。
+
+非过度约束测试：PASS
+PENDING + verifiedAt=NULL 可落。
+UNVERIFIED + source=NONE + verifiedAt=NULL 可落。
+
+迁移纪律：PASS
+使用独立 20261003220000_customs_ior_identity_verified_invariant migration，未回改 20261003210000。
+
+前序 I1 其余项继续 PASS
+三表/五枚举、append-only、tenant/lineage、digest 幂等、4811 DB 拒绝、POA VERIFIED evidence/source、scope、expiry window、machine-safe refs、无 isLatest、无 GIN，均无需重开。
+
+因此最终状态：
+
+BG-013 = PASS / CLOSED
+
+不需要 A4，也不需要再送 Schema Design/Implementation 复审。
+
+可以继续进入下一内部缺口。
+
+永久语义继续保持：
+
+IOR verified ≠ claimant rights verified ≠ Broker POA verified ≠ filing authorized ≠ filing submitted ≠ refund received
+
+以及：
+
+filingSubmitted=false · externalWritePerformed=false · transportEnabled=false · Payment=0 · collection=OFF · productionCredentials=ABSENT
+```

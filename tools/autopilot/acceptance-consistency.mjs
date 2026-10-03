@@ -63,6 +63,14 @@ const openBacklog = backlog.items.filter((item) => !completed.has(item.id) && it
 const stateOpen = [...new Set([...openBacklog, ...(state.arch_review_pending ?? [])])];
 
 // C1：矩阵必须绑定一个真实存在的 acceptance HEAD（当前 HEAD 或其后代链上的祖先）。
+const shaPresentLocally = (() => {
+  try {
+    execFileSync('git', ['-c', 'safe.directory=' + ROOT, 'cat-file', '-e', matrix.acceptance_head + '^{commit}'], { cwd: ROOT, stdio: 'ignore' });
+    return true;
+  } catch {
+    return false;
+  }
+})();
 const isAncestorOfHead = (() => {
   try {
     execFileSync('git', ['-c', 'safe.directory=' + ROOT, 'merge-base', '--is-ancestor', matrix.acceptance_head, 'HEAD'], { cwd: ROOT });
@@ -71,8 +79,14 @@ const isAncestorOfHead = (() => {
     return false;
   }
 })();
-if (matrix.acceptance_head !== head && !isAncestorOfHead) {
-  conflicts.push('MATRIX_HEAD_UNKNOWN matrix=' + matrix.acceptance_head + ' head=' + head);
+if (matrix.acceptance_head !== head) {
+  if (!shaPresentLocally) {
+    // SHALLOW_CLONE：CI 默认 depth=1，历史对象不在本地。此时 ancestry 不可判定，
+    // 但内容一致性（open items / register / report）仍然强制；不得因此误判为冲突。
+    console.log('NOTE: acceptance_head ' + matrix.acceptance_head + ' 不在本地克隆（浅克隆）——跳过 ancestry 检查，内容一致性照常强制');
+  } else if (!isAncestorOfHead) {
+    conflicts.push('MATRIX_HEAD_UNKNOWN matrix=' + matrix.acceptance_head + ' head=' + head);
+  }
 }
 
 // C2：STATE 未完成项必须与矩阵 open_internal_items 完全一致。

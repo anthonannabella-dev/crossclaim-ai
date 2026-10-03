@@ -6,10 +6,10 @@
   "next_task": "PC-12A 实施 → 本地测试 + tsc api/web + API contract + full CI → PC-12A CHECKPOINT 送审。",
   "send_head": "07b7009",
   "decision_head": "07b7009",
-  "last_chatgpt_message": "MSG-20261003-137",
+  "last_chatgpt_message": "MSG-20261003-138",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-03T16:13:49.891Z",
+  "updated_at": "2026-10-03T16:17:11.858Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -51,9 +51,9 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-03T14:11:19.420Z",
   "state": "IMPLEMENT",
-  "last_action": "BG-013 FINAL Checkpoint 已送审：Issue #2 comment 5970956902（HEAD 7d73154）",
+  "last_action": "MSG-20261003-138 已逐字归档（FULL_COPY_OK）：BG-013 = PASS / CLOSED",
   "last_action_at": "2026-10-03T14:17:18.723Z",
-  "next_action": "提交 BG-013 FINAL 送审；继续 BG-020 customs 只读投影 GET",
+  "next_action": "继续 BG-020（customs 只读投影 GET）；另需修复 HEAD 3e0e7d5 的 CI 红灯",
   "current_head": "8902185",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
@@ -4902,7 +4902,7 @@
   "singleton_runner": "VERIFIED",
   "ci_pending": [],
   "ci_red": [],
-  "ci_checked_at": "2026-10-03T16:14:21.934Z",
+  "ci_checked_at": "2026-10-03T16:16:55.175Z",
   "continuous_verification": {
     "at": "2026-10-03T14:17:18.723Z",
     "a_to_b_to_c": "VERIFIED（单次启动连续执行 u1→u2→u3，无 heartbeat 唤醒；停止条件 = SAFE_CONTINUATION_QUEUE_EMPTY）",
@@ -4984,12 +4984,12 @@
       "④ Production Candidate register only"
     ]
   },
-  "awaiting_verdict": true,
+  "awaiting_verdict": false,
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-03T16:14:22.075Z",
-    "head": "7d73154",
-    "acceptance_head": "7d73154",
+    "computed_at": "2026-10-03T16:18:08.777Z",
+    "head": "3e0e7d5",
+    "acceptance_head": "3e0e7d5",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5005,7 +5005,16 @@
       "CHECK:L1-02_no_open_internal_items",
       "CHECK:L1-03_no_open_markers",
       "CHECK:L1-04_full_ci_success_on_head",
-      "CHECK:L1-10_git_working_tree_clean"
+      "CHECK:L1-05_pg_regression_passed",
+      "CHECK:L1-06_fresh_db_migration_passed",
+      "CHECK:L1-07_api_typecheck_passed",
+      "CHECK:L1-08_web_typecheck_build_passed",
+      "CHECK:L1-09_no_skipped_critical_tests",
+      "CHECK:L1-10_git_working_tree_clean",
+      "CHECK:L1-11_docs_state_consistent",
+      "CHECK:L1-12_schema_invariants_verified",
+      "CHECK:L1-13_negative_paths_covered",
+      "CHECK:L1-14_real_pg_e2e_not_mock_only"
     ],
     "HOST_ACTION_REQUIRED": [
       "BG-006-production-candidate-preflight"
@@ -5047,53 +5056,53 @@
       "L1-03_no_open_markers": {
         "label": "不存在 TODO/IN_PROGRESS/PARTIAL/READY_FOR_REVIEW/WAITING_FOR_VERDICT/未处理 REVISE·BLOCK",
         "status": false,
-        "evidence": "arch_pending=1 awaiting_verdict=true"
+        "evidence": "arch_pending=1 awaiting_verdict=false"
       },
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=7d73154 ci_head=7d73154 ci=in_progress run=37136085965"
+        "evidence": "acceptance_head=3e0e7d5 ci_head=3e0e7d5 ci=failure run=37136117691"
       },
       "L1-05_pg_regression_passed": {
-        "status": true,
-        "evidence": "customs IOR PG 9/9 + architecture-contract 142/142 + db-constraint-coverage 26/26 @7d73154"
+        "status": "UNVERIFIED",
+        "evidence": "pg_regression recorded at 7d73154 ≠ acceptance head 3e0e7d5"
       },
       "L1-06_fresh_db_migration_passed": {
-        "status": true,
-        "evidence": "migrate deploy OK；migrate status：64 migrations up to date（含 20261003220000） @7d73154"
+        "status": "UNVERIFIED",
+        "evidence": "fresh_db_migration recorded at 7d73154 ≠ acceptance head 3e0e7d5"
       },
       "L1-07_api_typecheck_passed": {
-        "status": true,
-        "evidence": "tsc --noEmit EXIT=0（本轮未改 TS 类型面，仍重跑） @7d73154"
+        "status": "UNVERIFIED",
+        "evidence": "typecheck_api recorded at 7d73154 ≠ acceptance head 3e0e7d5"
       },
       "L1-08_web_typecheck_build_passed": {
-        "status": true,
-        "evidence": "tsc --noEmit (web) 由 CI 覆盖 @7d73154"
+        "status": "UNVERIFIED",
+        "evidence": "typecheck_web recorded at 7d73154 ≠ acceptance head 3e0e7d5"
       },
       "L1-09_no_skipped_critical_tests": {
-        "status": true,
-        "evidence": "本轮聚焦套件 skipped=0 @7d73154"
+        "status": "UNVERIFIED",
+        "evidence": "tests_no_skipped recorded at 7d73154 ≠ acceptance head 3e0e7d5"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
         "status": false,
-        "evidence": "dirty entries: 4"
+        "evidence": "dirty entries: 6"
       },
       "L1-11_docs_state_consistent": {
-        "status": true,
-        "evidence": "doc-sync 动态计数 OK（73 models / 64 migrations） @7d73154"
+        "status": "UNVERIFIED",
+        "evidence": "docs_sync recorded at 7d73154 ≠ acceptance head 3e0e7d5"
       },
       "L1-12_schema_invariants_verified": {
-        "status": true,
-        "evidence": "db-constraint-coverage 26/26 + 13 枚 IOR 相关约束/触发器运行库验证 @7d73154"
+        "status": "UNVERIFIED",
+        "evidence": "schema_invariants recorded at 7d73154 ≠ acceptance head 3e0e7d5"
       },
       "L1-13_negative_paths_covered": {
-        "status": true,
-        "evidence": "CHANGE A 负向：VERIFIED+source=NONE / VERIFIED+verifiedAt=NULL → DB reject；非过度约束：PENDING/UNVERIFIED + NULL → 接受 @7d73154"
+        "status": "UNVERIFIED",
+        "evidence": "negative_paths recorded at 7d73154 ≠ acceptance head 3e0e7d5"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
-        "status": true,
-        "evidence": "customs-ior-facts-db 9/9 真实 PostgreSQL @7d73154"
+        "status": "UNVERIFIED",
+        "evidence": "pg_e2e_real recorded at 7d73154 ≠ acceptance head 3e0e7d5"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
@@ -5180,9 +5189,9 @@
     "status": "DONE（MSG-20261003-134：端点+customs.recovery.chain.run/INTERNAL_WRITE+角色矩阵+immutable execution identity+路由级 E2E 4/4+API.md 90/77）"
   },
   "gates_recorded_at": "2026-10-03T15:17:04.369Z",
-  "ci_status_head": "7d73154",
-  "ci_status": "in_progress",
-  "ci_run_id": "37136085965",
+  "ci_status_head": "3e0e7d5",
+  "ci_status": "failure",
+  "ci_run_id": "37136117691",
   "internal_code_complete_at": "2026-10-03T15:36:47.862Z",
   "independent_final_audit": {
     "required": true,
@@ -5284,7 +5293,7 @@
     "residual": "HTTP 路由与 DB 持久化 → BG-021（Schema Delta，需架构审计）"
   },
   "bg013": {
-    "status": "CHANGE_A_IMPLEMENTED（待 BG-013 FINAL 裁决）",
+    "status": "PASS / CLOSED",
     "verdict": "MSG-20261003-136",
     "next": "Prisma Schema + migration + tenant/immutable triggers + PostgreSQL E2E → Implementation Checkpoint",
     "schema": "3 模型 + 5 枚举；模型总数 73（67 core + 6 join）",
@@ -5323,7 +5332,9 @@
       "doc": "docs/releases/BG013-IOR-FINAL-CHECKPOINT.md",
       "github_comment_id": "5970956902",
       "verdict": null
-    }
+    },
+    "verdict_message": "MSG-20261003-138",
+    "closed_at": "2026-10-03T16:17:11.858Z"
   },
   "evidence": {
     "pg_regression": {
