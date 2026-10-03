@@ -124096,3 +124096,88 @@ PS04 第一阶段完成的验收口径也固定下来：事实可追溯、tenant
 Production Enablement=HOLD · External Write=HOLD · Real Money=HOLD · Customer Submission=HOLD · Production Credentials=HOST_ONLY
 本裁决授权 dispatcher 继续自治推进，不需要因静态 TASKS 耗尽再次停住。
 ```
+
+### [MSG-20261003-134] BG-012 裁决：PASS WITH REVISE —— 端点 `POST /customs-entry-facts/:id/recovery-chain` 与 `customs.recovery.chain.run`（INTERNAL_WRITE，OWNER/ADMIN/OPS 允许、FINANCE/VIEWER 拒绝）获批；**③ 幂等必须改为 server-derived immutable identity**（org+factId+inputDigest+policyId+policyVersion+algorithmVersion → executionKey；computedAt 仅输出元数据）；④ 四个 HOLD 字段必须显式；⑤ dispatcher 自动执行获批
+
+```text
+BG-012 裁决：PASS WITH REVISE。 可以接这个内部 POST，但按下面边界执行。
+① 允许新增内部触发端点。 建议：
+POST /customs-entry-facts/:entryFactId/recovery-chain
+其语义只能是：
+读取持久化事实 → 服务端确定性计算 → qualification → append-only projections/evidence → 返回结果
+它是 INTERNAL_WRITE，因为会新增内部投影记录；但它不是 filing、不是 broker submission、不是 EXTERNAL_WRITE。不得调用 PSP/Broker/Customs provider，不得消费 production credential，不得产生真实资金动作。
+② Action Guard 批准。 action 建议固定为：
+customs.recovery.chain.run
+风险类别：INTERNAL_WRITE
+角色矩阵：
+OWNER → allow
+ADMIN → allow
+OPS → allow
+FINANCE → deny
+VIEWER → deny
+FINANCE 可以继续读取 evidence/result，但不应主动触发重算或产生新 projection。
+必须接现有 Action Guard 的：
+capability source；
+workflow/internal-write kill switch；
+tenant/member/active-role 服务端重验。
+不需要 human approval，因为这里没有外部提交和资金执行。
+③ 幂等设计：REVISE。不要把 computedAt 作为核心幂等键。
+不要采用：
+factId + policyVersion + computedAt
+作为重放身份，因为如果 computedAt=now()，相同请求每次都会得到不同 key，失去真正的 retry idempotency。
+应使用服务端派生的 immutable execution identity，至少：
+organizationId + entryFactId + inputDigest + policyId + policyVersion + algorithmVersion
+然后生成：
+executionKey / projectionSetId = sha256(...)
+规则：
+完全相同输入再次 POST → 返回已有 projection/result，不得追加第二份相同计算结果；
+policyVersion / algorithmVersion / inputDigest 变化 → 允许形成新的历史 projection；
+computedAt 是输出元数据，不参与“同输入是不是同一次逻辑计算”的判断；
+客户端不得自行声明 trusted inputDigest / organizationId / policyVersion 来绕过服务端事实读取。
+如果已有 projection store 已用 resultDigest/inputDigest 做确定性 append，可以直接复用，不要再造第二套幂等系统。
+④ 响应边界：必须永久保留。
+任何成功/失败响应均应明确：
+纯文本
+filingSubmitted=false
+externalWritePerformed=false
+transportEnabled=false
+productionCredentials=ABSENT
+最好再保留：
+filingAuthorized=false
+这个 POST 返回 READY 也只能表示：
+“内部 claim-ready 计算完成”
+绝不能表示：
+已提交 Customs；
+broker 已受理；
+已 filing；
+已追回；
+已到账。
+⑤ Dispatcher：AUTHORIZED。
+BG-012 获本裁决后，可以自动 materialize、实现、测试、提交，不需要再等一次设计裁决。
+但实施验收至少覆盖：
+401 unauthenticated；
+VIEWER / FINANCE → 403；
+OWNER / ADMIN / OPS → 可触发；
+未知 fact → 404；
+跨租户 → 404/fail-closed；
+qualification 不通过 → 不得产生 claim-ready；
+AMBIGUOUS / reconciliation-required → 不得产生可信 confirmed recovery；
+相同 immutable inputs 重放 → 返回既有结果，不能复制 projection；
+policyVersion / algorithmVersion / inputDigest 改变 → append 新历史，latest 正确；
+GET 只读视图仍 recomputedOnRead=false；
+filingSubmitted=false / externalWritePerformed=false / transportEnabled=false；
+外部 adapter calls = 0；
+broker/provider calls = 0；
+Payment / Settlement / Billing / RecoveryLedger 真实资金副作用 = 0；
+API.md 同步；
+路由级 HTTP + 真实 PostgreSQL E2E。
+因此最终裁决为：
+① PASS
+② PASS：customs.recovery.chain.run / INTERNAL_WRITE / OWNER+ADMIN+OPS
+③ REVISE：幂等改为 server-derived immutable input identity，不使用 computedAt 作为重试身份
+④ PASS，四个 HOLD 字段必须显式存在
+⑤ PASS / dispatcher 自动执行获批
+完成③的口径后，无需再次提交设计审查，可以直接实现并提交 Implementation Checkpoint。
+永久边界继续不变：
+Production Enablement=HOLD · External Write=HOLD · Real Money=HOLD · Customer Submission=HOLD · Production Credentials=HOST_ONLY。
+```

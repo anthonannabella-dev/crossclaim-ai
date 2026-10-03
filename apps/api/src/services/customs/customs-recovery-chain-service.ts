@@ -44,6 +44,8 @@ export interface CustomsChainPolicies {
 }
 
 export interface CustomsChainRunResult {
+  /** server-derived immutable execution identity（MSG-20261003-134 ③；computedAt 不参与）。 */
+  executionKey: string;
   package: CustomsClaimReadyPackage;
   projections: readonly { kind: CustomsProjectionKind; projectionId: string; status: 'APPENDED' | 'ALREADY_APPENDED' }[];
   algorithmVersion: string;
@@ -155,6 +157,16 @@ export async function runCustomsRecoveryChain(input: {
     { kind: 'ESTIMATE', payload: estimate, policy: true },
   ];
 
+  // MSG-20261003-134 ③：幂等身份 = server-derived immutable input identity（不含 computedAt）
+  const executionKey = digest({
+    organizationId: input.organizationId,
+    entryFactId: input.factId,
+    inputDigest: loaded.contentDigest,
+    policyId: input.policies.eligibility.policyId,
+    policyVersion: input.policies.eligibility.policyVersion,
+    algorithmVersion: input.algorithmVersion,
+  });
+
   const projections: { kind: CustomsProjectionKind; projectionId: string; status: 'APPENDED' | 'ALREADY_APPENDED' }[] = [];
   for (const write of writes) {
     const result = await input.store.appendProjection({
@@ -168,5 +180,5 @@ export async function runCustomsRecoveryChain(input: {
     projections.push({ kind: write.kind, projectionId: result.projectionId, status: result.status });
   }
 
-  return { package: pkg, projections, algorithmVersion: input.algorithmVersion };
+  return { executionKey, package: pkg, projections, algorithmVersion: input.algorithmVersion };
 }

@@ -186,7 +186,17 @@ export function customsProjectionId(input: {
   resultDigest: string;
   computedAt: Date;
 }): string {
-  return sha256Hex({ ...input, computedAt: input.computedAt.toISOString() }).slice(0, 32);
+  // MSG-20261003-134 ③：幂等身份 = server-derived immutable input identity；
+  // computedAt 只是**输出元数据**，不得参与「同输入是否同一次逻辑计算」的判断。
+  void input.computedAt;
+  return sha256Hex({
+    organizationId: input.organizationId,
+    kind: input.kind,
+    inputFactId: input.inputFactId,
+    inputDigest: input.inputDigest,
+    algorithmVersion: input.algorithmVersion,
+    resultDigest: input.resultDigest,
+  }).slice(0, 32);
 }
 
 type FactRowLike = {
