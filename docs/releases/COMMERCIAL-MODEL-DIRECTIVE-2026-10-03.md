@@ -1,6 +1,3 @@
- **SUPERSEDED BY HOST DIRECTIVE 2026-10-03（ACQUISITION + 15% SUCCESS-FEE COMMERCIAL MODEL FINALIZATION）。**
-> 本文件的 Customs 自助定价口径（PAID PACKAGE / SUBSCRIPTION / $299 / $699 / $1,499 / $2,999）**已作废**，保留仅作历史审计记录。
-> 最新口径：FREE CUSTOMS AUDIT → Qualified Opportunity → Customs Recovery Agreement → Managed Recovery → 实际增量追达到账后收 **15%**（见 `docs/releases/COMMERCIAL-MODEL-DIRECTIVE-2026-10-03.md`）。
 # HOST DIRECTIVE 2026-10-03 — ACQUISITION + 15% SUCCESS-FEE COMMERCIAL MODEL FINALIZATION
 
 状态：**REGISTERED / SUPERSEDES（旧 Customs Self-Service Pricing）**；收费政策改动属**资金链路** → 实施前需架构方审计。
