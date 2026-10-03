@@ -47,6 +47,7 @@ describe('G9 — 关键 DB 约束覆盖', () => {
   requireCheck('ClaimItem_sourceFingerprint_non_empty_check', /CHECK \(length\("sourceFingerprint"\) > 0\)/);
   requireCheck('ProviderOutcomeFact_sourceRef_non_empty_check', /CHECK \(length\("sourceRef"\) > 0\)/);
   requireCheck('ReimbursementFact_sourceRef_non_empty_check', /CHECK \(length\("sourceRef"\) > 0\)/);
+  requireCheck('RecoveryPayout_sourceType_check', /CHECK \("sourceType" IN \(/);
   requireCheck('ExpectedRecoveryBasis_currency_shape', /CHECK \("currency" ~ /);
   requireCheck('ClaimReconciliationProjection_currency_shape', /CHECK \("currency" ~ /);
 
