@@ -147,11 +147,15 @@
     },
     {
       "name": "cc_append_only__CustomsEntryFactRecord",
-      "table": "CustomsEntryFactRecord"
+      "table": "CustomsEntryFactRecord",
+      "tgtype": 27,
+      "semantics": "BEFORE UPDATE OR DELETE → 拒绝（G4/Q2：Customs entry 事实 append-only；新版本事实必须新增 Fact + lineage）"
     },
     {
       "name": "cc_append_only__CustomsEntryDutyLineRecord",
-      "table": "CustomsEntryDutyLineRecord"
+      "table": "CustomsEntryDutyLineRecord",
+      "tgtype": 27,
+      "semantics": "BEFORE UPDATE OR DELETE → 拒绝（G4/Q2：duty line 属于 immutable evidence snapshot）"
     }
   ],
   "unexpectedPrefixes": [
