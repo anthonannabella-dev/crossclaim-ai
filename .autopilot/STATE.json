@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261003-138",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-03T16:27:07.663Z",
+  "updated_at": "2026-10-03T16:37:58.055Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -51,9 +51,9 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-03T14:11:19.420Z",
   "state": "IMPLEMENT",
-  "last_action": "BG-020 完成：Customs 只读读模型接线（GET /customs-entry-facts/:id），4/4 真实 PostgreSQL + customs 回归 26 文件 220 用例",
+  "last_action": "BG-019 第一步：前端接入 BG-020 的 customs 只读读模型（web typecheck OK）",
   "last_action_at": "2026-10-03T14:17:18.723Z",
-  "next_action": "BG-019 前端收口（仍为 registered-only）；BG-021 independent-site 持久化待架构审计",
+  "next_action": "就 Platform / Independent-site 的最小 UI 边界向架构方请求裁定；同时继续其它安全内部项",
   "current_head": "8902185",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
@@ -4989,9 +4989,9 @@
   "awaiting_verdict": false,
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-03T16:27:13.974Z",
-    "head": "c07ff84",
-    "acceptance_head": "c07ff84",
+    "computed_at": "2026-10-03T16:37:58.468Z",
+    "head": "f50af7b",
+    "acceptance_head": "f50af7b",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5006,11 +5006,16 @@
       "CHECK:L1-02_no_open_internal_items",
       "CHECK:L1-03_no_open_markers",
       "CHECK:L1-04_full_ci_success_on_head",
+      "CHECK:L1-05_pg_regression_passed",
       "CHECK:L1-06_fresh_db_migration_passed",
+      "CHECK:L1-07_api_typecheck_passed",
       "CHECK:L1-08_web_typecheck_build_passed",
       "CHECK:L1-09_no_skipped_critical_tests",
       "CHECK:L1-10_git_working_tree_clean",
-      "CHECK:L1-12_schema_invariants_verified"
+      "CHECK:L1-11_docs_state_consistent",
+      "CHECK:L1-12_schema_invariants_verified",
+      "CHECK:L1-13_negative_paths_covered",
+      "CHECK:L1-14_real_pg_e2e_not_mock_only"
     ],
     "HOST_ACTION_REQUIRED": [
       "BG-006-production-candidate-preflight"
@@ -5057,48 +5062,48 @@
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=c07ff84 ci_head=7ce06d8 ci=in_progress run=37136635120"
+        "evidence": "acceptance_head=f50af7b ci_head=c07ff84 ci=UNKNOWN run="
       },
       "L1-05_pg_regression_passed": {
-        "status": true,
-        "evidence": "customs 26 files / 220 tests PASS（含 BG-020 PG 4/4） @c07ff84"
+        "status": "UNVERIFIED",
+        "evidence": "pg_regression recorded at c07ff84 ≠ acceptance head f50af7b"
       },
       "L1-06_fresh_db_migration_passed": {
         "status": "UNVERIFIED",
-        "evidence": "fresh_db_migration recorded at 7d73154 ≠ acceptance head c07ff84"
+        "evidence": "fresh_db_migration recorded at 7d73154 ≠ acceptance head f50af7b"
       },
       "L1-07_api_typecheck_passed": {
-        "status": true,
-        "evidence": "tsc --noEmit EXIT=0 @c07ff84"
+        "status": "UNVERIFIED",
+        "evidence": "typecheck_api recorded at c07ff84 ≠ acceptance head f50af7b"
       },
       "L1-08_web_typecheck_build_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_web recorded at 7d73154 ≠ acceptance head c07ff84"
+        "evidence": "typecheck_web recorded at 7d73154 ≠ acceptance head f50af7b"
       },
       "L1-09_no_skipped_critical_tests": {
         "status": "UNVERIFIED",
-        "evidence": "tests_no_skipped recorded at 7d73154 ≠ acceptance head c07ff84"
+        "evidence": "tests_no_skipped recorded at 7d73154 ≠ acceptance head f50af7b"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
         "status": false,
-        "evidence": "dirty entries: 2"
+        "evidence": "dirty entries: 7"
       },
       "L1-11_docs_state_consistent": {
-        "status": true,
-        "evidence": "API.md 已同步（implemented=91 / documented=78，API_CONTRACT_OK） @c07ff84"
+        "status": "UNVERIFIED",
+        "evidence": "docs_sync recorded at c07ff84 ≠ acceptance head f50af7b"
       },
       "L1-12_schema_invariants_verified": {
         "status": "UNVERIFIED",
-        "evidence": "schema_invariants recorded at 7d73154 ≠ acceptance head c07ff84"
+        "evidence": "schema_invariants recorded at 7d73154 ≠ acceptance head f50af7b"
       },
       "L1-13_negative_paths_covered": {
-        "status": true,
-        "evidence": "BG-020：VIEWER/未知角色 403、空 id 400、跨租户 404、只读不重算 @c07ff84"
+        "status": "UNVERIFIED",
+        "evidence": "negative_paths recorded at c07ff84 ≠ acceptance head f50af7b"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
-        "status": true,
-        "evidence": "customs-entry-fact-read-http 4/4 真实 PostgreSQL @c07ff84"
+        "status": "UNVERIFIED",
+        "evidence": "pg_e2e_real recorded at c07ff84 ≠ acceptance head f50af7b"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
@@ -5390,5 +5395,14 @@
     ],
     "tests": "apps/api/src/__tests__/customs-entry-fact-read-http.test.ts → 4/4（真实 PostgreSQL）",
     "boundary": "readOnly / filingSubmitted=false / transportEnabled=false / externalWritePerformed=false / productionCredentials=ABSENT；不重算（读取前后投影行数不变）"
+  },
+  "bg019": {
+    "status": "IN_PROGRESS（Customs 已接线；Platform / Independent-site 最小 UI 范围待架构方裁定）",
+    "done": [
+      "Carrier response + customs filing status 只读卡片（既有）",
+      "Customs entry fact + 四类 latest 投影只读卡片（本轮，消费 BG-020 的 GET /customs-entry-facts/:id）",
+      "start-recovery / manual-response 表单（既有，受 Action Guard 保护的内部写入）"
+    ],
+    "remaining_question": "CHANGE E 要求「四域内部 Golden Path 所需的最小 frontend wiring」或由宿主正式修改协议范围；Platform 与 Independent-site 的「最小」边界需要架构方裁定（避免 Codex 自行降低标准）。"
   }
 }

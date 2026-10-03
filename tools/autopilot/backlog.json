@@ -1,6 +1,6 @@
 {
   "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。",
-  "updatedAt": "2026-10-03T16:27:07.663Z",
+  "updatedAt": "2026-10-03T16:37:58.055Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -509,7 +509,9 @@
       "filters": [
         "web"
       ],
-      "materializable": false
+      "materializable": false,
+      "status": "IN_PROGRESS",
+      "progress": "Customs 已接线（BG-020 端点 + 只读卡片）；Platform / Independent-site 最小边界待架构方裁定"
     },
     {
       "id": "BG-020-customs-readonly-projection-http",

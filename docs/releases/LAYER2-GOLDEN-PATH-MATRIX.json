@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-03T16:14:18.846Z",
+  "generated_at": "2026-10-03T16:37:58.316Z",
   "rule": "COVERED 需存在命名证据文件；否则 GAP",
   "domains": [
     {
@@ -224,25 +224,25 @@
     {
       "id": "customs",
       "name": "Customs / Trade Recovery",
-      "domain_test_files": 25,
+      "domain_test_files": 26,
       "domain_web_files": 3,
       "cells": {
         "http": {
           "status": "COVERED",
           "evidence": [
             "apps/api/src/__tests__/customs-claim-ready-http.test.ts",
+            "apps/api/src/__tests__/customs-entry-fact-read-http.test.ts",
             "apps/api/src/__tests__/customs-execution-contract.test.ts",
-            "apps/api/src/__tests__/customs-filing-provider.test.ts",
-            "apps/api/src/__tests__/customs-ior-facts-db.test.ts"
+            "apps/api/src/__tests__/customs-filing-provider.test.ts"
           ]
         },
         "persistence": {
           "status": "COVERED",
           "evidence": [
             "apps/api/src/__tests__/customs-claim-ready-http.test.ts",
+            "apps/api/src/__tests__/customs-entry-fact-read-http.test.ts",
             "apps/api/src/__tests__/customs-entry-fact-store-db.test.ts",
-            "apps/api/src/__tests__/customs-ior-facts-db.test.ts",
-            "apps/api/src/__tests__/customs-recovery-chain-http-e2e-db.test.ts"
+            "apps/api/src/__tests__/customs-ior-facts-db.test.ts"
           ]
         },
         "db_invariant": {
@@ -309,18 +309,18 @@
           "status": "COVERED",
           "evidence": [
             "apps/api/src/__tests__/customs-claim-ready-http.test.ts",
+            "apps/api/src/__tests__/customs-entry-fact-read-http.test.ts",
             "apps/api/src/__tests__/customs-entry-fact-store-db.test.ts",
-            "apps/api/src/__tests__/customs-execution-contract.test.ts",
-            "apps/api/src/__tests__/customs-ior-facts-db.test.ts"
+            "apps/api/src/__tests__/customs-execution-contract.test.ts"
           ]
         },
         "rbac": {
           "status": "COVERED",
           "evidence": [
             "apps/api/src/__tests__/customs-claim-ready-http.test.ts",
+            "apps/api/src/__tests__/customs-entry-fact-read-http.test.ts",
             "apps/api/src/__tests__/customs-execution-contract.test.ts",
-            "apps/api/src/__tests__/customs-recovery-chain-http-e2e-db.test.ts",
-            "apps/api/src/__tests__/customs-recovery-chain-http.test.ts"
+            "apps/api/src/__tests__/customs-recovery-chain-http-e2e-db.test.ts"
           ]
         },
         "amount_ledger": {

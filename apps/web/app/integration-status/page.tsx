@@ -22,6 +22,22 @@ interface CarrierResponses {
   };
 }
 
+/** BG-020：Customs 事实 + 四类 latest 计算投影的只读读模型（后端已裁决/已持久化；前端只展示、不重算）。 */
+interface CustomsEntryFactReadModel {
+  entryFact: {
+    id: string;
+    entryNumber: string;
+    entryDate: string;
+    jurisdiction: string;
+    source: string;
+    contentDigest: string;
+    lineCount: number;
+    totalDutyAmountByCurrency: Record<string, string>;
+  };
+  projections: Record<string, { projectionId: string; computedAt: string; algorithmVersion: string; policyVersion: string | null } | null>;
+  boundary: { readOnly: boolean; filingSubmitted: boolean; transportEnabled: boolean; externalWritePerformed: boolean; productionCredentials: string };
+}
+
 /** P0-1：Return→matching→claim-ready evidence 的只读读模型（后端已裁决/已持久化，前端只展示）。 */
 interface ReturnClaimEvidence {
   evidence: {
@@ -97,6 +113,9 @@ export default async function IntegrationStatusPage({
     ? await apiGet<CustomsFilingStatus>('/customs-opportunities/' + encodeURIComponent(opportunityId) + '/filing-status')
     : null;
   const entryFactId = params?.entryFactId ?? '';
+  const entryFactRead = entryFactId
+    ? await apiGet<CustomsEntryFactReadModel>('/customs-entry-facts/' + encodeURIComponent(entryFactId))
+    : null;
   const returnEvidence = entryFactId
     ? await apiGet<ReturnClaimEvidence>('/customs-entry-facts/' + encodeURIComponent(entryFactId) + '/return-claim-evidence')
     : null;
@@ -113,6 +132,58 @@ export default async function IntegrationStatusPage({
         </p>
       </div>
 
+
+      <section className="rounded border border-slate-200 p-4">
+        <h2 className="text-base font-medium">Customs entry fact + projections（BG-020 只读）</h2>
+        {entryFactId === '' ? (
+          <p className="mt-2 text-sm text-slate-500">未提供 entryFactId。</p>
+        ) : entryFactRead === null ? (
+          <p className="mt-2 text-sm text-slate-500">未请求。</p>
+        ) : !entryFactRead.ok || entryFactRead.body === null ? (
+          <p className="mt-2 text-sm text-rose-600">
+            读取失败：HTTP {entryFactRead.status}
+            {entryFactRead.code !== null ? ' · ' + entryFactRead.code : ''}
+          </p>
+        ) : (
+          <div className="mt-2">
+            <StatusRow label="entryNumber" value={entryFactRead.body.entryFact.entryNumber} />
+            <StatusRow label="entryDate" value={entryFactRead.body.entryFact.entryDate} />
+            <StatusRow label="jurisdiction" value={entryFactRead.body.entryFact.jurisdiction} />
+            <StatusRow label="lineCount" value={String(entryFactRead.body.entryFact.lineCount)} />
+            <StatusRow
+              label="totalDutyAmountByCurrency"
+              value={JSON.stringify(entryFactRead.body.entryFact.totalDutyAmountByCurrency)}
+            />
+            <h3 className="mt-3 text-sm font-medium text-slate-700">latest projections</h3>
+            <ul className="mt-1 space-y-1 text-sm">
+              {['DUTY_TRUTH', 'DISCREPANCY', 'ELIGIBILITY', 'ESTIMATE'].map((kind) => {
+                const projection = entryFactRead.body?.projections[kind] ?? null;
+                return (
+                  <li key={kind} className="font-mono text-xs text-slate-700">
+                    {kind}: 
+                    {projection === null
+                      ? '（无）'
+                      : projection.projectionId + ' · ' + projection.algorithmVersion + ' · ' + projection.computedAt}
+                  </li>
+                );
+              })}
+            </ul>
+            <StatusRow
+              label="boundary"
+              value={
+                'readOnly=' + String(entryFactRead.body.boundary.readOnly) +
+                ' filingSubmitted=' + String(entryFactRead.body.boundary.filingSubmitted) +
+                ' transportEnabled=' + String(entryFactRead.body.boundary.transportEnabled) +
+                ' externalWritePerformed=' + String(entryFactRead.body.boundary.externalWritePerformed) +
+                ' productionCredentials=' + String(entryFactRead.body.boundary.productionCredentials)
+              }
+            />
+            <p className="mt-2 text-xs text-slate-500">
+              本卡片只展示后端已持久化的 latest 投影；读取**不会**触发重算，也不代表已提交、已追回或已计费。
+            </p>
+          </div>
+        )}
+      </section>
       <section className="rounded border border-slate-200 p-4">
         <h2 className="text-base font-medium">Customs return→claim evidence（P0-1 只读）</h2>
         {entryFactId === '' ? (

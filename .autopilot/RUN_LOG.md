@@ -1688,3 +1688,6 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 
 ## 2026-10-03T16:27:07.663Z — BG-020
 - GET /customs-entry-facts/:id 只读读模型接线（事实 + 四类 latest 投影）；PG 4/4；customs 220 用例通过。
+
+## 2026-10-03T16:37:58.055Z — BG-019 第一步
+- integration-status 页接入 customs entry fact + 四类 latest 投影只读卡片；web tsc OK。
