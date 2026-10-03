@@ -1,6 +1,6 @@
 # FINAL ACCEPTANCE REPORT（自动生成，请勿手改）
 
-- 生成时间：2026-10-03T15:50:07.602Z；HEAD：`8902185`
+- 生成时间：2026-10-03T15:54:39.048Z；HEAD：`376d64c`
 - 协议：`docs/releases/FINAL-ACCEPTANCE-PROTOCOL.md`（三层验收；禁止自证）
 - 状态：CODE_COMPLETE=NO · INTEGRATION_COMPLETE=NO · REAL_VALIDATION_COMPLETE=NO · PRODUCTION_READY=NO
 - INDEPENDENT_FINAL_AUDIT_REQUIRED = TRUE（独立审计完成前不得置 PRODUCTION_READY=YES）
@@ -34,10 +34,24 @@
 ## 2. 打开的内部项
 
 - BG-013-ior-facts-persistence-schema-delta
-- CHECK:safe_continuation_queue_zero
-- CHECK:no_open_internal_items
-- CHECK:git_working_tree_clean
-- CHECK:full_ci_success_on_head
+- BG-016-acceptance-head-single-source
+- BG-017-layer2-golden-path-matrix
+- BG-018-independent-site-internal-closure
+- BG-019-frontend-http-wiring-closure
+- CHECK:L1-01_safe_continuation_queue_zero
+- CHECK:L1-02_no_open_internal_items
+- CHECK:L1-03_no_open_markers
+- CHECK:L1-04_full_ci_success_on_head
+- CHECK:L1-05_pg_regression_passed
+- CHECK:L1-06_fresh_db_migration_passed
+- CHECK:L1-07_api_typecheck_passed
+- CHECK:L1-08_web_typecheck_build_passed
+- CHECK:L1-09_no_skipped_critical_tests
+- CHECK:L1-10_git_working_tree_clean
+- CHECK:L1-11_docs_state_consistent
+- CHECK:L1-12_schema_invariants_verified
+- CHECK:L1-13_negative_paths_covered
+- CHECK:L1-14_real_pg_e2e_not_mock_only
 
 ## 3. 外部 / 宿主依赖（不得自证完成）
 

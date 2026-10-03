@@ -1,6 +1,6 @@
 {
   "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。",
-  "updatedAt": "2026-10-03T15:48:55.435Z",
+  "updatedAt": "2026-10-03T15:54:17.396Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -401,6 +401,107 @@
       "template": "suite-evidence",
       "filters": [
         "enterprise-ior-layer"
+      ]
+    },
+    {
+      "id": "BG-016-acceptance-head-single-source",
+      "priority": "P0",
+      "source_backlog_id": "MSG-20261003-135 CHANGE B",
+      "title": "单一 Acceptance Head + 四份状态一致 guard（STATE/backlog/MASTER-GAP-CLOSURE-REGISTER/FINAL-ACCEPTANCE-REPORT）",
+      "scope": "新增 consistency guard 工具 + CI 接线；四份来源含 IN_PROGRESS/PARTIAL/INTERNAL_CODE_COMPLETE=FALSE 时禁止 OPEN_INTERNAL_ITEMS=0",
+      "acceptance_criteria": "guard 在同一 head 上比对四份来源，冲突即失败；FINAL-ACCEPTANCE-REPORT 改为派生而非手写矩阵",
+      "dependencies": [],
+      "risk_class": "MEDIUM",
+      "ARCH_REVIEW_REQUIRED": false,
+      "HOST_ACTION_REQUIRED": false,
+      "HOLD_EXTERNAL": true,
+      "allowed_files": [
+        "tools/autopilot/**",
+        "docs/releases/**"
+      ],
+      "boundary": "NO_EXTERNAL_CALL",
+      "required_tests": [
+        "autopilot"
+      ],
+      "template": "suite-evidence",
+      "filters": [
+        "autopilot"
+      ]
+    },
+    {
+      "id": "BG-017-layer2-golden-path-matrix",
+      "priority": "P0",
+      "source_backlog_id": "MSG-20261003-135 CHANGE C",
+      "title": "Layer 2 四域 Golden Path Matrix（Platform / Logistics-Carrier / Customs / Independent-site）逐项验收表",
+      "scope": "每域列出 HTTP/persistence/DB invariant/frontend/happy/negative/replay/concurrency/failure-recovery/cross-tenant/RBAC/amount-ledger consistency；缺项 materialize 为 backlog",
+      "acceptance_criteria": "每域矩阵项有真实 E2E 证据或显式 materialize；禁止用专项测试数量替代矩阵",
+      "dependencies": [],
+      "risk_class": "MEDIUM",
+      "ARCH_REVIEW_REQUIRED": false,
+      "HOST_ACTION_REQUIRED": false,
+      "HOLD_EXTERNAL": true,
+      "allowed_files": [
+        "docs/releases/**",
+        "apps/api/src/__tests__/**",
+        "apps/web/**"
+      ],
+      "boundary": "NO_EXTERNAL_CALL",
+      "required_tests": [
+        "golden-path"
+      ],
+      "template": "doc-sync",
+      "filters": []
+    },
+    {
+      "id": "BG-018-independent-site-internal-closure",
+      "priority": "P1",
+      "source_backlog_id": "MSG-20261003-135 CHANGE D",
+      "title": "Independent-site 内部闭环（chargeback → qualification → evidence → start recovery → manual dispute handoff → status fact → settlement reconciliation → RecoveryLedger → 15% fee → BillingInvoice），fixture/manual-handoff 版",
+      "scope": "纯内部/夹具/manual-handoff；保持 submitted ≠ won ≠ settled ≠ recovered ≠ billable；真实 PSP 提交仍属 API/LEGAL/HOST",
+      "acceptance_criteria": "内部闭环 E2E + 负路径 + 跨租户 + RBAC + 金额/账本一致性；零真实 PSP 写入",
+      "dependencies": [],
+      "risk_class": "HIGH",
+      "ARCH_REVIEW_REQUIRED": false,
+      "HOST_ACTION_REQUIRED": false,
+      "HOLD_EXTERNAL": true,
+      "allowed_files": [
+        "apps/api/src/services/**",
+        "apps/api/src/__tests__/**"
+      ],
+      "boundary": "NO_EXTERNAL_CALL",
+      "required_tests": [
+        "independent-site"
+      ],
+      "template": "suite-evidence",
+      "filters": [
+        "independent-site"
+      ]
+    },
+    {
+      "id": "BG-019-frontend-http-wiring-closure",
+      "priority": "P1",
+      "source_backlog_id": "MSG-20261003-135 CHANGE E",
+      "title": "前端/HTTP 缺口按协议收口（四域内部 Golden Path 所需的最小 frontend wiring）",
+      "scope": "补齐后端已有但前端未接的内部 Golden Path 最小接线；或由宿主正式修改协议范围（二选一，不得由 Codex 忽略）",
+      "acceptance_criteria": "每域内部 Golden Path 所需的 HTTP→frontend 接线存在并有测试；否则协议范围须经宿主正式修改",
+      "dependencies": [
+        "BG-017-layer2-golden-path-matrix"
+      ],
+      "risk_class": "MEDIUM",
+      "ARCH_REVIEW_REQUIRED": false,
+      "HOST_ACTION_REQUIRED": false,
+      "HOLD_EXTERNAL": true,
+      "allowed_files": [
+        "apps/web/**",
+        "apps/api/src/services/**"
+      ],
+      "boundary": "NO_EXTERNAL_CALL",
+      "required_tests": [
+        "web"
+      ],
+      "template": "suite-evidence",
+      "filters": [
+        "web"
       ]
     }
   ],

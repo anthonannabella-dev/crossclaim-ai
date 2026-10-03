@@ -1644,3 +1644,11 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 ## 2026-10-03T15:50:03.344Z — BACKLOG BG-015-ior-full-chain-assembly
 - Enterprise IOR 全链装配（Entry→IOR→claimant/right→remedy+deadline→qualification→evidence→estimate→claim-ready→broker authorization→filing provider→refund destination），fail-closed 零外写
 -  Test Files  1 passed (1) |       Tests  16 passed (16)
+
+## 2026-10-03T15:52:09.301Z — BG-013 Schema Delta Request（I1 持久化）
+- Issue #2 comment 5970773400（HEAD 376d64c）；docs/releases/BG013-IOR-SCHEMA-DELTA-REQUEST.md；待发唤醒。
+
+## 2026-10-03T15:54:17.396Z — MSG-20261003-135（INDEPENDENT FINAL AUDIT = REVISE）
+- 已逐字归档（FULL_COPY_OK）；CODE_COMPLETE 回退为 NO，AUTONOMOUS_INTERNAL_WORK=RUNNING。
+- CHANGE A 实施：final-status 14 项逐条 + evidence 绑定 acceptance HEAD + 无默认 true + 工作树无静默豁免。
+- CHANGE B–E 登记为 BG-016..BG-019，重新进入 SAFE_CONTINUATION_QUEUE。

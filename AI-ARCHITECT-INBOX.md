@@ -124181,3 +124181,202 @@ API.md 同步；
 永久边界继续不变：
 Production Enablement=HOLD · External Write=HOLD · Real Money=HOLD · Customer Submission=HOLD · Production Credentials=HOST_ONLY。
 ```
+
+### [MSG-20261003-135] INDEPENDENT FINAL AUDIT = REVISE（CHANGE A–E；CODE_COMPLETE=NO / AUTONOMOUS_INTERNAL_WORK=RUNNING）（reviewed ref b0fffe5）
+
+```text
+INDEPENDENT FINAL AUDIT = REVISE。
+
+这次不是因为产品方向错，而是“内部代码已完成”的最终验收机制本身还存在可误报条件，并且 Layer 2 明确没有达到协议要求。独立反查后，当前不能接受 INTERNAL_CODE_COMPLETE=TRUE / AUTONOMOUS_INTERNAL_WORK=EXHAUSTED。
+
+最关键的发现有四组。
+
+Layer 1 不能通过：final-status 仍属于部分自证。 FINAL-ACCEPTANCE-PROTOCOL.md 要求 14 项全部成立，但 tools/autopilot/final-status.mjs 实际只检查了约 11 个布尔项，而且多项并未重新执行/读取实证，只是检查 STATE 里“是否记录过”。例如 pg_regression_recorded、fresh_db_migration_recorded、schema_invariants_recorded 都是 Boolean(state.xxx) 类型判断。更明显的是：
+JavaScript
+negative_paths_recorded:
+  Boolean(
+    state.lifelines &&
+    state.p0_business_survival_gates === undefined
+      ? state.lifelines
+      : true
+  )
+
+当条件落入 : true 分支时，这一项无条件通过。这违反了协议自己的“禁止自证完成”。
+
+另外还有一项硬失败：本次 REVIEWED_HEAD = 1e37be3，但所谓 HEAD CI success 是 9e84737 → run 37133358856 success。协议 Layer 1 第 4 条写的是：
+
+“最新 HEAD 全量 CI SUCCESS”
+
+当前最新审计 HEAD 与 CI-success HEAD 并不相同。即使 1e37be3 只是审计文档提交，现行协议没有 docs-only exemption，因此不能算第 4 项已实证。
+
+还有 git status clean 检查主动忽略 .autopilot/** 与 FINAL-ACCEPTANCE-REPORT.md，而协议原文要求的是 git status clean。如果要允许这些文件例外，应先修改协议明确例外，而不是计算器自行降低标准。
+
+验收材料互相矛盾，说明“无内部项”结论尚未可靠收敛。 FINAL-ACCEPTANCE-REPORT.md 一方面写：
+Independent-site / Chargeback = IN PROGRESS
+Settlement = IN PROGRESS
+Backend HTTP wiring = PARTIAL
+Frontend wiring = PARTIAL
+
+另一方面同一文件又写：
+
+打开的内部项：（无）
+
+这是直接矛盾。
+
+更严重的是 MASTER-GAP-CLOSURE-REGISTER.md 在当前审计 HEAD 上仍然保留：
+
+G3
+G10
+G11
+
+并且 D 段明确写：
+
+INTERNAL_CODE_COMPLETE = FALSE
+
+同时里面还有旧状态，例如 Customs 总表仍写大量 PARTIAL，而 STATE 又声称 BG-012 已 DONE。
+
+因此当前并不存在一个“一致的权威最终状态”。STATE → backlog → MASTER REGISTER → FINAL REPORT 四者没有在同一 acceptance head 上完全 reconcile。
+
+Layer 2 明确没有达到协议定义的 PRODUCT GOLDEN PATH COMPLETE。 这个是目前最大的实质性缺口。
+
+协议要求四域每个都达到：
+
+Authorization → Data ingest → Opportunity → Qualification → Recoverable amount → Evidence package → Start recovery → Claim/Broker handoff → Status tracking → Settlement confirmed → RecoveryLedger → 15% FeeCalculation → BillingInvoice
+
+而且每域还要覆盖：
+
+happy / negative / replay / concurrency / failure-recovery / cross-tenant / RBAC bypass / amount+ledger consistency
+
+并禁止：
+
+service 有 HTTP 未接；
+HTTP 有 frontend 未接；
+contract-only 无 persistence；
+Schema 字段无 DB invariant。
+
+但当前自己的 Final Report 已经承认 Frontend/Backend wiring PARTIAL。
+
+尤其 Independent-site PS04 Phase 1 目前只是：
+
+支付/拒付事实 → evidence → qualification → claim-ready → read-only
+
+这符合我们之前批准的 Phase 1，但它绝不是协议定义的完整 Independent-site Golden Path。还没有内部完成：
+
+start recovery → dispute handoff/submission boundary → status tracking → settlement reconciliation → ledger → 15% fee → invoice
+
+真实 PSP 写入可以继续 HOLD，但fixture/manual-handoff/internal simulation 下的业务链闭环仍属于 Codex 可以完成的内部工作，不能因为真实 API 未接就跳过 Layer 2。
+
+Platform 也是类似问题：Amazon read-only adapter 有证据，但“read-only adapter tests”不能自动等价为 Platform 域完整 Golden Path E2E。
+
+因此 BG-001 的 72 tests、BG-009 的 7 tests、BG-010 的内部链测试等，都是很好的局部证据，但不能替代 Layer 2 四域逐域 Golden Path acceptance matrix。
+
+Layer 3 的分类是正确的，这部分 PASS。 以下保持未 CLOSED 是正确的：
+HOST_ACTION_REQUIRED：生产部署、DNS、付费服务、生产支付、生产凭据；
+API_INTEGRATION_REQUIRED：Amazon/TikTok/Walmart/Shopify OAuth，UPS/FedEx/DHL，Customs provider/Broker，Stripe/PayPal；
+REAL_DATA_REQUIRED：真实客户数据、真实 Settlement、真实 recovered cash；
+LEGAL_OR_LICENSE_REQUIRED：Broker POA、IOR 权属、dispute submission authority。
+
+这一层没有发现把真实能力假装完成的情况。
+
+必须继续执行的 CHANGE
+
+CHANGE A — 修正最终状态计算器。
+
+final-status.mjs 必须逐条映射协议 14 项，而不是“记录过就通过”。至少：
+
+14 项一一显式存在；
+negative paths 不得出现默认 true；
+test skipped 要真实读取测试结果；
+PG/fresh DB/typecheck/build/constraints 要绑定具体本轮 evidence/run；
+CI success 必须对应 acceptance HEAD；
+无法机器验证的项 → UNVERIFIED，而不是 true。
+
+CHANGE B — 建立单一 Acceptance Head 并强制四份状态一致。
+
+在一个固定 HEAD 上重新生成并比对：
+
+STATE.json
+backlog.json
+MASTER-GAP-CLOSURE-REGISTER.md
+FINAL-ACCEPTANCE-REPORT.md
+
+任何一个仍包含 IN_PROGRESS / PARTIAL / G3/G10/G11 / INTERNAL_CODE_COMPLETE=FALSE，就不得输出 OPEN_INTERNAL_ITEMS=0。
+
+需要加一个自动 guard，CI 中直接检查这些状态之间不存在冲突。
+
+CHANGE C — Layer 2 四域 Golden Path Matrix。
+
+为四个域分别建立明确验收表：
+
+Platform
+Logistics / Carrier
+Customs
+Independent-site
+
+每域逐项标出：
+
+HTTP / persistence / DB invariant / frontend / happy / negative / replay / concurrency / failure recovery / cross-tenant / RBAC / amount-ledger consistency
+
+缺哪一项就 materialize backlog，不允许用“专项测试很多”代替完整矩阵。
+
+CHANGE D — Independent-site 继续内部闭环，而不是停在 Phase 1。
+
+仍保持：
+
+External Write=HOLD
+
+但 Codex 可以继续做纯内部/fixture/manual-handoff 版：
+
+chargeback opportunity
+→ qualification
+→ evidence/package
+→ start recovery
+→ manual dispute handoff
+→ status fact
+→ settlement reconciliation
+→ RecoveryLedger
+→ 15% fee
+→ BillingInvoice
+
+必须保持：
+
+submitted ≠ won ≠ settled ≠ recovered ≠ billable
+
+真实 Stripe/PayPal submission 继续属于 API/LEGAL/HOST。
+
+CHANGE E — 前端/HTTP 缺口必须按协议收口或修改协议范围。
+
+当前 Final Report 自己写 Frontend wiring = PARTIAL。只要协议仍规定：
+
+HTTP 有 frontend 未接 = Layer 2 不完整
+
+那么就不能 CODE_COMPLETE。
+
+两种合法选择只能二选一：
+
+把四域内部 Golden Path 所需的最小 frontend wiring 补齐；
+或由宿主正式修改 FINAL ACCEPTANCE PROTOCOL，明确“内部完成不要求所有域 UI”。
+
+不能由 Codex 自己忽略该条件。
+
+所以现在状态应回退为：
+
+CODE_COMPLETE = NO
+INTEGRATION_COMPLETE = NO
+REAL_VALIDATION_COMPLETE = NO
+PRODUCTION_READY = NO
+
+AUTONOMOUS_INTERNAL_WORK = RUNNING
+
+而不是 EXHAUSTED。
+
+现阶段不需要碰任何真实生产能力。上面 A–E 全部仍然是 Codex 可以在 HOLD_EXTERNAL 下自行完成的内部工程工作，因此应该重新进入 SAFE_CONTINUATION_QUEUE。
+
+等这些修完后，再重新提交一次：
+
+INDEPENDENT FINAL AUDIT REQUEST v2
+
+届时重点不再看“2637 tests 有多少”，而看三个东西是否真正同时成立：
+
+14/14 Layer 1 实证 + 四域 Layer 2 Golden Path 完整 + Layer 3 明确继续 HOLD。
+```
