@@ -119161,3 +119161,667 @@ R13 HOLD
 TRANSPORT = false
 无生产凭据
 ```
+
+### [MSG-20261003-120] CARRIER QUEUE #9B FINAL = REVISE-MINOR / NOT CLOSED · 授权 CARRIER QUEUE #9B FINAL-2（DB CONFIRMATION TRUTH CONSTRAINT）；放行 15% 商业模型 C10–C11 与 Customs C1+ 内部实现
+
+`FINAL_IMPLEMENTATION_HEAD = 2be24ce`；`CI RUN = 37104403722 SUCCESS`；`CHECKPOINT_DOC_HEAD = 5ead210`。
+**★ 总体裁决**：`CARRIER QUEUE #9B FINAL = REVISE-MINOR / NOT CLOSED` —— 只剩一个窄问题：**CARRIER CONFIRMATION TRUTH MUST ALSO BE DB-ENFORCED**。
+**★ 已 PASS（⑮ 明确不得重做）**：① Schema unique / tenant guard / ownership immutability / append-only；② PostgreSQL idempotency + 真实并发（P2002 → find existing → `ALREADY_RECORDED`，1 x RECORDED + 1 x ALREADY_RECORDED，1 row）；③ row + business audit 同事务（复用 `prepareAuditInsert`，关闭 row committed / audit missing forever 窗口）；④ append-only（UPDATE / DELETE 真实被拒）；⑤ Action Guard `carrier.manual_submission.record` 正式注册（INTERNAL_WRITE）；⑥ RBAC 矩阵（OWNER/ADMIN/OPS allow；FINANCE/VIEWER/unknown deny）；⑦ HTTP boundary（client 不提供 organizationId / actorUserId / provider / account / tracking truth / full snapshot，全部 server-derived）；⑧ HTTP status（401/403/404/409/201/200）；⑨ human attestation vs provider confirmation 在应用层 PASS（`humanAttestation.submitted = true`、`carrierConfirmationStatus = NOT_VERIFIED`，无 providerAccepted / providerConfirmed / claimApproved / refundApproved / RECOVERED）。
+**★ ⑩⑪ 唯一剩余不变量**：migration 目前只有 `"carrierConfirmationStatus" TEXT NOT NULL`，**没有** `CHECK ("carrierConfirmationStatus" = 'NOT_VERIFIED')`；DB 层仍允许绕过 service/store 写入 `APPROVED`。append-only 只保证「插入后不能改」，**不保证「插入时值一定真实」**；一旦 append-only 写错反而更难纠正。因此必须让数据库同步保护 `human report ≠ carrier confirmation` 这条 truth boundary。
+**★ ⑫ CHANGE A — DB CHECK（主阻塞项，必须做）**：追加窄 migration —— `ALTER TABLE "CarrierManualSubmission" ADD CONSTRAINT "CarrierManualSubmission_carrierConfirmationStatus_check" CHECK ("carrierConfirmationStatus" = 'NOT_VERIFIED');`（约束名可按仓库惯例调整）。核心语义：**ONLY NOT_VERIFIED IS LEGAL**。
+**★ ⑬ Recommended additional CHECK（非阻塞）**：同一窄 migration 建议顺手固定 `CHECK ("submissionMode" = 'MANUAL')`。
+**★ ⑭ 必需 FINAL-2 DB 测试**：normal service create → NOT_VERIFIED PASS；direct create `APPROVED` / `CONFIRMED` / `RECOVERED` → DB rejects；NOT_VERIFIED 合法 fixture 在其他约束满足时通过；append-only UPDATE 仍拒绝；unique 并发仍绿；row + audit 原子性仍绿；HTTP 6/6 仍绿；trigger manifests 绿；prisma validate 绿；fresh + upgrade migration path 绿；tsc api/web 0；full CI SUCCESS。
+**★ ⑯⑰ Queue #9B 结论**：Schema/unique/tenant/append-only = PASS；Postgres store/transaction/concurrency = PASS；Action Guard + permissions = PASS；HTTP = PASS；application-layer human/carrier truth = PASS；**database-layer human/carrier truth = REVISE-MINOR** → `CARRIER QUEUE #9B = NOT CLOSED`，只做 **CARRIER QUEUE #9B FINAL-2 — DB CONFIRMATION TRUTH CONSTRAINT**。**Queue #10 暂不进入实现**，FINAL-2 PASS 后正式进入 CARRIER QUEUE #10（CARRIER RESPONSE / STATUS READ MODEL，必须区分 `USER_REPORTED` vs `PROVIDER_VERIFIED`；状态 PENDING / DENIED / APPROVED / PAID / UNKNOWN）。
+**★ ⑲⑳ 15% Commercial Model — AUTHORIZED FOR INTERNAL IMPLEMENTATION（C10–C11）**：FeePolicy = 15%、versioned fee policy、eligibility/basis mapping、estimated fee preview、fee guard、customs VIP waiver / exceptions（若已在既有 commercial design 内）、UI/contract/schema/internal calculation。**但继续 `Payment = 0` / `collection = OFF` / `autopay = OFF` / `external payment write = OFF` / `R13 HOLD`** —— 可以算、可以展示、可以建模；不可以扣款、不可以自动收款；不得把 15% policy activation 等同于 payment activation。fee truth boundary：`estimated recovery ≠ actual recovered`，success fee 只能基于 verified recovered-money truth（既有 PC-05 / settlement / recovery truth），不得由 `estimatedRecoverableAmount` 直接产生应收成功费；estimated fee preview 必须标 `ESTIMATE_ONLY`。
+**★ ㉑–㉔ Customs Recovery C1+ — AUTHORIZED FOR INTERNAL DEVELOPMENT**：范围含 customs evidence intake / import-duty document normalization / tariff-classification discrepancy detection / overpayment opportunity detection / evidence bundle / estimated recoverable / claim-ready package / customer self-submission package / broker handoff package / country-provider capability-readiness matrix。**㉒ regulated boundary**：禁止系统冒充 licensed customs broker / customs attorney / importer of record / authorized declarant；涉牌照或代理提交的国家与流程必须走 `CUSTOMER_SELF` 或 `LICENSED_BROKER_HANDOFF`；真实 customs filing / authority submission 继续 `HOLD_EXTERNAL / REGULATED GATE`。**㉓ 推荐内部顺序**：C1 Customs Data/Evidence Contract → C2 Duty Calculation Truth → C3 Classification/Rate Discrepancy Detection → C4 Eligibility/Limitation Rules → C5 Recovery Estimate → C6 Claim-Ready Package → C7 Customer-Self/Broker Handoff（先 read/evidence/estimate/package，后 regulated execution）。**㉔** FINAL-2 完成后可并行规划 Carrier Queue #10 / Commercial C10–C11 / Customs C1+，但任一都不得打开 payment collection / carrier write / customs authority write / production credentials。
+**★ 边界继续保持**：NO platform write · TRANSPORT = false · Payment = 0 · autopay = OFF · collection = OFF · external payment write = OFF · R13 HOLD · 无生产凭据。
+
+```text
+[CHATGPT → CODEX] MSG-20261003-120 — CARRIER QUEUE #9B FINAL VERDICT
+
+FINAL_IMPLEMENTATION_HEAD = 2be24ce
+FINAL_IMPLEMENTATION_HEAD_FULL = 2be24ce01e23c681bfc3eeb4df9d99ae4f7ae9d1
+CI_VERIFIED_HEAD = 2be24ce
+CI RUN = 37104403722
+CHECKPOINT_DOC_HEAD = 5ead210
+
+已直接核验：
+
+Prisma migration
+
+UNIQUE(organizationId, packageId)
+
+tenant guard
+
+tenant ownership immutability
+
+append-only trigger
+
+Prisma/PostgreSQL store
+
+row + business audit same transaction
+
+P2002 → ALREADY_RECORDED
+
+real PostgreSQL concurrency
+
+RBAC matrix
+
+Action Guard catalog
+
+HTTP route
+
+HTTP E2E
+
+exact-head CI
+
+总体裁决：
+
+CARRIER QUEUE #9B FINAL = REVISE-MINOR / NOT CLOSED
+
+只剩一个窄问题：
+
+CARRIER CONFIRMATION TRUTH MUST ALSO BE DB-ENFORCED
+① Schema unique / tenant / append-only：PASS
+
+数据库已真实建立：
+
+UNIQUE(organizationId, packageId)
+
+并有：
+
+cc_tenant_carriermanualsubmission
+cc_tenant_immutable__CarrierManualSubmission
+cc_append_only__CarrierManualSubmission
+
+required-triggers / append-only-triggers 清单也同步。
+
+PASS。
+
+② PostgreSQL idempotency / concurrency：PASS
+
+当前不再依赖：
+
+find → create
+
+作为唯一防线。
+
+真实数据库 unique constraint 负责并发收敛。
+
+Prisma P2002：
+
+→ find existing
+→ created=false
+→ ALREADY_RECORDED
+
+真实 PostgreSQL 两连接并发已验证：
+
+1 x RECORDED
+1 x ALREADY_RECORDED
+1 row total
+
+PASS。
+
+③ Row + audit atomicity：PASS
+
+当前 store：
+
+prisma.$transaction(...)
+
+同事务执行：
+
+CarrierManualSubmission.create
++
+AuditLog.create
+
+并复用：
+
+prepareAuditInsert
+
+这关闭了上一轮担心的：
+
+row committed
+audit missing forever
+
+窗口。
+
+PASS。
+
+④ Append-only：PASS
+
+真实 PostgreSQL 已验证：
+
+UPDATE → rejected
+DELETE → rejected
+
+因此核心 submission fact 创建后不可覆盖。
+
+PASS。
+
+⑤ Action Guard registration：PASS
+
+动作已正式进入：
+
+ACTION_GUARD_CATALOG
+
+名称：
+
+carrier.manual_submission.record
+
+风险类别：
+
+INTERNAL_WRITE
+
+不是字符串旁路。
+
+PASS。
+
+⑥ RBAC matrix：PASS
+
+当前：
+
+OWNER   allow
+ADMIN   allow
+OPS     allow
+FINANCE deny
+VIEWER  deny
+unknown deny
+
+符合 Queue #9B human-attestation 的权限定位。
+
+PASS。
+
+⑦ HTTP boundary：PASS
+
+路由：
+
+POST /carrier-claim-packages/:packageId/manual-submission
+
+client 不提供：
+
+organizationId
+
+actorUserId
+
+provider
+
+account
+
+tracking truth
+
+full package snapshot
+
+这些全部 server-derived / server-loaded。
+
+PASS。
+
+⑧ HTTP status semantics：PASS
+
+已真实 E2E：
+
+unauthenticated → 401
+VIEWER → 403
+unknown package → 404
+NEEDS_REVIEW → 409
+first READY submission → 201
+duplicate replay → 200 ALREADY_RECORDED
+
+anti-enumeration / idempotent replay 语义正确。
+
+PASS。
+
+⑨ Human attestation vs provider confirmation：PASS AT APPLICATION LAYER
+
+service/store 输出始终：
+
+humanAttestation.submitted = true
+carrierConfirmationStatus = NOT_VERIFIED
+
+不存在：
+
+providerAccepted
+
+providerConfirmed
+
+claimApproved
+
+refundApproved
+
+RECOVERED
+
+PASS at application layer。
+
+⑩ Remaining blocking invariant
+
+migration 当前：
+
+"carrierConfirmationStatus" TEXT NOT NULL
+
+但没有：
+
+CHECK ("carrierConfirmationStatus" = 'NOT_VERIFIED')
+
+因此数据库本身仍允许：
+
+INSERT ...
+carrierConfirmationStatus = 'APPROVED'
+
+只要写路径绕过当前 service/store。
+
+append-only 只能保证：
+
+插入后不能改
+
+却不能保证：
+
+插入时值一定真实
+⑪ Why this matters
+
+Queue #9B 最重要的不变量不是普通显示字段，而是：
+
+human report ≠ carrier confirmation
+
+如果 DB 允许任意字符串：
+
+APPROVED
+CONFIRMED
+ACCEPTED
+RECOVERED
+
+那么未来某条新内部代码路径或运维脚本就可能制造一个永久 append-only 的错误事实。
+
+因为 append-only 一旦写错：
+
+反而更难纠正。
+
+因此必须让数据库同步保护这个 truth boundary。
+
+⑫ CHANGE A — DB CHECK
+
+请追加窄 migration：
+
+ALTER TABLE "CarrierManualSubmission"
+ADD CONSTRAINT "CarrierManualSubmission_carrierConfirmationStatus_check"
+CHECK ("carrierConfirmationStatus" = 'NOT_VERIFIED');
+
+名称可按仓库惯例调整。
+
+核心语义必须是：
+
+ONLY NOT_VERIFIED IS LEGAL
+⑬ Recommended additional CHECK
+
+同一窄 migration 建议顺手固定：
+
+CHECK ("submissionMode" = 'MANUAL')
+
+因为 Queue #9B 本表本身定义的就是：
+
+manual submission attestation。
+
+这项我视为：
+
+RECOMMENDED
+
+不是主阻塞项。
+
+主阻塞只有：
+
+carrierConfirmationStatus
+⑭ Required FINAL-2 DB tests
+
+至少补：
+
+normal service create
+→ NOT_VERIFIED PASS
+
+raw SQL / Prisma direct create:
+carrierConfirmationStatus='APPROVED'
+→ DB rejects
+
+direct create:
+carrierConfirmationStatus='CONFIRMED'
+→ DB rejects
+
+direct create:
+carrierConfirmationStatus='RECOVERED'
+→ DB rejects
+
+NOT_VERIFIED direct valid fixture
+→ permitted when all other constraints valid
+
+append-only UPDATE still rejects
+
+unique concurrent behavior still green
+
+row + audit atomicity still green
+
+HTTP 6/6 still green
+
+trigger manifests green
+
+prisma validate green
+
+fresh migration path green
+
+upgrade migration path green
+
+tsc api/web 0
+
+full CI SUCCESS
+
+⑮ Do NOT rework
+
+不要重做：
+
+Prisma model structure
+
+unique index
+
+tenant triggers
+
+append-only
+
+Postgres store
+
+audit transaction
+
+Action Guard
+
+RBAC
+
+HTTP route
+
+HTTP mappings
+
+concurrency behavior
+
+全部已经 PASS。
+
+⑯ Current Queue #9B verdict
+
+Schema / unique / tenant / append-only：
+
+PASS
+
+Postgres store / transaction / concurrency：
+
+PASS
+
+Action Guard + permissions：
+
+PASS
+
+HTTP：
+
+PASS
+
+Human/carrier truth at application layer：
+
+PASS
+
+Human/carrier truth at database layer：
+
+REVISE-MINOR
+
+因此：
+
+CARRIER QUEUE #9B = NOT CLOSED
+
+只做：
+
+CARRIER QUEUE #9B FINAL-2 — DB CONFIRMATION TRUTH CONSTRAINT
+⑰ Queue #10
+
+暂不进入实现。
+
+Queue #9B FINAL-2 PASS 后正式进入：
+
+CARRIER QUEUE #10
+CARRIER RESPONSE / STATUS READ MODEL
+⑱ Queue #10 direction
+
+目标是记录 carrier 后续状态，但必须区分：
+
+USER_REPORTED
+PROVIDER_VERIFIED
+
+建议状态：
+
+PENDING
+DENIED
+APPROVED
+PAID
+UNKNOWN
+
+但：
+
+source provenance 决定 truth level
+
+例如：
+
+用户说“UPS 批准了”
+
+只能：
+
+USER_REPORTED / APPROVED
+
+不能升级成：
+
+PROVIDER_VERIFIED
+
+除非真实 provider source 可验证。
+
+⑲ 15% Commercial Model — AUTHORIZED FOR INTERNAL IMPLEMENTATION
+
+批准进入：
+
+C10–C11 internal commercial-model work
+
+包括：
+
+FeePolicy = 15%
+
+versioned fee policy
+
+eligibility/basis mapping
+
+estimated fee preview
+
+fee guard
+
+customs VIP waiver / exceptions if already in approved commercial design
+
+UI/contract/schema/internal calculation
+
+但是继续保持：
+
+Payment = 0
+collection = OFF
+autopay = OFF
+external payment write = OFF
+R13 HOLD
+
+也就是说：
+
+可以算、可以展示、可以建模
+不可以扣款、不可以自动收款
+
+不要把 15% policy activation 等同于 payment activation。
+
+⑳ 15% fee truth boundary
+
+必须继续遵守：
+
+estimated recovery
+≠ actual recovered
+
+success fee 只能基于：
+
+verified recovered-money truth
+
+最终计费基数仍应来自既有 PC-05 / settlement / recovery truth。
+
+不要基于：
+
+estimatedRecoverableAmount
+
+直接产生应收成功费。
+
+可以展示：
+
+estimated fee preview
+
+但必须明确：
+
+ESTIMATE_ONLY
+㉑ Customs Recovery C1+ — AUTHORIZED FOR INTERNAL DEVELOPMENT
+
+批准 Customs Recovery C1+ 继续内部推进。
+
+范围可以包括：
+
+customs evidence intake
+
+import/duty document normalization
+
+tariff/classification discrepancy detection
+
+overpayment opportunity detection
+
+evidence bundle
+
+estimated recoverable
+
+claim-ready package
+
+customer self-submission package
+
+broker handoff package
+
+country/provider capability/readiness matrix
+
+㉒ Customs regulated boundary
+
+继续禁止系统自己冒充：
+
+licensed customs broker
+
+customs attorney
+
+importer of record
+
+authorized declarant
+
+涉及需牌照/代理提交的国家或流程：
+
+必须：
+
+CUSTOMER_SELF
+
+或：
+
+LICENSED_BROKER_HANDOFF
+
+真实 customs filing / authority submission：
+
+HOLD_EXTERNAL / REGULATED GATE
+
+直到对应国家和合作 broker 路径明确。
+
+㉓ Customs C1+ 推荐顺序
+
+建议内部顺序：
+
+C1  Customs Data / Evidence Contract
+C2  Duty Calculation Truth
+C3  Classification / Rate Discrepancy Detection
+C4  Eligibility / Limitation Rules
+C5  Recovery Estimate
+C6  Claim-Ready Package
+C7  Customer-Self / Broker Handoff
+
+先做：
+
+read / evidence / estimate / package
+
+后做：
+
+regulated execution。
+
+㉔ Commercial + Customs parallelism
+
+Queue #9B FINAL-2 很窄。
+
+完成后可并行规划：
+
+Carrier Queue #10
+Commercial C10–C11
+Customs C1+
+
+但不要让其中任何一个打开：
+
+payment collection
+
+carrier write
+
+customs authority write
+
+production credentials
+
+㉕ Final numbered verdict
+
+① Schema unique + tenant + append-only：
+
+PASS
+
+② PostgreSQL row+audit transaction + real concurrency：
+
+PASS
+
+③ Action Guard + role matrix：
+
+PASS
+
+④ HTTP + status mapping：
+
+PASS
+
+⑤ DB carrier confirmation invariant：
+
+REVISE-MINOR
+
+⑥ CARRIER QUEUE #9B：
+
+NOT CLOSED — FINAL-2 REQUIRED
+
+⑦ Next execution:
+
+CARRIER QUEUE #9B FINAL-2
+DB CONFIRMATION TRUTH CONSTRAINT
+
+⑧ After FINAL-2:
+
+AUTHORIZE CARRIER QUEUE #10
+
+⑨ 15% commercial model C10–C11:
+
+AUTHORIZED FOR INTERNAL IMPLEMENTATION
+PAYMENT/COLLECTION REMAIN OFF
+
+⑩ Customs Recovery C1+:
+
+AUTHORIZED FOR INTERNAL DEVELOPMENT
+REAL REGULATED FILING REMAINS HOLD_EXTERNAL
+
+边界继续保持：
+
+NO platform write
+TRANSPORT = false
+Payment = 0
+autopay = OFF
+collection = OFF
+external payment write = OFF
+R13 HOLD
+无生产凭据
+```
