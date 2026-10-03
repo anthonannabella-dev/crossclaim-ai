@@ -1456,3 +1456,9 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - TEST：三类 mutation → DB 拒绝且原记录不变；rotate/reconnect → identity tuple 不变；cross-tenant binding 继续拒绝。
 - NEXT：并入 M4–M6 → C2 FINAL 验收（12+ 项）→ 送审。
 - 归档：AI-ARCHITECT-INBOX.md（逐字 ```text + FULL_COPY_OK）。
+
+## 2026-10-03T09:34:56.145Z — G4/C1 Customs Entry Contract（HEAD 3f5b9e3）
+- 交付：`customs-entry-contract.ts`（只读事实契约，fail-closed 9 原因码，BigInt scale-6 求和，PII 递归拒绝）+ 16/16 回归。
+- 闸门：tsc api/web 0 error；API contract 88/75；audit coverage OK；autopilot rules OK（本地 migration-checksums 为 CRLF 基线噪声，CI 权威）。
+- 边界：无 Schema 变更 / 无路由 / 无外写；filingPerformed=false、paymentPerformed=false、productionCredentials=ABSENT。
+- 下一步：C2 duty calculation truth；C1 持久化先送 Schema Delta。
