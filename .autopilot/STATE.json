@@ -1,6 +1,6 @@
 {
   "gate": "B2-FIX R1",
-  "head": "a6bd16d",
+  "head": "a155812",
   "status": "RECONCILED",
   "current_task": "Carrier Queue #6 — SLA EVIDENCE ASSEMBLY + ELIGIBILITY INPUT PLANE：Tracking Fact + Invoice Fact + POD Fact + Carrier Terms Evidence + Service Level Evidence → **ShipmentEvidenceBundle**（只建证据输入层；不得自动认定赔付 / 自动提交 claim / 自动退款 / 调用 carrier write API / 自动产生 recovery amount）。**逐字归档 MSG-111 为第一步。**CarrierInvoiceReadPort + CarrierPODReadPort（verified account lineage、request/response 双向绑定、十进制金额、charge kind 归一化 + raw code 保留、POD 掩码与隐私、safe rawReference）；**read-only**，不做 SLA/退款资格推导。CarrierTrackingReadPort + normalized CarrierTrackingSnapshot（UPS/FedEx provider adapter 分离）+ 状态/事件归一化（确定性排序 + 去重）+ 失败原因分类 + tenant/account lineage 归属；**read-only**（无 mutation / claim / pickup / refund，TRANSPORT=false）。",
   "next_task": "PC-12A 实施 → 本地测试 + tsc api/web + API contract + full CI → PC-12A CHECKPOINT 送审。",
@@ -9,8 +9,8 @@
   "last_chatgpt_message": "MSG-20261003-119",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-03T05:54:59.519Z",
-  "previous_head": "7f807c2",
+  "updated_at": "2026-10-03T06:02:44.655Z",
+  "previous_head": "a6bd16d",
   "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "f88ef2a",
@@ -49,9 +49,9 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-03T05:43:15.726Z",
+  "last_tick_at": "2026-10-03T05:56:14.186Z",
   "state": "IMPLEMENT",
-  "last_action": "SCHEDULER_STALE_RECOVERED（gap=11min）→ 本轮已恢复执行",
+  "last_action": "SCHEDULER_STALE_RECOVERED（gap=13min）→ 本轮已恢复执行",
   "last_action_at": "2026-10-02T09:01:54.693Z",
   "next_action": "先完成 CARRIER QUEUE #9B FINAL（router 接线 + 端到端 HTTP 测试 → 送审）；随后按架构方放行进入 CUSTOMS RECOVERY QUEUE C1（CustomsEntryFact Schema Delta + 规则包契约设计送审）",
   "current_head": "b55f13b",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-03T05:32:11.808Z",
-    "gapMs": 663919,
+    "previousTickAt": "2026-10-03T05:43:15.726Z",
+    "gapMs": 778461,
     "stale": true,
-    "checkedAt": "2026-10-03T05:43:15.726Z"
+    "checkedAt": "2026-10-03T05:56:14.186Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -250,7 +250,7 @@
     "integration_boundary_review": "AUTHORIZED_TO_PLAN（先提交设计/实施计划，不直接开放真实 transport）"
   },
   "r36_submission_comment": "5927087320",
-  "stale_recovered_at": "2026-10-03T05:43:15.726Z",
+  "stale_recovered_at": "2026-10-03T05:56:14.186Z",
   "engineering_regression_policy": {
     "source": "HOST PRODUCT DIRECTION 2026-10-01",
     "doc": "docs/releases/ENGINEERING-REGRESSION-POLICY.md",
@@ -3914,5 +3914,24 @@
     ],
     "boundary": "NO platform write · TRANSPORT=false · Payment = 0 · autopay = OFF · collection = OFF · R13 HOLD · 无生产凭据",
     "queue_impact": "NONE_ON_CURRENT_UNIT（不中断 CARRIER QUEUE #9B FINAL）"
+  },
+  "carrier_queue_9b_final_router_plan": {
+    "file": "apps/api/src/services/workflow/http-routes.ts（2048 行，单一 handler: export async function handleWorkflowRequest(req, res, deps: WorkflowRouteDeps)）",
+    "steps": [
+      "新增模块级 path 常量：/^\\/carrier-claim-packages\\/([^/]+)\\/manual-submission$/",
+      "在 handleWorkflowRequest 顶部与其它 path 一起解构（exec）",
+      "把该 path 加入「路由集合守卫」的布尔条件（与 caseBillingDraft 等并列），否则直接 return false",
+      "新增分支（模板：if (caseBillingDraft) 区块）：405 非 POST → readJsonBody(req) → deps.actionGuard 缺失则 throw ActionGuardNotConfiguredError('carrier.manual_submission.record') → assertAllowed({action, actorUserId: actor.actorUserId, organizationId: actor.organizationId}) → 调用 handleCarrierManualSubmissionRequest({ packageId: m[1], request: {carrierReference?, reportedCarrierSubmissionAt?, note?}, session: {organizationId: actor.organizationId, actorUserId: actor.actorUserId, role: actor.role} }, deps) → sendJson(res, result.status, result.body) → return true",
+      "WorkflowRouteDeps 增加可选依赖：carrierClaimPackages?: CarrierClaimPackageSource（缺省返回 null → 404，符合 ㉓「package 无持久实体时不要伪造」）与 carrierManualSubmissionStore?: CarrierManualSubmissionStore（缺省 createPrismaCarrierManualSubmissionStore(deps.prisma)）",
+      "server.ts：createServer 注入上述可选依赖（生产缺省为 null package source + Prisma store）"
+    ],
+    "existing_helpers": [
+      "sendJson(res, code, payload)",
+      "readJsonBody(req)",
+      "actor (actorUserId / organizationId / role)",
+      "deps.actionGuard.assertAllowed(...)",
+      "ActionGuardNotConfiguredError"
+    ],
+    "remaining_tests": "端到端 HTTP 测试：未认证 401 / 无权限 403 / 未知 package 404 / NEEDS_REVIEW 409 / 首次 201 / 幂等重放 200"
   }
 }
