@@ -1550,3 +1550,21 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 ## 2026-10-03T14:17:18.723Z — AUTOPILOT CONTINUOUS MODE 落地
 - continuous-runner + singleton lock + watchdog 已实现并验证（A→B→C 单次启动连续执行；SINGLETON_RUNNER=VERIFIED）。
 - 记录：AUTOPILOT_MODE=CONTINUOUS / HEARTBEAT_ROLE=LIVENESS_ONLY / WATCHDOG_ROLE=RECOVERY_ONLY。
+
+## 2026-10-03T14:18:25.816Z — CONTINUOUS u4-fresh-db-verify
+- deploy-smoke=OK | trigger-inventory=FAIL  | constraint-guard=OK
+
+## 2026-10-03T14:19:09.641Z — CONTINUOUS u4-fresh-db-verify
+- deploy-smoke=OK | trigger-inventory=FAIL  | constraint-guard=OK
+
+## 2026-10-03T14:19:44.718Z — CONTINUOUS u4-fresh-db-verify
+- deploy-smoke=OK | trigger-inventory=FAIL  | constraint-guard=OK
+
+## 2026-10-03T14:20:14.417Z — CONTINUOUS u4-fresh-db-verify
+- deploy-smoke=OK | trigger-inventory=FAIL status=2 psql: error: connection to server at "127.0.0.1", port 5432 failed: FATAL: database "crossclaim"" does not exist  | constraint-guard=OK
+
+## 2026-10-03T14:20:45.510Z — CONTINUOUS u4-fresh-db-verify
+- deploy-smoke=OK | trigger-inventory=OK | constraint-guard=OK
+
+## 2026-10-03T14:20:45.589Z — CONTINUOUS u5-doc-sync-guard
+- doc-sync=OK (5 checks)

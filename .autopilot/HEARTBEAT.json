@@ -12,7 +12,7 @@
   "remaining_tasks": 13,
   "automation_status": "ACTIVE",
   "interval_minutes": 5,
-  "tick_at": "2026-10-03T14:16:46.251Z",
+  "tick_at": "2026-10-03T14:20:45.636Z",
   "schedule_stale_previous": false,
   "state_machine": "CONTINUOUS",
   "continue_required": true,
@@ -252,8 +252,8 @@
     "production_credentials": "HOST_ONLY"
   },
   "remaining_units": 0,
-  "runner_pid": 16032,
+  "runner_pid": 31872,
   "mode": "CONTINUOUS",
-  "last_unit": "u3-ci-triage",
-  "last_unit_at": "2026-10-03T14:16:37.590Z"
+  "last_unit": "u5-doc-sync-guard",
+  "last_unit_at": "2026-10-03T14:20:45.629Z"
 }
