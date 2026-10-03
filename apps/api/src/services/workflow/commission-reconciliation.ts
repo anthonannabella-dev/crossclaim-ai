@@ -20,6 +20,7 @@ import { Prisma, type PrismaClient } from '@prisma/client';
 
 import { prepareAuditInsert } from '../audit';
 import { billingInvoiceNoFor } from '../recovery';
+import { evaluateFeeGuard, policyFromConfirmedAgreementRate } from '../commercial/fee-policy';
 import { WorkflowError } from './opportunity-review';
 import { assertPermission } from './permissions';
 
@@ -284,7 +285,37 @@ export async function reconcilePayoutItems(
 
     // 费率必须已确认（fail closed，无默认费率）
     const terms = await loadConfirmedTerms(prisma, input.organizationId, caseId);
-    const feeAmount = money(new Prisma.Decimal(item.amount).times(new Prisma.Decimal(terms.successFeeRate)));
+
+    // MSG-20261003-124 ㉓㉔㉕⑥：所有 FeeCalculation 创建路径必须显式通过统一 fee guard。
+    //   · 费率绑定：由**已确认的 agreement** 派生（历史 20% 保持 20%；默认 15% 仅适用于 cutover 后的新条款）；
+    //   · 计费基数：本轮 settlement 为 status='RECEIVED' 且与 payout item 精确匹配（verified recovered money truth）；
+    //   · client 无法提供费率；estimate basis / 无 verified recovered truth 一律 fail-closed。
+    const boundPolicy = policyFromConfirmedAgreementRate(terms.successFeeRate, item.currency);
+    const guard = evaluateFeeGuard({
+      policy: boundPolicy,
+      basis: 'VERIFIED_ACTUAL_INCREMENTAL_RECOVERED',
+      verifiedRecovered: {
+        settlementId: settlement.id,
+        verifiedAmount: item.amount,
+        currency: item.currency,
+        confirmationStatus: 'CONFIRMED',
+        reconciliationStatus: 'RECONCILED',
+      },
+    });
+    if (!guard.allowed) {
+      results.push({
+        ...base,
+        reconciliationStatus: 'MATCHED',
+        billingStatus: 'NOT_APPLICABLE',
+        matchType,
+        matchedFields,
+        confidenceReason: `${reasonParts.join('; ')}; fee guard blocked billing (${guard.reasonCode})`,
+        caseId,
+        settlementId: settlement.id,
+      });
+      continue;
+    }
+    const feeAmount = money(new Prisma.Decimal(guard.fee.feeAmount));
 
     if (dryRun) {
       results.push({

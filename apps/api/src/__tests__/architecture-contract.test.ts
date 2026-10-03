@@ -31,6 +31,15 @@ const ALL_MIGRATIONS_SQL = readdirSync(MIGRATIONS_DIR, { withFileTypes: true })
   .map((file) => readFileSync(file, 'utf8'))
   .join('\n');
 
+/** R46 S1 的迁移 SQL（仅 settlement_billing_linkage 批次的 4 个 migration） */
+const R46_S1_SQL = readdirSync(MIGRATIONS_DIR, { withFileTypes: true })
+  .filter((entry) => entry.isDirectory() && entry.name.includes('settlement_billing_linkage'))
+  .map((entry) => join(MIGRATIONS_DIR, entry.name, 'migration.sql'))
+  .filter((file) => existsSync(file))
+  .sort()
+  .map((file) => readFileSync(file, 'utf8'))
+  .join('\n');
+
 const schema = readFileSync(SCHEMA_PATH, 'utf8');
 
 /** 去掉注释后的 schema —— 用于"不得出现某关键词"这类断言 */
@@ -97,11 +106,74 @@ describe('模型清单一致性（C-0002 CHANGE #1）', () => {
     'RecoveryPayout',
     // MSG-20260929-59：Kill Switch 变更请求（控制面；Schema Migration Request 已批准）
     'KillSwitchRequest',
+    // MSG-20261001-19：platform.write 持久化执行账本（C-PLATFORM-WRITE-LEDGER）
+    'PlatformWriteAttempt',
+    // MSG-20261001-31/-32：人工追回提交持久化（R43 S1）
+    'RecoveryPackage',
+    'RecoveryPackageArtifact',
+    'RecoveryManualSubmission',
+    'RecoveryManualSubmissionReference',
+    // MSG-20261001-45 / -46：Outcome / Reimbursement Reconciliation（R45 S1）
+    'ProviderOutcomeFact',
+    'ReimbursementFact',
+    'ExpectedRecoveryBasis',
+    'ReconciliationOverrideDecision',
+    'ClaimReconciliationProjection',
+    'ReconciliationTolerancePolicy',
+    // MSG-20261002-53 / -54：Settlement / Billing Linkage（R46 S1）
+    'SettlementReceiptSnapshot',
+    'SettlementAdjustment',
+    'FeeCalculationAdjustment',
+    // TRACK C2（MSG-20261002-66 M2）：PlatformAccount
+    'PlatformAccount',
+    // TRACK A / PC-09（MSG-20261003-96 ⑬）：版本化商业/法律文档的显式接受事实
+    'PolicyAcceptance',
+    // CARRIER QUEUE #9B FINAL（MSG-20261003-119 ⑲–㉜）：人工提交事实（human attestation）
+    'CarrierManualSubmission',
+    // CARRIER QUEUE #10 FINAL（MSG-20261003-122 ⑳–㉖）：carrier response 事实（append-only / status-provenance 分离）
+    'CarrierClaimResponseFact',
+    // C17（MSG-20261003-124 ③④⑤）：Customs submission 执行身份根 + append-only 状态事实
+    'CustomsSubmissionAttempt',
+    'CustomsSubmissionAttemptFact',
+    // CUSTOMS GAP G4 / Q2（MSG-20261003-127）：Customs entry 事实层（append-only evidence snapshot）
+    'CustomsEntryFactRecord',
+    'CustomsEntryDutyLineRecord',
+    // P0-1（BUSINESS SURVIVAL GATE）：Return / Export / Destruction 事实
+    'CustomsReturnFactRecord',
+    // P0-2（BUSINESS SURVIVAL GATE）：Customer Qualification / Recovery Economics 判定投影
+    'RecoveryQualificationAssessmentRecord',
+    // P0-1 收尾：Return→matching→evidence→claim-ready 结果
+    'CustomsReturnClaimEvidenceRecord',
+    // CUSTOMS GAP G4 / Q2 第二批（MSG-20261003-127）：四个 append-only 计算投影
+    'CustomsDutyTruthRecord',
+    'CustomsDiscrepancyRecord',
+    'CustomsEligibilityRecord',
+    'CustomsRecoveryEstimateRecord',
+    // ENTERPRISE IOR RECOVERY LAYER（MSG-20261003-136 批准）：三张独立 append-only 事实表
+    'CustomsIorIdentityFact',
+    'CustomsRightLineageFact',
+    'CustomsBrokerPoaFact',
+    // BG-021（MSG-20261003-139 批准）：independent-site / chargeback 事实层（三张 append-only）
+    'IndependentSiteHandoffFact',
+    'IndependentSiteResponseFact',
+    'IndependentSiteSettlementFact',
+    // CHANGE B（MSG-20261003-141）：Phase 1 结果的只读投影
+    'IndependentSitePhase1Projection',
   ];
-  const JOIN_MODELS = ['CaseEvidence', 'CanonicalFactSource', 'ClaimItemEvidence'];
+  const JOIN_MODELS = [
+    'CaseEvidence',
+    'CanonicalFactSource',
+    'ClaimItemEvidence',
+    'RecoveryManualSubmissionEvidence',
+    // R45 S1：投影 ↔ 事实成员关系
+    'ClaimReconciliationProjectionFact',
+    // R46 S1：Fee ↔ Settlement/adjustment 逐笔成员关系
+    'FeeCalculationSettlement',
+  ];
+
 
   it(`核心模型恰好 ${CORE.length} 个`, () => {
-    expect(CORE).toHaveLength(35);
+    expect(CORE).toHaveLength(71);
     for (const name of CORE) expect(modelBlock(name), `缺少核心模型 ${name}`).not.toBe('');
   });
 
@@ -109,8 +181,8 @@ describe('模型清单一致性（C-0002 CHANGE #1）', () => {
     for (const name of JOIN_MODELS) expect(modelBlock(name), `缺少联结模型 ${name}`).not.toBe('');
   });
 
-  it('模型总数为 38（35 core + 3 join）—— 与 README/DOMAIN_MODEL 表述一致', () => {
-    expect(modelNames()).toHaveLength(38);
+  it('模型总数为 77（71 core + 6 join）—— 与 README/DOMAIN_MODEL 表述一致', () => {
+    expect(modelNames()).toHaveLength(77);
   });
 });
 
@@ -147,6 +219,17 @@ describe('租户归属（C-0002 CHANGE #2）', () => {
     'ClaimItemEvidence',
     'RecoveryPayout',
     'KillSwitchRequest',
+    // R45 S1：Outcome / Reimbursement Reconciliation
+    'ProviderOutcomeFact',
+    'ReimbursementFact',
+    'ExpectedRecoveryBasis',
+    'ReconciliationOverrideDecision',
+    'ClaimReconciliationProjection',
+    // R46 S1：Settlement / Billing Linkage
+    'SettlementReceiptSnapshot',
+    'SettlementAdjustment',
+    'FeeCalculationSettlement',
+    'FeeCalculationAdjustment',
   ];
 
   it.each(TENANT_OWNED)('%s 带 organizationId', (name) => {
@@ -215,6 +298,11 @@ describe('租户完整性数据库约束（C-0002 CHANGE #3）', () => {
     // MSG-20260929-59：控制面表（唯一外键指向租户根 Organization，
     // 触发器调用既有 crossclaim_assert_tenant_integrity()，无跨表 TG_ARGV 参数对）
     'KillSwitchRequest',
+    // R46 S1：Settlement / Billing Linkage
+    'SettlementReceiptSnapshot',
+    'SettlementAdjustment',
+    'FeeCalculationSettlement',
+    'FeeCalculationAdjustment',
   ];
 
   it.each(TRIGGERED)('%s 挂了租户校验触发器', (table) => {
@@ -431,5 +519,107 @@ describe('Kill Switch 变更请求（MSG-20260929-59 / -57）', () => {
 
   it('不触碰资金与业务事实模型（只有新增）', () => {
     expect(modelBlock('KillSwitchRequest')).not.toMatch(/Settlement|RecoveryLedgerEntry|BillingInvoice/);
+  });
+});
+
+// ============================================================
+// R46 S1：Settlement / Billing Linkage（MSG-20261002-53 / -54 收口）
+// ============================================================
+describe('R46 S1 资金域 Schema 不变量（MSG-20261002-53 / -54）', () => {
+  it('CHANGE A1：外部身份唯一性以 kind + valueHash + version 为规范依据', () => {
+    expect(ALL_MIGRATIONS_SQL).toMatch(
+      /CREATE UNIQUE INDEX "Settlement_org_identity_unique"[\s\S]{0,200}"externalIdentityVersion"/,
+    );
+    expect(ALL_MIGRATIONS_SQL).toMatch(
+      /CREATE UNIQUE INDEX "Settlement_org_fingerprint_unique"[\s\S]{0,200}"financialEventFingerprintVersion"/,
+    );
+    expect(ALL_MIGRATIONS_SQL).toMatch(
+      /CREATE UNIQUE INDEX "SettlementAdjustment_org_identity_unique"/,
+    );
+  });
+
+  it('CHANGE A（F3 修正）：fee chain 维度唯一，且不存在全局 settlementId 唯一锁死', () => {
+    expect(ALL_MIGRATIONS_SQL).toMatch(
+      /CREATE UNIQUE INDEX "FeeCalculationSettlement_calc_settlement_unique"[\s\S]{0,160}"feeCalculationId", "settlementId"/,
+    );
+    expect(ALL_MIGRATIONS_SQL).toMatch(
+      /CREATE UNIQUE INDEX "FeeCalculation_org_claimitem_active_unique"[\s\S]{0,200}WHERE "supersededByFeeCalculationId" IS NULL/,
+    );
+    expect(ALL_MIGRATIONS_SQL).toContain('cc_feecalculationsettlement_chain_unique');
+    expect(ALL_MIGRATIONS_SQL).not.toMatch(
+      /CREATE UNIQUE INDEX[^;]*ON "FeeCalculationSettlement"\("organizationId", "settlementId"\)/,
+    );
+  });
+
+  it('CHANGE B：Settlement 到账依据创建后不可漂移', () => {
+    expect(ALL_MIGRATIONS_SQL).toContain('cc_settlement_receipt_basis_immutable');
+    expect(ALL_MIGRATIONS_SQL).toMatch(/SETTLEMENT_RECEIPT_BASIS_IMMUTABLE/);
+    expect(ALL_MIGRATIONS_SQL).toMatch(
+      /CREATE TRIGGER "cc_append_only__SettlementReceiptSnapshot"[\s\S]{0,120}BEFORE UPDATE OR DELETE/,
+    );
+  });
+
+  it('CHANGE B1：v1 仅 full reversal，且等额 / 同币种由触发器强制', () => {
+    expect(ALL_MIGRATIONS_SQL).toMatch(/SettlementAdjustment_v1_kind_only[\s\S]{0,160}'REVERSAL'/);
+    expect(ALL_MIGRATIONS_SQL).toContain('cc_settlementadjustment_full_reversal_guard');
+    expect(ALL_MIGRATIONS_SQL).toMatch(/REVERSAL_AMOUNT_MISMATCH/);
+    expect(ALL_MIGRATIONS_SQL).toMatch(/REVERSAL_CURRENCY_MISMATCH/);
+    expect(modelBlock('SettlementAdjustment')).toMatch(
+      /@@unique\(\[organizationId,\s*originalSettlementId\]\)/,
+    );
+  });
+
+  it('CHANGE C1 / 三分类：FeeCalculationAdjustment 只存正数且 VOID 等额', () => {
+    const f = modelBlock('FeeCalculationAdjustment');
+    expect(f).toMatch(/adjustmentKind\s+FeeCalculationAdjustmentKind/);
+    expect(f).toMatch(/@@unique\(\[organizationId,\s*approvalId\]\)/);
+    expect(enumBlock('FeeCalculationAdjustmentKind')).toContain('VOID');
+    expect(enumBlock('FeeCalculationAdjustmentKind')).toContain('REVERSAL');
+    expect(enumBlock('FeeCalculationAdjustmentKind')).toContain('CORRECTION');
+    expect(ALL_MIGRATIONS_SQL).toMatch(/FeeCalculationAdjustment_amount_positive/);
+    expect(ALL_MIGRATIONS_SQL).toMatch(/cc_feecalculationadjustment_void_amount/);
+    expect(ALL_MIGRATIONS_SQL).toMatch(/FEE_VOID_AMOUNT_MISMATCH/);
+  });
+
+  it('CHANGE F4：snapshot digest 形状受 DB CHECK 约束', () => {
+    expect(ALL_MIGRATIONS_SQL).toMatch(
+      /SettlementReceiptSnapshot_digest_shape[\s\S]{0,160}\^\[0-9a-f\]\{64\}\$/,
+    );
+  });
+
+  it('F1：新表/新列均有租户守卫触发器', () => {
+    for (const name of [
+      'cc_tenant_settlement_claimitemid',
+      'cc_tenant_settlement_receiptsnapshotid',
+      'cc_tenant_feecalculation_claimitemid',
+      'cc_tenant_settlementadjustment_originalsettlementid',
+      'cc_tenant_feecalculationsettlement_settlementid',
+      'cc_tenant_feecalculationadjustment_targetfeecalculationid',
+    ]) {
+      expect(ALL_MIGRATIONS_SQL).toContain(name);
+    }
+  });
+
+  it('零资金业务行为：S1 迁移不创建任何 Settlement / Fee / Invoice 数据', () => {
+    expect(R46_S1_SQL.length).toBeGreaterThan(1000);
+    const moneyWrites = R46_S1_SQL.match(/INSERT INTO "(Settlement|FeeCalculation|BillingInvoice|RecoveryLedgerEntry|Payment)"/g);
+    expect(moneyWrites).toBeNull();
+  });
+
+  it('BillingInvoice / BillingStatus 在 R46 S1 未被修改', () => {
+    expect(R46_S1_SQL).not.toMatch(/ALTER TABLE "BillingInvoice"/);
+    expect(R46_S1_SQL).not.toMatch(/ALTER TYPE "BillingStatus"/);
+  });
+});
+
+describe('CARRIER QUEUE #9B FINAL-2 — DB confirmation truth constraint（MSG-20261003-120 ⑫⑬）', () => {
+  it('⑫ carrierConfirmationStatus 在 DB 层只允许 NOT_VERIFIED（append-only ≠ 插入时值真实）', () => {
+    expect(ALL_MIGRATIONS_SQL).toMatch(
+      /CarrierManualSubmission_carrierConfirmationStatus_check[\s\S]{0,160}'NOT_VERIFIED'/,
+    );
+  });
+
+  it('⑬ submissionMode 在 DB 层只允许 MANUAL（本表即人工提交见证）', () => {
+    expect(ALL_MIGRATIONS_SQL).toMatch(/CarrierManualSubmission_submissionMode_check[\s\S]{0,160}'MANUAL'/);
   });
 });

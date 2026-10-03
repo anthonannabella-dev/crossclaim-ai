@@ -48,6 +48,7 @@ C-0008-B2（Case / Evidence / Claim Draft / Billing）的端点尚未实现。
 | POST | `/auth/login` | `{ email, password, organizationId? }` | 200 `{ userId, organizationId, role }` + `Set-Cookie` | 401 `INVALID_CREDENTIALS`（统一文案，不区分账号是否存在）；403 `ACCOUNT_LOCKED` / `ACCOUNT_DISABLED` |
 | POST | `/auth/logout` | — | 204 + 清除 Cookie（写 `auth.session_revoked`） | — |
 | GET | `/auth/me` | — | 200 `{ userId, organizationId, role }` | 401 `UNAUTHENTICATED` |
+| POST | `/auth/signup` | `{ email, password, organizationName, displayName? }` | 201 `{ userId, organizationId, role, emailVerified, sessionIssued, nextStep }`（**不发放 session**；`emailVerified=false`，nextStep=`EMAIL_VERIFICATION_REQUIRED`） | 403 `SIGNUP_DISABLED`（PC-01A feature gate 默认关闭）；409 `EMAIL_ALREADY_REGISTERED`；400 `INVALID_EMAIL` / `INVALID_INPUT` / `ORGANIZATION_NAME_REQUIRED` |
 
 其他方法：405 `METHOD_NOT_ALLOWED`。
 
@@ -85,6 +86,20 @@ C-0008-B2（Case / Evidence / Claim Draft / Billing）的端点尚未实现。
 | GET | `/imports` | 200 `{ items: [{ id, status, rowsTotal, rowsOk, rowsFailed, startedAt, finishedAt, fileAssetId, connectionId }] }` |
 | GET | `/imports/:id/error-report` | 200 `{ batchId, status, rowsTotal, rowsOk, rowsFailed, failureStage, issues: [{ rowNumber, errorCode, errorCategory, field, action }], issuesTruncated, duplicates, emptyRowsSkipped }`（**只回错误码/行号/动作，不回原始值、PII、原始文件内容**；MSG-20260929-10 Q1） |
 | GET | `/opportunities` | 200 `{ items: [{ id, status, opportunityType, title, amountExpected, amountActual, recoverableAmount, currency, detectedAt }] }`（金额为 4 位小数字符串） |
+| GET | `/recovery-states` | — | 200 `{ items: [{ scope, refId, title, code, label, explanation, nextAction, recoverable, safeSummary, occurredAt, details, retry }], catalog }`（PC-04 客户可见失败/恢复投影；稳定 code；不含 raw internal error / secret） | 401 `UNAUTHENTICATED`；403 `FORBIDDEN`（FINANCE / VIEWER） |
+| GET | `/recovery-money` | query：`caseId`（可选） | 200 `{ organization: { byCurrency, collection, payment }, cases, feeNote }`（PC-05 客户可见追回金额只读投影；按币种分组、无 FX、EXPECTED≠RECEIVED、fee calculated≠collected、collection=NOT_ENABLED） | 401 `UNAUTHENTICATED`；403 `FORBIDDEN`（VIEWER；FINANCE 可见账单金额）；404 `NOT_FOUND`（caseId 跨租户 / 不存在） |
+| GET | `/accounts` | — | 200 `{ organizationId, platforms: [{ platform, accounts: [{ id, platform, externalAccountId, displayName, identityVersion, status, createdAt, connections, activeConnectionCount }] }], unboundLegacyConnections, onboarding, legend }`（PC-06 账户管理只读投影；PlatformAccount 与 SourceConnection 分层；多平台多账户分组；不含 credentialRef / token / config） | 401 `UNAUTHENTICATED`；403 `FORBIDDEN`（非 OWNER / ADMIN） |
+| GET | `/entitlements` | — | 200 `{ plan, planKnown, entitlements: [{ key, allowed, limit, used, remaining, usageState, reason, source, available, upgradeRequired, paymentRequired, entry }], packageUnlock, upgrade }`（PC-07 客户权益 / 套餐解锁只读投影；未知 plan → 全部 DENIED；`paymentRequired` ≠ 可付款；升级 available=false + `PAYMENT_NOT_ENABLED`） | 401 `UNAUTHENTICATED`；403 `FORBIDDEN`（VIEWER） |
+| GET | `/health/live` | — | 200 `{ status: 'ok', kind: 'liveness', checkedAt }`（liveness：只证明进程存活，不依赖任何下游） | — |
+| GET | `/health/ready` | — | 200 `{ kind: 'readiness', status, checks, killSwitchResolver, ... }`（readiness：数据库连通性等下游检查） | 503 `degraded`（依赖不可用，便于负载均衡摘除） |
+| GET | `/ops-readiness` | — | 200 `{ liveness, readiness, killSwitch, actionGuard, failedJobs, rateLimit, transport, runbookRef, checkedAt }`（PC-08 只读运维就绪视图；`transport` 恒为 `DISABLED`；不含 secret） | 401 `UNAUTHENTICATED`；403 `FORBIDDEN`（非 OWNER / ADMIN）；503 `ops_unavailable` |
+| GET | `/commercial/policies` | 是 | 200 `{ items: [...] }`（CURRENT 商业/法律文档；`?includeSuperseded=true` 含历史版本） | 401 `UNAUTHENTICATED` |
+| GET | `/commercial/policies/:key` | 是 | 200 `{ document, versions }`（`?version=` 可寻址 superseded 历史版本） | 401 `UNAUTHENTICATED`；404 `POLICY_NOT_FOUND`（未知 key/version fail-closed） |
+| POST | `/commercial/policies/:key/accept` | 是 | 201/200 `{ created, document, acceptance }`（显式接受事实，append-only；重复接受幂等） | 400 `EXPLICIT_ACCEPTANCE_REQUIRED`（禁止隐式接受）；404 `POLICY_NOT_FOUND`；409 `POLICY_VERSION_NOT_ACCEPTABLE` |
+| GET | `/commercial/acceptances` | 是 | 200 `{ items: [...] }`（当前 actor 的接受事实；跨租户不可见） | 401 `UNAUTHENTICATED` |
+| GET | `/commercial-readiness` | 是 | 200 `{ policies, acceptance, disclosures, feeCollection, integrations, transport, checkedAt }`（payment=ZERO / collection=OFF / activation=HOLD / integrations=EXTERNAL_GATE / transport=DISABLED） | 401 `UNAUTHENTICATED` |
+| GET | `/provider-readiness` | 是 | 200 `{ providers: [{ provider, authKind, contractReady, productionCredentials: ABSENT, readiness: EXTERNAL_GATE, reason, requiredHostActions, platformWriteEnabled: false, callbackPath }], carriers: [{ provider, authKind, authFlows, selectedAuthFlow, authFlowSelectionReason, accountIdentityStrategy, authContractReady, accountDiscoveryContractReady, authImplemented: false, accountDiscoveryImplemented: false, identityVerificationRequired: true, productionCredentials: ABSENT, productionApprovalState: NOT_REQUESTED, sandboxState: AVAILABLE, platformWriteEnabled: false, transportEnabled: false, requiredHostActions }]（CARRIER QUEUE #3 / #3 FINAL：UPS = selectedAuthFlow AUTHORIZATION_CODE + identityStrategy PROVIDER_DISCOVERY；FedEx = INTEGRATOR_CREDENTIAL_REGISTRATION + PROVIDER_VERIFIED_REGISTRATION；无泛化 CARRIER_READY）, checkedAt }`（合同就绪 ≠ 生产可用） | 401 `UNAUTHENTICATED` |
+| GET | `/payment-activation-readiness` | 是（OWNER / ADMIN） | 200 `{ ready, posture, internalReady, gates, status, checks, blockers, feeDueVsCollected, reversalPolicy, checkedAt }`（PC-12A：payment=ZERO / collection=OFF / autopay=OFF / externalWrite=OFF / r13=HOLD；多 gate 独立，单一 env flag 不解锁） | 401 `UNAUTHENTICATED`；403 `FORBIDDEN` |
 
 三者都按会话 `organizationId` 过滤，最多 100 条（默认 20）。非 GET 请求不匹配该处理器，按 404 处理。
 
@@ -95,6 +110,7 @@ C-0008-B2（Case / Evidence / Claim Draft / Billing）的端点尚未实现。
 | 方法 | 路径 | 请求体 | 成功 |
 |---|---|---|---|
 | POST | `/opportunities/:id/qualify` | — | 200 `{ opportunityId, from: "DETECTED", to: "QUALIFIED", reason: null }` |
+| GET | `/opportunities` | query：`status` / `domain` / `channel` / `accountId` / `detectedFrom` / `detectedTo` / `minRecoverable` / `limit`(1..100) / `cursor` | 200 `{ items, nextCursor, hasMore, appliedFilters, pageSize }`（只读客户可见机会列表；tenant-scoped；legacy NULL account 标记 `LEGACY_UNATTRIBUTED`，不推断） | 400 `INVALID_INPUT`（非法过滤值 / cursor / limit）；401 `UNAUTHENTICATED`；403 `FORBIDDEN`（FINANCE / VIEWER） |
 | POST | `/opportunities/:id/reject` | `{ reason }` | 200 `{ opportunityId, from: "DETECTED", to: "REJECTED", reason }` |
 
 - 仅允许 `DETECTED → QUALIFIED` / `DETECTED → REJECTED`；`DETECTED → CONVERTED` 只能由 Recovery Closure 建案流程触发
@@ -169,6 +185,7 @@ C-0008-B2（Case / Evidence / Claim Draft / Billing）的端点尚未实现。
 | GET | `/cases/:caseId` | 200 案件详情（含关联机会与 Claim **元数据**：round / status / target / dueAt） | OWNER / ADMIN / OPS |
 | GET | `/cases/:caseId/evidence` | 200 `{ items: [{ evidenceId, role, kind, title, description, reliability, capturedAt, addedAt, hasFile }] }` | OWNER / ADMIN / OPS |
 | GET | `/cases/:caseId/claim` | 200 `{ id, caseId, round, version, status, generatedAt, isFinal, sections }` | **仅 OWNER / ADMIN / OPS** |
+| GET | `/cases/<id>/claim-package` | — | 200 `{ case, account, package, why, evidence, missingItems, readiness, actions }`（PC-03 客户可见材料包只读投影；PACKAGE READY ≠ CLAIM ACTUALLY SUBMITTED，`providerWrite=HOLD_NEEDS_MANUAL`） | 401 `UNAUTHENTICATED`；403 `FORBIDDEN`（FINANCE / VIEWER，沿用证据权限）；404 `NOT_FOUND`（跨租户 / 不存在）；409 `CLAIM_PACKAGE_ACCOUNT_MISMATCH` |
 
 - **Claim 正文只在此端点返回**；`/cases` 与 `/cases/:caseId` 一律不含正文（FINANCE / VIEWER 也因此看不到）
 - FINANCE / VIEWER 访问案件与证据 → 403（财务事实请走 `/billing`）
@@ -384,3 +401,49 @@ C-0008-B2（Case / Evidence / Claim Draft / Billing）的端点尚未实现。
 - **邮箱默认掩码**（如 `a***@example.com`）；不返回完整邮箱，也不提供解掩码入口
 - 仅 `locked` 布尔；不返回失败次数、锁定时间或解锁入口；邀请不返回 tokenHash 与邀请链接
 - 仅 GET；无写路径、不写 AuditLog、无新表、无导出
+
+## Carrier 人工提交记录（CARRIER QUEUE #9B FINAL / MSG-20261003-119）
+
+| 方法 | 路径 | 请求体 | 成功 | 权限 |
+|---|---|---|---|---|
+| POST | `/carrier-claim-packages/:packageId/manual-submission` | `{ carrierReference?, reportedCarrierSubmissionAt?, note? }` | 201（首次）/ 200（幂等复用）`{ status, submissionRecord }` | OWNER / ADMIN / OPS |
+
+- 语义：**human attestation**（用户自称已完成人工提交），**不提交 carrier claim**；`carrierConfirmationStatus` 恒为 `NOT_VERIFIED`；不产生 providerAccepted / claimApproved / refundApproved。
+- Action Guard：动作 `carrier.manual_submission.record`（`INTERNAL_WRITE` + `workflow` kill switch）；未注入 Action Guard → fail closed。
+- 身份、租户与 package 事实一律服务端派生（`organizationId` / `actorUserId` / `role` / provider / account / tracking 均不由 client 提供）；client 只能提交上述三个业务字段。
+- 状态映射：400 `INVALID_REQUEST`；403 `CAPABILITY_REQUIRED`；404 `PACKAGE_NOT_FOUND` 或 `TENANT_MISMATCH`（沿用 anti-enumeration 约定，不区分存在性）；409 `PACKAGE_NOT_READY`（NEEDS_REVIEW 包不得记录）；201 `RECORDED`；200 `ALREADY_RECORDED`（幂等重放不得视为错误）。
+- 存储：`CarrierManualSubmission` 表 `UNIQUE(organizationId, packageId)` 幂等；append-only（创建后不可 UPDATE/DELETE）；business audit `carrier.manual_submission_recorded` 与记录同事务写入。
+- 边界：不改动 recovered cash truth（RecoveryPayout / actualRecovered / Settlement）、不产生 successFee、不访问 carrier portal / API、`TRANSPORT=false`。
+
+## Carrier response（CARRIER QUEUE #10 FINAL / MSG-20261003-122）
+
+| 方法 | 路径 | 请求体 | 成功 | 权限 |
+|---|---|---|---|---|
+| POST | `/carrier-claim-packages/:packageId/responses` | `{ status, providerReference?, observedAt?, note? }` | 201（首次）/ 200（幂等重放）`{ status, responseFact }` | OWNER / ADMIN / OPS |
+| GET | `/carrier-claim-packages/:packageId/responses` | — | 200 `{ responses: { currentStatus, currentVerificationLevel, history, provenance, timestamps } }` | 任意已认证成员（tenant-scoped） |
+
+- 语义：**carrier claim 后续响应事实**（status 与 provenance 分离）；人工补录入口**只允许** `source = USER_REPORTED`（恒 `verificationLevel = UNVERIFIED`）——client body 出现 `source` / `verificationLevel` / 身份字段一律 400，provider 验证必须走独立可信 ingest 路径（真实 provider 集成 = `HOLD_EXTERNAL`）。
+- Action Guard：动作 `carrier.claim_response.record`（`INTERNAL_WRITE` + `workflow` kill switch）；未注入 Action Guard → fail closed；不启用 `TRANSPORT`。
+- 身份与 submission truth 一律服务端派生（`organizationId` / `actorUserId` / `role` / provider / account / tracking 不由 client 提供）；`(:packageId)` 来自 route param，submission truth 由 `CarrierManualSubmission` 按 `(organizationId, packageId)` 读取，不存在 → 404（anti-enumeration）。
+- 状态映射：400 `INVALID_REQUEST` / `PROVIDER_REFERENCE_REQUIRED` / `INVALID_TIMESTAMP` / `FUTURE_TIMESTAMP`；403 `CAPABILITY_REQUIRED`；404 `SUBMISSION_NOT_FOUND`；201 `RECORDED`；200 `ALREADY_RECORDED`。
+- 存储：`CarrierClaimResponseFact` append-only（UPDATE / DELETE 由 DB 触发器拒绝）+ `UNIQUE(organizationId, packageId, idempotencyKey)` 幂等 + DB CHECK 真值（未知枚举拒绝；`USER_REPORTED` → `UNVERIFIED`；provider 来源必须带 provider reference）；business audit `carrier.claim_response_recorded` 与事实同事务、恰好一次。
+- 边界：`APPROVED != PAID != recovered cash`（PAID 事实不写 RecoveryPayout / actualRecovered / FeeCalculation）、不产生 successFee、不发起 payment collection、不调用 carrier API / portal、`TRANSPORT=false`、无生产凭据。
+
+## Customs 内部追回准备（C21 / MSG-20261003-124 ⑭–㉑）
+
+| 方法 | 路径 | 请求体 | 成功 | 权限 |
+|---|---|---|---|---|
+| POST | `/customs-opportunities/:id/start-recovery` | `{}`（仅必要确认字段；领域字段一律 400） | 200 `{ recoveryStatus: READY_TO_FILE, filingSubmitted: false, externalExecutionStatus: NOT_STARTED, submissionSnapshot }` | OWNER / ADMIN / OPS |
+| GET | `/customs-opportunities/:id/filing-status` | — | 200 `{ filingStatus: { currentStatus, currentSourceLevel, history, factCount } }` | 任意已认证成员（tenant-scoped） |
+| GET | `/platform-accounts/:platformAccountId/qualification` | — | 200 `{ qualification: { platformAccountId, status, reasonCodes, policyId, policyVersion, algorithmVersion, currency, estimatedRecoveryAmount, estimatedExternalApiCost, estimatedBrokerCost, expectedNetRecovery, costRatio, inputDigest, resultDigest, computedAt }, boundary: { readOnly: true, recomputedOnRead: false, filingAuthorized: false, transportEnabled: false, externalWritePerformed: false, productionCredentials: ABSENT } }` / 403（VIEWER·未知角色）/ 404（无判定或跨租户） | OWNER / ADMIN / OPS / FINANCE（tenant-scoped，只读，不重算） |
+| GET | `/independent-site-disputes/:disputeReference/state` | — | 200 `{ dispute, states: { submitted, won, settled, recovered, billable }, response, settlement, amounts: { recoveredAmount, feeAmount, currency }, invoiceDraft, notPersisted: [QUALIFICATION, EVIDENCE_PACKAGE, CLAIM_READY_PACKAGE], boundary: { readOnly: true, recomputedOnRead: false, externalWritePerformed: false, filingSubmitted: false, transportEnabled: false, paymentCollected: false, productionCredentials: ABSENT } }` / 403（VIEWER·未知角色）/ 404（无 handoff root 或跨租户） | OWNER / ADMIN / OPS / FINANCE（tenant-scoped，只读，不重算） |
+| GET | `/customs-entry-facts/:entryFactId` | — | 200 `{ entryFact: { id, entryNumber, entryDate, jurisdiction, source, contentDigest, lineCount, totalDutyAmountByCurrency }, projections: { DUTY_TRUTH, DISCREPANCY, ELIGIBILITY, ESTIMATE }, boundary: { readOnly: true, filingSubmitted: false, transportEnabled: false, externalWritePerformed: false, productionCredentials: ABSENT } }` / 403（VIEWER·未知角色）/ 404（事实不存在或跨租户） | OWNER / ADMIN / OPS / FINANCE（tenant-scoped，只读，不重算） |
+| GET | `/customs-entry-facts/:entryFactId/return-claim-evidence` | — | 200 `{ evidence: { evidenceId, status, statusReasons, confirmedRecoverableAmountByCurrency, eligibleQuantityByLine, qualificationStatus, policyId, policyVersion, algorithmVersion, computedAt, payload }, boundary: { readOnly: true, recomputedOnRead: false, frontendMayRecalculate: false, filingSubmitted: false, transportEnabled: false } }` / 404（无已裁决证据） | OWNER / ADMIN / OPS / FINANCE（tenant-scoped，只读） |
+| POST | `/customs-entry-facts/:entryFactId/recovery-chain` | `{}`（全部输入 server-side 派生） | 200 `{ action: customs.recovery.chain.run, executionKey, package: { packageId, readiness, gaps, estimateOnly, billable, filingSubmitted: false, submissionPerformed: false }, projections, boundary: { filingSubmitted: false, externalWritePerformed: false, transportEnabled: false, productionCredentials: ABSENT, filingAuthorized: false } }` / 403（FINANCE·VIEWER）/ 404 / 409 | OWNER / ADMIN / OPS（INTERNAL_WRITE，tenant-scoped） |
+
+- 语义：该端点**只做内部准备**（server-side validation / qualification / 授权就绪 / filing route 决策 / immutable snapshot / 内部工作流状态）；**不调用 C18 provider、不执行 filing**：`filingSubmitted=false`、`externalWritePerformed=false`、`transportEnabled=false`、`externalExecutionStatus=NOT_STARTED`。
+- Action Guard：动作 `customs.recovery.start`（`INTERNAL_WRITE` + `workflow` kill switch）；未注入 Action Guard → fail closed；不启用 `TRANSPORT`。
+- client 不得提供 `recoverableAmount` / `classification` / `eligibility` / `ruleVersion` / `ior` / `claimant` / `broker` / `packageDigest` / `feeRate` / `filingRoute` / `deadline` / 身份字段（出现即 400 `INVALID_REQUEST`）。
+- 状态映射：400 `INVALID_REQUEST`；403 `CAPABILITY_REQUIRED`；404 `OPPORTUNITY_NOT_FOUND`（anti-enumeration）；409 `ENTRY_FACT_MISSING` / `EVIDENCE_INCOMPLETE` / `NOT_ELIGIBLE` / `AMOUNT_NOT_READY` / `REMEDY_ROUTE_MISSING` / `DEADLINE_PASSED` / `PACKAGE_NOT_READY` / `AUTHORIZATION_NOT_READY` / `FILING_CAPABILITY_MISSING`。
+- 读模型不含 credential / broker secret / authority token / raw PII；状态与来源等级分离（`USER_REPORTED` / `PROVIDER_VERIFIED` / `AUTHORITY_VERIFIED`），禁止 `submitted → accepted`、`APPROVED → PAID` 的隐含升级。
+- 边界：真实 customs filing = `HOLD_EXTERNAL` / `HOST APPROVAL REQUIRED`；`Payment = 0` / `collection = OFF` / 无生产凭据。

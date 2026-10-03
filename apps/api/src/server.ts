@@ -15,9 +15,14 @@
 
 import http from 'node:http';
 import { PrismaClient } from '@prisma/client';
+import { createPrismaCustomsEntryFactStore } from './services/customs/customs-entry-fact-store';
+import { createPrismaQualificationAssessmentStore } from './services/commercial/recovery-qualification-store';
+import { createPrismaPs04StateLoaders } from './services/independent-site/ps04-state-loaders';
 import { loadEnv } from './config/env';
 import { createLogger, type Logger, type LogLevel } from './config/logger';
 import { checkHealth, healthHttpStatus } from './services/health';
+import { getOpsReadiness } from './services/ops/ops-readiness';
+import { createRateLimiter, rateLimitPolicyFromEnv } from './services/ops/rate-limit';
 import { checkReadiness, countLocalMigrations, readinessHttpStatus } from './services/readiness';
 import { killSwitchConfigFromEnv } from './services/operations/kill-switch';
 import { EnvValuesError, validateEnvValues } from './config/env';
@@ -40,14 +45,20 @@ import {
 } from './services/acquisition';
 import { createPrismaImportRepository } from './services/ingest';
 import {
+  bootstrapSelfServiceAccount,
   createPrismaAuthUserPort,
   createPrismaMembershipLookup,
   createPrismaSessionPort,
   handleAuthRequest,
   handleDataRequest,
   handleUploadRequest,
+  parseCookies,
+  resolveSession,
+  SESSION_COOKIE,
 } from './services/auth';
 import { handleWorkflowRequest } from './services/workflow';
+import type { CarrierClaimPackageSource } from './services/carriers/carrier-manual-submission';
+import { createAppActionGuard } from './services/action-guard/runtime-guard-composition';
 
 const VERSION = '0.1.0';
 
@@ -58,8 +69,32 @@ export interface ServerDeps {
   storage?: StorageAdapter;
   /** 可选：注入审计写入器后，成功下载会写入 AuditLog */
   audit?: AuditWriter;
+  /**
+   * CARRIER QUEUE #9B FINAL：server-side claim package truth（测试/部署可注入；缺省返回 null → 404，不伪造 package）。
+   */
+  carrierClaimPackages?: CarrierClaimPackageSource;
+  /** C21：server-side customs opportunity truth / 授权就绪 / filing provider / filing status（缺省 fail-closed）。 */
+  customsOpportunities?: import('./services/customs/customs-recovery-http').CustomsRecoveryHttpDeps['opportunities'];
+  customsAuthorization?: import('./services/customs/customs-authorization-readiness').CustomsAuthorizationFlags;
+  customsFilingProvider?: { providerId: string; capabilities: import('./services/customs/customs-filing-provider').CustomsFilingCapabilities } | null;
+  customsFilingStatus?: import('./services/customs/customs-recovery-http').CustomsRecoveryHttpDeps['filingStatus'];
+  /** P0-1：已持久化的 claim evidence 读取。 */
+  customsReturnEvidence?: { latest(args: { organizationId: string; entryFactId: string }): Promise<Record<string, unknown> | null> };
+  /** BG-020：Customs 事实 store（只读读模型）。 */
+  customsEntryFactStore?: import('./services/customs/customs-entry-fact-store').CustomsEntryFactStore;
+  /** BG-019：Independent-site 关键状态只读面。 */
+  independentSiteState?: import('./services/independent-site/ps04-state-read').Ps04StateReadDeps;
+  /** CHANGE A：Platform qualification 只读判定投影。 */
+  qualificationRead?: import('./services/commercial/qualification-read').QualificationReadDeps;
+  /** BG-012：内部触发执行器（router deps 转发）。 */
+  customsRecoveryChain?: { run(args: { organizationId: string; entryFactId: string }): Promise<never> };
   /** 可选：C-0008-A 内部认证端口（/auth/*）的依赖覆写 */
   auth?: import('./services/auth').AuthRouteDeps;
+  /**
+   * 可选：受保护业务入口的运行时守卫（授权项 ②）。
+   * 缺省由 createAppActionGuard 装配（READ_ONLY → 拒绝写入）；测试/组合根可显式注入。
+   */
+  actionGuard?: import('./services/action-guard/runtime-guard').RuntimeActionGuard;
 }
 
 /** 只保留文件名，剥掉路径与危险字符（CR/LF/引号/反斜杠/NUL） */
@@ -88,7 +123,7 @@ const IMPORT_ERROR_REPORT_PATH = /^\/imports\/[^/]+\/error-report$/;
 /** MSG-20260929-40：只读的 /operations/*（看板）与 /admin/*（Admin Console）也要进工作流分发，
  *  否则请求在 server 层就落到默认 404 —— 端点「纸面存在、实际不可达」。 */
 const WORKFLOW_PATH =
-  /^(?:\/opportunities\/(?:insights(?:\.csv)?|[^/]+\/(?:qualify|reject|case|basis))|\/connections(?:\/[^/]+\/(?:status|credential-ref))?|\/cases(?:\/[^/]+\/(?:commercial-terms|recovery-outcome|recovery-review|appeal-package|claim|evidence)|\/[^/]+)?|\/billing(?:\/[^/]+\/status)?|\/commissions\/reconcile|\/payments(?:\/webhook|\/reconciliation(?:\.csv)?|\/events\/[^/]+\/replay|\/processing\/retry-due)?|\/operations\/(?:dashboard|claims|recovery)|\/admin\/(?:tenant-overview|audit(?:\/[^/]+)?|system-health|imports(?:\/[^/]+(?:\/errors)?)?|recovery-review(?:\/[^/]+)?|members(?:\/[^/]+)?|permission-matrix|kill-switch))$/;
+  /^(?:\/carrier-claim-packages\/[^/]+\/(?:manual-submission|responses)|\/customs-entry-facts\/[^/]+(?:\/(?:return-claim-evidence|recovery-chain))?|\/independent-site-disputes\/[^/]+\/state|\/platform-accounts\/[^/]+\/qualification|\/customs-opportunities\/[^/]+\/(?:start-recovery|filing-status)|\/opportunities(?:\/(?:insights(?:\.csv)?|[^/]+\/(?:qualify|reject|case|basis)))?|\/connections(?:\/[^/]+\/(?:status|credential-ref|rebind))?|\/recovery-states|\/recovery-money|\/accounts|\/entitlements|\/commercial-readiness|\/commercial\/(?:policies(?:\/[^/]+(?:\/accept)?)?|acceptances)|\/provider-readiness|\/payment-activation-readiness|\/cases(?:\/[^/]+\/(?:commercial-terms|recovery-outcome|recovery-review|appeal\/(?:submit|package)|claim(?:\/(?:submit|prepare|package))?|claim-package|billing\/draft|evidence|platform\/write|recovery\/(?:manual-submit|manual-reference|manual-submit-approval|manual-reference-approval))|\/[^/]+)?|\/billing(?:\/[^/]+\/(?:status|payment-review))?|\/commissions\/reconcile|\/payments(?:\/webhook|\/reconciliation(?:\.csv)?|\/events\/[^/]+\/(?:replay|replay-review)|\/processing\/retry-due(?:\/(?:freeze|review))?)?|\/operations\/(?:dashboard|claims|recovery)|\/admin\/(?:tenant-overview|audit(?:\/[^/]+)?|system-health|imports(?:\/[^/]+(?:\/errors)?)?|recovery-review(?:\/[^/]+)?|members(?:\/[^/]+)?|permission-matrix|kill-switch))$/;
 
 /** CHANGE #20：Unicode 文件名走 RFC 5987 的 filename*=UTF-8''，同时给 ASCII 回退名 */
 export function buildContentDisposition(
@@ -108,6 +143,7 @@ let metrics: ReturnType<typeof createMetrics> | undefined;
  * MSG-20260929-68 S3：进程级只读探针 —— 能否完成一次控制面读取与生效值解析。
  * 使用哨兵租户 id（不存在的组织），不读取任何真实租户数据，也不外泄任何租户信息。
  */
+
 async function probeKillSwitchResolver(resolver: EffectiveKillSwitchResolver): Promise<boolean> {
   const sentinelOrganizationId = '00000000-0000-4000-8000-000000000000';
   const results = await resolver.resolveAll(sentinelOrganizationId);
@@ -121,6 +157,29 @@ export function createServer(deps: ServerDeps): http.Server {
     controlRequests: { findMany: (args) => prisma.killSwitchRequest.findMany(args) },
     config: killSwitchConfigFromEnv(),
   });
+  /**
+   * PC-08 CHANGE B：期望迁移数复用既有 countLocalMigrations()（只读；不执行 migrate）。
+   * 不可读时返回 -1，由 readiness 事实投影映射为 UNKNOWN / MIGRATION_MISMATCH。
+   */
+  const expectedMigrations = countLocalMigrations();
+  /**
+   * PC-08 CHANGE D：最小安全 storage 探针（只读 head：验证读取路径与 key 形状，不写入、不删除）。
+   * 不返回 storageKey / secret / path。
+   */
+  const storageProbe = storage
+    ? async (): Promise<boolean> => {
+        const probeOrg = '00000000-0000-4000-8000-000000000000';
+        const probeKey = probeOrg + '/00/' + probeOrg;
+        const meta = await storage.head(probeKey, probeOrg);
+        return meta === null || typeof meta === 'object';
+      }
+    : undefined;
+
+  /** PC-08：匿名入口的 rate limit 基线（每次装配读取环境；进程内固定窗口）。 */
+  const rateLimitPolicy = rateLimitPolicyFromEnv();
+  const authRateLimiter = createRateLimiter(rateLimitPolicy);
+  /** PC-08：Action Guard 单例（缺省装配为 READ_ONLY 姿态），供 workflow 分支与 ops 视图共享。 */
+  const actionGuard = deps.actionGuard ?? createAppActionGuard({ prisma, killSwitchResolver });
   // 审计 IP 盐值只影响“谁”的哈希；缺失时保持空值（不阻塞服务启动）
   const auditIpSalt = (() => {
     try {
@@ -144,6 +203,12 @@ export function createServer(deps: ServerDeps): http.Server {
           audit,
           // C-0008-A 裁定：未知邮箱失败登录没有租户归属 → 只写结构化安全日志
           log: (event, fields) => log.warn(event, fields),
+          // PC-01A：默认关闭（PUBLIC_SIGNUP_ENABLED=false），fail-closed。
+          signupEnabled: process.env.PUBLIC_SIGNUP_ENABLED === 'true',
+          selfSignup: (input) =>
+            bootstrapSelfServiceAccount(prisma, input, {
+              enabled: process.env.PUBLIC_SIGNUP_ENABLED === 'true',
+            }),
         }
       : undefined);
 
@@ -174,6 +239,20 @@ export function createServer(deps: ServerDeps): http.Server {
     };
 
     // C-0008-A 内部认证端点：仅服务本地/内部 Web 应用，未做公网暴露
+    // PC-08：最敏感的匿名入口限流基线（只拒绝过量请求，不读取/记录任何凭据）。
+    if (req.method === 'POST' && (url === '/auth/login' || url === '/auth/signup')) {
+      const clientKey = (req.socket.remoteAddress ?? 'unknown') + '|' + url;
+      const decision = authRateLimiter.check(url, clientKey);
+      if (!decision.allowed) {
+        res.writeHead(429, {
+          'content-type': 'application/json; charset=utf-8',
+          'retry-after': String(Math.ceil(decision.retryAfterMs / 1000)),
+        });
+        res.end(JSON.stringify({ error: 'RATE_LIMITED', retryAfterMs: decision.retryAfterMs }));
+        return;
+      }
+    }
+
     if (auth && url.startsWith('/auth/')) {
       handleAuthRequest(req, res, auth)
         .then((handled) => {
@@ -210,8 +289,9 @@ export function createServer(deps: ServerDeps): http.Server {
     // C-0008-A 内部只读数据端点（导入批次 / 追回机会），同样仅面向内部 Web
     if (
       auth &&
+      // PC-02（MSG-20261002-82 ⑥）：bare `/opportunities` 现由 workflow 路由提供
+      // 客户可见机会列表（filter + cursor 分页）；旧 data-routes 机会列表入口已退役。
       (url === '/imports' ||
-        url === '/opportunities' ||
         IMPORT_ERROR_REPORT_PATH.test(url.split('?')[0] ?? ''))
     ) {
       handleDataRequest(req, res, { prisma, session: auth.session })
@@ -228,7 +308,23 @@ export function createServer(deps: ServerDeps): http.Server {
     if (auth && WORKFLOW_PATH.test(url.split('?')[0] ?? '')) {
       handleWorkflowRequest(req, res, {
         prisma,
+        // CARRIER QUEUE #9B FINAL：人工提交记录路由的 server-side package truth
+        ...(deps.carrierClaimPackages ? { carrierClaimPackages: deps.carrierClaimPackages } : {}),
+...(deps.customsOpportunities ? { customsOpportunities: deps.customsOpportunities } : {}),
+...(deps.customsAuthorization ? { customsAuthorization: deps.customsAuthorization } : {}),
+...(deps.customsFilingProvider !== undefined ? { customsFilingProvider: deps.customsFilingProvider } : {}),
+...(deps.customsFilingStatus ? { customsFilingStatus: deps.customsFilingStatus } : {}),
+...(deps.customsReturnEvidence ? { customsReturnEvidence: deps.customsReturnEvidence } : {}),
+      ...(deps.customsEntryFactStore ? { customsEntryFactStore: deps.customsEntryFactStore } : {}),
+      ...(deps.independentSiteState ? { independentSiteState: deps.independentSiteState } : {}),
+      ...(deps.qualificationRead ? { qualificationRead: deps.qualificationRead } : {}),
+...(deps.customsRecoveryChain ? { customsRecoveryChain: deps.customsRecoveryChain } : {}),
         session: auth.session,
+        // 授权项 ②（MSG-20260930-16 §6）：受保护入口的运行时闸门；缺省 READ_ONLY → 拒绝写入
+        actionGuard,
+        // ② claim.submit：人工提交（claim.submitted_by_human）沿用同一个 AuditWriter；
+        // 未注入时由路由按同策略自建，盐值不足则 fail closed
+        ...(audit ? { audit } : {}),
         killSwitchResolver,
         // C-0010-C2：webhook 的结构化安全日志（验签失败 / 版本不一致）必须落到运行时 logger
         log: (event, fields) => log.warn(event, fields),
@@ -254,7 +350,8 @@ export function createServer(deps: ServerDeps): http.Server {
     }
 
     // P2-1（MSG-20260929-70 D1）：readiness 独立于 liveness；只返回原因码
-    if (req.method === 'GET' && url === '/readyz') {
+    // PC-08 CHANGE A：/health/ready 复用既有真实 readiness path（与 /readyz 同一实现）。
+    if (req.method === 'GET' && (url === '/readyz' || url === '/health/ready')) {
       checkReadiness({
         databaseProbe: async () => {
           await prisma.$queryRaw`SELECT 1`;
@@ -278,6 +375,47 @@ export function createServer(deps: ServerDeps): http.Server {
             version: VERSION,
           }),
         );
+      return;
+    }
+
+    // PC-08：liveness 与 readiness 分离（liveness 只证明进程存活，不依赖任何下游）。
+    if (req.method === 'GET' && url === '/health/live') {
+      send(200, { status: 'ok', kind: 'liveness', checkedAt: new Date().toISOString() });
+      return;
+    }
+
+    // PC-08：只读运维就绪视图（需要 OWNER / ADMIN 会话）。
+    if (req.method === 'GET' && url === '/ops-readiness') {
+      if (!auth) {
+        send(503, { error: 'ops_unavailable' });
+        return;
+      }
+      const cookie = parseCookies(req.headers.cookie)[SESSION_COOKIE];
+      if (!cookie) {
+        send(401, { error: 'UNAUTHENTICATED' });
+        return;
+      }
+      resolveSession(cookie, auth.session)
+        .then(async (context) => {
+          if (!context) {
+            send(401, { error: 'UNAUTHENTICATED' });
+            return;
+          }
+          if (context.role !== 'OWNER' && context.role !== 'ADMIN') {
+            send(403, { error: 'FORBIDDEN' });
+            return;
+          }
+          const readiness = await getOpsReadiness({
+            prisma,
+            killSwitchProbe: () => probeKillSwitchResolver(killSwitchResolver),
+            actionGuardConfigured: Boolean(actionGuard),
+            rateLimit: rateLimitPolicy,
+            ...(expectedMigrations >= 0 ? { expectedMigrations } : {}),
+            ...(storageProbe ? { storageProbe } : {}),
+          });
+          send(200, readiness);
+        })
+        .catch(() => send(503, { error: 'ops_unavailable' }));
       return;
     }
 
@@ -387,6 +525,22 @@ export interface Runtime {
   audit: AuditWriter | null;
 }
 
+/**
+ * CHANGE C/E（MSG-20261003-142）— **默认只读运行时装配**。
+ * createRuntime 与 runtime E2E 共用同一函数，杜绝「service/HTTP 已实现但 composition root 没接」。
+ * 全部只读：只装配 store / loader，不引入任何外部调用。
+ */
+export function createDefaultReadDeps(prisma: PrismaClient) {
+  const qualificationStore = createPrismaQualificationAssessmentStore(prisma);
+  return {
+    customsEntryFactStore: createPrismaCustomsEntryFactStore(prisma),
+    qualificationRead: {
+      loadLatest: (args: { organizationId: string; platformAccountId: string }) => qualificationStore.loadLatestAssessment(args),
+    },
+    independentSiteState: createPrismaPs04StateLoaders(prisma),
+  };
+}
+
 export function createRuntime(options: RuntimeOptions): Runtime {
   const { env, prisma, log } = options;
 
@@ -413,7 +567,11 @@ export function createRuntime(options: RuntimeOptions): Runtime {
     log.warn('audit_disabled', { reason: 'AUDIT_IP_SALT / STORAGE_URL_SECRET 均未配置' });
   }
 
-  return { server: createServer({ prisma, log, storage, ...(audit ? { audit } : {}) }), storage, audit };
+  return {
+    server: createServer({ prisma, log, storage, ...(audit ? { audit } : {}), ...createDefaultReadDeps(prisma) } as never),
+    storage,
+    audit,
+  };
 }
 
 /* istanbul ignore next -- 入口引导，测试不覆盖 */

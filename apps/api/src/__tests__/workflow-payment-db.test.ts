@@ -220,7 +220,16 @@ describe('C-0010-A — 支付域（真实 PostgreSQL）', () => {
     );
     await submitRecoveryReview(
       prisma,
-      { organizationId: ORG, actorUserId: ownerId, role: 'OWNER', caseId, decision: 'APPROVE' },
+      {
+        organizationId: ORG,
+        actorUserId: ownerId,
+        role: 'OWNER',
+        caseId,
+        decision: 'APPROVE',
+        // CHANGE A（R2）：审批必须绑定本次操作载荷
+        boundPayload: { recoveredAmount: '1500.0000', currency: 'USD', basisReference: 'payment-db-basis', evidenceArtifactId: null },
+        boundAction: 'commission.charge',
+      },
       () => NOW,
     );
     expect(await auditCount('recovery.review_approved')).toBe(1);
@@ -258,14 +267,19 @@ describe('C-0010-A — 支付域（真实 PostgreSQL）', () => {
     ).rejects.toThrow(ForbiddenError);
 
     // 6) OWNER 审批后，第三次回调把发票推进到 PAID
+    // P1（② 第二批）：支付审批同样必须绑定本次操作的规范化载荷，并返回审批事件 id
     const approval = await submitPaymentReview(prisma, {
       organizationId: ORG,
       actorUserId: ownerId,
       role: 'OWNER',
       invoiceId: INVOICE,
       decision: 'APPROVE',
+      // R6 CHANGE A：支付审批必须绑定真实账单操作（金额/币种/依据 + 精确 from→to）
+      boundPayload: { amount: '1500.0000', currency: 'USD', basisReference: 'pi_hitl_3', evidenceArtifactId: null, from: 'ISSUED', to: 'PAID' },
+      boundAction: 'payment.capture',
     });
     expect(approval.state).toBe('APPROVED');
+    expect(typeof approval.approvalId).toBe('string');
 
     await post(succeededEvent('evt_hitl_3', 'pi_hitl_3', 150000));
     const invoice = await invoiceRow();

@@ -44,6 +44,7 @@ export type WorkflowErrorCode =
   | 'PAYMENT_CONTEXT_REQUIRED'
   /** C-0010-B2 REVISE-3：并发的执行尝试冲突（绝不把数据库 P2002 暴露给 API 调用方） */
   | 'ATTEMPT_ALREADY_RUNNING'
+  | 'PAYMENT_SOURCE_CONFLICT'
   /** C-0011：REVIEW_REQUIRED 起必须入案（状态机不变量，不是数据库 CHECK） */
   | 'CLAIM_ITEM_CASE_REQUIRED'
   /** C-0012：人工复核提交的 ruleAmount 与历史规则输出不一致 */
@@ -51,7 +52,23 @@ export type WorkflowErrorCode =
   /** C-0013-A：Connector 路径必须至少带 platformRef 或 sourceFingerprint */
   | 'SOURCE_IDENTITY_REQUIRED'
   /** MSG-20260929-30：运营看板 window 越界（只允许 1d/7d/14d/30d） */
-  | 'INVALID_WINDOW';
+  | 'INVALID_WINDOW'
+  /** MSG-20261001-10 §5：billing.draft 缺少可用的费用依据（FeeCalculation）→ 409 */
+  | 'BILLING_BASIS_REQUIRED'
+  /** MSG-20261001-11 CHANGE B：仅有 VOID/WRITTEN_OFF 历史账单时重新起草需新编号策略 → 409 */
+  | 'BILLING_REISSUE_REQUIRES_NEW_NUMBER'
+  /** MSG-20261002-77 B3-1 / B3-4：新建或启用连接必须绑定 canonical PlatformAccount */
+  | 'PLATFORM_ACCOUNT_REQUIRED'
+  /** MSG-20261002-77 B3-6：已绑定连接不可改绑（legacy NULL → account 仅允许一次受控追认） */
+  | 'ACCOUNT_BINDING_IMMUTABLE'
+  /** MSG-20261002-83 ⑤8：材料包 account context 与 case/opportunity 不一致 → fail-closed */
+  | 'CLAIM_PACKAGE_ACCOUNT_MISMATCH'
+  /** MSG-20261002-78 T1/T2：canonical identity 必须来自 server-verified transport */
+  | 'UNVERIFIED_PLATFORM_IDENTITY'
+  /** MSG-20261002-77 B3-4：连接未处于 ACTIVE（未启用或已暂停），不得执行 ingest / sync */
+  | 'CONNECTION_NOT_ACTIVE'
+  /** MSG-20261001-15 CHANGE A：Appeal 正文为空，不能作为有效提交内容 → 409 */
+  | 'APPEAL_BODY_REQUIRED';
 
 export class WorkflowError extends Error {
   readonly code: WorkflowErrorCode;

@@ -1,0 +1,92 @@
+name: AI audit bridge (event triggered)
+
+# 事件触发审计：Codex 提交 READY_FOR_REVIEW 后立即触发，不再等待定时轮询。
+# 安全边界：默认 HOLD —— 未配置审计模型凭据时，只做「CI 对齐 + 结构化回帖(NOT_RUN)」，
+# 不执行任何外部写操作，不修改生产数据。
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+  actions: read
+
+concurrency:
+  group: ai-audit-bridge-${{ github.event.issue.number || github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: false
+
+jobs:
+  audit:
+    if: |
+      contains(github.event.comment.body, '[CODEX -> CHATGPT]') &&
+      contains(github.event.comment.body, 'TYPE: READY_FOR_REVIEW')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract HEAD from comment
+        id: head
+        run: |
+          BODY="${{ github.event.comment.body }}"
+          HEAD=$(printf '%s\n' "$BODY" | sed -n 's/^HEAD:[[:space:]]*\([0-9a-f]\{7,40\}\).*/\1/p' | head -1)
+          if [ -z "$HEAD" ]; then echo "FAIL: HEAD 缺失或不合法（READY_FOR_REVIEW 必须对应真实 commit）" >&2; exit 1; fi
+          echo "head=$HEAD" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for CI on that HEAD
+        id: ci
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          HEAD="${{ steps.head.outputs.head }}"
+          for i in $(seq 1 30); do
+            STATE=$(gh api "repos/${{ github.repository }}/commits/$HEAD/check-runs" \
+              --jq '[.check_runs[] | select(.status=="completed")] | length as $done | [.check_runs[] | .conclusion] | if ($done == (. | length)) then (if all(. == "success") then "success" else "failure" end) else "pending" end' 2>/dev/null || echo pending)
+            echo "attempt=$i state=$STATE"
+            [ "$STATE" = "pending" ] || break
+            sleep 20
+          done
+          echo "state=$STATE" >> "$GITHUB_OUTPUT"
+
+      - name: Writes audit decision (no credential => NOT_RUN)
+        id: audit
+        env:
+          AUDIT_MODEL_ENDPOINT: ${{ secrets.AUDIT_MODEL_ENDPOINT }}
+          AUDIT_MODEL_TOKEN: ${{ secrets.AUDIT_MODEL_TOKEN }}
+        run: |
+          HEAD="${{ steps.head.outputs.head }}"
+          CI="${{ steps.ci.outputs.state }}"
+          if [ "$CI" = "failure" ]; then
+            DECISION="REVISE"; REASON="CI_FAILED：HEAD 对应 CI 未通过，不进入审计（防止审计旧 commit）"
+          elif [ -z "$AUDIT_MODEL_ENDPOINT" ] || [ -z "$AUDIT_MODEL_TOKEN" ]; then
+            DECISION="NOT_RUN"; REASON="审计模型凭据未配置（HOST APPROVAL REQUIRED）；本步骤只做 CI 对齐与结构化留痕"
+          else
+            DECISION="NOT_RUN"; REASON="审计模型调用为可插拔步骤（需架构方批准接入），当前不自动调用"
+          fi
+          {
+            echo "[CHATGPT -> CODEX]"
+            echo "DECISION: $DECISION"
+            echo "GATE: (from comment)"
+            echo "HEAD: $HEAD"
+            echo "KEEP: -"
+            echo "CHANGE: - $REASON"
+            echo "RISKS: 自动审计为辅助层，最终架构裁决仍由 ChatGPT 总审计层给出"
+            echo "TEST: CI=$CI"
+            echo "NEXT: 见送审包第 7 项；若 REVISE 则立即修复并重新提交 READY_FOR_REVIEW"
+            echo "PRODUCTION: HOLD"
+          } > audit-comment.md
+          cat audit-comment.md
+          echo "decision=$DECISION" >> "$GITHUB_OUTPUT"
+
+      - name: Post structured reply to the bridge issue/PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api -X POST "repos/${{ github.repository }}/issues/${{ github.event.issue.number || github.event.pull_request.number }}/comments" \
+            -f body="$(cat audit-comment.md)"

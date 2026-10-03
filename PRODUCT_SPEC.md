@@ -181,3 +181,33 @@ CrossClaim 必须同时支持两种数据获取模式，且两者进入**同一�
 6. **跨模式去重**：现有 connection-scoped `dedupeKey` 不变（它是导入幂等键，不是全局业务身份键）；不同来源的 SourceTransaction 各自保留（provenance preservation），不自动 merge；但**算钱前必须做 cross-source reconciliation**：完全一致 → 保留双来源、只算一次；存在冲突（金额 / 币种 / 日期 / 单号不一致）→ `SOURCE_CONFLICT` / `NEEDS_REVIEW`，金额计算 fail closed。
 7. **不存在全局 API > FILE 或 FILE > API** 的来源优先级；权威性由具体业务规则决定（客户合同 > 客户 Rate Card > Carrier Tariff > Policy > Default），与数据获取模式无关。
 8. 真实 OAuth / API 正式申请 / 真实凭据仍属 **HOST APPROVAL REQUIRED**；C-0005 可先用 mock / fixture adapter 证明 API 模式。
+
+
+## 十一、长期产品定位（范围冻结，2026-10-01 HOST PRODUCT DIRECTION）
+
+**CrossClaim AI = 跨境资金损耗 Recovery OS**，统一承载四类 Recovery：
+
+| # | Recovery 类别 | 渠道示例 |
+| --- | --- | --- |
+| 1 | Platform Recovery | Amazon FBA/FBM、TikTok Shop/FBT、Walmart/WFS |
+| 2 | Logistics Recovery | UPS / FedEx / DHL / Freight Forwarder |
+| 3 | Customs / Trade Recovery | 报关行、税则/税率、B2B 可追回损耗 |
+| 4 | Independent-site / Payment Recovery | Shopify、Stripe、PayPal（Chargeback / Dispute） |
+
+四类前端「发现规则」可以不同，**后端必须复用统一 Recovery Engine**：
+`Source Data → Canonical Fact → RecoveryOpportunity → Case → Evidence → Claim/Appeal/Dispute → Settlement → RecoveryLedger → Billing`。
+
+硬性要求：
+
+1. 不为每个渠道重做孤立系统；平台/物流/海关/独立站共享案件、证据、权限、审计、到账、账本、收费能力。
+2. **不得**把产品收缩为 Amazon/FBA 单点理赔工具（本文件§二 V1 范围是**交付顺序**，不是产品边界）。
+3. 后续所有 Gate / Wave / Schema / Adapter / Claim / Appeal / Evidence / Settlement / Billing 设计，必须检查是否继续满足「统一跨渠道 Recovery Engine」。
+4. 牌照 / 正式报关 / 平台真实写入保持既有合规边界与人工卡口；真实 API、生产凭据、平台外写继续 HOLD。
+
+### 产品 backlog 登记：PRODUCT-SCOPE-04 — Independent-site / Chargeback Recovery
+
+| 项 | 状态 | 说明 |
+| --- | --- | --- |
+| 设计稿 | 完成 | `docs/releases/PRODUCT-SCOPE-04-INDEPENDENT-SITE-CHARGEBACK-RECOVERY-DESIGN.md`（A 承载评估 / B 最小 Schema Delta / C Shopify·Stripe·PayPal 接入需求 / D 复用映射 / E 设计要点与 backlog） |
+| 自治队列登记 | 完成 | `.autopilot/TASKS.md`「产品范围冻结」节 + backlog 表（PS04-1…PS04-7） |
+| 实施 | **未开工（仅登记与设计排队）** | PS04-1（枚举扩展，Schema/领域）与 PS04-5（资金链路）开工前必须经架构方裁决 |

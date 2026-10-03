@@ -1,0 +1,280 @@
+{
+  "note": "R43 Implementation S1（MSG-20261001-31 CHANGE A + MSG-20261001-32 CHANGE A/B）—— 人工追回提交域的 append-only / 受控变更触发器清单。与 required-triggers.json（租户保护）刻意分离：cc_append_only__* 不得以 cc_tenant_ 前缀命名，以免触发租户清单的反向校验；本清单由 tools/tenant-triggers/emit-check-append-only-sql.mjs 在 CI 显式校验（fresh deploy 与 upgrade path 都跑），不得只靠测试碰巧触发。 PC-09（MSG-20261003-96 ⑬）：新增 PolicyAcceptance 的 append-only 守卫。 R45 S1（MSG-20261001-45 / -46）：新增 reconciliation 域的 append-only / 受控 supersede / generation 验证触发器，并登记 cc_reconciliation% 与 cc_reimbursementfact_% 前缀。说明：generation 一致性一律使用**立即判定**（BEFORE），不使用 DEFERRABLE 约束触发器 —— 实测 Prisma 客户端会吞掉 COMMIT 阶段 deferred 约束错误（静默回滚、调用方无感）。 CARRIER QUEUE #9B FINAL（MSG-20261003-119 ㉜）：新增 CarrierManualSubmission append-only 守卫。 CARRIER QUEUE #10 FINAL（MSG-20261003-122 ㉓）：新增 CarrierClaimResponseFact append-only 守卫。 C17（MSG-20261003-124 ④⑤）：新增 CustomsSubmissionAttemptFact append-only 守卫。 ENTERPRISE IOR RECOVERY LAYER（MSG-20261003-136）：新增三张 IOR 事实表的 append-only 守卫与两条同租户 lineage 守卫。 BG-021（MSG-20261003-139）：新增 independent-site 三表 append-only 守卫与两条同租户 lineage 守卫。 CHANGE B（MSG-20261003-141）：新增 Phase-1 只读投影 append-only 守卫。",
+  "triggers": [
+    {
+      "name": "cc_append_only__PolicyAcceptance",
+      "table": "PolicyAcceptance",
+      "tgtype": 27,
+      "semantics": "BEFORE UPDATE OR DELETE → 拒绝（PC-09：客户接受事实不可改；重新接受同一版本为幂等 no-op）"
+    },
+    {
+      "name": "cc_append_only__RecoveryPackageArtifact",
+      "table": "RecoveryPackageArtifact",
+      "tgtype": 27,
+      "semantics": "BEFORE UPDATE OR DELETE → 拒绝（导出产物不可改）"
+    },
+    {
+      "name": "cc_append_only__RecoveryManualSubmission",
+      "table": "RecoveryManualSubmission",
+      "tgtype": 27,
+      "semantics": "BEFORE UPDATE OR DELETE → 拒绝（提交事实不可改；provider reference 走独立表）"
+    },
+    {
+      "name": "cc_append_only__RecoveryManualSubmissionReference",
+      "table": "RecoveryManualSubmissionReference",
+      "tgtype": 27,
+      "semantics": "BEFORE UPDATE OR DELETE → 拒绝（补录事实 append-only）"
+    },
+    {
+      "name": "cc_append_only__RecoveryManualSubmissionEvidence",
+      "table": "RecoveryManualSubmissionEvidence",
+      "tgtype": 27,
+      "semantics": "BEFORE UPDATE OR DELETE → 拒绝（证据引用不可改）"
+    },
+    {
+      "name": "cc_recoverypackage_controlled_mutation",
+      "table": "RecoveryPackage",
+      "tgtype": 19,
+      "semantics": "BEFORE UPDATE → 仅允许 status / supersededByPackageId / transitionReason / transitionActorUserId / updatedAt；核心字段与终态由函数拒绝"
+    },
+    {
+      "name": "cc_append_only__ProviderOutcomeFact",
+      "table": "ProviderOutcomeFact",
+      "tgtype": 27,
+      "semantics": "BEFORE UPDATE OR DELETE → 拒绝（provider outcome 事实不可改；撤销以新事实表达）"
+    },
+    {
+      "name": "cc_append_only__ReimbursementFact",
+      "table": "ReimbursementFact",
+      "tgtype": 27,
+      "semantics": "BEFORE UPDATE OR DELETE → 拒绝（赔付观察 / 冲正事实不可改）"
+    },
+    {
+      "name": "cc_append_only__ReconciliationOverrideDecision",
+      "table": "ReconciliationOverrideDecision",
+      "tgtype": 27,
+      "semantics": "BEFORE UPDATE OR DELETE → 拒绝（人工覆盖决策不可改）"
+    },
+    {
+      "name": "cc_expectedrecoverybasis_controlled_supersede",
+      "table": "ExpectedRecoveryBasis",
+      "tgtype": 27,
+      "semantics": "BEFORE UPDATE OR DELETE → 仅允许一次单向 supersede（supersededAt NULL→非空 + supersededByBasisId）；DELETE 一律拒绝"
+    },
+    {
+      "name": "cc_reconciliationprojection_controlled_mutation",
+      "table": "ClaimReconciliationProjection",
+      "tgtype": 19,
+      "semantics": "BEFORE UPDATE → identity 不可变 + projectionVersion 单调 +1（CAS）；projection 为 derived cache"
+    },
+    {
+      "name": "cc_reimbursementfact_reversal_guard",
+      "table": "ReimbursementFact",
+      "tgtype": 7,
+      "semantics": "BEFORE INSERT → 冲正目标必须存在、为 OBSERVED、同租户 / 同 provider / 同 currency（CHANGE B）"
+    },
+    {
+      "name": "cc_reconciliationprojectionfact_version_match",
+      "table": "ClaimReconciliationProjectionFact",
+      "tgtype": 7,
+      "semantics": "BEFORE INSERT → 成员关系的 projectionVersion 必须等于当前 projection generation（CHANGE A）"
+    },
+    {
+      "name": "cc_append_only__SettlementReceiptSnapshot",
+      "table": "SettlementReceiptSnapshot",
+      "tgtype": 27,
+      "semantics": "BEFORE UPDATE OR DELETE → 拒绝（R46 资金域事实不可改）"
+    },
+    {
+      "name": "cc_append_only__SettlementAdjustment",
+      "table": "SettlementAdjustment",
+      "tgtype": 27,
+      "semantics": "BEFORE UPDATE OR DELETE → 拒绝（R46 资金域事实不可改）"
+    },
+    {
+      "name": "cc_append_only__FeeCalculationSettlement",
+      "table": "FeeCalculationSettlement",
+      "tgtype": 27,
+      "semantics": "BEFORE UPDATE OR DELETE → 拒绝（R46 资金域事实不可改）"
+    },
+    {
+      "name": "cc_append_only__FeeCalculationAdjustment",
+      "table": "FeeCalculationAdjustment",
+      "tgtype": 27,
+      "semantics": "BEFORE UPDATE OR DELETE → 拒绝（R46 资金域事实不可改）"
+    },
+    {
+      "name": "cc_settlement_receipt_basis_immutable",
+      "table": "Settlement",
+      "tgtype": 19,
+      "semantics": "BEFORE UPDATE → 到账依据（receiptSnapshotId / external identity / fingerprint）创建后不可改（MSG-20261002-54 CHANGE B）"
+    },
+    {
+      "name": "cc_settlementadjustment_full_reversal_guard",
+      "table": "SettlementAdjustment",
+      "tgtype": 7,
+      "semantics": "BEFORE INSERT → v1 full reversal 等额 / 同币种 / 同租户（CHANGE B1）"
+    },
+    {
+      "name": "cc_feecalculationsettlement_chain_unique",
+      "table": "FeeCalculationSettlement",
+      "tgtype": 7,
+      "semantics": "BEFORE INSERT → 同一 fee chain 内资金事实唯一（MSG-20261002-54 CHANGE A / F3 修正）"
+    },
+    {
+      "name": "cc_feecalculationadjustment_void_amount",
+      "table": "FeeCalculationAdjustment",
+      "tgtype": 7,
+      "semantics": "BEFORE INSERT → VOID 等额于目标 FeeCalculation（CHANGE C1 / 三分类）"
+    },
+    {
+      "name": "cc_append_only__CarrierManualSubmission",
+      "table": "CarrierManualSubmission",
+      "tgtype": 27,
+      "semantics": "BEFORE UPDATE OR DELETE → 拒绝（Queue #9B：人工提交事实 append-only；更正走未来 amendment 事实，不覆盖原始 submission fact）"
+    },
+    {
+      "name": "cc_append_only__CarrierClaimResponseFact",
+      "table": "CarrierClaimResponseFact",
+      "tgtype": 27,
+      "semantics": "BEFORE UPDATE OR DELETE → 拒绝（CARRIER QUEUE #10 FINAL：carrier response fact append-only；状态变化必须新增 fact）"
+    },
+    {
+      "name": "cc_append_only__CustomsSubmissionAttemptFact",
+      "table": "CustomsSubmissionAttemptFact",
+      "tgtype": 27,
+      "semantics": "BEFORE UPDATE OR DELETE → 拒绝（C17：submission 状态事实 append-only；状态演进必须新增 fact）"
+    },
+    {
+      "name": "cc_append_only__CustomsEntryFactRecord",
+      "table": "CustomsEntryFactRecord",
+      "tgtype": 27,
+      "semantics": "BEFORE UPDATE OR DELETE → 拒绝（G4/Q2：Customs entry 事实 append-only；新版本事实必须新增 Fact + lineage）"
+    },
+    {
+      "name": "cc_append_only__CustomsEntryDutyLineRecord",
+      "table": "CustomsEntryDutyLineRecord",
+      "tgtype": 27,
+      "semantics": "BEFORE UPDATE OR DELETE → 拒绝（G4/Q2：duty line 属于 immutable evidence snapshot）"
+    },
+    {
+      "name": "cc_append_only__CustomsDutyTruthRecord",
+      "table": "CustomsDutyTruthRecord",
+      "tgtype": 27,
+      "semantics": "BEFORE UPDATE OR DELETE → 拒绝（G4/Q2：计算投影 append-only；重算必须新增投影行，latest 由 computedAt 推导）"
+    },
+    {
+      "name": "cc_append_only__CustomsDiscrepancyRecord",
+      "table": "CustomsDiscrepancyRecord",
+      "tgtype": 27,
+      "semantics": "BEFORE UPDATE OR DELETE → 拒绝（G4/Q2：计算投影 append-only；重算必须新增投影行，latest 由 computedAt 推导）"
+    },
+    {
+      "name": "cc_append_only__CustomsEligibilityRecord",
+      "table": "CustomsEligibilityRecord",
+      "tgtype": 27,
+      "semantics": "BEFORE UPDATE OR DELETE → 拒绝（G4/Q2：计算投影 append-only；重算必须新增投影行，latest 由 computedAt 推导）"
+    },
+    {
+      "name": "cc_append_only__CustomsRecoveryEstimateRecord",
+      "table": "CustomsRecoveryEstimateRecord",
+      "tgtype": 27,
+      "semantics": "BEFORE UPDATE OR DELETE → 拒绝（G4/Q2：计算投影 append-only；重算必须新增投影行，latest 由 computedAt 推导）"
+    },
+    {
+      "name": "cc_append_only__CustomsReturnFactRecord",
+      "table": "CustomsReturnFactRecord",
+      "tgtype": 27,
+      "semantics": "BEFORE UPDATE OR DELETE → 拒绝（P0-1：Return/Export/Destruction 事实 append-only；修正必须新增事实）"
+    },
+    {
+      "name": "cc_append_only__RecoveryQualificationAssessmentRecord",
+      "table": "RecoveryQualificationAssessmentRecord",
+      "tgtype": 27,
+      "semantics": "BEFORE UPDATE OR DELETE → 拒绝（P0-2：qualification 判定 append-only；重算必须新增历史）"
+    },
+    {
+      "name": "cc_append_only__CustomsReturnClaimEvidenceRecord",
+      "table": "CustomsReturnClaimEvidenceRecord",
+      "tgtype": 27,
+      "semantics": "BEFORE UPDATE OR DELETE → 拒绝（P0-1：claim evidence append-only；重算必须新增历史）"
+    },
+    {
+      "name": "cc_append_only__CustomsIorIdentityFact",
+      "table": "CustomsIorIdentityFact",
+      "tgtype": 27,
+      "semantics": "BEFORE UPDATE OR DELETE → 拒绝（IOR 身份事实 append-only；更正必须新增事实）"
+    },
+    {
+      "name": "cc_append_only__CustomsRightLineageFact",
+      "table": "CustomsRightLineageFact",
+      "tgtype": 27,
+      "semantics": "BEFORE UPDATE OR DELETE → 拒绝（权利归属事实 append-only）"
+    },
+    {
+      "name": "cc_append_only__CustomsBrokerPoaFact",
+      "table": "CustomsBrokerPoaFact",
+      "tgtype": 27,
+      "semantics": "BEFORE UPDATE OR DELETE → 拒绝（Broker 授权事实 append-only）"
+    },
+    {
+      "name": "cc_ior_lineage__CustomsRightLineageFact",
+      "table": "CustomsRightLineageFact",
+      "tgtype": 7,
+      "semantics": "BEFORE INSERT → 引用的 IOR 身份事实必须同租户且存在（MSG-20261003-136 tenant lineage）"
+    },
+    {
+      "name": "cc_ior_lineage__CustomsBrokerPoaFact",
+      "table": "CustomsBrokerPoaFact",
+      "tgtype": 7,
+      "semantics": "BEFORE INSERT → principal 必须对应同租户 IOR 身份事实（MSG-20261003-136 tenant lineage）"
+    },
+    {
+      "name": "cc_append_only__IndependentSiteHandoffFact",
+      "table": "IndependentSiteHandoffFact",
+      "tgtype": 27,
+      "semantics": "BEFORE UPDATE OR DELETE → 拒绝（initial handoff root append-only）"
+    },
+    {
+      "name": "cc_append_only__IndependentSiteResponseFact",
+      "table": "IndependentSiteResponseFact",
+      "tgtype": 27,
+      "semantics": "BEFORE UPDATE OR DELETE → 拒绝（PSP 响应事实 append-only；更正新增事实）"
+    },
+    {
+      "name": "cc_append_only__IndependentSiteSettlementFact",
+      "table": "IndependentSiteSettlementFact",
+      "tgtype": 27,
+      "semantics": "BEFORE UPDATE OR DELETE → 拒绝（到账事实 append-only；修正以新事实表达）"
+    },
+    {
+      "name": "cc_ps04_lineage__IndependentSiteResponseFact",
+      "table": "IndependentSiteResponseFact",
+      "tgtype": 7,
+      "semantics": "BEFORE INSERT → 必须存在同租户同 dispute 的 handoff root"
+    },
+    {
+      "name": "cc_ps04_lineage__IndependentSiteSettlementFact",
+      "table": "IndependentSiteSettlementFact",
+      "tgtype": 7,
+      "semantics": "BEFORE INSERT → 必须存在同租户同 dispute 的 handoff root"
+    },
+    {
+      "name": "cc_append_only__IndependentSitePhase1Projection",
+      "table": "IndependentSitePhase1Projection",
+      "tgtype": 27,
+      "semantics": "BEFORE UPDATE OR DELETE → 拒绝（Phase-1 只读投影 append-only；修正新增投影行）"
+    }
+  ],
+  "unexpectedPrefixes": [
+    "cc_append_only__%",
+    "cc_recoverypackage_%",
+    "cc_reconciliation%",
+    "cc_reimbursementfact_%",
+    "cc_money_%",
+    "cc_settlement_%",
+    "cc_settlementadjustment_%",
+    "cc_feecalculationsettlement_%",
+    "cc_feecalculationadjustment_%"
+  ]
+}

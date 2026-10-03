@@ -6,6 +6,7 @@
 import type { PrismaClient } from '@prisma/client';
 
 import type { EvidenceDraft, EvidencePromotionPorts } from './promotion';
+import { resolveAccountIdFromConnection } from './account-scope';
 
 export function createPrismaEvidencePromotionPorts(
   prisma: PrismaClient,
@@ -38,9 +39,15 @@ export function createPrismaEvidencePromotionPorts(
       },
 
       async create(draft: EvidenceDraft) {
+        // MSG-20261002-68 CHANGE A：统一走共享解析器；无法唯一确定 account → fail-closed。
+        const accountId = await resolveAccountIdFromConnection(prisma as never, {
+          organizationId: draft.organizationId,
+          connectionId: draft.connectionId,
+        });
         const created = await prisma.evidenceArtifact.create({
           data: {
             organizationId: draft.organizationId,
+            accountId,
             kind: draft.kind,
             fileAssetId: draft.fileAssetId,
             connectionId: draft.connectionId,

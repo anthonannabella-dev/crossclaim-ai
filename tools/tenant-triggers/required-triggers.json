@@ -1,40 +1,416 @@
 {
-  "note": "B2-FIX R1 / MSG-20260930-06 CHANGE D —— 必需租户保护触发器清单（名称 + 所属表 + 事件类型）。tgtype 23 = ROW|BEFORE|INSERT|UPDATE；19 = ROW|BEFORE|UPDATE。清单来自 docs/releases/TASK2-TENANT-TRIGGER-INVENTORY.md 的运行库取证（2026-09-30）。新增 tenant-owned 表时必须同步补迁移并更新本清单，否则 CI 失败。",
+  "note": "B2-FIX R1 / MSG-20260930-06 CHANGE D —— 必需租户保护触发器清单（名称 + 所属表 + 事件类型）。tgtype 23 = ROW|BEFORE|INSERT|UPDATE；19 = ROW|BEFORE|UPDATE。清单来自 docs/releases/TASK2-TENANT-TRIGGER-INVENTORY.md 的运行库取证（2026-09-30）。新增 tenant-owned 表时必须同步补迁移并更新本清单，否则 CI 失败。 R43 S1（MSG-20261001-31/-32）：新增人工追回提交 5 张表的租户保护触发器；append-only/受控变更触发器见 append-only-triggers.json（独立清单，刻意不与本清单混用）。 R45 S1（MSG-20261001-45 / -46）：新增 Outcome / Reimbursement Reconciliation 七表的租户保护触发器；append-only / 受控 supersede / generation 守卫见 append-only-triggers.json。 PC-09（MSG-20261003-96 ⑬）：新增 PolicyAcceptance（版本化商业/法律文档的显式接受事实）租户保护触发器。 CARRIER QUEUE #9B FINAL（MSG-20261003-119 ⑲–㉜）：新增 CarrierManualSubmission 的租户保护触发器；append-only 守卫见 append-only-triggers.json。 CARRIER QUEUE #10 FINAL（MSG-20261003-122 ㉔）：新增 CarrierClaimResponseFact 的租户保护触发器；append-only 守卫见 append-only-triggers.json。 C17（MSG-20261003-124 ⑪）：新增 CustomsSubmissionAttempt / CustomsSubmissionAttemptFact 租户保护触发器；append-only 守卫见 append-only-triggers.json。 ENTERPRISE IOR RECOVERY LAYER（MSG-20261003-136 批准）：新增三张 append-only IOR 事实表的租户保护触发器。 BG-021（MSG-20261003-139 批准）：新增 independent-site 三张 append-only 事实表的租户保护触发器。 CHANGE B（MSG-20261003-141）：新增 IndependentSitePhase1Projection 租户保护触发器。",
   "immutablePrefix": "cc_tenant_immutable__",
   "immutableTgtype": 19,
   "baselineTgtype": 23,
   "baselineTriggers": [
-    { "name": "cc_tenant_appeal", "table": "Appeal" },
-    { "name": "cc_tenant_billinginvoice", "table": "BillingInvoice" },
-    { "name": "cc_tenant_canonicalfactsource", "table": "CanonicalFactSource" },
-    { "name": "cc_tenant_caseevidence", "table": "CaseEvidence" },
-    { "name": "cc_tenant_caseopportunity", "table": "CaseOpportunity" },
-    { "name": "cc_tenant_claim", "table": "Claim" },
-    { "name": "cc_tenant_claimitem_caseid", "table": "ClaimItem" },
-    { "name": "cc_tenant_claimitem_opportunityid", "table": "ClaimItem" },
-    { "name": "cc_tenant_claimitem_ruleversionid", "table": "ClaimItem" },
-    { "name": "cc_tenant_claimitemevidence_claimitemid", "table": "ClaimItemEvidence" },
-    { "name": "cc_tenant_claimitemevidence_evidenceid", "table": "ClaimItemEvidence" },
-    { "name": "cc_tenant_evidenceartifact", "table": "EvidenceArtifact" },
-    { "name": "cc_tenant_evidenceedge", "table": "EvidenceEdge" },
-    { "name": "cc_tenant_feecalculation", "table": "FeeCalculation" },
-    { "name": "cc_tenant_fileasset", "table": "FileAsset" },
-    { "name": "cc_tenant_importbatch", "table": "ImportBatch" },
-    { "name": "cc_tenant_kill_switch_request", "table": "KillSwitchRequest" },
-    { "name": "cc_tenant_payment_invoiceid", "table": "Payment" },
-    { "name": "cc_tenant_paymentprocessingattempt_paymenteventid", "table": "PaymentProcessingAttempt" },
-    { "name": "cc_tenant_paymentprocessingattempt_paymentid", "table": "PaymentProcessingAttempt" },
-    { "name": "cc_tenant_recoverygraphedge", "table": "RecoveryGraphEdge" },
-    { "name": "cc_tenant_recoveryledgerentry", "table": "RecoveryLedgerEntry" },
-    { "name": "cc_tenant_recoveryroute", "table": "RecoveryRoute" },
-    { "name": "cc_tenant_ruleevaluation", "table": "RuleEvaluation" },
-    { "name": "cc_tenant_ruleevaluationshadow", "table": "RuleEvaluationShadow" },
-    { "name": "cc_tenant_ruleversion", "table": "RuleVersion" },
-    { "name": "cc_tenant_settlement", "table": "Settlement" },
-    { "name": "cc_tenant_sourcetransaction", "table": "SourceTransaction" }
+    {
+      "name": "cc_tenant_appeal",
+      "table": "Appeal"
+    },
+    {
+      "name": "cc_tenant_billinginvoice",
+      "table": "BillingInvoice"
+    },
+    {
+      "name": "cc_tenant_canonicalfactsource",
+      "table": "CanonicalFactSource"
+    },
+    {
+      "name": "cc_tenant_caseevidence",
+      "table": "CaseEvidence"
+    },
+    {
+      "name": "cc_tenant_caseopportunity",
+      "table": "CaseOpportunity"
+    },
+    {
+      "name": "cc_tenant_claim",
+      "table": "Claim"
+    },
+    {
+      "name": "cc_tenant_claimitem_caseid",
+      "table": "ClaimItem"
+    },
+    {
+      "name": "cc_tenant_claimitem_opportunityid",
+      "table": "ClaimItem"
+    },
+    {
+      "name": "cc_tenant_claimitem_ruleversionid",
+      "table": "ClaimItem"
+    },
+    {
+      "name": "cc_tenant_claimitemevidence_claimitemid",
+      "table": "ClaimItemEvidence"
+    },
+    {
+      "name": "cc_tenant_claimitemevidence_evidenceid",
+      "table": "ClaimItemEvidence"
+    },
+    {
+      "name": "cc_tenant_claimreconciliationprojection",
+      "table": "ClaimReconciliationProjection"
+    },
+    {
+      "name": "cc_tenant_claimreconciliationprojection_claimitemid",
+      "table": "ClaimReconciliationProjection"
+    },
+    {
+      "name": "cc_tenant_claimreconciliationprojectionfact",
+      "table": "ClaimReconciliationProjectionFact"
+    },
+    {
+      "name": "cc_tenant_claimreconciliationprojectionfact_projectionid",
+      "table": "ClaimReconciliationProjectionFact"
+    },
+    {
+      "name": "cc_tenant_claimreconciliationprojectionfact_reimbursementfactid",
+      "table": "ClaimReconciliationProjectionFact"
+    },
+    {
+      "name": "cc_tenant_evidenceartifact",
+      "table": "EvidenceArtifact"
+    },
+    {
+      "name": "cc_tenant_evidenceedge",
+      "table": "EvidenceEdge"
+    },
+    {
+      "name": "cc_tenant_expectedrecoverybasis",
+      "table": "ExpectedRecoveryBasis"
+    },
+    {
+      "name": "cc_tenant_expectedrecoverybasis_claimitemid",
+      "table": "ExpectedRecoveryBasis"
+    },
+    {
+      "name": "cc_tenant_feecalculation",
+      "table": "FeeCalculation"
+    },
+    {
+      "name": "cc_tenant_feecalculation_claimitemid",
+      "table": "FeeCalculation"
+    },
+    {
+      "name": "cc_tenant_feecalculation_feechainrootfeecalculationid",
+      "table": "FeeCalculation"
+    },
+    {
+      "name": "cc_tenant_feecalculation_supersededbyfeecalculationid",
+      "table": "FeeCalculation"
+    },
+    {
+      "name": "cc_tenant_feecalculationadjustment",
+      "table": "FeeCalculationAdjustment"
+    },
+    {
+      "name": "cc_tenant_feecalculationadjustment_targetfeecalculationid",
+      "table": "FeeCalculationAdjustment"
+    },
+    {
+      "name": "cc_tenant_feecalculationsettlement",
+      "table": "FeeCalculationSettlement"
+    },
+    {
+      "name": "cc_tenant_feecalculationsettlement_adjustmentid",
+      "table": "FeeCalculationSettlement"
+    },
+    {
+      "name": "cc_tenant_feecalculationsettlement_feecalculationid",
+      "table": "FeeCalculationSettlement"
+    },
+    {
+      "name": "cc_tenant_feecalculationsettlement_settlementid",
+      "table": "FeeCalculationSettlement"
+    },
+    {
+      "name": "cc_tenant_fileasset",
+      "table": "FileAsset"
+    },
+    {
+      "name": "cc_tenant_importbatch",
+      "table": "ImportBatch"
+    },
+    {
+      "name": "cc_tenant_kill_switch_request",
+      "table": "KillSwitchRequest"
+    },
+    {
+      "name": "cc_tenant_payment_invoiceid",
+      "table": "Payment"
+    },
+    {
+      "name": "cc_tenant_paymentprocessingattempt_paymenteventid",
+      "table": "PaymentProcessingAttempt"
+    },
+    {
+      "name": "cc_tenant_paymentprocessingattempt_paymentid",
+      "table": "PaymentProcessingAttempt"
+    },
+    {
+      "name": "cc_tenant_platform_write_attempt",
+      "table": "PlatformWriteAttempt"
+    },
+    {
+      "name": "cc_tenant_provideroutcomefact",
+      "table": "ProviderOutcomeFact"
+    },
+    {
+      "name": "cc_tenant_reconciliationoverridedecision",
+      "table": "ReconciliationOverrideDecision"
+    },
+    {
+      "name": "cc_tenant_reconciliationoverridedecision_claimitemid",
+      "table": "ReconciliationOverrideDecision"
+    },
+    {
+      "name": "cc_tenant_reconciliationoverridedecision_reimbursementfactid",
+      "table": "ReconciliationOverrideDecision"
+    },
+    {
+      "name": "cc_tenant_reconciliationtolerancepolicy",
+      "table": "ReconciliationTolerancePolicy"
+    },
+    {
+      "name": "cc_tenant_recoverygraphedge",
+      "table": "RecoveryGraphEdge"
+    },
+    {
+      "name": "cc_tenant_recoveryledgerentry",
+      "table": "RecoveryLedgerEntry"
+    },
+    {
+      "name": "cc_tenant_recoverymanualsubmission",
+      "table": "RecoveryManualSubmission"
+    },
+    {
+      "name": "cc_tenant_recoverymanualsubmission_claimitemid",
+      "table": "RecoveryManualSubmission"
+    },
+    {
+      "name": "cc_tenant_recoverymanualsubmission_packageid",
+      "table": "RecoveryManualSubmission"
+    },
+    {
+      "name": "cc_tenant_recoverymanualsubmissionevidence",
+      "table": "RecoveryManualSubmissionEvidence"
+    },
+    {
+      "name": "cc_tenant_recoverymanualsubmissionevidence_evidenceid",
+      "table": "RecoveryManualSubmissionEvidence"
+    },
+    {
+      "name": "cc_tenant_recoverymanualsubmissionevidence_submissionid",
+      "table": "RecoveryManualSubmissionEvidence"
+    },
+    {
+      "name": "cc_tenant_recoverymanualsubmissionreference",
+      "table": "RecoveryManualSubmissionReference"
+    },
+    {
+      "name": "cc_tenant_recoverymanualsubmissionreference_submissionid",
+      "table": "RecoveryManualSubmissionReference"
+    },
+    {
+      "name": "cc_tenant_recoverypackage",
+      "table": "RecoveryPackage"
+    },
+    {
+      "name": "cc_tenant_recoverypackage_claimitemid",
+      "table": "RecoveryPackage"
+    },
+    {
+      "name": "cc_tenant_recoverypackageartifact",
+      "table": "RecoveryPackageArtifact"
+    },
+    {
+      "name": "cc_tenant_recoverypackageartifact_fileassetid",
+      "table": "RecoveryPackageArtifact"
+    },
+    {
+      "name": "cc_tenant_recoverypackageartifact_packageid",
+      "table": "RecoveryPackageArtifact"
+    },
+    {
+      "name": "cc_tenant_recoveryroute",
+      "table": "RecoveryRoute"
+    },
+    {
+      "name": "cc_tenant_reimbursementfact",
+      "table": "ReimbursementFact"
+    },
+    {
+      "name": "cc_tenant_reimbursementfact_reversesfactid",
+      "table": "ReimbursementFact"
+    },
+    {
+      "name": "cc_tenant_ruleevaluation",
+      "table": "RuleEvaluation"
+    },
+    {
+      "name": "cc_tenant_ruleevaluationshadow",
+      "table": "RuleEvaluationShadow"
+    },
+    {
+      "name": "cc_tenant_ruleversion",
+      "table": "RuleVersion"
+    },
+    {
+      "name": "cc_tenant_settlement",
+      "table": "Settlement"
+    },
+    {
+      "name": "cc_tenant_settlement_claimitemid",
+      "table": "Settlement"
+    },
+    {
+      "name": "cc_tenant_settlement_receiptsnapshotid",
+      "table": "Settlement"
+    },
+    {
+      "name": "cc_tenant_settlementadjustment",
+      "table": "SettlementAdjustment"
+    },
+    {
+      "name": "cc_tenant_settlementadjustment_originalsettlementid",
+      "table": "SettlementAdjustment"
+    },
+    {
+      "name": "cc_tenant_settlementreceiptsnapshot",
+      "table": "SettlementReceiptSnapshot"
+    },
+    {
+      "name": "cc_tenant_settlementreceiptsnapshot_claimitemid",
+      "table": "SettlementReceiptSnapshot"
+    },
+    {
+      "name": "cc_tenant_sourcetransaction",
+      "table": "SourceTransaction"
+    },
+    {
+      "name": "cc_tenant_platformaccount",
+      "table": "PlatformAccount"
+    },
+    {
+      "name": "cc_tenant_sourceconnection_platformaccountid",
+      "table": "SourceConnection"
+    },
+    {
+      "name": "cc_tenant_claimitem_accountid",
+      "table": "ClaimItem"
+    },
+    {
+      "name": "cc_tenant_canonicalfact_accountid",
+      "table": "CanonicalFact"
+    },
+    {
+      "name": "cc_tenant_evidenceartifact_accountid",
+      "table": "EvidenceArtifact"
+    },
+    {
+      "name": "cc_tenant_recoveryopportunity_accountid",
+      "table": "RecoveryOpportunity"
+    },
+    {
+      "name": "cc_tenant_sourcetransaction_accountid",
+      "table": "SourceTransaction"
+    },
+    {
+      "name": "cc_tenant_policyacceptance",
+      "table": "PolicyAcceptance"
+    },
+    {
+      "name": "cc_tenant_carriermanualsubmission",
+      "table": "CarrierManualSubmission"
+    },
+    {
+      "name": "cc_tenant_carrierclaimresponsefact",
+      "table": "CarrierClaimResponseFact"
+    },
+    {
+      "name": "cc_tenant_customssubmissionattempt",
+      "table": "CustomsSubmissionAttempt"
+    },
+    {
+      "name": "cc_tenant_customssubmissionattemptfact",
+      "table": "CustomsSubmissionAttemptFact"
+    },
+    {
+      "name": "cc_tenant_customsentryfactrecord",
+      "table": "CustomsEntryFactRecord"
+    },
+    {
+      "name": "cc_tenant_customsentrydutylinerecord",
+      "table": "CustomsEntryDutyLineRecord"
+    },
+    {
+      "name": "cc_tenant_customsdutytruthrecord",
+      "table": "CustomsDutyTruthRecord"
+    },
+    {
+      "name": "cc_tenant_customsdiscrepancyrecord",
+      "table": "CustomsDiscrepancyRecord"
+    },
+    {
+      "name": "cc_tenant_customseligibilityrecord",
+      "table": "CustomsEligibilityRecord"
+    },
+    {
+      "name": "cc_tenant_customsrecoveryestimaterecord",
+      "table": "CustomsRecoveryEstimateRecord"
+    },
+    {
+      "name": "cc_tenant_customsreturnfactrecord",
+      "table": "CustomsReturnFactRecord"
+    },
+    {
+      "name": "cc_tenant_recoveryqualificationassessmentrecord",
+      "table": "RecoveryQualificationAssessmentRecord"
+    },
+    {
+      "name": "cc_tenant_customsreturnclaimevidencerecord",
+      "table": "CustomsReturnClaimEvidenceRecord"
+    },
+    {
+      "name": "cc_tenant_customsioridentityfact",
+      "table": "CustomsIorIdentityFact"
+    },
+    {
+      "name": "cc_tenant_customsrightlineagefact",
+      "table": "CustomsRightLineageFact"
+    },
+    {
+      "name": "cc_tenant_customsbrokerpoafact",
+      "table": "CustomsBrokerPoaFact"
+    },
+    {
+      "name": "cc_tenant_independentsitehandofffact",
+      "table": "IndependentSiteHandoffFact"
+    },
+    {
+      "name": "cc_tenant_independentsiteresponsefact",
+      "table": "IndependentSiteResponseFact"
+    },
+    {
+      "name": "cc_tenant_independentsitesettlementfact",
+      "table": "IndependentSiteSettlementFact"
+    },
+    {
+      "name": "cc_tenant_independentsitephase1projection",
+      "table": "IndependentSitePhase1Projection"
+    }
   ],
   "scopedTriggers": [
-    { "name": "cc_ruleset_ownership_immutable", "table": "RuleSet", "tgtype": 19 },
-    { "name": "cc_ruleversion_ownership", "table": "RuleVersion", "tgtype": 23 }
+    {
+      "name": "cc_ruleset_ownership_immutable",
+      "table": "RuleSet",
+      "tgtype": 19
+    },
+    {
+      "name": "cc_ruleversion_ownership",
+      "table": "RuleVersion",
+      "tgtype": 23
+    }
   ]
 }

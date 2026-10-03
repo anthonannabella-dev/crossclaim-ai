@@ -38,7 +38,7 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await prisma.$executeRawUnsafe(
-    'TRUNCATE TABLE "SourceTransaction", "ImportBatch", "Organization" CASCADE;',
+    'TRUNCATE TABLE "PlatformAccount", "SourceConnection", "SourceTransaction", "ImportBatch", "Organization" CASCADE;',
   );
   await prisma.organization.createMany({
     data: [
@@ -46,10 +46,37 @@ beforeEach(async () => {
       { id: ORG_B, name: '导入租户 B', slug: 'ingest-org-b' },
     ],
   });
+  // TRACK B BATCH 1：ingest 入口要求连接已绑定 PlatformAccount（服务端派生 account 归因）。
+  for (const org of [ORG_A, ORG_B]) {
+    const account = await prisma.platformAccount.create({
+      data: {
+        organizationId: org,
+        platform: 'AMAZON',
+        externalAccountId: 'fixture-' + org,
+        displayName: 'fixture account',
+      },
+    });
+    const connection = await prisma.sourceConnection.create({
+      data: {
+        organizationId: org,
+        domain: 'LOGISTICS',
+        channel: 'UPS',
+        kind: 'FILE_UPLOAD',
+        status: 'ACTIVE',
+        label: 'ingest fixture ' + org.slice(0, 4),
+        platformAccountId: account.id,
+      },
+    });
+    CONNECTION_BY_ORG.set(org, connection.id);
+  }
 });
 
+const CONNECTION_BY_ORG = new Map<string, string>();
+
 function context(organizationId: string) {
-  return { organizationId, domain: 'LOGISTICS' as const, channel: 'UPS' as const };
+  const connectionId = CONNECTION_BY_ORG.get(organizationId);
+  if (!connectionId) throw new Error('FIXTURE_CONNECTION_MISSING:' + organizationId);
+  return { organizationId, connectionId, domain: 'LOGISTICS' as const, channel: 'UPS' as const };
 }
 
 describe('导入层 · 真实数据库', () => {

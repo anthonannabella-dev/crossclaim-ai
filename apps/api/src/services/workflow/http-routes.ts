@@ -27,13 +27,100 @@ import {
 } from './connection-management';
 import { confirmCommercialTerms, createCaseForOpportunity } from './case-creation';
 import { confirmRecoveryOutcome } from './recovery-outcome';
+import { ActionGuardApprovalVerificationError } from '../action-guard/approval-verifier';
+import { createHitlSubmissionBoundary } from '../action-guard/hitl-submission';
+import { ActionGuardNotConfiguredError } from '../action-guard/guard-enforcement';
+import {
+  APPEAL_SUBMIT_ACTION,
+  CLAIM_SUBMIT_ACTION,
+  PAYMENT_CAPTURE_ACTION,
+  PAYMENT_REPLAY_ACTION,
+  PAYMENT_RETRY_DUE_ACTION,
+  RECOVERY_CONFIRMATION_ACTION,
+} from '../action-guard/approval-verifier';
+import {
+  PAYMENT_APPROVAL_EVENT_ACTION,
+  PAYMENT_CONSUMED_EVENT_ACTION,
+  PAYMENT_REJECTED_EVENT_ACTION,
+  PAYMENT_REPLAY_CONSUMED_EVENT_ACTION,
+  PAYMENT_REQUIRED_EVENT_ACTION,
+  PAYMENT_RETRY_DUE_CONSUMED_EVENT_ACTION,
+} from '../action-guard/approval-tx-verify';
+import { ApprovalBoundaryError } from '../action-guard/approval-tx-verify';
+import { createPrismaActionGuardAuditPort } from '../action-guard/runtime-guard-composition';
+import { handleCarrierManualSubmissionRequest } from '../carriers/carrier-manual-submission-http';
+import { createPrismaCarrierManualSubmissionStore } from '../carriers/carrier-manual-submission-prisma-store';
+import {
+  handleCarrierClaimResponseReadRequest,
+  handleCarrierClaimResponseRecordRequest,
+} from '../carriers/carrier-claim-response-http';
+import { createPrismaCarrierClaimResponseStore } from '../carriers/carrier-claim-response-prisma-store';
+import { createPrismaCarrierClaimResponseSubmissionSource } from '../carriers/carrier-claim-response-submissions';
+import {
+  handleCustomsFilingStatusReadRequest,
+  handleCustomsRecoveryStartRequest,
+} from '../customs/customs-recovery-http';
+import { getReturnClaimEvidenceView } from '../customs/customs-return-claim-evidence';
+import { postCustomsRecoveryChain } from '../customs/customs-recovery-chain-http';
+import { getCustomsEntryFactReadModel } from '../customs/customs-claim-ready-http';
+import type { CustomsEntryFactStore } from '../customs/customs-entry-fact-store';
+import { getIndependentSiteRecoveryState } from '../independent-site/ps04-state-read';
+import { getQualificationReadProjection } from '../commercial/qualification-read';
+import {
+  PlatformWriteRequestError,
+  requestPlatformWrite,
+} from '../platform-write/http-request';
+import {
+  RecoveryManualHttpError,
+  requestManualRecoveryReference,
+  requestManualRecoverySubmit,
+  requestManualRecoverySubmitApproval,
+  requestManualRecoveryReferenceApproval,
+} from '../recovery/http-request';
+import { ManualReferenceError } from '../recovery/manual-reference';
+import type { AuditWriter } from '../audit';
+import { submitClaimWithApproval } from '../claims/claim-submission';
+import { BILLING_DRAFT_ACTION, createBillingDraft } from '../billing/billing-draft';
+import { submitAppealWithApproval } from '../appeals/appeal-submission';
+import { buildAppealSubmissionSnapshot, appealSubmissionDigest } from '../appeals/appeal-snapshot';
+import { EVIDENCE_READ_ACTION } from '../evidence/evidence-read';
+import { CLAIM_PREPARE_ACTION, prepareClaimDraft } from '../claims/claim-preparation';
+import {
+  ActionGuardApprovalRequiredError,
+  ActionGuardDeniedError,
+  type RuntimeActionGuard,
+} from '../action-guard/runtime-guard';
+import { rebindLegacyConnection } from './connection-onboarding';
+import { getCommercialReadiness } from '../commercial/commercial-readiness';
+import {
+  PolicyAcceptanceError,
+  listMyPolicyAcceptances,
+  recordPolicyAcceptance,
+} from '../commercial/policy-acceptance';
+import { findPolicy, listCurrentPolicies, listPolicyDocuments, listPolicyVersions } from '../commercial/policy-registry';
+import { paymentsEnabled } from './payment';
+import { projectCarrierReadiness } from '../carriers/carrier-auth-contract';
+import { projectProviderReadiness } from '../connect/provider-integration-contract';
+import { getAcceptanceStatus } from '../commercial/policy-acceptance';
+import {
+  DEFAULT_FACT_SOURCES,
+  defaultPaymentActivationFacts,
+  projectPaymentActivationReadiness,
+} from '../payments/activation-readiness';
 import { getRecoveryReviewStatus, submitRecoveryReview } from './recovery-review';
+import { readReplaySnapshot, submitPaymentReplayReview, submitPaymentReview } from './payment';
+import {
+  executeRetryBatch,
+  freezeRetryBatch,
+  readRetryBatch,
+  submitRetryBatchReview,
+} from './payment-retry-batch';
 import { advanceBillingInvoice, listBillingInvoices } from './billing';
 import { getAppealPackageState } from './appeal-package';
 import { reconcilePayoutItems } from './commission-reconciliation';
 import { handlePaymentWebhook } from './payment-webhook';
 import { listPaymentReconciliation, toReconciliationCsv } from './payment-reconciliation';
-import { replayPaymentEvent, runDueRetries } from './payment-attempt';
+import { replayPaymentEvent } from './payment-attempt';
 import { getCase, getClaimDraft, listCaseEvidence, listCases } from './case-read';
 import { getMember, getPermissionMatrix, listMembers } from '../operations/admin-membership';
 import {
@@ -76,18 +163,48 @@ import {
   listOpportunityInsights,
   toExportRows,
 } from './opportunity-insight';
+import { getCaseClaimPackage } from './claim-package-view';
+import { getAccountManagementView } from './account-management-view';
+import { getEntitlementProjection } from './entitlement-view';
+import { getRecoveryMoneyView } from './recovery-money-view';
+import { listRecoveryStates } from './recovery-states';
+import { listOpportunities } from './opportunity-list';
 import { REJECT_REASONS, WorkflowError, reviewOpportunity } from './opportunity-review';
 import { ForbiddenError, assertPermission } from './permissions';
 
 const MAX_BODY_BYTES = 16 * 1024;
 const REVIEW_PATH = /^\/opportunities\/([^/]+)\/(qualify|reject|case)$/;
+/** PC-07：客户权益 / 套餐解锁只读投影。 */
+const ENTITLEMENTS_PATH = /^\/entitlements$/;
+/** PC-06：账户管理只读投影（PlatformAccount 与 SourceConnection 分层展示）。 */
+const ACCOUNTS_PATH = /^\/accounts$/;
+/** PC-05：客户可见的追回金额只读投影。 */
+const RECOVERY_MONEY_PATH = /^\/recovery-money$/;
+/** PC-04：客户可见的失败 / 恢复状态投影。 */
+const RECOVERY_STATES_PATH = /^\/recovery-states$/;
+/** PC-03：客户可见的 Claim Package 只读视图。 */
+const CASE_CLAIM_PACKAGE_PATH = /^\/cases\/([^/]+)\/claim-package$/;
+/** PC-02：客户可见的机会列表（read-only projection）。 */
+const OPPORTUNITY_LIST_PATH = /^\/opportunities$/;
 const INSIGHT_LIST_PATH = /^\/opportunities\/insights$/;
 const INSIGHT_CSV_PATH = /^\/opportunities\/insights\.csv$/;
 const INSIGHT_PATH = /^\/opportunities\/([^/]+)\/basis$/;
-const CONNECTION_PATH = /^\/connections(?:\/([^/]+)\/(status|credential-ref))?$/;
+const CONNECTION_PATH = /^\/connections(?:\/([^/]+)\/(status|credential-ref|rebind))?$/;
+/** PC-09（MSG-20261003-96 ⑬）：商业/法律披露与显式接受事实。 */
+const COMMERCIAL_POLICIES_PATH = /^\/commercial\/policies$/;
+const COMMERCIAL_POLICY_PATH = /^\/commercial\/policies\/([^/]+)$/;
+const COMMERCIAL_POLICY_ACCEPT_PATH = /^\/commercial\/policies\/([^/]+)\/accept$/;
+const COMMERCIAL_ACCEPTANCES_PATH = /^\/commercial\/acceptances$/;
+const COMMERCIAL_READINESS_PATH = /^\/commercial-readiness$/;
+/** PC-11A（MSG-20261003-99 ⑲）：provider 接入就绪投影（只读；合同就绪 ≠ 生产可用）。 */
+const PROVIDER_READINESS_PATH = /^\/provider-readiness$/;
+/** PC-12A（MSG-20261003-102 ⑮.9）：支付激活就绪（只读；OWNER/ADMIN）。 */
+const PAYMENT_ACTIVATION_READINESS_PATH = /^\/payment-activation-readiness$/;
 const COMMERCIAL_TERMS_PATH = /^\/cases\/([^/]+)\/commercial-terms$/;
 const RECOVERY_OUTCOME_PATH = /^\/cases\/([^/]+)\/recovery-outcome$/;
 const RECOVERY_REVIEW_PATH = /^\/cases\/([^/]+)\/recovery-review$/;
+// R6：支付域审批入口（受认证会话；审批人 OWNER/ADMIN）
+const PAYMENT_REVIEW_PATH = /^\/billing\/([^/]+)\/payment-review$/;
 const APPEAL_PACKAGE_PATH = /^\/cases\/([^/]+)\/appeal-package$/;
 const COMMISSION_RECONCILE_PATH = /^\/commissions\/reconcile$/;
 const PAYMENTS_PATH = /^\/payments$/;
@@ -95,12 +212,50 @@ const PAYMENT_WEBHOOK_PATH = /^\/payments\/webhook$/;
 const PAYMENTS_RECONCILIATION_PATH = /^\/payments\/reconciliation$/;
 const PAYMENTS_RECONCILIATION_CSV_PATH = /^\/payments\/reconciliation\.csv$/;
 const PAYMENT_REPLAY_PATH = /^\/payments\/events\/([^/]+)\/replay$/;
+// ② 第二批 replay：最小受认证审批入口（REQUEST / APPROVE / REJECT）
+const PAYMENT_REPLAY_REVIEW_PATH = /^\/payments\/events\/([^/]+)\/replay-review$/;
 const PAYMENT_RETRY_DUE_PATH = /^\/payments\/processing\/retry-due$/;
+// ② 第二批 retry-due：冻结清单（freeze）与批次审批（review）最小受认证入口
+const PAYMENT_RETRY_DUE_FREEZE_PATH = /^\/payments\/processing\/retry-due\/freeze$/;
+const PAYMENT_RETRY_DUE_REVIEW_PATH = /^\/payments\/processing\/retry-due\/review$/;
 const BILLING_PATH = /^\/billing(?:\/([^/]+)\/status)?$/;
 const CASE_LIST_PATH = /^\/cases$/;
 const CASE_DETAIL_PATH = /^\/cases\/([^/]+)$/;
 const CASE_EVIDENCE_PATH = /^\/cases\/([^/]+)\/evidence$/;
 const CASE_CLAIM_PATH = /^\/cases\/([^/]+)\/claim$/;
+// ② RUNTIME BUSINESS BLOCKING：claim.submit（人工提交入口；平台外写保持 NEEDS_MANUAL）
+const CASE_CLAIM_SUBMIT_PATH = /^\/cases\/([^/]+)\/claim\/submit$/;
+// ② 下一小批次（MSG-20261001-07 §6）：claim.prepare（内部准备写入 · INTERNAL_WRITE · 无人审批）
+const CASE_CLAIM_PREPARE_PATH = /^\/cases\/([^/]+)\/claim\/prepare$/;
+// ② 下一小批次（MSG-20261001-10 §5）：billing.draft（账单草稿写入 · INTERNAL_WRITE · 无人审批）
+const CASE_BILLING_DRAFT_PATH = /^\/cases\/([^/]+)\/billing\/draft$/;
+// CARRIER QUEUE #9B FINAL（MSG-20261003-119 ㉕）：人工提交记录入口（human attestation；无 carrier 外写）。
+const CARRIER_MANUAL_SUBMISSION_PATH = /^\/carrier-claim-packages\/([^/]+)\/manual-submission$/;
+// CARRIER QUEUE #10 FINAL（MSG-20261003-122 ㉙㉛）：carrier response 人工补录 + 读模型
+const CARRIER_CLAIM_RESPONSES_PATH = /^\/carrier-claim-packages\/([^/]+)\/responses$/;
+// C21（MSG-20261003-124 ⑭–㉑）：one-click 内部准备 + filing status 读模型
+const CUSTOMS_RECOVERY_PATH = /^\/customs-opportunities\/([^/]+)\/(start-recovery|filing-status)$/;
+/** P0-1：Return→matching→claim-ready evidence 的**只读**视图（消费已持久化结果，不重算）。 */
+const CUSTOMS_RETURN_EVIDENCE_PATH = /^\/customs-entry-facts\/([^/]+)\/return-claim-evidence$/;
+/** BG-012：Customs 恢复链**内部触发**（INTERNAL_WRITE；customs.recovery.chain.run）。 */
+const CUSTOMS_CHAIN_RUN_PATH = /^\/customs-entry-facts\/([^/]+)\/recovery-chain$/;
+/** BG-020：Customs 事实 + 四类 latest 计算投影的只读读模型（G11 补齐 HTTP 接线）。 */
+const CUSTOMS_ENTRY_FACT_READ_PATH = /^\/customs-entry-facts\/([^/]+)$/;
+/** BG-019（CHANGE E）：Independent-site Golden Path Critical-State Read Surface（只读）。 */
+const INDEPENDENT_SITE_STATE_PATH = /^\/independent-site-disputes\/([^/]+)\/state$/;
+/** CHANGE A（MSG-20261003-141）：Platform qualification 只读判定投影。 */
+const PLATFORM_QUALIFICATION_READ_PATH = /^\/platform-accounts\/([^/]+)\/qualification$/;
+// ② 下一小批次（MSG-20261001-14 §5）：appeal.submit（Appeal 人工提交 · 独立动作与审批绑定）
+const CASE_APPEAL_SUBMIT_PATH = /^\/cases\/([^/]+)\/appeal\/submit$/;
+// R37 P1（MSG-20261001-22 CHANGE A）：平台真实写回入口（EXTERNAL_WRITE · transport 恒关）
+const CASE_PLATFORM_WRITE_PATH = /^\/cases\/([^/]+)\/platform\/write$/;
+// R44（MSG-20261001-39 NEXT）：人工追回提交入口（受保护动作 · 复用 R43 S3/S4 服务，不复制事务逻辑）
+const CASE_RECOVERY_MANUAL_SUBMIT_PATH = /^\/cases\/([^/]+)\/recovery\/manual-submit$/;
+const CASE_RECOVERY_MANUAL_REFERENCE_PATH = /^\/cases\/([^/]+)\/recovery\/manual-reference$/;
+// R44-A（MSG-20261001-41 NEXT）：人工提交审批创建入口（只创建审批事实，不执行提交）
+const CASE_RECOVERY_MANUAL_APPROVAL_PATH = /^\/cases\/([^/]+)\/recovery\/manual-submit-approval$/;
+// R44-B（MSG-20261001-42 NEXT）：reference 补录的独立审批创建入口
+const CASE_RECOVERY_MANUAL_REFERENCE_APPROVAL_PATH = /^\/cases\/([^/]+)\/recovery\/manual-reference-approval$/;
 // MSG-20260929-30：运营看板（只读投影，GET only）
 const OPERATIONS_DASHBOARD_PATH = /^\/operations\/dashboard$/;
 const OPERATIONS_CLAIMS_PATH = /^\/operations\/claims$/;
@@ -140,11 +295,53 @@ export interface WorkflowRouteDeps {
   session: SessionDeps;
   /** MSG-20260929-68：由 server 创建的进程内 resolver 单例（未提供时回退到本地 WeakMap 缓存） */
   killSwitchResolver?: EffectiveKillSwitchResolver;
+  /**
+   * 授权项 ②（MSG-20260930-16 §6）：受保护业务入口必须经过 Action Guard。
+   * 未注入时受保护入口**一律拒绝**（fail closed），不允许"无守卫直接执行"。
+   */
+  actionGuard?: RuntimeActionGuard;
   /** Platforms of the adapters registered in this deployment (API connections only). */
   registeredPlatforms?: readonly string[];
   now?: () => Date;
+  /** 审计写入端口（缺省时按 server.ts 同策略自建；claim.submit 等受保护入口需要它记录人工提交） */
+  audit?: AuditWriter;
   /** C-0010-C2：结构化安全日志出口（webhook 验签失败、版本不一致等） */
   log?: (event: string, fields: Record<string, unknown>) => void;
+  /** CARRIER QUEUE #9B FINAL：server-side claim package truth（缺省返回 null → 404，不伪造 package）。 */
+  carrierClaimPackages?: import('../carriers/carrier-manual-submission').CarrierClaimPackageSource;
+  /** CARRIER QUEUE #9B FINAL：人工提交记录存储（缺省使用 Prisma/PostgreSQL 实现）。 */
+  carrierManualSubmissionStore?: import('../carriers/carrier-manual-submission').CarrierManualSubmissionStore;
+  /** CARRIER QUEUE #10 FINAL：carrier response append-only 存储（缺省使用 Prisma/PostgreSQL 实现）。 */
+  carrierClaimResponseStore?: import('../carriers/carrier-claim-response').CarrierClaimResponseStore;
+  /** CARRIER QUEUE #10 FINAL：server-side submission truth（缺省读 CarrierManualSubmission）。 */
+  carrierClaimResponseSubmissions?: import('../carriers/carrier-claim-response-submissions').CarrierClaimResponseSubmissionSource;
+  /** C21：server-side customs opportunity truth（缺省返回 null → 404，不伪造）。 */
+  customsOpportunities?: import('../customs/customs-recovery-http').CustomsRecoveryHttpDeps['opportunities'];
+  /** C21：授权就绪判定输入（缺省全部 false → AUTHORIZATION_NOT_READY）。 */
+  customsAuthorization?: import('../customs/customs-authorization-readiness').CustomsAuthorizationFlags;
+  /** C21：已登记 filing provider（缺省 null → BROKER_HANDOFF）。 */
+  customsFilingProvider?: { providerId: string; capabilities: import('../customs/customs-filing-provider').CustomsFilingCapabilities } | null;
+  /** C21：filing status 事实读取（缺省空集合）。 */
+  customsFilingStatus?: import('../customs/customs-recovery-http').CustomsRecoveryHttpDeps['filingStatus'];
+  /** P0-1：已持久化的 claim evidence 读取（缺省 → 404，不伪造）。 */
+  /** BG-012：内部触发执行器（缺省 → 409，不伪造）。 */
+  customsRecoveryChain?: {
+    run(args: { organizationId: string; entryFactId: string }): Promise<{
+      executionKey: string;
+      package: { packageId: string; readiness: string; gaps: readonly string[]; estimateOnly: boolean; billable: boolean; filingPerformed: boolean; submissionPerformed: boolean };
+      projections: readonly { kind: string; projectionId: string; status: 'APPENDED' | 'ALREADY_APPENDED' }[];
+      algorithmVersion: string;
+    }>;
+  };
+  customsReturnEvidence?: {
+    latest(args: { organizationId: string; entryFactId: string }): Promise<Record<string, unknown> | null>;
+  };
+  /** BG-020：Customs 事实 + 四类 latest 投影（只读）。 */
+  customsEntryFactStore?: CustomsEntryFactStore;
+  /** BG-019：Independent-site 关键状态只读面。 */
+  independentSiteState?: import('../independent-site/ps04-state-read').Ps04StateReadDeps;
+  /** CHANGE A：Platform qualification 只读判定投影。 */
+  qualificationRead?: import('../commercial/qualification-read').QualificationReadDeps;
 }
 
 function sendJson(res: ServerResponse, code: number, payload: unknown): void {
@@ -181,6 +378,20 @@ function statusFor(error: unknown): { code: number; error: string } {
   // MSG-20260929-60：Kill Switch 变更入口的两类边界错误
   if (error instanceof CsrfRejectedError) return { code: 403, error: error.code };
   if (error instanceof RateLimitedError) return { code: 429, error: error.code };
+  // 授权项 ②：Action Guard 三类拒绝稳定映射（不吞、不转 500）
+  if (error instanceof ActionGuardDeniedError) return { code: 403, error: error.code };
+  if (error instanceof ActionGuardApprovalRequiredError) return { code: 409, error: error.code };
+  if (error instanceof ActionGuardApprovalVerificationError) return { code: 403, error: error.code };
+  if (error instanceof ActionGuardNotConfiguredError) return { code: 403, error: error.code };
+  // R37 P1：platform.write 入口的结构化拒绝（客户端自证 / 幂等键不一致 / 目标不存在等）
+  if (error instanceof PlatformWriteRequestError) return { code: error.httpStatus, error: error.code };
+  // R44：人工追回提交入口的结构化拒绝（客户端自证 / 幂等键不一致 / 目标不存在等）
+  if (error instanceof RecoveryManualHttpError) return { code: error.httpStatus, error: error.code };
+  if (error instanceof ManualReferenceError) {
+    return { code: error.code === 'PROVIDER_CASE_REF_CONFLICT' ? 409 : 400, error: error.code };
+  }
+  // R2：锁内审批核验失败 → 403 + 精确原因（APPROVAL_*）
+  if (error instanceof ApprovalBoundaryError) return { code: 403, error: error.reason };
   if (error instanceof WorkflowError) {
     switch (error.code) {
       case 'NOT_FOUND':
@@ -193,8 +404,17 @@ function statusFor(error: unknown): { code: number; error: string } {
       case 'CURRENCY_MISMATCH':
       case 'REVIEW_REQUIRED':
       case 'PAYMENT_CONTEXT_REQUIRED':
+      case 'PAYMENT_SOURCE_CONFLICT':
       case 'ATTEMPT_ALREADY_RUNNING':
       case 'CLAIM_ITEM_CASE_REQUIRED':
+      case 'BILLING_BASIS_REQUIRED':
+      case 'BILLING_REISSUE_REQUIRES_NEW_NUMBER':
+      case 'APPEAL_BODY_REQUIRED':
+      case 'PLATFORM_ACCOUNT_REQUIRED':
+      case 'ACCOUNT_BINDING_IMMUTABLE':
+      case 'CONNECTION_NOT_ACTIVE':
+      case 'UNVERIFIED_PLATFORM_IDENTITY':
+      case 'CLAIM_PACKAGE_ACCOUNT_MISMATCH':
         return { code: 409, error: error.code };
       case 'FORBIDDEN':
         return { code: 403, error: error.code };
@@ -258,6 +478,19 @@ export async function handleWorkflowRequest(
 ): Promise<boolean> {
   const path = (req.url ?? '/').split('?')[0];
   const review = REVIEW_PATH.exec(path);
+  const opportunityList = OPPORTUNITY_LIST_PATH.test(path);
+  const caseClaimPackage = CASE_CLAIM_PACKAGE_PATH.exec(path);
+  const recoveryStates = RECOVERY_STATES_PATH.test(path);
+  const recoveryMoney = RECOVERY_MONEY_PATH.test(path);
+  const accountsPath = ACCOUNTS_PATH.test(path);
+  const entitlementsPath = ENTITLEMENTS_PATH.test(path);
+  const commercialPoliciesPath = COMMERCIAL_POLICIES_PATH.test(path);
+  const commercialPolicyPath = COMMERCIAL_POLICY_PATH.exec(path);
+  const commercialPolicyAcceptPath = COMMERCIAL_POLICY_ACCEPT_PATH.exec(path);
+  const commercialAcceptancesPath = COMMERCIAL_ACCEPTANCES_PATH.test(path);
+  const commercialReadinessPath = COMMERCIAL_READINESS_PATH.test(path);
+  const providerReadinessPath = PROVIDER_READINESS_PATH.test(path);
+  const paymentActivationReadinessPath = PAYMENT_ACTIVATION_READINESS_PATH.test(path);
   const insightList = INSIGHT_LIST_PATH.test(path);
   const insightCsv = INSIGHT_CSV_PATH.test(path);
   const insight = INSIGHT_PATH.exec(path);
@@ -265,6 +498,7 @@ export async function handleWorkflowRequest(
   const termsPath = COMMERCIAL_TERMS_PATH.exec(path);
   const outcomePath = RECOVERY_OUTCOME_PATH.exec(path);
   const reviewPath = RECOVERY_REVIEW_PATH.exec(path);
+  const paymentReviewPath = PAYMENT_REVIEW_PATH.exec(path);
   const appealPath = APPEAL_PACKAGE_PATH.exec(path);
   const commissionPath = COMMISSION_RECONCILE_PATH.test(path);
   const paymentsPath = PAYMENTS_PATH.test(path);
@@ -272,12 +506,32 @@ export async function handleWorkflowRequest(
   const reconciliationPath = PAYMENTS_RECONCILIATION_PATH.test(path);
   const reconciliationCsvPath = PAYMENTS_RECONCILIATION_CSV_PATH.test(path);
   const replayPath = PAYMENT_REPLAY_PATH.exec(path);
+  const replayReviewPath = PAYMENT_REPLAY_REVIEW_PATH.exec(path);
   const retryDuePath = PAYMENT_RETRY_DUE_PATH.test(path);
+  const retryDueFreezePath = PAYMENT_RETRY_DUE_FREEZE_PATH.exec(path);
+  const retryDueReviewPath = PAYMENT_RETRY_DUE_REVIEW_PATH.exec(path);
   const billingPath = BILLING_PATH.exec(path);
   const caseListPath = CASE_LIST_PATH.test(path);
   const caseDetail = CASE_DETAIL_PATH.exec(path);
   const caseEvidence = CASE_EVIDENCE_PATH.exec(path);
   const caseClaim = CASE_CLAIM_PATH.exec(path);
+  const caseClaimSubmit = CASE_CLAIM_SUBMIT_PATH.exec(path);
+  const caseClaimPrepare = CASE_CLAIM_PREPARE_PATH.exec(path);
+  const caseBillingDraft = CASE_BILLING_DRAFT_PATH.exec(path);
+  const carrierManualSubmission = CARRIER_MANUAL_SUBMISSION_PATH.exec(path);
+  const carrierClaimResponses = CARRIER_CLAIM_RESPONSES_PATH.exec(path);
+  const customsRecovery = CUSTOMS_RECOVERY_PATH.exec(path);
+  const customsReturnEvidence = CUSTOMS_RETURN_EVIDENCE_PATH.exec(path);
+  const customsChainRun = CUSTOMS_CHAIN_RUN_PATH.exec(path);
+  const customsEntryFactRead = CUSTOMS_ENTRY_FACT_READ_PATH.exec(path);
+  const ps04StateRead = INDEPENDENT_SITE_STATE_PATH.exec(path);
+  const platformQualificationRead = PLATFORM_QUALIFICATION_READ_PATH.exec(path);
+  const caseAppealSubmit = CASE_APPEAL_SUBMIT_PATH.exec(path);
+  const casePlatformWrite = CASE_PLATFORM_WRITE_PATH.exec(path);
+  const caseRecoveryManualSubmit = CASE_RECOVERY_MANUAL_SUBMIT_PATH.exec(path);
+  const caseRecoveryManualReference = CASE_RECOVERY_MANUAL_REFERENCE_PATH.exec(path);
+  const caseRecoveryManualApproval = CASE_RECOVERY_MANUAL_APPROVAL_PATH.exec(path);
+  const caseRecoveryManualReferenceApproval = CASE_RECOVERY_MANUAL_REFERENCE_APPROVAL_PATH.exec(path);
   const operationsDashboard = OPERATIONS_DASHBOARD_PATH.test(path);
   const operationsClaims = OPERATIONS_CLAIMS_PATH.test(path);
   const operationsRecovery = OPERATIONS_RECOVERY_PATH.test(path);
@@ -310,7 +564,14 @@ export async function handleWorkflowRequest(
     adminPermissionMatrix ||
     adminMemberDetail !== null ||
     adminKillSwitch;
-  if (!adminAny && !operationsDashboard && !operationsClaims && !operationsRecovery && !review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !replayPath && !retryDuePath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim) {
+  if (!adminAny && !opportunityList && !caseClaimPackage && !recoveryStates && !recoveryMoney && !accountsPath && !entitlementsPath && !operationsDashboard && !operationsClaims && !operationsRecovery && !review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !paymentReviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !replayPath && !replayReviewPath && !retryDuePath && !retryDueFreezePath && !retryDueReviewPath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim && !caseClaimSubmit && !caseClaimPrepare && !carrierManualSubmission && !carrierClaimResponses && !customsRecovery && !customsReturnEvidence && !customsChainRun && !customsEntryFactRead && !ps04StateRead && !platformQualificationRead && !caseBillingDraft && !caseAppealSubmit && !casePlatformWrite && !caseRecoveryManualSubmit && !caseRecoveryManualReference && !caseRecoveryManualApproval && !caseRecoveryManualReferenceApproval &&
+    !commercialPoliciesPath &&
+    !commercialPolicyPath &&
+    !commercialPolicyAcceptPath &&
+    !commercialAcceptancesPath &&
+    !commercialReadinessPath &&
+    !providerReadinessPath &&
+    !paymentActivationReadinessPath) {
     return false;
   }
 
@@ -331,12 +592,18 @@ export async function handleWorkflowRequest(
       }
       chunks.push(buffer);
     }
+    // PC-10：验签必须针对**原始字节**（禁止 parse→stringify 后再验签）。
+    const rawBytes = Buffer.concat(chunks);
     const result = await handlePaymentWebhook(
       deps.prisma,
       {
-        rawBody: Buffer.concat(chunks).toString('utf8'),
+        rawBody: rawBytes.toString('utf8'),
+        rawBodyBytes: rawBytes,
         signatureHeader:
           typeof req.headers['stripe-signature'] === 'string' ? req.headers['stripe-signature'] : undefined,
+        providerHeader:
+          typeof req.headers['x-webhook-provider'] === 'string' ? req.headers['x-webhook-provider'] : undefined,
+        headers: req.headers,
       },
       {
         ...(deps.now ? { now: deps.now } : {}),
@@ -351,8 +618,12 @@ export async function handleWorkflowRequest(
   // MSG-20260929-40：Admin Console 与 Operations 看板都是只读 GET 面。
   // 此前未登记，GET 请求在方法闸门处直接 405（与端点内的 GET-only 校验重复）。
   const allowed =
-    // MSG-20260929-60：Kill Switch 变更入口是唯一的 Admin POST 面；其余 Admin 端点保持只读 GET
-    adminKillSwitch
+    // PC-09：接受事实是唯一写入口（显式 accept），其余商业/法律面只读。
+    commercialPolicyAcceptPath
+      ? ['POST']
+      : commercialPoliciesPath || commercialPolicyPath || commercialAcceptancesPath || commercialReadinessPath || providerReadinessPath || paymentActivationReadinessPath
+      ? ['GET']
+    : adminKillSwitch
       ? ['GET', 'POST']
       : adminAny || operationsDashboard || operationsClaims || operationsRecovery
       ? ['GET']
@@ -362,7 +633,13 @@ export async function handleWorkflowRequest(
           ? ['GET', 'POST']
           : billingPath && !billingPath[1]
             ? ['GET']
-            : insightList ||
+            : opportunityList ||
+                entitlementsPath ||
+                accountsPath ||
+                recoveryStates ||
+                recoveryMoney ||
+                caseClaimPackage !== null ||
+                insightList ||
                 insightCsv ||
                 insight ||
                 appealPath ||
@@ -373,7 +650,15 @@ export async function handleWorkflowRequest(
                 reconciliationPath ||
                 reconciliationCsvPath
               ? ['GET']
-              : ['POST'];
+              : carrierClaimResponses
+                ? ['GET', 'POST']
+                : customsChainRun
+                  ? ['POST']
+                : customsReturnEvidence || customsEntryFactRead || ps04StateRead || platformQualificationRead
+                  ? ['GET']
+                  : customsRecovery
+                  ? ['GET', 'POST']
+                  : ['POST'];
   if (!allowed.includes(method)) {
     sendJson(res, 405, { error: 'METHOD_NOT_ALLOWED' });
     return true;
@@ -393,18 +678,117 @@ export async function handleWorkflowRequest(
   };
 
   try {
-    if (replayPath) {
-      // C-0010-B2：重放（TD-PAYMENT-003：必须给出白名单原因；无 paymentId → 409）
+    if (replayReviewPath) {
+      // ② 第二批 replay：最小受认证审批入口（受认证会话；审批人 OWNER/ADMIN）
       const body = await readJsonBody(req);
-      const result = await replayPaymentEvent(
+      const result = await submitPaymentReplayReview(
         deps.prisma,
         {
           organizationId: context.organizationId,
           actorUserId: context.userId,
           role: context.role,
-          paymentEventId: replayPath[1] ?? '',
-          reason: body.reason,
-          note: body.note,
+          paymentEventId: replayReviewPath[1] ?? '',
+          decision: body.decision === 'APPROVE' ? 'APPROVE' : body.decision === 'REJECT' ? 'REJECT' : 'REQUEST',
+          ...(typeof body.reason === 'string' ? { reason: body.reason } : {}),
+          ...(typeof body.approvalTtlMs === 'number' ? { approvalTtlMs: body.approvalTtlMs } : {}),
+        },
+        deps.now ? { now: deps.now } : {},
+      );
+      sendJson(res, 200, result);
+      return true;
+    }
+
+    if (replayPath) {
+      // ② 第二批 replay：受保护资金动作（Action Guard + 服务端审批绑定；缺 approvalId → 409，不可绕过）
+      const body = await readJsonBody(req);
+      const paymentEventId = replayPath[1] ?? '';
+      const approvalId = typeof body.approvalId === 'string' ? body.approvalId : undefined;
+      if (!deps.actionGuard) {
+        // fail closed：受保护入口必须在组合根注入 Action Guard
+        throw new ActionGuardNotConfiguredError(PAYMENT_REPLAY_ACTION);
+      }
+      // 指纹由服务端组装（提交侧比对输入）；执行侧会在事件锁内重读事实再次比对
+      const fingerprint = await readReplaySnapshot(deps.prisma, {
+        organizationId: context.organizationId,
+        paymentEventId,
+      });
+      const boundary = createHitlSubmissionBoundary({
+        guard: deps.actionGuard,
+        prisma: deps.prisma,
+        approvalVerifier: {
+          prisma: deps.prisma,
+          approvalEventAction: PAYMENT_APPROVAL_EVENT_ACTION,
+          requiredEventAction: PAYMENT_REQUIRED_EVENT_ACTION,
+          rejectedEventAction: PAYMENT_REJECTED_EVENT_ACTION,
+          // 支付域没有独立的 revoked 事件：拒绝即为撤销；不得回落到 recovery.approval_revoked
+          revokedEventAction: PAYMENT_REJECTED_EVENT_ACTION,
+          consumedEventAction: PAYMENT_REPLAY_CONSUMED_EVENT_ACTION,
+          targetEntityType: 'PaymentEvent',
+        },
+        audit: createPrismaActionGuardAuditPort(deps.prisma),
+      });
+      const result = await boundary.submit({
+        action: PAYMENT_REPLAY_ACTION,
+        organizationId: context.organizationId,
+        actorUserId: context.userId,
+        targetRef: paymentEventId,
+        approvalId,
+        payload: {
+          recoveredAmount: fingerprint.amount,
+          currency: fingerprint.currency,
+          basisReference: fingerprint.basisReference,
+          evidenceArtifactId: fingerprint.evidenceArtifactId,
+        },
+        perform: () =>
+          replayPaymentEvent(
+            deps.prisma,
+            {
+              organizationId: context.organizationId,
+              actorUserId: context.userId,
+              role: context.role,
+              paymentEventId,
+              reason: body.reason,
+              note: body.note,
+              ...(approvalId ? { approvalId } : {}),
+            },
+            deps.now ? { now: deps.now } : {},
+          ),
+      });
+      sendJson(res, 200, result);
+      return true;
+    }
+
+    if (retryDueFreezePath) {
+      // ② 第二批 retry-due：冻结当前到期清单（服务端 batchId + 排序清单指纹 + 有效期/数量上限）
+      const body = await readJsonBody(req);
+      const result = await freezeRetryBatch(
+        deps.prisma,
+        {
+          organizationId: context.organizationId,
+          actorUserId: context.userId,
+          role: context.role,
+          ...(typeof body.limit === 'number' ? { limit: body.limit } : {}),
+          ...(typeof body.ttlMs === 'number' ? { ttlMs: body.ttlMs } : {}),
+        },
+        deps.now ? { now: deps.now } : {},
+      );
+      sendJson(res, 200, result);
+      return true;
+    }
+
+    if (retryDueReviewPath) {
+      // ② 第二批 retry-due：批次审批（REQUEST / APPROVE / REJECT；审批人 OWNER/ADMIN）
+      const body = await readJsonBody(req);
+      const result = await submitRetryBatchReview(
+        deps.prisma,
+        {
+          organizationId: context.organizationId,
+          actorUserId: context.userId,
+          role: context.role,
+          batchId: typeof body.batchId === 'string' ? body.batchId : '',
+          decision: body.decision === 'APPROVE' ? 'APPROVE' : body.decision === 'REJECT' ? 'REJECT' : 'REQUEST',
+          ...(typeof body.reason === 'string' ? { reason: body.reason } : {}),
+          ...(typeof body.approvalTtlMs === 'number' ? { approvalTtlMs: body.approvalTtlMs } : {}),
         },
         deps.now ? { now: deps.now } : {},
       );
@@ -413,17 +797,58 @@ export async function handleWorkflowRequest(
     }
 
     if (retryDuePath) {
-      // C-0010-B2：自动重放到期 attempt（无队列 / 无后台线程；由宿主侧调度调用）
+      // ② 第二批 retry-due：受保护执行（Action Guard + 批次审批；缺 approvalId → 409，不可绕过）
       const body = await readJsonBody(req);
-      const result = await runDueRetries(
-        deps.prisma,
-        {
-          organizationId: context.organizationId,
-          role: context.role,
-          ...(typeof body.limit === 'number' ? { limit: body.limit } : {}),
+      const batchId = typeof body.batchId === 'string' ? body.batchId : '';
+      const approvalId = typeof body.approvalId === 'string' ? body.approvalId : undefined;
+      if (!deps.actionGuard) {
+        throw new ActionGuardNotConfiguredError(PAYMENT_RETRY_DUE_ACTION);
+      }
+      // 提交侧指纹输入：批次摘要（执行侧会在批次锁内重读并再次核对）
+      const batch = await readRetryBatch(deps.prisma, {
+        organizationId: context.organizationId,
+        batchId,
+      });
+      if (!batch) throw new WorkflowError('NOT_FOUND', `批次 ${batchId} 不存在或不属于该租户`);
+      const boundary = createHitlSubmissionBoundary({
+        guard: deps.actionGuard,
+        prisma: deps.prisma,
+        approvalVerifier: {
+          prisma: deps.prisma,
+          approvalEventAction: PAYMENT_APPROVAL_EVENT_ACTION,
+          requiredEventAction: PAYMENT_REQUIRED_EVENT_ACTION,
+          rejectedEventAction: PAYMENT_REJECTED_EVENT_ACTION,
+          revokedEventAction: PAYMENT_REJECTED_EVENT_ACTION,
+          consumedEventAction: PAYMENT_RETRY_DUE_CONSUMED_EVENT_ACTION,
+          targetEntityType: 'PaymentRetryBatch',
         },
-        deps.now ? { now: deps.now } : {},
-      );
+        audit: createPrismaActionGuardAuditPort(deps.prisma),
+      });
+      const result = await boundary.submit({
+        action: PAYMENT_RETRY_DUE_ACTION,
+        organizationId: context.organizationId,
+        actorUserId: context.userId,
+        targetRef: batch.batchId,
+        approvalId,
+        payload: {
+          recoveredAmount: null,
+          currency: null,
+          basisReference: batch.batchId,
+          evidenceArtifactId: batch.digest,
+        },
+        perform: () =>
+          executeRetryBatch(
+            deps.prisma,
+            {
+              organizationId: context.organizationId,
+              actorUserId: context.userId,
+              role: context.role,
+              batchId: batch.batchId,
+              ...(approvalId ? { approvalId } : {}),
+            },
+            deps.now ? { now: deps.now } : {},
+          ),
+      });
       sendJson(res, 200, result);
       return true;
     }
@@ -532,9 +957,104 @@ export async function handleWorkflowRequest(
           reason: body.reason,
           recoveredAmount: body.recoveredAmount,
           currency: body.currency,
+          // CHANGE A（R2）：审批必须绑定"本次操作"的规范化载荷；动作由服务端固定，不接受客户端指定
+          boundPayload:
+            typeof body.decision === 'string' && body.decision.trim().toUpperCase() === 'APPROVE'
+              ? {
+                  recoveredAmount: body.recoveredAmount,
+                  currency: body.currency,
+                  basisReference: body.basisReference,
+                  evidenceArtifactId: body.evidenceArtifactId,
+                }
+              : undefined,
+          boundAction: RECOVERY_CONFIRMATION_ACTION,
         },
         deps.now,
       );
+      sendJson(res, 200, result);
+      return true;
+    }
+
+    if (paymentReviewPath) {
+      const invoiceId = paymentReviewPath[1] ?? '';
+      const body = await readJsonBody(req);
+      const decision = typeof body.decision === 'string' ? body.decision.trim().toUpperCase() : '';
+      const result = await submitPaymentReview(
+        deps.prisma,
+        {
+          ...actor,
+          invoiceId,
+          decision: decision as 'REQUEST' | 'APPROVE' | 'REJECT',
+          reason: typeof body.reason === 'string' ? body.reason : undefined,
+          // R6 CHANGE A：审批必须绑定真实账单操作（金额/币种/依据 + from→to）
+          ...(decision === 'APPROVE'
+            ? {
+                boundPayload: {
+                  amount: body.amount,
+                  currency: body.currency,
+                  basisReference: body.basisReference ?? body.paymentReference,
+                  evidenceArtifactId: body.evidenceArtifactId,
+                  from: body.from,
+                  to: body.to,
+                },
+                boundAction: PAYMENT_CAPTURE_ACTION,
+                approvalTtlMs: typeof body.approvalTtlMs === 'number' ? body.approvalTtlMs : undefined,
+              }
+            : {}),
+        },
+        deps.now ? { now: deps.now } : {},
+      );
+      sendJson(res, 200, result);
+      return true;
+    }
+
+    if (entitlementsPath && method === 'GET') {
+      // PC-07：客户权益 / 套餐解锁只读投影（不激活付款、不创建 checkout、不扣款）。
+      sendJson(res, 200, await getEntitlementProjection(deps.prisma, actor));
+      return true;
+    }
+
+    if (accountsPath && method === 'GET') {
+      // PC-06：账户管理只读投影（多平台 / 多账户；不写入、不绑定、不触发外写）。
+      sendJson(res, 200, await getAccountManagementView(deps.prisma, actor));
+      return true;
+    }
+
+    if (recoveryMoney && method === 'GET') {
+      // PC-05：客户可见追回金额（只读；按币种分组；不做 payment / collection / FX）。
+      const url = new URL(req.url ?? '/recovery-money', 'http://localhost');
+      const caseId = url.searchParams.get('caseId') ?? undefined;
+      sendJson(res, 200, await getRecoveryMoneyView(deps.prisma, actor, caseId ? { caseId } : {}));
+      return true;
+    }
+
+    if (recoveryStates && method === 'GET') {
+      // PC-04：客户可见的失败 / 恢复状态（只读投影；不触发任何写操作或重试）。
+      sendJson(res, 200, await listRecoveryStates(deps.prisma, actor));
+      return true;
+    }
+
+    if (caseClaimPackage) {
+      // PC-03：客户可见 Claim Package 只读投影（tenant/account-safe；不生成 package、不触发外写）。
+      const view = await getCaseClaimPackage(deps.prisma, actor, caseClaimPackage[1] ?? '');
+      sendJson(res, 200, view);
+      return true;
+    }
+
+    if (opportunityList && method === 'GET') {
+      // PC-02：客户可见机会列表；只读、tenant-scoped、cursor 分页、字段安全集合。
+      const url = new URL(req.url ?? '/opportunities', 'http://localhost');
+      const result = await listOpportunities(deps.prisma, actor, {
+        status: url.searchParams.get('status') ?? undefined,
+        domain: url.searchParams.get('domain') ?? undefined,
+        channel: url.searchParams.get('channel') ?? undefined,
+        accountId: url.searchParams.get('accountId') ?? undefined,
+        detectedFrom: url.searchParams.get('detectedFrom') ?? undefined,
+        detectedTo: url.searchParams.get('detectedTo') ?? undefined,
+        minRecoverable: url.searchParams.get('minRecoverable') ?? undefined,
+        limit: url.searchParams.get('limit') ?? undefined,
+        cursor: url.searchParams.get('cursor') ?? undefined,
+      });
       sendJson(res, 200, result);
       return true;
     }
@@ -600,6 +1120,18 @@ export async function handleWorkflowRequest(
       return true;
     }
     if (caseEvidence) {
+      // ② 下一小批次（MSG-20261001-13 §5）：证据读取受保护动作 evidence.read（READ_ONLY）
+      if (!deps.actionGuard) {
+        // fail closed：受保护入口必须在组合根注入 Action Guard
+        throw new ActionGuardNotConfiguredError(EVIDENCE_READ_ACTION);
+      }
+      // 只读动作：无人工审批；能力状态不可用/缺 guard 时失败关闭。
+      await deps.actionGuard.assertAllowed({
+        action: EVIDENCE_READ_ACTION,
+        actorUserId: actor.actorUserId,
+        organizationId: actor.organizationId,
+      });
+      // 租户 / 主体权限 / 案件归属检查由既有只读投影完成（跨租户 404、无权限 403）
       sendJson(res, 200, {
         items: await listCaseEvidence(
           deps.prisma,
@@ -620,6 +1152,523 @@ export async function handleWorkflowRequest(
           caseClaim[1] ?? '',
         ),
       );
+      return true;
+    }
+
+    if (caseClaimSubmit) {
+      // ② RUNTIME BUSINESS BLOCKING：Claim 人工提交（HITL）——受保护动作 claim.submit
+      const body = await readJsonBody(req);
+      const caseId = caseClaimSubmit[1] ?? '';
+      const approvalId = typeof body.approvalId === 'string' ? body.approvalId : undefined;
+      if (!deps.actionGuard) {
+        // fail closed：受保护入口必须在组合根注入 Action Guard
+        throw new ActionGuardNotConfiguredError(CLAIM_SUBMIT_ACTION);
+      }
+      // 审批目标 = 案件（HITL 复核事件族挂在 Case 上，与第一批 /recovery-outcome 同域）
+      const claim = await deps.prisma.claim.findFirst({
+        where: { organizationId: actor.organizationId, caseId, round: 1 },
+        select: { id: true, status: true },
+      });
+      if (!claim) {
+        throw new WorkflowError('NOT_FOUND', `案件 ${caseId} 没有第 1 轮 Claim`);
+      }
+      const boundary = createHitlSubmissionBoundary({
+        guard: deps.actionGuard,
+        prisma: deps.prisma,
+        audit: createPrismaActionGuardAuditPort(deps.prisma),
+      });
+      const outcome = await boundary.submit({
+        action: CLAIM_SUBMIT_ACTION,
+        organizationId: actor.organizationId,
+        actorUserId: actor.actorUserId,
+        targetRef: caseId,
+        approvalId,
+        // 审批指纹绑定：claim.submit 无金额语义 → 只绑定本轮 Claim 依据
+        // （payload 字段名沿用既有契约：basisReference；资金动作仍必须带金额/币种/依据）
+        payload: { basisReference: claim.id },
+        // ALLOW 后进入**原子提交服务**：锁内完整重验审批与主体，并把
+        // 「Claim CAS + claim.submitted_by_human + 审批消费」放在同一事务（R19 CHANGE A/B）
+        perform: () =>
+          submitClaimWithApproval(
+            {
+              organizationId: actor.organizationId,
+              actorUserId: actor.actorUserId,
+              role: actor.role,
+              caseId,
+              claimId: claim.id,
+              ...(approvalId ? { approvalId } : {}),
+              ...(typeof body.note === 'string' && body.note.trim() !== '' ? { note: body.note } : {}),
+            },
+            {
+              prisma: deps.prisma,
+              ...(deps.now ? { now: deps.now } : {}),
+            },
+          ),
+      });
+      // outcome 自带 externalSubmission='NEEDS_MANUAL' 与 platformWriteExecuted=false（零平台外写）
+      sendJson(res, 200, outcome);
+      return true;
+    }
+
+    if (caseClaimPrepare) {
+      // ② 下一小批次：Claim 内部准备写入（受保护动作 claim.prepare · INTERNAL_WRITE）
+      const body = await readJsonBody(req);
+      const caseId = caseClaimPrepare[1] ?? '';
+      if (!deps.actionGuard) {
+        // fail closed：受保护入口必须在组合根注入 Action Guard
+        throw new ActionGuardNotConfiguredError(CLAIM_PREPARE_ACTION);
+      }
+      // INTERNAL_WRITE：只需能力闸门（Kill Switch scope=workflow + 动作 feature + 控制面模式），
+      // 不引入人工审批；审批只用于满足 humanApproval 的动作（claim.submit 等）。
+      await deps.actionGuard.assertAllowed({
+        action: CLAIM_PREPARE_ACTION,
+        actorUserId: actor.actorUserId,
+        organizationId: actor.organizationId,
+      });
+      // 放行后执行内部准备写入：租户隔离 + 动作权限 + 业务审计同事务（审计失败整笔回滚）
+      const prepared = await prepareClaimDraft(
+        {
+          organizationId: actor.organizationId,
+          actorUserId: actor.actorUserId,
+          role: actor.role,
+          caseId,
+          target: typeof body.target === 'string' ? body.target : '',
+          draftText: typeof body.draftText === 'string' ? body.draftText : '',
+        },
+        {
+          prisma: deps.prisma,
+          ...(deps.now ? { now: deps.now } : {}),
+        },
+      );
+      // 内部准备写入：恒不触达平台，也不推进 Claim 状态
+      sendJson(res, 200, prepared);
+      return true;
+    }
+
+    if (caseAppealSubmit) {
+      // ② 下一小批次：Appeal 人工提交（受保护动作 appeal.submit；与 claim.submit 互不通用）
+      const body = await readJsonBody(req);
+      const caseId = caseAppealSubmit[1] ?? '';
+      if (!deps.actionGuard) {
+        throw new ActionGuardNotConfiguredError(APPEAL_SUBMIT_ACTION);
+      }
+      // CHANGE B（MSG-20261001-15）：本批次只支持 round=2；多候选必须失败关闭（不任意取一条）
+      const appealCandidates = await deps.prisma.appeal.findMany({
+        where: { organizationId: actor.organizationId, caseId, round: 2 },
+        select: { id: true, status: true, round: true, claimId: true, finalText: true, aiDraftText: true },
+      });
+      if (appealCandidates.length === 0) {
+        throw new WorkflowError('NOT_FOUND', `案件 ${caseId} 没有 round=2 的 Appeal`);
+      }
+      if (appealCandidates.length > 1) {
+        throw new WorkflowError('ILLEGAL_TRANSITION', '同一案件存在多条 round=2 Appeal，需人工澄清后再提交');
+      }
+      const appeal = appealCandidates[0]!;
+      // CHANGE A：预检绑定与执行核验同一「服务端快照摘要」（空正文失败关闭）
+      const snapshot = buildAppealSubmissionSnapshot({
+        appealId: appeal.id,
+        caseId,
+        claimId: appeal.claimId,
+        round: appeal.round,
+        finalText: appeal.finalText,
+        aiDraftText: appeal.aiDraftText,
+      });
+      if (!snapshot) throw new WorkflowError('APPEAL_BODY_REQUIRED', 'Appeal 正文为空，不能作为有效提交内容');
+      const snapshotReference = appealSubmissionDigest(snapshot);
+      const approvalId = typeof body.approvalId === 'string' ? body.approvalId : undefined;
+      const boundary = createHitlSubmissionBoundary({
+        guard: deps.actionGuard,
+        prisma: deps.prisma,
+        audit: createPrismaActionGuardAuditPort(deps.prisma),
+      });
+      const outcome = await boundary.submit({
+        action: APPEAL_SUBMIT_ACTION,
+        organizationId: actor.organizationId,
+        actorUserId: actor.actorUserId,
+        targetRef: caseId,
+        approvalId,
+        // 审批指纹绑定：appeal.submit 只绑定本条 Appeal 依据（与 claim.submit 不同的动作+载荷）
+        payload: { basisReference: snapshotReference },
+        perform: () =>
+          submitAppealWithApproval(
+            {
+              organizationId: actor.organizationId,
+              actorUserId: actor.actorUserId,
+              role: actor.role,
+              caseId,
+              appealId: appeal.id,
+              ...(approvalId ? { approvalId } : {}),
+              ...(typeof body.note === 'string' && body.note.trim() !== '' ? { note: body.note } : {}),
+            },
+            { prisma: deps.prisma, ...(deps.now ? { now: deps.now } : {}) },
+          ),
+      });
+      sendJson(res, 200, outcome);
+      return true;
+    }
+
+    if (casePlatformWrite) {
+      // R37 P1/P2：平台真实写回入口（EXTERNAL_WRITE · transport 恒关）
+      // 快照/摘要由服务端重算，客户端自证字段一律拒绝；响应恒为 platformWriteExecuted=false。
+      const body = await readJsonBody(req);
+      const caseId = casePlatformWrite[1] ?? '';
+      const result = await requestPlatformWrite(
+        {
+          organizationId: context.organizationId,
+          actorUserId: context.userId,
+          role: context.role,
+          caseId,
+        },
+        body,
+        {
+          prisma: deps.prisma,
+          ...(deps.actionGuard ? { actionGuard: deps.actionGuard } : {}),
+        },
+      );
+      sendJson(res, result.httpStatus, result.body);
+      return true;
+    }
+    if (caseRecoveryManualSubmit) {
+      // R44：人工追回提交（受保护动作 recovery.manual_submit · 复用 R43 S3 服务；零平台外写）
+      const body = await readJsonBody(req);
+      const caseId = caseRecoveryManualSubmit[1] ?? '';
+      const result = await requestManualRecoverySubmit(
+        {
+          organizationId: actor.organizationId,
+          actorUserId: actor.actorUserId,
+          role: actor.role,
+          caseId,
+        },
+        body,
+        {
+          prisma: deps.prisma,
+          ...(deps.actionGuard ? { actionGuard: deps.actionGuard } : {}),
+          ...(deps.now ? { now: deps.now } : {}),
+        },
+      );
+      sendJson(res, result.httpStatus, result.body);
+      return true;
+    }
+    if (caseRecoveryManualReferenceApproval) {
+      // R44-B：创建 reference 补录审批（canonical 恒服务端构造；不创建 Reference、不消费审批）
+      const body = await readJsonBody(req);
+      const caseId = caseRecoveryManualReferenceApproval[1] ?? '';
+      const result = await requestManualRecoveryReferenceApproval(
+        { organizationId: actor.organizationId, actorUserId: actor.actorUserId, role: actor.role, caseId },
+        body,
+        { prisma: deps.prisma, ...(deps.actionGuard ? { actionGuard: deps.actionGuard } : {}), ...(deps.now ? { now: deps.now } : {}) },
+      );
+      sendJson(res, result.httpStatus, result.body);
+      return true;
+    }
+    if (caseRecoveryManualApproval) {
+      // R44-A：创建人工提交审批（REQUEST / APPROVE；不执行提交、不消费审批）
+      const body = await readJsonBody(req);
+      const caseId = caseRecoveryManualApproval[1] ?? '';
+      const result = await requestManualRecoverySubmitApproval(
+        {
+          organizationId: actor.organizationId,
+          actorUserId: actor.actorUserId,
+          role: actor.role,
+          caseId,
+        },
+        body,
+        {
+          prisma: deps.prisma,
+          ...(deps.actionGuard ? { actionGuard: deps.actionGuard } : {}),
+          ...(deps.now ? { now: deps.now } : {}),
+        },
+      );
+      sendJson(res, result.httpStatus, result.body);
+      return true;
+    }
+    if (caseRecoveryManualReference) {
+      // R44：人工提交后补录 provider case reference（独立受保护动作 · 独立 binding · append-only）
+      const body = await readJsonBody(req);
+      const caseId = caseRecoveryManualReference[1] ?? '';
+      const result = await requestManualRecoveryReference(
+        {
+          organizationId: actor.organizationId,
+          actorUserId: actor.actorUserId,
+          role: actor.role,
+          caseId,
+        },
+        body,
+        {
+          prisma: deps.prisma,
+          ...(deps.actionGuard ? { actionGuard: deps.actionGuard } : {}),
+          ...(deps.now ? { now: deps.now } : {}),
+        },
+      );
+      sendJson(res, result.httpStatus, result.body);
+      return true;
+    }
+    // CARRIER QUEUE #9B FINAL（MSG-20261003-119 ㉔㉕㉖㉗）：记录 human attestation（不提交 carrier claim）。
+    if (carrierManualSubmission) {
+      if ((req.method ?? 'GET') !== 'POST') {
+        sendJson(res, 405, { error: 'METHOD_NOT_ALLOWED' });
+        return true;
+      }
+      if (!deps.actionGuard) {
+        // fail closed：受保护入口必须在组合根注入 Action Guard
+        throw new ActionGuardNotConfiguredError('carrier.manual_submission.record');
+      }
+      await deps.actionGuard.assertAllowed({
+        action: 'carrier.manual_submission.record',
+        actorUserId: actor.actorUserId,
+        organizationId: actor.organizationId,
+      });
+      const body = await readJsonBody(req);
+      const result = await handleCarrierManualSubmissionRequest(
+        {
+          packageId: decodeURIComponent(carrierManualSubmission[1] ?? ''),
+          request: {
+            ...(typeof body.carrierReference === 'string' ? { carrierReference: body.carrierReference } : {}),
+            ...(typeof body.reportedCarrierSubmissionAt === 'string'
+              ? { reportedCarrierSubmissionAt: body.reportedCarrierSubmissionAt }
+              : {}),
+            ...(typeof body.note === 'string' ? { note: body.note } : {}),
+          },
+          // ㉓：身份一律 server-derived（client 只能提交上述三个业务字段）。
+          session: {
+            organizationId: actor.organizationId,
+            actorUserId: actor.actorUserId,
+            role: actor.role,
+          },
+        },
+        {
+          // ㉓㉔㉕：package truth 由服务端提供；本批次尚无持久 package 实体 → 缺省 404（不伪造）。
+          packages: deps.carrierClaimPackages ?? { async load() { return null; } },
+          store: deps.carrierManualSubmissionStore ?? createPrismaCarrierManualSubmissionStore(deps.prisma),
+          // store 已在同一事务内写入 business audit（handlesAuditAtomically），此处无需再 emit。
+          audit: { async emit() {} },
+          now: deps.now ?? (() => new Date()),
+        },
+      );
+      sendJson(res, result.status, result.body);
+      return true;
+    }
+
+    // CARRIER QUEUE #10 FINAL（MSG-20261003-122 ㉗㉘㉙㉛）：carrier response 事实（人工入口只允许 USER_REPORTED）。
+    if (carrierClaimResponses) {
+      const packageId = decodeURIComponent(carrierClaimResponses[1] ?? '');
+      const submissions =
+        deps.carrierClaimResponseSubmissions ?? createPrismaCarrierClaimResponseSubmissionSource(deps.prisma);
+      const store = deps.carrierClaimResponseStore ?? createPrismaCarrierClaimResponseStore(deps.prisma);
+      // ㉓：身份一律 server-derived。
+      const session = {
+        organizationId: actor.organizationId,
+        actorUserId: actor.actorUserId,
+        role: actor.role,
+      };
+
+      if ((req.method ?? 'GET') === 'GET') {
+        // ㉛ 读模型：tenant-scoped，仅返回稳定投影（不含 credential）。
+        const result = await handleCarrierClaimResponseReadRequest({ packageId, session }, { submissions, store });
+        sendJson(res, result.status, result.body);
+        return true;
+      }
+      if ((req.method ?? 'GET') !== 'POST') {
+        sendJson(res, 405, { error: 'METHOD_NOT_ALLOWED' });
+        return true;
+      }
+      if (!deps.actionGuard) {
+        // fail closed：受保护入口必须在组合根注入 Action Guard
+        throw new ActionGuardNotConfiguredError('carrier.claim_response.record');
+      }
+      await deps.actionGuard.assertAllowed({
+        action: 'carrier.claim_response.record',
+        actorUserId: actor.actorUserId,
+        organizationId: actor.organizationId,
+      });
+      const body = await readJsonBody(req);
+      const result = await handleCarrierClaimResponseRecordRequest(
+        // ㉙：client body 只透传 status/providerReference?/observedAt?/note?；
+        // 出现 source / verificationLevel / 身份字段时 handler 直接 400（FIELD_NOT_ALLOWED）。
+        { packageId, request: body as never, session },
+        { submissions, store, now: deps.now ?? (() => new Date()) },
+      );
+      sendJson(res, result.status, result.body);
+      return true;
+    }
+
+    // BG-012（MSG-20261003-134）：Customs 恢复链内部触发（INTERNAL_WRITE，不 filing）。
+    if (customsChainRun && method === 'POST') {
+      const entryFactId = decodeURIComponent(customsChainRun[1] ?? '');
+      const session = { organizationId: actor.organizationId, actorUserId: actor.actorUserId, role: actor.role };
+      const executor = deps.customsRecoveryChain;
+      const result = await postCustomsRecoveryChain({
+        session,
+        entryFactId,
+        run: async () => {
+          if (!executor) {
+            throw Object.assign(new Error('CHAIN_EXECUTOR_NOT_CONFIGURED'), { code: 'FACT_NOT_FOUND' });
+          }
+          return (await executor.run({ organizationId: session.organizationId, entryFactId })) as never;
+        },
+      });
+      sendJson(res, result.status, result.body);
+      return true;
+    }
+
+    // P0-1（BUSINESS SURVIVAL GATE）：Return→matching→claim-ready evidence 只读视图。
+    if (customsReturnEvidence && method === 'GET') {
+      const entryFactId = decodeURIComponent(customsReturnEvidence[1] ?? '');
+      const result = await getReturnClaimEvidenceView({
+        session: { organizationId: actor.organizationId, actorUserId: actor.actorUserId, role: actor.role },
+        deps: {
+          latest:
+            deps.customsReturnEvidence?.latest ??
+            (async () => null),
+        },
+        entryFactId,
+      });
+      sendJson(res, result.status, result.body);
+      return true;
+    }
+
+    // CHANGE A（MSG-20261003-141）：Platform qualification 只读判定投影（不重算）。
+    if (platformQualificationRead && method === 'GET') {
+      const platformAccountId = decodeURIComponent(platformQualificationRead[1] ?? '');
+      const result = await getQualificationReadProjection({
+        session: { organizationId: actor.organizationId, actorUserId: actor.actorUserId, role: actor.role },
+        deps: deps.qualificationRead ?? { async loadLatest() { return null; } },
+        platformAccountId,
+      });
+      sendJson(res, result.status, result.body);
+      return true;
+    }
+
+    // BG-019（CHANGE E）：Independent-site 关键状态只读面（submitted ≠ won ≠ settled ≠ recovered ≠ billable）。
+    if (ps04StateRead && method === 'GET') {
+      const disputeReference = decodeURIComponent(ps04StateRead[1] ?? '');
+      const result = await getIndependentSiteRecoveryState({
+        session: { organizationId: actor.organizationId, actorUserId: actor.actorUserId, role: actor.role },
+        deps:
+          deps.independentSiteState ??
+          ({
+            async loadHandoff() {
+              return null;
+            },
+            async loadLatestResponse() {
+              return null;
+            },
+            async loadLatestSettlement() {
+              return null;
+            },
+          } as never),
+        disputeReference,
+      });
+      sendJson(res, result.status, result.body);
+      return true;
+    }
+
+    // BG-020（G11 补齐）：Customs 事实 + DUTY_TRUTH / DISCREPANCY / ELIGIBILITY / ESTIMATE latest 投影（只读）。
+    if (customsEntryFactRead && method === 'GET') {
+      const entryFactId = decodeURIComponent(customsEntryFactRead[1] ?? '');
+      const store = deps.customsEntryFactStore;
+      const result = await getCustomsEntryFactReadModel({
+        session: { organizationId: actor.organizationId, actorUserId: actor.actorUserId, role: actor.role },
+        deps: {
+          store:
+            store ??
+            ({
+              async loadFact() {
+                return null;
+              },
+              async loadLatestProjection() {
+                return null;
+              },
+            } as never),
+        },
+        entryFactId,
+      });
+      sendJson(res, result.status, result.body);
+      return true;
+    }
+
+    // C21（MSG-20261003-124 ⑭–㉑）：one-click 内部准备（不 filing）+ filing status 读模型。
+    if (customsRecovery) {
+      const opportunityId = decodeURIComponent(customsRecovery[1] ?? '');
+      const action = customsRecovery[2] === 'start-recovery' ? 'start-recovery' : 'filing-status';
+      const session = {
+        organizationId: actor.organizationId,
+        actorUserId: actor.actorUserId,
+        role: actor.role,
+      };
+      const customsDeps = {
+        opportunities: deps.customsOpportunities ?? { async load() { return null; } },
+        authorization:
+          deps.customsAuthorization ?? {
+            customsAgreementSigned: false,
+            importerOfRecordConfirmed: false,
+            claimantConfirmed: false,
+            recoveryRightConfirmed: false,
+            brokerConnected: false,
+            brokerAuthorizationValid: false,
+            filingPermissionValid: false,
+            providerCapabilityReady: false,
+          },
+        provider: deps.customsFilingProvider ?? null,
+        filingStatus: deps.customsFilingStatus ?? { async listFacts() { return []; } },
+        ...(deps.now ? { now: deps.now } : {}),
+      };
+      if (action === 'filing-status') {
+        if ((req.method ?? 'GET') !== 'GET') {
+          sendJson(res, 405, { error: 'METHOD_NOT_ALLOWED' });
+          return true;
+        }
+        const result = await handleCustomsFilingStatusReadRequest({ opportunityId, session }, customsDeps);
+        sendJson(res, result.status, result.body);
+        return true;
+      }
+      if ((req.method ?? 'GET') !== 'POST') {
+        sendJson(res, 405, { error: 'METHOD_NOT_ALLOWED' });
+        return true;
+      }
+      if (!deps.actionGuard) {
+        throw new ActionGuardNotConfiguredError('customs.recovery.start');
+      }
+      await deps.actionGuard.assertAllowed({
+        action: 'customs.recovery.start',
+        actorUserId: actor.actorUserId,
+        organizationId: actor.organizationId,
+      });
+      const body = await readJsonBody(req);
+      const result = await handleCustomsRecoveryStartRequest({ opportunityId, request: body, session }, customsDeps);
+      sendJson(res, result.status, result.body);
+      return true;
+    }
+
+    if (caseBillingDraft) {
+      // ② 下一小批次：账单草稿写入（受保护动作 billing.draft · INTERNAL_WRITE）
+      const body = await readJsonBody(req);
+      const caseId = caseBillingDraft[1] ?? '';
+      if (!deps.actionGuard) {
+        // fail closed：受保护入口必须在组合根注入 Action Guard
+        throw new ActionGuardNotConfiguredError(BILLING_DRAFT_ACTION);
+      }
+      // INTERNAL_WRITE：只需能力闸门（Kill Switch scope=billing + 动作 feature + 控制面模式），
+      // 不引入人工审批；本批次不推进收款/到账/扣划，也不触达平台。
+      await deps.actionGuard.assertAllowed({
+        action: BILLING_DRAFT_ACTION,
+        actorUserId: actor.actorUserId,
+        organizationId: actor.organizationId,
+      });
+      const drafted = await createBillingDraft(
+        {
+          organizationId: actor.organizationId,
+          actorUserId: actor.actorUserId,
+          role: actor.role,
+          caseId,
+          ...(typeof body.note === 'string' ? { note: body.note } : {}),
+        },
+        {
+          prisma: deps.prisma,
+          ...(deps.now ? { now: deps.now } : {}),
+        },
+      );
+      sendJson(res, 200, drafted);
       return true;
     }
 
@@ -897,17 +1946,64 @@ export async function handleWorkflowRequest(
         return true;
       }
       const body = await readJsonBody(req);
-      const result = await advanceBillingInvoice(
-        deps.prisma,
-        {
-          ...actor,
-          invoiceId: billingPath[1],
-          to: body.to,
-          paymentReference: body.paymentReference,
-          note: body.note,
+      // P4（② 第二批）：资金/状态推进是受保护动作 payment.capture —— 守卫 + 支付域审批绑定
+      const approvalId = typeof body.approvalId === 'string' ? body.approvalId : undefined;
+      if (!deps.actionGuard) {
+        throw new ActionGuardNotConfiguredError(PAYMENT_CAPTURE_ACTION);
+      }
+      const boundary = createHitlSubmissionBoundary({
+        guard: deps.actionGuard,
+        prisma: deps.prisma,
+        // 支付域审批族（挂 BillingInvoice），与 recovery 的 Case 族分开
+        approvalVerifier: {
+          prisma: deps.prisma,
+          approvalEventAction: PAYMENT_APPROVAL_EVENT_ACTION,
+          requiredEventAction: PAYMENT_REQUIRED_EVENT_ACTION,
+          rejectedEventAction: PAYMENT_REJECTED_EVENT_ACTION,
+          // 支付域没有独立的 revoked 事件：拒绝即为撤销；不得回落到 recovery.approval_revoked
+          revokedEventAction: PAYMENT_REJECTED_EVENT_ACTION,
+          consumedEventAction: PAYMENT_CONSUMED_EVENT_ACTION,
+          targetEntityType: 'BillingInvoice',
         },
-        deps.now,
-      );
+        audit: createPrismaActionGuardAuditPort(deps.prisma),
+      });
+      const result = await boundary.submit({
+        action: PAYMENT_CAPTURE_ACTION,
+        organizationId: actor.organizationId,
+        actorUserId: actor.actorUserId,
+        targetRef: billingPath[1] ?? '',
+        approvalId,
+        payload: {
+          recoveredAmount: body.amount,
+          currency: body.currency,
+          basisReference: body.paymentReference ?? body.note,
+          evidenceArtifactId: body.evidenceArtifactId,
+        },
+        perform: () =>
+          advanceBillingInvoice(
+            deps.prisma,
+            {
+              ...actor,
+              invoiceId: billingPath[1],
+              to: body.to,
+              paymentReference: body.paymentReference,
+              note: body.note,
+              ...(approvalId
+                ? {
+                    approvalId,
+                    // 与服务端审批绑定的同一规范化载荷（锁内重验逐项比对）
+                    approvalPayload: {
+                      amount: body.amount,
+                      currency: body.currency,
+                      basisReference: body.paymentReference ?? body.note,
+                      evidenceArtifactId: body.evidenceArtifactId,
+                    },
+                  }
+                : {}),
+            },
+            deps.now,
+          ),
+      });
       sendJson(res, 200, result);
       return true;
     }
@@ -921,20 +2017,192 @@ export async function handleWorkflowRequest(
           'simulateSettlement 不允许由用户侧请求提交（仅测试/演示环境使用）',
         );
       }
-      const outcome = await confirmRecoveryOutcome(
-        deps.prisma,
-        {
-          ...actor,
-          caseId: outcomePath[1] ?? '',
+      const caseId = outcomePath[1] ?? '';
+      const approvalId = typeof body.approvalId === 'string' ? body.approvalId : undefined;
+      if (!deps.actionGuard) {
+        // fail closed：受保护入口必须在组合根注入 Action Guard
+        throw new ActionGuardNotConfiguredError('commission.charge');
+      }
+      // 资金确认是受保护动作：闸门 + 服务端审批绑定（HITL 复核状态）双重校验，
+      // 拒绝/审批不通过/能力或审计异常时 confirmRecoveryOutcome 不会被调用（零业务副作用）。
+      const boundary = createHitlSubmissionBoundary({
+        guard: deps.actionGuard,
+        prisma: deps.prisma,
+        // CHANGE D：审批核验结果写入可关联的安全审计（action_guard.approval_decision）
+        audit: createPrismaActionGuardAuditPort(deps.prisma),
+      });
+      const outcome = await boundary.submit({
+        action: 'commission.charge',
+        organizationId: actor.organizationId,
+        actorUserId: actor.actorUserId,
+        targetRef: caseId,
+        approvalId,
+        // CHANGE A：把本次提交载荷交给审批校验逐项比对（金额/币种/依据/证据）
+        payload: {
           recoveredAmount: body.recoveredAmount,
           currency: body.currency,
           basisReference: body.basisReference,
           evidenceArtifactId: body.evidenceArtifactId,
-          note: body.note,
         },
-        deps.now,
-      );
+        perform: () =>
+          confirmRecoveryOutcome(
+            deps.prisma,
+            {
+              ...actor,
+              caseId,
+              recoveredAmount: body.recoveredAmount,
+              currency: body.currency,
+              basisReference: body.basisReference,
+              evidenceArtifactId: body.evidenceArtifactId,
+              note: body.note,
+              // CHANGE A（R2）：把审批与操作身份贯穿到资金执行（原子消费的前提）
+              approvalId,
+              operationId: approvalId ? `approval:${approvalId}` : undefined,
+            },
+            deps.now,
+          ),
+      });
       sendJson(res, outcome.created ? 201 : 200, outcome);
+      return true;
+    }
+
+    // PC-12A（MSG-20261003-102 ⑮.9）：支付激活就绪 —— 多 gate 独立；单一 env flag 不解锁生产收费。
+    if (paymentActivationReadinessPath) {
+      if (actor.role !== 'OWNER' && actor.role !== 'ADMIN') {
+        sendJson(res, 403, { error: 'FORBIDDEN' });
+        return true;
+      }
+      let killSwitchReady = false;
+      try {
+        const sentinel = '00000000-0000-4000-8000-000000000000';
+        const resolved = await resolveKillSwitchResolver(deps).resolveAll(sentinel);
+        killSwitchReady = resolved.every((item) => item.degraded !== true);
+      } catch {
+        killSwitchReady = false;
+      }
+      const acceptance = await getAcceptanceStatus(deps.prisma, actor);
+      const facts = defaultPaymentActivationFacts({
+        paymentProcessingEnabled: paymentsEnabled(process.env),
+        paymentWebhookSecretConfigured: Boolean(process.env.PAYMENT_WEBHOOK_SECRET),
+        commercialAcceptanceReady: acceptance.complete,
+        actionGuardReady: Boolean(deps.actionGuard),
+        killSwitchReady,
+      });
+      sendJson(
+        res,
+        200,
+        projectPaymentActivationReadiness(facts, {
+          sources: DEFAULT_FACT_SOURCES,
+          ...(deps.now ? { now: deps.now } : {}),
+        }),
+      );
+      return true;
+    }
+
+    // PC-11A（MSG-20261003-99 ⑲）：provider 接入就绪投影 —— 合同就绪 ≠ 生产可用（恒 EXTERNAL_GATE）。
+    if (providerReadinessPath) {
+      sendJson(res, 200, {
+        providers: projectProviderReadiness(),
+        // CARRIER QUEUE #3（MSG-20261003-105 ㉗）：carrier readiness 按 provider 分别投影（不含 secret）。
+        carriers: projectCarrierReadiness(),
+        checkedAt: (deps.now ? deps.now() : new Date()).toISOString(),
+      });
+      return true;
+    }
+
+    // PC-09（MSG-20261003-96 ⑬）：商业/法律披露 + 显式接受事实 + 客户可见商业就绪（只读为主）。
+    if (
+      commercialPoliciesPath ||
+      commercialPolicyPath ||
+      commercialPolicyAcceptPath ||
+      commercialAcceptancesPath ||
+      commercialReadinessPath
+    ) {
+      const query = new URLSearchParams((req.url ?? '').split('?')[1] ?? '');
+      if (commercialReadinessPath) {
+        const readiness = await getCommercialReadiness(deps.prisma, actor, {
+          ...(deps.now ? { now: deps.now } : {}),
+        });
+        sendJson(res, 200, readiness);
+        return true;
+      }
+      if (commercialAcceptancesPath) {
+        sendJson(res, 200, { items: await listMyPolicyAcceptances(deps.prisma, actor) });
+        return true;
+      }
+      if (commercialPoliciesPath) {
+        const includeSuperseded = query.get('includeSuperseded') === 'true';
+        sendJson(res, 200, {
+          items: (includeSuperseded ? listPolicyDocuments() : listCurrentPolicies()).map((document) => ({
+            key: document.key,
+            version: document.version,
+            effectiveAt: document.effectiveAt,
+            status: document.status,
+            title: document.title,
+            summary: document.summary,
+            documentRef: document.documentRef,
+            requiresExplicitAcceptance: document.requiresExplicitAcceptance,
+          })),
+        });
+        return true;
+      }
+      if (commercialPolicyPath) {
+        const key = decodeURIComponent(commercialPolicyPath[1] ?? '');
+        const version = query.get('version') ?? undefined;
+        const document = findPolicy(key, version);
+        if (!document) {
+          sendJson(res, 404, { error: 'POLICY_NOT_FOUND' });
+          return true;
+        }
+        sendJson(res, 200, {
+          document: {
+            key: document.key,
+            version: document.version,
+            effectiveAt: document.effectiveAt,
+            status: document.status,
+            title: document.title,
+            summary: document.summary,
+            documentRef: document.documentRef,
+            requiresExplicitAcceptance: document.requiresExplicitAcceptance,
+          },
+          versions: listPolicyVersions(key).map((entry) => ({
+            version: entry.version,
+            status: entry.status,
+            effectiveAt: entry.effectiveAt,
+          })),
+        });
+        return true;
+      }
+      // POST /commercial/policies/:key/accept —— 显式接受事实（append-only）
+      const key = decodeURIComponent(commercialPolicyAcceptPath?.[1] ?? '');
+      const body = await readJsonBody(req);
+      try {
+        const result = await recordPolicyAcceptance(
+          deps.prisma,
+          actor,
+          {
+            documentKey: key,
+            documentVersion: body.documentVersion,
+            accept: body.accept,
+            source: body.source,
+            evidenceRef: body.evidenceRef,
+          },
+          { ...(deps.now ? { now: deps.now } : {}) },
+        );
+        sendJson(res, result.created ? 201 : 200, result);
+      } catch (error) {
+        if (error instanceof PolicyAcceptanceError) {
+          const status =
+            error.code === 'POLICY_NOT_FOUND'
+              ? 404
+              : error.code === 'EXPLICIT_ACCEPTANCE_REQUIRED'
+                ? 400
+                : 409;
+          sendJson(res, status, { error: error.code });
+          return true;
+        }
+        throw error;
+      }
       return true;
     }
 
@@ -973,6 +2241,7 @@ export async function handleWorkflowRequest(
             channel: body.channel,
             platform: body.platform,
             credentialRef: body.credentialRef,
+            account: body.account,
           },
           { ...(deps.registeredPlatforms ? { registeredPlatforms: deps.registeredPlatforms } : {}), ...(deps.now ? { now: deps.now } : {}) },
         );
@@ -981,6 +2250,21 @@ export async function handleWorkflowRequest(
       }
 
       const body = await readJsonBody(req);
+      if (sub === 'rebind') {
+        // MSG-20261002-78 T3：legacy unbound 的显式一次性追认（NULL → account，只影响未来行为）。
+        const rebound = await rebindLegacyConnection(
+          deps.prisma,
+          {
+            ...actor,
+            connectionId,
+            targetPlatformAccountId: body.targetPlatformAccountId,
+            reason: body.reason,
+          },
+          { ...(deps.now ? { now: deps.now } : {}) },
+        );
+        sendJson(res, 200, rebound);
+        return true;
+      }
       if (sub === 'status') {
         const result = await setConnectionStatus(
           deps.prisma,
@@ -1062,8 +2346,22 @@ export async function handleWorkflowRequest(
     return true;
   } catch (error) {
     const { code, error: name } = statusFor(error);
+    // MSG-33 CHANGE A：错误响应必须带**非空**领域名，便于调用方断言具体原因
+    const errorName =
+      typeof name === 'string' && name !== ''
+        ? name
+        : typeof (error as { code?: unknown })?.code === 'string' && (error as { code?: string }).code !== ''
+          ? String((error as { code?: string }).code)
+          : 'UNEXPECTED_ERROR';
+    const reason =
+      error instanceof ActionGuardApprovalVerificationError
+        ? error.reason
+        : error instanceof ApprovalBoundaryError
+          ? error.reason
+          : undefined;
     sendJson(res, code, {
-      error: name,
+      error: errorName,
+      ...(reason && reason !== 'VERIFIER_MISSING' ? { reason } : {}),
       ...(code === 400 && review?.[2] === 'reject' ? { allowedReasons: [...REJECT_REASONS] } : {}),
     });
     return true;

@@ -90,6 +90,14 @@ beforeEach(async () => {
     'TRUNCATE TABLE "AuditLog", "CanonicalFactSource", "CanonicalFact", "SourceTransaction", "ImportBatch", "FileAsset", "SourceConnection", "Organization" CASCADE;',
   );
   await prisma.organization.create({ data: { id: ORG, name: '重试租户', slug: 'runner-org' } });
+  const account = await prisma.platformAccount.create({
+    data: {
+      organizationId: ORG,
+      platform: 'AMAZON',
+      externalAccountId: 'fixture-' + ORG,
+      displayName: 'fixture account',
+    },
+  });
   const connection = await prisma.sourceConnection.create({
     data: {
       organizationId: ORG,
@@ -97,6 +105,7 @@ beforeEach(async () => {
       channel: 'OTHER',
       kind: 'FILE_UPLOAD',
       status: 'ACTIVE',
+      platformAccountId: account.id,
       label: 'runner upload',
     },
   });

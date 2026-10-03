@@ -29,7 +29,15 @@ import { ForbiddenError, WorkflowError } from '../services/workflow';
 const NOW = new Date('2026-09-28T18:00:00Z');
 const ORG = 'b4000000-0000-4000-8000-0000000000aa';
 const ACTOR = 'b4000000-0000-4000-8000-0000000000bb';
-const base = { organizationId: ORG, actorUserId: ACTOR, role: 'ADMIN' } as const;
+const TRUSTED_ACCOUNT_ID = 'acct-b2-0001';
+const TRUSTED_CONNECTION_ID = 'conn-b2-0001';
+
+const base = {
+  organizationId: ORG,
+  actorUserId: ACTOR,
+  role: 'ADMIN',
+  trustedConnectionId: TRUSTED_CONNECTION_ID,
+} as const;
 
 describe('C-0011 — 生命周期与枚举', () => {
   it('状态集合里**没有** AUTO_SUBMITTED（本设计不提供自动提交路径）', () => {
@@ -100,7 +108,11 @@ function fakePrisma(options: { existing?: boolean; status?: string } = {}) {
   const tx = {
     claimItem: { create },
     auditLog: { create: auditCreate },
-  };
+    // TRACK B BATCH 2：active new ClaimItem 需要可信 account 上下文（连接派生）。
+    sourceConnection: {
+      findFirst: vi.fn(async () => ({ platformAccountId: TRUSTED_ACCOUNT_ID })),
+    },
+};
   const prisma = {
     claimItem: { findFirst },
     claimItemEvidence: { findFirst: vi.fn(async () => null) },

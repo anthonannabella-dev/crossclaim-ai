@@ -61,7 +61,8 @@ AI 负责文档理解、字段抽取、异常解释、证据推荐、案件总�
 
 已完成：
 
-- 领域模型 **38 个（35 核心 + 3 联结）**、**19 条迁移**、**28 个租户完整性触发器**：`apps/api/prisma`
+- 领域模型 **77 个（71 核心 + 6 联结）**、**66 条迁移**、**95 个租户完整性触发器**（另有人工追回提交域与 reconciliation 域的 append-only / 受控 supersede / generation 守卫触发器清单）：`apps/api/prisma`
+- 2026-10-03 内部完成（详见 docs/releases/MASTER-GAP-CLOSURE-REGISTER.md）：CARRIER QUEUE #10（carrier response append-only 事实 + DB 真值 + tenant-scoped 读模型）已 CLOSED；CUSTOMS C15/C16/C19/C20/C21 契约层 + C17 submission ledger（root + append-only fact，并发/幂等收口）已 CLOSED；Commercial C10–C11（15% versioned FeePolicy cutover + ESTIMATE_ONLY 预览 + 统一 fee guard 收口）已落地。前端只读接线（carrier response / customs filing-status）列入 SAFE_CONTINUATION_QUEUE（见 docs/releases/FRONTEND-WIRING-MAP.md）。
 - Gate 1 运行时地基（Storage Adapter / Audit / Import foundation / Adapter interface）
 - Gate 2 物流首个纵向闭环（Detection Spine + Recovery Closure）
 - Gate 3 双模式采集与证据晋级（FILE_UPLOAD + 只读 API Connector + 跨来源对账）

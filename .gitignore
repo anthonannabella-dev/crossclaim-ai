@@ -91,3 +91,8 @@ inbox/*
 # 运行时本地存储（E1/E2 采集用，勿入库）
 .runtime-storage/
 
+# ----- AUTOPILOT 运行态（liveness / lock；非交付物）-----
+.autopilot/HEARTBEAT.json
+.autopilot/RUNNER.lock
+.autopilot/PIPELINE.lock
+.autopilot/units-materialized/*.tmp

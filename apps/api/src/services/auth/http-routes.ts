@@ -27,6 +27,15 @@ export interface AuthRouteDeps {
   /** 应用安全日志端口（不得写 email / password / token 明文） */
   log?: (event: string, fields: Record<string, unknown>) => void;
   now?: () => Date;
+  /** PC-01A（MSG-20261002-81 H）：public self-signup 默认关闭，fail-closed。 */
+  signupEnabled?: boolean;
+  /** PC-01A：bootstrap 端口（服务层实现见 services/auth/self-signup.ts）。 */
+  selfSignup?: (input: {
+    email: string;
+    password: string;
+    organizationName: string;
+    displayName?: string;
+  }) => Promise<{ userId: string; organizationId: string; role: string; emailVerified: boolean }>;
 }
 
 export function parseCookies(header: string | undefined): Record<string, string> {
@@ -140,6 +149,43 @@ export async function handleAuthRequest(
       sendJson(res, code === 'ACCOUNT_LOCKED' || code === 'ACCOUNT_DISABLED' ? 403 : 401, {
         error: code,
         message: error instanceof AuthError ? error.message : '邮箱或密码不正确',
+      });
+      return true;
+    }
+  }
+
+  if (path === '/auth/signup' && method === 'POST') {
+    // H：feature gate 默认关闭；关闭时不暴露任何注册能力（不建 User / 不建 Organization）。
+    if (deps.signupEnabled !== true || !deps.selfSignup) {
+      sendJson(res, 403, { error: 'SIGNUP_DISABLED', message: '自助注册当前不可用' });
+      return true;
+    }
+    try {
+      const body = await readJsonBody(req);
+      const result = await deps.selfSignup({
+        email: typeof body.email === 'string' ? body.email : '',
+        password: typeof body.password === 'string' ? body.password : '',
+        organizationName:
+          typeof body.organizationName === 'string' ? body.organizationName : '',
+        displayName: typeof body.displayName === 'string' ? body.displayName : undefined,
+      });
+      // G：未验证邮箱不发放 session；明确告知下一步是邮箱验证（PC-01B）。
+      sendJson(res, 201, {
+        userId: result.userId,
+        organizationId: result.organizationId,
+        role: result.role,
+        emailVerified: result.emailVerified,
+        sessionIssued: false,
+        nextStep: 'EMAIL_VERIFICATION_REQUIRED',
+      });
+      return true;
+    } catch (error) {
+      const code = (error as { code?: string } | null)?.code ?? 'INVALID_INPUT';
+      const status =
+        code === 'EMAIL_ALREADY_REGISTERED' ? 409 : code === 'SIGNUP_DISABLED' ? 403 : 400;
+      sendJson(res, status, {
+        error: code,
+        message: error instanceof Error ? error.message : '注册失败',
       });
       return true;
     }

@@ -5,7 +5,7 @@
 
 ---
 
-## 一、模型总览（38 个 = 35 个核心模型 + 3 个联结模型）
+## 一、模型总览（61 个 = 55 个核心模型 + 6 个联结模型）
 
 > **口径统一**：**29 个核心模型**（架构章程 §六 的清单 + C-0006-A 的 `CanonicalFact` + C-0006-B1 的 `RuleEvaluationShadow` + C-0008-A 的 `Session`、`UserInvitation`）**+ 2 个联结模型 `CaseEvidence`、`CanonicalFactSource`**。
 > README、本文、PR 描述、架构契约测试全部按此口径，不允许 29/31 混用。
@@ -35,11 +35,25 @@
 
 | 模型 | 说明 |
 |---|---|
-| `CanonicalFact` | 统一后的业务事实（金额 / 币种 / 日期 / 外部引用 + 来源计数）。`status=ACTIVE` 才能进入检测；`CONFLICT` 只进审计与对账复核 |
+| `CanonicalFact` | 统一后的业务事实（金额 / 币种 / 日期 / 外部引用 + 来源计数）。`status=ACTIVE` 才能进入检测；`CONFLICT` 只进审计与对账复核。TRACK C2：`accountId` 非空时身份为 `(organizationId, accountId, factKey)` |
 | `CanonicalFactSource` | 事实 ↔ 原始行（`SourceTransaction`）的联结，保存来源类型快照与 `observedAt`；原始数据永不丢失 |
 
 > 相同业务事实可以同时来自 FILE_UPLOAD 与 API：两条原始行都保留，只计 1 个 ACTIVE 事实；
 > 数值冲突 → `CONFLICT` fail closed，禁止进入 Detection / RuleEvaluation / RecoveryOpportunity。
+
+### 多账户作用域（TRACK C2 / MSG-20261002-66 M4–M6）
+
+| 模型 / 字段 | 说明 |
+|---|---|
+| `PolicyAcceptance` | PC-09（MSG-20261003-96 ⑬）：客户对版本化商业/法律文档的**显式接受事实**（user × organization × documentKey/version × acceptedAt × source）；append-only，仅访问不产生事实，不承载合同生命周期。 |
+| `CarrierManualSubmission` | CARRIER QUEUE #9B FINAL（MSG-20261003-119 ⑲–㉜）：人工提交事实（human attestation）——只记录「用户声称自己已完成人工提交」，`carrierConfirmationStatus` 恒为 `NOT_VERIFIED`；`UNIQUE(organizationId, packageId)` 幂等；append-only + 租户归属不可变；不存 credential / raw claim payload |
+| `PlatformAccount` | 业务归属身份：`organizationId + platform + externalAccountId + identityVersion`。**不是**凭据容器（token/secret 不入表，仍由 `SourceConnection.credentialRef` 承担）；`identityVersion` 是外部账户身份规范版本，凭据轮换**不得**产生新身份。`platform` / `externalAccountId` / `identityVersion` **创建后不可修改**（DB 不变量 `cc_platformaccount_identity_immutable`，MSG-20261002-67）；`displayName` / `status` / `marketplace` / `region` 仍可合法更新 |
+| `SourceConnection.platformAccountId` | 1 个 account → N 条连接（API / 上传 / 历史导入）；连接是 transport/auth 生命周期，account 是 business provenance identity。绑定后不可改写 |
+| `accountId` 下推 | `SourceTransaction` / `CanonicalFact` / `RecoveryOpportunity` / `ClaimItem` / `EvidenceArtifact` 均由**服务端**从连接上下文派生，客户端提交即拒绝（`CLIENT_ACCOUNT_FIELD_NOT_TRUSTED`）；绑定后不可改写（DB 不变量 `cc_account_binding_immutable__*`） |
+| 事实身份 | 唯一性使用**结构化字段** `(organizationId, accountId, factKey)`；account **不**拼进 `factKey`。`accountId IS NULL` 的历史行继续走 legacy partial unique `(organizationId, factKey)`（迁移窗口专用） |
+
+> 跨租户引用由 DB 守卫（`cc_tenant_*_accountid`）拒绝：account 必须与行同租户。
+> 回填 fail-closed：只有「来源唯一且一致」才推断 account；不唯一/缺失 → 保持 NULL 并输出 blocker report；重复 → 迁移直接失败（禁止静默合并）。
 
 ### 核心业务实体
 
@@ -131,6 +145,44 @@
 |---|---|
 | `KillSwitchRequest` | 控制面请求事实（开启 `PENDING_ENABLE → APPLIED`；拉闸 `DISABLED → APPLIED`）。只记请求，不承载资金语义，也不触碰 Claim / Settlement / Billing |
 
+### 人工追回提交（R43 S1 / MSG-20261001-31 / -32）
+
+| 模型 | 说明 |
+| --- | --- |
+| `RecoveryPackage` | 材料包身份（`packageVersion` / `digestVersion` / `packageDigest`）；`status` 仅 `GENERATED` / `EXPORTED`（非终态）/ `SUPERSEDED` / `WITHDRAWN`；核心字段不可变 |
+| `RecoveryPackageArtifact` | 导出产物（`PDF` / `JSON_MANIFEST`，append-only），只引用既有 `FileAsset` |
+| `RecoveryManualSubmission` | ②「用户已提交」业务事实（append-only）：`providerCaseRef` 不在此表，`approvalId` required + 租户内唯一 |
+| `RecoveryManualSubmissionReference` | provider case reference 补录事实（append-only，第五张表）：`providerCaseRefCanonical` 租户内唯一 |
+| `RecoveryManualSubmissionEvidence` | 提交证据联结（append-only）：只引用既有 `EvidenceArtifact` |
+
+> 四事实分离：材料包已生成 ≠ 用户已提交 ≠ provider 已受理 ≠ provider 已赔付；业务真值 = `ClaimItem.status` + `RecoveryManualSubmission`，`AuditLog` 仅 append-only 证据。
+
+
+### Outcome / Reimbursement Reconciliation（R45 S1 / MSG-20261001-45 / -46）
+
+| 模型 | 说明 |
+| --- | --- |
+| `ProviderOutcomeFact` | provider 受理 / 撤销事实（append-only）；撤销以新事实表达，不改写历史 `ACCEPTED` |
+| `ReimbursementFact` | 赔付观察 / 冲正事实（append-only）；`OBSERVED.amount > 0`，冲正行不携带独立金额（`reversesFactId`）|
+| `ExpectedRecoveryBasis` | 版本化期望基准；`supersededAt IS NULL` 为 effective，仅允许一次单向受控 supersede |
+| `ReconciliationOverrideDecision` | 每笔 reimbursement 单独审批的人工覆盖决策（append-only，`approvalId` 必填）|
+| `ClaimReconciliationProjection` | derived materialization（可重算缓存，非历史事实）；`inputDigest` / `projectionVersion` / `tolerancePolicyId + policyVersion` |
+| `ClaimReconciliationProjectionFact` | 投影 ↔ 赔付事实成员关系（联结）；绑定 projection generation，重算时同事务整体替换 |
+| `ReconciliationTolerancePolicy` | 版本化容差策略（append-only）；scope = 租户 + provider + operation + version，至多一个 effective；含显式系统 exact policy |
+
+> 四事实分离：受理 ≠ 赔付观察 ≠ 对账 ≠ 结算；投影不是真值，drift 必须可被 checker 发现并重算。
+
+### Settlement / Billing Linkage（R46 S1 / MSG-20261002-53 / -54）
+
+| 模型 | 说明 |
+| --- | --- |
+| `SettlementReceiptSnapshot` | 到账证据快照（append-only）：external identity / fingerprint / amount / currency / receivedAt / evidenceReferences / snapshotVersion / snapshotDigest（64hex）。**创建后不可改**；更正必须新快照 + 重新审批（MSG-54 CHANGE B）|
+| `SettlementAdjustment` | 独立 reversal/correction 财务事实（append-only）：引用原 Settlement（`ON DELETE RESTRICT`）、自身带 external identity、同事件幂等；v1 仅 full reversal 且等额（MSG-53 CHANGE B1 / MSG-54 收紧）|
+| `FeeCalculationAdjustment` | Fee 作废/调整事实（append-only）：`VOID` / `REVERSAL` / `CORRECTION` 三分类语义不同；**不得**修改历史 `FeeCalculation`（MSG-54 ① / CHANGE C1）|
+
+> `Settlement` 增列：external identity 三元组 + versioned fingerprint + `claimItemId`/`linkageBasisKind`/`linkageBasisRef` + `receiptSnapshotId`（创建后不可改）。
+> `FeeCalculation` 增列：`feeChainId` / `feeChainRootFeeCalculationId` / `supersededByFeeCalculationId` / `claimItemId` / `membershipDigest` / `feeBasisVersion` / `policyRef`。
+> 冻结：`FeeCalculation exists ≠ Invoice may automatically issue`；`BillingInvoice` / `BillingStatus` 本轮不变。
 ### 联结模型
 
 | 模型 | 说明 |
@@ -138,6 +190,7 @@
 | `CaseEvidence` | 案件 ↔ 证据的多对多联结（复合主键） |
 | `CanonicalFactSource` | 业务事实 ↔ 原始来源的联结（C-0006-A） |
 | `ClaimItemEvidence` | 归一化损失事件 ↔ 证据的联结（C-0011） |
+| `FeeCalculationSettlement` | FeeCalculation ↔ Settlement/Adjustment 逐笔成员关系（R46 S1）；`basisRole` POSITIVE/NEGATIVE + `amountContribution`；同一 fee chain 内资金事实唯一 |
 
 ---
 
@@ -226,7 +279,7 @@ DRAFT → SUBMITTED → ACKNOWLEDGED →
 |---|---|
 | 校验函数 | `crossclaim_assert_tenant_integrity()` |
 | 迁移 | `20260928060000_tenant_integrity/migration.sql` |
-| 覆盖 | **28 个** `cc_tenant_*` 引用完整性触发器 + **36 个** `cc_tenant_immutable__*` 归属不可变触发器 |
+| 覆盖 | **56 个** `cc_tenant_*` 引用完整性触发器 + **49 个** `cc_tenant_immutable__*` 归属不可变触发器（R43 S1 新增人工追回提交域 5 表；R45 S1 新增 reconciliation 域 7 表） |
 | CI 断言 | 按名称 / 所属表 / 事件类型 / 启用状态**清单**断言（`tools/tenant-triggers/`），不使用数量下限 |
 
 另外两类**规则所有权**约束（同属数据库级强制）：
@@ -378,3 +431,12 @@ I3  一笔 Payment 最多一个成功执行来源（SUCCEEDED + paymentId 上的
 - 连接**读取**当前与「连接写」同权限（OWNER / ADMIN）；是否给 OPS 只读仍待架构方裁定（已列入 C-0008-B1 Checkpoint 的 QUESTIONS）。
 - 用户触发的一切状态变化必须与 AuditLog 同事务写入（`actorType=USER` + `actorUserId`）；Web 层不做本地授权。
 - 机会人工复核只允许 `DETECTED → QUALIFIED` 与 `DETECTED → REJECTED`（拒绝必须带批准词表的 reason）；`DETECTED → CONVERTED` 只能由 Recovery Closure 建案流程触发。
+
+### 平台写回执行账本（C-PLATFORM-WRITE-LEDGER · MSG-20261001-19 授权）
+
+| 模型 | 说明 |
+|---|---|
+| `PlatformWriteAttempt` | `platform.write` 的**唯一逻辑执行记录**：快照版本/摘要、幂等键、状态（含 `UNKNOWN_PROVIDER_RESPONSE` / `RECONCILING` / `FAILED_CONFIRMED` / `MANUAL_REVIEW`）、审批引用与 basisReference、对账字段。**不承载凭据或原始平台 payload** |
+
+> 约束口径：`(organizationId, idempotencyKey)` 唯一 = 唯一逻辑执行链；`(organizationId, approvalId)` 唯一 = 一个非空审批最多绑定一个能取得真实执行权的 attempt；`SUCCEEDED` 另有 partial unique index 兜底（迁移内 raw SQL）。
+> 边界：真实外写、真实 adapter、HTTP 入口、生产凭据全部保持 HOLD；`PLATFORM_WRITE_TRANSPORT_ENABLED = false`。

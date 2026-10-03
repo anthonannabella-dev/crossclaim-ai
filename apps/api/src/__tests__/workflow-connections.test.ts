@@ -35,6 +35,7 @@ interface FakeConnectionTx {
     create: ReturnType<typeof vi.fn>;
     updateMany: ReturnType<typeof vi.fn>;
   };
+  platformAccount: { findFirst: ReturnType<typeof vi.fn> };
   auditLog: { create: ReturnType<typeof vi.fn> };
 }
 
@@ -50,6 +51,8 @@ function fakeTx(
       create: vi.fn(async () => ({ id: 'conn-1' })),
       updateMany: vi.fn(async () => ({ count: casHits ? 1 : 0 })),
     },
+    // MSG-20261002-77 B3-1：绑定已存在的同租户 PlatformAccount（服务端复核）。
+    platformAccount: { findFirst: vi.fn(async () => ({ id: 'acct-1' })) },
     auditLog: { create: vi.fn(async () => ({ id: 'audit-1' })) },
   };
   const transaction = vi.fn(async (fn: (client: FakeConnectionTx) => Promise<unknown>) => fn(tx));
@@ -147,11 +150,11 @@ describe('C-0008-B1 — 连接管理：权限与输入校验', () => {
     expect(transaction).not.toHaveBeenCalled();
   });
 
-  it('FILE_UPLOAD 初始状态即 ACTIVE；状态迁移非法值被拒', async () => {
-    const { prisma, tx } = fakeTx();
-    const created = await createManagedConnection(prisma, baseCreate, deps);
-    expect(created).toEqual({ id: 'conn-1', status: 'ACTIVE' });
-    expect(tx.sourceConnection.create).toHaveBeenCalledWith({
+  it('FILE_UPLOAD：未绑定 → NEEDS_AUTH；绑定已存在账户 → ACTIVE（MSG-20261002-77 B3-1）', async () => {
+    const unbound = fakeTx();
+    const createdUnbound = await createManagedConnection(unbound.prisma, baseCreate, deps);
+    expect(createdUnbound).toEqual({ id: 'conn-1', status: 'NEEDS_AUTH' });
+    expect(unbound.tx.sourceConnection.create).toHaveBeenCalledWith({
       data: {
         organizationId: ORG,
         domain: 'LOGISTICS',
@@ -159,17 +162,27 @@ describe('C-0008-B1 — 连接管理：权限与输入校验', () => {
         kind: 'FILE_UPLOAD',
         label: 'UPS 月度账单',
         credentialRef: null,
-        status: 'ACTIVE',
+        status: 'NEEDS_AUTH',
+        platformAccountId: null,
       },
       select: { id: true },
     });
-    const audit = tx.auditLog.create.mock.calls[0][0].data;
-    expect(audit).toMatchObject({
+    const auditUnbound = unbound.tx.auditLog.create.mock.calls[0][0].data;
+    expect(auditUnbound).toMatchObject({
       actorType: 'USER',
       actorUserId: ACTOR,
       action: 'source_connection.created',
       entityId: 'conn-1',
     });
+
+    const bound = fakeTx();
+    const createdBound = await createManagedConnection(
+      bound.prisma,
+      { ...baseCreate, account: { mode: 'BIND_EXISTING', platformAccountId: 'acct-1' } },
+      deps,
+    );
+    expect(createdBound).toEqual({ id: 'conn-1', status: 'ACTIVE' });
+    expect(bound.tx.sourceConnection.create.mock.calls[0][0].data).toMatchObject({ status: 'ACTIVE', platformAccountId: 'acct-1' });
   });
 
   it('已注册 platform 的 API 连接把 platform 写入 config，且状态为 NEEDS_AUTH', async () => {

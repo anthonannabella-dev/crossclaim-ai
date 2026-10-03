@@ -1,0 +1,390 @@
+import { cookies } from 'next/headers';
+
+import ManualResponseForm from './manual-response-form';
+import StartRecoveryForm from './start-recovery-form';
+
+/**
+ * G5-UI（MASTER GAP CLOSURE）：只读接线 —— carrier response 读模型 + customs filing status。
+ * 本页**只读**：不提交 claim、不执行 filing、不触发扣款、不修改任何事实；仅展示既有事实与投影。
+ * 用法：/integration-status?packageId=<carrier package id>&opportunityId=<customs opportunity id>
+ */
+
+const API_BASE = process.env.CROSSCLAIM_API_URL ?? 'http://127.0.0.1:3000';
+
+interface CarrierResponses {
+  responses: {
+    currentStatus: string | null;
+    currentVerificationLevel: string | null;
+    currentFactId: string | null;
+    history: Array<{ factId: string; status: string; source: string; verificationLevel: string; observedAt: string }>;
+    factCount: number;
+    hasProviderVerifiedFact: boolean;
+  };
+}
+
+/** BG-019（CHANGE E）：Independent-site 关键状态只读面（五状态分开呈现）。 */
+interface IndependentSiteState {
+  dispute: { disputeReference: string; paymentAccountRef: string; channel: string; handoffReference: string; executionKey: string };
+  states: { submitted: boolean; won: boolean; settled: boolean; recovered: boolean; billable: boolean };
+  response: { disposition: string; amount: string | null; currency: string; source: string } | null;
+  settlement: { amount: string; currency: string; verification: string; reference: string; evidenceArtifactRef: string | null } | null;
+  amounts: { recoveredAmount: string; feeAmount: string; currency: string | null };
+  invoiceDraft: { amount: string; currency: string | null; basis: string } | null;
+  phase1: {
+    qualification: { status: string | null; reasonCodes: string[] };
+    evidence: { readinessStatus: string | null; summary: unknown };
+    claimReady: { status: string | null; packageId: string | null; packageDigest: string | null };
+    policyId: string | null;
+    policyVersion: string | null;
+    algorithmVersion: string | null;
+    computedAt: string | null;
+    externalWritePerformed: boolean;
+    autoSubmitAllowed: boolean;
+  } | null;
+  notPersisted: string[];
+  boundary: { readOnly: boolean; recomputedOnRead: boolean; externalWritePerformed: boolean; filingSubmitted: boolean; transportEnabled: boolean; paymentCollected: boolean };
+}
+
+/** BG-020：Customs 事实 + 四类 latest 计算投影的只读读模型（后端已裁决/已持久化；前端只展示、不重算）。 */
+interface CustomsEntryFactReadModel {
+  entryFact: {
+    id: string;
+    entryNumber: string;
+    entryDate: string;
+    jurisdiction: string;
+    source: string;
+    contentDigest: string;
+    lineCount: number;
+    totalDutyAmountByCurrency: Record<string, string>;
+  };
+  projections: Record<string, { projectionId: string; computedAt: string; algorithmVersion: string; policyVersion: string | null } | null>;
+  boundary: { readOnly: boolean; filingSubmitted: boolean; transportEnabled: boolean; externalWritePerformed: boolean; productionCredentials: string };
+}
+
+/** P0-1：Return→matching→claim-ready evidence 的只读读模型（后端已裁决/已持久化，前端只展示）。 */
+interface ReturnClaimEvidence {
+  evidence: {
+    evidenceId: string;
+    status: string;
+    statusReasons: string[];
+    confirmedRecoverableAmountByCurrency: Record<string, string>;
+    eligibleQuantityByLine: Array<{ lineOrdinal: number; status: string; eligibleQuantity: string; confirmedDutyAmount: string }>;
+    qualificationStatus: string;
+    policyId: string;
+    policyVersion: string;
+    algorithmVersion: string;
+    computedAt: string;
+  };
+  boundary: { readOnly: boolean; recomputedOnRead: boolean; frontendMayRecalculate: boolean; filingSubmitted: boolean; transportEnabled: boolean };
+}
+
+interface CustomsFilingStatus {
+  filingStatus: {
+    currentStatus: string | null;
+    currentSourceLevel: string | null;
+    history: Array<{ factId: string; status: string; sourceLevel: string; observedAt: string }>;
+    factCount: number;
+    hasAuthorityVerifiedFact: boolean;
+  };
+}
+
+async function apiGet<T>(path: string): Promise<{ ok: boolean; status: number; body: T | null; code: string | null }> {
+  const cookieStore = await cookies();
+  const cookieHeader = cookieStore
+    .getAll()
+    .map((c) => c.name + '=' + c.value)
+    .join('; ');
+  const res = await fetch(API_BASE + path, {
+    headers: cookieHeader.length > 0 ? { cookie: cookieHeader } : {},
+    cache: 'no-store',
+  });
+  if (!res.ok) {
+    let code: string | null = null;
+    try {
+      const payload = (await res.json()) as { code?: string; error?: string };
+      code = payload.code ?? payload.error ?? null;
+    } catch {
+      code = null;
+    }
+    return { ok: false, status: res.status, body: null, code };
+  }
+  return { ok: true, status: res.status, body: (await res.json()) as T, code: null };
+}
+
+function StatusRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex justify-between border-b border-slate-100 py-1 text-sm">
+      <span className="text-slate-500">{label}</span>
+      <span className="font-mono text-slate-900">{value}</span>
+    </div>
+  );
+}
+
+export default async function IntegrationStatusPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ packageId?: string; opportunityId?: string; entryFactId?: string; disputeReference?: string }>;
+}) {
+  const params = await searchParams;
+  const packageId = params?.packageId ?? '';
+  const opportunityId = params?.opportunityId ?? '';
+
+  const carrier = packageId
+    ? await apiGet<CarrierResponses>('/carrier-claim-packages/' + encodeURIComponent(packageId) + '/responses')
+    : null;
+  const customs = opportunityId
+    ? await apiGet<CustomsFilingStatus>('/customs-opportunities/' + encodeURIComponent(opportunityId) + '/filing-status')
+    : null;
+  const entryFactId = params?.entryFactId ?? '';
+  const disputeReference = params?.disputeReference ?? '';
+  const ps04State = disputeReference
+    ? await apiGet<IndependentSiteState>('/independent-site-disputes/' + encodeURIComponent(disputeReference) + '/state')
+    : null;
+  const entryFactRead = entryFactId
+    ? await apiGet<CustomsEntryFactReadModel>('/customs-entry-facts/' + encodeURIComponent(entryFactId))
+    : null;
+  const returnEvidence = entryFactId
+    ? await apiGet<ReturnClaimEvidence>('/customs-entry-facts/' + encodeURIComponent(entryFactId) + '/return-claim-evidence')
+    : null;
+
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-xl font-semibold">集成状态（只读） / Integration status</h1>
+        <p className="mt-2 text-sm text-slate-600">
+          Carrier 响应事实与 Customs filing 状态的**只读**视图。本页不会提交 claim、不会执行 filing、不会触发任何扣款或外部写。
+        </p>
+        <p className="mt-1 text-xs text-slate-500">
+          用法：/integration-status?packageId=&lt;carrier package id&gt;&amp;opportunityId=&lt;customs opportunity id&gt;&amp;entryFactId=&lt;customs entry fact id&gt;
+        </p>
+      </div>
+
+
+
+      <section className="rounded border border-slate-200 p-4">
+        <h2 className="text-base font-medium">Independent-site 关键状态（BG-019 只读）</h2>
+        {disputeReference === '' ? (
+          <p className="mt-2 text-sm text-slate-500">未提供 disputeReference。</p>
+        ) : ps04State === null ? (
+          <p className="mt-2 text-sm text-slate-500">未请求。</p>
+        ) : !ps04State.ok || ps04State.body === null ? (
+          <p className="mt-2 text-sm text-rose-600">
+            读取失败：HTTP {ps04State.status}
+            {ps04State.code !== null ? ' · ' + ps04State.code : ''}
+          </p>
+        ) : (
+          <div className="mt-2">
+            <h3 className="text-sm font-medium text-slate-700">状态（必须分开判读，不得合并）</h3>
+            <StatusRow label="submitted" value={String(ps04State.body.states.submitted)} />
+            <StatusRow label="won" value={String(ps04State.body.states.won)} />
+            <StatusRow label="settled" value={String(ps04State.body.states.settled)} />
+            <StatusRow label="recovered" value={String(ps04State.body.states.recovered)} />
+            <StatusRow label="billable" value={String(ps04State.body.states.billable)} />
+            <h3 className="mt-3 text-sm font-medium text-slate-700">响应 / 到账事实</h3>
+            <StatusRow label="response.disposition" value={ps04State.body.response?.disposition ?? '（无）'} />
+            <StatusRow label="settlement.verification" value={ps04State.body.settlement?.verification ?? '（无）'} />
+            <StatusRow label="settlement.evidenceArtifactRef" value={ps04State.body.settlement?.evidenceArtifactRef ?? '（无）'} />
+            <StatusRow label="recoveredAmount" value={ps04State.body.amounts.recoveredAmount} />
+            <StatusRow label="feeAmount" value={ps04State.body.amounts.feeAmount} />
+            <StatusRow label="invoiceDraft" value={ps04State.body.invoiceDraft === null ? '（无）' : JSON.stringify(ps04State.body.invoiceDraft)} />
+            <h3 className="mt-3 text-sm font-medium text-slate-700">Phase 1 投影（CHANGE B 持久化）</h3>
+            {ps04State.body.phase1 === null ? (
+              <StatusRow label="phase1" value={'（未持久化：' + ps04State.body.notPersisted.join(', ') + '）'} />
+            ) : (
+              <div>
+                <StatusRow label="qualification.status" value={ps04State.body.phase1.qualification.status ?? '（无）'} />
+                <StatusRow label="qualification.reasonCodes" value={ps04State.body.phase1.qualification.reasonCodes.join(', ') || '（无）'} />
+                <StatusRow label="evidence.readinessStatus" value={ps04State.body.phase1.evidence.readinessStatus ?? '（无）'} />
+                <StatusRow label="claimReady.status" value={ps04State.body.phase1.claimReady.status ?? '（无）'} />
+                <StatusRow label="claimReady.packageId" value={ps04State.body.phase1.claimReady.packageId ?? '（无）'} />
+                <StatusRow
+                  label="policy"
+                  value={String(ps04State.body.phase1.policyId) + '@' + String(ps04State.body.phase1.policyVersion) + ' · ' + String(ps04State.body.phase1.algorithmVersion)}
+                />
+                <StatusRow label="phase1.computedAt" value={ps04State.body.phase1.computedAt ?? '（无）'} />
+                <StatusRow
+                  label="phase1.boundary"
+                  value={'externalWritePerformed=' + String(ps04State.body.phase1.externalWritePerformed) + ' autoSubmitAllowed=' + String(ps04State.body.phase1.autoSubmitAllowed)}
+                />
+              </div>
+            )}
+            <p className="mt-2 text-xs text-slate-500">
+              WON 不等于到账；UNVERIFIED 到账不计入 recovered；只有带 evidence 的 VERIFIED 到账才进入 recovered / 15% fee / 发票草稿。
+            </p>
+          </div>
+        )}
+      </section>
+      <section className="rounded border border-slate-200 p-4">
+        <h2 className="text-base font-medium">Customs entry fact + projections（BG-020 只读）</h2>
+        {entryFactId === '' ? (
+          <p className="mt-2 text-sm text-slate-500">未提供 entryFactId。</p>
+        ) : entryFactRead === null ? (
+          <p className="mt-2 text-sm text-slate-500">未请求。</p>
+        ) : !entryFactRead.ok || entryFactRead.body === null ? (
+          <p className="mt-2 text-sm text-rose-600">
+            读取失败：HTTP {entryFactRead.status}
+            {entryFactRead.code !== null ? ' · ' + entryFactRead.code : ''}
+          </p>
+        ) : (
+          <div className="mt-2">
+            <StatusRow label="entryNumber" value={entryFactRead.body.entryFact.entryNumber} />
+            <StatusRow label="entryDate" value={entryFactRead.body.entryFact.entryDate} />
+            <StatusRow label="jurisdiction" value={entryFactRead.body.entryFact.jurisdiction} />
+            <StatusRow label="lineCount" value={String(entryFactRead.body.entryFact.lineCount)} />
+            <StatusRow
+              label="totalDutyAmountByCurrency"
+              value={JSON.stringify(entryFactRead.body.entryFact.totalDutyAmountByCurrency)}
+            />
+            <h3 className="mt-3 text-sm font-medium text-slate-700">latest projections</h3>
+            <ul className="mt-1 space-y-1 text-sm">
+              {['DUTY_TRUTH', 'DISCREPANCY', 'ELIGIBILITY', 'ESTIMATE'].map((kind) => {
+                const projection = entryFactRead.body?.projections[kind] ?? null;
+                return (
+                  <li key={kind} className="font-mono text-xs text-slate-700">
+                    {kind}: 
+                    {projection === null
+                      ? '（无）'
+                      : projection.projectionId + ' · ' + projection.algorithmVersion + ' · ' + projection.computedAt}
+                  </li>
+                );
+              })}
+            </ul>
+            <StatusRow
+              label="boundary"
+              value={
+                'readOnly=' + String(entryFactRead.body.boundary.readOnly) +
+                ' filingSubmitted=' + String(entryFactRead.body.boundary.filingSubmitted) +
+                ' transportEnabled=' + String(entryFactRead.body.boundary.transportEnabled) +
+                ' externalWritePerformed=' + String(entryFactRead.body.boundary.externalWritePerformed) +
+                ' productionCredentials=' + String(entryFactRead.body.boundary.productionCredentials)
+              }
+            />
+            <p className="mt-2 text-xs text-slate-500">
+              本卡片只展示后端已持久化的 latest 投影；读取**不会**触发重算，也不代表已提交、已追回或已计费。
+            </p>
+          </div>
+        )}
+      </section>
+      <section className="rounded border border-slate-200 p-4">
+        <h2 className="text-base font-medium">Customs return→claim evidence（P0-1 只读）</h2>
+        {entryFactId === '' ? (
+          <p className="mt-2 text-sm text-slate-500">未提供 entryFactId。</p>
+        ) : returnEvidence === null ? (
+          <p className="mt-2 text-sm text-slate-500">未请求。</p>
+        ) : !returnEvidence.ok || returnEvidence.body === null ? (
+          <p className="mt-2 text-sm text-rose-600">
+            读取失败：HTTP {returnEvidence.status}
+            {returnEvidence.code !== null ? ' · ' + returnEvidence.code : ''}
+          </p>
+        ) : (
+          <div className="mt-2">
+            <StatusRow label="status" value={returnEvidence.body.evidence.status} />
+            <StatusRow label="qualificationStatus" value={returnEvidence.body.evidence.qualificationStatus} />
+            <StatusRow
+              label="confirmedRecoverableAmountByCurrency"
+              value={JSON.stringify(returnEvidence.body.evidence.confirmedRecoverableAmountByCurrency)}
+            />
+            <StatusRow label="policyVersion" value={returnEvidence.body.evidence.policyVersion} />
+            <StatusRow label="computedAt" value={returnEvidence.body.evidence.computedAt} />
+            <StatusRow
+              label="boundary"
+              value={
+                'readOnly=' + String(returnEvidence.body.boundary.readOnly) +
+                ' recomputedOnRead=' + String(returnEvidence.body.boundary.recomputedOnRead) +
+                ' frontendMayRecalculate=' + String(returnEvidence.body.boundary.frontendMayRecalculate) +
+                ' filingSubmitted=' + String(returnEvidence.body.boundary.filingSubmitted) +
+                ' transportEnabled=' + String(returnEvidence.body.boundary.transportEnabled)
+              }
+            />
+            <p className="mt-2 text-xs text-slate-500">
+              本卡片只展示后端已裁决并持久化的结果；金额与匹配**不会**在前端重新计算，也不代表已提交或已追回。
+            </p>
+          </div>
+        )}
+      </section>
+
+      <section className="rounded border border-slate-200 p-4">
+        <h2 className="text-base font-medium">Carrier claim responses（Queue #10 读模型）</h2>
+        {packageId === '' ? (
+          <p className="mt-2 text-sm text-slate-500">未提供 packageId。</p>
+        ) : carrier === null ? (
+          <p className="mt-2 text-sm text-slate-500">未请求。</p>
+        ) : !carrier.ok || carrier.body === null ? (
+          <p className="mt-2 text-sm text-rose-600">
+            读取失败：HTTP {carrier.status}
+            {carrier.code !== null ? ' · ' + carrier.code : ''}
+          </p>
+        ) : (
+          <div className="mt-2">
+            <StatusRow label="currentStatus" value={carrier.body.responses.currentStatus ?? '（无事实）'} />
+            <StatusRow
+              label="currentVerificationLevel"
+              value={carrier.body.responses.currentVerificationLevel ?? '（无事实）'}
+            />
+            <StatusRow label="factCount" value={String(carrier.body.responses.factCount)} />
+            <StatusRow
+              label="hasProviderVerifiedFact"
+              value={carrier.body.responses.hasProviderVerifiedFact ? 'true' : 'false'}
+            />
+            <h3 className="mt-3 text-sm font-medium text-slate-700">status history</h3>
+            {carrier.body.responses.history.length === 0 ? (
+              <p className="text-sm text-slate-500">（暂无事实）</p>
+            ) : (
+              <ul className="mt-1 space-y-1 text-sm">
+                {carrier.body.responses.history.map((h) => (
+                  <li key={h.factId} className="font-mono text-xs text-slate-700">
+                    {h.observedAt} · {h.status} · source={h.source} · verification={h.verificationLevel}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+      </section>
+
+      <section className="rounded border border-slate-200 p-4">
+        <h2 className="text-base font-medium">Customs filing status（C19 读模型）</h2>
+        {opportunityId === '' ? (
+          <p className="mt-2 text-sm text-slate-500">未提供 opportunityId。</p>
+        ) : customs === null ? (
+          <p className="mt-2 text-sm text-slate-500">未请求。</p>
+        ) : !customs.ok || customs.body === null ? (
+          <p className="mt-2 text-sm text-rose-600">
+            读取失败：HTTP {customs.status}
+            {customs.code !== null ? ' · ' + customs.code : ''}
+          </p>
+        ) : (
+          <div className="mt-2">
+            <StatusRow label="currentStatus" value={customs.body.filingStatus.currentStatus ?? '（无事实）'} />
+            <StatusRow label="currentSourceLevel" value={customs.body.filingStatus.currentSourceLevel ?? '（无事实）'} />
+            <StatusRow label="factCount" value={String(customs.body.filingStatus.factCount)} />
+            <StatusRow
+              label="hasAuthorityVerifiedFact"
+              value={customs.body.filingStatus.hasAuthorityVerifiedFact ? 'true' : 'false'}
+            />
+            <h3 className="mt-3 text-sm font-medium text-slate-700">status history</h3>
+            {customs.body.filingStatus.history.length === 0 ? (
+              <p className="text-sm text-slate-500">（暂无事实）</p>
+            ) : (
+              <ul className="mt-1 space-y-1 text-sm">
+                {customs.body.filingStatus.history.map((h) => (
+                  <li key={h.factId} className="font-mono text-xs text-slate-700">
+                    {h.observedAt} · {h.status} · source={h.sourceLevel}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        )}
+      </section>
+
+      <ManualResponseForm />
+
+      <StartRecoveryForm />
+
+      <p className="text-xs text-slate-500">
+        边界：真实 carrier provider 读取与 customs filing 仍为 HOLD_EXTERNAL；上述两个表单只产生内部事实/准备状态，不触发任何对外动作或扣款。
+      </p>
+    </div>
+  );
+}

@@ -66,6 +66,9 @@
 
 ## 四、与许可证闸门的关系
 
+> R10（HOST DIRECTIVE 2026-10-01）：复用分类与商用许可判定见 `docs/releases/OPEN_SOURCE_REUSE_MATRIX.md` 与 `tools/license-gate/oss-registry.json`；
+> **模型权重许可与框架代码许可必须分开判定**，任何框架（Docling / LangGraph 适配器 / PaddleOCR 等）自动拉取的权重都要在本表逐条登记，未核实不得进生产（LEVEL C）。
+
 | 检查对象 | 由谁管 |
 |---|---|
 | 库 / 框架的代码许可证 | `tools/license-gate/`（自动判定） |

@@ -56,8 +56,12 @@ function buildCsv(rowCount: number, badDataRowNumber = -1): string {
   return lines.join('\n');
 }
 
+const CONNECTION_BY_ORG = new Map<string, string>();
+
 function context(organizationId: string) {
-  return { organizationId, domain: 'LOGISTICS' as const, channel: 'UPS' as const };
+  const connectionId = CONNECTION_BY_ORG.get(organizationId);
+  if (!connectionId) throw new Error('FIXTURE_CONNECTION_MISSING:' + organizationId);
+  return { organizationId, connectionId, domain: 'LOGISTICS' as const, channel: 'UPS' as const };
 }
 
 beforeAll(async () => {
@@ -70,11 +74,32 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await prisma.$executeRawUnsafe(
-    'TRUNCATE TABLE "CanonicalFactSource", "CanonicalFact", "SourceTransaction", "ImportBatch", "FileAsset", "SourceConnection", "AuditLog", "Organization" CASCADE;',
+    'TRUNCATE TABLE "CanonicalFactSource", "CanonicalFact", "SourceTransaction", "ImportBatch", "FileAsset", "SourceConnection", "PlatformAccount", "AuditLog", "Organization" CASCADE;',
   );
   await prisma.organization.create({
     data: { id: ORG_A, name: '批量导入租户', slug: 'ingest-bulk-org' },
   });
+  // TRACK B BATCH 1：批量 ingest 同样要求连接已绑定 PlatformAccount。
+  const account = await prisma.platformAccount.create({
+    data: {
+      organizationId: ORG_A,
+      platform: 'AMAZON',
+      externalAccountId: 'fixture-' + ORG_A,
+      displayName: 'fixture account',
+    },
+  });
+  const connection = await prisma.sourceConnection.create({
+    data: {
+      organizationId: ORG_A,
+      domain: 'LOGISTICS',
+      channel: 'UPS',
+      kind: 'FILE_UPLOAD',
+      status: 'ACTIVE',
+      label: 'bulk fixture',
+      platformAccountId: account.id,
+    },
+  });
+  CONNECTION_BY_ORG.set(ORG_A, connection.id);
 });
 
 describe('导入层 · 批量落库（真实数据库）', () => {

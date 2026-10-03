@@ -1,0 +1,277 @@
+# AUTOPILOT 持久自治规则（.autopilot/RULES.md）
+
+> 来源：**HOST DIRECTIVE 2026-10-01「冻结底座 + 加速交付」**（宿主直接指令，长期有效）。
+> 本文件是**持久自治规则**：对后续每一轮 tick、会话重启、runner 重启同样生效，不依赖任何单轮聊天上下文。
+> 机器可读镜像：`.autopilot/rules.json`；runner 每轮读取并写入 HEARTBEAT；CI 由
+> `tools/autopilot/check-autopilot-rules.mjs` 校验。策略全文：`docs/releases/DELIVERY-ACCELERATION-POLICY.md`。
+
+## R1 冻结已 PASS 底座（默认不再重新设计 / 重构 / 重复审计）
+
+已审计 PASS 且**本轮未变化**的基础能力一律冻结，不得重新设计、重构或重复送审：
+Tenant / Organization 隔离 · Case / Recovery 主状态机 · Approval / HITL · Action Guard · Audit Log ·
+Transaction / CAS / Row Lock · 幂等与并发控制 · Recovery / Reconcile · 权限重验与审批消费机制 ·
+R43 Manual Recovery Persistence（S1–S6，MSG-20261001-39 = PASS — R43 CLOSED）·
+Platform Write Attempt Ledger（PG1–PG10，MSG-20261001-21 = PASS）。
+
+## R2 只有 8 类边界才触发「架构级审计」
+
+1. Schema 发生实质变化
+2. 租户隔离边界变化
+3. 权限模型变化
+4. 审批 / HITL 边界变化
+5. 真实外部写操作变化
+6. 资金 / 结算 / 扣费相关变化
+7. 幂等 / 事务 / 并发一致性边界变化
+8. 安全边界变化
+
+普通业务功能、UI、Rule Pack、Adapter、Connector、映射规则、解析规则**不再默认升级为架构级审计**。
+
+## R3 审计口径 = 增量风险审计
+
+每轮只提交**本轮新增/变化**的边界、风险与测试证据；已 PASS 且未变化的基础设施不重复送审。
+
+## R4 `ARCH_REVIEW_REQUIRED = NO` 时不得停止执行
+
+- `ARCH_REVIEW_REQUIRED = NO` ⇒ **直接进入下一执行单元**；不得以「无新 ChatGPT 裁决」为由停止、空转或等待宿主。
+- 唯一的合法停止条件是：`READY_FOR_REVIEW`（完整可审计批次送审）、`HOST_ACTION_REQUIRED`、架构方 `BLOCK`、以及无法 SELF_RESOLVE 的真实技术阻塞。
+- 该项由 runner 每轮写入 HEARTBEAT（`arch_review_policy.continue_when_no_new_risk=true`、`no_verdict_is_not_stop=true`），重启后仍生效。
+
+## R5 队列规则：不重新规划、不回退
+
+按 `.autopilot/TASKS.md` 的未完成队列顺序执行（历史序列 S1 → S2 → S3 → S4 → S5 已按序完成并关闭；等价约定为：**不重排、不重做、不回退**）。
+若某执行单元涉及 R2 的 8 类边界，则先实现 + targeted tests + commit + CI，再提交**增量**裁决；其余情况直接推进下一单元。
+
+## R6 复用优先
+
+新模块编码前依次检查：仓库现有实现 → 旧 `zhuihuiweikuan-saas`（只读迁移候选）→ 成熟 MIT / Apache-2.0 组件 → 现有库。
+禁止重复造轮子；但不得为使用开源组件破坏已 PASS 的事务、权限、审计与租户边界。
+
+## R7 编排工具边界
+
+n8n / Activepieces 仅限外围（定时、通知、数据同步、非关键搬运、webhook 编排）；索赔提交、审批消费、资金结算、关键状态迁移**不得**放进低代码工作流。
+
+## R8 每轮状态必须给出三项
+
+```
+FOUNDATION_REUSED    = 本轮复用了哪些已有底座
+NEW_RISK_BOUNDARY    = YES / NO（+ 说明）
+ARCH_REVIEW_REQUIRED = YES / NO（+ 原因；YES 时必须点名 R2 的触发项）
+```
+
+送审记录（STATE 中的 `*_submission`）必须包含 `risk_classification` 三项，否则 CI 失败。
+
+## R9 仍然 HOLD
+
+Production Enablement · 真实外部写 · 真实资金 · 客户真实提交 · 生产凭据 ·
+AMAZON WRITE · REAL WRITE ADAPTER · TRANSPORT=false · SETTLEMENT/BILLING LINKAGE。
+
+## R10 开源优先复用 + 商用许可证统一机制（HOST DIRECTIVE 2026-10-01 补充）
+
+**统一机制**：每个新模块开工前先做「复用分类 + 许可证判定」，二者是同一次判断，不拆成两套流程。
+
+### R10.1 复用分类（五档，写入 OPEN_SOURCE_REUSE_MATRIX）
+
+| 分类 | 含义 |
+| --- | --- |
+| `EXISTING` | 当前 CrossClaim 仓库已有能力 → 直接复用 |
+| `LEGACY_REUSE` | 旧 `zhuihuiweikuan-saas`（只读）有可迁移能力 |
+| `OSS_NOW` | 当前阶段应立即接入的成熟开源组件 |
+| `OSS_LATER` | 当前只保留接口，后续再接 |
+| `REJECT` | 许可证 / 架构 / 维护性 / 安全性不适合，不引入 |
+
+**不得在已有成熟方案的情况下重复自研通用基础能力。**
+
+### R10.2 许可证等级（与 `tools/license-gate/allowlist.json` 的 allow/review/deny 同源）
+
+- **LEVEL A（默认可进入候选）**：MIT / Apache-2.0 / BSD-2 / BSD-3 / ISC / 其他明确允许商用且无强传播要求的宽松许可。
+- **LEVEL B（必须人工审查）**：GPL / LGPL / AGPL / MPL / EPL / BSL / SSPL / Sustainable Use License / Elastic License / 自定义 Community License / Source Available / 带商业限制的模型许可证。
+- **LEVEL C（默认禁止进入生产）**：无 LICENSE / 许可不明确 / 商用不明确 / 模型来源不明 / 禁止商用 / 要求公开整个 CrossClaim 源码且未获批准 / 与商业 SaaS 明显冲突。
+  **不得因为 GitHub 仓库公开就默认「可以商用」。**
+
+### R10.3 依赖登记（OSS_NOW / OSS_LATER 必须登记才可进代码）
+
+登记落盘在 `tools/license-gate/oss-registry.json`，每条至少包含：
+`dependency_name / version / source_repository / license / license_category / commercial_use_allowed /
+redistribution_requirement / attribution_requirement / copyleft_risk / saas_network_restriction /
+model_weight_license / decision(ACCEPT|REVIEW|REJECT) / reason`，外加复用分类 `class`。
+校验器：`node tools/license-gate/check-oss-registry.mjs --root .`（挂在既有 `license-gate` CI job 上，**不新建第二套许可证系统**）。
+
+### R10.4 模型权重与代码许可证分离
+
+任何会下载/加载模型权重的框架（如 Docling、PaddleOCR）必须**分别**判定：框架代码许可证 vs **每个模型权重**许可证。
+权重登记沿用 `MODEL_LICENSES.md`（model name / source / license / commercial_use_allowed / redistribution_allowed / restrictions）。
+**许可证不明确的模型不得进入生产**（LEVEL C）。
+
+### R10.5 AI / Agent 层边界
+
+优先复用：**FastAPI**（AI service interface）、**Pydantic**（structured output）、**LangGraph**（agent orchestration）、**Docling**（文档解析）。
+链路：Recovery OS → AI service interface → FastAPI → Pydantic structured output → LangGraph → 模型（DeepSeek/Claude/其他）。
+
+**以下永远不得交给 LLM 决定**（继续由确定性代码 / SQL / Rule Engine 控制）：
+金额 · Fee / Success Fee · Deadline · Ledger · Settlement · Billing · 状态推进 · 权限判断 · 审批消费。
+
+### R10.6 Connector / Adapter 边界
+
+优先顺序：**官方 API / SDK → 成熟客户端库 → 薄 Adapter 自研**。
+平台 SDK、认证、分页、限流、字段命名**不得**写进 Recovery OS 核心；结构固定为：
+`Platform SDK/HTTP → Adapter → Canonical ingest → CanonicalFact → Rule Engine → RecoveryOpportunity → Recovery OS`。
+
+### R10.7 外围自动化边界
+
+只能承担：通知 · 定时任务 · Webhook · 非关键数据同步 · 非关键数据搬运 · 内部运营自动化。
+禁止承担：Claim/Appeal 提交核心事务 · approval consumption · Settlement · RecoveryLedger · Billing · Success Fee · Payment · 核心状态迁移 · 权限决定。
+**n8n**：不按普通 MIT/Apache 依赖处理（Sustainable Use License）；只能作为「受限外围工具」评估，不得嵌入客户产品、不得默认托管客户工作流/凭据；Embed/Enterprise 商业许可需单独立项。
+**Activepieces**：Community/Core 与企业版必须分开检查；MIT 部分可进入候选，`packages/ee` 不得当作 MIT 使用。
+
+### R10.8 禁止「大换底座」
+
+引入开源组件的原则是「**插入现有架构**」，不是「为使用某个开源项目推倒现有架构重做」。
+任何开源组件不得绕过：Tenant Isolation · RBAC · Approval/HITL · Audit · Idempotency · Transaction · Ledger invariants · Action Guard · Kill Switch。
+
+### R10.9 本规则不阻塞当前队列
+
+规则落盘后，当前执行队列继续推进；只有真正进入**新模块**时才执行对应的 OSS / License 判定。
+进入新大模块时，本轮回报在上述三项之外增加：`LEGACY_REUSED / OSS_CANDIDATE / OSS_DECISION / LICENSE / COMMERCIAL_USE / LICENSE_RISK`。
+
+## R11 Platform API Approval Readiness（并行准备线，HOST DIRECTIVE 2026-10-01 补充）
+
+**定位**：TRACK B。**不得打断** TRACK A（R44 → R45 → R46 → Full Regression → Production Candidate）。
+落盘位置：`docs/platform-approval/`（总纲 + 五平台 scope 矩阵 + 数据流 + 安全证据 + 隐私生命周期 + OAuth 生命周期 + IR + 宿主清单）。
+机器可读镜像：`.autopilot/rules.json` → `platform_api_approval_readiness`；runner 每轮写入 HEARTBEAT；校验器 `tools/autopilot/check-autopilot-rules.mjs` 强制文档与平台覆盖存在。
+
+**R11.1 平台范围**：P1 = Amazon SP-API / TikTok Shop / Walmart Marketplace / Shopify；P2 = WooCommerce；P3·OSS_LATER = BigCommerce、其他独立站、其他 PSP、其他物流商。优先级不得改变 Recovery OS 主线。
+
+**R11.2 统一接入原则**：Official API / Official OAuth → Platform Adapter → SourceConnection → Raw SourceTransaction → CanonicalFact → Rule Engine → RecoveryOpportunity → Recovery OS → Evidence/Case/Claim/Appeal → Settlement → RecoveryLedger → Billing。
+禁止：平台 SDK 直接进入核心；平台字段污染核心领域模型；客户密码进入 CrossClaim；保存后台登录密码；未授权抓取 / Cookie 偷取 / 模拟登录作为生产方式；绕过官方风控；LLM 决定金额·Deadline·Settlement·Fee·Ledger；绕过 Tenant Isolation / RBAC / Audit / HITL / Action Guard。浏览器自动化只可作为极特殊辅助能力评估。
+
+**R11.3 V1 = READ-ONLY FIRST**：READ-ONLY + LEAST PRIVILEGE + MINIMUM DATA；不参与 Recovery 的字段默认不申请；**REAL EXTERNAL WRITE HOLD**、**Claim/Appeal 自动对外提交 HOLD**；链路保持 AI Prepare → Human Review → Human Approve → Manual/Approved Submission。
+
+**R11.4 平台专属约束**：
+
+- Amazon：Public Developer 路线；V1 尽最大可能不申请 Restricted PII（buyer name/address/phone/email 与 Recovery 无直接关系 → 不申请）；仅当不可替代需求出现时单独评估 Restricted Role / RDT。
+- TikTok Shop：Official API + Seller Authorization；**Custom app 可运行 ≠ 商业/Connector 批准**；TPRM/数据安全协议材料需齐备。
+- Walmart：Solution Provider 路线；不申请与追回无关的 listing/price/inventory write 与 order mutation。
+- Shopify：Public App 方向；**Protected Customer Data 分层**；V1 避免直接身份类 Protected Customer Fields；App Review 清单齐备（HTTPS/OAuth/Privacy/ToS/emergency contact/demo/uninstall·revoke/data deletion/OWASP/encryption/token handling/minimal network）。
+- WooCommerce：官方 REST API + 商户授权（或商户生成的只读 REST Key）；默认 `READ`；凭据只进 Secret Manager（CredentialRef），支持 revoke/reconnect/rotate/health/last sync/error state/audit/rate·retry。
+
+**R11.5 独立站多源**：StoreAdapter + PaymentAdapter + CarrierAdapter → Canonical Fact → Recovery Opportunity；Chargeback 不得硬编码为 Shopify 专属模型；CrossClaim 自身计费的 Stripe Billing 与客户业务 PSP 连接严格分离。
+
+**R11.6 生产安全证据**：平台申请要求 IMPLEMENTED + TESTED + EVIDENCE AVAILABLE（「代码支持」不算证据）；清单见 `SECURITY_CONTROLS_EVIDENCE.md` 与 `HOST_ACTION_CHECKLIST.md`。
+
+**R11.7 宿主控制**：未经 HOST APPROVAL 不得：提交平台申请、创建付费账号、使用真实客户账户、写入真实 Client Secret / Refresh Token、开启真实 write scope、提交真实 Claim/Appeal、开启生产支付接入、使用生产凭据。
+
+**R11.8 每轮涉及平台接入时输出平台状态字段**（见 rules.json `platform_status_fields`）。
+
+## R12 Success Fee / Billing 永久红线（HOST DIRECTIVE 2026-10-02）
+
+**一句话红线**：`Reimbursement observed ≠ recovered ≠ billable` —— 只有系统通过 reconciliation 确认真实到账并形成合法
+`Settlement = RECEIVED`（及对应 `RecoveryLedger` 事实）后，才允许计算 Success Fee 与生成 `BillingInvoice`。
+
+**落盘位置**：`docs/releases/SUCCESS-FEE-BILLING-REDLINE.md`（规范文档）。
+**机器可读镜像**：`.autopilot/rules.json` → `success_fee_billing_redline`；runner 每轮写入 HEARTBEAT 的 `billing_redline_policy`；
+校验器 `tools/autopilot/check-autopilot-rules.mjs` 在 CI 强制（规则段 + JSON 块 + 文档同时存在）。
+
+**R12.1 允许链路（冻结）**：`Reconciliation → Confirmed Settlement → RecoveryLedger → FeeCalculation → BillingInvoice → Payment`。
+`Payment` 自动扣款属于**独立 Production / Payment Authorization Gate**，当前 **HOLD**。
+
+**R12.2 可计费判定（必须同时成立）**：`Settlement.status = RECEIVED`（`PARTIAL` 仅按已到账部分）·
+`confirmationStatus = CONFIRMED` · `reconciliationStatus ∈ { RECONCILED, PARTIAL }` · `evidenceId` 非空 ·
+未被冲回（`reversedBySettlementId IS NULL`）· 计费基数只取自已确认到账的 Settlement/RecoveryLedger（**不得**取自
+`ReimbursementFact.amount`、平台 approved 状态或 ClaimItem 金额）· 费率来自既有 `FeeCalculation`（`FeeBasis = NONE` 不得开票）·
+沿用 `billing.draft` 的锁后重读 / 依据唯一 / `BILLING_BASIS_REQUIRED` 口径。
+
+**R12.3 明确禁止（fail-closed）**：仅因平台 approved 收费 · 仅因 reimbursement observed 收费 · 未确认到账收费 ·
+partial recovery 按 full recovery 收费 · reversal / correction 后继续按旧金额收费 · AI 直接决定 recovered amount 或 fee ·
+未经客户明确预授权自动扣款。
+
+**R12.4 冲正强制重算**：冲正以新事实表达、不覆盖历史；相关 `FeeCalculation` 必须重算，已签发账单走既有受控状态机
+（`VOID` / `WRITTEN_OFF`），不得直接改金额；「旧金额继续计费」一律视为 fail-closed 缺陷。
+
+**R12.5 自动扣款 = 独立 Gate（当前 HOLD）**：开启需 ① 客户明确预授权（可追溯授权事实 + 撤销路径）② 支付通道正式验收
+（生产凭据 / webhook 验签 / 对账 / 退款与争议路径）③ 架构方与宿主书面放行。Gate 放行前只允许生成账单事实与草稿/通知，
+**不得**发起扣款；生产凭据与生产支付接入继续 HOST APPROVAL REQUIRED。
+
+**R12.6 不改变队列**：本红线不改变 R45 执行队列（S1 CLOSED → S2 → S3 → S4 → S5）与 R46 排期，不重新规划，
+不重复审计已 PASS 底座；R46 设计/计划必须显式引用本文件并逐条对应 R12.2 / R12.3。
+
+## R13 Success Fee 支付授权分离 与 Onboarding/自动收费契约（HOST DIRECTIVE 2026-10-02 补充二）
+
+**落盘位置**：`docs/releases/PAYMENT-AUTHORIZATION-AND-ONBOARDING-CONTRACT.md`（与 R12 的 `SUCCESS-FEE-BILLING-REDLINE.md` 配套）。
+**机器可读镜像**：`.autopilot/rules.json#payment_authorization_separation`；runner 每轮输出 `payment_authorization_policy`；
+校验器 `tools/autopilot/check-autopilot-rules.mjs` 在 CI 强制。
+
+**R13.1 两条授权链严格分离**：Platform OAuth / Seller Authorization **只**用于平台数据与 API 能力，**不得**视为成功费扣款授权，
+**不得**依赖平台卖家余额直接扣取 CrossClaim 佣金，**不得**从 OAuth 权限推导支付授权；平台若存在独立 App Billing，也必须作为独立 Billing Authorization。
+
+**R13.2 Onboarding 收费体验（冻结）**：注册 → 平台授权 → **免费扫描/发现 Recovery Opportunity（不得强制绑卡）** → 客户点击「开始追回」
+→ 接受 Success Fee 条款 → 设置付款方式 / 签署有效 Payment Mandate → 进入正式追回执行。
+
+**R13.3 自动收费唯一链路**：`FULLY_RECONCILED → Settlement confirmed/received → RecoveryLedger → FeeCalculation → BillingInvoice →
+已存在有效 Payment Authorization / PaymentMethod / Mandate → Payment Provider 自动收取成功费`；
+**没有有效 Payment Authorization 时只生成 BillingInvoice / Payment Request，不得自动扣款**。`FULLY_RECONCILED` 不是可计费充分条件（仍受 R12 约束）。
+
+**R13.4 不保存支付敏感数据**：不保存 PAN / card number / CVV / 网银密码；只保存 provider 返回的 Customer ID / PaymentMethod ID / Mandate ID /
+authorization status 等引用；卡数据输入必须在支付服务商侧完成。
+
+**R13.5 不可逆升级禁令**：平台账号授权**永远不能自动升级为**支付授权；两类授权生命周期独立登记、可分别撤销；撤销支付授权后立即停止自动扣款（仅保留账单事实）。
+
+**R13.6 现在只登记、不实施**：本契约不打断 R45 → R46 队列；PaymentMethod / Mandate / autopay enablement 在 R46 完成后作为
+**独立 Payment Activation Gate** 实施、测试与审计（当前 **HOLD**；生产凭据与真实扣款 HOST APPROVAL REQUIRED）。
+
+## R14 Customs / Duty Drawback 与 BrokerConnector 长期契约（HOST DIRECTIVE 2026-10-02 补充三）
+
+**落盘位置**：`docs/releases/CUSTOMS-BROKER-CONNECTOR-CONTRACT.md`（与 R12 / R13 配套）。
+**机器可读镜像**：`.autopilot/rules.json#customs_broker_connector`；runner 每轮输出 `customs_broker_policy`；
+校验器 `tools/autopilot/check-autopilot-rules.mjs` 在 CI 强制。
+
+**R14.1 BrokerConnector 抽象**：链路 = Recovery Opportunity → Evidence/Claim Package → **BrokerConnector** →
+Licensed Customs Broker / ABI Service → CBP → Outcome/Reimbursement → Reconciliation。必须支持多种 transport
+（API/Webhook · ABI Vendor Integration · EDI/SFTP · 必要时 Manual Broker Portal），**不得绑定某一家 Broker**。
+
+**R14.2 执业边界**：CrossClaim **不得**自称 Customs Broker，**不得**执行依法必须由 licensed customs broker 承担的 customs business；
+V1 = Broker 负责 licensed review / filing / CBP communication，CrossClaim 负责数据接入 / detection / matching / Evidence Package / workflow / tracking / reconciliation。
+
+**R14.3 三域独立**：Platform OAuth · Broker POA · Payment Authorization 三个授权域**完全独立**，任何一项都不得自动推导另一项；
+CrossClaim 不得伪造、代替或从 Platform OAuth 推导 Broker POA。
+
+**R14.4 费用独立**：Broker Fee 与 CrossClaim Fee 在领域模型 / 合同主体 / Invoice / Payment attribution 上必须可独立表达；
+**禁止默认**「收统一百分比再按每笔 Customs Business 给 Broker 分佣」（涉及美国 Customs Broker compensation / fee-sharing 规则，实施前须专门合规审查）；
+优先 fixed fee / per-file fee / volume pricing / platform fee。
+
+**R14.5 客户体验统一**：客户在 CrossClaim 内完成资料、授权与状态跟踪；Broker 可为独立法律/收费主体，客户不重复整理材料或手工搬运数据。
+
+**R14.6 退款资金**：退款原则上优先直接进入 claimant/customer 合法收款账户；CrossClaim **不得默认代收**、**不得形成资金池**、**不得从退款中截留佣金**；
+此类模式必须另开 Funds Custody / Money Movement 合规审计。CrossClaim 成功费仍按 R12/R13（无有效 Payment Authorization 只出 Invoice，不自动扣款）。
+
+**R14.7 仅登记、不打断队列**：本规则不改变 R45 → R46；进入 Customs/BrokerConnector 实施批次时再提交独立设计、Schema Delta、合规审计与测试。
+
+## R15 — Customs Self-Service Pricing（HOST DIRECTIVE 2026-10-02 补充四）
+
+- 文档：`docs/releases/CUSTOMS-SELF-SERVICE-PRICING-CONTRACT.md`（已登记；**不实现**）。
+- 三层：FREE AUDIT → ONE-TIME RECOVERY PACKAGE → CONTINUOUS SUBSCRIPTION；Package Tier = MAX(Expected Recovery, Data Volume, Complexity)。
+- 价格一律**配置化**（EXPERIMENTAL），不得硬编码进 Rule Engine / Recovery Domain；不得免费暴露完整 filing 数据集。
+- Entitlement 服务端校验；Package Fee ≠ Success Fee；Checkout 用独立 Payment Provider，≠ Platform OAuth 推导。
+- 队列影响：NONE（不打断 R45 → R46 → Full Regression）。
+
+## R16 — Carrier Recovery V1（HOST DIRECTIVE 2026-10-02 补充五）
+
+- 文档：`docs/releases/CARRIER-RECOVERY-V1-CONTRACT.md`（已登记；**不实现**）。
+- COMMON CARRIER RECOVERY ENGINE + Provider Rule Pack（UPS/FedEx/DHL/USPS）；REUSE > EXTEND > NEW BUILD。
+- V1 Top-10 rule 先行（再 10 → 30 → 50+）；deterministic / versioned / evidence-backed / fail-closed。
+- **UPS Compliance Gate**：默认只用客户提供数据；扩大 API 自动化前必须完成 terms review 或 partner access。
+- Provider Capability Matrix 必建；UNKNOWN 默认 fail-closed；不得因技术可行假设合同允许。
+- 队列影响：NONE（不打断 R46 → Settlement/Billing → Full Regression）。
+
+## R17 — 无人值守自治执行模式（HOST DIRECTIVE 2026-10-02 补充六）
+
+- 沿用既有 `.autopilot/{STATE,TASKS,RULES,RUN_LOG,BLOCKERS,HEARTBEAT}` 与 ChatGPT Audit Loop；**不得重新初始化**、不得丢裁决、不得回退已 PASS/CLOSED 批次。
+- **「无新裁决」不是停止条件**：TASKS 中存在 AUTHORIZED / READY / CONTINUE / REMAINING 单元即必须 IMPLEMENT。
+- 执行循环：RECONCILE → SELECT NEXT AUTHORIZED UNIT → IMPLEMENT → LOCAL TEST → DB TEST → TYPECHECK/VALIDATE → COMMIT → PUSH → CI → CLASSIFY → AUDIT REQUEST → READ FULL VERDICT → APPLY VERDICT → CONTINUE。
+- **禁止空转**：不得连续两个 tick 只有「无新裁决 / runner 正常 / IN_SYNC / 下一步是… / 等待审计 / 无需宿主动作」而无任何真实变化（code / test / DB acceptance / migration / commit / HEAD / CI / audit）。触发即 `AUTOPILOT_STALL = TRUE`，必须 SELF-RECOVER 到最小可执行单元。
+- 小批次原则：单一能力 / 可测试 / 可回滚 / 可审计 / 不扩大未授权范围；完成即 LOCAL PASS → COMMIT → PUSH → CI → 七段式 Audit Request → 右侧 wake-up。
+- 裁决处理：PASS 继续下一单元；PASS WITH REVISE 先落实强制 CHANGE；REVISE 修改后重送审；BLOCK 只停被 BLOCK 范围，独立已授权任务继续。
+- HOST ACTION REQUIRED 仅限：生产凭据 / 真实账户授权 / 真实客户脱敏数据（无法 synthetic）/ 真实资金操作 / 法律合规商业决定 / 外部登录验证码签约 / ChatGPT 明确 BLOCK。其余（测试失败、类型错误、migration、fixture、CI flaky、merge 冲突、依赖、本地环境、测试隔离）一律 SELF_RESOLVE。
+- 真实数据延后：继续 synthetic fixture / test doubles / mocked adapters / controlled PostgreSQL integration tests；但不得用 synthetic 冒充真实商业验证。
+- 安全边界不变：production_enabled=false · external_write_enabled=false · TRANSPORT=false；真实平台写入 / 自动 Claim 提交 / 扣款 / 自动 Success Fee / 自动 Invoice issuance / Autopay / 生产凭据 继续 HOLD。
+- 已登记的产品指令（Carrier Recovery V1、Customs Self-Service Pricing 等）状态为 REGISTERED / IMPLEMENTATION_STARTED=NO / QUEUE_IMPACT=NONE，**不得抢占 R46 主队列**。
+- 全局回归纪律：重要修改必须检查 schema compatibility / tenant isolation / permission / action guard / approval binding / idempotency / concurrency / transaction rollback / audit integrity / claim·appeal·recovery·settlement consistency。

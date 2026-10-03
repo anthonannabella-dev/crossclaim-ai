@@ -16,9 +16,12 @@
 | 禁止 | 买家姓名/地址/邮箱等 PII；真实支付凭据；平台凭据 |
 | 交付方式 | 宿主指定路径（不经聊天、不入仓库） |
 
+> 交付清单、字段命名与登记表以 [`HOST-DATA-REQUEST.md`](HOST-DATA-REQUEST.md) 为**单一口径**。
+
 ## 2. 步骤
 
 ```text
+0) 入场前置检查（Stage 0，只读）          → tools/validation/phase1-runbook.mjs preflight <csv>
 1) 接收检查（结构 + 行数 + 必需列）      → tools/validation/phase1-runbook.mjs audit-input <csv>
 2) 导入（既有 pipeline）                  → 产出 ImportBatch / SourceTransaction（幂等：dedupeKey）
 3) 数据质量报告                            → templates/DATA-QUALITY-REPORT.md
@@ -75,3 +78,26 @@ node tools/validation/phase1-runbook.mjs gate <candidates> <verified> [分类...
 - 本 Runbook 不接线任何业务动作；Discovery/Candidate 只产出**线索**
 - 真实轮换/生产部署/DNS/TLS 仍为 HOST APPROVAL REQUIRED
 - Production Enablement = HOLD
+---
+
+## 7. 常见错误案例与处置（Runbook 错误案例 · 2026-09-30 增补）
+
+> 依据：架构方 **MSG-20260930-02** 批准等待期「文档完善」范围。
+> 纪律不变：**不猜字段、不自动改写表头、不自动补值**；`preflight` 只做结构与列名检查，不做金额运算、不读内容语义。
+
+| 现象 | `preflight` 判定 | 处置 |
+|---|---|---|
+| 文件为空或只有空行 | `NEEDS_FIX`（`non-empty`） | 退回宿主补齐；不得创建空批次 |
+| 首行不是表头 / 只有一列 | `NEEDS_FIX`（`header-present`） | 要求导出保留表头 |
+| 缺 `order_id`/`occurred_at`/`amount`/`currency` | `NEEDS_FIX`（`required-columns: missing=…`） | 由**人工显式映射**（映射表书面确认）；禁止自动改写 |
+| 平台原生列名（`Order ID`/`Created At`/`Total Price`） | `NEEDS_FIX` + `alias-hints`（非阻断提示） | 别名仅作提示；系统不会自动映射 |
+| 行数 < 500 | `NEEDS_FIX`（`min-rows`） | 继续采集后再跑 |
+| 出现 `buyer_name`/`ship_address`/`email` 等列 | `NEEDS_FIX`（`no-pii-columns`，按列名保守判定） | 整列占位后重交；不读取内容 |
+| 某行字段数与表头不一致（含跨行引号） | `NEEDS_FIX`（`no-ragged-rows`） | 请宿主修正导出；Stage A 会把它计入 `rejected` |
+| `order_id` 重复 | `NEEDS_FIX`（`unique-order-id`） | 确认是否同单多行；需要时先拆分/聚合再交付 |
+| `occurred_at` 无法解析 | `NEEDS_FIX`（`dates-parsable`） | 统一为 ISO 日期 |
+| 数据不在最近 3 个月 | 非阻断（`recent-window-preferred=false`） | 可继续，但报告须注明时间窗 |
+| 字段内含逗号/引号 | ⚠️ `preflight` 只按逗号切分，可能误判裂行 | 用 `audit-input` 复核；必要时先产出规范化 CSV |
+| `preflight` 通过但 Stage A 记账不平 | 属 `STOP_REWORK` 线索 | 先修导入记账；**禁止 silent drop** |
+
+**退出码约定**：`preflight` 返回 `0 = READY_FOR_STAGE_A`、`1 = NEEDS_FIX`（便于脚本/CI 判定）。

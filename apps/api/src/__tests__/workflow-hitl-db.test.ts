@@ -41,6 +41,18 @@ beforeEach(async () => {
     'TRUNCATE TABLE "AuditLog", "BillingInvoice", "FeeCalculation", "RecoveryLedgerEntry", "Settlement", "Claim", "CaseEvidence", "EvidenceArtifact", "RecoveryRoute", "CaseOpportunity", "Case", "RecoveryOpportunity", "Membership", "User", "Organization" CASCADE;',
   );
   await prisma.organization.create({ data: { id: ORG, name: 'HITL 租户', slug: 'hitl-org' } });
+  // MSG-20261002-70 CHANGE C：夹具 account-aware 化（人工确认凭证需从 case 主张链派生 account）。
+  fixtureAccountId = (
+    await prisma.platformAccount.create({
+      data: {
+        organizationId: ORG,
+        platform: 'OTHER',
+        externalAccountId: 'C2-FIXTURE-ACCOUNT',
+        displayName: 'c2 fixture account',
+      },
+      select: { id: true },
+    })
+  ).id;
   const [admin, finance] = await Promise.all([
     prisma.user.create({ data: { email: 'hitl-admin@example.com', displayName: '管理员', status: 'ACTIVE' } }),
     prisma.user.create({ data: { email: 'hitl-finance@example.com', displayName: '财务', status: 'ACTIVE' } }),
@@ -56,6 +68,8 @@ beforeEach(async () => {
 });
 
 /** 具备确认回收前置条件的案件：WON + Claim APPROVED + 已确认费率。 */
+let fixtureAccountId = '';
+
 async function seedReadyCase(claimedAmount = '5000.0000', currency = 'USD') {
   const kase = await prisma.case.create({
     data: {
@@ -66,6 +80,19 @@ async function seedReadyCase(claimedAmount = '5000.0000', currency = 'USD') {
       status: 'WON',
       claimedAmount: new Prisma.Decimal(claimedAmount),
       currency,
+    },
+  });
+  // account-scoped 主张：使 case 具备可派生的 account provenance。
+  await prisma.claimItem.create({
+    data: {
+      organizationId: ORG,
+      accountId: fixtureAccountId,
+      caseId: kase.id,
+      platformType: 'OTHER',
+      claimType: 'OTHER',
+      platformRef: 'HITL-' + kase.id.slice(0, 8),
+      occurredAt: new Date('2026-09-08T00:00:00.000Z'),
+      normalizerVersion: 'v1',
     },
   });
   await prisma.claim.create({
@@ -143,14 +170,24 @@ describe('C-0009.2 — 高额回收人工卡口（真实 PostgreSQL）', () => {
     expect(row.recoveredAmount?.toFixed(4)).toBe('0.0000');
   });
 
-  it('ADMIN 复核通过后可确认；状态由审计推导为 APPROVED', async () => {
+  it('ADMIN 复核通过后可确认（R3：必须携带操作级 approvalId）；状态由审计推导为 APPROVED', async () => {
     const kase = await seedReadyCase();
     await expect(confirm(kase.id)).rejects.toMatchObject({ code: 'REVIEW_REQUIRED' });
 
     const approved = await submitRecoveryReview(
       prisma,
-      { organizationId: ORG, actorUserId: adminId, role: 'ADMIN', caseId: kase.id, decision: 'APPROVE' },
-      () => NOW,
+      {
+        organizationId: ORG,
+        actorUserId: adminId,
+        role: 'ADMIN',
+        caseId: kase.id,
+        decision: 'APPROVE',
+        // CHANGE A（R2）：审批绑定本次操作载荷（与后续确认一致）
+        boundPayload: { recoveredAmount: '1500.0000', currency: 'USD', basisReference: 'carrier-email-20260928', evidenceArtifactId: null },
+        boundAction: 'commission.charge',
+      },
+      // R3：审批必须晚于对应的 review_required（同秒会被判定为轮次不成立）
+      () => new Date(NOW.getTime() + 1000),
     );
     expect(approved).toMatchObject({ state: 'APPROVED', decision: 'APPROVE' });
 
@@ -161,7 +198,8 @@ describe('C-0009.2 — 高额回收人工卡口（真实 PostgreSQL）', () => {
     );
     expect(status.state).toBe('APPROVED');
 
-    const result = await confirm(kase.id);
+    // R3 CHANGE B：高额旧卡口不是操作级审批替代 —— 确认必须携带审批事件 id
+    const result = await confirm(kase.id, { approvalId: approved.approvalId as string });
     expect(result.created).toBe(true);
     // 1500.0000 × 0.15 = 225.0000（Decimal 4 位 HALF_UP）
     expect(result.feeAmount).toBe('225.0000');

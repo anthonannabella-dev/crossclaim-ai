@@ -31,3 +31,13 @@
 
 - 重复导入验证：`dedupeKey` 命中数 =
 - 是否产生重复 SourceTransaction：否（必须）
+## Stage 0 入场前置检查（preflight 证据，只读）
+
+- 命令：`node tools/validation/phase1-runbook.mjs preflight <dataset.csv>`
+- verdict：`READY_FOR_STAGE_A` / `NEEDS_FIX`（退出码 0 / 1）
+- 阻断项结果：non-empty / header-present / required-columns / min-rows / no-pii-columns / no-ragged-rows / unique-order-id / dates-parsable
+- 非阻断提示：recent-window-preferred（时间窗）、alias-hints（别名提示，**不自动映射**）
+- 数据集 sha256：
+
+> 说明：Stage 0 只做结构/列名/数量/可解析性检查；**不猜字段、不自动补值、不做金额运算**。
+> 空值与币种一致性等数值语义问题在 Stage A 与 `DATA-QUALITY-REPORT.md` 记录。

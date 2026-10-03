@@ -12,6 +12,7 @@
  *
  * 用法：
  *   node tools/validation/phase1-runbook.mjs plan
+ *   node tools/validation/phase1-runbook.mjs preflight <dataset.csv>   # Stage 0：入场前置检查（只读）
  *   node tools/validation/phase1-runbook.mjs audit-input <dataset.csv>
  *   node tools/validation/phase1-runbook.mjs gate <candidates> <verified> [true|false|needs...]
  */
@@ -28,6 +29,180 @@ export const PHASE1_THRESHOLDS = {
 export const DECISION_GATES = ['PASS_TO_MVP', 'CONTINUE_DATA_COLLECTION', 'STOP_REWORK'];
 
 export const HUMAN_CLASSIFICATIONS = ['TRUE_POSITIVE', 'FALSE_POSITIVE', 'NEEDS_DATA'];
+
+/** 疑似 PII 列名提示（只做列名扫描，不读取内容语义） */
+export const PII_COLUMN_HINTS = [
+  'email',
+  'phone',
+  'tel',
+  'address',
+  'buyer',
+  'recipient',
+  'contact',
+  'postal',
+  'zip',
+  'ssn',
+  'passport',
+  'name',
+];
+
+/** 业务标识白名单：命中 name 类提示但属于订单/商品/文件标识，不计为 PII */
+export const NON_PII_NAME_COLUMNS = [
+  'order_name',
+  'order name',
+  'product_name',
+  'item_name',
+  'variant_name',
+  'file_name',
+  'batch_name',
+  'source_name',
+];
+
+/**
+ * 列名别名提示：**仅供人工显式映射参考**。
+ * 纪律：禁止自动猜测字段、禁止自动改写表头——别名命中不会让检查通过。
+ */
+export const STAGE_A_COLUMN_ALIAS_HINTS = {
+  order_id: ['order id', 'orderid', 'order number', 'order no', 'order_name'],
+  occurred_at: ['created at', 'created_at', 'order date', 'date', 'transaction date'],
+  amount: ['total price', 'total', 'gross sales', 'net amount'],
+  currency: ['currency code', '币种'],
+};
+
+export const PREFLIGHT_VERDICTS = ['READY_FOR_STAGE_A', 'NEEDS_FIX'];
+
+/** 列名是否疑似 PII（保守；只按列名，不读内容） */
+export function isPiiColumn(column) {
+  const normalized = String(column ?? '').trim().toLowerCase();
+  if (normalized === '') return false;
+  if (NON_PII_NAME_COLUMNS.includes(normalized)) return false;
+  return PII_COLUMN_HINTS.some((hint) => normalized.includes(hint));
+}
+
+/**
+ * Stage 0 数据入场前置检查（**只读**）：
+ * 在 Stage A 记账之前，确认宿主交付的数据集符合冻结的输入契约。
+ * 只做结构 / 列名 / 数量 / 可解析性检查，**不判断商业价值**、**不修改数据**、
+ * **不猜测字段**、**不自动补值**。
+ */
+export function preflightDataset(input) {
+  const text = String(input?.text ?? '');
+  const minRows = Number(input?.minRows ?? 500);
+  const now = input?.now ? new Date(input.now) : new Date();
+  const checks = [];
+  const push = (name, ok, detail, blocking = true) => checks.push({ name, ok, detail, blocking });
+
+  const lines = text.split(/\r?\n/).filter((line) => line.trim() !== '');
+  if (lines.length === 0) {
+    push('non-empty', false, '文件为空（或只有空行）');
+    return {
+      ok: false,
+      verdict: 'NEEDS_FIX',
+      rowCount: 0,
+      header: [],
+      checks,
+      blockingChecks: ['non-empty'],
+      aliasHints: [],
+      nextStep: '退回宿主补齐数据（不臆造、不自动补值）',
+    };
+  }
+
+  const header = lines[0].split(',').map((cell) => cell.trim());
+  const rows = lines.slice(1);
+  push('header-present', header.length > 1, `columns=${header.length}`);
+
+  const missing = PHASE1_THRESHOLDS.requiredStageAColumns.filter((column) => !header.includes(column));
+  push(
+    'required-columns',
+    missing.length === 0,
+    missing.length === 0
+      ? `required ok: ${PHASE1_THRESHOLDS.requiredStageAColumns.join(',')}`
+      : `missing=${missing.join('+')}`,
+  );
+
+  // 非阻断：仅提示可人工显式映射的候选列名（禁止自动映射）
+  const aliasHints = [];
+  for (const column of missing) {
+    const hints = STAGE_A_COLUMN_ALIAS_HINTS[column] ?? [];
+    for (const candidate of header) {
+      if (hints.includes(candidate.trim().toLowerCase())) {
+        aliasHints.push(`${column} <- "${candidate}"（需人工显式映射，禁止自动改写）`);
+      }
+    }
+  }
+  push('alias-hints', true, aliasHints.length === 0 ? 'none' : aliasHints.join('; '), false);
+
+  push('min-rows', rows.length >= minRows, `rows=${rows.length} (>= ${minRows})`);
+
+  const piiColumns = header.filter((column) => isPiiColumn(column));
+  push(
+    'no-pii-columns',
+    piiColumns.length === 0,
+    piiColumns.length === 0 ? 'none' : `疑似 PII 列（保守判定）=${piiColumns.join('+')}`,
+  );
+
+  const idIndex = header.indexOf('order_id');
+  const seen = new Set();
+  const duplicates = new Set();
+  let ragged = 0;
+  for (const row of rows) {
+    const cells = row.split(',');
+    if (cells.length !== header.length) ragged += 1;
+    if (idIndex >= 0 && cells[idIndex] !== undefined) {
+      const id = cells[idIndex].trim();
+      if (seen.has(id)) duplicates.add(id);
+      seen.add(id);
+    }
+  }
+  push('no-ragged-rows', ragged === 0, `ragged=${ragged}`);
+  push('unique-order-id', duplicates.size === 0, `duplicates=${duplicates.size}`);
+
+  const dateIndex = header.indexOf('occurred_at');
+  let minDate = null;
+  let maxDate = null;
+  let unparsable = 0;
+  if (dateIndex >= 0) {
+    for (const row of rows) {
+      const raw = row.split(',')[dateIndex];
+      const parsed = raw ? new Date(raw.trim()) : null;
+      if (!parsed || Number.isNaN(parsed.getTime())) {
+        unparsable += 1;
+        continue;
+      }
+      if (!minDate || parsed < minDate) minDate = parsed;
+      if (!maxDate || parsed > maxDate) maxDate = parsed;
+    }
+  }
+  push('dates-parsable', unparsable === 0, `unparsable=${unparsable}`);
+
+  const windowStart = new Date(now);
+  windowStart.setMonth(windowStart.getMonth() - 3);
+  const withinWindow = minDate !== null && minDate >= windowStart;
+  push(
+    'recent-window-preferred',
+    withinWindow,
+    minDate
+      ? `min=${minDate.toISOString().slice(0, 10)} max=${(maxDate ?? minDate).toISOString().slice(0, 10)} (窗口起点 ${windowStart.toISOString().slice(0, 10)}，非阻断项)`
+      : 'no dates parsed',
+    false,
+  );
+
+  const blockingChecks = checks.filter((check) => check.blocking && !check.ok).map((check) => check.name);
+  const ok = blockingChecks.length === 0;
+  return {
+    ok,
+    verdict: ok ? 'READY_FOR_STAGE_A' : 'NEEDS_FIX',
+    rowCount: rows.length,
+    header,
+    checks,
+    aliasHints,
+    blockingChecks,
+    nextStep: ok
+      ? 'RUN: node tools/validation/phase1-runbook.mjs audit-input <dataset.csv>（Stage A 记账）'
+      : '退回宿主补齐（不臆造、不自动补值）；缺口见 blockingChecks',
+  };
+}
+
 
 export const FORBIDDEN_AUTOMATIONS = [
   'auto-submit-claim',
@@ -170,6 +345,7 @@ function main() {
   const [command, ...args] = process.argv.slice(2);
   if (!command || command === 'plan') {
     console.log('P2-4 Production Validation Runbook（CODE READY ≠ PRODUCTION VALIDATED）');
+    console.log('Stage 0：preflight <csv>（只读：表头/必需列/行数/PII 列名/唯一 id/日期可解析）');
     console.log(`Stage A：input = normalized + quarantine + rejected（阈值：禁止 silent drop）`);
     console.log(`Stage B：Candidate >= ${PHASE1_THRESHOLDS.candidateMin}（Candidate ≠ Claim）`);
     console.log(`Stage C：human verification >= ${PHASE1_THRESHOLDS.humanVerificationMin}（${HUMAN_CLASSIFICATIONS.join(' / ')}）`);
@@ -178,6 +354,16 @@ function main() {
     console.log(`禁止：${FORBIDDEN_AUTOMATIONS.join(', ')}`);
     console.log('真实数据：WAITING_HOST_DATA（不得使用真实客户数据做测试）');
     return;
+  }
+  if (command === 'preflight') {
+    const file = args[0];
+    if (!file) {
+      console.error('用法：preflight <dataset.csv>');
+      process.exit(2);
+    }
+    const result = preflightDataset({ text: readFileSync(file, 'utf8') });
+    console.log(JSON.stringify(result, null, 2));
+    process.exit(result.ok ? 0 : 1);
   }
   if (command === 'audit-input') {
     const file = args[0];
@@ -203,7 +389,7 @@ function main() {
     );
     return;
   }
-  console.error('未知命令（支持：plan / audit-input / gate）');
+  console.error('未知命令（支持：plan / preflight / audit-input / gate）');
   process.exit(2);
 }
 

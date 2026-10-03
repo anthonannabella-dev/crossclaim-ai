@@ -19,6 +19,7 @@ import { ForbiddenError, WorkflowError } from '../services/workflow';
 
 const prisma = new PrismaClient();
 const ORG = 'b4000000-0000-4000-8000-000000000001';
+let opportunityId = '';
 const ORG_B = 'b4000000-0000-4000-8000-000000000002';
 const NOW = new Date('2026-09-28T18:00:00Z');
 
@@ -36,7 +37,7 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await prisma.$executeRawUnsafe(
-    'TRUNCATE TABLE "ClaimItemEvidence", "ClaimItem", "PaymentProcessingAttempt", "Payment", "PaymentEvent", "AuditLog", "BillingInvoice", "FeeCalculation", "RecoveryLedgerEntry", "Settlement", "Claim", "CaseEvidence", "EvidenceArtifact", "RecoveryRoute", "CaseOpportunity", "Case", "RecoveryOpportunity", "Membership", "User", "Organization" CASCADE;',
+    'TRUNCATE TABLE "ClaimItemEvidence", "ClaimItem", "PaymentProcessingAttempt", "Payment", "PaymentEvent", "AuditLog", "BillingInvoice", "FeeCalculation", "RecoveryLedgerEntry", "Settlement", "Claim", "CaseEvidence", "EvidenceArtifact", "RecoveryRoute", "CaseOpportunity", "Case", "RecoveryOpportunity", "PlatformAccount", "Membership", "User", "Organization" CASCADE;',
   );
   await prisma.organization.createMany({
     data: [
@@ -77,6 +78,33 @@ beforeEach(async () => {
   });
   foreignCaseId = foreignCase.id;
 
+  // TRACK B BATCH 2 / B2-3：active new ClaimItem 必须是 account-scoped；
+  // 夹具提供可信 opportunity 上下文（本租户 + 已归因账户）。
+  const claimAccount = await prisma.platformAccount.create({
+    data: {
+      organizationId: ORG,
+      platform: 'AMAZON',
+      externalAccountId: 'fixture-' + ORG,
+      displayName: 'fixture account',
+    },
+  });
+  const opportunity = await prisma.recoveryOpportunity.create({
+    data: {
+      organizationId: ORG,
+      accountId: claimAccount.id,
+      domain: 'LOGISTICS',
+      channel: 'AMAZON_OTHER',
+      opportunityType: 'FREIGHT_RATE_OVERCHARGE',
+      title: 'fixture opportunity',
+      amountExpected: new Prisma.Decimal('100.0000'),
+      amountActual: new Prisma.Decimal('120.0000'),
+      recoverableAmount: new Prisma.Decimal('20.0000'),
+      currency: 'USD',
+      status: 'QUALIFIED',
+    },
+  });
+  opportunityId = opportunity.id;
+
   const evidence = await prisma.evidenceArtifact.create({
     data: { organizationId: ORG, kind: 'POD', title: 'POD 证据' },
   });
@@ -95,6 +123,7 @@ async function create(
       platformType: 'AMAZON',
       claimType: 'FBA_LOSS',
       platformRef: 'adj-1',
+      opportunityId,
       occurredAt: NOW,
       normalizerVersion: 'normalizer-1.0.0',
       ...overrides,

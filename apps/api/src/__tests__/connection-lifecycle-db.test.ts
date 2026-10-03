@@ -19,6 +19,7 @@ const ORG = 'f0000000-0000-4000-8000-000000000001';
 const OTHER_ORG = 'f0000000-0000-4000-8000-000000000002';
 const SALT = 'gate5-lifecycle-db-salt-0123456789';
 
+let ACCOUNT_ID = '';
 const connections = createPrismaConnectionLifecyclePort(prisma);
 const audit = createAuditWriter(createPrismaAuditSink(prisma), { ipSalt: SALT });
 const deps = { connections, audit, now: () => new Date('2026-09-28T14:30:00Z') };
@@ -33,7 +34,7 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await prisma.$executeRawUnsafe(
-    'TRUNCATE TABLE "AuditLog", "SourceConnection", "Organization" CASCADE;',
+    'TRUNCATE TABLE "AuditLog", "SourceConnection", "PlatformAccount", "Organization" CASCADE;',
   );
   await prisma.organization.createMany({
     data: [
@@ -41,6 +42,18 @@ beforeEach(async () => {
       { id: OTHER_ORG, name: '其他租户', slug: 'lifecycle-other' },
     ],
   });
+  // MSG-20261002-77：ACTIVE 连接必须绑定 canonical PlatformAccount。
+  ACCOUNT_ID = (
+    await prisma.platformAccount.create({
+      data: {
+        organizationId: ORG,
+        platform: 'OTHER',
+        externalAccountId: 'LIFECYCLE-ACCOUNT',
+        displayName: 'lifecycle account',
+      },
+      select: { id: true },
+    })
+  ).id;
 });
 
 describe('C-0007 Phase 1 — SourceConnection lifecycle（真实 PostgreSQL）', () => {
@@ -53,6 +66,7 @@ describe('C-0007 Phase 1 — SourceConnection lifecycle（真实 PostgreSQL）',
         kind: 'API',
         label: 'ups lifecycle',
         credentialRef: 'CROSSCLAIM_UPS_RO',
+        platformAccountId: ACCOUNT_ID,
       },
       deps,
     );
@@ -109,6 +123,7 @@ describe('C-0007 Phase 1 — SourceConnection lifecycle（真实 PostgreSQL）',
         channel: 'OTHER',
         kind: 'FILE_UPLOAD',
         label: 'upload lifecycle',
+        platformAccountId: ACCOUNT_ID,
       },
       deps,
     );
@@ -117,5 +132,23 @@ describe('C-0007 Phase 1 — SourceConnection lifecycle（真实 PostgreSQL）',
     await expect(
       transitionConnection({ organizationId: OTHER_ORG, connectionId: created.id, to: 'PAUSED' }, deps),
     ).rejects.toThrow(/不存在或不属于该租户/);
+  });
+
+  it('未绑定账户的连接不得被激活（MSG-20261002-77 B3-1 / B3-4 DB 不变量）', async () => {
+    const unbound = await createConnection(
+      {
+        organizationId: ORG,
+        domain: 'LOGISTICS',
+        channel: 'OTHER',
+        kind: 'FILE_UPLOAD',
+        label: 'unbound cannot activate',
+      },
+      deps,
+    );
+    expect(unbound.status).toBe('NEEDS_AUTH');
+    await expect(
+      transitionConnection({ organizationId: ORG, connectionId: unbound.id, to: 'ACTIVE' }, deps),
+    ).rejects.toThrow(/PLATFORM_ACCOUNT_REQUIRED/);
+    expect((await connections.find(ORG, unbound.id))?.status).toBe('NEEDS_AUTH');
   });
 });

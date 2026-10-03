@@ -48,6 +48,23 @@ export interface PermissionMatrix {
   claimTrackingReceive: boolean;
   /** MSG-20260929-27 F2：录入到账事实 RecoveryPayout（OWNER/ADMIN/FINANCE） */
   recoveryPayoutRecord: boolean;
+  /**
+   * CARRIER QUEUE #9B FINAL（MSG-20261003-119 ㉔㉗）：记录「用户自称已人工提交 claim package」的事实。
+   * 只是 human attestation（carrierConfirmationStatus = NOT_VERIFIED），不是 carrier 外写；
+   * OWNER / ADMIN / OPS 可（与 claimTrackingReceive 同档），FINANCE / VIEWER 不可。
+   */
+  recordCarrierManualSubmission: boolean;
+  /**
+   * CARRIER QUEUE #10 FINAL（MSG-20261003-122 ㉘）：记录 carrier claim response 事实
+   * （人工补录入口只能产生 USER_REPORTED；provider 验证走独立可信 ingest 路径）。
+   * OWNER / ADMIN / OPS 可；FINANCE / VIEWER / 未知角色不可。
+   */
+  recordCarrierClaimResponse: boolean;
+  /**
+   * C21（MSG-20261003-124 ⑲）：启动 Customs 内部追回准备（不执行 filing）。
+   * OWNER / ADMIN / OPS 可；FINANCE / VIEWER / 未知不可。
+   */
+  startCustomsRecovery: boolean;
 }
 
 const DENY_ALL: PermissionMatrix = {
@@ -65,6 +82,9 @@ const DENY_ALL: PermissionMatrix = {
   claimTrackingApprove: false,
   claimTrackingReceive: false,
   recoveryPayoutRecord: false,
+  recordCarrierManualSubmission: false,
+  recordCarrierClaimResponse: false,
+  startCustomsRecovery: false,
 };
 
 export const PERMISSIONS: Record<AppRole, PermissionMatrix> = {
@@ -83,6 +103,9 @@ export const PERMISSIONS: Record<AppRole, PermissionMatrix> = {
     claimTrackingApprove: true,
     claimTrackingReceive: true,
     recoveryPayoutRecord: true,
+    recordCarrierManualSubmission: true,
+    recordCarrierClaimResponse: true,
+    startCustomsRecovery: true,
   },
   ADMIN: {
     manageConnections: true,
@@ -99,6 +122,9 @@ export const PERMISSIONS: Record<AppRole, PermissionMatrix> = {
     claimTrackingApprove: true,
     claimTrackingReceive: true,
     recoveryPayoutRecord: true,
+    recordCarrierManualSubmission: true,
+    recordCarrierClaimResponse: true,
+    startCustomsRecovery: true,
   },
   OPS: {
     manageConnections: false,
@@ -115,6 +141,9 @@ export const PERMISSIONS: Record<AppRole, PermissionMatrix> = {
     claimTrackingApprove: false,
     claimTrackingReceive: true,
     recoveryPayoutRecord: false,
+    recordCarrierManualSubmission: true,
+    recordCarrierClaimResponse: true,
+    startCustomsRecovery: true,
   },
   FINANCE: {
     manageConnections: false,
@@ -131,6 +160,9 @@ export const PERMISSIONS: Record<AppRole, PermissionMatrix> = {
     claimTrackingApprove: false,
     claimTrackingReceive: false,
     recoveryPayoutRecord: true,
+    recordCarrierManualSubmission: false,
+    recordCarrierClaimResponse: false,
+    startCustomsRecovery: false,
   },
   VIEWER: { ...DENY_ALL },
 };

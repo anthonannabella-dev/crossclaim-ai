@@ -56,9 +56,18 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await prisma.$executeRawUnsafe(
-    'TRUNCATE TABLE "AuditLog", "EvidenceArtifact", "CaseEvidence", "SourceTransaction", "ImportBatch", "FileAsset", "SourceConnection", "Organization" CASCADE;',
+    'TRUNCATE TABLE "AuditLog", "EvidenceArtifact", "CaseEvidence", "SourceTransaction", "ImportBatch", "FileAsset", "SourceConnection", "PlatformAccount", "Organization" CASCADE;',
   );
   await prisma.organization.create({ data: { id: ORG, name: '采集租户', slug: 'acquisition-org' } });
+  // TRACK B BATCH 1：ingest 入口要求连接已绑定 PlatformAccount（服务端派生 account 归因）。
+  const account = await prisma.platformAccount.create({
+    data: {
+      organizationId: ORG,
+      platform: 'UPS',
+      externalAccountId: 'fixture-' + ORG,
+      displayName: 'fixture account',
+    },
+  });
 
   const uploadConnection = await prisma.sourceConnection.create({
     data: {
@@ -67,6 +76,7 @@ beforeEach(async () => {
       channel: 'OTHER',
       kind: 'FILE_UPLOAD',
       status: 'ACTIVE',
+      platformAccountId: account.id,
       label: 'carrier invoice upload',
     },
   });
@@ -79,6 +89,7 @@ beforeEach(async () => {
       channel: 'UPS',
       kind: 'API',
       status: 'ACTIVE',
+      platformAccountId: account.id,
       label: 'ups fixture api',
       credentialRef: 'CROSSCLAIM_FIXTURE_UPS_RO',
     },

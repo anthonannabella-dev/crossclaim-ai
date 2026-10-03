@@ -1,0 +1,52 @@
+{
+  "units": [
+    {
+      "id": "u1-customs-suite",
+      "title": "运行 Customs 全链测试套件并留档结果（证据单元）",
+      "kind": "TEST_EVIDENCE",
+      "safe": true
+    },
+    {
+      "id": "u2-full-gates",
+      "title": "运行全量闸门（tsc api/web + API contract + audit coverage + autopilot rules）并留档",
+      "kind": "GATE_EVIDENCE",
+      "safe": true
+    },
+    {
+      "id": "u3-ci-triage",
+      "title": "CI 非阻塞巡检：读取最近提交的 CI run 状态并在有红灯时登记 SELF_RESOLVE 队列",
+      "kind": "CI_TRIAGE",
+      "safe": true
+    },
+    {
+      "id": "u4-fresh-db-verify",
+      "title": "空库迁移 + 触发器清单 + DB 约束守卫复核（发布证据单元）",
+      "kind": "RELEASE_EVIDENCE",
+      "safe": true
+    },
+    {
+      "id": "u5-doc-sync-guard",
+      "title": "文档同步守卫：README/API.md 与最新能力（模型计数、只读路由、CONTINUOUS AUTOPILOT）",
+      "kind": "DOC_SYNC",
+      "safe": true
+    },
+    {
+      "id": "u6-carrier-suite",
+      "title": "Carrier Queue #3–#10 全链套件回归（auth/tracking/invoice+POD/evidence/SLA/estimate/package/manual submission/response）",
+      "kind": "TEST_EVIDENCE",
+      "safe": true
+    },
+    {
+      "id": "u7-money-chain-suite",
+      "title": "资金链回归（R45/R46 settlement·billing·fee guard·commission reconciliation·platform write ledger）",
+      "kind": "TEST_EVIDENCE",
+      "safe": true
+    },
+    {
+      "id": "u8-full-regression",
+      "title": "Full Regression（TRACK A）：全量 API 套件（含全部 DB/HTTP/E2E）一次跑完并留档",
+      "kind": "FULL_REGRESSION",
+      "safe": true
+    }
+  ]
+}

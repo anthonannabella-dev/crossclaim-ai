@@ -162,7 +162,18 @@ describe('C-0009.2 — 审批角色与状态机', () => {
 
     const approve = pending();
     await expect(
-      submitRecoveryReview(approve.prisma, { ...base, role: 'OWNER', decision: 'APPROVE' }, () => NOW),
+      submitRecoveryReview(
+        approve.prisma,
+        {
+          ...base,
+          role: 'OWNER',
+          decision: 'APPROVE',
+          // CHANGE A（R2）：审批必须绑定本次操作载荷
+          boundPayload: { recoveredAmount: '3000.0000', currency: 'USD', basisReference: 'basis-1', evidenceArtifactId: null },
+          boundAction: 'commission.charge',
+        },
+        () => NOW,
+      ),
     ).resolves.toMatchObject({ decision: 'APPROVE', state: 'APPROVED' });
     expect(approve.auditCreate.mock.calls[0][0].data.action).toBe(REVIEW_ACTIONS.approved);
   });

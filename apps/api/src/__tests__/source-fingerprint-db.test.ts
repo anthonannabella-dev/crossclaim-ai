@@ -11,6 +11,7 @@ import { WorkflowError } from '../services/workflow';
 
 const prisma = new PrismaClient();
 const ORG = 'b6000000-0000-4000-8000-000000000001';
+let B2_CONNECTION_ID = '';
 const NOW = new Date('2026-09-10T12:00:00Z');
 
 let ownerId = '';
@@ -24,9 +25,31 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await prisma.$executeRawUnsafe(
-    'TRUNCATE TABLE "ClaimItemEvidence", "ClaimItem", "PaymentProcessingAttempt", "Payment", "PaymentEvent", "AuditLog", "BillingInvoice", "FeeCalculation", "RecoveryLedgerEntry", "Settlement", "Claim", "CaseEvidence", "EvidenceArtifact", "RecoveryRoute", "CaseOpportunity", "Case", "RecoveryOpportunity", "Membership", "User", "Organization" CASCADE;',
+    'TRUNCATE TABLE "ClaimItemEvidence", "ClaimItem", "PaymentProcessingAttempt", "Payment", "PaymentEvent", "AuditLog", "BillingInvoice", "FeeCalculation", "RecoveryLedgerEntry", "Settlement", "Claim", "CaseEvidence", "EvidenceArtifact", "RecoveryRoute", "CaseOpportunity", "Case", "RecoveryOpportunity", "SourceConnection", "PlatformAccount", "Membership", "User", "Organization" CASCADE;',
   );
   await prisma.organization.create({ data: { id: ORG, name: '指纹租户', slug: 'fp-org' } });
+  // TRACK B BATCH 2：连接器/内部调用方必须提供可信连接上下文（同租户 + 已绑定 PlatformAccount）。
+  const b2Account = await prisma.platformAccount.create({
+    data: {
+      organizationId: ORG,
+      platform: 'AMAZON',
+      externalAccountId: 'fixture-' + ORG,
+      displayName: 'fixture account',
+    },
+  });
+  const b2Connection = await prisma.sourceConnection.create({
+    data: {
+      id: undefined,
+      organizationId: ORG,
+      domain: 'LOGISTICS',
+      channel: 'OTHER',
+      kind: 'API',
+      status: 'ACTIVE',
+      label: 'fingerprint fixture',
+      platformAccountId: b2Account.id,
+    },
+  });
+  B2_CONNECTION_ID = b2Connection.id;
   const owner = await prisma.user.create({
     data: { email: 'fp-owner@example.com', displayName: '负责人', status: 'ACTIVE' },
   });
@@ -47,6 +70,7 @@ async function create(overrides: Record<string, unknown> = {}) {
       claimType: 'FBA_LOSS',
       occurredAt: NOW,
       normalizerVersion: 'normalizer-1.0.0',
+      trustedConnectionId: B2_CONNECTION_ID,
       ...overrides,
     } as never,
     { now: () => NOW },

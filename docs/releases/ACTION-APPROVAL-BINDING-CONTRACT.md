@@ -1,0 +1,259 @@
+# 审批绑定与生命周期契约（授权项 ② · R1 → R7；② 第二批 payment.capture 接入中）
+
+依据：**MSG-20260930-17**（R1 REVISE）→ **MSG-20260930-18**（R2 REVISE）→ **MSG-20260930-19**（R3 REVISE）→ **MSG-20260930-20**（R4 REVISE，自动路径锁内判定与事件顺序）→ **MSG-20260930-21**（R4 = PASS；下一批次 = ② 第二批 payment.capture）→ **MSG-20260930-22**（R5 REVISE：审批必须绑定真实账单操作与迁移；下一批次 = 账单入口 R6，随后 replay → 冻结批次 retry-due）。
+本文件随每轮裁决同步：**只保留已兑现的表述**，未实现的承诺不得留在契约里。
+范围：受保护业务入口（首批 = recovery-outcome → 资金确认）的**操作级**审批授权。
+
+---
+
+## 1. 审批身份（CHANGE A）
+
+| 项 | 契约 |
+| --- | --- |
+| 批准标识 | **审批事件的 `AuditLog.id`**：`recovery.review_approved` 那一行的 id 即 `approvalId`。不接受随机 ID、他案 ID、他租户 ID |
+| 为什么不用"案件状态" | 案件 APPROVED 只说明"该案被批准过一次"；本次操作的授权必须可定位到**具体审批事件**（含审批人、时间、绑定载荷） |
+| 是否新增表 | **不新增独立 Approval 表**（避免 Schema 涟漪）；仅当审计事件方案无法满足绑定或原子性时才改走最小 Schema Delta，并附迁移证据 |
+| 审批人 | 记入事件的 `actorUserId`；R3 起必须同时满足「用户状态 ACTIVE + 该租户有效成员 + 角色 ∈ {OWNER, ADMIN}」 |
+| 执行人 | **与审批人分别校验**：R3 起必须同时满足「用户状态 ACTIVE + 该租户有效成员 + 角色 ∈ {OWNER, ADMIN, FINANCE}」；不要求与审批人同一人 |
+| 主体校验时机 | 事务外（wrapper）与**事务内（资金锁内）各校验一次**，口径一致：任一次发现失效即拒绝 |
+
+## 2. 绑定内容（CHANGE A）
+
+审批事件写入时必须绑定本次操作的**规范化载荷指纹**：
+
+```text
+boundPayload = {
+  amount: <4 位小数规范化字符串>,
+  currency: <ISO 大写>,
+  basisReference: <规范化字符串>,
+  evidenceArtifactId: <或 null>,
+  fingerprintVersion: 'v1'
+}
+```
+
+执行时逐项比对；**任一关键字段变化 → 拒绝并要求重新审批**。动作绑定与版本：
+
+- `approvalId` 对应的审批事件必须声明 `boundAction`（本批 = `commission.charge`）；
+- 入口映射在代码注释与文档中显式记录：`POST /cases/:id/recovery-outcome`（资金确认）↔ 动作 `commission.charge`；
+- **R3**：读取审批时校验 `boundPayload.fingerprintVersion`；**缺失或未知版本一律拒绝** `APPROVAL_VERSION_UNSUPPORTED`
+  （写入时的 `normalizeBoundPayload` 固定产出 `v1`，不能替代读取时校验）；
+- **禁止**通过 `requiredStateForAction = NOT_REQUIRED` 绕过动作目录的人工审批要求——该分支已删除。
+
+## 3. 生命周期（CHANGE B）
+
+| 状态 | 判定 | 处理 |
+| --- | --- | --- |
+| 有效期 | 审批事件记录 `expiresAt`（默认 24h，可配置）；`now >= expiresAt`。R3：`now` 必须是**两把锁获取之后重新读取的服务端时间**，不得沿用等待锁之前的时间 | 拒绝 `APPROVAL_EXPIRED` |
+| 撤销 | 出现晚于该审批的 `recovery.review_rejected` / `recovery.approval_revoked` | 拒绝 `APPROVAL_REVOKED` |
+| 消费 | 存在携带同一 `approvalId` 的 `recovery.approval_consumed` | 进入幂等返回**之前**仍必须先通过本节全部重验（见 §4） |
+| 审批轮次 | 审批事件必须晚于其对应的 `recovery.review_required`，且 `review_required` 与审批之间不得插入另一轮（**R4**：同案件生命周期事件时间在案件锁内生成并严格递增，见 §4.2） | 否则 `APPROVAL_NOT_APPROVED` |
+| 数据源异常 | 查询/解析失败 | 拒绝 `APPROVAL_SOURCE_ERROR`（事务内外同一原因码；**不得**伪报为租户不匹配或裸 `SOURCE_ERROR`） |
+
+## 4. 原子执行与恰一次（CHANGE B · R3 修订）
+
+在确认回收的资金事务内（顺序固定）：
+
+1. `SELECT pg_advisory_xact_lock(hashtext('cc-recovery-case:' || caseId))` —— **无条件**获取案件锁（含缺 `approvalId` 的兼容调用）；
+2. 有 `approvalId` 时再取 `cc-approval:<approvalId>`（锁顺序恒为「案件 → 审批」，故同案不同审批也只能形成一条资金链）；
+3. 锁内**重新**读取服务端时间并重验 §2/§3 全部条件（不沿用事务外结论，也不沿用等待前的时间）；
+4. **锁内按案件**核查既有资金链（无论 `approvalId` 是否已消费）：四类对象任一缺失 → `ILLEGAL_TRANSITION`，**不得**返回空 ID 冒充成功；
+5. 合法幂等返回必须能证明「这条链就是本审批消费产生的」：比对消费事件的 `approvalId` / `operationId` 与本次规范化载荷（金额、币种），并对齐 Settlement 金额；不一致 → `APPROVAL_NOT_APPROVED` / `APPROVAL_PAYLOAD_MISMATCH`；
+6. 通过后才写 `recovery.approval_consumed`（含 `approvalId`、`operationId`、执行主体、目标）与资金对象（Settlement → RecoveryLedgerEntry → FeeCalculation → BillingInvoice）。
+
+由此得到：
+
+- 首次提交：恰好一次资金写入 + 一条消费记录；
+- **合法幂等重试**（同 `approvalId` + 同载荷 + 链完整）：返回既有结果（`created=false`），不再产生资金对象；
+- 并发首次提交：advisory lock 串行化，只有一条链；其余请求读到完整链后走幂等分支；
+- **撤销 / 过期 / 主体失效优先于幂等返回**：即使该审批此前已成功消费过，重试时若已撤销、已过期或主体失效，一律**最终拒绝**（R3 口径变更，取代 R2 的「先返回既有结果」）；
+- 同案不同审批并发：旧审批被新一轮 `review_required` 取代后拒绝，全案仍只有一条完整链。
+
+### 4.2 生命周期事件顺序（R4）
+
+- 自动写入（`assertHighValueReviewCleared` 的 `review_required`）与显式 REQUEST/APPROVE/REJECT **都在案件锁内**读取事件、推导状态、决定是否写入与 `previousState`；锁外读取只能作为预检查，不决定写入。
+- 生命周期事件时间在**案件锁内**生成；同一案件内严格递增（若当前毫秒不晚于已有最新事件，则顺延 1ms），使 `createdAt` 的 `<` / `>` 在事务内外都有确定语义，不假设毫秒时间唯一。
+- 因此「自动路径读到旧状态 → 期间完成 APPROVE → 仍按旧状态追加 REQUEST」的交错不再可能：自动路径要么在锁内看到 `APPROVED` 而不写入，要么先写入 `review_required`（此时后续 APPROVE 的轮次顺序明确，旧审批在新轮次生效后被拒绝）。
+
+### 4.1 缺 `approvalId` 的兼容路径（R3 显式收口）
+
+- 受保护 HTTP 入口**无法进入**该路径：动作 `commission.charge` 在动作目录中要求 `humanApproval`，缺 `approvalId` 时守卫直接 `REQUIRE_APPROVAL`（409），`perform` 零执行；
+- **高额确认若缺操作级审批**（USD 超阈值 / 非 USD）：服务端入口直接拒绝 `REVIEW_REQUIRED`——「案件已 APPROVED」不是操作级审批的替代；
+- 低额、且由服务内部直接调用（非受保护入口）的兼容调用仍保留，但同样受**案件锁**保护，不得再出现"绕过最终边界"的返回。
+
+## 5. 审计与口径（CHANGE D）
+
+实际落库的审计事件（与代码一致，不再保留未兑现的事件名）：
+
+| 记录 | 事件 | 关键字段 |
+| --- | --- | --- |
+| 策略评估 | `action_guard.evaluated` | action / decision / code / risk / actor / org |
+| 审批核验结果 | `action_guard.approval_decision` | `decision`（ALLOW/DENY）、`code`、`reasonCodes`/`reason`、`actorUserId`（执行主体）、`approvalId`、`operationId`、目标（`entityType=ActionGuardTarget` + `entityId`） |
+| 首次执行成功 | `recovery_outcome.confirmed` | `entityType=Settlement` + `entityId=Settlement.id`（可与具体 Settlement 关联）、`approvalId`、`operationId`、`result=CONFIRMED`（USER actor 记 `actorUserId`） |
+| 审批消费 | `recovery.approval_consumed` | `approvalId`、`operationId`、`caseNo`、金额、币种（USER actor 记 `actorUserId`） |
+| 最终拒绝（新增） | `recovery.outcome_rejected` | `actorUserId`（执行主体，因主体可能已停用而记入 `changes`）、`approvalId`、`operationId`、`caseId`/`caseNo`、`stage`（ENTRY_GATE / LOCKED_RECHECK）、`reason`、`result=REJECTED` |
+
+- 拒绝路径的审计写入失败**不得覆盖原始拒绝错误**（放行路径相反：缺审计端口或写入失败必须失败关闭）；
+- 只记录规范化指纹与关联标识，**不记录凭据或原始敏感载荷**；
+- 口径修正：「零副作用」准确表述为「**零业务/资金副作用**」——安全审计允许新增；
+- 静态字符串检查仅为「有限静态约定检查」，不使用「类型与测试层面不可行」这类表述；
+- 未配置守卫的错误码：默认装配路径（READ_ONLY）→ `ACTION_GUARD_REQUIREMENTS_NOT_MET`；直接缺依赖分支 → `ACTION_GUARD_NOT_CONFIGURED`。
+
+## 5.1 支付域：`payment.capture`（② 第二批）
+
+| 项 | 值 |
+| --- | --- |
+| 受保护动作 | `payment.capture`（目录要求 `humanApproval` + `productionGate`；Kill Switch scope `billing`） |
+| 审批事件族 | `payment.review_required` / `payment.review_approved` / `payment.review_rejected`（挂在 `BillingInvoice` 上，与 `recovery.review_*` 的 `Case` 族彻底分离） |
+| 消费事件 | `payment.capture_consumed`（含 `approvalId`/`operationId`/`invoiceId`/状态迁移与金额；与资金写入同事务） |
+| 审批写入 | `submitPaymentReview` 的 APPROVE 必须绑定 `boundAction` + 规范化 `boundPayload`（金额/币种/依据）+ `expiresAt` + `fingerprintVersion`，并返回 `approvalId` |
+| 锁与顺序 | 发票级 advisory lock（`cc-payment-invoice:<invoiceId>`）；生命周期事件时间在锁内生成且同发票严格递增（与 recovery 同规则） |
+| 入口闭环（R5/R6） | `POST /billing/:id/status` 经 HITL 边界接入；缺 Action Guard 即 fail-closed；缺 `approvalId` → 409 REQUIRE_APPROVAL |
+| 审批创建入口（R6 新增） | `POST /billing/:id/payment-review`（受认证会话；审批人 OWNER/ADMIN），REQUEST/APPROVE/REJECT，APPROVE 由服务端组装绑定载荷 |
+| 真实操作绑定（R6 CHANGE A） | 审批指纹 = `invoiceId` + **精确 `from`→`to`** + 金额 + 币种 + 依据 + 证据 + 版本；`payment.capture` 审批**只能用于 `to=PAID`**（签发等迁移走独立授权） |
+| 锁内执行快照（R6 CHANGE A → **R7 CHANGE A**） | 见 §5.3：执行时在发票锁内读取**完整执行快照**，迁移判断 / CAS / 金额写入 / 成功与消费审计 / 执行时间全部取自它；批准金额与币种必须等于锁内快照，否则 403 `APPROVAL_PAYLOAD_MISMATCH` |
+| 最终审计（R6 CHANGE D） | `billing.status_changed` 记 `approvalId`/`operationId`/`result`；锁内拒绝写 `payment.capture_rejected`（stage/reason/执行主体/审批/操作/结果，SYSTEM actor，事务外写入且失败不覆盖原错误） |
+| 幂等语义 | 状态迁移**不是**幂等创建：审批已消费且发票已在目标状态时，重复提交返回 409 `ILLEGAL_TRANSITION`，消费记录保持 1（零新增副作用） |
+
+支付域受保护入口状态（按已批准设计推进）：
+
+- `POST /billing/:id/status`（`payment.capture`）：已接入并通过 R7 验收（§5.3）。
+- `POST /payments/events/:id/replay`（`payment.replay`）：**已接入**（§5.4；R8 批次），目标为具体 `PaymentEvent`。
+- `POST /payments/processing/retry-due`（`payment.retry_due`）：**已接入**（§5.5；冻结清单批次审批 + 受保护执行）。
+- `POST /payments/webhook`：保持验签 + `providerEventId` 幂等 + 事件形状校验边界；「接收已发生付款事实」与「发起新扣款/外写」必须分开。
+
+## 5.2 三项设计裁决（MSG-20260930-22，已授权实施）
+
+- **replay**：执行主体=当前认证用户（独立核验有效成员与执行权限），审批人 OWNER/ADMIN；审批目标=具体 `PaymentEvent`，指纹绑定其关联发票、事件/支付身份、规范化金额币种、预期恢复动作、处理版本与载荷摘要；**不绑定用户可替换的原始 JSON**；事件或关键关联变化即失效；不得把账单确认审批用于 replay。
+- **retry-due**：采用**冻结清单批次审批**——租户隔离、服务端生成 `batchId`、指纹=排序后的明确 attempt/event 清单及版本+关联发票+金额币种+操作类型+有效期与数量上限；执行不得动态扩展到批准后新出现的 due 项；每项执行前重验事实/权限/生命周期/幂等，变化项拒绝或跳过并留证；不接受只绑定 limit 或查询条件的开放批次；后台重试须以 SYSTEM 身份运行并带预先授权范围。
+- **webhook**：接收付款事实**不引入每次人工审批**，保持验签、重放保护、幂等、租户/发票/金额币种匹配与审计边界；但「接收已发生付款」与「发起新扣款/外写」必须分离——验签成功不等于授权扣款，后续处理仍受运行模式、Kill Switch、生命周期与适用审批规则约束。
+
+## 5.3 R7：锁内执行快照与签发边界（MSG-20260930-23）
+
+- **单一事实来源**：`advanceBillingInvoice` 在取得发票 advisory lock 之后读取完整快照（`status/invoiceNo/caseId/total/currency`），
+  其后的合法迁移判断、CAS、`paidAmount`、`paidAt` 与两类审计（`billing.status_changed`、`payment.capture_consumed`）**全部**引用该快照；
+  锁外读取降级为「预检查」（存在性 / 明显非法迁移，快速失败），不再提供任何执行依据。
+- **防绕过机制**：① 所有受保护写入遵循同一把发票 advisory lock（`cc-payment-invoice:<invoiceId>`）；
+  ② CAS 在状态之外同时比较**记账事实**（`total` + `currency`）——即使存在不遵循锁协议的写入者，也只会在 CAS 未命中时拒绝，而不是把锁外旧金额写进账单。
+- **执行时间**：`paidAt` / `issuedAt`、消费事件与成功审计的时间戳均由锁内生成（不再沿用锁前 `at`）。
+- **签发边界**：`payment.capture` 审批**只能用于 `to=PAID`**；`DRAFT → ISSUED` 需要独立授权边界，
+  当前统一守卫的 `POST /billing/:id/status` **不得**被描述为「签发能力已接入」，也不得复用收费审批完成签发。
+- 适用对象：本节的「执行快照」结论限定在**账单登记**（`BillingInvoice`）；真实支付渠道扣款未接入，仍属 HOLD。
+## 5.4 支付事件重放：`payment.replay`（② 第二批 replay）
+
+| 项 | 值 |
+| --- | --- |
+| 受保护动作 | `payment.replay`（`MONEY_MOVEMENT`；requires `humanApproval` + `productionGate`；Kill Switch scope `billing`）。**独立身份**：与 `payment.capture` 互不通用、互不消费 |
+| 审批目标 | 具体 `PaymentEvent`（`entityType = PaymentEvent`，`entityId = paymentEventId`）；不是 `BillingInvoice`，也不是 `Case` |
+| 审批事件族 | `payment.review_required` / `payment.review_approved` / `payment.review_rejected`（挂在 `PaymentEvent` 上） |
+| 消费事件 | `payment.replay_consumed`（独立于 `payment.capture_consumed`；含 `approvalId`/`operationId`/`paymentEventId`/`invoiceId`/金额币种/`recoveryAction`/`processingVersion`，与执行同事务） |
+| 指纹（**服务端组装**） | `amount`、`currency`（关联 `Payment` 的规范化值）；`basisReference = provider:providerEventId`（事件身份）；`evidenceArtifactId = PaymentEvent.payloadHash`（**载荷摘要**）；额外键 `paymentEventId` / `invoiceId` / `provider` / `providerEventId` / `payloadHash` / `externalPaymentId` / `recoveryAction = recoverPaymentSucceeded` / `processingVersion = v1` |
+| 不绑定什么 | 用户可任意替换的原始 JSON；事件或关键关联（事件身份 / 载荷摘要 / 金额币种 / 关联发票）变化即失效 |
+| 锁与事务 | 事件级 advisory lock `cc-payment-event:<paymentEventId>`；**审批生命周期写入与执行共用同一把锁**；执行在**单一事务**内完成：锁内执行快照 → 锁内指纹重验（有效期/撤销/取代/消费）→ attempt → 资金写入（`applyPaymentSucceeded` 复用调用方事务）→ 消费审计 |
+| 提交侧 vs 锁内 | HTTP 入口先由服务端读取指纹并交给 HITL 边界做**提交侧**比对（预检），执行侧在锁内**重读事实再次比对**（权威判定）；两阶段不一致时以锁内为准 |
+| 缺审批 | HTTP：409 `ACTION_GUARD_HUMAN_APPROVAL_REQUIRED`；服务层直调同样拒绝（`APPROVAL_NOT_FOUND`）——受保护资金入口**没有** bypass 路径 |
+| 拒绝审计 | 锁内拒绝写 `payment.replay_rejected`（stage/reason/执行主体/approvalId/结果；事务外独立写入，失败不覆盖原错误） |
+| 最小审批入口 | `POST /payments/events/:id/replay-review`（受认证会话；REQUEST/APPROVE/REJECT；审批人 OWNER/ADMIN；APPROVE 由服务端组装指纹） |
+| 资金事实保护（R8 修订 CHANGE A） | 锁顺序固定 **事件锁 → 发票锁**；`applyPaymentSucceeded` 锁外仅做存在性预检查，事务内取得 `cc-payment-invoice:<invoiceId>` 后**重读** `status/total/currency` 快照，PAID 更新 CAS 同时比较 `status` + `total` + `currency`；事实在核验与更新之间被改变 → `AMOUNT_MISMATCH` / `ILLEGAL_TRANSITION`，**绝不**写入旧 `paidAmount`/旧成功审计。Payment 行按 **id** 取得 PostgreSQL 行锁（`FOR UPDATE`），并确认恰一行且 `id` 与定位快照一致；**行锁会阻塞其他事务对该行的普通 UPDATE/DELETE（与是否遵守 advisory lock 无关）**——锁前已提交的变化由锁后重读处理，锁持有期间的修改由数据库锁串行化；资金对象身份（`Payment.id`、`Payment.provider`）纳入快照与审批指纹，`Payment.provider` 必须与事件 `provider` 一致 |
+| 结果语义 | `attempt.status = SUCCEEDED` 表示「**一次获批的恢复尝试已执行**」；资金结论看 `resultStatus`（`PAID` = 收口成功；`AMOUNT_MISMATCH` / `PENDING_REVIEW` / `ILLEGAL_TRANSITION` = 已执行但未收口成功，同样会消费该审批）。不得把这些结果表述为「付款收口成功」 |
+| 现状限定 | 本批次不接入真实支付凭据、不发起真实扣款；`retry-due` 仍未接入守卫（下一批次）；webhook 边界不变 |
+## 5.5 冻结清单批次重试：`payment.retry_due`（② 第二批 retry-due）
+
+| 项 | 值 |
+| --- | --- |
+| 受保护动作 | `payment.retry_due`（`MONEY_MOVEMENT`；requires `humanApproval` + `productionGate`）。**独立身份**：与 `payment.capture` / `payment.replay` 三者互不通用、互不消费 |
+| 冻结（freeze） | `POST /payments/processing/retry-due/freeze`：服务端生成 `batchId`；只选 `RETRYABLE_FAILED` 且已到期且具备 `paymentId` 的项；**固定排序**（`nextRetryAt asc, id asc`）；数量上限 ≤ 20（`limit` 越界夹取）；有效期默认 15 分钟（夹取 1–60 分钟）。清单以 `PaymentRetryBatch` 审计记录落库（`entityType=PaymentRetryBatch`，`entityId=batchId`，`action=payment.retry_batch_frozen`，含逐项指纹与 `digest`） |
+| 批次指纹 | 逐项固化：`attemptId`/`attemptNo`/`paymentEventId`/事件 `provider`+`providerEventId`+`payloadHash`/`paymentId`+`paymentProvider`/`invoiceId`/`externalPaymentId`/规范化金额币种/操作类型/处理版本；`digest = sha256(规范化排序清单 JSON)` |
+| 审批 | `POST /payments/processing/retry-due/review`（REQUEST/APPROVE/REJECT；审批人 OWNER/ADMIN）；APPROVE 绑定 `batchId` + `digest` + `itemCount` + 有效期，`boundAction = payment.retry_due`；与执行共用同一把批次锁 `cc-payment-retry-batch:<batchId>` |
+| 执行 | `POST /payments/processing/retry-due`（必须携带 `batchId` + `approvalId`；缺审批 → 409 `ACTION_GUARD_HUMAN_APPROVAL_REQUIRED`，缺 Action Guard → fail-closed）。**单一事务**内：批次锁 → 重读批次并复核 `digest` → 审批核验（摘要/数量/有效期/撤销/消费）→ 逐项重验与执行 → 批次消费 |
+| 只处理冻结清单 | 批准后新出现的 due 项**绝不执行**（执行循环只遍历冻结清单；`limit` 不参与执行阶段选单） |
+| 逐项重验与留证 | 每项执行前重验 attempt 状态/到期、事件身份与载荷摘要、Payment 身份/币种/金额/关联发票；锁后（事件锁 → 发票锁 → Payment 行锁）再次比对最终事实；不一致项**跳过**并写 `payment.retry_due_skipped`（原因精确） |
+| 资金收口复用 | 复用 replay 已验收协议：`recoverPaymentSucceeded`（调用方事务）+ 发票锁 + `total`/`currency` 事实 CAS；attempt/资金写入/审计同事务 |
+| 执行身份与授权范围 | **用户授权触发、内部以 SYSTEM 记录执行**（`actorType=SYSTEM`、`actorRef = payment-retry-worker`、`actorUserId` 为空）；预先授权范围由「批次审批 + 冻结摘要 + `batchId` + 冻结截止时间」共同界定。**不宣称**独立后台 worker 认证已完成；调度器继续后置 |
+| 冻结有效期（R13 修订） | 冻结 `expiresAt` 在**审批与执行**均强制生效；实际有效截止取「冻结截止」与「审批截止」**较早值**；过期冻结记录不得再请求/批准（不得延长）；审批指纹绑定 `freezeExpiresAt` 并在执行核对 |
+| 逐项锁后重验（R13 修订） | 每项取得全部必要锁后**重新生成时间**，并再次核验审批有效期/主体/撤销/轮次与冻结授权范围；任何失效 → 抛错回滚本次整批执行且**不消费批次**；逐项 attempt/审计时间使用锁后新时间 |
+| attempt 代际与去重（R13 修订） | 事件锁后对原 attempt 加行锁重读并核对 `paymentEventId`/`paymentId`/`attemptNo`/状态/到期；**一次性认领**（清空 `nextRetryAt`，使旧代际不再被任何批次选中）；检测后继代际取代与重试上限（≤ `MAX_ATTEMPTS`）；不同批次含同一 attempt 时只有一次实际执行，其余跳过留证 |
+| 整批分阶段锁协议（R14 修订，取代逐项取锁） | 批次内所有项按确定性顺序**分阶段**取锁：先取得**全部事件锁** → 再取得**全部发票锁** → 再取得 **Payment 行锁 与 attempt 行锁**；事务持有全部锁后才开始逐项执行。这样消除「已持发票锁、再等待新事件锁」的循环等待（与 replay 的 事件→发票→Payment 顺序兼容） |
+| 各阶段独立排序（R15 修订） | **每个阶段的去重资源集合独立确定性排序**（全部事件 ID / 全部发票 ID / 全部 Payment ID / 全部 attempt ID 各自比较），不得由事件顺序推断其他资源顺序——否则两个事件集合不重叠、发票集合交叉的批次仍可能互相持有一张发票并等待另一张 |
+| 唯一约束冲突语义（R17 修订：**结构化精确白名单**） | 仅当 Prisma `P2002` 的 `meta.target` **结构化**匹配下列之一才映射（`services/workflow/payment-conflict-map.ts`）：① 数组 target 长度**恰为 2**、元素全为非空字符串、**无重复**，且字段集合**精确等于** `{organizationId, paymentId}`（顺序可互换）→ 409 `PAYMENT_SOURCE_CONFLICT`；② 字段集合精确等于 `{organizationId, paymentEventId}`（顺序可互换）→ 409 `ATTEMPT_ALREADY_RUNNING`；③ 字符串 target **精确等于** `PaymentProcessingAttempt_succeeded_payment_key` → 409 `PAYMENT_SOURCE_CONFLICT`。**已删除一切消息子串/关键字猜测**：`meta` 缺失或非结构化、字段集合不符、单字段/三字段、含空串或重复字段、未知约束名、非 `P2002` 错误一律**原样抛出**。映射发生在事务回滚之后的独立位置，不在失败事务内继续写审计/消费；批次与 replay 两条路径均适用。单测 `payment-conflict-map.test.ts` **9 例（3 正例 + 6 反例）**全绿；判定**不做任何清洗**（不 trim、不过滤成员：带空白的字段名/约束名一律拒绝） |
+| 冲突取证分阶段（R17） | **链接阶段**（`paymentProcessingAttempt.updateMany()` 把 `paymentId` 写入 attempt）与**完成阶段**（attempt 终态更新）分别取证；不得把不同阶段观察到的错误合并为单一未经证实的结论 |
+| 唯一约束冲突语义（R16 修订，**已被 R17 精确白名单取代——仅作历史留档，不得据此实现**） | 历史口径（~~`PaymentProcessingAttempt_succeeded_payment_key`，或 `P2002` 且 `meta.target` **含** `paymentId` → `PAYMENT_SOURCE_CONFLICT`；`meta.target` **含** `paymentEventId` → `ATTEMPT_ALREADY_RUNNING`~~）：「含某字段即可映射」过宽，R17 已收紧为**结构化精确白名单**（见上方 R17 行），实现与测试一律以 R17 为准。该行中仍有效的部分：「批次执行与 replay 两条路径均需映射」「其余错误原样抛出（不放宽唯一约束、不把未知故障伪装为 409）」「执行侧在锁内先行检查『已有成功来源 / 同事件进行中』并跳过留证」 |
+| 行锁身份校验（R15 修订） | 记录**实际锁定成功**的 Payment/attempt 行身份（恰一行且 `id` 一致）；每个需执行项必须确认其行已锁定，否则**跳过留证**（`PAYMENT_NOT_LOCKED` / `ATTEMPT_NOT_LOCKED`），不得因后续查询能读到行而恢复执行；正常缺失项仍可按批次语义跳过 |
+| 代际与认领位置（R14 修订） | 关联 / 状态 / 到期 / `attemptNo` 代际 / 后继代际 / 重试上限检查全部在**取得事件锁之后**完成；一次性认领（清空 `nextRetryAt`）置于**最终事实比对与授权确认之后、创建新 attempt 之前**——事实变化被跳过的项**不会**提前清空认领标记 |
+| 执行时间一致性（R14 修订） | 每项的判定时间 `itemAt` 在全部必要锁取得后生成，并统一用于：审批重验、attempt 开始/结束、资金处理（`paidAt`）、成功资金审计与执行审计；批次消费使用**实际完成阶段**生成的时间；跳过留证使用对应判定时间 |
+| 存储 itemCount（R14 修订） | 读取冻结记录时必须校验**存储的 `itemCount`**（不得用 `items.length` 重算成恒真）；`itemCount` 与清单长度不一致、未知 `digestVersion`、非法 item 结构均**失败关闭** |
+| 批次记录校验（R13 修订） | 批次锁后重读并集中校验：`digestVersion`、操作/处理版本、逐项结构、数量（≤20）、`itemCount` 与清单一致、重复项、摘要复核；未知版本/损坏/异常数量 → 失败关闭 |
+| 旧入口关闭（R13 修订） | 旧的动态选单入口 `runDueRetries` **不再是**「按 `limit` 动态查询 + 无需审批直接恢复资金」的路径；现仅作受保护「冻结批次执行」别名，必须提供 `batchId` + `approvalId`（缺审批拒绝 `APPROVAL_NOT_FOUND`），后台调度器同样必须走受保护路径 |
+| 消费与结果 | 批次消费 `payment.retry_due_consumed`（独立事件族，含 `approvalId`/`batchId`/`digest`/执行与跳过项数）；逐项执行审计 `payment.retry_due_executed`。`attempt.SUCCEEDED` 仍表示「一次获批的恢复尝试已执行」，资金结论看 `resultStatus` |
+## 6. 验收矩阵（CHANGE C 对应）
+
+| 场景 | 期望 | 资金对象 |
+| --- | --- | --- |
+| 已 APPROVED 案件 + 随机/他案/他租户 `approvalId` | 拒绝（NOT_FOUND / TARGET / TENANT） | 四类均 0 |
+| 审批动作不匹配（如 `claim.submit`） | 拒绝 ACTION_MISMATCH | 四类均 0 |
+| 执行人/审批人非成员、停用或无权限 | 拒绝 ACTOR_MISMATCH（事务内外同口径） | 四类均 0 |
+| 金额/币种/依据/证据变更 | 拒绝 PAYLOAD_MISMATCH | 四类均 0 |
+| 指纹版本缺失/未知 | 拒绝 VERSION_UNSUPPORTED | 四类均 0 |
+| 过期 / 撤销 | 拒绝 EXPIRED / REVOKED（含**等锁期间**发生的情形） | 四类均 0 |
+| 审批源异常 | 拒绝 SOURCE_ERROR | 四类均 0 |
+| 既有资金链缺项 | 拒绝 `ILLEGAL_TRANSITION`，不返回空 ID、不消费审批 | 不新增任何对象 |
+| 首次成功后授权撤销再重试 | **最终拒绝**（R3：重验优先于幂等返回） | 仍恰为 1 套且不新增 |
+| 合法重复请求（同审批 + 同载荷） | 幂等返回既有结果 | 四类均恰为 1 |
+| 并发首次提交（同一审批） | 仅一次 201，其余 200 | 四类均恰为 1 |
+| 同案件不同审批并发 | 旧审批被取代后拒绝 | 全案最多一条完整链 |
+| 受保护入口缺 `approvalId` | 409 REQUIRE_APPROVAL | 四类均 0 |
+| 支付域（`payment.capture`，账单入口）缺 `approvalId` | 409 `ACTION_GUARD_HUMAN_APPROVAL_REQUIRED` | 发票状态与支付对象不变 |
+| 支付域审批已消费后重复提交 | 409 `ILLEGAL_TRANSITION`（状态迁移非幂等），消费记录仍为 1 | 无新增副作用 |
+| 支付域执行快照交错（审批绑定旧事实，锁内事实已变） | 403 `APPROVAL_PAYLOAD_MISMATCH`（R7 用例 11；控制点 = `pg_locks` 中该发票 advisory lock 的等待行） | 无新增副作用 + 锁内拒绝审计 |
+| 支付域执行快照交错（审批绑定锁内新事实） | 200；`paidAmount` = 成功审计金额 = 消费金额/币种 = 批准金额（R7 用例 12） | 恰一次登记 + 恰一次消费 |
+| 支付域等锁期间失效（过期 / 撤销 / 主体成员停用） | 403 `APPROVAL_EXPIRED` / `APPROVAL_REVOKED` / `APPROVAL_ACTOR_MISMATCH`（R7 用例 13a–13c） | 账单金额与状态不变、消费不新增 |
+| 支付域审批审计端口写入失败 | 拒绝（≥400，fail-closed；R7 用例 14：数据库层拒绝 `action_guard.approval_decision`） | `work` 不执行：账单与消费零变化 |
+| replay HTTP 全链路（REQUEST→APPROVE→执行） | 200；attempt 恰一次、`payment.replay_consumed` 恰一次、审计带 `approvalId`/`operationId`（R8 用例 01） | 资金对象不重复创建 |
+| replay 缺 `approvalId` | 409 `ACTION_GUARD_HUMAN_APPROVAL_REQUIRED`（R8 用例 02） | 零副作用 |
+| replay 事件关键关联被改写（载荷摘要变化） | 403 `APPROVAL_PAYLOAD_MISMATCH`（提交侧比对；R8 用例 03） | 零副作用 |
+| replay 等锁期间事实变化（控制点 = 事件 advisory lock 等待行） | 403 `APPROVAL_PAYLOAD_MISMATCH` + `payment.replay_rejected`（R8 用例 04） | 零副作用 |
+| 跨域冒用：`payment.capture` 审批用于 replay | 403 `APPROVAL_TARGET_MISMATCH` / `APPROVAL_ACTION_MISMATCH`（R8 用例 05） | 零副作用、零消费 |
+| replay 同审批并发 | 恰一次重放 + 一次消费；其余 403 `APPROVAL_ALREADY_CONSUMED`（R8 用例 06） | 资金对象恰一条 |
+| replay 等锁期间过期 / 撤销 / 主体成员停用 | 403 `APPROVAL_EXPIRED` / `APPROVAL_REVOKED` / `APPROVAL_ACTOR_MISMATCH`（R8 用例 07–09） | 账单金额与状态不变、消费不新增 |
+| replay 已到达发票核验→更新阶段时发票事实变化（显式控制点 = 发票锁等待行） | `resultStatus = AMOUNT_MISMATCH`（R8 用例 10）：账单保持 ISSUED、`paidAmount` 为 0、无 `payment.succeeded` | 不得出现新发票事实 + 旧 `paidAmount`/旧成功审计 |
+| 锁协议之外的写入者在核验与更新之间改发票事实 | 事实 CAS 未命中 → `ILLEGAL_TRANSITION` + `payment.reconciliation_failed`（R8 用例 11） | **无 PAID 推进、无成功资金审计**；异常审计与已执行尝试按既定结果语义记录（不暗示整事务回滚） |
+| 反向冒用：replay 审批用于账单确认 | 403 `APPROVAL_TARGET_MISMATCH` / `APPROVAL_ACTION_MISMATCH`（R8 用例 12） | 两类消费均不新增、账单不推进 |
+| replay 服务层直调缺 `approvalId` | 拒绝 `APPROVAL_NOT_FOUND`（R8 用例 13） | 零 attempt / 零资金 / 零消费 |
+| 约束映射白名单 | **结构化精确匹配**才给稳定领域码（数组 target 长度恰 2 / 全非空字符串 / 无重复 / 字段集合精确等于 `{organizationId, paymentId}` 或 `{organizationId, paymentEventId}`；字符串 target 精确等于 `PaymentProcessingAttempt_succeeded_payment_key`）；未知 P2002 / `meta` 不完整 / 非唯一约束错误 → 原样抛出（`payment-conflict-map` 单测 9/9：3 正例 + 6 反例；不 trim、不清洗） | 不掩盖未知错误 |
+| replay 审批决策审计失败 | 放行前关闭（R8 用例 14） | 零副作用（进程级故障注入） |
+| replay 消费审计失败 | 整个事务回滚（R8 用例 15） | attempt / 发票推进 / 成功审计均不部分提交 |
+| retry-due 全链路（freeze → REQUEST/APPROVE → execute） | 200；恰一次新增 attempt、恰一次批次消费、SYSTEM 身份（RD 用例 01） | 资金对象不重复创建 |
+| retry-due 缺 `approvalId` | 409 `ACTION_GUARD_HUMAN_APPROVAL_REQUIRED`（RD 用例 02） | 零副作用 |
+| 批准后新增 due 项 | 不执行（只处理冻结清单；RD 用例 03） | 新增项状态不变 |
+| 冻结后清单内事实变化 | 该项跳过并留证 `payment.retry_due_skipped`（RD 用例 04） | 无资金推进、无成功审计 |
+| 跨域冒用（replay 审批 → retry-due） | 403 `APPROVAL_TARGET_MISMATCH` / `APPROVAL_ACTION_MISMATCH`（RD 用例 05） | 三类消费均不新增 |
+| retry-due 审批过期 | 403 `APPROVAL_EXPIRED`（RD 用例 06） | 零新增 |
+| retry-due 数量上限 | `limit` 越界被夹取，执行只处理冻结清单（RD 用例 07） | 不动态扩张 |
+| retry-due 批次消费审计失败 | 整个事务回滚（RD 用例 08） | attempt / 资金 / 执行审计不部分提交 |
+| retry-due 冻结期限到期（审批仍有效） | 拒绝批准（`APPROVAL_EXPIRED`）；过期冻结不得重新批准延长（RD 用例 09） | 零新增 |
+| retry-due 等锁期间主体停用 | 逐项锁后重验拒绝 `APPROVAL_ACTOR_MISMATCH`，整批回滚且不消费（RD 用例 10） | 零部分提交 |
+| retry-due 冻结后 attempt 不可重试 | 跳过留证 `ATTEMPT_NOT_RETRYABLE`（RD 用例 11） | 无新执行 |
+| retry-due 同审批并发执行 | 恰一次；其余 `APPROVAL_ALREADY_CONSUMED`（RD 用例 12） | 恰一次消费 |
+| 不同批次包含同一 attempt | 只执行一次，后者跳过留证（RD 用例 13） | `payment.retry_due_executed` 恰 1 |
+| 冻结候选项 ≥21 | 清单恰为上限 20（RD 用例 14） | 不动态扩张 |
+| 冻结摘要被篡改 / 未知版本 | 失败关闭（RD 用例 15） | 零执行 |
+| 旧入口 `runDueRetries` 缺审批 | 拒绝 `APPROVAL_NOT_FOUND`（RD 用例 16） | 零 attempt / 资金 / 消费 |
+| 等事件锁期间出现后继代际 | 旧项在事件锁后判定跳过 `SUPERSEDED_GENERATION`，且**不清空**认领标记（RD 用例 17） | 无新执行、可被后续合法批次处理 |
+| 等发票锁期间审批过期 | 逐项锁后重验拒绝 `APPROVAL_EXPIRED`，整批回滚不消费（RD 用例 18） | 零部分提交 |
+| 已批准后冻结到期（审批仍有效） | 执行拒绝 `APPROVAL_EXPIRED`（较早截止边界生效；RD 用例 19 —— **改写冻结截止时间的有限证明**，不得称为自然时间推进下的完整有效期竞争测试） | 零新增 |
+| 存储 `itemCount` 与清单不符 | 失败关闭（RD 用例 20） | 零执行 |
+| 未知 `digestVersion` | 精确拒绝 `APPROVAL_VERSION_UNSUPPORTED`（RD 用例 21） | 零执行 |
+| 两项批次（首项执行、次项事实变化） | 首项执行、次项跳过留证（RD 用例 22）；任何项授权失效 → 抛错回滚整批（含已执行项） | 逐项留证、整体事务边界 |
+| 首项资金写入后授权失效（受控屏障） | 精确 `APPROVAL_ACTOR_MISMATCH` + **整批回滚**（RD 用例 23） | 无部分提交 |
+| 两个已批准批次真实并发含同一 attempt | 仅一次实际重试；**不得忽略 rejected**（要求一执行、一明确跳过并给出精确原因；RD 用例 24） | 跨批次去重 |
+| retry-due 审批决策审计失败 | 放行前关闭（RD 用例 25） | 零副作用 |
+| 受控**等发票锁**后释放 | 200；`attempt.startedAt ≤ paidAt ≤ payment.succeeded.createdAt`、执行审计不早于 attempt、批次消费不早于执行审计（RD 用例 26） | 时间口径一致 |
+| 共享发票：批次（E1/E2）与 replay（E2）真实并发 | 会话级控制点（双方到达 E2 等待点、等待者不持共享发票锁）；释放后有界完成且**不允许任意 500**；非 200 必须为 200/403/409 之一并给出**非空领域原因**（RD 用例 27） | 发票 PAID 一次、成功审计 ≤1 |
+| 事件集合**完全不相交**、发票集合交叉的两批次并发 | 显式断言事件集合交集为空；**阶段控制点**（独立连接持**服务端锁序中的第一把共享发票锁** = 两张发票 id 字典序较小者；两批次完成各自事件锁阶段后都排队在该锁上：该锁等待者 ≥2 **且 4 个事件键等待者 = 0**；控制点开跑前另有「受审键不得有残留 advisory lock」前置断言）；无异常/无死锁；**精确最终结果**：两张发票均 PAID 且 `paidAmount = AMOUNT`、`payment.succeeded` 恰 2 条且实体集合恰为两张发票、Payment 恰 2 条且关联/金额/币种逐一核对、四个冻结项「执行 + 跳过」合计恰 4 且无重复（RD 用例 28；构造为直接写入的冻结记录，证明边界已登记） | 无交叉持锁 |
+| **（历史行：已被上方同名行取代，仅留档）** 首项资金写入后授权失效（受控屏障） | 抛错 `APPROVAL_ACTOR_MISMATCH`，**整批回滚**：发票不推进、无成功资金审计、两条 attempt 认领标记均保留、零执行审计、零批次消费（RD 用例 23） | 无任何部分提交 |
+| **（历史行：已被上方同名行取代，仅留档）** 两个已批准批次真实并发含同一 attempt | 仅一次实际重试（`executed` 合计 1、执行审计 1、支付对象 1；RD 用例 24） | 跨批次去重有效 |
+| **（历史行：已被上方同名行取代，仅留档）** retry-due 审批决策审计失败 | 放行前关闭、零副作用（RD 用例 25） | 零资金副作用 |
+| **（历史行：已被上方同名行取代，仅留档）** 受控等锁后的时间顺序 | `attempt.startedAt ≤ 发票 paidAt ≤ payment.succeeded.createdAt`，执行审计不早于 attempt；批次消费不早于执行审计（RD 用例 26） | 时间口径一致 |
+| **（历史行：已被上方同名行取代，仅留档）** 共享发票：批次（E1/E2）与 replay（E2）真实并发 | 会话级控制点证明「批次等事件锁时未持共享发票锁」；释放后有界完成、无死锁、无重复资金推进（RD 用例 27） | 发票 PAID 一次、成功审计 ≤1 |
+| **（历史行：已被上方同名行取代，仅留档）** 发票集合交叉的两批次并发 | 各阶段独立排序 → 无死锁、每张发票至多一次 PAID、支付对象数不变（RD 用例 28） | 无交叉持锁 |
+
+> 实现与测试（`action-guard-hitl-*`、`workflow-hitl-db`、`workflow-outcome-db`、`action-guard-payment-capture-http-db`、`workflow-billing*`）按本文件逐条对齐后送审。

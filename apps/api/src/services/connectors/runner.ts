@@ -210,6 +210,7 @@ export async function runConnectorPull(
           sourceFingerprint: output.sourceFingerprintCandidate,
           fingerprintVersion: FINGERPRINT_VERSION,
           creationContext: 'CONNECTOR_IMPORT',
+          trustedConnectionId: input.connectionRef,
         },
         { now },
       );

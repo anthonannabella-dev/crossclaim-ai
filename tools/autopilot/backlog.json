@@ -1,0 +1,576 @@
+{
+  "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。",
+  "updatedAt": "2026-10-03T17:08:36.692Z",
+  "selection_order": [
+    "P0/P1 未关闭缺口",
+    "当前 Gate 未关闭项",
+    "已批准 GLOBAL GAP",
+    "平台域 / Carrier / Customs / Independent-site / Settlement-Billing 未完成内部链",
+    "回归 / 文档 / 发布证据"
+  ],
+  "items": [
+    {
+      "id": "BG-001-platform-adapter-readonly-closure",
+      "priority": "P1",
+      "source_backlog_id": "REGISTER-A1（Platform Recovery PARTIAL）",
+      "title": "平台域只读 adapter 闭环证据（Amazon 只读 adapter + 连接/账号 lineage + opportunity 信号）",
+      "scope": "核对平台域只读链当前实现状态并留档（adapter capability → connection/account lineage → opportunity signal）",
+      "acceptance_criteria": "相关套件全绿；证据写入 RUN_LOG；零外写",
+      "dependencies": [],
+      "risk_class": "LOW",
+      "ARCH_REVIEW_REQUIRED": false,
+      "HOST_ACTION_REQUIRED": false,
+      "HOLD_EXTERNAL": true,
+      "allowed_files": [
+        "apps/api/src/**（只读测试）",
+        ".autopilot/RUN_LOG.md"
+      ],
+      "boundary": "READ_ONLY / NO_EXTERNAL_WRITE / NO_PRODUCTION_CREDENTIALS",
+      "required_tests": [
+        "adapter-capability",
+        "amazon",
+        "connection"
+      ],
+      "template": "suite-evidence",
+      "filters": [
+        "adapter-capability",
+        "amazon",
+        "connection"
+      ]
+    },
+    {
+      "id": "BG-002-settlement-billing-linkage-evidence",
+      "priority": "P1",
+      "source_backlog_id": "REGISTER-A13/A15（Settlement / Fee Preview PARTIAL）",
+      "title": "Settlement–Billing 联动与 fee guard 证据（资金真值链只读复核）",
+      "scope": "核对 settlement/billing/fee 链与 fee guard 收口证据",
+      "acceptance_criteria": "相关套件全绿；证据写入 RUN_LOG；HOLD_EXTERNAL 保持",
+      "dependencies": [],
+      "risk_class": "MEDIUM",
+      "ARCH_REVIEW_REQUIRED": false,
+      "HOST_ACTION_REQUIRED": false,
+      "HOLD_EXTERNAL": true,
+      "allowed_files": [
+        "apps/api/src/**（只读测试）",
+        ".autopilot/RUN_LOG.md"
+      ],
+      "boundary": "NO_REAL_MONEY / NO_AUTOPAY / NO_COLLECTION",
+      "required_tests": [
+        "settlement",
+        "billing",
+        "fee-guard"
+      ],
+      "template": "suite-evidence",
+      "filters": [
+        "settlement",
+        "billing",
+        "fee"
+      ]
+    },
+    {
+      "id": "BG-003-dashboard-ops-readonly-evidence",
+      "priority": "P2",
+      "source_backlog_id": "REGISTER-A16（Dashboard / Admin / Operations PARTIAL）",
+      "title": "Dashboard / Admin / Operations 只读面证据",
+      "scope": "核对 admin/operations 只读面与 RBAC 现状并留档",
+      "acceptance_criteria": "相关套件全绿；证据写入 RUN_LOG",
+      "dependencies": [],
+      "risk_class": "LOW",
+      "ARCH_REVIEW_REQUIRED": false,
+      "HOST_ACTION_REQUIRED": false,
+      "HOLD_EXTERNAL": true,
+      "allowed_files": [
+        "apps/api/src/**（只读测试）",
+        ".autopilot/RUN_LOG.md"
+      ],
+      "boundary": "READ_ONLY",
+      "required_tests": [
+        "admin",
+        "operations"
+      ],
+      "template": "suite-evidence",
+      "filters": [
+        "admin",
+        "operations"
+      ]
+    },
+    {
+      "id": "BG-004-docs-release-evidence-sync",
+      "priority": "P2",
+      "source_backlog_id": "REGISTER-A20（HTTP/DB/Schema/Frontend/Tests/CI/Docs PARTIAL）",
+      "title": "文档与发布证据同步守卫（README / API.md / 差集登记表 ↔ 代码）",
+      "scope": "核对文档声明与最新代码事实",
+      "acceptance_criteria": "doc-sync 守卫全绿",
+      "dependencies": [],
+      "risk_class": "LOW",
+      "ARCH_REVIEW_REQUIRED": false,
+      "HOST_ACTION_REQUIRED": false,
+      "HOLD_EXTERNAL": true,
+      "allowed_files": [
+        "README.md",
+        "API.md",
+        "docs/releases/**"
+      ],
+      "boundary": "DOC_ONLY",
+      "required_tests": [
+        "doc-sync-guard"
+      ],
+      "template": "doc-sync"
+    },
+    {
+      "id": "BG-005-customs-g4-evidence-chain-verification",
+      "priority": "P1",
+      "source_backlog_id": "GAP G11（Customs G4 HTTP 接线）",
+      "title": "Customs G4 证据链 HTTP/E2E 现状复核",
+      "scope": "核对 customs 证据链只读路由与 E2E 现状（401/403/404/200 + 租户隔离）",
+      "acceptance_criteria": "customs 证据链套件全绿；证据写入 RUN_LOG",
+      "dependencies": [],
+      "risk_class": "MEDIUM",
+      "ARCH_REVIEW_REQUIRED": false,
+      "HOST_ACTION_REQUIRED": false,
+      "HOLD_EXTERNAL": true,
+      "allowed_files": [
+        "apps/api/src/**（只读测试）",
+        ".autopilot/RUN_LOG.md"
+      ],
+      "boundary": "NO_FILING / NO_EXTERNAL_WRITE",
+      "required_tests": [
+        "customs-return-claim-evidence",
+        "customs-claim-ready-http"
+      ],
+      "template": "suite-evidence",
+      "filters": [
+        "customs-return-claim-evidence",
+        "customs-claim-ready-http"
+      ]
+    },
+    {
+      "id": "BG-006-production-candidate-preflight",
+      "priority": "P1",
+      "source_backlog_id": "TRACK A（Production Candidate 前置）",
+      "title": "Production Candidate 预检（只登记 HOST_ACTION_REQUIRED，不执行）",
+      "scope": "登记生产部署 / DNS / 付费服务 / 生产凭据等待宿主批准项",
+      "acceptance_criteria": "仅登记清单，零外部动作",
+      "dependencies": [],
+      "risk_class": "HIGH",
+      "ARCH_REVIEW_REQUIRED": true,
+      "HOST_ACTION_REQUIRED": true,
+      "HOLD_EXTERNAL": true,
+      "allowed_files": [
+        ".autopilot/STATE.json"
+      ],
+      "boundary": "SKIP_AND_REGISTER_ONLY",
+      "required_tests": [],
+      "template": "host-required-register"
+    },
+    {
+      "id": "BG-007-evidence-graph-closure-evidence",
+      "priority": "P2",
+      "source_backlog_id": "REGISTER-A6（Evidence / Recovery Graph PARTIAL）",
+      "title": "Evidence / Recovery Graph 证据层现状核对（evidence artifact / promotion / POD evidence）",
+      "scope": "核对 evidence 层与图结构相关套件当前实现状态并留档",
+      "acceptance_criteria": "evidence 相关套件全绿；证据写入 RUN_LOG",
+      "dependencies": [],
+      "risk_class": "LOW",
+      "ARCH_REVIEW_REQUIRED": false,
+      "HOST_ACTION_REQUIRED": false,
+      "HOLD_EXTERNAL": true,
+      "allowed_files": [
+        "apps/api/src/**（只读测试）",
+        ".autopilot/RUN_LOG.md"
+      ],
+      "boundary": "READ_ONLY",
+      "required_tests": [
+        "evidence",
+        "pod-evidence",
+        "canonical"
+      ],
+      "template": "suite-evidence",
+      "filters": [
+        "evidence",
+        "pod-evidence",
+        "canonical"
+      ]
+    },
+    {
+      "id": "BG-008-platform-write-amazon-evidence",
+      "priority": "P2",
+      "source_backlog_id": "REGISTER-A1/A10（Platform Recovery + Action Guard PARTIAL）",
+      "title": "Platform write 账本与 Amazon 只读 adapter 证据核对",
+      "scope": "核对 platform.write 账本（CAS/no-blind-retry）与 Amazon 只读 adapter 现状并留档",
+      "acceptance_criteria": "platform-write / amazon 相关套件全绿；零外写",
+      "dependencies": [],
+      "risk_class": "MEDIUM",
+      "ARCH_REVIEW_REQUIRED": false,
+      "HOST_ACTION_REQUIRED": false,
+      "HOLD_EXTERNAL": true,
+      "allowed_files": [
+        "apps/api/src/**（只读测试）",
+        ".autopilot/RUN_LOG.md"
+      ],
+      "boundary": "NO_EXTERNAL_WRITE / NO_PRODUCTION_CREDENTIALS",
+      "required_tests": [
+        "platform-write",
+        "amazon"
+      ],
+      "template": "suite-evidence",
+      "filters": [
+        "platform-write",
+        "amazon"
+      ]
+    },
+    {
+      "id": "BG-009-carrier-settlement-readonly-reconciliation",
+      "priority": "P0",
+      "source_backlog_id": "MSG-20261003-133 Q2① / REGISTER-A13「结果事实 → 到账事实」断点",
+      "title": "Carrier 结果 → Settlement 只读对账投影（APPROVED/PAID ≠ RECEIVED）",
+      "scope": "只读 reconciliation projection / discrepancy；不创建 Settlement 事实、不改 Payment/Billing、无银行证据不得升级为 RECEIVED",
+      "acceptance_criteria": "投影语义与边界测试全绿（APPROVED/PAID 无证据→AWAITING_SETTLEMENT_EVIDENCE；金额不一致→DISCREPANCY；币种不一致→INDETERMINATE；跨租户→拒绝）",
+      "dependencies": [],
+      "risk_class": "MEDIUM",
+      "ARCH_REVIEW_REQUIRED": false,
+      "HOST_ACTION_REQUIRED": false,
+      "HOLD_EXTERNAL": true,
+      "allowed_files": [
+        "apps/api/src/services/settlement/**",
+        "apps/api/src/__tests__/**"
+      ],
+      "boundary": "READ_ONLY / NO_MONEY_WRITE / NO_FX",
+      "required_tests": [
+        "carrier-settlement-reconciliation-readonly"
+      ],
+      "template": "suite-evidence",
+      "filters": [
+        "carrier-settlement-reconciliation-readonly"
+      ]
+    },
+    {
+      "id": "BG-010-ps04-phase1-readonly-chain",
+      "priority": "P1",
+      "source_backlog_id": "MSG-20261003-133 Q1 / Q2②（PS04 第一阶段）",
+      "title": "PS04 Phase 1：独立站/拒付内部只读链（事实 → 证据装配 → 资格输入 → claim-ready 证据包 → 只读查询）",
+      "scope": "仅 fixture/CSV/FILE_UPLOAD；不接真实 PSP、不实现 dispute.submit；lineage/deadline fail-closed；金额口径互不等同",
+      "acceptance_criteria": "事实可追溯、tenant/account lineage 完整、deadline fail-closed、证据包 deterministic、qualification 后端强制、零外调/零 submission/零 recovered-billable 自证",
+      "dependencies": [
+        "BG-011-ps04-enum-migration-d1-d3"
+      ],
+      "risk_class": "MEDIUM",
+      "ARCH_REVIEW_REQUIRED": false,
+      "HOST_ACTION_REQUIRED": false,
+      "HOLD_EXTERNAL": true,
+      "allowed_files": [
+        "apps/api/src/services/**",
+        "apps/api/src/__tests__/**"
+      ],
+      "boundary": "READ_ONLY / NO_EXTERNAL_PSP / NO_DISPUTE_SUBMIT",
+      "required_tests": [
+        "payment",
+        "chargeback",
+        "evidence"
+      ],
+      "template": "suite-evidence",
+      "filters": [
+        "settlement",
+        "evidence"
+      ]
+    },
+    {
+      "id": "BG-011-ps04-enum-migration-d1-d3",
+      "priority": "P0",
+      "source_backlog_id": "MSG-20261003-133 Q1（仅批准 D1–D3 枚举）",
+      "title": "PS04 D1–D3 枚举迁移（RecoveryDomain += INDEPENDENT_SITE；Channel += SHOPIFY/STRIPE/PAYPAL；RouteTarget += PAYMENT_PROCESSOR）",
+      "scope": "枚举迁移必须先独立落地；不含 D4；不改其它 Schema",
+      "acceptance_criteria": "migration 可从空库执行；architecture-contract 通过；业务代码使用新值前先完成本项",
+      "dependencies": [],
+      "risk_class": "MEDIUM",
+      "ARCH_REVIEW_REQUIRED": false,
+      "HOST_ACTION_REQUIRED": false,
+      "HOLD_EXTERNAL": true,
+      "allowed_files": [
+        "apps/api/prisma/migrations/**",
+        "apps/api/prisma/schema.prisma"
+      ],
+      "boundary": "APPROVED_SCHEMA_ONLY_D1_D3",
+      "required_tests": [
+        "architecture-contract"
+      ],
+      "template": "suite-evidence",
+      "filters": [
+        "architecture-contract"
+      ]
+    },
+    {
+      "id": "BG-012-customs-g4-http-trigger-wiring",
+      "priority": "P2",
+      "source_backlog_id": "MSG-20261003-133 Q2③（GAP G11）",
+      "title": "Customs G4 HTTP **内部触发**接线（受 Action Guard 保护；仍不 filing）",
+      "scope": "内部触发端点 + RBAC/Action Guard；不接真实 filing、不 EXTERNAL_WRITE",
+      "acceptance_criteria": "路由级 E2E（401/403/404/409/200）+ API.md 同步；filingSubmitted=false",
+      "dependencies": [
+        "BG-009-carrier-settlement-readonly-reconciliation"
+      ],
+      "risk_class": "MEDIUM",
+      "ARCH_REVIEW_REQUIRED": true,
+      "HOST_ACTION_REQUIRED": false,
+      "HOLD_EXTERNAL": true,
+      "allowed_files": [
+        "apps/api/src/services/workflow/**",
+        "apps/api/src/server.ts",
+        "API.md"
+      ],
+      "boundary": "NO_FILING / NO_EXTERNAL_WRITE",
+      "required_tests": [
+        "customs-return-claim-evidence-http-e2e-db"
+      ],
+      "template": "suite-evidence",
+      "filters": [
+        "customs-return-claim-evidence-http-e2e-db"
+      ],
+      "dispatcher_skip": true,
+      "dispatcher_skip_reason": "EXTERNAL_WRITE/Action Guard 边界需架构方再审（MSG-20261003-133 Q3）"
+    },
+    {
+      "id": "BG-013-ior-facts-persistence-schema-delta",
+      "priority": "P1",
+      "source_backlog_id": "IOR 指令 ①②③ / I1",
+      "title": "IOR identity / right lineage / broker POA 事实持久化（Schema Delta，需架构方审计）",
+      "scope": "append-only 事实表 + 5 枚举 + tenant/immutable 触发器 + DB 级 CHECK（machine-safe 引用、4811 拒绝、POA 一致性）+ 不含外部写入（已获架构方批准：MSG-20261003-136）",
+      "acceptance_criteria": "Prisma + migration + PostgreSQL E2E：同 fact 重放 exactly-one、corrected 追加历史、UPDATE/DELETE 拒绝、跨租户 lineage 拒绝、raw EIN / numeric importer number / credential-free-text 拒绝、CBP_FORM_4811 拒绝、VERIFIED+NONE 拒绝、VERIFIED 缺 evidence 拒绝、过期窗口非法拒绝、latest 返回新 fact",
+      "dependencies": [],
+      "risk_class": "HIGH",
+      "ARCH_REVIEW_REQUIRED": true,
+      "HOST_ACTION_REQUIRED": false,
+      "HOLD_EXTERNAL": true,
+      "allowed_files": [
+        "apps/api/prisma/**"
+      ],
+      "boundary": "SCHEMA_CHANGE_REQUIRES_AUDIT",
+      "required_tests": [
+        "architecture-contract"
+      ],
+      "template": "suite-evidence",
+      "filters": [
+        "architecture-contract"
+      ],
+      "materializable": true,
+      "status": "COMPLETED",
+      "completed_at": "2026-10-03T16:10:31.114Z"
+    },
+    {
+      "id": "BG-014-ior-qualification-wiring",
+      "priority": "P1",
+      "source_backlog_id": "IOR 指令 ⑥ / I2",
+      "title": "Enterprise IOR readiness 输入接入现有 Qualification / Economics Gate（复用，不建第二套）",
+      "scope": "只增输入平面与判定接线；不改变既有 gate 语义",
+      "acceptance_criteria": "IOR readiness 缺失/歧义 → INDETERMINATE/NOT_QUALIFIED；昂贵调用仍在 gate 之后",
+      "dependencies": [],
+      "risk_class": "MEDIUM",
+      "ARCH_REVIEW_REQUIRED": false,
+      "HOST_ACTION_REQUIRED": false,
+      "HOLD_EXTERNAL": true,
+      "allowed_files": [
+        "apps/api/src/services/**"
+      ],
+      "boundary": "NO_EXTERNAL_CALL",
+      "required_tests": [
+        "customer-qualification-gate"
+      ],
+      "template": "suite-evidence",
+      "filters": [
+        "customer-qualification-gate"
+      ]
+    },
+    {
+      "id": "BG-015-ior-full-chain-assembly",
+      "priority": "P1",
+      "source_backlog_id": "IOR 指令 ⑪ / I3",
+      "title": "Enterprise IOR 全链装配（Entry→IOR→claimant/right→remedy+deadline→qualification→evidence→estimate→claim-ready→broker authorization→filing provider→refund destination），fail-closed 零外写",
+      "scope": "只读装配层 + 逐 stage 就绪报告；不新增外部调用、不改 Schema",
+      "acceptance_criteria": "任一环节不明确 → 对应 stage 不 READY 且 claimPackageReady=false；autoSubmitAllowed 恒 false",
+      "dependencies": [
+        "BG-013-ior-facts-persistence-schema-delta"
+      ],
+      "risk_class": "MEDIUM",
+      "ARCH_REVIEW_REQUIRED": false,
+      "HOST_ACTION_REQUIRED": false,
+      "HOLD_EXTERNAL": true,
+      "allowed_files": [
+        "apps/api/src/services/**"
+      ],
+      "boundary": "NO_EXTERNAL_CALL",
+      "required_tests": [
+        "enterprise-ior-layer"
+      ],
+      "template": "suite-evidence",
+      "filters": [
+        "enterprise-ior-layer"
+      ]
+    },
+    {
+      "id": "BG-016-acceptance-head-single-source",
+      "priority": "P0",
+      "source_backlog_id": "MSG-20261003-135 CHANGE B",
+      "title": "单一 Acceptance Head + 四份状态一致 guard（STATE/backlog/MASTER-GAP-CLOSURE-REGISTER/FINAL-ACCEPTANCE-REPORT）",
+      "scope": "新增 consistency guard 工具 + CI 接线；四份来源含 IN_PROGRESS/PARTIAL/INTERNAL_CODE_COMPLETE=FALSE 时禁止 OPEN_INTERNAL_ITEMS=0",
+      "acceptance_criteria": "guard 在同一 head 上比对四份来源，冲突即失败；FINAL-ACCEPTANCE-REPORT 改为派生而非手写矩阵",
+      "dependencies": [],
+      "risk_class": "MEDIUM",
+      "ARCH_REVIEW_REQUIRED": false,
+      "HOST_ACTION_REQUIRED": false,
+      "HOLD_EXTERNAL": true,
+      "allowed_files": [
+        "tools/autopilot/**",
+        "docs/releases/**"
+      ],
+      "boundary": "NO_EXTERNAL_CALL",
+      "required_tests": [
+        "autopilot"
+      ],
+      "template": "suite-evidence",
+      "filters": [
+        "autopilot"
+      ],
+      "materializable": false
+    },
+    {
+      "id": "BG-017-layer2-golden-path-matrix",
+      "priority": "P0",
+      "source_backlog_id": "MSG-20261003-135 CHANGE C",
+      "title": "Layer 2 四域 Golden Path Matrix（Platform / Logistics-Carrier / Customs / Independent-site）逐项验收表",
+      "scope": "每域列出 HTTP/persistence/DB invariant/frontend/happy/negative/replay/concurrency/failure-recovery/cross-tenant/RBAC/amount-ledger consistency；缺项 materialize 为 backlog",
+      "acceptance_criteria": "每域矩阵项有真实 E2E 证据或显式 materialize；禁止用专项测试数量替代矩阵",
+      "dependencies": [],
+      "risk_class": "MEDIUM",
+      "ARCH_REVIEW_REQUIRED": false,
+      "HOST_ACTION_REQUIRED": false,
+      "HOLD_EXTERNAL": true,
+      "allowed_files": [
+        "docs/releases/**",
+        "apps/api/src/__tests__/**",
+        "apps/web/**"
+      ],
+      "boundary": "NO_EXTERNAL_CALL",
+      "required_tests": [
+        "golden-path"
+      ],
+      "template": "doc-sync",
+      "filters": [],
+      "materializable": false
+    },
+    {
+      "id": "BG-018-independent-site-internal-closure",
+      "priority": "P1",
+      "source_backlog_id": "MSG-20261003-135 CHANGE D",
+      "title": "Independent-site 内部闭环（已交付：chargeback-recovery-flow 8/8）；HTTP/持久化残留见 BG-021",
+      "scope": "纯内部/夹具/manual-handoff；保持 submitted ≠ won ≠ settled ≠ recovered ≠ billable；真实 PSP 提交仍属 API/LEGAL/HOST",
+      "acceptance_criteria": "内部闭环 E2E + 负路径 + 跨租户 + RBAC + 金额/账本一致性；零真实 PSP 写入",
+      "dependencies": [],
+      "risk_class": "HIGH",
+      "ARCH_REVIEW_REQUIRED": false,
+      "HOST_ACTION_REQUIRED": false,
+      "HOLD_EXTERNAL": true,
+      "allowed_files": [
+        "apps/api/src/services/**",
+        "apps/api/src/__tests__/**"
+      ],
+      "boundary": "NO_EXTERNAL_CALL",
+      "required_tests": [
+        "independent-site"
+      ],
+      "template": "suite-evidence",
+      "filters": [
+        "independent-site"
+      ],
+      "materializable": false
+    },
+    {
+      "id": "BG-019-frontend-http-wiring-closure",
+      "priority": "P1",
+      "source_backlog_id": "MSG-20261003-135 CHANGE E",
+      "title": "前端/HTTP 缺口按协议收口（四域内部 Golden Path 所需的最小 frontend wiring）",
+      "scope": "补齐后端已有但前端未接的内部 Golden Path 最小接线；或由宿主正式修改协议范围（二选一，不得由 Codex 忽略）",
+      "acceptance_criteria": "每域内部 Golden Path 所需的 HTTP→frontend 接线存在并有测试；否则协议范围须经宿主正式修改",
+      "dependencies": [
+        "BG-017-layer2-golden-path-matrix"
+      ],
+      "risk_class": "MEDIUM",
+      "ARCH_REVIEW_REQUIRED": false,
+      "HOST_ACTION_REQUIRED": false,
+      "HOLD_EXTERNAL": true,
+      "allowed_files": [
+        "apps/web/**",
+        "apps/api/src/services/**"
+      ],
+      "boundary": "NO_EXTERNAL_CALL",
+      "required_tests": [
+        "web"
+      ],
+      "template": "suite-evidence",
+      "filters": [
+        "web"
+      ],
+      "materializable": false,
+      "status": "COMPLETED",
+      "progress": "Customs 已接线（BG-020 端点 + 只读卡片）；Platform / Independent-site 最小边界待架构方裁定",
+      "completed_at": "2026-10-03T17:08:36.692Z"
+    },
+    {
+      "id": "BG-020-customs-readonly-projection-http",
+      "priority": "P1",
+      "source_backlog_id": "G11 / MSG-20261003-135 CHANGE C（Customs 域矩阵缺口）",
+      "title": "Customs 只读投影 GET + IOR 全链 HTTP 接线（duty truth / discrepancy / eligibility / estimate / claim-ready package / IOR recovery chain）",
+      "scope": "只读 GET 端点 + tenant-scoped 读模型 + 前端只读页；零外部写、零 filing",
+      "acceptance_criteria": "每端点 401/403/404/200 + 跨租户 fail-closed + 重算口径 recomputedOnRead=false；路由契约同步；filingSubmitted=false",
+      "dependencies": [],
+      "risk_class": "MEDIUM",
+      "ARCH_REVIEW_REQUIRED": false,
+      "HOST_ACTION_REQUIRED": false,
+      "HOLD_EXTERNAL": true,
+      "allowed_files": [
+        "apps/api/src/services/**",
+        "apps/api/src/__tests__/**",
+        "apps/web/**"
+      ],
+      "boundary": "NO_EXTERNAL_CALL",
+      "required_tests": [
+        "customs"
+      ],
+      "template": "suite-evidence",
+      "filters": [
+        "customs"
+      ],
+      "status": "COMPLETED",
+      "completed_at": "2026-10-03T16:27:07.663Z"
+    },
+    {
+      "id": "BG-021-independent-site-persistence-schema-delta",
+      "priority": "P1",
+      "source_backlog_id": "MSG-20261003-135 CHANGE D（残留：HTTP + DB 持久化）",
+      "title": "Independent-site / Chargeback 事实持久化 + HTTP 接线（Schema Delta，需架构方审计）",
+      "scope": "append-only dispute/handoff/response/settlement 事实表 + tenant/immutable 触发器 + 只读 GET/POST 路由 + 前端只读页；不含真实 PSP 调用",
+      "acceptance_criteria": "Schema Delta 获批后落 migration；真实 PG E2E（幂等、append-only、跨租户拒绝、并发 exactly-one）+ 路由契约同步",
+      "dependencies": [],
+      "risk_class": "HIGH",
+      "ARCH_REVIEW_REQUIRED": true,
+      "HOST_ACTION_REQUIRED": false,
+      "HOLD_EXTERNAL": true,
+      "allowed_files": [
+        "apps/api/prisma/**",
+        "apps/api/src/**",
+        "apps/web/**"
+      ],
+      "boundary": "SCHEMA_CHANGE_REQUIRES_AUDIT",
+      "required_tests": [
+        "independent-site"
+      ],
+      "template": "suite-evidence",
+      "filters": [
+        "independent-site"
+      ],
+      "materializable": false,
+      "status": "COMPLETED",
+      "completed_at": "2026-10-03T16:42:50.059Z"
+    }
+  ],
+  "authorization_note": "MSG-20261003-133 Q3：dispatcher 获授权自动扩 backlog 并执行安全单元（契约/已批准 D1–D3 Schema/append-only 持久化/deterministic normalization/qualification·evidence·package/测试/文档/fixture/只读 HTTP/只读 reconciliation projection）；遇到未批准 Schema、EXTERNAL_WRITE Action Guard、真实 adapter/webhook、submission、真实资金语义写入、生产 credential、收费时必须停该分支并重新送审。"
+}

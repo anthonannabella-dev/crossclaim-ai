@@ -21,12 +21,16 @@
  *   FeeCalculation (our service fee) → BillingInvoice (what we charge the client).
  */
 
+import { resolveAccountIdFromCase } from '../evidence/account-scope';
 import { Prisma, type PrismaClient } from '@prisma/client';
 
 import { prepareAuditInsert } from '../audit';
 import { billingInvoiceNoFor, type CommercialTerms } from '../recovery';
 import { WorkflowError } from './opportunity-review';
 import { assertPermission } from './permissions';
+import { ApprovalBoundaryError, verifyApprovalBoundary } from '../action-guard/approval-tx-verify';
+import { requiresHighValueReview, resolveHighValueThreshold } from './recovery-review';
+import { RECOVERY_CONFIRMATION_ACTION } from '../action-guard/approval-verifier';
 import { assertHighValueReviewCleared } from './recovery-review';
 
 const MONEY_SCALE = 4;
@@ -47,6 +51,13 @@ export interface ConfirmRecoveryOutcomeInput {
   basisReference: unknown;
   evidenceArtifactId?: unknown;
   note?: unknown;
+  /**
+   * CHANGE B（MSG-20260930-17）：本次执行所依据的审批标识。
+   * 提供时，审批消费与首次资金写入在同一事务内完成（advisory lock 串行化）。
+   */
+  approvalId?: string;
+  /** 操作关联标识（缺省由 approvalId + caseId 生成） */
+  operationId?: string;
 }
 
 export interface ConfirmRecoveryOutcomeResult {
@@ -151,40 +162,8 @@ export async function confirmRecoveryOutcome(
   const claimedAmount = kase.claimedAmount ? money(kase.claimedAmount) : new Prisma.Decimal(0);
   const exceedsClaim = recoveredAmount.gt(claimedAmount);
 
-  // 幂等优先：该案件已有 Settlement 时，重复确认返回既有资金对象，
-  // 不重复计费，也不因「案件已 SETTLED」而报错（下方守卫只约束首次确认）。
-  const existingSettlement = await prisma.settlement.findFirst({
-    where: { organizationId: input.organizationId, caseId: kase.id },
-    select: { id: true, amount: true, currency: true },
-  });
-  if (existingSettlement) {
-    const [ledger, fee, billing] = await Promise.all([
-      prisma.recoveryLedgerEntry.findFirst({
-        where: { organizationId: input.organizationId, settlementId: existingSettlement.id },
-        select: { id: true },
-      }),
-      prisma.feeCalculation.findFirst({
-        where: { organizationId: input.organizationId, settlementId: existingSettlement.id },
-        select: { id: true, feeAmount: true },
-      }),
-      prisma.billingInvoice.findFirst({
-        where: { organizationId: input.organizationId, caseId: kase.id },
-        select: { id: true },
-      }),
-    ]);
-    return {
-      caseId: kase.id,
-      caseNo: kase.caseNo,
-      settlementId: existingSettlement.id,
-      ledgerEntryId: ledger?.id ?? '',
-      feeCalculationId: fee?.id ?? '',
-      billingInvoiceId: billing?.id ?? '',
-      recoveredAmount: money(existingSettlement.amount).toFixed(MONEY_SCALE),
-      feeAmount: (fee?.feeAmount ? money(fee.feeAmount) : new Prisma.Decimal(0)).toFixed(MONEY_SCALE),
-      created: false,
-      exceedsClaim,
-    };
-  }
+  // R3 CHANGE B：既有资金链的判定移入「案件锁内 + 完整重验之后」（见下方事务），
+  // 避免并发下先通过 wrapper、再因他人已建 Settlement 而跳过最终授权重验。
 
   // 人工事实必须已经存在：绝不自动推进（Q3）
   if (kase.status !== 'WON') {
@@ -237,13 +216,176 @@ export async function confirmRecoveryOutcome(
   const feeAmount = money(recoveredAmount.times(new Prisma.Decimal(terms.successFeeRate)));
   const at = now();
 
-  return prisma.$transaction(async (tx) => {
+  const approvalId = typeof input.approvalId === 'string' && input.approvalId.trim() !== '' ? input.approvalId.trim() : null;
+  // R3 CHANGE B：高额确认若缺操作级审批，直接拒绝（旧案件状态卡口不能替代操作级授权）
+  if (
+    approvalId === null &&
+    requiresHighValueReview({ recoveredAmount, currency, threshold: resolveHighValueThreshold() })
+  ) {
+    // R3 CHANGE D：入口闸门的拒绝同样留证（审计失败不改变拒绝结果）
+    await writeOutcomeRejectionAudit(prisma, {
+      organizationId: input.organizationId,
+      actorUserId: input.actorUserId,
+      caseId: kase.id,
+      caseNo: kase.caseNo,
+      approvalId: null,
+      operationId: null,
+      stage: 'ENTRY_GATE',
+      reason: 'APPROVAL_ID_REQUIRED',
+      at,
+    }).catch(() => undefined);
+    throw new WorkflowError('REVIEW_REQUIRED', '高额确认必须携带操作级审批（approvalId）');
+  }
+  const operationId =
+    typeof input.operationId === 'string' && input.operationId.trim() !== ''
+      ? input.operationId.trim()
+      : approvalId ? `approval:${approvalId}` : null;
+
+  try {
+    return await prisma.$transaction(async (tx) => {
+    // CHANGE B（MSG-20260930-17 §4）：审批消费与首次资金写入必须原子化。
+    // R3 CHANGE B（MSG-20260930-19）：案件锁**无条件**获取（含缺 approvalId 的兼容调用），
+    // 且「既有资金链的幂等返回」必须在**锁内 + 完整重验之后**，不再有绕过最终边界的早返回。
+    if (typeof tx.$executeRawUnsafe === 'function') {
+      await tx.$executeRawUnsafe('SELECT pg_advisory_xact_lock(hashtext($1))', `cc-recovery-case:${kase.id}`);
+    }
+    let approvalConsumed = false;
+    if (approvalId) {
+      // R2 CHANGE B1：锁顺序固定为「案件 → 审批」，保证同案不同审批也只允许一条资金链
+      await tx.$executeRawUnsafe('SELECT pg_advisory_xact_lock(hashtext($1))', `cc-approval:${approvalId}`);
+      // R3 CHANGE A：锁获取后**重新读取服务端时间**，不得沿用等待前的时间
+      const verificationTime = now();
+      // 锁内重验审批绑定与生命周期（不能用事务外结论）
+      const boundary = await verifyApprovalBoundary(tx, {
+        organizationId: input.organizationId,
+        approvalId,
+        action: RECOVERY_CONFIRMATION_ACTION,
+        caseId: kase.id,
+        actorUserId: input.actorUserId,
+        payload: {
+          amount: recoveredAmount.toFixed(MONEY_SCALE),
+          currency,
+          basisReference,
+          evidenceArtifactId: requestedEvidenceId,
+        },
+        now: verificationTime,
+      });
+      if (!boundary.ok) {
+        throw new ApprovalBoundaryError(boundary.reason, kase.id);
+      }
+      approvalConsumed = boundary.consumed;
+    }
+
+    // R3 CHANGE B：锁内按**案件**核查既有资金链（无论本次 approvalId 是否已消费、也无论是否带 approvalId）。
+    // 同案不同审批并发时，后到的请求在此看到第一条完整资金链并走幂等返回，而不是依赖唯一约束报错。
+    const caseSettlement = await tx.settlement.findFirst({
+      where: { organizationId: input.organizationId, caseId: kase.id },
+      select: { id: true, amount: true },
+    });
+    if (caseSettlement) {
+      const [ledgerRow, feeRow, invoiceRow] = await Promise.all([
+        tx.recoveryLedgerEntry.findFirst({
+          where: { organizationId: input.organizationId, settlementId: caseSettlement.id },
+          select: { id: true },
+        }),
+        tx.feeCalculation.findFirst({
+          where: { organizationId: input.organizationId, settlementId: caseSettlement.id },
+          select: { id: true, feeAmount: true },
+        }),
+        tx.billingInvoice.findFirst({
+          where: { organizationId: input.organizationId, caseId: kase.id },
+          select: { id: true },
+        }),
+      ]);
+      // 缺对象拒绝，不返回空 ID 冒充成功（R3 CHANGE B）
+      if (!ledgerRow || !feeRow || !invoiceRow) {
+        throw new WorkflowError(
+          'ILLEGAL_TRANSITION',
+          '既有资金链不完整（缺少 Ledger/Fee/Billing 之一），拒绝幂等返回',
+        );
+      }
+      // 合法幂等返回必须能证明「这条链就是本审批消费产生的」：核对审批标识、同操作与规范化载荷
+      if (approvalId) {
+        const consumedRow = await tx.auditLog.findFirst({
+          where: {
+            organizationId: input.organizationId,
+            action: 'recovery.approval_consumed',
+            entityType: 'Case',
+            entityId: kase.id,
+            changes: { path: ['approvalId'], equals: approvalId } as never,
+          },
+          select: { changes: true },
+        });
+        if (!consumedRow) {
+          // 既有资金链不是由本审批消费产生：不得据其返回成功
+          throw new ApprovalBoundaryError('APPROVAL_NOT_APPROVED', kase.id);
+        }
+        const consumedChanges = (consumedRow.changes ?? null) as Record<string, unknown> | null;
+        const consumedOperationId =
+          typeof consumedChanges?.operationId === 'string' ? consumedChanges.operationId : null;
+        const consumedAmount =
+          typeof consumedChanges?.recoveredAmount === 'string' ? consumedChanges.recoveredAmount : null;
+        const consumedCurrency =
+          typeof consumedChanges?.currency === 'string' ? consumedChanges.currency : null;
+        if (
+          consumedOperationId !== operationId ||
+          consumedAmount !== recoveredAmount.toFixed(MONEY_SCALE) ||
+          consumedCurrency !== currency ||
+          money(caseSettlement.amount).toFixed(MONEY_SCALE) !== recoveredAmount.toFixed(MONEY_SCALE)
+        ) {
+          throw new ApprovalBoundaryError('APPROVAL_PAYLOAD_MISMATCH', kase.id);
+        }
+      }
+      return {
+        caseId: kase.id,
+        caseNo: kase.caseNo,
+        settlementId: caseSettlement.id,
+        ledgerEntryId: ledgerRow.id,
+        feeCalculationId: feeRow.id,
+        billingInvoiceId: invoiceRow.id,
+        recoveredAmount: money(caseSettlement.amount).toFixed(MONEY_SCALE),
+        feeAmount: money(feeRow.feeAmount).toFixed(MONEY_SCALE),
+        created: false,
+        exceedsClaim,
+      };
+    }
+    if (approvalConsumed) {
+      // 审批已消费却没有任何资金对象：链不完整，拒绝（不重复消费、不静默补写）
+      throw new WorkflowError(
+        'ILLEGAL_TRANSITION',
+        '审批已消费但案件资金链缺失，拒绝重复消费',
+      );
+    }
+
+    if (approvalId) {
+      // 消费事件：审批与首次资金写入同事务落库
+      await tx.auditLog.create({
+        data: {
+          organizationId: input.organizationId,
+          actorType: 'USER',
+          actorUserId: input.actorUserId,
+          action: 'recovery.approval_consumed',
+          entityType: 'Case',
+          entityId: kase.id,
+          changes: { approvalId, operationId, caseNo: kase.caseNo, recoveredAmount: recoveredAmount.toFixed(MONEY_SCALE), currency } as never,
+          createdAt: at,
+        },
+      });
+    }
+
     // 凭证：优先使用用户指定的 EvidenceArtifact，否则为本次人工确认留一条可追溯凭证
     let evidenceId = requestedEvidenceId;
     if (!evidenceId) {
+      // MSG-20261002-68 CHANGE A：人工确认凭证必须带 server-derived account provenance。
+      // 由 case 的主张链派生；无法唯一确定 → PLATFORM_ACCOUNT_REQUIRED（不得写 NULL 新事实）。
+      const evidenceAccountId = await resolveAccountIdFromCase(tx as never, {
+        organizationId: input.organizationId,
+        caseId: kase.id,
+      });
       const created = await tx.evidenceArtifact.create({
         data: {
           organizationId: input.organizationId,
+          accountId: evidenceAccountId,
           kind: 'CREDIT_NOTE',
           title: `Manual recovery confirmation — ${kase.caseNo}`,
           description: `basisReference: ${basisReference}`,
@@ -347,6 +489,9 @@ export async function confirmRecoveryOutcome(
         basisReference,
         evidenceArtifactId: evidenceId,
         ...(note ? { hasNote: true } : {}),
+        // R3 CHANGE D：成功记录必须能与审批/操作/执行主体对齐（entityId = Settlement.id）
+        ...(approvalId ? { approvalId, operationId } : {}),
+        result: 'CONFIRMED',
       },
       at,
     });
@@ -379,7 +524,31 @@ export async function confirmRecoveryOutcome(
       created: true,
       exceedsClaim,
     };
-  });
+    });
+  } catch (error) {
+    // R3 CHANGE D：锁内拒绝（含既有链缺项）必须留下可关联的最终拒绝审计。
+    // 事务已回滚，故用独立连接写入；审计失败不得覆盖原始拒绝错误。
+    const reason =
+      error instanceof ApprovalBoundaryError
+        ? error.reason
+        : error instanceof WorkflowError
+          ? error.code
+          : null;
+    if (reason !== null) {
+      await writeOutcomeRejectionAudit(prisma, {
+        organizationId: input.organizationId,
+        actorUserId: input.actorUserId,
+        caseId: kase.id,
+        caseNo: kase.caseNo,
+        approvalId,
+        operationId,
+        stage: 'LOCKED_RECHECK',
+        reason,
+        at: now(),
+      }).catch(() => undefined);
+    }
+    throw error;
+  }
 }
 
 async function writeUserAudit(
@@ -407,6 +576,64 @@ async function writeUserAudit(
     { maxStringLength: 512 },
   );
   await tx.auditLog.create({
+    data: {
+      organizationId: row.organizationId,
+      actorType: row.actorType,
+      actorUserId: row.actorUserId,
+      actorRef: row.actorRef,
+      action: row.action,
+      entityType: row.entityType,
+      entityId: row.entityId,
+      changes: (row.changes ?? undefined) as Prisma.InputJsonValue | undefined,
+      ip: row.ip,
+      userAgent: row.userAgent,
+      createdAt: input.at,
+    },
+  });
+}
+
+/**
+ * R3 CHANGE D：最终拒绝审计（入口闸门 / 锁内重验）。
+ * 记录执行主体、审批、操作、目标与结果；与 `recovery_outcome.confirmed` 成对使用。
+ * 主体可能是「已停用用户 / 非有效成员」，故不以 USER actor 落库（成员触发器），
+ * 执行主体 ID 记入 changes，保持 AI/SYSTEM 形状约束。
+ */
+async function writeOutcomeRejectionAudit(
+  prisma: PrismaClient,
+  input: {
+    organizationId: string;
+    actorUserId: string;
+    caseId: string;
+    caseNo: string;
+    approvalId: string | null;
+    operationId: string | null;
+    stage: 'ENTRY_GATE' | 'LOCKED_RECHECK';
+    reason: string;
+    at: Date;
+  },
+): Promise<void> {
+  const row = prepareAuditInsert(
+    {
+      organizationId: input.organizationId,
+      actorType: 'SYSTEM',
+      actorRef: 'recovery-outcome-guard',
+      action: 'recovery.outcome_rejected',
+      entityType: 'Case',
+      entityId: input.caseId,
+      changes: {
+        caseId: input.caseId,
+        caseNo: input.caseNo,
+        actorUserId: input.actorUserId,
+        approvalId: input.approvalId,
+        operationId: input.operationId,
+        stage: input.stage,
+        reason: input.reason,
+        result: 'REJECTED',
+      },
+    },
+    { maxStringLength: 512, now: () => input.at },
+  );
+  await prisma.auditLog.create({
     data: {
       organizationId: row.organizationId,
       actorType: row.actorType,

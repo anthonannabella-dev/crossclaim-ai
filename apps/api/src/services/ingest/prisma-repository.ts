@@ -29,6 +29,7 @@
 
 import { Prisma, type PrismaClient } from '@prisma/client';
 
+import { AccountLineageError } from '../account-lineage/policy';
 import type { AuditWriter } from '../audit';
 import { writeCanonicalFactsForTransactions, type DerivedFact } from '../canonical';
 import type { ImportBatchDraft, ImportRepository, TransactionInsert } from './import-service';
@@ -54,6 +55,48 @@ export const DEFAULT_IMPORT_CHUNK_SIZE = 1000;
 /** Prisma 默认事务超时是 5s；批量导入必须显式放宽，否则大文件直接失败。 */
 export const DEFAULT_IMPORT_TRANSACTION_TIMEOUT_MS = 60_000;
 export const DEFAULT_IMPORT_TRANSACTION_MAX_WAIT_MS = 30_000;
+
+/**
+ * TRACK B BATCH 1 / B1-2（Account Lineage Runtime Gate）—— ingest 入口 fail-closed。
+ *
+ * 架构方冻结（MSG-20261002-73 §⑤ / MSG-20261002-74 ③）：
+ *   - 第一条 SourceTransaction 写入之前，必须验证 SourceConnection.platformAccountId 非空；
+ *   - unbound connection / 缺失连接上下文 / 连接不属于该租户 → 一律 reject ingest，
+ *     结果必须是 0 SourceTransaction / 0 CanonicalFact / 0 RecoveryOpportunity / 0 ClaimItem；
+ *   - 禁止 `platformAccountId ?? null` 继续写入（不允许上游静默 NULL 归因）。
+ *
+ * 只读取当前 organization 的连接；跨租户连接 id 不会命中 → fail-closed（不是 legacy 放行）。
+ * 读路径（legacy 历史数据）不受影响：本函数只在写入事务内被调用。
+ */
+async function resolveIngestAccountScope(
+  tx: Prisma.TransactionClient,
+  organizationId: string,
+  rows: readonly TransactionInsert[],
+): Promise<Map<string, string>> {
+  const scope = new Map<string, string>();
+  const missingContext = rows.some((row) => row.connectionId === null);
+  if (missingContext) {
+    throw new AccountLineageError('缺少可追溯的连接上下文');
+  }
+  const connectionIds = [...new Set(rows.map((row) => row.connectionId as string))];
+  if (connectionIds.length === 0) return scope;
+  const connections = await tx.sourceConnection.findMany({
+    where: { organizationId, id: { in: connectionIds } },
+    select: { id: true, platformAccountId: true },
+  });
+  const byId = new Map(connections.map((connection) => [connection.id, connection.platformAccountId]));
+  for (const connectionId of connectionIds) {
+    if (!byId.has(connectionId)) {
+      throw new AccountLineageError('连接不属于该组织或不存在');
+    }
+    const accountId = byId.get(connectionId);
+    if (!accountId) {
+      throw new AccountLineageError('连接未绑定 PlatformAccount');
+    }
+    scope.set(connectionId, accountId);
+  }
+  return scope;
+}
 
 export function createPrismaImportRepository(
   prisma: PrismaClient,
@@ -118,10 +161,24 @@ export function createPrismaImportRepository(
 
         const result = await prisma.$transaction(
           async (tx) => {
+            // TRACK C2 M4：accountId 只由服务端从连接上下文派生；客户端提交即拒绝。
+            for (const row of chunk) {
+              if ((row as { accountId?: unknown }).accountId !== undefined) {
+                throw new Error('CLIENT_ACCOUNT_FIELD_NOT_TRUSTED');
+              }
+            }
+            // TRACK B B1-2：unbound connection 在第一条事实写入前 fail-closed。
+            const accountByConnection = await resolveIngestAccountScope(
+              tx,
+              first.organizationId,
+              chunk,
+            );
+
             const written = await tx.sourceTransaction.createMany({
               data: chunk.map((row) => ({
                 organizationId: row.organizationId,
                 connectionId: row.connectionId,
+                accountId: accountByConnection.get(row.connectionId as string) as string,
                 importBatchId: row.importBatchId,
                 domain: row.domain,
                 channel: row.channel,

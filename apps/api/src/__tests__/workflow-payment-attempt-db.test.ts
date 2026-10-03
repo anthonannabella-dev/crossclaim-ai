@@ -18,8 +18,11 @@ import {
   applyPaymentSucceeded,
   handlePaymentWebhook,
   replayPaymentEvent,
+  freezeRetryBatch,
   runDueRetries,
+  submitRetryBatchReview,
   startAttempt,
+  submitPaymentReplayReview,
 } from '../services/workflow';
 
 const prisma = new PrismaClient();
@@ -57,6 +60,25 @@ beforeEach(async () => {
     data: [{ organizationId: ORG, userId: owner.id, role: 'OWNER', isActive: true }],
   });
 });
+
+/**
+ * ② 第二批 replay：操作级审批现在是必需的（payment.replay）。
+ * 服务端在锁内组装指纹（事件身份 / 金额币种 / 载荷摘要 / 恢复动作 / 处理版本）。
+ */
+async function approveReplay(paymentEventId: string): Promise<string> {
+  await submitPaymentReplayReview(
+    prisma,
+    { organizationId: ORG, actorUserId: ownerId, role: 'OWNER', paymentEventId, decision: 'REQUEST' },
+    { now: () => NOW },
+  );
+  const approved = await submitPaymentReplayReview(
+    prisma,
+    { organizationId: ORG, actorUserId: ownerId, role: 'OWNER', paymentEventId, decision: 'APPROVE' },
+    { now: () => new Date(NOW.getTime() + 1000) },
+  );
+  if (!approved.approvalId) throw new Error('REPLAY_APPROVAL_NOT_CREATED');
+  return approved.approvalId;
+}
 
 async function seedInvoice(options: { total?: string; status?: 'ISSUED' | 'PAID' } = {}) {
   return prisma.billingInvoice.create({
@@ -189,11 +211,31 @@ describe('C-0010-B2 — 执行尝试（真实 PostgreSQL）', () => {
     const payment = await seedPayment();
     await seedFailedAttempt(event.id, payment.id);
 
-    const result = await runDueRetries(prisma, { organizationId: ORG, role: 'ADMIN' }, { now: () => NOW });
-    expect(result.scanned).toBe(1);
-    expect(result.deadLettered).toHaveLength(0);
-    expect(result.retried).toHaveLength(1);
-    expect(result.retried[0]).toMatchObject({ status: 'SUCCEEDED', resultStatus: 'PAID' });
+    // ② 第二批 retry-due：旧动态选单入口已关闭，改为「冻结清单 + 批次审批 + 受保护执行」
+    const frozen = await freezeRetryBatch(
+      prisma,
+      { organizationId: ORG, actorUserId: ownerId, role: 'OWNER' },
+      { now: () => NOW },
+    );
+    await submitRetryBatchReview(
+      prisma,
+      { organizationId: ORG, actorUserId: ownerId, role: 'OWNER', batchId: frozen.batchId, decision: 'REQUEST' },
+      { now: () => NOW },
+    );
+    const batchApproval = await submitRetryBatchReview(
+      prisma,
+      { organizationId: ORG, actorUserId: ownerId, role: 'OWNER', batchId: frozen.batchId, decision: 'APPROVE' },
+      { now: () => new Date(NOW.getTime() + 1000) },
+    );
+    const result = await runDueRetries(
+      prisma,
+      { organizationId: ORG, role: 'ADMIN', actorUserId: ownerId, batchId: frozen.batchId, approvalId: String(batchApproval.approvalId) },
+      { now: () => NOW },
+    );
+    expect(result.itemCount).toBe(1);
+    expect(result.skipped).toHaveLength(0);
+    expect(result.executed).toHaveLength(1);
+    expect(result.executed[0]).toMatchObject({ resultStatus: 'PAID' });
 
     expect(await prisma.payment.count({ where: { organizationId: ORG } })).toBe(1);
     const invoice = await invoiceRow();
@@ -239,7 +281,12 @@ describe('C-0010-B2 — 执行尝试（真实 PostgreSQL）', () => {
 
     const replayed = await replayPaymentEvent(
       prisma,
-      { ...base, reason: 'MANUAL_RECOVERY', note: 'provider console confirmed the capture' },
+      {
+        ...base,
+        reason: 'MANUAL_RECOVERY',
+        note: 'provider console confirmed the capture',
+        approvalId: await approveReplay(event.id),
+      },
       { now: () => NOW },
     );
     expect(replayed).toMatchObject({ attemptNo: 2, status: 'SUCCEEDED', resultStatus: 'PAID' });
@@ -288,7 +335,14 @@ describe('C-0010-B2 — 执行尝试（真实 PostgreSQL）', () => {
     // 恢复（replay）：同一笔 Payment 继续把账单推到终态
     const replayed = await replayPaymentEvent(
       prisma,
-      { organizationId: ORG, actorUserId: ownerId, role: 'OWNER', paymentEventId: event.id, reason: 'MANUAL_RECOVERY' },
+      {
+        organizationId: ORG,
+        actorUserId: ownerId,
+        role: 'OWNER',
+        paymentEventId: event.id,
+        reason: 'MANUAL_RECOVERY',
+        approvalId: await approveReplay(event.id),
+      },
       { now: () => NOW },
     );
     expect(replayed.resultStatus).toBe('PAID');
@@ -375,15 +429,17 @@ describe('C-0010-B2 — 执行尝试（真实 PostgreSQL）', () => {
       where: { id: first.id },
       data: { status: 'RETRYABLE_FAILED', paymentId: payment.id, nextRetryAt: new Date(NOW.getTime() - 1000) },
     });
+    // 同一审批并发：只有一次能消费该审批，其余请求精确拒绝（恰一次重放）
+    const concurrentApprovalId = await approveReplay(event.id);
     const settled = await Promise.allSettled([
       replayPaymentEvent(
         prisma,
-        { organizationId: ORG, actorUserId: ownerId, role: 'OWNER', paymentEventId: event.id, reason: 'MANUAL_RECOVERY' },
+        { organizationId: ORG, actorUserId: ownerId, role: 'OWNER', paymentEventId: event.id, reason: 'MANUAL_RECOVERY', approvalId: concurrentApprovalId },
         { now: () => NOW },
       ),
       replayPaymentEvent(
         prisma,
-        { organizationId: ORG, actorUserId: ownerId, role: 'OWNER', paymentEventId: event.id, reason: 'MANUAL_RECOVERY' },
+        { organizationId: ORG, actorUserId: ownerId, role: 'OWNER', paymentEventId: event.id, reason: 'MANUAL_RECOVERY', approvalId: concurrentApprovalId },
         { now: () => NOW },
       ),
     ]);

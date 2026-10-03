@@ -31,6 +31,8 @@ export interface TransactionProjection {
   id: string;
   connectionId: string | null;
   connectionKind: SourceConnectionKind | null;
+  /** TRACK C2 M4：account scope（服务端从 connection.platformAccountId 派生）。 */
+  accountId?: string | null;
   referenceType: string | null;
   externalId: string | null;
   occurredAt: Date | null;
@@ -41,6 +43,8 @@ export interface TransactionProjection {
 
 export interface DerivedFact {
   factKey: string;
+  /** TRACK C2 M4：account scope（null = legacy 行）。 */
+  accountId: string | null;
   referenceType: string | null;
   externalId: string | null;
   occurredAt: Date | null;
@@ -58,6 +62,7 @@ export function toFactSourceTransaction(row: TransactionProjection): FactSourceT
     id: row.id,
     connectionId: row.connectionId,
     connectionKind: row.connectionKind,
+    accountId: row.accountId ?? null,
     referenceType: row.referenceType,
     externalId: row.externalId,
     occurredAt: row.occurredAt,
@@ -78,6 +83,7 @@ export function deriveFactsFromTransactions(
 
   const active: DerivedFact[] = reconciled.facts.map((fact) => ({
     factKey: fact.factKey,
+    accountId: fact.accountId,
     referenceType: fact.referenceType,
     externalId: fact.externalId,
     occurredAt: fact.occurredAt,
@@ -96,6 +102,7 @@ export function deriveFactsFromTransactions(
     const modes = modesOf(rowsOfConflict);
     return {
       factKey: conflict.factKey,
+      accountId: conflict.accountId,
       referenceType: conflict.referenceType,
       externalId: conflict.externalId,
       occurredAt: rowsOfConflict[0]?.occurredAt ?? null,

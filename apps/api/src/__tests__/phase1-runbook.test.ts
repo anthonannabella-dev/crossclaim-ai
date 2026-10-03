@@ -1,17 +1,27 @@
 // P2-4（MSG-20260929-73）— Production Validation Runbook：门槛冻结、Stage A 记账、Decision Gate、禁止自动动作
 
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
 
 import { beforeAll, describe, expect, it } from 'vitest';
 
 const toolPath = path.join(__dirname, '..', '..', '..', '..', 'tools', 'validation', 'phase1-runbook.mjs');
 
-/** 动态导入纯 ESM 工具（CommonJS 输出下不允许 top-level await） */
+/**
+ * 动态导入纯 ESM 工具（CommonJS 输出下不允许 top-level await）。
+ *
+ * 工具文件首行是 shebang（`#!/usr/bin/env node`）：原生 ESM 加载器会剥离它，但 vite(vite-node) 的 SSR
+ * 转换不会——shebang 会被留在转换产物里，Node 抛 `SyntaxError: Invalid or unexpected token`，
+ * 导致整份套件 collect 失败（本机 Node 24 必现；CI 的 Node 20 组合不触发）。
+ * 因此这里读入源码、剥离 shebang 后用 data: URL 导入：不依赖加载器对 shebang 的处理，行为稳定。
+ * （该工具只依赖 `node:fs`，data: URL 模块可以正常导入 `node:` 内置模块。）
+ */
 let tool: Record<string, unknown>;
 
 beforeAll(async () => {
-  tool = (await import(pathToFileURL(toolPath).href)) as Record<string, unknown>;
+  const source = readFileSync(toolPath, 'utf8').replace(/^#![^\n]*\n/, '');
+  const url = `data:text/javascript;base64,${Buffer.from(source, "utf8").toString("base64")}`;
+  tool = (await import(/* @vite-ignore */ url)) as Record<string, unknown>;
 });
 
 describe('P2-4 Validation Runbook — 冻结门槛', () => {
@@ -115,3 +125,164 @@ describe('P2-4 Validation Runbook — Stage B/C 与 Decision Gate', () => {
     expect(markdown).not.toContain('recoveryAmount'); // 阶段一不判断商业指标
   });
 });
+
+describe('P2-4 Validation Runbook — Stage 0 入场前置检查（preflight，只读）', () => {
+  const now = '2026-09-30T00:00:00.000Z';
+
+  function csv(header: string[], rowCount: number, date = '2026-09-01T00:00:00Z') {
+    const lines = [header.join(',')];
+    for (let index = 1; index <= rowCount; index += 1) {
+      lines.push(
+        header
+          .map((column) => {
+            if (column === 'order_id') return `ORDER-${index}`;
+            if (column === 'occurred_at') return date;
+            if (column === 'amount') return '120.50';
+            if (column === 'currency') return 'JPY';
+            if (column === 'product_name') return 'Widget';
+            if (column === 'buyer_name') return 'MASKED';
+            return 'NaN';
+          })
+          .join(','),
+      );
+    }
+    return lines.join('\n');
+  }
+
+  it('11 结构合规（必需列/行数/唯一 id/日期可解析）→ READY_FOR_STAGE_A', () => {
+    const result = (tool.preflightDataset as any)({ text: csv(['order_id', 'occurred_at', 'amount', 'currency'], 500), now });
+    expect(result.verdict).toBe('READY_FOR_STAGE_A');
+    expect(result.ok).toBe(true);
+    expect(result.rowCount).toBe(500);
+    expect(result.blockingChecks).toEqual([]);
+    expect(result.nextStep).toContain('audit-input');
+  });
+
+  it('12 缺必需列 → NEEDS_FIX，缺口进 blockingChecks，且只给别名提示不做映射', () => {
+    const result = (tool.preflightDataset as any)({ text: csv(['order_id', 'occurred_at'], 500), now });
+    expect(result.verdict).toBe('NEEDS_FIX');
+    expect(result.blockingChecks).toContain('required-columns');
+    expect(
+      result.checks.find((check: { name: string }) => check.name === 'required-columns').detail,
+    ).toContain('amount+currency');
+  });
+
+  it('13 行数不足（< 500）→ NEEDS_FIX', () => {
+    const result = (tool.preflightDataset as any)({
+      text: csv(['order_id', 'occurred_at', 'amount', 'currency'], 120),
+      now,
+    });
+    expect(result.verdict).toBe('NEEDS_FIX');
+    expect(result.blockingChecks).toContain('min-rows');
+  });
+
+  it('14 疑似 PII 列 → NEEDS_FIX；业务标识列（product_name）不算 PII', () => {
+    const pii = (tool.preflightDataset as any)({
+      text: csv(['order_id', 'occurred_at', 'amount', 'currency', 'buyer_name'], 500),
+      now,
+    });
+    expect(pii.verdict).toBe('NEEDS_FIX');
+    expect(pii.blockingChecks).toContain('no-pii-columns');
+    expect(pii.checks.find((check: { name: string }) => check.name === 'no-pii-columns').detail).toContain(
+      'buyer_name',
+    );
+
+    const business = (tool.preflightDataset as any)({
+      text: csv(['order_id', 'occurred_at', 'amount', 'currency', 'product_name'], 500),
+      now,
+    });
+    expect(business.blockingChecks).not.toContain('no-pii-columns');
+  });
+
+  it('15 重复 order_id / 日期不可解析 → NEEDS_FIX；日期窗口仅提示不阻断', () => {
+    const duplicated = (tool.preflightDataset as any)({
+      text: csv(['order_id', 'occurred_at', 'amount', 'currency'], 500).replace('ORDER-2,', 'ORDER-1,'),
+      now,
+    });
+    expect(duplicated.blockingChecks).toContain('unique-order-id');
+
+    const badDates = (tool.preflightDataset as any)({
+      text: csv(['order_id', 'occurred_at', 'amount', 'currency'], 500, 'not-a-date'),
+      now,
+    });
+    expect(badDates.blockingChecks).toContain('dates-parsable');
+
+    const oldDates = (tool.preflightDataset as any)({
+      text: csv(['order_id', 'occurred_at', 'amount', 'currency'], 500, '2020-01-01T00:00:00Z'),
+      now,
+    });
+    expect(oldDates.ok).toBe(true); // 窗口偏好为非阻断项
+    expect(
+      oldDates.checks.find((check: { name: string }) => check.name === 'recent-window-preferred').ok,
+    ).toBe(false);
+  });
+
+  it('16 空文件 → NEEDS_FIX（不抛异常）', () => {
+    const result = (tool.preflightDataset as any)({ text: '\n\n', now });
+    expect(result.verdict).toBe('NEEDS_FIX');
+    expect(result.blockingChecks).toEqual(['non-empty']);
+  });
+});
+describe('P2-4 Validation Runbook — Stage 0 边界用例（MSG-20260930-02 授权范围）', () => {
+  const now = '2026-09-30T00:00:00.000Z';
+
+  function build(rows: string[]) {
+    return ['order_id,occurred_at,amount,currency', ...rows].join('\n');
+  }
+
+  it('17 超大 CSV（50,000 行）→ 只读检查在时限内完成且行数准确（性能边界）', () => {
+    const rows: string[] = [];
+    for (let index = 1; index <= 50_000; index += 1) {
+      rows.push(`BULK-${index},2026-09-01T00:00:00Z,120.50,JPY`);
+    }
+    const startedAt = Date.now();
+    const result = (tool.preflightDataset as any)({ text: build(rows), now });
+    const elapsedMs = Date.now() - startedAt;
+    expect(result.verdict).toBe('READY_FOR_STAGE_A');
+    expect(result.rowCount).toBe(50_000);
+    expect(result.blockingChecks).toEqual([]);
+    expect(elapsedMs).toBeLessThan(15_000); // 只读结构检查：50k 行不应退化到分钟级
+  });
+
+  it('18 空字段（amount/currency 为空）→ 当前不阻断（Stage 0 只做结构/列名；数值语义留给 Stage A 数据质量）', () => {
+    const result = (tool.preflightDataset as any)({
+      text: build(['EMPTY-1,2026-09-01T00:00:00Z,,', 'EMPTY-2,2026-09-02T00:00:00Z,,']),
+      now,
+      minRows: 2,
+    });
+    // 记录当前边界：不猜测金额、不因空值自动判定为“数据可用”
+    expect(result.blockingChecks).toEqual([]);
+    expect(result.verdict).toBe('READY_FOR_STAGE_A');
+    expect(result.checks.find((check: { name: string }) => check.name === 'required-columns').ok).toBe(true);
+  });
+
+  it('19 Decimal 精度：金额文本原样保留，Stage 0 不做任何四舍五入或运算', () => {
+    const csv = build([
+      'DEC-1,2026-09-01T00:00:00Z,12345678.123456,JPY',
+      'DEC-2,2026-09-02T00:00:00Z,0.000001,JPY',
+    ]);
+    const result = (tool.preflightDataset as any)({ text: csv, now, minRows: 2 });
+    expect(result.verdict).toBe('READY_FOR_STAGE_A');
+    expect(csv).toContain('12345678.123456');
+    expect(csv).toContain('0.000001');
+    // 只读契约：preflight 不返回任何金额计算结果
+    expect(Object.keys(result)).not.toContain('amount');
+    expect(JSON.stringify(result)).not.toContain('12345678.123456');
+  });
+
+  it('20 多币种混排 → 结构检查不阻断（币种一致性属 Stage A/DATA-QUALITY，不由 Stage 0 猜测）', () => {
+    const result = (tool.preflightDataset as any)({
+      text: build([
+        'CUR-1,2026-09-01T00:00:00Z,100.00,JPY',
+        'CUR-2,2026-09-01T00:00:00Z,100.00,USD',
+        'CUR-3,2026-09-01T00:00:00Z,100.00,EUR',
+      ]),
+      now,
+      minRows: 3,
+    });
+    expect(result.verdict).toBe('READY_FOR_STAGE_A');
+    expect(result.blockingChecks).toEqual([]);
+  });
+});
+
+

@@ -39,6 +39,7 @@ export function createPrismaConnectionLifecyclePort(
           label: draft.label,
           credentialRef: draft.credentialRef,
           status: draft.status,
+          platformAccountId: draft.platformAccountId ?? null,
         },
         select: { id: true },
       });
