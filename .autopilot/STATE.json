@@ -1,16 +1,16 @@
 {
   "gate": "Gate 7 / Carrier Queue #10 CLOSED → P2 并行（Commercial C10–C11 + Customs C1+/C15–C21）",
-  "head": "35ef87f",
-  "status": "IMPLEMENT",
-  "current_task": "P2 并行推进：Commercial C10–C11（15% versioned fee model / estimated fee preview / fee guard / policy provenance）与 Customs Recovery C1+（C1–C14 内部 + C15–C21 契约层，真实 filing 继续 HOLD_EXTERNAL）。Carrier Queue #10 已 CLOSED。",
+  "head": "3e80b52",
+  "status": "RECONCILED",
+  "current_task": "Carrier Queue #6 — SLA EVIDENCE ASSEMBLY + ELIGIBILITY INPUT PLANE：Tracking Fact + Invoice Fact + POD Fact + Carrier Terms Evidence + Service Level Evidence → **ShipmentEvidenceBundle**（只建证据输入层；不得自动认定赔付 / 自动提交 claim / 自动退款 / 调用 carrier write API / 自动产生 recovery amount）。**逐字归档 MSG-111 为第一步。**CarrierInvoiceReadPort + CarrierPODReadPort（verified account lineage、request/response 双向绑定、十进制金额、charge kind 归一化 + raw code 保留、POD 掩码与隐私、safe rawReference）；**read-only**，不做 SLA/退款资格推导。CarrierTrackingReadPort + normalized CarrierTrackingSnapshot（UPS/FedEx provider adapter 分离）+ 状态/事件归一化（确定性排序 + 去重）+ 失败原因分类 + tenant/account lineage 归属；**read-only**（无 mutation / claim / pickup / refund，TRANSPORT=false）。",
   "next_task": "PC-12A 实施 → 本地测试 + tsc api/web + API contract + full CI → PC-12A CHECKPOINT 送审。",
   "send_head": "07b7009",
   "decision_head": "07b7009",
   "last_chatgpt_message": "MSG-20261003-123",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-03T08:13:36.041Z",
-  "previous_head": "f3ce608",
+  "updated_at": "2026-10-03T08:15:45.024Z",
+  "previous_head": "35ef87f",
   "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "dff7161",
@@ -49,10 +49,10 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-03T08:13:36.041Z",
+  "last_tick_at": "2026-10-03T08:15:45.024Z",
   "state": "IMPLEMENT",
-  "last_action": "MSG-20261003-123 逐字归档（FULL_COPY_OK）→ CARRIER QUEUE #10 FINAL = PASS、Queue #10 OVERALL = PASS/CLOSED → 授权 Commercial C10–C11 与 Customs C1+/C15–C21 并行 P2",
-  "last_action_at": "2026-10-03T08:13:36.040Z",
+  "last_action": "P2 并行开工：Commercial C10–C11 契约层（versioned 15% FeePolicy 注册表 + resolveFeePolicy 时点解析 + BigInt 定点费率 + ESTIMATE_ONLY 预览 + evaluateFeeGuard 统一闸门：client 费率拒绝/estimate 不可计费/无 verified recovered 拒绝/waiver·micro 非计费/币种与金额校验）→ 14/14 测试 → tsc api/web 0 → API contract OK → commit/push（PROGRESS）",
+  "last_action_at": "2026-10-03T08:15:45.023Z",
   "next_action": "按 P2 并行开工：① Commercial C10–C11（FeePolicy=15% versioned + estimated fee preview + fee guard + policy provenance；payment/collection 继续 OFF）；② Customs C1+ 与 C15–C21 契约层（C15 已完成；C16 授权就绪、C19 状态/来源、C21 one-click 编排 fail-closed；C17 Schema Delta 与 C18 真实 provider 先送审/待宿主授权）。任一单元完成即 commit/push；READY_FOR_REVIEW 才送审。",
   "current_head": "e060a5f",
   "reviewed_head": "24e27c8",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-03T07:48:43.141Z",
-    "gapMs": 213798,
+    "previousTickAt": "2026-10-03T08:13:36.041Z",
+    "gapMs": 46773,
     "stale": false,
-    "checkedAt": "2026-10-03T07:52:16.938Z"
+    "checkedAt": "2026-10-03T08:14:22.813Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -4362,5 +4362,24 @@
   "carrier_queue_10_final_checkpoint_doc": "docs/releases/CARRIER-QUEUE-10-FINAL-CHECKPOINT.md",
   "carrier_queue_10_overall_status": "PASS / CLOSED（MSG-20261003-123 ⑥；FINAL impl dff7161 / CI 37108323249 / doc f3ce608）",
   "carrier_queue_10_final_verdict": "① Schema/DB truth/append-only/tenant/idempotency/audit PASS；② Action Guard + role matrix PASS；③ Human POST provenance boundary + tenant-scoped GET PASS；④ Projection no hidden precedence PASS；⑤ Queue #10 FINAL PASS；⑥ Queue #10 overall PASS/CLOSED；⑦ Commercial C10–C11 AUTHORIZED PARALLEL P2；⑧ Customs C1+/C15–C21 AUTHORIZED PARALLEL P2",
-  "carrier_queue_10_msg123_archive": "MSG-20261003-123 已归档（compare FULL_COPY_OK）"
+  "carrier_queue_10_msg123_archive": "MSG-20261003-123 已归档（compare FULL_COPY_OK）",
+  "commercial_c10_c11": {
+    "status": "PROGRESS（契约层完成；PROGRESS 批次不送审，payment/collection 继续 OFF）",
+    "module": "apps/api/src/services/commercial/fee-policy.ts",
+    "tests": "apps/api/src/__tests__/commercial-fee-policy.test.ts 14/14",
+    "delivered": [
+      "versioned FeePolicy 注册表（STANDARD_SUCCESS_15 / CUSTOMS_SUCCESS_15 = 1500 bps；CUSTOMS_VIP_WAIVER waiverCap 500.00；MICRO_NOT_SERVICED 非计费）",
+      "resolveFeePolicy(policyId, at)：未知策略 / 未生效时点 → 稳定错误（版本与时点 provenance）",
+      "applyRateBps：BigInt 定点、half-up、无浮点（35.00×15% = 5.25；18620.00×15% = 2793.00）",
+      "computeEstimatedFeePreview：estimatedRecoverable → ESTIMATE_ONLY 预览（billable=false、paymentCollectionPerformed=false、autopayEnabled=false）",
+      "evaluateFeeGuard（C11 统一闸门）：client 提供费率 → CLIENT_SUPPLIED_RATE_REJECTED；estimate basis → ESTIMATE_NOT_BILLABLE；无 verified recovered truth → NO_VERIFIED_RECOVERED_TRUTH；waiver/micro → POLICY_NOT_BILLABLE；币种不符 → CURRENCY_MISMATCH；金额非法 → INVALID_AMOUNT",
+      "fee due 只能来自 verified actual incremental recovered（带 settlementId lineage）"
+    ],
+    "boundary": "Payment = 0 · collection = OFF · autopay = OFF · external payment write = OFF · 不扣款 · 不收款 · 无生产凭据",
+    "pending": [
+      "把 fee guard 接入既有 FeeCalculation 创建路径（record-fee.ts / commission-reconciliation.ts 等）—— 属资金链路实现，需架构方审计后实施",
+      "默认 FeePolicy 20% → 15% 的落地（既有库中策略数据）—— 需明确数据迁移方案",
+      "estimated fee preview 的对外呈现（web/API）"
+    ]
+  }
 }
