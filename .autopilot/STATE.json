@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "5dfb753",
+  "head": "59ed5bd",
   "status": "RECONCILED",
   "current_task": "Carrier Queue #6 — SLA EVIDENCE ASSEMBLY + ELIGIBILITY INPUT PLANE：Tracking Fact + Invoice Fact + POD Fact + Carrier Terms Evidence + Service Level Evidence → **ShipmentEvidenceBundle**（只建证据输入层；不得自动认定赔付 / 自动提交 claim / 自动退款 / 调用 carrier write API / 自动产生 recovery amount）。**逐字归档 MSG-111 为第一步。**CarrierInvoiceReadPort + CarrierPODReadPort（verified account lineage、request/response 双向绑定、十进制金额、charge kind 归一化 + raw code 保留、POD 掩码与隐私、safe rawReference）；**read-only**，不做 SLA/退款资格推导。CarrierTrackingReadPort + normalized CarrierTrackingSnapshot（UPS/FedEx provider adapter 分离）+ 状态/事件归一化（确定性排序 + 去重）+ 失败原因分类 + tenant/account lineage 归属；**read-only**（无 mutation / claim / pickup / refund，TRANSPORT=false）。",
   "next_task": "PC-12A 实施 → 本地测试 + tsc api/web + API contract + full CI → PC-12A CHECKPOINT 送审。",
@@ -10,7 +10,7 @@
   "production_enabled": false,
   "external_write_enabled": false,
   "updated_at": "2026-10-03T09:26:08.099Z",
-  "previous_head": "3417377",
+  "previous_head": "5dfb753",
   "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "0c35106",
@@ -49,11 +49,11 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-03T13:31:19.601Z",
+  "last_tick_at": "2026-10-03T13:36:19.952Z",
   "state": "IMPLEMENT",
-  "last_action": "P0 checkpoint 留档：Issue #2 comment 5969656379（REVIEWED_HEAD 5dfb753）",
-  "last_action_at": "2026-10-03T13:32:17.381Z",
-  "next_action": "在审计会话发送 P0 checkpoint 唤醒（Issue #2 comment 5969656379）→ 三要素验证 → 读取并逐字归档裁决",
+  "last_action": "生死线 A 置 CLOSED（路由级 HTTP E2E CI 3417377 success）；B 早已 CLOSED —— 两条 BUSINESS SURVIVAL GATES 均收口",
+  "last_action_at": "2026-10-03T13:36:38.439Z",
+  "next_action": "发送 P0 checkpoint 审计唤醒（Issue #2 comment 5969656379）→ 三要素验证 → 逐字归档裁决；随后取下一内部缺口",
   "current_head": "749040c",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-03T13:26:19.227Z",
-    "gapMs": 300375,
+    "previousTickAt": "2026-10-03T13:31:19.601Z",
+    "gapMs": 300352,
     "stale": false,
-    "checkedAt": "2026-10-03T13:31:19.601Z"
+    "checkedAt": "2026-10-03T13:36:19.952Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -4847,14 +4847,15 @@
   },
   "lifelines": {
     "A_customs_evidence_chain": {
-      "status": "VERIFIED（CLOSED 待 3417377 CI）",
+      "status": "CLOSED",
       "tests": "matching 10/10 + return fact PG 5/5 + evidence PG E2E 8/8 + view 3/3 + route HTTP E2E 4/4",
-      "ci_evidence": "33d8633 success（路由级 E2E 在 3417377）"
+      "ci_evidence": "3417377 success（路由级 E2E）；33d8633 success（全链单测/DB 套件）"
     },
     "B_customer_qualification_and_trust": {
       "status": "CLOSED",
       "tests": "qualification 11/11 + persistence PG 5/5 + backend gate 409 / bypass 403 + trust guard 2/2",
       "ci_evidence": "33d8633 success"
-    }
+    },
+    "closed_at": "2026-10-03T13:36:38.439Z"
   }
 }
