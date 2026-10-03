@@ -4906,7 +4906,8 @@
     "carrier": "Queue #3–#10 全链套件回归通过",
     "money_chain": "R45/R46 settlement·billing·fee·commission·platform-write 套件回归通过",
     "u8_full_regression": "FULL_REGRESSION_PASS 263 files / 2637 tests passed（durationMs=1020255）",
-    "track_a_full_regression": "DONE（本地全量回归通过；CI 侧每笔 commit 亦 success）"
+    "track_a_full_regression": "DONE（本地全量回归通过；CI 侧每笔 commit 亦 success）",
+    "u2": "tsc api=OK tsc web=OK api-contract=OK audit-coverage=OK autopilot-rules=OK"
   },
   "ci_confirmed_at": "2026-10-03T14:43:07.357Z",
   "dispatched_completed": [
@@ -4966,8 +4967,8 @@
   "awaiting_verdict": true,
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-03T15:16:25.914Z",
-    "head": "a2d4e6e",
+    "computed_at": "2026-10-03T15:17:04.510Z",
+    "head": "c945945",
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
     "REAL_VALIDATION_COMPLETE": "NO",
@@ -4976,9 +4977,7 @@
     "INDEPENDENT_FINAL_AUDIT_REQUIRED": true,
     "OPEN_INTERNAL_ITEMS": [
       "CHECK:git_working_tree_clean",
-      "CHECK:full_ci_success_on_head",
-      "CHECK:api_typecheck_recorded",
-      "CHECK:web_typecheck_recorded"
+      "CHECK:full_ci_success_on_head"
     ],
     "HOST_ACTION_REQUIRED": [
       "BG-006-production-candidate-preflight"
@@ -5013,8 +5012,8 @@
       "full_ci_success_on_head": false,
       "pg_regression_recorded": true,
       "fresh_db_migration_recorded": true,
-      "api_typecheck_recorded": false,
-      "web_typecheck_recorded": false,
+      "api_typecheck_recorded": true,
+      "web_typecheck_recorded": true,
       "docs_sync_recorded": true,
       "schema_invariants_recorded": true,
       "negative_paths_recorded": true
@@ -5039,5 +5038,6 @@
   },
   "bg012": {
     "status": "DONE（MSG-20261003-134：端点+customs.recovery.chain.run/INTERNAL_WRITE+角色矩阵+immutable execution identity+路由级 E2E 4/4+API.md 90/77）"
-  }
+  },
+  "gates_recorded_at": "2026-10-03T15:17:04.369Z"
 }

@@ -1,6 +1,6 @@
 # FINAL ACCEPTANCE REPORT（自动生成，请勿手改）
 
-- 生成时间：2026-10-03T15:16:25.980Z；HEAD：`a2d4e6e`
+- 生成时间：2026-10-03T15:17:04.576Z；HEAD：`c945945`
 - 协议：`docs/releases/FINAL-ACCEPTANCE-PROTOCOL.md`（三层验收；禁止自证）
 - 状态：CODE_COMPLETE=NO · INTEGRATION_COMPLETE=NO · REAL_VALIDATION_COMPLETE=NO · PRODUCTION_READY=NO
 - INDEPENDENT_FINAL_AUDIT_REQUIRED = TRUE（独立审计完成前不得置 PRODUCTION_READY=YES）
@@ -35,8 +35,6 @@
 
 - CHECK:git_working_tree_clean
 - CHECK:full_ci_success_on_head
-- CHECK:api_typecheck_recorded
-- CHECK:web_typecheck_recorded
 
 ## 3. 外部 / 宿主依赖（不得自证完成）
 
