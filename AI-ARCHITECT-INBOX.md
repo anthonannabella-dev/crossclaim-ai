@@ -126193,3 +126193,697 @@ SAFE_CONTINUATION_QUEUE = 0
 
 Codex 现在应停止继续自动扩内部开发 backlog。后续若继续推进，应进入 Layer 3：真实 API/OAuth、Customs Data/Broker、真实客户数据、真实 settlement/到账、支付与法律/牌照验证；这些不再属于当前内部自治代码收口阶段。
 ```
+
+### [MSG-20261003-148] ARCHITECT VERDICT — POST-ACCEPTANCE GAP CLOSURE（REVIEWED REQUEST #5974535504）= PASS_WITH_REVISIONS；IMPLEMENTATION_AUTHORIZED = YES（reviewed ref 9f6fbcf）
+
+```text
+【ARCHITECT VERDICT】POST-ACCEPTANCE GAP CLOSURE — REVIEWED REQUEST #5974535504
+
+REVIEWED_HEAD = 9f6fbcf
+DESIGN_PACK = docs/releases/POST-ACCEPTANCE-DESIGN-PACK.md
+
+总体裁决：
+
+1. Email Verification / Password Reset Schema
+   = APPROVE_WITH_REVISE
+
+2. Notification Phase 1 Schema
+   = REVISE
+
+3. Durable Worker / Scheduler
+   = APPROVE_WITH_REVISE
+
+4. Mutation CSRF
+   = REVISE
+
+5. Data Retention / Export / Delete
+   = APPROVE_WITH_REVISE
+
+6. Claim / Appeal immutable language metadata
+   = APPROVE_WITH_REVISE
+
+可继续不依赖以上审计的 Customer UI / i18n 工作，不得停机等待。
+
+==================================================
+
+1. EMAIL VERIFICATION / PASSWORD RESET
+   VERDICT = APPROVE_WITH_REVISE
+   ==================================================
+
+批准建立：
+
+EmailVerificationToken
+PasswordResetToken
+
+但需要以下修订：
+
+A. Token 必须至少 256-bit 随机熵。
+
+B. 数据库只存 token digest，不存明文。
+
+高熵随机 token 下：
+
+SHA-256(token)
+
+即可用于安全 lookup。
+
+如需要 server-side pepper，可使用：
+
+HMAC-SHA256(serverSecret, token)
+
+不得因为“每 token 独立随机 salt”导致无法直接按 digest 唯一查询。
+
+C. tokenHash 必须 UNIQUE。
+
+D. 必须包含：
+
+id
+userId
+tokenHash
+expiresAt
+consumedAt?
+createdAt
+requesterIpHash?
+
+必要索引：
+
+tokenHash UNIQUE
+(userId, expiresAt)
+
+E. resend verification：
+
+新 token 创建后，旧的仍未消费 verification token 必须失效或被标记 superseded。
+
+不得允许大量同时有效 token。
+
+F. verify 必须原子：
+
+lock / transactional consume
+→ 验证 expiry
+→ consumedAt is null
+→ set consumedAt
+→ set User.emailVerified=true
+
+同一 token 并发请求最多一个成功。
+
+G. email verification 不得修改 passwordChangedAt。
+
+passwordChangedAt 只能在真实密码变更时更新。
+
+H. Password reset 必须原子完成：
+
+validate token
+→ consume token
+→ write new password hash
+→ passwordChangedAt
+→ revoke all sessions
+
+若任何一步失败全部回滚。
+
+I. forgot-password 对存在/不存在邮箱必须返回相同外部响应。
+
+不要求人为实现不现实的绝对恒定耗时，
+但不得通过 HTTP status / body 暴露账号是否存在。
+
+J. EMAIL DELIVERY 仍：
+
+EXTERNAL_GATE
+
+本轮允许完成 token lifecycle + HTTP contract + fake/test delivery adapter，
+不得接生产邮件服务。
+
+验收：
+
+EMAIL_VERIFICATION_LIFECYCLE = PASS
+PASSWORD_RECOVERY = PASS
+EMAIL_DELIVERY = EXTERNAL_GATE
+
+==================================================
+2. NOTIFICATION PHASE 1
+VERDICT = REVISE
+
+当前设计：
+
+Notification
++
+NotificationRead
+
+但 Notification 本身已经包含：
+
+recipientUserId
+
+在“一条 Notification 对应一个 recipient”的模型下，
+再建立 NotificationRead 容易造成双重 ownership / read-state 不一致。
+
+建议第一阶段采用更简单模型：
+
+Notification {
+id
+organizationId
+recipientUserId
+kind
+severity
+titleKey
+deepLink
+dedupeKey
+createdAt
+readAt?
+acknowledgedAt?
+}
+
+UNIQUE:
+
+organizationId
+recipientUserId
+dedupeKey
+
+这样：
+
+每个 recipient 有自己的 notification row。
+
+不需要 NotificationRead。
+
+只有未来需要：
+
+one event → many recipients
+
+并且希望共享事件 payload 时，
+才拆为：
+
+NotificationEvent
+NotificationRecipient
+
+Phase 1 不需要过度设计。
+
+附加要求：
+
+A. deepLink 必须是 internal relative path。
+
+禁止：
+
+http://
+https://
+javascript:
+外域 URL
+
+B. titleKey 必须来自允许的 localization key。
+
+C. Notification 不得成为业务事实来源。
+
+事实仍来自：
+
+Claim
+Settlement
+Review
+AuditLog
+etc.
+
+D. dedupe 必须 DB-level unique，不只内存判断。
+
+E. read / acknowledge 必须 tenant + recipient scoped。
+
+用户不得读取或修改其他成员通知。
+
+F. Phase 1 不做 Email Delivery。
+
+修订后可实施。
+
+==================================================
+3. DURABLE WORKER / SCHEDULER
+VERDICT = APPROVE_WITH_REVISE
+
+原设计推荐 BullMQ + Redis。
+
+修改为：
+
+优先采用：
+
+BullMQ v6 + PostgreSQL backend
+
+原因：
+
+当前项目已经有 PostgreSQL 16。
+
+BullMQ v6 已支持 PostgreSQL backend，
+可以满足现阶段：
+
+provider.pull
+oauth.refresh
+provider.reconcile
+customs.status.refresh
+webhook.followup
+payment.reconcile
+claim.deadline.scan
+notification.dispatch
+
+而无需立即增加 Redis/Valkey 基础设施。
+
+当前项目是 solo-founder / 低运维预算阶段，
+减少一个独立状态服务优先级高于极限吞吐。
+
+要求：
+
+A. 使用 BullMQ OSS，不使用 BullMQ Pro。
+
+B. BullMQ license 必须通过现有 license gate。
+
+C. PostgreSQL queue 必须使用：
+
+独立 schema：
+bullmq
+
+最好：
+
+独立 database
+
+如果当前资源限制不能独立 DB，
+允许同 PostgreSQL instance + 独立 bullmq schema。
+
+不得与 Prisma 业务表混在 public schema。
+
+D. BullMQ migration 必须使用其正式 migration mechanism。
+
+不得手写 Prisma models 模拟 BullMQ tables。
+
+E. 队列迁移应显式执行，
+不得 worker 启动时偷偷修改 production schema。
+
+F. 必须实现：
+
+jobId
+executionKey
+tenantId
+accountId?
+provider?
+idempotencyKey
+attempts
+backoff
+timeout
+concurrency
+failed terminal
+restart recovery
+graceful shutdown
+
+G. Job payload 不得包含：
+
+OAuth token
+API secret
+customer raw document
+payment secret
+
+只允许引用：
+
+credentialRef
+entity id
+account id
+tenant id
+
+H. Job handler 必须继续经过现有：
+
+Production Gate
+Action Guard
+idempotency
+external-write boundary
+
+Queue 不能成为绕开现有安全边界的新通道。
+
+I. Worker 重启测试必须证明：
+
+queued job 不丢
+delayed job 不丢
+retry job 不丢
+completed job 不重复造成业务副作用
+
+J. 第一阶段不要引入 Redis。
+
+如果未来 PostgreSQL queue 出现吞吐 / connection / latency 瓶颈，
+再评估：
+
+BullMQ + Valkey
+
+Valkey 优先于新增 Redis licensing ambiguity。
+
+不得为“以后可能需要”现在先部署第二套存储。
+
+实施后：
+
+DURABLE_WORKER_RUNTIME = PASS
+SCHEDULER_RUNTIME = PASS
+
+==================================================
+4. MUTATION CSRF / ORIGIN
+VERDICT = REVISE
+
+当前设计“只有存在 session cookie 的 mutation 才检查 Origin”
+不够完整。
+
+修订原则：
+
+Browser-facing state-changing endpoint：
+
+POST
+PUT
+PATCH
+DELETE
+
+默认需要 same-origin protection。
+
+分类：
+
+A. Cookie-authenticated mutation
+
+必须：
+
+Origin / Referer same-origin validation
+
+高风险路径继续额外使用：
+
+x-crossclaim-csrf
+
+B. Login
+
+虽然请求前没有 session cookie，
+仍建议做 Origin validation。
+
+原因：
+
+防止 login-CSRF / session confusion。
+
+C. Signup / forgot-password / resend-verification
+
+做 Origin validation + rate limit。
+
+D. OAuth callback
+
+不依赖 Origin。
+
+继续使用：
+
+state
+PKCE
+provider binding
+
+E. Provider webhook
+
+不依赖 Origin。
+
+必须使用：
+
+signature verification
+timestamp/replay protection
+idempotency
+
+F. Machine/API client
+
+如果未来使用：
+
+Authorization: Bearer ...
+
+且完全不依赖浏览器 cookie，
+
+可不要求 browser Origin。
+
+不要用 cookie presence 作为唯一判据。
+
+实现统一 helper，例如：
+
+assertBrowserMutationOrigin()
+
+禁止每个 endpoint 各写一套不同逻辑。
+
+补 negative tests：
+
+missing Origin
+foreign Origin
+forged Host
+valid Origin
+webhook exemption
+OAuth callback exemption
+Bearer-only API exemption
+
+==================================================
+5. DATA RETENTION / EXPORT / DELETE
+VERDICT = APPROVE_WITH_REVISE
+
+方向正确：
+
+禁止 cascade 整个 tenant 冒充“合规删除”。
+
+但不得在代码中直接写死一个全球统一 retention period。
+
+CrossClaim 涉及：
+
+Customs
+financial
+billing
+audit
+evidence
+platform records
+
+保留期限可能受 jurisdiction / contract / accounting 要求影响。
+
+因此建立：
+
+RetentionPolicy
+
+逻辑层，而不是单一固定数字。
+
+至少分类：
+
+A. USER_PROFILE
+B. CONNECTION_CREDENTIAL_REFERENCE
+C. RAW_UPLOAD
+D. EVIDENCE
+E. CUSTOMS_DOCUMENT
+F. BILLING_FINANCIAL
+G. AUDIT_SECURITY
+H. NOTIFICATION
+I. GENERATED_REPORT
+
+每类定义：
+
+retentionClass
+retentionUntil?
+legalHold?
+deletionState
+
+规则：
+
+legalHold=true
+→ 不得删除
+
+财务 / Customs / Audit：
+
+若必须保留，
+优先：
+
+PII minimization / anonymization
+
+不得破坏：
+
+金额事实
+审计链
+legal evidence integrity
+
+Organization deletion：
+
+request
+→ OWNER confirmation
+→ cooling period
+→ revoke connections
+→ stop future sync
+→ revoke sessions
+→ mark deletion pending
+→ durable deletion worker
+→ delete/anonymize according to policy
+
+sole OWNER 的用户删除：
+
+不得静默留下 orphan Organization。
+
+必须进入：
+
+transfer ownership
+或
+organization deletion flow
+
+Data Export：
+
+至少 JSON / CSV。
+
+导出必须 tenant scoped + audited。
+
+任何真实 retention period 由后续法律/地区政策配置，
+不要由工程自行猜测。
+
+==================================================
+6. CLAIM / APPEAL LANGUAGE METADATA
+VERDICT = APPROVE_WITH_REVISE
+
+批准增加语言追溯。
+
+但不要仅简单理解成：
+
+Claim.claimLocale
+
+然后允许随着 draft 重生成反复覆盖。
+
+第一阶段允许最小 Schema：
+
+Claim:
+contentLocale?
+providerLocale?
+generationVersion?
+templateVersion?
+
+Appeal:
+contentLocale?
+providerLocale?
+generationVersion?
+templateVersion?
+
+规则：
+
+A. DRAFT 阶段允许重新生成。
+
+每次重生成必须有 AuditLog，
+记录：
+
+old metadata digest
+new metadata digest
+
+不得记录完整 prompt。
+
+B. 一旦：
+
+finalText frozen
+或
+claim package frozen
+或
+status >= APPROVED / SUBMITTED
+
+则：
+
+contentLocale
+providerLocale
+generationVersion
+templateVersion
+
+全部 immutable。
+
+C. UI locale 永远不得修改这些字段。
+
+D. Provider locale resolver 只负责建议。
+
+真正生成/冻结时必须把解析结果写入实体，
+不能每次 read 时重新计算。
+
+E. Submission payload / Claim Package 必须使用被冻结的语言 metadata。
+
+不得在提交时根据当前 UI locale 重新决定。
+
+F. 历史 Claim / Appeal 若这些字段为空：
+
+允许 LEGACY_UNSPECIFIED
+
+不得批量伪造 locale。
+
+G. 当前真实 LLM Provider 未接，
+所以：
+
+REAL_MULTILINGUAL_CLAIM_GENERATION = NO
+
+保持真实状态。
+
+==================================================
+7. EXECUTION AUTHORIZATION
+
+批准 Codex 开始实施：
+
+A. EmailVerificationToken / PasswordResetToken
+—— 按本裁决修订后实施
+
+B. Notification Phase 1
+—— 先按单表 recipient notification 模型修订再实施
+
+C. Durable Worker
+—— 改用 BullMQ v6 PostgreSQL backend first
+
+D. CSRF unified guard
+—— 按 Browser mutation 分类实现
+
+E. Data lifecycle foundation
+—— retention class / lifecycle contract；真实地区期限不自行确定
+
+F. Claim / Appeal language metadata
+—— 按 frozen-state immutability 实施
+
+每个小批次独立：
+
+implement
+→ targeted tests
+→ PG tests if applicable
+→ typecheck/build
+→ full relevant regression
+→ CI
+→ checkpoint
+
+不得一次性做成一个巨型 commit。
+
+==================================================
+8. PARALLEL CUSTOMER WORK
+
+以上实施期间：
+
+Customer UI / i18n 不需要等待。
+
+继续：
+
+169 hardcoded → 0
+
+当前已看到 P0-I18N-01 开始执行。
+
+继续按页推进。
+
+不得因架构审计而停止 Customer Product Layer。
+
+==================================================
+9. PRODUCTION BOUNDARY
+
+仍然：
+
+INTEGRATION_COMPLETE = NO
+REAL_VALIDATION_COMPLETE = NO
+PRODUCTION_READY = NO
+
+不得开启：
+
+真实 Provider credential
+真实 OAuth
+真实 Customs filing
+真实 Broker submission
+真实 Payment capture
+真实 customer production data
+
+本裁决只批准内部 implementation。
+
+==================================================
+10. NEXT
+
+执行顺序建议：
+
+1. 当前 P0-I18N 小批次继续
+2. Email Verification + Password Reset
+3. Claim language metadata
+4. CSRF guard
+5. Durable Worker PostgreSQL backend
+6. Notification Phase 1
+7. Data lifecycle foundation
+8. Customer Product P0 全量回归
+9. 新 Customer Product Baseline
+10. 再进入 P1 Customs Data Provider
+
+ARCHITECT_REVIEW = PASS_WITH_REVISIONS
+IMPLEMENTATION_AUTHORIZED = YES
+PRODUCTION_ENABLEMENT = HOLD
+```

@@ -6,10 +6,10 @@
   "next_task": null,
   "send_head": "07b7009",
   "decision_head": "07b7009",
-  "last_chatgpt_message": "MSG-20261003-147",
+  "last_chatgpt_message": "MSG-20261003-148",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-03T23:19:49.069Z",
+  "updated_at": "2026-10-03T23:28:18.948Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -5709,6 +5709,34 @@
       "composer cleared",
       "marker 5974535504 at bottom",
       "generating"
+    ]
+  },
+  "post_acceptance_verdict": {
+    "at": "2026-10-03T23:28:18.948Z",
+    "reviewed_request": "5974535504",
+    "reviewed_head": "9f6fbcf",
+    "verdict": "PASS_WITH_REVISIONS",
+    "implementation_authorized": "YES",
+    "production_enablement": "HOLD",
+    "rulings": {
+      "email_verification_and_password_reset": "APPROVE_WITH_REVISE（≥256-bit 熵 / SHA-256 digest UNIQUE / supersede 旧 token / 原子 consume / 不动 passwordChangedAt / reset 原子含 revoke all sessions / forgot 不暴露存在性）",
+      "notification_phase1": "REVISE（单表 recipient notification：readAt/acknowledgedAt 内联，不要 NotificationRead；deepLink 必须 internal relative；titleKey 白名单；dedupe DB 唯一；tenant+recipient scoped）",
+      "durable_worker": "APPROVE_WITH_REVISE（改为 BullMQ v6 + PostgreSQL backend first，独立 bullmq schema，正式 migration 机制，不引 Redis；payload 不含 secret；handler 继续过 Production Gate/Action Guard/idempotency）",
+      "csrf": "REVISE（统一 assertBrowserMutationOrigin()；login 也做 Origin；signup/forgot/resend 加 Origin+rate limit；OAuth callback 与 webhook 豁免；Bearer-only API 豁免；不得用 cookie presence 作为唯一判据）",
+      "data_retention": "APPROVE_WITH_REVISE（RetentionPolicy 逻辑层 + 9 分类 + legalHold + 匿名化优先；organization 删除流程；sole OWNER 不得留 orphan；导出 JSON/CSV tenant scoped + audited；真实期限由法律/地区政策配置）",
+      "claim_language_metadata": "APPROVE_WITH_REVISE（最小 Schema：contentLocale?/providerLocale?/generationVersion?/templateVersion?；DRAFT 可重生成并审计 metadata digest；frozen/APPROVED/SUBMITTED 后 immutable；历史空值 LEGACY_UNSPECIFIED；resolver 只建议，生成时写入）"
+    },
+    "execution_order": [
+      "P0-I18N 小批次继续",
+      "Email Verification + Password Reset",
+      "Claim language metadata",
+      "CSRF guard",
+      "Durable Worker（PostgreSQL backend）",
+      "Notification Phase 1",
+      "Data lifecycle foundation",
+      "Customer Product P0 全量回归",
+      "新 Customer Product Baseline",
+      "P1 Customs Data Provider"
     ]
   }
 }
