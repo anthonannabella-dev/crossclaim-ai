@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "b41afe7",
+  "head": "b84351f",
   "status": "RECONCILED",
   "current_task": "Carrier Queue #6 — SLA EVIDENCE ASSEMBLY + ELIGIBILITY INPUT PLANE：Tracking Fact + Invoice Fact + POD Fact + Carrier Terms Evidence + Service Level Evidence → **ShipmentEvidenceBundle**（只建证据输入层；不得自动认定赔付 / 自动提交 claim / 自动退款 / 调用 carrier write API / 自动产生 recovery amount）。**逐字归档 MSG-111 为第一步。**CarrierInvoiceReadPort + CarrierPODReadPort（verified account lineage、request/response 双向绑定、十进制金额、charge kind 归一化 + raw code 保留、POD 掩码与隐私、safe rawReference）；**read-only**，不做 SLA/退款资格推导。CarrierTrackingReadPort + normalized CarrierTrackingSnapshot（UPS/FedEx provider adapter 分离）+ 状态/事件归一化（确定性排序 + 去重）+ 失败原因分类 + tenant/account lineage 归属；**read-only**（无 mutation / claim / pickup / refund，TRANSPORT=false）。",
   "next_task": "PC-12A 实施 → 本地测试 + tsc api/web + API contract + full CI → PC-12A CHECKPOINT 送审。",
@@ -10,7 +10,7 @@
   "production_enabled": false,
   "external_write_enabled": false,
   "updated_at": "2026-10-03T09:26:08.099Z",
-  "previous_head": "a247495",
+  "previous_head": "b41afe7",
   "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "0c35106",
@@ -49,11 +49,11 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-03T11:58:55.820Z",
+  "last_tick_at": "2026-10-03T12:03:56.444Z",
   "state": "IMPLEMENT",
-  "last_action": "G4 CLOSED 收尾：差集登记表 G4 → DONE/CLOSED（MSG-20261003-128 PASS；C1–C7 + 两批 Schema Delta + CI 5/5）",
-  "last_action_at": "2026-10-03T11:58:55.936Z",
-  "next_action": "MASTER GAP CLOSURE 继续：优先收口 G2/G7/G8/G9 复核项（G2 已随 C17 完成、G7 已补全链回归、G8/G9 逐模块核对），再取下一个目标域内部缺口进入 SAFE_CONTINUATION_QUEUE",
+  "last_action": "MASTER GAP CLOSURE 复核状态更新：G2 → DONE（随 C17）、G7 → DONE（Customs 全链回归）、G8/G9 → IN_PROGRESS（含具体下一步）",
+  "last_action_at": "2026-10-03T12:03:56.528Z",
+  "next_action": "G8 收口：为 Customs C1–C5 增加 Prisma store（append-only 写入 + contentDigest 幂等 + 投影写入）与 DB 回归；随后 G9 逐表扫描应用层校验字段；再评估下一目标域内部缺口",
   "current_head": "749040c",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-03T11:44:01.330Z",
-    "gapMs": 894491,
-    "stale": true,
-    "checkedAt": "2026-10-03T11:58:55.820Z"
+    "previousTickAt": "2026-10-03T11:58:55.820Z",
+    "gapMs": 300625,
+    "stale": false,
+    "checkedAt": "2026-10-03T12:03:56.444Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",

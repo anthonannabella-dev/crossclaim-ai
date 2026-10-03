@@ -33,14 +33,14 @@
 | ID | 缺口 | 来源 | 动作 |
 |---|---|---|---|
 | ~~G1~~ **DONE** | 统一 fee guard 收口：所有 `FeeCalculation` 创建路径必须过 `evaluateFeeGuard`（`commission-reconciliation.ts` 已按 ㉕ 改造：matched settlement → verified recovered truth → 绑定 agreement policy → guard → FeeCalculation；`record-fee.ts` 既有装配保留） | MSG-20261003-124 ㉓㉔㉕⑥ | `record-fee.ts` 保留既有装配、只在 create 前接 guard；`commission-reconciliation.ts` 改为 matched settlement → verified recovered truth → RecoveryCommercialEligibility → SettlementFeeEligibility → resolve versioned policy → guard → FeeCalculation；补 ㊱ 回归 |
-| G2 | C17 `CustomsSubmissionAttempt`（幂等根）+ `CustomsSubmissionAttemptFact`（append-only 状态） | MSG-20261003-124 ③④⑤⑥㊲ | Schema/migration + tenant/append-only 清单 + store + PG 回归（timeout 不建第二根、ambiguous 不重发、SUBMITTED 必带 providerSubmissionId）→ 送 **C17 FINAL SCHEMA CHECKPOINT** |
+| ~~G2~~ **DONE** | C17 `CustomsSubmissionAttempt`（幂等根）+ `CustomsSubmissionAttemptFact`（append-only） | MSG-20261003-126 PASS/CLOSED | 已收口：root UNIQUE + fact append-only + tenant lineage + SUBMITTED 必带 providerSubmissionId + 并发原子（FOR UPDATE）+ IDEMPOTENCY_KEY_CONFLICT + FACT_IMMUTABLE_MISMATCH；真实 PG 13/13 |
 | G3 | C21 HTTP：`POST /customs-opportunities/:id/start-recovery` + `GET .../filing-status` + `customs.recovery.start` Action Guard/RBAC | MSG-20261003-124 ⑭–㉑ | 实现并按 `filingSubmitted=false` / `externalExecutionStatus=NOT_STARTED` 语义暴露；真实 DB E2E（401/403/404/400/200/409 语义） |
 | ~~G4~~ **DONE / CLOSED** | Customs C1–C7 内部链：**C1** 事实契约 → **C2** duty 真值 → **C3** 分类/税率差异 → **C4** 三态资格（SHANGE A 方向语义）→ **C5** 估算（estimateOnly、消费 C4 候选）→ **C6** claim-ready package（确定性装配）→ **C7** handoff-only | HOST DIRECTIVE 2026-10-03 补充四 §3 ㉓ + **MSG-20261003-127 REVISE → MSG-20261003-128 PASS/CLOSED** | 全部收口：契约 85/85、customs 全套 154/154、两批 Schema Delta（事实层 append-only + 四个 append-only 计算投影）迁移 50 条、触发器清单 89/30、CI 5/5（4ed8714 / 749040c）；架构方明确**无需再送 G4 checkpoint** |
 | ~~G5~~ **DONE** | 前端真实接线（只读页 + 人工补录表单 + start-recovery 表单全部上线） | MASTER GAP CLOSURE 检查项 E | **已核查并记录**：`apps/web` 49 文件 / 34 条后端路径，均不含 Queue #10 与 C21/C19 新能力 → 结论 **CONFIRMED_GAP（只读 UI 接线待做）**；映射见 `docs/releases/FRONTEND-WIRING-MAP.md` |
 | ~~G6~~ **DONE** | 文档同步（README / FINAL-GATE / PRODUCTION-READINESS / API BACKLOG ↔ 代码） | 检查项 F | 逐文档比对最近实现（Queue #10、Customs C15–C21、15% cutover）并更新 |
-| G7 | 非 happy-path 覆盖复核（跨租户 / 幂等 / 并发 / 失败恢复）针对新增模块 | 检查项「测试只覆盖 happy path」 | 复核并补测 |
-| G8 | contract-only → 持久化复核 | 检查项「contract-only 未持久化」 | 逐模块核对（Carrier 已闭环；Customs C16/C19/C21 依赖 G2/G3） |
-| G9 | Schema 字段无 DB constraint 复核 | 检查项「Schema 有字段但无 DB constraint」 | 每次新增表时同步 CHECK/UNIQUE/触发器并加静态断言 |
+| ~~G7~~ **DONE（Customs）** | 非 happy-path 覆盖复核 | 检查项「测试只覆盖 happy path」 | Customs：新增 C1→C7 全链回归 7/7（少缴拒绝估算 / INDETERMINATE 传播 / 混币·PII·篡改事实·证据引用 fail-closed / 确定性）；Carrier 侧此前已覆盖租户/幂等/并发/超时；**剩余**：下一目标域接入时同步补非 happy-path |
+| G8 | contract-only → 持久化复核 | 检查项「contract-only 未持久化」 | **IN PROGRESS**：Customs C1–C5 契约层已配套持久化目标表（事实层 + 四个计算结果投影，随 Q2 落地）；**待做**：C1–C5 的 Prisma store（append-only 写入 + contentDigest 幂等）与 DB 回归，使「契约 → 持久化」闭环有测试证据 |
+| G9 | Schema 字段无 DB constraint 复核 | 检查项「Schema 有字段但无 DB constraint」 | **IN PROGRESS**：Q2 新增表已带 CHECK（金额 range / kind / currency / digest 形状 / lineOrdinal）+ tenant/immutable/append-only 触发器；**待做**：逐模块扫描既有表，列出仅有应用层校验的字段并评估补 DB constraint 的必要性 |
 | G10 | service→HTTP 未接线复核 | 检查项「service 有但 HTTP 未接线」 | **映射已建立**（`FRONTEND-WIRING-MAP.md` §3）：已接线 carrier manual/response、customs start-recovery/filing-status、platform write、claim、billing、evidence、provider readiness；未接线者为 C15/C16/C19 ingest/C20/fee preview（均按设计供上层使用或 HOLD_EXTERNAL） |
 
 ## C. 外部 / 宿主依赖（不进入 SAFE_CONTINUATION_QUEUE）
