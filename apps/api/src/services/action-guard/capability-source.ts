@@ -31,6 +31,7 @@ export type ActionKillSwitchScope = (typeof ACTION_KILL_SWITCH_SCOPES)[number];
  */
 export const ACTION_SCOPE_MAP: Record<string, ActionKillSwitchScope[]> = {
   'claim.prepare': ['workflow'],
+  'carrier.manual_submission.record': ['workflow'],
   'billing.draft': ['billing'],
   'claim.submit': ['submission'],
   'appeal.submit': ['submission'],

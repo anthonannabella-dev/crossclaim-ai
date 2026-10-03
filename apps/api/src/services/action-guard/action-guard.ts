@@ -27,6 +27,10 @@ type GateRequirement = 'humanApproval' | 'hostApproval' | 'platformEnablement' |
 export const ACTION_GUARD_CATALOG: Record<string, { risk: ActionRiskClass; requires: GateRequirement[] }> = {
   'evidence.read': { risk: 'READ_ONLY', requires: [] },
   'claim.prepare': { risk: 'INTERNAL_WRITE', requires: [] },
+  // CARRIER QUEUE #9B FINAL（MSG-20261003-119 ㉗㉘）：人工提交事实（human attestation）。
+  // INTERNAL_WRITE：创建 immutable business fact；零平台外写 / 零资金 / 不开 TRANSPORT。
+  // 不要求 humanApproval —— 用户自身的「我已提交」声明即 attestation，但 RBAC capability 必须满足。
+  'carrier.manual_submission.record': { risk: 'INTERNAL_WRITE', requires: [] },
   'billing.draft': { risk: 'INTERNAL_WRITE', requires: [] },
   // R43 S3 / MSG-20261001-31 + MSG-20261001-34：人工追回提交（零平台外写；humanApproval 不替代 RBAC 层）
   'recovery.manual_submit': { risk: 'INTERNAL_WRITE', requires: ['humanApproval'] },
