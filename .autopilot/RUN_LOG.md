@@ -1740,3 +1740,6 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 
 ## 2026-10-03T18:11:31.088Z — CHANGE FINAL 发布
 - Issue #2 comment 5972030105；闭合记录三元闭环。
+
+## 2026-10-03T18:14:48.644Z — MSG-20261003-146 / CHANGE FINAL-A
+- 三元闭合须同时满足 CI SUCCESS 且审计 PASS；否则 AWAITING_FINAL_AUDIT/NO。已修 final-archival.mjs + 协议 §九。

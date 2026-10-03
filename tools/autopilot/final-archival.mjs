@@ -16,17 +16,21 @@ const tree = v3.head ?? head;
 const ciRun = v3.ci_run ?? state.ci_run_id ?? '';
 const ciConclusion =
   state.ci_status_head === tree ? String(state.ci_status ?? '') : String(state.ci_last_success_head ?? '') === tree ? 'success' : String(state.ci_status ?? '');
+const audit = String(v3.verdict ?? 'PENDING').toUpperCase();
+const ciSuccess = ciConclusion === 'success';
+// CHANGE FINAL-A（MSG-20261003-146）：三元闭合必须**同时**成立：CI SUCCESS + 独立审计 PASS。
+const closurePassed = ciSuccess && audit === 'PASS';
 const closure = {
   FINAL_ACCEPTANCE_HEAD: tree,
   CI_RUN: String(ciRun),
   CI_CONCLUSION: ciConclusion.toUpperCase(),
   INDEPENDENT_ARCHITECT_AUDIT: v3.verdict ?? 'PENDING',
-  CODE_COMPLETE: ciConclusion === 'success' ? 'YES' : 'NO',
+  CODE_COMPLETE: closurePassed ? 'YES' : 'NO',
   INTEGRATION_COMPLETE: 'NO',
   REAL_VALIDATION_COMPLETE: 'NO',
   PRODUCTION_READY: 'NO',
-  INTERNAL_READY: ciConclusion === 'success' ? 'YES' : 'NO',
-  AUTONOMOUS_INTERNAL_WORK: ciConclusion === 'success' ? 'EXHAUSTED' : 'RUNNING',
+  INTERNAL_READY: closurePassed ? 'YES' : 'NO',
+  AUTONOMOUS_INTERNAL_WORK: closurePassed ? 'EXHAUSTED' : ciSuccess ? 'AWAITING_FINAL_AUDIT' : 'RUNNING',
   SAFE_CONTINUATION_QUEUE: 0,
 };
 console.log(JSON.stringify(closure, null, 2));
