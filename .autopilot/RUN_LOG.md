@@ -1498,3 +1498,8 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - CHANGE B：C5 消费 C4 候选，杜绝负差额被当可追回金额。
 - 验收：eligibility 16/16、estimate 16/16（C1–C5 = 71/71）；tsc api/web 0；API contract 88/75；audit/autopilot OK。
 - Q2 批准（Decimal(38,6) + append-only 投影 + CHANGE C lineOrdinal），Q3 PASS（C6 纯契约 / C7 handoff-only）。
+
+## 2026-10-03T09:55:49.215Z — G4/C6 Claim-Ready Package（HEAD 6599a10）
+- 交付：`customs-claim-ready-package.ts`（确定性装配 + checklist + 缺口码 + sha256 摘要；estimateOnly，不固化金额）+ 8/8 回归。
+- 累计：C1–C6 = **79/79**；无 Schema / 无路由 / 无外写。
+- 下一步：C7 handoff-only + Q2 Schema Delta migration。
