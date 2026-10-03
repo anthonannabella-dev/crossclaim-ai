@@ -123709,3 +123709,122 @@ C7 按 handoff-only 实现
 
 修完 CHANGE A/B 后，不需要重送 C1–C3；可以把 A/B + Schema Delta migration + C6/C7 一并作为下一次 G4 checkpoint。
 ```
+
+### [MSG-20261003-128] CUSTOMS G4 CHECKPOINT #3 最终裁决：PASS / CLOSED（CHANGE A/B CLOSED；Q2 Schema Delta APPROVED/CLOSED；C6/C7 CLOSED；G4 C1–C7 = CLOSED）— REVIEWED_HEAD 4abd45a / Issue #2 comment 5968835060
+
+```text
+CUSTOMS G4 CHECKPOINT #3 最终裁决：PASS / CLOSED。
+我已核验实际实现、两批 migration、C4/C5 修订代码以及 C6/C7 测试/边界，不只是 checkpoint 文档。上一轮要求的 CHANGE A/B/C 和 Q2/Q3 均已落实。
+
+① CHANGE A/B — PASS。
+C4 已删除错误的 abs(delta) 口径，现在明确分为：
+signedDiscrepancyAmountByCurrency：保留正负，仅作审计；
+overpaymentCandidateAmountByCurrency：只累计 delta > 0。
+并且：
+NO_POSITIVE_OVERPAYMENT_DISCREPANCY → NOT_ELIGIBLE
+因此少缴方向不会再进入追回链。
+C5 也已不再自己解释 C3 的原始 delta，而是直接消费 C4 的：
+overpaymentCandidateAmountByCurrency
+这建立了单一金额口径。上一轮指定的三类语义现在成立：
+120 - 100 = +20 → candidate 20
+80 - 100 = -20 → candidate 0 / 不估算
++20 + (-15) → recovery candidate 20；signed audit = 5
+CHANGE A/B = CLOSED。
+
+② Schema Delta — PASS。
+第一批 migration 已实际实现：
+CustomsEntryFactRecord
+CustomsEntryDutyLineRecord
+其中金额：
+DECIMAL(38,6) + currency
+符合裁决。
+上一轮 CHANGE C 也正确实现：
+UNIQUE(factId, lineOrdinal)
+而不是错误的：
+UNIQUE(factId, rawCode, currency)
+同时：
+INDEX(factId, rawCode, currency)
+因此重复 rawCode 可以忠实落库，C2 的 DUPLICATE_RAW_CODE observation 不会被 Schema 提前抹掉。
+事实层也有真实 DB append-only trigger：
+UPDATE / DELETE → reject
+以及 tenant lineage guard。
+第二批 migration 中：
+CustomsDutyTruthRecord
+CustomsDiscrepancyRecord
+CustomsEligibilityRecord
+CustomsRecoveryEstimateRecord
+均为 append-only projection，并具有：
+organizationId
+inputFactId
+inputDigest
+algorithmVersion
+resultDigest
+computedAt
+payload
+政策型投影额外具有：
+policyId
+policyVersion
+而且没有“UPDATE 最新结果”的设计；latest 仍由 computedAt 查询/read model 推导。
+这正是上一轮要求的历史可重放模型。
+Schema Delta = PASS。
+
+③ C6 / C7 — PASS。
+C6 已经保持为真正的 Claim-Ready Package assembler，而不是 submission engine。
+已确认存在：
+packageId / inputDigest / resultDigest
+确定性派生，并保持：
+estimateOnly=true
+frozenAsTrustedAmount=false
+billable=false
+filingPerformed=false
+submissionPerformed=false
+transportEnabled=false
+特别重要的是少缴输入在 C6 回归中已经变成：
+NOT_READY
+且：
+estimate.byCurrency = []
+因此 CHANGE A/B 的方向语义没有在 package 层被重新破坏。
+C7 也严格保持 handoff-only。实际禁止动作包含：
+AUTO_FILING
+AUTO_PORTAL_SUBMIT
+BROKER_API_WRITE
+ABI_EDI_WRITE
+GOVERNMENT_FEE_PAYMENT
+TREAT_PACKAGE_AS_FILING
+TREAT_HANDOFF_AS_RECOVERED_TRUTH
+并且 acknowledgement 明确：
+filingPerformed=false
+recoveredTruthDerived=false
+externalWritePerformed=false
+所以“客户拿到包/交给 broker”没有被错误升级成“系统已经报关”或“已经追回”。
+C6 = PASS
+C7 = PASS
+
+④ G4 最终裁决
+PASS / CLOSED。
+当前 G4 内部链已经形成完整且边界清晰的：
+C1 Entry Fact
+→ C2 Duty Truth
+→ C3 Discrepancy
+→ C4 Eligibility
+→ C5 Estimate
+→ C6 Claim-Ready Package
+→ C7 Handoff
+并且关键真值边界已经正确分层：
+事实 ≠ 差异
+差异 ≠ 资格
+资格 ≠ 预计追回金额
+预计追回金额 ≠ 实际追回金额
+Package ≠ Filing
+Handoff ≠ Filing
+Acknowledgement ≠ Recovered Truth
+因此正式编号裁决：
+① PASS — CHANGE A/B CLOSED
+② PASS — Q2 Schema Delta APPROVED/CLOSED
+③ PASS — C6/C7 CLOSED
+④ PASS — CUSTOMS G4 C1–C7 = CLOSED
+不需要再送 G4 checkpoint。可以直接进入下一内部缺口。
+边界继续保持：
+HOLD_EXTERNAL · TRANSPORT=false · filingSubmitted=false · Payment=0 · NO production credentials
+下一阶段如果开始真正的 Customs 外部提交能力，必须作为独立 Production/Transport Enablement Gate处理，不能因为 G4 CLOSED 自动视为获得真实 filing 授权。
+```
