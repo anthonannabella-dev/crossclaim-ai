@@ -58,6 +58,7 @@ function git(argsList) {
 /** FINAL ACCEPTANCE 协议：每单元后重算最终状态；停止时生成/刷新 FINAL-ACCEPTANCE-REPORT。 */
 function runFinalTools(options = {}) {
   try {
+    execFileSync(process.execPath, [path.join(ROOT, 'tools', 'autopilot', 'record-ci-status.mjs')], { cwd: ROOT, stdio: 'ignore' });
     execFileSync(process.execPath, [path.join(ROOT, 'tools', 'autopilot', 'final-status.mjs')], { cwd: ROOT, stdio: 'ignore' });
   } catch {
     /* 计算失败不阻塞执行；下一轮重试 */
