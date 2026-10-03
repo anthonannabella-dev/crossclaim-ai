@@ -144,6 +144,14 @@
       "table": "CustomsSubmissionAttemptFact",
       "tgtype": 27,
       "semantics": "BEFORE UPDATE OR DELETE → 拒绝（C17：submission 状态事实 append-only；状态演进必须新增 fact）"
+    },
+    {
+      "name": "cc_append_only__CustomsEntryFactRecord",
+      "table": "CustomsEntryFactRecord"
+    },
+    {
+      "name": "cc_append_only__CustomsEntryDutyLineRecord",
+      "table": "CustomsEntryDutyLineRecord"
     }
   ],
   "unexpectedPrefixes": [
