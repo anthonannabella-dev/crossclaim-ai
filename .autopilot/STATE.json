@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261003-122",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-03T07:39:03.044Z",
+  "updated_at": "2026-10-03T07:40:09.113Z",
   "previous_head": "2a5399e",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -53,7 +53,7 @@
   "state": "IMPLEMENT",
   "last_action": "MSG-20261003-122 逐字归档（FULL_COPY_OK）→ Queue #10 契约层判定 PASS/CLOSED AS CONTRACT LAYER（overall NOT CLOSED）→ Schema Delta 获授权 → 下一批锁定 Queue #10 FINAL（Prisma append-only persistence + tenant guard + Action Guard + 人工补录 HTTP + 读模型）；15% C10–C11 与 Customs C1+ 为 P2 并行",
   "last_action_at": "2026-10-03T07:39:03.043Z",
-  "next_action": "立即实施 CARRIER QUEUE #10 FINAL：Schema Delta（Prisma CarrierClaimResponseFact + migration + tenant guard + append-only）→ prisma validate/migrate/generate → PG 回归（append-only / 跨租户 / 并发 / 幂等）→ Action Guard capability（carrier.claim_response.record）→ 人工补录 HTTP（server-derived 身份；client 仅 status/source/providerReference/observedAt/note）→ 读模型投影 → tsc api/web + API contract → commit/push → CI → checkpoint → 送审。",
+  "next_action": "继续 CARRIER QUEUE #10 FINAL（MSG-20261003-122 ⑦⑧ 授权）：Schema Delta（Prisma append-only CarrierClaimResponseFact + migration + tenant guard + append-only）→ PG 回归 → Action Guard capability → 人工补录 HTTP → 读模型投影 → tsc/API contract → commit/push → CI → checkpoint → 送审。随后按 P2 推进 Customs C15/C16/C19/C21 契约层与 Commercial C10–C11；C17 Schema Delta 与 C18 真实 provider 接入先送审/待宿主授权。",
   "current_head": "e060a5f",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
@@ -4013,5 +4013,231 @@
   "carrier_queue_10_audit_comment_id": "5966824937",
   "carrier_queue_10_schema_delta": "AUTHORIZED（MSG-20261003-122 ⑧；仅限 carrier claim response persistence）",
   "carrier_queue_10_msg122_verdict": "① status/provenance separation PASS；② trusted source default fail-closed PASS；③ append-only facts + deterministic projection PASS AT CONTRACT LEVEL；④ APPROVED != PAID != recovered cash PASS；⑤ 契约层 PASS/CLOSED AS CONTRACT LAYER；⑥ overall NOT CLOSED YET；⑦ 下一优先批 Queue #10 FINAL（PRISMA + POSTGRES + ACTION GUARD + HUMAN HTTP + READ MODEL）；⑧ Schema Delta AUTHORIZED；⑨ 15% 商业模型 AUTHORIZED/PRIORITY P2；⑩ Customs C1+ AUTHORIZED/PRIORITY P2",
-  "carrier_queue_10_msg122_archive": "MSG-20261003-122 已归档（compare FULL_COPY_OK）"
+  "carrier_queue_10_msg122_archive": "MSG-20261003-122 已归档（compare FULL_COPY_OK）",
+  "customs_one_click_directive": {
+    "source": "HOST DIRECTIVE 2026-10-03（补充四）— CUSTOMS ONE-CLICK AUTOMATED RECOVERY COMPLETION",
+    "doc": "docs/releases/CUSTOMS-ONE-CLICK-AUTOMATED-RECOVERY-DIRECTIVE.md",
+    "registered_at": "2026-10-03T07:40:09.112Z",
+    "reference_head_at_registration": "7e2e712",
+    "goal": "客户完成必要授权后只点一次 Start Recovery；系统自动执行可自动化部分，直至 Authority Submission → Status Tracking → Actual Refund → Settlement + Reconciliation → 15% Success Fee。CLAIM_READY 不是终点。",
+    "authorizations": {
+      "independent": [
+        "PLATFORM_OAUTH",
+        "BROKER_FILING_POA",
+        "PAYMENT_AUTHORIZATION"
+      ],
+      "rule": "Platform OAuth != Broker POA；三类授权不得互相推导",
+      "onboarding": [
+        "Customs Recovery Agreement",
+        "Importer / Claimant identity confirmation",
+        "Broker direct POA / required authorization",
+        "Broker/Filing Provider connection"
+      ],
+      "gate": "READY_TO_FILE"
+    },
+    "queue_appended": [
+      "C15",
+      "C16",
+      "C17",
+      "C18",
+      "C19",
+      "C20",
+      "C21"
+    ],
+    "queue_definitions": {
+      "C15": "Customs Filing Provider Contract（provider-neutral；operation-level fail-closed：DATA_READ/FILING_CREATE/DOCUMENT_UPLOAD/STATUS_READ/RFI_READ/RFI_RESPOND/WEBHOOK/REFUND_STATUS；缺 Filing capability → CLAIM_READY/BROKER_HANDOFF）",
+      "C16": "Customs Authorization Readiness（8 项验证；仅全部满足 → READY_TO_FILE；否则 BROKER_POA_REQUIRED/IOR_NOT_CONFIRMED/CLAIMANT_NOT_CONFIRMED/RECOVERY_RIGHT_NOT_CONFIRMED/BROKER_NOT_CONNECTED/FILING_PROVIDER_NOT_READY）",
+      "C17": "Customs Submission Attempt Ledger（append-only / tenant-scoped / idempotent；同一 claim+package+operation 至多一次真实 filing；复用 platform.write 已验证模式）",
+      "C18": "First Real Filing/Broker Adapter（只选 1 个支持 Customs Data + Filing + Status 的 provider；缺能力 → NEEDS_MANUAL/BROKER_HANDOFF）",
+      "C19": "Filing Status / Webhook Read Model（PREPARING/READY_TO_FILE/SUBMITTED/ACCEPTED/NEEDS_MORE_INFO/UNDER_REVIEW/DENIED/APPROVED/PAID/UNKNOWN + USER_REPORTED/PROVIDER_VERIFIED/AUTHORITY_VERIFIED；禁止提交=>accepted、APPROVED=>PAID 自动推导）",
+      "C20": "Refund → Settlement Integration（复用 ProviderOutcomeFact→RecoveryPayout→Settlement→Reconciliation→FeeCalculation→Billing；仅 verified actual incremental recovered 触发 15%）",
+      "C21": "One-Click Start Recovery（POST /customs-opportunities/:id/start-recovery；全部 server-derived；READY_TO_FILE → immutable submission snapshot → CustomsFilingProvider；否则 fail-closed）"
+    },
+    "hitl_required_cases": [
+      "POTENTIAL_HS_CLASSIFICATION_ERROR",
+      "VALUATION_REVIEW_REQUIRED",
+      "IOR_RIGHTS_UNCLEAR",
+      "CONFLICTING_EVIDENCE",
+      "INDETERMINATE"
+    ],
+    "straight_through_allowed": [
+      "DUPLICATE_DUTY",
+      "RATE_OVERPAYMENT",
+      "CONFIRMED_EXCLUSION",
+      "other deterministic confirmed cases"
+    ],
+    "straight_through_condition": "仅在 jurisdiction/provider capability 明确后允许；默认不直通",
+    "completion_standard": [
+      "CUSTOMS_DATA_READY",
+      "CUSTOMS_ELIGIBILITY_READY",
+      "CUSTOMS_AMOUNT_READY",
+      "CUSTOMS_REMEDY_READY",
+      "CUSTOMS_PACKAGE_READY",
+      "BROKER_AUTH_READY",
+      "FILING_PROVIDER_READY",
+      "ONE_CLICK_START_RECOVERY",
+      "SUBMISSION_IDEMPOTENCY",
+      "STATUS_TRACKING",
+      "REFUND_TO_SETTLEMENT",
+      "15_PERCENT_FEE_CHAIN"
+    ],
+    "reuse_required": [
+      "SourceConnection",
+      "PlatformAccount",
+      "CanonicalFact",
+      "RuleSet/RuleVersion",
+      "RecoveryOpportunity",
+      "Case",
+      "ClaimItem",
+      "EvidenceArtifact",
+      "RecoveryPackage",
+      "Action Guard",
+      "Settlement",
+      "Reconciliation",
+      "RecoveryPayout",
+      "FeePolicy",
+      "FeeCalculation",
+      "Billing"
+    ],
+    "forbidden_new": [
+      "Customs-only Billing",
+      "Customs-only Settlement",
+      "Customs-only Payment",
+      "第二套 Recovery Engine"
+    ],
+    "platform_backlog": [
+      "TIKTOK_READ_ADAPTER",
+      "WALMART_READ_ADAPTER",
+      "SHOPIFY_OAUTH_READ_ADAPTER"
+    ],
+    "platform_signal_rule": "平台信号只能作为 CUSTOMS_OPPORTUNITY_SIGNAL；不得确认 Customs entitlement；Carrier 数据只增强 evidence/drawback detection",
+    "host_approval_required": [
+      "C18 真实 Filing/Broker Provider 选型与接入（第三方真实账号授权 / POA / 代表资格）",
+      "任何真实 customs filing / authority submission（外部写、不可逆）",
+      "付费数据源 / 正式 API 申请 / 生产凭据",
+      "真实客户数据（entry / duty / IOR / claimant）进入非合成环境",
+      "真实资金链路（refund 对接 / Settlement 实盘 / 15% 实际扣费）",
+      "代表客户执行业务的牌照与合规结论"
+    ],
+    "arch_review_required": [
+      "C17 Schema Delta（submission attempt ledger）",
+      "C16 授权就绪判定语义与 READY_TO_FILE 边界",
+      "C19 状态机与来源等级",
+      "C20 资金链路复用与 15% fee trigger",
+      "C21 one-click action 权限模型 / Action Guard / immutable submission snapshot",
+      "Straight-Through Processing 适用条件"
+    ],
+    "queue_impact": "NONE_ON_CURRENT_UNIT —— Queue #9B FINAL-2 已 CLOSED；当前优先单元仍为 CARRIER QUEUE #10 FINAL（MSG-20261003-122 ⑦⑧ 已授权 Schema Delta）；C15–C21 作为 P2 内部实现队列（真实 filing 继续 HOLD_EXTERNAL）",
+    "boundary": "NO platform write · TRANSPORT=false · Payment = 0 · autopay = OFF · collection = OFF · external payment write = OFF · R13 HOLD · 无生产凭据 · 真实 customs filing = HOLD_EXTERNAL / REGULATED GATE"
+  },
+  "customs_execution_queue": {
+    "note": "HOST DIRECTIVE 2026-10-03（补充四）§3：不修改既有 C1–C14 定义，追加 C15–C21；真实 filing / provider 接入 / 生产凭据继续 HOLD_EXTERNAL。",
+    "items": [
+      {
+        "id": "C1",
+        "name": "Customs Data / Evidence Contract",
+        "status": "AUTHORIZED_INTERNAL"
+      },
+      {
+        "id": "C2",
+        "name": "Duty Calculation Truth",
+        "status": "AUTHORIZED_INTERNAL"
+      },
+      {
+        "id": "C3",
+        "name": "Classification / Rate Discrepancy Detection",
+        "status": "AUTHORIZED_INTERNAL"
+      },
+      {
+        "id": "C4",
+        "name": "Eligibility / Limitation Rules",
+        "status": "AUTHORIZED_INTERNAL"
+      },
+      {
+        "id": "C5",
+        "name": "Recovery Estimate",
+        "status": "AUTHORIZED_INTERNAL"
+      },
+      {
+        "id": "C6",
+        "name": "Claim-Ready Package",
+        "status": "AUTHORIZED_INTERNAL"
+      },
+      {
+        "id": "C7",
+        "name": "Customer-Self / Broker Handoff",
+        "status": "AUTHORIZED_INTERNAL"
+      },
+      {
+        "id": "C8",
+        "name": "Customs Remedy Router",
+        "status": "AUTHORIZED_INTERNAL"
+      },
+      {
+        "id": "C9",
+        "name": "Customs Recovery Package",
+        "status": "AUTHORIZED_INTERNAL"
+      },
+      {
+        "id": "C10",
+        "name": "Commercial Eligibility Guard",
+        "status": "AUTHORIZED_INTERNAL"
+      },
+      {
+        "id": "C11",
+        "name": "统一所有 FeeCalculation 创建路径",
+        "status": "AUTHORIZED_INTERNAL"
+      },
+      {
+        "id": "C12",
+        "name": "UK Rule Pack",
+        "status": "AUTHORIZED_INTERNAL"
+      },
+      {
+        "id": "C13",
+        "name": "EU Rule Pack",
+        "status": "AUTHORIZED_INTERNAL"
+      },
+      {
+        "id": "C14",
+        "name": "Canada / Australia / Singapore / Japan rule packs",
+        "status": "AUTHORIZED_INTERNAL"
+      },
+      {
+        "id": "C15",
+        "name": "Customs Filing Provider Contract",
+        "status": "REGISTERED_P2_INTERNAL（契约层可立即实施）"
+      },
+      {
+        "id": "C16",
+        "name": "Customs Authorization Readiness",
+        "status": "REGISTERED_P2_INTERNAL（判定层可立即实施）"
+      },
+      {
+        "id": "C17",
+        "name": "Customs Submission Attempt Ledger",
+        "status": "REGISTERED_P2（Schema Delta 需架构方审计）"
+      },
+      {
+        "id": "C18",
+        "name": "First Real Filing/Broker Adapter",
+        "status": "REGISTERED_HOLD_EXTERNAL（HOST APPROVAL REQUIRED）"
+      },
+      {
+        "id": "C19",
+        "name": "Filing Status / Webhook Read Model",
+        "status": "REGISTERED_P2_INTERNAL（契约层可立即实施）"
+      },
+      {
+        "id": "C20",
+        "name": "Refund → Settlement Integration",
+        "status": "REGISTERED_P2（复用既有资金链；真实资金 HOLD）"
+      },
+      {
+        "id": "C21",
+        "name": "One-Click Start Recovery",
+        "status": "REGISTERED_P2（编排 fail-closed；真实 filing HOLD_EXTERNAL）"
+      }
+    ]
+  }
 }
