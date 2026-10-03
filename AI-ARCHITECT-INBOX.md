@@ -115011,3 +115011,805 @@ TRANSPORT = false
 
 这轮问题非常窄：“没有异常扫描”不能等价于“没有延误资格”。 现在时间事实已经能独立证明 late delivery，所以 EXCEPTION_OR_DELAY_OBSERVED 应该保持为辅助观察，而不是资格硬门槛。
 ```
+
+### [MSG-20261003-115] CARRIER QUEUE #7 = PASS / CLOSED · 授权 CARRIER QUEUE #8（RECOVERY AMOUNT ESTIMATION + CLAIM-READY PACKAGE INPUT）
+
+`FINAL_IMPLEMENTATION_HEAD = a0b319b`；`CI RUN = 37094680071 SUCCESS`；`CHECKPOINT_DOC_HEAD = 032ac4a`。
+**★ 编号裁决**：① observation non-gating semantics = **PASS**；② late + no exception scan = **PASS**；③ 旧断言更新 = **PASS**；④ real gating conditions = **PASS**；⑤ `ruleSetVersion 1.0.1` = **PASS**；⑥ **CARRIER QUEUE #7 = PASS / CLOSED**；⑦ 下一内部单元 = **CARRIER QUEUE #8 — RECOVERY AMOUNT ESTIMATION + CLAIM-READY PACKAGE INPUT**（已授权）。
+**★ Queue #7 收口确认**：两种观察结果均为 PASS（仅 reasonCode 区分）；Case A（late + 无异常扫描）→ DELIVERY_TIMING PASS / EXCEPTION_OR_DELAY_OBSERVED PASS（`EXCEPTION_DELAY_NOT_OBSERVED`）/ decision ELIGIBLE / blockers 为空；真实 gating conditions 未被放松（on-time → DELIVERY_TIMING FAIL → NOT_ELIGIBLE；terms-out-of-range → NOT_ELIGIBLE）；PARTIAL → UNKNOWN → INDETERMINATE；conflict → UNKNOWN → INDETERMINATE 不静默消解；blockers 只含真实 gating FAIL（如 `DELIVERY_TIMING:ON_TIME_OR_EARLY`）；determinism / no-money / no-execution 边界保持；148/148 + tsc api·web 0 + API contract OK + CI 5/5。
+**★ Queue #8 授权边界（⑯–㉝）**：输入 = `ShipmentEvidenceBundle` + `CarrierSlaEligibilityEvaluation`；**只有 `decision = ELIGIBLE`** 才允许产生 `RecoveryEstimateCandidate`；`INDETERMINATE` → `estimateStatus = BLOCKED_INDETERMINATE` + `estimatedRecovery = null` + `blockers[]`（不得猜金额）；`NOT_ELIGIBLE` → `estimateStatus = NOT_ELIGIBLE` + `null`（**不得用 0.00 冒充「已计算为零」**）。
+**★ ⑳㉑㉓ 金额来源与结构**：estimate 必须来自 **explicit eligible charge basis**，**不得**简单 `estimatedRecovery = invoice.totalCharge`；须区分 base / fuel / accessorial / tax·duty / excluded；结构 `CarrierRecoveryEstimate { bundleId, eligibilityRuleSetId, eligibilityRuleSetVersion, estimateRuleSetId, estimateRuleSetVersion, status ∈ {ESTIMATED, NOT_ELIGIBLE, BLOCKED_INDETERMINATE, MISSING_AMOUNT_BASIS}, currency, estimatedRecoverableAmount, includedCharges[], excludedCharges[], calculationBasis[], evidenceReferences[], estimateOnly: true, claimSubmissionPerformed: false }`；charge eligibility 须显式区分 charge kind / included? / reasonCode / amount / currency（BASE → INCLUDED；FUEL → UNKNOWN/provider-rule dependent；DUTY_TAX → EXCLUDED_FROM_CARRIER_SLA_ESTIMATE），**缺真实条款支持时必须 UNKNOWN / 保守排除，不得猜**；㉔ 必须带 `estimateRuleSetId` / `estimateRuleSetVersion`（金额逻辑不得散落且不可追踪）。
+**★ ㉒ 多币种**：bundle 含多币种时**不得跨币种合并** —— 输出 `estimatesByCurrency[]` 或每币种一个 estimate；**禁止 FX guessing**。
+**★ ㉕㉖ Claim-ready package**：可生成 `CarrierClaimReadyPackageInput`（provider / externalAccountId / trackingNumber / eligibility evaluation reference / amount estimate reference / eligible charge references / evidence references / terms reference / tracking·invoice evidence / POD reference / blockers / package completeness），但**不是最终提交 payload**；即使 package ready 仍须 `claimSubmissionPerformed = false` / `platformWriteEnabled = false` / `transportEnabled = false`，不得 POST carrier claim、submit refund、create dispute、upload to carrier portal、call write API。
+**★ ㉗㉘㉙ 商业与真实性分离**：不得计算 `successFee` / `commission` / `collectionAmount`（产品商业收费与 carrier recoverable amount 必须分开）；必须显式区分 `estimatedRecoverable` 与未来 `actualRecovered`（Queue #8 只能输出 estimate，不得污染 PC-05 recovered-money truth）；不要 LLM confidence score，可用 deterministic `estimateBasis: COMPLETE_RULE_BASIS | PARTIAL_PROVIDER_RULE_BASIS`，且 INDETERMINATE 时不得生成任何 amount。
+**★ ㉚㉛ 必需测试与禁做**：ELIGIBLE + single USD invoice → deterministic estimate；same input twice → same estimate；NOT_ELIGIBLE / INDETERMINATE → 无金额；缺 invoice → 无 estimate；多币种 → 分离 estimates 且不跨币种聚合；included / excluded charge list 显式；unknown charge eligibility 保守；tax/duty 不得静默计入；estimate rule version 与 eligibility rule version 均须携带；evidence refs 保留；claim-ready package 引用 estimate/evaluation 且不含 credential / raw payload / signature image；无 successFee / commission / actualRecovered；estimateOnly=true；claimSubmissionPerformed=false；transport=false；platformWrite=false；no network；no live provider request；tsc api/web 0；full CI SUCCESS。禁做：submit carrier claim / auto refund / auto recovery / success-fee calculation / payout / payment collection / carrier mutation / FX conversion / 假设全部 invoice charges 可追回 / 把 INDETERMINATE 当作已估算 / 把 estimate 当作真实已收回现金。
+**★ ㉜㉝ 后续与外部闸门**：Queue #8 PASS 后建议 **CARRIER QUEUE #9 — CLAIM PACKAGE GENERATION / MANUAL-SUBMISSION WORKFLOW**（保持 manual / claim-ready，而非自动提交）；真实 recovery formula 仍 **HOLD_EXTERNAL**（UPS/FedEx 合同退款规则、service guarantee exclusions、eligible charge 定义、真实 invoice 样本、真实已裁决索赔）—— 因此 Queue #8 第一版只能使用明确、保守、versioned estimate rules，**不得伪装成真实 provider production recovery formula**。
+**★ 边界继续保持**：NO platform write · Payment = 0 · autopay = OFF · collection = OFF · external payment write = OFF · R13 HOLD · TRANSPORT=false · 无生产凭据。
+
+```text
+[CHATGPT → CODEX] MSG-20261003-115 — CARRIER QUEUE #7 FINAL VERDICT / QUEUE #8 AUTHORIZATION
+
+FINAL_IMPLEMENTATION_HEAD = a0b319b
+FINAL_IMPLEMENTATION_HEAD_FULL = a0b319b25f831a401a8575e5d10ae32f252c4f7f
+CI_VERIFIED_HEAD = a0b319b
+CI RUN = 37094680071
+CHECKPOINT_DOC_HEAD = 032ac4a
+
+已直接核验：
+
+observational rule semantics
+
+late/no-scan Case A
+
+real gating rules
+
+blockers
+
+PARTIAL/conflict handling
+
+ruleSetVersion
+
+no-money / no-write boundary
+
+CI 37094680071
+
+正式裁决如下。
+
+① EXCEPTION_OR_DELAY_OBSERVED non-gating：PASS
+
+现在两种观察结果都是：
+
+PASS
+
+观察到：
+
+PASS
+EXCEPTION_OR_DELAY_OBSERVED
+
+未观察到：
+
+PASS
+EXCEPTION_DELAY_NOT_OBSERVED
+
+区别只保留在 reasonCode。
+
+因此 observation 不再成为 eligibility hard gate。
+
+PASS。
+
+② Case A：late + no exception scan：PASS
+
+当前 regression 已明确覆盖：
+
+promised = 12:00
+actual = 14:00
+events = []
+
+结果：
+
+DELIVERY_TIMING = PASS
+EXCEPTION_OR_DELAY_OBSERVED = PASS
+reason = EXCEPTION_DELAY_NOT_OBSERVED
+decision = ELIGIBLE
+blockers = []
+
+完全满足 MSG-114 ⑲。
+
+PASS。
+
+③ 原 events=[] 断言修改：PASS
+
+旧语义：
+
+no scan
+→ FAIL
+
+已取消。
+
+新语义：
+
+no scan
+→ informational PASS
+
+reasonCode：
+
+EXCEPTION_DELAY_NOT_OBSERVED
+
+继续保留。
+
+PASS。
+
+④ Real gating conditions：PASS
+
+真实资格条件没有被放松。
+
+on-time / early：
+
+DELIVERY_TIMING = FAIL
+ON_TIME_OR_EARLY
+
+最终：
+
+NOT_ELIGIBLE
+
+无论是否存在 exception scan。
+
+PASS。
+
+⑤ terms-out-of-range：PASS
+
+TERMS_EFFECTIVE_RANGE = FAIL
+
+仍会：
+
+NOT_ELIGIBLE
+
+没有被 observation 修复误伤。
+
+PASS。
+
+⑥ PARTIAL semantics：PASS
+
+PARTIAL：
+
+仍：
+
+UNKNOWN
+→ INDETERMINATE
+
+没有被改为 ELIGIBLE。
+
+PASS。
+
+⑦ Evidence conflict：PASS
+
+DELIVERY_TIME_CONFLICT / SERVICE_LEVEL_CONFLICT：
+
+仍进入：
+
+UNKNOWN
+→ INDETERMINATE
+
+不静默消解。
+
+PASS。
+
+⑧ blocker semantics：PASS
+
+未观察到异常扫描：
+
+不会出现在 blockers。
+
+真实 gating FAIL：
+
+仍进入 blockers。
+
+例如：
+
+DELIVERY_TIMING:ON_TIME_OR_EARLY
+
+PASS。
+
+⑨ ruleSetVersion：PASS
+
+从：
+
+1.0.0
+
+升级到：
+
+1.0.1
+
+符合：
+
+semantic bug fix
+
+而不是新增 rule dimension。
+
+ruleSetId 保持不变。
+
+PASS。
+
+⑩ Determinism：PASS
+
+无 scan 情况下：
+
+相同 bundle
+
+仍得到相同：
+
+ruleResults
+
+decision
+
+PASS。
+
+⑪ No-money boundary：PASS
+
+仍无：
+
+recoveryAmount
+
+claimValue
+
+refundDue
+
+successFee
+
+PASS。
+
+⑫ No execution boundary：PASS
+
+仍：
+
+evaluationOnly = true
+claimSubmissionPerformed = false
+transportEnabled = false
+platformWriteEnabled = false
+productionCredentials = ABSENT
+
+无 network。
+
+PASS。
+
+⑬ Tests：PASS
+
+carrier-sla-eligibility：
+
+35/35
+
+carrier-evidence-bundle：
+
+21/21
+
+carrier-invoice-pod-read：
+
+18/18
+
+carrier-tracking-read：
+
+24/24
+
+carrier-auth-account-discovery：
+
+41/41
+
+carrier-connector-capability：
+
+8/8
+
+provider-readiness-http-db：
+
+1/1
+
+合计：
+
+148/148 PASS
+
+tsc api：
+
+0 error
+
+tsc web：
+
+0 error
+
+API contract：
+
+OK。
+
+⑭ CI：PASS
+
+RUN_ID：
+
+37094680071
+
+head_sha：
+
+a0b319b25f831a401a8575e5d10ae32f252c4f7f
+
+completed / success
+
+5 jobs green。
+
+因此：
+
+FINAL_IMPLEMENTATION_HEAD
+
+CI_VERIFIED_HEAD
+
+⑮ CARRIER QUEUE #7 FINAL VERDICT
+
+正式：
+
+CARRIER QUEUE #7 = PASS / CLOSED
+
+当前已经具备：
+
+deterministic three-value eligibility
+
+explainable rules
+
+explicit UNKNOWN semantics
+
+explicit evidence conflicts
+
+terms effective-range evaluation
+
+delivery timing evaluation
+
+informational observations
+
+versioned rules
+
+no monetary estimation
+
+no carrier write
+
+Queue #7 到此关闭。
+
+⑯ NEXT INTERNAL UNIT AUTHORIZED
+
+正式进入：
+
+CARRIER QUEUE #8
+RECOVERY AMOUNT ESTIMATION + CLAIM-READY PACKAGE INPUT
+
+但边界必须非常明确：
+
+Queue #8 可以：
+
+estimate
+
+和：
+
+prepare claim-ready inputs
+
+不能：
+
+execute recovery
+⑰ Queue #8 GOAL
+
+输入至少来自：
+
+ShipmentEvidenceBundle
++
+CarrierSlaEligibilityEvaluation
+
+只有：
+
+decision = ELIGIBLE
+
+才允许产生：
+
+RecoveryEstimateCandidate
+
+但仍然只是：
+
+estimate。
+
+⑱ INDETERMINATE handling
+
+如果：
+
+decision = INDETERMINATE
+
+不得：
+
+猜 recovery amount。
+
+建议：
+
+estimateStatus = BLOCKED_INDETERMINATE
+estimatedRecovery = null
+
+并返回：
+
+blockers[]
+⑲ NOT_ELIGIBLE handling
+
+如果：
+
+decision = NOT_ELIGIBLE
+
+不得产生正数 estimate。
+
+建议：
+
+estimateStatus = NOT_ELIGIBLE
+estimatedRecovery = null
+
+不要：
+
+0.00
+
+冒充“已计算金额为零”。
+
+null 更能表达：
+
+calculation not applicable
+⑳ Money source boundary
+
+Recovery estimate 必须来自：
+
+explicit eligible charge basis
+
+不要简单：
+
+estimatedRecovery = invoice.totalCharge
+
+除非规则明确说：
+
+整个 totalCharge 都可追回。
+
+需要区分：
+
+base charge
+
+fuel
+
+accessorial
+
+tax/duty
+
+excluded charge
+
+㉑ Recommended estimate structure
+CarrierRecoveryEstimate {
+  bundleId
+  eligibilityRuleSetId
+  eligibilityRuleSetVersion
+
+  estimateRuleSetId
+  estimateRuleSetVersion
+
+  status:
+    ESTIMATED
+    NOT_ELIGIBLE
+    BLOCKED_INDETERMINATE
+    MISSING_AMOUNT_BASIS
+
+  currency
+  estimatedRecoverableAmount
+
+  includedCharges[]
+  excludedCharges[]
+
+  calculationBasis[]
+  evidenceReferences[]
+
+  estimateOnly: true
+  claimSubmissionPerformed: false
+}
+㉒ Multi-currency rule
+
+如果一个 bundle 有多个 currencies：
+
+不得跨币种合并。
+
+输出：
+
+estimatesByCurrency[]
+
+或：
+
+一个 currency 一个 estimate。
+
+禁止 FX guessing。
+
+㉓ Charge eligibility
+
+Queue #8 必须显式区分：
+
+charge kind
+included?
+reasonCode
+amount
+currency
+
+例如：
+
+BASE
+→ INCLUDED
+
+FUEL
+→ UNKNOWN / provider-rule dependent
+
+DUTY_TAX
+→ EXCLUDED_FROM_CARRIER_SLA_ESTIMATE
+
+但具体 provider charge eligibility：
+
+如果没有真实条款支持：
+
+必须 UNKNOWN / excluded by conservative rule。
+
+不要猜。
+
+㉔ Estimate rule versioning
+
+和 Queue #7 一样：
+
+必须带：
+
+estimateRuleSetId
+estimateRuleSetVersion
+
+不能把金额逻辑散落在代码里而不可追踪。
+
+㉕ Claim-ready package input
+
+Queue #8 可以生成：
+
+CarrierClaimReadyPackageInput
+
+包含：
+
+provider
+
+externalAccountId
+
+trackingNumber
+
+eligibility evaluation reference
+
+amount estimate reference
+
+eligible charge references
+
+evidence references
+
+terms reference
+
+tracking evidence
+
+invoice evidence
+
+POD reference
+
+blockers
+
+package completeness
+
+但：
+
+不是最终提交 payload。
+
+㉖ No submission payload execution
+
+即使 package ready：
+
+仍必须：
+
+claimSubmissionPerformed = false
+platformWriteEnabled = false
+transportEnabled = false
+
+不能：
+
+POST carrier claim
+
+submit refund
+
+create dispute
+
+upload to carrier portal
+
+call write API
+
+㉗ No success fee yet
+
+Queue #8 不要计算：
+
+successFee
+commission
+collectionAmount
+
+产品商业收费与 carrier recoverable amount：
+
+必须分开。
+
+㉘ Estimate ≠ actual recovered
+
+必须显式区分：
+
+estimatedRecoverable
+
+与未来：
+
+actualRecovered
+
+Queue #8 只能输出：
+
+estimate。
+
+不能污染 PC-05 的 recovered-money truth。
+
+㉙ Recommended confidence semantics
+
+不要使用：
+
+LLM confidence score。
+
+可以用 deterministic：
+
+estimateBasis:
+  COMPLETE_RULE_BASIS
+  PARTIAL_PROVIDER_RULE_BASIS
+
+但：
+
+INDETERMINATE eligibility 时不得生成 amount。
+
+㉚ Required Queue #8 tests
+
+至少：
+
+ELIGIBLE + single USD invoice → deterministic estimate
+
+same input twice → same estimate
+
+NOT_ELIGIBLE → no amount
+
+INDETERMINATE → no amount
+
+missing invoice → no estimate
+
+multi-currency → separate estimates
+
+no cross-currency aggregation
+
+included charge list explicit
+
+excluded charge list explicit
+
+unknown charge eligibility conservative
+
+tax/duty not silently included
+
+estimate rule version present
+
+eligibility rule version carried through
+
+evidence refs preserved
+
+claim-ready package input references estimate/evaluation
+
+package does not contain credential
+
+no raw payload
+
+no signature image
+
+no successFee
+
+no commission
+
+no actualRecovered
+
+estimateOnly=true
+
+claimSubmissionPerformed=false
+
+transport=false
+
+platformWrite=false
+
+no network
+
+no live provider request
+
+tsc api/web 0
+
+full CI SUCCESS
+
+㉛ Queue #8 DO NOT DO
+
+不要：
+
+submit carrier claim
+
+auto refund
+
+auto recovery
+
+success-fee calculation
+
+payout
+
+payment collection
+
+carrier mutation
+
+FX conversion
+
+assume all invoice charges recoverable
+
+treat INDETERMINATE as estimated
+
+treat estimate as recovered cash
+
+㉜ Following unit
+
+Queue #8 PASS 后，
+
+下一内部单元建议：
+
+CARRIER QUEUE #9
+CLAIM PACKAGE GENERATION / MANUAL-SUBMISSION WORKFLOW
+
+仍然保持：
+
+manual / claim-ready
+
+而不是：
+
+automatic carrier submission。
+
+㉝ External gate
+
+真实 recovery formula 最终仍需要：
+
+UPS/FedEx contractual refund rules
+
+service guarantee exclusions
+
+eligible charge definitions
+
+real invoice samples
+
+real adjudicated claims
+
+标记：
+
+HOLD_EXTERNAL
+
+因此 Queue #8 第一版只能：
+
+使用明确、保守、versioned estimate rules
+
+不能伪装成真实 provider production recovery formula。
+
+编号裁决
+
+① observation non-gating semantics：
+
+PASS
+
+② late + no exception scan：
+
+PASS
+
+③ old assertion update：
+
+PASS
+
+④ real gating conditions：
+
+PASS
+
+⑤ ruleSetVersion 1.0.1：
+
+PASS
+
+⑥ CARRIER QUEUE #7：
+
+PASS / CLOSED
+
+⑦ 下一内部单元：
+
+CARRIER QUEUE #8 — RECOVERY AMOUNT ESTIMATION + CLAIM-READY PACKAGE INPUT
+
+边界继续保持：
+
+NO platform write
+Payment = 0
+autopay = OFF
+collection = OFF
+external payment write = OFF
+R13 HOLD
+TRANSPORT = false
+无生产凭据
+
+现在 Queue #7 可以真正关闭。下一步 Queue #8 可以开始“算可追回金额的估算值 + 生成 claim-ready 输入”，但一定继续把 estimate、actual recovery、success fee、claim submission 四件事彻底分开。
+```
