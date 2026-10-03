@@ -582,3 +582,15 @@ describe('R46 S1 资金域 Schema 不变量（MSG-20261002-53 / -54）', () => {
     expect(R46_S1_SQL).not.toMatch(/ALTER TYPE "BillingStatus"/);
   });
 });
+
+describe('CARRIER QUEUE #9B FINAL-2 — DB confirmation truth constraint（MSG-20261003-120 ⑫⑬）', () => {
+  it('⑫ carrierConfirmationStatus 在 DB 层只允许 NOT_VERIFIED（append-only ≠ 插入时值真实）', () => {
+    expect(ALL_MIGRATIONS_SQL).toMatch(
+      /CarrierManualSubmission_carrierConfirmationStatus_check[\s\S]{0,160}'NOT_VERIFIED'/,
+    );
+  });
+
+  it('⑬ submissionMode 在 DB 层只允许 MANUAL（本表即人工提交见证）', () => {
+    expect(ALL_MIGRATIONS_SQL).toMatch(/CarrierManualSubmission_submissionMode_check[\s\S]{0,160}'MANUAL'/);
+  });
+});

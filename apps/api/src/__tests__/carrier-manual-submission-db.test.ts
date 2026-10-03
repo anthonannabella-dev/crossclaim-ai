@@ -301,3 +301,119 @@ describe('CARRIER QUEUE #9B FINAL — PostgreSQL manual submission record', () =
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// CARRIER QUEUE #9B FINAL-2（MSG-20261003-120 ⑫⑬⑭）— DB CONFIRMATION TRUTH
+//   「human report ≠ carrier confirmation」必须在数据库层也成立：
+//   append-only 只保证「插入后不能改」，CHECK 才保证「插入时值一定真实」。
+// ---------------------------------------------------------------------------
+
+const Q9BF2_COLUMNS = [
+  '"id"',
+  '"organizationId"',
+  '"packageId"',
+  '"bundleId"',
+  '"provider"',
+  '"externalAccountId"',
+  '"trackingNumber"',
+  '"submittedByUserId"',
+  '"submittedAt"',
+  '"recordedAt"',
+  '"carrierConfirmationStatus"',
+  '"submissionMode"',
+  '"channel"',
+  '"eligibilityRuleSetId"',
+  '"eligibilityRuleSetVersion"',
+  '"estimateRuleSetId"',
+  '"estimateRuleSetVersion"',
+  '"packageSnapshotReference"',
+].join(', ');
+
+function directInsert(id: string, packageId: string, status: string, mode = 'MANUAL') {
+  return prisma.$executeRawUnsafe(
+    'INSERT INTO "CarrierManualSubmission" (' +
+      Q9BF2_COLUMNS +
+      ') VALUES ($1,$2,$3,$4,$5,$6,$7,$8,now(),now(),$9,$10,$11,$12,$13,$14,$15,$16)',
+    id,
+    ORG,
+    packageId,
+    'bundle-q9bf2',
+    'UPS',
+    'UPS-ACCT-1',
+    TRACKING,
+    USER,
+    status,
+    mode,
+    'PORTAL',
+    'rs-elig',
+    'v1',
+    'rs-est',
+    'v1',
+    'pkg-snapshot:sha256:q9bf2',
+  );
+}
+
+describe('CARRIER QUEUE #9B FINAL-2 — DB confirmation truth constraint（MSG-20261003-120 ⑫⑬⑭）', () => {
+  it('⑫ 两条 CHECK 约束在数据库目录中真实存在', async () => {
+    const rows = await prisma.$queryRawUnsafe<Array<{ conname: string }>>(
+      'SELECT conname FROM pg_constraint WHERE conrelid = to_regclass($1) AND contype = $2',
+      '"CarrierManualSubmission"',
+      'c',
+    );
+    const names = rows.map((r) => r.conname);
+    expect(names).toContain('CarrierManualSubmission_carrierConfirmationStatus_check');
+    expect(names).toContain('CarrierManualSubmission_submissionMode_check');
+  });
+
+  it('⑭ NOT_VERIFIED 直接写入（其它约束合法）→ 允许', async () => {
+    await directInsert('ccbf2000-0000-4000-8000-000000000001', 'pkg-q9bf2-ok', 'NOT_VERIFIED');
+    expect(await prisma.carrierManualSubmission.count()).toBe(1);
+  });
+
+  it('⑭ carrierConfirmationStatus = APPROVED → 数据库拒绝且零 row', async () => {
+    await expect(
+      directInsert('ccbf2000-0000-4000-8000-000000000002', 'pkg-q9bf2-approved', 'APPROVED'),
+    ).rejects.toThrow();
+    expect(await prisma.carrierManualSubmission.count()).toBe(0);
+  });
+
+  it('⑭ carrierConfirmationStatus = CONFIRMED → 数据库拒绝且零 row', async () => {
+    await expect(
+      directInsert('ccbf2000-0000-4000-8000-000000000003', 'pkg-q9bf2-confirmed', 'CONFIRMED'),
+    ).rejects.toThrow();
+    expect(await prisma.carrierManualSubmission.count()).toBe(0);
+  });
+
+  it('⑭ carrierConfirmationStatus = RECOVERED → 数据库拒绝且零 row', async () => {
+    await expect(
+      directInsert('ccbf2000-0000-4000-8000-000000000004', 'pkg-q9bf2-recovered', 'RECOVERED'),
+    ).rejects.toThrow();
+    expect(await prisma.carrierManualSubmission.count()).toBe(0);
+  });
+
+  it('⑭ carrierConfirmationStatus = ACCEPTED → 数据库拒绝且零 row', async () => {
+    await expect(
+      directInsert('ccbf2000-0000-4000-8000-000000000005', 'pkg-q9bf2-accepted', 'ACCEPTED'),
+    ).rejects.toThrow();
+    expect(await prisma.carrierManualSubmission.count()).toBe(0);
+  });
+
+  it('⑬ submissionMode = AUTO → 数据库拒绝且零 row（本表只表达人工提交见证）', async () => {
+    await expect(
+      directInsert('ccbf2000-0000-4000-8000-000000000006', 'pkg-q9bf2-auto', 'NOT_VERIFIED', 'AUTO'),
+    ).rejects.toThrow();
+    expect(await prisma.carrierManualSubmission.count()).toBe(0);
+  });
+
+  it('⑭ service 路径写入的行仍为 NOT_VERIFIED / MANUAL（CHECK 不破坏既有路径）', async () => {
+    const pkg = packageFor([INVOICE]);
+    const outcome = await recordCarrierManualSubmission(
+      { packageId: pkg.packageId, request: { carrierReference: 'CASE-Q9BF2' }, context: contextFor() },
+      depsFor(pkg),
+    );
+    if (!outcome.ok) throw new Error('expected ok');
+    const row = await prisma.carrierManualSubmission.findFirstOrThrow({});
+    expect(row.carrierConfirmationStatus).toBe('NOT_VERIFIED');
+    expect(row.submissionMode).toBe('MANUAL');
+  });
+});
