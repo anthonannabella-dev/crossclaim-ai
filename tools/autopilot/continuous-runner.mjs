@@ -70,7 +70,7 @@ function loadQueue() {
   const state = readJson(STATE, {});
   const index = readJson(UNITS_INDEX, { units: [] });
   const safeQueue = Array.isArray(state.safe_continuation_queue) ? state.safe_continuation_queue : [];
-  const done = new Set(Array.isArray(state.units_completed) ? state.units_completed : []);
+  const done = new Set([...(Array.isArray(state.units_completed) ? state.units_completed : []), ...(Array.isArray(state.dispatched_completed) ? state.dispatched_completed : [])]);
   const units = index.units.filter((unit) => !done.has(unit.id));
   return { state, index, safeQueue, units, done };
 }
@@ -87,23 +87,51 @@ async function main() {
   try {
     for (;;) {
       const { state, units } = loadQueue();
-      touchHeartbeat({ state_machine: 'CONTINUOUS', remaining_units: units.length });
-      if (units.length === 0) {
-        console.log('STOP_CONDITION=SAFE_CONTINUATION_QUEUE_EMPTY');
-        break;
+      let unit;
+      let unitSource = 'STATIC';
+      if (units.length > 0) {
+        unit = units[0];
+      } else {
+        // GLOBAL BACKLOG DISPATCHER：静态单元耗尽 → 自动 materialize 下一个安全单元（不再停止）
+        let dispatchOut = '';
+        try {
+          dispatchOut = execFileSync(process.execPath, [path.join(ROOT, 'tools', 'autopilot', 'dispatcher.mjs')], { cwd: ROOT, encoding: 'utf8' });
+        } catch (error) {
+          dispatchOut = String(error.stdout ?? '');
+        }
+        const lastLine = dispatchOut.trim().split('\n').pop() ?? '{}';
+        let parsed = {};
+        try {
+          parsed = JSON.parse(lastLine);
+        } catch {
+          parsed = {};
+        }
+        if (!parsed.ok) {
+          console.log('GLOBAL_STOP reason=' + String(parsed.reason ?? 'NO_SAFE_TASK') + ' hostPending=' + JSON.stringify(parsed.hostPending ?? []));
+          console.log('STOP_CONDITION=' + (parsed.reason === 'HOST_ACTION_REQUIRED_ONLY' ? 'HOST_ACTION_REQUIRED' : 'SAFE_CONTINUATION_QUEUE_EMPTY'));
+          break;
+        }
+        unit = { id: parsed.id, title: parsed.metadata?.title ?? parsed.id, path: parsed.unitPath };
+        unitSource = 'DISPATCHER';
+        console.log('DISPATCHER_PICK=' + parsed.id);
       }
+      touchHeartbeat({
+        state_machine: 'CONTINUOUS',
+        remaining_units: units.length,
+        current_task: unit.id,
+        current_head: git(['rev-parse', '--short', 'HEAD']),
+      });
       if (maxUnits > 0 && executed >= maxUnits) {
         console.log('STOP_CONDITION=MAX_UNITS_REACHED executed=' + executed);
         break;
       }
-      const unit = units[0];
-      console.log('PICK_UNIT=' + unit.id + ' :: ' + unit.title);
+      console.log('PICK_UNIT=' + unit.id + ' source=' + unitSource + ' :: ' + String(unit.title ?? ''));
       if (dryRun) {
         console.log('DRY_RUN_SKIP_EXECUTION=' + unit.id);
         break;
       }
       const beforeHead = git(['rev-parse', '--short', 'HEAD']);
-      const modulePath = path.join(ROOT, 'tools', 'autopilot', 'units', unit.id + '.mjs');
+      const modulePath = unit.path ?? path.join(ROOT, 'tools', 'autopilot', 'units', unit.id + '.mjs');
       const mod = await import(pathToFileURL(modulePath).href);
       const started = Date.now();
       const result = await mod.run({ root: ROOT, state, unit });
@@ -116,6 +144,16 @@ async function main() {
       const afterHead = git(['rev-parse', '--short', 'HEAD']);
       const latestState = readJson(STATE, {});
       latestState.units_completed = [...new Set([...(latestState.units_completed ?? []), unit.id])];
+      if (unitSource === 'DISPATCHER') {
+        latestState.dispatched_completed = [...new Set([...(latestState.dispatched_completed ?? []), unit.id])];
+      }
+      latestState.current_head = afterHead;
+      latestState.runner_status = 'RUNNING';
+      latestState.heartbeat_role = 'LIVENESS_ONLY';
+      latestState.watchdog_role = 'RECOVERY_ONLY';
+      latestState.global_backlog_dispatcher = 'VERIFIED';
+      latestState.static_unit_dependency = 'REMOVED';
+      latestState.safe_continuation_queue = 'ACTIVE';
       latestState.last_unit = { id: unit.id, at: new Date().toISOString(), head_before: beforeHead, head_after: afterHead, detail: result?.detail ?? '' };
       latestState.autopilot_mode = 'CONTINUOUS';
       latestState.heartbeat_role = 'LIVENESS_ONLY';

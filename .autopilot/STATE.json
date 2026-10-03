@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261003-126",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-03T09:26:08.099Z",
+  "updated_at": "2026-10-03T14:47:59.226Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -51,10 +51,10 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-03T14:11:19.420Z",
   "state": "IMPLEMENT",
-  "last_action": "u8 Full Regression（TRACK A 具名项）通过：全量 API 套件 263 文件 / 2637 用例全绿（约 17 分钟），由 CONTINUOUS runner 连续执行并留档",
+  "last_action": "GLOBAL BACKLOG DISPATCHER 落地并验收：静态单元耗尽后自动 materialize 并执行 backlog（BG-001 72 用例 / BG-002 132 用例 / BG-005 19 用例）",
   "last_action_at": "2026-10-03T14:17:18.723Z",
-  "next_action": "继续消费 SAFE_CONTINUATION_QUEUE：注册下一批 backlog 单元（customs G4 HTTP 写入侧接线验证 / 平台域 adapter 只读闭环 / 独立站支付域内部链证据），并保持 CI 非阻塞巡检",
-  "current_head": "749040c",
+  "next_action": "继续消费 SAFE_CONTINUATION_QUEUE：BG-003 / BG-004；BG-006（Production Candidate 预检）为 HOST_ACTION_REQUIRED，已登记并跳过",
+  "current_head": "989a486",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -4865,14 +4865,17 @@
     "u5-doc-sync-guard",
     "u6-carrier-suite",
     "u7-money-chain-suite",
-    "u8-full-regression"
+    "u8-full-regression",
+    "BG-001-platform-adapter-readonly-closure",
+    "BG-002-settlement-billing-linkage-evidence",
+    "BG-005-customs-g4-evidence-chain-verification"
   ],
   "last_unit": {
-    "id": "u8-full-regression",
-    "at": "2026-10-03T14:43:54.718Z",
-    "head_before": "0d71cb4",
-    "head_after": "b30f3e2",
-    "detail": "FULL_REGRESSION_PASS  Test Files  263 passed (263) |       Tests  2637 passed (2637) durationMs=1020255"
+    "id": "BG-005-customs-g4-evidence-chain-verification",
+    "at": "2026-10-03T14:47:39.251Z",
+    "head_before": "989a486",
+    "head_after": "989a486",
+    "detail": " Test Files  4 passed (4) |       Tests  19 passed (19)"
   },
   "autopilot_mode": "CONTINUOUS",
   "heartbeat_role": "LIVENESS_ONLY",
@@ -4898,5 +4901,28 @@
     "u8_full_regression": "FULL_REGRESSION_PASS 263 files / 2637 tests passed（durationMs=1020255）",
     "track_a_full_regression": "DONE（本地全量回归通过；CI 侧每笔 commit 亦 success）"
   },
-  "ci_confirmed_at": "2026-10-03T14:43:07.357Z"
+  "ci_confirmed_at": "2026-10-03T14:43:07.357Z",
+  "dispatched_completed": [
+    "BG-001-platform-adapter-readonly-closure",
+    "BG-002-settlement-billing-linkage-evidence",
+    "BG-005-customs-g4-evidence-chain-verification"
+  ],
+  "host_action_required": [],
+  "dispatched_units": [
+    "BG-001-platform-adapter-readonly-closure",
+    "BG-002-settlement-billing-linkage-evidence",
+    "BG-005-customs-g4-evidence-chain-verification",
+    "BG-003-dashboard-ops-readonly-evidence"
+  ],
+  "runner_status": "RUNNING",
+  "global_backlog_dispatcher": "VERIFIED",
+  "static_unit_dependency": "REMOVED",
+  "safe_continuation_queue": "ACTIVE",
+  "full_autonomous_internal_execution": "VERIFIED",
+  "dispatcher_acceptance": {
+    "at": "2026-10-03T14:47:59.226Z",
+    "preset": "static units 全部 completed（8 个）",
+    "sequence": "BG-001(72 tests) → BG-002(132 tests) → BG-005(19 tests) → BG-003（继续）",
+    "note": "无 heartbeat/scheduler/人工唤醒；仅因验收 --max-units 3 暂停"
+  }
 }

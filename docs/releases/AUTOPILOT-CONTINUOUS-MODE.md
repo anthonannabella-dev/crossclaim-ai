@@ -67,3 +67,35 @@ WATCHDOG=RUNNER_HEALTHY pid=45612 heartbeatAgeMs=11823 (no second runner started
 - **CI 非阻塞**：commit 后记录 `ci_pending`（run id/状态），不等待；存在不冲突安全单元则立即执行；后续循环复查；**红灯才进入 SELF_RESOLVE**。
 - **审计非阻塞**：`READY_FOR_REVIEW` 时记录 `awaiting_verdict`；不依赖该 verdict 的安全单元继续执行；新 verdict 到达时优先 reconcile。
 - 单元 u3（`ci-triage`）即该语义的可执行实现：巡检最近提交的 CI 状态并写入 `ci_pending` / `ci_red`。
+
+## 6. GLOBAL BACKLOG DISPATCHER（FINAL GAP 2026-10-03）
+
+| 项 | 值 |
+|---|---|
+| `GLOBAL_BACKLOG_DISPATCHER` | **VERIFIED** |
+| `STATIC_UNIT_DEPENDENCY` | **REMOVED**（静态 registry 清空不再导致停止） |
+| `SAFE_CONTINUATION_QUEUE` | **ACTIVE**（backlog.json 的未完成安全项被真实消费） |
+| `FULL_AUTONOMOUS_INTERNAL_EXECUTION` | **VERIFIED** |
+
+实现：`tools/autopilot/dispatcher.mjs` + `tools/autopilot/backlog.json` + `tools/autopilot/unit-templates/{suite-evidence,doc-sync,host-required-register}.mjs`。
+选择顺序：P0/P1 未关闭 → 当前 Gate 未关闭 → 已批准 GLOBAL GAP → 平台/Carrier/Customs/Independent-site/Settlement-Billing 内部链 → 回归/文档/发布证据；
+HOST_ACTION_REQUIRED / ARCH_REVIEW 项**登记并跳过**，继续寻找其它安全任务。materialize 的单元记录 source_backlog_id / title / scope / acceptance_criteria / dependencies / risk_class / ARCH_REVIEW_REQUIRED / HOST_ACTION_REQUIRED / HOLD_EXTERNAL / allowed_files / boundary / required_tests。
+
+### 6.1 真实验收（预置：static units 全部 completed；一次启动）
+
+```text
+PRESET_STATIC_COMPLETED=8
+RUNNER_STARTED pid=45020 mode=CONTINUOUS
+DISPATCHER_PICK=BG-001-platform-adapter-readonly-closure
+UNIT_RESULT={"id":"BG-001-platform-adapter-readonly-closure","ok":true,"detail":" Test Files  8 passed (8) |       Tests  72 passed (72)"}
+CONTINUE_IMMEDIATELY next_unit_pending=true
+DISPATCHER_PICK=BG-002-settlement-billing-linkage-evidence
+UNIT_RESULT={"id":"BG-002-settlement-billing-linkage-evidence","ok":true,"detail":" Test Files  15 passed (15) |       Tests  132 passed (132)"}
+CONTINUE_IMMEDIATELY next_unit_pending=true
+DISPATCHER_PICK=BG-005-customs-g4-evidence-chain-verification
+UNIT_RESULT={"id":"BG-005-customs-g4-evidence-chain-verification","ok":true,"detail":" Test Files  4 passed (4) |       Tests  19 passed (19)"}
+CONTINUE_IMMEDIATELY next_unit_pending=true
+DISPATCHER_PICK=BG-003-dashboard-ops-readonly-evidence（继续执行中；本次仅为验收设 --max-units 3）
+```
+
+结论：static queue 空 → dispatcher 自动发现 A → materialize A → execute A → 自动发现 B → execute B → 自动发现 C → execute C，全过程无 heartbeat / scheduler / 人工唤醒。

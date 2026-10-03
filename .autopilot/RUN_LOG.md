@@ -1577,3 +1577,19 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 
 ## 2026-10-03T14:43:54.682Z — CONTINUOUS u8-full-regression
 - FULL_REGRESSION_PASS  Test Files  263 passed (263) |       Tests  2637 passed (2637) durationMs=1020255
+
+## 2026-10-03T14:47:01.362Z — BACKLOG BG-001-platform-adapter-readonly-closure
+- 平台域只读 adapter 闭环证据（Amazon 只读 adapter + 连接/账号 lineage + opportunity 信号）
+-  Test Files  8 passed (8) |       Tests  72 passed (72)
+
+## 2026-10-03T14:47:22.941Z — BACKLOG BG-002-settlement-billing-linkage-evidence
+- Settlement–Billing 联动与 fee guard 证据（资金真值链只读复核）
+-  Test Files  15 passed (15) |       Tests  132 passed (132)
+
+## 2026-10-03T14:47:39.219Z — BACKLOG BG-005-customs-g4-evidence-chain-verification
+- Customs G4 证据链 HTTP/E2E 现状复核
+-  Test Files  4 passed (4) |       Tests  19 passed (19)
+
+## 2026-10-03T14:47:59.226Z — GLOBAL BACKLOG DISPATCHER 验收
+- AUTOPILOT_MODE=CONTINUOUS / GLOBAL_BACKLOG_DISPATCHER=VERIFIED / STATIC_UNIT_DEPENDENCY=REMOVED / SAFE_CONTINUATION_QUEUE=ACTIVE / FULL_AUTONOMOUS_INTERNAL_EXECUTION=VERIFIED
+- 一次启动：static 空 → BG-001 → BG-002 → BG-005 连续执行（无 heartbeat）

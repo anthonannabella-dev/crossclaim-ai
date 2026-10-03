@@ -1,0 +1,167 @@
+{
+  "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。",
+  "updatedAt": "2026-10-03T14:45:21.400Z",
+  "selection_order": [
+    "P0/P1 未关闭缺口",
+    "当前 Gate 未关闭项",
+    "已批准 GLOBAL GAP",
+    "平台域 / Carrier / Customs / Independent-site / Settlement-Billing 未完成内部链",
+    "回归 / 文档 / 发布证据"
+  ],
+  "items": [
+    {
+      "id": "BG-001-platform-adapter-readonly-closure",
+      "priority": "P1",
+      "source_backlog_id": "REGISTER-A1（Platform Recovery PARTIAL）",
+      "title": "平台域只读 adapter 闭环证据（Amazon 只读 adapter + 连接/账号 lineage + opportunity 信号）",
+      "scope": "核对平台域只读链当前实现状态并留档（adapter capability → connection/account lineage → opportunity signal）",
+      "acceptance_criteria": "相关套件全绿；证据写入 RUN_LOG；零外写",
+      "dependencies": [],
+      "risk_class": "LOW",
+      "ARCH_REVIEW_REQUIRED": false,
+      "HOST_ACTION_REQUIRED": false,
+      "HOLD_EXTERNAL": true,
+      "allowed_files": [
+        "apps/api/src/**（只读测试）",
+        ".autopilot/RUN_LOG.md"
+      ],
+      "boundary": "READ_ONLY / NO_EXTERNAL_WRITE / NO_PRODUCTION_CREDENTIALS",
+      "required_tests": [
+        "adapter-capability",
+        "amazon",
+        "connection"
+      ],
+      "template": "suite-evidence",
+      "filters": [
+        "adapter-capability",
+        "amazon",
+        "connection"
+      ]
+    },
+    {
+      "id": "BG-002-settlement-billing-linkage-evidence",
+      "priority": "P1",
+      "source_backlog_id": "REGISTER-A13/A15（Settlement / Fee Preview PARTIAL）",
+      "title": "Settlement–Billing 联动与 fee guard 证据（资金真值链只读复核）",
+      "scope": "核对 settlement/billing/fee 链与 fee guard 收口证据",
+      "acceptance_criteria": "相关套件全绿；证据写入 RUN_LOG；HOLD_EXTERNAL 保持",
+      "dependencies": [],
+      "risk_class": "MEDIUM",
+      "ARCH_REVIEW_REQUIRED": false,
+      "HOST_ACTION_REQUIRED": false,
+      "HOLD_EXTERNAL": true,
+      "allowed_files": [
+        "apps/api/src/**（只读测试）",
+        ".autopilot/RUN_LOG.md"
+      ],
+      "boundary": "NO_REAL_MONEY / NO_AUTOPAY / NO_COLLECTION",
+      "required_tests": [
+        "settlement",
+        "billing",
+        "fee-guard"
+      ],
+      "template": "suite-evidence",
+      "filters": [
+        "settlement",
+        "billing",
+        "fee"
+      ]
+    },
+    {
+      "id": "BG-003-dashboard-ops-readonly-evidence",
+      "priority": "P2",
+      "source_backlog_id": "REGISTER-A16（Dashboard / Admin / Operations PARTIAL）",
+      "title": "Dashboard / Admin / Operations 只读面证据",
+      "scope": "核对 admin/operations 只读面与 RBAC 现状并留档",
+      "acceptance_criteria": "相关套件全绿；证据写入 RUN_LOG",
+      "dependencies": [],
+      "risk_class": "LOW",
+      "ARCH_REVIEW_REQUIRED": false,
+      "HOST_ACTION_REQUIRED": false,
+      "HOLD_EXTERNAL": true,
+      "allowed_files": [
+        "apps/api/src/**（只读测试）",
+        ".autopilot/RUN_LOG.md"
+      ],
+      "boundary": "READ_ONLY",
+      "required_tests": [
+        "admin",
+        "operations"
+      ],
+      "template": "suite-evidence",
+      "filters": [
+        "admin",
+        "operations"
+      ]
+    },
+    {
+      "id": "BG-004-docs-release-evidence-sync",
+      "priority": "P2",
+      "source_backlog_id": "REGISTER-A20（HTTP/DB/Schema/Frontend/Tests/CI/Docs PARTIAL）",
+      "title": "文档与发布证据同步守卫（README / API.md / 差集登记表 ↔ 代码）",
+      "scope": "核对文档声明与最新代码事实",
+      "acceptance_criteria": "doc-sync 守卫全绿",
+      "dependencies": [],
+      "risk_class": "LOW",
+      "ARCH_REVIEW_REQUIRED": false,
+      "HOST_ACTION_REQUIRED": false,
+      "HOLD_EXTERNAL": true,
+      "allowed_files": [
+        "README.md",
+        "API.md",
+        "docs/releases/**"
+      ],
+      "boundary": "DOC_ONLY",
+      "required_tests": [
+        "doc-sync-guard"
+      ],
+      "template": "doc-sync"
+    },
+    {
+      "id": "BG-005-customs-g4-evidence-chain-verification",
+      "priority": "P1",
+      "source_backlog_id": "GAP G11（Customs G4 HTTP 接线）",
+      "title": "Customs G4 证据链 HTTP/E2E 现状复核",
+      "scope": "核对 customs 证据链只读路由与 E2E 现状（401/403/404/200 + 租户隔离）",
+      "acceptance_criteria": "customs 证据链套件全绿；证据写入 RUN_LOG",
+      "dependencies": [],
+      "risk_class": "MEDIUM",
+      "ARCH_REVIEW_REQUIRED": false,
+      "HOST_ACTION_REQUIRED": false,
+      "HOLD_EXTERNAL": true,
+      "allowed_files": [
+        "apps/api/src/**（只读测试）",
+        ".autopilot/RUN_LOG.md"
+      ],
+      "boundary": "NO_FILING / NO_EXTERNAL_WRITE",
+      "required_tests": [
+        "customs-return-claim-evidence",
+        "customs-claim-ready-http"
+      ],
+      "template": "suite-evidence",
+      "filters": [
+        "customs-return-claim-evidence",
+        "customs-claim-ready-http"
+      ]
+    },
+    {
+      "id": "BG-006-production-candidate-preflight",
+      "priority": "P1",
+      "source_backlog_id": "TRACK A（Production Candidate 前置）",
+      "title": "Production Candidate 预检（只登记 HOST_ACTION_REQUIRED，不执行）",
+      "scope": "登记生产部署 / DNS / 付费服务 / 生产凭据等待宿主批准项",
+      "acceptance_criteria": "仅登记清单，零外部动作",
+      "dependencies": [],
+      "risk_class": "HIGH",
+      "ARCH_REVIEW_REQUIRED": true,
+      "HOST_ACTION_REQUIRED": true,
+      "HOLD_EXTERNAL": true,
+      "allowed_files": [
+        ".autopilot/STATE.json"
+      ],
+      "boundary": "SKIP_AND_REGISTER_ONLY",
+      "required_tests": [],
+      "template": "host-required-register"
+    }
+  ]
+}
