@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261003-143",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-03T17:08:36.692Z",
+  "updated_at": "2026-10-03T17:24:07.136Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -51,9 +51,9 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-03T14:11:19.420Z",
   "state": "IMPLEMENT",
-  "last_action": "MSG-20261003-143 已逐字归档（FULL_COPY_OK）：BG-019 = PASS / CLOSED（四域 frontend cell 全 COVERED）",
+  "last_action": "INDEPENDENT FINAL AUDIT REQUEST v2 已送审：Issue #2 comment 5971618294（HEAD 1729cb9，Layer 1 14/14）",
   "last_action_at": "2026-10-03T14:17:18.723Z",
-  "next_action": "按架构方指示回到 Independent Final Audit 总验收：重核 Layer 1 14/14 + Acceptance Head/CI + 四份状态一致 + 剩余内部 backlog；如 CODE_COMPLETE=YES 则生成 FINAL-ACCEPTANCE-REPORT 并提交 INDEPENDENT FINAL AUDIT REQUEST v2",
+  "next_action": "发送唤醒并读取 v2 裁决；PASS → 记录（PRODUCTION_READY 仍由宿主决定）；REVISE → 逐项修",
   "current_head": "8902185",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
@@ -4990,12 +4990,12 @@
       "④ Production Candidate register only"
     ]
   },
-  "awaiting_verdict": false,
+  "awaiting_verdict": true,
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-03T17:23:18.517Z",
-    "head": "76497f4",
-    "acceptance_head": "76497f4",
+    "computed_at": "2026-10-03T17:24:07.927Z",
+    "head": "1729cb9",
+    "acceptance_head": "1729cb9",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5004,6 +5004,7 @@
     "INTERNAL_CODE_COMPLETE": false,
     "INDEPENDENT_FINAL_AUDIT_REQUIRED": true,
     "OPEN_INTERNAL_ITEMS": [
+      "CHECK:L1-03_no_open_markers",
       "CHECK:L1-10_git_working_tree_clean"
     ],
     "HOST_ACTION_REQUIRED": [
@@ -5045,13 +5046,13 @@
       },
       "L1-03_no_open_markers": {
         "label": "不存在 TODO/IN_PROGRESS/PARTIAL/READY_FOR_REVIEW/WAITING_FOR_VERDICT/未处理 REVISE·BLOCK",
-        "status": true,
-        "evidence": "arch_pending=0 awaiting_verdict=false"
+        "status": false,
+        "evidence": "arch_pending=0 awaiting_verdict=true"
       },
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": true,
-        "evidence": "acceptance_head=76497f4 ci_head=76497f4 ci=in_progress run=37140224116 last_success=503b106/37139449952"
+        "evidence": "acceptance_head=1729cb9 ci_head=76497f4 ci=in_progress run=37140224116 last_success=503b106/37139449952"
       },
       "L1-05_pg_regression_passed": {
         "status": true,
@@ -5076,7 +5077,7 @@
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
         "status": false,
-        "evidence": "dirty entries: 6"
+        "evidence": "dirty entries: 7"
       },
       "L1-11_docs_state_consistent": {
         "status": true,
@@ -5453,5 +5454,18 @@
     "closed_at": "2026-10-03T16:45:10.253Z"
   },
   "ci_last_success_head": "503b106",
-  "ci_last_success_run": "37139449952"
+  "ci_last_success_run": "37139449952",
+  "independent_final_audit_v2": {
+    "at": "2026-10-03T17:23:44.761Z",
+    "head": "1729cb9",
+    "doc": "docs/releases/INDEPENDENT-FINAL-AUDIT-REQUEST-V2.md",
+    "github_comment_id": "5971618294",
+    "verdict": null,
+    "wakeup_sent_at": "2026-10-03T17:24:07.135Z",
+    "wakeup_verification": [
+      "composer cleared",
+      "marker 5971618294 at bottom",
+      "generating"
+    ]
+  }
 }
