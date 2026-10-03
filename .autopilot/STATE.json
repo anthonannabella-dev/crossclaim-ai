@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261003-135",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-03T15:54:17.396Z",
+  "updated_at": "2026-10-03T15:55:56.307Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -51,9 +51,9 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-03T14:11:19.420Z",
   "state": "IMPLEMENT",
-  "last_action": "MSG-20261003-135 已逐字归档（FULL_COPY_OK）并执行 CHANGE A：final-status 改为 14 项逐条实证 + evidence 绑定 acceptance HEAD；运行态文件移出 git 跟踪",
+  "last_action": "BG-013 Schema Delta 唤醒已投递并三要素验证（composer 清空 / marker 在底部 / 生成中）",
   "last_action_at": "2026-10-03T14:17:18.723Z",
-  "next_action": "CHANGE B（单一 Acceptance Head + 四份状态一致 guard）→ CHANGE C（四域 Golden Path Matrix）→ CHANGE D（Independent-site 内部闭环）→ CHANGE E（前端/HTTP 收口）",
+  "next_action": "CHANGE B：单一 Acceptance Head + 四份状态一致 guard（BG-016）；随后 CHANGE C（BG-017）→ CHANGE D（BG-018）→ CHANGE E（BG-019）；BG-013 待架构方裁决",
   "current_head": "8902185",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
@@ -5111,8 +5111,14 @@
     "head": "376d64c",
     "doc": "docs/releases/BG013-IOR-SCHEMA-DELTA-REQUEST.md",
     "github_comment_id": "5970773400",
-    "wakeup_sent_at": null,
-    "verdict": null
+    "wakeup_sent_at": "2026-10-03T15:55:56.307Z",
+    "verdict": null,
+    "wakeup_channel": "https://chatgpt.com/c/6ac0c3b8-30a4-83ec-a529-4d9b04ffa0e7",
+    "wakeup_verification": [
+      "composer cleared",
+      "marker 5970773400 present at transcript bottom",
+      "generating (stop control present)"
+    ]
   },
   "bg012": {
     "status": "DONE（MSG-20261003-134：端点+customs.recovery.chain.run/INTERNAL_WRITE+角色矩阵+immutable execution identity+路由级 E2E 4/4+API.md 90/77）"

@@ -1652,3 +1652,6 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 已逐字归档（FULL_COPY_OK）；CODE_COMPLETE 回退为 NO，AUTONOMOUS_INTERNAL_WORK=RUNNING。
 - CHANGE A 实施：final-status 14 项逐条 + evidence 绑定 acceptance HEAD + 无默认 true + 工作树无静默豁免。
 - CHANGE B–E 登记为 BG-016..BG-019，重新进入 SAFE_CONTINUATION_QUEUE。
+
+## 2026-10-03T15:55:56.307Z — BG-013 唤醒投递
+- 三要素验证通过（composer 清空 / marker 在底部 / 生成中）；等待编号裁决。
