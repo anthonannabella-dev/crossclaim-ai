@@ -1,11 +1,11 @@
 # FINAL ACCEPTANCE REPORT（自动生成，请勿手改）
 
-- 生成时间：2026-10-03T17:37:45.392Z
+- 生成时间：2026-10-03T17:50:38.944Z
 - 单一权威矩阵：`docs/releases/ACCEPTANCE-MATRIX.json` @bd87ffb
-- acceptance HEAD：`bd87ffb`
+- acceptance HEAD：`4c9425a`
 - 协议：`docs/releases/FINAL-ACCEPTANCE-PROTOCOL.md`（三层验收；禁止自证）
-- 状态：CODE_COMPLETE=NO · INTEGRATION_COMPLETE=NO · REAL_VALIDATION_COMPLETE=NO · PRODUCTION_READY=NO
-- INTERNAL_READY=NO；AUTONOMOUS_INTERNAL_WORK=RUNNING
+- 状态：CODE_COMPLETE=YES · INTEGRATION_COMPLETE=NO · REAL_VALIDATION_COMPLETE=NO · PRODUCTION_READY=NO
+- INTERNAL_READY=YES；AUTONOMOUS_INTERNAL_WORK=EXHAUSTED
 - INDEPENDENT_FINAL_AUDIT_REQUIRED = TRUE（独立审计完成前不得置 PRODUCTION_READY=YES）
 
 ## 1. 验收项（派生自 ACCEPTANCE-MATRIX.json）
@@ -40,7 +40,6 @@
 
 ### Layer 1 未通过检查（final-status 计算器输出；UNVERIFIED = 未绑定当前 HEAD 的实证）
 
-- L1-04_full_ci_success_on_head → false（acceptance_head=bd87ffb ci_head=bd87ffb ci=in_progress run=37141076705）
 
 ## 3. 外部 / 宿主依赖（不得自证完成）
 
