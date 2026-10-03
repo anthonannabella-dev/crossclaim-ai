@@ -38,6 +38,8 @@ const sha = head();
 const auth = token();
 let status = 'UNKNOWN';
 let runId = '';
+let lastSuccessHead = '';
+let lastSuccessRun = '';
 if (sha && auth) {
   try {
     const res = await fetch('https://api.github.com/repos/' + REPO + '/actions/runs?head_sha=' + sha + '&per_page=1', {
@@ -56,10 +58,31 @@ if (sha && auth) {
   }
 }
 
+// 追加：最近一次成功的 CI（用于「簿记提交不使产品实证失效」的验收规则）
+if (sha && auth) {
+  try {
+    const res = await fetch('https://api.github.com/repos/' + REPO + '/actions/runs?branch=gate/7-commercial-validation&per_page=15', {
+      headers: { Authorization: 'Bearer ' + auth, Accept: 'application/vnd.github+json', 'User-Agent': 'crossclaim-codex-ci' },
+    });
+    if (res.ok) {
+      const json2 = await res.json();
+      const successRun = (json2.workflow_runs ?? []).find((item) => item.status === 'completed' && item.conclusion === 'success');
+      if (successRun) {
+        lastSuccessHead = String(successRun.head_sha).slice(0, 7);
+        lastSuccessRun = String(successRun.id);
+      }
+    }
+  } catch {
+    /* 保持既有值 */
+  }
+}
+
 const state = JSON.parse(fs.readFileSync(STATE, 'utf8'));
 state.ci_status_head = sha.slice(0, 7);
 state.ci_status = status === "success" ? "success" : status;
 state.ci_run_id = runId;
 state.ci_checked_at = new Date().toISOString();
+if (lastSuccessHead) state.ci_last_success_head = lastSuccessHead;
+if (lastSuccessRun) state.ci_last_success_run = lastSuccessRun;
 fs.writeFileSync(STATE, JSON.stringify(state, null, 2) + "\n", "utf8");
 console.log("CI_STATUS=" + state.ci_status + " HEAD=" + state.ci_status_head + " RUN=" + runId);
