@@ -156,6 +156,30 @@
       "table": "CustomsEntryDutyLineRecord",
       "tgtype": 27,
       "semantics": "BEFORE UPDATE OR DELETE → 拒绝（G4/Q2：duty line 属于 immutable evidence snapshot）"
+    },
+    {
+      "name": "cc_append_only__CustomsDutyTruthRecord",
+      "table": "CustomsDutyTruthRecord",
+      "tgtype": 27,
+      "semantics": "BEFORE UPDATE OR DELETE → 拒绝（G4/Q2：计算投影 append-only；重算必须新增投影行，latest 由 computedAt 推导）"
+    },
+    {
+      "name": "cc_append_only__CustomsDiscrepancyRecord",
+      "table": "CustomsDiscrepancyRecord",
+      "tgtype": 27,
+      "semantics": "BEFORE UPDATE OR DELETE → 拒绝（G4/Q2：计算投影 append-only；重算必须新增投影行，latest 由 computedAt 推导）"
+    },
+    {
+      "name": "cc_append_only__CustomsEligibilityRecord",
+      "table": "CustomsEligibilityRecord",
+      "tgtype": 27,
+      "semantics": "BEFORE UPDATE OR DELETE → 拒绝（G4/Q2：计算投影 append-only；重算必须新增投影行，latest 由 computedAt 推导）"
+    },
+    {
+      "name": "cc_append_only__CustomsRecoveryEstimateRecord",
+      "table": "CustomsRecoveryEstimateRecord",
+      "tgtype": 27,
+      "semantics": "BEFORE UPDATE OR DELETE → 拒绝（G4/Q2：计算投影 append-only；重算必须新增投影行，latest 由 computedAt 推导）"
     }
   ],
   "unexpectedPrefixes": [

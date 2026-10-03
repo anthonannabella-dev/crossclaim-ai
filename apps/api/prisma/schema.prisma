@@ -365,6 +365,10 @@ model Organization {
   customsSubmissionAttempts          CustomsSubmissionAttempt[]
   customsEntryFacts                  CustomsEntryFactRecord[]
   customsEntryDutyLines              CustomsEntryDutyLineRecord[]
+  customsDutyTruthRecordList CustomsDutyTruthRecord[]
+  customsDiscrepancyRecordList CustomsDiscrepancyRecord[]
+  customsEligibilityRecordList CustomsEligibilityRecord[]
+  customsRecoveryEstimateRecordList CustomsRecoveryEstimateRecord[]
   customsSubmissionAttemptFacts      CustomsSubmissionAttemptFact[]
   fileAssets                         FileAsset[]
   importBatches                      ImportBatch[]
@@ -2542,6 +2546,10 @@ model CustomsEntryFactRecord {
 
   organization Organization                @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   dutyLines    CustomsEntryDutyLineRecord[]
+  dutyTruthRecords    CustomsDutyTruthRecord[]
+  discrepancyRecords  CustomsDiscrepancyRecord[]
+  eligibilityRecords  CustomsEligibilityRecord[]
+  estimateRecords     CustomsRecoveryEstimateRecord[]
 
   @@unique([organizationId, contentDigest])
   @@index([organizationId, entryNumber])
@@ -2564,4 +2572,79 @@ model CustomsEntryDutyLineRecord {
   @@unique([factId, lineOrdinal])
   @@index([factId, rawCode, currency])
   @@index([organizationId, factId])
+}
+
+model CustomsDutyTruthRecord {
+  id               String   @id
+  organizationId   String
+  inputFactId      String
+  inputDigest      String
+  algorithmVersion String
+  resultDigest     String
+  computedAt       DateTime
+  payload          Json
+  createdAt        DateTime @default(now())
+
+  organization Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  inputFact    CustomsEntryFactRecord @relation(fields: [inputFactId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, inputFactId, computedAt])
+}
+
+
+model CustomsDiscrepancyRecord {
+  id               String   @id
+  organizationId   String
+  inputFactId      String
+  inputDigest      String
+  algorithmVersion String
+  resultDigest     String
+  computedAt       DateTime
+  payload          Json
+  createdAt        DateTime @default(now())
+
+  organization Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  inputFact    CustomsEntryFactRecord @relation(fields: [inputFactId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, inputFactId, computedAt])
+}
+
+
+model CustomsEligibilityRecord {
+  id               String   @id
+  organizationId   String
+  inputFactId      String
+  inputDigest      String
+  algorithmVersion String
+  resultDigest     String
+  computedAt       DateTime
+  policyId         String
+  policyVersion    String
+  payload          Json
+  createdAt        DateTime @default(now())
+
+  organization Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  inputFact    CustomsEntryFactRecord @relation(fields: [inputFactId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, inputFactId, computedAt])
+}
+
+
+model CustomsRecoveryEstimateRecord {
+  id               String   @id
+  organizationId   String
+  inputFactId      String
+  inputDigest      String
+  algorithmVersion String
+  resultDigest     String
+  computedAt       DateTime
+  policyId         String
+  policyVersion    String
+  payload          Json
+  createdAt        DateTime @default(now())
+
+  organization Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  inputFact    CustomsEntryFactRecord @relation(fields: [inputFactId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId, inputFactId, computedAt])
 }

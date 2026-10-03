@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "4ed8714",
+  "head": "pending",
   "status": "RECONCILED",
   "current_task": "Carrier Queue #6 — SLA EVIDENCE ASSEMBLY + ELIGIBILITY INPUT PLANE：Tracking Fact + Invoice Fact + POD Fact + Carrier Terms Evidence + Service Level Evidence → **ShipmentEvidenceBundle**（只建证据输入层；不得自动认定赔付 / 自动提交 claim / 自动退款 / 调用 carrier write API / 自动产生 recovery amount）。**逐字归档 MSG-111 为第一步。**CarrierInvoiceReadPort + CarrierPODReadPort（verified account lineage、request/response 双向绑定、十进制金额、charge kind 归一化 + raw code 保留、POD 掩码与隐私、safe rawReference）；**read-only**，不做 SLA/退款资格推导。CarrierTrackingReadPort + normalized CarrierTrackingSnapshot（UPS/FedEx provider adapter 分离）+ 状态/事件归一化（确定性排序 + 去重）+ 失败原因分类 + tenant/account lineage 归属；**read-only**（无 mutation / claim / pickup / refund，TRANSPORT=false）。",
   "next_task": "PC-12A 实施 → 本地测试 + tsc api/web + API contract + full CI → PC-12A CHECKPOINT 送审。",
@@ -10,7 +10,7 @@
   "production_enabled": false,
   "external_write_enabled": false,
   "updated_at": "2026-10-03T09:26:08.099Z",
-  "previous_head": "aef8b33",
+  "previous_head": "4ed8714",
   "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "0c35106",
@@ -49,11 +49,11 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-03T10:58:47.293Z",
+  "last_tick_at": "2026-10-03T11:18:45.197Z",
   "state": "IMPLEMENT",
-  "last_action": "Q2 Schema Delta 第一批收口：事实层 append-only 表 + migration + 触发器清单，CI 5/5 success（4ed8714）",
+  "last_action": "Q2 Schema Delta 第二批：新增四个 append-only 计算投影（DutyTruth/Discrepancy/Eligibility/Estimate：inputFactId+inputDigest+algorithmVersion+resultDigest+computedAt+payload，政策型带 policyId/policyVersion）+ migration 20261003110000；prisma validate/generate OK；architecture-contract 142/142；触发器清单 89 baseline / 30 append-only（psql 校验 OK）；模型 67、迁移 50",
   "last_action_at": "2026-10-03T10:28:09.779Z",
-  "next_action": "Q2 Schema Delta 第二批：四个 append-only 计算投影（DutyTruth/Discrepancy/Eligibility/Estimate，带 inputDigest/algorithmVersion/resultDigest + 政策型 policyId/policyVersion）→ 完成后把 CHANGE A/B + migration + C6/C7 合并送 G4 checkpoint",
+  "next_action": "把 CHANGE A/B + 全部 migration + C6/C7 合并为下一次 G4 checkpoint：写 checkpoint 文档 + GitHub Issue #2 留档 + ChatGPT 唤醒送审",
   "current_head": "4ed8714",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-03T10:53:44.103Z",
-    "gapMs": 303190,
+    "previousTickAt": "2026-10-03T11:13:46.997Z",
+    "gapMs": 298201,
     "stale": false,
-    "checkedAt": "2026-10-03T10:58:47.293Z"
+    "checkedAt": "2026-10-03T11:18:45.197Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -4667,12 +4667,16 @@
         "boundary": "handoffOnly=true / filingPerformed=false / submissionPerformed=false / externalWritePerformed=false / transportEnabled=false / productionCredentials=ABSENT"
       },
       "q2_schema": {
-        "status": "IN_PROGRESS（事实层已落库并验证）",
-        "first_batch": "CustomsEntryFactRecord + CustomsEntryDutyLineRecord（append-only；Decimal(38,6)；UNIQUE(factId,lineOrdinal)；INDEX(factId,rawCode,currency)）",
-        "migration": "apps/api/prisma/migrations/20261003100000_customs_entry_fact/migration.sql",
-        "triggers": "tenant 完整性 + 归属不可变 + append-only（清单 85 baseline / 26 append-only；psql 校验 OK）",
-        "counts": "模型 63（57 core + 6 join）；迁移 49 条",
-        "next_batch": "DutyTruth/Discrepancy/Eligibility/Estimate 四个 append-only 计算投影（inputDigest/algorithmVersion/resultDigest + policyId/policyVersion）"
+        "status": "DONE（事实层 + 四个 append-only 计算投影均已落库并验证）",
+        "first_batch": "CustomsEntryFactRecord + CustomsEntryDutyLineRecord",
+        "second_batch": "CustomsDutyTruthRecord / CustomsDiscrepancyRecord / CustomsEligibilityRecord / CustomsRecoveryEstimateRecord",
+        "migrations": [
+          "20261003100000_customs_entry_fact",
+          "20261003110000_customs_computation_projections"
+        ],
+        "triggers": "89 baseline / 30 append-only（psql 校验 OK）",
+        "counts": "模型 67（61 core + 6 join）；迁移 50 条",
+        "latest_rule": "latest 由 ORDER BY computedAt DESC / view 推导，投影 append-only 不 UPDATE"
       }
     },
     "g7": {

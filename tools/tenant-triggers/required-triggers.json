@@ -343,6 +343,22 @@
     {
       "name": "cc_tenant_customsentrydutylinerecord",
       "table": "CustomsEntryDutyLineRecord"
+    },
+    {
+      "name": "cc_tenant_customsdutytruthrecord",
+      "table": "CustomsDutyTruthRecord"
+    },
+    {
+      "name": "cc_tenant_customsdiscrepancyrecord",
+      "table": "CustomsDiscrepancyRecord"
+    },
+    {
+      "name": "cc_tenant_customseligibilityrecord",
+      "table": "CustomsEligibilityRecord"
+    },
+    {
+      "name": "cc_tenant_customsrecoveryestimaterecord",
+      "table": "CustomsRecoveryEstimateRecord"
     }
   ],
   "scopedTriggers": [
