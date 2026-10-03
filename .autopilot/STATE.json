@@ -51,9 +51,9 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-03T14:11:19.420Z",
   "state": "IMPLEMENT",
-  "last_action": "BG-012 收尾完成：POST /customs-entry-facts/:id/recovery-chain 已接线（http-routes+server 白名单+API.md 90/77），路由级 HTTP E2E 4/4（401/403 FINANCE·VIEWER/200 OWNER 含 executionKey 与四个 HOLD 字段/404 未知事实）",
+  "last_action": "INTERNAL_CODE_COMPLETE = TRUE（12/12 检查通过；HEAD 9e84737 CI success run 37133358856）→ AUTONOMOUS_INTERNAL_WORK = EXHAUSTED；FINAL-ACCEPTANCE-REPORT 已刷新",
   "last_action_at": "2026-10-03T14:17:18.723Z",
-  "next_action": "执行 final-status/final-report 重算；若无安全内部项则按协议停留在 HOST_ACTION_REQUIRED/独立审计状态",
+  "next_action": "独立审计：将 FINAL-ACCEPTANCE-REPORT + HEAD/commits/migrations/schema/tests/CI/routes/frontend/backlog 送 ChatGPT 反查（INDEPENDENT_FINAL_AUDIT_REQUIRED=TRUE）；其余为四类外部依赖",
   "current_head": "3d80d60",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
@@ -4890,7 +4890,7 @@
   "singleton_runner": "VERIFIED",
   "ci_pending": [],
   "ci_red": [],
-  "ci_checked_at": "2026-10-03T15:27:43.282Z",
+  "ci_checked_at": "2026-10-03T15:36:37.233Z",
   "continuous_verification": {
     "at": "2026-10-03T14:17:18.723Z",
     "a_to_b_to_c": "VERIFIED（单次启动连续执行 u1→u2→u3，无 heartbeat 唤醒；停止条件 = SAFE_CONTINUATION_QUEUE_EMPTY）",
@@ -4967,18 +4967,15 @@
   "awaiting_verdict": true,
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-03T15:28:07.634Z",
-    "head": "1e67429",
-    "CODE_COMPLETE": "NO",
+    "computed_at": "2026-10-03T15:36:37.373Z",
+    "head": "9e84737",
+    "CODE_COMPLETE": "YES",
     "INTEGRATION_COMPLETE": "NO",
     "REAL_VALIDATION_COMPLETE": "NO",
     "PRODUCTION_READY": "NO",
-    "INTERNAL_CODE_COMPLETE": false,
+    "INTERNAL_CODE_COMPLETE": true,
     "INDEPENDENT_FINAL_AUDIT_REQUIRED": true,
-    "OPEN_INTERNAL_ITEMS": [
-      "CHECK:git_working_tree_clean",
-      "CHECK:full_ci_success_on_head"
-    ],
+    "OPEN_INTERNAL_ITEMS": [],
     "HOST_ACTION_REQUIRED": [
       "BG-006-production-candidate-preflight"
     ],
@@ -5008,8 +5005,8 @@
     "checks": {
       "safe_continuation_queue_zero": true,
       "no_open_internal_items": true,
-      "git_working_tree_clean": false,
-      "full_ci_success_on_head": false,
+      "git_working_tree_clean": true,
+      "full_ci_success_on_head": true,
       "pg_regression_recorded": true,
       "fresh_db_migration_recorded": true,
       "api_typecheck_recorded": true,
@@ -5018,15 +5015,15 @@
       "schema_invariants_recorded": true,
       "negative_paths_recorded": true
     },
-    "AUTONOMOUS_INTERNAL_WORK": "RUNNING"
+    "AUTONOMOUS_INTERNAL_WORK": "EXHAUSTED"
   },
-  "code_complete": "NO",
+  "code_complete": "YES",
   "integration_complete": "NO",
   "real_validation_complete": "NO",
   "production_ready": "NO",
   "independent_final_audit_required": true,
   "final_acceptance_protocol": "ACTIVE（docs/releases/FINAL-ACCEPTANCE-PROTOCOL.md；三层验收 + 4 状态重算 + 独立审计）",
-  "autonomous_internal_work": "RUNNING",
+  "autonomous_internal_work": "EXHAUSTED",
   "arch_review_pending": [],
   "arch_review_request": {
     "head": "1bf8d7b",
@@ -5040,7 +5037,8 @@
     "status": "DONE（MSG-20261003-134：端点+customs.recovery.chain.run/INTERNAL_WRITE+角色矩阵+immutable execution identity+路由级 E2E 4/4+API.md 90/77）"
   },
   "gates_recorded_at": "2026-10-03T15:17:04.369Z",
-  "ci_status_head": "1e67429",
-  "ci_status": "in_progress",
-  "ci_run_id": "37132929683"
+  "ci_status_head": "9e84737",
+  "ci_status": "success",
+  "ci_run_id": "37133358856",
+  "internal_code_complete_at": "2026-10-03T15:36:47.862Z"
 }
