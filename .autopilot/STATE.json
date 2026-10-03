@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261003-140",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-03T16:46:43.127Z",
+  "updated_at": "2026-10-03T16:51:30.291Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -51,9 +51,9 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-03T14:11:19.420Z",
   "state": "IMPLEMENT",
-  "last_action": "BG-019：Independent-site 关键状态只读面完成（后端读模型 + 路由 + 前端卡片，真实 PG 6/6）",
+  "last_action": "BG-019：Platform critical-state read surface 落地（组合既有只读端点，不新增写路径）",
   "last_action_at": "2026-10-03T14:17:18.723Z",
-  "next_action": "BG-019：按 CHANGE E 实现 Platform + Independent-site 的 Golden Path Critical-State Read Surface",
+  "next_action": "提交 BG-019 checkpoint 请架构方确认四域 frontend cell 可判 COVERED",
   "current_head": "8902185",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
@@ -4991,9 +4991,9 @@
   "awaiting_verdict": false,
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-03T16:47:46.841Z",
-    "head": "a0fb52c",
-    "acceptance_head": "a0fb52c",
+    "computed_at": "2026-10-03T16:51:30.705Z",
+    "head": "a64eb97",
+    "acceptance_head": "a64eb97",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5063,27 +5063,27 @@
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=a0fb52c ci_head=c07ff84 ci=UNKNOWN run="
+        "evidence": "acceptance_head=a64eb97 ci_head=c07ff84 ci=UNKNOWN run="
       },
       "L1-05_pg_regression_passed": {
         "status": "UNVERIFIED",
-        "evidence": "pg_regression recorded at 9e57ba3 ≠ acceptance head a0fb52c"
+        "evidence": "pg_regression recorded at 9e57ba3 ≠ acceptance head a64eb97"
       },
       "L1-06_fresh_db_migration_passed": {
         "status": "UNVERIFIED",
-        "evidence": "fresh_db_migration recorded at 9e57ba3 ≠ acceptance head a0fb52c"
+        "evidence": "fresh_db_migration recorded at 9e57ba3 ≠ acceptance head a64eb97"
       },
       "L1-07_api_typecheck_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_api recorded at 9e57ba3 ≠ acceptance head a0fb52c"
+        "evidence": "typecheck_api recorded at 9e57ba3 ≠ acceptance head a64eb97"
       },
       "L1-08_web_typecheck_build_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_web recorded at 4af3432 ≠ acceptance head a0fb52c"
+        "evidence": "typecheck_web recorded at 4af3432 ≠ acceptance head a64eb97"
       },
       "L1-09_no_skipped_critical_tests": {
         "status": "UNVERIFIED",
-        "evidence": "tests_no_skipped recorded at 4af3432 ≠ acceptance head a0fb52c"
+        "evidence": "tests_no_skipped recorded at 4af3432 ≠ acceptance head a64eb97"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
@@ -5092,19 +5092,19 @@
       },
       "L1-11_docs_state_consistent": {
         "status": "UNVERIFIED",
-        "evidence": "docs_sync recorded at 9e57ba3 ≠ acceptance head a0fb52c"
+        "evidence": "docs_sync recorded at 9e57ba3 ≠ acceptance head a64eb97"
       },
       "L1-12_schema_invariants_verified": {
         "status": "UNVERIFIED",
-        "evidence": "schema_invariants recorded at 9e57ba3 ≠ acceptance head a0fb52c"
+        "evidence": "schema_invariants recorded at 9e57ba3 ≠ acceptance head a64eb97"
       },
       "L1-13_negative_paths_covered": {
         "status": "UNVERIFIED",
-        "evidence": "negative_paths recorded at 9e57ba3 ≠ acceptance head a0fb52c"
+        "evidence": "negative_paths recorded at 9e57ba3 ≠ acceptance head a64eb97"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
         "status": "UNVERIFIED",
-        "evidence": "pg_e2e_real recorded at 9e57ba3 ≠ acceptance head a0fb52c"
+        "evidence": "pg_e2e_real recorded at 9e57ba3 ≠ acceptance head a64eb97"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
@@ -5374,12 +5374,13 @@
     "boundary": "readOnly / filingSubmitted=false / transportEnabled=false / externalWritePerformed=false / productionCredentials=ABSENT；不重算（读取前后投影行数不变）"
   },
   "bg019": {
-    "status": "IN_PROGRESS（Customs + Independent-site 已接线；Platform 待补）",
+    "status": "READY_FOR_REVIEW（四域 critical-state read surface 均已接线）",
     "done": [
       "Carrier response + customs filing status 只读卡片（既有）",
       "Customs entry fact + 四类 latest 投影只读卡片（本轮，消费 BG-020 的 GET /customs-entry-facts/:id）",
       "start-recovery / manual-response 表单（既有，受 Action Guard 保护的内部写入）",
-      "Independent-site 关键状态只读面：GET /independent-site-disputes/:disputeReference/state + UI 卡片（五状态分开呈现；PG 6/6）"
+      "Independent-site 关键状态只读面：GET /independent-site-disputes/:disputeReference/state + UI 卡片（五状态分开呈现；PG 6/6）",
+      "Platform Golden Path Critical-State Read Surface：/platform-recovery-state?caseId=（opportunity/qualification 可见项 → claim-ready 包 → 提交状态 → recovered/fee/billing 真值）+ 显式 External submission: NOT ENABLED / NEEDS_MANUAL"
     ],
     "remaining_question": "CHANGE E 要求「四域内部 Golden Path 所需的最小 frontend wiring」或由宿主正式修改协议范围；Platform 与 Independent-site 的「最小」边界需要架构方裁定（避免 Codex 自行降低标准）。"
   },
