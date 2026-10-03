@@ -1,7 +1,7 @@
 {
   "gate": "Gate 7 / Carrier Queue #10 CLOSED → P2 并行（Commercial C10–C11 + Customs C1+/C15–C21）",
   "head": "3e80b52",
-  "status": "RECONCILED",
+  "status": "READY_FOR_REVIEW",
   "current_task": "Carrier Queue #6 — SLA EVIDENCE ASSEMBLY + ELIGIBILITY INPUT PLANE：Tracking Fact + Invoice Fact + POD Fact + Carrier Terms Evidence + Service Level Evidence → **ShipmentEvidenceBundle**（只建证据输入层；不得自动认定赔付 / 自动提交 claim / 自动退款 / 调用 carrier write API / 自动产生 recovery amount）。**逐字归档 MSG-111 为第一步。**CarrierInvoiceReadPort + CarrierPODReadPort（verified account lineage、request/response 双向绑定、十进制金额、charge kind 归一化 + raw code 保留、POD 掩码与隐私、safe rawReference）；**read-only**，不做 SLA/退款资格推导。CarrierTrackingReadPort + normalized CarrierTrackingSnapshot（UPS/FedEx provider adapter 分离）+ 状态/事件归一化（确定性排序 + 去重）+ 失败原因分类 + tenant/account lineage 归属；**read-only**（无 mutation / claim / pickup / refund，TRANSPORT=false）。",
   "next_task": "PC-12A 实施 → 本地测试 + tsc api/web + API contract + full CI → PC-12A CHECKPOINT 送审。",
   "send_head": "07b7009",
@@ -9,13 +9,13 @@
   "last_chatgpt_message": "MSG-20261003-123",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-03T08:25:56.833Z",
+  "updated_at": "2026-10-03T08:29:35.448Z",
   "previous_head": "35ef87f",
-  "architect_decision_pending": false,
+  "architect_decision_pending": true,
   "blocked_scope": null,
-  "last_send_head": "dff7161",
+  "last_send_head": "c5dedaf",
   "last_sent_at": "2026-10-03T08:11:14.015Z",
-  "last_sent_fingerprint": "CARRIER-QUEUE-10-FINAL:persistence-guard-http-read-model",
+  "last_sent_fingerprint": "CUSTOMS-EXECUTION-BOUNDARY-AUDIT:C17+C21+FEECUARD",
   "final_head": "1144401",
   "ci_run": "36949295897",
   "ci_result": "completed_success",
@@ -49,10 +49,10 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-03T08:25:56.833Z",
+  "last_tick_at": "2026-10-03T08:29:35.448Z",
   "state": "IMPLEMENT",
-  "last_action": "P2 并行续做：C19 可信 ingest port（provider/authority 分离、sourceLevel 由 adapter 固定、幂等、时间校验）+ C20 refund→settlement→15% fee 契约层（USER_REPORTED 拒绝、无 verified receipt 拒绝、verified receipt 才产出 15% 且带 provenance、非计费策略 FEE_GUARD_REJECTED）→ 9/9 测试 → tsc api/web 0 → API contract OK → commit/push（PROGRESS）",
-  "last_action_at": "2026-10-03T08:25:56.832Z",
+  "last_action": "把实施前必须审计的三项边界整理为设计/授权请求（C17 Schema Delta / C21 HTTP+Action Guard / fee guard 接入 + 15% 默认策略）→ 写 docs/releases/CUSTOMS-EXECUTION-BOUNDARY-AUDIT-REQUEST.md → 登记 STATE → 进入送审",
+  "last_action_at": "2026-10-03T08:29:35.448Z",
   "next_action": "按 P2 并行开工：① Commercial C10–C11（FeePolicy=15% versioned + estimated fee preview + fee guard + policy provenance；payment/collection 继续 OFF）；② Customs C1+ 与 C15–C21 契约层（C15 已完成；C16 授权就绪、C19 状态/来源、C21 one-click 编排 fail-closed；C17 Schema Delta 与 C18 真实 provider 先送审/待宿主授权）。任一单元完成即 commit/push；READY_FOR_REVIEW 才送审。",
   "current_head": "e060a5f",
   "reviewed_head": "24e27c8",
@@ -4416,5 +4416,15 @@
       "Commercial fee guard 接入既有 FeeCalculation 创建路径（资金链路，需审计）",
       "C18 真实 Filing/Broker provider 接入（HOST APPROVAL REQUIRED）"
     ]
+  },
+  "customs_boundary_audit_request": {
+    "status": "SENT_PENDING_VERDICT",
+    "doc": "docs/releases/CUSTOMS-EXECUTION-BOUNDARY-AUDIT-REQUEST.md",
+    "asks": [
+      "C17 CustomsSubmissionAttempt Schema Delta",
+      "C21 HTTP 路由 + customs.recovery.start Action Guard / RBAC（C17 落地前不执行 filing）",
+      "Commercial fee guard 接入既有 FeeCalculation 路径 + 默认 FeePolicy 15% 落地方式"
+    ],
+    "sent_at": "2026-10-03T08:29:35.416Z"
   }
 }
