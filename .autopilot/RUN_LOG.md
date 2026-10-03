@@ -1749,3 +1749,7 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 
 ## 2026-10-03T18:19:48.749Z — INDEPENDENT FINAL AUDIT = PASS
 - MSG-20261003-147；三元闭环成立；内部代码开发阶段完成；停止自动扩内部 backlog。
+
+## 2026-10-03T22:29:16.413Z — STATE 台账救济
+- 分类：STALE_AUTOPILOT_STATE（automation_status=ACTIVE / state=IMPLEMENT / 旧 Carrier Queue current_task / 旧 PC-12A next_task）。
+- 处置：改为 STOPPED_INTERNAL_COMPLETE / TERMINAL_INTERNAL_COMPLETE，清空 current/next task 并写入 Layer 3 优先级与 provider 真实状态；未触碰 FINAL_ACCEPTANCE_HEAD。

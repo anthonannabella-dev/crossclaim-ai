@@ -1,3 +1,10 @@
+# TASKS（CrossClaim AUTOPILOT）
+
+- **状态：内部自治开发已结束**（INDEPENDENT FINAL AUDIT = PASS，MSG-20261003-147；FINAL_ACCEPTANCE_HEAD `0f7f7ac`）。
+- 本文件不再承载可执行的内部 backlog；剩余为 Layer 3 外部依赖，需宿主逐项授权（见 STATE.layer3_priority）。
+
+---
+
 ## CARRIER QUEUE #3 — UPS / FEDEX AUTH + ACCOUNT DISCOVERY INTERNAL CONTRACT（当前执行单元）
 
 - 裁决：MSG-20261003-105 ⑤⑭ —— PC-12A = PASS/CLOSED；正式授权 **CARRIER QUEUE #3**；PC-12B / Carrier 生产凭据继续 HOLD_EXTERNAL。
