@@ -65,6 +65,7 @@ import { postCustomsRecoveryChain } from '../customs/customs-recovery-chain-http
 import { getCustomsEntryFactReadModel } from '../customs/customs-claim-ready-http';
 import type { CustomsEntryFactStore } from '../customs/customs-entry-fact-store';
 import { getIndependentSiteRecoveryState } from '../independent-site/ps04-state-read';
+import { getQualificationReadProjection } from '../commercial/qualification-read';
 import {
   PlatformWriteRequestError,
   requestPlatformWrite,
@@ -242,6 +243,8 @@ const CUSTOMS_CHAIN_RUN_PATH = /^\/customs-entry-facts\/([^/]+)\/recovery-chain$
 const CUSTOMS_ENTRY_FACT_READ_PATH = /^\/customs-entry-facts\/([^/]+)$/;
 /** BG-019（CHANGE E）：Independent-site Golden Path Critical-State Read Surface（只读）。 */
 const INDEPENDENT_SITE_STATE_PATH = /^\/independent-site-disputes\/([^/]+)\/state$/;
+/** CHANGE A（MSG-20261003-141）：Platform qualification 只读判定投影。 */
+const PLATFORM_QUALIFICATION_READ_PATH = /^\/platform-accounts\/([^/]+)\/qualification$/;
 // ② 下一小批次（MSG-20261001-14 §5）：appeal.submit（Appeal 人工提交 · 独立动作与审批绑定）
 const CASE_APPEAL_SUBMIT_PATH = /^\/cases\/([^/]+)\/appeal\/submit$/;
 // R37 P1（MSG-20261001-22 CHANGE A）：平台真实写回入口（EXTERNAL_WRITE · transport 恒关）
@@ -337,6 +340,8 @@ export interface WorkflowRouteDeps {
   customsEntryFactStore?: CustomsEntryFactStore;
   /** BG-019：Independent-site 关键状态只读面。 */
   independentSiteState?: import('../independent-site/ps04-state-read').Ps04StateReadDeps;
+  /** CHANGE A：Platform qualification 只读判定投影。 */
+  qualificationRead?: import('../commercial/qualification-read').QualificationReadDeps;
 }
 
 function sendJson(res: ServerResponse, code: number, payload: unknown): void {
@@ -520,6 +525,7 @@ export async function handleWorkflowRequest(
   const customsChainRun = CUSTOMS_CHAIN_RUN_PATH.exec(path);
   const customsEntryFactRead = CUSTOMS_ENTRY_FACT_READ_PATH.exec(path);
   const ps04StateRead = INDEPENDENT_SITE_STATE_PATH.exec(path);
+  const platformQualificationRead = PLATFORM_QUALIFICATION_READ_PATH.exec(path);
   const caseAppealSubmit = CASE_APPEAL_SUBMIT_PATH.exec(path);
   const casePlatformWrite = CASE_PLATFORM_WRITE_PATH.exec(path);
   const caseRecoveryManualSubmit = CASE_RECOVERY_MANUAL_SUBMIT_PATH.exec(path);
@@ -558,7 +564,7 @@ export async function handleWorkflowRequest(
     adminPermissionMatrix ||
     adminMemberDetail !== null ||
     adminKillSwitch;
-  if (!adminAny && !opportunityList && !caseClaimPackage && !recoveryStates && !recoveryMoney && !accountsPath && !entitlementsPath && !operationsDashboard && !operationsClaims && !operationsRecovery && !review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !paymentReviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !replayPath && !replayReviewPath && !retryDuePath && !retryDueFreezePath && !retryDueReviewPath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim && !caseClaimSubmit && !caseClaimPrepare && !carrierManualSubmission && !carrierClaimResponses && !customsRecovery && !customsReturnEvidence && !customsChainRun && !customsEntryFactRead && !ps04StateRead && !caseBillingDraft && !caseAppealSubmit && !casePlatformWrite && !caseRecoveryManualSubmit && !caseRecoveryManualReference && !caseRecoveryManualApproval && !caseRecoveryManualReferenceApproval &&
+  if (!adminAny && !opportunityList && !caseClaimPackage && !recoveryStates && !recoveryMoney && !accountsPath && !entitlementsPath && !operationsDashboard && !operationsClaims && !operationsRecovery && !review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !paymentReviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !replayPath && !replayReviewPath && !retryDuePath && !retryDueFreezePath && !retryDueReviewPath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim && !caseClaimSubmit && !caseClaimPrepare && !carrierManualSubmission && !carrierClaimResponses && !customsRecovery && !customsReturnEvidence && !customsChainRun && !customsEntryFactRead && !ps04StateRead && !platformQualificationRead && !caseBillingDraft && !caseAppealSubmit && !casePlatformWrite && !caseRecoveryManualSubmit && !caseRecoveryManualReference && !caseRecoveryManualApproval && !caseRecoveryManualReferenceApproval &&
     !commercialPoliciesPath &&
     !commercialPolicyPath &&
     !commercialPolicyAcceptPath &&
@@ -648,7 +654,7 @@ export async function handleWorkflowRequest(
                 ? ['GET', 'POST']
                 : customsChainRun
                   ? ['POST']
-                : customsReturnEvidence || customsEntryFactRead || ps04StateRead
+                : customsReturnEvidence || customsEntryFactRead || ps04StateRead || platformQualificationRead
                   ? ['GET']
                   : customsRecovery
                   ? ['GET', 'POST']
@@ -1516,6 +1522,18 @@ export async function handleWorkflowRequest(
             (async () => null),
         },
         entryFactId,
+      });
+      sendJson(res, result.status, result.body);
+      return true;
+    }
+
+    // CHANGE A（MSG-20261003-141）：Platform qualification 只读判定投影（不重算）。
+    if (platformQualificationRead && method === 'GET') {
+      const platformAccountId = decodeURIComponent(platformQualificationRead[1] ?? '');
+      const result = await getQualificationReadProjection({
+        session: { organizationId: actor.organizationId, actorUserId: actor.actorUserId, role: actor.role },
+        deps: deps.qualificationRead ?? { async loadLatest() { return null; } },
+        platformAccountId,
       });
       sendJson(res, result.status, result.body);
       return true;

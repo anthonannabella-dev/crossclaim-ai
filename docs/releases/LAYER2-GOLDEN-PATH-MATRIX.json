@@ -1,16 +1,17 @@
 {
-  "generated_at": "2026-10-03T16:52:33.730Z",
+  "generated_at": "2026-10-03T16:57:14.841Z",
   "rule": "COVERED 需存在命名证据文件；否则 GAP",
   "domains": [
     {
       "id": "platform",
       "name": "Platform Recovery",
-      "domain_test_files": 11,
+      "domain_test_files": 12,
       "domain_web_files": 11,
       "cells": {
         "http": {
           "status": "COVERED",
           "evidence": [
+            "apps/api/src/__tests__/platform-qualification-read.test.ts",
             "apps/api/src/__tests__/platform-write-golden-path-db.test.ts",
             "apps/api/src/__tests__/platform-write-http-db.test.ts",
             "apps/api/src/__tests__/platform-write-orchestrator-db.test.ts"
@@ -21,8 +22,8 @@
           "evidence": [
             "apps/api/src/__tests__/amazon-sp-connector-runner-db.test.ts",
             "apps/api/src/__tests__/c2-platform-account-identity-db.test.ts",
-            "apps/api/src/__tests__/platform-write-golden-path-db.test.ts",
-            "apps/api/src/__tests__/platform-write-http-db.test.ts"
+            "apps/api/src/__tests__/platform-qualification-read.test.ts",
+            "apps/api/src/__tests__/platform-write-golden-path-db.test.ts"
           ]
         },
         "db_invariant": {
@@ -46,7 +47,7 @@
             "apps/api/src/__tests__/amazon-sp-connector-runner-db.test.ts",
             "apps/api/src/__tests__/amazon-sp-read-only-adapter.test.ts",
             "apps/api/src/__tests__/c2-platform-account-identity-db.test.ts",
-            "apps/api/src/__tests__/platform-write-adapter-capability.test.ts"
+            "apps/api/src/__tests__/platform-qualification-read.test.ts"
           ]
         },
         "negative": {
@@ -89,26 +90,26 @@
           "evidence": [
             "apps/api/src/__tests__/amazon-sp-connector-runner-db.test.ts",
             "apps/api/src/__tests__/c2-platform-account-identity-db.test.ts",
-            "apps/api/src/__tests__/platform-write-golden-path-db.test.ts",
-            "apps/api/src/__tests__/platform-write-http-db.test.ts"
+            "apps/api/src/__tests__/platform-qualification-read.test.ts",
+            "apps/api/src/__tests__/platform-write-golden-path-db.test.ts"
           ]
         },
         "rbac": {
           "status": "COVERED",
           "evidence": [
             "apps/api/src/__tests__/amazon-sp-connector-runner-db.test.ts",
+            "apps/api/src/__tests__/platform-qualification-read.test.ts",
             "apps/api/src/__tests__/platform-write-golden-path-db.test.ts",
-            "apps/api/src/__tests__/platform-write-http-db.test.ts",
-            "apps/api/src/__tests__/platform-write-orchestrator-db.test.ts"
+            "apps/api/src/__tests__/platform-write-http-db.test.ts"
           ]
         },
         "amount_ledger": {
           "status": "COVERED",
           "evidence": [
             "apps/api/src/__tests__/amazon-sp-connector-runner-db.test.ts",
+            "apps/api/src/__tests__/platform-qualification-read.test.ts",
             "apps/api/src/__tests__/platform-write-golden-path-db.test.ts",
-            "apps/api/src/__tests__/platform-write-http-db.test.ts",
-            "apps/api/src/__tests__/platform-write-ledger-db.test.ts"
+            "apps/api/src/__tests__/platform-write-http-db.test.ts"
           ]
         }
       }

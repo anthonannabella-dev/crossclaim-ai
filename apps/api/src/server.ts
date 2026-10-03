@@ -81,6 +81,8 @@ export interface ServerDeps {
   customsEntryFactStore?: import('./services/customs/customs-entry-fact-store').CustomsEntryFactStore;
   /** BG-019：Independent-site 关键状态只读面。 */
   independentSiteState?: import('./services/independent-site/ps04-state-read').Ps04StateReadDeps;
+  /** CHANGE A：Platform qualification 只读判定投影。 */
+  qualificationRead?: import('./services/commercial/qualification-read').QualificationReadDeps;
   /** BG-012：内部触发执行器（router deps 转发）。 */
   customsRecoveryChain?: { run(args: { organizationId: string; entryFactId: string }): Promise<never> };
   /** 可选：C-0008-A 内部认证端口（/auth/*）的依赖覆写 */
@@ -118,7 +120,7 @@ const IMPORT_ERROR_REPORT_PATH = /^\/imports\/[^/]+\/error-report$/;
 /** MSG-20260929-40：只读的 /operations/*（看板）与 /admin/*（Admin Console）也要进工作流分发，
  *  否则请求在 server 层就落到默认 404 —— 端点「纸面存在、实际不可达」。 */
 const WORKFLOW_PATH =
-  /^(?:\/carrier-claim-packages\/[^/]+\/(?:manual-submission|responses)|\/customs-entry-facts\/[^/]+(?:\/(?:return-claim-evidence|recovery-chain))?|\/independent-site-disputes\/[^/]+\/state|\/customs-opportunities\/[^/]+\/(?:start-recovery|filing-status)|\/opportunities(?:\/(?:insights(?:\.csv)?|[^/]+\/(?:qualify|reject|case|basis)))?|\/connections(?:\/[^/]+\/(?:status|credential-ref|rebind))?|\/recovery-states|\/recovery-money|\/accounts|\/entitlements|\/commercial-readiness|\/commercial\/(?:policies(?:\/[^/]+(?:\/accept)?)?|acceptances)|\/provider-readiness|\/payment-activation-readiness|\/cases(?:\/[^/]+\/(?:commercial-terms|recovery-outcome|recovery-review|appeal\/(?:submit|package)|claim(?:\/(?:submit|prepare|package))?|claim-package|billing\/draft|evidence|platform\/write|recovery\/(?:manual-submit|manual-reference|manual-submit-approval|manual-reference-approval))|\/[^/]+)?|\/billing(?:\/[^/]+\/(?:status|payment-review))?|\/commissions\/reconcile|\/payments(?:\/webhook|\/reconciliation(?:\.csv)?|\/events\/[^/]+\/(?:replay|replay-review)|\/processing\/retry-due(?:\/(?:freeze|review))?)?|\/operations\/(?:dashboard|claims|recovery)|\/admin\/(?:tenant-overview|audit(?:\/[^/]+)?|system-health|imports(?:\/[^/]+(?:\/errors)?)?|recovery-review(?:\/[^/]+)?|members(?:\/[^/]+)?|permission-matrix|kill-switch))$/;
+  /^(?:\/carrier-claim-packages\/[^/]+\/(?:manual-submission|responses)|\/customs-entry-facts\/[^/]+(?:\/(?:return-claim-evidence|recovery-chain))?|\/independent-site-disputes\/[^/]+\/state|\/platform-accounts\/[^/]+\/qualification|\/customs-opportunities\/[^/]+\/(?:start-recovery|filing-status)|\/opportunities(?:\/(?:insights(?:\.csv)?|[^/]+\/(?:qualify|reject|case|basis)))?|\/connections(?:\/[^/]+\/(?:status|credential-ref|rebind))?|\/recovery-states|\/recovery-money|\/accounts|\/entitlements|\/commercial-readiness|\/commercial\/(?:policies(?:\/[^/]+(?:\/accept)?)?|acceptances)|\/provider-readiness|\/payment-activation-readiness|\/cases(?:\/[^/]+\/(?:commercial-terms|recovery-outcome|recovery-review|appeal\/(?:submit|package)|claim(?:\/(?:submit|prepare|package))?|claim-package|billing\/draft|evidence|platform\/write|recovery\/(?:manual-submit|manual-reference|manual-submit-approval|manual-reference-approval))|\/[^/]+)?|\/billing(?:\/[^/]+\/(?:status|payment-review))?|\/commissions\/reconcile|\/payments(?:\/webhook|\/reconciliation(?:\.csv)?|\/events\/[^/]+\/(?:replay|replay-review)|\/processing\/retry-due(?:\/(?:freeze|review))?)?|\/operations\/(?:dashboard|claims|recovery)|\/admin\/(?:tenant-overview|audit(?:\/[^/]+)?|system-health|imports(?:\/[^/]+(?:\/errors)?)?|recovery-review(?:\/[^/]+)?|members(?:\/[^/]+)?|permission-matrix|kill-switch))$/;
 
 /** CHANGE #20：Unicode 文件名走 RFC 5987 的 filename*=UTF-8''，同时给 ASCII 回退名 */
 export function buildContentDisposition(
@@ -312,6 +314,7 @@ export function createServer(deps: ServerDeps): http.Server {
 ...(deps.customsReturnEvidence ? { customsReturnEvidence: deps.customsReturnEvidence } : {}),
       ...(deps.customsEntryFactStore ? { customsEntryFactStore: deps.customsEntryFactStore } : {}),
       ...(deps.independentSiteState ? { independentSiteState: deps.independentSiteState } : {}),
+      ...(deps.qualificationRead ? { qualificationRead: deps.qualificationRead } : {}),
 ...(deps.customsRecoveryChain ? { customsRecoveryChain: deps.customsRecoveryChain } : {}),
         session: auth.session,
         // 授权项 ②（MSG-20260930-16 §6）：受保护入口的运行时闸门；缺省 READ_ONLY → 拒绝写入

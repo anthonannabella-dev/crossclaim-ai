@@ -6,10 +6,10 @@
   "next_task": "PC-12A 实施 → 本地测试 + tsc api/web + API contract + full CI → PC-12A CHECKPOINT 送审。",
   "send_head": "07b7009",
   "decision_head": "07b7009",
-  "last_chatgpt_message": "MSG-20261003-140",
+  "last_chatgpt_message": "MSG-20261003-141",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-03T16:52:33.455Z",
+  "updated_at": "2026-10-03T16:57:14.578Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -51,9 +51,9 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-03T14:11:19.420Z",
   "state": "IMPLEMENT",
-  "last_action": "BG-019 checkpoint 已送审：Issue #2 comment 5971280514（HEAD fb37b85）",
+  "last_action": "CHANGE A 实施：Platform Qualification 只读判定投影（后端只读端点 + UI 真实展示 status/reasonCodes/policy/computedAt）",
   "last_action_at": "2026-10-03T14:17:18.723Z",
-  "next_action": "提交 BG-019 checkpoint 请架构方确认四域 frontend cell 可判 COVERED",
+  "next_action": "实施 CHANGE A（Platform qualification 只读投影）→ CHANGE B（PS04 Phase-1 结果持久化）→ matrix guard",
   "current_head": "8902185",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
@@ -4988,12 +4988,12 @@
       "④ Production Candidate register only"
     ]
   },
-  "awaiting_verdict": true,
+  "awaiting_verdict": false,
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-03T16:52:33.886Z",
-    "head": "5f801b9",
-    "acceptance_head": "5f801b9",
+    "computed_at": "2026-10-03T16:57:14.991Z",
+    "head": "02c7ef1",
+    "acceptance_head": "02c7ef1",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5058,53 +5058,53 @@
       "L1-03_no_open_markers": {
         "label": "不存在 TODO/IN_PROGRESS/PARTIAL/READY_FOR_REVIEW/WAITING_FOR_VERDICT/未处理 REVISE·BLOCK",
         "status": false,
-        "evidence": "arch_pending=0 awaiting_verdict=true"
+        "evidence": "arch_pending=0 awaiting_verdict=false"
       },
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=5f801b9 ci_head=c07ff84 ci=UNKNOWN run="
+        "evidence": "acceptance_head=02c7ef1 ci_head=c07ff84 ci=UNKNOWN run="
       },
       "L1-05_pg_regression_passed": {
         "status": "UNVERIFIED",
-        "evidence": "pg_regression recorded at 9e57ba3 ≠ acceptance head 5f801b9"
+        "evidence": "pg_regression recorded at 9e57ba3 ≠ acceptance head 02c7ef1"
       },
       "L1-06_fresh_db_migration_passed": {
         "status": "UNVERIFIED",
-        "evidence": "fresh_db_migration recorded at 9e57ba3 ≠ acceptance head 5f801b9"
+        "evidence": "fresh_db_migration recorded at 9e57ba3 ≠ acceptance head 02c7ef1"
       },
       "L1-07_api_typecheck_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_api recorded at 9e57ba3 ≠ acceptance head 5f801b9"
+        "evidence": "typecheck_api recorded at 9e57ba3 ≠ acceptance head 02c7ef1"
       },
       "L1-08_web_typecheck_build_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_web recorded at 4af3432 ≠ acceptance head 5f801b9"
+        "evidence": "typecheck_web recorded at 4af3432 ≠ acceptance head 02c7ef1"
       },
       "L1-09_no_skipped_critical_tests": {
         "status": "UNVERIFIED",
-        "evidence": "tests_no_skipped recorded at 4af3432 ≠ acceptance head 5f801b9"
+        "evidence": "tests_no_skipped recorded at 4af3432 ≠ acceptance head 02c7ef1"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
         "status": false,
-        "evidence": "dirty entries: 4"
+        "evidence": "dirty entries: 12"
       },
       "L1-11_docs_state_consistent": {
         "status": "UNVERIFIED",
-        "evidence": "docs_sync recorded at 9e57ba3 ≠ acceptance head 5f801b9"
+        "evidence": "docs_sync recorded at 9e57ba3 ≠ acceptance head 02c7ef1"
       },
       "L1-12_schema_invariants_verified": {
         "status": "UNVERIFIED",
-        "evidence": "schema_invariants recorded at 9e57ba3 ≠ acceptance head 5f801b9"
+        "evidence": "schema_invariants recorded at 9e57ba3 ≠ acceptance head 02c7ef1"
       },
       "L1-13_negative_paths_covered": {
         "status": "UNVERIFIED",
-        "evidence": "negative_paths recorded at 9e57ba3 ≠ acceptance head 5f801b9"
+        "evidence": "negative_paths recorded at 9e57ba3 ≠ acceptance head 02c7ef1"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
         "status": "UNVERIFIED",
-        "evidence": "pg_e2e_real recorded at 9e57ba3 ≠ acceptance head 5f801b9"
+        "evidence": "pg_e2e_real recorded at 9e57ba3 ≠ acceptance head 02c7ef1"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
@@ -5374,7 +5374,7 @@
     "boundary": "readOnly / filingSubmitted=false / transportEnabled=false / externalWritePerformed=false / productionCredentials=ABSENT；不重算（读取前后投影行数不变）"
   },
   "bg019": {
-    "status": "CHECKPOINT_SUBMITTED（待架构方确认四域 frontend cell 判定）",
+    "status": "REVISE（CHANGE A + B + matrix guard）",
     "done": [
       "Carrier response + customs filing status 只读卡片（既有）",
       "Customs entry fact + 四类 latest 投影只读卡片（本轮，消费 BG-020 的 GET /customs-entry-facts/:id）",
@@ -5395,7 +5395,13 @@
       "composer cleared",
       "marker 5971280514 at bottom",
       "generating"
-    ]
+    ],
+    "customs": "COVERED / CLOSED",
+    "carrier": "COVERED / CLOSED",
+    "change_a": "Platform Qualification Read Projection：UI 必须真实读取并显示 qualification status / reason codes / policy+version / evaluatedAt；INDETERMINATE / NOT_QUALIFIED / CONDITIONAL 原样展示；不重算",
+    "change_b": "Independent-site Phase-1 结果持久化（qualification status+reasons / evidence readiness / claim-ready status+digest / computedAt / policyVersion / algorithmVersion / externalWritePerformed=false / autoSubmitAllowed=false），再由 state 端点一并读出",
+    "matrix_guard": "Platform frontend evidence 必须断言 qualification 字段存在；Independent-site 必须断言 qualification/evidence/claim-ready 不再是 notPersisted",
+    "change_a_status": "IMPLEMENTED（GET /platform-accounts/:id/qualification + Platform UI 真实读取；PG 3/3）"
   },
   "bg021": {
     "status": "PASS / CLOSED",

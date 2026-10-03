@@ -125115,3 +125115,131 @@ submitted ≠ won ≠ settled ≠ recovered ≠ billable
 
 External Write=HOLD · Real Money=HOLD · Customer Submission=HOLD · Production Credentials=HOST_ONLY。
 ```
+
+### [MSG-20261003-141] BG-019 = REVISE（Customs/Carrier COVERED；CHANGE A Platform qualification 只读投影 + CHANGE B Independent-site Phase-1 结果持久化 + matrix guard）（reviewed ref 5f801b9）
+
+```text
+BG-019 CHECKPOINT：REVISE。
+
+四域里 Customs / Carrier 可以判 COVERED；Platform / Independent-site 还不能 CLOSED。原因不是 UI 不够漂亮，而是我们在 MSG-20261003-139 定义的关键状态里，有两段目前只是“告诉你没展示/没持久化”，还不是“可观察的真实状态”。
+
+编号裁决：
+
+Customs frontend cell：PASS / COVERED
+
+filing status 可见；
+return→claim evidence 可见；
+entry fact + 四类 latest projection 可见；
+fail-closed boundary 可见；
+前端不重算。
+
+CLOSED。
+
+Carrier frontend cell：PASS / COVERED
+
+current status / verification level / history 可见；
+hasProviderVerifiedFact=false 能明确呈现；
+不把 provider response 自动等价为到账。
+
+CLOSED。
+
+Platform frontend cell：REVISE
+
+当前页面这一段还不够：
+
+“本读模型不返回 qualification 细分字段；以 Qualification Gate 持久化判定为准，本页不重算。”
+
+这叫“披露缺失”，不是“Qualification 状态可观察”。
+
+CHANGE E 要求的关键链是：
+
+Opportunity → Qualification → Claim-ready Package → Submission → Recovered → Fee/Billing
+
+当前 Platform 实际是：
+
+Opportunity → [Qualification not exposed] → Claim-ready → Submission → Money
+
+所以只差一个很窄的补丁：
+
+CHANGE A — Platform Qualification Read Projection
+
+UI 至少要真实读取并显示：
+
+qualification status；
+reason codes；
+policy/version；
+evaluatedAt/computedAt；
+如果是 INDETERMINATE / NOT_QUALIFIED / CONDITIONAL，原样展示。
+
+不允许前端重算，也不需要新写路由；可以复用已有持久化 qualification record 或加一个只读 GET/projection。
+
+Independent-site frontend cell：REVISE
+
+五状态这部分做得对：
+
+submitted / won / settled / recovered / billable
+
+而且 PG 6/6 证明这些状态来自真实持久化事实。
+
+但我们之前明确要求 Independent-site UI 至少覆盖：
+
+Dispute → Qualification → Evidence / Claim-ready → Handoff → Response → Settlement → Recovered → Fee → Billing
+
+当前实际是：
+
+Dispute → [qualification notPersisted] → [evidence notPersisted] → [claim-ready notPersisted] → Handoff → Response → Settlement → Money
+
+所以 notPersisted 诚实，但不能算该节点已 COVERED。
+
+CHANGE B — Independent-site Phase-1 Read Projection Persistence
+
+最小做法不是重做业务链，而是把 Phase 1 的以下结果持久化成只读 projection/fact：
+
+qualification status + reasons；
+evidence readiness / evidence summary；
+claim-ready status + package identity/digest；
+computedAt / policyVersion / algorithmVersion；
+externalWritePerformed=false / autoSubmitAllowed=false。
+
+然后 /independent-site-disputes/:ref/state 把它们一起读出来。
+
+不需要真实 PSP，不需要 dispute.submit，不需要新增外部写。
+
+Layer 2 Matrix：当前“0 GAP”不能作为最终证据
+
+这里生成器目前只要找到某个 frontend 文件，就把 frontend cell 判 COVERED，但这不足以证明 critical-state completeness。
+
+因此建议补一个小规则：
+
+Platform frontend evidence 必须断言 qualification 字段存在；
+Independent-site frontend evidence 必须断言 qualification/evidence/claim-ready 不再是 notPersisted。
+
+否则 matrix 会再次产生“文件存在 = 状态完整”的假阳性。
+
+最终裁决：
+
+Customs = COVERED / CLOSED
+Carrier = COVERED / CLOSED
+Platform = REVISE — 缺真实 Qualification read state
+Independent-site = REVISE — 缺持久化 Qualification / Evidence / Claim-ready read state
+
+因此：
+
+BG-019 = REVISE（仅 CHANGE A + B + matrix guard）
+
+这已经是很窄的最后收口，不需要扩大成完整产品 UI。
+
+修完后，如果页面能真实显示：
+
+Platform：Opportunity → Qualification → Claim-ready → Submission → Recovered/Fee/Billing
+
+以及：
+
+Independent-site：Dispute → Qualification → Evidence/Claim-ready → Submitted → Won → Settled → Recovered → Billable
+
+那么四域 frontend cell 就可以正式全部判 COVERED。
+
+边界继续：
+
+External Write=HOLD · Real Money=HOLD · Customer Submission=HOLD · Production Credentials=HOST_ONLY。
+```

@@ -1,26 +1,26 @@
 # LAYER 2 — GOLDEN PATH MATRIX（自动生成，请勿手改）
 
-- 生成时间：2026-10-03T16:52:33.730Z
+- 生成时间：2026-10-03T16:57:14.841Z
 - 机器可读：`docs/releases/LAYER2-GOLDEN-PATH-MATRIX.json`；生成器：`tools/autopilot/golden-path-matrix.mjs`
 - 判定规则：**COVERED 必须存在命名证据文件**（测试/前端）；否则 GAP，并自动登记为 backlog。
 - 依据：MSG-20261003-135 CHANGE C（禁止用「专项测试很多」替代完整矩阵）。
 
-## Platform Recovery（api 测试 11 个 / 前端 11 个）
+## Platform Recovery（api 测试 12 个 / 前端 11 个）
 
 | 能力轴 | 状态 | 证据 |
 |---|---|---|
-| http | COVERED | apps/api/src/__tests__/platform-write-golden-path-db.test.ts<br>apps/api/src/__tests__/platform-write-http-db.test.ts<br>apps/api/src/__tests__/platform-write-orchestrator-db.test.ts |
-| persistence | COVERED | apps/api/src/__tests__/amazon-sp-connector-runner-db.test.ts<br>apps/api/src/__tests__/c2-platform-account-identity-db.test.ts<br>apps/api/src/__tests__/platform-write-golden-path-db.test.ts<br>apps/api/src/__tests__/platform-write-http-db.test.ts |
+| http | COVERED | apps/api/src/__tests__/platform-qualification-read.test.ts<br>apps/api/src/__tests__/platform-write-golden-path-db.test.ts<br>apps/api/src/__tests__/platform-write-http-db.test.ts<br>apps/api/src/__tests__/platform-write-orchestrator-db.test.ts |
+| persistence | COVERED | apps/api/src/__tests__/amazon-sp-connector-runner-db.test.ts<br>apps/api/src/__tests__/c2-platform-account-identity-db.test.ts<br>apps/api/src/__tests__/platform-qualification-read.test.ts<br>apps/api/src/__tests__/platform-write-golden-path-db.test.ts |
 | db_invariant | COVERED | apps/api/src/__tests__/c2-platform-account-identity-db.test.ts |
 | frontend | COVERED | apps/web/app/cases/[id]/claim-package/claim-package-view.tsx<br>apps/web/app/components/opportunity-actions.tsx<br>apps/web/app/opportunities/opportunity-list.tsx<br>apps/web/app/page.tsx |
-| happy | COVERED | apps/api/src/__tests__/amazon-sp-connector-runner-db.test.ts<br>apps/api/src/__tests__/amazon-sp-read-only-adapter.test.ts<br>apps/api/src/__tests__/c2-platform-account-identity-db.test.ts<br>apps/api/src/__tests__/platform-write-adapter-capability.test.ts |
+| happy | COVERED | apps/api/src/__tests__/amazon-sp-connector-runner-db.test.ts<br>apps/api/src/__tests__/amazon-sp-read-only-adapter.test.ts<br>apps/api/src/__tests__/c2-platform-account-identity-db.test.ts<br>apps/api/src/__tests__/platform-qualification-read.test.ts |
 | negative | COVERED | apps/api/src/__tests__/amazon-sp-connector-runner-db.test.ts<br>apps/api/src/__tests__/amazon-sp-read-only-adapter.test.ts<br>apps/api/src/__tests__/c2-platform-account-identity-db.test.ts<br>apps/api/src/__tests__/platform-write-adapter-capability.test.ts |
 | replay | COVERED | apps/api/src/__tests__/amazon-sp-connector-runner-db.test.ts<br>apps/api/src/__tests__/amazon-sp-read-only-adapter.test.ts<br>apps/api/src/__tests__/platform-write-adapter-capability.test.ts<br>apps/api/src/__tests__/platform-write-golden-path-db.test.ts |
 | concurrency | COVERED | apps/api/src/__tests__/platform-write-golden-path-db.test.ts<br>apps/api/src/__tests__/platform-write-ledger-db.test.ts<br>apps/api/src/__tests__/platform-write-orchestrator-db.test.ts |
 | failure_recovery | COVERED | apps/api/src/__tests__/amazon-sp-read-only-adapter.test.ts<br>apps/api/src/__tests__/platform-write-adapter-capability.test.ts<br>apps/api/src/__tests__/platform-write-ledger-db.test.ts<br>apps/api/src/__tests__/platform-write-orchestrator-db.test.ts |
-| cross_tenant | COVERED | apps/api/src/__tests__/amazon-sp-connector-runner-db.test.ts<br>apps/api/src/__tests__/c2-platform-account-identity-db.test.ts<br>apps/api/src/__tests__/platform-write-golden-path-db.test.ts<br>apps/api/src/__tests__/platform-write-http-db.test.ts |
-| rbac | COVERED | apps/api/src/__tests__/amazon-sp-connector-runner-db.test.ts<br>apps/api/src/__tests__/platform-write-golden-path-db.test.ts<br>apps/api/src/__tests__/platform-write-http-db.test.ts<br>apps/api/src/__tests__/platform-write-orchestrator-db.test.ts |
-| amount_ledger | COVERED | apps/api/src/__tests__/amazon-sp-connector-runner-db.test.ts<br>apps/api/src/__tests__/platform-write-golden-path-db.test.ts<br>apps/api/src/__tests__/platform-write-http-db.test.ts<br>apps/api/src/__tests__/platform-write-ledger-db.test.ts |
+| cross_tenant | COVERED | apps/api/src/__tests__/amazon-sp-connector-runner-db.test.ts<br>apps/api/src/__tests__/c2-platform-account-identity-db.test.ts<br>apps/api/src/__tests__/platform-qualification-read.test.ts<br>apps/api/src/__tests__/platform-write-golden-path-db.test.ts |
+| rbac | COVERED | apps/api/src/__tests__/amazon-sp-connector-runner-db.test.ts<br>apps/api/src/__tests__/platform-qualification-read.test.ts<br>apps/api/src/__tests__/platform-write-golden-path-db.test.ts<br>apps/api/src/__tests__/platform-write-http-db.test.ts |
+| amount_ledger | COVERED | apps/api/src/__tests__/amazon-sp-connector-runner-db.test.ts<br>apps/api/src/__tests__/platform-qualification-read.test.ts<br>apps/api/src/__tests__/platform-write-golden-path-db.test.ts<br>apps/api/src/__tests__/platform-write-http-db.test.ts |
 
 ## Logistics / Carrier Recovery（api 测试 17 个 / 前端 2 个）
 

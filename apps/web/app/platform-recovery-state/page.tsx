@@ -14,6 +14,24 @@ import { cookies } from 'next/headers';
 
 const API_BASE = process.env.CROSSCLAIM_API_URL ?? 'http://127.0.0.1:3000';
 
+/** CHANGE A：Platform Qualification 只读判定投影（来自持久化判定，前端不重算）。 */
+interface QualificationProjection {
+  qualification: {
+    platformAccountId: string;
+    status: string | null;
+    reasonCodes: string[];
+    policyId: string | null;
+    policyVersion: string | null;
+    algorithmVersion: string | null;
+    currency: string | null;
+    estimatedRecoveryAmount: string | null;
+    expectedNetRecovery: string | null;
+    costRatio: string | null;
+    computedAt: string | null;
+  };
+  boundary: { readOnly: boolean; recomputedOnRead: boolean; filingAuthorized: boolean; transportEnabled: boolean };
+}
+
 interface CaseDetail {
   id: string;
   caseNo: string;
@@ -69,10 +87,14 @@ function StateRow({ label, value, note }: { label: string; value: string; note?:
 export default async function PlatformRecoveryStatePage({
   searchParams,
 }: {
-  searchParams?: Promise<{ caseId?: string }>;
+  searchParams?: Promise<{ caseId?: string; platformAccountId?: string }>;
 }) {
   const params = await searchParams;
   const caseId = params?.caseId ?? '';
+  const platformAccountId = params?.platformAccountId ?? '';
+  const qualification = platformAccountId
+    ? await apiGet<QualificationProjection>('/platform-accounts/' + encodeURIComponent(platformAccountId) + '/qualification')
+    : null;
 
   const detail = caseId ? await apiGet<CaseDetail>('/cases/' + encodeURIComponent(caseId)) : null;
   const claimPackage = caseId ? await apiGet<ClaimPackageState>('/cases/' + encodeURIComponent(caseId) + '/claim-package') : null;
@@ -91,7 +113,7 @@ export default async function PlatformRecoveryStatePage({
         <p className="mt-2 text-sm text-slate-600">
           本页只读展示 Platform 域 Golden Path 的关键状态与真值；不会提交 claim、不会执行 platform.write、不会触发任何扣款。
         </p>
-        <p className="mt-1 text-xs text-slate-500">用法：/platform-recovery-state?caseId=&lt;case id&gt;</p>
+        <p className="mt-1 text-xs text-slate-500">用法：/platform-recovery-state?caseId=&lt;case id&gt;&amp;platformAccountId=&lt;platform account id&gt;</p>
       </div>
 
       <section className="rounded border border-amber-300 bg-amber-50 p-4">
@@ -123,9 +145,34 @@ export default async function PlatformRecoveryStatePage({
                 />
               ))
             )}
-            <p className="mt-1 text-xs text-slate-500">
-              说明：本读模型不返回 qualification 细分字段；若需判定细节请以 Qualification Gate 的持久化判定为准（本页不重算）。
-            </p>
+            <h3 className="mt-3 text-sm font-medium text-slate-700">Qualification（持久化判定，只读）</h3>
+            {platformAccountId === '' ? (
+              <p className="text-sm text-slate-500">未提供 platformAccountId（无法读取 qualification 判定）。</p>
+            ) : qualification === null ? (
+              <p className="text-sm text-slate-500">未请求。</p>
+            ) : !qualification.ok || qualification.body === null ? (
+              <p className="text-sm text-rose-600">读取失败：HTTP {qualification.status}</p>
+            ) : (
+              <div>
+                <StateRow label="qualificationStatus" value={qualification.body.qualification.status ?? '（无）'} />
+                <StateRow label="reasonCodes" value={qualification.body.qualification.reasonCodes.join(', ') || '（无）'} />
+                <StateRow
+                  label="policy"
+                  value={String(qualification.body.qualification.policyId) + '@' + String(qualification.body.qualification.policyVersion)}
+                />
+                <StateRow label="algorithmVersion" value={qualification.body.qualification.algorithmVersion ?? '（无）'} />
+                <StateRow label="computedAt" value={qualification.body.qualification.computedAt ?? '（无）'} />
+                <StateRow label="estimatedRecoveryAmount" value={qualification.body.qualification.estimatedRecoveryAmount ?? '（无）'} />
+                <StateRow label="expectedNetRecovery" value={qualification.body.qualification.expectedNetRecovery ?? '（无）'} />
+                <StateRow
+                  label="boundary"
+                  value={'readOnly=' + String(qualification.body.boundary.readOnly) + ' recomputedOnRead=' + String(qualification.body.boundary.recomputedOnRead) + ' filingAuthorized=' + String(qualification.body.boundary.filingAuthorized)}
+                />
+                <p className="mt-1 text-xs text-slate-500">
+                  判定 ≠ filing 授权；INDETERMINATE / NOT_QUALIFIED / CONDITIONAL 一律原样展示，前端不重算。
+                </p>
+              </div>
+            )}
           </div>
         )}
       </section>
