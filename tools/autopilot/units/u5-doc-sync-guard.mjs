@@ -6,9 +6,14 @@ export async function run({ root }) {
   const readme = fs.readFileSync(path.join(root, 'README.md'), 'utf8');
   const api = fs.readFileSync(path.join(root, 'API.md'), 'utf8');
   const state = JSON.parse(fs.readFileSync(path.join(root, '.autopilot', 'STATE.json'), 'utf8'));
-  const checks = [];
-  checks.push(['readme_model_count', /领域模型 \*\*70 个/.test(readme)]);
-  checks.push(['readme_migrations', /\*\*56 条迁移\*\*/.test(readme)]);
+  
+const schemaText = fs.readFileSync(path.join(root, 'apps/api/prisma/schema.prisma'), 'utf8');
+const actualModels = (schemaText.match(/^model\s+\w+\s*\{/gm) ?? []).length;
+const actualMigrations = fs.readdirSync(path.join(root, 'apps/api/prisma/migrations'), { withFileTypes: true }).filter((entry) => entry.isDirectory()).length;
+
+const checks = [];
+  checks.push(['readme_model_count', readme.includes('领域模型 **' + actualModels + ' 个')]);
+  checks.push(['readme_migrations', readme.includes('**' + actualMigrations + ' 条迁移**')]);
   checks.push(['api_return_evidence_route', api.includes('/customs-entry-facts/:entryFactId/return-claim-evidence')]);
   checks.push(['api_customs_start_route', api.includes('/customs-opportunities/:id/start-recovery')]);
   checks.push(['autopilot_mode_recorded', state.autopilot_mode === 'CONTINUOUS' && state.heartbeat_role === 'LIVENESS_ONLY']);

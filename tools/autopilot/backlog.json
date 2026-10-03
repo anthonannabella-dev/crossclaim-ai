@@ -1,6 +1,6 @@
 {
   "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。",
-  "updatedAt": "2026-10-03T16:02:46.125Z",
+  "updatedAt": "2026-10-03T16:10:31.114Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -352,7 +352,9 @@
       "filters": [
         "architecture-contract"
       ],
-      "materializable": true
+      "materializable": true,
+      "status": "COMPLETED",
+      "completed_at": "2026-10-03T16:10:31.114Z"
     },
     {
       "id": "BG-014-ior-qualification-wiring",

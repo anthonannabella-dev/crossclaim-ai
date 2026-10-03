@@ -370,6 +370,9 @@ model Organization {
   customsReturnFacts                 CustomsReturnFactRecord[]
   recoveryQualificationAssessments   RecoveryQualificationAssessmentRecord[]
   customsReturnClaimEvidence          CustomsReturnClaimEvidenceRecord[]
+  customsIorIdentityFacts             CustomsIorIdentityFact[]
+  customsRightLineageFacts            CustomsRightLineageFact[]
+  customsBrokerPoaFacts               CustomsBrokerPoaFact[]
   customsDutyTruthRecordList CustomsDutyTruthRecord[]
   customsDiscrepancyRecordList CustomsDiscrepancyRecord[]
   customsEligibilityRecordList CustomsEligibilityRecord[]
@@ -2745,4 +2748,119 @@ model CustomsReturnClaimEvidenceRecord {
   entryFact    CustomsEntryFactRecord @relation(fields: [entryFactId], references: [id], onDelete: Cascade)
 
   @@index([organizationId, entryFactId, computedAt])
+}
+
+// ============================================================
+// ENTERPRISE IOR RECOVERY LAYER（HOST DIRECTIVE；MSG-20261003-136 批准实施）
+//   · 身份事实 ≠ 权利归属事实 ≠ Broker 授权事实 —— 三张**独立** append-only 表，禁止合并
+//   · 禁止裸存 EIN / Importer Number / 银行账号 / credential：只允许 machine-safe reference
+//     （DB 级 CHECK 拒绝 digits-only 与 EIN 形状，不依赖 service 校验）
+//   · Broker POA 仅 CBP_FORM_5291 / EQUIVALENT_REGULATORY_POA；Form 4811 由 DB CHECK 拒绝
+//   · filingAuthorized = true 只表示"授权事实"，**不等于**已申报；本域不得出现
+//     filingSubmitted / provider result 等外部执行字段
+//   · latest 由 query/view 推导，禁止 mutable isLatest
+// ============================================================
+enum CustomsIorPrincipalType {
+  IMPORTER_OF_RECORD
+  DRAWBACK_CLAIMANT
+}
+
+enum CustomsIorVerificationStatus {
+  UNVERIFIED
+  PENDING
+  VERIFIED
+  REVOKED
+  UNKNOWN
+}
+
+enum CustomsIorVerificationSource {
+  BROKER_ATTESTATION
+  ACE_LOOKUP
+  CUSTOMER_DOCUMENT
+  MANUAL_REVIEW
+  NONE
+}
+
+enum CustomsBrokerAuthorizationType {
+  CBP_FORM_5291
+  EQUIVALENT_REGULATORY_POA
+}
+
+enum CustomsRightLineageOutcome {
+  COMPLETE
+  NEEDS_MANUAL
+  BROKER_REVIEW
+}
+
+model CustomsIorIdentityFact {
+  id                  String                        @id
+  organizationId      String
+  jurisdiction        String
+  principalType       CustomsIorPrincipalType
+  importerOfRecordRef String
+  legalEntityRef      String
+  aceAccountRef       String?
+  verificationStatus  CustomsIorVerificationStatus
+  verificationSource  CustomsIorVerificationSource
+  verifiedAt          DateTime?
+  effectiveFrom       DateTime?
+  effectiveTo         DateTime?
+  contentDigest       String
+  sourceReference     String
+  observedAt          DateTime
+  createdAt           DateTime                      @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, contentDigest])
+  @@index([organizationId, importerOfRecordRef, observedAt])
+  @@index([organizationId, verificationStatus])
+}
+
+model CustomsRightLineageFact {
+  id                      String                     @id
+  organizationId          String
+  entryReference          String
+  importerOfRecordRef     String
+  claimantRef             String
+  remedyRoute             String
+  iorRightsForRemedy      String
+  claimantRightsForRemedy String
+  filingAuthorized        Boolean
+  outcome                 CustomsRightLineageOutcome
+  reasonCodes             Json
+  evidenceKinds           Json
+  contentDigest           String
+  observedAt              DateTime
+  createdAt               DateTime                   @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, contentDigest])
+  @@index([organizationId, entryReference, observedAt])
+  @@index([organizationId, claimantRef])
+}
+
+model CustomsBrokerPoaFact {
+  id                  String                        @id
+  organizationId      String
+  principalRef        String
+  brokerRef           String
+  jurisdiction        String
+  authorizationType   CustomsBrokerAuthorizationType
+  scope               Json
+  effectiveAt         DateTime
+  expiresAt           DateTime?
+  evidenceArtifactRef String?
+  verificationStatus  CustomsIorVerificationStatus
+  verificationSource  CustomsIorVerificationSource
+  contentDigest       String
+  observedAt          DateTime
+  createdAt           DateTime                      @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, contentDigest])
+  @@index([organizationId, principalRef, observedAt])
+  @@index([organizationId, brokerRef])
 }

@@ -1667,3 +1667,9 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 
 ## 2026-10-03T16:02:46.125Z — MSG-20261003-136（BG-013 Schema Delta）
 - PASS WITH REVISE / APPROVED_TO_IMPLEMENT；已归档 FULL_COPY_OK；BG-013 离开 arch pending，转为可执行实现。
+
+## 2026-10-03T16:09:05.448Z — BACKLOG doc-sync-check
+- doc-sync-check doc-sync=OK
+
+## 2026-10-03T16:10:31.114Z — BG-013 IOR 事实持久化
+- 3 表 5 枚举 + migration 20261003210000；DB CHECK/触发器 11 枚；PG E2E 8/8；模型总数 70→73、迁移 62→63。
