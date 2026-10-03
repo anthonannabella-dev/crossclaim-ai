@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261003-119",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-03T06:34:06.042Z",
+  "updated_at": "2026-10-03T06:34:56.927Z",
   "previous_head": "a155812",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -53,7 +53,7 @@
   "state": "IMPLEMENT",
   "last_action": "SCHEDULER_STALE_RECOVERED（gap=16min）→ 本轮已恢复执行",
   "last_action_at": "2026-10-02T09:01:54.693Z",
-  "next_action": "补端到端 HTTP 测试（含 createServer 注入 carrierClaimPackages）→ 全量本地验证 → commit/push → CI → 生成 checkpoint 并送审 READY_FOR_REVIEW",
+  "next_action": "先完成 CARRIER QUEUE #9B FINAL 送审（端到端 HTTP 测试 + checkpoint）；随后把商业模型改动（15% FeePolicy / Execution Threshold / CUSTOMS_VIP_WAIVER / 统一 Fee Guard）作为 Queue C10–C11 的设计→审计→实施批次推进",
   "current_head": "b55f13b",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
@@ -3936,5 +3936,56 @@
   },
   "carrier_queue_9b_final_router_head": "8cc82fa",
   "carrier_queue_9b_final_router_ci": "37102959839 SUCCESS",
-  "carrier_queue_9b_final_router_done": "POST /carrier-claim-packages/:packageId/manual-submission 已接入真实 router（path 常量 + 路由集合守卫 + Action Guard assertAllowed 动作字面量 + server-derived session + 三字段白名单 + 稳定 201/200/400/403/404/409 映射 + Prisma store 缺省注入）；API.md 已记录（contract 85/72）；修复三处 CI 红灯（API contract 未记录 / 静态约定要求动作字面量与 assertAllowed 同文件 / 删除常量后遗留 import）"
+  "carrier_queue_9b_final_router_done": "POST /carrier-claim-packages/:packageId/manual-submission 已接入真实 router（path 常量 + 路由集合守卫 + Action Guard assertAllowed 动作字面量 + server-derived session + 三字段白名单 + 稳定 201/200/400/403/404/409 映射 + Prisma store 缺省注入）；API.md 已记录（contract 85/72）；修复三处 CI 红灯（API contract 未记录 / 静态约定要求动作字面量与 assertAllowed 同文件 / 删除常量后遗留 import）",
+  "commercial_model_directive": {
+    "source": "HOST DIRECTIVE 2026-10-03 — ACQUISITION + 15% SUCCESS-FEE COMMERCIAL MODEL FINALIZATION",
+    "doc": "docs/releases/COMMERCIAL-MODEL-DIRECTIVE-2026-10-03.md",
+    "registered_at": "2026-10-03T06:34:56.926Z",
+    "superseded_docs": [
+      "COMMERCIAL-MODEL-DIRECTIVE-2026-10-03.md",
+      "CUSTOMS-SELF-SERVICE-PRICING-CONTRACT.md",
+      "R45-S1-RECONCILIATION-SCHEMA-CHECKPOINT.md"
+    ],
+    "model": "FREE AUDIT → MANAGED RECOVERY → ACTUAL RECOVERY RECEIVED → 15% SUCCESS FEE",
+    "fees": {
+      "STANDARD_SUCCESS_FEE": "15%",
+      "CUSTOMS_SUCCESS_FEE": "15%",
+      "default_fee_policy_change": "20% → 15%（待架构方审计后实施）"
+    },
+    "forbidden_fees": [
+      "audit fee",
+      "case opening fee",
+      "file retrieval fee",
+      "$15/$20/$25 基础审核费"
+    ],
+    "execution_threshold": "estimated recovery < 服务器配置阈值 → 免费展示结果、不进入高成本人工执行（阈值服务器配置化）",
+    "billable_basis": "Verified Actual Incremental Recovery Received × 15%（不得使用 estimated / approved / expected / normal statutory entitlement）",
+    "customs_vip_waiver": "estimated recovery ≥ 阈值 AND classificationDecision == ELIGIBLE AND Customs Agreement SIGNED → 可减免 Platform/Logistics 费（支持 waiverCap，全部服务器配置化）",
+    "commercial_policies": [
+      "STANDARD_SUCCESS_15",
+      "CUSTOMS_SUCCESS_15",
+      "CUSTOMS_VIP_WAIVER",
+      "ENTERPRISE_CUSTOM_RATE",
+      "MICRO_NOT_SERVICED"
+    ],
+    "tiers": {
+      "A": "高价值 Customs（Priority Recovery / Broker·Licensed Partner / 可选平台·Carrier 费减免 / Customs 15%）",
+      "B": "标准回收（≥ execution threshold / 15%）",
+      "C": "Micro Opportunity（低于阈值 → 免费展示，不进入高成本人工执行）"
+    },
+    "normal_statutory_entitlement": "NOT BILLABLE（successFeeEligible = false）",
+    "platform_vs_customs_separation": "平台授权只能产生 CUSTOMS_OPPORTUNITY_SIGNAL；不得直接确认 CUSTOMS_OVERPAYMENT / recoverableAmount / successFeeEligible",
+    "unified_fee_guard": "RecoveryCommercialEligibility → SettlementFeeEligibility → Server Fee Policy → FeeCalculation（覆盖 record-fee.ts / commission-reconciliation.ts / 未来所有路径；client-supplied rate 必拒）",
+    "no_refactor": "复用 Settlement / RecoveryPayout / FeeCalculation / FeeCalculationSettlement / FeePolicy / BillingInvoice / Payment / Reversal；只改策略/文档/默认费率/测试",
+    "arch_review_required": [
+      "默认 FeePolicy 20% → 15%",
+      "Execution Threshold 语义与配置面",
+      "CUSTOMS_VIP_WAIVER（含 waiverCap）",
+      "Commercial Policy 枚举与版本化",
+      "统一 Fee Guard 落地（消除旁路）"
+    ],
+    "queue_impact": "NONE_ON_CURRENT_UNIT（不中断 CARRIER QUEUE #9B FINAL）",
+    "supersedes": "CUSTOMS SELF-SERVICE PRICING 口径（$299/$699/$1,499/$2,999）与早前 MSG/HOST 中的 20% 默认费率（以本指令 15% 为准）",
+    "boundary": "NO platform write · TRANSPORT=false · Payment = 0 · autopay = OFF · collection = OFF · R13 HOLD · 无生产凭据"
+  }
 }
