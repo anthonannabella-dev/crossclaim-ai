@@ -22,6 +22,23 @@ interface CarrierResponses {
   };
 }
 
+/** P0-1：Return→matching→claim-ready evidence 的只读读模型（后端已裁决/已持久化，前端只展示）。 */
+interface ReturnClaimEvidence {
+  evidence: {
+    evidenceId: string;
+    status: string;
+    statusReasons: string[];
+    confirmedRecoverableAmountByCurrency: Record<string, string>;
+    eligibleQuantityByLine: Array<{ lineOrdinal: number; status: string; eligibleQuantity: string; confirmedDutyAmount: string }>;
+    qualificationStatus: string;
+    policyId: string;
+    policyVersion: string;
+    algorithmVersion: string;
+    computedAt: string;
+  };
+  boundary: { readOnly: boolean; recomputedOnRead: boolean; frontendMayRecalculate: boolean; filingSubmitted: boolean; transportEnabled: boolean };
+}
+
 interface CustomsFilingStatus {
   filingStatus: {
     currentStatus: string | null;
@@ -67,7 +84,7 @@ function StatusRow({ label, value }: { label: string; value: string }) {
 export default async function IntegrationStatusPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ packageId?: string; opportunityId?: string }>;
+  searchParams?: Promise<{ packageId?: string; opportunityId?: string; entryFactId?: string }>;
 }) {
   const params = await searchParams;
   const packageId = params?.packageId ?? '';
@@ -79,6 +96,10 @@ export default async function IntegrationStatusPage({
   const customs = opportunityId
     ? await apiGet<CustomsFilingStatus>('/customs-opportunities/' + encodeURIComponent(opportunityId) + '/filing-status')
     : null;
+  const entryFactId = params?.entryFactId ?? '';
+  const returnEvidence = entryFactId
+    ? await apiGet<ReturnClaimEvidence>('/customs-entry-facts/' + encodeURIComponent(entryFactId) + '/return-claim-evidence')
+    : null;
 
   return (
     <div className="space-y-6">
@@ -88,9 +109,47 @@ export default async function IntegrationStatusPage({
           Carrier 响应事实与 Customs filing 状态的**只读**视图。本页不会提交 claim、不会执行 filing、不会触发任何扣款或外部写。
         </p>
         <p className="mt-1 text-xs text-slate-500">
-          用法：/integration-status?packageId=&lt;carrier package id&gt;&amp;opportunityId=&lt;customs opportunity id&gt;
+          用法：/integration-status?packageId=&lt;carrier package id&gt;&amp;opportunityId=&lt;customs opportunity id&gt;&amp;entryFactId=&lt;customs entry fact id&gt;
         </p>
       </div>
+
+      <section className="rounded border border-slate-200 p-4">
+        <h2 className="text-base font-medium">Customs return→claim evidence（P0-1 只读）</h2>
+        {entryFactId === '' ? (
+          <p className="mt-2 text-sm text-slate-500">未提供 entryFactId。</p>
+        ) : returnEvidence === null ? (
+          <p className="mt-2 text-sm text-slate-500">未请求。</p>
+        ) : !returnEvidence.ok || returnEvidence.body === null ? (
+          <p className="mt-2 text-sm text-rose-600">
+            读取失败：HTTP {returnEvidence.status}
+            {returnEvidence.code !== null ? ' · ' + returnEvidence.code : ''}
+          </p>
+        ) : (
+          <div className="mt-2">
+            <StatusRow label="status" value={returnEvidence.body.evidence.status} />
+            <StatusRow label="qualificationStatus" value={returnEvidence.body.evidence.qualificationStatus} />
+            <StatusRow
+              label="confirmedRecoverableAmountByCurrency"
+              value={JSON.stringify(returnEvidence.body.evidence.confirmedRecoverableAmountByCurrency)}
+            />
+            <StatusRow label="policyVersion" value={returnEvidence.body.evidence.policyVersion} />
+            <StatusRow label="computedAt" value={returnEvidence.body.evidence.computedAt} />
+            <StatusRow
+              label="boundary"
+              value={
+                'readOnly=' + String(returnEvidence.body.boundary.readOnly) +
+                ' recomputedOnRead=' + String(returnEvidence.body.boundary.recomputedOnRead) +
+                ' frontendMayRecalculate=' + String(returnEvidence.body.boundary.frontendMayRecalculate) +
+                ' filingSubmitted=' + String(returnEvidence.body.boundary.filingSubmitted) +
+                ' transportEnabled=' + String(returnEvidence.body.boundary.transportEnabled)
+              }
+            />
+            <p className="mt-2 text-xs text-slate-500">
+              本卡片只展示后端已裁决并持久化的结果；金额与匹配**不会**在前端重新计算，也不代表已提交或已追回。
+            </p>
+          </div>
+        )}
+      </section>
 
       <section className="rounded border border-slate-200 p-4">
         <h2 className="text-base font-medium">Carrier claim responses（Queue #10 读模型）</h2>
