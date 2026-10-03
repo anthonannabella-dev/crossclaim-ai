@@ -32,7 +32,7 @@
 
 | ID | 缺口 | 来源 | 动作 |
 |---|---|---|---|
-| G1 | 统一 fee guard 收口：所有 `FeeCalculation` 创建路径必须过 `evaluateFeeGuard` | MSG-20261003-124 ㉓㉔㉕⑥ | `record-fee.ts` 保留既有装配、只在 create 前接 guard；`commission-reconciliation.ts` 改为 matched settlement → verified recovered truth → RecoveryCommercialEligibility → SettlementFeeEligibility → resolve versioned policy → guard → FeeCalculation；补 ㊱ 回归 |
+| ~~G1~~ **DONE** | 统一 fee guard 收口：所有 `FeeCalculation` 创建路径必须过 `evaluateFeeGuard`（`commission-reconciliation.ts` 已按 ㉕ 改造：matched settlement → verified recovered truth → 绑定 agreement policy → guard → FeeCalculation；`record-fee.ts` 既有装配保留） | MSG-20261003-124 ㉓㉔㉕⑥ | `record-fee.ts` 保留既有装配、只在 create 前接 guard；`commission-reconciliation.ts` 改为 matched settlement → verified recovered truth → RecoveryCommercialEligibility → SettlementFeeEligibility → resolve versioned policy → guard → FeeCalculation；补 ㊱ 回归 |
 | G2 | C17 `CustomsSubmissionAttempt`（幂等根）+ `CustomsSubmissionAttemptFact`（append-only 状态） | MSG-20261003-124 ③④⑤⑥㊲ | Schema/migration + tenant/append-only 清单 + store + PG 回归（timeout 不建第二根、ambiguous 不重发、SUBMITTED 必带 providerSubmissionId）→ 送 **C17 FINAL SCHEMA CHECKPOINT** |
 | G3 | C21 HTTP：`POST /customs-opportunities/:id/start-recovery` + `GET .../filing-status` + `customs.recovery.start` Action Guard/RBAC | MSG-20261003-124 ⑭–㉑ | 实现并按 `filingSubmitted=false` / `externalExecutionStatus=NOT_STARTED` 语义暴露；真实 DB E2E（401/403/404/400/200/409 语义） |
 | G4 | Customs C1–C7 内部链（evidence/data contract → duty truth → classification discrepancy → eligibility → estimate → claim-ready package） | HOST DIRECTIVE 2026-10-03 补充四 §3 ㉓ | 逐单元契约→持久化→HTTP→测试；真实 filing 不在此范围 |

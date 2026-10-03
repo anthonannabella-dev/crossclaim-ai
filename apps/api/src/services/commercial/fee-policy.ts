@@ -284,6 +284,33 @@ export function evaluateFeeGuard(input: {
 }
 
 /** 边界自证：策略/预览层不做任何资金动作。 */
+/**
+ * 已确认 commercial agreement 的费率 → 绑定 FeePolicy（MSG-20261003-124 ㉖㉗㉘㉙）:
+ *   · 历史已确认的 20% 条款保持 20%（不因默认 15% 被回写）;
+ *   · 非 15%/20% 的协议费率以 AGREEMENT_BOUND_<bps> 绑定，仍然完全 server-side;
+ *   · client 无法影响该绑定（费率来自已确认 terms，guard 亦拒绝 clientSuppliedRateBps）。
+ */
+export function policyFromConfirmedAgreementRate(rate: string, currency: string | null = null): FeePolicy {
+  const rateBps = Math.round(Number(rate) * 10000);
+  if (!Number.isFinite(rateBps) || rateBps <= 0 || rateBps > 10000) throw new Error('INVALID_AGREEMENT_RATE:' + rate);
+  const known =
+    rateBps === 1500 ? { policyId: 'STANDARD_SUCCESS_15', version: 'v1' } :
+    rateBps === 2000 ? { policyId: 'STANDARD_SUCCESS_20', version: 'v0' } :
+    { policyId: 'AGREEMENT_BOUND_' + rateBps, version: 'agreement-bound' };
+  return {
+    policyId: known.policyId,
+    policyRef: 'STANDARD_SUCCESS',
+    policyKind: 'STANDARD_SUCCESS',
+    version: known.version,
+    rateBps,
+    effectiveFrom: '2000-01-01',
+    effectiveTo: null,
+    waiverCapAmount: null,
+    currency,
+    description: 'agreement-bound policy（由已确认 commercial terms 派生；历史费率不被默认策略回写）',
+  };
+}
+
 export const FEE_POLICY_BOUNDARY = {
   paymentCollectionPerformed: false,
   autopayEnabled: false,

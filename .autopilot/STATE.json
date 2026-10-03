@@ -2,14 +2,14 @@
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
   "head": "0693821",
   "status": "RECONCILED",
-  "current_task": "MASTER GAP CLOSURE：按 register G1–G10 顺序闭环内部差集。当前执行 G1（统一 fee guard 收口：record-fee.ts 只在 create 前接 guard；commission-reconciliation.ts 改为 verified recovered truth → versioned policy → guard → FeeCalculation）。",
+  "current_task": "MASTER GAP CLOSURE：G1 DONE → 执行 G2（C17 CustomsSubmissionAttempt root + CustomsSubmissionAttemptFact append-only → C17 FINAL SCHEMA CHECKPOINT 送审）",
   "next_task": "PC-12A 实施 → 本地测试 + tsc api/web + API contract + full CI → PC-12A CHECKPOINT 送审。",
   "send_head": "07b7009",
   "decision_head": "07b7009",
   "last_chatgpt_message": "MSG-20261003-124",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-03T08:41:22.476Z",
+  "updated_at": "2026-10-03T08:44:15.496Z",
   "previous_head": "8cab430",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -49,11 +49,11 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-03T08:41:22.476Z",
+  "last_tick_at": "2026-10-03T08:44:15.496Z",
   "state": "IMPLEMENT",
-  "last_action": "登记 HOST DIRECTIVE 2026-10-03（补充五）MASTER GAP CLOSURE 模式 → 重算 20 项目标差集并写入 MASTER-GAP-CLOSURE-REGISTER（G1–G10 内部缺口 / E1–E6 外部依赖）→ STATE 切换 execution_mode=MASTER_GAP_CLOSURE",
-  "last_action_at": "2026-10-03T08:41:22.476Z",
-  "next_action": "G1：fee guard 统一收口（commission-reconciliation.ts REQUIRED FIX）+ ㊱ 回归；随后 G2（C17 root+fact → FINAL SCHEMA CHECKPOINT 送审）、G3（C21 HTTP + Guard）、G4（Customs C1–C7）、G5（前端接线核查）、G6（文档同步）、G7–G10（复核项）。每完成即重算 register。",
+  "last_action": "G1 完成：统一 fee guard 收口 —— 新增 policyFromConfirmedAgreementRate（agreement 绑定，历史 20% 不回写），commission-reconciliation.ts 在 FeeCalculation.create 前接 evaluateFeeGuard（未通过则拒绝计费并记录原因）→ 27/27 fee 相关测试 + 118/118 回归 → tsc api/web 0 → API contract OK → register 标记 G1 DONE",
+  "last_action_at": "2026-10-03T08:44:15.496Z",
+  "next_action": "G2：按 MSG-20261003-124 ③④⑤ 设计并实现 CustomsSubmissionAttempt（幂等根，immutable + UNIQUE(org,provider,operation,idempotencyKey)）与 CustomsSubmissionAttemptFact（append-only 状态事实 ATTEMPTED/UNKNOWN_PROVIDER_RESPONSE/RECONCILING/SUBMITTED/FAILED_CONFIRMED/MANUAL_REVIEW；SUBMITTED → providerSubmissionId NOT NULL）→ migration + tenant/append-only 清单 + store + PG 回归（timeout 不建第二根 / ambiguous 不重发 / 24h → MANUAL_REVIEW）→ 送 C17 FINAL SCHEMA CHECKPOINT。",
   "current_head": "e060a5f",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
@@ -4454,7 +4454,6 @@
     "registered_at": "2026-10-03T08:41:22.475Z",
     "recomputed_at_head": "0693821",
     "internal_remaining_gap": [
-      "G1",
       "G2",
       "G3",
       "G4",
@@ -4474,6 +4473,12 @@
       "E6"
     ],
     "internal_code_complete": false,
-    "rule": "PASS → 下一内部缺口；REVISE → 自动修改重送审；BLOCK → 合规替代；仅真正 HOST_REQUIRED 才停。每单元完成即重算差集。"
+    "rule": "PASS → 下一内部缺口；REVISE → 自动修改重送审；BLOCK → 合规替代；仅真正 HOST_REQUIRED 才停。每单元完成即重算差集。",
+    "g1": {
+      "status": "DONE",
+      "change": "commission-reconciliation.ts：FeeCalculation.create 前接 evaluateFeeGuard（费率由已确认 agreement 绑定，历史 20% 保持；verified recovered truth = status RECEIVED 的精确匹配 settlement；未通过则 billingStatus=NOT_APPLICABLE + confidenceReason 记录 guard 原因，不创建 Fee/Billing）",
+      "helper": "commercial/fee-policy.ts::policyFromConfirmedAgreementRate（15%→STANDARD_SUCCESS_15/v1；20%→STANDARD_SUCCESS_20/v0；其它→AGREEMENT_BOUND_<bps>；非法费率抛错）",
+      "tests": "commercial-fee-guard-wiring 6/6 + commercial-fee-policy 14/14 + commercial-fee-policy-cutover 7/7；回归 commission/settlement/workflow/carrier-claim-response 11 files / 118 tests PASS"
+    }
   }
 }
