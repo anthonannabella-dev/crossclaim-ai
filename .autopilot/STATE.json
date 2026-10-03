@@ -4890,7 +4890,7 @@
   "singleton_runner": "VERIFIED",
   "ci_pending": [],
   "ci_red": [],
-  "ci_checked_at": "2026-10-03T15:20:44.735Z",
+  "ci_checked_at": "2026-10-03T15:27:43.282Z",
   "continuous_verification": {
     "at": "2026-10-03T14:17:18.723Z",
     "a_to_b_to_c": "VERIFIED（单次启动连续执行 u1→u2→u3，无 heartbeat 唤醒；停止条件 = SAFE_CONTINUATION_QUEUE_EMPTY）",
@@ -4967,8 +4967,8 @@
   "awaiting_verdict": true,
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-03T15:20:44.914Z",
-    "head": "03b4008",
+    "computed_at": "2026-10-03T15:28:07.634Z",
+    "head": "1e67429",
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
     "REAL_VALIDATION_COMPLETE": "NO",
@@ -5040,7 +5040,7 @@
     "status": "DONE（MSG-20261003-134：端点+customs.recovery.chain.run/INTERNAL_WRITE+角色矩阵+immutable execution identity+路由级 E2E 4/4+API.md 90/77）"
   },
   "gates_recorded_at": "2026-10-03T15:17:04.369Z",
-  "ci_status_head": "03b4008",
+  "ci_status_head": "1e67429",
   "ci_status": "in_progress",
-  "ci_run_id": "37132703350"
+  "ci_run_id": "37132929683"
 }

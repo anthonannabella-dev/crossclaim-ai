@@ -39,7 +39,13 @@ const openBacklog = backlog.items.filter((item) => !completed.has(item.id) && it
 const openStatic = units.units.filter((unit) => !completed.has(unit.id)).map((unit) => unit.id);
 const openInternal = [...openStatic, ...openBacklog];
 
-const dirty = git(["status", "--porcelain"]);
+// 排除自动化运行态文件（.autopilot/ 与自动生成的报告），避免「运行检查本身把树弄脏」的自指问题。
+const dirtyRaw = git(["status", "--porcelain"]);
+const dirty = dirtyRaw
+  .split("\n")
+  .filter((line) => line.trim() !== "")
+  .filter((line) => !line.includes(".autopilot/") && !line.includes("docs/releases/FINAL-ACCEPTANCE-REPORT.md"))
+  .join("\n");
 const head = git(["rev-parse", "--short", "HEAD"]);
 
 const checks = {
