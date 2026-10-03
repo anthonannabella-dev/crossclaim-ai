@@ -1,11 +1,11 @@
 # FINAL ACCEPTANCE REPORT（自动生成，请勿手改）
 
-- 生成时间：2026-10-03T18:08:27.704Z
-- 单一权威矩阵：`docs/releases/ACCEPTANCE-MATRIX.json` @0f7f7ac
-- acceptance HEAD：`0f7f7ac`
+- 生成时间：2026-10-03T23:17:35.770Z
+- 单一权威矩阵：`docs/releases/ACCEPTANCE-MATRIX.json` @92c99fc
+- acceptance HEAD：`92c99fc`
 - 协议：`docs/releases/FINAL-ACCEPTANCE-PROTOCOL.md`（三层验收；禁止自证）
-- 状态：CODE_COMPLETE=YES · INTEGRATION_COMPLETE=NO · REAL_VALIDATION_COMPLETE=NO · PRODUCTION_READY=NO
-- INTERNAL_READY=YES；AUTONOMOUS_INTERNAL_WORK=EXHAUSTED
+- 状态：CODE_COMPLETE=NO · INTEGRATION_COMPLETE=NO · REAL_VALIDATION_COMPLETE=NO · PRODUCTION_READY=NO
+- INTERNAL_READY=NO；AUTONOMOUS_INTERNAL_WORK=RUNNING
 - INDEPENDENT_FINAL_AUDIT_REQUIRED = TRUE（独立审计完成前不得置 PRODUCTION_READY=YES）
 
 ## 1. 验收项（派生自 ACCEPTANCE-MATRIX.json）
@@ -40,6 +40,17 @@
 
 ### Layer 1 未通过检查（final-status 计算器输出；UNVERIFIED = 未绑定当前 HEAD 的实证）
 
+- L1-04_full_ci_success_on_head → false（acceptance_head=92c99fc ci_head=f5bdd92 ci=in_progress run=37143524364）
+- L1-05_pg_regression_passed → UNVERIFIED（pg_regression recorded at fd4c675 ≠ acceptance head 92c99fc（且中间存在非簿记变更））
+- L1-06_fresh_db_migration_passed → UNVERIFIED（fresh_db_migration recorded at bd87ffb ≠ acceptance head 92c99fc（且中间存在非簿记变更））
+- L1-07_api_typecheck_passed → UNVERIFIED（typecheck_api recorded at bd87ffb ≠ acceptance head 92c99fc（且中间存在非簿记变更））
+- L1-08_web_typecheck_build_passed → UNVERIFIED（typecheck_web recorded at bd87ffb ≠ acceptance head 92c99fc（且中间存在非簿记变更））
+- L1-09_no_skipped_critical_tests → UNVERIFIED（tests_no_skipped recorded at bd87ffb ≠ acceptance head 92c99fc（且中间存在非簿记变更））
+- L1-10_git_working_tree_clean → false（dirty entries: 9）
+- L1-11_docs_state_consistent → UNVERIFIED（docs_sync recorded at bd87ffb ≠ acceptance head 92c99fc（且中间存在非簿记变更））
+- L1-12_schema_invariants_verified → UNVERIFIED（schema_invariants recorded at bd87ffb ≠ acceptance head 92c99fc（且中间存在非簿记变更））
+- L1-13_negative_paths_covered → UNVERIFIED（negative_paths recorded at bd87ffb ≠ acceptance head 92c99fc（且中间存在非簿记变更））
+- L1-14_real_pg_e2e_not_mock_only → UNVERIFIED（pg_e2e_real recorded at bd87ffb ≠ acceptance head 92c99fc（且中间存在非簿记变更））
 
 ## 3. 外部 / 宿主依赖（不得自证完成）
 

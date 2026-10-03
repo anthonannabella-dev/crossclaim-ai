@@ -74,13 +74,17 @@ export {
   type InvitationUserPort,
 } from './invitation';
 export {
+  HOST_SESSION_COOKIE,
   SESSION_COOKIE,
   SESSION_COOKIE_MAX_AGE_SECONDS,
   clearSessionCookieHeader,
   handleAuthRequest,
+  isSecureCookieContext,
   parseCookies,
+  readSessionToken,
   sessionCookieHeader,
   type AuthRouteDeps,
+  type SessionCookieOptions,
 } from './http-routes';
 export { handleDataRequest, type DataRouteDeps } from './data-routes';
 export { MAX_UPLOAD_BYTES, handleUploadRequest, type UploadRouteDeps } from './upload-routes';

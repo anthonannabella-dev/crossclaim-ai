@@ -17,6 +17,7 @@ export type AuthErrorCode =
   | 'INVALID_CREDENTIALS'
   | 'ACCOUNT_LOCKED'
   | 'ACCOUNT_DISABLED'
+  | 'EMAIL_NOT_VERIFIED'
   | 'NO_MEMBERSHIP'
   | 'AMBIGUOUS_ORGANIZATION';
 
@@ -35,6 +36,8 @@ export interface AuthUserRow {
   email: string;
   passwordHash: string | null;
   status: string;
+  /** 邮箱验证状态（公共 SaaS 注册闸门；invitation flow 用户为 true）。 */
+  emailVerified: boolean;
   failedLogins: number;
   lockedUntil: Date | null;
 }
@@ -135,6 +138,13 @@ export async function loginWithPassword(
     await deps.users.recordLoginFailure(user.id, failedLogins, lockedUntil);
     await auditLoginFailed(deps, { userId: user.id, reason: 'BAD_PASSWORD', failedLogins });
     throw new AuthError('INVALID_CREDENTIALS', '邮箱或密码不正确');
+  }
+
+  // P0-1（POST-ACCEPTANCE GAP CLOSURE §一）：未验证邮箱不得发放 session。
+  // 放在密码校验之后：只有持正确凭据者才会看到该状态，避免邮箱枚举。
+  if (user.emailVerified !== true) {
+    await auditLoginFailed(deps, { userId: user.id, reason: 'EMAIL_NOT_VERIFIED' });
+    throw new AuthError('EMAIL_NOT_VERIFIED', '邮箱尚未验证，请先完成邮箱验证');
   }
 
   const memberships = input.organizationId

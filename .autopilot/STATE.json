@@ -4993,17 +4993,29 @@
   "awaiting_verdict": false,
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-03T18:08:27.640Z",
-    "head": "0f7f7ac",
-    "acceptance_head": "0f7f7ac",
+    "computed_at": "2026-10-03T23:17:35.704Z",
+    "head": "92c99fc",
+    "acceptance_head": "92c99fc",
     "protocol_layer1_items": 14,
-    "CODE_COMPLETE": "YES",
+    "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
     "REAL_VALIDATION_COMPLETE": "NO",
     "PRODUCTION_READY": "NO",
-    "INTERNAL_CODE_COMPLETE": true,
+    "INTERNAL_CODE_COMPLETE": false,
     "INDEPENDENT_FINAL_AUDIT_REQUIRED": true,
-    "OPEN_INTERNAL_ITEMS": [],
+    "OPEN_INTERNAL_ITEMS": [
+      "CHECK:L1-04_full_ci_success_on_head",
+      "CHECK:L1-05_pg_regression_passed",
+      "CHECK:L1-06_fresh_db_migration_passed",
+      "CHECK:L1-07_api_typecheck_passed",
+      "CHECK:L1-08_web_typecheck_build_passed",
+      "CHECK:L1-09_no_skipped_critical_tests",
+      "CHECK:L1-10_git_working_tree_clean",
+      "CHECK:L1-11_docs_state_consistent",
+      "CHECK:L1-12_schema_invariants_verified",
+      "CHECK:L1-13_negative_paths_covered",
+      "CHECK:L1-14_real_pg_e2e_not_mock_only"
+    ],
     "HOST_ACTION_REQUIRED": [
       "BG-006-production-candidate-preflight"
     ],
@@ -5048,53 +5060,53 @@
       },
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
-        "status": true,
-        "evidence": "acceptance_head=0f7f7ac ci_head=0f7f7ac ci=success run=37142365134"
+        "status": false,
+        "evidence": "acceptance_head=92c99fc ci_head=f5bdd92 ci=in_progress run=37143524364"
       },
       "L1-05_pg_regression_passed": {
-        "status": true,
-        "evidence": "本地全量 DB 回归 133 文件 / 1060 用例 PASS（真实 PostgreSQL）+ 四域回归 45 文件 / 362 用例 @fd4c675"
+        "status": "UNVERIFIED",
+        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head 92c99fc（且中间存在非簿记变更）"
       },
       "L1-06_fresh_db_migration_passed": {
-        "status": true,
-        "evidence": "migrate status：66 migrations up to date @bd87ffb"
+        "status": "UNVERIFIED",
+        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head 92c99fc（且中间存在非簿记变更）"
       },
       "L1-07_api_typecheck_passed": {
-        "status": true,
-        "evidence": "tsc --noEmit (api) EXIT=0 @bd87ffb"
+        "status": "UNVERIFIED",
+        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head 92c99fc（且中间存在非簿记变更）"
       },
       "L1-08_web_typecheck_build_passed": {
-        "status": true,
-        "evidence": "tsc --noEmit (web) EXIT=0 @bd87ffb"
+        "status": "UNVERIFIED",
+        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head 92c99fc（且中间存在非簿记变更）"
       },
       "L1-09_no_skipped_critical_tests": {
-        "status": true,
-        "evidence": "四域回归 skipped=0 @bd87ffb"
+        "status": "UNVERIFIED",
+        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head 92c99fc（且中间存在非簿记变更）"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
-        "status": true,
-        "evidence": "porcelain empty"
+        "status": false,
+        "evidence": "dirty entries: 9"
       },
       "L1-11_docs_state_consistent": {
-        "status": true,
-        "evidence": "doc-sync 实时计数 OK；API_CONTRACT_OK；README 同步 @bd87ffb"
+        "status": "UNVERIFIED",
+        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head 92c99fc（且中间存在非簿记变更）"
       },
       "L1-12_schema_invariants_verified": {
-        "status": true,
-        "evidence": "db-constraint-coverage 26/26 + 触发器清单核对（required 98 / append-only 43） @bd87ffb"
+        "status": "UNVERIFIED",
+        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head 92c99fc（且中间存在非簿记变更）"
       },
       "L1-13_negative_paths_covered": {
-        "status": true,
-        "evidence": "四域负路径覆盖（跨租户/RBAC/幂等/并发/digest/证据/币种金额/未授权写/UNKNOWN provider） @bd87ffb"
+        "status": "UNVERIFIED",
+        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head 92c99fc（且中间存在非簿记变更）"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
-        "status": true,
-        "evidence": "真实 PostgreSQL 套件全绿（customs 26 / IOR 9 / PS04 8 / Phase-1 3 / state-read 6 / qualification 3 / runtime E2E 2） @bd87ffb"
+        "status": "UNVERIFIED",
+        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head 92c99fc（且中间存在非簿记变更）"
       }
     },
-    "AUTONOMOUS_INTERNAL_WORK": "EXHAUSTED",
-    "INTERNAL_READY": "YES",
+    "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
+    "INTERNAL_READY": "NO",
     "EXTERNAL_GATES_REMAINING": {
       "HOST_ACTION_REQUIRED": [
         "BG-006-production-candidate-preflight"
@@ -5125,13 +5137,13 @@
       "ARCH_REVIEW_REQUIRED": []
     }
   },
-  "code_complete": "YES",
+  "code_complete": "NO",
   "integration_complete": "NO",
   "real_validation_complete": "NO",
   "production_ready": "NO",
   "independent_final_audit_required": true,
   "final_acceptance_protocol": "ACTIVE（docs/releases/FINAL-ACCEPTANCE-PROTOCOL.md；三层验收 + 4 状态重算 + 独立审计）",
-  "autonomous_internal_work": "EXHAUSTED",
+  "autonomous_internal_work": "RUNNING",
   "arch_review_pending": [],
   "arch_review_request": {
     "id": "BG-021-independent-site-persistence-schema-delta",

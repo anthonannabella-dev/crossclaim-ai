@@ -54,7 +54,7 @@ import {
   handleUploadRequest,
   parseCookies,
   resolveSession,
-  SESSION_COOKIE,
+  readSessionToken,
 } from './services/auth';
 import { handleWorkflowRequest } from './services/workflow';
 import type { CarrierClaimPackageSource } from './services/carriers/carrier-manual-submission';
@@ -390,7 +390,7 @@ export function createServer(deps: ServerDeps): http.Server {
         send(503, { error: 'ops_unavailable' });
         return;
       }
-      const cookie = parseCookies(req.headers.cookie)[SESSION_COOKIE];
+      const cookie = readSessionToken(parseCookies(req.headers.cookie));
       if (!cookie) {
         send(401, { error: 'UNAUTHENTICATED' });
         return;

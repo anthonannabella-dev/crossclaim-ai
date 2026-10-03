@@ -28,7 +28,7 @@ import {
 } from '../acquisition';
 import type { ImportRepository } from '../ingest';
 import type { StorageAdapter } from '../storage';
-import { parseCookies, SESSION_COOKIE } from './http-routes';
+import { parseCookies, readSessionToken } from './http-routes';
 import { resolveSession, type SessionDeps } from './session';
 
 export const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
@@ -102,7 +102,7 @@ export async function handleUploadRequest(
     return true;
   }
 
-  const token = parseCookies(req.headers.cookie)[SESSION_COOKIE];
+  const token = readSessionToken(parseCookies(req.headers.cookie));
   const context = token ? await resolveSession(token, deps.session) : null;
   if (!context) {
     sendJson(res, 401, { error: 'UNAUTHENTICATED' });

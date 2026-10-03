@@ -16,6 +16,11 @@ import {
   resolveSession,
   resolveScryptParams,
   revokeSession,
+  HOST_SESSION_COOKIE,
+  clearSessionCookieHeader,
+  isSecureCookieContext,
+  readSessionToken,
+  sessionCookieHeader,
   verifyPassword,
   type AuthUserRow,
   type SessionPort,
@@ -110,6 +115,7 @@ function userFixture(user: Partial<AuthUserRow> = {}) {
     email: 'owner@example.com',
     passwordHash: null,
     status: 'ACTIVE',
+    emailVerified: true,
     failedLogins: 0,
     lockedUntil: null,
     ...user,
@@ -328,5 +334,99 @@ describe('C-0008-A — login', () => {
     expect(serialized).not.toContain('super-secret-9999');
     // 未知邮箱没有租户归属 → 不写 AuditLog
     expect(fixture.sink.rows).toHaveLength(0);
+  });
+});
+
+describe('P0-1 — email verification login gate（POST-ACCEPTANCE GAP CLOSURE §一）', () => {
+  it('未验证邮箱（emailVerified=false）→ EMAIL_NOT_VERIFIED，且不创建会话、不记录登录成功', async () => {
+    const fixture = sessionFixture();
+    const password = 'owner-pass-1';
+    const user = userFixture({ passwordHash: hashPassword(password, FAST_PARAMS), emailVerified: false });
+    let thrown: unknown = null;
+    try {
+      await loginWithPassword({ email: 'owner@example.com', password }, { users: user.port, session: fixture.deps, audit: fixture.deps.audit });
+    } catch (error) {
+      thrown = error;
+    }
+    expect(thrown instanceof AuthError).toBe(true);
+    expect((thrown as AuthError).code).toBe('EMAIL_NOT_VERIFIED');
+    expect(fixture.rows.size).toBe(0);
+    expect(user.successes).toHaveLength(0);
+  });
+
+  it('验证后（emailVerified=true）→ 登录成功并发放会话', async () => {
+    const fixture = sessionFixture();
+    const password = 'owner-pass-1';
+    const user = userFixture({ passwordHash: hashPassword(password, FAST_PARAMS), emailVerified: true });
+    const result = await loginWithPassword({ email: 'owner@example.com', password }, { users: user.port, session: fixture.deps, audit: fixture.deps.audit });
+    expect(result.role).toBe('OWNER');
+    expect(fixture.rows.size).toBe(1);
+  });
+
+  it('停用账号仍被拒绝（EMAIL_NOT_VERIFIED 不改变既有语义）', async () => {
+    const fixture = sessionFixture();
+    const password = 'owner-pass-1';
+    const user = userFixture({ passwordHash: hashPassword(password, FAST_PARAMS), status: 'DISABLED' });
+    let thrown: unknown = null;
+    try {
+      await loginWithPassword({ email: 'owner@example.com', password }, { users: user.port, session: fixture.deps, audit: fixture.deps.audit });
+    } catch (error) {
+      thrown = error;
+    }
+    expect((thrown as AuthError).code).toBe('ACCOUNT_DISABLED');
+    expect(fixture.rows.size).toBe(0);
+  });
+
+  it('错误密码仍被拒绝（且不会因此暴露验证状态）', async () => {
+    const fixture = sessionFixture();
+    const user = userFixture({ passwordHash: hashPassword('owner-pass-1', FAST_PARAMS), emailVerified: false });
+    let thrown: unknown = null;
+    try {
+      await loginWithPassword({ email: 'owner@example.com', password: 'wrong-pass-1' }, { users: user.port, session: fixture.deps, audit: fixture.deps.audit });
+    } catch (error) {
+      thrown = error;
+    }
+    expect((thrown as AuthError).code).toBe('INVALID_CREDENTIALS');
+    expect(fixture.rows.size).toBe(0);
+  });
+});
+
+describe('P1-6 — production cookie hardening（POST-ACCEPTANCE GAP CLOSURE §六）', () => {
+  it('Secure 仅在 production / HTTPS 启用；开发 localhost 不受影响', () => {
+    expect(isSecureCookieContext({ nodeEnv: 'production' })).toBe(true);
+    expect(isSecureCookieContext({ nodeEnv: 'development' })).toBe(false);
+    expect(isSecureCookieContext({ nodeEnv: 'development', forwardedProto: 'https' })).toBe(true);
+    expect(isSecureCookieContext({ nodeEnv: 'production', forwardedProto: 'http' })).toBe(true);
+  });
+
+  it('生产写入含 Secure；开发不含；Path=/ 且无 Domain', () => {
+    const prod = sessionCookieHeader('tok', 3600, { secure: true });
+    const dev = sessionCookieHeader('tok');
+    expect(prod).toContain('cc_session=tok');
+    expect(prod).toContain('Path=/');
+    expect(prod).toContain('HttpOnly');
+    expect(prod).toContain('SameSite=Lax');
+    expect(prod).toContain('Secure');
+    expect(prod).not.toContain('Domain=');
+    expect(dev).not.toContain('Secure');
+  });
+
+  it('logout 清除参数与写入完全一致（含 Secure），否则浏览器不会真正清除', () => {
+    const written = sessionCookieHeader('tok', 3600, { secure: true });
+    const cleared = clearSessionCookieHeader({ secure: true });
+    const attrs = (value: string) => value.split(';').map((part) => part.trim()).filter((part) => !part.startsWith('cc_session=') && !part.startsWith('Max-Age='));
+    expect(attrs(cleared)).toEqual(attrs(written));
+    expect(cleared).toContain('Max-Age=0');
+  });
+
+  it('读取端同时接受 cc_session 与 __Host-cc_session（命名切换不踢掉既有会话）', () => {
+    expect(readSessionToken({ cc_session: 'a' })).toBe('a');
+    expect(readSessionToken({ '__Host-cc_session': 'b' })).toBe('b');
+    expect(readSessionToken({})).toBeUndefined();
+    expect(HOST_SESSION_COOKIE).toBe('__Host-cc_session');
+    const hostCookie = sessionCookieHeader('tok', 3600, { secure: true, name: HOST_SESSION_COOKIE });
+    expect(hostCookie.startsWith('__Host-cc_session=tok')).toBe(true);
+    expect(hostCookie).toContain('Secure');
+    expect(hostCookie).not.toContain('Domain=');
   });
 });

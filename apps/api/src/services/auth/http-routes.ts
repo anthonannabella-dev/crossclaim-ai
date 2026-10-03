@@ -51,15 +51,46 @@ export function parseCookies(header: string | undefined): Record<string, string>
   return out;
 }
 
+/** 支持的生产 cookie 名（`__Host-` 前缀要求 Secure + Path=/ + 无 Domain）。 */
+export const HOST_SESSION_COOKIE = '__Host-' + SESSION_COOKIE;
+
+/** 读取端同时接受两种名字，切换命名时不会踢掉既有会话。 */
+export function readSessionToken(cookies: Record<string, string>): string | undefined {
+  return cookies[SESSION_COOKIE] ?? cookies[HOST_SESSION_COOKIE];
+}
+
+/**
+ * P1-6：生产/HTTPS 上下文自动启用 Secure。
+ * 判定顺序：显式 cookieName/secure 选项 → `x-forwarded-proto: https` → `NODE_ENV === production`。
+ * 开发环境（localhost / NODE_ENV!=production / 非 https）保持不加 Secure，避免破坏本地登录。
+ */
+export function isSecureCookieContext(input: { nodeEnv?: string | undefined; forwardedProto?: string | undefined }): boolean {
+  const proto = String(input.forwardedProto ?? '').split(',')[0]?.trim().toLowerCase();
+  if (proto === 'https') return true;
+  return input.nodeEnv === 'production';
+}
+
+export interface SessionCookieOptions {
+  secure?: boolean;
+  name?: string;
+}
+
+function cookieAttributes(options: SessionCookieOptions): string {
+  return '; Path=/; HttpOnly; SameSite=Lax' + (options.secure === true ? '; Secure' : '');
+}
+
 export function sessionCookieHeader(
   token: string,
   maxAgeSeconds = SESSION_COOKIE_MAX_AGE_SECONDS,
+  options: SessionCookieOptions = {},
 ): string {
-  return `${SESSION_COOKIE}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAgeSeconds}`;
+  const name = options.name ?? SESSION_COOKIE;
+  return `${name}=${token}${cookieAttributes(options)}; Max-Age=${maxAgeSeconds}`;
 }
 
-export function clearSessionCookieHeader(): string {
-  return `${SESSION_COOKIE}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`;
+export function clearSessionCookieHeader(options: SessionCookieOptions = {}): string {
+  const name = options.name ?? SESSION_COOKIE;
+  return `${name}=${cookieAttributes(options)}; Max-Age=0`;
 }
 
 async function readJsonBody(req: IncomingMessage): Promise<Record<string, unknown>> {
@@ -95,6 +126,16 @@ function sendJson(
     ...headers,
   });
   res.end(body);
+}
+
+/** 生产启用 Secure；`SESSION_COOKIE_HOST_PREFIX=true` 时使用 `__Host-` 名（默认保持 cc_session）。 */
+function cookieOptionsFor(req: IncomingMessage): SessionCookieOptions {
+  const secure = isSecureCookieContext({
+    nodeEnv: process.env.NODE_ENV,
+    forwardedProto: (req.headers['x-forwarded-proto'] as string | undefined) ?? undefined,
+  });
+  const useHostPrefix = secure && process.env.SESSION_COOKIE_HOST_PREFIX === 'true';
+  return { secure, ...(useHostPrefix ? { name: HOST_SESSION_COOKIE } : {}) };
 }
 
 export async function handleAuthRequest(
@@ -141,12 +182,12 @@ export async function handleAuthRequest(
         res,
         200,
         { userId: result.userId, organizationId: result.organizationId, role: result.role },
-        { 'set-cookie': sessionCookieHeader(result.token) },
+        { 'set-cookie': sessionCookieHeader(result.token, SESSION_COOKIE_MAX_AGE_SECONDS, cookieOptionsFor(req)) },
       );
       return true;
     } catch (error) {
       const code = error instanceof AuthError ? error.code : 'INVALID_CREDENTIALS';
-      sendJson(res, code === 'ACCOUNT_LOCKED' || code === 'ACCOUNT_DISABLED' ? 403 : 401, {
+      sendJson(res, code === 'ACCOUNT_LOCKED' || code === 'ACCOUNT_DISABLED' || code === 'EMAIL_NOT_VERIFIED' ? 403 : 401, {
         error: code,
         message: error instanceof AuthError ? error.message : '邮箱或密码不正确',
       });
@@ -203,7 +244,7 @@ export async function handleAuthRequest(
         );
       }
     }
-    sendJson(res, 204, {}, { 'set-cookie': clearSessionCookieHeader() });
+    sendJson(res, 204, {}, { 'set-cookie': clearSessionCookieHeader(cookieOptionsFor(req)) });
     return true;
   }
 

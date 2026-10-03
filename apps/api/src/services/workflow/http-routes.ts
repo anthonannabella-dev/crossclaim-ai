@@ -17,7 +17,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import type { PrismaClient } from '@prisma/client';
 
-import { parseCookies, SESSION_COOKIE } from '../auth/http-routes';
+import { parseCookies, readSessionToken } from '../auth/http-routes';
 import { resolveSession, type SessionContext, type SessionDeps } from '../auth/session';
 import {
   createManagedConnection,
@@ -664,7 +664,7 @@ export async function handleWorkflowRequest(
     return true;
   }
 
-  const token = parseCookies(req.headers.cookie)[SESSION_COOKIE];
+  const token = readSessionToken(parseCookies(req.headers.cookie));
   const context: SessionContext | null = token ? await resolveSession(token, deps.session) : null;
   if (!context) {
     sendJson(res, 401, { error: 'UNAUTHENTICATED' });

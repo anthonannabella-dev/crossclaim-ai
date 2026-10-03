@@ -23,6 +23,7 @@ export function createPrismaAuthUserPort(prisma: PrismaClient): AuthUserPort {
           email: true,
           passwordHash: true,
           status: true,
+          emailVerified: true,
           failedLogins: true,
           lockedUntil: true,
         },

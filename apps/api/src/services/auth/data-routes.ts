@@ -22,7 +22,7 @@ import type { IncomingMessage, ServerResponse } from 'node:http';
 
 import type { PrismaClient } from '@prisma/client';
 
-import { parseCookies, SESSION_COOKIE } from './http-routes';
+import { parseCookies, readSessionToken } from './http-routes';
 import { resolveSession, type SessionContext, type SessionDeps } from './session';
 
 export interface DataRouteDeps {
@@ -118,7 +118,7 @@ async function requireSession(
   res: ServerResponse,
   deps: DataRouteDeps,
 ): Promise<SessionContext | null> {
-  const token = parseCookies(req.headers.cookie)[SESSION_COOKIE];
+  const token = readSessionToken(parseCookies(req.headers.cookie));
   const context = token ? await resolveSession(token, deps.session) : null;
   if (!context) {
     sendJson(res, 401, { error: 'UNAUTHENTICATED' });
