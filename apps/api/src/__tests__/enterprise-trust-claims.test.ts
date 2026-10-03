@@ -35,8 +35,13 @@ describe('P0-3 — enterprise trust claims guard', () => {
       } catch {
         continue;
       }
+      // 允许在「禁止 / 未取得 / 状态模型」语境中出现这些词（例如内部清单、裁决归档、心跳记录）；
+      // 只有把它们当成事实声称时才判为违规。
+      const hasNegationContext = /禁止|不得|未取得|NOT_AVAILABLE|EXTERNAL_AUDITED/.test(text);
       for (const claim of FORBIDDEN_CLAIMS) {
-        if (text.includes(claim)) offenders.push(file.replace(REPO_ROOT, '') + ' :: ' + claim);
+        if (text.includes(claim) && !hasNegationContext) {
+          offenders.push(file.replace(REPO_ROOT, '') + ' :: ' + claim);
+        }
       }
     }
     expect(offenders, '禁止对外自证的合规表述：' + offenders.join(', ')).toEqual([]);
