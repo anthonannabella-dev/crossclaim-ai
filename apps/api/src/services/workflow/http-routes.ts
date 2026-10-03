@@ -50,7 +50,6 @@ import { ApprovalBoundaryError } from '../action-guard/approval-tx-verify';
 import { createPrismaActionGuardAuditPort } from '../action-guard/runtime-guard-composition';
 import { handleCarrierManualSubmissionRequest } from '../carriers/carrier-manual-submission-http';
 import { createPrismaCarrierManualSubmissionStore } from '../carriers/carrier-manual-submission-prisma-store';
-import { CARRIER_MANUAL_SUBMISSION_ACTION } from '../carriers/carrier-manual-submission';
 import {
   PlatformWriteRequestError,
   requestPlatformWrite,
