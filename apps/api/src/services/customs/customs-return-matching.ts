@@ -218,6 +218,12 @@ export function normalizeCustomsReturnFact(input: CustomsReturnFactInput): Custo
     if (typeof value !== 'string' || value.trim() === '') fail('INVALID_REQUEST', field + ' 必填');
   }
   if (input.sku !== null && (typeof input.sku !== 'string' || input.sku.trim() === '')) fail('INVALID_REQUEST', 'sku 必须为非空字符串或 null');
+  if (!SAFE_REFERENCE_PATTERN.test(String(input.rawReference).trim())) {
+    fail('INVALID_REQUEST', 'rawReference 必须是 machine-safe 引用（禁止空格 / 自由文本 / PII）');
+  }
+  if (!SAFE_REFERENCE_PATTERN.test(String(input.importerOfRecordRef).trim())) {
+    fail('INVALID_REQUEST', 'importerOfRecordRef 必须是 machine-safe 引用（禁止空格 / PII）');
+  }
   const quantity = decimal6(input.quantity);
   if (toScaled(quantity) <= 0n) fail('INVALID_QUANTITY', '数量必须为正');
   const payload = {
