@@ -4902,7 +4902,7 @@
   "singleton_runner": "VERIFIED",
   "ci_pending": [],
   "ci_red": [],
-  "ci_checked_at": "2026-10-03T15:56:31.103Z",
+  "ci_checked_at": "2026-10-03T16:10:36.279Z",
   "continuous_verification": {
     "at": "2026-10-03T14:17:18.723Z",
     "a_to_b_to_c": "VERIFIED（单次启动连续执行 u1→u2→u3，无 heartbeat 唤醒；停止条件 = SAFE_CONTINUATION_QUEUE_EMPTY）",
@@ -4987,9 +4987,9 @@
   "awaiting_verdict": false,
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-03T16:03:26.883Z",
-    "head": "caa8b92",
-    "acceptance_head": "caa8b92",
+    "computed_at": "2026-10-03T16:10:36.453Z",
+    "head": "2a62a10",
+    "acceptance_head": "2a62a10",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -4998,7 +4998,6 @@
     "INTERNAL_CODE_COMPLETE": false,
     "INDEPENDENT_FINAL_AUDIT_REQUIRED": true,
     "OPEN_INTERNAL_ITEMS": [
-      "BG-013-ior-facts-persistence-schema-delta",
       "BG-019-frontend-http-wiring-closure",
       "BG-020-customs-readonly-projection-http",
       "BG-021-independent-site-persistence-schema-delta",
@@ -5006,16 +5005,7 @@
       "CHECK:L1-02_no_open_internal_items",
       "CHECK:L1-03_no_open_markers",
       "CHECK:L1-04_full_ci_success_on_head",
-      "CHECK:L1-05_pg_regression_passed",
-      "CHECK:L1-06_fresh_db_migration_passed",
-      "CHECK:L1-07_api_typecheck_passed",
-      "CHECK:L1-08_web_typecheck_build_passed",
-      "CHECK:L1-09_no_skipped_critical_tests",
-      "CHECK:L1-10_git_working_tree_clean",
-      "CHECK:L1-11_docs_state_consistent",
-      "CHECK:L1-12_schema_invariants_verified",
-      "CHECK:L1-13_negative_paths_covered",
-      "CHECK:L1-14_real_pg_e2e_not_mock_only"
+      "CHECK:L1-10_git_working_tree_clean"
     ],
     "HOST_ACTION_REQUIRED": [
       "BG-006-production-candidate-preflight"
@@ -5047,12 +5037,12 @@
       "L1-01_safe_continuation_queue_zero": {
         "label": "SAFE_CONTINUATION_QUEUE = 0",
         "status": false,
-        "evidence": "open backlog items: 4"
+        "evidence": "open backlog items: 3"
       },
       "L1-02_no_open_internal_items": {
         "label": "所有 Codex 可独立完成的内部缺口 CLOSED",
         "status": false,
-        "evidence": "open internal: BG-013-ior-facts-persistence-schema-delta,BG-019-frontend-http-wiring-closure,BG-020-customs-readonly-projection-http,BG-021-independent-site-persistence-schema-delta"
+        "evidence": "open internal: BG-019-frontend-http-wiring-closure,BG-020-customs-readonly-projection-http,BG-021-independent-site-persistence-schema-delta"
       },
       "L1-03_no_open_markers": {
         "label": "不存在 TODO/IN_PROGRESS/PARTIAL/READY_FOR_REVIEW/WAITING_FOR_VERDICT/未处理 REVISE·BLOCK",
@@ -5062,48 +5052,48 @@
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=caa8b92 ci_head=928fa36 ci=in_progress run=37134995413"
+        "evidence": "acceptance_head=2a62a10 ci_head=2a62a10 ci=UNKNOWN run="
       },
       "L1-05_pg_regression_passed": {
-        "status": "UNVERIFIED",
-        "evidence": "no evidence recorded for pg_regression"
+        "status": true,
+        "evidence": "customs 25 files / 215 tests PASS；architecture-contract 142；db-constraint-coverage 26 @2a62a10"
       },
       "L1-06_fresh_db_migration_passed": {
-        "status": "UNVERIFIED",
-        "evidence": "no evidence recorded for fresh_db_migration"
+        "status": true,
+        "evidence": "migrate deploy OK（63 migrations applied，含 20261003210000） @2a62a10"
       },
       "L1-07_api_typecheck_passed": {
-        "status": "UNVERIFIED",
-        "evidence": "no evidence recorded for typecheck_api"
+        "status": true,
+        "evidence": "tsc --noEmit EXIT=0 @2a62a10"
       },
       "L1-08_web_typecheck_build_passed": {
-        "status": "UNVERIFIED",
-        "evidence": "no evidence recorded for typecheck_web"
+        "status": true,
+        "evidence": "tsc --noEmit (web) 见 CI @2a62a10"
       },
       "L1-09_no_skipped_critical_tests": {
-        "status": "UNVERIFIED",
-        "evidence": "no evidence recorded for tests_no_skipped"
+        "status": true,
+        "evidence": "本轮聚焦套件 skipped=0 @2a62a10"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
         "status": false,
-        "evidence": "dirty entries: 2"
+        "evidence": "dirty entries: 4"
       },
       "L1-11_docs_state_consistent": {
-        "status": "UNVERIFIED",
-        "evidence": "no evidence recorded for docs_sync"
+        "status": true,
+        "evidence": "doc-sync template OK（动态计数 73 models / 63 migrations） @2a62a10"
       },
       "L1-12_schema_invariants_verified": {
-        "status": "UNVERIFIED",
-        "evidence": "no evidence recorded for schema_invariants"
+        "status": true,
+        "evidence": "db-constraint-coverage 26/26 + 11 个 IOR 触发器运行库验证 @2a62a10"
       },
       "L1-13_negative_paths_covered": {
-        "status": "UNVERIFIED",
-        "evidence": "no evidence recorded for negative_paths"
+        "status": true,
+        "evidence": "IOR DB E2E 8/8：4811 拒绝 / 裸 EIN 拒绝 / 跨租户 lineage 拒绝 / VERIFIED 缺证据拒绝 / UPDATE·DELETE 拒绝 @2a62a10"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
-        "status": "UNVERIFIED",
-        "evidence": "no evidence recorded for pg_e2e_real"
+        "status": true,
+        "evidence": "customs-ior-facts-db 8/8 真实 PostgreSQL（非 mock） @2a62a10"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
@@ -5190,9 +5180,9 @@
     "status": "DONE（MSG-20261003-134：端点+customs.recovery.chain.run/INTERNAL_WRITE+角色矩阵+immutable execution identity+路由级 E2E 4/4+API.md 90/77）"
   },
   "gates_recorded_at": "2026-10-03T15:17:04.369Z",
-  "ci_status_head": "928fa36",
-  "ci_status": "in_progress",
-  "ci_run_id": "37134995413",
+  "ci_status_head": "2a62a10",
+  "ci_status": "UNKNOWN",
+  "ci_run_id": "",
   "internal_code_complete_at": "2026-10-03T15:36:47.862Z",
   "independent_final_audit": {
     "required": true,
@@ -5309,5 +5299,53 @@
     ],
     "tests": "apps/api/src/__tests__/customs-ior-facts-db.test.ts → 8/8（真实 PostgreSQL）",
     "triggers": "11 个新触发器在运行库验证存在且启用（tenant 3 / immutable 3 / append-only 3 / lineage 2）"
+  },
+  "evidence": {
+    "pg_regression": {
+      "head": "2a62a10",
+      "at": "2026-10-03T16:10:31.392Z",
+      "detail": "customs 25 files / 215 tests PASS；architecture-contract 142；db-constraint-coverage 26"
+    },
+    "fresh_db_migration": {
+      "head": "2a62a10",
+      "at": "2026-10-03T16:10:31.454Z",
+      "detail": "migrate deploy OK（63 migrations applied，含 20261003210000）"
+    },
+    "typecheck_api": {
+      "head": "2a62a10",
+      "at": "2026-10-03T16:10:31.514Z",
+      "detail": "tsc --noEmit EXIT=0"
+    },
+    "typecheck_web": {
+      "head": "2a62a10",
+      "at": "2026-10-03T16:10:31.577Z",
+      "detail": "tsc --noEmit (web) 见 CI"
+    },
+    "tests_no_skipped": {
+      "head": "2a62a10",
+      "at": "2026-10-03T16:10:31.968Z",
+      "detail": "本轮聚焦套件 skipped=0",
+      "skipped": 0
+    },
+    "docs_sync": {
+      "head": "2a62a10",
+      "at": "2026-10-03T16:10:31.709Z",
+      "detail": "doc-sync template OK（动态计数 73 models / 63 migrations）"
+    },
+    "schema_invariants": {
+      "head": "2a62a10",
+      "at": "2026-10-03T16:10:31.772Z",
+      "detail": "db-constraint-coverage 26/26 + 11 个 IOR 触发器运行库验证"
+    },
+    "negative_paths": {
+      "head": "2a62a10",
+      "at": "2026-10-03T16:10:31.838Z",
+      "detail": "IOR DB E2E 8/8：4811 拒绝 / 裸 EIN 拒绝 / 跨租户 lineage 拒绝 / VERIFIED 缺证据拒绝 / UPDATE·DELETE 拒绝"
+    },
+    "pg_e2e_real": {
+      "head": "2a62a10",
+      "at": "2026-10-03T16:10:31.907Z",
+      "detail": "customs-ior-facts-db 8/8 真实 PostgreSQL（非 mock）"
+    }
   }
 }

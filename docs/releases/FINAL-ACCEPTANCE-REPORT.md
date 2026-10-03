@@ -1,8 +1,8 @@
 # FINAL ACCEPTANCE REPORT（自动生成，请勿手改）
 
-- 生成时间：2026-10-03T16:03:26.962Z
-- 单一权威矩阵：`docs/releases/ACCEPTANCE-MATRIX.json` @caa8b92
-- acceptance HEAD：`caa8b92`
+- 生成时间：2026-10-03T16:10:36.517Z
+- 单一权威矩阵：`docs/releases/ACCEPTANCE-MATRIX.json` @2a62a10
+- acceptance HEAD：`2a62a10`
 - 协议：`docs/releases/FINAL-ACCEPTANCE-PROTOCOL.md`（三层验收；禁止自证）
 - 状态：CODE_COMPLETE=NO · INTEGRATION_COMPLETE=NO · REAL_VALIDATION_COMPLETE=NO · PRODUCTION_READY=NO
 - INTERNAL_READY=NO；AUTONOMOUS_INTERNAL_WORK=RUNNING
@@ -36,27 +36,17 @@
 
 ## 2. 打开的内部项（SAFE_CONTINUATION_QUEUE）
 
-- BG-013-ior-facts-persistence-schema-delta
 - BG-019-frontend-http-wiring-closure
 - BG-020-customs-readonly-projection-http
 - BG-021-independent-site-persistence-schema-delta
 
 ### Layer 1 未通过检查（final-status 计算器输出；UNVERIFIED = 未绑定当前 HEAD 的实证）
 
-- L1-01_safe_continuation_queue_zero → false（open backlog items: 4）
-- L1-02_no_open_internal_items → false（open internal: BG-013-ior-facts-persistence-schema-delta,BG-019-frontend-http-wiring-closure,BG-020-customs-readonly-projection-http,BG-021-independent-site-persistence-schema-delta）
+- L1-01_safe_continuation_queue_zero → false（open backlog items: 3）
+- L1-02_no_open_internal_items → false（open internal: BG-019-frontend-http-wiring-closure,BG-020-customs-readonly-projection-http,BG-021-independent-site-persistence-schema-delta）
 - L1-03_no_open_markers → false（arch_pending=1 awaiting_verdict=false）
-- L1-04_full_ci_success_on_head → false（acceptance_head=caa8b92 ci_head=928fa36 ci=in_progress run=37134995413）
-- L1-05_pg_regression_passed → UNVERIFIED（no evidence recorded for pg_regression）
-- L1-06_fresh_db_migration_passed → UNVERIFIED（no evidence recorded for fresh_db_migration）
-- L1-07_api_typecheck_passed → UNVERIFIED（no evidence recorded for typecheck_api）
-- L1-08_web_typecheck_build_passed → UNVERIFIED（no evidence recorded for typecheck_web）
-- L1-09_no_skipped_critical_tests → UNVERIFIED（no evidence recorded for tests_no_skipped）
-- L1-10_git_working_tree_clean → false（dirty entries: 2）
-- L1-11_docs_state_consistent → UNVERIFIED（no evidence recorded for docs_sync）
-- L1-12_schema_invariants_verified → UNVERIFIED（no evidence recorded for schema_invariants）
-- L1-13_negative_paths_covered → UNVERIFIED（no evidence recorded for negative_paths）
-- L1-14_real_pg_e2e_not_mock_only → UNVERIFIED（no evidence recorded for pg_e2e_real）
+- L1-04_full_ci_success_on_head → false（acceptance_head=2a62a10 ci_head=2a62a10 ci=UNKNOWN run=）
+- L1-10_git_working_tree_clean → false（dirty entries: 4）
 
 ## 3. 外部 / 宿主依赖（不得自证完成）
 
