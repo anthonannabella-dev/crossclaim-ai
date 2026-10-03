@@ -1,8 +1,8 @@
 # FINAL ACCEPTANCE REPORT（自动生成，请勿手改）
 
-- 生成时间：2026-10-03T15:58:16.397Z
-- 单一权威矩阵：`docs/releases/ACCEPTANCE-MATRIX.json` @928fa36
-- acceptance HEAD：`928fa36`
+- 生成时间：2026-10-03T15:59:59.773Z
+- 单一权威矩阵：`docs/releases/ACCEPTANCE-MATRIX.json` @4831a13
+- acceptance HEAD：`4831a13`
 - 协议：`docs/releases/FINAL-ACCEPTANCE-PROTOCOL.md`（三层验收；禁止自证）
 - 状态：CODE_COMPLETE=NO · INTEGRATION_COMPLETE=NO · REAL_VALIDATION_COMPLETE=NO · PRODUCTION_READY=NO
 - INTERNAL_READY=NO；AUTONOMOUS_INTERNAL_WORK=RUNNING
@@ -41,19 +41,25 @@
 - BG-018-independent-site-internal-closure
 - BG-019-frontend-http-wiring-closure
 - BG-020-customs-readonly-projection-http
+- GP-independent_site-http
+- GP-independent_site-persistence
+- GP-independent_site-db_invariant
+- GP-independent_site-replay
+- GP-independent_site-concurrency
+- GP-independent_site-rbac
 
 ### Layer 1 未通过检查（final-status 计算器输出；UNVERIFIED = 未绑定当前 HEAD 的实证）
 
-- L1-01_safe_continuation_queue_zero → false（open backlog items: 5）
-- L1-02_no_open_internal_items → false（open internal: BG-013-ior-facts-persistence-schema-delta,BG-017-layer2-golden-path-matrix,BG-018-independent-site-internal-closure,BG-019-frontend-http-wiring-closure,BG-020-customs-readonly-projection-http）
+- L1-01_safe_continuation_queue_zero → false（open backlog items: 11）
+- L1-02_no_open_internal_items → false（open internal: BG-013-ior-facts-persistence-schema-delta,BG-017-layer2-golden-path-matrix,BG-018-independent-site-internal-closure,BG-019-frontend-http-wiring-closure,BG-020-customs-readonly-projection-http,GP-independent_site-http,GP-independent_site-persistence,GP-independent_site-db_invariant,GP-independent_site-replay,GP-independent_site-concurrency,GP-independent_site-rbac）
 - L1-03_no_open_markers → false（arch_pending=1 awaiting_verdict=false）
-- L1-04_full_ci_success_on_head → false（acceptance_head=928fa36 ci_head=928fa36 ci=in_progress run=37134995413）
+- L1-04_full_ci_success_on_head → false（acceptance_head=4831a13 ci_head=928fa36 ci=in_progress run=37134995413）
 - L1-05_pg_regression_passed → UNVERIFIED（no evidence recorded for pg_regression）
 - L1-06_fresh_db_migration_passed → UNVERIFIED（no evidence recorded for fresh_db_migration）
 - L1-07_api_typecheck_passed → UNVERIFIED（no evidence recorded for typecheck_api）
 - L1-08_web_typecheck_build_passed → UNVERIFIED（no evidence recorded for typecheck_web）
 - L1-09_no_skipped_critical_tests → UNVERIFIED（no evidence recorded for tests_no_skipped）
-- L1-10_git_working_tree_clean → false（dirty entries: 10）
+- L1-10_git_working_tree_clean → false（dirty entries: 8）
 - L1-11_docs_state_consistent → UNVERIFIED（no evidence recorded for docs_sync）
 - L1-12_schema_invariants_verified → UNVERIFIED（no evidence recorded for schema_invariants）
 - L1-13_negative_paths_covered → UNVERIFIED（no evidence recorded for negative_paths）

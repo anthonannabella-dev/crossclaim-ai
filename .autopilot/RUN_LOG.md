@@ -1658,3 +1658,6 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 
 ## 2026-10-03T15:57:55.813Z — CHANGE B
 - 单一权威矩阵 ACCEPTANCE-MATRIX.json + acceptance-consistency guard（CI 接线）；报告改为派生；register G3/G10 更正为 DONE、G11 写明真实剩余并转 BG-020。
+
+## 2026-10-03T15:59:59.364Z — CHANGE C
+- Layer 2 四域 Golden Path Matrix 落地；gaps 自动 materialize；guard 增加 GOLDEN_PATH_GAP_NOT_MATERIALIZED 检查。

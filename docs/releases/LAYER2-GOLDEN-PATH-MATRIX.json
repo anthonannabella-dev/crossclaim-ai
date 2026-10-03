@@ -1,0 +1,413 @@
+{
+  "generated_at": "2026-10-03T15:59:44.681Z",
+  "rule": "COVERED 需存在命名证据文件；否则 GAP",
+  "domains": [
+    {
+      "id": "platform",
+      "name": "Platform Recovery",
+      "domain_test_files": 11,
+      "domain_web_files": 10,
+      "cells": {
+        "http": {
+          "status": "COVERED",
+          "evidence": [
+            "apps/api/src/__tests__/platform-write-golden-path-db.test.ts",
+            "apps/api/src/__tests__/platform-write-http-db.test.ts",
+            "apps/api/src/__tests__/platform-write-orchestrator-db.test.ts"
+          ]
+        },
+        "persistence": {
+          "status": "COVERED",
+          "evidence": [
+            "apps/api/src/__tests__/amazon-sp-connector-runner-db.test.ts",
+            "apps/api/src/__tests__/c2-platform-account-identity-db.test.ts",
+            "apps/api/src/__tests__/platform-write-golden-path-db.test.ts",
+            "apps/api/src/__tests__/platform-write-http-db.test.ts"
+          ]
+        },
+        "db_invariant": {
+          "status": "COVERED",
+          "evidence": [
+            "apps/api/src/__tests__/c2-platform-account-identity-db.test.ts"
+          ]
+        },
+        "frontend": {
+          "status": "COVERED",
+          "evidence": [
+            "apps/web/app/cases/[id]/claim-package/claim-package-view.tsx",
+            "apps/web/app/components/opportunity-actions.tsx",
+            "apps/web/app/opportunities/opportunity-list.tsx",
+            "apps/web/app/page.tsx"
+          ]
+        },
+        "happy": {
+          "status": "COVERED",
+          "evidence": [
+            "apps/api/src/__tests__/amazon-sp-connector-runner-db.test.ts",
+            "apps/api/src/__tests__/amazon-sp-read-only-adapter.test.ts",
+            "apps/api/src/__tests__/c2-platform-account-identity-db.test.ts",
+            "apps/api/src/__tests__/platform-write-adapter-capability.test.ts"
+          ]
+        },
+        "negative": {
+          "status": "COVERED",
+          "evidence": [
+            "apps/api/src/__tests__/amazon-sp-connector-runner-db.test.ts",
+            "apps/api/src/__tests__/amazon-sp-read-only-adapter.test.ts",
+            "apps/api/src/__tests__/c2-platform-account-identity-db.test.ts",
+            "apps/api/src/__tests__/platform-write-adapter-capability.test.ts"
+          ]
+        },
+        "replay": {
+          "status": "COVERED",
+          "evidence": [
+            "apps/api/src/__tests__/amazon-sp-connector-runner-db.test.ts",
+            "apps/api/src/__tests__/amazon-sp-read-only-adapter.test.ts",
+            "apps/api/src/__tests__/platform-write-adapter-capability.test.ts",
+            "apps/api/src/__tests__/platform-write-golden-path-db.test.ts"
+          ]
+        },
+        "concurrency": {
+          "status": "COVERED",
+          "evidence": [
+            "apps/api/src/__tests__/platform-write-golden-path-db.test.ts",
+            "apps/api/src/__tests__/platform-write-ledger-db.test.ts",
+            "apps/api/src/__tests__/platform-write-orchestrator-db.test.ts"
+          ]
+        },
+        "failure_recovery": {
+          "status": "COVERED",
+          "evidence": [
+            "apps/api/src/__tests__/amazon-sp-read-only-adapter.test.ts",
+            "apps/api/src/__tests__/platform-write-adapter-capability.test.ts",
+            "apps/api/src/__tests__/platform-write-ledger-db.test.ts",
+            "apps/api/src/__tests__/platform-write-orchestrator-db.test.ts"
+          ]
+        },
+        "cross_tenant": {
+          "status": "COVERED",
+          "evidence": [
+            "apps/api/src/__tests__/amazon-sp-connector-runner-db.test.ts",
+            "apps/api/src/__tests__/c2-platform-account-identity-db.test.ts",
+            "apps/api/src/__tests__/platform-write-golden-path-db.test.ts",
+            "apps/api/src/__tests__/platform-write-http-db.test.ts"
+          ]
+        },
+        "rbac": {
+          "status": "COVERED",
+          "evidence": [
+            "apps/api/src/__tests__/amazon-sp-connector-runner-db.test.ts",
+            "apps/api/src/__tests__/platform-write-golden-path-db.test.ts",
+            "apps/api/src/__tests__/platform-write-http-db.test.ts",
+            "apps/api/src/__tests__/platform-write-orchestrator-db.test.ts"
+          ]
+        },
+        "amount_ledger": {
+          "status": "COVERED",
+          "evidence": [
+            "apps/api/src/__tests__/amazon-sp-connector-runner-db.test.ts",
+            "apps/api/src/__tests__/platform-write-golden-path-db.test.ts",
+            "apps/api/src/__tests__/platform-write-http-db.test.ts",
+            "apps/api/src/__tests__/platform-write-ledger-db.test.ts"
+          ]
+        }
+      }
+    },
+    {
+      "id": "logistics_carrier",
+      "name": "Logistics / Carrier Recovery",
+      "domain_test_files": 17,
+      "domain_web_files": 2,
+      "cells": {
+        "http": {
+          "status": "COVERED",
+          "evidence": [
+            "apps/api/src/__tests__/carrier-claim-response-http-e2e-db.test.ts",
+            "apps/api/src/__tests__/carrier-claim-response-http.test.ts",
+            "apps/api/src/__tests__/carrier-manual-submission-http-e2e-db.test.ts",
+            "apps/api/src/__tests__/carrier-manual-submission-http.test.ts"
+          ]
+        },
+        "persistence": {
+          "status": "COVERED",
+          "evidence": [
+            "apps/api/src/__tests__/carrier-claim-response-db.test.ts",
+            "apps/api/src/__tests__/carrier-claim-response-http-e2e-db.test.ts",
+            "apps/api/src/__tests__/carrier-claim-response.test.ts",
+            "apps/api/src/__tests__/carrier-manual-submission-db.test.ts"
+          ]
+        },
+        "db_invariant": {
+          "status": "COVERED",
+          "evidence": [
+            "apps/api/src/__tests__/carrier-claim-response-db.test.ts",
+            "apps/api/src/__tests__/carrier-claim-response.test.ts",
+            "apps/api/src/__tests__/carrier-manual-submission-db.test.ts"
+          ]
+        },
+        "frontend": {
+          "status": "COVERED",
+          "evidence": [
+            "apps/web/app/integration-status/manual-response-form.tsx"
+          ]
+        },
+        "happy": {
+          "status": "COVERED",
+          "evidence": [
+            "apps/api/src/__tests__/carrier-auth-account-discovery.test.ts",
+            "apps/api/src/__tests__/carrier-claim-package.test.ts",
+            "apps/api/src/__tests__/carrier-claim-response-db.test.ts",
+            "apps/api/src/__tests__/carrier-claim-response-http-e2e-db.test.ts"
+          ]
+        },
+        "negative": {
+          "status": "COVERED",
+          "evidence": [
+            "apps/api/src/__tests__/carrier-auth-account-discovery.test.ts",
+            "apps/api/src/__tests__/carrier-claim-package.test.ts",
+            "apps/api/src/__tests__/carrier-claim-response-db.test.ts",
+            "apps/api/src/__tests__/carrier-claim-response-http-e2e-db.test.ts"
+          ]
+        },
+        "replay": {
+          "status": "COVERED",
+          "evidence": [
+            "apps/api/src/__tests__/carrier-auth-account-discovery.test.ts",
+            "apps/api/src/__tests__/carrier-claim-response-db.test.ts",
+            "apps/api/src/__tests__/carrier-claim-response-http-e2e-db.test.ts",
+            "apps/api/src/__tests__/carrier-claim-response-http.test.ts"
+          ]
+        },
+        "concurrency": {
+          "status": "COVERED",
+          "evidence": [
+            "apps/api/src/__tests__/carrier-claim-response-db.test.ts",
+            "apps/api/src/__tests__/carrier-manual-submission-db.test.ts",
+            "apps/api/src/__tests__/carrier-manual-submission.test.ts"
+          ]
+        },
+        "failure_recovery": {
+          "status": "COVERED",
+          "evidence": [
+            "apps/api/src/__tests__/carrier-settlement-reconciliation-readonly.test.ts"
+          ]
+        },
+        "cross_tenant": {
+          "status": "COVERED",
+          "evidence": [
+            "apps/api/src/__tests__/carrier-auth-account-discovery.test.ts",
+            "apps/api/src/__tests__/carrier-claim-response-db.test.ts",
+            "apps/api/src/__tests__/carrier-claim-response-http-e2e-db.test.ts",
+            "apps/api/src/__tests__/carrier-claim-response-http.test.ts"
+          ]
+        },
+        "rbac": {
+          "status": "COVERED",
+          "evidence": [
+            "apps/api/src/__tests__/carrier-claim-response-db.test.ts",
+            "apps/api/src/__tests__/carrier-claim-response-http-e2e-db.test.ts",
+            "apps/api/src/__tests__/carrier-claim-response-http.test.ts",
+            "apps/api/src/__tests__/carrier-manual-submission-db.test.ts"
+          ]
+        },
+        "amount_ledger": {
+          "status": "COVERED",
+          "evidence": [
+            "apps/api/src/__tests__/carrier-claim-package.test.ts",
+            "apps/api/src/__tests__/carrier-claim-response-db.test.ts",
+            "apps/api/src/__tests__/carrier-claim-response-http-e2e-db.test.ts",
+            "apps/api/src/__tests__/carrier-claim-response-http.test.ts"
+          ]
+        }
+      }
+    },
+    {
+      "id": "customs",
+      "name": "Customs / Trade Recovery",
+      "domain_test_files": 24,
+      "domain_web_files": 3,
+      "cells": {
+        "http": {
+          "status": "COVERED",
+          "evidence": [
+            "apps/api/src/__tests__/customs-claim-ready-http.test.ts",
+            "apps/api/src/__tests__/customs-execution-contract.test.ts",
+            "apps/api/src/__tests__/customs-filing-provider.test.ts",
+            "apps/api/src/__tests__/customs-recovery-chain-http-e2e-db.test.ts"
+          ]
+        },
+        "persistence": {
+          "status": "COVERED",
+          "evidence": [
+            "apps/api/src/__tests__/customs-claim-ready-http.test.ts",
+            "apps/api/src/__tests__/customs-entry-fact-store-db.test.ts",
+            "apps/api/src/__tests__/customs-recovery-chain-http-e2e-db.test.ts",
+            "apps/api/src/__tests__/customs-recovery-chain-service-db.test.ts"
+          ]
+        },
+        "db_invariant": {
+          "status": "COVERED",
+          "evidence": [
+            "apps/api/src/__tests__/customs-entry-fact-store-db.test.ts",
+            "apps/api/src/__tests__/customs-execution-contract.test.ts",
+            "apps/api/src/__tests__/customs-recovery-chain-http-e2e-db.test.ts",
+            "apps/api/src/__tests__/customs-recovery-chain-http.test.ts"
+          ]
+        },
+        "frontend": {
+          "status": "COVERED",
+          "evidence": [
+            "apps/web/app/integration-status/start-recovery-form.tsx"
+          ]
+        },
+        "happy": {
+          "status": "COVERED",
+          "evidence": [
+            "apps/api/src/__tests__/customs-claim-ready-http.test.ts",
+            "apps/api/src/__tests__/customs-claim-ready-package.test.ts",
+            "apps/api/src/__tests__/customs-classification-discrepancy.test.ts",
+            "apps/api/src/__tests__/customs-duty-truth.test.ts"
+          ]
+        },
+        "negative": {
+          "status": "COVERED",
+          "evidence": [
+            "apps/api/src/__tests__/customs-claim-ready-package.test.ts",
+            "apps/api/src/__tests__/customs-classification-discrepancy.test.ts",
+            "apps/api/src/__tests__/customs-duty-truth.test.ts",
+            "apps/api/src/__tests__/customs-entry-contract.test.ts"
+          ]
+        },
+        "replay": {
+          "status": "COVERED",
+          "evidence": [
+            "apps/api/src/__tests__/customs-classification-discrepancy.test.ts",
+            "apps/api/src/__tests__/customs-duty-truth.test.ts",
+            "apps/api/src/__tests__/customs-entry-fact-store-db.test.ts",
+            "apps/api/src/__tests__/customs-filing-provider.test.ts"
+          ]
+        },
+        "concurrency": {
+          "status": "COVERED",
+          "evidence": [
+            "apps/api/src/__tests__/customs-entry-fact-store-db.test.ts",
+            "apps/api/src/__tests__/customs-return-fact-store-db.test.ts",
+            "apps/api/src/__tests__/customs-submission-ledger-db.test.ts"
+          ]
+        },
+        "failure_recovery": {
+          "status": "COVERED",
+          "evidence": [
+            "apps/api/src/__tests__/customs-recovery-chain-http.test.ts",
+            "apps/api/src/__tests__/customs-recovery-chain-service-db.test.ts",
+            "apps/api/src/__tests__/customs-recovery-eligibility.test.ts",
+            "apps/api/src/__tests__/customs-refund-linkage.test.ts"
+          ]
+        },
+        "cross_tenant": {
+          "status": "COVERED",
+          "evidence": [
+            "apps/api/src/__tests__/customs-claim-ready-http.test.ts",
+            "apps/api/src/__tests__/customs-entry-fact-store-db.test.ts",
+            "apps/api/src/__tests__/customs-execution-contract.test.ts",
+            "apps/api/src/__tests__/customs-recovery-chain-http-e2e-db.test.ts"
+          ]
+        },
+        "rbac": {
+          "status": "COVERED",
+          "evidence": [
+            "apps/api/src/__tests__/customs-claim-ready-http.test.ts",
+            "apps/api/src/__tests__/customs-execution-contract.test.ts",
+            "apps/api/src/__tests__/customs-recovery-chain-http-e2e-db.test.ts",
+            "apps/api/src/__tests__/customs-recovery-chain-http.test.ts"
+          ]
+        },
+        "amount_ledger": {
+          "status": "COVERED",
+          "evidence": [
+            "apps/api/src/__tests__/customs-claim-ready-http.test.ts",
+            "apps/api/src/__tests__/customs-claim-ready-package.test.ts",
+            "apps/api/src/__tests__/customs-classification-discrepancy.test.ts",
+            "apps/api/src/__tests__/customs-duty-truth.test.ts"
+          ]
+        }
+      }
+    },
+    {
+      "id": "independent_site",
+      "name": "Independent-site / Chargeback",
+      "domain_test_files": 1,
+      "domain_web_files": 1,
+      "cells": {
+        "http": {
+          "status": "GAP",
+          "evidence": []
+        },
+        "persistence": {
+          "status": "GAP",
+          "evidence": []
+        },
+        "db_invariant": {
+          "status": "GAP",
+          "evidence": []
+        },
+        "frontend": {
+          "status": "COVERED",
+          "evidence": [
+            "apps/web/app/money/recovery-money-view.tsx"
+          ]
+        },
+        "happy": {
+          "status": "COVERED",
+          "evidence": [
+            "apps/api/src/__tests__/chargeback-recovery-chain.test.ts"
+          ]
+        },
+        "negative": {
+          "status": "COVERED",
+          "evidence": [
+            "apps/api/src/__tests__/chargeback-recovery-chain.test.ts"
+          ]
+        },
+        "replay": {
+          "status": "GAP",
+          "evidence": []
+        },
+        "concurrency": {
+          "status": "GAP",
+          "evidence": []
+        },
+        "failure_recovery": {
+          "status": "COVERED",
+          "evidence": [
+            "apps/api/src/__tests__/chargeback-recovery-chain.test.ts"
+          ]
+        },
+        "cross_tenant": {
+          "status": "COVERED",
+          "evidence": [
+            "apps/api/src/__tests__/chargeback-recovery-chain.test.ts"
+          ]
+        },
+        "rbac": {
+          "status": "GAP",
+          "evidence": []
+        },
+        "amount_ledger": {
+          "status": "COVERED",
+          "evidence": [
+            "apps/api/src/__tests__/chargeback-recovery-chain.test.ts"
+          ]
+        }
+      }
+    }
+  ],
+  "gaps": [
+    "independent_site:http",
+    "independent_site:persistence",
+    "independent_site:db_invariant",
+    "independent_site:replay",
+    "independent_site:concurrency",
+    "independent_site:rbac"
+  ]
+}

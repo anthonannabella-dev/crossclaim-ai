@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-10-03T15:58:16.174Z",
-  "acceptance_head": "928fa36",
+  "generated_at": "2026-10-03T15:59:59.550Z",
+  "acceptance_head": "4831a13",
   "protocol": "docs/releases/FINAL-ACCEPTANCE-PROTOCOL.md",
   "areas": [
     {
@@ -164,7 +164,13 @@
     "BG-017-layer2-golden-path-matrix",
     "BG-018-independent-site-internal-closure",
     "BG-019-frontend-http-wiring-closure",
-    "BG-020-customs-readonly-projection-http"
+    "BG-020-customs-readonly-projection-http",
+    "GP-independent_site-http",
+    "GP-independent_site-persistence",
+    "GP-independent_site-db_invariant",
+    "GP-independent_site-replay",
+    "GP-independent_site-concurrency",
+    "GP-independent_site-rbac"
   ],
   "host_action_required": [
     "BG-006-production-candidate-preflight"

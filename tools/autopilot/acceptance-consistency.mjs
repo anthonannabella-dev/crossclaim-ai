@@ -80,6 +80,18 @@ if (!sameSet(stateOpen, matrix.open_internal_items ?? [])) {
   conflicts.push('OPEN_ITEMS_MISMATCH state=[' + stateOpen.join(',') + '] matrix=[' + (matrix.open_internal_items ?? []).join(',') + ']');
 }
 
+// C2b：LAYER 2 Golden Path Matrix 的缺口必须已登记为 backlog（缺哪项就 materialize）。
+const GP = path.join(ROOT, 'docs', 'releases', 'LAYER2-GOLDEN-PATH-MATRIX.json');
+const gpMatrix = readJson(GP, null);
+if (gpMatrix) {
+  for (const gap of gpMatrix.gaps ?? []) {
+    const expectedId = 'GP-' + gap.replace(':', '-');
+    if (!backlog.items.some((item) => item.id === expectedId)) {
+      conflicts.push('GOLDEN_PATH_GAP_NOT_MATERIALIZED: ' + gap);
+    }
+  }
+}
+
 // C3：REGISTER 未划掉的 G 行 = 表内未关闭项；必须与矩阵的非空内部项一致。
 const openRegisterRows = register
   .split(/\r?\n/)
