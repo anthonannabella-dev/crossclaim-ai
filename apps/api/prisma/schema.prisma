@@ -361,6 +361,7 @@ model Organization {
   platformAccounts                   PlatformAccount[]
   policyAcceptances                  PolicyAcceptance[]
   carrierManualSubmissions           CarrierManualSubmission[]
+  carrierClaimResponseFacts          CarrierClaimResponseFact[]
   fileAssets                         FileAsset[]
   importBatches                      ImportBatch[]
   transactions                       SourceTransaction[]
@@ -436,6 +437,7 @@ model User {
 
   policyAcceptances PolicyAcceptance[]
   carrierManualSubmissions CarrierManualSubmission[]
+  carrierClaimResponseFacts CarrierClaimResponseFact[]
 
   @@index([status])
 }
@@ -2422,7 +2424,42 @@ model CarrierManualSubmission {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   submittedBy  User         @relation(fields: [submittedByUserId], references: [id], onDelete: Cascade)
 
+  responseFacts CarrierClaimResponseFact[]
+
   @@unique([organizationId, packageId])
   @@index([organizationId, submittedAt])
   @@index([organizationId, trackingNumber])
+}
+
+// ============================================================
+// CARRIER QUEUE #10 FINAL（MSG-20261003-122 ⑳–㉖）
+// carrier claim response facts：append-only、tenant-scoped、DB 强制真值。
+// status 与 provenance 分离；APPROVED != PAID != recovered cash；
+// 不存 recovered amount / success fee / payment truth / credential / token。
+// ============================================================
+model CarrierClaimResponseFact {
+  id                   String   @id
+  organizationId       String
+  packageId            String
+  submissionRecordId   String
+  provider             String
+  externalAccountId    String
+  trackingNumber       String
+  status               String
+  source               String
+  verificationLevel    String
+  providerReference    String?
+  observedAt           DateTime
+  recordedAt           DateTime
+  rawArtifactReference String?
+  recordedByUserId     String
+  idempotencyKey       String
+  createdAt            DateTime @default(now())
+
+  organization Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  recordedBy   User                    @relation(fields: [recordedByUserId], references: [id], onDelete: Cascade)
+  submission   CarrierManualSubmission @relation(fields: [submissionRecordId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, packageId, idempotencyKey])
+  @@index([organizationId, packageId, observedAt])
 }

@@ -130,6 +130,8 @@ describe('模型清单一致性（C-0002 CHANGE #1）', () => {
     'PolicyAcceptance',
     // CARRIER QUEUE #9B FINAL（MSG-20261003-119 ⑲–㉜）：人工提交事实（human attestation）
     'CarrierManualSubmission',
+    // CARRIER QUEUE #10 FINAL（MSG-20261003-122 ⑳–㉖）：carrier response 事实（append-only / status-provenance 分离）
+    'CarrierClaimResponseFact',
   ];
   const JOIN_MODELS = [
     'CaseEvidence',
@@ -144,7 +146,7 @@ describe('模型清单一致性（C-0002 CHANGE #1）', () => {
 
 
   it(`核心模型恰好 ${CORE.length} 个`, () => {
-    expect(CORE).toHaveLength(52);
+    expect(CORE).toHaveLength(53);
     for (const name of CORE) expect(modelBlock(name), `缺少核心模型 ${name}`).not.toBe('');
   });
 
@@ -152,8 +154,8 @@ describe('模型清单一致性（C-0002 CHANGE #1）', () => {
     for (const name of JOIN_MODELS) expect(modelBlock(name), `缺少联结模型 ${name}`).not.toBe('');
   });
 
-  it('模型总数为 58（52 core + 6 join）—— 与 README/DOMAIN_MODEL 表述一致', () => {
-    expect(modelNames()).toHaveLength(58);
+  it('模型总数为 59（53 core + 6 join）—— 与 README/DOMAIN_MODEL 表述一致', () => {
+    expect(modelNames()).toHaveLength(59);
   });
 });
 
