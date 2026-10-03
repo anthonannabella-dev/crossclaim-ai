@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261003-124",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-03T08:34:49.096Z",
+  "updated_at": "2026-10-03T08:40:27.441Z",
   "previous_head": "3e80b52",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -49,11 +49,11 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-03T08:34:49.096Z",
+  "last_tick_at": "2026-10-03T08:40:27.441Z",
   "state": "IMPLEMENT",
-  "last_action": "MSG-20261003-124 逐字归档（FULL_COPY_OK）→ 裁决：C17 REVISE（root+fact 拆分）、C21 PASS/AUTHORIZED（不 filing）、fee guard wiring PASS/AUTHORIZED、默认 15% APPROVED（versioned cutover 不迁移历史）、Payment/collection 继续 OFF",
-  "last_action_at": "2026-10-03T08:34:49.095Z",
-  "next_action": "立即开工：先做 fee guard 统一收口（record-fee.ts 不改重构、只在 FeeCalculation.create 前接 guard；commission-reconciliation.ts 改为 matched settlement → verified recovered truth → RecoveryCommercialEligibility → SettlementFeeEligibility → resolve versioned FeePolicy → evaluateFeeGuard → FeeCalculation），补 ㊱ 回归；随后 C17 attempt root+fact 重设计并送 C17 FINAL SCHEMA CHECKPOINT；再实施 C21 HTTP + Action Guard（filingSubmitted=false）。",
+  "last_action": "按 MSG-20261003-124 ㉖–㉛ 实施 20%→15% versioned cutover：注册表保留历史 20%（effectiveTo 2026-09-30）与当前 15%（effectiveFrom 2026-10-01），新增 policyRef family 解析 resolveFeePolicyByRef（0/多命中 fail-closed）→ 21/21 测试 → tsc api/web 0 → API contract OK → commit/push（PROGRESS）",
+  "last_action_at": "2026-10-03T08:40:27.440Z",
+  "next_action": "按 MSG-124 ㉓㉔㉕ 做 fee guard 统一收口：record-fee.ts 保留既有装配、只在 FeeCalculation.create 前接 evaluateFeeGuard；commission-reconciliation.ts 改为 matched settlement → verified recovered truth → RecoveryCommercialEligibility → SettlementFeeEligibility → resolve server versioned FeePolicy → evaluateFeeGuard → FeeCalculation；补 ㊱ 回归（client rate / estimate basis / 无 verified recovered / user-reported / statutory / classification≠ELIGIBLE / successFeeEligible=false / incrementalRecovery=false / 15% 允许 / 20% 历史保持）。",
   "current_head": "e060a5f",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
@@ -4380,7 +4380,14 @@
       "把 fee guard 接入既有 FeeCalculation 创建路径（record-fee.ts / commission-reconciliation.ts 等）—— 属资金链路实现，需架构方审计后实施",
       "默认 FeePolicy 20% → 15% 的落地（既有库中策略数据）—— 需明确数据迁移方案",
       "estimated fee preview 的对外呈现（web/API）"
-    ]
+    ],
+    "cutover": {
+      "status": "DONE（versioned policy cutover；历史 20% 未迁移）",
+      "policy_refs": "STANDARD_SUCCESS / CUSTOMS_SUCCESS 各两个版本：v0 20%（effectiveFrom 2026-01-01, effectiveTo 2026-09-30）与 v1 15%（effectiveFrom 2026-10-01, effectiveTo null）",
+      "resolver": "resolveFeePolicyByRef(policyRef, at) —— 同一 family 任一时点恰好命中一条，0 条或 >1 条 fail-closed；resolveFeePolicy(policyId, at) 保留（窗口外抛 FeePolicyNotEffectiveError）",
+      "tests": "commercial-fee-policy 14/14 + commercial-fee-policy-cutover 7/7（cutover 前 20% / cutover 后 15%；历史 20% fee due 仍 20.00；新条款 15.00；历史策略对象不可改写）",
+      "boundary": "Payment = 0 · collection = OFF · autopay = OFF · 历史 FeeCalculation / audit / agreement / invoice 不重写"
+    }
   },
   "customs_queue_c16_c19_c21": {
     "status": "PROGRESS（契约层完成；真实 filing / provider 接入继续 HOLD_EXTERNAL）",

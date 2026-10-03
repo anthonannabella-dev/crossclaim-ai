@@ -19,8 +19,17 @@ export type FeePolicyKind =
   | 'ENTERPRISE_CUSTOM_RATE'
   | 'MICRO_NOT_SERVICED';
 
+/** policy family（同一 family 可有多个版本，按 effectiveFrom/effectiveTo 解析）。 */
+export type FeePolicyRef =
+  | 'STANDARD_SUCCESS'
+  | 'CUSTOMS_SUCCESS'
+  | 'CUSTOMS_VIP_WAIVER'
+  | 'MICRO_NOT_SERVICED';
+
 export interface FeePolicy {
   policyId: string;
+  /** 版本化 family（MSG-20261003-124 ㉚㉛）。 */
+  policyRef: FeePolicyRef;
   policyKind: FeePolicyKind;
   version: string;
   /** bps（1500 = 15%）；非计费策略（waiver / micro）为 null。 */
@@ -37,7 +46,20 @@ export interface FeePolicy {
 /** 服务端策略注册表（versioned；client 不得提供费率或策略内容）。 */
 export const FEE_POLICY_REGISTRY: readonly FeePolicy[] = [
   {
+    policyId: 'STANDARD_SUCCESS_20',
+    policyRef: 'STANDARD_SUCCESS',
+    policyKind: 'STANDARD_SUCCESS',
+    version: 'v0',
+    rateBps: 2000,
+    effectiveFrom: '2026-01-01',
+    effectiveTo: '2026-09-30',
+    waiverCapAmount: null,
+    currency: null,
+    description: '历史默认成功费 20%（仅对 2026-10-01 cutover 之前已确认的 commercial terms 生效；不得被 15% 回写）',
+  },
+  {
     policyId: 'STANDARD_SUCCESS_15',
+    policyRef: 'STANDARD_SUCCESS',
     policyKind: 'STANDARD_SUCCESS',
     version: 'v1',
     rateBps: SUCCESS_FEE_15_RATE_BPS,
@@ -48,7 +70,20 @@ export const FEE_POLICY_REGISTRY: readonly FeePolicy[] = [
     description: '标准追回成功费 15%（仅基于 verified actual incremental recovered）',
   },
   {
+    policyId: 'CUSTOMS_SUCCESS_20',
+    policyRef: 'CUSTOMS_SUCCESS',
+    policyKind: 'CUSTOMS_SUCCESS',
+    version: 'v0',
+    rateBps: 2000,
+    effectiveFrom: '2026-01-01',
+    effectiveTo: '2026-09-30',
+    waiverCapAmount: null,
+    currency: null,
+    description: '历史 Customs 成功费 20%（cutover 前已确认条款继续适用）',
+  },
+  {
     policyId: 'CUSTOMS_SUCCESS_15',
+    policyRef: 'CUSTOMS_SUCCESS',
     policyKind: 'CUSTOMS_SUCCESS',
     version: 'v1',
     rateBps: SUCCESS_FEE_15_RATE_BPS,
@@ -60,6 +95,7 @@ export const FEE_POLICY_REGISTRY: readonly FeePolicy[] = [
   },
   {
     policyId: 'CUSTOMS_VIP_WAIVER',
+    policyRef: 'CUSTOMS_VIP_WAIVER',
     policyKind: 'CUSTOMS_VIP_WAIVER',
     version: 'v1',
     rateBps: null,
@@ -71,6 +107,7 @@ export const FEE_POLICY_REGISTRY: readonly FeePolicy[] = [
   },
   {
     policyId: 'MICRO_NOT_SERVICED',
+    policyRef: 'MICRO_NOT_SERVICED',
     policyKind: 'MICRO_NOT_SERVICED',
     version: 'v1',
     rateBps: null,
@@ -90,6 +127,20 @@ export class FeePolicyNotEffectiveError extends Error {
 }
 
 /** 按 policyId + 时点解析服务端策略（版本化；过期即失败）。 */
+/**
+ * 按 policy family + 时点解析（MSG-20261003-124 ㉚㉛）：
+ * 同一 family 可存在多个版本（历史 20% 有 effectiveTo，新 15% 有 effectiveFrom），
+ * 任一时点必须恰好命中一条，否则 fail-closed。
+ */
+export function resolveFeePolicyByRef(policyRef: FeePolicyRef, at: string): FeePolicy {
+  const candidates = FEE_POLICY_REGISTRY.filter(
+    (p) => p.policyRef === policyRef && at >= p.effectiveFrom && (p.effectiveTo === null || at <= p.effectiveTo),
+  );
+  if (candidates.length === 0) throw new FeePolicyNotEffectiveError(policyRef);
+  if (candidates.length > 1) throw new FeePolicyNotEffectiveError(policyRef + ':AMBIGUOUS_EFFECTIVE_WINDOW');
+  return candidates[0];
+}
+
 export function resolveFeePolicy(policyId: string, at: string): FeePolicy {
   const policy = FEE_POLICY_REGISTRY.find((p) => p.policyId === policyId);
   if (!policy) throw new FeePolicyNotFoundError(policyId);
