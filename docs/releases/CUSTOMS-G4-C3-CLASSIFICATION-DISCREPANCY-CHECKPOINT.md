@@ -1,6 +1,6 @@
 # CUSTOMS G4 / C3 — Classification / Rate Discrepancy CHECKPOINT
 
-- 时间：2026-10-03T09:38:46.383Z（HEAD d8fd6c3；C1 impl `f7b85ee` / C2 impl `d8fd6c3`）
+- 时间：2026-10-03T09:38:46.383Z（HEAD 6768952；C1 impl `f7b85ee` / C2 impl `d8fd6c3`）
 - 单元：G4 内部链第三环 **C3 = 分类 / 税率差异检测**（只暴露差异；无 Schema、无路由、无外写）
 - 输入：C1 只读事实 + 外部预期（RATE_TABLE / BROKER_QUOTE / VENDOR_ESTIMATE / MANUAL）
 

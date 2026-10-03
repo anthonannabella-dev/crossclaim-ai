@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "d8fd6c3",
+  "head": "6768952",
   "status": "RECONCILED",
   "current_task": "Carrier Queue #6 — SLA EVIDENCE ASSEMBLY + ELIGIBILITY INPUT PLANE：Tracking Fact + Invoice Fact + POD Fact + Carrier Terms Evidence + Service Level Evidence → **ShipmentEvidenceBundle**（只建证据输入层；不得自动认定赔付 / 自动提交 claim / 自动退款 / 调用 carrier write API / 自动产生 recovery amount）。**逐字归档 MSG-111 为第一步。**CarrierInvoiceReadPort + CarrierPODReadPort（verified account lineage、request/response 双向绑定、十进制金额、charge kind 归一化 + raw code 保留、POD 掩码与隐私、safe rawReference）；**read-only**，不做 SLA/退款资格推导。CarrierTrackingReadPort + normalized CarrierTrackingSnapshot（UPS/FedEx provider adapter 分离）+ 状态/事件归一化（确定性排序 + 去重）+ 失败原因分类 + tenant/account lineage 归属；**read-only**（无 mutation / claim / pickup / refund，TRANSPORT=false）。",
   "next_task": "PC-12A 实施 → 本地测试 + tsc api/web + API contract + full CI → PC-12A CHECKPOINT 送审。",
@@ -51,10 +51,10 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-03T09:31:09.704Z",
   "state": "IMPLEMENT",
-  "last_action": "G4/C3：新增 customs-classification-discrepancy（事实 × 外部预期逐行差异：kind / amount(+delta) / currency / missing / unmatched，只暴露不裁决）与 12/12 回归；C1+C2+C3 = 39/39",
-  "last_action_at": "2026-10-03T09:38:46.383Z",
-  "next_action": "G4 续：C4 eligibility → C5 estimate → C6 claim-ready package → C7 handoff 边界（C1–C3 持久化先送 Schema Delta 审计）；随后 G7/G8/G9 复核",
-  "current_head": "d8fd6c3",
+  "last_action": "G4/C4：新增 customs-recovery-eligibility（政策驱动三态判定 ELIGIBLE/NOT_ELIGIBLE/INDETERMINATE + 9 原因码 + 逐币种观察差异金额 + 时效/白名单/最小金额/OTHER 行策略）与 14/14 回归；C1–C4 = 53/53",
+  "last_action_at": "2026-10-03T09:41:24.607Z",
+  "next_action": "G4 续：C5 estimated recoverable amount（仅 ELIGIBLE 前提下、保守可审计估算）→ C6 claim-ready package → C7 handoff 边界（C1–C5 持久化先送 Schema Delta 审计）；随后 G7/G8/G9 复核",
+  "current_head": "6768952",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -4552,7 +4552,7 @@
       "note": "service→route 映射见 FRONTEND-WIRING-MAP §3"
     },
     "g4": {
-      "status": "IN_PROGRESS（C1 DONE + C2 DONE + C3 DONE）",
+      "status": "IN_PROGRESS（C1 DONE + C2 DONE + C3 DONE + C4 DONE）",
       "step": "C1 = Customs Entry Data / Evidence Contract（只读事实归一化）",
       "artifact": "apps/api/src/services/customs/customs-entry-contract.ts",
       "tests": "apps/api/src/__tests__/customs-entry-contract.test.ts → 16/16 PASS",
@@ -4599,6 +4599,28 @@
           "CURRENCY_MISMATCH"
         ],
         "boundary": "adjudicationPerformed=false / recoverableAmountDerived=false / appliesFxConversion=false / filingPerformed=false / paymentPerformed=false / productionCredentials=ABSENT"
+      },
+      "c4": {
+        "artifact": "apps/api/src/services/customs/customs-recovery-eligibility.ts",
+        "tests": "apps/api/src/__tests__/customs-recovery-eligibility.test.ts → 14/14 PASS（累计 53/53）",
+        "checkpoint": "docs/releases/CUSTOMS-G4-C4-ELIGIBILITY-CHECKPOINT.md",
+        "statuses": [
+          "ELIGIBLE",
+          "NOT_ELIGIBLE",
+          "INDETERMINATE"
+        ],
+        "reasons": [
+          "OK",
+          "JURISDICTION_NOT_SUPPORTED",
+          "SOURCE_NOT_ALLOWED",
+          "ENTRY_TOO_OLD",
+          "NO_DUTY_LINES",
+          "REQUIRED_DISCREPANCY_MISSING",
+          "BELOW_MIN_DISPUTED_AMOUNT",
+          "MIN_THRESHOLD_NOT_DEFINED_FOR_CURRENCY",
+          "OTHER_KIND_LINES_PRESENT"
+        ],
+        "boundary": "eligibilityDetermined=true / adjudicationPerformed=false / recoverableAmountDerived=false / feeDerived=false / appliesFxConversion=false / filingPerformed=false / paymentPerformed=false / productionCredentials=ABSENT"
       }
     }
   },

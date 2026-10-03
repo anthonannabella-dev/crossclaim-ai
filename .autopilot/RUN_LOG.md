@@ -1472,3 +1472,8 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 交付：`customs-classification-discrepancy.ts`（事实 × 外部预期：kind/amount+delta/currency/missing/unmatched，fail-closed 预期校验）+ 12/12 回归。
 - 累计：C1 16 + C2 11 + C3 12 = **39/39**；无 Schema / 无路由 / 无外写。
 - 下一步：C4 eligibility。
+
+## 2026-10-03T09:41:24.607Z — G4/C4 Customs Recovery Eligibility（HEAD 6768952）
+- 交付：`customs-recovery-eligibility.ts`（政策驱动三态判定 + 9 原因码 + 逐币种观察差异金额）+ 14/14 回归。
+- 累计：C1 16 + C2 11 + C3 12 + C4 14 = **53/53**；无 Schema / 无路由 / 无外写。
+- 下一步：C5 estimated recoverable amount。
