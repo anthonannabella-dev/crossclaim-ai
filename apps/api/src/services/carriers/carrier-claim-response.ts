@@ -56,7 +56,7 @@ export const CARRIER_PROVIDER_RESPONSE_SOURCES: readonly CarrierClaimResponseSou
 export const CARRIER_RESPONSE_VERIFICATION_LEVELS = ['UNVERIFIED', 'PROVIDER_VERIFIED'] as const;
 export type CarrierResponseVerificationLevel = (typeof CARRIER_RESPONSE_VERIFICATION_LEVELS)[number];
 
-export const CARRIER_CLAIM_RESPONSE_CAPABILITY = 'carrier.claim_response.record';
+export const CARRIER_CLAIM_RESPONSE_CAPABILITY = 'carrier.claim_package.claim_response.record';
 export const CARRIER_CLAIM_RESPONSE_AUDIT_EVENT = 'carrier.claim_response_recorded';
 
 const PROVIDER_REFERENCE_MAX_LENGTH = 128;

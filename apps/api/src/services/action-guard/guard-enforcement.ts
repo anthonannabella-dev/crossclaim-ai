@@ -164,6 +164,7 @@ export const GUARD_ENFORCED_ACTIONS = [
   'recovery.manual_submit',
   'recovery.manual_submit_reference_recorded',
   'carrier.manual_submission.record',
+  'carrier.claim_response.record',
   'appeal.submit',
   'platform.write',
   'commission.charge',

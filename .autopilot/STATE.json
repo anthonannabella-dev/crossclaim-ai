@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / Carrier Queue #10 FINAL",
-  "head": "8b08f5d",
+  "head": "35ef87f",
   "status": "RECONCILED",
   "current_task": "Carrier Queue #6 — SLA EVIDENCE ASSEMBLY + ELIGIBILITY INPUT PLANE：Tracking Fact + Invoice Fact + POD Fact + Carrier Terms Evidence + Service Level Evidence → **ShipmentEvidenceBundle**（只建证据输入层；不得自动认定赔付 / 自动提交 claim / 自动退款 / 调用 carrier write API / 自动产生 recovery amount）。**逐字归档 MSG-111 为第一步。**CarrierInvoiceReadPort + CarrierPODReadPort（verified account lineage、request/response 双向绑定、十进制金额、charge kind 归一化 + raw code 保留、POD 掩码与隐私、safe rawReference）；**read-only**，不做 SLA/退款资格推导。CarrierTrackingReadPort + normalized CarrierTrackingSnapshot（UPS/FedEx provider adapter 分离）+ 状态/事件归一化（确定性排序 + 去重）+ 失败原因分类 + tenant/account lineage 归属；**read-only**（无 mutation / claim / pickup / refund，TRANSPORT=false）。",
   "next_task": "PC-12A 实施 → 本地测试 + tsc api/web + API contract + full CI → PC-12A CHECKPOINT 送审。",
@@ -9,8 +9,8 @@
   "last_chatgpt_message": "MSG-20261003-122",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-03T07:48:43.141Z",
-  "previous_head": "a992d2f",
+  "updated_at": "2026-10-03T07:55:36.381Z",
+  "previous_head": "8b08f5d",
   "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "e060a5f",
@@ -49,10 +49,10 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-03T07:48:43.141Z",
+  "last_tick_at": "2026-10-03T07:55:36.381Z",
   "state": "IMPLEMENT",
-  "last_action": "CARRIER QUEUE #10 FINAL 续做：Prisma store（append-only + 同事务 fact/business audit + P2002→ALREADY_RECORDED）+ 真实 PostgreSQL 回归 12/12（CHECK 真值 / provider reference / append-only / tenant guard / 跨租户读隔离 / 真实并发一行 / 投影确定性 / APPROVED!=PAID / 资金零写入 / 无网络）→ 契约层 23/23 → tsc api/web 0 → API contract OK → commit/push",
-  "last_action_at": "2026-10-03T07:48:43.140Z",
+  "last_action": "CARRIER QUEUE #10 FINAL 续做：Action Guard 注册（carrier.claim_response.record / INTERNAL_WRITE）+ RBAC 矩阵（OWNER/ADMIN/OPS）+ HTTP 边界单元（POST 人工补录强制 USER_REPORTED、客户端提交 source/verificationLevel/身份字段一律 400；GET 读模型 tenant-scoped）+ 单测 11/11 → 修复两处回归（capability 与 action 命名分离；workflow 测试矩阵同步）→ 相关套件 70/70 → tsc api/web 0 → API contract OK → commit/push",
+  "last_action_at": "2026-10-03T07:55:36.380Z",
   "next_action": "继续 CARRIER QUEUE #10 FINAL（MSG-20261003-122 ⑦⑧ 授权）：Schema Delta（Prisma append-only CarrierClaimResponseFact + migration + tenant guard + append-only）→ PG 回归 → Action Guard capability → 人工补录 HTTP → 读模型投影 → tsc/API contract → commit/push → CI → checkpoint → 送审。随后按 P2 推进 Customs C15/C16/C19/C21 契约层与 Commercial C10–C11；C17 Schema Delta 与 C18 真实 provider 接入先送审/待宿主授权。",
   "current_head": "e060a5f",
   "reviewed_head": "24e27c8",
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-03T07:45:32.195Z",
-    "gapMs": 108494,
+    "previousTickAt": "2026-10-03T07:48:43.141Z",
+    "gapMs": 213798,
     "stale": false,
-    "checkedAt": "2026-10-03T07:47:20.689Z"
+    "checkedAt": "2026-10-03T07:52:16.938Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -4316,6 +4316,26 @@
         "Action Guard 注册 carrier.claim_response.record（INTERNAL_WRITE）+ RBAC 矩阵",
         "人工补录 HTTP POST /carrier-claim-packages/:packageId/responses（只允许 USER_REPORTED）",
         "读模型 HTTP GET /carrier-claim-packages/:packageId/responses（tenant-scoped）",
+        "可信 provider ingestion port（recordTrustedCarrierResponse；真实 adapter HOLD_EXTERNAL）",
+        "checkpoint + 送审"
+      ]
+    },
+    "guard_and_http": {
+      "status": "DONE（HTTP 边界单元；router/server 接线与真实 HTTP E2E 待续）",
+      "action_guard": "carrier.claim_response.record（INTERNAL_WRITE，requires: []）已进 catalog + capability-source（workflow kill switch）+ GUARD_ENFORCED_ACTIONS；不启用 TRANSPORT",
+      "rbac": "PERMISSIONS.recordCarrierClaimResponse：OWNER/ADMIN/OPS true；FINANCE/VIEWER（DENY_ALL）/未知 false",
+      "capability_naming": "capability 常量 = carrier.claim_package.claim_response.record（与 Action Guard action 字面量分离，沿用 #9B 约定）",
+      "http_module": "apps/api/src/services/carriers/carrier-claim-response-http.ts",
+      "endpoints": [
+        "POST /carrier-claim-packages/:packageId/responses —— 人工补录；client 仅 status/providerReference?/observedAt?/note?；出现 source/verificationLevel/身份字段 → 400 FIELD_NOT_ALLOWED",
+        "GET /carrier-claim-packages/:packageId/responses —— 读模型（currentStatus/currentVerificationLevel/history/provenance/timestamps；tenant-scoped；不含 credential）"
+      ],
+      "http_mapping": "INVALID_REQUEST/PROVIDER_REFERENCE_REQUIRED/INVALID_TIMESTAMP/FUTURE_TIMESTAMP → 400；CAPABILITY_REQUIRED → 403；SUBMISSION_NOT_FOUND → 404（anti-enumeration）；RECORDED → 201；ALREADY_RECORDED → 200",
+      "tests": "carrier-claim-response-http 11/11（+ 契约 23 + DB 12 = 46）；action-guard-catalog-integrity 5/5；action-guard-enforcement 7/7；workflow 12/12",
+      "pending": [
+        "router（workflow/http-routes.ts）接线 POST/GET + server.ts 注入 store / submissions loader",
+        "真实 HTTP E2E（DB）：401/403/404/201/200 + GET 读模型 tenant-scoped",
+        "API.md 记录两条路由（API contract 计数同步）",
         "可信 provider ingestion port（recordTrustedCarrierResponse；真实 adapter HOLD_EXTERNAL）",
         "checkpoint + 送审"
       ]

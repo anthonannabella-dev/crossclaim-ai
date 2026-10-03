@@ -54,6 +54,12 @@ export interface PermissionMatrix {
    * OWNER / ADMIN / OPS 可（与 claimTrackingReceive 同档），FINANCE / VIEWER 不可。
    */
   recordCarrierManualSubmission: boolean;
+  /**
+   * CARRIER QUEUE #10 FINAL（MSG-20261003-122 ㉘）：记录 carrier claim response 事实
+   * （人工补录入口只能产生 USER_REPORTED；provider 验证走独立可信 ingest 路径）。
+   * OWNER / ADMIN / OPS 可；FINANCE / VIEWER / 未知角色不可。
+   */
+  recordCarrierClaimResponse: boolean;
 }
 
 const DENY_ALL: PermissionMatrix = {
@@ -72,6 +78,7 @@ const DENY_ALL: PermissionMatrix = {
   claimTrackingReceive: false,
   recoveryPayoutRecord: false,
   recordCarrierManualSubmission: false,
+  recordCarrierClaimResponse: false,
 };
 
 export const PERMISSIONS: Record<AppRole, PermissionMatrix> = {
@@ -91,6 +98,7 @@ export const PERMISSIONS: Record<AppRole, PermissionMatrix> = {
     claimTrackingReceive: true,
     recoveryPayoutRecord: true,
     recordCarrierManualSubmission: true,
+    recordCarrierClaimResponse: true,
   },
   ADMIN: {
     manageConnections: true,
@@ -108,6 +116,7 @@ export const PERMISSIONS: Record<AppRole, PermissionMatrix> = {
     claimTrackingReceive: true,
     recoveryPayoutRecord: true,
     recordCarrierManualSubmission: true,
+    recordCarrierClaimResponse: true,
   },
   OPS: {
     manageConnections: false,
@@ -125,6 +134,7 @@ export const PERMISSIONS: Record<AppRole, PermissionMatrix> = {
     claimTrackingReceive: true,
     recoveryPayoutRecord: false,
     recordCarrierManualSubmission: true,
+    recordCarrierClaimResponse: true,
   },
   FINANCE: {
     manageConnections: false,
@@ -142,6 +152,7 @@ export const PERMISSIONS: Record<AppRole, PermissionMatrix> = {
     claimTrackingReceive: false,
     recoveryPayoutRecord: true,
     recordCarrierManualSubmission: false,
+    recordCarrierClaimResponse: false,
   },
   VIEWER: { ...DENY_ALL },
 };
