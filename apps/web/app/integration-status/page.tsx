@@ -22,6 +22,18 @@ interface CarrierResponses {
   };
 }
 
+/** BG-019（CHANGE E）：Independent-site 关键状态只读面（五状态分开呈现）。 */
+interface IndependentSiteState {
+  dispute: { disputeReference: string; paymentAccountRef: string; channel: string; handoffReference: string; executionKey: string };
+  states: { submitted: boolean; won: boolean; settled: boolean; recovered: boolean; billable: boolean };
+  response: { disposition: string; amount: string | null; currency: string; source: string } | null;
+  settlement: { amount: string; currency: string; verification: string; reference: string; evidenceArtifactRef: string | null } | null;
+  amounts: { recoveredAmount: string; feeAmount: string; currency: string | null };
+  invoiceDraft: { amount: string; currency: string | null; basis: string } | null;
+  notPersisted: string[];
+  boundary: { readOnly: boolean; recomputedOnRead: boolean; externalWritePerformed: boolean; filingSubmitted: boolean; transportEnabled: boolean; paymentCollected: boolean };
+}
+
 /** BG-020：Customs 事实 + 四类 latest 计算投影的只读读模型（后端已裁决/已持久化；前端只展示、不重算）。 */
 interface CustomsEntryFactReadModel {
   entryFact: {
@@ -100,7 +112,7 @@ function StatusRow({ label, value }: { label: string; value: string }) {
 export default async function IntegrationStatusPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ packageId?: string; opportunityId?: string; entryFactId?: string }>;
+  searchParams?: Promise<{ packageId?: string; opportunityId?: string; entryFactId?: string; disputeReference?: string }>;
 }) {
   const params = await searchParams;
   const packageId = params?.packageId ?? '';
@@ -113,6 +125,10 @@ export default async function IntegrationStatusPage({
     ? await apiGet<CustomsFilingStatus>('/customs-opportunities/' + encodeURIComponent(opportunityId) + '/filing-status')
     : null;
   const entryFactId = params?.entryFactId ?? '';
+  const disputeReference = params?.disputeReference ?? '';
+  const ps04State = disputeReference
+    ? await apiGet<IndependentSiteState>('/independent-site-disputes/' + encodeURIComponent(disputeReference) + '/state')
+    : null;
   const entryFactRead = entryFactId
     ? await apiGet<CustomsEntryFactReadModel>('/customs-entry-facts/' + encodeURIComponent(entryFactId))
     : null;
@@ -133,6 +149,40 @@ export default async function IntegrationStatusPage({
       </div>
 
 
+
+      <section className="rounded border border-slate-200 p-4">
+        <h2 className="text-base font-medium">Independent-site 关键状态（BG-019 只读）</h2>
+        {disputeReference === '' ? (
+          <p className="mt-2 text-sm text-slate-500">未提供 disputeReference。</p>
+        ) : ps04State === null ? (
+          <p className="mt-2 text-sm text-slate-500">未请求。</p>
+        ) : !ps04State.ok || ps04State.body === null ? (
+          <p className="mt-2 text-sm text-rose-600">
+            读取失败：HTTP {ps04State.status}
+            {ps04State.code !== null ? ' · ' + ps04State.code : ''}
+          </p>
+        ) : (
+          <div className="mt-2">
+            <h3 className="text-sm font-medium text-slate-700">状态（必须分开判读，不得合并）</h3>
+            <StatusRow label="submitted" value={String(ps04State.body.states.submitted)} />
+            <StatusRow label="won" value={String(ps04State.body.states.won)} />
+            <StatusRow label="settled" value={String(ps04State.body.states.settled)} />
+            <StatusRow label="recovered" value={String(ps04State.body.states.recovered)} />
+            <StatusRow label="billable" value={String(ps04State.body.states.billable)} />
+            <h3 className="mt-3 text-sm font-medium text-slate-700">响应 / 到账事实</h3>
+            <StatusRow label="response.disposition" value={ps04State.body.response?.disposition ?? '（无）'} />
+            <StatusRow label="settlement.verification" value={ps04State.body.settlement?.verification ?? '（无）'} />
+            <StatusRow label="settlement.evidenceArtifactRef" value={ps04State.body.settlement?.evidenceArtifactRef ?? '（无）'} />
+            <StatusRow label="recoveredAmount" value={ps04State.body.amounts.recoveredAmount} />
+            <StatusRow label="feeAmount" value={ps04State.body.amounts.feeAmount} />
+            <StatusRow label="invoiceDraft" value={ps04State.body.invoiceDraft === null ? '（无）' : JSON.stringify(ps04State.body.invoiceDraft)} />
+            <StatusRow label="notPersisted" value={ps04State.body.notPersisted.join(', ')} />
+            <p className="mt-2 text-xs text-slate-500">
+              WON 不等于到账；UNVERIFIED 到账不计入 recovered；只有带 evidence 的 VERIFIED 到账才进入 recovered / 15% fee / 发票草稿。
+            </p>
+          </div>
+        )}
+      </section>
       <section className="rounded border border-slate-200 p-4">
         <h2 className="text-base font-medium">Customs entry fact + projections（BG-020 只读）</h2>
         {entryFactId === '' ? (

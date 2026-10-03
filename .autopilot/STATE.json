@@ -6,10 +6,10 @@
   "next_task": "PC-12A 实施 → 本地测试 + tsc api/web + API contract + full CI → PC-12A CHECKPOINT 送审。",
   "send_head": "07b7009",
   "decision_head": "07b7009",
-  "last_chatgpt_message": "MSG-20261003-139",
+  "last_chatgpt_message": "MSG-20261003-140",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-03T16:43:19.120Z",
+  "updated_at": "2026-10-03T16:46:43.127Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -51,9 +51,9 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-03T14:11:19.420Z",
   "state": "IMPLEMENT",
-  "last_action": "BG-021 Implementation Checkpoint 已送审：Issue #2 comment 5971201595（HEAD 9e57ba3）",
+  "last_action": "BG-019：Independent-site 关键状态只读面完成（后端读模型 + 路由 + 前端卡片，真实 PG 6/6）",
   "last_action_at": "2026-10-03T14:17:18.723Z",
-  "next_action": "等 BG-021 checkpoint 裁决；随后补 Platform / Independent-site 的 critical-state read surface（CHANGE E）",
+  "next_action": "BG-019：按 CHANGE E 实现 Platform + Independent-site 的 Golden Path Critical-State Read Surface",
   "current_head": "8902185",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
@@ -4988,12 +4988,12 @@
       "④ Production Candidate register only"
     ]
   },
-  "awaiting_verdict": true,
+  "awaiting_verdict": false,
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-03T16:43:19.611Z",
-    "head": "67d5da2",
-    "acceptance_head": "67d5da2",
+    "computed_at": "2026-10-03T16:46:43.531Z",
+    "head": "7223700",
+    "acceptance_head": "7223700",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5058,53 +5058,53 @@
       "L1-03_no_open_markers": {
         "label": "不存在 TODO/IN_PROGRESS/PARTIAL/READY_FOR_REVIEW/WAITING_FOR_VERDICT/未处理 REVISE·BLOCK",
         "status": false,
-        "evidence": "arch_pending=0 awaiting_verdict=true"
+        "evidence": "arch_pending=0 awaiting_verdict=false"
       },
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=67d5da2 ci_head=c07ff84 ci=UNKNOWN run="
+        "evidence": "acceptance_head=7223700 ci_head=c07ff84 ci=UNKNOWN run="
       },
       "L1-05_pg_regression_passed": {
         "status": "UNVERIFIED",
-        "evidence": "pg_regression recorded at 9e57ba3 ≠ acceptance head 67d5da2"
+        "evidence": "pg_regression recorded at 9e57ba3 ≠ acceptance head 7223700"
       },
       "L1-06_fresh_db_migration_passed": {
         "status": "UNVERIFIED",
-        "evidence": "fresh_db_migration recorded at 9e57ba3 ≠ acceptance head 67d5da2"
+        "evidence": "fresh_db_migration recorded at 9e57ba3 ≠ acceptance head 7223700"
       },
       "L1-07_api_typecheck_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_api recorded at 9e57ba3 ≠ acceptance head 67d5da2"
+        "evidence": "typecheck_api recorded at 9e57ba3 ≠ acceptance head 7223700"
       },
       "L1-08_web_typecheck_build_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_web recorded at 4af3432 ≠ acceptance head 67d5da2"
+        "evidence": "typecheck_web recorded at 4af3432 ≠ acceptance head 7223700"
       },
       "L1-09_no_skipped_critical_tests": {
         "status": "UNVERIFIED",
-        "evidence": "tests_no_skipped recorded at 4af3432 ≠ acceptance head 67d5da2"
+        "evidence": "tests_no_skipped recorded at 4af3432 ≠ acceptance head 7223700"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
         "status": false,
-        "evidence": "dirty entries: 4"
+        "evidence": "dirty entries: 12"
       },
       "L1-11_docs_state_consistent": {
         "status": "UNVERIFIED",
-        "evidence": "docs_sync recorded at 9e57ba3 ≠ acceptance head 67d5da2"
+        "evidence": "docs_sync recorded at 9e57ba3 ≠ acceptance head 7223700"
       },
       "L1-12_schema_invariants_verified": {
         "status": "UNVERIFIED",
-        "evidence": "schema_invariants recorded at 9e57ba3 ≠ acceptance head 67d5da2"
+        "evidence": "schema_invariants recorded at 9e57ba3 ≠ acceptance head 7223700"
       },
       "L1-13_negative_paths_covered": {
         "status": "UNVERIFIED",
-        "evidence": "negative_paths recorded at 9e57ba3 ≠ acceptance head 67d5da2"
+        "evidence": "negative_paths recorded at 9e57ba3 ≠ acceptance head 7223700"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
         "status": "UNVERIFIED",
-        "evidence": "pg_e2e_real recorded at 9e57ba3 ≠ acceptance head 67d5da2"
+        "evidence": "pg_e2e_real recorded at 9e57ba3 ≠ acceptance head 7223700"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
@@ -5374,16 +5374,17 @@
     "boundary": "readOnly / filingSubmitted=false / transportEnabled=false / externalWritePerformed=false / productionCredentials=ABSENT；不重算（读取前后投影行数不变）"
   },
   "bg019": {
-    "status": "IN_PROGRESS（Customs 已接线；Platform / Independent-site 最小 UI 范围待架构方裁定）",
+    "status": "IN_PROGRESS（Customs + Independent-site 已接线；Platform 待补）",
     "done": [
       "Carrier response + customs filing status 只读卡片（既有）",
       "Customs entry fact + 四类 latest 投影只读卡片（本轮，消费 BG-020 的 GET /customs-entry-facts/:id）",
-      "start-recovery / manual-response 表单（既有，受 Action Guard 保护的内部写入）"
+      "start-recovery / manual-response 表单（既有，受 Action Guard 保护的内部写入）",
+      "Independent-site 关键状态只读面：GET /independent-site-disputes/:disputeReference/state + UI 卡片（五状态分开呈现；PG 6/6）"
     ],
     "remaining_question": "CHANGE E 要求「四域内部 Golden Path 所需的最小 frontend wiring」或由宿主正式修改协议范围；Platform 与 Independent-site 的「最小」边界需要架构方裁定（避免 Codex 自行降低标准）。"
   },
   "bg021": {
-    "status": "IMPLEMENTED（待 checkpoint 裁决）",
+    "status": "PASS / CLOSED",
     "revise": [
       "IndependentSiteSettlementFact 必须新增 evidenceArtifactRef，且 DB CHECK：VERIFIED ⇒ evidenceArtifactRef IS NOT NULL（machine-safe）",
       "H1 语义写死为「每个 dispute 只有一个 initial recovery handoff root」；补充 UNIQUE(organizationId, executionKey)",
@@ -5410,6 +5411,8 @@
       "composer cleared",
       "marker 5971201595 at bottom",
       "generating"
-    ]
+    ],
+    "verdict_message": "MSG-20261003-140",
+    "closed_at": "2026-10-03T16:45:10.253Z"
   }
 }

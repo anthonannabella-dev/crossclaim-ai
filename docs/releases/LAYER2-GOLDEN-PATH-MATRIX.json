@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-03T16:43:19.455Z",
+  "generated_at": "2026-10-03T16:46:43.377Z",
   "rule": "COVERED 需存在命名证据文件；否则 GAP",
   "domains": [
     {
@@ -337,13 +337,14 @@
     {
       "id": "independent_site",
       "name": "Independent-site / Chargeback",
-      "domain_test_files": 3,
-      "domain_web_files": 1,
+      "domain_test_files": 4,
+      "domain_web_files": 2,
       "cells": {
         "http": {
           "status": "COVERED",
           "evidence": [
-            "apps/api/src/__tests__/independent-site-internal-closure.test.ts"
+            "apps/api/src/__tests__/independent-site-internal-closure.test.ts",
+            "apps/api/src/__tests__/independent-site-state-read.test.ts"
           ]
         },
         "persistence": {
@@ -371,7 +372,8 @@
           "evidence": [
             "apps/api/src/__tests__/chargeback-recovery-chain.test.ts",
             "apps/api/src/__tests__/independent-site-facts-db.test.ts",
-            "apps/api/src/__tests__/independent-site-internal-closure.test.ts"
+            "apps/api/src/__tests__/independent-site-internal-closure.test.ts",
+            "apps/api/src/__tests__/independent-site-state-read.test.ts"
           ]
         },
         "negative": {
@@ -379,7 +381,8 @@
           "evidence": [
             "apps/api/src/__tests__/chargeback-recovery-chain.test.ts",
             "apps/api/src/__tests__/independent-site-facts-db.test.ts",
-            "apps/api/src/__tests__/independent-site-internal-closure.test.ts"
+            "apps/api/src/__tests__/independent-site-internal-closure.test.ts",
+            "apps/api/src/__tests__/independent-site-state-read.test.ts"
           ]
         },
         "replay": {
@@ -407,13 +410,15 @@
           "evidence": [
             "apps/api/src/__tests__/chargeback-recovery-chain.test.ts",
             "apps/api/src/__tests__/independent-site-facts-db.test.ts",
-            "apps/api/src/__tests__/independent-site-internal-closure.test.ts"
+            "apps/api/src/__tests__/independent-site-internal-closure.test.ts",
+            "apps/api/src/__tests__/independent-site-state-read.test.ts"
           ]
         },
         "rbac": {
           "status": "COVERED",
           "evidence": [
-            "apps/api/src/__tests__/independent-site-internal-closure.test.ts"
+            "apps/api/src/__tests__/independent-site-internal-closure.test.ts",
+            "apps/api/src/__tests__/independent-site-state-read.test.ts"
           ]
         },
         "amount_ledger": {
@@ -421,7 +426,8 @@
           "evidence": [
             "apps/api/src/__tests__/chargeback-recovery-chain.test.ts",
             "apps/api/src/__tests__/independent-site-facts-db.test.ts",
-            "apps/api/src/__tests__/independent-site-internal-closure.test.ts"
+            "apps/api/src/__tests__/independent-site-internal-closure.test.ts",
+            "apps/api/src/__tests__/independent-site-state-read.test.ts"
           ]
         }
       }

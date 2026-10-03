@@ -125027,3 +125027,91 @@ External Write=HOLD · Real Money=HOLD · Customer Submission=HOLD · Production
 
 submitted ≠ won ≠ settled ≠ recovered ≠ billable。
 ```
+
+### [MSG-20261003-140] BG-021 INDEPENDENT-SITE = PASS / CLOSED（无需再送 FINAL；下一步 CHANGE E / BG-019）（reviewed ref 9e57ba3）
+
+```text
+BG-021 IMPLEMENTATION CHECKPOINT：PASS / CLOSED。
+
+我已独立核对实现提交 9e57ba3、migration 20261003230000_independent_site_recovery_facts、真实 PostgreSQL 8/8，以及现有 independent-site-internal-closure.test.ts。上轮 MSG-20261003-139 的加强项都已经真正落地。
+
+编号裁决如下：
+
+三表 + 三枚举：PASS
+
+IndependentSiteHandoffFact
+IndependentSiteResponseFact
+IndependentSiteSettlementFact
+三枚举均与现有 PS04 词表一致。
+
+Initial handoff root / concurrency：PASS
+
+UNIQUE(org, disputeReference) 已落；
+UNIQUE(org, executionKey) 已落；
+PG 并发测试证明同 dispute 多 executionKey 并发时 exactly-one root；
+后续不同 executionKey 再建第二 root 被拒绝；
+当前语义明确是 initial recovery handoff root，未来 appeal/resubmission 应另建 Attempt/Appeal generation，不需要破坏该约束。
+
+Settlement VERIFIED evidence：PASS
+
+evidenceArtifactRef 已新增；
+DB CHECK：
+VERIFIED ⇒ evidenceArtifactRef IS NOT NULL
+evidence reference 同时受 machine-safe shape 约束。
+
+金额 / currency / source DB invariant：PASS
+
+Response amount IS NULL OR >= 0
+Settlement amount > 0
+currency ^[A-Z]{3}$
+Response source 仅 MANUAL_ENTRY/FIXTURE
+不存在隐式 FX。
+
+敏感数据防线：PASS
+
+PAN-like / numeric account 被 DB 拒绝；
+free-text secret 形态被当前 machine-safe ref 规则拒绝；
+Schema 没有 PAN/CVV/PSP secret/credential 字段。
+
+Tenant / lineage / append-only：PASS
+
+3 个 tenant triggers；
+3 个 immutable；
+3 个 append-only；
+response / settlement 必须引用同 tenant、同 dispute 的 handoff root；
+cross-tenant PG 路径已验证拒绝。
+
+历史与 latest：PASS
+
+Response/Settlement 可 append corrected fact；
+无 mutable isLatest；
+latest 由时间字段 + id 排序推导。
+
+UNVERIFIED settlement ≠ recovered/billable：PASS
+这里我特别反查了。PG 测试证明 UNVERIFIED settlement 可以作为事实落库，而现有 independent-site-internal-closure 明确验证其进入 consolidation 后：
+
+settled=false
+recovered=false
+billable=false
+recoveredAmount=0
+feeAmount=0
+invoiceDraft=null
+
+因此 DB 事实层和业务收敛语义是闭合的，不存在“UNVERIFIED 一落库就被当成钱”的漏洞。
+
+最终：
+
+BG-021 = PASS / CLOSED
+
+不需要再送 FINAL Schema checkpoint。
+
+下一步可以直接继续 CHANGE E / BG-019：Platform + Independent-site Golden Path Critical-State Read Surface。
+
+当前剩余内部重点已经很明确：不是再补事实层，而是把关键 Golden Path 状态真实接到 UI，让内部验收能看到：
+
+submitted ≠ won ≠ settled ≠ recovered ≠ billable
+
+边界继续不变：
+
+External Write=HOLD · Real Money=HOLD · Customer Submission=HOLD · Production Credentials=HOST_ONLY。
+```
