@@ -51,9 +51,9 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-03T12:45:18.754Z",
   "state": "IMPLEMENT",
-  "last_action": "P0-1：Import ↔ Return/Export/Destruction 匹配（契约 + 确定性匹配 + fail-closed，单测 10/10）+ Return/Export/Destruction 事实 append-only 持久化（schema/migration/触发器/store，真实 PG 5/5）",
+  "last_action": "P0-2：新增 customer-qualification-gate（四态 QUALIFIED/CONDITIONAL/NOT_QUALIFIED/INDETERMINATE；versioned policy；昂贵外部调用前置门；数据不足/lineage 不完整 → INDETERMINATE 不触发外呼；成本占比与净额 fail-closed）与单测 11/11",
   "last_action_at": "2026-10-03T12:03:56.528Z",
-  "next_action": "P0-1 续：把匹配结果接入 claim-ready evidence package（eligible quantity / duty basis）+ HTTP/前端；随后 P0-2 Customer Qualification / Recovery Economics Gate",
+  "next_action": "P0-2 续：把 qualification 判定持久化为 append-only 投影（policyId/version + inputDigest/resultDigest）+ 接 HTTP/前端；然后 P0-3 Enterprise Trust Readiness",
   "current_head": "749040c",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
@@ -4821,5 +4821,11 @@
     "migration": "20261003160000_customs_return_fact",
     "tests": "customs-return-matching 10/10（unit）+ customs-return-fact-store-db 5/5（PG）",
     "boundary": "AMBIGUOUS/NO_MATCH 不产生可追回数量；PARTIAL 不放大；跨租户/跨账户拒绝；无 PII/凭据；不 filing/transport"
+  },
+  "p0_2": {
+    "status": "IN_PROGRESS（判定引擎完成；持久化/HTTP 待接）",
+    "module": "apps/api/src/services/commercial/customer-qualification-gate.ts",
+    "tests": "apps/api/src/__tests__/customer-qualification-gate.test.ts → 11/11 PASS",
+    "boundary": "expensiveAdapterCallAllowed 仅 QUALIFIED；CONDITIONAL 需人工确认；INDETERMINATE/NOT_QUALIFIED 不触发外呼；判定 ≠ filing 授权"
   }
 }
