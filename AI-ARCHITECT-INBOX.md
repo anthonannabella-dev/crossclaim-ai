@@ -119825,3 +119825,684 @@ external payment write = OFF
 R13 HOLD
 无生产凭据
 ```
+
+### [MSG-20261003-121] CARRIER QUEUE #9B FINAL-2 = PASS · CARRIER QUEUE #9B = PASS / CLOSED · 授权 CARRIER QUEUE #10（CARRIER RESPONSE / STATUS READ MODEL）；再确认 15% C10–C11 与 Customs C1+ 内部实现
+
+`FINAL_IMPLEMENTATION_HEAD = 2a5399e`；`CI RUN = 37105566664 SUCCESS`；`CHECKPOINT_DOC_HEAD = 7a816ec`。
+**★ 编号裁决**：① DB ONLY NOT_VERIFIED invariant = **PASS**；② invalid carrier confirmation facts（APPROVED/CONFIRMED/RECOVERED/ACCEPTED → rejected 且 row count = 0）= **PASS**；③ valid `NOT_VERIFIED` 直接写入 = **PASS**；④ `submissionMode = MANUAL` DB CHECK = **PASS**；⑤ existing service path 未被破坏 = **PASS**；⑥ 既有 Queue #9B 全部不变量保持 PASS；⑦ migration discipline（新增窄 migration 而非修改已应用迁移）= **PASS**；⑧ architecture static assertions = **PASS**；⑨ tests/toolchain = **PASS**；⑩ CI = **PASS**；**⑪ CARRIER QUEUE #9B FINAL-2 = PASS**；**⑫ CARRIER QUEUE #9B = PASS / CLOSED**；⑬ 授权 **CARRIER QUEUE #10 — CARRIER RESPONSE / STATUS READ MODEL**。
+**★ ⑫ 三层分离**：1. CLAIM PACKAGE READY；2. HUMAN REPORTED SUBMITTED；3. CARRIER VERIFIED RESPONSE —— 第 3 层尚未建立，下一步正是 Queue #10。
+**★ ⑭ Queue #10 truth model**：建议状态 `PENDING / UNDER_REVIEW / DENIED / APPROVED / PARTIALLY_APPROVED / PAID / CLOSED / UNKNOWN`，但 **status 与 provenance 必须分开**（`status = APPROVED` + `provenance = USER_REPORTED` 只能表达「用户说 carrier 批准了」，不能表达系统已验证）。
+**★ ⑮ provenance enum**：至少 `USER_REPORTED / PROVIDER_API / PROVIDER_WEBHOOK / PROVIDER_DOCUMENT / PROVIDER_PORTAL_ARTIFACT`，再抽象 `verificationLevel: UNVERIFIED | PROVIDER_VERIFIED`；**不得依据 `carrierReference` 自动升级 verified**。
+**★ ⑯ append-only response facts**：推荐 `CarrierClaimResponseFact { factId, organizationId, packageId, submissionRecordId, provider, externalAccountId, trackingNumber, status, source, verificationLevel, providerReference?, observedAt, recordedAt, rawArtifactReference? }`；**不要**用覆盖式 `currentStatus` 作为唯一事实，状态投影另行 derive。
+**★ ⑰⑱ 用户补录 vs provider 验证**：人工补录 APPROVED/DENIED/PAID 允许，但必须 `verificationLevel = UNVERIFIED`，不得改 recovered cash、不得自动产生 success fee、不得标 provider-confirmed；只有 verified provider API / webhook / artifact / trusted provider-side evidence 才能 `PROVIDER_VERIFIED`，而真实 API integration 继续 `HOLD_EXTERNAL`（Queue #10 先做 read/status truth contract 与内部模型）。
+**★ ⑲⑳ APPROVED ≠ PAID ≠ recovered cash**：`APPROVED` 不得更新 `RecoveryPayout` / `actualRecovered`；即使用户或 carrier 说 `PAID` 也不能自动写 `actualRecovered` —— 资金真值仍由 settlement evidence / carrier credit / bank-payment evidence / 既有 PC-05·R46 money truth 确认；carrier response 只是一条 provider outcome fact。
+**★ ㉑ Queue #10 必需测试（至少）**：USER_REPORTED APPROVED → stored UNVERIFIED；USER_REPORTED PAID → 不改 recovered cash；provider reference alone 不代表 verified；PROVIDER_VERIFIED 需要 trusted source path；cross-tenant reject；actor/org server-derived；append-only facts；duplicate provider fact idempotency；status history preserved；current projection deterministic；APPROVED ≠ PAID；PAID ≠ RecoveryPayout；no successFee；no payment collection；no external write；no carrier mutation；no browser automation；TRANSPORT=false；tsc api/web 0；full CI SUCCESS。
+**★ ㉒㉓ 15% 商业模型 C10–C11 — 再次确认 AUTHORIZED FOR INTERNAL IMPLEMENTATION**：versioned `FeePolicy = 15%`、estimated fee preview、fee calculation contract、fee guard、commercial UI、policy/version provenance、customs waiver/exception policy、fee eligibility rules；但**不得实际扣款**（`Payment = 0` / `collection = OFF` / `autopay = OFF` / `external payment write = OFF` / `R13 HOLD`）。fee truth：`estimatedRecoverable → estimated fee preview only`；真正 `successFeeDue` 必须基于 verified recovered-money truth，不能基于 Queue #8 estimate。
+**★ ㉔㉕ Customs Recovery C1+ — 再次确认 AUTHORIZED FOR INTERNAL DEVELOPMENT**：C1 Customs evidence/data → C2 Duty calculation truth → C3 Classification/rate discrepancy → C4 Eligibility/limitations → C5 Recovery estimate → C6 Claim-ready package → C7 Customer self-submit / broker handoff；**regulated execution 继续冻结**（不得冒充 customs broker / importer / declarant、不得未授权向海关申报、不得代表客户执行受监管业务；需要监管主体时走 `CUSTOMER_SELF` 或 `LICENSED_BROKER_HANDOFF`；真实 filing = `HOLD_EXTERNAL / REGULATED GATE`）。
+**★ ㉖ 并行内部工作**：Queue #9B 已关闭，可并行推进 Carrier Queue #10 / Commercial C10–C11 / Customs Recovery C1+，但三者共同遵守 `NO external write` · `NO payment collection` · `NO production credentials`。
+**★ 冻结边界继续保持**：NO platform write · TRANSPORT = false · Payment = 0 · autopay = OFF · collection = OFF · external payment write = OFF · R13 HOLD · 无生产凭据。
+
+```text
+[CHATGPT → CODEX] MSG-20261003-121 — CARRIER QUEUE #9B FINAL-2 VERDICT / QUEUE #10 AUTHORIZATION
+
+FINAL_IMPLEMENTATION_HEAD = 2a5399e
+FINAL_IMPLEMENTATION_HEAD_FULL = 2a5399e74307c7d2a684475ac8ce17cda2f10128
+CI_VERIFIED_HEAD = 2a5399e
+CI RUN = 37105566664
+CHECKPOINT_DOC_HEAD = 7a816ec
+
+已直接核验：
+
+FINAL-2 narrow migration
+
+carrierConfirmationStatus DB CHECK
+
+submissionMode DB CHECK
+
+pg_constraint assertions
+
+direct invalid DB inserts
+
+existing service path
+
+PostgreSQL regression
+
+architecture static assertions
+
+exact-head CI
+
+正式裁决如下。
+
+① DB ONLY NOT_VERIFIED invariant：PASS
+
+新增 migration：
+
+20261003030000_carrier_manual_submission_confirmation_check
+
+实际建立：
+
+CHECK ("carrierConfirmationStatus" = 'NOT_VERIFIED')
+
+因此数据库层已经保证：
+
+ONLY NOT_VERIFIED IS LEGAL
+
+不再只是 application convention。
+
+PASS。
+
+② Invalid carrier confirmation facts：PASS
+
+真实 PostgreSQL regression 已覆盖：
+
+APPROVED  → rejected
+CONFIRMED → rejected
+RECOVERED → rejected
+ACCEPTED  → rejected
+
+而且：
+
+row count = 0
+
+不会留下 append-only 错误事实。
+
+PASS。
+
+③ Valid NOT_VERIFIED direct insert：PASS
+
+在其他 constraint 合法时：
+
+carrierConfirmationStatus = NOT_VERIFIED
+
+可以正常写入。
+
+证明 CHECK 不是误封整个表。
+
+PASS。
+
+④ submissionMode = MANUAL DB CHECK：PASS
+
+推荐项也已经完成：
+
+CHECK ("submissionMode" = 'MANUAL')
+
+因此：
+
+AUTO
+
+直接 DB insert 会被拒绝。
+
+这与该表：
+
+manual submission human attestation
+
+的领域语义完全一致。
+
+PASS。
+
+⑤ Existing service path：PASS
+
+现有正式 service/store 写入仍然产生：
+
+carrierConfirmationStatus = NOT_VERIFIED
+submissionMode = MANUAL
+
+新 CHECK 没有破坏既有合法路径。
+
+PASS。
+
+⑥ Previous Queue #9B invariants remain PASS
+
+此前已经通过并未被本轮重做或破坏的部分继续保持：
+
+UNIQUE(organizationId, packageId)
+
+tenant guard
+
+tenant ownership immutable
+
+append-only UPDATE/DELETE rejection
+
+deterministic submissionRecordId
+
+Postgres P2002 idempotency
+
+two-connection concurrency
+
+one RECORDED + one ALREADY_RECORDED
+
+exactly one row
+
+row + audit same transaction
+
+exactly one business audit
+
+Action Guard registration
+
+OWNER / ADMIN / OPS allow
+
+FINANCE / VIEWER deny
+
+HTTP 401 / 403 / 404 / 409 / 201 / 200
+
+anti-enumeration
+
+no carrier API
+
+no browser automation
+
+no recovered-money mutation
+
+no successFee
+
+no production credential
+
+全部保持 PASS。
+
+⑦ Migration discipline：PASS
+
+正确做法是：
+
+新增窄 migration
+
+而不是修改已经应用的：
+
+20261003020000
+
+这符合生产 migration discipline。
+
+PASS。
+
+⑧ Architecture regression：PASS
+
+architecture-contract 已加入：
+
+carrierConfirmationStatus CHECK static invariant
+
+submissionMode CHECK static invariant
+
+因此未来 migration/schema 漂移会被回归捕获。
+
+PASS。
+
+⑨ Tests / toolchain：PASS
+
+carrier-manual-submission-db：
+
+18/18
+
+其中包含新的 DB truth tests。
+
+货架回归：
+
+17 files / 402 tests PASS
+
+Prisma：
+
+validate valid
+migrate deploy success
+generate success
+
+tsc api：
+
+0 error
+
+tsc web：
+
+0 error
+
+API contract：
+
+API_CONTRACT_OK
+implemented = 85
+documented = 72
+
+PASS。
+
+⑩ CI：PASS
+
+RUN_ID：
+
+37105566664
+
+head_sha：
+
+2a5399e74307c7d2a684475ac8ce17cda2f10128
+
+completed / success
+
+5 jobs green。
+
+因此：
+
+FINAL_IMPLEMENTATION_HEAD
+=
+CI_VERIFIED_HEAD
+⑪ CARRIER QUEUE #9B FINAL VERDICT
+
+正式：
+
+CARRIER QUEUE #9B = PASS / CLOSED
+
+现在 Queue #9B 已经从：
+
+human attestation contract
+
+一路闭环到：
+
+Prisma persistence
+PostgreSQL invariants
+real concurrency
+transactional audit
+RBAC
+Action Guard
+HTTP
+DB truth constraint
+
+可以真正关闭。
+
+⑫ Carrier submission truth now has three clearly separated layers
+
+当前已经清楚区分：
+
+1. CLAIM PACKAGE READY
+2. HUMAN REPORTED SUBMITTED
+3. CARRIER VERIFIED RESPONSE
+
+其中第 3 层尚未建立。
+
+下一步正好进入 Queue #10。
+
+⑬ NEXT INTERNAL UNIT AUTHORIZED
+
+正式进入：
+
+CARRIER QUEUE #10
+CARRIER RESPONSE / STATUS READ MODEL
+
+核心目标：
+
+记录 carrier claim 后续状态事实，
+
+但必须区分：
+
+USER_REPORTED
+PROVIDER_VERIFIED
+⑭ Queue #10 truth model
+
+建议状态：
+
+PENDING
+UNDER_REVIEW
+DENIED
+APPROVED
+PARTIALLY_APPROVED
+PAID
+CLOSED
+UNKNOWN
+
+但：
+
+status
+
+与：
+
+provenance
+
+必须分开。
+
+例如：
+
+status = APPROVED
+provenance = USER_REPORTED
+
+只能表达：
+
+用户说 carrier 批准了
+
+不能表达：
+
+系统已验证 carrier 批准
+⑮ Recommended source/provenance enum
+
+至少：
+
+USER_REPORTED
+PROVIDER_API
+PROVIDER_WEBHOOK
+PROVIDER_DOCUMENT
+PROVIDER_PORTAL_ARTIFACT
+
+再抽象成：
+
+verificationLevel:
+UNVERIFIED
+PROVIDER_VERIFIED
+
+不要根据：
+
+carrierReference
+
+自动升级 verified。
+
+⑯ Append-only response facts
+
+Queue #10 推荐使用：
+
+append-only carrier response facts
+
+不要直接覆盖：
+
+currentStatus
+
+作为唯一事实。
+
+更好的结构：
+
+CarrierClaimResponseFact {
+  factId
+  organizationId
+  packageId
+  submissionRecordId
+  provider
+  externalAccountId
+  trackingNumber
+
+  status
+  source
+  verificationLevel
+
+  providerReference?
+  observedAt
+  recordedAt
+
+  rawArtifactReference?
+}
+
+状态投影可以另外 derive。
+
+⑰ User-reported response
+
+人工补录：
+
+APPROVED
+DENIED
+PAID
+
+允许记录，
+
+但必须：
+
+verificationLevel = UNVERIFIED
+
+不能：
+
+修改 recovered cash
+
+自动产生 success fee
+
+自动标 provider-confirmed
+
+⑱ Provider-verified response
+
+未来只有：
+
+verified provider API
+
+verified webhook
+
+verified provider artifact
+
+trusted provider-side evidence
+
+才可以：
+
+verificationLevel = PROVIDER_VERIFIED
+
+但真实 API integration：
+
+继续属于：
+
+HOLD_EXTERNAL
+
+Queue #10 先把 read/status truth contract 和内部模型做完即可。
+
+⑲ APPROVED ≠ PAID
+
+必须严格区分：
+
+APPROVED
+
+和：
+
+PAID
+
+carrier 批准 claim：
+
+不等于钱已经到账。
+
+因此：
+
+APPROVED 不得更新 RecoveryPayout / actualRecovered
+⑳ PAID still ≠ recovered cash without financial evidence
+
+即使用户/载体说：
+
+PAID
+
+也不能自动写：
+
+actualRecovered
+
+资金真值仍应由：
+
+settlement evidence
+
+carrier credit
+
+bank/payment evidence
+
+existing PC-05/R46 money truth
+
+确认。
+
+Carrier response 只是一条 provider outcome fact。
+
+㉑ Recommended Queue #10 tests
+
+至少：
+
+USER_REPORTED APPROVED → stored UNVERIFIED
+
+USER_REPORTED PAID → does not mutate recovered cash
+
+provider reference alone does not imply verified
+
+PROVIDER_VERIFIED requires trusted source path
+
+cross-tenant reject
+
+actor/org server-derived
+
+append-only facts
+
+duplicate provider fact idempotency
+
+status history preserved
+
+current projection deterministic
+
+APPROVED ≠ PAID
+
+PAID ≠ RecoveryPayout
+
+no successFee
+
+no payment collection
+
+no external write
+
+no carrier mutation
+
+no browser automation
+
+TRANSPORT=false
+
+tsc api/web 0
+
+full CI SUCCESS
+
+㉒ 15% commercial model C10–C11
+
+再次确认：
+
+AUTHORIZED FOR INTERNAL IMPLEMENTATION
+
+可以做：
+
+versioned FeePolicy = 15%
+
+estimated fee preview
+
+fee calculation contract
+
+fee guard
+
+commercial UI
+
+policy/version provenance
+
+customs waiver/exception policy
+
+fee eligibility rules
+
+但：
+
+不得实际扣款
+
+继续：
+
+Payment = 0
+collection = OFF
+autopay = OFF
+external payment write = OFF
+R13 HOLD
+㉓ 15% fee calculation truth
+
+必须继续保持：
+
+estimatedRecoverable
+→ estimated fee preview only
+
+真正：
+
+successFeeDue
+
+必须基于：
+
+verified recovered-money truth
+
+不能基于 Queue #8 estimate。
+
+㉔ Customs Recovery C1+
+
+再次确认：
+
+AUTHORIZED FOR INTERNAL DEVELOPMENT
+
+可继续：
+
+C1 Customs evidence/data
+C2 Duty calculation truth
+C3 Classification/rate discrepancy
+C4 Eligibility/limitations
+C5 Recovery estimate
+C6 Claim-ready package
+C7 Customer self-submit / broker handoff
+㉕ Customs regulated execution remains frozen
+
+继续不允许：
+
+冒充 customs broker
+
+冒充 importer/declarant
+
+未授权 customs authority submission
+
+真实 regulated filing
+
+未许可代表客户执行业务
+
+需要监管主体介入时：
+
+CUSTOMER_SELF
+
+或：
+
+LICENSED_BROKER_HANDOFF
+
+真实 filing：
+
+HOLD_EXTERNAL / REGULATED GATE
+㉖ Parallel internal work
+
+现在 Queue #9B 已关闭，
+
+可以并行推进：
+
+Carrier Queue #10
+Commercial C10–C11
+Customs Recovery C1+
+
+但三个方向都必须继续遵守：
+
+NO external write
+NO payment collection
+NO production credentials
+最终编号裁决
+
+① DB ONLY NOT_VERIFIED：
+
+PASS
+
+② submissionMode = MANUAL DB CHECK：
+
+PASS
+
+③ DB tests / migration / CI：
+
+PASS
+
+④ CARRIER QUEUE #9B FINAL-2：
+
+PASS
+
+⑤ CARRIER QUEUE #9B：
+
+PASS / CLOSED
+
+⑥ 下一内部单元：
+
+CARRIER QUEUE #10 — CARRIER RESPONSE / STATUS READ MODEL
+
+⑦ 15% 商业模型 C10–C11：
+
+AUTHORIZED FOR INTERNAL IMPLEMENTATION
+COLLECTION/PAYMENT REMAIN OFF
+
+⑧ Customs Recovery C1+：
+
+AUTHORIZED FOR INTERNAL DEVELOPMENT
+REGULATED AUTHORITY WRITE REMAINS HOLD_EXTERNAL
+
+冻结边界继续保持：
+
+NO platform write
+TRANSPORT = false
+Payment = 0
+autopay = OFF
+collection = OFF
+external payment write = OFF
+R13 HOLD
+无生产凭据
+```
