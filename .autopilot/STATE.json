@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261003-147",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-03T22:59:47.170Z",
+  "updated_at": "2026-10-03T23:05:37.804Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -5621,5 +5621,51 @@
   "final_pre_integration_acceptance": "PASS",
   "internal_blocker_count": 0,
   "autopilot_state_consistency": "PASS",
-  "release_baseline_ready": "YES"
+  "release_baseline_ready": "YES",
+  "i18n_baseline": {
+    "at": "2026-10-03T23:05:37.804Z",
+    "I18N_INFRASTRUCTURE": "PASS",
+    "SUPPORTED_UI_LOCALES": [
+      "zh-CN",
+      "en-US",
+      "de",
+      "ja",
+      "es"
+    ],
+    "DICTIONARY_KEY_PARITY": "PASS",
+    "EMPTY_TRANSLATION_COUNT": 0,
+    "STATUS_LOCALIZATION": "PASS（13 code × 5 语言 + UNKNOWN 兜底）",
+    "DATE_MONEY_LOCALIZATION": "TOOLING_PASS / PAGE_INTEGRATION_PENDING",
+    "BUSINESS_LANGUAGE_LAYER": "PASS（ui/report/claim/provider + fail-safe resolver + contract）",
+    "CUSTOMER_UI_HARDCODED_STRING_COUNT": 169,
+    "hardcode_ratchet_baseline": 169,
+    "CUSTOMER_UI_LOCALIZATION": "REVISE",
+    "REPORT_LANGUAGE_READINESS": "REVISE（解析就绪；冻结持久化与选择器待做）",
+    "CLAIM_LANGUAGE_READINESS": "REVISE（immutable language metadata 需架构审计）",
+    "PROVIDER_LANGUAGE_READINESS": "PASS",
+    "EMAIL_LANGUAGE_READINESS": "EXTERNAL_GATE",
+    "MARKETING_I18N_READYNESS": "MISSING（P2）",
+    "REAL_MULTILINGUAL_CLAIM_GENERATION": "NO（Provider/LLM 未接入，正常状态）",
+    "guard": "tools/i18n/check-i18n.mjs（CI 接线；棘轮：硬编码只允许下降）",
+    "docs": [
+      "docs/architecture/BUSINESS-LANGUAGE-CONTRACT.md",
+      "docs/releases/I18N-COVERAGE-MATRIX.md"
+    ],
+    "p0_gaps": [
+      "P0-1 客户页面硬编码入字典（169 行：signup/accounts/opportunities/connections/money/plan/cases/claim-package/upload）",
+      "P0-2 各客户页状态本地化接入（当前仅 opportunities 部分）",
+      "P0-3 客户页日期/金额经 formatMoney/formatDate*",
+      "P0-4 Claim/Appeal immutable language metadata（涉及 Schema → 需架构审计）"
+    ],
+    "p1_gaps": [
+      "Email 模板 locale 架构",
+      "Report language 选择器 + 冻结持久化",
+      "providerLocale 接入各 provider 接入点",
+      "locale preference persistence",
+      "Ops Console label 本地化"
+    ],
+    "p2_gaps": [
+      "Marketing/SEO locale 路由 + hreflang/canonical/sitemap/landing pages"
+    ]
+  }
 }

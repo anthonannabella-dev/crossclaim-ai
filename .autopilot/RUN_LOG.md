@@ -1756,3 +1756,6 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 
 ## 2026-10-03T22:59:47.170Z — RELEASE INTEGRATION
 - PR #12 merged → main 5a340bc；main CI 37159776098 success；branch protection 已启用。RELEASE_BASELINE_READY=YES。
+
+## 2026-10-03T23:05:37.804Z — I18N BASELINE
+- 业务语言层 + 状态本地化 + 校验器/棘轮落地（CI 接线）；客户硬编码基线 169，P0/P1/P2 缺口已登记。
