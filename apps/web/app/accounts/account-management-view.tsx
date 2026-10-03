@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react';
 
+import type { Messages } from '../../i18n/dictionaries/zh-CN';
+
 interface Connection {
   id: string;
   label: string;
@@ -42,7 +44,8 @@ interface Response {
 
 const fmt = (value: string | null) => (value ? value.slice(0, 10) : '—');
 
-export default function AccountManagementView() {
+export default function AccountManagementView({ t }: { t: Messages }) {
+  const copy = t.accountsPage;
   const [data, setData] = useState<Response | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -53,21 +56,21 @@ export default function AccountManagementView() {
       try {
         const response = await fetch('/api/accounts', { cache: 'no-store' });
         if (response.status === 401) {
-          if (!cancelled) setError('会话已失效，请重新登录');
+          if (!cancelled) setError(t.common.sessionExpired);
           return;
         }
         if (response.status === 403) {
-          if (!cancelled) setError('当前角色无权查看账户管理（需要 OWNER / ADMIN）');
+          if (!cancelled) setError(copy.forbidden);
           return;
         }
         if (!response.ok) {
-          if (!cancelled) setError('无法加载账户数据');
+          if (!cancelled) setError(copy.loadFailed);
           return;
         }
         const body = (await response.json()) as Response;
         if (!cancelled) setData(body);
       } catch {
-        if (!cancelled) setError('网络错误');
+        if (!cancelled) setError(t.common.networkError);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -75,27 +78,31 @@ export default function AccountManagementView() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [copy, t]);
 
-  if (loading) return <p className="text-sm text-slate-600">加载中… / Loading…</p>;
+  if (loading) return <p className="text-sm text-slate-600">{t.common.loading}</p>;
   if (error) return <div className="rounded border border-slate-300 bg-slate-50 p-3 text-sm text-slate-700">{error}</div>;
-  if (!data) return <p className="text-sm text-slate-600">无数据</p>;
+  if (!data) return <p className="text-sm text-slate-600">{copy.empty}</p>;
 
   return (
     <div className="space-y-4">
       {data.platforms.length === 0 ? (
         <div className="rounded border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-          还没有已绑定账户。可先前往{' '}
+          {copy.emptyNoAccountsPrefix}{' '}
           <a className="text-blue-700 underline" href={data.onboarding.connectAccountEntry}>
-            连接
+            {copy.linkConnections}
           </a>{' '}
-          页面创建连接并绑定账户。
+          {copy.emptyNoAccountsSuffix}
         </div>
       ) : null}
 
       {data.platforms.map((group) => (
         <section key={group.platform} className="rounded border border-slate-200 p-3">
-          <h2 className="text-sm font-medium">{group.platform}（{group.accounts.length} 个账户）</h2>
+          <h2 className="text-sm font-medium">
+            {copy.groupHeading
+              .replace('{platform}', group.platform)
+              .replace('{count}', String(group.accounts.length))}
+          </h2>
           <div className="mt-2 space-y-3">
             {group.accounts.map((account) => (
               <div key={account.id} className="rounded border border-slate-200 p-2 text-xs">
@@ -103,35 +110,39 @@ export default function AccountManagementView() {
                   {account.displayName} · {account.externalAccountId}
                 </div>
                 <div className="text-slate-600">
-                  identity {account.identityVersion} · 状态 {account.status} · 创建 {fmt(account.createdAt)} · 活跃连接{' '}
-                  {account.activeConnectionCount}/{account.connections.length}
+                  {copy.accountMeta
+                    .replace('{identityVersion}', account.identityVersion)
+                    .replace('{status}', account.status)
+                    .replace('{created}', fmt(account.createdAt))
+                    .replace('{active}', String(account.activeConnectionCount))
+                    .replace('{total}', String(account.connections.length))}
                 </div>
                 <div className="mt-1 text-[11px] text-slate-600">
-                  下游入口：
+                  {copy.downstreamEntries}
                   {account.navigation.opportunities.available ? (
                     <a className="text-blue-700 underline" href={account.navigation.opportunities.entry}>
-                      该账户的机会
+                      {copy.navOpportunities}
                     </a>
                   ) : null}
                   {!account.navigation.recoveryMoney.available ? (
                     <span className="text-slate-500">
-                      　金额视图暂不支持按账户过滤（{account.navigation.recoveryMoney.reason}）
+                      {copy.moneyFilterUnavailable.replace('{reason}', account.navigation.recoveryMoney.reason)}
                     </span>
                   ) : null}
                 </div>
                 {account.connections.length === 0 ? (
-                  <div className="mt-1 text-amber-700">该账户尚无连接（transport 层未建立）。</div>
+                  <div className="mt-1 text-amber-700">{copy.noConnections}</div>
                 ) : (
                   <table className="mt-1 w-full border-collapse">
                     <thead>
                       <tr className="border-b text-left text-slate-600">
-                        <th className="py-1">连接</th>
-                        <th className="py-1">渠道 / 域</th>
-                        <th className="py-1">状态</th>
-                        <th className="py-1">绑定状态</th>
-                        <th className="py-1">最近同步</th>
-                        <th className="py-1">最近错误</th>
-                        <th className="py-1">重绑</th>
+                        <th className="py-1">{copy.colConnection}</th>
+                        <th className="py-1">{copy.colChannelDomain}</th>
+                        <th className="py-1">{copy.colStatus}</th>
+                        <th className="py-1">{copy.colBindingState}</th>
+                        <th className="py-1">{copy.colLastSync}</th>
+                        <th className="py-1">{copy.colLastError}</th>
+                        <th className="py-1">{copy.colRebind}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -146,17 +157,17 @@ export default function AccountManagementView() {
                           <td className="py-1">
                             {connection.actions.reconnect.available ? (
                               <a className="mr-1 text-blue-700 underline" href={connection.actions.reconnect.entry}>
-                                重新连接
+                                {copy.reconnect}
                               </a>
                             ) : connection.actions.reconnect.reason === 'REAL_OAUTH_EXTERNAL_GATE' ? (
-                              <span className="mr-1 text-slate-500">需重新授权（真实 OAuth/API 尚未启用）</span>
+                              <span className="mr-1 text-slate-500">{copy.reconnectGated}</span>
                             ) : null}
                             {connection.rebind.available ? (
                               <a className="text-blue-700 underline" href={data.onboarding.explicitRebindEntry}>
-                                显式重绑
+                                {copy.explicitRebind}
                               </a>
                             ) : (
-                              <span className="text-slate-400">不可变</span>
+                              <span className="text-slate-400">{copy.immutable}</span>
                             )}
                           </td>
                         </tr>
@@ -172,26 +183,28 @@ export default function AccountManagementView() {
 
       {data.unboundLegacyConnections.length > 0 ? (
         <section className="rounded border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
-          <h2 className="text-sm font-medium">未绑定连接（legacy，只读冻结）</h2>
-          <p className="mt-1">
-            这些连接没有绑定账户，系统不会自动猜测归属；请通过显式重绑选择目标账户（同租户、一次性）。
-          </p>
+          <h2 className="text-sm font-medium">{copy.legacyTitle}</h2>
+          <p className="mt-1">{copy.legacyNote}</p>
           <ul className="mt-2 list-disc pl-5">
             {data.unboundLegacyConnections.map((connection) => (
               <li key={connection.id}>
-                {connection.label} · {connection.channel} / {connection.domain} · 状态 {connection.status} · 最近错误{' '}
-                {connection.safeHealthNote ?? '—'}
+                {copy.legacyItem
+                  .replace('{label}', connection.label)
+                  .replace('{channel}', connection.channel)
+                  .replace('{domain}', connection.domain)
+                  .replace('{status}', connection.status)
+                  .replace('{note}', connection.safeHealthNote ?? '—')}
               </li>
             ))}
           </ul>
           <a className="mt-2 inline-block text-blue-700 underline" href={data.onboarding.explicitRebindEntry}>
-            前往显式重绑
+            {copy.goExplicitRebind}
           </a>
         </section>
       ) : null}
 
       <p className="text-[11px] text-slate-600">
-        真实平台授权（OAuth / API）：{data.onboarding.realOAuthState} —— 本页不发起真实授权，仅指向既有安全入口。
+        {copy.realOAuthNote.replace('{state}', data.onboarding.realOAuthState)}
       </p>
     </div>
   );
