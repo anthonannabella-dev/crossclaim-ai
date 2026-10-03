@@ -276,7 +276,7 @@
     },
     {
       "id": "BG-011-ps04-enum-migration-d1-d3",
-      "priority": "P1",
+      "priority": "P0",
       "source_backlog_id": "MSG-20261003-133 Q1（仅批准 D1–D3 枚举）",
       "title": "PS04 D1–D3 枚举迁移（RecoveryDomain += INDEPENDENT_SITE；Channel += SHOPIFY/STRIPE/PAYPAL；RouteTarget += PAYMENT_PROCESSOR）",
       "scope": "枚举迁移必须先独立落地；不含 D4；不改其它 Schema",

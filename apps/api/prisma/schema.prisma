@@ -29,6 +29,7 @@ enum RecoveryDomain {
   PLATFORM
   LOGISTICS
   CUSTOMS
+  INDEPENDENT_SITE
 }
 
 enum Channel {
@@ -40,6 +41,7 @@ enum Channel {
   FREIGHT_FORWARDER
   INSURANCE
   CUSTOMS_BROKER
+  PAYMENT_PROCESSOR
   OTHER
 }
 

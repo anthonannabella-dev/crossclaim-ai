@@ -1615,3 +1615,11 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 ## 2026-10-03T15:01:33.598Z — MSG-20261003-133 执行（Q2①）
 - carrier-settlement-reconciliation-readonly 落地：7/7 通过（APPROVED/PAID 无结算证据 → AWAITING_SETTLEMENT_EVIDENCE，绝不升级 RECEIVED；金额不符 → DISCREPANCY；币种不符 → INDETERMINATE；跨租户 → 拒绝）。
 - backlog 扩充 BG-009（P0）/BG-010/BG-011/BG-012；dispatcher 授权范围已记录。
+
+## 2026-10-03T15:02:41.687Z — BACKLOG BG-009-carrier-settlement-readonly-reconciliation
+- Carrier 结果 → Settlement 只读对账投影（APPROVED/PAID ≠ RECEIVED）
+-  Test Files  1 passed (1) |       Tests  7 passed (7)
+
+## 2026-10-03T15:02:43.642Z — BACKLOG BG-011-ps04-enum-migration-d1-d3
+- PS04 D1–D3 枚举迁移（RecoveryDomain += INDEPENDENT_SITE；Channel += SHOPIFY/STRIPE/PAYPAL；RouteTarget += PAYMENT_PROCESSOR）
+-  Test Files  1 passed (1) |       Tests  142 passed (142)

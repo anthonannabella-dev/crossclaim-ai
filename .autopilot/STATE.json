@@ -54,7 +54,7 @@
   "last_action": "依 MSG-20261003-133 执行 Q2①：新增 carrier-settlement-reconciliation-readonly（APPROVED/PAID ≠ RECEIVED；只读投影；无资金写入）与 7/7 测试；backlog 依裁决扩充（BG-009/010/011/012）",
   "last_action_at": "2026-10-03T14:17:18.723Z",
   "next_action": "继续按 ③→①→②→④ 顺序：BG-010 PS04 Phase 1（先 BG-011 D1–D3 枚举迁移）→ BG-012 Customs 内部触发接线",
-  "current_head": "f7768ec",
+  "current_head": "07ff664",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -4872,14 +4872,16 @@
     "BG-003-dashboard-ops-readonly-evidence",
     "BG-004-docs-release-evidence-sync",
     "BG-007-evidence-graph-closure-evidence",
-    "BG-008-platform-write-amazon-evidence"
+    "BG-008-platform-write-amazon-evidence",
+    "BG-009-carrier-settlement-readonly-reconciliation",
+    "BG-011-ps04-enum-migration-d1-d3"
   ],
   "last_unit": {
-    "id": "BG-008-platform-write-amazon-evidence",
-    "at": "2026-10-03T14:51:38.698Z",
-    "head_before": "f7768ec",
-    "head_after": "f7768ec",
-    "detail": " Test Files  10 passed (10) |       Tests  97 passed (97)"
+    "id": "BG-011-ps04-enum-migration-d1-d3",
+    "at": "2026-10-03T15:02:43.673Z",
+    "head_before": "07ff664",
+    "head_after": "07ff664",
+    "detail": " Test Files  1 passed (1) |       Tests  142 passed (142)"
   },
   "autopilot_mode": "CONTINUOUS",
   "heartbeat_role": "LIVENESS_ONLY",
@@ -4913,7 +4915,9 @@
     "BG-003-dashboard-ops-readonly-evidence",
     "BG-004-docs-release-evidence-sync",
     "BG-007-evidence-graph-closure-evidence",
-    "BG-008-platform-write-amazon-evidence"
+    "BG-008-platform-write-amazon-evidence",
+    "BG-009-carrier-settlement-readonly-reconciliation",
+    "BG-011-ps04-enum-migration-d1-d3"
   ],
   "host_action_required": [
     "BG-006-production-candidate-preflight"
@@ -4925,7 +4929,10 @@
     "BG-003-dashboard-ops-readonly-evidence",
     "BG-004-docs-release-evidence-sync",
     "BG-007-evidence-graph-closure-evidence",
-    "BG-008-platform-write-amazon-evidence"
+    "BG-008-platform-write-amazon-evidence",
+    "BG-009-carrier-settlement-readonly-reconciliation",
+    "BG-011-ps04-enum-migration-d1-d3",
+    "BG-010-ps04-phase1-readonly-chain"
   ],
   "runner_status": "RUNNING",
   "global_backlog_dispatcher": "VERIFIED",
