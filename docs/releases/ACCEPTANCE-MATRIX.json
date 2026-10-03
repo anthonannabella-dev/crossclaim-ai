@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-10-03T16:22:47.495Z",
-  "acceptance_head": "75d18d7",
+  "generated_at": "2026-10-03T16:27:13.810Z",
+  "acceptance_head": "c07ff84",
   "protocol": "docs/releases/FINAL-ACCEPTANCE-PROTOCOL.md",
   "areas": [
     {
@@ -161,7 +161,6 @@
   ],
   "open_internal_items": [
     "BG-019-frontend-http-wiring-closure",
-    "BG-020-customs-readonly-projection-http",
     "BG-021-independent-site-persistence-schema-delta"
   ],
   "host_action_required": [
