@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261003-138",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-03T16:38:32.553Z",
+  "updated_at": "2026-10-03T16:38:55.771Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -4989,9 +4989,9 @@
   "awaiting_verdict": true,
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-03T16:38:34.217Z",
-    "head": "2fee655",
-    "acceptance_head": "2fee655",
+    "computed_at": "2026-10-03T16:38:56.206Z",
+    "head": "8778a69",
+    "acceptance_head": "8778a69",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5062,48 +5062,48 @@
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=2fee655 ci_head=c07ff84 ci=UNKNOWN run="
+        "evidence": "acceptance_head=8778a69 ci_head=c07ff84 ci=UNKNOWN run="
       },
       "L1-05_pg_regression_passed": {
         "status": "UNVERIFIED",
-        "evidence": "pg_regression recorded at c07ff84 ≠ acceptance head 2fee655"
+        "evidence": "pg_regression recorded at c07ff84 ≠ acceptance head 8778a69"
       },
       "L1-06_fresh_db_migration_passed": {
         "status": "UNVERIFIED",
-        "evidence": "fresh_db_migration recorded at 7d73154 ≠ acceptance head 2fee655"
+        "evidence": "fresh_db_migration recorded at 7d73154 ≠ acceptance head 8778a69"
       },
       "L1-07_api_typecheck_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_api recorded at c07ff84 ≠ acceptance head 2fee655"
+        "evidence": "typecheck_api recorded at c07ff84 ≠ acceptance head 8778a69"
       },
       "L1-08_web_typecheck_build_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_web recorded at 7d73154 ≠ acceptance head 2fee655"
+        "evidence": "typecheck_web recorded at 7d73154 ≠ acceptance head 8778a69"
       },
       "L1-09_no_skipped_critical_tests": {
         "status": "UNVERIFIED",
-        "evidence": "tests_no_skipped recorded at 7d73154 ≠ acceptance head 2fee655"
+        "evidence": "tests_no_skipped recorded at 7d73154 ≠ acceptance head 8778a69"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
         "status": false,
-        "evidence": "dirty entries: 6"
+        "evidence": "dirty entries: 4"
       },
       "L1-11_docs_state_consistent": {
         "status": "UNVERIFIED",
-        "evidence": "docs_sync recorded at c07ff84 ≠ acceptance head 2fee655"
+        "evidence": "docs_sync recorded at c07ff84 ≠ acceptance head 8778a69"
       },
       "L1-12_schema_invariants_verified": {
         "status": "UNVERIFIED",
-        "evidence": "schema_invariants recorded at 7d73154 ≠ acceptance head 2fee655"
+        "evidence": "schema_invariants recorded at 7d73154 ≠ acceptance head 8778a69"
       },
       "L1-13_negative_paths_covered": {
         "status": "UNVERIFIED",
-        "evidence": "negative_paths recorded at c07ff84 ≠ acceptance head 2fee655"
+        "evidence": "negative_paths recorded at c07ff84 ≠ acceptance head 8778a69"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
         "status": "UNVERIFIED",
-        "evidence": "pg_e2e_real recorded at c07ff84 ≠ acceptance head 2fee655"
+        "evidence": "pg_e2e_real recorded at c07ff84 ≠ acceptance head 8778a69"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
@@ -5156,9 +5156,15 @@
     "head": "2fee655",
     "doc": "docs/releases/BG021-INDEPENDENT-SITE-SCHEMA-DELTA-REQUEST.md",
     "github_comment_id": "5971164391",
-    "wakeup_sent_at": null,
+    "wakeup_sent_at": "2026-10-03T16:38:55.770Z",
     "verdict": null,
-    "also_asks": "CHANGE E：Platform / Independent-site 的最小 frontend 边界裁定"
+    "also_asks": "CHANGE E：Platform / Independent-site 的最小 frontend 边界裁定",
+    "wakeup_channel": "https://chatgpt.com/c/6ac0c3b8-30a4-83ec-a529-4d9b04ffa0e7",
+    "wakeup_verification": [
+      "composer cleared",
+      "marker 5971164391 at bottom",
+      "generating"
+    ]
   },
   "bg012": {
     "status": "DONE（MSG-20261003-134：端点+customs.recovery.chain.run/INTERNAL_WRITE+角色矩阵+immutable execution identity+路由级 E2E 4/4+API.md 90/77）"
