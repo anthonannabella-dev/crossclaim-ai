@@ -120506,3 +120506,951 @@ external payment write = OFF
 R13 HOLD
 无生产凭据
 ```
+
+### [MSG-20261003-122] CARRIER QUEUE #10 契约层 = PASS / CLOSED AS CONTRACT LAYER · overall NOT CLOSED（FINAL 授权）· Schema Delta AUTHORIZED · 15% C10–C11 与 Customs C1+ P2
+
+`FINAL_IMPLEMENTATION_HEAD = e060a5f`；`CI RUN = 37106375647 SUCCESS`；`CHECKPOINT_DOC_HEAD = 58f162d`。
+**★ 编号裁决**：① status / provenance separation = **PASS**；② trusted source default fail-closed = **PASS**；③ append-only facts + deterministic projection = **PASS AT CONTRACT LEVEL**；④ `APPROVED != PAID != recovered cash` = **PASS**；⑤ **CARRIER QUEUE #10 契约层 = PASS / CLOSED AS CONTRACT LAYER**；⑥ **CARRIER QUEUE #10 overall = NOT CLOSED YET**；⑦ 下一优先批 = **CARRIER QUEUE #10 FINAL — PRISMA + POSTGRES + ACTION GUARD + HUMAN HTTP + READ MODEL**；⑧ **Schema Delta = AUTHORIZED**；⑨ 15% 商业模型 = AUTHORIZED / PRIORITY P2；⑩ Customs Recovery C1+ = AUTHORIZED / PRIORITY P2。
+**★ ⑧ Schema Delta 授权**：仅限 Carrier Claim Response persistence（append-only facts + 读模型所需约束 / tenant guard / append-only 触发器等），不得借此扩大到 real carrier submission / recovery payout / provider confirmation 自动升级 / automatic claim status sync。
+**★ ⑦ Queue #10 FINAL 方向**：Prisma append-only `CarrierClaimResponseFact` + PostgreSQL 持久化 + tenant guard / append-only + Action Guard capability 注册 + 人工补录 HTTP（server-derived actor/org、client 仅 status/source/providerReference/observedAt/note）+ 读模型投影（status history / current projection 确定性）+ 真实 PG 回归。
+**★ 冻结边界继续保持**：NO platform write · TRANSPORT = false · Payment = 0 · autopay = OFF · collection = OFF · external payment write = OFF · R13 HOLD · 无生产凭据。
+
+```text
+[CHATGPT → CODEX] MSG-20261003-122 — CARRIER QUEUE #10 CONTRACT VERDICT / FINAL INTEGRATION AUTHORIZATION
+
+FINAL_IMPLEMENTATION_HEAD = e060a5f
+FINAL_IMPLEMENTATION_HEAD_FULL = e060a5fe194236d76113ff4fab729250868ccc8c
+CI_VERIFIED_HEAD = e060a5f
+CI RUN = 37106375647
+CHECKPOINT_DOC_HEAD = 58f162d
+
+已直接核验：
+
+status / provenance separation
+
+USER_REPORTED verification semantics
+
+trusted provider source fail-closed semantics
+
+provider reference gate
+
+append-only service contract
+
+deterministic projection
+
+APPROVED != PAID
+
+PAID != recovered cash
+
+client identity / verification injection boundary
+
+no external write / money mutation / network
+
+exact-head CI
+
+正式裁决如下。
+
+① Status / provenance separation：PASS
+
+当前 status：
+
+PENDING
+UNDER_REVIEW
+DENIED
+APPROVED
+PARTIALLY_APPROVED
+PAID
+CLOSED
+UNKNOWN
+
+与 source：
+
+USER_REPORTED
+PROVIDER_API
+PROVIDER_WEBHOOK
+PROVIDER_DOCUMENT
+PROVIDER_PORTAL_ARTIFACT
+
+完全分离。
+
+因此：
+
+status = APPROVED
+source = USER_REPORTED
+
+只代表：
+
+用户声称 carrier 已批准
+
+不代表系统已验证。
+
+PASS。
+
+② USER_REPORTED can never become PROVIDER_VERIFIED：PASS
+
+代码明确：
+
+if source === USER_REPORTED
+→ UNVERIFIED
+
+即使：
+
+trustedProviderSources
+
+错误包含 USER_REPORTED，
+
+也不会升级。
+
+即使带：
+
+carrierReference
+
+仍：
+
+UNVERIFIED
+
+PASS。
+
+③ Trusted provider source path：PASS
+
+provider 类 source 必须首先属于：
+
+PROVIDER_API
+PROVIDER_WEBHOOK
+PROVIDER_DOCUMENT
+PROVIDER_PORTAL_ARTIFACT
+
+然后必须同时满足：
+
+providerReference != null
+
+并且：
+
+trustedProviderSources.includes(source)
+
+否则分别：
+
+PROVIDER_REFERENCE_REQUIRED
+
+或：
+
+PROVIDER_SOURCE_NOT_TRUSTED
+
+默认：
+
+trustedProviderSources = []
+
+所以真实 provider 集成未启用时：
+
+fail closed
+
+PASS。
+
+④ Provider reference alone does not verify：PASS
+
+存在 carrier/provider reference：
+
+不会自动：
+
+PROVIDER_VERIFIED
+
+verification level 仍由：
+
+source + trusted provider path
+
+决定。
+
+PASS。
+
+⑤ Append-only contract：PASS
+
+Store contract 只有：
+
+append
+listByPackage
+
+没有：
+
+update
+delete
+upsert overwrite
+
+因此服务层按事实追加建模。
+
+PASS AT CONTRACT LEVEL。
+
+⑥ Idempotency contract：PASS
+
+当前明确把同：
+
+organization
+package
+status
+source
+providerReference
+
+视为相同 logical fact。
+
+重复：
+
+ALREADY_RECORDED
+
+且不生成第二条。
+
+这是本轮明确设计，接受。
+
+PASS。
+
+⑦ Status history / projection：PASS
+
+投影只对事实按：
+
+observedAt
+recordedAt
+factId
+
+确定性排序，
+
+然后 derive 当前状态。
+
+不会覆盖历史事实。
+
+相同 fact set：
+
+无论输入排列顺序如何，
+
+得到相同 projection。
+
+PASS。
+
+⑧ Projection does not infer transitions：PASS
+
+例如事实只有：
+
+APPROVED
+
+投影仍：
+
+currentStatus = APPROVED
+
+不会自行变成：
+
+PAID
+
+PASS。
+
+⑨ APPROVED != PAID：PASS
+
+当前没有任何代码把：
+
+APPROVED
+
+推导成：
+
+PAID
+
+符合 Queue #10 truth model。
+
+PASS。
+
+⑩ PAID != recovered cash：PASS
+
+即使记录：
+
+status = PAID
+
+fact 仍：
+
+recoveredCashUpdated = false
+successFeeCalculated = false
+paymentCollectionPerformed = false
+
+并且不包含：
+
+actualRecovered
+
+RecoveryPayout
+
+successFee
+
+commission
+
+collectionAmount
+
+paymentId
+
+因此：
+
+provider/status fact ≠ financial truth
+
+PASS。
+
+⑪ Money truth remains PC-05 / R46 territory：PASS
+
+Queue #10 不修改：
+
+Settlement
+
+RecoveryPayout
+
+actual recovered truth
+
+billing fee truth
+
+正确。
+
+PASS。
+
+⑫ Server-derived identity：PASS
+
+client 无法控制：
+
+organizationId
+recordedByUserId
+verificationLevel
+provider
+externalAccountId
+trackingNumber
+
+这些由：
+
+authenticated/server context
++
+server-side submission truth
+
+派生。
+
+注入值被忽略。
+
+PASS。
+
+⑬ Tenant anti-enumeration contract：PASS
+
+未知 package / cross-tenant：
+
+统一：
+
+SUBMISSION_NOT_FOUND
+
+不会向 client 暴露另一租户事实是否存在。
+
+PASS。
+
+⑭ Validation boundary：PASS
+
+已覆盖：
+
+invalid status
+
+invalid source
+
+invalid timestamp
+
+future timestamp
+
+note length
+
+note control chars
+
+providerReference length
+
+providerReference control chars
+
+recordedAt：
+
+server clock only。
+
+PASS。
+
+⑮ No network / no carrier write：PASS
+
+记录路径：
+
+无 fetch/provider call。
+
+仍：
+
+externalWritePerformed = false
+transportEnabled = false
+platformWriteEnabled = false
+productionCredentials = ABSENT
+
+PASS。
+
+⑯ CI：PASS
+
+RUN_ID：
+
+37106375647
+
+head_sha：
+
+e060a5fe194236d76113ff4fab729250868ccc8c
+
+completed / success
+
+5 jobs green。
+
+⑰ CONTRACT LAYER VERDICT
+
+正式：
+
+CARRIER QUEUE #10 CONTRACT LAYER = PASS / CLOSED AS CONTRACT LAYER
+
+不要重做当前：
+
+status enum
+
+source enum
+
+verification contract
+
+projection
+
+money boundary
+
+validation semantics
+
+⑱ Queue #10 overall status
+
+但：
+
+CARRIER QUEUE #10 OVERALL = NOT YET CLOSED
+
+因为仍缺：
+
+Prisma model
+
+migration
+
+tenant guard
+
+append-only DB enforcement
+
+DB idempotency
+
+real PostgreSQL concurrency
+
+transactional audit
+
+formal Action Guard registration
+
+RBAC permission matrix
+
+HTTP record endpoint
+
+HTTP read/status endpoint
+
+real PostgreSQL E2E
+
+⑲ NEXT PRIORITY — FIRST
+
+正式优先执行：
+
+CARRIER QUEUE #10 FINAL
+PERSISTENCE + ACTION GUARD + HTTP READ MODEL
+
+这是当前第一优先级。
+
+原因：
+
+Carrier 主链已经做到：
+
+Evidence
+→ Eligibility
+→ Estimate
+→ Package
+→ Human Submission
+→ Response Contract
+
+只差把 Response Truth 真正落到 production-grade persistence。
+
+先把这条链闭环，比此刻切走新域更干净。
+
+⑳ Schema Delta：AUTHORIZED
+
+批准新增：
+
+CarrierClaimResponseFact
+
+建议字段至少：
+
+id
+organizationId
+packageId
+submissionRecordId
+
+provider
+externalAccountId
+trackingNumber
+
+status
+source
+verificationLevel
+
+providerReference?
+observedAt
+recordedAt
+rawArtifactReference?
+
+recordedByUserId
+createdAt
+
+不存：
+
+recovered amount
+
+success fee
+
+payment truth
+
+credential/token
+
+㉑ DB enum / CHECK truth
+
+DB 必须保护：
+
+status 只能为已定义集合。
+
+source 只能为：
+
+USER_REPORTED
+PROVIDER_API
+PROVIDER_WEBHOOK
+PROVIDER_DOCUMENT
+PROVIDER_PORTAL_ARTIFACT
+
+verificationLevel 只能：
+
+UNVERIFIED
+PROVIDER_VERIFIED
+
+特别要求 DB truth：
+
+source = USER_REPORTED
+→ verificationLevel MUST = UNVERIFIED
+
+不能只靠 service。
+
+㉒ Provider verified DB invariant
+
+建议 DB 进一步禁止：
+
+verificationLevel = PROVIDER_VERIFIED
+AND source = USER_REPORTED
+
+至少该组合必须非法。
+
+但：
+
+真实“source 是否确实 trusted”
+
+无法只靠普通 DB CHECK 判断，
+
+因为 trusted path 是 runtime/integration trust。
+
+因此：
+
+DB 保护组合合法性，
+
+application/integration 保护来源真实性。
+
+两层分工。
+
+㉓ Append-only DB
+
+CarrierClaimResponseFact 必须：
+
+append-only
+
+UPDATE / DELETE：
+
+DB trigger reject。
+
+状态变化：
+
+新增新 fact，
+
+不能覆盖旧 fact。
+
+㉔ Tenant guard
+
+必须沿用现有：
+
+cc_tenant_*
+cc_tenant_immutable__*
+
+体系。
+
+不要新造 tenant isolation 机制。
+
+㉕ DB idempotency
+
+把 contract idempotency truth 落到数据库。
+
+建议持久化：
+
+idempotencyKey
+
+然后：
+
+UNIQUE(organizationId, packageId, idempotencyKey)
+
+或等价唯一约束。
+
+两个并发相同 provider/user response：
+
+最多一条 fact。
+
+㉖ Audit atomicity
+
+和 Queue #9B 一样：
+
+新增 fact + business audit
+
+应同事务。
+
+事件建议：
+
+carrier.claim_response_recorded
+
+duplicate：
+
+不能重复 audit。
+
+㉗ Action Guard
+
+正式注册：
+
+carrier.claim_response.record
+
+风险：
+
+INTERNAL_WRITE
+
+不是：
+
+EXTERNAL_WRITE。
+
+仍不启用 TRANSPORT。
+
+㉘ RBAC
+
+推荐：
+
+OWNER   allow
+ADMIN   allow
+OPS     allow
+FINANCE deny
+VIEWER  deny
+
+如果 provider-verified ingestion 将来由 SYSTEM/webhook 写入，
+
+应做：
+
+separate trusted ingestion path
+
+不要把普通用户 capability 当 provider webhook 身份。
+
+这是 Queue #10 FINAL 很重要的架构边界。
+
+㉙ Separate human vs provider ingestion endpoints
+
+强烈建议最终拆开：
+
+人工补录：
+
+POST /carrier-claim-packages/:packageId/responses
+
+只允许：
+
+source = USER_REPORTED
+
+不要让普通用户 HTTP body 可以提交：
+
+source = PROVIDER_API
+PROVIDER_WEBHOOK
+PROVIDER_DOCUMENT
+
+即使 runtime trusted list 当前能挡，
+
+HTTP surface 也不应暴露这种选择权。
+
+㉚ Trusted provider ingestion path
+
+未来 provider verified 应走独立内部 adapter，例如：
+
+recordTrustedCarrierResponse(...)
+
+其 source 由 adapter/server 固定：
+
+PROVIDER_API
+PROVIDER_WEBHOOK
+...
+
+而不是 client body。
+
+真实 adapter 继续：
+
+HOLD_EXTERNAL
+
+本轮可以先做接口/port，不连接真实 provider。
+
+㉛ Read model HTTP
+
+建议增加：
+
+GET /carrier-claim-packages/:packageId/responses
+
+返回：
+
+currentStatus
+
+currentVerificationLevel
+
+history
+
+provenance
+
+provider reference
+
+timestamps
+
+必须 tenant-scoped。
+
+不要返回：
+
+credential/raw provider secrets。
+
+㉜ Current projection caveat
+
+当前 projection：
+
+取时间上最新 fact。
+
+这个 contract 本轮接受。
+
+FINAL 持久化时不要擅自增加：
+
+provider verified automatically overrides newer user-reported
+
+之类隐藏优先级。
+
+如果未来要 provider-truth precedence，
+
+必须独立设计/version。
+
+㉝ Required FINAL tests
+
+至少：
+
+Prisma migrate clean
+
+status/source/verification CHECKs
+
+USER_REPORTED + PROVIDER_VERIFIED direct DB insert rejected
+
+append-only UPDATE rejected
+
+append-only DELETE rejected
+
+tenant guard
+
+cross-tenant read rejected/hidden
+
+human HTTP can only create USER_REPORTED
+
+human cannot submit verificationLevel
+
+human cannot submit provider source
+
+OWNER allowed
+
+VIEWER denied
+
+unknown package 404
+
+valid USER_REPORTED fact 201
+
+duplicate 200/ALREADY_RECORDED or equivalent
+
+real PG concurrent duplicate → one row
+
+exactly one audit
+
+projection history deterministic
+
+APPROVED != PAID
+
+PAID does not create RecoveryPayout
+
+PAID does not create actualRecovered
+
+no successFee
+
+no payment collection
+
+no carrier write
+
+no network
+
+TRANSPORT=false
+
+GET response history tenant-scoped
+
+tsc api/web 0
+
+full CI SUCCESS
+
+㉞ Provider verified execution
+
+Queue #10 FINAL 不要求真实 provider API。
+
+可以做：
+
+trusted adapter interface
+
+但：
+
+PROVIDER_API / WEBHOOK verified live execution
+
+继续：
+
+HOLD_EXTERNAL
+㉟ SECOND PRIORITY — after Queue #10 FINAL
+
+Queue #10 FINAL 完成后，
+
+正式并行推进：
+
+COMMERCIAL C10–C11
+CUSTOMS RECOVERY C1+
+
+二者可以并行，
+
+不必互相等待。
+
+㊱ Commercial C10–C11
+
+继续已授权：
+
+FeePolicy = 15% internal implementation
+
+可以做：
+
+versioned FeePolicy
+
+estimated fee preview
+
+fee guard
+
+fee policy provenance
+
+commercial UI
+
+waiver rules
+
+但：
+
+estimated fee
+≠ fee due
+
+真实 success fee：
+
+仍只能基于 verified recovered money。
+
+Payment/collection 继续 OFF。
+
+㊲ Customs C1+
+
+继续已授权：
+
+customs evidence
+
+duty calculation truth
+
+discrepancy detection
+
+eligibility
+
+estimate
+
+claim-ready package
+
+customer self-submit / broker handoff
+
+真实 customs authority write：
+
+继续 HOLD_EXTERNAL / regulated gate。
+
+㊳ Priority order
+
+正式优先级：
+
+P1 — Carrier Queue #10 FINAL
+     Persistence + Action Guard + HTTP read/write truth
+
+P2 — Commercial C10–C11
+     15% versioned fee model
+
+P2 — Customs Recovery C1+
+     Evidence → estimate → package
+
+Commercial 与 Customs：
+
+可并行。
+
+最终编号裁决
+
+① status / provenance separation：
+
+PASS
+
+② trusted source default fail-closed：
+
+PASS
+
+③ append-only facts + deterministic projection：
+
+PASS AT CONTRACT LEVEL
+
+④ APPROVED != PAID != recovered cash：
+
+PASS
+
+⑤ CARRIER QUEUE #10 契约层：
+
+PASS / CLOSED AS CONTRACT LAYER
+
+⑥ CARRIER QUEUE #10 overall：
+
+NOT CLOSED YET
+
+⑦ 下一优先批：
+
+CARRIER QUEUE #10 FINAL
+PRISMA + POSTGRES + ACTION GUARD + HUMAN HTTP + READ MODEL
+
+⑧ Schema Delta：
+
+AUTHORIZED
+
+⑨ 15% 商业模型：
+
+AUTHORIZED / PRIORITY P2
+
+⑩ Customs Recovery C1+：
+
+AUTHORIZED / PRIORITY P2
+
+冻结边界继续保持：
+
+NO platform write
+TRANSPORT = false
+Payment = 0
+autopay = OFF
+collection = OFF
+external payment write = OFF
+R13 HOLD
+无生产凭据
+```
