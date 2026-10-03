@@ -1,8 +1,8 @@
 # FINAL ACCEPTANCE REPORT（自动生成，请勿手改）
 
-- 生成时间：2026-10-03T17:31:03.150Z
-- 单一权威矩阵：`docs/releases/ACCEPTANCE-MATRIX.json` @06ce975
-- acceptance HEAD：`06ce975`
+- 生成时间：2026-10-03T17:34:10.697Z
+- 单一权威矩阵：`docs/releases/ACCEPTANCE-MATRIX.json` @58a1737
+- acceptance HEAD：`58a1737`
 - 协议：`docs/releases/FINAL-ACCEPTANCE-PROTOCOL.md`（三层验收；禁止自证）
 - 状态：CODE_COMPLETE=NO · INTEGRATION_COMPLETE=NO · REAL_VALIDATION_COMPLETE=NO · PRODUCTION_READY=NO
 - INTERNAL_READY=NO；AUTONOMOUS_INTERNAL_WORK=RUNNING
@@ -40,8 +40,8 @@
 
 ### Layer 1 未通过检查（final-status 计算器输出；UNVERIFIED = 未绑定当前 HEAD 的实证）
 
-- L1-04_full_ci_success_on_head → false（acceptance_head=06ce975 ci_head=06ce975 ci=in_progress run=37140647537）
-- L1-10_git_working_tree_clean → false（dirty entries: 4）
+- L1-04_full_ci_success_on_head → false（acceptance_head=58a1737 ci_head=58a1737 ci=in_progress run=37140854628）
+- L1-10_git_working_tree_clean → false（dirty entries: 1）
 
 ## 3. 外部 / 宿主依赖（不得自证完成）
 
