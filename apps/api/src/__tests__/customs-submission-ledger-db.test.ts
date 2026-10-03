@@ -242,3 +242,90 @@ describe('C17 — customs submission ledger (PostgreSQL)', () => {
     expect(CUSTOMS_SUBMISSION_LEDGER_BOUNDARY.productionCredentials).toBe('ABSENT');
   });
 });
+
+describe('C17 FINAL-2 (CHANGE A/B/C) — concurrency + idempotency immutability', () => {
+  it('CHANGE A：两个不同 providerSubmissionId 并发同一 attempt → exactly one accepted，另一个稳定 fail-closed', async () => {
+    const storeA = createPrismaCustomsSubmissionLedgerStore(prisma);
+    const storeB = createPrismaCustomsSubmissionLedgerStore(prismaB);
+    const opened = await openCustomsSubmissionAttempt(rootInput(), { store: storeA, now: () => NOW });
+    if (!opened.ok) throw new Error('expected ok');
+    const attemptId = opened.root.id;
+    const base = {
+      organizationId: ORG,
+      attemptId,
+      status: 'SUBMITTED' as const,
+      source: 'PROVIDER_API' as const,
+      verificationLevel: 'PROVIDER_VERIFIED' as const,
+      observedAt: '2026-10-03T08:00:00.000Z',
+      providerReference: 'REF-1',
+    };
+    const [a, b] = await Promise.all([
+      recordCustomsSubmissionAttemptFact({ ...base, providerSubmissionId: 'PROV-A' }, { store: storeA, now: () => NOW }),
+      recordCustomsSubmissionAttemptFact({ ...base, providerSubmissionId: 'PROV-B' }, { store: storeB, now: () => NOW }),
+    ]);
+    const okCount = [a, b].filter((r) => r.ok).length;
+    const failCount = [a, b].filter((r) => !r.ok).length;
+    expect(okCount).toBe(1);
+    expect(failCount).toBe(1);
+    const failure = [a, b].find((r) => !r.ok);
+    if (failure && !failure.ok) expect(failure.reason).toBe('PROVIDER_SUBMISSION_ID_CONFLICT');
+    const rows = await prisma.customsSubmissionAttemptFact.findMany({ where: { attemptId } });
+    const verifiedIds = rows
+      .filter((r) => r.verificationLevel === 'PROVIDER_VERIFIED' && r.providerSubmissionId !== null)
+      .map((r) => r.providerSubmissionId);
+    expect(verifiedIds).toHaveLength(1);
+  });
+
+  it('CHANGE B：同 idempotencyKey 但 immutable payload 不同 → IDEMPOTENCY_KEY_CONFLICT（不得静默 ROOT_EXISTING）', async () => {
+    const store = createPrismaCustomsSubmissionLedgerStore(prisma);
+    const first = await openCustomsSubmissionAttempt(rootInput(), { store, now: () => NOW });
+    if (!first.ok) throw new Error('expected ok');
+    const mismatch = await openCustomsSubmissionAttempt(
+      rootInput({ packageDigest: 'b'.repeat(64) }),
+      { store, now: () => NOW },
+    );
+    expect(mismatch.ok).toBe(false);
+    if (!mismatch.ok) expect(mismatch.reason).toBe('IDEMPOTENCY_KEY_CONFLICT');
+    expect(await prisma.customsSubmissionAttempt.count()).toBe(1);
+    const other = await openCustomsSubmissionAttempt(rootInput(), { store, now: () => NOW });
+    if (!other.ok) throw new Error('expected ok');
+    expect(other.status).toBe('ROOT_EXISTING');
+  });
+
+  it('CHANGE C：同 fact id 但 immutable 字段不一致 → FACT_IMMUTABLE_MISMATCH（不得静默 ALREADY_RECORDED）', async () => {
+    const store = createPrismaCustomsSubmissionLedgerStore(prisma);
+    const opened = await openCustomsSubmissionAttempt(rootInput(), { store, now: () => NOW });
+    if (!opened.ok) throw new Error('expected ok');
+    const attemptId = opened.root.id;
+    const first = await recordCustomsSubmissionAttemptFact(
+      {
+        organizationId: ORG,
+        attemptId,
+        status: 'ATTEMPTED',
+        providerSubmissionId: null,
+        source: 'MANUAL',
+        verificationLevel: 'UNVERIFIED',
+        observedAt: '2026-10-03T08:00:00.000Z',
+        errorCode: null,
+      },
+      { store, now: () => NOW },
+    );
+    if (!first.ok) throw new Error('expected ok');
+    const replay = await recordCustomsSubmissionAttemptFact(
+      {
+        organizationId: ORG,
+        attemptId,
+        status: 'ATTEMPTED',
+        providerSubmissionId: null,
+        source: 'MANUAL',
+        verificationLevel: 'UNVERIFIED',
+        observedAt: '2026-10-03T08:00:00.000Z',
+        errorCode: 'DIFFERENT_ERROR_CODE',
+      },
+      { store, now: () => NOW },
+    );
+    expect(replay.ok).toBe(false);
+    if (!replay.ok) expect(replay.reason).toBe('FACT_IMMUTABLE_MISMATCH');
+    expect(await prisma.customsSubmissionAttemptFact.count()).toBe(1);
+  });
+});

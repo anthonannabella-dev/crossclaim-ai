@@ -69,10 +69,21 @@ export interface CustomsSubmissionLedgerStore {
   ): Promise<CustomsSubmissionAttempt | null>;
   findRootById(organizationId: string, attemptId: string): Promise<CustomsSubmissionAttempt | null>;
   appendFact(fact: CustomsSubmissionAttemptFact): Promise<{ created: boolean; fact: CustomsSubmissionAttemptFact }>;
+  /**
+   * CHANGE A/C（MSG-20261003-125 CHANGE A/C）：在同一事务内锁定 root 行后重读事实、
+   * 校验 providerSubmissionId 冲突与「同 id 事实完整等价」，再决定 append。
+   * 冲突一律 fail-closed（不写新事实）。
+   */
+  appendFactGuarded(
+    fact: CustomsSubmissionAttemptFact,
+    constraints: { forbidProviderSubmissionIdConflict: boolean },
+  ): Promise<{ created: boolean; fact: CustomsSubmissionAttemptFact | null; conflict: CustomsSubmissionGuardConflict | null }>;
   listFacts(organizationId: string, attemptId: string): Promise<CustomsSubmissionAttemptFact[]>;
 }
 
 const DIGEST_PATTERN = /^[0-9a-f]{64}$/;
+
+export type CustomsSubmissionGuardConflict = 'PROVIDER_SUBMISSION_ID_CONFLICT' | 'FACT_IMMUTABLE_MISMATCH';
 
 function hash32(parts: readonly (string | number | null)[]): string {
   return createHash('sha256').update(parts.map((p) => (p === null ? '' : String(p))).join('|')).digest('hex').slice(0, 32);
@@ -111,7 +122,8 @@ export function customsSubmissionFactId(input: {
 
 export type OpenAttemptReason =
   | 'INVALID_REQUEST'
-  | 'INVALID_DIGEST';
+  | 'INVALID_DIGEST'
+  | 'IDEMPOTENCY_KEY_CONFLICT';
 
 export type OpenAttemptOutcome =
   | { ok: true; status: 'ROOT_CREATED' | 'ROOT_EXISTING'; root: CustomsSubmissionAttempt }
@@ -165,6 +177,21 @@ export async function openCustomsSubmissionAttempt(
     createdAt: now.toISOString(),
   };
   const created = await deps.store.createRoot(root);
+  if (!created.created) {
+    // CHANGE B（MSG-20261003-125 CHANGE B）：同 idempotencyKey 但 immutable payload 不一致 → fail-closed，
+    // 不得静默当作正常 retry 复用旧 root。
+    const same =
+      created.root.opportunityId === root.opportunityId &&
+      created.root.caseId === root.caseId &&
+      created.root.claimItemId === root.claimItemId &&
+      created.root.packageId === root.packageId &&
+      created.root.packageDigest === root.packageDigest &&
+      created.root.provider === root.provider &&
+      created.root.operation === root.operation &&
+      created.root.jurisdiction === root.jurisdiction &&
+      created.root.remedyType === root.remedyType;
+    if (!same) return { ok: false, reason: 'IDEMPOTENCY_KEY_CONFLICT' };
+  }
   return { ok: true, status: created.created ? 'ROOT_CREATED' : 'ROOT_EXISTING', root: created.root };
 }
 
@@ -173,6 +200,7 @@ export type RecordFactReason =
   | 'ATTEMPT_NOT_FOUND'
   | 'SUBMITTED_REQUIRES_PROVIDER_ID'
   | 'PROVIDER_SUBMISSION_ID_CONFLICT'
+  | 'FACT_IMMUTABLE_MISMATCH'
   | 'INVALID_TIMESTAMP'
   | 'FUTURE_TIMESTAMP';
 
@@ -209,13 +237,7 @@ export async function recordCustomsSubmissionAttemptFact(
   if (input.status === 'SUBMITTED' && providerSubmissionId === null) {
     return { ok: false, reason: 'SUBMITTED_REQUIRES_PROVIDER_ID' };
   }
-  if (providerSubmissionId !== null) {
-    const existing = await deps.store.listFacts(input.organizationId, input.attemptId);
-    const conflict = existing.some(
-      (f) => f.verificationLevel === 'PROVIDER_VERIFIED' && f.providerSubmissionId !== null && f.providerSubmissionId !== providerSubmissionId,
-    );
-    if (conflict) return { ok: false, reason: 'PROVIDER_SUBMISSION_ID_CONFLICT' };
-  }
+  // CHANGE A：冲突检测已下沉到 store 事务（root 行锁内重读事实后判定）。
 
   const now = deps.now ? deps.now() : new Date();
   const observedMs = Date.parse(input.observedAt);
@@ -244,7 +266,9 @@ export async function recordCustomsSubmissionAttemptFact(
     reconciliationAttempt: input.reconciliationAttempt ?? null,
     createdAt: now.toISOString(),
   };
-  const appended = await deps.store.appendFact(fact);
+  const appended = await deps.store.appendFactGuarded(fact, { forbidProviderSubmissionIdConflict: true });
+  if (appended.conflict !== null) return { ok: false, reason: appended.conflict };
+  if (appended.fact === null) return { ok: false, reason: 'INVALID_REQUEST' };
   return { ok: true, status: appended.created ? 'FACT_RECORDED' : 'ALREADY_RECORDED', fact: appended.fact };
 }
 

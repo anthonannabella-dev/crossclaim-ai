@@ -159,6 +159,66 @@ export function createPrismaCustomsSubmissionLedgerStore(prisma: PrismaClient): 
       }
     },
 
+    async appendFactGuarded(fact, constraints) {
+      // CHANGE A：以 root 行锁串行化同一 attempt 的并发写入（PostgreSQL SELECT ... FOR UPDATE）。
+      return prisma.$transaction(async (tx) => {
+        await tx.$executeRawUnsafe(
+          'SELECT "id" FROM "CustomsSubmissionAttempt" WHERE "id" = $1 AND "organizationId" = $2 FOR UPDATE',
+          fact.attemptId,
+          fact.organizationId,
+        );
+        const existingRows = await tx.customsSubmissionAttemptFact.findMany({
+          where: { organizationId: fact.organizationId, attemptId: fact.attemptId },
+        });
+        const existing = existingRows.map((row) => toFact(row as FactRow));
+
+        // CHANGE A：providerSubmissionId 冲突（并发安全，锁内判定）。
+        if (constraints.forbidProviderSubmissionIdConflict && fact.providerSubmissionId !== null) {
+          const conflict = existing.some(
+            (f) => f.verificationLevel === 'PROVIDER_VERIFIED' && f.providerSubmissionId !== null && f.providerSubmissionId !== fact.providerSubmissionId,
+          );
+          if (conflict) return { created: false, fact: null, conflict: 'PROVIDER_SUBMISSION_ID_CONFLICT' as const };
+        }
+
+        // CHANGE C：同 id 事实必须完整等价，否则 fail-closed（不得静默 ALREADY_RECORDED）。
+        const sameId = existing.find((f) => f.id === fact.id);
+        if (sameId !== undefined) {
+          const equal =
+            sameId.organizationId === fact.organizationId &&
+            sameId.attemptId === fact.attemptId &&
+            sameId.status === fact.status &&
+            sameId.providerSubmissionId === fact.providerSubmissionId &&
+            sameId.source === fact.source &&
+            sameId.verificationLevel === fact.verificationLevel &&
+            sameId.observedAt === fact.observedAt &&
+            sameId.providerReference === fact.providerReference &&
+            sameId.errorCode === fact.errorCode &&
+            sameId.reconciliationAttempt === fact.reconciliationAttempt;
+          if (!equal) return { created: false, fact: null, conflict: 'FACT_IMMUTABLE_MISMATCH' as const };
+          return { created: false, fact: sameId, conflict: null };
+        }
+
+        const createdRow = await tx.customsSubmissionAttemptFact.create({
+          data: {
+            id: fact.id,
+            organizationId: fact.organizationId,
+            attemptId: fact.attemptId,
+            status: fact.status,
+            providerSubmissionId: fact.providerSubmissionId,
+            source: fact.source,
+            verificationLevel: fact.verificationLevel,
+            observedAt: new Date(fact.observedAt),
+            recordedAt: new Date(fact.recordedAt),
+            providerReference: fact.providerReference,
+            errorCode: fact.errorCode,
+            reconciliationAttempt: fact.reconciliationAttempt,
+            createdAt: new Date(fact.createdAt),
+          },
+        });
+        return { created: true, fact: toFact(createdRow as FactRow), conflict: null };
+      });
+    },
+
     async listFacts(organizationId, attemptId) {
       const rows = await prisma.customsSubmissionAttemptFact.findMany({
         where: { organizationId, attemptId },

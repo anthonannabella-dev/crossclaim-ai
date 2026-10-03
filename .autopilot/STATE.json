@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261003-125",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-03T09:00:47.722Z",
+  "updated_at": "2026-10-03T09:07:18.832Z",
   "previous_head": "8cab430",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -49,11 +49,11 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-03T09:00:47.722Z",
+  "last_tick_at": "2026-10-03T09:07:18.832Z",
   "state": "IMPLEMENT",
-  "last_action": "读取新会话 C17 FINAL 裁决（REVISE）并逐字归档（FULL_COPY_OK）→ 需 CHANGE A（providerSubmissionId 并发原子）/ B（idempotencyKey payload 冲突 fail-closed）/ C（fact P2002 完整等价校验）后送 C17 FINAL-2",
-  "last_action_at": "2026-10-03T09:00:47.721Z",
-  "next_action": "实施 CHANGE A/B/C：① root 行 SELECT … FOR UPDATE（或 advisory lock）内完成事实重读 + ID 校验 + append，补双连接并发 exactly-one-accepted 测试；② openCustomsSubmissionAttempt 在 ROOT_EXISTING 时比对 immutable identity snapshot，不一致 → IDEMPOTENCY_KEY_CONFLICT；③ appendFact 的 P2002 回读比对完整事实字段，不一致 fail-closed；跑真实 PG 回归（原 10/10 保持 + 新增）→ 送 C17 FINAL-2。",
+  "last_action": "按 HOST DIRECTIVE（CONTINUOUS EXECUTION）+ MSG-20261003-125 实施 C17 CHANGE A/B/C：并发原子（root FOR UPDATE + exactly-one-accepted 并发测试）、idempotencyKey immutable payload 冲突（IDEMPOTENCY_KEY_CONFLICT）、fact 完整等价（FACT_IMMUTABLE_MISMATCH）→ PG 13/13（原 10/10 保持）→ tsc api/web 0 → API contract/audit/autopilot gates OK → commit/push",
+  "last_action_at": "2026-10-03T09:07:18.831Z",
+  "next_action": "写 C17 FINAL-2 CHECKPOINT 并立即送 ChatGPT 新会话（引用 CHANGE A/B/C 与 13/13 证据）；随后按 CONTINUOUS_EXECUTION 继续 C21 HTTP（G3，filingSubmitted=false）。",
   "current_head": "e060a5f",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
@@ -4546,5 +4546,13 @@
       "B": "同 idempotencyKey 的 immutable payload 不一致 → IDEMPOTENCY_KEY_CONFLICT（不得静默 ROOT_EXISTING）",
       "C": "fact P2002 回读需完整 immutable fact equality，不一致 fail-closed"
     }
+  },
+  "execution_rule": "CONTINUOUS_EXECUTION（HOST DIRECTIVE 2026-10-03 补充六）：WAITING_FOR_VERDICT=NO 且 HOST_ACTION_REQUIRED=NO 时不得因「已读裁决/已归档/已更新状态/已 commit/已跑测试/已 checkpoint/已输出进度」而结束自治轮次；PASS→下一内部缺口；REVISE→立即改并重送；BLOCK→先找合规替代。仅 A–D 允许终止。",
+  "c17_final2": {
+    "status": "IMPLEMENTED（CHANGE A/B/C + 13/13 PG；待送 C17 FINAL-2 CHECKPOINT）",
+    "changeA": "providerSubmissionId 冲突下沉到 store 事务：appendFactGuarded 内 SELECT … FOR UPDATE 锁 root 行 → 锁内重读事实 → 冲突 fail-closed；新增双连接并发测试（PROV-A vs PROV-B → exactly one accepted）",
+    "changeB": "openCustomsSubmissionAttempt 在 ROOT_EXISTING 时比对 immutable identity snapshot（opportunityId/caseId/claimItemId/packageId/packageDigest/provider/operation/jurisdiction/remedyType）→ 任一不同返回 IDEMPOTENCY_KEY_CONFLICT",
+    "changeC": "fact P2002/同 id 回读改为完整 immutable equality 比对（status/providerSubmissionId/source/verificationLevel/observedAt/providerReference/errorCode/reconciliationAttempt）→ 不一致 FACT_IMMUTABLE_MISMATCH",
+    "tests": "customs-submission-ledger-db 13/13（原 10/10 保持 + CHANGE A/B/C 各 1 条新断言）"
   }
 }
