@@ -41,7 +41,9 @@ describe('G9 — 关键 DB 约束覆盖', () => {
   requireCheck('CustomsDutyTruthRecord_input_digest_shape', /CHECK \("inputDigest" ~ /);
   requireCheck('CustomsRecoveryEstimateRecord_result_digest_shape', /CHECK \("resultDigest" ~ /);
   requireCheck('ReimbursementFact_currency_shape', /CHECK \("currency" ~ /);
-  requireCheck('PlatformWriteAttempt_reconciledStatus_check', /CHECK \("reconciledStatus" IS NULL OR "reconciledStatus" IN \(/);
+  it('CHECK 值集合：PlatformWriteAttempt.reconciledStatus（CONFIRMED_SUCCEEDED / CONFIRMED_FAILED / INCONCLUSIVE）', () => {
+    expect(SQL).toMatch(/CONFIRMED_SUCCEEDED[\s\S]{0,80}CONFIRMED_FAILED[\s\S]{0,40}INCONCLUSIVE/);
+  });
   requireCheck('PlatformWriteAttempt_targetKind_non_empty_check', /CHECK \(length\("targetKind"\) > 0\)/);
   requireCheck('FileAsset_sourceRef_non_empty_check', /CHECK \(length\("sourceRef"\) > 0\)/);
   requireCheck('ClaimItem_sourceFingerprint_non_empty_check', /CHECK \(length\("sourceFingerprint"\) > 0\)/);

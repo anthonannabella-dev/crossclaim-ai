@@ -51,9 +51,9 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-03T12:39:48.150Z",
   "state": "IMPLEMENT",
-  "last_action": "G11 第一单元：新增 customs-recovery-chain-service（从持久化事实重算 C1→C6 并 append 四类计算投影）+ 真实 PG 4/4；store.loadFact 扩展为返回完整事实（供链服务还原只读事实）",
+  "last_action": "CI 修复：PlatformWriteAttempt.reconciledStatus 的允许值集合取错来源（应为 CONFIRMED_SUCCEEDED/CONFIRMED_FAILED/INCONCLUSIVE），新增 migration 20261003150000 修正并同步守卫断言；本地 platform-write-ledger-db 10/10、守卫 21/21",
   "last_action_at": "2026-10-03T12:03:56.528Z",
-  "next_action": "G11 第二单元：HTTP 只读端点（claim-ready package / latest projections）+ Action Guard 保护的 handoff 记录端点 + API.md 同步 + 前端只读接线",
+  "next_action": "G11 第二单元：HTTP 只读端点 + Action Guard handoff 端点 + API.md + 前端接线",
   "current_head": "749040c",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
