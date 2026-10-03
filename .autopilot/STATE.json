@@ -4905,7 +4905,7 @@
   "singleton_runner": "VERIFIED",
   "ci_pending": [],
   "ci_red": [],
-  "ci_checked_at": "2026-10-03T17:16:00.636Z",
+  "ci_checked_at": "2026-10-03T17:21:42.600Z",
   "continuous_verification": {
     "at": "2026-10-03T14:17:18.723Z",
     "a_to_b_to_c": "VERIFIED（单次启动连续执行 u1→u2→u3，无 heartbeat 唤醒；停止条件 = SAFE_CONTINUATION_QUEUE_EMPTY）",
@@ -4993,9 +4993,9 @@
   "awaiting_verdict": false,
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-03T17:16:34.677Z",
-    "head": "a0d33fe",
-    "acceptance_head": "a0d33fe",
+    "computed_at": "2026-10-03T17:21:43.394Z",
+    "head": "45ff4ae",
+    "acceptance_head": "45ff4ae",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5052,7 +5052,7 @@
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=a0d33fe ci_head=a0d33fe ci=in_progress run=37139864438"
+        "evidence": "acceptance_head=45ff4ae ci_head=45ff4ae ci=in_progress run=37139920810"
       },
       "L1-05_pg_regression_passed": {
         "status": true,
@@ -5077,7 +5077,7 @@
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
         "status": false,
-        "evidence": "dirty entries: 6"
+        "evidence": "dirty entries: 4"
       },
       "L1-11_docs_state_consistent": {
         "status": true,
@@ -5156,9 +5156,9 @@
     "status": "DONE（MSG-20261003-134：端点+customs.recovery.chain.run/INTERNAL_WRITE+角色矩阵+immutable execution identity+路由级 E2E 4/4+API.md 90/77）"
   },
   "gates_recorded_at": "2026-10-03T15:17:04.369Z",
-  "ci_status_head": "a0d33fe",
+  "ci_status_head": "45ff4ae",
   "ci_status": "in_progress",
-  "ci_run_id": "37139864438",
+  "ci_run_id": "37139920810",
   "internal_code_complete_at": "2026-10-03T15:36:47.862Z",
   "independent_final_audit": {
     "required": true,
