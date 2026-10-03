@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-03T16:39:12.855Z",
+  "generated_at": "2026-10-03T16:42:50.273Z",
   "rule": "COVERED 需存在命名证据文件；否则 GAP",
   "domains": [
     {
@@ -337,7 +337,7 @@
     {
       "id": "independent_site",
       "name": "Independent-site / Chargeback",
-      "domain_test_files": 2,
+      "domain_test_files": 3,
       "domain_web_files": 1,
       "cells": {
         "http": {
@@ -349,12 +349,14 @@
         "persistence": {
           "status": "COVERED",
           "evidence": [
+            "apps/api/src/__tests__/independent-site-facts-db.test.ts",
             "apps/api/src/__tests__/independent-site-internal-closure.test.ts"
           ]
         },
         "db_invariant": {
           "status": "COVERED",
           "evidence": [
+            "apps/api/src/__tests__/independent-site-facts-db.test.ts",
             "apps/api/src/__tests__/independent-site-internal-closure.test.ts"
           ]
         },
@@ -368,6 +370,7 @@
           "status": "COVERED",
           "evidence": [
             "apps/api/src/__tests__/chargeback-recovery-chain.test.ts",
+            "apps/api/src/__tests__/independent-site-facts-db.test.ts",
             "apps/api/src/__tests__/independent-site-internal-closure.test.ts"
           ]
         },
@@ -375,18 +378,21 @@
           "status": "COVERED",
           "evidence": [
             "apps/api/src/__tests__/chargeback-recovery-chain.test.ts",
+            "apps/api/src/__tests__/independent-site-facts-db.test.ts",
             "apps/api/src/__tests__/independent-site-internal-closure.test.ts"
           ]
         },
         "replay": {
           "status": "COVERED",
           "evidence": [
+            "apps/api/src/__tests__/independent-site-facts-db.test.ts",
             "apps/api/src/__tests__/independent-site-internal-closure.test.ts"
           ]
         },
         "concurrency": {
           "status": "COVERED",
           "evidence": [
+            "apps/api/src/__tests__/independent-site-facts-db.test.ts",
             "apps/api/src/__tests__/independent-site-internal-closure.test.ts"
           ]
         },
@@ -400,6 +406,7 @@
           "status": "COVERED",
           "evidence": [
             "apps/api/src/__tests__/chargeback-recovery-chain.test.ts",
+            "apps/api/src/__tests__/independent-site-facts-db.test.ts",
             "apps/api/src/__tests__/independent-site-internal-closure.test.ts"
           ]
         },
@@ -413,6 +420,7 @@
           "status": "COVERED",
           "evidence": [
             "apps/api/src/__tests__/chargeback-recovery-chain.test.ts",
+            "apps/api/src/__tests__/independent-site-facts-db.test.ts",
             "apps/api/src/__tests__/independent-site-internal-closure.test.ts"
           ]
         }

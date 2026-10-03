@@ -373,6 +373,9 @@ model Organization {
   customsIorIdentityFacts             CustomsIorIdentityFact[]
   customsRightLineageFacts            CustomsRightLineageFact[]
   customsBrokerPoaFacts               CustomsBrokerPoaFact[]
+  independentSiteHandoffFacts         IndependentSiteHandoffFact[]
+  independentSiteResponseFacts        IndependentSiteResponseFact[]
+  independentSiteSettlementFacts      IndependentSiteSettlementFact[]
   customsDutyTruthRecordList CustomsDutyTruthRecord[]
   customsDiscrepancyRecordList CustomsDiscrepancyRecord[]
   customsEligibilityRecordList CustomsEligibilityRecord[]
@@ -2863,4 +2866,93 @@ model CustomsBrokerPoaFact {
   @@unique([organizationId, contentDigest])
   @@index([organizationId, principalRef, observedAt])
   @@index([organizationId, brokerRef])
+}
+
+// ============================================================
+// BG-021 — INDEPENDENT-SITE / CHARGEBACK 事实层（MSG-20261003-139 APPROVED TO IMPLEMENT WITH REVISE）
+//   · submit ≠ won ≠ settled ≠ recovered ≠ billable —— 三类事实各自 append-only，互不覆盖
+//   · IndependentSiteHandoffFact 的 UNIQUE(organizationId, disputeReference) 语义 = **每个 dispute 只有一个
+//     initial recovery handoff root**（用于并发 start recovery exactly-one）；未来补证 / 二次提交 / appeal
+//     必须新建 Attempt/Appeal Fact 或 generation，不得删除本唯一约束
+//   · 禁止 PAN / CVV / raw card·bank account / OAuth token / PSP credential；只允许 tokenized opaque reference
+//   · VERIFIED settlement 必须带 evidenceArtifactRef（DB CHECK）——它才是 recovered / fee basis 的依据
+// ============================================================
+enum Ps04HandoffChannel {
+  MANUAL_PORTAL
+  MANUAL_EMAIL
+  FIXTURE
+}
+
+enum Ps04ResponseDisposition {
+  WON
+  LOST
+  PARTIAL
+  UNKNOWN
+}
+
+enum Ps04SettlementVerification {
+  VERIFIED
+  UNVERIFIED
+}
+
+model IndependentSiteHandoffFact {
+  id                String             @id
+  organizationId    String
+  merchantRef       String
+  paymentAccountRef String
+  disputeReference  String
+  packageId         String
+  packageDigest     String
+  channel           Ps04HandoffChannel
+  handoffReference  String
+  attestedByActorId String
+  executionKey      String
+  contentDigest     String
+  observedAt        DateTime
+  createdAt         DateTime           @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  /// initial recovery handoff root：每个 dispute 仅一条（并发 exactly-one）
+  @@unique([organizationId, disputeReference])
+  @@unique([organizationId, executionKey])
+  @@unique([organizationId, contentDigest])
+  @@index([organizationId, paymentAccountRef, observedAt])
+}
+
+model IndependentSiteResponseFact {
+  id               String                   @id
+  organizationId   String
+  disputeReference String
+  disposition      Ps04ResponseDisposition
+  amount           Decimal?                 @db.Decimal(38, 6)
+  currency         String
+  source           String
+  contentDigest    String
+  observedAt       DateTime
+  createdAt        DateTime                 @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, contentDigest])
+  @@index([organizationId, disputeReference, observedAt])
+}
+
+model IndependentSiteSettlementFact {
+  id                  String                      @id
+  organizationId      String
+  disputeReference    String
+  amount              Decimal                     @db.Decimal(38, 6)
+  currency            String
+  verification        Ps04SettlementVerification
+  reference           String
+  evidenceArtifactRef String?
+  contentDigest       String
+  receivedAt          DateTime
+  createdAt           DateTime                    @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, contentDigest])
+  @@index([organizationId, disputeReference, receivedAt])
 }

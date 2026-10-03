@@ -1,8 +1,8 @@
 # FINAL ACCEPTANCE REPORT（自动生成，请勿手改）
 
-- 生成时间：2026-10-03T16:39:13.120Z
-- 单一权威矩阵：`docs/releases/ACCEPTANCE-MATRIX.json` @4af3432
-- acceptance HEAD：`4af3432`
+- 生成时间：2026-10-03T16:42:50.492Z
+- 单一权威矩阵：`docs/releases/ACCEPTANCE-MATRIX.json` @9dc26cd
+- acceptance HEAD：`9dc26cd`
 - 协议：`docs/releases/FINAL-ACCEPTANCE-PROTOCOL.md`（三层验收；禁止自证）
 - 状态：CODE_COMPLETE=NO · INTEGRATION_COMPLETE=NO · REAL_VALIDATION_COMPLETE=NO · PRODUCTION_READY=NO
 - INTERNAL_READY=NO；AUTONOMOUS_INTERNAL_WORK=RUNNING
@@ -37,15 +37,23 @@
 ## 2. 打开的内部项（SAFE_CONTINUATION_QUEUE）
 
 - BG-019-frontend-http-wiring-closure
-- BG-021-independent-site-persistence-schema-delta
 
 ### Layer 1 未通过检查（final-status 计算器输出；UNVERIFIED = 未绑定当前 HEAD 的实证）
 
-- L1-01_safe_continuation_queue_zero → false（open backlog items: 2）
-- L1-02_no_open_internal_items → false（open internal: BG-019-frontend-http-wiring-closure,BG-021-independent-site-persistence-schema-delta）
-- L1-03_no_open_markers → false（arch_pending=1 awaiting_verdict=true）
-- L1-04_full_ci_success_on_head → false（acceptance_head=4af3432 ci_head=c07ff84 ci=UNKNOWN run=）
-- L1-10_git_working_tree_clean → false（dirty entries: 4）
+- L1-01_safe_continuation_queue_zero → false（open backlog items: 1）
+- L1-02_no_open_internal_items → false（open internal: BG-019-frontend-http-wiring-closure）
+- L1-03_no_open_markers → false（arch_pending=0 awaiting_verdict=false）
+- L1-04_full_ci_success_on_head → false（acceptance_head=9dc26cd ci_head=c07ff84 ci=UNKNOWN run=）
+- L1-05_pg_regression_passed → UNVERIFIED（pg_regression recorded at 4af3432 ≠ acceptance head 9dc26cd）
+- L1-06_fresh_db_migration_passed → UNVERIFIED（fresh_db_migration recorded at 4af3432 ≠ acceptance head 9dc26cd）
+- L1-07_api_typecheck_passed → UNVERIFIED（typecheck_api recorded at 4af3432 ≠ acceptance head 9dc26cd）
+- L1-08_web_typecheck_build_passed → UNVERIFIED（typecheck_web recorded at 4af3432 ≠ acceptance head 9dc26cd）
+- L1-09_no_skipped_critical_tests → UNVERIFIED（tests_no_skipped recorded at 4af3432 ≠ acceptance head 9dc26cd）
+- L1-10_git_working_tree_clean → false（dirty entries: 15）
+- L1-11_docs_state_consistent → UNVERIFIED（docs_sync recorded at 4af3432 ≠ acceptance head 9dc26cd）
+- L1-12_schema_invariants_verified → UNVERIFIED（schema_invariants recorded at 4af3432 ≠ acceptance head 9dc26cd）
+- L1-13_negative_paths_covered → UNVERIFIED（negative_paths recorded at 4af3432 ≠ acceptance head 9dc26cd）
+- L1-14_real_pg_e2e_not_mock_only → UNVERIFIED（pg_e2e_real recorded at 4af3432 ≠ acceptance head 9dc26cd）
 
 ## 3. 外部 / 宿主依赖（不得自证完成）
 
@@ -81,7 +89,7 @@
 
 ### ARCH_REVIEW_REQUIRED
 
-- BG-021-independent-site-persistence-schema-delta
+- （无）
 
 ## 4. 边界
 

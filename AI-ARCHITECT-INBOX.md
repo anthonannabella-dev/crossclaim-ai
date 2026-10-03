@@ -124781,3 +124781,249 @@ IOR verified ≠ claimant rights verified ≠ Broker POA verified ≠ filing aut
 
 filingSubmitted=false · externalWritePerformed=false · transportEnabled=false · Payment=0 · collection=OFF · productionCredentials=ABSENT
 ```
+
+### [MSG-20261003-139] BG-021 = APPROVED TO IMPLEMENT WITH REVISE（settlement evidence + H1 initial-root 语义）+ CHANGE E = Golden Path Critical-State Read Surface（reviewed ref 9dc26cd）
+
+```text
+BG-021 + CHANGE E 裁决：PASS WITH REVISE。
+
+整体方向对，可以实施，但我要求两个很窄的加强：VERIFIED settlement 必须有可审计 evidence，以及 H1 的“一 dispute 一 handoff”语义必须明确限定为“initial handoff root”，不能误解成未来永远不能有 appeal/resubmission。
+
+一、BG-021 Schema Delta
+
+1. 三表 + 三枚举：PASS WITH CLARIFICATION
+
+批准：
+
+IndependentSiteHandoffFact
+IndependentSiteResponseFact
+IndependentSiteSettlementFact
+
+以及三个枚举。
+
+H1：
+
+UNIQUE(organizationId, disputeReference)
+
+当前 V1 可以批准，但其语义必须写死为：
+
+每个 dispute 只有一个 initial recovery handoff root
+
+它用于解决并发 start recovery exactly-one。
+
+不能把它解释为：
+
+一个 dispute 永远只能有一次 evidence update / appeal / resubmission。
+
+未来若 PSP 允许补证、二次提交或 appeal，应建立独立 Attempt/Appeal Fact 或 generation，不得删除这个唯一约束去破坏当前 root 身份。
+
+同时建议再加：
+
+UNIQUE(organizationId, executionKey)
+
+因为 executionKey 本身就是服务端幂等身份。
+
+2. paymentAccountRef tokenized reference：PASS
+
+允许 opaque/tokenized reference。
+
+必须禁止：
+
+PAN；
+CVV；
+raw bank/card account；
+Stripe/PayPal secret；
+OAuth token；
+PSP credential。
+
+存在 paymentAccountRef 不等于账户已授权、已验证或可扣款。
+
+3. VERIFIED Settlement evidence：REVISE — 必须增加
+
+这里比 BG-013 POA 还重要，因为这个事实会进入：
+
+settled → recovered → fee basis → BillingInvoice
+
+所以只靠一个 machine-safe reference 不够。
+
+要求 IndependentSiteSettlementFact 增加：
+
+evidenceArtifactRef
+
+并在 DB 层：
+
+纯文本
+verification = VERIFIED
+→ evidenceArtifactRef IS NOT NULL
+
+最好同时要求它是 machine-safe reference。
+
+语义必须保持：
+
+PSP says WON ≠ settlement verified
+
+Settlement reference exists ≠ settlement verified
+
+只有有证据支撑的 VERIFIED settlement 才能进入 recovered/billable。
+
+4. Currency CHECK：PASS，但必须复用全项目既有 CurrencyShape
+
+不要为 PS04 另造第二套 currency 规则。
+
+统一使用现有项目的 DB currency shape 规则；如果现有规则就是 ISO 风格三位大写，则继续：
+
+^[A-Z]{3}$
+
+同时：
+
+response currency 与 settlement currency 必须分别合法；
+consolidation 时不一致 → CURRENCY_MISMATCH / fail-closed；
+不做隐式 FX。
+
+5. latest view：PASS
+
+继续采用：
+
+observedAt/receivedAt DESC, id DESC
+
+推导 latest。
+
+禁止 mutable：
+
+isLatest
+
+可建普通 SQL view，但不是必要前置。
+
+另外必须落 DB 的约束
+
+IndependentSiteResponseFact.source 虽然暂时不是 enum，也必须：
+
+CHECK source IN ('MANUAL_ENTRY','FIXTURE')
+
+不能仅靠 TypeScript。
+
+金额规则建议：
+
+Response: amount IS NULL OR amount >= 0
+Settlement: amount > 0，而不是 >= 0
+
+因为“0 元 VERIFIED settlement”不应该成为 recovered truth。
+
+另外三表都要：
+
+digest shape；
+safe references；
+tenant trigger；
+tenant immutable；
+append-only UPDATE/DELETE deny；
+response/settlement → same-tenant handoff lineage。
+PostgreSQL 验收至少覆盖
+两并发不同 executionKey start 同 dispute → exactly one root；
+同 executionKey replay → existing；
+same dispute different executionKey → CONFLICT；
+response 无同租户 handoff → reject；
+settlement 无同租户 handoff → reject；
+cross-tenant lineage → reject；
+UPDATE/DELETE → reject；
+raw PAN-like/numeric account/free-text secret → reject；
+invalid currency → reject；
+response source 非 MANUAL_ENTRY/FIXTURE → reject；
+VERIFIED settlement 缺 evidenceArtifactRef → reject；
+VERIFIED settlement amount=0 → reject；
+UNVERIFIED settlement 不得成为 recovered/billable；
+corrected response/settlement append history，latest 可推导。
+
+所以：
+
+BG-021 = APPROVED TO IMPLEMENT WITH REVISE
+
+实施上述项后直接送 Implementation Checkpoint，不需要再送 Schema Design。
+
+二、CHANGE E — Platform / Independent-site 最小 UI 边界
+
+这里我不修改 FINAL ACCEPTANCE PROTOCOL，也不把标准降成“随便有个只读页面就算完成”。
+
+但也不要求把整套后台能力全部做成完整商业 UI。
+
+最小标准定为：
+
+“Golden Path Critical-State Read Surface”
+
+也就是：前端必须让内部验收人员能够看到该域 Golden Path 的关键状态转换和真值，但不要求在 UI 里执行所有动作。
+
+Platform 最小 UI
+
+必须能看到：
+
+Opportunity
+→ Qualification
+→ Claim-ready Package
+→ Recovery/Submission status
+→ Settlement/Recovered state
+→ Fee/Billing state
+
+现有 opportunities + claim-package 可以复用。
+
+platform.write 当前仍是 NEEDS_MANUAL / TRANSPORT=false，不要求做可点击外部提交按钮。
+
+但 UI 至少要明确显示：
+
+External submission: NOT ENABLED / NEEDS_MANUAL
+
+不能让用户误以为系统已自动提交。
+
+Independent-site 最小 UI
+
+不能只靠通用 recovery-money-view。
+
+至少需要一个只读 PS04 状态面，能够展示：
+
+Dispute
+→ Qualification
+→ Evidence / Claim-ready
+→ Handoff
+→ Response disposition
+→ Settlement verification
+→ Recovered amount
+→ 15% fee
+→ Billing draft
+
+关键状态要明确拆开显示：
+
+Submitted / Won / Settled / Recovered / Billable
+
+不能合成一个“Recovered”标签。
+
+其中 start recovery 如果已经有安全的内部/manual-handoff HTTP，可以保留最小人工入口；如果没有，本轮 UI closure 不要求为了满足 UI 验收新开写路由。
+
+CHANGE E 最终判定口径
+
+Layer 2 的 frontend cell 只有满足下面条件才能 COVERED：
+
+有真实 backend 数据源，并能在 UI 中观察该域 Golden Path 的关键状态和 fail-closed 状态。
+
+不要求：
+
+每一个 backend endpoint 都必须有独立 UI。
+
+也不要求：
+
+HOLD_EXTERNAL 的动作必须在 UI 里开放。
+
+因此：
+
+Customs：现状可继续 CLOSED；
+Carrier：现状可继续 CLOSED；
+Platform：补 critical-state read surface 后 CLOSED；
+Independent-site：BG-021 persistence + read API + critical-state UI 后 CLOSED。
+
+这不是降低协议，而是把“frontend wiring”具体化为关键 Golden Path 可观察性，而不是 endpoint 数量覆盖率。
+
+永久边界继续：
+
+External Write=HOLD · Real Money=HOLD · Customer Submission=HOLD · Production Credentials=HOST_ONLY
+
+并保持：
+
+submitted ≠ won ≠ settled ≠ recovered ≠ billable。
+```

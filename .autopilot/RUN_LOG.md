@@ -1694,3 +1694,9 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 
 ## 2026-10-03T16:38:32.553Z — BG-021 送审
 - Issue #2 comment 5971164391（BG-021 Schema Delta + CHANGE E 范围裁定）；待发唤醒。
+
+## 2026-10-03T16:40:34.558Z — MSG-20261003-139
+- BG-021 批准实施（含 4 条加强）；CHANGE E 定为 Golden Path Critical-State Read Surface。已归档 FULL_COPY_OK。
+
+## 2026-10-03T16:42:50.059Z — BG-021 实施
+- 3 表 3 枚举 + migration 20261003230000；DB CHECK/触发器 11 枚；PG 8/8；模型 73→76、迁移 64→65。

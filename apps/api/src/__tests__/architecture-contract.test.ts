@@ -153,6 +153,10 @@ describe('模型清单一致性（C-0002 CHANGE #1）', () => {
     'CustomsIorIdentityFact',
     'CustomsRightLineageFact',
     'CustomsBrokerPoaFact',
+    // BG-021（MSG-20261003-139 批准）：independent-site / chargeback 事实层（三张 append-only）
+    'IndependentSiteHandoffFact',
+    'IndependentSiteResponseFact',
+    'IndependentSiteSettlementFact',
   ];
   const JOIN_MODELS = [
     'CaseEvidence',
@@ -167,7 +171,7 @@ describe('模型清单一致性（C-0002 CHANGE #1）', () => {
 
 
   it(`核心模型恰好 ${CORE.length} 个`, () => {
-    expect(CORE).toHaveLength(67);
+    expect(CORE).toHaveLength(70);
     for (const name of CORE) expect(modelBlock(name), `缺少核心模型 ${name}`).not.toBe('');
   });
 
@@ -175,8 +179,8 @@ describe('模型清单一致性（C-0002 CHANGE #1）', () => {
     for (const name of JOIN_MODELS) expect(modelBlock(name), `缺少联结模型 ${name}`).not.toBe('');
   });
 
-  it('模型总数为 73（67 core + 6 join）—— 与 README/DOMAIN_MODEL 表述一致', () => {
-    expect(modelNames()).toHaveLength(73);
+  it('模型总数为 76（70 core + 6 join）—— 与 README/DOMAIN_MODEL 表述一致', () => {
+    expect(modelNames()).toHaveLength(76);
   });
 });
 

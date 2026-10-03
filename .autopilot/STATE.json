@@ -6,10 +6,10 @@
   "next_task": "PC-12A 实施 → 本地测试 + tsc api/web + API contract + full CI → PC-12A CHECKPOINT 送审。",
   "send_head": "07b7009",
   "decision_head": "07b7009",
-  "last_chatgpt_message": "MSG-20261003-138",
+  "last_chatgpt_message": "MSG-20261003-139",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-03T16:38:55.771Z",
+  "updated_at": "2026-10-03T16:42:50.059Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -51,9 +51,9 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-03T14:11:19.420Z",
   "state": "IMPLEMENT",
-  "last_action": "BG-021 Schema Delta + CHANGE E 范围裁定请求已送审：Issue #2 comment 5971164391（HEAD 2fee655）",
+  "last_action": "BG-021 实施完成（3 表 3 枚举 + migration + DB CHECK/触发器 + PG 8/8），Implementation Checkpoint 送审",
   "last_action_at": "2026-10-03T14:17:18.723Z",
-  "next_action": "发送 ChatGPT 唤醒并读取裁决；PASS → 实施 independent-site 持久化；范围裁定 → 据此调整 BG-019",
+  "next_action": "等 BG-021 checkpoint 裁决；随后补 Platform / Independent-site 的 critical-state read surface（CHANGE E）",
   "current_head": "8902185",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
@@ -4888,7 +4888,8 @@
     "BG-017-layer2-golden-path-matrix",
     "BG-018-independent-site-internal-closure",
     "BG-013-ior-facts-persistence-schema-delta",
-    "BG-020-customs-readonly-projection-http"
+    "BG-020-customs-readonly-projection-http",
+    "BG-021-independent-site-persistence-schema-delta"
   ],
   "last_unit": {
     "id": "BG-015-ior-full-chain-assembly",
@@ -4941,7 +4942,8 @@
     "BG-017-layer2-golden-path-matrix",
     "BG-018-independent-site-internal-closure",
     "BG-013-ior-facts-persistence-schema-delta",
-    "BG-020-customs-readonly-projection-http"
+    "BG-020-customs-readonly-projection-http",
+    "BG-021-independent-site-persistence-schema-delta"
   ],
   "host_action_required": [
     "BG-006-production-candidate-preflight"
@@ -4986,12 +4988,12 @@
       "④ Production Candidate register only"
     ]
   },
-  "awaiting_verdict": true,
+  "awaiting_verdict": false,
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-03T16:39:13.047Z",
-    "head": "4af3432",
-    "acceptance_head": "4af3432",
+    "computed_at": "2026-10-03T16:42:50.428Z",
+    "head": "9dc26cd",
+    "acceptance_head": "9dc26cd",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5001,12 +5003,20 @@
     "INDEPENDENT_FINAL_AUDIT_REQUIRED": true,
     "OPEN_INTERNAL_ITEMS": [
       "BG-019-frontend-http-wiring-closure",
-      "BG-021-independent-site-persistence-schema-delta",
       "CHECK:L1-01_safe_continuation_queue_zero",
       "CHECK:L1-02_no_open_internal_items",
       "CHECK:L1-03_no_open_markers",
       "CHECK:L1-04_full_ci_success_on_head",
-      "CHECK:L1-10_git_working_tree_clean"
+      "CHECK:L1-05_pg_regression_passed",
+      "CHECK:L1-06_fresh_db_migration_passed",
+      "CHECK:L1-07_api_typecheck_passed",
+      "CHECK:L1-08_web_typecheck_build_passed",
+      "CHECK:L1-09_no_skipped_critical_tests",
+      "CHECK:L1-10_git_working_tree_clean",
+      "CHECK:L1-11_docs_state_consistent",
+      "CHECK:L1-12_schema_invariants_verified",
+      "CHECK:L1-13_negative_paths_covered",
+      "CHECK:L1-14_real_pg_e2e_not_mock_only"
     ],
     "HOST_ACTION_REQUIRED": [
       "BG-006-production-candidate-preflight"
@@ -5038,63 +5048,63 @@
       "L1-01_safe_continuation_queue_zero": {
         "label": "SAFE_CONTINUATION_QUEUE = 0",
         "status": false,
-        "evidence": "open backlog items: 2"
+        "evidence": "open backlog items: 1"
       },
       "L1-02_no_open_internal_items": {
         "label": "所有 Codex 可独立完成的内部缺口 CLOSED",
         "status": false,
-        "evidence": "open internal: BG-019-frontend-http-wiring-closure,BG-021-independent-site-persistence-schema-delta"
+        "evidence": "open internal: BG-019-frontend-http-wiring-closure"
       },
       "L1-03_no_open_markers": {
         "label": "不存在 TODO/IN_PROGRESS/PARTIAL/READY_FOR_REVIEW/WAITING_FOR_VERDICT/未处理 REVISE·BLOCK",
         "status": false,
-        "evidence": "arch_pending=1 awaiting_verdict=true"
+        "evidence": "arch_pending=0 awaiting_verdict=false"
       },
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=4af3432 ci_head=c07ff84 ci=UNKNOWN run="
+        "evidence": "acceptance_head=9dc26cd ci_head=c07ff84 ci=UNKNOWN run="
       },
       "L1-05_pg_regression_passed": {
-        "status": true,
-        "evidence": "customs 26 文件 / 220 用例 PASS（BG-020 PG 4/4） @4af3432"
+        "status": "UNVERIFIED",
+        "evidence": "pg_regression recorded at 4af3432 ≠ acceptance head 9dc26cd"
       },
       "L1-06_fresh_db_migration_passed": {
-        "status": true,
-        "evidence": "migrate status：64 migrations up to date @4af3432"
+        "status": "UNVERIFIED",
+        "evidence": "fresh_db_migration recorded at 4af3432 ≠ acceptance head 9dc26cd"
       },
       "L1-07_api_typecheck_passed": {
-        "status": true,
-        "evidence": "tsc api EXIT=0 @4af3432"
+        "status": "UNVERIFIED",
+        "evidence": "typecheck_api recorded at 4af3432 ≠ acceptance head 9dc26cd"
       },
       "L1-08_web_typecheck_build_passed": {
-        "status": true,
-        "evidence": "tsc web EXIT=0（BG-019 前端接线） @4af3432"
+        "status": "UNVERIFIED",
+        "evidence": "typecheck_web recorded at 4af3432 ≠ acceptance head 9dc26cd"
       },
       "L1-09_no_skipped_critical_tests": {
-        "status": true,
-        "evidence": "聚焦套件 skipped=0 @4af3432"
+        "status": "UNVERIFIED",
+        "evidence": "tests_no_skipped recorded at 4af3432 ≠ acceptance head 9dc26cd"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
         "status": false,
-        "evidence": "dirty entries: 4"
+        "evidence": "dirty entries: 15"
       },
       "L1-11_docs_state_consistent": {
-        "status": true,
-        "evidence": "API.md 同步（implemented=91/documented=78）+ doc-sync 动态计数 OK @4af3432"
+        "status": "UNVERIFIED",
+        "evidence": "docs_sync recorded at 4af3432 ≠ acceptance head 9dc26cd"
       },
       "L1-12_schema_invariants_verified": {
-        "status": true,
-        "evidence": "db-constraint-coverage 26/26 + IOR 13 枚约束/触发器 @4af3432"
+        "status": "UNVERIFIED",
+        "evidence": "schema_invariants recorded at 4af3432 ≠ acceptance head 9dc26cd"
       },
       "L1-13_negative_paths_covered": {
-        "status": true,
-        "evidence": "BG-020：403/400/404/跨租户 + 只读不重算 @4af3432"
+        "status": "UNVERIFIED",
+        "evidence": "negative_paths recorded at 4af3432 ≠ acceptance head 9dc26cd"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
-        "status": true,
-        "evidence": "真实 PostgreSQL 套件（BG-020 4/4 + IOR 9/9） @4af3432"
+        "status": "UNVERIFIED",
+        "evidence": "pg_e2e_real recorded at 4af3432 ≠ acceptance head 9dc26cd"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
@@ -5126,9 +5136,7 @@
         "IOR_RIGHT_CONFIRMATION",
         "DISPUTE_SUBMISSION_AUTHORITY"
       ],
-      "ARCH_REVIEW_REQUIRED": [
-        "BG-021-independent-site-persistence-schema-delta"
-      ]
+      "ARCH_REVIEW_REQUIRED": []
     }
   },
   "code_complete": "NO",
@@ -5138,9 +5146,7 @@
   "independent_final_audit_required": true,
   "final_acceptance_protocol": "ACTIVE（docs/releases/FINAL-ACCEPTANCE-PROTOCOL.md；三层验收 + 4 状态重算 + 独立审计）",
   "autonomous_internal_work": "RUNNING",
-  "arch_review_pending": [
-    "BG-021-independent-site-persistence-schema-delta"
-  ],
+  "arch_review_pending": [],
   "arch_review_request": {
     "id": "BG-021-independent-site-persistence-schema-delta",
     "requested_at": "2026-10-03T16:38:32.553Z",
@@ -5375,5 +5381,22 @@
       "start-recovery / manual-response 表单（既有，受 Action Guard 保护的内部写入）"
     ],
     "remaining_question": "CHANGE E 要求「四域内部 Golden Path 所需的最小 frontend wiring」或由宿主正式修改协议范围；Platform 与 Independent-site 的「最小」边界需要架构方裁定（避免 Codex 自行降低标准）。"
+  },
+  "bg021": {
+    "status": "IMPLEMENTED（待 checkpoint 裁决）",
+    "revise": [
+      "IndependentSiteSettlementFact 必须新增 evidenceArtifactRef，且 DB CHECK：VERIFIED ⇒ evidenceArtifactRef IS NOT NULL（machine-safe）",
+      "H1 语义写死为「每个 dispute 只有一个 initial recovery handoff root」；补充 UNIQUE(organizationId, executionKey)",
+      "Response.source 必须 DB CHECK IN ('MANUAL_ENTRY','FIXTURE')；Response.amount NULL 或 >= 0；Settlement.amount > 0（0 元 VERIFIED 不得成为 recovered truth）",
+      "currency 复用既有 CurrencyShape（^[A-Z]{3}$），不做第二套规则；不一致 → CURRENCY_MISMATCH fail-closed，不做隐式 FX"
+    ],
+    "change_e": {
+      "verdict": "不修改协议、不降标准；把 frontend COVERED 具体化为「Golden Path Critical-State Read Surface」",
+      "platform": "需补 opportunity → qualification → claim-ready package → recovery/submission status → settlement/recovered → fee/billing 的只读状态面，并显式显示 External submission: NOT ENABLED / NEEDS_MANUAL",
+      "independent_site": "需只读 PS04 状态面：Dispute → Qualification → Evidence/Claim-ready → Handoff → Response disposition → Settlement verification → Recovered → 15% fee → Billing draft；Submitted / Won / Settled / Recovered / Billable 必须分开显示",
+      "customs_carrier": "现状可继续 CLOSED"
+    },
+    "migration": "20261003230000_independent_site_recovery_facts",
+    "tests": "independent-site-facts-db 8/8 (PG)"
   }
 }
