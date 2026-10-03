@@ -125909,3 +125909,132 @@ INTERNAL CODE COMPLETE = PASS / AUTONOMOUS INTERNAL WORK = EXHAUSTED
 
 但仍然只能是内部代码完成，不是 PRODUCTION_READY=YES。
 ```
+
+### [MSG-20261003-145] INDEPENDENT FINAL AUDIT v3 = REVISE（仅 FINAL ARCHIVAL SEMANTICS：三元闭环，禁止为记录 verdict 再改 Final Acceptance Tree）
+
+```text
+INDEPENDENT FINAL AUDIT v3：REVISE，但只剩 1 个“最终状态归档”问题。
+
+业务代码、Layer 2、Layer 3 边界和 CI 本身已经通过了。我独立查到：
+
+FINAL_ACCEPTANCE_HEAD 0f7f7ac：有效
+
+该 commit 只修改 .autopilot/STATE.json 这类验收静态记录；
+没有再改 final-status.mjs、业务代码、Schema 或测试逻辑。
+所以上一轮的“改验收器后继承旧 CI”漏洞已消失。
+
+HEAD 自身 CI：PASS
+
+GitHub Actions run 37142365134
+head_sha = 0f7f7ac6f00e39c18782cd403c7108aea343b97a
+status=completed
+conclusion=success
+
+因此 v2 的 CHANGE A 已实质通过。
+
+Layer 2：PASS / CLOSED
+
+Platform = COVERED
+Carrier = COVERED
+Customs = COVERED
+Independent-site = COVERED
+Backend HTTP = INTERNAL_COMPLETE
+Frontend = INTERNAL_COMPLETE
+Golden Path matrix 无 GAP。
+
+Layer 3：PASS（正确保持 HOLD）
+
+INTEGRATION_COMPLETE=NO
+REAL_VALIDATION_COMPLETE=NO
+PRODUCTION_READY=NO
+HOST / API / REAL_DATA / LEGAL 四类仍明确未关闭。
+
+v2 的 stale-state 问题已基本修复
+ACCEPTANCE-MATRIX.json 已不再把四域写成 PARTIAL，consistency guard 也已经增加 SEMANTIC_STALE_AREA 检查。
+
+唯一阻塞：0f7f7ac 仓库快照里的 STATE 仍然写的是旧结果
+
+我直接读取了 0f7f7ac:.autopilot/STATE.json。
+
+它里面仍然是：
+
+纯文本
+CODE_COMPLETE=NO
+INTERNAL_CODE_COMPLETE=false
+INTERNAL_READY=NO
+AUTONOMOUS_INTERNAL_WORK=RUNNING
+
+并且：
+
+纯文本
+L1-04_full_ci_success_on_head = false
+acceptance_head=fd4c675
+ci_head=4c9425a
+
+而不是你此次请求声称的：
+
+纯文本
+CODE_COMPLETE=YES
+INTERNAL_READY=YES
+AUTONOMOUS_INTERNAL_WORK=EXHAUSTED
+Layer 1 = 14/14
+
+原因其实很清楚：0f7f7ac 提交发生在 CI 完成之前，所以该 commit 中的 STATE 不可能预先知道它自己的 CI 后来成功。
+
+这不是产品缺陷，而是最终状态归档存在一个时间顺序悖论：
+
+commit final HEAD → CI 跑完 → 才知道 CI SUCCESS
+
+如果这时再 commit 一次 STATE=YES，又会产生一个新的 HEAD，然后严格规则又要求这个新 HEAD 自己重新跑 CI。
+
+CHANGE FINAL — 只需修正最终验收协议的归档方式
+
+不要再制造“更新 STATE → 新 HEAD → 再等 CI → 再更新 STATE”的无限循环。
+
+建议把最终规则明确为：
+
+Final Acceptance Tree = 0f7f7ac
+
+并由外部不可变证据绑定：
+
+纯文本
+FINAL_ACCEPTANCE_HEAD = 0f7f7ac
+CI_RUN = 37142365134
+CI_CONCLUSION = SUCCESS
+INDEPENDENT_ARCHITECT_AUDIT = PASS
+
+最终 CODE_COMPLETE / INTERNAL_READY / EXHAUSTED 可以由这组三方事实派生：
+
+immutable Git tree + GitHub CI result + independent audit verdict
+
+而不要求 0f7f7ac commit 内部的 STATE 在 CI 尚未发生时就预知未来结果。
+
+如果要留档，可以写 GitHub Issue comment / release annotation；不要为了记录这个 verdict 再改变 Final Acceptance Tree。
+
+当前实质状态
+
+从代码和独立验证角度：
+
+Layer 1 技术条件：14/14 已满足
+Layer 2：PASS
+Layer 3：正确 HOLD
+安全内部 backlog：0
+当前 Final Acceptance HEAD CI：SUCCESS
+没有发现新的内部产品/架构缺口
+
+所以这次不是再开发功能。
+
+v3 正式裁决：REVISE — FINAL ARCHIVAL SEMANTICS ONLY
+
+Codex 只需把最终协议改成“Final Acceptance Head + 外部 CI + 独立审计 verdict”三元闭环，避免继续提交静态状态造成无限 HEAD 漂移。
+
+完成这一条后，不需要再改业务代码；届时可直接判：
+
+INTERNAL CODE COMPLETE = PASS
+INTERNAL_READY = YES
+AUTONOMOUS_INTERNAL_WORK = EXHAUSTED
+
+同时继续保持：
+
+INTEGRATION_COMPLETE=NO · REAL_VALIDATION_COMPLETE=NO · PRODUCTION_READY=NO。
+```

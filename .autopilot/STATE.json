@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261003-144",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-03T18:08:48.525Z",
+  "updated_at": "2026-10-03T18:11:00.317Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -4905,7 +4905,7 @@
   "singleton_runner": "VERIFIED",
   "ci_pending": [],
   "ci_red": [],
-  "ci_checked_at": "2026-10-03T18:08:06.071Z",
+  "ci_checked_at": "2026-10-03T18:09:26.315Z",
   "continuous_verification": {
     "at": "2026-10-03T14:17:18.723Z",
     "a_to_b_to_c": "VERIFIED（单次启动连续执行 u1→u2→u3，无 heartbeat 唤醒；停止条件 = SAFE_CONTINUATION_QUEUE_EMPTY）",
@@ -5153,9 +5153,9 @@
     "status": "DONE（MSG-20261003-134：端点+customs.recovery.chain.run/INTERNAL_WRITE+角色矩阵+immutable execution identity+路由级 E2E 4/4+API.md 90/77）"
   },
   "gates_recorded_at": "2026-10-03T15:17:04.369Z",
-  "ci_status_head": "0f7f7ac",
-  "ci_status": "success",
-  "ci_run_id": "37142365134",
+  "ci_status_head": "fd03d92",
+  "ci_status": "in_progress",
+  "ci_run_id": "37143113305",
   "internal_code_complete_at": "2026-10-03T15:36:47.862Z",
   "independent_final_audit": {
     "required": true,
@@ -5491,5 +5491,14 @@
       "marker 5972002869 at bottom",
       "generating"
     ]
+  },
+  "final_archival_semantics": {
+    "per": "MSG-20261003-145",
+    "triple": [
+      "FINAL_ACCEPTANCE_HEAD (immutable git tree)",
+      "GitHub CI run/conclusion on that head",
+      "independent architect verdict"
+    ],
+    "rule": "不因记录 verdict 而再提交 STATE/报告；CLOSED 记录写入 Issue comment / release annotation"
   }
 }

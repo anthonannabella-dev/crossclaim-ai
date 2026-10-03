@@ -36,3 +36,22 @@ Amazon / TikTok Shop / Walmart / Shopify 真实 OAuth、UPS / FedEx / DHL 真实
 ## 八、最终独立审计（不得省略）
 
 即使 `INTERNAL_CODE_COMPLETE = TRUE`，也不得等价为「项目完成」。必须保留 `INDEPENDENT_FINAL_AUDIT_REQUIRED = TRUE`，由 ChatGPT 独立读取 Git HEAD / commits / migrations / schema / tests / CI / routes / frontend wiring / backlog / FINAL-ACCEPTANCE-REPORT 反查；独立审计完成前 `PRODUCTION_READY` 不得因 Codex 自证而设为 YES。
+
+## 九、最终归档语义（FINAL ARCHIVAL SEMANTICS；MSG-20261003-145 裁定）
+
+最终「内部代码完成」的判定**不依赖 Final Acceptance Tree 内部的 STATE 预知自身未来的 CI 结果**，
+而由下列**三元事实**派生（外部不可变证据闭环）：
+
+| 事实 | 来源 | 说明 |
+|---|---|---|
+| `FINAL_ACCEPTANCE_HEAD` | Git | 不可变提交（其 diff 只允许静态验收产物） |
+| `CI_RUN` / `CI_CONCLUSION` | GitHub Actions | 该 HEAD 自身的全量 CI 结果 |
+| `INDEPENDENT_ARCHITECT_AUDIT` | 架构方裁决 | 独立反查结论 |
+
+派生：`CODE_COMPLETE=YES` / `INTERNAL_READY=YES` / `AUTONOMOUS_INTERNAL_WORK=EXHAUSTED`，
+同时 `INTEGRATION_COMPLETE=NO` / `REAL_VALIDATION_COMPLETE=NO` / `PRODUCTION_READY=NO` 保持不变。
+
+**禁止**：为了记录 verdict 而再次提交 STATE/报告，从而改变 Final Acceptance Tree（会造成 HEAD 漂移与无穷 CI 等待）。
+CLOSED 记录应写在 GitHub Issue comment / release annotation / 本协议文档中，而不是新的提交。
+
+计算器：`tools/autopilot/final-archival.mjs`（只读 Git/STATE/CI 结果并输出闭合记录，不修改 Final Acceptance Tree）。
