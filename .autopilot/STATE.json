@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261003-122",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-03T07:40:09.113Z",
+  "updated_at": "2026-10-03T07:41:27.531Z",
   "previous_head": "2a5399e",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -49,10 +49,10 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-03T07:39:03.044Z",
+  "last_tick_at": "2026-10-03T07:41:27.531Z",
   "state": "IMPLEMENT",
-  "last_action": "MSG-20261003-122 逐字归档（FULL_COPY_OK）→ Queue #10 契约层判定 PASS/CLOSED AS CONTRACT LAYER（overall NOT CLOSED）→ Schema Delta 获授权 → 下一批锁定 Queue #10 FINAL（Prisma append-only persistence + tenant guard + Action Guard + 人工补录 HTTP + 读模型）；15% C10–C11 与 Customs C1+ 为 P2 并行",
-  "last_action_at": "2026-10-03T07:39:03.043Z",
+  "last_action": "登记 HOST DIRECTIVE 2026-10-03（补充四）CUSTOMS ONE-CLICK AUTOMATED RECOVERY COMPLETION（C15–C21 追加到 Customs Execution Queue；真实 filing HOLD_EXTERNAL）→ 实施 C15 Customs Filing Provider Contract 契约层（provider-neutral + operation-level fail-closed + 路由决策 + C18 证据门槛）→ 13/13 测试 + tsc api/web 0 + API contract OK → commit/push（PROGRESS）",
+  "last_action_at": "2026-10-03T07:41:27.531Z",
   "next_action": "继续 CARRIER QUEUE #10 FINAL（MSG-20261003-122 ⑦⑧ 授权）：Schema Delta（Prisma append-only CarrierClaimResponseFact + migration + tenant guard + append-only）→ PG 回归 → Action Guard capability → 人工补录 HTTP → 读模型投影 → tsc/API contract → commit/push → CI → checkpoint → 送审。随后按 P2 推进 Customs C15/C16/C19/C21 契约层与 Commercial C10–C11；C17 Schema Delta 与 C18 真实 provider 接入先送审/待宿主授权。",
   "current_head": "e060a5f",
   "reviewed_head": "24e27c8",
@@ -4239,5 +4239,19 @@
         "status": "REGISTERED_P2（编排 fail-closed；真实 filing HOLD_EXTERNAL）"
       }
     ]
+  },
+  "customs_queue_c15": {
+    "status": "PROGRESS（契约层完成；PROGRESS 批次不送审，真实 provider 接入仍 HOLD_EXTERNAL）",
+    "module": "apps/api/src/services/customs/customs-filing-provider.ts",
+    "tests": "apps/api/src/__tests__/customs-filing-provider.test.ts 13/13",
+    "contract": "provider-neutral CustomsFilingProvider + 8 项 operation-level fail-closed 能力 + 路由决策（AUTO_FILING / CLAIM_READY / BROKER_HANDOFF）+ C18 证据门槛（11 项）",
+    "invariants": [
+      "未声明或显式 false 的能力一律缺失（fail-closed）",
+      "缺 FILING_CREATE/DOCUMENT_UPLOAD/STATUS_READ → CLAIM_READY，绝不 AUTO_FILING",
+      "无 provider → BROKER_HANDOFF",
+      "路由决策永不表示已提交（filingSubmitted=false / externalWritePerformed=false / transportEnabled=false / productionCredentials=ABSENT）",
+      "合约层零外部写、零资金动作、零网络"
+    ],
+    "boundary": "真实 filing / provider 接入 / 生产凭据 = HOLD_EXTERNAL / HOST APPROVAL REQUIRED（C18）"
   }
 }
