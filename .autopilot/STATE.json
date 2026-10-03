@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261003-124",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-03T08:55:45.513Z",
+  "updated_at": "2026-10-03T08:59:21.937Z",
   "previous_head": "8cab430",
   "architect_decision_pending": true,
   "blocked_scope": null,
@@ -20,7 +20,7 @@
   "ci_run": "36949295897",
   "ci_result": "completed_success",
   "fix_pr": "https://github.com/anthonannabella-dev/crossclaim-ai/pull/10",
-  "channel_status": "HEALTHY（in-app browser tab 10 / chatgpt.com/c/6abf6ce8-cd44-83ec-ac11-2a708a677486；MSG-121 已读取并归档）",
+  "channel_status": "HEALTHY（宿主新开 ChatGPT 会话；C17 FINAL SCHEMA CHECKPOINT 已投递并三要素验证：输入框清空 / 消息出现在底部 / 生成中或已回复）",
   "pending_verdict_unarchived": null,
   "b2_status": "PASS（MSG-20260930-10 工程修复 + MSG-20260930-11 集成 PASS/MERGE APPROVED）",
   "protocol": "DUAL_CHANNEL_WAKEUP（GitHub = 正式总线 / ChatGPT Web = 仅唤醒）",
@@ -49,11 +49,11 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-03T08:52:28.095Z",
+  "last_tick_at": "2026-10-03T08:59:21.937Z",
   "state": "AWAIT_VERDICT",
-  "last_action": "C17 FINAL SCHEMA CHECKPOINT 写入并进入送审（MSG-20261003-124 ⑬）",
-  "last_action_at": "2026-10-03T08:55:45.513Z",
-  "next_action": "送 C17 FINAL SCHEMA CHECKPOINT（引用 MSG-20261003-124 ③④⑤⑥⑬ 与本次 schema/store/回归证据）→ 读裁决；同时可并行启动 G3（C21 HTTP + customs.recovery.start + GET filing-status，filingSubmitted=false）。",
+  "last_action": "宿主新开 ChatGPT 会话 → 将 C17 FINAL SCHEMA CHECKPOINT 投递到新会话并三要素验证成功（输入框清空 / 消息在底部 / 已创建新会话 6ac0c3b8-30a4-83ec-a529-4d9b04ffa0e7）→ 架构方回复将做实现事实核验后给编号裁决",
+  "last_action_at": "2026-10-03T08:59:21.937Z",
+  "next_action": "读取 C17 CHECKPOINT 的编号裁决：PASS → 按 MSG-124 ㉑ 实施 G3（C21 HTTP + customs.recovery.start + GET filing-status，filingSubmitted=false）；REVISE → 立即按 CHANGE 修改并重送；BLOCK → 停止该方案并建替代。裁决到达前按 SAFE_CONTINUATION_QUEUE 推进不受审任务（G5 前端接线核查 / G6 文档同步 / G7 非 happy-path 复核）。",
   "current_head": "e060a5f",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
@@ -4521,5 +4521,17 @@
         ]
       }
     }
+  },
+  "audit_channel_url": "https://chatgpt.com/c/6ac0c3b8-30a4-83ec-a529-4d9b04ffa0e7",
+  "audit_channel_note": "前一会话 https://chatgpt.com/c/6abf6ce8-cd44-83ec-ac11-2a708a677486 仍保留历史；新会话用于后续裁决（MSG-20261003-124 之后的往返）。C17 CHECKPOINT 引用 Issue #2 comment 5967397179。",
+  "c17_checkpoint_delivery": {
+    "delivered_at": "2026-10-03T08:59:21.936Z",
+    "channel": "https://chatgpt.com/c/6ac0c3b8-30a4-83ec-a529-4d9b04ffa0e7",
+    "verification": [
+      "composer cleared",
+      "message present in transcript",
+      "conversation created (new chat id)"
+    ],
+    "architect_ack": "架构方已回复确认将做实现事实核验（schema / 迁移约束 / 服务逻辑 / 测试证据），随后给编号裁决；裁决尚未产生"
   }
 }
