@@ -1,6 +1,6 @@
 # CUSTOMS G4 / C2 — Duty Calculation Truth CHECKPOINT
 
-- 时间：2026-10-03T09:36:48.317Z（HEAD f7b85ee）
+- 时间：2026-10-03T09:36:48.317Z（HEAD d8fd6c3）
 - 单元：G4 内部链第二环 **C2 = 报关单 duty/tax 计算真值**（纯确定性计算；无 Schema、无路由、无外写）
 - 消费方：C1 `CustomsEntryFact`；产出：`CustomsDutyTruth`
 

@@ -1,7 +1,7 @@
 # MASTER GAP CLOSURE REGISTER（目标 → 实现 → 缺口）
 
 维护规则：每完成一个单元即重算；本表是 SAFE_CONTINUATION_QUEUE 的唯一权威来源。
-最近重算：2026-10-03（HEAD `f7b85ee`；依据 MSG-20261003-126 与全部已交付批次；G4/C1 契约层已收口）。
+最近重算：2026-10-03（HEAD `d8fd6c3`；依据 MSG-20261003-126 与全部已交付批次；G4 C1–C3 契约层已收口）。
 
 ## A. 目标 → 状态
 
@@ -12,7 +12,7 @@
 | 3 | Customs / Trade Recovery | C15 filing provider 契约（`a992d2f`）、C16 授权就绪 + C19 状态读模型 + C21 one-click 编排（`db5c378`）、C19 可信 ingest + C20 refund→fee（`c5dedaf`）；C17 账本 = MSG-20261003-126 **PASS/CLOSED**（root+fact，impl `0c35106`）；C1 报关单事实契约层 DONE（`3f5b9e3`）。 | PARTIAL（C2–C14 + C1 持久化内部待做） |
 | 4 | 一次账户体系下多平台多账号连接 | SourceConnection / PlatformAccount / account discovery / connection onboarding + tenant 守卫 | INTERNAL COMPLETE（真实 OAuth = EXTERNAL） |
 | 5 | Opportunity Detection | RecoveryOpportunity + detection spine + Qualification | INTERNAL COMPLETE（平台侧信号需真实 adapter） |
-| 6 | Evidence / Recovery Graph | EvidenceArtifact / EvidenceEdge / CanonicalFact / ShipmentEvidenceBundle | INTERNAL COMPLETE（Customs evidence：C1 契约层 DONE（impl `f7b85ee`）+ C2 计算真值 DONE（impl `f7b85ee`）；持久化待 Schema Delta 审计） |
+| 6 | Evidence / Recovery Graph | EvidenceArtifact / EvidenceEdge / CanonicalFact / ShipmentEvidenceBundle | INTERNAL COMPLETE（Customs evidence：C1 契约层 DONE（impl `f7b85ee`）+ C2 计算真值 DONE（impl `d8fd6c3`）+ C3 差异检测 DONE（impl `d8fd6c3`）；持久化待 Schema Delta 审计） |
 | 7 | Eligibility / Rule Evaluation | RuleSet/RuleVersion + carrier SLA eligibility（35/35）+ reconciliation 规则 | INTERNAL COMPLETE（Customs eligibility = GAP C4） |
 | 8 | Estimated Recoverable Amount | carrier recovery estimate（ELIGIBLE-only、多币种、保守规则） | INTERNAL COMPLETE（Customs amount = GAP C5） |
 | 9 | Claim-Ready Package | carrier claim package（deterministic packageId、evidence manifest） | INTERNAL COMPLETE（Customs package = GAP C6） |
@@ -35,7 +35,7 @@
 | ~~G1~~ **DONE** | 统一 fee guard 收口：所有 `FeeCalculation` 创建路径必须过 `evaluateFeeGuard`（`commission-reconciliation.ts` 已按 ㉕ 改造：matched settlement → verified recovered truth → 绑定 agreement policy → guard → FeeCalculation；`record-fee.ts` 既有装配保留） | MSG-20261003-124 ㉓㉔㉕⑥ | `record-fee.ts` 保留既有装配、只在 create 前接 guard；`commission-reconciliation.ts` 改为 matched settlement → verified recovered truth → RecoveryCommercialEligibility → SettlementFeeEligibility → resolve versioned policy → guard → FeeCalculation；补 ㊱ 回归 |
 | G2 | C17 `CustomsSubmissionAttempt`（幂等根）+ `CustomsSubmissionAttemptFact`（append-only 状态） | MSG-20261003-124 ③④⑤⑥㊲ | Schema/migration + tenant/append-only 清单 + store + PG 回归（timeout 不建第二根、ambiguous 不重发、SUBMITTED 必带 providerSubmissionId）→ 送 **C17 FINAL SCHEMA CHECKPOINT** |
 | G3 | C21 HTTP：`POST /customs-opportunities/:id/start-recovery` + `GET .../filing-status` + `customs.recovery.start` Action Guard/RBAC | MSG-20261003-124 ⑭–㉑ | 实现并按 `filingSubmitted=false` / `externalExecutionStatus=NOT_STARTED` 语义暴露；真实 DB E2E（401/403/404/400/200/409 语义） |
-| G4 | Customs C1–C7 内部链（evidence/data contract → duty truth → classification discrepancy → eligibility → estimate → claim-ready package） | HOST DIRECTIVE 2026-10-03 补充四 §3 ㉓ | **IN PROGRESS**：**C1 DONE**（`f7b85ee`，contract + 16/16 回归）+ **C2 DONE**（`f7b85ee`，duty calculation truth + 11/11 回归）→ 下一单元 C3 classification / rate discrepancy；C1/C2 持久化需先送 Schema Delta |
+| G4 | Customs C1–C7 内部链（evidence/data contract → duty truth → classification discrepancy → eligibility → estimate → claim-ready package） | HOST DIRECTIVE 2026-10-03 补充四 §3 ㉓ | **IN PROGRESS**：**C1 DONE**（impl `f7b85ee`，contract 16/16）+ **C2 DONE**（impl `d8fd6c3`，duty truth 11/11）+ **C3 DONE**（impl `d8fd6c3`，classification/rate discrepancy 12/12）→ 下一单元 C4 eligibility；C1–C3 持久化需先送 Schema Delta |
 | ~~G5~~ **DONE** | 前端真实接线（只读页 + 人工补录表单 + start-recovery 表单全部上线） | MASTER GAP CLOSURE 检查项 E | **已核查并记录**：`apps/web` 49 文件 / 34 条后端路径，均不含 Queue #10 与 C21/C19 新能力 → 结论 **CONFIRMED_GAP（只读 UI 接线待做）**；映射见 `docs/releases/FRONTEND-WIRING-MAP.md` |
 | ~~G6~~ **DONE** | 文档同步（README / FINAL-GATE / PRODUCTION-READINESS / API BACKLOG ↔ 代码） | 检查项 F | 逐文档比对最近实现（Queue #10、Customs C15–C21、15% cutover）并更新 |
 | G7 | 非 happy-path 覆盖复核（跨租户 / 幂等 / 并发 / 失败恢复）针对新增模块 | 检查项「测试只覆盖 happy path」 | 复核并补测 |

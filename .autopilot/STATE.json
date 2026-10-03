@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "f7b85ee",
+  "head": "d8fd6c3",
   "status": "RECONCILED",
   "current_task": "Carrier Queue #6 — SLA EVIDENCE ASSEMBLY + ELIGIBILITY INPUT PLANE：Tracking Fact + Invoice Fact + POD Fact + Carrier Terms Evidence + Service Level Evidence → **ShipmentEvidenceBundle**（只建证据输入层；不得自动认定赔付 / 自动提交 claim / 自动退款 / 调用 carrier write API / 自动产生 recovery amount）。**逐字归档 MSG-111 为第一步。**CarrierInvoiceReadPort + CarrierPODReadPort（verified account lineage、request/response 双向绑定、十进制金额、charge kind 归一化 + raw code 保留、POD 掩码与隐私、safe rawReference）；**read-only**，不做 SLA/退款资格推导。CarrierTrackingReadPort + normalized CarrierTrackingSnapshot（UPS/FedEx provider adapter 分离）+ 状态/事件归一化（确定性排序 + 去重）+ 失败原因分类 + tenant/account lineage 归属；**read-only**（无 mutation / claim / pickup / refund，TRANSPORT=false）。",
   "next_task": "PC-12A 实施 → 本地测试 + tsc api/web + API contract + full CI → PC-12A CHECKPOINT 送审。",
@@ -51,10 +51,10 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-03T09:31:09.704Z",
   "state": "IMPLEMENT",
-  "last_action": "G4/C2：新增 customs-duty-truth（报关单 duty/tax 确定性真值：逐币种逐 kind BigInt 合计 + 8 类观察项 + 只读事实守卫 fail-closed）与 11/11 回归；C1+C2 合计 27/27",
-  "last_action_at": "2026-10-03T09:36:48.317Z",
-  "next_action": "G4 续：C3 classification / rate discrepancy → C4 eligibility → C5 estimate → C6 claim-ready package（C1/C2 持久化先送 Schema Delta 审计）；随后 G7/G8/G9 复核",
-  "current_head": "f7b85ee",
+  "last_action": "G4/C3：新增 customs-classification-discrepancy（事实 × 外部预期逐行差异：kind / amount(+delta) / currency / missing / unmatched，只暴露不裁决）与 12/12 回归；C1+C2+C3 = 39/39",
+  "last_action_at": "2026-10-03T09:38:46.383Z",
+  "next_action": "G4 续：C4 eligibility → C5 estimate → C6 claim-ready package → C7 handoff 边界（C1–C3 持久化先送 Schema Delta 审计）；随后 G7/G8/G9 复核",
+  "current_head": "d8fd6c3",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -4552,7 +4552,7 @@
       "note": "service→route 映射见 FRONTEND-WIRING-MAP §3"
     },
     "g4": {
-      "status": "IN_PROGRESS（C1 DONE + C2 DONE）",
+      "status": "IN_PROGRESS（C1 DONE + C2 DONE + C3 DONE）",
       "step": "C1 = Customs Entry Data / Evidence Contract（只读事实归一化）",
       "artifact": "apps/api/src/services/customs/customs-entry-contract.ts",
       "tests": "apps/api/src/__tests__/customs-entry-contract.test.ts → 16/16 PASS",
@@ -4585,6 +4585,20 @@
           "DUTY_TOTAL_MISMATCH"
         ],
         "boundary": "calculationPerformed=true / adjudicationPerformed=false / recoverableAmountDerived=false / appliesFxConversion=false / filingPerformed=false / paymentPerformed=false / productionCredentials=ABSENT"
+      },
+      "c3": {
+        "artifact": "apps/api/src/services/customs/customs-classification-discrepancy.ts",
+        "tests": "apps/api/src/__tests__/customs-classification-discrepancy.test.ts → 12/12 PASS（累计 39/39）",
+        "checkpoint": "docs/releases/CUSTOMS-G4-C3-CLASSIFICATION-DISCREPANCY-CHECKPOINT.md",
+        "codes": [
+          "NO_EXPECTATION_DATA",
+          "MISSING_EXPECTATION",
+          "UNMATCHED_EXPECTATION",
+          "KIND_MISMATCH",
+          "AMOUNT_MISMATCH",
+          "CURRENCY_MISMATCH"
+        ],
+        "boundary": "adjudicationPerformed=false / recoverableAmountDerived=false / appliesFxConversion=false / filingPerformed=false / paymentPerformed=false / productionCredentials=ABSENT"
       }
     }
   },

@@ -1467,3 +1467,8 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 交付：`customs-duty-truth.ts`（逐币种逐 kind BigInt 合计、8 类观察项、只读事实守卫）+ 11/11 回归；C1+C2 = 27/27。
 - 边界：adjudication=false、recoverableAmount=false、noFx、noFiling、noPayment；无 Schema / 无路由变更。
 - 下一步：C3 classification / rate discrepancy。
+
+## 2026-10-03T09:38:46.383Z — G4/C3 Classification / Rate Discrepancy（HEAD d8fd6c3）
+- 交付：`customs-classification-discrepancy.ts`（事实 × 外部预期：kind/amount+delta/currency/missing/unmatched，fail-closed 预期校验）+ 12/12 回归。
+- 累计：C1 16 + C2 11 + C3 12 = **39/39**；无 Schema / 无路由 / 无外写。
+- 下一步：C4 eligibility。
