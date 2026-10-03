@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261003-123",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-03T08:15:45.024Z",
+  "updated_at": "2026-10-03T08:21:15.862Z",
   "previous_head": "35ef87f",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -49,10 +49,10 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-03T08:15:45.024Z",
+  "last_tick_at": "2026-10-03T08:21:15.862Z",
   "state": "IMPLEMENT",
-  "last_action": "P2 并行开工：Commercial C10–C11 契约层（versioned 15% FeePolicy 注册表 + resolveFeePolicy 时点解析 + BigInt 定点费率 + ESTIMATE_ONLY 预览 + evaluateFeeGuard 统一闸门：client 费率拒绝/estimate 不可计费/无 verified recovered 拒绝/waiver·micro 非计费/币种与金额校验）→ 14/14 测试 → tsc api/web 0 → API contract OK → commit/push（PROGRESS）",
-  "last_action_at": "2026-10-03T08:15:45.023Z",
+  "last_action": "P2 并行续做：Customs C16（授权就绪判定 fail-closed）+ C19（状态/来源分离读模型，禁止隐含升级）+ C21（one-click 编排全 server-derived、逐项 fail-closed、绝不提交 filing）契约层 → 15/15 测试 → tsc api/web 0 → API contract OK → commit/push（PROGRESS）",
+  "last_action_at": "2026-10-03T08:21:15.862Z",
   "next_action": "按 P2 并行开工：① Commercial C10–C11（FeePolicy=15% versioned + estimated fee preview + fee guard + policy provenance；payment/collection 继续 OFF）；② Customs C1+ 与 C15–C21 契约层（C15 已完成；C16 授权就绪、C19 状态/来源、C21 one-click 编排 fail-closed；C17 Schema Delta 与 C18 真实 provider 先送审/待宿主授权）。任一单元完成即 commit/push；READY_FOR_REVIEW 才送审。",
   "current_head": "e060a5f",
   "reviewed_head": "24e27c8",
@@ -4380,6 +4380,24 @@
       "把 fee guard 接入既有 FeeCalculation 创建路径（record-fee.ts / commission-reconciliation.ts 等）—— 属资金链路实现，需架构方审计后实施",
       "默认 FeePolicy 20% → 15% 的落地（既有库中策略数据）—— 需明确数据迁移方案",
       "estimated fee preview 的对外呈现（web/API）"
+    ]
+  },
+  "customs_queue_c16_c19_c21": {
+    "status": "PROGRESS（契约层完成；真实 filing / provider 接入继续 HOLD_EXTERNAL）",
+    "modules": [
+      "apps/api/src/services/customs/customs-authorization-readiness.ts（C16）",
+      "apps/api/src/services/customs/customs-filing-status.ts（C19）",
+      "apps/api/src/services/customs/customs-one-click-start.ts（C21）"
+    ],
+    "tests": "apps/api/src/__tests__/customs-execution-contract.test.ts 15/15",
+    "c16": "8 项授权就绪判定；全部满足才 READY_TO_FILE，否则逐项拒绝码（CUSTOMS_AGREEMENT_REQUIRED / IOR_NOT_CONFIRMED / CLAIMANT_NOT_CONFIRMED / RECOVERY_RIGHT_NOT_CONFIRMED / BROKER_NOT_CONNECTED / BROKER_POA_REQUIRED / FILING_PERMISSION_REQUIRED / FILING_PROVIDER_NOT_READY）；判定不代表已申报",
+    "c19": "10 状态 + 3 来源等级（USER_REPORTED / PROVIDER_VERIFIED / AUTHORITY_VERIFIED）；append-only 事实 + 确定性投影（latest-wins，保留 history）；禁止隐含升级（USER_REPORTED SUBMITTED != ACCEPTED，APPROVED != PAID，inferredTransitions 恒为空）",
+    "c21": "one-click 编排 fail-closed：client 只能给 opportunityId（注入 recoverableAmount/classification/eligibility/ruleVersion/IOR/claimant/broker/packageDigest/feeRate/filingRoute/deadline/身份 → INVALID_REQUEST）；服务端逐项校验 entryFact/evidence/eligibility/amount/remedy/deadline/package/授权（C16）/provider 能力（C15）→ 全通过才 READY_TO_FILE + immutable snapshot；filingSubmitted / externalWritePerformed / authoritySubmissionPerformed / transportEnabled 恒 false",
+    "boundary": "真实 customs filing = HOLD_EXTERNAL / REGULATED GATE；无生产凭据；无扣款；无外写",
+    "pending": [
+      "C17 submission attempt ledger Schema Delta（append-only / tenant / idempotent）—— 需架构方审计",
+      "C18 真实 Filing/Broker provider 选型与接入 —— HOST APPROVAL REQUIRED",
+      "C21 HTTP 路由（POST /customs-opportunities/:id/start-recovery）+ Action Guard 注册 —— 需先确认权限模型"
     ]
   }
 }
