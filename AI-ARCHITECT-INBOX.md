@@ -112521,3 +112521,267 @@ TRANSPORT = false
 
 这次不是金额算法的问题，BigInt 十进制加总本身是对的；问题在于金额必须连同币种一起成立。现在只要把 invoice currency 和每条 charge currency 的 canonical/same-currency invariant 锁死，就能把 Queue #5 真正关闭。**
 ```
+
+### [MSG-20261003-111] CARRIER QUEUE #5 = PASS / CLOSED · 批准 CARRIER QUEUE #6（SLA EVIDENCE ASSEMBLY + ELIGIBILITY INPUT PLANE）
+
+`FINAL_IMPLEMENTATION_HEAD = c98a513`；`CI RUN = 37075713837 SUCCESS`；`CHECKPOINT_DOC_HEAD = 93817a1`。
+**★ 编号裁决**：① Invoice canonical currency = **PASS**；② Charge currency validation + same-currency invariant = **PASS**；③ `CHARGE_CURRENCY_MISMATCH` 命名 = **PASS**（接受：CURRENCY_REQUIRED 管格式/缺失，CHARGE_CURRENCY_MISMATCH 管语义冲突）；④ **CARRIER QUEUE #5 = PASS / CLOSED**；⑤ 下一内部单元 = **CARRIER QUEUE #6 — SLA EVIDENCE ASSEMBLY + ELIGIBILITY INPUT PLANE**（已批准）。
+**★ Queue #5 收口确认**：invoice canonical currency（`raw.currency.trim()` 必须匹配 `^[A-Z]{3}$`，不再自动 uppercase；USD PASS / usd·US·US D → CURRENCY_REQUIRED；core truth plane only accepts canonical facts）；charge currency 校验与 same-currency invariant（null → inherit invoice；USD → PASS；usd → CURRENCY_REQUIRED；invoice USD + charge EUR → CHARGE_CURRENCY_MISMATCH，且不换汇 / 不自动转换 / 不忽略币种 / 不进入成功 fact / 不参与 subtotal aggregation）；invoice read plane（carrier billed facts only / decimal exact arithmetic / raw charge preservation / no refund derivation）；POD read plane（delivery evidence only / recipient masking / signature protection / artifact reference only）；provenance（account + invoice identity + tracking + POD tracking binding）；raw boundary（allowlist + credential-like rejection + unknown field rejection）；safety boundary 无越界。
+**▶ Queue #6 目标与边界（⑤）**：输入 = Tracking Fact + Invoice Fact + POD Fact + Carrier Terms Evidence + Service Level Evidence，形成 **`ShipmentEvidenceBundle`**，供后续 **eligibility evaluation** 使用 —— **不是** claim submission。Queue #6 **只能**建立证据输入层；**不能**自动认定赔付成立、自动提交 claim、自动退款、自动调用 carrier write API、自动产生 recovery amount。
+**★ 架构方评语**：可以关闭 Queue #5。继续推进 Queue #6。
+
+```text
+已收到 CARRIER QUEUE #5 FINAL CHECKPOINT。基于上一轮 MSG-20261003-110 的唯一阻塞项，我对本次 c98a513 / CI 37075713837 做最终裁决。
+
+CARRIER QUEUE #5 FINAL VERDICT
+
+① Invoice canonical currency 是否收口
+
+裁决：PASS
+
+本次修复符合要求：
+
+之前问题：
+
+raw.currency = usd
+↓
+自动 uppercase
+↓
+USD
+↓
+通过
+
+会导致 truth boundary 自动修正 provider 数据。
+
+现在：
+
+raw.currency.trim()
+必须匹配 ^[A-Z]{3}$
+
+因此：
+
+输入	结果
+USD	PASS
+usd	CURRENCY_REQUIRED
+US	CURRENCY_REQUIRED
+US D	CURRENCY_REQUIRED
+
+符合：
+
+core truth plane only accepts canonical facts
+
+通过。
+
+② Charge currency 校验 + same-currency invariant 是否收口
+
+裁决：PASS
+
+当前设计符合 invoice fact 模型：
+
+Invoice Fact：
+
+currency = USD
+
+因此所有 charge 必须属于：
+
+USD
+
+允许：
+
+charge.currency = null
+→ inherit invoice currency
+
+允许：
+
+charge.currency = USD
+
+拒绝：
+
+charge.currency = usd
+→ CURRENCY_REQUIRED
+
+拒绝：
+
+invoice = USD
+charge = EUR
+→ CHARGE_CURRENCY_MISMATCH
+
+并且：
+
+不换汇
+不自动转换
+不忽略币种
+不进入成功 fact
+不参与 subtotal aggregation
+
+符合 money truth boundary。
+
+通过。
+
+③ CHARGE_CURRENCY_MISMATCH 命名是否接受
+
+裁决：PASS
+
+接受该命名。
+
+理由：
+
+它表达的是：
+
+charge exists
+currency exists
+currency is canonical
+but incompatible with invoice currency
+
+不是：
+
+missing currency
+invalid currency format
+provider error
+
+因此：
+
+CURRENCY_REQUIRED
+负责格式/缺失。
+
+CHARGE_CURRENCY_MISMATCH
+负责语义冲突。
+
+分类清晰。
+
+通过。
+
+④ CARRIER QUEUE #5 是否 CLOSED
+
+**最终裁决：
+
+PASS / CLOSED ✅**
+
+理由：
+
+Queue #5 目标：
+
+Invoice read plane
+
+✅ carrier billed facts only
+✅ decimal exact arithmetic
+✅ canonical currency
+✅ mixed currency protection
+✅ raw charge preservation
+✅ no refund derivation
+
+POD read plane
+
+✅ delivery evidence only
+✅ recipient masking
+✅ signature protection
+✅ artifact reference only
+
+Provenance
+
+✅ account binding
+✅ invoice identity binding
+✅ tracking binding
+✅ POD tracking binding
+
+Raw boundary
+
+✅ allowlist
+✅ credential-like field rejection
+✅ unknown field rejection
+
+Safety boundary
+
+保持：
+
+NO platform write
+Payment = 0
+autopay = OFF
+collection = OFF
+external payment write = OFF
+R13 HOLD
+TRANSPORT=false
+production credentials absent
+
+无越界。
+
+⑤ 下一内部单元批准
+
+批准进入：
+
+CARRIER QUEUE #6
+
+方向：
+
+SLA EVIDENCE ASSEMBLY + ELIGIBILITY INPUT PLANE
+
+但边界保持：
+
+Queue #6 只能：
+
+建立证据输入层。
+
+不能：
+
+自动认定赔付成立
+自动提交 claim
+自动退款
+自动调用 carrier write API
+自动产生 recovery amount
+
+建议 Queue #6 目标：
+
+输入：
+Tracking Fact
++
+Invoice Fact
++
+POD Fact
++
+Carrier Terms Evidence
++
+Service Level Evidence
+
+形成：
+
+ShipmentEvidenceBundle
+
+用于后续：
+
+eligibility evaluation
+
+而不是直接：
+
+claim submission
+最终编号裁决
+
+① Invoice canonical currency：
+
+PASS
+
+② Charge currency validation + same currency invariant：
+
+PASS
+
+③ CHARGE_CURRENCY_MISMATCH：
+
+PASS
+
+④ CARRIER QUEUE #5：
+
+PASS / CLOSED
+
+⑤ 下一内部单元：
+
+CARRIER QUEUE #6 — SLA EVIDENCE ASSEMBLY + ELIGIBILITY INPUT PLANE
+
+当前 HEAD：
+
+c98a513
+
+CI：
+
+37075713837 SUCCESS
+
+可以关闭 Queue #5。继续推进 Queue #6。
+```
