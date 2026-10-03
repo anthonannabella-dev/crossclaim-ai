@@ -1,16 +1,16 @@
 {
   "gate": "B2-FIX R1",
-  "head": "c98a513",
+  "head": "93817a1",
   "status": "RECONCILED",
-  "current_task": "Carrier Queue #5 — INVOICE + POD READ PLANE：CarrierInvoiceReadPort + CarrierPODReadPort（verified account lineage、request/response 双向绑定、十进制金额、charge kind 归一化 + raw code 保留、POD 掩码与隐私、safe rawReference）；**read-only**，不做 SLA/退款资格推导。CarrierTrackingReadPort + normalized CarrierTrackingSnapshot（UPS/FedEx provider adapter 分离）+ 状态/事件归一化（确定性排序 + 去重）+ 失败原因分类 + tenant/account lineage 归属；**read-only**（无 mutation / claim / pickup / refund，TRANSPORT=false）。",
+  "current_task": "CARRIER QUEUE #6 — SLA EVIDENCE ASSEMBLY + ELIGIBILITY INPUT PLANE（MSG-20261003-111 ⑤ 授权）",
   "next_task": "PC-12A 实施 → 本地测试 + tsc api/web + API contract + full CI → PC-12A CHECKPOINT 送审。",
   "send_head": "07b7009",
   "decision_head": "07b7009",
   "last_chatgpt_message": "MSG-20261003-102",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-02T23:03:33.455Z",
-  "previous_head": "afe8f35",
+  "updated_at": "2026-10-03T00:53:15.979Z",
+  "previous_head": "c98a513",
   "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "db6725c",
@@ -49,11 +49,11 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-02T23:07:08.223Z",
+  "last_tick_at": "2026-10-03T00:38:10.765Z",
   "state": "IMPLEMENT",
-  "last_action": "SCHEDULER_STALE_RECOVERED（gap=14min）→ 本轮已恢复执行",
+  "last_action": "SCHEDULER_STALE_RECOVERED（gap=91min）→ 本轮已恢复执行",
   "last_action_at": "2026-10-02T09:01:54.693Z",
-  "next_action": "Carrier Queue #5 送审（Issue #2 comment + ChatGPT 唤醒 + 裁决归档：FULL_COPY_OK）；通过后按 VERDICT 进入 Queue #6（SLA Evidence Assembly，待架构方裁定）。",
+  "next_action": "① 逐字归档 MSG-20261003-111（raw → FULL_COPY_OK → commit/push）；② 实现 Queue #6 ShipmentEvidenceBundle 证据输入层并送审。",
   "current_head": "b55f13b",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-02T23:02:09.405Z",
-    "gapMs": 298819,
-    "stale": false,
-    "checkedAt": "2026-10-02T23:07:08.223Z"
+    "previousTickAt": "2026-10-02T23:07:08.223Z",
+    "gapMs": 5462543,
+    "stale": true,
+    "checkedAt": "2026-10-03T00:38:10.765Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -250,7 +250,7 @@
     "integration_boundary_review": "AUTHORIZED_TO_PLAN（先提交设计/实施计划，不直接开放真实 transport）"
   },
   "r36_submission_comment": "5927087320",
-  "stale_recovered_at": "2026-10-02T23:00:58.753Z",
+  "stale_recovered_at": "2026-10-03T00:38:10.765Z",
   "engineering_regression_policy": {
     "source": "HOST PRODUCT DIRECTION 2026-10-01",
     "doc": "docs/releases/ENGINEERING-REGRESSION-POLICY.md",
@@ -3736,11 +3736,13 @@
   "carrier_queue_4_ci_run": "37073303640",
   "carrier_queue_4_checkpoint_doc_head": "9a2592a",
   "carrier_queue_4_audit_comment_id": "5962656767",
-  "carrier_queue_5_status": "QUEUE #5 FINAL IMPLEMENTED（MSG-20261003-110 ⑬–㉒；canonical currency + same-currency invariant；Wait CI/送审）",
+  "carrier_queue_5_status": "PASS / CLOSED（MSG-20261003-111 ④；FINAL_IMPLEMENTATION_HEAD c98a513 / CI 37075713837 / CHECKPOINT_DOC_HEAD 93817a1）",
   "carrier_queue_5_boundary": "READ-ONLY：不计算赔付资格 / 不提交 claim / 不执行外写；TRANSPORT=false · platformWriteEnabled=false · productionCredentials=ABSENT",
   "carrier_queue_5_implementation_head": "ccc4345",
   "carrier_queue_5_ci_run": "37074580689",
   "carrier_queue_5_ci_result": "SUCCESS",
   "carrier_queue_5_checkpoint_doc_head": "db6725c",
-  "carrier_queue_5_audit_comment_id": "5962804928"
+  "carrier_queue_5_audit_comment_id": "5962804928",
+  "carrier_queue_6_status": "AUTHORIZED（MSG-20261003-111 ⑤；SLA Evidence Assembly + Eligibility Input Plane；待逐字归档 MSG-111）",
+  "carrier_queue_6_boundary": "只建证据输入层（ShipmentEvidenceBundle）；禁止自动认定赔付 / 自动提交 claim / 自动退款 / carrier write API / 自动 recovery amount；TRANSPORT=false · platformWriteEnabled=false · productionCredentials=ABSENT"
 }
