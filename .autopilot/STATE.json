@@ -1,6 +1,6 @@
 {
   "gate": "B2-FIX R1",
-  "head": "a155812",
+  "head": "5deef82",
   "status": "RECONCILED",
   "current_task": "Carrier Queue #6 — SLA EVIDENCE ASSEMBLY + ELIGIBILITY INPUT PLANE：Tracking Fact + Invoice Fact + POD Fact + Carrier Terms Evidence + Service Level Evidence → **ShipmentEvidenceBundle**（只建证据输入层；不得自动认定赔付 / 自动提交 claim / 自动退款 / 调用 carrier write API / 自动产生 recovery amount）。**逐字归档 MSG-111 为第一步。**CarrierInvoiceReadPort + CarrierPODReadPort（verified account lineage、request/response 双向绑定、十进制金额、charge kind 归一化 + raw code 保留、POD 掩码与隐私、safe rawReference）；**read-only**，不做 SLA/退款资格推导。CarrierTrackingReadPort + normalized CarrierTrackingSnapshot（UPS/FedEx provider adapter 分离）+ 状态/事件归一化（确定性排序 + 去重）+ 失败原因分类 + tenant/account lineage 归属；**read-only**（无 mutation / claim / pickup / refund，TRANSPORT=false）。",
   "next_task": "PC-12A 实施 → 本地测试 + tsc api/web + API contract + full CI → PC-12A CHECKPOINT 送审。",
@@ -9,8 +9,8 @@
   "last_chatgpt_message": "MSG-20261003-119",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-03T06:02:44.655Z",
-  "previous_head": "a6bd16d",
+  "updated_at": "2026-10-03T06:34:06.042Z",
+  "previous_head": "a155812",
   "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "f88ef2a",
@@ -49,11 +49,11 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-03T05:56:14.186Z",
+  "last_tick_at": "2026-10-03T06:12:13.638Z",
   "state": "IMPLEMENT",
-  "last_action": "SCHEDULER_STALE_RECOVERED（gap=13min）→ 本轮已恢复执行",
+  "last_action": "SCHEDULER_STALE_RECOVERED（gap=16min）→ 本轮已恢复执行",
   "last_action_at": "2026-10-02T09:01:54.693Z",
-  "next_action": "先完成 CARRIER QUEUE #9B FINAL（router 接线 + 端到端 HTTP 测试 → 送审）；随后按架构方放行进入 CUSTOMS RECOVERY QUEUE C1（CustomsEntryFact Schema Delta + 规则包契约设计送审）",
+  "next_action": "补端到端 HTTP 测试（含 createServer 注入 carrierClaimPackages）→ 全量本地验证 → commit/push → CI → 生成 checkpoint 并送审 READY_FOR_REVIEW",
   "current_head": "b55f13b",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
@@ -101,10 +101,10 @@
   "schedule_check": {
     "intervalMinutes": 5,
     "staleAfterMinutes": 10,
-    "previousTickAt": "2026-10-03T05:43:15.726Z",
-    "gapMs": 778461,
+    "previousTickAt": "2026-10-03T05:56:14.186Z",
+    "gapMs": 959453,
     "stale": true,
-    "checkedAt": "2026-10-03T05:56:14.186Z"
+    "checkedAt": "2026-10-03T06:12:13.638Z"
   },
   "wakeup_r32_redelivered_at": "2026-10-01T05:51:02.826Z",
   "wakeup_r32_head": "7d888cc",
@@ -250,7 +250,7 @@
     "integration_boundary_review": "AUTHORIZED_TO_PLAN（先提交设计/实施计划，不直接开放真实 transport）"
   },
   "r36_submission_comment": "5927087320",
-  "stale_recovered_at": "2026-10-03T05:56:14.186Z",
+  "stale_recovered_at": "2026-10-03T06:12:13.638Z",
   "engineering_regression_policy": {
     "source": "HOST PRODUCT DIRECTION 2026-10-01",
     "doc": "docs/releases/ENGINEERING-REGRESSION-POLICY.md",
@@ -3854,7 +3854,7 @@
   "carrier_queue_9b_final_schema_head": "59d6c41",
   "carrier_queue_9b_final_schema_ci": "37098373719 SUCCESS",
   "carrier_queue_9b_final_schema_done": "Prisma CarrierManualSubmission 模型 + migration 20261003020000（UNIQUE(organizationId, packageId) + tenant guard cc_tenant_carriermanualsubmission + cc_tenant_immutable__CarrierManualSubmission + cc_append_only__CarrierManualSubmission）+ required-triggers/append-only-triggers 清单 + architecture-contract 58（52 core + 6 join）+ DOMAIN_MODEL/README 同步；本地 prisma validate/migrate deploy/tenant+append-only checklist/tsc/architecture-contract 全绿",
-  "carrier_queue_9b_final_remaining": "把该 handler 接入真实 router（handleWorkflowRequest 的 POST /carrier-claim-packages/:packageId/manual-submission）+ createServer 注入 package source/store/audit（package truth 目前无持久实体，按 ㉓ 只保存 snapshot lineage）+ 端到端 HTTP 测试（401/403/404/409/200）→ 然后 READY_FOR_REVIEW 送审",
+  "carrier_queue_9b_final_remaining": "端到端 HTTP 测试（未认证 401 / 无权限 403 / 未知 package 404 / NEEDS_REVIEW 409 / 首次 201 / 幂等重放 200，需 createServer 注入 fixture package source）→ 然后 checkpoint doc + Issue #2 comment + ChatGPT 唤醒 → READY_FOR_REVIEW",
   "carrier_queue_9b_final_store_head": "e492115",
   "carrier_queue_9b_final_store_ci": "37099094723 SUCCESS",
   "carrier_queue_9b_final_store_done": "Prisma/PostgreSQL store（createPrismaCarrierManualSubmissionStore）：DB UNIQUE(org,packageId) 收敛并发（P2002 → ALREADY_RECORDED）+ 同事务 business audit（prepareAuditInsert + tx.auditLog.create，handlesAuditAtomically=true）+ submissionRecordId 改为确定性哈希（可作 audit entityId）；真实 PostgreSQL 验收 10/10（含两个独立连接并发只产生一行 + audit 恰好一次、append-only UPDATE/DELETE 被拒、租户/身份 server-derived、无网络）；契约层 15/15 保持",
@@ -3933,5 +3933,8 @@
       "ActionGuardNotConfiguredError"
     ],
     "remaining_tests": "端到端 HTTP 测试：未认证 401 / 无权限 403 / 未知 package 404 / NEEDS_REVIEW 409 / 首次 201 / 幂等重放 200"
-  }
+  },
+  "carrier_queue_9b_final_router_head": "8cc82fa",
+  "carrier_queue_9b_final_router_ci": "37102959839 SUCCESS",
+  "carrier_queue_9b_final_router_done": "POST /carrier-claim-packages/:packageId/manual-submission 已接入真实 router（path 常量 + 路由集合守卫 + Action Guard assertAllowed 动作字面量 + server-derived session + 三字段白名单 + 稳定 201/200/400/403/404/409 映射 + Prisma store 缺省注入）；API.md 已记录（contract 85/72）；修复三处 CI 红灯（API contract 未记录 / 静态约定要求动作字面量与 assertAllowed 同文件 / 删除常量后遗留 import）"
 }
