@@ -61,6 +61,7 @@ import {
   handleCustomsRecoveryStartRequest,
 } from '../customs/customs-recovery-http';
 import { getReturnClaimEvidenceView } from '../customs/customs-return-claim-evidence';
+import { postCustomsRecoveryChain } from '../customs/customs-recovery-chain-http';
 import {
   PlatformWriteRequestError,
   requestPlatformWrite,
@@ -232,6 +233,8 @@ const CARRIER_CLAIM_RESPONSES_PATH = /^\/carrier-claim-packages\/([^/]+)\/respon
 const CUSTOMS_RECOVERY_PATH = /^\/customs-opportunities\/([^/]+)\/(start-recovery|filing-status)$/;
 /** P0-1：Return→matching→claim-ready evidence 的**只读**视图（消费已持久化结果，不重算）。 */
 const CUSTOMS_RETURN_EVIDENCE_PATH = /^\/customs-entry-facts\/([^/]+)\/return-claim-evidence$/;
+/** BG-012：Customs 恢复链**内部触发**（INTERNAL_WRITE；customs.recovery.chain.run）。 */
+const CUSTOMS_CHAIN_RUN_PATH = /^\/customs-entry-facts\/([^/]+)\/recovery-chain$/;
 // ② 下一小批次（MSG-20261001-14 §5）：appeal.submit（Appeal 人工提交 · 独立动作与审批绑定）
 const CASE_APPEAL_SUBMIT_PATH = /^\/cases\/([^/]+)\/appeal\/submit$/;
 // R37 P1（MSG-20261001-22 CHANGE A）：平台真实写回入口（EXTERNAL_WRITE · transport 恒关）
@@ -311,6 +314,15 @@ export interface WorkflowRouteDeps {
   /** C21：filing status 事实读取（缺省空集合）。 */
   customsFilingStatus?: import('../customs/customs-recovery-http').CustomsRecoveryHttpDeps['filingStatus'];
   /** P0-1：已持久化的 claim evidence 读取（缺省 → 404，不伪造）。 */
+  /** BG-012：内部触发执行器（缺省 → 409，不伪造）。 */
+  customsRecoveryChain?: {
+    run(args: { organizationId: string; entryFactId: string }): Promise<{
+      executionKey: string;
+      package: { packageId: string; readiness: string; gaps: readonly string[]; estimateOnly: boolean; billable: boolean; filingPerformed: boolean; submissionPerformed: boolean };
+      projections: readonly { kind: string; projectionId: string; status: 'APPENDED' | 'ALREADY_APPENDED' }[];
+      algorithmVersion: string;
+    }>;
+  };
   customsReturnEvidence?: {
     latest(args: { organizationId: string; entryFactId: string }): Promise<Record<string, unknown> | null>;
   };
@@ -494,6 +506,7 @@ export async function handleWorkflowRequest(
   const carrierClaimResponses = CARRIER_CLAIM_RESPONSES_PATH.exec(path);
   const customsRecovery = CUSTOMS_RECOVERY_PATH.exec(path);
   const customsReturnEvidence = CUSTOMS_RETURN_EVIDENCE_PATH.exec(path);
+  const customsChainRun = CUSTOMS_CHAIN_RUN_PATH.exec(path);
   const caseAppealSubmit = CASE_APPEAL_SUBMIT_PATH.exec(path);
   const casePlatformWrite = CASE_PLATFORM_WRITE_PATH.exec(path);
   const caseRecoveryManualSubmit = CASE_RECOVERY_MANUAL_SUBMIT_PATH.exec(path);
@@ -532,7 +545,7 @@ export async function handleWorkflowRequest(
     adminPermissionMatrix ||
     adminMemberDetail !== null ||
     adminKillSwitch;
-  if (!adminAny && !opportunityList && !caseClaimPackage && !recoveryStates && !recoveryMoney && !accountsPath && !entitlementsPath && !operationsDashboard && !operationsClaims && !operationsRecovery && !review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !paymentReviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !replayPath && !replayReviewPath && !retryDuePath && !retryDueFreezePath && !retryDueReviewPath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim && !caseClaimSubmit && !caseClaimPrepare && !carrierManualSubmission && !carrierClaimResponses && !customsRecovery && !customsReturnEvidence && !caseBillingDraft && !caseAppealSubmit && !casePlatformWrite && !caseRecoveryManualSubmit && !caseRecoveryManualReference && !caseRecoveryManualApproval && !caseRecoveryManualReferenceApproval &&
+  if (!adminAny && !opportunityList && !caseClaimPackage && !recoveryStates && !recoveryMoney && !accountsPath && !entitlementsPath && !operationsDashboard && !operationsClaims && !operationsRecovery && !review && !insightList && !insightCsv && !insight && !connection && !termsPath && !outcomePath && !reviewPath && !paymentReviewPath && !appealPath && !commissionPath && !paymentsPath && !webhookPath && !reconciliationPath && !reconciliationCsvPath && !replayPath && !replayReviewPath && !retryDuePath && !retryDueFreezePath && !retryDueReviewPath && !billingPath && !caseListPath && !caseDetail && !caseEvidence && !caseClaim && !caseClaimSubmit && !caseClaimPrepare && !carrierManualSubmission && !carrierClaimResponses && !customsRecovery && !customsReturnEvidence && !customsChainRun && !caseBillingDraft && !caseAppealSubmit && !casePlatformWrite && !caseRecoveryManualSubmit && !caseRecoveryManualReference && !caseRecoveryManualApproval && !caseRecoveryManualReferenceApproval &&
     !commercialPoliciesPath &&
     !commercialPolicyPath &&
     !commercialPolicyAcceptPath &&
@@ -620,6 +633,8 @@ export async function handleWorkflowRequest(
               ? ['GET']
               : carrierClaimResponses
                 ? ['GET', 'POST']
+                : customsChainRun
+                  ? ['POST']
                 : customsReturnEvidence
                   ? ['GET']
                   : customsRecovery
@@ -1454,6 +1469,25 @@ export async function handleWorkflowRequest(
         { packageId, request: body as never, session },
         { submissions, store, now: deps.now ?? (() => new Date()) },
       );
+      sendJson(res, result.status, result.body);
+      return true;
+    }
+
+    // BG-012（MSG-20261003-134）：Customs 恢复链内部触发（INTERNAL_WRITE，不 filing）。
+    if (customsChainRun && method === 'POST') {
+      const entryFactId = decodeURIComponent(customsChainRun[1] ?? '');
+      const session = { organizationId: actor.organizationId, actorUserId: actor.actorUserId, role: actor.role };
+      const executor = deps.customsRecoveryChain;
+      const result = await postCustomsRecoveryChain({
+        session,
+        entryFactId,
+        run: async () => {
+          if (!executor) {
+            throw Object.assign(new Error('CHAIN_EXECUTOR_NOT_CONFIGURED'), { code: 'FACT_NOT_FOUND' });
+          }
+          return (await executor.run({ organizationId: session.organizationId, entryFactId })) as never;
+        },
+      });
       sendJson(res, result.status, result.body);
       return true;
     }

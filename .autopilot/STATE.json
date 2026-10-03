@@ -51,9 +51,9 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-03T14:11:19.420Z",
   "state": "IMPLEMENT",
-  "last_action": "BG-012 实施（MSG-20261003-134）：projection 幂等身份改为 server-derived immutable identity（去掉 computedAt）、chain service 暴露 executionKey、新增内部触发 handler（角色矩阵 + 四个 HOLD 字段）与 4/4 单测",
+  "last_action": "BG-012 收尾完成：POST /customs-entry-facts/:id/recovery-chain 已接线（http-routes+server 白名单+API.md 90/77），路由级 HTTP E2E 4/4（401/403 FINANCE·VIEWER/200 OWNER 含 executionKey 与四个 HOLD 字段/404 未知事实）",
   "last_action_at": "2026-10-03T14:17:18.723Z",
-  "next_action": "BG-012 续：把 POST /customs-entry-facts/:id/recovery-chain 接入 http-routes + server 白名单 + API.md，并补真实 PostgreSQL 路由级 E2E（含重放不重复 projection、policyVersion 变化 append 新历史）",
+  "next_action": "执行 final-status/final-report 重算；若无安全内部项则按协议停留在 HOST_ACTION_REQUIRED/独立审计状态",
   "current_head": "3d80d60",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
@@ -4919,7 +4919,8 @@
     "BG-008-platform-write-amazon-evidence",
     "BG-009-carrier-settlement-readonly-reconciliation",
     "BG-011-ps04-enum-migration-d1-d3",
-    "BG-010-ps04-phase1-readonly-chain"
+    "BG-010-ps04-phase1-readonly-chain",
+    "BG-012-customs-g4-http-trigger-wiring"
   ],
   "host_action_required": [
     "BG-006-production-candidate-preflight"
@@ -4965,8 +4966,8 @@
   "awaiting_verdict": true,
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-03T15:06:13.034Z",
-    "head": "70b26b4",
+    "computed_at": "2026-10-03T15:16:25.914Z",
+    "head": "a2d4e6e",
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
     "REAL_VALIDATION_COMPLETE": "NO",
@@ -4974,9 +4975,6 @@
     "INTERNAL_CODE_COMPLETE": false,
     "INDEPENDENT_FINAL_AUDIT_REQUIRED": true,
     "OPEN_INTERNAL_ITEMS": [
-      "BG-012-customs-g4-http-trigger-wiring",
-      "CHECK:safe_continuation_queue_zero",
-      "CHECK:no_open_internal_items",
       "CHECK:git_working_tree_clean",
       "CHECK:full_ci_success_on_head",
       "CHECK:api_typecheck_recorded",
@@ -5009,8 +5007,8 @@
       "DISPUTE_SUBMISSION_AUTHORITY"
     ],
     "checks": {
-      "safe_continuation_queue_zero": false,
-      "no_open_internal_items": false,
+      "safe_continuation_queue_zero": true,
+      "no_open_internal_items": true,
       "git_working_tree_clean": false,
       "full_ci_success_on_head": false,
       "pg_regression_recorded": true,
@@ -5030,9 +5028,7 @@
   "independent_final_audit_required": true,
   "final_acceptance_protocol": "ACTIVE（docs/releases/FINAL-ACCEPTANCE-PROTOCOL.md；三层验收 + 4 状态重算 + 独立审计）",
   "autonomous_internal_work": "RUNNING",
-  "arch_review_pending": [
-    "BG-012-customs-g4-http-trigger-wiring"
-  ],
+  "arch_review_pending": [],
   "arch_review_request": {
     "head": "1bf8d7b",
     "doc": "docs/releases/ARCH-REVIEW-REQUEST-BG012.md",
@@ -5042,9 +5038,6 @@
     "verdict": null
   },
   "bg012": {
-    "status": "IN_PROGRESS（③ 幂等已改为 immutable identity；handler 角色矩阵已实现；路由接线/PG E2E/API.md 待做）",
-    "action": "customs.recovery.chain.run",
-    "risk": "INTERNAL_WRITE",
-    "roles": "OWNER/ADMIN/OPS allow；FINANCE/VIEWER deny"
+    "status": "DONE（MSG-20261003-134：端点+customs.recovery.chain.run/INTERNAL_WRITE+角色矩阵+immutable execution identity+路由级 E2E 4/4+API.md 90/77）"
   }
 }
