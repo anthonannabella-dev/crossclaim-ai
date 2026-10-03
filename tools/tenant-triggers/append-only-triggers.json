@@ -180,6 +180,12 @@
       "table": "CustomsRecoveryEstimateRecord",
       "tgtype": 27,
       "semantics": "BEFORE UPDATE OR DELETE → 拒绝（G4/Q2：计算投影 append-only；重算必须新增投影行，latest 由 computedAt 推导）"
+    },
+    {
+      "name": "cc_append_only__CustomsReturnFactRecord",
+      "table": "CustomsReturnFactRecord",
+      "tgtype": 27,
+      "semantics": "BEFORE UPDATE OR DELETE → 拒绝（P0-1：Return/Export/Destruction 事实 append-only；修正必须新增事实）"
     }
   ],
   "unexpectedPrefixes": [

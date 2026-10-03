@@ -359,6 +359,10 @@
     {
       "name": "cc_tenant_customsrecoveryestimaterecord",
       "table": "CustomsRecoveryEstimateRecord"
+    },
+    {
+      "name": "cc_tenant_customsreturnfactrecord",
+      "table": "CustomsReturnFactRecord"
     }
   ],
   "scopedTriggers": [

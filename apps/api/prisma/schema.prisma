@@ -365,6 +365,7 @@ model Organization {
   customsSubmissionAttempts          CustomsSubmissionAttempt[]
   customsEntryFacts                  CustomsEntryFactRecord[]
   customsEntryDutyLines              CustomsEntryDutyLineRecord[]
+  customsReturnFacts                 CustomsReturnFactRecord[]
   customsDutyTruthRecordList CustomsDutyTruthRecord[]
   customsDiscrepancyRecordList CustomsDiscrepancyRecord[]
   customsEligibilityRecordList CustomsEligibilityRecord[]
@@ -2647,4 +2648,35 @@ model CustomsRecoveryEstimateRecord {
   inputFact    CustomsEntryFactRecord @relation(fields: [inputFactId], references: [id], onDelete: Cascade)
 
   @@index([organizationId, inputFactId, computedAt])
+}
+
+// ============================================================
+// P0-1（MASTER GAP CLOSURE · BUSINESS SURVIVAL GATE）：Return / Export / Destruction 事实
+//   · append-only evidence snapshot（重复 ingest 由 contentDigest 幂等收敛）
+//   · 金额/数量 = Decimal(38,6) + 独立 currency；跨租户 / 跨账户 lineage 由 DB 触发器拒绝
+//   · 无 credential / raw payload / PII（仅 safe reference / digest）
+// ============================================================
+model CustomsReturnFactRecord {
+  id                  String   @id
+  organizationId      String
+  platformAccountId   String
+  entryNumber         String
+  htsCode             String
+  sku                 String?
+  kind                String
+  quantity            Decimal  @db.Decimal(38, 6)
+  currency            String
+  jurisdiction        String
+  importerOfRecordRef String
+  source              String
+  rawReference        String
+  observedAt          DateTime
+  contentDigest       String
+  createdAt           DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, contentDigest])
+  @@index([organizationId, entryNumber])
+  @@index([organizationId, platformAccountId, htsCode])
 }

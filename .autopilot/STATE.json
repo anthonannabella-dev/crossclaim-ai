@@ -51,9 +51,9 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-03T12:45:18.754Z",
   "state": "IMPLEMENT",
-  "last_action": "G11 第二单元：新增 customs-claim-ready-http（只读读模型 + claim-ready 视图；RBAC OWNER/ADMIN/OPS/FINANCE；404 不泄漏存在性；响应显式 filingSubmitted=false/transportEnabled=false/estimateOnly）与单测 4/4",
+  "last_action": "P0-1：Import ↔ Return/Export/Destruction 匹配（契约 + 确定性匹配 + fail-closed，单测 10/10）+ Return/Export/Destruction 事实 append-only 持久化（schema/migration/触发器/store，真实 PG 5/5）",
   "last_action_at": "2026-10-03T12:03:56.528Z",
-  "next_action": "G11 第三单元：把两个 GET 端点接入 workflow/http-routes + server.ts deps 转发 + API.md 契约计数同步 + web 只读页接线",
+  "next_action": "P0-1 续：把匹配结果接入 claim-ready evidence package（eligible quantity / duty basis）+ HTTP/前端；随后 P0-2 Customer Qualification / Recovery Economics Gate",
   "current_head": "749040c",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
@@ -4813,5 +4813,13 @@
   },
   "g4_q2_ci": "success（37117140552 / 4ed8714：API migration+append-only 清单、deploy smoke、web、license、backup-restore 全绿）",
   "g4_q2_ci2": "success（37119595670 / 749040c：API migration+触发器清单、deploy smoke、web、license、backup-restore 全绿）",
-  "g4_status": "PASS / CLOSED（MSG-20261003-128）"
+  "g4_status": "PASS / CLOSED（MSG-20261003-128）",
+  "p0_1": {
+    "status": "IN_PROGRESS（匹配契约 + 持久化完成；与 claim-ready 装配 / HTTP 待接）",
+    "module": "apps/api/src/services/customs/customs-return-matching.ts",
+    "store": "apps/api/src/services/customs/customs-return-fact-store.ts",
+    "migration": "20261003160000_customs_return_fact",
+    "tests": "customs-return-matching 10/10（unit）+ customs-return-fact-store-db 5/5（PG）",
+    "boundary": "AMBIGUOUS/NO_MATCH 不产生可追回数量；PARTIAL 不放大；跨租户/跨账户拒绝；无 PII/凭据；不 filing/transport"
+  }
 }
