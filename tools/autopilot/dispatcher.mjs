@@ -46,24 +46,29 @@ const candidates = backlogFile.items
   .filter((item) => !done.has(item.id))
   .sort((left, right) => priorityRank(left.priority) - priorityRank(right.priority));
 
-const safe = candidates.filter((item) => item.HOST_ACTION_REQUIRED !== true);
 const hostOnly = candidates.filter((item) => item.HOST_ACTION_REQUIRED === true);
+// 架构方审计要求优先于自治执行：Schema / 领域 / 安全 / 合规项不得由 Codex 自行落地。
+const archOnly = candidates.filter((item) => item.HOST_ACTION_REQUIRED !== true && item.ARCH_REVIEW_REQUIRED === true);
+const safe = candidates.filter((item) => item.HOST_ACTION_REQUIRED !== true && item.ARCH_REVIEW_REQUIRED !== true);
 
 if (peek) {
-  console.log(JSON.stringify({ ok: true, next: safe[0]?.id ?? null, hostPending: hostOnly.map((item) => item.id) }));
+  console.log(JSON.stringify({ ok: true, next: safe[0]?.id ?? null, hostPending: hostOnly.map((item) => item.id), archPending: archOnly.map((item) => item.id) }));
   process.exit(0);
 }
 
 if (safe.length === 0) {
-  const registered = [...new Set([...(state.host_action_required ?? []), ...hostOnly.map((item) => item.id)])];
-  state.host_action_required = registered;
+  state.host_action_required = [...new Set([...(state.host_action_required ?? []), ...hostOnly.map((item) => item.id)])];
+  state.arch_review_pending = [...new Set([...(state.arch_review_pending ?? []), ...archOnly.map((item) => item.id)])];
   writeJson(STATE, state);
+  const reason = hostOnly.length > 0 ? 'HOST_ACTION_REQUIRED_ONLY' : archOnly.length > 0 ? 'ARCH_REVIEW_REQUIRED_ONLY' : 'BACKLOG_EMPTY';
   if (hostOnly.length > 0) {
     console.log('DISPATCHER_HOST_ACTION_REQUIRED_PENDING=' + hostOnly.map((item) => item.id).join(','));
+  } else if (archOnly.length > 0) {
+    console.log('DISPATCHER_ARCH_REVIEW_REQUIRED_PENDING=' + archOnly.map((item) => item.id).join(','));
   } else {
     console.log('DISPATCHER_BACKLOG_EMPTY');
   }
-  console.log(JSON.stringify({ ok: false, reason: hostOnly.length > 0 ? 'HOST_ACTION_REQUIRED_ONLY' : 'BACKLOG_EMPTY', hostPending: hostOnly.map((item) => item.id) }));
+  console.log(JSON.stringify({ ok: false, reason, hostPending: hostOnly.map((item) => item.id), archPending: archOnly.map((item) => item.id) }));
   process.exit(0);
 }
 

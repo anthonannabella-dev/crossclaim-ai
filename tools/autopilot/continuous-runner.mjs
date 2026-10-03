@@ -126,7 +126,13 @@ async function main() {
         }
         if (!parsed.ok) {
           console.log('GLOBAL_STOP reason=' + String(parsed.reason ?? 'NO_SAFE_TASK') + ' hostPending=' + JSON.stringify(parsed.hostPending ?? []));
-          console.log('STOP_CONDITION=' + (parsed.reason === 'HOST_ACTION_REQUIRED_ONLY' ? 'HOST_ACTION_REQUIRED' : 'SAFE_CONTINUATION_QUEUE_EMPTY'));
+          const stopCondition =
+          parsed.reason === 'HOST_ACTION_REQUIRED_ONLY'
+            ? 'HOST_ACTION_REQUIRED'
+            : parsed.reason === 'ARCH_REVIEW_REQUIRED_ONLY'
+              ? 'ARCH_REVIEW_REQUIRED'
+              : 'SAFE_CONTINUATION_QUEUE_EMPTY';
+        console.log('STOP_CONDITION=' + stopCondition);
           break;
         }
         unit = { id: parsed.id, title: parsed.metadata?.title ?? parsed.id, path: parsed.unitPath };

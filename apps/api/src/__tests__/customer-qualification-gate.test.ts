@@ -8,6 +8,12 @@ import {
   computeCostRatio,
   evaluateCustomerQualification,
 } from '../services/commercial/customer-qualification-gate';
+import {
+  IOR_QUALIFICATION_BOUNDARY,
+  evaluateEnterpriseIorReadiness,
+  toQualificationIorSummary,
+} from '../services/customs/enterprise-ior/ior-qualification-readiness';
+import { IOR_IDENTITY_BOUNDARY, normalizeIorIdentity } from '../services/customs/enterprise-ior/ior-identity';
 
 const POLICY = {
   policyId: 'recovery-economics-2026',
@@ -148,5 +154,198 @@ describe('P0-2 — customer qualification / recovery economics gate', () => {
     expect(CUSTOMS_QUALIFICATION_BOUNDARY.filingAuthorized).toBe(false);
     expect(CUSTOMS_QUALIFICATION_BOUNDARY.transportEnabled).toBe(false);
     expect(CUSTOMS_QUALIFICATION_BOUNDARY.productionCredentials).toBe('ABSENT');
+  });
+});
+
+// ---- BG-014：ENTERPRISE IOR readiness 接入既有 Qualification Gate（复用，不建第二套引擎）----
+
+const IOR_NOW = '2026-10-03T12:45:00.000Z';
+
+const iorIdentity = (overrides: Record<string, unknown> = {}) =>
+  normalizeIorIdentity({
+    organizationId: 'org-1',
+    jurisdiction: 'US',
+    principalType: 'IMPORTER_OF_RECORD',
+    importerOfRecordRef: 'ior_acct_1',
+    legalEntityRef: 'legal_entity_1',
+    aceAccountRef: 'ace:acct:1',
+    verificationStatus: 'VERIFIED',
+    verificationSource: 'ACE_LOOKUP',
+    verifiedAt: '2026-09-01T00:00:00.000Z',
+    effectiveFrom: '2026-01-01T00:00:00.000Z',
+    effectiveTo: null,
+    ...overrides,
+  } as never);
+
+const IOR_DEADLINE_POLICY = [
+  {
+    policyId: 'customs-remedy-deadline-2026',
+    policyVersion: '1.0.0',
+    jurisdiction: 'US',
+    remedy: 'DRAWBACK' as const,
+    anchorField: 'exportDate' as const,
+    daysFromAnchor: 1825,
+  },
+];
+
+const iorReadinessInput = (overrides: Record<string, unknown> = {}) => ({
+  identity: iorIdentity(),
+  rightLineage: {
+    organizationId: 'org-1',
+    entryReference: 'entry:1',
+    importerOfRecordRef: 'ior_acct_1',
+    claimantRef: 'claimant:1',
+    remedyRoute: 'DRAWBACK',
+    iorVerified: true,
+    iorRightsForRemedy: 'CONFIRMED' as const,
+    claimantRightsForRemedy: 'CONFIRMED' as const,
+    filingAuthorized: true,
+    evidence: ['ENTRY_RECORD', 'IOR_VERIFICATION', 'CLAIMANT_ATTESTATION', 'RECOVERY_RIGHT_DOCUMENT', 'FILING_AUTHORIZATION'].map(
+      (kind) => ({ kind, reference: 'ref-1', digest: null }),
+    ),
+  },
+  brokerAuthorization: {
+    organizationId: 'org-1',
+    principalRef: 'ior_acct_1',
+    brokerRef: 'broker:1',
+    jurisdiction: 'US',
+    authorizationType: 'CBP_FORM_5291',
+    scope: ['DRAWBACK'],
+    effectiveAt: '2026-01-01T00:00:00.000Z',
+    expiresAt: null,
+    evidenceArtifactRef: 'poa:1',
+    verificationStatus: 'VERIFIED',
+    verificationSource: 'MANUAL_REVIEW',
+  },
+  remedyDeadline: {
+    jurisdiction: 'US',
+    remedy: 'DRAWBACK',
+    entryDate: '2025-01-01',
+    liquidationDate: '2025-03-01',
+    exportDate: '2026-01-01',
+    destructionDate: null,
+    exclusionEffectiveDate: null,
+  },
+  deadlinePolicies: IOR_DEADLINE_POLICY,
+  refundDestination: {
+    organizationId: 'org-1',
+    claimantRef: 'claimant:1',
+    payeeIdentityConfirmed: true,
+    aceRefundEnrollmentStatus: 'READY' as const,
+    refundDestinationVerified: true,
+    thirdPartyDesignationPresent: false,
+    verifiedAt: '2026-09-01T00:00:00.000Z',
+    bankAccountReference: null,
+  },
+  now: IOR_NOW,
+  ...overrides,
+});
+
+describe('BG-014 — Enterprise IOR readiness 接入既有 Qualification Gate', () => {
+  it('IOR 全就绪 → 与既有经济学路径一致（QUALIFIED），并标记已评估', () => {
+    const readiness = evaluateEnterpriseIorReadiness(iorReadinessInput() as never);
+    expect(readiness.ready).toBe(true);
+    expect(readiness.reasonCodes).toEqual(['OK']);
+    expect(readiness.terminal).toBe(false);
+    expect(readiness.callsExpensiveProvider).toBe(false);
+    expect(readiness.autoFilingAllowed).toBe(false);
+
+    const decision = evaluate({ iorReadiness: toQualificationIorSummary(readiness) });
+    expect(decision.qualificationStatus).toBe('QUALIFIED');
+    expect(decision.iorReadinessEvaluated).toBe(true);
+    expect(decision.iorReady).toBe(true);
+    expect(decision.iorReasonCodes).toEqual(['OK']);
+    expect(decision.expensiveAdapterCallAllowed).toBe(true);
+  });
+
+  it('未提供 IOR readiness → 既有行为完全不变（向后兼容）', () => {
+    const decision = evaluate();
+    expect(decision.qualificationStatus).toBe('QUALIFIED');
+    expect(decision.iorReadinessEvaluated).toBe(false);
+    expect(decision.iorReady).toBe(false);
+    expect(decision.iorReasonCodes).toEqual([]);
+  });
+
+  it('权利链不清 / POA 缺失 / refund destination 未就绪 → INDETERMINATE + IOR_NOT_READY（不触发昂贵调用）', () => {
+    const base = iorReadinessInput();
+    const unclear = evaluateEnterpriseIorReadiness(
+      iorReadinessInput({
+        rightLineage: { ...(base.rightLineage as object), iorRightsForRemedy: 'UNCLEAR' },
+      }) as never,
+    );
+    expect(unclear.ready).toBe(false);
+    expect(unclear.reasonCodes).toContain('RIGHT_LINEAGE_NEEDS_MANUAL');
+
+    const decision = evaluate({ iorReadiness: toQualificationIorSummary(unclear) });
+    expect(decision.qualificationStatus).toBe('INDETERMINATE');
+    expect(decision.reasonCodes).toContain('IOR_NOT_READY');
+    expect(decision.expensiveAdapterCallAllowed).toBe(false);
+    expect(decision.advisoryOnly).toBe(true);
+    expect(decision.filingAuthorized).toBe(false);
+
+    const noPoa = evaluateEnterpriseIorReadiness(iorReadinessInput({ brokerAuthorization: null }) as never);
+    expect(noPoa.reasonCodes).toContain('BROKER_AUTHORIZATION_MISSING');
+    expect(evaluate({ iorReadiness: toQualificationIorSummary(noPoa) }).qualificationStatus).toBe('INDETERMINATE');
+
+    const noRefund = evaluateEnterpriseIorReadiness(iorReadinessInput({ refundDestination: null }) as never);
+    expect(noRefund.reasonCodes).toContain('REFUND_DESTINATION_NOT_READY');
+    expect(noRefund.ready).toBe(false);
+  });
+
+  it('remedy deadline 已过期 → 终局 NOT_QUALIFIED（IOR_DEADLINE_EXPIRED）', () => {
+    const expired = evaluateEnterpriseIorReadiness(
+      iorReadinessInput({
+        remedyDeadline: {
+          jurisdiction: 'US',
+          remedy: 'DRAWBACK',
+          entryDate: '2019-01-01',
+          liquidationDate: '2019-03-01',
+          exportDate: '2019-01-01',
+          destructionDate: null,
+          exclusionEffectiveDate: null,
+        },
+      }) as never,
+    );
+    expect(expired.remedyDeadlineStatus).toBe('EXPIRED');
+    expect(expired.terminal).toBe(true);
+    expect(expired.ready).toBe(false);
+
+    const decision = evaluate({ iorReadiness: toQualificationIorSummary(expired) });
+    expect(decision.qualificationStatus).toBe('NOT_QUALIFIED');
+    expect(decision.reasonCodes).toContain('IOR_DEADLINE_EXPIRED');
+    expect(decision.advisoryOnly).toBe(true);
+    expect(decision.expensiveAdapterCallAllowed).toBe(false);
+  });
+
+  it('remedy deadline 缺 policy / 缺 anchor → INDETERMINATE（非终局），不调用昂贵 provider', () => {
+    const indeterminate = evaluateEnterpriseIorReadiness(
+      iorReadinessInput({
+        remedyDeadline: {
+          jurisdiction: 'US',
+          remedy: 'PROTEST',
+          entryDate: '2025-01-01',
+          liquidationDate: null,
+          exportDate: null,
+          destructionDate: null,
+          exclusionEffectiveDate: null,
+        },
+      }) as never,
+    );
+    expect(indeterminate.remedyDeadlineStatus).toBe('INDETERMINATE');
+    expect(indeterminate.terminal).toBe(false);
+    expect(indeterminate.reasonCodes).toContain('REMEDY_DEADLINE_INDETERMINATE');
+
+    const decision = evaluate({ iorReadiness: toQualificationIorSummary(indeterminate) });
+    expect(decision.qualificationStatus).toBe('INDETERMINATE');
+    expect(decision.reasonCodes).toContain('IOR_NOT_READY');
+  });
+
+  it('边界常量：IOR readiness 参与 gate，但不改变「判定 ≠ filing 授权」', () => {
+    expect(CUSTOMS_QUALIFICATION_BOUNDARY.iorReadinessGatesQualification).toBe(true);
+    expect(IOR_QUALIFICATION_BOUNDARY.reusesExistingQualificationGate).toBe(true);
+    expect(IOR_QUALIFICATION_BOUNDARY.secondQualificationEngine).toBe(false);
+    expect(IOR_QUALIFICATION_BOUNDARY.autoFilingAllowed).toBe(false);
+    expect(IOR_QUALIFICATION_BOUNDARY.productionCredentials).toBe('ABSENT');
+    expect(IOR_IDENTITY_BOUNDARY.clientReportedTruthAccepted).toBe(false);
   });
 });

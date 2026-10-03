@@ -1636,3 +1636,11 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 
 ## 2026-10-03T15:45:08.544Z — ENTERPRISE IOR RECOVERY LAYER 第一增量
 - 契约层六模块落地 + 8/8 测试；登记表新增 F 段（I1–I5）；backlog 新增 BG-013/BG-014。
+
+## 2026-10-03T15:49:58.036Z — BACKLOG BG-014-ior-qualification-wiring
+- Enterprise IOR readiness 输入接入现有 Qualification / Economics Gate（复用，不建第二套）
+-  Test Files  1 passed (1) |       Tests  17 passed (17)
+
+## 2026-10-03T15:50:03.344Z — BACKLOG BG-015-ior-full-chain-assembly
+- Enterprise IOR 全链装配（Entry→IOR→claimant/right→remedy+deadline→qualification→evidence→estimate→claim-ready→broker authorization→filing provider→refund destination），fail-closed 零外写
+-  Test Files  1 passed (1) |       Tests  16 passed (16)

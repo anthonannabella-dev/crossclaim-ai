@@ -26,6 +26,8 @@ export const CUSTOMS_QUALIFICATION_REASONS = [
   'AMBIGUOUS_LINEAGE',
   'UNKNOWN_CURRENCY_POLICY',
   'NO_RECOVERY_ESTIMATE',
+  'IOR_NOT_READY',
+  'IOR_DEADLINE_EXPIRED',
 ] as const;
 export type CustomsQualificationReason = (typeof CUSTOMS_QUALIFICATION_REASONS)[number];
 
@@ -75,6 +77,17 @@ export interface RecoveryEconomicsPolicy {
   minimumDataCompleteness: string;
 }
 
+/**
+ * ENTERPRISE IOR 层的聚集就绪输入（指令 ⑥）。由 `enterprise-ior/ior-qualification-readiness` 产出；
+ * 未提供时 Gate 完全沿用既有经济学路径（向后兼容）。
+ */
+export interface EnterpriseIorReadinessSummary {
+  ready: boolean;
+  /** 终局缺口（例如 remedy deadline 已过）→ NOT_QUALIFIED；否则 INDETERMINATE。 */
+  terminal: boolean;
+  reasonCodes: readonly string[];
+}
+
 export interface CustomerQualificationDecision {
   organizationId: string;
   platformAccountId: string;
@@ -97,6 +110,10 @@ export interface CustomerQualificationDecision {
   readonly transportEnabled: false;
   readonly appliedCosts: false;
   readonly productionCredentials: 'ABSENT';
+  /** ENTERPRISE IOR 层（指令 ⑥）：是否提供了 IOR readiness 平面。 */
+  readonly iorReadinessEvaluated: boolean;
+  readonly iorReady: boolean;
+  readonly iorReasonCodes: readonly string[];
 }
 
 const DECIMAL_PATTERN = /^-?\d{1,15}(\.\d{1,6})?$/;
@@ -153,6 +170,7 @@ export function evaluateCustomerQualification(input: {
   estimatedBrokerCost: string;
   policy: RecoveryEconomicsPolicy;
   computedAt: string;
+  iorReadiness?: EnterpriseIorReadinessSummary;
 }): CustomerQualificationDecision {
   const { readiness, policy } = input;
   if (!readiness || typeof readiness.organizationId !== 'string' || typeof readiness.platformAccountId !== 'string') {
@@ -177,8 +195,19 @@ export function evaluateCustomerQualification(input: {
     compareScaled(readiness.dataCompletenessScore, policy.minimumDataCompleteness) < 0;
   const ambiguous = readiness.lineageCompleteness !== 'COMPLETE';
 
+  const ior = input.iorReadiness ?? null;
+  const iorBlocking = ior !== null && ior.ready !== true;
+
   let status: CustomsQualificationStatus;
-  if (incomplete) {
+  if (iorBlocking && ior !== null) {
+    if (ior.terminal) {
+      status = 'NOT_QUALIFIED';
+      reasons.push('IOR_DEADLINE_EXPIRED');
+    } else {
+      status = 'INDETERMINATE';
+      reasons.push('IOR_NOT_READY');
+    }
+  } else if (incomplete) {
     status = 'INDETERMINATE';
     reasons.push('INCOMPLETE_DATA');
   } else if (ambiguous) {
@@ -225,11 +254,15 @@ export function evaluateCustomerQualification(input: {
     transportEnabled: false,
     appliedCosts: false,
     productionCredentials: 'ABSENT',
+    iorReadinessEvaluated: ior !== null,
+    iorReady: ior !== null && ior.ready === true,
+    iorReasonCodes: ior === null ? [] : ior.reasonCodes,
   };
 }
 
 export const CUSTOMS_QUALIFICATION_BOUNDARY = {
   gatesExpensiveAdapters: true,
+  iorReadinessGatesQualification: true,
   autoExternalCallWhenNotQualified: false,
   conditionalRequiresHumanConfirmation: true,
   indeterminateTriggersExternalCall: false,
