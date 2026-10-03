@@ -1608,3 +1608,6 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 ## 2026-10-03T14:51:38.664Z — BACKLOG BG-008-platform-write-amazon-evidence
 - Platform write 账本与 Amazon 只读 adapter 证据核对
 -  Test Files  10 passed (10) |       Tests  97 passed (97)
+
+## 2026-10-03T14:55:54.165Z — PS04/NEXT-GAP 决策请求留档
+- Issue #2 comment 5970317248；待发唤醒。
