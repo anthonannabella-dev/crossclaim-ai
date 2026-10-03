@@ -64,7 +64,7 @@ interface RecoveryMoney {
 
 async function apiGet<T>(path: string): Promise<{ ok: boolean; status: number; body: T | null }> {
   const token = (await cookies()).get('cc_session')?.value ?? '';
-  const res = await fetch(API_BASE + '/api' + path, {
+  const res = await fetch(API_BASE + '/api/' + path.replace(/^\//, ''), {
     headers: token ? { cookie: 'cc_session=' + token } : {},
     cache: 'no-store',
   });

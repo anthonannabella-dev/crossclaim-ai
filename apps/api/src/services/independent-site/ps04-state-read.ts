@@ -54,6 +54,8 @@ export interface Ps04StateReadDeps {
   loadHandoff(organizationId: string, disputeReference: string): Promise<Ps04HandoffRow | null>;
   loadLatestResponse(organizationId: string, disputeReference: string): Promise<Ps04ResponseRow | null>;
   loadLatestSettlement(organizationId: string, disputeReference: string): Promise<Ps04SettlementRow | null>;
+  /** CHANGE B：Phase 1 结果（qualification / evidence / claim-ready）的持久化只读投影。 */
+  loadLatestPhase1Projection?(organizationId: string, disputeReference: string): Promise<Record<string, unknown> | null>;
 }
 
 export interface Ps04StateReadSession {
@@ -94,7 +96,34 @@ export async function getIndependentSiteRecoveryState(input: {
   }
   const response = await deps.loadLatestResponse(session.organizationId, disputeReference);
   const settlement = await deps.loadLatestSettlement(session.organizationId, disputeReference);
+  const phase1Raw = deps.loadLatestPhase1Projection ? await deps.loadLatestPhase1Projection(session.organizationId, disputeReference) : null;
   const feePolicy = input.feePolicy ?? DEFAULT_FEE_POLICY;
+
+  const phase1 =
+    phase1Raw === null
+      ? null
+      : {
+          qualification: {
+            status: phase1Raw.qualificationStatus ?? null,
+            reasonCodes: Array.isArray(phase1Raw.qualificationReasonCodes) ? phase1Raw.qualificationReasonCodes : [],
+          },
+          evidence: {
+            readinessStatus: phase1Raw.evidenceReadinessStatus ?? null,
+            summary: phase1Raw.evidenceSummary ?? null,
+          },
+          claimReady: {
+            status: phase1Raw.claimReadyStatus ?? null,
+            packageId: phase1Raw.packageId ?? null,
+            packageDigest: phase1Raw.packageDigest ?? null,
+          },
+          policyId: phase1Raw.policyId ?? null,
+          policyVersion: phase1Raw.policyVersion ?? null,
+          algorithmVersion: phase1Raw.algorithmVersion ?? null,
+          resultDigest: phase1Raw.resultDigest ?? null,
+          computedAt: phase1Raw.computedAt instanceof Date ? phase1Raw.computedAt.toISOString() : (phase1Raw.computedAt ?? null),
+          externalWritePerformed: phase1Raw.externalWritePerformed ?? false,
+          autoSubmitAllowed: phase1Raw.autoSubmitAllowed ?? false,
+        };
 
   const submitted = true;
   const won = response !== null && (response.disposition === 'WON' || response.disposition === 'PARTIAL');
@@ -134,8 +163,9 @@ export async function getIndependentSiteRecoveryState(input: {
             },
       amounts: { recoveredAmount, feeAmount, currency: settlement?.currency ?? response?.currency ?? null },
       invoiceDraft: billable ? { amount: feeAmount, currency: settlement?.currency ?? null, basis: 'VERIFIED_ACTUAL_INCREMENTAL_RECOVERY' } : null,
-      // 明确未持久化的上游环节，避免 UI 误以为已具备。
-      notPersisted: ['QUALIFICATION', 'EVIDENCE_PACKAGE', 'CLAIM_READY_PACKAGE'],
+      // CHANGE B：Phase 1 结果已持久化时原样读出；仅列出确实缺失的环节（不再无条件标 notPersisted）。
+      phase1,
+      notPersisted: phase1 === null ? ['QUALIFICATION', 'EVIDENCE_PACKAGE', 'CLAIM_READY_PACKAGE'] : [],
       boundary: {
         readOnly: true,
         recomputedOnRead: false,

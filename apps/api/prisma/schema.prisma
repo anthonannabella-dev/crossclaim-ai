@@ -376,6 +376,7 @@ model Organization {
   independentSiteHandoffFacts         IndependentSiteHandoffFact[]
   independentSiteResponseFacts        IndependentSiteResponseFact[]
   independentSiteSettlementFacts      IndependentSiteSettlementFact[]
+  independentSitePhase1Projections    IndependentSitePhase1Projection[]
   customsDutyTruthRecordList CustomsDutyTruthRecord[]
   customsDiscrepancyRecordList CustomsDiscrepancyRecord[]
   customsEligibilityRecordList CustomsEligibilityRecord[]
@@ -2955,4 +2956,37 @@ model IndependentSiteSettlementFact {
 
   @@unique([organizationId, contentDigest])
   @@index([organizationId, disputeReference, receivedAt])
+}
+
+// ============================================================
+// CHANGE B（MSG-20261003-141）— Independent-site Phase 1 结果的**持久化只读投影**。
+//   · 把 Phase 1 的 qualification / evidence readiness / claim-ready 结果落成 append-only 事实，
+//     使 `/independent-site-disputes/:ref/state` 能真实读出这些节点（不再是 notPersisted）。
+//   · 只记录**只读投影**：不得表示外部执行（externalWritePerformed / autoSubmitAllowed 必须为 false，DB CHECK 强制）。
+//   · latest 由 computedAt DESC, id DESC 推导；禁止 mutable isLatest。
+// ============================================================
+model IndependentSitePhase1Projection {
+  id                        String   @id
+  organizationId            String
+  disputeReference          String
+  policyId                  String
+  policyVersion             String
+  algorithmVersion          String
+  qualificationStatus       String
+  qualificationReasonCodes  Json
+  evidenceReadinessStatus   String
+  evidenceSummary           Json
+  claimReadyStatus          String
+  packageId                 String?
+  packageDigest             String?
+  externalWritePerformed    Boolean  @default(false)
+  autoSubmitAllowed         Boolean  @default(false)
+  resultDigest              String
+  computedAt                DateTime
+  createdAt                 DateTime @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, disputeReference, resultDigest])
+  @@index([organizationId, disputeReference, computedAt])
 }

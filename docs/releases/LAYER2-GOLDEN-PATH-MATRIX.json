@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-03T16:57:14.841Z",
+  "generated_at": "2026-10-03T17:01:33.370Z",
   "rule": "COVERED 需存在命名证据文件；否则 GAP",
   "domains": [
     {
@@ -35,10 +35,8 @@
         "frontend": {
           "status": "COVERED",
           "evidence": [
-            "apps/web/app/cases/[id]/claim-package/claim-package-view.tsx",
-            "apps/web/app/components/opportunity-actions.tsx",
-            "apps/web/app/opportunities/opportunity-list.tsx",
-            "apps/web/app/page.tsx"
+            "apps/web/app/integration-status/page.tsx",
+            "apps/web/app/platform-recovery-state/page.tsx"
           ]
         },
         "happy": {
@@ -149,7 +147,8 @@
         "frontend": {
           "status": "COVERED",
           "evidence": [
-            "apps/web/app/integration-status/manual-response-form.tsx"
+            "apps/web/app/integration-status/manual-response-form.tsx",
+            "apps/web/app/integration-status/page.tsx"
           ]
         },
         "happy": {
@@ -258,6 +257,7 @@
         "frontend": {
           "status": "COVERED",
           "evidence": [
+            "apps/web/app/integration-status/page.tsx",
             "apps/web/app/integration-status/start-recovery-form.tsx"
           ]
         },
@@ -338,7 +338,7 @@
     {
       "id": "independent_site",
       "name": "Independent-site / Chargeback",
-      "domain_test_files": 4,
+      "domain_test_files": 5,
       "domain_web_files": 2,
       "cells": {
         "http": {
@@ -352,20 +352,22 @@
           "status": "COVERED",
           "evidence": [
             "apps/api/src/__tests__/independent-site-facts-db.test.ts",
-            "apps/api/src/__tests__/independent-site-internal-closure.test.ts"
+            "apps/api/src/__tests__/independent-site-internal-closure.test.ts",
+            "apps/api/src/__tests__/ps04-phase1-projection.test.ts"
           ]
         },
         "db_invariant": {
           "status": "COVERED",
           "evidence": [
             "apps/api/src/__tests__/independent-site-facts-db.test.ts",
-            "apps/api/src/__tests__/independent-site-internal-closure.test.ts"
+            "apps/api/src/__tests__/independent-site-internal-closure.test.ts",
+            "apps/api/src/__tests__/ps04-phase1-projection.test.ts"
           ]
         },
         "frontend": {
           "status": "COVERED",
           "evidence": [
-            "apps/web/app/money/recovery-money-view.tsx"
+            "apps/web/app/integration-status/page.tsx"
           ]
         },
         "happy": {
@@ -390,7 +392,8 @@
           "status": "COVERED",
           "evidence": [
             "apps/api/src/__tests__/independent-site-facts-db.test.ts",
-            "apps/api/src/__tests__/independent-site-internal-closure.test.ts"
+            "apps/api/src/__tests__/independent-site-internal-closure.test.ts",
+            "apps/api/src/__tests__/ps04-phase1-projection.test.ts"
           ]
         },
         "concurrency": {
@@ -419,7 +422,8 @@
           "status": "COVERED",
           "evidence": [
             "apps/api/src/__tests__/independent-site-internal-closure.test.ts",
-            "apps/api/src/__tests__/independent-site-state-read.test.ts"
+            "apps/api/src/__tests__/independent-site-state-read.test.ts",
+            "apps/api/src/__tests__/ps04-phase1-projection.test.ts"
           ]
         },
         "amount_ledger": {

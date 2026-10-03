@@ -24,10 +24,10 @@ const OUT_MD = path.join(ROOT, 'docs', 'releases', 'LAYER2-GOLDEN-PATH-MATRIX.md
 const BACKLOG = path.join(ROOT, 'tools', 'autopilot', 'backlog.json');
 
 const DOMAINS = [
-  { id: 'platform', name: 'Platform Recovery', keywords: ['platform', 'amazon'], webTokens: ['/api/cases/', 'platform/write', '/api/opportunities'] },
+  { id: 'platform', name: 'Platform Recovery', keywords: ['platform', 'amazon'], webTokens: ['claim-package', '/recovery-money'], frontendRequiredTokens: ['qualification'] },
   { id: 'logistics_carrier', name: 'Logistics / Carrier Recovery', keywords: ['carrier'], webTokens: ['carrier-claim-packages', 'carrier'] },
   { id: 'customs', name: 'Customs / Trade Recovery', keywords: ['customs'], webTokens: ['customs-opportunities', 'customs-entry-facts'] },
-  { id: 'independent_site', name: 'Independent-site / Chargeback', keywords: ['independent-site', 'chargeback', 'ps04', 'dispute'], webTokens: ['independent', 'chargeback', 'dispute'] },
+  { id: 'independent_site', name: 'Independent-site / Chargeback', keywords: ['independent-site', 'chargeback', 'ps04', 'dispute'], webTokens: ['independent', 'chargeback', 'dispute'], frontendRequiredTokens: ['phase1'] },
 ];
 
 const AXES = [
@@ -83,8 +83,13 @@ for (const domain of DOMAINS) {
   const domainTests = apiIndex.filter((entry) => domain.keywords.some((keyword) => entry.file.toLowerCase().includes(keyword)));
   const domainWeb = webIndex.filter((entry) => domain.keywords.some((keyword) => entry.hay.includes(keyword)));
   // frontend 证据必须真正调用该域的后端路径（避免「文件里出现域名」就算接通）。
+  // CHANGE E 加严（MSG-20261003-141）：frontend cell 不仅要「存在调用」，还要**断言关键状态字段**存在，
+  // 否则会出现「文件存在 = 状态完整」的假阳性。
   const domainWebWired = webIndex.filter(
-    (entry) => entry.hay.includes('/api/') && domain.webTokens.some((token) => entry.hay.includes(token)),
+    (entry) =>
+      (entry.hay.includes('/api') || entry.hay.includes('apiget')) &&
+      domain.webTokens.some((token) => entry.hay.includes(token)) &&
+      (domain.frontendRequiredTokens ?? []).every((token) => entry.hay.includes(token)),
   );
   const cells = {};
   for (const axis of AXES) {

@@ -30,6 +30,17 @@ interface IndependentSiteState {
   settlement: { amount: string; currency: string; verification: string; reference: string; evidenceArtifactRef: string | null } | null;
   amounts: { recoveredAmount: string; feeAmount: string; currency: string | null };
   invoiceDraft: { amount: string; currency: string | null; basis: string } | null;
+  phase1: {
+    qualification: { status: string | null; reasonCodes: string[] };
+    evidence: { readinessStatus: string | null; summary: unknown };
+    claimReady: { status: string | null; packageId: string | null; packageDigest: string | null };
+    policyId: string | null;
+    policyVersion: string | null;
+    algorithmVersion: string | null;
+    computedAt: string | null;
+    externalWritePerformed: boolean;
+    autoSubmitAllowed: boolean;
+  } | null;
   notPersisted: string[];
   boundary: { readOnly: boolean; recomputedOnRead: boolean; externalWritePerformed: boolean; filingSubmitted: boolean; transportEnabled: boolean; paymentCollected: boolean };
 }
@@ -176,7 +187,27 @@ export default async function IntegrationStatusPage({
             <StatusRow label="recoveredAmount" value={ps04State.body.amounts.recoveredAmount} />
             <StatusRow label="feeAmount" value={ps04State.body.amounts.feeAmount} />
             <StatusRow label="invoiceDraft" value={ps04State.body.invoiceDraft === null ? '（无）' : JSON.stringify(ps04State.body.invoiceDraft)} />
-            <StatusRow label="notPersisted" value={ps04State.body.notPersisted.join(', ')} />
+            <h3 className="mt-3 text-sm font-medium text-slate-700">Phase 1 投影（CHANGE B 持久化）</h3>
+            {ps04State.body.phase1 === null ? (
+              <StatusRow label="phase1" value={'（未持久化：' + ps04State.body.notPersisted.join(', ') + '）'} />
+            ) : (
+              <div>
+                <StatusRow label="qualification.status" value={ps04State.body.phase1.qualification.status ?? '（无）'} />
+                <StatusRow label="qualification.reasonCodes" value={ps04State.body.phase1.qualification.reasonCodes.join(', ') || '（无）'} />
+                <StatusRow label="evidence.readinessStatus" value={ps04State.body.phase1.evidence.readinessStatus ?? '（无）'} />
+                <StatusRow label="claimReady.status" value={ps04State.body.phase1.claimReady.status ?? '（无）'} />
+                <StatusRow label="claimReady.packageId" value={ps04State.body.phase1.claimReady.packageId ?? '（无）'} />
+                <StatusRow
+                  label="policy"
+                  value={String(ps04State.body.phase1.policyId) + '@' + String(ps04State.body.phase1.policyVersion) + ' · ' + String(ps04State.body.phase1.algorithmVersion)}
+                />
+                <StatusRow label="phase1.computedAt" value={ps04State.body.phase1.computedAt ?? '（无）'} />
+                <StatusRow
+                  label="phase1.boundary"
+                  value={'externalWritePerformed=' + String(ps04State.body.phase1.externalWritePerformed) + ' autoSubmitAllowed=' + String(ps04State.body.phase1.autoSubmitAllowed)}
+                />
+              </div>
+            )}
             <p className="mt-2 text-xs text-slate-500">
               WON 不等于到账；UNVERIFIED 到账不计入 recovered；只有带 evidence 的 VERIFIED 到账才进入 recovered / 15% fee / 发票草稿。
             </p>
