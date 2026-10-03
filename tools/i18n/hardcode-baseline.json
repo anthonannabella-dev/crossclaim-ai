@@ -1,6 +1,6 @@
 {
   "note": "Customer UI 硬编码棘轮基线：只允许下降。迁移完成后必须同步下调此值。",
-  "customerHardcodedStrings": 118,
+  "customerHardcodedStrings": 89,
   "recordedAt": "2026-10-04",
   "scannedRoots": [
     "apps/web/app/page.tsx",
@@ -17,6 +17,11 @@
     "apps/web/app/components"
   ],
   "history": [
+    {
+      "at": "2026-10-04",
+      "value": 89,
+      "note": "P0-I18N-04：/money 页面与 recovery-money-view 迁入字典（-29），棘轮同步下调。"
+    },
     {
       "at": "2026-10-04",
       "value": 118,
