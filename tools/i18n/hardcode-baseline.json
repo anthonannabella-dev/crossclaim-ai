@@ -1,6 +1,6 @@
 {
   "note": "Customer UI 硬编码棘轮基线：只允许下降。迁移完成后必须同步下调此值。",
-  "customerHardcodedStrings": 36,
+  "customerHardcodedStrings": 0,
   "recordedAt": "2026-10-04",
   "scannedRoots": [
     "apps/web/app/page.tsx",
@@ -17,6 +17,11 @@
     "apps/web/app/components"
   ],
   "history": [
+    {
+      "at": "2026-10-04",
+      "value": 0,
+      "note": "P0-I18N-09：Claim Package 页面与 claim-package-view 迁入字典（-36），客户 UI 硬编码清零。"
+    },
     {
       "at": "2026-10-04",
       "value": 36,

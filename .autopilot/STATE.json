@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261003-148",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-03T23:34:15.778Z",
+  "updated_at": "2026-10-03T23:43:09.891Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -5008,9 +5008,9 @@
   "awaiting_verdict": false,
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-03T23:41:43.882Z",
-    "head": "20d719d",
-    "acceptance_head": "20d719d",
+    "computed_at": "2026-10-03T23:43:10.617Z",
+    "head": "7c3bcfd",
+    "acceptance_head": "7c3bcfd",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5076,48 +5076,48 @@
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=20d719d ci_head=f5bdd92 ci=in_progress run=37143524364"
+        "evidence": "acceptance_head=7c3bcfd ci_head=f5bdd92 ci=in_progress run=37143524364"
       },
       "L1-05_pg_regression_passed": {
         "status": "UNVERIFIED",
-        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head 20d719d（且中间存在非簿记变更）"
+        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head 7c3bcfd（且中间存在非簿记变更）"
       },
       "L1-06_fresh_db_migration_passed": {
         "status": "UNVERIFIED",
-        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head 20d719d（且中间存在非簿记变更）"
+        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head 7c3bcfd（且中间存在非簿记变更）"
       },
       "L1-07_api_typecheck_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head 20d719d（且中间存在非簿记变更）"
+        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head 7c3bcfd（且中间存在非簿记变更）"
       },
       "L1-08_web_typecheck_build_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head 20d719d（且中间存在非簿记变更）"
+        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head 7c3bcfd（且中间存在非簿记变更）"
       },
       "L1-09_no_skipped_critical_tests": {
         "status": "UNVERIFIED",
-        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head 20d719d（且中间存在非簿记变更）"
+        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head 7c3bcfd（且中间存在非簿记变更）"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
         "status": false,
-        "evidence": "dirty entries: 7"
+        "evidence": "dirty entries: 10"
       },
       "L1-11_docs_state_consistent": {
         "status": "UNVERIFIED",
-        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head 20d719d（且中间存在非簿记变更）"
+        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head 7c3bcfd（且中间存在非簿记变更）"
       },
       "L1-12_schema_invariants_verified": {
         "status": "UNVERIFIED",
-        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head 20d719d（且中间存在非簿记变更）"
+        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head 7c3bcfd（且中间存在非簿记变更）"
       },
       "L1-13_negative_paths_covered": {
         "status": "UNVERIFIED",
-        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head 20d719d（且中间存在非簿记变更）"
+        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head 7c3bcfd（且中间存在非簿记变更）"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
         "status": "UNVERIFIED",
-        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head 20d719d（且中间存在非簿记变更）"
+        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head 7c3bcfd（且中间存在非簿记变更）"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
@@ -5650,7 +5650,7 @@
   "autopilot_state_consistency": "PASS",
   "release_baseline_ready": "YES",
   "i18n_baseline": {
-    "at": "2026-10-03T23:05:37.804Z",
+    "at": "2026-10-03T23:43:09.891Z",
     "I18N_INFRASTRUCTURE": "PASS",
     "SUPPORTED_UI_LOCALES": [
       "zh-CN",
@@ -5664,25 +5664,25 @@
     "STATUS_LOCALIZATION": "PASS（13 code × 5 语言 + UNKNOWN 兜底）",
     "DATE_MONEY_LOCALIZATION": "TOOLING_PASS / PAGE_INTEGRATION_PENDING",
     "BUSINESS_LANGUAGE_LAYER": "PASS（ui/report/claim/provider + fail-safe resolver + contract）",
-    "CUSTOMER_UI_HARDCODED_STRING_COUNT": 169,
-    "hardcode_ratchet_baseline": 169,
-    "CUSTOMER_UI_LOCALIZATION": "REVISE",
+    "CUSTOMER_UI_HARDCODED_STRING_COUNT": 0,
+    "hardcode_ratchet_baseline": 0,
+    "CUSTOMER_UI_LOCALIZATION": "PASS",
     "REPORT_LANGUAGE_READINESS": "REVISE（解析就绪；冻结持久化与选择器待做）",
-    "CLAIM_LANGUAGE_READINESS": "REVISE（immutable language metadata 需架构审计）",
+    "CLAIM_LANGUAGE_READINESS": "REVISE（immutable metadata 已获 APPROVE_WITH_REVISE，待实施）",
     "PROVIDER_LANGUAGE_READINESS": "PASS",
     "EMAIL_LANGUAGE_READINESS": "EXTERNAL_GATE",
     "MARKETING_I18N_READYNESS": "MISSING（P2）",
     "REAL_MULTILINGUAL_CLAIM_GENERATION": "NO（Provider/LLM 未接入，正常状态）",
-    "guard": "tools/i18n/check-i18n.mjs（CI 接线；棘轮：硬编码只允许下降）",
+    "guard": "tools/i18n/check-i18n.mjs（CI 接线；棘轮：硬编码只允许下降，当前基线 0）",
     "docs": [
       "docs/architecture/BUSINESS-LANGUAGE-CONTRACT.md",
       "docs/releases/I18N-COVERAGE-MATRIX.md"
     ],
     "p0_gaps": [
-      "P0-1 客户页面硬编码入字典（169 行：signup/accounts/opportunities/connections/money/plan/cases/claim-package/upload）",
-      "P0-2 各客户页状态本地化接入（当前仅 opportunities 部分）",
-      "P0-3 客户页日期/金额经 formatMoney/formatDate*",
-      "P0-4 Claim/Appeal immutable language metadata（涉及 Schema → 需架构审计）"
+      "P0-1 客户页面硬编码入字典 —— DONE（0 行）",
+      "P0-2 各客户页状态本地化接入（服务端 label 已本地化；页面级 code → label 待接）",
+      "P0-3 客户页日期/金额经 formatMoney/formatDate*（工具层就绪，页面接入待做）",
+      "P0-4 Claim/Appeal immutable language metadata（涉及 Schema → 已获架构裁决 APPROVE_WITH_REVISE）"
     ],
     "p1_gaps": [
       "Email 模板 locale 架构",
@@ -5693,7 +5693,9 @@
     ],
     "p2_gaps": [
       "Marketing/SEO locale 路由 + hreflang/canonical/sitemap/landing pages"
-    ]
+    ],
+    "DICTIONARY_KEYS_PER_LOCALE": 344,
+    "P0_1_CUSTOMER_HARDCODE_MIGRATION": "DONE（169/177 → 0；9 个小批次，每批次独立 implement→typecheck→CI→commit）"
   },
   "post_acceptance": {
     "at": "2026-10-03T23:19:20.551Z",

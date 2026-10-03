@@ -1,6 +1,6 @@
+import { getServerMessages } from '../../../../i18n/server';
 import ClaimPackageView from './claim-package-view';
 import RecoveryBanner from '../../../components/recovery-banner';
-import { getServerMessages } from '../../../../i18n/server';
 
 /**
  * TRACK A / PC-03 —— 客户可见 Claim Package（/cases/[id]/claim-package）。
@@ -12,14 +12,16 @@ export default async function CaseClaimPackagePage({ params }: { params: Promise
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-xl font-semibold">Claim Package</h1>
+        <h1 className="text-xl font-semibold">{t.claimPackagePage.pageTitle}</h1>
         <p className="mt-2 text-sm text-slate-600">
-          这是系统为该案件准备的材料包与依据。<strong>材料包就绪不等于已提交</strong>：真实平台提交仍为人工执行。
+          {t.claimPackagePage.pageDescriptionPrefix}
+          <strong>{t.claimPackagePage.pageDescriptionStrong}</strong>
+          {t.claimPackagePage.pageDescriptionSuffix}
         </p>
       </div>
       {/* PC-04：案件维度的失败 / 恢复状态 */}
       <RecoveryBanner scope="CASE" t={t} />
-      <ClaimPackageView caseId={id} />
+      <ClaimPackageView caseId={id} t={t} />
     </div>
   );
 }

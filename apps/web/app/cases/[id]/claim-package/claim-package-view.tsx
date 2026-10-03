@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from 'react';
 
+import type { Messages } from '../../../../i18n/dictionaries/zh-CN';
+
 interface ClaimPackage {
   case: {
     id: string;
@@ -42,7 +44,8 @@ interface ClaimPackage {
   actions: { canPrepare: boolean; canDownloadPackage: boolean; canRecordManualSubmission: boolean; canAppeal: boolean };
 }
 
-export default function ClaimPackageView({ caseId }: { caseId: string }) {
+export default function ClaimPackageView({ caseId, t }: { caseId: string; t: Messages }) {
+  const copy = t.claimPackagePage;
   const [view, setView] = useState<ClaimPackage | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -60,7 +63,7 @@ export default function ClaimPackageView({ caseId }: { caseId: string }) {
         const body = (await response.json()) as ClaimPackage;
         if (!cancelled) setView(body);
       } catch {
-        if (!cancelled) setError('网络错误 / Network error');
+        if (!cancelled) setError(t.common.networkError);
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -68,70 +71,101 @@ export default function ClaimPackageView({ caseId }: { caseId: string }) {
     return () => {
       cancelled = true;
     };
-  }, [caseId]);
+  }, [caseId, t]);
 
-  if (loading) return <p className="text-sm text-slate-600">加载中… / Loading…</p>;
-  if (error) return <div className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-700">加载失败：{error}</div>;
-  if (!view) return <p className="text-sm text-slate-600">无数据</p>;
+  if (loading) return <p className="text-sm text-slate-600">{t.common.loading}</p>;
+  if (error) {
+    return (
+      <div className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-700">
+        {copy.loadFailed.replace('{message}', error)}
+      </div>
+    );
+  }
+  if (!view) return <p className="text-sm text-slate-600">{copy.empty}</p>;
 
   return (
     <div className="space-y-4">
       <div className="rounded border border-slate-200 p-3 text-sm">
         <div className="font-medium">{view.case.caseNo} · {view.case.title}</div>
         <div className="mt-1 text-slate-600">
-          预计可追回：{view.case.recoverableAmount ? view.case.recoverableAmount + ' ' + view.case.currency : '—'}
-          {view.case.deadline ? ' · 截止 ' + view.case.deadline.slice(0, 10) : ''}
+          {copy.expectedRecoverable.replace(
+            '{amount}',
+            view.case.recoverableAmount ? view.case.recoverableAmount + ' ' + view.case.currency : '—',
+          )}
+          {view.case.deadline ? copy.deadlineSuffix.replace('{date}', view.case.deadline.slice(0, 10)) : ''}
         </div>
         <div className="mt-2">
-          <span className="rounded bg-slate-100 px-2 py-0.5 text-xs">{view.readiness.label}（{view.readiness.state}）</span>
+          <span className="rounded bg-slate-100 px-2 py-0.5 text-xs">
+            {copy.statusWithCode.replace('{label}', view.readiness.label).replace('{state}', view.readiness.state)}
+          </span>
         </div>
         <div className="mt-2 text-xs text-slate-600">
-          账户：
+          {copy.accountLabel}
           {view.account.state === 'ATTRIBUTED'
             ? (view.account.displayName ?? '') + ' · ' + (view.account.platform ?? '') + ' · ' + (view.account.externalAccountId ?? '')
-            : '未归因（legacy，不按连接推断）'}
+            : copy.unattributed}
         </div>
       </div>
 
       <div className="rounded border border-slate-200 p-3 text-sm">
-        <div className="font-medium">为什么可以追回 / Why</div>
+        <div className="font-medium">{copy.whyTitle}</div>
         <p className="mt-1 text-slate-700">{view.why.basisSummary}</p>
-        <p className="mt-1 text-xs text-slate-600">金额依据：{view.why.amountBasis ?? '—'}</p>
-        <p className="mt-1 text-xs text-slate-600">证据数量：{view.why.evidenceCount}（案件关联证据 {view.why.linkedEvidenceCount}）</p>
+        <p className="mt-1 text-xs text-slate-600">
+          {copy.amountBasis.replace('{value}', view.why.amountBasis ?? '—')}
+        </p>
+        <p className="mt-1 text-xs text-slate-600">
+          {copy.evidenceCounts
+            .replace('{total}', String(view.why.evidenceCount))
+            .replace('{linked}', String(view.why.linkedEvidenceCount))}
+        </p>
       </div>
 
       <div className="rounded border border-slate-200 p-3 text-sm">
-        <div className="font-medium">材料包 / Package</div>
+        <div className="font-medium">{copy.packageTitle}</div>
         {view.package ? (
           <div className="mt-1 text-xs text-slate-700">
-            <div>版本 {view.package.packageVersion} · 状态 {view.package.status}</div>
-            <div>目标：{view.package.target.platformType} / {view.package.target.claimType}（{view.package.target.domain} · {view.package.target.channel}）</div>
+            <div>
+              {copy.packageMeta
+                .replace('{version}', view.package.packageVersion)
+                .replace('{status}', view.package.status)}
+            </div>
+            <div>
+              {copy.packageTarget
+                .replace('{platformType}', view.package.target.platformType)
+                .replace('{claimType}', view.package.target.claimType)
+                .replace('{domain}', view.package.target.domain)
+                .replace('{channel}', view.package.target.channel)}
+            </div>
             <div className="break-all">digest：{view.package.packageDigest}</div>
-            <div>生成时间：{view.package.generatedAt.slice(0, 19)}</div>
+            <div>{copy.packageGeneratedAt.replace('{at}', view.package.generatedAt.slice(0, 19))}</div>
           </div>
         ) : (
-          <p className="mt-1 text-slate-600">尚未生成材料包。</p>
+          <p className="mt-1 text-slate-600">{copy.packageMissing}</p>
         )}
         <div className="mt-2 text-xs text-slate-600">
-          <div>PACKAGE READY：{view.readiness.packageReady ? '是' : '否'}</div>
-          <div>CLAIM ACTUALLY SUBMITTED：{view.readiness.claimSubmitted ? '是（已登记人工提交事实）' : '否'}</div>
-          <div>真实平台写入：{view.readiness.providerWrite}（TRANSPORT=false，需人工提交）</div>
+          <div>
+            PACKAGE READY：{view.readiness.packageReady ? copy.yes : copy.no}
+          </div>
+          <div>
+            CLAIM ACTUALLY SUBMITTED：{view.readiness.claimSubmitted ? copy.claimSubmittedYes : copy.no}
+          </div>
+          <div>{copy.providerWriteNote.replace('{state}', view.readiness.providerWrite)}</div>
         </div>
       </div>
 
       <div className="rounded border border-slate-200 p-3 text-sm">
-        <div className="font-medium">证据清单 / Evidence manifest</div>
+        <div className="font-medium">{copy.evidenceTitle}</div>
         {view.evidence.length === 0 ? (
-          <p className="mt-1 text-slate-600">暂无已导出证据。</p>
+          <p className="mt-1 text-slate-600">{copy.noEvidence}</p>
         ) : (
           <table className="mt-2 w-full border-collapse text-xs">
             <thead>
               <tr className="border-b text-left text-slate-600">
-                <th className="py-1">类型</th>
-                <th className="py-1">标题</th>
-                <th className="py-1">来源</th>
-                <th className="py-1">导出时间</th>
-                <th className="py-1">下载</th>
+                <th className="py-1">{copy.colKind}</th>
+                <th className="py-1">{copy.colTitle}</th>
+                <th className="py-1">{copy.colSource}</th>
+                <th className="py-1">{copy.colExportedAt}</th>
+                <th className="py-1">{copy.colDownload}</th>
               </tr>
             </thead>
             <tbody>
@@ -141,7 +175,7 @@ export default function ClaimPackageView({ caseId }: { caseId: string }) {
                   <td className="py-1">{item.title}</td>
                   <td className="py-1">{item.sourceType}</td>
                   <td className="py-1">{item.capturedAt.slice(0, 19)}</td>
-                  <td className="py-1">{item.downloadable ? '可下载（受既有权限控制）' : '—'}</td>
+                  <td className="py-1">{item.downloadable ? copy.downloadable : '—'}</td>
                 </tr>
               ))}
             </tbody>
@@ -150,9 +184,9 @@ export default function ClaimPackageView({ caseId }: { caseId: string }) {
       </div>
 
       <div className="rounded border border-slate-200 p-3 text-sm">
-        <div className="font-medium">还缺什么 / Missing items</div>
+        <div className="font-medium">{copy.missingTitle}</div>
         {view.missingItems.length === 0 ? (
-          <p className="mt-1 text-slate-600">无缺失项。</p>
+          <p className="mt-1 text-slate-600">{copy.noMissing}</p>
         ) : (
           <ul className="mt-1 list-disc pl-5 text-xs text-amber-800">
             {view.missingItems.map((item) => (
@@ -161,12 +195,14 @@ export default function ClaimPackageView({ caseId }: { caseId: string }) {
           </ul>
         )}
         <div className="mt-2 text-xs text-slate-600">
-          可执行动作（由服务端 capability 决定）：
-          {view.actions.canPrepare ? ' 生成材料包' : ''}
-          {view.actions.canDownloadPackage ? ' 下载材料包' : ''}
-          {view.actions.canRecordManualSubmission ? ' 登记人工提交' : ''}
-          {view.actions.canAppeal ? ' 发起申诉' : ''}
-          {!view.actions.canPrepare && !view.actions.canDownloadPackage && !view.actions.canRecordManualSubmission && !view.actions.canAppeal ? ' 无' : ''}
+          {copy.actionsLabel}
+          {view.actions.canPrepare ? ' ' + copy.actionPrepare : ''}
+          {view.actions.canDownloadPackage ? ' ' + copy.actionDownload : ''}
+          {view.actions.canRecordManualSubmission ? ' ' + copy.actionRecordManual : ''}
+          {view.actions.canAppeal ? ' ' + copy.actionAppeal : ''}
+          {!view.actions.canPrepare && !view.actions.canDownloadPackage && !view.actions.canRecordManualSubmission && !view.actions.canAppeal
+            ? ' ' + copy.actionNone
+            : ''}
         </div>
       </div>
     </div>

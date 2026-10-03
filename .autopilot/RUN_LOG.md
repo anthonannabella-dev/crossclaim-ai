@@ -1771,3 +1771,6 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 
 ## 2026-10-03T23:28:18.948Z — MSG-20261003-148
 - POST-ACCEPTANCE 设计包裁决 PASS_WITH_REVISIONS；IMPLEMENTATION_AUTHORIZED=YES；6 项修订已登记。
+
+## 2026-10-03T23:43:09.891Z — P0-I18N-09
+- 客户 UI 硬编码 36 → 0（9 批次）：signup/accounts/opportunities/connections/money/plan/cases/:id/claim-package + 共享组件。
