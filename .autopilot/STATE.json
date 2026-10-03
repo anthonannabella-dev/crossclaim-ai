@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261003-148",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-03T23:43:09.891Z",
+  "updated_at": "2026-10-03T23:43:46.757Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -4905,17 +4905,52 @@
   "singleton_runner": "VERIFIED",
   "ci_pending": [
     {
-      "head": "b88e255",
-      "run": "37162057767",
-      "url": "https://github.com/anthonannabella-dev/crossclaim-ai/actions/runs/37162057767",
-      "recordedAt": "2026-10-03T23:34:15.778Z",
+      "head": "6113be6",
+      "run": "37162204607",
+      "url": "https://github.com/anthonannabella-dev/crossclaim-ai/actions/runs/37162204607",
+      "recordedAt": "2026-10-03T23:43:46.757Z",
       "policy": "NON_BLOCKING（不等待；红灯才 SELF_RESOLVE）"
     },
     {
-      "head": "1101426",
-      "run": "37162069757",
-      "url": "https://github.com/anthonannabella-dev/crossclaim-ai/actions/runs/37162069757",
-      "recordedAt": "2026-10-03T23:34:15.778Z",
+      "head": "714069b",
+      "run": "37162273278",
+      "url": "https://github.com/anthonannabella-dev/crossclaim-ai/actions/runs/37162273278",
+      "recordedAt": "2026-10-03T23:43:46.757Z",
+      "policy": "NON_BLOCKING（不等待；红灯才 SELF_RESOLVE）"
+    },
+    {
+      "head": "ca6d069",
+      "run": "37162365487",
+      "url": "https://github.com/anthonannabella-dev/crossclaim-ai/actions/runs/37162365487",
+      "recordedAt": "2026-10-03T23:43:46.757Z",
+      "policy": "NON_BLOCKING（不等待；红灯才 SELF_RESOLVE）"
+    },
+    {
+      "head": "9f52c34",
+      "run": "37162462385",
+      "url": "https://github.com/anthonannabella-dev/crossclaim-ai/actions/runs/37162462385",
+      "recordedAt": "2026-10-03T23:43:46.757Z",
+      "policy": "NON_BLOCKING（不等待；红灯才 SELF_RESOLVE）"
+    },
+    {
+      "head": "20d719d",
+      "run": "37162514008",
+      "url": "https://github.com/anthonannabella-dev/crossclaim-ai/actions/runs/37162514008",
+      "recordedAt": "2026-10-03T23:43:46.757Z",
+      "policy": "NON_BLOCKING（不等待；红灯才 SELF_RESOLVE）"
+    },
+    {
+      "head": "7c3bcfd",
+      "run": "37162587664",
+      "url": "https://github.com/anthonannabella-dev/crossclaim-ai/actions/runs/37162587664",
+      "recordedAt": "2026-10-03T23:43:46.757Z",
+      "policy": "NON_BLOCKING（不等待；红灯才 SELF_RESOLVE）"
+    },
+    {
+      "head": "506b5fb",
+      "run": "37162663800",
+      "url": "https://github.com/anthonannabella-dev/crossclaim-ai/actions/runs/37162663800",
+      "recordedAt": "2026-10-03T23:43:46.757Z",
       "policy": "NON_BLOCKING（不等待；红灯才 SELF_RESOLVE）"
     }
   ],
@@ -5755,5 +5790,22 @@
       "新 Customer Product Baseline",
       "P1 Customs Data Provider"
     ]
-  }
+  },
+  "ci_resolved": [
+    {
+      "head": "b88e255",
+      "run": "37162057767",
+      "conclusion": "success",
+      "url": "https://github.com/anthonannabella-dev/crossclaim-ai/actions/runs/37162057767",
+      "checkedAt": "2026-10-03T23:43:46.757Z"
+    },
+    {
+      "head": "1101426",
+      "run": "37162069757",
+      "conclusion": "success",
+      "url": "https://github.com/anthonannabella-dev/crossclaim-ai/actions/runs/37162069757",
+      "checkedAt": "2026-10-03T23:43:46.757Z"
+    }
+  ],
+  "ci_policy": "非阻塞：commit 后记录 pending，不等待；仅红灯时 SELF_RESOLVE → 修复 → 重跑"
 }
