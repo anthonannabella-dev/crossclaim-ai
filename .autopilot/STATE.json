@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261003-126",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-03T09:14:41.198Z",
+  "updated_at": "2026-10-03T09:16:33.159Z",
   "previous_head": "0693821",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -49,11 +49,11 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "ACTIVE",
-  "last_tick_at": "2026-10-03T09:14:41.198Z",
+  "last_tick_at": "2026-10-03T09:16:33.159Z",
   "state": "IMPLEMENT",
-  "last_action": "G3 收尾：server.ts 转发 C21 deps + 修复断言 → 真实 HTTP E2E 6/6（401/403/404/400/200 + GET 读模型）→ G3 完成",
-  "last_action_at": "2026-10-03T09:14:41.197Z",
-  "next_action": "按 CONTINUOUS_EXECUTION 继续 G5（前端真实接线核查：carrier response 读模型 / customs filing-status / fee preview 是否真正调用后端）→ G6（README/FINAL-GATE/PRODUCTION-READINESS/API BACKLOG 同步）→ G4（Customs C1–C7 内部链）。",
+  "last_action": "G5 核查 + G6 文档同步：扫描 apps/web（49 文件 / 34 条后端路径）→ 确认新能力（carrier response / customs start-recovery / filing-status / fee preview）尚未接线，产出 FRONTEND-WIRING-MAP.md（含 service→route 映射）→ 同步 README 状态段与差集登记表（G6 DONE / G10 MAPPED / G5 CONFIRMED_GAP）",
+  "last_action_at": "2026-10-03T09:16:33.158Z",
+  "next_action": "按 CONTINUOUS_EXECUTION 继续：G5-UI（实现只读前端接线：carrier response history、customs filing-status、estimated fee preview；不引入外部写）→ G4（Customs C1–C7 内部链）→ G7/G8/G9 复核。",
   "current_head": "e060a5f",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
@@ -4455,12 +4455,10 @@
     "recomputed_at_head": "0693821",
     "internal_remaining_gap": [
       "G4",
-      "G5",
-      "G6",
+      "G5-UI",
       "G7",
       "G8",
-      "G9",
-      "G10"
+      "G9"
     ],
     "external_dependencies": [
       "E1",
@@ -4535,6 +4533,19 @@
       ],
       "e2e": "customs-recovery-http-e2e-db 6/6：未认证 401 / VIEWER 403 / 未知 opportunity 404 / client 领域字段 400 / OWNER 200 READY_TO_FILE（filingSubmitted=false、externalExecutionStatus=NOT_STARTED、无 credential-successFee-actualRecovered）/ GET filing-status 200（空投影）+ 未认证 401",
       "server_forward": "server.ts 新增 C21 deps 转发（customsOpportunities / customsAuthorization / customsFilingProvider / customsFilingStatus）"
+    },
+    "g5": {
+      "status": "ASSESSED（CONFIRMED_GAP：只读 UI 接线待做）",
+      "evidence": "apps/web 49 文件 / 34 条后端路径；无 carrier response、无 customs start-recovery/filing-status、无 fee preview",
+      "artifact": "docs/releases/FRONTEND-WIRING-MAP.md"
+    },
+    "g6": {
+      "status": "DONE",
+      "note": "README 状态段与差集登记表已同步至 C17/Queue #10/Commercial 最新事实"
+    },
+    "g10": {
+      "status": "MAPPED",
+      "note": "service→route 映射见 FRONTEND-WIRING-MAP §3"
     }
   },
   "audit_channel_url": "https://chatgpt.com/c/6ac0c3b8-30a4-83ec-a529-4d9b04ffa0e7",
