@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261003-138",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-03T16:37:58.055Z",
+  "updated_at": "2026-10-03T16:38:32.553Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -51,9 +51,9 @@
   "automation_status": "ACTIVE",
   "last_tick_at": "2026-10-03T14:11:19.420Z",
   "state": "IMPLEMENT",
-  "last_action": "BG-019 第一步：前端接入 BG-020 的 customs 只读读模型（web typecheck OK）",
+  "last_action": "BG-021 Schema Delta + CHANGE E 范围裁定请求已送审：Issue #2 comment 5971164391（HEAD 2fee655）",
   "last_action_at": "2026-10-03T14:17:18.723Z",
-  "next_action": "就 Platform / Independent-site 的最小 UI 边界向架构方请求裁定；同时继续其它安全内部项",
+  "next_action": "发送 ChatGPT 唤醒并读取裁决；PASS → 实施 independent-site 持久化；范围裁定 → 据此调整 BG-019",
   "current_head": "8902185",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
@@ -4986,12 +4986,12 @@
       "④ Production Candidate register only"
     ]
   },
-  "awaiting_verdict": false,
+  "awaiting_verdict": true,
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-03T16:37:58.468Z",
-    "head": "f50af7b",
-    "acceptance_head": "f50af7b",
+    "computed_at": "2026-10-03T16:38:34.217Z",
+    "head": "2fee655",
+    "acceptance_head": "2fee655",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5057,53 +5057,53 @@
       "L1-03_no_open_markers": {
         "label": "不存在 TODO/IN_PROGRESS/PARTIAL/READY_FOR_REVIEW/WAITING_FOR_VERDICT/未处理 REVISE·BLOCK",
         "status": false,
-        "evidence": "arch_pending=1 awaiting_verdict=false"
+        "evidence": "arch_pending=1 awaiting_verdict=true"
       },
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=f50af7b ci_head=c07ff84 ci=UNKNOWN run="
+        "evidence": "acceptance_head=2fee655 ci_head=c07ff84 ci=UNKNOWN run="
       },
       "L1-05_pg_regression_passed": {
         "status": "UNVERIFIED",
-        "evidence": "pg_regression recorded at c07ff84 ≠ acceptance head f50af7b"
+        "evidence": "pg_regression recorded at c07ff84 ≠ acceptance head 2fee655"
       },
       "L1-06_fresh_db_migration_passed": {
         "status": "UNVERIFIED",
-        "evidence": "fresh_db_migration recorded at 7d73154 ≠ acceptance head f50af7b"
+        "evidence": "fresh_db_migration recorded at 7d73154 ≠ acceptance head 2fee655"
       },
       "L1-07_api_typecheck_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_api recorded at c07ff84 ≠ acceptance head f50af7b"
+        "evidence": "typecheck_api recorded at c07ff84 ≠ acceptance head 2fee655"
       },
       "L1-08_web_typecheck_build_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_web recorded at 7d73154 ≠ acceptance head f50af7b"
+        "evidence": "typecheck_web recorded at 7d73154 ≠ acceptance head 2fee655"
       },
       "L1-09_no_skipped_critical_tests": {
         "status": "UNVERIFIED",
-        "evidence": "tests_no_skipped recorded at 7d73154 ≠ acceptance head f50af7b"
+        "evidence": "tests_no_skipped recorded at 7d73154 ≠ acceptance head 2fee655"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
         "status": false,
-        "evidence": "dirty entries: 7"
+        "evidence": "dirty entries: 6"
       },
       "L1-11_docs_state_consistent": {
         "status": "UNVERIFIED",
-        "evidence": "docs_sync recorded at c07ff84 ≠ acceptance head f50af7b"
+        "evidence": "docs_sync recorded at c07ff84 ≠ acceptance head 2fee655"
       },
       "L1-12_schema_invariants_verified": {
         "status": "UNVERIFIED",
-        "evidence": "schema_invariants recorded at 7d73154 ≠ acceptance head f50af7b"
+        "evidence": "schema_invariants recorded at 7d73154 ≠ acceptance head 2fee655"
       },
       "L1-13_negative_paths_covered": {
         "status": "UNVERIFIED",
-        "evidence": "negative_paths recorded at c07ff84 ≠ acceptance head f50af7b"
+        "evidence": "negative_paths recorded at c07ff84 ≠ acceptance head 2fee655"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
         "status": "UNVERIFIED",
-        "evidence": "pg_e2e_real recorded at c07ff84 ≠ acceptance head f50af7b"
+        "evidence": "pg_e2e_real recorded at c07ff84 ≠ acceptance head 2fee655"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
@@ -5151,40 +5151,14 @@
     "BG-021-independent-site-persistence-schema-delta"
   ],
   "arch_review_request": {
-    "id": "BG-013-ior-facts-persistence-schema-delta",
-    "requested_at": "2026-10-03T15:52:09.301Z",
-    "head": "376d64c",
-    "doc": "docs/releases/BG013-IOR-SCHEMA-DELTA-REQUEST.md",
-    "github_comment_id": "5970773400",
-    "wakeup_sent_at": "2026-10-03T15:55:56.307Z",
-    "verdict": "PASS WITH REVISE",
-    "wakeup_channel": "https://chatgpt.com/c/6ac0c3b8-30a4-83ec-a529-4d9b04ffa0e7",
-    "wakeup_verification": [
-      "composer cleared",
-      "marker 5970773400 present at transcript bottom",
-      "generating (stop control present)"
-    ],
-    "verdict_message": "MSG-20261003-136",
-    "archived": "FULL_COPY_OK",
-    "ruled_at": "2026-10-03T16:02:46.125Z",
-    "rulings": {
-      "1": "PASS — 三张 append-only 事实表 + 5 枚举 APPROVE",
-      "2": "PASS WITH REVISE — machine-safe CHECK 必须 DB 化；银行账号不属于这三表",
-      "3": "PASS — aceAccountRef 仅 tokenized/opaque reference",
-      "4": "PASS — UNIQUE(org, contentDigest) 不可变事实幂等",
-      "5": "PASS — latest 由 query/view 推导，禁止 mutable isLatest",
-      "6": "PASS / 不加 GIN（有真实 containment query 再加）"
-    },
-    "required_db_invariants": [
-      "UNIQUE(org, contentDigest) 幂等 + corrected fact 追加历史",
-      "UPDATE / DELETE 触发器拒绝（append-only）",
-      "cross-tenant lineage 拒绝",
-      "raw EIN 拒绝 / numeric importer number 拒绝 / raw credential-free-text 拒绝（DB-level CHECK）",
-      "CBP_FORM_4811 作为 Broker POA → DB 写入失败",
-      "VERIFIED POA 必须有 evidenceArtifactRef 且 source ≠ NONE",
-      "expiresAt >= effectiveAt；scope 非空",
-      "filingAuthorized=true ≠ filing performed；不得有 filingSubmitted / provider result 外部执行字段"
-    ]
+    "id": "BG-021-independent-site-persistence-schema-delta",
+    "requested_at": "2026-10-03T16:38:32.553Z",
+    "head": "2fee655",
+    "doc": "docs/releases/BG021-INDEPENDENT-SITE-SCHEMA-DELTA-REQUEST.md",
+    "github_comment_id": "5971164391",
+    "wakeup_sent_at": null,
+    "verdict": null,
+    "also_asks": "CHANGE E：Platform / Independent-site 的最小 frontend 边界裁定"
   },
   "bg012": {
     "status": "DONE（MSG-20261003-134：端点+customs.recovery.chain.run/INTERNAL_WRITE+角色矩阵+immutable execution identity+路由级 E2E 4/4+API.md 90/77）"

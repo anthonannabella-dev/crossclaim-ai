@@ -1691,3 +1691,6 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 
 ## 2026-10-03T16:37:58.055Z — BG-019 第一步
 - integration-status 页接入 customs entry fact + 四类 latest 投影只读卡片；web tsc OK。
+
+## 2026-10-03T16:38:32.553Z — BG-021 送审
+- Issue #2 comment 5971164391（BG-021 Schema Delta + CHANGE E 范围裁定）；待发唤醒。
