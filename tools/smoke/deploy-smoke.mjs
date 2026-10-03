@@ -16,6 +16,7 @@
  */
 import { execFileSync, spawn } from 'node:child_process';
 import { randomUUID } from 'node:crypto';
+import net from 'node:net';
 import { setTimeout as delay } from 'node:timers/promises';
 
 const ROOT = process.cwd();
@@ -28,6 +29,29 @@ const TSX_CLI = API_DIR + '/node_modules/tsx/dist/cli.mjs';
 /** 同步等待（避免在同步流程里引入额外子进程） */
 function sleepSync(ms) {
   Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
+}
+
+/**
+ * 宿主端口 TCP 可达性探测。
+ * 容器内 `pg_isready` 成功 **不代表** 宿主发布端口已可连接（docker-proxy 存在就绪竞态），
+ * 因此必须两者都通过才认为 postgres 可被宿主进程使用，避免 migrate deploy 报 P1001。
+ */
+function canConnectToHostPort(port, timeoutMs = 2000) {
+  return new Promise((resolve) => {
+    const socket = net.connect({ host: '127.0.0.1', port: Number(port) });
+    let settled = false;
+    const finish = (ok) => {
+      if (settled) return;
+      settled = true;
+      socket.removeAllListeners();
+      socket.destroy();
+      resolve(ok);
+    };
+    socket.setTimeout(timeoutMs);
+    socket.once('connect', () => finish(true));
+    socket.once('timeout', () => finish(false));
+    socket.once('error', () => finish(false));
+  });
 }
 const container = 'crossclaim-smoke-' + randomUUID().slice(0, 8);
 const dbName = 'smoke_' + randomUUID().slice(0, 8).replace(/-/g, '');
@@ -92,14 +116,17 @@ async function main() {
   });
 
   let hostPort = '';
-  await step('wait for postgres ready', () => {
+  await step('wait for postgres ready', async () => {
     for (let i = 0; i < 30; i += 1) {
       try {
         const mapping = run('docker', ['port', container, '5432']).trim();
         hostPort = mapping.split(':').pop() ?? '';
         if (hostPort) {
           run('docker', ['exec', container, 'pg_isready', '-U', dbUser, '-d', dbName]);
-          return 'host port ' + hostPort;
+          // 容器内 ready 且宿主端口可连接，才继续（否则 docker-proxy 竞态 → P1001）
+          if (await canConnectToHostPort(hostPort)) {
+            return 'host port ' + hostPort + ' (container + host port reachable)';
+          }
         }
       } catch {
         /* retry */
