@@ -23,3 +23,9 @@
 - 已补：`RecoveryPayout.sourceType`（代码内闭合枚举 `PAYOUT_SOURCE_TYPES`）→ `CHECK ("sourceType" IN ('PLATFORM_SETTLEMENT', 'BANK_TRANSFER', 'OTHER'))`。
 - 判定为**非缺口**（外部/平台提供的动态字符串，无闭合值集合，DB 枚举 CHECK 不适用）：`ClaimItem.claimType` / `ClaimItem.platformType`、`RecoveryOpportunity.opportunityType`、`ExpectedRecoveryBasis.basisSource`、`PaymentProcessingAttempt.resultStatus`、`AuditLog.entityType`、`PaymentEvent.eventType`、`SourceTransaction.referenceType`、`CanonicalFact.referenceType`、`ProviderOutcomeFact.sourceRef`、`ReimbursementFact.sourceRef`、`FileAsset.mimeType` 等——保留形状/非空约束 + 应用层校验。
 - 守卫断言现为 **21** 项（`db-constraint-coverage`）。
+
+## 追加批次（migration 20261003190000_reference_shape_checks）
+
+- 为外部来源列补形状/非空约束：FileAsset.mimeType（type/subtype 形状）、FileAsset.sourceRef、AuditLog.entityType、SourceTransaction.referenceType、CanonicalFact.referenceType、RecoveryOpportunity.opportunityType、ClaimItem.claimType/platformType、ExpectedRecoveryBasis.basisSource、ProviderOutcomeFact.sourceRef。
+- 判定原则不变：外部平台/工件提供的值不做枚举 CHECK；闭合枚举（如 RecoveryPayout.sourceType、platform-write reconciledStatus、customs kind/currency/source）才做 IN CHECK。
+- 守卫断言数：26（db-constraint-coverage）。

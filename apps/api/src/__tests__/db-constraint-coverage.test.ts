@@ -50,6 +50,11 @@ describe('G9 — 关键 DB 约束覆盖', () => {
   requireCheck('ProviderOutcomeFact_sourceRef_non_empty_check', /CHECK \(length\("sourceRef"\) > 0\)/);
   requireCheck('ReimbursementFact_sourceRef_non_empty_check', /CHECK \(length\("sourceRef"\) > 0\)/);
   requireCheck('RecoveryPayout_sourceType_check', /CHECK \("sourceType" IN \(/);
+  requireCheck('FileAsset_mimeType_shape_check', /CHECK \("mimeType" ~ /);
+  requireCheck('AuditLog_entityType_shape_check', /CHECK \(length\("entityType"\) > 0\)/);
+  requireCheck('RecoveryOpportunity_opportunityType_shape_check', /CHECK \(length\("opportunityType"\) > 0\)/);
+  requireCheck('ClaimItem_claimType_shape_check', /CHECK \(length\("claimType"\) > 0\)/);
+  requireCheck('ExpectedRecoveryBasis_basisSource_shape_check', /CHECK \(length\("basisSource"\) > 0\)/);
   requireCheck('ExpectedRecoveryBasis_currency_shape', /CHECK \("currency" ~ /);
   requireCheck('ClaimReconciliationProjection_currency_shape', /CHECK \("currency" ~ /);
 
