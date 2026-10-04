@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-04T11:41:04.583Z",
+  "generated_at": "2026-10-04T11:44:14.981Z",
   "rule": "COVERED 需存在命名证据文件；否则 GAP",
   "domains": [
     {
@@ -226,7 +226,7 @@
     {
       "id": "customs",
       "name": "Customs / Trade Recovery",
-      "domain_test_files": 49,
+      "domain_test_files": 50,
       "domain_web_files": 15,
       "cells": {
         "http": {
@@ -303,10 +303,10 @@
         "failure_recovery": {
           "status": "COVERED",
           "evidence": [
+            "apps/api/src/__tests__/customs-provider-authorization-lifecycle-store-db.test.ts",
             "apps/api/src/__tests__/customs-provider-c17-reconciliation-db.test.ts",
             "apps/api/src/__tests__/customs-provider-negative-path-e2e.test.ts",
-            "apps/api/src/__tests__/customs-provider-reconciliation-lookup.test.ts",
-            "apps/api/src/__tests__/customs-provider-reconciliation.test.ts"
+            "apps/api/src/__tests__/customs-provider-reconciliation-lookup.test.ts"
           ]
         },
         "cross_tenant": {

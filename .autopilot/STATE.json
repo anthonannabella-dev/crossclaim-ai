@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261004-16",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-04T11:44:00.000Z",
+  "updated_at": "2026-10-04T11:52:00.000Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -4908,11 +4908,11 @@
     "ca-6-one-click-customs-auth-ux"
   ],
   "last_unit": {
-    "id": "c18-tenant-isolation-store-db-e2e",
-    "at": "2026-10-04T11:44:00.000Z",
-    "head_before": "8ad4380",
-    "head_after": "293f55e",
-    "detail": "ephemeral PG: Test Files 1 passed (1) | Tests 5 passed (5)"
+    "id": "c18-7-lifecycle-persistence-store",
+    "at": "2026-10-04T11:52:00.000Z",
+    "head_before": "a35bc2c",
+    "head_after": "（本批次提交）",
+    "detail": "ephemeral PG: Test Files 1 passed (1) | Tests 8 passed (8)；npx tsc --noEmit exit 0"
   },
   "autopilot_mode": "CONTINUOUS (Layer 3 / C18)",
   "heartbeat_role": "LIVENESS_ONLY",
@@ -5192,9 +5192,9 @@
   "awaiting_verdict": "EXACT-ORDER REPLAY 证据已送审（comment 5979262070）；shared/staging deploy 解禁待裁决",
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-04T11:41:05.052Z",
-    "head": "293f55e",
-    "acceptance_head": "293f55e",
+    "computed_at": "2026-10-04T11:44:15.454Z",
+    "head": "a35bc2c",
+    "acceptance_head": "a35bc2c",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5287,48 +5287,48 @@
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=293f55e ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
+        "evidence": "acceptance_head=a35bc2c ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
       },
       "L1-05_pg_regression_passed": {
         "status": "UNVERIFIED",
-        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head 293f55e（且中间存在非簿记变更）"
+        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head a35bc2c（且中间存在非簿记变更）"
       },
       "L1-06_fresh_db_migration_passed": {
         "status": "UNVERIFIED",
-        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head 293f55e（且中间存在非簿记变更）"
+        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head a35bc2c（且中间存在非簿记变更）"
       },
       "L1-07_api_typecheck_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head 293f55e（且中间存在非簿记变更）"
+        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head a35bc2c（且中间存在非簿记变更）"
       },
       "L1-08_web_typecheck_build_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head 293f55e（且中间存在非簿记变更）"
+        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head a35bc2c（且中间存在非簿记变更）"
       },
       "L1-09_no_skipped_critical_tests": {
         "status": "UNVERIFIED",
-        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head 293f55e（且中间存在非簿记变更）"
+        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head a35bc2c（且中间存在非簿记变更）"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
         "status": false,
-        "evidence": "dirty entries: 3"
+        "evidence": "dirty entries: 2"
       },
       "L1-11_docs_state_consistent": {
         "status": "UNVERIFIED",
-        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head 293f55e（且中间存在非簿记变更）"
+        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head a35bc2c（且中间存在非簿记变更）"
       },
       "L1-12_schema_invariants_verified": {
         "status": "UNVERIFIED",
-        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head 293f55e（且中间存在非簿记变更）"
+        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head a35bc2c（且中间存在非簿记变更）"
       },
       "L1-13_negative_paths_covered": {
         "status": "UNVERIFIED",
-        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head 293f55e（且中间存在非簿记变更）"
+        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head a35bc2c（且中间存在非簿记变更）"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
         "status": "UNVERIFIED",
-        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head 293f55e（且中间存在非簿记变更）"
+        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head a35bc2c（且中间存在非簿记变更）"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
@@ -6276,7 +6276,7 @@
       "API.md / DOMAIN_MODEL.md / architecture-contract 计数 77 → 79"
     ]
   },
-  "next_execution_unit": "C18 lifecycle persistence（授权生命周期持久化：合法迁移落库、非法迁移被拒、并发迁移串行化）→ 之后 Production Persistence Checkpoint；并行 SEO-4 /recover 页面接线（DEFAULT_NOINDEX）",
+  "next_execution_unit": "C18 Production Persistence Checkpoint 前置：把 expires 映射、store 语义与两份 PG 证据（binding store 5 例 / lifecycle store 8 例）整理成送审材料 → 右侧 ChatGPT Audit Loop；并行 SEO-4 /recover 页面接线（DEFAULT_NOINDEX）",
   "customer_ui_commercialization": {
     "at": "2026-10-04T01:21:55.949Z",
     "authorization": "MSG-20261004-01（CUSTOMER UI/UX COMMERCIALIZATION — IMPLEMENTATION AUTHORIZED）",
@@ -6965,9 +6965,26 @@
         "two-connection webhook exactly-one claim（DONE）",
         "tenant isolation（DONE）",
         "resolver 0/1/>1 fail-closed（DONE）",
-        "lifecycle persistence（NEXT）"
+        "lifecycle persistence（DONE —— 8 例 PG）"
       ],
-      "staging_migrate_deploy": "AUTHORIZED 但被宿主输入阻塞：需要非生产 staging DATABASE_URL（且确认该库不含真实客户数据）"
+      "staging_migrate_deploy": "AUTHORIZED 但被宿主输入阻塞：需要非生产 staging DATABASE_URL（且确认该库不含真实客户数据）",
+      "status": "ALL_INTERNAL_ITEMS_DONE；剩余为送审（ChatGPT Audit Loop）+ 宿主提供非生产 staging DATABASE_URL 后执行已授权的 staging migrate deploy"
+    },
+    "lifecycle_persistence": {
+      "store": "apps/api/src/services/customs/customs-provider-authorization-lifecycle-prisma-store.ts",
+      "test": "apps/api/src/__tests__/customs-provider-authorization-lifecycle-store-db.test.ts",
+      "cases": 8,
+      "result": "PASS（ephemeral 库，EPHEMERAL_VITEST_EXIT=0）",
+      "schema_change": "NONE（复用 C18 既有 3 张表；migration 未改）",
+      "status_mapping": {
+        "ACTIVE": "binding ACTIVE + lineage RESTORED（仅当此前不是 ACTIVE）",
+        "REAUTH_REQUIRED": "binding PENDING_VERIFICATION + lineage REAUTH_REQUIRED",
+        "SUSPENDED": "binding SUSPENDED + lineage SUSPENDED",
+        "REVOKED": "binding REVOKED + lineage REVOKED",
+        "EXPIRED": "binding REVOKED + lineage REVOKED，snapshot.providerStatus = EXPIRED（列无 EXPIRED 取值，精确原因留在 append-only 快照）",
+        "UNKNOWN_or_conflict": "不写库（fail-closed）"
+      },
+      "needs_architect_review": "EXPIRED→REVOKED 的列映射语义（提交闸门视角）需在 Production Persistence Checkpoint 一并确认"
     }
   },
   "last_heartbeat_at": "2026-10-04T11:21:28.069Z",
@@ -7122,10 +7139,10 @@
     "seo3_progress": "CHANGE A/B validator added (86f4289), engine output validation added (eb99c53), validator wired into runPublicSeoChecker (8bf49da), HTTP boundary guard added (4f2cd20); HTTP entry still not registered"
   },
   "CURRENT_HEAD": "293f55e",
-  "LAST_COMPLETED_UNIT": "c18-tenant-isolation-store-db-e2e（Prisma 绑定存储第 5 条：跨租户读 fail-closed + 跨租户 lineage 写入被 DB trigger 拒绝；ephemeral 库 5/5）",
-  "NEXT_EXECUTION_UNIT": "C18 lifecycle persistence（授权生命周期持久化：合法迁移落库、非法迁移被拒、并发迁移串行化）→ 之后 Production Persistence Checkpoint；并行 SEO-4 /recover 页面接线（DEFAULT_NOINDEX）",
+  "LAST_COMPLETED_UNIT": "c18-7-lifecycle-persistence-store（授权生命周期持久化：binding.status + append-only lineage 同事务；幂等 REPLAYED；并发两连接只落一条；fail-closed BINDING_UNKNOWN / AUTHORIZATION_UNKNOWN / AUTHORIZATION_CONFLICT；ephemeral 库 8/8，tsc 0）",
+  "NEXT_EXECUTION_UNIT": "C18 Production Persistence Checkpoint 前置：把 expires 映射、store 语义与两份 PG 证据（binding store 5 例 / lifecycle store 8 例）整理成送审材料 → 右侧 ChatGPT Audit Loop；并行 SEO-4 /recover 页面接线（DEFAULT_NOINDEX）",
   "CI_STATUS": "GREEN 至 a293935（run 37198756264 success）；8ad4380 / 293f55e in_progress（37199053372 / 37199395488）",
-  "WAITING_FOR_VERDICT": "none（MSG-20261004-27 / -28 / -29 均已逐字归档并 FULL_COPY_OK；最近一轮 exact-order = PASS）",
+  "WAITING_FOR_VERDICT": "none（待送审：生命周期持久化语义映射 EXPIRED→binding REVOKED，snapshot 保留 providerStatus）",
   "HOST_ACTION_REQUIRED": [
     "provider developer/partner account registration",
     "third-party commercial agreement acceptance",
@@ -7139,7 +7156,7 @@
     "non-production staging DATABASE_URL + 确认该 shared 库是否承载真实客户数据（执行已授权的 staging migrate deploy 前需要）"
   ],
   "HOLD_EXTERNAL": true,
-  "LAST_HEARTBEAT_AT": "2026-10-04T11:44:00.000Z",
+  "LAST_HEARTBEAT_AT": "2026-10-04T11:52:00.000Z",
   "ci_red_streak_note": "RESOLVED: three contract/inventory fixes (tenant-trigger whitelist 1b15ab7, append-only whitelist cc13bde, model inventory 82->85 4f02282); 4f02282 is the first green run after the streak.",
   "ci_contract_fix_local_verification": {
     "at": "2026-10-04T08:51:16.135Z",
