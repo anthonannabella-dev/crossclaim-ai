@@ -56,6 +56,10 @@ const rule = (overrides: Partial<RecoveryRuleDefinition> = {}): RecoveryRuleDefi
 const ports = (overrides: Partial<SeoPublicCheckerPorts> = {}): SeoPublicCheckerPorts => ({
   resolveActiveRule: async ({ slug }) => (slug === 'us-customs-drawback' ? rule() : null),
   listRegisteredBasisKeys: async () => ['engine:customs-drawback-eligibility', 'engine:customs-duty-difference'],
+  getPublicInputSchema: async () => ({
+    fields: { reexported: { kind: 'boolean' } },
+    allowEmpty: true,
+  }),
   runEligibility: async () => ({ eligible: true, reasonCodes: [] }),
   runCalculation: async ({ basisKey }) => ({
     estimate: { min: 1000, max: 2500, currency: 'USD' },
@@ -261,5 +265,30 @@ describe('SEO-3 — public read-only checker/calculator', () => {
       expect(result.ok).toBe(false);
       expect(result.code).toBe('ENGINE_OUTPUT_INVALID');
     }
+  });
+
+  it('CHANGE A 接线：未知 answer key 在调用引擎前就被拒（引擎不会被调用）', async () => {
+    let eligibilityCalled = false;
+    const result = await runPublicSeoChecker(
+      { slug: 'us-customs-drawback', answers: { reexported: true, phone: 'x' } },
+      ports({
+        runEligibility: async () => {
+          eligibilityCalled = true;
+          return { eligible: true, reasonCodes: [] };
+        },
+      }),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.code).toBe('INVALID_REQUEST');
+    expect(eligibilityCalled).toBe(false);
+  });
+
+  it('CHANGE A 接线：basisKey 未注册 public schema → NO_RECOVERY_CAPABILITY', async () => {
+    const result = await runPublicSeoChecker(
+      { slug: 'us-customs-drawback', answers: { reexported: true } },
+      ports({ getPublicInputSchema: async () => null }),
+    );
+    expect(result.ok).toBe(false);
+    expect(result.code).toBe('NO_RECOVERY_CAPABILITY');
   });
 });

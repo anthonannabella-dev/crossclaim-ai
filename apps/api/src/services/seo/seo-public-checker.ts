@@ -18,6 +18,10 @@ import {
   validateRecoveryRuleDefinition,
   type RecoveryRuleDefinition,
 } from '../recovery-rules/recovery-rule-definition';
+import {
+  validatePublicAnswersAgainstSchema,
+  type PublicInputSchema,
+} from './seo-public-input-schema';
 
 /** 匿名输入白名单约束。 */
 export const SEO_PUBLIC_ANSWER_KEY_RE = /^[a-z][a-z0-9_]{0,31}$/;
@@ -72,6 +76,8 @@ export interface SeoPublicCheckerPorts {
   resolveActiveRule(input: { slug: string; now: Date }): Promise<RecoveryRuleDefinition | null>;
   /** 已注册且可执行的引擎 capability key。 */
   listRegisteredBasisKeys(): Promise<readonly string[]>;
+  /** CHANGE A/B：basisKey → public input schema（未注册 = 该能力不可公开，fail-closed）。 */
+  getPublicInputSchema(basisKey: string): Promise<PublicInputSchema | null>;
   /** 既有 eligibility 引擎（不在 SEO 层重写业务判断）。 */
   runEligibility(input: {
     basisKey: string;
@@ -215,13 +221,24 @@ export async function runPublicSeoChecker(
       : DENIED('CHECKER_NOT_AVAILABLE');
   }
 
+  // CHANGE A/B：语义白名单 + schema 驱动数值校验（必须在调用任何引擎**之前**完成）。
+  const schemaBasisKey = checkerReady ? rule.eligibilityMethod.basisKey : rule.calculationMethod.basisKey;
+  const schema: PublicInputSchema | null = await ports.getPublicInputSchema(schemaBasisKey);
+  const schemaCheck = validatePublicAnswersAgainstSchema({ answers: validation.answers, schema });
+  if (!schemaCheck.ok) {
+    return schemaCheck.code === 'SCHEMA_NOT_REGISTERED'
+      ? DENIED('NO_RECOVERY_CAPABILITY')
+      : DENIED('INVALID_REQUEST');
+  }
+  const checkedAnswers = schemaCheck.answers ?? {};
+
   let eligible: boolean | null = null;
   let reasonCodes: readonly string[] = [];
   if (checkerReady) {
     const outcome = await ports.runEligibility({
       basisKey: rule.eligibilityMethod.basisKey,
       rule,
-      answers: validation.answers,
+      answers: checkedAnswers,
     });
     // engine 输出校验：不合法即 fail-closed，绝不把异常值透传给公开调用方。
     if (!isSafeEligibilityOutcome(outcome)) return DENIED('ENGINE_OUTPUT_INVALID');
@@ -236,7 +253,7 @@ export async function runPublicSeoChecker(
     const calculation = await ports.runCalculation({
       basisKey: rule.calculationMethod.basisKey,
       rule,
-      answers: validation.answers,
+      answers: checkedAnswers,
     });
     if (!isSafeCalculationOutcome(calculation)) return DENIED('ENGINE_OUTPUT_INVALID');
     estimate = calculation.estimate;
