@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261004-16",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-04T10:46:14.682Z",
+  "updated_at": "2026-10-04T11:01:28.884Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -54,7 +54,7 @@
   "last_action": "INDEPENDENT FINAL AUDIT = PASS（MSG-20261003-147）；三元闭环成立，内部代码开发阶段正式完成",
   "last_action_at": "2026-10-03T14:17:18.723Z",
   "next_action": "内部自治开发停止；剩余为 Layer 3 外部依赖（需宿主授权）",
-  "current_head": "5c81195",
+  "current_head": "1950ef8",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -5189,7 +5189,7 @@
       "④ Production Candidate register only"
     ]
   },
-  "awaiting_verdict": "两条待归档：MSG-20261004-27（ZERO evidence，PASS WITH REVISE/90b1f71）+ SEO-3 PUBLIC API SECURITY（REVISE/3066ac2）",
+  "awaiting_verdict": "EXACT-ORDER REPLAY 证据已送审（comment 5979262070）；shared/staging deploy 解禁待裁决",
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
     "computed_at": "2026-10-04T10:11:44.364Z",
@@ -6276,7 +6276,7 @@
       "API.md / DOMAIN_MODEL.md / architecture-contract 计数 77 → 79"
     ]
   },
-  "next_execution_unit": "Archive ZERO-evidence verdict (MSG-20261004-27, fnv fa4fee5d) and SEO-3 verdict (MSG-20261004-28, fnv 1aef0ed7) using the verified archiver",
+  "next_execution_unit": "Read the deploy-release verdict; archive the SEO-3 verdict (3066ac2 / 1aef0ed7); then C18 Prisma Store + real PG E2E",
   "customer_ui_commercialization": {
     "at": "2026-10-04T01:21:55.949Z",
     "authorization": "MSG-20261004-01（CUSTOMER UI/UX COMMERCIALIZATION — IMPLEMENTATION AUTHORIZED）",
@@ -6555,7 +6555,7 @@
   "audit_session_url": "https://chatgpt.com/c/6ac1cdf0-1ec8-83ec-8036-0e66fcf5c6b9",
   "ci_note": "2026-10-04 复核：全部内部单元 CLOSED 后，GitHub Actions 对各 head 均有 workflow run（0c6bb0f/ f0abd05 / cb04232 / c6ce17c / 3fad4d4 / c897737 / fd7e4bf / 400fe6e / 8f32fce = success；5c6888e / f640f8c / 84c3f99 运行中）。架构方某次查询未见 runs 属查询口径差异（commit statuses vs workflow runs），此处记录 run id 以便复核。",
   "c18_layer3": {
-    "at": "2026-10-04T08:06:10.111Z",
+    "at": "2026-10-04T11:01:28.884Z",
     "main_line": "P0 = C18 REAL CUSTOMS PROVIDER INTEGRATION",
     "matrix_doc": "docs/releases/C18-PROVIDER-INTEGRATION-MATRIX.md",
     "completed": [
@@ -6893,11 +6893,24 @@
       "len": 3207,
       "archived": false,
       "pending_archive": true
+    },
+    "exact_order_replay": {
+      "status": "PASS(evidence submitted)",
+      "reviewed_head": "1950ef8",
+      "script": "tools/verification/c18-exact-order-replay.mjs",
+      "result": {
+        "migrate_deploy": "OK(all in place, no manual psql)",
+        "diff_lines": 0,
+        "status_up_to_date": true,
+        "replay": "PASS"
+      },
+      "audit_comment_id": 5979262070,
+      "asking": "release shared/staging migrate deploy (production still HOLD)"
     }
   },
-  "last_heartbeat_at": "2026-10-04T10:46:14.682Z",
-  "waiting_for_verdict": "两条待归档：MSG-20261004-27（ZERO evidence，PASS WITH REVISE/90b1f71）+ SEO-3 PUBLIC API SECURITY（REVISE/3066ac2）",
-  "last_completed_unit": "ci-verification (5cc8864, 15f6dbc green) + archive command plan",
+  "last_heartbeat_at": "2026-10-04T11:01:28.884Z",
+  "waiting_for_verdict": "EXACT-ORDER REPLAY 证据已送审（comment 5979262070）；shared/staging deploy 解禁待裁决",
+  "last_completed_unit": "exact-order-replay-proof (PASS) + evidence submission",
   "hold_external": true,
   "track_c_seo_p3": {
     "at": "2026-10-04T09:46:09.403Z",
@@ -7044,11 +7057,11 @@
     ],
     "seo3_progress": "CHANGE A/B validator added (86f4289), engine output validation added (eb99c53), validator wired into runPublicSeoChecker (8bf49da), HTTP boundary guard added (4f2cd20); HTTP entry still not registered"
   },
-  "CURRENT_HEAD": "5c81195",
+  "CURRENT_HEAD": "1950ef8",
   "LAST_COMPLETED_UNIT": "c18-migration-sql-final2-submission",
   "NEXT_EXECUTION_UNIT": "读 MIGRATION SQL FINAL-2 裁决 → PASS 后按解禁顺序；并行 SEO-3 PUBLIC API SECURITY AUDIT 唤醒",
   "CI_STATUS": "GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress)",
-  "WAITING_FOR_VERDICT": "两条待归档：MSG-20261004-27（ZERO evidence，PASS WITH REVISE/90b1f71）+ SEO-3 PUBLIC API SECURITY（REVISE/3066ac2）",
+  "WAITING_FOR_VERDICT": "EXACT-ORDER REPLAY 证据已送审（comment 5979262070）；shared/staging deploy 解禁待裁决",
   "HOST_ACTION_REQUIRED": [
     "provider developer/partner account registration",
     "third-party commercial agreement acceptance",
@@ -7061,7 +7074,7 @@
     "Search Console verification / domain ownership（SEO 页面转 INDEX 前需要）"
   ],
   "HOLD_EXTERNAL": true,
-  "LAST_HEARTBEAT_AT": "2026-10-04T10:46:14.682Z",
+  "LAST_HEARTBEAT_AT": "2026-10-04T11:01:28.884Z",
   "ci_red_streak_note": "RESOLVED: three contract/inventory fixes (tenant-trigger whitelist 1b15ab7, append-only whitelist cc13bde, model inventory 82->85 4f02282); 4f02282 is the first green run after the streak.",
   "ci_contract_fix_local_verification": {
     "at": "2026-10-04T08:51:16.135Z",
