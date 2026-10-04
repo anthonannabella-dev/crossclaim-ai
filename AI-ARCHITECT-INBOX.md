@@ -136777,3 +136777,149 @@ PRODUCTION_PUBLIC_CHECKER = HOLD
 
 所以这轮已经非常接近关闭：业务输入/输出安全已经通过，剩下的是三个真实 HTTP runtime 防护，而不是业务逻辑重做。
 ```
+
+### [MSG-20261005-05] ARCHITECT VERDICT — SEO-3 PUBLIC HTTP FINAL-2 = **PASS**（HTTP Runtime FINAL；Production Enablement 继续 HOLD）；代码送审 HEAD = `e7365ea`（完整 SHA `e7365eac511786ea7be789ce7110a95542c46999`）。①**CHANGE C/D/E 全部 PASS**：`CHANGE_C_REAL_TIMEOUT = PASS`（2500ms 常量已变成真实执行：`Promise.race(engine, timeout)` 超时返回 **504 ENGINE_TIMEOUT**、engine 抛错返回 **502 ENGINE_FAILED**；且 timeout 返回后 **slot 不会马上释放**，要等 engine promise 真正 settle 才 `release()`，因此不会因慢任务继续运行而突破并发上限）、`CHANGE_D_SHARED_CONCURRENCY_GATE = PASS`（关闭上一轮 fail-open：`concurrencyGate` 必传，运行时缺失返回 **503 CONCURRENCY_GATE_MISSING**，并提供进程级 singleton `getSeoPublicConcurrencyGate()`，不再允许每请求各建计数器）、`CHANGE_E_BOUNDED_IN_MEMORY_LIMITER = PASS`（默认 `ttlMs=10min` / `maxBuckets=5000`，新 key 超限按最久未使用淘汰，匿名公网不断换 IP/hash 也不会让 Map 无界增长）。因此：`PUBLIC_CHECKER_HTTP_CORE = FINAL_PASS`、`PUBLIC_CHECKER_HTTP_HANDLER = FINAL_PASS`。②**可以注册公开只读入口并定稿 SEO-8**：`PUBLIC_ROUTE_IMPLEMENTATION = AUTHORIZED`、`SEO_8_PUBLIC_SURFACE_CONTRACT = AUTHORIZED`——但这是**代码接线批准，不是生产解禁**；建议真实入口保持 `PUBLIC_SEO_CHECKER_ENABLED=false` **默认关闭**，DEV / STAGING 可显式开启。③下一道生产门只剩**真实 route 集成验收 + 共享/边缘原子限流**；边界继续 `EXTERNAL_WRITE = HOLD`、`PAYMENT = HOLD`、`TRANSPORT = HOLD`、`PRODUCTION_CREDENTIALS = HOLD`、`PRODUCTION_PUBLIC_CHECKER = HOLD`。结论：SEO-3 的 HTTP handler/runtime 层**可以正式关闭**，Codex 现在可以接真实公开只读 route 并完成 SEO-8（本轮 C/D/E 均为窄修，未触碰支付、外写、Transport 或生产凭据；15 文件 / 109 例 + tsc 0 属送审执行证据，架构方独立确认的是 `e7365ea` 上 C/D/E 的实际实现与关键行为测试）。
+
+```text
+ARCHITECT VERDICT：PASS（HTTP Runtime FINAL；Production Enablement 继续 HOLD）
+
+我按**代码送审 HEAD = e7365ea**重新复核，完整 SHA：
+
+纯文本
+e7365eac511786ea7be789ce7110a95542c46999
+
+并核了 08a822c → e7365ea 的实际变更范围。C/D/E 都是本轮要求的窄修，没有触碰支付、外写、Transport 或生产凭据。
+
+① CHANGE C / D / E：全部 PASS
+纯文本
+CHANGE_C_REAL_TIMEOUT = PASS
+CHANGE_D_SHARED_CONCURRENCY_GATE = PASS
+CHANGE_E_BOUNDED_IN_MEMORY_LIMITER = PASS
+
+CHANGE C 已从“2500ms 常量”变成真实执行：Promise.race(engine, timeout)，超时返回 504 ENGINE_TIMEOUT；engine 抛错返回 502 ENGINE_FAILED。更重要的是，timeout 返回后，slot 不会马上释放，而是等 engine promise 真正 settle 后才 release()，因此不会因慢任务继续运行而突破并发上限。
+
+CHANGE D 已关闭上一轮 fail-open：concurrencyGate 现在是必传依赖；运行时缺失返回 503 CONCURRENCY_GATE_MISSING；同时提供进程级 singleton getSeoPublicConcurrencyGate()，不再允许每请求各建一个计数器。
+
+CHANGE E 也已真正有界：默认 ttlMs=10min、maxBuckets=5000，新 key 超限会按最久未使用项淘汰。所以即便匿名公网不断换 IP/hash，Map 也不会无界增长。
+
+因此：
+
+纯文本
+PUBLIC_CHECKER_HTTP_CORE = FINAL_PASS
+PUBLIC_CHECKER_HTTP_HANDLER = FINAL_PASS
+② 可以注册公开只读入口，并定稿 SEO-8
+
+批准：
+
+纯文本
+PUBLIC_ROUTE_IMPLEMENTATION = AUTHORIZED
+SEO_8_PUBLIC_SURFACE_CONTRACT = AUTHORIZED
+
+但这里的“批准注册”是代码接线批准，不是生产解禁。
+
+建议真实入口保持：
+
+纯文本
+PUBLIC_SEO_CHECKER_ENABLED=false
+
+默认关闭。
+
+DEV / STAGING 可以显式开启：
+
+纯文本
+DEV_PUBLIC_CHECKER = AUTHORIZED
+STAGING_PUBLIC_CHECKER = AUTHORIZED
+
+接线时必须实际使用：
+
+纯文本
+raw request body
+→ 8 KiB pre-parse guard
+→ JSON parse
+→ trusted-proxy client IP
+→ limiter
+→ process singleton concurrency gate
+→ handler
+→ response
+
+不要让 route 自己绕过现在已经验收的 handler。
+
+SEO-8 最终合同测试应把实际 route 层钉住，包括：POST only、超过 8 KiB 在 JSON parse 前拒绝、405/413/415、可信代理 fail-closed、429、N+1 并发 503、504 timeout、502 engine failure、Cache-Control: no-store、无 wildcard CORS，以及不记录 raw body/IP/UA。
+
+这属于接线验收，不需要重新设计 SEO-3。
+
+③ 生产共享/边缘原子限流：仍然是硬前置
+
+确认不变：
+
+纯文本
+IN_MEMORY_RATE_LIMIT = DEV_STAGING_ONLY
+
+SHARED_OR_EDGE_ATOMIC_RATE_LIMIT
+= REQUIRED_FOR_PRODUCTION
+
+也就是说，现在即使把 route 写进 server.ts：
+
+纯文本
+PRODUCTION_PUBLIC_CHECKER = HOLD
+
+仍然不能打开。
+
+生产前至少需要真实接上以下之一：
+
+纯文本
+Redis atomic check-and-consume
+或
+CDN / API Gateway global rate limit
+
+并保持应用内第二层防护。
+
+我不建议用当前 CANARY_ACCEPTED 语义代替正式生产共享限流作为长期方案。
+
+④ 证据是否够
+
+架构层面已经够，可以 FINAL PASS。
+
+有一个很小的证据说明：当前我看到的 CHANGE E 新测试直接证明了 maxBuckets 硬上限；TTL 淘汰逻辑在实现中存在，但该新测试没有实际推进时钟后断言 TTL 删除。
+
+这不阻塞 FINAL PASS，因为真正防止内存无界增长的硬安全不变量已经由 maxBuckets 保证。
+
+建议在 SEO-8 顺手补一个非阻塞测试：
+
+纯文本
+t0: k1
+t0 + ttlMs + 1
+check k2
+→ k1 被清理
+
+不需要因此再送 FINAL-3。
+
+最终状态：
+
+纯文本
+CHANGE_A = PASS
+CHANGE_B = PASS
+CHANGE_C = PASS
+CHANGE_D = PASS
+CHANGE_E = PASS
+
+PUBLIC_CHECKER_CORE = PASS
+PUBLIC_CHECKER_HTTP_HANDLER = FINAL_PASS
+PUBLIC_ROUTE_REGISTRATION = AUTHORIZED
+SEO_8_PUBLIC_CONTRACT = AUTHORIZED
+
+DEV_PUBLIC_ENABLEMENT = AUTHORIZED
+STAGING_PUBLIC_ENABLEMENT = AUTHORIZED
+
+PRODUCTION_SHARED_OR_EDGE_RATE_LIMIT = REQUIRED
+PRODUCTION_PUBLIC_CHECKER = HOLD
+
+EXTERNAL_WRITE = HOLD
+PAYMENT = HOLD
+TRANSPORT = HOLD
+PRODUCTION_CREDENTIALS = HOLD
+
+另外，exact HEAD 的 hosted GitHub status/workflow 仍为空，因此 15 files / 109 tests + tsc 0 属于送审执行证据；我独立确认的是 e7365ea 上 C/D/E 的实际实现与关键行为测试。
+
+结论：SEO-3 的 HTTP handler/runtime 层可以正式关闭，Codex 现在可以接真实公开只读 route 并完成 SEO-8；下一道生产门只剩真实 route 集成验收 + 共享/边缘原子限流。
+```
