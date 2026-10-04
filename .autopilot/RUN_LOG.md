@@ -1780,3 +1780,7 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 
 ## 2026-10-03T23:53:09.312Z — EMAIL LIFECYCLE
 - Email 验证 + 密码重置落地（Schema + migration 67 + service + HTTP + 20 tests）；EMAIL_DELIVERY 保持 EXTERNAL_GATE。
+
+## 2026-10-04T00:15:11.904Z — PC-01B CLOSED
+- Email 验证 + 密码重置收口：CI 37163183689 SUCCESS；本地真实 PostgreSQL 回归 135 文件 / 1071 用例 PASS。
+- 下一单元：Claim / Appeal language metadata。
