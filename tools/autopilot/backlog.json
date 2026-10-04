@@ -1,6 +1,6 @@
 {
   "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。",
-  "updatedAt": "2026-10-04T14:50:00.000Z",
+  "updatedAt": "2026-10-04T14:56:00.000Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -1167,6 +1167,16 @@
       "acceptance_criteria": "裁决落地后按裁定实现；PUBLIC_CHECKER_HTTP 保持 HOLD 直至 SEO-3 PUBLIC HTTP FINAL",
       "status": "WAITING_FOR_VERDICT",
       "implementation_head": "765231e"
+    },
+    {
+      "id": "SEO-4-STAGE-9-web-recover-route-skeleton",
+      "priority": "P0",
+      "source_backlog_id": "用户指令：立即实现 /recover 路由骨架",
+      "title": "apps/web /recover/[slug] 路由骨架（默认 noindex，fail-closed，不接数据源、不注册 API）",
+      "scope": "新增 app/recover/[slug]/page.tsx（骨架 + robots noindex + 数据源未裁定前 notFound()）与 app/recover/not-found.tsx（统一 404 视图，仅用 i18n key）；不注册 route handler / POST",
+      "acceptance_criteria": "apps/web tsc exit 0；无 Checker POST；PUBLIC_CHECKER_HTTP 保持 HOLD；数据源裁决后接 facade",
+      "status": "IMPLEMENTED_PENDING_CI",
+      "implementation_head": "(this commit)"
     }
   ],
   "authorization_note": "MSG-20261003-133 Q3：dispatcher 获授权自动扩 backlog 并执行安全单元（契约/已批准 D1–D3 Schema/append-only 持久化/deterministic normalization/qualification·evidence·package/测试/文档/fixture/只读 HTTP/只读 reconciliation projection）；遇到未批准 Schema、EXTERNAL_WRITE Action Guard、真实 adapter/webhook、submission、真实资金语义写入、生产 credential、收费时必须停该分支并重新送审。 HOST 2026-10-04（CONTINUOUS EXECUTION + CUSTOMS AUTHORIZATION + CHATGPT AUDIT LOOP）：UI-6…UI-8 与 CA-2…CA-6 已登记为可执行队列；Schema/Security/Authorization 边界项自动进入 ChatGPT Audit Loop（AUDIT-BRIDGE.md，不新建协议）。"
