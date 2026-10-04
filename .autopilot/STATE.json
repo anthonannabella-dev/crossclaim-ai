@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261004-16",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T06:55:00.000Z",
+  "updated_at": "2026-10-05T07:05:00.000Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -5192,9 +5192,9 @@
   "awaiting_verdict": "EXACT-ORDER REPLAY 证据已送审（comment 5979262070）；shared/staging deploy 解禁待裁决",
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-04T20:15:18.460Z",
-    "head": "e7365ea",
-    "acceptance_head": "e7365ea",
+    "computed_at": "2026-10-04T20:15:51.411Z",
+    "head": "6e6229a",
+    "acceptance_head": "6e6229a",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5286,7 +5286,6 @@
       "CHECK:L1-07_api_typecheck_passed",
       "CHECK:L1-08_web_typecheck_build_passed",
       "CHECK:L1-09_no_skipped_critical_tests",
-      "CHECK:L1-10_git_working_tree_clean",
       "CHECK:L1-11_docs_state_consistent",
       "CHECK:L1-12_schema_invariants_verified",
       "CHECK:L1-13_negative_paths_covered",
@@ -5345,48 +5344,48 @@
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=e7365ea ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
+        "evidence": "acceptance_head=6e6229a ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
       },
       "L1-05_pg_regression_passed": {
         "status": "UNVERIFIED",
-        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head e7365ea（且中间存在非簿记变更）"
+        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head 6e6229a（且中间存在非簿记变更）"
       },
       "L1-06_fresh_db_migration_passed": {
         "status": "UNVERIFIED",
-        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head e7365ea（且中间存在非簿记变更）"
+        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head 6e6229a（且中间存在非簿记变更）"
       },
       "L1-07_api_typecheck_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head e7365ea（且中间存在非簿记变更）"
+        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head 6e6229a（且中间存在非簿记变更）"
       },
       "L1-08_web_typecheck_build_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head e7365ea（且中间存在非簿记变更）"
+        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head 6e6229a（且中间存在非簿记变更）"
       },
       "L1-09_no_skipped_critical_tests": {
         "status": "UNVERIFIED",
-        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head e7365ea（且中间存在非簿记变更）"
+        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head 6e6229a（且中间存在非簿记变更）"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
-        "status": false,
-        "evidence": "dirty entries: 1"
+        "status": true,
+        "evidence": "porcelain empty"
       },
       "L1-11_docs_state_consistent": {
         "status": "UNVERIFIED",
-        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head e7365ea（且中间存在非簿记变更）"
+        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head 6e6229a（且中间存在非簿记变更）"
       },
       "L1-12_schema_invariants_verified": {
         "status": "UNVERIFIED",
-        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head e7365ea（且中间存在非簿记变更）"
+        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head 6e6229a（且中间存在非簿记变更）"
       },
       "L1-13_negative_paths_covered": {
         "status": "UNVERIFIED",
-        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head e7365ea（且中间存在非簿记变更）"
+        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head 6e6229a（且中间存在非簿记变更）"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
         "status": "UNVERIFIED",
-        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head e7365ea（且中间存在非簿记变更）"
+        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head 6e6229a（且中间存在非簿记变更）"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
@@ -6334,7 +6333,7 @@
       "API.md / DOMAIN_MODEL.md / architecture-contract 计数 77 → 79"
     ]
   },
-  "next_execution_unit": "重新提交 SEO-3 PUBLIC HTTP FINAL 复核（CHANGE C/D/E 已落地 + 新增 4 例 runtime 防护测试）；通过后接线公开只读入口并定稿 SEO-8",
+  "next_execution_unit": "读 SEO-3 FINAL-2 裁决：逐字归档 + verdict-diff FULL_COPY_OK；PASS → 注册公开只读入口并把 SEO-8 公开面合同测试定稿；REVISE → 立即修",
   "customer_ui_commercialization": {
     "at": "2026-10-04T01:21:55.949Z",
     "authorization": "MSG-20261004-01（CUSTOMER UI/UX COMMERCIALIZATION — IMPLEMENTATION AUTHORIZED）",
@@ -7380,10 +7379,10 @@
     "seo3_progress": "CHANGE A/B validator added (86f4289), engine output validation added (eb99c53), validator wired into runPublicSeoChecker (8bf49da), HTTP boundary guard added (4f2cd20); HTTP entry still not registered"
   },
   "CURRENT_HEAD": "293f55e",
-  "LAST_COMPLETED_UNIT": "SEO-3 REVISE 修复（MSG-20261005-04）：CHANGE C 真 timeout enforcement（504 ENGINE_TIMEOUT，槽位只在引擎真正结束时释放）/ CHANGE D concurrencyGate 必传 + 进程级 singleton（缺省 fail-closed 503 CONCURRENCY_GATE_MISSING）/ CHANGE E in-memory limiter 增加 TTL 与 max-size（LRU）；seo-* 15 文件 109 例全过、tsc 0",
-  "NEXT_EXECUTION_UNIT": "重新提交 SEO-3 PUBLIC HTTP FINAL 复核（CHANGE C/D/E 已落地 + 新增 4 例 runtime 防护测试）；通过后接线公开只读入口并定稿 SEO-8",
-  "CI_STATUS": "本批提交后由托管 CI 复核；本地：apps/api tsc 0 / seo-* 109 例全过",
-  "WAITING_FOR_VERDICT": "none（MSG-20261005-04 SEO-3 PUBLIC HTTP FINAL = REVISE 已归档 FULL_COPY_OK；CHANGE C/D/E 已修，待重新送 FINAL 复核）",
+  "LAST_COMPLETED_UNIT": "SEO-3 FINAL-2 送审材料（CHANGE C 真 timeout + 槽位释放语义、CHANGE D 闸门必传 + 进程级 singleton、CHANGE E limiter TTL/max-size；新增 4 例真实行为测试）",
+  "NEXT_EXECUTION_UNIT": "读 SEO-3 FINAL-2 裁决：逐字归档 + verdict-diff FULL_COPY_OK；PASS → 注册公开只读入口并把 SEO-8 公开面合同测试定稿；REVISE → 立即修",
+  "CI_STATUS": "HEAD 6e6229a 已推送；本地：apps/api tsc 0 / seo-* 109 例全过 / 四项门禁 OK",
+  "WAITING_FOR_VERDICT": "SEO-3 PUBLIC HTTP FINAL-2（已送审：docs/releases/SEO-3-PUBLIC-HTTP-FINAL2-REQUEST.md @ 6e6229a；代码 HEAD e7365ea；唤醒三要素已验证送达）；RSI staging smoke 仍等宿主非生产 DATABASE_URL",
   "HOST_ACTION_REQUIRED": [
     "provider developer/partner account registration",
     "third-party commercial agreement acceptance",
@@ -7397,7 +7396,7 @@
     "non-production staging DATABASE_URL + 确认该 shared 库是否承载真实客户数据（执行已授权的 staging migrate deploy 前需要）"
   ],
   "HOLD_EXTERNAL": true,
-  "LAST_HEARTBEAT_AT": "2026-10-05T06:55:00.000Z",
+  "LAST_HEARTBEAT_AT": "2026-10-05T07:05:00.000Z",
   "ci_red_streak_note": "RESOLVED: three contract/inventory fixes (tenant-trigger whitelist 1b15ab7, append-only whitelist cc13bde, model inventory 82->85 4f02282); 4f02282 is the first green run after the streak.",
   "ci_contract_fix_local_verification": {
     "at": "2026-10-04T08:51:16.135Z",
@@ -7604,12 +7603,13 @@
       "es"
     ],
     "next": "SEO-5 收尾（sitemap/hreflang/canonical 全链测试重跑）",
-    "seo3_status": "REVISE_FIXED（CHANGE C/D/E 已落地，待重新送 FINAL）",
-    "seo3_durable_record": "docs/releases/SEO-3-PUBLIC-HTTP-FINAL-REQUEST.md",
+    "seo3_status": "FINAL2_SUBMITTED（CHANGE C/D/E 已落地；等裁决）",
+    "seo3_durable_record": "docs/releases/SEO-3-PUBLIC-HTTP-FINAL2-REQUEST.md",
     "seo3_durable_record_commit": "08a822c",
     "production_rate_limit": "NOT_IMPLEMENTED（in-memory = DEV/STAGING_ONLY；生产需共享/边缘原子限流）",
     "change_c": "timeout enforced（createSeoTimeout + race；慢任务结束前不释放并发槽）",
     "change_d": "concurrencyGate 必传 + getSeoPublicConcurrencyGate() 进程级 singleton；缺省 503 CONCURRENCY_GATE_MISSING",
-    "change_e": "in-memory limiter ttlMs + maxBuckets（LRU）"
+    "change_e": "in-memory limiter ttlMs + maxBuckets（LRU）",
+    "seo3_code_head": "e7365ea"
   }
 }
