@@ -1,6 +1,6 @@
 {
   "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。",
-  "updatedAt": "2026-10-05T00:42:00.000Z",
+  "updatedAt": "2026-10-05T00:45:00.000Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -1280,6 +1280,69 @@
       "acceptance_criteria": "SEO-4 相关 33 用例全绿；api/web tsc 0",
       "status": "IMPLEMENTED_PENDING_CI",
       "implementation_head": "(this commit)"
+    },
+    {
+      "id": "RSI-P1-01-lifecycle-contract",
+      "priority": "P0",
+      "source_backlog_id": "OWNER 任务：RSI 自治控制层（docs/releases/RSI-CONTROL-PLANE-PHASE1.md）",
+      "title": "RSI Phase-1：Incident/Task/Candidate/EvaluationRun/PromotionDecision 契约与状态机（纯函数 + fail-closed 非法跃迁）",
+      "scope": "RSI Phase-1（离线/沙箱）：只读观察 + 自动建任务 + 受控 patch + 确定性验证 + 独立 Judge；无外部写",
+      "acceptance_criteria": "对应纯函数/编排落地并有命名用例；api tsc 0；不新增 schema/migration（如需另送 Schema Delta 审计）",
+      "status": "READY"
+    },
+    {
+      "id": "RSI-P1-02-readonly-observer",
+      "priority": "P0",
+      "source_backlog_id": "OWNER 任务：RSI 自治控制层（docs/releases/RSI-CONTROL-PLANE-PHASE1.md）",
+      "title": "RSI Phase-1：只读 Observer（CI/测试/backlog 信号 → 脱敏 signal），不读客户数据与凭据",
+      "scope": "RSI Phase-1（离线/沙箱）：只读观察 + 自动建任务 + 受控 patch + 确定性验证 + 独立 Judge；无外部写",
+      "acceptance_criteria": "对应纯函数/编排落地并有命名用例；api tsc 0；不新增 schema/migration（如需另送 Schema Delta 审计）",
+      "status": "READY"
+    },
+    {
+      "id": "RSI-P1-03-auto-task-generator",
+      "priority": "P0",
+      "source_backlog_id": "OWNER 任务：RSI 自治控制层（docs/releases/RSI-CONTROL-PLANE-PHASE1.md）",
+      "title": "RSI Phase-1：signal → incident → task 自动生成 + 同 signal 去重",
+      "scope": "RSI Phase-1（离线/沙箱）：只读观察 + 自动建任务 + 受控 patch + 确定性验证 + 独立 Judge；无外部写",
+      "acceptance_criteria": "对应纯函数/编排落地并有命名用例；api tsc 0；不新增 schema/migration（如需另送 Schema Delta 审计）",
+      "status": "READY"
+    },
+    {
+      "id": "RSI-P1-04-builder-judge-separation",
+      "priority": "P0",
+      "source_backlog_id": "OWNER 任务：RSI 自治控制层（docs/releases/RSI-CONTROL-PLANE-PHASE1.md）",
+      "title": "RSI Phase-1：Builder/Judge 隔离编排（确定性测试 + replay/benchmark → 独立 Judge）",
+      "scope": "RSI Phase-1（离线/沙箱）：只读观察 + 自动建任务 + 受控 patch + 确定性验证 + 独立 Judge；无外部写",
+      "acceptance_criteria": "对应纯函数/编排落地并有命名用例；api tsc 0；不新增 schema/migration（如需另送 Schema Delta 审计）",
+      "status": "READY"
+    },
+    {
+      "id": "RSI-P1-05-immutable-evidence",
+      "priority": "P0",
+      "source_backlog_id": "OWNER 任务：RSI 自治控制层（docs/releases/RSI-CONTROL-PLANE-PHASE1.md）",
+      "title": "RSI Phase-1：不可变 evaluation evidence 结构 + 追加式证据契约",
+      "scope": "RSI Phase-1（离线/沙箱）：只读观察 + 自动建任务 + 受控 patch + 确定性验证 + 独立 Judge；无外部写",
+      "acceptance_criteria": "对应纯函数/编排落地并有命名用例；api tsc 0；不新增 schema/migration（如需另送 Schema Delta 审计）",
+      "status": "READY"
+    },
+    {
+      "id": "RSI-P1-06-policy-engine",
+      "priority": "P0",
+      "source_backlog_id": "OWNER 任务：RSI 自治控制层（docs/releases/RSI-CONTROL-PLANE-PHASE1.md）",
+      "title": "RSI Phase-1：Policy Engine（L0–L5 等级 + 永久 OWNER gate 硬编码禁止清单）",
+      "scope": "RSI Phase-1（离线/沙箱）：只读观察 + 自动建任务 + 受控 patch + 确定性验证 + 独立 Judge；无外部写",
+      "acceptance_criteria": "对应纯函数/编排落地并有命名用例；api tsc 0；不新增 schema/migration（如需另送 Schema Delta 审计）",
+      "status": "READY"
+    },
+    {
+      "id": "RSI-P1-07-e2e-demo",
+      "priority": "P0",
+      "source_backlog_id": "OWNER 任务：RSI 自治控制层（docs/releases/RSI-CONTROL-PLANE-PHASE1.md）",
+      "title": "RSI Phase-1 E2E：一条脱敏信号走完整闭环并以 commit/测试/CI 作为证据",
+      "scope": "RSI Phase-1（离线/沙箱）：只读观察 + 自动建任务 + 受控 patch + 确定性验证 + 独立 Judge；无外部写",
+      "acceptance_criteria": "对应纯函数/编排落地并有命名用例；api tsc 0；不新增 schema/migration（如需另送 Schema Delta 审计）",
+      "status": "READY"
     }
   ],
   "authorization_note": "MSG-20261003-133 Q3：dispatcher 获授权自动扩 backlog 并执行安全单元（契约/已批准 D1–D3 Schema/append-only 持久化/deterministic normalization/qualification·evidence·package/测试/文档/fixture/只读 HTTP/只读 reconciliation projection）；遇到未批准 Schema、EXTERNAL_WRITE Action Guard、真实 adapter/webhook、submission、真实资金语义写入、生产 credential、收费时必须停该分支并重新送审。 HOST 2026-10-04（CONTINUOUS EXECUTION + CUSTOMS AUTHORIZATION + CHATGPT AUDIT LOOP）：UI-6…UI-8 与 CA-2…CA-6 已登记为可执行队列；Schema/Security/Authorization 边界项自动进入 ChatGPT Audit Loop（AUDIT-BRIDGE.md，不新建协议）。"

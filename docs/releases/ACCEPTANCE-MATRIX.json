@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-10-04T15:41:23.504Z",
-  "acceptance_head": "4402245",
+  "generated_at": "2026-10-04T15:43:01.882Z",
+  "acceptance_head": "12859d3",
   "protocol": "docs/releases/FINAL-ACCEPTANCE-PROTOCOL.md",
   "areas": [
     {
@@ -194,7 +194,14 @@
     "SEO-4-STAGE-15-projection-pipeline-guard",
     "SEO-4-STAGE-16-web-wiring-contract-test",
     "SEO-4-P0-route-shape-vs-canonical-mismatch",
-    "SEO-4-P0-projection-carries-canonical-path"
+    "SEO-4-P0-projection-carries-canonical-path",
+    "RSI-P1-01-lifecycle-contract",
+    "RSI-P1-02-readonly-observer",
+    "RSI-P1-03-auto-task-generator",
+    "RSI-P1-04-builder-judge-separation",
+    "RSI-P1-05-immutable-evidence",
+    "RSI-P1-06-policy-engine",
+    "RSI-P1-07-e2e-demo"
   ],
   "host_action_required": [
     "provider developer/partner account registration",
