@@ -136923,3 +136923,394 @@ PRODUCTION_CREDENTIALS = HOLD
 
 结论：SEO-3 的 HTTP handler/runtime 层可以正式关闭，Codex 现在可以接真实公开只读 route 并完成 SEO-8；下一道生产门只剩真实 route 集成验收 + 共享/边缘原子限流。
 ```
+
+### [MSG-20261005-06] ARCHITECT VERDICT — SEO 公开 Checker 真实 engine / 输入 schema 设计 = **PASS WITH REVISE**（reviewed HEAD = `cb41b3e`）；方向正确（公开 Checker 只做匿名、自报、规则驱动的预筛，不把 SEO 层变成第二套业务规则引擎），但实现前必须修 5 项。①**5 个 eligibility key 可保留，但必须显式「自报预筛」语义**：不得让 API 的 `eligible = true` 被理解成「系统已验证有 IOR / POA / filing authorization」；必须增加 `eligibilityLabel = PRELIMINARY_SELF_REPORTED`，UI 表达为「基于你提供的信息，初步符合条件」；且必填不得把 5 个字段全设为 required —— 必须**由当前规则决定**（`requiresIorIdentity = true` → `hasIorIdentity` 必答；`= false` → 不得因缺该字段而 `INVALID_REQUEST`），因此 `getPublicInputSchema()` 这种脱离 rule 的静态 schema 不够，需要 `getPublicInputSchema(rule)` 或等价的 rule-aware builder；不需要新增身份/账号/单号字段，也不要自由文本。②`evidenceCount >= minimumEvidenceCount` = **PASS 但只是数量门槛**：`EVIDENCE_COUNT_GATE = PASS` / `EVIDENCE_VALIDITY_VERIFICATION = NOT_PERFORMED`（不能证明证据类型正确、真实、有效或满足 filing 要求，规则里还有 `requiredEvidence[]`），因此最终 eligibility 必须继续标 `PRELIMINARY_SELF_REPORTED`，**不得**标 `VERIFIED` / `READY_TO_FILE`。③**DUTY_DIFFERENCE 的 `refundableAmount` 作为输入 = REVISE**（circular estimate：用户说自己能退 7000，系统再把 7000 返回，会让「真实 engine」失去意义）：输入改为 `dutyPaidAmount` + `dutyActuallyDueAmount` + `currency`，`difference = max(0, dutyPaidAmount - dutyActuallyDueAmount)`，输出仍须明确 `SELF_REPORTED_POINT_ESTIMATE` + `ESTIMATE_ONLY`；**特别提醒**：若当前 customs-drawback 规则并不能真实解释为 `dutyPaid - dutyActuallyDue`，就**不要**为了让 Calculator 有数字而强行注册该 DUTY_DIFFERENCE engine，应继续 `calculator unavailable → estimate = null`，直到规则里有真实计算依据。④`MIN_EQUALS_MAX = PASS`（不要为「看起来像估算」人工加 ±10%、成功率或历史比例），`ARTIFICIAL_RANGE = FORBIDDEN`；未来规则里出现真实可溯源的 `rate / cap / excluded amount / formula / sourceReference` 时才允许由规则公式产生更复杂的金额。⑤**实现前必须修的结构问题**：`runPublicSeoChecker()` 目前 `schemaBasisKey = checkerReady ? eligibilityMethod.basisKey : calculationMethod.basisKey`，只要 checker 和 calculator 同时存在就**只取 eligibility schema**，于是带计算字段的请求会被判 `UNKNOWN_ANSWER_KEY`；必须改为：读取 eligibility schema + 读取 calculation schema + 验证二者字段不冲突 + 组成 request-level union whitelist + 分别投影 `eligibilityAnswers` / `calculationAnswers`（不要做一个大而松散的总 schema）。边界：DEV/STAGING 可显式开启（`DEV_PUBLIC_ENABLEMENT = AUTHORIZED` / `STAGING_PUBLIC_ENABLEMENT = AUTHORIZED`），`PRODUCTION_PUBLIC_CHECKER = HOLD`，`EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS = HOLD`。完成后送一次窄的 **PUBLIC ENGINE IMPLEMENTATION AUDIT** 即可。
+
+```text
+ARCHITECT VERDICT：PASS WITH REVISE
+
+我按 reviewed HEAD = cb41b3ea8803e6d7c8ebbd32c0f044c0a49506b5 重新审了这次设计。总体方向正确：公开 Checker 只做匿名、自报、规则驱动的预筛，不把 SEO 层变成第二套业务规则引擎。 但实现前有两个必须修的语义问题，否则注册“真实 engine”后会产生错误结果。
+
+① 这 5 个 eligibility key：可以保留，但必须明确“自报预筛”语义
+
+这 5 个字段本身可接受：
+
+纯文本
+hasIorIdentity        boolean
+hasAuthorizedSigner   boolean
+hasBrokerPoa          boolean
+hasFilingAuthorization boolean
+evidenceCount         integer >= 0
+
+不需要再增加身份、账号、单号等字段，也不要加入任何自由文本。
+
+但不能让 API 的：
+
+纯文本
+eligible = true
+
+被理解成“系统已经验证有 IOR / POA / filing authorization”。
+
+这是匿名请求，系统实际上只知道：
+
+用户说自己有。
+
+因此必须增加一个明确语义，例如：
+
+纯文本
+eligibilityLabel = PRELIMINARY_SELF_REPORTED
+
+UI 对应表达应是“基于你提供的信息，初步符合条件”，而不是“已验证符合资格”。
+
+另外，“required”不能简单地把 5 个字段全部设为必填。应由当前规则决定：
+
+纯文本
+requiresIorIdentity = true
+→ hasIorIdentity 必须回答
+
+requiresIorIdentity = false
+→ 不应因为缺少 hasIorIdentity 而 INVALID_REQUEST
+
+同理适用于 signer / POA / filing authorization。
+
+这意味着目前：
+
+TypeScript
+getPublicInputSchema()
+
+这种完全脱离 rule 的静态 schema 设计不够理想。建议改为：
+
+TypeScript
+getPublicInputSchema(rule)
+
+或者等价的 rule-aware schema builder。
+
+② evidenceCount >= minimumEvidenceCount：PASS，但只能代表数量门槛
+
+这一点可以做：
+
+纯文本
+evidenceCount >= minimumEvidenceCount
+
+没有概率、成功率或统计推断，因此本身安全。
+
+但它只证明：
+
+纯文本
+“自报的证据数量够”
+
+不能证明：
+
+纯文本
+证据类型正确
+证据真实
+证据有效
+证据满足 filing 要求
+
+因为 RecoveryRuleDefinition 里还有：
+
+纯文本
+requiredEvidence[]
+
+所以即使 count 满足，也必须继续把最终 eligibility 标为：
+
+纯文本
+PRELIMINARY_SELF_REPORTED
+
+而不是 VERIFIED / READY_TO_FILE。
+
+因此：
+
+纯文本
+EVIDENCE_COUNT_GATE = PASS
+EVIDENCE_VALIDITY_VERIFICATION = NOT_PERFORMED
+③ DUTY_DIFFERENCE：当前 refundableAmount 方案不批准
+
+这一点需要改。
+
+现在提议：
+
+纯文本
+用户输入：
+dutyPaidAmount = 10,000
+refundableAmount = 7,000
+
+engine：
+min(dutyPaidAmount, refundableAmount)
+= 7,000
+
+这实际上不是“计算退款金额”，而是：
+
+用户自己告诉系统“我认为能退 7,000”，系统再把 7,000 返回给他。
+
+它属于 circular estimate，会让“真实 engine”这个概念失去意义。
+
+因此：
+
+纯文本
+REFUNDABLE_AMOUNT_AS_INPUT = REVISE
+
+对于真正的 DUTY_DIFFERENCE，推荐输入改成：
+
+纯文本
+dutyPaidAmount
+dutyActuallyDueAmount
+currency
+
+然后：
+
+纯文本
+difference =
+max(0, dutyPaidAmount - dutyActuallyDueAmount)
+
+这样才是“difference”。
+
+如果两个数字均为用户自报，那么输出仍应明确：
+
+纯文本
+SELF_REPORTED_POINT_ESTIMATE
+ESTIMATE_ONLY
+
+但至少计算逻辑是真正的 arithmetic derivation，而不是把答案作为输入再返回。
+
+④ min = max 可以，不必人为制造区间
+
+如果底层只有两个确定的用户自报数字：
+
+纯文本
+paid = 10,000
+due = 6,000
+
+系统没有任何可信依据产生：
+
+纯文本
+3,200 – 4,500
+
+这种区间。
+
+所以不要为了“看起来像估算”而人工加入 ±10%、成功率或历史比例。
+
+可以返回：
+
+纯文本
+min = 4,000
+max = 4,000
+
+但语义应是：
+
+纯文本
+POINT_ESTIMATE_FROM_SELF_REPORTED_INPUTS
+
+而不是置信区间。
+
+因此：
+
+纯文本
+MIN_EQUALS_MAX = PASS
+ARTIFICIAL_RANGE = FORBIDDEN
+
+如果未来规则中加入真实可溯源的：
+
+纯文本
+rate
+cap
+excluded amount
+formula
+sourceReference
+
+届时才允许由规则公式产生更复杂的金额。
+
+特别提醒：当前 customs-drawback 规则如果并不能真实解释为 dutyPaid - dutyActuallyDue，就不要为了让 Calculator 有数字而强行注册这个 DUTY_DIFFERENCE engine。应继续：
+
+纯文本
+calculator unavailable
+→ estimate = null
+
+直到规则里有真实计算依据。
+
+⑤ 还有一个实现前必须修的结构问题：两套 schema 当前无法同时工作
+
+当前 runPublicSeoChecker() 的逻辑是：
+
+TypeScript
+schemaBasisKey =
+  checkerReady
+    ? eligibilityMethod.basisKey
+    : calculationMethod.basisKey;
+
+也就是说，如果 checker 和 calculator 同时存在，只会取 eligibility schema。
+
+但你的设计现在实际上有：
+
+纯文本
+Eligibility schema
+------------------
+hasIorIdentity
+hasAuthorizedSigner
+hasBrokerPoa
+hasFilingAuthorization
+evidenceCount
+
+Calculation schema
+------------------
+dutyPaidAmount
+dutyActuallyDueAmount
+currency
+
+于是一个请求如果带计算字段，当前 validator 会把这些字段当成：
+
+纯文本
+UNKNOWN_ANSWER_KEY
+
+所以实现真实 engine 前必须解决这个问题。
+
+我建议不要做一个大而松散的总 schema，而是：
+
+纯文本
+读取 eligibility schema
++
+读取 calculation schema
++
+验证二者字段不冲突
++
+组成 request-level union whitelist
++
+分别投影：
+eligibilityAnswers
+calculationAnswers
+
+即：
+
+纯文本
+incoming answers
+        ↓
+combined public whitelist
+        ↓
+        ├── eligibilityAnswers → eligibility engine
+        └── calculationAnswers → calculation engine
+
+若两个 schema 使用同一个字段名但定义不同：
+
+纯文本
+fail-closed
+SCHEMA_CONFLICT
+
+不能偷偷选其中一个。
+
+这一项是必须修。
+
+⑥ currency 不建议用任意 ^[A-Z]{3}$
+
+当前 schema 已支持：
+
+纯文本
+enum
+
+所以更安全的是：
+
+纯文本
+currency:
+  enum ['USD']
+
+或者该 engine 明确支持的有限币种。
+
+而不是：
+
+纯文本
+^[A-Z]{3}$
+
+因为后者连 ZZZ 都能通过。
+
+因此：
+
+纯文本
+CURRENCY = ENGINE_SUPPORTED_ENUM
+
+更合适。
+
+⑦ DUTY_DIFFERENCE 需要单独 implementation audit
+
+需要。
+
+不是因为数学复杂，而是因为它直接产生用户可见金额。
+
+下一轮至少核：
+
+纯文本
+paid < due → null
+paid = due → null
+paid > due → exact difference
+
+NaN / Infinity → reject
+超大金额 → reject
+币种不支持 → reject
+两个金额币种不得不一致
+calculator 输入不能来自 eligibility schema 漏洞
+输出 basisKey 必须等于请求的 calculation basisKey
+disclaimerKey 固定正确
+未满足 preliminary eligibility → calculator 不运行
+
+以及最重要的一条：
+
+纯文本
+不得把用户自报 refundableAmount 原样包装成“系统估算”
+最终裁定
+纯文本
+PUBLIC_ELIGIBILITY_ENGINE_DESIGN
+= PASS_WITH_REVISE
+
+5_ELIGIBILITY_KEYS
+= PASS
+
+SELF_REPORTED_ELIGIBILITY_LABEL
+= REQUIRED
+
+RULE_AWARE_REQUIRED_FIELDS
+= REQUIRED
+
+EVIDENCE_COUNT_GATE
+= PASS
+
+EVIDENCE_VERIFIED
+= NO
+
+DUTY_DIFFERENCE_REFUNDABLE_AMOUNT_INPUT
+= REJECTED
+
+DUTY_DIFFERENCE_INPUT
+= dutyPaidAmount + dutyActuallyDueAmount + currency
+
+MIN_EQUALS_MAX_POINT_ESTIMATE
+= PASS
+
+ARTIFICIAL_RANGE
+= FORBIDDEN
+
+ELIGIBILITY_AND_CALCULATION_SCHEMA_COMPOSITION
+= REVISE_REQUIRED
+
+CURRENCY
+= SUPPORTED_ENUM
+
+DUTY_DIFFERENCE_IMPLEMENTATION_AUDIT
+= REQUIRED
+
+实现完成后，可以注册进 registry 并在：
+
+纯文本
+DEV = ENABLED
+STAGING = ENABLED
+
+显式测试。
+
+生产边界保持：
+
+纯文本
+PRODUCTION_PUBLIC_CHECKER = HOLD
+EXTERNAL_WRITE = HOLD
+PAYMENT = HOLD
+TRANSPORT = HOLD
+PRODUCTION_CREDENTIALS = HOLD
+
+所以 Codex 现在可以实现，但要同时修“eligibility/calculation 双 schema 编排”，并把金额模型改成真正的 duty difference；完成后送一次窄的 PUBLIC ENGINE IMPLEMENTATION AUDIT 即可。
+```

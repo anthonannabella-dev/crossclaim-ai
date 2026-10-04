@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261004-16",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T08:15:00.000Z",
+  "updated_at": "2026-10-05T08:25:00.000Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -5192,9 +5192,9 @@
   "awaiting_verdict": "EXACT-ORDER REPLAY 证据已送审（comment 5979262070）；shared/staging deploy 解禁待裁决",
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-04T20:50:56.759Z",
-    "head": "cb41b3e",
-    "acceptance_head": "cb41b3e",
+    "computed_at": "2026-10-04T20:55:43.715Z",
+    "head": "37f48e3",
+    "acceptance_head": "37f48e3",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5286,6 +5286,7 @@
       "CHECK:L1-07_api_typecheck_passed",
       "CHECK:L1-08_web_typecheck_build_passed",
       "CHECK:L1-09_no_skipped_critical_tests",
+      "CHECK:L1-10_git_working_tree_clean",
       "CHECK:L1-11_docs_state_consistent",
       "CHECK:L1-12_schema_invariants_verified",
       "CHECK:L1-13_negative_paths_covered",
@@ -5344,48 +5345,48 @@
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=cb41b3e ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
+        "evidence": "acceptance_head=37f48e3 ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
       },
       "L1-05_pg_regression_passed": {
         "status": "UNVERIFIED",
-        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head cb41b3e（且中间存在非簿记变更）"
+        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head 37f48e3（且中间存在非簿记变更）"
       },
       "L1-06_fresh_db_migration_passed": {
         "status": "UNVERIFIED",
-        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head cb41b3e（且中间存在非簿记变更）"
+        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head 37f48e3（且中间存在非簿记变更）"
       },
       "L1-07_api_typecheck_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head cb41b3e（且中间存在非簿记变更）"
+        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head 37f48e3（且中间存在非簿记变更）"
       },
       "L1-08_web_typecheck_build_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head cb41b3e（且中间存在非簿记变更）"
+        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head 37f48e3（且中间存在非簿记变更）"
       },
       "L1-09_no_skipped_critical_tests": {
         "status": "UNVERIFIED",
-        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head cb41b3e（且中间存在非簿记变更）"
+        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head 37f48e3（且中间存在非簿记变更）"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
-        "status": true,
-        "evidence": "porcelain empty"
+        "status": false,
+        "evidence": "dirty entries: 1"
       },
       "L1-11_docs_state_consistent": {
         "status": "UNVERIFIED",
-        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head cb41b3e（且中间存在非簿记变更）"
+        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head 37f48e3（且中间存在非簿记变更）"
       },
       "L1-12_schema_invariants_verified": {
         "status": "UNVERIFIED",
-        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head cb41b3e（且中间存在非簿记变更）"
+        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head 37f48e3（且中间存在非簿记变更）"
       },
       "L1-13_negative_paths_covered": {
         "status": "UNVERIFIED",
-        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head cb41b3e（且中间存在非簿记变更）"
+        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head 37f48e3（且中间存在非簿记变更）"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
         "status": "UNVERIFIED",
-        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head cb41b3e（且中间存在非簿记变更）"
+        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head 37f48e3（且中间存在非簿记变更）"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
@@ -6333,7 +6334,7 @@
       "API.md / DOMAIN_MODEL.md / architecture-contract 计数 77 → 79"
     ]
   },
-  "next_execution_unit": "读 engine 设计裁决：逐字归档 + verdict-diff FULL_COPY_OK；PASS → 实现 engine + 输入 schema 并注册进 registry（仍 DEV/STAGING 显式开启、生产 HOLD）；REVISE → 按裁决修正后再送",
+  "next_execution_unit": "按裁决实现：①getPublicInputSchema(rule) rule-aware 必填 + eligibilityLabel=PRELIMINARY_SELF_REPORTED；②evidenceCount 仅数量门槛、最终标签保持 PRELIMINARY_SELF_REPORTED（不得 VERIFIED/READY_TO_FILE）；③DUTY_DIFFERENCE 输入改 dutyPaidAmount + dutyActuallyDueAmount + currency，difference=max(0,paid−due)，SELF_REPORTED_POINT_ESTIMATE + ESTIMATE_ONLY，若规则无法真实解释则**不注册**该 engine（estimate 保持 null）；④禁止人工区间（ARTIFICIAL_RANGE = FORBIDDEN）；⑤修复 runPublicSeoChecker 只取一套 schema 的结构问题（读两套 schema → 校验不冲突 → union whitelist → 分别投影 eligibilityAnswers / calculationAnswers）；完成后送 PUBLIC ENGINE IMPLEMENTATION AUDIT",
   "customer_ui_commercialization": {
     "at": "2026-10-04T01:21:55.949Z",
     "authorization": "MSG-20261004-01（CUSTOMER UI/UX COMMERCIALIZATION — IMPLEMENTATION AUTHORIZED）",
@@ -7379,10 +7380,10 @@
     "seo3_progress": "CHANGE A/B validator added (86f4289), engine output validation added (eb99c53), validator wired into runPublicSeoChecker (8bf49da), HTTP boundary guard added (4f2cd20); HTTP entry still not registered"
   },
   "CURRENT_HEAD": "293f55e",
-  "LAST_COMPLETED_UNIT": "SEO 公开 Checker engine 设计送审（5 个无 PII 输入字段 + DECISION_TABLE eligibility + DUTY_DIFFERENCE calculation 的 min=max 语义 + 强制 ESTIMATE_ONLY 免责声明；本轮零代码改动）",
-  "NEXT_EXECUTION_UNIT": "读 engine 设计裁决：逐字归档 + verdict-diff FULL_COPY_OK；PASS → 实现 engine + 输入 schema 并注册进 registry（仍 DEV/STAGING 显式开启、生产 HOLD）；REVISE → 按裁决修正后再送",
-  "CI_STATUS": "HEAD cb41b3e 已推送；本地：apps/api tsc 0 / seo-* 19 文件 137 例全过",
-  "WAITING_FOR_VERDICT": "SEO 公开 Checker engine + 输入 schema 设计（已送审：docs/releases/SEO-PUBLIC-ENGINE-DESIGN-REQUEST.md @ cb41b3e；唤醒三要素已验证送达）；RSI staging smoke 仍等宿主非生产 DATABASE_URL",
+  "LAST_COMPLETED_UNIT": "SEO engine / 输入 schema 设计裁决归档 = PASS WITH REVISE（MSG-20261005-06）：方向通过，5 项必修（自报预筛标签 / rule-aware 必填 / 证据仅数量门槛 / DUTY_DIFFERENCE 改为 paid−due / 双 schema 编排）",
+  "NEXT_EXECUTION_UNIT": "按裁决实现：①getPublicInputSchema(rule) rule-aware 必填 + eligibilityLabel=PRELIMINARY_SELF_REPORTED；②evidenceCount 仅数量门槛、最终标签保持 PRELIMINARY_SELF_REPORTED（不得 VERIFIED/READY_TO_FILE）；③DUTY_DIFFERENCE 输入改 dutyPaidAmount + dutyActuallyDueAmount + currency，difference=max(0,paid−due)，SELF_REPORTED_POINT_ESTIMATE + ESTIMATE_ONLY，若规则无法真实解释则**不注册**该 engine（estimate 保持 null）；④禁止人工区间（ARTIFICIAL_RANGE = FORBIDDEN）；⑤修复 runPublicSeoChecker 只取一套 schema 的结构问题（读两套 schema → 校验不冲突 → union whitelist → 分别投影 eligibilityAnswers / calculationAnswers）；完成后送 PUBLIC ENGINE IMPLEMENTATION AUDIT",
+  "CI_STATUS": "本批为归档+状态提交；本地：apps/api tsc 0 / seo-* 19 文件 137 例全过",
+  "WAITING_FOR_VERDICT": "none（MSG-20261005-06 SEO engine 设计 = PASS WITH REVISE 已逐字归档：FNV 29fe15cb / 386 行 / FULL_COPY_OK；5 项必修待实现，完成后送 PUBLIC ENGINE IMPLEMENTATION AUDIT）；RSI staging smoke 仍等宿主非生产 DATABASE_URL",
   "HOST_ACTION_REQUIRED": [
     "provider developer/partner account registration",
     "third-party commercial agreement acceptance",
@@ -7396,7 +7397,7 @@
     "non-production staging DATABASE_URL + 确认该 shared 库是否承载真实客户数据（执行已授权的 staging migrate deploy 前需要）"
   ],
   "HOLD_EXTERNAL": true,
-  "LAST_HEARTBEAT_AT": "2026-10-05T08:15:00.000Z",
+  "LAST_HEARTBEAT_AT": "2026-10-05T08:25:00.000Z",
   "ci_red_streak_note": "RESOLVED: three contract/inventory fixes (tenant-trigger whitelist 1b15ab7, append-only whitelist cc13bde, model inventory 82->85 4f02282); 4f02282 is the first green run after the streak.",
   "ci_contract_fix_local_verification": {
     "at": "2026-10-04T08:51:16.135Z",
@@ -7628,6 +7629,17 @@
     "engine_registry": "EMPTY_BY_DEFAULT（未注册 basisKey 不对外声明；run* 返回 unavailable，不产出任何金额）",
     "public_route_adapter": "apps/api/src/services/seo/seo-public-node-adapter.ts",
     "server_branch": "apps/api/src/server.ts（isSeoPublicRouteRequest(req) → handleSeoPublicNodeRequest）",
-    "engine_design_request": "docs/releases/SEO-PUBLIC-ENGINE-DESIGN-REQUEST.md"
+    "engine_design_request": "docs/releases/SEO-PUBLIC-ENGINE-DESIGN-REQUEST.md",
+    "engine_design_verdict": {
+      "id": "MSG-20261005-06",
+      "verdict": "PASS_WITH_REVISE",
+      "reviewed_head": "cb41b3e",
+      "fnv": "29fe15cb",
+      "lines": 386
+    },
+    "eligibility_label_required": "PRELIMINARY_SELF_REPORTED",
+    "calculation_model": "DUTY_DIFFERENCE: dutyPaidAmount - dutyActuallyDueAmount（SELF_REPORTED_POINT_ESTIMATE；若规则无真实依据则不注册）",
+    "artificial_range": "FORBIDDEN",
+    "dual_schema_orchestration": "REQUIRED（union whitelist + eligibilityAnswers / calculationAnswers 分开投影）"
   }
 }
