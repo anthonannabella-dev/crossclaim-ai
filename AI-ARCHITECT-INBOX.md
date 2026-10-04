@@ -137597,3 +137597,224 @@ PRODUCTION_CREDENTIALS = HOLD
 
 下一轮只需要补 F/G。不要重做 DUTY_DIFFERENCE，也不要注册它。完成后送 PUBLIC ENGINE IMPLEMENTATION FINAL-2 即可。
 ```
+
+### [MSG-20261005-08] ARCHITECT VERDICT — PUBLIC ENGINE IMPLEMENTATION FINAL-2 = **PASS**（reviewed HEAD = `e49632c`，未使用上一轮缓存）。`CHANGE_F_ELIGIBILITY_DECISION_TABLE = PASS`、`CHANGE_G_RULE_AWARE_SCHEMA_WIRING = PASS`、**`PUBLIC_ENGINE_IMPLEMENTATION = PASS / CLOSED`**，**不用再送 FINAL-3**。①CHANGE F 实现符合要求（`requiresIorIdentity && !hasIorIdentity → MISSING_IOR_IDENTITY`、`requiresAuthorizedSigner → MISSING_AUTHORIZED_SIGNER`、`requiresBrokerPoa → MISSING_BROKER_POA`、`requiresFilingAuthorization → MISSING_FILING_AUTHORIZATION`、`evidenceCount < minimumEvidenceCount → INSUFFICIENT_EVIDENCE`、`eligible = reasonCodes.length === 0`，顺序稳定，且确实没有概率 / LLM / 模型评分 / 历史成功率）；CHANGE G 已真正穿透运行路径（`runPublicSeoChecker() → getPublicInputSchema({ basisKey, rule }) → SeoPublicEngine.getPublicInputSchema(rule)`），`buildPublicEligibilitySchemaForRule(rule)` 不再是孤立函数。②**registry 继续为空 = 当前正确状态**（`PUBLIC_SEO_CHECKER_ENABLED = false` / `ENGINE_REGISTRY = EMPTY` / `PUBLIC_CALCULATOR = UNAVAILABLE` / `estimate = null`），并进一步细分记录：`ELIGIBILITY_ENGINE = IMPLEMENTED_BUT_UNREGISTERED`、`DUTY_DIFFERENCE_ENGINE = IMPLEMENTED_BUT_UNREGISTERED`；**两者不必绑定一起解禁** —— `ELIGIBILITY_REGISTRATION = HOLD_UNTIL_RULE_MAPPING_CONFIRMED`（只要有生效 RuleVersion 的 `eligibilityMethod.kind = DECISION_TABLE` 且 basisKey 明确映射到当前 decision-table，即可单独注册，不必等金额语义），`DUTY_DIFFERENCE_REGISTRATION = HOLD_UNTIL_CALCULATION_SEMANTICS_CONFIRMED`（必须等 `paid − actuallyDue` 有真实 RuleVersion / sourceReference 依据）。③**CHANGE G 不新增 E2E 可接受、不阻塞关闭**：`CHANGE_G_EVIDENCE = SUFFICIENT`、`NEW_E2E_REQUIRED_NOW = NO` —— 这本质是 typed plumbing change（旧签名 `getPublicInputSchema(basisKey)` → 新 `getPublicInputSchema({ basisKey, rule })`，且 `SeoPublicEngine.getPublicInputSchema(rule)`，checker 已真实传入刚解析的 rule；任一处仍用旧签名 tsc 会直接失败），加上现有 SEO 回归套件全通过即足够，不应为证明一个已被类型系统锁死的参数传递去复制大份生产规则。**未来首次注册时的建议 fixture**：用一份**完整且通过 codec 的 TEST-ONLY `RuleVersion` row**（`parseRecoveryRuleDefinition()` → `createSeoPublicEngineRegistry([engine])` → `createSeoPublicCheckerPorts()` → `runPublicSeoChecker()`），**不要**用 `as unknown as RecoveryRuleDefinition` 作为那次注册验收的唯一证据。④**一个非阻塞说明**：目前没有 `createEligibilitySeoPublicEngine()` 之类 adapter 把 `buildPublicEligibilitySchemaForRule` + `runEligibilityDecisionTable` 包装成 `SeoPublicEngine`；这不阻塞本轮关闭（registry 明确为空），属未来实际注册时的几行 composition wiring，首次注册时与该 integration test 一起提交即可，**不需要重新做 engine design audit**。最终状态：`RULE_AWARE_ELIGIBILITY_SCHEMA = PASS`、`PRELIMINARY_SELF_REPORTED_SEMANTICS = PASS`、`EVIDENCE_COUNT_ONLY = PASS`、`ELIGIBILITY_DECISION_TABLE = PASS`、`DUAL_SCHEMA_ORCHESTRATION = PASS`、`RULE_PARAMETER_PLUMBING = PASS`、`DUTY_DIFFERENCE_IMPLEMENTATION = PASS`、`DUTY_DIFFERENCE_REGISTRATION = HOLD`、`PUBLIC_ENGINE_IMPLEMENTATION = PASS / CLOSED`、`ENGINE_REGISTRY = EMPTY`、`PUBLIC_SEO_CHECKER_ENABLED = false`、`ESTIMATE = null`、`DEFAULT_NOINDEX = KEEP`；边界保持 `PRODUCTION_PUBLIC_CHECKER / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS = HOLD`。
+
+```text
+ARCHITECT VERDICT：PASS
+
+我按**代码送审 HEAD = e49632c67396285aa33bae62675de0043ce75c76**重新复核了 FINAL-2，没有使用上一轮缓存。
+
+① CHANGE F / G：均可记 PASS，PUBLIC ENGINE IMPLEMENTATION 可 CLOSED
+
+我独立确认：
+
+纯文本
+CHANGE_F_ELIGIBILITY_DECISION_TABLE = PASS
+CHANGE_G_RULE_AWARE_SCHEMA_WIRING = PASS
+
+PUBLIC_ENGINE_IMPLEMENTATION = PASS
+PUBLIC_ENGINE_IMPLEMENTATION = CLOSED
+
+CHANGE F 的实际实现符合上一轮要求：
+
+纯文本
+requiresIorIdentity && !hasIorIdentity
+→ MISSING_IOR_IDENTITY
+
+requiresAuthorizedSigner && !hasAuthorizedSigner
+→ MISSING_AUTHORIZED_SIGNER
+
+requiresBrokerPoa && !hasBrokerPoa
+→ MISSING_BROKER_POA
+
+requiresFilingAuthorization && !hasFilingAuthorization
+→ MISSING_FILING_AUTHORIZATION
+
+evidenceCount < minimumEvidenceCount
+→ INSUFFICIENT_EVIDENCE
+
+最终：
+
+纯文本
+eligible = reasonCodes.length === 0
+
+reasonCodes 顺序稳定，而且确实没有概率、LLM、模型评分或历史成功率。
+
+CHANGE G 也已经真正穿透运行路径：
+
+纯文本
+runPublicSeoChecker()
+        ↓
+getPublicInputSchema({ basisKey, rule })
+        ↓
+SeoPublicEngine.getPublicInputSchema(rule)
+
+因此 buildPublicEligibilitySchemaForRule(rule) 不再只是孤立函数；未来注册具体 engine 时可以使用当前生效的 RuleVersion 生成 schema。
+
+② registry 继续为空：同意，而且是当前正确状态
+
+当前：
+
+纯文本
+PUBLIC_SEO_CHECKER_ENABLED = false
+ENGINE_REGISTRY = EMPTY
+PUBLIC_CALCULATOR = UNAVAILABLE
+estimate = null
+
+这是正确的 fail-closed 状态。
+
+我同意：
+
+纯文本
+DUTY_DIFFERENCE_ENGINE = IMPLEMENTED_BUT_UNREGISTERED
+ELIGIBILITY_ENGINE = IMPLEMENTED_BUT_UNREGISTERED
+
+但有一个细分需要记清楚：
+
+Eligibility 与 DUTY_DIFFERENCE 不必绑定在一起解禁。
+
+以后如果真实生效 RuleVersion 已明确：
+
+纯文本
+eligibilityMethod.kind = DECISION_TABLE
+basisKey = 某个明确映射到当前 decision-table 的 key
+
+那么 eligibility engine 可以单独注册，不需要等 DUTY_DIFFERENCE 的金额语义被证实。
+
+而 DUTY_DIFFERENCE 仍必须等：
+
+纯文本
+paid - actuallyDue
+
+有真实 RuleVersion / sourceReference 依据后才能注册。
+
+所以更准确地记录：
+
+纯文本
+ELIGIBILITY_REGISTRATION = HOLD_UNTIL_RULE_MAPPING_CONFIRMED
+
+DUTY_DIFFERENCE_REGISTRATION
+= HOLD_UNTIL_CALCULATION_SEMANTICS_CONFIRMED
+③ CHANGE G 不新增 E2E：可以接受，不阻塞关闭
+
+这次不要求再补 E2E。
+
+原因是这项修改本质上是一个typed plumbing change：
+
+旧接口：
+
+纯文本
+getPublicInputSchema(basisKey)
+
+现在：
+
+纯文本
+getPublicInputSchema({ basisKey, rule })
+
+同时：
+
+纯文本
+SeoPublicEngine.getPublicInputSchema(rule)
+
+而 checker 已真实传入刚解析的 rule。
+
+如果其中任一处仍使用旧签名，TypeScript 会直接失败。再加上现有 SEO 回归套件全部通过，所以本轮证据足够：
+
+纯文本
+CHANGE_G_EVIDENCE = SUFFICIENT
+NEW_E2E_REQUIRED_NOW = NO
+
+不应该为了证明一个已经由类型系统锁死的参数传递，再复制一大份生产规则。
+
+未来注册时，用什么 fixture？
+
+真正第一次注册 engine 时，我建议补一个很小的 registration integration test，但不需要真实生产数据库。
+
+允许使用：
+
+纯文本
+TEST_ONLY RuleVersion row
+        ↓
+parseRecoveryRuleDefinition()
+        ↓
+createSeoPublicEngineRegistry([engine])
+        ↓
+createSeoPublicCheckerPorts()
+        ↓
+runPublicSeoChecker()
+
+也就是说，用一份完整且通过 codec 的测试 RuleVersion row即可。
+
+不要直接：
+
+纯文本
+as unknown as RecoveryRuleDefinition
+
+作为那次“注册验收”的唯一证据。
+
+这样能同时证明：
+
+纯文本
+DB-row-shaped rule
+→ codec
+→ current rule
+→ rule-aware schema
+→ engine
+→ public checker
+
+这一条即可。
+
+一个非阻塞说明
+
+目前我没有看到现成的：
+
+纯文本
+createEligibilitySeoPublicEngine()
+
+之类 adapter/factory，把：
+
+纯文本
+buildPublicEligibilitySchemaForRule
++
+runEligibilityDecisionTable
+
+包装成 SeoPublicEngine。
+
+这不阻塞本轮关闭，因为 registry 明确保持空；它属于未来实际注册时的几行 composition wiring，而不是架构缺口。
+
+首次注册时把这个 adapter 与上述 integration test 一起提交即可，不需要重新做 engine design audit。
+
+最终状态
+纯文本
+RULE_AWARE_ELIGIBILITY_SCHEMA = PASS
+PRELIMINARY_SELF_REPORTED_SEMANTICS = PASS
+EVIDENCE_COUNT_ONLY = PASS
+
+ELIGIBILITY_DECISION_TABLE = PASS
+DUAL_SCHEMA_ORCHESTRATION = PASS
+RULE_PARAMETER_PLUMBING = PASS
+
+DUTY_DIFFERENCE_IMPLEMENTATION = PASS
+DUTY_DIFFERENCE_REGISTRATION = HOLD
+
+PUBLIC_ENGINE_IMPLEMENTATION = PASS / CLOSED
+
+ENGINE_REGISTRY = EMPTY
+PUBLIC_SEO_CHECKER_ENABLED = false
+ESTIMATE = null
+DEFAULT_NOINDEX = KEEP
+
+生产边界继续保持：
+
+纯文本
+PRODUCTION_PUBLIC_CHECKER = HOLD
+EXTERNAL_WRITE = HOLD
+PAYMENT = HOLD
+TRANSPORT = HOLD
+PRODUCTION_CREDENTIALS = HOLD
+
+Hosted GitHub status/workflow 在 exact HEAD 上仍为空，因此 tsc 0 / 24 files / 171 tests 属于本轮归档执行证据；我独立确认的是 e49632c 上 CHANGE F/G 的实际代码和调用链。
+
+结论：不用再送 FINAL-3。PUBLIC ENGINE IMPLEMENTATION 到这里可以正式 PASS / CLOSED。后面只有“真实规则出现后的注册审计”，不是继续改 engine 架构。
+```
