@@ -37,6 +37,7 @@ export type SeoPublicDenialCode =
   | 'NO_RECOVERY_CAPABILITY'
   | 'CHECKER_NOT_AVAILABLE'
   | 'CALCULATOR_NOT_AVAILABLE'
+  | 'ENGINE_OUTPUT_INVALID'
   | 'PII_REJECTED';
 
 export type SeoPublicAnswerValue = string | number | boolean;
@@ -133,6 +134,32 @@ export function containsPersonalData(value: string): boolean {
   );
 }
 
+const SAFE_TOKEN_RE = /^[A-Za-z0-9._:-]{1,64}$/;
+const CURRENCY_RE = /^[A-Z]{3}$/;
+
+/**
+ * engine 输出校验（架构方新增要求）：公开边界不得直接信任 engine 返回值。
+ * 非法 → ENGINE_OUTPUT_INVALID → fail-closed（防止某个 engine 意外返回异常值/超大内容/自由文本穿透到公开 API）。
+ */
+export function isSafeEligibilityOutcome(outcome: SeoPublicEligibilityOutcome): boolean {
+  if (outcome === null || typeof outcome !== 'object') return false;
+  if (typeof outcome.eligible !== 'boolean') return false;
+  if (!Array.isArray(outcome.reasonCodes) || outcome.reasonCodes.length > 20) return false;
+  return outcome.reasonCodes.every((code) => typeof code === 'string' && SAFE_TOKEN_RE.test(code));
+}
+
+export function isSafeCalculationOutcome(outcome: SeoPublicCalculationOutcome): boolean {
+  if (outcome === null || typeof outcome !== 'object') return false;
+  if (typeof outcome.basisKey !== 'string' || !SAFE_TOKEN_RE.test(outcome.basisKey)) return false;
+  if (typeof outcome.disclaimerKey !== 'string' || !SAFE_TOKEN_RE.test(outcome.disclaimerKey)) return false;
+  const estimate = outcome.estimate;
+  if (estimate === null) return true; // 允许"无可用估算"，但字段本身仍须合法
+  if (typeof estimate !== 'object') return false;
+  if (!Number.isFinite(estimate.min) || !Number.isFinite(estimate.max)) return false;
+  if (estimate.min < 0 || estimate.max < estimate.min) return false;
+  return typeof estimate.currency === 'string' && CURRENCY_RE.test(estimate.currency);
+}
+
 /** 匿名输入校验（键白名单、值类型/长度、无 PII）。 */
 export function validatePublicSeoRequest(
   request: SeoPublicRequest,
@@ -196,6 +223,8 @@ export async function runPublicSeoChecker(
       rule,
       answers: validation.answers,
     });
+    // engine 输出校验：不合法即 fail-closed，绝不把异常值透传给公开调用方。
+    if (!isSafeEligibilityOutcome(outcome)) return DENIED('ENGINE_OUTPUT_INVALID');
     eligible = outcome.eligible;
     reasonCodes = outcome.reasonCodes;
   }
@@ -209,6 +238,7 @@ export async function runPublicSeoChecker(
       rule,
       answers: validation.answers,
     });
+    if (!isSafeCalculationOutcome(calculation)) return DENIED('ENGINE_OUTPUT_INVALID');
     estimate = calculation.estimate;
     estimateLabel = 'ESTIMATE_ONLY';
     disclaimerKey = calculation.disclaimerKey;

@@ -220,4 +220,46 @@ describe('SEO-3 — public read-only checker/calculator', () => {
       actionGuardBypassed: false,
     });
   });
+
+  it('engine 输出校验：非法 eligibility 输出 → ENGINE_OUTPUT_INVALID（fail-closed）', async () => {
+    const bad = await runPublicSeoChecker(
+      { slug: 'us-customs-drawback' },
+      ports({
+        runEligibility: async () => ({ eligible: 'yes' as never, reasonCodes: [] }),
+      }),
+    );
+    expect(bad.ok).toBe(false);
+    expect(bad.code).toBe('ENGINE_OUTPUT_INVALID');
+
+    const badReasonCodes = await runPublicSeoChecker(
+      { slug: 'us-customs-drawback' },
+      ports({
+        runEligibility: async () => ({ eligible: true, reasonCodes: ['ok', 'x'.repeat(200)] }),
+      }),
+    );
+    expect(badReasonCodes.code).toBe('ENGINE_OUTPUT_INVALID');
+  });
+
+  it('engine 输出校验：非法 estimate（NaN / min<0 / max<min / 坏货币）→ ENGINE_OUTPUT_INVALID', async () => {
+    const cases = [
+      { min: Number.NaN, max: 10, currency: 'USD' },
+      { min: -1, max: 10, currency: 'USD' },
+      { min: 10, max: 5, currency: 'USD' },
+      { min: 1, max: 10, currency: 'US' },
+    ];
+    for (const estimate of cases) {
+      const result = await runPublicSeoChecker(
+        { slug: 'us-customs-drawback' },
+        ports({
+          runCalculation: async ({ basisKey }) => ({
+            estimate,
+            basisKey,
+            disclaimerKey: 'seo.disclaimer.estimateOnly',
+          }),
+        }),
+      );
+      expect(result.ok).toBe(false);
+      expect(result.code).toBe('ENGINE_OUTPUT_INVALID');
+    }
+  });
 });
