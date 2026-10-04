@@ -52,20 +52,43 @@ export interface ProviderCallResult {
   errorCode?: string | null;
 }
 
+/** provider 是否已书面/沙盒证明「同 key + 同 payload 可安全 replay」。未核验 = fail-closed。 */
+export type ProviderIdempotencySemantics = 'REPLAY_SAFE' | 'UNVERIFIED';
+
+/** 只读操作（可安全重复）与写操作（可能已生效）的分界。 */
+export const PROVIDER_READ_ONLY_OPERATIONS: readonly CustomsProviderOperation[] = [
+  'GET_SUBMISSION_STATUS',
+  'GET_REFUND_STATUS',
+];
+
 /**
  * 结果分类（fail-closed）：
  *   · 无响应 / 超时 → AMBIGUOUS（可能已生效，绝不盲重试）
  *   · 409 / IDEMPOTENCY_KEY_CONFLICT → CONFLICT（不可重试）
  *   · 4xx（除 409/429）→ PERMANENT_FAILURE
- *   · 429 / 5xx → RETRYABLE
+ *   · 429 / 5xx：
+ *       - 只读操作 → RETRYABLE
+ *       - 写操作 → 只有当 provider 的该操作被证明 replay-safe 才 RETRYABLE；否则 AMBIGUOUS
+ *         （provider 可能已经执行动作再返回 500，盲目重发会制造重复提交）
  *   · 2xx → SUCCESS
  */
-export function classifyProviderOutcome(result: ProviderCallResult): CustomsProviderOutcome {
+export function classifyProviderOutcome(
+  result: ProviderCallResult,
+  options: {
+    operation?: CustomsProviderOperation;
+    idempotencySemantics?: ProviderIdempotencySemantics;
+  } = {},
+): CustomsProviderOutcome {
   if (!result.transportCompleted || result.httpStatus === null) return 'AMBIGUOUS';
   const code = (result.errorCode ?? '').toUpperCase();
   if (code === 'IDEMPOTENCY_KEY_CONFLICT') return 'CONFLICT';
   if (result.httpStatus === 409) return 'CONFLICT';
-  if (result.httpStatus === 429 || result.httpStatus >= 500) return 'RETRYABLE';
+  if (result.httpStatus === 429 || result.httpStatus >= 500) {
+    const readOnly =
+      options.operation !== undefined && PROVIDER_READ_ONLY_OPERATIONS.includes(options.operation);
+    if (readOnly) return 'RETRYABLE';
+    return options.idempotencySemantics === 'REPLAY_SAFE' ? 'RETRYABLE' : 'AMBIGUOUS';
+  }
   if (result.httpStatus >= 400) return 'PERMANENT_FAILURE';
   if (result.httpStatus >= 200 && result.httpStatus < 300) return 'SUCCESS';
   return 'AMBIGUOUS';
@@ -77,13 +100,34 @@ export function isAutoRetryable(outcome: CustomsProviderOutcome): boolean {
 }
 
 /** 指数退避 + 抖动 + 上限（random 可注入以便测试确定性）。 */
+export class ProviderRetryExhaustedError extends Error {
+  constructor(operation: CustomsProviderOperation, maxAttempts: number) {
+    super('provider operation ' + operation + ' exhausted maxAttempts=' + maxAttempts);
+    this.name = 'ProviderRetryExhaustedError';
+  }
+}
+
+/** 重试次数守卫：超过 maxAttempts 一律拒绝（真实执行上限，不只是 backoff 封顶）。 */
+export function canAutoRetry(input: {
+  operation: CustomsProviderOperation;
+  attempt: number;
+  outcome: CustomsProviderOutcome;
+}): boolean {
+  if (!isAutoRetryable(input.outcome)) return false;
+  return input.attempt <= PROVIDER_RETRY_POLICIES[input.operation].maxAttempts;
+}
+
 export function nextRetryDelayMs(input: {
   operation: CustomsProviderOperation;
   attempt: number;
   random?: () => number;
 }): number {
   const policy = PROVIDER_RETRY_POLICIES[input.operation];
-  const attempt = Math.max(1, Math.min(input.attempt, policy.maxAttempts));
+  if (!Number.isFinite(input.attempt) || input.attempt < 1) return policy.baseDelayMs;
+  if (input.attempt > policy.maxAttempts) {
+    throw new ProviderRetryExhaustedError(input.operation, policy.maxAttempts);
+  }
+  const attempt = input.attempt;
   const exponential = policy.baseDelayMs * 2 ** (attempt - 1);
   const capped = Math.min(exponential, policy.maxDelayMs);
   const random = input.random ?? Math.random;

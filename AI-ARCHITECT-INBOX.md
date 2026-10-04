@@ -130927,3 +130927,39 @@ PRODUCTION_CREDENTIALS = HOLD
 
 修完这两项后，不需要再拆成 C18-2 FINAL、C18-3 FINAL 两次送审，可以和 C18-4/C18-5 一起打包成下一次 C18 security/execution checkpoint 来审。
 ```
+
+### [MSG-20261004-16] ARCHITECT VERDICT — LAYER 3 / C18-4 + C18-5 = REVISE（C18-2 = PASS、C18-3 = PASS；C18-4 = PASS WITH PRODUCTION RESIDUAL（webhook replay 需 atomic durable claim，属 C18-8/真实 ingress 硬门槛，不要求现在加 Schema）；C18-5 = REVISE 两条必修：① 写操作 5xx/429 只有在 provider-specific idempotency 证据为 replay-safe 时才 RETRYABLE，否则 AMBIGUOUS；② 真正执行 maxAttempts（不能只封顶 backoff）。C18-6/7/8 允许离线继续；ProviderTenantBinding 若需持久化先送 Schema Delta）
+
+```text
+ARCHITECT VERDICT：REVISE
+
+我按 reviewed HEAD = ee80fb3（完整 SHA ee80fb371d3b1f6eb89566066b0fd3b7ffb023eb）重新检查了 C18-2/3 修订、C18-4 webhook、C18-5 reconciliation，以及既有 C17 ledger。C18-2/C18-3 上轮两条必修已经正确修掉；本轮主要问题集中在 C18-5 的真实重试安全边界。
+
+C18-4 的 HMAC 主体可以通过：HMAC-SHA256(timestamp.rawBody)、timingSafeEqual、300 秒窗口、缺头/坏时间/坏签名/未知事件 fail-closed，以及状态始终只映射为 PROVIDER_VERIFIED，这些都成立。现在不需要强行改成 t=...,v1=... 格式，因为真实 Provider 的签名头格式应由各 adapter 按官方协议实现，不能在 provider-neutral core 里假设 Stripe 风格。多密钥轮换也同理：真实 adapter 上线前必须支持 provider 官方的 key-id / active+previous secret 机制，但不是当前离线骨架必须重写的理由。
+
+不过 webhook replay 目前只是：
+
+seenDeliveryIds.has(deliveryId)
+
+这是纯函数检查，并不是并发安全的持久化 replay guard。真实 webhook 开启前必须有 atomic durable claim，例如 (providerId, deliveryId) 唯一约束或等价事务机制；两个相同 webhook 并发进入时只能有一个获准继续。不能仅靠“先读取 Set、后面再写 C17”。这一项可以放进 C18-8/真实 ingress 接线，不要求现在为 C18-4 单独加 Schema，但它是 Production Enablement 硬门槛。
+
+C18-5 的五分类设计本身我接受，特别是 CONFLICT 不重试、AMBIGUOUS 必须 lookup → digest compare → adopt/conflict → never blind resubmit，这和 C17 的 UNKNOWN_PROVIDER_RESPONSE → RECONCILING → 不盲目重新 POST 是一致的。但目前有两个必须修的问题：
+
+不能把所有“transportCompleted=true 的 5xx”统一当 RETRYABLE。 对 GET_SUBMISSION_STATUS / GET_REFUND_STATUS 这类只读操作，5xx 自动重试没问题；但对 CREATE_SUBMISSION / UPLOAD_EVIDENCE / RESPOND_RFI，Provider 有可能已经执行动作后再返回 500。只要该 Provider 的该操作还没有书面/沙盒证明 idempotency replay-safe，就必须视为 AMBIGUOUS，先对账，不能重发。只有 provider-specific IDEMPOTENCY_SEMANTICS 已核验，且确认同 key + 同 payload 可安全 replay，才允许把相应 5xx/429 转成 RETRYABLE。
+
+maxAttempts 当前没有真正限制重试次数。 nextRetryDelayMs({attempt:99}) 只是把指数退避封顶到 maxAttempts 对应的 delay，仍然返回一个延迟；因此调用方理论上可以第 99 次继续重试。这不等于“单操作 maxAttempts 2–5”。需要让执行守卫明确拒绝超过上限，例如 canAutoRetry(...) = false，或 nextRetryDelayMs() 超限返回 null/抛出 RETRY_EXHAUSTED，并补测试证明写操作真的只能执行规定次数。
+
+C17 也需要显式接线，但不要求修改 C17 的核心不变量。真实 adapter 执行阶段必须做到：write 出现 AMBIGUOUS → 在现有 root 上追加 UNKNOWN_PROVIDER_RESPONSE → 进入 C17 reconciliation → append RECONCILING → provider 查到同 key+同 digest 后采用既有 submission → 不创建第二 root、不再次 POST。这个接线可以在 C18-8 的 E2E 一起完成。
+
+因此，本轮最小必须修集合只有以下三项：
+
+C18-5：write operation 的 5xx/429 是否可 retry 必须受 provider-specific idempotency evidence 控制；没有证据默认 AMBIGUOUS。
+C18-5：真正执行 maxAttempts 上限，不能只是限制 backoff 数值。
+C18-8/真实 ingress：Webhook deliveryId 必须有 atomic durable replay claim，并验证 AMBIGUOUS → C17 既有 reconciliation path、绝不创建第二提交根。
+
+C18-2 = PASS，C18-3 = PASS；C18-4 = PASS WITH PRODUCTION RESIDUAL；C18-5 = REVISE。
+
+允许继续 C18-6 / C18-7 / C18-8 离线推进。 不需要现在停住整个 C18。按之前约定，在 C18-6 如果需要 ProviderTenantBinding 新持久化模型，先送 Schema Delta，再 migration；然后 C18-6/7/8 连同上述 C18-5 修订一次性进入第二个 checkpoint。
+
+边界继续保持：REAL_BROKER=NO / REAL_FILING=NO / REAL_TRANSPORT=HOLD / PRODUCTION_ENABLEMENT=HOLD。当前仍然可以写真实 adapter 骨架，但不能开启真实请求。GitHub 在我本次查询 ee80fb3 时仍未返回可独立确认的 workflow run/status，因此测试数字我作为送审证据接受，但不表述为我已独立确认 GitHub CI SUCCESS。
+```

@@ -1883,3 +1883,7 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - ① requestDigest 递归 canonicalization（嵌套 evidenceRefs 进入摘要 + 集合稳定排序）。
 - ② Sandbox evidence / RFI 幂等改为 idempotencyKey + payloadDigest（同 key 不同 payload = IDEMPOTENCY_KEY_CONFLICT）。
 - 裁决：C18-1 = PASS；C18-2/C18-3 = REVISE（已修）；C18-4…C18-8 = AUTHORIZED_TO_CONTINUE_OFFLINE（两个审计 checkpoint + 硬停条件）。
+
+## 2026-10-04T05:58:21.052Z — C18-4/C18-5 REVISE 落地
+- C18-5：写操作 5xx/429 受 provider idempotency 证据控制（未核验 → AMBIGUOUS）；maxAttempts 真正生效。
+- 生产门槛（不得在真实 ingress 前遗漏）：webhook atomic durable replay claim、AMBIGUOUS→C17 reconciliation（不建第二 root）、provider key 轮换。

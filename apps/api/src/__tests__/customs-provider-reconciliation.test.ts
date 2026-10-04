@@ -5,7 +5,9 @@ import { describe, expect, it } from 'vitest';
 import {
   assertResubmitAllowed,
   buildProviderReconciliationPlan,
+  canAutoRetry,
   classifyProviderOutcome,
+  ProviderRetryExhaustedError,
   isAutoRetryable,
   nextRetryDelayMs,
   PROVIDER_RETRY_POLICIES,
@@ -13,10 +15,8 @@ import {
 } from '../services/customs/customs-provider-reconciliation';
 
 describe('C18-5 — provider idempotency / retry / reconciliation（unit）', () => {
-  it('结果分类：2xx=SUCCESS；429/5xx=RETRYABLE；4xx=PERMANENT_FAILURE；409=CONFLICT；无响应=AMBIGUOUS', () => {
+  it('结果分类：2xx=SUCCESS；4xx=PERMANENT_FAILURE；409=CONFLICT；无响应=AMBIGUOUS', () => {
     expect(classifyProviderOutcome({ httpStatus: 200, transportCompleted: true })).toBe('SUCCESS');
-    expect(classifyProviderOutcome({ httpStatus: 429, transportCompleted: true })).toBe('RETRYABLE');
-    expect(classifyProviderOutcome({ httpStatus: 503, transportCompleted: true })).toBe('RETRYABLE');
     expect(classifyProviderOutcome({ httpStatus: 400, transportCompleted: true })).toBe('PERMANENT_FAILURE');
     expect(classifyProviderOutcome({ httpStatus: 422, transportCompleted: true })).toBe('PERMANENT_FAILURE');
     expect(classifyProviderOutcome({ httpStatus: 409, transportCompleted: true })).toBe('CONFLICT');
@@ -25,6 +25,35 @@ describe('C18-5 — provider idempotency / retry / reconciliation（unit）', ()
     ).toBe('CONFLICT');
     expect(classifyProviderOutcome({ httpStatus: null, transportCompleted: false })).toBe('AMBIGUOUS');
     expect(classifyProviderOutcome({ httpStatus: 504, transportCompleted: false })).toBe('AMBIGUOUS');
+  });
+
+  it('REVISE：429/5xx 的重试资格取决于操作类型与 provider idempotency 证据', () => {
+    // 只读操作：可重试
+    expect(
+      classifyProviderOutcome({ httpStatus: 503, transportCompleted: true }, { operation: 'GET_SUBMISSION_STATUS' }),
+    ).toBe('RETRYABLE');
+    expect(
+      classifyProviderOutcome({ httpStatus: 429, transportCompleted: true }, { operation: 'GET_REFUND_STATUS' }),
+    ).toBe('RETRYABLE');
+    // 写操作 + 未核验 idempotency → AMBIGUOUS（不重发）
+    expect(
+      classifyProviderOutcome({ httpStatus: 503, transportCompleted: true }, { operation: 'CREATE_SUBMISSION' }),
+    ).toBe('AMBIGUOUS');
+    expect(
+      classifyProviderOutcome(
+        { httpStatus: 500, transportCompleted: true },
+        { operation: 'UPLOAD_EVIDENCE', idempotencySemantics: 'UNVERIFIED' },
+      ),
+    ).toBe('AMBIGUOUS');
+    // 写操作 + 已核验 replay-safe → RETRYABLE
+    expect(
+      classifyProviderOutcome(
+        { httpStatus: 503, transportCompleted: true },
+        { operation: 'RESPOND_RFI', idempotencySemantics: 'REPLAY_SAFE' },
+      ),
+    ).toBe('RETRYABLE');
+    // 无操作信息（未知调用方）→ fail-closed
+    expect(classifyProviderOutcome({ httpStatus: 503, transportCompleted: true })).toBe('AMBIGUOUS');
   });
 
   it('只有 RETRYABLE 允许自动重试（CONFLICT / AMBIGUOUS / PERMANENT_FAILURE 都不允许）', () => {
@@ -39,9 +68,12 @@ describe('C18-5 — provider idempotency / retry / reconciliation（unit）', ()
     expect(nextRetryDelayMs({ operation: 'UPLOAD_EVIDENCE', attempt: 1, random: noJitter })).toBe(1000);
     expect(nextRetryDelayMs({ operation: 'UPLOAD_EVIDENCE', attempt: 2, random: noJitter })).toBe(2000);
     expect(nextRetryDelayMs({ operation: 'UPLOAD_EVIDENCE', attempt: 3, random: noJitter })).toBe(4000);
-    // 超过 maxAttempts 时按 maxAttempts 封顶
-    expect(nextRetryDelayMs({ operation: 'UPLOAD_EVIDENCE', attempt: 99, random: noJitter })).toBe(
-      Math.min(1000 * 2 ** (PROVIDER_RETRY_POLICIES.UPLOAD_EVIDENCE.maxAttempts - 1), 30000),
+    // REVISE：超过 maxAttempts 必须抛 ProviderRetryExhaustedError（真正限制重试次数）
+    expect(() => nextRetryDelayMs({ operation: 'UPLOAD_EVIDENCE', attempt: 99, random: noJitter })).toThrow(
+      ProviderRetryExhaustedError,
+    );
+    expect(() => nextRetryDelayMs({ operation: 'CREATE_SUBMISSION', attempt: 3, random: noJitter })).toThrow(
+      ProviderRetryExhaustedError,
     );
     // 抖动落在 ±ratio 区间内
     const low = nextRetryDelayMs({ operation: 'CREATE_SUBMISSION', attempt: 1, random: () => 0 });
@@ -50,6 +82,15 @@ describe('C18-5 — provider idempotency / retry / reconciliation（unit）', ()
     expect(low).toBeLessThanOrEqual(2000);
     expect(high).toBeGreaterThanOrEqual(2000);
     expect(high).toBeLessThanOrEqual(2500);
+  });
+
+  it('REVISE：canAutoRetry 真正限制次数上限', () => {
+    const op = 'UPLOAD_EVIDENCE' as const;
+    const max = PROVIDER_RETRY_POLICIES[op].maxAttempts;
+    expect(canAutoRetry({ operation: op, attempt: max, outcome: 'RETRYABLE' })).toBe(true);
+    expect(canAutoRetry({ operation: op, attempt: max + 1, outcome: 'RETRYABLE' })).toBe(false);
+    expect(canAutoRetry({ operation: op, attempt: 1, outcome: 'AMBIGUOUS' })).toBe(false);
+    expect(canAutoRetry({ operation: op, attempt: 1, outcome: 'CONFLICT' })).toBe(false);
   });
 
   it('AMBIGUOUS → 必须对账，步骤确定且明确禁止重发', () => {
