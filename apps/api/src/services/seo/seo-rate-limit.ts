@@ -23,6 +23,10 @@ export interface SeoRateLimiterOptions {
   capacity: number;
   /** 每分钟补充的令牌数。 */
   refillPerMinute: number;
+  /** MSG-20261005-04 CHANGE E: idle bucket TTL (ms). */
+  ttlMs?: number;
+  /** MSG-20261005-04 CHANGE E: hard cap on bucket count (LRU eviction). */
+  maxBuckets?: number;
   now?: () => Date;
 }
 
@@ -33,15 +37,38 @@ export function hashAnonymousKey(raw: string, salt: string): string {
 
 export function createInMemorySeoPublicRateLimiter(
   options: SeoRateLimiterOptions,
-): SeoPublicRateLimiter & { size(): number } {
+): SeoPublicRateLimiter & { size(): number; maxSize(): number } {
   const capacity = Math.max(1, Math.floor(options.capacity));
   const refillPerMs = Math.max(0, options.refillPerMinute) / 60000;
+  const ttlMs = Math.max(0, Math.floor(options.ttlMs ?? 10 * 60 * 1000));
+  const maxBuckets = Math.max(1, Math.floor(options.maxBuckets ?? 5000));
   const now = options.now ?? (() => new Date());
   const buckets = new Map<string, { tokens: number; updatedAtMs: number }>();
+
+  /** 先淘汰超时空闲桶；再按 LRU 保证不超过 maxBuckets。 */
+  const evict = (nowMs: number, incomingKey: string): void => {
+    if (ttlMs > 0) {
+      for (const [bucketKey, bucket] of buckets) {
+        if (nowMs - bucket.updatedAtMs > ttlMs) buckets.delete(bucketKey);
+      }
+    }
+    if (!buckets.has(incomingKey) && buckets.size >= maxBuckets) {
+      let oldestKey: string | null = null;
+      let oldestMs = Number.POSITIVE_INFINITY;
+      for (const [bucketKey, bucket] of buckets) {
+        if (bucket.updatedAtMs < oldestMs) {
+          oldestMs = bucket.updatedAtMs;
+          oldestKey = bucketKey;
+        }
+      }
+      if (oldestKey !== null) buckets.delete(oldestKey);
+    }
+  };
 
   return {
     check(anonymousKeyHash: string): SeoRateLimitDecision {
       const nowMs = now().getTime();
+      evict(nowMs, anonymousKeyHash);
       const existing = buckets.get(anonymousKeyHash) ?? { tokens: capacity, updatedAtMs: nowMs };
       const elapsed = Math.max(0, nowMs - existing.updatedAtMs);
       const tokens = Math.min(capacity, existing.tokens + elapsed * refillPerMs);
@@ -62,6 +89,7 @@ export function createInMemorySeoPublicRateLimiter(
       return { allowed: true, remaining: Math.floor(remaining), retryAfterSeconds: 0 };
     },
     size: () => buckets.size,
+    maxSize: () => maxBuckets,
   };
 }
 

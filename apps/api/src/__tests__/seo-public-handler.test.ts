@@ -4,6 +4,10 @@ import { describe, expect, it } from 'vitest';
 
 import { handlePublicSeoRequest, SEO_PUBLIC_HANDLER_BOUNDARY } from '../services/seo/seo-public-handler';
 import { createInMemorySeoPublicRateLimiter } from '../services/seo/seo-rate-limit';
+import {
+  createSeoConcurrencyGate,
+  type SeoConcurrencyGate,
+} from '../services/seo/seo-public-http-guard';
 import type { SeoPublicCheckerPorts } from '../services/seo/seo-public-checker';
 import type { RecoveryRuleDefinition } from '../services/recovery-rules/recovery-rule-definition';
 
@@ -59,6 +63,8 @@ const deps = () => ({
   ports: ports(),
   rateLimiter: createInMemorySeoPublicRateLimiter({ capacity: 2, refillPerMinute: 60, now: () => NOW }),
   anonymousSalt: 'salt-1',
+  // MSG-20261005-04 CHANGE D：闸门必传（组合根应传进程级 singleton）。
+  concurrencyGate: createSeoConcurrencyGate(8),
 });
 
 const base = (over: Partial<Parameters<typeof handlePublicSeoRequest>[0]> = {}) => ({
@@ -130,5 +136,80 @@ describe('SEO-3 public handler composition', () => {
     gate.release();
     expect((await handlePublicSeoRequest(base(), d)).status).toBe(200);
     expect(gate.inFlight()).toBe(0);
+  });
+});
+
+describe('SEO-3 runtime 防护（MSG-20261005-04 CHANGE C/D/E）', () => {
+  it('CHANGE_C：engine 超时 → 504 ENGINE_TIMEOUT，且槽位保留到引擎真正结束才释放', async () => {
+    const gate = createSeoConcurrencyGate(1);
+    const slowPorts = {
+      ...ports(),
+      resolveActiveRule: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 40));
+        return rule();
+      },
+    };
+    const slowDeps = { ...deps(), ports: slowPorts, concurrencyGate: gate, timeoutMs: 5 };
+    const res = await handlePublicSeoRequest(base(), slowDeps);
+    expect(res.status).toBe(504);
+    expect((res.body as { code: string }).code).toBe('ENGINE_TIMEOUT');
+    // 慢任务仍在跑：槽位不能被提前释放，否则并发上限会被突破。
+    expect(gate.inFlight()).toBe(1);
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    expect(gate.inFlight()).toBe(0);
+  });
+
+  it('CHANGE_D-1：闸门缺失 → fail-closed 503（不允许每请求自建计数器）', async () => {
+    const missing = {
+      ...deps(),
+      concurrencyGate: undefined as unknown as SeoConcurrencyGate,
+    };
+    const res = await handlePublicSeoRequest(base(), missing);
+    expect(res.status).toBe(503);
+    expect((res.body as { code: string }).code).toBe('CONCURRENCY_GATE_MISSING');
+  });
+
+  it('CHANGE_D-2：同一 deps 并发 N+1 → 前 N 占槽、第 N+1 个 503', async () => {
+    const gate = createSeoConcurrencyGate(2);
+    const slowPorts = {
+      ...ports(),
+      resolveActiveRule: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 30));
+        return rule();
+      },
+    };
+    const d = {
+      ...deps(),
+      ports: slowPorts,
+      concurrencyGate: gate,
+      timeoutMs: 5000,
+      rateLimiter: createInMemorySeoPublicRateLimiter({
+        capacity: 10,
+        refillPerMinute: 60,
+        now: () => NOW,
+      }),
+    };
+    const results = await Promise.all([
+      handlePublicSeoRequest(base(), d),
+      handlePublicSeoRequest(base(), d),
+      handlePublicSeoRequest(base(), d),
+    ]);
+    expect(results.map((r) => r.status).sort()).toEqual([200, 200, 503]);
+    expect(gate.inFlight()).toBe(0);
+  });
+
+  it('CHANGE_E：in-memory limiter 有 TTL 与 max-size（不无界增长）', () => {
+    const limiter = createInMemorySeoPublicRateLimiter({
+      capacity: 1,
+      refillPerMinute: 1,
+      ttlMs: 1000,
+      maxBuckets: 2,
+      now: () => NOW,
+    });
+    limiter.check('k1');
+    limiter.check('k2');
+    limiter.check('k3');
+    expect(limiter.maxSize()).toBe(2);
+    expect(limiter.size()).toBeLessThanOrEqual(2);
   });
 });

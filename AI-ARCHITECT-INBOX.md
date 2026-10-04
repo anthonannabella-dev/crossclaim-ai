@@ -136514,3 +136514,266 @@ NEXT:
 
 这个裁定不会触碰 C18、RSI、生产边界，也不会引入新的公开 API。
 ```
+
+### [MSG-20261005-04] ARCHITECT VERDICT — SEO-3 PUBLIC HTTP FINAL = **REVISE**（reviewed HEAD = `08a822c`）；业务输入/输出安全已 PASS，仅剩 3 个真实 HTTP runtime 防护（不是业务逻辑重做）。**已可关闭**：`CHANGE_A_PUBLIC_INPUT_SCHEMA = PASS`、`CHANGE_B_NUMERIC_SCHEMA_VALIDATION = PASS`、`UNKNOWN_KEY_REJECT`、`FINITE_NUMBER_CHECK`、`INTEGER_DECIMAL_MIN_MAX`、`ENGINE_OUTPUT_VALIDATION`、`RATE_LIMIT_BEFORE_ENGINE`、`BODY_8K_CONTRACT`、`TRUSTED_PROXY_KEY_DERIVATION`、`NO_STORE_POLICY`、`NO_RAW_BODY_IP_UA_POLICY`、`ANONYMOUS_READ_ONLY`、`NO_TENANT_DATA`、`NO_EXTERNAL_WRITE`、`NO_PAYMENT`、`NO_SUBMISSION` 全部 PASS（上一轮最核心的 A/B 漏洞确已封上）。**剩余 3 个必修**：①**CHANGE C — timeout 目前只是声明，没有真正执行**：`SEO_PUBLIC_TIMEOUT_MS = 2500` 只是策略常量，`handlePublicSeoRequest()` 直接 `await runPublicSeoChecker(...)`，没有 timeout race / deadline / abort，因此「2–3s timeout」= `POLICY CONSTANT ONLY` 而非 HTTP enforcement；必须补成真实行为并测试（engine 永不返回或超过 2500ms → 返回 HTTP timeout response、不永久占住请求；建议支持 `AbortSignal` 传播取消；慢任务未真正结束前不要错误释放 concurrency slot）。②**CHANGE D — concurrency gate 默认值实际不是全局并发限制**：`const gate = deps.concurrencyGate ?? createSeoConcurrencyGate()` 在接线层忘记注入时会让**每个请求各有一个计数器**，`MAX_CONCURRENCY = 8` 因此限制不了进程总并发（生产级公开 handler 不应允许这种 fail-open 默认）；最小修法 = 把 `concurrencyGate` 改为**必传**，或在 composition root 建**进程级 singleton** 供所有请求共用，并补一个真实并发测试（同一 `deps` 并发 `N+1` 个慢请求 → 前 N 个占槽、第 N+1 个 503）。③**CHANGE E — in-memory Map 仍然没有 TTL / max-size**（上一轮要求中尚未真正完成的一项，当前 limiter 仅有 Map）。边界保持：`PRODUCTION_PUBLIC_CHECKER = HOLD`、`PAYMENT = HOLD`、`TRANSPORT = HOLD`、`PRODUCTION_CREDENTIALS = HOLD`。结论：这轮已非常接近关闭——业务输入/输出安全已经通过，剩下的是三个真实 HTTP runtime 防护。
+
+```text
+ARCHITECT VERDICT：REVISE
+
+我按 reviewed HEAD = 08a822c0b1a0213d4e18264d945e6c93261e9e09 重新复核。该 commit 本身主要是送审文档/状态记录；我按这个 exact HEAD 读取了当前 seo-public-input-schema / http-guard / handler / checker / rate-limit / server 实现。
+
+结论是：CHANGE A / B 已 PASS，但 PUBLIC_CHECKER_HTTP 还不能记 FINAL PASS，也不能直接生产公开。 剩余问题很窄。
+
+已经可以关闭的部分
+纯文本
+CHANGE_A_PUBLIC_INPUT_SCHEMA = PASS
+CHANGE_B_NUMERIC_SCHEMA_VALIDATION = PASS
+
+UNKNOWN_KEY_REJECT = PASS
+FINITE_NUMBER_CHECK = PASS
+INTEGER_DECIMAL_MIN_MAX = PASS
+ENGINE_OUTPUT_VALIDATION = PASS
+RATE_LIMIT_BEFORE_ENGINE = PASS
+BODY_8K_CONTRACT = PASS
+TRUSTED_PROXY_KEY_DERIVATION = PASS
+NO_STORE_POLICY = PASS
+NO_RAW_BODY_IP_UA_POLICY = PASS
+ANONYMOUS_READ_ONLY = PASS
+NO_TENANT_DATA = PASS
+NO_EXTERNAL_WRITE = PASS
+NO_PAYMENT = PASS
+NO_SUBMISSION = PASS
+
+你上一轮最核心的 A/B 漏洞确实已经封上了。
+
+但还有 3 个必须修的点。
+
+CHANGE C — timeout 目前只是“声明”，没有真正执行
+
+当前代码定义：
+
+纯文本
+SEO_PUBLIC_TIMEOUT_MS = 2500
+
+但 handlePublicSeoRequest() 实际直接：
+
+TypeScript
+await runPublicSeoChecker(...)
+
+没有 timeout race / deadline / abort。
+
+所以：
+
+纯文本
+2–3s timeout = POLICY CONSTANT ONLY
+
+还不是 HTTP enforcement。
+
+必须补成真实行为，并测试：
+
+纯文本
+engine 永不返回 / 超过 2500ms
+→ HTTP timeout response
+→ 不永久占住请求
+
+建议同时保证慢任务未真正结束前，不要错误释放 concurrency slot；如果支持 AbortSignal，最好传播 cancellation。
+
+CHANGE D — concurrency gate 默认值实际上不是全局并发限制
+
+现在：
+
+TypeScript
+const gate = deps.concurrencyGate ?? createSeoConcurrencyGate();
+
+如果接线层忘记注入，就会变成：
+
+纯文本
+request A → new gate
+request B → new gate
+request C → new gate
+
+每个请求都有自己的计数器。
+
+结果：
+
+纯文本
+MAX_CONCURRENCY = 8
+
+实际上无法限制进程总并发。
+
+生产级公开 handler 不应该允许这种 fail-open 默认。
+
+最小修法：
+
+纯文本
+concurrencyGate 改为必传
+
+或在 composition root 创建进程级 singleton，然后所有请求共用。
+
+至少补一个真实并发测试：
+
+纯文本
+同一 deps
+并发 N+1 个慢请求
+→ 前 N 个占槽
+→ 第 N+1 个 503
+CHANGE E — in-memory Map 仍然没有 TTL / max-size
+
+这是上一轮要求中尚未真正完成的一项。
+
+当前 limiter：
+
+TypeScript
+const buckets = new Map(...)
+
+只增加，不淘汰。
+
+所以匿名公网请求不断换 IP/hash 时，长期进程会无限增长。
+
+虽然你已经把它标记为：
+
+纯文本
+DEV/STAGING_ONLY
+
+这个定位是正确的，但此前要求仍包括：
+
+纯文本
+Map TTL / max-size
+
+当前 assertProductionRateLimiter() 里甚至有：
+
+纯文本
+mapHasTtlOrMaxSize
+
+但实际 createInMemorySeoPublicRateLimiter() 本身并没有 TTL/maxEntries。
+
+因此需要加一个有限内存机制，例如：
+
+纯文本
+bucketTtlMs
+maxEntries
+
+并有淘汰测试。
+
+生产共享/边缘限流：必须在生产公开前完成
+
+这一点确认不变：
+
+纯文本
+IN_MEMORY_RATE_LIMIT = DEV/STAGING_ONLY
+SHARED_OR_EDGE_ATOMIC_RATE_LIMIT = REQUIRED_FOR_PRODUCTION
+
+所以现在可以：
+
+纯文本
+DEV = allowed
+STAGING = allowed
+
+但不能：
+
+纯文本
+PRODUCTION PUBLIC = allowed
+
+除非有：
+
+Redis 原子 check-and-consume；或
+CDN/API Gateway 全局限流；
+且应用层仍保持第二层保护。
+是否允许开始接线公开入口？
+
+允许接线代码，但不是“生产公开解禁”。
+
+建议下一步直接实现 route，这样才能完成真正的 HTTP integration test。
+
+裁定：
+
+纯文本
+PUBLIC_ROUTE_IMPLEMENTATION = AUTHORIZED
+
+PUBLIC_ROUTE_DEV_STAGING = AUTHORIZED
+
+PUBLIC_ROUTE_PRODUCTION_ENABLEMENT = HOLD
+
+并要求：
+
+纯文本
+PUBLIC_SEO_CHECKER_ENABLED=false
+
+默认关闭。
+
+只有显式 DEV/STAGING 配置才开启。
+
+这样 Codex 可以完成：
+
+纯文本
+server route
+→ raw bytes ≤8 KiB
+→ JSON parse
+→ trusted client IP
+→ shared singleton concurrency gate
+→ limiter
+→ actual timeout
+→ handler
+→ response
+
+同时把 SEO-8 公共面合同测试定稿。
+
+PUBLIC_CHECKER_HTTP 当前状态
+
+不能写成：
+
+纯文本
+PUBLIC_CHECKER_HTTP = PASS
+
+应写：
+
+纯文本
+PUBLIC_CHECKER_CORE = PASS
+PUBLIC_CHECKER_HTTP_HANDLER = REVISE
+PUBLIC_CHECKER_ROUTE_WIRING = AUTHORIZED_NONPROD
+PUBLIC_CHECKER_PRODUCTION = HOLD
+最小剩余集合
+
+只补这三项即可：
+
+纯文本
+CHANGE C
+真实 2–3s timeout enforcement + slow/hung engine test
+
+CHANGE D
+process-shared / mandatory concurrency gate
+禁止 per-request fallback gate
+
+CHANGE E
+in-memory limiter 增 TTL 或 max-size
+并测试淘汰/容量上限
+
+然后把真实 route 接上，补一组 route-level contract：
+
+纯文本
+POST only
+raw body >8KiB 在 JSON parse 前拒绝
+no-store
+无 ACAO: *
+trusted proxy fail-closed
+rate limit before engine
+timeout
+concurrency saturation
+
+通过后直接送：
+
+SEO-3 PUBLIC HTTP FINAL-2
+
+不需要重审 CHANGE A/B，也不需要重新审 SEO-4 URL 契约。
+
+当前外部边界继续：
+
+纯文本
+EXTERNAL_WRITE = HOLD
+PAYMENT = HOLD
+TRANSPORT = HOLD
+PRODUCTION_CREDENTIALS = HOLD
+PRODUCTION_PUBLIC_CHECKER = HOLD
+
+所以这轮已经非常接近关闭：业务输入/输出安全已经通过，剩下的是三个真实 HTTP runtime 防护，而不是业务逻辑重做。
+```

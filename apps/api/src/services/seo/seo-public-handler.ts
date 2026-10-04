@@ -1,14 +1,15 @@
 /**
- * SEO-3 PUBLIC HANDLER（组合层，**不注册任何 HTTP 路由**）
+ * SEO-3 PUBLIC HANDLER（组合层，**未注册任何 HTTP 路由**）
  * ---------------------------------------------------------------
- * 把审计要求的各层按正确顺序组合成一个可测试的 handler：
- *   1) 请求形状（POST / JSON / ≤8 KiB，解析前）
- *   2) 匿名键（**可信代理**真实 client IP）+ 限流（必须先于昂贵引擎调用）
- *   3) 有界并发闸门
- *   4) 公开 Checker（含 CHANGE A/B schema 校验与 engine 输出校验）
- *   5) 统一响应头（no-store / 同源 CORS）
+ * 按裁决要求的固定顺序组合成一个可测试的 handler：
+ *   1) 请求形状（POST / JSON / ≤8 KiB）在解密前判
+ *   2) 限流（**受信代理**才取真实 client IP）+ 限流在昂贵逻辑前调用
+ *   3) 有界并发闸门（**必传**，进程级 singleton；不允许 fail-open 默认）
+ *   4) 真执行 Checker（内含 CHANGE A/B schema 校验与 engine 输出校验）
+ *   5) 真实 timeout enforcement（MSG-20261005-04 CHANGE C）
+ *   6) 统一响应头（no-store / 同源 CORS）
  *
- * 本模块不做 I/O、不读环境、不注册路由；接线（含共享限流与 CDN/网关）留给 PUBLIC HTTP FINAL。
+ * 本模块不做 I/O，也不注册路由；接线（含共享/边缘限流）在 PUBLIC HTTP FINAL 后。
  */
 
 import {
@@ -19,26 +20,34 @@ import {
   type SeoPublicRequest,
 } from './seo-public-checker';
 import {
-  createSeoConcurrencyGate,
+  createSeoTimeout,
   deriveAnonymousKey,
   guardSeoHttpRequestShape,
   SEO_PUBLIC_RESPONSE_POLICY,
+  type SeoConcurrencyGate,
 } from './seo-public-http-guard';
 import type { SeoPublicRateLimiter } from './seo-rate-limit';
 
 export interface SeoPublicHandlerDeps {
   ports: SeoPublicCheckerPorts;
   rateLimiter: SeoPublicRateLimiter;
-  /** 匿名键盐（服务端持有，不进日志）。 */
+  /** 用于匿名化，禁止落盘原始标识 */
   anonymousSalt: string;
-  concurrencyGate?: ReturnType<typeof createSeoConcurrencyGate>;
+  /**
+   * MSG-20261005-04 CHANGE D：**必传**。缺省即 fail-closed（503），
+   * 因为每个请求各建一个计数器会让 MAX_CONCURRENCY 形同虚设。
+   * 组合根应使用 getSeoPublicConcurrencyGate() 取进程级 singleton。
+   */
+  concurrencyGate: SeoConcurrencyGate;
+  /** 覆盖默认 timeout（毫秒）；只在测试或组合根显式调优时使用。 */
+  timeoutMs?: number;
 }
 
 export interface SeoPublicHandlerInput {
   method: string;
   contentType: string | null;
   bodyByteLength: number;
-  /** 已解析的 JSON body（解析必须发生在 8 KiB 检查之后，由接线层保证）。 */
+  /** 已解析的 JSON body（超过 8 KiB 拒收由调用层保证） */
   parsedBody: SeoPublicRequest | null;
   trustedProxy: boolean;
   clientIp: string | null;
@@ -65,7 +74,7 @@ export async function handlePublicSeoRequest(
   input: SeoPublicHandlerInput,
   deps: SeoPublicHandlerDeps,
 ): Promise<SeoPublicHandlerResponse> {
-  // 1) 请求形状（解析前已按字节判断体积）。
+  // 1) 请求形状；在解密前已按字节长度判断
   const shape = guardSeoHttpRequestShape({
     method: input.method,
     contentType: input.contentType,
@@ -76,7 +85,7 @@ export async function handlePublicSeoRequest(
     return deny(status, shape.code);
   }
 
-  // 2) 匿名键（只信可信代理）+ 限流（先于任何昂贵工作）。
+  // 2) 限流只放可信代理 + 只做匿名键（不落任何原始信息）
   const key = deriveAnonymousKey({
     trustedProxy: input.trustedProxy,
     clientIp: input.clientIp,
@@ -86,30 +95,50 @@ export async function handlePublicSeoRequest(
   const limit = deps.rateLimiter.check(key.key);
   if (!limit.allowed) return deny(429, 'RATE_LIMITED');
 
-  // 3) 有界并发。
-  const gate = deps.concurrencyGate ?? createSeoConcurrencyGate();
+  // 3) 有界并发：闸门必传（CHANGE D）
+  const gate = deps.concurrencyGate;
+  if (gate === undefined || gate === null) return deny(503, 'CONCURRENCY_GATE_MISSING');
   const slot = gate.tryAcquire();
   if (!slot.ok) return deny(503, slot.code);
 
+  // 4) 真执行 Checker（内部已含 CHANGE A/B 校验 + engine 输出校验）
+  const engine = runPublicSeoChecker(input.parsedBody ?? { slug: '' }, deps.ports);
+  // 槽位只在**引擎真正结束**时释放：超时后慢任务仍在跑，若立刻释放会突破并发上限。
+  let released = false;
+  const releaseOnce = (): void => {
+    if (!released) {
+      released = true;
+      gate.release();
+    }
+  };
+  void engine.then(releaseOnce, releaseOnce);
+
+  // 5) 真实 timeout enforcement（CHANGE C）
+  const timeout = createSeoTimeout(deps.timeoutMs ?? SEO_PUBLIC_RESPONSE_POLICY.timeoutMs);
   try {
-    // 4) 公开 Checker（内部已含 CHANGE A/B 输入校验 + engine 输出校验）。
-    const result = await runPublicSeoChecker(input.parsedBody ?? { slug: '' }, deps.ports);
+    const result = await Promise.race([engine, timeout.expired]);
+    if (result === undefined) return deny(504, 'ENGINE_TIMEOUT');
     if (!result.ok) {
       const status = result.code === 'INVALID_REQUEST' || result.code === 'PII_REJECTED' ? 400 : 404;
       return { status, headers: responseHeaders(), body: result };
     }
     return { status: 200, headers: responseHeaders(), body: result };
+  } catch {
+    return deny(502, 'ENGINE_FAILED');
   } finally {
-    gate.release();
+    timeout.cancel();
   }
 }
 
-/** 边界自证：组合层不注册路由、不外写、不落库、不含租户数据。 */
+/** 边界验证：组合层不注册路由、不写库、不传租户数据。 */
 export const SEO_PUBLIC_HANDLER_BOUNDARY = {
   routeRegistered: false,
   tenantDataIncluded: false,
   externalWritePerformed: false,
   databaseWritePerformed: false,
   rateLimitBeforeEngineCall: true,
+  /** MSG-20261005-04：闸门必传；timeout 真执行。 */
+  concurrencyGateRequired: true,
+  timeoutEnforced: true,
   checkerBoundary: SEO_PUBLIC_TOOL_BOUNDARY,
 } as const;

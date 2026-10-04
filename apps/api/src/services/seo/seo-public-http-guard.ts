@@ -59,7 +59,15 @@ export function deriveAnonymousKey(input: {
 }
 
 /** 有界并发闸门（进程内参考实现；生产应换成跨进程/共享实现）。 */
-export function createSeoConcurrencyGate(max: number = SEO_PUBLIC_MAX_CONCURRENCY) {
+export interface SeoConcurrencyGate {
+  tryAcquire(): SeoHttpGuardResult;
+  release(): void;
+  inFlight(): number;
+}
+
+export function createSeoConcurrencyGate(
+  max: number = SEO_PUBLIC_MAX_CONCURRENCY,
+): SeoConcurrencyGate {
   let inFlight = 0;
   return {
     tryAcquire(): SeoHttpGuardResult {
@@ -93,3 +101,34 @@ export const SEO_PUBLIC_HTTP_GUARD_BOUNDARY = {
   trustsForwardedHeaderWhenProxyUntrusted: false,
   productionCredentials: 'ABSENT',
 } as const;
+
+/**
+ * MSG-20261005-04 CHANGE D：组合根应取**进程级 singleton**，让所有请求共用同一计数器。
+ * 若每个请求自建 gate，MAX_CONCURRENCY 只限制单请求，等于没有限制。
+ */
+let SEO_PUBLIC_PROCESS_CONCURRENCY_GATE: SeoConcurrencyGate | null = null;
+export function getSeoPublicConcurrencyGate(max: number = SEO_PUBLIC_MAX_CONCURRENCY): SeoConcurrencyGate {
+  if (SEO_PUBLIC_PROCESS_CONCURRENCY_GATE === null) {
+    SEO_PUBLIC_PROCESS_CONCURRENCY_GATE = createSeoConcurrencyGate(max);
+  }
+  return SEO_PUBLIC_PROCESS_CONCURRENCY_GATE;
+}
+
+/**
+ * MSG-20261005-04 CHANGE C：真实 timeout enforcement。
+ * expired 在 ms 后 resolve 为 undefined（不 reject，避免未处理拒绝）；cancel() 清理定时器，
+ * 且 unref 定时器以免拖住进程退出。
+ */
+export function createSeoTimeout(ms: number): { expired: Promise<undefined>; cancel: () => void } {
+  let handle: ReturnType<typeof setTimeout> | null = null;
+  let cancelFn: () => void = () => {};
+  const expired = new Promise<undefined>((resolve) => {
+    handle = setTimeout(() => resolve(undefined), Math.max(1, Math.floor(ms)));
+    const anyHandle = handle as unknown as { unref?: () => void };
+    anyHandle.unref?.();
+    cancelFn = () => {
+      if (handle !== null) clearTimeout(handle);
+    };
+  });
+  return { expired, cancel: () => cancelFn() };
+}
