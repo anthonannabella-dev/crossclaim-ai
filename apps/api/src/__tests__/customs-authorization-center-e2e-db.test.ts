@@ -25,6 +25,9 @@ const OTHER = 'ca510000-0000-4000-8000-000000000004';
 const OPP = 'ca5-e2e-opp';
 const OPP_NO_ROUTE = 'ca5-e2e-opp-no-route';
 const OPP_NO_LINEAGE = 'ca5-e2e-opp-no-lineage';
+const OPP_EXPIRED_IOR = 'ca5-e2e-opp-expired-ior';
+const OPP_NO_FILING_AUTH = 'ca5-e2e-opp-no-filing-auth';
+const OPP_SELF = 'ca5-e2e-opp-self-filed';
 const ENTRY = 'ENTRY-CA5-1';
 const SALT = 'ca5-final2-salt-0123456789';
 const FAST_PARAMS = { N: 1024, r: 8, p: 1, keyLength: 64 };
@@ -146,6 +149,25 @@ beforeEach(async () => {
   await prisma.recoveryRoute.create({
     data: { id: randomUUID(), organizationId: ORG, opportunityId: OPP_NO_LINEAGE, target: 'CUSTOMS_BROKER' as never },
   });
+  for (const [id, entry, target] of [
+    [OPP_EXPIRED_IOR, 'ENTRY-EXPIRED', 'CUSTOMS_BROKER'],
+    [OPP_NO_FILING_AUTH, 'ENTRY-NO-FILING-AUTH', 'CUSTOMS_BROKER'],
+    [OPP_SELF, 'ENTRY-SELF', 'CUSTOMER_SELF'],
+  ] as const) {
+    await prisma.recoveryOpportunity.create({
+      data: {
+        id,
+        organizationId: ORG,
+        domain: 'CUSTOMS' as never,
+        channel: 'CUSTOMS_BROKER' as never,
+        opportunityType: entry,
+        title: 'CA5 ' + entry,
+      },
+    });
+    await prisma.recoveryRoute.create({
+      data: { id: randomUUID(), organizationId: ORG, opportunityId: id, target: target as never },
+    });
+  }
   await prisma.customsIorIdentityFact.create({
     data: {
       id: randomUUID(),
@@ -198,6 +220,74 @@ beforeEach(async () => {
       lifecycleKey: 'ca5-final2-poa',
       verificationStatus: 'VERIFIED' as never,
       verificationSource: 'BROKER_ATTESTATION' as never,
+      contentDigest: digest(),
+      observedAt: new Date('2026-09-02T00:00:00.000Z'),
+    },
+  });
+  // CHANGE B 夹具：VERIFIED 但已过期（effectiveTo 过去）
+  await prisma.customsIorIdentityFact.create({
+    data: {
+      id: randomUUID(),
+      organizationId: ORG,
+      jurisdiction: 'US',
+      principalType: 'IMPORTER_OF_RECORD' as never,
+      importerOfRecordRef: 'ior:expired',
+      legalEntityRef: 'entity:expired',
+      verificationStatus: 'VERIFIED' as never,
+      verificationSource: 'CUSTOMER_DOCUMENT' as never,
+      verifiedAt: new Date('2025-01-01T00:00:00.000Z'),
+      effectiveFrom: new Date('2025-01-01T00:00:00.000Z'),
+      effectiveTo: new Date('2026-01-01T00:00:00.000Z'),
+      contentDigest: digest(),
+      sourceReference: 'doc:expired',
+      observedAt: new Date('2026-09-01T00:00:00.000Z'),
+    },
+  });
+  // CHANGE A 夹具：权利 CONFIRMED 但缺 filing authorization（outcome 会因此是 NEEDS_MANUAL）
+  for (const [entry, principal] of [
+    ['ENTRY-EXPIRED', 'ior:expired'],
+    ['ENTRY-NO-FILING-AUTH', 'ior:acme'],
+    ['ENTRY-SELF', 'ior:acme'],
+  ] as const) {
+    await prisma.customsRightLineageFact.create({
+      data: {
+        id: randomUUID(),
+        organizationId: ORG,
+        entryReference: entry,
+        importerOfRecordRef: principal,
+        claimantRef: 'entity:acme',
+        remedyRoute: 'DRAWBACK',
+        iorRightsForRemedy: 'CONFIRMED',
+        claimantRightsForRemedy: 'CONFIRMED',
+        filingAuthorized: entry === 'ENTRY-EXPIRED',
+        outcome: (entry === 'ENTRY-EXPIRED' ? 'COMPLETE' : 'NEEDS_MANUAL') as never,
+        reasonCodes: [] as never,
+        evidenceKinds: [] as never,
+        contentDigest: digest(),
+        observedAt: new Date('2026-09-02T00:00:00.000Z'),
+      },
+    });
+  }
+  // SELF_FILED：签署权限事实（VERIFIED）
+  await prisma.customsAuthorizedSignerFact.create({
+    data: {
+      id: randomUUID(),
+      organizationId: ORG,
+      principalRef: 'ior:acme',
+      signerRef: 'signer:acme-legal-rep',
+      signerType: 'LEGAL_REPRESENTATIVE' as never,
+      authorityBasis: 'LEGAL_REPRESENTATIVE',
+      scope: ['DRAWBACK'] as never,
+      jurisdiction: 'US',
+      effectiveAt: new Date('2026-09-01T00:00:00.000Z'),
+      expiresAt: null,
+      verificationStatus: 'VERIFIED' as never,
+      verificationSource: 'CUSTOMER_DOCUMENT' as never,
+      verifiedAt: new Date('2026-09-01T00:00:00.000Z'),
+      evidenceArtifactRef: 'evidence:signer',
+      revokedAt: null,
+      supersededAt: null,
+      lifecycleKey: 'ca5-final2-signer',
       contentDigest: digest(),
       observedAt: new Date('2026-09-02T00:00:00.000Z'),
     },
@@ -286,6 +376,46 @@ describe('CA-5 — authorization center real-fact E2E（真实 PostgreSQL 授权
         body: '{}',
       });
       expect(res.status).toBe(405);
+    });
+  });
+
+  it('CHANGE A/B：追回权与申报授权分离；IOR VERIFIED 但过期 → ① 需要处理', async () => {
+    await withServer({ customsFilingProvider: PROVIDER }, async (base) => {
+      const cookie = await login(base, 'ca5f2-owner@example.com');
+      const read = async (id: string) => {
+        const res = await getCenter(base, id, cookie);
+        expect(res.status).toBe(200);
+        const body = (await res.json()) as {
+          authorizationCenter: { items: Array<{ key: string; state: string; action: string | null }>; route: string };
+        };
+        return {
+          route: body.authorizationCenter.route,
+          byKey: (key: string) => body.authorizationCenter.items.find((entry) => entry.key === key),
+        };
+      };
+
+      // A（BROKER_FILED）：权利 CONFIRMED 但缺 filing authorization → ② 已确认，⑥ 等待申报授权
+      const broker = await read(OPP_NO_FILING_AUTH);
+      expect(broker.route).toBe('BROKER_FILED');
+      // 追回权只看权利字段：即使 outcome=NEEDS_MANUAL（仅因缺 filing authorization），② 仍必须是已确认
+      expect(broker.byKey('RECOVERY_RIGHT')?.state).toBe('CONFIRMED');
+      // 本夹具没有 service agreement 事实（loader 保守 false），因此 file 阶段仍有客户侧 blocker →
+      // ⑥ 停在准备中而不是等待申报授权；关键不变量是"绝不 READY_TO_SUBMIT"。
+      // （"只剩 filing authorization 时 → WAITING_AUTHORIZATION" 由 center unit 的 ownership 用例覆盖。）
+      expect(broker.byKey('SUBMISSION_READINESS')?.state).not.toBe('READY_TO_SUBMIT');
+
+      // A（SELF_FILED）：同样的缺口归 ③ 签署权限，⑥ 保持准备中
+      const self = await read(OPP_SELF);
+      expect(self.route).toBe('SELF_FILED');
+      expect(self.byKey('RECOVERY_RIGHT')?.state).toBe('CONFIRMED');
+      expect(self.byKey('SIGNER_AUTHORITY')?.state).toBe('NEEDS_ACTION');
+      expect(self.byKey('SIGNER_AUTHORITY')?.action).toBe('CONFIRM_SIGNING_AUTHORITY');
+      expect(self.byKey('SUBMISSION_READINESS')?.state).toBe('IN_PREPARATION');
+
+      // B：IOR VERIFIED 但超出有效窗口 → ① 需要处理（不得显示已确认）
+      const expired = await read(OPP_EXPIRED_IOR);
+      expect(expired.byKey('ENTERPRISE_IDENTITY')?.state).toBe('NEEDS_ACTION');
+      expect(expired.byKey('RECOVERY_RIGHT')?.state).toBe('CONFIRMED');
     });
   });
 });

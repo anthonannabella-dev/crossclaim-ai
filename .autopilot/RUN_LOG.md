@@ -1847,3 +1847,8 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - ① UI 支持 PENDING_POLICY（5 语言 604 键；等待文案改为"等待授权/政策确认"）。
 - ② FILING_PERMISSION_REQUIRED route-aware：SELF_FILED → ③ 签署权限。
 - ③ 真实 Prisma tenant-scoped loader（RecoveryRoute + RightLineage + IOR + POA/Signer facts；退款账户恒保守 false；未知 route/lineage → 404）并接入 createDefaultReadDeps；真实 PG 事实 E2E 6/6。
+
+## 2026-10-04T04:20:31.814Z — CA-5 FINAL-2 REVISE（事实映射两条）落地
+- A：追回权改为 iorRightsForRemedy+claimantRightsForRemedy 派生（outcome 不再参与）。
+- B：IOR 复用 evaluateIorIdentity（有效窗口 / REVOKED / UNVERIFIED / legalEntityRef）。
+- 真实 PG 事实 E2E 新增：权利 CONFIRMED + filingAuthorized=false（BROKER_FILED / SELF_FILED）与 VERIFIED 但过期 IOR 三组断言；center unit 14/14 + E2E 7/7。

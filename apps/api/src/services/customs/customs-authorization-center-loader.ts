@@ -28,6 +28,7 @@ import {
 } from './customs-authorization-route';
 import { buildCustomsAuthorizationCenter } from './customs-authorization-center';
 import type { CustomsAuthorizationCenterHttpDeps } from './customs-authorization-center-http';
+import { evaluateIorIdentity, normalizeIorIdentity } from './enterprise-ior/ior-identity';
 
 /** RecoveryRoute.target → 三种合法 filing route；其它一律 null（未知 = fail-closed）。 */
 export const ROUTE_TARGET_TO_FILING_ROUTE: Record<string, CustomsFilingRoute | null> = {
@@ -45,6 +46,47 @@ function providerCapabilityReady(
 ): boolean {
   if (provider === null) return false;
   return missingFilingCapabilities(provider.capabilities, CUSTOMS_AUTO_FILING_REQUIRED_OPERATIONS).length === 0;
+}
+
+/**
+ * IOR 身份可用性（复用既有 evaluateIorIdentity 语义；任何异常一律视为不可用 = fail-closed）。
+ * 不使用「verificationStatus === VERIFIED」这种简化判断。
+ */
+function iorIdentityUsable(
+  row: {
+    jurisdiction: string;
+    principalType: string;
+    importerOfRecordRef: string;
+    legalEntityRef: string;
+    aceAccountRef: string | null;
+    verificationStatus: string;
+    verificationSource: string;
+    verifiedAt: Date | null;
+    effectiveFrom: Date | null;
+    effectiveTo: Date | null;
+  } | null,
+  organizationId: string,
+  at: Date,
+): boolean {
+  if (!row) return false;
+  try {
+    const identity = normalizeIorIdentity({
+      organizationId,
+      jurisdiction: row.jurisdiction,
+      principalType: String(row.principalType),
+      importerOfRecordRef: row.importerOfRecordRef,
+      legalEntityRef: row.legalEntityRef,
+      aceAccountRef: row.aceAccountRef,
+      verificationStatus: String(row.verificationStatus),
+      verificationSource: String(row.verificationSource),
+      verifiedAt: row.verifiedAt ? row.verifiedAt.toISOString() : null,
+      effectiveFrom: row.effectiveFrom ? row.effectiveFrom.toISOString() : null,
+      effectiveTo: row.effectiveTo ? row.effectiveTo.toISOString() : null,
+    });
+    return evaluateIorIdentity(identity, at.toISOString()).usable;
+  } catch {
+    return false;
+  }
 }
 
 export function createPrismaCustomsAuthorizationCenterLoader(
@@ -82,7 +124,18 @@ export function createPrismaCustomsAuthorizationCenterLoader(
       const ior = await prisma.customsIorIdentityFact.findFirst({
         where: { organizationId, importerOfRecordRef: principalRef },
         orderBy: [{ observedAt: 'desc' }],
-        select: { verificationStatus: true },
+        select: {
+          jurisdiction: true,
+          principalType: true,
+          importerOfRecordRef: true,
+          legalEntityRef: true,
+          aceAccountRef: true,
+          verificationStatus: true,
+          verificationSource: true,
+          verifiedAt: true,
+          effectiveFrom: true,
+          effectiveTo: true,
+        },
       });
 
       const poaRowsRaw = await prisma.customsBrokerPoaFact.findMany({
@@ -137,9 +190,13 @@ export function createPrismaCustomsAuthorizationCenterLoader(
       const facts: CustomsAuthorizationFacts = {
         // 无服务端事实来源的项目一律保守 false（fail-closed），绝不默认 true
         customsAgreementSigned: false,
-        iorConfirmed: ior?.verificationStatus === 'VERIFIED',
+        // MSG-20261004-10 CHANGE B：复用 evaluateIorIdentity（有效窗口 / REVOKED / UNVERIFIED / legalEntityRef），
+        // 不把「VERIFIED 但已过期 / 尚未生效」误判为已确认。
+        iorConfirmed: iorIdentityUsable(ior, organizationId, at),
         claimantConfirmed: typeof lineage.claimantRef === 'string' && lineage.claimantRef.trim() !== '',
-        recoveryRightForRemedy: lineage.outcome === 'COMPLETE',
+        // MSG-20261004-10 CHANGE A：追回权只看权利字段，不再用 outcome（outcome 可能仅因缺 filing authorization 而 NEEDS_MANUAL）
+        recoveryRightForRemedy:
+          lineage.iorRightsForRemedy === 'CONFIRMED' && lineage.claimantRightsForRemedy === 'CONFIRMED',
         brokerConnected: latestBrokerRef !== null,
         brokerPoaStatus: poa.status,
         brokerPoaScopeCoversRemedy: poa.scopeCoversRemedy,

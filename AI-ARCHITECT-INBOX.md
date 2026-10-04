@@ -129674,3 +129674,200 @@ FILING_PERMISSION_REQUIRED 改为 route-aware ownership：BROKER_FILED 保持 pr
 
 REAL_BROKER=NO / REAL_FILING=NO / C18=HOLD_EXTERNAL 继续保持，不需要解除，也不需要新 Schema。
 ```
+
+### [MSG-20261004-10] ARCHITECT VERDICT — CUSTOMS AUTHORIZATION CA-5 FINAL-2 = REVISE（①UI PENDING_POLICY / ②route-aware ownership / ③Prisma runtime loader 主体 = PASS；仅两条事实映射窄修：A 追回权必须由 iorRightsForRemedy+claimantRightsForRemedy 派生（不得用 outcome）；B IOR 必须复用 evaluateIorIdentity 有效窗口判定（不得只看 VERIFIED））
+
+```text
+ARCHITECT VERDICT：REVISE
+
+我按 reviewed HEAD = c897737 重新检查了最终代码。上一轮要求的三条窄修本身已经真实落地，但在把 CA-5 改成“真实 Prisma truth loader”后，暴露出 2 个事实映射问题。它们会让客户授权中心显示错误的授权状态，所以我不建议现在直接 CA-5 = CLOSED。
+
+已通过的部分
+
+① UI PENDING_POLICY：PASS
+
+现在 Web 已补：
+
+PENDING_POLICY → statePendingPolicy
+tone=pending
+5 语言
+nextAction=null 且存在 WAITING_AUTHORIZATION / PENDING_POLICY 时使用 waitingNote
+不再泄漏 PENDING_POLICY 工程枚举
+不再错误显示“当前无需操作”
+
+这一项可以关闭。
+
+② FILING_PERMISSION_REQUIRED route-aware ownership：PASS
+
+现在：
+
+BROKER_FILED → PROVIDER
+SELF_FILED → CUSTOMER_SIGNER
+SELF_FILED 缺申报权限进入③ SIGNER_AUTHORITY
+action=CONFIRM_SIGNING_AUTHORITY
+⑥保持 IN_PREPARATION
+
+这符合上一轮裁定。无需再改。
+
+③ Prisma tenant-scoped loader + runtime 装配：主体结构 PASS
+
+我确认现在已经不是进程级 CustomsAuthorizationFlags。
+
+真实路径已经存在：
+
+RecoveryOpportunity
+→ RecoveryRoute
+→ CustomsRightLineageFact
+→ CustomsIorIdentityFact
+→ CustomsBrokerPoaFact / CustomsAuthorizedSignerFact
+→ CA-1 resolver
+→ CA-5 projection
+
+并且：
+
+createDefaultReadDeps(prisma)
+已经装配：
+
+customsAuthorizationCenter: createPrismaCustomsAuthorizationCenterLoader(prisma)
+
+createServer() 在没有显式注入时也会自动创建 Prisma loader。
+
+退款账户三项现在全部保守 false，这一点正确。
+
+真实 PG E2E 也确实不再是假 loader：它实际写入 CustomsRightLineageFact / CustomsIorIdentityFact / CustomsBrokerPoaFact / RecoveryRoute 后走 HTTP。
+
+还必须修的 2 个问题
+CHANGE A — recoveryRightForRemedy 映射错误
+
+当前 loader：
+
+TypeScript
+recoveryRightForRemedy: lineage.outcome === 'COMPLETE'
+
+这不符合 CustomsRightLineageFact 自身的领域定义。
+
+因为 evaluateRightLineage() 中：
+
+如果：
+
+IOR recovery right = CONFIRMED
+claimant recovery right = CONFIRMED
+但 filingAuthorized = false
+
+那么 lineage 的 outcome 仍会是：
+
+NEEDS_MANUAL
+
+原因只是：
+
+FILING_AUTHORIZATION_MISSING
+
+此时客户的追回权其实已经确认，只是缺申报权限。
+
+但当前 CA-5 会把：
+
+② 追回权 → NEEDS_ACTION
+
+同时又显示 filing permission 缺失。
+
+这重新把②“追回权”和③/⑥“申报授权”混在了一起。
+
+最小修复应该是从已有字段直接派生：
+
+TypeScript
+recoveryRightForRemedy =
+  lineage.iorRightsForRemedy === 'CONFIRMED' &&
+  lineage.claimantRightsForRemedy === 'CONFIRMED'
+
+而：
+
+TypeScript
+filingPermissionValid = lineage.filingAuthorized === true
+
+继续独立。
+
+必须新增回归：
+
+rights confirmed + filingAuthorized=false
+→ ② RECOVERY_RIGHT = CONFIRMED
+→ BROKER_FILED：⑥等待申报授权
+→ SELF_FILED：③需要确认签署/申报权限
+
+这个测试非常重要。
+
+CHANGE B — IOR VERIFIED 不能忽略有效期
+
+当前 loader：
+
+TypeScript
+iorConfirmed: ior?.verificationStatus === 'VERIFIED'
+
+但 CustomsIorIdentityFact 明确还有：
+
+effectiveFrom
+effectiveTo
+legalEntityRef
+verificationStatus
+
+而仓库已经有现成的：
+
+evaluateIorIdentity()
+
+它会拒绝：
+
+已过 effectiveTo
+尚未到 effectiveFrom
+REVOKED
+未验证身份
+缺 legalEntityRef
+
+当前 loader 没有使用这些规则。
+
+因此一个：
+
+verificationStatus = VERIFIED
+effectiveTo = 昨天
+
+的 IOR 现在仍可能被 CA-5 显示为：
+
+① 企业身份：已确认
+
+这是授权中心不能接受的 false-positive。
+
+最小修复：复用现有 evaluateIorIdentity() 语义，不要在 CA-5 loader 中重新简化成一个 enum 判断。
+
+至少补：
+
+VERIFIED + expired → ① NEEDS_ACTION
+VERIFIED + not-yet-effective → ① NEEDS_ACTION
+VERIFIED + 有效窗口内 → 可确认
+关于 CA-5 是否 CLOSED
+
+现在我的裁定是：
+
+CA-5_STATUS = NOT_CLOSED
+
+但已经非常接近关闭。
+
+只剩上面 2 个窄修：
+
+RightLineage 中“追回权”和“filing authorization”彻底分离。
+IOR identity 使用完整有效性判定，不能只看 VERIFIED。
+
+不需要：
+
+新 Schema
+migration
+改 UI 结构
+改六项模型
+改权限模型
+解除 C18
+接真实 Broker
+接真实海关 filing
+
+这两项修完并补针对性测试后，我可以直接给：
+
+CA-5 = PASS / CLOSED → 允许进入 CA-6。
+
+REAL_BROKER=NO / REAL_FILING=NO / C18=HOLD_EXTERNAL 继续保持。
+```
