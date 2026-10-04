@@ -687,6 +687,27 @@ const de: Messages = {
     FAILED: "Fehlgeschlagen",
     UNKNOWN: "Unbekannter Status",
   },
+  recover: {
+    error: {
+      notFound: "Wiederherstellungsseite nicht gefunden",
+      unavailable: "Diese Seite ist derzeit nicht verfügbar",
+    },
+    notice: {
+      expired: "Diese Regel ist abgelaufen; die Seite wird nicht mehr aktualisiert",
+    },
+    page: {
+      title: "Anspruch und Schätzung",
+      problemHeading: "Wann es gilt",
+      evidenceHeading: "Was Sie brauchen",
+      sourcesHeading: "Regelquellen",
+      eligibilityHeading: "Anspruchsprüfung",
+      deadlineHeading: "Antragsfrist",
+      estimateDisclaimer: "Nur Schätzungen, keine Zusage eines Erstattungsbetrags",
+    },
+    cta: {
+      checker: "Anspruch kostenlos prüfen",
+    },
+  },
 };
 
 export default de;

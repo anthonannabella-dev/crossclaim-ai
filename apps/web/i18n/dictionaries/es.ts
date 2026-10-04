@@ -686,6 +686,27 @@ const es: Messages = {
     FAILED: "Fallido",
     UNKNOWN: "Estado desconocido",
   },
+  recover: {
+    error: {
+      notFound: "Página de recuperación no encontrada",
+      unavailable: "Esta página no está disponible",
+    },
+    notice: {
+      expired: "Esta regla ha caducado; la página ya no se actualiza",
+    },
+    page: {
+      title: "Elegibilidad y estimación",
+      problemHeading: "Cuándo aplica",
+      evidenceHeading: "Qué necesita",
+      sourcesHeading: "Fuentes de la regla",
+      eligibilityHeading: "Elegibilidad",
+      deadlineHeading: "Plazo de presentación",
+      estimateDisclaimer: "Solo estimaciones: no es una promesa de importe recuperado",
+    },
+    cta: {
+      checker: "Comprobar elegibilidad gratis",
+    },
+  },
 };
 
 export default es;

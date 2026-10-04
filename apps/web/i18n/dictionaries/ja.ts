@@ -684,6 +684,27 @@ const ja: Messages = {
     FAILED: "失敗",
     UNKNOWN: "不明なステータス",
   },
+  recover: {
+    error: {
+      notFound: "該当する回収ページが見つかりません",
+      unavailable: "このページは現在利用できません",
+    },
+    notice: {
+      expired: "このルールは失効しました。ページは更新されません",
+    },
+    page: {
+      title: "回収の対象と見積り",
+      problemHeading: "対象となる場合",
+      evidenceHeading: "必要な資料",
+      sourcesHeading: "ルールの出典",
+      eligibilityHeading: "対象判定",
+      deadlineHeading: "申請期限",
+      estimateDisclaimer: "以下は見積りであり、回収額を保証するものではありません",
+    },
+    cta: {
+      checker: "無料で対象を確認",
+    },
+  },
 };
 
 export default ja;

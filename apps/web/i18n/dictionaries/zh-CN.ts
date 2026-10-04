@@ -680,6 +680,27 @@ const zhCN = {
     FAILED: "失败",
     UNKNOWN: "未知状态",
   },
+  recover: {
+    error: {
+      notFound: "未找到该追回页面",
+      unavailable: "该页面暂不可用",
+    },
+    notice: {
+      expired: "该规则已过期，页面不再更新",
+    },
+    page: {
+      title: "追回资格与估算",
+      problemHeading: "适用情形",
+      evidenceHeading: "所需材料",
+      sourcesHeading: "规则来源",
+      eligibilityHeading: "资格判断",
+      deadlineHeading: "申报时限",
+      estimateDisclaimer: "以下为估算，不构成实际追回金额的承诺",
+    },
+    cta: {
+      checker: "免费试用资格检查",
+    },
+  },
 };
 
 export default zhCN;

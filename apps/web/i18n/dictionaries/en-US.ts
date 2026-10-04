@@ -685,6 +685,27 @@ const enUS: Messages = {
     FAILED: "Failed",
     UNKNOWN: "Unknown status",
   },
+  recover: {
+    error: {
+      notFound: "Recovery page not found",
+      unavailable: "This page is not available",
+    },
+    notice: {
+      expired: "This rule has expired; the page is no longer updated",
+    },
+    page: {
+      title: "Recovery eligibility and estimate",
+      problemHeading: "When it applies",
+      evidenceHeading: "What you need",
+      sourcesHeading: "Rule sources",
+      eligibilityHeading: "Eligibility",
+      deadlineHeading: "Filing deadline",
+      estimateDisclaimer: "Estimates only, not a promise of any recovered amount",
+    },
+    cta: {
+      checker: "Check eligibility for free",
+    },
+  },
 };
 
 export default enUS;

@@ -1,6 +1,6 @@
 {
   "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。",
-  "updatedAt": "2026-10-04T14:42:00.000Z",
+  "updatedAt": "2026-10-04T14:46:00.000Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -1119,8 +1119,10 @@
       "title": "/recover 正文与内链只由真实字段组成（薄内容 fail-closed）",
       "scope": "composeRecoverRouteContent：正文小节只来自生效规则的 problemDescription/requiredEvidence/sourceReferences；薄内容(<2 可溯源小节或正文<200) → sections=[]；内链仅在目标真实存在时输出",
       "acceptance_criteria": "RECOVER_CONTENT_THIN_FAILS_CLOSED / RECOVER_INTERNAL_LINKS_ONLY_REAL_RELATED 全绿；tsc 0",
-      "status": "IMPLEMENTED_PENDING_CI",
-      "implementation_head": "(this commit)"
+      "status": "CLOSED",
+      "implementation_head": "(this commit)",
+      "closed_at": "2026-10-04T14:46:00.000Z",
+      "close_evidence": "CI run 37209246328 (head 4f70367) success"
     },
     {
       "id": "SEO-4-STAGE-6-seo-contract-tests",
@@ -1129,8 +1131,10 @@
       "title": "SEO-4 合同测试：判定语义稳定 / gate↔robots↔sitemap 一致 / 无 POST / 无硬编码金额费率",
       "scope": "在 seo-recover-route.test.ts 内固化四条合同：六种 reason 固定、indexable⇔index⇔进 sitemap、模块不注册 POST 或 Checker 路由、源码无金额/百分比/费率硬编码",
       "acceptance_criteria": "RECOVER_CONTRACT_REASONS_STABLE / RECOVER_CONTRACT_GATE_ROBOTS_SITEMAP_AGREE / RECOVER_CONTRACT_NO_POST_HANDLER / RECOVER_CONTRACT_NO_HARDCODED_RULE_LITERALS 全绿；tsc 0",
-      "status": "IMPLEMENTED_PENDING_CI",
-      "implementation_head": "(this commit)"
+      "status": "CLOSED",
+      "implementation_head": "(this commit)",
+      "closed_at": "2026-10-04T14:46:00.000Z",
+      "close_evidence": "CI run 37209570136 (head 1ebe1ec) success"
     },
     {
       "id": "SEO-4-STAGE-7-recover-page-plan-facade",
@@ -1139,6 +1143,16 @@
       "title": "buildRecoverPagePlan：单 slug 完整页面计划（判定+metadata+JSON-LD+正文+sitemap）",
       "scope": "全链路 indexable = 路由 OK AND gate 通过 AND 正文不薄；任一条不满足 → 全链路 noindex 且 canonical/JSON-LD/sitemap 一致降级；不可用页面不渲染正文与内链",
       "acceptance_criteria": "RECOVER_FACADE_NOINDEX_DEFAULT / RECOVER_FACADE_INDEXABLE_REQUIRES_ALL_GATES 全绿；tsc 0",
+      "status": "IMPLEMENTED_PENDING_CI",
+      "implementation_head": "(this commit)"
+    },
+    {
+      "id": "SEO-4-STAGE-8-recover-i18n-keys",
+      "priority": "P1",
+      "source_backlog_id": "SEO-4-RECOVER-WIRING-PLAN.md 阶段 5（i18n parity 前置）",
+      "title": "/recover 页面 i18n key 五语言落地（parity 保持）",
+      "scope": "在 apps/web/i18n/dictionaries 的 zh-CN/en-US/de/ja/es 增加 recover.* 中立 UI 文案（错误/过期提示/标题/小节标题/估算免责/CTA），键集合一致；不含任何规则/资格/截止日/费率/金额主张",
+      "acceptance_criteria": "tools/i18n/check-i18n.mjs → I18N_CHECK=OK locales=5 customerHardcodes=0；apps/web tsc exit 0",
       "status": "IMPLEMENTED_PENDING_CI",
       "implementation_head": "(this commit)"
     }
