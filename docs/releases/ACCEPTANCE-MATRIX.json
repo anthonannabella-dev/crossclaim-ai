@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-10-04T16:20:52.049Z",
-  "acceptance_head": "0560c0c",
+  "generated_at": "2026-10-04T16:22:04.473Z",
+  "acceptance_head": "2db742b",
   "protocol": "docs/releases/FINAL-ACCEPTANCE-PROTOCOL.md",
   "areas": [
     {
@@ -212,7 +212,12 @@
     "RSI-COST-02-model-router-adapter",
     "RSI-COST-03-call-ledger",
     "RSI-COST-04-admin-cost-panel",
-    "RSI-COST-05-cost-e2e"
+    "RSI-COST-05-cost-e2e",
+    "RSI-INSP-01-drift-detector",
+    "RSI-INSP-02-daily-health-inspection",
+    "RSI-INSP-03-weekly-full-review",
+    "RSI-INSP-04-golden-fixtures",
+    "RSI-INSP-05-production-to-fixture"
   ],
   "host_action_required": [
     "provider developer/partner account registration",

@@ -1,6 +1,6 @@
 {
   "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。",
-  "updatedAt": "2026-10-05T01:21:00.000Z",
+  "updatedAt": "2026-10-05T01:22:00.000Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -1495,6 +1495,56 @@
       "title": "成本 E2E Test A–E（规则零 LLM / low-cost / 升级 strong / 预算熔断 / 熔断不递归）",
       "scope": "RSI 长期运行但不得持续消耗 token：确定性优先、分级、预算与熔断",
       "acceptance_criteria": "对应实现/用例落地；api tsc 0；不新增 schema（如需另送 Schema Delta）",
+      "status": "READY"
+    },
+    {
+      "id": "RSI-INSP-01-drift-detector",
+      "priority": "P0",
+      "source_backlog_id": "OWNER 任务：Continuous Inspection / Functional Drift Detection",
+      "title": "RSI 巡检：功能漂移判定 + 业务不变量（已实现）",
+      "scope": "主动周期性巡检 + 漂移分类 + 自动建任务；不靠聊天心跳",
+      "acceptance_criteria": "实现/用例落地；api tsc 0；如需持久化另送 Schema Delta",
+      "status": "IMPLEMENTED_PENDING_CI",
+      "evidence": "vitest rsi-drift-detector 5/5；api tsc 0",
+      "artifacts": [
+        "apps/api/src/services/autonomy/rsi-drift-detector.ts",
+        "apps/api/src/__tests__/rsi-drift-detector.test.ts"
+      ]
+    },
+    {
+      "id": "RSI-INSP-02-daily-health-inspection",
+      "priority": "P0",
+      "source_backlog_id": "OWNER 任务：Continuous Inspection / Functional Drift Detection",
+      "title": "Daily Health Inspection 任务（Runtime/API-Provider/Application 检查项；健康则静默）",
+      "scope": "主动周期性巡检 + 漂移分类 + 自动建任务；不靠聊天心跳",
+      "acceptance_criteria": "实现/用例落地；api tsc 0；如需持久化另送 Schema Delta",
+      "status": "READY"
+    },
+    {
+      "id": "RSI-INSP-03-weekly-full-review",
+      "priority": "P0",
+      "source_backlog_id": "OWNER 任务：Continuous Inspection / Functional Drift Detection",
+      "title": "Weekly Full-System Review（回归/集成/PG E2E/契约/golden/business invariants/AI benchmark/cost；机器可读结果）",
+      "scope": "主动周期性巡检 + 漂移分类 + 自动建任务；不靠聊天心跳",
+      "acceptance_criteria": "实现/用例落地；api tsc 0；如需持久化另送 Schema Delta",
+      "status": "READY"
+    },
+    {
+      "id": "RSI-INSP-04-golden-fixtures",
+      "priority": "P0",
+      "source_backlog_id": "OWNER 任务：Continuous Inspection / Functional Drift Detection",
+      "title": "GoldenFixture 语料（Amazon/TikTok/Walmart/Shopify/carrier/POD/recovery/claim package/Customs 匹配与资格/授权/费用边界）",
+      "scope": "主动周期性巡检 + 漂移分类 + 自动建任务；不靠聊天心跳",
+      "acceptance_criteria": "实现/用例落地；api tsc 0；如需持久化另送 Schema Delta",
+      "status": "READY"
+    },
+    {
+      "id": "RSI-INSP-05-production-to-fixture",
+      "priority": "P0",
+      "source_backlog_id": "OWNER 任务：Continuous Inspection / Functional Drift Detection",
+      "title": "生产问题 → 脱敏 → 新 GoldenFixture → 永久进入 Regression Corpus（需 Schema Delta 持久化）",
+      "scope": "主动周期性巡检 + 漂移分类 + 自动建任务；不靠聊天心跳",
+      "acceptance_criteria": "实现/用例落地；api tsc 0；如需持久化另送 Schema Delta",
       "status": "READY"
     }
   ],
