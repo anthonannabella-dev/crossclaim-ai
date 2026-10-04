@@ -133039,3 +133039,300 @@ PRODUCTION_ENABLEMENT = HOLD
 
 本次 exact HEAD 的 GitHub workflow/status 仍为空，所以我确认的是代码与 proposal 本身；Codex 报告的 19/19 + 8/8 + 13/13、tsc EXIT=0 我仍不表述为 independently verified GitHub CI SUCCESS。
 ```
+
+### [MSG-20261004-25] ARCHITECT VERDICT — C18 MIGRATION SQL AUDIT = REVISE（reviewed HEAD = a129263；主体 SQL 设计正确但暂不解禁执行；三项必修：① Lineage 补 tenant-owned 必需 @@unique([organizationId, id]) + 对应 unique index（7→8 indexes）；② 删除自建 cc_c18_lineage_tenant_integrity()，改用仓库通用 crossclaim_assert_tenant_integrity('bindingId', 'CustomsProviderTenantBinding')（BEFORE INSERT 时 NEW 尚未入表，自建函数重复实现既有机制）；③ binding identity shape 下沉 DB CHECK：bindingScopeVersion='v1'、bindingScopeKey ^[0-9a-f]{64}$、jurisdictionAnchor ^(\*|[A-Z]{2})$；保留 cc_c18_binding_identity_immutable / cc_c18_binding_lineage_append_only 专用函数；硬门槛：必须补 CLEAN_SHADOW_DIFF = ZERO 证据（fresh DB → 全部既有 migrations → candidate → diff vs schema.prisma = EMPTY），不接受 dirty live DB 过滤作为最终依据；MIGRATION_SQL = REVISE / MIGRATION_APPLIED = NO / MIGRATE_DEPLOY = HOLD；PASS 后 EPHEMERAL_FRESH_DB_APPLY = AUTHORIZED，正式 deploy 仍 HOLD 到 Production Persistence Checkpoint）
+
+`	ext
+ARCHITECT VERDICT：REVISE
+
+我按 reviewed HEAD = a129263（完整 SHA a129263d287abe840c0bf67c9ff2afa54bf968a0）重新审了实际 schema.prisma 和：
+
+apps/api/prisma/migrations/20261004070816_c18_provider_persistence/migration.sql
+
+结论是：**主体 SQL 设计正确，但目前还不能解禁执行。**不是 C18 架构方向有问题，而是 migration 在真正 apply 前还需要一次很窄的数据库级收口和“干净基线重放”。
+
+① 当前 SQL 是否可以执行？
+
+暂时 NO。
+
+下面这些已经 PASS：
+
+纯文本
+3 enums                         PASS
+3 tables                        PASS
+Binding unique identity         PASS
+CROSSCLAIM_SAAS DB CHECK        PASS
+snapshotDigest CHECK            PASS
+binding identity UPDATE reject  PASS
+lineage append-only trigger     PASS
+WebhookReplay unique claim      PASS
+existing C17 tables untouched   PASS
+no destructive business ALTER  PASS
+
+但有三个必须先修的点。
+
+第一，CustomsProviderTenantBindingLineage 是 tenant-owned model，却缺少仓库统一要求的：
+
+prisma
+@@unique([organizationId, id])
+
+schema.prisma 顶部的仓库契约明确规定：
+
+纯文本
+每个 tenant-owned model：
+1. organizationId
+2. @@unique([organizationId, id])
+3. cross-tenant reference → DB trigger
+
+Binding 已经有：
+
+prisma
+@@unique([organizationId, id])
+
+Lineage 没有。
+
+所以必须补：
+
+prisma
+@@unique([organizationId, id])
+
+以及 migration：
+
+SQL
+CREATE UNIQUE INDEX
+"CustomsProviderTenantBindingLineage_organizationId_id_key"
+ON "CustomsProviderTenantBindingLineage"("organizationId", "id");
+
+这会让当前“7 indexes”变成 8 indexes。
+
+第二，当前自建的：
+
+纯文本
+cc_c18_lineage_tenant_integrity()
+
+建议删除，直接复用仓库已经存在的：
+
+纯文本
+crossclaim_assert_tenant_integrity()
+
+当前自建函数里这一段：
+
+SQL
+SELECT l."organizationId"
+FROM "CustomsProviderTenantBinding" b
+JOIN "CustomsProviderTenantBindingLineage" l
+  ON l."bindingId" = b."id"
+WHERE b."id" = NEW."bindingId"
+
+在 BEFORE INSERT 时，NEW lineage 本来还没有写进 lineage 表，所以第一段查询对新行没有意义，最终还要 fallback 再读 Binding。
+
+不是说它一定会坏，而是重复实现了已经存在且更通用的数据库不变量机制。
+
+直接改成：
+
+SQL
+CREATE TRIGGER "cc_tenant_CustomsProviderTenantBindingLineage"
+BEFORE INSERT OR UPDATE
+ON "CustomsProviderTenantBindingLineage"
+FOR EACH ROW
+EXECUTE FUNCTION crossclaim_assert_tenant_integrity(
+  'bindingId',
+  'CustomsProviderTenantBinding'
+);
+
+这和仓库现有 tenant integrity 架构完全一致。
+
+第三，建议在这轮一起把 binding identity 的 DB shape 封住。
+
+既然你们正式定义：
+
+纯文本
+bindingScopeVersion = v1
+bindingScopeKey = SHA-256
+jurisdictionAnchor = * | ISO alpha-2
+
+数据库不应该允许：
+
+纯文本
+bindingScopeVersion = nonsense
+bindingScopeKey = abc
+jurisdictionAnchor = USA
+
+建议至少加入：
+
+SQL
+CHECK ("bindingScopeVersion" = 'v1');
+
+CHECK ("bindingScopeKey" ~ '^[0-9a-f]{64}$');
+
+CHECK ("jurisdictionAnchor" ~ '^(\*|[A-Z]{2})$');
+
+这三条和现有 Customs migration 大量使用的 digest/ref/状态 DB CHECK 风格一致。
+
+principalRef / bindingSlotRef 的 opaque shape 也可以顺手下沉，但我把前三条列为本轮更重要的必修。
+
+② trigger 函数需要统一吗？
+
+分开处理。
+
+Tenant integrity：必须优先复用已有通用函数。
+
+纯文本
+crossclaim_assert_tenant_integrity()
+
+不要继续维护 cc_c18_lineage_tenant_integrity()。
+
+Binding identity immutable：保留 C18 专用函数是合理的。
+
+纯文本
+cc_c18_binding_identity_immutable()
+
+因为它保护的是 C18 特有的：
+
+纯文本
+organizationId
+providerId
+principalRef
+bindingScopeVersion
+jurisdictionAnchor
+bindingSlotRef
+bindingScopeKey
+
+没有必要为了“统一名字”把业务语义塞进一个过于通用的函数。
+
+Lineage append-only：C18 专用函数也可以保留。
+
+仓库已有：
+
+纯文本
+cc_customs_ior_fact_append_only()
+
+技术上可以复用，但它抛出的错误是：
+
+纯文本
+CUSTOMS_IOR_FACT_APPEND_ONLY
+
+用于 Provider Binding Lineage 反而语义不准确。
+
+因此：
+
+纯文本
+trigger 命名统一：
+cc_append_only__<Table>
+
+函数：
+可以保留 cc_c18_binding_lineage_append_only()
+
+这是比较干净的组合。
+
+③ “dirty live DB diff → 过滤 C18 子集”能否作为正式 migration 来源？
+
+不能作为最终执行依据。
+
+它可以作为当前 candidate SQL，不需要丢掉；但执行前必须再做一次：
+
+纯文本
+migration history
+→ clean shadow/fresh PostgreSQL
+→ schema.prisma @ exact HEAD
+→ complete diff
+
+也就是从仓库 migrations 的权威历史状态开始，而不是从当前有 drift 的开发数据库开始。
+
+原因不是我怀疑你过滤错了，而是：
+
+从 dirty live DB 手工筛选 SQL，无法证明“没有漏掉一个 C18 所依赖但恰好已存在于本地 drift 状态中的对象”。
+
+真正要证明的是：
+
+纯文本
+all committed migrations
++
+this new migration
+=
+current schema.prisma
+
+而不是：
+
+纯文本
+my local DB
++
+filtered SQL
+≈ schema.prisma
+
+所以 FINAL-2 migration audit 必须补一份：
+
+纯文本
+CLEAN_SHADOW_DIFF = ZERO
+
+或者等价证据：
+
+纯文本
+fresh DB
+→ apply all prior migrations
+→ apply candidate C18 migration
+→ migrate diff DB vs schema.prisma
+→ EMPTY
+
+这一条是执行前的硬门槛。
+
+解禁顺序
+
+修完上述内容后，不需要再回 Schema Delta 设计阶段。
+
+直接送：
+
+纯文本
+C18 MIGRATION SQL FINAL-2
+
+我只核：
+
+纯文本
+1. Lineage @@unique([organizationId,id])
+2. tenant trigger 改用 crossclaim_assert_tenant_integrity(...)
+3. bindingScopeVersion / bindingScopeKey / jurisdictionAnchor DB CHECK
+4. clean migration-history shadow/fresh replay
+5. final diff = zero
+6. migration 仍未在 shared/prod 执行
+
+如果这些 PASS：
+
+纯文本
+MIGRATION_SQL = PASS
+EPHEMERAL_FRESH_DB_APPLY = AUTHORIZED
+
+然后才执行你们既定的：
+
+纯文本
+fresh DB migration
+→ Prisma Store
+→ two-connection PG concurrency
+→ cross-tenant E2E
+→ append-only E2E
+→ concurrent rebind / no lost lineage
+→ webhook exactly-one claim
+→ Production Persistence Checkpoint
+
+正式/shared/production 的 migrate deploy 仍保持 HOLD，直到 Production Persistence Checkpoint PASS。
+
+也就是说，不需要等真实 Broker API 才能部署数据库 schema，但也不能现在直接把这版 migration 推到生产。
+
+当前状态：
+
+纯文本
+VERDICT = REVISE
+
+SCHEMA_DELTA_DESIGN = CLOSED
+SCHEMA_PRISMA_MODELS = PASS_WITH_REVISE
+
+MIGRATION_SQL = REVISE
+MIGRATION_APPLIED = NO
+MIGRATE_DEPLOY = HOLD
+
+REAL_TRANSPORT = HOLD
+EXTERNAL_WRITE = HOLD
+PAYMENT = HOLD
+PRODUCTION_ENABLEMENT = HOLD
+
+另外，本次 exact HEAD 的 GitHub workflow/status 查询仍为空，所以 prisma validate = valid 是 Codex 的送审证据；我独立确认的是 exact HEAD 上的 schema 和 SQL 内容，没有把它表述为 GitHub CI 已验证。
+`

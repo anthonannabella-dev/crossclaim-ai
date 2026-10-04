@@ -2,7 +2,9 @@
 -- 生成方式：prisma migrate diff（live DB → datamodel）后**只保留 C18 相关语句**，
 -- 因为本地 dev DB 存在与 C18 无关的历史 drift；随后手工追加 DB 级不变量（CHECK / trigger）。
 -- 声明：本文件为 create-only，**未执行**（migrate deploy = NOT RUN，migration applied = NO）。
--- 内容全部为新增对象：3 个 enum、3 张表、7 个索引、3 个外键，无 DROP、无 ALTER 既有业务真值。
+-- 内容全部为新增对象：3 个 enum、3 张表、8 个索引、3 个外键，无 DROP、无 ALTER 既有业务真值。
+-- v2（MSG-20261004-25）：Lineage 补 tenant-owned 唯一键；tenant integrity 改为复用仓库通用函数
+-- crossclaim_assert_tenant_integrity('bindingId', 'CustomsProviderTenantBinding')；新增 binding 身份形状 CHECK。
 
 -- CreateEnum
 CREATE TYPE "CustomsProviderRelationship" AS ENUM ('CROSSCLAIM_SAAS', 'BROKER_OF_RECORD', 'CLIENT_DIRECT', 'REFERRAL_PARTNER');
@@ -86,6 +88,9 @@ CREATE INDEX "CustomsProviderWebhookReplayClaim_claimedAt_idx" ON "CustomsProvid
 -- CreateIndex
 CREATE UNIQUE INDEX "CustomsProviderWebhookReplayClaim_providerId_deliveryId_key" ON "CustomsProviderWebhookReplayClaim"("providerId", "deliveryId");
 
+-- CreateIndex（tenant-owned 必需：organizationId + id 唯一）
+CREATE UNIQUE INDEX "CustomsProviderTenantBindingLineage_organizationId_id_key" ON "CustomsProviderTenantBindingLineage"("organizationId", "id");
+
 -- AddForeignKey
 ALTER TABLE "CustomsProviderTenantBinding" ADD CONSTRAINT "CustomsProviderTenantBinding_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "Organization"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
@@ -111,6 +116,18 @@ ALTER TABLE "CustomsProviderTenantBinding"
     "relationship" <> 'CROSSCLAIM_SAAS'
     OR ("relationshipEvidenceRef" IS NOT NULL AND "relationshipVerifiedAt" IS NOT NULL)
   );
+
+ALTER TABLE "CustomsProviderTenantBinding"
+  ADD CONSTRAINT "CustomsProviderTenantBinding_scope_version_chk"
+  CHECK ("bindingScopeVersion" = 'v1');
+
+ALTER TABLE "CustomsProviderTenantBinding"
+  ADD CONSTRAINT "CustomsProviderTenantBinding_scope_key_chk"
+  CHECK ("bindingScopeKey" ~ '^[0-9a-f]{64}$');
+
+ALTER TABLE "CustomsProviderTenantBinding"
+  ADD CONSTRAINT "CustomsProviderTenantBinding_jurisdiction_anchor_chk"
+  CHECK ("jurisdictionAnchor" ~ '^(\*|[A-Z]{2})$');
 
 ALTER TABLE "CustomsProviderTenantBindingLineage"
   ADD CONSTRAINT "CustomsProviderTenantBindingLineage_snapshot_digest_chk"
@@ -151,28 +168,8 @@ CREATE TRIGGER "cc_append_only__CustomsProviderTenantBindingLineage"
   BEFORE UPDATE OR DELETE ON "CustomsProviderTenantBindingLineage"
   FOR EACH ROW EXECUTE FUNCTION "cc_c18_binding_lineage_append_only"();
 
--- lineage / binding 必须同租户（tenant integrity）
-CREATE OR REPLACE FUNCTION "cc_c18_lineage_tenant_integrity"()
-RETURNS TRIGGER AS $$
-DECLARE
-  binding_org TEXT;
-BEGIN
-  SELECT l."organizationId" INTO binding_org
-  FROM "CustomsProviderTenantBinding" b
-  JOIN "CustomsProviderTenantBindingLineage" l ON l."bindingId" = b."id"
-  WHERE b."id" = NEW."bindingId"
-  LIMIT 1;
-  IF binding_org IS NULL THEN
-    SELECT "organizationId" INTO binding_org FROM "CustomsProviderTenantBinding" WHERE "id" = NEW."bindingId";
-  END IF;
-  IF binding_org IS NOT NULL AND binding_org <> NEW."organizationId" THEN
-    RAISE EXCEPTION 'C18_LINEAGE_TENANT_MISMATCH: lineage organizationId must equal its binding organizationId';
-  END IF;
-  RETURN NEW;
-END;
-$$ LANGUAGE plpgsql;
-
-DROP TRIGGER IF EXISTS "cc_tenant_integrity__CustomsProviderTenantBindingLineage" ON "CustomsProviderTenantBindingLineage";
-CREATE TRIGGER "cc_tenant_integrity__CustomsProviderTenantBindingLineage"
+-- lineage / binding 必须同租户：复用仓库既有通用 tenant-integrity 函数
+-- （crossclaim_assert_tenant_integrity(fk_column, ref_table) 会校验被引用行的 organizationId 与本行一致）
+CREATE TRIGGER "cc_tenant_CustomsProviderTenantBindingLineage"
   BEFORE INSERT OR UPDATE ON "CustomsProviderTenantBindingLineage"
-  FOR EACH ROW EXECUTE FUNCTION "cc_c18_lineage_tenant_integrity"();
+  FOR EACH ROW EXECUTE FUNCTION crossclaim_assert_tenant_integrity('bindingId', 'CustomsProviderTenantBinding');

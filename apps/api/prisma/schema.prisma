@@ -3220,6 +3220,7 @@ model CustomsProviderTenantBindingLineage {
   organization Organization                   @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   binding      CustomsProviderTenantBinding   @relation(fields: [bindingId], references: [id], onDelete: Restrict)
 
+  @@unique([organizationId, id])
   @@index([organizationId, bindingId, occurredAt])
 }
 
