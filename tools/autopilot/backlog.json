@@ -1,6 +1,6 @@
 {
   "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。",
-  "updatedAt": "2026-10-05T00:16:00.000Z",
+  "updatedAt": "2026-10-05T00:21:00.000Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -1217,6 +1217,16 @@
       "title": "apps/web /recover/[slug] 由 projection 驱动的 SSG（fail-closed）",
       "scope": "js/lib/recover-projection.ts 构建期读取 artifact（MISSING/MALFORMED/UNKNOWN_SCHEMA/INVALID_DIGEST 全 fail-closed）；page.tsx dynamicParams=false + generateStaticParams + generateMetadata（robots 由 artifact 决定，canonical/hreflang 仅可索引时）+ 正文只渲染 artifact 内容与 i18n key",
       "acceptance_criteria": "apps/web tsc exit 0；artifact 缺失时 0 静态参数且请求走 404；无 Checker POST；PUBLIC_CHECKER_HTTP 仍 HOLD",
+      "status": "IMPLEMENTED_PENDING_CI",
+      "implementation_head": "(this commit)"
+    },
+    {
+      "id": "SEO-4-STAGE-14-web-sitemap-robots",
+      "priority": "P0",
+      "source_backlog_id": "MSG-20261004-35（OPTION_B_REVISED）",
+      "title": "apps/web sitemap.ts + robots.ts 由同一 artifact 驱动",
+      "scope": "sitemap 只收录 inSitemap && index,follow && 无 noindexReasons 的页面；robots 只声明 sitemap、不对收录路径 Disallow；artifact 缺失 → 空 sitemap",
+      "acceptance_criteria": "apps/web tsc exit 0；空 artifact 时 sitemap 为空数组且 robots 仍声明 sitemap；无 Checker POST",
       "status": "IMPLEMENTED_PENDING_CI",
       "implementation_head": "(this commit)"
     }
