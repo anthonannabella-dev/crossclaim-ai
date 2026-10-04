@@ -235,6 +235,80 @@ describe('CA-3 — authorization lifecycle persistence（真实 PostgreSQL）', 
     expect(noBroker.readiness.READY_TO_FILE).toBe(false);
   });
 
+  it('CHANGE B：同一幂等键重放 → 返回同一 fact（不产生第二行）', async () => {
+    const organizationId = await seedOrg('idem-replay');
+    const principalRef = await seedIor(organizationId);
+    const actorUserId = await seedUser(organizationId);
+    const payload = {
+      organizationId,
+      actorUserId,
+      subject: 'BROKER_POA' as const,
+      action: 'GRANT' as const,
+      principalRef,
+      brokerRef: 'broker:1',
+      scope: ['DUTY_REFUND'],
+      jurisdiction: 'US',
+      effectiveAt: new Date('2026-09-01T00:00:00.000Z'),
+      evidenceArtifactRef: 'evidence:poa',
+      verificationSource: 'BROKER_ATTESTATION' as const,
+      idempotencyKey: 'grant-1',
+    };
+    const first = await appendAuthorizationLifecycle(payload, { stores });
+    const second = await appendAuthorizationLifecycle(payload, { stores });
+    expect(second.factId).toBe(first.factId);
+    expect(await prisma.customsBrokerPoaFact.count({ where: { organizationId } })).toBe(1);
+  });
+
+  it('CHANGE B：同 key 不同 payload → IDEMPOTENCY_KEY_CONFLICT', async () => {
+    const organizationId = await seedOrg('idem-conflict');
+    const principalRef = await seedIor(organizationId);
+    const actorUserId = await seedUser(organizationId);
+    const base = {
+      organizationId,
+      actorUserId,
+      subject: 'BROKER_POA' as const,
+      action: 'GRANT' as const,
+      principalRef,
+      brokerRef: 'broker:1',
+      scope: ['DUTY_REFUND'],
+      jurisdiction: 'US',
+      effectiveAt: new Date('2026-09-01T00:00:00.000Z'),
+      evidenceArtifactRef: 'evidence:poa',
+      verificationSource: 'BROKER_ATTESTATION' as const,
+      idempotencyKey: 'grant-2',
+    };
+    await appendAuthorizationLifecycle(base, { stores });
+    await expect(appendAuthorizationLifecycle({ ...base, scope: ['*'] }, { stores })).rejects.toMatchObject({
+      code: 'IDEMPOTENCY_KEY_CONFLICT',
+    });
+  });
+
+  it('CHANGE B：双连接并发同一键 → exactly one fact', async () => {
+    const organizationId = await seedOrg('idem-race');
+    const principalRef = await seedIor(organizationId);
+    const actorUserId = await seedUser(organizationId);
+    const payload = {
+      organizationId,
+      actorUserId,
+      subject: 'BROKER_POA' as const,
+      action: 'GRANT' as const,
+      principalRef,
+      brokerRef: 'broker:1',
+      scope: ['DUTY_REFUND'],
+      jurisdiction: 'US',
+      effectiveAt: new Date('2026-09-01T00:00:00.000Z'),
+      evidenceArtifactRef: 'evidence:poa',
+      verificationSource: 'BROKER_ATTESTATION' as const,
+      idempotencyKey: 'grant-race',
+    };
+    const results = await Promise.allSettled([
+      appendAuthorizationLifecycle(payload, { stores }),
+      appendAuthorizationLifecycle(payload, { stores }),
+    ]);
+    expect(results.filter((row) => row.status === 'fulfilled')).toHaveLength(2);
+    expect(await prisma.customsBrokerPoaFact.count({ where: { organizationId } })).toBe(1);
+  });
+
   it('tenant scoping：另一租户的同名 principal 事实不可见', async () => {
     const own = await seedOrg('own');
     const other = await seedOrg('other');

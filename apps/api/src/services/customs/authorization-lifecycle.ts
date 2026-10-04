@@ -201,6 +201,7 @@ export async function appendAuthorizationLifecycle(
 
   const now = deps.now ?? (() => new Date());
   const observedAt = now();
+  const effectiveAtProvided = input.effectiveAt !== undefined;
   const effectiveAt = input.effectiveAt ?? observedAt;
   const expiresAt = input.expiresAt ?? null;
   const evidenceArtifactRef = input.evidenceArtifactRef ?? null;
@@ -231,7 +232,7 @@ export async function appendAuthorizationLifecycle(
     authorityBasis: input.authorityBasis ?? null,
     scope: [...input.scope].sort(),
     jurisdiction: input.jurisdiction,
-    effectiveAt: effectiveAt.toISOString(),
+    effectiveAt: effectiveAtProvided ? effectiveAt.toISOString() : null,
     expiresAt: expiresAt ? expiresAt.toISOString() : null,
     evidenceArtifactRef,
     verificationStatus,
@@ -265,12 +266,32 @@ export async function appendAuthorizationLifecycle(
     };
   }
 
+  const resolveOnUniqueViolation = async (): Promise<AppendAuthorizationResult | null> => {
+    const raced = await deps.stores.findByLifecycleKey(input.organizationId, lifecycleKey);
+    if (!raced) return null;
+    if (raced.contentDigest !== digest) {
+      throw new AuthorizationLifecycleError('IDEMPOTENCY_KEY_CONFLICT', 'same idempotency key with different immutable payload');
+    }
+    return {
+      factId: raced.factId,
+      subject: input.subject,
+      action: input.action,
+      lifecycleStatus: input.action === 'REVOKE' ? 'REVOKED' : verificationStatus,
+      observedAt: observedAt.toISOString(),
+      contentDigest: digest,
+      verificationSource: input.verificationSource,
+      serverDerivedFields: true,
+    };
+  };
+
   let factId: string;
   if (input.subject === 'BROKER_POA') {
     if (!input.brokerRef) {
       throw new AuthorizationLifecycleError('INVALID_SUBJECT', 'BROKER_POA 需要 brokerRef');
     }
-    const created = await deps.stores.appendPoa({
+    let created: { id: string };
+    try {
+      created = await deps.stores.appendPoa({
       organizationId: input.organizationId,
       principalRef: input.principalRef,
       brokerRef: input.brokerRef,
@@ -286,8 +307,13 @@ export async function appendAuthorizationLifecycle(
       revokedAt,
       contentDigest: digest,
       observedAt,
-      lifecycleKey,
-    });
+        lifecycleKey,
+      });
+    } catch (error) {
+      const resolved = await resolveOnUniqueViolation();
+      if (resolved) return resolved;
+      throw error;
+    }
     factId = created.id;
   } else if (input.subject === 'AUTHORIZED_SIGNER') {
     if (!input.signerRef || !input.signerType || !input.authorityBasis) {
@@ -296,7 +322,9 @@ export async function appendAuthorizationLifecycle(
         'AUTHORIZED_SIGNER 需要 signerRef / signerType / authorityBasis',
       );
     }
-    const created = await deps.stores.appendSigner({
+    let created: { id: string };
+    try {
+      created = await deps.stores.appendSigner({
       organizationId: input.organizationId,
       principalRef: input.principalRef,
       signerRef: input.signerRef,
@@ -313,8 +341,13 @@ export async function appendAuthorizationLifecycle(
       revokedAt,
       contentDigest: digest,
       observedAt,
-      lifecycleKey,
-    });
+        lifecycleKey,
+      });
+    } catch (error) {
+      const resolved = await resolveOnUniqueViolation();
+      if (resolved) return resolved;
+      throw error;
+    }
     factId = created.id;
   } else {
     throw new AuthorizationLifecycleError('UNKNOWN_SUBJECT_KIND', '未知授权主体类型');

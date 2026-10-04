@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-04T02:34:38.490Z",
+  "generated_at": "2026-10-04T02:40:51.010Z",
   "rule": "COVERED 需存在命名证据文件；否则 GAP",
   "domains": [
     {
@@ -284,19 +284,19 @@
         "replay": {
           "status": "COVERED",
           "evidence": [
+            "apps/api/src/__tests__/customs-authorization-lifecycle-db.test.ts",
             "apps/api/src/__tests__/customs-classification-discrepancy.test.ts",
             "apps/api/src/__tests__/customs-duty-truth.test.ts",
-            "apps/api/src/__tests__/customs-entry-fact-store-db.test.ts",
-            "apps/api/src/__tests__/customs-filing-provider.test.ts"
+            "apps/api/src/__tests__/customs-entry-fact-store-db.test.ts"
           ]
         },
         "concurrency": {
           "status": "COVERED",
           "evidence": [
+            "apps/api/src/__tests__/customs-authorization-lifecycle-db.test.ts",
             "apps/api/src/__tests__/customs-entry-fact-store-db.test.ts",
             "apps/api/src/__tests__/customs-ior-facts-db.test.ts",
-            "apps/api/src/__tests__/customs-return-fact-store-db.test.ts",
-            "apps/api/src/__tests__/customs-submission-ledger-db.test.ts"
+            "apps/api/src/__tests__/customs-return-fact-store-db.test.ts"
           ]
         },
         "failure_recovery": {
