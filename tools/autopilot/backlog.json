@@ -1,6 +1,6 @@
 {
   "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。",
-  "updatedAt": "2026-10-05T02:36:00.000Z",
+  "updatedAt": "2026-10-05T02:41:00.000Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -1571,7 +1571,14 @@
       "title": "生产问题 → 脱敏 → 新 GoldenFixture → 永久进入 Regression Corpus（需 Schema Delta 持久化）",
       "scope": "主动周期性巡检 + 漂移分类 + 自动建任务；不靠聊天心跳",
       "acceptance_criteria": "实现/用例落地；api tsc 0；如需持久化另送 Schema Delta",
-      "status": "READY"
+      "status": "IMPLEMENTED_PENDING_CI",
+      "implementation_head": "(this commit)",
+      "artifacts": [
+        "apps/api/src/services/autonomy/rsi-fixture-pipeline.ts",
+        "apps/api/src/__tests__/rsi-fixture-pipeline.test.ts"
+      ],
+      "evidence": "vitest rsi-fixture-pipeline 4/4；api tsc 0",
+      "remaining": "归档 sink 的真实实现（corpus 持久化）依赖 RSI-RT-06 Schema Delta 裁决"
     },
     {
       "id": "RSI-CONT-01-continuation-engine",
