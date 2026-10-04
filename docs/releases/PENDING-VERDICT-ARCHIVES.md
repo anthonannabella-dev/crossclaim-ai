@@ -21,3 +21,17 @@
 ## 硬边界（不变）
 
 `MIGRATE_DEPLOY`(shared/prod) · `PUBLIC_CHECKER_HTTP` · `PUBLIC_CHECKER_PRODUCTION` · `REAL_TRANSPORT` · `EXTERNAL_WRITE` · `PAYMENT` · `PRODUCTION_ENABLEMENT` = HOLD；`TRANSPORT=false`；`FINAL_ACCEPTANCE_HEAD=0f7f7ac` 未动。
+
+## CI 状态（2026-10-04 更新）
+
+红色连击已结束：**`4f02282` run `37190859502` = success**（此前 `3125271…b5149ca` 连续 failure）。
+
+根因不是数据完整性问题，而是仓库三处**严格契约/清单未同步**，均已修复：
+
+1. `1b15ab7` — tenant-trigger 白名单（`required-triggers.json` 102→103）+ 补两个 `cc_tenant_immutable__*`（复用既有 `cc_forbid_tenant_reassignment()`）；
+2. `cc13bde` — append-only 白名单（`append-only-triggers.json` 47→48）；
+3. `4f02282` — 模型清单：C18 新增 3 个 model → **82（76 core + 6 join）→ 85（79 core + 6 join）**，同步 `architecture-contract.test.ts` 的标题与 `toHaveLength`（本地 142/142，CI 通过）。
+
+定位工具（已入库）：`work/scripts/ci-failure-digest.mjs`（失败 job/step + 关键行）、`work/scripts/ci-step-context.mjs`（打印失败 step 之后的原文片段与失败用例行，不做正则改写）。
+
+**结论**：`C18_INTERNAL_SKELETON = CLOSED` + `WHOLE_SCHEMA_DIFF_ZERO` + **CI 绿** 三者互相印证；因此本文档中「ZERO evidence」裁决的送审内容已获远端 CI 独立确认（不再是"仅本地证据"）。
