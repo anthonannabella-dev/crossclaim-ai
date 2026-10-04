@@ -12,7 +12,13 @@
  *   · 面向用户的文案一律以 **i18n key** 形式返回，页面不得内联字符串。
  */
 
-import { buildRecoverPath, resolveLocaleFallback, type SeoLocale } from './seo-technical';
+import {
+  buildAlternates,
+  buildRecoverPath,
+  resolveLocaleFallback,
+  type SeoAlternate,
+  type SeoLocale,
+} from './seo-technical';
 
 export const SEO_RECOVER_ROUTE_REASONS = [
   'RECOVER_OK',
@@ -173,6 +179,7 @@ export function resolveRecoverRoute(input: SeoRecoverRouteInput): SeoRecoverRout
 
 /** 边界自证：Stage 1 的骨架不注册任何 Checker POST，也不产生外写/传输/凭据使用。 */
 export const SEO_RECOVER_ROUTE_BOUNDARY = {
+  stageOneReasons: SEO_RECOVER_ROUTE_REASONS,
   checkerPostRegistered: false,
   publicCheckerHttp: 'HOLD',
   externalWritePerformed: false,
@@ -181,3 +188,60 @@ export const SEO_RECOVER_ROUTE_BOUNDARY = {
   productionCredentials: 'ABSENT',
   defaultRobots: 'noindex,nofollow',
 } as const;
+
+/** SEO-4 Stage 2 —— gate 驱动的 metadata（默认 noindex；unavailable 页面不给 canonical / hreflang）。 */
+export interface SeoRecoverRouteMetadataInput {
+  decision: SeoRecoverRouteDecision;
+  baseUrl: string;
+  /**
+   * 页面标题/描述的**来源引用**（来自生效 RecoveryRuleDefinition v1 的字段名或 i18n key）。
+   * 为空即代表「本页没有可用的真实文案」——此时不生成，绝不发明描述。
+   */
+  titleRef?: string | null;
+  descriptionRef?: string | null;
+}
+
+export interface SeoRecoverRouteMetadata {
+  reason: SeoRecoverRouteReason;
+  robots: 'index,follow' | 'noindex,nofollow';
+  canonical: string | null;
+  alternates: readonly SeoAlternate[];
+  titleRef: string | null;
+  descriptionRef: string | null;
+  i18nKeys: readonly string[];
+  externalWritePerformed: false;
+  databaseWritePerformed: false;
+  transportEnabled: false;
+  checkerPostRegistered: false;
+  productionCredentials: 'ABSENT';
+}
+
+/**
+ * metadata 只由「判定结果 + 生效规则字段」派生：
+ *   · robots 直接继承判定（默认 noindex）；
+ *   · canonical / hreflang 只在 `indexable && path != null` 时输出，404/410/冲突页一律不给，
+ *     避免把不可用页面标成可索引或互相 hreflang；
+ *   · 标题/描述只接受调用方给出的真实来源引用，缺省即 null（不填充发明文案）。
+ */
+export function buildRecoverRouteMetadata(input: SeoRecoverRouteMetadataInput): SeoRecoverRouteMetadata {
+  const decision = input.decision;
+  const canonicalizable = decision.indexable && decision.path !== null;
+  const base = input.baseUrl.replace(/\/+$/, '');
+
+  return {
+    reason: decision.reason,
+    robots: decision.robots,
+    canonical: canonicalizable ? `${base}${decision.path}` : null,
+    alternates: canonicalizable
+      ? buildAlternates({ baseUrl: input.baseUrl, path: decision.path!, canonicalLocale: decision.locale })
+      : [],
+    titleRef: input.titleRef ?? null,
+    descriptionRef: input.descriptionRef ?? null,
+    i18nKeys: decision.i18nKeys,
+    externalWritePerformed: false,
+    databaseWritePerformed: false,
+    transportEnabled: false,
+    checkerPostRegistered: false,
+    productionCredentials: 'ABSENT',
+  };
+}

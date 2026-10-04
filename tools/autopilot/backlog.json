@@ -1,6 +1,6 @@
 {
   "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。",
-  "updatedAt": "2026-10-04T14:05:00.000Z",
+  "updatedAt": "2026-10-04T14:12:00.000Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -1071,7 +1071,19 @@
         "apps/api/src/services/seo/seo-recover-route.ts",
         "apps/api/src/__tests__/seo-recover-route.test.ts"
       ],
-      "evidence": "vitest src/__tests__/seo-recover-route.test.ts 6/6；SEO 回归 9 files / 65 tests；tsc exit 0"
+      "evidence": "vitest src/__tests__/seo-recover-route.test.ts 6/6；SEO 回归 9 files / 65 tests；tsc exit 0",
+      "pending_ci_run": "37208163582",
+      "pending_ci_head": "60ec7de"
+    },
+    {
+      "id": "SEO-4-STAGE-2-recover-metadata",
+      "priority": "P1",
+      "source_backlog_id": "SEO-4-RECOVER-WIRING-PLAN.md 阶段 2",
+      "title": "/recover metadata 由 gate 驱动（默认 noindex、canonical/hreflang 仅在可索引时输出）",
+      "scope": "buildRecoverRouteMetadata：robots 继承判定；canonical 与 5 语言 hreflang + x-default 仅在 indexable 时给出；标题/描述只接受真实来源引用",
+      "acceptance_criteria": "RECOVER_METADATA_NOINDEX_DEFAULT / RECOVER_METADATA_CANONICAL_ONLY_WHEN_INDEXABLE / RECOVER_METADATA_ALTERNATES_X_DEFAULT 全绿；tsc 0",
+      "status": "IMPLEMENTED_PENDING_CI",
+      "implementation_head": "(this commit)"
     }
   ],
   "authorization_note": "MSG-20261003-133 Q3：dispatcher 获授权自动扩 backlog 并执行安全单元（契约/已批准 D1–D3 Schema/append-only 持久化/deterministic normalization/qualification·evidence·package/测试/文档/fixture/只读 HTTP/只读 reconciliation projection）；遇到未批准 Schema、EXTERNAL_WRITE Action Guard、真实 adapter/webhook、submission、真实资金语义写入、生产 credential、收费时必须停该分支并重新送审。 HOST 2026-10-04（CONTINUOUS EXECUTION + CUSTOMS AUTHORIZATION + CHATGPT AUDIT LOOP）：UI-6…UI-8 与 CA-2…CA-6 已登记为可执行队列；Schema/Security/Authorization 边界项自动进入 ChatGPT Audit Loop（AUDIT-BRIDGE.md，不新建协议）。"

@@ -8,6 +8,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildRecoverRouteMetadata,
   SEO_RECOVER_ROUTE_BOUNDARY,
   detectDuplicateRouteSlugs,
   resolveRecoverRoute,
@@ -129,5 +130,51 @@ describe('SEO-4 Stage 1 /recover 路由骨架', () => {
       // 页面不允许内联文案：只能给 i18n key。
       for (const key of candidate.i18nKeys) expect(key).toMatch(/^recover\.[A-Za-z.]+$/);
     }
+  });
+});
+
+describe('SEO-4 Stage 2 metadata（gate 驱动，默认 noindex）', () => {
+  const BASE = 'https://crossclaim.example';
+
+  it('RECOVER_METADATA_NOINDEX_DEFAULT：不可用与 fallback 页面一律 noindex，且不给 canonical/hreflang', () => {
+    const cases = [
+      resolveRecoverRoute(input({ slug: 'nope-nothing-here' })),
+      resolveRecoverRoute(input({ rules: [rule({ effectiveTo: '2026-09-01T00:00:00.000Z' })] })),
+      resolveRecoverRoute(input({ requestedLocale: 'fr' })),
+    ];
+    for (const decision of cases) {
+      const meta = buildRecoverRouteMetadata({ decision, baseUrl: BASE });
+      expect(meta.robots).toBe('noindex,nofollow');
+      expect(meta.canonical).toBeNull();
+      expect(meta.alternates).toEqual([]);
+      // 不带来源引用时不得发明标题/描述。
+      expect(meta.titleRef).toBeNull();
+      expect(meta.descriptionRef).toBeNull();
+    }
+  });
+
+  it('RECOVER_METADATA_CANONICAL_ONLY_WHEN_INDEXABLE：只有 indexable 的 OK 页才有 canonical', () => {
+    const ok = resolveRecoverRoute(input({ requestedLocale: 'de' }));
+    const meta = buildRecoverRouteMetadata({ decision: ok, baseUrl: BASE, titleRef: 'rule.title' });
+    expect(meta.robots).toBe('index,follow');
+    expect(meta.canonical).toBe(`${BASE}${ok.path}`);
+    expect(meta.titleRef).toBe('rule.title');
+    expect(meta.descriptionRef).toBeNull();
+
+    // gate 未通过的页面（indexable=false）→ 即便 REASON 是 OK 也不给 canonical。
+    const gatedOut = resolveRecoverRoute(input({ rules: [rule({ indexable: false, noindexReasons: ['THIN_CONTENT'] })] }));
+    const gatedMeta = buildRecoverRouteMetadata({ decision: gatedOut, baseUrl: BASE });
+    expect(gatedMeta.robots).toBe('noindex,nofollow');
+    expect(gatedMeta.canonical).toBeNull();
+    expect(gatedMeta.alternates).toEqual([]);
+  });
+
+  it('RECOVER_METADATA_ALTERNATES_X_DEFAULT：可索引页给出 5 语言 hreflang + x-default；不可索引页没有', () => {
+    const ok = resolveRecoverRoute(input({ requestedLocale: 'ja' }));
+    const meta = buildRecoverRouteMetadata({ decision: ok, baseUrl: BASE });
+    const langs = meta.alternates.map((a) => a.hreflang);
+    expect(langs).toEqual(['en', 'zh', 'de', 'ja', 'es', 'x-default']);
+    expect(meta.alternates.find((a) => a.hreflang === 'x-default')?.href).toBe(`${BASE}${ok.path}`);
+    for (const alternate of meta.alternates) expect(alternate.href.startsWith(BASE)).toBe(true);
   });
 });
