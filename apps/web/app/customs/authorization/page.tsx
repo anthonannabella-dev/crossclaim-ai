@@ -27,6 +27,15 @@ interface AuthorizationCenterItem {
   blockerCodes: readonly string[];
 }
 
+interface AuthorizationPlan {
+  gate: string;
+  missingItemKeys: readonly string[];
+  missingActions: readonly string[];
+  reuseExistingAuthorization: boolean;
+  reasonCodes: readonly string[];
+  nextAction: string | null;
+}
+
 interface AuthorizationCenter {
   route: string;
   remedy: string;
@@ -63,6 +72,12 @@ export default async function CustomsAuthorizationPage({
       )
     : null;
   const center = centerResponse?.ok ? centerResponse.body?.authorizationCenter ?? null : null;
+  const planResponse = selectedId
+    ? await apiGet<{ authorizationPlan: AuthorizationPlan }>(
+        '/customs-opportunities/' + encodeURIComponent(selectedId) + '/authorization-plan',
+      )
+    : null;
+  const plan = planResponse?.ok ? planResponse.body?.authorizationPlan ?? null : null;
 
   const itemLabels: Record<string, string> = {
     ENTERPRISE_IDENTITY: t.customsAuthorization.itemEnterpriseIdentity,
@@ -97,6 +112,12 @@ export default async function CustomsAuthorizationPage({
     COMPLETE_BROKER_AUTHORIZATION: t.customsAuthorization.actionCompleteBrokerAuthorization,
     CONFIRM_REFUND_ACCOUNT: t.customsAuthorization.actionConfirmRefundAccount,
     START_RECOVERY: t.customsAuthorization.actionStartRecovery,
+  };
+  const gateLabels: Record<string, string> = {
+    READY_TO_START: t.customsAuthorization.gateReadyToStart,
+    NEEDS_AUTHORIZATION: t.customsAuthorization.gateNeedsAuthorization,
+    REAUTHORIZATION_REQUIRED: t.customsAuthorization.gateReauthorizationRequired,
+    WAITING_ON_PROVIDER: t.customsAuthorization.gateWaitingOnProvider,
   };
 
   return (
@@ -149,6 +170,19 @@ export default async function CustomsAuthorizationPage({
             </InlineNotice>
           ) : (
             <>
+              {plan === null ? null : (
+                <SectionCard title={t.customsAuthorization.planTitle}>
+                  <p className="text-sm text-slate-800">
+                    {gateLabels[plan.gate] ?? t.customsAuthorization.gateUnknown}
+                  </p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {plan.reuseExistingAuthorization
+                      ? t.customsAuthorization.reuseNote
+                      : t.customsAuthorization.missingOnlyNote}
+                  </p>
+                </SectionCard>
+              )}
+
               <SectionCard
                 title={t.customsAuthorization.nextStepLabel}
                 subtitle={
@@ -228,6 +262,14 @@ export default async function CustomsAuthorizationPage({
                 <p className="mt-3 text-xs font-medium text-slate-600">
                   {t.customsAuthorization.advancedCodesLabel}
                 </p>
+                {plan !== null && plan.reasonCodes.length > 0 ? (
+                  <p className="mt-3 text-xs font-medium text-slate-600">
+                    {t.customsAuthorization.reasonsLabel}
+                  </p>
+                ) : null}
+                {plan !== null && plan.reasonCodes.length > 0 ? (
+                  <p className="mt-1 break-words text-xs text-slate-500">{plan.reasonCodes.join(', ')}</p>
+                ) : null}
                 <p className="mt-1 break-words text-xs text-slate-500">
                   {center.advancedBlockerCodes.length > 0
                     ? center.advancedBlockerCodes.join(', ')

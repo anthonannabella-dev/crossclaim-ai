@@ -212,6 +212,15 @@ const de: Messages = {
   },
 
   customsAuthorization: {
+    planTitle: 'Ein-Klick-Erstattungsplan',
+    gateReadyToStart: 'Bereit, die Erstattung zu starten',
+    gateNeedsAuthorization: 'Nur noch wenige Berechtigungen fehlen',
+    gateReauthorizationRequired: 'Neue Berechtigung erforderlich',
+    gateWaitingOnProvider: 'Warten auf Berechtigung / Broker-Einreichung',
+    gateUnknown: 'Berechtigungsstatus wird geprüft',
+    reuseNote: 'Die bestehende Broker-Vollmacht wird wiederverwendet; für diese Einfuhr ist keine erneute Unterschrift nötig.',
+    missingOnlyNote: 'Bitte nur die unten genannten fehlenden Punkte ergänzen; alles andere muss nicht erneut eingereicht werden.',
+    reasonsLabel: 'Grund für die erneute Berechtigung',
     statePendingPolicy: 'Berechtigungsanforderungen offen',
     waitingNote: 'Warten auf Berechtigung oder Richtlinienbestätigung; es wird nichts automatisch eingereicht oder abgebucht.',
     title: 'Berechtigungen für die Zollrückerstattung',

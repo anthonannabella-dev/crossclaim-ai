@@ -213,6 +213,15 @@ const zhCN = {
   },
 
   customsAuthorization: {
+    planTitle: '一键追回计划',
+    gateReadyToStart: '可以开始追回',
+    gateNeedsAuthorization: '只差少量授权即可开始',
+    gateReauthorizationRequired: '需要重新授权',
+    gateWaitingOnProvider: '等待授权 / 代理提交',
+    gateUnknown: '授权状态待确认',
+    reuseNote: '已复用既有代理授权，本单无需重复签署。',
+    missingOnlyNote: '只需补齐下列缺失项，其余无需重复提交。',
+    reasonsLabel: '需要重新授权的原因',
     statePendingPolicy: '授权要求待确认',
     waitingNote: '正在等待授权 / 政策确认；系统不会自动提交，也不会自动扣款。',
     title: '关税追回授权',

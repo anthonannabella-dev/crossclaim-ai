@@ -212,6 +212,15 @@ const enUS: Messages = {
   },
 
   customsAuthorization: {
+    planTitle: 'One-click recovery plan',
+    gateReadyToStart: 'Ready to start recovery',
+    gateNeedsAuthorization: 'Only a few authorizations are missing',
+    gateReauthorizationRequired: 'New authorization required',
+    gateWaitingOnProvider: 'Waiting for authorization / broker submission',
+    gateUnknown: 'Authorization status pending',
+    reuseNote: 'Your existing broker authorization is reused; nothing needs to be signed again for this filing.',
+    missingOnlyNote: 'Only complete the missing items listed below; nothing else must be resubmitted.',
+    reasonsLabel: 'Why a new authorization is required',
     statePendingPolicy: 'Authorization requirements pending',
     waitingNote: 'Waiting for authorization or policy confirmation; nothing is submitted to customs or charged automatically.',
     title: 'Duty recovery authorization',
