@@ -6,10 +6,10 @@
   "next_task": "CA-4 BrokerAuthorizationSession internal contract",
   "send_head": "07b7009",
   "decision_head": "07b7009",
-  "last_chatgpt_message": "MSG-20261004-03",
+  "last_chatgpt_message": "MSG-20261004-04",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-04T02:17:59.546Z",
+  "updated_at": "2026-10-04T02:20:26.884Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -5006,24 +5006,12 @@
       "④ Production Candidate register only"
     ]
   },
-  "awaiting_verdict": {
-    "unit": "ca-3-authorization-lifecycle-persistence",
-    "since": "2026-10-04T02:17:59.546Z",
-    "head": "06eebbc",
-    "audit_comment_id": "5975709260",
-    "github_url": "https://github.com/anthonannabella-dev/crossclaim-ai/issues/2#issuecomment-5975709260",
-    "delivery_verified": [
-      "composer cleared",
-      "new user turn at bottom",
-      "generating"
-    ],
-    "next": "读取新 VERDICT → 逐字归档（compare.mjs FULL_COPY_OK）→ 按裁决执行 → 关闭 CA-3 / 进入 CA-4"
-  },
+  "awaiting_verdict": null,
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-04T02:18:00.476Z",
-    "head": "06eebbc",
-    "acceptance_head": "06eebbc",
+    "computed_at": "2026-10-04T02:20:27.791Z",
+    "head": "a3ba590",
+    "acceptance_head": "a3ba590",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5045,6 +5033,7 @@
       "CHECK:L1-07_api_typecheck_passed",
       "CHECK:L1-08_web_typecheck_build_passed",
       "CHECK:L1-09_no_skipped_critical_tests",
+      "CHECK:L1-10_git_working_tree_clean",
       "CHECK:L1-11_docs_state_consistent",
       "CHECK:L1-12_schema_invariants_verified",
       "CHECK:L1-13_negative_paths_covered",
@@ -5095,48 +5084,48 @@
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=06eebbc ci_head=f5bdd92 ci=in_progress run=37143524364"
+        "evidence": "acceptance_head=a3ba590 ci_head=f5bdd92 ci=in_progress run=37143524364"
       },
       "L1-05_pg_regression_passed": {
         "status": "UNVERIFIED",
-        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head 06eebbc（且中间存在非簿记变更）"
+        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head a3ba590（且中间存在非簿记变更）"
       },
       "L1-06_fresh_db_migration_passed": {
         "status": "UNVERIFIED",
-        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head 06eebbc（且中间存在非簿记变更）"
+        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head a3ba590（且中间存在非簿记变更）"
       },
       "L1-07_api_typecheck_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head 06eebbc（且中间存在非簿记变更）"
+        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head a3ba590（且中间存在非簿记变更）"
       },
       "L1-08_web_typecheck_build_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head 06eebbc（且中间存在非簿记变更）"
+        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head a3ba590（且中间存在非簿记变更）"
       },
       "L1-09_no_skipped_critical_tests": {
         "status": "UNVERIFIED",
-        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head 06eebbc（且中间存在非簿记变更）"
+        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head a3ba590（且中间存在非簿记变更）"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
-        "status": true,
-        "evidence": "porcelain empty"
+        "status": false,
+        "evidence": "dirty entries: 2"
       },
       "L1-11_docs_state_consistent": {
         "status": "UNVERIFIED",
-        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head 06eebbc（且中间存在非簿记变更）"
+        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head a3ba590（且中间存在非簿记变更）"
       },
       "L1-12_schema_invariants_verified": {
         "status": "UNVERIFIED",
-        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head 06eebbc（且中间存在非簿记变更）"
+        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head a3ba590（且中间存在非簿记变更）"
       },
       "L1-13_negative_paths_covered": {
         "status": "UNVERIFIED",
-        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head 06eebbc（且中间存在非簿记变更）"
+        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head a3ba590（且中间存在非簿记变更）"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
         "status": "UNVERIFIED",
-        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head 06eebbc（且中间存在非簿记变更）"
+        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head a3ba590（且中间存在非簿记变更）"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
@@ -6014,7 +6003,7 @@
     "at": "2026-10-04T01:21:55.949Z",
     "CA_1": "CLOSED（465a6a6：route-aware authorization + 三阶段 readiness；unit 16 / PG 8）",
     "CA_2": "CLOSED（PASS，MSG-20261004-03，head d48d671）",
-    "CA_3": "IMPLEMENTED / AWAITING_CHATGPT_VERDICT（append-only 生命周期写入口 + 读模型；unit 6 + PG 4）",
+    "CA_3": "REVISE（MSG-20261004-04）：A–C 必改待实施；CA-3 FINAL 送审前不进入 CA-4",
     "CA_4": "PENDING（BrokerAuthorizationSession contract；ARCH_REVIEW_REQUIRED）",
     "CA_5": "PENDING（Customs Authorization Center UI）",
     "CA_6": "PENDING（One-click auth UX wiring）",
@@ -6041,7 +6030,13 @@
       "verdict_final": "MSG-20261004-03 = PASS / CLOSED",
       "reviewed_head": "d48d671",
       "full_copy_ok": true
-    }
+    },
+    "ca3_required_changes": [
+      "A: POA 生命周期必须按 organizationId + principalRef + brokerRef 隔离（B 的 revoked 不得撤销 A）",
+      "B: 生命周期写入增加稳定幂等身份（不含 observedAt）：同 key 同 payload → 返回既有 fact；同 key 不同 payload → IDEMPOTENCY_KEY_CONFLICT；双连接并发 exactly-once",
+      "C: CustomsBrokerPoaFact 增加 verifiedAt / revokedAt / supersededAt 生命周期字段与 DB invariant（与 signer 对齐）",
+      "D（建议，非阻塞）：verificationSource → serverVerificationSource，HTTP boundary 永不由 client 映射"
+    ]
   },
   "stop_conditions": [
     "HOST_ACTION_REQUIRED（真实账号/Secret/生产凭据/法律签署/付费/外部验证码）",

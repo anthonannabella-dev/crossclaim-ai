@@ -128641,3 +128641,155 @@ CA-3 只能追加新事实表达生命周期变化，不能 UPDATE 历史授权�
 
 本轮没有新的必须修集合。
 ```
+
+### [MSG-20261004-04] ARCHITECT VERDICT — CUSTOMS AUTHORIZATION CA-3 = REVISE（A：POA lifecycle 按 brokerRef 隔离 / B：稳定幂等键 + 并发 exactly-once / C：Broker POA revokedAt·verifiedAt·supersededAt 与 signer 对齐；另建议 verificationSource → serverVerificationSource）
+
+```text
+CUSTOMS AUTHORIZATION CA-3：REVISE。
+
+整体实现方向是对的：append-only、CA-2 resolver 复用、CA-1 readiness 组合、零外写都成立。但当前 06eebbc 还有 3 个必须修的授权正确性问题，所以暂时不能把 CA-3 CLOSED。
+
+Append-only 生命周期：PASS
+
+GRANT / RENEW / REVOKE 都是新增 fact，没有 UPDATE 历史；Prisma store 也没有暴露 update/delete。真实 PG 还验证了 DB trigger 拒绝 UPDATE。
+
+读模型组合 CA-1：PASS WITH REVISE
+
+readAuthorizationState() 确实：
+
+POA facts + Signer facts → resolver → CustomsAuthorizationFacts → CA-1 readiness
+
+并且退款账户未就绪不会错误阻塞 prepare，这部分正确。
+
+硬缺口 A：Broker POA 身份选择缺少 brokerRef —— REVISE
+
+当前 AuthorizationStateInput.context 已有：
+
+brokerRef?: string
+
+但它完全没有被使用。
+
+listPoa() 只按：
+
+organizationId + principalRef
+
+读取；resolveBrokerPoaFacts() 也只按 principalRef 选 latest。
+
+这意味着同一个 importer 同时有：
+
+Broker A 的有效 POA
+Broker B 的新 PENDING / REVOKED POA
+
+Broker B 的较新事实可能直接覆盖 Broker A 的授权状态。
+
+CHANGE A：POA resolver 必须按 broker identity 隔离。
+
+至少变成：
+
+organizationId + principalRef + brokerRef
+
+当前选择哪个 Broker，就只能消费该 Broker 的 POA 生命周期。
+
+补真实 PG：
+
+A VERIFIED + B REVOKED，不得让 B 撤销 A；
+A/B 两套 POA latest 各自独立；
+当前 brokerRef 不存在 → MISSING。
+
+硬缺口 B：生命周期写入没有稳定幂等身份 —— REVISE
+
+当前 contentDigest 包含：
+
+observedAt
+
+而 observedAt = now()。
+
+所以同一个 GRANT/RENEW/REVOKE 因网络重试执行两次：
+
+第一次 digest A
+第二次因为 observedAt 不同 → digest B
+
+(organizationId, contentDigest) UNIQUE 无法去重，会生成两条事实。
+
+对授权生命周期这是不安全的。
+
+CHANGE B：增加稳定 idempotency identity。
+
+推荐：
+
+organizationId + subject + principalRef + brokerRef/signerRef + action + idempotencyKey
+
+同 key + 同 immutable payload：
+→ 返回已有 fact。
+
+同 key + 不同 payload：
+→ IDEMPOTENCY_KEY_CONFLICT。
+
+observedAt 不能参与业务幂等身份。
+
+并补双连接并发 PG：
+
+exactly one fact accepted。
+
+硬缺口 C：BROKER_POA 的 REVOKE 并没有持久化 revokedAt —— REVISE
+
+PoaFactInsert 定义了：
+
+verifiedAt
+revokedAt
+
+但 appendPoa() 实际写 Prisma 时根本没写这两个字段。
+
+更根本的问题是 CustomsBrokerPoaFact Schema 当前就没有：
+
+verifiedAt / revokedAt / supersededAt
+
+所以现在请求中声称：
+
+REVOKE 追加 REVOKED 事实带 revokedAt
+
+对 AuthorizedSigner 是真的，对 Broker POA 不是真的。
+
+这会让 Broker POA 撤销只能知道“观察到一条 REVOKED fact”，而没有明确 revocation timestamp。
+
+CHANGE C：二选一，我推荐第一种：
+
+给 CustomsBrokerPoaFact 增加与 signer 对齐的 verifiedAt / revokedAt / supersededAt 生命周期字段和 DB invariant；
+或明确改协议：POA 的 revocation time 就是 observedAt，删除 revokedAt 的假契约。
+
+为了以后接真实 Broker/POA，我建议保持两种授权事实生命周期结构一致。
+
+server-derived 字段：PASS WITH REVISE
+
+verificationStatus / observedAt / digest / verifiedAt / revokedAt 确实由 service 生成。
+
+但 verificationSource 实际仍然是：
+
+AppendAuthorizationInput.verificationSource 由调用者传入，并不是本函数“计算出来”的。
+
+目前因为还没有公开 HTTP 写入口，可以暂时接受为 trusted server input；但 CA-4/HTTP 接线时必须保证客户端不能直接映射这个字段。
+
+建议直接把名字改成 serverVerificationSource 并在 API boundary 永远由服务端 evidence/provider/manual-review context 派生。
+
+这一点本身不单独阻塞 CA-3，前面的 A–C 已足够构成 REVISE。
+
+Production boundary：PASS
+
+仍然保持：filingSubmitted=false
+externalWritePerformed=false
+transportEnabled=false
+productionCredentials=ABSENT 没有真实 Broker / CBP / ACE / Filing 外写。
+
+最终裁决
+CA-3 = REVISE
+
+必须修的最小集合只有：
+
+A：POA lifecycle 按 brokerRef 隔离
+B：生命周期写入加入稳定幂等键 + 并发 exactly-once
+C：Broker POA 撤销时间契约与实际持久化一致
+
+修完这三项并补真实 PostgreSQL 回归后，可以重送 CA-3 FINAL。
+
+CA-3 FINAL PASS 前，不建议正式进入 CA-4。
+```
