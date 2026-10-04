@@ -135560,3 +135560,367 @@ PRODUCTION_ENABLEMENT = HOLD
 
 这条路线既能把 SEO-4 继续做完，也不会破坏现有 apps/web → HTTP → apps/api 的硬架构边界。
 ```
+
+### [MSG-20261005-01] ARCHITECT VERDICT — RSI-RT-06 状态持久化 Schema Delta = PASS WITH REVISE（允许 schema design / SQL draft / migration generation / ephemeral validation；migrate deploy / staging unlock / production enablement = BLOCKED）；reviewed HEAD = 328592d。裁定：①RSI_SCOPE = PLATFORM_LEVEL，须补仓库契约例外 RSI_PLATFORM_SCOPE_EXCEPTION = APPROVED（RSI 表非业务租户表、不存客户数据/授权、不参与 recovery claim / payment / provider execution），不得据此绕过租户隔离；②AutonomyLease 必须增加 renewedAt，字段为 id / taskId UNIQUE / ownerRef / acquiredAt / renewedAt / expiresAt / status(ACTIVE|EXPIRED|RELEASED) / createdAt / updatedAt，以便用 now - renewedAt 判断续租、卡死、时间漂移；③生命周期状态用 text + CHECK，不用 PostgreSQL enum（RSI 状态会迭代，避免 ALTER TYPE 迁移风险），内部不可变分类 IncidentSeverity / CandidateType / PromotionAction 可保留代码 enum；④8 张表方向可接受（AutonomyIncident / AutonomyTask / AutonomyCandidate / AutonomyEvaluationRun / AutonomyMetricResult / AutonomyPromotionDecision / AutonomyRollbackRecord / AutonomyLease），但加三条硬要求：(A) Incident / Task / Candidate / Promotion 必须 UNIQUE(dedupeKey)，避免 reboot 后重复 incident/promotion；(B) PromotionDecision fail-closed 校验 judgeRef != candidate.builderRef，生成者不得自我批准；(C) MetricResult / PromotionDecision / RollbackRecord append-only，禁止 UPDATE/DELETE，只能 new record + supersedes reference；⑤migration 流程同 C18：APPROVED → 人工审 SQL → 生成 migration → ephemeral database deploy → whole-schema diff = 0 → 测试 → staging unlock，PRODUCTION = HOLD 不变；⑥RSI 允许只读系统状态 / 内部编排 / 健康 reconcile / 重试调度 / 生命周期管理 / 指标采集，禁止 External Write / Payment / Transport / Provider API mutation / Customer action / 凭据处理 / token 存储。下一步：Codex 补 Schema Delta（platform scope exception + renewedAt + text+CHECK + append-only + dedupe）→ 生成 migration draft → 不执行 deploy → 提交 migration SQL 审计材料 → 再进下一轮架构验收。
+
+```text
+ARCHITECT VERDICT：PASS WITH REVISE（允许生成 Schema Delta，但暂不允许 migration deploy）
+
+基于本次送审内容（reviewed HEAD = 328592d，且声明未改 schema.prisma / 未生成 migration / 未执行 deploy），我的裁定如下：
+
+① RSI 数据归属：选择平台级，但必须显式契约隔离
+
+裁定：
+
+纯文本
+RSI_SCOPE = PLATFORM_LEVEL
+
+原因：
+
+RSI 当前定义是：
+
+系统运行健康
+自动化循环状态
+incident/candidate/evaluation/promotion/rollback
+agent/controller 生命周期
+
+它不是客户业务对象。
+
+因此不应该强行加入：
+
+纯文本
+organizationId
+tenantId
+customerId
+
+否则会产生错误边界：
+
+代码
+客户数据域
+      ↓
+RSI 运维自治域
+
+混在一起。
+
+但是必须补充仓库契约：
+
+纯文本
+RSI_PLATFORM_SCOPE_EXCEPTION = APPROVED
+
+明确：
+
+RSI 表不是业务租户表
+RSI 不保存客户数据
+RSI 不保存客户授权
+RSI 不参与 recovery claim / payment / provider execution
+
+否则未来审计会认为它绕过多租户隔离。
+
+② Lease：必须增加 renewedAt
+
+当前：
+
+纯文本
+AutonomyLease
+- taskId
+- expiresAt
+
+不足。
+
+批准修改：
+
+纯文本
+AutonomyLease
+
+id
+taskId UNIQUE
+ownerRef
+acquiredAt
+renewedAt
+expiresAt
+status
+createdAt
+updatedAt
+
+原因：
+
+只有 expiresAt 无法判断：
+
+是正常续租？
+controller 卡死？
+时间漂移？
+网络延迟？
+
+需要：
+
+纯文本
+now - renewedAt
+
+作为健康判断依据。
+
+状态：
+
+纯文本
+ACTIVE
+EXPIRED
+RELEASED
+
+即可。
+
+③ enum vs text + CHECK
+
+裁定：
+
+生命周期状态：
+
+采用：
+
+纯文本
+text + CHECK
+
+不要 PostgreSQL enum。
+
+原因：
+
+RSI 是自治系统，会迭代状态。
+
+如果使用 DB enum：
+
+新增状态需要：
+
+代码
+ALTER TYPE
+migration
+deploy
+
+风险更高。
+
+推荐：
+
+SQL
+status TEXT NOT NULL
+CHECK(status IN (...))
+
+例如：
+
+纯文本
+AutonomyTask.status
+
+QUEUED
+RUNNING
+PAUSED
+SUCCEEDED
+FAILED
+CANCELLED
+
+但是：
+
+内部不可变分类可以使用代码 enum：
+
+例如：
+
+纯文本
+IncidentSeverity
+CandidateType
+PromotionAction
+
+由应用层管理。
+
+④ 表设计裁定
+
+当前 8 张表方向可以接受：
+
+纯文本
+AutonomyIncident
+AutonomyTask
+AutonomyCandidate
+AutonomyEvaluationRun
+AutonomyMetricResult
+AutonomyPromotionDecision
+AutonomyRollbackRecord
+AutonomyLease
+
+但增加三个硬要求。
+
+A. Incident / Candidate / Promotion 必须有 dedupe
+
+批准：
+
+纯文本
+UNIQUE(dedupeKey)
+
+避免：
+
+代码
+reboot
+ ↓
+controller restart
+ ↓
+重复创建 incident
+ ↓
+重复 promotion
+B. PromotionDecision 必须 fail-closed
+
+批准：
+
+必须保证：
+
+纯文本
+judgeRef != candidate.builderRef
+
+即：
+
+生成者不能自己批准。
+
+例如：
+
+禁止：
+
+代码
+Builder Agent
+      ↓
+自己评估
+      ↓
+自己 Promotion
+
+必须：
+
+代码
+Builder
+ ↓
+Candidate
+ ↓
+Independent Judge
+ ↓
+PromotionDecision
+C. Evidence 表 append-only
+
+批准：
+
+纯文本
+AutonomyMetricResult
+AutonomyPromotionDecision
+AutonomyRollbackRecord
+
+append-only。
+
+禁止：
+
+SQL
+UPDATE evidence
+DELETE evidence
+
+只能：
+
+代码
+new record
++
+supersedes reference
+⑤ migration 流程
+
+接受 C18 同等级流程：
+
+纯文本
+APPROVED
+      ↓
+人工审 SQL
+      ↓
+生成 migration
+      ↓
+ephemeral database deploy
+      ↓
+whole-schema diff
+      ↓
+0 drift
+      ↓
+测试
+      ↓
+staging unlock
+
+但是注意：
+
+当前：
+
+纯文本
+PRODUCTION = HOLD
+
+不改变。
+
+不允许：
+
+代码
+migration
+ ↓
+production deploy
+⑥ RSI 权限边界确认
+
+确认：
+
+通过之后：
+
+纯文本
+RSI_ALLOWED:
+
+✓ read system state
+✓ internal orchestration
+✓ health/reconcile
+✓ retry scheduling
+✓ lifecycle management
+✓ metrics collection
+
+禁止：
+
+纯文本
+RSI_FORBIDDEN:
+
+✗ External Write
+✗ Payment
+✗ Transport
+✗ Provider API mutation
+✗ Customer action
+✗ Credential handling
+✗ Token storage
+
+保持：
+
+纯文本
+TRANSPORT=false
+
+EXTERNAL_WRITE=HOLD
+
+PAYMENT=HOLD
+
+PRODUCTION_CREDENTIALS=HOLD
+最终裁定
+纯文本
+RSI_SCHEMA_DELTA = APPROVED_WITH_REVISIONS
+
+Allowed:
+✓ schema design
+✓ SQL draft
+✓ migration generation
+✓ ephemeral validation
+
+Blocked:
+✗ migrate deploy
+✗ staging unlock
+✗ production enablement
+
+需要 Codex 下一步执行：
+
+按上述修改补充 Schema Delta：
+
+platform scope exception
+renewedAt
+text + CHECK
+append-only constraints
+dedupe constraints
+
+生成 migration draft
+
+不执行 deploy
+
+提交 migration SQL 审计材料
+
+然后再进入下一轮架构验收。
+```
