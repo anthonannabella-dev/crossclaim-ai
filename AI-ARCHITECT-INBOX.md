@@ -133689,3 +133689,170 @@ PRODUCTION_ENABLEMENT = HOLD
 
 另外，exact HEAD 的 GitHub workflow/status 查询依然为空，因此我没有把本轮描述为 hosted CI 已验证；以上是对 90b1f71 仓库内容本身的独立审计。
 ```
+
+### [MSG-20261004-29] ARCHITECT VERDICT — C18 EXACT-ORDER REPLAY = PASS（reviewed HEAD = 1950ef8；① EXACT_ORDER_REPLAY / WHOLE_SCHEMA_DIFF_ZERO / MIGRATION_HISTORY_REPRODUCIBLE 全 PASS，脚本确认为「所有 migration 原样 + 一次 prisma migrate deploy + 不手工 psql + whole-schema diff meaningful=0 且任何非零即 EXIT!=0 + migrate status up to date + DROP」；② STAGING_MIGRATE_DEPLOY = AUTHORIZED、SHARED_NONPROD_MIGRATE_DEPLOY = AUTHORIZED，但 SHARED_WITH_REAL_PRODUCTION_DATA 与 PRODUCTION_MIGRATE_DEPLOY 继续 HOLD；附 6 步 staging 最小验收集（migrate status 前置无 failed + 记录 head → deploy EXIT 0 → status up to date → DB→schema.prisma diff meaningful=0 → C18 DB 不变量烟测：缺证据 CROSSCLAIM_SAAS / 身份 UPDATE / lineage UPDATE / lineage DELETE / 跨租户 lineage INSERT 全部 reject，使用专用 fixture 且结束清理 → 再进 Prisma Store + E2E）；③ 迁移层 CLOSED（C18_MIGRATION_SQL = CLOSED、NON_C18_SCHEMA_DRIFT = CLOSED），下一阶段只关心持久化行为：Binding current row + Lineage 同一 DB 事务（失败一起回滚、并发不丢 lineage、不出现 silent last-write-wins 身份漂移）、同一 (providerId, deliveryId) 两独立连接并发 INSERT 恰好一个 CLAIMED + 一个 ALREADY_CLAIMED 且行数 1、tenant isolation、resolver 0/1/>1 fail-closed、lifecycle persistence → PRODUCTION_PERSISTENCE_CHECKPOINT；PRISMA_STORE_IMPLEMENTATION / REAL_PG_E2E = AUTHORIZED）
+
+```text
+ARCHITECT VERDICT：PASS
+
+我按 reviewed HEAD = 1950ef8（完整 SHA 1950ef8f2b2b1e7fd2fb77eac75fde46e583d030）重新审了 tools/verification/c18-exact-order-replay.mjs 和本轮送审证据。这次满足了我上一轮要求的最后一道 migration-history 门槛。
+
+① EXACT_ORDER_REPLAY：可以正式记 PASS
+
+脚本现在确实是：
+
+纯文本
+fresh ephemeral DB
+→ 所有 migration 原样保留
+→ 一次 prisma migrate deploy
+→ 不移动 C18 migration
+→ 不手工 psql 应用任何 migration
+→ whole-schema migrate diff
+→ meaningful diff 必须 = 0
+→ prisma migrate status 必须 up to date
+→ DROP ephemeral DB
+
+而且代码不是只检查 CustomsProvider*，任何 meaningful diff 非零都会：
+
+纯文本
+failed = true
+→ EXIT != 0
+
+所以当前状态可更新为：
+
+纯文本
+EXACT_ORDER_REPLAY = PASS
+WHOLE_SCHEMA_DIFF_ZERO = PASS
+MIGRATION_HISTORY_REPRODUCIBLE = PASS
+C18_MIGRATION_SQL = PASS
+NON_C18_RECONCILIATION = PASS
+
+我没有把本轮说成“我独立执行了脚本”，因为 exact HEAD 的 GitHub hosted workflow/status 仍为空；我独立确认的是脚本逻辑与 exact HEAD 内容，实际 EXIT=0 / DIFF=0 / STATUS=true 来自已归档的运行证据。
+
+② shared/staging migrate deploy：解禁
+
+允许。
+
+但我把 shared 限定为 non-production shared environment。如果所谓 shared DB 已经承载真实客户/生产级数据，则按 production 处理，继续 HOLD。
+
+状态：
+
+纯文本
+STAGING_MIGRATE_DEPLOY = AUTHORIZED
+
+SHARED_NONPROD_MIGRATE_DEPLOY = AUTHORIZED
+SHARED_WITH_REAL_PRODUCTION_DATA = HOLD
+
+PRODUCTION_MIGRATE_DEPLOY = HOLD
+
+这次可以真正执行 prisma migrate deploy 到 staging/non-prod shared。
+
+staging 最小验收集
+
+不要再扩成大审计，只跑下面这组即可：
+
+纯文本
+1. PRE-DEPLOY
+   prisma migrate status
+   → 无 failed migration
+   → 记录当前 migration head
+
+2. DEPLOY
+   exact reviewed code
+   → prisma migrate deploy
+   → EXIT 0
+
+3. POST-DEPLOY MIGRATION STATE
+   prisma migrate status
+   → Database schema is up to date
+
+4. POST-DEPLOY SCHEMA
+   DB → schema.prisma migrate diff
+   → meaningful diff = 0
+
+5. C18 DB INVARIANT SMOKE
+   CROSSCLAIM_SAAS 缺 evidence → reject
+   binding identity UPDATE → reject
+   lineage UPDATE → reject
+   lineage DELETE → reject
+   cross-tenant lineage INSERT → reject
+
+6. 然后继续 Prisma Store + real PG E2E
+
+第 5 步测试必须使用专门 staging fixture，并在测试结束清理，不要碰已有业务数据。
+
+③ 接下来真正需要完成的是持久化行为，不是 migration 了
+
+Migration 这一层现在可以结束。
+
+下一阶段我只关心：
+
+纯文本
+Prisma Store
+→ Binding current row + Lineage 同事务
+→ concurrent rebind no lost lineage
+→ two-connection webhook exactly-one
+→ tenant isolation
+→ resolver 0/1/>1 fail-closed
+→ lifecycle persistence
+→ Production Persistence Checkpoint
+
+其中 webhook 至少要证明：
+
+纯文本
+同一 (providerId, deliveryId)
+两个独立 PG connection 并发 INSERT
+
+结果：
+exactly one CLAIMED
+exactly one ALREADY_CLAIMED / replay
+DB row count = 1
+
+Binding 则至少证明：
+
+纯文本
+current update + lineage append
+= 同一 DB transaction
+
+失败：
+两边一起 rollback
+
+并发：
+不丢 lineage
+不出现 silent last-write-wins 的身份漂移
+
+通过这些以后，才进入：
+
+纯文本
+PRODUCTION_PERSISTENCE_CHECKPOINT
+
+然后再决定 production migrate deploy。
+
+最终裁定：
+
+纯文本
+ARCHITECT VERDICT = PASS
+
+EXACT_ORDER_REPLAY = PASS
+WHOLE_SCHEMA_DIFF_ZERO = PASS
+MIGRATION_HISTORY_REPRODUCIBLE = PASS
+
+C18_MIGRATION_SQL = CLOSED
+NON_C18_SCHEMA_DRIFT = CLOSED
+
+STAGING_MIGRATE_DEPLOY = AUTHORIZED
+SHARED_NONPROD_MIGRATE_DEPLOY = AUTHORIZED
+
+PRISMA_STORE_IMPLEMENTATION = AUTHORIZED
+REAL_PG_E2E = AUTHORIZED
+
+PRODUCTION_PERSISTENCE_CHECKPOINT = REQUIRED
+
+PRODUCTION_MIGRATE_DEPLOY = HOLD
+REAL_TRANSPORT = HOLD
+EXTERNAL_WRITE = HOLD
+PAYMENT = HOLD
+PRODUCTION_ENABLEMENT = HOLD
+
+所以 Codex 现在不需要再围绕 migration 本身返工了，可以直接部署 staging/non-prod shared，然后推进 Prisma Store + 真实 PostgreSQL E2E。
+```
