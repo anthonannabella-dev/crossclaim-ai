@@ -100,6 +100,12 @@ export interface SeoPublicCheckerOutcome {
   slug: string | null;
   eligible: boolean | null;
   reasonCodes: readonly string[];
+  /**
+   * MSG-20261005-06: answers are the caller's own statements, never verified by us.
+   * Only PRELIMINARY_SELF_REPORTED is representable; VERIFIED / READY_TO_FILE are
+   * deliberately absent from this union so no code path can claim them.
+   */
+  eligibilityLabel: 'PRELIMINARY_SELF_REPORTED' | null;
   estimate: SeoPublicEstimate | null;
   /** estimate 必须带此标记；无 calculator 能力时为 null。 */
   estimateLabel: 'ESTIMATE_ONLY' | null;
@@ -119,6 +125,7 @@ const DENIED = (code: SeoPublicDenialCode): SeoPublicCheckerOutcome => ({
   slug: null,
   eligible: null,
   reasonCodes: [],
+  eligibilityLabel: null,
   estimate: null,
   estimateLabel: null,
   disclaimerKey: null,
@@ -276,6 +283,7 @@ export async function runPublicSeoChecker(
     slug: rule.slug,
     eligible,
     reasonCodes,
+    eligibilityLabel: checkerReady ? 'PRELIMINARY_SELF_REPORTED' : null,
     estimate,
     estimateLabel,
     disclaimerKey,

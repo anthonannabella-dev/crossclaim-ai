@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261004-16",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T09:10:00.000Z",
+  "updated_at": "2026-10-05T09:20:00.000Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -5192,9 +5192,9 @@
   "awaiting_verdict": "EXACT-ORDER REPLAY 证据已送审（comment 5979262070）；shared/staging deploy 解禁待裁决",
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-04T21:45:57.225Z",
-    "head": "5cfdf26",
-    "acceptance_head": "5cfdf26",
+    "computed_at": "2026-10-04T21:52:44.201Z",
+    "head": "8d734e3",
+    "acceptance_head": "8d734e3",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5345,27 +5345,27 @@
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=5cfdf26 ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
+        "evidence": "acceptance_head=8d734e3 ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
       },
       "L1-05_pg_regression_passed": {
         "status": "UNVERIFIED",
-        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head 5cfdf26（且中间存在非簿记变更）"
+        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head 8d734e3（且中间存在非簿记变更）"
       },
       "L1-06_fresh_db_migration_passed": {
         "status": "UNVERIFIED",
-        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head 5cfdf26（且中间存在非簿记变更）"
+        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head 8d734e3（且中间存在非簿记变更）"
       },
       "L1-07_api_typecheck_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head 5cfdf26（且中间存在非簿记变更）"
+        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head 8d734e3（且中间存在非簿记变更）"
       },
       "L1-08_web_typecheck_build_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head 5cfdf26（且中间存在非簿记变更）"
+        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head 8d734e3（且中间存在非簿记变更）"
       },
       "L1-09_no_skipped_critical_tests": {
         "status": "UNVERIFIED",
-        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head 5cfdf26（且中间存在非簿记变更）"
+        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head 8d734e3（且中间存在非簿记变更）"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
@@ -5374,19 +5374,19 @@
       },
       "L1-11_docs_state_consistent": {
         "status": "UNVERIFIED",
-        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head 5cfdf26（且中间存在非簿记变更）"
+        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head 8d734e3（且中间存在非簿记变更）"
       },
       "L1-12_schema_invariants_verified": {
         "status": "UNVERIFIED",
-        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head 5cfdf26（且中间存在非簿记变更）"
+        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head 8d734e3（且中间存在非簿记变更）"
       },
       "L1-13_negative_paths_covered": {
         "status": "UNVERIFIED",
-        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head 5cfdf26（且中间存在非簿记变更）"
+        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head 8d734e3（且中间存在非簿记变更）"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
         "status": "UNVERIFIED",
-        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head 5cfdf26（且中间存在非簿记变更）"
+        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head 8d734e3（且中间存在非簿记变更）"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
@@ -6334,7 +6334,7 @@
       "API.md / DOMAIN_MODEL.md / architecture-contract 计数 77 → 79"
     ]
   },
-  "next_execution_unit": "把 PRELIMINARY_SELF_REPORTED 写入 checker 输出（item ②，不得出现 VERIFIED/READY_TO_FILE）；确认 customs-drawback 规则是否真实支持 dutyPaid − dutyActuallyDue（支持才注册该 engine 并接线 rule-aware schema），不支持则保持 estimate = null；随后送 PUBLIC ENGINE IMPLEMENTATION AUDIT",
+  "next_execution_unit": "确认 customs-drawback 规则是否真实支持 dutyPaid − dutyActuallyDue：支持则把 duty-difference engine + rule-aware schema 注册进 seo-public-ports registry（仍 DEV/STAGING 显式开启、生产 HOLD）；不支持则保持 estimate = null 并在文档中写明原因；随后送 PUBLIC ENGINE IMPLEMENTATION AUDIT",
   "customer_ui_commercialization": {
     "at": "2026-10-04T01:21:55.949Z",
     "authorization": "MSG-20261004-01（CUSTOMER UI/UX COMMERCIALIZATION — IMPLEMENTATION AUTHORIZED）",
@@ -7380,9 +7380,9 @@
     "seo3_progress": "CHANGE A/B validator added (86f4289), engine output validation added (eb99c53), validator wired into runPublicSeoChecker (8bf49da), HTTP boundary guard added (4f2cd20); HTTP entry still not registered"
   },
   "CURRENT_HEAD": "293f55e",
-  "LAST_COMPLETED_UNIT": "MSG-20261005-06 第③④项核心：新增 seo-public-duty-difference.ts —— 输入改为 dutyPaidAmount + dutyActuallyDueAmount + currency（弃用 circular 的 refundableAmount），difference = max(0, paid − due) 由引擎自行推导，输出 SELF_REPORTED_POINT_ESTIMATE（min === max，无人工区间/成功率/历史比例），非正差额或输入不可用一律 estimate = null；**engine 仍未注册**（等确认规则真实支持该语义）；新增 8 例合同测试",
-  "NEXT_EXECUTION_UNIT": "把 PRELIMINARY_SELF_REPORTED 写入 checker 输出（item ②，不得出现 VERIFIED/READY_TO_FILE）；确认 customs-drawback 规则是否真实支持 dutyPaid − dutyActuallyDue（支持才注册该 engine 并接线 rule-aware schema），不支持则保持 estimate = null；随后送 PUBLIC ENGINE IMPLEMENTATION AUDIT",
-  "CI_STATUS": "本批提交后由托管 CI 复核；本地：apps/api tsc 0 / 新 duty-difference 8/8",
+  "LAST_COMPLETED_UNIT": "MSG-20261005-06 第①②（输出侧）完成：SeoPublicCheckerOutcome 新增 eligibilityLabel，类型只允许 PRELIMINARY_SELF_REPORTED | null（VERIFIED/READY_TO_FILE 在类型层面不可表示），checker 在 eligibility 真正执行时置为 PRELIMINARY_SELF_REPORTED、拒绝结果一律 null；新增 3 例测试（含不得出现 VERIFIED/READY_TO_FILE 的序列化断言）；seo-* 23 文件 164 例全过、tsc 0",
+  "NEXT_EXECUTION_UNIT": "确认 customs-drawback 规则是否真实支持 dutyPaid − dutyActuallyDue：支持则把 duty-difference engine + rule-aware schema 注册进 seo-public-ports registry（仍 DEV/STAGING 显式开启、生产 HOLD）；不支持则保持 estimate = null 并在文档中写明原因；随后送 PUBLIC ENGINE IMPLEMENTATION AUDIT",
+  "CI_STATUS": "本批提交后由托管 CI 复核；本地：apps/api tsc 0 / seo-* 23 文件 164 例全过",
   "WAITING_FOR_VERDICT": "none（SEO 侧无待裁决项；RSI staging smoke 仍等宿主非生产 DATABASE_URL）",
   "HOST_ACTION_REQUIRED": [
     "provider developer/partner account registration",
@@ -7397,7 +7397,7 @@
     "non-production staging DATABASE_URL + 确认该 shared 库是否承载真实客户数据（执行已授权的 staging migrate deploy 前需要）"
   ],
   "HOLD_EXTERNAL": true,
-  "LAST_HEARTBEAT_AT": "2026-10-05T09:10:00.000Z",
+  "LAST_HEARTBEAT_AT": "2026-10-05T09:20:00.000Z",
   "ci_red_streak_note": "RESOLVED: three contract/inventory fixes (tenant-trigger whitelist 1b15ab7, append-only whitelist cc13bde, model inventory 82->85 4f02282); 4f02282 is the first green run after the streak.",
   "ci_contract_fix_local_verification": {
     "at": "2026-10-04T08:51:16.135Z",
@@ -7645,12 +7645,12 @@
     "engine_revise_done": [
       "item5-dual-schema-orchestration",
       "item1-rule-aware-required-core",
+      "item1-eligibility-label-in-output",
+      "item2-evidence-count-only-in-output",
       "item3-duty-difference-paid-minus-due-core",
       "item4-no-artificial-range"
     ],
     "engine_revise_remaining": [
-      "item1-eligibility-label-in-output",
-      "item2-evidence-count-only-in-output",
       "item3-confirm-rule-supports-difference-then-register"
     ],
     "engine_schema_module": "apps/api/src/services/seo/seo-public-engine-schema.ts",
