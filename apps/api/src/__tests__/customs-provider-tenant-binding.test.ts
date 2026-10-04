@@ -1,0 +1,272 @@
+/** C18-6 单元验收：provider tenant / account lineage（server-derived 绑定 + 跨租户隔离 + fail-closed 负路径）。 */
+
+import { describe, expect, it } from 'vitest';
+
+import {
+  appendCustomsProviderTenantLineage,
+  bindCustomsProviderSubmissionRequest,
+  CUSTOMS_PROVIDER_TENANT_BINDING_BOUNDARY,
+  customsProviderTenantLineageDigest,
+  createInMemoryCustomsProviderTenantBindingResolver,
+  isJurisdictionCovered,
+  resolveCustomsProviderTenantBinding,
+  type CustomsProviderTenantBinding,
+  type CustomsProviderTenantBindingQuery,
+} from '../services/customs/customs-provider-tenant-binding';
+
+const DIGEST = 'a'.repeat(64);
+
+const binding = (overrides: Partial<CustomsProviderTenantBinding> = {}): CustomsProviderTenantBinding => ({
+  organizationId: 'org:acme',
+  providerId: 'provider:customs-a',
+  providerTenantRef: 'ptenant:acme-us',
+  providerAccountRef: 'paccount:broker-a',
+  relationship: 'CROSSCLAIM_SAAS',
+  jurisdictionScope: ['US'],
+  status: 'ACTIVE',
+  verifiedAt: '2026-10-04T05:00:00.000Z',
+  credentialReference: 'credref:secret-slot-1',
+  lineage: [{ event: 'BOUND', at: '2026-10-04T05:00:00.000Z', actorRef: 'actor:ops', note: null }],
+  ...overrides,
+});
+
+const query = (overrides: Partial<CustomsProviderTenantBindingQuery> = {}): CustomsProviderTenantBindingQuery => ({
+  organizationId: 'org:acme',
+  providerId: 'provider:customs-a',
+  jurisdiction: 'US',
+  principalRef: 'ior:acme',
+  ...overrides,
+});
+
+describe('C18-6 — provider tenant / account lineage（unit）', () => {
+  it('ACTIVE 绑定：返回 server-derived tenant/account ref，且声明零外写', () => {
+    const resolution = resolveCustomsProviderTenantBinding(binding(), query());
+    expect(resolution.ok).toBe(true);
+    expect(resolution.reasonCode).toBe('BINDING_RESOLVED');
+    expect(resolution.providerTenantRef).toBe('ptenant:acme-us');
+    expect(resolution.providerAccountRef).toBe('paccount:broker-a');
+    expect(resolution.relationship).toBe('CROSSCLAIM_SAAS');
+    expect(resolution.externalWritePerformed).toBe(false);
+    expect(resolution.filingSubmitted).toBe(false);
+    expect(resolution.transportEnabled).toBe(false);
+    expect(resolution.productionCredentials).toBe('ABSENT');
+    expect(resolution.nextAction).toBeNull();
+  });
+
+  it('无绑定 → BINDING_UNKNOWN 且不给出任何可执行动作', () => {
+    const resolution = resolveCustomsProviderTenantBinding(null, query());
+    expect(resolution.ok).toBe(false);
+    expect(resolution.reasonCode).toBe('BINDING_UNKNOWN');
+    expect(resolution.providerTenantRef).toBeNull();
+    expect(resolution.nextAction).toBeNull();
+  });
+
+  it('非 ACTIVE 绑定（PENDING / SUSPENDED / REVOKED）→ BINDING_NOT_ACTIVE', () => {
+    for (const status of ['PENDING_VERIFICATION', 'SUSPENDED', 'REVOKED'] as const) {
+      const resolution = resolveCustomsProviderTenantBinding(binding({ status }), query());
+      expect(resolution.ok).toBe(false);
+      expect(resolution.reasonCode).toBe('BINDING_NOT_ACTIVE');
+      expect(resolution.providerTenantRef).toBeNull();
+    }
+  });
+
+  it('provider 不匹配 → PROVIDER_MISMATCH（绝不返回该绑定的 ref）', () => {
+    const resolution = resolveCustomsProviderTenantBinding(
+      binding({ providerId: 'provider:customs-b' }),
+      query({ providerId: 'provider:customs-a' }),
+    );
+    expect(resolution.ok).toBe(false);
+    expect(resolution.reasonCode).toBe('PROVIDER_MISMATCH');
+    expect(resolution.providerTenantRef).toBeNull();
+  });
+
+  it('辖区覆盖：scope 精确匹配 / "*" 通配 / 不覆盖则拒绝', () => {
+    expect(isJurisdictionCovered(['US'], 'US')).toBe(true);
+    expect(isJurisdictionCovered(['*'], 'DE')).toBe(true);
+    expect(isJurisdictionCovered(['US'], 'DE')).toBe(false);
+
+    const denied = resolveCustomsProviderTenantBinding(binding(), query({ jurisdiction: 'DE' }));
+    expect(denied.ok).toBe(false);
+    expect(denied.reasonCode).toBe('JURISDICTION_NOT_COVERED');
+
+    const wildcard = resolveCustomsProviderTenantBinding(
+      binding({ jurisdictionScope: ['*'] }),
+      query({ jurisdiction: 'DE' }),
+    );
+    expect(wildcard.ok).toBe(true);
+  });
+
+  it('调用方传入 tenantRef：一致可放行，不一致必须 CALLER_TENANT_OVERRIDE_REJECTED', () => {
+    const same = resolveCustomsProviderTenantBinding(binding(), query(), 'ptenant:acme-us');
+    expect(same.ok).toBe(true);
+
+    const override = resolveCustomsProviderTenantBinding(binding(), query(), 'ptenant:attacker');
+    expect(override.ok).toBe(false);
+    expect(override.reasonCode).toBe('CALLER_TENANT_OVERRIDE_REJECTED');
+    expect(override.providerTenantRef).toBeNull();
+  });
+
+  it('tenant isolation：跨租户查询不可能命中别人的绑定', () => {
+    const isolation = resolveCustomsProviderTenantBinding(
+      binding({ organizationId: 'org:other' }),
+      query({ organizationId: 'org:acme' }),
+    );
+    expect(isolation.ok).toBe(false);
+    expect(isolation.reasonCode).toBe('TENANT_ISOLATION_VIOLATION');
+    expect(isolation.providerTenantRef).toBeNull();
+  });
+
+  it('resolver 端口：按 organizationId 过滤，且不接受违规 query', async () => {
+    const resolver = createInMemoryCustomsProviderTenantBindingResolver([
+      binding(),
+      binding({ organizationId: 'org:other', providerTenantRef: 'ptenant:other-us' }),
+    ]);
+
+    const mine = await resolver.resolve(query());
+    expect(mine.ok).toBe(true);
+    expect(mine.providerTenantRef).toBe('ptenant:acme-us');
+
+    const other = await resolver.resolve(query({ organizationId: 'org:other' }));
+    expect(other.providerTenantRef).toBe('ptenant:other-us');
+
+    const unknownOrg = await resolver.resolve(query({ organizationId: 'org:nobody' }));
+    expect(unknownOrg.ok).toBe(false);
+    expect(unknownOrg.reasonCode).toBe('BINDING_UNKNOWN');
+
+    const badQuery = await resolver.resolve(query({ jurisdiction: 'us' }));
+    expect(badQuery.ok).toBe(false);
+    expect(badQuery.reasonCode).toBe('INVALID_QUERY');
+  });
+
+  it('bindCustomsProviderSubmissionRequest：tenantRef 只能来自 server-derived 绑定', async () => {
+    const resolver = createInMemoryCustomsProviderTenantBindingResolver([binding()]);
+    const draft = {
+      principalRef: 'ior:acme',
+      jurisdiction: 'US',
+      remedy: 'DRAWBACK',
+      brokerRef: 'broker:a',
+      poaRef: 'evidence:poa',
+      signerRef: null,
+      filingAuthorized: true,
+      packageRef: 'package:1',
+      packageDigest: DIGEST,
+      evidenceRefs: [{ evidenceRef: 'evidence:entry', documentKind: 'ENTRY_SUMMARY', sha256: DIGEST }],
+      idempotencyKey: 'customs-submission:package:1',
+      requestedAt: '2026-10-04T05:00:00.000Z',
+    };
+
+    const bound = await bindCustomsProviderSubmissionRequest({
+      resolver,
+      organizationId: 'org:acme',
+      providerId: 'provider:customs-a',
+      entitlement: 'CROSSCLAIM_SAAS',
+      draft,
+    });
+    expect(bound.ok).toBe(true);
+    if (!bound.ok) return;
+    expect(bound.envelope.request.tenantRef).toBe('ptenant:acme-us');
+    expect(bound.envelope.transportEnabled).toBe(false);
+    expect(bound.envelope.externalWritePerformed).toBe(false);
+
+    const overridden = await bindCustomsProviderSubmissionRequest({
+      resolver,
+      organizationId: 'org:acme',
+      providerId: 'provider:customs-a',
+      entitlement: 'CROSSCLAIM_SAAS',
+      callerTenantRef: 'ptenant:attacker',
+      draft,
+    });
+    expect(overridden.ok).toBe(false);
+    if (overridden.ok) return;
+    expect(overridden.stage).toBe('BINDING');
+    expect(overridden.reasonCode).toBe('CALLER_TENANT_OVERRIDE_REJECTED');
+  });
+
+  it('绑定关系与所需 entitlement 不一致时不得构造提交请求（矩阵 #12 承载位）', async () => {
+    const resolver = createInMemoryCustomsProviderTenantBindingResolver([
+      binding({ relationship: 'BROKER_OF_RECORD' }),
+    ]);
+    const result = await bindCustomsProviderSubmissionRequest({
+      resolver,
+      organizationId: 'org:acme',
+      providerId: 'provider:customs-a',
+      entitlement: 'CROSSCLAIM_SAAS',
+      draft: {
+        principalRef: 'ior:acme',
+        jurisdiction: 'US',
+        remedy: 'DRAWBACK',
+        filingAuthorized: true,
+        packageRef: 'package:1',
+        packageDigest: DIGEST,
+        evidenceRefs: [{ evidenceRef: 'evidence:entry', documentKind: 'ENTRY_SUMMARY', sha256: DIGEST }],
+        idempotencyKey: 'customs-submission:package:1',
+        requestedAt: '2026-10-04T05:00:00.000Z',
+      },
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.stage).toBe('BINDING');
+  });
+
+  it('绑定不存在时：binding 阶段 fail-closed，且不产生 DTO 请求', async () => {
+    const resolver = createInMemoryCustomsProviderTenantBindingResolver([]);
+    const result = await bindCustomsProviderSubmissionRequest({
+      resolver,
+      organizationId: 'org:acme',
+      providerId: 'provider:customs-a',
+      entitlement: 'CROSSCLAIM_SAAS',
+      draft: {
+        principalRef: 'ior:acme',
+        jurisdiction: 'US',
+        remedy: 'DRAWBACK',
+        filingAuthorized: true,
+        packageRef: 'package:1',
+        packageDigest: DIGEST,
+        evidenceRefs: [{ evidenceRef: 'evidence:entry', documentKind: 'ENTRY_SUMMARY', sha256: DIGEST }],
+        idempotencyKey: 'customs-submission:package:1',
+        requestedAt: '2026-10-04T05:00:00.000Z',
+      },
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.stage).toBe('BINDING');
+    expect(result.reasonCode).toBe('BINDING_UNKNOWN');
+  });
+
+  it('lineage 只追加：新对象不影响旧账本，摘要随内容变化', () => {
+    const before = binding();
+    const after = appendCustomsProviderTenantLineage(before, {
+      event: 'REAUTH_REQUIRED',
+      at: '2026-10-04T06:00:00.000Z',
+      actorRef: 'actor:provider-webhook',
+      note: 'protest window reopened',
+    });
+
+    expect(before.lineage).toHaveLength(1);
+    expect(after.lineage).toHaveLength(2);
+    expect(after).not.toBe(before);
+    expect(customsProviderTenantLineageDigest(after.lineage)).not.toBe(
+      customsProviderTenantLineageDigest(before.lineage),
+    );
+
+    expect(() =>
+      appendCustomsProviderTenantLineage(before, {
+        event: 'NOT_AN_EVENT' as never,
+        at: '2026-10-04T06:00:00.000Z',
+        actorRef: 'actor:ops',
+        note: null,
+      }),
+    ).toThrow('INVALID_LINEAGE_EVENT');
+  });
+
+  it('边界自证：C18-6 离线层不读凭据、不写外部、不改 provider 账号', () => {
+    expect(CUSTOMS_PROVIDER_TENANT_BINDING_BOUNDARY).toEqual({
+      externalWritePerformed: false,
+      filingSubmitted: false,
+      transportEnabled: false,
+      providerAccountMutationPerformed: false,
+      credentialReadPerformed: false,
+      productionCredentials: 'ABSENT',
+    });
+  });
+});

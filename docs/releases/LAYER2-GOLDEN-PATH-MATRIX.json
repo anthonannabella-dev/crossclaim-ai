@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-04T06:03:25.879Z",
+  "generated_at": "2026-10-04T06:08:21.912Z",
   "rule": "COVERED 需存在命名证据文件；否则 GAP",
   "domains": [
     {
@@ -226,7 +226,7 @@
     {
       "id": "customs",
       "name": "Customs / Trade Recovery",
-      "domain_test_files": 42,
+      "domain_test_files": 43,
       "domain_web_files": 15,
       "cells": {
         "http": {
