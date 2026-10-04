@@ -25,29 +25,49 @@ function schemaEnumValues(name) {
     .filter((token) => token !== '' && !token.startsWith('//') && !token.startsWith('@@'));
 }
 
-function migrationEnumValues() {
-  const created = new Map();
-  const added = new Map();
-  for (const dir of fs.readdirSync(migrationsDir)) {
+/**
+ * 按 migration 目录顺序（Prisma 的权威顺序）重放 enum 变更，覆盖三种历史写法：
+ *   1) CREATE TYPE "X" AS ENUM (...)
+ *   2) ALTER TYPE "X" ADD VALUE 'V'
+ *   3) enum-recreate：CREATE TYPE "X_new" AS ENUM (...) + ALTER TYPE "X" RENAME TO "X_old" + ALTER TYPE "X_new" RENAME TO "X"
+ *      （架构方在历史里识别出的模式；上一版扫描器漏掉了它）
+ */
+function replayEnumHistory() {
+  const state = new Map(); // enumName -> string[]
+  const dirs = fs.readdirSync(migrationsDir).filter((d) => !d.startsWith('.')).sort();
+  for (const dir of dirs) {
     const file = path.join(migrationsDir, dir, 'migration.sql');
     if (!fs.existsSync(file)) continue;
     const sql = fs.readFileSync(file, 'utf8');
-    for (const m of sql.matchAll(/CREATE TYPE "([A-Za-z]+)" AS ENUM \(([^)]*)\)/g)) {
-      const values = m[2]
+    const parseValues = (raw) =>
+      raw
         .split(',')
         .map((v) => v.trim().replace(/^'/, '').replace(/'$/, ''))
         .filter((v) => v !== '');
-      created.set(m[1], values);
+
+    for (const m of sql.matchAll(/CREATE TYPE "([A-Za-z_]+)" AS ENUM \(([^)]*)\)/g)) {
+      state.set(m[1], parseValues(m[2]));
     }
-    for (const m of sql.matchAll(/ALTER TYPE "([A-Za-z]+)" ADD VALUE '([A-Z_]+)'/g)) {
-      if (!added.has(m[1])) added.set(m[1], new Set());
-      added.get(m[1]).add(m[2]);
+    for (const m of sql.matchAll(/ALTER TYPE "([A-Za-z_]+)" ADD VALUE (?:IF NOT EXISTS )?'([A-Z_]+)'/g)) {
+      const current = state.get(m[1]) ?? [];
+      if (!current.includes(m[2])) state.set(m[1], [...current, m[2]]);
+    }
+    // enum-recreate：把 "<base>_new" 的值提升为 "<base>"，并丢弃 "_old"
+    for (const m of sql.matchAll(/ALTER TYPE "([A-Za-z_]+)_new" RENAME TO "([A-Za-z_]+)"/g)) {
+      const from = state.get(m[1] + '_new');
+      if (from) state.set(m[2], from);
+    }
+    for (const m of sql.matchAll(/DROP TYPE "([A-Za-z_]+)_old"/g)) {
+      state.delete(m[1] + '_old');
+      state.delete(m[1] + '_new');
     }
   }
-  return { created, added };
+  return state;
 }
 
-const { created, added } = migrationEnumValues();
+const history = replayEnumHistory();
+const created = history;
+const added = new Map();
 const targets = ['Channel', 'RouteTarget'];
 let drift = false;
 

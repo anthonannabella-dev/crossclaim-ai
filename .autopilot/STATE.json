@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261004-16",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-04T07:31:26.179Z",
+  "updated_at": "2026-10-04T07:37:03.623Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -6161,7 +6161,7 @@
       "API.md / DOMAIN_MODEL.md / architecture-contract 计数 77 → 79"
     ]
   },
-  "next_execution_unit": "扩展 drift 扫描器覆盖 enum-recreate 模式 → 定稿向前修复（补 schema.prisma + 新 non-C18 migration）→ whole-schema ZERO",
+  "next_execution_unit": "定位剩余 42 行非 C18 差异 → 继续向前修复至 whole-schema ZERO；C18 侧并行 Prisma Store + PG E2E",
   "customer_ui_commercialization": {
     "at": "2026-10-04T01:21:55.949Z",
     "authorization": "MSG-20261004-01（CUSTOMER UI/UX COMMERCIALIZATION — IMPLEMENTATION AUTHORIZED）",
@@ -6440,7 +6440,7 @@
   "audit_session_url": "https://chatgpt.com/c/6ac1cdf0-1ec8-83ec-8036-0e66fcf5c6b9",
   "ci_note": "2026-10-04 复核：全部内部单元 CLOSED 后，GitHub Actions 对各 head 均有 workflow run（0c6bb0f/ f0abd05 / cb04232 / c6ce17c / 3fad4d4 / c897737 / fd7e4bf / 400fe6e / 8f32fce = success；5c6888e / f640f8c / 84c3f99 运行中）。架构方某次查询未见 runs 属查询口径差异（commit statuses vs workflow runs），此处记录 run id 以便复核。",
   "c18_layer3": {
-    "at": "2026-10-04T07:31:26.179Z",
+    "at": "2026-10-04T07:37:03.623Z",
     "main_line": "P0 = C18 REAL CUSTOMS PROVIDER INTEGRATION",
     "matrix_doc": "docs/releases/C18-PROVIDER-INTEGRATION-MATRIX.md",
     "completed": [
@@ -6758,11 +6758,18 @@
       "tool": "tools/verification/c18-schema-drift-report.mjs",
       "finding": "Channel: schema 有 PAYMENT_PROCESSOR 但迁移历史无 → 需新 migration ADD VALUE；RouteTarget 简单扫描未见差异；但架构方指出历史还通过 enum-recreate 模式改过 Channel/RouteTarget，扫描器需扩展以覆盖 CREATE TYPE ..._new + RENAME 模式后再定稿向前修复",
       "status": "DIAGNOSTIC_LANDED（尚未改 schema.prisma / 尚未新增 non-C18 migration）"
+    },
+    "non_c18_drift_reconciliation": {
+      "tool": "tools/verification/c18-schema-drift-report.mjs（已扩展覆盖 enum-recreate 与 ADD VALUE IF NOT EXISTS）",
+      "confirmed_delta": "Channel: 历史有 SHOPIFY/STRIPE/PAYPAL（已补回 schema.prisma）、schema 有 PAYMENT_PROCESSOR（已由新 migration 补）；RouteTarget: 历史有 PAYMENT_PROCESSOR（已补回 schema.prisma）",
+      "migration": "apps/api/prisma/migrations/20261004073500_non_c18_schema_history_reconciliation/migration.sql",
+      "whole_schema_diff": "63 → 42 行（未归零，剩余待下一轮定位）",
+      "status": "PARTIAL（未达 WHOLE_SCHEMA_DIFF_ZERO；shared/prod deploy 仍 HOLD）"
     }
   },
-  "last_heartbeat_at": "2026-10-04T07:31:26.179Z",
+  "last_heartbeat_at": "2026-10-04T07:37:03.623Z",
   "waiting_for_verdict": "none（FINAL-2 = PASS WITH REVISE 已归档）",
-  "last_completed_unit": "non-c18-drift-diagnostic-tool",
+  "last_completed_unit": "non-c18-drift-reconciliation（部分：63→42）",
   "hold_external": true,
   "track_c_seo_p3": {
     "at": "2026-10-04T07:13:02.014Z",
