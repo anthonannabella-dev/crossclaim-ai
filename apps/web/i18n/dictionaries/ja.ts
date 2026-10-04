@@ -170,6 +170,15 @@ const ja: Messages = {
     customsSubmissionHold: "通関の申告は人による通関業者・申告サービスが行います（Provider = HOLD）。",
   },
 
+  billingStatus: {
+    DRAFT: "下書き",
+    ISSUED: "発行済み",
+    PAID: "入金済み",
+    PARTIALLY_PAID: "一部入金",
+    VOID: "無効",
+    WRITTEN_OFF: "貸倒処理",
+  },
+
   nav: {
     dashboard: 'ダッシュボード',
     upload: '請求書をアップロード',
@@ -485,6 +494,7 @@ const ja: Messages = {
     upgradeAction: "アップグレード操作は現在：{state}（{reason}）",
     upgradeAvailable: "実行可",
     upgradeUnavailable: "実行不可",
+    advancedDetails: "詳細（技術項目）",
   },
   billingPage: {
     title: '請求（サービス手数料）',
@@ -505,6 +515,7 @@ const ja: Messages = {
     markPaid: '入金済みにする（PAID）',
     paymentReference: 'paymentReference（またはメモ）',
     note: 'note（任意）',
+    advancedDetails: "詳細（技術項目）",
   },
   casesPage: {
     title: 'ケース',

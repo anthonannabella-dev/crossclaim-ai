@@ -170,6 +170,15 @@ const es: Messages = {
     customsSubmissionHold: "La presentación aduanera la realiza un agente o servicio humano (Provider = HOLD).",
   },
 
+  billingStatus: {
+    DRAFT: "Borrador",
+    ISSUED: "Emitida",
+    PAID: "Cobrada",
+    PARTIALLY_PAID: "Cobrada parcialmente",
+    VOID: "Anulada",
+    WRITTEN_OFF: "Incobrable",
+  },
+
   nav: {
     dashboard: 'Panel',
     upload: 'Subir facturas',
@@ -485,6 +494,7 @@ const es: Messages = {
     upgradeAction: "La acción de mejora está actualmente: {state} ({reason})",
     upgradeAvailable: "disponible",
     upgradeUnavailable: "no disponible",
+    advancedDetails: "Detalle avanzado (campos técnicos)",
   },
   billingPage: {
     title: 'Facturación (tarifa de servicio)',
@@ -505,6 +515,7 @@ const es: Messages = {
     markPaid: 'Marcar como cobrada (PAID)',
     paymentReference: 'paymentReference (o una nota)',
     note: 'note (opcional)',
+    advancedDetails: "Detalle avanzado (campos técnicos)",
   },
   casesPage: {
     title: 'Expedientes',

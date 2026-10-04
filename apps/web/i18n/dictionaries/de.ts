@@ -170,6 +170,15 @@ const de: Messages = {
     customsSubmissionHold: "Die Zolleinreichung erfolgt durch einen menschlichen Broker oder Dienst (Provider = HOLD).",
   },
 
+  billingStatus: {
+    DRAFT: "Entwurf",
+    ISSUED: "Ausgestellt",
+    PAID: "Bezahlt",
+    PARTIALLY_PAID: "Teilweise bezahlt",
+    VOID: "Ungültig",
+    WRITTEN_OFF: "Abgeschrieben",
+  },
+
   nav: {
     dashboard: 'Dashboard',
     upload: 'Rechnungen hochladen',
@@ -485,6 +494,7 @@ const de: Messages = {
     upgradeAction: "Upgrade-Aktion derzeit: {state} ({reason})",
     upgradeAvailable: "ausführbar",
     upgradeUnavailable: "nicht ausführbar",
+    advancedDetails: "Erweiterte Details (Technikfelder)",
   },
   billingPage: {
     title: 'Abrechnung (Servicegebühr)',
@@ -505,6 +515,7 @@ const de: Messages = {
     markPaid: 'Als bezahlt markieren (PAID)',
     paymentReference: 'paymentReference (oder Notiz)',
     note: 'note (optional)',
+    advancedDetails: "Erweiterte Details (Technikfelder)",
   },
   casesPage: {
     title: 'Fälle',

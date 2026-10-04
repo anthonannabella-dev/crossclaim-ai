@@ -1,8 +1,12 @@
 import { cookies } from 'next/headers';
 import Link from 'next/link';
 
+import { formatDateTime } from '../../i18n/business-language';
+import { getServerLocale, getServerMessages } from '../../i18n/server';
 import BillingActions from '../components/billing-actions';
-import { getServerMessages } from '../../i18n/server';
+import InlineNotice from '../components/ui/inline-notice';
+import SectionCard from '../components/ui/section-card';
+import StatusBadge from '../components/ui/status-badge';
 
 const API_BASE = process.env.CROSSCLAIM_API_URL ?? 'http://127.0.0.1:3000';
 
@@ -37,14 +41,18 @@ async function apiGet<T>(path: string): Promise<{ ok: boolean; status: number; b
   return { ok: true, status: response.status, body: (await response.json()) as T };
 }
 
+/**
+ * UI-6b —— 账单与费用（客户视图）：服务费账单卡片 + 客户语言状态；
+ * 明确「当前不会自动扣款」；invoice 号 / reference / 原始状态码进「高级详情」。
+ */
 export default async function BillingPage() {
-  const t = await getServerMessages();
+  const [t, locale] = await Promise.all([getServerMessages(), getServerLocale()]);
   const me = await apiGet<Me>('/auth/me');
   if (!me.ok || !me.body) {
     return (
-      <div className="rounded-lg border bg-white p-6">
-        <h1 className="text-xl font-semibold">{t.common.loginRequired}</h1>
-        <Link href="/login" className="mt-4 inline-block rounded bg-slate-900 px-4 py-2 text-white">
+      <div className="rounded-xl border border-slate-200 bg-white p-6">
+        <h1 className="text-xl font-semibold text-slate-900">{t.common.loginRequired}</h1>
+        <Link href="/login" className="mt-4 inline-block rounded-lg bg-slate-900 px-4 py-2 text-sm text-white">
           {t.common.goToLogin}
         </Link>
       </div>
@@ -52,85 +60,101 @@ export default async function BillingPage() {
   }
 
   const billing = await apiGet<{ items: BillingItem[] }>('/billing');
+  const statusLabel = (code: string): string => {
+    const table = t.billingStatus as unknown as Record<string, string>;
+    return table[code] ?? code;
+  };
 
   return (
     <div className="space-y-6">
-      <section className="rounded-lg border bg-white p-6">
-        <h1 className="text-xl font-semibold">{t.billingPage.title}</h1>
-        <p className="mt-2 text-sm text-slate-600">{t.billingPage.description}</p>
+      <header>
+        <h1 className="text-2xl font-semibold text-slate-900">{t.billingPage.title}</h1>
+        <p className="mt-2 max-w-3xl text-sm text-slate-600">{t.billingPage.description}</p>
         <p className="mt-1 text-xs text-slate-500">
-          {t.common.role}：{me.body.role}（{t.billingPage.advanceHint}）
+          {t.common.role}
+          {': '}
+          {me.body.role}
+          {' · '}
+          {t.billingPage.advanceHint}
         </p>
-        <Link href="/" className="mt-4 inline-block text-sm text-slate-600 underline">
-          {t.common.backToDashboard}
-        </Link>
-      </section>
+      </header>
 
-      {billing.status === 403 ? (
-        <section className="rounded-lg border bg-white p-6 text-sm text-slate-600">
-          {t.billingPage.noAccess}
-        </section>
-      ) : billing.ok && billing.body ? (
-        <section className="rounded-lg border bg-white p-6">
-          <h2 className="text-lg font-medium">{t.billingPage.title}</h2>
-          {billing.body.items.length === 0 ? (
-            <p className="mt-3 text-sm text-slate-500">{t.billingPage.empty}</p>
+      <InlineNotice tone="warn" title={t.dashboardPage.paymentsHold}>
+        {t.moneyPage.realityNote}
+      </InlineNotice>
+
+      <SectionCard title={t.billingPage.title}>
+        {billing.status === 403 ? (
+          <p className="text-sm text-slate-600">{t.billingPage.noAccess}</p>
+        ) : billing.ok && billing.body ? (
+          billing.body.items.length === 0 ? (
+            <p className="text-sm text-slate-500">{t.billingPage.empty}</p>
           ) : (
-            <table className="mt-3 w-full text-sm">
-              <thead className="text-left text-slate-500">
-                <tr>
-                  <th className="py-2">{t.billingPage.colInvoiceNo}</th>
-                  <th>{t.billingPage.colCase}</th>
-                  <th>{t.billingPage.colStatus}</th>
-                  <th>{t.billingPage.colFee}</th>
-                  <th>{t.billingPage.colTotal}</th>
-                  <th>{t.billingPage.colPaid}</th>
-                  <th>{t.billingPage.colDates}</th>
-                  <th>{t.billingPage.colActions}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {billing.body.items.map((item) => (
-                  <tr key={item.id} className="border-t align-top">
-                    <td className="py-2 font-mono text-xs">{item.invoiceNo}</td>
-                    <td className="font-mono text-xs">{item.caseNo ?? '—'}</td>
-                    <td>{item.status}</td>
-                    <td>{item.serviceFee ?? '—'}</td>
-                    <td>
-                      {item.total} {item.currency}
-                    </td>
-                    <td>
-                      {item.paidAmount} {item.currency}
-                    </td>
-                    <td className="text-xs text-slate-500">
-                      {item.issuedAt ? new Date(item.issuedAt).toLocaleString('zh-CN') : '—'} /{' '}
-                      {item.paidAt ? new Date(item.paidAt).toLocaleString('zh-CN') : '—'}
-                    </td>
-                    <td>
-                      <BillingActions
-                        invoiceId={item.id}
-                        status={item.status}
-                        labels={{
-                          issue: t.billingPage.issue,
-                          markPaid: t.billingPage.markPaid,
-                          paymentReference: t.billingPage.paymentReference,
-                          note: t.billingPage.note,
-                          requestFailed: t.common.requestFailed,
-                          networkError: t.common.networkError,
-                        }}
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </section>
-      ) : (
-        <section className="rounded-lg border bg-white p-6 text-sm text-red-600">
-          {t.common.loadFailed}（HTTP {billing.status}）。
-        </section>
-      )}
+            <ul className="space-y-3">
+              {billing.body.items.map((item) => (
+                <li key={item.id} className="rounded-lg border border-slate-200 p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <p className="text-sm font-semibold text-slate-900">
+                        {item.total} {item.currency}
+                      </p>
+                      <p className="mt-0.5 text-xs text-slate-500">
+                        {t.billingPage.colCase}
+                        {': '}
+                        {item.caseNo ?? '—'}
+                      </p>
+                    </div>
+                    <StatusBadge tone={item.status === 'PAID' ? 'ok' : item.status === 'ISSUED' ? 'pending' : 'neutral'}>
+                      {statusLabel(item.status)}
+                    </StatusBadge>
+                  </div>
+                  <dl className="mt-3 grid grid-cols-2 gap-3 text-xs sm:grid-cols-3">
+                    <div>
+                      <dt className="text-slate-500">{t.billingPage.colFee}</dt>
+                      <dd className="mt-0.5 font-medium text-slate-800">{item.serviceFee ?? '—'}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-slate-500">{t.billingPage.colPaid}</dt>
+                      <dd className="mt-0.5 font-medium text-slate-800">{item.paidAmount}</dd>
+                    </div>
+                    <div>
+                      <dt className="text-slate-500">{t.billingPage.colDates}</dt>
+                      <dd className="mt-0.5 text-slate-700">
+                        {item.issuedAt ? formatDateTime(item.issuedAt, { locale }) : '—'}
+                      </dd>
+                    </div>
+                  </dl>
+                  <div className="mt-3">
+                    <BillingActions
+                      invoiceId={item.id}
+                      status={item.status}
+                      labels={{
+                        issue: t.billingPage.issue,
+                        markPaid: t.billingPage.markPaid,
+                        paymentReference: t.billingPage.paymentReference,
+                        note: t.billingPage.note,
+                        requestFailed: t.common.requestFailed,
+                        networkError: t.common.networkError,
+                      }}
+                    />
+                  </div>
+                  <details className="mt-3 text-[11px] text-slate-500">
+                    <summary className="cursor-pointer">{t.billingPage.advancedDetails}</summary>
+                    <ul className="mt-1 space-y-0.5 font-mono">
+                      <li>invoiceNo={item.invoiceNo}</li>
+                      <li>status={item.status}</li>
+                      <li>reference={item.reference ?? '-'}</li>
+                      <li>paidAt={item.paidAt ?? '-'}</li>
+                    </ul>
+                  </details>
+                </li>
+              ))}
+            </ul>
+          )
+        ) : (
+          <p className="text-sm text-red-600">{t.common.loadFailed}</p>
+        )}
+      </SectionCard>
     </div>
   );
 }

@@ -171,6 +171,15 @@ const zhCN = {
     customsSubmissionHold: "海关申报需人工报关代理或申报服务执行（Provider = HOLD）。",
   },
 
+  billingStatus: {
+    DRAFT: "草稿",
+    ISSUED: "已开票",
+    PAID: "已收款",
+    PARTIALLY_PAID: "部分收款",
+    VOID: "已作废",
+    WRITTEN_OFF: "已核销",
+  },
+
   nav: {
     dashboard: '工作台',
     upload: '上传账单',
@@ -484,6 +493,7 @@ const zhCN = {
     upgradeAction: "升级动作当前：{state}（{reason}）",
     upgradeAvailable: "可执行",
     upgradeUnavailable: "不可执行",
+    advancedDetails: "高级详情（工程字段）",
   },
   billingPage: {
     title: '账单（服务费）',
@@ -504,6 +514,7 @@ const zhCN = {
     markPaid: '标记已收款（PAID）',
     paymentReference: 'paymentReference（或填备注）',
     note: 'note（可选）',
+    advancedDetails: "高级详情（工程字段）",
   },
   casesPage: {
     title: '案件',

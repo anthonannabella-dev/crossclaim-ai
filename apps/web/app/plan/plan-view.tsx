@@ -3,6 +3,9 @@
 import { useEffect, useState } from 'react';
 
 import type { Messages } from '../../i18n/dictionaries/zh-CN';
+import InlineNotice from '../components/ui/inline-notice';
+import SectionCard from '../components/ui/section-card';
+import StatusBadge from '../components/ui/status-badge';
 
 interface Entitlement {
   key: string;
@@ -34,6 +37,10 @@ interface Response {
   upgrade: { available: boolean; reason: string; guidance: string };
 }
 
+/**
+ * UI-6b —— 套餐与解锁（客户视图）：权益改为卡片，金额/额度用客户语言；
+ * 内部状态码（usageState / paymentState / collectionState）与升级动作细节折叠进「高级详情」。
+ */
 export default function PlanView({ t }: { t: Messages }) {
   const copy = t.planPage;
   const [data, setData] = useState<Response | null>(null);
@@ -70,18 +77,32 @@ export default function PlanView({ t }: { t: Messages }) {
     };
   }, [copy, t]);
 
-  if (loading) return <p className="text-sm text-slate-600">{t.common.loading}</p>;
-  if (error) return <div className="rounded border border-slate-300 bg-slate-50 p-3 text-sm text-slate-700">{error}</div>;
+  if (loading) {
+    return (
+      <div className="space-y-3" aria-busy="true">
+        {[0, 1].map((index) => (
+          <div key={index} className="h-32 animate-pulse rounded-lg border border-slate-200 bg-slate-100" />
+        ))}
+        <span className="sr-only">{t.common.loading}</span>
+      </div>
+    );
+  }
+  if (error) {
+    return (
+      <InlineNotice tone="danger" title={t.dashboardPage.loadFailedTitle}>
+        {error}
+      </InlineNotice>
+    );
+  }
   if (!data) return <p className="text-sm text-slate-600">{copy.empty}</p>;
 
   return (
     <div className="space-y-4">
-      <section className="rounded border border-slate-200 p-3 text-sm">
-        <div className="font-medium">
-          {copy.currentPlan.replace('{plan}', data.plan)}
-          {data.planKnown ? '' : copy.unknownPlan}
-        </div>
-        <div className="mt-1 text-xs text-slate-600">
+      <SectionCard
+        title={copy.currentPlan.replace('{plan}', data.plan)}
+        subtitle={data.planKnown ? undefined : copy.unknownPlan}
+      >
+        <p className="text-sm text-slate-700">
           {copy.packageUnlockPrefix}
           <strong>{data.packageUnlock.label}</strong>
           {copy.packageUnlockDetail
@@ -90,50 +111,74 @@ export default function PlanView({ t }: { t: Messages }) {
             .replace('{payment}', data.packageUnlock.paymentCompleted ? copy.yes : copy.no)
             .replace('{paymentState}', data.packageUnlock.paymentState)
             .replace('{collectionState}', data.packageUnlock.collectionState)}
-        </div>
-      </section>
+        </p>
+      </SectionCard>
 
-      <section className="rounded border border-slate-200 p-3">
-        <h2 className="text-sm font-medium">{copy.capabilities}</h2>
-        <table className="mt-2 w-full border-collapse text-xs">
-          <thead>
-            <tr className="border-b text-left text-slate-600">
-              <th className="py-1">{copy.colCapability}</th>
-              <th className="py-1">{copy.colState}</th>
-              <th className="py-1 text-right">{copy.colLimit}</th>
-              <th className="py-1 text-right">{copy.colUsed}</th>
-              <th className="py-1 text-right">{copy.colRemaining}</th>
-              <th className="py-1">{copy.colReason}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.entitlements.map((item) => (
-              <tr key={item.key} className="border-b">
-                <td className="py-1">{item.key}</td>
-                <td className="py-1">{item.available ? copy.available : copy.unavailable}</td>
-                <td className="py-1 text-right">{item.limit ?? copy.unlimited}</td>
-                <td className="py-1 text-right">
-                  {item.usageState === 'TRACKED' ? item.used : copy.usageUntracked}
-                </td>
-                <td className="py-1 text-right">
-                  {item.usageState === 'TRACKED' ? item.remaining : '—'}
-                </td>
-                <td className="py-1 text-[11px] text-slate-600">{item.reason}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </section>
+      <InlineNotice tone="warn" title={t.dashboardPage.paymentsHold}>
+        {t.moneyPage.realityNote}
+      </InlineNotice>
 
-      <section className="rounded border border-amber-300 bg-amber-50 p-3 text-xs text-amber-900">
-        <div className="font-medium">{copy.upgradeTitle}</div>
-        <p className="mt-1">{data.upgrade.guidance}</p>
-        <p className="mt-1">
+      <SectionCard title={copy.capabilities}>
+        <ul className="grid gap-3 sm:grid-cols-2">
+          {data.entitlements.map((item) => (
+            <li key={item.key} className="rounded-lg border border-slate-200 p-4">
+              <div className="flex flex-wrap items-start justify-between gap-2">
+                <p className="text-sm font-medium text-slate-900">{item.key}</p>
+                <StatusBadge tone={item.available ? 'ok' : 'neutral'}>
+                  {item.available ? copy.available : copy.unavailable}
+                </StatusBadge>
+              </div>
+              <dl className="mt-3 grid grid-cols-3 gap-2 text-xs">
+                <div>
+                  <dt className="text-slate-500">{copy.colLimit}</dt>
+                  <dd className="mt-0.5 font-medium text-slate-800">{item.limit ?? copy.unlimited}</dd>
+                </div>
+                <div>
+                  <dt className="text-slate-500">{copy.colUsed}</dt>
+                  <dd className="mt-0.5 font-medium text-slate-800">
+                    {item.usageState === 'TRACKED' ? item.used : copy.usageUntracked}
+                  </dd>
+                </div>
+                <div>
+                  <dt className="text-slate-500">{copy.colRemaining}</dt>
+                  <dd className="mt-0.5 font-medium text-slate-800">
+                    {item.usageState === 'TRACKED' ? item.remaining : '—'}
+                  </dd>
+                </div>
+              </dl>
+              <p className="mt-2 text-xs text-slate-600">{item.reason}</p>
+              <details className="mt-2 text-[11px] text-slate-500">
+                <summary className="cursor-pointer">{copy.advancedDetails}</summary>
+                <ul className="mt-1 space-y-0.5 font-mono">
+                  <li>key={item.key}</li>
+                  <li>allowed={String(item.allowed)}</li>
+                  <li>usageState={item.usageState}</li>
+                  <li>upgradeRequired={String(item.upgradeRequired)}</li>
+                  <li>paymentRequired={String(item.paymentRequired)}</li>
+                  <li>entry={item.entry}</li>
+                </ul>
+              </details>
+            </li>
+          ))}
+        </ul>
+      </SectionCard>
+
+      <SectionCard title={copy.upgradeTitle}>
+        <p className="text-sm text-slate-700">{data.upgrade.guidance}</p>
+        <p className="mt-2 text-xs text-slate-600">
           {copy.upgradeAction
             .replace('{state}', data.upgrade.available ? copy.upgradeAvailable : copy.upgradeUnavailable)
             .replace('{reason}', data.upgrade.reason)}
         </p>
-      </section>
+        <details className="mt-2 text-[11px] text-slate-500">
+          <summary className="cursor-pointer">{copy.advancedDetails}</summary>
+          <ul className="mt-1 space-y-0.5 font-mono">
+            <li>upgradeAvailable={String(data.upgrade.available)}</li>
+            <li>packageUnlockState={data.packageUnlock.state}</li>
+            <li>packageUnlockReason={data.packageUnlock.reason}</li>
+          </ul>
+        </details>
+      </SectionCard>
     </div>
   );
 }

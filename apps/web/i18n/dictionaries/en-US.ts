@@ -170,6 +170,15 @@ const enUS: Messages = {
     customsSubmissionHold: "Customs filing must be performed by a human broker or filing service (Provider = HOLD).",
   },
 
+  billingStatus: {
+    DRAFT: "Draft",
+    ISSUED: "Issued",
+    PAID: "Paid",
+    PARTIALLY_PAID: "Partially paid",
+    VOID: "Void",
+    WRITTEN_OFF: "Written off",
+  },
+
   nav: {
     dashboard: 'Dashboard',
     upload: 'Upload invoices',
@@ -485,6 +494,7 @@ const enUS: Messages = {
     upgradeAction: "Upgrade action is currently: {state} ({reason})",
     upgradeAvailable: "executable",
     upgradeUnavailable: "not executable",
+    advancedDetails: "Advanced detail (engineering fields)",
   },
   billingPage: {
     title: 'Billing (service fee)',
@@ -505,6 +515,7 @@ const enUS: Messages = {
     markPaid: 'Mark as paid (PAID)',
     paymentReference: 'paymentReference (or add a note)',
     note: 'note (optional)',
+    advancedDetails: "Advanced detail (engineering fields)",
   },
   casesPage: {
     title: 'Cases',
