@@ -52,10 +52,10 @@ POST only · `Content-Type: application/json` · body ≤ 8 KiB（**解析 JSON 
 | `no-store` + same-origin（禁 `ACAO: *`）+ 不记 raw body/IP/UA + 2–3s 超时 | **已成策略常量** | 同上 `SEO_PUBLIC_RESPONSE_POLICY` |
 | handler 组合顺序（形状 → 限流 → 并发 → checker） | **已实现（未注册路由）** | `seo-public-handler.ts` · `c017728`（6 测试） |
 | 限流先于昂贵引擎调用 | **已实现并断言** | 同上（`rateLimitBeforeEngineCall: true`） |
-| 共享/边缘限流（生产） | **未做（部署侧）** | 需 Redis 或 CDN/网关全局限流 + 应用层第二层 |
+| 共享/边缘限流（生产） | **契约与门槛已强制（`7643fc0`）；实际搭建仍属部署侧** | `SeoSharedRateLimiter` 端口 + `assertProductionRateLimiter`（生产若只有进程内限流 → 拒绝；单机 canary 需 7 条前提全满足）；真实 Redis/CDN 限流尚未部署 |
 | HTTP 路由注册与部署配置 | **未做（刻意 HOLD）** | `PUBLIC_CHECKER_HTTP` / `PUBLIC_CHECKER_PRODUCTION` 仍 HOLD |
 
 ### 送 PUBLIC HTTP FINAL 时只需核的 10 项（对应上方状态）
 1. `publicInputSchema` ✅ 已实现；2. 未知 answer key 拒绝 ✅；3. numeric finite/range ✅；4. 8 KiB cap ✅；5. trusted-IP rate key ✅；6. **bounded/shared limiter —— 进程内有界已实现，共享限流未做**；7. timeout + concurrency ✅（策略与并发闸门）；8. no-store + same-origin ✅；9. engine output validation ✅；10. zero write/submission/payment regression ✅（边界自证 + 测试）。
 
-**结论**：10 项中 9 项已落地并有测试；剩余为部署侧（共享限流 + 路由接线 + CDN 超时），属于 PUBLIC HTTP FINAL 的接线范围。
+**结论（更新）**：10 项在**契约/代码层面全部落地并有测试**（含生产限流门槛 `7643fc0`）；剩余为**纯部署侧**——真正安装共享限流（Redis/CDN）、注册公开路由、配置 CDN 超时，属于 PUBLIC HTTP FINAL 的接线与运维范围。
