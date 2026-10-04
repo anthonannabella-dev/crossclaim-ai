@@ -1,6 +1,6 @@
 {
   "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。",
-  "updatedAt": "2026-10-05T00:26:00.000Z",
+  "updatedAt": "2026-10-05T00:31:00.000Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -1177,8 +1177,10 @@
       "title": "apps/web /recover/[slug] 路由骨架（默认 noindex，fail-closed，不接数据源、不注册 API）",
       "scope": "新增 app/recover/[slug]/page.tsx（骨架 + robots noindex + 数据源未裁定前 notFound()）与 app/recover/not-found.tsx（统一 404 视图，仅用 i18n key）；不注册 route handler / POST",
       "acceptance_criteria": "apps/web tsc exit 0；无 Checker POST；PUBLIC_CHECKER_HTTP 保持 HOLD；数据源裁决后接 facade",
-      "status": "IMPLEMENTED_PENDING_CI",
-      "implementation_head": "(this commit)"
+      "status": "CLOSED",
+      "implementation_head": "(this commit)",
+      "closed_at": "2026-10-05T00:31:00.000Z",
+      "close_evidence": "CI run 37211114167 (head 73a7de8) success"
     },
     {
       "id": "SEO-4-STAGE-10-static-projection-contract",
@@ -1187,8 +1189,10 @@
       "title": "seo-recover-static-v1 投影契约（白名单 + fail-closed 解析）",
       "scope": "buildRecoverStaticProjection / parseRecoverStaticProjection / isProjectionPageIndexable：版本化 schema、64-hex digest、白名单键、拒绝 tenant/organizationId/凭据/PII/白名单外键、schema 不识别或 locale 非法整份拒绝",
       "acceptance_criteria": "RECOVER_PROJECTION_SCHEMA_VERSIONED_AND_DIGESTED / RECOVER_PROJECTION_REJECTS_FORBIDDEN_FIELDS / RECOVER_PROJECTION_UNKNOWN_SCHEMA_FAILS_CLOSED / RECOVER_PROJECTION_INDEXABLE_REQUIRES_ALL_FLAGS 全绿；tsc 0",
-      "status": "IMPLEMENTED_PENDING_CI",
-      "implementation_head": "(this commit)"
+      "status": "CLOSED",
+      "implementation_head": "(this commit)",
+      "closed_at": "2026-10-05T00:31:00.000Z",
+      "close_evidence": "CI run 37211437452 (head fa0fb70) success"
     },
     {
       "id": "SEO-4-STAGE-11-static-projection-exporter",
@@ -1197,8 +1201,10 @@
       "title": "规则 → seo-recover-static-v1 投影导出器（自校验白名单）",
       "scope": "buildRecoverStaticProjectionFromRules：5 语言 × 规则生成白名单页面（只经 facade）；computeRecoverSourceDigest 顺序无关；导出前 parseRecoverStaticProjection 自校验，越界即抛错不落盘",
       "acceptance_criteria": "RECOVER_EXPORT_WHITELIST_SELF_VALIDATES / RECOVER_EXPORT_DIGEST_STABLE_AND_ORDER_INDEPENDENT / RECOVER_EXPORT_FAILS_CLOSED_WHEN_THIN 全绿；tsc 0",
-      "status": "IMPLEMENTED_PENDING_CI",
-      "implementation_head": "(this commit)"
+      "status": "CLOSED",
+      "implementation_head": "(this commit)",
+      "closed_at": "2026-10-05T00:31:00.000Z",
+      "close_evidence": "CI run 37211767219 (head 121628f) success"
     },
     {
       "id": "SEO-4-STAGE-12-rule-source-and-cli",
@@ -1207,8 +1213,10 @@
       "title": "RuleVersion → 导出规则映射（已验收 codec + gate）+ 构建期导出 CLI",
       "scope": "toExportRules：parseRecoveryRuleDefinition + isRecoveryRuleEffective + seoIndexabilityGate（basisKey 为空即 fail-closed noindex），解析失败的行跳过并记录；exportRecoverStaticPages CLI 读 RuleVersion → artifact 落盘（只读规则表 + 本地写文件）",
       "acceptance_criteria": "RECOVER_SOURCE_SKIPS_INVALID_ROWS / RECOVER_SOURCE_EMPTY_INPUT_EXPORTS_NOTHING 全绿；tsc 0；CLI 未在 shared/prod 执行",
-      "status": "IMPLEMENTED_PENDING_CI",
-      "implementation_head": "(this commit)"
+      "status": "CLOSED",
+      "implementation_head": "(this commit)",
+      "closed_at": "2026-10-05T00:31:00.000Z",
+      "close_evidence": "CI run 37212106794 (head 9691bb0) success"
     },
     {
       "id": "SEO-4-STAGE-13-web-ssg-from-projection",
@@ -1217,8 +1225,10 @@
       "title": "apps/web /recover/[slug] 由 projection 驱动的 SSG（fail-closed）",
       "scope": "js/lib/recover-projection.ts 构建期读取 artifact（MISSING/MALFORMED/UNKNOWN_SCHEMA/INVALID_DIGEST 全 fail-closed）；page.tsx dynamicParams=false + generateStaticParams + generateMetadata（robots 由 artifact 决定，canonical/hreflang 仅可索引时）+ 正文只渲染 artifact 内容与 i18n key",
       "acceptance_criteria": "apps/web tsc exit 0；artifact 缺失时 0 静态参数且请求走 404；无 Checker POST；PUBLIC_CHECKER_HTTP 仍 HOLD",
-      "status": "IMPLEMENTED_PENDING_CI",
-      "implementation_head": "(this commit)"
+      "status": "CLOSED",
+      "implementation_head": "(this commit)",
+      "closed_at": "2026-10-05T00:31:00.000Z",
+      "close_evidence": "CI run 37212378584 (head a23986b) success"
     },
     {
       "id": "SEO-4-STAGE-14-web-sitemap-robots",
@@ -1237,6 +1247,16 @@
       "title": "投影流水线：export 脚本 + web 构建守卫（默认不阻断 / 发布模式阻断）",
       "scope": "apps/api 增 export:recover-static 脚本；apps/web 增 scripts/check-recover-projection.mjs + check:recover-projection：缺投影默认打印 FAIL-CLOSED 退出 0，设 RECOVER_PROJECTION_REQUIRED=1 则退出 1",
       "acceptance_criteria": "缺投影时默认 exit 0 且输出 fail-closed 说明；RECOVER_PROJECTION_REQUIRED=1 时 exit 1（已实测）；不改变现有 build/CI 行为",
+      "status": "IMPLEMENTED_PENDING_CI",
+      "implementation_head": "(this commit)"
+    },
+    {
+      "id": "SEO-4-STAGE-16-web-wiring-contract-test",
+      "priority": "P1",
+      "source_backlog_id": "MSG-20261004-35（OPTION_B_REVISED）",
+      "title": "web 接线合同测试：fail-closed / 无 POST / robots-sitemap 一致",
+      "scope": "apps/api 测试读取 web 源码契约：dynamicParams=false + notFound()、sitemap 空数组、读取器四类失败、无 POST、robots 在代码行上不出现 disallow",
+      "acceptance_criteria": "三条合同用例全绿；tsc 0",
       "status": "IMPLEMENTED_PENDING_CI",
       "implementation_head": "(this commit)"
     }
