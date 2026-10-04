@@ -1,10 +1,11 @@
 /**
- * CA-5 REVISE D 真实端到端验收（MSG-20261004-08）：
- * login session → WORKFLOW_PATH → GET /customs-opportunities/:id/authorization-center → 真实只读 loader。
- * 覆盖：200 本租户 / 403 VIEWER / 401 未认证 / 404 不存在 / 404 跨租户 / 405 非 GET / 无授权事实时 fail-closed。
- * 注意：本测试**不注入** customsAuthorizationCenter，刻意验证 composition root 自动装配。
+ * CA-5 REVISE D（MSG-20261004-09）真实端到端验收：
+ * **真实 PostgreSQL 授权事实**（CustomsRightLineageFact / CustomsIorIdentityFact / CustomsBrokerPoaFact /
+ * RecoveryRoute）→ Prisma 只读 loader → GET /customs-opportunities/:id/authorization-center。
+ * 覆盖：200 本租户 / 403 VIEWER / 401 未认证 / 404 无 route 或无 lineage / 404 跨租户 / 405 非 GET。
  */
 
+import { randomUUID } from 'node:crypto';
 import type { AddressInfo } from 'node:net';
 
 import { PrismaClient } from '@prisma/client';
@@ -14,68 +15,37 @@ import { createLogger } from '../config/logger';
 import { createServer } from '../server';
 import { createAuditWriter, createPrismaAuditSink } from '../services/audit';
 import { hashPassword } from '../services/auth';
-import type { CustomsOpportunityTruth } from '../services/customs/customs-one-click-start';
 
 const prisma = new PrismaClient();
-const ORG = 'ca500000-0000-4000-8000-000000000001';
-const ORG2 = 'ca500000-0000-4000-8000-000000000009';
-const USER = 'ca500000-0000-4000-8000-000000000002';
-const VIEWER = 'ca500000-0000-4000-8000-000000000003';
-const OTHER = 'ca500000-0000-4000-8000-000000000004';
-const OPP = 'opp-ca5-e2e';
-const SALT = 'ca5-e2e-salt-0123456789';
+const ORG = 'ca510000-0000-4000-8000-000000000001';
+const ORG2 = 'ca510000-0000-4000-8000-000000000009';
+const USER = 'ca510000-0000-4000-8000-000000000002';
+const VIEWER = 'ca510000-0000-4000-8000-000000000003';
+const OTHER = 'ca510000-0000-4000-8000-000000000004';
+const OPP = 'ca5-e2e-opp';
+const OPP_NO_ROUTE = 'ca5-e2e-opp-no-route';
+const OPP_NO_LINEAGE = 'ca5-e2e-opp-no-lineage';
+const ENTRY = 'ENTRY-CA5-1';
+const SALT = 'ca5-final2-salt-0123456789';
 const FAST_PARAMS = { N: 1024, r: 8, p: 1, keyLength: 64 };
-const PASSWORD = 'ca5-e2e-pass-1';
+const PASSWORD = 'ca5-final2-pass-1';
 
 const audit = createAuditWriter(createPrismaAuditSink(prisma), { ipSalt: SALT });
 const log = createLogger({ level: 'error', sink: () => undefined });
 const PERMISSIVE_GUARD = { async assertAllowed() {} };
-
-const TRUTH: CustomsOpportunityTruth = {
-  opportunityId: OPP,
-  organizationId: ORG,
-  entryFactPresent: true,
-  evidenceBundleCompleteness: 'COMPLETE',
-  eligibilityDecision: 'ELIGIBLE',
-  recoverableAmounts: [{ currency: 'USD', amount: '18620.00' }],
-  remedyRoute: 'DRAWBACK',
-  filingDeadline: '2027-05-01',
-  recoveryPackageStatus: 'READY',
-  ruleVersion: 'us-customs-v1',
-};
-
-const OPPORTUNITIES = {
-  async load(organizationId: string, opportunityId: string) {
-    return organizationId === ORG && opportunityId === OPP ? TRUTH : null;
-  },
-};
-
-const READY_FLAGS = {
-  customsAgreementSigned: true,
-  importerOfRecordConfirmed: true,
-  claimantConfirmed: true,
-  recoveryRightConfirmed: true,
-  brokerConnected: true,
-  brokerAuthorizationValid: true,
-  filingPermissionValid: true,
-  providerCapabilityReady: true,
-};
+const digest = () => randomUUID().replace(/-/g, '').padEnd(64, '0').slice(0, 64);
 
 const PROVIDER = {
   providerId: 'broker-a',
   capabilities: { DATA_READ: true, FILING_CREATE: true, DOCUMENT_UPLOAD: true, STATUS_READ: true },
 };
 
-function withServer<T>(
-  deps: Record<string, unknown>,
-  run: (base: string) => Promise<T>,
-): Promise<T> {
+function withServer<T>(deps: Record<string, unknown>, run: (base: string) => Promise<T>): Promise<T> {
   const server = createServer({ prisma, log, audit, actionGuard: PERMISSIVE_GUARD, ...deps } as never);
   return new Promise<T>((resolve, reject) => {
     server.listen(0, '127.0.0.1', () => {
       const { port } = server.address() as AddressInfo;
-      const base = 'http://127.0.0.1:' + port;
-      run(base).then(
+      run('http://127.0.0.1:' + port).then(
         async (value) => {
           await new Promise<void>((done) => server.close(() => done()));
           resolve(value);
@@ -116,77 +86,168 @@ afterAll(async () => {
 
 beforeEach(async () => {
   await prisma.$executeRawUnsafe(
-    'TRUNCATE TABLE "AuditLog", "Session", "UserInvitation", "Membership", "User", "Organization" CASCADE;',
+    'TRUNCATE TABLE "AuditLog", "Session", "UserInvitation", "Membership", "User", "CustomsBrokerPoaFact", "CustomsRightLineageFact", "CustomsIorIdentityFact", "RecoveryRoute", "RecoveryOpportunity", "Organization" CASCADE;',
   );
-  await prisma.organization.create({ data: { id: ORG, name: 'CA5 E2E', slug: 'ca5-e2e' } });
-  await prisma.organization.create({ data: { id: ORG2, name: 'CA5 E2E OTHER', slug: 'ca5-e2e-other' } });
-  await prisma.user.create({
-    data: {
-      id: USER,
-      email: 'ca5-owner@example.com',
-      passwordHash: hashPassword(PASSWORD, FAST_PARAMS),
-      displayName: 'OWNER',
-      status: 'ACTIVE',
-      emailVerified: true,
-    },
-  });
-  await prisma.user.create({
-    data: {
-      id: VIEWER,
-      email: 'ca5-viewer@example.com',
-      passwordHash: hashPassword(PASSWORD, FAST_PARAMS),
-      displayName: 'VIEWER',
-      status: 'ACTIVE',
-      emailVerified: true,
-    },
-  });
+  await prisma.organization.create({ data: { id: ORG, name: 'CA5 FINAL E2E', slug: 'ca5-final2' } });
+  await prisma.organization.create({ data: { id: ORG2, name: 'CA5 FINAL OTHER', slug: 'ca5-final2-other' } });
+  for (const [id, email, name] of [
+    [USER, 'ca5f2-owner@example.com', 'OWNER'],
+    [VIEWER, 'ca5f2-viewer@example.com', 'VIEWER'],
+    [OTHER, 'ca5f2-other@example.com', 'OTHER'],
+  ] as const) {
+    await prisma.user.create({
+      data: {
+        id,
+        email,
+        passwordHash: hashPassword(PASSWORD, FAST_PARAMS),
+        displayName: name,
+        status: 'ACTIVE',
+        emailVerified: true,
+      },
+    });
+  }
   await prisma.membership.create({ data: { organizationId: ORG, userId: USER, role: 'OWNER' as never, isActive: true } });
   await prisma.membership.create({ data: { organizationId: ORG, userId: VIEWER, role: 'VIEWER' as never, isActive: true } });
-  await prisma.user.create({
+  await prisma.membership.create({ data: { organizationId: ORG2, userId: OTHER, role: 'OWNER' as never, isActive: true } });
+
+  await prisma.recoveryOpportunity.create({
     data: {
-      id: OTHER,
-      email: 'ca5-other@example.com',
-      passwordHash: hashPassword(PASSWORD, FAST_PARAMS),
-      displayName: 'OTHER OWNER',
-      status: 'ACTIVE',
-      emailVerified: true,
+      id: OPP,
+      organizationId: ORG,
+      domain: 'CUSTOMS' as never,
+      channel: 'CUSTOMS_BROKER' as never,
+      opportunityType: ENTRY,
+      title: 'Duty recovery candidate',
     },
   });
-  await prisma.membership.create({ data: { organizationId: ORG2, userId: OTHER, role: 'OWNER' as never, isActive: true } });
+  await prisma.recoveryOpportunity.create({
+    data: {
+      id: OPP_NO_ROUTE,
+      organizationId: ORG,
+      domain: 'CUSTOMS' as never,
+      channel: 'CUSTOMS_BROKER' as never,
+      opportunityType: 'ENTRY-NO-ROUTE',
+      title: 'No route decision yet',
+    },
+  });
+  await prisma.recoveryOpportunity.create({
+    data: {
+      id: OPP_NO_LINEAGE,
+      organizationId: ORG,
+      domain: 'CUSTOMS' as never,
+      channel: 'CUSTOMS_BROKER' as never,
+      opportunityType: 'ENTRY-NO-LINEAGE',
+      title: 'No right-lineage fact yet',
+    },
+  });
+  await prisma.recoveryRoute.create({
+    data: { id: randomUUID(), organizationId: ORG, opportunityId: OPP, target: 'CUSTOMS_BROKER' as never },
+  });
+  await prisma.recoveryRoute.create({
+    data: { id: randomUUID(), organizationId: ORG, opportunityId: OPP_NO_LINEAGE, target: 'CUSTOMS_BROKER' as never },
+  });
+  await prisma.customsIorIdentityFact.create({
+    data: {
+      id: randomUUID(),
+      organizationId: ORG,
+      jurisdiction: 'US',
+      principalType: 'IMPORTER_OF_RECORD' as never,
+      importerOfRecordRef: 'ior:acme',
+      legalEntityRef: 'entity:acme',
+      verificationStatus: 'VERIFIED' as never,
+      verificationSource: 'CUSTOMER_DOCUMENT' as never,
+      verifiedAt: new Date('2026-09-01T00:00:00.000Z'),
+      contentDigest: digest(),
+      sourceReference: 'doc:acme',
+      observedAt: new Date('2026-09-01T00:00:00.000Z'),
+    },
+  });
+  await prisma.customsRightLineageFact.create({
+    data: {
+      id: randomUUID(),
+      organizationId: ORG,
+      entryReference: ENTRY,
+      importerOfRecordRef: 'ior:acme',
+      claimantRef: 'entity:acme',
+      remedyRoute: 'DRAWBACK',
+      iorRightsForRemedy: 'CONFIRMED',
+      claimantRightsForRemedy: 'CONFIRMED',
+      filingAuthorized: true,
+      outcome: 'COMPLETE' as never,
+      reasonCodes: [] as never,
+      evidenceKinds: [] as never,
+      contentDigest: digest(),
+      observedAt: new Date('2026-09-02T00:00:00.000Z'),
+    },
+  });
+  await prisma.customsBrokerPoaFact.create({
+    data: {
+      id: randomUUID(),
+      organizationId: ORG,
+      principalRef: 'ior:acme',
+      brokerRef: 'broker:a',
+      jurisdiction: 'US',
+      authorizationType: 'CBP_FORM_5291' as never,
+      scope: ['DRAWBACK'] as never,
+      effectiveAt: new Date('2026-09-01T00:00:00.000Z'),
+      expiresAt: null,
+      evidenceArtifactRef: 'evidence:poa',
+      verifiedAt: new Date('2026-09-01T00:00:00.000Z'),
+      revokedAt: null,
+      supersededAt: null,
+      lifecycleKey: 'ca5-final2-poa',
+      verificationStatus: 'VERIFIED' as never,
+      verificationSource: 'BROKER_ATTESTATION' as never,
+      contentDigest: digest(),
+      observedAt: new Date('2026-09-02T00:00:00.000Z'),
+    },
+  });
 });
 
-describe('CA-5 — authorization center HTTP E2E（真实 PostgreSQL + composition root）', () => {
+describe('CA-5 — authorization center real-fact E2E（真实 PostgreSQL 授权事实）', () => {
   it('未认证 → 401', async () => {
-    await withServer({ customsOpportunities: OPPORTUNITIES, customsAuthorization: READY_FLAGS, customsFilingProvider: PROVIDER }, async (base) => {
-      const res = await getCenter(base, OPP);
-      expect(res.status).toBe(401);
+    await withServer({ customsFilingProvider: PROVIDER }, async (base) => {
+      expect((await getCenter(base, OPP)).status).toBe(401);
     });
   });
 
-  it('VIEWER → 403（复用既有海关只读角色，不新造权限）', async () => {
-    await withServer({ customsOpportunities: OPPORTUNITIES, customsAuthorization: READY_FLAGS, customsFilingProvider: PROVIDER }, async (base) => {
-      const cookie = await login(base, 'ca5-viewer@example.com');
+  it('VIEWER → 403', async () => {
+    await withServer({ customsFilingProvider: PROVIDER }, async (base) => {
+      const cookie = await login(base, 'ca5f2-viewer@example.com');
       const res = await getCenter(base, OPP, cookie);
       expect(res.status).toBe(403);
       expect(((await res.json()) as { reason: string }).reason).toBe('ROLE_NOT_PERMITTED');
     });
   });
 
-  it('OWNER 本租户 → 200：六项清单 + 只读边界（composition root 自动装配 loader）', async () => {
-    await withServer({ customsOpportunities: OPPORTUNITIES, customsAuthorization: READY_FLAGS, customsFilingProvider: PROVIDER }, async (base) => {
-      const cookie = await login(base, 'ca5-owner@example.com');
+  it('OWNER 本租户真实事实 → 200：POA VERIFIED 使 ④ 已确认，退款账户保守显示需要处理', async () => {
+    await withServer({ customsFilingProvider: PROVIDER }, async (base) => {
+      const cookie = await login(base, 'ca5f2-owner@example.com');
       const res = await getCenter(base, OPP, cookie);
       expect(res.status).toBe(200);
       const text = await res.text();
       const body = JSON.parse(text) as {
-        opportunityId: string;
-        authorizationCenter: { items: unknown[]; nextAction: string; filingSubmitted: boolean };
+        authorizationCenter: {
+          route: string;
+          items: Array<{ key: string; state: string; action: string | null }>;
+          stages: { READY_TO_FILE: boolean };
+          nextAction: string | null;
+          filingSubmitted: boolean;
+        };
         boundary: Record<string, unknown>;
       };
-      expect(body.opportunityId).toBe(OPP);
-      expect(body.authorizationCenter.items).toHaveLength(6);
-      expect(body.authorizationCenter.nextAction).toBe('START_RECOVERY');
-      expect(body.authorizationCenter.filingSubmitted).toBe(false);
+      const center = body.authorizationCenter;
+      expect(center.route).toBe('BROKER_FILED');
+      expect(center.items).toHaveLength(6);
+      const byKey = (key: string) => center.items.find((entry) => entry.key === key);
+      // 真实 POA 事实 → ④ 已确认（不是 NEEDS_ACTION）
+      expect(byKey('BROKER_AUTHORIZATION')?.state).toBe('CONFIRMED');
+      // 无已核验退款账户事实 → ⑤ 需要处理（绝不默认 true）
+      expect(byKey('REFUND_ACCOUNT')?.state).toBe('NEEDS_ACTION');
+      expect(byKey('REFUND_ACCOUNT')?.action).toBe('CONFIRM_REFUND_ACCOUNT');
+      // 仍缺企业身份确认事实（无服务端来源）→ ① 需要处理
+      expect(byKey('ENTERPRISE_IDENTITY')?.state).toBe('NEEDS_ACTION');
+      expect(center.filingSubmitted).toBe(false);
       expect(body.boundary).toEqual({
         readOnly: true,
         filingSubmitted: false,
@@ -200,46 +261,31 @@ describe('CA-5 — authorization center HTTP E2E（真实 PostgreSQL + compositi
     });
   });
 
-  it('未知 opportunity → 404；跨租户 opportunity → 404（不泄露存在性）', async () => {
-    await withServer({ customsOpportunities: OPPORTUNITIES, customsAuthorization: READY_FLAGS, customsFilingProvider: PROVIDER }, async (base) => {
-      const cookie = await login(base, 'ca5-owner@example.com');
-      const missing = await getCenter(base, 'opp-missing', cookie);
-      expect(missing.status).toBe(404);
-      // 同 id 但另一租户的会话：loader 收到该会话的 organizationId → null（anti-enumeration）
-      const otherCookie = await login(base, 'ca5-other@example.com');
-      const crossTenant = await getCenter(base, OPP, otherCookie);
-      expect(crossTenant.status).toBe(404);
+  it('无 route 决策 / 无 right-lineage 事实 → 404（fail-closed，不伪造）', async () => {
+    await withServer({ customsFilingProvider: PROVIDER }, async (base) => {
+      const cookie = await login(base, 'ca5f2-owner@example.com');
+      expect((await getCenter(base, OPP_NO_ROUTE, cookie)).status).toBe(404);
+      expect((await getCenter(base, OPP_NO_LINEAGE, cookie)).status).toBe(404);
+      expect((await getCenter(base, 'unknown-opp', cookie)).status).toBe(404);
+    });
+  });
+
+  it('跨租户（另一租户会话请求同一 opportunity）→ 404', async () => {
+    await withServer({ customsFilingProvider: PROVIDER }, async (base) => {
+      const otherCookie = await login(base, 'ca5f2-other@example.com');
+      expect((await getCenter(base, OPP, otherCookie)).status).toBe(404);
     });
   });
 
   it('非 GET → 405', async () => {
-    await withServer({ customsOpportunities: OPPORTUNITIES, customsAuthorization: READY_FLAGS, customsFilingProvider: PROVIDER }, async (base) => {
-      const cookie = await login(base, 'ca5-owner@example.com');
+    await withServer({ customsFilingProvider: PROVIDER }, async (base) => {
+      const cookie = await login(base, 'ca5f2-owner@example.com');
       const res = await fetch(base + '/customs-opportunities/' + OPP + '/authorization-center', {
         method: 'POST',
         headers: { 'content-type': 'application/json', cookie },
         body: '{}',
       });
       expect(res.status).toBe(405);
-    });
-  });
-
-  it('无授权事实（fail-closed）：不得显示已确认 / 可提交', async () => {
-    await withServer({ customsOpportunities: OPPORTUNITIES }, async (base) => {
-      const cookie = await login(base, 'ca5-owner@example.com');
-      const res = await getCenter(base, OPP, cookie);
-      expect(res.status).toBe(200);
-      const body = (await res.json()) as {
-        authorizationCenter: {
-          items: Array<{ key: string; state: string; action: string | null }>;
-          nextAction: string | null;
-          stages: { READY_TO_FILE: boolean };
-        };
-      };
-      const broker = body.authorizationCenter.items.find((entry) => entry.key === 'BROKER_AUTHORIZATION');
-      expect(broker?.state).toBe('NEEDS_ACTION');
-      expect(body.authorizationCenter.stages.READY_TO_FILE).toBe(false);
-      expect(body.authorizationCenter.nextAction).not.toBe('START_RECOVERY');
     });
   });
 });

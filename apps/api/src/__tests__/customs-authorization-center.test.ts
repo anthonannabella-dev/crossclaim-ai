@@ -137,6 +137,20 @@ describe('CA-5 — customs authorization center projection（unit）', () => {
     expect(item(value, 'SUBMISSION_READINESS').blockerCodes).toContain('FILING_PROVIDER_NOT_READY');
   });
 
+  it('REVISE B2：SELF_FILED 缺 filing permission 归 ③ 签署权限（不是等待 provider）', () => {
+    const value = center({ filingPermissionValid: false }, 'SELF_FILED', selfFiledPolicy);
+    const signer = item(value, 'SIGNER_AUTHORITY');
+    expect(signer.state).toBe('NEEDS_ACTION');
+    expect(signer.action).toBe('CONFIRM_SIGNING_AUTHORITY');
+    expect(signer.blockerCodes).toContain('FILING_PERMISSION_REQUIRED');
+    expect(item(value, 'SUBMISSION_READINESS').state).toBe('IN_PREPARATION');
+    expect(value.nextAction).toBe('CONFIRM_SIGNING_AUTHORITY');
+    // BROKER_FILED 仍归 provider/authority 侧
+    const brokerFiled = center({ filingPermissionValid: false });
+    expect(item(brokerFiled, 'SUBMISSION_READINESS').state).toBe('WAITING_AUTHORIZATION');
+    expect(item(brokerFiled, 'SIGNER_AUTHORITY').blockerCodes).not.toContain('FILING_PERMISSION_REQUIRED');
+  });
+
   it('REVISE C：⑥ 可提交时主 CTA 是 START_RECOVERY，退款账户不成为隐含前置', () => {
     const value = center({ refundDestinationVerified: false });
     expect(item(value, 'REFUND_ACCOUNT').state).toBe('NEEDS_ACTION');

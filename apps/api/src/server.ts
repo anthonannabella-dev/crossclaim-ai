@@ -16,7 +16,7 @@
 import http from 'node:http';
 import { PrismaClient } from '@prisma/client';
 import { createPrismaCustomsEntryFactStore } from './services/customs/customs-entry-fact-store';
-import { createCustomsAuthorizationCenterLoader } from './services/customs/customs-authorization-center-loader';
+import { createPrismaCustomsAuthorizationCenterLoader } from './services/customs/customs-authorization-center-loader';
 import { createPrismaQualificationAssessmentStore } from './services/commercial/recovery-qualification-store';
 import { createPrismaPs04StateLoaders } from './services/independent-site/ps04-state-loaders';
 import { loadEnv } from './config/env';
@@ -337,18 +337,14 @@ export function createServer(deps: ServerDeps): http.Server {
         ...(deps.carrierClaimPackages ? { carrierClaimPackages: deps.carrierClaimPackages } : {}),
 ...(deps.customsOpportunities ? { customsOpportunities: deps.customsOpportunities } : {}),
 ...(deps.customsAuthorization ? { customsAuthorization: deps.customsAuthorization } : {}),
-      // CA-5 REVISE D：composition root 自动装配只读授权中心 loader（有 opportunity truth 时）
+      // CA-5 FINAL（MSG-20261004-09）：真实 Prisma tenant-scoped loader（缺省即装配，不再用进程级授权 flags）
       ...(deps.customsAuthorizationCenter
         ? { customsAuthorizationCenter: deps.customsAuthorizationCenter }
-        : deps.customsOpportunities
-          ? {
-              customsAuthorizationCenter: createCustomsAuthorizationCenterLoader({
-                opportunities: deps.customsOpportunities,
-                ...(deps.customsAuthorization ? { authorization: deps.customsAuthorization } : {}),
-                ...(deps.customsFilingProvider !== undefined ? { provider: deps.customsFilingProvider } : {}),
-              }),
-            }
-          : {}),
+        : {
+            customsAuthorizationCenter: createPrismaCustomsAuthorizationCenterLoader(prisma, {
+              ...(deps.customsFilingProvider !== undefined ? { provider: deps.customsFilingProvider } : {}),
+            }),
+          }),
       ...(deps.customsAuthorizationCenter ? { customsAuthorizationCenter: deps.customsAuthorizationCenter } : {}),
 ...(deps.customsFilingProvider !== undefined ? { customsFilingProvider: deps.customsFilingProvider } : {}),
 ...(deps.customsFilingStatus ? { customsFilingStatus: deps.customsFilingStatus } : {}),
@@ -576,6 +572,8 @@ export function createDefaultReadDeps(prisma: PrismaClient) {
       loadLatest: (args: { organizationId: string; platformAccountId: string }) => qualificationStore.loadLatestAssessment(args),
     },
     independentSiteState: createPrismaPs04StateLoaders(prisma),
+    // CA-5：授权中心只读 loader（tenant-scoped 事实派生；无 route/lineage 事实即 404 fail-closed）
+    customsAuthorizationCenter: createPrismaCustomsAuthorizationCenterLoader(prisma),
   };
 }
 

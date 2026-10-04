@@ -212,6 +212,8 @@ const ja: Messages = {
   },
 
   customsAuthorization: {
+    statePendingPolicy: '権限要件を確認中',
+    waitingNote: '権限・政策の確認待ちです。自動で提出されたり課金されたりすることはありません。',
     title: '関税還付の権限',
     subtitle:
       '不足している権限だけをお願いします。同じ代理店委任状を案件ごとに再度署名する必要はありません。',

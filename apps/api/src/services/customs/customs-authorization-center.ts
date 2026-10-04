@@ -1,18 +1,7 @@
 /**
  * CA-5 — CUSTOMS AUTHORIZATION CENTER（客户视角授权中心，MSG-20261004-02 §9）
- * ---------------------------------------------------------------
- * 纯投影：把 CA-1 的三阶段 route-aware 判定翻译成客户能读懂的六项清单。
- * 客户默认只看到「已确认 / 需要处理 / 本路线不需要 / 待判定 / 准备中 / 可以提交 / 等待授权」，
- * 工程 blocker code（IOR_NOT_CONFIRMED / BROKER_POA_REQUIRED / providerWrite / lineage …）只出现在 advancedBlockerCodes。
- *
- * MSG-20261004-08 REVISE（CA-5 = REVISE）：
- *   A = ③/④ 的 required 必须来自 CA-1 **实际应用的 policy**（readiness.requirements），不得按 route 二次推断；
- *       policyApplied=false 时不得声称 NOT_REQUIRED，改记 PENDING_POLICY。
- *   B = 消除 filing readiness 死区：FILING_PERMISSION_REQUIRED 归 provider/authority 侧 → WAITING_AUTHORIZATION；
- *       剩余 blocker 全是 provider/authority 侧时一律 WAITING_AUTHORIZATION（不再出现 IN_PREPARATION + nextAction=null）。
- *   C = ⑥ 已 READY_TO_SUBMIT 时主 CTA 必须是 START_RECOVERY；退款账户（⑤）是独立 refund-stage 待办，不反向阻塞 filing。
- *
- * 本模块不做任何授权获取、不写库、不外写：真实 filing / provider transport 继续 HOLD。
+ * MSG-20261004-08 REVISE A/B/C + MSG-20261004-09 REVISE B2（route-aware filing permission ownership）。
+ * 纯投影：只消费 CA-1 的 server-derived snapshot，不做任何 policy 二次推断。
  */
 
 import type {
@@ -32,17 +21,14 @@ export const CUSTOMS_AUTHORIZATION_CENTER_ITEM_KEYS = [
 
 export type CustomsAuthorizationCenterItemKey = (typeof CUSTOMS_AUTHORIZATION_CENTER_ITEM_KEYS)[number];
 
-/** ①–⑤ 的状态词表（客户可见）。PENDING_POLICY = 该路线授权要求尚未由 policy 确定（保守显示，不得声称"不需要"）。 */
 export type CustomsAuthorizationChecklistState =
   | 'CONFIRMED'
   | 'NEEDS_ACTION'
   | 'NOT_REQUIRED'
   | 'PENDING_POLICY';
 
-/** ⑥ 提交准备的状态词表（客户可见）。 */
 export type CustomsAuthorizationSubmitState = 'IN_PREPARATION' | 'READY_TO_SUBMIT' | 'WAITING_AUTHORIZATION';
 
-/** 下一步动作：只描述动作，不承诺自动提交。 */
 export type CustomsAuthorizationNextAction =
   | 'CONFIRM_ENTERPRISE_IDENTITY'
   | 'SUPPLY_DOCUMENTS'
@@ -54,9 +40,7 @@ export type CustomsAuthorizationNextAction =
 export interface CustomsAuthorizationCenterItem {
   key: CustomsAuthorizationCenterItemKey;
   state: CustomsAuthorizationChecklistState | CustomsAuthorizationSubmitState;
-  /** 该项目的下一步动作（客户视角）；无需动作时为 null。 */
   action: CustomsAuthorizationNextAction | null;
-  /** 工程 blocker code（仅供高级详情）。 */
   blockerCodes: readonly CustomsStageBlocker[];
 }
 
@@ -65,16 +49,9 @@ export interface CustomsAuthorizationCenter {
   remedy: string;
   jurisdiction: string | null;
   items: readonly CustomsAuthorizationCenterItem[];
-  /** 客户此刻应该做的事：⑥ 已可提交 → START_RECOVERY；否则按 ①→⑤ 取第一个需要动作的项目。 */
   nextAction: CustomsAuthorizationNextAction | null;
-  stages: {
-    READY_TO_PREPARE: boolean;
-    READY_TO_FILE: boolean;
-    READY_TO_RECEIVE_REFUND: boolean;
-  };
-  /** 工程 blocker code 全集（只给高级详情，不进入客户默认视图）。 */
+  stages: { READY_TO_PREPARE: boolean; READY_TO_FILE: boolean; READY_TO_RECEIVE_REFUND: boolean };
   advancedBlockerCodes: readonly CustomsStageBlocker[];
-  /** 外部动作边界：本投影永远不表示已提交。 */
   filingSubmitted: false;
   externalWritePerformed: false;
   transportEnabled: false;
@@ -105,28 +82,35 @@ const BROKER_BLOCKERS: readonly CustomsStageBlocker[] = [
   'AUTHORIZATION_SOURCE_NOT_ALLOWED',
 ];
 
-/**
- * REVISE B：这些 blocker 由 provider / authority / 系统侧完成，客户无法在六项清单里"补一份"，
- * 因此统一定义为「等待授权 / 代理提交」，而不是停在"准备中"。
- * FILING_PERMISSION_REQUIRED = 合法申报权限（provider/Broker/监管侧取得），不是客户自填项。
- */
+/** 与 route 无关的 provider/authority 侧 blocker。 */
 export const CUSTOMS_AUTHORIZATION_PROVIDER_SIDE_BLOCKERS: readonly CustomsStageBlocker[] = [
   'FILING_PROVIDER_NOT_READY',
   'PROVIDER_POLICY_REQUIRED',
   'FILING_PERMISSION_REQUIRED',
 ];
 
+/**
+ * REVISE B2：FILING_PERMISSION_REQUIRED 的 ownership 是 route-aware 的。
+ *   BROKER_FILED / SERVICE_PROVIDER_TRANSMIT → provider / broker / authority 侧（客户等待即可）
+ *   SELF_FILED → 客户/其授权签署人自行申报 → 归 ③ 签署权限（不是 ④ Broker Authorization）
+ */
+export function customsAuthorizationFilingPermissionOwnership(
+  route: CustomsFilingRoute,
+): 'PROVIDER' | 'CUSTOMER_SIGNER' {
+  return route === 'SELF_FILED' ? 'CUSTOMER_SIGNER' : 'PROVIDER';
+}
+
 function pick(blockers: readonly CustomsStageBlocker[], wanted: readonly CustomsStageBlocker[]): CustomsStageBlocker[] {
   return blockers.filter((code) => wanted.includes(code));
 }
 
-/** 六项清单投影（只消费 CA-1 server-derived snapshot，不做任何 policy 二次推断）。 */
 export function buildCustomsAuthorizationCenter(input: {
   readiness: CustomsRouteAuthorizationReadiness;
 }): CustomsAuthorizationCenter {
   const { readiness } = input;
   const requirements = readiness.requirements;
   const policyResolved = readiness.policyApplied && requirements !== null;
+  const filingPermissionOwnership = customsAuthorizationFilingPermissionOwnership(readiness.route);
 
   const identityCodes = pick(readiness.prepare.blockers, IDENTITY_BLOCKERS);
   const recoveryRightCodes = pick(readiness.prepare.blockers, ['RECOVERY_RIGHT_NOT_CONFIRMED']);
@@ -137,8 +121,11 @@ export function buildCustomsAuthorizationCenter(input: {
     'REFUND_DESTINATION_NOT_VERIFIED',
     'ACE_ENROLLMENT_NOT_READY',
   ]);
+  // REVISE B2：SELF_FILED 缺 filing permission 时归 ③（客户签署权限），不是 provider 侧
+  const selfFiledPermissionCodes =
+    filingPermissionOwnership === 'CUSTOMER_SIGNER' ? pick(readiness.file.blockers, ['FILING_PERMISSION_REQUIRED']) : [];
 
-  const authItemState = (
+  const authItem = (
     required: boolean,
     codes: CustomsStageBlocker[],
   ): { state: CustomsAuthorizationChecklistState; action: CustomsAuthorizationNextAction | null; codes: CustomsStageBlocker[] } => {
@@ -148,8 +135,8 @@ export function buildCustomsAuthorizationCenter(input: {
     return { state: 'NEEDS_ACTION', action: null, codes };
   };
 
-  const signer = authItemState(requirements?.authorizedSignerRequired ?? false, signerCodes);
-  const broker = authItemState(requirements?.brokerPoaRequired ?? false, brokerCodes);
+  const signer = authItem(requirements?.authorizedSignerRequired ?? false, [...signerCodes, ...selfFiledPermissionCodes]);
+  const broker = authItem(requirements?.brokerPoaRequired ?? false, brokerCodes);
 
   const items: CustomsAuthorizationCenterItem[] = [
     {
@@ -184,13 +171,12 @@ export function buildCustomsAuthorizationCenter(input: {
     },
   ];
 
-  // REVISE B：客户侧 blocker（身份 / 追回权 / route 授权）与 provider 侧 blocker 分开判定
-  const providerSide = readiness.file.blockers.filter((code) =>
-    CUSTOMS_AUTHORIZATION_PROVIDER_SIDE_BLOCKERS.includes(code),
+  const providerSide = readiness.file.blockers.filter(
+    (code) =>
+      CUSTOMS_AUTHORIZATION_PROVIDER_SIDE_BLOCKERS.includes(code) &&
+      !(code === 'FILING_PERMISSION_REQUIRED' && filingPermissionOwnership === 'CUSTOMER_SIGNER'),
   );
-  const customerSide = readiness.file.blockers.filter(
-    (code) => !CUSTOMS_AUTHORIZATION_PROVIDER_SIDE_BLOCKERS.includes(code),
-  );
+  const customerSide = readiness.file.blockers.filter((code) => !providerSide.includes(code));
   const submitState: CustomsAuthorizationSubmitState = readiness.file.ready
     ? 'READY_TO_SUBMIT'
     : customerSide.length === 0 && providerSide.length > 0
@@ -204,7 +190,6 @@ export function buildCustomsAuthorizationCenter(input: {
     blockerCodes: providerSide,
   });
 
-  // REVISE C：⑥ 可提交时，主 CTA 就是 START_RECOVERY（退款账户属于独立 refund-stage 待办，不反向阻塞 filing）
   const firstActionable = items.find((item) => item.key !== 'SUBMISSION_READINESS' && item.action !== null);
   const nextAction: CustomsAuthorizationNextAction | null =
     submitState === 'READY_TO_SUBMIT' ? 'START_RECOVERY' : firstActionable?.action ?? null;

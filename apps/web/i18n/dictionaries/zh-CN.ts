@@ -213,6 +213,8 @@ const zhCN = {
   },
 
   customsAuthorization: {
+    statePendingPolicy: '授权要求待确认',
+    waitingNote: '正在等待授权 / 政策确认；系统不会自动提交，也不会自动扣款。',
     title: '关税追回授权',
     subtitle: '系统只要求你补齐缺失的授权；同一份代理授权不需要逐单重复签署。',
     selectLabel: '选择关税机会',

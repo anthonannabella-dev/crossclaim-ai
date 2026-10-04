@@ -212,6 +212,8 @@ const enUS: Messages = {
   },
 
   customsAuthorization: {
+    statePendingPolicy: 'Authorization requirements pending',
+    waitingNote: 'Waiting for authorization or policy confirmation; nothing is submitted to customs or charged automatically.',
     title: 'Duty recovery authorization',
     subtitle:
       'The system only asks for the authorizations that are missing; the same broker authorization does not need to be signed again for every file.',

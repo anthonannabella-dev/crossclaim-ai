@@ -79,6 +79,7 @@ export default async function CustomsAuthorizationPage({
     IN_PREPARATION: t.customsAuthorization.stateInPreparation,
     READY_TO_SUBMIT: t.customsAuthorization.stateReadyToSubmit,
     WAITING_AUTHORIZATION: t.customsAuthorization.stateWaitingAuthorization,
+    PENDING_POLICY: t.customsAuthorization.statePendingPolicy,
   };
   const stateTones: Record<string, BadgeTone> = {
     CONFIRMED: 'ok',
@@ -87,6 +88,7 @@ export default async function CustomsAuthorizationPage({
     IN_PREPARATION: 'pending',
     READY_TO_SUBMIT: 'ok',
     WAITING_AUTHORIZATION: 'warn',
+    PENDING_POLICY: 'pending',
   };
   const actionLabels: Record<string, string> = {
     CONFIRM_ENTERPRISE_IDENTITY: t.customsAuthorization.actionConfirmEnterpriseIdentity,
@@ -149,7 +151,15 @@ export default async function CustomsAuthorizationPage({
             <>
               <SectionCard
                 title={t.customsAuthorization.nextStepLabel}
-                subtitle={center.nextAction === null ? t.customsAuthorization.noActionNeeded : undefined}
+                subtitle={
+                  center.nextAction === null
+                    ? center.items.some(
+                        (entry) => entry.state === 'WAITING_AUTHORIZATION' || entry.state === 'PENDING_POLICY',
+                      )
+                      ? t.customsAuthorization.waitingNote
+                      : t.customsAuthorization.noActionNeeded
+                    : undefined
+                }
                 actions={
                   center.nextAction === null ? null : (
                     <Link

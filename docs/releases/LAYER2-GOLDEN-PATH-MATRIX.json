@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-04T04:05:49.171Z",
+  "generated_at": "2026-10-04T04:13:43.960Z",
   "rule": "COVERED 需存在命名证据文件；否则 GAP",
   "domains": [
     {
@@ -330,10 +330,10 @@
         "amount_ledger": {
           "status": "COVERED",
           "evidence": [
-            "apps/api/src/__tests__/customs-authorization-center-e2e-db.test.ts",
             "apps/api/src/__tests__/customs-authorization-center.test.ts",
             "apps/api/src/__tests__/customs-claim-ready-http.test.ts",
-            "apps/api/src/__tests__/customs-claim-ready-package.test.ts"
+            "apps/api/src/__tests__/customs-claim-ready-package.test.ts",
+            "apps/api/src/__tests__/customs-classification-discrepancy.test.ts"
           ]
         }
       }

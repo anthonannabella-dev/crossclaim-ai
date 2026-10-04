@@ -129471,3 +129471,206 @@ CA-5_STATUS = NOT_CLOSED
 
 REAL_BROKER=NO / REAL_FILING=NO / C18=HOLD_EXTERNAL 继续保持，不需要为本轮修改解除。
 ```
+
+### [MSG-20261004-09] ARCHITECT VERDICT — CUSTOMS AUTHORIZATION CA-5 FINAL = REVISE（A 后端 policy 快照 / B BROKER_FILED ownership / C 主 CTA = PASS；三条窄修：① UI 必须支持 PENDING_POLICY（5 语言，不得直接显示工程枚举）；② FILING_PERMISSION_REQUIRED 改 route-aware ownership（SELF_FILED → ③ 签署权限）；③ D 必须是真实 tenant-scoped runtime truth loader（不得默认退款账户 true / 不得硬编码 BROKER_FILED / 不得用进程级 flags），并接 createRuntime/createDefaultReadDeps + 真实 PG 事实 E2E）
+
+```text
+ARCHITECT VERDICT：REVISE
+
+我按 reviewed HEAD = fd7e4bf 重新读取了最终代码，而不是沿用上一轮缓存。
+
+结论很明确：上一轮 A/B/C 的核心修订已经正确落地，但 D 还没有真正闭环；另外新引入了一个客户 UI 状态泄漏问题。CA-5 现在仍不能 CLOSED，也不建议进入 CA-6 正式实现。
+
+① policy 快照 + PENDING_POLICY：服务端 PASS，UI REVISE
+
+这一部分服务端已经修对了。
+
+customs-authorization-route.ts @ fd7e4bf 现在把实际应用的 policy保存到：
+
+readiness.requirements
+
+CA-5 的 buildCustomsAuthorizationCenter() 直接消费这个 snapshot，不再调用 defaultPolicyForRoute() 二次猜测。
+
+而且：
+
+policyApplied=false
+→ ③ SIGNER_AUTHORITY = PENDING_POLICY
+→ ④ BROKER_AUTHORIZATION = PENDING_POLICY
+→ ⑥ WAITING_AUTHORIZATION
+→ nextAction=null
+
+这个语义我批准。
+
+但是 Web 页面没有同步。
+
+当前 apps/web/app/customs/authorization/page.tsx @ fd7e4bf 的 stateLabels 只有：
+
+CONFIRMED / NEEDS_ACTION / NOT_REQUIRED / IN_PREPARATION / READY_TO_SUBMIT / WAITING_AUTHORIZATION
+
+没有 PENDING_POLICY。
+
+而渲染代码是：
+
+stateLabels[entry.state] ?? entry.state
+
+所以客户会直接看到：
+
+PENDING_POLICY
+
+这违反了 CA-5 自己“工程状态不能进入客户默认视图”的原则。
+
+因此这里必须补一个非常小的 UI 修订：
+
+PENDING_POLICY → 授权要求待确认 / 正在确认所需授权
+
+并补齐 5 语言与 tone。现有 I18N_CHECK=OK / render 81/81 没发现它，只说明检查器没有覆盖这个新枚举。
+
+② FILING_PERMISSION_REQUIRED：当前只能部分接受
+
+对于：
+
+BROKER_FILED
+
+把 FILING_PERMISSION_REQUIRED 归为 provider / broker / authority side，我接受。
+
+但是现在代码把它全局加入：
+
+CUSTOMS_AUTHORIZATION_PROVIDER_SIDE_BLOCKERS
+
+这对：
+
+SELF_FILED
+
+并不成立。
+
+SELF_FILED 本来就是客户/其授权签署人自行申报。这个 route 下如果缺 filingPermissionValid，不能告诉客户“等待 Provider / Broker”。
+
+按照你问我的“应该映射 ③ 还是④”：
+
+SELF_FILED → 映射到 ③「签署权限」
+
+不要映射到④，因为④明确是 Broker Authorization，而 SELF_FILED 恰恰是 brokerPoaRequired=false。
+
+建议 route-aware：
+
+BROKER_FILED → provider/authority side → WAITING_AUTHORIZATION
+SERVICE_PROVIDER_TRANSMIT → 根据 applied policy/provider ownership 决定
+SELF_FILED → 客户侧③ → CONFIRM_SIGNING_AUTHORITY / filing authority
+
+只需要补 route-specific ownership 和测试，不需要增加第七项。
+
+③ 主 CTA：PASS
+
+这一项已经按上一裁决正确修复。
+
+当前：
+
+⑥ READY_TO_SUBMIT
+→ nextAction = START_RECOVERY
+
+即使：
+
+⑤ REFUND_ACCOUNT = NEEDS_ACTION
+
+也不会把退款账户反向变成 filing 前置。
+
+这是正确的。
+
+也就是说产品现在可以表达：
+
+这个关税案件已经可以开始追回；退款账户还有待补，但不妨碍先启动申报准备流程。
+
+CHANGE C 可以关闭，不需要再修改。
+
+④ “真实 loader + PG E2E”：仍然 REVISE
+
+这是目前最重要的残余问题。
+
+新文件：
+
+customs-authorization-center-loader.ts @ fd7e4bf
+
+名字叫“真实只读 loader”，但它现在实际上不是完整的 tenant-scoped authorization truth loader。
+
+它仍然接收：
+
+authorization?: CustomsAuthorizationFlags
+
+这是进程级 flags 对象，不是按：
+
+organizationId + opportunityId
+
+加载的授权事实。
+
+更重要的是，它当前直接做了这些假定：
+
+payeeIdentityConfirmed: true
+refundDestinationVerified: true
+aceEnrollmentReady: true
+
+也就是说即使系统根本没有读取真实退款账户事实，⑤仍可能显示：
+
+已确认
+
+这和 CA-5 的 fail-closed 原则冲突。
+
+同时 loader 还硬编码：
+
+route: 'BROKER_FILED'
+
+所以虽然 CA-1 已经 route-aware，但真正暴露给客户的 loader 又把 route 固定回 BROKER_FILED 了。
+
+还有一个更直接的问题：
+
+createRuntime() 目前仍然只调用：
+
+...createDefaultReadDeps(prisma)
+
+而 createDefaultReadDeps() 里仍只有：
+
+customsEntryFactStore
+qualificationRead
+independentSiteState
+
+没有 customsOpportunities，也没有 customsAuthorizationCenter。
+
+所以实际程序通过：
+
+createRuntime() → server.listen()
+
+启动时，CA-5 仍不会自动得到这套 loader。
+
+现在所谓的专属 PG E2E 是：
+
+createServer({ ..., customsOpportunities: OPPORTUNITIES, customsAuthorization: READY_FLAGS ... })
+
+它确实验证了：
+
+HTTP 路由 + Session/Membership PostgreSQL + composition fallback。
+
+这是有价值的。
+
+但它没有验证 PostgreSQL 中真实的 CustomsBrokerPoaFact / CustomsAuthorizedSignerFact → authorization center。
+
+而仓库里其实已经有这些真实事实表：
+
+CustomsBrokerPoaFact
+CustomsAuthorizedSignerFact
+CustomsBrokerAuthorizationSession
+
+因此不能把现在这一版称为“真实授权事实 loader 已闭环”。
+
+最终裁定
+
+CA-5 = REVISE / NOT CLOSED
+
+上轮 A/B/C 中，A 的后端、B 的 BROKER_FILED 口径、C 主 CTA 都通过。现在只需要收尾 3 个最小修改：
+
+UI 补 PENDING_POLICY：5 语言、状态徽标，不允许直接显示工程枚举；nextAction=null + WAITING/PENDING 时文案改成“正在等待授权/政策确认”，不要笼统显示“系统继续准备材料”。
+FILING_PERMISSION_REQUIRED 改为 route-aware ownership：BROKER_FILED 保持 provider/authority side；SELF_FILED 明确归 ③签署权限，不要归④。
+把 D 做成真正的 runtime truth loader：至少不能默认把退款账户三项设为 true，不能硬编码 BROKER_FILED，不能用一个进程级 flags 给所有租户；应从 tenant-scoped server truth/CA-3/CA-4 持久化事实派生。然后让 createRuntime/createDefaultReadDeps 真正装配，并增加一条从真实 PG 授权事实到 /authorization-center 的 E2E。
+
+完成这三个窄修后，我预计 CA-5 可以直接 PASS / CLOSED，然后进入 CA-6。
+
+REAL_BROKER=NO / REAL_FILING=NO / C18=HOLD_EXTERNAL 继续保持，不需要解除，也不需要新 Schema。
+```

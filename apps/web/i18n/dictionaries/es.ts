@@ -212,6 +212,8 @@ const es: Messages = {
   },
 
   customsAuthorization: {
+    statePendingPolicy: 'Requisitos de autorización pendientes',
+    waitingNote: 'Esperando autorización o confirmación de política; nada se presenta ni se cobra automáticamente.',
     title: 'Autorización para la recuperación de aranceles',
     subtitle:
       'El sistema solo solicita las autorizaciones que faltan; no hace falta firmar el mismo poder del agente para cada expediente.',

@@ -1841,3 +1841,9 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - B：FILING_PERMISSION_REQUIRED 归 provider/authority 侧 → WAITING_AUTHORIZATION（消除"准备中+无下一步"死区）。
 - C：⑥ READY_TO_SUBMIT → nextAction = START_RECOVERY（退款账户为独立 refund-stage 待办）。
 - D：新增 customs-authorization-center-loader（真实只读）+ server composition root 自动装配 + CA-5 专属 PostgreSQL HTTP E2E 6/6。
+
+## 2026-10-04T04:13:43.418Z — CA-5 FINAL REVISE（三条窄修）落地
+- 裁决 MSG-20261004-09 = REVISE（A 后端/B BROKER_FILED/C 主 CTA 已 PASS）。
+- ① UI 支持 PENDING_POLICY（5 语言 604 键；等待文案改为"等待授权/政策确认"）。
+- ② FILING_PERMISSION_REQUIRED route-aware：SELF_FILED → ③ 签署权限。
+- ③ 真实 Prisma tenant-scoped loader（RecoveryRoute + RightLineage + IOR + POA/Signer facts；退款账户恒保守 false；未知 route/lineage → 404）并接入 createDefaultReadDeps；真实 PG 事实 E2E 6/6。

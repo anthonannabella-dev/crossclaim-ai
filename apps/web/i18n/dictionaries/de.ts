@@ -212,6 +212,8 @@ const de: Messages = {
   },
 
   customsAuthorization: {
+    statePendingPolicy: 'Berechtigungsanforderungen offen',
+    waitingNote: 'Warten auf Berechtigung oder Richtlinienbestätigung; es wird nichts automatisch eingereicht oder abgebucht.',
     title: 'Berechtigungen für die Zollrückerstattung',
     subtitle:
       'Das System fragt nur nach fehlenden Berechtigungen. Dieselbe Broker-Vollmacht muss nicht für jede Einfuhr erneut unterschrieben werden.',
