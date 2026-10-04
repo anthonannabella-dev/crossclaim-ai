@@ -1,6 +1,6 @@
 {
   "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。",
-  "updatedAt": "2026-10-04T14:46:00.000Z",
+  "updatedAt": "2026-10-04T14:50:00.000Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -1143,8 +1143,10 @@
       "title": "buildRecoverPagePlan：单 slug 完整页面计划（判定+metadata+JSON-LD+正文+sitemap）",
       "scope": "全链路 indexable = 路由 OK AND gate 通过 AND 正文不薄；任一条不满足 → 全链路 noindex 且 canonical/JSON-LD/sitemap 一致降级；不可用页面不渲染正文与内链",
       "acceptance_criteria": "RECOVER_FACADE_NOINDEX_DEFAULT / RECOVER_FACADE_INDEXABLE_REQUIRES_ALL_GATES 全绿；tsc 0",
-      "status": "IMPLEMENTED_PENDING_CI",
-      "implementation_head": "(this commit)"
+      "status": "CLOSED",
+      "implementation_head": "(this commit)",
+      "closed_at": "2026-10-04T14:50:00.000Z",
+      "close_evidence": "CI run 37209880901 (head 7b10a8f) success"
     },
     {
       "id": "SEO-4-STAGE-8-recover-i18n-keys",
@@ -1155,6 +1157,16 @@
       "acceptance_criteria": "tools/i18n/check-i18n.mjs → I18N_CHECK=OK locales=5 customerHardcodes=0；apps/web tsc exit 0",
       "status": "IMPLEMENTED_PENDING_CI",
       "implementation_head": "(this commit)"
+    },
+    {
+      "id": "SEO-4-BOUNDARY-recover-page-datasource",
+      "priority": "P0",
+      "source_backlog_id": "SEO-4-RECOVER-WIRING-PLAN.md 取数边界",
+      "title": "/recover 页面数据源边界（送审：B 构建期静态 vs A 公开只读 GET）",
+      "scope": "determine how apps/web obtains the effective-rule read-only projection without creating an unaudited public surface",
+      "acceptance_criteria": "裁决落地后按裁定实现；PUBLIC_CHECKER_HTTP 保持 HOLD 直至 SEO-3 PUBLIC HTTP FINAL",
+      "status": "WAITING_FOR_VERDICT",
+      "implementation_head": "765231e"
     }
   ],
   "authorization_note": "MSG-20261003-133 Q3：dispatcher 获授权自动扩 backlog 并执行安全单元（契约/已批准 D1–D3 Schema/append-only 持久化/deterministic normalization/qualification·evidence·package/测试/文档/fixture/只读 HTTP/只读 reconciliation projection）；遇到未批准 Schema、EXTERNAL_WRITE Action Guard、真实 adapter/webhook、submission、真实资金语义写入、生产 credential、收费时必须停该分支并重新送审。 HOST 2026-10-04（CONTINUOUS EXECUTION + CUSTOMS AUTHORIZATION + CHATGPT AUDIT LOOP）：UI-6…UI-8 与 CA-2…CA-6 已登记为可执行队列；Schema/Security/Authorization 边界项自动进入 ChatGPT Audit Loop（AUDIT-BRIDGE.md，不新建协议）。"

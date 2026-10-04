@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-10-04T14:46:17.065Z",
-  "acceptance_head": "9e5790f",
+  "generated_at": "2026-10-04T14:50:28.849Z",
+  "acceptance_head": "765231e",
   "protocol": "docs/releases/FINAL-ACCEPTANCE-PROTOCOL.md",
   "areas": [
     {
@@ -183,7 +183,8 @@
     "SEO-4-STAGE-5-recover-content-internal-links",
     "SEO-4-STAGE-6-seo-contract-tests",
     "SEO-4-STAGE-7-recover-page-plan-facade",
-    "SEO-4-STAGE-8-recover-i18n-keys"
+    "SEO-4-STAGE-8-recover-i18n-keys",
+    "SEO-4-BOUNDARY-recover-page-datasource"
   ],
   "host_action_required": [
     "provider developer/partner account registration",

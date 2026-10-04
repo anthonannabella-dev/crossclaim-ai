@@ -1,8 +1,8 @@
 # FINAL ACCEPTANCE REPORT（自动生成，请勿手改）
 
-- 生成时间：2026-10-04T14:46:17.982Z
-- 单一权威矩阵：`docs/releases/ACCEPTANCE-MATRIX.json` @9e5790f
-- acceptance HEAD：`9e5790f`
+- 生成时间：2026-10-04T14:50:29.641Z
+- 单一权威矩阵：`docs/releases/ACCEPTANCE-MATRIX.json` @765231e
+- acceptance HEAD：`765231e`
 - 协议：`docs/releases/FINAL-ACCEPTANCE-PROTOCOL.md`（三层验收；禁止自证）
 - 状态：CODE_COMPLETE=NO · INTEGRATION_COMPLETE=NO · REAL_VALIDATION_COMPLETE=NO · PRODUCTION_READY=NO
 - INTERNAL_READY=NO；AUTONOMOUS_INTERNAL_WORK=RUNNING
@@ -60,23 +60,24 @@
 - SEO-4-STAGE-6-seo-contract-tests
 - SEO-4-STAGE-7-recover-page-plan-facade
 - SEO-4-STAGE-8-recover-i18n-keys
+- SEO-4-BOUNDARY-recover-page-datasource
 
 ### Layer 1 未通过检查（final-status 计算器输出；UNVERIFIED = 未绑定当前 HEAD 的实证）
 
-- L1-01_safe_continuation_queue_zero → false（open backlog items: 24）
-- L1-02_no_open_internal_items → false（open internal: c18-1-provider-integration-matrix,c18-2-provider-dto-schema,c18-3-sandbox-filing-provider,c18-4-provider-webhook-verification,c18-5-provider-idempotency-reconciliation,c18-6-provider-tenant-account-lineage,c18-7-provider-authorization-lifecycle,c18-8-provider-negative-path-e2e,seo-1-gap-audit-and-page-matrix,seo-2-recovery-rule-definition-v1,seo-3-public-checker-calculator,seo-4-recover-routes-and-locales,seo-5-technical-seo,seo-6-indexability-gate,seo-7-analytics-event-contract,seo-8-seo-contract-tests,SEO-4-STAGE-1-recover-route-skeleton,SEO-4-STAGE-2-recover-metadata,SEO-4-STAGE-3-recover-jsonld,SEO-4-STAGE-4-recover-sitemap-robots,SEO-4-STAGE-5-recover-content-internal-links,SEO-4-STAGE-6-seo-contract-tests,SEO-4-STAGE-7-recover-page-plan-facade,SEO-4-STAGE-8-recover-i18n-keys）
+- L1-01_safe_continuation_queue_zero → false（open backlog items: 25）
+- L1-02_no_open_internal_items → false（open internal: c18-1-provider-integration-matrix,c18-2-provider-dto-schema,c18-3-sandbox-filing-provider,c18-4-provider-webhook-verification,c18-5-provider-idempotency-reconciliation,c18-6-provider-tenant-account-lineage,c18-7-provider-authorization-lifecycle,c18-8-provider-negative-path-e2e,seo-1-gap-audit-and-page-matrix,seo-2-recovery-rule-definition-v1,seo-3-public-checker-calculator,seo-4-recover-routes-and-locales,seo-5-technical-seo,seo-6-indexability-gate,seo-7-analytics-event-contract,seo-8-seo-contract-tests,SEO-4-STAGE-1-recover-route-skeleton,SEO-4-STAGE-2-recover-metadata,SEO-4-STAGE-3-recover-jsonld,SEO-4-STAGE-4-recover-sitemap-robots,SEO-4-STAGE-5-recover-content-internal-links,SEO-4-STAGE-6-seo-contract-tests,SEO-4-STAGE-7-recover-page-plan-facade,SEO-4-STAGE-8-recover-i18n-keys,SEO-4-BOUNDARY-recover-page-datasource）
 - L1-03_no_open_markers → false（arch_pending=0 awaiting_verdict=false）
-- L1-04_full_ci_success_on_head → false（acceptance_head=9e5790f ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364）
-- L1-05_pg_regression_passed → UNVERIFIED（pg_regression recorded at fd4c675 ≠ acceptance head 9e5790f（且中间存在非簿记变更））
-- L1-06_fresh_db_migration_passed → UNVERIFIED（fresh_db_migration recorded at bd87ffb ≠ acceptance head 9e5790f（且中间存在非簿记变更））
-- L1-07_api_typecheck_passed → UNVERIFIED（typecheck_api recorded at bd87ffb ≠ acceptance head 9e5790f（且中间存在非簿记变更））
-- L1-08_web_typecheck_build_passed → UNVERIFIED（typecheck_web recorded at bd87ffb ≠ acceptance head 9e5790f（且中间存在非簿记变更））
-- L1-09_no_skipped_critical_tests → UNVERIFIED（tests_no_skipped recorded at bd87ffb ≠ acceptance head 9e5790f（且中间存在非簿记变更））
-- L1-10_git_working_tree_clean → false（dirty entries: 6）
-- L1-11_docs_state_consistent → UNVERIFIED（docs_sync recorded at bd87ffb ≠ acceptance head 9e5790f（且中间存在非簿记变更））
-- L1-12_schema_invariants_verified → UNVERIFIED（schema_invariants recorded at bd87ffb ≠ acceptance head 9e5790f（且中间存在非簿记变更））
-- L1-13_negative_paths_covered → UNVERIFIED（negative_paths recorded at bd87ffb ≠ acceptance head 9e5790f（且中间存在非簿记变更））
-- L1-14_real_pg_e2e_not_mock_only → UNVERIFIED（pg_e2e_real recorded at bd87ffb ≠ acceptance head 9e5790f（且中间存在非簿记变更））
+- L1-04_full_ci_success_on_head → false（acceptance_head=765231e ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364）
+- L1-05_pg_regression_passed → UNVERIFIED（pg_regression recorded at fd4c675 ≠ acceptance head 765231e（且中间存在非簿记变更））
+- L1-06_fresh_db_migration_passed → UNVERIFIED（fresh_db_migration recorded at bd87ffb ≠ acceptance head 765231e（且中间存在非簿记变更））
+- L1-07_api_typecheck_passed → UNVERIFIED（typecheck_api recorded at bd87ffb ≠ acceptance head 765231e（且中间存在非簿记变更））
+- L1-08_web_typecheck_build_passed → UNVERIFIED（typecheck_web recorded at bd87ffb ≠ acceptance head 765231e（且中间存在非簿记变更））
+- L1-09_no_skipped_critical_tests → UNVERIFIED（tests_no_skipped recorded at bd87ffb ≠ acceptance head 765231e（且中间存在非簿记变更））
+- L1-10_git_working_tree_clean → false（dirty entries: 1）
+- L1-11_docs_state_consistent → UNVERIFIED（docs_sync recorded at bd87ffb ≠ acceptance head 765231e（且中间存在非簿记变更））
+- L1-12_schema_invariants_verified → UNVERIFIED（schema_invariants recorded at bd87ffb ≠ acceptance head 765231e（且中间存在非簿记变更））
+- L1-13_negative_paths_covered → UNVERIFIED（negative_paths recorded at bd87ffb ≠ acceptance head 765231e（且中间存在非簿记变更））
+- L1-14_real_pg_e2e_not_mock_only → UNVERIFIED（pg_e2e_real recorded at bd87ffb ≠ acceptance head 765231e（且中间存在非簿记变更））
 
 ## 3. 外部 / 宿主依赖（不得自证完成）
 
