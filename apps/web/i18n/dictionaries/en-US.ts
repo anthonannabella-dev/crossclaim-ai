@@ -412,6 +412,9 @@ const enUS: Messages = {
     colTimeline: "Timeline",
     statusWithCode: "{label} ({code})",
     timeline: "Discovered {discovered} · Submitted {submitted} · Approved {approved} · Received {received}",
+    realityNote: "Expected amounts are not received money; calculated fees are not charged fees.",
+    paymentDisabled: "Nothing is charged automatically: payment and collection channels are not enabled yet.",
+    advancedDetails: "Advanced detail (engineering fields)",
   },
   accountsPage: {
     title: "Accounts",

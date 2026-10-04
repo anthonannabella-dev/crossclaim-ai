@@ -2,22 +2,14 @@
 
 import { useEffect, useState } from 'react';
 
+import { formatDateTime } from '../../i18n/business-language';
+import type { Locale } from '../../i18n';
 import type { Messages } from '../../i18n/dictionaries/zh-CN';
-
-interface Bucket {
-  currency: string;
-  discovered: string;
-  expected: string;
-  claimed: string;
-  approved: string;
-  recovered: string;
-  disputed: string;
-  adjustments: string;
-  netRecovered: string;
-  outstanding: string;
-  feeCalculated: string;
-  feeCollected: string;
-}
+import InlineNotice from '../components/ui/inline-notice';
+import SectionCard from '../components/ui/section-card';
+import StatusBadge from '../components/ui/status-badge';
+import SummaryCards from '../components/ui/summary-cards';
+import { buildCurrencySummaries, type MoneyBucket } from '../lib/dashboard-view';
 
 interface CaseMoney {
   caseId: string;
@@ -26,20 +18,23 @@ interface CaseMoney {
   status: string;
   statusLabel: string;
   currency: string;
-  bucket: Bucket;
+  bucket: MoneyBucket;
   timeline: { discoveredAt: string | null; submittedAt: string | null; approvedAt: string | null; receivedAt: string | null };
   lineage: { claimItems: number; settlements: number; ledgerEntries: number; adjustments: number };
 }
 
 interface Response {
-  organization: { byCurrency: Bucket[]; collection: string; payment: string };
+  organization: { byCurrency: MoneyBucket[]; collection: string; payment: string };
   cases: CaseMoney[];
   feeNote: string;
 }
 
-const fmt = (value: string | null) => (value ? value.slice(0, 10) : '—');
-
-export default function RecoveryMoneyView({ t }: { t: Messages }) {
+/**
+ * UI-6a —— 金额与收益（客户视图）。
+ * 客户默认看到：预计可追回 / 追回中 / 已确认 / 已到账（按币种）+ 净收益；
+ * 明确「预计 ≠ 已到账」「已计算费用 ≠ 已扣款」；lineage / collection / payment 等内部字段进「高级详情」。
+ */
+export default function RecoveryMoneyView({ t, locale }: { t: Messages; locale: Locale }) {
   const copy = t.moneyPage;
   const [data, setData] = useState<Response | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -71,104 +66,118 @@ export default function RecoveryMoneyView({ t }: { t: Messages }) {
     };
   }, [copy, t]);
 
-  if (loading) return <p className="text-sm text-slate-600">{t.common.loading}</p>;
-  if (error) return <div className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-700">{error}</div>;
-  if (!data) return <p className="text-sm text-slate-600">{copy.empty}</p>;
-
-  if (data.cases.length === 0) {
+  if (loading) {
     return (
-      <div className="rounded border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">{copy.noCases}</div>
+      <div className="space-y-3" aria-busy="true">
+        {[0, 1].map((index) => (
+          <div key={index} className="h-36 animate-pulse rounded-lg border border-slate-200 bg-slate-100" />
+        ))}
+        <span className="sr-only">{t.common.loading}</span>
+      </div>
     );
   }
+  if (error) {
+    return (
+      <InlineNotice tone="danger" title={t.dashboardPage.loadFailedTitle}>
+        {error}
+      </InlineNotice>
+    );
+  }
+  if (!data) return <p className="text-sm text-slate-600">{copy.empty}</p>;
+
+  const summaries = buildCurrencySummaries(data.organization.byCurrency, t);
 
   return (
-    <div className="space-y-6">
-      <section className="rounded border border-slate-200 p-3">
-        <h2 className="text-sm font-medium">{copy.orgSummary}</h2>
-        <table className="mt-2 w-full border-collapse text-xs">
-          <thead>
-            <tr className="border-b text-left text-slate-600">
-              <th className="py-1">{copy.colCurrency}</th>
-              <th className="py-1 text-right">{copy.colDiscovered}</th>
-              <th className="py-1 text-right">{copy.colExpected}</th>
-              <th className="py-1 text-right">{copy.colRecovered}</th>
-              <th className="py-1 text-right">{copy.colAdjustments}</th>
-              <th className="py-1 text-right">{copy.colNetRecovered}</th>
-              <th className="py-1 text-right">{copy.colOutstanding}</th>
-              <th className="py-1 text-right">{copy.colFeeCalculated}</th>
-              <th className="py-1 text-right">{copy.colFeeCollected}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.organization.byCurrency.map((bucket) => (
-              <tr key={bucket.currency} className="border-b">
-                <td className="py-1">{bucket.currency}</td>
-                <td className="py-1 text-right">{bucket.discovered}</td>
-                <td className="py-1 text-right">{bucket.expected}</td>
-                <td className="py-1 text-right">{bucket.recovered}</td>
-                <td className="py-1 text-right">{bucket.adjustments}</td>
-                <td className="py-1 text-right font-medium">{bucket.netRecovered}</td>
-                <td className="py-1 text-right">{bucket.outstanding}</td>
-                <td className="py-1 text-right">{bucket.feeCalculated}</td>
-                <td className="py-1 text-right">{bucket.feeCollected}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-        <p className="mt-2 text-[11px] text-slate-600">
-          {copy.collectionLine
-            .replace('{collection}', data.organization.collection)
-            .replace('{payment}', data.organization.payment)
-            .replace('{feeNote}', data.feeNote)}
-        </p>
-      </section>
+    <div className="space-y-4">
+      <InlineNotice tone="warn" title={t.dashboardPage.paymentsHold}>
+        {copy.realityNote}
+      </InlineNotice>
 
-      <section className="rounded border border-slate-200 p-3">
-        <h2 className="text-sm font-medium">{copy.caseDetailTitle}</h2>
-        <table className="mt-2 w-full border-collapse text-xs">
-          <thead>
-            <tr className="border-b text-left text-slate-600">
-              <th className="py-1">{copy.colCase}</th>
-              <th className="py-1">{copy.colStatus}</th>
-              <th className="py-1 text-right">{copy.colApproved}</th>
-              <th className="py-1 text-right">{copy.colRecovered}</th>
-              <th className="py-1 text-right">{copy.colNetRecovered}</th>
-              <th className="py-1 text-right">{copy.colOutstanding}</th>
-              <th className="py-1">{copy.colTimeline}</th>
-              <th className="py-1">lineage</th>
-            </tr>
-          </thead>
-          <tbody>
+      <SectionCard title={copy.orgSummary} subtitle={t.dashboardPage.metricsSubtitle}>
+        <SummaryCards
+          summaries={summaries}
+          currencyLabel={t.dashboardPage.currencyLabel}
+          emptyTitle={copy.noCases}
+          emptyBody={t.dashboardPage.metricsEmptyBody}
+          emptyAction={{ label: t.dashboardPage.ctaConnect, href: '/connections' }}
+          holdNote={copy.paymentDisabled}
+          link={{ label: t.dashboardPage.opportunitiesMore, href: '/opportunities' }}
+        />
+      </SectionCard>
+
+      <SectionCard title={copy.caseDetailTitle}>
+        {data.cases.length === 0 ? (
+          <p className="text-sm text-slate-600">{copy.noCases}</p>
+        ) : (
+          <ul className="space-y-3">
             {data.cases.map((row) => (
-              <tr key={row.caseId} className="border-b align-top">
-                <td className="py-1">
-                  <a className="text-blue-700" href={'/cases/' + row.caseId}>
-                    {row.caseNo}
-                  </a>
-                  <div className="text-[11px] text-slate-500">{row.title}</div>
-                </td>
-                <td className="py-1">
-                  {copy.statusWithCode.replace('{label}', row.statusLabel).replace('{code}', row.status)}
-                </td>
-                <td className="py-1 text-right">{row.bucket.approved} {row.currency}</td>
-                <td className="py-1 text-right">{row.bucket.recovered}</td>
-                <td className="py-1 text-right font-medium">{row.bucket.netRecovered}</td>
-                <td className="py-1 text-right">{row.bucket.outstanding}</td>
-                <td className="py-1 text-[11px] text-slate-600">
+              <li key={row.caseId} className="rounded-lg border border-slate-200 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">{row.caseNo}</p>
+                    <p className="mt-0.5 text-xs text-slate-500">{row.title}</p>
+                  </div>
+                  <StatusBadge tone="neutral">
+                    {copy.statusWithCode.replace('{label}', row.statusLabel).replace('{code}', '')}
+                  </StatusBadge>
+                </div>
+                <dl className="mt-3 grid grid-cols-2 gap-3 text-xs sm:grid-cols-4">
+                  <div>
+                    <dt className="text-slate-500">{copy.colApproved}</dt>
+                    <dd className="mt-0.5 text-sm font-semibold text-slate-900">
+                      {row.bucket.approved} {row.currency}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-slate-500">{copy.colRecovered}</dt>
+                    <dd className="mt-0.5 text-sm font-semibold text-slate-900">{row.bucket.recovered}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-slate-500">{copy.colNetRecovered}</dt>
+                    <dd className="mt-0.5 text-sm font-semibold text-emerald-700">{row.bucket.netRecovered}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-slate-500">{copy.colOutstanding}</dt>
+                    <dd className="mt-0.5 text-sm font-semibold text-slate-800">{row.bucket.outstanding}</dd>
+                  </div>
+                </dl>
+                <p className="mt-3 text-[11px] text-slate-600">
                   {copy.timeline
-                    .replace('{discovered}', fmt(row.timeline.discoveredAt))
-                    .replace('{submitted}', fmt(row.timeline.submittedAt))
-                    .replace('{approved}', fmt(row.timeline.approvedAt))
-                    .replace('{received}', fmt(row.timeline.receivedAt))}
-                </td>
-                <td className="py-1 text-[11px] text-slate-600">
-                  claim {row.lineage.claimItems} · settlement {row.lineage.settlements} · ledger {row.lineage.ledgerEntries} · adj {row.lineage.adjustments}
-                </td>
-              </tr>
+                    .replace('{discovered}', row.timeline.discoveredAt ? formatDateTime(row.timeline.discoveredAt, { locale }) : '—')
+                    .replace('{submitted}', row.timeline.submittedAt ? formatDateTime(row.timeline.submittedAt, { locale }) : '—')
+                    .replace('{approved}', row.timeline.approvedAt ? formatDateTime(row.timeline.approvedAt, { locale }) : '—')
+                    .replace('{received}', row.timeline.receivedAt ? formatDateTime(row.timeline.receivedAt, { locale }) : '—')}
+                </p>
+                <details className="mt-2 text-[11px] text-slate-500">
+                  <summary className="cursor-pointer">{copy.advancedDetails}</summary>
+                  <ul className="mt-1 space-y-0.5 font-mono">
+                    <li>status={row.status}</li>
+                    <li>currency={row.currency}</li>
+                    <li>discovered={row.bucket.discovered}</li>
+                    <li>expected={row.bucket.expected}</li>
+                    <li>adjustments={row.bucket.adjustments}</li>
+                    <li>feeCalculated={row.bucket.feeCalculated}</li>
+                    <li>feeCollected={row.bucket.feeCollected}</li>
+                    <li>claimItems={row.lineage.claimItems}</li>
+                    <li>settlements={row.lineage.settlements}</li>
+                    <li>ledgerEntries={row.lineage.ledgerEntries}</li>
+                    <li>adjustmentEntries={row.lineage.adjustments}</li>
+                  </ul>
+                </details>
+              </li>
             ))}
-          </tbody>
-        </table>
-      </section>
+          </ul>
+        )}
+        <details className="mt-4 text-[11px] text-slate-500">
+          <summary className="cursor-pointer">{copy.advancedDetails}</summary>
+          <p className="mt-1">
+            {copy.collectionLine
+              .replace('{collection}', data.organization.collection)
+              .replace('{payment}', data.organization.payment)
+              .replace('{feeNote}', data.feeNote)}
+          </p>
+        </details>
+      </SectionCard>
     </div>
   );
 }

@@ -412,6 +412,9 @@ const de: Messages = {
     colTimeline: "Zeitachse",
     statusWithCode: "{label} ({code})",
     timeline: "Entdeckt {discovered} · Eingereicht {submitted} · Genehmigt {approved} · Eingegangen {received}",
+    realityNote: "Erwartete Beträge sind kein Eingang; berechnete Gebühren sind nicht erhoben.",
+    paymentDisabled: "Es wird nichts automatisch abgebucht: Zahlungs- und Inkassokanäle sind noch nicht aktiv.",
+    advancedDetails: "Erweiterte Details (Technikfelder)",
   },
   accountsPage: {
     title: "Konten",

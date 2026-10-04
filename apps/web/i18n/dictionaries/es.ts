@@ -412,6 +412,9 @@ const es: Messages = {
     colTimeline: "Cronología",
     statusWithCode: "{label} ({code})",
     timeline: "Detectado {discovered} · Enviado {submitted} · Aprobado {approved} · Recibido {received}",
+    realityNote: "Los importes previstos no son dinero recibido; las tarifas calculadas no están cobradas.",
+    paymentDisabled: "No se cobra nada automáticamente: los canales de pago y cobro no están habilitados.",
+    advancedDetails: "Detalle avanzado (campos técnicos)",
   },
   accountsPage: {
     title: "Cuentas",

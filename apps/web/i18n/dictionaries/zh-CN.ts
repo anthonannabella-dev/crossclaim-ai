@@ -411,6 +411,9 @@ const zhCN = {
     colTimeline: "时间线",
     statusWithCode: "{label}（{code}）",
     timeline: "发现 {discovered} · 提交 {submitted} · 获批 {approved} · 到账 {received}",
+    realityNote: "预计金额不等于已到账；已计算费用不等于已扣款。",
+    paymentDisabled: "当前不会自动扣款：支付与收款通道尚未开启。",
+    advancedDetails: "高级详情（工程字段）",
   },
   accountsPage: {
     title: "账户管理",

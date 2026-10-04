@@ -11,6 +11,7 @@ import AccountManagementView from '../app/accounts/account-management-view';
 import RecoveryPipeline from '../app/components/ui/recovery-pipeline';
 import { buildRecoveryPipeline, caseStatusLabel, pipelineStateLabel } from '../app/lib/case-view';
 import ClaimPackageView from '../app/cases/[id]/claim-package/claim-package-view';
+import RecoveryMoneyView from '../app/money/recovery-money-view';
 import InlineNotice from '../app/components/ui/inline-notice';
 import PlatformCard from '../app/components/ui/platform-card';
 import SecurityStrip from '../app/components/ui/security-strip';
@@ -398,6 +399,15 @@ check('case.status.localized', caseStatusLabel('COLLECTING_EVIDENCE', zhCN) === 
 const packageHtml = render(<ClaimPackageView caseId="case-1" t={zhCN} locale="zh-CN" />);
 check('claim.package.loading.skeleton', packageHtml.includes('animate-pulse'));
 check('claim.package.hold.wording.dictionary', zhCN.claimPackagePage.readyToSubmitBody.includes('External Write = HOLD'));
+
+// ⑬ UI-6a：金额与收益客户视图
+const moneyHtml = render(<RecoveryMoneyView t={zhCN} locale="zh-CN" />);
+check('money.loading.skeleton', moneyHtml.includes('animate-pulse'));
+check(
+  'money.reality.wording.dictionary',
+  zhCN.moneyPage.realityNote.length > 0 && zhCN.moneyPage.paymentDisabled.length > 0,
+);
+check('money.advanced.detail.key', zhCN.moneyPage.advancedDetails.length > 0);
 
 console.log(results.join('\n'));
 if (failures.length > 0) {

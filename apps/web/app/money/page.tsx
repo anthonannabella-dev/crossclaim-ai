@@ -1,4 +1,4 @@
-import { getServerMessages } from '../../i18n/server';
+import { getServerLocale, getServerMessages } from '../../i18n/server';
 import RecoveryMoneyView from './recovery-money-view';
 
 /**
@@ -6,7 +6,7 @@ import RecoveryMoneyView from './recovery-money-view';
  * MONEY VISIBILITY（非 MONEY MOVEMENT）：只读展示，Payment / collection 仍为 0 / OFF。
  */
 export default async function MoneyPage() {
-  const t = await getServerMessages();
+  const [t, locale] = await Promise.all([getServerMessages(), getServerLocale()]);
   return (
     <div className="space-y-4">
       <div>
@@ -17,7 +17,7 @@ export default async function MoneyPage() {
           {t.moneyPage.feeNoteRest}
         </p>
       </div>
-      <RecoveryMoneyView t={t} />
+      <RecoveryMoneyView t={t} locale={locale} />
     </div>
   );
 }

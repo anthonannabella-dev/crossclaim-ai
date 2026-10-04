@@ -1,6 +1,6 @@
 # LAYER 2 — GOLDEN PATH MATRIX（自动生成，请勿手改）
 
-- 生成时间：2026-10-04T00:53:58.044Z
+- 生成时间：2026-10-04T01:10:44.945Z
 - 机器可读：`docs/releases/LAYER2-GOLDEN-PATH-MATRIX.json`；生成器：`tools/autopilot/golden-path-matrix.mjs`
 - 判定规则：**COVERED 必须存在命名证据文件**（测试/前端）；否则 GAP，并自动登记为 backlog。
 - 依据：MSG-20261003-135 CHANGE C（禁止用「专项测试很多」替代完整矩阵）。
@@ -56,7 +56,7 @@
 | rbac | COVERED | apps/api/src/__tests__/customs-authorization-route-db.test.ts<br>apps/api/src/__tests__/customs-authorization-route.test.ts<br>apps/api/src/__tests__/customs-claim-ready-http.test.ts<br>apps/api/src/__tests__/customs-entry-fact-read-http.test.ts |
 | amount_ledger | COVERED | apps/api/src/__tests__/customs-claim-ready-http.test.ts<br>apps/api/src/__tests__/customs-claim-ready-package.test.ts<br>apps/api/src/__tests__/customs-classification-discrepancy.test.ts<br>apps/api/src/__tests__/customs-duty-truth.test.ts |
 
-## Independent-site / Chargeback（api 测试 6 个 / 前端 4 个）
+## Independent-site / Chargeback（api 测试 6 个 / 前端 3 个）
 
 | 能力轴 | 状态 | 证据 |
 |---|---|---|

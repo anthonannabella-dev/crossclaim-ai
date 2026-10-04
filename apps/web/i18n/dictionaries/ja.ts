@@ -412,6 +412,9 @@ const ja: Messages = {
     colTimeline: "タイムライン",
     statusWithCode: "{label}（{code}）",
     timeline: "検出 {discovered} · 提出 {submitted} · 承認 {approved} · 入金 {received}",
+    realityNote: "見込み額は入金済みではなく、計算済み手数料は徴収済みではありません。",
+    paymentDisabled: "自動課金は行われません。決済・収納チャネルは未有効です。",
+    advancedDetails: "詳細（技術項目）",
   },
   accountsPage: {
     title: "アカウント管理",

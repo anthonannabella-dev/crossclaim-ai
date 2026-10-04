@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-04T00:53:58.044Z",
+  "generated_at": "2026-10-04T01:10:44.945Z",
   "rule": "COVERED 需存在命名证据文件；否则 GAP",
   "domains": [
     {
@@ -341,7 +341,7 @@
       "id": "independent_site",
       "name": "Independent-site / Chargeback",
       "domain_test_files": 6,
-      "domain_web_files": 4,
+      "domain_web_files": 3,
       "cells": {
         "http": {
           "status": "COVERED",
