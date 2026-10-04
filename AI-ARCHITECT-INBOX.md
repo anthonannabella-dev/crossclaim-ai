@@ -129241,3 +129241,233 @@ CA-4 = CLOSED，可直接进入 CA-5 Customs Authorization Center UI。
 
 无需再重审 A/B/C，也无需改变 Production Boundary；真实 Broker / Filing / CBP / ACE / ABI 继续 HOLD。
 ```
+
+### [MSG-20261004-08] ARCHITECT VERDICT — CUSTOMS AUTHORIZATION CA-5 = REVISE（A：③/④ 必须消费 CA-1 实际 applied policy，policyApplied=false 不得显示 NOT_REQUIRED；B：消除 filing readiness 死区（FILING_PERMISSION_REQUIRED 明确 ownership）；C：⑥ READY_TO_SUBMIT 时主 CTA 必须是 START_RECOVERY，退款账户不反向阻塞；D：真实只读 loader 接入 composition root + CA-5 专属 PostgreSQL HTTP E2E）
+
+```text
+ARCHITECT VERDICT：REVISE
+CA-5 方向成立、边界设计基本正确，但 当前不能 CLOSED，也不应直接进入 CA-6。问题是局部且可窄修，不需要 Schema / migration，也不需要解除 C18=HOLD_EXTERNAL。
+
+我按 reviewed HEAD = cf88248 重新读取最终代码状态，结论如下。
+
+① 六项清单 / 状态词表：REVISE
+
+六项本身我批准：
+
+① 企业身份
+② 追回权
+③ 签署权限
+④ 报关代理授权
+⑤ 退款账户
+⑥ 提交准备
+
+⑥ READY_TO_SUBMIT = readiness.file.ready 这个主口径也成立；退款账户属于 refund stage，不应该反向污染 file readiness，这一点是对的。
+
+但有三个必须修的语义问题。
+
+CHANGE A — NOT_REQUIRED 必须来自“实际应用的 policy”，不能重新按 route 猜。
+
+当前：
+
+customs-authorization-center.ts
+
+通过：
+
+customsAuthorizationCenterRequirements(route)
+→ defaultPolicyForRoute(route, '*')
+
+重新计算③/④是否 required。
+
+这会丢掉 CA-1 真正用于判定的 provider/jurisdiction policy。
+
+最明显的错误路径是：
+
+SERVICE_PROVIDER_TRANSMIT
+
+在 customs-authorization-route.ts 中：
+
+defaultPolicyForRoute('SERVICE_PROVIDER_TRANSMIT') = null
+
+因此 CA-5 会把：
+
+SIGNER_AUTHORITY → NOT_REQUIRED
+BROKER_AUTHORIZATION → NOT_REQUIRED
+
+即使 CA-1 实际传入的 provider policy 明确要求 signer/POA。
+
+这会产生服务端自相矛盾：
+
+④ 本路线不需要代理授权
+⑥ IN_PREPARATION，因为实际上存在 BROKER_POA_REQUIRED
+
+这不能进入 CA-6。
+
+最小修法：让 CustomsRouteAuthorizationReadiness 携带 CA-1 实际使用的 normalized requirements，例如：
+
+brokerPoaRequired / authorizedSignerRequired / filingPermissionRequired / refundEnrollmentRequired / policyApplied
+
+CA-5 只消费这个 server-derived snapshot，不要再调用 defaultPolicyForRoute() 二次推断。
+
+并且当 policyApplied=false 时，③/④不能显示 NOT_REQUIRED。建议增加类似 PENDING_POLICY / WAITING_DETERMINATION 的中性状态，或者在 policy 未确定时不做“无需授权”的肯定陈述。
+
+CHANGE B — FILING_PERMISSION_REQUIRED 当前形成“无下一步死区”。
+
+现在 SUBMISSION_READINESS 把：
+
+FILING_PROVIDER_NOT_READY
+PROVIDER_POLICY_REQUIRED
+
+视为 provider-side blocker。
+
+但：
+
+FILING_PERMISSION_REQUIRED
+
+没有映射到①–⑤任何一项，也没有被归入 provider/policy waiting。
+
+结果可能出现：
+
+①–⑤全部没有 action
+⑥ = IN_PREPARATION
+nextAction = null
+
+客户 UI 随后显示：
+
+当前无需你操作，系统会继续准备证据与材料。
+
+但事实上还缺合法 filing permission。
+
+这属于错误客户状态。
+
+必须明确 ownership：
+
+如果 filing permission 是 provider/Broker/系统侧完成 → 纳入 WAITING_AUTHORIZATION
+如果必须客户完成 → 映射到③/④中的一个明确 action
+
+不能继续处于“IN_PREPARATION + nextAction=null”。
+
+CHANGE C — ⑤不能通过 nextAction 反向成为⑥的事实阻塞。
+
+当前测试明确规定：
+
+退款账户未就绪：
+
+⑤ = NEEDS_ACTION
+⑥ = READY_TO_SUBMIT
+但 nextAction = CONFIRM_REFUND_ACCOUNT
+
+这是状态层面“不阻塞⑥”，但产品行为上实际上把客户先引去补退款账户，而且不再给 START_RECOVERY。
+
+这和你们自己的原则：
+
+退款账户未就绪只影响⑤，不影响⑥
+
+存在语义冲突。
+
+进入 CA-6 前应确定规则。我的裁定是：
+
+若 ⑥ 已 READY_TO_SUBMIT，退款账户是独立 refund-stage 待办，不应阻止 START_RECOVERY 成为主 CTA。
+
+⑤可以继续显示“需要处理”，但不能变成 filing 的隐性前置条件。
+
+② GET 只读端点：设计 PASS，运行时集成 REVISE
+
+这一层的边界设计我批准。
+
+customs-authorization-center-http.ts 已做到：
+
+复用 CUSTOMS_CLAIM_READ_ROLES
+OWNER / ADMIN / OPS / FINANCE
+VIEWER → 403
+空 id → 400
+loader 返回 null → 404
+organizationId 由 authenticated session 传入 loader
+响应显式声明：
+readOnly=true
+filingSubmitted=false
+externalWritePerformed=false
+transportEnabled=false
+productionCredentials=ABSENT
+
+所以HTTP handler 本身是合格的。
+
+但这里存在一个实际集成缺口：
+
+在 server.ts:createDefaultReadDeps() 中，目前只真正装配了：
+
+customsEntryFactStore
+qualificationRead
+independentSiteState
+
+没有装配 customsAuthorizationCenter。
+
+因此真实 createRuntime() 启动以后，CA-5 会落到：
+
+loadCenter() => null
+
+也就是授权中心端点默认一直返回 404。
+
+这不是安全问题——确实 fail-closed——但说明它现在仍然是**“契约已实现、真实 runtime 未接线”**。
+
+所以 CA-5 现在不能宣称完整 CLOSED。
+
+而且我核对了所谓的：
+
+customs HTTP E2E 6/6（真实 PostgreSQL）
+
+现有 customs-recovery-http-e2e-db.test.ts 没有 authorization-center，也没有调用 handleCustomsAuthorizationCenterRequest。
+
+CA-5 新增的是 customs-authorization-center.test.ts 的 handler/unit 边界测试。
+
+所以“6/6 real PG”可以作为 C21 回归证据，但不能当作 CA-5 新端点的真实 E2E 证据。
+
+最小修复：把真实只读 loader 接入 createDefaultReadDeps()，然后补一组真正经过：
+
+createRuntime/createServer → login session → WORKFLOW_PATH → authorization-center
+
+的 PostgreSQL E2E。
+
+至少覆盖：
+
+200 本租户
+403 VIEWER
+404 不存在/跨租户
+405 非 GET
+无 loader/无事实时 fail-closed
+③ 客户 UI：PASS WITH DEPENDENCY
+
+apps/web/app/customs/authorization/page.tsx 这一层我基本批准。
+
+它目前没有：
+
+伪造追回金额
+伪造 Provider 已连接
+伪造 Broker 已授权
+声称已经海关提交
+自动触发 filing
+自动扣款
+
+顶部持续显示“尚未向海关提交”，这一点很好。
+
+START_RECOVERY 当前只是 Link 导航，不做 POST、不外写。CA-5 阶段完全可以接受。 真正 one-click 放到 CA-6 是正确切分。
+
+所以这里不需要为了“更自动化”提前增加外写。
+
+但 UI 必须等待上面 A/B/C 的状态语义修正，否则它会忠实地展示错误的 server-derived 状态。
+
+最终裁定
+
+VERDICT = REVISE
+
+CA-5_STATUS = NOT_CLOSED
+
+只要求下面这个最小集合，不扩大范围：
+
+不要重新按 route 推断 policy requirements；CA-5 必须消费 CA-1 实际 applied policy/normalized requirements，并处理 policyApplied=false，禁止错误显示 NOT_REQUIRED。
+消除 filing readiness 死区：给 FILING_PERMISSION_REQUIRED 明确 ownership；同时保证退款账户 gap 不通过 nextAction 变成 filing 的隐形阻塞。
+完成真实 runtime loader 接线 + CA-5 专属 PostgreSQL HTTP E2E；不能拿原 C21 的 6/6 替代新端点验收。
+
+完成这三项后，不需要再次扩大 CA-5 范围，可以直接 CA-5 = CLOSED → CA-6。
+
+REAL_BROKER=NO / REAL_FILING=NO / C18=HOLD_EXTERNAL 继续保持，不需要为本轮修改解除。
+```

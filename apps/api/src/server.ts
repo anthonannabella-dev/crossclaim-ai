@@ -16,6 +16,7 @@
 import http from 'node:http';
 import { PrismaClient } from '@prisma/client';
 import { createPrismaCustomsEntryFactStore } from './services/customs/customs-entry-fact-store';
+import { createCustomsAuthorizationCenterLoader } from './services/customs/customs-authorization-center-loader';
 import { createPrismaQualificationAssessmentStore } from './services/commercial/recovery-qualification-store';
 import { createPrismaPs04StateLoaders } from './services/independent-site/ps04-state-loaders';
 import { loadEnv } from './config/env';
@@ -336,6 +337,18 @@ export function createServer(deps: ServerDeps): http.Server {
         ...(deps.carrierClaimPackages ? { carrierClaimPackages: deps.carrierClaimPackages } : {}),
 ...(deps.customsOpportunities ? { customsOpportunities: deps.customsOpportunities } : {}),
 ...(deps.customsAuthorization ? { customsAuthorization: deps.customsAuthorization } : {}),
+      // CA-5 REVISE D：composition root 自动装配只读授权中心 loader（有 opportunity truth 时）
+      ...(deps.customsAuthorizationCenter
+        ? { customsAuthorizationCenter: deps.customsAuthorizationCenter }
+        : deps.customsOpportunities
+          ? {
+              customsAuthorizationCenter: createCustomsAuthorizationCenterLoader({
+                opportunities: deps.customsOpportunities,
+                ...(deps.customsAuthorization ? { authorization: deps.customsAuthorization } : {}),
+                ...(deps.customsFilingProvider !== undefined ? { provider: deps.customsFilingProvider } : {}),
+              }),
+            }
+          : {}),
       ...(deps.customsAuthorizationCenter ? { customsAuthorizationCenter: deps.customsAuthorizationCenter } : {}),
 ...(deps.customsFilingProvider !== undefined ? { customsFilingProvider: deps.customsFilingProvider } : {}),
 ...(deps.customsFilingStatus ? { customsFilingStatus: deps.customsFilingStatus } : {}),

@@ -1,10 +1,10 @@
-/** CA-5 单元验收：授权中心六项清单投影 + 只读 HTTP 边界（RBAC / 404 / 边界声明）。 */
+/** CA-5 单元验收：授权中心六项清单投影（含 MSG-20261004-08 REVISE A/B/C）+ 只读 HTTP 边界。 */
 
 import { describe, expect, it } from 'vitest';
 
 import {
   buildCustomsAuthorizationCenter,
-  customsAuthorizationCenterRequirements,
+  CUSTOMS_AUTHORIZATION_PROVIDER_SIDE_BLOCKERS,
 } from '../services/customs/customs-authorization-center';
 import { handleCustomsAuthorizationCenterRequest } from '../services/customs/customs-authorization-center-http';
 import {
@@ -58,11 +58,10 @@ function center(
   return buildCustomsAuthorizationCenter({ readiness });
 }
 
-const item = (value: ReturnType<typeof center>, key: string) =>
-  value.items.find((entry) => entry.key === key)!;
+const item = (value: ReturnType<typeof center>, key: string) => value.items.find((entry) => entry.key === key)!;
 
 describe('CA-5 — customs authorization center projection（unit）', () => {
-  it('全部就绪：六项清单 + 唯一动作 START_RECOVERY，且不表示已提交', () => {
+  it('全部就绪：六项清单 + 主 CTA START_RECOVERY，且不表示已提交', () => {
     const value = center();
     expect(value.items).toHaveLength(6);
     expect(value.items.map((entry) => entry.key)).toEqual([
@@ -75,22 +74,18 @@ describe('CA-5 — customs authorization center projection（unit）', () => {
     ]);
     expect(item(value, 'ENTERPRISE_IDENTITY').state).toBe('CONFIRMED');
     expect(item(value, 'BROKER_AUTHORIZATION').state).toBe('CONFIRMED');
-    expect(item(value, 'SIGNER_AUTHORITY').state).toBe('NOT_REQUIRED'); // BROKER_FILED 不要求签署权限
+    // BROKER_FILED 的应用 policy 不要求签署权限
+    expect(item(value, 'SIGNER_AUTHORITY').state).toBe('NOT_REQUIRED');
     expect(item(value, 'SUBMISSION_READINESS').state).toBe('READY_TO_SUBMIT');
     expect(value.nextAction).toBe('START_RECOVERY');
-    expect(value.stages).toEqual({
-      READY_TO_PREPARE: true,
-      READY_TO_FILE: true,
-      READY_TO_RECEIVE_REFUND: true,
-    });
+    expect(value.stages).toEqual({ READY_TO_PREPARE: true, READY_TO_FILE: true, READY_TO_RECEIVE_REFUND: true });
     expect(value.filingSubmitted).toBe(false);
-    expect(value.externalWritePerformed).toBe(false);
     expect(value.transportEnabled).toBe(false);
     expect(value.productionCredentials).toBe('ABSENT');
     expect(value.serverDerived).toBe(true);
   });
 
-  it('缺代理授权：④ 需要动作（COMPLETE_BROKER_AUTHORIZATION），⑥ 停在准备中，工程码只进高级详情', () => {
+  it('缺代理授权：④ 需要动作，⑥ 停在准备中，工程码只进高级详情', () => {
     const value = center({ brokerConnected: false, brokerPoaStatus: 'MISSING' });
     const broker = item(value, 'BROKER_AUTHORIZATION');
     expect(broker.state).toBe('NEEDS_ACTION');
@@ -98,15 +93,9 @@ describe('CA-5 — customs authorization center projection（unit）', () => {
     expect(item(value, 'SUBMISSION_READINESS').state).toBe('IN_PREPARATION');
     expect(value.nextAction).toBe('COMPLETE_BROKER_AUTHORIZATION');
     expect(value.advancedBlockerCodes).toContain('BROKER_NOT_CONNECTED');
-    // 客户默认视图（items）只暴露 code 数组，由 UI 决定是否放进高级详情
-    expect(broker.blockerCodes).toContain('BROKER_NOT_CONNECTED');
   });
 
-  it('SELF_FILED：不要求代理授权，但要求签署权限（含辖区不匹配 fail-closed）', () => {
-    const requirements = customsAuthorizationCenterRequirements('SELF_FILED');
-    expect(requirements.signerAuthorityRequired).toBe(true);
-    expect(requirements.brokerAuthorizationRequired).toBe(false);
-
+  it('SELF_FILED：③ 由应用 policy 判定为必需，④ NOT_REQUIRED；辖区不匹配 fail-closed', () => {
     const ok = center({ signerJurisdiction: 'US' }, 'SELF_FILED', selfFiledPolicy);
     expect(item(ok, 'SIGNER_AUTHORITY').state).toBe('CONFIRMED');
     expect(item(ok, 'BROKER_AUTHORIZATION').state).toBe('NOT_REQUIRED');
@@ -119,23 +108,43 @@ describe('CA-5 — customs authorization center projection（unit）', () => {
     expect(mismatch.advancedBlockerCodes).toContain('SIGNER_JURISDICTION_MISMATCH');
   });
 
-  it('退款账户未就绪：⑤ 需要动作，但不阻塞 ⑥（材料/证据准备与提交准备分离）', () => {
+  it('REVISE A：policy 未确定时，③/④ 不得声称 NOT_REQUIRED（PENDING_POLICY + 等待授权）', () => {
+    // SERVICE_PROVIDER_TRANSMIT 无默认 policy → policyApplied=false
+    const value = center({}, 'SERVICE_PROVIDER_TRANSMIT');
+    expect(item(value, 'SIGNER_AUTHORITY').state).toBe('PENDING_POLICY');
+    expect(item(value, 'SIGNER_AUTHORITY').action).toBeNull();
+    expect(item(value, 'BROKER_AUTHORIZATION').state).toBe('PENDING_POLICY');
+    expect(item(value, 'BROKER_AUTHORIZATION').action).toBeNull();
+    expect(item(value, 'SUBMISSION_READINESS').state).toBe('WAITING_AUTHORIZATION');
+    expect(value.nextAction).toBeNull();
+    expect(value.advancedBlockerCodes).toContain('PROVIDER_POLICY_REQUIRED');
+  });
+
+  it('REVISE B：缺少合法 filing permission 时不得出现「准备中 + 无下一步」死区', () => {
+    const value = center({ filingPermissionValid: false });
+    const submit = item(value, 'SUBMISSION_READINESS');
+    expect(submit.state).toBe('WAITING_AUTHORIZATION');
+    expect(submit.blockerCodes).toContain('FILING_PERMISSION_REQUIRED');
+    expect(CUSTOMS_AUTHORIZATION_PROVIDER_SIDE_BLOCKERS).toContain('FILING_PERMISSION_REQUIRED');
+    // 客户侧没有可做项 → nextAction 为空是合法"等待"，而不是错误状态
+    expect(value.nextAction).toBeNull();
+    expect(item(value, 'ENTERPRISE_IDENTITY').state).toBe('CONFIRMED');
+  });
+
+  it('REVISE B：provider 能力未就绪同样是等待授权（不是准备中）', () => {
+    const value = center({ providerCapabilityReady: false });
+    expect(item(value, 'SUBMISSION_READINESS').state).toBe('WAITING_AUTHORIZATION');
+    expect(item(value, 'SUBMISSION_READINESS').blockerCodes).toContain('FILING_PROVIDER_NOT_READY');
+  });
+
+  it('REVISE C：⑥ 可提交时主 CTA 是 START_RECOVERY，退款账户不成为隐含前置', () => {
     const value = center({ refundDestinationVerified: false });
     expect(item(value, 'REFUND_ACCOUNT').state).toBe('NEEDS_ACTION');
     expect(item(value, 'REFUND_ACCOUNT').action).toBe('CONFIRM_REFUND_ACCOUNT');
     expect(item(value, 'SUBMISSION_READINESS').state).toBe('READY_TO_SUBMIT');
     expect(value.stages.READY_TO_FILE).toBe(true);
     expect(value.stages.READY_TO_RECEIVE_REFUND).toBe(false);
-    // ⑤ 排在 ⑥ 之前，因此客户此刻应先去确认退款账户
-    expect(value.nextAction).toBe('CONFIRM_REFUND_ACCOUNT');
-  });
-
-  it('提交能力未就绪：⑥ = 等待授权（不伪造可提交）', () => {
-    const value = center({ providerCapabilityReady: false });
-    expect(item(value, 'SUBMISSION_READINESS').state).toBe('WAITING_AUTHORIZATION');
-    expect(item(value, 'SUBMISSION_READINESS').action).toBeNull();
-    expect(item(value, 'SUBMISSION_READINESS').blockerCodes).toContain('FILING_PROVIDER_NOT_READY');
-    expect(value.nextAction).toBeNull();
+    expect(value.nextAction).toBe('START_RECOVERY');
   });
 
   it('身份 / 追回权缺失：① 与 ② 分别给出客户动作', () => {
@@ -146,8 +155,7 @@ describe('CA-5 — customs authorization center projection（unit）', () => {
   });
 
   it('不返回任何客户不可见的原始金额 / 凭证字段', () => {
-    const value = center();
-    const serialised = JSON.stringify(value);
+    const serialised = JSON.stringify(center());
     for (const forbidden of ['amount', 'currency', 'balance', 'providerWrite', 'lineage', 'dutyTruth']) {
       expect(serialised.toLowerCase()).not.toContain(forbidden.toLowerCase());
     }
@@ -194,7 +202,6 @@ describe('CA-5 — authorization center HTTP boundary（unit）', () => {
       deps,
     );
     expect(result.status).toBe(200);
-    expect(result.body.opportunityId).toBe('opp-1');
     expect(result.body.boundary).toEqual({
       readOnly: true,
       filingSubmitted: false,

@@ -1,6 +1,6 @@
 {
   "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。",
-  "updatedAt": "2026-10-04T03:11:51.837Z",
+  "updatedAt": "2026-10-04T04:05:36.271Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -805,7 +805,16 @@
         "web",
         "customs"
       ],
-      "status": "PENDING"
+      "status": "PENDING",
+      "verdict": "REVISE（MSG-20261004-08）— A–D 已实现，等待 CA-5 FINAL",
+      "audit_request_comment": "5976136618",
+      "revise_changes": [
+        "A",
+        "B",
+        "C",
+        "D"
+      ],
+      "updated_at": "2026-10-04T04:05:36.271Z"
     },
     {
       "id": "ca-6-one-click-customs-auth-ux",

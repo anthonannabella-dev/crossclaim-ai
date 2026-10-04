@@ -121,12 +121,24 @@ export interface CustomsStageReadiness {
   blockers: readonly CustomsStageBlocker[];
 }
 
+/** CA-5 REVISE A：CA-1 实际应用的 policy 归一化要求快照（policy 未确定时为 null）。 */
+export interface CustomsRouteAuthorizationRequirements {
+  jurisdiction: string;
+  brokerPoaRequired: boolean;
+  authorizedSignerRequired: boolean;
+  filingPermissionRequired: boolean;
+  providerCapabilityRequired: boolean;
+  refundEnrollmentRequired: boolean;
+}
+
 export interface CustomsRouteAuthorizationReadiness {
   route: CustomsFilingRoute;
   /** 本次判定所用的 remedy（scope 覆盖以事实层已解析结果为准）。 */
   remedy: string;
   jurisdiction: string | null;
   policyApplied: boolean;
+  /** 本次判定实际应用的 policy 归一化要求；policy 未确定时 null（调用方不得据此声称"不需要授权"）。 */
+  requirements: CustomsRouteAuthorizationRequirements | null;
   prepare: CustomsStageReadiness;
   file: CustomsStageReadiness;
   refund: CustomsStageReadiness;
@@ -237,6 +249,16 @@ export function evaluateCustomsAuthorizationForRoute(input: {
     remedy,
     jurisdiction: policy?.jurisdiction ?? null,
     policyApplied: policy !== null,
+    requirements: policy === null
+      ? null
+      : {
+          jurisdiction: policy.jurisdiction,
+          brokerPoaRequired: policy.brokerPoaRequired,
+          authorizedSignerRequired: policy.authorizedSignerRequired,
+          filingPermissionRequired: policy.filingPermissionRequired,
+          providerCapabilityRequired: policy.providerCapabilityRequired,
+          refundEnrollmentRequired: policy.refundEnrollmentRequired,
+        },
     prepare,
     file,
     refund,

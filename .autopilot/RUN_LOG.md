@@ -1834,3 +1834,10 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 ## 2026-10-04T03:31:10.586Z — CI 恢复绿灯 + CA-5 裁决待取回
 - CI：90cd73b / 9f0caf2 / e5e9dd0 / 737506e 全部 success（红streak 根因＝CA-2 租户触发器清单缺口，已修复）；cf88248 / 8f32fce 仍在跑，已记 pending。
 - CA-5 裁决：右侧 ChatGPT 会话本轮不可用（长消息两次 + 短重试一次均停在 Unknown error，无助手轮次；新标签页停在「请稍候…」）。判定 CHATGPT_WEB_READ=FAILED，回退 GitHub 耐久记录 comment 5976136618，下一周期重读。
+
+## 2026-10-04T04:05:36.271Z — CA-5 REVISE A–D 落地
+- 裁决 MSG-20261004-08 = REVISE（新审计会话 https://chatgpt.com/c/6ac1cdf0-1ec8-83ec-8036-0e66fcf5c6b9；旧会话 Unknown error 弃用）。
+- A：CA-1 readiness 新增 requirements 快照；③/④ 只消费 applied policy；policyApplied=false → PENDING_POLICY。
+- B：FILING_PERMISSION_REQUIRED 归 provider/authority 侧 → WAITING_AUTHORIZATION（消除"准备中+无下一步"死区）。
+- C：⑥ READY_TO_SUBMIT → nextAction = START_RECOVERY（退款账户为独立 refund-stage 待办）。
+- D：新增 customs-authorization-center-loader（真实只读）+ server composition root 自动装配 + CA-5 专属 PostgreSQL HTTP E2E 6/6。
