@@ -1819,3 +1819,9 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 ## 2026-10-04T03:11:51.837Z — CA-4 CLOSED
 - CA-4 FINAL = PASS WITH REVISE（MSG-20261004-07）；CHANGE FINAL-D1（同状态 UPDATE 旁路）已修：migration 20261004060000 + 真实 PG 断言。
 - 队列推进：SAFE_CONTINUATION_QUEUE = CA-5（Authorization Center UI）→ CA-6（one-click auth UX）。
+
+## 2026-10-04T03:15:39.188Z — CI 红灯根因定位与修复（非阻塞）
+- 现象：d48d671 … 8138a48 连续 CI failure，唯一失败步骤 = 租户触发器清单校验。
+- 根因：CA-2 的 signer 事实表触发器（tenant / append-only / lineage）从未登记进 checklist。
+- 修复：90cd73b 补齐两条清单；本地复跑闸门全绿。
+- pending：90cd73b (37173233154) / 9f0caf2 (37173392995) 仍在运行，归档后回填 ci_resolved。

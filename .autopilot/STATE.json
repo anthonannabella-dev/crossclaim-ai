@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261004-07",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-04T03:11:51.837Z",
+  "updated_at": "2026-10-04T03:15:39.188Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -4916,7 +4916,22 @@
   "heartbeat_role": "LIVENESS_ONLY",
   "watchdog_role": "RECOVERY_ONLY",
   "singleton_runner": "VERIFIED",
-  "ci_pending": [],
+  "ci_pending": [
+    {
+      "head": "90cd73b",
+      "run": "37173233154",
+      "status": "in_progress",
+      "url": "https://github.com/anthonannabella-dev/crossclaim-ai/actions/runs/37173233154",
+      "recorded_at": "2026-10-04T03:15:39.188Z"
+    },
+    {
+      "head": "9f0caf2",
+      "run": "37173392995",
+      "status": "in_progress",
+      "url": "https://github.com/anthonannabella-dev/crossclaim-ai/actions/runs/37173392995",
+      "recorded_at": "2026-10-04T03:15:39.188Z"
+    }
+  ],
   "ci_red": [],
   "ci_checked_at": "2026-10-03T18:19:24.116Z",
   "continuous_verification": {
@@ -5009,9 +5024,9 @@
   "awaiting_verdict": null,
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-04T03:12:10.797Z",
-    "head": "90cd73b",
-    "acceptance_head": "90cd73b",
+    "computed_at": "2026-10-04T03:15:39.938Z",
+    "head": "9f0caf2",
+    "acceptance_head": "9f0caf2",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5082,48 +5097,48 @@
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=90cd73b ci_head=f5bdd92 ci=in_progress run=37143524364"
+        "evidence": "acceptance_head=9f0caf2 ci_head=9f0caf2 ci=in_progress run=37143524364"
       },
       "L1-05_pg_regression_passed": {
         "status": "UNVERIFIED",
-        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head 90cd73b（且中间存在非簿记变更）"
+        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head 9f0caf2（且中间存在非簿记变更）"
       },
       "L1-06_fresh_db_migration_passed": {
         "status": "UNVERIFIED",
-        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head 90cd73b（且中间存在非簿记变更）"
+        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head 9f0caf2（且中间存在非簿记变更）"
       },
       "L1-07_api_typecheck_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head 90cd73b（且中间存在非簿记变更）"
+        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head 9f0caf2（且中间存在非簿记变更）"
       },
       "L1-08_web_typecheck_build_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head 90cd73b（且中间存在非簿记变更）"
+        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head 9f0caf2（且中间存在非簿记变更）"
       },
       "L1-09_no_skipped_critical_tests": {
         "status": "UNVERIFIED",
-        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head 90cd73b（且中间存在非簿记变更）"
+        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head 9f0caf2（且中间存在非簿记变更）"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
         "status": false,
-        "evidence": "dirty entries: 5"
+        "evidence": "dirty entries: 1"
       },
       "L1-11_docs_state_consistent": {
         "status": "UNVERIFIED",
-        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head 90cd73b（且中间存在非簿记变更）"
+        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head 9f0caf2（且中间存在非簿记变更）"
       },
       "L1-12_schema_invariants_verified": {
         "status": "UNVERIFIED",
-        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head 90cd73b（且中间存在非簿记变更）"
+        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head 9f0caf2（且中间存在非簿记变更）"
       },
       "L1-13_negative_paths_covered": {
         "status": "UNVERIFIED",
-        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head 90cd73b（且中间存在非簿记变更）"
+        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head 9f0caf2（且中间存在非簿记变更）"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
         "status": "UNVERIFIED",
-        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head 90cd73b（且中间存在非簿记变更）"
+        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head 9f0caf2（且中间存在非簿记变更）"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
@@ -5186,7 +5201,7 @@
     "status": "DONE（MSG-20261003-134：端点+customs.recovery.chain.run/INTERNAL_WRITE+角色矩阵+immutable execution identity+路由级 E2E 4/4+API.md 90/77）"
   },
   "gates_recorded_at": "2026-10-03T15:17:04.369Z",
-  "ci_status_head": "f5bdd92",
+  "ci_status_head": "9f0caf2",
   "ci_status": "in_progress",
   "ci_run_id": "37143524364",
   "internal_code_complete_at": "2026-10-03T15:36:47.862Z",
@@ -6110,5 +6125,14 @@
     "no production credentials",
     "no external submission",
     "no real filing"
-  ]
+  ],
+  "ci_red_streak_diagnosis": {
+    "observed": "d48d671 … 8138a48 连续 CI failure（API · migration + typecheck + tests）",
+    "failed_step": "Verify tenant-integrity triggers (checklist of name / table / event / enabled)",
+    "root_cause": "CA-2（CustomsAuthorizedSignerFact）新增的 cc_tenant_customsauthorizedsignerfact / cc_append_only__CustomsAuthorizedSignerFact / cc_ior_lineage__CustomsAuthorizedSignerFact 从未登记进 tools/tenant-triggers/*.json，任何全量库都会触发清单反向校验失败",
+    "fix": "90cd73b 补齐 required-triggers.json（+2 baseline）与 append-only-triggers.json（+2）",
+    "local_evidence": "emit-check-sql：102 baseline / 78 immutable / 2 scoped；emit-check-append-only-sql：47 —— 两条闸门 exit=0",
+    "status": "FIXED_PENDING_CI_CONFIRMATION",
+    "at": "2026-10-04T03:15:39.188Z"
+  }
 }
