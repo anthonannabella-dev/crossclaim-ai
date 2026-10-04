@@ -173,3 +173,13 @@ CREATE TRIGGER "cc_append_only__CustomsProviderTenantBindingLineage"
 CREATE TRIGGER "cc_tenant_CustomsProviderTenantBindingLineage"
   BEFORE INSERT OR UPDATE ON "CustomsProviderTenantBindingLineage"
   FOR EACH ROW EXECUTE FUNCTION crossclaim_assert_tenant_integrity('bindingId', 'CustomsProviderTenantBinding');
+
+-- CI 契约（tools/tenant-triggers）：每张含 organizationId 的表都必须有 cc_tenant_immutable__<Table>（BEFORE UPDATE）。
+-- 复用仓库既有函数 cc_forbid_tenant_reassignment()。
+CREATE TRIGGER "cc_tenant_immutable__CustomsProviderTenantBinding"
+  BEFORE UPDATE ON "CustomsProviderTenantBinding"
+  FOR EACH ROW EXECUTE FUNCTION cc_forbid_tenant_reassignment();
+
+CREATE TRIGGER "cc_tenant_immutable__CustomsProviderTenantBindingLineage"
+  BEFORE UPDATE ON "CustomsProviderTenantBindingLineage"
+  FOR EACH ROW EXECUTE FUNCTION cc_forbid_tenant_reassignment();
