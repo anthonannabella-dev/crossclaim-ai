@@ -708,6 +708,22 @@ const de: Messages = {
       checker: "Anspruch kostenlos prüfen",
     },
   },
+  rsi: {
+    cost: {
+      title: "RSI-Kostenkontrolle",
+      today: "Heute",
+      month: "Dieser Monat",
+      events: "Beobachtete Ereignisse",
+      incidents: "Vorfälle",
+      ruleResolved: "Durch Regeln gelöst",
+      lowCostCalls: "Aufrufe günstiger Modelle",
+      strongCalls: "Aufrufe starker Modelle",
+      tokens: "Token-Verbrauch",
+      cost: "KI-Kosten",
+      budgetRemaining: "Restbudget",
+      costSafeMode: "Kostensicherer Modus",
+    },
+  },
 };
 
 export default de;

@@ -705,6 +705,22 @@ const ja: Messages = {
       checker: "無料で対象を確認",
     },
   },
+  rsi: {
+    cost: {
+      title: "RSI コスト管理",
+      today: "今日",
+      month: "今月",
+      events: "観測イベント",
+      incidents: "インシデント",
+      ruleResolved: "ルールで解決",
+      lowCostCalls: "低コストモデル呼び出し",
+      strongCalls: "高性能モデル呼び出し",
+      tokens: "トークン使用量",
+      cost: "AI コスト",
+      budgetRemaining: "残り予算",
+      costSafeMode: "コスト安全モード",
+    },
+  },
 };
 
 export default ja;

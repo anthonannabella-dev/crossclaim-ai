@@ -707,6 +707,22 @@ const es: Messages = {
       checker: "Comprobar elegibilidad gratis",
     },
   },
+  rsi: {
+    cost: {
+      title: "Control de coste RSI",
+      today: "Hoy",
+      month: "Este mes",
+      events: "Eventos observados",
+      incidents: "Incidentes",
+      ruleResolved: "Resuelto por reglas",
+      lowCostCalls: "Llamadas a modelo económico",
+      strongCalls: "Llamadas a modelo potente",
+      tokens: "Uso de tokens",
+      cost: "Coste de IA",
+      budgetRemaining: "Presupuesto restante",
+      costSafeMode: "Modo de coste seguro",
+    },
+  },
 };
 
 export default es;

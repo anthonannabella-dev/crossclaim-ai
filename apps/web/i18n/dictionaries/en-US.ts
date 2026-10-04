@@ -706,6 +706,22 @@ const enUS: Messages = {
       checker: "Check eligibility for free",
     },
   },
+  rsi: {
+    cost: {
+      title: "RSI cost control",
+      today: "Today",
+      month: "This month",
+      events: "Events observed",
+      incidents: "Incidents",
+      ruleResolved: "Rule engine resolved",
+      lowCostCalls: "Low cost model calls",
+      strongCalls: "Strong model calls",
+      tokens: "Token usage",
+      cost: "AI cost",
+      budgetRemaining: "Budget remaining",
+      costSafeMode: "Cost safe mode",
+    },
+  },
 };
 
 export default enUS;

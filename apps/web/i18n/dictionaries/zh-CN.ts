@@ -701,6 +701,22 @@ const zhCN = {
       checker: "免费试用资格检查",
     },
   },
+  rsi: {
+    cost: {
+      title: "RSI 成本控制",
+      today: "今日",
+      month: "本月",
+      events: "观测事件",
+      incidents: "Incident",
+      ruleResolved: "规则引擎解决",
+      lowCostCalls: "低成本模型调用",
+      strongCalls: "强模型调用",
+      tokens: "Token 用量",
+      cost: "AI 花费",
+      budgetRemaining: "剩余预算",
+      costSafeMode: "成本安全模式",
+    },
+  },
 };
 
 export default zhCN;

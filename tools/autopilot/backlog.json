@@ -1,6 +1,6 @@
 {
   "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。",
-  "updatedAt": "2026-10-05T01:16:00.000Z",
+  "updatedAt": "2026-10-05T01:21:00.000Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -1479,7 +1479,14 @@
       "title": "/admin/autonomy 成本面板（today/month：incidents、rule-resolved、low/strong 调用、tokens、cost、budget remaining）",
       "scope": "RSI 长期运行但不得持续消耗 token：确定性优先、分级、预算与熔断",
       "acceptance_criteria": "对应实现/用例落地；api tsc 0；不新增 schema（如需另送 Schema Delta）",
-      "status": "READY"
+      "status": "PARTIAL_IMPLEMENTED_PENDING_CI",
+      "implementation_head": "(this commit)",
+      "artifacts": [
+        "apps/web/app/admin/autonomy/cost-panel.tsx",
+        "apps/web/i18n/dictionaries/*（rsi.cost.* 5 语言）"
+      ],
+      "evidence": "i18n locales=5 keys=636 hardcoded=0；web tsc 0",
+      "remaining": "服务端数据注入：需内部 admin 端点或 RSI Controller 只读接口（读台账）；该端点属内部认证面，需与 /admin/autonomy 页面接线一并实现"
     },
     {
       "id": "RSI-COST-05-cost-e2e",
