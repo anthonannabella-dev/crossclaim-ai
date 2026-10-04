@@ -159,6 +159,9 @@ describe('模型清单一致性（C-0002 CHANGE #1）', () => {
     'IndependentSiteSettlementFact',
     // CHANGE B（MSG-20261003-141）：Phase 1 结果的只读投影
     'IndependentSitePhase1Projection',
+    // CA-4 REVISE D（MSG-20261004-06 批准）：受控状态机 + append-only 事件历史
+    'CustomsBrokerAuthorizationSession',
+    'CustomsBrokerAuthorizationSessionEvent',
   ];
   const JOIN_MODELS = [
     'CaseEvidence',
@@ -173,7 +176,7 @@ describe('模型清单一致性（C-0002 CHANGE #1）', () => {
 
 
   it(`核心模型恰好 ${CORE.length} 个`, () => {
-    expect(CORE).toHaveLength(71);
+    expect(CORE).toHaveLength(73);
     for (const name of CORE) expect(modelBlock(name), `缺少核心模型 ${name}`).not.toBe('');
   });
 
@@ -181,8 +184,8 @@ describe('模型清单一致性（C-0002 CHANGE #1）', () => {
     for (const name of JOIN_MODELS) expect(modelBlock(name), `缺少联结模型 ${name}`).not.toBe('');
   });
 
-  it('模型总数为 80（74 core + 6 join）—— 与 README/DOMAIN_MODEL 表述一致', () => {
-    expect(modelNames()).toHaveLength(80);
+  it('模型总数为 82（76 core + 6 join）—— 与 README/DOMAIN_MODEL 表述一致', () => {
+    expect(modelNames()).toHaveLength(82);
   });
 });
 

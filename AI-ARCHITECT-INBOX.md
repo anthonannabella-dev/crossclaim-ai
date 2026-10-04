@@ -128876,3 +128876,238 @@ no real filing
 
 必须修集合仅剩上面那个 replay observedAt 元数据一致性问题，可在进入 CA-4 前后顺手收掉。
 ```
+
+### [MSG-20261004-06] ARCHITECT VERDICT — CUSTOMS AUTHORIZATION CA-4 = PASS WITH REVISE（A：URL scheme 大小写绕过 + data:/file:；B：VERIFIED 与 POA 证据条件统一；C：verificationSource/verifiedAt 成为 session 真值并显式映射到 POA；D：落 CustomsBrokerAuthorizationSession 受控状态机 + append-only 事件 + PG 并发/租户/迁移测试；A–D 落地后 CA-4 = CLOSED → CA-5）
+
+```text
+CUSTOMS AUTHORIZATION CA-4：PASS WITH REVISE。
+
+当前 8 态状态机和整体方向可接受，但现在还不建议直接把 CA-4 标 CLOSED。先修 3 个契约缺口，再落持久化层；持久化验收通过后即可 CLOSED 并进入 CA-5。
+
+8 状态 + 转移白名单：PASS
+
+现有状态：
+
+CREATED → CUSTOMER_ACTION_REQUIRED → SIGNED → PROVIDER_VERIFYING → VERIFIED / REJECTED
+
+以及非终态可进入 EXPIRED / REVOKED，足够覆盖第一版 Broker authorization lifecycle。
+
+我不要求新增状态。
+
+VERIFIED / REJECTED / EXPIRED / REVOKED 作为 session 终态也可以接受，因为后续授权真正被撤销时，应通过 CA-3 的 POA lifecycle fact 表达，而不是重新打开旧 session。
+
+所以这里不需要为了“以后撤销”允许 VERIFIED → REVOKED。
+
+Opaque ref：REVISE，一个安全小洞
+
+当前：
+
+纯文本
+value.startsWith('http://')
+value.startsWith('https://')
+value.startsWith('javascript:')
+
+是大小写敏感的。
+
+例如：
+
+纯文本
+HTTPS://example.com
+JaVaScRiPt:...
+
+不会命中这三个判断，而你的 OPAQUE_REF_RE 又允许字母、冒号、斜杠，因此存在绕过可能。
+
+CHANGE A
+
+URL/scheme 拒绝至少改成大小写不敏感：
+
+纯文本
+/^https?:\/\//i
+/^javascript:/i
+
+建议顺便拒绝明显 URL-like：
+
+纯文本
+/^data:/i
+/^file:/i
+
+但仍应允许你自己的 opaque namespace：
+
+纯文本
+broker:abc
+provider-auth:xyz
+evidence:123
+
+所以不要粗暴禁止所有带冒号的字符串。
+
+VERIFIED 证据门槛：REVISE，当前内部不一致
+
+现在 transitionBrokerAuthorizationSession() 允许：
+
+纯文本
+verificationSource = PROVIDER_EVIDENCE
+providerAuthorizationRef != null
+evidenceArtifactRef = null
+
+即可进入 VERIFIED。
+
+但之后：
+
+brokerAuthorizationSessionToPoaAppend()
+
+又硬性要求：
+
+纯文本
+session.evidenceArtifactRef
+
+否则报 VERIFICATION_EVIDENCE_REQUIRED。
+
+于是存在一种合法 VERIFIED session，却无法转换成 POA。
+
+CHANGE B
+
+两处必须统一。
+
+建议采用更安全的版本：
+
+VERIFIED 必须最终产生 EvidenceArtifact，因此进入 VERIFIED 时要求 evidenceArtifactRef。
+
+providerAuthorizationRef 可以作为 provider-side reference，但不能替代你平台内部证据资产。
+
+即：
+
+纯文本
+verificationSource required
+AND evidenceArtifactRef required
+providerAuthorizationRef optional
+
+这样 CA-3 的 POA fact 有稳定可审计 evidence lineage。
+
+如果真实 provider 只给 providerAuthorizationRef，则先把 provider response/material 转成 EvidenceArtifact，再 VERIFIED。
+
+verificationSource 没有被 Session 保存：REVISE
+
+当前 TransitionContext 有：
+
+纯文本
+verificationSource
+
+但 BrokerAuthorizationSession 本身没有该字段。
+
+所以一旦 transition 函数返回后，你只能知道：
+
+纯文本
+status = VERIFIED
+providerAuthorizationRef
+evidenceArtifactRef
+
+却不知道它究竟是：
+
+纯文本
+PROVIDER_EVIDENCE
+
+还是：
+
+纯文本
+MANUAL_REVIEW
+
+更严重的是 brokerAuthorizationSessionToPoaAppend() 无论怎么 verified，都直接写：
+
+纯文本
+verificationSource = BROKER_ATTESTATION
+
+这会把：
+
+MANUAL_REVIEW
+
+错误改写成：
+
+BROKER_ATTESTATION
+
+CHANGE C
+
+Session 至少增加：
+
+纯文本
+verificationSource?: PROVIDER_EVIDENCE | MANUAL_REVIEW | null
+verifiedAt?: Date | null
+
+进入 VERIFIED 时持久化。
+
+然后 POA 映射必须显式定义来源转换，而不是一律 BROKER_ATTESTATION。
+
+例如：
+
+纯文本
+PROVIDER_EVIDENCE → BROKER_ATTESTATION
+MANUAL_REVIEW     → MANUAL_REVIEW
+
+这和 CA-3 的 ServerVerificationSource 已经能对齐。
+
+3) 是否批准持久化表？
+
+批准。
+
+但我不建议把 Session 本身做成“每次状态变化新增整行”的纯 append-only fact。
+
+这里更适合：
+
+CustomsBrokerAuthorizationSession = 受控可迁移状态机
++
+CustomsBrokerAuthorizationSessionEvent / AuditLog = append-only 历史
+
+原因是 Session 是一个有明确 identity 的进行中工作对象：
+
+纯文本
+sessionId
+CREATED → SIGNED → VERIFYING → VERIFIED
+
+它和 POA Fact 不一样。POA 是事实真值，天然 append-only；Session 是 workflow state，受控 UPDATE 更自然。
+
+推荐数据库约束：
+
+tenant scoped；
+sessionId tenant unique；
+immutable：
+organizationId / principalRef / brokerRef / providerRef / jurisdiction / requestedScope / authorizationType / route
+只允许状态机白名单 UPDATE；
+terminal 不可迁出；
+VERIFIED 必须 evidence + verificationSource + verifiedAt；
+completedAt 仅 terminal；
+每次 transition 同事务写 AuditLog 或 append-only event；
+optimistic version / CAS，防并发双迁移；
+不允许普通 Prisma .update() 绕开 service boundary。
+
+另外建议增加：
+
+纯文本
+version
+
+或基于：
+
+纯文本
+WHERE id=? AND status=expectedStatus
+
+做 CAS，保证两个 webhook/worker 同时推进不会产生 lost update。
+
+4) 是否允许 CA-4 CLOSED / 进入 CA-5？
+
+我的裁决是：
+
+当前契约：PASS WITH REVISE。
+
+先完成最小集合：
+
+A：URL scheme 大小写绕过修复
+B：VERIFIED 与 POA evidence 条件统一
+C：verificationSource/verifiedAt 成为 session 真值并正确映射到 POA
+D：落 CustomsBrokerAuthorizationSession 持久化状态机 + PG concurrency/tenant/transition tests
+
+D 落地时不需要再大改架构，按上面的“受控 UPDATE Session + append-only Audit/Event”即可。
+
+完成 A–D 后：
+
+CA-4 = CLOSED，可进入 CA-5。
+
+Production boundary 继续保持不变：不接真实 Broker、无真实授权跳转、无真实 Filing/CBP/ACE/ABI、无生产凭据。
+```

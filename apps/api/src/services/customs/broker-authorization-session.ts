@@ -8,6 +8,11 @@
  * 状态机：CREATED → CUSTOMER_ACTION_REQUIRED → SIGNED → PROVIDER_VERIFYING → VERIFIED / REJECTED
  *         （任意非终态可 → EXPIRED / REVOKED）
  * VERIFIED 只能由 server / provider evidence 触发，并据此生成 append-only Broker POA 事实（CA-3 写入口）。
+ *
+ * MSG-20261004-06 REVISE（CA-4 PASS WITH REVISE）：
+ *   A = scheme 拒绝改为大小写不敏感，并补 data: / file:
+ *   B = VERIFIED 与 POA 的证据条件统一（evidenceArtifactRef 必须存在）
+ *   C = verificationSource / verifiedAt 成为 session 真值，并显式映射到 POA（不再一律 BROKER_ATTESTATION）
  */
 
 import { createHash } from 'node:crypto';
@@ -30,9 +35,14 @@ export type CustomsBrokerAuthorizationSessionStatus =
 
 export type AuthorizationVerificationSource = 'PROVIDER_EVIDENCE' | 'MANUAL_REVIEW';
 
+/** POA 事实可接受的 server-side 验证来源（CA-3 的词表子集；REVISE C 显式映射）。 */
+export type PoaVerificationSource = 'BROKER_ATTESTATION' | 'MANUAL_REVIEW';
+
 const OPAQUE_REF_RE = /^[A-Za-z0-9._:@#/-]{1,96}$/;
 const SCOPE_TOKEN_RE = /^(\*|[A-Z][A-Z0-9_]{2,63})$/;
 const JURISDICTION_RE = /^[A-Z]{2}$/;
+/** REVISE A：scheme 判断大小写不敏感，避免 HTTPS:// / JaVaScRiPt: 绕过。 */
+const RAW_URL_SCHEME_RE = /^(https?:\/\/|javascript:|data:|file:)/i;
 
 export class BrokerAuthorizationSessionError extends Error {
   readonly code:
@@ -65,6 +75,9 @@ export interface BrokerAuthorizationSession {
   externalAuthorizationUrlRef?: string | null;
   providerAuthorizationRef?: string | null;
   evidenceArtifactRef?: string | null;
+  /** REVISE C：进入 VERIFIED 时由 server 决定并持久化，供 POA 映射使用。 */
+  verificationSource?: AuthorizationVerificationSource | null;
+  verifiedAt?: Date | null;
   expiresAt?: Date | null;
   completedAt?: Date | null;
   contentDigest: string;
@@ -87,9 +100,28 @@ export const BROKER_AUTHORIZATION_SESSION_TRANSITIONS: Record<
   REVOKED: [],
 };
 
+const TERMINAL_STATUSES: readonly CustomsBrokerAuthorizationSessionStatus[] = [
+  'VERIFIED',
+  'REJECTED',
+  'EXPIRED',
+  'REVOKED',
+];
+
+export function isTerminalBrokerAuthorizationSessionStatus(
+  status: CustomsBrokerAuthorizationSessionStatus,
+): boolean {
+  return TERMINAL_STATUSES.includes(status);
+}
+
+/** REVISE C：session 验证来源 → POA 事实验证来源的显式映射。 */
+export const SESSION_TO_POA_VERIFICATION_SOURCE: Record<AuthorizationVerificationSource, PoaVerificationSource> = {
+  PROVIDER_EVIDENCE: 'BROKER_ATTESTATION',
+  MANUAL_REVIEW: 'MANUAL_REVIEW',
+};
+
 function assertOpaqueRef(value: string | null | undefined, field: string): void {
   if (value === null || value === undefined) return;
-  if (value.startsWith('http://') || value.startsWith('https://') || value.startsWith('javascript:')) {
+  if (RAW_URL_SCHEME_RE.test(value)) {
     throw new BrokerAuthorizationSessionError('RAW_URL_NOT_ALLOWED', field + ' 只能存不透明引用，不得存裸 URL');
   }
   if (/^[0-9]{2}-[0-9]{7}$/.test(value) || /^[0-9]{6,12}$/.test(value)) {
@@ -158,6 +190,8 @@ export function createBrokerAuthorizationSession(
     externalAuthorizationUrlRef: input.externalAuthorizationUrlRef ?? null,
     providerAuthorizationRef: null,
     evidenceArtifactRef: null,
+    verificationSource: null,
+    verifiedAt: null,
     expiresAt: input.expiresAt ?? null,
     completedAt: null,
     createdAt: at,
@@ -180,7 +214,9 @@ export interface TransitionContext {
 
 /**
  * 状态迁移（唯一合法入口）。
- * - VERIFIED 必须带 server/provider 证据（verificationSource + providerAuthorizationRef 或 evidenceArtifactRef）。
+ * - VERIFIED 必须带 server/provider 证据：verificationSource + **evidenceArtifactRef**（REVISE B，与 POA 写入条件统一）；
+ *   providerAuthorizationRef 为可选补充，不能替代平台内部证据资产。
+ * - 进入 VERIFIED 时持久化 verificationSource / verifiedAt（REVISE C）。
  * - 进入终态时写入 completedAt。
  */
 export function transitionBrokerAuthorizationSession(
@@ -202,21 +238,24 @@ export function transitionBrokerAuthorizationSession(
   assertOpaqueRef(evidenceArtifactRef, 'evidenceArtifactRef');
 
   if (next === 'VERIFIED') {
-    if (!context.verificationSource || (!providerAuthorizationRef && !evidenceArtifactRef)) {
+    if (!context.verificationSource || !evidenceArtifactRef) {
       throw new BrokerAuthorizationSessionError(
         'VERIFICATION_EVIDENCE_REQUIRED',
-        'VERIFIED 只能由 server/provider evidence 触发（需要 verificationSource + 引用）',
+        'VERIFIED 需要 verificationSource + evidenceArtifactRef（providerAuthorizationRef 不能替代内部证据）',
       );
     }
   }
 
   const at = context.at ?? new Date();
-  const terminal = next === 'VERIFIED' || next === 'REJECTED' || next === 'EXPIRED' || next === 'REVOKED';
+  const terminal = isTerminalBrokerAuthorizationSessionStatus(next);
+  const verifiedSource = next === 'VERIFIED' ? (context.verificationSource ?? null) : null;
   const updated: BrokerAuthorizationSession = {
     ...session,
     status: next,
     providerAuthorizationRef,
     evidenceArtifactRef,
+    verificationSource: verifiedSource,
+    verifiedAt: next === 'VERIFIED' ? at : null,
     completedAt: terminal ? at : session.completedAt ?? null,
     updatedAt: at,
   };
@@ -234,14 +273,15 @@ export interface PoaAppendCandidate {
   scope: readonly string[];
   jurisdiction: string;
   authorizationType: 'CBP_FORM_5291' | 'EQUIVALENT_REGULATORY_POA';
-  evidenceArtifactRef: string | null;
-  verificationSource: 'BROKER_ATTESTATION';
+  evidenceArtifactRef: string;
+  verificationSource: PoaVerificationSource;
   idempotencyKey: string;
 }
 
 /**
  * VERIFIED 会话 → CA-3 append-only Broker POA 事实输入（不在这里写库；由调用方走 appendAuthorizationLifecycle）。
  * 幂等键使用 sessionId，保证同一会话重复收敛不会产生第二条 POA。
+ * REVISE C：verificationSource 由 session 真值显式映射，MANUAL_REVIEW 不再被改写成 BROKER_ATTESTATION。
  */
 export function brokerAuthorizationSessionToPoaAppend(
   session: BrokerAuthorizationSession,
@@ -249,8 +289,11 @@ export function brokerAuthorizationSessionToPoaAppend(
   if (session.status !== 'VERIFIED') {
     throw new BrokerAuthorizationSessionError('INVALID_TRANSITION', '只有 VERIFIED 会话才能生成 POA 事实');
   }
-  if (!session.evidenceArtifactRef) {
-    throw new BrokerAuthorizationSessionError('VERIFICATION_EVIDENCE_REQUIRED', 'VERIFIED 会话必须有 evidence 引用');
+  if (!session.evidenceArtifactRef || !session.verificationSource) {
+    throw new BrokerAuthorizationSessionError(
+      'VERIFICATION_EVIDENCE_REQUIRED',
+      'VERIFIED 会话必须有 evidence 引用与 verificationSource 真值',
+    );
   }
   return {
     subject: 'BROKER_POA',
@@ -261,7 +304,7 @@ export function brokerAuthorizationSessionToPoaAppend(
     jurisdiction: session.jurisdiction,
     authorizationType: session.authorizationType,
     evidenceArtifactRef: session.evidenceArtifactRef,
-    verificationSource: 'BROKER_ATTESTATION',
+    verificationSource: SESSION_TO_POA_VERIFICATION_SOURCE[session.verificationSource],
     idempotencyKey: 'broker-authorization-session:' + session.sessionId,
   };
 }

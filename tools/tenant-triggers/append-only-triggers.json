@@ -1,6 +1,24 @@
 {
   "note": "R43 Implementation S1（MSG-20261001-31 CHANGE A + MSG-20261001-32 CHANGE A/B）—— 人工追回提交域的 append-only / 受控变更触发器清单。与 required-triggers.json（租户保护）刻意分离：cc_append_only__* 不得以 cc_tenant_ 前缀命名，以免触发租户清单的反向校验；本清单由 tools/tenant-triggers/emit-check-append-only-sql.mjs 在 CI 显式校验（fresh deploy 与 upgrade path 都跑），不得只靠测试碰巧触发。 PC-09（MSG-20261003-96 ⑬）：新增 PolicyAcceptance 的 append-only 守卫。 R45 S1（MSG-20261001-45 / -46）：新增 reconciliation 域的 append-only / 受控 supersede / generation 验证触发器，并登记 cc_reconciliation% 与 cc_reimbursementfact_% 前缀。说明：generation 一致性一律使用**立即判定**（BEFORE），不使用 DEFERRABLE 约束触发器 —— 实测 Prisma 客户端会吞掉 COMMIT 阶段 deferred 约束错误（静默回滚、调用方无感）。 CARRIER QUEUE #9B FINAL（MSG-20261003-119 ㉜）：新增 CarrierManualSubmission append-only 守卫。 CARRIER QUEUE #10 FINAL（MSG-20261003-122 ㉓）：新增 CarrierClaimResponseFact append-only 守卫。 C17（MSG-20261003-124 ④⑤）：新增 CustomsSubmissionAttemptFact append-only 守卫。 ENTERPRISE IOR RECOVERY LAYER（MSG-20261003-136）：新增三张 IOR 事实表的 append-only 守卫与两条同租户 lineage 守卫。 BG-021（MSG-20261003-139）：新增 independent-site 三表 append-only 守卫与两条同租户 lineage 守卫。 CHANGE B（MSG-20261003-141）：新增 Phase-1 只读投影 append-only 守卫。",
   "triggers": [
+  {
+    "name": "cc_append_only__CustomsAuthorizedSignerFact",
+    "table": "CustomsAuthorizedSignerFact",
+    "tgtype": 27,
+    "semantics": "BEFORE UPDATE OR DELETE → 拒绝（CA-2 signer 授权事实 append-only；修正以新事实表达）"
+  },
+  {
+    "name": "cc_ior_lineage__CustomsAuthorizedSignerFact",
+    "table": "CustomsAuthorizedSignerFact",
+    "tgtype": 7,
+    "semantics": "BEFORE INSERT → 必须存在同租户同 principal 的 IOR 身份事实"
+  },
+  {
+    "name": "cc_append_only__CustomsBrokerAuthorizationSessionEvent",
+    "table": "CustomsBrokerAuthorizationSessionEvent",
+    "tgtype": 27,
+    "semantics": "BEFORE UPDATE OR DELETE → 拒绝（CA-4 会话迁移历史 append-only；修正以新迁移事件表达）"
+  },
     {
       "name": "cc_append_only__PolicyAcceptance",
       "table": "PolicyAcceptance",

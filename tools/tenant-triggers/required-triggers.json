@@ -4,6 +4,18 @@
   "immutableTgtype": 19,
   "baselineTgtype": 23,
   "baselineTriggers": [
+  {
+    "name": "cc_tenant_customsauthorizedsignerfact",
+    "table": "CustomsAuthorizedSignerFact"
+  },
+  {
+    "name": "cc_tenant_customsbrokerauthorizationsession",
+    "table": "CustomsBrokerAuthorizationSession"
+  },
+  {
+    "name": "cc_tenant_customsbrokerauthorizationsessionevent",
+    "table": "CustomsBrokerAuthorizationSessionEvent"
+  },
     {
       "name": "cc_tenant_appeal",
       "table": "Appeal"

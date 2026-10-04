@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-04T02:51:02.849Z",
+  "generated_at": "2026-10-04T03:09:05.983Z",
   "rule": "COVERED 需存在命名证据文件；否则 GAP",
   "domains": [
     {
@@ -226,7 +226,7 @@
     {
       "id": "customs",
       "name": "Customs / Trade Recovery",
-      "domain_test_files": 33,
+      "domain_test_files": 34,
       "domain_web_files": 14,
       "cells": {
         "http": {
@@ -294,9 +294,9 @@
           "status": "COVERED",
           "evidence": [
             "apps/api/src/__tests__/customs-authorization-lifecycle-db.test.ts",
+            "apps/api/src/__tests__/customs-broker-authorization-session-db.test.ts",
             "apps/api/src/__tests__/customs-entry-fact-store-db.test.ts",
-            "apps/api/src/__tests__/customs-ior-facts-db.test.ts",
-            "apps/api/src/__tests__/customs-return-fact-store-db.test.ts"
+            "apps/api/src/__tests__/customs-ior-facts-db.test.ts"
           ]
         },
         "failure_recovery": {
@@ -314,7 +314,7 @@
             "apps/api/src/__tests__/customs-authorization-lifecycle-db.test.ts",
             "apps/api/src/__tests__/customs-authorization-route-db.test.ts",
             "apps/api/src/__tests__/customs-authorized-signer-db.test.ts",
-            "apps/api/src/__tests__/customs-claim-ready-http.test.ts"
+            "apps/api/src/__tests__/customs-broker-authorization-session-db.test.ts"
           ]
         },
         "rbac": {
