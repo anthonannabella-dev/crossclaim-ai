@@ -17,6 +17,13 @@ import { appendFile } from 'node:fs/promises';
 import { attachContinuationToController, type RsiTaskRunner } from './rsi-controller-continuation';
 import { createRsiEventLoop, type RsiEventSources, type RsiEventLoopHandle } from './rsi-event-loop';
 import { createLocalEventSources, type RsiReadFile } from './rsi-local-sources';
+import {
+  createAdminSnapshotPublisher,
+  type RsiSnapshotPublisher,
+} from './rsi-admin-snapshot-publisher';
+import type { RsiAdminHealth } from './rsi-admin-snapshot';
+import type { RsiCostLedger } from '../services/autonomy/rsi-cost-ledger';
+import type { RsiCostUsage } from '../services/autonomy/rsi-cost-policy';
 import type { RsiSafeTask } from '../services/autonomy/rsi-continuation-engine';
 
 export function parseTaskQueue(raw: string): readonly RsiSafeTask[] {
@@ -51,6 +58,7 @@ export function createNoopRunner(log?: (line: string) => void): RsiTaskRunner {
 export interface RsiRuntimeComposition {
   loop: RsiEventLoopHandle;
   controller: ReturnType<typeof attachContinuationToController>;
+  publisher: RsiSnapshotPublisher | null;
   start(): void;
   stop(): void;
 }
@@ -63,6 +71,14 @@ export async function composeRsiRuntime(input: {
   testResultsPath?: string;
   runner?: RsiTaskRunner;
   intervalMs?: number;
+  /** 配置后：周期性把健康 + 台账写成功 artifact（供 /admin/autonomy 只读）。 */
+  adminSnapshot?: {
+    path: string;
+    write: (path: string, content: string) => Promise<void>;
+    ledger: RsiCostLedger;
+    healthProvider: () => RsiAdminHealth;
+    usageProvider: () => RsiCostUsage;
+  };
 }): Promise<RsiRuntimeComposition> {
   let tasks: readonly RsiSafeTask[] = [];
   if (input.tasksPath !== undefined) {
@@ -93,11 +109,30 @@ export async function composeRsiRuntime(input: {
     intervalMs: input.intervalMs ?? 60_000,
   });
 
+  const publisher =
+    input.adminSnapshot === undefined
+      ? null
+      : createAdminSnapshotPublisher({
+          path: input.adminSnapshot.path,
+          write: input.adminSnapshot.write,
+          ledger: input.adminSnapshot.ledger,
+          healthProvider: input.adminSnapshot.healthProvider,
+          usageProvider: input.adminSnapshot.usageProvider,
+          intervalMs: input.intervalMs ?? 60_000,
+        });
+
   return {
     loop,
     controller,
-    start: () => loop.start(),
-    stop: () => loop.stop(),
+    publisher,
+    start: () => {
+      loop.start();
+      publisher?.start();
+    },
+    stop: () => {
+      loop.stop();
+      publisher?.stop();
+    },
   };
 }
 
@@ -105,6 +140,7 @@ export const RSI_RUNTIME_COMPOSITION_BOUNDARY = {
   eventDriven: true,
   watchdogFallbackOnly: true,
   defaultRunnerIsNoop: true,
+  adminSnapshotIsReadOnlyArtifact: true,
   readsCredentials: false,
   writesDatabase: false,
   performsExternalWrite: false,

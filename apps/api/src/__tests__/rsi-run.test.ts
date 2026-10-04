@@ -9,6 +9,7 @@ import {
   parseTaskQueue,
 } from '../runtime/rsi-run';
 import type { RsiReadFile } from '../runtime/rsi-local-sources';
+import { createRsiCostLedger } from '../services/autonomy/rsi-cost-ledger';
 
 const files = (map: Record<string, string>): RsiReadFile => async (path) => {
   const value = map[path];
@@ -71,5 +72,52 @@ describe('RSI 运行组装入口', () => {
     expect(RSI_RUNTIME_COMPOSITION_BOUNDARY.watchdogFallbackOnly).toBe(true);
     expect(RSI_RUNTIME_COMPOSITION_BOUNDARY.readsCredentials).toBe(false);
     expect(RSI_RUNTIME_COMPOSITION_BOUNDARY.writesDatabase).toBe(false);
+  });
+
+  it('RSI_RUN_PUBLISHER_WIRED_WHEN_CONFIGURED：配置后随运行时起停并写出快照，未配置则为 null', async () => {
+    const writes: string[] = [];
+    const ledger = createRsiCostLedger();
+    ledger.recordRuleResolved({ entryId: 'r1', at: new Date().toISOString(), incidentId: 'inc-1' });
+
+    const runtime = await composeRsiRuntime({
+      readFile: files({}),
+      intervalMs: 60_000,
+      adminSnapshot: {
+        path: '/snapshot.json',
+        write: async (_path, content) => {
+          writes.push(content);
+        },
+        ledger,
+        healthProvider: () => ({
+          health: 'HEALTHY',
+          openIncidents: 0,
+          activeTasks: 0,
+          failedTasks: 0,
+          pendingOwnerApprovals: 0,
+          lastScanAt: null,
+        }),
+        usageProvider: () => ({
+          spentToday: 0,
+          spentThisMonth: 0,
+          incidentSpent: 0,
+          incidentAttempts: 0,
+          incidentCandidates: 0,
+          incidentLlmCalls: 0,
+          incidentTokens: 0,
+          incidentElapsedMinutes: 0,
+          strongCallsForTask: 0,
+        }),
+      },
+    });
+    expect(runtime.publisher).not.toBeNull();
+    const published = await runtime.publisher!.publishOnce();
+    expect(published.ok).toBe(true);
+    expect(JSON.parse(writes[0]!).schema).toBe('rsi-admin-snapshot-v1');
+    runtime.start();
+    runtime.stop();
+
+    const bare = await composeRsiRuntime({ readFile: files({}), intervalMs: 60_000 });
+    expect(bare.publisher).toBeNull();
+    expect(RSI_RUNTIME_COMPOSITION_BOUNDARY.adminSnapshotIsReadOnlyArtifact).toBe(true);
   });
 });
