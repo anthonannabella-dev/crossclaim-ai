@@ -23,6 +23,7 @@ import {
   classifyProviderOutcome,
   ProviderBlindRetryError,
 } from '../services/customs/customs-provider-reconciliation';
+import { decideProviderReconciliation } from '../services/customs/customs-provider-reconciliation-lookup';
 
 const prisma = new PrismaClient();
 const ORG = 'cc180000-0000-4000-8000-000000000001';
@@ -92,6 +93,7 @@ describe('C18-8 — AMBIGUOUS → C17 ledger reconciliation (PostgreSQL)', () =>
     const store = createPrismaCustomsSubmissionLedgerStore(prisma);
     const provider = createSandboxFilingProvider({ now: () => NOW });
     let createSubmissionCalls = 0;
+    let lookupCalls = 0;
 
     const opened = await openCustomsSubmissionAttempt(rootInput(), { store, now: () => NOW });
     if (!opened.ok) throw new Error('expected root');
@@ -139,10 +141,17 @@ describe('C18-8 — AMBIGUOUS → C17 ledger reconciliation (PostgreSQL)', () =>
       if (!outcome.ok) throw new Error('expected fact, got ' + outcome.reason);
     }
 
-    // provider lookup（同 idempotencyKey）→ 拿到既有 submission，digest 一致 → adopt。
-    createSubmissionCalls += 1;
-    const lookedUp = await provider.createSubmission(sandboxInput('idem-c18-8'));
-    expect(lookedUp.providerSubmissionId).toBe(applied.providerSubmissionId);
+    // 对账必须走**只读** lookup（不是第二次 createSubmission）。
+    lookupCalls += 1;
+    const lookup = await provider.lookupByIdempotencyKey({
+      organizationId: ORG,
+      idempotencyKey: 'idem-c18-8',
+    });
+    expect(lookup.outcome).toBe('FOUND');
+    const decision = decideProviderReconciliation({ lookup, expectedPayloadDigest: DIGEST_A });
+    expect(decision.verdict).toBe('ADOPT_EXISTING');
+    expect(decision.providerSubmissionId).toBe(applied.providerSubmissionId);
+    expect(decision.resubmitAllowed).toBe(false);
     expect(provider.listSubmissions(ORG)).toHaveLength(1);
 
     const adopted = await recordCustomsSubmissionAttemptFact(
@@ -150,7 +159,7 @@ describe('C18-8 — AMBIGUOUS → C17 ledger reconciliation (PostgreSQL)', () =>
         organizationId: ORG,
         attemptId,
         status: 'SUBMITTED',
-        providerSubmissionId: lookedUp.providerSubmissionId,
+        providerSubmissionId: decision.providerSubmissionId,
         source: 'PROVIDER_API',
         verificationLevel: 'PROVIDER_VERIFIED',
         observedAt: '2026-10-04T05:53:00.000Z',
@@ -170,12 +179,16 @@ describe('C18-8 — AMBIGUOUS → C17 ledger reconciliation (PostgreSQL)', () =>
     // 关键不变式：整个歧义→对账→采用过程中，submission root 始终只有 1 个。
     expect(await prisma.customsSubmissionAttempt.count()).toBe(1);
     expect(provider.listSubmissions(ORG)).toHaveLength(1);
-    expect(createSubmissionCalls).toBe(2); // 1 次原始写 + 1 次对账查询（不是第二次提交）
+    // 关键：整条歧义→对账→采用链路上，写操作永远只有 1 次；对账只走只读查询。
+    expect(createSubmissionCalls).toBe(1);
+    expect(lookupCalls).toBe(1);
   });
 
   it('same key + different digest：conflict，根数仍为 1，绝不盲重发', async () => {
     const store = createPrismaCustomsSubmissionLedgerStore(prisma);
     const provider = createSandboxFilingProvider({ now: () => NOW });
+    let createSubmissionCalls = 0;
+    let lookupCalls = 0;
 
     const opened = await openCustomsSubmissionAttempt(rootInput({ idempotencyKey: 'idem-c18-8-b' }), {
       store,
@@ -184,11 +197,9 @@ describe('C18-8 — AMBIGUOUS → C17 ledger reconciliation (PostgreSQL)', () =>
     if (!opened.ok) throw new Error('expected root');
     const attemptId = opened.root.id;
 
-    // provider 侧已存在「同 key + 不同 digest」的提交 → 幂等冲突（协议错误，不重试）。
+    // provider 侧已存在「同 key + 不同 digest」的提交（1 次写，模拟第一次写其实已生效）。
     await provider.createSubmission(sandboxInput('idem-c18-8-b', DIGEST_A));
-    await expect(provider.createSubmission(sandboxInput('idem-c18-8-b', DIGEST_B))).rejects.toThrow(
-      'IDEMPOTENCY_KEY_CONFLICT',
-    );
+    createSubmissionCalls += 1;
 
     for (const step of [
       { status: 'ATTEMPTED', observedAt: '2026-10-04T05:50:00.000Z' },
@@ -209,6 +220,18 @@ describe('C18-8 — AMBIGUOUS → C17 ledger reconciliation (PostgreSQL)', () =>
       if (!outcome.ok) throw new Error('expected fact, got ' + outcome.reason);
     }
 
+    // 对账只读查询拿回 provider 侧已有 digest，内部比较得出 mismatch（不得用第二次 createSubmission 去"查询冲突"）。
+    lookupCalls += 1;
+    const lookup = await provider.lookupByIdempotencyKey({
+      organizationId: ORG,
+      idempotencyKey: 'idem-c18-8-b',
+    });
+    expect(lookup.outcome).toBe('FOUND');
+    const decision = decideProviderReconciliation({ lookup, expectedPayloadDigest: DIGEST_B });
+    expect(decision.verdict).toBe('CONFLICT_MISMATCH');
+    expect(decision.providerPayloadDigest).toBe(DIGEST_A);
+    expect(decision.providerSubmissionId).toBeNull();
+
     // digest 不一致 → 不得 adopt；进入人工复核，且不产生第二根、不盲目 POST。
     const conflict = await recordCustomsSubmissionAttemptFact(
       {
@@ -219,7 +242,7 @@ describe('C18-8 — AMBIGUOUS → C17 ledger reconciliation (PostgreSQL)', () =>
         source: 'PROVIDER_API',
         verificationLevel: 'PROVIDER_VERIFIED',
         observedAt: '2026-10-04T05:53:00.000Z',
-        errorCode: 'RECONCILIATION_DIGEST_MISMATCH',
+        errorCode: decision.reasonCode,
         reconciliationAttempt: 1,
       },
       { store, now: () => NOW },
@@ -228,6 +251,8 @@ describe('C18-8 — AMBIGUOUS → C17 ledger reconciliation (PostgreSQL)', () =>
 
     expect(await prisma.customsSubmissionAttempt.count()).toBe(1);
     expect(provider.listSubmissions(ORG)).toHaveLength(1);
+    expect(createSubmissionCalls).toBe(1);
+    expect(lookupCalls).toBe(1);
     const facts = await store.listFacts(ORG, attemptId);
     expect(facts.map((f) => f.status)).toEqual([
       'ATTEMPTED',

@@ -50,6 +50,8 @@ interface SandboxSubmission {
   organizationId: string;
   idempotencyKey: string;
   payloadDigest: string;
+  /** 不可变载荷标识（provider 侧对账用；与请求 packageDigest 同形）。 */
+  packageDigest: string;
   status: string;
   acceptedAt: string | null;
   refundStatus: string;
@@ -85,6 +87,10 @@ export function createSandboxFilingProvider(options: SandboxFilingProviderOption
     dueAt?: string | null;
   }): CustomsFilingRfiListResult;
   listSubmissions(organizationId: string): ReadonlyArray<{ providerSubmissionId: string; status: string }>;
+  /** C18-8：只读对账查询（同 idempotencyKey 反查 provider 侧记录；绝不写入、绝不创建）。 */
+  lookupByIdempotencyKey(input: { organizationId: string; idempotencyKey: string }):
+    | { outcome: 'NOT_FOUND' }
+    | { outcome: 'FOUND'; providerSubmissionId: string; payloadDigest: string; status: string };
 } {
   const now = options.now ?? (() => new Date());
   const submissions = new Map<string, SandboxSubmission>();
@@ -144,6 +150,7 @@ export function createSandboxFilingProvider(options: SandboxFilingProviderOption
         organizationId: input.organizationId,
         idempotencyKey: input.idempotencyKey,
         payloadDigest,
+        packageDigest: input.packageDigest,
         status: 'SUBMITTED',
         acceptedAt: null,
         refundStatus: 'NOT_REFUNDED',
@@ -277,6 +284,18 @@ export function createSandboxFilingProvider(options: SandboxFilingProviderOption
       return [...submissions.values()]
         .filter((row) => row.organizationId === organizationId)
         .map((row) => ({ providerSubmissionId: row.providerSubmissionId, status: row.status }));
+    },
+
+    lookupByIdempotencyKey(input) {
+      // 只读：不创建、不修改任何 provider 侧记录（专用于 AMBIGUOUS 对账）。
+      const row = findByKey(input.organizationId, input.idempotencyKey);
+      if (!row) return { outcome: 'NOT_FOUND' } as const;
+      return {
+        outcome: 'FOUND' as const,
+        providerSubmissionId: row.providerSubmissionId,
+        payloadDigest: row.packageDigest,
+        status: row.status,
+      };
     },
   };
 }

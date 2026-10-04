@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-04T06:25:53.647Z",
+  "generated_at": "2026-10-04T06:32:33.683Z",
   "rule": "COVERED 需存在命名证据文件；否则 GAP",
   "domains": [
     {
@@ -226,7 +226,7 @@
     {
       "id": "customs",
       "name": "Customs / Trade Recovery",
-      "domain_test_files": 46,
+      "domain_test_files": 47,
       "domain_web_files": 15,
       "cells": {
         "http": {
@@ -305,8 +305,8 @@
           "evidence": [
             "apps/api/src/__tests__/customs-provider-c17-reconciliation-db.test.ts",
             "apps/api/src/__tests__/customs-provider-negative-path-e2e.test.ts",
-            "apps/api/src/__tests__/customs-provider-reconciliation.test.ts",
-            "apps/api/src/__tests__/customs-recovery-chain-http.test.ts"
+            "apps/api/src/__tests__/customs-provider-reconciliation-lookup.test.ts",
+            "apps/api/src/__tests__/customs-provider-reconciliation.test.ts"
           ]
         },
         "cross_tenant": {

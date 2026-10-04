@@ -131722,3 +131722,150 @@ C18 = HOLD_EXTERNAL
 
 另外，我本次查询 4477158 时仍没有拿到该 HEAD 可独立确认的 GitHub workflow run/status，所以测试数字仍视为 Codex 的本地送审证据，不表述为我已经独立确认 GitHub CI SUCCESS。
 ```
+
+### [MSG-20261004-19] ARCHITECT VERDICT — LAYER 3 / C18 INTERNAL FINAL-2 = REVISE（reviewed HEAD = 9ffa228；① C18-6 = PASS / CLOSED、② C18-7 = PASS / CLOSED；③ C18-8 = REVISE 仅缺一项：必须新增 provider-neutral 的**只读** reconciliation lookup port（lookupSubmissionByIdempotencyKey(organizationId, idempotencyKey) → NOT_FOUND | FOUND{providerSubmissionId,payloadDigest,status}），PG E2E 必须改成 createSubmission 恒为 1 次 + lookup 只读查询 1 次；mismatch 只能由 lookup 返回的 digest 内部比较得出，不得用第二次 createSubmission 去"查询冲突"；C18_INTERNAL_SKELETON = NOT_CLOSED（下一轮送 C18 INTERNAL FINAL-3，只需核这一项）；SEO-3 = ALLOWED_TO_CONTINUE_IN_PARALLEL；SCHEMA_DELTA_PROPOSALS = ALLOWED_TO_PREPARE；REAL_TRANSPORT/PRODUCTION_ENABLEMENT/EXTERNAL_WRITE/PAYMENT = HOLD）
+
+```text
+ARCHITECT VERDICT：REVISE
+
+我按 reviewed HEAD = 9ffa228（完整 SHA 9ffa22895c715e29c6ba449a9c7cda8e07064fa0）重新验收了 FINAL-2。三条里，① C18-6 达标，② C18-7 达标；③ C18-8 还差一个真正的“只读对账入口”，所以现在还不能把 C18_INTERNAL_SKELETON 关掉。
+
+C18-6 这次可以 PASS / CLOSED。CROSSCLAIM_SAAS 已不再只是 enum：现在必须同时有 relationshipEvidenceRef 和可解析的 relationshipVerifiedAt，否则 RELATIONSHIP_NOT_VERIFIED fail-closed；caller 仍不能覆盖 tenantRef，tenant/provider/jurisdiction 隔离也保持正确。持久化放到后续 Schema Delta 合理。relationshipVerifiedAt 最终生产写入时应由 server 生成并防 future timestamp，但这属于持久化硬化，不阻塞当前内部 contract 关闭。
+
+C18-7 也可以 PASS / CLOSED。现在已经做到：未来 effectiveAt 不参与当前折叠；REVOKED/EXPIRED 只有 effectiveAt 严格更晚的授权才能解除；同 effectiveAt 的 granting vs terminal 会进入 conflict/UNKNOWN；内部 VERIFIED + provider ACTIVE 才允许提交。这个满足上一轮要求。
+
+问题只剩 C18-8。新的真实 PostgreSQL 测试确实已经走了 C17：
+
+纯文本
+open root
+→ ATTEMPTED
+→ UNKNOWN_PROVIDER_RESPONSE
+→ RECONCILING
+→ SUBMITTED / MANUAL_REVIEW
+
+并证明 C17 root 数量始终为 1，这部分是进步，也达标。
+
+但是测试中所谓的：
+
+“provider lookup（同 idempotencyKey）”
+
+实际上调用的是：
+
+TypeScript
+provider.createSubmission(...)
+
+而且测试自己统计：
+
+纯文本
+createSubmissionCalls = 2
+
+代码注释把第二次称为“对账查询”，但从 C15 contract 看，createSubmission() 就是写操作；当前 CustomsFilingProvider 根本没有 lookupSubmissionByIdempotencyKey 一类只读方法。getSubmission() 也只能拿 providerSubmissionId 查，而 AMBIGUOUS 场景恰恰可能还不知道这个 ID。
+
+因此目前真实语义其实还是：
+
+纯文本
+第一次 createSubmission
+→ AMBIGUOUS
+→ 第二次 createSubmission(same key)
+
+Sandbox 因为实现了幂等，所以第二次返回已有记录；但这正是我们前两轮明确不允许拿来证明“绝不盲目重发”的做法。它证明了 replay-safe sandbox 能工作，不是证明了未知真实 Provider 下没有第二次 POST。
+
+所以只剩一个非常窄的必修：
+
+纯文本
+新增 provider-neutral reconciliation lookup port
+
+例如：
+
+纯文本
+lookupSubmissionByIdempotencyKey(
+  organizationId,
+  idempotencyKey
+)
+→ NOT_FOUND
+  | FOUND {
+      providerSubmissionId,
+      payloadDigest,
+      status
+    }
+
+或者单独的：
+
+纯文本
+ProviderSubmissionReconciliationPort
+
+都可以，不一定非要污染 C15 主接口。
+
+然后把 PG E2E 改成真正：
+
+纯文本
+原始 createSubmission = 1 次
+↓
+AMBIGUOUS
+↓
+C17 UNKNOWN_PROVIDER_RESPONSE
+↓
+C17 RECONCILING
+↓
+lookupSubmissionByIdempotencyKey = 1 次只读查询
+↓
+same digest → adopt existing submission
+different digest → MANUAL_REVIEW
+↓
+createSubmissionCalls 始终 = 1
+
+mismatch 分支同样不能通过第二次 createSubmission(different digest) 来“查询冲突”；应该由 lookup 返回 provider 侧已有 digest，然后内部 compare 得出 mismatch。
+
+这条修完，我就可以批准内部 skeleton 关闭。无需再重审 C18-6/C18-7。
+
+当前状态建议定为：
+
+纯文本
+C18-1 = CLOSED
+C18-2 = CLOSED
+C18-3 = CLOSED
+C18-4 = CLOSED_WITH_PRODUCTION_GATE
+C18-5 = CLOSED
+C18-6 = CLOSED
+C18-7 = CLOSED
+C18-8 = REVISE — only reconciliation lookup residual
+
+C18_INTERNAL_SKELETON = NOT_CLOSED
+
+下一轮只需要送 C18 INTERNAL FINAL-3，核这一项即可。
+
+至于后续顺序：可以现在并行推进 SEO-3，不要等这一条小修。与此同时准备两个生产 Schema Delta 也合理：
+
+纯文本
+A. ProviderTenantBinding persistence
+   + relationshipEvidenceRef
+   + relationshipVerifiedAt
+
+B. ProviderWebhookReplayClaim
+   UNIQUE(providerId, deliveryId)
+   atomic claim
+
+但 Schema Delta 仍应先审再 migration。
+
+所以最终：
+
+纯文本
+VERDICT = REVISE
+
+① C18-6 = PASS / CLOSED
+② C18-7 = PASS / CLOSED
+③ C18-8 = REVISE（仅缺真正 read-only idempotency reconciliation lookup）
+
+C18_INTERNAL_SKELETON = NOT_CLOSED
+
+SEO-3 = ALLOWED_TO_CONTINUE_IN_PARALLEL
+SCHEMA_DELTA_PROPOSALS = ALLOWED_TO_PREPARE
+
+REAL_TRANSPORT = HOLD
+PRODUCTION_ENABLEMENT = HOLD
+EXTERNAL_WRITE = HOLD
+PAYMENT = HOLD
+C18 = HOLD_EXTERNAL
+
+另外，本次 9ffa228 查询仍没有拿到该 exact HEAD 可独立确认的 GitHub workflow run/status，所以我不把 Codex 报告的测试数字表述为已独立确认的 GitHub CI SUCCESS。
+```
