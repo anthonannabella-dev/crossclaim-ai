@@ -135147,3 +135147,155 @@ PRODUCTION ENABLEMENT = HOLD
 
 另外 6b98fde 的 GitHub hosted status/workflow 仍为空；27/27、exact-order replay、tsc 属于归档执行证据，我独立确认的是 exact HEAD 上的实现和测试逻辑。
 ```
+
+### [MSG-20261004-34] ARCHITECT VERDICT — C18 PRODUCTION PERSISTENCE CHECKPOINT = **PASS / CLOSED**｜reviewed HEAD = 8d15a9b｜CHANGE H = PASS（reconciliation transition 事实 snapshot.observedEvents=[]，rebuildHistory 尊重显式空数组，不再 fallback；第 3 次 apply 用例真实加入：REPLAYED / binding REVOKED / appliedEventCount=1）；正式结论：Codex 可以停止在这一层继续修补，转去 staging smoke 或其它已授权内部工作。边界正式记录：STAGING_MIGRATE_DEPLOY = AUTHORIZED、NON_PROD_SHARED_MIGRATE_DEPLOY = AUTHORIZED、STAGING_SMOKE = REQUIRED_BEFORE_PRODUCTION_DEPLOY；REAL_DATA_SHARED / PRODUCTION_MIGRATE_DEPLOY / REAL_TRANSPORT / EXTERNAL_WRITE / PAYMENT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT = HOLD。本轮无 schema/migration 变化，故 EXACT_ORDER_REPLAY = PASS 与 WHOLE_SCHEMA_DIFF_ZERO = PASS 仍适用于 migration history，无需重跑 migration 设计审计｜
+
+```text
+ARCHITECT VERDICT：PASS
+
+我按 reviewed HEAD = 8d15a9b 重新复核，完整 SHA：
+
+纯文本
+8d15a9b7f56c1061538e4bf74fb054dcf5d7ab5f
+
+没有使用上一轮缓存。
+
+① CHANGE H = PASS
+
+我独立确认 exact HEAD 上已经按上一轮方案 A 正确实现：
+
+纯文本
+allRecorded && gateChanged
+→ isReconciliation = true
+→ transition lineage 仍正常写入
+→ snapshot.observedEvents = []
+
+同时 rebuildHistory() 现在是：
+
+纯文本
+observedEvents 字段存在
+→ 直接采用
+→ 即使 observedEvents = [] 也不 fallback 到 triggeringEvent
+
+因此 reconciliation fact 只表达：
+
+已经持久化的 provider observation 现在生效，内部 submit gate 在此刻完成对齐。
+
+它不会再次冒充新的 provider observation。
+
+我也核到你要求的第三次调用测试已经真实加入：
+
+纯文本
+future REVOKED
+→ AUTHORIZATION_OBSERVED
+
+到期
+→ ACTIVE → REVOKED
+→ reconciliation transition
+
+第三次相同 apply
+→ REPLAYED
+→ binding = REVOKED
+→ priorDerived.appliedEventCount = 1
+→ derived.appliedEventCount = 1
+→ lineage 仍为 3
+
+这正好封住 FINAL-4 唯一剩余问题。
+
+因此：
+
+纯文本
+CHANGE_H = PASS
+FUTURE_GATE_RECONCILIATION_HISTORY_DEDUP = PASS
+② PRODUCTION PERSISTENCE CHECKPOINT = PASS
+
+可以正式关闭。
+
+截至 8d15a9b：
+
+纯文本
+CHANGE_A = PASS
+CHANGE_B = PASS
+CHANGE_C = PASS
+CHANGE_D = PASS
+CHANGE_E = PASS
+CHANGE_F = PASS
+CHANGE_G = PASS
+CHANGE_H = PASS
+
+BINDING_CURRENT_PLUS_LINEAGE_ATOMIC = PASS
+CONCURRENT_REBIND_HISTORY = PASS
+WEBHOOK_EXACTLY_ONCE = PASS
+TENANT_ISOLATION = PASS
+RESOLVER_0_1_N_FAIL_CLOSED = PASS
+LIFECYCLE_PERSISTENCE = PASS
+
+NON_TRANSITION_OBSERVATION_DURABILITY = PASS
+FUTURE_OBSERVATION_DURABILITY = PASS
+FUTURE_EVENT_NO_EARLY_GATE_CHANGE = PASS
+FUTURE_GATE_RECONCILIATION = PASS
+FUTURE_GATE_RECONCILIATION_HISTORY_DEDUP = PASS
+
+FULL_CANONICAL_PAYLOAD_EQUALITY = PASS
+EXACT_REPLAY_NO_DOUBLE_FOLD = PASS
+IDEMPOTENCY_PAYLOAD_CONFLICT = PASS
+P2002_FULL_PAYLOAD_CHECK = PASS
+
+PRODUCTION_PERSISTENCE_CHECKPOINT = PASS
+C18_PERSISTENCE_LAYER = CLOSED
+
+不需要再做 FINAL-6，也不需要再补 ephemeral persistence 证据。
+
+③ 下一道门是 staging，不是继续改 C18 persistence
+
+这里必须区分：
+
+纯文本
+PRODUCTION_PERSISTENCE_CHECKPOINT = PASS
+
+不等于：
+
+纯文本
+PRODUCTION_DEPLOY = PASS
+
+下一步应停止 C18 persistence 返工，等宿主提供明确非生产且不承载真实客户数据的 DATABASE_URL 后执行 staging/non-prod shared：
+
+纯文本
+migrate deploy
+→ migrate status = up to date
+→ whole-schema diff = zero
+→ DB invariant smoke
+→ lifecycle smoke
+→ webhook exactly-one smoke
+→ tenant-isolation smoke
+
+通过之后再单独送 Production Deploy Gate。
+
+当前边界正式记录为：
+
+纯文本
+STAGING_MIGRATE_DEPLOY = AUTHORIZED
+NON_PROD_SHARED_MIGRATE_DEPLOY = AUTHORIZED
+STAGING_SMOKE = REQUIRED_BEFORE_PRODUCTION_DEPLOY
+
+REAL_DATA_SHARED = HOLD
+PRODUCTION_MIGRATE_DEPLOY = HOLD
+
+REAL_TRANSPORT = HOLD
+EXTERNAL_WRITE = HOLD
+PAYMENT = HOLD
+PRODUCTION_CREDENTIALS = HOLD
+PRODUCTION_ENABLEMENT = HOLD
+
+本轮 8d15a9b 没有 schema/migration 变化，因此上一轮已经通过的：
+
+纯文本
+EXACT_ORDER_REPLAY = PASS
+WHOLE_SCHEMA_DIFF_ZERO = PASS
+
+仍然适用于 migration history；无需因为 CHANGE H 重跑 migration 设计审计。
+
+最后一个证据边界说明：exact HEAD 的 GitHub hosted status/workflow 查询仍为空，所以 27/27 + tsc exit 0 我视为本轮归档执行证据；我独立确认的是 8d15a9b 上 CHANGE H 的实现、测试和本轮无 schema/migration 变化。
+
+结论：C18 Production Persistence Checkpoint 到这里正式 PASS / CLOSED。Codex 可以停止在这一层继续修补，转去 staging smoke 或其它已授权内部工作。
+```
