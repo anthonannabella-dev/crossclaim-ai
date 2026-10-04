@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-10-04T01:12:37.648Z",
-  "acceptance_head": "e7c8712",
+  "generated_at": "2026-10-04T01:23:03.581Z",
+  "acceptance_head": "fe2dad3",
   "protocol": "docs/releases/FINAL-ACCEPTANCE-PROTOCOL.md",
   "areas": [
     {
@@ -159,7 +159,15 @@
       "evidence": "BG-006 已登记；未执行任何生产动作"
     }
   ],
-  "open_internal_items": [],
+  "open_internal_items": [
+    "ui-7-customs-customer-ux",
+    "ui-8-states-a11y-full-regression",
+    "ca-2-authorized-signer-fact",
+    "ca-3-authorization-lifecycle-persistence",
+    "ca-4-broker-authorization-session-contract",
+    "ca-5-customs-authorization-center-ui",
+    "ca-6-one-click-customs-auth-ux"
+  ],
   "host_action_required": [
     "BG-006-production-candidate-preflight"
   ],

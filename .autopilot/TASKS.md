@@ -735,3 +735,19 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - [ ] PHASE B8 — AsyncJob + Outbox（PostgreSQL 原生；暂不引入 Redis / Temporal）
 - [ ] PHASE B9 — Submission Adapter（一期仅 CLAIM_READY_PACKAGE / PORTAL_DEEPLINK；DIRECT_API 需官方资质 + Action Guard 全绿）
 - [ ] PHASE B10 — Customer Projection APIs（Overview / Action Center / Recoveries / Integrations / Executive Report）
+
+## SAFE CONTINUATION QUEUE（HOST 2026-10-04 指令登记）
+
+| # | Unit | Status |
+|---|---|---|
+| 1 | `ui-7-customs-customer-ux` | PENDING |
+| 2 | `ui-8-states-a11y-full-regression` | PENDING |
+| 3 | `ca-2-authorized-signer-fact` | PENDING |
+| 4 | `ca-3-authorization-lifecycle-persistence` | PENDING |
+| 5 | `ca-4-broker-authorization-session-contract` | PENDING |
+| 6 | `ca-5-customs-authorization-center-ui` | PENDING |
+| 7 | `ca-6-one-click-customs-auth-ux` | PENDING |
+
+- 已完成（不得重复）：UI-1、UI-2、UI-3、UI-4、UI-5a、UI-5b、UI-6、CA-1。
+- 调度：CONTINUOUS（heartbeat 仅 liveness/watchdog/crash recovery）。
+- 审计：ARCH_REVIEW_REQUIRED 单元完成后自动走 AUDIT-BRIDGE 闭环（不新建协议）。

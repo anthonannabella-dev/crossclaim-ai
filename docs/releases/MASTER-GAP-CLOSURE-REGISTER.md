@@ -65,6 +65,7 @@
 每条必须绑定当前 acceptance HEAD 的实证（`tools/autopilot/record-evidence.mjs` 记录），未绑定 → `UNVERIFIED`。
 当前打开的内部项见 `docs/releases/ACCEPTANCE-MATRIX.json` 的 `open_internal_items`。
 历史说明：G1–G10 的旧布尔结论已作废，避免与 STATE/报告冲突。
+- 当前状态（HOST 2026-10-04 指令登记后）：**INTERNAL_CODE_COMPLETE = FALSE** —— `open_internal_items` 非空（UI-7 / UI-8 / CA-2…CA-6 已进入 SAFE_CONTINUATION_QUEUE）。
 
 ## E. BUSINESS SURVIVAL GATES（生死线，HOST FINAL ACCEPTANCE RULES 2026-10-03）— **P0 = PASS / CLOSED（MSG-20261003-132）**
 

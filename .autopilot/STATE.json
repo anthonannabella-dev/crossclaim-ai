@@ -1,15 +1,15 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "42be8f6",
+  "head": "fe2dad3",
   "status": "RECONCILED",
-  "current_task": null,
-  "next_task": "Claim / Appeal Language Metadata（MSG-20261003-148/149 §6：contentLocale?/providerLocale?/generationVersion?/templateVersion?；DRAFT 重生成记 metadata digest；冻结后 immutable；历史空值 LEGACY_UNSPECIFIED）",
+  "current_task": "UI-7 Customs Customer UX（MSG-20261004-02 §四/§十一）",
+  "next_task": "UI-8 状态/空/错/无障碍 + Customer Product Full Regression",
   "send_head": "07b7009",
   "decision_head": "07b7009",
   "last_chatgpt_message": "MSG-20261004-01",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-04T00:41:06.602Z",
+  "updated_at": "2026-10-04T01:21:55.949Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -48,9 +48,9 @@
   },
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
-  "automation_status": "STOPPED_INTERNAL_COMPLETE",
+  "automation_status": "CONTINUOUS",
   "last_tick_at": "2026-10-03T14:11:19.420Z",
-  "state": "TERMINAL_INTERNAL_COMPLETE",
+  "state": "CONTINUOUS_AUTOPILOT_RUNNING",
   "last_action": "INDEPENDENT FINAL AUDIT = PASS（MSG-20261003-147）；三元闭环成立，内部代码开发阶段正式完成",
   "last_action_at": "2026-10-03T14:17:18.723Z",
   "next_action": "内部自治开发停止；剩余为 Layer 3 外部依赖（需宿主授权）",
@@ -4890,7 +4890,15 @@
     "BG-013-ior-facts-persistence-schema-delta",
     "BG-020-customs-readonly-projection-http",
     "BG-021-independent-site-persistence-schema-delta",
-    "BG-019-frontend-http-wiring-closure"
+    "BG-019-frontend-http-wiring-closure",
+    "ui-1-customer-shell",
+    "ui-2-dashboard-commercialization",
+    "ui-3-opportunity-customer-view",
+    "ui-4-account-connection-customer-view",
+    "ui-5a-case-detail-pipeline",
+    "ui-5b-claim-package-customer-view",
+    "ui-6-money-billing-plan-customer-ux",
+    "ca-1-route-aware-customs-authorization"
   ],
   "last_unit": {
     "id": "BG-015-ior-full-chain-assembly",
@@ -4968,7 +4976,15 @@
   "runner_status": "RUNNING",
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
-  "safe_continuation_queue": 0,
+  "safe_continuation_queue": [
+    "ui-7-customs-customer-ux",
+    "ui-8-states-a11y-full-regression",
+    "ca-2-authorized-signer-fact",
+    "ca-3-authorization-lifecycle-persistence",
+    "ca-4-broker-authorization-session-contract",
+    "ca-5-customs-authorization-center-ui",
+    "ca-6-one-click-customs-auth-ux"
+  ],
   "full_autonomous_internal_execution": "VERIFIED",
   "dispatcher_acceptance": {
     "at": "2026-10-03T14:47:59.226Z",
@@ -4990,12 +5006,12 @@
       "④ Production Candidate register only"
     ]
   },
-  "awaiting_verdict": false,
+  "awaiting_verdict": null,
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-04T01:12:38.258Z",
-    "head": "e7c8712",
-    "acceptance_head": "e7c8712",
+    "computed_at": "2026-10-04T01:23:04.177Z",
+    "head": "fe2dad3",
+    "acceptance_head": "fe2dad3",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5004,6 +5020,16 @@
     "INTERNAL_CODE_COMPLETE": false,
     "INDEPENDENT_FINAL_AUDIT_REQUIRED": true,
     "OPEN_INTERNAL_ITEMS": [
+      "ui-7-customs-customer-ux",
+      "ui-8-states-a11y-full-regression",
+      "ca-2-authorized-signer-fact",
+      "ca-3-authorization-lifecycle-persistence",
+      "ca-4-broker-authorization-session-contract",
+      "ca-5-customs-authorization-center-ui",
+      "ca-6-one-click-customs-auth-ux",
+      "CHECK:L1-01_safe_continuation_queue_zero",
+      "CHECK:L1-02_no_open_internal_items",
+      "CHECK:L1-03_no_open_markers",
       "CHECK:L1-04_full_ci_success_on_head",
       "CHECK:L1-05_pg_regression_passed",
       "CHECK:L1-06_fresh_db_migration_passed",
@@ -5045,64 +5071,64 @@
     "checks": {
       "L1-01_safe_continuation_queue_zero": {
         "label": "SAFE_CONTINUATION_QUEUE = 0",
-        "status": true,
-        "evidence": "open backlog items: 0"
+        "status": false,
+        "evidence": "open backlog items: 7"
       },
       "L1-02_no_open_internal_items": {
         "label": "所有 Codex 可独立完成的内部缺口 CLOSED",
-        "status": true,
-        "evidence": "open internal: none"
+        "status": false,
+        "evidence": "open internal: ui-7-customs-customer-ux,ui-8-states-a11y-full-regression,ca-2-authorized-signer-fact,ca-3-authorization-lifecycle-persistence,ca-4-broker-authorization-session-contract,ca-5-customs-authorization-center-ui,ca-6-one-click-customs-auth-ux"
       },
       "L1-03_no_open_markers": {
         "label": "不存在 TODO/IN_PROGRESS/PARTIAL/READY_FOR_REVIEW/WAITING_FOR_VERDICT/未处理 REVISE·BLOCK",
-        "status": true,
+        "status": false,
         "evidence": "arch_pending=0 awaiting_verdict=false"
       },
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=e7c8712 ci_head=f5bdd92 ci=in_progress run=37143524364"
+        "evidence": "acceptance_head=fe2dad3 ci_head=f5bdd92 ci=in_progress run=37143524364"
       },
       "L1-05_pg_regression_passed": {
         "status": "UNVERIFIED",
-        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head e7c8712（且中间存在非簿记变更）"
+        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head fe2dad3（且中间存在非簿记变更）"
       },
       "L1-06_fresh_db_migration_passed": {
         "status": "UNVERIFIED",
-        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head e7c8712（且中间存在非簿记变更）"
+        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head fe2dad3（且中间存在非簿记变更）"
       },
       "L1-07_api_typecheck_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head e7c8712（且中间存在非簿记变更）"
+        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head fe2dad3（且中间存在非簿记变更）"
       },
       "L1-08_web_typecheck_build_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head e7c8712（且中间存在非簿记变更）"
+        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head fe2dad3（且中间存在非簿记变更）"
       },
       "L1-09_no_skipped_critical_tests": {
         "status": "UNVERIFIED",
-        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head e7c8712（且中间存在非簿记变更）"
+        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head fe2dad3（且中间存在非簿记变更）"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
         "status": false,
-        "evidence": "dirty entries: 7"
+        "evidence": "dirty entries: 4"
       },
       "L1-11_docs_state_consistent": {
         "status": "UNVERIFIED",
-        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head e7c8712（且中间存在非簿记变更）"
+        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head fe2dad3（且中间存在非簿记变更）"
       },
       "L1-12_schema_invariants_verified": {
         "status": "UNVERIFIED",
-        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head e7c8712（且中间存在非簿记变更）"
+        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head fe2dad3（且中间存在非簿记变更）"
       },
       "L1-13_negative_paths_covered": {
         "status": "UNVERIFIED",
-        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head e7c8712（且中间存在非簿记变更）"
+        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head fe2dad3（且中间存在非簿记变更）"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
         "status": "UNVERIFIED",
-        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head e7c8712（且中间存在非簿记变更）"
+        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head fe2dad3（且中间存在非簿记变更）"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
@@ -5884,7 +5910,7 @@
   },
   "next_execution_unit": "CA-2 Authorized Signer Fact + DB invariants（MSG-20261004-02 §四）",
   "customer_ui_commercialization": {
-    "at": "2026-10-04T00:22:16.366Z",
+    "at": "2026-10-04T01:21:55.949Z",
     "authorization": "MSG-20261004-01（CUSTOMER UI/UX COMMERCIALIZATION — IMPLEMENTATION AUTHORIZED）",
     "reviewed_head": "5992b90",
     "branch": "gate/7-commercial-validation",
@@ -5925,7 +5951,17 @@
       "CI",
       "HEAD",
       "NEXT_UI_UNIT"
-    ]
+    ],
+    "UI_1_CUSTOMER_APP_SHELL": "CLOSED（a34933e）",
+    "UI_2_DASHBOARD": "CLOSED（a34933e）",
+    "UI_3_OPPORTUNITY": "CLOSED（3e124f5）",
+    "UI_4_ACCOUNT_CONNECTION": "CLOSED（fd8de3a）",
+    "UI_5_CASE_AND_CLAIM_PACKAGE": "CLOSED（fa95e93 / 821c910）",
+    "UI_6_MONEY_BILLING_PLAN": "CLOSED（e7c8712 / fe2dad3）",
+    "UI_7_CUSTOMS_CUSTOMER_UX": "IN_PROGRESS",
+    "UI_8_STATES_A11Y_REGRESSION": "PENDING",
+    "CUSTOMER_UI_HARDCODED_STRING_COUNT": 0,
+    "ratchet": "tools/i18n/hardcode-baseline.json = 0（只允许下降）"
   },
   "customs_authorization": {
     "at": "2026-10-04T00:41:06.602Z",
@@ -5963,5 +5999,29 @@
       "CA-5 Customer Authorization Center UI",
       "CA-6 One-click recovery UX wiring"
     ]
-  }
+  },
+  "remote_head": "fe2dad3",
+  "safe_continuation_queue_state": "ACTIVE",
+  "customs_authorization_queue": {
+    "at": "2026-10-04T01:21:55.949Z",
+    "CA_1": "CLOSED（465a6a6：route-aware authorization + 三阶段 readiness；unit 16 / PG 8）",
+    "CA_2": "PENDING（AuthorizedSignerFact + DB invariants；ARCH_REVIEW_REQUIRED）",
+    "CA_3": "PENDING（lifecycle persistence；ARCH_REVIEW_REQUIRED）",
+    "CA_4": "PENDING（BrokerAuthorizationSession contract；ARCH_REVIEW_REQUIRED）",
+    "CA_5": "PENDING（Customs Authorization Center UI）",
+    "CA_6": "PENDING（One-click auth UX wiring）",
+    "audit_loop": "AUDIT-BRIDGE.md / docs/ai-bridge/DUAL-CHANNEL-WAKEUP-PROTOCOL.md（Codex 自行送审并读回 VERDICT）",
+    "REAL_BROKER_CONNECTED": "NO",
+    "REAL_FILING_PROVIDER_CONNECTED": "NO",
+    "REAL_CUSTOMS_SUBMISSION": "NO",
+    "PRODUCTION_CUSTOMS_CREDENTIALS": "NO",
+    "C18_STATUS": "HOLD_EXTERNAL"
+  },
+  "stop_conditions": [
+    "HOST_ACTION_REQUIRED（真实账号/Secret/生产凭据/法律签署/付费/外部验证码）",
+    "ChatGPT VERDICT = BLOCK 且无其它独立安全单元",
+    "SAFE_CONTINUATION_QUEUE = EMPTY 且 UI-6…UI-8 / CA-2…CA-6 全部 CLOSED",
+    "所有授权产品目标 CLOSED"
+  ],
+  "stall_policy": "HEAD 不变 + SAFE QUEUE 非空 + 无新代码/测试/commit/CI/audit 证据 → AUTOPILOT_STALL=TRUE → reconcile → watchdog recovery → 选最小可执行单元继续"
 }

@@ -1,6 +1,6 @@
 {
   "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。",
-  "updatedAt": "2026-10-03T17:08:36.692Z",
+  "updatedAt": "2026-10-04T01:21:55.949Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -570,7 +570,259 @@
       "materializable": false,
       "status": "COMPLETED",
       "completed_at": "2026-10-03T16:42:50.059Z"
+    },
+    {
+      "id": "ui-6-money-billing-plan-customer-ux",
+      "priority": "P0",
+      "source_backlog_id": "MSG-20261004-01 §十/§十二（UI-6）",
+      "title": "UI-6 Money / Billing / Plan 客户视图",
+      "scope": "金额与收益、账单与费用、套餐与解锁三页客户化（按币种 4 核心指标、预计≠已到账、已计算≠已扣款、Payment HOLD、工程字段折叠）",
+      "acceptance_criteria": "客户可读文案 + 高级详情折叠 + customerHardcodes=0 + i18n parity + tsc/build 绿",
+      "dependencies": [],
+      "risk_class": "LOW",
+      "ARCH_REVIEW_REQUIRED": false,
+      "HOST_ACTION_REQUIRED": false,
+      "HOLD_EXTERNAL": true,
+      "allowed_files": [
+        "apps/web/**"
+      ],
+      "boundary": "READ_ONLY_PRESENTATION / NO_MONEY_MOVEMENT",
+      "required_tests": [
+        "ui-render-check",
+        "i18n-check",
+        "web-tsc",
+        "web-build"
+      ],
+      "template": "suite-evidence",
+      "filters": [
+        "web"
+      ],
+      "status": "COMPLETED",
+      "completed_at": "2026-10-04T00:00:00.000Z",
+      "evidence": [
+        "e7c8712（UI-6a money）",
+        "fe2dad3（UI-6b billing+plan）"
+      ]
+    },
+    {
+      "id": "ui-7-customs-customer-ux",
+      "priority": "P0",
+      "source_backlog_id": "MSG-20261004-02 §四/§十一（UI-7）",
+      "title": "UI-7 Customs Customer UX：预计 vs 确认可追回 + 客户向管线与下一步",
+      "scope": "Customs 客户视图：Estimated Recovery vs Confirmed Eligible Recovery 视觉区分；DUTY_TRUTH/DISCREPANCY/ELIGIBILITY/ESTIMATE/providerWrite/lineage 折叠进「计算依据/高级详情」；明确「材料已准备 / 等待授权或代理提交 / 尚未向海关提交」",
+      "acceptance_criteria": "客户默认无工程 blocker code；预计与确认分开呈现；filing=false 边界文案存在；tests/i18n/hardcodes=0/tsc/build 绿",
+      "dependencies": [
+        "ui-6-money-billing-plan-customer-ux"
+      ],
+      "risk_class": "MEDIUM",
+      "ARCH_REVIEW_REQUIRED": false,
+      "HOST_ACTION_REQUIRED": false,
+      "HOLD_EXTERNAL": true,
+      "allowed_files": [
+        "apps/web/**"
+      ],
+      "boundary": "READ_ONLY_PRESENTATION / NO_FILING / NO_EXTERNAL_WRITE",
+      "required_tests": [
+        "ui-render-check",
+        "i18n-check",
+        "web-tsc",
+        "web-build"
+      ],
+      "template": "suite-evidence",
+      "filters": [
+        "web"
+      ],
+      "status": "PENDING"
+    },
+    {
+      "id": "ui-8-states-a11y-full-regression",
+      "priority": "P0",
+      "source_backlog_id": "MSG-20261004-01 §十四/§十七（UI-8）",
+      "title": "UI-8 状态/空/错/无障碍统一 + Customer Product Full Regression + Baseline 冻结",
+      "scope": "Skeleton/Loading/Empty/Filtered Empty/Network Error/401/403/404/Permission/Needs Action/External Gate/Responsive/Keyboard/Focus/ARIA/Status·Date·Money localization；随后四域 API 回归 + 前端全量回归",
+      "acceptance_criteria": "所有客户页状态齐备且可访问；CI 绿 + customerHardcodes=0 + i18n parity + Production 边界不变；产出 CUSTOMER_PRODUCT_BASELINE",
+      "dependencies": [
+        "ui-7-customs-customer-ux"
+      ],
+      "risk_class": "MEDIUM",
+      "ARCH_REVIEW_REQUIRED": false,
+      "HOST_ACTION_REQUIRED": false,
+      "HOLD_EXTERNAL": true,
+      "allowed_files": [
+        "apps/web/**",
+        "apps/api/src/__tests__/**",
+        "docs/releases/**"
+      ],
+      "boundary": "READ_ONLY_PRESENTATION / TEST_ONLY",
+      "required_tests": [
+        "ui-render-check",
+        "i18n-check",
+        "api-regression",
+        "web-tsc",
+        "web-build"
+      ],
+      "template": "suite-evidence",
+      "filters": [
+        "web"
+      ],
+      "status": "PENDING"
+    },
+    {
+      "id": "ca-2-authorized-signer-fact",
+      "priority": "P0",
+      "source_backlog_id": "MSG-20261004-02 §六（CA-2）",
+      "title": "CA-2 AuthorizedSignerFact + DB invariants",
+      "scope": "新增授权签署人事实层（LEGAL_REPRESENTATIVE / AUTHORIZED_EMPLOYEE / LICENSED_CUSTOMS_BROKER / OTHER_REGULATORY_AUTHORIZED_SIGNER）：tenant scoped、append-only、client 不得自报 VERIFIED、VERIFIED 需 source（必要时 evidence）、raw sensitive identity 禁止、scope/expired/revoked/superseded fail-closed",
+      "acceptance_criteria": "Schema + migration 可从空库执行；PG E2E 覆盖 append-only/tenant isolation/verification source/scope mismatch/expiry/revocation/supersession；architecture-contract 通过",
+      "dependencies": [
+        "ca-1"
+      ],
+      "risk_class": "HIGH",
+      "ARCH_REVIEW_REQUIRED": true,
+      "HOST_ACTION_REQUIRED": false,
+      "HOLD_EXTERNAL": true,
+      "allowed_files": [
+        "apps/api/prisma/**",
+        "apps/api/src/**",
+        "API.md"
+      ],
+      "boundary": "SCHEMA_CHANGE_REQUIRES_AUDIT / NO_EXTERNAL_CALL",
+      "required_tests": [
+        "customs-authorization-route-db",
+        "architecture-contract",
+        "enterprise-ior-layer"
+      ],
+      "template": "suite-evidence",
+      "filters": [
+        "customs"
+      ],
+      "status": "PENDING",
+      "audit": "CHATGPT_AUDIT_REQUIRED"
+    },
+    {
+      "id": "ca-3-authorization-lifecycle-persistence",
+      "priority": "P0",
+      "source_backlog_id": "MSG-20261004-02 §七（CA-3）",
+      "title": "CA-3 授权生命周期持久化：revoke / expire / supersede / latest usable",
+      "scope": "Broker POA 与 Authorized Signer 生命周期事实（PENDING/VERIFIED/REVOKED/SUPERSEDED/EXPIRED），历史不可覆盖，server-side deterministic latest usable（principal/broker/jurisdiction/route/scope/effective window/revocation/supersession/verification）",
+      "acceptance_criteria": "PG E2E：revoked/expired/superseded/scope mismatch/jurisdiction mismatch/cross tenant/replay 全部 fail-closed 或确定性选择；无 UPDATE 覆盖旧事实",
+      "dependencies": [
+        "ca-2-authorized-signer-fact"
+      ],
+      "risk_class": "HIGH",
+      "ARCH_REVIEW_REQUIRED": true,
+      "HOST_ACTION_REQUIRED": false,
+      "HOLD_EXTERNAL": true,
+      "allowed_files": [
+        "apps/api/prisma/**",
+        "apps/api/src/**"
+      ],
+      "boundary": "SCHEMA_OR_AUTH_BOUNDARY_REQUIRES_AUDIT",
+      "required_tests": [
+        "customs-authorization-route-db",
+        "architecture-contract"
+      ],
+      "template": "suite-evidence",
+      "filters": [
+        "customs"
+      ],
+      "status": "PENDING",
+      "audit": "CHATGPT_AUDIT_REQUIRED"
+    },
+    {
+      "id": "ca-4-broker-authorization-session-contract",
+      "priority": "P1",
+      "source_backlog_id": "MSG-20261004-02 §九（CA-4）",
+      "title": "CA-4 BrokerAuthorizationSession 内部契约（provider-neutral）",
+      "scope": "CREATED/CUSTOMER_ACTION_REQUIRED/SIGNED/PROVIDER_VERIFYING/VERIFIED/REJECTED/EXPIRED/REVOKED 状态机 + 引用型字段（externalAuthorizationUrlRef/providerAuthorizationRef/evidenceArtifactRef/contentDigest），不含真实 Broker/webhook/凭据",
+      "acceptance_criteria": "契约与状态机单测；外部 URL/token 不存敏感原值；VERIFIED 未来只能由 server/provider evidence 触发（本轮不接真实 provider）",
+      "dependencies": [
+        "ca-3-authorization-lifecycle-persistence"
+      ],
+      "risk_class": "HIGH",
+      "ARCH_REVIEW_REQUIRED": true,
+      "HOST_ACTION_REQUIRED": false,
+      "HOLD_EXTERNAL": true,
+      "allowed_files": [
+        "apps/api/prisma/**",
+        "apps/api/src/**"
+      ],
+      "boundary": "NO_REAL_BROKER / NO_REAL_WEBHOOK / NO_PROVIDER_CREDENTIAL",
+      "required_tests": [
+        "customs-authorization-route",
+        "architecture-contract"
+      ],
+      "template": "suite-evidence",
+      "filters": [
+        "customs"
+      ],
+      "status": "PENDING",
+      "audit": "CHATGPT_AUDIT_REQUIRED"
+    },
+    {
+      "id": "ca-5-customs-authorization-center-ui",
+      "priority": "P1",
+      "source_backlog_id": "MSG-20261004-02 §七/§九（CA-5）",
+      "title": "CA-5 Customs Authorization Center 客户 UI（六项授权 + 下一步 CTA）",
+      "scope": "企业身份 / 追回权 / 签署权限 / 报关代理授权 / 退款账户 / 提交准备 六项客户语言状态与 CTA；内部 blocker code 仅入高级详情",
+      "acceptance_criteria": "客户默认无 IOR_NOT_CONFIRMED/BROKER_POA_REQUIRED 等 code；每项有明确下一步；i18n parity + hardcodes=0",
+      "dependencies": [
+        "ca-3-authorization-lifecycle-persistence"
+      ],
+      "risk_class": "MEDIUM",
+      "ARCH_REVIEW_REQUIRED": false,
+      "HOST_ACTION_REQUIRED": false,
+      "HOLD_EXTERNAL": true,
+      "allowed_files": [
+        "apps/web/**",
+        "apps/api/src/**"
+      ],
+      "boundary": "READ_ONLY_PRESENTATION / NO_EXTERNAL_CALL",
+      "required_tests": [
+        "ui-render-check",
+        "i18n-check",
+        "web-tsc",
+        "web-build"
+      ],
+      "template": "suite-evidence",
+      "filters": [
+        "web",
+        "customs"
+      ],
+      "status": "PENDING"
+    },
+    {
+      "id": "ca-6-one-click-customs-auth-ux",
+      "priority": "P1",
+      "source_backlog_id": "MSG-20261004-02 §八/§十（CA-6）",
+      "title": "CA-6 一键追回授权 UX 接线（复用有效授权）",
+      "scope": "Customs Opportunity → 开始追回 → 服务端重校验授权 → 只提示缺失项 → 完成一次授权 → 后续同 principal/jurisdiction/scope/route 复用 → READY_TO_FILE；仅 expired/revoked/superseded/broker·entity·route·jurisdiction/scope 变化时重新授权",
+      "acceptance_criteria": "同一授权可跨机会复用（无重复签署要求）；退款账户未就绪不阻塞分析/证据/材料准备；filing/refund 阶段仍 fail-closed",
+      "dependencies": [
+        "ca-4-broker-authorization-session-contract",
+        "ca-5-customs-authorization-center-ui"
+      ],
+      "risk_class": "MEDIUM",
+      "ARCH_REVIEW_REQUIRED": false,
+      "HOST_ACTION_REQUIRED": false,
+      "HOLD_EXTERNAL": true,
+      "allowed_files": [
+        "apps/web/**",
+        "apps/api/src/**"
+      ],
+      "boundary": "NO_FILING / NO_EXTERNAL_WRITE / TRANSPORT_FALSE",
+      "required_tests": [
+        "customs-authorization-route-db",
+        "ui-render-check",
+        "web-tsc"
+      ],
+      "template": "suite-evidence",
+      "filters": [
+        "customs",
+        "web"
+      ],
+      "status": "PENDING"
     }
   ],
-  "authorization_note": "MSG-20261003-133 Q3：dispatcher 获授权自动扩 backlog 并执行安全单元（契约/已批准 D1–D3 Schema/append-only 持久化/deterministic normalization/qualification·evidence·package/测试/文档/fixture/只读 HTTP/只读 reconciliation projection）；遇到未批准 Schema、EXTERNAL_WRITE Action Guard、真实 adapter/webhook、submission、真实资金语义写入、生产 credential、收费时必须停该分支并重新送审。"
+  "authorization_note": "MSG-20261003-133 Q3：dispatcher 获授权自动扩 backlog 并执行安全单元（契约/已批准 D1–D3 Schema/append-only 持久化/deterministic normalization/qualification·evidence·package/测试/文档/fixture/只读 HTTP/只读 reconciliation projection）；遇到未批准 Schema、EXTERNAL_WRITE Action Guard、真实 adapter/webhook、submission、真实资金语义写入、生产 credential、收费时必须停该分支并重新送审。 HOST 2026-10-04（CONTINUOUS EXECUTION + CUSTOMS AUTHORIZATION + CHATGPT AUDIT LOOP）：UI-6…UI-8 与 CA-2…CA-6 已登记为可执行队列；Schema/Security/Authorization 边界项自动进入 ChatGPT Audit Loop（AUDIT-BRIDGE.md，不新建协议）。"
 }
