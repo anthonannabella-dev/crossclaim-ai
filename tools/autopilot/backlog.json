@@ -1,6 +1,6 @@
 {
   "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。",
-  "updatedAt": "2026-10-05T02:51:00.000Z",
+  "updatedAt": "2026-10-05T02:57:00.000Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -1688,6 +1688,16 @@
       "title": "能力缺口信号（GoldenFixture 覆盖 → Weekly CAPABILITY_GAP 套件）",
       "scope": "capabilityGapSuiteFromCoverage：缺域/被拒 → FAIL（只列域名与计数，不含语料内容）；全覆盖 → PASS",
       "acceptance_criteria": "vitest rsi-capability-gap 3/3；api tsc 0",
+      "status": "IMPLEMENTED_PENDING_CI",
+      "implementation_head": "(this commit)"
+    },
+    {
+      "id": "RSI-RT-11-health-fields",
+      "priority": "P1",
+      "source_backlog_id": "OWNER 任务：RSI Runtime 第 4/6 节 Health Check",
+      "title": "健康载荷补全（queue 连通性 / 上次 reconcile / 上次 incident / 计数）",
+      "scope": "RsiControllerState + rsiHealthPayload 增加 lastReconcileAt、queueConnected、lastIncidentRef；启动即记录一次 reconcile",
+      "acceptance_criteria": "vitest rsi-controller 4/4；api tsc 0",
       "status": "IMPLEMENTED_PENDING_CI",
       "implementation_head": "(this commit)"
     }

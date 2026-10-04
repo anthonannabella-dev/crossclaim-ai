@@ -2,7 +2,7 @@
 
 import { afterEach, describe, expect, it } from 'vitest';
 
-import { createRsiController } from '../runtime/rsi-controller';
+import { createRsiController, rsiHealthPayload } from '../runtime/rsi-controller';
 
 const handles: { stop: () => Promise<void> }[] = [];
 afterEach(async () => {
@@ -65,5 +65,34 @@ describe('RSI Runtime Controller', () => {
     expect(scans).toBe(1);
     expect(controller.state.scanCount).toBe(1);
     expect(controller.state.lastScanAt).toBe('2026-10-05T00:00:00.000Z');
+  });
+
+  it('RSI_RUNTIME_HEALTH_FIELDS_COMPLETE：健康载荷含 queue 连通性、上次 reconcile、上次 incident 与计数', async () => {
+    const controller = createRsiController({
+      env: {},
+      healthPort: 0,
+      scanIntervalMs: 10_000,
+      now: () => new Date('2026-10-05T00:00:00.000Z'),
+    });
+    handles.push(controller);
+
+    const payload = rsiHealthPayload(
+      { enabled: true, paused: false, stages: { OBSERVE: true, AUTO_INCIDENT: true, AUTO_PATCH: true, AUTO_VALIDATE: true, AUTO_JUDGE: true, AUTO_PROMOTE_LOW_RISK: false } },
+      controller.state,
+    );
+    for (const field of [
+      'queueConnected',
+      'lastReconcileAt',
+      'lastIncidentRef',
+      'activeTasks',
+      'failedTasks',
+      'pendingOwnerApprovals',
+    ]) {
+      expect(payload).toHaveProperty(field);
+    }
+    // 启动即记录一次 reconcile（用于「重启后恢复」可观测性）
+    expect(controller.state.lastReconcileAt).toBe('2026-10-05T00:00:00.000Z');
+    expect(controller.state.queueConnected).toBe(true);
+    expect(controller.state.lastIncidentRef).toBeNull();
   });
 });

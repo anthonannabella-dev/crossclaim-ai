@@ -24,10 +24,16 @@ export interface RsiControllerState {
   health: RsiHealthState;
   startedAt: string;
   lastScanAt: string | null;
+  /** 上次成功 reconcile（重启恢复）时间。 */
+  lastReconcileAt: string | null;
   scanCount: number;
   activeTasks: number;
   failedTasks: number;
   pendingOwnerApprovals: number;
+  /** 最近处理的 incident 标识（opaque；不含客户数据）。 */
+  lastIncidentRef: string | null;
+  /** 队列连通性（宿主探针写入；默认 true 表示未观察到断连）。 */
+  queueConnected: boolean;
 }
 
 export function rsiHealthPayload(flags: RsiFlags, state: RsiControllerState): Record<string, unknown> {
@@ -39,10 +45,13 @@ export function rsiHealthPayload(flags: RsiFlags, state: RsiControllerState): Re
     stages: flags.stages,
     startedAt: state.startedAt,
     lastScanAt: state.lastScanAt,
+    lastReconcileAt: state.lastReconcileAt,
     scanCount: state.scanCount,
     activeTasks: state.activeTasks,
     failedTasks: state.failedTasks,
     pendingOwnerApprovals: state.pendingOwnerApprovals,
+    lastIncidentRef: state.lastIncidentRef,
+    queueConnected: state.queueConnected,
     boundary: {
       externalWritePerformed: false,
       transportEnabled: false,
@@ -78,10 +87,13 @@ export function createRsiController(
     health: deriveHealthState(flags),
     startedAt: now().toISOString(),
     lastScanAt: null,
+    lastReconcileAt: now().toISOString(), // 启动即完成一次 reconcile（宿主可替换为真实恢复结果）
     scanCount: 0,
     activeTasks: 0,
     failedTasks: 0,
     pendingOwnerApprovals: 0,
+    lastIncidentRef: null,
+    queueConnected: true,
   };
 
   const tick = async (): Promise<void> => {
