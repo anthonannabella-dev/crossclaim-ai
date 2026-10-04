@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-10-04T17:25:45.643Z",
-  "acceptance_head": "f5b178f",
+  "generated_at": "2026-10-04T17:30:45.992Z",
+  "acceptance_head": "1d070c1",
   "protocol": "docs/releases/FINAL-ACCEPTANCE-PROTOCOL.md",
   "areas": [
     {
@@ -226,7 +226,8 @@
     "RSI-CONT-06-runtime-composition",
     "RSI-RT-07-admin-health-panel",
     "RSI-RT-08-admin-autonomy-page",
-    "RSI-RT-09-admin-snapshot-generator"
+    "RSI-RT-09-admin-snapshot-generator",
+    "RSI-RT-10-snapshot-publisher"
   ],
   "host_action_required": [
     "provider developer/partner account registration",
