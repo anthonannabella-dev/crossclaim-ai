@@ -69,6 +69,52 @@ describe('C18-3 — sandbox filing provider（unit，零外写）', () => {
     expect(second.providerReference).toBe('evidence:entry');
   });
 
+  it('REVISE：evidence 幂等键冲突语义（同 key 不同 payload → IDEMPOTENCY_KEY_CONFLICT）', async () => {
+    const provider = createSandboxFilingProvider();
+    const created = await provider.createSubmission(submissionInput());
+    const baseEvidence = {
+      organizationId: ORG,
+      providerSubmissionId: created.providerSubmissionId,
+      evidenceReference: 'evidence:entry',
+      documentKind: 'ENTRY_SUMMARY',
+      sha256: DIGEST,
+      idempotencyKey: 'evidence-op:1',
+    };
+    const first = await provider.uploadEvidence(baseEvidence);
+    expect(first.ok).toBe(true);
+    const replay = await provider.uploadEvidence(baseEvidence);
+    expect(replay.ok).toBe(true);
+    await expect(
+      provider.uploadEvidence({ ...baseEvidence, sha256: 'd'.repeat(64) }),
+    ).rejects.toThrow('IDEMPOTENCY_KEY_CONFLICT');
+    await expect(
+      provider.uploadEvidence({ ...baseEvidence, evidenceReference: 'evidence:other' }),
+    ).rejects.toThrow('IDEMPOTENCY_KEY_CONFLICT');
+  });
+
+  it('REVISE：RFI 回应幂等键冲突语义（同 key 不同 response → IDEMPOTENCY_KEY_CONFLICT）', async () => {
+    const provider = createSandboxFilingProvider();
+    const created = await provider.createSubmission(submissionInput());
+    provider.seedRequestForInformation({
+      organizationId: ORG,
+      providerSubmissionId: created.providerSubmissionId,
+      requestId: 'rfi:1',
+      summary: 'Need commercial invoice',
+    });
+    const baseResponse = {
+      organizationId: ORG,
+      providerSubmissionId: created.providerSubmissionId,
+      requestId: 'rfi:1',
+      responseReference: 'evidence:invoice',
+      idempotencyKey: 'rfi-op:1',
+    };
+    const first = await provider.respondToRequest(baseResponse);
+    expect(first.ok).toBe(true);
+    await expect(
+      provider.respondToRequest({ ...baseResponse, responseReference: 'evidence:other' }),
+    ).rejects.toThrow('IDEMPOTENCY_KEY_CONFLICT');
+  });
+
   it('状态只能显式推进：SUBMITTED ≠ ACCEPTED；acceptedAt 仅在显式 ACCEPTED 时写入', async () => {
     const provider = createSandboxFilingProvider();
     const created = await provider.createSubmission(submissionInput());

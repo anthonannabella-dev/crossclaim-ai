@@ -57,7 +57,8 @@ interface SandboxSubmission {
   currency: string | null;
   evidence: Set<string>;
   rfiRequests: Array<{ requestId: string; requestedAt: string; dueAt: string | null; summary: string }>;
-  rfiResponses: Set<string>;
+  /** 幂等操作账本：idempotencyKey → payloadDigest（与 C17 同语义：同 key 不同 payload = 冲突）。 */
+  operationDigests: Map<string, string>;
   observedAt: string;
 }
 
@@ -150,7 +151,7 @@ export function createSandboxFilingProvider(options: SandboxFilingProviderOption
         currency: null,
         evidence: new Set(),
         rfiRequests: [],
-        rfiResponses: new Set(),
+        operationDigests: new Map(),
         observedAt: at,
       };
       submissions.set(providerSubmissionId, row);
@@ -159,6 +160,18 @@ export function createSandboxFilingProvider(options: SandboxFilingProviderOption
 
     async uploadEvidence(input: CustomsFilingUploadEvidenceInput): Promise<CustomsFilingOperationResult> {
       const row = requireOwned({ organizationId: input.organizationId, providerSubmissionId: input.providerSubmissionId });
+      const payloadDigest = digest({
+        operation: 'UPLOAD_EVIDENCE',
+        evidenceReference: input.evidenceReference,
+        documentKind: input.documentKind,
+        sha256: input.sha256,
+      });
+      const existing = row.operationDigests.get(input.idempotencyKey);
+      if (existing !== undefined) {
+        if (existing !== payloadDigest) throw new Error('IDEMPOTENCY_KEY_CONFLICT');
+        return { ok: true, providerReference: input.evidenceReference };
+      }
+      row.operationDigests.set(input.idempotencyKey, payloadDigest);
       const evidenceKey = input.evidenceReference + ':' + input.sha256;
       if (row.evidence.has(evidenceKey)) {
         return { ok: true, providerReference: input.evidenceReference };
@@ -195,7 +208,17 @@ export function createSandboxFilingProvider(options: SandboxFilingProviderOption
 
     async respondToRequest(input: CustomsFilingRfiResponseInput): Promise<CustomsFilingOperationResult> {
       const row = requireOwned(input);
-      row.rfiResponses.add(input.requestId);
+      const payloadDigest = digest({
+        operation: 'RESPOND_RFI',
+        requestId: input.requestId,
+        responseReference: input.responseReference,
+      });
+      const existing = row.operationDigests.get(input.idempotencyKey);
+      if (existing !== undefined) {
+        if (existing !== payloadDigest) throw new Error('IDEMPOTENCY_KEY_CONFLICT');
+        return { ok: true, providerReference: input.responseReference };
+      }
+      row.operationDigests.set(input.idempotencyKey, payloadDigest);
       row.observedAt = now().toISOString();
       return { ok: true, providerReference: input.responseReference };
     },

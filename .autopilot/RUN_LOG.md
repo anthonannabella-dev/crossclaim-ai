@@ -1878,3 +1878,8 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 ## 2026-10-04T05:27:51.933Z — C18-1 接入矩阵 + Layer 3 队列登记
 - 产出 docs/releases/C18-PROVIDER-INTEGRATION-MATRIX.md（14 项接入矩阵字段 + 字段级 mapping + adapter 分层 + 离线清单 + HOST_ACTION 清单）。
 - 队列：C18-2..C18-8 已登记（C18-4..C18-8 需架构审计）；HOLD_EXTERNAL 八项已显式列出。
+
+## 2026-10-04T05:43:32.309Z — C18-2/C18-3 REVISE 两条必修落地
+- ① requestDigest 递归 canonicalization（嵌套 evidenceRefs 进入摘要 + 集合稳定排序）。
+- ② Sandbox evidence / RFI 幂等改为 idempotencyKey + payloadDigest（同 key 不同 payload = IDEMPOTENCY_KEY_CONFLICT）。
+- 裁决：C18-1 = PASS；C18-2/C18-3 = REVISE（已修）；C18-4…C18-8 = AUTHORIZED_TO_CONTINUE_OFFLINE（两个审计 checkpoint + 硬停条件）。

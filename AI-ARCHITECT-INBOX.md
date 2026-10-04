@@ -130544,3 +130544,386 @@ CA-6 CLOSED 不代表真实 CBP/ACE/ABI submission 已开启，也不允许自�
 
 另外，我这次查询 f640f8c 时 GitHub 仍没有向我返回可独立确认的 commit statuses/workflow runs；因此上述 PASS 是源码、持久化路径和测试代码层面的架构验收，不把 Codex 报告的本地测试写成“我已独立确认 GitHub CI SUCCESS”。
 ```
+
+### [MSG-20261004-15] ARCHITECT VERDICT — LAYER 3 / C18-2 + C18-3 = REVISE（C18-1 = PASS；两条必修：① C18-2 requestDigest 必须递归 canonicalization（replacer 数组会把嵌套 evidenceRefs 丢成 [{}]，破坏幂等不变量）+ evidenceRefs 作为集合稳定排序；② C18-3 evidence upload / RFI response 必须使用 idempotencyKey + payloadDigest 冲突语义（同 key 不同 payload → IDEMPOTENCY_KEY_CONFLICT），与 submission/C17 一致。C18-4/5 与 C18-6/7/8 = AUTHORIZED_TO_CONTINUE_OFFLINE，分两个审计 checkpoint；硬停条件：新 Schema/migration、改 C17 不变量、改 tenant isolation、改 Action Guard、真实 transport、真实凭据、公网 webhook、真实 filing、Payment、把 UNVERIFIED 写成 true）
+
+```text
+ARCHITECT VERDICT：REVISE
+
+我按 reviewed HEAD = f36b3d8 重新检查了 C18-2 DTO、C18-3 Sandbox provider、C15/C17 既有契约和 C18 integration matrix。总体方向是对的，但现在有 2 个必须修的实现问题，其中一个会直接破坏幂等摘要，所以暂时不能把 C18-2/C18-3 作为真实 adapter 的冻结基准。
+
+① C18-2 DTO：边界主体成立，但 requestDigest 必须修
+
+这些我接受：
+
+filingAuthorized=true 才允许构造提交请求
+recovery right 不等于 filing authorization
+opaque-only
+jurisdiction/remedy 白名单
+provider status 未知 → UNKNOWN
+SUBMITTED ≠ ACCEPTED
+APPROVED ≠ PAID
+provider 状态只能是 PROVIDER_VERIFIED
+refund revision 不直接产生 recovered cash / fee
+
+但 customsProviderRequestDigest() 现在有一个实际 bug：
+
+TypeScript
+JSON.stringify(request, Object.keys(request).sort())
+
+这个 replacer 数组会应用到所有嵌套对象。
+
+所以：
+
+TypeScript
+evidenceRefs: [
+  {
+    evidenceRef: "...",
+    documentKind: "...",
+    sha256: "..."
+  }
+]
+
+在 digest canonicalization 中实际上可能变成：
+
+JSON
+"evidenceRefs":[{}]
+
+也就是说：
+
+两组完全不同的 evidence 内容，有可能产生相同 requestDigest。
+
+这会破坏：
+
+纯文本
+同 idempotencyKey + 同 digest = 同一次请求
+
+这个 C17/C18 核心不变量。
+
+必须改为真正的递归 canonical serialization。
+
+建议：
+
+纯文本
+递归排序 object keys
+保留 nested fields
+
+而且如果 evidenceRefs 在业务上是无序集合，最好在摘要前按：
+
+纯文本
+evidenceRef + documentKind + sha256
+
+稳定排序。
+
+必须补测试：
+
+纯文本
+只改变 evidenceRef
+→ digest 必须变化
+
+只改变 evidence sha256
+→ digest 必须变化
+
+同一组 evidence 仅顺序不同
+→ 如果定义为集合，则 digest 必须相同
+
+这是本轮第一个必须修项。
+
+DTO 是否应该在这里校验 provider tenant 绑定？
+
+不需要把完整 tenant/account lineage 塞进 C18-2 DTO。
+
+当前 DTO 是 wire normalization 层，它能验证：
+
+纯文本
+tenantRef 是合法 opaque ref
+
+但它无法凭自己判断：
+
+这个 tenantRef 是否真的属于当前 CrossClaim organizationId。
+
+这个事实必须来自 C18-6。
+
+正确分层应该是：
+
+纯文本
+authenticated organizationId
+        ↓
+C18-6 ProviderTenantBinding
+        ↓ server-derived
+provider tenant/account ref
+        ↓
+C18-2 DTO
+        ↓
+RealProviderAdapter
+
+所以我不要求现在给 DTO 新增 DB 查询。
+
+但是在 C18-6 完成以前，不允许真实 transport 使用一个调用方自由传入的 tenantRef。
+
+最终真实 adapter 最好接收类似 server-derived：
+
+TypeScript
+ProviderTenantBinding
+
+而不是自由字符串。
+
+② C18-3 Sandbox：submission 幂等语义 PASS，但 evidence / RFI 幂等还没达到声明
+
+Submission 这一段我批准：
+
+纯文本
+same key + same immutable payload
+→ 返回原 providerSubmissionId
+
+same key + different payload
+→ IDEMPOTENCY_KEY_CONFLICT
+
+而且这里不要改成：
+
+“返回已有 submission + conflict=true”
+
+现有 fail-closed 语义更正确。
+
+因为 C17 已经明确规定：
+
+纯文本
+同 idempotencyKey
++ immutable payload 不一致
+= IDEMPOTENCY_KEY_CONFLICT
+
+这是协议错误，不是正常 replay。
+
+如果返回一个已有 submission 对象，调用方很容易把冲突误当成功。
+
+所以：
+
+IDEMPOTENCY_KEY_CONFLICT 应继续作为非重试型失败。
+
+但 C18-3 目前还有第二个必须修项。
+
+uploadEvidence() 收到了：
+
+TypeScript
+idempotencyKey
+
+但实现完全没有使用它。
+
+目前实际上用的是：
+
+TypeScript
+evidenceReference + ':' + sha256
+
+做去重。
+
+respondToRequest() 同样收到：
+
+TypeScript
+idempotencyKey
+
+但实现也没有使用；只是：
+
+TypeScript
+rfiResponses.add(input.requestId)
+
+因此这种情况当前不会产生 conflict：
+
+纯文本
+同 idempotencyKey
+第一次：evidence=A
+第二次：evidence=B
+
+以及：
+
+纯文本
+同 idempotencyKey
+第一次：responseReference=A
+第二次：responseReference=B
+
+但送审描述写的是：
+
+提交/证据/RFI 幂等；同 key 不同 payload → IDEMPOTENCY_KEY_CONFLICT
+
+源码目前只对 submission 实现了这一条。
+
+所以如果 Sandbox 要作为“真实 adapter 行为基准”，必须统一：
+
+纯文本
+operation + tenant + submission + idempotencyKey
+        ↓
+保存 payloadDigest
+
+同 key + 同 digest
+→ replay 原结果
+
+同 key + 不同 digest
+→ IDEMPOTENCY_KEY_CONFLICT
+
+至少覆盖：
+
+createSubmission
+uploadEvidence
+respondToRequest
+
+这是第二个必须修项。
+
+③ C18-4…C18-8 不需要每一小步都来单独审计
+
+我允许继续自治推进，但建议改成 两个审计 checkpoint，不要 C18-4、5、6、7、8 每完成一个就停一次。
+
+建议：
+
+纯文本
+C18-4 Webhook verification
++
+C18-5 Idempotency / retry / reconciliation
+→ 一次 SECURITY / EXECUTION BOUNDARY 审计
+
+然后：
+
+纯文本
+C18-6 Tenant/provider lineage
++
+C18-7 Authorization lifecycle
++
+C18-8 Negative-path sandbox E2E
+→ 一次 C18 INTERNAL FINAL 审计
+
+这样 Codex 可以连续推进，不需要每个小 commit 都停。
+
+但有几个硬停条件。
+
+只要出现以下任何一个，就必须提前送审：
+
+新 Schema / migration
+修改 C17 ledger 不变量
+修改 tenant isolation 模型
+修改 Action Guard / external-write gate
+写真实 provider-specific transport
+引入真实 credential
+开 webhook 公网入口
+开真实 filing
+开 Payment
+把任何 UNVERIFIED 商务/法律事实写成 true
+
+特别是 C18-6 很可能涉及 ProviderTenantBinding 持久化。
+
+如果需要新增表或修改 Schema：
+
+先送 Schema Delta，再 migration。
+
+不要“先建表再审”。
+
+④ “第三方 SaaS 是否允许代客提交”：必须确认，但不是现在就阻塞所有 adapter 代码
+
+这里需要区分两层。
+
+可以现在继续做
+
+在没有商务/法务确认前，仍可以开发：
+
+纯文本
+provider adapter interface
+DTO mapping
+response mapping
+sandbox
+mock
+webhook verifier abstraction
+polling abstraction
+credential interface
+tenant binding interface
+negative path
+disabled transport
+
+也就是说：
+
+可以做 RealProviderAdapter 的技术骨架。
+
+但是必须：
+
+纯文本
+transportEnabled=false
+productionCredentials=ABSENT
+externalWrite=false
+不能在 UNVERIFIED 状态下做
+
+在以下事实没有官方文档 / 合同 / provider 书面确认以前：
+
+不能开启真实提交能力。
+
+尤其矩阵 #12：
+
+“是否允许第三方 SaaS 代客提交”
+
+这是 C18 的商业生死线之一。
+
+需要明确知道：
+
+CrossClaim 能否作为 SaaS 前台代客户触发 submission
+必须由 Broker 作为 filing party，还是 CrossClaim 可以 API 调用 Broker
+POA 签给谁
+CrossClaim 是技术服务商、agent、referral partner 还是 filing party
+是否要求 Broker license / ABI filer code
+客户授权能否跨多个 filing 复用
+Provider API credential 属于 CrossClaim 还是客户/Broker
+Provider 是否允许 multi-tenant SaaS
+是否允许自动 submission，还是只能 prepare + human approve
+
+因此：
+
+纯文本
+UNVERIFIED
+≠ false
+
+但也：
+
+纯文本
+UNVERIFIED
+≠ 可以上线
+
+正确状态应该一直是：
+
+纯文本
+REAL_ADAPTER_CODE = CAN_PREPARE
+REAL_TRANSPORT = HOLD
+PRODUCTION_ENABLEMENT = HOLD
+
+直到 #10–14，尤其 #12 有正式证据。
+
+本轮最小必须修集合
+
+只需要两个：
+
+修 C18-2 requestDigest 的深层 canonicalization，确保 nested evidenceRefs 真正进入 digest，并补内容变化测试。
+补 C18-3 evidence upload / RFI response 的 idempotencyKey + payloadDigest 冲突语义，与 submission/C17 保持一致。
+
+不要求：
+
+Schema 变更
+C15 重构
+C17 重构
+C18 matrix 重写
+接真实 Provider
+开外写
+现在就拿 production credential
+
+所以最终裁定：
+
+纯文本
+VERDICT = REVISE
+
+C18-1 = PASS
+C18-2 = REVISE
+C18-3 = REVISE
+
+C18-4/5 = AUTHORIZED_TO_CONTINUE_OFFLINE
+C18-6/7/8 = AUTHORIZED_TO_CONTINUE_OFFLINE
+  subject to Schema/Security hard-stop rules
+
+REAL_BROKER = NO
+REAL_FILING = NO
+REAL_TRANSPORT = HOLD
+PRODUCTION_CREDENTIALS = HOLD
+
+修完这两项后，不需要再拆成 C18-2 FINAL、C18-3 FINAL 两次送审，可以和 C18-4/C18-5 一起打包成下一次 C18 security/execution checkpoint 来审。
+```

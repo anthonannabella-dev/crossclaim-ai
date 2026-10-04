@@ -51,6 +51,34 @@ describe('C18-2 — provider-neutral wire DTO（unit）', () => {
     expect(customsProviderRequestDigest({ ...stable, remedy: 'PROTEST' })).not.toBe(digest);
   });
 
+  it('REVISE：digest 必须深入嵌套证据（改 evidenceRef / sha256 必须变化；仅顺序不同必须相同）', () => {
+    const { requestedAt, ...stable } = base();
+    void requestedAt;
+    const withTwoEvidence = {
+      ...stable,
+      evidenceRefs: [
+        { evidenceRef: 'evidence:entry', documentKind: 'ENTRY_SUMMARY', sha256: 'a'.repeat(64) },
+        { evidenceRef: 'evidence:invoice', documentKind: 'COMMERCIAL_INVOICE', sha256: 'b'.repeat(64) },
+      ],
+    };
+    const digestTwo = customsProviderRequestDigest(withTwoEvidence);
+
+    const changedRef = {
+      ...withTwoEvidence,
+      evidenceRefs: [withTwoEvidence.evidenceRefs[0], { ...withTwoEvidence.evidenceRefs[1], evidenceRef: 'evidence:other' }],
+    };
+    expect(customsProviderRequestDigest(changedRef)).not.toBe(digestTwo);
+
+    const changedSha = {
+      ...withTwoEvidence,
+      evidenceRefs: [withTwoEvidence.evidenceRefs[0], { ...withTwoEvidence.evidenceRefs[1], sha256: 'c'.repeat(64) }],
+    };
+    expect(customsProviderRequestDigest(changedSha)).not.toBe(digestTwo);
+
+    const reordered = { ...withTwoEvidence, evidenceRefs: [...withTwoEvidence.evidenceRefs].reverse() };
+    expect(customsProviderRequestDigest(reordered)).toBe(digestTwo);
+  });
+
   it('裸 URL / EIN-like / 纯数字引用一律拒绝（opaque-only）', () => {
     for (const bad of ['https://broker.example/poa', 'HTTPS://Broker.example/poa', '12-3456789', '123456789']) {
       const result = buildCustomsProviderSubmissionRequest({ ...base(), poaRef: bad });

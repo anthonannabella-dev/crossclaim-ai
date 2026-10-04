@@ -105,10 +105,35 @@ function assertOpaqueRef(value: string | null, field: string): CustomsProviderDt
   return null;
 }
 
-/** 规范化摘要：排序键 + 排除易变字段（requestedAt / 运行时元数据）。 */
+/**
+ * 规范化摘要：**递归**排序 object keys（replacer 数组会作用于嵌套对象并丢掉嵌套字段，禁止使用），
+ * 并对无序集合 evidenceRefs 做稳定排序（evidenceRef + documentKind + sha256）。
+ * 排除易变字段：requestedAt 不参与。
+ */
 export function customsProviderRequestDigest(request: Record<string, unknown>): string {
-  const canonical = JSON.stringify(request, Object.keys(request).sort());
-  return createHash('sha256').update(canonical, 'utf8').digest('hex');
+  const evidenceRefs = Array.isArray(request.evidenceRefs)
+    ? [...(request.evidenceRefs as CustomsProviderEvidenceRef[])].sort((a, b) => {
+        const keyA = a.evidenceRef + '|' + a.documentKind + '|' + a.sha256;
+        const keyB = b.evidenceRef + '|' + b.documentKind + '|' + b.sha256;
+        return keyA < keyB ? -1 : keyA > keyB ? 1 : 0;
+      })
+    : request.evidenceRefs;
+  const canonical = canonicalize({ ...request, evidenceRefs });
+  return createHash('sha256').update(JSON.stringify(canonical), 'utf8').digest('hex');
+}
+
+/** 递归规范化：对象按键排序，数组保序（集合类字段在调用方先行排序）。 */
+function canonicalize(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map((entry) => canonicalize(entry));
+  if (value !== null && typeof value === 'object') {
+    const source = value as Record<string, unknown>;
+    const out: Record<string, unknown> = {};
+    for (const key of Object.keys(source).sort()) {
+      out[key] = canonicalize(source[key]);
+    }
+    return out;
+  }
+  return value;
 }
 
 export function buildCustomsProviderSubmissionRequest(input: {
