@@ -1,6 +1,6 @@
 {
   "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。",
-  "updatedAt": "2026-10-05T03:21:00.000Z",
+  "updatedAt": "2026-10-05T03:27:00.000Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -1729,6 +1729,16 @@
       "title": "RSI 部署合同测试（unit / 安装脚本 / 运行时入口 / package 脚本四者对齐）",
       "scope": "断言 unit 指向 rsi-run、状态路径可写、硬化与 restart 限制齐全、安装脚本幂等且不含凭据、package 脚本存在",
       "acceptance_criteria": "vitest rsi-deployment-contract 4/4；api tsc 0",
+      "status": "IMPLEMENTED_PENDING_CI",
+      "implementation_head": "(this commit)"
+    },
+    {
+      "id": "RSI-INSP-07-weekly-capability-integration",
+      "priority": "P1",
+      "source_backlog_id": "OWNER 任务：Continuous Inspection 第 3 节",
+      "title": "Weekly Review × 能力缺口集成证据 + rsi:test 入口",
+      "scope": "证明覆盖缺口作为 CAPABILITY_GAP 失败套件进入周审并要求 Incident；新增 rsi:test 脚本",
+      "acceptance_criteria": "vitest rsi-weekly-capability-integration 2/2；api tsc 0",
       "status": "IMPLEMENTED_PENDING_CI",
       "implementation_head": "(this commit)"
     }
