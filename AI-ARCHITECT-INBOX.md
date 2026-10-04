@@ -135924,3 +135924,258 @@ dedupe constraints
 
 然后再进入下一轮架构验收。
 ```
+
+### [MSG-20261005-02] ARCHITECT VERDICT — RSI-RT-06 MIGRATION SQL = PASS（migration draft HEAD = 4472e8b；migrate deploy = NOT RUN / 仅 ephemeral 验证）。裁定：**RSI_MIGRATION_SQL = PASS**，**STAGING_MIGRATE_DEPLOY = AUTHORIZED**，**PRODUCTION_MIGRATE_DEPLOY = HOLD**；理由 = 仅新增 RSI persistence 表、无修改既有业务表、无 tenant/customer 数据耦合、无 external write、无 provider/payment/credential 能力、schema contract 与 migration contract 一致。②上轮四项硬要求全部落实：(A) Platform scope = PASS，RSI_PLATFORM_SCOPE_EXCEPTION = **ACCEPTED**，8 张表保持 NO organizationId / NO tenantId / NO customerId（符合「系统自治控制面 / 运行状态 / agent-controller 生命周期」定位），并要求继续保持「RSI 不得演化成业务数据存储层」；(B) Lease renewedAt = PASS（taskId UNIQUE + ownerRef + acquiredAt + renewedAt + expiresAt + status，满足 reboot recovery / lease heartbeat / stale detection / ownership recovery，时间单调性测试通过）；(C) TEXT + CHECK 状态约束 = PASS（不用 PostgreSQL enum，`rsi-lifecycle.ts → contract test → DB CHECK` 单源约束正确）；(D) 三项安全不变量全 PASS —— dedupe `UNIQUE(dedupeKey)` 覆盖 Incident / Task / Candidate / Promotion（避免 restart→reconcile 重复创建）、judge separation 由 DB trigger 防护 `judgeRef != candidate.builderRef`（禁止自我批准）、AutonomyMetricResult / AutonomyPromotionDecision / AutonomyRollbackRecord append-only（INSERT allowed、UPDATE/DELETE forbidden）。③**EVIDENCE_SET = SUFFICIENT**：prisma validate / tsc / schema contract 10-10 / architecture contract 142-142 / PG persistence 8-8 / dedupe / append-only / judge separation / lease uniqueness / exact-order replay / whole schema diff zero 全部 PASS，「当前没有必须补的最小集合」。④下一步流程批准：宿主提供**非生产** DATABASE_URL → migrate deploy → migrate status → whole-schema diff → DB invariant smoke → RSI persistence checkpoint；**不需要继续修改 migration draft**。production 仍需单独门禁（生产数据库确认 + 回滚策略 + migration window + backup/restore 验证 + production persistence checkpoint）。边界：TRANSPORT = false、EXTERNAL_WRITE = HOLD、PAYMENT = HOLD、PRODUCTION_CREDENTIALS = HOLD。
+
+```text
+ARCHITECT VERDICT：PASS
+
+基于本次送审材料（migration draft HEAD = 4472e8b，声明 migrate deploy = NOT RUN，仅 ephemeral 验证），裁定如下。
+
+说明：我依据本次提供的审计证据、约束描述和验证结果做架构裁定；未执行外部仓库查询。
+
+① RSI-RT-06 MIGRATION SQL：PASS
+
+当前 migration draft 满足进入 staging smoke 的前置要求：
+
+纯文本
+RSI_MIGRATION_SQL = PASS
+STAGING_APPLY = AUTHORIZED
+PRODUCTION_APPLY = HOLD
+
+原因：
+
+已满足：
+
+仅新增 RSI persistence 表；
+无修改既有业务表；
+无 tenant/customer 数据耦合；
+无 external write；
+无 provider/payment/credential 能力；
+schema contract 与 migration contract 一致。
+② 上轮四项硬要求全部落实
+A. Platform scope
+
+PASS。
+
+确认：
+
+纯文本
+RSI_PLATFORM_SCOPE_EXCEPTION = ACCEPTED
+
+8 张表保持：
+
+纯文本
+NO organizationId
+NO tenantId
+NO customerId
+
+符合 RSI 当前定位：
+
+系统自治控制面；
+运行状态；
+agent/controller 生命周期。
+
+要求继续保持：
+
+RSI 不得演化成业务数据存储层。
+
+B. Lease renewedAt
+
+PASS。
+
+当前：
+
+纯文本
+AutonomyLease
+
+taskId UNIQUE
+ownerRef
+acquiredAt
+renewedAt
+expiresAt
+status
+
+满足：
+
+reboot recovery；
+lease heartbeat；
+stale detection；
+ownership recovery。
+
+时间单调性测试通过，可以接受。
+
+C. TEXT + CHECK 状态约束
+
+PASS。
+
+采用：
+
+纯文本
+TEXT + CHECK
+
+而不是 PostgreSQL enum，符合 RSI 长期演进需求。
+
+尤其：
+
+纯文本
+rsi-lifecycle.ts
+        ↓
+contract test
+        ↓
+DB CHECK
+
+这个单源约束正确。
+
+D. 三项安全不变量
+
+全部 PASS。
+
+1. dedupe
+
+已满足：
+
+纯文本
+UNIQUE(dedupeKey)
+
+覆盖：
+
+Incident
+Task
+Candidate
+Promotion
+
+避免：
+
+restart
+ ↓
+reconcile
+ ↓
+重复创建
+2. Judge separation
+
+PASS。
+
+当前：
+
+纯文本
+judgeRef != candidate.builderRef
+
+并由 DB trigger 防护。
+
+满足：
+
+Builder
+   ↓
+Candidate
+   ↓
+Independent Judge
+   ↓
+Promotion
+
+禁止自我批准。
+
+3. Evidence append-only
+
+PASS。
+
+以下：
+
+纯文本
+AutonomyMetricResult
+AutonomyPromotionDecision
+AutonomyRollbackRecord
+
+append-only：
+
+INSERT allowed
+UPDATE forbidden
+DELETE forbidden
+
+符合审计链要求。
+
+③ 当前证据是否足够？
+
+裁定：
+
+纯文本
+EVIDENCE_SET = SUFFICIENT
+
+已有：
+
+检查	结果
+prisma validate	PASS
+tsc	PASS
+schema contract	10/10
+architecture contract	142/142
+PG persistence	8/8
+dedupe	PASS
+append-only	PASS
+judge separation	PASS
+lease uniqueness	PASS
+exact-order replay	PASS
+whole schema diff zero	PASS
+
+当前没有必须补的最小集合。
+
+④ 下一步流程批准
+
+可以进入：
+
+纯文本
+STAGING SMOKE
+
+流程：
+
+提供非生产 DATABASE_URL
+        ↓
+migrate deploy
+        ↓
+migrate status
+        ↓
+whole-schema diff
+        ↓
+DB invariant smoke
+        ↓
+RSI persistence checkpoint
+
+批准。
+
+但保持边界：
+
+纯文本
+PRODUCTION_MIGRATE_DEPLOY = HOLD
+
+原因：
+
+staging migration 通过 ≠ production 解禁。
+
+Production 仍需要单独：
+
+生产数据库确认；
+回滚策略；
+migration window；
+backup/restore 验证；
+production persistence checkpoint。
+最终状态
+纯文本
+RSI_SCHEMA_DELTA = PASS
+
+RSI_MIGRATION_SQL = PASS
+
+STAGING_MIGRATE_DEPLOY = AUTHORIZED
+
+PRODUCTION_MIGRATE_DEPLOY = HOLD
+
+TRANSPORT = false
+
+EXTERNAL_WRITE = HOLD
+
+PAYMENT = HOLD
+
+PRODUCTION_CREDENTIALS = HOLD
+
+下一执行单元：
+
+在宿主提供的非生产 DATABASE_URL 后执行 staging smoke，不需要继续修改 migration draft。
+```
