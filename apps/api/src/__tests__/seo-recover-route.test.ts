@@ -10,6 +10,7 @@ import { readFileSync } from 'node:fs';
 
 import {
   SEO_RECOVER_ROUTE_REASONS,
+  renderRecoverSitemapXml,
   buildRecoverSitemapAndRobots,
   composeRecoverRouteContent,
   buildRecoverRouteMetadata,
@@ -382,5 +383,31 @@ describe('SEO-4 Stage 6 合同测试（边界与一致性）', () => {
     expect(code).not.toMatch(/[$€£]\s?\d/);
     expect(code).not.toMatch(/\b\d+(\.\d+)?\s?%/);
     expect(code).not.toMatch(/\b(SUCCESS_FEE|FLAT_FEE)\b\s*[:=]\s*['"`]/);
+  });
+
+  it('RECOVER_SITEMAP_XML_EMPTY_WHEN_NOTHING_INDEXABLE：没有任何可索引 URL 时输出空 urlset', () => {
+    const site = buildRecoverSitemapAndRobots({
+      decisions: [resolveRecoverRoute(input({ slug: 'nope-nothing-here' }))],
+      baseUrl: 'https://crossclaim.example',
+    });
+    const xml = renderRecoverSitemapXml(site.entries);
+    expect(site.entries).toEqual([]);
+    expect(xml).toContain('<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">');
+    expect(xml).toContain('</urlset>');
+    expect(xml).not.toContain('<url>');
+  });
+
+  it('RECOVER_SITEMAP_XML_ESCAPES_AND_LISTS_INDEXABLE：只列可能索引 URL，且特殊字符被转义', () => {
+    const xml = renderRecoverSitemapXml(
+      [
+        { loc: 'https://crossclaim.example/recover/amazon/fee-refund' },
+        { loc: 'https://crossclaim.example/recover/amazon/fee-refund?q=a&b=<x>' },
+      ],
+      { lastmod: '2026-10-04' },
+    );
+    expect((xml.match(/<url>/g) ?? []).length).toBe(2);
+    expect(xml).toContain('<loc>https://crossclaim.example/recover/amazon/fee-refund</loc>');
+    expect(xml).toContain('a&amp;b=&lt;x&gt;');
+    expect(xml).toContain('<lastmod>2026-10-04</lastmod>');
   });
 });

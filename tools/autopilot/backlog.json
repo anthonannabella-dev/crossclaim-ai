@@ -1,6 +1,6 @@
 {
   "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。",
-  "updatedAt": "2026-10-04T14:31:00.000Z",
+  "updatedAt": "2026-10-04T14:37:00.000Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -1106,8 +1106,11 @@
       "title": "/recover sitemap 只纳入 gate 通过 URL，robots 与 sitemap 一致",
       "scope": "buildRecoverSitemapAndRobots：indexable+200 才进 sitemap；被 disallow 覆盖的 URL 从 sitemap 移除并记 ROBOTS_DISALLOW；输出 robots.txt 含 Sitemap 行；consistency.conflictCount 自证恒为 0",
       "acceptance_criteria": "RECOVER_SITEMAP_ONLY_GATE_PASSING / RECOVER_ROBOTS_DISALLOW_REMOVES_SITEMAP_ENTRY 全绿；tsc 0",
-      "status": "IMPLEMENTED_PENDING_CI",
-      "implementation_head": "(this commit)"
+      "status": "CLOSED",
+      "implementation_head": "(this commit)",
+      "closed_at": "2026-10-04T14:37:00.000Z",
+      "close_evidence": "CI run 37208929843 (head 1ae5d0f) success",
+      "note": "输出面补完：renderRecoverSitemapXml（空集合输出空 urlset，特殊字符转义）"
     },
     {
       "id": "SEO-4-STAGE-5-recover-content-internal-links",

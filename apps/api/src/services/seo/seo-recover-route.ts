@@ -481,3 +481,29 @@ export function composeRecoverRouteContent(input: SeoRecoverContentInput): SeoRe
     productionCredentials: 'ABSENT',
   };
 }
+
+/** SEO-4 Stage 4 输出面 —— sitemap XML：只渲染传入条目（构造上已保证全部通过 gate）。 */
+const xmlEscape = (value: string): string =>
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+
+export function renderRecoverSitemapXml(
+  entries: readonly { loc: string }[],
+  options: { lastmod?: string | null } = {},
+): string {
+  const lastmod = options.lastmod ? `\n    <lastmod>${xmlEscape(options.lastmod)}</lastmod>` : '';
+  const urls = entries
+    .map((entry) => `  <url>\n    <loc>${xmlEscape(entry.loc)}</loc>${lastmod}\n  </url>`)
+    .join('\n');
+  return [
+    '<?xml version="1.0" encoding="UTF-8"?>',
+    '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">',
+    ...(urls === '' ? [] : [urls]),
+    '</urlset>',
+    '',
+  ].join('\n');
+}
