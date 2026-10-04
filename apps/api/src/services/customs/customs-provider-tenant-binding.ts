@@ -71,6 +71,16 @@ export interface CustomsProviderTenantLineageEntry {
 export interface CustomsProviderTenantBinding {
   /** CrossClaim 租户（authenticated organizationId）——权威来源。 */
   organizationId: string;
+  /** server-derived opaque IOR / 法人引用。绑定身份的一部分（MSG-20261004-23 ①）。 */
+  principalRef: string;
+  bindingScopeVersion: (typeof BINDING_SCOPE_VERSION);
+  /**
+   * 稳定的绑定身份键：**创建后 immutable**，由 v1 + principalRef + jurisdictionAnchor + bindingSlotRef 派生，
+   * 不依赖 mutable providerTenantRef / providerAccountRef，也不因 jurisdictionScope 扩容而变化。
+   */
+  bindingScopeKey: string;
+  /** CrossClaim 自有的稳定 slot（同一 principal+provider+jurisdiction 并存多账号时用于区分）。 */
+  bindingSlotRef: string;
   /** provider-neutral provider 标识（与 C15 `CustomsFilingProvider.providerId` 同名同义）。 */
   providerId: string;
   /** server-derived provider 侧租户引用（opaque）。 */
@@ -99,8 +109,8 @@ export interface CustomsProviderTenantBindingQuery {
   organizationId: string;
   providerId: string;
   jurisdiction: string;
-  /** 可选：Internal principal / IOR 引用（仅用于 lineage 取证，不参与授权判定）。 */
-  principalRef?: string | null;
+  /** server-derived opaque IOR / 法人引用；**参与绑定选择**（MSG-20261004-23 ③）。 */
+  principalRef: string;
 }
 
 export type CustomsProviderTenantBindingReasonCode =
@@ -109,6 +119,8 @@ export type CustomsProviderTenantBindingReasonCode =
   | 'BINDING_UNKNOWN'
   | 'BINDING_NOT_ACTIVE'
   | 'PROVIDER_MISMATCH'
+  | 'PRINCIPAL_MISMATCH'
+  | 'BINDING_AMBIGUOUS'
   | 'JURISDICTION_NOT_COVERED'
   | 'CALLER_TENANT_OVERRIDE_REJECTED'
   | 'RELATIONSHIP_NOT_VERIFIED'
@@ -144,6 +156,8 @@ const RAW_URL_SCHEME_RE = /^(https?:\/\/|javascript:|data:|file:)/i;
 const JURISDICTION_RE = /^(\*|[A-Z]{2})$/;
 
 export function isOpaqueProviderRef(value: string): boolean {
+  // 注意：正则会把 undefined 强制转成字符串 "undefined"（可通过 opaque 校验），必须先做类型/非空检查。
+  if (typeof value !== 'string' || value.trim() === '') return false;
   if (RAW_URL_SCHEME_RE.test(value)) return false;
   if (/^[0-9]{2}-[0-9]{7}$/.test(value) || /^[0-9]{6,12}$/.test(value)) return false;
   return OPAQUE_REF_RE.test(value);
@@ -154,7 +168,11 @@ export function isJurisdictionCovered(scope: readonly string[], jurisdiction: st
   return scope.includes('*') || scope.includes(jurisdiction);
 }
 
-const DENIED = (reasonCode: CustomsProviderTenantBindingReasonCode): CustomsProviderTenantBindingResolution => ({
+export const BINDING_SCOPE_VERSION = 'v1' as const;
+
+export const deniedProviderBindingResolution = (
+  reasonCode: CustomsProviderTenantBindingReasonCode,
+): CustomsProviderTenantBindingResolution => ({
   ok: false,
   reasonCode,
   providerId: null,
@@ -170,6 +188,48 @@ const DENIED = (reasonCode: CustomsProviderTenantBindingReasonCode): CustomsProv
 });
 
 /**
+ * bindingScopeKey 的 canonical 派生（MSG-20261004-23 ②）：
+ * sha256(v1 + principalRef + jurisdictionAnchor + bindingSlotRef)，键排序保证稳定；
+ * 不接受 mutable provider 账号状态作为输入。
+ */
+export function computeProviderBindingScopeKey(input: {
+  principalRef: string;
+  jurisdictionAnchor: string;
+  bindingSlotRef: string;
+}): string {
+  const anchor = String(input.jurisdictionAnchor ?? '').trim().toUpperCase();
+  if (
+    !isOpaqueProviderRef(input.principalRef) ||
+    !isOpaqueProviderRef(input.bindingSlotRef) ||
+    (anchor !== '*' && !JURISDICTION_RE.test(anchor))
+  ) {
+    throw new Error('INVALID_BINDING_SCOPE_INPUT');
+  }
+  const canonical = JSON.stringify(
+    {
+      bindingSlotRef: input.bindingSlotRef,
+      jurisdictionAnchor: anchor,
+      principalRef: input.principalRef,
+      version: BINDING_SCOPE_VERSION,
+    },
+    ['bindingSlotRef', 'jurisdictionAnchor', 'principalRef', 'version'],
+  );
+  return createHash('sha256').update(canonical, 'utf8').digest('hex');
+}
+
+const DENIED = deniedProviderBindingResolution;
+
+/** query 形状校验（resolver 与纯函数共用，保证非法 query 报 INVALID_QUERY 而不是 BINDING_UNKNOWN）。 */
+export function isValidProviderTenantBindingQuery(query: CustomsProviderTenantBindingQuery): boolean {
+  return (
+    isOpaqueProviderRef(query?.organizationId) &&
+    isOpaqueProviderRef(query?.providerId) &&
+    isOpaqueProviderRef(query?.principalRef) &&
+    JURISDICTION_RE.test(query?.jurisdiction ?? '')
+  );
+}
+
+/**
  * 纯函数判定：**只有** server-derived 绑定满足全部条件才放行。
  * `callerTenantRef` 仅在提供时用于「拒绝调用方覆盖」这一条，永远不是权威来源。
  */
@@ -178,11 +238,7 @@ export function resolveCustomsProviderTenantBinding(
   query: CustomsProviderTenantBindingQuery,
   callerTenantRef?: string | null,
 ): CustomsProviderTenantBindingResolution {
-  if (
-    !isOpaqueProviderRef(query.organizationId) ||
-    !isOpaqueProviderRef(query.providerId) ||
-    !JURISDICTION_RE.test(query.jurisdiction)
-  ) {
+  if (!isValidProviderTenantBindingQuery(query)) {
     return DENIED('INVALID_QUERY');
   }
   if (callerTenantRef != null && !isOpaqueProviderRef(callerTenantRef)) {
@@ -193,6 +249,8 @@ export function resolveCustomsProviderTenantBinding(
   // 防御性隔离检查：绑定与查询必须同租户、同 provider。任何不一致都视为隔离事故，直接拒绝。
   if (binding.organizationId !== query.organizationId) return DENIED('TENANT_ISOLATION_VIOLATION');
   if (binding.providerId !== query.providerId) return DENIED('PROVIDER_MISMATCH');
+  // 多账号场景：必须是同一 principal 的绑定，绝不做“第一条 provider binding”。
+  if (binding.principalRef !== query.principalRef) return DENIED('PRINCIPAL_MISMATCH');
 
   if (binding.status !== 'ACTIVE') return DENIED('BINDING_NOT_ACTIVE');
   // 商务/法务关系门槛：CROSSCLAIM_SAAS 不得只是 enum 标签——必须有真实验证证据。
@@ -242,9 +300,20 @@ export function createInMemoryCustomsProviderTenantBindingResolver(
   const rows = [...bindings];
   return {
     async resolve(query: CustomsProviderTenantBindingQuery): Promise<CustomsProviderTenantBindingResolution> {
-      const owned = rows.filter((row) => row.organizationId === query.organizationId);
-      const match = owned.find((row) => row.providerId === query.providerId) ?? null;
-      return resolveCustomsProviderTenantBinding(match, query);
+      if (!isValidProviderTenantBindingQuery(query)) return DENIED('INVALID_QUERY');
+      const owned = rows.filter(
+        (row) =>
+          row.organizationId === query.organizationId &&
+          row.providerId === query.providerId &&
+          row.principalRef === query.principalRef,
+      );
+      const applicable = owned.filter(
+        (row) => row.status === 'ACTIVE' && isJurisdictionCovered(row.jurisdictionScope, query.jurisdiction),
+      );
+      // 0 条 → BINDING_UNKNOWN；>1 条无法唯一确定 → BINDING_AMBIGUOUS（fail-closed）。
+      if (applicable.length === 0) return DENIED('BINDING_UNKNOWN');
+      if (applicable.length > 1) return DENIED('BINDING_AMBIGUOUS');
+      return resolveCustomsProviderTenantBinding(applicable[0]!, query);
     },
   };
 }

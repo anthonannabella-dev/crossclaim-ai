@@ -132516,3 +132516,288 @@ SEO-3 不受影响，可以继续并行推进。
 
 这轮只要改提案，不要写 migration。下一轮直接送 C18 SCHEMA DELTA FINAL-2；通过后就可以正式生成 SQL migration。
 ```
+
+### [MSG-20261004-23] ARCHITECT VERDICT — C18 SCHEMA DELTA FINAL-2 = REVISE（reviewed HEAD = ca1a6b8；B = PASS；A 仅剩 multi-binding stable identity + deterministic selection；MIGRATION / SCHEMA_PRISMA_CHANGE / MIGRATE_DEPLOY = HOLD；三项必修：① Binding model 必须显式保存 principalRef（server-derived opaque IOR/legal-entity ref；当前 resolver 仍是 owned.find(providerId)，多账号下会拿错）；② bindingScopeKey 必须是 immutable/versioned stable identity（v1 + principalRef + jurisdictionAnchor + bindingSlotRef 的 canonical sha256），不依赖 mutable providerTenantRef/providerAccountRef、不因 jurisdictionScope 扩容而变；③ resolver selection contract：organizationId + providerId + principalRef + scope → exactly one，0 条 = BINDING_UNKNOWN，>1 条 = BINDING_AMBIGUOUS 必须 fail-closed，绝不 find(providerId)；lineage snapshot 需纳入 principalRef、previousSnapshot = NOT_REQUIRED、append-only 用 trigger（沿用 cc_append_only__* / crossclaim_assert_tenant_integrity 风格）、snapshotDigest 补 CHECK 正则）
+
+```text
+ARCHITECT VERDICT：REVISE
+
+我按 reviewed HEAD = ca1a6b8（完整 SHA ca1a6b84398fc45483fdc6feb8fa5aefdddd77b3）重新审了 docs/releases/C18-SCHEMA-DELTA-PROPOSAL.md v2，并核对了当前 resolver 与仓库既有 migration 风格。v2 的四条主修基本都正确，B 已经可以 PASS，A 只剩一个 migration 前必须解决的窄问题：多 binding 之后如何唯一、稳定地选中正确 binding。
+
+① bindingScopeKey：方向对，但当前口径还不能直接落库
+
+现在的：
+
+纯文本
+bindingScopeKey
+= principalRef / IOR
++ jurisdiction
++ account hint
+
+确实比上一版 (organizationId, providerId) 好很多，也足够 provider-neutral。
+
+但当前还有两个实际问题。
+
+第一，Schema 没有显式保存 principalRef。而当前代码里的 CustomsProviderTenantBindingQuery.principalRef 还是：
+
+仅用于 lineage 取证，不参与授权判定。
+
+并且 exact HEAD 的 in-memory resolver 现在仍然是：
+
+TypeScript
+owned.find((row) => row.providerId === query.providerId)
+
+也就是说，一旦数据库允许：
+
+纯文本
+同 organization
++ 同 provider
++ 多个 IOR / 多账号 binding
+
+运行时就可能拿到“第一条 provider binding”，而不是当前 IOR 对应的那条。
+
+这是必须在 migration 前消除的歧义。
+
+第二，account hint 必须明确为稳定 binding 身份，不能是当前 providerAccountRef 的别名。
+
+因为：
+
+纯文本
+A 账号
+→ REBOUND
+→ B 账号
+
+如果 bindingScopeKey 随账号改变，就会把一次“rebind”变成新的 binding identity，破坏你们刚确定的：
+
+纯文本
+current binding + lineage
+
+模型。
+
+所以我的最小必修是：
+
+纯文本
+CustomsProviderTenantBinding
++ principalRef
++ bindingScopeKey
+
+其中：
+
+纯文本
+principalRef = server-derived opaque IOR/legal-entity reference
+
+并建议：
+
+纯文本
+bindingScopeVersion = "v1"
+
+bindingScopeKey 必须满足：
+
+纯文本
+server-derived
+immutable after creation
+provider-neutral
+不依赖 mutable providerTenantRef
+不依赖 mutable providerAccountRef
+不因 jurisdictionScope 扩容而自动变化
+
+如果同一 principalRef + provider + jurisdiction 确实允许并存多个账号，使用一个 CrossClaim 自己生成的稳定 bindingSlotRef 来区分，比“account hint”更安全。
+
+例如：
+
+纯文本
+bindingScopeKey =
+sha256(
+  v1
+  + principalRef
+  + jurisdictionAnchor
+  + bindingSlotRef
+)
+
+bindingSlotRef 是 CrossClaim 的稳定 opaque slot，不是 provider 当前账户 ID。
+
+对应查询至少应该有：
+
+纯文本
+@@index([organizationId, providerId, principalRef, status])
+
+生产 resolver 必须：
+
+纯文本
+organizationId
++ providerId
++ principalRef
++ scope
+→ exactly one binding
+
+如果出现 0 条：
+
+纯文本
+BINDING_UNKNOWN
+
+出现 >1 条无法唯一确定：
+
+纯文本
+BINDING_AMBIGUOUS
+→ fail-closed
+
+绝不能继续 .find(providerId)。
+
+② Lineage snapshot：PASS，不需要 previousSnapshot
+
+现在的 full post-state snapshot 方案是对的。
+
+只要保证：
+
+纯文本
+第一条 = BOUND full snapshot
+以后每次 mutation = full post-state snapshot
+current update + lineage append = 同一事务
+
+就不需要额外保存：
+
+纯文本
+previousSnapshot
+
+上一条 lineage 本身就是 previous state。
+
+但上面如果按要求增加了 principalRef，snapshot 也应该把它纳入。
+
+我建议把“可重建完整 binding 真值”的文案稍微收紧为：
+
+可重建任一时点的 authorization / provider-binding decision state
+
+因为你们故意没有把 credentialReference 放进 lineage snapshot。这个选择我赞成：credential 生命周期不应该偷偷混进 binding authorization lineage。
+
+未来凭据轮换如果需要审计，应独立处理。
+
+另外 snapshotDigest 在 migration SQL 里至少补：
+
+SQL
+CHECK ("snapshotDigest" ~ '^[0-9a-f]{64}$')
+③ Webhook 生命周期：B = PASS
+
+删除 outcome 是正确的。
+
+最终职责保持：
+
+纯文本
+CustomsProviderWebhookReplayClaim
+= immutable replay lock
+
+只有：
+
+纯文本
+providerId
+deliveryId
+claimedAt
+
+就够。
+
+以后如果真的需要：
+
+纯文本
+RECEIVED
+→ PROCESSED
+→ FAILED
+→ RECONCILED
+
+同意单独建立：
+
+纯文本
+WebhookProcessingFact / Event
+
+并做 append-only。
+
+不要把 outcome 再塞回 ReplayClaim。
+
+④ Append-only：明确选 Trigger，不选 revoke DML
+
+这个我现在可以直接裁决。
+
+使用 trigger。
+
+因为我检查了仓库现有 migration，已经有成熟模式：
+
+纯文本
+cc_append_only__CustomsAuthorizedSignerFact
+→ BEFORE UPDATE OR DELETE
+→ cc_customs_ior_fact_append_only()
+
+租户完整性也是：
+
+纯文本
+crossclaim_assert_tenant_integrity()
++ BEFORE INSERT OR UPDATE trigger
+
+所以 C18 应继续同一风格。
+
+不要主要依赖：
+
+SQL
+REVOKE UPDATE, DELETE
+
+原因是数据库 owner / migration role 等权限模型可能绕过或产生部署差异；trigger 才与目前 CrossClaim 的 DB invariant 风格一致。
+
+建议 migration 继续：
+
+纯文本
+lineage UPDATE → trigger reject
+lineage DELETE → trigger reject
+cross-tenant bindingId → tenant integrity trigger reject
+⑤ 现在是否允许生成 migration？
+
+暂时还不允许。
+
+不是整体方案有问题，而是必须先把这一件事写清楚：
+
+多 binding 下的 principalRef + immutable bindingScopeKey + resolver selection contract
+
+这条在 Schema 一旦落库后再补，会涉及列、索引、唯一键和 Prisma Store 查询一起返工，所以现在必须先定。
+
+本轮状态：
+
+纯文本
+VERDICT = REVISE
+
+SCHEMA_DELTA_A = REVISE
+  only residual:
+  multi-binding stable identity + deterministic selection
+
+SCHEMA_DELTA_A2_LINEAGE = PASS_WITH_NARROW_REVISE
+  add principalRef to snapshot after A is fixed
+  previousSnapshot = NOT_REQUIRED
+  append-only = TRIGGER
+
+SCHEMA_DELTA_B = PASS
+
+MIGRATION = HOLD
+SCHEMA_PRISMA_CHANGE = HOLD
+MIGRATE_DEPLOY = HOLD
+
+下一轮只需要送 C18 SCHEMA DELTA FINAL-3，不用再重审 B。
+
+FINAL-3 只核三项：
+
+纯文本
+1. Binding model 显式保存 principalRef
+2. bindingScopeKey 明确为 immutable/versioned stable identity，
+   不由 mutable provider account 状态决定
+3. resolver selection contract：
+   org + provider + principal + scope → exactly one；
+   ambiguous → fail-closed
+
+这三项收口后，我会允许直接进入：
+
+纯文本
+PASS
+→ schema.prisma
+→ generate migration SQL
+→ SQL review
+→ prisma validate
+→ fresh DB migration
+→ Prisma Store
+→ real PG concurrency / tenant / append-only E2E
+
+REAL_TRANSPORT / EXTERNAL_WRITE / PAYMENT / PRODUCTION_ENABLEMENT 继续保持 HOLD。
+```

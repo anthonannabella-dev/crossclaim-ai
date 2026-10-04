@@ -45,6 +45,10 @@ const SECRET = 'sandbox-webhook-secret';
 
 const binding = (overrides: Partial<CustomsProviderTenantBinding> = {}): CustomsProviderTenantBinding => ({
   organizationId: 'org:acme',
+  principalRef: 'ior:acme',
+  bindingScopeVersion: 'v1',
+  bindingScopeKey: 'b'.repeat(64),
+  bindingSlotRef: 'slot:acme-us-1',
   providerId: 'provider:customs-a',
   providerTenantRef: 'ptenant:acme-us',
   providerAccountRef: 'paccount:broker-a',

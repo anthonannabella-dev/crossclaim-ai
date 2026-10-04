@@ -1,7 +1,7 @@
-# C18 — SCHEMA DELTA PROPOSAL v2（ProviderTenantBinding 持久化 + WebhookReplayClaim 持久化）
+# C18 — SCHEMA DELTA PROPOSAL v3（ProviderTenantBinding 持久化 + WebhookReplayClaim 持久化）
 
-> 状态：**REVISED PROPOSAL / NOT APPLIED**。本文件只是提案 v2，**没有**改 `schema.prisma`、**没有**写 migration、**没有**跑 `migrate deploy`。
-> v2 依据 MSG-20261004-22 的四条最小必修 + 两条建议（enum、DB CHECK）修订；`C18_INTERNAL_SKELETON = CLOSED` 不变，`MIGRATION / SCHEMA_PRISMA_CHANGE / MIGRATE_DEPLOY = HOLD`。
+> 状态：**REVISED PROPOSAL / NOT APPLIED**。本文件只是提案 v3，**没有**改 `schema.prisma`、**没有**写 migration、**没有**跑 `migrate deploy`。
+> v2 依据 MSG-20261004-22（四条必修 + 两条建议）；**v3 依据 MSG-20261004-23**：B 已 PASS，A 仅剩「多 binding 下的稳定身份 + 确定性选择」，本轮把该项收口（principalRef 显式落列、bindingScopeKey 变为 immutable/versioned 稳定身份、resolver selection contract 明确 exactly-one/BINDING_AMBIGUOUS、lineage snapshot 纳入 principalRef、append-only 明确用 trigger）。`C18_INTERNAL_SKELETON = CLOSED` 不变，`MIGRATION / SCHEMA_PRISMA_CHANGE / MIGRATE_DEPLOY = HOLD`。
 
 ## 0. 为什么是纯新增
 
@@ -21,6 +21,7 @@
 | ③ | lineage 只有 event/actor/note/occurredAt/sourceRef | lineage 增加**安全 canonical snapshot**（不含 secret）+ `snapshotDigest`，可重建历史；append-only 由 DB 真正 enforce（UPDATE/DELETE reject）；current 更新与 lineage append 同事务 |
 | ④ | ReplayClaim 有 `outcome` 状态机 | **删除 `outcome`**，只做 immutable replay lock（`id/providerId/deliveryId/claimedAt`）；retention 保留但**不硬编码 180d**（真实 Provider 选定前 `AUTO_PURGE = OFF`） |
 | 建议 | String 真值、无 DB CHECK | `relationship` / `status` / lineage `event` 改为 Prisma enum；`CROSSCLAIM_SAAS ⇒ 关系证据非空` 下沉 DB CHECK |
+| v3 | （MSG-20261004-23 残留）无 principalRef 落列、bindingScopeKey 依赖可变账号、resolver 可能拿"第一条" | 显式 `principalRef` + `bindingScopeVersion` + immutable `bindingScopeKey` + `bindingSlotRef`；resolver 要求 exactly-one，>1 → `BINDING_AMBIGUOUS`；lineage snapshot 纳入 principalRef；append-only 用 trigger |
 
 ## 2. 枚举（Prisma enum，避免非法真值入库）
 
@@ -37,6 +38,16 @@ model CustomsProviderTenantBinding {
   id                      String   @id @default(uuid())
   organizationId          String
   organization            Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  /// server-derived opaque IOR / 法人引用（绑定身份的一部分；MSG-20261004-23 ①）
+  principalRef            String
+  /// 绑定身份版本（v1）；升级时新增列值而不是改写历史
+  bindingScopeVersion     String   @default("v1")
+  /// 稳定绑定身份键：v1 + principalRef + jurisdictionAnchor + bindingSlotRef 的 canonical sha256。
+  /// 创建后 immutable；不依赖 mutable providerTenantRef / providerAccountRef；不因 jurisdictionScope 扩容而变化。
+  bindingScopeKey         String
+  /// CrossClaim 自有的稳定 slot（同一 principal + provider + jurisdiction 并存多账号时用于区分，
+  /// 绝不是 provider 当前账号 ID 的别名）
+  bindingSlotRef          String
   providerId              String
   providerTenantRef       String
   providerAccountRef      String
@@ -57,10 +68,42 @@ model CustomsProviderTenantBinding {
 
   @@unique([organizationId, id])
   @@unique([organizationId, providerId, bindingScopeKey])
+  @@index([organizationId, providerId, principalRef, status])
   @@index([organizationId, providerId, status])
   @@index([organizationId, bindingScopeKey])
 }
 ```
+
+### 3.1 `bindingScopeKey` 派生（immutable / versioned）
+
+```
+bindingScopeKey = sha256(canonicalJson{
+  version: "v1",
+  principalRef,
+  jurisdictionAnchor,   // '*' 或 ISO-3166 alpha-2
+  bindingSlotRef        // CrossClaim 生成的稳定 opaque slot
+})
+```
+
+约束（全部为硬约束，FINAL-3 请核这三条）：
+
+1. **server-derived**：三个输入全部来自服务端；不接受客户端自报。
+2. **immutable after creation**：一旦写入不可改写；账号 rebind（providerAccountRef A→B）**不**改变 binding identity，只追加 lineage。
+3. **不依赖可变 provider 状态**：不使用 `providerTenantRef` / `providerAccountRef` / 当前 `jurisdictionScope` 内容；同一 `principalRef + provider + jurisdiction` 若要并存多账号，用 `bindingSlotRef` 区分。
+
+### 3.2 Resolver selection contract（取代 `.find(providerId)`）
+
+```
+organizationId + providerId + principalRef + jurisdiction
+  → exactly one applicable binding
+
+0 条 → BINDING_UNKNOWN
+>1 条（无法唯一确定）→ BINDING_AMBIGUOUS → fail-closed（nextAction = null）
+```
+
+- **绝不允许** `owned.find((row) => row.providerId === query.providerId)` 这种"第一条 provider binding"取法。
+- 纯函数层另有 `PRINCIPAL_MISMATCH`（binding.principalRef ≠ query.principalRef）作为纵深防御。
+- 代码已按此契约实现（`customs-provider-tenant-binding.ts`：`isValidProviderTenantBindingQuery` / `computeProviderBindingScopeKey` / `createInMemoryCustomsProviderTenantBindingResolver`），测试覆盖多账号选择、歧义 fail-closed、principal 不匹配。
 
 DB 级 CHECK（migration 手写 SQL 部分）：
 
@@ -84,10 +127,11 @@ model CustomsProviderTenantBindingLineage {
   actorRef        String
   note            String?
   /// 该事件后的安全 canonical 绑定快照（不含任何 secret / 凭据本体 / 合同正文）：
-  /// { providerTenantRef, providerAccountRef, bindingScopeKey, relationship,
+  /// { providerTenantRef, providerAccountRef, principalRef, bindingScopeVersion, bindingScopeKey,
+  ///   bindingSlotRef, relationship,
   ///   relationshipEvidenceRef, relationshipVerifiedAt, jurisdictionScope, status, verifiedAt }
   snapshot        Json
-  snapshotDigest  String   // sha256(canonical(snapshot))
+  snapshotDigest  String   // sha256(canonical(snapshot))；migration 补 CHECK ("snapshotDigest" ~ '^[0-9a-f]{64}$')
   occurredAt      DateTime
   recordedAt      DateTime @default(now())
   sourceRef       String?
@@ -98,10 +142,11 @@ model CustomsProviderTenantBindingLineage {
 
 强制项（migration 必须真正实现，不只在文档里声明）：
 
-1. **append-only**：对 lineage 表 revoke `UPDATE` / `DELETE`（或等价 trigger：`UPDATE`/`DELETE` 直接 `RAISE EXCEPTION`）。
-2. **tenant integrity**：`lineage.organizationId` 必须等于其 binding 的 `organizationId`（复合 FK 或 trigger 校验）。
+1. **append-only = trigger**（MSG-20261004-23 ④ 已裁决）：沿用仓库既有模式 `cc_append_only__*` + `BEFORE UPDATE OR DELETE` trigger 直接 reject；**不以** `REVOKE UPDATE, DELETE` 为主（权限模型可能被 owner/migration role 绕过，且与现有 DB invariant 风格不一致）。
+2. **tenant integrity trigger**：`lineage.organizationId` 必须等于其 binding 的 `organizationId`，沿用 `crossclaim_assert_tenant_integrity()` + `BEFORE INSERT OR UPDATE` trigger。
 3. **同事务**：current binding 的更新与 lineage append 必须在同一事务内完成（服务层 + 测试保证）。
 4. 服务层写入前计算 `snapshotDigest`（canonical key-sorted SHA-256，与 C18-8 `providerSubmissionPayloadDigest` 同一 canonical 规则）。
+5. `previousSnapshot` **不需要**（MSG-20261004-23 ②：上一条 lineage 本身即 previous state）；snapshot 语义表述为"可重建任一时点的 authorization / provider-binding decision state"（`credentialReference` 故意不入 snapshot，凭据轮换审计另行处理）。
 
 ## 5. 提案 B — `CustomsProviderWebhookReplayClaim`（v2，immutable replay lock）
 

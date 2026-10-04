@@ -5,11 +5,13 @@ import { describe, expect, it } from 'vitest';
 import {
   appendCustomsProviderTenantLineage,
   bindCustomsProviderSubmissionRequest,
+  computeProviderBindingScopeKey,
   CUSTOMS_PROVIDER_TENANT_BINDING_BOUNDARY,
   customsProviderTenantLineageDigest,
   createInMemoryCustomsProviderTenantBindingResolver,
   isJurisdictionCovered,
   resolveCustomsProviderTenantBinding,
+  BINDING_SCOPE_VERSION,
   type CustomsProviderTenantBinding,
   type CustomsProviderTenantBindingQuery,
 } from '../services/customs/customs-provider-tenant-binding';
@@ -18,6 +20,10 @@ const DIGEST = 'a'.repeat(64);
 
 const binding = (overrides: Partial<CustomsProviderTenantBinding> = {}): CustomsProviderTenantBinding => ({
   organizationId: 'org:acme',
+  principalRef: 'ior:acme',
+  bindingScopeVersion: BINDING_SCOPE_VERSION,
+  bindingScopeKey: 'b'.repeat(64),
+  bindingSlotRef: 'slot:acme-us-1',
   providerId: 'provider:customs-a',
   providerTenantRef: 'ptenant:acme-us',
   providerAccountRef: 'paccount:broker-a',
@@ -182,6 +188,112 @@ describe('C18-6 — provider tenant / account lineage（unit）', () => {
     expect(isolation.ok).toBe(false);
     expect(isolation.reasonCode).toBe('TENANT_ISOLATION_VIOLATION');
     expect(isolation.providerTenantRef).toBeNull();
+  });
+
+  it('多账号：bindingScopeKey 是 versioned、server-derived、immutable 的稳定身份', () => {
+    const key = computeProviderBindingScopeKey({
+      principalRef: 'ior:acme',
+      jurisdictionAnchor: 'US',
+      bindingSlotRef: 'slot:acme-us-1',
+    });
+    expect(key).toMatch(/^[0-9a-f]{64}$/);
+    // 稳定：同输入同结果。
+    expect(
+      computeProviderBindingScopeKey({
+        principalRef: 'ior:acme',
+        jurisdictionAnchor: 'US',
+        bindingSlotRef: 'slot:acme-us-1',
+      }),
+    ).toBe(key);
+    // 对 principal / jurisdictionAnchor / slot 敏感。
+    expect(
+      computeProviderBindingScopeKey({
+        principalRef: 'ior:other',
+        jurisdictionAnchor: 'US',
+        bindingSlotRef: 'slot:acme-us-1',
+      }),
+    ).not.toBe(key);
+    expect(
+      computeProviderBindingScopeKey({
+        principalRef: 'ior:acme',
+        jurisdictionAnchor: '*',
+        bindingSlotRef: 'slot:acme-us-1',
+      }),
+    ).not.toBe(key);
+    expect(
+      computeProviderBindingScopeKey({
+        principalRef: 'ior:acme',
+        jurisdictionAnchor: 'US',
+        bindingSlotRef: 'slot:acme-us-2',
+      }),
+    ).not.toBe(key);
+    // 非法输入 fail-closed。
+    expect(() =>
+      computeProviderBindingScopeKey({
+        principalRef: '',
+        jurisdictionAnchor: 'US',
+        bindingSlotRef: 'slot:x',
+      }),
+    ).toThrow('INVALID_BINDING_SCOPE_INPUT');
+    expect(() =>
+      computeProviderBindingScopeKey({
+        principalRef: 'ior:acme',
+        jurisdictionAnchor: 'USA',
+        bindingSlotRef: 'slot:x',
+      }),
+    ).toThrow('INVALID_BINDING_SCOPE_INPUT');
+  });
+
+  it('多账号选择：resolver 按 organization + provider + principalRef 选，绝不拿“第一条 provider binding”', async () => {
+    const resolver = createInMemoryCustomsProviderTenantBindingResolver([
+      binding({ principalRef: 'ior:acme', providerTenantRef: 'ptenant:acme-us' }),
+      binding({ principalRef: 'ior:acme-ca', providerTenantRef: 'ptenant:acme-ca' }),
+    ]);
+
+    const us = await resolver.resolve(query({ principalRef: 'ior:acme' }));
+    expect(us.ok).toBe(true);
+    expect(us.providerTenantRef).toBe('ptenant:acme-us');
+
+    const ca = await resolver.resolve(query({ principalRef: 'ior:acme-ca' }));
+    expect(ca.ok).toBe(true);
+    expect(ca.providerTenantRef).toBe('ptenant:acme-ca');
+
+    // 该租户下没有这个 principal 的绑定 → BINDING_UNKNOWN（不退化成“随便拿一条”）。
+    const unknown = await resolver.resolve(query({ principalRef: 'ior:acme-mx' }));
+    expect(unknown.ok).toBe(false);
+    expect(unknown.reasonCode).toBe('BINDING_UNKNOWN');
+  });
+
+  it('多账号歧义：同一 principal + provider + 辖区存在两条适用绑定 → BINDING_AMBIGUOUS（fail-closed）', async () => {
+    const resolver = createInMemoryCustomsProviderTenantBindingResolver([
+      binding({ bindingSlotRef: 'slot:a', bindingScopeKey: 'c'.repeat(64) }),
+      binding({ bindingSlotRef: 'slot:b', bindingScopeKey: 'd'.repeat(64) }),
+    ]);
+    const ambiguous = await resolver.resolve(query());
+    expect(ambiguous.ok).toBe(false);
+    expect(ambiguous.reasonCode).toBe('BINDING_AMBIGUOUS');
+    expect(ambiguous.providerTenantRef).toBeNull();
+    expect(ambiguous.nextAction).toBeNull();
+  });
+
+  it('principal 不匹配：纯函数层面 PRINCIPAL_MISMATCH；query 缺 principalRef → INVALID_QUERY', async () => {
+    const mismatch = resolveCustomsProviderTenantBinding(binding(), {
+      organizationId: 'org:acme',
+      providerId: 'provider:customs-a',
+      jurisdiction: 'US',
+      principalRef: 'ior:someone-else',
+    });
+    expect(mismatch.ok).toBe(false);
+    expect(mismatch.reasonCode).toBe('PRINCIPAL_MISMATCH');
+
+    const resolver = createInMemoryCustomsProviderTenantBindingResolver([binding()]);
+    const invalid = await resolver.resolve({
+      organizationId: 'org:acme',
+      providerId: 'provider:customs-a',
+      jurisdiction: 'US',
+    } as never);
+    expect(invalid.ok).toBe(false);
+    expect(invalid.reasonCode).toBe('INVALID_QUERY');
   });
 
   it('resolver 端口：按 organizationId 过滤，且不接受违规 query', async () => {
