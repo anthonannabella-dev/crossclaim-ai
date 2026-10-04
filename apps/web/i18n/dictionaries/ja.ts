@@ -721,6 +721,16 @@ const ja: Messages = {
       costSafeMode: "コスト安全モード",
     },
   },
+  rsiHealth: {
+    title: "RSI システム健全性",
+    status: "ステータス",
+    openIncidents: "未解決インシデント",
+    activeTasks: "実行中タスク",
+    failedTasks: "失敗タスク",
+    pendingOwner: "オーナー承認待ち",
+    lastScan: "最終点検",
+    healthStates: "状態",
+  },
 };
 
 export default ja;

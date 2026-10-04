@@ -717,6 +717,16 @@ const zhCN = {
       costSafeMode: "成本安全模式",
     },
   },
+  rsiHealth: {
+    title: "RSI 系统健康",
+    status: "状态",
+    openIncidents: "未关闭 Incident",
+    activeTasks: "执行中任务",
+    failedTasks: "失败任务",
+    pendingOwner: "待宿主批准",
+    lastScan: "上次巡检",
+    healthStates: "健康态",
+  },
 };
 
 export default zhCN;

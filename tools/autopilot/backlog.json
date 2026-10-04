@@ -1,6 +1,6 @@
 {
   "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。",
-  "updatedAt": "2026-10-05T02:11:00.000Z",
+  "updatedAt": "2026-10-05T02:16:00.000Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -1631,6 +1631,16 @@
       "scope": "composeRsiRuntime：只读队列/CI/verdict artifact → 事件驱动领取；默认 no-op runner（不执行外部动作）；可起停、可 systemd 托管",
       "acceptance_criteria": "vitest rsi-run 3/3；api tsc 0；无凭据/无库写/无外写",
       "status": "IMPLEMENTED_PENDING_CI",
+      "implementation_head": "(this commit)"
+    },
+    {
+      "id": "RSI-RT-07-admin-health-panel",
+      "priority": "P1",
+      "source_backlog_id": "OWNER 任务：RSI Runtime 第 8 节 Admin 页面",
+      "title": "/admin/autonomy System Health 面板（展示层）",
+      "scope": "health-panel.tsx 只读展示 STARTING/HEALTHY/DEGRADED/PAUSED/BLOCKED/FAILED + incidents/active/failed/pending owner/last scan；5 语言 key",
+      "acceptance_criteria": "i18n locales=5 keys=644 hardcoded=0；web tsc 0",
+      "status": "PARTIAL_IMPLEMENTED_PENDING_CI",
       "implementation_head": "(this commit)"
     }
   ],

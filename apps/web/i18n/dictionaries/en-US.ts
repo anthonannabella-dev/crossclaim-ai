@@ -722,6 +722,16 @@ const enUS: Messages = {
       costSafeMode: "Cost safe mode",
     },
   },
+  rsiHealth: {
+    title: "RSI system health",
+    status: "Status",
+    openIncidents: "Open incidents",
+    activeTasks: "Active tasks",
+    failedTasks: "Failed tasks",
+    pendingOwner: "Pending owner approvals",
+    lastScan: "Last inspection",
+    healthStates: "Health states",
+  },
 };
 
 export default enUS;

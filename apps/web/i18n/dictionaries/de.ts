@@ -724,6 +724,16 @@ const de: Messages = {
       costSafeMode: "Kostensicherer Modus",
     },
   },
+  rsiHealth: {
+    title: "RSI-Systemzustand",
+    status: "Status",
+    openIncidents: "Offene Vorfälle",
+    activeTasks: "Aktive Aufgaben",
+    failedTasks: "Fehlgeschlagene Aufgaben",
+    pendingOwner: "Ausstehende Owner-Freigaben",
+    lastScan: "Letzte Prüfung",
+    healthStates: "Zustände",
+  },
 };
 
 export default de;
