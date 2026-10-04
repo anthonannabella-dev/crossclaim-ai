@@ -5,9 +5,9 @@ import { describe, expect, it } from 'vitest';
 import {
   RSI_RUNTIME_COMPOSITION_BOUNDARY,
   composeRsiRuntime,
-  createNoopRunner,
   parseTaskQueue,
 } from '../runtime/rsi-run';
+import { createUnconfiguredRunner } from '../runtime/rsi-task-runner';
 import type { RsiReadFile } from '../runtime/rsi-local-sources';
 import { createRsiCostLedger } from '../services/autonomy/rsi-cost-ledger';
 
@@ -31,7 +31,7 @@ describe('RSI 运行组装入口', () => {
     expect(parseTaskQueue('not json')).toEqual([]);
   });
 
-  it('RSI_RUN_COMPOSES_EVENT_DRIVEN_RUNTIME：组装后可被事件驱动领取任务，且默认 runner 是 no-op', async () => {
+  it('RSI_RUN_COMPOSES_EVENT_DRIVEN_RUNTIME：组装后可被事件驱动领取任务，且未配置 runner 时只 BLOCK', async () => {
     const log: string[] = [];
     const runtime = await composeRsiRuntime({
       readFile: files({
@@ -40,14 +40,14 @@ describe('RSI 运行组装入口', () => {
       }),
       tasksPath: '/tasks.json',
       ciResultsPath: '/ci.json',
-      runner: createNoopRunner((line) => log.push(line)),
+      runner: createUnconfiguredRunner((line) => log.push(line)),
       intervalMs: 60_000,
     });
 
     const outcomes = await runtime.loop.pollOnce();
     expect(outcomes).toHaveLength(1);
     expect(outcomes[0]!.claimed?.id).toBe('A');
-    expect(log).toEqual(['RSI_NOOP_RUNNER claimed=A priority=P1']);
+    expect(log[0]?.startsWith('RSI_RUNNER_UNCONFIGURED')).toBe(true);
     // 无新事件 → 静默
     expect(await runtime.loop.pollOnce()).toEqual([]);
 
@@ -67,7 +67,8 @@ describe('RSI 运行组装入口', () => {
     expect(await runtime.loop.pollOnce()).toEqual([]);
     expect(runtime.loop.silentPolls()).toBe(1);
 
-    expect(RSI_RUNTIME_COMPOSITION_BOUNDARY.defaultRunnerIsNoop).toBe(true);
+    expect(RSI_RUNTIME_COMPOSITION_BOUNDARY.defaultRunnerYieldsBlock).toBe(true);
+    expect(RSI_RUNTIME_COMPOSITION_BOUNDARY.noopAutoPass).toBe(false);
     expect(RSI_RUNTIME_COMPOSITION_BOUNDARY.eventDriven).toBe(true);
     expect(RSI_RUNTIME_COMPOSITION_BOUNDARY.watchdogFallbackOnly).toBe(true);
     expect(RSI_RUNTIME_COMPOSITION_BOUNDARY.readsCredentials).toBe(false);

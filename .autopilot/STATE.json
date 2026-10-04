@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261004-16",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T10:45:00.000Z",
+  "updated_at": "2026-10-05T11:20:00.000Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -5192,9 +5192,9 @@
   "awaiting_verdict": "EXACT-ORDER REPLAY 证据已送审（comment 5979262070）；shared/staging deploy 解禁待裁决",
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-04T22:20:50.868Z",
-    "head": "37b624a",
-    "acceptance_head": "37b624a",
+    "computed_at": "2026-10-04T23:40:54.707Z",
+    "head": "a70eb99",
+    "acceptance_head": "a70eb99",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5345,48 +5345,48 @@
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=37b624a ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
+        "evidence": "acceptance_head=a70eb99 ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
       },
       "L1-05_pg_regression_passed": {
         "status": "UNVERIFIED",
-        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head 37b624a（且中间存在非簿记变更）"
+        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head a70eb99（且中间存在非簿记变更）"
       },
       "L1-06_fresh_db_migration_passed": {
         "status": "UNVERIFIED",
-        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head 37b624a（且中间存在非簿记变更）"
+        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head a70eb99（且中间存在非簿记变更）"
       },
       "L1-07_api_typecheck_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head 37b624a（且中间存在非簿记变更）"
+        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head a70eb99（且中间存在非簿记变更）"
       },
       "L1-08_web_typecheck_build_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head 37b624a（且中间存在非簿记变更）"
+        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head a70eb99（且中间存在非簿记变更）"
       },
       "L1-09_no_skipped_critical_tests": {
         "status": "UNVERIFIED",
-        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head 37b624a（且中间存在非簿记变更）"
+        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head a70eb99（且中间存在非簿记变更）"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
         "status": false,
-        "evidence": "dirty entries: 1"
+        "evidence": "dirty entries: 4"
       },
       "L1-11_docs_state_consistent": {
         "status": "UNVERIFIED",
-        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head 37b624a（且中间存在非簿记变更）"
+        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head a70eb99（且中间存在非簿记变更）"
       },
       "L1-12_schema_invariants_verified": {
         "status": "UNVERIFIED",
-        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head 37b624a（且中间存在非簿记变更）"
+        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head a70eb99（且中间存在非簿记变更）"
       },
       "L1-13_negative_paths_covered": {
         "status": "UNVERIFIED",
-        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head 37b624a（且中间存在非簿记变更）"
+        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head a70eb99（且中间存在非簿记变更）"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
         "status": "UNVERIFIED",
-        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head 37b624a（且中间存在非簿记变更）"
+        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head a70eb99（且中间存在非簿记变更）"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
@@ -6334,7 +6334,7 @@
       "API.md / DOMAIN_MODEL.md / architecture-contract 计数 77 → 79"
     ]
   },
-  "next_execution_unit": "无内部可执行单元（SAFE_CONTINUATION_QUEUE = EMPTY）。剩余全部为外部依赖：①RSI staging smoke（需宿主非生产 DATABASE_URL）②首次 engine 注册（需生效 RuleVersion 证明语义；按裁决用 TEST-ONLY row + adapter + integration test，无需重做设计审计）③生产共享/边缘原子限流 ④Search Console/域名所有权 ⑤systemd Test A/B/D 证据",
+  "next_execution_unit": "①提供项目内真实执行器模块（例如封装「跑目标测试 + 产出证据」）并作为 RSI_RUNNER_MODULE 的默认可注入实现；②RSI Model Router 接真实 Provider Adapter（低成本优先/强模型升级/预算熔断/凭据隔离）；③autonomy migration 在宿主非生产库应用 + reboot reconcile/lease/exactly-once 运行时验收；④systemd Test A–F（宿主机）",
   "customer_ui_commercialization": {
     "at": "2026-10-04T01:21:55.949Z",
     "authorization": "MSG-20261004-01（CUSTOMER UI/UX COMMERCIALIZATION — IMPLEMENTATION AUTHORIZED）",
@@ -7380,10 +7380,10 @@
     "seo3_progress": "CHANGE A/B validator added (86f4289), engine output validation added (eb99c53), validator wired into runPublicSeoChecker (8bf49da), HTTP boundary guard added (4f2cd20); HTTP entry still not registered"
   },
   "CURRENT_HEAD": "293f55e",
-  "LAST_COMPLETED_UNIT": "PUBLIC ENGINE IMPLEMENTATION = PASS / CLOSED（MSG-20261005-08）：CHANGE_F_ELIGIBILITY_DECISION_TABLE = PASS、CHANGE_G_RULE_AWARE_SCHEMA_WIRING = PASS、CHANGE_G_EVIDENCE = SUFFICIENT；registry 保持空为正确状态",
-  "NEXT_EXECUTION_UNIT": "无内部可执行单元（SAFE_CONTINUATION_QUEUE = EMPTY）。剩余全部为外部依赖：①RSI staging smoke（需宿主非生产 DATABASE_URL）②首次 engine 注册（需生效 RuleVersion 证明语义；按裁决用 TEST-ONLY row + adapter + integration test，无需重做设计审计）③生产共享/边缘原子限流 ④Search Console/域名所有权 ⑤systemd Test A/B/D 证据",
-  "CI_STATUS": "HEAD 37b624a 及本批提交已推送；本地：apps/api tsc 0 / seo-* 24 文件 171 例全过 / 四项门禁 OK",
-  "WAITING_FOR_VERDICT": "none（MSG-20261005-08 PUBLIC ENGINE IMPLEMENTATION FINAL-2 = PASS 已逐字归档：FNV c21a79ae / 216 行 / FULL_COPY_OK；PUBLIC_ENGINE_IMPLEMENTATION = PASS / CLOSED，无需 FINAL-3）",
+  "LAST_COMPLETED_UNIT": "RSI-RT-01（真实 runner）：删除 no-op 自动 PASS，新增 rsi-task-runner.ts —— 未配置执行器一律 BLOCK；createCommandRunner 按退出码判定 PASS/REVISE，超时/白名单外/spawn 失败一律 BLOCK，证据只回 sha256 摘要；支持 RSI_RUNNER_MODULE / RSI_RUNNER_COMMAND+ARGS 注入真实执行器；新增 6 例测试",
+  "NEXT_EXECUTION_UNIT": "①提供项目内真实执行器模块（例如封装「跑目标测试 + 产出证据」）并作为 RSI_RUNNER_MODULE 的默认可注入实现；②RSI Model Router 接真实 Provider Adapter（低成本优先/强模型升级/预算熔断/凭据隔离）；③autonomy migration 在宿主非生产库应用 + reboot reconcile/lease/exactly-once 运行时验收；④systemd Test A–F（宿主机）",
+  "CI_STATUS": "本批提交后由托管 CI 复核；本地：apps/api tsc 0；rsi-* 29/30 文件通过（唯一失败为 rsi-persistence-db.test.ts，该文件按设计只能在一次性库运行）",
+  "WAITING_FOR_VERDICT": "none（本批无待裁决项）",
   "HOST_ACTION_REQUIRED": [
     "provider developer/partner account registration",
     "third-party commercial agreement acceptance",
@@ -7397,7 +7397,7 @@
     "non-production staging DATABASE_URL + 确认该 shared 库是否承载真实客户数据（执行已授权的 staging migrate deploy 前需要）"
   ],
   "HOLD_EXTERNAL": true,
-  "LAST_HEARTBEAT_AT": "2026-10-05T10:45:00.000Z",
+  "LAST_HEARTBEAT_AT": "2026-10-05T11:20:00.000Z",
   "ci_red_streak_note": "RESOLVED: three contract/inventory fixes (tenant-trigger whitelist 1b15ab7, append-only whitelist cc13bde, model inventory 82->85 4f02282); 4f02282 is the first green run after the streak.",
   "ci_contract_fix_local_verification": {
     "at": "2026-10-04T08:51:16.135Z",
@@ -7686,5 +7686,28 @@
     "duty_difference_registration": "HOLD_UNTIL_CALCULATION_SEMANTICS_CONFIRMED",
     "first_registration_recipe": "TEST-ONLY RuleVersion row → parseRecoveryRuleDefinition → createSeoPublicEngineRegistry([engine]) → createSeoPublicCheckerPorts → runPublicSeoChecker；首次注册时补 createEligibilitySeoPublicEngine() adapter + integration test，无需重做 engine design audit"
   },
-  "SAFE_CONTINUATION_QUEUE": "EMPTY（内部工作已清空；剩余项均为 HOST_ACTION_REQUIRED / REAL_CREDENTIAL_REQUIRED / SEARCH-CONSOLE-DOMAIN / 外部基础设施）"
+  "SAFE_CONTINUATION_QUEUE": "EMPTY（内部工作已清空；剩余项均为 HOST_ACTION_REQUIRED / REAL_CREDENTIAL_REQUIRED / SEARCH-CONSOLE-DOMAIN / 外部基础设施）",
+  "rsi_runtime": {
+    "runner_noop_autopass": "REMOVED",
+    "runner_default": "BLOCK（未配置执行器绝不 PASS）",
+    "runner_injection": [
+      "RSI_RUNNER_MODULE",
+      "RSI_RUNNER_COMMAND(+RSI_RUNNER_ARGS/CWD/TIMEOUT_MS)"
+    ],
+    "runner_evidence": "sha256 摘要 + 退出码 + 耗时（不落 stdout/stderr 原文）",
+    "command_allowlist": [
+      "node",
+      "npx",
+      "npm",
+      "git",
+      "bash",
+      "sh",
+      "psql"
+    ],
+    "RSI_RUNTIME_READY": "PARTIAL（runner 本身已真实可注入且 fail-closed；项目专用执行器模块待补）",
+    "MODEL_PROVIDER_READY": "NOT_STARTED",
+    "PERSISTENCE_READY": "MIGRATION_VERIFIED_ON_EPHEMERAL；durable 非生产库应 = HOST_ACTION_REQUIRED（需宿主 DATABASE_URL）",
+    "REBOOT_RECONCILE_READY": "NOT_IMPLEMENTED",
+    "SYSTEMD_VALIDATED": "NOT_VALIDATED（宿主 Linux 实机）"
+  }
 }

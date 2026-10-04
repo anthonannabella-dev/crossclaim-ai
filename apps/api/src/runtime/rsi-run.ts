@@ -12,11 +12,15 @@
  * 运行：`npm run rsi:dev`（控制器骨架）或 `npm run rsi:run`（组装入口，事件驱动 + 兜底）。
  */
 
-import { appendFile } from 'node:fs/promises';
-
 import { attachContinuationToController, type RsiTaskRunner } from './rsi-controller-continuation';
 import { createRsiEventLoop, type RsiEventSources, type RsiEventLoopHandle } from './rsi-event-loop';
 import { createLocalEventSources, type RsiReadFile } from './rsi-local-sources';
+import {
+  createCommandRunner,
+  createUnconfiguredRunner,
+  loadRunnerFromModule,
+  type RsiEvidenceRunner,
+} from './rsi-task-runner';
 import {
   createAdminSnapshotPublisher,
   type RsiSnapshotPublisher,
@@ -47,13 +51,35 @@ export function parseTaskQueue(raw: string): readonly RsiSafeTask[] {
 }
 
 /** 未注入 runner 时的安全默认：只记录，不执行任何外部动作。 */
-export function createNoopRunner(log?: (line: string) => void): RsiTaskRunner {
-  return {
-    async run(task) {
-      log?.(`RSI_NOOP_RUNNER claimed=${task.id} priority=${task.priority}`);
-      return { status: 'PASS' };
-    },
-  };
+/**
+ * 直接运行路径的真实执行器解析：
+ *   1) RSI_RUNNER_MODULE 指定模块（导出 createRsiTaskRunner 或 rsiTaskRunner）；
+ *   2) RSI_RUNNER_COMMAND + RSI_RUNNER_ARGS 指定受白名单约束的命令；
+ *   3) 都没有 → 未配置执行器，任务只会被判 BLOCK（绝不 auto-PASS）。
+ */
+export async function resolveRunnerFromEnv(
+  env: NodeJS.ProcessEnv = process.env,
+  log: (line: string) => void = (line) => console.log(line),
+): Promise<RsiEvidenceRunner> {
+  const spec = env.RSI_RUNNER_MODULE;
+  if (spec !== undefined && spec.trim() !== '') {
+    const loaded = await loadRunnerFromModule(spec, log);
+    if (loaded !== null) return loaded;
+  }
+  const command = env.RSI_RUNNER_COMMAND;
+  if (command !== undefined && command.trim() !== '') {
+    const args = (env.RSI_RUNNER_ARGS ?? '').split(' ').map((part) => part.trim()).filter((part) => part !== '');
+    const timeoutMs = Number(env.RSI_RUNNER_TIMEOUT_MS ?? '');
+    return createCommandRunner({
+      command,
+      args,
+      cwd: env.RSI_RUNNER_CWD,
+      timeoutMs: Number.isFinite(timeoutMs) && timeoutMs > 0 ? timeoutMs : undefined,
+      log,
+    });
+  }
+  log('RSI_RUNNER=UNCONFIGURED（未配置执行器：任务只会 BLOCK，不会 PASS）');
+  return createUnconfiguredRunner(log);
 }
 
 export interface RsiRuntimeComposition {
@@ -95,7 +121,7 @@ export async function composeRsiRuntime(input: {
 
   const controller = attachContinuationToController({
     tasks,
-    runner: input.runner ?? createNoopRunner(),
+    runner: input.runner ?? createUnconfiguredRunner(),
   });
 
   const localSources: RsiEventSources = createLocalEventSources({
@@ -158,7 +184,8 @@ export async function composeRsiRuntime(input: {
 export const RSI_RUNTIME_COMPOSITION_BOUNDARY = {
   eventDriven: true,
   watchdogFallbackOnly: true,
-  defaultRunnerIsNoop: true,
+  defaultRunnerYieldsBlock: true,
+  noopAutoPass: false,
   adminSnapshotIsReadOnlyArtifact: true,
   verdictPollOnlyWhileWaiting: true,
   readsCredentials: false,
@@ -169,7 +196,6 @@ export const RSI_RUNTIME_COMPOSITION_BOUNDARY = {
 const isDirectRun = process.argv[1] !== undefined && process.argv[1].includes('rsi-run');
 if (isDirectRun) {
   void (async () => {
-    const stateFile = process.env.RSI_STATE_FILE ?? 'rsi-run.log';
     const fsPromises = await import('node:fs/promises');
     const composition = await composeRsiRuntime({
       readFile: async (path) => fsPromises.readFile(path, 'utf8'),
@@ -177,12 +203,7 @@ if (isDirectRun) {
       ciResultsPath: process.env.RSI_CI_RESULTS_PATH,
       verdictPath: process.env.RSI_VERDICT_PATH,
       testResultsPath: process.env.RSI_TEST_RESULTS_PATH,
-      runner: {
-        async run(task) {
-          await appendFile(stateFile, `${new Date().toISOString()} claimed=${task.id} priority=${task.priority}\n`, 'utf8');
-          return { status: 'PASS' };
-        },
-      },
+      runner: await resolveRunnerFromEnv(),
       intervalMs: Number(process.env.RSI_WATCHDOG_INTERVAL_MS ?? 60_000),
     });
     composition.start();
