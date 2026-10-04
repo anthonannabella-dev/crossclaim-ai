@@ -282,10 +282,11 @@ export interface ResolvedPoaFacts {
  */
 export function resolveBrokerPoaFacts(
   rows: readonly BrokerPoaRow[],
-  ctx: { at: Date; remedy: string; principalRef?: string },
+  ctx: { at: Date; remedy: string; principalRef?: string; brokerRef?: string },
 ): ResolvedPoaFacts {
   const candidates = rows
     .filter((row) => (ctx.principalRef ? row.principalRef === ctx.principalRef : true))
+    .filter((row) => (ctx.brokerRef ? row.brokerRef === ctx.brokerRef : true))
     .slice()
     .sort((a, b) => {
       const byObserved = b.observedAt.getTime() - a.observedAt.getTime();

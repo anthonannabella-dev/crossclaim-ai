@@ -30,9 +30,10 @@ function harness() {
       signer.push(row);
       return { id: 'signer-' + counter };
     },
-    async listPoa(organizationId, principalRef): Promise<BrokerPoaRow[]> {
+    async listPoa(organizationId, principalRef, brokerRef): Promise<BrokerPoaRow[]> {
       return poa
         .filter((row) => row.organizationId === organizationId && row.principalRef === principalRef)
+        .filter((row) => (brokerRef ? row.brokerRef === brokerRef : true))
         .map((row, index) => ({
           id: 'poa-' + (index + 1),
           principalRef: row.principalRef,
@@ -201,7 +202,7 @@ describe('CA-3 — authorization lifecycle（unit）', () => {
     // 历史行未被 UPDATE：第一条 observedAt 仍是旧时间
     expect(h.poa[0]!.observedAt.toISOString()).toBe(AT.toISOString());
     const state = await readAuthorizationState(
-      { organizationId: 'org-1', principalRef: 'ior:acme', remedy: 'DUTY_REFUND', route: 'BROKER_FILED', at: new Date(AT.getTime() + 120_000), context },
+      { organizationId: 'org-1', principalRef: 'ior:acme', remedy: 'DUTY_REFUND', route: 'BROKER_FILED', at: new Date(AT.getTime() + 120_000), context: { ...context, brokerRef: 'broker:1' } },
       h.deps,
     );
     expect(state.brokerPoa.status).toBe('VERIFIED');
@@ -266,7 +267,7 @@ describe('CA-3 — authorization lifecycle（unit）', () => {
     h.advance(60_000);
     await appendAuthorizationLifecycle({ ...base, action: 'REVOKE', evidenceArtifactRef: null }, h.deps);
     const state = await readAuthorizationState(
-      { organizationId: 'org-1', principalRef: 'ior:acme', remedy: 'DUTY_REFUND', route: 'BROKER_FILED', context },
+      { organizationId: 'org-1', principalRef: 'ior:acme', remedy: 'DUTY_REFUND', route: 'BROKER_FILED', context: { ...context, brokerRef: 'broker:1' } },
       h.deps,
     );
     expect(state.readiness.READY_TO_FILE).toBe(false);

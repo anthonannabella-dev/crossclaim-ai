@@ -241,6 +241,18 @@ describe('CA-1 — route-aware customs authorization（unit）', () => {
     expect(resolved.rowId).toBeNull();
   });
 
+  it('CHANGE A：broker B revoked 不影响 broker A（按 brokerRef 隔离）', () => {
+    const a = poaRow({ id: 'poa-a', brokerRef: 'broker:A', observedAt: new Date('2026-09-01T00:00:00.000Z'), contentDigest: 'a'.repeat(64) });
+    const b = poaRow({ id: 'poa-b', brokerRef: 'broker:B', verificationStatus: 'REVOKED', observedAt: new Date('2026-10-01T00:00:00.000Z'), contentDigest: 'b'.repeat(64) });
+    const forA = resolveBrokerPoaFacts([a, b], { at: AT, remedy: 'DUTY_REFUND', principalRef: 'principal-1', brokerRef: 'broker:A' });
+    const forB = resolveBrokerPoaFacts([a, b], { at: AT, remedy: 'DUTY_REFUND', principalRef: 'principal-1', brokerRef: 'broker:B' });
+    const unknown = resolveBrokerPoaFacts([a, b], { at: AT, remedy: 'DUTY_REFUND', principalRef: 'principal-1', brokerRef: 'broker:C' });
+    expect(forA.status).toBe('VERIFIED');
+    expect(forA.rowId).toBe('poa-a');
+    expect(forB.status).toBe('REVOKED');
+    expect(unknown.status).toBe('MISSING');
+  });
+
   it('辖区不符：显式 policy jurisdiction 与 POA jurisdiction 不一致 → JURISDICTION_MISMATCH', () => {
     const mismatch = evaluateCustomsAuthorizationForRoute({
       route: 'BROKER_FILED',

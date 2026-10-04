@@ -107,7 +107,7 @@ export interface SignerFactInsert {
 export interface AuthorizationLifecycleStores {
   appendPoa(row: PoaFactInsert): Promise<{ id: string }>;
   appendSigner(row: SignerFactInsert): Promise<{ id: string }>;
-  listPoa(organizationId: string, principalRef: string): Promise<BrokerPoaRow[]>;
+  listPoa(organizationId: string, principalRef: string, brokerRef?: string): Promise<BrokerPoaRow[]>;
   listSigner(organizationId: string, principalRef: string): Promise<AuthorizedSignerRow[]>;
 }
 
@@ -360,9 +360,46 @@ export async function readAuthorizationState(
   deps: AuthorizationLifecycleDeps,
 ): Promise<AuthorizationState> {
   const at = input.at ?? (deps.now ?? (() => new Date()))();
-  const poaRows = await deps.stores.listPoa(input.organizationId, input.principalRef);
+  const requestedBrokerRef = input.context.brokerRef;
+  const signerRowsForFallback = await deps.stores.listSigner(input.organizationId, input.principalRef);
+  const signerFallback = resolveAuthorizedSignerFacts(signerRowsForFallback, {
+    at,
+    remedy: input.remedy,
+    principalRef: input.principalRef,
+  });
+  // CHANGE A: BROKER_FILED without an explicit broker is fail-closed (MISSING).
+  if (input.route === 'BROKER_FILED' && !requestedBrokerRef) {
+    const missingPoa: ResolvedPoaFacts = { status: 'MISSING', scopeCoversRemedy: false, jurisdiction: null, source: 'MISSING', rowId: null, expiresAt: null, supersedesId: null };
+    return {
+      brokerPoa: missingPoa,
+      signer: signerFallback,
+      readiness: evaluateCustomsAuthorizationForRoute({
+        route: input.route,
+        remedy: input.remedy,
+        ...(input.policy ? { policy: input.policy } : {}),
+        facts: {
+          ...input.context,
+          brokerPoaStatus: 'MISSING',
+          brokerPoaScopeCoversRemedy: false,
+          brokerPoaJurisdiction: null,
+          brokerPoaSource: 'MISSING',
+          signerStatus: signerFallback.status,
+          signerScopeCoversRemedy: signerFallback.scopeCoversRemedy,
+          signerSource: signerFallback.source,
+          signerJurisdiction: signerFallback.jurisdiction,
+        },
+      }),
+      serverDerived: true,
+    };
+  }
+  const poaRows = await deps.stores.listPoa(input.organizationId, input.principalRef, requestedBrokerRef);
   const signerRows = await deps.stores.listSigner(input.organizationId, input.principalRef);
-  const brokerPoa = resolveBrokerPoaFacts(poaRows, { at, remedy: input.remedy, principalRef: input.principalRef });
+  const brokerPoa = resolveBrokerPoaFacts(poaRows, {
+    at,
+    remedy: input.remedy,
+    principalRef: input.principalRef,
+    ...(requestedBrokerRef ? { brokerRef: requestedBrokerRef } : {}),
+  });
   const signer = resolveAuthorizedSignerFacts(signerRows, { at, remedy: input.remedy, principalRef: input.principalRef });
 
   const readiness = evaluateCustomsAuthorizationForRoute({
@@ -437,9 +474,9 @@ export function createPrismaAuthorizationLifecycleStores(prisma: PrismaClient): 
       return { id: created.id };
     },
 
-    async listPoa(organizationId, principalRef) {
+    async listPoa(organizationId, principalRef, brokerRef) {
       const rows = await prisma.customsBrokerPoaFact.findMany({
-        where: { organizationId, principalRef },
+        where: { organizationId, principalRef, ...(brokerRef ? { brokerRef } : {}) },
         orderBy: [{ observedAt: 'desc' }],
       });
       return rows.map((row) => ({

@@ -135,7 +135,7 @@ describe('CA-3 — authorization lifecycle persistence（真实 PostgreSQL）', 
         remedy: 'DUTY_REFUND',
         route: 'BROKER_FILED',
         at: new Date('2026-10-02T00:00:00.000Z'),
-        context,
+        context: { ...context, brokerRef: 'broker:1' },
       },
       { stores },
     );
@@ -196,6 +196,45 @@ describe('CA-3 — authorization lifecycle persistence（真实 PostgreSQL）', 
     expect(state.readiness.file.blockers).toContain('SIGNER_NOT_USABLE');
   });
 
+  it('CHANGE A：brokerRef 隔离——B 的 REVOKED 不得撤销 A 的 VERIFIED；缺 brokerRef → MISSING', async () => {
+    const organizationId = await seedOrg('broker-scope');
+    const principalRef = await seedIor(organizationId);
+    const actorUserId = await seedUser(organizationId);
+    const base = {
+      organizationId,
+      actorUserId,
+      subject: 'BROKER_POA' as const,
+      principalRef,
+      scope: ['DUTY_REFUND'],
+      jurisdiction: 'US',
+      evidenceArtifactRef: 'evidence:poa',
+      verificationSource: 'BROKER_ATTESTATION' as const,
+    };
+    await appendAuthorizationLifecycle({ ...base, action: 'GRANT', brokerRef: 'broker:A' }, { stores, now: () => new Date('2026-09-01T00:00:00.000Z') });
+    await appendAuthorizationLifecycle({ ...base, action: 'REVOKE', brokerRef: 'broker:B', evidenceArtifactRef: null }, { stores, now: () => new Date('2026-10-01T00:00:00.000Z') });
+
+    const forA = await readAuthorizationState(
+      { organizationId, principalRef, remedy: 'DUTY_REFUND', route: 'BROKER_FILED', at: new Date('2026-10-02T00:00:00.000Z'), context: { ...context, brokerRef: 'broker:A' } },
+      { stores },
+    );
+    expect(forA.brokerPoa.status).toBe('VERIFIED');
+    expect(forA.readiness.READY_TO_FILE).toBe(true);
+
+    const forB = await readAuthorizationState(
+      { organizationId, principalRef, remedy: 'DUTY_REFUND', route: 'BROKER_FILED', at: new Date('2026-10-02T00:00:00.000Z'), context: { ...context, brokerRef: 'broker:B' } },
+      { stores },
+    );
+    expect(forB.brokerPoa.status).toBe('REVOKED');
+    expect(forB.readiness.READY_TO_FILE).toBe(false);
+
+    const noBroker = await readAuthorizationState(
+      { organizationId, principalRef, remedy: 'DUTY_REFUND', route: 'BROKER_FILED', at: new Date('2026-10-02T00:00:00.000Z'), context }, // no brokerRef
+      { stores },
+    );
+    expect(noBroker.brokerPoa.status).toBe('MISSING');
+    expect(noBroker.readiness.READY_TO_FILE).toBe(false);
+  });
+
   it('tenant scoping：另一租户的同名 principal 事实不可见', async () => {
     const own = await seedOrg('own');
     const other = await seedOrg('other');
@@ -225,7 +264,7 @@ describe('CA-3 — authorization lifecycle persistence（真实 PostgreSQL）', 
         principalRef: ownPrincipal,
         remedy: 'DUTY_REFUND',
         route: 'BROKER_FILED',
-        context,
+        context: { ...context, brokerRef: 'broker:1' },
       },
       { stores },
     );
