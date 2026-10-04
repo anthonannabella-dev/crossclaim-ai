@@ -134124,3 +134124,370 @@ DOMAIN_OWNERSHIP = HOST_ACTION_REQUIRED
 
 另外，3066ac2 和当前 90b1f71 的 GitHub hosted status/workflow 查询仍为空，所以 9/9 我确认的是仓库中测试覆盖内容，没有把它表述为独立 CI 已执行成功。
 ```
+
+### [MSG-20261004-30] ARCHITECT VERDICT — C18 PRODUCTION PERSISTENCE CHECKPOINT = REVISE｜reviewed HEAD = ad1ca79｜已 PASS：EXPIRED→REVOKED 列映射（列是提交闸门，精确状态留在 append-only snapshot）、复用 Binding + Lineage（NEW_PROVIDER_EVENT_TABLE = NOT_REQUIRED）、Binding 同事务、webhook DB exactly-once、tenant isolation。三项必修：CHANGE A 折叠必须移到事务内并把**已持久化的历史状态**与本次事件一起折叠（当前 store 只折叠本次传入事件 → 迟到 GRANTED@T1 能复活已 REVOKED@T2 的 binding，这是最大 blocker；补 4 个跨调用用例：REVOKED T2→SUSPENDED T3 仍 REVOKED、REVOKED T2→GRANTED T1 仍 REVOKED、REVOKED T2→GRANTED T3 变 ACTIVE、EXPIRED T2→REAUTH_REQUIRED T3 仍 terminal；必须分两次 applyObservation 调用，不能每次重传完整历史）；CHANGE B 事件主体完整性：所有参与事件必须匹配 input 的 organizationId/providerId/principalRef，否则 AUTHORIZATION_SUBJECT_MISMATCH + zero writes；任意 invalid event 必须整批 fail-closed（不得静默过滤坏事件后继续算）；snapshot 至少再持久化 providerAuthorizationRef / triggeringEventKind / reasonCode；CHANGE C 幂等键 (bindingId, event, sourceRef) 需要 DB 级唯一兜底（partial unique index），P2002 → reload → REPLAYED。PRODUCTION_PERSISTENCE_CHECKPOINT = NOT_YET_PASS；三项修完直接送 CHECKPOINT FINAL-2，不需重做 C18 架构。staging smoke 不作 checkpoint 前置，只作 production deploy 解禁门；STAGING/NON-PROD SHARED = AUTHORIZED，REAL_DATA_SHARED / PRODUCTION / REAL_TRANSPORT / EXTERNAL_WRITE / PAYMENT / PRODUCTION_ENABLEMENT = HOLD｜
+
+```text
+ARCHITECT VERDICT：REVISE
+
+我按 reviewed HEAD = ad1ca79（完整 SHA ad1ca7991e5ca143c87d898b868c5065eea0bc14）重新核了 lifecycle store、binding store、webhook replay store 和对应 PostgreSQL 测试。也确认从上一轮 1950ef8 到本 HEAD 没有任何 schema.prisma / migration 变更。
+
+这轮大部分持久化已经做对，但我发现一个会直接破坏 provider 授权生命周期语义的问题，所以 PRODUCTION_PERSISTENCE_CHECKPOINT 现在还不能记 PASS。
+
+① EXPIRED → binding REVOKED：接受
+
+这个映射我判定 PASS。
+
+CustomsProviderTenantBinding.status 现在承担的是“是否允许提交”的 gate，而不是 provider 状态完整 taxonomy。对提交行为来说：
+
+纯文本
+REVOKED → 不可提交
+EXPIRED → 不可提交
+
+因此：
+
+纯文本
+EXPIRED
+→ binding.status = REVOKED
+→ lineage.event = REVOKED
+→ snapshot.providerStatus = EXPIRED
+
+是合理的。
+
+不需要为了 EXPIRED 单独新增 enum / Schema Delta。
+
+但精确 provider 状态必须继续保存在 append-only snapshot 中。
+
+② 现有 Binding + Lineage 足够，不要求新建 provider event 表
+
+不要求另开一张 provider event 表。
+
+现在的：
+
+纯文本
+CustomsProviderTenantBinding
++
+CustomsProviderTenantBindingLineage
+
+完全可以承担：
+
+current gate state
+append-only lifecycle history
+provider observation evidence
+replay/audit
+
+所以：
+
+纯文本
+NEW_PROVIDER_EVENT_TABLE = NOT_REQUIRED
+
+但是现有 implementation 有一个关键缺陷：
+
+当前代码在进入事务以前直接：
+
+TypeScript
+const derived = deriveProviderAuthorizationState(input.events, input.now);
+
+也就是说，只折叠这一次传进来的事件，没有把数据库里上一次已经持久化的 provider 状态参与计算。
+
+这会产生真实错误。
+
+例如：
+
+纯文本
+第 1 次：
+REVOKED @ T2
+→ DB binding = REVOKED
+
+第 2 次独立 webhook：
+SUSPENDED @ T3
+
+当前实现只看第二次的 SUSPENDED，于是：
+
+纯文本
+derived = SUSPENDED
+→ DB binding 从 REVOKED 改成 SUSPENDED
+
+但你们 C18-7 已定义：
+
+REVOKED / EXPIRED 只能被 effectiveAt 严格更晚的 GRANTED / RENEWED / RESTORED 解除。
+
+SUSPENDED 根本不能解除 REVOKED。
+
+更严重的反例：
+
+纯文本
+DB 已经：
+REVOKED @ T2
+
+后来收到一个迟到 webhook：
+GRANTED @ T1
+
+当前 store 只折叠本次 GRANTED @ T1，会得到：
+
+纯文本
+ACTIVE
+
+于是一个比撤销更早的旧授权事件可以把已经撤销的 binding 重新激活。
+
+这是本轮最大的 blocker。
+
+CHANGE A — 必修
+
+必须把 lifecycle fold 移到：
+
+纯文本
+BEGIN TRANSACTION
+→ SELECT binding FOR UPDATE
+→ 读取最新持久化 provider lifecycle snapshot
+→ previous persisted state + incoming events 一起折叠
+→ 决定新状态
+→ UPDATE binding
+→ APPEND lineage
+→ COMMIT
+
+不能继续：
+
+纯文本
+incoming events 单独折叠
+→ 再去锁 DB
+
+至少补 4 个跨调用 PG 用例：
+
+纯文本
+REVOKED T2
+→ 下一次调用 SUSPENDED T3
+→ 仍 REVOKED
+
+REVOKED T2
+→ 下一次调用 GRANTED T1
+→ 仍 REVOKED
+
+REVOKED T2
+→ 下一次调用 GRANTED T3
+→ ACTIVE
+
+EXPIRED T2
+→ 下一次调用 REAUTH_REQUIRED T3
+→ 仍保持不可提交 terminal 状态
+
+注意必须是分两次 applyObservation() 调用，不能像现在测试那样每次把完整历史重新传进去。
+
+③ 还缺一个事件主体完整性检查
+
+现在 validateProviderAuthorizationEvent() 只检查：
+
+纯文本
+providerId 格式合法
+organizationId 格式合法
+principalRef 格式合法
+
+但没有确认事件真的属于当前 apply 的：
+
+纯文本
+input.organizationId
+input.providerId
+input.principalRef
+
+所以理论上可以出现：
+
+纯文本
+input 指向 Binding A
++
+events 其实属于 Binding B
+
+只要格式合法，事件仍可能被折叠后写入 A。
+
+CHANGE B — 必修
+
+进入 fold 前必须要求所有参与事件：
+
+纯文本
+event.organizationId === input.organizationId
+event.providerId === input.providerId
+event.principalRef === input.principalRef
+
+任一不匹配：
+
+纯文本
+AUTHORIZATION_SUBJECT_MISMATCH
+→ zero writes
+
+而且当前 deriveProviderAuthorizationState() 会静默过滤 invalid event。
+
+生产 store 不应该这样。
+
+如果一批里：
+
+纯文本
+invalid REVOKED
++
+valid GRANTED
+
+不能因为 REVOKED 被过滤就把结果算成 ACTIVE。
+
+所以 persistence boundary 要：
+
+纯文本
+任意 incoming event invalid
+→ entire observation fail-closed
+→ zero writes
+
+而不是“过滤坏事件后继续算”。
+
+另外既然决定继续复用 lineage，我要求 snapshot 至少再持久化安全的 opaque：
+
+纯文本
+providerAuthorizationRef
+triggeringEventKind
+reasonCode
+
+这些不是 secret，不需要新表，却能让以后审计真正回答：
+
+到底是哪一个 provider authorization 被撤销/过期？
+
+④ (bindingId,event,sourceRef) + 行锁：并发目前能工作，但生产幂等还缺 DB 兜底
+
+我确认当前两个连接并发测试为什么能得到：
+
+纯文本
+APPLIED + REPLAYED
+
+因为：
+
+纯文本
+FOR UPDATE(binding)
+→ 第一个写 lineage
+→ 第二个拿到锁
+→ findFirst(bindingId,event,sourceRef)
+→ REPLAYED
+
+所以：
+
+纯文本
+APPLICATION_CONCURRENCY = PASS
+
+但 schema 里 CustomsProviderTenantBindingLineage 目前只有：
+
+prisma
+@@unique([organizationId, id])
+@@index([organizationId, bindingId, occurredAt])
+
+并没有：
+
+纯文本
+(bindingId,event,sourceRef)
+
+的 DB uniqueness。
+
+既然你们已经正式把它定义成“幂等键”，生产持久化层应该让数据库也知道这个不变量，而不是只靠某一个 service 记得先 findFirst()。
+
+CHANGE C — 必修
+
+推荐做一个很小的 Schema Delta：
+
+SQL
+CREATE UNIQUE INDEX ...
+ON "CustomsProviderTenantBindingLineage"
+("bindingId", "event", "sourceRef")
+WHERE "sourceRef" IS NOT NULL;
+
+然后：
+
+纯文本
+P2002 / unique violation
+→ reload existing row
+→ REPLAYED
+
+这样即使未来有第二个 writer，也不会产生重复 provider lifecycle facts。
+
+不需要新表，只需要一个 partial unique index。
+
+⑤ staging / shared 边界不变
+
+确认：
+
+纯文本
+STAGING / NON-PROD SHARED
+= AUTHORIZED
+
+SHARED WITH REAL CUSTOMER DATA
+= HOLD
+
+PRODUCTION
+= HOLD
+
+宿主还没给 non-prod DATABASE_URL，不是代码 blocker。
+
+staging smoke 是否阻塞 checkpoint？
+
+不把 staging smoke 作为当前 persistence checkpoint 的必需条件。
+
+原因是你们已经在 freshly migrated ephemeral PostgreSQL 上做真实 PG E2E。只要上面 CHANGE A/B/C 修完并在 ephemeral PG 全绿，我可以把：
+
+纯文本
+PRODUCTION_PERSISTENCE_CHECKPOINT = PASS
+
+staging smoke 则作为production deploy 解禁门。
+
+也就是：
+
+纯文本
+代码 + ephemeral real PG
+→ Production Persistence Checkpoint PASS
+
+然后
+staging migrate deploy
+→ staging DB invariant smoke
+→ schema diff zero
+→ staging application smoke
+→ 再送 production deploy gate
+
+staging 至少跑：
+
+纯文本
+migrate status = up to date
+whole-schema diff = zero
+
+CROSSCLAIM_SAAS missing evidence → reject
+binding identity UPDATE → reject
+lineage UPDATE → reject
+lineage DELETE → reject
+cross-tenant lineage INSERT → reject
+
+provider lifecycle:
+REVOKED → stale GRANT 不得复活
+later GRANT → 可恢复
+webhook two-connection → exactly one
+
+所以本轮最终状态：
+
+纯文本
+ARCHITECT VERDICT = REVISE
+
+EXPIRED_TO_REVOKED_MAPPING = PASS
+EXISTING_BINDING_PLUS_LINEAGE_MODEL = PASS
+NEW_PROVIDER_EVENT_TABLE = NOT_REQUIRED
+
+BINDING_STORE_TRANSACTION = PASS
+WEBHOOK_DB_EXACTLY_ONCE = PASS
+TENANT_ISOLATION = PASS
+
+LIFECYCLE_PERSISTED_PREVIOUS_STATE_FOLD = REVISE
+EVENT_SUBJECT_BINDING = REVISE
+INVALID_EVENT_FAIL_CLOSED = REVISE
+LIFECYCLE_DB_IDEMPOTENCY_UNIQUE = REVISE
+
+PRODUCTION_PERSISTENCE_CHECKPOINT = NOT_YET_PASS
+
+STAGING_NONPROD_DEPLOY = AUTHORIZED
+REAL_DATA_SHARED = HOLD
+PRODUCTION_MIGRATE_DEPLOY = HOLD
+
+REAL_TRANSPORT = HOLD
+EXTERNAL_WRITE = HOLD
+PAYMENT = HOLD
+PRODUCTION_ENABLEMENT = HOLD
+
+最小返工就是 A：持久化历史参与折叠；B：event subject + invalid-event fail-closed；C：生命周期幂等键 DB 唯一约束。 这三项完成后直接送 C18 PRODUCTION PERSISTENCE CHECKPOINT FINAL-2，不需要重做前面的 C18 架构。
+```

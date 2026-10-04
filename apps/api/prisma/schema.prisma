@@ -3225,6 +3225,10 @@ model CustomsProviderTenantBindingLineage {
   binding      CustomsProviderTenantBinding   @relation(fields: [bindingId], references: [id], onDelete: Restrict)
 
   @@unique([organizationId, id])
+  // C18 PRODUCTION PERSISTENCE CHECKPOINT FINAL-2（MSG-20261004-30 CHANGE C）：
+  // provider 生命周期事实的 DB 级幂等兜底。PostgreSQL 视 NULL 彼此不同，因此 sourceRef 为空的历史行不受影响。
+  // 显式命名（48 字符）以避免 PostgreSQL 63 字符标识符上限截断导致 migrate diff 反复要求 RENAME。
+  @@unique([bindingId, event, sourceRef], map: "CustomsProviderTenantBindingLineage_lifecycle_key")
   @@index([organizationId, bindingId, occurredAt])
 }
 
