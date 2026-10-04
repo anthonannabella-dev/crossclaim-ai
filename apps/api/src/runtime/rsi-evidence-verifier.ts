@@ -18,6 +18,8 @@ export interface RsiCiEvidenceRecord {
   head: string;
   status: string;
   conclusion: string;
+  /** 可选：CI 完成时间（ISO）。开启 requireFreshness 时必须有，否则视为无法证明新鲜。 */
+  completedAt?: string;
 }
 
 export interface RsiTestEvidenceRecord {
@@ -41,7 +43,9 @@ export interface RsiEvidenceVerdict {
     | 'EVIDENCE_OK'
     | 'EVIDENCE_MISSING_TOKEN'
     | 'NO_SUCCESSFUL_CI_OR_TEST'
-    | 'HEAD_NOT_EVIDENCED';
+    | 'HEAD_NOT_EVIDENCED'
+    | 'EVIDENCE_STALE'
+    | 'FRESHNESS_UNVERIFIABLE';
 }
 
 /** 是否存在「已完成且 success」的 CI，或「通过」的测试。 */
@@ -55,9 +59,24 @@ export function hasSuccessfulCiOrTest(input: RsiEvidenceInput): boolean {
   return ciOk || testOk;
 }
 
+export interface RsiEvidencePolicy {
+  /** 任务被领取的时刻；与 requireFreshness 配合判断证据是否陈旧。 */
+  claimedAt?: Date | number;
+  /** 开启后：成功记录必须带有不早于 claimedAt（允许 skewMs 容差）的 completedAt。 */
+  requireFreshness?: boolean;
+  skewMs?: number;
+}
+
+const toMs = (value: Date | number | undefined): number | null => {
+  if (value === undefined) return null;
+  const ms = value instanceof Date ? value.getTime() : value;
+  return Number.isFinite(ms) ? ms : null;
+};
+
 export function verifyRunnerEvidence(
   evidenceRef: string | undefined,
   input: RsiEvidenceInput,
+  policy: RsiEvidencePolicy = {},
 ): RsiEvidenceVerdict {
   const ref = typeof evidenceRef === 'string' ? evidenceRef.trim() : '';
   if (ref === '' || RSI_NO_EVIDENCE_TOKENS.includes(ref)) {
@@ -77,6 +96,23 @@ export function verifyRunnerEvidence(
     );
     if (!evidenced) return { ok: false, reason: 'HEAD_NOT_EVIDENCED' };
   }
+  if (policy.requireFreshness === true) {
+    const claimedMs = toMs(policy.claimedAt);
+    if (claimedMs === null) return { ok: false, reason: 'FRESHNESS_UNVERIFIABLE' };
+    const skew = Math.max(0, policy.skewMs ?? 60_000);
+    const freshCi = input.ciResults.filter((run) => {
+      if (String(run.status).toLowerCase() !== 'completed') return false;
+      if (String(run.conclusion).toLowerCase() !== 'success') return false;
+      if (typeof run.completedAt !== 'string') return false;
+      const at = Date.parse(run.completedAt);
+      return Number.isFinite(at) && at >= claimedMs - skew;
+    });
+    const freshTest = input.testResults.some((record) => record.passed === true || String(record.status ?? '').toLowerCase() === 'pass');
+    if (freshCi.length === 0 && !freshTest) {
+      const anyTimestamped = input.ciResults.some((run) => typeof run.completedAt === 'string');
+      return { ok: false, reason: anyTimestamped ? 'EVIDENCE_STALE' : 'FRESHNESS_UNVERIFIABLE' };
+    }
+  }
   return { ok: true, reason: 'EVIDENCE_OK' };
 }
 
@@ -91,7 +127,8 @@ export const RSI_EVIDENCE_VERIFIER_BOUNDARY = {
   passRequiresRealEvidence: true,
   noEvidenceTokensRejected: true,
   headCorrelationWhenPresent: true,
-  claimedAtCorrelation: 'NOT_YET（下一步：用事件源时间戳排除陈旧证据）',
+  claimedAtCorrelation: 'SUPPORTED（requireFreshness + claimedAt + skewMs；CI 需带 completedAt）',
+  requireFreshnessDefault: false,
   readsCredentials: false,
   writesDatabase: false,
   performsExternalWrite: false,
