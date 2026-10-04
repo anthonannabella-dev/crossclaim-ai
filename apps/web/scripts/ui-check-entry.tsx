@@ -6,6 +6,8 @@
 import { renderToStaticMarkup } from 'react-dom/server';
 
 import CustomerShell from '../app/components/customer-shell';
+import ConnectionManager, { type ConnectionItem } from '../app/components/connection-manager';
+import AccountManagementView from '../app/accounts/account-management-view';
 import InlineNotice from '../app/components/ui/inline-notice';
 import PlatformCard from '../app/components/ui/platform-card';
 import SecurityStrip from '../app/components/ui/security-strip';
@@ -276,6 +278,42 @@ check('opportunity.page.no.premature.empty', !listHtml.includes(zhCN.opportuniti
 
 const listEnHtml = render(<OpportunityList t={enUS} />);
 check('opportunity.page.i18n.en', listEnHtml.includes(enUS.opportunitiesPage.advancedFilters));
+
+// ⑩ UI-4：账户 / 连接客户视图
+const connectionItems: ConnectionItem[] = [
+  {
+    id: 'conn-1',
+    label: 'UPS monthly',
+    kind: 'FILE_UPLOAD',
+    domain: 'LOGISTICS',
+    channel: 'UPS',
+    status: 'ACTIVE',
+    hasCredentialRef: true,
+    platform: null,
+    lastError: null,
+  },
+  {
+    id: 'conn-2',
+    label: 'FedEx',
+    kind: 'API',
+    domain: 'LOGISTICS',
+    channel: 'FEDEX',
+    status: 'NEEDS_AUTH',
+    hasCredentialRef: false,
+    platform: 'FEDEX',
+    lastError: null,
+  },
+];
+const connectionHtml = render(<ConnectionManager items={connectionItems} t={zhCN} />);
+check('connection.customer.status.label', connectionHtml.includes(zhCN.connectionsPage.statusActive));
+check('connection.raw.status.folded', !connectionHtml.includes('>ACTIVE<'));
+check('connection.action.localized', connectionHtml.includes(zhCN.connectionsPage.actionRevoke) && connectionHtml.includes(zhCN.connectionsPage.actionPause));
+check('connection.advanced.details', connectionHtml.includes(zhCN.connectionsPage.advanced) && connectionHtml.includes('kind=FILE_UPLOAD'));
+check('connection.create.form.present', connectionHtml.includes(zhCN.connectionsPage.create));
+check('connection.empty.and.error.capable', render(<ConnectionManager items={[]} t={zhCN} />).includes(zhCN.connectionsPage.empty));
+
+const accountsHtml = render(<AccountManagementView t={zhCN} locale="zh-CN" />);
+check('accounts.loading.skeleton', accountsHtml.includes('animate-pulse'));
 
 console.log(results.join('\n'));
 if (failures.length > 0) {

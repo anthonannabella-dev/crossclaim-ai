@@ -1,9 +1,12 @@
 'use client';
 
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 
 import type { Messages } from '../../i18n/dictionaries/zh-CN';
+import StatusBadge from './ui/status-badge';
+import type { BadgeTone } from './ui/status-badge';
 
 /** 与后端 Prisma enum 保持一致；Web 不导入 Prisma，这里只维护词表（技术字面量，不翻译）。 */
 const KINDS = ['FILE_UPLOAD', 'API'] as const;
@@ -41,6 +44,11 @@ export interface ConnectionItem {
   lastError: string | null;
 }
 
+/**
+ * UI-4 —— 采集连接（客户视图）。
+ * 客户默认看到：名称 / 渠道 / 状态（客户语言）/ 凭据是否已配置 / 可用操作；
+ * 工程字段（kind / domain / platform / 原始 status code / credentialRef）收进「高级详情」与创建表单。
+ */
 export default function ConnectionManager({ items, t }: { items: ConnectionItem[]; t: Messages }) {
   const copy = t.connectionsPage;
   const router = useRouter();
@@ -54,6 +62,52 @@ export default function ConnectionManager({ items, t }: { items: ConnectionItem[
   const [platform, setPlatform] = useState('');
   const [credentialRef, setCredentialRef] = useState('');
   const [refDraft, setRefDraft] = useState<Record<string, string>>({});
+
+  const statusLabel = (code: string): string => {
+    const table = copy as unknown as Record<string, string>;
+    switch (code) {
+      case 'ACTIVE':
+        return table.statusActive ?? code;
+      case 'PAUSED':
+        return table.statusPaused ?? code;
+      case 'REVOKED':
+        return table.statusRevoked ?? code;
+      case 'ERROR':
+        return table.statusError ?? code;
+      case 'NEEDS_AUTH':
+        return table.statusNeedsAuth ?? code;
+      default:
+        return code;
+    }
+  };
+
+  const statusTone = (code: string): BadgeTone => {
+    switch (code) {
+      case 'ACTIVE':
+        return 'ok';
+      case 'NEEDS_AUTH':
+      case 'ERROR':
+        return 'warn';
+      case 'REVOKED':
+        return 'danger';
+      default:
+        return 'neutral';
+    }
+  };
+
+  const actionLabel = (to: string): string => {
+    const table = copy as unknown as Record<string, string>;
+    switch (to) {
+      case 'ACTIVE':
+        return table.actionActivate ?? to;
+      case 'PAUSED':
+        return table.actionPause ?? to;
+      case 'REVOKED':
+        return table.actionRevoke ?? to;
+      default:
+        return to;
+    }
+  };
 
   async function call(path: string, init: RequestInit, okMessage: string) {
     setBusy(true);
@@ -96,175 +150,189 @@ export default function ConnectionManager({ items, t }: { items: ConnectionItem[
 
   return (
     <div className="space-y-6">
-      <form onSubmit={create} className="space-y-3 rounded-lg border bg-white p-6">
-        <h2 className="text-lg font-medium">{copy.formTitle}</h2>
-        <p className="text-xs text-slate-500">{copy.formHint}</p>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <label className="text-sm">
-            {copy.name}
-            <input
-              value={label}
-              onChange={(event) => setLabel(event.target.value)}
-              className="mt-1 w-full rounded border px-2 py-1"
-              placeholder={copy.namePlaceholder}
-            />
-          </label>
-          <label className="text-sm">
-            {copy.kind}
-            <select
-              value={kind}
-              onChange={(event) => setKind(event.target.value as (typeof KINDS)[number])}
-              className="mt-1 w-full rounded border px-2 py-1"
-            >
-              {KINDS.map((value) => (
-                <option key={value} value={value}>
-                  {value}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="text-sm">
-            {copy.domain}
-            <select
-              value={domain}
-              onChange={(event) => setDomain(event.target.value as (typeof DOMAINS)[number])}
-              className="mt-1 w-full rounded border px-2 py-1"
-            >
-              {DOMAINS.map((value) => (
-                <option key={value} value={value}>
-                  {value}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="text-sm">
-            {copy.channel}
-            <select
-              value={channel}
-              onChange={(event) => setChannel(event.target.value as (typeof CHANNELS)[number])}
-              className="mt-1 w-full rounded border px-2 py-1"
-            >
-              {CHANNELS.map((value) => (
-                <option key={value} value={value}>
-                  {value}
-                </option>
-              ))}
-            </select>
-          </label>
-          {kind === 'API' ? (
-            <label className="text-sm">
-              {copy.platform}
-              <input
-                value={platform}
-                onChange={(event) => setPlatform(event.target.value)}
-                className="mt-1 w-full rounded border px-2 py-1"
-                placeholder={copy.platformPlaceholder}
-              />
-            </label>
-          ) : null}
-          <label className="text-sm">
-            {copy.credentialRef}
-            <input
-              value={credentialRef}
-              onChange={(event) => setCredentialRef(event.target.value)}
-              className="mt-1 w-full rounded border px-2 py-1"
-              placeholder={copy.refPlaceholder}
-            />
-          </label>
-        </div>
-        {error ? <p className="text-sm text-red-600">{error}</p> : null}
-        {notice ? <p className="text-sm text-emerald-700">{notice}</p> : null}
-        <button
-          type="submit"
-          disabled={busy || label.trim() === ''}
-          className="rounded bg-slate-900 px-4 py-2 text-white disabled:opacity-60"
-        >
-          {copy.create}
-        </button>
-      </form>
-
-      <section className="rounded-lg border bg-white p-6">
-        <h2 className="text-lg font-medium">{copy.listTitle}</h2>
+      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+        <h2 className="text-base font-semibold text-slate-900">{copy.listTitle}</h2>
         {items.length === 0 ? (
           <p className="mt-3 text-sm text-slate-500">{copy.empty}</p>
         ) : (
-          <table className="mt-3 w-full text-sm">
-            <thead className="text-left text-slate-500">
-              <tr>
-                <th className="py-2">{copy.colName}</th>
-                <th>{copy.colChannel}</th>
-                <th>{copy.colKind}</th>
-                <th>{copy.colStatus}</th>
-                <th>{copy.colCredentialRef}</th>
-                <th>{copy.colActions}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {items.map((item) => (
-                <tr key={item.id} className="border-t align-top">
-                  <td className="py-2">
-                    {item.label}
-                    {item.platform ? (
-                      <span className="ml-2 rounded bg-slate-100 px-1 text-xs text-slate-600">{item.platform}</span>
-                    ) : null}
-                  </td>
-                  <td>{item.channel}</td>
-                  <td>{item.kind}</td>
-                  <td>
-                    {item.status}
-                    {item.lastError ? <div className="text-xs text-red-600">{item.lastError}</div> : null}
-                  </td>
-                  <td>{item.hasCredentialRef ? copy.configured : copy.notConfigured}</td>
-                  <td className="space-y-2">
-                    <div className="flex flex-wrap gap-2">
-                      {(NEXT_STATUSES[item.status] ?? []).map((to) => (
-                        <button
-                          key={to}
-                          type="button"
-                          disabled={busy}
-                          onClick={() =>
-                            void call(
-                              `/connections/${item.id}/status`,
-                              { method: 'POST', body: JSON.stringify({ to }) },
-                              copy.noticeStatus,
-                            )
-                          }
-                          className="rounded border px-2 py-1 text-xs disabled:opacity-60"
-                        >
-                          {to}
-                        </button>
-                      ))}
-                    </div>
-                    {item.status !== 'REVOKED' ? (
-                      <div className="flex gap-2">
-                        <input
-                          value={refDraft[item.id] ?? ''}
-                          onChange={(event) => setRefDraft((prev) => ({ ...prev, [item.id]: event.target.value }))}
-                          className="w-40 rounded border px-2 py-1 text-xs"
-                          placeholder={copy.newRefPlaceholder}
-                        />
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() =>
-                            void call(
-                              `/connections/${item.id}/credential-ref`,
-                              { method: 'POST', body: JSON.stringify({ credentialRef: (refDraft[item.id] ?? '').trim() || null }) },
-                              copy.noticeRefUpdated,
-                            )
-                          }
-                          className="rounded border px-2 py-1 text-xs disabled:opacity-60"
-                        >
-                          {copy.updateRef}
-                        </button>
-                      </div>
-                    ) : null}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <ul className="mt-4 space-y-3">
+            {items.map((item) => (
+              <li key={item.id} className="rounded-lg border border-slate-200 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <p className="text-sm font-semibold text-slate-900">{item.label}</p>
+                    <p className="mt-0.5 text-xs text-slate-500">{item.channel}</p>
+                  </div>
+                  <StatusBadge tone={statusTone(item.status)}>{statusLabel(item.status)}</StatusBadge>
+                </div>
+
+                {item.lastError ? <p className="mt-2 text-xs text-red-600">{item.lastError}</p> : null}
+
+                <dl className="mt-3 grid grid-cols-2 gap-3 text-xs">
+                  <div>
+                    <dt className="text-slate-500">{copy.colCredentialRef}</dt>
+                    <dd className="mt-0.5 font-medium text-slate-800">
+                      {item.hasCredentialRef ? copy.configured : copy.notConfigured}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-slate-500">{copy.colKind}</dt>
+                    <dd className="mt-0.5 font-medium text-slate-800">{item.kind}</dd>
+                  </div>
+                </dl>
+
+                <div className="mt-3 flex flex-wrap gap-2">
+                  {(NEXT_STATUSES[item.status] ?? []).map((to) => (
+                    <button
+                      key={to}
+                      type="button"
+                      disabled={busy}
+                      onClick={() =>
+                        void call(
+                          `/connections/${item.id}/status`,
+                          { method: 'POST', body: JSON.stringify({ to }) },
+                          copy.noticeStatus,
+                        )
+                      }
+                      className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                    >
+                      {actionLabel(to)}
+                    </button>
+                  ))}
+                </div>
+
+                {item.status !== 'REVOKED' ? (
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <input
+                      value={refDraft[item.id] ?? ''}
+                      onChange={(event) => setRefDraft((prev) => ({ ...prev, [item.id]: event.target.value }))}
+                      className="w-48 rounded-lg border border-slate-300 px-2 py-1 text-xs"
+                      placeholder={copy.newRefPlaceholder}
+                    />
+                    <button
+                      type="button"
+                      disabled={busy}
+                      onClick={() =>
+                        void call(
+                          `/connections/${item.id}/credential-ref`,
+                          {
+                            method: 'POST',
+                            body: JSON.stringify({ credentialRef: (refDraft[item.id] ?? '').trim() || null }),
+                          },
+                          copy.noticeRefUpdated,
+                        )
+                      }
+                      className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+                    >
+                      {copy.updateRef}
+                    </button>
+                  </div>
+                ) : null}
+
+                <details className="mt-3 text-[11px] text-slate-500">
+                  <summary className="cursor-pointer">{copy.advanced}</summary>
+                  <ul className="mt-1 space-y-0.5 font-mono">
+                    <li>kind={item.kind}</li>
+                    <li>domain={item.domain}</li>
+                    <li>channel={item.channel}</li>
+                    <li>status={item.status}</li>
+                    <li>platform={item.platform ?? '-'}</li>
+                    <li>credentialRef={item.hasCredentialRef ? 'SET' : 'UNSET'}</li>
+                  </ul>
+                </details>
+              </li>
+            ))}
+          </ul>
         )}
+      </section>
+
+      <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+        <h2 className="text-base font-semibold text-slate-900">{copy.formTitle}</h2>
+        <p className="mt-1 text-xs text-slate-500">{copy.formHint}</p>
+        <form onSubmit={create} className="mt-4 space-y-3">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className="text-sm">
+              {copy.name}
+              <input
+                value={label}
+                onChange={(event) => setLabel(event.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5"
+                placeholder={copy.namePlaceholder}
+              />
+            </label>
+            <label className="text-sm">
+              {copy.kind}
+              <select
+                value={kind}
+                onChange={(event) => setKind(event.target.value as (typeof KINDS)[number])}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5"
+              >
+                {KINDS.map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-sm">
+              {copy.domain}
+              <select
+                value={domain}
+                onChange={(event) => setDomain(event.target.value as (typeof DOMAINS)[number])}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5"
+              >
+                {DOMAINS.map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-sm">
+              {copy.channel}
+              <select
+                value={channel}
+                onChange={(event) => setChannel(event.target.value as (typeof CHANNELS)[number])}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5"
+              >
+                {CHANNELS.map((value) => (
+                  <option key={value} value={value}>
+                    {value}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {kind === 'API' ? (
+              <label className="text-sm">
+                {copy.platform}
+                <input
+                  value={platform}
+                  onChange={(event) => setPlatform(event.target.value)}
+                  className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5"
+                  placeholder={copy.platformPlaceholder}
+                />
+              </label>
+            ) : null}
+            <label className="text-sm">
+              {copy.credentialRef}
+              <input
+                value={credentialRef}
+                onChange={(event) => setCredentialRef(event.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5"
+                placeholder={copy.refPlaceholder}
+              />
+            </label>
+          </div>
+          {error ? <p className="text-sm text-red-600">{error}</p> : null}
+          {notice ? <p className="text-sm text-emerald-700">{notice}</p> : null}
+          <button
+            type="submit"
+            disabled={busy || label.trim() === ''}
+            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-60"
+          >
+            {copy.create}
+          </button>
+        </form>
       </section>
     </div>
   );
