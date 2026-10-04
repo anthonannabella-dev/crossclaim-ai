@@ -1,6 +1,6 @@
 {
-  "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。",
-  "updatedAt": "2026-10-05T03:27:00.000Z",
+  "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。 MAPPING UPDATE（2026-10-05）：seo-4 / seo-5 已按 MSG-20261005-03 完成；seo-2 / seo-3 仍 IN_PROGRESS（等 PUBLIC API SECURITY AUDIT，公开 HTTP = HOLD）。",
+  "updatedAt": "2026-10-05T06:15:00.000Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -1002,26 +1002,29 @@
     },
     {
       "id": "seo-4-recover-routes-and-locales",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "risk_class": "MEDIUM",
       "arch_review_required": false,
       "layer": "TRACK-C/SEO-P3",
       "dependencies": [
         "seo-1-gap-audit-and-page-matrix"
       ],
-      "updated_at": "2026-10-04T06:01:14.998Z"
+      "updated_at": "2026-10-05T06:15:00.000Z",
+      "completed_at": "2026-10-05T06:15:00.000Z",
+      "note": "COMPLETED：MSG-20261005-03 裁定 OPTION_A（canonical = /{locale}/recover/{slug}，slug 为 URL identity）已落地；apps/web 两条路由（/recover/[slug] 默认语言 + /[locale]/recover/[slug] 服务 zh/de/ja/es）共用 RecoverView，文案按 URL locale 取；5 例路由合同 + 4 例 canonical↔route shape 回归测试通过；继续 default NOINDEX。"
     },
     {
       "id": "seo-5-technical-seo",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "risk_class": "MEDIUM",
       "arch_review_required": false,
       "layer": "TRACK-C/SEO-P3",
       "dependencies": [
         "seo-1-gap-audit-and-page-matrix"
       ],
-      "updated_at": "2026-10-04T06:51:32.908Z",
-      "note": "纯函数构建层已落地（locale/sitemap/robots/metadata/canonical/hreflang/JSON-LD）；待 SEO-4 路由接线"
+      "updated_at": "2026-10-05T06:15:00.000Z",
+      "note": "COMPLETED：纯函数构建层（locale / sitemap / robots / metadata / canonical / hreflang / JSON-LD）已落地，并在 MSG-20261005-03 后对齐 slug-based URL；HREFLANG_POLICY = STRICT_REACHABILITY。sitemap 仍以 page.canonical 为唯一来源，不自行拼 URL。",
+      "completed_at": "2026-10-05T06:15:00.000Z"
     },
     {
       "id": "seo-6-indexability-gate",
