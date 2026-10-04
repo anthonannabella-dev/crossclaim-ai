@@ -1,6 +1,6 @@
 # LAYER 2 — GOLDEN PATH MATRIX（自动生成，请勿手改）
 
-- 生成时间：2026-10-04T02:14:28.246Z
+- 生成时间：2026-10-04T02:17:08.836Z
 - 机器可读：`docs/releases/LAYER2-GOLDEN-PATH-MATRIX.json`；生成器：`tools/autopilot/golden-path-matrix.mjs`
 - 判定规则：**COVERED 必须存在命名证据文件**（测试/前端）；否则 GAP，并自动登记为 backlog。
 - 依据：MSG-20261003-135 CHANGE C（禁止用「专项测试很多」替代完整矩阵）。
@@ -39,21 +39,21 @@
 | rbac | COVERED | apps/api/src/__tests__/carrier-claim-response-db.test.ts<br>apps/api/src/__tests__/carrier-claim-response-http-e2e-db.test.ts<br>apps/api/src/__tests__/carrier-claim-response-http.test.ts<br>apps/api/src/__tests__/carrier-manual-submission-db.test.ts |
 | amount_ledger | COVERED | apps/api/src/__tests__/carrier-claim-package.test.ts<br>apps/api/src/__tests__/carrier-claim-response-db.test.ts<br>apps/api/src/__tests__/carrier-claim-response-http-e2e-db.test.ts<br>apps/api/src/__tests__/carrier-claim-response-http.test.ts |
 
-## Customs / Trade Recovery（api 测试 30 个 / 前端 14 个）
+## Customs / Trade Recovery（api 测试 32 个 / 前端 14 个）
 
 | 能力轴 | 状态 | 证据 |
 |---|---|---|
-| http | COVERED | apps/api/src/__tests__/customs-authorization-route-db.test.ts<br>apps/api/src/__tests__/customs-authorization-route.test.ts<br>apps/api/src/__tests__/customs-authorized-signer-db.test.ts<br>apps/api/src/__tests__/customs-authorized-signer.test.ts |
-| persistence | COVERED | apps/api/src/__tests__/customs-authorization-route-db.test.ts<br>apps/api/src/__tests__/customs-authorized-signer-db.test.ts<br>apps/api/src/__tests__/customs-claim-ready-http.test.ts<br>apps/api/src/__tests__/customs-entry-fact-read-http.test.ts |
-| db_invariant | COVERED | apps/api/src/__tests__/customs-authorization-route-db.test.ts<br>apps/api/src/__tests__/customs-authorized-signer-db.test.ts<br>apps/api/src/__tests__/customs-entry-fact-store-db.test.ts<br>apps/api/src/__tests__/customs-execution-contract.test.ts |
+| http | COVERED | apps/api/src/__tests__/customs-authorization-lifecycle-db.test.ts<br>apps/api/src/__tests__/customs-authorization-lifecycle.test.ts<br>apps/api/src/__tests__/customs-authorization-route-db.test.ts<br>apps/api/src/__tests__/customs-authorization-route.test.ts |
+| persistence | COVERED | apps/api/src/__tests__/customs-authorization-lifecycle-db.test.ts<br>apps/api/src/__tests__/customs-authorization-lifecycle.test.ts<br>apps/api/src/__tests__/customs-authorization-route-db.test.ts<br>apps/api/src/__tests__/customs-authorized-signer-db.test.ts |
+| db_invariant | COVERED | apps/api/src/__tests__/customs-authorization-lifecycle-db.test.ts<br>apps/api/src/__tests__/customs-authorization-lifecycle.test.ts<br>apps/api/src/__tests__/customs-authorization-route-db.test.ts<br>apps/api/src/__tests__/customs-authorized-signer-db.test.ts |
 | frontend | COVERED | apps/web/app/integration-status/page.tsx<br>apps/web/app/integration-status/start-recovery-form.tsx |
-| happy | COVERED | apps/api/src/__tests__/customs-authorization-route-db.test.ts<br>apps/api/src/__tests__/customs-authorization-route.test.ts<br>apps/api/src/__tests__/customs-authorized-signer-db.test.ts<br>apps/api/src/__tests__/customs-authorized-signer.test.ts |
-| negative | COVERED | apps/api/src/__tests__/customs-authorization-route-db.test.ts<br>apps/api/src/__tests__/customs-authorization-route.test.ts<br>apps/api/src/__tests__/customs-authorized-signer-db.test.ts<br>apps/api/src/__tests__/customs-authorized-signer.test.ts |
+| happy | COVERED | apps/api/src/__tests__/customs-authorization-lifecycle-db.test.ts<br>apps/api/src/__tests__/customs-authorization-lifecycle.test.ts<br>apps/api/src/__tests__/customs-authorization-route-db.test.ts<br>apps/api/src/__tests__/customs-authorization-route.test.ts |
+| negative | COVERED | apps/api/src/__tests__/customs-authorization-lifecycle-db.test.ts<br>apps/api/src/__tests__/customs-authorization-lifecycle.test.ts<br>apps/api/src/__tests__/customs-authorization-route-db.test.ts<br>apps/api/src/__tests__/customs-authorization-route.test.ts |
 | replay | COVERED | apps/api/src/__tests__/customs-classification-discrepancy.test.ts<br>apps/api/src/__tests__/customs-duty-truth.test.ts<br>apps/api/src/__tests__/customs-entry-fact-store-db.test.ts<br>apps/api/src/__tests__/customs-filing-provider.test.ts |
 | concurrency | COVERED | apps/api/src/__tests__/customs-entry-fact-store-db.test.ts<br>apps/api/src/__tests__/customs-ior-facts-db.test.ts<br>apps/api/src/__tests__/customs-return-fact-store-db.test.ts<br>apps/api/src/__tests__/customs-submission-ledger-db.test.ts |
 | failure_recovery | COVERED | apps/api/src/__tests__/customs-recovery-chain-http.test.ts<br>apps/api/src/__tests__/customs-recovery-chain-service-db.test.ts<br>apps/api/src/__tests__/customs-recovery-eligibility.test.ts<br>apps/api/src/__tests__/customs-refund-linkage.test.ts |
-| cross_tenant | COVERED | apps/api/src/__tests__/customs-authorization-route-db.test.ts<br>apps/api/src/__tests__/customs-authorized-signer-db.test.ts<br>apps/api/src/__tests__/customs-claim-ready-http.test.ts<br>apps/api/src/__tests__/customs-entry-fact-read-http.test.ts |
-| rbac | COVERED | apps/api/src/__tests__/customs-authorization-route-db.test.ts<br>apps/api/src/__tests__/customs-authorization-route.test.ts<br>apps/api/src/__tests__/customs-authorized-signer.test.ts<br>apps/api/src/__tests__/customs-claim-ready-http.test.ts |
+| cross_tenant | COVERED | apps/api/src/__tests__/customs-authorization-lifecycle-db.test.ts<br>apps/api/src/__tests__/customs-authorization-route-db.test.ts<br>apps/api/src/__tests__/customs-authorized-signer-db.test.ts<br>apps/api/src/__tests__/customs-claim-ready-http.test.ts |
+| rbac | COVERED | apps/api/src/__tests__/customs-authorization-lifecycle-db.test.ts<br>apps/api/src/__tests__/customs-authorization-lifecycle.test.ts<br>apps/api/src/__tests__/customs-authorization-route-db.test.ts<br>apps/api/src/__tests__/customs-authorization-route.test.ts |
 | amount_ledger | COVERED | apps/api/src/__tests__/customs-claim-ready-http.test.ts<br>apps/api/src/__tests__/customs-claim-ready-package.test.ts<br>apps/api/src/__tests__/customs-classification-discrepancy.test.ts<br>apps/api/src/__tests__/customs-duty-truth.test.ts |
 
 ## Independent-site / Chargeback（api 测试 6 个 / 前端 3 个）
