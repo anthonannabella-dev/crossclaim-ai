@@ -114,4 +114,21 @@ describe('SEO-3 public handler composition', () => {
     expect(SEO_PUBLIC_HANDLER_BOUNDARY.rateLimitBeforeEngineCall).toBe(true);
     expect(SEO_PUBLIC_HANDLER_BOUNDARY.tenantDataIncluded).toBe(false);
   });
+
+  it('有界并发：闸门饱和 → 503；请求结束后必定释放槽位', async () => {
+    const { createSeoConcurrencyGate } = await import('../services/seo/seo-public-http-guard');
+    const gate = createSeoConcurrencyGate(1);
+    const d = { ...deps(), concurrencyGate: gate };
+
+    // 先占满唯一槽位（模拟一个还在处理中的请求）。
+    expect(gate.tryAcquire()).toEqual({ ok: true });
+    const saturated = await handlePublicSeoRequest(base(), d);
+    expect(saturated.status).toBe(503);
+    expect((saturated.body as { code: string }).code).toBe('CONCURRENCY_EXCEEDED');
+
+    // 释放后可以正常处理，并且处理结束会把槽位还回去。
+    gate.release();
+    expect((await handlePublicSeoRequest(base(), d)).status).toBe(200);
+    expect(gate.inFlight()).toBe(0);
+  });
 });
