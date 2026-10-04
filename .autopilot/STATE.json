@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261004-16",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-04T06:47:07.124Z",
+  "updated_at": "2026-10-04T06:51:32.908Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -5063,7 +5063,6 @@
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
     "seo-4-recover-routes-and-locales",
-    "seo-5-technical-seo",
     "seo-6-indexability-gate",
     "seo-7-analytics-event-contract",
     "seo-8-seo-contract-tests"
@@ -5092,9 +5091,9 @@
   "awaiting_verdict": "C18 SCHEMA DELTA FINAL-2（GitHub comment 5977432866，reviewed HEAD ca1a6b8）",
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-04T06:46:25.067Z",
-    "head": "80b8f77",
-    "acceptance_head": "80b8f77",
+    "computed_at": "2026-10-04T06:51:33.776Z",
+    "head": "65306c0",
+    "acceptance_head": "65306c0",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5187,48 +5186,48 @@
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=80b8f77 ci_head=8f32fce ci=pending（a088d90 / 3d8e0a1） run=37143524364"
+        "evidence": "acceptance_head=65306c0 ci_head=8f32fce ci=pending（ca1a6b8） run=37143524364"
       },
       "L1-05_pg_regression_passed": {
         "status": "UNVERIFIED",
-        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head 80b8f77（且中间存在非簿记变更）"
+        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head 65306c0（且中间存在非簿记变更）"
       },
       "L1-06_fresh_db_migration_passed": {
         "status": "UNVERIFIED",
-        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head 80b8f77（且中间存在非簿记变更）"
+        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head 65306c0（且中间存在非簿记变更）"
       },
       "L1-07_api_typecheck_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head 80b8f77（且中间存在非簿记变更）"
+        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head 65306c0（且中间存在非簿记变更）"
       },
       "L1-08_web_typecheck_build_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head 80b8f77（且中间存在非簿记变更）"
+        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head 65306c0（且中间存在非簿记变更）"
       },
       "L1-09_no_skipped_critical_tests": {
         "status": "UNVERIFIED",
-        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head 80b8f77（且中间存在非簿记变更）"
+        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head 65306c0（且中间存在非簿记变更）"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
         "status": false,
-        "evidence": "dirty entries: 2"
+        "evidence": "dirty entries: 3"
       },
       "L1-11_docs_state_consistent": {
         "status": "UNVERIFIED",
-        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head 80b8f77（且中间存在非簿记变更）"
+        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head 65306c0（且中间存在非簿记变更）"
       },
       "L1-12_schema_invariants_verified": {
         "status": "UNVERIFIED",
-        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head 80b8f77（且中间存在非簿记变更）"
+        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head 65306c0（且中间存在非簿记变更）"
       },
       "L1-13_negative_paths_covered": {
         "status": "UNVERIFIED",
-        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head 80b8f77（且中间存在非簿记变更）"
+        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head 65306c0（且中间存在非簿记变更）"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
         "status": "UNVERIFIED",
-        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head 80b8f77（且中间存在非簿记变更）"
+        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head 65306c0（且中间存在非簿记变更）"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
@@ -6122,7 +6121,7 @@
       "API.md / DOMAIN_MODEL.md / architecture-contract 计数 77 → 79"
     ]
   },
-  "next_execution_unit": "读 SCHEMA DELTA FINAL-2 裁决 → PASS 后生成 migration SQL（不 migrate deploy）；并行 SEO-3 PUBLIC API SECURITY AUDIT",
+  "next_execution_unit": "读 SCHEMA DELTA FINAL-2 裁决；SEO-3 PUBLIC API SECURITY AUDIT 送审",
   "customer_ui_commercialization": {
     "at": "2026-10-04T01:21:55.949Z",
     "authorization": "MSG-20261004-01（CUSTOMER UI/UX COMMERCIALIZATION — IMPLEMENTATION AUTHORIZED）",
@@ -6658,19 +6657,20 @@
     "schema_delta_final2_wakeup_sent_at": "2026-10-04T06:47:07.124Z",
     "schema_delta_final2_wakeup_delivery": "VERIFIED（marker 5977432866 出现在最新用户轮 + 输入框已清空 + 生成中）"
   },
-  "last_heartbeat_at": "2026-10-04T06:47:07.124Z",
+  "last_heartbeat_at": "2026-10-04T06:51:32.908Z",
   "waiting_for_verdict": "C18 SCHEMA DELTA FINAL-2（GitHub comment 5977432866，reviewed HEAD ca1a6b8）",
-  "last_completed_unit": "c18-schema-delta-proposal-v2（FINAL-2 送审）",
+  "last_completed_unit": "seo-5-technical-seo-builders",
   "hold_external": true,
   "track_c_seo_p3": {
-    "at": "2026-10-04T06:20:22.102Z",
+    "at": "2026-10-04T06:51:32.908Z",
     "main_line": "TRACK C / SEO P3 — programmatic SEO + free checker/calculator acquisition engine（与 C18 并行）",
     "gap_audit_doc": "docs/releases/SEO-P3-GAP-AUDIT.md",
     "completed": [
       "seo-1-gap-audit-and-page-matrix",
       "seo-2-recovery-rule-definition-v1",
       "seo-2-revise-5-fixes",
-      "seo-3-public-checker-calculator-core"
+      "seo-3-public-checker-calculator-core",
+      "seo-5-technical-seo-builders"
     ],
     "first_batch_pages": 28,
     "default_index_policy": "NOINDEX（通过 indexability gate 才 INDEX）",
@@ -6751,7 +6751,8 @@
       ]
     },
     "seo_2_status": "REVISE_LANDED（待 SEO-2 FINAL + SEO-3 public API security checkpoint 一起送审）",
-    "seo_3_status": "CORE_LANDED（服务层 + 限流；HTTP 公开入口尚未接线，待 PUBLIC API SECURITY AUDIT 通过后由 SEO-4 暴露）"
+    "seo_3_status": "CORE_LANDED（服务层 + 限流；HTTP 公开入口尚未接线，待 PUBLIC API SECURITY AUDIT 通过后由 SEO-4 暴露）",
+    "seo_5_status": "BUILDERS_LANDED（纯函数层；Next.js 路由接线在 SEO-4 完成，公开 Checker API 仍待 PUBLIC API SECURITY AUDIT）"
   },
   "CURRENT_HEAD": "ca1a6b8",
   "LAST_COMPLETED_UNIT": "c18-schema-delta-proposal-v2（FINAL-2 送审）",
