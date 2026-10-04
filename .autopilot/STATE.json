@@ -2,14 +2,14 @@
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
   "head": "17fda50",
   "status": "RECONCILED",
-  "current_task": "SEO-2 RecoveryRuleDefinition v1 typed contract（高风险，先送架构审计）与 C18-6 并行",
+  "current_task": "SEO-2 待架构审计（Rule contract 实质变化）；并行继续 C18-6 tenant/provider lineage",
   "next_task": "SEO-3 公开只读 Checker/Calculator（public API security boundary，需审计）",
   "send_head": "07b7009",
   "decision_head": "07b7009",
   "last_chatgpt_message": "MSG-20261004-16",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-04T06:01:14.998Z",
+  "updated_at": "2026-10-04T06:03:01.194Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -5016,7 +5016,6 @@
     "c18-6-provider-tenant-account-lineage",
     "c18-7-provider-authorization-lifecycle",
     "c18-8-provider-negative-path-e2e",
-    "seo-2-recovery-rule-definition-v1",
     "seo-3-public-checker-calculator",
     "seo-4-recover-routes-and-locales",
     "seo-5-technical-seo",
@@ -5048,9 +5047,9 @@
   "awaiting_verdict": null,
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-04T06:01:15.853Z",
-    "head": "f4a37d5",
-    "acceptance_head": "f4a37d5",
+    "computed_at": "2026-10-04T06:03:26.369Z",
+    "head": "321f002",
+    "acceptance_head": "321f002",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5142,27 +5141,27 @@
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=f4a37d5 ci_head=8f32fce ci=pending（commit 后记录；此前 completed head 全 success） run=37143524364"
+        "evidence": "acceptance_head=321f002 ci_head=8f32fce ci=pending（commit 后记录；此前 completed head 全 success） run=37143524364"
       },
       "L1-05_pg_regression_passed": {
         "status": "UNVERIFIED",
-        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head f4a37d5（且中间存在非簿记变更）"
+        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head 321f002（且中间存在非簿记变更）"
       },
       "L1-06_fresh_db_migration_passed": {
         "status": "UNVERIFIED",
-        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head f4a37d5（且中间存在非簿记变更）"
+        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head 321f002（且中间存在非簿记变更）"
       },
       "L1-07_api_typecheck_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head f4a37d5（且中间存在非簿记变更）"
+        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head 321f002（且中间存在非簿记变更）"
       },
       "L1-08_web_typecheck_build_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head f4a37d5（且中间存在非簿记变更）"
+        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head 321f002（且中间存在非簿记变更）"
       },
       "L1-09_no_skipped_critical_tests": {
         "status": "UNVERIFIED",
-        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head f4a37d5（且中间存在非簿记变更）"
+        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head 321f002（且中间存在非簿记变更）"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
@@ -5171,19 +5170,19 @@
       },
       "L1-11_docs_state_consistent": {
         "status": "UNVERIFIED",
-        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head f4a37d5（且中间存在非簿记变更）"
+        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head 321f002（且中间存在非簿记变更）"
       },
       "L1-12_schema_invariants_verified": {
         "status": "UNVERIFIED",
-        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head f4a37d5（且中间存在非簿记变更）"
+        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head 321f002（且中间存在非簿记变更）"
       },
       "L1-13_negative_paths_covered": {
         "status": "UNVERIFIED",
-        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head f4a37d5（且中间存在非簿记变更）"
+        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head 321f002（且中间存在非簿记变更）"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
         "status": "UNVERIFIED",
-        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head f4a37d5（且中间存在非簿记变更）"
+        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head 321f002（且中间存在非簿记变更）"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
@@ -6061,7 +6060,7 @@
       "API.md / DOMAIN_MODEL.md / architecture-contract 计数 77 → 79"
     ]
   },
-  "next_execution_unit": "c18-4+c18-5 audit submission",
+  "next_execution_unit": "seo-3-public-checker-calculator（+ C18-6 并行）",
   "customer_ui_commercialization": {
     "at": "2026-10-04T01:21:55.949Z",
     "authorization": "MSG-20261004-01（CUSTOMER UI/UX COMMERCIALIZATION — IMPLEMENTATION AUTHORIZED）",
@@ -6449,16 +6448,17 @@
       "真实 adapter 需支持 provider 官方 key-id / active+previous secret 轮换"
     ]
   },
-  "last_heartbeat_at": "2026-10-04T06:01:14.998Z",
-  "waiting_for_verdict": "C18-4 + C18-5（待送审）",
-  "last_completed_unit": "c18-5-provider-idempotency-reconciliation",
+  "last_heartbeat_at": "2026-10-04T06:03:01.194Z",
+  "waiting_for_verdict": "SEO-2 recovery rule contract（待送审）",
+  "last_completed_unit": "seo-2-recovery-rule-definition-v1",
   "hold_external": true,
   "track_c_seo_p3": {
-    "at": "2026-10-04T06:01:14.998Z",
+    "at": "2026-10-04T06:03:01.194Z",
     "main_line": "TRACK C / SEO P3 — programmatic SEO + free checker/calculator acquisition engine（与 C18 并行）",
     "gap_audit_doc": "docs/releases/SEO-P3-GAP-AUDIT.md",
     "completed": [
-      "seo-1-gap-audit-and-page-matrix"
+      "seo-1-gap-audit-and-page-matrix",
+      "seo-2-recovery-rule-definition-v1"
     ],
     "first_batch_pages": 28,
     "default_index_policy": "NOINDEX（通过 indexability gate 才 INDEX）",
@@ -6517,6 +6517,9 @@
     "TRANSPORT": false,
     "external_write": "HOLD",
     "payment": "HOLD",
-    "production_credentials": "HOLD"
+    "production_credentials": "HOLD",
+    "awaiting_audit": [
+      "seo-2-recovery-rule-definition-v1"
+    ]
   }
 }
