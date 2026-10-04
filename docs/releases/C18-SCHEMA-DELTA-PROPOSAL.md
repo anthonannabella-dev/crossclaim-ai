@@ -1,5 +1,7 @@
-# C18 — SCHEMA DELTA PROPOSAL v3（ProviderTenantBinding 持久化 + WebhookReplayClaim 持久化）
+# C18 — SCHEMA DELTA PROPOSAL v3.1（ProviderTenantBinding 持久化 + WebhookReplayClaim 持久化）
 
+> v3.1 修正（MSG-20261004-24）：删除 Prisma 示例中重复的 `bindingScopeKey`；新增 `jurisdictionAnchor` 落列（bindingScopeKey 的正式输入，与身份字段一并 immutable、纳入 snapshot）；CHECK 使用 Prisma 带引号的 camelCase 列名；binding identity 增加 DB 级 immutable trigger。
+>
 > 状态：**REVISED PROPOSAL / NOT APPLIED**。本文件只是提案 v3，**没有**改 `schema.prisma`、**没有**写 migration、**没有**跑 `migrate deploy`。
 > v2 依据 MSG-20261004-22（四条必修 + 两条建议）；**v3 依据 MSG-20261004-23**：B 已 PASS，A 仅剩「多 binding 下的稳定身份 + 确定性选择」，本轮把该项收口（principalRef 显式落列、bindingScopeKey 变为 immutable/versioned 稳定身份、resolver selection contract 明确 exactly-one/BINDING_AMBIGUOUS、lineage snapshot 纳入 principalRef、append-only 明确用 trigger）。`C18_INTERNAL_SKELETON = CLOSED` 不变，`MIGRATION / SCHEMA_PRISMA_CHANGE / MIGRATE_DEPLOY = HOLD`。
 
@@ -42,6 +44,8 @@ model CustomsProviderTenantBinding {
   principalRef            String
   /// 绑定身份版本（v1）；升级时新增列值而不是改写历史
   bindingScopeVersion     String   @default("v1")
+  /// bindingScopeKey 的正式输入之一（provenance：可解释该 binding 当初为何属于此 scope key）。
+  jurisdictionAnchor      String
   /// 稳定绑定身份键：v1 + principalRef + jurisdictionAnchor + bindingSlotRef 的 canonical sha256。
   /// 创建后 immutable；不依赖 mutable providerTenantRef / providerAccountRef；不因 jurisdictionScope 扩容而变化。
   bindingScopeKey         String
@@ -51,9 +55,6 @@ model CustomsProviderTenantBinding {
   providerId              String
   providerTenantRef       String
   providerAccountRef      String
-  /// provider-neutral 绑定作用域键：由 (principalRef/IOR, jurisdiction, account hint) 稳定派生，
-  /// 真实 Provider 选定前不绑定任何 provider 专有字段。
-  bindingScopeKey         String
   relationship            CustomsProviderRelationship
   relationshipEvidenceRef String?
   relationshipVerifiedAt  DateTime?
@@ -108,8 +109,8 @@ organizationId + providerId + principalRef + jurisdiction
 DB 级 CHECK（migration 手写 SQL 部分）：
 
 ```sql
-CHECK (relationship <> 'CROSSCLAIM_SAAS'
-       OR (relationship_evidence_ref IS NOT NULL AND relationship_verified_at IS NOT NULL))
+CHECK ("relationship" <> 'CROSSCLAIM_SAAS'
+       OR ("relationshipEvidenceRef" IS NOT NULL AND "relationshipVerifiedAt" IS NOT NULL))
 ```
 
 语义：**一个租户 + 一个 provider + 一个 binding scope** 才唯一；同一客户在同一 filing provider 下的不同 IOR / 法人 / 辖区可以有各自的 binding，不被锁死。
@@ -131,7 +132,78 @@ model CustomsProviderTenantBindingLineage {
   ///   bindingSlotRef, relationship,
   ///   relationshipEvidenceRef, relationshipVerifiedAt, jurisdictionScope, status, verifiedAt }
   snapshot        Json
-  snapshotDigest  String   // sha256(canonical(snapshot))；migration 补 CHECK ("snapshotDigest" ~ '^[0-9a-f]{64}$')
+  snapshotDigest  String   // sha256(canonical(snapshot))；migration 补 CHECK ("snapshotDigest" ~ '^[0-9a-f]{64}
+  occurredAt      DateTime
+  recordedAt      DateTime @default(now())
+  sourceRef       String?
+
+  @@index([organizationId, bindingId, occurredAt])
+}
+```
+
+强制项（migration 必须真正实现，不只在文档里声明）：
+
+1. **append-only = trigger**（MSG-20261004-23 ④ 已裁决）：沿用仓库既有模式 `cc_append_only__*` + `BEFORE UPDATE OR DELETE` trigger 直接 reject；**不以** `REVOKE UPDATE, DELETE` 为主（权限模型可能被 owner/migration role 绕过，且与现有 DB invariant 风格不一致）。
+2. **tenant integrity trigger**：`lineage.organizationId` 必须等于其 binding 的 `organizationId`，沿用 `crossclaim_assert_tenant_integrity()` + `BEFORE INSERT OR UPDATE` trigger。
+3. **同事务**：current binding 的更新与 lineage append 必须在同一事务内完成（服务层 + 测试保证）。
+4. 服务层写入前计算 `snapshotDigest`（canonical key-sorted SHA-256，与 C18-8 `providerSubmissionPayloadDigest` 同一 canonical 规则）。
+5. `previousSnapshot` **不需要**（MSG-20261004-23 ②：上一条 lineage 本身即 previous state）；snapshot 语义表述为"可重建任一时点的 authorization / provider-binding decision state"（`credentialReference` 故意不入 snapshot，凭据轮换审计另行处理）。
+
+## 5. 提案 B — `CustomsProviderWebhookReplayClaim`（v2，immutable replay lock）
+
+```prisma
+model CustomsProviderWebhookReplayClaim {
+  id          String   @id @default(uuid())
+  providerId  String
+  deliveryId  String
+  claimedAt   DateTime @default(now())
+
+  @@unique([providerId, deliveryId])
+  @@index([claimedAt])
+}
+```
+
+- 唯一职责：**这个 deliveryId 有没有被领取过**。没有 `outcome`、没有状态机（避免"防重锁兼状态机"和 append-only 声明自相矛盾）。
+- 领取语义：`INSERT ... ON CONFLICT DO NOTHING`（或捕获 P2002）后按"是否新建"判定唯一赢家；并发相同 webhook 只有一个 `CLAIMED`，另一个 `REPLAY_DETECTED`。
+- **先验签再 claim**：坏签名绝不 INSERT（否则攻击者可用坏签名烧掉合法 deliveryId）。
+- 不存 raw body / payload / 签名。
+- **保留策略**：`retention >= provider 官方最大 redelivery/replay window + CrossClaim 对账/事故窗口`；真实 Provider 选定前 **`AUTO_PURGE = OFF`**（记录极小，早删 replay key 的风险远大于多存）；选定后再定 180d/365d 并补 cleanup test。`@@index([claimedAt])` 保留，用于未来 cleanup。
+
+## 6. Migration 执行顺序（v2，仍 HOLD）
+
+```
+Revised Schema Delta（本文件）
+→ ARCHITECT PASS
+→ 修改 schema.prisma
+→ 生成 migration SQL
+→ 人工 review SQL（含 CHECK / append-only enforce / tenant integrity）
+→ prisma validate
+→ fresh DB migration
+→ Prisma stores 替换进程内实现
+→ 真实 PostgreSQL concurrency / tenant / append-only E2E
+→ C18 Production Persistence Checkpoint
+```
+
+配套验收（migration PASS 后必须补）：
+
+- B：两个独立 PG 连接并发同一 `(providerId, deliveryId)` → 恰好一个 `CLAIMED` + 一个 `ALREADY_CLAIMED`。
+- A：cross-tenant reject；非法 relationship 状态 reject；`CROSSCLAIM_SAAS` 缺证据在 **DB 层** reject；并发 rebind 不丢 lineage；lineage `UPDATE`/`DELETE` 被拒绝。
+
+## 7. 明确的"不做"
+
+- 不修改既有 71 个 migration / 82 个 model；不动 C17 ledger 与 `CustomsSubmissionAttempt*`。
+- 不引入 provider 专有字段；`bindingscope` 在真实 Provider 选定前保持 provider-neutral。
+- 不存 secret / 凭据本体 / 合同正文 / raw webhook payload。
+- 不把 SEO 契约（RuleVersion）下沉成表。
+- 本轮**只改提案**；不写 migration、不改 `schema.prisma`、不跑 `migrate deploy`。
+
+## 8. 送审问题（C18 SCHEMA DELTA FINAL-2）
+
+1. `bindingScopeKey` 的派生口径（principalRef/IOR + jurisdiction + account hint）是否足够 provider-neutral、且足以支撑"同客户多 IOR/多辖区多账号"？（派生规则的实现细节将随后写进 Schema Delta FINAL-2 的实现说明。）
+2. lineage 的 snapshot 字段集是否完整到"仅靠 lineage 即可重建任一时点的绑定真值"？是否还需要显式 `previousSnapshot`？
+3. B 删除 `outcome` 后，webhook 处理生命周期若将来需要，是否同意另建 append-only fact（而不是复活 outcome）？
+4. append-only 的实现方式选择：revoke DML 权限 vs trigger 拒绝，哪一种更符合本仓库既有迁移风格？
+)  -- 逐句 review 时确认列名为带引号 camelCase
   occurredAt      DateTime
   recordedAt      DateTime @default(now())
   sourceRef       String?

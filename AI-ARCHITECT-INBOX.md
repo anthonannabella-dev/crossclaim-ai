@@ -132801,3 +132801,241 @@ PASS
 
 REAL_TRANSPORT / EXTERNAL_WRITE / PAYMENT / PRODUCTION_ENABLEMENT 继续保持 HOLD。
 ```
+
+### [MSG-20261004-24] ARCHITECT VERDICT — C18 SCHEMA DELTA FINAL-3 = PASS WITH REVISE（三项核心 PASS；SCHEMA_DELTA_DESIGN = CLOSED；SCHEMA_PRISMA_CHANGE / MIGRATION_SQL_GENERATION = AUTHORIZED；MIGRATE_DEPLOY = HOLD；SQL_REVIEW = REQUIRED_BEFORE_APPLY）（reviewed HEAD = de4ca17；必修：① proposal 里 bindingScopeKey 重复字段必须删除（否则 prisma validate 失败）；② binding identity 的 immutable 必须由 DB trigger enforce，并新增 jurisdictionAnchor 落列（bindingScopeKey 的正式输入，便于解释绑定 provenance）且一并 immutable、纳入 snapshot；CHECK 必须用 Prisma 带引号的 camelCase 列名，不要抄文档里的 snake_case；snapshotDigest CHECK 必须真加；lineage append-only 用 BEFORE UPDATE OR DELETE trigger；B 保持 PASS 不重审；下一轮送 C18 MIGRATION SQL AUDIT：schema.prisma diff + migration 路径 + SQL 全文 + 声明 migrate deploy = NOT RUN / migration applied = NO + prisma validate 结果）
+
+```text
+ARCHITECT VERDICT：PASS WITH REVISE
+
+我按 reviewed HEAD = de4ca17（完整 SHA de4ca17197d4ca7660d81bef3583f351f20e2b2f）重新核了 FINAL-3。上轮要求的三项实质上已经达标，可以结束 Schema Delta 架构设计阶段，进入 schema.prisma + create-only migration SQL 阶段；但在真正生成 migration 前还有两处机械性/数据库级约束必须同时带进去。
+
+① 三项核心：PASS。
+
+principalRef 已成为 binding 明确字段并参与 query；缺失/空值直接 INVALID_QUERY，PRINCIPAL_MISMATCH 也做了纵深防御。之前 .find(providerId) 的危险路径已经消失。
+
+bindingScopeKey 也已经符合上轮要求：
+
+纯文本
+SHA-256(
+  version=v1
+  + principalRef
+  + jurisdictionAnchor
+  + bindingSlotRef
+)
+
+而且不依赖 providerTenantRef / providerAccountRef / jurisdictionScope，所以账号 rebind、scope 扩容不会改变 binding identity。测试也覆盖了稳定性和输入敏感性。
+
+Resolver 现在是：
+
+纯文本
+organizationId
++ providerId
++ principalRef
++ jurisdiction
+→ ACTIVE + jurisdiction-covered candidates
+
+0  → BINDING_UNKNOWN
+1  → resolve
+>1 → BINDING_AMBIGUOUS → fail-closed
+
+这满足安全要求。即使同 principal/provider/jurisdiction 存在多个合法账号，当前系统会选择“拒绝而不是猜”，这是正确的生产默认行为。
+
+但是在把 v3 直接复制进 schema.prisma 前，必须修两点。
+
+第一，proposal 里的 Prisma 示例有一个重复字段。
+
+当前 v3 中 bindingScopeKey 出现了两次：
+
+prisma
+bindingScopeKey String
+...
+providerAccountRef String
+...
+bindingScopeKey String
+
+第二个是 v2 遗留，必须删除。否则 prisma validate 会直接失败。
+
+这只是文档残留，不影响架构结论。
+
+第二，binding identity 的“immutable after creation”必须在 DB 层真正 enforce。
+
+现在代码和文档都说：
+
+纯文本
+principalRef
+providerId
+bindingScopeVersion
+bindingScopeKey
+bindingSlotRef
+
+创建后不可变。
+
+那 migration 里必须沿用仓库现有 trigger 风格，而不能只靠 service convention。
+
+至少禁止 UPDATE：
+
+纯文本
+organizationId
+providerId
+principalRef
+bindingScopeVersion
+bindingScopeKey
+bindingSlotRef
+
+我还建议把 jurisdictionAnchor 显式落列并一并 immutable。
+
+原因很简单：它是 bindingScopeKey 的正式输入，但现在数据库只保存 hash，没有保存这个身份输入。保存它以后，未来可以解释：
+
+这个 binding 当初为什么属于这个 scope key？
+
+而不是只能相信一个无法反解的 SHA-256。
+
+建议最终字段：
+
+纯文本
+principalRef
+bindingScopeVersion = v1
+jurisdictionAnchor
+bindingSlotRef
+bindingScopeKey
+
+snapshot 也包含 jurisdictionAnchor。
+
+这不是要求 resolver 改用它；resolver 仍可按实际 jurisdictionScope 判断覆盖。它只是 binding identity provenance。
+
+Lineage：PASS
+
+previousSnapshot 不需要。
+
+现在：
+
+纯文本
+BOUND → full post-state snapshot
+REBOUND → full post-state snapshot
+SUSPENDED → full post-state snapshot
+...
+
+上一条本身就是 previous state。
+
+Append-only 明确使用：
+
+纯文本
+BEFORE UPDATE OR DELETE trigger
+
+也完全符合仓库已有 cc_append_only__* 风格。
+
+snapshotDigest 需要在 migration SQL 中真正加：
+
+SQL
+CHECK ("snapshotDigest" ~ '^[0-9a-f]{64}$')
+B：保持 PASS，不重审
+
+CustomsProviderWebhookReplayClaim 当前最小模型正确：
+
+纯文本
+id
+providerId
+deliveryId
+claimedAt
+
+UNIQUE(providerId, deliveryId)
+
+以后 webhook processing lifecycle 另建 append-only fact/event，不把 outcome 塞回来。
+
+② 是否允许进入 migration 阶段？
+
+允许。
+
+状态可改成：
+
+纯文本
+SCHEMA_DELTA_A = PASS_WITH_REVISE
+SCHEMA_DELTA_A2 = PASS
+SCHEMA_DELTA_B = PASS
+
+SCHEMA_DELTA_DESIGN = CLOSED
+
+SCHEMA_PRISMA_CHANGE = AUTHORIZED
+MIGRATION_SQL_GENERATION = AUTHORIZED
+MIGRATE_DEPLOY = HOLD
+
+执行顺序：
+
+纯文本
+1. 修 proposal 重复 bindingScopeKey
+2. schema.prisma 落模型
+3. 加 jurisdictionAnchor + identity immutability requirement
+4. 生成 create-only migration.sql
+5. 不执行 migration
+6. 把 schema diff + migration.sql 一起送审
+
+然后我会专门审 SQL。
+
+③ 下一轮不要只给 migration 文件清单
+
+直接提交实际 SQL，逐句 review。
+
+最优送审包：
+
+纯文本
+C18 MIGRATION SQL AUDIT
+
+REVIEWED_HEAD = <exact SHA>
+
+1. schema.prisma diff
+2. 新 migration 文件完整路径
+3. migration.sql 全文
+4. 明确声明：
+   migrate deploy = NOT RUN
+   migration applied = NO
+5. prisma validate 结果
+
+我下一轮重点会逐项检查：
+
+纯文本
+ENUM 创建
+三张表 DDL
+unique/index
+Organization FK
+tenant-integrity trigger
+CROSSCLAIM_SAAS CHECK
+snapshotDigest CHECK
+binding identity immutable trigger
+lineage append-only trigger
+WebhookReplayClaim unique constraint
+无 DROP / 无 ALTER 既有业务真值
+
+另外注意，proposal 当前 CHECK 示例使用的是 snake_case：
+
+SQL
+relationship_evidence_ref
+relationship_verified_at
+
+而 Prisma 默认生成的是带引号的 camelCase 列名。实际 migration 应使用类似：
+
+SQL
+"relationshipEvidenceRef"
+"relationshipVerifiedAt"
+
+这一点必须在 SQL review 中确认，别直接照文档示例复制。
+
+最终：
+
+纯文本
+VERDICT = PASS WITH REVISE
+
+THREE_FINAL_RESIDUALS = PASS
+SCHEMA_DELTA_DESIGN = CLOSED
+
+SCHEMA_PRISMA = AUTHORIZED
+CREATE_ONLY_MIGRATION_SQL = AUTHORIZED
+SQL_REVIEW = REQUIRED_BEFORE_APPLY
+
+MIGRATE_DEPLOY = HOLD
+REAL_TRANSPORT = HOLD
+EXTERNAL_WRITE = HOLD
+PAYMENT = HOLD
+PRODUCTION_ENABLEMENT = HOLD
+
+本次 exact HEAD 的 GitHub workflow/status 仍为空，所以我确认的是代码与 proposal 本身；Codex 报告的 19/19 + 8/8 + 13/13、tsc EXIT=0 我仍不表述为 independently verified GitHub CI SUCCESS。
+```

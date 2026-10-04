@@ -437,6 +437,8 @@ model Organization {
   feeCalculationAdjustments          FeeCalculationAdjustment[]
 
   @@index([status])
+  customsProviderTenantBindings       CustomsProviderTenantBinding[]
+  customsProviderTenantBindingLineage CustomsProviderTenantBindingLineage[]
 }
 
 model User {
@@ -3144,4 +3146,89 @@ model CustomsAuthorizedSignerFact {
   @@index([organizationId, principalRef, observedAt])
   @@index([organizationId, signerRef])
   @@index([organizationId, verificationStatus])
+}
+
+
+// ---- C18 LAYER 3 PROVIDER PERSISTENCE (SCHEMA DELTA A/B, MSG-20261004-24) ----
+
+enum CustomsProviderRelationship {
+  CROSSCLAIM_SAAS
+  BROKER_OF_RECORD
+  CLIENT_DIRECT
+  REFERRAL_PARTNER
+}
+
+enum CustomsProviderBindingStatus {
+  ACTIVE
+  PENDING_VERIFICATION
+  SUSPENDED
+  REVOKED
+}
+
+enum CustomsProviderBindingEvent {
+  BOUND
+  REBOUND
+  REAUTH_REQUIRED
+  SUSPENDED
+  REVOKED
+  RESTORED
+}
+
+model CustomsProviderTenantBinding {
+  id                      String                       @id @default(uuid())
+  organizationId          String
+  principalRef            String
+  bindingScopeVersion     String                       @default("v1")
+  jurisdictionAnchor      String
+  bindingSlotRef          String
+  bindingScopeKey         String
+  providerId              String
+  providerTenantRef       String
+  providerAccountRef      String
+  relationship            CustomsProviderRelationship
+  relationshipEvidenceRef String?
+  relationshipVerifiedAt  DateTime?
+  jurisdictionScope       String[]
+  status                  CustomsProviderBindingStatus
+  verifiedAt              DateTime?
+  credentialReference     String?
+  createdAt               DateTime                     @default(now())
+  updatedAt               DateTime                     @updatedAt
+
+  organization Organization                           @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  lineage      CustomsProviderTenantBindingLineage[]
+
+  @@unique([organizationId, id])
+  @@unique([organizationId, providerId, bindingScopeKey])
+  @@index([organizationId, providerId, principalRef, status])
+  @@index([organizationId, bindingScopeKey])
+}
+
+model CustomsProviderTenantBindingLineage {
+  id             String                       @id @default(uuid())
+  organizationId String
+  bindingId      String
+  event          CustomsProviderBindingEvent
+  actorRef       String
+  note           String?
+  snapshot       Json
+  snapshotDigest String
+  occurredAt     DateTime
+  recordedAt     DateTime                     @default(now())
+  sourceRef      String?
+
+  organization Organization                   @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  binding      CustomsProviderTenantBinding   @relation(fields: [bindingId], references: [id], onDelete: Restrict)
+
+  @@index([organizationId, bindingId, occurredAt])
+}
+
+model CustomsProviderWebhookReplayClaim {
+  id         String   @id @default(uuid())
+  providerId String
+  deliveryId String
+  claimedAt  DateTime @default(now())
+
+  @@unique([providerId, deliveryId])
+  @@index([claimedAt])
 }

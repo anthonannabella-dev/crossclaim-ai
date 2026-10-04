@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261004-16",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-04T07:01:57.772Z",
+  "updated_at": "2026-10-04T07:06:33.216Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -5108,9 +5108,9 @@
   "awaiting_verdict": "C18 SCHEMA DELTA FINAL-3（GitHub comment 5977508825，reviewed HEAD de4ca17）",
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-04T07:01:43.412Z",
-    "head": "2cf39a9",
-    "acceptance_head": "2cf39a9",
+    "computed_at": "2026-10-04T07:09:39.323Z",
+    "head": "56cbca9",
+    "acceptance_head": "56cbca9",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5203,48 +5203,48 @@
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=2cf39a9 ci_head=8f32fce ci=pending（de4ca17） run=37143524364"
+        "evidence": "acceptance_head=56cbca9 ci_head=8f32fce ci=pending（543fb96） run=37143524364"
       },
       "L1-05_pg_regression_passed": {
         "status": "UNVERIFIED",
-        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head 2cf39a9（且中间存在非簿记变更）"
+        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head 56cbca9（且中间存在非簿记变更）"
       },
       "L1-06_fresh_db_migration_passed": {
         "status": "UNVERIFIED",
-        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head 2cf39a9（且中间存在非簿记变更）"
+        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head 56cbca9（且中间存在非簿记变更）"
       },
       "L1-07_api_typecheck_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head 2cf39a9（且中间存在非簿记变更）"
+        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head 56cbca9（且中间存在非簿记变更）"
       },
       "L1-08_web_typecheck_build_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head 2cf39a9（且中间存在非簿记变更）"
+        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head 56cbca9（且中间存在非簿记变更）"
       },
       "L1-09_no_skipped_critical_tests": {
         "status": "UNVERIFIED",
-        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head 2cf39a9（且中间存在非簿记变更）"
+        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head 56cbca9（且中间存在非簿记变更）"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
         "status": false,
-        "evidence": "dirty entries: 2"
+        "evidence": "dirty entries: 4"
       },
       "L1-11_docs_state_consistent": {
         "status": "UNVERIFIED",
-        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head 2cf39a9（且中间存在非簿记变更）"
+        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head 56cbca9（且中间存在非簿记变更）"
       },
       "L1-12_schema_invariants_verified": {
         "status": "UNVERIFIED",
-        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head 2cf39a9（且中间存在非簿记变更）"
+        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head 56cbca9（且中间存在非簿记变更）"
       },
       "L1-13_negative_paths_covered": {
         "status": "UNVERIFIED",
-        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head 2cf39a9（且中间存在非簿记变更）"
+        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head 56cbca9（且中间存在非簿记变更）"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
         "status": "UNVERIFIED",
-        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head 2cf39a9（且中间存在非簿记变更）"
+        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head 56cbca9（且中间存在非簿记变更）"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
@@ -6138,7 +6138,7 @@
       "API.md / DOMAIN_MODEL.md / architecture-contract 计数 77 → 79"
     ]
   },
-  "next_execution_unit": "读 SCHEMA DELTA FINAL-3 裁决；SEO-3 PUBLIC API SECURITY AUDIT",
+  "next_execution_unit": "生成 create-only migration.sql（含 CHECK / trigger）+ prisma validate → C18 MIGRATION SQL AUDIT 送审",
   "customer_ui_commercialization": {
     "at": "2026-10-04T01:21:55.949Z",
     "authorization": "MSG-20261004-01（CUSTOMER UI/UX COMMERCIALIZATION — IMPLEMENTATION AUTHORIZED）",
@@ -6417,7 +6417,7 @@
   "audit_session_url": "https://chatgpt.com/c/6ac1cdf0-1ec8-83ec-8036-0e66fcf5c6b9",
   "ci_note": "2026-10-04 复核：全部内部单元 CLOSED 后，GitHub Actions 对各 head 均有 workflow run（0c6bb0f/ f0abd05 / cb04232 / c6ce17c / 3fad4d4 / c897737 / fd7e4bf / 400fe6e / 8f32fce = success；5c6888e / f640f8c / 84c3f99 运行中）。架构方某次查询未见 runs 属查询口径差异（commit statuses vs workflow runs），此处记录 run id 以便复核。",
   "c18_layer3": {
-    "at": "2026-10-04T06:58:55.482Z",
+    "at": "2026-10-04T07:06:33.216Z",
     "main_line": "P0 = C18 REAL CUSTOMS PROVIDER INTEGRATION",
     "matrix_doc": "docs/releases/C18-PROVIDER-INTEGRATION-MATRIX.md",
     "completed": [
@@ -6667,7 +6667,7 @@
         "Enums for relationship/status/lineage.event; DB CHECK for CROSSCLAIM_SAAS verified evidence"
       ]
     },
-    "schema_delta_status": "FINAL-3_SUBMITTED（A 残留三项已落地；B 已 PASS）",
+    "schema_delta_status": "PROPOSAL_v3_1 + schema.prisma landed（create-only migration 待生成；未 deploy）",
     "schema_delta_final2_comment_id": 5977432866,
     "schema_delta_final2_url": "https://github.com/anthonannabella-dev/crossclaim-ai/issues/2#issuecomment-5977432866",
     "schema_delta_final2_reviewed_head": "ca1a6b8",
@@ -6685,11 +6685,21 @@
     "schema_delta_final3_comment_id": 5977508825,
     "schema_delta_final3_url": "https://github.com/anthonannabella-dev/crossclaim-ai/issues/2#issuecomment-5977508825",
     "schema_delta_final3_reviewed_head": "de4ca17",
-    "schema_delta_final3_wakeup_delivery": "VERIFIED（marker 5977508825 可见 + 输入框已清空 + 生成中）"
+    "schema_delta_final3_wakeup_delivery": "VERIFIED（marker 5977508825 可见 + 输入框已清空 + 生成中）",
+    "msg_20261004_24": {
+      "verdict": "PASS WITH REVISE",
+      "reviewed_head": "de4ca17",
+      "archived_at": "2026-10-04T07:06:33.216Z",
+      "schema_delta_design": "CLOSED",
+      "schema_prisma_change": "AUTHORIZED",
+      "migration_sql_generation": "AUTHORIZED",
+      "migrate_deploy": "HOLD",
+      "sql_review": "REQUIRED_BEFORE_APPLY"
+    }
   },
-  "last_heartbeat_at": "2026-10-04T07:01:57.772Z",
-  "waiting_for_verdict": "C18 SCHEMA DELTA FINAL-3（GitHub comment 5977508825，reviewed HEAD de4ca17）",
-  "last_completed_unit": "seo-6-indexability-gate-integration（page plan）",
+  "last_heartbeat_at": "2026-10-04T07:06:33.216Z",
+  "waiting_for_verdict": "none（FINAL-3 = PASS WITH REVISE；SQL review 待下一轮送审）",
+  "last_completed_unit": "c18-schema-prisma-landing（models + proposal v3.1；未生成/未执行 migration）",
   "hold_external": true,
   "track_c_seo_p3": {
     "at": "2026-10-04T07:01:42.569Z",
@@ -6790,7 +6800,7 @@
   "LAST_COMPLETED_UNIT": "c18-schema-delta-a-residual（principalRef + immutable scope key + deterministic selection）",
   "NEXT_EXECUTION_UNIT": "读 SCHEMA DELTA FINAL-3 裁决 → PASS 后生成 migration SQL（不 migrate deploy）；并行 SEO-3 PUBLIC API SECURITY AUDIT",
   "CI_STATUS": "pending（543fb96）",
-  "WAITING_FOR_VERDICT": "C18 SCHEMA DELTA FINAL-3（GitHub comment 5977508825，reviewed HEAD de4ca17）",
+  "WAITING_FOR_VERDICT": "none（FINAL-3 = PASS WITH REVISE；SQL review 待下一轮送审）",
   "HOST_ACTION_REQUIRED": [
     "provider developer/partner account registration",
     "third-party commercial agreement acceptance",
