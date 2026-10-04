@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-10-04T15:51:40.250Z",
-  "acceptance_head": "0652709",
+  "generated_at": "2026-10-04T15:53:02.722Z",
+  "acceptance_head": "2198ec8",
   "protocol": "docs/releases/FINAL-ACCEPTANCE-PROTOCOL.md",
   "areas": [
     {
@@ -201,7 +201,12 @@
     "RSI-P1-04-builder-judge-separation",
     "RSI-P1-05-immutable-evidence",
     "RSI-P1-06-policy-engine",
-    "RSI-P1-07-e2e-demo"
+    "RSI-P1-07-e2e-demo",
+    "RSI-RT-01-runtime-entry",
+    "RSI-RT-02-supervisor-autostart",
+    "RSI-RT-03-health-state",
+    "RSI-RT-04-admin-autonomy-page",
+    "RSI-RT-05-kill-switch"
   ],
   "host_action_required": [
     "provider developer/partner account registration",

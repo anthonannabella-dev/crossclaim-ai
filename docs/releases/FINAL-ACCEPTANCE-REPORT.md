@@ -1,8 +1,8 @@
 # FINAL ACCEPTANCE REPORT（自动生成，请勿手改）
 
-- 生成时间：2026-10-04T15:51:41.124Z
-- 单一权威矩阵：`docs/releases/ACCEPTANCE-MATRIX.json` @0652709
-- acceptance HEAD：`0652709`
+- 生成时间：2026-10-04T15:53:03.545Z
+- 单一权威矩阵：`docs/releases/ACCEPTANCE-MATRIX.json` @2198ec8
+- acceptance HEAD：`2198ec8`
 - 协议：`docs/releases/FINAL-ACCEPTANCE-PROTOCOL.md`（三层验收；禁止自证）
 - 状态：CODE_COMPLETE=NO · INTEGRATION_COMPLETE=NO · REAL_VALIDATION_COMPLETE=NO · PRODUCTION_READY=NO
 - INTERNAL_READY=NO；AUTONOMOUS_INTERNAL_WORK=RUNNING
@@ -78,23 +78,28 @@
 - RSI-P1-05-immutable-evidence
 - RSI-P1-06-policy-engine
 - RSI-P1-07-e2e-demo
+- RSI-RT-01-runtime-entry
+- RSI-RT-02-supervisor-autostart
+- RSI-RT-03-health-state
+- RSI-RT-04-admin-autonomy-page
+- RSI-RT-05-kill-switch
 
 ### Layer 1 未通过检查（final-status 计算器输出；UNVERIFIED = 未绑定当前 HEAD 的实证）
 
-- L1-01_safe_continuation_queue_zero → false（open backlog items: 42）
-- L1-02_no_open_internal_items → false（open internal: c18-1-provider-integration-matrix,c18-2-provider-dto-schema,c18-3-sandbox-filing-provider,c18-4-provider-webhook-verification,c18-5-provider-idempotency-reconciliation,c18-6-provider-tenant-account-lineage,c18-7-provider-authorization-lifecycle,c18-8-provider-negative-path-e2e,seo-1-gap-audit-and-page-matrix,seo-2-recovery-rule-definition-v1,seo-3-public-checker-calculator,seo-4-recover-routes-and-locales,seo-5-technical-seo,seo-6-indexability-gate,seo-7-analytics-event-contract,seo-8-seo-contract-tests,SEO-4-STAGE-1-recover-route-skeleton,SEO-4-STAGE-2-recover-metadata,SEO-4-STAGE-3-recover-jsonld,SEO-4-STAGE-4-recover-sitemap-robots,SEO-4-STAGE-5-recover-content-internal-links,SEO-4-STAGE-6-seo-contract-tests,SEO-4-STAGE-7-recover-page-plan-facade,SEO-4-STAGE-8-recover-i18n-keys,SEO-4-BOUNDARY-recover-page-datasource,SEO-4-STAGE-9-web-recover-route-skeleton,SEO-4-STAGE-10-static-projection-contract,SEO-4-STAGE-11-static-projection-exporter,SEO-4-STAGE-12-rule-source-and-cli,SEO-4-STAGE-13-web-ssg-from-projection,SEO-4-STAGE-14-web-sitemap-robots,SEO-4-STAGE-15-projection-pipeline-guard,SEO-4-STAGE-16-web-wiring-contract-test,SEO-4-P0-route-shape-vs-canonical-mismatch,SEO-4-P0-projection-carries-canonical-path,RSI-P1-01-lifecycle-contract,RSI-P1-02-readonly-observer,RSI-P1-03-auto-task-generator,RSI-P1-04-builder-judge-separation,RSI-P1-05-immutable-evidence,RSI-P1-06-policy-engine,RSI-P1-07-e2e-demo）
+- L1-01_safe_continuation_queue_zero → false（open backlog items: 47）
+- L1-02_no_open_internal_items → false（open internal: c18-1-provider-integration-matrix,c18-2-provider-dto-schema,c18-3-sandbox-filing-provider,c18-4-provider-webhook-verification,c18-5-provider-idempotency-reconciliation,c18-6-provider-tenant-account-lineage,c18-7-provider-authorization-lifecycle,c18-8-provider-negative-path-e2e,seo-1-gap-audit-and-page-matrix,seo-2-recovery-rule-definition-v1,seo-3-public-checker-calculator,seo-4-recover-routes-and-locales,seo-5-technical-seo,seo-6-indexability-gate,seo-7-analytics-event-contract,seo-8-seo-contract-tests,SEO-4-STAGE-1-recover-route-skeleton,SEO-4-STAGE-2-recover-metadata,SEO-4-STAGE-3-recover-jsonld,SEO-4-STAGE-4-recover-sitemap-robots,SEO-4-STAGE-5-recover-content-internal-links,SEO-4-STAGE-6-seo-contract-tests,SEO-4-STAGE-7-recover-page-plan-facade,SEO-4-STAGE-8-recover-i18n-keys,SEO-4-BOUNDARY-recover-page-datasource,SEO-4-STAGE-9-web-recover-route-skeleton,SEO-4-STAGE-10-static-projection-contract,SEO-4-STAGE-11-static-projection-exporter,SEO-4-STAGE-12-rule-source-and-cli,SEO-4-STAGE-13-web-ssg-from-projection,SEO-4-STAGE-14-web-sitemap-robots,SEO-4-STAGE-15-projection-pipeline-guard,SEO-4-STAGE-16-web-wiring-contract-test,SEO-4-P0-route-shape-vs-canonical-mismatch,SEO-4-P0-projection-carries-canonical-path,RSI-P1-01-lifecycle-contract,RSI-P1-02-readonly-observer,RSI-P1-03-auto-task-generator,RSI-P1-04-builder-judge-separation,RSI-P1-05-immutable-evidence,RSI-P1-06-policy-engine,RSI-P1-07-e2e-demo,RSI-RT-01-runtime-entry,RSI-RT-02-supervisor-autostart,RSI-RT-03-health-state,RSI-RT-04-admin-autonomy-page,RSI-RT-05-kill-switch）
 - L1-03_no_open_markers → false（arch_pending=0 awaiting_verdict=false）
-- L1-04_full_ci_success_on_head → false（acceptance_head=0652709 ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364）
-- L1-05_pg_regression_passed → UNVERIFIED（pg_regression recorded at fd4c675 ≠ acceptance head 0652709（且中间存在非簿记变更））
-- L1-06_fresh_db_migration_passed → UNVERIFIED（fresh_db_migration recorded at bd87ffb ≠ acceptance head 0652709（且中间存在非簿记变更））
-- L1-07_api_typecheck_passed → UNVERIFIED（typecheck_api recorded at bd87ffb ≠ acceptance head 0652709（且中间存在非簿记变更））
-- L1-08_web_typecheck_build_passed → UNVERIFIED（typecheck_web recorded at bd87ffb ≠ acceptance head 0652709（且中间存在非簿记变更））
-- L1-09_no_skipped_critical_tests → UNVERIFIED（tests_no_skipped recorded at bd87ffb ≠ acceptance head 0652709（且中间存在非簿记变更））
+- L1-04_full_ci_success_on_head → false（acceptance_head=2198ec8 ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364）
+- L1-05_pg_regression_passed → UNVERIFIED（pg_regression recorded at fd4c675 ≠ acceptance head 2198ec8（且中间存在非簿记变更））
+- L1-06_fresh_db_migration_passed → UNVERIFIED（fresh_db_migration recorded at bd87ffb ≠ acceptance head 2198ec8（且中间存在非簿记变更））
+- L1-07_api_typecheck_passed → UNVERIFIED（typecheck_api recorded at bd87ffb ≠ acceptance head 2198ec8（且中间存在非簿记变更））
+- L1-08_web_typecheck_build_passed → UNVERIFIED（typecheck_web recorded at bd87ffb ≠ acceptance head 2198ec8（且中间存在非簿记变更））
+- L1-09_no_skipped_critical_tests → UNVERIFIED（tests_no_skipped recorded at bd87ffb ≠ acceptance head 2198ec8（且中间存在非簿记变更））
 - L1-10_git_working_tree_clean → false（dirty entries: 3）
-- L1-11_docs_state_consistent → UNVERIFIED（docs_sync recorded at bd87ffb ≠ acceptance head 0652709（且中间存在非簿记变更））
-- L1-12_schema_invariants_verified → UNVERIFIED（schema_invariants recorded at bd87ffb ≠ acceptance head 0652709（且中间存在非簿记变更））
-- L1-13_negative_paths_covered → UNVERIFIED（negative_paths recorded at bd87ffb ≠ acceptance head 0652709（且中间存在非簿记变更））
-- L1-14_real_pg_e2e_not_mock_only → UNVERIFIED（pg_e2e_real recorded at bd87ffb ≠ acceptance head 0652709（且中间存在非簿记变更））
+- L1-11_docs_state_consistent → UNVERIFIED（docs_sync recorded at bd87ffb ≠ acceptance head 2198ec8（且中间存在非簿记变更））
+- L1-12_schema_invariants_verified → UNVERIFIED（schema_invariants recorded at bd87ffb ≠ acceptance head 2198ec8（且中间存在非簿记变更））
+- L1-13_negative_paths_covered → UNVERIFIED（negative_paths recorded at bd87ffb ≠ acceptance head 2198ec8（且中间存在非簿记变更））
+- L1-14_real_pg_e2e_not_mock_only → UNVERIFIED（pg_e2e_real recorded at bd87ffb ≠ acceptance head 2198ec8（且中间存在非簿记变更））
 
 ## 3. 外部 / 宿主依赖（不得自证完成）
 
