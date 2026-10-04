@@ -1,82 +1,109 @@
-# C18 — SCHEMA DELTA PROPOSAL（ProviderTenantBinding 持久化 + WebhookReplayClaim 持久化）
+# C18 — SCHEMA DELTA PROPOSAL v2（ProviderTenantBinding 持久化 + WebhookReplayClaim 持久化）
 
-> 状态：**PROPOSAL / NOT APPLIED**。本文件只是提案，**没有**写任何 migration、没有改 `schema.prisma`。
-> 依据 MSG-20261004-16 / -17 / -18 的硬停条件：新 Schema / migration 必须先送 Schema Delta 审计，通过后才允许落库
-> （“先送 Schema Delta，再 migration；不要先建表再审”）。
-> 归属：LAYER 3 / P0 = C18 REAL CUSTOMS PROVIDER INTEGRATION（Gate 7 / gate/7-commercial-validation）。
+> 状态：**REVISED PROPOSAL / NOT APPLIED**。本文件只是提案 v2，**没有**改 `schema.prisma`、**没有**写 migration、**没有**跑 `migrate deploy`。
+> v2 依据 MSG-20261004-22 的四条最小必修 + 两条建议（enum、DB CHECK）修订；`C18_INTERNAL_SKELETON = CLOSED` 不变，`MIGRATION / SCHEMA_PRISMA_CHANGE / MIGRATE_DEPLOY = HOLD`。
 
-## 0. 为什么需要这两张表
+## 0. 为什么是纯新增
 
-当前 C18 离线骨架把两件事做成了**契约 + 端口**，但没有持久化：
+两张表都只服务 C18 生产门槛（`server-derived provider 租户绑定 + 代客提交权证据`、`webhook replay atomic durable claim`），当前只有契约 + 端口 + 进程内参考实现：
 
-| 能力 | 现有代码（已 PASS / 待 Final） | 缺的持久化 |
+| 能力 | 现有代码 | 缺的持久化 |
 | --- | --- | --- |
-| server-derived provider 租户绑定（含代客提交权证据） | `apps/api/src/services/customs/customs-provider-tenant-binding.ts` | `CustomsProviderTenantBinding` |
-| webhook 重放的 atomic durable claim | `apps/api/src/services/customs/customs-provider-webhook-replay-claim.ts` | `CustomsProviderWebhookReplayClaim` |
+| provider 租户绑定 + 关系证据 | `apps/api/src/services/customs/customs-provider-tenant-binding.ts` | `CustomsProviderTenantBinding`（+ lineage） |
+| webhook 重放 atomic durable claim | `apps/api/src/services/customs/customs-provider-webhook-replay-claim.ts` | `CustomsProviderWebhookReplayClaim` |
 
-两者都是 **Production Enablement 硬门槛**：前者决定“我们是否有权替这位客户向 provider 提交”，后者决定“同一个 webhook 会不会被处理两次”。
-它们不影响内部 golden path，也不改变任何既有表。
+## 1. v2 相对 v1 的修订（对应 MSG-20261004-22）
 
-## 1. 设计原则（与既有架构一致）
+| # | v1 | v2 |
+| --- | --- | --- |
+| ① | `@@unique([organizationId, providerId])` 只到 providerId | 引入 provider-neutral **`bindingScopeKey`**，唯一键改为 `@@unique([organizationId, providerId, bindingScopeKey])`，不再锁死"同一 provider 仅一个账号" |
+| ② | 无 tenant-owned 规范化 | A 表补 `organizationId` + `Organization` relation + `@@unique([organizationId, id])`；lineage 显式带 `organizationId` 并由 FK/tenant-integrity 保证与 binding 同租户 |
+| ③ | lineage 只有 event/actor/note/occurredAt/sourceRef | lineage 增加**安全 canonical snapshot**（不含 secret）+ `snapshotDigest`，可重建历史；append-only 由 DB 真正 enforce（UPDATE/DELETE reject）；current 更新与 lineage append 同事务 |
+| ④ | ReplayClaim 有 `outcome` 状态机 | **删除 `outcome`**，只做 immutable replay lock（`id/providerId/deliveryId/claimedAt`）；retention 保留但**不硬编码 180d**（真实 Provider 选定前 `AUTO_PURGE = OFF`） |
+| 建议 | String 真值、无 DB CHECK | `relationship` / `status` / lineage `event` 改为 Prisma enum；`CROSSCLAIM_SAAS ⇒ 关系证据非空` 下沉 DB CHECK |
 
-1. **纯新增**：只 add model / add index / add enum；不修改、不重命名、不删除任何既有表或列。
-2. **租户隔离**：所有业务查询一律带 `organizationId`；跨租户读取必须不可能（沿用 C17 / CA 系列口径）。
-3. **append-only**：授权 lineage 与 webhook claim 都是“只追加”语义，不做就地更新历史事实。
-4. **server-derived**：`verifiedAt` / `observedAt` / `contentDigest` / claim 时间等一律服务端计算，客户端自报即拒绝（现有代码已经这样做）。
-5. **opaque 引用**：evidence / credential / source 一律只存 opaque 引用，绝不存合同正文、凭据本体、原始 webhook payload。
-6. **无 PII**：不存 IP / UA / 邮箱 / 电话；SEO-3 的限流保留哈希键（若未来也要持久化，同样只存哈希）。
+## 2. 枚举（Prisma enum，避免非法真值入库）
 
-## 2. 提案 A — `CustomsProviderTenantBinding`
+```prisma
+enum CustomsProviderRelationship { CROSSCLAIM_SAAS  BROKER_OF_RECORD  CLIENT_DIRECT  REFERRAL_PARTNER }
+enum CustomsProviderBindingStatus { ACTIVE  PENDING_VERIFICATION  SUSPENDED  REVOKED }
+enum CustomsProviderBindingEvent { BOUND  REBOUND  REAUTH_REQUIRED  SUSPENDED  REVOKED  RESTORED }
+```
+
+## 3. 提案 A — `CustomsProviderTenantBinding`（v2）
 
 ```prisma
 model CustomsProviderTenantBinding {
   id                      String   @id @default(uuid())
   organizationId          String
-  providerId              String   // provider-neutral id，与 C15 CustomsFilingProvider.providerId 同义
-  providerTenantRef       String   // server-derived，opaque
-  providerAccountRef      String   // server-derived，opaque（broker 账号 / ABI filer code 引用）
-  relationship            String   // CROSSCLAIM_SAAS | BROKER_OF_RECORD | CLIENT_DIRECT | REFERRAL_PARTNER
-  relationshipEvidenceRef String?  // opaque；代客提交权必须有值
-  relationshipVerifiedAt  DateTime? // 该 relationship 的验证时间；未验证 = null
-  jurisdictionScope       String[] // ['*'] 或 ISO-3166 alpha-2
-  status                  String   // ACTIVE | PENDING_VERIFICATION | SUSPENDED | REVOKED
-  verifiedAt              DateTime? // provider/账号绑定本身的验证时间
-  credentialReference     String?  // 只允许是引用（未来接 Secret Manager / KMS key id）
+  organization            Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  providerId              String
+  providerTenantRef       String
+  providerAccountRef      String
+  /// provider-neutral 绑定作用域键：由 (principalRef/IOR, jurisdiction, account hint) 稳定派生，
+  /// 真实 Provider 选定前不绑定任何 provider 专有字段。
+  bindingScopeKey         String
+  relationship            CustomsProviderRelationship
+  relationshipEvidenceRef String?
+  relationshipVerifiedAt  DateTime?
+  jurisdictionScope       String[]
+  status                  CustomsProviderBindingStatus
+  verifiedAt              DateTime?
+  credentialReference     String?
   createdAt               DateTime @default(now())
   updatedAt               DateTime @updatedAt
 
   lineage CustomsProviderTenantBindingLineage[]
 
-  @@unique([organizationId, providerId])
+  @@unique([organizationId, id])
+  @@unique([organizationId, providerId, bindingScopeKey])
   @@index([organizationId, providerId, status])
-}
-
-model CustomsProviderTenantBindingLineage {
-  id          String   @id @default(uuid())
-  bindingId   String
-  event       String   // BOUND | REBOUND | REAUTH_REQUIRED | SUSPENDED | REVOKED | RESTORED
-  actorRef    String   // opaque
-  note        String?
-  occurredAt  DateTime
-  recordedAt  DateTime @default(now())
-  sourceRef   String?  // opaque（webhook delivery id / 人工工单号）
-
-  binding CustomsProviderTenantBinding @relation(fields: [bindingId], references: [id], onDelete: Restrict)
-
-  @@index([bindingId, occurredAt])
+  @@index([organizationId, bindingScopeKey])
 }
 ```
 
-关键不变量（与代码一致，落库后由唯一约束 + 事务保证）：
+DB 级 CHECK（migration 手写 SQL 部分）：
 
-- `(organizationId, providerId)` 唯一 → 一个租户对一个 provider 只有一条**当前**绑定；
-  历史变化由 lineage 表达，不靠多行绑定。
-- `relationship = 'CROSSCLAIM_SAAS'` 时，代码要求 `relationshipVerifiedAt != null` 且 `relationshipEvidenceRef` 是合法 opaque 引用，
-  否则 fail-closed（`RELATIONSHIP_NOT_VERIFIED`）。数据库层建议加 **CHECK**（若采用原生迁移）或由服务层强校验 + 审计测试覆盖。
-- `status != 'ACTIVE'` → 一律 fail-closed，不构造任何提交请求。
-- `credentialReference` 只存引用，**永不**存 secret 值。
+```sql
+CHECK (relationship <> 'CROSSCLAIM_SAAS'
+       OR (relationship_evidence_ref IS NOT NULL AND relationship_verified_at IS NOT NULL))
+```
 
-## 3. 提案 B — `CustomsProviderWebhookReplayClaim`
+语义：**一个租户 + 一个 provider + 一个 binding scope** 才唯一；同一客户在同一 filing provider 下的不同 IOR / 法人 / 辖区可以有各自的 binding，不被锁死。
+
+## 4. 提案 A2 — `CustomsProviderTenantBindingLineage`（v2，可重建历史）
+
+```prisma
+model CustomsProviderTenantBindingLineage {
+  id              String   @id @default(uuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  bindingId       String
+  binding         CustomsProviderTenantBinding @relation(fields: [bindingId], references: [id], onDelete: Restrict)
+  event           CustomsProviderBindingEvent
+  actorRef        String
+  note            String?
+  /// 该事件后的安全 canonical 绑定快照（不含任何 secret / 凭据本体 / 合同正文）：
+  /// { providerTenantRef, providerAccountRef, bindingScopeKey, relationship,
+  ///   relationshipEvidenceRef, relationshipVerifiedAt, jurisdictionScope, status, verifiedAt }
+  snapshot        Json
+  snapshotDigest  String   // sha256(canonical(snapshot))
+  occurredAt      DateTime
+  recordedAt      DateTime @default(now())
+  sourceRef       String?
+
+  @@index([organizationId, bindingId, occurredAt])
+}
+```
+
+强制项（migration 必须真正实现，不只在文档里声明）：
+
+1. **append-only**：对 lineage 表 revoke `UPDATE` / `DELETE`（或等价 trigger：`UPDATE`/`DELETE` 直接 `RAISE EXCEPTION`）。
+2. **tenant integrity**：`lineage.organizationId` 必须等于其 binding 的 `organizationId`（复合 FK 或 trigger 校验）。
+3. **同事务**：current binding 的更新与 lineage append 必须在同一事务内完成（服务层 + 测试保证）。
+4. 服务层写入前计算 `snapshotDigest`（canonical key-sorted SHA-256，与 C18-8 `providerSubmissionPayloadDigest` 同一 canonical 规则）。
+
+## 5. 提案 B — `CustomsProviderWebhookReplayClaim`（v2，immutable replay lock）
 
 ```prisma
 model CustomsProviderWebhookReplayClaim {
@@ -84,41 +111,49 @@ model CustomsProviderWebhookReplayClaim {
   providerId  String
   deliveryId  String
   claimedAt   DateTime @default(now())
-  outcome     String   @default("CLAIMED") // CLAIMED | PROCESSED | REJECTED（终态仅用于取证）
 
   @@unique([providerId, deliveryId])
   @@index([claimedAt])
 }
 ```
 
-关键不变量：
+- 唯一职责：**这个 deliveryId 有没有被领取过**。没有 `outcome`、没有状态机（避免"防重锁兼状态机"和 append-only 声明自相矛盾）。
+- 领取语义：`INSERT ... ON CONFLICT DO NOTHING`（或捕获 P2002）后按"是否新建"判定唯一赢家；并发相同 webhook 只有一个 `CLAIMED`，另一个 `REPLAY_DETECTED`。
+- **先验签再 claim**：坏签名绝不 INSERT（否则攻击者可用坏签名烧掉合法 deliveryId）。
+- 不存 raw body / payload / 签名。
+- **保留策略**：`retention >= provider 官方最大 redelivery/replay window + CrossClaim 对账/事故窗口`；真实 Provider 选定前 **`AUTO_PURGE = OFF`**（记录极小，早删 replay key 的风险远大于多存）；选定后再定 180d/365d 并补 cleanup test。`@@index([claimedAt])` 保留，用于未来 cleanup。
 
-- `(providerId, deliveryId)` 唯一约束 = **atomic durable claim** 的落地点。
-  实现方式：`INSERT ... ON CONFLICT DO NOTHING`（或 Prisma 捕获 P2002）后以“受影响行数 / 是否新建”判定**唯一赢家**；
-  并发两个相同 webhook 时只有一个拿到 `CLAIMED`，另一个必须得到 `ALREADY_CLAIMED` → 返回 `REPLAY_DETECTED`。
-- **先验签再 claim**：坏签名绝不写入 claim 行（否则攻击者可用坏签名烧掉合法 deliveryId）。
-- 只存 `providerId` / `deliveryId` / 时间 / 取证状态；**不存 raw body、不存 payload、不存签名**。
-- 保留策略：建议按 `claimedAt` 分区或定期清理（例如 180 天），但保留窗口必须 ≥ provider 官方重投窗口 + 对账窗口。
+## 6. Migration 执行顺序（v2，仍 HOLD）
 
-## 4. 迁移与回滚策略
+```
+Revised Schema Delta（本文件）
+→ ARCHITECT PASS
+→ 修改 schema.prisma
+→ 生成 migration SQL
+→ 人工 review SQL（含 CHECK / append-only enforce / tenant integrity）
+→ prisma validate
+→ fresh DB migration
+→ Prisma stores 替换进程内实现
+→ 真实 PostgreSQL concurrency / tenant / append-only E2E
+→ C18 Production Persistence Checkpoint
+```
 
-- 类型：**additive only**（纯新增表 + 索引 + 外键），无数据回填、无 drop、无列改名。
-- 影响面：现有 71 个 migration、82 个 Prisma model 均不受影响；C17 `CustomsSubmissionAttempt*` 不变。
-- 顺序：本提案 → Schema Delta 审计 → 通过后写 migration（`prisma migrate dev` 生成 SQL 并 review）→ 落库 → 服务层接线（把端口实现从 in-memory 换成 Prisma store）→ 回归。
-- 回滚：删除两张新表即可（无既有表依赖）；但一旦开始写入真实 claim / 绑定，回滚需先确认没有在途 webhook。
-- 生产门槛不变：迁移通过**不等于**开启真实 transport / 真实 filing / 外写；这些仍由 HOST_ACTION_REQUIRED 控制。
+配套验收（migration PASS 后必须补）：
 
-## 5. 明确的“不做”
+- B：两个独立 PG 连接并发同一 `(providerId, deliveryId)` → 恰好一个 `CLAIMED` + 一个 `ALREADY_CLAIMED`。
+- A：cross-tenant reject；非法 relationship 状态 reject；`CROSSCLAIM_SAAS` 缺证据在 **DB 层** reject；并发 rebind 不丢 lineage；lineage `UPDATE`/`DELETE` 被拒绝。
 
-- 不新增任何 provider-specific 字段（不把某个 broker 的字段写死进核心表）。
-- 不把 `RuleVersion` 的 SEO 契约下沉成表（SEO-2/3 仍走现有 JSON + typed codec）。
-- 不引入 secret 存储；`credentialReference` 保持引用语义。
-- 不修改 C17 的 ledger 不变量，也不新增第二套 submission root。
-- 不在本批写 migration，不跑 `migrate deploy`。
+## 7. 明确的"不做"
 
-## 6. 送审问题（Schema Delta 审计）
+- 不修改既有 71 个 migration / 82 个 model；不动 C17 ledger 与 `CustomsSubmissionAttempt*`。
+- 不引入 provider 专有字段；`bindingscope` 在真实 Provider 选定前保持 provider-neutral。
+- 不存 secret / 凭据本体 / 合同正文 / raw webhook payload。
+- 不把 SEO 契约（RuleVersion）下沉成表。
+- 本轮**只改提案**；不写 migration、不改 `schema.prisma`、不跑 `migrate deploy`。
 
-1. 两张表的字段与唯一约束是否足够支撑 C18 生产门槛？是否需要 `relationship` 的 CHECK 约束（CROSSCLAIM_SAAS ⇒ verified 字段非空）？
-2. `CustomsProviderTenantBinding` 采用「一租户一 provider 一条当前绑定 + lineage 表」是否优于「多行有效窗口」？
-3. `CustomsProviderWebhookReplayClaim` 的保留策略与 `outcome` 字段是否有必要，还是保持最小（providerId + deliveryId + claimedAt）？
-4. 是否同意迁移顺序：本提案 → 审计 → migration → 服务层切换；以及“迁移通过 ≠ 开外写”的边界表述？
+## 8. 送审问题（C18 SCHEMA DELTA FINAL-2）
+
+1. `bindingScopeKey` 的派生口径（principalRef/IOR + jurisdiction + account hint）是否足够 provider-neutral、且足以支撑"同客户多 IOR/多辖区多账号"？（派生规则的实现细节将随后写进 Schema Delta FINAL-2 的实现说明。）
+2. lineage 的 snapshot 字段集是否完整到"仅靠 lineage 即可重建任一时点的绑定真值"？是否还需要显式 `previousSnapshot`？
+3. B 删除 `outcome` 后，webhook 处理生命周期若将来需要，是否同意另建 append-only fact（而不是复活 outcome）？
+4. append-only 的实现方式选择：revoke DML 权限 vs trigger 拒绝，哪一种更符合本仓库既有迁移风格？

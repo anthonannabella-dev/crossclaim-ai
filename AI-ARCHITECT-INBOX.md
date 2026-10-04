@@ -132191,3 +132191,328 @@ C18 = HOLD_EXTERNAL
 
 本次 exact HEAD 3d8e0a1 的 GitHub 查询仍返回空 workflow/status，所以我确认的是代码与测试定义本身满足架构验收；Codex 报告的 27/27 与 tsc EXIT=0 仍视为送审证据，不表述为我独立确认了该 HEAD 的 GitHub CI SUCCESS。
 ```
+
+### [MSG-20261004-22] ARCHITECT VERDICT — C18 SCHEMA DELTA A/B = REVISE（A = REVISE、B = PASS_WITH_REVISE；MIGRATION / SCHEMA_PRISMA_CHANGE / MIGRATE_DEPLOY = HOLD）（reviewed proposal HEAD = 2b12d45；四条最小必修：① @@unique([organizationId, providerId]) 过于严格，会锁死「同客户同 provider 不同 IOR/法人/辖区」的多账号未来，须引入稳定 provider-neutral binding scope 并纳入唯一键；② A/Lineage 按仓库 tenant-owned 规范补 organizationId + Organization relation + @@unique([organizationId, id])，lineage 显式带 organizationId 并由 FK/tenant-integrity 保证与 binding 同租户；③ lineage 必须能重建绑定历史（安全 canonical snapshot + snapshotDigest），且 append-only 要由 DB 真正 enforce（UPDATE/DELETE reject），current 更新与 lineage append 同事务 + 并发测试；④ B 删除 outcome（ReplayClaim 只做 immutable replay lock：id/providerId/deliveryId/claimedAt），retention 保留但不硬编码 180d（AUTO_PURGE=OFF）；另建议 relationship/status/lineage.event 用 Prisma enum，CROSSCLAIM_SAAS 的 verified 条件下沉 DB CHECK；C18_INTERNAL_SKELETON = CLOSED 不变；SEO-3 不受影响可并行）
+
+```text
+ARCHITECT VERDICT：REVISE
+
+我按 HEAD = 2b12d45（完整 SHA 2b12d4521bab3b41e780dd5aa8627f955ffb7e1b）重新审了 docs/releases/C18-SCHEMA-DELTA-PROPOSAL.md。方向正确，先提案 → 审计 → migration 的纪律也完全正确；但在真正生成 migration 前，有几处 Schema 级问题必须收紧，否则一旦落库会比现在难改。
+
+① A 表：字段方向对，但唯一键和租户完整性需要 REVISE
+
+CROSSCLAIM_SAAS 的 verified 条件，我建议必须下沉数据库 CHECK，不能只靠服务层：
+
+SQL
+CHECK (
+  relationship <> 'CROSSCLAIM_SAAS'
+  OR (
+    relationshipEvidenceRef IS NOT NULL
+    AND relationshipVerifiedAt IS NOT NULL
+  )
+)
+
+opaque 格式仍可由应用层严格验证，不必把复杂 regex 全塞 DB。但“代客提交权证据不能为空”属于商业/合规不变量，值得 DB 双保险。
+
+同时建议把这些 String 改成 Prisma enum：
+
+纯文本
+relationship
+status
+lineage.event
+
+避免数据库接受诸如 ACTVE、CROSSCLAIM_SASS 这种非法真值。
+
+更重要的是，现在：
+
+prisma
+@@unique([organizationId, providerId])
+
+过于严格。
+
+它永久规定：
+
+一个 CrossClaim 租户在同一个真实 Provider 下只能拥有一个 provider account/binding。
+
+这会堵死以后非常正常的：
+
+纯文本
+同一客户
+→ 同一个 filing provider
+→ 不同 IOR / 法人
+→ 不同 provider account
+→ 不同国家/辖区
+
+而仓库本身对平台账户已经采用了多账户 provenance 模型，因此不建议在 Customs production schema 反过来锁死成“一 provider 仅一账号”。
+
+FINAL-5 不需要马上设计一个巨大模型，但 revised proposal 至少应该引入一个稳定的 binding scope，例如：
+
+纯文本
+bindingKey / providerConnectionRef / principalRef
+
+然后唯一性变为类似：
+
+纯文本
+organizationId
++ providerId
++ binding scope
+
+而不是只到 providerId。
+
+具体 scope 最好在真实 Provider 选定前保持 provider-neutral。
+
+另外，按照当前 schema.prisma 的整体 tenant-owned 规则，A 表还应加入：
+
+prisma
+organization Organization @relation(...)
+@@unique([organizationId, id])
+
+Lineage 也建议显式保存 organizationId，并通过 FK/tenant-integrity trigger 保证：
+
+纯文本
+lineage.organizationId
+==
+binding.organizationId
+
+不能只依赖 bindingId 间接隔离。
+
+② 「当前绑定 + lineage」可以保留，但当前 lineage 不足以表达历史
+
+我不要求改成多行 effective-window 模型。
+
+对于你们当前架构：
+
+纯文本
+一条 current projection
++
+append-only lineage
+
+实际上比每次查询多个历史版本简单，适合 CrossClaim。
+
+所以方向：
+
+PASS。
+
+但是当前 lineage 只有：
+
+纯文本
+event
+actorRef
+note
+occurredAt
+sourceRef
+
+这只能知道：
+
+“某天发生过 REBOUND”
+
+却无法知道：
+
+“REBOUND 前后的 providerTenantRef / accountRef / jurisdiction / relationship 到底是什么”。
+
+如果 current row 被更新：
+
+纯文本
+providerAccountRef A → B
+jurisdictionScope US → US,CA
+relationship CLIENT_DIRECT → CROSSCLAIM_SAAS
+
+过几个月之后，现有 lineage 无法重建历史真值。
+
+所以在 migration 前必须二选一：
+
+lineage 保存安全的 canonical binding snapshot；或
+lineage 保存足够的 previous/new state 字段。
+
+我更推荐 snapshot，例如安全的结构化 JSON，不保存 secret：
+
+纯文本
+providerTenantRef
+providerAccountRef
+binding scope
+relationship
+relationshipEvidenceRef
+relationshipVerifiedAt
+jurisdictionScope
+status
+verifiedAt
+
+并可附：
+
+纯文本
+snapshotDigest
+
+然后 DB migration 必须真正实现 append-only：
+
+纯文本
+UPDATE lineage → reject
+DELETE lineage → reject
+
+不能只在文档中写“append-only”。
+
+Current binding 更新与 lineage append 应在同一事务内完成，并补并发测试。
+
+因此我的答案是：
+
+当前 row + 完整 immutable lineage 优于多行有效窗口；当前这个“瘦 lineage”还不够。
+
+③ Webhook ReplayClaim：唯一键正确，但我建议删掉 outcome
+
+B 的核心设计：
+
+prisma
+@@unique([providerId, deliveryId])
+
+是正确的。
+
+它正好满足：
+
+纯文本
+验签成功
+→ INSERT
+→ UNIQUE 冲突
+→ 唯一赢家
+
+以及：
+
+纯文本
+bad signature
+→ never insert
+
+这部分 PASS。
+
+但是：
+
+纯文本
+outcome = CLAIMED | PROCESSED | REJECTED
+
+我建议 删掉。
+
+因为 ReplayClaim 的唯一职责应该是：
+
+“这个 deliveryId 有没有被领取过？”
+
+最小表足够：
+
+纯文本
+id
+providerId
+deliveryId
+claimedAt
+
+如果之后把：
+
+纯文本
+CLAIMED → PROCESSED
+
+通过 UPDATE 修改 outcome，就直接和提案自己声明的“claim 是 append-only”冲突。
+
+如果未来确实需要 webhook processing lifecycle，另建 append-only fact/event，或走审计事实；不要让防重锁同时承担状态机职责。
+
+所以：
+
+纯文本
+WebhookReplayClaim = immutable replay lock
+
+最干净。
+
+保留策略
+
+Retention policy 必须有，但现在不要把 180 天写死成产品真值。
+
+生产规则应该是：
+
+纯文本
+retention
+>= provider 官方最大 redelivery/replay window
++ CrossClaim reconciliation/incident window
+
+在真实 Provider 尚未选定、官方文档尚未验证前，我甚至建议：
+
+纯文本
+AUTO_PURGE = OFF
+
+因为每条记录很小，保守长期保存的风险远低于过早删掉 replay key 后再次处理旧 webhook。
+
+等真实 Provider 选定后，再确定例如：
+
+纯文本
+180d / 365d
+
+并补 cleanup test。
+
+@@index([claimedAt]) 保留即可，正好服务未来 retention cleanup。
+
+④ Migration 顺序：批准，但要在 Revised Schema Delta PASS 后
+
+这个顺序我完全同意：
+
+纯文本
+Revised Schema Delta
+↓
+ARCHITECT PASS
+↓
+修改 schema.prisma
+↓
+生成 migration SQL
+↓
+人工 review SQL
+↓
+prisma validate
+↓
+fresh DB migration
+↓
+Prisma stores
+↓
+真实 PostgreSQL concurrency / tenant / append-only E2E
+↓
+C18 Production Persistence Checkpoint
+
+特别是 B 必须有真实两个独立 PG connection 的并发验收：
+
+纯文本
+same providerId + deliveryId
+并发 INSERT
+→ exactly one CLAIMED
+→ exactly one ALREADY_CLAIMED
+
+A 则至少补：
+
+纯文本
+cross-tenant reject
+invalid relationship state reject
+CROSSCLAIM_SAAS without evidence reject at DB
+concurrent rebind no lost lineage
+lineage UPDATE/DELETE rejected
+本轮最小必修
+
+不需要大改，只需 revised proposal 收掉这 4 点：
+
+@@unique([organizationId, providerId]) 不要锁死未来多账号；增加稳定 binding scope。
+A/Lineage 按仓库 tenant-owned 规范补 organizationId、Organization relation、tenant-integrity。
+lineage 必须能重建绑定历史，并由 DB 真正 enforce append-only。
+ReplayClaim 删除 outcome；保持 immutable 最小 replay lock。Retention policy 保留，但暂不硬编码 180d。
+
+因此本轮状态：
+
+纯文本
+VERDICT = REVISE
+
+SCHEMA_DELTA_A = REVISE
+SCHEMA_DELTA_B = PASS_WITH_REVISE
+MIGRATION = HOLD
+SCHEMA_PRISMA_CHANGE = HOLD
+MIGRATE_DEPLOY = HOLD
+
+C18_INTERNAL_SKELETON = CLOSED
+
+REAL_TRANSPORT = HOLD
+EXTERNAL_WRITE = HOLD
+PAYMENT = HOLD
+PRODUCTION_ENABLEMENT = HOLD
+C18 = HOLD_EXTERNAL
+
+SEO-3 不受影响，可以继续并行推进。
+
+这轮只要改提案，不要写 migration。下一轮直接送 C18 SCHEMA DELTA FINAL-2；通过后就可以正式生成 SQL migration。
+```
