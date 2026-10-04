@@ -1425,6 +1425,56 @@
       "scope": "需要 Postgres 表 + lease；新增表属 Schema Delta，须先送审再落 migration",
       "acceptance_criteria": "Test C/F 在真实 PG 上通过；同一任务 reboot 后不重复创建",
       "status": "BLOCKED_ON_SCHEMA_DELTA_AUDIT"
+    },
+    {
+      "id": "RSI-COST-01-policy-core",
+      "priority": "P0",
+      "source_backlog_id": "OWNER 任务：AI Model Invocation / Cost Control Layer",
+      "title": "RSI 成本控制：三级执行策略 + 预算 + Incident 熔断 + ModelRouterPort（已实现）",
+      "scope": "RSI 长期运行但不得持续消耗 token：确定性优先、分级、预算与熔断",
+      "acceptance_criteria": "对应实现/用例落地；api tsc 0；不新增 schema（如需另送 Schema Delta）",
+      "status": "IMPLEMENTED_PENDING_CI",
+      "evidence": "vitest rsi-cost-policy 5/5；api tsc 0",
+      "artifacts": [
+        "apps/api/src/services/autonomy/rsi-cost-policy.ts",
+        "apps/api/src/__tests__/rsi-cost-policy.test.ts"
+      ]
+    },
+    {
+      "id": "RSI-COST-02-model-router-adapter",
+      "priority": "P0",
+      "source_backlog_id": "OWNER 任务：AI Model Invocation / Cost Control Layer",
+      "title": "Model Router 适配（DeepSeek/Qwen 低成本→强模型升级；凭据只在 Router 侧）",
+      "scope": "RSI 长期运行但不得持续消耗 token：确定性优先、分级、预算与熔断",
+      "acceptance_criteria": "对应实现/用例落地；api tsc 0；不新增 schema（如需另送 Schema Delta）",
+      "status": "READY"
+    },
+    {
+      "id": "RSI-COST-03-call-ledger",
+      "priority": "P0",
+      "source_backlog_id": "OWNER 任务：AI Model Invocation / Cost Control Layer",
+      "title": "AI 调用记录台账（incident/task/provider/model/tokens/cost/latency/result/retry；禁 secret）",
+      "scope": "RSI 长期运行但不得持续消耗 token：确定性优先、分级、预算与熔断",
+      "acceptance_criteria": "对应实现/用例落地；api tsc 0；不新增 schema（如需另送 Schema Delta）",
+      "status": "READY"
+    },
+    {
+      "id": "RSI-COST-04-admin-cost-panel",
+      "priority": "P0",
+      "source_backlog_id": "OWNER 任务：AI Model Invocation / Cost Control Layer",
+      "title": "/admin/autonomy 成本面板（today/month：incidents、rule-resolved、low/strong 调用、tokens、cost、budget remaining）",
+      "scope": "RSI 长期运行但不得持续消耗 token：确定性优先、分级、预算与熔断",
+      "acceptance_criteria": "对应实现/用例落地；api tsc 0；不新增 schema（如需另送 Schema Delta）",
+      "status": "READY"
+    },
+    {
+      "id": "RSI-COST-05-cost-e2e",
+      "priority": "P0",
+      "source_backlog_id": "OWNER 任务：AI Model Invocation / Cost Control Layer",
+      "title": "成本 E2E Test A–E（规则零 LLM / low-cost / 升级 strong / 预算熔断 / 熔断不递归）",
+      "scope": "RSI 长期运行但不得持续消耗 token：确定性优先、分级、预算与熔断",
+      "acceptance_criteria": "对应实现/用例落地；api tsc 0；不新增 schema（如需另送 Schema Delta）",
+      "status": "READY"
     }
   ],
   "authorization_note": "MSG-20261003-133 Q3：dispatcher 获授权自动扩 backlog 并执行安全单元（契约/已批准 D1–D3 Schema/append-only 持久化/deterministic normalization/qualification·evidence·package/测试/文档/fixture/只读 HTTP/只读 reconciliation projection）；遇到未批准 Schema、EXTERNAL_WRITE Action Guard、真实 adapter/webhook、submission、真实资金语义写入、生产 credential、收费时必须停该分支并重新送审。 HOST 2026-10-04（CONTINUOUS EXECUTION + CUSTOMS AUTHORIZATION + CHATGPT AUDIT LOOP）：UI-6…UI-8 与 CA-2…CA-6 已登记为可执行队列；Schema/Security/Authorization 边界项自动进入 ChatGPT Audit Loop（AUDIT-BRIDGE.md，不新建协议）。"

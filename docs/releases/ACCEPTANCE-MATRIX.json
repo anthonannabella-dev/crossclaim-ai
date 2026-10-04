@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-10-04T16:05:25.082Z",
-  "acceptance_head": "847d830",
+  "generated_at": "2026-10-04T16:09:37.466Z",
+  "acceptance_head": "328592d",
   "protocol": "docs/releases/FINAL-ACCEPTANCE-PROTOCOL.md",
   "areas": [
     {
@@ -207,7 +207,12 @@
     "RSI-RT-03-health-state",
     "RSI-RT-04-admin-autonomy-page",
     "RSI-RT-05-kill-switch",
-    "RSI-RT-06-state-reconcile"
+    "RSI-RT-06-state-reconcile",
+    "RSI-COST-01-policy-core",
+    "RSI-COST-02-model-router-adapter",
+    "RSI-COST-03-call-ledger",
+    "RSI-COST-04-admin-cost-panel",
+    "RSI-COST-05-cost-e2e"
   ],
   "host_action_required": [
     "provider developer/partner account registration",
