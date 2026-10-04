@@ -1,6 +1,6 @@
 {
   "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。",
-  "updatedAt": "2026-10-04T06:23:57.440Z",
+  "updatedAt": "2026-10-04T06:40:51.701Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -863,12 +863,13 @@
       "hold_external": true,
       "layer": "LAYER3/C18",
       "dependencies": [],
-      "updated_at": "2026-10-04T05:27:51.933Z",
-      "completed_at": "2026-10-04T05:27:51.933Z"
+      "updated_at": "2026-10-04T06:40:51.700Z",
+      "completed_at": "2026-10-04T05:27:51.933Z",
+      "note": "C18_INTERNAL_SKELETON = CLOSED（MSG-20261004-21 = PASS）；剩余为生产门槛（Schema Delta / 真实 Provider / 凭据 / 法务）"
     },
     {
       "id": "c18-2-provider-dto-schema",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "risk_class": "MEDIUM",
       "arch_review_required": false,
       "hold_external": true,
@@ -876,7 +877,9 @@
       "dependencies": [
         "c18-1-provider-integration-matrix"
       ],
-      "updated_at": "2026-10-04T05:27:51.933Z"
+      "updated_at": "2026-10-04T06:40:51.701Z",
+      "completed_at": "2026-10-04T06:40:51.701Z",
+      "note": "C18_INTERNAL_SKELETON = CLOSED（MSG-20261004-21 = PASS）；剩余为生产门槛（Schema Delta / 真实 Provider / 凭据 / 法务）"
     },
     {
       "id": "c18-3-sandbox-filing-provider",
@@ -888,8 +891,9 @@
       "dependencies": [
         "c18-1-provider-integration-matrix"
       ],
-      "updated_at": "2026-10-04T05:42:54.049Z",
-      "completed_at": "2026-10-04T05:42:54.049Z"
+      "updated_at": "2026-10-04T06:40:51.701Z",
+      "completed_at": "2026-10-04T05:42:54.049Z",
+      "note": "C18_INTERNAL_SKELETON = CLOSED（MSG-20261004-21 = PASS）；剩余为生产门槛（Schema Delta / 真实 Provider / 凭据 / 法务）"
     },
     {
       "id": "c18-4-provider-webhook-verification",
@@ -901,8 +905,9 @@
       "dependencies": [
         "c18-1-provider-integration-matrix"
       ],
-      "updated_at": "2026-10-04T05:47:49.199Z",
-      "completed_at": "2026-10-04T05:47:49.199Z"
+      "updated_at": "2026-10-04T06:40:51.701Z",
+      "completed_at": "2026-10-04T05:47:49.199Z",
+      "note": "C18_INTERNAL_SKELETON = CLOSED（MSG-20261004-21 = PASS）；剩余为生产门槛（Schema Delta / 真实 Provider / 凭据 / 法务）"
     },
     {
       "id": "c18-5-provider-idempotency-reconciliation",
@@ -914,12 +919,13 @@
       "dependencies": [
         "c18-1-provider-integration-matrix"
       ],
-      "updated_at": "2026-10-04T05:57:47.469Z",
-      "completed_at": "2026-10-04T05:57:47.469Z"
+      "updated_at": "2026-10-04T06:40:51.701Z",
+      "completed_at": "2026-10-04T05:57:47.469Z",
+      "note": "C18_INTERNAL_SKELETON = CLOSED（MSG-20261004-21 = PASS）；剩余为生产门槛（Schema Delta / 真实 Provider / 凭据 / 法务）"
     },
     {
       "id": "c18-6-provider-tenant-account-lineage",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "risk_class": "HIGH",
       "arch_review_required": true,
       "hold_external": true,
@@ -927,7 +933,9 @@
       "dependencies": [
         "c18-1-provider-integration-matrix"
       ],
-      "updated_at": "2026-10-04T06:23:57.291Z"
+      "updated_at": "2026-10-04T06:40:51.701Z",
+      "completed_at": "2026-10-04T06:40:51.701Z",
+      "note": "C18_INTERNAL_SKELETON = CLOSED（MSG-20261004-21 = PASS）；剩余为生产门槛（Schema Delta / 真实 Provider / 凭据 / 法务）"
     },
     {
       "id": "c18-7-provider-authorization-lifecycle",
@@ -939,8 +947,9 @@
       "dependencies": [
         "c18-1-provider-integration-matrix"
       ],
-      "updated_at": "2026-10-04T06:23:57.363Z",
-      "completed_at": "2026-10-04T06:23:57.363Z"
+      "updated_at": "2026-10-04T06:40:51.701Z",
+      "completed_at": "2026-10-04T06:23:57.363Z",
+      "note": "C18_INTERNAL_SKELETON = CLOSED（MSG-20261004-21 = PASS）；剩余为生产门槛（Schema Delta / 真实 Provider / 凭据 / 法务）"
     },
     {
       "id": "c18-8-provider-negative-path-e2e",
@@ -952,8 +961,9 @@
       "dependencies": [
         "c18-1-provider-integration-matrix"
       ],
-      "updated_at": "2026-10-04T06:23:57.440Z",
-      "completed_at": "2026-10-04T06:23:57.440Z"
+      "updated_at": "2026-10-04T06:40:51.701Z",
+      "completed_at": "2026-10-04T06:23:57.440Z",
+      "note": "C18_INTERNAL_SKELETON = CLOSED（MSG-20261004-21 = PASS）；剩余为生产门槛（Schema Delta / 真实 Provider / 凭据 / 法务）"
     },
     {
       "id": "seo-1-gap-audit-and-page-matrix",

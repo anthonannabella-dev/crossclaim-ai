@@ -132042,3 +132042,152 @@ C18 = HOLD_EXTERNAL
 
 另外，我对 exact HEAD a088d90 的查询仍没有取得可独立确认的 GitHub workflow run/status，因此本轮测试数字仍作为 Codex 的送审证据，而不是我独立确认的 GitHub CI SUCCESS。
 ```
+
+### [MSG-20261004-21] ARCHITECT VERDICT — LAYER 3 / C18 INTERNAL FINAL-4 = PASS（C18-8 = CLOSED，C18_INTERNAL_SKELETON = CLOSED）（reviewed HEAD = 3d8e0a1；① providerSubmissionPayloadDigest 基于 C15 createSubmission 的 7 个 immutable identity 字段递归 canonical + SHA-256 = PASS，且测试证明任一字段变化都会改变 digest、且它不等于 packageDigest；② 沙盒保存同一 canonical digest、lookup 原样返回、无 packageDigest 冒充 + 真实 PG 反例（同 key + 同 packageDigest + 不同 remedyType → CONFLICT_MISMATCH → providerSubmissionId=null → MANUAL_REVIEW → never ADOPT_EXISTING，且 createSubmissionCalls=1 / lookupCalls=1 / root=1 / submission=1 / resubmitAllowed=false）= PASS；③ C18-1…C18-8 全部 CLOSED（C18-4 = CLOSED_WITH_PRODUCTION_GATE）；骨架闭集 ≠ 真实 Provider 已接通；下一步已批准：SEO-3 Public Checker/Calculator → PUBLIC API SECURITY AUDIT 并行两条 Schema Delta（A ProviderTenantBinding persistence / B WebhookReplayClaim persistence）送审，MIGRATION = HOLD_UNTIL_SCHEMA_DELTA_PASS；REAL_BROKER=NO / REAL_FILING=NO / REAL_TRANSPORT=HOLD / EXTERNAL_WRITE=HOLD / PRODUCTION_ENABLEMENT=HOLD / PAYMENT=HOLD / C18=HOLD_EXTERNAL）
+
+```text
+ARCHITECT VERDICT：PASS
+
+我按 reviewed HEAD = 3d8e0a1（完整 SHA 3d8e0a18f21b298618184681720be47f2652984e）重新验收了 FINAL-4。上轮唯一残留已经达标，可以关闭 C18 内部骨架。
+
+① payloadDigest：PASS。 providerSubmissionPayloadDigest() 现在基于 C15 createSubmission 的 7 个 immutable identity 字段：
+
+纯文本
+organizationId
+opportunityId
+claimItemId
+packageId
+packageDigest
+jurisdiction
+remedyType
+
+递归 canonicalize 后取 SHA-256，结果固定为 64-char lowercase hex；测试也逐字段证明任一字段变化都会改变 digest，并明确证明它不等于 packageDigest。
+
+这里准确说，它是 provider create-submission payload identity，不等同于整个 C17 root schema；但这正是我上一轮要求的范围，满足 reconciliation/adopt 判定需要。
+
+② Sandbox + lookup + 反例：PASS。 createSubmission() 已改成保存同一个 canonical digest；lookupByIdempotencyKey() 原样返回存储的 payloadDigest，不存在 packageDigest 冒充。第三条真实 PostgreSQL E2E 也准确覆盖了关键反例：
+
+纯文本
+same idempotencyKey
++ same packageDigest
++ different remedyType
+→ canonical digest different
+→ CONFLICT_MISMATCH
+→ providerSubmissionId = null
+→ MANUAL_REVIEW
+→ never ADOPT_EXISTING
+
+同时仍保持：
+
+纯文本
+createSubmissionCalls = 1
+lookupCalls = 1
+CustomsSubmissionAttempt root = 1
+provider submission = 1
+resubmitAllowed = false
+
+所以之前担心的“同包但不同业务身份被错误 adopt”已经封住。
+
+③ C18_INTERNAL_SKELETON
+
+允许 CLOSED。
+
+最终内部状态可登记为：
+
+纯文本
+C18-1 = CLOSED
+C18-2 = CLOSED
+C18-3 = CLOSED
+C18-4 = CLOSED_WITH_PRODUCTION_GATE
+C18-5 = CLOSED
+C18-6 = CLOSED
+C18-7 = CLOSED
+C18-8 = CLOSED
+
+C18_INTERNAL_SKELETON = CLOSED
+
+这句话的含义必须保持严格：
+
+C18 的 provider-neutral 内部代码骨架完成，不等于真实 Customs Provider 已接通，也不等于可生产自动 filing。
+
+生产边界继续：
+
+纯文本
+REAL_BROKER = NO
+REAL_FILING = NO
+REAL_TRANSPORT = HOLD
+EXTERNAL_WRITE = HOLD
+PRODUCTION_ENABLEMENT = HOLD
+PAYMENT = HOLD
+C18 = HOLD_EXTERNAL
+④ 下一步顺序
+
+批准按你提出的并行方案执行。
+
+一条线直接推进：
+
+纯文本
+SEO-3
+→ Public Checker / Calculator
+→ PUBLIC API SECURITY AUDIT
+
+另一条线同时送审两个 Schema Delta：
+
+纯文本
+Schema Delta A
+→ ProviderTenantBinding persistence
+→ relationshipEvidenceRef
+→ relationshipVerifiedAt
+→ tenant/provider/jurisdiction/status/relationship evidence constraints
+
+Schema Delta B
+→ ProviderWebhookReplayClaim persistence
+→ UNIQUE(providerId, deliveryId)
+→ atomic INSERT / ON CONFLICT semantics
+→ durable replay protection
+
+但 migration 仍不得先做。
+
+顺序必须是：
+
+纯文本
+Schema Delta proposal
+→ ARCHITECT PASS
+→ migration
+→ Prisma store
+→ real PostgreSQL concurrency/E2E
+
+之后才进入真正的 C18 Production Enablement：
+
+纯文本
+真实 Provider 选择
+→ 第三方 SaaS 代客提交书面确认
+→ sandbox/developer account
+→ credentials
+→ provider-specific adapter
+→ webhook signing/key lifecycle
+→ 真实 sandbox E2E
+→ Production approval
+→ External Write 开闸
+
+最终裁定：
+
+纯文本
+VERDICT = PASS
+
+C18-8 = CLOSED
+C18_INTERNAL_SKELETON = CLOSED
+
+SEO-3 = AUTHORIZED_TO_CONTINUE
+C18_SCHEMA_DELTA_A = AUTHORIZED_TO_SUBMIT_FOR_AUDIT
+C18_SCHEMA_DELTA_B = AUTHORIZED_TO_SUBMIT_FOR_AUDIT
+MIGRATION = HOLD_UNTIL_SCHEMA_DELTA_PASS
+
+REAL_TRANSPORT = HOLD
+PRODUCTION_ENABLEMENT = HOLD
+EXTERNAL_WRITE = HOLD
+PAYMENT = HOLD
+C18 = HOLD_EXTERNAL
+
+本次 exact HEAD 3d8e0a1 的 GitHub 查询仍返回空 workflow/status，所以我确认的是代码与测试定义本身满足架构验收；Codex 报告的 27/27 与 tsc EXIT=0 仍视为送审证据，不表述为我独立确认了该 HEAD 的 GitHub CI SUCCESS。
+```
