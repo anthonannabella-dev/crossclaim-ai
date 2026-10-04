@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-10-04T01:36:18.854Z",
-  "acceptance_head": "cb72b47",
+  "generated_at": "2026-10-04T01:59:34.918Z",
+  "acceptance_head": "17fda50",
   "protocol": "docs/releases/FINAL-ACCEPTANCE-PROTOCOL.md",
   "areas": [
     {
@@ -160,8 +160,6 @@
     }
   ],
   "open_internal_items": [
-    "ui-7-customs-customer-ux",
-    "ui-8-states-a11y-full-regression",
     "ca-2-authorized-signer-fact",
     "ca-3-authorization-lifecycle-persistence",
     "ca-4-broker-authorization-session-contract",

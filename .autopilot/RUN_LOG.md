@@ -1793,3 +1793,6 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 
 ## 2026-10-04T01:21:55.949Z — RECONCILE / QUEUE
 - 远端 HEAD=fe2dad3，本地 HEAD=fe2dad3；STATE 已对齐；backlog 新增 8 项（UI-6…UI-8 + CA-2…CA-6）；SAFE_CONTINUATION_QUEUE=7。
+
+## 2026-10-04T01:59:34.722Z — UI-8b
+- Customer Product Full Regression 完成并冻结 CUSTOMER_PRODUCT_BASELINE（head=17fda50）；UI-7/UI-8 CLOSED；CI flake 8c9cfe1 已分类登记。
