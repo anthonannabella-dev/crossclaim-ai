@@ -466,12 +466,17 @@ export function composeRecoverRouteContent(input: SeoRecoverContentInput): SeoRe
 
   const internalLinks = input.relatedPages ?? [];
   if (internalLinks.length === 0) reasons.push('NO_INTERNAL_LINKS');
-  if (!input.decision.indexable || input.decision.path === null) reasons.push('NOT_INDEXABLE');
+  const unavailable = !input.decision.indexable || input.decision.path === null;
+  if (unavailable) reasons.push('NOT_INDEXABLE');
   if (thin) reasons.push('THIN_CONTENT');
+  // 不可用页面（404 / 410 / 冲突 / gate 未通过）不渲染任何正文与内链。
+  const renderNothing = thin || unavailable;
 
   return {
-    sections: thin ? [] : candidates.map(({ i18nKey, ref, sourceRef: ref2 }) => ({ i18nKey, ref, sourceRef: ref2 })),
-    internalLinks: thin ? [] : internalLinks,
+    sections: renderNothing
+      ? []
+      : candidates.map(({ i18nKey, ref, sourceRef: ref2 }) => ({ i18nKey, ref, sourceRef: ref2 })),
+    internalLinks: renderNothing ? [] : internalLinks,
     thin,
     reasons,
     externalWritePerformed: false,
@@ -506,4 +511,104 @@ export function renderRecoverSitemapXml(
     '</urlset>',
     '',
   ].join('\n');
+}
+
+/**
+ * SEO-4 集成入口 —— 一个 slug 的完整页面计划（route 判定 + metadata + JSON-LD + 正文 + sitemap 资格）。
+ * indexable 必须**同时**满足：路由判定 OK、SEO-6 gate 通过、正文不薄。任一不满足 → 全链路 noindex，
+ * 且 metadata / JSON-LD / sitemap 自动保持一致（都由同一个 indexable 推导）。
+ */
+export interface SeoRecoverPagePlanInput {
+  slug: string | null | undefined;
+  requestedLocale?: string | null;
+  rules: readonly SeoRecoverRouteRule[];
+  now: Date;
+  conflictingSlugs?: readonly string[];
+  /** 该 slug 对应的生效规则（单源；正文与小节只从这里取）。 */
+  rule: SeoRecoverRouteRule & SeoRecoverContentRule;
+  baseUrl: string;
+  relatedPages?: readonly { name: string; url: string }[];
+  breadcrumb?: readonly BreadcrumbItem[];
+  faqs?: readonly { question: string; answer: string }[];
+  disallowPaths?: readonly string[];
+  titleRef?: string | null;
+  descriptionRef?: string | null;
+}
+
+export interface SeoRecoverPagePlan {
+  decision: SeoRecoverRouteDecision;
+  metadata: SeoRecoverRouteMetadata;
+  jsonLd: SeoRecoverRouteJsonLd;
+  content: SeoRecoverContent;
+  /** 只有 indexable 的页面才允许进入 sitemap；此处给出该页的资格与 robots 文本。 */
+  sitemap: { included: boolean; sitemapLoc: string; robotsTxt: string };
+  indexable: boolean;
+  externalWritePerformed: false;
+  databaseWritePerformed: false;
+  transportEnabled: false;
+  checkerPostRegistered: false;
+  productionCredentials: 'ABSENT';
+}
+
+export function buildRecoverPagePlan(input: SeoRecoverPagePlanInput): SeoRecoverPagePlan {
+  const decision = resolveRecoverRoute({
+    slug: input.slug,
+    requestedLocale: input.requestedLocale,
+    rules: input.rules,
+    now: input.now,
+    conflictingSlugs: input.conflictingSlugs,
+  });
+
+  const content = composeRecoverRouteContent({
+    decision,
+    rule: input.rule,
+    relatedPages: input.relatedPages,
+  });
+
+  // 全链路 indexable：路由 OK + gate 通过 + 正文不薄；否则统一降级为 noindex 且不给 canonical。
+  const indexable = decision.indexable && !content.thin;
+  const effective: SeoRecoverRouteDecision = {
+    ...decision,
+    indexable,
+    robots: indexable ? 'index,follow' : 'noindex,nofollow',
+    path: indexable ? decision.path : decision.path,
+  };
+
+  const metadata = buildRecoverRouteMetadata({
+    decision: effective,
+    baseUrl: input.baseUrl,
+    titleRef: input.titleRef ?? null,
+    descriptionRef: input.descriptionRef ?? null,
+  });
+
+  const jsonLd = buildRecoverRouteJsonLd({
+    decision: effective,
+    sourceReferences: input.rule.sourceReferences,
+    breadcrumb: input.breadcrumb,
+    faqs: input.faqs,
+  });
+
+  const site = buildRecoverSitemapAndRobots({
+    decisions: [effective],
+    baseUrl: input.baseUrl,
+    disallowPaths: input.disallowPaths,
+  });
+
+  return {
+    decision: effective,
+    metadata,
+    jsonLd,
+    content,
+    sitemap: {
+      included: site.entries.length > 0,
+      sitemapLoc: site.sitemapLoc,
+      robotsTxt: site.robotsTxt,
+    },
+    indexable,
+    externalWritePerformed: false,
+    databaseWritePerformed: false,
+    transportEnabled: false,
+    checkerPostRegistered: false,
+    productionCredentials: 'ABSENT',
+  };
 }

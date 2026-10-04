@@ -1,6 +1,6 @@
 {
   "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。",
-  "updatedAt": "2026-10-04T14:37:00.000Z",
+  "updatedAt": "2026-10-04T14:42:00.000Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -1129,6 +1129,16 @@
       "title": "SEO-4 合同测试：判定语义稳定 / gate↔robots↔sitemap 一致 / 无 POST / 无硬编码金额费率",
       "scope": "在 seo-recover-route.test.ts 内固化四条合同：六种 reason 固定、indexable⇔index⇔进 sitemap、模块不注册 POST 或 Checker 路由、源码无金额/百分比/费率硬编码",
       "acceptance_criteria": "RECOVER_CONTRACT_REASONS_STABLE / RECOVER_CONTRACT_GATE_ROBOTS_SITEMAP_AGREE / RECOVER_CONTRACT_NO_POST_HANDLER / RECOVER_CONTRACT_NO_HARDCODED_RULE_LITERALS 全绿；tsc 0",
+      "status": "IMPLEMENTED_PENDING_CI",
+      "implementation_head": "(this commit)"
+    },
+    {
+      "id": "SEO-4-STAGE-7-recover-page-plan-facade",
+      "priority": "P1",
+      "source_backlog_id": "SEO-4-RECOVER-WIRING-PLAN.md 集成入口",
+      "title": "buildRecoverPagePlan：单 slug 完整页面计划（判定+metadata+JSON-LD+正文+sitemap）",
+      "scope": "全链路 indexable = 路由 OK AND gate 通过 AND 正文不薄；任一条不满足 → 全链路 noindex 且 canonical/JSON-LD/sitemap 一致降级；不可用页面不渲染正文与内链",
+      "acceptance_criteria": "RECOVER_FACADE_NOINDEX_DEFAULT / RECOVER_FACADE_INDEXABLE_REQUIRES_ALL_GATES 全绿；tsc 0",
       "status": "IMPLEMENTED_PENDING_CI",
       "implementation_head": "(this commit)"
     }

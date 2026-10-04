@@ -10,6 +10,7 @@ import { readFileSync } from 'node:fs';
 
 import {
   SEO_RECOVER_ROUTE_REASONS,
+  buildRecoverPagePlan,
   renderRecoverSitemapXml,
   buildRecoverSitemapAndRobots,
   composeRecoverRouteContent,
@@ -327,6 +328,16 @@ describe('SEO-4 Stage 5 正文与内链（只由真实字段组成，薄内容 f
 describe('SEO-4 Stage 6 合同测试（边界与一致性）', () => {
   // vitest 以 apps/api 为 cwd 运行，直接读源文件做边界合同检查。
   const source = readFileSync('src/services/seo/seo-recover-route.ts', 'utf8');
+  /** facade 用例用的「路由字段 + 真实正文来源」规则（单一来源，不发明规则内容）。 */
+  const factoredRule = () => ({
+    ...rule(),
+    title: 'Amazon FBA fee refund',
+    problemDescription:
+      'FBA fee overcharges are refundable when the fee was computed against incorrect dimensions or weight, within the platform dispute window defined by the effective rule version.',
+    requiredEvidence: ['settlement report line', 'fee preview versus charged comparison'],
+    sourceReferences: ['src:amazon-fba-fee-policy'],
+    relatedRuleRefs: ['amazon-inventory-reimbursement'],
+  });
 
   it('RECOVER_CONTRACT_REASONS_STABLE：六种判定语义固定，不得被静默删改', () => {
     expect([...SEO_RECOVER_ROUTE_REASONS]).toEqual([
@@ -409,5 +420,70 @@ describe('SEO-4 Stage 6 合同测试（边界与一致性）', () => {
     expect(xml).toContain('<loc>https://crossclaim.example/recover/amazon/fee-refund</loc>');
     expect(xml).toContain('a&amp;b=&lt;x&gt;');
     expect(xml).toContain('<lastmod>2026-10-04</lastmod>');
+  });
+
+  it('RECOVER_FACADE_NOINDEX_DEFAULT：不可用 slug 的完整计划全链路 noindex（无 canonical / 无 JSON-LD / 不进 sitemap）', () => {
+    const plan = buildRecoverPagePlan({
+      slug: 'nope-nothing-here',
+      requestedLocale: 'en',
+      rules: [factoredRule()],
+      now: NOW,
+      rule: factoredRule(),
+      baseUrl: 'https://crossclaim.example',
+    });
+    expect(plan.indexable).toBe(false);
+    expect(plan.decision.robots).toBe('noindex,nofollow');
+    expect(plan.metadata.canonical).toBeNull();
+    expect(plan.metadata.alternates).toEqual([]);
+    expect(plan.jsonLd.blocks).toEqual([]);
+    expect(plan.sitemap.included).toBe(false);
+    expect(plan.content.sections).toEqual([]);
+  });
+
+  it('RECOVER_FACADE_INDEXABLE_REQUIRES_ALL_GATES：gate 通过但正文太薄 → 仍然 noindex', () => {
+    const gateOkButThin = buildRecoverPagePlan({
+      slug: factoredRule().slug,
+      requestedLocale: 'en',
+      rules: [factoredRule()],
+      now: NOW,
+      rule: { ...factoredRule(), problemDescription: '', requiredEvidence: [], sourceReferences: [] },
+      baseUrl: 'https://crossclaim.example',
+    });
+    expect(gateOkButThin.content.thin).toBe(true);
+    expect(gateOkButThin.indexable).toBe(false);
+    expect(gateOkButThin.metadata.canonical).toBeNull();
+    expect(gateOkButThin.sitemap.included).toBe(false);
+
+    const allGates = buildRecoverPagePlan({
+      slug: factoredRule().slug,
+      requestedLocale: 'en',
+      rules: [factoredRule()],
+      now: NOW,
+      rule: factoredRule(),
+      baseUrl: 'https://crossclaim.example',
+      titleRef: 'rule.title',
+      breadcrumb: [
+        { name: 'Home', url: 'https://crossclaim.example/' },
+        { name: 'Recover', url: 'https://crossclaim.example/recover' },
+      ],
+    });
+    expect(allGates.content.thin).toBe(false);
+    expect(allGates.indexable).toBe(true);
+    expect(allGates.metadata.canonical).toBe(`https://crossclaim.example${allGates.decision.path}`);
+    expect(allGates.sitemap.included).toBe(true);
+    expect(allGates.jsonLd.blocks.length).toBeGreaterThan(0);
+
+    // 没有真实面包屑 → 不发明 JSON-LD（fail-closed），即便页面可索引。
+    const withoutBreadcrumb = buildRecoverPagePlan({
+      slug: factoredRule().slug,
+      requestedLocale: 'en',
+      rules: [factoredRule()],
+      now: NOW,
+      rule: factoredRule(),
+      baseUrl: 'https://crossclaim.example',
+    });
+    expect(withoutBreadcrumb.indexable).toBe(true);
+    expect(withoutBreadcrumb.jsonLd.blocks).toEqual([]);
+    expect(withoutBreadcrumb.jsonLd.skipped).toContain('NO_BREADCRUMB');
   });
 });
