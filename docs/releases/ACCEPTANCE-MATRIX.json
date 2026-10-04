@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-10-04T04:20:32.074Z",
-  "acceptance_head": "c897737",
+  "generated_at": "2026-10-04T04:24:22.187Z",
+  "acceptance_head": "3fad4d4",
   "protocol": "docs/releases/FINAL-ACCEPTANCE-PROTOCOL.md",
   "areas": [
     {
@@ -160,7 +160,6 @@
     }
   ],
   "open_internal_items": [
-    "ca-5-customs-authorization-center-ui",
     "ca-6-one-click-customs-auth-ux"
   ],
   "host_action_required": [

@@ -129871,3 +129871,127 @@ CA-5 = PASS / CLOSED → 允许进入 CA-6。
 
 REAL_BROKER=NO / REAL_FILING=NO / C18=HOLD_EXTERNAL 继续保持。
 ```
+
+### [MSG-20261004-11] ARCHITECT VERDICT — CUSTOMS AUTHORIZATION CA-5 FINAL-3 = PASS / CLOSED（A 追回权与 filing authorization 分离 = PASS；B IOR 完整有效性判定 = PASS；无残余项；NEXT_AUTHORIZED_UNIT = CA-6 One-click Customs Recovery Authorization UX，真实 Broker / Filing / CBP-ACE-ABI / 生产凭据继续 HOLD）
+
+```text
+ARCHITECT VERDICT：PASS
+
+我按 reviewed HEAD = 3fad4d4 重新检查了本轮代码与对应测试实现。MSG-20261004-10 要求的 A/B 两条事实映射已经闭环，没有发现新的 CA-5 阻断项。
+
+① A：追回权与 filing authorization 分离 — PASS
+
+当前 loader 已改为：
+
+TypeScript
+recoveryRightForRemedy:
+  lineage.iorRightsForRemedy === 'CONFIRMED' &&
+  lineage.claimantRightsForRemedy === 'CONFIRMED'
+
+同时：
+
+TypeScript
+filingPermissionValid: lineage.filingAuthorized === true
+
+保持独立。
+
+这正是需要的领域边界：
+
+“有追回权” ≠ “已经获得合法申报权限”。
+
+真实 PG E2E 也新增了两条关键路径：
+
+BROKER_FILED：rights 已确认、filingAuthorized=false
+② RECOVERY_RIGHT = CONFIRMED
+⑥绝不会错误进入 READY_TO_SUBMIT
+SELF_FILED：rights 已确认、filingAuthorized=false
+② = CONFIRMED
+③ = NEEDS_ACTION
+action = CONFIRM_SIGNING_AUTHORITY
+⑥ = IN_PREPARATION
+
+并且“BROKER_FILED 只剩 filing permission blocker 时 → WAITING_AUTHORIZATION”已有 center unit 覆盖。
+
+CHANGE A CLOSED。
+
+② B：IOR 完整有效性判定 — PASS
+
+现在不再使用：
+
+TypeScript
+verificationStatus === 'VERIFIED'
+
+这种过度简化逻辑。
+
+新增的 iorIdentityUsable() 直接复用了仓库已有：
+
+normalizeIorIdentity()
+→ evaluateIorIdentity()
+
+因此实际判断已经覆盖：
+
+VERIFIED / UNVERIFIED / PENDING / UNKNOWN / REVOKED
+effectiveFrom
+effectiveTo
+legalEntityRef
+非法/异常事实 → catch → false
+
+即保持 fail-closed。
+
+我也核对了既有 enterprise-IOR 测试，本身已有 PENDING / REVOKED / expired 等判定；CA-5 本轮又新增了真实 PostgreSQL：
+
+VERIFIED，但 effectiveTo 已经过期
+→ ① ENTERPRISE_IDENTITY = NEEDS_ACTION
+
+同时②追回权仍独立保持 CONFIRMED。
+
+这正好证明①身份与②追回权没有再次串在一起。
+
+CHANGE B CLOSED。
+
+③ CA-5 最终状态
+
+CA-5 = CLOSED
+
+允许进入 CA-6 — One-click Customs Recovery Authorization UX。
+
+CA-5 当前已经具备完整的内部授权中心闭环：
+
+RecoveryOpportunity
+→ RecoveryRoute
+→ RightLineage
+→ IOR Identity
+→ Broker POA / Authorized Signer
+→ CA-1 route-aware readiness
+→ 六项客户授权投影
+→ tenant-scoped HTTP
+→ 客户 UI
+
+并且以下原则仍保持：
+
+server-derived truth
+tenant isolation
+fail-closed
+POA / Signer 生命周期
+route-aware authorization
+追回权与 filing permission 分离
+refund account 不反向阻塞 filing
+不伪造 Provider / Broker 状态
+不声称已经申报
+不发生真实外写
+FINAL
+
+VERDICT = PASS
+CA-5_STATUS = CLOSED
+NEXT_AUTHORIZED_UNIT = CA-6
+
+本轮没有必须再修的 CA-5 残余项。
+
+但 CA-6 的批准范围仍然只限内部 one-click 授权与启动 UX/编排：
+
+REAL_BROKER=NO
+REAL_FILING=NO
+C18=HOLD_EXTERNAL
+
+不能因为 CA-5 CLOSED 就自动开启真实 Broker、CBP/ACE/ABI 外写或生产凭据。
+```

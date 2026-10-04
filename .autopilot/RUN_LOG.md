@@ -1852,3 +1852,7 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - A：追回权改为 iorRightsForRemedy+claimantRightsForRemedy 派生（outcome 不再参与）。
 - B：IOR 复用 evaluateIorIdentity（有效窗口 / REVOKED / UNVERIFIED / legalEntityRef）。
 - 真实 PG 事实 E2E 新增：权利 CONFIRMED + filingAuthorized=false（BROKER_FILED / SELF_FILED）与 VERIFIED 但过期 IOR 三组断言；center unit 14/14 + E2E 7/7。
+
+## 2026-10-04T04:24:21.930Z — CA-5 CLOSED
+- CA-5 FINAL-3 = PASS / CLOSED（MSG-20261004-11，head 3fad4d4）：追回权/申报授权分离 + IOR 有效窗口判定闭环，无残余项。
+- 队列推进：SAFE_CONTINUATION_QUEUE = CA-6（one-click Customs recovery authorization UX wiring，内部编排，零真实外写）。
