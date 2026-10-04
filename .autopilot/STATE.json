@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261004-16",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-04T08:46:09.521Z",
+  "updated_at": "2026-10-04T08:51:16.135Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -5400,7 +5400,7 @@
   },
   "gates_recorded_at": "2026-10-03T15:17:04.369Z",
   "ci_status_head": "8f32fce",
-  "ci_status": "验证中（cc13bde run 37189757768 in_progress；1b15ab7/8a7b830 仍 failure）",
+  "ci_status": "验证中（cc13bde 37189757768 / c31a985 37189994533 in_progress；本地两份白名单生成器已验证收录新条目）",
   "ci_run_id": "37143524364",
   "internal_code_complete_at": "2026-10-03T15:36:47.862Z",
   "independent_final_audit": {
@@ -6841,9 +6841,9 @@
       "pending_archive": true
     }
   },
-  "last_heartbeat_at": "2026-10-04T08:46:09.521Z",
+  "last_heartbeat_at": "2026-10-04T08:51:16.135Z",
   "waiting_for_verdict": "两条待归档：MSG-20261004-27（ZERO evidence，PASS WITH REVISE/90b1f71）+ SEO-3 PUBLIC API SECURITY（REVISE/3066ac2）",
-  "last_completed_unit": "ci-contract-repairs（tenant-trigger 白名单 + append-only 白名单）",
+  "last_completed_unit": "ci-contract-local-verification（两份白名单生成器 EMIT_OK）",
   "hold_external": true,
   "track_c_seo_p3": {
     "at": "2026-10-04T08:06:10.111Z",
@@ -6988,7 +6988,7 @@
   "CURRENT_HEAD": "cc13bde",
   "LAST_COMPLETED_UNIT": "c18-migration-sql-final2-submission",
   "NEXT_EXECUTION_UNIT": "读 MIGRATION SQL FINAL-2 裁决 → PASS 后按解禁顺序；并行 SEO-3 PUBLIC API SECURITY AUDIT 唤醒",
-  "CI_STATUS": "验证中（cc13bde run 37189757768 in_progress；1b15ab7/8a7b830 仍 failure）",
+  "CI_STATUS": "验证中（cc13bde 37189757768 / c31a985 37189994533 in_progress；本地两份白名单生成器已验证收录新条目）",
   "WAITING_FOR_VERDICT": "两条待归档：MSG-20261004-27（ZERO evidence，PASS WITH REVISE/90b1f71）+ SEO-3 PUBLIC API SECURITY（REVISE/3066ac2）",
   "HOST_ACTION_REQUIRED": [
     "provider developer/partner account registration",
@@ -7002,6 +7002,12 @@
     "Search Console verification / domain ownership（SEO 页面转 INDEX 前需要）"
   ],
   "HOLD_EXTERNAL": true,
-  "LAST_HEARTBEAT_AT": "2026-10-04T08:46:09.521Z",
-  "ci_red_streak_note": "已修两处 CI 契约缺口：① tenant-trigger 白名单（1b15ab7，102→103）② append-only 白名单（cc13bde，47→48）；若 cc13bde 仍红，按 ci-failure-digest 继续定位（可能还有第三份白名单，如 immutable/受控变更）"
+  "LAST_HEARTBEAT_AT": "2026-10-04T08:51:16.135Z",
+  "ci_red_streak_note": "已修两处 CI 契约缺口：① tenant-trigger 白名单（1b15ab7，102→103）② append-only 白名单（cc13bde，47→48）；若 cc13bde 仍红，按 ci-failure-digest 继续定位（可能还有第三份白名单，如 immutable/受控变更）",
+  "ci_contract_fix_local_verification": {
+    "at": "2026-10-04T08:51:16.135Z",
+    "tenant_emit": "EMIT_OK，生成 SQL 含 cc_tenant_CustomsProviderTenantBindingLineage（26919 bytes）",
+    "append_only_emit": "EMIT_OK，生成 SQL 含 cc_append_only__CustomsProviderTenantBindingLineage（13884 bytes）",
+    "note": "两份白名单 JSON 结构正确、生成器已收录新条目；CI 侧 cc13bde/c31a985 仍 in_progress，未判定"
+  }
 }
