@@ -5,12 +5,63 @@ import { describe, expect, it } from 'vitest';
 import {
   CUSTOMS_PROVIDER_RECONCILIATION_LOOKUP_BOUNDARY,
   decideProviderReconciliation,
+  providerSubmissionPayloadDigest,
 } from '../services/customs/customs-provider-reconciliation-lookup';
 
 const DIGEST_A = 'a'.repeat(64);
 const DIGEST_B = 'b'.repeat(64);
 
+const identity = (overrides: Record<string, string> = {}) => ({
+  organizationId: 'org:acme',
+  opportunityId: 'opportunity:1',
+  claimItemId: 'claim-item:1',
+  packageId: 'package:1',
+  packageDigest: DIGEST_A,
+  jurisdiction: 'US',
+  remedyType: 'DRAWBACK',
+  ...overrides,
+});
+
 describe('C18-8 — read-only reconciliation lookup', () => {
+  it('payloadDigest 是完整 immutable payload 的 canonical SHA-256（名实一致）', () => {
+    const base = providerSubmissionPayloadDigest(identity());
+    expect(base).toMatch(/^[0-9a-f]{64}$/);
+    // 稳定：同一身份重复计算一致。
+    expect(providerSubmissionPayloadDigest(identity())).toBe(base);
+    // 与 packageDigest 区分开：完整的载荷摘要不等于 packageDigest。
+    expect(base).not.toBe(DIGEST_A);
+    // 对任一分量敏感。
+    for (const [field, value] of [
+      ['organizationId', 'org:other'],
+      ['opportunityId', 'opportunity:2'],
+      ['claimItemId', 'claim-item:2'],
+      ['packageId', 'package:2'],
+      ['packageDigest', DIGEST_B],
+      ['jurisdiction', 'DE'],
+      ['remedyType', 'PROTEST'],
+    ] as const) {
+      expect(providerSubmissionPayloadDigest(identity({ [field]: value }))).not.toBe(base);
+    }
+  });
+
+  it('同 key + 同 packageDigest 但不同 jurisdiction/remedy → digest 不同 → 绝不 ADOPT_EXISTING', () => {
+    const providerSide = providerSubmissionPayloadDigest(identity());
+    const attemptSide = providerSubmissionPayloadDigest(identity({ remedyType: 'PROTEST' }));
+    expect(attemptSide).not.toBe(providerSide);
+    const decision = decideProviderReconciliation({
+      lookup: {
+        outcome: 'FOUND',
+        providerSubmissionId: 'sandbox-sub-0001',
+        payloadDigest: providerSide,
+        status: 'SUBMITTED',
+      },
+      expectedPayloadDigest: attemptSide,
+    });
+    expect(decision.verdict).toBe('CONFLICT_MISMATCH');
+    expect(decision.providerSubmissionId).toBeNull();
+    expect(decision.resubmitAllowed).toBe(false);
+  });
+
   it('FOUND + digest 一致 → ADOPT_EXISTING（采用既有 id，且不重发、不外写）', () => {
     const decision = decideProviderReconciliation({
       lookup: {

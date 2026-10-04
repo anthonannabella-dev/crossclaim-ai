@@ -25,6 +25,7 @@ import type {
   CustomsFilingSubmissionResult,
   CustomsFilingUploadEvidenceInput,
 } from './customs-filing-provider';
+import { providerSubmissionPayloadDigest } from './customs-provider-reconciliation-lookup';
 
 export const SANDBOX_FILING_PROVIDER_ID = 'sandbox:customs';
 
@@ -50,8 +51,6 @@ interface SandboxSubmission {
   organizationId: string;
   idempotencyKey: string;
   payloadDigest: string;
-  /** 不可变载荷标识（provider 侧对账用；与请求 packageDigest 同形）。 */
-  packageDigest: string;
   status: string;
   acceptedAt: string | null;
   refundStatus: string;
@@ -123,7 +122,9 @@ export function createSandboxFilingProvider(options: SandboxFilingProviderOption
     capabilities: SANDBOX_CAPABILITIES,
 
     async createSubmission(input: CustomsFilingCreateSubmissionInput): Promise<CustomsFilingSubmissionResult> {
-      const payloadDigest = digest({
+      // MSG-20261004-20：幂等/对账身份 = 完整 immutable payload 的 canonical SHA-256，
+      // 不再只比较 packageDigest（jurisdiction / remedy / claim identity 一变即为不同请求）。
+      const payloadDigest = providerSubmissionPayloadDigest({
         organizationId: input.organizationId,
         opportunityId: input.opportunityId,
         claimItemId: input.claimItemId,
@@ -150,7 +151,6 @@ export function createSandboxFilingProvider(options: SandboxFilingProviderOption
         organizationId: input.organizationId,
         idempotencyKey: input.idempotencyKey,
         payloadDigest,
-        packageDigest: input.packageDigest,
         status: 'SUBMITTED',
         acceptedAt: null,
         refundStatus: 'NOT_REFUNDED',
@@ -293,7 +293,7 @@ export function createSandboxFilingProvider(options: SandboxFilingProviderOption
       return {
         outcome: 'FOUND' as const,
         providerSubmissionId: row.providerSubmissionId,
-        payloadDigest: row.packageDigest,
+        payloadDigest: row.payloadDigest,
         status: row.status,
       };
     },

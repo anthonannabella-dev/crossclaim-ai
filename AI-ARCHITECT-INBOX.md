@@ -131869,3 +131869,176 @@ C18 = HOLD_EXTERNAL
 
 另外，本次 9ffa228 查询仍没有拿到该 exact HEAD 可独立确认的 GitHub workflow run/status，所以我不把 Codex 报告的测试数字表述为已独立确认的 GitHub CI SUCCESS。
 ```
+
+### [MSG-20261004-20] ARCHITECT VERDICT — LAYER 3 / C18 INTERNAL FINAL-3 = REVISE（reviewed HEAD = a088d90；只读 lookup 端口 / 无第二次 POST / C17 接线 / root 恒为 1 / NOT_FOUND→MANUAL_REVIEW / MISMATCH→MANUAL_REVIEW / resubmitAllowed=false 全部 PASS；C18-8 唯一残留 = payloadDigest 身份名实不符：Sandbox 返回的其实是 packageDigest，必须改成完整 immutable payload 的 canonical SHA-256（organizationId/opportunityId/claimItemId/packageId/packageDigest/jurisdiction/remedyType），并补「同 key + 同 packageDigest 但不同 jurisdiction/remedy」→ CONFLICT_MISMATCH、绝不 ADOPT_EXISTING 的反例；C18-1…C18-7 = CLOSED（C18-4 = CLOSED_WITH_PRODUCTION_GATE）；C18_INTERNAL_SKELETON = NOT_CLOSED（修完直接送 FINAL-4，只核该 digest）；SEO-3 Public API Security + 两个 Schema Delta 提案可并行推进，但 migration 必须等 Schema Delta 审计 PASS；REAL_TRANSPORT/PRODUCTION_ENABLEMENT/EXTERNAL_WRITE/PAYMENT = HOLD）
+
+```text
+ARCHITECT VERDICT：REVISE
+
+我按 reviewed HEAD = a088d90（完整 SHA a088d90260e3710a9fe473fd1d88f8fbc6f5a4be）重新核了 FINAL-3。
+
+这次**“第二次 POST”问题已经真正解决**：PG E2E 现在确实是 createSubmissionCalls === 1 + lookupCalls === 1，对账走独立只读端口，C17 事实链也是 UNKNOWN_PROVIDER_RESPONSE → RECONCILING → SUBMITTED/MANUAL_REVIEW，submission root 始终只有 1 个。这一部分 PASS。
+
+但还发现最后一个很窄、却会影响错误 adopt 的问题：
+
+唯一残留：payloadDigest 实际上只是 packageDigest
+
+新端口定义的是：
+
+纯文本
+FOUND {
+  providerSubmissionId,
+  payloadDigest,
+  status
+}
+
+语义明确是：
+
+provider 侧记录的不可变请求载荷摘要。
+
+可是 Sandbox 实际返回：
+
+TypeScript
+payloadDigest: row.packageDigest
+
+而 packageDigest 只代表 claim package 内容。
+
+原始 createSubmission 的不可变语义还包含例如：
+
+纯文本
+organizationId
+opportunityId
+claimItemId
+packageId
+packageDigest
+jurisdiction
+remedyType
+
+C17 自己的 root immutable equality 更严格，还会比较这些字段。
+
+因此现在存在理论上的错误采用：
+
+纯文本
+same idempotencyKey
+same packageDigest
+different jurisdiction / remedy / claim identity
+↓
+lookup 返回相同 packageDigest
+↓
+decideProviderReconciliation()
+↓
+ADOPT_EXISTING
+
+而正确结果应该是 conflict/fail-closed。
+
+尤其仓库里其实已经有一个真正的稳定请求摘要概念：
+
+纯文本
+customsProviderRequestDigest(...)
+
+这也是前面 C18-2 专门修过的 deep canonical SHA-256。
+
+所以不要把 packageDigest 冒充 payloadDigest。
+
+最小修法
+
+二选一即可，我更推荐 A：
+
+A. 真正生成完整 immutable payload digest
+
+给 provider submission create payload 定义一个统一 SHA-256 canonical digest，例如：
+
+纯文本
+providerSubmissionPayloadDigest({
+  organizationId,
+  opportunityId,
+  claimItemId,
+  packageId,
+  packageDigest,
+  jurisdiction,
+  remedyType
+})
+
+Sandbox 创建时保存这个 64-char SHA-256；
+
+lookup 返回它：
+
+纯文本
+payloadDigest = stored immutable payload digest
+
+PG E2E 本地 expected digest 也使用同一个规范函数计算。
+
+然后增加一条反例：
+
+纯文本
+same idempotencyKey
+same packageDigest
+different remedyType or jurisdiction
+→ CONFLICT_MISMATCH
+→ never ADOPT_EXISTING
+
+B. 如果你们本来只想比较 packageDigest
+
+那就必须把接口字段明确改名为：
+
+纯文本
+packageDigest
+
+但我不建议这样，因为它弱于 C17/C18 已经建立的“same key + same immutable payload”不变量。
+
+除此之外，本轮剩余内容可以通过：
+
+纯文本
+READ_ONLY_LOOKUP_PORT = PASS
+NO_SECOND_POST = PASS
+C17_LEDGER_WIRING = PASS
+ROOT_EXACTLY_ONE = PASS
+NOT_FOUND → MANUAL_REVIEW = PASS
+MISMATCH → MANUAL_REVIEW = PASS
+resubmitAllowed = false = PASS
+
+所以这已经不是架构方向问题，只是 digest identity 必须名实一致。
+
+当前裁定：
+
+纯文本
+C18-1 = CLOSED
+C18-2 = CLOSED
+C18-3 = CLOSED
+C18-4 = CLOSED_WITH_PRODUCTION_GATE
+C18-5 = CLOSED
+C18-6 = CLOSED
+C18-7 = CLOSED
+C18-8 = REVISE — only payloadDigest identity residual
+
+C18_INTERNAL_SKELETON = NOT_CLOSED
+
+修这一条以后直接送 C18 INTERNAL FINAL-4；我只需要核这个 digest，不需要再重审 C18-1～7。
+
+同时，可以并行推进，不必等 FINAL-4：
+
+纯文本
+SEO-3 Public Checker / Calculator
+→ PUBLIC API SECURITY AUDIT
+
+C18 Schema Delta proposal A
+→ ProviderTenantBinding persistence
+
+C18 Schema Delta proposal B
+→ ProviderWebhookReplayClaim persistence
+→ UNIQUE(providerId, deliveryId)
+→ atomic claim
+
+所以第③问答案是 YES：SEO-3 与两个 Schema Delta 可以同时推进；但 migration 仍必须等 Schema Delta 审计 PASS 后再写。
+
+边界继续保持：
+
+纯文本
+REAL_TRANSPORT = HOLD
+PRODUCTION_ENABLEMENT = HOLD
+EXTERNAL_WRITE = HOLD
+PAYMENT = HOLD
+C18 = HOLD_EXTERNAL
+
+另外，我对 exact HEAD a088d90 的查询仍没有取得可独立确认的 GitHub workflow run/status，因此本轮测试数字仍作为 Codex 的送审证据，而不是我独立确认的 GitHub CI SUCCESS。
+```

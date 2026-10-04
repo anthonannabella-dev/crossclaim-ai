@@ -15,6 +15,8 @@
  * 查不到 → 仍需人工复核（绝不自动重发）。
  */
 
+import { createHash } from 'node:crypto';
+
 const DIGEST_RE = /^[0-9a-f]{64}$/;
 const OPAQUE_REF_RE = /^[A-Za-z0-9._:@#/-]{1,96}$/;
 const RAW_URL_SCHEME_RE = /^(https?:\/\/|javascript:|data:|file:)/i;
@@ -28,6 +30,49 @@ export type ProviderReconciliationLookupOutcome =
       payloadDigest: string;
       status: string;
     };
+
+/**
+ * provider submission 的**完整不可变请求载荷摘要**（MSG-20261004-20 唯一残留）。
+ * 与 packageDigest 的区别：packageDigest 只代表 claim package 内容，而 C17/C18 的
+ * 「同 key + 同 immutable payload」不变量覆盖整个提交身份（含 jurisdiction / remedy / claim identity）。
+ * 递归按键排序后取 SHA-256，保证稳定且对任一分量敏感。
+ */
+export const PROVIDER_SUBMISSION_PAYLOAD_FIELDS = [
+  'organizationId',
+  'opportunityId',
+  'claimItemId',
+  'packageId',
+  'packageDigest',
+  'jurisdiction',
+  'remedyType',
+] as const;
+
+export interface ProviderSubmissionPayloadIdentity {
+  organizationId: string;
+  opportunityId: string;
+  claimItemId: string;
+  packageId: string;
+  packageDigest: string;
+  jurisdiction: string;
+  remedyType: string;
+}
+
+function canonicalize(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map((entry) => canonicalize(entry));
+  if (value !== null && typeof value === 'object') {
+    const source = value as Record<string, unknown>;
+    const out: Record<string, unknown> = {};
+    for (const key of Object.keys(source).sort()) out[key] = canonicalize(source[key]);
+    return out;
+  }
+  return value;
+}
+
+export function providerSubmissionPayloadDigest(input: ProviderSubmissionPayloadIdentity): string {
+  const canonical: Record<string, string> = {};
+  for (const field of PROVIDER_SUBMISSION_PAYLOAD_FIELDS) canonical[field] = String(input[field] ?? '');
+  return createHash('sha256').update(JSON.stringify(canonicalize(canonical)), 'utf8').digest('hex');
+}
 
 /** 只读端口：实现方必须是**查询**语义，绝不产生或修改 provider 侧状态。 */
 export interface CustomsProviderReconciliationLookup {

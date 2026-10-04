@@ -23,7 +23,10 @@ import {
   classifyProviderOutcome,
   ProviderBlindRetryError,
 } from '../services/customs/customs-provider-reconciliation';
-import { decideProviderReconciliation } from '../services/customs/customs-provider-reconciliation-lookup';
+import {
+  decideProviderReconciliation,
+  providerSubmissionPayloadDigest,
+} from '../services/customs/customs-provider-reconciliation-lookup';
 
 const prisma = new PrismaClient();
 const ORG = 'cc180000-0000-4000-8000-000000000001';
@@ -148,7 +151,10 @@ describe('C18-8 — AMBIGUOUS → C17 ledger reconciliation (PostgreSQL)', () =>
       idempotencyKey: 'idem-c18-8',
     });
     expect(lookup.outcome).toBe('FOUND');
-    const decision = decideProviderReconciliation({ lookup, expectedPayloadDigest: DIGEST_A });
+    const decision = decideProviderReconciliation({
+      lookup,
+      expectedPayloadDigest: providerSubmissionPayloadDigest(sandboxInput('idem-c18-8')),
+    });
     expect(decision.verdict).toBe('ADOPT_EXISTING');
     expect(decision.providerSubmissionId).toBe(applied.providerSubmissionId);
     expect(decision.resubmitAllowed).toBe(false);
@@ -227,9 +233,14 @@ describe('C18-8 — AMBIGUOUS → C17 ledger reconciliation (PostgreSQL)', () =>
       idempotencyKey: 'idem-c18-8-b',
     });
     expect(lookup.outcome).toBe('FOUND');
-    const decision = decideProviderReconciliation({ lookup, expectedPayloadDigest: DIGEST_B });
+    const decision = decideProviderReconciliation({
+      lookup,
+      expectedPayloadDigest: providerSubmissionPayloadDigest(sandboxInput('idem-c18-8-b', DIGEST_B)),
+    });
     expect(decision.verdict).toBe('CONFLICT_MISMATCH');
-    expect(decision.providerPayloadDigest).toBe(DIGEST_A);
+    expect(decision.providerPayloadDigest).toBe(
+      providerSubmissionPayloadDigest(sandboxInput('idem-c18-8-b', DIGEST_A)),
+    );
     expect(decision.providerSubmissionId).toBeNull();
 
     // digest 不一致 → 不得 adopt；进入人工复核，且不产生第二根、不盲目 POST。
@@ -261,5 +272,77 @@ describe('C18-8 — AMBIGUOUS → C17 ledger reconciliation (PostgreSQL)', () =>
       'MANUAL_REVIEW',
     ]);
     expect(facts.some((f) => f.status === 'SUBMITTED')).toBe(false);
+  });
+
+  it('同 key + 同 packageDigest 但不同 remedyType：digest 不同 → CONFLICT_MISMATCH（绝不误采用）', async () => {
+    const store = createPrismaCustomsSubmissionLedgerStore(prisma);
+    const provider = createSandboxFilingProvider({ now: () => NOW });
+    let createSubmissionCalls = 0;
+    let lookupCalls = 0;
+
+    const opened = await openCustomsSubmissionAttempt(
+      rootInput({ idempotencyKey: 'idem-c18-8-c', remedyType: 'PROTEST' }),
+      { store, now: () => NOW },
+    );
+    if (!opened.ok) throw new Error('expected root');
+    const attemptId = opened.root.id;
+
+    // provider 侧已有：同 key + 同 packageDigest，但 remedyType 不同（DRAWBACK）。
+    await provider.createSubmission(sandboxInput('idem-c18-8-c', DIGEST_A));
+    createSubmissionCalls += 1;
+
+    lookupCalls += 1;
+    const lookup = await provider.lookupByIdempotencyKey({
+      organizationId: ORG,
+      idempotencyKey: 'idem-c18-8-c',
+    });
+    expect(lookup.outcome).toBe('FOUND');
+    const decision = decideProviderReconciliation({
+      lookup,
+      expectedPayloadDigest: providerSubmissionPayloadDigest({
+        ...sandboxInput('idem-c18-8-c', DIGEST_A),
+        remedyType: 'PROTEST',
+      }),
+    });
+    expect(decision.verdict).toBe('CONFLICT_MISMATCH');
+    expect(decision.providerSubmissionId).toBeNull();
+    expect(decision.resubmitAllowed).toBe(false);
+
+    for (const step of [
+      { status: 'ATTEMPTED', observedAt: '2026-10-04T05:50:00.000Z' },
+      { status: 'UNKNOWN_PROVIDER_RESPONSE', observedAt: '2026-10-04T05:51:00.000Z' },
+      { status: 'RECONCILING', observedAt: '2026-10-04T05:52:00.000Z', reconciliationAttempt: 1 },
+      {
+        status: 'MANUAL_REVIEW',
+        observedAt: '2026-10-04T05:53:00.000Z',
+        errorCode: decision.reasonCode,
+        reconciliationAttempt: 1,
+      },
+    ] as const) {
+      const outcome = await recordCustomsSubmissionAttemptFact(
+        {
+          organizationId: ORG,
+          attemptId,
+          verificationLevel: 'PROVIDER_VERIFIED',
+          source: 'PROVIDER_API',
+          providerSubmissionId: null,
+          ...step,
+        } as never,
+        { store, now: () => NOW },
+      );
+      if (!outcome.ok) throw new Error('expected fact, got ' + outcome.reason);
+    }
+
+    const facts = await store.listFacts(ORG, attemptId);
+    expect(facts.map((f) => f.status)).toEqual([
+      'ATTEMPTED',
+      'UNKNOWN_PROVIDER_RESPONSE',
+      'RECONCILING',
+      'MANUAL_REVIEW',
+    ]);
+    expect(await prisma.customsSubmissionAttempt.count()).toBe(1);
+    expect(provider.listSubmissions(ORG)).toHaveLength(1);
+    expect(createSubmissionCalls).toBe(1);
+    expect(lookupCalls).toBe(1);
   });
 });
