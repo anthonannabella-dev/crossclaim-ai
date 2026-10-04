@@ -20,7 +20,8 @@
     "export:recover-static": "tsx src/services/seo/seo-recover-static-cli.ts",
     "rsi:dev": "tsx src/runtime/rsi-controller.ts",
     "rsi:start": "node dist/runtime/rsi-controller.js",
-    "rsi:health": "node -e \"fetch(process.env.RSI_HEALTH_URL || 'http://127.0.0.1:4319/health').then(r => r.text()).then(t => console.log(t))\""
+    "rsi:health": "node -e \"fetch(process.env.RSI_HEALTH_URL || 'http://127.0.0.1:4319/health').then(r => r.text()).then(t => console.log(t))\"",
+    "rsi:run": "tsx src/runtime/rsi-run.ts"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0"

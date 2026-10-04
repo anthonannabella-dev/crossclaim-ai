@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-10-04T16:56:21.137Z",
-  "acceptance_head": "a2afd37",
+  "generated_at": "2026-10-04T17:01:18.641Z",
+  "acceptance_head": "812b408",
   "protocol": "docs/releases/FINAL-ACCEPTANCE-PROTOCOL.md",
   "areas": [
     {
@@ -222,7 +222,8 @@
     "RSI-CONT-02-controller-wiring",
     "RSI-CONT-03-event-sources",
     "RSI-CONT-04-event-loop",
-    "RSI-CONT-05-local-sources"
+    "RSI-CONT-05-local-sources",
+    "RSI-CONT-06-runtime-composition"
   ],
   "host_action_required": [
     "provider developer/partner account registration",

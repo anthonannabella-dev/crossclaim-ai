@@ -1,6 +1,6 @@
 {
   "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。",
-  "updatedAt": "2026-10-05T01:57:00.000Z",
+  "updatedAt": "2026-10-05T02:02:00.000Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -1615,6 +1615,16 @@
       "title": "本地只读事件源（CI 结果 / verdict / 测试结果 artifact 解析）",
       "scope": "createLocalEventSources + parseCiResults/parseVerdict/parseTestResults；缺失或非法 JSON 静默；fs 注入可测；只读",
       "acceptance_criteria": "vitest rsi-local-sources 3/3 + rsi-event-loop 3/3；api tsc 0",
+      "status": "IMPLEMENTED_PENDING_CI",
+      "implementation_head": "(this commit)"
+    },
+    {
+      "id": "RSI-CONT-06-runtime-composition",
+      "priority": "P0",
+      "source_backlog_id": "OWNER 任务：Event-Driven Immediate Continuation",
+      "title": "RSI Runtime 组装入口 rsi:run（本地源+事件循环+控制器+runner）",
+      "scope": "composeRsiRuntime：只读队列/CI/verdict artifact → 事件驱动领取；默认 no-op runner（不执行外部动作）；可起停、可 systemd 托管",
+      "acceptance_criteria": "vitest rsi-run 3/3；api tsc 0；无凭据/无库写/无外写",
       "status": "IMPLEMENTED_PENDING_CI",
       "implementation_head": "(this commit)"
     }
