@@ -149,3 +149,22 @@ export function appendEvidence(
   }
   return { ok: true, evidence: [...existing, next] };
 }
+
+/**
+ * RSI-RT-06（MSG-20261005-01 ②③）——DB CHECK 值域与类型声明。
+ * ---------------------------------------------------------------
+ * migration 20261005000000_rsi_autonomy_state_persistence 里的 TEXT + CHECK 必须与本文件
+ * **逐字一致**（rsi-schema-contract.test.ts 会逐项比对）。改状态只能改这里 + 新 migration，
+ * 不允许在 DB 里单独加值，也不需要 PostgreSQL enum。
+ */
+export const RSI_LEASE_STATES = ['ACTIVE', 'EXPIRED', 'RELEASED'] as const;
+export const RSI_EVALUATION_KINDS = ['TEST', 'REPLAY', 'BENCHMARK', 'SECURITY', 'POLICY'] as const;
+export const RSI_EVALUATION_RUN_STATES = ['PENDING', 'RUNNING', 'PASSED', 'FAILED', 'INCONCLUSIVE'] as const;
+export const RSI_PROMOTION_DECISIONS = ['PROMOTED', 'REJECTED', 'ROLLED_BACK'] as const;
+export const RSI_RISK_CLASSES = ['LOW', 'MEDIUM', 'HIGH'] as const;
+
+export type RsiLeaseState = (typeof RSI_LEASE_STATES)[number];
+export type RsiEvaluationKind = (typeof RSI_EVALUATION_KINDS)[number];
+export type RsiEvaluationRunState = (typeof RSI_EVALUATION_RUN_STATES)[number];
+export type RsiPromotionDecisionKind = (typeof RSI_PROMOTION_DECISIONS)[number];
+export type RsiRiskClass = (typeof RSI_RISK_CLASSES)[number];

@@ -3245,3 +3245,154 @@ model CustomsProviderWebhookReplayClaim {
   @@unique([providerId, deliveryId])
   @@index([claimedAt])
 }
+
+// ============================================================
+// RSI-RT-06 — RSI 自治运行时状态持久化（平台级，非业务租户表）
+// 裁定：MSG-20261005-01 = PASS WITH REVISE（RSI_SCHEMA_DELTA = APPROVED_WITH_REVISIONS）
+//   · RSI_SCOPE = PLATFORM_LEVEL；显式契约例外 RSI_PLATFORM_SCOPE_EXCEPTION = APPROVED
+//     本组表不是业务租户表：无 organizationId / tenantId / customerId，
+//     不保存客户数据、客户授权、凭据或 token，不参与 recovery claim / payment / provider execution。
+//   · 生命周期状态一律 TEXT + CHECK（值域与 apps/api/src/services/autonomy/rsi-lifecycle.ts 单源一致），
+//     不用 PostgreSQL enum，避免 ALTER TYPE 迁移风险。
+//   · Incident / Task / Candidate / Promotion 各带 UNIQUE(dedupeKey)，reboot 后同因不重复建。
+//   · MetricResult / PromotionDecision / RollbackRecord 为 append-only 证据表（DB trigger 拒绝 UPDATE/DELETE），
+//     新增事实用 new record + supersedes reference。
+//   · PromotionDecision 必须 fail-closed：judgeRef != candidate.builderRef（DB trigger 强制）。
+//   · 本批只提交 schema + migration draft；**migrate deploy 未执行**（HOLD）。
+// ============================================================
+
+model AutonomyIncident {
+  id         String   @id @default(uuid())
+  kind       String
+  dedupeKey  String
+  status     String   @default("OPEN")
+  riskClass  String
+  sourceRefs Json
+  detectedAt DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  tasks AutonomyTask[]
+
+  @@unique([dedupeKey])
+  @@index([status, detectedAt])
+  @@index([kind, detectedAt])
+}
+
+model AutonomyTask {
+  id                String   @id @default(uuid())
+  incidentId        String
+  status            String   @default("READY")
+  riskClass         String
+  ownerGateRequired Boolean  @default(false)
+  dedupeKey         String
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  incident   AutonomyIncident    @relation(fields: [incidentId], references: [id], onDelete: Restrict)
+  candidates AutonomyCandidate[]
+  lease      AutonomyLease?
+
+  @@unique([dedupeKey])
+  @@index([incidentId, status])
+  @@index([status, createdAt])
+}
+
+model AutonomyCandidate {
+  id            String   @id @default(uuid())
+  taskId        String
+  status        String   @default("CREATED")
+  builderRef    String
+  baselineRef   String
+  codeCommitRef String?
+  promptVersion String?
+  dedupeKey     String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  task               AutonomyTask                @relation(fields: [taskId], references: [id], onDelete: Restrict)
+  evaluationRuns     AutonomyEvaluationRun[]
+  promotionDecisions AutonomyPromotionDecision[]
+  rollbackRecords    AutonomyRollbackRecord[]
+
+  @@unique([dedupeKey])
+  @@index([taskId, status])
+  @@index([builderRef, createdAt])
+}
+
+model AutonomyEvaluationRun {
+  id          String    @id @default(uuid())
+  candidateId String
+  kind        String
+  status      String    @default("PENDING")
+  startedAt   DateTime
+  finishedAt  DateTime?
+  createdAt   DateTime  @default(now())
+
+  candidate AutonomyCandidate    @relation(fields: [candidateId], references: [id], onDelete: Restrict)
+  metrics   AutonomyMetricResult[]
+
+  @@index([candidateId, kind, startedAt])
+  @@index([status, startedAt])
+}
+
+model AutonomyMetricResult {
+  id              String   @id @default(uuid())
+  evaluationRunId String
+  name            String
+  value           Decimal  @db.Decimal(18, 6)
+  unit            String
+  recordedAt      DateTime @default(now())
+  supersedesId    String?
+
+  evaluationRun AutonomyEvaluationRun @relation(fields: [evaluationRunId], references: [id], onDelete: Restrict)
+
+  @@index([evaluationRunId, name, recordedAt])
+}
+
+model AutonomyPromotionDecision {
+  id           String   @id @default(uuid())
+  candidateId  String
+  dedupeKey    String
+  decision     String
+  reason       String
+  judgeRef     String
+  decidedAt    DateTime
+  supersedesId String?
+
+  candidate AutonomyCandidate @relation(fields: [candidateId], references: [id], onDelete: Restrict)
+
+  @@unique([dedupeKey])
+  @@index([candidateId, decidedAt])
+  @@index([decision, decidedAt])
+}
+
+model AutonomyRollbackRecord {
+  id           String   @id @default(uuid())
+  candidateId  String
+  targetRef    String
+  reason       String
+  triggeredBy  String
+  recordedAt   DateTime @default(now())
+  supersedesId String?
+
+  candidate AutonomyCandidate @relation(fields: [candidateId], references: [id], onDelete: Restrict)
+
+  @@index([candidateId, recordedAt])
+}
+
+model AutonomyLease {
+  id         String   @id @default(uuid())
+  taskId     String   @unique
+  ownerRef   String
+  acquiredAt DateTime
+  renewedAt  DateTime
+  expiresAt  DateTime
+  status     String   @default("ACTIVE")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  task AutonomyTask @relation(fields: [taskId], references: [id], onDelete: Restrict)
+
+  @@index([status, expiresAt])
+}
