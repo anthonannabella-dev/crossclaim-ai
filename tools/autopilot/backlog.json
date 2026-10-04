@@ -1,6 +1,6 @@
 {
   "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。",
-  "updatedAt": "2026-10-05T01:10:00.000Z",
+  "updatedAt": "2026-10-05T01:11:00.000Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -1447,7 +1447,14 @@
       "title": "Model Router 适配（DeepSeek/Qwen 低成本→强模型升级；凭据只在 Router 侧）",
       "scope": "RSI 长期运行但不得持续消耗 token：确定性优先、分级、预算与熔断",
       "acceptance_criteria": "对应实现/用例落地；api tsc 0；不新增 schema（如需另送 Schema Delta）",
-      "status": "READY"
+      "status": "IMPLEMENTED_PENDING_CI",
+      "implementation_head": "(this commit)",
+      "artifacts": [
+        "apps/api/src/services/autonomy/rsi-model-router.ts",
+        "apps/api/src/__tests__/rsi-model-router.test.ts"
+      ],
+      "evidence": "vitest rsi-model-router 4/4；api tsc 0",
+      "remaining": "真实 provider HTTP 适配器需宿主注入凭据（HOLD），本层只定义注入点"
     },
     {
       "id": "RSI-COST-03-call-ledger",
