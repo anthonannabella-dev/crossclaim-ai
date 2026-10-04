@@ -80,7 +80,7 @@ describe('SEO-6 — page plan + indexability integration', () => {
     expect(plan.inSitemap).toBe(true);
     expect(plan.noindexReasons).toEqual([]);
     expect(plan.metadata.robots).toBe('index,follow');
-    expect(plan.path).toBe('/recover/customs/drawback');
+    expect(plan.path).toBe('/recover/us-customs-drawback');
     expect(plan.jsonLd.map((b) => b['@type'])).toEqual(['BreadcrumbList', 'ItemList', 'FAQPage']);
     expect(plan.externalWritePerformed).toBe(false);
   });

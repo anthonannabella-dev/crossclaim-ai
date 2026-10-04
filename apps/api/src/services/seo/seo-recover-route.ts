@@ -157,11 +157,7 @@ export function resolveRecoverRoute(input: SeoRecoverRouteInput): SeoRecoverRout
     });
   }
 
-  const path = buildRecoverPath({
-    platform: rule.platform.toLowerCase(),
-    recoveryType: rule.recoveryType,
-    locale,
-  });
+  const path = buildRecoverPath({ slug: rule.slug, locale });
   const reason: SeoRecoverRouteReason = localeFallbackApplied ? 'RECOVER_LOCALE_FALLBACK' : 'RECOVER_OK';
   const indexable = rule.indexable && reason === 'RECOVER_OK';
 
@@ -206,6 +202,8 @@ export interface SeoRecoverRouteMetadataInput {
    */
   titleRef?: string | null;
   descriptionRef?: string | null;
+  /** STRICT_REACHABILITY（MSG-20261005-03）：真实存在页面的语言集合。 */
+  reachableLocales?: readonly SeoLocale[];
 }
 
 export interface SeoRecoverRouteMetadata {
@@ -240,7 +238,12 @@ export function buildRecoverRouteMetadata(input: SeoRecoverRouteMetadataInput): 
     robots: decision.robots,
     canonical: canonicalizable ? `${base}${decision.path}` : null,
     alternates: canonicalizable
-      ? buildAlternates({ baseUrl: input.baseUrl, path: decision.path!, canonicalLocale: decision.locale })
+      ? buildAlternates({
+          baseUrl: input.baseUrl,
+          path: decision.path!,
+          canonicalLocale: decision.locale,
+          reachableLocales: input.reachableLocales,
+        })
       : [],
     titleRef: input.titleRef ?? null,
     descriptionRef: input.descriptionRef ?? null,
@@ -533,6 +536,8 @@ export interface SeoRecoverPagePlanInput {
   disallowPaths?: readonly string[];
   titleRef?: string | null;
   descriptionRef?: string | null;
+  /** STRICT_REACHABILITY（MSG-20261005-03）：真实存在页面的语言集合。 */
+  reachableLocales?: readonly SeoLocale[];
 }
 
 export interface SeoRecoverPagePlan {
@@ -579,6 +584,7 @@ export function buildRecoverPagePlan(input: SeoRecoverPagePlanInput): SeoRecover
     baseUrl: input.baseUrl,
     titleRef: input.titleRef ?? null,
     descriptionRef: input.descriptionRef ?? null,
+    reachableLocales: input.reachableLocales,
   });
 
   const jsonLd = buildRecoverRouteJsonLd({

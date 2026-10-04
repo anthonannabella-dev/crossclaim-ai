@@ -67,6 +67,8 @@ export function buildRecoverStaticProjectionFromRules(input: SeoRecoverExportInp
         baseUrl: input.baseUrl,
         relatedPages: input.relatedPages,
         breadcrumb: input.breadcrumb,
+        // STRICT_REACHABILITY：只声明本次真的生成页面的语言。
+        reachableLocales: locales,
       });
 
       pages.push({

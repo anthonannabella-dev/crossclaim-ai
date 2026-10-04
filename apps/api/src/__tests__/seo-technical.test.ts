@@ -80,21 +80,34 @@ describe('SEO-5 — technical SEO builders', () => {
   });
 
   it('URL 契约：/recover/{platform} 与 /recover/{platform}/{recoveryType}，非法段返回 null', () => {
-    expect(buildRecoverPath({ platform: 'customs', locale: 'en' })).toBe('/recover/customs');
-    expect(buildRecoverPath({ platform: 'customs', recoveryType: 'duty-overpayment', locale: 'zh' })).toBe(
-      '/zh/recover/customs/duty-overpayment',
+    expect(buildRecoverPath({ slug: 'customs-duty-overpayment', locale: 'en' })).toBe(
+      '/recover/customs-duty-overpayment',
     );
-    expect(buildRecoverPath({ platform: 'BAD PLATFORM', locale: 'en' })).toBeNull();
-    expect(buildRecoverPath({ platform: 'customs', recoveryType: 'Bad Type', locale: 'en' })).toBeNull();
+    expect(buildRecoverPath({ slug: 'customs-duty-overpayment', locale: 'zh' })).toBe(
+      '/zh/recover/customs-duty-overpayment',
+    );
+    expect(buildRecoverPath({ slug: 'BAD SLUG', locale: 'en' })).toBeNull();
+    expect(buildRecoverPath({ slug: 'ab', locale: 'en' })).toBeNull();
   });
 
   it('hreflang alternates：5 语言 + x-default，且 canonical 语言自指', () => {
-    const alternates = buildAlternates({ baseUrl: BASE, path: '/zh/recover/customs/drawback', canonicalLocale: 'zh' });
-    expect(alternates).toHaveLength(6);
-    expect(alternates.map((a) => a.hreflang)).toEqual(['en', 'zh', 'de', 'ja', 'es', 'x-default']);
-    expect(alternates.find((a) => a.hreflang === 'en')?.href).toBe(`${BASE}/recover/customs/drawback`);
-    expect(alternates.find((a) => a.hreflang === 'zh')?.href).toBe(`${BASE}/zh/recover/customs/drawback`);
-    expect(alternates.find((a) => a.hreflang === 'x-default')?.href).toBe(`${BASE}/zh/recover/customs/drawback`);
+    const alternates = buildAlternates({ baseUrl: BASE, path: '/zh/recover/customs-drawback', canonicalLocale: 'zh' });
+    expect(alternates).toHaveLength(2);
+    expect(alternates.map((a) => a.hreflang)).toEqual(['zh', 'x-default']);
+    expect(alternates.find((a) => a.hreflang === 'zh')?.href).toBe(`${BASE}/zh/recover/customs-drawback`);
+    expect(alternates.find((a) => a.hreflang === 'x-default')?.href).toBe(`${BASE}/zh/recover/customs-drawback`);
+  });
+
+  it('STRICT_REACHABILITY：只声明传入的可达语言，未确认的可达语言一律省略', () => {
+    const alternates = buildAlternates({
+      baseUrl: BASE,
+      path: '/recover/customs-drawback',
+      canonicalLocale: 'en',
+      reachableLocales: ['en', 'ja'],
+    });
+    expect(alternates.map((a) => a.hreflang)).toEqual(['en', 'ja', 'x-default']);
+    expect(alternates.some((a) => a.hreflang === 'de')).toBe(false);
+    expect(buildAlternates({ baseUrl: BASE, path: '/recover/x', reachableLocales: [] })).toEqual([]);
   });
 
   it('sitemap：只有通过 indexability gate 的页面才收录，未通过带原因进 excluded', () => {
@@ -110,7 +123,7 @@ describe('SEO-5 — technical SEO builders', () => {
       ],
     });
     expect(entries).toHaveLength(1);
-    expect(entries[0]?.url).toBe(`${BASE}/recover/customs/drawback`);
+    expect(entries[0]?.url).toBe(`${BASE}/recover/us-customs-drawback`);
     expect(entries[0]?.lastModified).toBe('2026-10-02T00:00:00.000Z');
     expect(excluded.map((e) => e.slug).sort()).toEqual(['expired-page', 'thin-page']);
     expect(excluded.find((e) => e.slug === 'thin-page')?.reasons).toContain('RENDER_METRICS_REQUIRED');
@@ -127,15 +140,15 @@ describe('SEO-5 — technical SEO builders', () => {
 
   it('metadata：canonical 自指 + robots 由 indexability 决定（noindex 绝不写 index）', () => {
     const indexable = buildSeoMetadata({ rule: rule(), locale: 'en', baseUrl: BASE, indexable: true });
-    expect(indexable.canonical).toBe(`${BASE}/recover/customs/drawback`);
+    expect(indexable.canonical).toBe(`${BASE}/recover/us-customs-drawback`);
     expect(indexable.robots).toBe('index,follow');
     expect(indexable.title).toBe(rule().title);
-    expect(indexable.alternates).toHaveLength(6);
+    expect(indexable.alternates).toHaveLength(2);
     expect(indexable.openGraph.url).toBe(indexable.canonical);
 
     const noindex = buildSeoMetadata({ rule: rule(), locale: 'de', baseUrl: BASE, indexable: false });
     expect(noindex.robots).toBe('noindex,follow');
-    expect(noindex.canonical).toBe(`${BASE}/de/recover/customs/drawback`);
+    expect(noindex.canonical).toBe(`${BASE}/de/recover/us-customs-drawback`);
   });
 
   it('JSON-LD：Breadcrumb 需要至少两级；FAQ 与 related 列表为空时返回 null（禁止虚构）', () => {
@@ -143,7 +156,7 @@ describe('SEO-5 — technical SEO builders', () => {
     const breadcrumb = buildBreadcrumbJsonLd([
       { name: 'Home', url: BASE },
       { name: 'Customs', url: `${BASE}/recover/customs` },
-      { name: rule().title, url: `${BASE}/recover/customs/drawback` },
+      { name: rule().title, url: `${BASE}/recover/us-customs-drawback` },
     ]);
     expect(breadcrumb?.['@type']).toBe('BreadcrumbList');
     expect((breadcrumb?.itemListElement as unknown[]).length).toBe(3);

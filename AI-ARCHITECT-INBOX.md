@@ -136179,3 +136179,338 @@ PRODUCTION_CREDENTIALS = HOLD
 
 在宿主提供的非生产 DATABASE_URL 后执行 staging smoke，不需要继续修改 migration draft。
 ```
+
+### [MSG-20261005-03] ARCHITECT VERDICT — SEO-4 路由形状 = **方案 A**（PASS WITH DECISION）：canonical 对齐真实 route。裁定：`SEO_URL_CONTRACT = OPTION_A`、`CANONICAL = /{locale}/recover/{slug}`、`SLUG = URL_IDENTITY`、`PLATFORM = METADATA_ONLY`、`RECOVERY_TYPE = CONTENT/TAXONOMY_ONLY`、`HREFLANG = ONLY_REACHABLE_LOCALES`、`/recover/{slug} = KEEP`、`301 = NOT_REQUIRED`、`DEFAULT_NOINDEX = CONTINUE`、`SEO-4 ROUTE CONTRACT = APPROVED`。理由：当前不是 SEO 内容问题，而是 **public URL contract 出现两个来源**（`seo-technical.ts` 的 canonical `/{locale}/recover/{platform}[/{recoveryType}]` vs `apps/web` 实际 route `/recover/{slug}`），必须先统一，否则任何 sitemap / hreflang / canonical 都是不可信信号；方案 B 会让「一个规则 = 多个 URL」，需要 slug alias + 301 + canonical 合并 + duplicate content + hreflang 映射 + 老 URL 生命周期，而 SEO-4 阶段目标是建立稳定技术 SEO 基础，不应提前引入 URL migration。① 选方案 A：`/{locale}/recover/{slug}` 为唯一 canonical（例 `/zh/recover/amazon-fba-refund`、`/en/recover/amazon-fba-refund`、`/ja/recover/amazon-fba-refund`）；`platform` / `recoveryType` / `category` 属于页面 metadata、内容结构、JSON-LD、内链分类、sitemap 分类逻辑，**不是 URL identity**。② `HREFLANG_POLICY = STRICT_REACHABILITY`：不强制每页 5 语言，但**只声明真实存在页面的语言**；available locale → hreflang，missing locale → omit，**禁止** hreflang 指向 404（否则降低搜索引擎信任）。③ 既有 `/recover/{slug}` = legacy/default locale route，**保留、不要 301**（当前没有真正旧 URL），它成为 en canonical；最终形状 `/recover/foo`（canonical=en）+ `/zh/recover/foo`、`/ja/recover/foo`。④ `DEFAULT_NOINDEX = KEEP`：修 URL contract ≠ 页面质量达标；必须 rule exists + content exists + thin content gate pass + source references sufficient + canonical self-resolvable + sitemap eligible 全通过才 INDEX，不能因为 canonical 修好就把 NOINDEX 改成 INDEX。⑤ 最小修改范围：`seo-technical.ts` + `seo-recover-static-projection.ts` 由 `/{locale}/recover/{platform}[/{recoveryType}]` 改为 `/{locale}/recover/{slug}`；sitemap 继续以 `page.canonical` 为唯一来源（不得自己拼 URL）；web route 为 `apps/web/app/recover/[slug]` + `apps/web/app/[locale]/recover/[slug]`（或等价 locale rewrite）。本轮**禁止**新增 platform 两层 route、301 migration、slug alias、改 SEO-5 分类体系。NEXT：修 canonical ↔ route contract → 重跑 sitemap/hreflang/canonical tests → 保持 NOINDEX gate → 再进入 SEO-5。本裁定不触碰 C18 / RSI / 生产边界，也不引入新的公开 API。
+
+```text
+ARCHITECT VERDICT：选择方案 A（PASS WITH DECISION）
+
+我按本次送审事实重新裁定。当前不是 SEO 内容问题，而是URL contract 已经出现两个来源：
+
+纯文本
+seo-technical.ts
+        ↓
+canonical contract
+/{locale}/recover/{platform}[/{recoveryType}]
+
+vs
+
+apps/web
+        ↓
+实际 route
+/recover/{slug}
+
+这属于 public URL contract 冲突，必须先统一，否则任何 sitemap / hreflang / canonical 都是不可信信号。
+
+① 选择方案 A：canonical 对齐真实 route
+
+裁定：
+
+纯文本
+SEO_URL_CONTRACT = OPTION_A
+
+即：
+
+纯文本
+/{locale}/recover/{slug}
+
+作为唯一 canonical。
+
+其中：
+
+纯文本
+slug
+
+是 URL identity。
+
+例如：
+
+纯文本
+/zh/recover/amazon-fba-refund
+/en/recover/amazon-fba-refund
+/ja/recover/amazon-fba-refund
+
+而：
+
+纯文本
+platform
+recoveryType
+category
+
+属于：
+
+页面 metadata；
+内容结构；
+JSON-LD；
+内链分类；
+sitemap 分类逻辑；
+
+不是 URL identity。
+
+原因
+
+方案 B：
+
+纯文本
+/recover/amazon
+/recover/amazon/fba-refund
+
+看起来更符合搜索分类，但会引入：
+
+纯文本
+一个规则
+=
+多个 URL
+
+需要解决：
+
+slug alias；
+301；
+canonical 合并；
+duplicate content；
+hreflang 映射；
+老 URL 生命周期。
+
+对于当前阶段：
+
+纯文本
+SEO-4
+
+目标是建立稳定技术 SEO 基础，不应该提前引入 URL migration。
+
+② locale URL：必须全部可达才声明
+
+裁定：
+
+纯文本
+HREFLANG_POLICY = STRICT_REACHABILITY
+
+不是强制：
+
+每个页面必须 5 语言都有。
+
+而是：
+
+如果存在：
+
+纯文本
+/en/recover/foo
+/zh/recover/foo
+/ja/recover/foo
+
+则：
+
+hreflang：
+
+XML
+<link rel="alternate" hreflang="en" />
+<link rel="alternate" hreflang="zh" />
+<link rel="alternate" hreflang="ja" />
+
+只声明真实存在页面。
+
+禁止：
+
+纯文本
+hreflang=de
+↓
+404
+
+否则会降低搜索引擎信任。
+
+所以规则：
+
+纯文本
+available locale
+      ↓
+hreflang
+
+missing locale
+      ↓
+omit
+③ 已存在 /recover/{slug} 如何处理
+
+裁定：
+
+纯文本
+/recover/{slug}
+=
+legacy/default locale route
+
+保留。
+
+不要 301。
+
+原因：
+
+当前没有真正旧 URL。
+
+如果：
+
+纯文本
+/recover/foo
+
+已经是产品入口，
+
+则：
+
+它应该成为：
+
+纯文本
+en canonical
+
+即：
+
+推荐最终：
+
+纯文本
+/recover/foo
+        |
+        canonical=en
+        |
+        +-- /zh/recover/foo
+        +-- /ja/recover/foo
+
+而不是：
+
+纯文本
+/recover/foo
+        |
+        301
+        ↓
+/recover/amazon/fba-refund
+
+建议 contract：
+
+纯文本
+default locale:
+
+/recover/{slug}
+
+
+localized:
+
+/{locale}/recover/{slug}
+④ NOINDEX 是否继续？
+
+继续。
+
+裁定：
+
+纯文本
+DEFAULT_NOINDEX = KEEP
+
+原因：
+
+现在修 URL contract ≠ 页面质量已经达到 index 条件。
+
+必须继续：
+
+纯文本
+rule exists
++
+content exists
++
+thin content gate pass
++
+source references sufficient
++
+canonical self-resolvable
++
+sitemap eligible
+
+全部通过才：
+
+纯文本
+INDEX
+
+不能因为 canonical 修好：
+
+纯文本
+NOINDEX → INDEX
+⑤ 必须修改范围（最小集合）
+
+批准下一步：
+
+SEO contract
+
+修改：
+
+纯文本
+seo-technical.ts
+seo-recover-static-projection.ts
+
+从：
+
+纯文本
+/{locale}/recover/{platform}[/{recoveryType}]
+
+改：
+
+纯文本
+/{locale}/recover/{slug}
+Sitemap
+
+保持：
+
+纯文本
+page.canonical
+
+作为唯一来源。
+
+不要 sitemap 自己拼 URL。
+
+Web route
+
+明确：
+
+纯文本
+apps/web/app/recover/[slug]
+apps/web/app/[locale]/recover/[slug]
+
+或者等价 locale rewrite。
+
+禁止
+
+本轮不要：
+
+新增 platform 两层 route；
+301 migration；
+slug alias；
+改 SEO-5 分类体系。
+最终裁定
+纯文本
+SEO_ROUTE_SHAPE = OPTION_A
+
+CANONICAL = /{locale}/recover/{slug}
+
+SLUG = URL_IDENTITY
+
+PLATFORM = METADATA_ONLY
+
+RECOVERY_TYPE = CONTENT/TAXONOMY_ONLY
+
+HREFLANG = ONLY_REACHABLE_LOCALES
+
+/recover/{slug} = KEEP
+
+301 = NOT_REQUIRED
+
+DEFAULT_NOINDEX = CONTINUE
+
+状态：
+
+纯文本
+SEO-4 ROUTE CONTRACT = APPROVED
+
+NEXT:
+修 canonical ↔ route contract
+↓
+重新跑 sitemap/hreflang/canonical tests
+↓
+保持 NOINDEX gate
+↓
+再进入 SEO-5
+
+这个裁定不会触碰 C18、RSI、生产边界，也不会引入新的公开 API。
+```

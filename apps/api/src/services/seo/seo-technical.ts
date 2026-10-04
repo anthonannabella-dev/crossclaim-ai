@@ -39,17 +39,16 @@ export function resolveLocaleFallback(requested: string | null | undefined): Seo
     : SEO_DEFAULT_LOCALE;
 }
 
-/** `/recover/{platform}` 与 `/recover/{platform}/{recoveryType}` 的 URL 契约（含 locale 前缀）。 */
-export function buildRecoverPath(input: {
-  platform: string;
-  recoveryType?: string | null;
-  locale: SeoLocale;
-}): string | null {
-  const platform = String(input.platform ?? '').trim().toLowerCase();
-  if (!SLUG_RE.test(platform)) return null;
-  const suffix = input.recoveryType ? `/${String(input.recoveryType).trim().toLowerCase()}` : '';
-  if (input.recoveryType && !SLUG_RE.test(String(input.recoveryType).trim().toLowerCase())) return null;
-  return `${localePathSegment(input.locale)}/recover/${platform}${suffix}`;
+/**
+ * `/recover/{slug}` 的 URL 约定（带 locale 前缀；默认语言无前缀）。
+ * MSG-20261005-03（SEO_URL_CONTRACT = OPTION_A）：**slug 是 URL identity**；
+ * platform / recoveryType / category 只属于页面 metadata、内容结构、JSON-LD、内链分类与 sitemap 分类，
+ * **不是 URL identity**。
+ */
+export function buildRecoverPath(input: { slug: string; locale: SeoLocale }): string | null {
+  const slug = String(input.slug ?? '').trim().toLowerCase();
+  if (!SLUG_RE.test(slug)) return null;
+  return `${localePathSegment(input.locale)}/recover/${slug}`;
 }
 
 export interface SeoAlternate {
@@ -57,22 +56,34 @@ export interface SeoAlternate {
   href: string;
 }
 
-/** hreflang alternates：为每个受支持语言给出绝对 URL，并附 x-default。 */
+/**
+ * hreflang alternates —— HREFLANG_POLICY = STRICT_REACHABILITY（MSG-20261005-03）：
+ * **只声明真实存在页面的语言**，未确认可达的语言一律省略（绝不产生 hreflang → 404）。
+ * 缺省时只声明 canonical 语言本身：宁可少声明，也不猜。
+ */
 export function buildAlternates(input: {
   baseUrl: string;
   path: string;
   canonicalLocale?: SeoLocale;
+  reachableLocales?: readonly SeoLocale[];
 }): readonly SeoAlternate[] {
   const base = input.baseUrl.replace(/\/+$/, '');
   const suffix = input.path.replace(/^\/(en|zh|de|ja|es)(?=\/|$)/, '');
-  const alternates: SeoAlternate[] = SEO_SUPPORTED_LOCALES.map((locale) => ({
+  const canonicalLocale = input.canonicalLocale ?? SEO_DEFAULT_LOCALE;
+  const reachable = [...new Set(input.reachableLocales ?? [canonicalLocale])].filter((locale) =>
+    (SEO_SUPPORTED_LOCALES as readonly string[]).includes(locale),
+  );
+  if (reachable.length === 0) return [];
+  const alternates: SeoAlternate[] = reachable.map((locale) => ({
     hreflang: locale,
     href: `${base}${localePathSegment(locale)}${suffix}`,
   }));
-  alternates.push({
-    hreflang: 'x-default',
-    href: `${base}${localePathSegment(input.canonicalLocale ?? SEO_DEFAULT_LOCALE)}${suffix}`,
-  });
+  if (reachable.includes(canonicalLocale)) {
+    alternates.push({
+      hreflang: 'x-default',
+      href: `${base}${localePathSegment(canonicalLocale)}${suffix}`,
+    });
+  }
   return alternates;
 }
 
@@ -92,6 +103,8 @@ export interface BuildSitemapInput {
   now: Date;
   locale: SeoLocale;
   registeredBasisKeys: readonly string[];
+  /** STRICT_REACHABILITY（MSG-20261005-03）：真实存在页面的语言集合；缺省只声明 canonical 语言。 */
+  reachableLocales?: readonly SeoLocale[];
   rules: readonly {
     rule: RecoveryRuleDefinition;
     /** renderer 计算的机器可验证信号；缺失即不收录。 */
@@ -116,11 +129,7 @@ export function buildSitemapEntries(input: BuildSitemapInput): {
   const excluded: SeoSitemapExclusion[] = [];
 
   for (const item of input.rules) {
-    const path = buildRecoverPath({
-      platform: item.rule.platform.toLowerCase(),
-      recoveryType: item.rule.recoveryType,
-      locale: input.locale,
-    });
+    const path = buildRecoverPath({ slug: item.rule.slug, locale: input.locale });
     if (path === null) {
       excluded.push({ slug: item.rule.slug, reasons: ['INVALID_DEFINITION'] });
       continue;
@@ -140,7 +149,12 @@ export function buildSitemapEntries(input: BuildSitemapInput): {
     entries.push({
       url: `${base}${path}`,
       lastModified: item.lastModified ?? item.rule.effectiveFrom,
-      alternates: buildAlternates({ baseUrl: base, path, canonicalLocale: input.locale }),
+      alternates: buildAlternates({
+        baseUrl: base,
+        path,
+        canonicalLocale: input.locale,
+        reachableLocales: input.reachableLocales,
+      }),
     });
   }
   return { entries, excluded };
@@ -176,20 +190,22 @@ export function buildSeoMetadata(input: {
   locale: SeoLocale;
   baseUrl: string;
   indexable: boolean;
+  reachableLocales?: readonly SeoLocale[];
 }): SeoMetadata {
   const base = input.baseUrl.replace(/\/+$/, '');
-  const path = buildRecoverPath({
-    platform: input.rule.platform.toLowerCase(),
-    recoveryType: input.rule.recoveryType,
-    locale: input.locale,
-  });
+  const path = buildRecoverPath({ slug: input.rule.slug, locale: input.locale });
   const canonical = `${base}${path ?? ''}`;
   return {
     title: input.rule.title,
     description: input.rule.problemDescription,
     canonical,
     robots: input.indexable ? 'index,follow' : 'noindex,follow',
-    alternates: buildAlternates({ baseUrl: base, path: path ?? '', canonicalLocale: input.locale }),
+    alternates: buildAlternates({
+      baseUrl: base,
+      path: path ?? '',
+      canonicalLocale: input.locale,
+      reachableLocales: input.reachableLocales,
+    }),
     openGraph: {
       title: input.rule.title,
       description: input.rule.problemDescription,

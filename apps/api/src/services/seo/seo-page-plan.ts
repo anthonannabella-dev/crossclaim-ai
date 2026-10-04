@@ -38,6 +38,8 @@ export interface RecoveryPagePlanInput {
   renderMetrics?: SeoRenderMetrics;
   conflictingVersions?: boolean;
   canonicalExplicit?: boolean;
+  /** STRICT_REACHABILITY（MSG-20261005-03）：真实存在页面的语言集合。 */
+  reachableLocales?: readonly SeoLocale[];
   /** 真实存在的关系页（内部链接用；为空则不生成 ItemList）。 */
   related?: readonly { name: string; url: string }[];
   /** 真实存在的面包屑层级（至少两级才会生成 JSON-LD）。 */
@@ -75,17 +77,14 @@ export function planRecoveryPage(input: RecoveryPagePlanInput): RecoveryPagePlan
     canonicalExplicit: input.canonicalExplicit ?? true,
   });
 
-  const path = buildRecoverPath({
-    platform: input.rule.platform.toLowerCase(),
-    recoveryType: input.rule.recoveryType,
-    locale: input.locale,
-  }) ?? '';
+  const path = buildRecoverPath({ slug: input.rule.slug, locale: input.locale }) ?? '';
 
   const metadata = buildSeoMetadata({
     rule: input.rule,
     locale: input.locale,
     baseUrl: input.baseUrl,
     indexable: gate.indexable,
+    reachableLocales: input.reachableLocales,
   });
 
   const jsonLd: Record<string, unknown>[] = [];

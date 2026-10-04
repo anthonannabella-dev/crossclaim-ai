@@ -180,7 +180,9 @@ describe('SEO-4 Stage 2 metadata（gate 驱动，默认 noindex）', () => {
     const ok = resolveRecoverRoute(input({ requestedLocale: 'ja' }));
     const meta = buildRecoverRouteMetadata({ decision: ok, baseUrl: BASE });
     const langs = meta.alternates.map((a) => a.hreflang);
-    expect(langs).toEqual(['en', 'zh', 'de', 'ja', 'es', 'x-default']);
+    // HREFLANG_POLICY = STRICT_REACHABILITY（MSG-20261005-03）：未显式声明可达语言时，
+    // 只声明 canonical 语言本身 + x-default，宁可少声明也不猜。
+    expect(langs).toEqual(['ja', 'x-default']);
     expect(meta.alternates.find((a) => a.hreflang === 'x-default')?.href).toBe(`${BASE}${ok.path}`);
     for (const alternate of meta.alternates) expect(alternate.href.startsWith(BASE)).toBe(true);
   });
