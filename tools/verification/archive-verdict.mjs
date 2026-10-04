@@ -23,7 +23,9 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const INBOX = path.join(ROOT, 'AI-ARCHITECT-INBOX.md');
+// 与 tools/verdict-diff/compare.mjs 保持一致：允许用 CROSSCLAIM_ARCHIVE 指向替换归档文件，
+// 这样归档器本身可以在临时文件上做端到端冒烟测试，而不污染真实审计链。
+const INBOX = process.env.CROSSCLAIM_ARCHIVE ?? path.join(ROOT, 'AI-ARCHITECT-INBOX.md');
 const COMPARE = path.join(ROOT, 'tools/verdict-diff/compare.mjs');
 
 const [sourcePath, msgId, headingPath] = process.argv.slice(2);
