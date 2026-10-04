@@ -64,6 +64,7 @@ import { getReturnClaimEvidenceView } from '../customs/customs-return-claim-evid
 import { postCustomsRecoveryChain } from '../customs/customs-recovery-chain-http';
 import { getCustomsEntryFactReadModel } from '../customs/customs-claim-ready-http';
 import { handleCustomsAuthorizationCenterRequest } from '../customs/customs-authorization-center-http';
+import { handleCustomsAuthorizationPlanRequest } from '../customs/customs-authorization-plan-http';
 import type { CustomsEntryFactStore } from '../customs/customs-entry-fact-store';
 import { getIndependentSiteRecoveryState } from '../independent-site/ps04-state-read';
 import { getQualificationReadProjection } from '../commercial/qualification-read';
@@ -235,7 +236,7 @@ const CARRIER_MANUAL_SUBMISSION_PATH = /^\/carrier-claim-packages\/([^/]+)\/manu
 // CARRIER QUEUE #10 FINAL（MSG-20261003-122 ㉙㉛）：carrier response 人工补录 + 读模型
 const CARRIER_CLAIM_RESPONSES_PATH = /^\/carrier-claim-packages\/([^/]+)\/responses$/;
 // C21（MSG-20261003-124 ⑭–㉑）：one-click 内部准备 + filing status 读模型
-const CUSTOMS_RECOVERY_PATH = /^\/customs-opportunities\/([^/]+)\/(start-recovery|filing-status|authorization-center)$/;
+const CUSTOMS_RECOVERY_PATH = /^\/customs-opportunities\/([^/]+)\/(start-recovery|filing-status|authorization-center|authorization-plan)$/;
 /** P0-1：Return→matching→claim-ready evidence 的**只读**视图（消费已持久化结果，不重算）。 */
 const CUSTOMS_RETURN_EVIDENCE_PATH = /^\/customs-entry-facts\/([^/]+)\/return-claim-evidence$/;
 /** BG-012：Customs 恢复链**内部触发**（INTERNAL_WRITE；customs.recovery.chain.run）。 */
@@ -322,6 +323,8 @@ export interface WorkflowRouteDeps {
   customsAuthorization?: import('../customs/customs-authorization-readiness').CustomsAuthorizationFlags;
   /** CA-5：授权中心只读投影（缺省 loadCenter 返回 null → 404，fail-closed）。 */
   customsAuthorizationCenter?: import('../customs/customs-authorization-center-http').CustomsAuthorizationCenterHttpDeps;
+  /** CA-6：一键追回授权计划只读投影（缺省 loadPlan 返回 null → 404）。 */
+  customsAuthorizationPlan?: import('../customs/customs-authorization-plan-http').CustomsAuthorizationPlanHttpDeps;
   /** C21：已登记 filing provider（缺省 null → BROKER_HANDOFF）。 */
   customsFilingProvider?: { providerId: string; capabilities: import('../customs/customs-filing-provider').CustomsFilingCapabilities } | null;
   /** C21：filing status 事实读取（缺省空集合）。 */
@@ -1599,6 +1602,22 @@ export async function handleWorkflowRequest(
         actorUserId: actor.actorUserId,
         role: actor.role,
       };
+      // CA-6：一键追回授权计划（只读；缺省 loadPlan 返回 null → 404）
+      if (customsRecovery[2] === 'authorization-plan') {
+        if ((req.method ?? 'GET') !== 'GET') {
+          sendJson(res, 405, { error: 'METHOD_NOT_ALLOWED' });
+          return true;
+        }
+        const planDeps = deps.customsAuthorizationPlan ?? {
+          async loadPlan() {
+            return null;
+          },
+        };
+        const planResult = await handleCustomsAuthorizationPlanRequest({ opportunityId, session }, planDeps);
+        sendJson(res, planResult.status, planResult.body);
+        return true;
+      }
+
       // CA-5：客户授权中心（只读；缺省 loadCenter 返回 null → 404）
       if (customsRecovery[2] === 'authorization-center') {
         if ((req.method ?? 'GET') !== 'GET') {

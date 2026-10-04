@@ -16,7 +16,10 @@
 import http from 'node:http';
 import { PrismaClient } from '@prisma/client';
 import { createPrismaCustomsEntryFactStore } from './services/customs/customs-entry-fact-store';
-import { createPrismaCustomsAuthorizationCenterLoader } from './services/customs/customs-authorization-center-loader';
+import {
+  createPrismaCustomsAuthorizationCenterLoader,
+  createPrismaCustomsOneClickAuthorizationPlanLoader,
+} from './services/customs/customs-authorization-center-loader';
 import { createPrismaQualificationAssessmentStore } from './services/commercial/recovery-qualification-store';
 import { createPrismaPs04StateLoaders } from './services/independent-site/ps04-state-loaders';
 import { loadEnv } from './config/env';
@@ -83,6 +86,8 @@ export interface ServerDeps {
   customsAuthorization?: import('./services/customs/customs-authorization-readiness').CustomsAuthorizationFlags;
   /** CA-5：客户授权中心只读投影（缺省 fail-closed 404）。 */
   customsAuthorizationCenter?: import('./services/customs/customs-authorization-center-http').CustomsAuthorizationCenterHttpDeps;
+  /** CA-6：一键追回授权计划只读投影（缺省 fail-closed 404）。 */
+  customsAuthorizationPlan?: import('./services/customs/customs-authorization-plan-http').CustomsAuthorizationPlanHttpDeps;
   customsFilingProvider?: { providerId: string; capabilities: import('./services/customs/customs-filing-provider').CustomsFilingCapabilities } | null;
   customsFilingStatus?: import('./services/customs/customs-recovery-http').CustomsRecoveryHttpDeps['filingStatus'];
   /** P0-1：已持久化的 claim evidence 读取。 */
@@ -130,7 +135,7 @@ const IMPORT_ERROR_REPORT_PATH = /^\/imports\/[^/]+\/error-report$/;
 /** MSG-20260929-40：只读的 /operations/*（看板）与 /admin/*（Admin Console）也要进工作流分发，
  *  否则请求在 server 层就落到默认 404 —— 端点「纸面存在、实际不可达」。 */
 const WORKFLOW_PATH =
-  /^(?:\/carrier-claim-packages\/[^/]+\/(?:manual-submission|responses)|\/customs-entry-facts\/[^/]+(?:\/(?:return-claim-evidence|recovery-chain))?|\/independent-site-disputes\/[^/]+\/state|\/platform-accounts\/[^/]+\/qualification|\/customs-opportunities\/[^/]+\/(?:start-recovery|filing-status|authorization-center)|\/opportunities(?:\/(?:insights(?:\.csv)?|[^/]+\/(?:qualify|reject|case|basis)))?|\/connections(?:\/[^/]+\/(?:status|credential-ref|rebind))?|\/recovery-states|\/recovery-money|\/accounts|\/entitlements|\/commercial-readiness|\/commercial\/(?:policies(?:\/[^/]+(?:\/accept)?)?|acceptances)|\/provider-readiness|\/payment-activation-readiness|\/cases(?:\/[^/]+\/(?:commercial-terms|recovery-outcome|recovery-review|appeal\/(?:submit|package)|claim(?:\/(?:submit|prepare|package))?|claim-package|billing\/draft|evidence|platform\/write|recovery\/(?:manual-submit|manual-reference|manual-submit-approval|manual-reference-approval))|\/[^/]+)?|\/billing(?:\/[^/]+\/(?:status|payment-review))?|\/commissions\/reconcile|\/payments(?:\/webhook|\/reconciliation(?:\.csv)?|\/events\/[^/]+\/(?:replay|replay-review)|\/processing\/retry-due(?:\/(?:freeze|review))?)?|\/operations\/(?:dashboard|claims|recovery)|\/admin\/(?:tenant-overview|audit(?:\/[^/]+)?|system-health|imports(?:\/[^/]+(?:\/errors)?)?|recovery-review(?:\/[^/]+)?|members(?:\/[^/]+)?|permission-matrix|kill-switch))$/;
+  /^(?:\/carrier-claim-packages\/[^/]+\/(?:manual-submission|responses)|\/customs-entry-facts\/[^/]+(?:\/(?:return-claim-evidence|recovery-chain))?|\/independent-site-disputes\/[^/]+\/state|\/platform-accounts\/[^/]+\/qualification|\/customs-opportunities\/[^/]+\/(?:start-recovery|filing-status|authorization-center|authorization-plan)|\/opportunities(?:\/(?:insights(?:\.csv)?|[^/]+\/(?:qualify|reject|case|basis)))?|\/connections(?:\/[^/]+\/(?:status|credential-ref|rebind))?|\/recovery-states|\/recovery-money|\/accounts|\/entitlements|\/commercial-readiness|\/commercial\/(?:policies(?:\/[^/]+(?:\/accept)?)?|acceptances)|\/provider-readiness|\/payment-activation-readiness|\/cases(?:\/[^/]+\/(?:commercial-terms|recovery-outcome|recovery-review|appeal\/(?:submit|package)|claim(?:\/(?:submit|prepare|package))?|claim-package|billing\/draft|evidence|platform\/write|recovery\/(?:manual-submit|manual-reference|manual-submit-approval|manual-reference-approval))|\/[^/]+)?|\/billing(?:\/[^/]+\/(?:status|payment-review))?|\/commissions\/reconcile|\/payments(?:\/webhook|\/reconciliation(?:\.csv)?|\/events\/[^/]+\/(?:replay|replay-review)|\/processing\/retry-due(?:\/(?:freeze|review))?)?|\/operations\/(?:dashboard|claims|recovery)|\/admin\/(?:tenant-overview|audit(?:\/[^/]+)?|system-health|imports(?:\/[^/]+(?:\/errors)?)?|recovery-review(?:\/[^/]+)?|members(?:\/[^/]+)?|permission-matrix|kill-switch))$/;
 
 /** CHANGE #20：Unicode 文件名走 RFC 5987 的 filename*=UTF-8''，同时给 ASCII 回退名 */
 export function buildContentDisposition(
@@ -342,6 +347,13 @@ export function createServer(deps: ServerDeps): http.Server {
         ? { customsAuthorizationCenter: deps.customsAuthorizationCenter }
         : {
             customsAuthorizationCenter: createPrismaCustomsAuthorizationCenterLoader(prisma, {
+              ...(deps.customsFilingProvider !== undefined ? { provider: deps.customsFilingProvider } : {}),
+            }),
+          }),
+      ...(deps.customsAuthorizationPlan
+        ? { customsAuthorizationPlan: deps.customsAuthorizationPlan }
+        : {
+            customsAuthorizationPlan: createPrismaCustomsOneClickAuthorizationPlanLoader(prisma, {
               ...(deps.customsFilingProvider !== undefined ? { provider: deps.customsFilingProvider } : {}),
             }),
           }),

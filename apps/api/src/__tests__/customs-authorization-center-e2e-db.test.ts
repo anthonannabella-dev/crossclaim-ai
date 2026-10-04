@@ -79,6 +79,12 @@ function getCenter(base: string, opportunityId: string, cookie?: string) {
   });
 }
 
+function getPlan(base: string, opportunityId: string, cookie?: string) {
+  return fetch(base + '/customs-opportunities/' + encodeURIComponent(opportunityId) + '/authorization-plan', {
+    headers: { ...(cookie ? { cookie } : {}) },
+  });
+}
+
 beforeAll(async () => {
   await prisma.$connect();
 });
@@ -416,6 +422,54 @@ describe('CA-5 — authorization center real-fact E2E（真实 PostgreSQL 授权
       const expired = await read(OPP_EXPIRED_IOR);
       expect(expired.byKey('ENTERPRISE_IDENTITY')?.state).toBe('NEEDS_ACTION');
       expect(expired.byKey('RECOVERY_RIGHT')?.state).toBe('CONFIRMED');
+    });
+  });
+
+  it('CA-6：授权计划只读端点——既有 POA 可复用（不重复签署），只列真正缺失项', async () => {
+    await withServer({ customsFilingProvider: PROVIDER }, async (base) => {
+      const cookie = await login(base, 'ca5f2-owner@example.com');
+      const res = await getPlan(base, OPP, cookie);
+      expect(res.status).toBe(200);
+      const body = (await res.json()) as {
+        authorizationPlan: {
+          gate: string;
+          missingItemKeys: string[];
+          missingActions: string[];
+          reuseExistingAuthorization: boolean;
+          reasonCodes: string[];
+          nextAction: string | null;
+          filingSubmitted: boolean;
+          transportEnabled: boolean;
+        };
+        boundary: Record<string, unknown>;
+      };
+      const plan = body.authorizationPlan;
+      // 真实 POA VERIFIED 且 scope/辖区/主体一致 → 复用既有授权，不要求再次签署
+      expect(plan.reuseExistingAuthorization).toBe(true);
+      expect(plan.reasonCodes).toEqual([]);
+      expect(plan.missingItemKeys).not.toContain('BROKER_AUTHORIZATION');
+      expect(plan.missingItemKeys).toContain('ENTERPRISE_IDENTITY');
+      expect(plan.gate).toBe('NEEDS_AUTHORIZATION');
+      expect(plan.nextAction).toBe('CONFIRM_ENTERPRISE_IDENTITY');
+      expect(plan.filingSubmitted).toBe(false);
+      expect(plan.transportEnabled).toBe(false);
+      expect(body.boundary).toEqual({
+        readOnly: true,
+        filingSubmitted: false,
+        transportEnabled: false,
+        externalWritePerformed: false,
+        productionCredentials: 'ABSENT',
+      });
+      // 无 route / 无 lineage → 404；跨租户 → 404；非 GET → 405
+      expect((await getPlan(base, OPP_NO_LINEAGE, cookie)).status).toBe(404);
+      const otherCookie = await login(base, 'ca5f2-other@example.com');
+      expect((await getPlan(base, OPP, otherCookie)).status).toBe(404);
+      const post = await fetch(base + '/customs-opportunities/' + OPP + '/authorization-plan', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', cookie },
+        body: '{}',
+      });
+      expect(post.status).toBe(405);
     });
   });
 });

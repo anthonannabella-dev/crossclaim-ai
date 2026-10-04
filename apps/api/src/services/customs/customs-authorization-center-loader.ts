@@ -1,13 +1,12 @@
 /**
- * CA-5 REVISE D（MSG-20261004-09）— 真实 tenant-scoped 授权中心 loader
+ * CA-5/CA-6 — 授权中心 + 一键追回计划的真实 tenant-scoped loader（MSG-20261004-09/-11 之后）
  * ---------------------------------------------------------------
- * 从**持久化事实**派生（全部按 organizationId 隔离，零进程级授权 flags，零默认 true）：
- *   RecoveryOpportunity(CUSTOMS) → RecoveryRoute(target) → 决定 filing route（未知即 fail-closed 返回 null）
+ * 单一事实装配入口（全部按 organizationId 隔离，零进程级授权 flags，零默认 true）：
+ *   RecoveryOpportunity(CUSTOMS) → RecoveryRoute(target) → filing route（未知 → null = fail-closed）
  *   CustomsRightLineageFact(entryReference) → principal / 追回权 / claimant / filing permission
- *   CustomsIorIdentityFact(importerOfRecordRef) → IOR 是否已核验
+ *   CustomsIorIdentityFact → evaluateIorIdentity（有效窗口 / REVOKED / UNVERIFIED / legalEntityRef）
  *   CustomsBrokerPoaFact / CustomsAuthorizedSignerFact → CA-1 resolver（latest usable / revoke / expire / supersede）
- * 退款账户三要素（payee / refund destination / ACE enrollment）当前**没有任何已核验事实来源**，
- * 因此恒为 false（⑤ 显示"需要处理"），绝不默认 true；provider 提交能力来自已登记 provider。
+ * 计划层再把「既有授权能否复用」编码成 snapshot（CA-6：同一 principal/jurisdiction/scope/route 不重复签署）。
  */
 
 import type { PrismaClient } from '@prisma/client';
@@ -26,8 +25,13 @@ import {
   type CustomsAuthorizationFacts,
   type CustomsFilingRoute,
 } from './customs-authorization-route';
-import { buildCustomsAuthorizationCenter } from './customs-authorization-center';
+import { buildCustomsAuthorizationCenter, type CustomsAuthorizationCenter } from './customs-authorization-center';
 import type { CustomsAuthorizationCenterHttpDeps } from './customs-authorization-center-http';
+import {
+  planCustomsOneClickAuthorization,
+  type CustomsExistingAuthorizationSnapshot,
+  type CustomsOneClickAuthorizationPlan,
+} from './customs-one-click-authorization';
 import { evaluateIorIdentity, normalizeIorIdentity } from './enterprise-ior/ior-identity';
 
 /** RecoveryRoute.target → 三种合法 filing route；其它一律 null（未知 = fail-closed）。 */
@@ -36,9 +40,21 @@ export const ROUTE_TARGET_TO_FILING_ROUTE: Record<string, CustomsFilingRoute | n
   CUSTOMER_SELF: 'SELF_FILED',
 };
 
-export interface CustomsAuthorizationCenterLoaderOptions {
+export interface CustomsAuthorizationLoaderOptions {
   provider?: { providerId: string; capabilities: CustomsFilingCapabilities } | null;
   now?: () => Date;
+}
+
+export interface CustomsAuthorizationContext {
+  center: CustomsAuthorizationCenter;
+  existingAuthorization: CustomsExistingAuthorizationSnapshot | null;
+}
+
+/** 辖区匹配：任一为 null / '*' 视为通配（与 CA-1 policy 语义一致）。 */
+function jurisdictionMatches(a: string | null, b: string | null): boolean {
+  if (a === null || b === null) return true;
+  if (a === '*' || b === '*') return true;
+  return a === b;
 }
 
 function providerCapabilityReady(
@@ -48,10 +64,7 @@ function providerCapabilityReady(
   return missingFilingCapabilities(provider.capabilities, CUSTOMS_AUTO_FILING_REQUIRED_OPERATIONS).length === 0;
 }
 
-/**
- * IOR 身份可用性（复用既有 evaluateIorIdentity 语义；任何异常一律视为不可用 = fail-closed）。
- * 不使用「verificationStatus === VERIFIED」这种简化判断。
- */
+/** IOR 可用性：复用既有 evaluateIorIdentity；任何异常一律不可用（fail-closed）。 */
 function iorIdentityUsable(
   row: {
     jurisdiction: string;
@@ -89,15 +102,15 @@ function iorIdentityUsable(
   }
 }
 
-export function createPrismaCustomsAuthorizationCenterLoader(
+export function createPrismaCustomsAuthorizationContextLoader(
   prisma: PrismaClient,
-  options: CustomsAuthorizationCenterLoaderOptions = {},
-): CustomsAuthorizationCenterHttpDeps {
+  options: CustomsAuthorizationLoaderOptions = {},
+): { load(input: { organizationId: string; opportunityId: string }): Promise<CustomsAuthorizationContext | null> } {
   const provider = options.provider ?? null;
   const now = options.now ?? (() => new Date());
 
   return {
-    async loadCenter({ organizationId, opportunityId }) {
+    async load({ organizationId, opportunityId }) {
       const opportunity = await prisma.recoveryOpportunity.findFirst({
         where: { organizationId, id: opportunityId, domain: 'CUSTOMS' },
         select: { id: true, opportunityType: true },
@@ -188,13 +201,9 @@ export function createPrismaCustomsAuthorizationCenterLoader(
       const signer = resolveAuthorizedSignerFacts(signerRows, { at, remedy, principalRef });
 
       const facts: CustomsAuthorizationFacts = {
-        // 无服务端事实来源的项目一律保守 false（fail-closed），绝不默认 true
         customsAgreementSigned: false,
-        // MSG-20261004-10 CHANGE B：复用 evaluateIorIdentity（有效窗口 / REVOKED / UNVERIFIED / legalEntityRef），
-        // 不把「VERIFIED 但已过期 / 尚未生效」误判为已确认。
         iorConfirmed: iorIdentityUsable(ior, organizationId, at),
         claimantConfirmed: typeof lineage.claimantRef === 'string' && lineage.claimantRef.trim() !== '',
-        // MSG-20261004-10 CHANGE A：追回权只看权利字段，不再用 outcome（outcome 可能仅因缺 filing authorization 而 NEEDS_MANUAL）
         recoveryRightForRemedy:
           lineage.iorRightsForRemedy === 'CONFIRMED' && lineage.claimantRightsForRemedy === 'CONFIRMED',
         brokerConnected: latestBrokerRef !== null,
@@ -214,7 +223,66 @@ export function createPrismaCustomsAuthorizationCenterLoader(
       };
 
       const readiness = evaluateCustomsAuthorizationForRoute({ route: filingRoute, remedy, facts });
-      return buildCustomsAuthorizationCenter({ readiness });
+      const center = buildCustomsAuthorizationCenter({ readiness });
+
+      // CA-6：既有授权快照（用于"要不要重签"判定；只看已解析事实，不做任何新写入）
+      const existingAuthorization: CustomsExistingAuthorizationSnapshot | null =
+        filingRoute === 'BROKER_FILED' && latestBrokerRef
+          ? {
+              subject: 'BROKER_POA',
+              status: poa.status === 'VERIFIED' ? 'VERIFIED' : (poa.status as CustomsExistingAuthorizationSnapshot['status']),
+              scopeCoversRequested: poa.scopeCoversRemedy,
+              jurisdictionMatches: jurisdictionMatches(poa.jurisdiction, readiness.jurisdiction),
+              routeMatches: true,
+              samePrincipal: poaRowsRaw.every((row) => row.principalRef === principalRef),
+              sameBrokerOrSigner: true,
+            }
+          : filingRoute === 'SELF_FILED'
+            ? {
+                subject: 'AUTHORIZED_SIGNER',
+                status:
+                  signer.status === 'VERIFIED'
+                    ? 'VERIFIED'
+                    : (signer.status as CustomsExistingAuthorizationSnapshot['status']),
+                scopeCoversRequested: signer.scopeCoversRemedy,
+                jurisdictionMatches: jurisdictionMatches(signer.jurisdiction, readiness.jurisdiction),
+                routeMatches: true,
+                samePrincipal: true,
+                sameBrokerOrSigner: true,
+              }
+            : null;
+
+      return { center, existingAuthorization };
+    },
+  };
+}
+
+export function createPrismaCustomsAuthorizationCenterLoader(
+  prisma: PrismaClient,
+  options: CustomsAuthorizationLoaderOptions = {},
+): CustomsAuthorizationCenterHttpDeps {
+  const context = createPrismaCustomsAuthorizationContextLoader(prisma, options);
+  return {
+    async loadCenter(args) {
+      const loaded = await context.load(args);
+      return loaded ? loaded.center : null;
+    },
+  };
+}
+
+export function createPrismaCustomsOneClickAuthorizationPlanLoader(
+  prisma: PrismaClient,
+  options: CustomsAuthorizationLoaderOptions = {},
+): { loadPlan(input: { organizationId: string; opportunityId: string }): Promise<CustomsOneClickAuthorizationPlan | null> } {
+  const context = createPrismaCustomsAuthorizationContextLoader(prisma, options);
+  return {
+    async loadPlan(args) {
+      const loaded = await context.load(args);
+      if (!loaded) return null;
+      return planCustomsOneClickAuthorization({
+        center: loaded.center,
+        existingAuthorization: loaded.existingAuthorization,
+      });
     },
   };
 }
