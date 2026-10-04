@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-10-04T17:45:25.328Z",
-  "acceptance_head": "cbef6c2",
+  "generated_at": "2026-10-04T17:50:42.057Z",
+  "acceptance_head": "e849c51",
   "protocol": "docs/releases/FINAL-ACCEPTANCE-PROTOCOL.md",
   "areas": [
     {
@@ -227,7 +227,8 @@
     "RSI-RT-07-admin-health-panel",
     "RSI-RT-08-admin-autonomy-page",
     "RSI-RT-09-admin-snapshot-generator",
-    "RSI-RT-10-snapshot-publisher"
+    "RSI-RT-10-snapshot-publisher",
+    "RSI-INSP-06-capability-gap-signal"
   ],
   "host_action_required": [
     "provider developer/partner account registration",
