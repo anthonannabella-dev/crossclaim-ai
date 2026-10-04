@@ -1,4 +1,4 @@
-import { getServerMessages } from '../../../../i18n/server';
+import { getServerLocale, getServerMessages } from '../../../../i18n/server';
 import ClaimPackageView from './claim-package-view';
 import RecoveryBanner from '../../../components/recovery-banner';
 
@@ -8,7 +8,7 @@ import RecoveryBanner from '../../../components/recovery-banner';
  */
 export default async function CaseClaimPackagePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const t = await getServerMessages();
+  const [t, locale] = await Promise.all([getServerMessages(), getServerLocale()]);
   return (
     <div className="space-y-4">
       <div>
@@ -21,7 +21,7 @@ export default async function CaseClaimPackagePage({ params }: { params: Promise
       </div>
       {/* PC-04：案件维度的失败 / 恢复状态 */}
       <RecoveryBanner scope="CASE" t={t} />
-      <ClaimPackageView caseId={id} t={t} />
+      <ClaimPackageView caseId={id} t={t} locale={locale} />
     </div>
   );
 }

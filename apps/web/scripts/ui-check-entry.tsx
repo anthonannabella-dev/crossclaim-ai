@@ -10,6 +10,7 @@ import ConnectionManager, { type ConnectionItem } from '../app/components/connec
 import AccountManagementView from '../app/accounts/account-management-view';
 import RecoveryPipeline from '../app/components/ui/recovery-pipeline';
 import { buildRecoveryPipeline, caseStatusLabel, pipelineStateLabel } from '../app/lib/case-view';
+import ClaimPackageView from '../app/cases/[id]/claim-package/claim-package-view';
 import InlineNotice from '../app/components/ui/inline-notice';
 import PlatformCard from '../app/components/ui/platform-card';
 import SecurityStrip from '../app/components/ui/security-strip';
@@ -392,6 +393,11 @@ check('pipeline.renders.hold', pipelineHtml.includes(zhCN.casePipeline.submissio
 check('pipeline.state.labels', pipelineHtml.includes(zhCN.casePipeline.stateDone) && pipelineHtml.includes(zhCN.casePipeline.stateCurrent));
 check('pipeline.no.fake.autosubmit', !pipelineHtml.includes(zhCN.status.SUBMITTED) || pipelineHtml.includes(zhCN.casePipeline.submissionHold));
 check('case.status.localized', caseStatusLabel('COLLECTING_EVIDENCE', zhCN) === zhCN.caseStatus.COLLECTING_EVIDENCE);
+
+// ⑫ UI-5b：Claim 材料包客户视图（SSR 首屏 = 骨架屏 + HOLD 文案来自字典）
+const packageHtml = render(<ClaimPackageView caseId="case-1" t={zhCN} locale="zh-CN" />);
+check('claim.package.loading.skeleton', packageHtml.includes('animate-pulse'));
+check('claim.package.hold.wording.dictionary', zhCN.claimPackagePage.readyToSubmitBody.includes('External Write = HOLD'));
 
 console.log(results.join('\n'));
 if (failures.length > 0) {
