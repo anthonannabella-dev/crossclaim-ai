@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-10-04T05:28:19.999Z",
-  "acceptance_head": "a002243",
+  "generated_at": "2026-10-04T05:34:39.456Z",
+  "acceptance_head": "d2a161e",
   "protocol": "docs/releases/FINAL-ACCEPTANCE-PROTOCOL.md",
   "areas": [
     {
@@ -170,7 +170,14 @@
     "c18-8-provider-negative-path-e2e"
   ],
   "host_action_required": [
-    "BG-006-production-candidate-preflight"
+    "provider developer/partner account registration",
+    "third-party commercial agreement acceptance",
+    "company/KYC/IOR/broker materials",
+    "production client id/secret + webhook signing key",
+    "real POA signing",
+    "any provider fee",
+    "enable real external write",
+    "real customs filing / refund / money movement"
   ],
   "external_gates_remaining": {
     "api_integration_required": [
