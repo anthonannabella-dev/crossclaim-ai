@@ -335,3 +335,95 @@ export function assertAuthorizationDomainsIndependent(input: {
   }
   return { independent: violations.length === 0, violations };
 }
+
+/** ── CA-2：AuthorizedSignerFact（谁有权代表 claimant/importer 启动或签署 Customs recovery） ── */
+
+export type CustomsAuthorizedSignerType =
+  | 'LEGAL_REPRESENTATIVE'
+  | 'AUTHORIZED_EMPLOYEE'
+  | 'LICENSED_CUSTOMS_BROKER'
+  | 'OTHER_REGULATORY_AUTHORIZED_SIGNER';
+
+/** 数据库/事实层的签署人事实行（append-only；同一 principal 可有多条历史）。 */
+export interface AuthorizedSignerRow {
+  id: string;
+  principalRef: string;
+  signerRef: string;
+  signerType: CustomsAuthorizedSignerType;
+  authorityBasis: string;
+  scopeRemedies: readonly string[];
+  jurisdiction: string;
+  effectiveAt: Date;
+  expiresAt: Date | null;
+  verificationStatus: 'UNVERIFIED' | 'PENDING' | 'VERIFIED' | 'REVOKED' | 'UNKNOWN';
+  observedAt: Date;
+  revokedAt: Date | null;
+  supersededAt: Date | null;
+  contentDigest: string;
+}
+
+export interface ResolvedSignerFacts {
+  status: AuthorizationLifecycleStatus;
+  scopeCoversRemedy: boolean;
+  jurisdiction: string | null;
+  source: AuthorizationSource;
+  rowId: string | null;
+  signerType: CustomsAuthorizedSignerType | null;
+  supersededById: string | null;
+}
+
+/**
+ * server-side deterministic 选择（CA-2/CA-3）：最新一条事实生效；
+ * 显式 revokedAt / supersededAt 优先；VERIFIED 且已过期 → EXPIRED；scope 必须覆盖本次 remedy。
+ * 旧事实即使曾 VERIFIED 也不可用（由最新事实的 revoked/superseded/scope 决定）。
+ */
+export function resolveAuthorizedSignerFacts(
+  rows: readonly AuthorizedSignerRow[],
+  ctx: { at: Date; remedy: string; principalRef?: string },
+): ResolvedSignerFacts {
+  const candidates = rows
+    .filter((row) => (ctx.principalRef ? row.principalRef === ctx.principalRef : true))
+    .slice()
+    .sort((a, b) => {
+      const byObserved = b.observedAt.getTime() - a.observedAt.getTime();
+      if (byObserved !== 0) return byObserved;
+      const byEffective = b.effectiveAt.getTime() - a.effectiveAt.getTime();
+      if (byEffective !== 0) return byEffective;
+      return a.contentDigest.localeCompare(b.contentDigest);
+    });
+
+  const latest = candidates[0];
+  if (!latest) {
+    return {
+      status: 'MISSING',
+      scopeCoversRemedy: false,
+      jurisdiction: null,
+      source: 'MISSING',
+      rowId: null,
+      signerType: null,
+      supersededById: null,
+    };
+  }
+
+  const newer = candidates.find((row) => row.id !== latest.id) ?? null;
+  const scopeCoversRemedy = latest.scopeRemedies.includes('*') || latest.scopeRemedies.includes(ctx.remedy);
+
+  let status: AuthorizationLifecycleStatus;
+  if (latest.revokedAt !== null || latest.verificationStatus === 'REVOKED') status = 'REVOKED';
+  else if (latest.supersededAt !== null) status = 'SUPERSEDED';
+  else if (latest.verificationStatus === 'VERIFIED') {
+    status = latest.expiresAt !== null && latest.expiresAt.getTime() <= ctx.at.getTime() ? 'EXPIRED' : 'VERIFIED';
+  } else if (latest.verificationStatus === 'PENDING') status = 'PENDING';
+  else status = 'PENDING';
+
+  return {
+    status,
+    scopeCoversRemedy,
+    jurisdiction: latest.jurisdiction,
+    source: 'SIGNER_AUTHORITY_FACT',
+    rowId: latest.id,
+    signerType: latest.signerType,
+    supersededById: newer ? newer.id : null,
+  };
+}
+

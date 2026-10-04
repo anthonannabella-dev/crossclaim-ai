@@ -455,3 +455,13 @@ I3  一笔 Payment 最多一个成功执行来源（SUCCEEDED + paymentId 上的
 - `forgot-password` 对存在 / 不存在 / 已停用邮箱返回完全相同的对外结果（不暴露存在性）。
 - 两张表按 `userId` 归属（无 `organizationId`，与 `Session` 同族），因此不挂租户触发器；`tokenHash` / `userId` 由 DB 触发器保证不可改写。
 - `EMAIL_DELIVERY = EXTERNAL_GATE`：运行时默认装配 disabled 适配器（零投递）；测试注入 fake 适配器捕获 token。
+
+## CA-2 — Authorized Signer Authority（MSG-20261004-02 §六）
+
+| 模型 | 作用 | 关键不变量 |
+|---|---|---|
+| `CustomsAuthorizedSignerFact` | 谁有权代表 claimant / importer 启动或签署 Customs recovery（LEGAL_REPRESENTATIVE / AUTHORIZED_EMPLOYEE / LICENSED_CUSTOMS_BROKER / OTHER_REGULATORY_AUTHORIZED_SIGNER） | tenant scoped；append-only（UPDATE/DELETE 触发器拒绝）；`(organizationId, contentDigest)` 唯一；`VERIFIED` 需 `verificationSource <> NONE` + `verifiedAt` + `evidenceArtifactRef`（client 不得自证）；`signerRef` / `principalRef` 必须为 opaque 引用（EIN-like / 纯数字一律拒绝）；scope 非空数组；`expiresAt >= effectiveAt`；`REVOKED` 必须带 `revokedAt`；principal 必须指向**同租户** IOR 身份事实（lineage 触发器） |
+
+生命周期与选择（CA-1/CA-3 共用）：`resolveAuthorizedSignerFacts()` 按 observedAt → effectiveAt → contentDigest 取最新事实；显式 revoked / superseded 优先；VERIFIED 且已过期 → EXPIRED；scope 不覆盖本次 remedy → fail-closed。历史事实一律保留，不 UPDATE 覆盖。
+
+Route-aware 使用：`SELF_FILED` 必须提供有效签署权限（本事实层），`BROKER_FILED` 不要求签署权限但要求 Broker POA，`SERVICE_PROVIDER_TRANSMIT` 无策略时 fail-closed（`PROVIDER_POLICY_REQUIRED`）。

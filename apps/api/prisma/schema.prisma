@@ -373,6 +373,7 @@ model Organization {
   customsIorIdentityFacts             CustomsIorIdentityFact[]
   customsRightLineageFacts            CustomsRightLineageFact[]
   customsBrokerPoaFacts               CustomsBrokerPoaFact[]
+  customsAuthorizedSignerFacts CustomsAuthorizedSignerFact[]
   independentSiteHandoffFacts         IndependentSiteHandoffFact[]
   independentSiteResponseFacts        IndependentSiteResponseFact[]
   independentSiteSettlementFacts      IndependentSiteSettlementFact[]
@@ -3026,4 +3027,42 @@ model PasswordResetToken {
 
   @@index([userId, expiresAt])
   @@index([userId, consumedAt])
+}
+
+enum CustomsAuthorizedSignerType {
+  LEGAL_REPRESENTATIVE
+  AUTHORIZED_EMPLOYEE
+  LICENSED_CUSTOMS_BROKER
+  OTHER_REGULATORY_AUTHORIZED_SIGNER
+}
+
+/// CA-2（MSG-20261004-02 §六）：谁有权代表 claimant / importer 启动或签署 Customs recovery。
+/// append-only · tenant scoped · VERIFIED 需 source/evidence/verifiedAt · raw sensitive identity 禁止。
+model CustomsAuthorizedSignerFact {
+  id                  String                        @id
+  organizationId      String
+  principalRef        String
+  signerRef           String
+  signerType          CustomsAuthorizedSignerType
+  authorityBasis      String
+  scope               Json
+  jurisdiction        String
+  effectiveAt         DateTime
+  expiresAt           DateTime?
+  verificationStatus  CustomsIorVerificationStatus
+  verificationSource  CustomsIorVerificationSource
+  verifiedAt          DateTime?
+  evidenceArtifactRef String?
+  revokedAt           DateTime?
+  supersededAt        DateTime?
+  contentDigest       String
+  observedAt          DateTime
+  createdAt           DateTime                      @default(now())
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, contentDigest])
+  @@index([organizationId, principalRef, observedAt])
+  @@index([organizationId, signerRef])
+  @@index([organizationId, verificationStatus])
 }

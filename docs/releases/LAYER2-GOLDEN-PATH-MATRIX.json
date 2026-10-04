@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-04T01:59:35.072Z",
+  "generated_at": "2026-10-04T02:03:38.021Z",
   "rule": "COVERED 需存在命名证据文件；否则 GAP",
   "domains": [
     {
@@ -226,7 +226,7 @@
     {
       "id": "customs",
       "name": "Customs / Trade Recovery",
-      "domain_test_files": 28,
+      "domain_test_files": 30,
       "domain_web_files": 14,
       "cells": {
         "http": {
@@ -234,26 +234,26 @@
           "evidence": [
             "apps/api/src/__tests__/customs-authorization-route-db.test.ts",
             "apps/api/src/__tests__/customs-authorization-route.test.ts",
-            "apps/api/src/__tests__/customs-claim-ready-http.test.ts",
-            "apps/api/src/__tests__/customs-entry-fact-read-http.test.ts"
+            "apps/api/src/__tests__/customs-authorized-signer-db.test.ts",
+            "apps/api/src/__tests__/customs-authorized-signer.test.ts"
           ]
         },
         "persistence": {
           "status": "COVERED",
           "evidence": [
             "apps/api/src/__tests__/customs-authorization-route-db.test.ts",
+            "apps/api/src/__tests__/customs-authorized-signer-db.test.ts",
             "apps/api/src/__tests__/customs-claim-ready-http.test.ts",
-            "apps/api/src/__tests__/customs-entry-fact-read-http.test.ts",
-            "apps/api/src/__tests__/customs-entry-fact-store-db.test.ts"
+            "apps/api/src/__tests__/customs-entry-fact-read-http.test.ts"
           ]
         },
         "db_invariant": {
           "status": "COVERED",
           "evidence": [
             "apps/api/src/__tests__/customs-authorization-route-db.test.ts",
+            "apps/api/src/__tests__/customs-authorized-signer-db.test.ts",
             "apps/api/src/__tests__/customs-entry-fact-store-db.test.ts",
-            "apps/api/src/__tests__/customs-execution-contract.test.ts",
-            "apps/api/src/__tests__/customs-ior-facts-db.test.ts"
+            "apps/api/src/__tests__/customs-execution-contract.test.ts"
           ]
         },
         "frontend": {
@@ -268,8 +268,8 @@
           "evidence": [
             "apps/api/src/__tests__/customs-authorization-route-db.test.ts",
             "apps/api/src/__tests__/customs-authorization-route.test.ts",
-            "apps/api/src/__tests__/customs-claim-ready-http.test.ts",
-            "apps/api/src/__tests__/customs-claim-ready-package.test.ts"
+            "apps/api/src/__tests__/customs-authorized-signer-db.test.ts",
+            "apps/api/src/__tests__/customs-authorized-signer.test.ts"
           ]
         },
         "negative": {
@@ -277,8 +277,8 @@
           "evidence": [
             "apps/api/src/__tests__/customs-authorization-route-db.test.ts",
             "apps/api/src/__tests__/customs-authorization-route.test.ts",
-            "apps/api/src/__tests__/customs-claim-ready-package.test.ts",
-            "apps/api/src/__tests__/customs-classification-discrepancy.test.ts"
+            "apps/api/src/__tests__/customs-authorized-signer-db.test.ts",
+            "apps/api/src/__tests__/customs-authorized-signer.test.ts"
           ]
         },
         "replay": {
@@ -312,9 +312,9 @@
           "status": "COVERED",
           "evidence": [
             "apps/api/src/__tests__/customs-authorization-route-db.test.ts",
+            "apps/api/src/__tests__/customs-authorized-signer-db.test.ts",
             "apps/api/src/__tests__/customs-claim-ready-http.test.ts",
-            "apps/api/src/__tests__/customs-entry-fact-read-http.test.ts",
-            "apps/api/src/__tests__/customs-entry-fact-store-db.test.ts"
+            "apps/api/src/__tests__/customs-entry-fact-read-http.test.ts"
           ]
         },
         "rbac": {
