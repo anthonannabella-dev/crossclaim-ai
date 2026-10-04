@@ -1787,3 +1787,6 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 
 ## 2026-10-04T00:22:16.366Z — MSG-20261004-01
 - 客户 UI/UX 商业化授权：UI-1 Shell + UI-2 Dashboard 起，按 8 个小批次自动推进（无需逐批再授权）。
+
+## 2026-10-04T00:41:06.602Z — CA-1
+- Route-aware customs authorization + 三阶段 readiness 落地（unit 16 + PG 8 + customs/IOR 回归 277 PASS）。

@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261004-01",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-04T00:22:16.366Z",
+  "updated_at": "2026-10-04T00:41:06.602Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -4993,9 +4993,9 @@
   "awaiting_verdict": false,
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-04T00:32:09.954Z",
-    "head": "f2d302f",
-    "acceptance_head": "f2d302f",
+    "computed_at": "2026-10-04T00:41:07.330Z",
+    "head": "a34933e",
+    "acceptance_head": "a34933e",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5061,48 +5061,48 @@
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=f2d302f ci_head=f5bdd92 ci=in_progress run=37143524364"
+        "evidence": "acceptance_head=a34933e ci_head=f5bdd92 ci=in_progress run=37143524364"
       },
       "L1-05_pg_regression_passed": {
         "status": "UNVERIFIED",
-        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head f2d302f（且中间存在非簿记变更）"
+        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head a34933e（且中间存在非簿记变更）"
       },
       "L1-06_fresh_db_migration_passed": {
         "status": "UNVERIFIED",
-        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head f2d302f（且中间存在非簿记变更）"
+        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head a34933e（且中间存在非簿记变更）"
       },
       "L1-07_api_typecheck_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head f2d302f（且中间存在非簿记变更）"
+        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head a34933e（且中间存在非簿记变更）"
       },
       "L1-08_web_typecheck_build_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head f2d302f（且中间存在非簿记变更）"
+        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head a34933e（且中间存在非簿记变更）"
       },
       "L1-09_no_skipped_critical_tests": {
         "status": "UNVERIFIED",
-        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head f2d302f（且中间存在非簿记变更）"
+        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head a34933e（且中间存在非簿记变更）"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
         "status": false,
-        "evidence": "dirty entries: 20"
+        "evidence": "dirty entries: 5"
       },
       "L1-11_docs_state_consistent": {
         "status": "UNVERIFIED",
-        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head f2d302f（且中间存在非簿记变更）"
+        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head a34933e（且中间存在非簿记变更）"
       },
       "L1-12_schema_invariants_verified": {
         "status": "UNVERIFIED",
-        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head f2d302f（且中间存在非簿记变更）"
+        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head a34933e（且中间存在非簿记变更）"
       },
       "L1-13_negative_paths_covered": {
         "status": "UNVERIFIED",
-        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head f2d302f（且中间存在非簿记变更）"
+        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head a34933e（且中间存在非簿记变更）"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
         "status": "UNVERIFIED",
-        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head f2d302f（且中间存在非簿记变更）"
+        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head a34933e（且中间存在非簿记变更）"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
@@ -5882,7 +5882,7 @@
       "API.md / DOMAIN_MODEL.md / architecture-contract 计数 77 → 79"
     ]
   },
-  "next_execution_unit": "Claim / Appeal Language Metadata（MSG-20261003-148/149 §6：contentLocale?/providerLocale?/generationVersion?/templateVersion?；DRAFT 重生成记 metadata digest；冻结后 immutable；历史空值 LEGACY_UNSPECIFIED）",
+  "next_execution_unit": "CA-2 Authorized Signer Fact + DB invariants（MSG-20261004-02 §四）",
   "customer_ui_commercialization": {
     "at": "2026-10-04T00:22:16.366Z",
     "authorization": "MSG-20261004-01（CUSTOMER UI/UX COMMERCIALIZATION — IMPLEMENTATION AUTHORIZED）",
@@ -5925,6 +5925,43 @@
       "CI",
       "HEAD",
       "NEXT_UI_UNIT"
+    ]
+  },
+  "customs_authorization": {
+    "at": "2026-10-04T00:41:06.602Z",
+    "authorization": "MSG-20261004-02（CUSTOMS AUTHORIZATION CLOSURE — INTERNAL CONTRACT + CUSTOMER UX）",
+    "CUSTOMS_ROUTE_AWARE_AUTHORIZATION": "PASS（CA-1）",
+    "CUSTOMS_READINESS_STAGES": "PASS（CA-1：READY_TO_PREPARE / READY_TO_FILE / READY_TO_RECEIVE_REFUND）",
+    "BROKER_POA_LIFECYCLE": "PASS（CA-1：latest usable + REVOKED/EXPIRED/SUPERSEDED 不可用；CA-3 扩到 signer/revoke 入口）",
+    "AUTHORIZED_SIGNER_MODEL": "NOT_STARTED（CA-2）",
+    "AUTHORIZATION_SESSION_CONTRACT": "NOT_STARTED（CA-4）",
+    "CUSTOMS_AUTHORIZATION_CENTER_UI": "NOT_STARTED（CA-5）",
+    "CUSTOMS_ONE_CLICK_AUTH_UX": "NOT_STARTED（CA-6）",
+    "ca1_artifacts": [
+      "apps/api/src/services/customs/customs-authorization-route.ts（route 策略 + 三阶段判定 + POA latest-usable 解析 + 三域独立断言）",
+      "apps/api/src/services/customs/customs-authorization-readiness.ts（改为 BROKER_FILED 等价适配，blocker 词表/顺序向后兼容）",
+      "apps/api/src/__tests__/customs-authorization-route.test.ts（16：A–N + 向后兼容）",
+      "apps/api/src/__tests__/customs-authorization-route-db.test.ts（8，真实 PostgreSQL：append-only / tenant isolation / latest usable / revoke / supersede / expiry / scope）"
+    ],
+    "ca1_evidence": {
+      "unit": "16 PASS",
+      "postgres": "8 PASS（真实 PostgreSQL）",
+      "legacy_contract": "customs-execution-contract 15 PASS",
+      "customs_ior_regression": "32 files / 277 tests PASS",
+      "typecheck": "apps/api tsc --noEmit EXIT=0"
+    },
+    "REAL_BROKER_CONNECTED": "NO",
+    "REAL_FILING_PROVIDER_CONNECTED": "NO",
+    "REAL_CUSTOMS_SUBMISSION": "NO",
+    "PRODUCTION_CUSTOMS_CREDENTIALS": "NO",
+    "C18_STATUS": "HOLD_EXTERNAL",
+    "hold_unchanged": "filingSubmitted=false · externalWritePerformed=false · transportEnabled=false · productionCredentials=ABSENT",
+    "backlog": [
+      "CA-2 Authorized Signer Fact + DB invariants",
+      "CA-3 POA lifecycle revoke/supersede/expiry",
+      "CA-4 Authorization Session contract",
+      "CA-5 Customer Authorization Center UI",
+      "CA-6 One-click recovery UX wiring"
     ]
   }
 }
