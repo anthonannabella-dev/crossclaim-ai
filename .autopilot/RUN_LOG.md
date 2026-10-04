@@ -1830,3 +1830,7 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - CA-5-A 737506e：只读授权中心投影 + GET /customs-opportunities/:id/authorization-center（tenant/RBAC/404 fail-closed）。
 - CA-5-B cf88248：/customs/authorization 客户 UI + 40 键 × 5 语言（602 键 parity，hardcodes=0）；web tsc/build OK；render 81/81。
 - 审计：GitHub Issue #2 comment 5976136618；ChatGPT 通道本轮 Unknown error（2 次投递后无助手轮次）→ CHATGPT_WEB_READ=FAILED，回退 GitHub 耐久记录，下一周期重读。
+
+## 2026-10-04T03:31:10.586Z — CI 恢复绿灯 + CA-5 裁决待取回
+- CI：90cd73b / 9f0caf2 / e5e9dd0 / 737506e 全部 success（红streak 根因＝CA-2 租户触发器清单缺口，已修复）；cf88248 / 8f32fce 仍在跑，已记 pending。
+- CA-5 裁决：右侧 ChatGPT 会话本轮不可用（长消息两次 + 短重试一次均停在 Unknown error，无助手轮次；新标签页停在「请稍候…」）。判定 CHATGPT_WEB_READ=FAILED，回退 GitHub 耐久记录 comment 5976136618，下一周期重读。
