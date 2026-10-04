@@ -1,6 +1,6 @@
 # C18 发现报告 — `schema.prisma` 与 migration history 不一致（非 C18 引入）
 
-> 状态：**RESOLVED（2026-10-04）** —— 已按架构方 MSG-20261004-26 的向前修复指令收口到 `WHOLE_SCHEMA_DIFF_ZERO`。
+> 状态：**RESOLVED / CLOSED（2026-10-04）** —— 已按架构方 MSG-20261004-26 的向前修复指令收口到 `WHOLE_SCHEMA_DIFF_ZERO`。
 >   · 修复 1（enum 取值，`cc30e4a`）：`schema.prisma` 补回历史确有的 `Channel.SHOPIFY/STRIPE/PAYPAL` 与 `RouteTarget.PAYMENT_PROCESSOR`；另开独立 non-C18 migration `20261004073500_non_c18_schema_history_reconciliation` 补 `Channel.PAYMENT_PROCESSOR`（`ADD VALUE IF NOT EXISTS`）与缺失的 `FeeCalculationSettlement(organizationId, feeChainId)` 索引。
 >   · 修复 2（索引名，`90b1f71`）：残差 42 行**全部是索引名**——历史 migration 生成的索引名被 PostgreSQL 63 字符标识符上限截断，而 `schema.prisma` 声明全名；已由独立 non-C18 migration `20261004074300_non_c18_index_name_reconciliation` 只做 `ALTER INDEX ... RENAME TO ...`（不改列、不动数据、不删对象，反向重命名可回滚）。
 >   · 证据：`all committed migrations + 两个 non-C18 reconciliation + C18 candidate == schema.prisma`，clean-replay 报告 `PREEXISTING_UNRELATED_DIFF_LINES = 0` 且 `C18_SCOPED_DIFF_LINES = 0`；复现脚本 `tools/verification/c18-clean-replay-proof.mjs`。诊断工具 `tools/verification/c18-schema-drift-report.mjs`。
@@ -23,7 +23,7 @@ C18 的 migration 在干净基线上**完全一致**（见 §3），差异全部
 
 ## 2. 证据
 
-在一次性数据库（`crossclaim_c18_proof`，脚本 `work/scripts/c18-clean-replay-proof.mjs`）上按权威顺序重放：
+在一次性数据库（`crossclaim_c18_proof`，脚本 `tools/verification/c18-clean-replay-proof.mjs`）上按权威顺序重放：
 
 ```
 CREATE DATABASE <proof>

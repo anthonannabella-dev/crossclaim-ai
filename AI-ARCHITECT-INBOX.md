@@ -133856,3 +133856,271 @@ PRODUCTION_ENABLEMENT = HOLD
 
 所以 Codex 现在不需要再围绕 migration 本身返工了，可以直接部署 staging/non-prod shared，然后推进 Prisma Store + 真实 PostgreSQL E2E。
 ```
+
+### [MSG-20261004-28] ARCHITECT VERDICT — TRACK C / SEO-3 PUBLIC API SECURITY = REVISE｜reviewed HEAD = 3066ac2｜主体边界 PASS（匿名只读 / 零副作用 / RuleVersion server-resolved fail-closed / PII 字符串过滤）但两项服务层必修：CHANGE A basisKey 只做了格式白名单，须改为 rule/engine 级 publicInputSchema 语义白名单（未知 key → UNKNOWN_ANSWER_KEY → INVALID_REQUEST）；CHANGE B `typeof value === 'number' || 'boolean'` 直接 continue 会漏检数值型 PII，须 schema-driven 校验（Number.isFinite / 类型 / 整数小数 / min-max），不要用通用正则猜；限流 in-memory = DEV/STAGING_ONLY，生产须 Redis 共享原子限流或 CDN/网关全局限流 + 应用层第二层，匿名 key 须来自可信代理真实 client IP（不可信任 X-Forwarded-For）；HTTP 接线前须补 body ≤ 8 KiB、timeout ≈2–3s、有界并发、no-store、same-origin CORS（禁止 Allow-Origin: *）、不记录 raw body/IP/UA、engine 输出校验（ENGINE_OUTPUT_INVALID fail-closed）；SEO-4 /recover 页面接线 = AUTHORIZED 且 DEFAULT_NOINDEX = REQUIRED；PUBLIC_CHECKER_HTTP / PUBLIC_CHECKER_PRODUCTION = HOLD（等 CHANGE A/B + HTTP 边界后另送 SEO-3 PUBLIC HTTP FINAL 十项）；SEARCH_CONSOLE / DOMAIN_OWNERSHIP = HOST_ACTION_REQUIRED｜
+
+```text
+ARCHITECT VERDICT：REVISE
+
+我按本轮重新审了 3066ac2（完整 SHA 3066ac280b2aaf4bfa57ecc8dbdceafc84cc6e50）的 seo-public-checker.ts / seo-rate-limit.ts / seo-public-checker.test.ts，并对比到当前 90b1f71；这两个安全边界文件后续没有改动。
+
+整体方向正确，但现在还不能把 Checker API 暴露到公网 HTTP。有两个服务层漏洞必须先补。
+
+① 匿名/PII/fail-closed 边界：主体 PASS，但有两项必修
+
+现有这些我判定为 PASS：
+
+纯文本
+匿名、无 session                         PASS
+不访问 tenant 数据                       PASS
+无 submission / payment / external write PASS
+RuleVersion server-resolved              PASS
+basisKey 必须真实注册                     PASS
+规则不存在/无能力 fail-closed             PASS
+资格失败不运行 calculator                 PASS
+ESTIMATE_ONLY + disclaimer               PASS
+slug/key/字符串长度/答案数量限制          PASS
+
+但是现在所谓“答案白名单”实际上只是格式白名单：
+
+纯文本
+^[a-z][a-z0-9_]{0,31}$
+
+任何符合格式的 key 都能进入 engine，例如：
+
+纯文本
+phone
+email
+customer_name
+account
+secret
+foo
+
+RecoveryRuleDefinition 目前也没有 publicInputSchema 或允许字段定义。
+
+CHANGE A — 必须增加 rule/engine 级语义白名单。
+
+推荐不是在 SEO 层硬编码字段，而是 registry 提供：
+
+纯文本
+basisKey
+→ public input schema
+→ allowed keys
+→ type
+→ min/max
+→ enum/options
+
+例如：
+
+纯文本
+engine:customs-drawback-eligibility
+
+reexported: boolean
+duty_amount: number 0..100000000
+days_since_import: integer 0..3650
+
+未知 key 必须：
+
+纯文本
+UNKNOWN_ANSWER_KEY
+→ INVALID_REQUEST
+
+不能把任意合法格式 key 继续传给引擎。
+
+第二个实际漏洞是：
+
+TypeScript
+if (typeof value === 'number' || typeof value === 'boolean') continue;
+
+所以：
+
+JSON
+{"phone":14155550132}
+
+不会经过 PII 检测。
+
+CHANGE B — numeric 输入必须 schema-driven 校验。
+
+至少：
+
+纯文本
+Number.isFinite(value)
+类型匹配
+整数/小数要求
+min/max
+禁止超范围
+
+不要简单把“6 位以上数字全部当 PII”，否则合法金额会被误杀；正确做法是依赖具体字段的 public input schema，而不是靠通用正则猜。
+
+所以当前：
+
+纯文本
+SEO-3_SERVICE_BOUNDARY = REVISE
+PUBLIC_CHECKER_HTTP = HOLD
+② Rate limit：生产必须共享/全局化
+
+当前 in-memory token bucket 适合：
+
+纯文本
+unit test
+local
+staging
+single-process development
+
+不够正式公网生产。
+
+因为多实例/多 worker 时每个进程各有一份桶，可以绕限流；而且当前 Map 没有 TTL/LRU，攻击者不断制造新匿名 key 会让 Map 一直增长。
+
+生产至少满足二选一：
+
+纯文本
+A. Redis/共享存储 atomic limiter
+
+或：
+
+纯文本
+B. CDN / API Gateway / reverse proxy 提供全局 rate limit
+   + 应用层 limiter 做第二层
+
+可以先接线，但条件必须是：
+
+纯文本
+PUBLIC_API_ENABLED=false 默认关闭
+或仅 staging
+
+若临时单机 canary，则必须同时满足：
+
+纯文本
+单实例
+单 Node process
+无 PM2 cluster
+无 autoscale/serverless
+上游已有 global rate limit
+Map 有 TTL / max-size eviction
+有 kill switch
+
+否则不能视为 production-ready。
+
+另外匿名 key 必须来自可信代理提供的真实 client IP，不能直接信任用户可伪造的 X-Forwarded-For。
+
+③ HTTP 接线前还必须补哪些防护？
+
+必须补，不建议等上线以后。
+
+最小 PUBLIC HTTP contract：
+
+纯文本
+POST only
+Content-Type = application/json
+body <= 8 KiB（解析 JSON 前限制）
+rate limit 在昂贵 engine 调用前
+总处理 timeout ≈ 2–3 秒
+bounded concurrency / semaphore
+Cache-Control: no-store
+same-origin CORS 或不开放 CORS
+禁止 Access-Control-Allow-Origin: *
+不记录 raw body / raw IP / raw UA
+
+另外我建议把输出也校验。
+
+现在 runCalculation() 的返回被直接信任。公网边界应该检查：
+
+纯文本
+estimate.min/max = finite
+min >= 0
+max >= min
+currency = ^[A-Z]{3}$
+disclaimerKey = safe token
+reasonCodes = 有数量/长度上限的安全 token
+
+不合法的 engine output：
+
+纯文本
+ENGINE_OUTPUT_INVALID
+→ fail-closed
+
+这能避免未来某个 engine accidentally 返回异常值、超大内容或自由文本直接穿透到公开 API。
+
+Slug 枚举不用作为 P0 阻塞。
+
+这些 /recover/... 页面本来就是 SEO 公共资产，因此 slug 本身不是秘密。可以统一外部 404/不可用响应以减少 fingerprinting，但不必做复杂 anti-enumeration。
+
+④ SEO-4 /recover 路由：允许页面接线，但 Checker HTTP 暂缓
+
+我授权：
+
+纯文本
+SEO-4_RECOVER_PAGE_WIRING = AUTHORIZED
+DEFAULT_NOINDEX = REQUIRED
+
+也就是说现在可以继续做：
+
+纯文本
+/recover/...
+canonical
+hreflang
+JSON-LD
+sitemap plumbing
+renderer
+Checker UI shell
+
+但 Checker 的真正 POST API：
+
+纯文本
+PUBLIC_CHECKER_HTTP_ENABLEMENT = HOLD
+
+等 CHANGE A/B + HTTP boundary 落完，再送一次很窄的：
+
+纯文本
+SEO-3 PUBLIC HTTP FINAL
+
+我只需要核：
+
+纯文本
+1. rule/basisKey publicInputSchema
+2. unknown answer key reject
+3. numeric finite/range validation
+4. request body 8 KiB cap
+5. trusted-IP-derived rate key
+6. bounded/shared limiter
+7. timeout + concurrency
+8. no-store + same-origin
+9. engine output validation
+10. zero write/submission/payment regression
+
+通过后即可开放公网。
+
+Search Console、Bing/Google verification、域名 ownership/token 都可以列为：
+
+纯文本
+HOST_ACTION_REQUIRED
+
+它们不应阻塞 /recover 页面代码建设，但会阻塞最终搜索引擎生产验证。
+
+最终状态：
+
+纯文本
+ARCHITECT VERDICT = REVISE
+
+SEO-3_CORE_READ_ONLY_DESIGN = PASS
+RULE_RESOLUTION_FAIL_CLOSED = PASS
+ZERO_SIDE_EFFECT_BOUNDARY = PASS
+PII_STRING_FILTER = PASS
+
+PUBLIC_INPUT_SEMANTIC_ALLOWLIST = REVISE
+NUMERIC_INPUT_VALIDATION = REVISE
+
+IN_MEMORY_RATE_LIMIT = DEV/STAGING_ONLY
+SHARED_OR_EDGE_RATE_LIMIT = REQUIRED_FOR_PRODUCTION
+
+SEO-4_PAGE_WIRING = AUTHORIZED
+DEFAULT_NOINDEX = REQUIRED
+
+PUBLIC_CHECKER_HTTP = HOLD
+PUBLIC_CHECKER_PRODUCTION = HOLD
+
+SEARCH_CONSOLE = HOST_ACTION_REQUIRED
+DOMAIN_OWNERSHIP = HOST_ACTION_REQUIRED
+
+另外，3066ac2 和当前 90b1f71 的 GitHub hosted status/workflow 查询仍为空，所以 9/9 我确认的是仓库中测试覆盖内容，没有把它表述为独立 CI 已执行成功。
+```

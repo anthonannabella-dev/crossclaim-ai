@@ -5,18 +5,24 @@
 
 | # | 主题 | 抽取长度 | FNV-1a | reviewed HEAD | 状态 |
 | --- | --- | --- | --- | --- | --- |
-| 1 | **ZERO evidence**（WHOLE_SCHEMA_DIFF_ZERO 证据送审） | 3207 | `fa4fee5d` | `90b1f71` | **PASS WITH REVISE** — 已读取，待归档（哈希已复核） |
-| 2 | **SEO-3 PUBLIC API SECURITY**（公开只读 Checker/Calculator） | 4501 | `1aef0ed7` | `3066ac2` | **REVISE** — 已读取，待归档（哈希已复核） |
+| 1 | **ZERO evidence**（WHOLE_SCHEMA_DIFF_ZERO 证据送审） | 3207 | `fa4fee5d` | `90b1f71` | **PASS WITH REVISE** — 已归档为 `MSG-20261004-27`（FULL_COPY_OK） |
+| 2 | **SEO-3 PUBLIC API SECURITY**（公开只读 Checker/Calculator） | 4501 | `1aef0ed7` | `3066ac2` | **REVISE** — 已归档为 `MSG-20261004-28`（FULL_COPY_OK） |
 
-### 抽取坐标（复核于 2026-10-04）
+**当前无待归档裁决（2026-10-04 收口：`MSG-20261004-27` / `-28` / `-29` 均已入库）。**
 
-会话中最近三条裁决的定位（从末尾往前）：`n=4` = SEO-3（`3066ac2`, 4501, `1aef0ed7`）→ `n=3` = ZERO evidence（`90b1f71`, 3207, `fa4fee5d`）→ `n=2` = FINAL-2（`e18e358`, 4536, `a59fc0d9`，**已归档为 MSG-20261004-26**）。
+### 抽取坐标与坑（复核于 2026-10-04）
 
-抽取方法：取 `document.body.innerText` 中所有 `ChatGPT 说：` 的出现位置，按相邻两处切段；对每段裁掉 `ChatGPT 可能会出错` 及其后的 UI 尾巴与该段之后的下一条用户消息，再 trim。归档前必须用 `tools/verdict-diff/compare.mjs` 验证 `FULL_COPY_OK`。
+按「从最旧开始数第 n 条 `ChatGPT 说：`」定位：`n=2` = FINAL-2（`e18e358`, 4536, `a59fc0d9`，已归档 `MSG-20261004-26`）；`n=3` = ZERO evidence（`90b1f71`, 3207, `fa4fee5d`）；`n=4` = SEO-3（`3066ac2`, 4501, `1aef0ed7`）；`n=5` = EXACT-ORDER（`1950ef8`, 3190, `064442e4`，已归档 `MSG-20261004-29`）。
+
+抽取方法：取 `document.body.innerText` 中所有 `ChatGPT 说：` 的出现位置，按相邻两处切段；对每段裁掉 `ChatGPT 可能会出错` 及其后的 UI 尾巴与该段之后的下一条用户消息，再 trim。
+
+**本次踩到的坑**：当该条回复不是会话最后一条时，其段尾会带上日期分隔标签（如 `今天 20:01`），必须先截掉再 trim —— 否则会比归档值多出 10 个字符、哈希不匹配（SEO-3 实测：未截断 4511 / `9dc7d595`，截断后 4501 / `1aef0ed7`）。
+
+**导出方式**：`cua_repl` 运行时没有 `require`，但 `await import("node:fs")` 可用，因此可把页面 DOM 抽出的原文直接写入 `work/stage/*.txt`；随后在 node 侧独立复算长度与 FNV-1a 二次确认（本次两侧一致：4501 / `1aef0ed7`，无 BOM）。
 
 ## 归档后需立即执行的事项
 
-**来自 #1（ZERO evidence，PASS WITH REVISE）**：按裁决原文处理其 REVISE 项；`shared / production migrate deploy` 的解禁与否以裁决为准（当前 HOLD）。
+**来自 #1（ZERO evidence，PASS WITH REVISE）**：`WHOLE_SCHEMA_DIFF_ZERO = PASS`、`NON_C18_SCHEMA_HISTORY_DRIFT = CLOSED`；`C18-SCHEMA-DRIFT-FINDING.md` 已改为 RESOLVED / CLOSED 并改用 `tools/verification/c18-clean-replay-proof.mjs` 路径；`shared / production migrate deploy` 以 `MSG-20261004-29` 为准（staging / non-prod shared = AUTHORIZED，production = HOLD）。
 
 **来自 #2（SEO-3，REVISE）**：按 `docs/releases/SEO-3-PUBLIC-API-AUDIT-REQUIREMENTS.md` 与 `docs/releases/SEO-3-CHANGE-AB-SCHEMA-SKETCH.md` 实现：
 - CHANGE A：`basisKey` 级语义白名单（未注册 key → `UNKNOWN_ANSWER_KEY` → `INVALID_REQUEST`，必须在传入引擎前拒绝）
@@ -30,7 +36,7 @@
 
 ## CI 状态（2026-10-04 更新）
 
-红色连击已结束：**`4f02282` run `37190859502` = success**（此前 `3125271…b5149ca` 连续 failure）。
+红色连击已结束：**`4f02282` run `37190859502` = success**（此前 `3125271…b5149ca` 连续 failure）。此后 a293935 / 2e9e678 / 42b9ccb / 8ad4380 的前序 heads 全部 success。
 
 根因不是数据完整性问题，而是仓库三处**严格契约/清单未同步**，均已修复：
 
@@ -40,4 +46,4 @@
 
 定位工具（已入库）：`work/scripts/ci-failure-digest.mjs`（失败 job/step + 关键行）、`work/scripts/ci-step-context.mjs`（打印失败 step 之后的原文片段与失败用例行，不做正则改写）。
 
-**结论**：`C18_INTERNAL_SKELETON = CLOSED` + `WHOLE_SCHEMA_DIFF_ZERO` + **CI 绿** 三者互相印证；因此本文档中「ZERO evidence」裁决的送审内容已获远端 CI 独立确认（不再是"仅本地证据"）。
+**结论**：`C18_INTERNAL_SKELETON = CLOSED` + `WHOLE_SCHEMA_DIFF_ZERO` + **CI 绿** 三者互相印证；因此本文档中「ZERO evidence」「EXACT-ORDER REPLAY」两轮送审内容均已获远端 CI 独立确认（不再是“仅本地证据”）。
