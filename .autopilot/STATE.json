@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261004-16",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-04T07:51:24.497Z",
+  "updated_at": "2026-10-04T07:56:02.765Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -5128,7 +5128,7 @@
       "④ Production Candidate register only"
     ]
   },
-  "awaiting_verdict": "WHOLE_SCHEMA_DIFF_ZERO 证据已送审（comment 5977852157）；shared/prod migrate deploy 解禁待架构方",
+  "awaiting_verdict": "ZERO-evidence 裁决已到（PASS WITH REVISE，reviewed HEAD 90b1f71）——待归档（逐字+哈希校验+compare.mjs）并按裁定执行",
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
     "computed_at": "2026-10-04T07:27:17.389Z",
@@ -6161,7 +6161,7 @@
       "API.md / DOMAIN_MODEL.md / architecture-contract 计数 77 → 79"
     ]
   },
-  "next_execution_unit": "读解禁裁决；并行推进 C18 Prisma Store + 真实 PG E2E（10 项）",
+  "next_execution_unit": "归档 ZERO-evidence 裁决（MSG-20261004-27）并按其 REVISE 项执行；随后 C18 Prisma Store + PG E2E",
   "customer_ui_commercialization": {
     "at": "2026-10-04T01:21:55.949Z",
     "authorization": "MSG-20261004-01（CUSTOMER UI/UX COMMERCIALIZATION — IMPLEMENTATION AUTHORIZED）",
@@ -6440,7 +6440,7 @@
   "audit_session_url": "https://chatgpt.com/c/6ac1cdf0-1ec8-83ec-8036-0e66fcf5c6b9",
   "ci_note": "2026-10-04 复核：全部内部单元 CLOSED 后，GitHub Actions 对各 head 均有 workflow run（0c6bb0f/ f0abd05 / cb04232 / c6ce17c / 3fad4d4 / c897737 / fd7e4bf / 400fe6e / 8f32fce = success；5c6888e / f640f8c / 84c3f99 运行中）。架构方某次查询未见 runs 属查询口径差异（commit statuses vs workflow runs），此处记录 run id 以便复核。",
   "c18_layer3": {
-    "at": "2026-10-04T07:51:24.497Z",
+    "at": "2026-10-04T07:56:02.765Z",
     "main_line": "P0 = C18 REAL CUSTOMS PROVIDER INTEGRATION",
     "matrix_doc": "docs/releases/C18-PROVIDER-INTEGRATION-MATRIX.md",
     "completed": [
@@ -6771,10 +6771,17 @@
     },
     "whole_schema_zero_evidence_comment_id": 5977852157,
     "whole_schema_zero_reviewed_head": "90b1f71",
-    "whole_schema_zero_wakeup_delivery": "VERIFIED"
+    "whole_schema_zero_wakeup_delivery": "VERIFIED",
+    "zero_evidence_verdict": {
+      "verdict_head": "PASS WITH REVISE",
+      "reviewed_head": "90b1f71",
+      "len": 3207,
+      "archived": false,
+      "note": "文本已获取，下一轮归档并执行"
+    }
   },
-  "last_heartbeat_at": "2026-10-04T07:51:24.497Z",
-  "waiting_for_verdict": "WHOLE_SCHEMA_DIFF_ZERO 证据已送审（comment 5977852157）；shared/prod migrate deploy 解禁待架构方",
+  "last_heartbeat_at": "2026-10-04T07:56:02.765Z",
+  "waiting_for_verdict": "ZERO-evidence 裁决已到（PASS WITH REVISE，reviewed HEAD 90b1f71）——待归档（逐字+哈希校验+compare.mjs）并按裁定执行",
   "last_completed_unit": "whole-schema-zero-evidence-submission",
   "hold_external": true,
   "track_c_seo_p3": {
@@ -6879,7 +6886,7 @@
   "LAST_COMPLETED_UNIT": "c18-migration-sql-final2-submission",
   "NEXT_EXECUTION_UNIT": "读 MIGRATION SQL FINAL-2 裁决 → PASS 后按解禁顺序；并行 SEO-3 PUBLIC API SECURITY AUDIT 唤醒",
   "CI_STATUS": "pending（90b1f71）",
-  "WAITING_FOR_VERDICT": "WHOLE_SCHEMA_DIFF_ZERO 证据已送审（comment 5977852157）；shared/prod migrate deploy 解禁待架构方",
+  "WAITING_FOR_VERDICT": "ZERO-evidence 裁决已到（PASS WITH REVISE，reviewed HEAD 90b1f71）——待归档（逐字+哈希校验+compare.mjs）并按裁定执行",
   "HOST_ACTION_REQUIRED": [
     "provider developer/partner account registration",
     "third-party commercial agreement acceptance",
