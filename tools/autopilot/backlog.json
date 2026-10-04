@@ -1,6 +1,6 @@
 {
   "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。",
-  "updatedAt": "2026-10-04T06:51:32.908Z",
+  "updatedAt": "2026-10-04T12:25:51.045Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -1055,6 +1055,16 @@
         "seo-1-gap-audit-and-page-matrix"
       ],
       "updated_at": "2026-10-04T06:01:14.998Z"
+    },
+    {
+      "id": "SEO-4-STAGE-1-recover-route-skeleton",
+      "priority": "P1",
+      "source_backlog_id": "TRACK C / SEO P3（MSG-20261004-28 ④ SEO-4_RECOVER_PAGE_WIRING = AUTHORIZED）",
+      "title": "/recover 路由骨架（gate 驱动的 404 / 重复 slug / 过期 / 冲突 / locale fallback）",
+      "scope": "接线 SEO-6 每页计划：路由骨架 + 响应分类，不产出可见内容；默认 noindex；不注册任何公开 Checker POST 路由",
+      "acceptance_criteria": "docs/releases/SEO-4-RECOVER-WIRING-PLAN.md 第 1 阶段全绿；构建/类型检查干净；CUSTOMER_UI_HARDCODED_STRING_COUNT=0；PUBLIC_CHECKER_HTTP 仍 HOLD；TRANSPORT=false",
+      "plan_doc": "docs/releases/SEO-4-RECOVER-WIRING-PLAN.md",
+      "boundary": "TRANSPORT=false / EXTERNAL_WRITE=HOLD / PAYMENT=HOLD / 生产凭据 ABSENT / FINAL_ACCEPTANCE_HEAD=0f7f7ac 未动"
     }
   ],
   "authorization_note": "MSG-20261003-133 Q3：dispatcher 获授权自动扩 backlog 并执行安全单元（契约/已批准 D1–D3 Schema/append-only 持久化/deterministic normalization/qualification·evidence·package/测试/文档/fixture/只读 HTTP/只读 reconciliation projection）；遇到未批准 Schema、EXTERNAL_WRITE Action Guard、真实 adapter/webhook、submission、真实资金语义写入、生产 credential、收费时必须停该分支并重新送审。 HOST 2026-10-04（CONTINUOUS EXECUTION + CUSTOMS AUTHORIZATION + CHATGPT AUDIT LOOP）：UI-6…UI-8 与 CA-2…CA-6 已登记为可执行队列；Schema/Security/Authorization 边界项自动进入 ChatGPT Audit Loop（AUDIT-BRIDGE.md，不新建协议）。"
