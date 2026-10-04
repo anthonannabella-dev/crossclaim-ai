@@ -1,6 +1,6 @@
 {
   "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。",
-  "updatedAt": "2026-10-05T00:01:00.000Z",
+  "updatedAt": "2026-10-05T00:06:00.000Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -1187,6 +1187,16 @@
       "title": "seo-recover-static-v1 投影契约（白名单 + fail-closed 解析）",
       "scope": "buildRecoverStaticProjection / parseRecoverStaticProjection / isProjectionPageIndexable：版本化 schema、64-hex digest、白名单键、拒绝 tenant/organizationId/凭据/PII/白名单外键、schema 不识别或 locale 非法整份拒绝",
       "acceptance_criteria": "RECOVER_PROJECTION_SCHEMA_VERSIONED_AND_DIGESTED / RECOVER_PROJECTION_REJECTS_FORBIDDEN_FIELDS / RECOVER_PROJECTION_UNKNOWN_SCHEMA_FAILS_CLOSED / RECOVER_PROJECTION_INDEXABLE_REQUIRES_ALL_FLAGS 全绿；tsc 0",
+      "status": "IMPLEMENTED_PENDING_CI",
+      "implementation_head": "(this commit)"
+    },
+    {
+      "id": "SEO-4-STAGE-11-static-projection-exporter",
+      "priority": "P0",
+      "source_backlog_id": "MSG-20261004-35（OPTION_B_REVISED）",
+      "title": "规则 → seo-recover-static-v1 投影导出器（自校验白名单）",
+      "scope": "buildRecoverStaticProjectionFromRules：5 语言 × 规则生成白名单页面（只经 facade）；computeRecoverSourceDigest 顺序无关；导出前 parseRecoverStaticProjection 自校验，越界即抛错不落盘",
+      "acceptance_criteria": "RECOVER_EXPORT_WHITELIST_SELF_VALIDATES / RECOVER_EXPORT_DIGEST_STABLE_AND_ORDER_INDEPENDENT / RECOVER_EXPORT_FAILS_CLOSED_WHEN_THIN 全绿；tsc 0",
       "status": "IMPLEMENTED_PENDING_CI",
       "implementation_head": "(this commit)"
     }
