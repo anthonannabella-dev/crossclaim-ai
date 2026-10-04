@@ -184,8 +184,8 @@ describe('模型清单一致性（C-0002 CHANGE #1）', () => {
     for (const name of JOIN_MODELS) expect(modelBlock(name), `缺少联结模型 ${name}`).not.toBe('');
   });
 
-  it('模型总数为 82（76 core + 6 join）—— 与 README/DOMAIN_MODEL 表述一致', () => {
-    expect(modelNames()).toHaveLength(82);
+  it('模型总数为 85（79 core + 6 join）—— 与 README/DOMAIN_MODEL 表述一致', () => {
+    expect(modelNames()).toHaveLength(85);
   });
 });
 
