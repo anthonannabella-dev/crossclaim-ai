@@ -134759,3 +134759,217 @@ PRODUCTION_ENABLEMENT = HOLD
 
 另外，本 exact HEAD 的 GitHub hosted status/workflow 查询仍为空，因此 21/21、tsc、prisma validate、exact-order replay 我视为已归档执行证据；我独立确认的是 6de52ca 上的实现、migration 和测试逻辑。
 ```
+
+### [MSG-20261004-32] ARCHITECT VERDICT — C18 PRODUCTION PERSISTENCE CHECKPOINT FINAL-3 复核 = REVISE（仅剩 CHANGE F/G）｜reviewed HEAD = 54f7f08｜已 PASS：CHANGE_A/B/C、AUTHORIZATION_OBSERVED（非 transition 观察耐久化）、MULTI_EVENT_OBSERVED_EVENTS、RENEWED_EXPIRES_AT_DURABILITY、PROVIDER_AUTHORIZATION_REF_DURABILITY、EXPIRED_TO_REVOKED、PLAIN_UNIQUE_INDEX、WEBHOOK_EXACTLY_ONCE、TENANT_ISOLATION。两项必修：CHANGE F 未来生效（effectiveAt > now）的合法已验证观察现在被判 AUTHORIZATION_UNKNOWN 且 zero-write，与 FINAL-3 新契约「每个会影响未来 fold 的已验证观察都必须 durable」冲突 → 应不改变 current gate、落 AUTHORIZATION_OBSERVED、并在 snapshot.observedEvents 保存事件（不得提前激活/撤销，但必须保存）；CHANGE G 精确重放不得重复 fold（当前 history 已含 incoming 再 fold 一次，appliedEventCount 会 2→3，DerivedProviderAuthorizationState 并不完全一致），且 sameEvent()/P2002 只比较 kind/effectiveAt/observedAt/sourceRef，未比较 providerAuthorizationRef/expiresAt/reasonCode → 同 sourceRef 但 payload 变化会被误判 REPLAYED；修正=完整 canonical event equality（含 providerAuthorizationRef/expiresAt/reasonCode）＋精确重放时 derived 取 fold(persisted history) 不再加 incoming ＋ P2002 后校验 incoming 全量 payload 已持久化，exact match → REPLAYED，同 identity 但 payload 不同 → AUTHORIZATION_IDEMPOTENCY_CONFLICT fail-closed；补两个测试（精确重放全字段一致且 appliedEventCount 不增加；同 identity 不同 payload → conflict + zero writes）。PRODUCTION_PERSISTENCE_CHECKPOINT = REVISE；修完直接送 FINAL-4，无需重审 A–E。边界：STAGING/NON-PROD SHARED MIGRATE = AUTHORIZED，STAGING_SMOKE = PRODUCTION_DEPLOY_GATE；REAL-DATA SHARED / PRODUCTION MIGRATE / REAL TRANSPORT / EXTERNAL WRITE / PAYMENT / PRODUCTION ENABLEMENT = HOLD｜
+
+```text
+ARCHITECT VERDICT：REVISE
+
+我按 reviewed HEAD = 54f7f08（完整 SHA 54f7f086613b3ad109e691ef98d0df2828e0bd3c）重新审了 FINAL-3。AUTHORIZATION_OBSERVED 方向是对的，multi-event observedEvents 也已经解决上一轮“只留最后事件”的问题；但还剩 2 个非常窄的持久化一致性问题。
+
+① CHANGE D：主体 PASS，但还没完全闭合
+
+这些已经可以记 PASS：
+
+纯文本
+AUTHORIZATION_OBSERVED_EVENT = PASS
+MULTI_EVENT_OBSERVED_EVENTS = PASS
+RENEWED_EXPIRES_AT_DURABILITY = PASS
+PROVIDER_AUTHORIZATION_REF_DURABILITY = PASS
+
+但当前仍有一个直接反例：
+
+纯文本
+收到合法、已验证的未来事件：
+REVOKED effectiveAt = tomorrow
+
+现代码：
+
+纯文本
+derive(...) = UNKNOWN
+→ AUTHORIZATION_UNKNOWN
+→ 不写 lineage
+
+测试也明确要求它 zero-write。
+
+这和 FINAL-3 新契约：
+
+每一个会影响未来 fold 的已验证 provider observation 都必须 durable
+
+冲突。
+
+未来 REVOKED / GRANTED / RENEWED 显然会影响未来 fold，不能因为今天尚未生效就永久丢掉。
+
+CHANGE F — 最小修正
+
+未来有效事件：
+
+纯文本
+effectiveAt > now
+
+应：
+
+纯文本
+不改变 current binding.status
++
+落 AUTHORIZATION_OBSERVED
++
+snapshot.observedEvents 保存事件
+
+不能提前激活/撤销，但必须保存。
+
+因此：
+
+纯文本
+NON_TRANSITION_OBSERVATION_DURABILITY = PASS_WITH_ONE_REVISE
+② CHANGE E：方向正确，但 replay 仍不是严格同一 truth
+
+当前正常 replay 路径：
+
+TypeScript
+history = 已包含这次 incoming 的持久化历史
+derived = derive(history + incoming)
+
+所以同一个事件被 fold 两次。
+
+比如首次 APPLIED：
+
+纯文本
+REVOKED + stale GRANTED
+appliedEventCount = 2
+
+重放时：
+
+纯文本
+history 已经 = REVOKED + GRANTED
+再 + incoming GRANTED
+appliedEventCount = 3
+
+虽然你现在测试的：
+
+纯文本
+status
+conflict
+expiresAt
+
+一样，但 DerivedProviderAuthorizationState 本身并不完全一样。
+
+更重要的是，当前：
+
+TypeScript
+sameEvent()
+
+只比较：
+
+纯文本
+kind
+effectiveAt
+observedAt
+sourceRef
+
+没有比较：
+
+纯文本
+providerAuthorizationRef
+expiresAt
+reasonCode
+
+所以同一个 sourceRef 如果 payload 变了，可能被错误判成 REPLAYED。
+
+P2002 catch 也只是找到同 sourceRef 的事实就返回 replay，没有完整 payload equality。
+
+这会把真正的 idempotency conflict 静默吞掉。
+
+CHANGE G — 最小修正
+
+不需要新 Schema。
+
+精确 replay 时：
+
+纯文本
+1. 用完整 canonical event equality：
+   kind
+   effectiveAt
+   observedAt
+   sourceRef
+   providerAuthorizationRef
+   expiresAt
+   reasonCode
+
+2. 如果 incoming 已完整存在于 persisted history：
+   derived = fold(persisted history)
+   不要再次 + incoming
+
+3. P2002 后：
+   reload persisted history
+   校验 incoming 全量 payload 已确实持久化
+
+   exact match
+   → REPLAYED
+
+   same idempotency key but payload differs
+   → AUTHORIZATION_IDEMPOTENCY_CONFLICT
+   → fail-closed
+
+至少补两个测试：
+
+纯文本
+APPLIED → exact replay
+→ derived 全字段一致，尤其 appliedEventCount 不增加
+
+同 sourceRef / identity
+但 expiresAt 或 providerAuthorizationRef 不同
+→ 不得 REPLAYED
+→ AUTHORIZATION_IDEMPOTENCY_CONFLICT
+→ zero writes
+③ Production Persistence Checkpoint
+
+所以本轮还不能记 PASS：
+
+纯文本
+PRODUCTION_PERSISTENCE_CHECKPOINT = REVISE
+
+但非常接近完成。
+
+已经关闭：
+
+纯文本
+CHANGE_A = PASS
+CHANGE_B = PASS
+CHANGE_C = PASS
+
+AUTHORIZATION_OBSERVED = PASS
+MULTI_EVENT_DURABILITY = PASS
+EXPIRED_TO_REVOKED = PASS
+PLAIN_UNIQUE_INDEX = PASS
+WEBHOOK_EXACTLY_ONCE = PASS
+TENANT_ISOLATION = PASS
+
+只剩：
+
+纯文本
+CHANGE_F
+future-dated valid observations 必须 durable，但不能提前改变 gate
+
+CHANGE_G
+exact replay 不得 double-fold；
+完整 payload equality；
+idempotency key 相同但 payload 不同必须 conflict
+
+修完这两个直接送 PRODUCTION PERSISTENCE CHECKPOINT FINAL-4，不需要重审前面的 A–E。
+
+边界保持：
+
+纯文本
+STAGING / NON-PROD SHARED MIGRATE = AUTHORIZED
+STAGING SMOKE = PRODUCTION DEPLOY GATE
+
+REAL-DATA SHARED = HOLD
+PRODUCTION MIGRATE DEPLOY = HOLD
+REAL TRANSPORT = HOLD
+EXTERNAL WRITE = HOLD
+PAYMENT = HOLD
+PRODUCTION ENABLEMENT = HOLD
+
+另外，exact HEAD 的 hosted GitHub status/workflow 仍为空；25/25、exact-order replay、prisma validate、tsc 属于已归档执行证据，我独立确认的是 54f7f08 上的代码、migration 与测试逻辑。
+```

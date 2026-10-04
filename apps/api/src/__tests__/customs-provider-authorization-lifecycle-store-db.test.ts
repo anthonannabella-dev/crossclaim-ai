@@ -29,6 +29,8 @@ const T3 = new Date('2026-10-04T09:00:00.000Z');
 const T4 = new Date('2026-10-04T09:30:00.000Z');
 const T5 = new Date('2026-10-05T00:00:00.000Z');
 const NOW = new Date('2026-10-04T10:00:00.000Z');
+const T6 = new Date('2026-10-06T00:00:00.000Z');
+const NOW_AFTER_T6 = new Date('2026-10-06T12:00:00.000Z');
 // 多次调用要用**递增的观察时钟**：occurredAt 由调用方 now 决定，同一 now 会造成事实排序并列（按 uuid 决胜）。
 const NOW_1H = new Date('2026-10-04T11:00:00.000Z');
 const NOW_2H = new Date('2026-10-04T12:00:00.000Z');
@@ -159,15 +161,37 @@ describe('C18-7 授权生命周期 store（PostgreSQL / FINAL-3）', () => {
     expect(await bindingStatus()).toBe('ACTIVE');
   });
 
-  it('全部事件尚未生效 → AUTHORIZATION_UNKNOWN，不得提前变 ACTIVE', async () => {
-    await seedActiveBinding();
-    const result = await lifecycleStore().applyObservation(
-      observation([event('REVOKED', new Date('2026-10-05T00:00:00.000Z'))]),
-    );
-    expect(result.ok).toBe(false);
-    if (result.ok) throw new Error('unreachable');
-    expect(result.reasonCode).toBe('AUTHORIZATION_UNKNOWN');
-    expect(await prisma.customsProviderTenantBindingLineage.count()).toBe(1);
+  it('CHANGE F：未来生效的合法观察 → 不提前改闸门，但必须耐久化；生效后由历史落闸门', async () => {
+    const seeded = await seedActiveBinding();
+    const store = lifecycleStore();
+
+    // 观察时点 NOW 早于 effectiveAt：不得提前撤销，但事实必须落库。
+    const future = await store.applyObservation(observation([event('REVOKED', T6)], NOW));
+    expect(future.ok).toBe(true);
+    if (!future.ok) throw new Error('unreachable');
+    expect(future.outcome).toBe('APPLIED');
+    expect(future.bindingStatus).toBe('ACTIVE');
+    expect(future.derived.status).toBe('UNKNOWN');
+    expect(await bindingStatus()).toBe('ACTIVE');
+    const facts = await lineageFacts(seeded.bindingId);
+    expect(facts.map((row) => row.event)).toEqual(['BOUND', 'AUTHORIZATION_OBSERVED']);
+    const snapshot = facts[1]!.snapshot as Record<string, unknown>;
+    expect(snapshot.providerStatus).toBe('UNKNOWN');
+    expect((snapshot.observedEvents as unknown[]).length).toBe(1);
+
+    // 到 effectiveAt 之后再应用同一条观察：历史里的未来撤销生效，闸门必须跟着落下来（不得长期 stale）。
+    const effective = await store.applyObservation(observation([event('REVOKED', T6)], NOW_AFTER_T6));
+    expect(effective.ok).toBe(true);
+    if (!effective.ok) throw new Error('unreachable');
+    expect(effective.outcome).toBe('APPLIED');
+    expect(effective.derived.status).toBe('REVOKED');
+    expect(effective.bindingStatus).toBe('REVOKED');
+    expect(await bindingStatus()).toBe('REVOKED');
+    expect((await lineageFacts(seeded.bindingId)).map((row) => row.event)).toEqual([
+      'BOUND',
+      'AUTHORIZATION_OBSERVED',
+      'REVOKED',
+    ]);
   });
 
   it('CHANGE B：事件主体与 input 不一致 → AUTHORIZATION_SUBJECT_MISMATCH，zero writes', async () => {
@@ -392,10 +416,45 @@ describe('C18-7 授权生命周期 store（PostgreSQL / FINAL-3）', () => {
     if (!replay.ok) throw new Error('unreachable');
     expect(replay.outcome).toBe('REPLAYED');
     expect(replay.derived.status).toBe('REVOKED');
-    expect(replay.derived.status).toBe(stale.derived.status);
-    expect(replay.derived.conflict).toBe(stale.derived.conflict);
-    expect(replay.derived.expiresAt).toBe(stale.derived.expiresAt);
-    expect(replay.priorDerived.status).toBe(stale.priorDerived.status);
+    // CHANGE G：精确重放不重复 fold，derived/priorDerived 与 APPLIED 路径**全字段**一致（appliedEventCount 不增加）。
+    expect(replay.derived).toEqual(stale.derived);
+    expect(replay.derived.appliedEventCount).toBe(stale.derived.appliedEventCount);
+    // priorDerived 的语义是「本次观察之前的状态」：该观察落库后它自然包含这条事实，故只断言终态一致。
+    expect(replay.priorDerived.status).toBe('REVOKED');
+  });
+
+  it('CHANGE G-1：精确重放 → derived 全字段一致且 appliedEventCount 不增加', async () => {
+    await seedActiveBinding();
+    const store = lifecycleStore();
+    const first = await store.applyObservation(observation([event('REVOKED', T2)]));
+    expect(first.ok).toBe(true);
+    if (!first.ok) throw new Error('unreachable');
+    expect(first.derived.appliedEventCount).toBe(1);
+
+    const replay = await store.applyObservation(observation([event('REVOKED', T2)]));
+    expect(replay.ok).toBe(true);
+    if (!replay.ok) throw new Error('unreachable');
+    expect(replay.outcome).toBe('REPLAYED');
+    expect(replay.derived).toEqual(first.derived);
+    expect(replay.derived.appliedEventCount).toBe(1);
+  });
+
+  it('CHANGE G-2：同一 idempotency identity 但 payload 不同 → AUTHORIZATION_IDEMPOTENCY_CONFLICT + zero writes', async () => {
+    const seeded = await seedActiveBinding();
+    const store = lifecycleStore();
+    const first = await store.applyObservation(observation([event('REVOKED', T2)]));
+    expect(first.ok && first.outcome).toBe('APPLIED');
+    const factsAfterFirst = await lineageFacts(seeded.bindingId);
+
+    // 同一 (kind, effectiveAt, observedAt, sourceRef)，但 reasonCode 不同 → 不是重放，是幂等冲突。
+    const conflict = await store.applyObservation(
+      observation([event('REVOKED', T2, { reasonCode: 'PROVIDER_REVOKED' })]),
+    );
+    expect(conflict.ok).toBe(false);
+    if (conflict.ok) throw new Error('unreachable');
+    expect(conflict.reasonCode).toBe('AUTHORIZATION_IDEMPOTENCY_CONFLICT');
+    expect(await bindingStatus()).toBe('REVOKED');
+    expect((await lineageFacts(seeded.bindingId)).length).toBe(factsAfterFirst.length);
   });
 
   it('幂等：同一凭证重放 → REPLAYED，事实不重复追加', async () => {

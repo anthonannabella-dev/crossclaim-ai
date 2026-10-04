@@ -105,7 +105,8 @@ export type ProviderAuthorizationDeniedReason =
   | 'AUTHORIZATION_CONFLICT'
   | 'AUTHORIZATION_SUBJECT_MISMATCH'
   | 'AUTHORIZATION_EVENT_INVALID'
-  | 'AUTHORIZATION_HISTORY_INVALID';
+  | 'AUTHORIZATION_HISTORY_INVALID'
+  | 'AUTHORIZATION_IDEMPOTENCY_CONFLICT';
 
 export type ProviderAuthorizationObservationResult =
   | {
@@ -145,15 +146,14 @@ const DENIED = (reasonCode: ProviderAuthorizationDeniedReason): ProviderAuthoriz
 const eventOrderKey = (event: ProviderAuthorizationEvent): string =>
   `${event.effectiveAt}|${event.observedAt}|${event.sourceRef}`;
 
-/** 与折叠函数一致的「参与折叠的最后一条事件」；用于事实的 sourceRef。 */
-const lastAppliedEvent = (
+/**
+ * 本次调用中排序最后的一条 incoming 事件（**不按 now 过滤**）。
+ * CHANGE F 之后未来生效的事件也要耐久化，因此事实的 sourceRef 不能只在「已生效」的事件里挑。
+ */
+const lastIncomingEvent = (
   events: readonly ProviderAuthorizationEvent[],
-  now: Date,
 ): ProviderAuthorizationEvent | null => {
-  const nowMs = now.getTime();
-  const valid = (events ?? []).filter(
-    (event) => validateProviderAuthorizationEvent(event).ok && Date.parse(event.effectiveAt) <= nowMs,
-  );
+  const valid = (events ?? []).filter((event) => validateProviderAuthorizationEvent(event).ok);
   if (valid.length === 0) return null;
   return [...valid].sort((a, b) => {
     const ka = eventOrderKey(a);
@@ -208,8 +208,33 @@ const persistedEventsOf = (snapshot: unknown): PersistedTriggeringEvent[] => {
   return shape.triggeringEvent ? [shape.triggeringEvent] : [];
 };
 
-const sameEvent = (a: PersistedTriggeringEvent, b: PersistedTriggeringEvent): boolean =>
-  a.kind === b.kind && a.effectiveAt === b.effectiveAt && a.observedAt === b.observedAt && a.sourceRef === b.sourceRef;
+/** idempotency identity（幂等键维度）：同一 identity 但 payload 不同 = 真正的幂等冲突。 */
+const identityOf = (event: {
+  kind: string;
+  effectiveAt: string;
+  observedAt: string;
+  sourceRef: string;
+}): string => [event.kind, event.effectiveAt, event.observedAt, event.sourceRef].join('|');
+
+/** 完整 canonical payload（CHANGE G：必须比较 providerAuthorizationRef / expiresAt / reasonCode）。 */
+const payloadOf = (event: {
+  kind: string;
+  effectiveAt: string;
+  observedAt: string;
+  sourceRef: string;
+  providerAuthorizationRef: string;
+  expiresAt?: string | null;
+  reasonCode?: string | null;
+}): string =>
+  [
+    event.kind,
+    event.effectiveAt,
+    event.observedAt,
+    event.sourceRef,
+    event.providerAuthorizationRef,
+    event.expiresAt ?? '',
+    event.reasonCode ?? '',
+  ].join('|');
 
 /** 从 append-only lineage 重建历史事件；任何不可重建的事实 → fail-closed。 */
 const rebuildHistory = (
@@ -292,19 +317,31 @@ export function createPrismaProviderAuthorizationLifecycleStore(
         const history = rebuilt.events;
 
         const priorDerived = deriveProviderAuthorizationState(history, input.now);
-        const derived = deriveProviderAuthorizationState([...history, ...(input.events ?? [])], input.now);
-        if (derived.conflict) return DENIED('AUTHORIZATION_CONFLICT');
-        if (derived.status === 'UNKNOWN') return DENIED('AUTHORIZATION_UNKNOWN');
-        const mapped = mapProviderStatusToBinding(derived.status);
-        if (mapped === null) return DENIED('AUTHORIZATION_UNKNOWN');
-        const trigger = lastAppliedEvent(input.events, input.now);
+        const incoming = input.events ?? [];
+        const trigger = lastIncomingEvent(incoming);
         if (trigger === null) return DENIED('AUTHORIZATION_UNKNOWN');
 
-        // 幂等：本次 incoming 的事件若全部已在历史里，就是一次重放（返回与正常路径相同的 fold 真值）。
-        const observedPersisted = (input.events ?? []).map(toPersistedTriggeringEvent);
-        const allRecorded =
-          observedPersisted.length > 0 && observedPersisted.every((p) => history.some((h) => sameEvent(toPersistedTriggeringEvent(h), p)));
-        if (allRecorded) {
+        // CHANGE G：同一 idempotency identity 但 payload 不同 → 真正的幂等冲突，不得静默当成重放。
+        for (const event of incoming) {
+          const match = history.find((h) => identityOf(h) === identityOf(event));
+          if (match && payloadOf(match) !== payloadOf(event)) {
+            return DENIED('AUTHORIZATION_IDEMPOTENCY_CONFLICT');
+          }
+        }
+        const allRecorded = incoming.every((event) => history.some((h) => payloadOf(h) === payloadOf(event)));
+
+        // CHANGE G：精确重放不得重复 fold —— derived 直接取已持久化历史的折叠真值（不再 + incoming）。
+        const derived = allRecorded
+          ? priorDerived
+          : deriveProviderAuthorizationState([...history, ...incoming], input.now);
+        if (!allRecorded && derived.conflict) return DENIED('AUTHORIZATION_CONFLICT');
+        // CHANGE F：未来生效的合法观察不改闸门，但仍必须耐久化（mapped 为 null 表示「当前不生效」）。
+        const mapped = derived.status === 'UNKNOWN' ? null : mapProviderStatusToBinding(derived.status);
+        if (derived.status !== 'UNKNOWN' && mapped === null) return DENIED('AUTHORIZATION_UNKNOWN');
+        const gateChanged = mapped !== null && binding.status !== mapped.bindingStatus;
+        const observedPersisted = incoming.map(toPersistedTriggeringEvent);
+
+        if (allRecorded && !gateChanged) {
           const existing = await tx.customsProviderTenantBindingLineage.findFirst({
             where: { organizationId: input.organizationId, bindingId: binding.id, sourceRef: trigger.sourceRef },
           });
@@ -322,10 +359,9 @@ export function createPrismaProviderAuthorizationLifecycleStore(
           };
         }
 
-        // CHANGE D：闸门变化用 transition 事件语义；闸门不变也必须落事实（用 AUTHORIZATION_OBSERVED，含义准确）。
-        const gateChanged = binding.status !== mapped.bindingStatus;
+        // CHANGE D：闸门变化用 transition 事件语义；闸门不变（含「全部尚未生效」）落 AUTHORIZATION_OBSERVED。
         const eventToWrite: ProviderAuthorizationLineageEvent = gateChanged
-          ? mapped.lineageEvent
+          ? mapped!.lineageEvent
           : 'AUTHORIZATION_OBSERVED';
 
         const snapshot: ProviderAuthorizationObservationSnapshot = {
@@ -369,7 +405,9 @@ export function createPrismaProviderAuthorizationLifecycleStore(
           ok: true as const,
           outcome: 'APPLIED' as const,
           bindingId: binding.id,
-          bindingStatus: mapped.bindingStatus,
+          bindingStatus: gateChanged
+            ? mapped!.bindingStatus
+            : (binding.status as ProviderAuthorizationBindingStatus),
           lineageId: lineage.id,
           derived,
           priorDerived,
@@ -396,9 +434,21 @@ export function createPrismaProviderAuthorizationLifecycleStore(
         const rebuilt = rebuildHistory(rows, input);
         if (!rebuilt.ok) return DENIED('AUTHORIZATION_HISTORY_INVALID');
         const priorDerived = deriveProviderAuthorizationState(rebuilt.events, input.now);
-        const derived = deriveProviderAuthorizationState([...rebuilt.events, ...(input.events ?? [])], input.now);
-        const trigger = lastAppliedEvent(input.events, input.now);
+        const incomingEvents = input.events ?? [];
+        const trigger = lastIncomingEvent(incomingEvents);
         if (trigger === null) return DENIED('AUTHORIZATION_UNKNOWN');
+        // CHANGE G：P2002 后必须确认 incoming 的**全量 payload** 已持久化；同 identity 不同 payload → 冲突。
+        for (const event of incomingEvents) {
+          const match = rebuilt.events.find((h) => identityOf(h) === identityOf(event));
+          if (match && payloadOf(match) !== payloadOf(event)) {
+            return DENIED('AUTHORIZATION_IDEMPOTENCY_CONFLICT');
+          }
+        }
+        const allRecorded = incomingEvents.every((event) =>
+          rebuilt.events.some((h) => payloadOf(h) === payloadOf(event)),
+        );
+        if (!allRecorded) return DENIED('AUTHORIZATION_HISTORY_INVALID');
+        const derived = priorDerived;
         const existing = await prisma.customsProviderTenantBindingLineage.findFirst({
           where: { organizationId: input.organizationId, bindingId: binding.id, sourceRef: trigger.sourceRef },
         });

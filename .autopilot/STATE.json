@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261004-16",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-04T12:02:00.000Z",
+  "updated_at": "2026-10-04T12:03:50.701Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -4908,11 +4908,11 @@
     "ca-6-one-click-customs-auth-ux"
   ],
   "last_unit": {
-    "id": "c18-persistence-checkpoint-final3",
-    "at": "2026-10-04T11:57:20.629Z",
-    "head_before": "489fd8d",
+    "id": "c18-persistence-checkpoint-final4",
+    "at": "2026-10-04T12:03:50.701Z",
+    "head_before": "ada500e",
     "head_after": "（本批次提交）",
-    "detail": "ephemeral PG: 3 files / 25 tests passed；tsc exit 0；exact-order replay PASS"
+    "detail": "ephemeral PG: 3 files / 27 tests passed；tsc exit 0；exact-order replay PASS"
   },
   "autopilot_mode": "CONTINUOUS (Layer 3 / C18)",
   "heartbeat_role": "LIVENESS_ONLY",
@@ -5192,9 +5192,9 @@
   "awaiting_verdict": "EXACT-ORDER REPLAY 证据已送审（comment 5979262070）；shared/staging deploy 解禁待裁决",
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-04T12:03:38.648Z",
-    "head": "54f7f08",
-    "acceptance_head": "54f7f08",
+    "computed_at": "2026-10-04T12:09:41.188Z",
+    "head": "ada500e",
+    "acceptance_head": "ada500e",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5228,6 +5228,7 @@
       "CHECK:L1-07_api_typecheck_passed",
       "CHECK:L1-08_web_typecheck_build_passed",
       "CHECK:L1-09_no_skipped_critical_tests",
+      "CHECK:L1-10_git_working_tree_clean",
       "CHECK:L1-11_docs_state_consistent",
       "CHECK:L1-12_schema_invariants_verified",
       "CHECK:L1-13_negative_paths_covered",
@@ -5286,48 +5287,48 @@
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=54f7f08 ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
+        "evidence": "acceptance_head=ada500e ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
       },
       "L1-05_pg_regression_passed": {
         "status": "UNVERIFIED",
-        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head 54f7f08（且中间存在非簿记变更）"
+        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head ada500e（且中间存在非簿记变更）"
       },
       "L1-06_fresh_db_migration_passed": {
         "status": "UNVERIFIED",
-        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head 54f7f08（且中间存在非簿记变更）"
+        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head ada500e（且中间存在非簿记变更）"
       },
       "L1-07_api_typecheck_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head 54f7f08（且中间存在非簿记变更）"
+        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head ada500e（且中间存在非簿记变更）"
       },
       "L1-08_web_typecheck_build_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head 54f7f08（且中间存在非簿记变更）"
+        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head ada500e（且中间存在非簿记变更）"
       },
       "L1-09_no_skipped_critical_tests": {
         "status": "UNVERIFIED",
-        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head 54f7f08（且中间存在非簿记变更）"
+        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head ada500e（且中间存在非簿记变更）"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
-        "status": true,
-        "evidence": "porcelain empty"
+        "status": false,
+        "evidence": "dirty entries: 3"
       },
       "L1-11_docs_state_consistent": {
         "status": "UNVERIFIED",
-        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head 54f7f08（且中间存在非簿记变更）"
+        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head ada500e（且中间存在非簿记变更）"
       },
       "L1-12_schema_invariants_verified": {
         "status": "UNVERIFIED",
-        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head 54f7f08（且中间存在非簿记变更）"
+        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head ada500e（且中间存在非簿记变更）"
       },
       "L1-13_negative_paths_covered": {
         "status": "UNVERIFIED",
-        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head 54f7f08（且中间存在非簿记变更）"
+        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head ada500e（且中间存在非簿记变更）"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
         "status": "UNVERIFIED",
-        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head 54f7f08（且中间存在非簿记变更）"
+        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head ada500e（且中间存在非簿记变更）"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
@@ -6275,7 +6276,7 @@
       "API.md / DOMAIN_MODEL.md / architecture-contract 计数 77 → 79"
     ]
   },
-  "next_execution_unit": "读 FINAL-3 裁决 → 逐字归档（FNV-1a + FULL_COPY_OK）→ 按裁决执行；若 checkpoint 记 PASS 则转 SEO-4 /recover 页面接线（DEFAULT_NOINDEX）+ 等宿主 staging DATABASE_URL",
+  "next_execution_unit": "送 C18 PRODUCTION PERSISTENCE CHECKPOINT FINAL-4 复核（issue #2 耐久记录 + 唤醒 + 三要素验证）→ PASS 后 checkpoint 记 PASS；并行 SEO-4 /recover 页面接线（DEFAULT_NOINDEX）",
   "customer_ui_commercialization": {
     "at": "2026-10-04T01:21:55.949Z",
     "authorization": "MSG-20261004-01（CUSTOMER UI/UX COMMERCIALIZATION — IMPLEMENTATION AUTHORIZED）",
@@ -7092,6 +7093,38 @@
         "PRODUCTION_PERSISTENCE_CHECKPOINT 是否可记 PASS（staging smoke 仍作 production deploy 解禁门）",
         "若仍需补证据的最小集合"
       ]
+    },
+    "msg_20261004_32": {
+      "verdict": "REVISE（仅剩 CHANGE F/G）",
+      "reviewed_head": "54f7f08",
+      "archived_as": "MSG-20261004-32",
+      "len": 3297,
+      "fnv": "f0c17c23",
+      "lines": 144,
+      "passes": [
+        "CHANGE_A / CHANGE_B / CHANGE_C = PASS（无需重审）",
+        "AUTHORIZATION_OBSERVED / MULTI_EVENT_OBSERVED_EVENTS = PASS",
+        "RENEWED_EXPIRES_AT_DURABILITY / PROVIDER_AUTHORIZATION_REF_DURABILITY = PASS",
+        "EXPIRED_TO_REVOKED / PLAIN_UNIQUE_INDEX / WEBHOOK_EXACTLY_ONCE / TENANT_ISOLATION = PASS"
+      ]
+    },
+    "persistence_checkpoint_final4": {
+      "status": "IMPLEMENTED（待送审 FINAL-4）",
+      "change_f": {
+        "how": "未来生效（effectiveAt > now）的合法观察不再 fail-closed 丢弃：不改变 current gate，落 AUTHORIZATION_OBSERVED 并把事件写入 snapshot.observedEvents；事实的 sourceRef 改用「不按 now 过滤的最后一条 incoming」",
+        "evidence": "F 用例：now<N 时落 AUTHORIZATION_OBSERVED（providerStatus=UNKNOWN、binding 仍 ACTIVE）；到 effectiveAt 之后再应用同一观察 → 历史里的撤销生效，binding 落 REVOKED（证明耐久化真的有用，闸门不会长期 stale）",
+        "extra": "顺带修掉一个自发现的安全缺口：耐久化的未来事件生效后，闸门必须在下一个观察（含精确重放）时被对齐，否则会长期 stale ACTIVE"
+      },
+      "change_g": {
+        "how": "canonical payload equality（kind/effectiveAt/observedAt/sourceRef + providerAuthorizationRef/expiresAt/reasonCode）；精确重放时 derived = fold(persisted history)（不再 + incoming，避免 double fold）；P2002 后校验 incoming 全量 payload 已持久化，exact → REPLAYED，同 identity 不同 payload → AUTHORIZATION_IDEMPOTENCY_CONFLICT + zero writes",
+        "evidence": "G-1 精确重放：derived 全字段一致且 appliedEventCount 不增加；G-2 同 identity 改 reasonCode → conflict + 事实数不变；E 用例：迟到旧 GRANTED 重放 → REPLAYED 且 derived 与 APPLIED 路径全字段一致"
+      },
+      "evidence": {
+        "ephemeral_pg": "lifecycle 20 + binding 5 + webhook 2 = 27/27（EPHEMERAL_VITEST_EXIT=0）",
+        "migration_layer": "EXACT_ORDER_REPLAY = PASS / DIFF_LINES=0 / WHOLE_SCHEMA_DIFF=ZERO / status up to date",
+        "typecheck": "npx tsc --noEmit exit 0"
+      },
+      "schema_change": "NONE（本轮只改服务层与测试；上两轮的枚举值 + 唯一索引不变）"
     }
   },
   "last_heartbeat_at": "2026-10-04T11:21:28.069Z",
@@ -7246,10 +7279,10 @@
     "seo3_progress": "CHANGE A/B validator added (86f4289), engine output validation added (eb99c53), validator wired into runPublicSeoChecker (8bf49da), HTTP boundary guard added (4f2cd20); HTTP entry still not registered"
   },
   "CURRENT_HEAD": "293f55e",
-  "LAST_COMPLETED_UNIT": "c18-persistence-checkpoint-final3（CHANGE D：闸门未变化的合法观察也耐久化 + 新增 AUTHORIZATION_OBSERVED 枚举 + snapshot.observedEvents 保存全部事件；CHANGE E：REPLAYED/P2002 路径改用 persisted history + incoming 的同一 fold 真值；lifecycle PG 18 例、合计 25/25；新 enum migration 后 EXACT_ORDER_REPLAY 仍 PASS；tsc 0）",
-  "NEXT_EXECUTION_UNIT": "读 FINAL-3 裁决 → 逐字归档（FNV-1a + FULL_COPY_OK）→ 按裁决执行；若 checkpoint 记 PASS 则转 SEO-4 /recover 页面接线（DEFAULT_NOINDEX）+ 等宿主 staging DATABASE_URL",
+  "LAST_COMPLETED_UNIT": "c18-persistence-checkpoint-final4（CHANGE F：未来生效的合法观察也耐久化且不提前改闸门，生效后由持久化历史落闸门；CHANGE G：完整 canonical payload equality、精确重放不重复 fold、同 identity 不同 payload → AUTHORIZATION_IDEMPOTENCY_CONFLICT；lifecycle PG 20 例、合计 27/27；exact-order replay 仍 PASS；tsc 0）",
+  "NEXT_EXECUTION_UNIT": "送 C18 PRODUCTION PERSISTENCE CHECKPOINT FINAL-4 复核（issue #2 耐久记录 + 唤醒 + 三要素验证）→ PASS 后 checkpoint 记 PASS；并行 SEO-4 /recover 页面接线（DEFAULT_NOINDEX）",
   "CI_STATUS": "GREEN 至 a35bc2c；待本批次 CI 完成后复核新 HEAD",
-  "WAITING_FOR_VERDICT": "C18 PRODUCTION PERSISTENCE CHECKPOINT FINAL-3（issue #2 comment 5979720642，reviewed HEAD 54f7f08；唤醒送达三要素已验证：输入框已清空 + marker 可见 + 生成中）",
+  "WAITING_FOR_VERDICT": "none（MSG-20261004-32 = REVISE 已归档并按 CHANGE F/G 修完；等待 FINAL-4 送审）",
   "HOST_ACTION_REQUIRED": [
     "provider developer/partner account registration",
     "third-party commercial agreement acceptance",
@@ -7263,7 +7296,7 @@
     "non-production staging DATABASE_URL + 确认该 shared 库是否承载真实客户数据（执行已授权的 staging migrate deploy 前需要）"
   ],
   "HOLD_EXTERNAL": true,
-  "LAST_HEARTBEAT_AT": "2026-10-04T12:02:00.000Z",
+  "LAST_HEARTBEAT_AT": "2026-10-04T12:03:50.701Z",
   "ci_red_streak_note": "RESOLVED: three contract/inventory fixes (tenant-trigger whitelist 1b15ab7, append-only whitelist cc13bde, model inventory 82->85 4f02282); 4f02282 is the first green run after the streak.",
   "ci_contract_fix_local_verification": {
     "at": "2026-10-04T08:51:16.135Z",
