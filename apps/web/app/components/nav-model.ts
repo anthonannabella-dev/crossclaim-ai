@@ -34,6 +34,7 @@ export function buildCustomerNav(t: Messages): NavGroup[] {
         { href: '/opportunities', label: t.customerShell.navOpportunities },
         { href: '/cases', label: t.customerShell.navCases },
         { href: '/money', label: t.customerShell.navMoney },
+        { href: '/customs', label: t.customerShell.navCustoms },
         { href: '/accounts', label: t.customerShell.navAccounts },
         { href: '/upload', label: t.customerShell.navUpload },
       ],

@@ -70,6 +70,7 @@ check('shell.responsive.markers', shellHtml.includes('lg:hidden') && shellHtml.i
 check('shell.skip.link', shellHtml.includes('main-content') && shellHtml.includes(zhCN.customerShell.skipToContent));
 check('shell.no.admin.routes', !shellHtml.includes('/admin') && !shellHtml.includes('/operations'));
 check('shell.no.engineering.status', !shellHtml.includes('BOUND_ACTIVE') && !shellHtml.includes('credentialRef'));
+check('shell.nav.customs', shellHtml.includes(zhCN.customerShell.navCustoms) && shellHtml.includes('/customs'));
 
 // ② 金额区：按币种、四核心指标 + 净追回，且不跨币种求和
 const summaryHtml = render(
@@ -408,6 +409,18 @@ check(
   zhCN.moneyPage.realityNote.length > 0 && zhCN.moneyPage.paymentDisabled.length > 0,
 );
 check('money.advanced.detail.key', zhCN.moneyPage.advancedDetails.length > 0);
+
+// ⑭ UI-7：关税追回客户视图（字典口径 + 预计/确认区分 + HOLD 文案）
+check('customs.estimated.vs.confirmed', zhCN.customsPage.estimatedLabel !== zhCN.customsPage.confirmedLabel);
+check('customs.confirmed.per.currency', zhCN.customsPage.confirmedNote.includes(zhCN.dashboardPage.currencyLabel) || zhCN.customsPage.confirmedNote.length > 0);
+check('customs.submit.hold.wording', zhCN.customsPage.submitNote.includes('HOLD') && zhCN.customsPage.holdBadge.length > 0);
+check('customs.refund.no.custody', zhCN.customsPage.refundNote.includes('CrossClaim'));
+check('customs.advanced.basis.key', zhCN.customsPage.calculationBasis.length > 0 && zhCN.customsPage.advancedNote.includes('DUTY_TRUTH'));
+check('customs.no.blocker.code.as.primary', !zhCN.customsPage.subtitle.includes('BROKER_POA_REQUIRED') && !zhCN.customsPage.actionNote.includes('IOR_'));
+check(
+  'customs.en.dictionary',
+  enUS.customsPage.estimatedLabel !== enUS.customsPage.confirmedLabel && enUS.customsPage.submitNote.includes('HOLD'),
+);
 
 console.log(results.join('\n'));
 if (failures.length > 0) {
