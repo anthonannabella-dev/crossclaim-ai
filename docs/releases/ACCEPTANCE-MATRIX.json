@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-10-04T15:20:20.965Z",
-  "acceptance_head": "a23986b",
+  "generated_at": "2026-10-04T15:25:44.241Z",
+  "acceptance_head": "a68ff9d",
   "protocol": "docs/releases/FINAL-ACCEPTANCE-PROTOCOL.md",
   "areas": [
     {
@@ -190,7 +190,8 @@
     "SEO-4-STAGE-11-static-projection-exporter",
     "SEO-4-STAGE-12-rule-source-and-cli",
     "SEO-4-STAGE-13-web-ssg-from-projection",
-    "SEO-4-STAGE-14-web-sitemap-robots"
+    "SEO-4-STAGE-14-web-sitemap-robots",
+    "SEO-4-STAGE-15-projection-pipeline-guard"
   ],
   "host_action_required": [
     "provider developer/partner account registration",

@@ -1,6 +1,6 @@
 {
   "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。",
-  "updatedAt": "2026-10-05T00:21:00.000Z",
+  "updatedAt": "2026-10-05T00:26:00.000Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -1227,6 +1227,16 @@
       "title": "apps/web sitemap.ts + robots.ts 由同一 artifact 驱动",
       "scope": "sitemap 只收录 inSitemap && index,follow && 无 noindexReasons 的页面；robots 只声明 sitemap、不对收录路径 Disallow；artifact 缺失 → 空 sitemap",
       "acceptance_criteria": "apps/web tsc exit 0；空 artifact 时 sitemap 为空数组且 robots 仍声明 sitemap；无 Checker POST",
+      "status": "IMPLEMENTED_PENDING_CI",
+      "implementation_head": "(this commit)"
+    },
+    {
+      "id": "SEO-4-STAGE-15-projection-pipeline-guard",
+      "priority": "P1",
+      "source_backlog_id": "MSG-20261004-35（OPTION_B_REVISED）",
+      "title": "投影流水线：export 脚本 + web 构建守卫（默认不阻断 / 发布模式阻断）",
+      "scope": "apps/api 增 export:recover-static 脚本；apps/web 增 scripts/check-recover-projection.mjs + check:recover-projection：缺投影默认打印 FAIL-CLOSED 退出 0，设 RECOVER_PROJECTION_REQUIRED=1 则退出 1",
+      "acceptance_criteria": "缺投影时默认 exit 0 且输出 fail-closed 说明；RECOVER_PROJECTION_REQUIRED=1 时 exit 1（已实测）；不改变现有 build/CI 行为",
       "status": "IMPLEMENTED_PENDING_CI",
       "implementation_head": "(this commit)"
     }

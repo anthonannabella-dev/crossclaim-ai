@@ -8,7 +8,8 @@
     "dev": "next dev -p 3001",
     "build": "next build",
     "start": "next start -p 3001",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "check:recover-projection": "node scripts/check-recover-projection.mjs"
   },
   "dependencies": {
     "next": "15.5.26",
