@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261004-16",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-04T07:46:30.781Z",
+  "updated_at": "2026-10-04T07:51:24.497Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -54,7 +54,7 @@
   "last_action": "INDEPENDENT FINAL AUDIT = PASS（MSG-20261003-147）；三元闭环成立，内部代码开发阶段正式完成",
   "last_action_at": "2026-10-03T14:17:18.723Z",
   "next_action": "内部自治开发停止；剩余为 Layer 3 外部依赖（需宿主授权）",
-  "current_head": "e94a29c",
+  "current_head": "90b1f71",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -5128,7 +5128,7 @@
       "④ Production Candidate register only"
     ]
   },
-  "awaiting_verdict": "C18 MIGRATION SQL FINAL-2（GitHub comment 5977650278，reviewed HEAD e18e358）",
+  "awaiting_verdict": "WHOLE_SCHEMA_DIFF_ZERO 证据已送审（comment 5977852157）；shared/prod migrate deploy 解禁待架构方",
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
     "computed_at": "2026-10-04T07:27:17.389Z",
@@ -5339,7 +5339,7 @@
   },
   "gates_recorded_at": "2026-10-03T15:17:04.369Z",
   "ci_status_head": "8f32fce",
-  "ci_status": "pending（e94a29c）",
+  "ci_status": "pending（90b1f71）",
   "ci_run_id": "37143524364",
   "internal_code_complete_at": "2026-10-03T15:36:47.862Z",
   "independent_final_audit": {
@@ -6161,7 +6161,7 @@
       "API.md / DOMAIN_MODEL.md / architecture-contract 计数 77 → 79"
     ]
   },
-  "next_execution_unit": "C18 Prisma Store + 真实 PG E2E（10 项）；shared/prod migrate deploy 仍由架构方解禁",
+  "next_execution_unit": "读解禁裁决；并行推进 C18 Prisma Store + 真实 PG E2E（10 项）",
   "customer_ui_commercialization": {
     "at": "2026-10-04T01:21:55.949Z",
     "authorization": "MSG-20261004-01（CUSTOMER UI/UX COMMERCIALIZATION — IMPLEMENTATION AUTHORIZED）",
@@ -6440,7 +6440,7 @@
   "audit_session_url": "https://chatgpt.com/c/6ac1cdf0-1ec8-83ec-8036-0e66fcf5c6b9",
   "ci_note": "2026-10-04 复核：全部内部单元 CLOSED 后，GitHub Actions 对各 head 均有 workflow run（0c6bb0f/ f0abd05 / cb04232 / c6ce17c / 3fad4d4 / c897737 / fd7e4bf / 400fe6e / 8f32fce = success；5c6888e / f640f8c / 84c3f99 运行中）。架构方某次查询未见 runs 属查询口径差异（commit statuses vs workflow runs），此处记录 run id 以便复核。",
   "c18_layer3": {
-    "at": "2026-10-04T07:46:30.781Z",
+    "at": "2026-10-04T07:51:24.497Z",
     "main_line": "P0 = C18 REAL CUSTOMS PROVIDER INTEGRATION",
     "matrix_doc": "docs/releases/C18-PROVIDER-INTEGRATION-MATRIX.md",
     "completed": [
@@ -6768,11 +6768,14 @@
       "residual": "0 行",
       "whole_schema_diff": "ZERO（clean-replay: all committed migrations + 两个 non-C18 reconciliation + C18 candidate == schema.prisma）",
       "note": "残差 42 行全部是 ALTER INDEX ... RENAME TO ...：历史索引名被 PostgreSQL 63 字符上限截断，schema.prisma 声明全名；已由独立 non-C18 migration 重命名收口（可反向重命名回滚，不改数据）"
-    }
+    },
+    "whole_schema_zero_evidence_comment_id": 5977852157,
+    "whole_schema_zero_reviewed_head": "90b1f71",
+    "whole_schema_zero_wakeup_delivery": "VERIFIED"
   },
-  "last_heartbeat_at": "2026-10-04T07:46:30.781Z",
-  "waiting_for_verdict": "none（FINAL-2 = PASS WITH REVISE 已归档）",
-  "last_completed_unit": "non-c18-drift-reconciliation-COMPLETE（WHOLE_SCHEMA_DIFF_ZERO）",
+  "last_heartbeat_at": "2026-10-04T07:51:24.497Z",
+  "waiting_for_verdict": "WHOLE_SCHEMA_DIFF_ZERO 证据已送审（comment 5977852157）；shared/prod migrate deploy 解禁待架构方",
+  "last_completed_unit": "whole-schema-zero-evidence-submission",
   "hold_external": true,
   "track_c_seo_p3": {
     "at": "2026-10-04T07:13:02.014Z",
@@ -6872,11 +6875,11 @@
     "seo_7_status": "EVENT_CONTRACT_LANDED（provider-neutral；无 PII/租户数据；estimate 必须 ESTIMATE_ONLY）",
     "seo_3_audit_request_note": "durable record posted；wake-up 待下一轮（避免与 MIGRATION SQL AUDIT 的流式回答交叠）"
   },
-  "CURRENT_HEAD": "e94a29c",
+  "CURRENT_HEAD": "90b1f71",
   "LAST_COMPLETED_UNIT": "c18-migration-sql-final2-submission",
   "NEXT_EXECUTION_UNIT": "读 MIGRATION SQL FINAL-2 裁决 → PASS 后按解禁顺序；并行 SEO-3 PUBLIC API SECURITY AUDIT 唤醒",
-  "CI_STATUS": "pending（e94a29c）",
-  "WAITING_FOR_VERDICT": "none（FINAL-2 = PASS WITH REVISE 已归档）",
+  "CI_STATUS": "pending（90b1f71）",
+  "WAITING_FOR_VERDICT": "WHOLE_SCHEMA_DIFF_ZERO 证据已送审（comment 5977852157）；shared/prod migrate deploy 解禁待架构方",
   "HOST_ACTION_REQUIRED": [
     "provider developer/partner account registration",
     "third-party commercial agreement acceptance",
@@ -6889,5 +6892,5 @@
     "Search Console verification / domain ownership（SEO 页面转 INDEX 前需要）"
   ],
   "HOLD_EXTERNAL": true,
-  "LAST_HEARTBEAT_AT": "2026-10-04T07:21:27.743Z"
+  "LAST_HEARTBEAT_AT": "2026-10-04T07:51:24.497Z"
 }
