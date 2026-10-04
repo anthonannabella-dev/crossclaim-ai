@@ -49,6 +49,25 @@ if (verdict.trim() === '') {
   console.error('原文为空，拒绝归档');
   process.exit(1);
 }
+
+// 关键顺序：先校验原文哈希，再动归档文件。
+// （早先的实现在追加之后才校验，导致哈希不匹配时归档已被污染 —— 冒烟测试用错误哈希暴露了这一点。）
+const fnv1aChecksum = (s) => {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < s.length; i += 1) {
+    h ^= s.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(16).padStart(8, '0');
+};
+const expectedFnvEarly = process.argv[5];
+if (expectedFnvEarly && fnv1aChecksum(verdict) !== expectedFnvEarly) {
+  console.error(
+    '原文哈希不匹配：期望 ' + expectedFnvEarly + '，实际 ' + fnv1aChecksum(verdict) +
+      '（len=' + verdict.length + '）→ 拒绝归档，且未触碰归档文件',
+  );
+  process.exit(3);
+}
 const heading = fs.readFileSync(headingPath, 'utf8').split('\n')[0].trim();
 if (!heading.startsWith('### [' + msgId + ']')) {
   console.error('标题文件首行必须以 "### [' + msgId + '] " 开头');
@@ -65,6 +84,26 @@ if (inbox.includes(msgId)) {
   inbox = inbox.replace(/\n+$/, '\n') + `\n${heading}\n\n${fence}text\n${verdict}\n${fence}\n`;
   fs.writeFileSync(INBOX, inbox, 'utf8');
   console.log('ARCHIVED ' + msgId + '（' + verdict.split('\n').length + ' 行）');
+}
+
+// 可选：第 4 个参数为浏览器抽取时算出的 FNV-1a。compare.mjs 只能证明「归档 = 原文文件」，
+// 不能证明「原文文件 = 浏览器原文」；这一步补上缺失的一环，转写少一个字符即失败。
+const expectedFnv = process.argv[5];
+if (expectedFnv) {
+  const fnv1a = (s) => {
+    let h = 0x811c9dc5;
+    for (let i = 0; i < s.length; i += 1) {
+      h ^= s.charCodeAt(i);
+      h = Math.imul(h, 0x01000193) >>> 0;
+    }
+    return h.toString(16).padStart(8, '0');
+  };
+  const actual = fnv1a(verdict);
+  if (actual !== expectedFnv) {
+    console.error('原文哈希不匹配：期望 ' + expectedFnv + '，实际 ' + actual + '（len=' + verdict.length + '）→ 拒绝归档');
+    process.exit(3);
+  }
+  console.log('FNV1A_MATCH ' + actual + '（原文文件与浏览器抽取一致）');
 }
 
 const out = execFileSync(process.execPath, [COMPARE, sourcePath, msgId], { cwd: ROOT, encoding: 'utf8' });
