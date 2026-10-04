@@ -33,11 +33,13 @@ describe('RSI 事件驱动续跑引擎', () => {
     expect(first.claimed?.id).toBe('A');
     clock.advance(400); // 执行 A 用了 400ms
 
+    engine.completeCurrent('PASS');
     const toB = engine.handleEvent('TASK_COMPLETED');
     expect(toB.claimed?.id).toBe('B');
     expect(toB.transitionLatencyMs).toBeLessThan(5_000); // 秒级，不是 5 分钟
 
     clock.advance(300);
+    engine.completeCurrent('PASS');
     const toC = engine.handleEvent('TASK_COMPLETED');
     expect(toC.claimed?.id).toBe('C');
     expect(toC.transitionLatencyMs).toBeLessThan(5_000);
@@ -70,7 +72,8 @@ describe('RSI 事件驱动续跑引擎', () => {
 
     const byEvent = engine.handleEvent('TASK_COMPLETED'); // 事件先到，claim B
     const byWatchdog = engine.watchdogTick(); // watchdog 随后触发
-    expect(byEvent.claimed?.id).toBe('B');
+    expect(byEvent.claimed).toBeNull(); // 有在飞任务时事件不得再 claim（exactly-one-worker）
+    expect(byEvent.reason).toBe('ACTIVE_LEASE');
     expect(byWatchdog.claimed).toBeNull(); // lease 生效 → 不重复领取
     expect(['ACTIVE_LEASE', 'NO_CHANGE']).toContain(byWatchdog.reason);
     expect(engine.state().worker).toBe('RUNNING');
@@ -79,7 +82,7 @@ describe('RSI 事件驱动续跑引擎', () => {
     clock.advance(10 * 60 * 1000);
     const reclaimed = engine.watchdogTick();
     expect(reclaimed.reason).toBe('WATCHDOG_LEASE_RECLAIM');
-    expect(reclaimed.claimed?.id).toBe('B');
+    expect(reclaimed.claimed?.id).toBe('A'); // A 未被显式完成，故回收 A 而非 B
   });
 
   it('E2E_D_REVISE_STARTS_IMMEDIATELY：verdict=REVISE 到达即创建修订任务并立即执行，不等心跳', () => {

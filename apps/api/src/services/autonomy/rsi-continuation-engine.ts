@@ -60,6 +60,9 @@ export function createRsiContinuationEngine(options: {
 
   const rank = (priority: RsiPriority): number => RSI_PRIORITIES.indexOf(priority);
 
+  /** BLOCK 过的任务：既不标记完成，也不重复领取（等待宿主/裁决处理）。 */
+  const blockedKeys = new Set<string>();
+
   const claimNextSafeTask = (): RsiContinuationOutcome => {
     const at = now();
     if (leased !== null && at < leaseExpiresAt) {
@@ -74,7 +77,7 @@ export function createRsiContinuationEngine(options: {
       return { action: 'SILENT', claimed: null, transitionLatencyMs: null, reason: 'QUEUE_EMPTY' };
     }
     const next = [...queue]
-      .filter((task) => !completedKeys.has(task.dedupeKey))
+      .filter((task) => !completedKeys.has(task.dedupeKey) && !blockedKeys.has(task.dedupeKey))
       .sort((a, b) => rank(a.priority) - rank(b.priority) || (a.id < b.id ? -1 : 1))[0];
     if (next === undefined) {
       return { action: 'SILENT', claimed: null, transitionLatencyMs: null, reason: 'ALL_DEDUPED' };
@@ -90,15 +93,29 @@ export function createRsiContinuationEngine(options: {
     };
   };
 
-  const completeCurrent = (outcome: 'PASS' | 'REVISE' = 'PASS'): void => {
-    if (leased !== null) completedKeys.add(leased.dedupeKey);
+  /**
+   * 只有显式结果才结束当前任务，且**没有默认值**（旧实现的默认 PASS 是伪成功来源）：
+   *   PASS  → 标记 dedupeKey 完成；
+   *   REVISE→ 标记完成并插入 P0 修订任务（可重试）；
+   *   BLOCK → **既不标记完成、也不插入修订**，转入 blocked（不会被重复领取）。
+   */
+  const completeCurrent = (outcome: 'PASS' | 'REVISE' | 'BLOCK'): void => {
+    const task = leased;
     leased = null;
     leaseExpiresAt = 0;
     lastCompletedAt = now();
+    if (task === null) return;
+    if (outcome === 'PASS') {
+      completedKeys.add(task.dedupeKey);
+      return;
+    }
     if (outcome === 'REVISE') {
+      completedKeys.add(task.dedupeKey);
       const at = now();
       queue = [{ id: `revision-${at}`, priority: 'P0', dedupeKey: `REVISION:${at}` }, ...queue];
+      return;
     }
+    blockedKeys.add(task.dedupeKey);
   };
 
   const engine = {
@@ -116,9 +133,10 @@ export function createRsiContinuationEngine(options: {
         const outcome = claimNextSafeTask();
         return { ...outcome, action: revise ? 'REVISION' : 'CONSUME_VERDICT', reason: revise ? 'VERDICT_REVISE' : 'VERDICT_PASS' };
       }
-      completeCurrent('PASS');
+      // 事件只驱动「领取下一个」；它**不能**替在飞任务宣告完成。
       const outcome = claimNextSafeTask();
-      return { ...outcome, reason: event };
+      // 未领取到任务时保留底层原因（ACTIVE_LEASE / QUEUE_EMPTY / ALL_DEDUPED）。
+      return { ...outcome, reason: outcome.claimed === null ? outcome.reason : event };
     },
     watchdogTick(): RsiContinuationOutcome {
       if (waitingForVerdict && verdict !== null) {

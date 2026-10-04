@@ -32,6 +32,9 @@ export interface RsiControllerContinuation {
   latencies(): readonly number[];
 }
 
+/** 这些 evidenceRef 表示「没有拿到真实证据」，不能作为 PASS 依据。 */
+const NO_EVIDENCE_TOKENS = new Set(['unconfigured', 'timeout', 'not-allowed', 'spawn-failed']);
+
 export function attachContinuationToController(options: {
   tasks: readonly RsiSafeTask[];
   runner: RsiTaskRunner;
@@ -49,7 +52,12 @@ export function attachContinuationToController(options: {
     if (outcome.claimed === null) return outcome; // SILENT / 无进展
     if (outcome.transitionLatencyMs !== null) observed.push(outcome.transitionLatencyMs);
     const result = await options.runner.run(outcome.claimed);
-    engine.completeCurrent(result.status === 'REVISE' ? 'REVISE' : 'PASS');
+    // 忠实映射：BLOCK 绝不写成 PASS；PASS 必须带可用证据。
+    const evidenceRef = (result as { evidenceRef?: unknown }).evidenceRef;
+    const hasEvidence = typeof evidenceRef === 'string' && evidenceRef !== '' && !NO_EVIDENCE_TOKENS.has(evidenceRef);
+    const status: 'PASS' | 'REVISE' | 'BLOCK' =
+      result.status === 'PASS' && hasEvidence ? 'PASS' : result.status === 'REVISE' ? 'REVISE' : 'BLOCK';
+    engine.completeCurrent(status);
     return outcome;
   };
 
@@ -69,6 +77,10 @@ export function attachContinuationToController(options: {
 }
 
 export const RSI_CONTROLLER_CONTINUATION_BOUNDARY = {
+  // RSI-RT-01/05：消除伪成功（claimed→PASS / BLOCK→PASS / 事件替在飞任务宣告完成）。
+  blockIsNeverPass: true,
+  passRequiresEvidence: true,
+  eventsDoNotCompleteInflight: true,
   eventDriven: true,
   watchdogIntervalMs: RSI_CONTINUATION_BOUNDARY.watchdogIntervalMs,
   heartbeatDrivesExecution: RSI_CONTINUATION_BOUNDARY.heartbeatDrivesExecution,
