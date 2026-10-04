@@ -1,0 +1,52 @@
+# CrossClaim RSI Controller —— 正式 systemd 服务模板
+#
+#   · 服务器启动后 RSI 自动启动；崩溃自动恢复；reboot 后自动恢复；
+#   · 与 crossclaim-web / crossclaim-api / crossclaim-worker 完全独立：
+#     RSI 崩溃不得拖垮主业务（反之亦然）；
+#   · 防 crash loop：RestartSec + StartLimitIntervalSec/StartLimitBurst 超阈值后 systemd 停止重启，
+#     RSI 自身在 DEGRADED 状态发出 OWNER_ACTION_REQUIRED（见 rsi-supervisor-policy）。
+#
+# 安装：sudo install -m 0644 deploy/systemd/crossclaim-rsi.service /etc/systemd/system/
+
+[Unit]
+Description=CrossClaim RSI Controller (bounded recursive self-improvement runtime)
+Documentation=file:/opt/crossclaim/docs/releases/RSI-DEPLOYMENT.md
+After=network-online.target postgresql.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+# 最小权限：专用系统用户（无 login shell、无 sudo、无 docker 组）
+User=crossclaim-rsi
+Group=crossclaim-rsi
+WorkingDirectory=/opt/crossclaim
+# 正式环境变量文件（由宿主创建；**不得**包含明文生产凭据，密钥走密钥管理注入）
+EnvironmentFile=/etc/crossclaim/rsi.env
+Environment=NODE_ENV=production
+Environment=RSI_HEALTH_PORT=4319
+ExecStart=/usr/bin/node /opt/crossclaim/apps/api/dist/runtime/rsi-controller.js
+KillSignal=SIGTERM
+TimeoutStopSec=30
+# 崩溃自动恢复 + 防 crash loop
+Restart=on-failure
+RestartSec=5
+StartLimitIntervalSec=300
+StartLimitBurst=5
+# 日志进 journald：journalctl -u crossclaim-rsi -f
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=crossclaim-rsi
+
+# ── 硬化：不接触支付 / 报关 / 客户凭据 ─────────────────────────
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/crossclaim-rsi
+StateDirectory=crossclaim-rsi
+CapabilityBoundingSet=
+AmbientCapabilities=
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

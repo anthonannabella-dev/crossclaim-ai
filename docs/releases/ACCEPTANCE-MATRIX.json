@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-10-04T16:01:06.655Z",
-  "acceptance_head": "790c20d",
+  "generated_at": "2026-10-04T16:03:19.983Z",
+  "acceptance_head": "62ba2f6",
   "protocol": "docs/releases/FINAL-ACCEPTANCE-PROTOCOL.md",
   "areas": [
     {
@@ -206,7 +206,8 @@
     "RSI-RT-02-supervisor-autostart",
     "RSI-RT-03-health-state",
     "RSI-RT-04-admin-autonomy-page",
-    "RSI-RT-05-kill-switch"
+    "RSI-RT-05-kill-switch",
+    "RSI-RT-06-state-reconcile"
   ],
   "host_action_required": [
     "provider developer/partner account registration",

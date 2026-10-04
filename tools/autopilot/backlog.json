@@ -1,6 +1,6 @@
 {
   "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。",
-  "updatedAt": "2026-10-05T01:01:00.000Z",
+  "updatedAt": "2026-10-05T01:10:00.000Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -1379,14 +1379,16 @@
       "title": "随系统自动启动与崩溃自动拉起（复用仓库现有部署标准；防 crash-loop）",
       "scope": "systemd / Docker Compose / PM2 / 现有 supervisor 择一复用；达到阈值 → RSI_DEGRADED 并通知 OWNER",
       "acceptance_criteria": "纯函数/可运行代码 + 命名用例；api tsc 0；不新增 schema（如需另送 Schema Delta 审计）",
-      "status": "PARTIAL_IMPLEMENTED_PENDING_CI",
+      "status": "IMPLEMENTED_PENDING_HOST_VALIDATION",
       "implementation_head": "(this commit)",
       "artifacts": [
-        "apps/api/src/runtime/rsi-supervisor-policy.ts",
-        "apps/api/src/__tests__/rsi-supervisor-policy.test.ts"
+        "deploy/systemd/crossclaim-rsi.service",
+        "deploy/install-rsi-service.sh",
+        "docs/releases/RSI-DEPLOYMENT.md",
+        "apps/api/package.json（rsi:dev/start/health）"
       ],
       "evidence": "vitest rsi-supervisor-policy 4/4；api tsc 0",
-      "remaining": "按 DEPLOYMENT.md 的既有部署方式接线 supervisor 自启（仓库无 compose/pm2/systemd；生产部署为 HOST APPROVAL REQUIRED）"
+      "remaining": "需 Alibaba Cloud Linux 主机执行 Test A/B/D 并回填证据"
     },
     {
       "id": "RSI-RT-03-health-state",
@@ -1414,6 +1416,15 @@
       "scope": "已落地开关契约（rsi-runtime-config）；待接入 Runtime 与 admin 页面",
       "acceptance_criteria": "纯函数/可运行代码 + 命名用例；api tsc 0；不新增 schema（如需另送 Schema Delta 审计）",
       "status": "READY"
+    },
+    {
+      "id": "RSI-RT-06-state-reconcile",
+      "priority": "P0",
+      "source_backlog_id": "OWNER《RSI Runtime 服务器部署》第 5 节",
+      "title": "RSI 状态持久化与 reboot reconcile（不重复 incident/candidate/promotion）",
+      "scope": "需要 Postgres 表 + lease；新增表属 Schema Delta，须先送审再落 migration",
+      "acceptance_criteria": "Test C/F 在真实 PG 上通过；同一任务 reboot 后不重复创建",
+      "status": "BLOCKED_ON_SCHEMA_DELTA_AUDIT"
     }
   ],
   "authorization_note": "MSG-20261003-133 Q3：dispatcher 获授权自动扩 backlog 并执行安全单元（契约/已批准 D1–D3 Schema/append-only 持久化/deterministic normalization/qualification·evidence·package/测试/文档/fixture/只读 HTTP/只读 reconciliation projection）；遇到未批准 Schema、EXTERNAL_WRITE Action Guard、真实 adapter/webhook、submission、真实资金语义写入、生产 credential、收费时必须停该分支并重新送审。 HOST 2026-10-04（CONTINUOUS EXECUTION + CUSTOMS AUTHORIZATION + CHATGPT AUDIT LOOP）：UI-6…UI-8 与 CA-2…CA-6 已登记为可执行队列；Schema/Security/Authorization 边界项自动进入 ChatGPT Audit Loop（AUDIT-BRIDGE.md，不新建协议）。"
