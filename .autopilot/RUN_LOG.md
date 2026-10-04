@@ -1870,3 +1870,7 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - CA-6 FINAL-2 = PASS / CLOSED（MSG-20261004-14，head f640f8c）。
 - CUSTOMS_AUTHORIZATION_INTERNAL_CHAIN = CA-1…CA-6 全部 CLOSED；SAFE_CONTINUATION_QUEUE = EMPTY。
 - 下一阶段 C18（真实 Broker / ABI / Filing Provider）仍为 HOLD_EXTERNAL，需宿主裁决后方可推进。
+
+## 2026-10-04T04:57:44.739Z — CI 复核（内部链 CLOSED 后）
+- success：0c6bb0f / f0abd05 / cb04232 / c6ce17c / 3fad4d4 / c897737 / fd7e4bf / 400fe6e / 8f32fce。
+- in_progress：5c6888e / f640f8c / 84c3f99（已记 pending）。
