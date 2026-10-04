@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261004-16",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-04T06:12:20.135Z",
+  "updated_at": "2026-10-04T06:12:46.596Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -4939,6 +4939,18 @@
       "status": "in_progress",
       "url": "https://github.com/anthonannabella-dev/crossclaim-ai/actions/runs/37178311782",
       "recorded_at": "2026-10-04T04:57:44.739Z"
+    },
+    {
+      "head": "3fce2ca",
+      "status": "pending",
+      "note": "未等待；下一 tick 用 REST 复核 workflow run",
+      "recorded_at": "2026-10-04T06:12:46.596Z"
+    },
+    {
+      "head": "1e42e6e",
+      "status": "pending",
+      "note": "未等待；下一 tick 用 REST 复核 workflow run",
+      "recorded_at": "2026-10-04T06:12:46.596Z"
     }
   ],
   "ci_red": [],
@@ -5252,7 +5264,7 @@
   },
   "gates_recorded_at": "2026-10-03T15:17:04.369Z",
   "ci_status_head": "8f32fce",
-  "ci_status": "pending（commit 后记录；此前 completed head 全 success）",
+  "ci_status": "pending（3fce2ca / 1e42e6e 已记录，非阻塞）",
   "ci_run_id": "37143524364",
   "internal_code_complete_at": "2026-10-03T15:36:47.862Z",
   "independent_final_audit": {
@@ -6449,7 +6461,7 @@
     ],
     "note": "C18-6 本次只落地 server-derived ProviderTenantBinding 契约/resolver 端口/跨租户隔离 fail-closed；ProviderTenantBinding 持久化（新表）仍待 Schema Delta 审计后再做。"
   },
-  "last_heartbeat_at": "2026-10-04T06:12:20.135Z",
+  "last_heartbeat_at": "2026-10-04T06:12:46.596Z",
   "waiting_for_verdict": "none（SEO-2 裁决已归档：REVISE）",
   "last_completed_unit": "seo-2-revise（MSG-20261004-17 五组必修）",
   "hold_external": true,
@@ -6541,5 +6553,22 @@
       ]
     },
     "seo_2_status": "REVISE_LANDED（待 SEO-2 FINAL + SEO-3 public API security checkpoint 一起送审）"
-  }
+  },
+  "CURRENT_HEAD": "1e42e6e",
+  "LAST_COMPLETED_UNIT": "seo-2-revise（五组必修）+ c18-6-provider-tenant-account-lineage",
+  "NEXT_EXECUTION_UNIT": "seo-3-public-checker-calculator（+ c18-7-provider-authorization-lifecycle 并行）",
+  "CI_STATUS": "pending（3fce2ca / 1e42e6e 已记录，非阻塞）",
+  "WAITING_FOR_VERDICT": "none（MSG-20261004-17 SEO-2 REVISE 已归档并落地）",
+  "HOST_ACTION_REQUIRED": [
+    "provider developer/partner account registration",
+    "third-party commercial agreement acceptance",
+    "company/KYC/IOR/broker materials",
+    "production client id/secret + webhook signing key",
+    "real POA signing",
+    "any provider fee",
+    "enable real external write",
+    "real customs filing / refund / money movement"
+  ],
+  "HOLD_EXTERNAL": true,
+  "LAST_HEARTBEAT_AT": "2026-10-04T06:12:46.596Z"
 }
