@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261004-16",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-04T06:17:53.935Z",
+  "updated_at": "2026-10-04T06:20:22.102Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -5038,7 +5038,6 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "seo-3-public-checker-calculator",
     "seo-4-recover-routes-and-locales",
     "seo-5-technical-seo",
     "seo-6-indexability-gate",
@@ -5069,9 +5068,9 @@
   "awaiting_verdict": "C18 INTERNAL FINAL（GitHub comment 5977242683，reviewed HEAD 4477158）",
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-04T06:16:45.324Z",
-    "head": "d2ceca6",
-    "acceptance_head": "d2ceca6",
+    "computed_at": "2026-10-04T06:20:22.986Z",
+    "head": "b8e1664",
+    "acceptance_head": "b8e1664",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5119,7 +5118,8 @@
       "real POA signing",
       "any provider fee",
       "enable real external write",
-      "real customs filing / refund / money movement"
+      "real customs filing / refund / money movement",
+      "Search Console verification / domain ownership（SEO 页面转 INDEX 前需要）"
     ],
     "API_INTEGRATION_REQUIRED": [
       "AMAZON_OAUTH_READ",
@@ -5163,27 +5163,27 @@
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=d2ceca6 ci_head=8f32fce ci=pending（3fce2ca / 1e42e6e 已记录，非阻塞） run=37143524364"
+        "evidence": "acceptance_head=b8e1664 ci_head=8f32fce ci=pending（d2ceca6 / 4477158 已记录，非阻塞） run=37143524364"
       },
       "L1-05_pg_regression_passed": {
         "status": "UNVERIFIED",
-        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head d2ceca6（且中间存在非簿记变更）"
+        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head b8e1664（且中间存在非簿记变更）"
       },
       "L1-06_fresh_db_migration_passed": {
         "status": "UNVERIFIED",
-        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head d2ceca6（且中间存在非簿记变更）"
+        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head b8e1664（且中间存在非簿记变更）"
       },
       "L1-07_api_typecheck_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head d2ceca6（且中间存在非簿记变更）"
+        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head b8e1664（且中间存在非簿记变更）"
       },
       "L1-08_web_typecheck_build_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head d2ceca6（且中间存在非簿记变更）"
+        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head b8e1664（且中间存在非簿记变更）"
       },
       "L1-09_no_skipped_critical_tests": {
         "status": "UNVERIFIED",
-        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head d2ceca6（且中间存在非簿记变更）"
+        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head b8e1664（且中间存在非簿记变更）"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
@@ -5192,19 +5192,19 @@
       },
       "L1-11_docs_state_consistent": {
         "status": "UNVERIFIED",
-        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head d2ceca6（且中间存在非簿记变更）"
+        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head b8e1664（且中间存在非簿记变更）"
       },
       "L1-12_schema_invariants_verified": {
         "status": "UNVERIFIED",
-        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head d2ceca6（且中间存在非簿记变更）"
+        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head b8e1664（且中间存在非簿记变更）"
       },
       "L1-13_negative_paths_covered": {
         "status": "UNVERIFIED",
-        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head d2ceca6（且中间存在非簿记变更）"
+        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head b8e1664（且中间存在非簿记变更）"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
         "status": "UNVERIFIED",
-        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head d2ceca6（且中间存在非簿记变更）"
+        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head b8e1664（且中间存在非簿记变更）"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
@@ -5218,7 +5218,8 @@
         "real POA signing",
         "any provider fee",
         "enable real external write",
-        "real customs filing / refund / money movement"
+        "real customs filing / refund / money movement",
+        "Search Console verification / domain ownership（SEO 页面转 INDEX 前需要）"
       ],
       "API_INTEGRATION_REQUIRED": [
         "AMAZON_OAUTH_READ",
@@ -6082,7 +6083,7 @@
       "API.md / DOMAIN_MODEL.md / architecture-contract 计数 77 → 79"
     ]
   },
-  "next_execution_unit": "读 C18 INTERNAL FINAL 裁决 → 按 VERDICT 执行；无阻塞则并行 seo-3-public-checker-calculator",
+  "next_execution_unit": "seo-3 audit（PUBLIC API SECURITY）+ 读 C18 INTERNAL FINAL 裁决",
   "customer_ui_commercialization": {
     "at": "2026-10-04T01:21:55.949Z",
     "authorization": "MSG-20261004-01（CUSTOMER UI/UX COMMERCIALIZATION — IMPLEMENTATION AUTHORIZED）",
@@ -6480,18 +6481,19 @@
     "final_audit_wakeup_delivery": "VERIFIED（marker 5977242683 出现在最新用户轮 + 输入框已清空 + 生成中）",
     "final_audit_pending": "C18-6 + C18-7 + C18-8（含 C18-5 三条必修与 C18-4 residual 随批确认）"
   },
-  "last_heartbeat_at": "2026-10-04T06:17:53.935Z",
+  "last_heartbeat_at": "2026-10-04T06:20:22.102Z",
   "waiting_for_verdict": "C18 INTERNAL FINAL（GitHub comment 5977242683，reviewed HEAD 4477158）",
-  "last_completed_unit": "c18-8-provider-negative-path-e2e（+ C18 INTERNAL FINAL 送审）",
+  "last_completed_unit": "seo-3-public-checker-calculator-core",
   "hold_external": true,
   "track_c_seo_p3": {
-    "at": "2026-10-04T06:12:20.135Z",
+    "at": "2026-10-04T06:20:22.102Z",
     "main_line": "TRACK C / SEO P3 — programmatic SEO + free checker/calculator acquisition engine（与 C18 并行）",
     "gap_audit_doc": "docs/releases/SEO-P3-GAP-AUDIT.md",
     "completed": [
       "seo-1-gap-audit-and-page-matrix",
       "seo-2-recovery-rule-definition-v1",
-      "seo-2-revise-5-fixes"
+      "seo-2-revise-5-fixes",
+      "seo-3-public-checker-calculator-core"
     ],
     "first_batch_pages": 28,
     "default_index_policy": "NOINDEX（通过 indexability gate 才 INDEX）",
@@ -6571,7 +6573,8 @@
         "keep RuleVersion.definition JSON, no Schema change; add typed codec, remove/validate ruleVersion/effectiveFrom/effectiveTo double source of truth, complete runtime validation"
       ]
     },
-    "seo_2_status": "REVISE_LANDED（待 SEO-2 FINAL + SEO-3 public API security checkpoint 一起送审）"
+    "seo_2_status": "REVISE_LANDED（待 SEO-2 FINAL + SEO-3 public API security checkpoint 一起送审）",
+    "seo_3_status": "CORE_LANDED（服务层 + 限流；HTTP 公开入口尚未接线，待 PUBLIC API SECURITY AUDIT 通过后由 SEO-4 暴露）"
   },
   "CURRENT_HEAD": "4477158",
   "LAST_COMPLETED_UNIT": "c18-8-provider-negative-path-e2e（+ C18 INTERNAL FINAL 送审）",

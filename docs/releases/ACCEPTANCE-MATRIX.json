@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-10-04T06:16:44.597Z",
-  "acceptance_head": "d2ceca6",
+  "generated_at": "2026-10-04T06:20:22.231Z",
+  "acceptance_head": "b8e1664",
   "protocol": "docs/releases/FINAL-ACCEPTANCE-PROTOCOL.md",
   "areas": [
     {
@@ -185,7 +185,8 @@
     "real POA signing",
     "any provider fee",
     "enable real external write",
-    "real customs filing / refund / money movement"
+    "real customs filing / refund / money movement",
+    "Search Console verification / domain ownership（SEO 页面转 INDEX 前需要）"
   ],
   "external_gates_remaining": {
     "api_integration_required": [
