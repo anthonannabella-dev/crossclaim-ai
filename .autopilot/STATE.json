@@ -2,14 +2,14 @@
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
   "head": "17fda50",
   "status": "RECONCILED",
-  "current_task": "C18-4/C18-5 打包送审（SECURITY / EXECUTION BOUNDARY）",
-  "next_task": "C18-4 provider webhook verification（高风险，需审计）",
+  "current_task": "SEO-2 RecoveryRuleDefinition v1 typed contract（高风险，先送架构审计）与 C18-6 并行",
+  "next_task": "SEO-3 公开只读 Checker/Calculator（public API security boundary，需审计）",
   "send_head": "07b7009",
   "decision_head": "07b7009",
   "last_chatgpt_message": "MSG-20261004-16",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-04T05:58:21.052Z",
+  "updated_at": "2026-10-04T06:01:14.998Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -5015,7 +5015,14 @@
   "safe_continuation_queue": [
     "c18-6-provider-tenant-account-lineage",
     "c18-7-provider-authorization-lifecycle",
-    "c18-8-provider-negative-path-e2e"
+    "c18-8-provider-negative-path-e2e",
+    "seo-2-recovery-rule-definition-v1",
+    "seo-3-public-checker-calculator",
+    "seo-4-recover-routes-and-locales",
+    "seo-5-technical-seo",
+    "seo-6-indexability-gate",
+    "seo-7-analytics-event-contract",
+    "seo-8-seo-contract-tests"
   ],
   "full_autonomous_internal_execution": "VERIFIED",
   "dispatcher_acceptance": {
@@ -5041,9 +5048,9 @@
   "awaiting_verdict": null,
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-04T05:58:22.064Z",
-    "head": "ee80fb3",
-    "acceptance_head": "ee80fb3",
+    "computed_at": "2026-10-04T06:01:15.853Z",
+    "head": "f4a37d5",
+    "acceptance_head": "f4a37d5",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5060,6 +5067,14 @@
       "c18-6-provider-tenant-account-lineage",
       "c18-7-provider-authorization-lifecycle",
       "c18-8-provider-negative-path-e2e",
+      "seo-1-gap-audit-and-page-matrix",
+      "seo-2-recovery-rule-definition-v1",
+      "seo-3-public-checker-calculator",
+      "seo-4-recover-routes-and-locales",
+      "seo-5-technical-seo",
+      "seo-6-indexability-gate",
+      "seo-7-analytics-event-contract",
+      "seo-8-seo-contract-tests",
       "CHECK:L1-01_safe_continuation_queue_zero",
       "CHECK:L1-02_no_open_internal_items",
       "CHECK:L1-03_no_open_markers",
@@ -5112,12 +5127,12 @@
       "L1-01_safe_continuation_queue_zero": {
         "label": "SAFE_CONTINUATION_QUEUE = 0",
         "status": false,
-        "evidence": "open backlog items: 8"
+        "evidence": "open backlog items: 16"
       },
       "L1-02_no_open_internal_items": {
         "label": "所有 Codex 可独立完成的内部缺口 CLOSED",
         "status": false,
-        "evidence": "open internal: c18-1-provider-integration-matrix,c18-2-provider-dto-schema,c18-3-sandbox-filing-provider,c18-4-provider-webhook-verification,c18-5-provider-idempotency-reconciliation,c18-6-provider-tenant-account-lineage,c18-7-provider-authorization-lifecycle,c18-8-provider-negative-path-e2e"
+        "evidence": "open internal: c18-1-provider-integration-matrix,c18-2-provider-dto-schema,c18-3-sandbox-filing-provider,c18-4-provider-webhook-verification,c18-5-provider-idempotency-reconciliation,c18-6-provider-tenant-account-lineage,c18-7-provider-authorization-lifecycle,c18-8-provider-negative-path-e2e,seo-1-gap-audit-and-page-matrix,seo-2-recovery-rule-definition-v1,seo-3-public-checker-calculator,seo-4-recover-routes-and-locales,seo-5-technical-seo,seo-6-indexability-gate,seo-7-analytics-event-contract,seo-8-seo-contract-tests"
       },
       "L1-03_no_open_markers": {
         "label": "不存在 TODO/IN_PROGRESS/PARTIAL/READY_FOR_REVIEW/WAITING_FOR_VERDICT/未处理 REVISE·BLOCK",
@@ -5127,48 +5142,48 @@
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=ee80fb3 ci_head=8f32fce ci=pending（commit 后记录；此前 completed head 全 success） run=37143524364"
+        "evidence": "acceptance_head=f4a37d5 ci_head=8f32fce ci=pending（commit 后记录；此前 completed head 全 success） run=37143524364"
       },
       "L1-05_pg_regression_passed": {
         "status": "UNVERIFIED",
-        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head ee80fb3（且中间存在非簿记变更）"
+        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head f4a37d5（且中间存在非簿记变更）"
       },
       "L1-06_fresh_db_migration_passed": {
         "status": "UNVERIFIED",
-        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head ee80fb3（且中间存在非簿记变更）"
+        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head f4a37d5（且中间存在非簿记变更）"
       },
       "L1-07_api_typecheck_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head ee80fb3（且中间存在非簿记变更）"
+        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head f4a37d5（且中间存在非簿记变更）"
       },
       "L1-08_web_typecheck_build_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head ee80fb3（且中间存在非簿记变更）"
+        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head f4a37d5（且中间存在非簿记变更）"
       },
       "L1-09_no_skipped_critical_tests": {
         "status": "UNVERIFIED",
-        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head ee80fb3（且中间存在非簿记变更）"
+        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head f4a37d5（且中间存在非簿记变更）"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
         "status": false,
-        "evidence": "dirty entries: 5"
+        "evidence": "dirty entries: 3"
       },
       "L1-11_docs_state_consistent": {
         "status": "UNVERIFIED",
-        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head ee80fb3（且中间存在非簿记变更）"
+        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head f4a37d5（且中间存在非簿记变更）"
       },
       "L1-12_schema_invariants_verified": {
         "status": "UNVERIFIED",
-        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head ee80fb3（且中间存在非簿记变更）"
+        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head f4a37d5（且中间存在非簿记变更）"
       },
       "L1-13_negative_paths_covered": {
         "status": "UNVERIFIED",
-        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head ee80fb3（且中间存在非簿记变更）"
+        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head f4a37d5（且中间存在非簿记变更）"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
         "status": "UNVERIFIED",
-        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head ee80fb3（且中间存在非簿记变更）"
+        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head f4a37d5（且中间存在非簿记变更）"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
@@ -6434,8 +6449,74 @@
       "真实 adapter 需支持 provider 官方 key-id / active+previous secret 轮换"
     ]
   },
-  "last_heartbeat_at": "2026-10-04T05:57:47.469Z",
+  "last_heartbeat_at": "2026-10-04T06:01:14.998Z",
   "waiting_for_verdict": "C18-4 + C18-5（待送审）",
   "last_completed_unit": "c18-5-provider-idempotency-reconciliation",
-  "hold_external": true
+  "hold_external": true,
+  "track_c_seo_p3": {
+    "at": "2026-10-04T06:01:14.998Z",
+    "main_line": "TRACK C / SEO P3 — programmatic SEO + free checker/calculator acquisition engine（与 C18 并行）",
+    "gap_audit_doc": "docs/releases/SEO-P3-GAP-AUDIT.md",
+    "completed": [
+      "seo-1-gap-audit-and-page-matrix"
+    ],
+    "first_batch_pages": 28,
+    "default_index_policy": "NOINDEX（通过 indexability gate 才 INDEX）",
+    "queue": [
+      {
+        "id": "seo-1-gap-audit-and-page-matrix",
+        "risk_class": "LOW",
+        "arch_review_required": false
+      },
+      {
+        "id": "seo-2-recovery-rule-definition-v1",
+        "risk_class": "HIGH",
+        "arch_review_required": true
+      },
+      {
+        "id": "seo-3-public-checker-calculator",
+        "risk_class": "HIGH",
+        "arch_review_required": true
+      },
+      {
+        "id": "seo-4-recover-routes-and-locales",
+        "risk_class": "MEDIUM",
+        "arch_review_required": false
+      },
+      {
+        "id": "seo-5-technical-seo",
+        "risk_class": "MEDIUM",
+        "arch_review_required": false
+      },
+      {
+        "id": "seo-6-indexability-gate",
+        "risk_class": "MEDIUM",
+        "arch_review_required": false
+      },
+      {
+        "id": "seo-7-analytics-event-contract",
+        "risk_class": "LOW",
+        "arch_review_required": false
+      },
+      {
+        "id": "seo-8-seo-contract-tests",
+        "risk_class": "MEDIUM",
+        "arch_review_required": false
+      }
+    ],
+    "hard_boundaries": [
+      "no tenant data in public checker/calculator",
+      "no PII",
+      "anonymous read-only only",
+      "rate limited",
+      "no external write",
+      "no real submission",
+      "no charge / payment",
+      "estimate must be labelled as estimate"
+    ],
+    "TRANSPORT": false,
+    "external_write": "HOLD",
+    "payment": "HOLD",
+    "production_credentials": "HOLD"
+  }
 }

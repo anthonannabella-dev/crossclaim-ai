@@ -1887,3 +1887,7 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 ## 2026-10-04T05:58:21.052Z — C18-4/C18-5 REVISE 落地
 - C18-5：写操作 5xx/429 受 provider idempotency 证据控制（未核验 → AMBIGUOUS）；maxAttempts 真正生效。
 - 生产门槛（不得在真实 ingress 前遗漏）：webhook atomic durable replay claim、AMBIGUOUS→C17 reconciliation（不建第二 root）、provider key 轮换。
+
+## 2026-10-04T06:01:14.998Z — SEO P3 启动（TRACK C，与 C18 并行）
+- SEO-1：gap audit + 首批 28 页候选矩阵（docs/releases/SEO-P3-GAP-AUDIT.md）；默认 NOINDEX，通过 indexability gate 才 INDEX。
+- 队列：SEO-2..SEO-8 已登记进 SAFE_CONTINUATION_QUEUE（与 C18 并行，互不阻塞）；SEO-2/SEO-3 需架构审计。

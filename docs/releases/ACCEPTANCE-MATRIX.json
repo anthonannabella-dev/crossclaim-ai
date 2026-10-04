@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-10-04T05:58:21.316Z",
-  "acceptance_head": "ee80fb3",
+  "generated_at": "2026-10-04T06:01:15.119Z",
+  "acceptance_head": "f4a37d5",
   "protocol": "docs/releases/FINAL-ACCEPTANCE-PROTOCOL.md",
   "areas": [
     {
@@ -167,7 +167,15 @@
     "c18-5-provider-idempotency-reconciliation",
     "c18-6-provider-tenant-account-lineage",
     "c18-7-provider-authorization-lifecycle",
-    "c18-8-provider-negative-path-e2e"
+    "c18-8-provider-negative-path-e2e",
+    "seo-1-gap-audit-and-page-matrix",
+    "seo-2-recovery-rule-definition-v1",
+    "seo-3-public-checker-calculator",
+    "seo-4-recover-routes-and-locales",
+    "seo-5-technical-seo",
+    "seo-6-indexability-gate",
+    "seo-7-analytics-event-contract",
+    "seo-8-seo-contract-tests"
   ],
   "host_action_required": [
     "provider developer/partner account registration",
