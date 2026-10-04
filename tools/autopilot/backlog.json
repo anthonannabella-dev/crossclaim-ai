@@ -1,6 +1,6 @@
 {
-  "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。 MAPPING UPDATE（2026-10-05）：seo-4 / seo-5 已按 MSG-20261005-03 完成；seo-2 / seo-3 仍 IN_PROGRESS（等 PUBLIC API SECURITY AUDIT，公开 HTTP = HOLD）。 MAPPING UPDATE（2026-10-05，第二轮）：seo-6 / seo-7 依代码与测试证据标记 COMPLETED；seo-8 保持 IN_PROGRESS（公开 HTTP 合同受 SEO-3 审计门禁）。",
-  "updatedAt": "2026-10-05T06:25:00.000Z",
+  "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。 MAPPING UPDATE（2026-10-05）：seo-4 / seo-5 已按 MSG-20261005-03 完成；seo-2 / seo-3 仍 IN_PROGRESS（等 PUBLIC API SECURITY AUDIT，公开 HTTP = HOLD）。 MAPPING UPDATE（2026-10-05，第二轮）：seo-6 / seo-7 依代码与测试证据标记 COMPLETED；seo-8 保持 IN_PROGRESS（公开 HTTP 合同受 SEO-3 审计门禁）。 MAPPING UPDATE（2026-10-05，第三轮）：seo-8 公开面合同测试定稿（含真实 HTTP 集成验收）；seo-2 / seo-3 仍 IN_PROGRESS（等 PUBLIC API SECURITY AUDIT 最终裁决）。",
+  "updatedAt": "2026-10-05T08:05:00.000Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -1054,15 +1054,16 @@
     },
     {
       "id": "seo-8-seo-contract-tests",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "risk_class": "MEDIUM",
       "arch_review_required": false,
       "layer": "TRACK-C/SEO-P3",
       "dependencies": [
         "seo-1-gap-audit-and-page-matrix"
       ],
-      "updated_at": "2026-10-05T06:25:00.000Z",
-      "note": "IN_PROGRESS：已有 15 个 seo-* 套件（含 5 例本地化路由合同 + 4 例 canonical↔route shape 回归）全部通过；但公开 HTTP 面（Checker/Calculator 入口）合同必须等 SEO-3 PUBLIC API SECURITY AUDIT 通过后才能定稿 —— 不提前宣称完成。"
+      "updated_at": "2026-10-05T08:05:00.000Z",
+      "note": "COMPLETED：SEO 合同测试定稿 —— 19 个 seo-* 套件 137 例全过，含公开面 HTTP 集成验收矩阵（真实 http server + fetch：开关关闭 404 / GET 405 / 超长提前 413 / 非法 JSON 400 / no-store 且无 ACAO:* / 未受信代理 400 / 429 / 慢 engine 504）。",
+      "completed_at": "2026-10-05T08:05:00.000Z"
     },
     {
       "id": "SEO-4-STAGE-1-recover-route-skeleton",

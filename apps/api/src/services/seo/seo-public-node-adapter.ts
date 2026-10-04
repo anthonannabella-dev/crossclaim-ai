@@ -18,6 +18,7 @@ import { SEO_PUBLIC_MAX_BODY_BYTES } from './seo-public-http-guard';
 import { getSeoPublicConcurrencyGate } from './seo-public-http-guard';
 import { createInMemorySeoPublicRateLimiter, type SeoPublicRateLimiter } from './seo-rate-limit';
 import { createSeoPublicCheckerPorts, createSeoPublicEngineRegistry } from './seo-public-ports';
+import type { SeoPublicCheckerPorts } from './seo-public-checker';
 import { handleSeoPublicRoute, SEO_PUBLIC_ROUTE_PATH, seoPublicCheckerEnabled } from './seo-public-route';
 
 export const SEO_PUBLIC_BODY_READ = {
@@ -82,6 +83,12 @@ export interface SeoPublicNodeDeps {
   prisma?: PrismaClient;
   env?: NodeJS.ProcessEnv;
   rateLimiter?: SeoPublicRateLimiter;
+  /** Explicit checker ports (composition root / integration tests). */
+  ports?: SeoPublicCheckerPorts;
+  /** Explicit concurrency gate; defaults to the process-level singleton. */
+  concurrencyGate?: ReturnType<typeof getSeoPublicConcurrencyGate>;
+  /** Override the checker timeout (tests only). */
+  timeoutMs?: number;
 }
 
 let CACHED_DEPS: ReturnType<typeof buildDeps> | null = null;
@@ -94,7 +101,8 @@ function buildDeps(input: SeoPublicNodeDeps) {
     env,
     trustedProxy: env.SEO_PUBLIC_TRUSTED_PROXY === 'true',
     ports:
-      prisma === undefined
+      input.ports ??
+      (prisma === undefined
         ? null
         : createSeoPublicCheckerPorts({
             loadRules: async (): Promise<readonly RecoveryRuleDefinition[]> => {
@@ -108,12 +116,13 @@ function buildDeps(input: SeoPublicNodeDeps) {
             },
             registry,
             now: () => new Date(),
-          }),
+          })),
     rateLimiter:
       input.rateLimiter ??
       createInMemorySeoPublicRateLimiter({ capacity: 30, refillPerMinute: 30, ttlMs: 600000, maxBuckets: 5000 }),
     anonymousSalt: env.SEO_PUBLIC_ANONYMOUS_SALT ?? 'dev-only-unsalted',
-    concurrencyGate: getSeoPublicConcurrencyGate(),
+    concurrencyGate: input.concurrencyGate ?? getSeoPublicConcurrencyGate(),
+    timeoutMs: input.timeoutMs,
   };
 }
 
@@ -191,6 +200,7 @@ export async function handleSeoPublicNodeRequest(
       rateLimiter: deps.rateLimiter,
       anonymousSalt: deps.anonymousSalt,
       concurrencyGate: deps.concurrencyGate,
+      timeoutMs: deps.timeoutMs,
       env,
     },
   );
