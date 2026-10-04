@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261004-16",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T05:20:00.000Z",
+  "updated_at": "2026-10-05T05:35:00.000Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -5192,9 +5192,9 @@
   "awaiting_verdict": "EXACT-ORDER REPLAY 证据已送审（comment 5979262070）；shared/staging deploy 解禁待裁决",
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-04T18:54:43.999Z",
-    "head": "6069eb8",
-    "acceptance_head": "6069eb8",
+    "computed_at": "2026-10-04T18:55:39.436Z",
+    "head": "f9f4765",
+    "acceptance_head": "f9f4765",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5345,48 +5345,48 @@
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=6069eb8 ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
+        "evidence": "acceptance_head=f9f4765 ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
       },
       "L1-05_pg_regression_passed": {
         "status": "UNVERIFIED",
-        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head 6069eb8（且中间存在非簿记变更）"
+        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head f9f4765（且中间存在非簿记变更）"
       },
       "L1-06_fresh_db_migration_passed": {
         "status": "UNVERIFIED",
-        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head 6069eb8（且中间存在非簿记变更）"
+        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head f9f4765（且中间存在非簿记变更）"
       },
       "L1-07_api_typecheck_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head 6069eb8（且中间存在非簿记变更）"
+        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head f9f4765（且中间存在非簿记变更）"
       },
       "L1-08_web_typecheck_build_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head 6069eb8（且中间存在非簿记变更）"
+        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head f9f4765（且中间存在非簿记变更）"
       },
       "L1-09_no_skipped_critical_tests": {
         "status": "UNVERIFIED",
-        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head 6069eb8（且中间存在非簿记变更）"
+        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head f9f4765（且中间存在非簿记变更）"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
         "status": false,
-        "evidence": "dirty entries: 8"
+        "evidence": "dirty entries: 1"
       },
       "L1-11_docs_state_consistent": {
         "status": "UNVERIFIED",
-        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head 6069eb8（且中间存在非簿记变更）"
+        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head f9f4765（且中间存在非簿记变更）"
       },
       "L1-12_schema_invariants_verified": {
         "status": "UNVERIFIED",
-        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head 6069eb8（且中间存在非簿记变更）"
+        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head f9f4765（且中间存在非簿记变更）"
       },
       "L1-13_negative_paths_covered": {
         "status": "UNVERIFIED",
-        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head 6069eb8（且中间存在非簿记变更）"
+        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head f9f4765（且中间存在非簿记变更）"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
         "status": "UNVERIFIED",
-        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head 6069eb8（且中间存在非簿记变更）"
+        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head f9f4765（且中间存在非簿记变更）"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
@@ -6334,7 +6334,7 @@
       "API.md / DOMAIN_MODEL.md / architecture-contract 计数 77 → 79"
     ]
   },
-  "next_execution_unit": "等 SEO-4 形状裁定 → 按裁定实现（schema/URL 构造 + 5 语言可达性 + hreflang + sitemap + 合同测试），保持 default NOINDEX；RSI staging smoke 等宿主 DATABASE_URL",
+  "next_execution_unit": "SEO-4 残留缺口：apps/web 增加 app/[locale]/recover/[slug] 路由（非默认语言 zh/de/ja/es；en 仍由 /recover/{slug} 作 canonical，不产生重复），并让 getServerMessages 按 URL locale 取词；随后把导出的 reachableLocales 默认值从「全部 5 语言」收窄为「web 真正可服务的语言」，彻底消除 hreflang→未发布 URL 的风险；保持 DEFAULT_NOINDEX 与 fail-closed",
   "customer_ui_commercialization": {
     "at": "2026-10-04T01:21:55.949Z",
     "authorization": "MSG-20261004-01（CUSTOMER UI/UX COMMERCIALIZATION — IMPLEMENTATION AUTHORIZED）",
@@ -7380,10 +7380,10 @@
     "seo3_progress": "CHANGE A/B validator added (86f4289), engine output validation added (eb99c53), validator wired into runPublicSeoChecker (8bf49da), HTTP boundary guard added (4f2cd20); HTTP entry still not registered"
   },
   "CURRENT_HEAD": "293f55e",
-  "LAST_COMPLETED_UNIT": "SEO-4 P0 路由形状 gap 分析 + 形状裁定请求（A：canonical 对齐 /recover/{slug}（推荐）/ B：web 服从两层 /{platform}/{recoveryType}）；含文件行号证据与影响面",
-  "NEXT_EXECUTION_UNIT": "等 SEO-4 形状裁定 → 按裁定实现（schema/URL 构造 + 5 语言可达性 + hreflang + sitemap + 合同测试），保持 default NOINDEX；RSI staging smoke 等宿主 DATABASE_URL",
-  "CI_STATUS": "HEAD 3044c74 已推送；本地证据全绿（tsc 0 / 一次性库 8 例 / whole-schema diff ZERO / 触发器清单 OK）",
-  "WAITING_FOR_VERDICT": "SEO-4 P0 路由形状裁定（canonical `/{locale}/recover/{platform}/{recoveryType}` vs 实际路由 `/recover/{slug}`）：耐久记录 docs/releases/SEO-4-P0-ROUTE-SHAPE-DECISION-REQUEST.md @ 3044c74；另 RSI-RT-06 staging smoke 仍等宿主非生产 DATABASE_URL",
+  "LAST_COMPLETED_UNIT": "SEO-4 URL 契约方案 A 落地（MSG-20261005-03）：canonical = /{locale}/recover/{slug} + STRICT_REACHABILITY hreflang；tsc 0、13 个 SEO 套件 96/96；HEAD f9f4765",
+  "NEXT_EXECUTION_UNIT": "SEO-4 残留缺口：apps/web 增加 app/[locale]/recover/[slug] 路由（非默认语言 zh/de/ja/es；en 仍由 /recover/{slug} 作 canonical，不产生重复），并让 getServerMessages 按 URL locale 取词；随后把导出的 reachableLocales 默认值从「全部 5 语言」收窄为「web 真正可服务的语言」，彻底消除 hreflang→未发布 URL 的风险；保持 DEFAULT_NOINDEX 与 fail-closed",
+  "CI_STATUS": "HEAD f9f4765 CI in_progress（GitHub 排队）；本地：tsc 0 + SEO 96/96 + 四项门禁 OK",
+  "WAITING_FOR_VERDICT": "none（SEO-4 形状裁定 MSG-20261005-03 已归档；RSI staging smoke 仍等宿主非生产 DATABASE_URL）",
   "HOST_ACTION_REQUIRED": [
     "provider developer/partner account registration",
     "third-party commercial agreement acceptance",
@@ -7397,7 +7397,7 @@
     "non-production staging DATABASE_URL + 确认该 shared 库是否承载真实客户数据（执行已授权的 staging migrate deploy 前需要）"
   ],
   "HOLD_EXTERNAL": true,
-  "LAST_HEARTBEAT_AT": "2026-10-05T05:20:00.000Z",
+  "LAST_HEARTBEAT_AT": "2026-10-05T05:35:00.000Z",
   "ci_red_streak_note": "RESOLVED: three contract/inventory fixes (tenant-trigger whitelist 1b15ab7, append-only whitelist cc13bde, model inventory 82->85 4f02282); 4f02282 is the first green run after the streak.",
   "ci_contract_fix_local_verification": {
     "at": "2026-10-04T08:51:16.135Z",
@@ -7591,8 +7591,10 @@
     ]
   },
   "seo": {
-    "p0_open": "SEO-4-P0-route-shape-vs-canonical-mismatch = 已送裁定（3044c74）",
+    "p0_open": "SEO-4 残留：web 缺 [locale] 路由 → 非默认语言页面不可达（canonical/hreflang 已按方案 A 对齐）",
     "decision_request": "docs/releases/SEO-4-P0-ROUTE-SHAPE-DECISION-REQUEST.md",
-    "default_index_policy": "NOINDEX（未变；本轮未把任何页面改为 INDEX）"
+    "default_index_policy": "NOINDEX（未变）",
+    "url_contract": "OPTION_A（MSG-20261005-03）: canonical = /{locale}/recover/{slug}; slug = URL identity; platform/recoveryType = metadata only",
+    "hreflang_policy": "STRICT_REACHABILITY（只声明真实可达语言；x-default 仅在 canonical 语言可达时输出）"
   }
 }
