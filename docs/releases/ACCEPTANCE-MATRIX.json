@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-10-04T16:45:45.351Z",
-  "acceptance_head": "bd0dd4c",
+  "generated_at": "2026-10-04T16:50:47.477Z",
+  "acceptance_head": "620ab79",
   "protocol": "docs/releases/FINAL-ACCEPTANCE-PROTOCOL.md",
   "areas": [
     {
@@ -220,7 +220,8 @@
     "RSI-INSP-05-production-to-fixture",
     "RSI-CONT-01-continuation-engine",
     "RSI-CONT-02-controller-wiring",
-    "RSI-CONT-03-event-sources"
+    "RSI-CONT-03-event-sources",
+    "RSI-CONT-04-event-loop"
   ],
   "host_action_required": [
     "provider developer/partner account registration",
