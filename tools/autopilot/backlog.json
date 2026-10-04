@@ -1,6 +1,6 @@
 {
   "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。",
-  "updatedAt": "2026-10-04T04:24:21.930Z",
+  "updatedAt": "2026-10-04T04:46:15.878Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -846,7 +846,14 @@
         "customs",
         "web"
       ],
-      "status": "PENDING"
+      "status": "PENDING",
+      "verdict": "REVISE（MSG-20261004-12）— 两条窄修已实现，等待 CA-6 FINAL",
+      "audit_request_comment": "5976624498",
+      "revise_changes": [
+        "TARGET_BROKER_BINDING",
+        "GENERIC_REUSE_COPY"
+      ],
+      "updated_at": "2026-10-04T04:46:15.878Z"
     }
   ],
   "authorization_note": "MSG-20261003-133 Q3：dispatcher 获授权自动扩 backlog 并执行安全单元（契约/已批准 D1–D3 Schema/append-only 持久化/deterministic normalization/qualification·evidence·package/测试/文档/fixture/只读 HTTP/只读 reconciliation projection）；遇到未批准 Schema、EXTERNAL_WRITE Action Guard、真实 adapter/webhook、submission、真实资金语义写入、生产 credential、收费时必须停该分支并重新送审。 HOST 2026-10-04（CONTINUOUS EXECUTION + CUSTOMS AUTHORIZATION + CHATGPT AUDIT LOOP）：UI-6…UI-8 与 CA-2…CA-6 已登记为可执行队列；Schema/Security/Authorization 边界项自动进入 ChatGPT Audit Loop（AUDIT-BRIDGE.md，不新建协议）。"

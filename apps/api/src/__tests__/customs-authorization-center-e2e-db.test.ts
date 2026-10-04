@@ -28,6 +28,8 @@ const OPP_NO_LINEAGE = 'ca5-e2e-opp-no-lineage';
 const OPP_EXPIRED_IOR = 'ca5-e2e-opp-expired-ior';
 const OPP_NO_FILING_AUTH = 'ca5-e2e-opp-no-filing-auth';
 const OPP_SELF = 'ca5-e2e-opp-self-filed';
+const OPP_BROKER_B = 'ca5-e2e-opp-broker-b';
+const OPP_NO_SESSION = 'ca5-e2e-opp-no-session';
 const ENTRY = 'ENTRY-CA5-1';
 const SALT = 'ca5-final2-salt-0123456789';
 const FAST_PARAMS = { N: 1024, r: 8, p: 1, keyLength: 64 };
@@ -159,6 +161,8 @@ beforeEach(async () => {
     [OPP_EXPIRED_IOR, 'ENTRY-EXPIRED', 'CUSTOMS_BROKER'],
     [OPP_NO_FILING_AUTH, 'ENTRY-NO-FILING-AUTH', 'CUSTOMS_BROKER'],
     [OPP_SELF, 'ENTRY-SELF', 'CUSTOMER_SELF'],
+    [OPP_BROKER_B, 'ENTRY-BROKER-B', 'CUSTOMS_BROKER'],
+    [OPP_NO_SESSION, 'ENTRY-NO-SESSION', 'CUSTOMS_BROKER'],
   ] as const) {
     await prisma.recoveryOpportunity.create({
       data: {
@@ -298,6 +302,96 @@ beforeEach(async () => {
       observedAt: new Date('2026-09-02T00:00:00.000Z'),
     },
   });
+  // CA-6 REVISE：目标 broker 的 server truth = CA-4 broker authorization session
+  //   OPP            → broker:a（与 POA 一致）⇒ 可复用
+  //   OPP_BROKER_B   → broker:b（与 POA 不一致）⇒ BROKER_CHANGED，必须重签
+  //   OPP_NO_SESSION → 无 session ⇒ 目标 broker 未知 ⇒ fail-closed 到 WAITING_ON_PROVIDER
+  for (const [sessionId, principal, brokerRef] of [
+    ['ca5-e2e-session-a', 'ior:acme', 'broker:a'],
+    ['ca5-e2e-session-b', 'ior:b', 'broker:b'],
+  ] as const) {
+    await prisma.customsBrokerAuthorizationSession.create({
+      data: {
+        id: randomUUID(),
+        organizationId: ORG,
+        sessionId,
+        principalRef: principal,
+        brokerRef,
+        providerRef: 'provider:fixture',
+        jurisdiction: 'US',
+        requestedScope: ['DRAWBACK'] as never,
+        authorizationType: 'CBP_FORM_5291' as never,
+        route: 'BROKER_FILED',
+        status: 'CREATED' as never,
+        version: 1,
+        contentDigest: digest(),
+        createdAt: new Date('2026-09-03T00:00:00.000Z'),
+      },
+    });
+  }
+  // ior:b / ior:c 的 IOR 身份 + POA（broker:a）夹具：用于 A→B 与"未绑定"两种 CA-6 判定
+  for (const [principal, entry] of [
+    ['ior:b', 'ENTRY-BROKER-B'],
+    ['ior:c', 'ENTRY-NO-SESSION'],
+  ] as const) {
+    await prisma.customsIorIdentityFact.create({
+      data: {
+        id: randomUUID(),
+        organizationId: ORG,
+        jurisdiction: 'US',
+        principalType: 'IMPORTER_OF_RECORD' as never,
+        importerOfRecordRef: principal,
+        legalEntityRef: 'entity:' + principal,
+        verificationStatus: 'VERIFIED' as never,
+        verificationSource: 'CUSTOMER_DOCUMENT' as never,
+        verifiedAt: new Date('2026-09-01T00:00:00.000Z'),
+        contentDigest: digest(),
+        sourceReference: 'doc:' + principal,
+        observedAt: new Date('2026-09-01T00:00:00.000Z'),
+      },
+    });
+    await prisma.customsBrokerPoaFact.create({
+      data: {
+        id: randomUUID(),
+        organizationId: ORG,
+        principalRef: principal,
+        brokerRef: 'broker:a',
+        jurisdiction: 'US',
+        authorizationType: 'CBP_FORM_5291' as never,
+        scope: ['DRAWBACK'] as never,
+        effectiveAt: new Date('2026-09-01T00:00:00.000Z'),
+        expiresAt: null,
+        evidenceArtifactRef: 'evidence:poa',
+        verifiedAt: new Date('2026-09-01T00:00:00.000Z'),
+        revokedAt: null,
+        supersededAt: null,
+        lifecycleKey: 'ca5-final2-poa-' + principal,
+        verificationStatus: 'VERIFIED' as never,
+        verificationSource: 'BROKER_ATTESTATION' as never,
+        contentDigest: digest(),
+        observedAt: new Date('2026-09-02T00:00:00.000Z'),
+      },
+    });
+    // lineage 必须在同租户 IOR 身份事实之后写入（DB lineage 触发器）
+    await prisma.customsRightLineageFact.create({
+      data: {
+        id: randomUUID(),
+        organizationId: ORG,
+        entryReference: entry,
+        importerOfRecordRef: principal,
+        claimantRef: 'entity:acme',
+        remedyRoute: 'DRAWBACK',
+        iorRightsForRemedy: 'CONFIRMED',
+        claimantRightsForRemedy: 'CONFIRMED',
+        filingAuthorized: true,
+        outcome: 'COMPLETE' as never,
+        reasonCodes: [] as never,
+        evidenceKinds: [] as never,
+        contentDigest: digest(),
+        observedAt: new Date('2026-09-02T00:00:00.000Z'),
+      },
+    });
+  }
 });
 
 describe('CA-5 — authorization center real-fact E2E（真实 PostgreSQL 授权事实）', () => {
@@ -470,6 +564,38 @@ describe('CA-5 — authorization center real-fact E2E（真实 PostgreSQL 授权
         body: '{}',
       });
       expect(post.status).toBe(405);
+    });
+  });
+
+  it('CA-6 REVISE：目标 broker 绑定必须真实比较（A→A 复用 / A→B 重签 / 未绑定 fail-closed）', async () => {
+    await withServer({ customsFilingProvider: PROVIDER }, async (base) => {
+      const cookie = await login(base, 'ca5f2-owner@example.com');
+      const planOf = async (id: string) => {
+        const res = await getPlan(base, id, cookie);
+        expect(res.status).toBe(200);
+        const body = (await res.json()) as {
+          authorizationPlan: { gate: string; reuseExistingAuthorization: boolean; reasonCodes: string[]; nextAction: string | null };
+        };
+        return body.authorizationPlan;
+      };
+
+      // OPP：session broker:a 与 POA broker:a 一致 ⇒ 复用
+      const matched = await planOf(OPP);
+      expect(matched.reuseExistingAuthorization).toBe(true);
+      expect(matched.reasonCodes).toEqual([]);
+
+      // OPP_BROKER_B：session broker:b ≠ POA broker:a ⇒ 不得声称可复用，必须走 BROKER_CHANGED
+      const changed = await planOf(OPP_BROKER_B);
+      expect(changed.reuseExistingAuthorization).toBe(false);
+      expect(changed.reasonCodes).toContain('BROKER_CHANGED');
+      expect(changed.gate).toBe('REAUTHORIZATION_REQUIRED');
+
+      // OPP_NO_SESSION：目标 broker 未知 ⇒ fail-closed 到 WAITING_ON_PROVIDER（不猜、不让客户重签）
+      const unbound = await planOf(OPP_NO_SESSION);
+      expect(unbound.gate).toBe('WAITING_ON_PROVIDER');
+      expect(unbound.nextAction).toBeNull();
+      expect(unbound.reuseExistingAuthorization).toBe(false);
+      expect(unbound.reasonCodes).toEqual(['TARGET_BROKER_UNKNOWN']);
     });
   });
 });

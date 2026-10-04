@@ -48,6 +48,8 @@ export interface CustomsAuthorizationLoaderOptions {
 export interface CustomsAuthorizationContext {
   center: CustomsAuthorizationCenter;
   existingAuthorization: CustomsExistingAuthorizationSnapshot | null;
+  /** true = BROKER_FILED 且目标 broker 尚未由 server truth（CA-4 session）确定。 */
+  targetBindingUnknown: boolean;
 }
 
 /** 辖区匹配：任一为 null / '*' 视为通配（与 CA-1 policy 语义一致）。 */
@@ -192,11 +194,25 @@ export function createPrismaCustomsAuthorizationContextLoader(
 
       const at = now();
       const latestBrokerRef = poaRowsRaw[0]?.brokerRef ?? null;
+
+      // CA-6 REVISE（MSG-20261004-12）：目标 broker 必须来自 server truth（CA-4 broker authorization session），
+      // 不得用"最新一张 POA 的 broker"冒充"本次 filing 的目标 broker"，也不得默认 true。
+      const targetBrokerRef =
+        (
+          await prisma.customsBrokerAuthorizationSession.findFirst({
+            where: { organizationId, principalRef },
+            orderBy: [{ updatedAt: 'desc' }],
+            select: { brokerRef: true },
+          })
+        )?.brokerRef ?? null;
+      const targetBindingUnknown = filingRoute === 'BROKER_FILED' && targetBrokerRef === null;
+      const effectiveBrokerRef = filingRoute === 'BROKER_FILED' ? targetBrokerRef ?? latestBrokerRef : null;
+
       const poa = resolveBrokerPoaFacts(poaRows, {
         at,
         remedy,
         principalRef,
-        ...(latestBrokerRef ? { brokerRef: latestBrokerRef } : {}),
+        ...(effectiveBrokerRef ? { brokerRef: effectiveBrokerRef } : {}),
       });
       const signer = resolveAuthorizedSignerFacts(signerRows, { at, remedy, principalRef });
 
@@ -206,7 +222,7 @@ export function createPrismaCustomsAuthorizationContextLoader(
         claimantConfirmed: typeof lineage.claimantRef === 'string' && lineage.claimantRef.trim() !== '',
         recoveryRightForRemedy:
           lineage.iorRightsForRemedy === 'CONFIRMED' && lineage.claimantRightsForRemedy === 'CONFIRMED',
-        brokerConnected: latestBrokerRef !== null,
+        brokerConnected: effectiveBrokerRef !== null,
         brokerPoaStatus: poa.status,
         brokerPoaScopeCoversRemedy: poa.scopeCoversRemedy,
         brokerPoaJurisdiction: poa.jurisdiction,
@@ -227,15 +243,20 @@ export function createPrismaCustomsAuthorizationContextLoader(
 
       // CA-6：既有授权快照（用于"要不要重签"判定；只看已解析事实，不做任何新写入）
       const existingAuthorization: CustomsExistingAuthorizationSnapshot | null =
-        filingRoute === 'BROKER_FILED' && latestBrokerRef
-          ? {
+        filingRoute === 'BROKER_FILED'
+          ? targetBindingUnknown
+            ? null
+            : {
               subject: 'BROKER_POA',
               status: poa.status === 'VERIFIED' ? 'VERIFIED' : (poa.status as CustomsExistingAuthorizationSnapshot['status']),
               scopeCoversRequested: poa.scopeCoversRemedy,
               jurisdictionMatches: jurisdictionMatches(poa.jurisdiction, readiness.jurisdiction),
               routeMatches: true,
+              // 真实比较：POA 的 brokerRef 必须等于本次 filing 的目标 broker（来自 CA-4 session）
               samePrincipal: poaRowsRaw.every((row) => row.principalRef === principalRef),
-              sameBrokerOrSigner: true,
+              sameBrokerOrSigner: poaRowsRaw.some(
+                (row) => row.principalRef === principalRef && row.brokerRef === targetBrokerRef,
+              ),
             }
           : filingRoute === 'SELF_FILED'
             ? {
@@ -247,12 +268,13 @@ export function createPrismaCustomsAuthorizationContextLoader(
                 scopeCoversRequested: signer.scopeCoversRemedy,
                 jurisdictionMatches: jurisdictionMatches(signer.jurisdiction, readiness.jurisdiction),
                 routeMatches: true,
-                samePrincipal: true,
-                sameBrokerOrSigner: true,
+                samePrincipal: signerRowsRaw.every((row) => row.principalRef === principalRef),
+                // SELF_FILED 契约语义：同一 principal 下**任一仍有效的授权签署人**即可复用（不再声称"same signer"）
+                sameBrokerOrSigner: signer.status === 'VERIFIED',
               }
             : null;
 
-      return { center, existingAuthorization };
+      return { center, existingAuthorization, targetBindingUnknown };
     },
   };
 }
@@ -282,6 +304,7 @@ export function createPrismaCustomsOneClickAuthorizationPlanLoader(
       return planCustomsOneClickAuthorization({
         center: loaded.center,
         existingAuthorization: loaded.existingAuthorization,
+        ...(loaded.targetBindingUnknown ? { targetBindingUnknown: true } : {}),
       });
     },
   };

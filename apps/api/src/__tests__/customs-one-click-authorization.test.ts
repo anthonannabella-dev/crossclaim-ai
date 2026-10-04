@@ -165,4 +165,16 @@ describe('CA-6 — one-click customs recovery authorization plan（unit）', () 
     expect(plan.gate).toBe('REAUTHORIZATION_REQUIRED');
     expect(plan.reasonCodes).toEqual(['AUTHORIZATION_PENDING']);
   });
+
+  it('REVISE：目标 broker/signer 未由 server truth 绑定时 fail-closed 到 WAITING_ON_PROVIDER', () => {
+    const plan = planCustomsOneClickAuthorization({
+      center: center(),
+      existingAuthorization: usableExisting,
+      targetBindingUnknown: true,
+    });
+    expect(plan.gate).toBe('WAITING_ON_PROVIDER');
+    expect(plan.nextAction).toBeNull();
+    expect(plan.reuseExistingAuthorization).toBe(false);
+    expect(plan.reasonCodes).toEqual(['TARGET_BROKER_UNKNOWN']);
+  });
 });

@@ -218,7 +218,7 @@ const ja: Messages = {
     gateReauthorizationRequired: '再授权が必要です',
     gateWaitingOnProvider: '権限 / 代理店提出待ち',
     gateUnknown: '権限状態を確認中',
-    reuseNote: '既存の代理店権限を再利用するため、この案件で再署名は不要です。',
+    reuseNote: '既存の有効な権限を再利用するため、この案件で再署名は不要です。',
     missingOnlyNote: '以下に挙げた不足分のみご対応ください。それ以外の再提出は不要です。',
     reasonsLabel: '再授权が必要な理由',
     statePendingPolicy: '権限要件を確認中',

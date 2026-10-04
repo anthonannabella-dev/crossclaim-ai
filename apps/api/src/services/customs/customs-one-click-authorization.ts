@@ -35,6 +35,7 @@ export const CUSTOMS_REAUTHORIZATION_REASONS = [
   'LEGAL_ENTITY_CHANGED',
   'BROKER_CHANGED',
   'PROVIDER_RENEWAL_REQUIRED',
+  'TARGET_BROKER_UNKNOWN',
 ] as const;
 
 export type CustomsReauthorizationReason = (typeof CUSTOMS_REAUTHORIZATION_REASONS)[number];
@@ -136,6 +137,8 @@ export function customsReauthorizationReasons(
 export function planCustomsOneClickAuthorization(input: {
   center: CustomsAuthorizationCenter;
   existingAuthorization?: CustomsExistingAuthorizationSnapshot | null;
+  /** true = 当前目标 broker/signer 绑定尚未由 server truth 确定（不得猜、也不得让客户重签）。 */
+  targetBindingUnknown?: boolean;
 }): CustomsOneClickAuthorizationPlan {
   const { center } = input;
   const missingItems = center.items.filter(
@@ -154,6 +157,20 @@ export function planCustomsOneClickAuthorization(input: {
     transportEnabled: false as const,
     productionCredentials: 'ABSENT' as const,
   };
+
+  // REVISE（MSG-20261004-12）：目标 broker/signer 尚未由 server truth 确定时 fail-closed 到 WAITING_ON_PROVIDER
+  // （既不能猜"可复用"，也不能让客户先重复签一次）
+  if (input.targetBindingUnknown === true) {
+    return {
+      gate: 'WAITING_ON_PROVIDER',
+      missingItemKeys,
+      missingActions,
+      reuseExistingAuthorization: false,
+      reasonCodes: ['TARGET_BROKER_UNKNOWN'],
+      nextAction: null,
+      ...boundary,
+    };
+  }
 
   if (center.stages.READY_TO_FILE) {
     return {
@@ -204,3 +221,4 @@ export function planCustomsOneClickAuthorization(input: {
     ...boundary,
   };
 }
+

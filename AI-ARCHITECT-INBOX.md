@@ -129995,3 +129995,224 @@ C18=HOLD_EXTERNAL
 
 不能因为 CA-5 CLOSED 就自动开启真实 Broker、CBP/ACE/ABI 外写或生产凭据。
 ```
+
+### [MSG-20261004-12] ARCHITECT VERDICT — CUSTOMS AUTHORIZATION CA-6 = REVISE（四态 gate / WAITING_ON_PROVIDER / 只读端点 / UI 主体 = PASS；两条窄修：① sameBrokerOrSigner 不得写死 true——目标 broker 必须来自 server truth 并与 POA brokerRef 真实比较，未绑定则 fail-closed 到 WAITING_ON_PROVIDER；② reuse 文案改为通用「现有有效授权」，不得把 SELF_FILED 的 signer 说成代理授权）
+
+```text
+ARCHITECT VERDICT：REVISE
+
+我按 reviewed HEAD = 0c6bb0f 重新读取了 CA-6 的 planner、共享 Prisma loader、HTTP 路由、真实 PG E2E 和客户 UI。四态 gate 的总体设计是成立的，WAITING_ON_PROVIDER 也没有自动触发客户签署；但“复用既有授权、不逐单重签”这一核心承诺目前还有一个会产生 false-positive 的身份绑定问题，因此暂时不能 CA-6 = CLOSED。
+
+① 四态 gate：主体 PASS；授权复用判定 REVISE
+
+四态本身我接受：
+
+READY_TO_START / NEEDS_AUTHORIZATION / REAUTHORIZATION_REQUIRED / WAITING_ON_PROVIDER
+
+顺序也基本正确。特别是：
+
+center.stages.READY_TO_FILE
+→ READY_TO_START
+
+客户动作已经全部完成、只剩 provider/authority blocker
+→ WAITING_ON_PROVIDER
+→ nextAction=null
+
+这些都符合 CA-6 目标。
+
+问题在真实 loader 的这一段：
+
+TypeScript
+samePrincipal: poaRowsRaw.every((row) => row.principalRef === principalRef),
+sameBrokerOrSigner: true,
+
+以及 SELF_FILED：
+
+TypeScript
+samePrincipal: true,
+sameBrokerOrSigner: true,
+routeMatches: true,
+
+这里的 sameBrokerOrSigner 没有被验证，而是直接写死为 true。
+
+BROKER_FILED 更明显：
+
+TypeScript
+const latestBrokerRef = poaRowsRaw[0]?.brokerRef ?? null;
+
+系统实际上是在选择“这个 principal 最新一条 POA 的 broker”，不是“当前这次 filing 准备使用的 broker”。
+
+所以当前逻辑实际变成：
+
+只要这个企业最近有一张可用 POA，就可能被认为可以复用。
+
+而不是：
+
+当前目标 Broker 与 POA 的 brokerRef 确实一致，才可复用。
+
+这违反 CA-6 自己定义的：
+
+same principal + jurisdiction + scope + route + same broker/signer ⇒ reuse
+
+更直接的证据是当前真实 PG E2E：
+
+纯文本
+providerId = broker-a
+brokerRef  = broker:a
+
+两者字符串本身不同，但测试仍然断言：
+
+纯文本
+reuseExistingAuthorization = true
+
+所以当前 E2E 实际没有证明“同一 Broker”，只证明“存在一张 verified POA”。
+
+这一点必须修。
+
+② WAITING_ON_PROVIDER：PASS
+
+这一点我批准。
+
+当前 planner：
+
+TypeScript
+missingItems.length === 0
+&& submission.state === 'WAITING_AUTHORIZATION'
+
+才进入：
+
+TypeScript
+WAITING_ON_PROVIDER
+nextAction = null
+
+也就是说 provider / broker / authority 侧未准备好时，不会自动生成：
+
+COMPLETE_BROKER_AUTHORIZATION
+
+或：
+
+CONFIRM_SIGNING_AUTHORITY
+
+这种客户动作。
+
+这正是应该的：
+
+Provider 还没准备好 ≠ 让客户先重复签一遍。
+
+② CLOSED。
+
+③ 只读端点 + 共享事实 loader：PASS WITH ONE REQUIRED PG ASSERTION
+
+结构已经达标。
+
+现在 center 与 plan 都走：
+
+createPrismaCustomsAuthorizationContextLoader()
+
+而不是各自重新定义 truth。
+
+HTTP：
+
+纯文本
+GET /customs-opportunities/:id/authorization-plan
+
+也保持：
+
+tenant-scoped
+RBAC
+404 anti-enumeration
+GET only
+filingSubmitted=false
+externalWritePerformed=false
+transportEnabled=false
+productionCredentials=ABSENT
+
+这些我接受。
+
+但是修复 Broker/Signer 身份绑定后，必须补一组真实 PG 判定：
+
+纯文本
+POA broker=A + 当前目标 broker=A
+→ reuse=true
+
+POA broker=A + 当前目标 broker=B
+→ reuse=false
+→ BROKER_CHANGED
+→ 不允许显示“无需重复签署”
+
+如果“当前目标 Broker 尚未确定”，不要猜，也不要直接让客户重新签。
+
+应该 fail-closed 到类似：
+
+纯文本
+WAITING_ON_PROVIDER
+
+等 Broker/Provider 绑定确定后再判断是否需要重签。
+
+目标 Broker 的 server truth 可以来自 provider/broker binding 或 loader option；不要默认假设 providerId === brokerRef，因为当前测试已经证明它们并非同一格式。
+
+不要求因此增加新 Schema。
+
+④ 客户 UI：大部分 PASS，还有一个很小但必须修的文案语义
+
+CTA 保持 navigation-only，我接受。
+
+现在没有：
+
+自动 filing
+自动 Broker submission
+自动收费
+自动扣款
+
+工程 reasonCodes 也只进入高级详情，默认客户视图不会直接泄漏。
+
+但当前 reuse 文案是：
+
+“已复用既有代理授权，本单无需重复签署。”
+
+CA-6 同时支持：
+
+BROKER_POA
+和
+AUTHORIZED_SIGNER
+
+因此在 SELF_FILED 路径复用 Authorized Signer 时，这句话会错误告诉客户：
+
+“复用了代理授权”
+
+实际上根本没有 Broker POA。
+
+最小修改有两种做法。我更建议直接改成通用文案：
+
+“已复用现有有效授权，本单无需重复签署。”
+
+这样不用增加 API 字段。
+
+如果以后希望明确展示授权类型，再把 subject 放进 plan：
+
+BROKER_POA / AUTHORIZED_SIGNER
+
+然后分别翻译。
+
+⑤ CA-6 是否可以 CLOSED
+
+暂时不可以。
+
+现在只剩 2 个必须修的最小项：
+
+去掉 sameBrokerOrSigner: true 的假判定。 BROKER_FILED 必须把当前目标 Broker 与 POA brokerRef 真正绑定比较；SELF_FILED 如果产品坚持“同 signer 才复用”，则也需要真实比较 signerRef。如果业务规则其实是“任一仍有效的授权签署人都可复用”，那就正式修改契约语义，不要继续声称“same signer”。
+修客户 reuse 文案。 不要把 SELF_FILED 的 signer authorization 显示成“代理授权”；改成通用“现有有效授权”即可。同时新增真实 PG 的 broker A→A 与 A→B 两侧断言。
+
+除此之外，本轮没有发现需要重做四态 gate、HTTP、六项模型、i18n 架构或 runtime composition 的问题。
+
+因此：
+
+CA-6_STATUS = NOT_CLOSED
+VERDICT = REVISE
+
+修完这两处后，我预计可以直接给 CA-6 = PASS / CLOSED。
+
+REAL_BROKER=NO / REAL_FILING=NO / C18=HOLD_EXTERNAL 继续保持。
+
+另外，GitHub 在 0c6bb0f 上当前没有返回 commit statuses/workflow runs，所以你报告的本地 tsc/build/test 我可以作为送审证据参考，但不会把它描述成我独立验证过的 GitHub CI SUCCESS。
+```

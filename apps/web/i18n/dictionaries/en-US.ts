@@ -218,7 +218,7 @@ const enUS: Messages = {
     gateReauthorizationRequired: 'New authorization required',
     gateWaitingOnProvider: 'Waiting for authorization / broker submission',
     gateUnknown: 'Authorization status pending',
-    reuseNote: 'Your existing broker authorization is reused; nothing needs to be signed again for this filing.',
+    reuseNote: 'Your existing valid authorization is reused; nothing needs to be signed again for this filing.',
     missingOnlyNote: 'Only complete the missing items listed below; nothing else must be resubmitted.',
     reasonsLabel: 'Why a new authorization is required',
     statePendingPolicy: 'Authorization requirements pending',

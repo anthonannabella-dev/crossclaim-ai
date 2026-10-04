@@ -1,6 +1,6 @@
 # LAYER 2 — GOLDEN PATH MATRIX（自动生成，请勿手改）
 
-- 生成时间：2026-10-04T04:36:41.671Z
+- 生成时间：2026-10-04T04:46:16.391Z
 - 机器可读：`docs/releases/LAYER2-GOLDEN-PATH-MATRIX.json`；生成器：`tools/autopilot/golden-path-matrix.mjs`
 - 判定规则：**COVERED 必须存在命名证据文件**（测试/前端）；否则 GAP，并自动登记为 backlog。
 - 依据：MSG-20261003-135 CHANGE C（禁止用「专项测试很多」替代完整矩阵）。
@@ -45,7 +45,7 @@
 |---|---|---|
 | http | COVERED | apps/api/src/__tests__/customs-authorization-center-e2e-db.test.ts<br>apps/api/src/__tests__/customs-authorization-center.test.ts<br>apps/api/src/__tests__/customs-authorization-lifecycle-db.test.ts<br>apps/api/src/__tests__/customs-authorization-lifecycle.test.ts |
 | persistence | COVERED | apps/api/src/__tests__/customs-authorization-center-e2e-db.test.ts<br>apps/api/src/__tests__/customs-authorization-lifecycle-db.test.ts<br>apps/api/src/__tests__/customs-authorization-lifecycle.test.ts<br>apps/api/src/__tests__/customs-authorization-route-db.test.ts |
-| db_invariant | COVERED | apps/api/src/__tests__/customs-authorization-lifecycle-db.test.ts<br>apps/api/src/__tests__/customs-authorization-lifecycle.test.ts<br>apps/api/src/__tests__/customs-authorization-route-db.test.ts<br>apps/api/src/__tests__/customs-authorized-signer-db.test.ts |
+| db_invariant | COVERED | apps/api/src/__tests__/customs-authorization-center-e2e-db.test.ts<br>apps/api/src/__tests__/customs-authorization-lifecycle-db.test.ts<br>apps/api/src/__tests__/customs-authorization-lifecycle.test.ts<br>apps/api/src/__tests__/customs-authorization-route-db.test.ts |
 | frontend | COVERED | apps/web/app/customs/authorization/page.tsx<br>apps/web/app/integration-status/page.tsx<br>apps/web/app/integration-status/start-recovery-form.tsx |
 | happy | COVERED | apps/api/src/__tests__/customs-authorization-center-e2e-db.test.ts<br>apps/api/src/__tests__/customs-authorization-center.test.ts<br>apps/api/src/__tests__/customs-authorization-lifecycle-db.test.ts<br>apps/api/src/__tests__/customs-authorization-lifecycle.test.ts |
 | negative | COVERED | apps/api/src/__tests__/customs-authorization-center-e2e-db.test.ts<br>apps/api/src/__tests__/customs-authorization-center.test.ts<br>apps/api/src/__tests__/customs-authorization-lifecycle-db.test.ts<br>apps/api/src/__tests__/customs-authorization-lifecycle.test.ts |

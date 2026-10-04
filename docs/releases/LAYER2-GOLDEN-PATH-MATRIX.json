@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-04T04:36:41.671Z",
+  "generated_at": "2026-10-04T04:46:16.391Z",
   "rule": "COVERED 需存在命名证据文件；否则 GAP",
   "domains": [
     {
@@ -250,10 +250,10 @@
         "db_invariant": {
           "status": "COVERED",
           "evidence": [
+            "apps/api/src/__tests__/customs-authorization-center-e2e-db.test.ts",
             "apps/api/src/__tests__/customs-authorization-lifecycle-db.test.ts",
             "apps/api/src/__tests__/customs-authorization-lifecycle.test.ts",
-            "apps/api/src/__tests__/customs-authorization-route-db.test.ts",
-            "apps/api/src/__tests__/customs-authorized-signer-db.test.ts"
+            "apps/api/src/__tests__/customs-authorization-route-db.test.ts"
           ]
         },
         "frontend": {

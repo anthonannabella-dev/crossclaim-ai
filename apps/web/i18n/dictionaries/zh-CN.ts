@@ -219,7 +219,7 @@ const zhCN = {
     gateReauthorizationRequired: '需要重新授权',
     gateWaitingOnProvider: '等待授权 / 代理提交',
     gateUnknown: '授权状态待确认',
-    reuseNote: '已复用既有代理授权，本单无需重复签署。',
+    reuseNote: '已复用现有有效授权，本单无需重复签署。',
     missingOnlyNote: '只需补齐下列缺失项，其余无需重复提交。',
     reasonsLabel: '需要重新授权的原因',
     statePendingPolicy: '授权要求待确认',

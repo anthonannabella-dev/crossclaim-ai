@@ -1856,3 +1856,7 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 ## 2026-10-04T04:24:21.930Z — CA-5 CLOSED
 - CA-5 FINAL-3 = PASS / CLOSED（MSG-20261004-11，head 3fad4d4）：追回权/申报授权分离 + IOR 有效窗口判定闭环，无残余项。
 - 队列推进：SAFE_CONTINUATION_QUEUE = CA-6（one-click Customs recovery authorization UX wiring，内部编排，零真实外写）。
+
+## 2026-10-04T04:46:15.878Z — CA-6 REVISE（两条窄修）落地
+- ① 目标 broker 绑定：来自 CA-4 CustomsBrokerAuthorizationSession（server truth），与 POA brokerRef 真实比较；A→A 复用、A→B 触发 BROKER_CHANGED、未绑定 → WAITING_ON_PROVIDER（TARGET_BROKER_UNKNOWN，不让客户重签）。
+- ② reuse 文案改为通用「现有有效授权」（5 语言，613 键 parity）。

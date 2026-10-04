@@ -218,7 +218,7 @@ const es: Messages = {
     gateReauthorizationRequired: 'Se requiere nueva autorización',
     gateWaitingOnProvider: 'Esperando autorización / presentación del agente',
     gateUnknown: 'Estado de autorización pendiente',
-    reuseNote: 'Se reutiliza su autorización de agente existente; no hace falta firmar de nuevo para este expediente.',
+    reuseNote: 'Se reutiliza su autorización válida existente; no hace falta firmar de nuevo para este expediente.',
     missingOnlyNote: 'Complete solo los puntos que faltan indicados abajo; no hace falta reenviar lo demás.',
     reasonsLabel: 'Motivo por el que se requiere una nueva autorización',
     statePendingPolicy: 'Requisitos de autorización pendientes',
