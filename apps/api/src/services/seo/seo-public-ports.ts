@@ -23,7 +23,7 @@ import type {
 
 export interface SeoPublicEngine {
   basisKey: string;
-  getPublicInputSchema(): PublicInputSchema | null;
+  getPublicInputSchema(rule: RecoveryRuleDefinition): PublicInputSchema | null;
   runEligibility(input: {
     rule: RecoveryRuleDefinition;
     answers: Record<string, SeoPublicAnswerValue>;
@@ -86,8 +86,10 @@ export function createSeoPublicCheckerPorts(input: CreateSeoPublicCheckerPortsIn
     async listRegisteredBasisKeys() {
       return input.registry.list();
     },
-    async getPublicInputSchema(basisKey: string) {
-      return input.registry.get(basisKey)?.getPublicInputSchema() ?? null;
+    async getPublicInputSchema({ basisKey, rule }) {
+      // MSG-20261005-07 CHANGE G: hand the rule to the engine so it can build
+      // a rule-aware schema instead of a static one.
+      return input.registry.get(basisKey)?.getPublicInputSchema(rule) ?? null;
     },
     async runEligibility({ basisKey, rule, answers }) {
       const engine = input.registry.get(basisKey);

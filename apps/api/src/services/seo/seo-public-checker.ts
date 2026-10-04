@@ -77,7 +77,11 @@ export interface SeoPublicCheckerPorts {
   /** 已注册且可执行的引擎 capability key。 */
   listRegisteredBasisKeys(): Promise<readonly string[]>;
   /** CHANGE A/B：basisKey → public input schema（未注册 = 该能力不可公开，fail-closed）。 */
-  getPublicInputSchema(basisKey: string): Promise<PublicInputSchema | null>;
+  /** MSG-20261005-07 CHANGE G: the rule travels with the request so the engine can build a rule-aware schema. */
+  getPublicInputSchema(input: {
+    basisKey: string;
+    rule: RecoveryRuleDefinition;
+  }): Promise<PublicInputSchema | null>;
   /** 既有 eligibility 引擎（不在 SEO 层重写业务判断）。 */
   runEligibility(input: {
     basisKey: string;
@@ -231,10 +235,10 @@ export async function runPublicSeoChecker(
   // CHANGE A/B：语义白名单 + schema 驱动数值校验（必须在调用任何引擎**之前**完成）。
   // MSG-20261005-06 (5): orchestrate BOTH schemas; each engine sees only its own keys.
   const eligibilitySchema = checkerReady
-    ? await ports.getPublicInputSchema(rule.eligibilityMethod.basisKey)
+    ? await ports.getPublicInputSchema({ basisKey: rule.eligibilityMethod.basisKey, rule })
     : null;
   const calculationSchema = calculatorReady
-    ? await ports.getPublicInputSchema(rule.calculationMethod.basisKey)
+    ? await ports.getPublicInputSchema({ basisKey: rule.calculationMethod.basisKey, rule })
     : null;
   const orchestration = orchestratePublicAnswerSchemas({
     answers: validation.answers,
