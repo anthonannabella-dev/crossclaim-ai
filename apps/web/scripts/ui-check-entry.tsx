@@ -8,6 +8,8 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import CustomerShell from '../app/components/customer-shell';
 import ConnectionManager, { type ConnectionItem } from '../app/components/connection-manager';
 import AccountManagementView from '../app/accounts/account-management-view';
+import RecoveryPipeline from '../app/components/ui/recovery-pipeline';
+import { buildRecoveryPipeline, caseStatusLabel, pipelineStateLabel } from '../app/lib/case-view';
 import InlineNotice from '../app/components/ui/inline-notice';
 import PlatformCard from '../app/components/ui/platform-card';
 import SecurityStrip from '../app/components/ui/security-strip';
@@ -314,6 +316,82 @@ check('connection.empty.and.error.capable', render(<ConnectionManager items={[]}
 
 const accountsHtml = render(<AccountManagementView t={zhCN} locale="zh-CN" />);
 check('accounts.loading.skeleton', accountsHtml.includes('animate-pulse'));
+
+// ⑪ UI-5：案件管线（纯函数 + 渲染）
+const pendingPipeline = buildRecoveryPipeline(
+  {
+    domain: 'PLATFORM',
+    caseStatus: 'COLLECTING_EVIDENCE',
+    claimStatus: null,
+    opportunityStatuses: ['QUALIFIED'],
+    evidenceCount: 2,
+    recoveredAmount: '0.0000',
+  },
+  zhCN,
+);
+check('pipeline.stages.count', pendingPipeline.length === 8);
+check('pipeline.detected.done', pendingPipeline[0]!.state === 'DONE');
+check('pipeline.submission.not.done', pendingPipeline[4]!.state !== 'DONE');
+check('pipeline.submission.hold.hint', pendingPipeline[4]!.hint === zhCN.casePipeline.submissionHold);
+check('pipeline.received.pending', pendingPipeline[7]!.state === 'PENDING');
+
+const completedPipeline = buildRecoveryPipeline(
+  {
+    domain: 'PLATFORM',
+    caseStatus: 'SETTLED',
+    claimStatus: 'APPROVED',
+    opportunityStatuses: ['CONVERTED'],
+    evidenceCount: 3,
+    recoveredAmount: '1200.0000',
+  },
+  zhCN,
+);
+check('pipeline.full.done', completedPipeline.every((stage) => stage.state === 'DONE'));
+
+const rejectedPipeline = buildRecoveryPipeline(
+  {
+    domain: 'PLATFORM',
+    caseStatus: 'CLAIMED',
+    claimStatus: 'REJECTED',
+    opportunityStatuses: ['QUALIFIED'],
+    evidenceCount: 1,
+    recoveredAmount: '0.0000',
+  },
+  zhCN,
+);
+check('pipeline.rejected.blocked', rejectedPipeline.some((stage) => stage.state === 'BLOCKED'));
+
+const customsPipeline = buildRecoveryPipeline(
+  {
+    domain: 'CUSTOMS',
+    caseStatus: 'OPEN',
+    claimStatus: null,
+    opportunityStatuses: ['DETECTED'],
+    evidenceCount: 0,
+    recoveredAmount: null,
+  },
+  zhCN,
+);
+check('pipeline.customs.labels', customsPipeline[0]!.label === zhCN.casePipeline.customsStageDetected);
+check('pipeline.customs.hold.hint', customsPipeline[4]!.hint === zhCN.casePipeline.customsSubmissionHold);
+
+const pipelineHtml = render(
+  <RecoveryPipeline
+    title={zhCN.casePipeline.title}
+    subtitle={zhCN.casePipeline.subtitle}
+    stages={pendingPipeline}
+    labels={{
+      DONE: pipelineStateLabel('DONE', zhCN),
+      CURRENT: pipelineStateLabel('CURRENT', zhCN),
+      PENDING: pipelineStateLabel('PENDING', zhCN),
+      BLOCKED: pipelineStateLabel('BLOCKED', zhCN),
+    }}
+  />,
+);
+check('pipeline.renders.hold', pipelineHtml.includes(zhCN.casePipeline.submissionHold));
+check('pipeline.state.labels', pipelineHtml.includes(zhCN.casePipeline.stateDone) && pipelineHtml.includes(zhCN.casePipeline.stateCurrent));
+check('pipeline.no.fake.autosubmit', !pipelineHtml.includes(zhCN.status.SUBMITTED) || pipelineHtml.includes(zhCN.casePipeline.submissionHold));
+check('case.status.localized', caseStatusLabel('COLLECTING_EVIDENCE', zhCN) === zhCN.caseStatus.COLLECTING_EVIDENCE);
 
 console.log(results.join('\n'));
 if (failures.length > 0) {

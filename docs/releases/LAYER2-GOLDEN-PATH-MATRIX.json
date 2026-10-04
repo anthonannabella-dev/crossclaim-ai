@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-10-04T00:46:22.241Z",
+  "generated_at": "2026-10-04T00:52:21.137Z",
   "rule": "COVERED 需存在命名证据文件；否则 GAP",
   "domains": [
     {
       "id": "platform",
       "name": "Platform Recovery",
       "domain_test_files": 13,
-      "domain_web_files": 16,
+      "domain_web_files": 18,
       "cells": {
         "http": {
           "status": "COVERED",
@@ -227,7 +227,7 @@
       "id": "customs",
       "name": "Customs / Trade Recovery",
       "domain_test_files": 28,
-      "domain_web_files": 10,
+      "domain_web_files": 12,
       "cells": {
         "http": {
           "status": "COVERED",
