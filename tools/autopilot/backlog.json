@@ -1,6 +1,6 @@
 {
-  "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。 MAPPING UPDATE（2026-10-05）：seo-4 / seo-5 已按 MSG-20261005-03 完成；seo-2 / seo-3 仍 IN_PROGRESS（等 PUBLIC API SECURITY AUDIT，公开 HTTP = HOLD）。",
-  "updatedAt": "2026-10-05T06:15:00.000Z",
+  "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。 MAPPING UPDATE（2026-10-05）：seo-4 / seo-5 已按 MSG-20261005-03 完成；seo-2 / seo-3 仍 IN_PROGRESS（等 PUBLIC API SECURITY AUDIT，公开 HTTP = HOLD）。 MAPPING UPDATE（2026-10-05，第二轮）：seo-6 / seo-7 依代码与测试证据标记 COMPLETED；seo-8 保持 IN_PROGRESS（公开 HTTP 合同受 SEO-3 审计门禁）。",
+  "updatedAt": "2026-10-05T06:25:00.000Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -1028,36 +1028,41 @@
     },
     {
       "id": "seo-6-indexability-gate",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "risk_class": "MEDIUM",
       "arch_review_required": false,
       "layer": "TRACK-C/SEO-P3",
       "dependencies": [
         "seo-1-gap-audit-and-page-matrix"
       ],
-      "updated_at": "2026-10-04T06:01:14.998Z"
+      "updated_at": "2026-10-05T06:25:00.000Z",
+      "note": "COMPLETED：indexability gate 驱动 metadata/robots/sitemap 判定，薄内容与缺证据一律 fail-closed；seo-page-plan / seo-recover-route / seo-technical 套件通过，并已按 MSG-20261005-03 对齐 slug-based canonical。",
+      "completed_at": "2026-10-05T06:25:00.000Z"
     },
     {
       "id": "seo-7-analytics-event-contract",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "risk_class": "LOW",
       "arch_review_required": false,
       "layer": "TRACK-C/SEO-P3",
       "dependencies": [
         "seo-1-gap-audit-and-page-matrix"
       ],
-      "updated_at": "2026-10-04T06:01:14.998Z"
+      "updated_at": "2026-10-05T06:25:00.000Z",
+      "note": "COMPLETED：provider-neutral 事件合同（无 PII / 无租户数据，estimate 标记 ESTIMATE_ONLY）；seo-analytics 套件通过。",
+      "completed_at": "2026-10-05T06:25:00.000Z"
     },
     {
       "id": "seo-8-seo-contract-tests",
-      "status": "PENDING",
+      "status": "IN_PROGRESS",
       "risk_class": "MEDIUM",
       "arch_review_required": false,
       "layer": "TRACK-C/SEO-P3",
       "dependencies": [
         "seo-1-gap-audit-and-page-matrix"
       ],
-      "updated_at": "2026-10-04T06:01:14.998Z"
+      "updated_at": "2026-10-05T06:25:00.000Z",
+      "note": "IN_PROGRESS：已有 15 个 seo-* 套件（含 5 例本地化路由合同 + 4 例 canonical↔route shape 回归）全部通过；但公开 HTTP 面（Checker/Calculator 入口）合同必须等 SEO-3 PUBLIC API SECURITY AUDIT 通过后才能定稿 —— 不提前宣称完成。"
     },
     {
       "id": "SEO-4-STAGE-1-recover-route-skeleton",
