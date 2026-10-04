@@ -128793,3 +128793,86 @@ C：Broker POA 撤销时间契约与实际持久化一致
 
 CA-3 FINAL PASS 前，不建议正式进入 CA-4。
 ```
+
+### [MSG-20261004-05] ARCHITECT VERDICT — CUSTOMS AUTHORIZATION CA-3 FINAL = PASS WITH REVISE / CLOSED（A–C 全部落地；唯一非阻塞残余：幂等重放的 observedAt 元数据一致性；允许进入 CA-4）
+
+```text
+CUSTOMS AUTHORIZATION CA-3 FINAL：PASS WITH REVISE。
+
+A–C 三个上一轮硬缺口都已经实质修掉，允许 CA-3 = CLOSED，并进入 CA-4。我只保留一个不阻塞 CA-4 的小修订项。
+
+A — Broker POA 按 brokerRef 隔离：PASS
+
+readAuthorizationState() 对 BROKER_FILED 缺 brokerRef 明确 fail-closed；
+store 查询已支持 organizationId + principalRef + brokerRef；
+resolveBrokerPoaFacts() 也加入 brokerRef 过滤；
+Broker A VERIFIED / Broker B REVOKED 互不污染；
+unknown brokerRef → MISSING。
+
+这一项已经真正闭环。
+
+B — 生命周期幂等 / 并发 exactly-once：PASS
+
+lifecycleKey 已持久化并 tenant-unique；
+digest 不再包含 observedAt，默认 server-derived effectiveAt 也不再破坏重放；
+同 key + 同 payload → 返回既有 fact；
+同 key + 不同 payload → IDEMPOTENCY_KEY_CONFLICT；
+unique race 后会回读 lifecycleKey 再按 immutable payload 比较；
+真实 PG 已覆盖双并发只落一条事实。
+
+这解决了上一轮最关键的重试安全问题。
+
+C — Broker POA 生命周期字段对齐：PASS
+
+verifiedAt / revokedAt / supersededAt / lifecycleKey 已落 Schema；
+migration 有 legacy backfill；
+VERIFIED→verifiedAt；
+revokedAt ⇔ REVOKED；
+supersededAt >= effectiveAt；
+append-only trigger 在回填后恢复；
+Prisma 写入现在也实际写 verifiedAt / revokedAt / lifecycleKey。
+
+Append-only / read model：PASS
+
+GRANT / RENEW / REVOKE 仍只追加；
+历史行不 UPDATE；
+CA-2 resolver + CA-1 readiness 组合保持；
+production boundary 没有被突破。
+
+唯一残余：非阻塞 REVISE
+
+幂等重放命中既有 fact 时，返回结果里的：
+
+observedAt
+
+现在使用的是“本次重试调用的 now”，不是“已存在 fact 的真实 observedAt”。
+
+于是可能出现：
+
+factId = 同一个
+contentDigest = 同一个
+但 replay response.observedAt = 新时间
+
+这会让响应元数据和数据库事实不完全一致。
+
+最小修订：
+findByLifecycleKey() 顺便返回 persisted observedAt，命中 replay / race fallback 时返回数据库里的 observedAt。
+
+这不影响授权判定、幂等唯一性或安全边界，所以不阻塞 CA-3 CLOSED，也不阻塞 CA-4。
+
+最终裁决
+
+CA-3 = PASS WITH REVISE / CLOSED
+
+允许进入 CA-4。
+
+CA-4 可以开始做 BrokerAuthorizationSession 内部契约，但继续保持：
+
+no real Broker/provider connection
+no CBP/ACE/ABI write
+no production credentials
+no external submission
+no real filing
+
+必须修集合仅剩上面那个 replay observedAt 元数据一致性问题，可在进入 CA-4 前后顺手收掉。
+```

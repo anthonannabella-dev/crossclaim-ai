@@ -1,8 +1,8 @@
 # FINAL ACCEPTANCE REPORT（自动生成，请勿手改）
 
-- 生成时间：2026-10-04T02:40:51.516Z
-- 单一权威矩阵：`docs/releases/ACCEPTANCE-MATRIX.json` @c6f4ff8
-- acceptance HEAD：`c6f4ff8`
+- 生成时间：2026-10-04T02:47:35.632Z
+- 单一权威矩阵：`docs/releases/ACCEPTANCE-MATRIX.json` @47855e9
+- acceptance HEAD：`47855e9`
 - 协议：`docs/releases/FINAL-ACCEPTANCE-PROTOCOL.md`（三层验收；禁止自证）
 - 状态：CODE_COMPLETE=NO · INTEGRATION_COMPLETE=NO · REAL_VALIDATION_COMPLETE=NO · PRODUCTION_READY=NO
 - INTERNAL_READY=NO；AUTONOMOUS_INTERNAL_WORK=RUNNING
@@ -36,27 +36,26 @@
 
 ## 2. 打开的内部项（SAFE_CONTINUATION_QUEUE）
 
-- ca-3-authorization-lifecycle-persistence
 - ca-4-broker-authorization-session-contract
 - ca-5-customs-authorization-center-ui
 - ca-6-one-click-customs-auth-ux
 
 ### Layer 1 未通过检查（final-status 计算器输出；UNVERIFIED = 未绑定当前 HEAD 的实证）
 
-- L1-01_safe_continuation_queue_zero → false（open backlog items: 4）
-- L1-02_no_open_internal_items → false（open internal: ca-3-authorization-lifecycle-persistence,ca-4-broker-authorization-session-contract,ca-5-customs-authorization-center-ui,ca-6-one-click-customs-auth-ux）
+- L1-01_safe_continuation_queue_zero → false（open backlog items: 3）
+- L1-02_no_open_internal_items → false（open internal: ca-4-broker-authorization-session-contract,ca-5-customs-authorization-center-ui,ca-6-one-click-customs-auth-ux）
 - L1-03_no_open_markers → false（arch_pending=0 awaiting_verdict=false）
-- L1-04_full_ci_success_on_head → false（acceptance_head=c6f4ff8 ci_head=f5bdd92 ci=in_progress run=37143524364）
-- L1-05_pg_regression_passed → UNVERIFIED（pg_regression recorded at fd4c675 ≠ acceptance head c6f4ff8（且中间存在非簿记变更））
-- L1-06_fresh_db_migration_passed → UNVERIFIED（fresh_db_migration recorded at bd87ffb ≠ acceptance head c6f4ff8（且中间存在非簿记变更））
-- L1-07_api_typecheck_passed → UNVERIFIED（typecheck_api recorded at bd87ffb ≠ acceptance head c6f4ff8（且中间存在非簿记变更））
-- L1-08_web_typecheck_build_passed → UNVERIFIED（typecheck_web recorded at bd87ffb ≠ acceptance head c6f4ff8（且中间存在非簿记变更））
-- L1-09_no_skipped_critical_tests → UNVERIFIED（tests_no_skipped recorded at bd87ffb ≠ acceptance head c6f4ff8（且中间存在非簿记变更））
-- L1-10_git_working_tree_clean → false（dirty entries: 2）
-- L1-11_docs_state_consistent → UNVERIFIED（docs_sync recorded at bd87ffb ≠ acceptance head c6f4ff8（且中间存在非簿记变更））
-- L1-12_schema_invariants_verified → UNVERIFIED（schema_invariants recorded at bd87ffb ≠ acceptance head c6f4ff8（且中间存在非簿记变更））
-- L1-13_negative_paths_covered → UNVERIFIED（negative_paths recorded at bd87ffb ≠ acceptance head c6f4ff8（且中间存在非簿记变更））
-- L1-14_real_pg_e2e_not_mock_only → UNVERIFIED（pg_e2e_real recorded at bd87ffb ≠ acceptance head c6f4ff8（且中间存在非簿记变更））
+- L1-04_full_ci_success_on_head → false（acceptance_head=47855e9 ci_head=f5bdd92 ci=in_progress run=37143524364）
+- L1-05_pg_regression_passed → UNVERIFIED（pg_regression recorded at fd4c675 ≠ acceptance head 47855e9（且中间存在非簿记变更））
+- L1-06_fresh_db_migration_passed → UNVERIFIED（fresh_db_migration recorded at bd87ffb ≠ acceptance head 47855e9（且中间存在非簿记变更））
+- L1-07_api_typecheck_passed → UNVERIFIED（typecheck_api recorded at bd87ffb ≠ acceptance head 47855e9（且中间存在非簿记变更））
+- L1-08_web_typecheck_build_passed → UNVERIFIED（typecheck_web recorded at bd87ffb ≠ acceptance head 47855e9（且中间存在非簿记变更））
+- L1-09_no_skipped_critical_tests → UNVERIFIED（tests_no_skipped recorded at bd87ffb ≠ acceptance head 47855e9（且中间存在非簿记变更））
+- L1-10_git_working_tree_clean → false（dirty entries: 5）
+- L1-11_docs_state_consistent → UNVERIFIED（docs_sync recorded at bd87ffb ≠ acceptance head 47855e9（且中间存在非簿记变更））
+- L1-12_schema_invariants_verified → UNVERIFIED（schema_invariants recorded at bd87ffb ≠ acceptance head 47855e9（且中间存在非簿记变更））
+- L1-13_negative_paths_covered → UNVERIFIED（negative_paths recorded at bd87ffb ≠ acceptance head 47855e9（且中间存在非簿记变更））
+- L1-14_real_pg_e2e_not_mock_only → UNVERIFIED（pg_e2e_real recorded at bd87ffb ≠ acceptance head 47855e9（且中间存在非簿记变更））
 
 ## 3. 外部 / 宿主依赖（不得自证完成）
 

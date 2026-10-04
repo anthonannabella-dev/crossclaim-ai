@@ -53,12 +53,12 @@ function harness() {
       const poaRow = poa.find((row, index) => 'poa-' + (index + 1) === key || organizationId === row.organizationId && row.lifecycleKey === lifecycleKey);
       if (poaRow) {
         const index = poa.indexOf(poaRow);
-        return { factId: 'poa-' + (index + 1), contentDigest: poaRow.contentDigest };
+        return { factId: 'poa-' + (index + 1), contentDigest: poaRow.contentDigest, observedAt: poaRow.observedAt };
       }
       const signerRow = signer.find((row) => organizationId === row.organizationId && row.lifecycleKey === lifecycleKey);
       if (signerRow) {
         const index = signer.indexOf(signerRow);
-        return { factId: 'signer-' + (index + 1), contentDigest: signerRow.contentDigest };
+        return { factId: 'signer-' + (index + 1), contentDigest: signerRow.contentDigest, observedAt: signerRow.observedAt };
       }
       return null;
     },

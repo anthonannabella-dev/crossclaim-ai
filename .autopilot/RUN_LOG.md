@@ -1808,3 +1808,6 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 
 ## 2026-10-04T02:20:26.884Z — CA-3 VERDICT
 - MSG-20261004-04 = REVISE（A–C 必改）；已逐字归档并 FULL_COPY_OK。
+
+## 2026-10-04T02:47:34.663Z — CA-3 CLOSED
+- CA-3 FINAL = PASS WITH REVISE / CLOSED（MSG-20261004-05）；残余 replay observedAt 已修；队列推进 CA-4…CA-6。

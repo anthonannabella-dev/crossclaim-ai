@@ -109,7 +109,7 @@ export interface SignerFactInsert {
 
 export interface AuthorizationLifecycleStores {
   appendPoa(row: PoaFactInsert): Promise<{ id: string }>;
-  findByLifecycleKey(organizationId: string, lifecycleKey: string): Promise<{ factId: string; contentDigest: string } | null>;
+  findByLifecycleKey(organizationId: string, lifecycleKey: string): Promise<{ factId: string; contentDigest: string; observedAt: Date } | null>;
   appendSigner(row: SignerFactInsert): Promise<{ id: string }>;
   listPoa(organizationId: string, principalRef: string, brokerRef?: string): Promise<BrokerPoaRow[]>;
   listSigner(organizationId: string, principalRef: string): Promise<AuthorizedSignerRow[]>;
@@ -521,14 +521,16 @@ export function createPrismaAuthorizationLifecycleStores(prisma: PrismaClient): 
     async findByLifecycleKey(organizationId, lifecycleKey) {
       const poa = await prisma.customsBrokerPoaFact.findFirst({
         where: { organizationId, lifecycleKey },
-        select: { id: true, contentDigest: true },
+        select: { id: true, contentDigest: true, observedAt: true },
       });
-      if (poa) return { factId: poa.id, contentDigest: poa.contentDigest };
+      if (poa) return { factId: poa.id, contentDigest: poa.contentDigest, observedAt: poa.observedAt };
       const signer = await prisma.customsAuthorizedSignerFact.findFirst({
         where: { organizationId, lifecycleKey },
-        select: { id: true, contentDigest: true },
+        select: { id: true, contentDigest: true, observedAt: true },
       });
-      return signer ? { factId: signer.id, contentDigest: signer.contentDigest } : null;
+      return signer
+        ? { factId: signer.id, contentDigest: signer.contentDigest, observedAt: signer.observedAt }
+        : null;
     },
 
     async appendSigner(row) {
