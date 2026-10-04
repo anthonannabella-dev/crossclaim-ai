@@ -31,3 +31,17 @@
 - `CUSTOMER_UI_HARDCODED_STRING_COUNT = 0`；5 语言 key parity = 100%。
 - 未注册任何公开 Checker POST 路由；`PUBLIC_CHECKER_HTTP` 仍 HOLD。
 - `TRANSPORT=false`、`EXTERNAL_WRITE=HOLD`、`PAYMENT=HOLD`、生产凭据 ABSENT；`FINAL_ACCEPTANCE_HEAD=0f7f7ac` 未动。
+
+## 5. 阶段 1 测试用例清单（不可省略，逐条命名）
+
+| 用例 | 输入 | 期望 |
+| --- | --- | --- |
+| RECOVER_SLUG_NOT_FOUND | 未注册 slug | 统一 404，不泄漏注册表（不做 fingerprinting） |
+| RECOVER_SLUG_DUPLICATE | 同一 slug 两条生效 RuleVersion | fail-closed：不进 sitemap、robots=noindex、canonical 不指向该页 |
+| RECOVER_RULE_EXPIRED | RuleVersion effectiveTo 已过 | 不 INDEX、不进 sitemap、页面显示升级提示（文案来自 i18n key） |
+| RECOVER_VERSION_CONFLICT | canonical selector 判定 >1 active | 与 DUPLICATE 同口径 fail-closed，且记录 reasonCode |
+| RECOVER_LOCALE_FALLBACK | 缺失某语言内容 | 回退到默认语言并输出 hreflang 互指 + x-default，不产出空壳页面 |
+| RECOVER_NO_CHECKER_HTTP | 任意公开请求 | 不存在 Checker POST 路由（api-contract gate 断言） |
+
+> 每条用例都必须只消费生效中的 RuleVersion / RecoveryRuleDefinition v1，不得在测试或页面里硬编码规则、资格、截止日、计算或费率。
+
