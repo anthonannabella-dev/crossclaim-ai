@@ -3,6 +3,8 @@
  *   · 读路径 fail-closed：0 条 → BINDING_UNKNOWN；1 条 → 解析成功；>1 条适用 → BINDING_AMBIGUOUS；
  *   · 写入同事务：lineage 失败 → binding 一起回滚（不留半截状态）；
  *   · 并发 rebind：行锁串行化 → lineage 不丢（两条事实都在）。
+ *   · 租户隔离：别的租户查不到（BINDING_UNKNOWN / providerTenantRef=null），
+ *     且跨租户 lineage 写入被 DB tenant-integrity trigger 拒绝。
  */
 
 import { PrismaClient } from '@prisma/client';
@@ -178,5 +180,45 @@ describe('C18-6 Prisma store (PostgreSQL)', () => {
     expect(lineage).toHaveLength(3);
     expect(lineage.map((entry) => entry.event)).toEqual(['BOUND', 'REBOUND', 'REBOUND']);
     expect(await prisma.customsProviderTenantBinding.count()).toBe(1);
+  });
+
+  it('tenant isolation：别的租户查不到、也不能挂到别人的 binding 上', async () => {
+    const store = createPrismaProviderTenantBindingStore(prisma);
+    const created = await store.upsertWithLineage({
+      row: row(),
+      event: 'BOUND',
+      actorRef: 'actor:ops',
+      occurredAt: NOW,
+      snapshotDigest: DIGEST_A,
+    });
+
+    // 读：换 organizationId 后必须查不到（不是报错、也不是"拿到别人的"）。
+    const otherTenant = await store.resolve({
+      organizationId: 'cc180600-0000-4000-8000-000000000009',
+      providerId: 'provider:customs-a',
+      principalRef: 'ior:acme',
+      jurisdiction: 'US',
+    });
+    expect(otherTenant.ok).toBe(false);
+    expect(otherTenant.reasonCode).toBe('BINDING_UNKNOWN');
+    expect(otherTenant.providerTenantRef).toBeNull();
+
+    // 写：把 lineage 挂到别的租户名下必须被 DB 的 tenant-integrity trigger 拒绝。
+    await expect(
+      prisma.customsProviderTenantBindingLineage.create({
+        data: {
+          organizationId: 'cc180600-0000-4000-8000-000000000009',
+          bindingId: created.bindingId,
+          event: 'BOUND' as never,
+          actorRef: 'actor:attacker',
+          note: null,
+          snapshot: { forged: true } as never,
+          snapshotDigest: DIGEST_B,
+          occurredAt: NOW,
+          sourceRef: null,
+        },
+      }),
+    ).rejects.toThrow();
+    expect(await prisma.customsProviderTenantBindingLineage.count()).toBe(1);
   });
 });
