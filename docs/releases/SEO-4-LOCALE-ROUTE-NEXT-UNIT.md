@@ -1,4 +1,9 @@
 # SEO-4 下一单元 — web `[locale]` 路由与可达语言收窄
+> **状态：DONE（本单元已完成）** —— `apps/web/app/[locale]/recover/[slug]/page.tsx` 已落地，
+> 只服务 zh/de/ja/es，en 仍由 `/recover/[slug]` 承担；两条路由共用 `RecoverView`；
+> 文案按 URL locale 取（`getServerMessages(locale)`）；新增 5 例路由合同测试；
+> web tsc 0、合同测试 8/8、i18n locales=5 keys=644 hardcoded=0。
+> 因此「导入的 reachableLocales = 全部 5 语言」现在与 web 真实可达语言**一致**，无需收窄。
 
 背景：MSG-20261005-03 已把 URL 契约定为 OPTION_A（canonical = `/{locale}/recover/{slug}`，
 hreflang 走 STRICT_REACHABILITY）。API 侧已落地（HEAD f9f4765）。
