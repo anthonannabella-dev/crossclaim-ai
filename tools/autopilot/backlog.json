@@ -1,6 +1,6 @@
 {
   "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。",
-  "updatedAt": "2026-10-05T00:57:00.000Z",
+  "updatedAt": "2026-10-05T01:01:00.000Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -1379,7 +1379,14 @@
       "title": "随系统自动启动与崩溃自动拉起（复用仓库现有部署标准；防 crash-loop）",
       "scope": "systemd / Docker Compose / PM2 / 现有 supervisor 择一复用；达到阈值 → RSI_DEGRADED 并通知 OWNER",
       "acceptance_criteria": "纯函数/可运行代码 + 命名用例；api tsc 0；不新增 schema（如需另送 Schema Delta 审计）",
-      "status": "READY"
+      "status": "PARTIAL_IMPLEMENTED_PENDING_CI",
+      "implementation_head": "(this commit)",
+      "artifacts": [
+        "apps/api/src/runtime/rsi-supervisor-policy.ts",
+        "apps/api/src/__tests__/rsi-supervisor-policy.test.ts"
+      ],
+      "evidence": "vitest rsi-supervisor-policy 4/4；api tsc 0",
+      "remaining": "按 DEPLOYMENT.md 的既有部署方式接线 supervisor 自启（仓库无 compose/pm2/systemd；生产部署为 HOST APPROVAL REQUIRED）"
     },
     {
       "id": "RSI-RT-03-health-state",
