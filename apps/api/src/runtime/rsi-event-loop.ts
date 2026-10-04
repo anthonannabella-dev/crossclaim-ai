@@ -21,7 +21,7 @@ import type { RsiContinuationOutcome } from '../services/autonomy/rsi-continuati
 
 export interface RsiEventSources {
   /** 只读：最近的 CI 运行结果（宿主负责真实读取）。 */
-  readCi?: () => Promise<readonly RsiCiOutcome[]>;
+  readCi?: () => Promise<readonly RsiCiOutcome[] | undefined>;
   /** 只读：最近一次测试结果。 */
   readTests?: () => Promise<{ fingerprint: string; passed: boolean } | undefined>;
   /** 只读：最近一条裁决（若已消费则返回 undefined）。 */
