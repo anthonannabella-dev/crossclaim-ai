@@ -2,14 +2,14 @@
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
   "head": "17fda50",
   "status": "RECONCILED",
-  "current_task": "C18-6 完成（离线契约层）；紧接着 C18-7",
+  "current_task": "SEO-2 五组必修已落地；下一步 SEO-3（公开只读 Checker/Calculator, PUBLIC API SECURITY AUDIT）与 C18-7 并行",
   "next_task": "SEO-3 公开只读 Checker/Calculator（public API security boundary，需审计）",
   "send_head": "07b7009",
   "decision_head": "07b7009",
   "last_chatgpt_message": "MSG-20261004-16",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-04T06:08:14.621Z",
+  "updated_at": "2026-10-04T06:12:20.135Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -5046,9 +5046,9 @@
   "awaiting_verdict": null,
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-04T06:08:22.385Z",
-    "head": "63c451c",
-    "acceptance_head": "63c451c",
+    "computed_at": "2026-10-04T06:12:28.730Z",
+    "head": "3fce2ca",
+    "acceptance_head": "3fce2ca",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5140,48 +5140,48 @@
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=63c451c ci_head=8f32fce ci=pending（commit 后记录；此前 completed head 全 success） run=37143524364"
+        "evidence": "acceptance_head=3fce2ca ci_head=8f32fce ci=pending（commit 后记录；此前 completed head 全 success） run=37143524364"
       },
       "L1-05_pg_regression_passed": {
         "status": "UNVERIFIED",
-        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head 63c451c（且中间存在非簿记变更）"
+        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head 3fce2ca（且中间存在非簿记变更）"
       },
       "L1-06_fresh_db_migration_passed": {
         "status": "UNVERIFIED",
-        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head 63c451c（且中间存在非簿记变更）"
+        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head 3fce2ca（且中间存在非簿记变更）"
       },
       "L1-07_api_typecheck_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head 63c451c（且中间存在非簿记变更）"
+        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head 3fce2ca（且中间存在非簿记变更）"
       },
       "L1-08_web_typecheck_build_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head 63c451c（且中间存在非簿记变更）"
+        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head 3fce2ca（且中间存在非簿记变更）"
       },
       "L1-09_no_skipped_critical_tests": {
         "status": "UNVERIFIED",
-        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head 63c451c（且中间存在非簿记变更）"
+        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head 3fce2ca（且中间存在非簿记变更）"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
         "status": false,
-        "evidence": "dirty entries: 3"
+        "evidence": "dirty entries: 4"
       },
       "L1-11_docs_state_consistent": {
         "status": "UNVERIFIED",
-        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head 63c451c（且中间存在非簿记变更）"
+        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head 3fce2ca（且中间存在非簿记变更）"
       },
       "L1-12_schema_invariants_verified": {
         "status": "UNVERIFIED",
-        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head 63c451c（且中间存在非簿记变更）"
+        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head 3fce2ca（且中间存在非簿记变更）"
       },
       "L1-13_negative_paths_covered": {
         "status": "UNVERIFIED",
-        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head 63c451c（且中间存在非簿记变更）"
+        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head 3fce2ca（且中间存在非簿记变更）"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
         "status": "UNVERIFIED",
-        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head 63c451c（且中间存在非簿记变更）"
+        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head 3fce2ca（且中间存在非簿记变更）"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
@@ -6059,7 +6059,7 @@
       "API.md / DOMAIN_MODEL.md / architecture-contract 计数 77 → 79"
     ]
   },
-  "next_execution_unit": "c18-7-provider-authorization-lifecycle",
+  "next_execution_unit": "seo-3-public-checker-calculator（+ c18-7 并行）",
   "customer_ui_commercialization": {
     "at": "2026-10-04T01:21:55.949Z",
     "authorization": "MSG-20261004-01（CUSTOMER UI/UX COMMERCIALIZATION — IMPLEMENTATION AUTHORIZED）",
@@ -6449,17 +6449,18 @@
     ],
     "note": "C18-6 本次只落地 server-derived ProviderTenantBinding 契约/resolver 端口/跨租户隔离 fail-closed；ProviderTenantBinding 持久化（新表）仍待 Schema Delta 审计后再做。"
   },
-  "last_heartbeat_at": "2026-10-04T06:08:14.621Z",
-  "waiting_for_verdict": "SEO-2 recovery rule contract（待送审）",
-  "last_completed_unit": "c18-6-provider-tenant-account-lineage",
+  "last_heartbeat_at": "2026-10-04T06:12:20.135Z",
+  "waiting_for_verdict": "none（SEO-2 裁决已归档：REVISE）",
+  "last_completed_unit": "seo-2-revise（MSG-20261004-17 五组必修）",
   "hold_external": true,
   "track_c_seo_p3": {
-    "at": "2026-10-04T06:03:01.194Z",
+    "at": "2026-10-04T06:12:20.135Z",
     "main_line": "TRACK C / SEO P3 — programmatic SEO + free checker/calculator acquisition engine（与 C18 并行）",
     "gap_audit_doc": "docs/releases/SEO-P3-GAP-AUDIT.md",
     "completed": [
       "seo-1-gap-audit-and-page-matrix",
-      "seo-2-recovery-rule-definition-v1"
+      "seo-2-recovery-rule-definition-v1",
+      "seo-2-revise-5-fixes"
     ],
     "first_batch_pages": 28,
     "default_index_policy": "NOINDEX（通过 indexability gate 才 INDEX）",
@@ -6521,6 +6522,24 @@
     "production_credentials": "HOLD",
     "awaiting_audit": [
       "seo-2-recovery-rule-definition-v1"
-    ]
+    ],
+    "msg_20261004_17": {
+      "verdict": "REVISE",
+      "reviewed_head": "63c451c",
+      "archive": "AI-ARCHITECT-INBOX.md",
+      "archived_at": "2026-10-04T06:10:17.308Z",
+      "seo_1": "PASS",
+      "seo_2": "NOT_CLOSED",
+      "seo_3": "AUTHORIZED_TO_CONTINUE (PUBLIC API SECURITY AUDIT required)",
+      "c18_6": "AUTHORIZED_TO_CONTINUE_IN_PARALLEL",
+      "required_fixes": [
+        "generalize submissionMethod into cross-domain submission/execution semantics + jurisdictionScope GLOBAL/COUNTRY/REGION",
+        "add real checker engine binding eligibilityMethod.basisKey and relatedRuleRefs",
+        "canonical selector must pick the single currently-effective version; >1 active = conflict/NOINDEX; no ruleVersion string ordering",
+        "THIN_CONTENT must not rely on caller booleans before SEO-6 INDEX; use renderer-derived signals",
+        "keep RuleVersion.definition JSON, no Schema change; add typed codec, remove/validate ruleVersion/effectiveFrom/effectiveTo double source of truth, complete runtime validation"
+      ]
+    },
+    "seo_2_status": "REVISE_LANDED（待 SEO-2 FINAL + SEO-3 public API security checkpoint 一起送审）"
   }
 }

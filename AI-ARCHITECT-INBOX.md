@@ -130963,3 +130963,321 @@ C18-2 = PASS，C18-3 = PASS；C18-4 = PASS WITH PRODUCTION RESIDUAL；C18-5 = RE
 
 边界继续保持：REAL_BROKER=NO / REAL_FILING=NO / REAL_TRANSPORT=HOLD / PRODUCTION_ENABLEMENT=HOLD。当前仍然可以写真实 adapter 骨架，但不能开启真实请求。GitHub 在我本次查询 ee80fb3 时仍未返回可独立确认的 workflow run/status，因此测试数字我作为送审证据接受，但不表述为我已独立确认 GitHub CI SUCCESS。
 ```
+
+### [MSG-20261004-17] ARCHITECT VERDICT — TRACK C / SEO P2 RECOVERY RULE DEFINITION v1 = REVISE（reviewed HEAD = 63c451c；SEO-1 = PASS；SEO-2 = NOT_CLOSED；SEO-3 = AUTHORIZED_TO_CONTINUE 但必须单独做 PUBLIC API SECURITY AUDIT；五组最小必修：① submissionMethod 泛化为跨域 submission/execution 语义 + jurisdictionScope GLOBAL/COUNTRY/REGION；② 增加真实 Checker 引擎绑定 eligibilityMethod.basisKey + relatedRuleRefs；③ canonical selector 改为「当前 now 唯一有效版本」，多 active 直接 conflict，不再做 ruleVersion 字符串排序；④ THIN_CONTENT 不得靠 caller boolean 自证，SEO-6 INDEX 前用 renderer-derived 可验证信号；⑤ 保持 RuleVersion.definition JSON 不改 Schema，新增 typed codec 并消除/校验 version/effectiveFrom/effectiveTo 双事实 + 补全 runtime validation；C18-6 = AUTHORIZED_TO_CONTINUE_IN_PARALLEL；REAL_TRANSPORT/PRODUCTION_ENABLEMENT/PAYMENT = HOLD）
+
+```text
+ARCHITECT VERDICT：REVISE
+
+我按 reviewed HEAD = 63c451c（完整 SHA 63c451cfe0ef34538cd7ea909b4ae38d15ae4c4a）重新检查了 RecoveryRuleDefinition v1、6 组测试、SEO P3 28 页矩阵，以及现有 Prisma RuleVersion。
+
+方向是正确的：Rule 单源 → Checker/Calculator → SEO 页面 这条架构我认可。但当前 v1 还没有真正覆盖首批 28 页，尤其存在一个明显问题：submissionMethod 目前其实是 Customs-only。
+
+① 字段集：REVISE，当前不能完整承载 28 页
+
+当前：
+
+纯文本
+BROKER_FILED
+SELF_FILED
+SERVICE_PROVIDER_TRANSMIT
+
+适合 Customs，但无法准确描述：
+
+• Amazon FBA reimbursement
+• UPS/FedEx/DHL claim
+• TikTok/Walmart settlement dispute
+• Stripe/PayPal dispute
+• Shopify chargeback
+
+所以 RecoveryRuleDefinition 现在虽然叫跨域规则，但执行路由仍是 Customs 语义。
+
+必须修 3 个契约点：
+
+第一，把 submissionMethod 改成真正 provider-neutral 的执行/提交模式。可以是更通用的 submissionMode / executionRouteKey，不要让 Amazon 页面假装是 SERVICE_PROVIDER_TRANSMIT。
+
+第二，Checker 需要一个和 Calculator basisKey 对称的真实引擎绑定，例如：
+
+纯文本
+eligibilityMethod.basisKey
+
+现在这些：
+
+纯文本
+requiresIorIdentity
+requiresBrokerPoa
+minimumEvidenceCount
+
+只能描述 Customs 元数据，不能执行：
+
+“UPS late delivery 是否符合退款”
+“Amazon inbound discrepancy 是否符合赔偿”
+“Stripe dispute evidence 是否充分”
+
+Checker 不能靠这些 booleans 自己发明业务逻辑。
+
+第三，SEO-1 已明确写了：
+
+related recovery rules 依赖 Rule 关联字段
+
+但 SEO-2 还没有关联字段。
+
+至少增加类似：
+
+纯文本
+relatedRuleRefs[]
+
+或 relatedRecoveryTypes[]。
+
+其中我更推荐 opaque relatedRuleRefs，不要依赖可变 slug。
+
+evidenceMinimumsByRemedy 暂时不需要；一个 RuleDefinition 已对应一个具体 recoveryType。supportedLocales 也不应该塞进业务 Rule，本质属于 SEO/i18n presentation 层。
+
+另外，当前 country 强制两位国家码：
+
+TypeScript
+/^[A-Z]{2}$/
+
+对首批 Amazon/Carrier/Dispute 页面可能过窄。不要为了页面硬填 US。建议升级成显式：
+
+纯文本
+jurisdictionScope =
+GLOBAL
+COUNTRY
+REGION
+
+而不是伪造国家。
+
+② Indexability gate：方向 PASS，但 THIN_CONTENT 现在太容易自证
+
+默认：
+
+NOINDEX，全部门槛通过才 INDEX
+
+这个原则完全正确。
+
+但现在：
+
+TypeScript
+sections: {
+  problem: boolean;
+  eligibility: boolean;
+  evidence: boolean;
+  calculation: boolean;
+}
+
+本质上是调用方说：
+
+“我这个页面不是 thin content。”
+
+这不够。
+
+最终 SEO-6 切 INDEX 前，必须改成机器可验证信号，例如 renderer 计算：
+
+纯文本
+problemContentLength
+eligibilityContentLength
+evidenceContentLength
+calculationContentLength
+uniqueContentDigest
+sourceBackedSections
+
+或者等价的 render-derived metrics。
+
+也就是说：
+
+boolean 可以用于开发阶段，但不能成为 production INDEX 的最终证据。
+
+还有一点：
+
+TypeScript
+if (input.rule.submissionMethod === undefined)
+
+当前实际上几乎是死门槛，因为 submissionMethod 是 required 字段。真正的 NO_RECOVERY_CAPABILITY 应检查：
+
+对应 basisKey / engine capability 是否真实注册并可执行，
+
+而不是字段是否存在。
+
+③ Canonical / 多版本冲突：冲突原则 PASS，canonical selector 必须修
+
+这一条：
+
+同 slug 存在多个同时生效版本 → conflict → NOINDEX
+
+PASS。
+
+但：
+
+TypeScript
+selectCanonicalRecoveryRuleVersion(rules)
+
+现在存在两个问题。
+
+它没有接收 now，所以可能选中：
+
+• 未来尚未生效版本
+• 已经过期版本
+
+而且相同 effectiveFrom 时使用：
+
+纯文本
+ruleVersion 字符串排序
+
+会出现类似：
+
+纯文本
+v2
+v10
+
+语义不可靠。
+
+正确规则应该更简单：
+
+纯文本
+按当前 now 过滤有效版本
+↓
+0 个 → no canonical
+1 个 → canonical
+>1 个 → conflict / NOINDEX
+
+不要在两个同时有效的版本之间靠 ruleVersion 排序偷偷选一个。
+
+所以：
+
+canonicalSlug 当前不必新增。
+slug 本身可以作为稳定公开 URL identity。
+
+supersedes 当前也不是必需。
+
+只要：
+
+纯文本
+effective window 不重叠
++ 同 slug 唯一 active version
+
+已经足够。
+未来如果出现 slug rename / redirect，再在 SEO-4 增加 redirect/canonical lineage。
+
+④ RuleVersion.definition：不要现在新增 Schema
+
+这里我明确建议：
+
+保持现有 RuleVersion.definition Json。
+
+因为数据库已经有：
+
+纯文本
+RuleVersion.version
+RuleVersion.effectiveFrom
+RuleVersion.effectiveTo
+RuleVersion.source
+RuleVersion.definition Json
+
+现在再新建 typed columns/table，很容易制造第二规则事实源。
+
+但必须补一个 typed DB boundary，例如：
+
+纯文本
+RuleVersion DB row
+        ↓
+parse/validate definition JSON
+        ↓
+ResolvedRecoveryRuleDefinition
+
+而且数据库顶层：
+
+纯文本
+version
+effectiveFrom
+effectiveTo
+
+必须是权威值。
+
+当前 RecoveryRuleDefinition 又包含：
+
+纯文本
+ruleVersion
+effectiveFrom
+effectiveTo
+
+如果这些也持久化进 JSON，就形成双事实。二选一即可：
+
+1. JSON 不再保存这三个字段，由 DB row 注入； 推荐。
+2. 暂时保留 JSON 字段，但加载时要求和 DB columns 严格相等，否则 fail-closed 。
+
+不需要 Schema Delta。
+
+另外必须补一层 runtime JSON 校验
+
+因为 DB definition 是 JSON，TypeScript 类型本身不能保护数据库内容。当前 validator 还有几个缺口：
+
+POLICY deadline 注释写的是 STATUTORY/POLICY 都需要 days + source，但代码只检查 STATUTORY source。 还应该验证：
+
+• STATUTORY/POLICY days > 0
+• sourceReferenceId 必须真的存在于 sourceReferences[].id
+• supportedMode 必须白名单，而不是任意 string
+• ctaMode runtime 白名单
+• requiredEvidence 与 minimumEvidenceCount 基本一致性
+• basisKey 非空
+
+这些可以一起做，不需要拆审计。
+
+⑤ SEO-3 与 C18-6
+
+允许 SEO-3 继续推进并单独送审。
+
+但有一个限制：
+
+SEO-3 可以现在开发：
+
+纯文本
+public read-only API
+anonymous security boundary
+rate limit
+input allowlist
+no PII
+no tenant data
+no DB write
+no external write
+estimate-only
+
+但 Checker/Calculator 的业务结果必须来自：
+
+纯文本
+server-resolved active RuleVersion
++ eligibility/calculation basisKey
++ existing engine
+
+不能在 SEO-3 里重新硬编码一套 Amazon/Customs/Carrier 判断。
+
+同时：
+
+C18-6 可以继续并行，互不阻塞。
+
+最小必须修集合
+
+我只要求 SEO-2 收口这 5 组：
+
+1. 把 Customs-only submissionMethod 泛化为跨域 submission/execution 语义，并支持 global jurisdiction。
+2. 增加真实 Checker 引擎绑定 eligibility basisKey ，以及 relatedRuleRefs 。
+3. canonical selector 改为 当前有效版本唯一选择 ；多 active 直接 conflict，不再靠字符串 ruleVersion 排序。
+4. THIN_CONTENT 最终不能靠 caller boolean 自证；SEO-6 INDEX 前换成 render-derived 可验证信号。
+5. 保持现有 RuleVersion.definition JSON ， 不改 Schema ；增加 typed codec，并消除/校验 version/effectiveFrom/effectiveTo 双事实，同时补完整 runtime validation。
+
+因此：
+
+VERDICT = REVISE
+
+SEO-1 = PASS
+SEO-2 = NOT_CLOSED
+SEO-3 = AUTHORIZED_TO_CONTINUE
+       但必须单独做 PUBLIC API SECURITY AUDIT
+C18-6 = AUTHORIZED_TO_CONTINUE_IN_PARALLEL
+
+REAL_TRANSPORT = HOLD
+PRODUCTION_ENABLEMENT = HOLD
+PAYMENT = HOLD
+
+修完这些以后，SEO-2 不需要再拆很多轮；可以直接作为 SEO-2 FINAL + SEO-3 public API security checkpoint 一起送下一轮。
+```
