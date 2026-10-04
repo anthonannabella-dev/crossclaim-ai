@@ -37,3 +37,25 @@ POST only · `Content-Type: application/json` · body ≤ 8 KiB（**解析 JSON 
 - `SEO-4_RECOVER_PAGE_WIRING = AUTHORIZED`（canonical / hreflang / JSON-LD / sitemap plumbing / renderer / Checker UI shell 可继续），`DEFAULT_NOINDEX = REQUIRED`。
 - `PUBLIC_CHECKER_HTTP_ENABLEMENT = HOLD`：等 CHANGE A/B + HTTP 边界落完，再送一次很窄的 **SEO-3 PUBLIC HTTP FINAL**，只需核 10 项（publicInputSchema、unknown key reject、numeric finite/range、8 KiB cap、trusted-IP rate key、bounded/shared limiter、timeout+concurrency、no-store+same-origin、engine output validation、zero write/submission/payment regression）。
 - `SEARCH_CONSOLE` / `DOMAIN_OWNERSHIP` = **HOST_ACTION_REQUIRED**（不阻塞 `/recover` 页面代码建设，但阻塞最终搜索引擎生产验证）。
+
+## 实现状态（2026-10-04，供下一次送审对照）
+
+| 要求 | 状态 | 位置 / 提交 |
+| --- | --- | --- |
+| CHANGE A 语义白名单（schema 驱动，未知 key 拒绝） | **已实现（未接线前即生效）** | `seo-public-input-schema.ts`（校验器）· `86f4289` |
+| CHANGE B 数值 schema 校验（finite/类型/整数/min-max/enum/token） | **已实现** | 同上（并明确**不对数值套 PII 正则**，避免误杀合法金额） |
+| CHANGE A/B 接入公开入口（未知 key 在任何引擎调用之前拒绝） | **已接线** | `seo-public-checker.ts` + `getPublicInputSchema` 端口 · `8bf49da` |
+| engine 输出校验（`ENGINE_OUTPUT_INVALID` fail-closed） | **已实现** | `seo-public-checker.ts` · `eb99c53` |
+| 请求形状：POST / JSON / body ≤ 8 KiB（解析前） | **已实现（纯决策层）** | `seo-public-http-guard.ts` · `4f2cd20` |
+| 匿名 key 只来自可信代理真实 client IP（不信 `X-Forwarded-For`） | **已实现** | 同上（加盐 SHA-256，不存原始 IP） |
+| 有界并发 | **已实现（进程内参考实现）** | 同上；生产需共享/跨进程实现 |
+| `no-store` + same-origin（禁 `ACAO: *`）+ 不记 raw body/IP/UA + 2–3s 超时 | **已成策略常量** | 同上 `SEO_PUBLIC_RESPONSE_POLICY` |
+| handler 组合顺序（形状 → 限流 → 并发 → checker） | **已实现（未注册路由）** | `seo-public-handler.ts` · `c017728`（6 测试） |
+| 限流先于昂贵引擎调用 | **已实现并断言** | 同上（`rateLimitBeforeEngineCall: true`） |
+| 共享/边缘限流（生产） | **未做（部署侧）** | 需 Redis 或 CDN/网关全局限流 + 应用层第二层 |
+| HTTP 路由注册与部署配置 | **未做（刻意 HOLD）** | `PUBLIC_CHECKER_HTTP` / `PUBLIC_CHECKER_PRODUCTION` 仍 HOLD |
+
+### 送 PUBLIC HTTP FINAL 时只需核的 10 项（对应上方状态）
+1. `publicInputSchema` ✅ 已实现；2. 未知 answer key 拒绝 ✅；3. numeric finite/range ✅；4. 8 KiB cap ✅；5. trusted-IP rate key ✅；6. **bounded/shared limiter —— 进程内有界已实现，共享限流未做**；7. timeout + concurrency ✅（策略与并发闸门）；8. no-store + same-origin ✅；9. engine output validation ✅；10. zero write/submission/payment regression ✅（边界自证 + 测试）。
+
+**结论**：10 项中 9 项已落地并有测试；剩余为部署侧（共享限流 + 路由接线 + CDN 超时），属于 PUBLIC HTTP FINAL 的接线范围。
