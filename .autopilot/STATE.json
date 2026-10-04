@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261004-16",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-04T08:31:13.607Z",
+  "updated_at": "2026-10-04T08:46:09.521Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -54,7 +54,7 @@
   "last_action": "INDEPENDENT FINAL AUDIT = PASS（MSG-20261003-147）；三元闭环成立，内部代码开发阶段正式完成",
   "last_action_at": "2026-10-03T14:17:18.723Z",
   "next_action": "内部自治开发停止；剩余为 Layer 3 外部依赖（需宿主授权）",
-  "current_head": "90b1f71",
+  "current_head": "cc13bde",
   "reviewed_head": "24e27c8",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -5400,7 +5400,7 @@
   },
   "gates_recorded_at": "2026-10-03T15:17:04.369Z",
   "ci_status_head": "8f32fce",
-  "ci_status": "RED（3125271…b5149ca 全部 failure；疑似与近期新增 non-C18 migrations / schema.prisma enum+索引名变更相关：CI 内可能跑 prisma migrate diff --exit-code 或 migration/schema 一致性检查）",
+  "ci_status": "验证中（cc13bde run 37189757768 in_progress；1b15ab7/8a7b830 仍 failure）",
   "ci_run_id": "37143524364",
   "internal_code_complete_at": "2026-10-03T15:36:47.862Z",
   "independent_final_audit": {
@@ -6222,7 +6222,7 @@
       "API.md / DOMAIN_MODEL.md / architecture-contract 计数 77 → 79"
     ]
   },
-  "next_execution_unit": "【CI 红灯优先】定位 b5149ca CI 失败 job → 修复 → 再回到两条裁决归档与 SEO-3 CHANGE A/B 实现",
+  "next_execution_unit": "复核 cc13bde CI；若绿→清理 ci_red 记录并回到两条裁决归档 + SEO-3 CHANGE A/B 实现；若红→继续用 ci-failure-digest 定位",
   "customer_ui_commercialization": {
     "at": "2026-10-04T01:21:55.949Z",
     "authorization": "MSG-20261004-01（CUSTOMER UI/UX COMMERCIALIZATION — IMPLEMENTATION AUTHORIZED）",
@@ -6841,9 +6841,9 @@
       "pending_archive": true
     }
   },
-  "last_heartbeat_at": "2026-10-04T08:31:13.607Z",
+  "last_heartbeat_at": "2026-10-04T08:46:09.521Z",
   "waiting_for_verdict": "两条待归档：MSG-20261004-27（ZERO evidence，PASS WITH REVISE/90b1f71）+ SEO-3 PUBLIC API SECURITY（REVISE/3066ac2）",
-  "last_completed_unit": "ci-red-detection（3125271…b5149ca 全 failure，已记录并升级为最高优先级）",
+  "last_completed_unit": "ci-contract-repairs（tenant-trigger 白名单 + append-only 白名单）",
   "hold_external": true,
   "track_c_seo_p3": {
     "at": "2026-10-04T08:06:10.111Z",
@@ -6985,10 +6985,10 @@
       }
     }
   },
-  "CURRENT_HEAD": "90b1f71",
+  "CURRENT_HEAD": "cc13bde",
   "LAST_COMPLETED_UNIT": "c18-migration-sql-final2-submission",
   "NEXT_EXECUTION_UNIT": "读 MIGRATION SQL FINAL-2 裁决 → PASS 后按解禁顺序；并行 SEO-3 PUBLIC API SECURITY AUDIT 唤醒",
-  "CI_STATUS": "RED（3125271…b5149ca 全部 failure；疑似与近期新增 non-C18 migrations / schema.prisma enum+索引名变更相关：CI 内可能跑 prisma migrate diff --exit-code 或 migration/schema 一致性检查）",
+  "CI_STATUS": "验证中（cc13bde run 37189757768 in_progress；1b15ab7/8a7b830 仍 failure）",
   "WAITING_FOR_VERDICT": "两条待归档：MSG-20261004-27（ZERO evidence，PASS WITH REVISE/90b1f71）+ SEO-3 PUBLIC API SECURITY（REVISE/3066ac2）",
   "HOST_ACTION_REQUIRED": [
     "provider developer/partner account registration",
@@ -7002,6 +7002,6 @@
     "Search Console verification / domain ownership（SEO 页面转 INDEX 前需要）"
   ],
   "HOLD_EXTERNAL": true,
-  "LAST_HEARTBEAT_AT": "2026-10-04T07:51:24.497Z",
-  "ci_red_streak_note": "需优先定位：先看 b5149ca 的 CI 日志确定失败 job 与断言；若是 migration 一致性检查，则 my two non-C18 reconciliations 或 schema.prisma enum 恢复触发了 schema-vs-migrations 断言"
+  "LAST_HEARTBEAT_AT": "2026-10-04T08:46:09.521Z",
+  "ci_red_streak_note": "已修两处 CI 契约缺口：① tenant-trigger 白名单（1b15ab7，102→103）② append-only 白名单（cc13bde，47→48）；若 cc13bde 仍红，按 ci-failure-digest 继续定位（可能还有第三份白名单，如 immutable/受控变更）"
 }
