@@ -74,6 +74,20 @@ const meaningful = diff
 console.log('DIFF_LINES=' + meaningful.length);
 const c18Scoped = meaningful.filter((l) => /CustomsProvider/.test(l));
 const unrelated = meaningful.filter((l) => !/CustomsProvider/.test(l));
+// 把剩余的非 C18 差异原样落盘，便于下一轮逐条定位（证据文件，不参与构建）。
+try {
+  fs.writeFileSync(
+    `${ROOT}/docs/releases/C18-NON-C18-DIFF-REMAINING.sql`,
+    `-- P0 NON_C18_SCHEMA_HISTORY_DRIFT：clean-replay 后仍存在的非 C18 差异（${unrelated.length} 行）\n` +
+      `-- 生成：tools/verification/c18-clean-replay-proof.mjs（一次性库重放；未在 shared/prod 执行任何操作）\n` +
+      unrelated.join('\n') +
+      '\n',
+    'utf8',
+  );
+  console.log('WROTE docs/releases/C18-NON-C18-DIFF-REMAINING.sql（' + unrelated.length + ' 行）');
+} catch (error) {
+  console.log('DUMP_FAILED: ' + String(error));
+}
 console.log('C18_SCOPED_DIFF_LINES=' + c18Scoped.length + ' → ' + (c18Scoped.length === 0 ? 'CLEAN_SHADOW_DIFF_C18 = ZERO' : 'CLEAN_SHADOW_DIFF_C18 = NONZERO'));
 console.log('PREEXISTING_UNRELATED_DIFF_LINES=' + unrelated.length);
 for (const line of unrelated.slice(0, 6)) console.log('  unrelated: ' + line.slice(0, 120));
