@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261004-16",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-04T06:16:44.468Z",
+  "updated_at": "2026-10-04T06:17:53.935Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -4951,6 +4951,18 @@
       "status": "pending",
       "note": "未等待；下一 tick 用 REST 复核 workflow run",
       "recorded_at": "2026-10-04T06:12:46.596Z"
+    },
+    {
+      "head": "d2ceca6",
+      "status": "pending",
+      "note": "非阻塞；下一 tick 复核 workflow run",
+      "recorded_at": "2026-10-04T06:17:53.935Z"
+    },
+    {
+      "head": "4477158",
+      "status": "pending",
+      "note": "非阻塞；下一 tick 复核 workflow run",
+      "recorded_at": "2026-10-04T06:17:53.935Z"
     }
   ],
   "ci_red": [],
@@ -5004,7 +5016,8 @@
     "real POA signing",
     "any provider fee",
     "enable real external write",
-    "real customs filing / refund / money movement"
+    "real customs filing / refund / money movement",
+    "Search Console verification / domain ownership（SEO 页面转 INDEX 前需要）"
   ],
   "dispatched_units": [
     "BG-001-platform-adapter-readonly-closure",
@@ -5053,7 +5066,7 @@
       "④ Production Candidate register only"
     ]
   },
-  "awaiting_verdict": null,
+  "awaiting_verdict": "C18 INTERNAL FINAL（GitHub comment 5977242683，reviewed HEAD 4477158）",
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
     "computed_at": "2026-10-04T06:16:45.324Z",
@@ -5262,7 +5275,7 @@
   },
   "gates_recorded_at": "2026-10-03T15:17:04.369Z",
   "ci_status_head": "8f32fce",
-  "ci_status": "pending（3fce2ca / 1e42e6e 已记录，非阻塞）",
+  "ci_status": "pending（d2ceca6 / 4477158 已记录，非阻塞）",
   "ci_run_id": "37143524364",
   "internal_code_complete_at": "2026-10-03T15:36:47.862Z",
   "independent_final_audit": {
@@ -6069,7 +6082,7 @@
       "API.md / DOMAIN_MODEL.md / architecture-contract 计数 77 → 79"
     ]
   },
-  "next_execution_unit": "seo-3-public-checker-calculator",
+  "next_execution_unit": "读 C18 INTERNAL FINAL 裁决 → 按 VERDICT 执行；无阻塞则并行 seo-3-public-checker-calculator",
   "customer_ui_commercialization": {
     "at": "2026-10-04T01:21:55.949Z",
     "authorization": "MSG-20261004-01（CUSTOMER UI/UX COMMERCIALIZATION — IMPLEMENTATION AUTHORIZED）",
@@ -6348,7 +6361,7 @@
   "audit_session_url": "https://chatgpt.com/c/6ac1cdf0-1ec8-83ec-8036-0e66fcf5c6b9",
   "ci_note": "2026-10-04 复核：全部内部单元 CLOSED 后，GitHub Actions 对各 head 均有 workflow run（0c6bb0f/ f0abd05 / cb04232 / c6ce17c / 3fad4d4 / c897737 / fd7e4bf / 400fe6e / 8f32fce = success；5c6888e / f640f8c / 84c3f99 运行中）。架构方某次查询未见 runs 属查询口径差异（commit statuses vs workflow runs），此处记录 run id 以便复核。",
   "c18_layer3": {
-    "at": "2026-10-04T06:16:44.468Z",
+    "at": "2026-10-04T06:17:53.935Z",
     "main_line": "P0 = C18 REAL CUSTOMS PROVIDER INTEGRATION",
     "matrix_doc": "docs/releases/C18-PROVIDER-INTEGRATION-MATRIX.md",
     "completed": [
@@ -6459,11 +6472,17 @@
       "AMBIGUOUS write → C17 既有 reconciliation path（append UNKNOWN_PROVIDER_RESPONSE → RECONCILING → 采用既有 submission，不创建第二 root、不再次 POST）",
       "真实 adapter 需支持 provider 官方 key-id / active+previous secret 轮换"
     ],
-    "note": "C18-6 本次只落地 server-derived ProviderTenantBinding 契约/resolver 端口/跨租户隔离 fail-closed；ProviderTenantBinding 持久化（新表）仍待 Schema Delta 审计后再做。"
+    "note": "C18-6 本次只落地 server-derived ProviderTenantBinding 契约/resolver 端口/跨租户隔离 fail-closed；ProviderTenantBinding 持久化（新表）仍待 Schema Delta 审计后再做。",
+    "final_audit_request_comment_id": 5977242683,
+    "final_audit_request_url": "https://github.com/anthonannabella-dev/crossclaim-ai/issues/2#issuecomment-5977242683",
+    "final_audit_reviewed_head": "4477158",
+    "final_audit_wakeup_sent_at": "2026-10-04T06:17:53.935Z",
+    "final_audit_wakeup_delivery": "VERIFIED（marker 5977242683 出现在最新用户轮 + 输入框已清空 + 生成中）",
+    "final_audit_pending": "C18-6 + C18-7 + C18-8（含 C18-5 三条必修与 C18-4 residual 随批确认）"
   },
-  "last_heartbeat_at": "2026-10-04T06:16:44.468Z",
-  "waiting_for_verdict": "none（SEO-2 裁决已归档：REVISE）",
-  "last_completed_unit": "c18-8-provider-negative-path-e2e",
+  "last_heartbeat_at": "2026-10-04T06:17:53.935Z",
+  "waiting_for_verdict": "C18 INTERNAL FINAL（GitHub comment 5977242683，reviewed HEAD 4477158）",
+  "last_completed_unit": "c18-8-provider-negative-path-e2e（+ C18 INTERNAL FINAL 送审）",
   "hold_external": true,
   "track_c_seo_p3": {
     "at": "2026-10-04T06:12:20.135Z",
@@ -6554,11 +6573,11 @@
     },
     "seo_2_status": "REVISE_LANDED（待 SEO-2 FINAL + SEO-3 public API security checkpoint 一起送审）"
   },
-  "CURRENT_HEAD": "1e42e6e",
-  "LAST_COMPLETED_UNIT": "seo-2-revise（五组必修）+ c18-6-provider-tenant-account-lineage",
-  "NEXT_EXECUTION_UNIT": "seo-3-public-checker-calculator（+ c18-7-provider-authorization-lifecycle 并行）",
-  "CI_STATUS": "pending（3fce2ca / 1e42e6e 已记录，非阻塞）",
-  "WAITING_FOR_VERDICT": "none（MSG-20261004-17 SEO-2 REVISE 已归档并落地）",
+  "CURRENT_HEAD": "4477158",
+  "LAST_COMPLETED_UNIT": "c18-8-provider-negative-path-e2e（+ C18 INTERNAL FINAL 送审）",
+  "NEXT_EXECUTION_UNIT": "读 C18 INTERNAL FINAL 裁决 → 按 VERDICT 执行；无阻塞则并行 seo-3-public-checker-calculator",
+  "CI_STATUS": "pending（d2ceca6 / 4477158 已记录，非阻塞）",
+  "WAITING_FOR_VERDICT": "C18 INTERNAL FINAL（GitHub comment 5977242683，reviewed HEAD 4477158）",
   "HOST_ACTION_REQUIRED": [
     "provider developer/partner account registration",
     "third-party commercial agreement acceptance",
@@ -6567,8 +6586,9 @@
     "real POA signing",
     "any provider fee",
     "enable real external write",
-    "real customs filing / refund / money movement"
+    "real customs filing / refund / money movement",
+    "Search Console verification / domain ownership（SEO 页面转 INDEX 前需要）"
   ],
   "HOLD_EXTERNAL": true,
-  "LAST_HEARTBEAT_AT": "2026-10-04T06:12:46.596Z"
+  "LAST_HEARTBEAT_AT": "2026-10-04T06:17:53.935Z"
 }
