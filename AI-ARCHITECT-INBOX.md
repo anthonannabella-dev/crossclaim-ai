@@ -128348,3 +128348,192 @@ NEXT_UI_UNIT
 
 然后自动继续后续 UI 单元，不要等待宿主逐批重新授权，除非涉及 Schema Delta、真实支付、真实 Provider、生产凭据或 External Write。
 ```
+
+### [MSG-20261004-02] ARCHITECT VERDICT — CUSTOMS AUTHORIZATION CA-2（AuthorizedSignerFact）= REVISE（窄修 A–G：scope 元素形状 / revoke 双向一致 / supersededAt 窗口 / future-effectiveAt fail-closed / signerJurisdiction 接入 / source=NONE 真实 DB 测 / supersedesId 语义）
+
+```text
+CUSTOMS AUTHORIZATION CA-2：REVISE。
+
+整体方向是对的，Schema、tenant/append-only、CA-1 route-aware 分离也基本成立；但我在当前 bd09782 反查到几个会直接影响授权正确性的缺口，所以现在不建议直接进入 CA-3。
+
+字段集 / signerType：PASS
+
+4 类 signerType 可接受。
+principalRef / signerRef / authorityBasis / scope / jurisdiction / effectiveAt / expiresAt / verification / revoke / supersede / digest 这套字段足够承载 CA-2。
+principalRef 强制指向同租户 IOR Identity，这一点是正确的。
+
+DB 不变量：REVISE
+
+已经做对的：
+
+(organizationId, contentDigest) unique；
+append-only；
+tenant isolation；
+raw EIN-like / numeric ref 拒绝；
+VERIFIED 要 source + verifiedAt + evidence；
+same-tenant IOR lineage。
+
+但还有 3 个问题：
+
+CHANGE A — scope 不能只验证“非空数组”。
+
+当前 DB 允许：
+
+纯文本
+[123]
+[{}]
+[""]
+
+这对授权 scope 太松。至少要保证每个元素都是非空 string，并满足 remedy token 形状；最好只允许 * 或合法 remedy code。
+
+CHANGE B — revoke consistency 要双向。
+
+当前只保证：
+
+verificationStatus=REVOKED => revokedAt != null
+
+但仍允许：
+
+verificationStatus=VERIFIED + revokedAt != null
+
+resolver 会把它当 REVOKED，DB 却允许语义矛盾。建议 DB 约束：
+
+revokedAt IS NOT NULL <=> verificationStatus='REVOKED'
+
+至少做到 revokedAt != null => REVOKED。
+
+CHANGE C — supersededAt >= observedAt 可能过度约束。
+
+对历史补录/回填事实，完全可能：
+
+supersededAt < observedAt
+
+因为 supersession 发生在过去，今天才录入。
+
+更合理的是约束：
+
+supersededAt >= effectiveAt
+
+而不是必须晚于 observedAt。
+
+Resolver latest/lifecycle：REVISE
+
+这里有一个实质安全 bug：
+
+当前 resolver 没检查：
+
+effectiveAt <= ctx.at
+
+所以一个未来才生效的 VERIFIED signer fact，只要 observedAt 更新，就会被当前时间提前当成 VERIFIED。
+
+CHANGE D — future-effective 必须 fail-closed。
+
+推荐新增明确生命周期：
+
+NOT_YET_EFFECTIVE
+
+或至少映射到不可用状态；但不要把未来授权直接算 VERIFIED。
+
+同时补 unit + PG E2E：
+
+effectiveAt > at => READY_TO_FILE=false
+
+SELF_FILED jurisdiction：REVISE
+
+这是第二个会真正错误放行的点。
+
+CustomsAuthorizedSignerFact 有 jurisdiction，resolver 也返回 jurisdiction，但 CustomsAuthorizationFacts 里没有 signerJurisdiction，所以 CA-1 对 SELF_FILED 根本没有比较 signer jurisdiction。
+
+现在可能出现：
+
+纯文本
+signer jurisdiction = DE
+filing policy = US
+signer status = VERIFIED
+scope = DUTY_REFUND
+
+仍然 READY_TO_FILE=true。
+
+CHANGE E — 把 signerJurisdiction 接进 CA-1。
+
+SELF_FILED 若 signer jurisdiction 与 policy jurisdiction 不匹配：
+
+READY_TO_FILE=false
+
+建议复用 JURISDICTION_MISMATCH，或者独立 SIGNER_JURISDICTION_MISMATCH。
+
+“client 不得自证 VERIFIED”的测试证据：REVISE
+
+你本轮 PG 测试标题写：
+
+source=NONE → DB 拒绝
+
+但 insertSigner() 实际把：
+
+纯文本
+verificationSource = CUSTOMER_DOCUMENT
+
+写死了，测试并没有真正注入 NONE。
+
+所以目前只真实覆盖了：
+
+evidence 缺失；
+verifiedAt 缺失。
+
+CHANGE F — 真正补 source=NONE DB rejection test。
+
+另外 CA-3 的写入口必须保证 verificationStatus / verificationSource 是 server-derived，不能直接接受 client body 自报 VERIFIED。
+
+supersededById 命名/语义：PASS WITH REVISE
+
+当前：
+
+纯文本
+const latest = candidates[0]
+const newer = candidates.find(row => row.id !== latest.id)
+supersededById = newer.id
+
+这里变量名 newer 实际是旧记录，而 supersededById 返回的也是旧记录 id。
+
+这在语义上是反的。
+
+CHANGE G — 要么改字段名，要么改值。
+
+如果表示“latest 取代了谁”，应叫：
+
+supersedesId
+
+如果表示“谁取代了当前 row”，那当前 latest 通常应为 null。
+
+CA-1 route-aware 衔接：PASS
+
+SELF_FILED 要 signer authority：对；
+BROKER_FILED 不要求 signer、要求 Broker POA：对；
+SERVICE_PROVIDER_TRANSMIT 无 policy fail-closed：对；
+Platform OAuth / Payment Authorization 不得满足 signer/POA：对。
+
+Production boundary：PASS
+
+filingSubmitted=false
+externalWritePerformed=false
+transportEnabled=false
+productionCredentials=ABSENT
+REAL_BROKER / REAL_FILING 仍 NO
+
+没有越界。
+
+最终裁决
+
+CA-2 = REVISE
+
+只需窄修 A–G，不需要推翻模型。
+
+其中真正阻塞 CA-3 的硬项是：
+
+future effectiveAt 不得提前生效；
+SELF_FILED signer jurisdiction 必须参与判定；
+source=NONE 要真实 DB 测；
+lifecycle 字段语义要收紧。
+
+这几项修完并补对应 PG/unit 回归后，可直接重送 CA-2 FINAL；在 CA-2 FINAL PASS 前，不建议进入 CA-3 的正式 lifecycle 写入口。
+```

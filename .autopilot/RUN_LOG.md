@@ -1799,3 +1799,6 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 
 ## 2026-10-04T02:03:37.724Z — CA-2
 - AuthorizedSignerFact 落地（schema/migration/resolver/tests）；登记 awaiting_verdict，准备走 ChatGPT Audit Loop。
+
+## 2026-10-04T02:07:50.606Z — CA-2 VERDICT
+- MSG-20261004-02 = REVISE（A–G 窄修）；已逐字归档并 FULL_COPY_OK。

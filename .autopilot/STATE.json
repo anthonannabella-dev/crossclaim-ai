@@ -6,10 +6,10 @@
   "next_task": "CA-3 authorization lifecycle persistence",
   "send_head": "07b7009",
   "decision_head": "07b7009",
-  "last_chatgpt_message": "MSG-20261004-01",
+  "last_chatgpt_message": "MSG-20261004-02",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-04T02:03:37.724Z",
+  "updated_at": "2026-10-04T02:07:50.606Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -5009,14 +5009,16 @@
   "awaiting_verdict": {
     "unit": "ca-2-authorized-signer-fact",
     "since": "2026-10-04T02:03:37.724Z",
-    "reason": "Schema / tenant isolation / security boundary → ARCH_REVIEW_REQUIRED（MSG-20261004-02 §十五）",
-    "independent_work_continues": "可并行推进 CA-5 UI 前置与其它非 Schema 单元；不阻塞 AUTOPILOT"
+    "verdict": "REVISE",
+    "verdict_message": "MSG-20261004-02",
+    "archived": "FULL_COPY_OK",
+    "next": "实施 A–G → 复跑 unit/PG → commit → 重送 CA-2 FINAL"
   },
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-04T02:03:38.486Z",
-    "head": "9f70a8b",
-    "acceptance_head": "9f70a8b",
+    "computed_at": "2026-10-04T02:07:59.788Z",
+    "head": "bd09782",
+    "acceptance_head": "bd09782",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5090,48 +5092,48 @@
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=9f70a8b ci_head=f5bdd92 ci=in_progress run=37143524364"
+        "evidence": "acceptance_head=bd09782 ci_head=f5bdd92 ci=in_progress run=37143524364"
       },
       "L1-05_pg_regression_passed": {
         "status": "UNVERIFIED",
-        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head 9f70a8b（且中间存在非簿记变更）"
+        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head bd09782（且中间存在非簿记变更）"
       },
       "L1-06_fresh_db_migration_passed": {
         "status": "UNVERIFIED",
-        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head 9f70a8b（且中间存在非簿记变更）"
+        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head bd09782（且中间存在非簿记变更）"
       },
       "L1-07_api_typecheck_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head 9f70a8b（且中间存在非簿记变更）"
+        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head bd09782（且中间存在非簿记变更）"
       },
       "L1-08_web_typecheck_build_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head 9f70a8b（且中间存在非簿记变更）"
+        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head bd09782（且中间存在非簿记变更）"
       },
       "L1-09_no_skipped_critical_tests": {
         "status": "UNVERIFIED",
-        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head 9f70a8b（且中间存在非簿记变更）"
+        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head bd09782（且中间存在非簿记变更）"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
         "status": false,
-        "evidence": "dirty entries: 8"
+        "evidence": "dirty entries: 2"
       },
       "L1-11_docs_state_consistent": {
         "status": "UNVERIFIED",
-        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head 9f70a8b（且中间存在非簿记变更）"
+        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head bd09782（且中间存在非簿记变更）"
       },
       "L1-12_schema_invariants_verified": {
         "status": "UNVERIFIED",
-        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head 9f70a8b（且中间存在非簿记变更）"
+        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head bd09782（且中间存在非簿记变更）"
       },
       "L1-13_negative_paths_covered": {
         "status": "UNVERIFIED",
-        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head 9f70a8b（且中间存在非簿记变更）"
+        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head bd09782（且中间存在非簿记变更）"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
         "status": "UNVERIFIED",
-        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head 9f70a8b（且中间存在非簿记变更）"
+        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head bd09782（且中间存在非簿记变更）"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
@@ -6008,7 +6010,7 @@
   "customs_authorization_queue": {
     "at": "2026-10-04T01:21:55.949Z",
     "CA_1": "CLOSED（465a6a6：route-aware authorization + 三阶段 readiness；unit 16 / PG 8）",
-    "CA_2": "IMPLEMENTED / AWAITING_CHATGPT_VERDICT（Schema + migration + resolver + unit 5 + PG 6；ARCH_REVIEW_REQUIRED）",
+    "CA_2": "REVISE（MSG-20261004-02）：A–G 窄修待实施；CA-2 FINAL 送审前不进入 CA-3 正式写入口",
     "CA_3": "PENDING（lifecycle persistence；ARCH_REVIEW_REQUIRED）",
     "CA_4": "PENDING（BrokerAuthorizationSession contract；ARCH_REVIEW_REQUIRED）",
     "CA_5": "PENDING（Customs Authorization Center UI）",
@@ -6019,7 +6021,17 @@
     "REAL_CUSTOMS_SUBMISSION": "NO",
     "PRODUCTION_CUSTOMS_CREDENTIALS": "NO",
     "C18_STATUS": "HOLD_EXTERNAL",
-    "awaiting_verdict_at": "2026-10-04T02:03:37.724Z"
+    "awaiting_verdict_at": "2026-10-04T02:03:37.724Z",
+    "ca2_verdict_at": "2026-10-04T02:07:50.606Z",
+    "ca2_required_changes": [
+      "A: scope 元素必须是满足 remedy token 形状的非空 string（仅 * 或合法 remedy code）",
+      "B: revokedAt IS NOT NULL <=> verificationStatus=REVOKED（双向一致）",
+      "C: supersededAt >= effectiveAt（不得强制 >= observedAt）",
+      "D: effectiveAt > at 的授权必须 fail-closed（NOT_YET_EFFECTIVE，不得提前算 VERIFIED）",
+      "E: signerJurisdiction 接入 CA-1；SELF_FILED 辖区不匹配 → READY_TO_FILE=false",
+      "F: 真实注入 verificationSource=NONE 的 DB 拒绝测试",
+      "G: supersededById → supersedesId（语义：latest 取代了谁）"
+    ]
   },
   "stop_conditions": [
     "HOST_ACTION_REQUIRED（真实账号/Secret/生产凭据/法律签署/付费/外部验证码）",
