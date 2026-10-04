@@ -38,6 +38,8 @@ const NO_EVIDENCE_TOKENS = new Set(['unconfigured', 'timeout', 'not-allowed', 's
 export function attachContinuationToController(options: {
   tasks: readonly RsiSafeTask[];
   runner: RsiTaskRunner;
+  /** RSI-RT-05：配置后，PASS 还必须通过真实 CI/测试证据校验，否则降级为 BLOCK。 */
+  verifyEvidence?: (evidenceRef: string | undefined) => Promise<{ ok: boolean }>;
   now?: () => number;
   leaseMs?: number;
 }): RsiControllerContinuation {
@@ -54,7 +56,10 @@ export function attachContinuationToController(options: {
     const result = await options.runner.run(outcome.claimed);
     // 忠实映射：BLOCK 绝不写成 PASS；PASS 必须带可用证据。
     const evidenceRef = (result as { evidenceRef?: unknown }).evidenceRef;
-    const hasEvidence = typeof evidenceRef === 'string' && evidenceRef !== '' && !NO_EVIDENCE_TOKENS.has(evidenceRef);
+    const hasToken = typeof evidenceRef === 'string' && evidenceRef !== '' && !NO_EVIDENCE_TOKENS.has(evidenceRef);
+    const hasEvidence =
+      hasToken &&
+      (options.verifyEvidence === undefined || (await options.verifyEvidence(evidenceRef as string)).ok);
     const status: 'PASS' | 'REVISE' | 'BLOCK' =
       result.status === 'PASS' && hasEvidence ? 'PASS' : result.status === 'REVISE' ? 'REVISE' : 'BLOCK';
     engine.completeCurrent(status);
