@@ -65,6 +65,10 @@ import {
   readSessionToken,
 } from './services/auth';
 import { handleWorkflowRequest } from './services/workflow';
+import {
+  handleSeoPublicNodeRequest,
+  isSeoPublicRouteRequest,
+} from './services/seo/seo-public-node-adapter';
 import type { CarrierClaimPackageSource } from './services/carriers/carrier-manual-submission';
 import { createAppActionGuard } from './services/action-guard/runtime-guard-composition';
 
@@ -259,6 +263,16 @@ export function createServer(deps: ServerDeps): http.Server {
       res.writeHead(code, { 'content-type': 'application/json; charset=utf-8' });
       res.end(body);
     };
+
+    // SEO-3 public read-only checker (MSG-20261005-05). Disabled unless
+    // PUBLIC_SEO_CHECKER_ENABLED === 'true'; it must never fall through to
+    // the session-based branches below.
+    if (isSeoPublicRouteRequest(req)) {
+      void handleSeoPublicNodeRequest(req, res, { prisma }).catch(() =>
+        send(500, { ok: false, code: 'SEO_PUBLIC_ROUTE_ERROR' }),
+      );
+      return;
+    }
 
     // C-0008-A 内部认证端点：仅服务本地/内部 Web 应用，未做公网暴露
     // PC-08：最敏感的匿名入口限流基线（只拒绝过量请求，不读取/记录任何凭据）。
