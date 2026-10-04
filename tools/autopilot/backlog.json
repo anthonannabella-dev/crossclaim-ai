@@ -1,6 +1,6 @@
 {
   "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。",
-  "updatedAt": "2026-10-04T14:12:00.000Z",
+  "updatedAt": "2026-10-04T14:17:00.000Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -1082,6 +1082,16 @@
       "title": "/recover metadata 由 gate 驱动（默认 noindex、canonical/hreflang 仅在可索引时输出）",
       "scope": "buildRecoverRouteMetadata：robots 继承判定；canonical 与 5 语言 hreflang + x-default 仅在 indexable 时给出；标题/描述只接受真实来源引用",
       "acceptance_criteria": "RECOVER_METADATA_NOINDEX_DEFAULT / RECOVER_METADATA_CANONICAL_ONLY_WHEN_INDEXABLE / RECOVER_METADATA_ALTERNATES_X_DEFAULT 全绿；tsc 0",
+      "status": "IMPLEMENTED_PENDING_CI",
+      "implementation_head": "(this commit)"
+    },
+    {
+      "id": "SEO-4-STAGE-3-recover-jsonld",
+      "priority": "P1",
+      "source_backlog_id": "SEO-4-RECOVER-WIRING-PLAN.md 阶段 3",
+      "title": "/recover JSON-LD 只由真实 sourceReferences 生成",
+      "scope": "buildRecoverRouteJsonLd：不可索引或无真实 sourceReferences → 不输出；面包屑/FAQ 仅在真实存在时生成并记录 skip reason",
+      "acceptance_criteria": "RECOVER_JSONLD_NONE_WHEN_NOT_INDEXABLE / RECOVER_JSONLD_ONLY_REAL_SOURCES / RECOVER_JSONLD_NO_FAQ_WITHOUT_FAQ 全绿；tsc 0",
       "status": "IMPLEMENTED_PENDING_CI",
       "implementation_head": "(this commit)"
     }

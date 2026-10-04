@@ -14,8 +14,11 @@
 
 import {
   buildAlternates,
+  buildBreadcrumbJsonLd,
+  buildFaqJsonLd,
   buildRecoverPath,
   resolveLocaleFallback,
+  type BreadcrumbItem,
   type SeoAlternate,
   type SeoLocale,
 } from './seo-technical';
@@ -238,6 +241,74 @@ export function buildRecoverRouteMetadata(input: SeoRecoverRouteMetadataInput): 
     titleRef: input.titleRef ?? null,
     descriptionRef: input.descriptionRef ?? null,
     i18nKeys: decision.i18nKeys,
+    externalWritePerformed: false,
+    databaseWritePerformed: false,
+    transportEnabled: false,
+    checkerPostRegistered: false,
+    productionCredentials: 'ABSENT',
+  };
+}
+
+/** SEO-4 Stage 3 —— JSON-LD：只由**真实存在**的数据生成，且必须有真实 sourceReferences 兜底。 */
+export interface SeoRecoverRouteJsonLdInput {
+  decision: SeoRecoverRouteDecision;
+  /** 生效 RecoveryRuleDefinition v1 的 sourceReferences；为空 → 不生成任何结构化数据。 */
+  sourceReferences: readonly string[];
+  /** 真实存在的面包屑（至少两级才生成）。 */
+  breadcrumb?: readonly BreadcrumbItem[];
+  /** 真实存在的 FAQ。 */
+  faqs?: readonly { question: string; answer: string }[];
+}
+
+export interface SeoRecoverRouteJsonLd {
+  blocks: readonly Record<string, unknown>[];
+  /** 为什么没有输出（便于审计：不可索引 / 无真实来源 / 数据缺失）。 */
+  skipped: readonly ('NOT_INDEXABLE' | 'NO_SOURCE_REFERENCES' | 'NO_BREADCRUMB' | 'NO_FAQ')[];
+  i18nKeys: readonly string[];
+  externalWritePerformed: false;
+  databaseWritePerformed: false;
+  transportEnabled: false;
+  checkerPostRegistered: false;
+  productionCredentials: 'ABSENT';
+}
+
+/**
+ * 组装规则：不发明任何结构化数据。
+ *   · 页面不可索引 / 没有路径 → 不输出；
+ *   · 没有真实 sourceReferences → 不输出（结构化数据必须可溯源）；
+ *   · 面包屑 / FAQ 只在调用方给出真实数据时生成，否则记录 skip reason。
+ */
+export function buildRecoverRouteJsonLd(input: SeoRecoverRouteJsonLdInput): SeoRecoverRouteJsonLd {
+  const skipped: ('NOT_INDEXABLE' | 'NO_SOURCE_REFERENCES' | 'NO_BREADCRUMB' | 'NO_FAQ')[] = [];
+  const blocks: Record<string, unknown>[] = [];
+
+  if (!input.decision.indexable || input.decision.path === null) skipped.push('NOT_INDEXABLE');
+  if (input.sourceReferences.length === 0) skipped.push('NO_SOURCE_REFERENCES');
+  if (skipped.length > 0) {
+    return {
+      blocks: [],
+      skipped,
+      i18nKeys: input.decision.i18nKeys,
+      externalWritePerformed: false,
+      databaseWritePerformed: false,
+      transportEnabled: false,
+      checkerPostRegistered: false,
+      productionCredentials: 'ABSENT',
+    };
+  }
+
+  const breadcrumb = buildBreadcrumbJsonLd(input.breadcrumb ?? []);
+  if (breadcrumb === null) skipped.push('NO_BREADCRUMB');
+  else blocks.push(breadcrumb);
+
+  const faq = buildFaqJsonLd((input.faqs ?? []) as never);
+  if (faq === null) skipped.push('NO_FAQ');
+  else blocks.push(faq);
+
+  return {
+    blocks,
+    skipped,
+    i18nKeys: input.decision.i18nKeys,
     externalWritePerformed: false,
     databaseWritePerformed: false,
     transportEnabled: false,

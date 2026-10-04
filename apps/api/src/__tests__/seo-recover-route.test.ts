@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildRecoverRouteMetadata,
+  buildRecoverRouteJsonLd,
   SEO_RECOVER_ROUTE_BOUNDARY,
   detectDuplicateRouteSlugs,
   resolveRecoverRoute,
@@ -176,5 +177,52 @@ describe('SEO-4 Stage 2 metadata（gate 驱动，默认 noindex）', () => {
     expect(langs).toEqual(['en', 'zh', 'de', 'ja', 'es', 'x-default']);
     expect(meta.alternates.find((a) => a.hreflang === 'x-default')?.href).toBe(`${BASE}${ok.path}`);
     for (const alternate of meta.alternates) expect(alternate.href.startsWith(BASE)).toBe(true);
+  });
+});
+
+describe('SEO-4 Stage 3 JSON-LD（只由真实来源生成）', () => {
+  const breadcrumb = [
+    { name: 'Home', url: 'https://crossclaim.example/' },
+    { name: 'Recover', url: 'https://crossclaim.example/recover' },
+  ];
+
+  it('RECOVER_JSONLD_NONE_WHEN_NOT_INDEXABLE：不可索引 / 冲突页不输出任何结构化数据', () => {
+    const notFound = resolveRecoverRoute(input({ slug: 'nope-nothing-here' }));
+    const missing = buildRecoverRouteJsonLd({ decision: notFound, sourceReferences: ['src:x'], breadcrumb });
+    expect(missing.blocks).toEqual([]);
+    expect(missing.skipped).toContain('NOT_INDEXABLE');
+
+    const gatedOut = resolveRecoverRoute(input({ rules: [rule({ indexable: false })] }));
+    const gated = buildRecoverRouteJsonLd({ decision: gatedOut, sourceReferences: ['src:x'], breadcrumb });
+    expect(gated.blocks).toEqual([]);
+    expect(gated.skipped).toContain('NOT_INDEXABLE');
+  });
+
+  it('RECOVER_JSONLD_ONLY_REAL_SOURCES：没有真实 sourceReferences → 一律不生成', () => {
+    const ok = resolveRecoverRoute(input({ requestedLocale: 'en' }));
+    const noSources = buildRecoverRouteJsonLd({ decision: ok, sourceReferences: [], breadcrumb });
+    expect(noSources.blocks).toEqual([]);
+    expect(noSources.skipped).toContain('NO_SOURCE_REFERENCES');
+
+    const withSources = buildRecoverRouteJsonLd({ decision: ok, sourceReferences: ['src:statute-1'], breadcrumb });
+    expect(withSources.blocks.length).toBeGreaterThan(0);
+    expect(withSources.skipped).not.toContain('NO_SOURCE_REFERENCES');
+  });
+
+  it('RECOVER_JSONLD_NO_FAQ_WITHOUT_FAQ：没有真实 FAQ 就不出现 FAQPage', () => {
+    const ok = resolveRecoverRoute(input({ requestedLocale: 'en' }));
+    const decision = buildRecoverRouteJsonLd({ decision: ok, sourceReferences: ['src:statute-1'], breadcrumb });
+    expect(decision.skipped).toContain('NO_FAQ');
+    const types = decision.blocks.map((block) => String(block['@type'] ?? ''));
+    expect(types).not.toContain('FAQPage');
+
+    const withFaq = buildRecoverRouteJsonLd({
+      decision: ok,
+      sourceReferences: ['src:statute-1'],
+      breadcrumb,
+      faqs: [{ question: 'Is this an estimate?', answer: 'Yes - estimates are labelled as estimates.' }],
+    });
+    expect(withFaq.skipped).not.toContain('NO_FAQ');
+    expect(withFaq.blocks.map((block) => String(block['@type'] ?? ''))).toContain('FAQPage');
   });
 });
