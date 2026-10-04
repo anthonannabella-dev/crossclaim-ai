@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261004-16",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T09:20:00.000Z",
+  "updated_at": "2026-10-05T09:35:00.000Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -5192,9 +5192,9 @@
   "awaiting_verdict": "EXACT-ORDER REPLAY 证据已送审（comment 5979262070）；shared/staging deploy 解禁待裁决",
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-04T22:00:23.359Z",
-    "head": "efcc125",
-    "acceptance_head": "efcc125",
+    "computed_at": "2026-10-04T22:00:59.799Z",
+    "head": "ed61ed7",
+    "acceptance_head": "ed61ed7",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5286,7 +5286,6 @@
       "CHECK:L1-07_api_typecheck_passed",
       "CHECK:L1-08_web_typecheck_build_passed",
       "CHECK:L1-09_no_skipped_critical_tests",
-      "CHECK:L1-10_git_working_tree_clean",
       "CHECK:L1-11_docs_state_consistent",
       "CHECK:L1-12_schema_invariants_verified",
       "CHECK:L1-13_negative_paths_covered",
@@ -5345,48 +5344,48 @@
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=efcc125 ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
+        "evidence": "acceptance_head=ed61ed7 ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
       },
       "L1-05_pg_regression_passed": {
         "status": "UNVERIFIED",
-        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head efcc125（且中间存在非簿记变更）"
+        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head ed61ed7（且中间存在非簿记变更）"
       },
       "L1-06_fresh_db_migration_passed": {
         "status": "UNVERIFIED",
-        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head efcc125（且中间存在非簿记变更）"
+        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head ed61ed7（且中间存在非簿记变更）"
       },
       "L1-07_api_typecheck_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head efcc125（且中间存在非簿记变更）"
+        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head ed61ed7（且中间存在非簿记变更）"
       },
       "L1-08_web_typecheck_build_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head efcc125（且中间存在非簿记变更）"
+        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head ed61ed7（且中间存在非簿记变更）"
       },
       "L1-09_no_skipped_critical_tests": {
         "status": "UNVERIFIED",
-        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head efcc125（且中间存在非簿记变更）"
+        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head ed61ed7（且中间存在非簿记变更）"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
-        "status": false,
-        "evidence": "dirty entries: 1"
+        "status": true,
+        "evidence": "porcelain empty"
       },
       "L1-11_docs_state_consistent": {
         "status": "UNVERIFIED",
-        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head efcc125（且中间存在非簿记变更）"
+        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head ed61ed7（且中间存在非簿记变更）"
       },
       "L1-12_schema_invariants_verified": {
         "status": "UNVERIFIED",
-        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head efcc125（且中间存在非簿记变更）"
+        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head ed61ed7（且中间存在非簿记变更）"
       },
       "L1-13_negative_paths_covered": {
         "status": "UNVERIFIED",
-        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head efcc125（且中间存在非簿记变更）"
+        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head ed61ed7（且中间存在非簿记变更）"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
         "status": "UNVERIFIED",
-        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head efcc125（且中间存在非簿记变更）"
+        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head ed61ed7（且中间存在非簿记变更）"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
@@ -6334,7 +6333,7 @@
       "API.md / DOMAIN_MODEL.md / architecture-contract 计数 77 → 79"
     ]
   },
-  "next_execution_unit": "确认 customs-drawback 规则是否真实支持 dutyPaid − dutyActuallyDue：支持则把 duty-difference engine + rule-aware schema 注册进 seo-public-ports registry（仍 DEV/STAGING 显式开启、生产 HOLD）；不支持则保持 estimate = null 并在文档中写明原因；随后送 PUBLIC ENGINE IMPLEMENTATION AUDIT",
+  "next_execution_unit": "读 PUBLIC ENGINE IMPLEMENTATION AUDIT 裁决：逐字归档 + verdict-diff FULL_COPY_OK；PASS → 关闭该线（registry 仍空、入口默认关闭，待某份生效 RuleVersion 证实语义后再按前置条件注册）；REVISE → 立即修",
   "customer_ui_commercialization": {
     "at": "2026-10-04T01:21:55.949Z",
     "authorization": "MSG-20261004-01（CUSTOMER UI/UX COMMERCIALIZATION — IMPLEMENTATION AUTHORIZED）",
@@ -7380,10 +7379,10 @@
     "seo3_progress": "CHANGE A/B validator added (86f4289), engine output validation added (eb99c53), validator wired into runPublicSeoChecker (8bf49da), HTTP boundary guard added (4f2cd20); HTTP entry still not registered"
   },
   "CURRENT_HEAD": "293f55e",
-  "LAST_COMPLETED_UNIT": "MSG-20261005-06 第①②（输出侧）完成：SeoPublicCheckerOutcome 新增 eligibilityLabel，类型只允许 PRELIMINARY_SELF_REPORTED | null（VERIFIED/READY_TO_FILE 在类型层面不可表示），checker 在 eligibility 真正执行时置为 PRELIMINARY_SELF_REPORTED、拒绝结果一律 null；新增 3 例测试（含不得出现 VERIFIED/READY_TO_FILE 的序列化断言）；seo-* 23 文件 164 例全过、tsc 0",
-  "NEXT_EXECUTION_UNIT": "确认 customs-drawback 规则是否真实支持 dutyPaid − dutyActuallyDue：支持则把 duty-difference engine + rule-aware schema 注册进 seo-public-ports registry（仍 DEV/STAGING 显式开启、生产 HOLD）；不支持则保持 estimate = null 并在文档中写明原因；随后送 PUBLIC ENGINE IMPLEMENTATION AUDIT",
-  "CI_STATUS": "本批提交后由托管 CI 复核；本地：apps/api tsc 0 / seo-* 23 文件 164 例全过",
-  "WAITING_FOR_VERDICT": "none（SEO 侧无待裁决项；RSI staging smoke 仍等宿主非生产 DATABASE_URL）",
+  "LAST_COMPLETED_UNIT": "PUBLIC ENGINE IMPLEMENTATION AUDIT 送审材料（MSG-20261005-06 五项必修全落地：rule-aware 必填 / PRELIMINARY_SELF_REPORTED 输出 / 证据仅数量门槛 / DUTY_DIFFERENCE paid−due 且不注册 / 双 schema 编排接线）",
+  "NEXT_EXECUTION_UNIT": "读 PUBLIC ENGINE IMPLEMENTATION AUDIT 裁决：逐字归档 + verdict-diff FULL_COPY_OK；PASS → 关闭该线（registry 仍空、入口默认关闭，待某份生效 RuleVersion 证实语义后再按前置条件注册）；REVISE → 立即修",
+  "CI_STATUS": "HEAD ed61ed7 已推送；本地：apps/api tsc 0 / seo-* 23 文件 164 例全过 / 四项门禁 OK",
+  "WAITING_FOR_VERDICT": "PUBLIC ENGINE IMPLEMENTATION AUDIT（已送审：docs/releases/SEO-PUBLIC-ENGINE-IMPLEMENTATION-AUDIT-REQUEST.md @ ed61ed7；代码 HEAD efcc125；唤醒三要素已验证送达）；RSI staging smoke 仍等宿主非生产 DATABASE_URL",
   "HOST_ACTION_REQUIRED": [
     "provider developer/partner account registration",
     "third-party commercial agreement acceptance",
@@ -7397,7 +7396,7 @@
     "non-production staging DATABASE_URL + 确认该 shared 库是否承载真实客户数据（执行已授权的 staging migrate deploy 前需要）"
   ],
   "HOLD_EXTERNAL": true,
-  "LAST_HEARTBEAT_AT": "2026-10-05T09:20:00.000Z",
+  "LAST_HEARTBEAT_AT": "2026-10-05T09:35:00.000Z",
   "ci_red_streak_note": "RESOLVED: three contract/inventory fixes (tenant-trigger whitelist 1b15ab7, append-only whitelist cc13bde, model inventory 82->85 4f02282); 4f02282 is the first green run after the streak.",
   "ci_contract_fix_local_verification": {
     "at": "2026-10-04T08:51:16.135Z",
@@ -7626,7 +7625,7 @@
     "public_route_module": "apps/api/src/services/seo/seo-public-route.ts",
     "seo8_status": "COMPLETED（19 套件 137 例，含真实 HTTP 集成验收矩阵）",
     "seo_public_ports": "apps/api/src/services/seo/seo-public-ports.ts",
-    "engine_registry": "EMPTY_BY_DEFAULT（未注册 basisKey 不对外声明；run* 返回 unavailable，不产出任何金额）",
+    "engine_registry": "EMPTY_BY_DEFAULT（DUTY_DIFFERENCE 语义在仓库内无法证实 → 不注册）",
     "public_route_adapter": "apps/api/src/services/seo/seo-public-node-adapter.ts",
     "server_branch": "apps/api/src/server.ts（isSeoPublicRouteRequest(req) → handleSeoPublicNodeRequest）",
     "engine_design_request": "docs/releases/SEO-PUBLIC-ENGINE-DESIGN-REQUEST.md",
@@ -7654,6 +7653,9 @@
       "item3-confirm-rule-supports-difference-then-register"
     ],
     "engine_schema_module": "apps/api/src/services/seo/seo-public-engine-schema.ts",
-    "duty_difference_module": "apps/api/src/services/seo/seo-public-duty-difference.ts"
+    "duty_difference_module": "apps/api/src/services/seo/seo-public-duty-difference.ts",
+    "engine_audit_request": "docs/releases/SEO-PUBLIC-ENGINE-IMPLEMENTATION-AUDIT-REQUEST.md",
+    "engine_audit_code_head": "efcc125",
+    "registration_decision": "docs/releases/SEO-DUTY-DIFFERENCE-REGISTRATION-DECISION.md"
   }
 }
