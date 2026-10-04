@@ -33,6 +33,8 @@ export interface RsiContinuationState {
   waitingForVerdict: boolean;
   verdict: 'PASS' | 'REVISE' | 'BLOCK' | null;
   queueLength: number;
+  /** RSI-RT-05：被判 BLOCK 的任务数（既不完成、也不重试），用于区分「失败」与「完成」。 */
+  blockedCount: number;
 }
 
 export interface RsiContinuationOutcome {
@@ -158,7 +160,13 @@ export function createRsiContinuationEngine(options: {
       verdict = next;
     },
     state(): RsiContinuationState {
-      return { worker: leased === null ? 'IDLE' : 'RUNNING', waitingForVerdict, verdict, queueLength: queue.length };
+      return {
+        worker: leased === null ? 'IDLE' : 'RUNNING',
+        waitingForVerdict,
+        verdict,
+        queueLength: queue.length,
+        blockedCount: blockedKeys.size,
+      };
     },
   };
   return engine;

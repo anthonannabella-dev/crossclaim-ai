@@ -39,7 +39,7 @@ export function attachContinuationToController(options: {
   tasks: readonly RsiSafeTask[];
   runner: RsiTaskRunner;
   /** RSI-RT-05：配置后，PASS 还必须通过真实 CI/测试证据校验，否则降级为 BLOCK。 */
-  verifyEvidence?: (evidenceRef: string | undefined) => Promise<{ ok: boolean }>;
+  verifyEvidence?: (evidenceRef: string | undefined, claimedAt: Date) => Promise<{ ok: boolean }>;
   now?: () => number;
   leaseMs?: number;
 }): RsiControllerContinuation {
@@ -52,6 +52,8 @@ export function attachContinuationToController(options: {
 
   const dispatch = async (outcome: RsiContinuationOutcome): Promise<RsiContinuationOutcome> => {
     if (outcome.claimed === null) return outcome; // SILENT / 无进展
+    const claimedAtMs = options.now?.() ?? Date.now();
+    const claimedAt = new Date(claimedAtMs);
     if (outcome.transitionLatencyMs !== null) observed.push(outcome.transitionLatencyMs);
     const result = await options.runner.run(outcome.claimed);
     // 忠实映射：BLOCK 绝不写成 PASS；PASS 必须带可用证据。
@@ -59,7 +61,7 @@ export function attachContinuationToController(options: {
     const hasToken = typeof evidenceRef === 'string' && evidenceRef !== '' && !NO_EVIDENCE_TOKENS.has(evidenceRef);
     const hasEvidence =
       hasToken &&
-      (options.verifyEvidence === undefined || (await options.verifyEvidence(evidenceRef as string)).ok);
+      (options.verifyEvidence === undefined || (await options.verifyEvidence(evidenceRef as string, claimedAt)).ok);
     const status: 'PASS' | 'REVISE' | 'BLOCK' =
       result.status === 'PASS' && hasEvidence ? 'PASS' : result.status === 'REVISE' ? 'REVISE' : 'BLOCK';
     engine.completeCurrent(status);
@@ -85,6 +87,7 @@ export const RSI_CONTROLLER_CONTINUATION_BOUNDARY = {
   // RSI-RT-01/05：消除伪成功（claimed→PASS / BLOCK→PASS / 事件替在飞任务宣告完成）。
   blockIsNeverPass: true,
   passRequiresEvidence: true,
+  claimedAtForwardedToEvidence: true,
   eventsDoNotCompleteInflight: true,
   eventDriven: true,
   watchdogIntervalMs: RSI_CONTINUATION_BOUNDARY.watchdogIntervalMs,
