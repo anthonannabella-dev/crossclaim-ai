@@ -72,6 +72,7 @@ export function evaluateCustomsAuthorizationReadiness(
       signerStatus: 'MISSING',
       signerScopeCoversRemedy: false,
       signerSource: 'MISSING',
+      signerJurisdiction: null,
       filingPermissionValid: flags.filingPermissionValid,
       providerCapabilityReady: flags.providerCapabilityReady,
       payeeIdentityConfirmed: true,

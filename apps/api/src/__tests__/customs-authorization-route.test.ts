@@ -33,6 +33,7 @@ const facts = (overrides: Partial<CustomsAuthorizationFacts> = {}): CustomsAutho
   signerStatus: 'VERIFIED',
   signerScopeCoversRemedy: true,
   signerSource: 'SIGNER_AUTHORITY_FACT',
+  signerJurisdiction: 'US',
   filingPermissionValid: true,
   providerCapabilityReady: true,
   payeeIdentityConfirmed: true,
@@ -143,7 +144,7 @@ describe('CA-1 — route-aware customs authorization（unit）', () => {
     const resolved = resolveBrokerPoaFacts([older, newer], { at: AT, remedy: 'DUTY_REFUND', principalRef: 'principal-1' });
     expect(resolved.rowId).toBe('poa-new');
     expect(resolved.status).toBe('VERIFIED');
-    expect(resolved.supersededById).toBe('poa-old');
+    expect(resolved.supersedesId).toBe('poa-old');
 
     const revoked = resolveBrokerPoaFacts(
       [older, poaRow({ id: 'poa-new', observedAt: new Date('2026-09-20T00:00:00.000Z'), contentDigest: 'c'.repeat(64), verificationStatus: 'REVOKED' })],

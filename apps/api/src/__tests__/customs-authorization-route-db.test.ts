@@ -30,6 +30,7 @@ const baseFacts = (overrides: Partial<CustomsAuthorizationFacts> = {}): CustomsA
   signerStatus: 'MISSING',
   signerScopeCoversRemedy: false,
   signerSource: 'MISSING',
+  signerJurisdiction: null,
   filingPermissionValid: true,
   providerCapabilityReady: true,
   payeeIdentityConfirmed: true,
@@ -240,7 +241,7 @@ describe('CA-1 — route-aware authorization（真实 PostgreSQL）', () => {
       principalRef,
     });
     expect(resolved.rowId).toBe(newId);
-    expect(resolved.supersededById).toBe(oldId);
+    expect(resolved.supersedesId).toBe(oldId);
     expect(resolved.status).toBe('VERIFIED');
   });
 

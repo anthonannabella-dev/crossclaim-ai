@@ -14,6 +14,7 @@ export type CustomsFilingRoute = 'BROKER_FILED' | 'SELF_FILED' | 'SERVICE_PROVID
 /** 授权生命周期（§五）：不存在 / 待核验 / 已核验 / 已撤销 / 已被更新取代 / 已过期。 */
 export type AuthorizationLifecycleStatus =
   | 'MISSING'
+  | 'NOT_YET_EFFECTIVE'
   | 'PENDING'
   | 'VERIFIED'
   | 'REVOKED'
@@ -43,6 +44,7 @@ export type CustomsStageBlocker =
   | 'SIGNER_AUTHORITY_REQUIRED'
   | 'SIGNER_NOT_USABLE'
   | 'SIGNER_SCOPE_MISMATCH'
+  | 'SIGNER_JURISDICTION_MISMATCH'
   | 'AUTHORIZATION_SOURCE_NOT_ALLOWED'
   | 'FILING_PERMISSION_REQUIRED'
   | 'FILING_PROVIDER_NOT_READY'
@@ -105,6 +107,8 @@ export interface CustomsAuthorizationFacts {
   signerStatus: AuthorizationLifecycleStatus;
   signerScopeCoversRemedy: boolean;
   signerSource: AuthorizationSource;
+  /** Signer authority jurisdiction; SELF_FILED requires it to match the policy jurisdiction. */
+  signerJurisdiction: string | null;
   filingPermissionValid: boolean;
   providerCapabilityReady: boolean;
   payeeIdentityConfirmed: boolean;
@@ -205,6 +209,8 @@ export function evaluateCustomsAuthorizationForRoute(input: {
         fileBlockers.push('AUTHORIZATION_SOURCE_NOT_ALLOWED');
       } else if (!facts.signerScopeCoversRemedy) {
         fileBlockers.push('SIGNER_SCOPE_MISMATCH');
+      } else if (jurisdictionMismatch(facts.signerJurisdiction, policy.jurisdiction)) {
+        fileBlockers.push('SIGNER_JURISDICTION_MISMATCH');
       }
     }
     if (policy.filingPermissionRequired && !facts.filingPermissionValid) {
@@ -267,7 +273,7 @@ export interface ResolvedPoaFacts {
   source: AuthorizationSource;
   rowId: string | null;
   expiresAt: Date | null;
-  supersededById: string | null;
+  supersedesId: string | null;
 }
 
 /**
@@ -291,14 +297,15 @@ export function resolveBrokerPoaFacts(
 
   const latest = candidates[0];
   if (!latest) {
-    return { status: 'MISSING', scopeCoversRemedy: false, jurisdiction: null, source: 'MISSING', rowId: null, expiresAt: null, supersededById: null };
+    return { status: 'MISSING', scopeCoversRemedy: false, jurisdiction: null, source: 'MISSING', rowId: null, expiresAt: null, supersedesId: null };
   }
 
   const newer = candidates.find((row) => row.id !== latest.id) ?? null;
   const scopeCoversRemedy = latest.scopeRemedies.includes('*') || latest.scopeRemedies.includes(ctx.remedy);
 
   let status: AuthorizationLifecycleStatus;
-  if (latest.verificationStatus === 'REVOKED') status = 'REVOKED';
+  if (latest.effectiveAt.getTime() > ctx.at.getTime()) status = 'NOT_YET_EFFECTIVE';
+  else if (latest.verificationStatus === 'REVOKED') status = 'REVOKED';
   else if (latest.verificationStatus === 'VERIFIED') {
     if (latest.expiresAt !== null && latest.expiresAt.getTime() <= ctx.at.getTime()) status = 'EXPIRED';
     else status = 'VERIFIED';
@@ -312,7 +319,7 @@ export function resolveBrokerPoaFacts(
     source: 'BROKER_POA_FACT',
     rowId: latest.id,
     expiresAt: latest.expiresAt,
-    supersededById: newer ? newer.id : null,
+    supersedesId: newer ? newer.id : null,
   };
 }
 
@@ -369,7 +376,7 @@ export interface ResolvedSignerFacts {
   source: AuthorizationSource;
   rowId: string | null;
   signerType: CustomsAuthorizedSignerType | null;
-  supersededById: string | null;
+  supersedesId: string | null;
 }
 
 /**
@@ -401,7 +408,7 @@ export function resolveAuthorizedSignerFacts(
       source: 'MISSING',
       rowId: null,
       signerType: null,
-      supersededById: null,
+      supersedesId: null,
     };
   }
 
@@ -409,7 +416,8 @@ export function resolveAuthorizedSignerFacts(
   const scopeCoversRemedy = latest.scopeRemedies.includes('*') || latest.scopeRemedies.includes(ctx.remedy);
 
   let status: AuthorizationLifecycleStatus;
-  if (latest.revokedAt !== null || latest.verificationStatus === 'REVOKED') status = 'REVOKED';
+  if (latest.effectiveAt.getTime() > ctx.at.getTime()) status = 'NOT_YET_EFFECTIVE';
+  else if (latest.revokedAt !== null || latest.verificationStatus === 'REVOKED') status = 'REVOKED';
   else if (latest.supersededAt !== null) status = 'SUPERSEDED';
   else if (latest.verificationStatus === 'VERIFIED') {
     status = latest.expiresAt !== null && latest.expiresAt.getTime() <= ctx.at.getTime() ? 'EXPIRED' : 'VERIFIED';
@@ -423,7 +431,7 @@ export function resolveAuthorizedSignerFacts(
     source: 'SIGNER_AUTHORITY_FACT',
     rowId: latest.id,
     signerType: latest.signerType,
-    supersededById: newer ? newer.id : null,
+    supersedesId: newer ? newer.id : null,
   };
 }
 

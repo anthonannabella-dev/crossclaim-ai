@@ -54,6 +54,9 @@ async function insertSigner(
     evidenceArtifactRef?: string | null;
     verifiedAt?: Date | null;
     signerRef?: string;
+    verificationSource?: string;
+    effectiveAt?: Date;
+    scopeOverride?: unknown;
   },
 ) {
   const id = randomUUID();
@@ -65,15 +68,16 @@ async function insertSigner(
       signerRef: input.signerRef ?? 'person:' + randomUUID().slice(0, 8),
       signerType: 'LEGAL_REPRESENTATIVE',
       authorityBasis: 'board:resolution',
-      scope: input.scope ?? ['DUTY_REFUND'],
+      scope: (input.scopeOverride ?? input.scope ?? ['DUTY_REFUND']) as never,
       jurisdiction: 'US',
       effectiveAt:
-        input.expiresAt && input.expiresAt !== null
+        input.effectiveAt ??
+        (input.expiresAt && input.expiresAt !== null
           ? new Date(input.expiresAt.getTime() - 30 * 86_400_000)
-          : new Date('2026-09-01T00:00:00.000Z'),
+          : new Date('2026-09-01T00:00:00.000Z')),
       expiresAt: input.expiresAt === undefined ? new Date('2027-09-01T00:00:00.000Z') : input.expiresAt,
       verificationStatus: input.verificationStatus ?? 'VERIFIED',
-      verificationSource: 'CUSTOMER_DOCUMENT',
+      verificationSource: (input.verificationSource ?? 'CUSTOMER_DOCUMENT') as never,
       verifiedAt: input.verifiedAt === undefined ? new Date('2026-09-01T00:00:00.000Z') : input.verifiedAt,
       evidenceArtifactRef: input.evidenceArtifactRef === undefined ? 'evidence:poa-doc' : input.evidenceArtifactRef,
       revokedAt: input.revokedAt ?? null,
@@ -148,6 +152,38 @@ describe('CA-2 — authorized signer fact（真实 PostgreSQL）', () => {
 
     await expect(insertSigner(organizationId, { principalRef, signerRef: '12-3456789' })).rejects.toThrow();
     await expect(insertSigner(organizationId, { principalRef, signerRef: '123456789' })).rejects.toThrow();
+  });
+
+  it('CHANGE F：真实注入 verificationSource=NONE 的 VERIFIED 事实 → DB 拒绝（不可自证）', async () => {
+    const organizationId = await seedOrg('none-source');
+    const principalRef = await seedIor(organizationId);
+    await expect(insertSigner(organizationId, { principalRef, verificationSource: 'NONE' })).rejects.toThrow();
+  });
+
+  it('CHANGE A：scope 元素必须是合法 remedy token（123 / {} / 空串拒绝）', async () => {
+    const organizationId = await seedOrg('scope-shape');
+    const principalRef = await seedIor(organizationId);
+    await expect(insertSigner(organizationId, { principalRef, scopeOverride: [123] })).rejects.toThrow();
+    await expect(insertSigner(organizationId, { principalRef, scopeOverride: [{}] })).rejects.toThrow();
+    await expect(insertSigner(organizationId, { principalRef, scopeOverride: [''] })).rejects.toThrow();
+    await expect(insertSigner(organizationId, { principalRef, scopeOverride: ['*'] })).resolves.toBeTruthy();
+  });
+
+  it('CHANGE D：effectiveAt 在未来的 VERIFIED 事实 → NOT_YET_EFFECTIVE（READY_TO_FILE=false）', async () => {
+    const organizationId = await seedOrg('future');
+    const principalRef = await seedIor(organizationId);
+    await insertSigner(organizationId, {
+      principalRef,
+      effectiveAt: new Date('2026-12-01T00:00:00.000Z'),
+      observedAt: new Date('2026-10-01T00:00:00.000Z'),
+      expiresAt: new Date('2027-12-01T00:00:00.000Z'),
+    });
+    const resolved = resolveAuthorizedSignerFacts(await loadRows(organizationId), {
+      at: new Date('2026-10-04T00:00:00.000Z'),
+      remedy: 'DUTY_REFUND',
+      principalRef,
+    });
+    expect(resolved.status).toBe('NOT_YET_EFFECTIVE');
   });
 
   it('revoked / expired / superseded 事实不可用（历史保留、不覆盖）', async () => {
