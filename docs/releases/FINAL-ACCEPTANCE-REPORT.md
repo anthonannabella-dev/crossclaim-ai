@@ -1,8 +1,8 @@
 # FINAL ACCEPTANCE REPORT（自动生成，请勿手改）
 
-- 生成时间：2026-10-04T06:14:42.905Z
-- 单一权威矩阵：`docs/releases/ACCEPTANCE-MATRIX.json` @35d663d
-- acceptance HEAD：`35d663d`
+- 生成时间：2026-10-04T06:16:45.389Z
+- 单一权威矩阵：`docs/releases/ACCEPTANCE-MATRIX.json` @d2ceca6
+- acceptance HEAD：`d2ceca6`
 - 协议：`docs/releases/FINAL-ACCEPTANCE-PROTOCOL.md`（三层验收；禁止自证）
 - 状态：CODE_COMPLETE=NO · INTEGRATION_COMPLETE=NO · REAL_VALIDATION_COMPLETE=NO · PRODUCTION_READY=NO
 - INTERNAL_READY=NO；AUTONOMOUS_INTERNAL_WORK=RUNNING
@@ -58,17 +58,17 @@
 - L1-01_safe_continuation_queue_zero → false（open backlog items: 16）
 - L1-02_no_open_internal_items → false（open internal: c18-1-provider-integration-matrix,c18-2-provider-dto-schema,c18-3-sandbox-filing-provider,c18-4-provider-webhook-verification,c18-5-provider-idempotency-reconciliation,c18-6-provider-tenant-account-lineage,c18-7-provider-authorization-lifecycle,c18-8-provider-negative-path-e2e,seo-1-gap-audit-and-page-matrix,seo-2-recovery-rule-definition-v1,seo-3-public-checker-calculator,seo-4-recover-routes-and-locales,seo-5-technical-seo,seo-6-indexability-gate,seo-7-analytics-event-contract,seo-8-seo-contract-tests）
 - L1-03_no_open_markers → false（arch_pending=0 awaiting_verdict=false）
-- L1-04_full_ci_success_on_head → false（acceptance_head=35d663d ci_head=8f32fce ci=pending（3fce2ca / 1e42e6e 已记录，非阻塞） run=37143524364）
-- L1-05_pg_regression_passed → UNVERIFIED（pg_regression recorded at fd4c675 ≠ acceptance head 35d663d（且中间存在非簿记变更））
-- L1-06_fresh_db_migration_passed → UNVERIFIED（fresh_db_migration recorded at bd87ffb ≠ acceptance head 35d663d（且中间存在非簿记变更））
-- L1-07_api_typecheck_passed → UNVERIFIED（typecheck_api recorded at bd87ffb ≠ acceptance head 35d663d（且中间存在非簿记变更））
-- L1-08_web_typecheck_build_passed → UNVERIFIED（typecheck_web recorded at bd87ffb ≠ acceptance head 35d663d（且中间存在非簿记变更））
-- L1-09_no_skipped_critical_tests → UNVERIFIED（tests_no_skipped recorded at bd87ffb ≠ acceptance head 35d663d（且中间存在非簿记变更））
+- L1-04_full_ci_success_on_head → false（acceptance_head=d2ceca6 ci_head=8f32fce ci=pending（3fce2ca / 1e42e6e 已记录，非阻塞） run=37143524364）
+- L1-05_pg_regression_passed → UNVERIFIED（pg_regression recorded at fd4c675 ≠ acceptance head d2ceca6（且中间存在非簿记变更））
+- L1-06_fresh_db_migration_passed → UNVERIFIED（fresh_db_migration recorded at bd87ffb ≠ acceptance head d2ceca6（且中间存在非簿记变更））
+- L1-07_api_typecheck_passed → UNVERIFIED（typecheck_api recorded at bd87ffb ≠ acceptance head d2ceca6（且中间存在非簿记变更））
+- L1-08_web_typecheck_build_passed → UNVERIFIED（typecheck_web recorded at bd87ffb ≠ acceptance head d2ceca6（且中间存在非簿记变更））
+- L1-09_no_skipped_critical_tests → UNVERIFIED（tests_no_skipped recorded at bd87ffb ≠ acceptance head d2ceca6（且中间存在非簿记变更））
 - L1-10_git_working_tree_clean → false（dirty entries: 3）
-- L1-11_docs_state_consistent → UNVERIFIED（docs_sync recorded at bd87ffb ≠ acceptance head 35d663d（且中间存在非簿记变更））
-- L1-12_schema_invariants_verified → UNVERIFIED（schema_invariants recorded at bd87ffb ≠ acceptance head 35d663d（且中间存在非簿记变更））
-- L1-13_negative_paths_covered → UNVERIFIED（negative_paths recorded at bd87ffb ≠ acceptance head 35d663d（且中间存在非簿记变更））
-- L1-14_real_pg_e2e_not_mock_only → UNVERIFIED（pg_e2e_real recorded at bd87ffb ≠ acceptance head 35d663d（且中间存在非簿记变更））
+- L1-11_docs_state_consistent → UNVERIFIED（docs_sync recorded at bd87ffb ≠ acceptance head d2ceca6（且中间存在非簿记变更））
+- L1-12_schema_invariants_verified → UNVERIFIED（schema_invariants recorded at bd87ffb ≠ acceptance head d2ceca6（且中间存在非簿记变更））
+- L1-13_negative_paths_covered → UNVERIFIED（negative_paths recorded at bd87ffb ≠ acceptance head d2ceca6（且中间存在非簿记变更））
+- L1-14_real_pg_e2e_not_mock_only → UNVERIFIED（pg_e2e_real recorded at bd87ffb ≠ acceptance head d2ceca6（且中间存在非簿记变更））
 
 ## 3. 外部 / 宿主依赖（不得自证完成）
 

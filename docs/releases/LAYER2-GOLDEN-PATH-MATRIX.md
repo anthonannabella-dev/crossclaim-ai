@@ -1,6 +1,6 @@
 # LAYER 2 — GOLDEN PATH MATRIX（自动生成，请勿手改）
 
-- 生成时间：2026-10-04T06:14:42.373Z
+- 生成时间：2026-10-04T06:16:44.868Z
 - 机器可读：`docs/releases/LAYER2-GOLDEN-PATH-MATRIX.json`；生成器：`tools/autopilot/golden-path-matrix.mjs`
 - 判定规则：**COVERED 必须存在命名证据文件**（测试/前端）；否则 GAP，并自动登记为 backlog。
 - 依据：MSG-20261003-135 CHANGE C（禁止用「专项测试很多」替代完整矩阵）。
@@ -39,7 +39,7 @@
 | rbac | COVERED | apps/api/src/__tests__/carrier-claim-response-db.test.ts<br>apps/api/src/__tests__/carrier-claim-response-http-e2e-db.test.ts<br>apps/api/src/__tests__/carrier-claim-response-http.test.ts<br>apps/api/src/__tests__/carrier-manual-submission-db.test.ts |
 | amount_ledger | COVERED | apps/api/src/__tests__/carrier-claim-package.test.ts<br>apps/api/src/__tests__/carrier-claim-response-db.test.ts<br>apps/api/src/__tests__/carrier-claim-response-http-e2e-db.test.ts<br>apps/api/src/__tests__/carrier-claim-response-http.test.ts |
 
-## Customs / Trade Recovery（api 测试 44 个 / 前端 15 个）
+## Customs / Trade Recovery（api 测试 45 个 / 前端 15 个）
 
 | 能力轴 | 状态 | 证据 |
 |---|---|---|
@@ -51,7 +51,7 @@
 | negative | COVERED | apps/api/src/__tests__/customs-authorization-center-e2e-db.test.ts<br>apps/api/src/__tests__/customs-authorization-center.test.ts<br>apps/api/src/__tests__/customs-authorization-lifecycle-db.test.ts<br>apps/api/src/__tests__/customs-authorization-lifecycle.test.ts |
 | replay | COVERED | apps/api/src/__tests__/customs-authorization-center-e2e-db.test.ts<br>apps/api/src/__tests__/customs-authorization-lifecycle-db.test.ts<br>apps/api/src/__tests__/customs-broker-authorization-session.test.ts<br>apps/api/src/__tests__/customs-classification-discrepancy.test.ts |
 | concurrency | COVERED | apps/api/src/__tests__/customs-authorization-lifecycle-db.test.ts<br>apps/api/src/__tests__/customs-broker-authorization-session-db.test.ts<br>apps/api/src/__tests__/customs-entry-fact-store-db.test.ts<br>apps/api/src/__tests__/customs-ior-facts-db.test.ts |
-| failure_recovery | COVERED | apps/api/src/__tests__/customs-provider-reconciliation.test.ts<br>apps/api/src/__tests__/customs-recovery-chain-http.test.ts<br>apps/api/src/__tests__/customs-recovery-chain-service-db.test.ts<br>apps/api/src/__tests__/customs-recovery-eligibility.test.ts |
+| failure_recovery | COVERED | apps/api/src/__tests__/customs-provider-negative-path-e2e.test.ts<br>apps/api/src/__tests__/customs-provider-reconciliation.test.ts<br>apps/api/src/__tests__/customs-recovery-chain-http.test.ts<br>apps/api/src/__tests__/customs-recovery-chain-service-db.test.ts |
 | cross_tenant | COVERED | apps/api/src/__tests__/customs-authorization-center-e2e-db.test.ts<br>apps/api/src/__tests__/customs-authorization-center.test.ts<br>apps/api/src/__tests__/customs-authorization-lifecycle-db.test.ts<br>apps/api/src/__tests__/customs-authorization-route-db.test.ts |
 | rbac | COVERED | apps/api/src/__tests__/customs-authorization-center-e2e-db.test.ts<br>apps/api/src/__tests__/customs-authorization-center.test.ts<br>apps/api/src/__tests__/customs-authorization-lifecycle-db.test.ts<br>apps/api/src/__tests__/customs-authorization-lifecycle.test.ts |
 | amount_ledger | COVERED | apps/api/src/__tests__/customs-authorization-center.test.ts<br>apps/api/src/__tests__/customs-claim-ready-http.test.ts<br>apps/api/src/__tests__/customs-claim-ready-package.test.ts<br>apps/api/src/__tests__/customs-classification-discrepancy.test.ts |

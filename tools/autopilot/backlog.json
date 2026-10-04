@@ -1,6 +1,6 @@
 {
   "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。",
-  "updatedAt": "2026-10-04T06:14:41.949Z",
+  "updatedAt": "2026-10-04T06:16:44.468Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -944,7 +944,7 @@
     },
     {
       "id": "c18-8-provider-negative-path-e2e",
-      "status": "PENDING",
+      "status": "COMPLETED",
       "risk_class": "MEDIUM",
       "arch_review_required": true,
       "hold_external": true,
@@ -952,7 +952,8 @@
       "dependencies": [
         "c18-1-provider-integration-matrix"
       ],
-      "updated_at": "2026-10-04T05:27:51.933Z"
+      "updated_at": "2026-10-04T06:16:44.468Z",
+      "completed_at": "2026-10-04T06:16:44.468Z"
     },
     {
       "id": "seo-1-gap-audit-and-page-matrix",
