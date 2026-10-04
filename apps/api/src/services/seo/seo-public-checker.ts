@@ -19,9 +19,9 @@ import {
   type RecoveryRuleDefinition,
 } from '../recovery-rules/recovery-rule-definition';
 import {
-  validatePublicAnswersAgainstSchema,
   type PublicInputSchema,
 } from './seo-public-input-schema';
+import { orchestratePublicAnswerSchemas } from './seo-public-answer-orchestration';
 
 /** 匿名输入白名单约束。 */
 export const SEO_PUBLIC_ANSWER_KEY_RE = /^[a-z][a-z0-9_]{0,31}$/;
@@ -222,15 +222,23 @@ export async function runPublicSeoChecker(
   }
 
   // CHANGE A/B：语义白名单 + schema 驱动数值校验（必须在调用任何引擎**之前**完成）。
-  const schemaBasisKey = checkerReady ? rule.eligibilityMethod.basisKey : rule.calculationMethod.basisKey;
-  const schema: PublicInputSchema | null = await ports.getPublicInputSchema(schemaBasisKey);
-  const schemaCheck = validatePublicAnswersAgainstSchema({ answers: validation.answers, schema });
-  if (!schemaCheck.ok) {
-    return schemaCheck.code === 'SCHEMA_NOT_REGISTERED'
+  // MSG-20261005-06 (5): orchestrate BOTH schemas; each engine sees only its own keys.
+  const eligibilitySchema = checkerReady
+    ? await ports.getPublicInputSchema(rule.eligibilityMethod.basisKey)
+    : null;
+  const calculationSchema = calculatorReady
+    ? await ports.getPublicInputSchema(rule.calculationMethod.basisKey)
+    : null;
+  const orchestration = orchestratePublicAnswerSchemas({
+    answers: validation.answers,
+    eligibility: { active: checkerReady, schema: eligibilitySchema },
+    calculation: { active: calculatorReady, schema: calculationSchema },
+  });
+  if (!orchestration.ok) {
+    return orchestration.code === 'SCHEMA_NOT_REGISTERED'
       ? DENIED('NO_RECOVERY_CAPABILITY')
       : DENIED('INVALID_REQUEST');
   }
-  const checkedAnswers = schemaCheck.answers ?? {};
 
   let eligible: boolean | null = null;
   let reasonCodes: readonly string[] = [];
@@ -238,7 +246,7 @@ export async function runPublicSeoChecker(
     const outcome = await ports.runEligibility({
       basisKey: rule.eligibilityMethod.basisKey,
       rule,
-      answers: checkedAnswers,
+      answers: orchestration.eligibilityAnswers,
     });
     // engine 输出校验：不合法即 fail-closed，绝不把异常值透传给公开调用方。
     if (!isSafeEligibilityOutcome(outcome)) return DENIED('ENGINE_OUTPUT_INVALID');
@@ -253,7 +261,7 @@ export async function runPublicSeoChecker(
     const calculation = await ports.runCalculation({
       basisKey: rule.calculationMethod.basisKey,
       rule,
-      answers: checkedAnswers,
+      answers: orchestration.calculationAnswers,
     });
     if (!isSafeCalculationOutcome(calculation)) return DENIED('ENGINE_OUTPUT_INVALID');
     estimate = calculation.estimate;
