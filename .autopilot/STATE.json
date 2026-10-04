@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261004-16",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-04T06:24:40.428Z",
+  "updated_at": "2026-10-04T06:25:53.239Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -5080,9 +5080,9 @@
   "awaiting_verdict": "C18 INTERNAL FINAL-2（GitHub comment 5977287947，reviewed HEAD 9ffa228）",
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-04T06:23:58.266Z",
-    "head": "3066ac2",
-    "acceptance_head": "3066ac2",
+    "computed_at": "2026-10-04T06:25:54.149Z",
+    "head": "a8fe602",
+    "acceptance_head": "a8fe602",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5175,48 +5175,48 @@
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=3066ac2 ci_head=8f32fce ci=pending（d2ceca6 / 4477158 已记录，非阻塞） run=37143524364"
+        "evidence": "acceptance_head=a8fe602 ci_head=8f32fce ci=pending（3066ac2 / 9ffa228 已记录，非阻塞） run=37143524364"
       },
       "L1-05_pg_regression_passed": {
         "status": "UNVERIFIED",
-        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head 3066ac2（且中间存在非簿记变更）"
+        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head a8fe602（且中间存在非簿记变更）"
       },
       "L1-06_fresh_db_migration_passed": {
         "status": "UNVERIFIED",
-        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head 3066ac2（且中间存在非簿记变更）"
+        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head a8fe602（且中间存在非簿记变更）"
       },
       "L1-07_api_typecheck_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head 3066ac2（且中间存在非簿记变更）"
+        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head a8fe602（且中间存在非簿记变更）"
       },
       "L1-08_web_typecheck_build_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head 3066ac2（且中间存在非簿记变更）"
+        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head a8fe602（且中间存在非簿记变更）"
       },
       "L1-09_no_skipped_critical_tests": {
         "status": "UNVERIFIED",
-        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head 3066ac2（且中间存在非簿记变更）"
+        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head a8fe602（且中间存在非簿记变更）"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
         "status": false,
-        "evidence": "dirty entries: 8"
+        "evidence": "dirty entries: 1"
       },
       "L1-11_docs_state_consistent": {
         "status": "UNVERIFIED",
-        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head 3066ac2（且中间存在非簿记变更）"
+        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head a8fe602（且中间存在非簿记变更）"
       },
       "L1-12_schema_invariants_verified": {
         "status": "UNVERIFIED",
-        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head 3066ac2（且中间存在非簿记变更）"
+        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head a8fe602（且中间存在非簿记变更）"
       },
       "L1-13_negative_paths_covered": {
         "status": "UNVERIFIED",
-        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head 3066ac2（且中间存在非簿记变更）"
+        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head a8fe602（且中间存在非簿记变更）"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
         "status": "UNVERIFIED",
-        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head 3066ac2（且中间存在非簿记变更）"
+        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head a8fe602（且中间存在非簿记变更）"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
@@ -6095,7 +6095,7 @@
       "API.md / DOMAIN_MODEL.md / architecture-contract 计数 77 → 79"
     ]
   },
-  "next_execution_unit": "读 C18 INTERNAL FINAL-2 裁决 → 按 VERDICT 执行；无阻塞则准备两个 Schema Delta 提案 + SEO-3 PUBLIC API SECURITY AUDIT",
+  "next_execution_unit": "C18 Schema Delta 审计送审（+ 读 C18 INTERNAL FINAL-2 裁决）",
   "customer_ui_commercialization": {
     "at": "2026-10-04T01:21:55.949Z",
     "authorization": "MSG-20261004-01（CUSTOMER UI/UX COMMERCIALIZATION — IMPLEMENTATION AUTHORIZED）",
@@ -6374,7 +6374,7 @@
   "audit_session_url": "https://chatgpt.com/c/6ac1cdf0-1ec8-83ec-8036-0e66fcf5c6b9",
   "ci_note": "2026-10-04 复核：全部内部单元 CLOSED 后，GitHub Actions 对各 head 均有 workflow run（0c6bb0f/ f0abd05 / cb04232 / c6ce17c / 3fad4d4 / c897737 / fd7e4bf / 400fe6e / 8f32fce = success；5c6888e / f640f8c / 84c3f99 运行中）。架构方某次查询未见 runs 属查询口径差异（commit statuses vs workflow runs），此处记录 run id 以便复核。",
   "c18_layer3": {
-    "at": "2026-10-04T06:24:40.428Z",
+    "at": "2026-10-04T06:25:53.239Z",
     "main_line": "P0 = C18 REAL CUSTOMS PROVIDER INTEGRATION",
     "matrix_doc": "docs/releases/C18-PROVIDER-INTEGRATION-MATRIX.md",
     "completed": [
@@ -6520,11 +6520,21 @@
       "Provider sandbox account / credentials / webhook secret rotation",
       "真实 adapter + 真实 sandbox E2E + Production approval",
       "External Write enablement + 首笔真实 filing"
-    ]
+    ],
+    "schema_delta_proposal": {
+      "doc": "docs/releases/C18-SCHEMA-DELTA-PROPOSAL.md",
+      "status": "PROPOSAL（未写 migration、未改 schema.prisma）",
+      "tables": [
+        "CustomsProviderTenantBinding",
+        "CustomsProviderTenantBindingLineage",
+        "CustomsProviderWebhookReplayClaim"
+      ],
+      "next": "送 Schema Delta 审计 → 通过后写 migration → 服务层把端口实现切到 Prisma store"
+    }
   },
-  "last_heartbeat_at": "2026-10-04T06:24:40.428Z",
+  "last_heartbeat_at": "2026-10-04T06:25:53.239Z",
   "waiting_for_verdict": "C18 INTERNAL FINAL-2（GitHub comment 5977287947，reviewed HEAD 9ffa228）",
-  "last_completed_unit": "c18-internal-final-2-fixes（MSG-20261004-18 三条窄修）",
+  "last_completed_unit": "c18-schema-delta-proposal（仅提案，未落库）",
   "hold_external": true,
   "track_c_seo_p3": {
     "at": "2026-10-04T06:20:22.102Z",
