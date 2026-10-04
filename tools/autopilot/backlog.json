@@ -1,6 +1,6 @@
 {
   "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。",
-  "updatedAt": "2026-10-05T02:21:00.000Z",
+  "updatedAt": "2026-10-05T02:26:00.000Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -1650,6 +1650,16 @@
       "title": "/admin/autonomy 页面组装（健康 + 成本面板，只读快照）",
       "scope": "page.tsx 读取 rsi-admin-snapshot-v1 artifact（缺失/非法 → fail-closed 只显示加载失败）；web 不读 DB、不调模型",
       "acceptance_criteria": "web tsc 0；快照缺失不编造数据；5 语言 key 复用",
+      "status": "IMPLEMENTED_PENDING_CI",
+      "implementation_head": "(this commit)"
+    },
+    {
+      "id": "RSI-RT-09-admin-snapshot-generator",
+      "priority": "P1",
+      "source_backlog_id": "OWNER 任务：RSI Runtime 第 8 节 Admin 页面",
+      "title": "Admin 快照生成器（健康 + 台账 → rsi-admin-snapshot-v1）",
+      "scope": "buildAdminSnapshot：白名单字段、台账 today/month 聚合、costSafeMode 标记；无任务明细/客户数据/凭据",
+      "acceptance_criteria": "vitest rsi-admin-snapshot 3/3；api tsc 0",
       "status": "IMPLEMENTED_PENDING_CI",
       "implementation_head": "(this commit)"
     }
