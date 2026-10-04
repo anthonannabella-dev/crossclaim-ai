@@ -109,6 +109,53 @@ describe('C18-7 — provider authorization lifecycle（unit）', () => {
     expect(deriveProviderAuthorizationState([revoked, reauth], NOW).status).toBe('REVOKED');
   });
 
+  it('时间语义：未来才生效的授权不得提前变 ACTIVE', () => {
+    const future = event({
+      effectiveAt: '2026-10-05T00:00:00.000Z',
+      observedAt: '2026-10-04T05:00:00.000Z',
+    });
+    const state = deriveProviderAuthorizationState([future], NOW);
+    expect(state.status).toBe('UNKNOWN');
+    expect(state.appliedEventCount).toBe(0);
+
+    // 当前已生效 + 未来事件并存：只按已生效部分判定。
+    const effectiveNow = event({ expiresAt: '2027-10-01T00:00:00.000Z' });
+    const mixed = deriveProviderAuthorizationState([effectiveNow, future], NOW);
+    expect(mixed.status).toBe('ACTIVE');
+    expect(mixed.appliedEventCount).toBe(1);
+  });
+
+  it('时间语义：同 effectiveAt 的授权不得靠 observedAt 解除 REVOKED（必须 strictly later）', () => {
+    const sameMomentRevoke = event({
+      kind: 'REVOKED',
+      effectiveAt: '2026-10-02T00:00:00.000Z',
+      observedAt: '2026-10-02T00:00:01.000Z',
+      sourceRef: 'webhook:delivery-2',
+    });
+    const sameMomentRenew = event({
+      kind: 'RENEWED',
+      effectiveAt: '2026-10-02T00:00:00.000Z',
+      observedAt: '2026-10-02T00:00:10.000Z',
+      sourceRef: 'webhook:delivery-3',
+    });
+    const state = deriveProviderAuthorizationState([sameMomentRevoke, sameMomentRenew], NOW);
+    expect(state.conflict).toBe(true);
+    expect(state.status).toBe('UNKNOWN');
+    expect(
+      evaluateProviderSubmissionPrecondition({ internal: { status: 'VERIFIED' }, provider: state, now: NOW })
+        .allowed,
+    ).toBe(false);
+
+    // 只有 effectiveAt 严格更晚的重新授权才解除。
+    const strictlyLater = event({
+      kind: 'RENEWED',
+      effectiveAt: '2026-10-03T00:00:00.000Z',
+      observedAt: '2026-10-03T00:00:01.000Z',
+      sourceRef: 'webhook:delivery-4',
+    });
+    expect(deriveProviderAuthorizationState([sameMomentRevoke, strictlyLater], NOW).status).toBe('ACTIVE');
+  });
+
   it('折叠：同一时间点互相矛盾的事件 → conflict → UNKNOWN（fail-closed）', () => {
     const granted = event();
     const revokedSameMoment = event({

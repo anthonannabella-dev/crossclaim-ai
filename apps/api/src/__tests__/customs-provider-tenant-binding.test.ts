@@ -22,6 +22,8 @@ const binding = (overrides: Partial<CustomsProviderTenantBinding> = {}): Customs
   providerTenantRef: 'ptenant:acme-us',
   providerAccountRef: 'paccount:broker-a',
   relationship: 'CROSSCLAIM_SAAS',
+  relationshipEvidenceRef: 'evidence:saas-agreement-v1',
+  relationshipVerifiedAt: '2026-10-04T05:00:00.000Z',
   jurisdictionScope: ['US'],
   status: 'ACTIVE',
   verifiedAt: '2026-10-04T05:00:00.000Z',
@@ -94,6 +96,72 @@ describe('C18-6 — provider tenant / account lineage（unit）', () => {
       query({ jurisdiction: 'DE' }),
     );
     expect(wildcard.ok).toBe(true);
+  });
+
+  it('关系门槛：CROSSCLAIM_SAAS 不能只是 enum —— 必须有验证证据与验证时间', () => {
+    // 未验证（verifiedAt = null）
+    const unverified = resolveCustomsProviderTenantBinding(
+      binding({ relationshipVerifiedAt: null }),
+      query(),
+    );
+    expect(unverified.ok).toBe(false);
+    expect(unverified.reasonCode).toBe('RELATIONSHIP_NOT_VERIFIED');
+    expect(unverified.providerTenantRef).toBeNull();
+
+    // 缺证据引用
+    const noEvidence = resolveCustomsProviderTenantBinding(
+      binding({ relationshipEvidenceRef: null }),
+      query(),
+    );
+    expect(noEvidence.reasonCode).toBe('RELATIONSHIP_NOT_VERIFIED');
+
+    // 非 opaque 证据引用（裸 URL）一律拒绝
+    const badEvidence = resolveCustomsProviderTenantBinding(
+      binding({ relationshipEvidenceRef: 'https://example.com/contract' }),
+      query(),
+    );
+    expect(badEvidence.reasonCode).toBe('RELATIONSHIP_NOT_VERIFIED');
+
+    // 证据 + 验证时间齐备才放行
+    expect(resolveCustomsProviderTenantBinding(binding(), query()).ok).toBe(true);
+
+    // 非代客提交关系（CrossClaim 不是 filer）不强制该证据
+    const brokerOfRecord = resolveCustomsProviderTenantBinding(
+      binding({
+        relationship: 'BROKER_OF_RECORD',
+        relationshipEvidenceRef: null,
+        relationshipVerifiedAt: null,
+      }),
+      query(),
+    );
+    expect(brokerOfRecord.ok).toBe(true);
+  });
+
+  it('关系门槛：bindCustomsProviderSubmissionRequest 在关系未验证时不得构造提交请求', async () => {
+    const resolver = createInMemoryCustomsProviderTenantBindingResolver([
+      binding({ relationshipVerifiedAt: null }),
+    ]);
+    const result = await bindCustomsProviderSubmissionRequest({
+      resolver,
+      organizationId: 'org:acme',
+      providerId: 'provider:customs-a',
+      entitlement: 'CROSSCLAIM_SAAS',
+      draft: {
+        principalRef: 'ior:acme',
+        jurisdiction: 'US',
+        remedy: 'DRAWBACK',
+        filingAuthorized: true,
+        packageRef: 'package:1',
+        packageDigest: DIGEST,
+        evidenceRefs: [{ evidenceRef: 'evidence:entry', documentKind: 'ENTRY_SUMMARY', sha256: DIGEST }],
+        idempotencyKey: 'customs-submission:package:1',
+        requestedAt: '2026-10-04T05:00:00.000Z',
+      },
+    });
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.stage).toBe('BINDING');
+    expect(result.reasonCode).toBe('RELATIONSHIP_NOT_VERIFIED');
   });
 
   it('调用方传入 tenantRef：一致可放行，不一致必须 CALLER_TENANT_OVERRIDE_REJECTED', () => {

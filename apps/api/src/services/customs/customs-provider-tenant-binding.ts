@@ -78,6 +78,14 @@ export interface CustomsProviderTenantBinding {
   /** server-derived provider 侧账号引用（opaque；例如 broker 账号 / ABI filer code 引用）。 */
   providerAccountRef: string;
   relationship: CustomsProviderTenantRelationship;
+  /**
+   * 商务/法务关系（例如「CrossClaim 作为第三方 SaaS 代客提交」）的**验证证据引用**。
+   * 只有 `relationshipEvidenceRef` 与 `relationshipVerifiedAt` 同时非空，才算该关系已验证；
+   * 持久化前它仍是 opaque 引用（绝不承载合同正文/凭据本体）。
+   */
+  relationshipEvidenceRef: string | null;
+  /** 该关系的验证时间（server-derived）。null = 未验证。 */
+  relationshipVerifiedAt: string | null;
   /** 该绑定允许的辖区（'*' = 全部；否则 ISO-3166 alpha-2）。 */
   jurisdictionScope: readonly string[];
   status: CustomsProviderTenantBindingStatus;
@@ -103,7 +111,16 @@ export type CustomsProviderTenantBindingReasonCode =
   | 'PROVIDER_MISMATCH'
   | 'JURISDICTION_NOT_COVERED'
   | 'CALLER_TENANT_OVERRIDE_REJECTED'
+  | 'RELATIONSHIP_NOT_VERIFIED'
   | 'TENANT_ISOLATION_VIOLATION';
+
+/**
+ * 需要**已验证商务关系**才能进入真实 filing path 的关系类型。
+ * CROSSCLAIM_SAAS = CrossClaim 作为第三方 SaaS 代客户提交（矩阵 #12：商业生死线，
+ * 必须有 provider/合同书面证据，否则不得视为已获代客提交权）。
+ */
+export const CUSTOMS_PROVIDER_RELATIONSHIPS_REQUIRING_VERIFIED_ENTITLEMENT: readonly CustomsProviderTenantRelationship[] =
+  ['CROSSCLAIM_SAAS'];
 
 export interface CustomsProviderTenantBindingResolution {
   ok: boolean;
@@ -178,6 +195,15 @@ export function resolveCustomsProviderTenantBinding(
   if (binding.providerId !== query.providerId) return DENIED('PROVIDER_MISMATCH');
 
   if (binding.status !== 'ACTIVE') return DENIED('BINDING_NOT_ACTIVE');
+  // 商务/法务关系门槛：CROSSCLAIM_SAAS 不得只是 enum 标签——必须有真实验证证据。
+  if (CUSTOMS_PROVIDER_RELATIONSHIPS_REQUIRING_VERIFIED_ENTITLEMENT.includes(binding.relationship)) {
+    const verified =
+      binding.relationshipVerifiedAt !== null &&
+      binding.relationshipVerifiedAt !== undefined &&
+      !Number.isNaN(Date.parse(binding.relationshipVerifiedAt)) &&
+      isOpaqueProviderRef(binding.relationshipEvidenceRef ?? '');
+    if (!verified) return DENIED('RELATIONSHIP_NOT_VERIFIED');
+  }
   if (!isJurisdictionCovered(binding.jurisdictionScope, query.jurisdiction)) {
     return DENIED('JURISDICTION_NOT_COVERED');
   }

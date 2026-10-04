@@ -49,6 +49,8 @@ const binding = (overrides: Partial<CustomsProviderTenantBinding> = {}): Customs
   providerTenantRef: 'ptenant:acme-us',
   providerAccountRef: 'paccount:broker-a',
   relationship: 'CROSSCLAIM_SAAS',
+  relationshipEvidenceRef: 'evidence:saas-agreement-v1',
+  relationshipVerifiedAt: '2026-10-04T05:00:00.000Z',
   jurisdictionScope: ['US'],
   status: 'ACTIVE',
   verifiedAt: '2026-10-04T05:00:00.000Z',

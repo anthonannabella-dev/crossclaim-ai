@@ -105,14 +105,21 @@ const sortKey = (event: ProviderAuthorizationEvent): string =>
 
 /**
  * 确定性折叠：按 effectiveAt → observedAt → sourceRef 排序后逐条应用。
- * REVOKED / EXPIRED 只能被**严格更晚**的 GRANTED / RENEWED / RESTORED 解除。
- * 同一时间点（effectiveAt + observedAt 相同）出现不同事件类型 → conflict（UNKNOWN）。
+ * MSG-20261004-18 ② 时间语义修订：
+ *   · **未来才生效**的事件（effectiveAt > now）不参与折叠——不得提前变 ACTIVE；
+ *   · REVOKED / EXPIRED 只能被 **effectiveAt 严格更晚** 的 GRANTED / RENEWED / RESTORED 解除
+ *     （同一个 effectiveAt、仅 observedAt 更晚**不足以**解除）；
+ *   · 同一 effectiveAt 同时出现「授权类」与「撤销/过期类」事件 → conflict（UNKNOWN），
+ *     不靠 observedAt 决胜。
  */
 export function deriveProviderAuthorizationState(
   events: readonly ProviderAuthorizationEvent[],
   now: Date,
 ): DerivedProviderAuthorizationState {
-  const valid = (events ?? []).filter((event) => validateProviderAuthorizationEvent(event).ok);
+  const nowMs = now.getTime();
+  const valid = (events ?? []).filter(
+    (event) => validateProviderAuthorizationEvent(event).ok && Date.parse(event.effectiveAt) <= nowMs,
+  );
   if (valid.length === 0) {
     return {
       status: 'UNKNOWN',
@@ -124,53 +131,62 @@ export function deriveProviderAuthorizationState(
     };
   }
 
-  const buckets = new Map<string, Set<ProviderAuthorizationEventKind>>();
+  // 同一 effectiveAt 的授权类 vs 终止类矛盾 = conflict（不受 observedAt 影响）。
+  const GRANTING_KINDS: readonly ProviderAuthorizationEventKind[] = ['GRANTED', 'RENEWED', 'RESTORED'];
+  const TERMINAL_KINDS: readonly ProviderAuthorizationEventKind[] = ['REVOKED', 'EXPIRED'];
+  const byEffectiveAt = new Map<string, Set<ProviderAuthorizationEventKind>>();
   for (const event of valid) {
-    const key = `${event.effectiveAt}|${event.observedAt}`;
-    buckets.set(key, (buckets.get(key) ?? new Set<ProviderAuthorizationEventKind>()).add(event.kind));
+    byEffectiveAt.set(
+      event.effectiveAt,
+      (byEffectiveAt.get(event.effectiveAt) ?? new Set<ProviderAuthorizationEventKind>()).add(event.kind),
+    );
   }
-  const conflict = [...buckets.values()].some((kinds) => kinds.size > 1);
+  const conflict = [...byEffectiveAt.values()].some(
+    (kinds) =>
+      GRANTING_KINDS.some((kind) => kinds.has(kind)) && TERMINAL_KINDS.some((kind) => kinds.has(kind)),
+  );
 
   const sorted = [...valid].sort((a, b) => (sortKey(a) < sortKey(b) ? -1 : sortKey(a) > sortKey(b) ? 1 : 0));
   let status: ProviderAuthorizationStatus = 'UNKNOWN';
   let expiresAt: string | null = null;
   let lastEffectiveAt: string | null = null;
   let lastObservedAt: string | null = null;
-  let revoked = false;
-  let expired = false;
+  /** 最近一次终止类事件的 effectiveAt（毫秒）；Infinity 表示从未终止。 */
+  let terminalEffectiveAtMs = Number.NEGATIVE_INFINITY;
 
   for (const event of sorted) {
     lastEffectiveAt = event.effectiveAt;
     lastObservedAt = event.observedAt;
+    const effectiveAtMs = Date.parse(event.effectiveAt);
     switch (event.kind) {
       case 'GRANTED':
       case 'RENEWED':
       case 'RESTORED':
-        // 严格更晚的授权事件解除 REVOKED / EXPIRED；同一或更早时间不解除。
-        revoked = false;
-        expired = false;
-        status = 'ACTIVE';
-        expiresAt = event.expiresAt ?? null;
+        // 只有 effectiveAt **严格更晚**的授权事件才解除终止态。
+        if (effectiveAtMs > terminalEffectiveAtMs) {
+          status = 'ACTIVE';
+          expiresAt = event.expiresAt ?? null;
+        }
         break;
       case 'REVOKED':
-        revoked = true;
+        terminalEffectiveAtMs = Math.max(terminalEffectiveAtMs, effectiveAtMs);
         status = 'REVOKED';
         break;
       case 'EXPIRED':
-        expired = true;
+        terminalEffectiveAtMs = Math.max(terminalEffectiveAtMs, effectiveAtMs);
         status = 'EXPIRED';
         break;
       case 'REAUTH_REQUIRED':
-        status = revoked ? 'REVOKED' : expired ? 'EXPIRED' : 'REAUTH_REQUIRED';
+        if (status !== 'REVOKED' && status !== 'EXPIRED') status = 'REAUTH_REQUIRED';
         break;
       case 'SUSPENDED':
-        status = revoked ? 'REVOKED' : expired ? 'EXPIRED' : 'SUSPENDED';
+        if (status !== 'REVOKED' && status !== 'EXPIRED') status = 'SUSPENDED';
         break;
     }
   }
 
   if (conflict) status = 'UNKNOWN';
-  if (status === 'ACTIVE' && expiresAt !== null && now.getTime() >= Date.parse(expiresAt)) {
+  if (status === 'ACTIVE' && expiresAt !== null && nowMs >= Date.parse(expiresAt)) {
     status = 'EXPIRED';
   }
 

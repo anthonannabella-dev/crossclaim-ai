@@ -131281,3 +131281,444 @@ PAYMENT = HOLD
 
 修完这些以后，SEO-2 不需要再拆很多轮；可以直接作为 SEO-2 FINAL + SEO-3 public API security checkpoint 一起送下一轮。
 ```
+
+### [MSG-20261004-18] ARCHITECT VERDICT — LAYER 3 / C18 INTERNAL FINAL（C18-6 + C18-7 + C18-8）= REVISE（reviewed HEAD = 4477158；C18-5 = PASS / CLOSED；C18-1/2/3/5 CLOSED、C18-4 = CLOSED_WITH_PRODUCTION_GATE；三个最小必修：① C18-6 CROSSCLAIM_SAAS 不得只是 enum——需 relationship entitlement 的 verified evidence（relationshipEvidenceRef/relationshipVerifiedAt 或明确 verifiedAt 语义），生产 filing 前必须 verified；② C18-7 future-effective 事件不得提前 ACTIVE，REVOKED/EXPIRED 只能被 effectiveAt 严格更晚的重新授权解除，同 effectiveAt 矛盾必须 fail-closed；③ C18-8 增加真实 C17 ledger reconciliation E2E（AMBIGUOUS → UNKNOWN_PROVIDER_RESPONSE → RECONCILING → adopt/conflict）并证明 submission root 恒为 1；C18_INTERNAL_SKELETON = NOT_CLOSED；REAL_TRANSPORT/PRODUCTION_ENABLEMENT/EXTERNAL_WRITE/PAYMENT = HOLD；下一步优先 C18 INTERNAL FINAL-2，然后 SEO-3 Public API Security + Checker/Calculator）
+
+```text
+ARCHITECT VERDICT：REVISE
+
+我按 reviewed HEAD = 4477158（完整 SHA 44771580f7cec32e051b57eea6e515c81e588265）重新检查了 C18-6 / C18-7 / C18-8，以及上一轮 C18-5 修订。
+
+这一轮已经非常接近关闭。C18-5 上轮两项必修已正确完成，C18-6/8 主体方向也正确；但我不能现在批准 C18_INTERNAL_SKELETON=CLOSED，还剩 3 个最小必修项。
+
+① C18-6 tenant binding：架构 PASS，但“代客提交权”目前只是标签
+
+这部分已经正确：
+
+纯文本
+authenticated organizationId
+→ server-derived ProviderTenantBinding
+→ providerTenantRef
+→ DTO
+→ adapter
+
+并且：
+
+caller 不能决定 tenantRef
+caller override 不一致 → CALLER_TENANT_OVERRIDE_REJECTED
+跨租户 → fail-closed
+provider / jurisdiction / ACTIVE 状态均检查
+DTO 只拿 server-derived providerTenantRef
+
+这些可以 PASS。
+
+但矩阵 #12：
+
+是否允许 CrossClaim 作为第三方 SaaS 代客提交
+
+现在代码里真正的门槛只是：
+
+纯文本
+relationship === CROSSCLAIM_SAAS
+
+而 verifiedAt 甚至没有作为放行条件。
+
+这意味着理论上可以构造：
+
+纯文本
+relationship = CROSSCLAIM_SAAS
+status = ACTIVE
+verifiedAt = null
+
+仍然通过 binding。
+
+这还不能叫“商务/法务权利已验证”。
+
+最小修法：
+
+ProviderTenantBinding contract 至少增加/明确：
+
+纯文本
+relationshipEvidenceRef
+relationshipVerifiedAt
+
+或者明确复用现有 verifiedAt，但必须定义它验证的是：
+
+provider/business agreement 已证明当前 relationship 有效
+
+并且：
+
+纯文本
+CROSSCLAIM_SAAS
++ ACTIVE
++ verifiedAt != null
++ evidenceRef != null
+
+才允许进入真实 filing path。
+
+现在仍然可以零 Schema 做 contract；持久化时一起进 Schema Delta。
+
+② C18-7 授权生命周期：总体正确，但时间语义有一个真实漏洞
+
+“内部授权 + provider 授权同时有效才允许提交”这一点：
+
+PASS。
+
+REVOKED / EXPIRED / SUSPENDED / UNKNOWN / CONFLICT 全部 fail-closed 也正确。
+
+但当前 deriveProviderAuthorizationState() 有两个问题。
+
+第一，未来才生效的授权会提前变 ACTIVE。
+
+现在没有过滤：
+
+纯文本
+effectiveAt > now
+
+所以一个：
+
+纯文本
+GRANTED
+effectiveAt = tomorrow
+
+今天调用 deriveProviderAuthorizationState() 仍可能得到：
+
+纯文本
+ACTIVE
+
+这是必须修的。
+
+第二，目前所谓：
+
+REVOKED 只有“严格更晚”的重新授权才能解除
+
+实际上代码排序是：
+
+纯文本
+effectiveAt
+→ observedAt
+→ sourceRef
+
+然后任何排在后面的 GRANTED / RENEWED / RESTORED 都会：
+
+纯文本
+revoked = false
+
+因此可能出现：
+
+纯文本
+REVOKED effectiveAt = T
+observedAt = T+1
+
+RENEWED effectiveAt = T
+observedAt = T+10
+
+虽然 effectiveAt 相同，后者仍可能解除撤销。
+
+这不符合你们自己写的：
+
+仅严格更晚的重新授权解除。
+
+应以 effectiveAt 严格更晚为准。
+
+同一 effectiveAt 出现授权与撤销矛盾，最好直接：
+
+纯文本
+CONFLICT / UNKNOWN
+
+不要靠 observedAt 决胜。
+
+必须补两条测试：
+
+纯文本
+future GRANTED → 现在不得 ACTIVE
+
+以及：
+
+纯文本
+REVOKED effectiveAt=T
+RENEWED effectiveAt=T but observed later
+→ 不得解除 REVOKED
+→ conflict/UNKNOWN 或 REVOKED
+③ C18-8 webhook replay：端口语义 PASS，但上一轮要求的 C17 接线还没有真正证明
+
+Atomic durable claim 的 contract 我接受：
+
+纯文本
+(providerId, deliveryId)
+→ atomic claim
+→ concurrent single winner
+
+而且顺序正确：
+
+纯文本
+verify signature
+→ atomic claim
+→ business handling
+
+坏签名不烧掉 deliveryId，这一点也正确。
+
+所以：
+
+C18-8 replay claim contract = PASS。
+
+但请注意：
+
+当前只是：
+
+纯文本
+ProviderWebhookReplayClaimStore
++ in-memory reference implementation
+
+不是生产 durable 实现。
+
+因此它满足：
+
+内部设计基准
+
+但还不满足：
+
+Production hard gate 已落地
+
+这个可以保留为 Schema Delta / Production Gate，不要求本轮实现数据库。
+
+真正的问题是上一轮要求的另一条：
+
+AMBIGUOUS → C17 既有 reconciliation path，并证明不会建立第二 submission root。
+
+我检查 C18-8 negative E2E 后，当前测试只做了：
+
+纯文本
+classifyProviderOutcome()
+→ AMBIGUOUS
+→ buildProviderReconciliationPlan()
+→ NEVER_RESUBMIT_BLIND
+→ assertResubmitAllowed() throws
+
+没有真正调用 C17：
+
+纯文本
+openCustomsSubmissionAttempt
+recordCustomsSubmissionAttemptFact
+UNKNOWN_PROVIDER_RESPONSE
+RECONCILING
+
+也没有真正证明：
+
+纯文本
+C17 root count = 1
+
+所以现在仍然是：
+
+C18-5 策略与 C17 语义一致
+
+但还不是：
+
+C18 已实际接到 C17 replay/reconciliation path。
+
+这是必须补的最后一条 execution-boundary test。
+
+建议直接增加一个真实 PG E2E：
+
+纯文本
+open C17 root
+↓
+模拟 CREATE_SUBMISSION ambiguous
+↓
+append UNKNOWN_PROVIDER_RESPONSE
+↓
+reconciliation
+↓
+append RECONCILING
+↓
+provider lookup 找到 same key + same digest
+↓
+append SUBMITTED with existing providerSubmissionId
+↓
+CustomsSubmissionAttempt count = 1
+↓
+不存在第二次 CREATE_SUBMISSION
+
+以及 mismatch：
+
+纯文本
+same key + different digest
+→ conflict
+→ root count still 1
+→ no blind POST
+C18-5 修订状态
+
+上一轮两项已经修好：
+
+PASS：
+
+纯文本
+write 5xx / 429
++ UNVERIFIED idempotency
+→ AMBIGUOUS
+
+只有明确：
+
+纯文本
+REPLAY_SAFE
+
+才允许写操作 retry。
+
+只读 5xx → RETRYABLE 也正确。
+
+而且：
+
+纯文本
+attempt > maxAttempts
+→ canAutoRetry=false
+→ ProviderRetryExhaustedError
+
+现在已经是真上限，不是只限制 backoff 数值。
+
+所以：
+
+纯文本
+C18-5 = CLOSED
+最小必须修集合
+
+只剩这 3 项：
+
+C18-6
+
+CROSSCLAIM_SAAS 不得只是 enum；
+增加/明确 relationship entitlement 的 verified evidence，并要求 production filing 前已验证。
+
+C18-7
+
+future-effective event 不得提前生效；
+REVOKED/EXPIRED 只能被 effectiveAt 严格更晚的重新授权解除；
+same effectiveAt 矛盾 fail-closed。
+
+C18-8
+
+增加真实 C17 ledger reconciliation E2E，证明
+AMBIGUOUS → UNKNOWN_PROVIDER_RESPONSE → RECONCILING → adopt/conflict；
+并证明整个过程中 submission root 永远只有一个。
+
+不需要重做：
+
+纯文本
+C18-2
+C18-3
+C18-4
+C18-5
+DTO
+Sandbox Provider
+Webhook HMAC
+Retry Policy
+Tenant resolver architecture
+Authorization precondition architecture
+④ 是否允许 C18_INTERNAL_SKELETON = CLOSED？
+
+暂时不允许。
+
+当前建议：
+
+纯文本
+C18-1 = CLOSED
+C18-2 = CLOSED
+C18-3 = CLOSED
+C18-4 = CLOSED_WITH_PRODUCTION_GATE
+C18-5 = CLOSED
+C18-6 = REVISE
+C18-7 = REVISE
+C18-8 = REVISE
+
+C18_INTERNAL_SKELETON = NOT_CLOSED
+
+但已经只差上面三个非常窄的修订。
+
+修完后下一轮可以直接送：
+
+纯文本
+C18 INTERNAL FINAL-2
+
+如果三项都满足，我预计可以直接给：
+
+纯文本
+C18_INTERNAL_SKELETON = CLOSED
+
+之后剩余全部转为明确的外部/生产门槛：
+
+纯文本
+ProviderTenantBinding DB persistence
+WebhookReplayClaim DB persistence
+Schema Delta + migration
+真实 Provider 选择
+#12 SaaS 代客提交书面确认
+Provider sandbox account
+credentials
+真实 webhook secret/key rotation
+真实 adapter
+真实 sandbox E2E
+Production approval
+External Write enablement
+首笔真实 filing
+
+这些不能和内部 skeleton 完成度混在一起。
+
+⑤ 下一步优先级
+
+我建议：
+
+先用一个很小批次把这 3 个 C18 INTERNAL residual 修掉。
+
+因为已经非常接近 C18_INTERNAL_SKELETON=CLOSED，不值得留下半关闭状态。
+
+然后优先：
+
+SEO-3 Public Checker / Calculator。
+
+原因是 C18 后面的主要工作开始进入：
+
+纯文本
+Schema Delta
+Provider evidence
+商务/法务
+账号申请
+凭据
+真实 sandbox
+
+其中相当一部分需要 HOST_ACTION / 外部 Provider。
+
+而 SEO-3：
+
+不需要真实 Provider
+不需要生产凭据
+不需要 External Write
+可以直接形成免费获客工具
+会成为 28 个 SEO 页真正有价值的核心，而不是纯内容页
+
+所以推荐顺序：
+
+纯文本
+1. C18 INTERNAL FINAL-2 三个窄修
+2. CLOSED C18 internal skeleton
+3. SEO-3 Public API Security + Checker/Calculator
+4. 同时准备 C18 ProviderTenantBinding / ReplayClaim Schema Delta
+5. 等真实 Provider / 法务 / sandbox 条件满足后进入 C18 Production Enablement
+
+最终本轮裁定：
+
+纯文本
+VERDICT = REVISE
+
+C18-5 = PASS / CLOSED
+C18-6 = REVISE
+C18-7 = REVISE
+C18-8 = REVISE
+
+C18_INTERNAL_SKELETON = NOT_CLOSED
+REAL_TRANSPORT = HOLD
+PRODUCTION_ENABLEMENT = HOLD
+EXTERNAL_WRITE = HOLD
+PAYMENT = HOLD
+C18 = HOLD_EXTERNAL
+
+另外，我本次查询 4477158 时仍没有拿到该 HEAD 可独立确认的 GitHub workflow run/status，所以测试数字仍视为 Codex 的本地送审证据，不表述为我已经独立确认 GitHub CI SUCCESS。
+```
