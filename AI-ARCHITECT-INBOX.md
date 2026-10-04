@@ -134973,3 +134973,177 @@ PRODUCTION ENABLEMENT = HOLD
 
 另外，exact HEAD 的 hosted GitHub status/workflow 仍为空；25/25、exact-order replay、prisma validate、tsc 属于已归档执行证据，我独立确认的是 54f7f08 上的代码、migration 与测试逻辑。
 ```
+
+### [MSG-20261004-33] ARCHITECT VERDICT — C18 PRODUCTION PERSISTENCE CHECKPOINT FINAL-4 复核 = REVISE（仅剩 CHANGE H）｜reviewed HEAD = 6b98fde｜已 PASS：FUTURE_OBSERVATION_DURABILITY、FUTURE_EVENT_NO_EARLY_GATE_CHANGE、FULL_CANONICAL_PAYLOAD_EQUALITY、EXACT_REPLAY_NO_DOUBLE_FOLD、IDEMPOTENCY_PAYLOAD_CONFLICT、P2002_FULL_PAYLOAD_CHECK，以及 CHANGE_F / CHANGE_G / FUTURE_GATE_RECONCILIATION。唯一剩余必修 CHANGE H：未来事件到期后对齐闸门时，transition lineage 的 snapshot 仍写 observedEvents = incoming，导致同一条 provider observation 在 rebuildHistory 里出现两次（真实事件数 1、重建数 2、appliedEventCount=2），污染 durable history 真实性与后续审计/重放语义；推荐方案 A —— allRecorded && gateChanged 时追加的 transition 事实 observedEvents = []，且 rebuildHistory 只要该字段存在就用它（即使是空数组），不得 fallback 到 triggeringEvent；补 1 个测试（future REVOKED 保存 → 到期后同事件触发 ACTIVE→REVOKED → 再 apply：priorDerived.status=REVOKED 且 appliedEventCount=1（不是 2）、outcome=REPLAYED、binding=REVOKED、lineage 不再增加、provider observation 在重建历史里只出现一次）。PRODUCTION_PERSISTENCE_CHECKPOINT = REVISE；修完直接送 FINAL-5。边界：STAGING/NON-PROD SHARED MIGRATE = AUTHORIZED，STAGING_SMOKE = PRODUCTION_DEPLOY_GATE；REAL-DATA SHARED / PRODUCTION MIGRATE / REAL TRANSPORT / EXTERNAL WRITE / PAYMENT / PRODUCTION ENABLEMENT = HOLD｜
+
+```text
+ARCHITECT VERDICT：REVISE
+
+我按 reviewed HEAD = 6b98fde（完整 SHA 6b98fde44660135245e319fcd53492860f8de557）重新审了 FINAL-4。CHANGE F / G 的核心修复是成立的，但未来事件“到期后对齐 gate”这条新路径还留下了 1 个非常窄的 durable-history 重复问题。
+
+① CHANGE F / G：主体可记 PASS
+
+这些我确认已经修好：
+
+纯文本
+FUTURE_OBSERVATION_DURABILITY = PASS
+FUTURE_EVENT_NO_EARLY_GATE_CHANGE = PASS
+FULL_CANONICAL_PAYLOAD_EQUALITY = PASS
+EXACT_REPLAY_NO_DOUBLE_FOLD = PASS
+IDEMPOTENCY_PAYLOAD_CONFLICT = PASS
+P2002_FULL_PAYLOAD_CHECK = PASS
+
+特别是：
+
+future effectiveAt > now 不再丢失；
+future event 初次只落 AUTHORIZATION_OBSERVED，不提前改变 gate；
+replay 不再 history + incoming 双重 fold；
+equality 已覆盖 providerAuthorizationRef / expiresAt / reasonCode；
+同 identity 不同 payload 已 fail-closed 为 AUTHORIZATION_IDEMPOTENCY_CONFLICT。
+
+这些都正确。
+
+② 还剩一个问题：future event 生效对齐 gate 时，同一 provider event 被写入 durable history 两次
+
+当前流程：
+
+纯文本
+T0:
+未来 REVOKED @ T6
+→ AUTHORIZATION_OBSERVED
+→ snapshot.observedEvents = [REVOKED@T6]
+
+T6 后：
+再次 apply 同一观察
+→ history 已经包含 REVOKED@T6
+→ allRecorded = true
+→ priorDerived = REVOKED
+→ gateChanged = ACTIVE → REVOKED
+→ 新增 lineage REVOKED
+
+到这里 gate 对齐是对的。
+
+但新增的 REVOKED lineage snapshot 又写：
+
+纯文本
+observedEvents = incoming
+             = [同一个 REVOKED@T6]
+
+于是下一次 rebuildHistory() 会读到：
+
+纯文本
+AUTHORIZATION_OBSERVED:
+  REVOKED@T6
+
+REVOKED transition:
+  REVOKED@T6
+
+同一个 provider observation 进入 fold 两次。
+
+所以 durable truth 会变成：
+
+纯文本
+真实 provider event 数 = 1
+rebuildHistory event 数 = 2
+appliedEventCount = 2
+
+你当前 F 测试只验证：
+
+纯文本
+['BOUND', 'AUTHORIZATION_OBSERVED', 'REVOKED']
+
+以及 gate 已变 REVOKED，但没有第三次重建历史检查，因此这个问题没有被测试捕获。
+
+它通常不会改变 REVOKED 终态，但会污染：
+
+appliedEventCount
+durable history 的真实性
+后续审计/重放语义
+将来任何依赖事件计数或事件集合的逻辑
+CHANGE H — 唯一剩余必修
+
+gate reconciliation lineage 可以记录“状态转换”，但不能再次被当作新的 provider observation ingest。
+
+推荐两种实现任选一种：
+
+纯文本
+方案 A（更干净）
+allRecorded && gateChanged 时：
+
+更新 binding.status
+追加 transition lineage（REVOKED / RESTORED ...）
+
+但该 transition snapshot：
+observedEvents = []
+
+并让 rebuildHistory：
+只要 observedEvents 字段存在，就使用它
+即使是 []
+不要 fallback 到 triggeringEvent
+
+这样 transition fact 表示：
+
+由于之前已持久化的 provider observation 现在生效，内部 gate 于此时完成对齐。
+
+而不是声称：
+
+我们又观察到了一次新的 provider event。
+
+或者：
+
+纯文本
+方案 B
+rebuildHistory() 对完整 canonical provider event 做去重
+
+也可以，但我更推荐 A，因为审计语义更清楚。
+
+最小测试只补 1 个
+
+在现有 future REVOKED 用例后再调用一次：
+
+纯文本
+1. future REVOKED 保存
+2. 到 T6 后同事件触发 gate ACTIVE → REVOKED
+3. 再次 apply/rebuild
+
+必须断言：
+
+纯文本
+priorDerived.status = REVOKED
+priorDerived.appliedEventCount = 1   // 不是 2
+
+derived.appliedEventCount = 1
+outcome = REPLAYED
+binding = REVOKED
+
+provider observation 在 rebuilt history 中只出现一次
+lineage 不再增加
+
+因此当前状态：
+
+纯文本
+CHANGE_F = PASS
+CHANGE_G = PASS
+
+FUTURE_GATE_RECONCILIATION = PASS
+FUTURE_GATE_RECONCILIATION_HISTORY_DEDUP = REVISE
+
+PRODUCTION_PERSISTENCE_CHECKPOINT = NOT_YET_PASS
+
+只修 CHANGE H 后直接送 C18 PRODUCTION PERSISTENCE CHECKPOINT FINAL-5。不要再重审 A–G，也不需要改 schema。
+
+边界保持不变：
+
+纯文本
+STAGING / NON-PROD SHARED MIGRATE = AUTHORIZED
+STAGING SMOKE = PRODUCTION DEPLOY GATE
+
+REAL-DATA SHARED = HOLD
+PRODUCTION MIGRATE DEPLOY = HOLD
+REAL TRANSPORT = HOLD
+EXTERNAL WRITE = HOLD
+PAYMENT = HOLD
+PRODUCTION ENABLEMENT = HOLD
+
+另外 6b98fde 的 GitHub hosted status/workflow 仍为空；27/27、exact-order replay、tsc 属于归档执行证据，我独立确认的是 exact HEAD 上的实现和测试逻辑。
+```

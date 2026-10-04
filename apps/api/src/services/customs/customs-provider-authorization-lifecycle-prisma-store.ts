@@ -204,7 +204,10 @@ interface LineageSnapshotShape {
 const persistedEventsOf = (snapshot: unknown): PersistedTriggeringEvent[] => {
   const shape = (snapshot ?? null) as LineageSnapshotShape | null;
   if (!shape) return [];
-  if (Array.isArray(shape.observedEvents) && shape.observedEvents.length > 0) return shape.observedEvents;
+  // CHANGE H：字段**存在**就以它为准（包括显式空数组）。
+  // gate reconciliation 的 transition 事实 observedEvents = []，表示「没有任何新的 provider observation」，
+  // 绝不能 fallback 到 triggeringEvent，否则同一条 provider 事件会被 fold 两次（污染 appliedEventCount 与历史真实性）。
+  if (Array.isArray(shape.observedEvents)) return shape.observedEvents;
   return shape.triggeringEvent ? [shape.triggeringEvent] : [];
 };
 
@@ -340,6 +343,9 @@ export function createPrismaProviderAuthorizationLifecycleStore(
         if (derived.status !== 'UNKNOWN' && mapped === null) return DENIED('AUTHORIZATION_UNKNOWN');
         const gateChanged = mapped !== null && binding.status !== mapped.bindingStatus;
         const observedPersisted = incoming.map(toPersistedTriggeringEvent);
+        // CHANGE H：allRecorded 说明这条观察**已经在历史里**；此时若闸门仍需对齐（未来事件到期），
+        // 产生的是「内部闸门对齐」的 transition 事实，而不是一次新的 provider observation ingest。
+        const isReconciliation = allRecorded && gateChanged;
 
         if (allRecorded && !gateChanged) {
           const existing = await tx.customsProviderTenantBindingLineage.findFirst({
@@ -376,7 +382,7 @@ export function createPrismaProviderAuthorizationLifecycleStore(
           triggeringEventKind: trigger.kind,
           reasonCode: trigger.reasonCode ?? null,
           triggeringEvent: toPersistedTriggeringEvent(trigger),
-          observedEvents: observedPersisted,
+          observedEvents: isReconciliation ? [] : observedPersisted,
           credentialReferenceRecorded: false,
         };
 

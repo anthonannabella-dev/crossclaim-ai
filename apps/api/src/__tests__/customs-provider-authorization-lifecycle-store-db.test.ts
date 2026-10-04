@@ -192,6 +192,21 @@ describe('C18-7 授权生命周期 store（PostgreSQL / FINAL-3）', () => {
       'AUTHORIZATION_OBSERVED',
       'REVOKED',
     ]);
+
+    // CHANGE H：这条 transition 事实是「内部闸门对齐」，不得把同一条 provider 事件再 ingest 一次。
+    const reconciliationFact = (await lineageFacts(seeded.bindingId))[2]!;
+    expect((reconciliationFact.snapshot as { observedEvents?: unknown[] }).observedEvents).toEqual([]);
+
+    const third = await store.applyObservation(observation([event('REVOKED', T6)], NOW_AFTER_T6));
+    expect(third.ok).toBe(true);
+    if (!third.ok) throw new Error('unreachable');
+    expect(third.outcome).toBe('REPLAYED');
+    expect(third.bindingStatus).toBe('REVOKED');
+    // provider observation 在重建的历史里只出现一次（不是 2）。
+    expect(third.priorDerived.status).toBe('REVOKED');
+    expect(third.priorDerived.appliedEventCount).toBe(1);
+    expect(third.derived.appliedEventCount).toBe(1);
+    expect((await lineageFacts(seeded.bindingId)).length).toBe(3);
   });
 
   it('CHANGE B：事件主体与 input 不一致 → AUTHORIZATION_SUBJECT_MISMATCH，zero writes', async () => {
