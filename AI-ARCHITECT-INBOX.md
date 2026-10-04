@@ -129111,3 +129111,133 @@ CA-4 = CLOSED，可进入 CA-5。
 
 Production boundary 继续保持不变：不接真实 Broker、无真实授权跳转、无真实 Filing/CBP/ACE/ABI、无生产凭据。
 ```
+
+### [MSG-20261004-07] ARCHITECT VERDICT — CUSTOMS AUTHORIZATION CA-4 FINAL = PASS WITH REVISE（A/B/C = PASS；D 主体 PASS；唯一必须修 CHANGE FINAL-D1：禁止同状态 UPDATE 旁路，保证每次 Session mutation = 合法状态迁移 = 一条 append-only Event；修完即 CA-4 = CLOSED → CA-5）
+
+```text
+CUSTOMS AUTHORIZATION CA-4 FINAL：PASS WITH REVISE。
+
+A/B/C 已经全部达标；D 的事务、CAS、tenant isolation、append-only event 主体也成立。当前只剩 1 个必须修的 DB 守卫缺口。修完即可 CA-4 = CLOSED → CA-5。
+
+A — opaque ref / scheme 绕过：PASS
+
+http/https/javascript/data/file 已改为大小写不敏感拒绝；
+DB CHECK 也使用 !~*；
+broker:abc / provider-auth:xyz 等内部 namespace 仍可用。
+
+契约层与数据库层一致。
+
+B — VERIFIED 证据条件：PASS
+
+VERIFIED 必须同时存在：
+verificationSource
+evidenceArtifactRef
+verifiedAt
+providerAuthorizationRef 不能替代 EvidenceArtifact。
+
+Session 与 brokerAuthorizationSessionToPoaAppend() 已不存在上一轮的语义冲突。
+
+C — verificationSource / verifiedAt 真值：PASS
+
+Session 已真实持久化；
+非 VERIFIED 状态不能残留验证真值；
+映射正确：
+PROVIDER_EVIDENCE → BROKER_ATTESTATION
+MANUAL_REVIEW → MANUAL_REVIEW
+不再伪造来源。
+
+D — CAS + Event 同事务：PASS
+
+我确认 applyTransition() 是一个 Prisma transaction：
+
+CAS UPDATE Session → append SessionEvent → commit
+
+如果 CAS count=0：
+
+返回 STALE；
+不产生 event。
+
+双并发测试也是 exactly-one applied。
+
+SessionEvent 有 tenant lineage trigger + append-only UPDATE/DELETE 拒绝，这部分成立。
+
+唯一必须修项：DB guard 仍允许“同状态 UPDATE”
+
+当前 trigger：
+
+纯文本
+IF NEW.status <> OLD.status THEN
+    校验白名单迁移
+END IF
+
+因此下面这种 DB 直写实际上仍可能通过：
+
+纯文本
+status: SIGNED → SIGNED
+version: 2 → 3
+同时修改某些非 identity 字段
+
+例如：
+
+providerAuthorizationRef
+evidenceArtifactRef
+externalAuthorizationUrlRef
+contentDigest
+updatedAt
+
+只要满足 CHECK，DB guard 不会认为它是非法 transition。
+
+这与当前宣称的：
+
+只允许状态机白名单迁移
+
+并不完全一致，而且会产生一个更重要的问题：
+
+可以发生 Session 状态/内容变化，但没有对应 append-only SessionEvent。
+
+这对 Authorization Session 不应该留下旁路。
+
+CHANGE FINAL-D1
+
+DB trigger 应直接要求：
+
+纯文本
+NEW.status <> OLD.status
+
+也就是说，受控 UPDATE 必须是真正的状态迁移。
+
+然后继续执行现有 whitelist：
+
+纯文本
+CREATED -> ...
+SIGNED -> ...
+PROVIDER_VERIFYING -> ...
+
+如果未来确实需要“不改变 status 但更新 provider metadata”，不要开放普通 UPDATE；另建明确的 append-only provider event / evidence fact。
+
+再补一个 PG 测试：
+
+纯文本
+SIGNED
+→ direct UPDATE evidenceArtifactRef/contentDigest + version+1
+→ status 仍 SIGNED
+=> DB REJECT
+
+这样才能真正保证：
+
+每一个 Session mutation = 一个合法状态迁移 = 一个 append-only Event。
+
+除此之外，我没有发现新的必须修项。
+
+最终裁决
+
+CA-4 = PASS WITH REVISE
+
+最小必须修集合只有 FINAL-D1：禁止 same-status mutation bypass。
+
+修掉并通过真实 PostgreSQL 回归后：
+
+CA-4 = CLOSED，可直接进入 CA-5 Customs Authorization Center UI。
+
+无需再重审 A/B/C，也无需改变 Production Boundary；真实 Broker / Filing / CBP / ACE / ABI 继续 HOLD。
+```

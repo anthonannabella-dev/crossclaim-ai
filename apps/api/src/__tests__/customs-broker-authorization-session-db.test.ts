@@ -251,4 +251,31 @@ describe('CA-4 — broker authorization session persistence（真实 PostgreSQL�
     const row = await stores.find(organizationId, 's-stale');
     expect(row?.status).toBe('CREATED');
   });
+
+  it('FINAL-D1：同状态 UPDATE（改 evidence/digest 但不迁移）被 DB 拒绝，且不产生事件', async () => {
+    const organizationId = await seedOrg('same-status');
+    await persistedSession(organizationId, 's-same');
+    await transitionBrokerAuthorizationSessionPersisted(
+      { organizationId, sessionId: 's-same', next: 'SIGNED', actorUserId },
+      deps,
+    );
+    const before = await stores.find(organizationId, 's-same');
+    expect(before?.status).toBe('SIGNED');
+    expect(before?.version).toBe(2);
+
+    await expect(
+      prisma.$executeRawUnsafe(
+        'UPDATE "CustomsBrokerAuthorizationSession" SET "evidenceArtifactRef" = \'evidence:bypass\', "contentDigest" = $2, "version" = "version" + 1 WHERE "organizationId" = $1 AND "sessionId" = \'s-same\'',
+        organizationId,
+        'b'.repeat(64),
+      ),
+    ).rejects.toThrow();
+
+    const after = await stores.find(organizationId, 's-same');
+    expect(after?.status).toBe('SIGNED');
+    expect(after?.version).toBe(2);
+    expect(after?.evidenceArtifactRef).toBeNull();
+    const events = await stores.listEvents(organizationId, 's-same');
+    expect(events).toHaveLength(2);
+  });
 });

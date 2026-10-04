@@ -1815,3 +1815,7 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 ## 2026-10-04T03:08:46.575Z — CA-4 REVISE A–D 落地
 - CA-4 = PASS WITH REVISE（MSG-20261004-06）：A scheme 大小写/data:/file:；B VERIFIED 与 POA 证据统一；C verificationSource/verifiedAt 真值 + POA 显式映射；D 受控状态机 + append-only 事件 + CAS。
 - 顺带修复 CI 清单缺口：CustomsAuthorizedSignerFact 的租户/append-only/lineage 触发器此前未登记进 checklist。
+
+## 2026-10-04T03:11:51.837Z — CA-4 CLOSED
+- CA-4 FINAL = PASS WITH REVISE（MSG-20261004-07）；CHANGE FINAL-D1（同状态 UPDATE 旁路）已修：migration 20261004060000 + 真实 PG 断言。
+- 队列推进：SAFE_CONTINUATION_QUEUE = CA-5（Authorization Center UI）→ CA-6（one-click auth UX）。
