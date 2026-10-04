@@ -1825,3 +1825,8 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 根因：CA-2 的 signer 事实表触发器（tenant / append-only / lineage）从未登记进 checklist。
 - 修复：90cd73b 补齐两条清单；本地复跑闸门全绿。
 - pending：90cd73b (37173233154) / 9f0caf2 (37173392995) 仍在运行，归档后回填 ci_resolved。
+
+## 2026-10-04T03:26:56.539Z — CA-5 IMPLEMENTED_PENDING_VERDICT
+- CA-5-A 737506e：只读授权中心投影 + GET /customs-opportunities/:id/authorization-center（tenant/RBAC/404 fail-closed）。
+- CA-5-B cf88248：/customs/authorization 客户 UI + 40 键 × 5 语言（602 键 parity，hardcodes=0）；web tsc/build OK；render 81/81。
+- 审计：GitHub Issue #2 comment 5976136618；ChatGPT 通道本轮 Unknown error（2 次投递后无助手轮次）→ CHATGPT_WEB_READ=FAILED，回退 GitHub 耐久记录，下一周期重读。
