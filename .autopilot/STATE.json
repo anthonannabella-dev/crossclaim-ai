@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261004-16",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T00:46:00.000Z",
+  "updated_at": "2026-10-05T00:52:00.000Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -5192,9 +5192,9 @@
   "awaiting_verdict": "EXACT-ORDER REPLAY 证据已送审（comment 5979262070）；shared/staging deploy 解禁待裁决",
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-04T15:46:06.760Z",
-    "head": "ebed4f4",
-    "acceptance_head": "ebed4f4",
+    "computed_at": "2026-10-04T15:51:41.044Z",
+    "head": "0652709",
+    "acceptance_head": "0652709",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5313,27 +5313,27 @@
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=ebed4f4 ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
+        "evidence": "acceptance_head=0652709 ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
       },
       "L1-05_pg_regression_passed": {
         "status": "UNVERIFIED",
-        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head ebed4f4（且中间存在非簿记变更）"
+        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head 0652709（且中间存在非簿记变更）"
       },
       "L1-06_fresh_db_migration_passed": {
         "status": "UNVERIFIED",
-        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head ebed4f4（且中间存在非簿记变更）"
+        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head 0652709（且中间存在非簿记变更）"
       },
       "L1-07_api_typecheck_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head ebed4f4（且中间存在非簿记变更）"
+        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head 0652709（且中间存在非簿记变更）"
       },
       "L1-08_web_typecheck_build_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head ebed4f4（且中间存在非簿记变更）"
+        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head 0652709（且中间存在非簿记变更）"
       },
       "L1-09_no_skipped_critical_tests": {
         "status": "UNVERIFIED",
-        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head ebed4f4（且中间存在非簿记变更）"
+        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head 0652709（且中间存在非簿记变更）"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
@@ -5342,19 +5342,19 @@
       },
       "L1-11_docs_state_consistent": {
         "status": "UNVERIFIED",
-        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head ebed4f4（且中间存在非簿记变更）"
+        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head 0652709（且中间存在非簿记变更）"
       },
       "L1-12_schema_invariants_verified": {
         "status": "UNVERIFIED",
-        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head ebed4f4（且中间存在非簿记变更）"
+        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head 0652709（且中间存在非簿记变更）"
       },
       "L1-13_negative_paths_covered": {
         "status": "UNVERIFIED",
-        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head ebed4f4（且中间存在非簿记变更）"
+        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head 0652709（且中间存在非簿记变更）"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
         "status": "UNVERIFIED",
-        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head ebed4f4（且中间存在非簿记变更）"
+        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head 0652709（且中间存在非簿记变更）"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
@@ -7348,8 +7348,8 @@
     "seo3_progress": "CHANGE A/B validator added (86f4289), engine output validation added (eb99c53), validator wired into runPublicSeoChecker (8bf49da), HTTP boundary guard added (4f2cd20); HTTP entry still not registered"
   },
   "CURRENT_HEAD": "293f55e",
-  "LAST_COMPLETED_UNIT": "RSI-P1-01 生命周期契约与状态机（5/5；非法跃迁 fail-closed、Builder/Judge 隔离、14 项 OWNER gate、L4 默认 OFF、证据 append-only）",
-  "NEXT_EXECUTION_UNIT": "RSI-P1-02：只读 Observer（CI/测试/backlog → 脱敏 signal），不读客户数据与凭据",
+  "LAST_COMPLETED_UNIT": "RSI-P1-02 只读 Observer（5/5；绿即静默、PII/token/路径脱敏、停滞才报警）",
+  "NEXT_EXECUTION_UNIT": "RSI-P1-03：signal → incident → task 自动生成 + 同 dedupeKey 去重",
   "CI_STATUS": "Stage 9–13 success（37211114167 / 37211437452 / 37211767219 / 37212106794 / 37212378584）；Stage 14/15/16 待回收",
   "WAITING_FOR_VERDICT": "none（MSG-20261004-35 已归档；OPTION_B_REVISED 已执行中）",
   "HOST_ACTION_REQUIRED": [
@@ -7365,7 +7365,7 @@
     "non-production staging DATABASE_URL + 确认该 shared 库是否承载真实客户数据（执行已授权的 staging migrate deploy 前需要）"
   ],
   "HOLD_EXTERNAL": true,
-  "LAST_HEARTBEAT_AT": "2026-10-05T00:46:00.000Z",
+  "LAST_HEARTBEAT_AT": "2026-10-05T00:52:00.000Z",
   "ci_red_streak_note": "RESOLVED: three contract/inventory fixes (tenant-trigger whitelist 1b15ab7, append-only whitelist cc13bde, model inventory 82->85 4f02282); 4f02282 is the first green run after the streak.",
   "ci_contract_fix_local_verification": {
     "at": "2026-10-04T08:51:16.135Z",
@@ -7434,7 +7434,8 @@
       "RSI-P1-07-e2e-demo"
     ],
     "completed_units": [
-      "RSI-P1-01-lifecycle-contract"
+      "RSI-P1-01-lifecycle-contract",
+      "RSI-P1-02-readonly-observer"
     ]
   }
 }
