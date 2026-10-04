@@ -1,6 +1,6 @@
 # LAYER 2 — GOLDEN PATH MATRIX（自动生成，请勿手改）
 
-- 生成时间：2026-10-04T05:34:39.706Z
+- 生成时间：2026-10-04T05:38:24.899Z
 - 机器可读：`docs/releases/LAYER2-GOLDEN-PATH-MATRIX.json`；生成器：`tools/autopilot/golden-path-matrix.mjs`
 - 判定规则：**COVERED 必须存在命名证据文件**（测试/前端）；否则 GAP，并自动登记为 backlog。
 - 依据：MSG-20261003-135 CHANGE C（禁止用「专项测试很多」替代完整矩阵）。
@@ -39,7 +39,7 @@
 | rbac | COVERED | apps/api/src/__tests__/carrier-claim-response-db.test.ts<br>apps/api/src/__tests__/carrier-claim-response-http-e2e-db.test.ts<br>apps/api/src/__tests__/carrier-claim-response-http.test.ts<br>apps/api/src/__tests__/carrier-manual-submission-db.test.ts |
 | amount_ledger | COVERED | apps/api/src/__tests__/carrier-claim-package.test.ts<br>apps/api/src/__tests__/carrier-claim-response-db.test.ts<br>apps/api/src/__tests__/carrier-claim-response-http-e2e-db.test.ts<br>apps/api/src/__tests__/carrier-claim-response-http.test.ts |
 
-## Customs / Trade Recovery（api 测试 39 个 / 前端 15 个）
+## Customs / Trade Recovery（api 测试 40 个 / 前端 15 个）
 
 | 能力轴 | 状态 | 证据 |
 |---|---|---|
