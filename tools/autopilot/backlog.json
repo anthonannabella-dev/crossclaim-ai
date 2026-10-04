@@ -1,6 +1,6 @@
 {
   "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。",
-  "updatedAt": "2026-10-05T01:11:00.000Z",
+  "updatedAt": "2026-10-05T01:16:00.000Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -1463,7 +1463,14 @@
       "title": "AI 调用记录台账（incident/task/provider/model/tokens/cost/latency/result/retry；禁 secret）",
       "scope": "RSI 长期运行但不得持续消耗 token：确定性优先、分级、预算与熔断",
       "acceptance_criteria": "对应实现/用例落地；api tsc 0；不新增 schema（如需另送 Schema Delta）",
-      "status": "READY"
+      "status": "IMPLEMENTED_PENDING_CI",
+      "implementation_head": "(this commit)",
+      "artifacts": [
+        "apps/api/src/services/autonomy/rsi-cost-ledger.ts",
+        "apps/api/src/__tests__/rsi-cost-ledger.test.ts"
+      ],
+      "evidence": "vitest rsi-cost-ledger 3/3；api tsc 0",
+      "note": "凭据字段检测已收紧为精确键名，避免误伤 inputTokens/outputTokens 计数字段"
     },
     {
       "id": "RSI-COST-04-admin-cost-panel",
