@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-10-04T04:50:34.805Z",
-  "acceptance_head": "5c6888e",
+  "generated_at": "2026-10-04T04:53:38.237Z",
+  "acceptance_head": "f640f8c",
   "protocol": "docs/releases/FINAL-ACCEPTANCE-PROTOCOL.md",
   "areas": [
     {
@@ -159,9 +159,7 @@
       "evidence": "BG-006 已登记；未执行任何生产动作"
     }
   ],
-  "open_internal_items": [
-    "ca-6-one-click-customs-auth-ux"
-  ],
+  "open_internal_items": [],
   "host_action_required": [
     "BG-006-production-candidate-preflight"
   ],

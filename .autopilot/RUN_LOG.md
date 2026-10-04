@@ -1865,3 +1865,8 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 目标 session 选择：principal + route + jurisdiction(通配) + requestedScope(覆盖 remedy)，排除 REVOKED/EXPIRED/REJECTED，排序 updatedAt DESC + sessionId DESC。
 - 无上下文匹配 → TARGET_BROKER_UNKNOWN → WAITING_ON_PROVIDER（不退回其它 session、不让客户重签）。
 - 真实 PG 反例已加：同 principal 的更新 session(DE/OTHER/broker:B) 不得影响 US/DRAWBACK 机会复用 broker:A。
+
+## 2026-10-04T04:52:58.140Z — CA-6 CLOSED / 内部授权链完成
+- CA-6 FINAL-2 = PASS / CLOSED（MSG-20261004-14，head f640f8c）。
+- CUSTOMS_AUTHORIZATION_INTERNAL_CHAIN = CA-1…CA-6 全部 CLOSED；SAFE_CONTINUATION_QUEUE = EMPTY。
+- 下一阶段 C18（真实 Broker / ABI / Filing Provider）仍为 HOLD_EXTERNAL，需宿主裁决后方可推进。

@@ -130408,3 +130408,139 @@ C18=HOLD_EXTERNAL
 
 另外，5c6888e 当前 GitHub 仍未返回 commit statuses/workflow runs，因此我不把送审里声明的本地测试结果表述成“GitHub CI 已独立验证成功”。
 ```
+
+### [MSG-20261004-14] ARCHITECT VERDICT — CUSTOMS AUTHORIZATION CA-6 FINAL-2 = PASS / CLOSED（上下文匹配的 CA-4 target session 选择器 = PASS；新增真实 PG 反例 = PASS；CUSTOMS_AUTHORIZATION_INTERNAL_CHAIN = CA-1…CA-6 全部 CLOSED；下一步为冻结中的 C18 真实 Broker / ABI / Filing Provider 接入，REAL_BROKER=NO / REAL_FILING=NO / C18=HOLD_EXTERNAL 保持不变）
+
+```text
+ARCHITECT VERDICT：PASS
+
+我按 reviewed HEAD = f640f8c（完整 SHA f640f8ca7f853343ae358e675321277d1c95c466）重新检查了本轮实现。MSG-20261004-13 唯一窄修已经闭环，没有发现新的 CA-6 必修项。
+
+① 上下文匹配 target session：PASS
+
+当前选择器已经不再按 principal 简单取“最新 session”，而是先获取 server-side CA-4 session，再按当前机会过滤：
+
+纯文本
+organizationId
++ principalRef
++ route === 当前 filingRoute
++ requestedScope 覆盖当前 remedy 或 *
++ jurisdiction === IOR jurisdiction 或 *
++ status 非 REVOKED / EXPIRED / REJECTED
+
+并使用：
+
+纯文本
+updatedAt DESC
+sessionId DESC
+
+做确定性排序。
+
+当前 jurisdiction 也确实来自：
+
+CustomsIorIdentityFact
+
+不是客户端提交值，因此这部分仍然保持 server-derived truth。
+
+无匹配 session 时：
+
+纯文本
+targetBrokerRef = null
+→ targetBindingUnknown = true
+→ WAITING_ON_PROVIDER
+→ TARGET_BROKER_UNKNOWN
+→ nextAction = null
+→ reuse = false
+
+没有退回其它辖区/其它 scope 的历史 session，也没有要求客户先盲目重签。
+
+这符合上一轮裁定。
+
+TARGET SESSION SELECTOR = CLOSED。
+
+② 新增真实 PG 反例：PASS
+
+我确认反例真实存在：
+
+纯文本
+同 principal = ior:acme
+
+正确 session：
+US / DRAWBACK / broker:a
+
+随后新增噪声 session：
+DE / OTHER / broker:b
+
+而当前 opportunity 为：
+
+纯文本
+US / DRAWBACK
+
+测试最终要求：
+
+纯文本
+reuseExistingAuthorization = true
+reasonCodes = []
+gate != REAUTHORIZATION_REQUIRED
+
+也就是说，新的不相关 session 不会抢走正确的 broker:a。
+
+同时之前三组关键路径仍保留：
+
+A→A → reuse=true
+A→B → BROKER_CHANGED + REAUTHORIZATION_REQUIRED
+无匹配 session → WAITING_ON_PROVIDER + TARGET_BROKER_UNKNOWN
+
+这已经覆盖了本轮要求的正例、冲突例和 fail-closed 例。
+
+PG REGRESSION REQUIREMENT = SATISFIED。
+
+③ CA-6 最终状态
+
+CA-6 = PASS / CLOSED
+
+当前 Customs Authorization 链条可以正式认为：
+
+纯文本
+CA-1 route-aware readiness     CLOSED
+CA-2 Broker POA / Signer facts CLOSED
+CA-3 lifecycle                 CLOSED
+CA-4 authorization session     CLOSED
+CA-5 customer auth center      CLOSED
+CA-6 one-click auth planning   CLOSED
+
+CA-6 已经能够做到内部层面的：
+
+检测当前关税机会
+→ 判断客户实际缺什么
+→ 已有有效授权则复用
+→ 不逐单重复签
+→ Broker 改变才要求重新授权
+→ Broker 未确定就等待系统/provider
+→ 客户不需要无意义操作
+→ 条件满足后显示可开始追回
+
+而不会伪造真实申报。
+
+本轮没有残余必修项。
+
+最终裁定：
+
+纯文本
+VERDICT = PASS
+CA-6_STATUS = CLOSED
+CUSTOMS_AUTHORIZATION_INTERNAL_CHAIN = CLOSED
+
+下一步可以离开 CA-1～CA-6 内部授权建设阶段。真正要把“客户点一下 → 系统代为实际提交关税追回”接通，进入的就是此前冻结的 C18：真实 Broker / ABI / Filing Provider 选择与接入。
+
+边界继续保持：
+
+纯文本
+REAL_BROKER = NO
+REAL_FILING = NO
+C18 = HOLD_EXTERNAL
+
+CA-6 CLOSED 不代表真实 CBP/ACE/ABI submission 已开启，也不允许自动解除这些生产边界。
+
+另外，我这次查询 f640f8c 时 GitHub 仍没有向我返回可独立确认的 commit statuses/workflow runs；因此上述 PASS 是源码、持久化路径和测试代码层面的架构验收，不把 Codex 报告的本地测试写成“我已独立确认 GitHub CI SUCCESS”。
+```
