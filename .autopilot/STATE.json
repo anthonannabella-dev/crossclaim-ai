@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261004-16",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T04:40:00.000Z",
+  "updated_at": "2026-10-05T04:55:00.000Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -5192,9 +5192,9 @@
   "awaiting_verdict": "EXACT-ORDER REPLAY 证据已送审（comment 5979262070）；shared/staging deploy 解禁待裁决",
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-04T18:42:00.835Z",
-    "head": "4472e8b",
-    "acceptance_head": "4472e8b",
+    "computed_at": "2026-10-04T18:42:46.616Z",
+    "head": "e754fd6",
+    "acceptance_head": "e754fd6",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5286,7 +5286,6 @@
       "CHECK:L1-07_api_typecheck_passed",
       "CHECK:L1-08_web_typecheck_build_passed",
       "CHECK:L1-09_no_skipped_critical_tests",
-      "CHECK:L1-10_git_working_tree_clean",
       "CHECK:L1-11_docs_state_consistent",
       "CHECK:L1-12_schema_invariants_verified",
       "CHECK:L1-13_negative_paths_covered",
@@ -5345,48 +5344,48 @@
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=4472e8b ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
+        "evidence": "acceptance_head=e754fd6 ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
       },
       "L1-05_pg_regression_passed": {
         "status": "UNVERIFIED",
-        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head 4472e8b（且中间存在非簿记变更）"
+        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head e754fd6（且中间存在非簿记变更）"
       },
       "L1-06_fresh_db_migration_passed": {
         "status": "UNVERIFIED",
-        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head 4472e8b（且中间存在非簿记变更）"
+        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head e754fd6（且中间存在非簿记变更）"
       },
       "L1-07_api_typecheck_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head 4472e8b（且中间存在非簿记变更）"
+        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head e754fd6（且中间存在非簿记变更）"
       },
       "L1-08_web_typecheck_build_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head 4472e8b（且中间存在非簿记变更）"
+        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head e754fd6（且中间存在非簿记变更）"
       },
       "L1-09_no_skipped_critical_tests": {
         "status": "UNVERIFIED",
-        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head 4472e8b（且中间存在非簿记变更）"
+        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head e754fd6（且中间存在非簿记变更）"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
-        "status": false,
-        "evidence": "dirty entries: 1"
+        "status": true,
+        "evidence": "porcelain empty"
       },
       "L1-11_docs_state_consistent": {
         "status": "UNVERIFIED",
-        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head 4472e8b（且中间存在非簿记变更）"
+        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head e754fd6（且中间存在非簿记变更）"
       },
       "L1-12_schema_invariants_verified": {
         "status": "UNVERIFIED",
-        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head 4472e8b（且中间存在非簿记变更）"
+        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head e754fd6（且中间存在非簿记变更）"
       },
       "L1-13_negative_paths_covered": {
         "status": "UNVERIFIED",
-        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head 4472e8b（且中间存在非簿记变更）"
+        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head e754fd6（且中间存在非簿记变更）"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
         "status": "UNVERIFIED",
-        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head 4472e8b（且中间存在非簿记变更）"
+        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head e754fd6（且中间存在非簿记变更）"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
@@ -6334,7 +6333,7 @@
       "API.md / DOMAIN_MODEL.md / architecture-contract 计数 77 → 79"
     ]
   },
-  "next_execution_unit": "等 RSI-RT-06 MIGRATION SQL AUDIT 裁决：PASS → 按 exact-order 复跑并准备 staging smoke（需宿主非生产 DATABASE_URL）；REVISE → 立即修 SQL/约束後重跑 ephemeral 验证",
+  "next_execution_unit": "读 RSI-RT-06 MIGRATION SQL AUDIT 裁决：逐字归档 AI-ARCHITECT-INBOX.md + verdict-diff FULL_COPY_OK；PASS → 等宿主非生产 DATABASE_URL 做 staging smoke；REVISE → 立即修 SQL/约束并重跑 ephemeral 验证",
   "customer_ui_commercialization": {
     "at": "2026-10-04T01:21:55.949Z",
     "authorization": "MSG-20261004-01（CUSTOMER UI/UX COMMERCIALIZATION — IMPLEMENTATION AUTHORIZED）",
@@ -7381,9 +7380,9 @@
   },
   "CURRENT_HEAD": "293f55e",
   "LAST_COMPLETED_UNIT": "RSI-RT-06 首批落地 = schema.prisma 新增 8 张平台级 RSI 表（93 模型）+ migration draft 20261005000000_rsi_autonomy_state_persistence（不 deploy）+ rsi-schema-contract/rsi-persistence-db 测试 + RSI-RT-06-SCHEMA-DELTA.md",
-  "NEXT_EXECUTION_UNIT": "等 RSI-RT-06 MIGRATION SQL AUDIT 裁决：PASS → 按 exact-order 复跑并准备 staging smoke（需宿主非生产 DATABASE_URL）；REVISE → 立即修 SQL/约束後重跑 ephemeral 验证",
-  "CI_STATUS": "等待本批提交的 CI；本地证据：tsc 0 / rsi-schema-contract 10-10 / architecture-contract 142-142 / rsi-persistence-db 8-8（一次性库）/ exact-order replay WHOLE_SCHEMA_DIFF=ZERO / 两张触发器清单 OK",
-  "WAITING_FOR_VERDICT": "RSI-RT-06 MIGRATION SQL AUDIT（issue #2 已提交耐久记录 + ChatGPT 唤醒；reviewed HEAD 见本次提交）",
+  "NEXT_EXECUTION_UNIT": "读 RSI-RT-06 MIGRATION SQL AUDIT 裁决：逐字归档 AI-ARCHITECT-INBOX.md + verdict-diff FULL_COPY_OK；PASS → 等宿主非生产 DATABASE_URL 做 staging smoke；REVISE → 立即修 SQL/约束并重跑 ephemeral 验证",
+  "CI_STATUS": "HEAD e754fd6 已推送；本地证据全绿（tsc 0 / 静态合同 152 例 / 一次性库 8 例 / whole-schema diff ZERO / 两张触发器清单 OK）",
+  "WAITING_FOR_VERDICT": "RSI-RT-06 MIGRATION SQL AUDIT（已送审：耐久记录 docs/releases/RSI-RT-06-MIGRATION-SQL-AUDIT-REQUEST.md @ e754fd6；ChatGPT 唤醒三要素已验证送达；reviewed HEAD = 4472e8b）",
   "HOST_ACTION_REQUIRED": [
     "provider developer/partner account registration",
     "third-party commercial agreement acceptance",
@@ -7397,7 +7396,7 @@
     "non-production staging DATABASE_URL + 确认该 shared 库是否承载真实客户数据（执行已授权的 staging migrate deploy 前需要）"
   ],
   "HOLD_EXTERNAL": true,
-  "LAST_HEARTBEAT_AT": "2026-10-05T04:40:00.000Z",
+  "LAST_HEARTBEAT_AT": "2026-10-05T04:55:00.000Z",
   "ci_red_streak_note": "RESOLVED: three contract/inventory fixes (tenant-trigger whitelist 1b15ab7, append-only whitelist cc13bde, model inventory 82->85 4f02282); 4f02282 is the first green run after the streak.",
   "ci_contract_fix_local_verification": {
     "at": "2026-10-04T08:51:16.135Z",
@@ -7478,7 +7477,7 @@
   "WATCHDOG_INTERVAL_MS": 60000,
   "HEARTBEAT_DRIVES_EXECUTION": false,
   "rsi_rt_06_schema_delta": {
-    "status": "LANDED（migration draft 已生成，未 deploy）— 待 MIGRATION SQL AUDIT",
+    "status": "MIGRATION_SQL_AUDIT_SUBMITTED（等裁决）",
     "reviewed_head": "328592d",
     "archived_as": "MSG-20261005-01",
     "integrity": {
@@ -7553,6 +7552,12 @@
       "append_only_checklist": "OK: 51 triggers",
       "tenant_checklist": "OK: 103 baseline / 80 immutable / 2 scoped"
     },
-    "doc": "docs/releases/RSI-RT-06-SCHEMA-DELTA.md"
+    "doc": "docs/releases/RSI-RT-06-SCHEMA-DELTA.md",
+    "code_head": "4472e8b",
+    "request_doc": "docs/releases/RSI-RT-06-MIGRATION-SQL-AUDIT-REQUEST.md",
+    "request_doc_commit": "e754fd6",
+    "durable_record_channel": "REPO_FILE（本机 gh token 失效，issue-comment 通道本轮不可用）",
+    "chatgpt_wakeup": "VERIFIED（composer 已清空 + marker 可见 + 生成中）",
+    "host_action_new": "gh auth login（可选，仅用于恢复 issue #2 comment 通道）"
   }
 }
