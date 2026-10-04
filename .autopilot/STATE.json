@@ -2,14 +2,14 @@
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
   "head": "17fda50",
   "status": "RECONCILED",
-  "current_task": "C18-5 provider 幂等 / 重试 / 对账（与 C18-4 打包送审）",
+  "current_task": "C18-4/C18-5 打包送审（SECURITY / EXECUTION BOUNDARY）",
   "next_task": "C18-4 provider webhook verification（高风险，需审计）",
   "send_head": "07b7009",
   "decision_head": "07b7009",
   "last_chatgpt_message": "MSG-20261004-15",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-04T05:47:49.199Z",
+  "updated_at": "2026-10-04T05:52:48.812Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -5013,7 +5013,6 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "c18-5-provider-idempotency-reconciliation",
     "c18-6-provider-tenant-account-lineage",
     "c18-7-provider-authorization-lifecycle",
     "c18-8-provider-negative-path-e2e"
@@ -5042,9 +5041,9 @@
   "awaiting_verdict": null,
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-04T05:48:11.814Z",
-    "head": "1157b31",
-    "acceptance_head": "1157b31",
+    "computed_at": "2026-10-04T05:53:12.877Z",
+    "head": "df8326a",
+    "acceptance_head": "df8326a",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5128,27 +5127,27 @@
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=1157b31 ci_head=8f32fce ci=pending（commit 后记录；此前 completed head 全 success） run=37143524364"
+        "evidence": "acceptance_head=df8326a ci_head=8f32fce ci=pending（commit 后记录；此前 completed head 全 success） run=37143524364"
       },
       "L1-05_pg_regression_passed": {
         "status": "UNVERIFIED",
-        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head 1157b31（且中间存在非簿记变更）"
+        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head df8326a（且中间存在非簿记变更）"
       },
       "L1-06_fresh_db_migration_passed": {
         "status": "UNVERIFIED",
-        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head 1157b31（且中间存在非簿记变更）"
+        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head df8326a（且中间存在非簿记变更）"
       },
       "L1-07_api_typecheck_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head 1157b31（且中间存在非簿记变更）"
+        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head df8326a（且中间存在非簿记变更）"
       },
       "L1-08_web_typecheck_build_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head 1157b31（且中间存在非簿记变更）"
+        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head df8326a（且中间存在非簿记变更）"
       },
       "L1-09_no_skipped_critical_tests": {
         "status": "UNVERIFIED",
-        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head 1157b31（且中间存在非簿记变更）"
+        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head df8326a（且中间存在非簿记变更）"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
@@ -5157,19 +5156,19 @@
       },
       "L1-11_docs_state_consistent": {
         "status": "UNVERIFIED",
-        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head 1157b31（且中间存在非簿记变更）"
+        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head df8326a（且中间存在非簿记变更）"
       },
       "L1-12_schema_invariants_verified": {
         "status": "UNVERIFIED",
-        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head 1157b31（且中间存在非簿记变更）"
+        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head df8326a（且中间存在非簿记变更）"
       },
       "L1-13_negative_paths_covered": {
         "status": "UNVERIFIED",
-        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head 1157b31（且中间存在非簿记变更）"
+        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head df8326a（且中间存在非簿记变更）"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
         "status": "UNVERIFIED",
-        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head 1157b31（且中间存在非簿记变更）"
+        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head df8326a（且中间存在非簿记变更）"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
@@ -6047,7 +6046,7 @@
       "API.md / DOMAIN_MODEL.md / architecture-contract 计数 77 → 79"
     ]
   },
-  "next_execution_unit": "c18-5-provider-idempotency-reconciliation",
+  "next_execution_unit": "c18-4+c18-5 audit submission",
   "customer_ui_commercialization": {
     "at": "2026-10-04T01:21:55.949Z",
     "authorization": "MSG-20261004-01（CUSTOMER UI/UX COMMERCIALIZATION — IMPLEMENTATION AUTHORIZED）",
@@ -6326,14 +6325,15 @@
   "audit_session_url": "https://chatgpt.com/c/6ac1cdf0-1ec8-83ec-8036-0e66fcf5c6b9",
   "ci_note": "2026-10-04 复核：全部内部单元 CLOSED 后，GitHub Actions 对各 head 均有 workflow run（0c6bb0f/ f0abd05 / cb04232 / c6ce17c / 3fad4d4 / c897737 / fd7e4bf / 400fe6e / 8f32fce = success；5c6888e / f640f8c / 84c3f99 运行中）。架构方某次查询未见 runs 属查询口径差异（commit statuses vs workflow runs），此处记录 run id 以便复核。",
   "c18_layer3": {
-    "at": "2026-10-04T05:47:49.199Z",
+    "at": "2026-10-04T05:52:48.812Z",
     "main_line": "P0 = C18 REAL CUSTOMS PROVIDER INTEGRATION",
     "matrix_doc": "docs/releases/C18-PROVIDER-INTEGRATION-MATRIX.md",
     "completed": [
       "c18-1-provider-integration-matrix",
       "c18-2-provider-dto-schema",
       "c18-3-sandbox-filing-provider",
-      "c18-4-provider-webhook-verification"
+      "c18-4-provider-webhook-verification",
+      "c18-5-provider-idempotency-reconciliation"
     ],
     "queue": [
       {
@@ -6415,10 +6415,11 @@
     "REAL_ADAPTER_CODE": "CAN_PREPARE",
     "REAL_TRANSPORT": "HOLD",
     "PRODUCTION_ENABLEMENT": "HOLD",
-    "next_audit_checkpoint": "C18-4 + C18-5 → SECURITY / EXECUTION BOUNDARY 审计（一次）"
+    "next_audit_checkpoint": "C18-4 + C18-5 → SECURITY / EXECUTION BOUNDARY 审计（一次）",
+    "pending_audit": "C18-4 provider webhook verification + C18-5 idempotency/retry/reconciliation → SECURITY / EXECUTION BOUNDARY 审计（一次）"
   },
-  "last_heartbeat_at": "2026-10-04T05:47:49.199Z",
-  "waiting_for_verdict": "C18-2 + C18-3 待送审（Provider submission 边界）",
-  "last_completed_unit": "c18-4-provider-webhook-verification",
+  "last_heartbeat_at": "2026-10-04T05:52:48.812Z",
+  "waiting_for_verdict": "C18-4 + C18-5（待送审）",
+  "last_completed_unit": "c18-5-provider-idempotency-reconciliation",
   "hold_external": true
 }
