@@ -1,6 +1,6 @@
 {
   "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。",
-  "updatedAt": "2026-10-05T00:45:00.000Z",
+  "updatedAt": "2026-10-05T00:46:00.000Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -1288,7 +1288,13 @@
       "title": "RSI Phase-1：Incident/Task/Candidate/EvaluationRun/PromotionDecision 契约与状态机（纯函数 + fail-closed 非法跃迁）",
       "scope": "RSI Phase-1（离线/沙箱）：只读观察 + 自动建任务 + 受控 patch + 确定性验证 + 独立 Judge；无外部写",
       "acceptance_criteria": "对应纯函数/编排落地并有命名用例；api tsc 0；不新增 schema/migration（如需另送 Schema Delta 审计）",
-      "status": "READY"
+      "status": "IMPLEMENTED_PENDING_CI",
+      "implementation_head": "(this commit)",
+      "artifacts": [
+        "apps/api/src/services/autonomy/rsi-lifecycle.ts",
+        "apps/api/src/__tests__/rsi-lifecycle.test.ts"
+      ],
+      "evidence": "vitest rsi-lifecycle 5/5；api tsc 0"
     },
     {
       "id": "RSI-P1-02-readonly-observer",
