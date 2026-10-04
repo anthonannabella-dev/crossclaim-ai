@@ -1,6 +1,6 @@
 {
   "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。",
-  "updatedAt": "2026-10-05T01:41:00.000Z",
+  "updatedAt": "2026-10-05T01:46:00.000Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -1585,6 +1585,16 @@
       "title": "续跑引擎接入 RSI Controller（事件入口 + 60s tick）",
       "scope": "emit(event)→claim→runner 立即执行；tick() 仅在事件丢失/idle/lease 超时时兜底；runner 由宿主注入（本地 Codex 或 AgentRunnerPort）",
       "acceptance_criteria": "vitest rsi-controller-continuation 3/3；api tsc 0；无凭据/无库写",
+      "status": "IMPLEMENTED_PENDING_CI",
+      "implementation_head": "(this commit)"
+    },
+    {
+      "id": "RSI-CONT-03-event-sources",
+      "priority": "P0",
+      "source_backlog_id": "OWNER 任务：Event-Driven Immediate Continuation",
+      "title": "事件源适配（CI/测试/verdict → 续跑事件 + 指纹去重）",
+      "scope": "deriveContinuationEvents + createEventFingerprintGate：成功→继续、失败→修复、REVISE→修订、BLOCK→OWNER；同指纹不重复触发",
+      "acceptance_criteria": "vitest rsi-event-sources 3/3；api tsc 0；纯只读输入",
       "status": "IMPLEMENTED_PENDING_CI",
       "implementation_head": "(this commit)"
     }
