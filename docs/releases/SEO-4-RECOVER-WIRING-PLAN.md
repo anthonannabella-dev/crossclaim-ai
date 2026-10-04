@@ -45,3 +45,16 @@
 
 > 每条用例都必须只消费生效中的 RuleVersion / RecoveryRuleDefinition v1，不得在测试或页面里硬编码规则、资格、截止日、计算或费率。
 
+## 6. 待修：路由形状与 canonical 路径不一致（2026-10-05 发现）
+
+**现象**：SEO-5 的 `buildRecoverPath({ platform, recoveryType, locale })` 产出的是 `/{locale?}/recover/{platform}/{recoveryType}`（例如 `/zh/recover/amazon/fee-refund`）；而当前 `apps/web` 只实现了 `app/recover/[slug]/page.tsx`，只在 `locale === "en"` 下查找页面，`generateStaticParams` 也只输出 en。
+
+**后果**：若按现状放开索引，会出现 canonical 指向 `…/recover/{platform}/{recoveryType}` 而实际路由是 `…/recover/{slug}` 的 canonical/URL 不一致；同时 zh/de/ja/es 四语页面根本无法访问，与 5 语言 parity 要求冲突。
+
+**结论**：这是路由结构决策，不是小补丁。二选一，需先定：
+
+1. 让 web 路由对齐 SEO-5：改成结构化捕获（如 `app/[locale]/recover/[...parts]/page.tsx`，注意与既有静态段路由的优先级），并用 projection 的 slug → platform/recoveryType 映射生成静态参数；或
+2. 让 SEO-5 的路径生成对齐 slug 路由（`/{locale?}/recover/{slug}`），并同步 canonical / hreflang / sitemap 三处。
+
+在定案前：保持默认 noindex、artifact 缺失即 fail-closed（当前行为），不得放开索引。
+

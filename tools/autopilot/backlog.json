@@ -1,6 +1,6 @@
 {
   "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。",
-  "updatedAt": "2026-10-05T00:31:00.000Z",
+  "updatedAt": "2026-10-05T00:36:00.000Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -1237,8 +1237,10 @@
       "title": "apps/web sitemap.ts + robots.ts 由同一 artifact 驱动",
       "scope": "sitemap 只收录 inSitemap && index,follow && 无 noindexReasons 的页面；robots 只声明 sitemap、不对收录路径 Disallow；artifact 缺失 → 空 sitemap",
       "acceptance_criteria": "apps/web tsc exit 0；空 artifact 时 sitemap 为空数组且 robots 仍声明 sitemap；无 Checker POST",
-      "status": "IMPLEMENTED_PENDING_CI",
-      "implementation_head": "(this commit)"
+      "status": "CLOSED",
+      "implementation_head": "(this commit)",
+      "closed_at": "2026-10-05T00:36:00.000Z",
+      "close_evidence": "CI run 37212620921 (head a68ff9d) success"
     },
     {
       "id": "SEO-4-STAGE-15-projection-pipeline-guard",
@@ -1259,6 +1261,15 @@
       "acceptance_criteria": "三条合同用例全绿；tsc 0",
       "status": "IMPLEMENTED_PENDING_CI",
       "implementation_head": "(this commit)"
+    },
+    {
+      "id": "SEO-4-P0-route-shape-vs-canonical-mismatch",
+      "priority": "P0",
+      "source_backlog_id": "SEO-4-RECOVER-WIRING-PLAN.md §6",
+      "title": "路由形状与 canonical 路径不一致（/recover/[slug] vs /{locale}/recover/{platform}/{recoveryType}）",
+      "scope": "定案：web 路由对齐 SEO-5，或反向让 SEO-5 路径对齐 slug 路由；随后同步 canonical / hreflang / sitemap 与 5 语言静态参数",
+      "acceptance_criteria": "路径形状定案并落地；canonical 与实际路由一致；zh/de/ja/es 均可访问；补一条路径一致性合同断言",
+      "status": "OPEN_P0_BLOCKING_INDEXING"
     }
   ],
   "authorization_note": "MSG-20261003-133 Q3：dispatcher 获授权自动扩 backlog 并执行安全单元（契约/已批准 D1–D3 Schema/append-only 持久化/deterministic normalization/qualification·evidence·package/测试/文档/fixture/只读 HTTP/只读 reconciliation projection）；遇到未批准 Schema、EXTERNAL_WRITE Action Guard、真实 adapter/webhook、submission、真实资金语义写入、生产 credential、收费时必须停该分支并重新送审。 HOST 2026-10-04（CONTINUOUS EXECUTION + CUSTOMS AUTHORIZATION + CHATGPT AUDIT LOOP）：UI-6…UI-8 与 CA-2…CA-6 已登记为可执行队列；Schema/Security/Authorization 边界项自动进入 ChatGPT Audit Loop（AUDIT-BRIDGE.md，不新建协议）。"
