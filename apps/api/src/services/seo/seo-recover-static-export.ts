@@ -72,6 +72,7 @@ export function buildRecoverStaticProjectionFromRules(input: SeoRecoverExportInp
       pages.push({
         slug: rule.slug,
         locale,
+        path: plan.decision.path,
         ruleVersion: rule.ruleVersion,
         decision: plan.decision.reason,
         robots: plan.decision.robots,

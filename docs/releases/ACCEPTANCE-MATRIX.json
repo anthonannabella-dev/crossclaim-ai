@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-10-04T15:35:33.910Z",
-  "acceptance_head": "d343873",
+  "generated_at": "2026-10-04T15:41:23.504Z",
+  "acceptance_head": "4402245",
   "protocol": "docs/releases/FINAL-ACCEPTANCE-PROTOCOL.md",
   "areas": [
     {
@@ -193,7 +193,8 @@
     "SEO-4-STAGE-14-web-sitemap-robots",
     "SEO-4-STAGE-15-projection-pipeline-guard",
     "SEO-4-STAGE-16-web-wiring-contract-test",
-    "SEO-4-P0-route-shape-vs-canonical-mismatch"
+    "SEO-4-P0-route-shape-vs-canonical-mismatch",
+    "SEO-4-P0-projection-carries-canonical-path"
   ],
   "host_action_required": [
     "provider developer/partner account registration",

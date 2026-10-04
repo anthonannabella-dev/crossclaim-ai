@@ -60,6 +60,7 @@ describe('SEO-4 静态投影导出', () => {
           'jsonLd',
           'locale',
           'noindexReasons',
+          'path',
           'relatedLinks',
           'requiredEvidence',
           'robots',

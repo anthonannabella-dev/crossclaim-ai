@@ -17,6 +17,8 @@ export type SeoRecoverStaticLocale = (typeof SEO_RECOVER_STATIC_LOCALES)[number]
 export interface SeoRecoverStaticPage {
   slug: string;
   locale: SeoRecoverStaticLocale;
+  /** 与 SEO-5 一致的 canonical 路径（例如 /zh/recover/amazon/fee-refund）；不可索引时为 null。 */
+  path: string | null;
   ruleVersion: string;
   decision: string;
   robots: string;
@@ -55,6 +57,7 @@ const FORBIDDEN_KEY_RE =
 const PAGE_KEYS = new Set([
   'slug',
   'locale',
+  'path',
   'ruleVersion',
   'decision',
   'robots',

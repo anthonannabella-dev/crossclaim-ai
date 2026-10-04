@@ -15,6 +15,8 @@ export const RECOVER_SUPPORTED_LOCALES = ['en', 'zh', 'de', 'ja', 'es'] as const
 export interface RecoverProjectionPage {
   slug: string;
   locale: (typeof RECOVER_SUPPORTED_LOCALES)[number];
+  /** SEO-5 的 canonical 路径；不可索引时为 null（页面层据此决定是否给 canonical）。 */
+  path: string | null;
   ruleVersion: string;
   decision: string;
   robots: string;

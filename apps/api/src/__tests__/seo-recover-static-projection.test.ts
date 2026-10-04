@@ -21,6 +21,7 @@ const DIGEST = 'd'.repeat(64);
 const page = (over: Partial<SeoRecoverStaticPage> = {}): SeoRecoverStaticPage => ({
   slug: 'amazon-fba-fee-refund',
   locale: 'en',
+  path: '/recover/amazon/fee-refund',
   ruleVersion: 'amazon-fba-fee-refund@v1.0.0',
   decision: 'RECOVER_OK',
   robots: 'noindex,nofollow',
