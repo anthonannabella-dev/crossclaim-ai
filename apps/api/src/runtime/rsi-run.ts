@@ -21,6 +21,7 @@ import {
   createAdminSnapshotPublisher,
   type RsiSnapshotPublisher,
 } from './rsi-admin-snapshot-publisher';
+import { createVerdictWatcher, type RsiVerdictWatcher } from './rsi-verdict-watcher';
 import type { RsiAdminHealth } from './rsi-admin-snapshot';
 import type { RsiCostLedger } from '../services/autonomy/rsi-cost-ledger';
 import type { RsiCostUsage } from '../services/autonomy/rsi-cost-policy';
@@ -59,6 +60,7 @@ export interface RsiRuntimeComposition {
   loop: RsiEventLoopHandle;
   controller: ReturnType<typeof attachContinuationToController>;
   publisher: RsiSnapshotPublisher | null;
+  verdictWatcher: RsiVerdictWatcher | null;
   start(): void;
   stop(): void;
 }
@@ -79,6 +81,8 @@ export async function composeRsiRuntime(input: {
     healthProvider: () => RsiAdminHealth;
     usageProvider: () => RsiCostUsage;
   };
+  /** 配置后：仅当运行时等待裁决时，短轮询 verdict artifact 并驱动续跑。 */
+  verdictWatch?: { intervalMs?: number };
 }): Promise<RsiRuntimeComposition> {
   let tasks: readonly RsiSafeTask[] = [];
   if (input.tasksPath !== undefined) {
@@ -121,15 +125,30 @@ export async function composeRsiRuntime(input: {
           intervalMs: input.intervalMs ?? 60_000,
         });
 
+  const verdictWatcher =
+    input.verdictWatch === undefined
+      ? null
+      : createVerdictWatcher({
+          readVerdict: async () => (await localSources.readVerdict?.()) ?? undefined,
+          isWaiting: () => controller.state().waitingForVerdict,
+          onVerdict: async () => {
+            await controller.emit('JUDGE_VERDICT_RECEIVED');
+          },
+          intervalMs: input.verdictWatch.intervalMs ?? 15_000,
+        });
+
   return {
     loop,
     controller,
     publisher,
+    verdictWatcher,
     start: () => {
       loop.start();
       publisher?.start();
+      verdictWatcher?.start();
     },
     stop: () => {
+      verdictWatcher?.stop();
       loop.stop();
       publisher?.stop();
     },
@@ -141,6 +160,7 @@ export const RSI_RUNTIME_COMPOSITION_BOUNDARY = {
   watchdogFallbackOnly: true,
   defaultRunnerIsNoop: true,
   adminSnapshotIsReadOnlyArtifact: true,
+  verdictPollOnlyWhileWaiting: true,
   readsCredentials: false,
   writesDatabase: false,
   performsExternalWrite: false,

@@ -120,4 +120,38 @@ describe('RSI 运行组装入口', () => {
     expect(bare.publisher).toBeNull();
     expect(RSI_RUNTIME_COMPOSITION_BOUNDARY.adminSnapshotIsReadOnlyArtifact).toBe(true);
   });
+
+  it('RSI_RUN_VERDICT_WATCHER_ONLY_WHILE_WAITING：配置后仅在等待裁决时读取并驱动续跑', async () => {
+    const runtime = await composeRsiRuntime({
+      readFile: files({
+        '/tasks.json': JSON.stringify([{ id: 'A', priority: 'P1', dedupeKey: 'd:A' }]),
+        '/verdict.json': JSON.stringify({ messageId: 'm1', verdict: 'PASS' }),
+      }),
+      tasksPath: '/tasks.json',
+      verdictPath: '/verdict.json',
+      intervalMs: 60_000,
+      verdictWatch: { intervalMs: 15_000 },
+    });
+
+    expect(runtime.verdictWatcher).not.toBeNull();
+    // 未进入等待 → 不读取、不投递
+    const idle = await runtime.verdictWatcher!.pollOnce();
+    expect(idle.delivered).toBe(false);
+    expect(runtime.verdictWatcher!.reads()).toBe(0);
+
+    // 进入等待 → 读取并投递一次（同裁决再读不重复投递）
+    runtime.controller.markWaitingForVerdict('PASS');
+    const delivered = await runtime.verdictWatcher!.pollOnce();
+    expect(delivered.delivered).toBe(true);
+    expect(runtime.verdictWatcher!.deliveries()).toBe(1);
+    const again = await runtime.verdictWatcher!.pollOnce();
+    expect(again.delivered).toBe(false);
+
+    runtime.start();
+    runtime.stop();
+    expect(RSI_RUNTIME_COMPOSITION_BOUNDARY.verdictPollOnlyWhileWaiting).toBe(true);
+
+    const bare = await composeRsiRuntime({ readFile: files({}), intervalMs: 60_000 });
+    expect(bare.verdictWatcher).toBeNull();
+  });
 });

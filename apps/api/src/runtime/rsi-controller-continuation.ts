@@ -26,6 +26,8 @@ export interface RsiControllerContinuation {
   emit(event: RsiContinuationEvent): Promise<RsiContinuationOutcome>;
   tick(): Promise<RsiContinuationOutcome>;
   state(): ReturnType<ReturnType<typeof createRsiContinuationEngine>['state']>;
+  /** 标记进入「等待裁决」状态（裁决轮询器据此决定是否短轮询）。 */
+  markWaitingForVerdict(verdict: 'PASS' | 'REVISE' | 'BLOCK' | null): void;
   /** 已记录的事件→领取延迟（毫秒），用于验证「秒级而非 5 分钟」。 */
   latencies(): readonly number[];
 }
@@ -61,6 +63,7 @@ export function attachContinuationToController(options: {
       return dispatch(outcome);
     },
     state: () => engine.state(),
+    markWaitingForVerdict: (verdict) => engine.markWaitingForVerdict(verdict),
     latencies: () => observed,
   };
 }
