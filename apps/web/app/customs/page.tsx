@@ -99,6 +99,12 @@ export default async function CustomsPage() {
           >
             {t.customsPage.actionCta}
           </Link>
+          <Link
+            href="/customs/authorization"
+            className="mt-2 inline-block rounded-lg border border-slate-200 px-3 py-1.5 text-xs font-medium text-slate-700 hover:border-slate-300"
+          >
+            {t.customsAuthorization.title}
+          </Link>
         </SectionCard>
       </div>
 

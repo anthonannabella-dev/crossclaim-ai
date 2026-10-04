@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-04T03:19:24.208Z",
+  "generated_at": "2026-10-04T03:23:36.533Z",
   "rule": "COVERED 需存在命名证据文件；否则 GAP",
   "domains": [
     {
@@ -227,7 +227,7 @@
       "id": "customs",
       "name": "Customs / Trade Recovery",
       "domain_test_files": 35,
-      "domain_web_files": 14,
+      "domain_web_files": 15,
       "cells": {
         "http": {
           "status": "COVERED",
@@ -259,6 +259,7 @@
         "frontend": {
           "status": "COVERED",
           "evidence": [
+            "apps/web/app/customs/authorization/page.tsx",
             "apps/web/app/integration-status/page.tsx",
             "apps/web/app/integration-status/start-recovery-form.tsx"
           ]
