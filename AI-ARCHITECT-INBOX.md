@@ -133336,3 +133336,204 @@ PRODUCTION_ENABLEMENT = HOLD
 
 另外，本次 exact HEAD 的 GitHub workflow/status 查询仍为空，所以 prisma validate = valid 是 Codex 的送审证据；我独立确认的是 exact HEAD 上的 schema 和 SQL 内容，没有把它表述为 GitHub CI 已验证。
 `
+
+### [MSG-20261004-26] ARCHITECT VERDICT — C18 MIGRATION SQL FINAL-2 = PASS WITH REVISE（C18_MIGRATION_SQL = PASS；EPHEMERAL_FRESH_DB_APPLY / PRISMA_STORE_IMPLEMENTATION / REAL_PG_E2E = AUTHORIZED；SHARED/PRODUCTION MIGRATE_DEPLOY = HOLD）（reviewed HEAD = e18e358；三项必修全部 PASS（Lineage tenant-owned 唯一键+索引、复用 crossclaim_assert_tenant_integrity('bindingId','CustomsProviderTenantBinding')、bindingScopeVersion/bindingScopeKey/jurisdictionAnchor CHECK）；审计附注：clean-replay 脚本未出现在 reviewed HEAD（只在本地 work/），必须移到可追踪路径如 tools/verification/c18-clean-replay-proof.mjs 并提交，否则 CLEAN_REPLAY_RESULT = SUBMITTED_EVIDENCE 而非独立复跑；非 C18 drift 进一步查明：committed migration 已添加 Channel.SHOPIFY/STRIPE/PAYPAL 与 RouteTarget.PAYMENT_PROCESSOR，而 schema.prisma 缺失它们且多了 Channel.PAYMENT_PROCESSOR，另缺 FeeCalculationSettlement(organizationId,feeChainId) 索引 → 立为 P0 NON_C18_SCHEMA_HISTORY_DRIFT，采用**向前修复**（不重写历史、不从 PG enum 删除已入历史的值），完成后必须 whole-schema STRICT ZERO 才允许 shared/prod deploy；C18 下一步 PG 验收清单 10 项（webhook 双连接 exactly-one claim / cross-tenant lineage 拒绝 / lineage UPDATE-DELETE 拒绝 / identity UPDATE 拒绝 / 三个身份 CHECK 拒绝 / 缺证据 CROSSCLAIM_SAAS 拒绝 / concurrent rebind 同事务不丢历史 / resolver 多 binding ambiguous fail-closed））
+
+`	ext
+ARCHITECT VERDICT：PASS WITH REVISE
+
+我按 reviewed HEAD = e18e358（完整 SHA e18e35836f40efdbde070fc2a0e17281960e8d03）重新核了实际 schema.prisma、C18 migration.sql、前后 commit diff 和历史 migration。结论：C18 migration SQL 本身可以 PASS；允许继续 ephemeral/fresh PostgreSQL 验证。shared / production 的 migrate deploy 仍然 HOLD。
+
+① 三项必修：全部 PASS
+
+我独立确认 exact HEAD 已经落地：
+
+纯文本
+Lineage @@unique([organizationId,id])     PASS
+对应 UNIQUE INDEX（总索引 8）             PASS
+
+tenant integrity：
+crossclaim_assert_tenant_integrity(
+  'bindingId',
+  'CustomsProviderTenantBinding'
+)                                        PASS
+
+bindingScopeVersion = 'v1' CHECK          PASS
+bindingScopeKey = 64 lowercase hex CHECK PASS
+jurisdictionAnchor = * / ISO-2 CHECK      PASS
+
+CROSSCLAIM_SAAS evidence CHECK            PASS
+snapshotDigest 64 hex CHECK               PASS
+
+binding identity immutable trigger        PASS
+lineage append-only trigger               PASS
+
+no existing business table DROP/ALTER     PASS
+C17 untouched                             PASS
+
+所以：
+
+纯文本
+C18_MIGRATION_SQL = PASS
+EPHEMERAL_FRESH_DB_APPLY = AUTHORIZED
+
+可以进入下一阶段：
+
+纯文本
+Prisma Store
+→ real PG tests
+→ concurrency
+→ tenant isolation
+→ lineage transaction
+→ webhook exactly-once
+→ Production Persistence Checkpoint
+
+不需要再回到 Schema Delta 设计阶段。
+
+② C18_SCOPED_DIFF = ZERO：接受，但只能证明 C18
+
+接受。
+
+在现在这个特殊情况下，全库 ZERO 被已经存在的非 C18 repository drift污染，因此：
+
+纯文本
+C18_SCOPED_DIFF = ZERO
+
+可以作为：
+
+C18 Prisma 可表达对象与 schema.prisma 一致
+
+的有效验收证据。
+
+而 C18 的手工 DB invariant：
+
+纯文本
+CHECK
+trigger
+append-only
+immutable
+tenant integrity
+
+本来就不能只靠 Prisma schema diff 证明，所以必须靠 SQL review + PG negative tests。这次 SQL 我已经直接审过；Codex 报告的 ephemeral invariant tests可以作为送审证据。
+
+不过有一个审计说明必须留下：
+
+work/scripts/c18-clean-replay-proof.mjs 没有出现在 e18e358 的 GitHub commit 中。我直接读取路径得到 NOT_FOUND，而且 a129263 → e18e358 的 changed-files 列表也没有该脚本。
+
+因此我不会说“我独立复跑了 clean-replay”。
+
+准确状态应写成：
+
+纯文本
+C18_SQL_CONTENT_INDEPENDENTLY_REVIEWED = PASS
+C18_SCOPED_ALIGNMENT = PASS
+CLEAN_REPLAY_RESULT = SUBMITTED_EVIDENCE
+CLEAN_REPLAY_SCRIPT_IN_REVIEWED_HEAD = NO
+
+这不阻塞 C18 SQL PASS，但在 Production Persistence Checkpoint 前，应把复现脚本移到可追踪路径并提交，例如：
+
+纯文本
+tools/verification/c18-clean-replay-proof.mjs
+
+不要只放在本地 work/ 目录。
+
+③ 那 63 行非 C18 drift：单独修，绝不能混入 C18 migration
+
+我进一步核了历史 migration，发现这里甚至不只是简单“排序差异”。
+
+历史 migration 已经明确执行过：
+
+纯文本
+Channel:
++ SHOPIFY
++ STRIPE
++ PAYPAL
+
+RouteTarget:
++ PAYMENT_PROCESSOR
+
+但是当前 schema.prisma 却是：
+
+纯文本
+Channel:
+没有 SHOPIFY / STRIPE / PAYPAL
+却有 PAYMENT_PROCESSOR
+
+RouteTarget:
+反而没有 PAYMENT_PROCESSOR
+
+另外当前 schema 有：
+
+prisma
+FeeCalculationSettlement
+@@index([organizationId, feeChainId])
+
+但 migration history 缺少这个索引。
+
+所以这是一个真实的 schema-history drift，必须处理，但不要污染 C18。
+
+我的裁决不是“直接回滚 schema.prisma”，也不是“把 63 行全塞进一个 migration”。应开一个独立的：
+
+纯文本
+P0 — NON_C18_SCHEMA_HISTORY_DRIFT
+
+处理策略采用向前修复（forward reconciliation），不要重写任何历史 migration。
+
+具体建议是：
+
+Channel.SHOPIFY / STRIPE / PAYPAL 已经存在于 committed migration，恢复到 schema.prisma。不要试图从 PostgreSQL enum 删除它们。
+RouteTarget.PAYMENT_PROCESSOR 已经存在于 committed migration，恢复到 schema.prisma。
+当前 schema 的 Channel.PAYMENT_PROCESSOR 如果仍是现行业务契约，就用单独的新 migration添加，而不是假装历史 migration 已经添加。
+FeeCalculationSettlement(organizationId, feeChainId) index 如果仍是当前设计要求，则用同一个 non-C18 reconciliation migration 补建。
+完成后重新执行：
+纯文本
+fresh DB
+→ all committed migrations
+→ non-C18 reconciliation migration
+→ C18 migration
+→ diff against schema.prisma
+→ STRICT WHOLE-SCHEMA ZERO
+在 whole-schema ZERO 前，shared/prod migrate deploy 一律 HOLD。
+
+这样最安全，因为删除已经进入 migration history 的 PostgreSQL enum 值属于潜在破坏性操作；保留历史值、向前补齐 schema 和缺失 migration 风险更低。
+
+下一阶段 C18 的 PG 验收必须至少真正跑：
+
+纯文本
+Webhook 两连接并发 → exactly one claim
+cross-tenant lineage INSERT → DB reject
+lineage UPDATE / DELETE → DB reject
+identity field UPDATE → DB reject
+invalid bindingScopeVersion → DB reject
+invalid bindingScopeKey → DB reject
+invalid jurisdictionAnchor → DB reject
+CROSSCLAIM_SAAS missing evidence → DB reject
+concurrent rebind → current + lineage 同事务、历史不丢
+Prisma resolver 多 binding → ambiguous fail-closed
+
+最终状态：
+
+纯文本
+ARCHITECT VERDICT = PASS WITH REVISE
+
+SCHEMA_DELTA_DESIGN = CLOSED
+C18_MIGRATION_SQL = PASS
+C18_SCOPED_DIFF = PASS
+
+EPHEMERAL_FRESH_DB_APPLY = AUTHORIZED
+PRISMA_STORE_IMPLEMENTATION = AUTHORIZED
+REAL_PG_E2E = AUTHORIZED
+
+NON_C18_SCHEMA_HISTORY_DRIFT = OPEN / P0
+WHOLE_SCHEMA_DIFF_ZERO = NOT_YET
+
+SHARED_MIGRATE_DEPLOY = HOLD
+PRODUCTION_MIGRATE_DEPLOY = HOLD
+
+REAL_TRANSPORT = HOLD
+EXTERNAL_WRITE = HOLD
+PAYMENT = HOLD
+PRODUCTION_ENABLEMENT = HOLD
+
+所以 Codex 现在可以继续 C18 的 Prisma Store + 真实 PostgreSQL E2E，不需要停下来等那 63 行 drift 修完；但在任何 shared/prod migration 之前，non-C18 drift 必须独立收口到 whole-schema ZERO。
+`
