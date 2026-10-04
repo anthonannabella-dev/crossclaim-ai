@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261004-16",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-04T08:01:11.038Z",
+  "updated_at": "2026-10-04T08:06:10.111Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -5128,7 +5128,7 @@
       "④ Production Candidate register only"
     ]
   },
-  "awaiting_verdict": "ZERO-evidence 裁决已到（PASS WITH REVISE，reviewed HEAD 90b1f71）——待归档（逐字+哈希校验+compare.mjs）并按裁定执行",
+  "awaiting_verdict": "两条待归档：MSG-20261004-27（ZERO evidence，PASS WITH REVISE/90b1f71）+ SEO-3 PUBLIC API SECURITY（REVISE/3066ac2）",
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
     "computed_at": "2026-10-04T07:27:17.389Z",
@@ -6161,7 +6161,7 @@
       "API.md / DOMAIN_MODEL.md / architecture-contract 计数 77 → 79"
     ]
   },
-  "next_execution_unit": "归档 ZERO-evidence 裁决（MSG-20261004-27，PASS WITH REVISE/90b1f71）并执行其修订项；读 SEO-3 审计裁决；随后 C18 Prisma Store + PG E2E",
+  "next_execution_unit": "逐字归档两条裁决（哈希校验 + compare.mjs FULL_COPY_OK）→ 按 SEO-3 REVISE 实现 CHANGE A/B 与 HTTP 边界；ZERO 裁决解禁项另行处理",
   "customer_ui_commercialization": {
     "at": "2026-10-04T01:21:55.949Z",
     "authorization": "MSG-20261004-01（CUSTOMER UI/UX COMMERCIALIZATION — IMPLEMENTATION AUTHORIZED）",
@@ -6440,7 +6440,7 @@
   "audit_session_url": "https://chatgpt.com/c/6ac1cdf0-1ec8-83ec-8036-0e66fcf5c6b9",
   "ci_note": "2026-10-04 复核：全部内部单元 CLOSED 后，GitHub Actions 对各 head 均有 workflow run（0c6bb0f/ f0abd05 / cb04232 / c6ce17c / 3fad4d4 / c897737 / fd7e4bf / 400fe6e / 8f32fce = success；5c6888e / f640f8c / 84c3f99 运行中）。架构方某次查询未见 runs 属查询口径差异（commit statuses vs workflow runs），此处记录 run id 以便复核。",
   "c18_layer3": {
-    "at": "2026-10-04T07:56:02.765Z",
+    "at": "2026-10-04T08:06:10.111Z",
     "main_line": "P0 = C18 REAL CUSTOMS PROVIDER INTEGRATION",
     "matrix_doc": "docs/releases/C18-PROVIDER-INTEGRATION-MATRIX.md",
     "completed": [
@@ -6777,15 +6777,15 @@
       "reviewed_head": "90b1f71",
       "len": 3207,
       "archived": false,
-      "note": "文本已获取，下一轮归档并执行"
+      "pending_archive": true
     }
   },
-  "last_heartbeat_at": "2026-10-04T08:01:11.038Z",
-  "waiting_for_verdict": "ZERO-evidence 裁决已到（PASS WITH REVISE，reviewed HEAD 90b1f71）——待归档（逐字+哈希校验+compare.mjs）并按裁定执行",
-  "last_completed_unit": "seo-3-public-api-security-audit-wakeup",
+  "last_heartbeat_at": "2026-10-04T08:06:10.111Z",
+  "waiting_for_verdict": "两条待归档：MSG-20261004-27（ZERO evidence，PASS WITH REVISE/90b1f71）+ SEO-3 PUBLIC API SECURITY（REVISE/3066ac2）",
+  "last_completed_unit": "两次审计裁决均已读取并记录要点（待逐字归档）",
   "hold_external": true,
   "track_c_seo_p3": {
-    "at": "2026-10-04T08:01:11.038Z",
+    "at": "2026-10-04T08:06:10.111Z",
     "main_line": "TRACK C / SEO P3 — programmatic SEO + free checker/calculator acquisition engine（与 C18 并行）",
     "gap_audit_doc": "docs/releases/SEO-P3-GAP-AUDIT.md",
     "completed": [
@@ -6883,13 +6883,52 @@
     "seo_3_audit_request_note": "durable record posted；wake-up 待下一轮（避免与 MIGRATION SQL AUDIT 的流式回答交叠）",
     "seo_3_audit_wakeup_sent_at": "2026-10-04T08:01:11.038Z",
     "seo_3_audit_wakeup_delivery": "VERIFIED（marker 5977605195 可见 + 输入框已清空 + 生成中）",
-    "seo_3_audit_durable_record": "GitHub issue #2 comment 5977605195"
+    "seo_3_audit_durable_record": "GitHub issue #2 comment 5977605195",
+    "seo_3_audit_verdict": {
+      "verdict": "REVISE",
+      "reviewed_head": "3066ac2",
+      "len": 4501,
+      "fnv": "1aef0ed7",
+      "lines": 263,
+      "pending_archive": true,
+      "pass_parts": [
+        "SEO-3_CORE_READ_ONLY_DESIGN",
+        "RULE_RESOLUTION_FAIL_CLOSED",
+        "ZERO_SIDE_EFFECT_BOUNDARY",
+        "PII_STRING_FILTER"
+      ],
+      "revise_items": [
+        "CHANGE A: rule/basisKey 级语义白名单（publicInputSchema：allowed keys/type/min/max/enum）；未知 key → UNKNOWN_ANSWER_KEY/INVALID_REQUEST，不能把任意格式合法的 key 传给引擎",
+        "CHANGE B: numeric 输入必须 schema-driven 校验（Number.isFinite、类型、整数/小数、min/max），不要用通用正则把 6 位以上数字一律当 PII（会误杀合法金额）"
+      ],
+      "production_rate_limit": "IN_MEMORY = DEV/STAGING_ONLY；生产需共享存储 atomic limiter 或 CDN/网关全局限流 + 应用层二层；匿名 key 必须来自可信代理真实 client IP，不信任可伪造的 X-Forwarded-For",
+      "http_boundary_required": [
+        "POST only",
+        "Content-Type application/json",
+        "body ≤ 8 KiB（解析前限制）",
+        "rate limit 在昂贵引擎调用前",
+        "总 timeout 2–3s",
+        "bounded concurrency/semaphore",
+        "Cache-Control no-store",
+        "same-origin CORS 或不开 CORS（禁止 ACAO: *）",
+        "不记录 raw body/IP/UA",
+        "engine 输出校验（estimate finite/min≥0/max≥min/currency ^[A-Z]{3}$/disclaimerKey 安全 token/reasonCodes 上限）否则 ENGINE_OUTPUT_INVALID fail-closed"
+      ],
+      "authorizations": {
+        "seo_4_recover_page_wiring": "AUTHORIZED",
+        "default_noindex": "REQUIRED",
+        "public_checker_http": "HOLD",
+        "public_checker_production": "HOLD",
+        "search_console": "HOST_ACTION_REQUIRED",
+        "domain_ownership": "HOST_ACTION_REQUIRED"
+      }
+    }
   },
   "CURRENT_HEAD": "90b1f71",
   "LAST_COMPLETED_UNIT": "c18-migration-sql-final2-submission",
   "NEXT_EXECUTION_UNIT": "读 MIGRATION SQL FINAL-2 裁决 → PASS 后按解禁顺序；并行 SEO-3 PUBLIC API SECURITY AUDIT 唤醒",
   "CI_STATUS": "pending（90b1f71）",
-  "WAITING_FOR_VERDICT": "ZERO-evidence 裁决已到（PASS WITH REVISE，reviewed HEAD 90b1f71）——待归档（逐字+哈希校验+compare.mjs）并按裁定执行",
+  "WAITING_FOR_VERDICT": "两条待归档：MSG-20261004-27（ZERO evidence，PASS WITH REVISE/90b1f71）+ SEO-3 PUBLIC API SECURITY（REVISE/3066ac2）",
   "HOST_ACTION_REQUIRED": [
     "provider developer/partner account registration",
     "third-party commercial agreement acceptance",
