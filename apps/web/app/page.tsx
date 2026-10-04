@@ -1,8 +1,28 @@
 import { cookies } from 'next/headers';
 import Link from 'next/link';
 
+import { formatDateTime } from '../i18n/business-language';
+import { getServerLocale, getServerMessages } from '../i18n/server';
 import OpportunityActions from './components/opportunity-actions';
-import { getServerMessages } from '../i18n/server';
+import OpportunityCard from './components/opportunity-card';
+import InlineNotice from './components/ui/inline-notice';
+import PlatformCard from './components/ui/platform-card';
+import SecurityStrip from './components/ui/security-strip';
+import SectionCard from './components/ui/section-card';
+import StatusBadge from './components/ui/status-badge';
+import SummaryCards from './components/ui/summary-cards';
+import TaskCenter from './components/ui/task-center';
+import {
+  buildCurrencySummaries,
+  buildOpportunityView,
+  buildPlatformCards,
+  buildTasks,
+  selectPrimaryCta,
+  type AccountsResponse,
+  type MoneyBucket,
+  type OpportunityApiItem,
+  type RecoveryStateItem,
+} from './lib/dashboard-view';
 
 const API_BASE = process.env.CROSSCLAIM_API_URL ?? 'http://127.0.0.1:3000';
 
@@ -21,28 +41,10 @@ interface ImportBatchItem {
   startedAt: string;
 }
 
-interface OpportunityItem {
-  id: string;
-  status: string;
-  title: string;
-  currency: string;
-  amountExpected: string | null;
-  amountActual: string | null;
-  recoverableAmount: string | null;
-  summary: {
-    invoiceReference: string | null;
-    invoiceReferenceMasked: string | null;
-    amountDifference: string | null;
-    basis: string;
-  };
-  calculation: {
-    invoiceReference: string | null;
-    invoiceReferenceMasked: string | null;
-    ruleVersion: string | null;
-    rateSource: string | null;
-    calculationDetail: string | null;
-    calculationTimestamp: string | null;
-  };
+interface MoneyResponse {
+  organization: { byCurrency: MoneyBucket[]; collection: string; payment: string };
+  cases: Array<{ caseId: string; caseNo: string; title: string; status: string; statusLabel: string; currency: string }>;
+  feeNote: string;
 }
 
 async function apiGet<T>(path: string): Promise<{ ok: boolean; status: number; body: T | null }> {
@@ -58,10 +60,13 @@ async function apiGet<T>(path: string): Promise<{ ok: boolean; status: number; b
 
 function LoginPrompt({ t }: { t: Awaited<ReturnType<typeof getServerMessages>> }) {
   return (
-    <div className="rounded-lg border bg-white p-6">
-      <h1 className="text-xl font-semibold">{t.common.loginRequired}</h1>
-      <p className="mt-2 text-slate-600">{t.footerNote}</p>
-      <Link href="/login" className="mt-4 inline-block rounded bg-slate-900 px-4 py-2 text-white">
+    <div className="rounded-xl border border-slate-200 bg-white p-6">
+      <h1 className="text-xl font-semibold text-slate-900">{t.common.loginRequired}</h1>
+      <p className="mt-2 text-sm text-slate-600">{t.footerNote}</p>
+      <Link
+        href="/login"
+        className="mt-4 inline-block rounded-lg bg-slate-900 px-4 py-2 text-sm text-white hover:bg-slate-800"
+      >
         {t.common.goToLogin}
       </Link>
     </div>
@@ -69,180 +74,243 @@ function LoginPrompt({ t }: { t: Awaited<ReturnType<typeof getServerMessages>> }
 }
 
 export default async function DashboardPage() {
-  const t = await getServerMessages();
+  const [t, locale] = await Promise.all([getServerMessages(), getServerLocale()]);
   const me = await apiGet<Me>('/auth/me');
   if (!me.ok || !me.body) return <LoginPrompt t={t} />;
 
-  const [imports, opportunities] = await Promise.all([
+  const [money, accounts, recoveryStates, opportunities, imports] = await Promise.all([
+    apiGet<MoneyResponse>('/recovery-money'),
+    apiGet<AccountsResponse>('/accounts'),
+    apiGet<{ items: RecoveryStateItem[] }>('/recovery-states'),
+    apiGet<{ items: OpportunityApiItem[]; hasMore: boolean }>('/opportunities?limit=5'),
     apiGet<{ items: ImportBatchItem[] }>('/imports'),
-    apiGet<{ items: OpportunityItem[] }>('/opportunities/insights'),
   ]);
 
+  const summaries = buildCurrencySummaries(money.body?.organization.byCurrency, t);
+  const tasks = buildTasks(recoveryStates.body?.items, t);
+  const platforms = buildPlatformCards(accounts.body, t);
+  const opportunityViews = (opportunities.body?.items ?? []).map((item) => buildOpportunityView(item, t));
+
+  const connectedAccounts = (accounts.body?.platforms ?? []).reduce(
+    (total, group) =>
+      total +
+      group.accounts.filter((account) => account.connections.some((connection) => connection.status === 'ACTIVE')).length,
+    0,
+  );
+  const cta = selectPrimaryCta(
+    {
+      pendingTasks: tasks.length,
+      connectedAccounts,
+      opportunityCount: opportunityViews.length,
+      missingPlatforms: platforms.filter((card) => !card.unavailable).length,
+    },
+    t,
+  );
+
   return (
-    <div className="space-y-8">
-      <section className="rounded-lg border bg-white p-6">
-        <h1 className="text-2xl font-semibold">{t.dashboard.title}</h1>
-        <p className="mt-2 text-sm text-slate-600">
-          {t.dashboard.organization}{' '}
-          <code className="rounded bg-slate-100 px-1">{me.body.organizationId}</code> · {t.common.role}{' '}
-          {me.body.role}
-        </p>
-        <div className="mt-4 flex gap-3">
-          <Link href="/upload" className="rounded border px-4 py-2 text-sm">
-            {t.nav.upload}
-          </Link>
-          <Link href="/connections" className="rounded border px-4 py-2 text-sm">
-            {t.nav.connections}
-          </Link>
-          <Link href="/billing" className="rounded border px-4 py-2 text-sm">
-            {t.nav.billing}
-          </Link>
-          <Link href="/cases" className="rounded border px-4 py-2 text-sm">
-            {t.nav.cases}
-          </Link>
-          <form action="/logout" method="post">
-            <button className="rounded border px-4 py-2 text-sm" type="submit">
-              {t.common.logout}
-            </button>
-          </form>
-        </div>
-      </section>
-
-      <section className="rounded-lg border bg-white p-6">
-        <h2 className="text-lg font-medium">{t.dashboard.recentImports}</h2>
-        {imports.ok && imports.body && imports.body.items.length > 0 ? (
-          <table className="mt-3 w-full text-sm">
-            <thead className="text-left text-slate-500">
-              <tr>
-                <th className="py-2">{t.dashboard.colBatch}</th>
-                <th>{t.dashboard.colStatus}</th>
-                <th>{t.dashboard.colRowsTotal}</th>
-                <th>{t.dashboard.colRowsOk}</th>
-                <th>{t.dashboard.colRowsFailed}</th>
-                <th>{t.dashboard.colStartedAt}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {imports.body.items.map((item) => (
-                <tr key={item.id} className="border-t">
-                  <td className="py-2 font-mono text-xs">{item.id.slice(0, 8)}…</td>
-                  <td>{item.status}</td>
-                  <td>{item.rowsTotal}</td>
-                  <td>{item.rowsOk}</td>
-                  <td>{item.rowsFailed}</td>
-                  <td className="text-slate-500">{new Date(item.startedAt).toLocaleString('zh-CN')}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : (
-          <p className="mt-3 text-sm text-slate-500">{t.dashboard.noImports}</p>
-        )}
-      </section>
-
-      <section className="rounded-lg border bg-white p-6">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-lg font-medium">{t.dashboard.opportunities}</h2>
-            <p className="mt-1 text-xs text-slate-500">
-              {t.dashboard.opportunitiesHint}
-            </p>
-          </div>
-          <a
-            href="/api/opportunities/insights.csv"
-            className="whitespace-nowrap rounded border px-3 py-1 text-sm"
+    <div className="space-y-6">
+      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-8">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{t.customerShell.brandNote}</p>
+        <h1 className="mt-2 text-2xl font-semibold text-slate-900 sm:text-3xl">{t.dashboardPage.heroTitle}</h1>
+        <p className="mt-3 max-w-3xl text-sm text-slate-600">{t.dashboardPage.heroSubtitle}</p>
+        <p className="mt-2 max-w-3xl text-sm text-slate-500">{t.dashboardPage.valueProp}</p>
+        <div className="mt-5 flex flex-wrap items-center gap-3">
+          <Link
+            href={cta.href}
+            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
           >
-            {t.dashboard.exportCsv}
-          </a>
+            {cta.label}
+          </Link>
+          <Link
+            href="/money"
+            className="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+          >
+            {t.dashboardPage.moneyLink}
+          </Link>
+          <StatusBadge tone="neutral">{t.common.role + ' ' + me.body.role}</StatusBadge>
         </div>
-        {opportunities.ok && opportunities.body && opportunities.body.items.length > 0 ? (
-          <table className="mt-3 w-full text-sm">
-            <thead className="text-left text-slate-500">
-              <tr>
-                <th className="py-2">{t.dashboard.colInvoiceAndTitle}</th>
-                <th>{t.dashboard.colDifference}</th>
-                <th>{t.dashboard.colBasis}</th>
-                <th>{t.dashboard.colEvidence}</th>
-                <th>{t.dashboard.colStatus}</th>
-                <th>{t.dashboard.colReview}</th>
-              </tr>
-            </thead>
-            <tbody>
-              {opportunities.body.items.map((item) => (
-                <tr key={item.id} className="border-t align-top">
-                  <td className="py-2">
-                    {/* C-0009.3 P0：默认掩码展示；客户自有数据可展开查看完整值 */}
-                    <div className="font-mono text-xs">
-                      {item.calculation.invoiceReferenceMasked ?? item.calculation.invoiceReference ?? '—'}
-                    </div>
-                    {item.calculation.invoiceReference &&
-                    item.calculation.invoiceReferenceMasked !== item.calculation.invoiceReference ? (
-                      <details className="mt-1">
-                        <summary className="cursor-pointer text-xs text-slate-500">
-                          {t.dashboard.showFull}
-                        </summary>
-                        <div className="mt-1 font-mono text-xs">
-                          {item.calculation.invoiceReference}
-                        </div>
-                      </details>
-                    ) : null}
-                    <div className="text-xs text-slate-500">{item.title || item.id.slice(0, 8)}</div>
-                  </td>
-                  <td>
-                    {item.summary.amountDifference ?? item.recoverableAmount ?? '—'} {item.currency}
-                  </td>
-                  <td className="text-xs">{item.summary.basis}</td>
-                  <td className="text-xs text-slate-600">
-                    <details>
-                      <summary className="cursor-pointer text-slate-500">{t.dashboard.evidenceExpand}</summary>
-                      <div className="mt-1 space-y-0.5">
-                        <div>
-                          {t.dashboard.evidenceInvoice}：{item.calculation.invoiceReference ?? '—'}
-                        </div>
-                        <div>
-                          {t.dashboard.evidenceRuleVersion}：{item.calculation.ruleVersion ?? '—'}
-                        </div>
-                        <div>
-                          {t.dashboard.evidenceRateSource}：{item.calculation.rateSource ?? '—'}
-                        </div>
-                        <div>
-                          {t.dashboard.evidenceDetail}：{item.calculation.calculationDetail ?? '—'}
-                        </div>
-                        <div>
-                          {t.dashboard.evidenceTimestamp}：
-                          {item.calculation.calculationTimestamp
-                            ? new Date(item.calculation.calculationTimestamp).toLocaleString('zh-CN')
-                            : '—'}
-                        </div>
-                      </div>
-                    </details>
-                  </td>
-                  <td>{item.status}</td>
-                  <td>
-                    {item.status === 'DETECTED' ? (
-                      <OpportunityActions
-                        opportunityId={item.id}
-                        labels={{
-                          qualify: t.dashboard.reviewQualify,
-                          reject: t.dashboard.reviewReject,
-                          reasonLabel: t.dashboard.rejectReason,
-                          reasons: t.dashboard.rejectReasons as unknown as Record<string, string>,
-                          requestFailed: t.common.requestFailed,
-                          networkError: t.common.networkError,
-                        }}
-                      />
-                    ) : (
-                      <span className="text-xs text-slate-400">—</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        ) : (
-          <p className="mt-3 text-sm text-slate-500">{t.dashboard.noOpportunities}</p>
-        )}
       </section>
+
+      <InlineNotice tone="warn" title={t.dashboardPage.submissionHoldTitle}>
+        {t.dashboardPage.submissionHoldBody}
+      </InlineNotice>
+
+      <SectionCard
+        title={t.dashboardPage.metricsTitle}
+        subtitle={t.dashboardPage.metricsSubtitle}
+        actions={
+          <Link href="/money" className="text-sm text-slate-500 underline hover:text-slate-800">
+            {t.dashboardPage.moneyLink}
+          </Link>
+        }
+      >
+        {money.ok && money.body ? (
+          <SummaryCards
+            summaries={summaries}
+            currencyLabel={t.dashboardPage.currencyLabel}
+            emptyTitle={t.dashboardPage.metricsEmpty}
+            emptyBody={t.dashboardPage.metricsEmptyBody}
+            emptyAction={{ label: t.dashboardPage.ctaConnect, href: '/connections' }}
+            holdNote={t.dashboardPage.paymentsHold}
+            link={{ label: t.dashboardPage.moneyLink, href: '/money' }}
+          />
+        ) : (
+          <InlineNotice tone="danger" title={t.dashboardPage.loadFailedTitle}>
+            {t.dashboardPage.loadFailedBody}
+          </InlineNotice>
+        )}
+      </SectionCard>
+
+      <SectionCard id="customer-tasks" title={t.dashboardPage.tasksTitle} subtitle={t.dashboardPage.tasksSubtitle}>
+        {recoveryStates.ok ? (
+          <TaskCenter
+            tasks={tasks}
+            labels={{ impact: t.dashboardPage.taskImpact, why: t.dashboardPage.taskWhyUser, empty: t.dashboardPage.tasksEmpty }}
+          />
+        ) : (
+          <InlineNotice tone="danger" title={t.dashboardPage.loadFailedTitle}>
+            {t.dashboardPage.loadFailedBody}
+          </InlineNotice>
+        )}
+      </SectionCard>
+
+      <SectionCard title={t.dashboardPage.platformsTitle} subtitle={t.dashboardPage.platformsSubtitle}>
+        {accounts.ok ? (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {platforms.map((card) => (
+              <PlatformCard
+                key={card.key}
+                card={card}
+                labels={{
+                  accounts: t.dashboardPage.platformAccounts,
+                  lastSync: t.dashboardPage.platformLastSync,
+                  never: t.dashboardPage.platformNever,
+                  advanced: t.dashboardPage.platformAdvanced,
+                  advancedEmpty: t.dashboardPage.platformAdvancedEmpty,
+                }}
+              />
+            ))}
+          </div>
+        ) : (
+          <InlineNotice tone="danger" title={t.dashboardPage.loadFailedTitle}>
+            {t.dashboardPage.loadFailedBody}
+          </InlineNotice>
+        )}
+      </SectionCard>
+
+      <SectionCard
+        title={t.dashboardPage.opportunitiesTitle}
+        subtitle={t.dashboardPage.opportunitiesSubtitle}
+        actions={
+          <>
+            <a href="/api/opportunities/insights.csv" className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50">
+              {t.dashboard.exportCsv}
+            </a>
+            <Link href="/opportunities" className="text-sm text-slate-500 underline hover:text-slate-800">
+              {t.dashboardPage.opportunitiesMore}
+            </Link>
+          </>
+        }
+      >
+        {opportunities.ok && opportunityViews.length > 0 ? (
+          <div className="grid gap-3 lg:grid-cols-2">
+            {opportunityViews.map((view) => (
+              <OpportunityCard
+                key={view.id}
+                view={view}
+                labels={{
+                  estimated: t.dashboardPage.opportunityEstimated,
+                  confidence: t.dashboardPage.opportunityConfidence,
+                  deadline: t.dashboardPage.opportunityDeadline,
+                  noDeadline: t.dashboardPage.opportunityNoDeadline,
+                  nextStep: t.dashboardPage.opportunityNextStep,
+                  openDetails: t.dashboardPage.opportunityAdvanced,
+                  advanced: t.dashboardPage.opportunityAdvancedFields,
+                  createCase: t.dashboardPage.opportunityCreateCase,
+                  unattributed: t.opportunitiesPage.unattributed,
+                }}
+                actions={
+                  view.canReview ? (
+                    <OpportunityActions
+                      opportunityId={view.id}
+                      labels={{
+                        qualify: t.dashboard.reviewQualify,
+                        reject: t.dashboard.reviewReject,
+                        reasonLabel: t.dashboard.rejectReason,
+                        reasons: t.dashboard.rejectReasons as unknown as Record<string, string>,
+                        requestFailed: t.common.requestFailed,
+                        networkError: t.common.networkError,
+                      }}
+                    />
+                  ) : null
+                }
+              />
+            ))}
+          </div>
+        ) : opportunities.ok ? (
+          <InlineNotice tone="info" title={t.dashboardPage.opportunitiesEmpty}>
+            {t.dashboardPage.opportunitiesEmptyBody}
+          </InlineNotice>
+        ) : (
+          <InlineNotice tone="danger" title={t.dashboardPage.loadFailedTitle}>
+            {t.dashboardPage.loadFailedBody}
+          </InlineNotice>
+        )}
+      </SectionCard>
+
+      <SectionCard
+        title={t.dashboardPage.importsTitle}
+        actions={
+          <Link href="/upload" className="text-sm text-slate-500 underline hover:text-slate-800">
+            {t.dashboardPage.importsCta}
+          </Link>
+        }
+      >
+        {imports.ok && imports.body && imports.body.items.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="text-left text-slate-500">
+                <tr>
+                  <th className="py-2">{t.dashboard.colBatch}</th>
+                  <th>{t.dashboard.colStatus}</th>
+                  <th>{t.dashboard.colRowsTotal}</th>
+                  <th>{t.dashboard.colRowsOk}</th>
+                  <th>{t.dashboard.colRowsFailed}</th>
+                  <th>{t.dashboard.colStartedAt}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {imports.body.items.slice(0, 5).map((item) => (
+                  <tr key={item.id} className="border-t border-slate-100">
+                    <td className="py-2 font-mono text-xs">{item.id.slice(0, 8)}…</td>
+                    <td>{item.status}</td>
+                    <td>{item.rowsTotal}</td>
+                    <td>{item.rowsOk}</td>
+                    <td>{item.rowsFailed}</td>
+                    <td className="text-slate-500">{formatDateTime(item.startedAt, { locale })}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <InlineNotice tone="info" title={t.dashboardPage.importsEmpty}>
+            {t.dashboardPage.importsEmptyBody}
+          </InlineNotice>
+        )}
+      </SectionCard>
+
+      <SecurityStrip
+        title={t.dashboardPage.securityTitle}
+        points={[
+          t.dashboardPage.security1,
+          t.dashboardPage.security2,
+          t.dashboardPage.security3,
+          t.dashboardPage.security4,
+          t.dashboardPage.security5,
+          t.dashboardPage.security6,
+        ]}
+      />
     </div>
   );
 }

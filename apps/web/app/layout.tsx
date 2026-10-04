@@ -3,7 +3,7 @@ import type { ReactNode } from 'react';
 
 import './globals.css';
 import { getServerLocale, getServerMessages } from '../i18n/server';
-import LanguageSwitcher from './language-switcher';
+import CustomerShell from './components/customer-shell';
 
 export const metadata: Metadata = {
   title: 'CrossClaim AI',
@@ -15,18 +15,10 @@ export default async function RootLayout({ children }: { children: ReactNode }) 
 
   return (
     <html lang={locale}>
-      <body>
-        <header className="border-b bg-white">
-          <div className="mx-auto flex max-w-5xl items-center justify-between px-6 py-4">
-            <span className="text-lg font-semibold">{t.appName}</span>
-            <div className="flex items-center gap-4">
-              <span className="text-sm text-slate-500">{t.headerNote}</span>
-              <LanguageSwitcher current={locale} />
-            </div>
-          </div>
-        </header>
-        <main className="mx-auto max-w-5xl px-6 py-10">{children}</main>
-        <footer className="mx-auto max-w-5xl px-6 pb-10 text-xs text-slate-500">{t.footerNote}</footer>
+      <body className="bg-slate-50 text-slate-900 antialiased">
+        <CustomerShell t={t} locale={locale}>
+          {children}
+        </CustomerShell>
       </body>
     </html>
   );

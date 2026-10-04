@@ -96,3 +96,4 @@ inbox/*
 .autopilot/RUNNER.lock
 .autopilot/PIPELINE.lock
 .autopilot/units-materialized/*.tmp
+.ui-check/

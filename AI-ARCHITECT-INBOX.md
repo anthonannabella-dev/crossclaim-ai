@@ -127644,3 +127644,707 @@ ARCHITECT_REVIEW = PASS_WITH_REVISIONS
 IMPLEMENTATION_AUTHORIZED = YES
 PRODUCTION_ENABLEMENT = HOLD
 ```
+
+### [MSG-20261004-01] ARCHITECT — CUSTOMER UI/UX COMMERCIALIZATION IMPLEMENTATION AUTHORIZATION（reviewed head 5992b90 / branch gate/7-commercial-validation）；IMPLEMENTATION_AUTHORIZED = YES；（客户体验层）
+
+```text
+[ARCHITECT → CODEX] CrossClaim CUSTOMER UI/UX COMMERCIALIZATION — IMPLEMENTATION AUTHORIZATION
+
+目标分支：
+gate/7-commercial-validation
+
+当前核验 HEAD：
+5992b900031896734494ba6ffc1ddf401d25cf24
+执行前请重新读取远端 HEAD；如已有后续提交，以最新 HEAD 为准，不回退代码。
+
+本任务已授权真实实施，不要只输出设计建议或状态汇报。
+
+====================
+一、总体目标
+
+把目前 apps/web 的“内部工程预览 UI”升级为真正面向跨境电商客户的商业化产品 UI。
+
+必须同时从以下 4 个角色审视：
+
+1. 跨境老板
+   他最关心：
+
+- 我到底有多少钱可以追回？
+- 已经追回多少钱？
+- 哪些钱正在处理中？
+- 哪些事情需要我做？
+- 系统是否安全？
+- 我需要付多少钱？
+- Amazon / TikTok / Walmart / Shopify / 物流 / 海关是否都覆盖？
+
+2. 电商运营
+   他最关心：
+
+- 哪个平台出了问题？
+- 哪个账号？
+- 哪张账单 / 哪个订单 / 哪个运单？
+- 要补什么资料？
+- 截止日期是什么？
+- 点哪里继续？
+- 哪些案件需要人工处理？
+
+3. 普通客户
+   要求：
+
+- 第一次登录无需培训也知道下一步做什么。
+- 不理解 claim / settlement / lineage / providerWrite / qualification 等工程术语也能使用。
+- 所有页面优先表达“结果 + 下一步动作”，技术细节放二级详情。
+
+4. UI/UX 设计
+   要求：
+
+- 信息层级清晰。
+- 重要金额优先。
+- 重要动作优先。
+- 危险/需人工动作明确。
+- 空状态具有引导性。
+- 手机/小屏不能崩。
+- 视觉统一，避免当前大量裸 table + engineering copy。
+
+CrossClaim 的核心产品价值必须在 UI 上明确体现：
+
+“一次连接，多渠道持续找钱”
+平台退款 + 物流赔付 + 独立站费用/拒付 + Customs 关税追回。
+
+不是卖复杂 SaaS。
+用户购买的是：
+“帮我发现损失 → 判断能否追回 → 准备证据 → 推进追回 → 看钱到账。”
+
+====================
+二、严禁事项
+
+本轮只升级客户体验层，不得破坏已经审计过的后端边界。
+
+必须保持：
+
+- External Write = HOLD
+- Real Money Movement = HOLD
+- 自动 platform submission 不得伪装成已经启用
+- Customs Filing 不得伪装成自动提交
+- Payment/Collection 未启用的地方必须保持真实状态
+- 不造假真实退款金额
+- 不造假已连接 Provider
+- 不为了 UI 修改后端业务真值
+- 不在前端重新计算后端已经持久化裁决的金额
+- 不删除 audit / lineage / security 语义，只把工程字段降级到“高级详情”
+
+所有金额、状态、能力继续以后端为事实源。
+
+====================
+三、产品信息架构重构
+
+当前顶栏 + 大量独立页面不够像成熟客户产品。
+
+建立统一 Customer App Shell。
+
+桌面版建议：
+
+左侧主导航：
+
+首页
+机会发现
+案件管理
+追回进度
+账户与平台
+数据导入
+金额与收益
+账单与费用
+证据中心
+
+下方：
+设置
+帮助中心
+
+ADMIN 页面不要混进普通 CUSTOMER 导航。
+
+移动端改为 drawer / compact navigation。
+
+不要一次性删除现有 route。
+优先在现有 route 上重新组织入口，确保 URL / API contract 兼容。
+
+====================
+四、首页 / Dashboard
+
+这是本轮最重要页面。
+
+首页第一屏必须让客户在 5 秒内回答：
+
+“CrossClaim 帮我找到了多少钱？”
+
+顶部 Hero：
+
+主标题建议：
+
+让跨境生意，找回每一笔应得的收益
+
+副说明：
+
+自动发现 Amazon、TikTok Shop、Walmart、独立站、物流和关税中的退款、赔付与费用异常。
+
+核心 CTA 根据客户状态动态显示：
+
+未连接：
+“连接我的平台”
+
+已连接但无数据：
+“开始扫描”
+
+已有机会：
+“查看可追回机会”
+
+需要客户操作：
+“处理待办”
+
+不要把“上传 CSV”作为产品第一价值入口。
+
+====================
+五、首页金额区域
+
+优先展示客户听得懂的 4 个核心指标：
+
+预计可追回
+追回处理中
+已确认可追回
+已追回到账
+
+必须按币种显示，不允许错误跨币种求和。
+
+如果存在 USD / EUR / GBP 等多个币种：
+分别展示或使用币种切换。
+
+不得制造一个错误的“总美元金额”。
+
+如果未来存在汇率换算能力，再单独实现。
+
+补充：
+
+- 机会数量
+- 案件数量
+- 最近 30 天变化
+
+====================
+六、平台连接区
+
+首页明显展示客户当前覆盖情况。
+
+按真实系统能力展示：
+
+Amazon
+TikTok Shop
+Walmart
+Shopify
+物流
+Customs
+
+卡片至少显示：
+
+平台名称
+账号数量
+连接状态
+最近同步
+发现机会数量
+需要处理事项
+
+状态使用客户语言：
+
+已连接
+需要重新授权
+等待数据
+需要配置
+暂未开放
+
+不要直接展示：
+
+BOUND_ACTIVE
+UNBOUND_LEGACY
+credentialRef
+identityVersion
+
+这些工程状态放“高级详情”。
+
+需要体现我们真正的产品差异化：
+
+一个 CrossClaim 账号
+→ 多平台
+→ 每个平台可以多个账号
+→ 所有损失统一汇总。
+
+====================
+七、Opportunity 页面升级
+
+当前 Opportunity table 工程味过强。
+
+客户默认应看到：
+
+来源
+问题是什么
+预计可追回
+可信度
+截止时间
+状态
+下一步
+
+例如：
+
+Amazon
+FBA 库存丢失
+预计追回 $3,250
+高可信
+还剩 27 天
+待确认
+[查看机会]
+
+Customs
+HS Code / 关税差异
+预计追回 $8,120
+需要确认资料
+[开始追回]
+
+物流
+FedEx 延误赔付
+预计追回 $1,280
+材料完整
+[创建案件]
+
+工程字段：
+
+domain
+channel
+accountId
+DETECTED
+QUALIFIED
+
+不应成为客户默认交互。
+
+可以通过筛选器 / 高级筛选保留。
+
+====================
+八、案件页面升级
+
+客户点进案件以后，页面必须围绕一个问题：
+
+“这笔钱现在进行到哪一步？”
+
+做成可视化流程：
+
+已发现
+↓
+资格确认
+↓
+证据准备
+↓
+材料包完成
+↓
+提交
+↓
+平台处理中
+↓
+批准
+↓
+到账
+
+如果 External Submission 尚未开放：
+
+明确显示：
+
+“材料已准备好”
+“需要人工提交”
+
+绝不能显示：
+“系统已自动提交”
+
+如果 Customs：
+
+可展示：
+
+发现关税机会
+→ 数据核验
+→ 退货/销毁匹配
+→ Eligibility
+→ Claim-ready Package
+→ Broker / Filing
+→ 海关处理
+→ Refund
+
+仍需保持真实 Provider 状态。
+
+====================
+九、客户待办中心
+
+增加首页“待处理事项”。
+
+这是提高实际使用效率的关键。
+
+示例：
+
+需要补充 POD
+需要重新授权 Amazon
+Customs 机会需要确认
+高额追回等待 OWNER 审批
+案件材料包已准备，可继续
+账号连接异常
+
+每条待办必须有：
+
+发生了什么
+影响多少钱
+为什么需要用户操作
+一个明确 CTA
+
+不要只显示错误码。
+
+====================
+十、Money 页面
+
+目前 money 页面偏财务数据库视图。
+
+重构成客户真正关心的：
+
+预计可追回
+已确认
+追回中
+已到账
+平台调整
+服务费
+净收益
+
+突出：
+
+净追回金额
+
+同时明确：
+
+预计金额 ≠ 已到账
+
+已计算费用 ≠ 已扣款
+
+当前 Payment/Collection 未开启时，必须明确说明，而不是让客户误以为会自动扣款。
+
+lineage 等内部信息移动到：
+
+“查看资金明细 / 审计记录”
+
+====================
+十一、Customs UX
+
+Customs 是商业化的重要入口，必须独立优化。
+
+客户应该理解：
+
+系统发现可能存在关税追回机会
+↓
+显示预计金额
+↓
+客户点击“开始核验”
+↓
+必要时调用付费 Customs Data / Filing Provider
+↓
+显示 confirmed eligible amount
+↓
+生成 Claim-ready Package
+↓
+Broker / Filing
+↓
+追回
+
+首页/机会卡必须把：
+
+“预计可追回”
+和
+“确认可追回”
+
+视觉上明确区分。
+
+不要把：
+
+DUTY_TRUTH
+DISCREPANCY
+ELIGIBILITY
+ESTIMATE
+
+直接作为主要客户文案。
+
+这些可在“查看计算依据”里展示。
+
+====================
+十二、收费体验
+
+产品逻辑继续遵循：
+
+平台 / 物流：
+优先成功后收费。
+
+Customs：
+免费发现机会
+→ 客户决定开始深度核验
+→ 如果涉及付费 API/数据成本，再进入明确商业步骤。
+
+当前真实 Payment 尚 HOLD 时：
+
+不要实际收费。
+
+UI 可以保留：
+“费用说明”
+“预计服务费”
+“成功费比例”
+
+但必须标记：
+
+“当前不会自动扣款”。
+
+====================
+十三、安全感设计
+
+跨境老板第一次连接 Amazon / TikTok / Shopify 时，最大心理门槛是安全。
+
+UI 需要主动表达：
+
+不索取平台账号密码
+通过官方授权连接
+客户可随时断开
+敏感凭据不显示
+数据按组织隔离
+高风险动作需要审批
+没有客户授权不会自动向外提交
+
+不要只把这些藏在协议页。
+
+首页 / 连接页应适当出现。
+
+====================
+十四、视觉方向
+
+参考已给出的新版 UI 方向，但不要照着图片硬编码。
+
+设计原则：
+
+- 专业 B2B SaaS
+- 蓝 / slate 为主
+- 大量留白
+- 卡片层级清晰
+- 状态色统一
+- 金额数字突出
+- icon 适度
+- 少使用大面积表格
+- table 仅保留在适合密集数据的页面
+- 卡片 + table 混合
+- hover / focus / disabled 完整
+- Skeleton / loading state
+- empty state
+- error state
+- permission state
+- responsive
+
+禁止为了“漂亮”引入大量沉重依赖。
+
+项目当前：
+Next 15
+React 19
+Tailwind 3
+
+优先保持当前技术栈。
+
+如果需要 icon：
+优先轻量方案。
+不要为了 icon 重构整个依赖树。
+
+====================
+十五、i18n
+
+现有：
+
+zh-CN
+en-US
+de
+ja
+es
+
+继续保持字典 parity。
+
+严禁重新产生客户 UI 硬编码字符串。
+
+CUSTOMER_UI_HARDCODED_STRING_COUNT 必须保持：
+
+0
+
+所有新增客户文案进入 i18n dictionary。
+
+如果 de / ja / es 当前属于 placeholder：
+遵循现有 locale capability，不得伪造完全支持状态。
+
+====================
+十六、推荐新增组件
+
+可按实际架构拆分，不强制命名：
+
+CustomerShell
+SidebarNav
+TopBar
+
+RecoverySummaryCards
+ConnectedPlatformCard
+OpportunityCard
+TaskCenter
+RecoveryPipeline
+MoneySummary
+SecurityTrustStrip
+EmptyState
+StatusBadge
+PageHeader
+
+优先建立共享 Design primitives，
+避免每个页面独立手写一套 rounded border p-3。
+
+====================
+十七、迁移策略
+
+不要一次重写全部页面。
+
+建议小批次：
+
+UI-1
+Customer App Shell
+Navigation
+Header
+Responsive base
+
+UI-2
+Dashboard
+
+UI-3
+Opportunity
+
+UI-4
+Account / Connection
+
+UI-5
+Case / Claim Package
+
+UI-6
+Money / Billing / Plan
+
+UI-7
+Customs customer-facing UX
+
+UI-8
+Loading / Empty / Error / Permissions / Accessibility
+
+每批：
+实现
+→ typecheck
+→ UI tests
+→ i18n check
+→ 回归
+→ commit
+
+不要等全部完成后才测试。
+
+====================
+十八、验收标准
+
+最终必须满足：
+
+A. 新客户第一次打开产品：
+30 秒内知道 CrossClaim 做什么。
+
+B. 已连接客户：
+5 秒内看到预计可追回金额。
+
+C. 有待办客户：
+5 秒内知道自己下一步做什么。
+
+D. 跨境老板：
+不需要理解内部技术词。
+
+E. 电商运营：
+可以快速定位平台 / 账户 / 问题 / 资料 / 截止时间。
+
+F. 财务：
+明确看到预计、批准、到账、费用、净收益差别。
+
+G. 安全：
+不会误以为系统已经自动向平台/海关提交。
+
+H. 真实边界：
+所有 External Write / Payment / Production Credential HOLD 保持不变。
+
+I. 国际化：
+客户 UI 硬编码字符串保持 0。
+
+J. 回归：
+现有 API contract / auth / tenant isolation / HITL / claim-package / money semantics 不被破坏。
+
+====================
+十九、测试要求
+
+至少补：
+
+Dashboard rendering
+responsive nav
+empty state
+loading state
+API error
+401
+403
+Opportunity state
+Money state
+Connection state
+Needs action
+External submission HOLD wording
+Payment HOLD wording
+i18n parity
+hardcoded string ratchet = 0
+
+并运行：
+
+web typecheck
+web build
+相关 UI tests
+现有 API regression（涉及 contract 的地方）
+i18n check
+
+====================
+二十、执行要求
+
+直接开始实施。
+
+不要只回复：
+“设计已准备好”
+“下一轮实施”
+“建议如下”
+
+必须产生真实代码提交。
+
+若发现现有 API 缺少 UI 必须的数据：
+
+1. 先判断是否可以从已有 endpoint 安全组合。
+2. 能组合就不要擅自扩 Schema。
+3. 如果确实需要 backend contract 变化，停在最小 Schema/API Delta，明确送审。
+4. 不得自行突破 External Write / Payment / Credential 边界。
+
+第一执行单元：
+
+UI-1 Customer App Shell
++
+UI-2 Dashboard Commercialization
+
+完成后提交：
+
+IMPLEMENTED_FILES
+SCREEN/ROUTE MATRIX
+I18N_CHECK
+HARDCODED_STRING_COUNT
+TYPECHECK
+BUILD
+TESTS
+CI
+HEAD
+NEXT_UI_UNIT
+
+然后自动继续后续 UI 单元，不要等待宿主逐批重新授权，除非涉及 Schema Delta、真实支付、真实 Provider、生产凭据或 External Write。
+```

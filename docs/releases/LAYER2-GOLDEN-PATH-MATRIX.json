@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-10-04T00:15:12.204Z",
+  "generated_at": "2026-10-04T00:32:09.520Z",
   "rule": "COVERED 需存在命名证据文件；否则 GAP",
   "domains": [
     {
       "id": "platform",
       "name": "Platform Recovery",
       "domain_test_files": 13,
-      "domain_web_files": 12,
+      "domain_web_files": 17,
       "cells": {
         "http": {
           "status": "COVERED",
@@ -117,7 +117,7 @@
       "id": "logistics_carrier",
       "name": "Logistics / Carrier Recovery",
       "domain_test_files": 17,
-      "domain_web_files": 2,
+      "domain_web_files": 3,
       "cells": {
         "http": {
           "status": "COVERED",
@@ -149,7 +149,8 @@
           "status": "COVERED",
           "evidence": [
             "apps/web/app/integration-status/manual-response-form.tsx",
-            "apps/web/app/integration-status/page.tsx"
+            "apps/web/app/integration-status/page.tsx",
+            "apps/web/i18n/dictionaries/en-US.ts"
           ]
         },
         "happy": {
@@ -226,7 +227,7 @@
       "id": "customs",
       "name": "Customs / Trade Recovery",
       "domain_test_files": 26,
-      "domain_web_files": 4,
+      "domain_web_files": 10,
       "cells": {
         "http": {
           "status": "COVERED",
@@ -340,7 +341,7 @@
       "id": "independent_site",
       "name": "Independent-site / Chargeback",
       "domain_test_files": 6,
-      "domain_web_files": 2,
+      "domain_web_files": 4,
       "cells": {
         "http": {
           "status": "COVERED",

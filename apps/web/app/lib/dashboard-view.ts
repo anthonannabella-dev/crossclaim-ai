@@ -1,0 +1,380 @@
+import type { Messages } from '../../i18n/dictionaries/zh-CN';
+
+/**
+ * UI-2 Dashboard 视图模型（MSG-20261004-01 §四–§六、§九）。
+ * 纯函数：只做「后端事实 → 客户语言」的映射，不在前端重算任何金额裁决，也不做跨币种求和。
+ */
+
+export interface MoneyBucket {
+  currency: string;
+  discovered: string;
+  expected: string;
+  approved: string;
+  recovered: string;
+  adjustments: string;
+  netRecovered: string;
+  outstanding: string;
+  feeCalculated: string;
+  feeCollected: string;
+}
+
+export interface MoneyMetricCell {
+  key: 'expected' | 'inProgress' | 'confirmed' | 'received' | 'net' | 'outstanding' | 'feeCalculated' | 'feeCollected';
+  label: string;
+  value: string;
+  hint: string | null;
+  emphasis: boolean;
+}
+
+export interface CurrencySummary {
+  currency: string;
+  cells: MoneyMetricCell[];
+}
+
+/**
+ * 4 个核心指标（+ 净追回 / 未追回 / 服务费），按币种分组，不跨币种求和。
+ * 取值全部来自 /recovery-money 的持久化聚合：discovered=已检测待确认、expected=追回中、
+ * approved=已确认、recovered=已到账。
+ */
+export function buildCurrencySummaries(
+  buckets: MoneyBucket[] | null | undefined,
+  t: Messages,
+): CurrencySummary[] {
+  return (buckets ?? []).map((bucket) => ({
+    currency: bucket.currency,
+    cells: [
+      {
+        key: 'expected',
+        label: t.dashboardPage.metricExpected,
+        value: bucket.discovered,
+        hint: t.dashboardPage.metricExpectedHint,
+        emphasis: false,
+      },
+      {
+        key: 'inProgress',
+        label: t.dashboardPage.metricInProgress,
+        value: bucket.expected,
+        hint: null,
+        emphasis: false,
+      },
+      {
+        key: 'confirmed',
+        label: t.dashboardPage.metricConfirmed,
+        value: bucket.approved,
+        hint: null,
+        emphasis: false,
+      },
+      {
+        key: 'received',
+        label: t.dashboardPage.metricReceived,
+        value: bucket.recovered,
+        hint: null,
+        emphasis: false,
+      },
+      {
+        key: 'net',
+        label: t.dashboardPage.metricNet,
+        value: bucket.netRecovered,
+        hint: null,
+        emphasis: true,
+      },
+      {
+        key: 'outstanding',
+        label: t.dashboardPage.metricOutstanding,
+        value: bucket.outstanding,
+        hint: null,
+        emphasis: false,
+      },
+      {
+        key: 'feeCalculated',
+        label: t.dashboardPage.metricFeeCalculated,
+        value: bucket.feeCalculated,
+        hint: t.dashboardPage.metricFeeHint,
+        emphasis: false,
+      },
+      {
+        key: 'feeCollected',
+        label: t.dashboardPage.metricFeeCollected,
+        value: bucket.feeCollected,
+        hint: null,
+        emphasis: false,
+      },
+    ],
+  }));
+}
+
+export type DashboardCtaKind = 'CONNECT' | 'SCAN' | 'OPPORTUNITIES' | 'TASKS';
+
+export interface DashboardCta {
+  kind: DashboardCtaKind;
+  label: string;
+  href: string;
+}
+
+/**
+ * 首屏主 CTA 按客户真实状态切换（§四）：
+ * 有待办 → 处理待办；有未连接平台 → 连接我的平台；已连接无机会 → 开始扫描；有机会 → 查看机会。
+ */
+export function selectPrimaryCta(
+  input: { pendingTasks: number; connectedAccounts: number; opportunityCount: number; missingPlatforms: number },
+  t: Messages,
+): DashboardCta {
+  if (input.pendingTasks > 0) {
+    return { kind: 'TASKS', label: t.dashboardPage.ctaHandleTasks, href: '#customer-tasks' };
+  }
+  if (input.connectedAccounts === 0 && input.missingPlatforms > 0) {
+    return { kind: 'CONNECT', label: t.dashboardPage.ctaConnect, href: '/connections' };
+  }
+  if (input.opportunityCount > 0) {
+    return { kind: 'OPPORTUNITIES', label: t.dashboardPage.ctaViewOpportunities, href: '/opportunities' };
+  }
+  return { kind: 'SCAN', label: t.dashboardPage.ctaScan, href: '/upload' };
+}
+
+export type PlatformTone = 'ok' | 'warn' | 'pending' | 'neutral';
+
+export interface PlatformCardView {
+  key: string;
+  name: string;
+  status: string;
+  tone: PlatformTone;
+  accounts: number;
+  lastSync: string | null;
+  detail: string | null;
+  cta: { label: string; href: string } | null;
+  unavailable: boolean;
+  /** 工程状态（BOUND_ACTIVE / credentialRef 等）只在这里出现，供「高级详情」折叠展示。 */
+  advanced: string[];
+}
+
+export interface AccountsConnection {
+  status: string;
+  channel: string;
+  domain: string;
+  lastSyncAt: string | null;
+  lastErrorAt: string | null;
+  actions?: { reconnect?: { available: boolean; reason: string } };
+}
+
+export interface AccountsAccount {
+  platform: string;
+  displayName: string;
+  status: string;
+  connections: AccountsConnection[];
+}
+
+export interface AccountsResponse {
+  platforms: Array<{ platform: string; accounts: AccountsAccount[] }>;
+  unboundLegacyConnections: AccountsConnection[];
+}
+
+const LOGISTICS_CHANNELS = ['UPS', 'FEDEX', 'DHL', 'FREIGHT_FORWARDER'];
+
+function connectionStatusLabel(connection: AccountsConnection, t: Messages): { label: string; tone: PlatformTone } {
+  if (connection.actions?.reconnect?.reason === 'REAL_OAUTH_EXTERNAL_GATE') {
+    return { label: t.dashboardPage.platformNeedsAuth, tone: 'warn' };
+  }
+  switch (connection.status) {
+    case 'ACTIVE':
+      return { label: t.dashboardPage.platformConnected, tone: 'ok' };
+    case 'NEEDS_AUTH':
+      return { label: t.dashboardPage.platformNeedsAuth, tone: 'warn' };
+    case 'PAUSED':
+      return { label: t.dashboardPage.platformWaitingData, tone: 'pending' };
+    case 'ERROR':
+      return { label: t.dashboardPage.platformNeedsConfig, tone: 'warn' };
+    default:
+      return { label: t.dashboardPage.platformNeedsConfig, tone: 'neutral' };
+  }
+}
+
+function summarizeConnections(connections: AccountsConnection[], t: Messages) {
+  if (connections.length === 0) {
+    return { status: t.dashboardPage.platformNeedsConfig, tone: 'neutral' as PlatformTone, lastSync: null };
+  }
+  const labels = connections.map((connection) => connectionStatusLabel(connection, t));
+  const priority: PlatformTone[] = ['warn', 'pending', 'neutral', 'ok'];
+  const tone = priority.find((candidate) => labels.some((row) => row.tone === candidate)) ?? 'neutral';
+  const status = labels.find((row) => row.tone === tone)?.label ?? t.dashboardPage.platformNeedsConfig;
+  const lastSync =
+    connections
+      .map((connection) => connection.lastSyncAt)
+      .filter((value): value is string => typeof value === 'string' && value !== '')
+      .sort()
+      .at(-1) ?? null;
+  return { status, tone, lastSync };
+}
+
+/**
+ * 平台覆盖卡：只按真实系统能力展示。
+ * Amazon / 物流 / Customs 来自真实连接与账号；TikTok Shop / Walmart / Shopify 目前没有
+ * adapter 与 channel，一律显示「暂未开放」（不伪造已连接）。
+ */
+export function buildPlatformCards(accounts: AccountsResponse | null | undefined, t: Messages): PlatformCardView[] {
+  const groups = accounts?.platforms ?? [];
+  const allConnections = groups.flatMap((group) => group.accounts.flatMap((account) => account.connections));
+
+  const amazonAccounts = groups.filter((group) => group.platform.toUpperCase().includes('AMAZON'));
+  const amazonConnections = allConnections.filter(
+    (connection) => connection.channel === 'AMAZON_FBA' || connection.channel === 'AMAZON_OTHER',
+  );
+  const logisticsConnections = allConnections.filter((connection) => LOGISTICS_CHANNELS.includes(connection.channel));
+  const customsConnections = allConnections.filter(
+    (connection) => connection.domain === 'CUSTOMS' || connection.channel === 'CUSTOMS_BROKER',
+  );
+
+  const card = (
+    key: string,
+    name: string,
+    connections: AccountsConnection[],
+    accountCount: number,
+    href: string,
+  ): PlatformCardView => {
+    const summary = summarizeConnections(connections, t);
+    return {
+      key,
+      name,
+      status: summary.status,
+      tone: summary.tone,
+      accounts: accountCount,
+      lastSync: summary.lastSync,
+      detail: null,
+      cta:
+        summary.tone === 'ok'
+          ? { label: t.dashboardPage.platformOpen, href }
+          : { label: t.dashboardPage.platformConfigure, href },
+      unavailable: false,
+      advanced: connections.map(
+        (connection) =>
+          connection.channel + ' · ' + connection.domain + ' · ' + connection.status,
+      ),
+    };
+  };
+
+  const unavailable = (key: string, name: string): PlatformCardView => ({
+    key,
+    name,
+    status: t.dashboardPage.platformUnavailable,
+    tone: 'neutral',
+    accounts: 0,
+    lastSync: null,
+    detail: t.dashboardPage.platformUnavailableDetail,
+    cta: null,
+    unavailable: true,
+    advanced: [],
+  });
+
+  return [
+    card('amazon', t.dashboardPage.platformAmazon, amazonConnections, amazonAccounts.reduce((total, group) => total + group.accounts.length, 0), '/accounts'),
+    card('logistics', t.dashboardPage.platformLogistics, logisticsConnections, 0, '/accounts'),
+    card('customs', t.dashboardPage.platformCustoms, customsConnections, 0, '/accounts'),
+    unavailable('tiktok', t.dashboardPage.platformTiktok),
+    unavailable('walmart', t.dashboardPage.platformWalmart),
+    unavailable('shopify', t.dashboardPage.platformShopify),
+  ];
+}
+
+export interface RecoveryStateItem {
+  scope: 'CONNECTION' | 'IMPORT' | 'CASE';
+  refId: string;
+  title: string;
+  code: string;
+  label: string;
+  explanation: string;
+  nextAction: string;
+  recoverable: boolean;
+  safeSummary: string;
+}
+
+export interface TaskView {
+  id: string;
+  title: string;
+  what: string;
+  impact: string;
+  why: string;
+  ctaLabel: string;
+  ctaHref: string;
+}
+
+/** 待办中心：发生了什么 / 影响什么 / 为什么需要你 / 一个明确 CTA（§九）。 */
+export function buildTasks(items: RecoveryStateItem[] | null | undefined, t: Messages): TaskView[] {
+  return (items ?? []).map((item) => ({
+    id: item.scope + ':' + item.refId,
+    title: item.title ? item.title + ' · ' + item.label : item.label,
+    what: item.explanation,
+    impact: item.recoverable ? t.dashboardPage.taskImpactRecoverable : t.dashboardPage.taskImpactBlocking,
+    why: item.safeSummary || t.dashboardPage.taskWhyUser,
+    ctaLabel: item.nextAction || t.dashboardPage.taskCta,
+    ctaHref:
+      item.scope === 'CONNECTION'
+        ? '/connections'
+        : item.scope === 'IMPORT'
+          ? '/upload'
+          : '/cases/' + item.refId,
+  }));
+}
+
+export interface OpportunityView {
+  id: string;
+  source: string;
+  problem: string;
+  amount: string | null;
+  currency: string;
+  confidence: string;
+  statusLabel: string;
+  statusCode: string;
+  deadline: string | null;
+  account: string | null;
+  canReview: boolean;
+  canCreateCase: boolean;
+  unattributed: boolean;
+  channel: string;
+  domain: string;
+  opportunityType: string;
+}
+
+export interface OpportunityApiItem {
+  id: string;
+  status: string;
+  customerStatus: { code: string; label: string };
+  opportunityType: string;
+  title: string;
+  description: string | null;
+  recoverableAmount: string | null;
+  currency: string;
+  confidence: number | null;
+  claimDeadline: string | null;
+  channel: string;
+  domain: string;
+  accountState: 'ATTRIBUTED' | 'LEGACY_UNATTRIBUTED';
+  account: { platform: string; displayName: string } | null;
+  actions: { canQualify: boolean; canReject: boolean; canCreateCase: boolean };
+}
+
+export function confidenceLabel(confidence: number | null, t: Messages): string {
+  if (confidence === null || Number.isNaN(confidence)) return t.dashboardPage.confidenceUnknown;
+  if (confidence >= 0.8) return t.dashboardPage.confidenceHigh;
+  if (confidence >= 0.5) return t.dashboardPage.confidenceMedium;
+  return t.dashboardPage.confidenceLow;
+}
+
+export function buildOpportunityView(item: OpportunityApiItem, t: Messages): OpportunityView {
+  return {
+    id: item.id,
+    source: item.account?.platform ?? (item.domain || t.dashboardPage.opportunityUnattributed),
+    problem: item.title || item.opportunityType,
+    amount: item.recoverableAmount,
+    currency: item.currency,
+    confidence: confidenceLabel(item.confidence, t),
+    statusLabel: item.customerStatus.label,
+    statusCode: item.customerStatus.code,
+    deadline: item.claimDeadline,
+    account: item.account?.displayName ?? null,
+    canReview: item.actions.canQualify,
+    canCreateCase: item.actions.canCreateCase,
+    unattributed: item.accountState === 'LEGACY_UNATTRIBUTED',
+    channel: item.channel,
+    domain: item.domain,
+    opportunityType: item.opportunityType,
+  };
+}
