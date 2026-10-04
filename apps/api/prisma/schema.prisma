@@ -3176,6 +3176,10 @@ enum CustomsProviderBindingEvent {
   SUSPENDED
   REVOKED
   RESTORED
+  // C18 FINAL-3（MSG-20261004-31 CHANGE D）：收到并验证了一个 provider authorization 观察，
+  // 但该观察**没有**改变 current submission gate 的状态。用它记录续期 / 换 authorization ref 等
+  // 不改变闸门但必须耐久化的事实，避免用语义不准确的 RESTORED 冒充。
+  AUTHORIZATION_OBSERVED
 }
 
 model CustomsProviderTenantBinding {

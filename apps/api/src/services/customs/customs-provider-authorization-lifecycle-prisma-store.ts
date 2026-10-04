@@ -4,26 +4,29 @@
  * 只消费 **server-derived** 的 provider 授权事件（验签 webhook / 轮询），折叠后把结果落到
  * current binding 的 status 与 append-only lineage 事实，全部在同一个 DB 事务内完成。
  *
- * FINAL-2（MSG-20261004-30 三项必修）：
- *   CHANGE A —— 折叠必须在事务内、且**已持久化的历史事件**要与本次 incoming 事件一起参与折叠：
- *               迟到的旧 GRANTED（effectiveAt 早于已记录的 REVOKED）不能复活已撤销的 binding，
- *               SUSPENDED / REAUTH_REQUIRED 也不能解除 REVOKED / EXPIRED 这类 terminal 状态。
- *               历史事件从每条 lineage 事实的 snapshot.triggeringEvent 重建（lineage 是 append-only，
- *               所以那确实就是当时的事实，不需要新增 provider event 表）。
- *   CHANGE B —— 事件主体完整性 + 严格 fail-closed：每个 incoming 事件必须与 input 的
- *               organizationId / providerId / principalRef 一致，否则 AUTHORIZATION_SUBJECT_MISMATCH 且 zero writes；
- *               任意事件校验失败 → 整批拒绝（AUTHORIZATION_EVENT_INVALID），**不再**静默过滤坏事件后继续折叠；
- *               snapshot 额外持久化 providerAuthorizationRef / triggeringEventKind / reasonCode（均非 secret）。
- *   CHANGE C —— 幂等键 (bindingId, event, sourceRef) 由 DB 唯一索引兜底
- *               `CustomsProviderTenantBindingLineage_lifecycle_key`；唯一冲突（P2002）→ 重新读取既有事实 → REPLAYED。
+ * 因为 lineage 同时是「下一次 fold 的 durable history」，本 store 的契约是：
+ *   **每一个会影响未来 fold 的已核验 provider 观察都必须耐久化**，无论它是否改变了提交闸门。
+ *
+ * MSG-20261004-30（FINAL-2）：
+ *   CHANGE A —— 折叠在事务内、且纳入已持久化的历史事件（从 lineage 的 snapshot 重建）。
+ *   CHANGE B —— 事件主体完整性 + 任意非法事件整批 fail-closed（zero writes）；snapshot 记录
+ *               providerAuthorizationRef / triggeringEventKind / reasonCode。
+ *   CHANGE C —— 幂等键 (bindingId, event, sourceRef) 由 DB 唯一索引兜底（P2002 → 重读 → REPLAYED）。
+ *
+ * MSG-20261004-31（FINAL-3）：
+ *   CHANGE D —— 闸门未变化的合法观察也必须落事实，事件语义用新增的 `AUTHORIZATION_OBSERVED`
+ *               （「收到并验证了一个观察，但没有改变闸门」），不再用会误导的 `RESTORED`，也不再丢弃事实。
+ *               一次调用携带多个事件时，snapshot.observedEvents 保存**全部**参与折叠的事件（不止最后一条）。
+ *   CHANGE E —— REPLAYED 路径（含 P2002 兜底）必须返回与正常路径相同的 fold 真值
+ *               （persisted history + incoming），不得退回 incoming-only。
  *
  * 状态映射（数据库列是「提交闸门」，精确的 provider 状态保存在 append-only snapshot 里）：
- *   ACTIVE          → binding ACTIVE               + lineage RESTORED
+ *   ACTIVE          → binding ACTIVE               + lineage RESTORED（仅当闸门确实由非 ACTIVE 变 ACTIVE）
  *   REAUTH_REQUIRED → binding PENDING_VERIFICATION + lineage REAUTH_REQUIRED
  *   SUSPENDED       → binding SUSPENDED            + lineage SUSPENDED
  *   REVOKED         → binding REVOKED              + lineage REVOKED
  *   EXPIRED         → binding REVOKED              + lineage REVOKED，snapshot.providerStatus = EXPIRED
- *     （`CustomsProviderBindingStatus` 无 EXPIRED 取值；撤销与过期都「不可提交」，精确原因留在快照。）
+ *   闸门不变        → 事件语义 AUTHORIZATION_OBSERVED（精确 provider 状态仍在 snapshot）
  *
  * 本模块不做任何 provider 网络调用、不读凭据、不产生外部写。
  */
@@ -44,7 +47,12 @@ import {
 
 export type ProviderAuthorizationBindingStatus = 'ACTIVE' | 'PENDING_VERIFICATION' | 'SUSPENDED' | 'REVOKED';
 
-export type ProviderAuthorizationLineageEvent = 'RESTORED' | 'REAUTH_REQUIRED' | 'SUSPENDED' | 'REVOKED';
+export type ProviderAuthorizationLineageEvent =
+  | 'RESTORED'
+  | 'REAUTH_REQUIRED'
+  | 'SUSPENDED'
+  | 'REVOKED'
+  | 'AUTHORIZATION_OBSERVED';
 
 export interface ProviderAuthorizationObservationInput {
   organizationId: string;
@@ -57,7 +65,7 @@ export interface ProviderAuthorizationObservationInput {
   now: Date;
 }
 
-/** 安全 opaque 的触发事件副本：让以后审计能回答「到底哪个 provider authorization 被撤销/过期」。 */
+/** 安全 opaque 的事件副本：让以后审计能回答「到底哪个 provider authorization 被撤销/续期/过期」。 */
 export interface PersistedTriggeringEvent {
   kind: ProviderAuthorizationEventKind;
   effectiveAt: string;
@@ -77,17 +85,19 @@ export interface ProviderAuthorizationObservationSnapshot {
   conflict: boolean;
   /** 触发本次写入（或重放）的事件证据引用。 */
   sourceRef: string;
-  /** CHANGE B 追加：非 secret 的主体/原因信息。 */
+  /** 非 secret 的主体/原因信息。 */
   providerAuthorizationRef: string;
   triggeringEventKind: ProviderAuthorizationEventKind;
   reasonCode: string | null;
-  /** CHANGE A 追加：完整（安全）触发事件，供后续调用重建历史并参与折叠。 */
+  /** 参与本次折叠的最后一条 incoming 事件（可读性）。 */
   triggeringEvent: PersistedTriggeringEvent;
+  /** CHANGE D：本次调用**全部**参与折叠的事件，保证未来 fold 可完整重建。 */
+  observedEvents: PersistedTriggeringEvent[];
   /** 只记录判定结果，不含任何凭据本体。 */
   credentialReferenceRecorded: false;
 }
 
-export type ProviderAuthorizationApplyOutcome = 'APPLIED' | 'REPLAYED' | 'UNCHANGED';
+export type ProviderAuthorizationApplyOutcome = 'APPLIED' | 'REPLAYED';
 
 export type ProviderAuthorizationDeniedReason =
   | 'BINDING_UNKNOWN'
@@ -111,9 +121,9 @@ export type ProviderAuthorizationObservationResult =
       bindingId: string;
       bindingStatus: ProviderAuthorizationBindingStatus;
       lineageId: string | null;
-      /** 历史 + 本次事件一起折叠后的状态。 */
+      /** 历史 + 本次事件一起折叠后的状态（REPLAYED 路径必须给出同样的真值）。 */
       derived: DerivedProviderAuthorizationState;
-      /** 仅由历史折叠出的状态（用于证明「迟到的旧事件不能复活 terminal」）。 */
+      /** 仅由历史折叠出的状态。 */
       priorDerived: DerivedProviderAuthorizationState;
       externalWritePerformed: false;
       transportEnabled: false;
@@ -135,7 +145,7 @@ const DENIED = (reasonCode: ProviderAuthorizationDeniedReason): ProviderAuthoriz
 const eventOrderKey = (event: ProviderAuthorizationEvent): string =>
   `${event.effectiveAt}|${event.observedAt}|${event.sourceRef}`;
 
-/** 与折叠函数一致的「参与折叠的最后一条事件」；用于幂等去重键。 */
+/** 与折叠函数一致的「参与折叠的最后一条事件」；用于事实的 sourceRef。 */
 const lastAppliedEvent = (
   events: readonly ProviderAuthorizationEvent[],
   now: Date,
@@ -186,6 +196,48 @@ const toPersistedTriggeringEvent = (event: ProviderAuthorizationEvent): Persiste
 const isUniqueViolation = (error: unknown): boolean =>
   error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002';
 
+interface LineageSnapshotShape {
+  triggeringEvent?: PersistedTriggeringEvent;
+  observedEvents?: PersistedTriggeringEvent[];
+}
+
+const persistedEventsOf = (snapshot: unknown): PersistedTriggeringEvent[] => {
+  const shape = (snapshot ?? null) as LineageSnapshotShape | null;
+  if (!shape) return [];
+  if (Array.isArray(shape.observedEvents) && shape.observedEvents.length > 0) return shape.observedEvents;
+  return shape.triggeringEvent ? [shape.triggeringEvent] : [];
+};
+
+const sameEvent = (a: PersistedTriggeringEvent, b: PersistedTriggeringEvent): boolean =>
+  a.kind === b.kind && a.effectiveAt === b.effectiveAt && a.observedAt === b.observedAt && a.sourceRef === b.sourceRef;
+
+/** 从 append-only lineage 重建历史事件；任何不可重建的事实 → fail-closed。 */
+const rebuildHistory = (
+  rows: readonly { snapshot: unknown }[],
+  subject: { organizationId: string; providerId: string; principalRef: string },
+): { ok: true; events: ProviderAuthorizationEvent[] } | { ok: false } => {
+  const events: ProviderAuthorizationEvent[] = [];
+  for (const row of rows) {
+    for (const stored of persistedEventsOf(row.snapshot)) {
+      const rebuilt: ProviderAuthorizationEvent = {
+        providerId: subject.providerId,
+        providerAuthorizationRef: stored.providerAuthorizationRef,
+        organizationId: subject.organizationId,
+        principalRef: subject.principalRef,
+        kind: stored.kind,
+        effectiveAt: stored.effectiveAt,
+        observedAt: stored.observedAt,
+        expiresAt: stored.expiresAt ?? null,
+        reasonCode: stored.reasonCode ?? null,
+        sourceRef: stored.sourceRef,
+      };
+      if (!validateProviderAuthorizationEvent(rebuilt).ok) return { ok: false };
+      events.push(rebuilt);
+    }
+  }
+  return { ok: true, events };
+};
+
 export function createPrismaProviderAuthorizationLifecycleStore(
   prisma: PrismaClient,
 ): ProviderAuthorizationLifecycleStore {
@@ -230,31 +282,14 @@ export function createPrismaProviderAuthorizationLifecycleStore(
         });
         if (binding === null) return DENIED('BINDING_UNKNOWN');
 
-        // CHANGE A：读回已持久化的历史事件（lineage 的 triggeringEvent 就是当时的事实）。
+        // CHANGE A：读回已持久化的历史事件（lineage 的 snapshot 就是当时的事实）。
         const lineageRows = await tx.customsProviderTenantBindingLineage.findMany({
           where: { organizationId: input.organizationId, bindingId: binding.id },
           orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
         });
-        const history: ProviderAuthorizationEvent[] = [];
-        for (const row of lineageRows) {
-          const stored = (row.snapshot as { triggeringEvent?: PersistedTriggeringEvent } | null)?.triggeringEvent;
-          if (!stored) continue; // 早于本机制的 lineage 事实（例如 binding store 的 BOUND）不带事件，跳过。
-          const rebuilt: ProviderAuthorizationEvent = {
-            providerId: input.providerId,
-            providerAuthorizationRef: stored.providerAuthorizationRef,
-            organizationId: input.organizationId,
-            principalRef: input.principalRef,
-            kind: stored.kind,
-            effectiveAt: stored.effectiveAt,
-            observedAt: stored.observedAt,
-            expiresAt: stored.expiresAt ?? null,
-            reasonCode: stored.reasonCode ?? null,
-            sourceRef: stored.sourceRef,
-          };
-          // 历史事实若不可重建/不合法 → fail-closed，绝不「猜」一个状态。
-          if (!validateProviderAuthorizationEvent(rebuilt).ok) return DENIED('AUTHORIZATION_HISTORY_INVALID');
-          history.push(rebuilt);
-        }
+        const rebuilt = rebuildHistory(lineageRows, input);
+        if (!rebuilt.ok) return DENIED('AUTHORIZATION_HISTORY_INVALID');
+        const history = rebuilt.events;
 
         const priorDerived = deriveProviderAuthorizationState(history, input.now);
         const derived = deriveProviderAuthorizationState([...history, ...(input.events ?? [])], input.now);
@@ -262,25 +297,23 @@ export function createPrismaProviderAuthorizationLifecycleStore(
         if (derived.status === 'UNKNOWN') return DENIED('AUTHORIZATION_UNKNOWN');
         const mapped = mapProviderStatusToBinding(derived.status);
         if (mapped === null) return DENIED('AUTHORIZATION_UNKNOWN');
-        // 幂等键取「本次 incoming 事件中真正参与折叠的最后一条」。
         const trigger = lastAppliedEvent(input.events, input.now);
         if (trigger === null) return DENIED('AUTHORIZATION_UNKNOWN');
 
-        const existing = await tx.customsProviderTenantBindingLineage.findFirst({
-          where: {
-            organizationId: input.organizationId,
-            bindingId: binding.id,
-            event: mapped.lineageEvent as never,
-            sourceRef: trigger.sourceRef,
-          },
-        });
-        if (existing !== null) {
+        // 幂等：本次 incoming 的事件若全部已在历史里，就是一次重放（返回与正常路径相同的 fold 真值）。
+        const observedPersisted = (input.events ?? []).map(toPersistedTriggeringEvent);
+        const allRecorded =
+          observedPersisted.length > 0 && observedPersisted.every((p) => history.some((h) => sameEvent(toPersistedTriggeringEvent(h), p)));
+        if (allRecorded) {
+          const existing = await tx.customsProviderTenantBindingLineage.findFirst({
+            where: { organizationId: input.organizationId, bindingId: binding.id, sourceRef: trigger.sourceRef },
+          });
           return {
             ok: true as const,
             outcome: 'REPLAYED' as const,
             bindingId: binding.id,
             bindingStatus: binding.status as ProviderAuthorizationBindingStatus,
-            lineageId: existing.id,
+            lineageId: existing?.id ?? null,
             derived,
             priorDerived,
             externalWritePerformed: false as const,
@@ -289,22 +322,11 @@ export function createPrismaProviderAuthorizationLifecycleStore(
           };
         }
 
-        // 只有**闸门状态真的变化**才追加事实：terminal 下收到 SUSPENDED / 迟到旧 GRANTED / 对已 ACTIVE 的 binding
-        // 再确认一次授权，都不应伪造一条事件语义（否则会写出「RESTORED」这种暗示此前不可用的假事实）。
-        if (binding.status === mapped.bindingStatus) {
-          return {
-            ok: true as const,
-            outcome: 'UNCHANGED' as const,
-            bindingId: binding.id,
-            bindingStatus: binding.status as ProviderAuthorizationBindingStatus,
-            lineageId: null,
-            derived,
-            priorDerived,
-            externalWritePerformed: false as const,
-            transportEnabled: false as const,
-            productionCredentials: 'ABSENT' as const,
-          };
-        }
+        // CHANGE D：闸门变化用 transition 事件语义；闸门不变也必须落事实（用 AUTHORIZATION_OBSERVED，含义准确）。
+        const gateChanged = binding.status !== mapped.bindingStatus;
+        const eventToWrite: ProviderAuthorizationLineageEvent = gateChanged
+          ? mapped.lineageEvent
+          : 'AUTHORIZATION_OBSERVED';
 
         const snapshot: ProviderAuthorizationObservationSnapshot = {
           providerStatus: derived.status,
@@ -318,10 +340,11 @@ export function createPrismaProviderAuthorizationLifecycleStore(
           triggeringEventKind: trigger.kind,
           reasonCode: trigger.reasonCode ?? null,
           triggeringEvent: toPersistedTriggeringEvent(trigger),
+          observedEvents: observedPersisted,
           credentialReferenceRecorded: false,
         };
 
-        if (binding.status !== mapped.bindingStatus) {
+        if (gateChanged) {
           await tx.customsProviderTenantBinding.update({
             where: { id: binding.id },
             data: { status: mapped.bindingStatus as never },
@@ -332,7 +355,7 @@ export function createPrismaProviderAuthorizationLifecycleStore(
           data: {
             organizationId: input.organizationId,
             bindingId: binding.id,
-            event: mapped.lineageEvent as never,
+            event: eventToWrite as never,
             actorRef: `system:provider-observation:${input.providerId}`,
             note: null,
             snapshot: snapshot as never,
@@ -360,24 +383,24 @@ export function createPrismaProviderAuthorizationLifecycleStore(
         return await prisma.$transaction(applyInsideTransaction);
       } catch (error) {
         // CHANGE C：DB 唯一索引兜底（另一 writer 先提交了同一 (bindingId,event,sourceRef)）→ 重新读取 → REPLAYED。
-        // 事务已整体回滚，因此这里在事务外重新读取，绝不留下半截状态。
+        // CHANGE E：这里必须用 persisted history + incoming 的同一 fold 真值，不能退回 incoming-only。
         if (!isUniqueViolation(error)) throw error;
         const binding = await prisma.customsProviderTenantBinding.findFirst({
           where: { organizationId: input.organizationId, providerId: input.providerId, bindingScopeKey },
         });
         if (binding === null) return DENIED('BINDING_UNKNOWN');
+        const rows = await prisma.customsProviderTenantBindingLineage.findMany({
+          where: { organizationId: input.organizationId, bindingId: binding.id },
+          orderBy: [{ occurredAt: 'asc' }, { id: 'asc' }],
+        });
+        const rebuilt = rebuildHistory(rows, input);
+        if (!rebuilt.ok) return DENIED('AUTHORIZATION_HISTORY_INVALID');
+        const priorDerived = deriveProviderAuthorizationState(rebuilt.events, input.now);
+        const derived = deriveProviderAuthorizationState([...rebuilt.events, ...(input.events ?? [])], input.now);
         const trigger = lastAppliedEvent(input.events, input.now);
         if (trigger === null) return DENIED('AUTHORIZATION_UNKNOWN');
-        const derived = deriveProviderAuthorizationState(input.events, input.now);
-        const mapped = mapProviderStatusToBinding(derived.status);
-        if (mapped === null) return DENIED('AUTHORIZATION_UNKNOWN');
         const existing = await prisma.customsProviderTenantBindingLineage.findFirst({
-          where: {
-            organizationId: input.organizationId,
-            bindingId: binding.id,
-            event: mapped.lineageEvent as never,
-            sourceRef: trigger.sourceRef,
-          },
+          where: { organizationId: input.organizationId, bindingId: binding.id, sourceRef: trigger.sourceRef },
         });
         if (existing === null) throw error;
         return {
@@ -387,7 +410,7 @@ export function createPrismaProviderAuthorizationLifecycleStore(
           bindingStatus: binding.status as ProviderAuthorizationBindingStatus,
           lineageId: existing.id,
           derived,
-          priorDerived: derived,
+          priorDerived,
           externalWritePerformed: false,
           transportEnabled: false,
           productionCredentials: 'ABSENT',

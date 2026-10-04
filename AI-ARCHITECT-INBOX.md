@@ -134491,3 +134491,271 @@ PRODUCTION_ENABLEMENT = HOLD
 
 最小返工就是 A：持久化历史参与折叠；B：event subject + invalid-event fail-closed；C：生命周期幂等键 DB 唯一约束。 这三项完成后直接送 C18 PRODUCTION PERSISTENCE CHECKPOINT FINAL-2，不需要重做前面的 C18 架构。
 ```
+
+### [MSG-20261004-31] ARCHITECT VERDICT — C18 PRODUCTION PERSISTENCE CHECKPOINT FINAL-2 复核 = REVISE（仅剩 CHANGE D/E）｜reviewed HEAD = 6de52ca｜已 PASS：CHANGE_A（事务内折叠并纳入已持久化历史）／CHANGE_B（主体完整性 + 非法事件整批 fail-closed）／CHANGE_C（幂等键 DB 唯一约束）／PLAIN_UNIQUE_INDEX（普通唯一索引替代 partial 接受，不要为 partial 制造长期 schema drift 豁免）／EXPIRED_TO_REVOKED／EXISTING_BINDING_PLUS_LINEAGE_MODEL。两项必修：CHANGE D「只有闸门变化才落事实」不可接受 —— lineage 既已被定义为下一次 fold 的 durable history，gate 未变化的合法 provider 事件（如 ACTIVE + RENEWED expiresAt=T5 或 providerAuthorizationRef 变更）也必须耐久化，否则续期/新 ref 永久丢失；且一次 applyObservation 携带多个事件时不能只保存 lastAppliedEvent；修法是新增不误导的枚举语义（如 AUTHORIZATION_OBSERVED：收到并验证了 observation 但未改变 submit gate），真正 REVOKED→ACTIVE 才写 RESTORED。CHANGE E：P2002 catch 里又退回 incoming-only，必须与正常路径一样用 persisted history + incoming 的同一 fold 真值返回 REPLAYED（或从已存在 lineage 的 canonical 结果重建）。PRODUCTION_PERSISTENCE_CHECKPOINT = REVISE（NOT_YET_PASS）；修完直接送 FINAL-3，不需重审 Binding Store / webhook exactly-once / tenant isolation / A/B/C。STAGING_NONPROD_DEPLOY = AUTHORIZED，STAGING_SMOKE 仍是 production deploy 解禁门；REAL_DATA_SHARED / PRODUCTION_MIGRATE_DEPLOY / REAL_TRANSPORT / EXTERNAL_WRITE / PAYMENT / PRODUCTION_ENABLEMENT = HOLD｜
+
+```text
+ARCHITECT VERDICT：REVISE
+
+我按 reviewed HEAD = 6de52ca（完整 SHA 6de52caf0f5111fd5eb091ed84e29e993c6319e1）重新核了 lifecycle store、14 个 lifecycle PG 用例、新 migration、Prisma schema 和 exact-order replay 脚本。
+
+三项必修本身基本已经修对，但复核 CHANGE A 后暴露出一个新的持久化历史完整性问题，因此 PRODUCTION_PERSISTENCE_CHECKPOINT 还不能正式 PASS。
+
+① CHANGE A / B / C 的裁定
+
+这几项可以记：
+
+纯文本
+LIFECYCLE_PERSISTED_PREVIOUS_STATE_FOLD = PASS
+EVENT_SUBJECT_BINDING = PASS
+INVALID_EVENT_FAIL_CLOSED = PASS
+LIFECYCLE_DB_IDEMPOTENCY_UNIQUE = PASS
+
+我确认：
+
+fold 已进入 FOR UPDATE 事务；
+已持久化的 snapshot.triggeringEvent 会参与后续 fold；
+REVOKED T2 → stale GRANTED T1 不再复活；
+strictly-later GRANTED T3 才能恢复；
+subject mismatch 和 invalid event 都在事务前 fail-closed；
+DB 唯一约束已真正落到 schema + migration；
+直接绕过 store 重复插入也会被 DB 拒绝。
+
+这些修复是成立的。
+
+② 普通 UNIQUE 代替 partial UNIQUE：接受
+
+这个偏离我判 PASS。
+
+当前：
+
+SQL
+UNIQUE ("bindingId", "event", "sourceRef")
+
+在 PostgreSQL 默认 NULL 语义下，多个 sourceRef IS NULL 的行不会互相冲突，因此对你们当前目标来说，与：
+
+SQL
+UNIQUE (...) WHERE "sourceRef" IS NOT NULL
+
+具有需要的幂等行为。
+
+而且普通 unique 可以由 Prisma schema 正常表达，能继续保持：
+
+纯文本
+WHOLE_SCHEMA_DIFF_ZERO
+EXACT_ORDER_REPLAY
+
+所以不要为了 partial index 再制造一个长期 schema drift 豁免。
+
+③ 「只有闸门变化才落事实」：不能接受
+
+问题在于你现在已经把 lineage 定义成：
+
+后续 lifecycle fold 的持久化历史来源。
+
+那就不能同时规定：
+
+gate 没变化的合法 provider event 不保存。
+
+这两个规则互相矛盾。
+
+一个非常具体的反例：
+
+纯文本
+Binding 当前 ACTIVE
+
+provider 来：
+RENEWED @ T2
+expiresAt = T5
+
+由于：
+
+纯文本
+ACTIVE → ACTIVE
+
+现在代码直接：
+
+纯文本
+UNCHANGED
+不写 lineage
+
+于是这次续期事件、expiresAt=T5、新的 providerAuthorizationRef 都永久消失。
+
+以后到了 T6 再收到另一个 observation，数据库历史中根本没有这次 RENEWED，系统无法正确重建真实 provider authorization history。
+
+同理：
+
+纯文本
+ACTIVE
+→ 新 GRANTED / RENEWED
+→ gate 仍 ACTIVE
+
+虽然 gate 没变化，但这仍然是真实生命周期事实，不能因为 RESTORED 这个名字不合适就不保存。
+
+所以你发现：
+
+ACTIVE → ACTIVE 写 RESTORED 是假事实
+
+这个判断是对的。
+
+但修法应该是：
+
+换一个不误导的事实语义，而不是把事实删掉。
+
+CHANGE D — 最后一项必修
+
+推荐给 CustomsProviderBindingEvent 增加一个明确的非 transition 事件，例如：
+
+纯文本
+AUTHORIZATION_OBSERVED
+
+或：
+
+纯文本
+PROVIDER_AUTH_OBSERVED
+
+其语义明确规定：
+
+收到并验证了一个 provider authorization lifecycle observation，但该 observation 没有导致 current submission gate 状态改变。
+
+这样：
+
+纯文本
+ACTIVE + RENEWED → ACTIVE
+
+可以落：
+
+纯文本
+AUTHORIZATION_OBSERVED
+snapshot.triggeringEvent.kind = RENEWED
+snapshot.expiresAt = ...
+snapshot.providerAuthorizationRef = ...
+
+而真正发生：
+
+纯文本
+REVOKED → ACTIVE
+
+才写：
+
+纯文本
+RESTORED
+
+这就不会制造假语义，同时不会丢历史。
+
+不需要新 provider event 表；现有 lineage 表继续复用即可，只补一个 enum event 语义。
+
+至少补两个跨调用 PG 反例：
+
+纯文本
+ACTIVE
+→ RENEWED T2 expiresAt=T5
+→ gate 仍 ACTIVE，但 observation 必须持久化
+→ 后续调用必须能从 DB 历史读回这次 RENEWED
+
+以及：
+
+纯文本
+ACTIVE
+→ GRANTED/RENEWED，providerAuthorizationRef 改变
+→ gate 仍 ACTIVE
+→ 新 authorization ref 不得丢失
+
+如果一个 applyObservation() 可能携带多个 provider events，也必须保证所有会影响未来 fold 的事件都能被持久化；不能继续只保存 lastAppliedEvent 而丢掉其它必要历史。
+
+还有一个很小的 FINAL-3 修订。
+
+当前 P2002 catch 里重新计算的是：
+
+TypeScript
+deriveProviderAuthorizationState(input.events, input.now)
+
+也就是又退回了 incoming-only。
+
+正常事务路径已经改成：
+
+纯文本
+persisted history + incoming
+
+所以 replay/P2002 路径也必须返回同样的 derived truth。
+
+否则：
+
+纯文本
+APPLIED 路径
+
+和：
+
+纯文本
+REPLAYED 路径
+
+可能对同一 durable DB state 返回不同的 derived/priorDerived。
+
+CHANGE E
+
+P2002 后：
+
+纯文本
+reload binding
+→ reload persisted lifecycle history
+→ history + incoming fold
+→ 返回 REPLAYED
+
+或者直接从已存在 lineage 的 canonical persisted result 重建。
+
+不能再用 incoming-only 作为返回真值。
+
+④ Production Persistence Checkpoint
+
+所以目前：
+
+纯文本
+PRODUCTION_PERSISTENCE_CHECKPOINT = REVISE
+
+不是前面的 A/B/C 没修好，而是 FINAL-2 把 lineage 正式升级成“下一次 fold 的 durable history”后，所有 fold-relevant provider observation 就必须耐久化。
+
+最小剩余只有两个：
+
+纯文本
+CHANGE D
+无 gate transition 的合法 provider authorization observation 也必须 durable；
+新增不误导的 AUTHORIZATION_OBSERVED 语义或等价方案。
+
+CHANGE E
+P2002 / REPLAYED 返回值必须使用 persisted-history + incoming 的相同 fold 真值。
+
+完成后直接送：
+
+纯文本
+C18 PRODUCTION PERSISTENCE CHECKPOINT FINAL-3
+
+不需要重新审 Binding Store、Webhook exactly-once、tenant isolation、A/B/C。
+
+当前状态可以记为：
+
+纯文本
+CHANGE_A = PASS
+CHANGE_B = PASS
+CHANGE_C = PASS
+
+PLAIN_UNIQUE_INDEX = PASS
+EXPIRED_TO_REVOKED = PASS
+EXISTING_BINDING_PLUS_LINEAGE_MODEL = PASS
+
+NON_TRANSITION_OBSERVATION_DURABILITY = REVISE
+P2002_REPLAY_DERIVED_TRUTH = REVISE
+
+PRODUCTION_PERSISTENCE_CHECKPOINT = NOT_YET_PASS
+
+STAGING_NONPROD_DEPLOY = AUTHORIZED
+STAGING_SMOKE = STILL_PRODUCTION_DEPLOY_GATE
+
+REAL_DATA_SHARED = HOLD
+PRODUCTION_MIGRATE_DEPLOY = HOLD
+REAL_TRANSPORT = HOLD
+EXTERNAL_WRITE = HOLD
+PAYMENT = HOLD
+PRODUCTION_ENABLEMENT = HOLD
+
+另外，本 exact HEAD 的 GitHub hosted status/workflow 查询仍为空，因此 21/21、tsc、prisma validate、exact-order replay 我视为已归档执行证据；我独立确认的是 6de52ca 上的实现、migration 和测试逻辑。
+```
