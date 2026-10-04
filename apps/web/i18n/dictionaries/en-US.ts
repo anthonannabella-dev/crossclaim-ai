@@ -211,6 +211,14 @@ const enUS: Messages = {
     holdNote: "Real filing stays disabled until a provider is enabled.",
   },
 
+  appStates: {
+    notFoundTitle: "Page not found",
+    notFoundBody: "The link may have expired, or this content is outside your organization's permissions.",
+    errorTitle: "Something went wrong",
+    errorBody: "The error has been recorded. You can retry; if it persists, check your connection status or contact support.",
+    retry: "Retry",
+  },
+
   nav: {
     dashboard: 'Dashboard',
     upload: 'Upload invoices',

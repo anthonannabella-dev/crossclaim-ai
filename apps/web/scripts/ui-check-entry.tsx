@@ -422,6 +422,23 @@ check(
   enUS.customsPage.estimatedLabel !== enUS.customsPage.confirmedLabel && enUS.customsPage.submitNote.includes('HOLD'),
 );
 
+// ⑮ UI-8a：全局状态页 + a11y 语义
+check('states.404.keys', zhCN.appStates.notFoundTitle.length > 0 && zhCN.appStates.notFoundBody.length > 0);
+check('states.error.retry.key', zhCN.appStates.errorTitle.length > 0 && zhCN.appStates.retry.length > 0);
+const alertHtml = render(
+  <InlineNotice tone="danger" title={zhCN.appStates.errorTitle}>
+    {zhCN.appStates.errorBody}
+  </InlineNotice>,
+);
+check('a11y.danger.role.alert', alertHtml.includes('role="alert"'));
+const statusHtml = render(
+  <InlineNotice tone="info" title={zhCN.dashboardPage.opportunitiesEmpty}>
+    {zhCN.dashboardPage.opportunitiesEmptyBody}
+  </InlineNotice>,
+);
+check('a11y.info.role.status', statusHtml.includes('role="status"'));
+check('a11y.notice.tone.classes', alertHtml.includes('border-red-200') && statusHtml.includes('border-sky-200'));
+
 console.log(results.join('\n'));
 if (failures.length > 0) {
   console.error('UI_RENDER_CHECK=FAIL count=' + failures.length);

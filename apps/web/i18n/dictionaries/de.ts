@@ -211,6 +211,14 @@ const de: Messages = {
     holdNote: "Die echte Einreichung bleibt deaktiviert, bis ein Anbieter freigeschaltet ist.",
   },
 
+  appStates: {
+    notFoundTitle: "Seite nicht gefunden",
+    notFoundBody: "Der Link ist möglicherweise abgelaufen oder der Inhalt liegt außerhalb der Berechtigungen Ihrer Organisation.",
+    errorTitle: "Fehler beim Laden",
+    errorBody: "Der Fehler wurde protokolliert. Sie können es erneut versuchen; bei Wiederholung prüfen Sie die Verbindung.",
+    retry: "Erneut versuchen",
+  },
+
   nav: {
     dashboard: 'Dashboard',
     upload: 'Rechnungen hochladen',

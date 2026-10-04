@@ -211,6 +211,14 @@ const es: Messages = {
     holdNote: "La presentación real permanece deshabilitada hasta que se habilite un proveedor.",
   },
 
+  appStates: {
+    notFoundTitle: "Página no encontrada",
+    notFoundBody: "El enlace puede haber caducado o el contenido está fuera de los permisos de su organización.",
+    errorTitle: "Error al cargar",
+    errorBody: "El error quedó registrado. Puede reintentar; si persiste, revise el estado de sus conexiones.",
+    retry: "Reintentar",
+  },
+
   nav: {
     dashboard: 'Panel',
     upload: 'Subir facturas',

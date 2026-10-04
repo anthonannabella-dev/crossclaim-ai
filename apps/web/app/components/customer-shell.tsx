@@ -31,6 +31,15 @@ export default function CustomerShell({
     setOpen(false);
   }, [pathname]);
 
+  useEffect(() => {
+    if (!open) return;
+    const onKeydown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') setOpen(false);
+    };
+    window.addEventListener('keydown', onKeydown);
+    return () => window.removeEventListener('keydown', onKeydown);
+  }, [open]);
+
   if (isBareRoute(pathname)) {
     return (
       <div className="flex min-h-screen flex-col bg-slate-50">

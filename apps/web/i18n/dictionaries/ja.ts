@@ -211,6 +211,14 @@ const ja: Messages = {
     holdNote: "実際の申告はプロバイダが有効になるまで無効です。",
   },
 
+  appStates: {
+    notFoundTitle: "ページが見つかりません",
+    notFoundBody: "リンクが無効か、この内容は組織の権限範囲外です。",
+    errorTitle: "読み込みエラー",
+    errorBody: "エラーは記録されました。再試行できます。続く場合は接続状態をご確認ください。",
+    retry: "再試行",
+  },
+
   nav: {
     dashboard: 'ダッシュボード',
     upload: '請求書をアップロード',

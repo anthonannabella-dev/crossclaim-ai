@@ -19,7 +19,10 @@ export default function InlineNotice({
   children: ReactNode;
 }) {
   return (
-    <div className={'rounded-lg border px-4 py-3 text-sm ' + TONES[tone]}>
+    <div
+      role={tone === 'danger' ? 'alert' : 'status'}
+      className={'rounded-lg border px-4 py-3 text-sm ' + TONES[tone]}
+    >
       {title ? <p className="font-medium">{title}</p> : null}
       <div className={title ? 'mt-1' : ''}>{children}</div>
     </div>

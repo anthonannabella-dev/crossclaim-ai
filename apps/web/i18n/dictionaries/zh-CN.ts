@@ -212,6 +212,14 @@ const zhCN = {
     holdNote: "真实报关与提交在 Provider 开通前保持关闭。",
   },
 
+  appStates: {
+    notFoundTitle: "找不到这个页面",
+    notFoundBody: "链接可能已失效，或该内容不在你的组织权限范围内。",
+    errorTitle: "页面加载出错",
+    errorBody: "系统已记录该错误。可以重试；如果持续出现，请检查连接状态或联系支持。",
+    retry: "重试",
+  },
+
   nav: {
     dashboard: '工作台',
     upload: '上传账单',
