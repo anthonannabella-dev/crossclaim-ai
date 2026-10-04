@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-10-04T18:06:13.557Z",
-  "acceptance_head": "7d99232",
+  "generated_at": "2026-10-04T18:11:13.158Z",
+  "acceptance_head": "602da14",
   "protocol": "docs/releases/FINAL-ACCEPTANCE-PROTOCOL.md",
   "areas": [
     {
@@ -230,7 +230,8 @@
     "RSI-RT-10-snapshot-publisher",
     "RSI-INSP-06-capability-gap-signal",
     "RSI-RT-11-health-fields",
-    "RSI-CONT-07-verdict-watcher"
+    "RSI-CONT-07-verdict-watcher",
+    "RSI-CONT-08-runtime-e2e"
   ],
   "host_action_required": [
     "provider developer/partner account registration",

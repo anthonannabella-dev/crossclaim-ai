@@ -1,6 +1,6 @@
 {
   "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。",
-  "updatedAt": "2026-10-05T03:07:00.000Z",
+  "updatedAt": "2026-10-05T03:11:00.000Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -1711,6 +1711,16 @@
       "status": "IMPLEMENTED_PENDING_CI",
       "implementation_head": "(this commit)",
       "note": "已接进 rsi:run（verdictWatch 可选，isWaiting 取控制器等待态）"
+    },
+    {
+      "id": "RSI-CONT-08-runtime-e2e",
+      "priority": "P0",
+      "source_backlog_id": "OWNER 续跑规范第 11 节 E2E",
+      "title": "RSI Runtime 端到端集成（事件驱动续跑 + REVISE + Watchdog 兜底）",
+      "scope": "组合 composeRsiRuntime：CI 事件驱动 A→B→C、runner REVISE 自动入队 P0 修订并立即消费、事件丢失由 Watchdog 恢复、无事件静默",
+      "acceptance_criteria": "vitest rsi-runtime-e2e 2/2；api tsc 0",
+      "status": "IMPLEMENTED_PENDING_CI",
+      "implementation_head": "(this commit)"
     }
   ],
   "authorization_note": "MSG-20261003-133 Q3：dispatcher 获授权自动扩 backlog 并执行安全单元（契约/已批准 D1–D3 Schema/append-only 持久化/deterministic normalization/qualification·evidence·package/测试/文档/fixture/只读 HTTP/只读 reconciliation projection）；遇到未批准 Schema、EXTERNAL_WRITE Action Guard、真实 adapter/webhook、submission、真实资金语义写入、生产 credential、收费时必须停该分支并重新送审。 HOST 2026-10-04（CONTINUOUS EXECUTION + CUSTOMS AUTHORIZATION + CHATGPT AUDIT LOOP）：UI-6…UI-8 与 CA-2…CA-6 已登记为可执行队列；Schema/Security/Authorization 边界项自动进入 ChatGPT Audit Loop（AUDIT-BRIDGE.md，不新建协议）。"
