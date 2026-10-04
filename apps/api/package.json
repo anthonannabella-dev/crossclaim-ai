@@ -17,7 +17,9 @@
     "dev": "tsx watch src/server.ts",
     "start": "node dist/server.js",
     "db:seed": "tsx prisma/seed.ts",
-    "export:recover-static": "tsx src/services/seo/seo-recover-static-cli.ts"
+    "export:recover-static": "tsx src/services/seo/seo-recover-static-cli.ts",
+    "rsi:dev": "tsx src/runtime/rsi-controller.ts",
+    "rsi:start": "node dist/runtime/rsi-controller.js"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0"

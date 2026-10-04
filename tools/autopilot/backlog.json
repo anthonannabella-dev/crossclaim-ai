@@ -1,6 +1,6 @@
 {
   "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。",
-  "updatedAt": "2026-10-05T00:53:00.000Z",
+  "updatedAt": "2026-10-05T00:57:00.000Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -1363,7 +1363,14 @@
       "title": "RSI Runtime 独立进程入口（start/stop/health/restart；不依赖聊天窗口）",
       "scope": "独立 rsi-controller 进程：信号摄取→incident→task→candidate 编排；与 api/web 解耦，RSI 崩溃不影响主业务",
       "acceptance_criteria": "纯函数/可运行代码 + 命名用例；api tsc 0；不新增 schema（如需另送 Schema Delta 审计）",
-      "status": "READY"
+      "status": "IMPLEMENTED_PENDING_CI",
+      "implementation_head": "(this commit)",
+      "artifacts": [
+        "apps/api/src/runtime/rsi-controller.ts",
+        "apps/api/src/__tests__/rsi-controller.test.ts",
+        "apps/api/package.json（rsi:dev / rsi:start）"
+      ],
+      "evidence": "vitest rsi-controller 3/3；api tsc 0"
     },
     {
       "id": "RSI-RT-02-supervisor-autostart",
