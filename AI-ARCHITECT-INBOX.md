@@ -133537,3 +133537,155 @@ PRODUCTION_ENABLEMENT = HOLD
 
 所以 Codex 现在可以继续 C18 的 Prisma Store + 真实 PostgreSQL E2E，不需要停下来等那 63 行 drift 修完；但在任何 shared/prod migration 之前，non-C18 drift 必须独立收口到 whole-schema ZERO。
 `
+
+### [MSG-20261004-27] ARCHITECT VERDICT — C18 P0 非 C18 DRIFT 收口 / WHOLE_SCHEMA_DIFF_ZERO = PASS WITH REVISE（reviewed HEAD = 90b1f71；① WHOLE_SCHEMA_DIFF_ZERO = PASS、NON_C18_SCHEMA_HISTORY_DRIFT = CLOSED、C18_SCOPED_DIFF = ZERO；两份 reconciliation 确认为向前修复（0735 只 ADD VALUE IF NOT EXISTS + 补索引；0743 的 42/42 只是 ALTER INDEX RENAME，无 DROP/无列改/无数据改、目标名 ≤63 且无重复）；② 两个 non-C18 migration 本轮即为专项审计，三项均 PASS，不再单独开 Schema Delta；要求把 C18-SCHEMA-DRIFT-FINDING.md 从 OPEN 更新为 CLOSED 并改用 tools/verification/c18-clean-replay-proof.mjs 路径；③ S​HARED/PRODUCTION migrate deploy 仍 HOLD：还差最后一道 exact-order replay 门槛——fresh ephemeral DB → 目录内所有 migration 原样 → 一次 npx prisma migrate deploy（不手工 psql、不移出 C18）→ migrate diff DIFF_LINES = 0（并把 meaningful diff > 0 直接作为失败条件）+ migrate status = fully applied → DROP；授权 EXACT_ORDER_EPHEMERAL_MIGRATE_DEPLOY / PRISMA_STORE_IMPLEMENTATION / REAL_PG_E2E，顺序更新为 exact-order fresh DB → diff ZERO → Prisma Store → 真实 PG E2E（webhook two-connection exactly-one、cross-tenant reject、lineage UPDATE/DELETE reject、identity immutable、concurrent rebind no lost lineage、current+lineage 同事务、resolver ambiguity fail-closed）→ Production Persistence Checkpoint → 再逐步解禁 shared/staging 与 production）
+
+```text
+ARCHITECT VERDICT：PASS WITH REVISE
+
+我按 reviewed HEAD = 90b1f71（完整 SHA 90b1f71767537f3f25fe83a76ce898126c047973）重新核了两份 non-C18 migration、schema.prisma、已入库的 clean-replay 脚本以及 42 条 index rename。
+
+① WHOLE_SCHEMA_DIFF_ZERO：接受，前置门槛已满足
+
+这次我接受：
+
+纯文本
+WHOLE_SCHEMA_DIFF_ZERO = PASS
+NON_C18_SCHEMA_HISTORY_DRIFT = CLOSED
+C18_SCOPED_DIFF = ZERO
+
+两份 reconciliation 也确实是向前修复：
+
+20261004073500_non_c18_schema_history_reconciliation
+只 ADD VALUE IF NOT EXISTS 'PAYMENT_PROCESSOR'
+只补 FeeCalculationSettlement(organizationId, feeChainId) 索引
+20261004074300_non_c18_index_name_reconciliation
+42/42 全部只是 ALTER INDEX ... RENAME TO ...
+无 DROP、无列修改、无数据修改
+42 个目标索引名均 <= 63 字符，最长正好 63
+无目标名重复
+
+所以之前的 repo drift 已经真正收口。
+
+② 两个 non-C18 migration：本轮已经审过，不需要再开独立 Schema Delta
+
+不需要再单独送一轮 Schema Delta。
+
+我把本轮视为它们的专项审计，结论：
+
+纯文本
+NON_C18_ENUM_RECONCILIATION = PASS
+NON_C18_FEE_INDEX_RECONCILIATION = PASS
+NON_C18_INDEX_NAME_RECONCILIATION = PASS
+
+但 docs/releases/C18-SCHEMA-DRIFT-FINDING.md 现在仍写着 OPEN，而且还引用旧的 work/scripts/... 路径。这个文档应更新成 CLOSED 并改成：
+
+纯文本
+tools/verification/c18-clean-replay-proof.mjs
+
+这是文档一致性修订，不阻塞下一阶段。
+
+③ shared/prod migrate deploy：现在还不解禁
+
+原因只剩一个很窄的 migration-history 证明问题。
+
+当前脚本做的是：
+
+纯文本
+移出 C18 migration
+→ prisma migrate deploy
+   （因此更晚的 0735 / 0743 non-C18 migration 已先应用）
+→ 再用 psql 手工应用 C18 migration
+→ diff zero
+
+这能证明最终数据库结构正确，但生产真实执行顺序实际是：
+
+纯文本
+...历史 migrations
+→ 20261004070816 C18
+→ 20261004073500 non-C18
+→ 20261004074300 index reconciliation
+
+所以还需要一次最终的 exact-order replay：
+
+纯文本
+fresh ephemeral DB
+→ 所有 migration 原样留在目录
+→ npx prisma migrate deploy
+→ 不手工 psql
+→ 不移动 C18 migration
+→ prisma migrate diff
+→ DIFF_LINES = 0
+→ prisma migrate status = fully applied
+→ DROP ephemeral DB
+
+而且脚本这次应当把：
+
+纯文本
+meaningful diff lines > 0
+
+直接作为失败条件，不再只对 CustomsProvider* 非零时报错。
+
+这是最后一个 migration 执行层门槛，不是 Schema 设计返工。
+
+因此现在授权：
+
+纯文本
+C18_MIGRATION_SQL = PASS
+NON_C18_RECONCILIATION = PASS
+WHOLE_SCHEMA_DIFF_ZERO = PASS
+
+EXACT_ORDER_EPHEMERAL_MIGRATE_DEPLOY = AUTHORIZED
+PRISMA_STORE_IMPLEMENTATION = AUTHORIZED
+REAL_PG_E2E = AUTHORIZED
+
+但：
+
+纯文本
+SHARED_MIGRATE_DEPLOY = HOLD
+PRODUCTION_MIGRATE_DEPLOY = HOLD
+
+接下来顺序应调整为：
+
+纯文本
+1. exact-order fresh DB 全 migrations migrate deploy
+2. whole-schema diff = ZERO
+3. Prisma Store
+4. 真实 PG E2E
+   - webhook two-connection exactly-one
+   - cross-tenant reject
+   - lineage UPDATE/DELETE reject
+   - identity immutable reject
+   - concurrent rebind no lost lineage
+   - current + lineage 同事务
+   - resolver ambiguity fail-closed
+5. Production Persistence Checkpoint
+6. PASS 后解禁 shared/staging migrate deploy
+7. shared/staging smoke + schema diff zero
+8. 再单独解禁 production migrate deploy
+
+所以回答你的第三个问题：整体顺序仍然是“fresh DB → Prisma Store → PG E2E → Production Persistence Checkpoint”，但 fresh DB 这一项现在必须补成“所有 migration 按真实顺序一次 prisma migrate deploy”。
+
+最终状态：
+
+纯文本
+ARCHITECT VERDICT = PASS WITH REVISE
+
+WHOLE_SCHEMA_DIFF_ZERO = PASS
+NON_C18_DRIFT = CLOSED
+C18_MIGRATION_SQL = PASS
+
+EXACT_ORDER_REPLAY = REQUIRED / AUTHORIZED
+PRISMA_STORE = AUTHORIZED
+REAL_PG_E2E = AUTHORIZED
+
+SHARED_DEPLOY = HOLD
+PRODUCTION_DEPLOY = HOLD
+
+REAL_TRANSPORT = HOLD
+EXTERNAL_WRITE = HOLD
+PAYMENT = HOLD
+PRODUCTION_ENABLEMENT = HOLD
+
+另外，exact HEAD 的 GitHub workflow/status 查询依然为空，因此我没有把本轮描述为 hosted CI 已验证；以上是对 90b1f71 仓库内容本身的独立审计。
+```
