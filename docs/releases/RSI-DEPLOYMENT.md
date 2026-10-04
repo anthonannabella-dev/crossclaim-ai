@@ -25,6 +25,20 @@ RSI 与 web/api/worker 进程隔离：RSI 崩溃不影响主业务。
 | systemd | `systemctl {start,stop,restart,status} crossclaim-rsi` |
 | 日志 | `journalctl -u crossclaim-rsi -f` |
 
+### 2.1 事件驱动运行的环境变量（`/etc/crossclaim/rsi.env`）
+
+| 变量 | 作用 | 默认 |
+| --- | --- | --- |
+| `RSI_TASKS_PATH` | 安全队列 artifact（只读 JSON：`[{id,priority,dedupeKey}]`） | 未设=空队列（静默） |
+| `RSI_CI_RESULTS_PATH` | CI 结果 artifact（`[{runId,head,status,conclusion}]`） | 未设=不触发 |
+| `RSI_VERDICT_PATH` | 裁决 artifact（`{messageId,verdict:PASS/REVISE/BLOCK}`） | 未设=不触发 |
+| `RSI_TEST_RESULTS_PATH` | 测试结果 artifact（`{fingerprint,passed}`） | 未设=不触发 |
+| `RSI_WATCHDOG_INTERVAL_MS` | Watchdog 兜底间隔（**只兜底**，不驱动推进） | `60000` |
+| `RSI_STATE_FILE` | 进程自用日志（记录被领取任务；不含凭据/客户数据） | `rsi-run.log` |
+
+> 运行入口是 `rsi-run`（事件驱动）：**无事件时不产生任何输出**；只有事件丢失 / worker idle 且队列非空 / lease 超时，才由 60s Watchdog 兜底。`rsi:dev` / `rsi:start` 保留为纯控制器骨架入口。
+
+
 入口是真实 Runtime：`apps/api/src/runtime/rsi-controller.ts`（只读扫描 + 仅回环 `127.0.0.1:4319/health`）。
 
 ## 3. 首次启用（OWNER 只做一次）
