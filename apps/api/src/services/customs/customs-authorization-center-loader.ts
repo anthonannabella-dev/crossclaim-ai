@@ -197,14 +197,29 @@ export function createPrismaCustomsAuthorizationContextLoader(
 
       // CA-6 REVISE（MSG-20261004-12）：目标 broker 必须来自 server truth（CA-4 broker authorization session），
       // 不得用"最新一张 POA 的 broker"冒充"本次 filing 的目标 broker"，也不得默认 true。
-      const targetBrokerRef =
-        (
-          await prisma.customsBrokerAuthorizationSession.findFirst({
-            where: { organizationId, principalRef },
-            orderBy: [{ updatedAt: 'desc' }],
-            select: { brokerRef: true },
-          })
-        )?.brokerRef ?? null;
+      // MSG-20261004-13 REVISE：目标 session 必须与本次机会上下文匹配
+      // （principal + route + jurisdiction 通配 + requestedScope 覆盖 remedy），且排除已撤销/过期 session；
+      // 不能只按 principal 取"最新一条 session"，否则旧 context 的新 session 会制造错误的 BROKER_CHANGED。
+      const sessionCandidates = await prisma.customsBrokerAuthorizationSession.findMany({
+        where: { organizationId, principalRef },
+        orderBy: [{ updatedAt: 'desc' }, { sessionId: 'desc' }],
+        select: { brokerRef: true, jurisdiction: true, requestedScope: true, route: true, status: true },
+      });
+      const sessionScopeCoversRemedy = (scope: unknown): boolean =>
+        Array.isArray(scope) && (scope.includes('*') || scope.includes(remedy));
+      const sessionJurisdictionMatches = (sessionJurisdiction: string): boolean =>
+        sessionJurisdiction === '*' || sessionJurisdiction === ior?.jurisdiction;
+      const targetSession =
+        sessionCandidates.find(
+          (session) =>
+            session.route === filingRoute &&
+            sessionScopeCoversRemedy(session.requestedScope) &&
+            sessionJurisdictionMatches(session.jurisdiction) &&
+            session.status !== 'REVOKED' &&
+            session.status !== 'EXPIRED' &&
+            session.status !== 'REJECTED',
+        ) ?? null;
+      const targetBrokerRef = targetSession?.brokerRef ?? null;
       const targetBindingUnknown = filingRoute === 'BROKER_FILED' && targetBrokerRef === null;
       const effectiveBrokerRef = filingRoute === 'BROKER_FILED' ? targetBrokerRef ?? latestBrokerRef : null;
 

@@ -1860,3 +1860,8 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 ## 2026-10-04T04:46:15.878Z — CA-6 REVISE（两条窄修）落地
 - ① 目标 broker 绑定：来自 CA-4 CustomsBrokerAuthorizationSession（server truth），与 POA brokerRef 真实比较；A→A 复用、A→B 触发 BROKER_CHANGED、未绑定 → WAITING_ON_PROVIDER（TARGET_BROKER_UNKNOWN，不让客户重签）。
 - ② reuse 文案改为通用「现有有效授权」（5 语言，613 键 parity）。
+
+## 2026-10-04T04:50:34.550Z — CA-6 FINAL REVISE（上下文匹配 target session）落地
+- 目标 session 选择：principal + route + jurisdiction(通配) + requestedScope(覆盖 remedy)，排除 REVOKED/EXPIRED/REJECTED，排序 updatedAt DESC + sessionId DESC。
+- 无上下文匹配 → TARGET_BROKER_UNKNOWN → WAITING_ON_PROVIDER（不退回其它 session、不让客户重签）。
+- 真实 PG 反例已加：同 principal 的更新 session(DE/OTHER/broker:B) 不得影响 US/DRAWBACK 机会复用 broker:A。

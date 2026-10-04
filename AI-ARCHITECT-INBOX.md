@@ -130216,3 +130216,195 @@ REAL_BROKER=NO / REAL_FILING=NO / C18=HOLD_EXTERNAL 继续保持。
 
 另外，GitHub 在 0c6bb0f 上当前没有返回 commit statuses/workflow runs，所以你报告的本地 tsc/build/test 我可以作为送审证据参考，但不会把它描述成我独立验证过的 GitHub CI SUCCESS。
 ```
+
+### [MSG-20261004-13] ARCHITECT VERDICT — CUSTOMS AUTHORIZATION CA-6 FINAL = REVISE（A→A/A→B/未绑定 主体 PASS；通用 reuse 文案 PASS；唯一窄修：CA-4 目标 session 必须按 principal + route + jurisdiction(通配) + requestedScope(覆盖 remedy) 选取并确定性排序，不能只按 principal 取最新 session；无上下文匹配则 fail-closed 到 WAITING_ON_PROVIDER）
+
+```text
+ARCHITECT VERDICT：REVISE
+
+我按 reviewed HEAD = 5c6888e 重新检查了 CA-6 FINAL。本轮上一审计要求的两条窄修确实已经落地，但在真实 CA-4 session 绑定中还剩 1 个必须修的选择器问题。因此暂时不能 CA-6 = CLOSED。
+
+① Broker A→A / A→B / 未绑定：逻辑主体 PASS，但 session 选择范围仍需修
+
+这部分已经正确：
+
+不再 sameBrokerOrSigner=true
+A→A：POA broker 与目标 broker 一致 → 可以复用
+A→B：目标 broker 不一致 → BROKER_CHANGED + REAUTHORIZATION_REQUIRED
+无 CA-4 session → TARGET_BROKER_UNKNOWN
+→ WAITING_ON_PROVIDER
+→ nextAction=null
+→ 不让客户盲目重签
+SELF_FILED 已正式改成：
+同一 principal 下存在 scope/jurisdiction 有效的 VERIFIED Authorized Signer 即可复用
+
+这个语义我接受。
+
+但现在目标 Broker 是这样取的：
+
+TypeScript
+await prisma.customsBrokerAuthorizationSession.findFirst({
+  where: {
+    organizationId,
+    principalRef,
+  },
+  orderBy: [{ updatedAt: 'desc' }],
+  select: { brokerRef: true },
+})
+
+也就是说，它取的是：
+
+这个 principal 最新的任意 CA-4 session
+
+而不是：
+
+与当前这笔 Customs opportunity 的 route / jurisdiction / remedy scope 相匹配的 CA-4 session
+
+CA-4 session 本身明明已经有：
+
+纯文本
+principalRef
+brokerRef
+jurisdiction
+requestedScope
+route
+status
+
+所以现在会存在这种错误：
+
+纯文本
+同一 principal
+
+旧：
+US + DRAWBACK + BROKER_FILED → broker:A
+
+最新：
+DE + OTHER_REMEDY + BROKER_FILED → broker:B
+
+当前机会：
+US + DRAWBACK
+
+现代码可能因为 B 的 session updatedAt 更新，就把：
+
+纯文本
+targetBrokerRef = broker:B
+
+从而错误产生：
+
+纯文本
+BROKER_CHANGED
+REAUTHORIZATION_REQUIRED
+
+实际上这笔 US/DRAWBACK 机会应该继续匹配 broker:A。
+
+这会导致客户不必要重新授权，正好违反 CA-6 的核心目标。
+
+必须修的唯一代码项
+
+目标 session resolver 至少要按当前上下文匹配：
+
+纯文本
+organizationId
+principalRef
+route
+jurisdiction
+requestedScope/remedy
+
+也就是：
+
+只从“适用于本次机会”的 CA-4 session 中选择 targetBrokerRef。
+
+requestedScope 应覆盖当前 remedy 或 *；jurisdiction 按 CA-1 已有通配语义处理。
+
+如果没有上下文匹配的 session：
+
+纯文本
+targetBindingUnknown=true
+→ WAITING_ON_PROVIDER
+→ nextAction=null
+
+不要退回 principal 的其它 session。
+
+建议同时让排序确定化：
+
+纯文本
+updatedAt DESC
+id/sessionId DESC
+
+避免完全相同时间下选择不确定。
+
+必须补 1 个真实 PG 回归
+
+现在已有：
+
+纯文本
+A→A → reuse=true
+A→B → BROKER_CHANGED
+无 session → WAITING_ON_PROVIDER
+
+这些保留。
+
+再增加：
+
+纯文本
+同 principal：
+session A = US / DRAWBACK / broker:A
+更新的 session B = DE / OTHER_REMEDY / broker:B
+
+当前机会 = US / DRAWBACK
+→ 必须选择 broker:A
+→ 不得 BROKER_CHANGED
+→ reuse=true（若 POA A 其余条件均满足）
+
+这条通过以后，Broker target binding 才真正满足你们自己定义的：
+
+principal + jurisdiction + scope + route + broker。
+
+② 通用 reuse 文案：PASS
+
+现在已经改成：
+
+已复用现有有效授权，本单无需重复签署。
+
+这同时适用于：
+
+Broker POA
+SELF_FILED Authorized Signer
+
+不会再把 signer authorization 错说成“代理授权”。
+
+此项 CLOSED。
+
+③ CA-6 最终状态
+
+目前：
+
+CA-6_STATUS = NOT_CLOSED
+
+但只剩上面 1 个窄修：
+
+CA-4 target session 必须按 principal + route + jurisdiction + scope/remedy 选取，不能只按 principal 取最新 session。
+
+不需要：
+
+Schema 变更
+migration
+UI 重做
+四态 gate 重做
+HTTP 重做
+CA-5 重开
+接真实 Broker
+开启 filing
+
+修完这一处并补上述 PG 反例测试，我就可以直接给：
+
+CA-6 = PASS / CLOSED。
+
+边界继续保持：
+
+REAL_BROKER=NO
+REAL_FILING=NO
+C18=HOLD_EXTERNAL
+
+另外，5c6888e 当前 GitHub 仍未返回 commit statuses/workflow runs，因此我不把送审里声明的本地测试结果表述成“GitHub CI 已独立验证成功”。
+```

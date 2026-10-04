@@ -329,6 +329,26 @@ beforeEach(async () => {
       },
     });
   }
+  // MSG-20261004-13 反例夹具：同一 principal(ior:acme) 之后又有一条**不同上下文**（DE / OTHER / broker:b）的新 session。
+  // 它 updatedAt 更新，但不得被当成 US/DRAWBACK 机会的目标 broker。
+  await prisma.customsBrokerAuthorizationSession.create({
+    data: {
+      id: randomUUID(),
+      organizationId: ORG,
+      sessionId: 'ca5-e2e-session-noise',
+      principalRef: 'ior:acme',
+      brokerRef: 'broker:b',
+      providerRef: 'provider:fixture',
+      jurisdiction: 'DE',
+      requestedScope: ['OTHER'] as never,
+      authorizationType: 'CBP_FORM_5291' as never,
+      route: 'BROKER_FILED',
+      status: 'CREATED' as never,
+      version: 1,
+      contentDigest: digest(),
+      createdAt: new Date('2026-09-04T00:00:00.000Z'),
+    },
+  });
   // ior:b / ior:c 的 IOR 身份 + POA（broker:a）夹具：用于 A→B 与"未绑定"两种 CA-6 判定
   for (const [principal, entry] of [
     ['ior:b', 'ENTRY-BROKER-B'],
@@ -583,6 +603,8 @@ describe('CA-5 — authorization center real-fact E2E（真实 PostgreSQL 授权
       const matched = await planOf(OPP);
       expect(matched.reuseExistingAuthorization).toBe(true);
       expect(matched.reasonCodes).toEqual([]);
+      // MSG-20261004-13：即使存在更新但上下文不匹配（DE/OTHER/broker:b）的 session，也必须仍选 US/DRAWBACK 的 broker:a
+      expect(matched.gate).not.toBe('REAUTHORIZATION_REQUIRED');
 
       // OPP_BROKER_B：session broker:b ≠ POA broker:a ⇒ 不得声称可复用，必须走 BROKER_CHANGED
       const changed = await planOf(OPP_BROKER_B);
