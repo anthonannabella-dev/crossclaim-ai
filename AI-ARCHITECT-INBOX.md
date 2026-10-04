@@ -128537,3 +128537,107 @@ lifecycle 字段语义要收紧。
 
 这几项修完并补对应 PG/unit 回归后，可直接重送 CA-2 FINAL；在 CA-2 FINAL PASS 前，不建议进入 CA-3 的正式 lifecycle 写入口。
 ```
+
+### [MSG-20261004-03] ARCHITECT VERDICT — CUSTOMS AUTHORIZATION CA-2 FINAL = PASS / CLOSED（A–G 全部落地；允许进入 CA-3：revoke/expire/supersede/latest usable，仅追加事实、不 UPDATE 历史、零外写）
+
+```text
+CUSTOMS AUTHORIZATION CA-2 FINAL：PASS / CLOSED。
+
+基于当前 d48d671 独立复核，上一轮 A–G 都已经真实落地，而且没有发现新的必须修阻塞项。
+
+A — scope token 约束：PASS
+
+新 migration 用 cc_customs_scope_tokens_valid(scope) 收紧；
+非空数组；
+每个元素必须匹配 * 或大写 remedy token；
+[123] / [{}] / [""] 都有真实 PG 拒绝测试。
+
+这已经把上一轮“只校验非空数组”的漏洞封住。
+
+B — revoke 双向一致：PASS
+
+当前约束：
+revokedAt IS NULL <=> verificationStatus <> REVOKED
+等价于：
+revokedAt != null <=> status=REVOKED
+不再允许 VERIFIED + revokedAt 这种矛盾事实。
+
+C — supersede 时间语义：PASS
+
+已改成：
+supersededAt >= effectiveAt
+不再错误要求晚于 observedAt；
+支持历史补录，语义合理。
+
+D — future-effective：PASS
+
+NOT_YET_EFFECTIVE 已进入统一生命周期类型；
+POA resolver 和 Signer resolver 都先判断：
+effectiveAt > at
+不再提前把未来授权算 VERIFIED；
+真实 PG 测试也确认 future-effective 不可用。
+
+E — SELF_FILED signer jurisdiction：PASS
+
+signerJurisdiction 已进入 CustomsAuthorizationFacts；
+SELF_FILED 会做 jurisdiction 比较；
+不符时：
+SIGNER_JURISDICTION_MISMATCH
+READY_TO_FILE=false。
+
+这一点解决了上一轮最关键的错误放行风险。
+
+F — “不可自证 VERIFIED”测试：PASS
+
+helper 现在允许真实注入 verificationSource='NONE'；
+PG 测试确实把 NONE 写进 DB；
+VERIFIED + NONE 被数据库拒绝。
+
+同时 evidence、verifiedAt 缺失仍然 fail-closed。
+
+G — supersession 命名：PASS
+
+supersededById 已改成 supersedesId；
+当前值表示“最新事实取代了哪一条旧 fact”，语义和返回值一致；
+POA / signer resolver 与测试都同步。
+
+CA-1 衔接：PASS
+
+SELF_FILED：Authorized Signer 必须有效；
+BROKER_FILED：不要求 signer，但要求 Broker POA；
+SERVICE_PROVIDER_TRANSMIT：无 provider policy 时 fail-closed；
+Platform OAuth / Payment Authorization 仍不能代替 Customs authorization；
+C16 兼容回归保持。
+
+DB / tenant / append-only 边界：PASS
+
+同租户 IOR lineage；
+opaque refs；
+raw EIN-like / numeric refs 拒绝；
+append-only；
+contentDigest tenant-unique；
+VERIFIED source/evidence/timestamp；
+scope、expiry、revoke、supersede invariants 都已经闭合。
+
+Production boundary：PASS
+
+filingSubmitted=false
+externalWritePerformed=false
+transportEnabled=false
+productionCredentials=ABSENT
+REAL_BROKER / REAL_FILING 继续 NO
+最终裁决
+CA-2 = PASS / CLOSED
+
+允许进入 CA-3。
+
+CA-3 可以开始做 Broker POA / Authorized Signer 的生命周期持久化入口与读模型：
+
+revoke / expire / supersede / latest usable
+
+但继续保持一个硬原则：
+
+CA-3 只能追加新事实表达生命周期变化，不能 UPDATE 历史授权事实，也不能引入真实 Broker / Filing / CBP / ACE 外写。
+
+本轮没有新的必须修集合。
+```
