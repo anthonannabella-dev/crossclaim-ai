@@ -1,6 +1,6 @@
 {
   "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。",
-  "updatedAt": "2026-10-04T14:26:00.000Z",
+  "updatedAt": "2026-10-04T14:31:00.000Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -1094,8 +1094,10 @@
       "title": "/recover JSON-LD 只由真实 sourceReferences 生成",
       "scope": "buildRecoverRouteJsonLd：不可索引或无真实 sourceReferences → 不输出；面包屑/FAQ 仅在真实存在时生成并记录 skip reason",
       "acceptance_criteria": "RECOVER_JSONLD_NONE_WHEN_NOT_INDEXABLE / RECOVER_JSONLD_ONLY_REAL_SOURCES / RECOVER_JSONLD_NO_FAQ_WITHOUT_FAQ 全绿；tsc 0",
-      "status": "IMPLEMENTED_PENDING_CI",
-      "implementation_head": "(this commit)"
+      "status": "CLOSED",
+      "implementation_head": "(this commit)",
+      "closed_at": "2026-10-04T14:31:00.000Z",
+      "close_evidence": "CI run 37208646143 (head ddeb349) success"
     },
     {
       "id": "SEO-4-STAGE-4-recover-sitemap-robots",
@@ -1114,6 +1116,16 @@
       "title": "/recover 正文与内链只由真实字段组成（薄内容 fail-closed）",
       "scope": "composeRecoverRouteContent：正文小节只来自生效规则的 problemDescription/requiredEvidence/sourceReferences；薄内容(<2 可溯源小节或正文<200) → sections=[]；内链仅在目标真实存在时输出",
       "acceptance_criteria": "RECOVER_CONTENT_THIN_FAILS_CLOSED / RECOVER_INTERNAL_LINKS_ONLY_REAL_RELATED 全绿；tsc 0",
+      "status": "IMPLEMENTED_PENDING_CI",
+      "implementation_head": "(this commit)"
+    },
+    {
+      "id": "SEO-4-STAGE-6-seo-contract-tests",
+      "priority": "P1",
+      "source_backlog_id": "SEO-4-RECOVER-WIRING-PLAN.md 阶段 6",
+      "title": "SEO-4 合同测试：判定语义稳定 / gate↔robots↔sitemap 一致 / 无 POST / 无硬编码金额费率",
+      "scope": "在 seo-recover-route.test.ts 内固化四条合同：六种 reason 固定、indexable⇔index⇔进 sitemap、模块不注册 POST 或 Checker 路由、源码无金额/百分比/费率硬编码",
+      "acceptance_criteria": "RECOVER_CONTRACT_REASONS_STABLE / RECOVER_CONTRACT_GATE_ROBOTS_SITEMAP_AGREE / RECOVER_CONTRACT_NO_POST_HANDLER / RECOVER_CONTRACT_NO_HARDCODED_RULE_LITERALS 全绿；tsc 0",
       "status": "IMPLEMENTED_PENDING_CI",
       "implementation_head": "(this commit)"
     }

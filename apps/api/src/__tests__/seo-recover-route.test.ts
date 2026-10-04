@@ -6,8 +6,10 @@
  */
 
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
 
 import {
+  SEO_RECOVER_ROUTE_REASONS,
   buildRecoverSitemapAndRobots,
   composeRecoverRouteContent,
   buildRecoverRouteMetadata,
@@ -318,5 +320,67 @@ describe('SEO-4 Stage 5 正文与内链（只由真实字段组成，薄内容 f
       relatedPages: [{ name: 'Inventory reimbursement', url: '/recover/amazon/inventory-reimbursement' }],
     });
     expect(thinWithLinks.internalLinks).toEqual([]);
+  });
+});
+
+describe('SEO-4 Stage 6 合同测试（边界与一致性）', () => {
+  // vitest 以 apps/api 为 cwd 运行，直接读源文件做边界合同检查。
+  const source = readFileSync('src/services/seo/seo-recover-route.ts', 'utf8');
+
+  it('RECOVER_CONTRACT_REASONS_STABLE：六种判定语义固定，不得被静默删改', () => {
+    expect([...SEO_RECOVER_ROUTE_REASONS]).toEqual([
+      'RECOVER_OK',
+      'RECOVER_SLUG_NOT_FOUND',
+      'RECOVER_SLUG_DUPLICATE',
+      'RECOVER_RULE_EXPIRED',
+      'RECOVER_VERSION_CONFLICT',
+      'RECOVER_LOCALE_FALLBACK',
+    ]);
+  });
+
+  it('RECOVER_CONTRACT_GATE_ROBOTS_SITEMAP_AGREE：indexable ⇔ robots=index ⇔ 进 sitemap', () => {
+    const decisions = [
+      resolveRecoverRoute(input({ requestedLocale: 'en' })),
+      resolveRecoverRoute(input({ rules: [rule({ indexable: false, noindexReasons: ['THIN_CONTENT'] })] })),
+      resolveRecoverRoute(input({ requestedLocale: 'fr' })),
+      resolveRecoverRoute(input({ rules: [rule({ effectiveTo: '2026-09-01T00:00:00.000Z' })] })),
+      resolveRecoverRoute(input({ slug: 'nope-nothing-here' })),
+      resolveRecoverRoute(input({ conflictingSlugs: ['amazon-fba-fee-refund'] })),
+    ];
+    for (const decision of decisions) {
+      if (decision.indexable) {
+        expect(decision.robots).toBe('index,follow');
+        expect(decision.status).toBe(200);
+        expect(decision.path).not.toBeNull();
+      } else {
+        expect(decision.robots).toBe('noindex,nofollow');
+      }
+    }
+    const site = buildRecoverSitemapAndRobots({ decisions, baseUrl: 'https://crossclaim.example' });
+    // sitemap 精确等于「所有 indexable 判定的 loc」——不可索引的判定 path 为 null，绝不出现。
+    const expectedLocs = decisions
+      .filter((decision) => decision.indexable)
+      .map((decision) => `https://crossclaim.example${decision.path}`);
+    expect(site.entries.map((entry) => entry.loc)).toEqual(expectedLocs);
+    expect(site.excluded.every((entry) => entry.reason === 'NOT_INDEXABLE')).toBe(true);
+    expect(site.consistency.conflictCount).toBe(0);
+  });
+
+  it('RECOVER_CONTRACT_NO_POST_HANDLER：模块不注册任何 POST / Checker 路由', () => {
+    expect(source).not.toMatch(/export\s+(async\s+)?function\s+POST\b/);
+    expect(source).not.toMatch(/method:\s*['"]POST['"]/i);
+    expect(source).not.toMatch(/publicCheckerPostHandler|checkerPost\s*\(/);
+    expect(SEO_RECOVER_ROUTE_BOUNDARY.checkerPostRegistered).toBe(false);
+    expect(SEO_RECOVER_ROUTE_BOUNDARY.publicCheckerHttp).toBe('HOLD');
+  });
+
+  it('RECOVER_CONTRACT_NO_HARDCODED_RULE_LITERALS：模块内不得出现金额/费率/百分比硬编码', () => {
+    const code = source
+      .split('\n')
+      .filter((line) => !line.trim().startsWith('*') && !line.trim().startsWith('/*') && !line.trim().startsWith('//'))
+      .join('\n');
+    expect(code).not.toMatch(/[$€£]\s?\d/);
+    expect(code).not.toMatch(/\b\d+(\.\d+)?\s?%/);
+    expect(code).not.toMatch(/\b(SUCCESS_FEE|FLAT_FEE)\b\s*[:=]\s*['"`]/);
   });
 });
