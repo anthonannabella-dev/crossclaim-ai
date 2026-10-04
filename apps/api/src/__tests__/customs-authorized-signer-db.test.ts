@@ -82,6 +82,7 @@ async function insertSigner(
       evidenceArtifactRef: input.evidenceArtifactRef === undefined ? 'evidence:poa-doc' : input.evidenceArtifactRef,
       revokedAt: input.revokedAt ?? null,
       contentDigest: digest(),
+      lifecycleKey: 'test:' + randomUUID().replace(/-/g, '').slice(0, 24),
       observedAt: input.observedAt ?? new Date('2026-09-01T00:00:00.000Z'),
     },
   });

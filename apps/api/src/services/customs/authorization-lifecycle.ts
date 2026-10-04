@@ -59,6 +59,7 @@ export class AuthorizationLifecycleError extends Error {
     | 'INVALID_SCOPE'
     | 'INVALID_SUBJECT'
     | 'EVIDENCE_REQUIRED'
+    | 'IDEMPOTENCY_KEY_CONFLICT'
     | 'UNKNOWN_SUBJECT_KIND';
   constructor(code: AuthorizationLifecycleError['code'], message: string) {
     super(message);
@@ -83,6 +84,7 @@ export interface PoaFactInsert {
   revokedAt: Date | null;
   contentDigest: string;
   observedAt: Date;
+  lifecycleKey: string;
 }
 
 export interface SignerFactInsert {
@@ -102,10 +104,12 @@ export interface SignerFactInsert {
   revokedAt: Date | null;
   contentDigest: string;
   observedAt: Date;
+  lifecycleKey: string;
 }
 
 export interface AuthorizationLifecycleStores {
   appendPoa(row: PoaFactInsert): Promise<{ id: string }>;
+  findByLifecycleKey(organizationId: string, lifecycleKey: string): Promise<{ factId: string; contentDigest: string } | null>;
   appendSigner(row: SignerFactInsert): Promise<{ id: string }>;
   listPoa(organizationId: string, principalRef: string, brokerRef?: string): Promise<BrokerPoaRow[]>;
   listSigner(organizationId: string, principalRef: string): Promise<AuthorizedSignerRow[]>;
@@ -135,6 +139,8 @@ export interface AppendAuthorizationInput {
   /** server-side 决定的验证来源（不是 client body 的字段）。 */
   verificationSource: ServerVerificationSource;
   authorizationType?: 'CBP_FORM_5291' | 'EQUIVALENT_REGULATORY_POA';
+  /** 稳定幂等键（同一业务事件重试必须相同；省略时以 payload digest 作为键）。 */
+  idempotencyKey?: string;
   /** 原始 client 载荷（仅用于 deny-list 检查，不写库）。 */
   clientPayload?: Record<string, unknown>;
 }
@@ -230,8 +236,34 @@ export async function appendAuthorizationLifecycle(
     evidenceArtifactRef,
     verificationStatus,
     verificationSource: input.verificationSource,
-    observedAt: observedAt.toISOString(),
   });
+
+  const idempotencyKey = input.idempotencyKey ?? 'payload:' + digest;
+  const lifecycleKey = authorizationContentDigest({
+    idempotencyKey,
+    subject: input.subject,
+    action: input.action,
+    principalRef: input.principalRef,
+    brokerRef: input.brokerRef ?? null,
+    signerRef: input.signerRef ?? null,
+    organizationId: input.organizationId,
+  });
+  const existing = await deps.stores.findByLifecycleKey(input.organizationId, lifecycleKey);
+  if (existing) {
+    if (existing.contentDigest !== digest) {
+      throw new AuthorizationLifecycleError('IDEMPOTENCY_KEY_CONFLICT', '同一幂等键对应不同 immutable payload');
+    }
+    return {
+      factId: existing.factId,
+      subject: input.subject,
+      action: input.action,
+      lifecycleStatus: input.action === 'REVOKE' ? 'REVOKED' : verificationStatus,
+      observedAt: observedAt.toISOString(),
+      contentDigest: digest,
+      verificationSource: input.verificationSource,
+      serverDerivedFields: true,
+    };
+  }
 
   let factId: string;
   if (input.subject === 'BROKER_POA') {
@@ -254,6 +286,7 @@ export async function appendAuthorizationLifecycle(
       revokedAt,
       contentDigest: digest,
       observedAt,
+      lifecycleKey,
     });
     factId = created.id;
   } else if (input.subject === 'AUTHORIZED_SIGNER') {
@@ -280,6 +313,7 @@ export async function appendAuthorizationLifecycle(
       revokedAt,
       contentDigest: digest,
       observedAt,
+      lifecycleKey,
     });
     factId = created.id;
   } else {
@@ -438,14 +472,30 @@ export function createPrismaAuthorizationLifecycleStores(prisma: PrismaClient): 
           effectiveAt: row.effectiveAt,
           expiresAt: row.expiresAt,
           evidenceArtifactRef: row.evidenceArtifactRef,
+          verifiedAt: row.verifiedAt,
+          revokedAt: row.revokedAt,
           verificationStatus: row.verificationStatus,
           verificationSource: row.verificationSource as never,
           contentDigest: row.contentDigest,
           observedAt: row.observedAt,
+          lifecycleKey: row.lifecycleKey,
         },
         select: { id: true },
       });
       return { id: created.id };
+    },
+
+    async findByLifecycleKey(organizationId, lifecycleKey) {
+      const poa = await prisma.customsBrokerPoaFact.findFirst({
+        where: { organizationId, lifecycleKey },
+        select: { id: true, contentDigest: true },
+      });
+      if (poa) return { factId: poa.id, contentDigest: poa.contentDigest };
+      const signer = await prisma.customsAuthorizedSignerFact.findFirst({
+        where: { organizationId, lifecycleKey },
+        select: { id: true, contentDigest: true },
+      });
+      return signer ? { factId: signer.id, contentDigest: signer.contentDigest } : null;
     },
 
     async appendSigner(row) {
@@ -468,6 +518,7 @@ export function createPrismaAuthorizationLifecycleStores(prisma: PrismaClient): 
           revokedAt: row.revokedAt,
           contentDigest: row.contentDigest,
           observedAt: row.observedAt,
+          lifecycleKey: row.lifecycleKey,
         },
         select: { id: true },
       });

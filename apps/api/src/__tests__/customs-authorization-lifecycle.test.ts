@@ -48,6 +48,21 @@ function harness() {
           contentDigest: row.contentDigest,
         }));
     },
+    async findByLifecycleKey(organizationId, lifecycleKey) {
+      const key = 'k:' + organizationId + ':' + lifecycleKey;
+      const poaRow = poa.find((row, index) => 'poa-' + (index + 1) === key || organizationId === row.organizationId && row.lifecycleKey === lifecycleKey);
+      if (poaRow) {
+        const index = poa.indexOf(poaRow);
+        return { factId: 'poa-' + (index + 1), contentDigest: poaRow.contentDigest };
+      }
+      const signerRow = signer.find((row) => organizationId === row.organizationId && row.lifecycleKey === lifecycleKey);
+      if (signerRow) {
+        const index = signer.indexOf(signerRow);
+        return { factId: 'signer-' + (index + 1), contentDigest: signerRow.contentDigest };
+      }
+      return null;
+    },
+
     async listSigner(organizationId, principalRef): Promise<AuthorizedSignerRow[]> {
       return signer
         .filter((row) => row.organizationId === organizationId && row.principalRef === principalRef)

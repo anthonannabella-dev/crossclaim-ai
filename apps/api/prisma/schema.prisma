@@ -2859,6 +2859,10 @@ model CustomsBrokerPoaFact {
   effectiveAt         DateTime
   expiresAt           DateTime?
   evidenceArtifactRef String?
+  verifiedAt          DateTime?
+  revokedAt           DateTime?
+  supersededAt        DateTime?
+  lifecycleKey        String
   verificationStatus  CustomsIorVerificationStatus
   verificationSource  CustomsIorVerificationSource
   contentDigest       String
@@ -2868,6 +2872,7 @@ model CustomsBrokerPoaFact {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, contentDigest])
+  @@unique([organizationId, lifecycleKey])
   @@index([organizationId, principalRef, observedAt])
   @@index([organizationId, brokerRef])
 }
@@ -3055,6 +3060,7 @@ model CustomsAuthorizedSignerFact {
   evidenceArtifactRef String?
   revokedAt           DateTime?
   supersededAt        DateTime?
+  lifecycleKey        String
   contentDigest       String
   observedAt          DateTime
   createdAt           DateTime                      @default(now())
@@ -3062,6 +3068,7 @@ model CustomsAuthorizedSignerFact {
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 
   @@unique([organizationId, contentDigest])
+  @@unique([organizationId, lifecycleKey])
   @@index([organizationId, principalRef, observedAt])
   @@index([organizationId, signerRef])
   @@index([organizationId, verificationStatus])

@@ -92,9 +92,12 @@ async function insertPoa(
       expiresAt:
         input.expiresAt === undefined ? new Date(input.observedAt.getTime() + 90 * 86_400_000) : input.expiresAt,
       verificationStatus: input.verificationStatus,
+      verifiedAt: input.verificationStatus === 'VERIFIED' ? input.observedAt : null,
+      revokedAt: input.verificationStatus === 'REVOKED' ? input.observedAt : null,
       verificationSource: 'BROKER_ATTESTATION',
       evidenceArtifactRef: input.verificationStatus === 'VERIFIED' ? 'evidence:' + randomUUID().slice(0, 8) : null,
       contentDigest: randomUUID().replace(/-/g, '').padEnd(64, '0').slice(0, 64),
+      lifecycleKey: 'test:' + randomUUID().replace(/-/g, '').slice(0, 24),
       observedAt: input.observedAt,
     },
   });
