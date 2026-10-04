@@ -135299,3 +135299,264 @@ WHOLE_SCHEMA_DIFF_ZERO = PASS
 
 结论：C18 Production Persistence Checkpoint 到这里正式 PASS / CLOSED。Codex 可以停止在这一层继续修补，转去 staging smoke 或其它已授权内部工作。
 ```
+
+### [MSG-20261004-35] ARCHITECT VERDICT — SEO-4 页面取数边界 = PASS WITH REVISE｜reviewed HEAD = 13df70f｜裁定 OPTION_B = SELECTED（API_BUILD_TIME_RULE_EXPORT / STATIC_PROJECTION_ARTIFACT / SSG_RECOVER_PAGES = AUTHORIZED）、OPTION_A = HOLD、OPTION_C = NOT_NEEDED；WEB_DIRECT_RULE_TABLE_READ / WEB_PRISMA_ACCESS / DIRECT_DB_ISR / PUBLIC_RECOVER_DATA_GET = FORBIDDEN-NOT_AUTHORIZED（web 只能经 HTTP 与 api 交互，硬边界 C-0008-A）。要求：projection 契约版本化 seo-recover-static-v1，只允许白名单字段（slug/locale/ruleVersion/decision/robots/canonical/hreflang/title-content refs/requiredEvidence/sourceReferences/related links/JSON-LD/sitemap eligibility/effective window/noindexReasons/generatedAt/sourceDigest），禁止 tenant data / organizationId / 客户账号 / 凭据 / 内部 DB id / raw RuleVersion row / PII；artifact 必须由已验收 codec + facade 产生，web 不得自行解释业务规则；页面构建对 projection 缺失、schema 版本不识别、版本冲突、digest 非法、locale 缺失、sourceReferences 不足、thin-content 未过 → 一律 NOINDEX / 无 canonical / 无 JSON-LD / 不进 sitemap，禁止「取不到数据就套模板并 index」；未来若改走 A，必须继承 SEO-3 同级 public surface 审计（含共享/边缘限流）。外部边界继续 HOLD：EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT。
+
+```text
+ARCHITECT VERDICT：PASS WITH REVISE
+
+我按 reviewed HEAD = 13df70f80839eab5656e27503e6dc60cdc6bc385 重新核了本轮。并确认 765231e → 13df70f 之间没有修改 apps/api / apps/web 代码，只有送审/状态台账，因此 API 层实现可以按 765231e 作为本轮代码基线继续使用。
+
+① 取数方案：选 B，但不是“apps/web 直接读数据库”
+
+我裁定：
+
+纯文本
+SEO4_RECOVER_DATASOURCE = OPTION_B_REVISED
+PUBLIC_READ_GET = NOT_REQUIRED
+SEO3_PUBLIC_HTTP = STILL_HOLD
+
+但原方案 B 有一处必须修正：
+
+纯文本
+禁止：
+apps/web
+→ Prisma
+→ RuleVersion 表
+
+因为仓库已有明确硬边界 C-0008-A：
+
+apps/web 只能通过 HTTP 与 apps/api 交互；不得直接导入 Prisma、数据库客户端或存储适配器。
+
+所以不能为了 SEO 绕过这条架构规则。
+
+批准的方案应当是：
+
+纯文本
+RuleVersion DB
+    ↓
+apps/api build-time exporter
+    ↓
+parseRecoveryRuleDefinition()
+    ↓
+canonical / conflict / indexability / thin-content gates
+    ↓
+buildRecoverPagePlan()
+    ↓
+生成最小静态 projection artifact
+    ↓
+apps/web build
+    ↓
+/recover/[slug] 静态页面
+
+也就是说：DB 读取仍然只发生在 apps/api 侧。
+
+Web 只读取构建阶段生成的、已经清洗和裁定过的静态 JSON/manifest。
+
+这个方案不算公开 API 面。
+
+② 当前先批准 SSG，不批准“直接数据库 ISR”
+
+原送审写的是：
+
+纯文本
+SSG / ISR
+
+这两者必须拆开。
+
+SSG：PASS
+纯文本
+API build-time export
+→ web build
+→ static HTML
+
+批准。
+
+ISR：暂不按“web runtime 直接读 DB”实现
+
+因为 ISR 会在运行期重新生成页面。
+
+如果 ISR 变成：
+
+纯文本
+apps/web runtime
+→ DB
+
+那仍然违反 C-0008-A。
+
+因此当前阶段：
+
+纯文本
+SSG = AUTHORIZED
+ISR_WITH_DIRECT_DB = FORBIDDEN
+
+规则变化后的更新方式先采用：
+
+纯文本
+RuleVersion changed
+→ regenerate SEO projection
+→ rebuild/redeploy web
+
+对目前 SEO 页数量和项目阶段，这比新增公开 GET 或给 web runtime 配数据库权限都更简单、更安全。
+
+未来如果确实需要 ISR，再单独选择：
+
+纯文本
+private/internal API
+或
+versioned static artifact/object storage
+
+但不是现在的 blocker。
+
+③ 构建产物必须是最小白名单，不得 dump RuleVersion
+
+建议新增类似：
+
+纯文本
+apps/api/scripts/export-recover-static-pages.ts
+
+输出版本化契约，例如：
+
+纯文本
+seo-recover-static-v1
+
+只允许包含页面实际需要的数据：
+
+纯文本
+slug
+locale
+ruleVersion
+
+decision
+robots
+canonical
+hreflang
+
+title/content refs
+requiredEvidence
+sourceReferences
+related page links
+
+JSON-LD
+sitemap eligibility
+
+effectiveFrom/effectiveTo
+noindexReasons
+
+generatedAt
+sourceDigest
+
+禁止输出：
+
+纯文本
+tenant data
+organizationId
+customer/account info
+credentials
+internal DB ids（除确有公共语义的 opaque refs）
+raw RuleVersion row
+内部 engine/config
+任何 PII
+
+最重要的是：artifact 必须由当前已经验收的 codec + facade 产生，Web 不得自行重新解释业务规则。
+
+④ 页面构建继续 fail-closed
+
+这一点我建议作为 SEO-4 wiring 的必测边界。
+
+如果：
+
+纯文本
+projection 缺失
+projection schema version 不认识
+rule version conflict
+artifact digest 不合法
+locale 缺失
+sourceReferences 不足
+thin-content gate 未通过
+
+则：
+
+纯文本
+NOINDEX
+无 canonical
+无 JSON-LD
+不进 sitemap
+
+不能出现：
+
+纯文本
+取不到数据 → 用默认模板凑页面 → index
+⑤ 如果以后选择方案 A：是，必须继承 SEO-3 的 Public HTTP 安全门
+
+回答你第二个问题：是。
+
+如果以后新增公共 GET，它必须按和 SEO-3 同级的 public surface 审计，至少包括：
+
+纯文本
+PUBLIC_READ_GET_SECURITY = REQUIRED
+
+input whitelist
+slug / locale 长度与格式限制
+GET body reject
+rate limit before DB / expensive logic
+shared / edge atomic limiter
+trusted-proxy client IP
+2–3s timeout
+bounded concurrency
+output schema validation
+PII / secret exclusion
+safe logging
+cache policy explicitly defined
+same-origin / CORS policy
+
+其中共享/边缘限流仍是必须项，不能退回单进程 Map。
+
+不过本轮不需要实现 A。
+
+最终裁定
+纯文本
+ARCHITECT VERDICT = PASS WITH REVISE
+
+OPTION_B = SELECTED
+OPTION_A = HOLD
+OPTION_C = NOT_NEEDED
+
+WEB_DIRECT_RULE_TABLE_READ = FORBIDDEN
+WEB_PRISMA_ACCESS = FORBIDDEN
+
+API_BUILD_TIME_RULE_EXPORT = AUTHORIZED
+STATIC_PROJECTION_ARTIFACT = AUTHORIZED
+SSG_RECOVER_PAGES = AUTHORIZED
+
+DIRECT_DB_ISR = NOT_AUTHORIZED
+PUBLIC_RECOVER_DATA_GET = NOT_AUTHORIZED
+
+SEO3_PUBLIC_HTTP_FINAL = INDEPENDENT / STILL_HOLD
+
+Codex 下一步可以直接实施：
+
+纯文本
+apps/api build-time static projection exporter
+→ projection contract + validation
+→ apps/web /recover/[slug]
+→ generateStaticParams
+→ metadata / JSON-LD / content
+→ sitemap
+→ 5 locales
+→ default noindex fail-closed
+→ web build + SEO contract tests
+
+不需要等 SEO-3 PUBLIC HTTP FINAL，也不需要新增公开 GET。
+
+外部边界继续不动：
+
+纯文本
+EXTERNAL_WRITE = HOLD
+PAYMENT = HOLD
+TRANSPORT = HOLD
+PRODUCTION_CREDENTIALS = HOLD
+PRODUCTION_ENABLEMENT = HOLD
+
+这条路线既能把 SEO-4 继续做完，也不会破坏现有 apps/web → HTTP → apps/api 的硬架构边界。
+```
