@@ -1874,3 +1874,7 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 ## 2026-10-04T04:57:44.739Z — CI 复核（内部链 CLOSED 后）
 - success：0c6bb0f / f0abd05 / cb04232 / c6ce17c / 3fad4d4 / c897737 / fd7e4bf / 400fe6e / 8f32fce。
 - in_progress：5c6888e / f640f8c / 84c3f99（已记 pending）。
+
+## 2026-10-04T05:27:51.933Z — C18-1 接入矩阵 + Layer 3 队列登记
+- 产出 docs/releases/C18-PROVIDER-INTEGRATION-MATRIX.md（14 项接入矩阵字段 + 字段级 mapping + adapter 分层 + 离线清单 + HOST_ACTION 清单）。
+- 队列：C18-2..C18-8 已登记（C18-4..C18-8 需架构审计）；HOLD_EXTERNAL 八项已显式列出。

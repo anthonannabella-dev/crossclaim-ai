@@ -65,7 +65,7 @@
 每条必须绑定当前 acceptance HEAD 的实证（`tools/autopilot/record-evidence.mjs` 记录），未绑定 → `UNVERIFIED`。
 当前打开的内部项见 `docs/releases/ACCEPTANCE-MATRIX.json` 的 `open_internal_items`。
 历史说明：G1–G10 的旧布尔结论已作废，避免与 STATE/报告冲突。
-- 当前状态（2026-10-04 CA-6 = PASS / CLOSED 后）：**INTERNAL_CODE_COMPLETE = TRUE** —— `open_internal_items` 为空；UI-1…UI-8 与 CA-1…CA-6 已全部 CLOSED（CA-6 裁决 MSG-20261004-14），CUSTOMS_AUTHORIZATION_INTERNAL_CHAIN = CLOSED。剩余工作为 C18（真实 Broker / ABI / Filing Provider 接入），属 HOLD_EXTERNAL，需宿主裁决，不计入内部代码项。
+- 当前状态（2026-10-04 HOST 切换 Layer 3 后）：**INTERNAL_CODE_COMPLETE = FALSE** —— 内部链本身已 CLOSED（UI-1…UI-8 / CA-1…CA-6，CA-6 = MSG-20261004-14），但 HOST 已把 Layer 3 / P0 = C18 真实 Customs Provider 接入登记进 SAFE_CONTINUATION_QUEUE（C18-2 provider DTO/schema、C18-3 SandboxFilingProvider、C18-4 webhook 验证、C18-5 幂等对账、C18-6 tenant/account lineage、C18-7 授权生命周期、C18-8 negative-path E2E），因此 `open_internal_items` 非空；C18 的真实凭据 / 外写 / 付费部分仍为 HOLD_EXTERNAL。
 
 ## E. BUSINESS SURVIVAL GATES（生死线，HOST FINAL ACCEPTANCE RULES 2026-10-03）— **P0 = PASS / CLOSED（MSG-20261003-132）**
 

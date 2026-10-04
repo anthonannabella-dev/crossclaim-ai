@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-10-04T04:57:44.857Z",
-  "acceptance_head": "84c3f99",
+  "generated_at": "2026-10-04T05:28:19.999Z",
+  "acceptance_head": "a002243",
   "protocol": "docs/releases/FINAL-ACCEPTANCE-PROTOCOL.md",
   "areas": [
     {
@@ -159,7 +159,16 @@
       "evidence": "BG-006 已登记；未执行任何生产动作"
     }
   ],
-  "open_internal_items": [],
+  "open_internal_items": [
+    "c18-1-provider-integration-matrix",
+    "c18-2-provider-dto-schema",
+    "c18-3-sandbox-filing-provider",
+    "c18-4-provider-webhook-verification",
+    "c18-5-provider-idempotency-reconciliation",
+    "c18-6-provider-tenant-account-lineage",
+    "c18-7-provider-authorization-lifecycle",
+    "c18-8-provider-negative-path-e2e"
+  ],
   "host_action_required": [
     "BG-006-production-candidate-preflight"
   ],
