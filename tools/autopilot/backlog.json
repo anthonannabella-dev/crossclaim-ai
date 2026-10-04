@@ -1,6 +1,6 @@
 {
   "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。",
-  "updatedAt": "2026-10-05T00:06:00.000Z",
+  "updatedAt": "2026-10-05T00:12:00.000Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -1197,6 +1197,16 @@
       "title": "规则 → seo-recover-static-v1 投影导出器（自校验白名单）",
       "scope": "buildRecoverStaticProjectionFromRules：5 语言 × 规则生成白名单页面（只经 facade）；computeRecoverSourceDigest 顺序无关；导出前 parseRecoverStaticProjection 自校验，越界即抛错不落盘",
       "acceptance_criteria": "RECOVER_EXPORT_WHITELIST_SELF_VALIDATES / RECOVER_EXPORT_DIGEST_STABLE_AND_ORDER_INDEPENDENT / RECOVER_EXPORT_FAILS_CLOSED_WHEN_THIN 全绿；tsc 0",
+      "status": "IMPLEMENTED_PENDING_CI",
+      "implementation_head": "(this commit)"
+    },
+    {
+      "id": "SEO-4-STAGE-12-rule-source-and-cli",
+      "priority": "P0",
+      "source_backlog_id": "MSG-20261004-35（OPTION_B_REVISED）",
+      "title": "RuleVersion → 导出规则映射（已验收 codec + gate）+ 构建期导出 CLI",
+      "scope": "toExportRules：parseRecoveryRuleDefinition + isRecoveryRuleEffective + seoIndexabilityGate（basisKey 为空即 fail-closed noindex），解析失败的行跳过并记录；exportRecoverStaticPages CLI 读 RuleVersion → artifact 落盘（只读规则表 + 本地写文件）",
+      "acceptance_criteria": "RECOVER_SOURCE_SKIPS_INVALID_ROWS / RECOVER_SOURCE_EMPTY_INPUT_EXPORTS_NOTHING 全绿；tsc 0；CLI 未在 shared/prod 执行",
       "status": "IMPLEMENTED_PENDING_CI",
       "implementation_head": "(this commit)"
     }

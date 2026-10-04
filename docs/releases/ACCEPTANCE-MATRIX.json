@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-10-04T15:06:22.205Z",
-  "acceptance_head": "fa0fb70",
+  "generated_at": "2026-10-04T15:11:55.674Z",
+  "acceptance_head": "121628f",
   "protocol": "docs/releases/FINAL-ACCEPTANCE-PROTOCOL.md",
   "areas": [
     {
@@ -187,7 +187,8 @@
     "SEO-4-BOUNDARY-recover-page-datasource",
     "SEO-4-STAGE-9-web-recover-route-skeleton",
     "SEO-4-STAGE-10-static-projection-contract",
-    "SEO-4-STAGE-11-static-projection-exporter"
+    "SEO-4-STAGE-11-static-projection-exporter",
+    "SEO-4-STAGE-12-rule-source-and-cli"
   ],
   "host_action_required": [
     "provider developer/partner account registration",
