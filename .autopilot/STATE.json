@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261004-16",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T09:35:00.000Z",
+  "updated_at": "2026-10-05T10:10:00.000Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -5192,9 +5192,9 @@
   "awaiting_verdict": "EXACT-ORDER REPLAY 证据已送审（comment 5979262070）；shared/staging deploy 解禁待裁决",
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-04T22:00:59.799Z",
-    "head": "ed61ed7",
-    "acceptance_head": "ed61ed7",
+    "computed_at": "2026-10-04T22:06:29.792Z",
+    "head": "2b74f0e",
+    "acceptance_head": "2b74f0e",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5286,6 +5286,7 @@
       "CHECK:L1-07_api_typecheck_passed",
       "CHECK:L1-08_web_typecheck_build_passed",
       "CHECK:L1-09_no_skipped_critical_tests",
+      "CHECK:L1-10_git_working_tree_clean",
       "CHECK:L1-11_docs_state_consistent",
       "CHECK:L1-12_schema_invariants_verified",
       "CHECK:L1-13_negative_paths_covered",
@@ -5344,48 +5345,48 @@
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=ed61ed7 ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
+        "evidence": "acceptance_head=2b74f0e ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
       },
       "L1-05_pg_regression_passed": {
         "status": "UNVERIFIED",
-        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head ed61ed7（且中间存在非簿记变更）"
+        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head 2b74f0e（且中间存在非簿记变更）"
       },
       "L1-06_fresh_db_migration_passed": {
         "status": "UNVERIFIED",
-        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head ed61ed7（且中间存在非簿记变更）"
+        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head 2b74f0e（且中间存在非簿记变更）"
       },
       "L1-07_api_typecheck_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head ed61ed7（且中间存在非簿记变更）"
+        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head 2b74f0e（且中间存在非簿记变更）"
       },
       "L1-08_web_typecheck_build_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head ed61ed7（且中间存在非簿记变更）"
+        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head 2b74f0e（且中间存在非簿记变更）"
       },
       "L1-09_no_skipped_critical_tests": {
         "status": "UNVERIFIED",
-        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head ed61ed7（且中间存在非簿记变更）"
+        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head 2b74f0e（且中间存在非簿记变更）"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
-        "status": true,
-        "evidence": "porcelain empty"
+        "status": false,
+        "evidence": "dirty entries: 3"
       },
       "L1-11_docs_state_consistent": {
         "status": "UNVERIFIED",
-        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head ed61ed7（且中间存在非簿记变更）"
+        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head 2b74f0e（且中间存在非簿记变更）"
       },
       "L1-12_schema_invariants_verified": {
         "status": "UNVERIFIED",
-        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head ed61ed7（且中间存在非簿记变更）"
+        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head 2b74f0e（且中间存在非簿记变更）"
       },
       "L1-13_negative_paths_covered": {
         "status": "UNVERIFIED",
-        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head ed61ed7（且中间存在非簿记变更）"
+        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head 2b74f0e（且中间存在非簿记变更）"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
         "status": "UNVERIFIED",
-        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head ed61ed7（且中间存在非簿记变更）"
+        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head 2b74f0e（且中间存在非簿记变更）"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
@@ -6333,7 +6334,7 @@
       "API.md / DOMAIN_MODEL.md / architecture-contract 计数 77 → 79"
     ]
   },
-  "next_execution_unit": "读 PUBLIC ENGINE IMPLEMENTATION AUDIT 裁决：逐字归档 + verdict-diff FULL_COPY_OK；PASS → 关闭该线（registry 仍空、入口默认关闭，待某份生效 RuleVersion 证实语义后再按前置条件注册）；REVISE → 立即修",
+  "next_execution_unit": "MSG-20261005-07 CHANGE G：把 rule 传入 schema 获取路径（getPublicInputSchema({ basisKey, rule }) 或 SeoPublicEngine.getPublicInputSchema(rule)），并让 checker 传 rule，使 buildPublicEligibilitySchemaForRule(rule) 真正可用；同时把 eligibility engine 与 DUTY_DIFFERENCE 一样保持未注册（除非规则语义被证实）；完成后送 PUBLIC ENGINE IMPLEMENTATION FINAL-2",
   "customer_ui_commercialization": {
     "at": "2026-10-04T01:21:55.949Z",
     "authorization": "MSG-20261004-01（CUSTOMER UI/UX COMMERCIALIZATION — IMPLEMENTATION AUTHORIZED）",
@@ -7379,10 +7380,10 @@
     "seo3_progress": "CHANGE A/B validator added (86f4289), engine output validation added (eb99c53), validator wired into runPublicSeoChecker (8bf49da), HTTP boundary guard added (4f2cd20); HTTP entry still not registered"
   },
   "CURRENT_HEAD": "293f55e",
-  "LAST_COMPLETED_UNIT": "PUBLIC ENGINE IMPLEMENTATION AUDIT 送审材料（MSG-20261005-06 五项必修全落地：rule-aware 必填 / PRELIMINARY_SELF_REPORTED 输出 / 证据仅数量门槛 / DUTY_DIFFERENCE paid−due 且不注册 / 双 schema 编排接线）",
-  "NEXT_EXECUTION_UNIT": "读 PUBLIC ENGINE IMPLEMENTATION AUDIT 裁决：逐字归档 + verdict-diff FULL_COPY_OK；PASS → 关闭该线（registry 仍空、入口默认关闭，待某份生效 RuleVersion 证实语义后再按前置条件注册）；REVISE → 立即修",
-  "CI_STATUS": "HEAD ed61ed7 已推送；本地：apps/api tsc 0 / seo-* 23 文件 164 例全过 / 四项门禁 OK",
-  "WAITING_FOR_VERDICT": "PUBLIC ENGINE IMPLEMENTATION AUDIT（已送审：docs/releases/SEO-PUBLIC-ENGINE-IMPLEMENTATION-AUDIT-REQUEST.md @ ed61ed7；代码 HEAD efcc125；唤醒三要素已验证送达）；RSI staging smoke 仍等宿主非生产 DATABASE_URL",
+  "LAST_COMPLETED_UNIT": "MSG-20261005-07 CHANGE F：新增 eligibility decision-table engine（requires* && !has* → MISSING_*；evidenceCount < minimumEvidenceCount → INSUFFICIENT_EVIDENCE；eligible = reasonCodes.length === 0；无概率/模型/LLM）；7 例合同测试（含裁决原文三例）全过、tsc 0",
+  "NEXT_EXECUTION_UNIT": "MSG-20261005-07 CHANGE G：把 rule 传入 schema 获取路径（getPublicInputSchema({ basisKey, rule }) 或 SeoPublicEngine.getPublicInputSchema(rule)），并让 checker 传 rule，使 buildPublicEligibilitySchemaForRule(rule) 真正可用；同时把 eligibility engine 与 DUTY_DIFFERENCE 一样保持未注册（除非规则语义被证实）；完成后送 PUBLIC ENGINE IMPLEMENTATION FINAL-2",
+  "CI_STATUS": "本批提交后由托管 CI 复核；本地：apps/api tsc 0 / 新 eligibility engine 7/7",
+  "WAITING_FOR_VERDICT": "none（MSG-20261005-07 PUBLIC ENGINE IMPLEMENTATION AUDIT = REVISE 已逐字归档：FNV b450b72c / 278 行 / FULL_COPY_OK；CHANGE F 已落地，CHANGE G 待做，完成后送 FINAL-2）；RSI staging smoke 仍等宿主非生产 DATABASE_URL",
   "HOST_ACTION_REQUIRED": [
     "provider developer/partner account registration",
     "third-party commercial agreement acceptance",
@@ -7396,7 +7397,7 @@
     "non-production staging DATABASE_URL + 确认该 shared 库是否承载真实客户数据（执行已授权的 staging migrate deploy 前需要）"
   ],
   "HOLD_EXTERNAL": true,
-  "LAST_HEARTBEAT_AT": "2026-10-05T09:35:00.000Z",
+  "LAST_HEARTBEAT_AT": "2026-10-05T10:10:00.000Z",
   "ci_red_streak_note": "RESOLVED: three contract/inventory fixes (tenant-trigger whitelist 1b15ab7, append-only whitelist cc13bde, model inventory 82->85 4f02282); 4f02282 is the first green run after the streak.",
   "ci_contract_fix_local_verification": {
     "at": "2026-10-04T08:51:16.135Z",
@@ -7656,6 +7657,20 @@
     "duty_difference_module": "apps/api/src/services/seo/seo-public-duty-difference.ts",
     "engine_audit_request": "docs/releases/SEO-PUBLIC-ENGINE-IMPLEMENTATION-AUDIT-REQUEST.md",
     "engine_audit_code_head": "efcc125",
-    "registration_decision": "docs/releases/SEO-DUTY-DIFFERENCE-REGISTRATION-DECISION.md"
+    "registration_decision": "docs/releases/SEO-DUTY-DIFFERENCE-REGISTRATION-DECISION.md",
+    "engine_impl_verdict": {
+      "id": "MSG-20261005-07",
+      "verdict": "REVISE",
+      "reviewed_head": "efcc125",
+      "fnv": "b450b72c",
+      "lines": 278
+    },
+    "engine_impl_done": [
+      "changeF-eligibility-decision-table"
+    ],
+    "engine_impl_remaining": [
+      "changeG-rule-parameter-plumbing",
+      "final2-submission"
+    ]
   }
 }

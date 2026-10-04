@@ -137314,3 +137314,286 @@ PRODUCTION_CREDENTIALS = HOLD
 
 所以 Codex 现在可以实现，但要同时修“eligibility/calculation 双 schema 编排”，并把金额模型改成真正的 duty difference；完成后送一次窄的 PUBLIC ENGINE IMPLEMENTATION AUDIT 即可。
 ```
+
+### [MSG-20261005-07] ARCHITECT VERDICT — PUBLIC ENGINE IMPLEMENTATION AUDIT = **REVISE（范围很窄）**（reviewed HEAD = `efcc125`，未使用上一轮缓存）。**已可记 PASS**：`SELF_REPORTED_ELIGIBILITY_LABEL = PASS`、`EVIDENCE_VALIDITY_NOT_PERFORMED = PASS`、`DUTY_DIFFERENCE_NON_CIRCULAR_MODEL = PASS`、`POINT_ESTIMATE_NO_ARTIFICIAL_RANGE = PASS`、`DUAL_SCHEMA_ORCHESTRATION = PASS`、`DUTY_DIFFERENCE_NOT_REGISTERED_WITHOUT_RULE_PROOF = PASS`（确认：`eligibilityLabel` 类型只允许 `PRELIMINARY_SELF_REPORTED \| null`、denied 为 `null`；`evidenceCount` 明确只是数量门槛；`refundableAmount` 已完全退出 calculator schema；`DUTY_DIFFERENCE` 已变成 `paid − actuallyDue`；非正差额返回 `null`；没有 ±%／历史比例／「追回成功率」；两套 schema 已 union whitelist + 分别投影且冲突 fail-closed；当前 registry 保持空是正确的，不能为了「有金额」而注册）。**仍需补 2 项接线缺口（不涉及 DUTY_DIFFERENCE 重做）**：①**CHANGE F — 真正的 eligibility engine 尚未实现**：`apps/api/src/services/seo/` 里新增了 engine-schema / duty-difference / answer-orchestration，但**没有** eligibility decision-table engine，因此 `PUBLIC ELIGIBILITY ENGINE` 还不能算 implementation complete；最小补法 = 新增纯函数（如 `seo-public-eligibility-engine.ts`）：`requiresIorIdentity && !hasIorIdentity → MISSING_IOR_IDENTITY`、`requiresAuthorizedSigner && !hasAuthorizedSigner → MISSING_AUTHORIZED_SIGNER`、`requiresBrokerPoa && !hasBrokerPoa → MISSING_BROKER_POA`、`requiresFilingAuthorization && !hasFilingAuthorization → MISSING_FILING_AUTHORIZATION`、`evidenceCount < minimumEvidenceCount → INSUFFICIENT_EVIDENCE`、`eligible = reasonCodes.length === 0`，**不要加入概率、模型评分或 LLM**。②**CHANGE G — rule-aware schema 目前无法通过 registry 真正调用**：`buildPublicEligibilitySchemaForRule(rule)` 写对了，但 registry contract 仍是 `SeoPublicEngine.getPublicInputSchema()`、port 仍是 `getPublicInputSchema(basisKey)`，**没有 rule 参数**，因此 engine 取 schema 时并不知道当前 RuleVersion 的 `requiresIorIdentity` / `requiresBrokerPoa` / `minimumEvidenceCount` 等，也就接不进真实运行路径（与「以后只需注册即可」的结论不一致）；最小修法 = 改成 `getPublicInputSchema({ basisKey, rule })` 或 `SeoPublicEngine.getPublicInputSchema(rule)`，并由 checker 传入 rule。下一轮**只补 F/G**，不要重做 DUTY_DIFFERENCE、也不要注册它；完成后送 **PUBLIC ENGINE IMPLEMENTATION FINAL-2**。边界保持：`PUBLIC_SEO_CHECKER_ENABLED = false`、`ENGINE_REGISTRY = EMPTY`、`PRODUCTION_PUBLIC_CHECKER = HOLD`、`EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS = HOLD`。
+
+```text
+ARCHITECT VERDICT：REVISE（范围很窄）
+
+我按**代码送审 HEAD = efcc12584d1e97b6614e607cb4ac3920e9ce1dfc**重新核了本轮实现，没有使用上一轮缓存。
+
+这轮大部分已经做对，但现在还不能把：
+
+纯文本
+PUBLIC_ENGINE_IMPLEMENTATION = PASS
+
+正式关闭。原因不是 DUTY_DIFFERENCE，而是还有 2 个真正的接线缺口。
+
+已经可以记 PASS 的部分
+纯文本
+SELF_REPORTED_ELIGIBILITY_LABEL = PASS
+EVIDENCE_VALIDITY_NOT_PERFORMED = PASS
+DUTY_DIFFERENCE_NON_CIRCULAR_MODEL = PASS
+POINT_ESTIMATE_NO_ARTIFICIAL_RANGE = PASS
+DUAL_SCHEMA_ORCHESTRATION = PASS
+DUTY_DIFFERENCE_NOT_REGISTERED_WITHOUT_RULE_PROOF = PASS
+
+我确认：
+
+eligibilityLabel 类型只允许 PRELIMINARY_SELF_REPORTED | null；
+denied response 为 null；
+evidenceCount 明确只是数量门槛；
+refundableAmount 已完全退出 calculator schema；
+DUTY_DIFFERENCE 已变成 paid - actuallyDue；
+非正差额返回 null；
+没有 ±%、历史比例或“追回成功率”；
+两套 schema 已 union whitelist + 分别投影；
+schema 冲突会 fail-closed；
+当前 registry 保持空是正确的，不能为了“有金额”而注册。
+
+这部分方向是对的。
+
+CHANGE F — 真正的 eligibility engine 还没有实现
+
+上一轮批准的核心语义之一是：
+
+纯文本
+(rule.eligibility, answers)
+→ eligible
+→ stable reasonCodes
+
+例如：
+
+纯文本
+requiresIorIdentity=true
+hasIorIdentity=false
+→ MISSING_IOR_IDENTITY
+
+requiresBrokerPoa=true
+hasBrokerPoa=false
+→ MISSING_BROKER_POA
+
+minimumEvidenceCount=3
+evidenceCount=2
+→ INSUFFICIENT_EVIDENCE
+
+但 exact HEAD 的 apps/api/src/services/seo/ 里目前没有这类 engine。
+
+新增的是：
+
+纯文本
+seo-public-engine-schema.ts
+seo-public-duty-difference.ts
+seo-public-answer-orchestration.ts
+
+没有 eligibility decision-table engine。
+
+所以目前只是：
+
+纯文本
+eligibility 输入 schema = 已实现
+eligibility 输出 label = 已实现
+eligibility 真正判定 engine = 未实现
+
+这意味着：
+
+纯文本
+PUBLIC ELIGIBILITY ENGINE
+
+还不能称为 implementation complete。
+
+最小补法
+
+新增一个纯函数即可，例如：
+
+纯文本
+seo-public-eligibility-engine.ts
+
+逻辑不要复杂化：
+
+纯文本
+if requiresIorIdentity && !hasIorIdentity
+  → MISSING_IOR_IDENTITY
+
+if requiresAuthorizedSigner && !hasAuthorizedSigner
+  → MISSING_AUTHORIZED_SIGNER
+
+if requiresBrokerPoa && !hasBrokerPoa
+  → MISSING_BROKER_POA
+
+if requiresFilingAuthorization && !hasFilingAuthorization
+  → MISSING_FILING_AUTHORIZATION
+
+if evidenceCount < minimumEvidenceCount
+  → INSUFFICIENT_EVIDENCE
+
+eligible = reasonCodes.length === 0
+
+不要加入概率、模型评分或 LLM。
+
+CHANGE G — rule-aware schema 目前还无法通过 registry 真正调用
+
+这是第二个更隐蔽的问题。
+
+你已经正确写了：
+
+TypeScript
+buildPublicEligibilitySchemaForRule(rule)
+
+但当前 registry contract 还是：
+
+TypeScript
+SeoPublicEngine.getPublicInputSchema()
+
+而 port 还是：
+
+TypeScript
+getPublicInputSchema(basisKey)
+
+没有 rule 参数。
+
+所以未来真正注册 eligibility engine 后，engine 在：
+
+纯文本
+getPublicInputSchema()
+
+时根本不知道当前 RuleVersion 的：
+
+纯文本
+requiresIorIdentity
+requiresBrokerPoa
+minimumEvidenceCount
+...
+
+因此你现在写好的：
+
+纯文本
+buildPublicEligibilitySchemaForRule(rule)
+
+还无法自然接进真实运行路径。
+
+这与送审中“以后只需注册即可”的结论不一致。
+
+最小修法
+
+建议把接口改成：
+
+纯文本
+getPublicInputSchema({
+  basisKey,
+  rule
+})
+
+或者：
+
+TypeScript
+SeoPublicEngine.getPublicInputSchema(rule)
+
+然后 checker：
+
+纯文本
+eligibilitySchema =
+  getPublicInputSchema(
+    eligibilityBasisKey,
+    rule
+  )
+
+calculationSchema =
+  getPublicInputSchema(
+    calculationBasisKey,
+    rule
+  )
+
+这样：
+
+纯文本
+RuleVersion
+↓
+rule-aware schema
+↓
+validator
+↓
+engine
+
+才真正闭环。
+
+DUTY_DIFFERENCE 当前处理正确
+
+关于你第三个问题，这部分我赞成 Codex 当前“不注册”的决定：
+
+纯文本
+DUTY_DIFFERENCE_ENGINE_REGISTRATION = NOT_REGISTERED
+
+因为仓库没有生产 RuleVersion 能证明：
+
+纯文本
+DUTY_DIFFERENCE
+=
+dutyPaidAmount - dutyActuallyDueAmount
+
+只看到 kind 和 basisKey 不能算语义证据。
+
+所以现在继续：
+
+纯文本
+registry = empty
+estimate = null
+NOINDEX
+
+是正确行为。
+
+将来注册是否还需要重新设计审计？
+
+不需要重新做设计审计。
+
+但需要一个非常窄的 REGISTRATION AUDIT，因为届时是第一次真正让用户得到金额。
+
+最小材料只需 4 项：
+
+纯文本
+1. 生效 RuleVersion 完整 calculationMethod
+2. 支撑 paid - actuallyDue 语义的 sourceReference
+3. engine basisKey 与 RuleVersion basisKey 精确一致
+4. DEV/STAGING E2E：
+   paid=10000
+   due=6000
+   → estimate=4000
+   → ESTIMATE_ONLY
+
+再补两个负例：
+
+纯文本
+paid <= due → estimate=null
+unsupported currency → INVALID_REQUEST
+
+就够了。
+
+不用再次讨论整个架构。
+
+当前最终状态
+纯文本
+ITEM_1_RULE_AWARE_REQUIRED_FIELDS = PASS_WITH_WIRING_REVISE
+ITEM_2_EVIDENCE_QUANTITY_ONLY = PASS
+ITEM_3_DUTY_DIFFERENCE_DERIVATION = PASS
+ITEM_4_POINT_ESTIMATE = PASS
+ITEM_5_DUAL_SCHEMA_ORCHESTRATION = PASS
+
+CHANGE_F_REAL_ELIGIBILITY_ENGINE = REVISE
+CHANGE_G_RULE_AWARE_SCHEMA_REGISTRY_WIRING = REVISE
+
+PUBLIC_ENGINE_IMPLEMENTATION = NOT_YET_CLOSED
+
+边界继续：
+
+纯文本
+PUBLIC_SEO_CHECKER_ENABLED = false
+ENGINE_REGISTRY = EMPTY
+
+PRODUCTION_PUBLIC_CHECKER = HOLD
+EXTERNAL_WRITE = HOLD
+PAYMENT = HOLD
+TRANSPORT = HOLD
+PRODUCTION_CREDENTIALS = HOLD
+
+下一轮只需要补 F/G。不要重做 DUTY_DIFFERENCE，也不要注册它。完成后送 PUBLIC ENGINE IMPLEMENTATION FINAL-2 即可。
+```
