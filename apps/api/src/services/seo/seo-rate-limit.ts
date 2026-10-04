@@ -73,3 +73,64 @@ export const SEO_PUBLIC_RATE_LIMIT_BOUNDARY = {
   tenantDataIncluded: false,
   productionCredentials: 'ABSENT',
 } as const;
+
+/**
+ * 共享/边缘限流端口（架构方裁决：`IN_MEMORY_RATE_LIMIT = DEV/STAGING_ONLY`、
+ * `SHARED_OR_EDGE_RATE_LIMIT = REQUIRED_FOR_PRODUCTION`）。
+ *
+ * 生产实现必须满足：
+ *   · **原子**：同一匿名键的 check-and-consume 在跨进程/跨实例下不可超额；
+ *   · 共享存储（Redis 等）或由 CDN/API Gateway 提供全局限流 + 应用层第二层；
+ *   · 只接受匿名键哈希（绝不接触原始 IP）。
+ */
+export interface SeoSharedRateLimiter {
+  /** 原子 check-and-consume；实现必须在共享存储上完成。 */
+  checkShared(anonymousKeyHash: string): Promise<SeoRateLimitDecision>;
+}
+
+export type SeoRateLimiterMode = 'DEV_STAGING' | 'PRODUCTION';
+
+export interface SeoRateLimiterDeploymentConfig {
+  mode: SeoRateLimiterMode;
+  hasSharedOrEdgeLimiter: boolean;
+  /** 单机 canary 的全部前提（架构方给的清单）。 */
+  canary?: {
+    singleInstance: boolean;
+    singleNodeProcess: boolean;
+    noPm2Cluster: boolean;
+    noAutoscaleOrServerless: boolean;
+    upstreamGlobalRateLimit: boolean;
+    mapHasTtlOrMaxSize: boolean;
+    hasKillSwitch: boolean;
+  };
+}
+
+export type SeoRateLimiterDeploymentVerdict =
+  | { ok: true; reason: 'SHARED_LIMITER' | 'CANARY_ACCEPTED' | 'DEV_STAGING_ONLY' }
+  | { ok: false; reason: 'SHARED_LIMITER_REQUIRED' | 'CANARY_PRECONDITION_MISSING' };
+
+/**
+ * 生产部署守卫：**进程内限流器不得用于多实例生产**。
+ * 只有共享/边缘限流，或满足全部 canary 前提的单机试点，才允许在生产模式下运行。
+ */
+export function assertProductionRateLimiter(
+  config: SeoRateLimiterDeploymentConfig,
+): SeoRateLimiterDeploymentVerdict {
+  if (config.mode !== 'PRODUCTION') return { ok: true, reason: 'DEV_STAGING_ONLY' };
+  if (config.hasSharedOrEdgeLimiter) return { ok: true, reason: 'SHARED_LIMITER' };
+
+  const canary = config.canary;
+  if (canary === undefined) return { ok: false, reason: 'SHARED_LIMITER_REQUIRED' };
+  const missing = [
+    canary.singleInstance,
+    canary.singleNodeProcess,
+    canary.noPm2Cluster,
+    canary.noAutoscaleOrServerless,
+    canary.upstreamGlobalRateLimit,
+    canary.mapHasTtlOrMaxSize,
+    canary.hasKillSwitch,
+  ].some((flag) => flag !== true);
+  return missing
+    ? { ok: false, reason: 'CANARY_PRECONDITION_MISSING' }
+    : { ok: true, reason: 'CANARY_ACCEPTED' };
+}
