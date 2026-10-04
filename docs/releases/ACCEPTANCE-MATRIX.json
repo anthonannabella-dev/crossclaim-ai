@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-10-04T14:20:54.570Z",
-  "acceptance_head": "ddeb349",
+  "generated_at": "2026-10-04T14:26:01.803Z",
+  "acceptance_head": "1ae5d0f",
   "protocol": "docs/releases/FINAL-ACCEPTANCE-PROTOCOL.md",
   "areas": [
     {
@@ -179,7 +179,8 @@
     "SEO-4-STAGE-1-recover-route-skeleton",
     "SEO-4-STAGE-2-recover-metadata",
     "SEO-4-STAGE-3-recover-jsonld",
-    "SEO-4-STAGE-4-recover-sitemap-robots"
+    "SEO-4-STAGE-4-recover-sitemap-robots",
+    "SEO-4-STAGE-5-recover-content-internal-links"
   ],
   "host_action_required": [
     "provider developer/partner account registration",

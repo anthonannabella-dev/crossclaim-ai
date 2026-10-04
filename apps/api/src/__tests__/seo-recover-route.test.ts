@@ -9,6 +9,7 @@ import { describe, expect, it } from 'vitest';
 
 import {
   buildRecoverSitemapAndRobots,
+  composeRecoverRouteContent,
   buildRecoverRouteMetadata,
   buildRecoverRouteJsonLd,
   SEO_RECOVER_ROUTE_BOUNDARY,
@@ -266,5 +267,56 @@ describe('SEO-4 Stage 4 sitemap / robots 一致性', () => {
     expect(site.excluded).toEqual([{ slug: indexable.slug, reason: 'ROBOTS_DISALLOW' }]);
     expect(site.robotsTxt).toContain('Disallow: /recover');
     expect(site.consistency.conflictCount).toBe(0);
+  });
+});
+
+describe('SEO-4 Stage 5 正文与内链（只由真实字段组成，薄内容 fail-closed）', () => {
+  const richRule = {
+    title: 'Amazon FBA fee refund',
+    problemDescription:
+      'FBA fee overcharges can be refunded when the fee was calculated on incorrect dimensions or weight, subject to the platform dispute window. This description comes from the effective recovery rule definition, not from this page.',
+    requiredEvidence: ['settlement report line', 'fee preview vs charged comparison'],
+    sourceReferences: ['src:amazon-fba-fee-policy'],
+    relatedRuleRefs: ['amazon-inventory-reimbursement'],
+  };
+
+  it('RECOVER_CONTENT_THIN_FAILS_CLOSED：真实字段不足 → 不产出任何小节（不填充空洞文案）', () => {
+    const decision = resolveRecoverRoute(input({ requestedLocale: 'en' }));
+    const thin = composeRecoverRouteContent({
+      decision,
+      rule: { title: 'x', problemDescription: '', requiredEvidence: [], sourceReferences: [], relatedRuleRefs: [] },
+    });
+    expect(thin.thin).toBe(true);
+    expect(thin.sections).toEqual([]);
+    expect(thin.internalLinks).toEqual([]);
+    expect(thin.reasons).toContain('THIN_CONTENT');
+
+    const rich = composeRecoverRouteContent({ decision, rule: richRule });
+    expect(rich.thin).toBe(false);
+    expect(rich.sections.length).toBeGreaterThanOrEqual(2);
+    for (const section of rich.sections) expect(section.i18nKey).toMatch(/^recover\.page\./);
+  });
+
+  it('RECOVER_INTERNAL_LINKS_ONLY_REAL_RELATED：内链只在目标真实存在时输出，且薄内容不输出内链', () => {
+    const decision = resolveRecoverRoute(input({ requestedLocale: 'en' }));
+    const noLinks = composeRecoverRouteContent({ decision, rule: richRule });
+    expect(noLinks.internalLinks).toEqual([]);
+    expect(noLinks.reasons).toContain('NO_INTERNAL_LINKS');
+
+    const withLinks = composeRecoverRouteContent({
+      decision,
+      rule: richRule,
+      relatedPages: [{ name: 'Inventory reimbursement', url: '/recover/amazon/inventory-reimbursement' }],
+    });
+    expect(withLinks.internalLinks).toHaveLength(1);
+    expect(withLinks.reasons).not.toContain('NO_INTERNAL_LINKS');
+
+    // 薄内容时即便给了内链也不输出（页面整体 fail-closed）。
+    const thinWithLinks = composeRecoverRouteContent({
+      decision,
+      rule: { title: 'x', problemDescription: '', requiredEvidence: [], sourceReferences: [], relatedRuleRefs: [] },
+      relatedPages: [{ name: 'Inventory reimbursement', url: '/recover/amazon/inventory-reimbursement' }],
+    });
+    expect(thinWithLinks.internalLinks).toEqual([]);
   });
 });

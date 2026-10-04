@@ -1,6 +1,6 @@
 {
   "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。",
-  "updatedAt": "2026-10-04T14:21:00.000Z",
+  "updatedAt": "2026-10-04T14:26:00.000Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -1065,15 +1065,15 @@
       "acceptance_criteria": "docs/releases/SEO-4-RECOVER-WIRING-PLAN.md 第 1 阶段全绿；构建/类型检查干净；CUSTOMER_UI_HARDCODED_STRING_COUNT=0；PUBLIC_CHECKER_HTTP 仍 HOLD；TRANSPORT=false",
       "plan_doc": "docs/releases/SEO-4-RECOVER-WIRING-PLAN.md",
       "boundary": "TRANSPORT=false / EXTERNAL_WRITE=HOLD / PAYMENT=HOLD / 生产凭据 ABSENT / FINAL_ACCEPTANCE_HEAD=0f7f7ac 未动",
-      "status": "IMPLEMENTED_PENDING_CI",
+      "status": "CLOSED",
       "implementation_head": "(this commit)",
       "artifacts": [
         "apps/api/src/services/seo/seo-recover-route.ts",
         "apps/api/src/__tests__/seo-recover-route.test.ts"
       ],
       "evidence": "vitest src/__tests__/seo-recover-route.test.ts 6/6；SEO 回归 9 files / 65 tests；tsc exit 0",
-      "pending_ci_run": "37208163582",
-      "pending_ci_head": "60ec7de"
+      "closed_at": "2026-10-04T14:26:00.000Z",
+      "close_evidence": "CI run 37208163582 (head 60ec7de) success"
     },
     {
       "id": "SEO-4-STAGE-2-recover-metadata",
@@ -1082,8 +1082,10 @@
       "title": "/recover metadata 由 gate 驱动（默认 noindex、canonical/hreflang 仅在可索引时输出）",
       "scope": "buildRecoverRouteMetadata：robots 继承判定；canonical 与 5 语言 hreflang + x-default 仅在 indexable 时给出；标题/描述只接受真实来源引用",
       "acceptance_criteria": "RECOVER_METADATA_NOINDEX_DEFAULT / RECOVER_METADATA_CANONICAL_ONLY_WHEN_INDEXABLE / RECOVER_METADATA_ALTERNATES_X_DEFAULT 全绿；tsc 0",
-      "status": "IMPLEMENTED_PENDING_CI",
-      "implementation_head": "(this commit)"
+      "status": "CLOSED",
+      "implementation_head": "(this commit)",
+      "closed_at": "2026-10-04T14:26:00.000Z",
+      "close_evidence": "CI run 37208341400 (head 84b20a7) success"
     },
     {
       "id": "SEO-4-STAGE-3-recover-jsonld",
@@ -1102,6 +1104,16 @@
       "title": "/recover sitemap 只纳入 gate 通过 URL，robots 与 sitemap 一致",
       "scope": "buildRecoverSitemapAndRobots：indexable+200 才进 sitemap；被 disallow 覆盖的 URL 从 sitemap 移除并记 ROBOTS_DISALLOW；输出 robots.txt 含 Sitemap 行；consistency.conflictCount 自证恒为 0",
       "acceptance_criteria": "RECOVER_SITEMAP_ONLY_GATE_PASSING / RECOVER_ROBOTS_DISALLOW_REMOVES_SITEMAP_ENTRY 全绿；tsc 0",
+      "status": "IMPLEMENTED_PENDING_CI",
+      "implementation_head": "(this commit)"
+    },
+    {
+      "id": "SEO-4-STAGE-5-recover-content-internal-links",
+      "priority": "P1",
+      "source_backlog_id": "SEO-4-RECOVER-WIRING-PLAN.md 阶段 5",
+      "title": "/recover 正文与内链只由真实字段组成（薄内容 fail-closed）",
+      "scope": "composeRecoverRouteContent：正文小节只来自生效规则的 problemDescription/requiredEvidence/sourceReferences；薄内容(<2 可溯源小节或正文<200) → sections=[]；内链仅在目标真实存在时输出",
+      "acceptance_criteria": "RECOVER_CONTENT_THIN_FAILS_CLOSED / RECOVER_INTERNAL_LINKS_ONLY_REAL_RELATED 全绿；tsc 0",
       "status": "IMPLEMENTED_PENDING_CI",
       "implementation_head": "(this commit)"
     }

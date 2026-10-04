@@ -22,6 +22,10 @@ import {
   type SeoAlternate,
   type SeoLocale,
 } from './seo-technical';
+import {
+  SEO_MIN_SECTION_CONTENT_LENGTH,
+  SEO_MIN_SOURCE_BACKED_SECTIONS,
+} from '../recovery-rules/recovery-rule-definition';
 
 export const SEO_RECOVER_ROUTE_REASONS = [
   'RECOVER_OK',
@@ -383,6 +387,93 @@ export function buildRecoverSitemapAndRobots(input: SeoRecoverSitemapInput): Seo
     robotsTxt,
     sitemapLoc,
     consistency: { conflictCount },
+    externalWritePerformed: false,
+    databaseWritePerformed: false,
+    transportEnabled: false,
+    checkerPostRegistered: false,
+    productionCredentials: 'ABSENT',
+  };
+}
+
+/**
+ * SEO-4 Stage 5 —— 页面正文与内链：**只由生效规则的真实字段组成，缺内容就 fail-closed，绝不填充废话**。
+ * 薄内容保护：可溯源小节数量 < SEO_MIN_SOURCE_BACKED_SECTIONS 或真实正文长度 < SEO_MIN_SECTION_CONTENT_LENGTH
+ * → 返回 sections = []（页面因此不会渲染出空洞内容，indexability gate 也会保持 noindex）。
+ */
+export interface SeoRecoverContentRule {
+  title: string;
+  problemDescription: string;
+  requiredEvidence: readonly string[];
+  sourceReferences: readonly string[];
+  relatedRuleRefs: readonly string[];
+}
+
+export interface SeoRecoverContentInput {
+  decision: SeoRecoverRouteDecision;
+  rule: SeoRecoverContentRule;
+  /** 真实存在的相关页面（内部链接目标必须真的存在）。 */
+  relatedPages?: readonly { name: string; url: string }[];
+}
+
+export interface SeoRecoverContent {
+  sections: readonly { i18nKey: string; sourceRef: string | null; ref: string }[];
+  internalLinks: readonly { name: string; url: string }[];
+  thin: boolean;
+  reasons: readonly ('NOT_INDEXABLE' | 'THIN_CONTENT' | 'NO_INTERNAL_LINKS')[];
+  externalWritePerformed: false;
+  databaseWritePerformed: false;
+  transportEnabled: false;
+  checkerPostRegistered: false;
+  productionCredentials: 'ABSENT';
+}
+
+export function composeRecoverRouteContent(input: SeoRecoverContentInput): SeoRecoverContent {
+  const reasons: ('NOT_INDEXABLE' | 'THIN_CONTENT' | 'NO_INTERNAL_LINKS')[] = [];
+  const rule = input.rule;
+  const sourceRef = rule.sourceReferences[0] ?? null;
+
+  // 正文小节只允许来自规则的真实字段；没有真实字段就没有小节（不写占位/模板文案）。
+  const candidates: { i18nKey: string; ref: string; text: string; sourceRef: string | null }[] = [];
+  if (rule.problemDescription.trim().length > 0) {
+    candidates.push({
+      i18nKey: 'recover.page.problemHeading',
+      ref: rule.title,
+      text: rule.problemDescription,
+      sourceRef,
+    });
+  }
+  if (rule.requiredEvidence.length > 0) {
+    candidates.push({
+      i18nKey: 'recover.page.evidenceHeading',
+      ref: rule.requiredEvidence.join('|'),
+      text: rule.requiredEvidence.join(' '),
+      sourceRef,
+    });
+  }
+  if (rule.sourceReferences.length > 0) {
+    candidates.push({
+      i18nKey: 'recover.page.sourcesHeading',
+      ref: rule.sourceReferences.join('|'),
+      text: rule.sourceReferences.join(' '),
+      sourceRef,
+    });
+  }
+
+  const sourceBacked = candidates.filter((section) => section.sourceRef !== null);
+  const totalLength = candidates.reduce((sum, section) => sum + section.text.trim().length, 0);
+  const thin =
+    sourceBacked.length < SEO_MIN_SOURCE_BACKED_SECTIONS || totalLength < SEO_MIN_SECTION_CONTENT_LENGTH;
+
+  const internalLinks = input.relatedPages ?? [];
+  if (internalLinks.length === 0) reasons.push('NO_INTERNAL_LINKS');
+  if (!input.decision.indexable || input.decision.path === null) reasons.push('NOT_INDEXABLE');
+  if (thin) reasons.push('THIN_CONTENT');
+
+  return {
+    sections: thin ? [] : candidates.map(({ i18nKey, ref, sourceRef: ref2 }) => ({ i18nKey, ref, sourceRef: ref2 })),
+    internalLinks: thin ? [] : internalLinks,
+    thin,
+    reasons,
     externalWritePerformed: false,
     databaseWritePerformed: false,
     transportEnabled: false,
