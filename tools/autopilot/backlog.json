@@ -1,6 +1,6 @@
 {
   "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。",
-  "updatedAt": "2026-10-05T01:38:00.000Z",
+  "updatedAt": "2026-10-05T01:41:00.000Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -1575,6 +1575,16 @@
       "title": "事件驱动续跑引擎（E2E A–D 已过）",
       "scope": "事件即续跑（秒级）+ 60s Watchdog 兜底 + lease/dedupe exactly-once + 优先级 P0–P4 + REVISE 立即建修订任务",
       "acceptance_criteria": "E2E A（A→B→C 秒级）/ B（事件丢失由 Watchdog 恢复）/ C（事件+watchdog 只 claim 一次）/ D（REVISE 立即执行）全绿；tsc 0",
+      "status": "IMPLEMENTED_PENDING_CI",
+      "implementation_head": "(this commit)"
+    },
+    {
+      "id": "RSI-CONT-02-controller-wiring",
+      "priority": "P0",
+      "source_backlog_id": "OWNER 任务：Event-Driven Immediate Continuation + Watchdog Fallback",
+      "title": "续跑引擎接入 RSI Controller（事件入口 + 60s tick）",
+      "scope": "emit(event)→claim→runner 立即执行；tick() 仅在事件丢失/idle/lease 超时时兜底；runner 由宿主注入（本地 Codex 或 AgentRunnerPort）",
+      "acceptance_criteria": "vitest rsi-controller-continuation 3/3；api tsc 0；无凭据/无库写",
       "status": "IMPLEMENTED_PENDING_CI",
       "implementation_head": "(this commit)"
     }

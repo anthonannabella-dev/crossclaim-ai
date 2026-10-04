@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-10-04T16:37:47.030Z",
-  "acceptance_head": "5002987",
+  "generated_at": "2026-10-04T16:40:44.535Z",
+  "acceptance_head": "a0809bd",
   "protocol": "docs/releases/FINAL-ACCEPTANCE-PROTOCOL.md",
   "areas": [
     {
@@ -218,7 +218,8 @@
     "RSI-INSP-03-weekly-full-review",
     "RSI-INSP-04-golden-fixtures",
     "RSI-INSP-05-production-to-fixture",
-    "RSI-CONT-01-continuation-engine"
+    "RSI-CONT-01-continuation-engine",
+    "RSI-CONT-02-controller-wiring"
   ],
   "host_action_required": [
     "provider developer/partner account registration",
