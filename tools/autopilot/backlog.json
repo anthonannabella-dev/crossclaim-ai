@@ -1,6 +1,6 @@
 {
   "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。",
-  "updatedAt": "2026-10-05T02:57:00.000Z",
+  "updatedAt": "2026-10-05T03:01:00.000Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -1698,6 +1698,16 @@
       "title": "健康载荷补全（queue 连通性 / 上次 reconcile / 上次 incident / 计数）",
       "scope": "RsiControllerState + rsiHealthPayload 增加 lastReconcileAt、queueConnected、lastIncidentRef；启动即记录一次 reconcile",
       "acceptance_criteria": "vitest rsi-controller 4/4；api tsc 0",
+      "status": "IMPLEMENTED_PENDING_CI",
+      "implementation_head": "(this commit)"
+    },
+    {
+      "id": "RSI-CONT-07-verdict-watcher",
+      "priority": "P1",
+      "source_backlog_id": "OWNER 续跑规范第 7 节：审计也改为事件驱动",
+      "title": "裁决轮询器（仅在 WAITING_FOR_VERDICT 时短轮询，同裁决只投递一次）",
+      "scope": "createVerdictWatcher：isWaiting=false 完全不读；按 messageId+verdict 去重；start 幂等/stop 清理",
+      "acceptance_criteria": "vitest rsi-verdict-watcher 3/3；api tsc 0",
       "status": "IMPLEMENTED_PENDING_CI",
       "implementation_head": "(this commit)"
     }
