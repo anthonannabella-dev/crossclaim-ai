@@ -1,6 +1,6 @@
 {
   "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。",
-  "updatedAt": "2026-10-05T01:22:00.000Z",
+  "updatedAt": "2026-10-05T01:26:00.000Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -1518,7 +1518,14 @@
       "title": "Daily Health Inspection 任务（Runtime/API-Provider/Application 检查项；健康则静默）",
       "scope": "主动周期性巡检 + 漂移分类 + 自动建任务；不靠聊天心跳",
       "acceptance_criteria": "实现/用例落地；api tsc 0；如需持久化另送 Schema Delta",
-      "status": "READY"
+      "status": "IMPLEMENTED_PENDING_CI",
+      "implementation_head": "(this commit)",
+      "artifacts": [
+        "apps/api/src/services/autonomy/rsi-daily-inspection.ts",
+        "apps/api/src/__tests__/rsi-daily-inspection.test.ts"
+      ],
+      "evidence": "vitest rsi-daily-inspection 4/4；api tsc 0",
+      "remaining": "真实探针（API/worker/queue/DB/provider OAuth/webhook）由宿主注入；调度由 RSI Controller 定时器触发"
     },
     {
       "id": "RSI-INSP-03-weekly-full-review",
