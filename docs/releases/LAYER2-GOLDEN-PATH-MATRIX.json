@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-04T02:47:35.113Z",
+  "generated_at": "2026-10-04T02:51:02.849Z",
   "rule": "COVERED 需存在命名证据文件；否则 GAP",
   "domains": [
     {
@@ -226,7 +226,7 @@
     {
       "id": "customs",
       "name": "Customs / Trade Recovery",
-      "domain_test_files": 32,
+      "domain_test_files": 33,
       "domain_web_files": 14,
       "cells": {
         "http": {
@@ -285,9 +285,9 @@
           "status": "COVERED",
           "evidence": [
             "apps/api/src/__tests__/customs-authorization-lifecycle-db.test.ts",
+            "apps/api/src/__tests__/customs-broker-authorization-session.test.ts",
             "apps/api/src/__tests__/customs-classification-discrepancy.test.ts",
-            "apps/api/src/__tests__/customs-duty-truth.test.ts",
-            "apps/api/src/__tests__/customs-entry-fact-store-db.test.ts"
+            "apps/api/src/__tests__/customs-duty-truth.test.ts"
           ]
         },
         "concurrency": {
