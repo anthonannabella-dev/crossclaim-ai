@@ -319,6 +319,11 @@ const es: Messages = {
     createCase: "Crear caso",
     loadMore: "Cargar más",
     loadedCount: "{count} elementos cargados",
+    advancedFilters: "Filtros avanzados (campos técnicos)",
+    advancedHint: "Solo se necesitan para diagnóstico o verificación profunda; la vista normal no requiere estos campos.",
+    matchesCount: "Mostrando {count} elementos",
+    clearFilters: "Restablecer filtros",
+    emptyBody: "Al conectar una plataforma o importar facturas, la detección comienza automáticamente.",
   },
   moneyPage: {
     title: "Importes recuperados",

@@ -319,6 +319,11 @@ const enUS: Messages = {
     createCase: "Create case",
     loadMore: "Load more",
     loadedCount: "Loaded {count} items",
+    advancedFilters: "Advanced filters (engineering fields)",
+    advancedHint: "Only needed for troubleshooting or deep verification; the default customer view does not require these.",
+    matchesCount: "Showing {count} items",
+    clearFilters: "Clear filters",
+    emptyBody: "Connect a platform or import invoices and detections will start automatically.",
   },
   moneyPage: {
     title: "Recovered money",

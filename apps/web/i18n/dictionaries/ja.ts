@@ -319,6 +319,11 @@ const ja: Messages = {
     createCase: "案件を作成",
     loadMore: "さらに読み込む",
     loadedCount: "{count} 件を読み込み済み",
+    advancedFilters: "詳細フィルタ（技術項目）",
+    advancedHint: "調査や詳細確認のときのみ使用します。通常の画面では変更不要です。",
+    matchesCount: "現在 {count} 件を表示",
+    clearFilters: "条件をリセット",
+    emptyBody: "プラットフォーム接続または取り込み後、自動で検出されます。",
   },
   moneyPage: {
     title: "回収金額",

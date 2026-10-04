@@ -3,43 +3,29 @@
 import { useCallback, useEffect, useState } from 'react';
 
 import type { Messages } from '../../i18n/dictionaries/zh-CN';
-
-interface OpportunityItem {
-  id: string;
-  status: string;
-  customerStatus: { code: string; label: string };
-  opportunityType: string;
-  title: string;
-  description: string | null;
-  recoverableAmount: string | null;
-  currency: string;
-  confidence: number | null;
-  claimDeadline: string | null;
-  detectedAt: string;
-  channel: string;
-  domain: string;
-  accountState: 'ATTRIBUTED' | 'LEGACY_UNATTRIBUTED';
-  account: { id: string; platform: string; externalAccountId: string; displayName: string } | null;
-  actions: { canQualify: boolean; canReject: boolean; canCreateCase: boolean };
-}
+import OpportunityActions from '../components/opportunity-actions';
+import OpportunityCard from '../components/opportunity-card';
+import EmptyState from '../components/ui/empty-state';
+import InlineNotice from '../components/ui/inline-notice';
+import { buildOpportunityView, type OpportunityApiItem } from '../lib/dashboard-view';
 
 interface ListResponse {
-  items: OpportunityItem[];
+  items: OpportunityApiItem[];
   nextCursor: string | null;
   hasMore: boolean;
   pageSize: number;
 }
 
-const STATUS_OPTIONS = ['DETECTED', 'QUALIFIED', 'REJECTED', 'CONVERTED', 'EXPIRED'];
+const STATUS_OPTIONS = ['DETECTED', 'QUALIFIED', 'REJECTED', 'CONVERTED', 'EXPIRED'] as const;
 
 /**
- * PC-02 客户可见机会列表。
- * loading / no opportunities / filtered no results / API error 四种状态分别呈现。
+ * UI-3 —— 机会发现页（客户视图）。
+ * 默认：客户语言状态筛选 + 机会卡片（来源 / 问题 / 预计可追回 / 可信度 / 截止时间 / 下一步）。
+ * 工程筛选（domain / channel / accountId / 最低金额）收进「高级筛选」；loading / empty / filtered-empty / error 分别呈现。
  */
 export default function OpportunityList({ t }: { t: Messages }) {
   const copy = t.opportunitiesPage;
-  const [items, setItems] = useState<OpportunityItem[]>([]);
-  const [cursor, setCursor] = useState<string | null>(null);
+  const [items, setItems] = useState<OpportunityApiItem[]>([]);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(false);
   const [status, setStatus] = useState('');
@@ -69,18 +55,22 @@ export default function OpportunityList({ t }: { t: Messages }) {
           setItems([]);
           return;
         }
+        if (response.status === 403) {
+          setError(t.common.permissionDenied);
+          setItems([]);
+          return;
+        }
         if (!response.ok) {
           const body = (await response.json().catch(() => ({}))) as { error?: string };
           setError(body.error ?? 'API error');
+          setItems([]);
           return;
         }
         const body = (await response.json()) as ListResponse;
         setItems((previous) => (mode === 'more' ? [...previous, ...body.items] : body.items));
         setNextCursor(body.nextCursor);
         setHasMore(body.hasMore);
-        setFiltered(
-          Boolean(status || domain || channel || accountId || minRecoverable),
-        );
+        setFiltered(Boolean(status || domain || channel || accountId || minRecoverable));
       } catch {
         setError(t.common.networkError);
       } finally {
@@ -94,141 +84,185 @@ export default function OpportunityList({ t }: { t: Messages }) {
     void load('reset');
   }, [load]);
 
-  const resetAndLoad = () => {
-    setCursor(null);
-    void load('reset');
+  const applyFilters = () => void load('reset');
+  const clearFilters = () => {
+    setStatus('');
+    setDomain('');
+    setChannel('');
+    setAccountId('');
+    setMinRecoverable('');
+  };
+
+  const statusLabel = (code: string): string => {
+    const table = t.status as unknown as Record<string, string>;
+    return table[code] ?? code;
   };
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-end gap-3 rounded border border-slate-200 p-3">
-        <label className="text-sm">
-          <span className="block text-slate-700">{copy.filterStatus}</span>
-          <select value={status} onChange={(event) => setStatus(event.target.value)} className="mt-1 rounded border px-2 py-1">
-            <option value="">{copy.filterAll}</option>
-            {STATUS_OPTIONS.map((option) => (
-              <option key={option} value={option}>
-                {option}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="text-sm">
-          <span className="block text-slate-700">domain</span>
-          <input value={domain} onChange={(event) => setDomain(event.target.value)} className="mt-1 w-32 rounded border px-2 py-1" />
-        </label>
-        <label className="text-sm">
-          <span className="block text-slate-700">channel</span>
-          <input value={channel} onChange={(event) => setChannel(event.target.value)} className="mt-1 w-32 rounded border px-2 py-1" />
-        </label>
-        <label className="text-sm">
-          <span className="block text-slate-700">accountId</span>
-          <input value={accountId} onChange={(event) => setAccountId(event.target.value)} className="mt-1 w-56 rounded border px-2 py-1" />
-        </label>
-        <label className="text-sm">
-          <span className="block text-slate-700">{copy.filterMinRecoverable}</span>
-          <input
-            value={minRecoverable}
-            onChange={(event) => setMinRecoverable(event.target.value)}
-            inputMode="decimal"
-            className="mt-1 w-32 rounded border px-2 py-1"
-          />
-        </label>
-        <button type="button" onClick={resetAndLoad} className="rounded bg-slate-900 px-3 py-2 text-sm text-white">
-          {copy.applyFilters}
-        </button>
+      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="text-sm">
+            <span className="block text-slate-700">{copy.filterStatus}</span>
+            <select
+              value={status}
+              onChange={(event) => setStatus(event.target.value)}
+              className="mt-1 rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+            >
+              <option value="">{copy.filterAll}</option>
+              {STATUS_OPTIONS.map((option) => (
+                <option key={option} value={option}>
+                  {statusLabel(option)}
+                </option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            onClick={applyFilters}
+            className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800"
+          >
+            {copy.applyFilters}
+          </button>
+          {filtered || status ? (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+            >
+              {copy.clearFilters}
+            </button>
+          ) : null}
+          <span className="text-xs text-slate-500">{copy.matchesCount.replace('{count}', String(items.length))}</span>
+        </div>
+
+        <details className="mt-3 text-xs text-slate-600">
+          <summary className="cursor-pointer font-medium">{copy.advancedFilters}</summary>
+          <p className="mt-1 text-slate-500">{copy.advancedHint}</p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <label className="text-sm">
+              <span className="block text-slate-700">domain</span>
+              <input
+                value={domain}
+                onChange={(event) => setDomain(event.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+              />
+            </label>
+            <label className="text-sm">
+              <span className="block text-slate-700">channel</span>
+              <input
+                value={channel}
+                onChange={(event) => setChannel(event.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+              />
+            </label>
+            <label className="text-sm">
+              <span className="block text-slate-700">accountId</span>
+              <input
+                value={accountId}
+                onChange={(event) => setAccountId(event.target.value)}
+                className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+              />
+            </label>
+            <label className="text-sm">
+              <span className="block text-slate-700">{copy.filterMinRecoverable}</span>
+              <input
+                value={minRecoverable}
+                onChange={(event) => setMinRecoverable(event.target.value)}
+                inputMode="decimal"
+                className="mt-1 w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+              />
+            </label>
+          </div>
+        </details>
       </div>
 
       {error ? (
-        <div className="rounded border border-red-300 bg-red-50 p-3 text-sm text-red-700">
+        <InlineNotice tone="danger" title={t.dashboardPage.loadFailedTitle}>
           {copy.loadFailed.replace('{message}', error)}
+        </InlineNotice>
+      ) : null}
+
+      {loading && items.length === 0 ? (
+        <div className="grid gap-3 lg:grid-cols-2" aria-busy="true">
+          {[0, 1, 2, 3].map((index) => (
+            <div key={index} className="h-36 animate-pulse rounded-lg border border-slate-200 bg-slate-100" />
+          ))}
+          <span className="sr-only">{t.common.loading}</span>
         </div>
       ) : null}
 
-      {loading && items.length === 0 ? <p className="text-sm text-slate-600">{t.common.loading}</p> : null}
-
-      {!loading && !error && items.length === 0 && !filtered ? (
-        <div className="rounded border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-          {copy.noItems}
-        </div>
+      {!loading && !error && items.length === 0 && !filtered && !status ? (
+        <EmptyState
+          title={copy.noItems}
+          body={copy.emptyBody}
+          action={{ label: t.dashboardPage.ctaConnect, href: '/connections' }}
+        />
       ) : null}
 
-      {!loading && !error && items.length === 0 && filtered ? (
-        <div className="rounded border border-slate-200 bg-slate-50 p-4 text-sm text-slate-700">
-          {copy.noFilteredResults}
+      {!loading && !error && items.length === 0 && (filtered || status) ? (
+        <div className="space-y-3">
+          <EmptyState title={copy.noFilteredResults} />
+          <button
+            type="button"
+            onClick={clearFilters}
+            className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50"
+          >
+            {copy.clearFilters}
+          </button>
         </div>
       ) : null}
 
       {items.length > 0 ? (
-        <table className="w-full border-collapse text-sm">
-          <thead>
-            <tr className="border-b text-left text-slate-600">
-              <th className="py-2">{copy.colOpportunity}</th>
-              <th className="py-2">{copy.colStatus}</th>
-              <th className="py-2">{copy.colAccount}</th>
-              <th className="py-2 text-right">{copy.colExpectedRecoverable}</th>
-              <th className="py-2">{copy.colDetectedAt}</th>
-              <th className="py-2">{copy.colActions}</th>
-            </tr>
-          </thead>
-          <tbody>
-            {items.map((item) => (
-              <tr key={item.id} className="border-b align-top">
-                <td className="py-2">
-                  <div className="font-medium">{item.title}</div>
-                  <div className="text-xs text-slate-500">
-                    {item.opportunityType} · {item.domain} / {item.channel}
-                  </div>
-                  {item.description ? <div className="text-xs text-slate-500">{item.description}</div> : null}
-                </td>
-                <td className="py-2">
-                  <span className="rounded bg-slate-100 px-2 py-0.5 text-xs">
-                    {copy.statusWithCode
-                      .replace('{label}', item.customerStatus.label)
-                      .replace('{code}', item.customerStatus.code)}
-                  </span>
-                </td>
-                <td className="py-2 text-xs">
-                  {item.account ? (
-                    <>
-                      <div>{item.account.displayName}</div>
-                      <div className="text-slate-500">
-                        {item.account.platform} · {item.account.externalAccountId}
-                      </div>
-                    </>
-                  ) : (
-                    <span className="text-amber-700">{copy.unattributed}</span>
-                  )}
-                </td>
-                <td className="py-2 text-right">
-                  {item.recoverableAmount ? item.recoverableAmount + ' ' + item.currency : '—'}
-                </td>
-                <td className="py-2 text-xs text-slate-600">{item.detectedAt.slice(0, 10)}</td>
-                <td className="py-2 text-xs">
-                  {item.actions.canQualify ? <a className="text-blue-700" href={'/cases?opportunity=' + item.id}>{copy.enterReview}</a> : null}
-                  {item.actions.canCreateCase ? <a className="text-blue-700" href={'/cases?opportunity=' + item.id}>{copy.createCase}</a> : null}
-                  {!item.actions.canQualify && !item.actions.canCreateCase ? <span className="text-slate-400">—</span> : null}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <div className="grid gap-3 lg:grid-cols-2">
+          {items.map((item) => (
+            <OpportunityCard
+              key={item.id}
+              view={buildOpportunityView(item, t)}
+              labels={{
+                estimated: t.dashboardPage.opportunityEstimated,
+                confidence: t.dashboardPage.opportunityConfidence,
+                deadline: t.dashboardPage.opportunityDeadline,
+                noDeadline: t.dashboardPage.opportunityNoDeadline,
+                nextStep: t.dashboardPage.opportunityNextStep,
+                openDetails: t.dashboardPage.opportunityAdvanced,
+                advanced: t.dashboardPage.opportunityAdvancedFields,
+                createCase: t.dashboardPage.opportunityCreateCase,
+                unattributed: copy.unattributed,
+              }}
+              actions={
+                item.status === 'DETECTED' ? (
+                  <OpportunityActions
+                    opportunityId={item.id}
+                    labels={{
+                      qualify: t.dashboard.reviewQualify,
+                      reject: t.dashboard.reviewReject,
+                      reasonLabel: t.dashboard.rejectReason,
+                      reasons: t.dashboard.rejectReasons as unknown as Record<string, string>,
+                      requestFailed: t.common.requestFailed,
+                      networkError: t.common.networkError,
+                    }}
+                  />
+                ) : null
+              }
+            />
+          ))}
+        </div>
       ) : null}
 
       {hasMore ? (
         <button
           type="button"
           onClick={() => {
-            setCursor(nextCursor);
             void load('more', nextCursor);
           }}
           disabled={loading}
-          className="rounded border px-3 py-2 text-sm"
+          className="rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 hover:bg-slate-50 disabled:opacity-60"
         >
           {loading ? t.common.loading : copy.loadMore}
         </button>
       ) : null}
-      {cursor ? (
+      {nextCursor ? (
         <p className="text-xs text-slate-500">{copy.loadedCount.replace('{count}', String(items.length))}</p>
       ) : null}
     </div>

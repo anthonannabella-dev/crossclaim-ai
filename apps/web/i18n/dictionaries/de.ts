@@ -319,6 +319,11 @@ const de: Messages = {
     createCase: "Fall anlegen",
     loadMore: "Mehr laden",
     loadedCount: "{count} Einträge geladen",
+    advancedFilters: "Erweiterte Filter (Technikfelder)",
+    advancedHint: "Nur für Fehlersuche oder Tiefenprüfung nötig; die Standardansicht braucht diese Felder nicht.",
+    matchesCount: "{count} Einträge sichtbar",
+    clearFilters: "Filter zurücksetzen",
+    emptyBody: "Nach dem Verbinden oder Import startet die Erkennung automatisch.",
   },
   moneyPage: {
     title: "Zurückgeholte Beträge",

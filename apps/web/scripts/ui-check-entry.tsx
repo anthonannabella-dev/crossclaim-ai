@@ -12,6 +12,7 @@ import SecurityStrip from '../app/components/ui/security-strip';
 import SummaryCards from '../app/components/ui/summary-cards';
 import TaskCenter from '../app/components/ui/task-center';
 import OpportunityCard from '../app/components/opportunity-card';
+import OpportunityList from '../app/opportunities/opportunity-list';
 import {
   buildCurrencySummaries,
   buildOpportunityView,
@@ -263,6 +264,18 @@ check('cta.tasks.wins', ctaTasks.kind === 'TASKS' && ctaTasks.href === '#custome
 check('cta.connect.when.unconnected', ctaConnect.kind === 'CONNECT' && ctaConnect.href === '/connections');
 check('cta.opportunities.when.data', ctaOpportunities.kind === 'OPPORTUNITIES' && ctaOpportunities.href === '/opportunities');
 check('cta.scan.when.connected.idle', ctaScan.kind === 'SCAN' && ctaScan.href === '/upload');
+
+// ⑨ UI-3：机会发现页（客户视图）—— 客户状态筛选、工程字段折叠、骨架屏、空/错状态
+const listHtml = render(<OpportunityList t={zhCN} />);
+check('opportunity.page.advanced.filters', listHtml.includes(zhCN.opportunitiesPage.advancedFilters));
+check('opportunity.page.advanced.hint', listHtml.includes(zhCN.opportunitiesPage.advancedHint));
+check('opportunity.page.status.localized', listHtml.includes(zhCN.status.DETECTED) && !listHtml.includes('>DETECTED<'));
+check('opportunity.page.loading.skeleton', listHtml.includes('animate-pulse'));
+check('opportunity.page.filters.count.label', listHtml.includes(zhCN.opportunitiesPage.matchesCount.replace('{count}', '0')));
+check('opportunity.page.no.premature.empty', !listHtml.includes(zhCN.opportunitiesPage.noFilteredResults));
+
+const listEnHtml = render(<OpportunityList t={enUS} />);
+check('opportunity.page.i18n.en', listEnHtml.includes(enUS.opportunitiesPage.advancedFilters));
 
 console.log(results.join('\n'));
 if (failures.length > 0) {

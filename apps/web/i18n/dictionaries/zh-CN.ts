@@ -318,6 +318,11 @@ const zhCN = {
     createCase: "建案",
     loadMore: "加载更多",
     loadedCount: "已加载 {count} 条",
+    advancedFilters: "高级筛选（工程字段）",
+    advancedHint: "仅在排障或深度核对时需要；客户默认视图无需修改这些字段。",
+    matchesCount: "当前显示 {count} 条",
+    clearFilters: "重置筛选",
+    emptyBody: "连接平台或导入账单后，系统会自动检测可追回机会。",
   },
   moneyPage: {
     title: "追回金额",
