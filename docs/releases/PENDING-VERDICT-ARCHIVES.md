@@ -5,8 +5,14 @@
 
 | # | 主题 | 抽取长度 | FNV-1a | reviewed HEAD | 状态 |
 | --- | --- | --- | --- | --- | --- |
-| 1 | **ZERO evidence**（WHOLE_SCHEMA_DIFF_ZERO 证据送审） | 3207 | （待复抽核对） | `90b1f71` | **PASS WITH REVISE** — 已读取，待归档 |
-| 2 | **SEO-3 PUBLIC API SECURITY**（公开只读 Checker/Calculator） | 4501 | `1aef0ed7` | `3066ac2` | **REVISE** — 已读取，待归档 |
+| 1 | **ZERO evidence**（WHOLE_SCHEMA_DIFF_ZERO 证据送审） | 3207 | `fa4fee5d` | `90b1f71` | **PASS WITH REVISE** — 已读取，待归档（哈希已复核） |
+| 2 | **SEO-3 PUBLIC API SECURITY**（公开只读 Checker/Calculator） | 4501 | `1aef0ed7` | `3066ac2` | **REVISE** — 已读取，待归档（哈希已复核） |
+
+### 抽取坐标（复核于 2026-10-04）
+
+会话中最近三条裁决的定位（从末尾往前）：`n=4` = SEO-3（`3066ac2`, 4501, `1aef0ed7`）→ `n=3` = ZERO evidence（`90b1f71`, 3207, `fa4fee5d`）→ `n=2` = FINAL-2（`e18e358`, 4536, `a59fc0d9`，**已归档为 MSG-20261004-26**）。
+
+抽取方法：取 `document.body.innerText` 中所有 `ChatGPT 说：` 的出现位置，按相邻两处切段；对每段裁掉 `ChatGPT 可能会出错` 及其后的 UI 尾巴与该段之后的下一条用户消息，再 trim。归档前必须用 `tools/verdict-diff/compare.mjs` 验证 `FULL_COPY_OK`。
 
 ## 归档后需立即执行的事项
 
