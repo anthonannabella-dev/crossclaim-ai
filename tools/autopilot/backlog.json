@@ -1,6 +1,6 @@
 {
   "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。",
-  "updatedAt": "2026-10-05T01:31:00.000Z",
+  "updatedAt": "2026-10-05T01:36:00.000Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -1550,7 +1550,14 @@
       "title": "GoldenFixture 语料（Amazon/TikTok/Walmart/Shopify/carrier/POD/recovery/claim package/Customs 匹配与资格/授权/费用边界）",
       "scope": "主动周期性巡检 + 漂移分类 + 自动建任务；不靠聊天心跳",
       "acceptance_criteria": "实现/用例落地；api tsc 0；如需持久化另送 Schema Delta",
-      "status": "READY"
+      "status": "PARTIAL_IMPLEMENTED_PENDING_CI",
+      "implementation_head": "(this commit)",
+      "artifacts": [
+        "apps/api/src/services/autonomy/rsi-golden-fixtures.ts",
+        "apps/api/src/__tests__/rsi-golden-fixtures.test.ts"
+      ],
+      "evidence": "vitest rsi-golden-fixtures 3/3；api tsc 0",
+      "remaining": "12 域真实 fixture 内容与归档（归档依赖 RSI-RT-06 持久化裁决）；当前交付结构契约 + 覆盖报告"
     },
     {
       "id": "RSI-INSP-05-production-to-fixture",
