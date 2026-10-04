@@ -316,3 +316,77 @@ export function buildRecoverRouteJsonLd(input: SeoRecoverRouteJsonLdInput): SeoR
     productionCredentials: 'ABSENT',
   };
 }
+
+/** SEO-4 Stage 4 —— sitemap 与 robots 必须一致：**sitemap 绝不列出被 robots 禁止的 URL**。 */
+export interface SeoRecoverSitemapInput {
+  decisions: readonly SeoRecoverRouteDecision[];
+  baseUrl: string;
+  sitemapFileName?: string;
+  /** 运维显式禁止的路径前缀（例如暂不希望被收录的目录）。 */
+  disallowPaths?: readonly string[];
+}
+
+export interface SeoRecoverSitemap {
+  entries: readonly { loc: string; slug: string | null; locale: SeoLocale }[];
+  excluded: readonly { slug: string | null; reason: 'NOT_INDEXABLE' | 'ROBOTS_DISALLOW' }[];
+  robotsTxt: string;
+  sitemapLoc: string;
+  /** 自证一致性：被排除的 URL 一定不在 entries 里（按构造保证，这里显式返回便于断言）。 */
+  consistency: { conflictCount: number };
+  externalWritePerformed: false;
+  databaseWritePerformed: false;
+  transportEnabled: false;
+  checkerPostRegistered: false;
+  productionCredentials: 'ABSENT';
+}
+
+const coveredByDisallow = (loc: string, disallows: readonly string[]): boolean => {
+  const path = loc.replace(/^https?:\/\/[^/]+/i, '');
+  return disallows.some((prefix) => prefix !== '' && (path === prefix || path.startsWith(prefix.endsWith('/') ? prefix : `${prefix}/`) || path.startsWith(prefix)));
+};
+
+export function buildRecoverSitemapAndRobots(input: SeoRecoverSitemapInput): SeoRecoverSitemap {
+  const base = input.baseUrl.replace(/\/+$/, '');
+  const disallows = input.disallowPaths ?? [];
+  const entries: { loc: string; slug: string | null; locale: SeoLocale }[] = [];
+  const excluded: { slug: string | null; reason: 'NOT_INDEXABLE' | 'ROBOTS_DISALLOW' }[] = [];
+
+  for (const decision of input.decisions) {
+    if (!decision.indexable || decision.path === null) {
+      excluded.push({ slug: decision.slug, reason: 'NOT_INDEXABLE' });
+      continue;
+    }
+    const loc = `${base}${decision.path}`;
+    if (coveredByDisallow(loc, disallows)) {
+      excluded.push({ slug: decision.slug, reason: 'ROBOTS_DISALLOW' });
+      continue;
+    }
+    entries.push({ loc, slug: decision.slug, locale: decision.locale });
+  }
+
+  const sitemapLoc = `${base}/${input.sitemapFileName ?? 'sitemap-recover.xml'}`;
+  const robotsTxt = [
+    'User-agent: *',
+    'Allow: /',
+    ...disallows.map((prefix) => `Disallow: ${prefix}`),
+    '',
+    `Sitemap: ${sitemapLoc}`,
+    '',
+  ].join('\n');
+
+  // 一致性自证：遍历 entries 重新检查一次，任何被 disallow 覆盖的都算冲突（应当恒为 0）。
+  const conflictCount = entries.filter((entry) => coveredByDisallow(entry.loc, disallows)).length;
+
+  return {
+    entries,
+    excluded,
+    robotsTxt,
+    sitemapLoc,
+    consistency: { conflictCount },
+    externalWritePerformed: false,
+    databaseWritePerformed: false,
+    transportEnabled: false,
+    checkerPostRegistered: false,
+    productionCredentials: 'ABSENT',
+  };
+}

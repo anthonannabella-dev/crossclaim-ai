@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-10-04T14:16:19.458Z",
-  "acceptance_head": "84b20a7",
+  "generated_at": "2026-10-04T14:20:54.570Z",
+  "acceptance_head": "ddeb349",
   "protocol": "docs/releases/FINAL-ACCEPTANCE-PROTOCOL.md",
   "areas": [
     {
@@ -178,7 +178,8 @@
     "seo-8-seo-contract-tests",
     "SEO-4-STAGE-1-recover-route-skeleton",
     "SEO-4-STAGE-2-recover-metadata",
-    "SEO-4-STAGE-3-recover-jsonld"
+    "SEO-4-STAGE-3-recover-jsonld",
+    "SEO-4-STAGE-4-recover-sitemap-robots"
   ],
   "host_action_required": [
     "provider developer/partner account registration",

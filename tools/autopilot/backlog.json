@@ -1,6 +1,6 @@
 {
   "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。",
-  "updatedAt": "2026-10-04T14:17:00.000Z",
+  "updatedAt": "2026-10-04T14:21:00.000Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -1092,6 +1092,16 @@
       "title": "/recover JSON-LD 只由真实 sourceReferences 生成",
       "scope": "buildRecoverRouteJsonLd：不可索引或无真实 sourceReferences → 不输出；面包屑/FAQ 仅在真实存在时生成并记录 skip reason",
       "acceptance_criteria": "RECOVER_JSONLD_NONE_WHEN_NOT_INDEXABLE / RECOVER_JSONLD_ONLY_REAL_SOURCES / RECOVER_JSONLD_NO_FAQ_WITHOUT_FAQ 全绿；tsc 0",
+      "status": "IMPLEMENTED_PENDING_CI",
+      "implementation_head": "(this commit)"
+    },
+    {
+      "id": "SEO-4-STAGE-4-recover-sitemap-robots",
+      "priority": "P1",
+      "source_backlog_id": "SEO-4-RECOVER-WIRING-PLAN.md 阶段 4",
+      "title": "/recover sitemap 只纳入 gate 通过 URL，robots 与 sitemap 一致",
+      "scope": "buildRecoverSitemapAndRobots：indexable+200 才进 sitemap；被 disallow 覆盖的 URL 从 sitemap 移除并记 ROBOTS_DISALLOW；输出 robots.txt 含 Sitemap 行；consistency.conflictCount 自证恒为 0",
+      "acceptance_criteria": "RECOVER_SITEMAP_ONLY_GATE_PASSING / RECOVER_ROBOTS_DISALLOW_REMOVES_SITEMAP_ENTRY 全绿；tsc 0",
       "status": "IMPLEMENTED_PENDING_CI",
       "implementation_head": "(this commit)"
     }

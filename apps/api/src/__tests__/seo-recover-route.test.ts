@@ -8,6 +8,7 @@
 import { describe, expect, it } from 'vitest';
 
 import {
+  buildRecoverSitemapAndRobots,
   buildRecoverRouteMetadata,
   buildRecoverRouteJsonLd,
   SEO_RECOVER_ROUTE_BOUNDARY,
@@ -224,5 +225,46 @@ describe('SEO-4 Stage 3 JSON-LD（只由真实来源生成）', () => {
     });
     expect(withFaq.skipped).not.toContain('NO_FAQ');
     expect(withFaq.blocks.map((block) => String(block['@type'] ?? ''))).toContain('FAQPage');
+  });
+});
+
+describe('SEO-4 Stage 4 sitemap / robots 一致性', () => {
+  const BASE = 'https://crossclaim.example';
+
+  it('RECOVER_SITEMAP_ONLY_GATE_PASSING：只有 indexable 的 200 页进 sitemap，其余记录原因', () => {
+    const indexable = resolveRecoverRoute(input({ requestedLocale: 'en' }));
+    const gateWithheld = resolveRecoverRoute(input({ rules: [rule({ indexable: false })] }));
+    const expired = resolveRecoverRoute(input({ rules: [rule({ effectiveTo: '2026-09-01T00:00:00.000Z' })] }));
+    const fallback = resolveRecoverRoute(input({ requestedLocale: 'fr' }));
+
+    const site = buildRecoverSitemapAndRobots({
+      decisions: [indexable, gateWithheld, expired, fallback],
+      baseUrl: BASE,
+    });
+
+    expect(site.entries.map((entry) => entry.loc)).toEqual([`${BASE}${indexable.path}`]);
+    expect(site.excluded.map((entry) => entry.reason)).toEqual([
+      'NOT_INDEXABLE',
+      'NOT_INDEXABLE',
+      'NOT_INDEXABLE',
+    ]);
+    expect(site.consistency.conflictCount).toBe(0);
+    expect(site.robotsTxt).toContain(`Sitemap: ${site.sitemapLoc}`);
+    // robots 不包含任何被排除的路径（避免与 sitemap 矛盾）。
+    for (const excluded of site.excluded) expect(excluded.slug === null || !site.robotsTxt.includes(excluded.slug)).toBe(true);
+  });
+
+  it('RECOVER_ROBOTS_DISALLOW_REMOVES_SITEMAP_ENTRY：robots 禁止的路径绝不进 sitemap（一致优先）', () => {
+    const indexable = resolveRecoverRoute(input({ requestedLocale: 'en' }));
+    const site = buildRecoverSitemapAndRobots({
+      decisions: [indexable],
+      baseUrl: BASE,
+      disallowPaths: ['/recover'],
+    });
+
+    expect(site.entries).toEqual([]);
+    expect(site.excluded).toEqual([{ slug: indexable.slug, reason: 'ROBOTS_DISALLOW' }]);
+    expect(site.robotsTxt).toContain('Disallow: /recover');
+    expect(site.consistency.conflictCount).toBe(0);
   });
 });
