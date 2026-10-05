@@ -152252,3 +152252,242 @@ PRODUCTION_READY = false
 这轮不是小问题：现在的 same-cohort proof 会让真实 Canary 差异无法出现。先把“同输入”与“不同输出”分开，U4 才能真正 CLOSED。
 ```
 
+### [MSG-20261005-78] PHASE 5 U4 FINAL2 裁决 = PASS WITH REVISE / NOT CLOSED（OUTCOME_INDEPENDENT_COHORT_MODEL / WINDOW_VALIDATION / METRIC_DELTA_REACHABILITY / INSUFFICIENT_EVIDENCE_ROLLBACK / NO_EXECUTION = PASS；SAME_COHORT_PROOF / CANARY_EVALUATION_DIGEST_FULL_BINDING = REVISE；PHASE5_U4_FINAL3_REQUIRED = YES）， reviewed ref 566b54ad
+
+```text
+DECISION
+
+OUTCOME_INDEPENDENT_COHORT_MODEL = PASS
+WINDOW_VALIDATION = PASS
+METRIC_DELTA_REACHABILITY = PASS
+INSUFFICIENT_EVIDENCE_ROLLBACK = PASS
+NO_EXECUTION = PASS
+SAME_COHORT_PROOF = REVISE
+CANARY_EVALUATION_DIGEST_FULL_BINDING = REVISE
+PHASE_5_U4 = PASS WITH REVISE / NOT CLOSED
+PHASE5_U4_FINAL3_REQUIRED = YES
+Reviewed HEAD：566b54ad
+GitHub Actions：NOT_OBSERVED
+KEEP
+
+这次核心方向修对了：
+
+cohort identity 已与 outcome 解耦；
+baseline/proposal 允许产生不同 outcome 和不同 metrics；
+successRate regression 分支重新可达；
+CohortRef 有 provenance/fingerprint/deep-freeze；
+window/dataset/size 门成立；
+数据不足强制 ROLLBACK_REQUIRED；
+U2 rollback anchor、SHADOW_ONLY、无 apply/promote/rollout 全部保持。
+CHANGE
+1. 现在只证明了“数量相同”，没有证明 evaluation 真消费了 CohortRef 的那些 taskRefs
+
+当前实际检查：
+
+纯文本
+cohortRef.cohortSize === baseline.totalRecords
+cohortRef.cohortSize === proposal.totalRecords
+
+但没有检查：
+
+纯文本
+baseline inputs == cohortRef.taskRefs
+proposal inputs == cohortRef.taskRefs
+
+而测试已经直接暴露这个漏洞：
+
+纯文本
+CohortRef.taskRefs = [t0,t1,t2,t3]
+
+baseline = run(..., "base")
+proposal = run(..., "prop")
+
+baseline/proposal 的 taskType 都不同，却仍被认定为同 cohort。
+
+所以现在实际是：
+
+“两边都是 4 条记录”
+
+而不是：
+
+“两边确实运行了同样的 4 个输入”。
+
+createCohortRef() 的 WeakSet 只能证明对象经过 factory，不能证明其中 taskRefs 就是 evaluation 真正使用的输入。
+
+正确修复
+
+不要重新用 outcome digest。
+
+建议新增可信中间 artifact：
+
+VerifiedCohortRun
+
+例如：
+
+纯文本
+Verified CohortRef
++
+exact input taskRefs
++
+Phase4 OfflineEvaluation
+↓
+VerifiedCohortRun
+
+至少包含：
+
+cohortRefDigest
+taskRefs
+inputSetDigest
+evaluationDigest
+datasetVersion
+evaluationWindow
+mode: BASELINE | PROPOSAL_SHADOW
+
+并且构造时必须证明：
+
+纯文本
+actual stable input refs == cohortRef.taskRefs
+
+最理想是由 server-owned cohort/task source 产生 stable refs，不允许调用方自己报一组 refs。
+
+Canary 最终接受：
+
+纯文本
+Verified BaselineCohortRun
+Verified ProposalCohortRun
+
+并要求：
+
+纯文本
+same cohortRefDigest
+same inputSetDigest
+same exact taskRefs
+different evaluationDigest allowed
+
+这才是真正：
+
+同输入，不同输出。
+
+2. “full evaluation digest binding”仍没完成
+
+当前 CanaryShadowEvaluation 里没有：
+
+baselineEvaluationDigest
+proposalEvaluationDigest
+
+Canary digest 虽然绑定了完整 metrics JSON，但 Phase 4 evaluationDigest 还包含其它 identity，例如 excluded-set / verified evaluation identity。
+
+因此上一轮明确要求的：
+
+纯文本
+baselineEvaluation.evaluationDigest
+proposalEvaluation.evaluationDigest
+
+仍然没有落地。
+
+FINAL3 必须：
+
+artifact 显式保存两者；
+canary fingerprint 绑定两者；
+canary evaluationDigest preimage 绑定两者。
+
+这样才不需要在 Phase5 重写 Phase4 identity 逻辑。
+
+RISKS
+
+当前仍可以：
+
+纯文本
+CohortRef = [A,B,C,D]
+
+baseline 实际跑 [E,F,G,H]
+proposal 实际跑 [I,J,K,L]
+
+两侧 totalRecords 都是 4
+
+然后通过 U4。
+
+这意味着现在虽然解决了“同 output”的错误，但又变成了：
+
+“相同数量 ≠ 相同 cohort”
+
+如果直接进 U5，Controlled Adoption Review 可能信任一个来自完全不同输入样本的 Canary PASS。
+
+TEST
+
+FINAL3 最少补：
+
+CohortRef [A,B,C,D]。
+baseline exact [A,B,C,D] → PASS。
+proposal exact [A,B,C,D]、outcome 不同 → PASS。
+proposal [A,B,C,X]，数量仍为 4 → REJECT。
+proposal [E,F,G,H]，数量仍为 4 → REJECT。
+missing one → REJECT。
+extra one → REJECT。
+reorder exact same set → PASS。
+baseline/proposal evaluationDigest 可以不同。
+Canary artifact 保存：
+baselineEvaluationDigest
+proposalEvaluationDigest
+改任一 Phase4 evaluation identity，即使核心 metrics 恰好一样，Canary digest 也必须变化。
+metric improvement/regression 仍保持可达。
+当前 window / rollback / anti-tamper tests 保持 green。
+NEXT
+
+只做：
+
+P5-U4 FINAL3 — exact input-set binding + Phase4 evaluationDigest binding
+
+推荐最终可信链：
+
+纯文本
+Server-owned Cohort Source
+        ↓
+Verified CohortRef
+        ↓
+ ┌──── exact same inputSet ────┐
+ ↓                             ↓
+Baseline Run              Proposal Shadow Run
+ ↓                             ↓
+Verified CohortRun A      Verified CohortRun B
+ ↓                             ↓
+Phase4 Eval A             Phase4 Eval B
+ └────────── compare ──────────┘
+              ↓
+CANARY_SHADOW_EVALUATION
+
+要求：
+
+inputSetDigest A == inputSetDigest B == CohortRef.inputSetDigest
+
+但：
+
+evaluationDigest A != evaluationDigest B
+
+完全允许。
+
+FINAL3 PASS 后，才授权进入：
+
+P5-U5 Controlled Adoption Review
+
+PRODUCTION
+
+继续全部 HOLD：
+
+REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing
+
+继续：
+
+SECOND_* = FORBIDDEN
+L5_RELAXATION = FORBIDDEN
+
+保持：
+
+MODEL_GATEWAY_RUNTIME_WIRED = false
+ACTION_RUNTIME_PRODUCTION_ENABLED = false
+META_IMPROVEMENT_INTEGRATED = false
+PRODUCTION_READY = false
+
+这次已经从“错误绑定 outcome”进步到了 outcome-independent cohort，但还差最后一层：必须证明两份 evaluation 真的是 CohortRef 那一批输入，而不是仅仅记录数量相同。
+```
+
