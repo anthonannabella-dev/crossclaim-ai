@@ -2270,3 +2270,11 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 新增 docs/releases/RECOVERY-SI-PHASE2-REMAINDER-QUEUE-REGISTRATION.md（只登记边界与未决问题，零代码、零 Schema）。
 - backlog 增 recovery-si-phase2-remainder-queue = QUEUED_DESIGN_REQUIRED（ARCH_REVIEW_REQUIRED = true，allowed_files 仅 docs/releases/**）。
 - 未变：P2_E = HOLD_SCHEMA_DELTA / P2_F = HOLD / P2_G = HOLD；四类 FORBIDDEN 不变；FINAL_ACCEPTANCE_HEAD = 0f7f7ac。
+
+## 2026-10-05T06:55Z — Recovery SI P2-E 持久化设计/实施边界送审包（零代码）
+- 新增 docs/releases/RECOVERY-SI-PHASE2-E-DESIGN-REQUEST.md：REVIEWED_HEAD = 48e6e2a3。
+- 分岔：Option A（复用既有 RecoveryPackage 语义 + 最小写入白名单，建议）vs Option B（新增 append-only 实体 + 独立 Schema Delta）。
+- 不变量：canonical READY 对齐门禁 / tenant 四点绑定 / 幂等收敛到 (organizationId, claimItemId, packageVersion, packageDigest) / 并发唯一赢家 / append-only + CAS 生命周期 / lineage 可回溯 / 零外写 / 零网络零凭据 / 不消费审批不调 executor / CUSTOMS L5 继续拒绝。
+- 建议最小证据 P2E-01..10（含真实 PostgreSQL 迁移与触发器清单、失败语义与补偿）。
+- 本轮零代码、零 Schema、零迁移、零运行时接线；P2_F / P2_G 继续 HOLD，真实执行必须另开 P2-G。
+- 状态：等待 P2-E 设计裁决（送审唤醒待下一窗口发出）。
