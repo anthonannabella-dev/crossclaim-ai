@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "83ab346c",
+  "head": "88bf3f70",
   "status": "RECONCILED",
   "current_task": "RSI 生产可执行闭环（7 点收口）：RSI_RUNTIME_READY = PASS；MODEL_PROVIDER_READY = 本地仿真已接线（真实网络/付费 HOLD）；PERSISTENCE_READY = ephemeral 已验证、durable 需宿主非生产 DATABASE_URL；REBOOT_RECONCILE_READY = NOT_IMPLEMENTED（下一单元）；SYSTEMD_VALIDATED = 需宿主 Linux 实机",
   "next_task": "BG-016 单一 Acceptance Head + 四份状态一致 guard（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍 HOST_ACTION_REQUIRED 或 HOLD",
@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-40",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T23:35:04.074Z",
+  "updated_at": "2026-10-05T23:38:00.072Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -50,15 +50,15 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
-  "next_execution_unit": "No ready safe unit for PHASE 5 (functionally closed, queue empty after MSG-20261005-82 archival). Await direction: possible next options are a Controlled Adoption Plan / Execution Gate unit (requires explicit auditor/host authorization and would still be plan-only), or a new phase defined by the host. All HOLD/FORBIDDEN boundaries and the non-blocking debt list remain in effect.",
+  "next_execution_unit": "PHASE 5 closure verdict: (1) read verdict; (2) extract to work/stage/verdict-p5close-raw.txt and archive verbatim (MSG-20261005-84) with compare.mjs FULL_COPY_OK + commit/push; (3) durable state: PHASE_5_META_IMPROVEMENT = CLOSED (formal) if PASS; (4) if the auditor authorizes a further unit (e.g. plan-only Controlled Adoption Plan / Execution Gate) queue it per its minimum gate; boundaries unchanged.",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-05T23:35:04.074Z",
+  "last_tick_at": "2026-10-05T23:38:00.072Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "PHASE 5 U5 verdict archived (MSG-20261005-82, FULL_COPY_OK, archive commit eb0dfbd6): ELIGIBLE_CANARY_GATE / TICKET_PROVENANCE-ANTI_TAMPER / REPLAY-EXPIRY-REVOCATION / REVIEWER_ROLE_SCOPE / NO_EXECUTION-REVIEW_ONLY = PASS; REJECTED_VERDICT_SEMANTICS = REVISE (fixed by U5 FINAL, MSG-20261005-83); PHASE5_U5_FINAL_REQUIRED = YES. Archive index for PHASE 5 is now complete: MSG-20261005-65..83.",
+  "last_action": "PHASE 5 CLOSURE CHECKPOINT (docs-only) delivered and submitted: docs/releases/SI-RUNTIME-PHASE5-CONTROLLED-LEARNING-ADOPTION-CLOSURE.md updated to the MSG-20261005-83 acceptance criteria (U1-U5 registry with final reviewed HEADs + verdicts + CLOSED, full 8-link trust chain, semantics freeze, permanent boundary registry), commit 88bf3f70; submission marker [CODEX-PHASE5-CLOSURE] delivered to the audit chat.",
   "last_action_at": "2026-10-05T23:24:28.898Z",
-  "next_action": "PHASE 5 complete: U1-U5 PASS / CLOSED, closure checkpoint delivered (83ab346c), all verdicts archived. Await host/auditor direction for any next phase or unit; SAFE_CONTINUATION_QUEUE has no ready work.",
-  "current_head": "83ab346c",
-  "last_completed_head": "83ab346c",
+  "next_action": "Read the closure checkpoint verdict (marker [CODEX-PHASE5-CLOSURE], REVIEWED_HEAD = 88bf3f70) -> archive (MSG-20261005-84) -> record PHASE 5 = CLOSED if PASS; otherwise apply the narrow doc fix.",
+  "current_head": "88bf3f70",
+  "last_completed_head": "88bf3f70",
   "reviewed_head": "add99ec3",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -5169,8 +5169,8 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "P5CLOSE-1 (done) MSG-20261005-82 archived",
-    "CLOSE-2 (blocked on direction) any new unit/phase requires auditor or host specification",
+    "CLOSE-1 read PHASE 5 closure verdict (88bf3f70) -> archive MSG-20261005-84 -> compare FULL_COPY_OK -> commit/push -> durable state",
+    "CLOSE-2 if PASS -> PHASE 5 = CLOSED (formal); await/act on any authorized next unit",
     "CLOSE-3 non-blocking debt: full SHA-256 digests, fingerprint schema upkeep, scanRawPayloadKeys bounded traversal, P2E-DB5 test-isolation"
   ],
   "full_autonomous_internal_execution": "VERIFIED",
@@ -9292,7 +9292,7 @@
   "AUDIT_REVISE_LOOP_AUTO_CONTINUE": true,
   "HOST_LIMIT_MEANS_STOP": false,
   "STOP_ONLY_ON_TRUE_HOST_DEPENDENCY_OR_COMPLETE": true,
-  "CONTINUATION_REQUIRED": false,
+  "CONTINUATION_REQUIRED": true,
   "heartbeat": {
     "automation_id": "crossclaim-ai-bridge-5min",
     "name": "crossclaim-si-watchdog-1min",
@@ -9321,7 +9321,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-05T23:35:04.074Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-05T23:38:00.072Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -10973,10 +10973,12 @@
     "phase5_functional_revision_required": "NO"
   },
   "phase5_closure_checkpoint": {
-    "status": "DELIVERED",
-    "commit": "83ab346c",
+    "status": "SUBMITTED / AWAITING_VERDICT",
+    "commit": "88bf3f70",
     "doc": "docs/releases/SI-RUNTIME-PHASE5-CONTROLLED-LEARNING-ADOPTION-CLOSURE.md",
-    "scope": "docs-only"
+    "marker": "[CODEX-PHASE5-CLOSURE]",
+    "delivered": true,
+    "expected_message_id": "MSG-20261005-84"
   },
   "phase5_u5_verdict": {
     "message_id": "MSG-20261005-82",
