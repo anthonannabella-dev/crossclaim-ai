@@ -148070,3 +148070,122 @@ META_IMPROVEMENT_INTEGRATED = false
 PRODUCTION_READY = false
 ```
 
+### [MSG-20261005-54] PHASE 3 ACTION RUNTIME FINAL3 裁决 = PASS / CLOSED（PHASE3_FINAL4_REQUIRED=NO）· reviewed ref fe3c33e9
+
+```text
+
+DECISION
+
+U2 opaque-ref scheme allowlist：PASS
+U1 trusted sandbox provenance：PASS
+U2 credential binding：PASS
+U3：PASS（EXACTLY_ONCE_CONTRACT / SANDBOX scope）
+U4 retry/reconcile：PASS
+U5/U6 Shared Guard + HITL + evidence：PASS
+enforcement 07：PASS
+PHASE_3_ACTION_RUNTIME = PASS / CLOSED
+PHASE3_FINAL4_REQUIRED = NO
+Reviewed HEAD：fe3c33e9
+授权进入 PHASE 4 — OUTCOME / LEARNING DATA PIPELINE
+
+KEEP
+
+credential ref 已从泛 URI regex 改为明确 allowlist：
+vault:
+provider-credential:
+secret-ref:
+sk: / pk: / Bearer: / https: / file: / javascript: 均无法再作为 opaque ref。
+大小写归一化后再匹配，不存在大小写逃逸。
+provider + tenant binding 保持 fail-closed。
+Action Pack 只能通过正式 createAppActionGuard() composition 获取 Guard。
+trusted sandbox WeakSet、idempotency fingerprint/CONFLICT、approval verifier、external-write HOLD 均未回退。
+
+CHANGE
+
+NONE。
+不再制造 PHASE 3 FINAL4。
+
+RISKS
+
+PHASE 3 的关闭范围必须保持准确：
+
+EXACTLY_ONCE_CONTRACT/SANDBOX = PASS
+
+但：
+
+PRODUCTION_DURABLE_EXACTLY_ONCE = NOT YET
+
+因为 durable PostgreSQL/Prisma 原子 store 尚未接入。这个留到真实 Action Runtime/Provider production wiring，不应重新打开 PHASE 3。
+
+同样：
+
+guardDeps 必须继续是 server-owned composition dependency，禁止未来从 HTTP/body/client 参数反序列化构造。
+
+P2E-DB5 继续登记为 test-isolation debt，与本阶段关闭无关。
+
+TEST
+
+已核代码：
+
+显式 scheme allowlist 已生效；
+泛 URI scheme 已被删除；
+新负例覆盖 sk:/pk:/Bearer:/https:/file:/javascript:；
+vault:providers/amazon/org-1 保持合法；
+b6fce775 → fe3c33e9 本轮代码改动只集中在 credential allowlist + 对应测试，没有发现范围外执行边界改动。
+
+状态：
+
+LOCAL_REGRESSION = PASS
+GITHUB_CI = NOT_OBSERVED
+
+NEXT
+
+进入 PHASE 4 — OUTCOME / LEARNING DATA PIPELINE。
+
+建议冻结目标为：
+
+provider/action outcome
+→ canonical outcome normalization
+→ outcome ↔ action/proposal/evidence lineage
+→ success/failure/recovery-value labels
+→ learning dataset projection
+→ quality/cost feedback
+→ immutable learning evidence
+→ offline evaluation
+→ meta-improvement candidate proposal
+
+关键原则：
+
+学习数据只能“观察和提出改进建议”，不得自动修改 Policy / Guard / Router / Action Runtime。
+
+任何 meta-improvement 仍必须经过外部 Judge / 人工裁决后才能进入下一阶段。
+
+PRODUCTION
+
+继续保持全部 HOLD：
+
+REAL_MODEL_NETWORK
+PAID_MODEL_CALLS
+EXTERNAL_WRITE
+PAYMENT
+TRANSPORT
+PRODUCTION_CREDENTIALS
+PRODUCTION_ENABLEMENT
+P2_F / P2_G
+CUSTOMS real filing
+
+以及：
+
+SECOND_* = FORBIDDEN
+L5_RELAXATION = FORBIDDEN
+
+继续：
+
+MODEL_GATEWAY_RUNTIME_WIRED = false
+ACTION_RUNTIME_PRODUCTION_ENABLED = false
+META_IMPROVEMENT_INTEGRATED = false
+PRODUCTION_READY = false
+
+PHASE 3 正式封板。
+```
+
