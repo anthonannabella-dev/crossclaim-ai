@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "fe3c33e9",
+  "head": "5510401f",
   "status": "RECONCILED",
   "current_task": "RSI 生产可执行闭环（7 点收口）：RSI_RUNTIME_READY = PASS；MODEL_PROVIDER_READY = 本地仿真已接线（真实网络/付费 HOLD）；PERSISTENCE_READY = ephemeral 已验证、durable 需宿主非生产 DATABASE_URL；REBOOT_RECONCILE_READY = NOT_IMPLEMENTED（下一单元）；SYSTEMD_VALIDATED = 需宿主 Linux 实机",
   "next_task": "BG-016 单一 Acceptance Head + 四份状态一致 guard（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍 HOST_ACTION_REQUIRED 或 HOLD",
@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-40",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T18:26:08.567Z",
+  "updated_at": "2026-10-05T18:32:54.257Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -21,7 +21,7 @@
   "ci_result": "completed_success",
   "fix_pr": "https://github.com/anthonannabella-dev/crossclaim-ai/pull/10",
   "channel_status": "HEALTHY（主审计会话 = https://chatgpt.com/c/6ac385db-cb60-83ec-9754-c7a30633a8c5（HOST 新开；MSG-20261005-30 起）；历史会话 https://chatgpt.com/c/6ac1cdf0-1ec8-83ec-8036-0e66fcf5c6b9 保留 MSG-22..29 逐字归档）",
-  "pending_verdict_unarchived": null,
+  "pending_verdict_unarchived": "PHASE 4 U1（Reviewed HEAD 5510401f）—— 已投递，等待裁决",
   "b2_status": "PASS（MSG-20260930-10 工程修复 + MSG-20260930-11 集成 PASS/MERGE APPROVED）",
   "protocol": "DUAL_CHANNEL_WAKEUP（GitHub = 正式总线 / ChatGPT Web = 仅唤醒）",
   "integration_pr": "https://github.com/anthonannabella-dev/crossclaim-ai/pull/11",
@@ -50,14 +50,14 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
-  "next_execution_unit": "PHASE 4 — OUTCOME / LEARNING DATA PIPELINE（按裁决 NEXT 的冻结目标）：provider/action outcome → canonical outcome normalization → outcome ↔ action/proposal/evidence lineage → success/failure/recovery-value labels → learning dataset projection → quality/cost feedback → immutable learning evidence → offline evaluation → meta-improvement candidate proposal。硬规则：学习数据只做“观察 + 提出改进建议”，不得自动修改 Policy / Guard / Router / Action Runtime；任何 meta-improvement 必须经外部 Judge / 人工裁决。流程：code → tests → regression → tsc → commit → push → audit → durable state。PHASE 4 边界不变：REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT 全部 HOLD；META_IMPROVEMENT_INTEGRATED 保持 false（无真实 E2E）。",
+  "next_execution_unit": "PHASE 4 U1 裁决处理：读取右侧审核会话（tab 14）完整 verdict（严格匹配 REVIEWED_HEAD = 5510401f）→ 原样逐字归档 AI-ARCHITECT-INBOX.md（MSG-20261005-55）→ compare.mjs 必须 FULL_COPY_OK → durable state 对账。若 PASS → 继续 PHASE 4 U2（outcome ↔ action/proposal/evidence lineage 强化）→ U3（learning dataset projection / immutable learning evidence）→ U4（offline evaluation）→ U5（meta-improvement candidate proposal，只提建议）；若 PASS WITH REVISE → 按裁决窄修。",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-05T18:26:08.567Z",
+  "last_tick_at": "2026-10-05T18:32:54.257Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "PHASE 3 ACTION RUNTIME = PASS / CLOSED（MSG-20261005-54，Reviewed HEAD fe3c33e9，PHASE3_FINAL4_REQUIRED = NO）；裁决已原样逐字归档（compare.mjs = FULL_COPY_OK）；U1/U2/U3/U4/U5-U6/enforcement 07 全部 PASS；授权进入 PHASE 4。",
-  "last_action_at": "2026-10-05T18:26:08.567Z",
-  "next_action": "PHASE 4 — OUTCOME / LEARNING DATA PIPELINE 启动",
-  "current_head": "fe3c33e9",
+  "last_action": "PHASE 4 U1 已实施并送审：新增 apps/api/src/services/outcome-learning/outcome-record.ts（16 维 canonical outcome 契约 + lineage 三元组 + 稳定 digest；buildOutcomeRecord fail-closed；projectLearningDataset 纯只读投影）+ 9 条验收；push 5510401f；投递 [CODEX-PHASE4-U1]（Reviewed HEAD 5510401f），送达三检通过，等待裁决。",
+  "last_action_at": "2026-10-05T18:32:54.257Z",
+  "next_action": "读取 PHASE 4 U1 裁决 → 逐字归档 + compare.mjs FULL_COPY_OK + durable state 对账",
+  "current_head": "5510401f",
   "last_completed_head": "6cba0639",
   "reviewed_head": "add99ec3",
   "claim_submit_batch": {
@@ -5169,11 +5169,11 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "PHASE4-1 canonical outcome 记录契约（task type/domain/provider/strategy/model tier/cost/latency/evidence quality/action result/rejection reason/recovery amount/success/human intervention/retry-reconcile/final outcome）",
-    "PHASE4-2 outcome ↔ action/proposal/evidence lineage（append-only 引用，不复制原始 payload）",
-    "PHASE4-3 learning dataset projection（只读投影 + 不可变 learning evidence）",
-    "PHASE4-4 offline evaluation + meta-improvement candidate proposal（只提建议，不自动改策略）",
-    "PHASE4-5 tests → regression → tsc → commit → push → PHASE 4 送审 → 逐字归档 → compare.mjs → durable state"
+    "PHASE4-0 读取 PHASE 4 U1 裁决（tab 14，匹配 Reviewed HEAD 5510401f）+ 逐字归档 MSG-20261005-55 + compare.mjs + durable state",
+    "PHASE4-U2 outcome ↔ action/proposal/evidence lineage 强化（引用不可变、append-only 语义）",
+    "PHASE4-U3 learning dataset projection / immutable learning evidence（复用 rsi-evidence-ledger，不建第二证据存储）",
+    "PHASE4-U4 offline evaluation（只评估，不改策略）",
+    "PHASE4-U5 meta-improvement candidate proposal（只提建议，必须经外部 Judge）"
   ],
   "full_autonomous_internal_execution": "VERIFIED",
   "dispatcher_acceptance": {
@@ -9323,7 +9323,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-05T18:26:08.567Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-05T18:32:54.257Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -9681,5 +9681,20 @@
       "guardDeps 必须保持 server-owned composition dependency（禁止由 HTTP/body/client 反序列化构造）",
       "P2E-DB5 = test-isolation debt，与本阶段关闭无关"
     ]
+  },
+  "phase4_u1": {
+    "status": "SUBMITTED / AWAITING_VERDICT",
+    "reviewed_head": "5510401f",
+    "pushed": true,
+    "files": [
+      "apps/api/src/services/outcome-learning/outcome-record.ts",
+      "apps/api/src/__tests__/outcome-learning.test.ts"
+    ],
+    "local_verification": {
+      "tsc": "PASS",
+      "targeted": "outcome-learning 9/9",
+      "regression": "93 files / 947 tests PASS",
+      "github_ci": "NOT_OBSERVED"
+    }
   }
 }
