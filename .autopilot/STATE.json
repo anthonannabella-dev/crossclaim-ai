@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-40",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T23:05:08.171Z",
+  "updated_at": "2026-10-05T23:07:37.898Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -52,7 +52,7 @@
   "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
   "next_execution_unit": "PHASE 5 next unit (Controlled Adoption Review): first read NEXT section of MSG-20261005-81 in AI-ARCHITECT-INBOX.md; implement per that spec; keep all boundaries; then audit + archive (MSG-20261005-82) + durable state.",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-05T23:05:08.171Z",
+  "last_tick_at": "2026-10-05T23:07:37.898Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
   "last_action": "PHASE 5 U4 FINAL4 verdict archived (MSG-20261005-81, FULL_COPY_OK, archive commit 4bb6311e): SAME_COHORT_PROOF / EXACT_INPUT_SET_TO_EVALUATION_BINDING / VERIFIED_COHORT_RUN_PROVENANCE / CANARY_EVALUATION_DIGEST_FULL_BINDING / METRIC_DELTA_REACHABILITY / U2_ROLLBACK_ANCHOR = PASS; PHASE_5_U4 = PASS / CLOSED; PHASE5_U4_FINAL5_REQUIRED = NO. Authorized to proceed to the next phase-5 unit (Controlled Adoption Review).",
   "last_action_at": "2026-10-05T23:01:02.525Z",
@@ -5169,9 +5169,9 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "P5U5-1 read MSG-20261005-81 NEXT for Controlled Adoption Review minimum requirements",
-    "P5U5-2 implement + tests + regression + tsc + commit + push",
-    "P5U5-3 audit -> archive (MSG-20261005-82) -> compare FULL_COPY_OK -> durable state",
+    "P5U5-1 implement controlled-adoption-review.ts per frozen gate: verified canary (ELIGIBLE, no triggers, insufficientEvidence false) + verified proposal (proposalDigest match) + verified rollback plan (digest match, baseline identity identical to canary) -> CONTROLLED_ADOPTION_REVIEW_TICKET (14 bindings, scope exactly CONTROLLED_ADOPTION_REVIEW, provenance/fingerprint/deep-freeze) -> verdict APPROVED/REJECTED (bound ticketDigest + canary/proposal/rollback digests + reviewerId/role/scope/decidedAt/reason/verdictDigest, provenance) with one-ticket-one-verdict digest-keyed replay, expiry/revocation fail-closed, role EXTERNAL_JUDGE/HUMAN_OPERATOR only, and APPROVED_FOR_CONTROLLED_ADOPTION_PLANNING semantics (no apply/promotion/rollout/mutation)",
+    "P5U5-2 tests (gate matrix incl. ROLLBACK_REQUIRED / INSUFFICIENT_EVIDENCE / provenance / proposal / rollback mismatches; ticket+verdict provenance & anti-tamper; replay/expiry/revoke/scope; APPROVED still no apply) + regression + tsc + commit + push",
+    "P5U5-3 audit U5 -> archive (MSG-20261005-82) -> compare FULL_COPY_OK -> durable state",
     "P5U5-4 non-blocking debt: full SHA-256 digests, fingerprint schema upkeep, scanRawPayloadKeys bounded traversal, P2E-DB5 test-isolation"
   ],
   "full_autonomous_internal_execution": "VERIFIED",
@@ -9322,7 +9322,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-05T23:05:08.171Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-05T23:07:37.898Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -10885,5 +10885,42 @@
       "PHASE_5_U4 = PASS / CLOSED"
     ],
     "phase5_u4_final5_required": "NO"
+  },
+  "phase5_u5_spec": {
+    "source": "MSG-20261005-81 NEXT",
+    "inputGate": [
+      "isVerifiedCanaryShadowEvaluation(canary) === true",
+      "canary.recommendation === ELIGIBLE_FOR_CONTROLLED_ADOPTION_REVIEW",
+      "canary.insufficientEvidence === false",
+      "canary.triggers.length === 0",
+      "verified Controlled Config Proposal with proposal.proposalDigest === canary.proposalDigest",
+      "verified Rollback Plan with rollbackPlan.rollbackPlanDigest === canary.rollbackPlanDigest",
+      "rollback baseline identity identical to canary"
+    ],
+    "forbiddenEntry": [
+      "ROLLBACK_REQUIRED",
+      "INSUFFICIENT_EVIDENCE",
+      "provenance mismatch",
+      "proposal mismatch",
+      "rollback mismatch"
+    ],
+    "ticket": "CONTROLLED_ADOPTION_REVIEW_TICKET binding canaryEvaluationDigest/proposalDigest/candidateDigest/verdictDigest/rollbackPlanDigest/baselineSnapshotDigest/baselineConfigFingerprint/cohortDigest/baselineEvaluationDigest/proposalEvaluationDigest/requestedAt/expiresAt/nonce/reviewerScope; scope exactly CONTROLLED_ADOPTION_REVIEW; provenance+fingerprint+deep-freeze",
+    "verdict": "CONTROLLED_ADOPTION_REVIEW verdict only APPROVED/REJECTED binding ticketDigest/canaryEvaluationDigest/proposalDigest/rollbackPlanDigest/reviewerId/role/scope/decidedAt/reason/verdictDigest; provenance+fingerprint+deep-freeze; forged/cloned APPROVED untrusted",
+    "replay": [
+      "one review ticket -> one final verdict",
+      "digest-keyed replay guard",
+      "expired/revoked ticket fail-closed",
+      "reviewer scope exact match",
+      "role limited to EXTERNAL_JUDGE / HUMAN_OPERATOR"
+    ],
+    "boundary": [
+      "even APPROVED may not modify config",
+      "APPROVED_FOR_CONTROLLED_ADOPTION_PLANNING only - never APPLIED/PROMOTED/DEPLOYED",
+      "apply FORBIDDEN",
+      "autoPromotion FORBIDDEN",
+      "productionRollout FORBIDDEN",
+      "Policy/Guard/Router/Action Runtime mutation FORBIDDEN",
+      "later Controlled Adoption Plan / Execution Gate is a separate unit"
+    ]
   }
 }
