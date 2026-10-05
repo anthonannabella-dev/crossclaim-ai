@@ -139821,3 +139821,383 @@ FINAL_ACCEPTANCE_HEAD = 0f7f7ac
 
 Codex 现在可以实施 P2-C Option A，只做确定性内存包生成；完成后送 P2-C Implementation Audit。不得调用现有任何 RecoveryPackage 持久化 API，也不得顺带进入 P2-D。
 ```
+
+### [MSG-20261005-17] ARCHITECT VERDICT — Recovery SI P2-C（Option A）实施 = **REVISE**（范围很窄，暂不能 CLOSED；`REVIEWED_HEAD = 436599a6`，未使用上一轮缓存）。**已 PASS（不重做）**：`P2C_01 = PASS`（verified action only）、`P2C_02 = PASS`（unregistered PREPARE fail-closed）、`P2C_03 = PASS`（top-level tenant/actor guard）、`P2C_04 = PASS`（deterministic convergence）、`P2C_08 = PASS`（L5 / no execution authorization）、`P2C_09 = PASS`（生产模块持久化 API 不可达）；架构方独立确认 `apps/api/src/services/intelligence/recovery-package-preview.ts` 只 import `buildRecoveryManifest / serializeCanonicalManifest / computePackageDigest / renderManifestPdf / sha256Hex / RECOVERY_PACKAGE_VERSION / RECOVERY_PACKAGE_DIGEST_VERSION`，未 import/call `generateRecoveryPackage / persistPackageArtifacts / transitionRecoveryPackage`，无 `@prisma/client`、无 FileAsset/AuditLog/Claim draft mutation（测试文件仅用 `typeof === 'function'` 断言，不构成生产持久化路径）。**三项必修**：①`CHANGE C1` —— `prepareRecoveryPackages()` 仍接受任意 `RecoveryToolRegistry`，只校验 tool name + `access === PREPARE`，无法证明 `PURE_DETERMINISTIC=true / DB_WRITE=false / NETWORK=false / CREDENTIAL_READ=false / PERSISTS_PACKAGE=false`，因此可以注册同名工具「先写库/发网络再返回外观合法 preview」而被接受（直接影响 `P2C-05` / `P2C-06`）；最小修法 = 不再接受泛型 registry，改由 `createRecoveryPrepareRegistry()` 产生专用 `RecoveryPrepareRegistry`（运行时校验 safety proof，可用专用 closure/bundle），并补负例「同名同形 PREPARE 工具 + 假 DB/network counter + 返回合法 preview → 不得被执行入口 invoke → counter = 0」；②`CHANGE C2` —— fact source 只绑定 tenant、未绑定 opportunity（返回的 `RecoveryManifestFactInput` 不含 `opportunityRef`），会生成「身份看似正确、内容属于另一机会」的包；最小修法 = fact source 返回 `{ opportunityRef, fact }`，调用前校验 `source.opportunityRef === requested opportunityRef` 否则 `FACT_IDENTITY_MISMATCH`，并做 money 一致性检查（`fact.currency` + `fact.recoverableAmount` 与当前 verified `OpportunitySlice.recoverable` 一致，否则 `FACT_PLAN_MISMATCH`）；③`CHANGE C3` —— 敏感扫描只扫「字段名」不扫「字段值」（`instructionNote = "https://storage...?X-Amz-Signature=..."`、`normalizedRefs = ["Bearer abc123..."]` 当前可通过），且执行入口对 registry 输出只检查 `opportunityRef` 与四个布尔、未检查 `kind / packageDigest / pdfDigest / canonical manifest / 敏感内容`；最小修法 = scanner 同时扫 key + string value（至少拦 `Bearer ...` / `X-Amz-Signature=` / `token=` / `access_token=` / `refresh_token=` / `api_key=` / `sk-...` / signed http(s) URL / IBAN·card-secret pattern），并新增统一 `validatePreparedRecoveryPackagePreview()` 供 `createRecoveryPrepareRegistry()` 与 `prepareRecoveryPackages()` 共用（外部 registry 返回的 preview 也必须过同一 validator）。**最小 FINAL-2 证据（4 条负例）**：1. 同名同形 PREPARE registry + 假 DB/network side effect → 不被执行入口调用 → counters = 0；2. requested `opp-A` 但 fact source 返回 `opp-B` facts → `FACT_IDENTITY_MISMATCH` 且 `preview = null`；3. verified recoverable = 300 USD 但 facts = 900 USD/EUR → `FACT_PLAN_MISMATCH`；4. 合法字段携带 signed URL / Bearer token → `SENSITIVE_PACKAGE_CONTENT_REJECTED`（外部 registry 返回的 preview 同样必须过 output validator）。**正式状态**：`RECOVERY_SI_P2_C_OPTION_A = REVISE`（`P2C_05 / P2C_06 / P2C_07 = REVISE`；`P2C_01..04 / P2C_08 / P2C_09 = PASS`），`P2_C_PERSISTENCE / P2_C_EXTERNAL_WRITE = FORBIDDEN`、`RUNTIME_WIRING = NONE`、`SCHEMA_DELTA_REQUIRED = NO`；`P2_D = NOT_AUTHORIZED`、`P2_E = HOLD_SCHEMA_DELTA`、`P2_F = HOLD`、`P2_G = HOLD`；未来 Option B 仍并入 `P2-E Schema/Persistence Audit`（RecoveryPackage / RecoveryPackageArtifact / FileAsset / AuditLog / unique constraint / CAS lifecycle / supersede·withdraw）。`47/47 + tsc 0` 属本地归档证据，exact `436599a6` hosted status 仍为空。结论：只修 C1（可信 PREPARE registry）、C2（fact→opportunity/money identity binding）、C3（完整 output + string-value 敏感扫描），补上述 4 条负例，再送 **P2-C FINAL-2**；P2-C 即使 PASS 也不得自动进入 P2-D。
+
+```text
+ARCHITECT VERDICT：REVISE（范围很窄，P2-C Option A 暂不能 CLOSED）
+
+我按 REVIEWED_HEAD = 436599a65c123f7e42d5694ccd1533e235bc5c1e 重新核了实现与测试，没有使用上一轮缓存。
+
+整体方向是对的：当前生产实现模块确实没有 Prisma、没有 RecoveryPackage 持久化调用、没有网络/凭据、没有 Runtime wiring。 但现在还有 3 个真正的安全边界缺口，因此 P2C-01..09 还不能整体记 PASS。
+
+已经可以记 PASS 的部分
+纯文本
+P2C-01 verified action only = PASS
+P2C-02 unregistered PREPARE = PASS
+P2C-03 top-level tenant/actor guard = PASS
+P2C-04 deterministic convergence = PASS
+P2C-08 L5/no execution authorization = PASS
+P2C-09 production module persistence API reachability = PASS
+
+并且我确认当前实现文件：
+
+纯文本
+apps/api/src/services/intelligence/recovery-package-preview.ts
+
+只从 recovery-package.ts import：
+
+纯文本
+buildRecoveryManifest
+serializeCanonicalManifest
+computePackageDigest
+renderManifestPdf
+sha256Hex
+RECOVERY_PACKAGE_VERSION
+RECOVERY_PACKAGE_DIGEST_VERSION
+
+没有 import / call：
+
+纯文本
+generateRecoveryPackage
+persistPackageArtifacts
+transitionRecoveryPackage
+
+也没有 @prisma/client、prisma.*、FileAsset/AuditLog/Claim draft mutation。
+
+有一个表述需要精确：实现模块没有 import 那三个持久化 API；测试文件本身确实 import 了它们，只用于 typeof ... === 'function' 断言，没有调用。这不构成生产持久化路径，也不阻塞。
+
+CHANGE C1 — PREPARE 执行入口仍接受任意 RecoveryToolRegistry
+
+这是目前最大的缺口。
+
+prepareRecoveryPackages() 接受：
+
+纯文本
+registry: RecoveryToolRegistry
+
+然后只检查：
+
+纯文本
+tool name
+access === PREPARE
+
+但普通 RecoveryToolRegistry 并不知道：
+
+纯文本
+PURE_DETERMINISTIC=true
+DB_WRITE=false
+NETWORK=false
+CREDENTIAL_READ=false
+PERSISTS_PACKAGE=false
+
+这些安全证明。
+
+所以理论上完全可以注册一个同名工具：
+
+纯文本
+recovery.carrier.package_preview.prepare
+
+它先写 DB / 发网络请求，然后返回一个外观正确的 preview。
+
+当前入口会接受。
+
+也就是说，目前能证明的是：
+
+createRecoveryPrepareRegistry() 自己构建的工具是安全的。
+
+但不能证明：
+
+prepareRecoveryPackages() 只可能调用这些安全工具。
+
+这直接影响：
+
+纯文本
+P2C-05
+P2C-06
+最小修法
+
+不要再让 P2-C 接受泛型 RecoveryToolRegistry。
+
+改成专用、不可随意伪造的：
+
+纯文本
+RecoveryPrepareRegistry
+
+由：
+
+纯文本
+createRecoveryPrepareRegistry()
+
+产生。
+
+运行时入口必须能验证其 safety proof，至少：
+
+纯文本
+PURE_DETERMINISTIC = true
+DB_WRITE = false
+NETWORK = false
+CREDENTIAL_READ = false
+TENANT_SCOPED = true
+PERSISTS_PACKAGE = false
+
+最简单可以做成专用 closure/bundle，不必搞复杂框架。
+
+新增一个负例即可：
+
+纯文本
+同名 PREPARE tool
++ 假 DB write/network counter
++ 返回完全合法 preview
+
+→ 不得被 P2-C invoke
+→ counter = 0
+CHANGE C2 — Fact source 只绑定 tenant，没有绑定 opportunity
+
+当前 fact source：
+
+TypeScript
+load({
+  organizationId,
+  opportunityRef
+})
+→ RecoveryManifestFactInput
+
+但返回的 RecoveryManifestFactInput 本身没有 opportunityRef。
+
+当前只验证：
+
+纯文本
+facts.organizationId === input.organizationId
+
+所以如果 fact source 错配：
+
+纯文本
+请求 opp-A
+→ 返回同一 tenant 下 opp-B 的 claimItem/evidence/money facts
+
+系统无法发现。
+
+更糟的是 preview 最终：
+
+纯文本
+opportunityRef = 请求的 opp-A
+manifest = opp-B 的事实
+
+于是会生成一个身份看似正确、内容却属于另一机会的包。
+
+最小修法
+
+Fact source 返回：
+
+纯文本
+{
+  opportunityRef,
+  fact
+}
+
+或者等价的不可变 source binding。
+
+然后调用前必须：
+
+纯文本
+source.organizationId === requested organizationId
+source.opportunityRef === requested opportunityRef
+
+否则：
+
+纯文本
+FACT_IDENTITY_MISMATCH
+
+建议再做一个很小的 money consistency check：
+
+纯文本
+fact.currency
++
+fact.recoverableAmount
+
+应与当前 verified OpportunitySlice.recoverable 一致；不一致：
+
+纯文本
+FACT_PLAN_MISMATCH
+
+这样才能保证：
+
+纯文本
+verified opportunity
+→ prepared package
+
+不是两套脱节的 money truth。
+
+CHANGE C3 — 敏感扫描目前只扫“字段名”，不扫“字段值”
+
+现在：
+
+TypeScript
+scanPreparedPackage()
+
+只看 key 是否匹配：
+
+纯文本
+token
+signedUrl
+storageKey
+cardNumber
+...
+
+但字符串值完全不检查。
+
+例如：
+
+纯文本
+instructionNote =
+"https://storage...?X-Amz-Signature=..."
+
+normalizedRefs =
+["Bearer abc123..."]
+
+当前可以通过。
+
+而设计承诺的是：
+
+纯文本
+credential / token / signed URL / storage key /
+bank-card secret
+→ reject
+
+所以现在 P2C-07 还没有完全成立。
+
+最小修法
+
+让敏感 scanner 同时扫：
+
+纯文本
+key
++
+string value
+
+至少拦高置信内容：
+
+纯文本
+Bearer ...
+X-Amz-Signature=
+token=
+access_token=
+refresh_token=
+api_key=
+sk-...
+signed http(s) URL
+IBAN/card-secret pattern
+
+而且执行入口收到 registry 输出后必须再次运行完整 preview validator/scanner。
+
+现在 prepareRecoveryPackages() 对任意 registry output 只检查：
+
+纯文本
+opportunityRef
+persisted=false
+submitted=false
+executionAuthorized=false
+executorInvoked=false
+
+并没有重新检查：
+
+kind
+packageDigest
+pdfDigest
+canonical manifest
+sensitive content
+
+因此建议做一个统一：
+
+纯文本
+validatePreparedRecoveryPackagePreview()
+
+同时被：
+
+纯文本
+createRecoveryPrepareRegistry()
+prepareRecoveryPackages()
+
+使用。
+
+最小 FINAL-2 证据
+
+不需要扩大范围，只补 4 条：
+
+纯文本
+1. 恶意同名 PREPARE registry：
+   尝试 DB/network side effect
+   → 不得被执行
+   → counters = 0
+
+2. requested opp-A
+   fact source 返回 opp-B facts
+   → FACT_IDENTITY_MISMATCH
+   → preview = null
+
+3. verified recoverable = 300 USD
+   facts = 900 USD / EUR
+   → FACT_PLAN_MISMATCH
+
+4. 合法字段内塞 signed URL / Bearer token
+   → SENSITIVE_PACKAGE_CONTENT_REJECTED
+   且任意外部 registry 返回的 preview
+   也必须经过同一 output validator
+
+这就够了，不需要重做 P2C-01..06 全部。
+
+你问的后续边界
+
+确认继续：
+
+纯文本
+P2_D = NOT_AUTHORIZED
+P2_E = HOLD_SCHEMA_DELTA
+P2_F = HOLD
+P2_G = HOLD
+
+P2-C 即使之后 PASS，也不得自动进入 P2-D。
+
+未来 Option B 我仍然同意：
+
+纯文本
+OPTION_B
+→ 并入 P2-E Schema/Persistence Audit
+
+因为届时要一起审现有：
+
+纯文本
+RecoveryPackage
+RecoveryPackageArtifact
+FileAsset
+AuditLog
+unique constraint
+CAS lifecycle
+supersede / withdraw
+
+不能复用本轮 Option A 的零持久化授权。
+
+当前正式状态
+纯文本
+RECOVERY_SI_P2_C_OPTION_A = REVISE
+
+P2C_01 = PASS
+P2C_02 = PASS
+P2C_03 = PASS
+P2C_04 = PASS
+P2C_05 = REVISE
+P2C_06 = REVISE
+P2C_07 = REVISE
+P2C_08 = PASS
+P2C_09 = PASS
+
+P2_C_PERSISTENCE = FORBIDDEN
+P2_C_EXTERNAL_WRITE = FORBIDDEN
+RUNTIME_WIRING = NONE
+SCHEMA_DELTA_REQUIRED = NO
+
+47/47 + tsc 0 是本地归档证据；exact 436599a6 的 hosted status/workflow 当前仍为空。
+
+结论：只修 C1（可信 PREPARE registry）、C2（fact→opportunity/money identity binding）、C3（完整 output + string-value 敏感扫描），补上面 4 个负例，再送 P2-C FINAL-2。
+```

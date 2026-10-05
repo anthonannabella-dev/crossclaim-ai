@@ -2188,3 +2188,11 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 证据：docs/releases/RECOVERY-SI-PHASE2-C-EVIDENCE.md（P2C-01..09 对照）；47/47 PASS、tsc exit 0。
 - 请求裁定：P2C-01..09 是否 PASS、Option A 是否 CLOSED；P2-D/P2-E/P2-F/P2-G 是否继续各自单独送审；未来 Option B 是否并入 P2-E。
 - 送达验证后立即读取并逐字归档裁决（FNV + FULL_COPY_OK），不等待下一次 heartbeat。
+
+## 2026-10-05T05:28:13.943Z — Recovery SI P2-C：MSG-20261005-17（REVISE）消费 + C1/C2/C3 落地
+- 裁决逐字归档：AI-ARCHITECT-INBOX.md 新增 [MSG-20261005-17]（FNV 5a40eb34 / 375 行 / FULL_COPY_OK；REVIEWED_HEAD 436599a6）。
+- CHANGE C1：执行入口只接受 createRecoveryPrepareRegistry 产生的可信 RecoveryPrepareRegistry（模块内 WeakSet 闭包品牌）；伪造同名同形 registry → UNTRUSTED_PREPARE_REGISTRY + 零调用。
+- CHANGE C2：fact source 返回 { opportunityRef, fact }；校验 opportunity 身份（FACT_IDENTITY_MISMATCH）、租户（TENANT_MISMATCH:FACTS）与 money 一致性（FACT_PLAN_MISMATCH）。
+- CHANGE C3：新增统一 validatePreparedRecoveryPackagePreview()（工厂与入口共用；检查 kind/版本/digest 重算/canonical JSON/布尔边界/敏感内容），敏感扫描同时扫 key 与字符串值（Bearer / X-Amz-Signature / token / api_key / sk- / JWT / IBAN / 卡号样式）。
+- 最小证据 F2C-01..04 全部覆盖；测试 recovery-si-phase2-c 10/10 + 回归 50/50 = 60/60 PASS；tsc exit 0。
+- 边界：P2-D/P2-E/P2-F/P2-G 未授权；RUNTIME_WIRING = NONE；SCHEMA_DELTA_REQUIRED = NO；FINAL_ACCEPTANCE_HEAD = 0f7f7ac。

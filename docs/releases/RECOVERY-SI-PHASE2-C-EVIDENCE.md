@@ -95,3 +95,58 @@ recovery-si-phase2-c 6/6 PASS
 - `RUNTIME_WIRING = NONE`（本轮不接 route / event loop / `rsi:run`）。
 
 边界不变：`EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / REAL_CLAIM_SUBMIT / CUSTOMS_FILING / RSI_MODEL_NETWORK / RSI_PAID_MODEL_CALLS = HOLD`；`SECOND_RUNTIME / L5_RELAXATION = FORBIDDEN`；`FINAL_ACCEPTANCE_HEAD = 0f7f7ac`。
+
+## 8. FINAL-2 修订（消费 MSG-20261005-17 = REVISE：C1 / C2 / C3）
+
+授权：**MSG-20261005-17**（`REVIEWED_HEAD = 436599a6`；原文 5330 字符 / 375 行 / FNV `5a40eb34` / `FULL_COPY_OK`）。
+已确认 PASS（本轮不重做）：`P2C_01`（verified action only）、`P2C_02`（unregistered PREPARE fail-closed）、
+`P2C_03`（top-level tenant/actor guard）、`P2C_04`（deterministic convergence）、`P2C_08`（L5 / no execution
+authorization）、`P2C_09`（生产模块持久化 API 不可达）。
+
+### 8.1 三项必修
+
+- **CHANGE C1 —— 可信 PREPARE registry**：执行入口不再接受泛型 `RecoveryToolRegistry`。改为只接受
+  `RecoveryPrepareRegistry`，且该对象必须由 `createRecoveryPrepareRegistry()` 创建（模块内
+  `WeakSet` 闭包品牌 `TRUSTED_PREPARE_REGISTRIES`）；伪造对象（即使 `kind` / `proofs` 外形一致）会被
+  `isTrustedPrepareRegistry()` 判否，入口返回 `UNTRUSTED_PREPARE_REGISTRY` 且**零调用**。
+  边界面量：`RECOVERY_PREPARE_BOUNDARY.trustedPrepareRegistryOnly = true`。
+- **CHANGE C2 —— fact → opportunity / money identity binding**：fact source 契约改为返回
+  `{ opportunityRef, fact }`；调用前校验 `loaded.opportunityRef === requested opportunityRef`
+  （否则 `FACT_IDENTITY_MISMATCH`）、`loaded.fact.organizationId === input.organizationId`
+  （否则 `TENANT_MISMATCH:FACTS`），并做金额一致性检查（`fact.currency` 与 `fact.recoverableAmount`
+  必须与当前 **verified** `OpportunitySlice.recoverable` 一致，否则 `FACT_PLAN_MISMATCH`）。
+  边界面量：`factIdentityBound = true`、`factPlanMoneyBound = true`。
+- **CHANGE C3 —— 完整 output + string-value 敏感扫描**：新增统一
+  `validatePreparedRecoveryPackagePreview()`，由工厂工具与执行入口**共用**，检查
+  `kind / opportunityRef / persisted / submitted / executionAuthorized / executorInvoked /
+  packageVersion / digestVersion / packageDigest 格式与重算 / pdfDigest 格式 / pdfBytes /
+  canonicalJson 与 manifest 一致 / 敏感内容`；`scanPreparedPackage()` 现在同时扫 **key 与字符串值**
+  （`Bearer ...`、`X-Amz-Signature=`、`token=`、`access_token=`、`refresh_token=`、`api_key=`、`sk-...`、
+  JWT 样式、IBAN 样式、13–19 位卡号样式、signed http(s) URL）。外部/任一 registry 返回的 preview
+  也必须过同一 validator（违规 → `PREVIEW_VALIDATION_FAILED:...`）。
+  边界面量：`sharedPreviewValidator = true`、`sensitiveValueScan = true`。
+
+### 8.2 最小 FINAL-2 证据（4 条负例 + 既有 10 例）
+
+| # | 裁决要求 | 证据 |
+| --- | --- | --- |
+| F2C-01 | 同名同形 PREPARE registry + 假 DB/network 副作用 → 不予调用（counters = 0） | `F2C-01`：伪造品牌对象 + 同名工具（每次调用自增 `dbWrites` / `networkCalls`）→ `ok=false / UNTRUSTED_PREPARE_REGISTRY`，`effects = {0,0}` |
+| F2C-02 | requested `opp-A` 但 fact source 返回 `opp-B` facts → `FACT_IDENTITY_MISMATCH`、preview = null | `F2C-02` |
+| F2C-03 | verified recoverable = 300 USD 但 facts = 900 USD/EUR → `FACT_PLAN_MISMATCH` | `F2C-03` |
+| F2C-04 | 合法字段携带 signed URL / Bearer token → `SENSITIVE_PACKAGE_CONTENT_REJECTED` | `F2C-04`（`instructionNote` 含 `X-Amz-Signature=`、`normalizedRefs` 含 `Bearer ...` → detail 含 `SENSITIVE_CONTENT`，preview = null） |
+| 保留 | P2C-01..04 / 08 / 09 全部保持 | `P2C-01` / `P2C-02` / `P2C-03` / `P2C-04` / `P2C-08` / `P2C-09` |
+| 新增 | C3 validator 对越界 preview 生效 | `P2C-07`：伪造 preview（`packageDigest='not-a-digest'`、`pdfBytes=0`、`canonicalJson` 不符、`executionAuthorized=true`）→ violations 含 `DIGEST_FORMAT / PDF_DIGEST_FORMAT / PDF_BYTES_INVALID / CANONICAL_JSON_MISMATCH / EXECUTION_AUTHORIZED_FLAG` |
+
+### 8.3 FINAL-2 验证结果
+
+```text
+api tsc --noEmit → exit 0
+recovery-si-phase2-c 10/10 PASS（P2C-01..09 + F2C-01..04；含 C3 validator 负例）
+回归：recovery-si-phase2-ab 19 + recovery-si 11 + recovery-si-e2e 5 + recovery-si-revise 6
+      + recovery-manual-package 9 = 50/50 PASS
+合计 60/60 PASS
+```
+
+边界不变：`P2_C_PERSISTENCE / P2_C_EXTERNAL_WRITE = FORBIDDEN`、`RUNTIME_WIRING = NONE`、
+`SCHEMA_DELTA_REQUIRED = NO`；`P2_D = NOT_AUTHORIZED`、`P2_E = HOLD_SCHEMA_DELTA`、`P2_F = HOLD`、
+`P2_G = HOLD`；未来 Option B 仍并入 `P2-E Schema/Persistence Audit`；`FINAL_ACCEPTANCE_HEAD = 0f7f7ac`。
