@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-40",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T22:17:39.529Z",
+  "updated_at": "2026-10-05T22:20:30.840Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -50,13 +50,13 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
-  "next_execution_unit": "PHASE 5 U4 FINAL3: (1) member-level cohort binding - prove each side actually used the trusted cohort inputs (e.g. trusted cohort composition supplies/validates the per-side evaluation input identity, or the canary re-derives both evaluations from the trusted CohortRef), not just cohortSize === totalRecords; (2) CANARY artifact + evaluationDigest must explicitly bind baseline/proposal Phase 4 evaluationDigest (any change -> digest change); (3) tests: member-level match -> PASS, any side input identity mismatch -> REJECT, digest binds both evaluationDigests, original 7 green, no execution preserved; then audit -> archive -> durable state. Boundaries unchanged.",
+  "next_execution_unit": "PHASE 5 U4 FINAL3 (once ruling received): implement the authorized member-level cohort binding + bind baseline/proposal Phase 4 evaluationDigest into the canary artifact and evaluationDigest; tests: member-level match PASS, any side input identity mismatch REJECT, digest changes with either evaluationDigest, original 7 green, no execution preserved; then audit -> archive (MSG-20261005-79) -> durable state. If no ruling arrives, keep CONT_INUATION_REQUIRED and re-check the audit channel each tick.",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-05T22:17:39.529Z",
+  "last_tick_at": "2026-10-05T22:20:30.840Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "PHASE 5 U4 FINAL2 verdict archived (MSG-20261005-78, FULL_COPY_OK, archive commit b507b005): OUTCOME_INDEPENDENT_COHORT_MODEL / WINDOW_VALIDATION / METRIC_DELTA_REACHABILITY / INSUFFICIENT_EVIDENCE_ROLLBACK / NO_EXECUTION = PASS; SAME_COHORT_PROOF / CANARY_EVALUATION_DIGEST_FULL_BINDING = REVISE; PHASE5_U4_FINAL3_REQUIRED = YES.",
-  "last_action_at": "2026-10-05T22:13:35.934Z",
-  "next_action": "Execute PHASE 5 U4 FINAL3 (member-level cohort binding + both sides Phase 4 evaluationDigest binding), then Controlled Adoption Review.",
+  "last_action": "PHASE 5 U4 FINAL3 blocked on a design ruling: member-level cohort binding cannot be satisfied by the sealed Phase 4 OfflineEvaluationResult (it exposes no input task/cohort identity; outcome-digest equality was already rejected because it forces identical outcomes). Sent a clarification request to the audit channel (marker [CODEX-PHASE5-U4FINAL3-CLARIFY]) asking which remedy is authorized: (A) extend the CLOSED Phase 4 offline-evaluation artifact with an outcome-independent input identity (inputMemberRefs + inputSetDigest bound into evaluationDigest) - requires reopening a sealed unit; (B) move evaluation derivation into the canary (canary owns the trusted cohort record set and derives both side evaluations internally so the same input is guaranteed by construction); (C) an auditor-specified third option. The unambiguous part (artifact/digest must bind both sides Phase 4 evaluationDigest) will be implemented with whichever option is authorized.",
+  "last_action_at": "2026-10-05T22:20:30.840Z",
+  "next_action": "Wait for the auditor ruling (A/B/C) on U4 FINAL3 member-level cohort binding, then implement it plus the both-evaluationDigest binding.",
   "current_head": "566b54ad",
   "last_completed_head": "566b54ad",
   "reviewed_head": "add99ec3",
@@ -5169,11 +5169,11 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "P5U4F3-1 U4 FINAL3: member-level cohort binding + both evaluationDigest binding in artifact/digest",
-    "P5U4F3-2 U4 FINAL3 tests + regression + tsc + commit + push",
-    "P5U4F3-3 audit U4 FINAL3 -> archive (MSG-20261005-79) -> compare FULL_COPY_OK -> durable state",
-    "P5U4F3-4 then Controlled Adoption Review per auditor NEXT",
-    "P5U4F3-5 non-blocking debt: full SHA-256 digests, fingerprint schema upkeep, scanRawPayloadKeys bounded traversal, P2E-DB5 test-isolation"
+    "P5U4F3-0 wait/read auditor ruling on [CODEX-PHASE5-U4FINAL3-CLARIFY] (A extend sealed Phase 4 artifact / B canary derives evaluations / C auditor option)",
+    "P5U4F3-1 implement authorized member-level cohort binding + bind both Phase 4 evaluationDigests into canary artifact/digest",
+    "P5U4F3-2 tests + regression + tsc + commit + push + audit + archive (MSG-20261005-79) + durable state",
+    "P5U4F3-3 then Controlled Adoption Review per auditor NEXT",
+    "P5U4F3-4 non-blocking debt: full SHA-256 digests, fingerprint schema upkeep, scanRawPayloadKeys bounded traversal, P2E-DB5 test-isolation"
   ],
   "full_autonomous_internal_execution": "VERIFIED",
   "dispatcher_acceptance": {
@@ -9323,7 +9323,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-05T22:17:39.529Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-05T22:20:30.840Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -10806,5 +10806,10 @@
       "CANARY_EVALUATION_DIGEST_FULL_BINDING (bind both Phase 4 evaluationDigests)"
     ],
     "phase5_u4_final3_required": "YES"
+  },
+  "phase5_u4_final3_blocker": {
+    "status": "WAITING_FOR_ARCHITECT_RULING",
+    "marker": "[CODEX-PHASE5-U4FINAL3-CLARIFY]",
+    "question": "A: extend CLOSED Phase 4 offline-evaluation artifact with outcome-independent input identity; B: canary derives both evaluations from the trusted cohort (Phase 4 stays sealed); C: auditor-specified minimal option. Unambiguous part: canary artifact/digest must bind both sides Phase 4 evaluationDigest."
   }
 }
