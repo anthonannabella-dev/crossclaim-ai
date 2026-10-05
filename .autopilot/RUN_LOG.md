@@ -2296,3 +2296,9 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 裁决：P2_E_V1_OPTION = A；P2_E_OPTION_A = AUTHORIZED_WITH_CONDITIONS；P2_E_OPTION_B = NOT_AUTHORIZED；REVIEWED_HEAD = 48e6e2a3。
 - 必修：①入口门禁改为 canonical READY + trusted claim.prepare Guard ALLOW（不得用 P2-D claim.submit ALLOW）；②package / artifact / FileAsset / audit 必须收进单一事务；③lineage 表述修订；④补 RecoveryPackage 的 DB DELETE guard。
 - 完成后送 P2-E Implementation Audit；不得进入 P2-F / P2-G。SCHEMA_DELTA 以裁决正文为准（本行不臆测）。
+
+## 2026-10-05T08:10Z — P2-E REVISE 方案定稿（设计层，四项必修来自已归档裁决）
+- docs/releases/RECOVERY-SI-PHASE2-E-REVISE-PLAN.md 从 DRAFT 升级为 FINAL-DESIGN（依据 MSG-20261005-22 全文归档）。
+- 四项必修：①入口门禁 P2_E_GUARD_ACTION = claim.prepare（不得用 P2-D claim.submit ALLOW）；②package/artifact/FileAsset/audit 单一事务原子性；③lineage 表述（planDigest 仅追溯 basis）；④RecoveryPackage DB DELETE guard。
+- 实施顺序与 P2E-01..10 证据映射已更新；实现完成后送 P2-E Implementation Audit，不得进入 P2-F/P2-G。
+- 边界不变：四类 FORBIDDEN；P2_F = HOLD；P2_G = HOLD；FINAL_ACCEPTANCE_HEAD = 0f7f7ac。

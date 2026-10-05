@@ -1,73 +1,60 @@
-# Recovery SI P2-E v1 — REVISE 修订方案（DRAFT / 依据部分裁决）
+# Recovery SI P2-E v1 — REVISE 修订方案（FINAL-DESIGN / 待实现）
 
-> **状态：DRAFT — 未授权实现。**
-> 依据：MSG-20261005-22（P2-E 设计裁决 = `PASS WITH REVISE`，`REVIEWED_HEAD = 48e6e2a3`）。裁决全文 10521 字符 / 731 行尚未完成逐字归档（见 `AUDIT-CAPTURE-LIMITATION-AND-P2E-VERDICT-CURSOR.md`），其中「事务原子性」「lineage 表述」两项必修的**正文条款尚未读取**。
-> 因此本文件只固化**已确认条款**的修订方向，不构成实现授权；待全文归档后补齐并重新送审。
+> 依据：**MSG-20261005-22 = PASS WITH REVISE**（已逐字归档，`FULL_COPY_OK`，576/576 行，FNV `1b49a5a3`）。`REVIEWED_HEAD = 48e6e2a3`。
+> 状态：设计层已定稿（四项必修全部来自归档正文）；**实现尚未开始**，完成后必须送 **P2-E Implementation Audit**；不得进入 P2-F / P2-G。
 
-## 1. 已确认必修（可直接据此改设计）
+## 必修 1 — 入口门禁：`P2_E_GUARD_ACTION = claim.prepare`
 
-### 必修 1 — 入口门禁：`P2_E_GUARD_ACTION = claim.prepare`
-
-裁决明确否定了我提交的写法「只有 P2-D `ALLOW` 才允许 P2-E 写入」，理由是 P2-D 对 `PLATFORM / CARRIER / INDEPENDENT_SITE` 使用的是 `claim.submit`，而真实 Control Plane 下
-
-```
-claim.submit + 无 approvalId → REQUIRE_APPROVAL
-```
-
-这是 P2-D 刚验证通过的正确行为；若把 P2-E 写入绑到它，等于要求「包必须先取得真实提交审批」，把内部 preparation 错绑到 external submission 门上。
-
-修订后的 v1 入口链路（裁决原文）：
+不得以「P2-D `claim.submit` = ALLOW」作为写入前提（真实 Control Plane 下 `claim.submit + 无 approvalId → REQUIRE_APPROVAL` 是 P2-D 已验证的正确行为，用它作内部准备前提等于把 preparation 错绑到 external submission 门上）。
 
 ```
 fresh state
-→ canonical READY alignment
-→ verified P2-C package preview / deterministic facts
-→ trusted ProductionControlPlane
-→ evaluate claim.prepare
-→ ALLOW
+→ canonical READY alignment（沿用 P2-D CHANGE D1：supplied READY == canonical planner READY）
+→ verified P2-C package preview / deterministic facts（manifest 与 digest 原样落库，不重算）
+→ trusted ProductionControlPlane.snapshotFor / evaluateWithoutAudit
+→ evaluate claim.prepare → ALLOW
 → persistence transaction
+P2_E_REQUIRES_P2D_ALLOW = NO
 ```
 
-即：
+## 必修 2 — 事务原子性
 
-```
-P2_E_GUARD_ACTION = claim.prepare          # 不是 claim.submit
-P2_E_REQUIRES_P2D_ALLOW = NO               # 不再要求 P2-D ALLOW
-保留：canonical READY 对齐（沿用 P2-D CHANGE D1 的 SUPLIED_READY == CANONICAL_PLANNER_READY）
-保留：verified P2-C preview 作为事实来源（manifest / digest 原样落库，不重算）
-新增：写入前必须先过一次可信 Control Plane 的 claim.prepare 判定（ALLOW 才进入持久化事务）
-```
+`RecoveryPackage` / `RecoveryPackageArtifact` / `FileAsset` / `AuditLog` 的写入必须收进**同一个事务**：任一步失败 → 全部回滚，不得留下孤儿 artifact、孤儿文件资产或半条审计。
 
-## 2. 仍需读取全文后才能定稿的部分（不得猜测实现）
+## 必修 3 — lineage 表述
 
-| 编号 | 必修 | 状态 |
-| --- | --- | --- |
-| 必修 2 | **事务原子性**（标题已确认，正文待读） | `PENDING_FULL_VERDICT` |
-| 必修 3 | **lineage 表述**（标题已确认，正文待读） | `PENDING_FULL_VERDICT` |
-| 第 ②③④⑤ 条裁定 | P2E-01..10 是否足够 / OWNER approval 前置 / P2-F·P2-G 独立送审确认 / 最小修订集合 | `PENDING_FULL_VERDICT` |
+落库行必须可回溯 `RecoveryPlan` / `DecisionEvidence` / `planDigest`；`planDigest` 只作为**追溯/verification basis**，不得取代 `packageDigest` 作为业务包身份（与既有 `UNIQUE (organizationId, claimItemId, packageVersion, packageDigest)` 一致）。
 
-在正文读到之前，**不开始** P2-E 实现；已确认的必修 1 只作为设计修订方向记录。
+## 必修 4 — RecoveryPackage DB DELETE guard
 
-## 3. 与既有证据集合的映射（预排，待终稿确认）
+补 `RecoveryPackage` 的数据库层 DELETE 防护（与既有 append-only artifact 触发器、controlled-mutation 触发器配套），确保删除路径在 DB 层即被拒绝，而不是只靠应用层约定。
 
-| 证据 | 与必修 1 的关系 |
+## 实施顺序（建议，零 Schema 变更前提下）
+
+1. 入口门禁：把写入入口从 `claim.submit` 判定改为 canonical READY + `claim.prepare` Guard（可信 Control Plane）。
+2. 事务化：把 package/artifact/FileAsset/audit 四个写入点收进单一 `prisma.$transaction`（或既有事务端口），失败整体回滚。
+3. DELETE guard：新增迁移 + 触发器，纳入 `tools/tenant-triggers/required-triggers.json` 清单（如适用），并跑触发器清单校验。
+4. lineage：补 `planDigest` 写入与反查路径，明确其 basis 语义。
+
+## 证据映射（P2E-01..10 调整）
+
+| 证据 | 调整 |
 | --- | --- |
-| `P2E-01`（写入门禁） | 改为断言：`claim.prepare` DENY / REQUIRE_APPROVAL → 零写入；`claim.prepare` ALLOW → 才允许持久化事务 |
-| `P2E-02`（tenant 四点） | 不变 |
-| `P2E-03`（幂等/并发） | 加入「事务内 CAS + 唯一约束」断言（待必修 2 定稿后细化） |
-| `P2E-05`（lineage） | 按必修 3 的表述重写（待定稿） |
-| `P2E-06/07`（零外写 / 零网络零凭据） | 不变 |
-| `P2E-09`（真实 PostgreSQL 迁移 + 触发器清单） | 不变（既有 tenant / append-only / controlled-mutation 触发器复用） |
+| `P2E-01` | 断言 `claim.prepare` DENY/REQUIRE_APPROVAL → 零写入；ALLOW → 才进入事务 |
+| `P2E-03` | 增加「事务内 CAS + 唯一约束」断言 |
+| `P2E-04` | append-only 证据 **+ DB DELETE guard 证据**（直接对 DB 尝试 DELETE 必须失败） |
+| `P2E-05` | 按必修 3 的 lineage 表述重写 |
+| `P2E-09` | 真实 PostgreSQL 迁移 + 触发器清单（含 DELETE guard） |
+| 其余 | 不变（零外写 / 零网络零凭据 / 生命周期 / 失败语义与补偿） |
 
-## 4. 边界（不变）
+## 边界（不变）
 
 ```
 P2_E_V1_OPTION = A（AUTHORIZED_WITH_CONDITIONS）
 P2_E_OPTION_B = NOT_AUTHORIZED
-SCHEMA_DELTA_REQUIRED = NO（当前阶段）
-RUNTIME_WIRING = NONE
 APPROVAL_CONSUMPTION / EXECUTOR_INVOCATION / BUSINESS_FACT_WRITE / EXTERNAL_ACTION = FORBIDDEN
 P2_F = HOLD
 P2_G = HOLD（真实执行必须另开 P2-G）
+RUNTIME_WIRING = NONE
 FINAL_ACCEPTANCE_HEAD = 0f7f7ac
 ```
