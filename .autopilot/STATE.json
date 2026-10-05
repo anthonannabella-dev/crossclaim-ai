@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-40",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T22:40:34.332Z",
+  "updated_at": "2026-10-05T22:44:36.131Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -50,13 +50,13 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
-  "next_execution_unit": "PHASE 5 U4 FINAL3 verdict archive + next unit: (1) read verdict (REVIEWED_HEAD = 4f4ae0ed, marker [CODEX-PHASE5-U4FINAL3]); (2) write work/stage/verdict-p5u4f3-raw.txt then archive AI-ARCHITECT-INBOX.md (MSG-20261005-80) + compare.mjs FULL_COPY_OK + commit/push; (3) durable state; if REVISE do the narrow fix; if PASS follow auditor NEXT (Controlled Adoption Review contract).",
+  "next_execution_unit": "PHASE 5 U4 FINAL4: read the NEXT/TEST sections of the archived verdict MSG-20261005-80 (AI-ARCHITECT-INBOX.md) for the exact member-level input-set binding requirements, implement them (likely: bind the exact cohort member identity list to each side Phase 4 evaluation, e.g. VerifiedCohortRun carrying memberRefs/memberSetDigest that the trusted composition derived from the same inputs the evaluation consumed, with canary requiring member-level equality across sides), keep both evaluationDigest bindings, re-run tests/regression/tsc, commit, push, audit, archive (MSG-20261005-81), durable state. Boundaries unchanged.",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-05T22:40:34.332Z",
+  "last_tick_at": "2026-10-05T22:44:36.131Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "PHASE 5 U4 FINAL3 implemented per ruling C: new server-owned createVerifiedCohortRun(cohortRef, evaluation, side) binds the trusted input set to that side Phase 4 evaluation (memberCount === totalRecords; datasetVersion match); provenance+fingerprint+deep-freeze+isVerifiedCohortRun. Canary now requires both side runs, requires them to share the same inputSetDigest (member-level same cohort), requires run.evaluationDigest === the passed evaluation digest, and binds baselineRunDigest/proposalRunDigest/baselineEvaluationDigest/proposalEvaluationDigest into the artifact and evaluationDigest (binds 18). code 4f4ae0ed pushed and submitted (marker [CODEX-PHASE5-U4FINAL3], REVIEWED_HEAD = 4f4ae0ed). Local: tsc 0; canary 10/10; PHASE5 10 files / 128 tests PASS; regression 103 files / 1075 tests (only P2E-DB5).",
+  "last_action": "PHASE 5 U4 FINAL3 verdict archived (MSG-20261005-80, FULL_COPY_OK, archive commit d232e7c0): CANARY_EVALUATION_DIGEST_FULL_BINDING / VERIFIED_COHORT_RUN_PROVENANCE / RUN_SIDE_BINDING / RUN_EVALUATION_DIGEST_BINDING = PASS; SAME_COHORT_PROOF / EXACT_INPUT_SET_TO_EVALUATION_BINDING = REVISE; PHASE5_U4_FINAL4_REQUIRED = YES. Details in the archived verdict NEXT/TEST sections.",
   "last_action_at": "2026-10-05T22:40:34.332Z",
-  "next_action": "Read PHASE 5 U4 FINAL3 verdict -> archive (MSG-20261005-80) -> if PASS continue to Controlled Adoption Review.",
+  "next_action": "Execute PHASE 5 U4 FINAL4 (exact input-set to evaluation member-level binding) per the archived verdict MSG-20261005-80 NEXT section, then Controlled Adoption Review.",
   "current_head": "4f4ae0ed",
   "last_completed_head": "4f4ae0ed",
   "reviewed_head": "add99ec3",
@@ -5169,9 +5169,11 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "P5U4F3a-1 read U4 FINAL3 verdict (4f4ae0ed) -> write verdict raw -> archive MSG-20261005-80 -> compare FULL_COPY_OK -> commit/push -> durable state",
-    "P5U4F3a-2 if PASS -> Controlled Adoption Review per auditor NEXT",
-    "P5U4F3a-3 non-blocking debt: full SHA-256 digests, fingerprint schema upkeep, scanRawPayloadKeys bounded traversal, P2E-DB5 test-isolation"
+    "P5U4F4-1 read MSG-20261005-80 NEXT/TEST for exact U4 FINAL4 requirements; implement member-level input-set <-> evaluation binding",
+    "P5U4F4-2 tests + regression + tsc + commit + push",
+    "P5U4F4-3 audit U4 FINAL4 -> archive (MSG-20261005-81) -> compare FULL_COPY_OK -> durable state",
+    "P5U4F4-4 then Controlled Adoption Review per auditor NEXT",
+    "P5U4F4-5 non-blocking debt: full SHA-256 digests, fingerprint schema upkeep, scanRawPayloadKeys bounded traversal, P2E-DB5 test-isolation"
   ],
   "full_autonomous_internal_execution": "VERIFIED",
   "dispatcher_acceptance": {
@@ -9321,7 +9323,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-05T22:40:34.332Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-05T22:44:36.131Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -9449,7 +9451,7 @@
     "PHASE_2_MODEL_GATEWAY_RUNTIME": "PASS / CLOSED（MSG-20261005-50；Reviewed HEAD 338f30b4；PHASE2_FINAL5_REQUIRED = NO）",
     "PHASE_3_ACTION_RUNTIME": "PASS / CLOSED（MSG-20261005-54；Reviewed HEAD = fe3c33e9；PHASE3_FINAL4_REQUIRED = NO）",
     "PHASE_4_OUTCOME_LEARNING_PIPELINE": "CLOSED / PASS（MSG-20261005-67）：U1 FINAL / U2 / U3 / U4 / U5 全 CLOSED；含 U4 FINAL、U5 FINAL、U5 FINAL2、PHASE 4 FINAL CLOSURE。",
-    "PHASE_5_META_IMPROVEMENT": "IN PROGRESS: U1/U2/U3 = PASS / CLOSED; U4 = PASS WITH REVISE; U4 FINAL3 = SUBMITTED / AWAITING_VERDICT (4f4ae0ed)."
+    "PHASE_5_META_IMPROVEMENT": "IN PROGRESS: U1/U2/U3 = PASS / CLOSED; U4 = PASS WITH REVISE (FINAL3 verdict MSG-20261005-80), U4 FINAL4 pending."
   },
   "heartbeat_watchdog": {
     "interval_seconds": 180,
@@ -9921,7 +9923,7 @@
       "U5"
     ]
   },
-  "archive_head": "a9e25d9f",
+  "archive_head": "d232e7c0",
   "phase4_u3_final": {
     "status": "PASS / CLOSED",
     "reviewed_head": "006cc912",
@@ -10832,5 +10834,23 @@
       "delivered": true,
       "expected_message_id": "MSG-20261005-80"
     }
+  },
+  "phase5_u4_final3_verdict": {
+    "message_id": "MSG-20261005-80",
+    "verdict": "PASS WITH REVISE / NOT CLOSED",
+    "reviewed_head": "4f4ae0ed",
+    "archive_verified": "FULL_COPY_OK",
+    "archive_head": "d232e7c0",
+    "pass": [
+      "CANARY_EVALUATION_DIGEST_FULL_BINDING = PASS",
+      "VERIFIED_COHORT_RUN_PROVENANCE = PASS",
+      "RUN_SIDE_BINDING = PASS",
+      "RUN_EVALUATION_DIGEST_BINDING = PASS"
+    ],
+    "revise": [
+      "SAME_COHORT_PROOF",
+      "EXACT_INPUT_SET_TO_EVALUATION_BINDING"
+    ],
+    "phase5_u4_final4_required": "YES"
   }
 }
