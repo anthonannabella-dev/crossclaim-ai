@@ -50,11 +50,11 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
-  "next_execution_unit": "完成 STEP 3 FINAL-5 测试层迁移（旧 rsi-si-runtime-e2e 改用测试替身 packId；修正 STEP3F5_A1 断言）→ 全回归 → commit + push → FINAL-5 送审投递",
+  "next_execution_unit": "生成 FINAL-5 送审包 → 右侧会话投递（marker [CODEX-STEP3-FINAL5]）→ 送达三检 → 读取裁决 → PASS 则 STEP_3_RUNTIME_POLICY_WIRING = PASS / CLOSED；同时补归档 FINAL-4 裁决 MSG-20261005-44 与 FINAL-2 裁决 MSG-20261005-42",
   "automation_status": "CONTINUOUS",
   "last_tick_at": "2026-10-06T08:30:00.000Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "STEP 3 FINAL-5 A/B/C 源码落地（tsc 0）；测试层迁移未完成（WIP checkpoint）",
+  "last_action": "STEP 3 FINAL-5 A/B/C 全部落地并通过回归",
   "last_action_at": "2026-10-06T08:30:00.000Z",
   "next_action": "C2 IMPLEMENTATION（Schema Delta + durable ledger/budget + PG 回归）",
   "current_head": "054ab732",
@@ -9354,7 +9354,7 @@
   "HEARTBEAT_INTERVAL_SECONDS": 60,
   "safe_continuation_queue_recomputed_at": "2026-10-06T07:30:00.000Z",
   "step3_runtime_policy_wiring": {
-    "status": "FINAL5_IN_PROGRESS_TESTS_PENDING",
+    "status": "FINAL5_IMPLEMENTED_AWAITING_SUBMIT",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
     "implementation_head": "c0b61792",
     "request": "docs/releases/SI-RUNTIME-STEP3-FINAL3-REQUEST.md",
@@ -9450,10 +9450,12 @@
       "tests": "tsc 0；real-guard E2E 4/4；回归 76 files / 769 tests PASS"
     },
     "final5": {
-      "source_changes": "A park-for-judge 按 domainPackList 判定；B reserved packId recovery-si 经 domainPacks 一律拒绝；C product 组装点只接受 AppActionGuardDeps（内部唯一 createAppActionGuard）",
-      "tsc": "exit 0",
-      "test_status": "rsi-domain-pack-wiring 全绿；rsi-si-runtime-e2e 4 例失败（旧测试仍经 domainPacks 注入真实 recovery-si pack，需改为 packId=recovery-si-test 的测试替身）；rsi-si-runtime-real-guard-e2e 1 例失败（STEP3F5_A1 waitingForVerdict 断言）",
-      "next": "修复上述 5 个测试层问题 → 全回归 → commit/push → 生成 FINAL-5 送审 → 投递"
+      "changes": [
+        "A park-for-judge 按 domainPackList（productRecoveryPack 存在即强制）",
+        "B reserved packId recovery-si 经 domainPacks 一律拒绝（RECOVERY_SI_RESERVED_PACK_ID_REJECTED）",
+        "C product 组装点只接受 AppActionGuardDeps（内部唯一 createAppActionGuard；结构化 guard 实例 FORBIDDEN）"
+      ],
+      "tests": "tsc 0；STEP3 三套 33/33；回归 76 files / 771 tests PASS"
     }
   }
 }

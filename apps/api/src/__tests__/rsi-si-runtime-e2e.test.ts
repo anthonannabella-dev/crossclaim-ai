@@ -19,6 +19,15 @@ import { createRsiInMemoryReconcileStore } from '../runtime/rsi-restart-reconcil
 import type { RecoveryReadPorts } from '../services/intelligence/recovery-read-tools';
 import type { RsiRecoveryGuardPort } from '../runtime/recovery-si-pack';
 
+/**
+ * FINAL-5：'recovery-si' 是保留 pack id（只能经 productRecoveryPack 组装）。
+ * 本文件的链路测试使用**测试替身 packId**，保留原有 E2E 意图且不绕过保留 id 规则。
+ */
+const testRecoveryPack = (deps: Parameters<typeof createRecoverySiPack>[0]) => ({
+  ...createRecoverySiPack(deps),
+  packId: 'recovery-si-test',
+});
+
 const SIGNALS = JSON.stringify([
   {
     kind: 'TEST_FAILURE',
@@ -71,7 +80,7 @@ describe('STEP_3G · ONE SI Runtime 端到端（Recovery Pack 作为 domain capa
   it('STEP3_E2E_1..9 signal → task → policy → pack → read tools → evidence → judge → verdict → continuation', async () => {
     const readCalls: string[] = [];
     const seen: RsiDomainPackEvidence[] = [];
-    const inner = createRecoverySiPack({ readPorts: readPorts(readCalls), bind, guard: ALLOW_GUARD });
+    const inner = testRecoveryPack({ readPorts: readPorts(readCalls), bind, guard: ALLOW_GUARD });
     const pack = {
       ...inner,
       run: async (context: { task: { id: string; dedupeKey: string; priority: string }; packId: string }) => {
@@ -154,7 +163,7 @@ describe('STEP_3G · ONE SI Runtime 端到端（Recovery Pack 作为 domain capa
     });
     const composition = await composeRsiRuntime({
       readFile: async () => '[]',
-      domainPacks: [createRecoverySiPack({ readPorts: readPorts([]), bind, guard: ALLOW_GUARD })],
+      domainPacks: [testRecoveryPack({ readPorts: readPorts([]), bind, guard: ALLOW_GUARD })],
       reconcile: { store, ownerRef: 'runtime-b' },
     });
     const plan = await composition.reconcileNow();
@@ -171,7 +180,7 @@ describe('STEP_3G · ONE SI Runtime 端到端（Recovery Pack 作为 domain capa
 describe('STEP_3 FINAL-2 · CHANGE A —— proposal 与 Judge verdict 分离', () => {
   it('STEP3F2_A1 proposal 不得被 watchdog 当 verdict 消费；external verdict 才是唯一完成来源', async () => {
     const readCalls: string[] = [];
-    const pack = createRecoverySiPack({ readPorts: readPorts(readCalls), bind, guard: ALLOW_GUARD });
+    const pack = testRecoveryPack({ readPorts: readPorts(readCalls), bind, guard: ALLOW_GUARD });
     const composition = await composeRsiRuntime({
       readFile: async (p: string) => (p === 'mem://signals' ? SIGNALS : '[]'),
       signalsPath: 'mem://signals',
@@ -201,7 +210,7 @@ describe('STEP_3 FINAL-2 · CHANGE A —— proposal 与 Judge verdict 分离', 
 
 describe('STEP_3 FINAL-3 · CHANGE A —— domainPacks 不可被 awaitVerdict:false 绕过', () => {
   it('STEP3F3_A1 显式 awaitVerdict:false + domainPacks → 仍 park-for-judge，不自证完成', async () => {
-    const pack = createRecoverySiPack({ readPorts: readPorts([]), bind, guard: ALLOW_GUARD });
+    const pack = testRecoveryPack({ readPorts: readPorts([]), bind, guard: ALLOW_GUARD });
     const queue = JSON.stringify([{ id: 'task-1', dedupeKey: 'task:recovery:PLATFORM:opp-1', priority: 'P2' }]);
     const composition = await composeRsiRuntime({
       readFile: async (p: string) => (p === 'mem://tasks' ? queue : '[]'),

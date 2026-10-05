@@ -241,10 +241,8 @@ export async function composeRsiRuntime(input: {
     // 默认 false：没有裁决来源时 park 会让任务永远停在等待裁决；需要时由调用方显式开启。
     // STEP 3 FINAL-2 CHANGE A：domainPacks 路径强制 park-for-judge（不可被 awaitVerdict=false 绕过）
     // STEP 3 FINAL-3 CHANGE A：domainPacks 路径**强制** park-for-judge（awaitVerdict:false 也不可绕过）
-    awaitVerdict:
-      input.domainPacks !== undefined && input.domainPacks.length > 0
-        ? true
-        : (input.awaitVerdict ?? false),
+    // STEP 3 FINAL-5 CHANGE A：按**最终组装列表**判定 —— productRecoveryPack 存在时同样强制 park-for-judge
+    awaitVerdict: domainPackList.length > 0 ? true : (input.awaitVerdict ?? false),
   });
 
   const localSources: RsiEventSources = createLocalEventSources({
