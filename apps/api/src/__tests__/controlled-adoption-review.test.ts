@@ -191,6 +191,30 @@ describe('PHASE 5 U5 —— controlled adoption review (REVIEW_ONLY)', () => {
     expect(isControlledAdoptionReviewDecided(ticket)).toBe(true);
   });
 
+  it('P5U5_1b REJECTED 语义独立：REJECTED verdict 的 semantics = REJECTED_NO_CONTROLLED_ADOPTION_PLAN，且无执行面', async () => {
+    const { proposal, plan, canary } = await ctx();
+    const ticket = openControlledAdoptionReviewTicket({
+      canary,
+      proposal,
+      rollbackPlan: plan,
+      reviewerScope: CONTROLLED_ADOPTION_REVIEW_SCOPE,
+      ...reviewSchedule(),
+    });
+    const rejected = decideControlledAdoptionReview(ticket, {
+      reviewerId: 'judge-2',
+      role: 'HUMAN_OPERATOR',
+      outcome: 'REJECTED',
+      decidedAt: '2026-10-06T00:00:00.000Z',
+      reason: 'hold for further canary',
+    });
+    expect(rejected.outcome).toBe('REJECTED');
+    expect(rejected.semantics).toBe('REJECTED_NO_CONTROLLED_ADOPTION_PLAN');
+    expect(rejected.execution.apply).toBe('FORBIDDEN');
+    expect(rejected.execution.autoPromotion).toBe('FORBIDDEN');
+    expect(CONTROLLED_ADOPTION_REVIEW_BOUNDARY.rejectedSemantics).toBe('REJECTED_NO_CONTROLLED_ADOPTION_PLAN');
+    expect(isVerifiedControlledAdoptionReviewVerdict(rejected)).toBe(true);
+  });
+
   it('P5U5_2 输入门 fail-closed：非 ELIGIBLE canary / 有 triggers / 数据不足 / proposal·rollback mismatch → REJECT', async () => {
     const { proposal, plan, canary, records, ref } = await ctx();
     const base = { canary, proposal, rollbackPlan: plan, reviewerScope: CONTROLLED_ADOPTION_REVIEW_SCOPE, ...reviewSchedule() };

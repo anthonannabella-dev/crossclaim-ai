@@ -26,6 +26,7 @@ export const CONTROLLED_ADOPTION_REVIEW_BOUNDARY = {
   scope: CONTROLLED_ADOPTION_REVIEW_SCOPE,
   roles: CONTROLLED_ADOPTION_REVIEW_ROLES,
   approvalSemantics: 'APPROVED_FOR_CONTROLLED_ADOPTION_PLANNING',
+  rejectedSemantics: 'REJECTED_NO_CONTROLLED_ADOPTION_PLAN',
   apply: 'FORBIDDEN',
   autoPromotion: 'FORBIDDEN',
   productionRollout: 'FORBIDDEN',
@@ -92,7 +93,7 @@ export interface ControlledAdoptionReviewVerdict {
   scope: typeof CONTROLLED_ADOPTION_REVIEW_SCOPE;
   decidedAt: string;
   reason: string | null;
-  semantics: 'APPROVED_FOR_CONTROLLED_ADOPTION_PLANNING';
+  semantics: 'APPROVED_FOR_CONTROLLED_ADOPTION_PLANNING' | 'REJECTED_NO_CONTROLLED_ADOPTION_PLAN';
   execution: {
     apply: 'FORBIDDEN';
     autoPromotion: 'FORBIDDEN';
@@ -307,7 +308,10 @@ export function decideControlledAdoptionReview(
     scope: verified.reviewerScope,
     decidedAt: decision.decidedAt,
     reason,
-    semantics: 'APPROVED_FOR_CONTROLLED_ADOPTION_PLANNING',
+    semantics:
+      decision.outcome === 'APPROVED'
+        ? 'APPROVED_FOR_CONTROLLED_ADOPTION_PLANNING'
+        : 'REJECTED_NO_CONTROLLED_ADOPTION_PLAN',
     execution: {
       apply: 'FORBIDDEN',
       autoPromotion: 'FORBIDDEN',
