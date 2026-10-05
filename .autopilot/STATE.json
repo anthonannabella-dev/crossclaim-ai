@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "566b54ad",
+  "head": "4f4ae0ed",
   "status": "RECONCILED",
   "current_task": "RSI 生产可执行闭环（7 点收口）：RSI_RUNTIME_READY = PASS；MODEL_PROVIDER_READY = 本地仿真已接线（真实网络/付费 HOLD）；PERSISTENCE_READY = ephemeral 已验证、durable 需宿主非生产 DATABASE_URL；REBOOT_RECONCILE_READY = NOT_IMPLEMENTED（下一单元）；SYSTEMD_VALIDATED = 需宿主 Linux 实机",
   "next_task": "BG-016 单一 Acceptance Head + 四份状态一致 guard（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍 HOST_ACTION_REQUIRED 或 HOLD",
@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-40",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T22:23:53.339Z",
+  "updated_at": "2026-10-05T22:40:34.332Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -50,15 +50,15 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
-  "next_execution_unit": "PHASE 5 U4 FINAL3 (ruling C): (1) add a server-owned VerifiedCohortRun artifact (createVerifiedCohortRun({ cohortRef, evaluation, side }) -> binds exact input set identity + the Phase 4 evaluation identity; provenance + WeakMap fingerprint + deep-freeze; isVerifiedCohortRun) so each side Phase 4 evaluation is provably tied to the same trusted input set; (2) evaluateCanaryShadow takes baselineRun + proposalRun (verified) instead of raw evaluations, requires both to share the same cohort/input-set identity (member-level), and binds both Phase 4 evaluationDigests into the canary artifact and evaluationDigest; (3) tests: same input set + different outcomes/metrics PASS (metric-delta rollback reachable), any side input identity mismatch REJECT, forged/cloned run REJECT, digest changes with either evaluationDigest, original behaviours preserved, no execution entries; then regression + tsc + commit + push + audit + archive (MSG-20261005-80) + durable state. Boundaries unchanged.",
+  "next_execution_unit": "PHASE 5 U4 FINAL3 verdict archive + next unit: (1) read verdict (REVIEWED_HEAD = 4f4ae0ed, marker [CODEX-PHASE5-U4FINAL3]); (2) write work/stage/verdict-p5u4f3-raw.txt then archive AI-ARCHITECT-INBOX.md (MSG-20261005-80) + compare.mjs FULL_COPY_OK + commit/push; (3) durable state; if REVISE do the narrow fix; if PASS follow auditor NEXT (Controlled Adoption Review contract).",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-05T22:23:53.339Z",
+  "last_tick_at": "2026-10-05T22:40:34.332Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "PHASE 5 U4 FINAL3 design ruling received and archived (MSG-20261005-79, FULL_COPY_OK, archive commit a9e25d9f): the auditor chose option C - do NOT reopen the sealed Phase 4 offline-evaluation artifact and do NOT make the canary a runner; instead introduce a VerifiedCohortRun as the trusted bridge layer between the exact input set and the Phase 4 evaluation.",
-  "last_action_at": "2026-10-05T22:20:30.840Z",
-  "next_action": "Implement PHASE 5 U4 FINAL3 per ruling C: VerifiedCohortRun bridge + canary member-level cohort binding + both evaluationDigest binding.",
-  "current_head": "566b54ad",
-  "last_completed_head": "566b54ad",
+  "last_action": "PHASE 5 U4 FINAL3 implemented per ruling C: new server-owned createVerifiedCohortRun(cohortRef, evaluation, side) binds the trusted input set to that side Phase 4 evaluation (memberCount === totalRecords; datasetVersion match); provenance+fingerprint+deep-freeze+isVerifiedCohortRun. Canary now requires both side runs, requires them to share the same inputSetDigest (member-level same cohort), requires run.evaluationDigest === the passed evaluation digest, and binds baselineRunDigest/proposalRunDigest/baselineEvaluationDigest/proposalEvaluationDigest into the artifact and evaluationDigest (binds 18). code 4f4ae0ed pushed and submitted (marker [CODEX-PHASE5-U4FINAL3], REVIEWED_HEAD = 4f4ae0ed). Local: tsc 0; canary 10/10; PHASE5 10 files / 128 tests PASS; regression 103 files / 1075 tests (only P2E-DB5).",
+  "last_action_at": "2026-10-05T22:40:34.332Z",
+  "next_action": "Read PHASE 5 U4 FINAL3 verdict -> archive (MSG-20261005-80) -> if PASS continue to Controlled Adoption Review.",
+  "current_head": "4f4ae0ed",
+  "last_completed_head": "4f4ae0ed",
   "reviewed_head": "add99ec3",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -5169,11 +5169,9 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "P5U4F3-1 implement VerifiedCohortRun bridge (exact input set <-> Phase 4 evaluation, provenance/fingerprint/deep-freeze)",
-    "P5U4F3-2 canary: require verified baseline/proposal runs sharing input-set identity; bind both evaluationDigests into artifact + evaluationDigest; tests",
-    "P5U4F3-3 regression + tsc + commit + push + audit U4 FINAL3 -> archive (MSG-20261005-80) -> durable state",
-    "P5U4F3-4 then Controlled Adoption Review per auditor NEXT",
-    "P5U4F3-5 non-blocking debt: full SHA-256 digests, fingerprint schema upkeep, scanRawPayloadKeys bounded traversal, P2E-DB5 test-isolation"
+    "P5U4F3a-1 read U4 FINAL3 verdict (4f4ae0ed) -> write verdict raw -> archive MSG-20261005-80 -> compare FULL_COPY_OK -> commit/push -> durable state",
+    "P5U4F3a-2 if PASS -> Controlled Adoption Review per auditor NEXT",
+    "P5U4F3a-3 non-blocking debt: full SHA-256 digests, fingerprint schema upkeep, scanRawPayloadKeys bounded traversal, P2E-DB5 test-isolation"
   ],
   "full_autonomous_internal_execution": "VERIFIED",
   "dispatcher_acceptance": {
@@ -9323,7 +9321,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-05T22:23:53.339Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-05T22:40:34.332Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -9451,7 +9449,7 @@
     "PHASE_2_MODEL_GATEWAY_RUNTIME": "PASS / CLOSED（MSG-20261005-50；Reviewed HEAD 338f30b4；PHASE2_FINAL5_REQUIRED = NO）",
     "PHASE_3_ACTION_RUNTIME": "PASS / CLOSED（MSG-20261005-54；Reviewed HEAD = fe3c33e9；PHASE3_FINAL4_REQUIRED = NO）",
     "PHASE_4_OUTCOME_LEARNING_PIPELINE": "CLOSED / PASS（MSG-20261005-67）：U1 FINAL / U2 / U3 / U4 / U5 全 CLOSED；含 U4 FINAL、U5 FINAL、U5 FINAL2、PHASE 4 FINAL CLOSURE。",
-    "PHASE_5_META_IMPROVEMENT": "IN PROGRESS: U1/U2/U3 = PASS / CLOSED; U4 = PASS WITH REVISE, U4 FINAL3 implementation authorized by ruling C (VerifiedCohortRun)."
+    "PHASE_5_META_IMPROVEMENT": "IN PROGRESS: U1/U2/U3 = PASS / CLOSED; U4 = PASS WITH REVISE; U4 FINAL3 = SUBMITTED / AWAITING_VERDICT (4f4ae0ed)."
   },
   "heartbeat_watchdog": {
     "interval_seconds": 180,
@@ -10817,5 +10815,22 @@
     "summary": "Do not reopen Phase 4; do not make Canary a runner; add VerifiedCohortRun as the trusted bridge between the exact input set and the Phase 4 evaluation.",
     "archive_verified": "FULL_COPY_OK",
     "archive_head": "a9e25d9f"
+  },
+  "phase5_u4_final3": {
+    "status": "SUBMITTED / AWAITING_VERDICT",
+    "reviewed_head": "4f4ae0ed",
+    "pushed": true,
+    "local_verification": {
+      "tsc": "PASS",
+      "targeted": "canary-shadow-evaluation 10/10",
+      "phase5": "10 files / 128 tests PASS",
+      "regression": "103 files / 1075 tests (1 failed = P2E-DB5)",
+      "github_ci": "NOT_OBSERVED"
+    },
+    "submission": {
+      "marker": "[CODEX-PHASE5-U4FINAL3]",
+      "delivered": true,
+      "expected_message_id": "MSG-20261005-80"
+    }
   }
 }
