@@ -2693,3 +2693,9 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - MODEL_GATEWAY_RUNTIME_WIRED / COST_CORE_RUNTIME_WIRED / META_IMPROVEMENT_INTEGRATED 仍为 false（后续能力，不构成 STEP 3 reopening）。
 - 全部生产边界保持 HOLD；STEP 3 CLOSED ≠ SI/RSI 生产开闸。
 - 待归档：MSG-42（FINAL-2，旧会话干净重抽）、MSG-44（FINAL-4）、MSG-45（FINAL-5，完整重抽）、MSG-46（FINAL-6）。
+
+## 2026-10-06T13:00Z —— PHASE 2 FINAL2 裁决归档（MSG-20261005-48，①②③ REVISE / PHASE2_FINAL3_REQUIRED = YES）
+- ① P2U2_7 需确定性 ALLOW fixture + 直接断言，禁止 if/else 放宽验收。
+- ② read-tool invocation audit 实际仍未回到 evidence digest（送审表述与代码不符）→ 必须真正恢复并提取纯函数测试。
+- ③ local-sim 前缀可伪装 → 必须以 factory provenance（WeakSet + 只读 isRsiLocalSimAdapter）判定。
+- 保持：B（Router strict allowlist）PASS；GITHUB_CI = NOT_OBSERVED；modelCallCount 语义 = Gateway 调用次数。

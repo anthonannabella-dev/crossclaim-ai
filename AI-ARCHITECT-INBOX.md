@@ -147150,3 +147150,157 @@ REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / P
 
 均不得因 STEP 3 closure 自动解锁。
 ```
+
+### [MSG-20261005-48] PHASE 2 MODEL GATEWAY RUNTIME FINAL2 — VERDICT = **NOT CLOSED / ① ② ③ 全部 REVISE**（① P2U2_7 需确定性 ALLOW fixture 并直接断言、不得 if/else 放宽；② read-tool invocation audit 实际仍未恢复到 digest；③ local-sim prefix 可伪装，需 factory provenance（WeakSet）而非名字校验；B（Router strict allowlist）继续 PASS；`PHASE2_FINAL3_REQUIRED = YES`）
+
+```text
+DECISION
+
+① 真 runtime 链：REVISE
+② evidence digest：REVISE
+③ HOLD 运行时强制：REVISE
+之前 B（Router strict allowlist）：继续 PASS
+PHASE_2_MODEL_GATEWAY_RUNTIME = NOT CLOSED
+PHASE2_FINAL3_REQUIRED = YES
+Reviewed HEAD：d89b42dc
+
+KEEP
+
+Recovery pack 已真实读取 modelGateway，P2U2_6 的 invoke===1 / modelCallCount===1 修复正确。
+composeRsiRuntime → productRecoveryPack → recovery-si → Shared Guard → Gateway → Judge 的结构已经搭出来。
+Gateway audit 字段进入 digest 的方向正确。
+非 local-sim adapter 默认拒绝的方向正确。
+Router creator strict allowlist 保持 PASS。
+GITHUB_CI = NOT_OBSERVED 继续正确。
+
+CHANGE
+
+只剩 3 个窄修。
+
+1. P2U2_7 仍没有证明“真 runtime 模型链一定执行”。
+
+现在测试是：
+
+if (decision === 'ALLOW') invoked===1 else invoked===0
+
+因此 Shared Guard 如果一直 DENY，这条测试仍然 PASS。
+
+FINAL3 必须使用现有 Shared Action Guard 的确定性 ALLOW 配置/fixture，然后直接断言：
+
+guard decision === ALLOW
+Gateway invoke === 1
+packId === recovery-si
+proposal 非空
+waitingForVerdict === true
+external verdict 后才完成
+
+不能再用 if/else 放宽验收。
+
+2. read-tool digest 实际仍未恢复。
+
+我核了 recovery-si-pack.ts 完整代码。
+
+当前 digest 是：
+
+task.id
+task.dedupeKey
+organizationId
+opportunityRef
+guardAction
+...gatewayAudit
+
+仍然没有：
+
+...invocations.map(i => i.tool)
+
+所以送审所称“read-tool 绑定已恢复”与实际代码不符。
+
+最小修复：把 read-tool invocation audit 真正放回 digest，例如：
+
+tool=<name>:ok=<state>
+
+并保留当前 gatewayAudit。
+
+最好把 evidence digest 组装提取成纯函数，直接测试：
+
+tool audit 改变 → evidenceRef 改变
+gateway audit 改变 → evidenceRef 改变
+
+3. local-sim prefix 不是可靠的运行时 capability enforcement。
+
+现在判断是：
+
+providerName.startsWith('rsi-local-sim')
+
+一个真实网络 adapter 完全可以写：
+
+providerName = 'rsi-local-sim-openai-real'
+
+然后通过 HOLD gate。
+
+所以：
+
+providerCapabilityEnforced: true
+
+目前还不能成立。
+
+最小安全方案：由 createRsiLocalSimAdapter() 工厂提供不可伪造的运行时 provenance。推荐非导出的 WeakSet 注册 adapter，并导出只读：
+
+isRsiLocalSimAdapter(adapter)
+
+Gateway 校验对象是否由真实 local-sim factory 创建，而不是校验名字。
+
+至少补：
+
+factory 创建的 local-sim → PASS
+普通 fake adapter amazon-real → REJECT
+伪装名 rsi-local-sim-openai-real → 也必须 REJECT
+strong adapter 同样验证
+
+RISKS
+
+还有一个非本轮阻断但要保持口径准确的点：
+
+aiEligible 现在只是 server-owned binding 字段，还不是 canonical production eligibility resolver；当前说明已经正确承认这一点，不需要扩范围。
+
+另外 modelCallCount=1 当前表达的是一次 Gateway invocation，不是 Router 内部可能发生的 low-cost + strong provider attempt 总数。只要字段语义继续定义为 Gateway 调用数即可，不要改口称 provider attempt count。
+
+TEST
+
+FINAL3 最小验收：
+
+Shared Guard 被明确配置为 ALLOW → runtime Gateway exactly 1。
+no gateway / aiEligible=false → Gateway 0。
+digest 真包含 read-tool audit + gateway audit。
+两类 audit 任一变化 → evidenceRef 变化。
+伪装 rsi-local-sim-* 名称的非 factory adapter → REJECT。
+原 78 files 继续全绿。
+
+NEXT
+
+只做这三个窄修，不要扩展 PHASE 2。
+
+通过后可记：
+
+U1 = PASS
+U2 = PASS
+PHASE_2_MODEL_GATEWAY_RUNTIME = PASS / CLOSED
+PHASE2_FINAL4_REQUIRED = NO
+
+然后授权进入 PHASE 3 ACTION RUNTIME。
+
+PRODUCTION
+
+全部保持 HOLD：
+
+REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing
+
+SECOND_* = FORBIDDEN
+L5_RELAXATION = FORBIDDEN
+
+并继续保持：
+
+MODEL_GATEWAY_RUNTIME_WIRED = false
+ACTION_RUNTIME_PRODUCTION_ENABLED = false
+PRODUCTION_READY = false
+```

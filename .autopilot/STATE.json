@@ -50,11 +50,11 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
-  "next_execution_unit": "投递 PHASE 2 FINAL2 审计（marker [CODEX-PHASE2-FINAL2]）→ 送达三检 → 读取 verdict → 逐字归档 + FULL_COPY_OK → 对账；MODEL_GATEWAY_RUNTIME_WIRED 保持 false",
+  "next_execution_unit": "PHASE 2 FINAL3（仅三项）：① P2U2_7 改用确定性 ALLOW guard fixture 并直接断言（Gateway invoke=1、packId=recovery-si、proposal 非空、waitingForVerdict=true、external verdict 才完成）② evidence digest 真正恢复 read-tool invocation audit（tool=<name>:ok=<state>）+ 提取纯函数并测试 digest 敏感性③ local-sim provenance 改为 factory WeakSet（导出只读 isRsiLocalSimAdapter；伪装名必须 REJECT；strong 同样校验）→ tsc / 回归 → commit + push → 再次送审 PHASE 2 FINAL3",
   "automation_status": "CONTINUOUS",
   "last_tick_at": "2026-10-06T08:30:00.000Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "PHASE 2 FINAL2 落地：evidence digest 恢复 read-tool 绑定并纳入 gateway 审计字段；createSiModelGatewayPort 强制 local-sim brand（真实/付费 adapter fail-closed）；新增 P2U2_7 真 runtime 链与 P2U2_8 HOLD 边界",
+  "last_action": "PHASE 2 FINAL2 裁决归档（MSG-20261005-48）：①②③ 全 REVISE → FINAL3 窄修授权",
   "last_action_at": "2026-10-06T08:30:00.000Z",
   "next_action": "C2 IMPLEMENTATION（Schema Delta + durable ledger/budget + PG 回归）",
   "current_head": "054ab732",
@@ -9447,7 +9447,7 @@
   "step3_runtime_policy_wiring_closed_at": "2026-10-06T12:00:00.000Z",
   "phase_state": {
     "PHASE_1_FINAL7": "PASS / CLOSED（MSG-20261005-47，REVIEWED_HEAD = 795f65a5；STEP3_FINAL8_REQUIRED = NO）",
-    "PHASE_2_MODEL_GATEWAY_RUNTIME": "FINAL2 DONE / PENDING RE-AUDIT（digest 恢复+扩展；HOLD 运行时强制 local-sim only；真 runtime 链精确计数）",
+    "PHASE_2_MODEL_GATEWAY_RUNTIME": "FINAL3_REQUIRED（FINAL2 裁决 ①②③ 全 REVISE；Reviewed HEAD d89b42dc，暂不进入 PHASE 3）",
     "PHASE_3_ACTION_RUNTIME": "QUEUED",
     "PHASE_4_OUTCOME_LEARNING_PIPELINE": "QUEUED",
     "PHASE_5_META_IMPROVEMENT": "QUEUED（依赖真实运行结果）"
@@ -9456,5 +9456,27 @@
     "interval_seconds": 180,
     "automation_id": "crossclaim-si-watchdog-180s",
     "role": "WAKEUP_WATCHDOG_ONLY"
+  },
+  "phase2_final2_verdict": {
+    "message_id": "MSG-20261005-48",
+    "verdict": "NOT CLOSED / ①②③ REVISE",
+    "reviewed_head": "d89b42dc",
+    "pass_kept": [
+      "Recovery pack 读取 modelGateway 且 invoke===1 修复正确",
+      "结构链已搭出",
+      "gateway audit 进 digest 方向正确",
+      "non-local-sim 默认拒绝方向正确",
+      "Router strict allowlist PASS",
+      "GITHUB_CI = NOT_OBSERVED 正确"
+    ],
+    "changes": [
+      "① P2U2_7 必须用共享 Action Guard 的确定性 ALLOW fixture，直接断言 guard=ALLOW / Gateway invoke=1 / packId=recovery-si / proposal 非空 / waitingForVerdict=true / external verdict 才完成；禁止 if/else 放宽",
+      "② read-tool invocation audit 必须真正放回 evidence digest（如 tool=<name>:ok=<state>），并保留 gatewayAudit；最好把 digest 组装提取为纯函数并测试“任一 audit 变化 → evidenceRef 变化”",
+      "③ local-sim 必须以 factory provenance（模块内非导出 WeakSet + 导出只读 isRsiLocalSimAdapter）判定，不得只校验 providerName 前缀；伪装名 rsi-local-sim-* 的非 factory adapter 也必须 REJECT；strong adapter 同样校验"
+    ],
+    "note_modelCallCount_semantics": "modelCallCount = Gateway 调用次数，不得改口称 provider attempt 数",
+    "note_aiEligible": "aiEligible 仍只是 server-owned binding 字段，不宣称 canonical production eligibility resolver",
+    "phase2_final3_required": "YES",
+    "archive": "AI-ARCHITECT-INBOX.md#MSG-20261005-48"
   }
 }
