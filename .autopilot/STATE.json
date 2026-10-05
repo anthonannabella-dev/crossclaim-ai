@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-40",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T21:35:12.079Z",
+  "updated_at": "2026-10-05T21:36:37.820Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -50,13 +50,13 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
-  "next_execution_unit": "PHASE 5 U3 FINAL2 verdict archive + U4 entry: (1) read verdict (REVIEWED_HEAD = 9a245254, marker [CODEX-PHASE5-U3FINAL2]); (2) write work/stage/verdict-p5u3g-raw.txt then archive AI-ARCHITECT-INBOX.md (MSG-20261005-75) + compare.mjs FULL_COPY_OK + commit/push; (3) durable state; if REVISE do the narrow fix; if PASS -> P5-U4 Canary/Shadow Evaluation (isolation, metric definitions, relation to U4 offline evaluation, rollback-to-baseline triggers; still no auto apply/promotion/rollout); (4) afterwards re-evaluate Controlled Adoption; boundaries unchanged: REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing = HOLD; SECOND_* = FORBIDDEN; L5_RELAXATION = FORBIDDEN.",
+  "next_execution_unit": "PHASE 5 U4 Canary / Shadow Evaluation: read the frozen minimum requirements from the archived verdict MSG-20261005-75 (isolation mode, metric definitions, relation to the U4 offline evaluation, and when rollback to the U2 baseline is mandatory); implement code + tests + regression + tsc + commit + push -> audit -> archive -> durable state. Still forbidden: auto apply / promotion / rollout, Policy/Guard/Router/Action Runtime mutation, REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing = HOLD; SECOND_* = FORBIDDEN; L5_RELAXATION = FORBIDDEN.",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-05T21:35:12.079Z",
+  "last_tick_at": "2026-10-05T21:36:37.820Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "PHASE 5 U3 FINAL2（target-specific delta value schema）done: TARGET_DELTA_VALUE_SCHEMA (INTEGER_RANGE/NUMBER_RANGE/ENUM) + isValidDeltaValue; delta.to invalid -> CONTROLLED_PROPOSAL_DELTA_VALUE_INVALID. code 9a245254 pushed and submitted (marker [CODEX-PHASE5-U3FINAL2], REVIEWED_HEAD = 9a245254). Local: tsc 0; controlled-config-proposal 12/12; PHASE5 9 files / 118 tests PASS; regression 102 files / 1065 tests (only P2E-DB5).",
-  "last_action_at": "2026-10-05T21:35:12.079Z",
-  "next_action": "读取 PHASE 5 U3 FINAL2 裁决 → 归档（MSG-20261005-75）→ 若 PASS 则 U3 = CLOSED 并进入 P5-U4 Canary/Shadow Evaluation。",
+  "last_action": "PHASE 5 U3 FINAL2 verdict archived (MSG-20261005-75, FULL_COPY_OK, archive commit 9d69ffe5): TARGET_SPECIFIC_DELTA_VALUE_SCHEMA / PATH_ALLOWLIST / DELTA_BASELINE_VALUE_BINDING / PROPOSAL_DIGEST_BINDING = PASS; PHASE_5_U3 = PASS / CLOSED; PHASE5_U3_FINAL3_REQUIRED = NO. Authorized to enter P5-U4 Canary / Shadow Evaluation.",
+  "last_action_at": "2026-10-05T21:36:37.820Z",
+  "next_action": "Execute P5-U4 Canary / Shadow Evaluation per the auditor minimum requirements archived in MSG-20261005-75, then re-evaluate Controlled Adoption.",
   "current_head": "9a245254",
   "last_completed_head": "9a245254",
   "reviewed_head": "add99ec3",
@@ -5169,10 +5169,11 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "P5U3G-1 read U3 FINAL2 verdict (9a245254) → write verdict raw → archive MSG-20261005-75 → compare FULL_COPY_OK → commit/push → durable state",
-    "P5U3G-2 if PASS → open P5-U4 Canary/Shadow Evaluation per auditor minimum requirements",
-    "P5U3G-3 afterwards re-evaluate Controlled Adoption (audit authorization required)",
-    "P5U3G-4 non-blocking debt: full SHA-256 digests, fingerprint schema upkeep, scanRawPayloadKeys bounded traversal, P2E-DB5 test-isolation"
+    "P5U4-1 read MSG-20261005-75 NEXT section for U4 minimum requirements; scaffold canary/shadow evaluation contract (isolation, metric denominator, rollback triggers tied to U2 baseline)",
+    "P5U4-2 U4 tests + regression + tsc + commit + push",
+    "P5U4-3 audit U4 -> archive (MSG-20261005-76) -> compare FULL_COPY_OK -> durable state",
+    "P5U4-4 afterwards re-evaluate Controlled Adoption (audit authorization required)",
+    "P5U4-5 non-blocking debt: full SHA-256 digests, fingerprint schema upkeep, scanRawPayloadKeys bounded traversal, P2E-DB5 test-isolation"
   ],
   "full_autonomous_internal_execution": "VERIFIED",
   "dispatcher_acceptance": {
@@ -9322,7 +9323,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-05T21:35:12.079Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-05T21:36:37.820Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -9450,7 +9451,7 @@
     "PHASE_2_MODEL_GATEWAY_RUNTIME": "PASS / CLOSED（MSG-20261005-50；Reviewed HEAD 338f30b4；PHASE2_FINAL5_REQUIRED = NO）",
     "PHASE_3_ACTION_RUNTIME": "PASS / CLOSED（MSG-20261005-54；Reviewed HEAD = fe3c33e9；PHASE3_FINAL4_REQUIRED = NO）",
     "PHASE_4_OUTCOME_LEARNING_PIPELINE": "CLOSED / PASS（MSG-20261005-67）：U1 FINAL / U2 / U3 / U4 / U5 全 CLOSED；含 U4 FINAL、U5 FINAL、U5 FINAL2、PHASE 4 FINAL CLOSURE。",
-    "PHASE_5_META_IMPROVEMENT": "IN PROGRESS: U1/U2 = PASS / CLOSED; U3 = PASS WITH REVISE, U3 FINAL2 = SUBMITTED / AWAITING_VERDICT (9a245254); NEXT = U4 Canary/Shadow Evaluation."
+    "PHASE_5_META_IMPROVEMENT": "IN PROGRESS: U1 / U2 / U3 = PASS / CLOSED; NEXT = U4 Canary / Shadow Evaluation -> then Controlled Adoption re-evaluation."
   },
   "heartbeat_watchdog": {
     "interval_seconds": 180,
@@ -9922,7 +9923,7 @@
       "U5"
     ]
   },
-  "archive_head": "c47ba0a0",
+  "archive_head": "9d69ffe5",
   "phase4_u3_final": {
     "status": "PASS / CLOSED",
     "reviewed_head": "006cc912",
@@ -10657,5 +10658,20 @@
       "delivered": true,
       "expected_message_id": "MSG-20261005-75"
     }
+  },
+  "phase5_u3_final2_verdict": {
+    "message_id": "MSG-20261005-75",
+    "verdict": "PASS / CLOSED",
+    "reviewed_head": "9a245254",
+    "archive_verified": "FULL_COPY_OK",
+    "archive_head": "9d69ffe5",
+    "pass": [
+      "TARGET_SPECIFIC_DELTA_VALUE_SCHEMA = PASS",
+      "TARGET_SPECIFIC_DELTA_PATH_ALLOWLIST = PASS",
+      "DELTA_BASELINE_VALUE_BINDING = PASS",
+      "PROPOSAL_DIGEST_BINDING = PASS",
+      "PHASE_5_U3 = PASS / CLOSED"
+    ],
+    "phase5_u3_final3_required": "NO"
   }
 }
