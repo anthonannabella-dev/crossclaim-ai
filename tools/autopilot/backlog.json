@@ -1953,6 +1953,32 @@
       "implementation_head": null,
       "audit_request": "docs/releases/SI-RSI-UNIFICATION-DIRECTIVE.md",
       "note": "单一顶层 CrossClaim SI Runtime；RSI 下沉为 Meta-Improvement Capability；Recovery SI 作为领域能力接入既有 Runtime；ONE CONTROL PLANE + L1–L5 权限分层保持不变；高风险动作继续 fail-closed。 P2-E 已 PASS / CLOSED（MSG-20261005-27），依赖解除；按冻结顺序执行 repo-wide inventory → KEEP/REUSE/MERGE/DEPRECATE/DUPLICATE → 最小统一方案 → Architecture Audit。仅 docs/releases/**。"
+    },
+    {
+      "id": "si-cost-optimization",
+      "priority": "P1",
+      "source_backlog_id": "HOST ADDENDUM 2026-10-05 — CROSSCLAIM SI COST / TOKEN OPTIMIZATION",
+      "title": "CrossClaim SI Cost / Token Optimization（durable cost ledger + hierarchical budget + deterministic model cache + AI necessity gate + cheap→strong quality gate + business-value cost policy + admin observability）",
+      "scope": "统一 SI Runtime 稳定后执行：OPT-1..OPT-7；坚持 DETERMINISTIC FIRST → AI ONLY WHEN NEEDED（LEVEL_0_RULE 默认零 token）",
+      "acceptance_criteria": "Acceptance 12 条逐条证明（LEVEL_0 默认 / rule-solvable 禁模型 / durable ledger survives restart / tenant budget isolation / cache identity 安全 / stale cache fail-closed / cheap→strong 必经 quality gate / 预算耗尽无无限 retry / strong 不被滥用 / 无 credential·raw prompt·raw response 持久化 / Cost Safe Mode / regression 全绿）+ 真实指标（无数据则 NOT_YET_MEASURABLE，禁止伪造）",
+      "dependencies": [
+        "si-rsi-unification-design"
+      ],
+      "risk_class": "HIGH",
+      "ARCH_REVIEW_REQUIRED": true,
+      "HOST_ACTION_REQUIRED": false,
+      "HOLD_EXTERNAL": true,
+      "allowed_files": [
+        "docs/releases/**"
+      ],
+      "boundary": "REGISTRATION_ONLY；REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / PRODUCTION_CREDENTIALS / P2-G = HOLD；不得打断 SI-RSI Unification",
+      "required_tests": [],
+      "template": "arch-design-request",
+      "filters": [],
+      "status": "QUEUED_BLOCKED_BY_SI_RSI_UNIFICATION",
+      "implementation_head": null,
+      "audit_request": "docs/releases/SI-COST-OPTIMIZATION-REGISTRATION.md",
+      "note": "HOST ADDENDUM：依赖 SI_RSI_UNIFICATION_PASS_CLOSED；统一 Runtime PASS/CLOSED 后自动进入执行队列（P1）。登记内容见 docs/releases/SI-COST-OPTIMIZATION-REGISTRATION.md（含 OPT-1..OPT-7、Acceptance 12 条与边界）。"
     }
   ],
   "authorization_note": "MSG-20261003-133 Q3：dispatcher 获授权自动扩 backlog 并执行安全单元（契约/已批准 D1–D3 Schema/append-only 持久化/deterministic normalization/qualification·evidence·package/测试/文档/fixture/只读 HTTP/只读 reconciliation projection）；遇到未批准 Schema、EXTERNAL_WRITE Action Guard、真实 adapter/webhook、submission、真实资金语义写入、生产 credential、收费时必须停该分支并重新送审。 HOST 2026-10-04（CONTINUOUS EXECUTION + CUSTOMS AUTHORIZATION + CHATGPT AUDIT LOOP）：UI-6…UI-8 与 CA-2…CA-6 已登记为可执行队列；Schema/Security/Authorization 边界项自动进入 ChatGPT Audit Loop（AUDIT-BRIDGE.md，不新建协议）。"

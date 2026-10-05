@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-22",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T12:30:00.000Z",
+  "updated_at": "2026-10-05T12:45:00.000Z",
   "previous_head": "8064f07",
   "architect_decision_pending": true,
   "blocked_scope": null,
@@ -52,7 +52,7 @@
   "continuous_execution": "ACTIVE",
   "next_execution_unit": "si-rsi-unification-design（P2-E 已 PASS / CLOSED，依赖解除）：repo-wide inventory → RSI / Recovery SI / autopilot / runtime / scheduler / judge / policy / kill switch 盘点 → KEEP/REUSE/MERGE/DEPRECATE/DUPLICATE 分类 → 最小统一方案 → Architecture Audit → 消费 verdict → REVISE 循环 → PASS。仅 docs/releases/**；P2_F / P2_G 继续 HOLD。",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-05T12:30:00.000Z",
+  "last_tick_at": "2026-10-05T12:45:00.000Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
   "last_action": "RECOVERY SI P2-E = PASS / CLOSED（MSG-20261005-27，FULL_COPY_OK 105/105；CHANGE_E5 = PASS；FINAL6_REQUIRED = NO）；五轮闭环全部逐字归档",
   "last_action_at": "2026-10-05T12:30:00.000Z",
@@ -5199,9 +5199,9 @@
   "awaiting_verdict": "EXACT-ORDER REPLAY 证据已送审（comment 5979262070）；shared/staging deploy 解禁待裁决",
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-05T10:51:35.227Z",
-    "head": "dfa701ab",
-    "acceptance_head": "dfa701ab",
+    "computed_at": "2026-10-05T10:57:41.649Z",
+    "head": "5bd79940",
+    "acceptance_head": "5bd79940",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5291,6 +5291,7 @@
       "recovery-si-phase2-d-design",
       "recovery-si-phase2-remainder-queue",
       "si-rsi-unification-design",
+      "si-cost-optimization",
       "CHECK:L1-01_safe_continuation_queue_zero",
       "CHECK:L1-02_no_open_internal_items",
       "CHECK:L1-03_no_open_markers",
@@ -5344,12 +5345,12 @@
       "L1-01_safe_continuation_queue_zero": {
         "label": "SAFE_CONTINUATION_QUEUE = 0",
         "status": false,
-        "evidence": "open backlog items: 81"
+        "evidence": "open backlog items: 82"
       },
       "L1-02_no_open_internal_items": {
         "label": "所有 Codex 可独立完成的内部缺口 CLOSED",
         "status": false,
-        "evidence": "open internal: c18-1-provider-integration-matrix,c18-2-provider-dto-schema,c18-3-sandbox-filing-provider,c18-4-provider-webhook-verification,c18-5-provider-idempotency-reconciliation,c18-6-provider-tenant-account-lineage,c18-7-provider-authorization-lifecycle,c18-8-provider-negative-path-e2e,seo-1-gap-audit-and-page-matrix,seo-2-recovery-rule-definition-v1,seo-3-public-checker-calculator,seo-4-recover-routes-and-locales,seo-5-technical-seo,seo-6-indexability-gate,seo-7-analytics-event-contract,seo-8-seo-contract-tests,SEO-4-STAGE-1-recover-route-skeleton,SEO-4-STAGE-2-recover-metadata,SEO-4-STAGE-3-recover-jsonld,SEO-4-STAGE-4-recover-sitemap-robots,SEO-4-STAGE-5-recover-content-internal-links,SEO-4-STAGE-6-seo-contract-tests,SEO-4-STAGE-7-recover-page-plan-facade,SEO-4-STAGE-8-recover-i18n-keys,SEO-4-BOUNDARY-recover-page-datasource,SEO-4-STAGE-9-web-recover-route-skeleton,SEO-4-STAGE-10-static-projection-contract,SEO-4-STAGE-11-static-projection-exporter,SEO-4-STAGE-12-rule-source-and-cli,SEO-4-STAGE-13-web-ssg-from-projection,SEO-4-STAGE-14-web-sitemap-robots,SEO-4-STAGE-15-projection-pipeline-guard,SEO-4-STAGE-16-web-wiring-contract-test,SEO-4-P0-route-shape-vs-canonical-mismatch,SEO-4-P0-projection-carries-canonical-path,RSI-P1-01-lifecycle-contract,RSI-P1-02-readonly-observer,RSI-P1-03-auto-task-generator,RSI-P1-04-builder-judge-separation,RSI-P1-05-immutable-evidence,RSI-P1-06-policy-engine,RSI-P1-07-e2e-demo,RSI-RT-01-runtime-entry,RSI-RT-02-supervisor-autostart,RSI-RT-03-health-state,RSI-RT-04-admin-autonomy-page,RSI-RT-05-kill-switch,RSI-RT-06-state-reconcile,RSI-COST-01-policy-core,RSI-COST-02-model-router-adapter,RSI-COST-03-call-ledger,RSI-COST-04-admin-cost-panel,RSI-COST-05-cost-e2e,RSI-INSP-01-drift-detector,RSI-INSP-02-daily-health-inspection,RSI-INSP-03-weekly-full-review,RSI-INSP-04-golden-fixtures,RSI-INSP-05-production-to-fixture,RSI-CONT-01-continuation-engine,RSI-CONT-02-controller-wiring,RSI-CONT-03-event-sources,RSI-CONT-04-event-loop,RSI-CONT-05-local-sources,RSI-CONT-06-runtime-composition,RSI-RT-07-admin-health-panel,RSI-RT-08-admin-autonomy-page,RSI-RT-09-admin-snapshot-generator,RSI-RT-10-snapshot-publisher,RSI-INSP-06-capability-gap-signal,RSI-RT-11-health-fields,RSI-CONT-07-verdict-watcher,RSI-CONT-08-runtime-e2e,RSI-RT-12-deployment-contract-test,RSI-INSP-07-weekly-capability-integration,recovery-si-phase1,recovery-si-phase2,recovery-si-phase2-ab,recovery-si-phase2-c-design,recovery-si-phase2-d-design,recovery-si-phase2-remainder-queue,si-rsi-unification-design"
+        "evidence": "open internal: c18-1-provider-integration-matrix,c18-2-provider-dto-schema,c18-3-sandbox-filing-provider,c18-4-provider-webhook-verification,c18-5-provider-idempotency-reconciliation,c18-6-provider-tenant-account-lineage,c18-7-provider-authorization-lifecycle,c18-8-provider-negative-path-e2e,seo-1-gap-audit-and-page-matrix,seo-2-recovery-rule-definition-v1,seo-3-public-checker-calculator,seo-4-recover-routes-and-locales,seo-5-technical-seo,seo-6-indexability-gate,seo-7-analytics-event-contract,seo-8-seo-contract-tests,SEO-4-STAGE-1-recover-route-skeleton,SEO-4-STAGE-2-recover-metadata,SEO-4-STAGE-3-recover-jsonld,SEO-4-STAGE-4-recover-sitemap-robots,SEO-4-STAGE-5-recover-content-internal-links,SEO-4-STAGE-6-seo-contract-tests,SEO-4-STAGE-7-recover-page-plan-facade,SEO-4-STAGE-8-recover-i18n-keys,SEO-4-BOUNDARY-recover-page-datasource,SEO-4-STAGE-9-web-recover-route-skeleton,SEO-4-STAGE-10-static-projection-contract,SEO-4-STAGE-11-static-projection-exporter,SEO-4-STAGE-12-rule-source-and-cli,SEO-4-STAGE-13-web-ssg-from-projection,SEO-4-STAGE-14-web-sitemap-robots,SEO-4-STAGE-15-projection-pipeline-guard,SEO-4-STAGE-16-web-wiring-contract-test,SEO-4-P0-route-shape-vs-canonical-mismatch,SEO-4-P0-projection-carries-canonical-path,RSI-P1-01-lifecycle-contract,RSI-P1-02-readonly-observer,RSI-P1-03-auto-task-generator,RSI-P1-04-builder-judge-separation,RSI-P1-05-immutable-evidence,RSI-P1-06-policy-engine,RSI-P1-07-e2e-demo,RSI-RT-01-runtime-entry,RSI-RT-02-supervisor-autostart,RSI-RT-03-health-state,RSI-RT-04-admin-autonomy-page,RSI-RT-05-kill-switch,RSI-RT-06-state-reconcile,RSI-COST-01-policy-core,RSI-COST-02-model-router-adapter,RSI-COST-03-call-ledger,RSI-COST-04-admin-cost-panel,RSI-COST-05-cost-e2e,RSI-INSP-01-drift-detector,RSI-INSP-02-daily-health-inspection,RSI-INSP-03-weekly-full-review,RSI-INSP-04-golden-fixtures,RSI-INSP-05-production-to-fixture,RSI-CONT-01-continuation-engine,RSI-CONT-02-controller-wiring,RSI-CONT-03-event-sources,RSI-CONT-04-event-loop,RSI-CONT-05-local-sources,RSI-CONT-06-runtime-composition,RSI-RT-07-admin-health-panel,RSI-RT-08-admin-autonomy-page,RSI-RT-09-admin-snapshot-generator,RSI-RT-10-snapshot-publisher,RSI-INSP-06-capability-gap-signal,RSI-RT-11-health-fields,RSI-CONT-07-verdict-watcher,RSI-CONT-08-runtime-e2e,RSI-RT-12-deployment-contract-test,RSI-INSP-07-weekly-capability-integration,recovery-si-phase1,recovery-si-phase2,recovery-si-phase2-ab,recovery-si-phase2-c-design,recovery-si-phase2-d-design,recovery-si-phase2-remainder-queue,si-rsi-unification-design,si-cost-optimization"
       },
       "L1-03_no_open_markers": {
         "label": "不存在 TODO/IN_PROGRESS/PARTIAL/READY_FOR_REVIEW/WAITING_FOR_VERDICT/未处理 REVISE·BLOCK",
@@ -5359,27 +5360,27 @@
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=dfa701ab ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
+        "evidence": "acceptance_head=5bd79940 ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
       },
       "L1-05_pg_regression_passed": {
         "status": "UNVERIFIED",
-        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head dfa701ab（且中间存在非簿记变更）"
+        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head 5bd79940（且中间存在非簿记变更）"
       },
       "L1-06_fresh_db_migration_passed": {
         "status": "UNVERIFIED",
-        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head dfa701ab（且中间存在非簿记变更）"
+        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head 5bd79940（且中间存在非簿记变更）"
       },
       "L1-07_api_typecheck_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head dfa701ab（且中间存在非簿记变更）"
+        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head 5bd79940（且中间存在非簿记变更）"
       },
       "L1-08_web_typecheck_build_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head dfa701ab（且中间存在非簿记变更）"
+        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head 5bd79940（且中间存在非簿记变更）"
       },
       "L1-09_no_skipped_critical_tests": {
         "status": "UNVERIFIED",
-        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head dfa701ab（且中间存在非簿记变更）"
+        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head 5bd79940（且中间存在非簿记变更）"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
@@ -5388,19 +5389,19 @@
       },
       "L1-11_docs_state_consistent": {
         "status": "UNVERIFIED",
-        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head dfa701ab（且中间存在非簿记变更）"
+        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head 5bd79940（且中间存在非簿记变更）"
       },
       "L1-12_schema_invariants_verified": {
         "status": "UNVERIFIED",
-        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head dfa701ab（且中间存在非簿记变更）"
+        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head 5bd79940（且中间存在非簿记变更）"
       },
       "L1-13_negative_paths_covered": {
         "status": "UNVERIFIED",
-        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head dfa701ab（且中间存在非簿记变更）"
+        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head 5bd79940（且中间存在非簿记变更）"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
         "status": "UNVERIFIED",
-        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head dfa701ab（且中间存在非簿记变更）"
+        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head 5bd79940（且中间存在非簿记变更）"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
@@ -8848,5 +8849,15 @@
       "ARCH_REVIEW_REQUIRED": "YES —— 审批 / HITL 边界变化（Action Guard dry-run 通路），需架构方对 P2-D 实施单独裁决"
     },
     "invariant": "ACTION_GUARD_DRY_RUN_ALLOW != EXECUTION_AUTHORIZATION；零审批消费 / 零 executor / 零业务事实写入 / 零外写；L5 永久拒绝"
+  },
+  "si_cost_optimization": {
+    "status": "REGISTERED_QUEUED",
+    "priority": "P1",
+    "dependency": "SI_RSI_UNIFICATION_PASS_CLOSED",
+    "registered_at": "2026-10-05T12:45:00.000Z",
+    "registration_doc": "docs/releases/SI-COST-OPTIMIZATION-REGISTRATION.md",
+    "activation_rule": "si-rsi-unification-design PASS/CLOSED 后自动激活（P1）；期间不启动任何实现，不打断 unification",
+    "scope_summary": "OPT-1 durable cost ledger（append-only / restart-durable / 无 raw prompt·response·credential·敏感 payload）; OPT-2 四级预算（PLATFORM→ORGANIZATION→ACCOUNT→INCIDENT/TASK）+ cost-safe degradation; OPT-3 deterministic model cache（身份绑定 + stale fail-closed + savedTokens/savedCost）; OPT-4 AI Necessity Gate（RULE_SOLVABLE / HIGH_CONFIDENCE → MODEL_CALL_FORBIDDEN；未知 fail-closed）; OPT-5 cheap→strong quality gate（schema/evaluator/judge，HTTP 200 ≠ 有效）; OPT-6 business-value cost policy（cost per opportunity/case/recovery/$1000；estimated recovery value 必须来自可信 canonical basis）; OPT-7 admin observability（不含客户敏感内容）",
+    "boundary": "REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / PRODUCTION_CREDENTIALS / P2_G = HOLD；FINAL_ACCEPTANCE_HEAD = 0f7f7ac"
   }
 }

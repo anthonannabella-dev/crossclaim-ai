@@ -2466,3 +2466,13 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
   → RSI / Recovery SI / autopilot / runtime / scheduler / judge / policy / kill switch 盘点
   → KEEP / REUSE / MERGE / DEPRECATE / DUPLICATE 分类 → 最小统一方案 → Architecture Audit → 消费 verdict → REVISE 循环 → PASS。
 - 本窗口在此 checkpoint 收口（下一窗口立即从 inventory 继续；不含任何代码/运行时接线）。
+
+## 2026-10-05T12:45Z — HOST ADDENDUM 登记：SI-COST-OPTIMIZATION（P1，QUEUED，不打断 unification）
+- 新增 `docs/releases/SI-COST-OPTIMIZATION-REGISTRATION.md`：逐条登记 HOST 指令（总原则 DETERMINISTIC FIRST → AI ONLY WHEN NEEDED；
+  OPT-1 durable cost ledger / OPT-2 四级预算 / OPT-3 deterministic model cache / OPT-4 AI Necessity Gate /
+  OPT-5 cheap→strong quality gate / OPT-6 business-value cost policy / OPT-7 admin observability；Acceptance 12 条 + 指标要求 + 边界）。
+- backlog 新增 `si-cost-optimization`：Priority = **P1**，dependency = `si-rsi-unification-design`（= SI_RSI_UNIFICATION_PASS_CLOSED），
+  status = `QUEUED_BLOCKED_BY_SI_RSI_UNIFICATION`，allowed_files = `docs/releases/**`（登记阶段）；HOST_ACTION_REQUIRED = false。
+- STATE 新增 `si_cost_optimization`（REGISTERED_QUEUED + activation_rule + scope_summary + boundary）。
+- 明确：本任务**不打断**当前的 `si-rsi-unification-design`；统一 Runtime PASS/CLOSED 后自动进入执行队列（P1）。
+- 未授权项继续 HOLD：REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / PRODUCTION_CREDENTIALS / P2-G。
