@@ -149624,3 +149624,189 @@ META_IMPROVEMENT_INTEGRATED = false
 PRODUCTION_READY = false
 ```
 
+### [MSG-20261005-65] PHASE 4 U5 FINAL 裁决 = PASS WITH REVISE / NOT CLOSED（SOURCE_EVIDENCE_PROVENANCE = PASS / EVIDENCE_EVALUATION_SET_BINDING = PASS / LEDGER_RETURNED_EVIDENCE_REFS = PASS / META_IMPROVEMENT_PROPOSAL_ONLY = PASS；PROVENANCE_OBJECT_INTEGRITY = REVISE：WeakSet 只证对象来源、不证对象未被篡改；PHASE4_U5_FINAL2_REQUIRED = YES；PHASE_4_OUTCOME_LEARNING_PIPELINE = NOT YET CLOSED）， reviewed ref efe93df4
+
+```text
+DECISION
+
+SOURCE_EVIDENCE_PROVENANCE = PASS
+EVIDENCE_EVALUATION_SET_BINDING = PASS
+LEDGER_RETURNED_EVIDENCE_REFS = PASS
+META_IMPROVEMENT_PROPOSAL_ONLY = PASS
+PROVENANCE_OBJECT_INTEGRITY = REVISE
+PHASE_4_U5 = PASS WITH REVISE / NOT CLOSED
+PHASE4_U5_FINAL2_REQUIRED = YES
+Reviewed HEAD：efe93df4
+PHASE_4_OUTCOME_LEARNING_PIPELINE = NOT YET CLOSED
+
+KEEP
+
+U3 manifest 现在确实只能从 appendVerifiedLearningEvidence() 成功落入既有 RSI immutable ledger 后产生。
+learningEvidenceRefs 已改为使用 immutable ledger 实际返回的 ref，不再冒用 lineageRefs.evidenceRef。
+caller 手造 / spread-copy manifest 会失去 WeakSet provenance。
+U4 已暴露 verifiedOutcomeDigests，U5 做的是精确集合比较，不再只是数量校验。
+subset / superset 均 fail-closed。
+candidate 已绑定：
+evaluationDigest + evidenceSetDigest + source evidence + candidateDigest
+proposal-only / no apply / no mutation 边界继续成立。
+Exact SHA GitHub Actions：NOT_OBSERVED。
+
+CHANGE
+
+现在只剩一个很窄、但必须关闭的漏洞：
+
+WeakSet 只证明“对象来源”，不证明“对象没被修改”
+
+U3：
+
+TypeScript
+APP_VERIFIED_LEARNING_EVIDENCE_SETS.has(evidenceSet)
+
+U4：
+
+TypeScript
+VERIFIED_OFFLINE_EVALUATIONS.has(evaluation)
+
+都只检查对象 identity。
+
+但返回给 caller 的对象和嵌套数组都是普通 JS 可变对象。readonly 只是 TypeScript 编译期约束。
+
+因此 caller 可以拿真正有 provenance 的原对象后原地修改：
+
+TypeScript
+(evidenceSet as any).outcomeDigests = [...otherDigests]
+
+WeakSet 仍然：
+
+TypeScript
+isVerifiedLearningEvidenceSet(evidenceSet) === true
+
+同样可以修改：
+
+TypeScript
+(evaluation.resolved as any).successRate = 0.01
+;(evaluation.context.byEvidenceQuality as any).WEAK = 100
+
+isVerifiedOfflineEvaluation(evaluation) 仍然为 true。
+
+这样 U5 可以对被篡改但仍带 provenance 的对象生成 candidate。
+
+FINAL2 最小修法
+
+二选一，推荐 WeakMap trusted fingerprint/snapshot：
+
+U3 创建 manifest 时计算完整 canonical fingerprint，并存入模块私有 WeakMap<object, fingerprint>；
+isVerifiedLearningEvidenceSet() 不只检查 object identity，还重算 fingerprint 比较；
+U4 对 evaluation 同样处理；
+fingerprint 必须覆盖 U5 实际消费的所有字段。
+
+或者 deep-freeze：
+
+顶层对象；
+outcomeDigests / learningEvidenceRefs / evidenceDigests；
+provenance；
+evaluation 的 resolved/unresolved/context/maps/arrays/provenance。
+
+仅 Object.freeze(topLevel) 不够。
+
+RISKS
+
+还有一个非阻断但应顺手统一的语义：
+
+U3：
+
+outcomeDigests = sortedUnique(...)
+
+U4 当前：
+
+verifiedOutcomeDigests = sortAscending(...)
+
+并没有实际去重，虽然注释写了“sorted + 去重”。
+
+建议 FINAL2 明确选择：
+
+set semantics：U3/U4 都 sortedUnique；
+或 multiset semantics：两边都保留重复。
+
+不要注释说 set、实现一边 set 一边 multiset。
+
+这不必单独开 FINAL3，可以与对象完整性一起修。
+
+TEST
+
+FINAL2 至少增加：
+
+正式 evidenceSet 创建后原地修改 outcomeDigests → provenance REJECT。
+原地修改 evidenceSetDigest → REJECT。
+原地修改 learningEvidenceRefs/evidenceDigests → REJECT。
+正式 evaluation 后修改 successRate → provenance REJECT。
+修改 verifiedOutcomeDigests → REJECT。
+修改 context.byEvidenceQuality → REJECT。
+未修改正式对象 → PASS。
+U3/U4 duplicate digest 的 set/multiset 语义一致。
+exact match → U5 PASS；篡改后即使集合“手工改成匹配”也必须 REJECT。
+原 67 个 Phase 4 tests 保持 green。
+
+NEXT
+
+只做一个窄修：
+
+PHASE 4 U5 FINAL2 — provenance object integrity / anti-tamper closure
+
+不需要再改：
+
+U5 规则；
+denominator；
+immutable ledger；
+exact-set binding；
+proposal-only 规则。
+
+通过后可以直接裁定：
+
+U5 = PASS / CLOSED
+
+以及：
+
+PHASE_4_OUTCOME_LEARNING_PIPELINE = PASS / CLOSED
+
+然后才进入 PHASE 5 — Meta Improvement。
+
+Phase 5 的进入条件应冻结为：
+
+Phase 4 verified evidence
+→ verified evaluation
+→ PROPOSAL_ONLY candidate
+→ External Judge / Human Approval
+→ 才能讨论 controlled adoption。
+
+Phase 5 初始仍然只允许设计/沙箱层的：
+
+candidate review；
+approval/verdict；
+controlled config proposal；
+rollback plan；
+canary/shadow evaluation；
+
+不得一开始就允许自动修改 Policy / Guard / Router / Action Runtime。
+
+PRODUCTION
+
+全部继续 HOLD：
+
+REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing
+
+继续：
+
+SECOND_* = FORBIDDEN
+L5_RELAXATION = FORBIDDEN
+
+保持：
+
+MODEL_GATEWAY_RUNTIME_WIRED = false
+ACTION_RUNTIME_PRODUCTION_ENABLED = false
+META_IMPROVEMENT_INTEGRATED = false
+PRODUCTION_READY = false
+
+现在离 Phase 4 整体封板只差这个 anti-tamper provenance 窄修。
+```
+
