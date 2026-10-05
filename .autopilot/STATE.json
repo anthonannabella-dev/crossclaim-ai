@@ -6,12 +6,12 @@
   "next_task": "BG-016 单一 Acceptance Head + 四份状态一致 guard（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍 HOST_ACTION_REQUIRED 或 HOLD",
   "send_head": "07b7009",
   "decision_head": "f5e4cc2c",
-  "last_chatgpt_message": "MSG-20261005-38",
+  "last_chatgpt_message": "MSG-20261005-39",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-06T06:00:00.000Z",
+  "updated_at": "2026-10-06T06:30:00.000Z",
   "previous_head": "8064f07",
-  "architect_decision_pending": true,
+  "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "0c35106",
   "last_sent_at": "2026-10-03T09:07:52.875Z",
@@ -50,12 +50,12 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "ACTIVE",
-  "next_execution_unit": "读取 C3 FINAL-2 裁决 → 逐字归档（MSG-20261005-39）→ PASS/CLOSED 则宣布 SI_COST_OPTIMIZATION = PASS / CLOSED 并 recompute SAFE_CONTINUATION_QUEUE；REVISE 则最小集合窄修 → commit/push → 再送审",
+  "next_execution_unit": "C3 FINAL-3 narrow revision（1 durable Safe Mode → Model Gateway adapter wiring；2 trustworthy real-provider provenance）→ tsc / prisma / 真实 PG / regression → commit + push → C3 FINAL-3 Audit → PASS/CLOSED 则宣布 SI_COST_OPTIMIZATION = PASS / CLOSED 并 recompute SAFE_CONTINUATION_QUEUE",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-06T06:00:00.000Z",
+  "last_tick_at": "2026-10-06T06:30:00.000Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "C3 FINAL-2（A/B/C/D）完成并送审（实现 HEAD = 3572ac22）",
-  "last_action_at": "2026-10-06T06:00:00.000Z",
+  "last_action": "C3 FINAL-2 裁决 = PASS WITH REVISE（MSG-20261005-39）：A/B/C = PASS；D = REVISE；另 durable Safe Mode 未接 Gateway → C3_FINAL3_REQUIRED",
+  "last_action_at": "2026-10-06T06:30:00.000Z",
   "next_action": "C2 IMPLEMENTATION（Schema Delta + durable ledger/budget + PG 回归）",
   "current_head": "054ab732",
   "last_completed_head": "054ab732",
@@ -8851,7 +8851,7 @@
     "invariant": "ACTION_GUARD_DRY_RUN_ALLOW != EXECUTION_AUTHORIZATION；零审批消费 / 零 executor / 零业务事实写入 / 零外写；L5 永久拒绝"
   },
   "si_cost_optimization": {
-    "status": "C3_FINAL2_SUBMITTED_PENDING_VERDICT",
+    "status": "C3_FINAL3_REQUIRED",
     "priority": "P1",
     "dependency": "SI_RSI_UNIFICATION_PASS_CLOSED",
     "registered_at": "2026-10-05T12:45:00.000Z",
@@ -9273,6 +9273,33 @@
         "D：指标 provenance（NO_TRAFFIC / LOCAL_SIMULATION_ONLY / REAL_PROVIDER；仅真实 provider 才输出生产指标）"
       ],
       "tests": "tsc 0；si-cost-c3 23/23；si-cost-c3-db（真实 PG）14/14；回归 50 files / 458 tests PASS"
+    },
+    "c3_final2_verdict": {
+      "message_id": "MSG-20261005-39",
+      "verdict": "PASS WITH REVISE",
+      "reviewed_head": "3572ac22",
+      "pass": [
+        "CHANGE_A_BUSINESS_VALUE_GATE_ON_STRONG",
+        "CHANGE_B_CONCURRENCY_ZERO_DENY_ALL",
+        "CHANGE_C_PER_POLICY_SCOPE_SAFE_MODE_RESOLVER"
+      ],
+      "changes": [
+        "CHANGE A：durable Safe Mode 必须真正接到 Router 调用前 —— costSafeMode port 改为 async（Promise<admission>），Router await；新增 server-side adapter（refs → resolveAiCostSafeMode() → decideAiCostSafeModeAdmission(STANDARD_AI)）并接入 local-sim composition",
+        "CHANGE B：REAL_PROVIDER 不得由 provider 名称字符串推断 —— 在现有边界下 production metrics 恒 NOT_YET_MEASURABLE，或仅由 server-owned trusted provider registry / explicit provenance predicate 判定"
+      ],
+      "required_tests": [
+        "durable org budget exhausted → Router local-sim provider calls = 0",
+        "durable account/incident budget exhausted → Router provider = 0",
+        "durable Safe Mode NORMAL → Router 正常执行",
+        "durable resolver error → fail-closed，provider = 0",
+        "L0 仍不受 Safe Mode 影响",
+        "手工写入 provider='fake-real-provider' 不得令 production metrics measurable",
+        "REAL_MODEL_NETWORK=HOLD → production metrics = NOT_YET_MEASURABLE",
+        "原 C3 23/23 + PG 14/14 + 全量回归继续绿"
+      ],
+      "c3_final3_required": "YES",
+      "c4_required": "NO",
+      "archive": "AI-ARCHITECT-INBOX.md#MSG-20261005-39"
     }
   },
   "si_rsi_unification": {

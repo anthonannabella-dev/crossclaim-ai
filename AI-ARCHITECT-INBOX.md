@@ -146060,3 +146060,192 @@ STEP_3_RUNTIME_POLICY_WIRING = NOT_AUTHORIZED
 
 结论：C3 的整体方向正确，也没有生产越界；收完这 4 个窄语义问题即可关闭整个 SI-COST-OPTIMIZATION。
 ```
+
+### [MSG-20261005-39] SI-COST-OPTIMIZATION C3 FINAL-2 — VERDICT = **PASS WITH REVISE**（CHANGE A strong business-value gate = PASS；CHANGE B concurrencyLimit=0 = DENY_ALL = PASS；CHANGE C per-policy-scope Safe Mode resolver = PASS；CHANGE D metric provenance = REVISE；另发现 durable Safe Mode 尚未接到 Gateway → `C3_FINAL3_REQUIRED = YES`；`C4_REQUIRED = NO`）
+
+```text
+DECISION
+
+VERDICT = PASS WITH REVISE
+
+核对 REVIEWED_HEAD = 3572ac22 后：
+
+CHANGE A — business-value gate on STRONG escalation = PASS
+CHANGE B — concurrencyLimit=0 = DENY_ALL = PASS
+CHANGE C — per-policy-scope Safe Mode resolver = PASS
+CHANGE D — production metric provenance = REVISE
+3572ac22 → 4495f74a 仅 docs / 状态 / 送审簿记：PASS
+
+另发现 Safe Mode 还有一个运行时接线缺口。
+
+因此：
+
+C3_IMPLEMENTATION = NOT_YET_CLOSED
+SI_COST_OPTIMIZATION = NOT_YET_CLOSED
+C3_FINAL3_REQUIRED = YES
+C4_REQUIRED = NO
+
+KEEP
+
+以下全部保留：
+
+LOW_COST → quality gate → STRONG business-value second gate
+HIGH value + eligible canonical risk 才允许 strong
+UNKNOWN / LOW / MEDIUM / HIGH-risk → strong=0
+concurrencyLimit：
+null = NOT_CONFIGURED
+0 = DENY_ALL
+
+0 = N slots
+
+PG advisory slot 多实例机制
+resolveAiCostSafeMode() 的逐 policy scope 统计
+perIncident 无 incident → NOT_APPLICABLE
+cache runtime / tenant identity / zero fake ledger
+observability 只读
+simulation/dev 指标与 production 指标分离的方向。
+CHANGE
+CHANGE A — Durable Safe Mode 必须真正接到 Router 调用前
+
+现在 durable resolver：
+
+resolveAiCostSafeMode(prisma, ...)
+
+是 async PostgreSQL 查询。
+
+但 Router 端口仍是同步：
+
+TypeScript
+costSafeMode?: (...) => {
+  standardAiAllowed: boolean
+  ...
+}
+
+Router 测试实际注入的也是手工：
+
+standardAiAllowed:false
+
+而不是 durable ledger + policy resolver。
+
+因此目前证明了：
+
+durable resolver 算得对
+
+也证明了：
+
+Router 接到一个“拒绝结果”时会拒绝
+
+但尚未证明：
+
+真实 Router 调用前一定读取 durable policy + ledger 并执行 Safe Mode。
+
+最小修订：
+
+让 costSafeMode port 支持 async：
+
+Promise<admission>
+
+Router：
+
+await options.costSafeMode(...)
+
+并增加一个 server-side adapter，把：
+
+refs → resolveAiCostSafeMode() → decideAiCostSafeModeAdmission(STANDARD_AI)
+
+真正接入 local-sim composition。
+
+仍然不属于 production runtime wiring。
+
+CHANGE B — REAL_PROVIDER 不能靠 provider 名字符串判断
+
+现在：
+
+/^rsi-local-sim/i = simulation
+其他任何字符串 = REAL_PROVIDER
+
+测试甚至直接写入：
+
+provider='amazon-ads-readonly'
+
+就得到：
+
+REAL_PROVIDER
+
+但 ledger 的 provider 是普通字符串。
+
+所以伪造/fixture/test 名称就可以把：
+
+NOT_YET_MEASURABLE
+
+变成“真实生产指标”。
+
+这不满足“可验证真实 provider traffic”。
+
+当前生产网络仍是 HOLD，因此最安全的 FINAL-3：
+
+在现有边界下 production metrics 恒 NOT_YET_MEASURABLE
+或仅由 server-owned trusted provider registry / explicit provenance predicate 判断 REAL_PROVIDER
+不得仅依据 ledger provider 名称推断真实性
+
+不要求新增 Schema。
+
+RISKS
+
+只剩两个关闭项：
+
+durable Safe Mode 算法存在，但尚未证明处于 Model Gateway 的真实执行链；
+任意非 local-sim provider 名称可伪造真实流量 provenance。
+
+其他 C3 核心成本控制已经成立。
+
+TEST
+
+FINAL-3 最小增加：
+
+durable org budget exhausted → Router local-sim provider calls = 0
+durable account/incident budget exhausted → Router provider = 0
+durable Safe Mode NORMAL → Router 正常执行
+durable resolver error → fail-closed，provider=0
+L0 仍不受 Safe Mode 影响
+手工写入 provider='fake-real-provider' 不得令 production metrics measurable
+当前 REAL_MODEL_NETWORK=HOLD → production metrics = NOT_YET_MEASURABLE
+trusted real-provider provenance 缺失 → NOT_YET_MEASURABLE
+原 C3 23/23 + PG 14/14 + 全量回归继续绿。
+NEXT
+
+仅授权：
+
+C3 FINAL-3 narrow revision
+
+范围只有：
+
+1. durable Safe Mode → actual Model Gateway adapter wiring
+2. trustworthy real-provider metric provenance
+
+通过后可直接裁：
+
+C3 = PASS / CLOSED
+SI_COST_OPTIMIZATION = PASS / CLOSED
+C3_FINAL4_REQUIRED = NO
+C4_REQUIRED = NO
+
+PRODUCTION
+
+继续：
+
+REAL_MODEL_NETWORK = HOLD
+PAID_MODEL_CALLS = HOLD
+EXTERNAL_WRITE = HOLD
+PAYMENT = HOLD
+TRANSPORT = HOLD
+PRODUCTION_CREDENTIALS = HOLD
+PRODUCTION_ENABLEMENT = HOLD
+
+P2_F = HOLD
+P2_G = HOLD
+RUNTIME_WIRING = NONE
+STEP_3_RUNTIME_POLICY_WIRING = NOT_AUTHORIZED
+
+结论：四项 FINAL-2 修订中 A/B/C 已关闭；只需把 durable Safe Mode 真正接到 Gateway，以及去掉“provider 名字=真实流量”的假 provenance，即可关闭整个 SI-COST-OPTIMIZATION。
+```
