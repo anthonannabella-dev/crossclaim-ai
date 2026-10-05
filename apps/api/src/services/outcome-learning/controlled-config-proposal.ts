@@ -22,6 +22,8 @@ export const CONTROLLED_PROPOSAL_BOUNDARY = {
   rejectedVerdict: 'NEVER_PROPOSES（fail-closed）',
   oneProposalPer: 'VERDICT_DIGEST（Set<string>，contract/sandbox 层）',
   deltaTarget: 'MUST_EQUAL_CANDIDATE_TARGET（取自 verified rollback plan）',
+  deltaPath: 'TARGET_SPECIFIC_ALLOWLIST（TARGET_DELTA_PATHS；越界 fail-closed）',
+  deltaFrom: 'MUST_EQUAL_BASELINE_SNAPSHOT_VALUE（delta.from 必须等于 trusted snapshot 中该字段当前值）',
   apply: 'FORBIDDEN',
   autoPromotion: 'OFF',
   autoRollout: 'FORBIDDEN',
@@ -44,6 +46,15 @@ export const CONTROLLED_PROPOSAL_BOUNDARY = {
   proposalProvenance: 'PROVENANCE_REGISTERED + fingerprint + deep-freeze',
   productionWrite: 'HOLD',
 } as const;
+
+/** 每 target 的受控字段 allowlist（server-owned；不在表内即拒绝）。 */
+export const TARGET_DELTA_PATHS = {
+  POLICY: ['policy.retryBudget', 'policy.resolutionWindowHours'],
+  GUARD: ['guard.evidenceStrengthRequirement'],
+  ROUTER: ['router.escalationThreshold', 'router.modelTierPolicy'],
+  ACTION_RUNTIME: ['actionRuntime.maxAttempts'],
+} as const;
+export type DeltaTargetName = keyof typeof TARGET_DELTA_PATHS;
 
 export interface ProposedDelta {
   target: string;
@@ -161,6 +172,14 @@ export function createControlledConfigProposal(
   }
   if (target !== plan.candidateTarget) {
     throw new Error('CONTROLLED_PROPOSAL_DELTA_TARGET_NOT_ALLOWED:' + target);
+  }
+  const allowedPaths = (TARGET_DELTA_PATHS as Record<string, readonly string[]>)[target];
+  if (allowedPaths === undefined || !allowedPaths.includes(path)) {
+    throw new Error('CONTROLLED_PROPOSAL_DELTA_PATH_NOT_ALLOWED:' + target + ':' + path);
+  }
+  const baselineValue = plan.baselineConfigValues[path];
+  if (baselineValue === undefined || baselineValue !== from) {
+    throw new Error('CONTROLLED_PROPOSAL_DELTA_FROM_NOT_IN_BASELINE:' + target + ':' + path);
   }
 
   const proposalDigest = digest('controlled-proposal', [

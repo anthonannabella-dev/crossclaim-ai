@@ -65,7 +65,11 @@ export const FORBIDDEN_ROLLBACK_TARGETS = ['ROLLBACK_TO_LATEST', 'LATEST', 'REST
 
 /** server-owned baseline 读取边界（target → 当前配置指纹）；由 composition root 注入。 */
 export interface BaselineConfigStorePort {
-  read(target: MetaCandidateTargetName): Promise<{ configFingerprint: string; capturedAt: string } | null>;
+  read(target: MetaCandidateTargetName): Promise<{
+    configFingerprint: string;
+    capturedAt: string;
+    configValues?: Record<string, string>;
+  } | null>;
 }
 
 export interface BaselineConfigSnapshot {
@@ -74,6 +78,7 @@ export interface BaselineConfigSnapshot {
   snapshotDigest: string;
   candidateTarget: MetaCandidateTargetName;
   configFingerprint: string;
+  configValues: Readonly<Record<string, string>>;
   capturedAt: string;
   provenance: { source: 'SERVER_OWNED_CONFIG_READ_BOUNDARY'; store: BaselineConfigStorePort };
 }
@@ -88,6 +93,9 @@ const baselineSnapshotFingerprint = (snapshot: BaselineConfigSnapshot): string =
     snapshotDigest: snapshot.snapshotDigest,
     candidateTarget: snapshot.candidateTarget,
     configFingerprint: snapshot.configFingerprint,
+    configValues: Object.keys(snapshot.configValues)
+      .sort()
+      .map((key) => [key, snapshot.configValues[key]]),
     capturedAt: snapshot.capturedAt,
   });
 
@@ -130,6 +138,14 @@ export async function captureBaselineConfigSnapshot(
   if (configFingerprint === '' || capturedAt === '') {
     throw new Error('ROLLBACK_PLAN_BASELINE_MALFORMED:' + candidateTarget);
   }
+  const configValues: Record<string, string> = {};
+  const rawValues = (read as { configValues?: Record<string, unknown> }).configValues;
+  if (rawValues !== null && rawValues !== undefined && typeof rawValues === 'object') {
+    for (const [key, value] of Object.entries(rawValues)) {
+      const text = requireText(value);
+      if (text !== '') configValues[key] = text;
+    }
+  }
   if ((FORBIDDEN_ROLLBACK_TARGETS as readonly string[]).includes(configFingerprint.toUpperCase())) {
     throw new Error('ROLLBACK_PLAN_BASELINE_FORBIDDEN:' + configFingerprint);
   }
@@ -138,6 +154,9 @@ export async function captureBaselineConfigSnapshot(
     candidateTarget,
     configFingerprint,
     capturedAt,
+    ...Object.keys(configValues)
+      .sort()
+      .flatMap((key) => [key, configValues[key]]),
   ]);
   const snapshot: BaselineConfigSnapshot = {
     kind: 'BASELINE_CONFIG_SNAPSHOT',
@@ -145,9 +164,11 @@ export async function captureBaselineConfigSnapshot(
     snapshotDigest,
     candidateTarget: candidateTarget as MetaCandidateTargetName,
     configFingerprint,
+    configValues,
     capturedAt,
     provenance: { source: 'SERVER_OWNED_CONFIG_READ_BOUNDARY', store },
   };
+  Object.freeze(snapshot.configValues);
   Object.freeze(snapshot.provenance);
   Object.freeze(snapshot);
   VERIFIED_BASELINE_SNAPSHOTS.add(snapshot);
@@ -178,6 +199,7 @@ export interface RollbackPlan {
   candidateTarget: MetaCandidateTargetName;
   baselineConfigFingerprint: string;
   baselineSnapshotDigest: string;
+  baselineConfigValues: Readonly<Record<string, string>>;
   rollbackTargetFingerprint: string;
   rollbackSteps: readonly RollbackStep[];
   rollbackTrigger: RollbackTrigger;
@@ -206,6 +228,9 @@ const rollbackPlanFingerprint = (plan: RollbackPlan): string =>
     candidateTarget: plan.candidateTarget,
     baselineConfigFingerprint: plan.baselineConfigFingerprint,
     baselineSnapshotDigest: plan.baselineSnapshotDigest,
+    baselineConfigValues: Object.keys(plan.baselineConfigValues)
+      .sort()
+      .map((key) => [key, plan.baselineConfigValues[key]]),
     rollbackTargetFingerprint: plan.rollbackTargetFingerprint,
     rollbackSteps: plan.rollbackSteps.map((step) => ({ order: step.order, action: step.action })),
     rollbackTrigger: plan.rollbackTrigger,
@@ -314,10 +339,12 @@ export function createRollbackPlan(
     candidateTarget: candidateTarget as MetaCandidateTargetName,
     baselineConfigFingerprint,
     baselineSnapshotDigest: baselineSnapshot.snapshotDigest,
+    baselineConfigValues: { ...baselineSnapshot.configValues },
     rollbackTargetFingerprint,
     rollbackSteps,    rollbackTrigger,
     execution: { executeRollback: 'FORBIDDEN', autoApply: false, requiresHumanApproval: true },
   };
+  Object.freeze(plan.baselineConfigValues);
   Object.freeze(plan.execution);
   plan.rollbackSteps.forEach((step) => Object.freeze(step));
   Object.freeze(plan.rollbackSteps);

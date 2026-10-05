@@ -13,6 +13,7 @@ import {
 } from '../services/outcome-learning/candidate-approval';
 import {
   CONTROLLED_PROPOSAL_BOUNDARY,
+  TARGET_DELTA_PATHS,
   createControlledConfigProposal,
   isVerifiedControlledConfigProposal,
 } from '../services/outcome-learning/controlled-config-proposal';
@@ -71,7 +72,11 @@ const trustedLineage = (): OutcomeLineageLedgerPort =>
 
 const store: BaselineConfigStorePort = {
   async read() {
-    return { configFingerprint: 'config:baseline-v1', capturedAt: '2026-10-05T20:10:00.000Z' };
+    return {
+      configFingerprint: 'config:baseline-v1',
+      capturedAt: '2026-10-05T20:10:00.000Z',
+      configValues: { 'router.escalationThreshold': '0.50', 'router.modelTierPolicy': 'balanced' },
+    };
   },
 };
 
@@ -230,5 +235,46 @@ describe('PHASE 5 U3 —— controlled config proposal (PROPOSAL_ONLY)', () => {
     expect(CONTROLLED_PROPOSAL_BOUNDARY.routerMutation).toBe('FORBIDDEN');
     expect(CONTROLLED_PROPOSAL_BOUNDARY.actionRuntimeMutation).toBe('FORBIDDEN');
     expect(CONTROLLED_PROPOSAL_BOUNDARY.deltaTarget).toContain('MUST_EQUAL_CANDIDATE_TARGET');
+  });
+});
+
+describe('PHASE 5 U3 FINAL —— target-specific delta allowlist + baseline value binding', () => {
+  it('P5U3F_1 path 必须在 target allowlist 内：ROUTER candidate 提交 killSwitch.disabled 之类字段 → REJECT', async () => {
+    const c = await ctx();
+    const plan = await planFor(c);
+    expect(() =>
+      createControlledConfigProposal(c.verdict, plan, {
+        proposedDelta: delta({ path: 'killSwitch.disabled' }),
+      }),
+    ).toThrow(/CONTROLLED_PROPOSAL_DELTA_PATH_NOT_ALLOWED:ROUTER:killSwitch.disabled/);
+    expect(TARGET_DELTA_PATHS.ROUTER).toEqual(['router.escalationThreshold', 'router.modelTierPolicy']);
+    expect(TARGET_DELTA_PATHS.POLICY).not.toContain('killSwitch.disabled');
+  });
+
+  it('P5U3F_2 delta.from 必须等于 trusted baseline 当前值：自报现状 → REJECT', async () => {
+    const c = await ctx();
+    const plan = await planFor(c);
+    expect(plan.baselineConfigValues['router.escalationThreshold']).toBe('0.50');
+    expect(() =>
+      createControlledConfigProposal(c.verdict, plan, { proposedDelta: delta({ from: '0.10' }) }),
+    ).toThrow(/CONTROLLED_PROPOSAL_DELTA_FROM_NOT_IN_BASELINE/);
+    const other = await ctx();
+    const otherPlan = await planFor(other);
+    expect(() =>
+      createControlledConfigProposal(other.verdict, otherPlan, {
+        proposedDelta: delta({ path: 'router.modelTierPolicy', from: '0.50' }),
+      }),
+    ).toThrow(/CONTROLLED_PROPOSAL_DELTA_FROM_NOT_IN_BASELINE/);
+  });
+
+  it('P5U3F_3 合法 path + 与 baseline 一致的 from → PASS，并绑定 baseline 当前值来源', async () => {
+    const c = await ctx();
+    const plan = await planFor(c);
+    const proposal = createControlledConfigProposal(c.verdict, plan, { proposedDelta: delta() });
+    expect(proposal.proposedDelta.path).toBe('router.escalationThreshold');
+    expect(proposal.proposedDelta.from).toBe('0.50');
+    expect(isVerifiedControlledConfigProposal(proposal)).toBe(true);
+    expect(CONTROLLED_PROPOSAL_BOUNDARY.deltaPath).toContain('TARGET_SPECIFIC_ALLOWLIST');
+    expect(CONTROLLED_PROPOSAL_BOUNDARY.deltaFrom).toContain('MUST_EQUAL_BASELINE_SNAPSHOT_VALUE');
   });
 });
