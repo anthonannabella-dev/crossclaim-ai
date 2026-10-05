@@ -127,3 +127,45 @@ export async function evaluateRecoveryPersistGate(input: {
     guardEvaluated: true,
   };
 }
+
+
+/**
+ * 必修 2：这些写入单元必须落在**同一个事务**里（任一失败 → 全部回滚，禁止孤儿 artifact / 文件资产 / 半条审计）。
+ */
+export const RECOVERY_PERSIST_TRANSACTION_UNITS: readonly string[] = [
+  'RecoveryPackage',
+  'RecoveryPackageArtifact',
+  'FileAsset',
+  'AuditLog',
+];
+export const RECOVERY_PERSIST_TRANSACTION_FAILURE_POLICY = 'ROLLBACK_ALL' as const;
+
+/**
+ * 必修 3：lineage —— planDigest 只作为**追溯 / verification basis**；
+ * 业务包身份仍是 packageDigest（与既有 UNIQUE (organizationId, claimItemId, packageVersion, packageDigest) 一致）。
+ */
+export const RECOVERY_PERSIST_LINEAGE = {
+  businessIdentity: 'packageDigest',
+  traceBasis: 'planDigest',
+  planDigestReplacesPackageDigest: false,
+  reverseLookupKeys: ['organizationId', 'claimItemId', 'packageVersion', 'packageDigest'],
+  evidenceRefs: ['RecoveryPlan', 'DecisionEvidence'],
+} as const;
+
+/**
+ * 必修 4：DB 层 DELETE guard —— 应用层不得删除 RecoveryPackage；
+ * 真正的拒绝必须由数据库触发器实现（迁移清单同步），本常量只声明要求。
+ */
+export const RECOVERY_PACKAGE_DELETE_GUARD = {
+  applicationDeleteAllowed: false,
+  dbTriggerRequired: true,
+  migrationStatus: 'PENDING',
+  triggerManifestSyncRequired: true,
+} as const;
+
+if (false) {
+  void RECOVERY_PERSIST_TRANSACTION_UNITS;
+  void RECOVERY_PERSIST_TRANSACTION_FAILURE_POLICY;
+  void RECOVERY_PERSIST_LINEAGE;
+  void RECOVERY_PACKAGE_DELETE_GUARD;
+}

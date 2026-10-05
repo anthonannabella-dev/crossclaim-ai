@@ -2307,3 +2307,9 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 新增 apps/api/src/services/intelligence/recovery-persist-gate.ts：P2_E_GUARD_ACTION = claim.prepare；claim.submit / platform.write / appeal.submit 列入 P2_E_FORBIDDEN_GUARD_ACTIONS；capabilities 只来自可信 Control Plane；outcome 恒定 persisted=false / transactionRequired=true / dbDeleteGuardRequired=true / approvalConsumed=false / executorInvoked=false。
 - 新增测试 apps/api/src/__tests__/recovery-si-phase2-e.test.ts（P2E-G1..G5）。
 - 本切片不含 Schema / 迁移 / 事务化 / DELETE guard / lineage（必修 2/3/4 仍待做）；RUNTIME_WIRING = NONE。
+
+## 2026-10-05T08:35Z — P2-E 必修 2/3/4 契约层落地（代码常量 + 测试；迁移仍待办）
+- recovery-persist-gate.ts 增：RECOVERY_PERSIST_TRANSACTION_UNITS（RecoveryPackage / RecoveryPackageArtifact / FileAsset / AuditLog）+ RECOVERY_PERSIST_TRANSACTION_FAILURE_POLICY = ROLLBACK_ALL。
+- 增 RECOVERY_PERSIST_LINEAGE：businessIdentity = packageDigest，traceBasis = planDigest，planDigest 不取代 packageDigest。
+- 增 RECOVERY_PACKAGE_DELETE_GUARD：应用层禁止删除、DB 触发器必填、迁移状态 PENDING、需同步触发器清单。
+- 测试新增 P2E-G6..G8；未写迁移、未做事务端口接线（RUNTIME_WIRING = NONE）。

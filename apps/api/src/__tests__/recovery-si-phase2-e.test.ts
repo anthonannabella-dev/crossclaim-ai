@@ -8,6 +8,10 @@ import {
   P2_E_GUARD_ACTION,
   P2_E_PERSIST_GATE_BOUNDARY,
   evaluateRecoveryPersistGate,
+  RECOVERY_PACKAGE_DELETE_GUARD,
+  RECOVERY_PERSIST_LINEAGE,
+  RECOVERY_PERSIST_TRANSACTION_FAILURE_POLICY,
+  RECOVERY_PERSIST_TRANSACTION_UNITS,
 } from '../services/intelligence/recovery-persist-gate';
 
 const ORG = 'org-p2e';
@@ -113,5 +117,32 @@ describe('Recovery SI P2-E v1 · 持久化入口门禁（必修 1）', () => {
     expect(outcome.approvalConsumed).toBe(false);
     expect(outcome.executorInvoked).toBe(false);
     expect(outcome.dbDeleteGuardRequired).toBe(true);
+  });
+});
+
+
+describe('Recovery SI P2-E v1 · 事务 / lineage / DELETE guard 契约（必修 2/3/4）', () => {
+  it('P2E-G6 事务单元集合固定，失败策略为整体回滚', () => {
+    expect(RECOVERY_PERSIST_TRANSACTION_UNITS).toEqual([
+      'RecoveryPackage',
+      'RecoveryPackageArtifact',
+      'FileAsset',
+      'AuditLog',
+    ]);
+    expect(RECOVERY_PERSIST_TRANSACTION_FAILURE_POLICY).toBe('ROLLBACK_ALL');
+  });
+
+  it('P2E-G7 lineage：planDigest 仅追溯 basis，业务身份仍是 packageDigest', () => {
+    expect(RECOVERY_PERSIST_LINEAGE.businessIdentity).toBe('packageDigest');
+    expect(RECOVERY_PERSIST_LINEAGE.traceBasis).toBe('planDigest');
+    expect(RECOVERY_PERSIST_LINEAGE.planDigestReplacesPackageDigest).toBe(false);
+    expect(RECOVERY_PERSIST_LINEAGE.evidenceRefs).toContain('RecoveryPlan');
+  });
+
+  it('P2E-G8 DELETE guard：应用层禁止删除，DB 触发器必填且清单需同步（迁移待办）', () => {
+    expect(RECOVERY_PACKAGE_DELETE_GUARD.applicationDeleteAllowed).toBe(false);
+    expect(RECOVERY_PACKAGE_DELETE_GUARD.dbTriggerRequired).toBe(true);
+    expect(RECOVERY_PACKAGE_DELETE_GUARD.triggerManifestSyncRequired).toBe(true);
+    expect(RECOVERY_PACKAGE_DELETE_GUARD.migrationStatus).toBe('PENDING');
   });
 });
