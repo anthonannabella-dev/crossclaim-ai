@@ -109,3 +109,54 @@ vitest: recovery-si-phase2-ab 13/13 PASS
 - `P2-E RecoveryPlan / DecisionEvidence 持久化`：未建表、无 Schema 变更（`SCHEMA_DELTA_REQUIRED = NO` 仅覆盖本轮）；
 - `P2-F 模型网络 / 付费调用`、`P2-G 真实执行`：继续 HOLD；
 - **运行时接线 = NONE**：本轮未接入任何 route / event loop / `rsi:run` 路径，`READY_FOR_EXECUTION` 依旧不是执行许可。
+
+## 7. FINAL-2 修订（消费 MSG-20261005-14 = REVISE）
+
+授权：**MSG-20261005-14**（`REVIEWED_HEAD = f1f6607d`；原文 4299 字符 / 272 行 / FNV `6729fcd3` / `FULL_COPY_OK`，已逐字归档）。
+已确认 PASS（本轮不重做）：`THREE_REAL_READ_ADAPTERS`、`STATIC_DOMAIN_TO_TOOL_BINDING`、`READ_ONLY_ACCESS`、
+`UNKNOWN_TOOL_FAIL_CLOSED`、`STALE_ACTION_NO_INVOKE`、`CURRENT_CROSS_TENANT_STATE_GUARD`、
+`MALFORMED_OUTPUT_FAIL_CLOSED`、`SENSITIVE_OUTPUT_FAIL_CLOSED`、`DATABASE_WRITE = 0`、`NETWORK_CALL = 0`、
+`CREDENTIAL_READ = 0`、`RUNTIME_WIRING = NONE`、`SCHEMA_DELTA_REQUIRED = NO`。
+
+### 7.1 四项必修（A1 / A2 / B1 / B2）
+
+- **CHANGE A1 —— unique cohort**：`cohortSize` 改为 **unique `opportunityRef` 计数**（比率分母同样按 opportunity 计），
+  绝不再用 action 数量；`RECOVERY_OUTCOME_SIGNAL_BOUNDARY.cohortUnit = 'UNIQUE_OPPORTUNITY_REF'`。
+  一个机会同时产生 `PREPARE_PACKAGE` + `READY_FOR_EXECUTION` 时不再虚高 cohort。
+- **CHANGE A2 —— domain-bound outcome samples**：输入改为
+  `estimateErrorSamplesByDomain` / `timeToReadySamplesMsByDomain`，每个域独立满足最小 cohort；
+  同一批样本不再被多个 domain 复用（不会把一个域的 outcome 错归到另一个域）。
+- **输出封套收紧（与 A2 同批）**：`refs` 只允许 `rule-version:*` / `algorithm-version:*`（移出 `capability:` / `tool-registry:`）；
+  `signal` 走严格白名单枚举 `RSI_OUTCOME_SIGNALS`、`dedupeKey` 走固定形状正则、`summary` 走服务器句式正则、
+  `reasonCodes` 走白名单 `RSI_OUTCOME_REASON_CODES`。任一不符 → **整条 signal rejected**（不做就地脱敏重发）。
+- **CHANGE B1 —— verify at invocation boundary**：`runRecoveryReadTools()` **不再接受外部 `verification`**；
+  执行入口内部重新 `prioritizeOpportunities()` + `verifyRecoveryPlan()`，因此「先 verify Plan A → 再改 plan →
+  带旧 verification 调用」的 TOCTOU 在入口处 fail-closed。边界常量：`acceptsExternalVerification = false`、
+  `verifyAtInvocationBoundary = true`。
+- **CHANGE B2 —— actor / output identity binding**：adapter 侧新增
+  `input.organizationId === actor.organizationId` 断言（否则 fail-closed，零查询）；
+  registry 输出侧新增 `output.opportunityRef === input.opportunityRef`（否则 `OUTPUT_IDENTITY_REJECTED`），
+  防 miswired port 返回同租户另一条 opportunity。
+
+### 7.2 最小 FINAL-2 证据 6 条（`recovery-si-phase2-ab.test.ts`：F2-01..06）
+
+| # | 裁决要求 | 证据 |
+| --- | --- | --- |
+| 1 | 3 opportunities × 2 actions → unique cohort = 3 → `COHORT_TOO_SMALL` → 无 RSI signal | `F2-01`（先断言 plan 确有 6 个 action，再断言 unique cohort = 3、`signals = []`、`skipped = [{CUSTOMS, COHORT_TOO_SMALL}]`） |
+| 2 | CUSTOMS + CARRIER 同时存在 → 各自只用自己 domain 的 outcome samples | `F2-02`（只给 CUSTOMS 样本：CUSTOMS 得 `10-20%` 分档；CARRIER 无 bucket 且记 `ESTIMATE_ERROR_NOT_MEASURABLE` / `TIME_TO_READY_NOT_MEASURABLE`） |
+| 3 | ref / dedupeKey / reasonCode 尝试编码 `org-` / `case-` / `opp-` → signal rejected | `F2-03`（`refs=['org-1']` → `REF_NOT_ALLOWED`；`refs=['capability:tool-registry']` 亦拒；`dedupeKey` 含 `opp-1` → `DEDUPE_KEY_NOT_ALLOWED`；`signal='CUSTOMS_OPP_1_SIGNAL'` → `SIGNAL_NOT_ALLOWED`；`reasonCodes=['OPP_1']` → `REASON_CODE_NOT_ALLOWED`；publish 拒绝且 sink 零调用） |
+| 4 | 先 verify Plan A 再修改当前 plan → 执行入口不得调用任何受影响 tool | `F2-04`（Plan A `verification.ok = true`；篡改 `expectedRecovery` 后入口内重新 verify → `opp-customs` 零调用） |
+| 5 | `actor.organizationId != input.organizationId` → fail-closed / DB read count = 0 | `F2-05`（fake Prisma `readCalls = []`、`writeCalls = []`，调用全部以 `TENANT_MISMATCH` fail-closed） |
+| 6 | adapter 返回 `output.opportunityRef != requested ref` → `OUTPUT_SCHEMA/IDENTITY_REJECTED` | `F2-06`（detail 含 `OUTPUT_IDENTITY_REJECTED`，`output = null`） |
+
+### 7.3 FINAL-2 验证结果
+
+```text
+api tsc --noEmit → exit 0
+recovery-si-phase2-ab 19/19 PASS（P2A-01..05 + P2B-01..10 + F2-01..06）
+Phase 1 回归：recovery-si 11 + recovery-si-e2e 5 + recovery-si-revise 6 = 22/22 PASS
+合计 41/41 PASS
+```
+
+边界不变：`P2_C / P2_D = NOT_AUTHORIZED`、`P2_E = HOLD_SCHEMA_DELTA`、`P2_F / P2_G = HOLD`、
+`RUNTIME_WIRING = NONE`、`SCHEMA_DELTA_REQUIRED = NO`、`FINAL_ACCEPTANCE_HEAD = 0f7f7ac`。

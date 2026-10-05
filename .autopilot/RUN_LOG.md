@@ -2141,3 +2141,14 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 不变量：只读（DB 写 0 / 网络 0 / 凭据 0）、tenant fail-closed、未登记/非 READ/陈旧一律不调用、不建第二套 Runtime、L5 不放宽。
 - 未做（等待各自授权）：P2-C PREPARE Tool、P2-D Action Guard handoff（需 D1–D8）、P2-E Schema Delta、P2-F 模型、P2-G 真实执行；RUNTIME_WIRING = NONE。
 - 送达验证后立即读取裁决并逐字归档（FNV + FULL_COPY_OK），不等待下一次 heartbeat。
+
+## 2026-10-05T05:12:02.108Z — Recovery SI Phase 2 A/B：MSG-20261005-14（REVISE）消费 + A1/A2/B1/B2 落地
+- 裁决逐字归档：AI-ARCHITECT-INBOX.md 新增 [MSG-20261005-14]（FNV 6729fcd3 / 272 行 / FULL_COPY_OK；REVIEWED_HEAD f1f6607d）。
+- CHANGE A1：k-anonymity cohort 改为 unique opportunityRef 计数（不再用 action 数量；比率分母同步改为按机会计）。
+- CHANGE A2：outcome 样本改为 estimateErrorSamplesByDomain / timeToReadySamplesMsByDomain，按域隔离，禁止跨域复用。
+- 输出封套收紧：refs 只允许 rule-version:/algorithm-version:；signal 白名单枚举；dedupeKey/summary 固定形状；reasonCodes 白名单；违规则整条 signal rejected。
+- CHANGE B1：runRecoveryReadTools 入口内部重新 prioritize + verifyRecoveryPlan，消除「旧 verification + 新 plan」的 TOCTOU。
+- CHANGE B2：adapter 侧 input.organizationId === actor.organizationId（否则 fail-closed、零查询）；输出侧 output.opportunityRef === input.opportunityRef（否则 OUTPUT_IDENTITY_REJECTED）。
+- 最小 FINAL-2 证据 6 条（F2-01..06）全部覆盖：3×2 actions → cohort 3 无信号；双域样本隔离；ref/dedupeKey/reasonCode 编码被拒；篡改 plan 后入口零调用；actor 错配 DB read = 0；输出身份不符被拒。
+- 测试：recovery-si-phase2-ab 19/19 + Phase 1 回归 22/22 = 41/41 PASS；tsc exit 0。
+- 边界：P2-C/P2-D/P2-E/P2-F/P2-G 未授权；RUNTIME_WIRING=NONE；SCHEMA_DELTA_REQUIRED=NO；外部能力全 HOLD；FINAL_ACCEPTANCE_HEAD = 0f7f7ac。

@@ -1,16 +1,23 @@
 /**
  * Recovery SI —— P2-B：只读 Tool 实接（READ_ONLY · 零外写 · fail-closed）
  * ---------------------------------------------------------------
- * 授权：MSG-20261005-13（P2-B = AUTHORIZED_WITH_CONDITIONS）。调用路径被**固定**为：
+ * 授权：MSG-20261005-13（P2-B = AUTHORIZED_WITH_CONDITIONS）+ MSG-20261005-14（REVISE：B1/B2）。
+ * 调用路径被**固定**为：
  *
- *   verified RecoveryPlan action
+ *   verified RecoveryPlan action（**在执行入口内部重新 verify**，不接受外部 verification 快照）
  *     → explicit registered READ tool（静态绑定表，模型/planner 不得构造 service 名）
  *     → input schema（只有 organizationId + opportunityRef）
  *     → tenant context（registry 强制非空 organizationId）
  *     → existing deterministic read service（见 recovery-read-tool-adapters.ts）
  *     → output schema（字段/类型白名单）
+ *     → output identity（`output.opportunityRef === input.opportunityRef`）
  *     → sensitive-field scan（secret / credential / token / PII）
  *     → return to SI
+ *
+ * CHANGE B1：`runRecoveryReadTools()` 内部调用 `verifyRecoveryPlan()`，消除
+ *   「先 verify Plan A、随后改 plan、再带旧 verification 调用」的 TOCTOU。
+ * CHANGE B2：adapter 侧绑定 `input.organizationId === actor.organizationId`（fail-closed），
+ *   输出侧绑定 `output.opportunityRef === input.opportunityRef`（防 miswired port）。
  *
  * 每个 adapter 必须证明：`READ_ONLY = true / DB_WRITE = false / NETWORK = false /
  * CREDENTIAL_READ = false / TENANT_SCOPED = true`；证明与声明不符 → 拒绝注册（fail-closed）。
@@ -20,9 +27,10 @@
  */
 
 import type { CustomerRecoveryState, RecoveryDomain } from './customer-recovery-state';
+import { prioritizeOpportunities } from './recovery-prioritizer';
 import type { RecoveryPlan, RecoveryPlanAction } from './recovery-planner';
 import { createRecoveryToolRegistry, type RecoveryTool, type RecoveryToolRegistry } from './recovery-tool-registry';
-import type { RecoveryVerificationResult } from './recovery-verifier';
+import { verifyRecoveryPlan } from './recovery-verifier';
 
 export const RECOVERY_READ_TOOL = {
   OPPORTUNITY: 'recovery.opportunity.read',
@@ -61,14 +69,25 @@ export const RECOVERY_READ_TOOL_SAFETY: Record<RecoveryReadToolName, RecoveryRea
 export const RECOVERY_DOMAIN_READ_TOOL: Record<RecoveryDomain, readonly RecoveryReadToolName[]> = {
   PLATFORM: [RECOVERY_READ_TOOL.OPPORTUNITY, RECOVERY_READ_TOOL.EVIDENCE],
   CARRIER: [RECOVERY_READ_TOOL.OPPORTUNITY, RECOVERY_READ_TOOL.EVIDENCE],
-  CUSTOMS: [RECOVERY_READ_TOOL.OPPORTUNITY, RECOVERY_READ_TOOL.EVIDENCE, RECOVERY_READ_TOOL.CUSTOMS_AUTHORIZATION_READINESS],
+  CUSTOMS: [
+    RECOVERY_READ_TOOL.OPPORTUNITY,
+    RECOVERY_READ_TOOL.EVIDENCE,
+    RECOVERY_READ_TOOL.CUSTOMS_AUTHORIZATION_READINESS,
+  ],
   INDEPENDENT_SITE: [RECOVERY_READ_TOOL.OPPORTUNITY, RECOVERY_READ_TOOL.EVIDENCE],
 };
 
 export interface RecoveryReadToolDomainMapping {
   OPPORTUNITY: 'PLATFORM' | 'CARRIER' | 'CUSTOMS' | 'INDEPENDENT_SITE' | 'SETTLEMENT' | 'PAYMENT' | 'CLAIM';
   EVIDENCE: 'PLATFORM' | 'CARRIER' | 'CUSTOMS' | 'INDEPENDENT_SITE' | 'SETTLEMENT' | 'PAYMENT' | 'CLAIM';
-  CUSTOMS_AUTHORIZATION_READINESS: 'PLATFORM' | 'CARRIER' | 'CUSTOMS' | 'INDEPENDENT_SITE' | 'SETTLEMENT' | 'PAYMENT' | 'CLAIM';
+  CUSTOMS_AUTHORIZATION_READINESS:
+    | 'PLATFORM'
+    | 'CARRIER'
+    | 'CUSTOMS'
+    | 'INDEPENDENT_SITE'
+    | 'SETTLEMENT'
+    | 'PAYMENT'
+    | 'CLAIM';
 }
 
 export const RECOVERY_READ_TOOL_DOMAIN: RecoveryReadToolDomainMapping = {
@@ -110,7 +129,8 @@ export interface RecoveryReadPorts {
   customsAuthorizationReadinessRead(input: RecoveryReadToolInput): Promise<CustomsAuthorizationReadinessReadOutput>;
 }
 
-const SENSITIVE_OUTPUT_KEY = /(secret|credential|password|passwd|token|api_?key|private_?key|file_?path|storage_?ref|download_?url|signed_?url|raw_?payload|source_?transaction)/i;
+const SENSITIVE_OUTPUT_KEY =
+  /(secret|credential|password|passwd|token|api_?key|private_?key|file_?path|storage_?ref|download_?url|signed_?url|raw_?payload|source_?transaction)/i;
 const EMAIL_VALUE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/;
 
 /** 敏感字段扫描（输出侧第二道闸：registry 已拦 secret 类键，这里再拦文件/存储/邮箱等） */
@@ -137,8 +157,10 @@ const isRecord = (value: unknown): value is Record<string, unknown> =>
 
 const requireString = (value: unknown): boolean => typeof value === 'string' && value.trim() !== '';
 const requireBoolean = (value: unknown): boolean => typeof value === 'boolean';
-const requireNonNegativeInt = (value: unknown): boolean => typeof value === 'number' && Number.isInteger(value) && value >= 0;
-const requireStringArray = (value: unknown): boolean => Array.isArray(value) && value.every((entry) => typeof entry === 'string');
+const requireNonNegativeInt = (value: unknown): boolean =>
+  typeof value === 'number' && Number.isInteger(value) && value >= 0;
+const requireStringArray = (value: unknown): boolean =>
+  Array.isArray(value) && value.every((entry) => typeof entry === 'string');
 
 interface RecoveryReadToolSpec {
   name: RecoveryReadToolName;
@@ -189,8 +211,7 @@ const READ_TOOL_SPECS: readonly RecoveryReadToolSpec[] = [
   },
 ];
 
-const specFor = (name: string): RecoveryReadToolSpec | undefined =>
-  READ_TOOL_SPECS.find((spec) => spec.name === name);
+const specFor = (name: string): RecoveryReadToolSpec | undefined => READ_TOOL_SPECS.find((spec) => spec.name === name);
 
 const proveSafety = (name: RecoveryReadToolName): readonly string[] => {
   const proof = RECOVERY_READ_TOOL_SAFETY[name];
@@ -212,7 +233,7 @@ export interface RecoveryReadToolRegistryBundle {
 
 /**
  * 只读工具注册表工厂。所有 `invoke` 只可能调用**注入的 port**（生产 port 见 adapters），
- * 且调用前显式校验 `input.organizationId === ctx.organizationId`（跨租户 → 抛错 → TOOL_THREW）。
+ * 调用前显式校验 `input.organizationId === ctx.organizationId`（跨租户 → 抛错 → fail-closed）。
  */
 export function createRecoveryReadToolRegistry(
   ports: RecoveryReadPorts,
@@ -222,26 +243,32 @@ export function createRecoveryReadToolRegistry(
   const registrationErrors: { name: string; reason: string }[] = [];
   const tools: RecoveryTool[] = [];
 
-  const guard = (name: RecoveryReadToolName, run: (input: RecoveryReadToolInput, ctx: { organizationId: string }) => Promise<unknown>) => async (
-    rawInput: unknown,
-    ctx: { organizationId: string },
-  ): Promise<unknown> => {
-    if (!isRecord(rawInput) || !requireString(rawInput.organizationId) || !requireString(rawInput.opportunityRef)) {
-      throw new Error(`INPUT_SCHEMA_REJECTED:${name}`);
-    }
-    const input = rawInput as unknown as RecoveryReadToolInput;
-    if (input.organizationId !== ctx.organizationId) {
-      throw new Error(`TENANT_MISMATCH:${name}`);
-    }
-    invokeCounts[name] = (invokeCounts[name] ?? 0) + 1;
-    options.onInvoke?.(name);
-    const output = await run(input, ctx);
-    const problems = specFor(name)?.validateOutput(output) ?? ['NO_SPEC'];
-    if (problems.length > 0) throw new Error(`OUTPUT_SCHEMA_REJECTED:${name}:${problems.join('|')}`);
-    const sensitive = scanRecoveryReadOutput(output);
-    if (sensitive.length > 0) throw new Error(`SENSITIVE_OUTPUT_REJECTED:${name}:${sensitive.join('|')}`);
-    return output;
-  };
+  const guard =
+    (
+      name: RecoveryReadToolName,
+      run: (input: RecoveryReadToolInput, ctx: { organizationId: string }) => Promise<unknown>,
+    ) =>
+    async (rawInput: unknown, ctx: { organizationId: string }): Promise<unknown> => {
+      if (!isRecord(rawInput) || !requireString(rawInput.organizationId) || !requireString(rawInput.opportunityRef)) {
+        throw new Error(`INPUT_SCHEMA_REJECTED:${name}`);
+      }
+      const input = rawInput as unknown as RecoveryReadToolInput;
+      if (input.organizationId !== ctx.organizationId) {
+        throw new Error(`TENANT_MISMATCH:${name}`);
+      }
+      invokeCounts[name] = (invokeCounts[name] ?? 0) + 1;
+      options.onInvoke?.(name);
+      const output = await run(input, ctx);
+      const problems = specFor(name)?.validateOutput(output) ?? ['NO_SPEC'];
+      if (problems.length > 0) throw new Error(`OUTPUT_SCHEMA_REJECTED:${name}:${problems.join('|')}`);
+      // CHANGE B2：输出身份必须与请求一致（防 miswired port 返回同租户另一条 opportunity）
+      if (!isRecord(output) || output.opportunityRef !== input.opportunityRef) {
+        throw new Error(`OUTPUT_IDENTITY_REJECTED:${name}`);
+      }
+      const sensitive = scanRecoveryReadOutput(output);
+      if (sensitive.length > 0) throw new Error(`SENSITIVE_OUTPUT_REJECTED:${name}:${sensitive.join('|')}`);
+      return output;
+    };
 
   for (const spec of READ_TOOL_SPECS) {
     const proofProblems = proveSafety(spec.name);
@@ -249,11 +276,12 @@ export function createRecoveryReadToolRegistry(
       registrationErrors.push({ name: spec.name, reason: `SAFETY_PROOF_MISMATCH:${proofProblems.join('|')}` });
       continue;
     }
-    const domainKey = spec.name === RECOVERY_READ_TOOL.OPPORTUNITY
-      ? 'OPPORTUNITY'
-      : spec.name === RECOVERY_READ_TOOL.EVIDENCE
-        ? 'EVIDENCE'
-        : 'CUSTOMS_AUTHORIZATION_READINESS';
+    const domainKey =
+      spec.name === RECOVERY_READ_TOOL.OPPORTUNITY
+        ? 'OPPORTUNITY'
+        : spec.name === RECOVERY_READ_TOOL.EVIDENCE
+          ? 'EVIDENCE'
+          : 'CUSTOMS_AUTHORIZATION_READINESS';
     tools.push({
       name: spec.name,
       domain: RECOVERY_READ_TOOL_DOMAIN[domainKey],
@@ -294,6 +322,7 @@ export type RecoveryReadInvocationReason =
   | 'INPUT_SCHEMA_REJECTED'
   | 'TENANT_MISMATCH'
   | 'OUTPUT_SCHEMA_REJECTED'
+  | 'OUTPUT_IDENTITY_REJECTED'
   | 'SENSITIVE_OUTPUT_REJECTED'
   | 'FORBIDDEN_TOOL_OUTPUT'
   | 'TOOL_NOT_REGISTERED'
@@ -324,6 +353,7 @@ const READ_INVOCATION_REASONS: readonly RecoveryReadInvocationReason[] = [
   'INPUT_SCHEMA_REJECTED',
   'TENANT_MISMATCH',
   'OUTPUT_SCHEMA_REJECTED',
+  'OUTPUT_IDENTITY_REJECTED',
   'SENSITIVE_OUTPUT_REJECTED',
   'FORBIDDEN_TOOL_OUTPUT',
   'TOOL_NOT_REGISTERED',
@@ -334,7 +364,12 @@ const READ_INVOCATION_REASONS: readonly RecoveryReadInvocationReason[] = [
 const mapInvokeReason = (reason: string): RecoveryReadInvocationReason =>
   (READ_INVOCATION_REASONS as readonly string[]).includes(reason) ? (reason as RecoveryReadInvocationReason) : 'TOOL_THREW';
 
-const actionIsFresh = (action: RecoveryPlanAction, state: CustomerRecoveryState, nowMs: number, maxAgeMs: number): boolean => {
+const actionIsFresh = (
+  action: RecoveryPlanAction,
+  state: CustomerRecoveryState,
+  nowMs: number,
+  maxAgeMs: number,
+): boolean => {
   const slice = state.opportunities.find((entry) => entry.opportunityRef === action.opportunityRef);
   if (slice === undefined) return false;
   const observedMs = Date.parse(slice.observedAt);
@@ -342,13 +377,13 @@ const actionIsFresh = (action: RecoveryPlanAction, state: CustomerRecoveryState,
 };
 
 /**
- * 只读执行入口：只有**已验证**的 plan action 才可能触发只读工具调用。
- * 未通过验证的 action（篡改/陈旧/跨租户/未登记）一律不调用工具。
+ * 只读执行入口。
+ * CHANGE B1：**在执行入口内部重新执行 `verifyRecoveryPlan()`**；调用方无法用一个与 plan 脱节的
+ * 旧 verification 快照骗过入口（先 verify Plan A、再改 plan 的场景在此 fail-closed）。
  */
 export async function runRecoveryReadTools(input: {
   state: CustomerRecoveryState;
   plan: RecoveryPlan;
-  verification: RecoveryVerificationResult;
   registry: RecoveryToolRegistry;
   nowMs: number;
   maxSnapshotAgeMs?: number;
@@ -368,7 +403,17 @@ export async function runRecoveryReadTools(input: {
     return { ok: false, reason: 'STALE_STATE', invocations, skipped };
   }
 
-  const verifiedActions = input.verification.ok ? input.verification.verifiedActions : [];
+  // CHANGE B1：入口内重新验证（不接受外部 verification 快照）
+  const priority = prioritizeOpportunities(input.state);
+  const verification = verifyRecoveryPlan({
+    plan: input.plan,
+    state: input.state,
+    registry: input.registry,
+    priority,
+    nowMs: input.nowMs,
+    maxSnapshotAgeMs: maxAgeMs,
+  });
+  const verifiedActions = verification.ok ? verification.verifiedActions : [];
   const verifiedKeys = new Set(verifiedActions.map((action) => `${action.opportunityRef}|${action.proposedAction}`));
 
   for (const action of input.plan.actions) {
@@ -380,7 +425,7 @@ export async function runRecoveryReadTools(input: {
       }
     };
 
-    if (!input.verification.ok || !verifiedKeys.has(verificationKey)) {
+    if (!verification.ok || !verifiedKeys.has(verificationKey)) {
       skipAll('PLAN_NOT_VERIFIED');
       continue;
     }
@@ -416,13 +461,12 @@ export async function runRecoveryReadTools(input: {
         organizationId: input.state.organizationId,
       });
       if (!result.ok) {
-        const detail = describeError(result.reason, result.detail);
         invocations.push({
           tool: toolName,
           opportunityRef: action.opportunityRef,
           ok: false,
           reason: mapInvokeReason(result.reason),
-          detail,
+          detail: describeError(result.reason, result.detail),
           output: null,
         });
         continue;
@@ -449,6 +493,12 @@ export const RECOVERY_READ_TOOLS_BOUNDARY = {
   tenantScoped: true,
   modelCannotInventToolNames: true,
   staticDomainBinding: true,
+  /** CHANGE B1：执行入口内部重新 verify，不接受外部 verification 快照 */
+  verifyAtInvocationBoundary: true,
+  acceptsExternalVerification: false,
+  /** CHANGE B2：输出身份绑定 + adapter actor 绑定 */
+  outputIdentityBound: true,
+  adapterActorTenantBound: true,
   invokeOnlyVerifiedActions: true,
   unknownToolFailsClosed: true,
   staleStateFailsClosed: true,

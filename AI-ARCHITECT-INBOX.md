@@ -139041,3 +139041,280 @@ L5_RELAXATION = FORBIDDEN
 
 所以 Codex 现在可以直接实现 P2-A + P2-B。完成后送一次 Recovery SI Phase 2 A/B Implementation Audit；不要顺带做 PREPARE、Action Guard handoff、Schema、模型调用或真实执行。
 ```
+
+### [MSG-20261005-14] ARCHITECT VERDICT — Recovery SI Phase 2 A/B 实施 = **REVISE**（`REVIEWED_HEAD = f1f6607d`，未使用上一轮缓存；送审包 `5625d379` 已正确区分）。**已确认 PASS（不用重做）**：`THREE_REAL_READ_ADAPTERS`、`STATIC_DOMAIN_TO_TOOL_BINDING`、`READ_ONLY_ACCESS`、`UNKNOWN_TOOL_FAIL_CLOSED`、`STALE_ACTION_NO_INVOKE`、`CURRENT_CROSS_TENANT_STATE_GUARD`、`MALFORMED_OUTPUT_FAIL_CLOSED`、`SENSITIVE_OUTPUT_FAIL_CLOSED`、`DATABASE_WRITE = 0`、`NETWORK_CALL = 0`、`CREDENTIAL_READ = 0`、`RUNTIME_WIRING = NONE`、`SCHEMA_DELTA_REQUIRED = NO`。**四项必修**：①`CHANGE_A1_UNIQUE_COHORT = REQUIRED` —— k-anonymity 的 cohort 现在用 `domainActions.length`，而一个 opportunity 可同时产生 `PREPARE_PACKAGE` + `READY_FOR_EXECUTION`（3 个真实 opportunity 可产生 6 个 action 从而错误通过 cohort ≥ 5），必须改为 **unique opportunityRef count**（未来可更严格，绝不能用 action 数）；②`CHANGE_A2_DOMAIN_BOUND_OUTCOME_SAMPLES = REQUIRED` —— `estimateErrorSamples` / `timeToReadySamplesMs` 是全局数组，多 domain 同批样本会被重复使用造成域间错归，必须改为 `estimateErrorSamplesByDomain` / `timeToReadySamplesMsByDomain` 并各自满足该 domain 的最小 cohort；同时收紧输出封套：`refs = rule-version:* | algorithm-version:* only`（去掉 `capability:` / `tool-registry:`），且 `signal` / `dedupeKey` / `summary` / `reasonCodes` 必须由服务器确定性生成或严格 enum/pattern 校验，不允许任意自由文本穿过 publish gate；③`CHANGE_B1_VERIFY_AT_INVOCATION_BOUNDARY = REQUIRED` —— `runRecoveryReadTools()` 现在接受外部传入的 `verification`，verified key 只按 `opportunityRef | proposedAction` 匹配，存在 TOCTOU（先 verify Plan A 再改 plan，仍带旧 verification），首选最小修法 = **执行入口内部重新调用 `verifyRecoveryPlan()`**（或用 `planDigest`/`verifiedPlanDigest` 严格绑定）；④`CHANGE_B2_ACTOR_AND_OUTPUT_IDENTITY_BINDING = REQUIRED` —— Prisma adapter 用 `actor.organizationId` 查询，必须增加 `input.organizationId === actor.organizationId` 否则 fail-closed，并在 output gate 增加 `output.opportunityRef === input.opportunityRef` 防 miswired port 返回同租户另一条 opportunity。**最小 FINAL-2 证据 6 条**：1. 3 opportunities × 2 actions → unique cohort = 3 → `COHORT_TOO_SMALL` → 无 RSI signal；2. CUSTOMS + CARRIER 同时存在 → 各自只用自己 domain 的 samples，不得跨域复用；3. ref / dedupeKey / reasonCode 尝试编码 `org-` / `case-` / `opp-` → signal rejected；4. 先 verify Plan A 再修改当前 plan → `runRecoveryReadTools` 不得调用任何受影响 tool；5. `actor.organizationId != input.organizationId` → fail-closed / DB read count = 0；6. adapter 返回 `output.opportunityRef != requested ref` → `OUTPUT_SCHEMA/IDENTITY_REJECTED`。**正式状态**：`P2_A = REVISE`、`P2_B = REVISE`、`RECOVERY_SI_PHASE2_AB = NOT_CLOSED`（不需要重新设计架构）；`P2_C = NOT_AUTHORIZED`、`P2_D = NOT_AUTHORIZED`、`P2_E = HOLD_SCHEMA_DELTA`、`P2_F = HOLD`、`P2_G = HOLD`、`EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / REAL_CLAIM_SUBMIT / CUSTOMS_FILING / RSI_MODEL_NETWORK / RSI_PAID_MODEL_CALLS = HOLD`、`SCHEMA_DELTA_REQUIRED = NO`、`FINAL_ACCEPTANCE_HEAD = 0f7f7ac`（`f1f6607d` hosted status 为空，35/35 + tsc 0 属送审方本地执行证据）。结论：只修 A1/A2/B1/B2 并补 6 条针对性负例，然后送 **Recovery SI Phase 2 A/B FINAL-2**，不要顺带进入 P2-C 或 P2-D。
+
+```text
+ARCHITECT VERDICT：REVISE（范围很窄，P2-A / P2-B 暂不能记 PASS）
+
+我按**实现代码 HEAD = f1f6607d104612d0bd279d7d01ad296c80f1d271**重新复核；送审包在后续归档 commit 5625d379c65273f8513a27c383d85b6bdb5614d3，两者已正确区分。本次没有使用上一轮缓存。
+
+整体实现方向是对的，三个真实 READ adapter、零外写、无 Runtime wiring、无 Schema Delta 都成立。但还剩 4 个安全/语义缺口，其中两个在 P2-A、两个在 P2-B。
+
+P2-A：REVISE
+
+当前最大问题是 k-anonymity 的 cohort 算错对象。
+
+代码现在：
+
+纯文本
+cohortSize = domainActions.length
+
+但一个 opportunity 可以同时产生：
+
+纯文本
+PREPARE_PACKAGE
+READY_FOR_EXECUTION
+
+也就是说，3 个真实 opportunity 可能产生 6 个 action，从而错误通过 cohort >= 5。
+
+这会直接破坏你们定义的反匿名化边界。
+
+必须改成：
+
+纯文本
+cohortSize =
+unique opportunityRef count
+
+或者未来更严格的独立业务实体计数，绝不能用 action 数量。
+
+因此：
+
+纯文本
+CHANGE_A1_UNIQUE_COHORT = REQUIRED
+
+第二个问题是 estimateErrorSamples / timeToReadySamplesMs 目前是全局数组。
+
+当同一次 supervision 中 PLATFORM / CARRIER / CUSTOMS 都达到 cohort 门槛时，同一批样本会被重复用于每个 domain：
+
+纯文本
+CUSTOMS signal ← same samples
+CARRIER signal ← same samples
+PLATFORM signal ← same samples
+
+这会把一个域的实际 outcome 错归到另一个域。
+
+必须改为：
+
+纯文本
+estimateErrorSamplesByDomain
+timeToReadySamplesMsByDomain
+
+并分别满足该 domain 的最小 cohort。
+
+纯文本
+CHANGE_A2_DOMAIN_BOUND_OUTCOME_SAMPLES = REQUIRED
+
+另外有一个输出封套问题，建议与 A2 一起修，不单独开大任务：
+
+当前 refs 实际允许：
+
+纯文本
+capability:
+tool-registry:
+
+但本轮批准范围明确是：
+
+纯文本
+rule-version:
+algorithm-version:
+
+而且 signal / dedupeKey / reasonCodes 的字符串内容没有像 summary 一样做严格泄漏约束，因此理论上可以把客户标识符编码进去。
+
+最小收紧：
+
+纯文本
+refs = rule-version:* | algorithm-version:* only
+
+并让：
+
+纯文本
+signal
+dedupeKey
+summary
+reasonCodes
+
+全部由服务器确定性生成或严格 enum/pattern 校验，不能允许任意自由文本穿过 publish gate。
+
+P2-B：REVISE
+
+10 条证据覆盖了大部分要求，但还漏了两个真实调用边界。
+
+第一，runRecoveryReadTools() 接收的是：
+
+纯文本
+plan
++
+verification
+
+但 verification 是外部传进来的。
+
+执行入口只建立：
+
+纯文本
+opportunityRef | proposedAction
+
+的 verified key。
+
+因此存在这种 TOCTOU：
+
+纯文本
+Plan A
+→ verify PASS
+
+随后修改 plan
+→ 保持相同 opportunityRef + proposedAction
+→ 把旧 verification + 新 plan 传给 runRecoveryReadTools()
+
+此时执行入口不会证明当前 plan 就是刚才被 verifier 验过的那份计划。
+
+这与：
+
+only verified plan action may invoke
+
+不完全一致。
+
+最小修法
+
+首选：
+
+纯文本
+runRecoveryReadTools()
+内部重新调用 verifyRecoveryPlan()
+
+也就是执行入口不要接受一个可以和 plan 脱节的 verification snapshot。
+
+或者使用：
+
+纯文本
+planDigest
+verifiedPlanDigest
+
+严格绑定。
+
+对当前 Phase 2-B，我更推荐第一种，简单、无 Schema。
+
+纯文本
+CHANGE_B1_VERIFY_AT_INVOCATION_BOUNDARY = REQUIRED
+
+第二，Prisma adapter 的 tenant actor 没与 input 再次绑定。
+
+当前 guard 证明：
+
+纯文本
+input.organizationId == ctx.organizationId
+
+但真正 DB adapter 使用：
+
+纯文本
+actor.organizationId
+
+如果 composition root 错配：
+
+纯文本
+ctx/input = org-B
+actor = org-A
+
+adapter 仍会按 org-A 查询。
+
+虽然正常装配不会故意这么做，但这是 tenant 安全边界，不能依赖“调用方不会配错”。
+
+必须增加：
+
+纯文本
+input.organizationId === actor.organizationId
+
+否则 fail-closed。
+
+同时建议 output gate 加：
+
+纯文本
+output.opportunityRef === input.opportunityRef
+
+防止 miswired port 返回同租户另一条 opportunity 的结果。
+
+纯文本
+CHANGE_B2_ACTOR_AND_OUTPUT_IDENTITY_BINDING = REQUIRED
+当前可以确认通过的部分
+
+以下不用重做：
+
+纯文本
+THREE_REAL_READ_ADAPTERS = PASS
+STATIC_DOMAIN_TO_TOOL_BINDING = PASS
+READ_ONLY_ACCESS = PASS
+
+UNKNOWN_TOOL_FAIL_CLOSED = PASS
+STALE_ACTION_NO_INVOKE = PASS
+CURRENT_CROSS_TENANT_STATE_GUARD = PASS
+MALFORMED_OUTPUT_FAIL_CLOSED = PASS
+SENSITIVE_OUTPUT_FAIL_CLOSED = PASS
+
+DATABASE_WRITE = 0
+NETWORK_CALL = 0
+CREDENTIAL_READ = 0
+
+RUNTIME_WIRING = NONE
+SCHEMA_DELTA_REQUIRED = NO
+最小 FINAL-2 证据
+
+不用重新跑一大套设计审计，只补这几条即可：
+
+纯文本
+1. 3 opportunities × 2 actions
+   → unique cohort = 3
+   → COHORT_TOO_SMALL
+   → no RSI signal
+
+2. CUSTOMS + CARRIER 同时存在
+   → 各自只使用自己的 outcome samples
+   → 不得跨 domain 复用
+
+3. ref / dedupeKey / reasonCode 尝试编码 org-/case-/opp-
+   → signal rejected
+
+4. 先 verify Plan A，再修改当前 plan
+   → runRecoveryReadTools 不得调用任何受影响 tool
+
+5. actor.organizationId != input.organizationId
+   → fail-closed / DB read count = 0
+
+6. adapter 返回 output.opportunityRef != requested ref
+   → OUTPUT_SCHEMA/IDENTITY_REJECTED
+
+这 6 条够了。
+
+正式状态
+纯文本
+P2_A = REVISE
+P2_B = REVISE
+
+RECOVERY_SI_PHASE2_AB = NOT_CLOSED
+
+但不需要重新设计架构。
+
+继续保持：
+
+纯文本
+P2_C = NOT_AUTHORIZED
+P2_D = NOT_AUTHORIZED
+P2_E = HOLD_SCHEMA_DELTA
+P2_F = HOLD
+P2_G = HOLD
+
+EXTERNAL_WRITE = HOLD
+PAYMENT = HOLD
+TRANSPORT = HOLD
+PRODUCTION_CREDENTIALS = HOLD
+REAL_CLAIM_SUBMIT = HOLD
+CUSTOMS_FILING = HOLD
+RSI_MODEL_NETWORK = HOLD
+RSI_PAID_MODEL_CALLS = HOLD
+
+SCHEMA_DELTA_REQUIRED = NO
+FINAL_ACCEPTANCE_HEAD = 0f7f7ac
+
+另外，exact implementation HEAD f1f6607d 的 hosted GitHub status/workflow 目前仍为空，所以 35/35 + tsc 0 属于送审方本地执行证据；我独立确认的是上述实现代码本身。
+
+结论：只修 A1/A2/B1/B2，并补 6 个针对性负例，然后送 Recovery SI Phase 2 A/B FINAL-2。不要顺带进入 P2-C 或 P2-D。
+```
