@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-40",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T21:24:07.477Z",
+  "updated_at": "2026-10-05T21:28:13.052Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -50,13 +50,13 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
-  "next_execution_unit": "PHASE 5 U3 FINAL 裁决归档与 U4 进入：(1) 打开右侧审核会话读取 U3 FINAL verdict（严格匹配 REVIEWED_HEAD = fc193694，marker [CODEX-PHASE5-U3FINAL]）；(2) 先落盘 work/stage/verdict-p5u3f-raw.txt → 逐字归档 AI-ARCHITECT-INBOX.md（MSG-20261005-74）→ compare.mjs FULL_COPY_OK → commit + push；(3) durable state；若 REVISE 按最小修法窄修；若 PASS → P5-U4 Canary/Shadow Evaluation（隔离方式、指标口径、与 U4 offline evaluation 关系、何时必须回滚到 U2 baseline；仍禁止自动 apply/promotion/rollout）；(4) 之后再审 Controlled Adoption；边界不变：REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing = HOLD；SECOND_* = FORBIDDEN；L5_RELAXATION = FORBIDDEN。",
+  "next_execution_unit": "PHASE 5 U3 FINAL2 — target-specific delta value schema: (1) 为 TARGET_DELTA_PATHS 中每个字段定义 value schema（类型 number/boolean/enum、取值范围与允许枚举），CREATE 时校验 delta.to：类型不符 / 超范围 / 枚举外 → fail-closed（例如 router.escalationThreshold 必须为 0..1 数值字符串，guard.evidenceStrengthRequirement 必须为允许枚举之一）；(2) 保持既有 path allowlist、delta.from === trusted baseline 当前值、proposalDigest 绑定、provenance/anti-tamper、one verdict → one proposal、无 apply/execute/mutate 入口；(3) tests：合法 to PASS；类型不符/超范围/枚举外 REJECT；原 9 项与 rollback-plan 8 项保持 green；(4) 通过后进入 P5-U4 Canary / Shadow Evaluation；(5) 边界不变：REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing = HOLD；SECOND_* = FORBIDDEN；L5_RELAXATION = FORBIDDEN。",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-05T21:24:07.477Z",
+  "last_tick_at": "2026-10-05T21:28:13.052Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "PHASE 5 U3 FINAL（target-specific delta allowlist + delta.from 绑定 trusted baseline 当前值）已实现、验证、commit + push（fc193694），并已送审（marker [CODEX-PHASE5-U3FINAL]，REVIEWED_HEAD = fc193694）。新增 TARGET_DELTA_PATHS 每 target 字段 allowlist（越界 → CONTROLLED_PROPOSAL_DELTA_PATH_NOT_ALLOWED）；baseline snapshot 携带 configValues 并进 fingerprint/snapshotDigest，rollback plan 新增 baselineConfigValues，提案要求 delta.from === 该字段当前值（否则 CONTROLLED_PROPOSAL_DELTA_FROM_NOT_IN_BASELINE）。本地：tsc exit 0；controlled-config-proposal 9/9；rollback-plan 8/8；PHASE 5 过滤集 9 files / 115 tests PASS；回归集 102 files / 1062 tests（唯一失败 = P2E-DB5）；GITHUB_CI = NOT_OBSERVED。",
+  "last_action": "PHASE 5 U3 FINAL verdict archived (MSG-20261005-74, FULL_COPY_OK, archive commit c47ba0a0): TARGET_SPECIFIC_DELTA_PATH_ALLOWLIST / DELTA_BASELINE_VALUE_BINDING / BASELINE_VALUE_PROVENANCE / PROPOSAL_DIGEST_BINDING = PASS; TARGET_SPECIFIC_DELTA_VALUE_SCHEMA = REVISE (delta.to still any non-empty string); PHASE5_U3_FINAL2_REQUIRED = YES.",
   "last_action_at": "2026-10-05T21:24:07.477Z",
-  "next_action": "读取 PHASE 5 U3 FINAL 裁决 → 归档（MSG-20261005-74）→ 若 PASS 则 U3 = CLOSED 并进入 P5-U4 Canary/Shadow Evaluation。",
+  "next_action": "Execute PHASE 5 U3 FINAL2 (target-specific delta value schema: type/range/enum for delta.to), then U4 Canary/Shadow Evaluation.",
   "current_head": "fc193694",
   "last_completed_head": "fc193694",
   "reviewed_head": "add99ec3",
@@ -5169,10 +5169,11 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "P5U3F-1 读取 U3 FINAL 裁决（匹配 fc193694）→ 落盘 verdict-p5u3f-raw.txt → 归档 MSG-20261005-74 → compare.mjs FULL_COPY_OK → commit + push → durable state",
-    "P5U3F-2 若 PASS → 开 P5-U4 Canary/Shadow Evaluation（按审计最低要求）",
-    "P5U3F-3 之后再审 Controlled Adoption",
-    "P5U3F-4 非阻断债务：三类 digest 完整 SHA-256、fingerprint 随结构升级、scanRawPayloadKeys 有界遍历、P2E-DB5"
+    "P5U3F2-1 U3 FINAL2：为每个 allowlisted delta 字段定义 value schema（类型/范围/枚举）并在 createControlledConfigProposal 校验 delta.to",
+    "P5U3F2-2 U3 FINAL2 tests（合法/类型不符/超范围/枚举外；原 9+8 保持 green）+ regression + tsc + commit + push",
+    "P5U3F2-3 送 U3 FINAL2 裁决 → 归档（MSG-20261005-75）→ compare.mjs FULL_COPY_OK → durable state",
+    "P5U3F2-4 随后 U4 Canary/Shadow Evaluation → 再审 Controlled Adoption",
+    "P5U3F2-5 非阻断债务（持续记录）：三类 digest 完整 SHA-256、fingerprint 随结构升级、scanRawPayloadKeys 有界遍历、P2E-DB5 test-isolation debt"
   ],
   "full_autonomous_internal_execution": "VERIFIED",
   "dispatcher_acceptance": {
@@ -9322,7 +9323,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-05T21:24:07.477Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-05T21:28:13.052Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -9450,7 +9451,7 @@
     "PHASE_2_MODEL_GATEWAY_RUNTIME": "PASS / CLOSED（MSG-20261005-50；Reviewed HEAD 338f30b4；PHASE2_FINAL5_REQUIRED = NO）",
     "PHASE_3_ACTION_RUNTIME": "PASS / CLOSED（MSG-20261005-54；Reviewed HEAD = fe3c33e9；PHASE3_FINAL4_REQUIRED = NO）",
     "PHASE_4_OUTCOME_LEARNING_PIPELINE": "CLOSED / PASS（MSG-20261005-67）：U1 FINAL / U2 / U3 / U4 / U5 全 CLOSED；含 U4 FINAL、U5 FINAL、U5 FINAL2、PHASE 4 FINAL CLOSURE。",
-    "PHASE_5_META_IMPROVEMENT": "IN PROGRESS：U1 / U2 = PASS / CLOSED；U3 = PASS WITH REVISE，U3 FINAL = SUBMITTED / AWAITING_VERDICT（fc193694）；NEXT = U4 Canary/Shadow Evaluation。"
+    "PHASE_5_META_IMPROVEMENT": "IN PROGRESS: U1/U2 = PASS / CLOSED; U3 = PASS WITH REVISE (MSG-20261005-73/74), U3 FINAL2 pending; NEXT = U4 Canary/Shadow Evaluation."
   },
   "heartbeat_watchdog": {
     "interval_seconds": 180,
@@ -9922,7 +9923,7 @@
       "U5"
     ]
   },
-  "archive_head": "3339afaa",
+  "archive_head": "c47ba0a0",
   "phase4_u3_final": {
     "status": "PASS / CLOSED",
     "reviewed_head": "006cc912",
@@ -10623,5 +10624,22 @@
       "delivered": true,
       "expected_message_id": "MSG-20261005-74"
     }
+  },
+  "phase5_u3_final_verdict": {
+    "message_id": "MSG-20261005-74",
+    "verdict": "PASS WITH REVISE / NOT CLOSED",
+    "reviewed_head": "fc193694",
+    "archive_verified": "FULL_COPY_OK",
+    "archive_head": "c47ba0a0",
+    "pass": [
+      "TARGET_SPECIFIC_DELTA_PATH_ALLOWLIST = PASS",
+      "DELTA_BASELINE_VALUE_BINDING = PASS",
+      "BASELINE_VALUE_PROVENANCE = PASS",
+      "PROPOSAL_DIGEST_BINDING = PASS"
+    ],
+    "revise": [
+      "TARGET_SPECIFIC_DELTA_VALUE_SCHEMA: delta.to 需按字段类型/范围/枚举校验"
+    ],
+    "phase5_u3_final2_required": "YES"
   }
 }
