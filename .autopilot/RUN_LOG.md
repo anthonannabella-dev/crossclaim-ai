@@ -2284,3 +2284,9 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - P2-E 裁决：PASS WITH REVISE（Option A 授权 / 入口门禁必须改 claim.prepare / 另有事务原子性与 lineage 必修）；REVIEWED_HEAD 48e6e2a3；总 10521 字符 / 731 行 / FNV e2516425。
 - 已落盘 chunk 1（第 1–59 行）；下一段起点第 60 行；拼接后必须通过 10521/731/e2516425 校验才允许写入 AI-ARCHITECT-INBOX（避免截断入库）。
 - 阻塞：等待宿主选择（粘贴全文 / 批准 SUMMARY_NON_VERBATIM 例外 / 继续 60 行分段捕获）。未获批准前不写 AI-ARCHITECT-INBOX。
+
+## 2026-10-05T07:35Z — P2-E v1 REVISE 修订方案（DRAFT，仅含已确认必修 1）
+- 新增 docs/releases/RECOVERY-SI-PHASE2-E-REVISE-PLAN.md（DRAFT / 未授权实现）。
+- 已确认必修 1：P2_E_GUARD_ACTION = claim.prepare（不得用 P2-D claim.submit ALLOW 作为写入前提）；链路 = fresh state → canonical READY alignment → verified P2-C preview/facts → trusted ProductionControlPlane → evaluate(claim.prepare) → ALLOW → persistence transaction。
+- 待读正文：必修 2（事务原子性）、必修 3（lineage 表述）与第 ②③④⑤ 条裁定；未读到前不开始实现。
+- 边界不变：P2_E = HOLD_SCHEMA_DELTA / P2_F = HOLD / P2_G = HOLD；FINAL_ACCEPTANCE_HEAD = 0f7f7ac。
