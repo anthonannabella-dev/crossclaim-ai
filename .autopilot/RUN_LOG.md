@@ -2256,3 +2256,11 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 证据：tsc exit 0；recovery-si-phase2-d 14/14；回归 recovery-si* + action-guard* = 70/70（7 files）。
 - 边界：无 Schema / 无迁移 / 无 Prisma / 无网络 / 无凭据 / ACTION_GUARD_CATALOG 未改 / RUNTIME_WIRING = NONE；P2_E = HOLD_SCHEMA_DELTA；P2_F / P2_G = HOLD；FINAL_ACCEPTANCE_HEAD = 0f7f7ac。
 - 状态：P2_D_V1_IMPLEMENTATION = FINAL2_SUBMITTED_WAITING_VERDICT；下一动作 = 读取 FINAL-2 裁决并逐字归档（不阻塞其它 SAFE 单元）。
+
+## 2026-10-05T06:10Z — Recovery SI P2-D v1 FINAL-2 = PASS / CLOSED（MSG-20261005-21 归档）
+- 归档：AI-ARCHITECT-INBOX.md `### [MSG-20261005-21]`，逐字归档；compare = FULL_COPY_OK。
+- 裁决：P2_D_V1_IMPLEMENTATION = PASS；RECOVERY_SI_P2_D_V1 = PASS / CLOSED；FINAL2 = PASS；FINAL3_REQUIRED = NO。
+- D1 = PASS（canonical READY 对齐，ACCEPT => 提权路径 authorization missing / HIGH-risk owner gate 篡改成 READY → 零 Guard 调用）；D4 = PASS（真实 createProductionControlPlane 下 claim.submit 无 approvalId → REQUIRE_APPROVAL）；D7 = PASS（submitted / persisted 冻结字段）。
+- 冻结：ACTION_GUARD_DRY_RUN_ALLOW != EXECUTION_AUTHORIZATION；四类 FORBIDDEN 不变；P2_E = HOLD_SCHEMA_DELTA / P2_F = HOLD / P2_G = HOLD；RUNTIME_WIRING = NONE；FINAL_ACCEPTANCE_HEAD = 0f7f7ac。
+- 真实执行必须另开 P2-G（executor identity / approval 真实性 / provider transport / external-write gate / kill switch / reconciliation）；claim.submit 仅是 dry-run 保守分类。
+- 下一执行单元：Phase 2 剩余阶段（P2-E 持久化 / P2-F 模型辅助 / P2-G 真实执行）均需各自架构审计；CUSTOMS 继续 null/HOLD。

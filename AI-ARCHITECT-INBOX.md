@@ -141417,3 +141417,264 @@ FINAL_ACCEPTANCE_HEAD = 0f7f7ac
 
 结论：不需要重做 P2-D。只补 canonical READY 对齐、submitted/persisted=false，再补上面 4 条 FINAL-2 负例即可 CLOSED。
 ```
+
+### [MSG-20261005-21] Recovery SI P2-D v1（Action Guard dry-run）FINAL-2 — VERDICT = PASS / CLOSED（D1–D10 全 PASS；FINAL3_REQUIRED = NO）
+
+```text
+ARCHITECT VERDICT：PASS / CLOSED
+
+我按 REVIEWED_HEAD = 638c95615206cc7f064e59ab886dd9c6acfa67c8 重新复核了 P2-D FINAL-2；送审包为 bf1bff07。没有使用上一轮缓存。
+
+① CHANGE D1 / D2：PASS
+纯文本
+CHANGE_D1_CANONICAL_READY_ALIGNMENT = PASS
+CHANGE_D2_DRY_RUN_FROZEN_FLAGS = PASS
+
+D1 = PASS
+D4 = PASS
+D7 = PASS
+
+D1 已真正落在 Control Plane / Action Guard 调用之前：
+
+纯文本
+state
+→ prioritizeOpportunities()
+→ verifyRecoveryPlan()
+→ planRecovery() 重新生成 canonical plan
+→ supplied READY vs canonical READY identity
+→ mismatch => DENY / CANONICAL_READY_MISMATCH
+→ Guard calls = 0
+
+canonical identity 已绑定：
+
+纯文本
+domain
+opportunityRef
+proposedAction
+toolRef
+executionMode
+authorizationRequired
+ownerApprovalRequired
+expectedRecovery.amount
+expectedRecovery.currency
+
+因此上一轮发现的两条提权路径已经被封住：
+
+纯文本
+authorizationReady=false
+REQUEST_AUTHORIZATION → forged READY
+→ zero Guard call
+
+riskClass=HIGH
+REQUEST_OWNER_APPROVAL → forged READY
+→ zero Guard call
+
+这也顺带覆盖 provider HOLD、缺 evidence、PREPARE capability 缺失等由 canonical planner 决定的 READY 条件。
+
+D2 也已完整：
+
+纯文本
+executionAuthorized = false
+executorInvoked = false
+submitted = false
+persisted = false
+approvalConsumed = false
+
+这些字段由基础 outcome 强制生成，因此 DENY / REQUIRE_APPROVAL / ALLOW 路径都不会把 dry-run 误表达成业务推进。
+
+② F2D-01..04：足够，FINAL-3 不需要
+
+四条补证据正好覆盖上一轮剩余 blocker：
+
+纯文本
+F2D-01 authorization missing → forged READY → Guard 0
+F2D-02 HIGH risk owner gate → forged READY → Guard 0
+F2D-03 real ProductionControlPlane → REQUIRE_APPROVAL
+F2D-04 ALLOW → 五个执行/持久化状态仍 false
+
+尤其 F2D-03 现在是真实 createProductionControlPlane() 路径，不是手工 fixture 决策：
+
+纯文本
+Kill Switch = enabled
+mode = WRITE_ENABLED
+productionGate = SATISFIED
+platform claim.submit = enabled
+tenant claim.submit = enabled
+无 approvalId
+
+→ claim.submit
+→ REQUIRE_APPROVAL
+
+所以现有 Action Guard 的 human approval gate 已经被真正证明。
+
+正式状态：
+
+纯文本
+D1 = PASS
+D2 = PASS
+D3 = PASS
+D4 = PASS
+D5 = PASS
+D6 = PASS
+D7 = PASS
+D8 = PASS
+D9 = PASS
+D10 = PASS
+
+P2_D_V1_IMPLEMENTATION = PASS
+RECOVERY_SI_P2_D_V1 = PASS / CLOSED
+
+FINAL2 = PASS
+FINAL3_REQUIRED = NO
+
+你报告的：
+
+纯文本
+recovery-si-phase2-d = 14/14 PASS
+相关回归 = 70/70 PASS
+tsc = exit 0
+
+属于本地归档执行证据；exact 638c9561 当前 GitHub hosted status/workflow 仍为空。我独立确认的是 exact HEAD 上的实现、测试及变更范围。
+
+③ 四类禁止边界继续冻结
+
+确认不变：
+
+纯文本
+APPROVAL_CONSUMPTION = FORBIDDEN
+EXECUTOR_INVOCATION = FORBIDDEN
+BUSINESS_FACT_WRITE = FORBIDDEN
+EXTERNAL_ACTION = FORBIDDEN
+
+P2-D 当前能力准确描述是：
+
+纯文本
+verified recovery decision
+→ canonical READY alignment
+→ immutable execution basis
+→ trusted Production Control Plane snapshot
+→ Action Guard dry-run
+→ ALLOW / DENY / REQUIRES_APPROVAL
+→ STOP
+
+不是：
+
+纯文本
+ALLOW
+→ execute
+
+所以：
+
+纯文本
+ACTION_GUARD_DRY_RUN_ALLOW
+!=
+EXECUTION_AUTHORIZATION
+
+继续是硬不变量。
+
+④ P2-E / P2-F / P2-G 继续单独送审
+
+确认：
+
+纯文本
+P2_E = HOLD_SCHEMA_DELTA
+P2_F = HOLD
+P2_G = HOLD
+
+SCHEMA_DELTA_REQUIRED = NO   // 当前 P2-D
+RUNTIME_WIRING = NONE
+
+P2-D CLOSED 不会自动解锁任何后续阶段。
+
+其中：
+
+P2-E：RecoveryPlan / DecisionEvidence / RecoveryPackage 等持久化；
+P2-F：模型辅助及 RSI_MODEL_NETWORK / RSI_PAID_MODEL_CALLS；
+P2-G：真实 executor / provider / external write / payment / filing。
+
+都必须独立审。
+
+⑤ 真实执行必须另开 P2-G
+
+确认，而且这是硬要求。
+
+当前：
+
+纯文本
+PLATFORM
+CARRIER
+INDEPENDENT_SITE
+→ claim.submit
+
+只批准作为 P2-D dry-run 的保守风险分类。
+
+绝不能直接解释成：
+
+纯文本
+真实 executor identity = claim.submit
+
+P2-G 至少必须重新审：
+
+纯文本
+真实 executor identity
+domain → provider operation 映射
+actor membership / RBAC
+approvalId 真实性
+approval action / tenant / target binding
+approval payload fingerprint
+approval expiry / revocation / consumed state
+approval consumption 原子性
+idempotency / exactly-once
+provider credential boundary
+provider transport
+external-write enablement
+production gate
+kill switch
+reconciliation
+provider response truth
+failure / retry / NEEDS_MANUAL
+
+CUSTOMS 同样继续：
+
+纯文本
+RECOVERY_GUARD_ACTION_MAP.CUSTOMS = null
+CUSTOMS_FILING = HOLD
+
+不能复用 customs.recovery.start 代替真实 filing。
+
+最终冻结状态
+纯文本
+RECOVERY_SI_P2_D_V1 = PASS / CLOSED
+FINAL3_REQUIRED = NO
+
+CANONICAL_READY_ALIGNMENT = PASS
+TRUSTED_CONTROL_PLANE = PASS
+STATIC_GUARD_MAPPING = PASS
+REAL_HUMAN_APPROVAL_GATE_DRY_RUN = PASS
+
+executionAuthorized = false
+executorInvoked = false
+submitted = false
+persisted = false
+approvalConsumed = false
+
+APPROVAL_CONSUMPTION = FORBIDDEN
+EXECUTOR_INVOCATION = FORBIDDEN
+BUSINESS_FACT_WRITE = FORBIDDEN
+EXTERNAL_ACTION = FORBIDDEN
+
+P2_E = HOLD_SCHEMA_DELTA
+P2_F = HOLD
+P2_G = HOLD
+
+EXTERNAL_WRITE = HOLD
+PAYMENT = HOLD
+TRANSPORT = HOLD
+PRODUCTION_CREDENTIALS = HOLD
+REAL_CLAIM_SUBMIT = HOLD
+CUSTOMS_FILING = HOLD
+
+FINAL_ACCEPTANCE_HEAD = 0f7f7ac
+
+结论：P2-D v1 dry-run 到这里可以正式 PASS / CLOSED，不用 FINAL-3。若继续开发，下一阶段不能直接执行，应另行选择并送审 P2-E、P2-F 或 P2-G；真实执行必须走 P2-G 独立架构审计。
+```
