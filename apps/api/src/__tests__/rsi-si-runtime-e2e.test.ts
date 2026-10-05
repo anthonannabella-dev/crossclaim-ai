@@ -198,3 +198,25 @@ describe('STEP_3 FINAL-2 · CHANGE A —— proposal 与 Judge verdict 分离', 
     expect(RSI_RUNTIME_COMPOSITION_BOUNDARY.secondRuntime).toBe(0);
   });
 });
+
+describe('STEP_3 FINAL-3 · CHANGE A —— domainPacks 不可被 awaitVerdict:false 绕过', () => {
+  it('STEP3F3_A1 显式 awaitVerdict:false + domainPacks → 仍 park-for-judge，不自证完成', async () => {
+    const pack = createRecoverySiPack({ readPorts: readPorts([]), bind, guard: ALLOW_GUARD });
+    const queue = JSON.stringify([{ id: 'task-1', dedupeKey: 'task:recovery:PLATFORM:opp-1', priority: 'P2' }]);
+    const composition = await composeRsiRuntime({
+      readFile: async (p: string) => (p === 'mem://tasks' ? queue : '[]'),
+      tasksPath: 'mem://tasks',
+      domainPacks: [pack],
+      awaitVerdict: false,
+    });
+    const outcome = await composition.controller.tick();
+    expect(outcome.claimed?.dedupeKey).toBe('task:recovery:PLATFORM:opp-1');
+    expect(composition.controller.state().waitingForVerdict).toBe(true);
+    expect(composition.controller.state().verdict).toBeNull();
+    expect(composition.controller.proposal()?.status).toBe('PASS');
+    composition.controller.markWaitingForVerdict('PASS');
+    await composition.controller.emit('JUDGE_VERDICT_RECEIVED');
+    expect(composition.controller.state().waitingForVerdict).toBe(false);
+    expect(RSI_RUNTIME_COMPOSITION_BOUNDARY.domainPackAlwaysParksForJudge).toBe(true);
+  });
+});

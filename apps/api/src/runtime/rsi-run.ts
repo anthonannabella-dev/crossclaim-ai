@@ -204,8 +204,11 @@ export async function composeRsiRuntime(input: {
     // RSI-RT-05：runner 结果只作提案，任务停在等待裁决，由 verdict 收口（REVISE 才会产出修订任务）。
     // 默认 false：没有裁决来源时 park 会让任务永远停在等待裁决；需要时由调用方显式开启。
     // STEP 3 FINAL-2 CHANGE A：domainPacks 路径强制 park-for-judge（不可被 awaitVerdict=false 绕过）
+    // STEP 3 FINAL-3 CHANGE A：domainPacks 路径**强制** park-for-judge（awaitVerdict:false 也不可绕过）
     awaitVerdict:
-      input.awaitVerdict ?? (input.domainPacks !== undefined && input.domainPacks.length > 0),
+      input.domainPacks !== undefined && input.domainPacks.length > 0
+        ? true
+        : (input.awaitVerdict ?? false),
   });
 
   const localSources: RsiEventSources = createLocalEventSources({
@@ -289,6 +292,8 @@ export const RSI_RUNTIME_COMPOSITION_BOUNDARY = {
   adminSnapshotIsReadOnlyArtifact: true,
   verdictPollOnlyWhileWaiting: true,
   parkForJudgeDefault: false,
+  /** FINAL-3：domainPacks 路径强制 park-for-judge，不可被 awaitVerdict=false 绕过 */
+  domainPackAlwaysParksForJudge: true,
   verdictValueFromArtifact: true,
   restartReconcileSupported: true,
   signalDrivenTaskGeneration: true,

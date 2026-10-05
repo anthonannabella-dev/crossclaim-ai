@@ -50,11 +50,11 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
-  "next_execution_unit": "读取 STEP 3 FINAL-2 裁决 → 逐字归档（MSG-20261005-42）→ PASS/CLOSED 则宣布 STEP_3_RUNTIME_POLICY_WIRING = PASS / CLOSED 并 recompute SAFE_CONTINUATION_QUEUE；REVISE 则最小集合窄修 → commit/push → 再送审",
+  "next_execution_unit": "STEP 3 FINAL-3 CHANGE B：实现真实 Shared Action Guard / Control Plane adapter（替换 fail-closed 默认端口，接入现有 action-guard + control-plane + kill-switch）→ 测试 → 回归 → commit/push → 在新审核会话（https://chatgpt.com/）送审 FINAL-3",
   "automation_status": "CONTINUOUS",
   "last_tick_at": "2026-10-06T08:30:00.000Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "STEP 3 FINAL-2（A+B）实现并送审（REVIEWED_HEAD = ca23b1df）",
+  "last_action": "STEP 3 FINAL-3 CHANGE A 落地（awaitVerdict:false 旁路关闭）+ 审核渠道切换为新会话",
   "last_action_at": "2026-10-06T08:30:00.000Z",
   "next_action": "C2 IMPLEMENTATION（Schema Delta + durable ledger/budget + PG 回归）",
   "current_head": "054ab732",
@@ -3609,9 +3609,9 @@
     "closure_service": "PENDING - closure-db 合成闭环链在**任何层级都没有 account provenance**（无 ClaimItem、opportunity.accountId 亦为 null，因为 detection 夹具的连接未绑定 PlatformAccount）。已实现并回滚的两种派生兜底：case→ClaimItem 与 case→CaseOpportunity→Opportunity.accountId；均无法派生。NEXT: 在 closure-db 的导入/检测夹具中把连接绑定到 seed 的 PlatformAccount，使 opportunity.accountId 落值后再接线（否则该 test/demo 闭环路径只能 fail-closed）。"
   },
   "audit_channel": {
-    "moved_at": "2026-10-02T08:11:55.840Z",
     "url": "https://chatgpt.com/",
-    "note": "宿主开启新会话；旧审计会话 6ab9ee1b-... 已不在标签内。裁决留档真源 = AI-ARCHITECT-INBOX.md + GitHub Issue #2；下次唤醒必须自包含（REVIEWED_HEAD + Issue #2 comment id + checkpoint 文档路径），且仅在真实 checkpoint 发送。"
+    "note": "HOST 于 2026-10-05 打开新审核会话（in-app browser tab 10，已 markHandoff）；旧会话 https://chatgpt.com/c/6ac385db-cb60-83ec-9754-c7a30633a8c5 保留 MSG-30..41 归档来源。下一次送审在新会话投递。",
+    "prior_conversation": "https://chatgpt.com/c/6ac385db-cb60-83ec-9754-c7a30633a8c5"
   },
   "c2_final2_blockers": {
     "ci_failed_head": "55383f3",
@@ -9354,7 +9354,7 @@
   "HEARTBEAT_INTERVAL_SECONDS": 60,
   "safe_continuation_queue_recomputed_at": "2026-10-06T07:30:00.000Z",
   "step3_runtime_policy_wiring": {
-    "status": "FINAL2_SUBMITTED_PENDING_VERDICT",
+    "status": "FINAL3_IN_PROGRESS",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
     "implementation_head": "c0b61792",
     "request": "docs/releases/SI-RUNTIME-STEP3-WIRING-REQUEST.md",
@@ -9416,6 +9416,8 @@
         "B shared Action Guard bridge（ALLOW 才执行只读工具；DENY/REQUIRES_APPROVAL/degraded/kill switch/tenant mismatch → BLOCK + tool 0；CUSTOMS/unmapped → guard 0/tool 0）"
       ],
       "tests": "tsc 0；新增 9 例；回归 75 files / 759 tests PASS"
-    }
+    },
+    "final2_verdict_note": "MSG-20261005-42 待归档：FINAL-2 裁决 = PASS WITH REVISE / STEP3_FINAL3_REQUIRED = YES（A：awaitVerdict:false 旁路；B：真实 Shared Guard adapter 未完成）。注意：work/stage/verdict-step3-f2.txt 的抽取丢了换行，**必须重新干净抽取**后再逐字归档。",
+    "final3_progress": "CHANGE A 已完成（domainPacks 强制 park-for-judge；新增 STEP3F3_A1 测试）；CHANGE B（真实 Shared Action Guard adapter）待完成"
   }
 }
