@@ -35,6 +35,7 @@ export const CONTROLLED_ADOPTION_PLAN_BOUNDARY = {
   rollout: 'FORBIDDEN',
   configMutation: 'FORBIDDEN',
   staleBaseline: 'FAIL_CLOSED（执行前 live config fingerprint 必须等于 plan.expectedBaselineConfigFingerprint，否则 STALE_BASELINE）',
+  temporalOrdering: 'createdAt >= reviewVerdict.decidedAt（否则 ADOPTION_PLAN_CREATED_BEFORE_VERDICT）',
   binds: [
     'planDigest',
     'reviewVerdictDigest',
@@ -153,6 +154,10 @@ export function createControlledAdoptionPlan(input: {
   if (!isValidDeltaValue(path, from)) throw new Error('ADOPTION_PLAN_FROM_VALUE_INVALID:' + target + ':' + path);
 
   if (!isIso(input.createdAt) || !isIso(input.expiresAt)) throw new Error('ADOPTION_PLAN_SCHEDULE_INVALID');
+  // PLAN_TEMPORAL_ORDERING：plan 必须在 review verdict 判决之后创建
+  if (Date.parse(input.createdAt) < Date.parse(verdict.decidedAt)) {
+    throw new Error('ADOPTION_PLAN_CREATED_BEFORE_VERDICT');
+  }
   if (Date.parse(input.expiresAt) <= Date.parse(input.createdAt)) throw new Error('ADOPTION_PLAN_EXPIRY_INVALID');
 
   const planDigest = digest('controlled-adoption-plan', [

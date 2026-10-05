@@ -238,6 +238,17 @@ describe('PHASE 6 U1 —— controlled adoption plan (PLAN_ONLY)', () => {
     expect(CONTROLLED_ADOPTION_PLAN_BOUNDARY.staleBaseline).toContain('STALE_BASELINE');
   });
 
+  it('P6U1_3b 时间顺序：createdAt 必须 >= review verdict 的 decidedAt → REJECT', async () => {
+    const c = await ctx();
+    expect(() =>
+      createControlledAdoptionPlan({ ...planInput(c), createdAt: '2026-10-05T23:00:00.000Z' }),
+    ).toThrow(/ADOPTION_PLAN_CREATED_BEFORE_VERDICT/);
+    expect(c.reviewVerdict.decidedAt).toBe('2026-10-06T00:00:00.000Z');
+    const ok = createControlledAdoptionPlan({ ...planInput(c), createdAt: c.reviewVerdict.decidedAt, expiresAt: '2026-10-06T06:30:00.000Z' });
+    expect(isVerifiedControlledAdoptionPlan(ok)).toBe(true);
+    expect(CONTROLLED_ADOPTION_PLAN_BOUNDARY.temporalOrdering).toContain('createdAt >= reviewVerdict.decidedAt');
+  });
+
   it('P6U1_4 provenance / anti-tamper / 无执行入口', async () => {
     const c = await ctx();
     const plan = createControlledAdoptionPlan(planInput(c));
