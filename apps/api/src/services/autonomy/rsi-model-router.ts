@@ -29,10 +29,11 @@ import {
 } from './rsi-cost-policy';
 import { evaluateAiNecessity } from './rsi-ai-necessity-gate';
 import {
-  AI_ESCALATION_DEFAULTS,
   assertJudgeCannotAuthorizeModelCall,
+  clampAiEscalationLimits,
   decideAiEscalation,
   type AiEscalationLimits,
+  type AiQualityVerdict,
 } from './rsi-model-escalation-policy';
 
 export type RsiProviderTier = 'LOW_COST' | 'STRONG';
@@ -216,6 +217,16 @@ export function createRsiModelRouter(options: {
   limits?: RsiBudgetLimits;
   /** C1：有界升级上限（默认 maxAttempts=2 / maxEscalations=1；不得被调用方放大） */
   escalationLimits?: AiEscalationLimits;
+  /**
+   * C1 FINAL-2（CHANGE A）：**server-side deterministic quality evaluator**。
+   * strong 升级授权只能来自：preceding LOW_COST attempt + 本 evaluator 的确定性结论；
+   * 未配置 → 无法证明质量 → 不升级（strong = 0）。caller 自报 quality/state 一律被忽略。
+   */
+  qualityEvaluator?: (input: {
+    taskType: string;
+    tier: RsiProviderTier;
+    attempt: RsiProviderAttemptResult;
+  }) => AiQualityVerdict;
   now?: () => number;
   callIdFactory?: () => string;
 }): ModelRouterPort & {
@@ -224,6 +235,11 @@ export function createRsiModelRouter(options: {
   const limits = options.limits ?? RSI_BUDGET_DEFAULTS;
   const now = options.now ?? (() => Date.now());
   let callSequence = 0;
+  /**
+   * C1 FINAL-2：per-task 内部升级状态（Gateway 自己维护，caller 不可注入）。
+   * 保证：无 preceding LOW_COST attempt 不升级；触顶后不再调用 provider（无递归、无 retry storm）。
+   */
+  const taskState = new Map<string, { attempts: number; escalations: number; strongFailed: boolean }>();
   const nextCallId = options.callIdFactory ?? (() => `rsi-call-${++callSequence}`);
 
   const emit = (record: RsiModelCallRecord): void => {
@@ -254,7 +270,7 @@ export function createRsiModelRouter(options: {
     request: RsiModelInvocationRequest,
     purpose: string,
     level: string,
-  ): Promise<{ outcome: RsiRouterOutcome; guardRejected: boolean }> => {
+  ): Promise<{ outcome: RsiRouterOutcome; guardRejected: boolean; attempt: RsiProviderAttemptResult | null }> => {
     const usageBefore = options.usage();
     const guard = checkRsiCallBudget({
       adapter,
@@ -269,6 +285,7 @@ export function createRsiModelRouter(options: {
       emit(record);
       return {
         guardRejected: true,
+        attempt: null,
         outcome: {
           called: false,
           level,
@@ -313,6 +330,7 @@ export function createRsiModelRouter(options: {
 
     return {
       guardRejected: false,
+      attempt,
       outcome: {
         called: true,
         level,
@@ -365,23 +383,58 @@ export function createRsiModelRouter(options: {
         return { called: false, level: effectiveLevel, reason: 'INVOCATION_INVALID', record };
       }
 
-      // C1：cheap → strong 必须经过 quality gate 且有界（LLM Judge 不得授权再次调用）
-      const escalationRequest = request.escalation ?? null;
-      if (options.strong === undefined || escalationRequest === null) {
-        return (await runAttempt(options.lowCost, request, 'LEVEL_1', effectiveLevel)).outcome;
+      // C1 FINAL-2（CHANGE A）：strong 授权只能来自「preceding LOW_COST attempt + server-side
+      // deterministic quality evaluator」。caller 自报 escalation.quality/state 一律被忽略。
+      const { effective: escalationLimits } = clampAiEscalationLimits(options.escalationLimits ?? null);
+      const taskKey = (request.incidentId ?? '-') + '::' + (request.taskId ?? '-');
+      const state = taskState.get(taskKey) ?? { attempts: 0, escalations: 0, strongFailed: false };
+      if (state.strongFailed) {
+        return { called: false, level: 'LEVEL_2_STRONG', reason: 'AI_ESCALATION_STOP_FAILED', record: null };
       }
+      if (state.attempts >= escalationLimits.maxAttempts) {
+        return { called: false, level: effectiveLevel, reason: 'AI_ESCALATION_MAX_ATTEMPTS', record: null };
+      }
+
+      // ① 先跑 LOW_COST（cheap 前置 attempt 由 Gateway 自己产生，不接受 caller 声明）
+      const first = await runAttempt(options.lowCost, request, 'LEVEL_1', effectiveLevel);
+      state.attempts += 1;
+      taskState.set(taskKey, state);
+
+      if (options.strong === undefined || first.guardRejected) {
+        return first.outcome;
+      }
+
+      // ② 质量结论只能来自 server-side deterministic evaluator；未配置 → 无法证明 → 不升级
+      const cheapSucceeded = first.outcome.record?.result === 'SUCCESS';
+      let quality: AiQualityVerdict | null = null;
+      if (!cheapSucceeded) {
+        // provider 失败 → 无可用输出，确定性判定为 FAIL（可进入一次有界升级）
+        quality = 'FAIL';
+      } else if (options.qualityEvaluator && first.attempt) {
+        quality = options.qualityEvaluator({ taskType: request.taskType, tier: 'LOW_COST', attempt: first.attempt });
+      }
+      if (quality === null) {
+        return first.outcome;
+      }
+
       const escalation = decideAiEscalation({
         currentTier: 'LOW_COST',
-        quality: escalationRequest.quality,
-        state: escalationRequest.state,
-        limits: options.escalationLimits ?? AI_ESCALATION_DEFAULTS,
+        quality,
+        state: { attempts: state.attempts, escalations: state.escalations },
+        limits: escalationLimits,
       });
       if (escalation.action !== 'ESCALATE_TO_STRONG') {
-        // 不允许升级（含 quality=PASS / 触顶 / judge 授权被忽略）→ 只跑一次 LOW_COST，绝不调用 strong
-        return (await runAttempt(options.lowCost, request, 'LEVEL_1', effectiveLevel)).outcome;
+        return first.outcome;
       }
       assertJudgeCannotAuthorizeModelCall({ requestedStrongCall: true, escalation });
       const second = await runAttempt(options.strong, request, 'LEVEL_2_STRONG', 'LEVEL_2_STRONG');
+      // strong attempt 同样计入 attempts（attempts = 真实 provider attempt 数）
+      state.attempts += 1;
+      state.escalations += 1;
+      if (second.outcome.record?.result !== 'SUCCESS') {
+        state.strongFailed = true;
+      }
+      taskState.set(taskKey, state);
       return { ...second.outcome, escalatedToStrong: true };
     },
   };

@@ -20,8 +20,10 @@ import {
 } from '../services/autonomy/rsi-model-cache-identity';
 import {
   AI_ESCALATION_BOUNDARY,
+  AI_ESCALATION_HARD_CAPS,
   AI_ESCALATION_DEFAULTS,
   assertJudgeCannotAuthorizeModelCall,
+  clampAiEscalationLimits,
   decideAiEscalation,
 } from '../services/autonomy/rsi-model-escalation-policy';
 import {
@@ -270,39 +272,83 @@ describe('C1 · Model Gateway 单咽喉（router 级证据）', () => {
     expect(strong.n).toBe(0);
   });
 
-  it('C1_ROUTER_STRONG_ONLY_VIA_BOUNDED_ESCALATION（无 escalation 绝不调用 strong）', async () => {
+  it('C1_ROUTER_STRONG_ONLY_VIA_BOUNDED_ESCALATION（FINAL-2：授权来自内部 cheap attempt + deterministic evaluator）', async () => {
+    const low = { n: 0 };
+    const strong = { n: 0 };
+    // ① caller 声明 COMPLEX_CODE_FIX（cost policy 会选 LEVEL_2）→ 被钳制为 LEVEL_1；evaluator PASS → 不升级
+    const router = createRsiModelRouter({
+      lowCost: adapter('LOW_COST', true, low),
+      strong: adapter('STRONG', true, strong),
+      usage: () => usage(),
+      qualityEvaluator: () => 'PASS',
+    });
+    const probe = await router.outcomeOf(routerRequest('COMPLEX_FIX', 'COMPLEX_CODE_FIX', evidence('SEMANTIC_REQUIRED')));
+    expect(probe.record?.provider).toBe('provider-lowcost');
+    expect(probe.escalatedToStrong).toBeUndefined();
+    expect(strong.n).toBe(0);
+
+    // ② cheap 失败（无可用输出 → 确定性 FAIL）→ 一次受控升级到 strong
+    const low2 = { n: 0 };
+    const strong2 = { n: 0 };
+    const failingRouter = createRsiModelRouter({
+      lowCost: adapter('LOW_COST', false, low2),
+      strong: adapter('STRONG', true, strong2),
+      usage: () => usage(),
+    });
+    const escalated = await failingRouter.outcomeOf(routerRequest('COMPLEX_FIX', 'COMPLEX_CODE_FIX', evidence('SEMANTIC_REQUIRED')));
+    expect(escalated.escalatedToStrong).toBe(true);
+    expect(escalated.record?.provider).toBe('provider-strong');
+    expect(low2.n).toBe(1);
+    expect(strong2.n).toBe(1);
+
+    // ③ 触顶后同一 task 再调用 → 不再触达 provider（无递归 / 无 retry storm）
+    const bounded = await failingRouter.outcomeOf(routerRequest('COMPLEX_FIX', 'COMPLEX_CODE_FIX', evidence('SEMANTIC_REQUIRED')));
+    expect(bounded.called).toBe(false);
+    expect(['AI_ESCALATION_STOP_FAILED', 'AI_ESCALATION_MAX_ATTEMPTS']).toContain(bounded.reason);
+    expect(strong2.n).toBe(1);
+    expect(low2.n).toBe(1);
+  });
+
+  it('C1_FINAL2_CALLER_FORGED_ESCALATION_CANNOT_CALL_STRONG', async () => {
     const low = { n: 0 };
     const strong = { n: 0 };
     const router = createRsiModelRouter({
-      lowCost: adapter('LOW_COST', false, low),
+      lowCost: adapter('LOW_COST', true, low),
+      strong: adapter('STRONG', true, strong),
+      usage: () => usage(),
+      // server-side deterministic evaluator：判定低成本输出质量合格
+      qualityEvaluator: () => 'PASS',
+    });
+    // caller 试图自报 quality=FAIL + state 来换取 strong → 必须被忽略（仍 PASS → 不升级）
+    const forged = {
+      ...routerRequest('COMPLEX_FIX', 'COMPLEX_CODE_FIX', evidence('SEMANTIC_REQUIRED')),
+      escalation: { quality: 'FAIL' as const, state: { attempts: 1, escalations: 0 } },
+    };
+    const outcome = await router.outcomeOf(forged);
+    expect(outcome.record?.provider).toBe('provider-lowcost');
+    expect(outcome.escalatedToStrong).toBeUndefined();
+    expect(strong.n).toBe(0);
+
+    // 未配置 server-side evaluator → 无法证明质量 → 即使 cheap 输出存在也不升级
+    const noEvaluatorRouter = createRsiModelRouter({
+      lowCost: adapter('LOW_COST', true, { n: 0 }),
       strong: adapter('STRONG', true, strong),
       usage: () => usage(),
     });
-    // caller 声明 COMPLEX_CODE_FIX（cost policy 会选 LEVEL_2）但无 escalation → 只跑一次 LOW_COST
-    const probe = await router.outcomeOf(routerRequest('COMPLEX_FIX', 'COMPLEX_CODE_FIX', evidence('SEMANTIC_REQUIRED')));
-    expect(probe.record?.provider).toBe('provider-lowcost');
+    const unverified = await noEvaluatorRouter.outcomeOf({
+      ...routerRequest('COMPLEX_FIX', 'COMPLEX_CODE_FIX', evidence('SEMANTIC_REQUIRED')),
+      escalation: { quality: 'FAIL' as const, state: { attempts: 1, escalations: 0 } },
+    });
+    expect(unverified.record?.provider).toBe('provider-lowcost');
     expect(strong.n).toBe(0);
+  });
 
-    // quality PASS → 仍然不调用 strong
-    const pass = await router.outcomeOf(
-      routerRequest('COMPLEX_FIX', 'COMPLEX_CODE_FIX', evidence('SEMANTIC_REQUIRED'), { quality: 'PASS', state: { attempts: 1, escalations: 0 } }),
-    );
-    expect(pass.record?.provider).toBe('provider-lowcost');
-    expect(strong.n).toBe(0);
-
-    // quality FAIL + 未触顶 → 一次受控升级
-        const escalated = await router.outcomeOf(
-      routerRequest('COMPLEX_FIX', 'COMPLEX_CODE_FIX', evidence('SEMANTIC_REQUIRED'), { quality: 'FAIL', state: { attempts: 1, escalations: 0 } }),
-    );
-    expect(escalated.escalatedToStrong).toBe(true);
-    expect(escalated.record?.provider).toBe('provider-strong');
-    expect(strong.n).toBe(1);
-
-    // 已用掉升级额度 → 不再调用 strong（无递归）
-    const bounded = await router.outcomeOf(
-      routerRequest('COMPLEX_FIX', 'COMPLEX_CODE_FIX', evidence('SEMANTIC_REQUIRED'), { quality: 'FAIL', state: { attempts: 2, escalations: 1 } }),
-    );
-    expect(bounded.escalatedToStrong).toBeUndefined();
-    expect(strong.n).toBe(1);
+  it('C1_FINAL2_ESCALATION_LIMITS_CANNOT_BE_RAISED_BY_HOST', () => {
+    const asked = clampAiEscalationLimits({ maxAttempts: 999, maxEscalations: 999 });
+    expect(asked.clamped).toBe(true);
+    expect(asked.effective).toEqual({ maxAttempts: 2, maxEscalations: 1 });
+    expect(AI_ESCALATION_HARD_CAPS).toEqual({ maxAttempts: 2, maxEscalations: 1 });
+    expect(AI_ESCALATION_BOUNDARY.hostMayRaiseHardCaps).toBe(false);
+    expect(AI_ESCALATION_BOUNDARY.escalationAuthorizationProvenance).toContain('SERVER_SIDE_DETERMINISTIC_EVALUATOR_ONLY');
   });
 });

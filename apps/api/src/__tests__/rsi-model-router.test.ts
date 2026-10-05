@@ -137,15 +137,8 @@ describe('RSI Model Router', () => {
       strong: adapter('STRONG', true, strongCalls),
       usage: () => usage(),
     });
-    // C1：strong 只能经有界升级合同（LOW_COST 先跑并失败 → quality FAIL → 一次受控升级）
-    const complexRequest = { ...request('COMPLEX_CODE_FIX'), taskType: 'COMPLEX_FIX' };
-    const cheap = await failing.outcomeOf(complexRequest);
-    expect(cheap.called).toBe(true);
-    expect(cheap.record?.provider).toBe('provider-lowcost');
-    const complex = await failing.outcomeOf({
-      ...complexRequest,
-      escalation: { quality: 'FAIL' as const, state: { attempts: 1, escalations: 0 } },
-    });
+    // C1 FINAL-2：strong 授权来自 Gateway 内部（preceding LOW_COST attempt + deterministic quality）
+    const complex = await failing.outcomeOf({ ...request('COMPLEX_CODE_FIX'), taskType: 'COMPLEX_FIX' });
     expect(complex.escalatedToStrong).toBe(true);
     expect(complex.record?.provider).toBe('provider-strong');
   });

@@ -25,15 +25,40 @@ export interface AiEscalationLimits {
 /** 固定上限（不得由调用方放大；如需调整必须走架构裁决） */
 export const AI_ESCALATION_DEFAULTS: AiEscalationLimits = { maxAttempts: 2, maxEscalations: 1 };
 
+/** 硬上限（CHANGE B：任何配置都不得放大） */
+export const AI_ESCALATION_HARD_CAPS: AiEscalationLimits = { maxAttempts: 2, maxEscalations: 1 };
+
+/**
+ * 把请求的上限钳制到硬上限内：`effective = min(requested, hardCap)`。
+ * 任何试图放大（例如 999/999）的配置都会被压回 2/1，并在 `clamped` 中如实报告。
+ */
+export function clampAiEscalationLimits(requested?: Partial<AiEscalationLimits> | null): {
+  effective: AiEscalationLimits;
+  clamped: boolean;
+} {
+  const askedAttempts = typeof requested?.maxAttempts === 'number' && Number.isFinite(requested.maxAttempts) ? requested.maxAttempts : AI_ESCALATION_HARD_CAPS.maxAttempts;
+  const askedEscalations = typeof requested?.maxEscalations === 'number' && Number.isFinite(requested.maxEscalations) ? requested.maxEscalations : AI_ESCALATION_HARD_CAPS.maxEscalations;
+  const effective: AiEscalationLimits = {
+    maxAttempts: Math.max(1, Math.min(askedAttempts, AI_ESCALATION_HARD_CAPS.maxAttempts)),
+    maxEscalations: Math.max(0, Math.min(askedEscalations, AI_ESCALATION_HARD_CAPS.maxEscalations)),
+  };
+  return {
+    effective,
+    clamped: effective.maxAttempts !== askedAttempts || effective.maxEscalations !== askedEscalations,
+  };
+}
+
 export const AI_ESCALATION_BOUNDARY = {
   cheapPassCallsStrong: false,
   escalationRequiresQualityFailure: true,
+  escalationAuthorizationProvenance: 'SERVER_SIDE_DETERMINISTIC_EVALUATOR_ONLY（caller 自报 quality/state 不构成授权）',
   judgeMayAuthorizeModelCall: false,
   judgeVerdictIsQualityInputOnly: true,
   maxAttempts: AI_ESCALATION_DEFAULTS.maxAttempts,
   maxEscalations: AI_ESCALATION_DEFAULTS.maxEscalations,
   recursiveModelLoop: 'FORBIDDEN',
   providerHttp200ImpliesQuality: false,
+  hostMayRaiseHardCaps: false,
 } as const;
 
 export interface AiEscalationState {

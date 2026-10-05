@@ -144,15 +144,9 @@ describe('RSI 成本控制 E2E', () => {
       strong: adapter('STRONG', { succeeded: true, cost: 0.05 }, strong),
       usage: () => usage(),
     });
-    // C1：LOW_COST 先跑（attempt 1）→ quality FAIL → 一次受控升级 → STRONG
-    const probe = await router.outcomeOf(request('COMPLEX_FIX', 'COMPLEX_CODE_FIX'));
-    expect(probe.record?.provider).toBe('provider-lowcost');
+    // C1 FINAL-2：LOW_COST attempt（provider 失败 → 确定性 FAIL）→ 一次受控升级 → STRONG（Gateway 内部授权）
+    const outcome = await router.outcomeOf(request('COMPLEX_FIX', 'COMPLEX_CODE_FIX'));
     expect(low.n).toBe(1);
-    expect(strong.n).toBe(0);
-    const outcome = await router.outcomeOf({
-      ...request('COMPLEX_FIX', 'COMPLEX_CODE_FIX'),
-      escalation: { quality: 'FAIL' as const, state: { attempts: 1, escalations: 0 } },
-    });
     expect(strong.n).toBe(1);
     expect(outcome.escalatedToStrong).toBe(true);
     expect(outcome.record?.provider).toBe('provider-strong');

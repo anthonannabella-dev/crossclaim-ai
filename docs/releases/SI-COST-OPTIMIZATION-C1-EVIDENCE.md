@@ -79,3 +79,50 @@ P2_F = HOLD；P2_G = HOLD；RUNTIME_WIRING = NONE；STEP_3_RUNTIME_POLICY_WIRING
 无 credential / raw prompt / raw provider response / 客户敏感 payload 持久化（本批零持久化）
 C2（AiCostLedgerEntry + AiBudgetPolicy + AiModelCacheEntry + PG enforcement）与 C3（policy + observability）尚未开始
 ```
+
+## 6. FINAL-2 修订（MSG-20261005-31 = PASS WITH REVISE；CHANGE A / B）
+
+裁决：Necessity Gate = PASS、Cache Identity Contract = PASS、Gateway 对 LEVEL_0/LEVEL_1 的咽喉控制 = PASS；
+**Cheap → Strong bounded escalation = REVISE**（`C1_FINAL2_REQUIRED = YES`）。
+
+### CHANGE A —— strong 升级授权来源不可由 caller 自报（已落地）
+
+```text
+移除：request.escalation 作为授权（字段保留仅为兼容，Router **忽略**其 quality/state）
+改为：Gateway 内部授权链 = preceding LOW_COST attempt（Gateway 自己产生）
+      + server-side deterministic quality evaluator（createRsiModelRouter({ qualityEvaluator })，可选注入）
+      → decideAiEscalation() → strong（最多一次）
+未配置 qualityEvaluator：无法证明质量 → **不升级**（strong = 0）
+provider 失败：无可用输出 → 确定性 FAIL → 允许一次有界升级
+per-task 内部状态：attempts / escalations / strongFailed（caller 不可注入）；触顶或 strong 失败后
+  同一 task 再调用 → 直接返回 { called:false, reason }，**不再触达 provider**
+```
+
+### CHANGE B —— 固定 2/1 上限不得被放大（已落地）
+
+```text
+AI_ESCALATION_HARD_CAPS = { maxAttempts: 2, maxEscalations: 1 }
+clampAiEscalationLimits(requested) = min(requested, hardCap)  → 任何 999/999 被压回 2/1（clamped=true）
+AI_ESCALATION_BOUNDARY.hostMayRaiseHardCaps = false
+```
+
+### FINAL-2 回归（裁决要求的 8 条）
+
+| 要求 | 证据（`rsi-cost-c1.test.ts`） |
+| --- | --- |
+| CALLER_FORGED_ESCALATION_CANNOT_CALL_STRONG | `C1_FINAL2_CALLER_FORGED_ESCALATION_CANNOT_CALL_STRONG`（caller 自报 quality=FAIL 被忽略；evaluator PASS → strong = 0） |
+| 没有 preceding LOW_COST attempt → strong = 0 | 同一测试：未配置 evaluator（无法证明）→ strong = 0；且 Router 从不接受 caller escalation 作为授权 |
+| LOW_COST 输出未通过 server-side deterministic quality evaluation → strong = 0 | 同上（`qualityEvaluator` 缺省 → quality 不可证 → 不升级） |
+| LOW_COST + deterministic FAIL → strong = exactly 1 | `C1_ROUTER_STRONG_ONLY_VIA_BOUNDED_ESCALATION`（②：cheap 失败 → deterministic FAIL → strong = 1） |
+| caller 自报 quality=FAIL 不构成授权 | `C1_FINAL2_CALLER_FORGED_ESCALATION_CANNOT_CALL_STRONG` |
+| escalationLimits={999,999} → 实际仍 ≤ 2/1 | `C1_FINAL2_ESCALATION_LIMITS_CANNOT_BE_RAISED_BY_HOST`（clamp → 2/1，clamped=true） |
+| STRONG FAIL → 不再调用任何 provider | `C1_ROUTER_STRONG_ONLY_VIA_BOUNDED_ESCALATION`（③：触顶/失败后同一 task 再调用 → `called=false`，provider 计数不变） |
+| 原 C1 13 例继续全绿 / 全量 rsi-* 全绿 / tsc = 0 | 见下 |
+
+```text
+apps/api npx tsc --noEmit                                            → exit 0
+C1 定向（rsi-cost-c1 + rsi-cost-e2e + rsi-cost-ledger + rsi-cost-policy + rsi-model-router + rsi-local-sim-adapter）
+                                                                     → 6 files / 48 tests PASS
+rsi-* 全量回归（46 文件）                                             → 46 files / 250 tests PASS
+prisma validate / migrate status                                     → valid / 79 migrations up to date（未改 Schema）
+```

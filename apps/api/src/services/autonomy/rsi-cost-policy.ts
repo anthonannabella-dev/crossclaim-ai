@@ -191,8 +191,9 @@ export interface RsiModelCallRequest {
    */
   necessity: AiDeterministicEvidence | null;
   /**
-   * C1：可选的受控升级请求。只有该合同批准时才可能使用 STRONG tier；
-   * 未提供 → 只允许 LOW_COST（strong 不会自动启用）。
+   * C1 FINAL-2（MSG-20261005-31 CHANGE A）：**不再接受 caller 自报的升级状态/质量结论**。
+   * strong 的授权来源只能是 Gateway 内部的「preceding LOW_COST attempt + server-side deterministic
+   * quality evaluator」；此处保留字段仅为兼容旧调用方并会被 Router 忽略。
    */
   escalation?: { quality: AiQualityVerdict; state: AiEscalationState } | null;
 }
