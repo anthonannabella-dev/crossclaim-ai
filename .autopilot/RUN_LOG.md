@@ -2664,3 +2664,12 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 未来生产接线不变量（KEEP，不阻塞）：Safe Mode refs 必须由 server-side invocation context 构造；trustedRealProviders 必须为 server-owned registry。
 - SAFE_CONTINUATION_QUEUE 重算结果：SAFE_CONTINUATION_QUEUE = EMPTY；剩余全部为 HOST_ACTION_REQUIRED（BG-006-production-candidate-preflight:HOST_ACTION_REQUIRED, RSI-RT-02-supervisor-autostart:IMPLEMENTED_PENDING_HOST_VALIDATION）或 HOLD_EXTERNAL（recovery-si-phase2:A_B_C_CLOSED_P2D_PENDING_DESIGN, recovery-si-phase2-remainder-queue:P2_E_PASS_CLOSED, si-rsi-unification-design:PASS_CLOSED）。
 - NEXT_EXECUTION_UNIT = AUTONOMOUS_INTERNAL_TARGET = COMPLETE：无剩余可安全继续的内部单元；等待 HOST_ACTION_REQUIRED / HOLD_EXTERNAL 解禁或新授权
+
+## 2026-10-06T08:30Z —— STEP_3_RUNTIME_POLICY_WIRING 接线完成并送审（实现 HEAD = c0b61792）
+- 3A：新增 runtime/rsi-domain-pack.ts（domain capability pack 合同 + 唯一派发层，未匹配任务 = BLOCK）与 runtime/recovery-si-pack.ts（Recovery SI pack = Recovery Policy Pack → 唯一 Policy Core → Guard-Action Binding → 确定性只读工具 → 证据；零网络/零外写/零真实模型调用）。
+- 3A 接线：composeRsiRuntime({ domainPacks }) 作为唯一 runner（未创建第二 event loop / controller / scheduler）；新增 runtimeMembers()（SECOND_RUNTIME = 0）与 domainDispatchLog()。
+- 3B/3C：Policy Core 仍唯一；架构回归断言 services/autonomy 不得 import services/intelligence；guard intent 只能声明，授权仍属共享 Action Guard / Control Plane / Kill Switch / HITL；CUSTOMS 执行类 intent guard action = null → BLOCK（L5 未放宽）。
+- 3D：deterministic-first，modelCallCount = 0；REAL_MODEL_NETWORK / PAID_MODEL_CALLS 仍 HOLD。
+- 3E/3F/3G：Judge 保持 SELF_JUDGE_FORBIDDEN + park-for-judge；restart/reconcile E2E（过期 lease 恢复、终止态不重放、二次幂等）；3G 十条 E2E 全绿。
+- 验证：tsc exit 0；STEP 3 定向 12/12；rsi-* + si-cost-* + recovery-* + architecture-contract = 75 files / 750 tests PASS；无 Schema/迁移变更。
+- NEXT_EXECUTION_UNIT = 读取 STEP_3_RUNTIME_POLICY_WIRING 裁决 → 逐字归档（MSG-20261005-41）→ PASS/CLOSED 则宣布 CROSSCLAIM_SI_RUNTIME_WIRING = PASS / CLOSED 并 recompute SAFE_CONTINUATION_QUEUE；REVISE 则最小集合窄修 → commit/push → 再送审。

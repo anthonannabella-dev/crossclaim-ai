@@ -1,7 +1,7 @@
 # FINAL ACCEPTANCE REPORT（自动生成，请勿手改）
 
-- 生成时间：2026-10-05T13:18:50.133Z
-- 单一权威矩阵：`docs/releases/ACCEPTANCE-MATRIX.json` @29d19d6c
+- 生成时间：2026-10-05T13:38:52.419Z
+- 单一权威矩阵：`docs/releases/ACCEPTANCE-MATRIX.json` @c0b61792
 - acceptance HEAD：`e7467b73`
 - 协议：`docs/releases/FINAL-ACCEPTANCE-PROTOCOL.md`（三层验收；禁止自证）
 - 状态：CODE_COMPLETE=NO · INTEGRATION_COMPLETE=NO · REAL_VALIDATION_COMPLETE=NO · PRODUCTION_READY=NO
@@ -118,6 +118,7 @@
 - recovery-si-phase2-remainder-queue
 - si-rsi-unification-design
 - si-cost-optimization
+- step3-runtime-policy-wiring
 
 ### Layer 1 未通过检查（final-status 计算器输出；UNVERIFIED = 未绑定当前 HEAD 的实证）
 

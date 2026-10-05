@@ -9,9 +9,9 @@
   "last_chatgpt_message": "MSG-20261005-40",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-06T07:40:00.000Z",
+  "updated_at": "2026-10-06T08:30:00.000Z",
   "previous_head": "8064f07",
-  "architect_decision_pending": false,
+  "architect_decision_pending": true,
   "blocked_scope": null,
   "last_send_head": "0c35106",
   "last_sent_at": "2026-10-03T09:07:52.875Z",
@@ -50,12 +50,12 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
-  "next_execution_unit": "AUTONOMOUS_INTERNAL_TARGET = COMPLETE：无剩余可安全继续的内部单元；等待 HOST_ACTION_REQUIRED / HOLD_EXTERNAL 解禁或新授权",
+  "next_execution_unit": "读取 STEP_3_RUNTIME_POLICY_WIRING 裁决 → 逐字归档（MSG-20261005-41）→ PASS/CLOSED 则宣布 CROSSCLAIM_SI_RUNTIME_WIRING = PASS / CLOSED 并 recompute SAFE_CONTINUATION_QUEUE；REVISE 则最小集合窄修 → commit/push → 再送审",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-06T07:40:00.000Z",
+  "last_tick_at": "2026-10-06T08:30:00.000Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "SI_COST_OPTIMIZATION = PASS / CLOSED（MSG-20261005-40，REVIEWED_HEAD = 2b02ef8c）；C4_REQUIRED = NO；SAFE_CONTINUATION_QUEUE recomputed",
-  "last_action_at": "2026-10-06T07:30:00.000Z",
+  "last_action": "STEP_3_RUNTIME_POLICY_WIRING 接线完成并送审（实现 HEAD = c0b61792）",
+  "last_action_at": "2026-10-06T08:30:00.000Z",
   "next_action": "C2 IMPLEMENTATION（Schema Delta + durable ledger/budget + PG 回归）",
   "current_head": "054ab732",
   "last_completed_head": "054ab732",
@@ -5168,7 +5168,9 @@
   "runner_status": "RUNNING",
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
-  "safe_continuation_queue": [],
+  "safe_continuation_queue": [
+    "step3-runtime-policy-wiring"
+  ],
   "full_autonomous_internal_execution": "VERIFIED",
   "dispatcher_acceptance": {
     "at": "2026-10-03T14:47:59.226Z",
@@ -9321,7 +9323,7 @@
   "AUDIT_REVISE_LOOP_AUTO_CONTINUE": true,
   "HOST_LIMIT_MEANS_STOP": false,
   "STOP_ONLY_ON_TRUE_HOST_DEPENDENCY_OR_COMPLETE": true,
-  "CONTINUATION_REQUIRED": false,
+  "CONTINUATION_REQUIRED": true,
   "heartbeat": {
     "automation_id": "crossclaim-ai-bridge-5min",
     "name": "crossclaim-si-watchdog-1min",
@@ -9350,5 +9352,25 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-06T07:30:00.000Z"
+  "safe_continuation_queue_recomputed_at": "2026-10-06T07:30:00.000Z",
+  "step3_runtime_policy_wiring": {
+    "status": "SUBMITTED_PENDING_VERDICT",
+    "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
+    "implementation_head": "c0b61792",
+    "request": "docs/releases/SI-RUNTIME-STEP3-WIRING-REQUEST.md",
+    "evidence": "docs/releases/SI-RUNTIME-STEP3-WIRING-EVIDENCE.md",
+    "deliverables": [
+      "runtime/rsi-domain-pack.ts（domain capability pack 合同 + 唯一派发层 + runtimeMembers）",
+      "runtime/recovery-si-pack.ts（Recovery SI = domain pack：policy → guard binding → 只读工具 → 证据）",
+      "runtime/rsi-run.ts（composeRsiRuntime domainPacks 接线）"
+    ],
+    "invariants": {
+      "secondRuntime": 0,
+      "policyCoreDependsOnDomainPack": "FORBIDDEN（回归断言）",
+      "dynamicSelfRegistration": "FORBIDDEN",
+      "customFiling": "L5 永久拒绝未放宽",
+      "judgeSelfApproval": "FORBIDDEN（park-for-judge）"
+    },
+    "tests": "tsc 0；STEP 3 定向 12/12；回归 75 files / 750 tests PASS；无 Schema/迁移变更"
+  }
 }

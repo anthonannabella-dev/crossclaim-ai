@@ -1983,6 +1983,34 @@
       "note": "HOST ADDENDUM：依赖 SI_RSI_UNIFICATION_PASS_CLOSED；统一 Runtime PASS/CLOSED 后自动进入执行队列（P1）。登记内容见 docs/releases/SI-COST-OPTIMIZATION-REGISTRATION.md（含 OPT-1..OPT-7、Acceptance 12 条与边界）。 依赖已解除（SI_RSI_UNIFICATION_PASS_CLOSED @ MSG-20261005-29）：QUEUED → READY_FOR_DESIGN；READY_FOR_DESIGN ≠ AUTO_IMPLEMENTATION_AUTHORIZED（durable ledger / budget / model cache / AI necessity gate 仍需各自设计/实施审计）。 C1 = PASS / CLOSED（MSG-20261005-33，C1_FINAL4_REQUIRED = NO）；C2 IMPLEMENTATION 已授权（AiCostLedgerEntry + AiBudgetPolicy + ledger-derived usage + AiModelCacheEntry + tenant/append-only + manifest sync + real PG + budget race）。 C2 = PASS / CLOSED（MSG-20261005-37，REVIEWED_HEAD = f5e4cc2c，C2_FINAL5_REQUIRED = NO；MSG-20261005-35 / -36 已逐字归档补齐，FULL_COPY_OK）；C3 IMPLEMENTATION = AUTHORIZED（cache runtime wiring + business-value cost policy + Cost Safe Mode + concurrencyLimit enforcement + admin 只读可观测 + NOT_YET_MEASURABLE）。CONCURRENCY_LIMIT_ENFORCEMENT = NOT_YET_WIRED，C3 收口。 C3 IMPLEMENTATION 已送审（HEAD = e7467b73）：cache runtime wiring / business-value cost policy / Cost Safe Mode / concurrencyLimit enforcement（PG advisory-lock slots，多实例）/ admin 只读可观测 / NOT_YET_MEASURABLE。CONCURRENCY_LIMIT_ENFORCEMENT = ENFORCED。无 Schema 变更。 C3 Implementation Audit = PASS WITH REVISE（MSG-20261005-38）：4 项窄修（strong business-value gate / concurrencyLimit=0 语义 / per-policy-scope Safe Mode / real-vs-simulation metrics provenance）→ C3_FINAL2_REQUIRED；C4_REQUIRED = NO。 SI_COST_OPTIMIZATION = PASS / CLOSED（MSG-20261005-40）：C1（Necessity Gate / cache identity / cheap→strong bounded escalation）= CLOSED；C2（durable AiCostLedgerEntry + AiBudgetPolicy + AiModelCacheEntry + tenant/append-only + budget race）= CLOSED；C3（cache runtime wiring + business-value cost policy + Cost Safe Mode → Gateway + concurrencyLimit（含 0 = DENY_ALL）+ admin 只读可观测 + NOT_YET_MEASURABLE provenance）= CLOSED。未来生产接线不变量（KEEP，不阻塞）：Safe Mode refs 必须由 server-side invocation context 构造；trustedRealProviders 必须是 server-owned registry。",
       "design_verdict": "MSG-20261005-30 = PASS WITH REVISE / APPROVED FOR STAGED IMPLEMENTATION（C1 AUTHORIZED；C2/C3 DESIGN APPROVED, IMPLEMENTATION SUBJECT TO PREVIOUS STAGE PASS）；C2 CLOSED（MSG-20261005-37）→ C3 AUTHORIZED",
       "verdict": "PASS / CLOSED（MSG-20261005-40；C1 = C2 = C3 = PASS / CLOSED；C4_REQUIRED = NO）"
+    },
+    {
+      "id": "step3-runtime-policy-wiring",
+      "priority": "P0",
+      "source_backlog_id": "HOST AUTHORIZATION 2026-10-05 — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
+      "title": "STEP_3_RUNTIME_POLICY_WIRING（Recovery SI → ONE CrossClaim SI Runtime）",
+      "scope": "3A runtime composition / 3B policy wiring / 3C guard-action wiring / 3D model gateway wiring / 3E evidence-judge / 3F restart-reconcile / 3G runtime acceptance",
+      "dependencies": [
+        "si-cost-optimization",
+        "si-rsi-unification-design"
+      ],
+      "risk_class": "HIGH",
+      "ARCH_REVIEW_REQUIRED": true,
+      "HOST_ACTION_REQUIRED": false,
+      "HOLD_EXTERNAL": false,
+      "allowed_files": [
+        "apps/api/src/runtime/**",
+        "apps/api/src/__tests__/**",
+        "docs/releases/**"
+      ],
+      "boundary": "REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT = HOLD；SECOND_RUNTIME = FORBIDDEN",
+      "required_tests": [],
+      "template": "implementation",
+      "filters": [],
+      "status": "SUBMITTED_PENDING_VERDICT",
+      "implementation_head": "c0b61792",
+      "audit_request": "docs/releases/SI-RUNTIME-STEP3-WIRING-REQUEST.md",
+      "note": "Recovery SI 作为 domain capability pack 接入唯一 runtime；SECOND_RUNTIME = 0；Policy Core 仍唯一；guard intent 只能声明。"
     }
   ],
   "authorization_note": "MSG-20261003-133 Q3：dispatcher 获授权自动扩 backlog 并执行安全单元（契约/已批准 D1–D3 Schema/append-only 持久化/deterministic normalization/qualification·evidence·package/测试/文档/fixture/只读 HTTP/只读 reconciliation projection）；遇到未批准 Schema、EXTERNAL_WRITE Action Guard、真实 adapter/webhook、submission、真实资金语义写入、生产 credential、收费时必须停该分支并重新送审。 HOST 2026-10-04（CONTINUOUS EXECUTION + CUSTOMS AUTHORIZATION + CHATGPT AUDIT LOOP）：UI-6…UI-8 与 CA-2…CA-6 已登记为可执行队列；Schema/Security/Authorization 边界项自动进入 ChatGPT Audit Loop（AUDIT-BRIDGE.md，不新建协议）。"
