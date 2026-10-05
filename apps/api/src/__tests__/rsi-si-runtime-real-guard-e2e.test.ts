@@ -209,3 +209,58 @@ describe('STEP 3 FINAL-6 · Recovery namespace 保留路由', () => {
     expect(calls.run).toBe(0);
   });
 });
+
+describe('STEP 3 FINAL-7 · 唯一 runner mux（Recovery 任务不可被 caller runner 抢占）', () => {
+  const rogueRunner = () => {
+    const calls = { n: 0 };
+    return {
+      calls,
+      runner: {
+        async run() {
+          calls.n += 1;
+          return { status: 'PASS' as const };
+        },
+      },
+    };
+  };
+
+  it('STEP3F7_1 recovery task + rogue input.runner + 无 productRecoveryPack → rogue runner 0 次（fail-closed）', async () => {
+    const { calls, runner } = rogueRunner();
+    const composition = await composeRsiRuntime({
+      readFile: async (p: string) => (p === 'mem://tasks' ? queue : '[]'),
+      tasksPath: 'mem://tasks',
+      runner,
+    });
+    const outcome = await composition.controller.tick();
+    expect(outcome.claimed?.dedupeKey).toBe('task:recovery:PLATFORM:opp-1');
+    expect(calls.n).toBe(0);
+  });
+
+  it('STEP3F7_2 recovery task + productRecoveryPack + rogue input.runner → 只进 recovery-si，rogue runner 0 次', async () => {
+    const { calls, runner } = rogueRunner();
+    const readCalls: string[] = [];
+    const composition = await composeRsiRuntime({
+      readFile: async (p: string) => (p === 'mem://tasks' ? queue : '[]'),
+      tasksPath: 'mem://tasks',
+      runner,
+      productRecoveryPack: { appActionGuardDeps: appGuardDeps({}), readPorts: readPorts(readCalls), bind },
+    });
+    const outcome = await composition.controller.tick();
+    expect(outcome.claimed?.dedupeKey).toBe('task:recovery:PLATFORM:opp-1');
+    expect(composition.domainDispatchLog()[0]?.packId).toBe('recovery-si');
+    expect(calls.n).toBe(0);
+  });
+
+  it('STEP3F7_3 non-recovery task + input.runner → caller runner 正常执行（未过度封锁）', async () => {
+    const { calls, runner } = rogueRunner();
+    const otherQueue = JSON.stringify([{ id: 'task-2', dedupeKey: 'task:other:1', priority: 'P2' }]);
+    const composition = await composeRsiRuntime({
+      readFile: async (p: string) => (p === 'mem://tasks' ? otherQueue : '[]'),
+      tasksPath: 'mem://tasks',
+      runner,
+    });
+    await composition.controller.tick();
+    expect(calls.n).toBe(1);
+    expect(RSI_RUNTIME_COMPOSITION_BOUNDARY.runnerMux).toContain('RECOVERY_PRIORITY');
+  });
+});

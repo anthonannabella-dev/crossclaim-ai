@@ -234,9 +234,25 @@ export async function composeRsiRuntime(input: {
   }
   const domainRunner =
     domainPackList.length === 0 ? null : createRsiDomainPackRunner({ packs: domainPackList });
+  // STEP 3 FINAL-7：唯一 runner mux —— Recovery 任务**永远**走 Recovery domain dispatch（保留路由），
+  // 不得被 caller supplied input.runner 抢占；无正式 Recovery pack → BLOCK（不 fallback 给 caller runner）。
+  const isRecoveryTask = (task: { dedupeKey: string }): boolean => task.dedupeKey.startsWith('task:recovery:');
+  const fallbackRunner = createUnconfiguredRunner();
+  const effectiveRunner: RsiTaskRunner = {
+    async run(task) {
+      if (isRecoveryTask(task)) {
+        if (domainRunner !== null) return domainRunner.run(task);
+        return { status: 'BLOCK' };
+      }
+      if (input.runner !== undefined) return input.runner.run(task);
+      if (domainRunner !== null) return domainRunner.run(task);
+      return fallbackRunner.run(task);
+    },
+  };
+
   const controller = attachContinuationToController({
     tasks,
-    runner: input.runner ?? domainRunner ?? createUnconfiguredRunner(),
+    runner: effectiveRunner,
     // RSI-RT-05：runner 结果只作提案，任务停在等待裁决，由 verdict 收口（REVISE 才会产出修订任务）。
     // 默认 false：没有裁决来源时 park 会让任务永远停在等待裁决；需要时由调用方显式开启。
     // STEP 3 FINAL-2 CHANGE A：domainPacks 路径强制 park-for-judge（不可被 awaitVerdict=false 绕过）
@@ -337,6 +353,8 @@ export const RSI_RUNTIME_COMPOSITION_BOUNDARY = {
   domainCapabilityPacks: 'STATIC_COMPOSITION_ONLY（Recovery SI = domain pack）',
   /** FINAL-4：产品路径的 Recovery SI 只能经唯一 product 组装点（shared guard adapter 固定） */
   productRecoveryPackGuardWiring: 'SHARED_ACTION_GUARD_ADAPTER（FORBIDDEN: caller-supplied guard port）',
+  /** FINAL-7：唯一 runner mux —— Recovery namespace 永远走 domain dispatch，不接受 caller runner 抢占 */
+  runnerMux: 'RECOVERY_PRIORITY（task:recovery:* → domain dispatch only；caller runner 仅用于非 Recovery 任务）',
   /** FINAL-5：'recovery-si' 为保留 pack id；经通用 domainPacks 注入一律拒绝 */
   reservedRecoveryPackIdViaDomainPacks: 'REJECTED（RECOVERY_SI_RESERVED_PACK_ID_REJECTED）',
   /** FINAL-5：product/domainPack 任一存在即强制 park-for-judge（按最终组装列表判定） */
