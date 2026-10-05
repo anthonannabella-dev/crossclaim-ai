@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-40",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T18:40:42.803Z",
+  "updated_at": "2026-10-05T18:43:04.256Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -21,7 +21,7 @@
   "ci_result": "completed_success",
   "fix_pr": "https://github.com/anthonannabella-dev/crossclaim-ai/pull/10",
   "channel_status": "HEALTHY（主审计会话 = https://chatgpt.com/c/6ac385db-cb60-83ec-9754-c7a30633a8c5（HOST 新开；MSG-20261005-30 起）；历史会话 https://chatgpt.com/c/6ac1cdf0-1ec8-83ec-8036-0e66fcf5c6b9 保留 MSG-22..29 逐字归档）",
-  "pending_verdict_unarchived": "PHASE 4 U1 FINAL + U2（Reviewed HEAD e4258d5d）—— 已投递，等待裁决",
+  "pending_verdict_unarchived": null,
   "b2_status": "PASS（MSG-20260930-10 工程修复 + MSG-20260930-11 集成 PASS/MERGE APPROVED）",
   "protocol": "DUAL_CHANNEL_WAKEUP（GitHub = 正式总线 / ChatGPT Web = 仅唤醒）",
   "integration_pr": "https://github.com/anthonannabella-dev/crossclaim-ai/pull/11",
@@ -50,13 +50,13 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
-  "next_execution_unit": "PHASE 4 批次裁决处理：读取右侧审核会话（tab 14）完整 verdict（严格匹配 REVIEWED_HEAD = e4258d5d）→ 原样逐字归档 AI-ARCHITECT-INBOX.md（MSG-20261005-56）→ compare.mjs 必须 FULL_COPY_OK → durable state 对账。若 PASS → 继续 U3（learning dataset projection / immutable learning evidence，复用 rsi-evidence-ledger，不建第二证据存储）→ U4（offline evaluation，必须显式定义 successRate 分母与 UNKNOWN/PARTIAL/MANUAL_REVIEW 语义）→ U5（meta-improvement candidate proposal，只提建议，必须经外部 Judge）；若 PASS WITH REVISE → 按裁决窄修。",
+  "next_execution_unit": "PHASE 4 下一批：(1) U2 trusted lineage resolver/port：新增 resolve({organizationId,taskId,actionRef,proposalRef,evidenceRef}) 端口，由既有 action/proposal/evidence ledger 验证三 ref 真实存在、同 organization、同 task、proposal→action/evidence 关联成立；canonical learning record 进入 immutable evidence/dataset **verified 路径**前必须通过该 trusted binding（caller 自报字符串不算）；至少补：自洽但 ledger 不存在 → REJECT；真实存在但跨 task → REJECT；跨 organization → REJECT；proposalRef 不同链 → REJECT；trusted resolver 完整同链 → PASS；未过 trusted binding 的记录不得进入 verified 路径。(2) U3 learning dataset projection + immutable learning evidence：只复用既有 rsi-evidence-ledger，禁止第二证据存储；append-only。(3) U4 offline evaluation：显式定义 SUCCESS/FAILURE/PARTIAL/UNKNOWN/MANUAL_REVIEW 分母语义（当前 successRate = successCount/recordCount 不可直接用于评估）。(4) U5 meta-improvement candidate proposal only（AUTO_PROMOTION = OFF，必须经外部 Judge）。(5) 非阻断维护项：scanRawPayloadKeys 目前 depth>4 停止，后续改为完整有界遍历/循环检测。流程：code → tests → regression → tsc → commit → push → 送审 → 送达三检 → 逐字归档 → FULL_COPY_OK → durable state。",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-05T18:40:42.803Z",
+  "last_tick_at": "2026-10-05T18:43:04.256Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "PHASE 4 U1 FINAL（4 个窄点）+ U2 lineage binding 已实施并送审：strict types（\"1.23\"/\"true\" → REJECT）、humanIntervention 缺失 → null、finalOutcome 为 success SSOT（矛盾 → OUTCOME_RECORD_SUCCESS_CONFLICT）、raw-payload 递归扫描；新增 OutcomeLineage + verifyOutcomeLineage（OUTCOME_LINEAGE_BINDING_MISMATCH）；push e4258d5d；投递 [CODEX-PHASE4-U1FINAL]（Reviewed HEAD e4258d5d），送达三检通过，等待裁决。",
-  "last_action_at": "2026-10-05T18:40:42.803Z",
-  "next_action": "读取 PHASE 4 U1 FINAL + U2 裁决 → 逐字归档 + compare.mjs FULL_COPY_OK + durable state 对账",
+  "last_action": "PHASE 4 U1 FINAL + U2 裁决已读取并原样归档（MSG-20261005-56，compare.mjs = FULL_COPY_OK）：U1 FINAL (a)(b)(c)(d) = PASS（PHASE4_U1_FINAL_REQUIRED = NO）；U2 只能记 LINEAGE_SELF_CONSISTENCY = PASS，LINEAGE_BINDING = REVISE（需接可信 ledger/resolver，不能只比较 caller 提供的字符串）；授权继续 U3/U4/U5。",
+  "last_action_at": "2026-10-05T18:43:04.256Z",
+  "next_action": "PHASE 4 下一批：U2 trusted lineage resolver + U3 learning dataset / immutable learning evidence",
   "current_head": "e4258d5d",
   "last_completed_head": "6cba0639",
   "reviewed_head": "add99ec3",
@@ -5169,10 +5169,11 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "P4F-4 读取 PHASE 4 U1FINAL/U2 裁决（tab 14，匹配 Reviewed HEAD e4258d5d）+ 逐字归档 MSG-20261005-56 + compare.mjs + durable state",
-    "PHASE4-U3 learning dataset projection / immutable learning evidence（复用 rsi-evidence-ledger，不建第二证据存储）",
-    "PHASE4-U4 offline evaluation（显式定义样本分母与 UNKNOWN/PARTIAL/MANUAL_REVIEW 语义）",
-    "PHASE4-U5 meta-improvement candidate proposal（只提建议，必须经外部 Judge；AUTO_PROMOTION = OFF）"
+    "P4F-5 U2 trusted lineage resolver（接既有 ledger，verified 路径必须通过 binding）",
+    "P4F-6 U3 learning dataset projection + immutable learning evidence（复用 rsi-evidence-ledger，append-only，禁止第二存储）",
+    "P4F-7 tests → regression → tsc → commit → push → PHASE 4 送审 → 逐字归档 → compare.mjs → durable state",
+    "P4F-8 U4 offline evaluation（分母与 UNKNOWN/PARTIAL/MANUAL_REVIEW 语义显式定义）",
+    "P4F-9 U5 meta-improvement candidate proposal（只提建议，必须经外部 Judge；AUTO_PROMOTION = OFF）"
   ],
   "full_autonomous_internal_execution": "VERIFIED",
   "dispatcher_acceptance": {
@@ -9322,7 +9323,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-05T18:40:42.803Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-05T18:43:04.256Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -9733,5 +9734,31 @@
       "regression": "93 files / 947 tests PASS",
       "github_ci": "NOT_OBSERVED"
     }
+  },
+  "phase4_u1_final_verdict": {
+    "message_id": "MSG-20261005-56",
+    "verdict": "U1 FINAL = PASS / U2 LINEAGE_BINDING = REVISE",
+    "reviewed_head": "e4258d5d",
+    "archive_verified": "FULL_COPY_OK",
+    "pass": [
+      "U1 FINAL (a) 严格类型",
+      "U1 FINAL (b) humanIntervention → null",
+      "U1 FINAL (c) finalOutcome = success SSOT",
+      "U1 FINAL (d) 递归 raw-payload 扫描",
+      "U2 LINEAGE_SELF_CONSISTENCY"
+    ],
+    "revise": [
+      "U2 LINEAGE_BINDING：需 trusted lineage resolver（接既有 ledger），仅比较 caller 字符串只能算 self-consistency"
+    ],
+    "phase4_u1_final_required": "NO",
+    "non_blocking": [
+      "scanRawPayloadKeys depth>4 停止，后续改完整有界遍历/循环检测",
+      "U4 必须定义 resolved denominator"
+    ],
+    "authorized_continue": [
+      "U3",
+      "U4",
+      "U5"
+    ]
   }
 }
