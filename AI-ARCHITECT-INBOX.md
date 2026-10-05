@@ -150912,3 +150912,175 @@ PRODUCTION_READY = false
 U2 的计划对象本身已经安全；现在只差把“给哪个 target 回滚、回滚到哪个真实 baseline”从 caller 声明升级为可信上游绑定。
 ```
 
+### [MSG-20261005-72] PHASE 5 U2 FINAL 裁决 = PASS / CLOSED（CANDIDATE_TARGET_BINDING / BASELINE_AUTHORITY / BASELINE_SNAPSHOT_PROVENANCE / ROLLBACK_PLAN_BASELINE_BINDING = PASS；PHASE_5_U2 = PASS / CLOSED；PHASE5_U2_FINAL2_REQUIRED = NO；授权进入 P5-U3 Controlled Config Proposal）， reviewed ref b50ca7ab
+
+```text
+DECISION
+
+CANDIDATE_TARGET_BINDING = PASS
+BASELINE_AUTHORITY = PASS
+BASELINE_SNAPSHOT_PROVENANCE = PASS
+ROLLBACK_PLAN_BASELINE_BINDING = PASS
+PHASE_5_U2 = PASS / CLOSED
+PHASE5_U2_FINAL2_REQUIRED = NO
+Reviewed HEAD：b50ca7ab
+GitHub Actions：NOT_OBSERVED
+KEEP
+createRollbackPlan() 已不接受 caller 自填 target。
+candidate 必须满足：
+isVerifiedMetaImprovementCandidate(candidate) === true
+且 candidate.candidateDigest === verdict.candidateDigest。
+因此 approved candidate 的 target 已被可信绑定。
+ROUTER candidate + POLICY baseline 会 fail-closed。
+baseline 已改成 captureBaselineConfigSnapshot() 从 server-owned composition-root read port 获取。
+caller 手造 / clone snapshot 无法通过 provenance。
+baselineConfigFingerprint 与 rollbackTargetFingerprint 都从 verified snapshot 派生。
+baselineSnapshotDigest 已进入 rollback plan fingerprint/digest。
+plan 自身继续保持 fingerprint + deep-freeze。
+ROLLBACK_PLAN_ONLY、no execute/apply/promote/mutate 继续成立。
+
+这里的 BaselineConfigStorePort 作为 server-owned composition-root dependency 可以接受；不需要继续递归给 store 自身再套一层 WeakSet，否则会陷入无限 provenance 包装。
+
+CHANGE
+
+无 U2 阻断修改。
+
+两个非阻断维护项：
+
+capturedAt 当前只检查非空；后续建议收紧为合法 ISO timestamp。
+真正生产化时 BaselineConfigStorePort 必须接实际 Policy/Guard/Router/Action config SSOT，而不是测试 fixture / caller supplied adapter。
+
+这两项不重新打开 U2 contract closure。
+
+RISKS
+
+当前 U2 是架构/契约层可信 baseline，不是生产持久化证明。
+
+仍需防止未来 U3/U4 把：
+
+baselineConfigFingerprint
+
+仅当普通字符串使用，而忽略：
+
+baselineSnapshotDigest + verified rollback plan provenance
+
+因此后续必须绑定整个可信链，不能降级成字符串比较。
+
+另外：
+
+digest 16 hex；
+P2E-DB5 isolation；
+fingerprint schema evolution；
+
+继续作为非阻断债务。
+
+TEST
+
+当前覆盖足以支持 closure：
+
+verified APPROVED verdict only；
+REJECTED fail-closed；
+verified candidate only；
+candidate/verdict digest mismatch fail-closed；
+target 从 candidate 派生；
+wrong-target baseline fail-closed；
+baseline clone/handmade fail-closed；
+store missing/not-found/invalid target/forbidden baseline fail-closed；
+rollback steps/trigger 校验；
+snapshot + plan anti-tamper；
+no execution exports。
+
+Codex 报告的 106/106 Phase 5 filtered tests 属于本地执行证据；exact SHA 未观察到 GitHub Actions run。
+
+NEXT
+
+授权进入 P5-U3 — Controlled Config Proposal。
+
+最低链路冻结为：
+
+Verified APPROVED Verdict
+
+Verified Meta Improvement Candidate
+Verified Rollback Plan
+Verified Baseline Snapshot
+→ CONTROLLED_CONFIG_PROPOSAL_ONLY
+
+最低绑定：
+
+verdictDigest
+ticketDigest
+candidateDigest
+evaluationDigest
+evidenceSetDigest
+candidateTarget
+baselineSnapshotDigest
+baselineConfigFingerprint
+rollbackPlanDigest
+proposedDelta
+proposalDigest
+
+最低信任门：
+
+verdict provenance true；
+outcome === APPROVED；
+candidate provenance true；
+candidateDigest 必须与 verdict、rollback plan 完全一致；
+rollback plan provenance true；
+rollback target/target/baseline 必须与 candidate、baseline snapshot 完全一致；
+baseline snapshot provenance true。
+
+proposedDelta 必须采用 target-specific allowlist schema，不能接受任意 JSON：
+
+ROUTER candidate → 只能产生 Router proposal fields；
+POLICY → 只能 Policy fields；
+GUARD → 只能 Guard fields；
+ACTION_RUNTIME → 当前仍建议 proposal schema only / execution forbidden。
+
+同时必须：
+
+one verified verdict → one proposalDigest identity
+REJECTED → no proposal
+rollback plan 必须先存在
+不允许 delta 改 target
+不允许 delta 修改 immutable evidence / approval / control-plane / kill-switch 边界
+proposal 本身 provenance + fingerprint + deep-freeze
+autoApply=false
+mutation=FORBIDDEN
+productionRollout=FORBIDDEN
+
+U3 只生成“建议改什么”，绝不能真的改配置。
+
+然后进入：
+
+P5-U4 Canary / Shadow Evaluation
+
+由 U4 比较：
+
+baseline vs controlled proposal
+
+确认无回归后，才讨论更后面的 Controlled Adoption。
+
+PRODUCTION
+
+继续全部 HOLD：
+
+REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing
+
+继续：
+
+SECOND_RUNTIME / SECOND_POLICY_ENGINE / SECOND_CONTROL_PLANE / SECOND_MODEL_GATEWAY / SECOND_COST_LEDGER / SECOND_META_EVIDENCE_STORE = FORBIDDEN
+
+继续：
+
+L5_RELAXATION = FORBIDDEN
+
+保持：
+
+MODEL_GATEWAY_RUNTIME_WIRED = false
+ACTION_RUNTIME_PRODUCTION_ENABLED = false
+META_IMPROVEMENT_INTEGRATED = false
+PRODUCTION_READY = false
+
+U2 可以正式 CLOSED，授权进入 P5-U3 Controlled Config Proposal。
+```
+
