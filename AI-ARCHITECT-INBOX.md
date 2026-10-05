@@ -150093,3 +150093,279 @@ PRODUCTION_READY = false
 PHASE 4 正式 CLOSED，可以进入 PHASE 5。
 ```
 
+### [MSG-20261005-68] PHASE 5 U1 裁决 = PASS WITH REVISE / NOT CLOSED（REVIEW_VERDICT_ONLY_BOUNDARY / APPROVER_ROLE_GATE / EXPIRY·REVOKE_DIRECTION / NO_APPLY·NO_PROMOTE·NO_MUTATION = PASS；CANDIDATE_PROVENANCE / TICKET_PROVENANCE_INTEGRITY / REPLAY_BY_TICKET_DIGEST / APPROVER_SCOPE_ENFORCEMENT = REVISE；PHASE5_U1_FINAL_REQUIRED = YES；NEXT = PHASE 5 U1 FINAL — candidate provenance + ticket integrity + digest-keyed replay；其后 U2 Controlled Config Proposal）， reviewed ref e157588a
+
+```text
+DECISION
+
+REVIEW_VERDICT_ONLY_BOUNDARY = PASS
+APPROVER_ROLE_GATE = PASS
+EXPIRY / REVOKE_DIRECTION = PASS
+NO_APPLY / NO_PROMOTE / NO_MUTATION = PASS
+CANDIDATE_PROVENANCE = REVISE
+TICKET_PROVENANCE_INTEGRITY = REVISE
+REPLAY_BY_TICKET_DIGEST = REVISE
+APPROVER_SCOPE_ENFORCEMENT = REVISE
+PHASE_5_U1 = PASS WITH REVISE / NOT CLOSED
+PHASE5_U1_FINAL_REQUIRED = YES
+Reviewed HEAD：e157588a
+GitHub Actions：NOT_OBSERVED
+KEEP
+
+当前这些设计可以保留：
+
+verdict 只产生判决，不执行任何变更；
+APPROVED / REJECTED 两态明确；
+自动化/System role 无法作为 approver；
+requestedAt / expiresAt / decidedAt 时间门存在；
+APPROVED 仍然：
+autoApply=false / promotion=OFF / productionRollout=FORBIDDEN；
+四类 mutation 全部 FORBIDDEN；
+revoke 后原 ticket 无法再判决；
+当前模块没有 apply/promote/execute/rollout 入口；
+verdict 已绑定 candidate/evaluation/evidenceSet/ticket/nonce。
+
+这些方向全部正确。
+
+CHANGE
+1. Candidate 目前可以被 caller 手工伪造
+
+openCandidateReviewTicket() 当前只做结构检查：
+
+candidateStatus === PROPOSAL_ONLY
+mutation === FORBIDDEN
+candidateDigest/evaluationDigest/evidenceSetDigest != empty
+
+但没有证明 candidate 真的是 Phase 4 U5 正式产出的。
+
+因此 caller 可以自己构造：
+
+纯文本
+PROPOSAL_ONLY
+arbitrary candidateDigest
+arbitrary evaluationDigest
+arbitrary evidenceSetDigest
+mutation = FORBIDDEN
+
+然后正常开 ticket。
+
+必须让 U5 candidate 成为 provenance-bearing object：
+
+isVerifiedMetaImprovementCandidate(candidate) === true
+
+推荐继续沿用 Phase 4 已验证模式：
+
+private WeakMap fingerprint + deep-freeze
+
+并让 openCandidateReviewTicket() fail-closed：
+
+APPROVAL_TICKET_CANDIDATE_NOT_VERIFIED
+
+2. Ticket 自身没有 provenance / integrity
+
+现在 decideCandidateReview() 接受任何结构看起来合法的 CandidateReviewTicket。
+
+也就是说手工构造：
+
+纯文本
+ticketDigest
+candidateDigest
+evaluationDigest
+evidenceSetDigest
+approverId
+role
+requestedAt
+expiresAt
+nonce
+
+就能进入 APPROVED verdict。
+
+必须增加：
+
+isVerifiedCandidateReviewTicket(ticket)
+
+ticket 只能由 openCandidateReviewTicket() 产生。
+
+同时 ticket 应：
+
+deep-freeze；
+private fingerprint；
+判决时重新验证 fingerprint；
+clone/spread ticket → provenance false；
+原对象字段篡改 → false / TypeError。
+3. 当前 replay protection 可被 clone 绕过
+
+现在：
+
+TypeScript
+const DECIDED_TICKETS = new WeakSet<CandidateReviewTicket>()
+
+只能阻止同一个 JS 对象判决两次。
+
+但：
+
+TypeScript
+const clone = { ...ticket }
+
+是另一个对象。
+
+当前它既没有 ticket provenance 门，又不在 WeakSet 中，因此可以再次判决。
+
+撤销同样存在这个问题。
+
+必须把状态键改为 ticket identity：
+
+纯文本
+DECIDED_TICKET_DIGESTS = Set<string>
+REVOKED_TICKET_DIGESTS = Set<string>
+
+至少 contract/sandbox 层：
+
+one verdict per ticketDigest
+
+而不是：
+
+one verdict per object instance
+
+未来生产持久化再把这两个状态下沉数据库唯一约束/事务。
+
+4. Scope 目前没有真正授权意义
+
+现在只检查：
+
+纯文本
+scope.length > 0
+
+所以：
+
+纯文本
+scope = ["BANANA"]
+
+也能批准 Meta Improvement。
+
+至少固定：
+
+纯文本
+META_IMPROVEMENT_PROPOSAL_ONLY
+
+建议：
+
+纯文本
+APPROVER_SCOPES = ["META_IMPROVEMENT_PROPOSAL_ONLY"]
+
+并要求 ticket 必须包含这个 scope。
+
+如果未来扩展 Policy/Router 等细粒度批准，再新增 scope，不要现在接受任意字符串。
+
+RISKS
+
+当前如果直接关闭 U1，会出现：
+
+纯文本
+伪造 candidate
+→ 伪造 ticket
+→ APPROVED verdict
+
+或者：
+
+纯文本
+真实 ticket
+→ APPROVED
+→ {...ticket}
+→ 再次 APPROVED / REJECTED
+
+因此当前的：
+
+ONE_VERDICT_PER_TICKET
+
+实际上还是：
+
+ONE_VERDICT_PER_OBJECT_INSTANCE
+
+不够作为 Phase 5 后续 Controlled Adoption Proposal 的可信前置。
+
+另外 selfApproval = FORBIDDEN 目前也不要过度宣称。等 candidate provenance 闭合后，candidate 可以确定是系统规则生成，而 automation role 又禁止审批，这时这一边界才更可信。
+
+TEST
+
+U1 FINAL 最少增加：
+
+caller 手工构造 MetaImprovementCandidate → 开票 REJECT。
+正式 U5 candidate → 开票 PASS。
+正式 candidate 原地篡改 digest/target/kind → REJECT。
+caller 手工构造 ticket → decide REJECT。
+{...ticket} → decide REJECT。
+正式 ticket 原地篡改 candidate/evaluation/evidenceSet/nonce → REJECT。
+原 ticket APPROVED 后，clone ticket 再判决 → REPLAY_BLOCKED。
+原 ticket REVOKED 后，clone ticket 判决/再撤销 → REJECT。
+scope=["anything"] → REJECT。
+scope=["META_IMPROVEMENT_PROPOSAL_ONLY"] → PASS。
+原 10/10 保持 green。
+no apply/promote/mutate/rollout 保持。
+NEXT
+
+先做：
+
+PHASE 5 U1 FINAL — candidate provenance + ticket integrity + digest-keyed replay
+
+这是进入 Controlled Adoption Proposal 前的必要门。
+
+U1 FINAL PASS 后，下一顺序建议：
+
+P5-U2 — Controlled Config Proposal
+
+最低要求冻结为：
+
+Verified APPROVED Verdict
+→ Controlled Config Proposal
+
+Proposal 至少绑定：
+
+verdictDigest
+ticketDigest
+candidateDigest
+evaluationDigest
+evidenceSetDigest
+baselineConfigFingerprint
+proposedDelta
+proposalDigest
+rollbackPlanRef
+
+且必须：
+
+APPROVED verdict only；
+REJECTED verdict 绝不能生成；
+一张 verdict 对应受控 proposal；
+proposed delta 必须限制在 candidate 指定 target；
+仍不直接修改 Policy/Guard/Router/Action Runtime；
+必须先有 rollback plan；
+下一步才能进入 Canary / Shadow Evaluation。
+
+建议完整顺序：
+
+U1 FINAL → U2 Controlled Config Proposal → U3 Rollback Plan → U4 Canary/Shadow Evaluation → 再审是否允许 Controlled Adoption。
+
+PRODUCTION
+
+继续全部 HOLD：
+
+REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing
+
+继续：
+
+SECOND_RUNTIME / SECOND_POLICY_ENGINE / SECOND_CONTROL_PLANE / SECOND_MODEL_GATEWAY / SECOND_COST_LEDGER / SECOND_META_EVIDENCE_STORE = FORBIDDEN
+
+继续：
+
+L5_RELAXATION = FORBIDDEN
+
+保持：
+
+MODEL_GATEWAY_RUNTIME_WIRED = false
+ACTION_RUNTIME_PRODUCTION_ENABLED = false
+META_IMPROVEMENT_INTEGRATED = false
+PRODUCTION_READY = false
+
+U1 方向正确，但必须先封住 candidate provenance、ticket provenance 和 clone replay 三个口子，再进入 U2。
+```
+
