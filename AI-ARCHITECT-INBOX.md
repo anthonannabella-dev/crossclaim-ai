@@ -142750,3 +142750,318 @@ FINAL_ACCEPTANCE_HEAD = 0f7f7ac
 
 当前结论：实现方向可以，证据规模也够；但 P2-E = CLOSED 还差“独立 lineage action + exact pushed HEAD 独立复核”。
 ```
+
+### [MSG-20261005-24] Recovery SI P2-E v1 FINAL-2 — VERDICT = REVISE（CHANGE 2 与 canonical READY recheck = PASS；剩 E1 门禁不可伪造绑定 / E2 lineage 与可信 gate digest 绑定 / E3 JSON+PDF 双 artifact 原子落库；FINAL3_REQUIRED = YES）
+
+```text
+DECISION
+
+ARCHITECT VERDICT = REVISE
+
+REVIEWED_HEAD =
+1fcb52449f615a9e269f43a7bd0810f80d987f84
+
+BOOKKEEPING_HEAD =
+afb7095381c9752dd29f294d749352737c60467d
+
+我已独立确认 1fcb5244 可读；afb70953 仅文档/状态/送审簿记，没有代码漂移。
+
+单项裁定：
+
+CHANGE_2_INDEPENDENT_LINEAGE_ACTION = PASS
+RISKS_CANONICAL_READY_RECHECK = PASS
+
+P2_E_V1_OPTION_A = REVISE
+P2_E_V1 = NOT_CLOSED
+FINAL3_REQUIRED = YES   // 窄 FINAL-3
+KEEP
+
+以下都可以保留，不要重做：
+
+recovery.si_package_persisted = PASS
+
+lineage changes 9-key whitelist = PASS
+
+canonical READY recompute before Guard = PASS
+
+authorizationReady=false forged READY = BLOCKED
+HIGH-risk forged READY = BLOCKED
+stale state = BLOCKED
+money tamper = BLOCKED
+
+P2_E_GUARD_ACTION = claim.prepare
+P2_D claim.submit ALLOW not trusted = PASS
+
+trusted ProductionControlPlane = PASS
+approval consumption = 0
+executor invocation = 0
+external action = 0
+
+RecoveryPackage DELETE DB guard = PASS
+tenant / append-only trigger registration = PASS
+
+PRISMA_MODEL_DELTA = NO
+NEW_TABLE = NO
+NEW_COLUMN = NO
+DB_TRIGGER_MIGRATION = YES/APPLIED
+CHANGE
+
+还剩 3 个窄 blocker。
+
+CHANGE E1 — Gate 必须与真实写入口不可绕过绑定
+
+当前存在：
+
+persistRecoveryPackageWithinTransaction({
+  gate: RecoveryPersistGateOutcome,
+  ...
+})
+
+而 RecoveryPersistGateOutcome 是普通可构造对象。
+
+你自己的真实 DB 测试就直接构造了：
+
+ALLOW_GATE = {
+  decision: 'ALLOW',
+  guardEvaluated: true,
+  canonicalReadyVerified: true,
+  ...
+}
+
+然后直接落库。
+
+这证明目前：
+
+canonical READY
++ trusted Control Plane
++ claim.prepare ALLOW
+
+不是不可绕过的写前置条件。
+
+必须改成以下二选一，建议 A：
+
+A. 单一 production orchestration entry
+
+state / registry / supplied READY / actor / controlPlane / preview
+→ internally evaluateRecoveryPersistGate()
+→ internally construct persistence payload
+→ transaction
+
+调用方不能传 gate outcome
+
+或：
+
+B. module-private opaque/WeakSet branded persist permit
+
+只有 evaluateRecoveryPersistGate 成功后才能产生
+任意手工对象无法伪造
+
+正式要求：
+
+CALLER_SUPPLIED_ALLOW_GATE = FORBIDDEN
+TRUSTED_GATE_TO_WRITE_BINDING = REQUIRED
+CHANGE E2 — lineage 的 planDigest 必须来自同一个可信 gate
+
+现在 buildRecoverySiPackageLineageAuditLog() 仍接受调用者传：
+
+planDigest
+planDigestVersion
+opportunityRef
+domain
+
+因此即使 gate 计算出了：
+
+canonicalPlanDigest
+
+audit 仍可以写入另一个 planDigest。
+
+必须绑定：
+
+AuditLog.planDigest
+==
+trusted persistence permit.canonicalPlanDigest
+
+并且 opportunityRef/domain 也必须来自本次通过 canonical READY 的 action，而非任意调用参数。
+
+新增负例：
+
+gate canonicalPlanDigest = A
+audit payload planDigest = B
+→ zero DB writes
+CHANGE E3 — 当前只持久化 1 个 PDF artifact，不完整
+
+这是 exact code 上的实际情况。
+
+当前 payload 是：
+
+package
+fileAsset          // singular
+artifact           // singular
+auditLog
+
+测试 fixture 明确：
+
+FileAsset.kind = PDF
+artifactKind = PDF
+
+DB7/DB8 也断言：
+
+FileAsset count = 1
+RecoveryPackageArtifact count = 1
+
+但 Option A 已批准的 RecoveryPackage 语义是：
+
+JSON_MANIFEST = canonical事实载体
+PDF = derivative view
+
+P2-C 也已经生成并验证：
+
+canonicalJson
+packageDigest
+pdfBytes
+pdfDigest
+
+所以 P2-E 必须把两种 artifact 一起纳入同一事务：
+
+1 RecoveryPackage
+2 FileAsset
+  - JSON manifest
+  - PDF
+2 RecoveryPackageArtifact
+  - JSON_MANIFEST
+  - PDF
+1 lineage AuditLog
+
+并要求：
+
+JSON_MANIFEST.sha256 = sha256(canonicalJson)
+PDF.sha256 = sha256(pdfBytes)
+
+packageDigest =
+sha256(canonical manifest)
+
+同一事务失败全部 rollback。
+
+这也是上一轮已经批准的“canonical manifest 原样落库 + PDF derivative”，不能只落 PDF。
+
+RISKS
+
+还需要顺手修正一个边界表述：
+
+当前常量有：
+
+businessFactWrite = 'DRY_RUN_ONLY'
+
+而 P2-E 已经实际写：
+
+RecoveryPackage
+RecoveryPackageArtifact
+FileAsset
+AuditLog
+
+因此不能继续写：
+
+BUSINESS_FACT_WRITE = FORBIDDEN
+
+准确冻结应是：
+
+P2_E_WHITELISTED_INTERNAL_PERSISTENCE = AUTHORIZED
+
+OTHER_BUSINESS_FACT_WRITE = FORBIDDEN
+EXTERNAL_BUSINESS_WRITE = FORBIDDEN
+
+这不是扩权，只是把 P2-D 的旧表述改成符合 P2-E 事实。
+
+TEST
+
+你当前：
+
+P2E-G22
+P2E-G16..G21
+P2E-DB1..DB13
+
+大部分已经足够。
+
+FINAL-3 只补 4 条：
+
+F3E-01
+手工伪造 ALLOW gate / permit
+→ persistence entry 无法调用
+→ DB writes = 0
+
+F3E-02
+trusted canonicalPlanDigest=A
+尝试 lineage planDigest=B
+→ fail-closed
+→ DB writes = 0
+
+F3E-03
+成功持久化
+→ RecoveryPackage = 1
+→ FileAsset = 2
+→ Artifact = 2
+→ kinds exactly JSON_MANIFEST + PDF
+→ lineage Audit = 1
+
+F3E-04
+第二个 artifact 或 lineage 写失败
+→ package/fileAssets/artifacts/audit 全部 0
+
+并发 replay 再确认最终仍是：
+
+package = 1
+fileAssets = 2
+artifacts = 2
+audit = 1
+no orphan
+
+就够了。
+
+当前 reported：
+
+22/22
+13/13 DB
+115/115 regression
+tsc 0
+
+仍属于本地执行证据；exact 1fcb5244 的 hosted GitHub status/workflow 当前为空。
+
+NEXT
+
+只做：
+
+E1 trusted gate→write binding
+E2 gate digest→lineage binding
+E3 JSON + PDF 双 artifact 原子持久化
+
+然后送：
+
+Recovery SI P2-E FINAL-3
+
+无需重新做设计审计。
+
+PRODUCTION
+
+继续冻结：
+
+P2_F = HOLD
+P2_G = HOLD
+
+APPROVAL_CONSUMPTION = FORBIDDEN
+EXECUTOR_INVOCATION = FORBIDDEN
+
+OTHER_BUSINESS_FACT_WRITE = FORBIDDEN
+EXTERNAL_ACTION = FORBIDDEN
+
+EXTERNAL_WRITE = HOLD
+PAYMENT = HOLD
+TRANSPORT = HOLD
+PRODUCTION_CREDENTIALS = HOLD
+REAL_CLAIM_SUBMIT = HOLD
+CUSTOMS_FILING = HOLD
+
+RUNTIME_WIRING = NONE
+FINAL_ACCEPTANCE_HEAD = 0f7f7ac
+
+结论：CHANGE 2 与 canonical READY 风险修复本身已经 PASS；P2-E 尚差“门禁不可伪造 + lineage 与可信 gate 绑定 + JSON/PDF 双 artifact 完整原子落库”三项，补完即可做窄 FINAL-3。
+```

@@ -1922,9 +1922,9 @@
       "required_tests": [],
       "template": "arch-design-request",
       "filters": [],
-    "status": "P2_E_FINAL2_SUBMITTED_PENDING_VERDICT",
-    "implementation_head": "1fcb5244",
-    "audit_request": "docs/releases/RECOVERY-SI-PHASE2-E-FINAL2-REQUEST.md",
+    "status": "P2_E_FINAL3_SUBMITTED_PENDING_VERDICT",
+    "implementation_head": "95733930",
+    "audit_request": "docs/releases/RECOVERY-SI-PHASE2-E-FINAL3-REQUEST.md",
     "note": "MSG-20261005-22：P2-E v1 设计 = PASS WITH REVISE，Option A 授权（Option B = NOT_AUTHORIZED）。四项必修已实现并送 P2-E Implementation Audit（REVIEWED_HEAD = b5baf381；证据 docs/releases/RECOVERY-SI-PHASE2-E-EVIDENCE.md；真实库 13/13 + 契约 15/15 + targeted regression 108/108 + tsc exit 0）。入口门禁 P2_E_GUARD_ACTION = claim.prepare（不得用 P2-D claim.submit ALLOW）、package/artifact/FileAsset/audit 单一事务、lineage 表述、RecoveryPackage DB DELETE guard（迁移已应用 + 清单已登记）。P2_F = HOLD、P2_G = HOLD。"
     },
     {

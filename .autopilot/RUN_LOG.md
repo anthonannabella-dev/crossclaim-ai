@@ -2385,3 +2385,25 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 测试：P2-E 契约 **22/22**（新增 P2E-G16..G22）、P2-E DB **13/13**、定向回归 **10 文件 / 115 例 PASS**；tsc exit 0；
   `prisma validate` valid / 79 migrations 无待应用 / `migrate status` up to date。
 - 证据：`docs/releases/RECOVERY-SI-PHASE2-E-EVIDENCE.md` §9.1；送审：`docs/releases/RECOVERY-SI-PHASE2-E-FINAL2-REQUEST.md`（REVIEWED_HEAD = 1fcb5244）。
+
+## 2026-10-05T10:40Z — P2-E FINAL-2 裁决捕获（MSG-20261005-24 = REVISE；CHANGE 2 / canonical 重算记 PASS）
+- 通道：同一右侧审计会话；FINAL-2 送审送达三检通过；回复完成后用「包含 `ARCHITECT VERDICT` + `DECISION` + `FINAL_ACCEPTANCE_HEAD` 的**最后一个** div」提取，
+  得到 4777 字符 / 205 非空行；本轮改用 cua REPL 的 `node:fs.writeFileSync` **直接写盘**（无需逐行转写，避免转写误差）。
+- 归档：`AI-ARCHITECT-INBOX.md` 新增 `MSG-20261005-24`；`compare.mjs` → **FULL_COPY_OK**（205/205 行，0 缺失 / 0 多出）。
+- 裁决要点：`CHANGE_2_INDEPENDENT_LINEAGE_ACTION = PASS`、`RISKS_CANONICAL_READY_RECHECK = PASS`；
+  剩三项窄 blocker：E1 门禁不可伪造绑定、E2 lineage 与可信 gate digest 绑定、E3 JSON+PDF 双 artifact 原子落库；
+  `P2_E_V1 = NOT_CLOSED`、`FINAL3_REQUIRED = YES`；RISKS 措辞修正 `BUSINESS_FACT_WRITE = DRY_RUN_ONLY` 与事实不符。
+- 架构方已独立确认 `1fcb5244` 可读、`afb70953` 仅簿记无代码漂移（exact HEAD 复核解锁）。
+
+## 2026-10-05T11:00Z — P2-E E1/E2/E3 修订落地（实现 HEAD = 95733930）
+- E1：`evaluateRecoveryPersistGate` 唯一 permit 签发者（模块私有 WeakSet）；写入侧对非 permit 门禁对象
+  `P2E_CALLER_SUPPLIED_GATE_FORBIDDEN`（手工/JSON 往返的 ALLOW 对象无效，端口零调用）。
+- E2：lineage 审计全部依据取自 `gate.persistedBasis`；`claimedPlanDigest` 不一致 → `P2E_LINEAGE_DIGEST_MISMATCH`；
+  canonical 重算增基数校验 `P2E_CANONICAL_READY_CARDINALITY_INVALID`。
+- E3：事务单元 = 1 package + 2 FileAsset（JSON=OTHER + PDF）+ 2 artifact（JSON_MANIFEST + PDF）+ 1 audit；
+  写入前重新校验 `sha256(canonicalJson) === packageDigest === JSON FileAsset.sha256` 与 PDF digest 一致；数量不符 fail-closed。
+- RISKS：删除 `BUSINESS_FACT_WRITE = DRY_RUN_ONLY`，改为 `P2_E_WHITELISTED_INTERNAL_PERSISTENCE = AUTHORIZED` /
+  `OTHER_BUSINESS_FACT_WRITE = FORBIDDEN` / `EXTERNAL_BUSINESS_WRITE = FORBIDDEN`。
+- 验证：tsc exit 0；P2-E 契约 **23/23**；P2-E DB **16/16**；定向回归 **10 文件 / 119 例 PASS**；
+  prisma validate valid / 79 migrations 无待应用 / up to date。
+- 证据：`docs/releases/RECOVERY-SI-PHASE2-E-EVIDENCE.md` §9.2；送审：`docs/releases/RECOVERY-SI-PHASE2-E-FINAL3-REQUEST.md`（REVIEWED_HEAD = 95733930）。
