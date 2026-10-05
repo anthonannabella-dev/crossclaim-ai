@@ -28,6 +28,8 @@ export interface RsiControllerContinuation {
   state(): ReturnType<ReturnType<typeof createRsiContinuationEngine>['state']>;
   /** 标记进入「等待裁决」状态（裁决轮询器据此决定是否短轮询）。 */
   markWaitingForVerdict(verdict: 'PASS' | 'REVISE' | 'BLOCK' | null): void;
+  /** CHANGE A：runner proposal（非裁决）；未跑过为 null */
+  proposal(): { at: number; status: 'PASS' | 'REVISE' | 'BLOCK' } | null;
   /** 已记录的事件→领取延迟（毫秒），用于验证「秒级而非 5 分钟」。 */
   latencies(): readonly number[];
 }
@@ -54,6 +56,8 @@ export function attachContinuationToController(options: {
     leaseMs: options.leaseMs,
   });
   const observed: number[] = [];
+  // STEP 3 FINAL-2（CHANGE A）：runner 只产生 proposal；**绝不**写入 Judge verdict
+  const proposals: { at: number; status: 'PASS' | 'REVISE' | 'BLOCK' }[] = [];
 
   const dispatch = async (outcome: RsiContinuationOutcome): Promise<RsiContinuationOutcome> => {
     if (outcome.claimed === null) return outcome; // SILENT / 无进展
@@ -70,8 +74,10 @@ export function attachContinuationToController(options: {
     const status: 'PASS' | 'REVISE' | 'BLOCK' =
       result.status === 'PASS' && hasEvidence ? 'PASS' : result.status === 'REVISE' ? 'REVISE' : 'BLOCK';
     if (options.awaitVerdict === true) {
-      // park-for-judge：不完成，只登记「等待裁决」，裁决到达时才收口。
-      engine.markWaitingForVerdict(status);
+      // park-for-judge：不完成。CHANGE A：proposal 单独保存，verdict 置 null，
+      // 只有真实 external verdict adapter 才能写入 Judge verdict（SELF_JUDGE_FORBIDDEN）。
+      proposals.push({ at: claimedAtMs, status });
+      engine.markWaitingForVerdict(null);
       // 只有在「刚领取普通任务」时才降级为 SILENT；裁决类动作（REVISION / CONSUME_VERDICT）必须保留。
       const parkAction = outcome.action === 'CONTINUE' ? 'SILENT' : outcome.action;
       const parkReason = outcome.action === 'CONTINUE' ? 'AWAITING_VERDICT' : outcome.reason;
@@ -92,6 +98,7 @@ export function attachContinuationToController(options: {
     },
     state: () => engine.state(),
     markWaitingForVerdict: (verdict) => engine.markWaitingForVerdict(verdict),
+    proposal: () => (proposals.length === 0 ? null : proposals[proposals.length - 1]),
     latencies: () => observed,
   };
 }
@@ -103,6 +110,9 @@ export const RSI_CONTROLLER_CONTINUATION_BOUNDARY = {
   claimedAtForwardedToEvidence: true,
   parkForJudgeSupported: true,
   parkForJudgeDefault: false,
+  // FINAL-2 CHANGE A：proposal 与 verdict 分离
+  proposalIsNotVerdict: true,
+  runnerCannotWriteVerdict: true,
   eventsDoNotCompleteInflight: true,
   eventDriven: true,
   watchdogIntervalMs: RSI_CONTINUATION_BOUNDARY.watchdogIntervalMs,

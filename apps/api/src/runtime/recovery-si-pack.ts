@@ -50,6 +50,8 @@ export interface RecoverySiPackDependencies {
   readPorts: RecoveryReadPorts;
   /** 任务 → Recovery 绑定；返回 null ⇒ 未绑定 ⇒ BLOCK（不猜 domain / 不猜 intent）。 */
   bind: (task: RsiSafeTask) => RecoverySiTaskBinding | null;
+  /** CHANGE B：共享 Action Guard / Control Plane 端口（缺省 = fail-closed DENY，绝不默认放行） */
+  guard?: RsiRecoveryGuardPort;
   flags?: RsiFlags;
   nowMs?: () => number;
 }
@@ -66,9 +68,38 @@ export const RECOVERY_SI_PACK_BOUNDARY = {
   networkCalls: 0,
   realModelCalls: 0,
   customFilingUnchanged: 'CUSTOMS → RECOVERY_GUARD_ACTION_MAP.CUSTOMS = null（L5 永久拒绝，未放宽）',
+  guardInExecutionChain: 'intent → resolveGuardAction → shared Action Guard / Control Plane dry-run → ALLOW 才执行只读工具',
+  guardNotAllowYields: 'BLOCK（toolCallCount = 0；deny / requires_approval / degraded / kill switch / tenant mismatch 一律 fail-closed）',
   unboundTask: 'BLOCK',
 } as const;
 
+/** STEP 3 FINAL-2（CHANGE B）：共享 Action Guard / Control Plane dry-run 端口（host 注入；唯一 Guard）。 */
+export type RsiRecoveryGuardDecision = 'ALLOW' | 'DENY' | 'REQUIRES_APPROVAL';
+export interface RsiRecoveryGuardRequest {
+  packId: string;
+  taskId: string;
+  organizationId: string;
+  domain: string;
+  action: string;
+  opportunityRef: string;
+}
+export interface RsiRecoveryGuardVerdict {
+  decision: RsiRecoveryGuardDecision;
+  reason: string;
+  degraded?: boolean;
+  killSwitchActive?: boolean;
+}
+export interface RsiRecoveryGuardPort {
+  evaluate(request: RsiRecoveryGuardRequest): Promise<RsiRecoveryGuardVerdict>;
+}
+/** 默认 fail-closed：未显式接入共享 Guard 时，任何执行路径必须 BLOCK（toolCallCount = 0）。 */
+export function createFailClosedRecoveryGuardPort(reason = 'RECOVERY_GUARD_NOT_WIRED'): RsiRecoveryGuardPort {
+  return {
+    async evaluate() {
+      return { decision: 'DENY', reason };
+    },
+  };
+}
 const digest12 = (value: string): string => createHash('sha256').update(value, 'utf8').digest('hex').slice(0, 12);
 
 const block = (reasonCodes: readonly string[], extra: Partial<RsiDomainPackEvidence> = {}): RsiDomainPackEvidence => ({
@@ -83,6 +114,7 @@ const block = (reasonCodes: readonly string[], extra: Partial<RsiDomainPackEvide
 
 export function createRecoverySiPack(deps: RecoverySiPackDependencies): RsiDomainCapabilityPack {
   const bundle = createRecoveryReadToolRegistry(deps.readPorts);
+  const guard = deps.guard ?? createFailClosedRecoveryGuardPort();
 
   return {
     packId: RECOVERY_SI_PACK_ID,
@@ -124,6 +156,25 @@ export function createRecoverySiPack(deps: RecoverySiPackDependencies): RsiDomai
         return block(['RECOVERY_GUARD_ACTION_NOT_ALLOWED', guardAction]);
       }
 
+      // CHANGE B：intent → shared Action Guard / Control Plane dry-run → 只有 ALLOW 才执行只读工具
+      const guardVerdict = await guard.evaluate({
+        packId: RECOVERY_SI_PACK_ID,
+        taskId: task.id,
+        organizationId: binding.organizationId,
+        domain: binding.domain,
+        action: guardAction,
+        opportunityRef: binding.opportunityRef,
+      });
+      if (
+        guardVerdict.decision !== 'ALLOW' ||
+        guardVerdict.degraded === true ||
+        guardVerdict.killSwitchActive === true
+      ) {
+        return block(['RECOVERY_GUARD_BLOCKED', guardVerdict.decision, guardVerdict.reason], {
+          guardActions: [{ action: guardAction, decision: guardVerdict.decision }],
+        });
+      }
+
       // ② 确定性只读工具（按 domain 映射；跨租户 / 敏感输出 → BLOCK）
       const tools = RECOVERY_DOMAIN_READ_TOOL[binding.domain];
       const invocations: { tool: string; ok: boolean; reason: string | null }[] = [];
@@ -157,7 +208,7 @@ export function createRecoverySiPack(deps: RecoverySiPackDependencies): RsiDomai
         evidenceRef,
         reasonCodes: ['RECOVERY_PACK_READ_ONLY_OK', ...policy.reasonCodes],
         modelCallCount: 0,
-        guardActions: [{ action: guardAction, decision: 'DECLARED_FOR_SHARED_GUARD' }],
+        guardActions: [{ action: guardAction, decision: 'ALLOW' }],
         externalWritePerformed: false,
       };
     },

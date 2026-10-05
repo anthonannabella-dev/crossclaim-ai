@@ -63,7 +63,7 @@ export const RSI_DOMAIN_PACK_BOUNDARY = {
 
 export interface RsiDomainPackRunner extends RsiEvidenceRunner {
   /** 派发记录（只读；用于 E2E / 审计断言，不含客户数据） */
-  dispatchLog(): readonly { taskId: string; packId: string; status: RsiRunnerStatus }[];
+  dispatchLog(): readonly { taskId: string; packId: string; status: RsiRunnerStatus; guardActions: readonly RsiDomainPackGuardAction[] }[];
 }
 
 /**
@@ -74,27 +74,27 @@ export function createRsiDomainPackRunner(input: {
   packs: readonly RsiDomainCapabilityPack[];
   log?: (line: string) => void;
 }): RsiDomainPackRunner {
-  const dispatched: { taskId: string; packId: string; status: RsiRunnerStatus }[] = [];
+  const dispatched: { taskId: string; packId: string; status: RsiRunnerStatus; guardActions: readonly RsiDomainPackGuardAction[] }[] = [];
   return {
     dispatchLog: () => dispatched,
     async run(task: RsiSafeTask) {
       const pack = input.packs.find((candidate) => candidate.matches(task));
       if (pack === undefined) {
         input.log?.(`RSI_DOMAIN_PACK_UNMATCHED task=${task.id} -> BLOCK`);
-        dispatched.push({ taskId: task.id, packId: '(unmatched)', status: 'BLOCK' });
+        dispatched.push({ taskId: task.id, packId: '(unmatched)', status: 'BLOCK', guardActions: [] });
         return { status: 'BLOCK', evidenceRef: 'domain-pack:unmatched' };
       }
       const evidence = await pack.run({ task, packId: pack.packId });
       if (evidence.externalWritePerformed !== false) {
         input.log?.(`RSI_DOMAIN_PACK_EXTERNAL_WRITE_REFUSED task=${task.id} pack=${pack.packId} -> BLOCK`);
-        dispatched.push({ taskId: task.id, packId: pack.packId, status: 'BLOCK' });
+        dispatched.push({ taskId: task.id, packId: pack.packId, status: 'BLOCK', guardActions: evidence.guardActions });
         return { status: 'BLOCK', evidenceRef: 'domain-pack:external-write-refused' };
       }
       if (evidence.status === 'PASS' && evidence.evidenceRef.trim() === '') {
-        dispatched.push({ taskId: task.id, packId: pack.packId, status: 'BLOCK' });
+        dispatched.push({ taskId: task.id, packId: pack.packId, status: 'BLOCK', guardActions: evidence.guardActions });
         return { status: 'BLOCK', evidenceRef: 'domain-pack:evidence-missing' };
       }
-      dispatched.push({ taskId: task.id, packId: pack.packId, status: evidence.status });
+      dispatched.push({ taskId: task.id, packId: pack.packId, status: evidence.status, guardActions: evidence.guardActions });
       return { status: evidence.status, evidenceRef: evidence.evidenceRef };
     },
   };

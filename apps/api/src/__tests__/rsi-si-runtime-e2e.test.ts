@@ -17,6 +17,7 @@ import { createRecoverySiPack, type RecoverySiPackDependencies } from '../runtim
 import type { RsiDomainPackEvidence } from '../runtime/rsi-domain-pack';
 import { createRsiInMemoryReconcileStore } from '../runtime/rsi-restart-reconcile';
 import type { RecoveryReadPorts } from '../services/intelligence/recovery-read-tools';
+import type { RsiRecoveryGuardPort } from '../runtime/recovery-si-pack';
 
 const SIGNALS = JSON.stringify([
   {
@@ -27,6 +28,12 @@ const SIGNALS = JSON.stringify([
     riskClass: 'LOW',
   },
 ]);
+
+const ALLOW_GUARD: RsiRecoveryGuardPort = {
+  async evaluate() {
+    return { decision: 'ALLOW', reason: 'TEST_ALLOW' };
+  },
+};
 
 const readPorts = (calls: string[]): RecoveryReadPorts => ({
   async opportunityRead(input) {
@@ -64,7 +71,7 @@ describe('STEP_3G · ONE SI Runtime 端到端（Recovery Pack 作为 domain capa
   it('STEP3_E2E_1..9 signal → task → policy → pack → read tools → evidence → judge → verdict → continuation', async () => {
     const readCalls: string[] = [];
     const seen: RsiDomainPackEvidence[] = [];
-    const inner = createRecoverySiPack({ readPorts: readPorts(readCalls), bind });
+    const inner = createRecoverySiPack({ readPorts: readPorts(readCalls), bind, guard: ALLOW_GUARD });
     const pack = {
       ...inner,
       run: async (context: { task: { id: string; dedupeKey: string; priority: string }; packId: string }) => {
@@ -147,7 +154,7 @@ describe('STEP_3G · ONE SI Runtime 端到端（Recovery Pack 作为 domain capa
     });
     const composition = await composeRsiRuntime({
       readFile: async () => '[]',
-      domainPacks: [createRecoverySiPack({ readPorts: readPorts([]), bind })],
+      domainPacks: [createRecoverySiPack({ readPorts: readPorts([]), bind, guard: ALLOW_GUARD })],
       reconcile: { store, ownerRef: 'runtime-b' },
     });
     const plan = await composition.reconcileNow();
@@ -157,5 +164,37 @@ describe('STEP_3G · ONE SI Runtime 端到端（Recovery Pack 作为 domain capa
     const second = await composition.reconcileNow();
     expect(second?.idempotentNoop).toBe(true);
     expect(store.taskSnapshot().find((t) => t.taskId === 'task-done')?.status).toBe('PROMOTED');
+  });
+});
+
+
+describe('STEP_3 FINAL-2 · CHANGE A —— proposal 与 Judge verdict 分离', () => {
+  it('STEP3F2_A1 proposal 不得被 watchdog 当 verdict 消费；external verdict 才是唯一完成来源', async () => {
+    const readCalls: string[] = [];
+    const pack = createRecoverySiPack({ readPorts: readPorts(readCalls), bind, guard: ALLOW_GUARD });
+    const composition = await composeRsiRuntime({
+      readFile: async (p: string) => (p === 'mem://signals' ? SIGNALS : '[]'),
+      signalsPath: 'mem://signals',
+      domainPacks: [pack],
+    });
+    const first = await composition.controller.tick();
+    expect(first.claimed?.dedupeKey).toBe('task:recovery:PLATFORM:opp-1');
+    expect(composition.controller.state().waitingForVerdict).toBe(true);
+    expect(composition.controller.state().verdict).toBeNull();
+    expect(composition.controller.proposal()?.status).toBe('PASS');
+    await composition.controller.tick();
+    await composition.controller.tick();
+    expect(composition.controller.state().waitingForVerdict).toBe(true);
+    expect(composition.controller.state().verdict).toBeNull();
+    composition.controller.markWaitingForVerdict('PASS');
+    await composition.controller.emit('JUDGE_VERDICT_RECEIVED');
+    expect(composition.controller.state().waitingForVerdict).toBe(false);
+    expect(readCalls.length).toBeGreaterThan(0);
+  });
+
+  it('STEP3F2_A2 malformed verdict → 保持等待（不猜、不自证完成）', () => {
+    expect(normalizeRsiVerdict('garbage')).toBeNull();
+    expect(normalizeRsiVerdict(undefined)).toBeNull();
+    expect(RSI_RUNTIME_COMPOSITION_BOUNDARY.secondRuntime).toBe(0);
   });
 });

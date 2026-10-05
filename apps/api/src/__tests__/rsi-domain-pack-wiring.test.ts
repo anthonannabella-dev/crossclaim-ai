@@ -25,6 +25,7 @@ import { decideRecoveryAction } from '../services/intelligence/recovery-policy';
 import { resolveGuardAction } from '../services/intelligence/recovery-guard-dry-run';
 import type { RecoveryPlanAction } from '../services/intelligence/recovery-planner';
 import type { RecoveryReadPorts } from '../services/intelligence/recovery-read-tools';
+import type { RsiRecoveryGuardPort } from '../runtime/recovery-si-pack';
 import type { RsiSafeTask } from '../services/autonomy/rsi-continuation-engine';
 
 const repoRoot = path.resolve(process.cwd(), '..', '..');
@@ -41,6 +42,12 @@ const walk = (dir: string): readonly string[] => {
 };
 
 const task = (dedupeKey: string, id = 'task-1'): RsiSafeTask => ({ id, dedupeKey, priority: 'P2' });
+
+const ALLOW_GUARD: RsiRecoveryGuardPort = {
+  async evaluate() {
+    return { decision: 'ALLOW', reason: 'TEST_ALLOW' };
+  },
+};
 
 const readPorts = (): { ports: RecoveryReadPorts; calls: string[] } => {
   const calls: string[] = [];
@@ -74,6 +81,7 @@ const deps = (over: Partial<RecoverySiPackDependencies> = {}, calls?: string[]):
   if (calls) calls.push(...built.calls);
   return {
     readPorts: built.ports,
+    guard: ALLOW_GUARD,
     bind: (t) => {
       const match = /^task:recovery:([A-Z_]+):(.+)$/.exec(t.dedupeKey);
       if (match === null) return null;
@@ -193,6 +201,7 @@ describe('STEP_3 · Recovery SI pack（policy → guard → read tools → evide
     const pack = createRecoverySiPack({
       ...deps(),
       readPorts: readPorts().ports,
+      guard: ALLOW_GUARD,
       bind: () => ({
         organizationId: 'org-1',
         domain: 'CUSTOMS',
@@ -237,5 +246,61 @@ describe('STEP_3 · Recovery SI pack（policy → guard → read tools → evide
     expect(RECOVERY_SI_PACK_BOUNDARY.realModelCalls).toBe(0);
     expect(RECOVERY_SI_PACK_BOUNDARY.customFilingUnchanged).toContain('L5');
     void calls;
+  });
+});
+
+describe('STEP_3 FINAL-2 · CHANGE B —— shared Action Guard 进入真实执行链', () => {
+  const guardOf = (verdict: Partial<{ decision: 'ALLOW' | 'DENY' | 'REQUIRES_APPROVAL'; reason: string; degraded: boolean; killSwitchActive: boolean }>) => {
+    const calls: string[] = [];
+    const port: RsiRecoveryGuardPort = {
+      async evaluate() {
+        calls.push('guard');
+        return { decision: 'DENY', reason: 'TEST', ...verdict } as never;
+      },
+    };
+    return { port, calls };
+  };
+
+  it('STEP3F2_B1 Guard ALLOW → read tool 执行（证据产出）', async () => {
+    const calls: string[] = [];
+    const pack = createRecoverySiPack({ readPorts: readPorts().ports, bind: () => ({ organizationId: 'org-1', domain: 'PLATFORM', actionKind: 'EXECUTE_READ_ONLY_CHECK', opportunityRef: 'opp-1' }), guard: ALLOW_GUARD });
+    const ev = await pack.run({ task: task('task:recovery:PLATFORM:opp-1'), packId: 'recovery-si' });
+    expect(ev.status).toBe('PASS');
+    expect(ev.guardActions[0]?.decision).toBe('ALLOW');
+    void calls;
+  });
+
+  for (const [, verdict] of [
+    ['DENY', { decision: 'DENY' as const }],
+    ['REQUIRES_APPROVAL', { decision: 'REQUIRES_APPROVAL' as const }],
+    ['degraded', { decision: 'ALLOW' as const, degraded: true }],
+    ['kill switch', { decision: 'ALLOW' as const, killSwitchActive: true }],
+    ['tenant mismatch', { decision: 'DENY' as const, reason: 'TENANT_MISMATCH' }],
+  ] as const) {
+    it('STEP3F2_B2 Guard  + label +  → read tool = 0（fail-closed）', async () => {
+      const g = guardOf(verdict);
+      const readCalls: string[] = [];
+      const ports = readPorts();
+      const spied: RecoveryReadPorts = {
+        opportunityRead: async (i) => { readCalls.push('opportunity'); return ports.ports.opportunityRead(i); },
+        evidenceRead: async (i) => { readCalls.push('evidence'); return ports.ports.evidenceRead(i); },
+        customsAuthorizationReadinessRead: async (i) => { readCalls.push('customs'); return ports.ports.customsAuthorizationReadinessRead(i); },
+      };
+      const pack = createRecoverySiPack({ readPorts: spied, bind: () => ({ organizationId: 'org-1', domain: 'PLATFORM', actionKind: 'EXECUTE_READ_ONLY_CHECK', opportunityRef: 'opp-1' }), guard: g.port });
+      const ev = await pack.run({ task: task('task:recovery:PLATFORM:opp-1'), packId: 'recovery-si' });
+      expect(ev.status).toBe('BLOCK');
+      expect(ev.reasonCodes).toContain('RECOVERY_GUARD_BLOCKED');
+      expect(readCalls).toEqual([]);
+      expect(g.calls).toEqual(['guard']);
+    });
+  }
+
+  it('STEP3F2_B3 CUSTOMS / unmapped → Guard = 0 且 tool = 0（不进普通 guard/tool path）', async () => {
+    const g = guardOf({});
+    const pack = createRecoverySiPack({ readPorts: readPorts().ports, bind: () => ({ organizationId: 'org-1', domain: 'CUSTOMS', actionKind: 'READY_FOR_EXECUTION', opportunityRef: 'opp-1' }), guard: g.port });
+    const ev = await pack.run({ task: task('task:recovery:CUSTOMS:opp-1'), packId: 'recovery-si' });
+    expect(ev.status).toBe('BLOCK');
+    expect(g.calls).toEqual([]);
+    expect(ev.guardActions).toEqual([]);
   });
 });
