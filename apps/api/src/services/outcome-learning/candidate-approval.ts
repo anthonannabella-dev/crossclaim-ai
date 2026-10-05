@@ -42,6 +42,7 @@ export const CANDIDATE_APPROVAL_BOUNDARY = {
   replayProtection: 'ONE_VERDICT_PER_TICKET_DIGEST',
   ticketProvenance: 'PROVENANCE_REGISTERED（只可由 openCandidateReviewTicket 产生）+ fingerprint + deep-freeze',
   candidateProvenance: 'PROVENANCE_REGISTERED（只接受 U5 isVerifiedMetaImprovementCandidate === true）',
+  verdictProvenance: 'PROVENANCE_REGISTERED（只可由 decideCandidateReview 产生）+ fingerprint + deep-freeze；U2 只接受 verified verdict',
   approverScopes: ["META_IMPROVEMENT_PROPOSAL_ONLY"],
   binds: ['candidateDigest', 'evaluationDigest', 'evidenceSetDigest', 'nonce', 'ticketDigest', 'verdictDigest'],
   expiry: 'ENFORCED（expiresAt 必须晚于 requestedAt；过期后不得判决）',
@@ -155,6 +156,54 @@ const freezeTicket = (ticket: CandidateReviewTicket): void => {
 };
 
 /** 只读 provenance：只有 openCandidateReviewTicket() 产生的 ticket 才为 true。 */
+const VERIFIED_APPROVAL_VERDICTS = new WeakSet<ApprovalVerdict>();
+const VERIFIED_APPROVAL_VERDICT_FINGERPRINTS = new WeakMap<ApprovalVerdict, string>();
+
+/** canonical fingerprint：覆盖判决消费路径（U2 前置）的全部字段。 */
+const verdictFingerprint = (verdict: ApprovalVerdict): string =>
+  JSON.stringify({
+    kind: verdict.kind,
+    verdictId: verdict.verdictId,
+    verdictDigest: verdict.verdictDigest,
+    ticketId: verdict.ticketId,
+    ticketDigest: verdict.ticketDigest,
+    outcome: verdict.outcome,
+    candidateDigest: verdict.candidateDigest,
+    evaluationDigest: verdict.evaluationDigest,
+    evidenceSetDigest: verdict.evidenceSetDigest,
+    nonce: verdict.nonce,
+    approverId: verdict.approverId,
+    role: verdict.role,
+    decidedAt: verdict.decidedAt,
+    reason: verdict.reason,
+    execution: {
+      autoApply: verdict.execution.autoApply,
+      promotion: verdict.execution.promotion,
+      productionRollout: verdict.execution.productionRollout,
+      adoption: verdict.execution.adoption,
+      mutation: { ...verdict.execution.mutation },
+    },
+  });
+
+const freezeVerdict = (verdict: ApprovalVerdict): void => {
+  Object.freeze(verdict.execution.mutation);
+  Object.freeze(verdict.execution);
+  Object.freeze(verdict);
+};
+
+/** 只读 provenance：只有 decideCandidateReview() 产出的 verdict 才为 true（U2 的判决信任门）。 */
+export function isVerifiedApprovalVerdict(verdict: ApprovalVerdict | null | undefined): boolean {
+  if (verdict === null || verdict === undefined) return false;
+  if (!VERIFIED_APPROVAL_VERDICTS.has(verdict)) return false;
+  const fingerprint = VERIFIED_APPROVAL_VERDICT_FINGERPRINTS.get(verdict);
+  if (fingerprint === undefined) return false;
+  try {
+    return fingerprint === verdictFingerprint(verdict);
+  } catch {
+    return false;
+  }
+}
+
 export function isVerifiedCandidateReviewTicket(
   ticket: CandidateReviewTicket | null | undefined,
 ): boolean {
@@ -387,7 +436,7 @@ export function decideCandidateReview(
   ]);
 
   DECIDED_TICKET_DIGESTS.add(ticket.ticketDigest);
-  return {
+  const verdict: ApprovalVerdict = {
     kind: 'APPROVAL_VERDICT',
     verdictId: 'approval-verdict:' + verdictDigest,
     verdictDigest,
@@ -404,4 +453,8 @@ export function decideCandidateReview(
     reason,
     execution: { ...FORBIDDEN_EXECUTION, mutation: { ...FORBIDDEN_EXECUTION.mutation } },
   };
+  freezeVerdict(verdict);
+  VERIFIED_APPROVAL_VERDICTS.add(verdict);
+  VERIFIED_APPROVAL_VERDICT_FINGERPRINTS.set(verdict, verdictFingerprint(verdict));
+  return verdict;
 }

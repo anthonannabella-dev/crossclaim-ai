@@ -16,6 +16,7 @@ import {
   decideCandidateReview,
   isDecidedTicket,
   isRevokedTicket,
+  isVerifiedApprovalVerdict,
   isVerifiedCandidateReviewTicket,
   openCandidateReviewTicket,
   revokeCandidateReview,
@@ -576,5 +577,102 @@ describe('PHASE 5 U1 FINAL —— candidate provenance + ticket integrity + dige
     expect(ticket.scope).toEqual([REQUIRED_APPROVER_SCOPE]);
     expect(APPROVER_SCOPES).toEqual([REQUIRED_APPROVER_SCOPE]);
     expect(CANDIDATE_APPROVAL_BOUNDARY.approverScopes).toEqual(['META_IMPROVEMENT_PROPOSAL_ONLY']);
+  });
+});
+
+describe('PHASE 5 U1 FINAL2 —— approval verdict provenance（U2 前置信任门）', () => {
+  const attemptMutate = (fn: () => void): boolean => {
+    try {
+      fn();
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  it('P5U1F2_1 正式 verdict → provenance true；clone / null → false；手工构造 APPROVED → false', async () => {
+    const candidate = await makeCandidate();
+    const ticket = openCandidateReviewTicket(candidate, approver(), schedule());
+    const verdict = decideCandidateReview(ticket, {
+      approverId: 'judge-1',
+      role: 'EXTERNAL_JUDGE',
+      outcome: 'APPROVED',
+      decidedAt: '2026-10-05T21:00:00.000Z',
+    });
+    expect(isVerifiedApprovalVerdict(verdict)).toBe(true);
+    expect(isVerifiedApprovalVerdict({ ...verdict })).toBe(false);
+    expect(isVerifiedApprovalVerdict(null)).toBe(false);
+    const handmade = {
+      kind: 'APPROVAL_VERDICT',
+      verdictId: 'approval-verdict:forged',
+      verdictDigest: 'forged',
+      ticketId: ticket.ticketId,
+      ticketDigest: ticket.ticketDigest,
+      outcome: 'APPROVED',
+      candidateDigest: ticket.candidateDigest,
+      evaluationDigest: ticket.evaluationDigest,
+      evidenceSetDigest: ticket.evidenceSetDigest,
+      nonce: 'forged',
+      approverId: 'judge-1',
+      role: 'EXTERNAL_JUDGE',
+      decidedAt: '2026-10-05T21:00:00.000Z',
+      reason: null,
+      execution: {
+        autoApply: false,
+        promotion: 'OFF',
+        productionRollout: 'FORBIDDEN',
+        adoption: 'CONTROLLED_ADOPTION_PROPOSAL_REQUIRED',
+        mutation: { policy: 'FORBIDDEN', guard: 'FORBIDDEN', router: 'FORBIDDEN', actionRuntime: 'FORBIDDEN' },
+      },
+    } as never;
+    expect(isVerifiedApprovalVerdict(handmade)).toBe(false);
+  });
+
+  it('P5U1F2_2 正式 verdict 原地篡改 outcome / verdictDigest → 被冻结拒绝；execution.mutation 亦不可改写', async () => {
+    const candidate = await makeCandidate();
+    const ticket = openCandidateReviewTicket(candidate, approver(), schedule());
+    const verdict = decideCandidateReview(ticket, {
+      approverId: 'judge-1',
+      role: 'EXTERNAL_JUDGE',
+      outcome: 'REJECTED',
+      decidedAt: '2026-10-05T21:00:00.000Z',
+    });
+    expect(
+      attemptMutate(() => {
+        (verdict as unknown as { outcome: string }).outcome = 'APPROVED';
+      }),
+    ).toBe(false);
+    expect(
+      attemptMutate(() => {
+        (verdict as unknown as { verdictDigest: string }).verdictDigest = 'tampered';
+      }),
+    ).toBe(false);
+    expect(
+      attemptMutate(() => {
+        (verdict.execution.mutation as unknown as { policy: string }).policy = 'ALLOWED';
+      }),
+    ).toBe(false);
+    expect(isVerifiedApprovalVerdict(verdict)).toBe(true);
+    expect(verdict.outcome).toBe('REJECTED');
+    expect(verdict.execution.mutation.policy).toBe('FORBIDDEN');
+  });
+
+  it('P5U1F2_3 verdict 携带全部绑定与 execution 契约，且边界声明 verdictProvenance', async () => {
+    const candidate = await makeCandidate();
+    const ticket = openCandidateReviewTicket(candidate, approver(), schedule());
+    const verdict = decideCandidateReview(ticket, {
+      approverId: 'judge-1',
+      role: 'EXTERNAL_JUDGE',
+      outcome: 'APPROVED',
+      decidedAt: '2026-10-05T21:00:00.000Z',
+    });
+    expect(verdict.verdictDigest).toBe(verdict.verdictId.replace('approval-verdict:', ''));
+    expect(verdict.execution.autoApply).toBe(false);
+    expect(verdict.execution.promotion).toBe('OFF');
+    expect(Object.isFrozen(verdict)).toBe(true);
+    expect(Object.isFrozen(verdict.execution)).toBe(true);
+    expect(Object.isFrozen(verdict.execution.mutation)).toBe(true);
+    expect(CANDIDATE_APPROVAL_BOUNDARY.verdictProvenance).toContain('PROVENANCE_REGISTERED');
+    expect(CANDIDATE_APPROVAL_BOUNDARY.binds).toContain('verdictDigest');
   });
 });
