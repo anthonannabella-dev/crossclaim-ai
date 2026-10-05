@@ -2595,3 +2595,11 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - NEXT_EXECUTION_UNIT = 读取 C2 Implementation Audit 裁决 → 逐字归档（MSG-20261005-34）→ PASS/CLOSED 则进入 C3 IMPLEMENTATION（缓存运行时接线 + business-value cost policy + admin observability 只读投影 + Cost Safe Mode + 指标 NOT_YET_MEASURABLE）；REVISE 则按最小集合修订 → 自检 → commit/push → 再送审。
 - 本窗口 checkpoint：HEAD = 9b5ca5f4（代码 HEAD = f099ec4c：C2-a 92b61b52 + C2-b f099ec4c）。
 
+
+## 2026-10-06T00:40Z — C2 裁决归档（MSG-20261005-34 = PASS WITH REVISE）
+- 归档：AI-ARCHITECT-INBOX.md 新增 MSG-20261005-34（FULL_COPY_OK）。
+- 裁决：账本 append-only+callId 幂等 / AiBudgetPolicy durable 且无 usage 表 / 缓存 identity+TTL-GC / 触发器与清单 / 重启耐久 / 同 scopeKey 并发串行 = PASS；
+- 三项窄修（C2 FINAL-2）：A 预算用量必须按**每个 policy 自己的作用域**聚合（platform/organization/account/incident/task 各自 usage；strong/token 同口径）；B advisory lock key 必须由 store 内部 canonical 派生（删除 caller scopeKey），固定顺序 platform:* → org:<id> → account:<id> → incident:<id> → task:<id> 防死锁；C guarded write 必须校验不变量（cost/token integer ≥0、attempt 正整数、limits ≥0，建议 DB CHECK）且幂等必须先识别已有 callId（duplicate，不误报 exceeded）。
+- 另：若未实现 concurrency enforcement 必须显式 NOT_YET_WIRED；tokenLimit 需 enforce 或明确留 C3；escalatedToStrong 不得作为真实 strong 调用事实源。
+- NEXT_EXECUTION_UNIT = C2 FINAL-2（A/B/C + 裁决要求 10 条 PG 回归）→ 送审 → PASS/CLOSED 后 C3。
+

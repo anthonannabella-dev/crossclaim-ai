@@ -145093,3 +145093,221 @@ STEP_3_RUNTIME_POLICY_WIRING = NOT_AUTHORIZED
 
 结论：C1 正式关闭，现在可以直接进入 C2 实现。
 ```
+
+### [MSG-20261005-34] SI-COST-OPTIMIZATION C2 Implementation Audit — VERDICT = **PASS WITH REVISE**（账本/预算/缓存/触发器/重启耐久/同 scope 并发 = PASS；预算 Guard 3 项窄修 → `C2_FINAL2_REQUIRED = YES`；C3 暂不授权）
+
+```text
+DECISION
+
+VERDICT = PASS WITH REVISE
+
+我按 f099ec4c 实码、92b61b52 Schema/迁移，以及 f099ec4c → 9b5ca5f4 后续提交核对。
+
+已确认：
+
+AiCostLedgerEntry append-only + callId unique：PASS
+AiBudgetPolicy durable、无 AiBudgetUsage：PASS
+AiModelCacheEntry tenant identity / immutable content / TTL GC：PASS
+trigger + manifest：PASS
+restart durability：PASS
+当前同一个 scopeKey 下的并发串行化：PASS
+f099ec4c → 9b5ca5f4 仅 docs/状态/送审簿记：PASS
+
+但发现预算 Guard 有两个实质性正确性缺口。
+
+C2_IMPLEMENTATION = NOT_YET_CLOSED
+C2_FINAL2_REQUIRED = YES
+C3_IMPLEMENTATION = NOT YET AUTHORIZED
+
+KEEP
+
+以下全部保留，无需重做：
+
+三张表与 80th migration
+costMicros integer-micro 设计方向
+ledger append-only trigger
+tenant triggers / immutable triggers
+usage 单一事实源 = ledger
+cache 非 append-only、允许 TTL/GC
+cache identity/content 不得原地改写
+PLATFORM → ORGANIZATION → ACCOUNT → INCIDENT/TASK policy hierarchy
+PostgreSQL advisory-lock 方案本身。
+CHANGE
+CHANGE A — 预算用量必须按“预算所属 scope”聚合，不能用最窄 scopeWhere
+
+当前 runGuardedAiCostWrite() 构造：
+
+organizationId + accountId + incidentId + taskId
+
+然后拿这一份最窄 aggregation 同时检查：
+
+platform daily/monthly
+organization daily/monthly
+account
+incident
+task
+
+这是错误的。
+
+例如：
+
+Organization daily limit = 5,000
+incident-A 已花 3,000
+incident-B 已花 3,000
+
+当前 incident-B 调用只统计 incident-B，很可能看不到 incident-A 的 3,000，导致组织实际花到 6,000。
+
+Platform budget 跨多个 organization 时问题更明显。
+
+必须改成每个有效 policy 用自己的作用域计算 usage：
+
+PLATFORM → 全平台 usage
+ORGANIZATION → organization usage
+ACCOUNT → account usage
+INCIDENT → incident usage
+TASK → task usage
+
+然后逐 policy 校验，而不是：
+
+min(all limits) + narrowest usage
+
+同时 strong-call/token 限额也必须按各自 policy scope 统计。
+
+CHANGE B — advisory lock 必须由系统从 refs/policies canonical derive
+
+当前：
+
+scopeKey: string
+
+由调用方传进来。
+
+这意味着相同组织/平台预算的两个并发请求，只要传不同 scopeKey，就不会互斥。
+
+即使调用方都诚实：
+
+org-A / incident-1
+org-A / incident-2
+
+如果分别锁 incident key，也无法保护共同的 Organization budget。
+
+最低要求：
+
+Gateway/store 内部生成 lock keys，调用方不得决定锁身份。
+
+对于一次写入，应对所有受影响层级取得 canonical locks，例如：
+
+platform:*
+→ org:<id>
+→ account:<id>
+→ incident:<id>
+→ task:<id>
+
+按固定顺序获取，防死锁。
+
+这样不同 incident 仍会在共同 org lock 上串行；不同 org 在 platform budget 存在时也会在 platform lock 上串行。
+
+CHANGE C — Guarded write 必须保护 ledger truth
+
+当前 appendAiCostEntry() 会验证：
+
+costMicros >= 0 && integer
+
+但 runGuardedAiCostWrite() 是直接：
+
+tx.aiCostLedgerEntry.create(...)
+
+没有同等验证。
+
+因此理论上 estimatedCostMicros < 0 可进入 ledger，反向降低聚合 usage。
+
+最小修订：
+
+estimatedCostMicros：integer + >=0
+token counts：integer + >=0
+attempt：正整数
+budget limits：integer + >=0
+最好同时增加 DB CHECK，避免绕过 service 写坏 append-only truth。
+
+另外 guarded idempotency 应先识别已有 callId：
+
+duplicate replay 不应因为“把自己成本再次加一次”而返回 budget exceeded。
+
+已有 callId → 验证 immutable identity 一致 → duplicate=true，零新增成本。
+
+RISKS
+
+目前 C2_DB8 只能证明：
+
+相同 caller-provided scopeKey 的五个并发请求不会 race。
+
+它还没有证明：
+
+不同 incident / task / organization 在共享父级预算下不会共同越界。
+
+这是 C2 的核心预算安全属性，所以不能直接 CLOSED。
+
+另外 tokenLimit / concurrencyLimit 当前只是 durable config。若 C2 不准备实现 concurrency enforcement，可明确标：
+
+CONCURRENCY_LIMIT_ENFORCEMENT = NOT_YET_WIRED / C3
+
+不要在 C2 宣称已经 enforcement。
+
+TEST
+
+C2 FINAL-2 最少增加：
+
+Organization limit 5,000：incident-A=3,000 后，incident-B 再写 3,000 → 拒绝
+Platform limit：org-A + org-B 并发，合计不能突破 platform limit
+Account limit：不同 incident 同一 account 共享 account usage
+不同 caller scopeKey 不再能绕开锁 —— 最好直接删除 caller scopeKey
+跨 incident 并发共享 org budget → 恰好允许预算范围内数量
+estimatedCostMicros=-1 → fail-closed / DB reject
+duplicate callId 在预算已满后重放 → duplicate=true，不误报 exceeded
+strong-call limit 按其实际 policy scope 统计
+token limit 若 C2 宣称已 enforce → 增真实 PG 回归；否则明确留到 C3
+原 10 个 PG 用例 + 全量回归继续绿。
+NEXT
+
+仅授权：
+
+C2 FINAL-2 narrow revision
+
+范围：
+
+A. scope-correct usage accounting
+B. canonical hierarchical advisory locks
+C. guarded-write/idempotency/integer invariants
+
+无需重做 cache，无需扩大模型网络边界。
+
+上述通过后：
+
+C2 = PASS / CLOSED
+C2_FINAL3_REQUIRED = NO
+
+再授权 C3：
+
+cache runtime wiring
+business-value cost policy
+Cost Safe Mode
+admin read-only observability
+NOT_YET_MEASURABLE metrics。
+PRODUCTION
+
+继续冻结：
+
+REAL_MODEL_NETWORK = HOLD
+PAID_MODEL_CALLS = HOLD
+EXTERNAL_WRITE = HOLD
+PAYMENT = HOLD
+TRANSPORT = HOLD
+PRODUCTION_CREDENTIALS = HOLD
+PRODUCTION_ENABLEMENT = HOLD
+
+P2_F = HOLD
+P2_G = HOLD
+RUNTIME_WIRING = NONE
+STEP_3_RUNTIME_POLICY_WIRING = NOT_AUTHORIZED
+
+所以当前结论：C2 主体设计是对的，但父级预算的真实 enforce/race 语义还需 FINAL-2 收口，暂不进入 C3。
+```
