@@ -19,7 +19,10 @@ import {
   META_CANDIDATE_STATUS,
   proposeMetaImprovementCandidates,
 } from '../services/outcome-learning/meta-improvement-candidate';
-import { evaluateVerifiedLearningRecords } from '../services/outcome-learning/offline-evaluation';
+import {
+  evaluateVerifiedLearningRecords,
+  isVerifiedOfflineEvaluation,
+} from '../services/outcome-learning/offline-evaluation';
 import { createAppOutcomeLineageLedger, type OutcomeLineageLedgerPort } from '../services/outcome-learning/outcome-lineage';
 import { buildOutcomeRecord, type OutcomeRecord } from '../services/outcome-learning/outcome-record';
 
@@ -346,5 +349,139 @@ describe('PHASE 4 U5 FINAL —— verified evidence provenance + exact evaluatio
     const resultB = proposeMetaImprovementCandidates({ evaluation: evaluationB, evidenceSet: evidenceSetB });
     expect(resultB.candidates[0]?.candidateDigest).toBe(result.candidates[0]?.candidateDigest);
     expect(resultB.candidates[0]?.evaluationDigest).toBe(result.candidates[0]?.evaluationDigest);
+  });
+});
+
+describe('PHASE 4 U5 FINAL2 —— provenance object integrity（anti-tamper）', () => {
+  const attemptMutate = (fn: () => void): boolean => {
+    try {
+      fn();
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  it('P4U5F2_1 原地修改 evidenceSet 的 outcomeDigests / evidenceSetDigest / refs / digests → 被拒绝（对象已冻结）', async () => {
+    const records = troubledRecords();
+    const evaluation = await evaluate(records);
+    const setA = await verifiedEvidenceSet(records);
+
+    expect(
+      attemptMutate(() => {
+        (setA as unknown as { outcomeDigests: string[] }).outcomeDigests = ['outcome:tampered'];
+      }),
+    ).toBe(false);
+    expect(
+      attemptMutate(() => {
+        (setA as unknown as { evidenceSetDigest: string }).evidenceSetDigest = 'learning-evidence-set:tampered';
+      }),
+    ).toBe(false);
+    const evidenceSet = await verifiedEvidenceSet(records);
+    expect(
+      attemptMutate(() => {
+        (evidenceSet as unknown as { learningEvidenceRefs: string[] }).learningEvidenceRefs = ['ref:tampered'];
+      }),
+    ).toBe(false);
+    expect(
+      attemptMutate(() => {
+        (evidenceSet as unknown as { evidenceDigests: string[] }).evidenceDigests = ['digest:tampered'];
+      }),
+    ).toBe(false);
+    // 冻结后内容未变 → provenance 仍成立，U5 正常
+    expect(isVerifiedLearningEvidenceSet(setA)).toBe(true);
+    expect(proposeMetaImprovementCandidates({ evaluation, evidenceSet: setA }).candidates.length).toBeGreaterThan(0);
+  });
+
+  it('P4U5F2_2 原地修改 evaluation 的 successRate / verifiedOutcomeDigests / byEvidenceQuality → 被拒绝（对象已冻结）', async () => {
+    const records = troubledRecords();
+    const evaluation = await evaluate(records);
+
+    expect(
+      attemptMutate(() => {
+        (evaluation.resolved as unknown as { successRate: number }).successRate = 0.01;
+      }),
+    ).toBe(false);
+    expect(
+      attemptMutate(() => {
+        (evaluation as unknown as { verifiedOutcomeDigests: string[] }).verifiedOutcomeDigests = [
+          'outcome:tampered',
+        ];
+      }),
+    ).toBe(false);
+    expect(
+      attemptMutate(() => {
+        (evaluation.context.byEvidenceQuality as unknown as Record<string, number>)['WEAK'] = 100;
+      }),
+    ).toBe(false);
+    expect(isVerifiedOfflineEvaluation(evaluation)).toBe(true);
+  });
+
+  it('P4U5F2_3 克隆 / 展开副本 / 手工重建的 manifest 与 evaluation → provenance REJECT（integrity 与 source 双重校验）', async () => {
+    const records = troubledRecords();
+    const evaluation = await evaluate(records);
+    const evidenceSet = await verifiedEvidenceSet(records);
+    const clonedEvaluation = {
+      ...evaluation,
+      resolved: { ...evaluation.resolved, byOutcome: { ...evaluation.resolved.byOutcome } },
+    };
+    const clonedEvidenceSet = { ...evidenceSet, outcomeDigests: [...evidenceSet.outcomeDigests] };
+    expect(isVerifiedOfflineEvaluation(clonedEvaluation)).toBe(false);
+    expect(isVerifiedLearningEvidenceSet(clonedEvidenceSet)).toBe(false);
+    expect(() => proposeMetaImprovementCandidates({ evaluation: clonedEvaluation, evidenceSet })).toThrow(
+      /META_CANDIDATE_EVALUATION_NOT_VERIFIED/,
+    );
+    expect(() => proposeMetaImprovementCandidates({ evaluation, evidenceSet: clonedEvidenceSet })).toThrow(
+      /META_CANDIDATE_EVIDENCE_SET_NOT_VERIFIED/,
+    );
+  });
+
+  it('P4U5F2_4 未修改的正式对象 → 双 provenance 为 true，candidate 正常生成', async () => {
+    const records = troubledRecords();
+    const evaluation = await evaluate(records);
+    const evidenceSet = await verifiedEvidenceSet(records);
+    expect(isVerifiedOfflineEvaluation(evaluation)).toBe(true);
+    expect(isVerifiedLearningEvidenceSet(evidenceSet)).toBe(true);
+    const result = proposeMetaImprovementCandidates({ evaluation, evidenceSet });
+    expect(result.candidates).toHaveLength(META_CANDIDATE_RULES.length);
+  });
+
+  it('P4U5F2_5 deep-freeze 覆盖清单：manifest 与 evaluation 的所有被消费字段均不可变', async () => {
+    const records = troubledRecords();
+    const evaluation = await evaluate(records);
+    const evidenceSet = await verifiedEvidenceSet(records);
+    for (const value of [
+      evidenceSet,
+      evidenceSet.outcomeDigests,
+      evidenceSet.learningEvidenceRefs,
+      evidenceSet.evidenceDigests,
+      evidenceSet.provenance,
+      evaluation,
+      evaluation.verifiedOutcomeDigests,
+      evaluation.resolved,
+      evaluation.resolved.byOutcome,
+      evaluation.unresolved,
+      evaluation.unresolved.byOutcome,
+      evaluation.context,
+      evaluation.context.byEvidenceQuality,
+      evaluation.context.byDomain,
+      evaluation.excluded,
+      evaluation.provenance,
+    ]) {
+      expect(Object.isFrozen(value)).toBe(true);
+    }
+  });
+
+  it('P4U5F2_6 set 语义一致：重复 outcome digest 在 U3 manifest 与 U4 evaluation 中都去重，且仍 exact-match', async () => {
+    const dup = record({ finalOutcome: 'FAILURE' });
+    const evaluation = await evaluate([dup, dup, record({ finalOutcome: 'SUCCESS' })]);
+    expect(evaluation.verifiedOutcomeDigests).toHaveLength(2);
+    expect(new Set(evaluation.verifiedOutcomeDigests).size).toBe(evaluation.verifiedOutcomeDigests.length);
+    const evidenceSet = await verifiedEvidenceSet([dup, record({ finalOutcome: 'SUCCESS' })]);
+    expect(new Set(evidenceSet.outcomeDigests).size).toBe(evidenceSet.outcomeDigests.length);
+    expect(evidenceSet.outcomeDigests).toEqual([...evaluation.verifiedOutcomeDigests]);
+    const result = proposeMetaImprovementCandidates({ evaluation, evidenceSet });
+    expect(result.insufficientData).toBe(false);
+    expect(result.candidates.length).toBeGreaterThan(0);
   });
 });

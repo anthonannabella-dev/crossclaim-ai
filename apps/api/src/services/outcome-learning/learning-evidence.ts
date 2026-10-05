@@ -57,6 +57,30 @@ export interface RsiEvidenceLedgerStorePort {
 
 const APP_LEARNING_EVIDENCE_LEDGERS = new WeakSet<LearningEvidenceLedgerPort>();
 const APP_VERIFIED_LEARNING_EVIDENCE_SETS = new WeakSet<VerifiedLearningEvidenceSet>();
+const APP_VERIFIED_LEARNING_EVIDENCE_FINGERPRINTS = new WeakMap<VerifiedLearningEvidenceSet, string>();
+
+/** 对象完整性：冻结所有被 U5 消费的字段（仅冻结顶层不够）。 */
+const freezeEvidenceSet = (set: VerifiedLearningEvidenceSet): void => {
+  Object.freeze(set.outcomeDigests);
+  Object.freeze(set.learningEvidenceRefs);
+  Object.freeze(set.evidenceDigests);
+  Object.freeze(set.provenance);
+  Object.freeze(set);
+};
+
+/** canonical fingerprint：覆盖 U5 实际消费的所有字段（U5 FINAL2 anti-tamper）。 */
+const evidenceSetFingerprint = (set: VerifiedLearningEvidenceSet): string =>
+  JSON.stringify({
+    kind: set.kind,
+    datasetVersion: set.datasetVersion,
+    outcomeDigests: [...set.outcomeDigests],
+    learningEvidenceRefs: [...set.learningEvidenceRefs],
+    evidenceDigests: [...set.evidenceDigests],
+    evidenceSetDigest: set.evidenceSetDigest,
+    provenanceKind: set.provenance && set.provenance.kind,
+    ledgerOwner: set.provenance && set.provenance.ledgerOwner,
+    verifiedOnly: set.provenance && set.provenance.verifiedOnly,
+  });
 
 const sortedUnique = (values: readonly string[]): string[] =>
   Array.from(new Set(values)).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
@@ -91,7 +115,16 @@ export interface VerifiedLearningEvidenceSet {
 export function isVerifiedLearningEvidenceSet(
   set: VerifiedLearningEvidenceSet | null | undefined,
 ): boolean {
-  return set !== null && set !== undefined && APP_VERIFIED_LEARNING_EVIDENCE_SETS.has(set);
+  if (set === null || set === undefined) return false;
+  if (!APP_VERIFIED_LEARNING_EVIDENCE_SETS.has(set)) return false;
+  const fingerprint = APP_VERIFIED_LEARNING_EVIDENCE_FINGERPRINTS.get(set);
+  if (fingerprint === undefined) return false;
+  try {
+    // 不仅查 identity：重算 canonical fingerprint，原地篡改（即便内容被手工改成匹配）一律失败
+    return fingerprint === evidenceSetFingerprint(set);
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -252,6 +285,8 @@ export async function appendVerifiedLearningEvidence(
       )
       .digest('hex')
       .slice(0, 16);
+  freezeEvidenceSet(evidenceSet);
   APP_VERIFIED_LEARNING_EVIDENCE_SETS.add(evidenceSet);
+  APP_VERIFIED_LEARNING_EVIDENCE_FINGERPRINTS.set(evidenceSet, evidenceSetFingerprint(evidenceSet));
   return { appended, skipped, evidenceSet };
 }

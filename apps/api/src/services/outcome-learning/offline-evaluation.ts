@@ -154,10 +154,83 @@ export interface OfflineEvaluationResult extends OfflineEvaluationMetrics {
 }
 
 const VERIFIED_OFFLINE_EVALUATIONS = new WeakSet<OfflineEvaluationResult>();
+const VERIFIED_OFFLINE_EVALUATION_FINGERPRINTS = new WeakMap<OfflineEvaluationResult, string>();
+
+/** 对象完整性：冻结所有被 U5 消费的字段（仅冻结顶层不够）。 */
+const freezeEvaluation = (result: OfflineEvaluationResult): void => {
+  Object.freeze(result.verifiedOutcomeDigests);
+  Object.freeze(result.resolved.byOutcome);
+  Object.freeze(result.resolved);
+  Object.freeze(result.unresolved.byOutcome);
+  Object.freeze(result.unresolved);
+  Object.freeze(result.context.byEvidenceQuality);
+  Object.freeze(result.context.byDomain);
+  Object.freeze(result.context);
+  for (const item of result.excluded) Object.freeze(item);
+  Object.freeze(result.excluded);
+  Object.freeze(result.provenance);
+  Object.freeze(result);
+};
+
+const sortedUnique = (values: readonly string[]): string[] =>
+  Array.from(new Set(values)).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+
+/** canonical fingerprint：覆盖 U5 实际消费的所有字段（U5 FINAL2 anti-tamper）。 */
+const evaluationFingerprint = (result: OfflineEvaluationResult): string =>
+  JSON.stringify({
+    evaluationVersion: result.evaluationVersion,
+    datasetVersion: result.datasetVersion,
+    totalRecords: result.totalRecords,
+    verifiedOutcomeDigests: [...result.verifiedOutcomeDigests],
+    verifiedOutcomeSetDigest: result.verifiedOutcomeSetDigest,
+    resolved: {
+      denominatorKind: result.resolved.denominatorKind,
+      denominator: result.resolved.denominator,
+      defined: result.resolved.defined,
+      byOutcome: { ...result.resolved.byOutcome },
+      successCount: result.resolved.successCount,
+      failureCount: result.resolved.failureCount,
+      rejectedCount: result.resolved.rejectedCount,
+      successRate: result.resolved.successRate,
+      failureRate: result.resolved.failureRate,
+      rejectedRate: result.resolved.rejectedRate,
+    },
+    unresolved: {
+      count: result.unresolved.count,
+      excludedFromSuccessRate: result.unresolved.excludedFromSuccessRate,
+      byOutcome: { ...result.unresolved.byOutcome },
+    },
+    unresolvedShareOfAllRecords: result.unresolvedShareOfAllRecords,
+    insufficientData: result.insufficientData,
+    context: {
+      humanInterventionCount: result.context.humanInterventionCount,
+      byEvidenceQuality: { ...result.context.byEvidenceQuality },
+      byDomain: { ...result.context.byDomain },
+    },
+    excludedCount: result.excludedCount,
+    excluded: result.excluded.map((item) => ({ digest: item.digest, reason: item.reason })),
+    evaluationDigest: result.evaluationDigest,
+    provenance: {
+      kind: result.provenance.kind,
+      ledgerProvenance: result.provenance.ledgerProvenance,
+      verifiedOnly: result.provenance.verifiedOnly,
+      evaluationVersion: result.provenance.evaluationVersion,
+      datasetVersion: result.provenance.datasetVersion,
+    },
+  });
 
 /** 只读 provenance：只有 evaluateVerifiedLearningRecords() 产出的评估才为 true。 */
 export function isVerifiedOfflineEvaluation(result: OfflineEvaluationResult | null | undefined): boolean {
-  return result !== null && result !== undefined && VERIFIED_OFFLINE_EVALUATIONS.has(result);
+  if (result === null || result === undefined) return false;
+  if (!VERIFIED_OFFLINE_EVALUATIONS.has(result)) return false;
+  const fingerprint = VERIFIED_OFFLINE_EVALUATION_FINGERPRINTS.get(result);
+  if (fingerprint === undefined) return false;
+  try {
+    // 不仅查 identity：重算 canonical fingerprint，原地篡改一律失败
+    return fingerprint === evaluationFingerprint(result);
+  } catch {
+    return false;
+  }
 }
 
 const bump = (map: Record<string, number>, key: string): void => {
@@ -236,7 +309,7 @@ function evaluateOfflineOutcomesInternal(
     OFFLINE_EVALUATION_VERSION,
     datasetVersion,
     metricResult,
-    'verified=' + sortAscending(outcomeDigests).join('+'),
+    'verified=' + sortedUnique(outcomeDigests).join('+'),
     'excluded=' +
       sortAscending(excluded.map((item) => String(item.digest) + ':' + String(item.reason))).join('+'),
   ].join('|');
@@ -245,10 +318,11 @@ function evaluateOfflineOutcomesInternal(
     evaluationVersion: OFFLINE_EVALUATION_VERSION,
     datasetVersion,
     totalRecords,
-    verifiedOutcomeDigests: sortAscending(outcomeDigests),
+    // set 语义（与 U3 manifest 一致）：sorted + 去重
+    verifiedOutcomeDigests: sortedUnique(outcomeDigests),
     verifiedOutcomeSetDigest:
       'verified-outcomes:' +
-      createHash('sha256').update(sortAscending(outcomeDigests).join('+')).digest('hex').slice(0, 16),
+      createHash('sha256').update(sortedUnique(outcomeDigests).join('+')).digest('hex').slice(0, 16),
     resolved: {
       denominatorKind: 'RESOLVED',
       denominator,
@@ -307,6 +381,8 @@ export async function evaluateVerifiedLearningRecords(
       datasetVersion,
     },
   };
+  freezeEvaluation(result);
   VERIFIED_OFFLINE_EVALUATIONS.add(result);
+  VERIFIED_OFFLINE_EVALUATION_FINGERPRINTS.set(result, evaluationFingerprint(result));
   return result;
 }
