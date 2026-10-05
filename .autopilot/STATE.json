@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-40",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T18:32:54.257Z",
+  "updated_at": "2026-10-05T18:35:13.007Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -21,7 +21,7 @@
   "ci_result": "completed_success",
   "fix_pr": "https://github.com/anthonannabella-dev/crossclaim-ai/pull/10",
   "channel_status": "HEALTHY（主审计会话 = https://chatgpt.com/c/6ac385db-cb60-83ec-9754-c7a30633a8c5（HOST 新开；MSG-20261005-30 起）；历史会话 https://chatgpt.com/c/6ac1cdf0-1ec8-83ec-8036-0e66fcf5c6b9 保留 MSG-22..29 逐字归档）",
-  "pending_verdict_unarchived": "PHASE 4 U1（Reviewed HEAD 5510401f）—— 已投递，等待裁决",
+  "pending_verdict_unarchived": null,
   "b2_status": "PASS（MSG-20260930-10 工程修复 + MSG-20260930-11 集成 PASS/MERGE APPROVED）",
   "protocol": "DUAL_CHANNEL_WAKEUP（GitHub = 正式总线 / ChatGPT Web = 仅唤醒）",
   "integration_pr": "https://github.com/anthonannabella-dev/crossclaim-ai/pull/11",
@@ -50,13 +50,13 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
-  "next_execution_unit": "PHASE 4 U1 裁决处理：读取右侧审核会话（tab 14）完整 verdict（严格匹配 REVIEWED_HEAD = 5510401f）→ 原样逐字归档 AI-ARCHITECT-INBOX.md（MSG-20261005-55）→ compare.mjs 必须 FULL_COPY_OK → durable state 对账。若 PASS → 继续 PHASE 4 U2（outcome ↔ action/proposal/evidence lineage 强化）→ U3（learning dataset projection / immutable learning evidence）→ U4（offline evaluation）→ U5（meta-improvement candidate proposal，只提建议）；若 PASS WITH REVISE → 按裁决窄修。",
+  "next_execution_unit": "PHASE 4 下一批（按裁决把 U1 收口并入，不停整个 PHASE 4）：(1) U1-FINAL-a 取消静默类型强转：数值字段只接受真正的 number（\"1.23\" → REJECT）；布尔字段只接受真正的 boolean（\"true\"/\"false\" → REJECT）；(2) U1-FINAL-b humanIntervention 缺失 → null（UNKNOWN），不得变 false；投影只统计明确 true；(3) U1-FINAL-c success 与 finalOutcome 一致性：SUCCESS→success=true；FAILURE/REJECTED→success=false；UNKNOWN/MANUAL_REVIEW→success=null；PARTIAL 明确定义；矛盾组合一律 REJECT；(4) U1-FINAL-d raw-payload 检查改为**递归** key scan（nested { metadata: { payload } } 也必须 REJECT），与 credential scan 同级 fail-closed；(5) U2 lineage binding：证明 actionRef ↔ proposalRef ↔ evidenceRef ↔ organization/task 属于同一执行链（当前只能记 LINEAGE_PRESENCE = PASS，不能记 LINEAGE_BINDING = PASS）；(6) 新增验收：numeric string REJECT、string boolean REJECT、缺 humanIntervention → null、success/finalOutcome 矛盾 REJECT、嵌套 payload REJECT；原 9 条保持 green。流程：code → tests → regression → tsc → commit → push → 送 PHASE 4 批次 → 送达三检 → 逐字归档 → FULL_COPY_OK → durable state。U4 时必须明确 offline evaluation 的样本分母与 UNKNOWN/PARTIAL/MANUAL_REVIEW 语义（successRate 现会把未结论样本放进分母）。",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-05T18:32:54.257Z",
+  "last_tick_at": "2026-10-05T18:35:13.007Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "PHASE 4 U1 已实施并送审：新增 apps/api/src/services/outcome-learning/outcome-record.ts（16 维 canonical outcome 契约 + lineage 三元组 + 稳定 digest；buildOutcomeRecord fail-closed；projectLearningDataset 纯只读投影）+ 9 条验收；push 5510401f；投递 [CODEX-PHASE4-U1]（Reviewed HEAD 5510401f），送达三检通过，等待裁决。",
-  "last_action_at": "2026-10-05T18:32:54.257Z",
-  "next_action": "读取 PHASE 4 U1 裁决 → 逐字归档 + compare.mjs FULL_COPY_OK + durable state 对账",
+  "last_action": "PHASE 4 U1 裁决已读取并原样逐字归档（MSG-20261005-55，compare.mjs = FULL_COPY_OK，3052 字符）：PHASE 4 U1 = PASS WITH REVISE / NOT CLOSED；PHASE4_U1_FINAL_REQUIRED = YES；Reviewed HEAD 5510401f；授权继续 U2/U3/U4/U5，U1 的 4 个窄点并入下一批收口。",
+  "last_action_at": "2026-10-05T18:35:13.007Z",
+  "next_action": "PHASE 4 下一批：U1 FINAL 4 个窄点 + U2 lineage binding",
   "current_head": "5510401f",
   "last_completed_head": "6cba0639",
   "reviewed_head": "add99ec3",
@@ -5169,11 +5169,12 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "PHASE4-0 读取 PHASE 4 U1 裁决（tab 14，匹配 Reviewed HEAD 5510401f）+ 逐字归档 MSG-20261005-55 + compare.mjs + durable state",
-    "PHASE4-U2 outcome ↔ action/proposal/evidence lineage 强化（引用不可变、append-only 语义）",
-    "PHASE4-U3 learning dataset projection / immutable learning evidence（复用 rsi-evidence-ledger，不建第二证据存储）",
-    "PHASE4-U4 offline evaluation（只评估，不改策略）",
-    "PHASE4-U5 meta-improvement candidate proposal（只提建议，必须经外部 Judge）"
+    "P4F-1 U1 窄修 a/b/c/d（严格类型、humanIntervention null、success 一致性、递归 raw-payload scan）",
+    "P4F-2 U2 lineage binding（organization/task/action/proposal/evidence 同链证明）",
+    "P4F-3 tests → regression → tsc → commit → push → PHASE 4 批次送审 → 逐字归档 → compare.mjs → durable state",
+    "P4F-4 U3 learning dataset projection / immutable learning evidence（复用 rsi-evidence-ledger）",
+    "P4F-5 U4 offline evaluation（明确分母与 UNKNOWN/PARTIAL/MANUAL_REVIEW 语义）",
+    "P4F-6 U5 meta-improvement candidate proposal（只提建议，必须经外部 Judge）"
   ],
   "full_autonomous_internal_execution": "VERIFIED",
   "dispatcher_acceptance": {
@@ -9323,7 +9324,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-05T18:32:54.257Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-05T18:35:13.007Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -9696,5 +9697,25 @@
       "regression": "93 files / 947 tests PASS",
       "github_ci": "NOT_OBSERVED"
     }
+  },
+  "phase4_u1_verdict": {
+    "message_id": "MSG-20261005-55",
+    "verdict": "PASS WITH REVISE / NOT CLOSED",
+    "reviewed_head": "5510401f",
+    "archive_verified": "FULL_COPY_OK",
+    "pass": [
+      "16 维 canonical 结构",
+      "lineage 三元组必填（PRESENCE 级）",
+      "projectLearningDataset 纯只读",
+      "observationOnly / autoPolicyMutation=FORBIDDEN / autoPromotion=OFF"
+    ],
+    "revise": [
+      "静默类型强转（\"1.23\" → 42.5；\"true\"/\"false\" → boolean）必须 REJECT",
+      "humanIntervention 缺失被标成 false（应为 null/UNKNOWN）",
+      "success 与 finalOutcome 可自相矛盾（须以 finalOutcome 为 SSOT 或强制一致性）",
+      "raw-payload 检查只扫顶层（需递归）"
+    ],
+    "lineage_note": "当前只能记 LINEAGE_PRESENCE = PASS；LINEAGE_BINDING = PASS 由 U2 证明",
+    "evaluation_note": "U4 必须定义 successRate 分母与 UNKNOWN/PARTIAL/MANUAL_REVIEW 语义"
   }
 }
