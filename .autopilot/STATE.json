@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-40",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T22:13:35.934Z",
+  "updated_at": "2026-10-05T22:14:17.056Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -52,7 +52,7 @@
   "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
   "next_execution_unit": "PHASE 5 U4 FINAL2 verdict archive + next unit: (1) read verdict (REVIEWED_HEAD = 566b54ad, marker [CODEX-PHASE5-U4FINAL2]); (2) write work/stage/verdict-p5u4f2-raw.txt then archive AI-ARCHITECT-INBOX.md (MSG-20261005-78) + compare.mjs FULL_COPY_OK + commit/push; (3) durable state; if REVISE do the narrow fix; if PASS follow auditor NEXT (Controlled Adoption Review contract) with code -> tests -> regression -> tsc -> commit -> push -> audit -> archive; boundaries unchanged.",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-05T22:13:35.934Z",
+  "last_tick_at": "2026-10-05T22:14:17.056Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
   "last_action": "PHASE 5 U4 FINAL2 implemented: outcome-independent trusted CohortRef (cohortId+datasetVersion+window+sorted taskRefs, no outcome fields; provenance+fingerprint+deep-freeze) required by evaluateCanaryShadow together with datasetVersion/window/cohortSize consistency; removed the verifiedOutcomeDigests equality precondition so real metric deltas are visible again; evaluationDigest binds cohortRefDigest + taskRefs + full metrics + metricDeltas. Metric-delta rollback (SUCCESS_RATE_DROP) is reachable again in tests. code 566b54ad pushed and submitted (marker [CODEX-PHASE5-U4FINAL2], REVIEWED_HEAD = 566b54ad). Local: tsc 0; canary 7/7; PHASE5 10 files / 125 tests PASS; regression 103 files / 1072 tests (only P2E-DB5).",
   "last_action_at": "2026-10-05T22:13:35.934Z",
@@ -5169,7 +5169,7 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "P5U4F2a-1 read U4 FINAL2 verdict (566b54ad) -> write verdict raw -> archive MSG-20261005-78 -> compare FULL_COPY_OK -> commit/push -> durable state",
+    "P5U4F2a-0 (in-flight) U4 FINAL2 reviewer found two blockers (next tick must read the full verdict then fix): (1) CohortRef.taskRefs are NOT member-bound to the two Phase 4 evaluations - only cohortSize === totalRecords is checked (their evidence: the test uses different taskTypes on each side yet shares TASK_REFS and passes); need member-level binding, e.g. require the trusted cohort records/taskRefs to be the actual evaluation inputs (expose an outcome-independent input identity on the Phase 4 evaluation) or have the canary re-derive the evaluations from the trusted cohort ref; (2) the canary artifact/digest must explicitly bind BOTH sides Phase 4 evaluationDigest, not only metrics (possible U4 FINAL3).",
     "P5U4F2a-2 if PASS -> open next phase-5 unit (Controlled Adoption Review) per auditor NEXT",
     "P5U4F2a-3 non-blocking debt: full SHA-256 digests, fingerprint schema upkeep, scanRawPayloadKeys bounded traversal, P2E-DB5 test-isolation"
   ],
@@ -9321,7 +9321,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-05T22:13:35.934Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-05T22:14:17.056Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
