@@ -144319,3 +144319,218 @@ FINAL_ACCEPTANCE_HEAD = 0f7f7ac
 
 最终结论：SI-RSI Unification v1 的“逻辑统一”已满足关闭条件，正式 PASS / CLOSED，无需 FINAL-2。Step 3 真实运行时接线仍未授权；SI-COST-OPTIMIZATION 现在仅升级到 READY_FOR_DESIGN。
 ```
+
+### [MSG-20261005-30] SI-COST-OPTIMIZATION 设计 — VERDICT = **PASS WITH REVISE / APPROVED FOR STAGED IMPLEMENTATION**（3.1=A / 3.2=B / 3.3=A（C2）/ 3.4=A / 3.5=A；`C1 IMPLEMENTATION = AUTHORIZED`；C2/C3 设计通过、实施待前置阶段 PASS）（新会话 https://chatgpt.com/c/6ac385db-cb60-83ec-9754-c7a30633a8c5）
+
+```text
+DECISION
+
+VERDICT = PASS WITH REVISE / APPROVED FOR STAGED IMPLEMENTATION
+
+3.1–3.5 裁定如下：
+
+项目	裁定	结论
+3.1 Cost Ledger	A	新建 AiCostLedgerEntry，独立 append-only 成本事实源
+3.2 Budget Usage	B	禁止 AiBudgetUsage 第二事实源；usage 必须从 ledger 聚合
+3.3 Model Cache	A	建立安全持久化 AiModelCacheEntry，但放入 C2
+3.4 Necessity Gate	A	rsi-model-router / Model Gateway 为唯一强制咽喉
+3.5 Budget Enforcement	A	同一 Model Gateway 强制；RSI Runtime 只读展示
+
+C1 → C2 → C3 分批实现：APPROVED。
+每批独立 Implementation Audit，不允许一次跨批扩大边界。
+
+KEEP
+
+保持以下设计不变：
+
+DETERMINISTIC FIRST → AI ONLY WHEN NEEDED
+LEVEL_0_RULE = DEFAULT
+SQL / validation / reconciliation / state machine / rule engine 不得迁给 LLM
+RULE_SOLVABLE → MODEL_CALL_FORBIDDEN
+UNKNOWN / ambiguous escalation 状态 fail-closed
+strong model 不允许调用方直接指定绕过 Gateway
+costMicros = INTEGER：APPROVED
+禁止保存：
+raw prompt
+raw model response
+credentials
+customer-sensitive payload
+没有真实流量时指标必须：
+NOT_YET_MEASURABLE
+禁止伪造「90% zero-token」之类结果。
+CHANGE
+1. 3.2 的 B 需要明确
+
+B ≠ 不持久化预算配置。
+
+推荐：
+
+AiBudgetPolicy = durable configuration
+AiCostLedgerEntry = durable usage fact
+
+但：
+
+AiBudgetUsage = FORBIDDEN
+
+即：
+
+Budget Limit 来自 policy；Budget Consumption 永远从 ledger 聚合。
+
+这样 restart 后不会把使用量清零，也不存在两个 usage truth。
+
+层级优先级固定：
+
+PLATFORM → ORGANIZATION → ACCOUNT → INCIDENT/TASK
+
+更具体层级只能进一步收紧，不得突破父级预算。
+
+2. Cache 不应机械复制 Ledger 的 append-only 策略
+
+AiCostLedgerEntry：
+
+tenant trigger + append-only trigger + manifest + real PG regression = REQUIRED
+
+AiModelCacheEntry：
+
+tenant isolation + immutable identity/content + manifest + real PG regression = REQUIRED
+
+但不建议直接套同一个永久禁止 DELETE 的 append-only trigger。
+
+Cache 是可丢弃派生数据，不是审计事实源。应允许受控 TTL/GC/eviction。
+
+必须保证：
+
+cache key 不可变
+cached result 不可原地改写成另一结果
+stale = MISS
+ruleVersion mismatch = MISS
+organization mismatch = MISS
+高风险任务不得 stale fallback。
+3. Strong escalation 必须防止循环升级
+
+推荐状态机：
+
+LEVEL_0_RULE
+→ deterministic unresolved
+→ LEVEL_1_LOW_COST
+→ schema validation
+→ deterministic quality evaluator
+→ bounded quality decision
+→ 仅满足明确升级条件
+→ LEVEL_2_STRONG
+
+不得：
+
+cheap failed → retry → retry → strong → retry → strong...
+
+必须有 maxAttempt / maxEscalation。
+
+RISKS
+
+主要剩余风险有四个：
+
+Budget race
+并发调用同时看到“预算尚未耗尽”，随后一起越界。C2 必须证明并发预算判定不会无限超支。
+
+Cache tenant leakage
+任何 tenant-scoped 数据漏掉 organizationId 都可能产生跨租户复用，这是 P0 级问题。
+
+Caller bypass
+如果还有任意 provider client 能绕过 rsi-model-router，OPT-4 就不能 CLOSED。
+
+LLM Judge 自我授权
+Judge 不得成为“模型决定自己可以继续花更多 token”的唯一依据；deterministic gate 必须在前，且 escalation 上限固定。
+
+TEST
+
+C1 至少证明：
+
+rule-solvable → MODEL_CALL_FORBIDDEN
+unknown → no expensive auto-escalation
+caller 无法绕过 Necessity Gate
+cheap→strong 只能通过 quality gate
+retry/escalation bounded
+cache identity contract 包含全部安全字段
+
+C2 必须使用 真实 PostgreSQL 证明：
+
+ledger restart 后仍存在
+duplicate callId 不双记账
+tenant isolation
+ledger UPDATE/DELETE 被拒绝
+budget restart 后不归零
+platform/org/account/incident-task hierarchy 正确
+cache 跨 tenant MISS
+ruleVersion mismatch MISS
+stale MISS
+并发预算耗尽后不会 retry storm。
+
+并同步：
+
+tools/tenant-triggers/*.json
+
+以及对应 schema/trigger 清单。
+
+C3 验证：
+
+admin projection 与 ledger 聚合一致
+Cost Safe Mode 不影响：
+LEVEL_0_RULE
+health check
+critical alert
+无真实调用时统计正确显示 NOT_YET_MEASURABLE
+existing RSI / Recovery SI regression 全绿。
+NEXT
+
+授权下一步仅为 C1 Implementation。
+
+顺序：
+
+C1
+Necessity Gate + cache identity contract + cheap→strong quality contract
+
+→ Implementation Audit
+
+通过后：
+
+C2
+AiCostLedgerEntry + AiBudgetPolicy + AiModelCacheEntry + PG enforcement
+
+→ Implementation Audit
+
+最后：
+
+C3
+policy + observability projection
+
+→ Final Audit。
+
+不得提前进行 runtime network wiring。
+
+PRODUCTION
+
+确认：
+
+REAL_MODEL_NETWORK = HOLD
+PAID_MODEL_CALLS = HOLD
+EXTERNAL_WRITE = HOLD
+PAYMENT = HOLD
+TRANSPORT = HOLD
+PRODUCTION_CREDENTIALS = HOLD
+PRODUCTION_ENABLEMENT = HOLD
+
+P2_F = HOLD
+P2_G = HOLD
+
+RUNTIME_WIRING = NONE
+STEP_3_RUNTIME_POLICY_WIRING = NOT_AUTHORIZED
+
+本任务 不构成任何真实模型调用授权。
+
+v1 只允许：
+
+local simulation adapter / fake provider / deterministic fixtures / zero external model spend。
+
+C1 IMPLEMENTATION = AUTHORIZED。
+C2/C3 = DESIGN APPROVED, IMPLEMENTATION SUBJECT TO PREVIOUS STAGE PASS。
+```

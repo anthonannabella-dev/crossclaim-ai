@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-22",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T14:10:00.000Z",
+  "updated_at": "2026-10-05T14:30:00.000Z",
   "previous_head": "8064f07",
   "architect_decision_pending": true,
   "blocked_scope": null,
@@ -20,7 +20,7 @@
   "ci_run": "36949295897",
   "ci_result": "completed_success",
   "fix_pr": "https://github.com/anthonannabella-dev/crossclaim-ai/pull/10",
-  "channel_status": "HEALTHY（HOST 已开启新审计会话 https://chatgpt.com/ 空会话；旧会话 https://chatgpt.com/c/6ac1cdf0-1ec8-83ec-8036-0e66fcf5c6b9 保留为历史，含 MSG-22..29 全部逐字归档）",
+  "channel_status": "HEALTHY（主审计会话 = https://chatgpt.com/c/6ac385db-cb60-83ec-9754-c7a30633a8c5（HOST 新开；MSG-20261005-30 起）；历史会话 https://chatgpt.com/c/6ac1cdf0-1ec8-83ec-8036-0e66fcf5c6b9 保留 MSG-22..29 逐字归档）",
   "pending_verdict_unarchived": null,
   "b2_status": "PASS（MSG-20260930-10 工程修复 + MSG-20260930-11 集成 PASS/MERGE APPROVED）",
   "protocol": "DUAL_CHANNEL_WAKEUP（GitHub = 正式总线 / ChatGPT Web = 仅唤醒）",
@@ -50,13 +50,13 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "ACTIVE",
-  "next_execution_unit": "SI-COST-OPTIMIZATION 设计裁决 → 按 C1 实施（零 Schema 契约层：AI Necessity Gate 位于 Model Gateway 咽喉 + cache identity 契约 + cheap→strong quality gate 契约）→ Implementation Audit；C2/C3 各自独立送审",
+  "next_execution_unit": "C1 IMPLEMENTATION（已授权）：AI Necessity Gate（放在 rsi-model-router / Model Gateway 唯一咽喉；RULE_SOLVABLE / HIGH_CONFIDENCE → MODEL_CALL_FORBIDDEN；未知 fail-closed）+ cache identity contract（全部安全字段；stale/ruleVersion/organization mismatch = MISS）+ cheap→strong quality contract（schema validation → deterministic evaluator → bounded escalation，maxAttempt/maxEscalation 固定）→ C1 Implementation Audit。",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-05T14:10:00.000Z",
+  "last_tick_at": "2026-10-05T14:30:00.000Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "SI-COST-OPTIMIZATION 设计/实施边界送审（READY_FOR_DESIGN → DESIGN_SUBMITTED_PENDING_VERDICT，C1/C2/C3 分期 + 5 项分岔）",
-  "last_action_at": "2026-10-05T14:10:00.000Z",
-  "next_action": "等 SI-COST-OPTIMIZATION 设计裁决（C1 优先：Necessity Gate + cache identity + quality gate 契约）",
+  "last_action": "SI-COST-OPTIMIZATION 设计裁决捕获（MSG-20261005-30）：3.1=A / 3.2=B / 3.3=A / 3.4=A / 3.5=A；C1 IMPLEMENTATION = AUTHORIZED（C2/C3 设计通过、实施待前置 PASS）",
+  "last_action_at": "2026-10-05T14:30:00.000Z",
+  "next_action": "实施 C1（零 Schema 契约层）并送 C1 Implementation Audit",
   "current_head": "054ab732",
   "last_completed_head": "054ab732",
   "reviewed_head": "070daf1",
@@ -5199,9 +5199,9 @@
   "awaiting_verdict": "EXACT-ORDER REPLAY 证据已送审（comment 5979262070）；shared/staging deploy 解禁待裁决",
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-05T11:11:08.350Z",
-    "head": "63cd5a74",
-    "acceptance_head": "63cd5a74",
+    "computed_at": "2026-10-05T11:13:41.140Z",
+    "head": "2ced94da",
+    "acceptance_head": "2ced94da",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5360,27 +5360,27 @@
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=63cd5a74 ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
+        "evidence": "acceptance_head=2ced94da ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
       },
       "L1-05_pg_regression_passed": {
         "status": "UNVERIFIED",
-        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head 63cd5a74（且中间存在非簿记变更）"
+        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head 2ced94da（且中间存在非簿记变更）"
       },
       "L1-06_fresh_db_migration_passed": {
         "status": "UNVERIFIED",
-        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head 63cd5a74（且中间存在非簿记变更）"
+        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head 2ced94da（且中间存在非簿记变更）"
       },
       "L1-07_api_typecheck_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head 63cd5a74（且中间存在非簿记变更）"
+        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head 2ced94da（且中间存在非簿记变更）"
       },
       "L1-08_web_typecheck_build_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head 63cd5a74（且中间存在非簿记变更）"
+        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head 2ced94da（且中间存在非簿记变更）"
       },
       "L1-09_no_skipped_critical_tests": {
         "status": "UNVERIFIED",
-        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head 63cd5a74（且中间存在非簿记变更）"
+        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head 2ced94da（且中间存在非簿记变更）"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
@@ -5389,19 +5389,19 @@
       },
       "L1-11_docs_state_consistent": {
         "status": "UNVERIFIED",
-        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head 63cd5a74（且中间存在非簿记变更）"
+        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head 2ced94da（且中间存在非簿记变更）"
       },
       "L1-12_schema_invariants_verified": {
         "status": "UNVERIFIED",
-        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head 63cd5a74（且中间存在非簿记变更）"
+        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head 2ced94da（且中间存在非簿记变更）"
       },
       "L1-13_negative_paths_covered": {
         "status": "UNVERIFIED",
-        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head 63cd5a74（且中间存在非簿记变更）"
+        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head 2ced94da（且中间存在非簿记变更）"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
         "status": "UNVERIFIED",
-        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head 63cd5a74（且中间存在非簿记变更）"
+        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head 2ced94da（且中间存在非簿记变更）"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
@@ -8851,7 +8851,7 @@
     "invariant": "ACTION_GUARD_DRY_RUN_ALLOW != EXECUTION_AUTHORIZATION；零审批消费 / 零 executor / 零业务事实写入 / 零外写；L5 永久拒绝"
   },
   "si_cost_optimization": {
-    "status": "DESIGN_SUBMITTED_PENDING_VERDICT",
+    "status": "C1_IMPLEMENTATION_AUTHORIZED",
     "priority": "P1",
     "dependency": "SI_RSI_UNIFICATION_PASS_CLOSED",
     "registered_at": "2026-10-05T12:45:00.000Z",
@@ -8876,7 +8876,43 @@
       "Schema Delta 触发器/清单同步要求",
       "costMicros 整数微单位是否认可",
       "v1 是否确认仅本地仿真（无真实网络/付费）"
-    ]
+    ],
+    "design_verdict": {
+      "message_id": "MSG-20261005-30",
+      "verdict": "PASS WITH REVISE / APPROVED FOR STAGED IMPLEMENTATION",
+      "reviewed_head": "2ced94da",
+      "rulings": {
+        "3.1_cost_ledger": "A（新建 AiCostLedgerEntry，独立 append-only 成本事实源）",
+        "3.2_budget_usage": "B（AiBudgetUsage = FORBIDDEN；usage 永远从 ledger 聚合；但 AiBudgetPolicy = durable configuration 必须持久化）",
+        "3.3_model_cache": "A（AiModelCacheEntry；放入 C2；非 append-only，允许受控 TTL/GC/eviction）",
+        "3.4_necessity_gate": "A（rsi-model-router / Model Gateway 为唯一强制咽喉）",
+        "3.5_budget_enforcement": "A（同一 Model Gateway 强制；RSI Runtime 只读展示）"
+      },
+      "staged": "C1 → C2 → C3 分批：APPROVED（每批独立 Implementation Audit）",
+      "c1_authorized": "C1 = Necessity Gate + cache identity contract + cheap→strong quality contract",
+      "c2_scope": "AiCostLedgerEntry + AiBudgetPolicy + AiModelCacheEntry + PG enforcement（tenant/append-only 清单同步 + 真实 PG 回归）",
+      "c3_scope": "policy + observability projection（admin projection 与 ledger 聚合一致；Cost Safe Mode 不影响 L0/health/critical alert）",
+      "c1_change_requirements": [
+        "3.2=B 需明确：B ≠ 不持久化预算配置；AiBudgetPolicy = durable config；AiBudgetUsage = FORBIDDEN；层级 PLATFORM → ORGANIZATION → ACCOUNT → INCIDENT/TASK，子级只能更严",
+        "Cache 不套用永久禁删 append-only：key 不可变 / 结果不可原地改写 / stale=MISS / ruleVersion mismatch=MISS / organization mismatch=MISS / 高风险不得 stale fallback",
+        "Strong escalation 必须防循环升级：maxAttempt / maxEscalation 固定；禁止 cheap→retry→strong→retry..."
+      ],
+      "c1_tests_required": [
+        "rule-solvable → MODEL_CALL_FORBIDDEN",
+        "unknown → no expensive auto-escalation",
+        "caller 无法绕过 Necessity Gate",
+        "cheap→strong 只能通过 quality gate",
+        "retry/escalation bounded",
+        "cache identity contract 包含全部安全字段"
+      ],
+      "risks": [
+        "Budget race（C2 需证明并发不无限超支）",
+        "Cache tenant leakage（P0：tenant-scoped 必须含 organizationId）",
+        "Caller bypass（任意 provider client 绕过 router 则 OPT-4 不能 CLOSED）",
+        "LLM Judge 自我授权（deterministic gate 必须在前 + escalation 上限固定）"
+      ],
+      "archive": "AI-ARCHITECT-INBOX.md#MSG-20261005-30"
+    }
   },
   "si_rsi_unification": {
     "status": "PASS_CLOSED",

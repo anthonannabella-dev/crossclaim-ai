@@ -2528,3 +2528,19 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 未授权项继续 HOLD：REAL_MODEL_NETWORK / PAID_MODEL_CALLS（v1 仅本地仿真 adapter）/ EXTERNAL_WRITE / PAYMENT /
   TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT；P2_F = HOLD / P2_G = HOLD。
 
+## 2026-10-05T14:30Z — SI-COST-OPTIMIZATION 设计裁决捕获（MSG-20261005-30；C1 实施授权）
+- 裁决：`PASS WITH REVISE / APPROVED FOR STAGED IMPLEMENTATION`；`C1 IMPLEMENTATION = AUTHORIZED`；
+  `C2/C3 = DESIGN APPROVED, IMPLEMENTATION SUBJECT TO PREVIOUS STAGE PASS`。
+- 分岔裁定：3.1 = **A**（新建 `AiCostLedgerEntry` 独立 append-only 成本事实源）；3.2 = **B**
+  （`AiBudgetUsage = FORBIDDEN`，usage 永远从 ledger 聚合；但 `AiBudgetPolicy = durable configuration` 必须持久化；
+  层级 PLATFORM → ORGANIZATION → ACCOUNT → INCIDENT/TASK，子级只能更严）；3.3 = **A**（`AiModelCacheEntry` 放入 C2；
+  非 append-only，允许受控 TTL/GC/eviction）；3.4 = **A**（Necessity Gate 唯一咽喉 = rsi-model-router / Model Gateway）；
+  3.5 = **A**（预算强制同一咽喉；RSI Runtime 只读展示）。`costMicros = INTEGER`：APPROVED。
+- C1 修订要求（已记录）：cache key 不可变 / 结果不可原地改写 / stale·ruleVersion·organization mismatch = MISS /
+  高风险不得 stale fallback；strong escalation 必须有 `maxAttempt` / `maxEscalation`，禁止 cheap→retry→strong→retry 循环。
+- C1 必测：rule-solvable → MODEL_CALL_FORBIDDEN；unknown → 不自动升级；caller 无法绕过 Necessity Gate；
+  cheap→strong 只能过 quality gate；retry/escalation bounded；cache identity contract 含全部安全字段。
+- 主要 RISKS：Budget race（C2 证明并发不无限超支）、Cache tenant leakage（P0）、Caller bypass、LLM Judge 自我授权。
+- 归档：`AI-ARCHITECT-INBOX.md` 新增 `MSG-20261005-30`；`compare.mjs` → **FULL_COPY_OK**（142/142 行，0 缺失 / 0 多出）。
+- 通道：主审计会话切换到 HOST 新会话 `https://chatgpt.com/c/6ac385db-cb60-83ec-9754-c7a30633a8c5`（历史 `6ac1cdf0-…` 保留 MSG-22..29）。
+
