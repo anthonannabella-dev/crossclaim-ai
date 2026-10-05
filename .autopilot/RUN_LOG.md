@@ -1937,3 +1937,16 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - HTTP/租户边界实测：未认证 401 · VIEWER 403（后端强制，前端无法绕过）· OWNER 200（只读、**不重算**）·
   未知 factId 404 · **跨租户访问 A 的证据对 B 租户返回 404**（不泄露存在性）。
 - 边界：本批未改任何代码；`NO_FILING / NO_EXTERNAL_WRITE` 保持，C18 真实 provider 仍 HOLD。
+
+## 2026-10-05T02:59:44.539Z — BG-001 平台域只读 adapter 闭环证据（P1，内部可做）
+- 套件实测（apps/api 本地，退出码 0）：**11 文件 / 88 例全绿** —— `amazon-sp-read-only-adapter`(10)、
+  `amazon-sp-connector-runner-db`(9)、`connection-lifecycle`(7)、`connection-lifecycle-db`(3)、`connection-onboarding-db`、
+  `connectors`(8)、`connectors-db`(5)、`workflow-connections`(13)、`workflow-connections-db`(8)、
+  `platform-write-adapter-capability`(8)、`api-connector-runtime`(3)。
+- 只读边界实测：编排器拉取→归一化→落 ClaimItem（带指纹）、畸形记录进 quarantine、cursor 前进；重复拉取**全部幂等**；
+  normalizer 版本变化只记事件不重建记录；**编排器不调用规则引擎、不碰 Settlement / Payment / Billing**；
+  connector 缺 connectorId 或只读 scope 不符 → 直接拒绝且**零写入**。
+- 连接 / 账号 lineage 实测：列表不返回 credentialRef 取值、跨租户不可见、OPS 无权读取；状态迁移与审计同事务
+  （审计失败 → 状态回滚，无痕变更被拒）；CAS 并发只放行一个；credential rotation 不改变 PlatformAccount identityVersion；
+  **未绑定账户的连接不得被激活**（DB 不变量）；轮换只记录形状变化，清空 → NEEDS_AUTH。
+- 边界：本批未改任何代码；READ_ONLY / NO_EXTERNAL_WRITE 保持，真实 Amazon/PAC 凭据仍属 HOST_ACTION_REQUIRED。
