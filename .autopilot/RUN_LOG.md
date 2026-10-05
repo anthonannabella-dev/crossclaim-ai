@@ -2095,3 +2095,9 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 跨域 E2E：Carrier/Amazon → PREPARE_PACKAGE + READY_FOR_EXECUTION；Customs → REQUEST_AUTHORIZATION；Independent → REQUEST_EVIDENCE；
   零外写（工具调用计数 0）、计划确定性、陈旧 snapshot fail-closed、READY_FOR_EXECUTION 带 Action Guard 前置。
 - 未新增 Schema；未接运行时；未用 LLM 参与金额计算。
+
+## 2026-10-05T04:17:19.951Z — Recovery SI Phase 1：Audit Pack 送审（Lane B，异步）
+- REVIEWED_HEAD = `97dfb387`；耐久记录 `docs/releases/RECOVERY-SI-PHASE1-AUDIT-REQUEST.md`。
+- 送审请求：①Phase 1 是否可记 CLOSED；②Phase 1 不接运行时/不做真实 Tool 执行、Phase 2 需另行批准是否同意；③SCHEMA_DELTA_REQUIRED = NO 是否同意；④如需补证据请列最小集合。
+- 唤醒投递异常（诚实记录）：右侧会话在投放本条 wake 时出现 **5 次重复消息** + 页面显示 `Unknown error`（重试按钮），已清空草稿，未再重复发送；等待裁决，不阻塞其它工作。
+- 说明：耐久记录 + 仓库文件才是权威来源；会话侧异常不影响已提交证据。
