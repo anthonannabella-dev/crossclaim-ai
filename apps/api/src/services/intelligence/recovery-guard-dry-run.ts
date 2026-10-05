@@ -28,6 +28,7 @@ import type { RecoveryToolRegistry } from './recovery-tool-registry';
 import { verifyRecoveryPlan } from './recovery-verifier';
 import type { ProductionControlPlane, ControlPlaneSnapshot } from '../action-guard/control-plane';
 import type { ActionGuardResult } from '../action-guard/action-guard';
+import { CLAIM_SUBMIT_ACTION } from '../action-guard/approval-verifier';
 import { sha256Hex } from '../recovery/recovery-package';
 
 export const RECOVERY_PLAN_DIGEST_VERSION = 'plan-digest/v1';
@@ -39,9 +40,9 @@ export const RECOVERY_EXECUTION_BASIS_VERSION = 'recovery-execution-basis/v1';
  * 结果是永久拒绝且零 Guard 调用。
  */
 export const RECOVERY_GUARD_ACTION_MAP: Record<RecoveryDomain, string | null> = {
-  PLATFORM: 'claim.submit',
-  CARRIER: 'claim.submit',
-  INDEPENDENT_SITE: 'claim.submit',
+  PLATFORM: CLAIM_SUBMIT_ACTION,
+  CARRIER: CLAIM_SUBMIT_ACTION,
+  INDEPENDENT_SITE: CLAIM_SUBMIT_ACTION,
   CUSTOMS: null,
 };
 
@@ -59,7 +60,7 @@ export const RECOVERY_ACTION_GUARD_MAP: Record<RecoveryActionKind, string | null
 };
 
 /** 本模块只允许引用这些既有 catalog action；出现其它名字即视为配置错误（fail-closed） */
-export const RECOVERY_ALLOWED_GUARD_ACTIONS: readonly string[] = ['claim.submit', 'claim.prepare', 'evidence.read'];
+export const RECOVERY_ALLOWED_GUARD_ACTIONS: readonly string[] = [CLAIM_SUBMIT_ACTION, 'claim.prepare', 'evidence.read'];
 
 export interface RecoveryExecutionBasis {
   basisVersion: string;

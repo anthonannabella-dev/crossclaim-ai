@@ -16,6 +16,7 @@
 
 import type { ProductionControlPlane } from '../action-guard/control-plane';
 import type { ActionGuardResult } from '../action-guard/action-guard';
+import { APPEAL_SUBMIT_ACTION, CLAIM_SUBMIT_ACTION, PLATFORM_WRITE_ACTION } from '../action-guard/approval-verifier';
 import type { CustomerRecoveryState } from './customer-recovery-state';
 import { prioritizeOpportunities } from './recovery-prioritizer';
 import { planRecovery, type RecoveryPlanAction } from './recovery-planner';
@@ -30,7 +31,7 @@ import {
 export const P2_E_GUARD_ACTION = 'claim.prepare' as const;
 
 /** 明确禁止：P2-D 的 external submission 门禁不得被当作持久化前提。 */
-export const P2_E_FORBIDDEN_GUARD_ACTIONS: readonly string[] = ['claim.submit', 'platform.write', 'appeal.submit'];
+export const P2_E_FORBIDDEN_GUARD_ACTIONS: readonly string[] = [CLAIM_SUBMIT_ACTION, PLATFORM_WRITE_ACTION, APPEAL_SUBMIT_ACTION];
 
 export const P2_E_PERSIST_GATE_BOUNDARY = {
   guardAction: P2_E_GUARD_ACTION,

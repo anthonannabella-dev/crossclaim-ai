@@ -52,6 +52,8 @@ export interface ProviderAdapter {
 }
 
 export const PROVIDER_ADAPTER_BOUNDARY = {
+  /** PHASE 3 FINAL U1: only factory-created sandbox adapters are trusted; caller-declared simulated=true grants nothing. */
+  simulatedProvenance: 'FACTORY_WEAKSET',
   realNetwork: 'HOLD',
   paidCalls: 'HOLD',
   externalWrite: 'HOLD',
@@ -160,6 +162,17 @@ export function normalizeProviderResult(raw: unknown): ProviderInvokeResult {
   };
 }
 
+/**
+ * Trusted sandbox provenance (PHASE 3 FINAL U1).
+ * Only adapters created by this module factory are registered here, so a caller cannot
+ * self-authorize the sandbox path by declaring `capability.simulated = true`.
+ */
+const TRUSTED_SANDBOX_ADAPTERS = new WeakSet<ProviderAdapter>();
+
+export function isTrustedSandboxProviderAdapter(adapter: ProviderAdapter): boolean {
+  return TRUSTED_SANDBOX_ADAPTERS.has(adapter);
+}
+
 export type MockProviderBehavior = 'SUCCESS' | 'FAIL' | 'DEGRADED';
 
 /** sandbox / mock provider（无网络、无凭据；仅用于契约与失败路径验证） */
@@ -169,7 +182,7 @@ export function createMockProviderAdapter(options: {
   onInvoke?: () => void;
 }): ProviderAdapter {
   const behavior = options.behavior ?? 'SUCCESS';
-  return {
+  const adapter: ProviderAdapter = {
     providerName: options.providerName,
     capability: { simulated: true, network: false, paid: false, write: false, moneyMovement: false },
     async invoke(): Promise<ProviderInvokeResult> {
@@ -183,4 +196,6 @@ export function createMockProviderAdapter(options: {
       return { status: 'SUCCEEDED', providerRef: 'mock:' + options.providerName, reasonCodes: ['MOCK_PROVIDER_OK'], sideEffectConfirmedAbsent: false };
     },
   };
+  TRUSTED_SANDBOX_ADAPTERS.add(adapter);
+  return adapter;
 }

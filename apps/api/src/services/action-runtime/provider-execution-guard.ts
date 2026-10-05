@@ -9,6 +9,10 @@
  */
 
 export const PROVIDER_EXECUTION_BOUNDARY = {
+  /** PHASE 3 FINAL: idempotency key must be bound to a request fingerprint. */
+  idempotencyFingerprint: 'REQUIRED (same key + different fingerprint => CONFLICT)',
+  /** PHASE 3 FINAL: credential ref must match the requesting provider AND organization. */
+  credentialBinding: 'PROVIDER_AND_ORGANIZATION_MUST_MATCH (fail-closed)',
   realCredentials: 'ABSENT（port 只返回 opaque ref）',
   externalWrite: 'HOLD',
   exactlyOnce: 'IDEMPOTENCY_KEY_REQUIRED（重放不二次执行）',
@@ -51,6 +55,13 @@ export async function resolveProviderCredential(
     // 形似密钥本体 → 拒绝（必须是不透明引用）
     return { ok: false, reason: 'PROVIDER_CREDENTIAL_REF_NOT_OPAQUE' };
   }
+  // PHASE 3 FINAL U2: the opaque ref must also be bound to the requesting provider/tenant.
+  if (ref.providerName !== input.providerName) {
+    return { ok: false, reason: 'PROVIDER_CREDENTIAL_PROVIDER_MISMATCH' };
+  }
+  if (ref.organizationId !== input.organizationId) {
+    return { ok: false, reason: 'PROVIDER_CREDENTIAL_TENANT_MISMATCH' };
+  }
   return { ok: true, ref };
 }
 
@@ -58,6 +69,8 @@ export async function resolveProviderCredential(
 
 export interface ProviderExecutionRecord {
   idempotencyKey: string;
+  /** PHASE 3 FINAL U3: stable request fingerprint (organizationId/providerName/action/payload). */
+  fingerprint: string;
   status: 'SUCCEEDED' | 'FAILED' | 'UNKNOWN';
   providerRef: string | null;
   attempts: number;
@@ -65,27 +78,53 @@ export interface ProviderExecutionRecord {
 
 export type IdempotencyBegin =
   | { outcome: 'WON'; key: string }
-  | { outcome: 'DUPLICATE'; key: string; record: ProviderExecutionRecord };
+  | { outcome: 'DUPLICATE'; key: string; record: ProviderExecutionRecord }
+  | { outcome: 'CONFLICT'; key: string; record: ProviderExecutionRecord };
 
+/**
+ * PHASE 3 FINAL U3: asynchronous port, so a durable (DB/Prisma unique-constraint) implementation
+ * can replace the in-memory one. Only WON is a single winner, keeping exactly-once enforceable.
+ * CONFLICT means the same key was reused with a different fingerprint: never replay it.
+ */
 export interface ProviderIdempotencyStore {
-  begin(input: { idempotencyKey: string }): IdempotencyBegin;
-  complete(input: { idempotencyKey: string; status: ProviderExecutionRecord['status']; providerRef?: string | null }): ProviderExecutionRecord;
+  begin(input: { idempotencyKey: string; fingerprint: string }): Promise<IdempotencyBegin>;
+  complete(input: {
+    idempotencyKey: string;
+    status: ProviderExecutionRecord['status'];
+    providerRef?: string | null;
+  }): Promise<ProviderExecutionRecord>;
   get(idempotencyKey: string): ProviderExecutionRecord | null;
 }
 
-/** 进程内 exactly-once 账（dev/sandbox 用；durable 版本走既有 DB 约束，不新增第二账本） */
+/** PHASE 3 FINAL U3: fingerprint ties one idempotency key to exactly one intended request. */
+export function buildProviderIdempotencyFingerprint(input: {
+  organizationId: string;
+  providerName: string;
+  action: string;
+  payloadRef: string;
+  payloadDigest: string;
+}): string {
+  return [input.organizationId, input.providerName, input.action, input.payloadRef, input.payloadDigest].join('|');
+}
+
+/** In-memory exactly-once port (sandbox implementation; the durable version relies on a DB constraint). */
 export function createInMemoryIdempotencyStore(): ProviderIdempotencyStore {
   const records = new Map<string, ProviderExecutionRecord>();
   return {
-    begin({ idempotencyKey }) {
+    async begin({ idempotencyKey, fingerprint }) {
       const key = idempotencyKey.trim();
       if (key === '') throw new Error('PROVIDER_IDEMPOTENCY_KEY_REQUIRED');
+      if (String(fingerprint ?? '').trim() === '') throw new Error('PROVIDER_IDEMPOTENCY_FINGERPRINT_REQUIRED');
       const existing = records.get(key);
-      if (existing) return { outcome: 'DUPLICATE', key, record: existing };
-      records.set(key, { idempotencyKey: key, status: 'UNKNOWN', providerRef: null, attempts: 1 });
+      if (existing) {
+        return existing.fingerprint === fingerprint
+          ? { outcome: 'DUPLICATE', key, record: existing }
+          : { outcome: 'CONFLICT', key, record: existing };
+      }
+      records.set(key, { idempotencyKey: key, fingerprint, status: 'UNKNOWN', providerRef: null, attempts: 1 });
       return { outcome: 'WON', key };
     },
-    complete({ idempotencyKey, status, providerRef }) {
+    async complete({ idempotencyKey, status, providerRef }) {
       const key = idempotencyKey.trim();
       const current = records.get(key);
       if (!current) throw new Error('PROVIDER_IDEMPOTENCY_UNKNOWN_KEY');
