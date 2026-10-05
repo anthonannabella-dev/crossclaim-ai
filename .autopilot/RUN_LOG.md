@@ -2226,3 +2226,10 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 必修 B：复用可信 ProductionControlPlane（snapshotFor / evaluateWithoutAudit），SI_SELF_SUPPLIED_CAPABILITIES = FORBIDDEN。
 - 证据扩为 D1–D10（D9 mapping/Control Plane truth；D10 planDigest 性质）；planDigest 采用 canonical projection + sha256，排除 generatedAt/objective/UI 字段。
 - 下一步：实施 P2-D dry-run → 送 P2-D Implementation Audit；不得进入 P2-E / P2-G。
+
+## 2026-10-05T05:45:05.805Z — Recovery SI P2-D v1 dry-run 实施 + Implementation Audit 送审（REVIEWED_HEAD 7c3efa11）
+- 必修 A：新增静态 Guard-action 映射（PLATFORM/CARRIER/INDEPENDENT_SITE → claim.submit；CUSTOMS → null；EXECUTE_READ_ONLY_CHECK → evidence.read；PREPARE_PACKAGE → claim.prepare）+ 白名单；未映射 → DENY 且零 Guard 调用；未复用 RSI policy 映射、未偷换 customs.recovery.start。
+- 必修 B：capabilities 仅来自 ProductionControlPlane.snapshotFor + evaluateWithoutAudit；SI 从不传 capabilities；degraded → DENY 零调用。
+- 证据 D1–D10；execution basis 十字段含 guardAction；planDigest = plan-digest/v1 canonical projection + sha256（顺序无关、generatedAt 不敏感）。
+- 测试：recovery-si-phase2-d 10/10 + 回归 51/51 = 61/61 PASS；tsc exit 0。
+- 边界：APPROVAL_CONSUMPTION / EXECUTOR_INVOCATION / BUSINESS_FACT_WRITE / EXTERNAL_ACTION = FORBIDDEN；P2_E/P2_F/P2_G 未授权；FINAL_ACCEPTANCE_HEAD = 0f7f7ac。
