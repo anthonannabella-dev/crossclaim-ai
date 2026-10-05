@@ -2554,3 +2554,11 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 证据：docs/releases/SI-COST-OPTIMIZATION-C1-EVIDENCE.md；送审：docs/releases/SI-COST-OPTIMIZATION-C1-IMPLEMENTATION-AUDIT-REQUEST.md（REVIEWED_HEAD = a1ba1dee）。
 - 边界不变：REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT = HOLD；P2_F / P2_G = HOLD；RUNTIME_WIRING = NONE。
 
+
+## 2026-10-05T15:45Z — C1 FINAL-2（CHANGE A/B）完成并送审（实现 HEAD = e6311195）
+- 裁决 MSG-20261005-31 = PASS WITH REVISE：Necessity Gate / Cache Identity / Gateway 咽喉控制 = PASS；Cheap→Strong bounded escalation = REVISE（C1_FINAL2_REQUIRED = YES）。
+- CHANGE A：strong 授权内部化 —— 移除 caller 自报 escalation 的授权效力；授权链 = preceding LOW_COST attempt（Gateway 自产）+ server-side deterministic quality evaluator → decideAiEscalation → strong（≤1 次）；未配置 evaluator 不升级；provider 失败按确定性 FAIL 允许一次有界升级；per-task 内部 attempts（含 strong）/escalations/strongFailed，触顶或 strong 失败后同 task 再调用不再触达 provider。
+- CHANGE B：AI_ESCALATION_HARD_CAPS = {2,1} + clampAiEscalationLimits（min(requested, hardCap)），hostMayRaiseHardCaps = false。
+- 验证：tsc exit 0；C1 定向 6 文件 / 48 例 PASS；rsi-* 全量 46 文件 / 250 例 PASS；prisma validate valid（未改 Schema）。
+- 送审：docs/releases/SI-COST-OPTIMIZATION-C1-FINAL2-REQUEST.md（REVIEWED_HEAD = e6311195）。
+
