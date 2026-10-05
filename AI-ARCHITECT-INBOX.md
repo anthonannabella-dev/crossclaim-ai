@@ -150718,3 +150718,197 @@ PRODUCTION_READY = false
 U1 现在可以正式 CLOSED。下一步建议先做 P5-U2 Rollback Plan，而不是直接进入 Controlled Config Proposal。
 ```
 
+### [MSG-20261005-71] PHASE 5 U2 裁决 = PASS WITH REVISE / NOT CLOSED（VERIFIED_APPROVED_VERDICT_GATE / ROLLBACK_PLAN_PROVENANCE / ROLLBACK_PLAN_ANTI_TAMPER / ROLLBACK_EXECUTION_BOUNDARY = PASS；CANDIDATE_TARGET_BINDING = REVISE / BASELINE_AUTHORITY = REVISE；PHASE5_U2_FINAL_REQUIRED = YES；NEXT = U2 FINAL：rollback target 必须来自可信 approved candidate，baseline 必须来自 trusted baseline snapshot/read boundary）， reviewed ref 8e205b19
+
+```text
+DECISION
+
+VERIFIED_APPROVED_VERDICT_GATE = PASS
+ROLLBACK_PLAN_PROVENANCE = PASS
+ROLLBACK_PLAN_ANTI_TAMPER = PASS
+ROLLBACK_EXECUTION_BOUNDARY = PASS
+CANDIDATE_TARGET_BINDING = REVISE
+BASELINE_AUTHORITY = REVISE
+PHASE_5_U2 = PASS WITH REVISE / NOT CLOSED
+PHASE5_U2_FINAL_REQUIRED = YES
+Reviewed HEAD：8e205b19
+GitHub Actions：NOT_OBSERVED
+KEEP
+
+这些已经成立，可以保留：
+
+只接受 isVerifiedApprovalVerdict(verdict) === true；
+REJECTED verdict fail-closed；
+rollback plan 有 provenance + fingerprint + deep-freeze；
+clone / 手造 plan 不可信；
+rollback target 必须等于 baseline fingerprint；
+禁止 LATEST / HEAD / RESTORE_DEFAULTS 等模糊目标；
+steps 顺序、trigger 白名单都有效；
+ROLLBACK_PLAN_ONLY；
+无 execute/apply/promote/mutate 入口。
+CHANGE
+1. candidateTarget 目前还是 caller 自填
+
+当前接口实际是：
+
+纯文本
+createRollbackPlan(
+  verifiedApprovedVerdict,
+  {
+    candidateTarget: callerInput,
+    ...
+  }
+)
+
+而 ApprovalVerdict 没有 candidateTarget。
+
+所以一个真实获批的 ROUTER candidate，可以这样生成：
+
+纯文本
+candidateTarget = POLICY
+
+只要 POLICY 在白名单中，当前就会通过。
+
+因此：
+
+candidateTarget ∈ allowed targets
+
+并不等于：
+
+candidateTarget === approved candidate.target
+
+这是 U3 “delta 只能作用于 candidate target”的直接前置漏洞。
+
+2. baseline 目前只是 caller 声明的字符串
+
+现在：
+
+纯文本
+baselineConfigFingerprint = "config:baseline-v1"
+rollbackTargetFingerprint = "config:baseline-v1"
+
+能证明“两者相等”，但不能证明：
+
+这个 fingerprint 真的是该 target 当前被批准变更前的配置。
+
+目前没有看到仓库中已有可复用的 trusted config snapshot / baseline fingerprint artifact。
+
+因此现在是：
+
+caller says baseline X → rollback to X
+
+而不是：
+
+server-owned current config snapshot X → rollback to X
+
+这对真正的 Controlled Config Proposal 还不够。
+
+RISKS
+
+如果现在关闭 U2，后续可能形成：
+
+纯文本
+真实 ROUTER candidate
+→ 真实 APPROVED verdict
+→ caller 填 POLICY
+→ 生成 trusted rollback plan
+→ U3 基于这个 plan 生成 POLICY delta
+
+或者：
+
+纯文本
+caller 声明 fake baseline fingerprint
+→ trusted rollback plan
+→ proposal 与 rollback 都绑定同一个 fake baseline
+
+所有对象 provenance 都是真的，但业务来源绑定是假的。
+
+TEST
+
+U2 FINAL 最少补：
+
+rollback target 必须来源于可信 approved candidate，而不是 caller string。
+ROUTER candidate + caller 尝试 POLICY → REJECT。
+推荐二选一：
+ApprovalVerdict 增加并可信绑定 candidateTarget/candidateKind；
+或 createRollbackPlan() 同时接收 verified candidate，并要求 candidate.candidateDigest === verdict.candidateDigest。
+baseline 必须来源于 trusted baseline snapshot/read boundary。
+caller 自造 baseline fingerprint → REJECT。
+baseline snapshot target 必须等于 candidate target。
+plan 的 baselineConfigFingerprint 必须从 snapshot 派生，不让 caller直接指定。
+rollback target 仍必须等于 baseline。
+原 7/7 保持 green。
+no execute/apply/mutate 保持。
+NEXT
+
+建议做一个窄的：
+
+P5-U2 FINAL — trusted candidate-target + baseline snapshot binding
+
+推荐链路：
+
+Verified APPROVED Verdict
+→ Verified Candidate
+→ Trusted Baseline Config Snapshot
+→ ROLLBACK_PLAN_ONLY
+
+其中 baseline snapshot 至少：
+
+candidateTarget
+configVersion/configRef
+configFingerprint
+capturedAt
+snapshotDigest
+server-owned provenance + fingerprint + freeze
+
+然后 rollback plan 派生：
+
+candidateTarget = verifiedCandidate.target
+baselineConfigFingerprint = verifiedBaseline.configFingerprint
+
+caller 只应该提供：
+
+rollbackSteps + rollbackTrigger
+
+U2 FINAL 通过后，才进入：
+
+P5-U3 Controlled Config Proposal
+
+其最低门冻结为：
+
+verified APPROVED verdict
+
+verified candidate
+verified rollback plan
+trusted baseline snapshot
+
+→ PROPOSAL_ONLY controlled config delta
+
+并要求：
+
+one verdict → one proposal；
+delta target === candidate target；
+baseline fingerprint === rollback plan baseline；
+rollback plan digest 必须绑定；
+不直接修改 Policy / Guard / Router / Action Runtime。
+PRODUCTION
+
+全部继续 HOLD：
+
+REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing
+
+继续：
+
+SECOND_* = FORBIDDEN
+L5_RELAXATION = FORBIDDEN
+
+保持：
+
+MODEL_GATEWAY_RUNTIME_WIRED = false
+ACTION_RUNTIME_PRODUCTION_ENABLED = false
+META_IMPROVEMENT_INTEGRATED = false
+PRODUCTION_READY = false
+
+U2 的计划对象本身已经安全；现在只差把“给哪个 target 回滚、回滚到哪个真实 baseline”从 caller 声明升级为可信上游绑定。
+```
+
