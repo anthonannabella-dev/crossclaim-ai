@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "edcbb826",
+  "head": "766ca18f",
   "status": "RECONCILED",
   "current_task": "RSI 生产可执行闭环（7 点收口）：RSI_RUNTIME_READY = PASS；MODEL_PROVIDER_READY = 本地仿真已接线（真实网络/付费 HOLD）；PERSISTENCE_READY = ephemeral 已验证、durable 需宿主非生产 DATABASE_URL；REBOOT_RECONCILE_READY = NOT_IMPLEMENTED（下一单元）；SYSTEMD_VALIDATED = 需宿主 Linux 实机",
   "next_task": "BG-016 单一 Acceptance Head + 四份状态一致 guard（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍 HOST_ACTION_REQUIRED 或 HOLD",
@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-40",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T23:07:37.898Z",
+  "updated_at": "2026-10-05T23:16:08.184Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -50,15 +50,15 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
-  "next_execution_unit": "PHASE 5 next unit (Controlled Adoption Review): first read NEXT section of MSG-20261005-81 in AI-ARCHITECT-INBOX.md; implement per that spec; keep all boundaries; then audit + archive (MSG-20261005-82) + durable state.",
+  "next_execution_unit": "PHASE 5 U5 verdict archive + closure: (1) read verdict (REVIEWED_HEAD = 766ca18f, marker [CODEX-PHASE5-U5]); (2) write work/stage/verdict-p5u5-raw.txt then archive AI-ARCHITECT-INBOX.md (MSG-20261005-82) + compare.mjs FULL_COPY_OK + commit/push; (3) durable state; if PASS and the auditor confirms phase closure, record PHASE_5_META_IMPROVEMENT = CLOSED and follow the auditor NEXT for the next phase/unit.",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-05T23:07:37.898Z",
+  "last_tick_at": "2026-10-05T23:16:08.184Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "PHASE 5 U4 FINAL4 verdict archived (MSG-20261005-81, FULL_COPY_OK, archive commit 4bb6311e): SAME_COHORT_PROOF / EXACT_INPUT_SET_TO_EVALUATION_BINDING / VERIFIED_COHORT_RUN_PROVENANCE / CANARY_EVALUATION_DIGEST_FULL_BINDING / METRIC_DELTA_REACHABILITY / U2_ROLLBACK_ANCHOR = PASS; PHASE_5_U4 = PASS / CLOSED; PHASE5_U4_FINAL5_REQUIRED = NO. Authorized to proceed to the next phase-5 unit (Controlled Adoption Review).",
-  "last_action_at": "2026-10-05T23:01:02.525Z",
-  "next_action": "Read the NEXT section of archived verdict MSG-20261005-81 for the Controlled Adoption Review minimum requirements, then implement it (code -> tests -> regression -> tsc -> commit -> push -> audit -> archive -> durable state).",
-  "current_head": "edcbb826",
-  "last_completed_head": "edcbb826",
+  "last_action": "PHASE 5 U5 Controlled Adoption Review implemented per MSG-20261005-81 frozen gate: eligible-canary + proposal + rollback-plan input gate (no ROLLBACK_REQUIRED / INSUFFICIENT_EVIDENCE / provenance-proposal-rollback mismatch); CONTROLLED_ADOPTION_REVIEW_TICKET with 14 bindings and exact scope, provenance+fingerprint+deep-freeze; verdict APPROVED/REJECTED bound to ticket/canary/proposal/rollback digests + reviewerId/role/scope/decidedAt/reason; one-ticket-one-verdict digest-keyed replay, expiry, one-way revocation, roles EXTERNAL_JUDGE/HUMAN_OPERATOR; APPROVED means APPROVED_FOR_CONTROLLED_ADOPTION_PLANNING only (apply/autoPromotion/productionRollout/mutation all FORBIDDEN, no execution exports). code 766ca18f pushed and submitted (marker [CODEX-PHASE5-U5], REVIEWED_HEAD = 766ca18f). Local: tsc 0; controlled-adoption-review 5/5; PHASE5 10 files / 123 tests PASS; regression 103 files / 1070 tests (only P2E-DB5).",
+  "last_action_at": "2026-10-05T23:16:08.184Z",
+  "next_action": "Read PHASE 5 U5 verdict -> archive (MSG-20261005-82) -> if PASS consider PHASE 5 closure (U1-U5) and next phase per auditor.",
+  "current_head": "766ca18f",
+  "last_completed_head": "766ca18f",
   "reviewed_head": "add99ec3",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -5169,10 +5169,9 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "P5U5-1 implement controlled-adoption-review.ts per frozen gate: verified canary (ELIGIBLE, no triggers, insufficientEvidence false) + verified proposal (proposalDigest match) + verified rollback plan (digest match, baseline identity identical to canary) -> CONTROLLED_ADOPTION_REVIEW_TICKET (14 bindings, scope exactly CONTROLLED_ADOPTION_REVIEW, provenance/fingerprint/deep-freeze) -> verdict APPROVED/REJECTED (bound ticketDigest + canary/proposal/rollback digests + reviewerId/role/scope/decidedAt/reason/verdictDigest, provenance) with one-ticket-one-verdict digest-keyed replay, expiry/revocation fail-closed, role EXTERNAL_JUDGE/HUMAN_OPERATOR only, and APPROVED_FOR_CONTROLLED_ADOPTION_PLANNING semantics (no apply/promotion/rollout/mutation)",
-    "P5U5-2 tests (gate matrix incl. ROLLBACK_REQUIRED / INSUFFICIENT_EVIDENCE / provenance / proposal / rollback mismatches; ticket+verdict provenance & anti-tamper; replay/expiry/revoke/scope; APPROVED still no apply) + regression + tsc + commit + push",
-    "P5U5-3 audit U5 -> archive (MSG-20261005-82) -> compare FULL_COPY_OK -> durable state",
-    "P5U5-4 non-blocking debt: full SHA-256 digests, fingerprint schema upkeep, scanRawPayloadKeys bounded traversal, P2E-DB5 test-isolation"
+    "P5U5a-1 read U5 verdict (766ca18f) -> write verdict raw -> archive MSG-20261005-82 -> compare FULL_COPY_OK -> commit/push -> durable state",
+    "P5U5a-2 if PASS and phase closure confirmed -> record PHASE 5 = CLOSED; else follow auditor NEXT",
+    "P5U5a-3 non-blocking debt: full SHA-256 digests, fingerprint schema upkeep, scanRawPayloadKeys bounded traversal, P2E-DB5 test-isolation"
   ],
   "full_autonomous_internal_execution": "VERIFIED",
   "dispatcher_acceptance": {
@@ -9322,7 +9321,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-05T23:07:37.898Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-05T23:16:08.184Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -9450,7 +9449,7 @@
     "PHASE_2_MODEL_GATEWAY_RUNTIME": "PASS / CLOSED（MSG-20261005-50；Reviewed HEAD 338f30b4；PHASE2_FINAL5_REQUIRED = NO）",
     "PHASE_3_ACTION_RUNTIME": "PASS / CLOSED（MSG-20261005-54；Reviewed HEAD = fe3c33e9；PHASE3_FINAL4_REQUIRED = NO）",
     "PHASE_4_OUTCOME_LEARNING_PIPELINE": "CLOSED / PASS（MSG-20261005-67）：U1 FINAL / U2 / U3 / U4 / U5 全 CLOSED；含 U4 FINAL、U5 FINAL、U5 FINAL2、PHASE 4 FINAL CLOSURE。",
-    "PHASE_5_META_IMPROVEMENT": "IN PROGRESS: U1/U2/U3/U4 = PASS / CLOSED; NEXT = Controlled Adoption Review (read MSG-20261005-81 NEXT)."
+    "PHASE_5_META_IMPROVEMENT": "IN PROGRESS: U1/U2/U3/U4 = PASS / CLOSED; U5 Controlled Adoption Review = SUBMITTED / AWAITING_VERDICT (766ca18f)."
   },
   "heartbeat_watchdog": {
     "interval_seconds": 180,
@@ -10922,5 +10921,22 @@
       "Policy/Guard/Router/Action Runtime mutation FORBIDDEN",
       "later Controlled Adoption Plan / Execution Gate is a separate unit"
     ]
+  },
+  "phase5_u5": {
+    "status": "SUBMITTED / AWAITING_VERDICT",
+    "reviewed_head": "766ca18f",
+    "pushed": true,
+    "local_verification": {
+      "tsc": "PASS",
+      "targeted": "controlled-adoption-review 5/5",
+      "phase5": "10 files / 123 tests PASS",
+      "regression": "103 files / 1070 tests (1 failed = P2E-DB5)",
+      "github_ci": "NOT_OBSERVED"
+    },
+    "submission": {
+      "marker": "[CODEX-PHASE5-U5]",
+      "delivered": true,
+      "expected_message_id": "MSG-20261005-82"
+    }
   }
 }
