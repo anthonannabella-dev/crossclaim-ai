@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-40",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T22:20:30.840Z",
+  "updated_at": "2026-10-05T22:23:53.339Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -50,13 +50,13 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
-  "next_execution_unit": "PHASE 5 U4 FINAL3 (once ruling received): implement the authorized member-level cohort binding + bind baseline/proposal Phase 4 evaluationDigest into the canary artifact and evaluationDigest; tests: member-level match PASS, any side input identity mismatch REJECT, digest changes with either evaluationDigest, original 7 green, no execution preserved; then audit -> archive (MSG-20261005-79) -> durable state. If no ruling arrives, keep CONT_INUATION_REQUIRED and re-check the audit channel each tick.",
+  "next_execution_unit": "PHASE 5 U4 FINAL3 (ruling C): (1) add a server-owned VerifiedCohortRun artifact (createVerifiedCohortRun({ cohortRef, evaluation, side }) -> binds exact input set identity + the Phase 4 evaluation identity; provenance + WeakMap fingerprint + deep-freeze; isVerifiedCohortRun) so each side Phase 4 evaluation is provably tied to the same trusted input set; (2) evaluateCanaryShadow takes baselineRun + proposalRun (verified) instead of raw evaluations, requires both to share the same cohort/input-set identity (member-level), and binds both Phase 4 evaluationDigests into the canary artifact and evaluationDigest; (3) tests: same input set + different outcomes/metrics PASS (metric-delta rollback reachable), any side input identity mismatch REJECT, forged/cloned run REJECT, digest changes with either evaluationDigest, original behaviours preserved, no execution entries; then regression + tsc + commit + push + audit + archive (MSG-20261005-80) + durable state. Boundaries unchanged.",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-05T22:20:30.840Z",
+  "last_tick_at": "2026-10-05T22:23:53.339Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "PHASE 5 U4 FINAL3 blocked on a design ruling: member-level cohort binding cannot be satisfied by the sealed Phase 4 OfflineEvaluationResult (it exposes no input task/cohort identity; outcome-digest equality was already rejected because it forces identical outcomes). Sent a clarification request to the audit channel (marker [CODEX-PHASE5-U4FINAL3-CLARIFY]) asking which remedy is authorized: (A) extend the CLOSED Phase 4 offline-evaluation artifact with an outcome-independent input identity (inputMemberRefs + inputSetDigest bound into evaluationDigest) - requires reopening a sealed unit; (B) move evaluation derivation into the canary (canary owns the trusted cohort record set and derives both side evaluations internally so the same input is guaranteed by construction); (C) an auditor-specified third option. The unambiguous part (artifact/digest must bind both sides Phase 4 evaluationDigest) will be implemented with whichever option is authorized.",
+  "last_action": "PHASE 5 U4 FINAL3 design ruling received and archived (MSG-20261005-79, FULL_COPY_OK, archive commit a9e25d9f): the auditor chose option C - do NOT reopen the sealed Phase 4 offline-evaluation artifact and do NOT make the canary a runner; instead introduce a VerifiedCohortRun as the trusted bridge layer between the exact input set and the Phase 4 evaluation.",
   "last_action_at": "2026-10-05T22:20:30.840Z",
-  "next_action": "Wait for the auditor ruling (A/B/C) on U4 FINAL3 member-level cohort binding, then implement it plus the both-evaluationDigest binding.",
+  "next_action": "Implement PHASE 5 U4 FINAL3 per ruling C: VerifiedCohortRun bridge + canary member-level cohort binding + both evaluationDigest binding.",
   "current_head": "566b54ad",
   "last_completed_head": "566b54ad",
   "reviewed_head": "add99ec3",
@@ -5169,11 +5169,11 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "P5U4F3-0 wait/read auditor ruling on [CODEX-PHASE5-U4FINAL3-CLARIFY] (A extend sealed Phase 4 artifact / B canary derives evaluations / C auditor option)",
-    "P5U4F3-1 implement authorized member-level cohort binding + bind both Phase 4 evaluationDigests into canary artifact/digest",
-    "P5U4F3-2 tests + regression + tsc + commit + push + audit + archive (MSG-20261005-79) + durable state",
-    "P5U4F3-3 then Controlled Adoption Review per auditor NEXT",
-    "P5U4F3-4 non-blocking debt: full SHA-256 digests, fingerprint schema upkeep, scanRawPayloadKeys bounded traversal, P2E-DB5 test-isolation"
+    "P5U4F3-1 implement VerifiedCohortRun bridge (exact input set <-> Phase 4 evaluation, provenance/fingerprint/deep-freeze)",
+    "P5U4F3-2 canary: require verified baseline/proposal runs sharing input-set identity; bind both evaluationDigests into artifact + evaluationDigest; tests",
+    "P5U4F3-3 regression + tsc + commit + push + audit U4 FINAL3 -> archive (MSG-20261005-80) -> durable state",
+    "P5U4F3-4 then Controlled Adoption Review per auditor NEXT",
+    "P5U4F3-5 non-blocking debt: full SHA-256 digests, fingerprint schema upkeep, scanRawPayloadKeys bounded traversal, P2E-DB5 test-isolation"
   ],
   "full_autonomous_internal_execution": "VERIFIED",
   "dispatcher_acceptance": {
@@ -9323,7 +9323,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-05T22:20:30.840Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-05T22:23:53.339Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -9451,7 +9451,7 @@
     "PHASE_2_MODEL_GATEWAY_RUNTIME": "PASS / CLOSED（MSG-20261005-50；Reviewed HEAD 338f30b4；PHASE2_FINAL5_REQUIRED = NO）",
     "PHASE_3_ACTION_RUNTIME": "PASS / CLOSED（MSG-20261005-54；Reviewed HEAD = fe3c33e9；PHASE3_FINAL4_REQUIRED = NO）",
     "PHASE_4_OUTCOME_LEARNING_PIPELINE": "CLOSED / PASS（MSG-20261005-67）：U1 FINAL / U2 / U3 / U4 / U5 全 CLOSED；含 U4 FINAL、U5 FINAL、U5 FINAL2、PHASE 4 FINAL CLOSURE。",
-    "PHASE_5_META_IMPROVEMENT": "IN PROGRESS: U1/U2/U3 = PASS / CLOSED; U4 = PASS WITH REVISE (U4 FINAL2 verdict MSG-20261005-78), U4 FINAL3 pending."
+    "PHASE_5_META_IMPROVEMENT": "IN PROGRESS: U1/U2/U3 = PASS / CLOSED; U4 = PASS WITH REVISE, U4 FINAL3 implementation authorized by ruling C (VerifiedCohortRun)."
   },
   "heartbeat_watchdog": {
     "interval_seconds": 180,
@@ -9923,7 +9923,7 @@
       "U5"
     ]
   },
-  "archive_head": "b507b005",
+  "archive_head": "a9e25d9f",
   "phase4_u3_final": {
     "status": "PASS / CLOSED",
     "reviewed_head": "006cc912",
@@ -10808,8 +10808,14 @@
     "phase5_u4_final3_required": "YES"
   },
   "phase5_u4_final3_blocker": {
-    "status": "WAITING_FOR_ARCHITECT_RULING",
-    "marker": "[CODEX-PHASE5-U4FINAL3-CLARIFY]",
-    "question": "A: extend CLOSED Phase 4 offline-evaluation artifact with outcome-independent input identity; B: canary derives both evaluations from the trusted cohort (Phase 4 stays sealed); C: auditor-specified minimal option. Unambiguous part: canary artifact/digest must bind both sides Phase 4 evaluationDigest."
+    "status": "RESOLVED_BY_RULING_C",
+    "marker": "[CODEX-PHASE5-U4FINAL3-CLARIFY]"
+  },
+  "phase5_u4_final3_ruling": {
+    "message_id": "MSG-20261005-79",
+    "ruling": "C",
+    "summary": "Do not reopen Phase 4; do not make Canary a runner; add VerifiedCohortRun as the trusted bridge between the exact input set and the Phase 4 evaluation.",
+    "archive_verified": "FULL_COPY_OK",
+    "archive_head": "a9e25d9f"
   }
 }
