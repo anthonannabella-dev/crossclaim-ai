@@ -1,6 +1,6 @@
 {
-  "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。 MAPPING UPDATE（2026-10-05）：seo-4 / seo-5 已按 MSG-20261005-03 完成；seo-2 / seo-3 仍 IN_PROGRESS（等 PUBLIC API SECURITY AUDIT，公开 HTTP = HOLD）。 MAPPING UPDATE（2026-10-05，第二轮）：seo-6 / seo-7 依代码与测试证据标记 COMPLETED；seo-8 保持 IN_PROGRESS（公开 HTTP 合同受 SEO-3 审计门禁）。 MAPPING UPDATE（2026-10-05，第三轮）：seo-8 公开面合同测试定稿（含真实 HTTP 集成验收）；seo-2 / seo-3 仍 IN_PROGRESS（等 PUBLIC API SECURITY AUDIT 最终裁决）。 MAPPING UPDATE（2026-10-05，第四轮）：RSI-RT-06（migration SQL PASS + restart reconcile 落地）与 RSI-COST-02/03/05（Provider Adapter contract v2 + 本地仿真 adapter + 台账 + 成本 E2E A–F）标记 COMPLETED；RSI-P1-03（signal → incident/task 自动生成）标记 IMPLEMENTED_PENDING_CI（等 hosted CI）。真实 Provider 网络与付费调用仍 HOLD。 MAPPING UPDATE（2026-10-05，第五轮）：RSI-P1-03（signal → incident/task 自动生成）hosted CI 绿灯（run 37249876844 @ c95346f），标记 COMPLETED。 MAPPING UPDATE（2026-10-05，第六轮）：RSI-P1-04 Builder/Judge 隔离编排落地（自判禁止 + 独立证据 + 风险分级必需证据 + append-only decision），标记 IMPLEMENTED_PENDING_CI。 MAPPING UPDATE（2026-10-05，第七轮）：RSI-P1-05 不可变证据账本落地（append-only + supersedes + 结构校验），标记 IMPLEMENTED_PENDING_CI。 MAPPING UPDATE（2026-10-05，第八轮）：RSI-P1-04（run 37250819492 @ 3129da6）与 RSI-P1-05（run 37251649884 @ 1fae507）hosted CI 全绿，标记 COMPLETED。 MAPPING UPDATE（2026-10-05，第九轮）：RSI-P1-06 Policy Engine 落地（L0–L5 分级 + 永久 OWNER 硬禁 + Kill Switch 只读放行 + 未知动作 fail-closed），标记 IMPLEMENTED_PENDING_CI；未接运行时、不授予新权限。 MAPPING UPDATE（2026-10-05，第十轮）：RSI-P1-07 端到端闭环 demo 落地（信号→task→runner→证据→独立 Judge→decision，全程零外写），标记 IMPLEMENTED_PENDING_CI；同时记录 RSI-P1-06 Policy Engine = IMPLEMENTED_PENDING_CI。 MAPPING UPDATE（2026-10-05，第十一轮）：RSI-P1-06 Policy Engine hosted CI 全绿（run 37252557596 @ 0bc5934 / run 37252580801 @ 191afaa），标记 COMPLETED。 MAPPING UPDATE（2026-10-05，第十二轮）：BG-016 单一 Acceptance Head guard 加固（新增冻结常量校验 C1b + STATE head 单一来源校验 C1c），标记 IMPLEMENTED_PENDING_CI。 MAPPING UPDATE（2026-10-05，第十三轮）：RSI-P1-07 端到端闭环 hosted CI 绿灯（run 37253431454 @ dfb5f08），标记 COMPLETED；RSI 侧内部单元（P1-01…P1-07 / RT / COST / INSP）已全部交付。 MAPPING UPDATE（2026-10-05，第十四轮）：BG-016 hosted CI 绿灯（run 37254366363 @ 45566c7；CI 第 97-98 行会跑 acceptance-consistency），标记 COMPLETED —— 冻结 FINAL_ACCEPTANCE_HEAD 常量校验已在 CI 生效。 MAPPING UPDATE（2026-10-05，第十五轮）：BG-009 Carrier→Settlement 只读对账实测通过（7/7，证据写入 RUN_LOG），标记 IMPLEMENTED_PENDING_CI。 MAPPING UPDATE（2026-10-05，第十六轮）：BG-009 hosted CI 绿灯（run 37255349343 @ 14e59d1），标记 COMPLETED。 MAPPING UPDATE（2026-10-05，第十七轮）：BG-017 Layer 2 四域 Golden Path Matrix 重算 48/48 格 COVERED、gaps=0、生成确定性一致（证据入 RUN_LOG），标记 IMPLEMENTED_PENDING_CI。 MAPPING UPDATE（2026-10-05，第十八轮）：BG-002 Settlement–Billing–Fee guard 只读复核 16 文件 / 140 例全绿（证据入 RUN_LOG），标记 IMPLEMENTED_PENDING_CI。 MAPPING UPDATE（2026-10-05，第十九轮）：BG-017 hosted CI 绿灯（run 37256124075 @ 8064f07），标记 COMPLETED。 MAPPING UPDATE（2026-10-05，第二十轮）：BG-005 Customs G4 证据链只读复核 4 文件 / 19 例全绿（401/403/404/200 + 租户隔离 + 零外写，证据入 RUN_LOG），标记 IMPLEMENTED_PENDING_CI。 MAPPING UPDATE（2026-10-05，第二十一轮）：BG-001 平台只读 adapter 闭环证据 11 文件 / 88 例全绿（只读边界 + 连接/账号 lineage 不变量，证据入 RUN_LOG），标记 IMPLEMENTED_PENDING_CI。 MAPPING UPDATE（2026-10-05，第二十二轮）：BG-001/BG-002/BG-005 hosted CI 全绿 → COMPLETED；BG-003 只读面 + RBAC 复核 12 文件 / 117 例全绿（证据入 RUN_LOG）→ IMPLEMENTED_PENDING_CI。 MAPPING UPDATE（2026-10-05，第二十三轮）：BG-004 doc-sync 守卫运行发现 STATE 缺 autopilot_mode/heartbeat_role 的真实漂移并修复（TASKS.md 为事实源），复跑 doc-sync=OK，标记 IMPLEMENTED_PENDING_CI。 MAPPING UPDATE（2026-10-05，第二十四轮）：BG-007 证据层/Canonical 事实/POD 证据包复核 11 文件 / 74 例全绿（CONFLICT 保留原行、shadow 不产 Opportunity、POD 跨租户拒绝且仅登记），标记 IMPLEMENTED_PENDING_CI。 MAPPING UPDATE（2026-10-05，第二十五轮）：BG-008 platform write 账本 + Amazon 只读证据 10 文件 / 97 例全绿（HTTP 无直投路径、幂等唯一执行链、消费失败整笔回滚、响应零 provider 字段、首 provider 双重门控），标记 IMPLEMENTED_PENDING_CI。 MAPPING UPDATE（2026-10-05，第二十六轮）：调度切换为 EVENT-DRIVEN CONTINUOUS + HEARTBEAT WATCHDOG FALLBACK（docs/releases/AUTOPILOT-SCHEDULING-MODE.md）；BG-003/BG-004 hosted CI 绿灯 → COMPLETED；BG-014 IOR 资格接入复核 4 文件 / 43 例全绿 → IMPLEMENTED_PENDING_CI。 MAPPING UPDATE（2026-10-05，第二十七轮）：BG-015 IOR 全链装配复核（9 文件 / 74 例，autoSubmitAllowed 恒 false）与 BG-018 独立站内部闭环复核（6 文件 / 34 例，WON≠到账、append-only、DB CHECK 强制 autoSubmitAllowed=false）均标记 IMPLEMENTED_PENDING_CI。 MAPPING UPDATE（2026-10-05，第二十八轮）：BG-011 生成 Audit Pack（docs/releases/BG-011-PS04-ENUM-MIGRATION-AUDIT-REQUEST.md，REVIEWED_HEAD 5d809039）并送审 → WAITING_FOR_ARCHITECT_VERDICT（不阻塞 Lane A）。",
-  "updatedAt": "2026-10-05T03:27:57.495Z",
+  "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。 MAPPING UPDATE（2026-10-05）：seo-4 / seo-5 已按 MSG-20261005-03 完成；seo-2 / seo-3 仍 IN_PROGRESS（等 PUBLIC API SECURITY AUDIT，公开 HTTP = HOLD）。 MAPPING UPDATE（2026-10-05，第二轮）：seo-6 / seo-7 依代码与测试证据标记 COMPLETED；seo-8 保持 IN_PROGRESS（公开 HTTP 合同受 SEO-3 审计门禁）。 MAPPING UPDATE（2026-10-05，第三轮）：seo-8 公开面合同测试定稿（含真实 HTTP 集成验收）；seo-2 / seo-3 仍 IN_PROGRESS（等 PUBLIC API SECURITY AUDIT 最终裁决）。 MAPPING UPDATE（2026-10-05，第四轮）：RSI-RT-06（migration SQL PASS + restart reconcile 落地）与 RSI-COST-02/03/05（Provider Adapter contract v2 + 本地仿真 adapter + 台账 + 成本 E2E A–F）标记 COMPLETED；RSI-P1-03（signal → incident/task 自动生成）标记 IMPLEMENTED_PENDING_CI（等 hosted CI）。真实 Provider 网络与付费调用仍 HOLD。 MAPPING UPDATE（2026-10-05，第五轮）：RSI-P1-03（signal → incident/task 自动生成）hosted CI 绿灯（run 37249876844 @ c95346f），标记 COMPLETED。 MAPPING UPDATE（2026-10-05，第六轮）：RSI-P1-04 Builder/Judge 隔离编排落地（自判禁止 + 独立证据 + 风险分级必需证据 + append-only decision），标记 IMPLEMENTED_PENDING_CI。 MAPPING UPDATE（2026-10-05，第七轮）：RSI-P1-05 不可变证据账本落地（append-only + supersedes + 结构校验），标记 IMPLEMENTED_PENDING_CI。 MAPPING UPDATE（2026-10-05，第八轮）：RSI-P1-04（run 37250819492 @ 3129da6）与 RSI-P1-05（run 37251649884 @ 1fae507）hosted CI 全绿，标记 COMPLETED。 MAPPING UPDATE（2026-10-05，第九轮）：RSI-P1-06 Policy Engine 落地（L0–L5 分级 + 永久 OWNER 硬禁 + Kill Switch 只读放行 + 未知动作 fail-closed），标记 IMPLEMENTED_PENDING_CI；未接运行时、不授予新权限。 MAPPING UPDATE（2026-10-05，第十轮）：RSI-P1-07 端到端闭环 demo 落地（信号→task→runner→证据→独立 Judge→decision，全程零外写），标记 IMPLEMENTED_PENDING_CI；同时记录 RSI-P1-06 Policy Engine = IMPLEMENTED_PENDING_CI。 MAPPING UPDATE（2026-10-05，第十一轮）：RSI-P1-06 Policy Engine hosted CI 全绿（run 37252557596 @ 0bc5934 / run 37252580801 @ 191afaa），标记 COMPLETED。 MAPPING UPDATE（2026-10-05，第十二轮）：BG-016 单一 Acceptance Head guard 加固（新增冻结常量校验 C1b + STATE head 单一来源校验 C1c），标记 IMPLEMENTED_PENDING_CI。 MAPPING UPDATE（2026-10-05，第十三轮）：RSI-P1-07 端到端闭环 hosted CI 绿灯（run 37253431454 @ dfb5f08），标记 COMPLETED；RSI 侧内部单元（P1-01…P1-07 / RT / COST / INSP）已全部交付。 MAPPING UPDATE（2026-10-05，第十四轮）：BG-016 hosted CI 绿灯（run 37254366363 @ 45566c7；CI 第 97-98 行会跑 acceptance-consistency），标记 COMPLETED —— 冻结 FINAL_ACCEPTANCE_HEAD 常量校验已在 CI 生效。 MAPPING UPDATE（2026-10-05，第十五轮）：BG-009 Carrier→Settlement 只读对账实测通过（7/7，证据写入 RUN_LOG），标记 IMPLEMENTED_PENDING_CI。 MAPPING UPDATE（2026-10-05，第十六轮）：BG-009 hosted CI 绿灯（run 37255349343 @ 14e59d1），标记 COMPLETED。 MAPPING UPDATE（2026-10-05，第十七轮）：BG-017 Layer 2 四域 Golden Path Matrix 重算 48/48 格 COVERED、gaps=0、生成确定性一致（证据入 RUN_LOG），标记 IMPLEMENTED_PENDING_CI。 MAPPING UPDATE（2026-10-05，第十八轮）：BG-002 Settlement–Billing–Fee guard 只读复核 16 文件 / 140 例全绿（证据入 RUN_LOG），标记 IMPLEMENTED_PENDING_CI。 MAPPING UPDATE（2026-10-05，第十九轮）：BG-017 hosted CI 绿灯（run 37256124075 @ 8064f07），标记 COMPLETED。 MAPPING UPDATE（2026-10-05，第二十轮）：BG-005 Customs G4 证据链只读复核 4 文件 / 19 例全绿（401/403/404/200 + 租户隔离 + 零外写，证据入 RUN_LOG），标记 IMPLEMENTED_PENDING_CI。 MAPPING UPDATE（2026-10-05，第二十一轮）：BG-001 平台只读 adapter 闭环证据 11 文件 / 88 例全绿（只读边界 + 连接/账号 lineage 不变量，证据入 RUN_LOG），标记 IMPLEMENTED_PENDING_CI。 MAPPING UPDATE（2026-10-05，第二十二轮）：BG-001/BG-002/BG-005 hosted CI 全绿 → COMPLETED；BG-003 只读面 + RBAC 复核 12 文件 / 117 例全绿（证据入 RUN_LOG）→ IMPLEMENTED_PENDING_CI。 MAPPING UPDATE（2026-10-05，第二十三轮）：BG-004 doc-sync 守卫运行发现 STATE 缺 autopilot_mode/heartbeat_role 的真实漂移并修复（TASKS.md 为事实源），复跑 doc-sync=OK，标记 IMPLEMENTED_PENDING_CI。 MAPPING UPDATE（2026-10-05，第二十四轮）：BG-007 证据层/Canonical 事实/POD 证据包复核 11 文件 / 74 例全绿（CONFLICT 保留原行、shadow 不产 Opportunity、POD 跨租户拒绝且仅登记），标记 IMPLEMENTED_PENDING_CI。 MAPPING UPDATE（2026-10-05，第二十五轮）：BG-008 platform write 账本 + Amazon 只读证据 10 文件 / 97 例全绿（HTTP 无直投路径、幂等唯一执行链、消费失败整笔回滚、响应零 provider 字段、首 provider 双重门控），标记 IMPLEMENTED_PENDING_CI。 MAPPING UPDATE（2026-10-05，第二十六轮）：调度切换为 EVENT-DRIVEN CONTINUOUS + HEARTBEAT WATCHDOG FALLBACK（docs/releases/AUTOPILOT-SCHEDULING-MODE.md）；BG-003/BG-004 hosted CI 绿灯 → COMPLETED；BG-014 IOR 资格接入复核 4 文件 / 43 例全绿 → IMPLEMENTED_PENDING_CI。 MAPPING UPDATE（2026-10-05，第二十七轮）：BG-015 IOR 全链装配复核（9 文件 / 74 例，autoSubmitAllowed 恒 false）与 BG-018 独立站内部闭环复核（6 文件 / 34 例，WON≠到账、append-only、DB CHECK 强制 autoSubmitAllowed=false）均标记 IMPLEMENTED_PENDING_CI。 MAPPING UPDATE（2026-10-05，第二十八轮）：BG-011 生成 Audit Pack（docs/releases/BG-011-PS04-ENUM-MIGRATION-AUDIT-REQUEST.md，REVIEWED_HEAD 5d809039）并送审 → WAITING_FOR_ARCHITECT_VERDICT（不阻塞 Lane A）。 MAPPING UPDATE（2026-10-05，第二十九轮）：CI/verdict 归并批次 —— 所有 IMPLEMENTED_PENDING_CI 项（hosted CI 已绿）翻为 COMPLETED；seo-2/seo-3 依 MSG-20261005-05（PUBLIC_CHECKER_HTTP=FINAL_PASS）与 MSG-20261005-08（PUBLIC_ENGINE_IMPLEMENTATION=PASS/CLOSED）翻为 COMPLETED。",
+  "updatedAt": "2026-10-05T03:28:57.534Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -196,7 +196,7 @@
         "pod-evidence",
         "canonical"
       ],
-      "status": "IMPLEMENTED_PENDING_CI"
+      "status": "COMPLETED"
     },
     {
       "id": "BG-008-platform-write-amazon-evidence",
@@ -224,7 +224,7 @@
         "platform-write",
         "amazon"
       ],
-      "status": "IMPLEMENTED_PENDING_CI"
+      "status": "COMPLETED"
     },
     {
       "id": "BG-009-carrier-settlement-readonly-reconciliation",
@@ -388,7 +388,7 @@
       "filters": [
         "customer-qualification-gate"
       ],
-      "status": "IMPLEMENTED_PENDING_CI"
+      "status": "COMPLETED"
     },
     {
       "id": "BG-015-ior-full-chain-assembly",
@@ -415,7 +415,7 @@
       "filters": [
         "enterprise-ior-layer"
       ],
-      "status": "IMPLEMENTED_PENDING_CI"
+      "status": "COMPLETED"
     },
     {
       "id": "BG-016-acceptance-head-single-source",
@@ -495,7 +495,7 @@
         "independent-site"
       ],
       "materializable": false,
-      "status": "IMPLEMENTED_PENDING_CI"
+      "status": "COMPLETED"
     },
     {
       "id": "BG-019-frontend-http-wiring-closure",
@@ -991,7 +991,7 @@
     },
     {
       "id": "seo-2-recovery-rule-definition-v1",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "risk_class": "HIGH",
       "arch_review_required": true,
       "layer": "TRACK-C/SEO-P3",
@@ -1004,7 +1004,7 @@
     },
     {
       "id": "seo-3-public-checker-calculator",
-      "status": "IN_PROGRESS",
+      "status": "COMPLETED",
       "risk_class": "HIGH",
       "arch_review_required": true,
       "layer": "TRACK-C/SEO-P3",
@@ -1178,7 +1178,7 @@
       "title": "/recover 页面 i18n key 五语言落地（parity 保持）",
       "scope": "在 apps/web/i18n/dictionaries 的 zh-CN/en-US/de/ja/es 增加 recover.* 中立 UI 文案（错误/过期提示/标题/小节标题/估算免责/CTA），键集合一致；不含任何规则/资格/截止日/费率/金额主张",
       "acceptance_criteria": "tools/i18n/check-i18n.mjs → I18N_CHECK=OK locales=5 customerHardcodes=0；apps/web tsc exit 0",
-      "status": "IMPLEMENTED_PENDING_CI",
+      "status": "COMPLETED",
       "implementation_head": "(this commit)"
     },
     {
@@ -1272,7 +1272,7 @@
       "title": "投影流水线：export 脚本 + web 构建守卫（默认不阻断 / 发布模式阻断）",
       "scope": "apps/api 增 export:recover-static 脚本；apps/web 增 scripts/check-recover-projection.mjs + check:recover-projection：缺投影默认打印 FAIL-CLOSED 退出 0，设 RECOVER_PROJECTION_REQUIRED=1 则退出 1",
       "acceptance_criteria": "缺投影时默认 exit 0 且输出 fail-closed 说明；RECOVER_PROJECTION_REQUIRED=1 时 exit 1（已实测）；不改变现有 build/CI 行为",
-      "status": "IMPLEMENTED_PENDING_CI",
+      "status": "COMPLETED",
       "implementation_head": "(this commit)"
     },
     {
@@ -1282,7 +1282,7 @@
       "title": "web 接线合同测试：fail-closed / 无 POST / robots-sitemap 一致",
       "scope": "apps/api 测试读取 web 源码契约：dynamicParams=false + notFound()、sitemap 空数组、读取器四类失败、无 POST、robots 在代码行上不出现 disallow",
       "acceptance_criteria": "三条合同用例全绿；tsc 0",
-      "status": "IMPLEMENTED_PENDING_CI",
+      "status": "COMPLETED",
       "implementation_head": "(this commit)"
     },
     {
@@ -1301,7 +1301,7 @@
       "title": "投影携带 canonical path（路径形状定案的前置）",
       "scope": "SeoRecoverStaticPage + 导出器 + web 读取器统一增加 path 字段（SEO-5 的 canonical 路径，不可索引时 null），白名单同步",
       "acceptance_criteria": "SEO-4 相关 33 用例全绿；api/web tsc 0",
-      "status": "IMPLEMENTED_PENDING_CI",
+      "status": "COMPLETED",
       "implementation_head": "(this commit)"
     },
     {
@@ -1311,7 +1311,7 @@
       "title": "RSI Phase-1：Incident/Task/Candidate/EvaluationRun/PromotionDecision 契约与状态机（纯函数 + fail-closed 非法跃迁）",
       "scope": "RSI Phase-1（离线/沙箱）：只读观察 + 自动建任务 + 受控 patch + 确定性验证 + 独立 Judge；无外部写",
       "acceptance_criteria": "对应纯函数/编排落地并有命名用例；api tsc 0；不新增 schema/migration（如需另送 Schema Delta 审计）",
-      "status": "IMPLEMENTED_PENDING_CI",
+      "status": "COMPLETED",
       "implementation_head": "(this commit)",
       "artifacts": [
         "apps/api/src/services/autonomy/rsi-lifecycle.ts",
@@ -1326,7 +1326,7 @@
       "title": "RSI Phase-1：只读 Observer（CI/测试/backlog 信号 → 脱敏 signal），不读客户数据与凭据",
       "scope": "RSI Phase-1（离线/沙箱）：只读观察 + 自动建任务 + 受控 patch + 确定性验证 + 独立 Judge；无外部写",
       "acceptance_criteria": "对应纯函数/编排落地并有命名用例；api tsc 0；不新增 schema/migration（如需另送 Schema Delta 审计）",
-      "status": "IMPLEMENTED_PENDING_CI",
+      "status": "COMPLETED",
       "implementation_head": "(this commit)",
       "artifacts": [
         "apps/api/src/services/autonomy/rsi-observer.ts",
@@ -1386,7 +1386,7 @@
       "title": "RSI Runtime 独立进程入口（start/stop/health/restart；不依赖聊天窗口）",
       "scope": "独立 rsi-controller 进程：信号摄取→incident→task→candidate 编排；与 api/web 解耦，RSI 崩溃不影响主业务",
       "acceptance_criteria": "纯函数/可运行代码 + 命名用例；api tsc 0；不新增 schema（如需另送 Schema Delta 审计）",
-      "status": "IMPLEMENTED_PENDING_CI",
+      "status": "COMPLETED",
       "implementation_head": "(this commit)",
       "artifacts": [
         "apps/api/src/runtime/rsi-controller.ts",
@@ -1456,7 +1456,7 @@
       "title": "RSI 成本控制：三级执行策略 + 预算 + Incident 熔断 + ModelRouterPort（已实现）",
       "scope": "RSI 长期运行但不得持续消耗 token：确定性优先、分级、预算与熔断",
       "acceptance_criteria": "对应实现/用例落地；api tsc 0；不新增 schema（如需另送 Schema Delta）",
-      "status": "IMPLEMENTED_PENDING_CI",
+      "status": "COMPLETED",
       "evidence": "vitest rsi-cost-policy 5/5；api tsc 0",
       "artifacts": [
         "apps/api/src/services/autonomy/rsi-cost-policy.ts",
@@ -1532,7 +1532,7 @@
       "title": "RSI 巡检：功能漂移判定 + 业务不变量（已实现）",
       "scope": "主动周期性巡检 + 漂移分类 + 自动建任务；不靠聊天心跳",
       "acceptance_criteria": "实现/用例落地；api tsc 0；如需持久化另送 Schema Delta",
-      "status": "IMPLEMENTED_PENDING_CI",
+      "status": "COMPLETED",
       "evidence": "vitest rsi-drift-detector 5/5；api tsc 0",
       "artifacts": [
         "apps/api/src/services/autonomy/rsi-drift-detector.ts",
@@ -1546,7 +1546,7 @@
       "title": "Daily Health Inspection 任务（Runtime/API-Provider/Application 检查项；健康则静默）",
       "scope": "主动周期性巡检 + 漂移分类 + 自动建任务；不靠聊天心跳",
       "acceptance_criteria": "实现/用例落地；api tsc 0；如需持久化另送 Schema Delta",
-      "status": "IMPLEMENTED_PENDING_CI",
+      "status": "COMPLETED",
       "implementation_head": "(this commit)",
       "artifacts": [
         "apps/api/src/services/autonomy/rsi-daily-inspection.ts",
@@ -1562,7 +1562,7 @@
       "title": "Weekly Full-System Review（回归/集成/PG E2E/契约/golden/business invariants/AI benchmark/cost；机器可读结果）",
       "scope": "主动周期性巡检 + 漂移分类 + 自动建任务；不靠聊天心跳",
       "acceptance_criteria": "实现/用例落地；api tsc 0；如需持久化另送 Schema Delta",
-      "status": "IMPLEMENTED_PENDING_CI",
+      "status": "COMPLETED",
       "implementation_head": "(this commit)",
       "artifacts": [
         "apps/api/src/services/autonomy/rsi-weekly-review.ts",
@@ -1594,7 +1594,7 @@
       "title": "生产问题 → 脱敏 → 新 GoldenFixture → 永久进入 Regression Corpus（需 Schema Delta 持久化）",
       "scope": "主动周期性巡检 + 漂移分类 + 自动建任务；不靠聊天心跳",
       "acceptance_criteria": "实现/用例落地；api tsc 0；如需持久化另送 Schema Delta",
-      "status": "IMPLEMENTED_PENDING_CI",
+      "status": "COMPLETED",
       "implementation_head": "(this commit)",
       "artifacts": [
         "apps/api/src/services/autonomy/rsi-fixture-pipeline.ts",
@@ -1610,7 +1610,7 @@
       "title": "事件驱动续跑引擎（E2E A–D 已过）",
       "scope": "事件即续跑（秒级）+ 60s Watchdog 兜底 + lease/dedupe exactly-once + 优先级 P0–P4 + REVISE 立即建修订任务",
       "acceptance_criteria": "E2E A（A→B→C 秒级）/ B（事件丢失由 Watchdog 恢复）/ C（事件+watchdog 只 claim 一次）/ D（REVISE 立即执行）全绿；tsc 0",
-      "status": "IMPLEMENTED_PENDING_CI",
+      "status": "COMPLETED",
       "implementation_head": "(this commit)"
     },
     {
@@ -1620,7 +1620,7 @@
       "title": "续跑引擎接入 RSI Controller（事件入口 + 60s tick）",
       "scope": "emit(event)→claim→runner 立即执行；tick() 仅在事件丢失/idle/lease 超时时兜底；runner 由宿主注入（本地 Codex 或 AgentRunnerPort）",
       "acceptance_criteria": "vitest rsi-controller-continuation 3/3；api tsc 0；无凭据/无库写",
-      "status": "IMPLEMENTED_PENDING_CI",
+      "status": "COMPLETED",
       "implementation_head": "(this commit)"
     },
     {
@@ -1630,7 +1630,7 @@
       "title": "事件源适配（CI/测试/verdict → 续跑事件 + 指纹去重）",
       "scope": "deriveContinuationEvents + createEventFingerprintGate：成功→继续、失败→修复、REVISE→修订、BLOCK→OWNER；同指纹不重复触发",
       "acceptance_criteria": "vitest rsi-event-sources 3/3；api tsc 0；纯只读输入",
-      "status": "IMPLEMENTED_PENDING_CI",
+      "status": "COMPLETED",
       "implementation_head": "(this commit)"
     },
     {
@@ -1640,7 +1640,7 @@
       "title": "宿主侧事件循环（只读源 → 指纹去重 → emit；60s 兜底 tick）",
       "scope": "pollOnce 拉取 CI/测试/verdict → 去重后 controller.emit；无新事件静默；start/stop 幂等；无 busy loop",
       "acceptance_criteria": "vitest rsi-event-loop 3/3；api tsc 0",
-      "status": "IMPLEMENTED_PENDING_CI",
+      "status": "COMPLETED",
       "implementation_head": "(this commit)"
     },
     {
@@ -1650,7 +1650,7 @@
       "title": "本地只读事件源（CI 结果 / verdict / 测试结果 artifact 解析）",
       "scope": "createLocalEventSources + parseCiResults/parseVerdict/parseTestResults；缺失或非法 JSON 静默；fs 注入可测；只读",
       "acceptance_criteria": "vitest rsi-local-sources 3/3 + rsi-event-loop 3/3；api tsc 0",
-      "status": "IMPLEMENTED_PENDING_CI",
+      "status": "COMPLETED",
       "implementation_head": "(this commit)"
     },
     {
@@ -1660,7 +1660,7 @@
       "title": "RSI Runtime 组装入口 rsi:run（本地源+事件循环+控制器+runner）",
       "scope": "composeRsiRuntime：只读队列/CI/verdict artifact → 事件驱动领取；默认 no-op runner（不执行外部动作）；可起停、可 systemd 托管",
       "acceptance_criteria": "vitest rsi-run 3/3；api tsc 0；无凭据/无库写/无外写",
-      "status": "IMPLEMENTED_PENDING_CI",
+      "status": "COMPLETED",
       "implementation_head": "(this commit)"
     },
     {
@@ -1680,7 +1680,7 @@
       "title": "/admin/autonomy 页面组装（健康 + 成本面板，只读快照）",
       "scope": "page.tsx 读取 rsi-admin-snapshot-v1 artifact（缺失/非法 → fail-closed 只显示加载失败）；web 不读 DB、不调模型",
       "acceptance_criteria": "web tsc 0；快照缺失不编造数据；5 语言 key 复用",
-      "status": "IMPLEMENTED_PENDING_CI",
+      "status": "COMPLETED",
       "implementation_head": "(this commit)"
     },
     {
@@ -1690,7 +1690,7 @@
       "title": "Admin 快照生成器（健康 + 台账 → rsi-admin-snapshot-v1）",
       "scope": "buildAdminSnapshot：白名单字段、台账 today/month 聚合、costSafeMode 标记；无任务明细/客户数据/凭据",
       "acceptance_criteria": "vitest rsi-admin-snapshot 3/3；api tsc 0",
-      "status": "IMPLEMENTED_PENDING_CI",
+      "status": "COMPLETED",
       "implementation_head": "(this commit)"
     },
     {
@@ -1700,7 +1700,7 @@
       "title": "Admin 快照周期发布器（写 rsi-admin-snapshot-v1）",
       "scope": "createAdminSnapshotPublisher：周期写快照、写失败不抛、start 幂等、stop 清理；只写自身 artifact",
       "acceptance_criteria": "vitest rsi-admin-snapshot-publisher 3/3；api tsc 0",
-      "status": "IMPLEMENTED_PENDING_CI",
+      "status": "COMPLETED",
       "implementation_head": "(this commit)",
       "note": "已接进 rsi:run 组装（adminSnapshot 可选配置，随运行时起停）"
     },
@@ -1711,7 +1711,7 @@
       "title": "能力缺口信号（GoldenFixture 覆盖 → Weekly CAPABILITY_GAP 套件）",
       "scope": "capabilityGapSuiteFromCoverage：缺域/被拒 → FAIL（只列域名与计数，不含语料内容）；全覆盖 → PASS",
       "acceptance_criteria": "vitest rsi-capability-gap 3/3；api tsc 0",
-      "status": "IMPLEMENTED_PENDING_CI",
+      "status": "COMPLETED",
       "implementation_head": "(this commit)"
     },
     {
@@ -1721,7 +1721,7 @@
       "title": "健康载荷补全（queue 连通性 / 上次 reconcile / 上次 incident / 计数）",
       "scope": "RsiControllerState + rsiHealthPayload 增加 lastReconcileAt、queueConnected、lastIncidentRef；启动即记录一次 reconcile",
       "acceptance_criteria": "vitest rsi-controller 4/4；api tsc 0",
-      "status": "IMPLEMENTED_PENDING_CI",
+      "status": "COMPLETED",
       "implementation_head": "(this commit)"
     },
     {
@@ -1731,7 +1731,7 @@
       "title": "裁决轮询器（仅在 WAITING_FOR_VERDICT 时短轮询，同裁决只投递一次）",
       "scope": "createVerdictWatcher：isWaiting=false 完全不读；按 messageId+verdict 去重；start 幂等/stop 清理",
       "acceptance_criteria": "vitest rsi-verdict-watcher 3/3；api tsc 0",
-      "status": "IMPLEMENTED_PENDING_CI",
+      "status": "COMPLETED",
       "implementation_head": "(this commit)",
       "note": "已接进 rsi:run（verdictWatch 可选，isWaiting 取控制器等待态）"
     },
@@ -1742,7 +1742,7 @@
       "title": "RSI Runtime 端到端集成（事件驱动续跑 + REVISE + Watchdog 兜底）",
       "scope": "组合 composeRsiRuntime：CI 事件驱动 A→B→C、runner REVISE 自动入队 P0 修订并立即消费、事件丢失由 Watchdog 恢复、无事件静默",
       "acceptance_criteria": "vitest rsi-runtime-e2e 2/2；api tsc 0",
-      "status": "IMPLEMENTED_PENDING_CI",
+      "status": "COMPLETED",
       "implementation_head": "(this commit)"
     },
     {
@@ -1752,7 +1752,7 @@
       "title": "RSI 部署合同测试（unit / 安装脚本 / 运行时入口 / package 脚本四者对齐）",
       "scope": "断言 unit 指向 rsi-run、状态路径可写、硬化与 restart 限制齐全、安装脚本幂等且不含凭据、package 脚本存在",
       "acceptance_criteria": "vitest rsi-deployment-contract 4/4；api tsc 0",
-      "status": "IMPLEMENTED_PENDING_CI",
+      "status": "COMPLETED",
       "implementation_head": "(this commit)"
     },
     {
@@ -1762,7 +1762,7 @@
       "title": "Weekly Review × 能力缺口集成证据 + rsi:test 入口",
       "scope": "证明覆盖缺口作为 CAPABILITY_GAP 失败套件进入周审并要求 Incident；新增 rsi:test 脚本",
       "acceptance_criteria": "vitest rsi-weekly-capability-integration 2/2；api tsc 0",
-      "status": "IMPLEMENTED_PENDING_CI",
+      "status": "COMPLETED",
       "implementation_head": "(this commit)"
     }
   ],
