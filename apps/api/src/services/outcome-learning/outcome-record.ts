@@ -1,14 +1,16 @@
 /**
- * PHASE 4 U1 —— OUTCOME / LEARNING DATA PIPELINE：canonical outcome 记录契约
+ * PHASE 4 U1+U2 —— OUTCOME / LEARNING DATA PIPELINE：canonical outcome 契约 + lineage binding
  * ---------------------------------------------------------------
  * 定位：**只做观察**。本模块不修改 Policy / Guard / Router / Action Runtime，
  * 也不产生任何生产写入（REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT /
  * TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT 全部 HOLD）。
  *
- * 硬约束：
- *   - 记录只允许**结构化字段 + 引用**：不得携带凭据，不得携带原始 payload / provider 响应。
- *   - 数值字段必须是有限非负数；非有限或负数一律 fail-closed（拒绝构建）。
- *   - lineage（actionRef / proposalRef / evidenceRef）为必填：outcome 只能**引用**，不得复制原始事实。
+ * 硬约束（含 FINAL 收口）：
+ *   - 只允许**结构化字段 + 引用**：不得携带凭据，不得携带原始 payload / provider 响应（**递归**扫描）。
+ *   - **严格类型**：数值字段只接受真正的 number；布尔字段只接受真正的 boolean；字符串形式一律拒绝（不静默清洗）。
+ *   - `finalOutcome` 是成功语义的 **SSOT**：`success` 由它派生；caller 传入矛盾值即拒绝。
+ *   - `humanIntervention` 缺失 → `null`（UNKNOWN），**不得**降级为 `false`。
+ *   - lineage（actionRef / proposalRef / evidenceRef）必填；若给出 lineage 声明，必须与记录同链（U2 binding）。
  *   - AUTO_PROMOTION = OFF；任何 meta-improvement 只能提建议，必须经外部 Judge / 人工裁决。
  */
 
@@ -49,15 +51,37 @@ export const OUTCOME_LEARNING_BOUNDARY = {
   observationOnly: true,
   autoPolicyMutation: 'FORBIDDEN',
   autoPromotion: 'OFF',
-  rawPayload: 'FORBIDDEN（只允许结构化字段 + 引用）',
+  rawPayload: 'FORBIDDEN（递归扫描，含嵌套 metadata.payload）',
   credentialFields: 'FORBIDDEN',
+  strictTypes: 'ENFORCED（number/boolean 不做字符串强转）',
   lineage: 'REQUIRED（actionRef / proposalRef / evidenceRef 只引用，不复制）',
+  lineageBinding: 'ENFORCED（organization/task/action/proposal/evidence 必须同链）',
+  successSemantics: 'finalOutcome 为 SSOT，success 由它派生',
   secondMetaEvidenceStore: 'FORBIDDEN（复用既有 rsi-evidence-ledger）',
   productionWrite: 'HOLD',
 } as const;
 
-/** 原始载荷/响应键：一旦出现即拒绝（防止把原始事实抄进学习数据）。 */
+/** 原始载荷/响应键：递归出现即拒绝（防止把原始事实抄进学习数据）。 */
 const RAW_PAYLOAD_KEY = /^(payload|payloads|response|responses|body|raw|rawpayload|raw_payload)$/i;
+
+/** 递归扫描禁止键（与 credential scan 同级 fail-closed）。 */
+export function scanRawPayloadKeys(candidate: unknown, depth = 0): readonly string[] {
+  const found: string[] = [];
+  if (depth > 4 || candidate === null || typeof candidate !== 'object') return found;
+  for (const [key, value] of Object.entries(candidate as Record<string, unknown>)) {
+    if (RAW_PAYLOAD_KEY.test(key)) found.push(key);
+    found.push(...scanRawPayloadKeys(value, depth + 1));
+  }
+  return found;
+}
+
+export interface OutcomeLineage {
+  organizationId: string;
+  taskId: string;
+  actionRef: string;
+  proposalRef: string;
+  evidenceRef: string;
+}
 
 export interface OutcomeRecordInput {
   organizationId: string;
@@ -82,6 +106,8 @@ export interface OutcomeRecordInput {
   actionRef?: string | null;
   proposalRef?: string | null;
   evidenceRef?: string | null;
+  /** U2：若给出，必须与本记录的 organization/task/refs 同链 */
+  lineage?: OutcomeLineage | null;
 }
 
 export interface OutcomeRecord {
@@ -99,8 +125,10 @@ export interface OutcomeRecord {
   actionResult: string | null;
   rejectionReason: string | null;
   recoveryAmount: number | null;
+  /** finalOutcome 派生：SUCCESS → true；FAILURE/REJECTED → false；其余（含 PARTIAL）→ null */
   success: boolean | null;
-  humanIntervention: boolean;
+  /** UNKNOWN 用 null 表示，绝不降级为 false */
+  humanIntervention: boolean | null;
   retryReconcile: RetryReconcileState;
   finalOutcome: FinalOutcome;
   actionRef: string;
@@ -110,39 +138,62 @@ export interface OutcomeRecord {
 }
 
 export type OutcomeBuildResult = { ok: true; record: OutcomeRecord } | { ok: false; reason: string };
+export type LineageBindingResult = { ok: true } | { ok: false; reason: string };
 
-const required = (v: unknown): string =>
-  typeof v === 'string' && v.trim() !== '' ? v.trim() : '';
+const required = (v: unknown): string => (typeof v === 'string' && v.trim() !== '' ? v.trim() : '');
 
-const optionalText = (v: unknown): string | null =>
-  typeof v === 'string' && v.trim() !== '' ? v.trim() : null;
+const optionalText = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? v.trim() : null);
 
-/** 有限非负数值；空值 → null；非法 → 'INVALID' */
+/** 严格：只接受真正的有限非负 number；字符串一律 INVALID（不做 Number() 强转）。 */
 const nonNegativeNumber = (v: unknown): number | null | 'INVALID' => {
-  if (v === undefined || v === null || v === '') return null;
-  const n = typeof v === 'number' ? v : Number(v);
-  if (!Number.isFinite(n) || n < 0) return 'INVALID';
-  return n;
+  if (v === undefined || v === null) return null;
+  if (typeof v !== 'number' || !Number.isFinite(v) || v < 0) return 'INVALID';
+  return v;
 };
 
+/** 严格：只接受真正的 boolean；字符串一律 INVALID（不做 "true"/"false" 强转）。 */
 const optionalBoolean = (v: unknown): boolean | null | 'INVALID' => {
-  if (v === undefined || v === null || v === '') return null;
+  if (v === undefined || v === null) return null;
   if (typeof v === 'boolean') return v;
-  if (v === 'true') return true;
-  if (v === 'false') return false;
   return 'INVALID';
 };
 
 const enumOr = <T extends readonly string[]>(allowed: T, v: unknown, fallback: T[number]): T[number] | 'INVALID' => {
   if (v === undefined || v === null || v === '') return fallback;
-  const s = String(v);
+  const s = typeof v === 'string' ? v : 'INVALID_VALUE';
   return (allowed as readonly string[]).includes(s) ? (s as T[number]) : 'INVALID';
 };
 
-const hasRawPayloadKey = (input: Record<string, unknown>): boolean =>
-  Object.keys(input).some((key) => RAW_PAYLOAD_KEY.test(key));
+/** finalOutcome 为 SSOT：派生 success 期望值。 */
+const deriveSuccess = (finalOutcome: FinalOutcome): boolean | null => {
+  if (finalOutcome === 'SUCCESS') return true;
+  if (finalOutcome === 'FAILURE' || finalOutcome === 'REJECTED') return false;
+  return null; // PARTIAL / MANUAL_REVIEW / UNKNOWN
+};
 
-/** 构建 canonical outcome 记录（fail-closed：任何违规都拒绝，不静默清洗）。 */
+/**
+ * U2：校验 lineage 声明与 canonical 记录属于**同一条执行链**。
+ * 仅证明引用存在是不够的，必须 organization/task/action/proposal/evidence 全部一致。
+ */
+export function verifyOutcomeLineage(record: OutcomeRecord, lineage: OutcomeLineage | null | undefined): LineageBindingResult {
+  if (lineage === null || lineage === undefined || typeof lineage !== 'object') {
+    return { ok: false, reason: 'OUTCOME_LINEAGE_DECLARATION_REQUIRED' };
+  }
+  const checks: Array<[string, string, string]> = [
+    ['organizationId', required(lineage.organizationId), record.organizationId],
+    ['taskId', required(lineage.taskId), record.taskId],
+    ['actionRef', required(lineage.actionRef), record.actionRef],
+    ['proposalRef', required(lineage.proposalRef), record.proposalRef],
+    ['evidenceRef', required(lineage.evidenceRef), record.evidenceRef],
+  ];
+  for (const [field, declared, actual] of checks) {
+    if (declared === '') return { ok: false, reason: 'OUTCOME_LINEAGE_DECLARATION_REQUIRED:' + field };
+    if (declared !== actual) return { ok: false, reason: 'OUTCOME_LINEAGE_BINDING_MISMATCH:' + field };
+  }
+  return { ok: true };
+}
+
+/** 构建 canonical outcome 记录（fail-closed：任何违规都拒绝，不静默清洗、不做类型强转）。 */
 export function buildOutcomeRecord(input: OutcomeRecordInput | null | undefined): OutcomeBuildResult {
   if (input === null || input === undefined || typeof input !== 'object') {
     return { ok: false, reason: 'OUTCOME_RECORD_INPUT_REQUIRED' };
@@ -157,8 +208,9 @@ export function buildOutcomeRecord(input: OutcomeRecordInput | null | undefined)
     return { ok: false, reason: 'OUTCOME_RECORD_IDENTITY_REQUIRED' };
   }
 
-  if (hasRawPayloadKey(raw)) {
-    return { ok: false, reason: 'OUTCOME_RECORD_RAW_PAYLOAD_FORBIDDEN' };
+  const rawPayloadKeys = scanRawPayloadKeys(raw);
+  if (rawPayloadKeys.length > 0) {
+    return { ok: false, reason: 'OUTCOME_RECORD_RAW_PAYLOAD_FORBIDDEN:' + rawPayloadKeys.join(',') };
   }
   const credentialKeys = scanCredentialFields(raw);
   if (credentialKeys.length > 0) {
@@ -180,9 +232,9 @@ export function buildOutcomeRecord(input: OutcomeRecordInput | null | undefined)
     return { ok: false, reason: 'OUTCOME_RECORD_NUMERIC_FIELD_INVALID' };
   }
 
-  const success = optionalBoolean(input.success);
   const humanIntervention = optionalBoolean(input.humanIntervention);
-  if (success === 'INVALID' || humanIntervention === 'INVALID') {
+  const callerSuccess = optionalBoolean(input.success);
+  if (humanIntervention === 'INVALID' || callerSuccess === 'INVALID') {
     return { ok: false, reason: 'OUTCOME_RECORD_BOOLEAN_FIELD_INVALID' };
   }
 
@@ -193,7 +245,13 @@ export function buildOutcomeRecord(input: OutcomeRecordInput | null | undefined)
     return { ok: false, reason: 'OUTCOME_RECORD_ENUM_INVALID' };
   }
 
-  const canonical = {
+  // finalOutcome 为 SSOT：caller 传入的 success 必须与派生值一致（缺省则由 finalOutcome 派生）。
+  const success = deriveSuccess(finalOutcome);
+  if (callerSuccess !== null && callerSuccess !== success) {
+    return { ok: false, reason: 'OUTCOME_RECORD_SUCCESS_CONFLICT' };
+  }
+
+  const record: Omit<OutcomeRecord, 'digest'> = {
     organizationId,
     taskId,
     taskType,
@@ -209,15 +267,22 @@ export function buildOutcomeRecord(input: OutcomeRecordInput | null | undefined)
     rejectionReason: optionalText(input.rejectionReason),
     recoveryAmount,
     success,
-    humanIntervention: humanIntervention === true,
+    humanIntervention,
     retryReconcile,
     finalOutcome,
     actionRef,
     proposalRef,
     evidenceRef,
   };
-  const digest = 'outcome:' + createHash('sha256').update(JSON.stringify(canonical)).digest('hex').slice(0, 16);
-  return { ok: true, record: { ...canonical, digest } };
+
+  // U2：若给出 lineage 声明，必须与记录同链（binding，而非仅存在性）。
+  if (input.lineage !== undefined && input.lineage !== null) {
+    const binding = verifyOutcomeLineage({ ...record, digest: '' } as OutcomeRecord, input.lineage);
+    if (!binding.ok) return { ok: false, reason: binding.reason };
+  }
+
+  const digest = 'outcome:' + createHash('sha256').update(JSON.stringify(record)).digest('hex').slice(0, 16);
+  return { ok: true, record: { ...record, digest } };
 }
 
 export interface LearningDatasetProjection {
@@ -227,11 +292,13 @@ export interface LearningDatasetProjection {
   byFinalOutcome: Record<string, number>;
   successCount: number;
   failureCount: number;
+  /** 分母 = 全部记录；U4 必须定义“未结论样本”口径后再用于评估 */
   successRate: number | null;
   totalRecoveryAmount: number;
   averageLatencyMs: number | null;
   totalInputCost: number;
   totalOutputCost: number;
+  /** 只统计**明确 true**；null（UNKNOWN）不计入 */
   humanInterventionCount: number;
   manualReviewCount: number;
 }
@@ -269,7 +336,7 @@ export function projectLearningDataset(records: readonly OutcomeRecord[]): Learn
       latencySum += record.latencyMs;
       latencyCount += 1;
     }
-    if (record.humanIntervention) humanInterventionCount += 1;
+    if (record.humanIntervention === true) humanInterventionCount += 1;
   }
 
   const recordCount = records.length;
