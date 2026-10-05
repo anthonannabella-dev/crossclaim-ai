@@ -144740,3 +144740,181 @@ STEP_3_RUNTIME_POLICY_WIRING = NOT_AUTHORIZED
 
 本裁定不授权 C2 提前实施；先完成 C1 FINAL-2。
 ```
+
+### [MSG-20261005-32] SI-COST-OPTIMIZATION C1 FINAL-2 — VERDICT = **PASS WITH REVISE**（CHANGE A provenance = PASS；CHANGE B hard cap 2/1 = PASS；剩 per-task identity 碰撞 + attempt 计数口径 → `C1_FINAL3_REQUIRED = YES`）
+
+```text
+DECISION
+
+VERDICT = PASS WITH REVISE
+
+对 e6311195 实码复核后：
+
+CHANGE A provenance = PASS
+CHANGE B hard cap 2/1 = PASS
+caller 伪造 request.escalation 已不能获得 strong 权限
+strong 现在确实必须发生在 Gateway 自己执行的 LOW_COST 之后
+999/999 → 2/1 clamp 成立
+e6311195 → d4947d07 未发现新的业务代码改动
+
+但发现 2 个很窄的 C1 状态正确性缺口。
+
+因此：
+
+C1_IMPLEMENTATION = NOT_YET_CLOSED
+C1_FINAL3_REQUIRED = YES
+C2 IMPLEMENTATION = 暂不提前授权
+
+KEEP
+
+全部保留：
+
+Necessity Gate
+Cache Identity Contract
+caller escalation 输入失去授权效力
+server-side qualityEvaluator
+evaluator 缺失 → 不升级
+LEVEL_2 caller capability → LEVEL_1 clamp
+AI_ESCALATION_HARD_CAPS = 2 / 1
+strong failure 后禁止递归
+zero Schema / zero migration
+所有生产 HOLD。
+CHANGE
+
+只修 2 项。
+
+CHANGE A — taskState key 必须真正是 per-task
+
+现在：
+
+taskKey = (incidentId ?? '-') + '::' + (taskId ?? '-')
+
+但 incidentId/taskId 类型允许 null。
+
+于是多个：
+
+incidentId=null, taskId=null
+
+的不同任务全部变成：
+
+-::-
+
+会共享：
+
+attempts / escalations / strongFailed
+
+一个任务 strong fail 后可能错误阻断另一个无关任务。
+
+最小修法：
+
+AI-eligible invocation 必须有不可空稳定 task identity。
+
+优先：
+
+taskId 必填且非空；
+
+或者内部 key 至少加入稳定不可伪造的任务身份，例如：
+
+incidentId + taskId + taskType + promptDigest
+
+不得让不同任务落入同一个 fallback key。
+
+CHANGE B — attempts 只能统计真实 provider attempt
+
+当前 LOW_COST：
+
+runAttempt()
+→ 即使 guardRejected=true
+→ 仍执行 state.attempts += 1
+
+STRONG 也类似。
+
+这与当前声明：
+
+attempts = 真实 provider attempt 数
+
+不一致。
+
+预算 guard 拒绝时 provider 根本没有被调用，不应算 attempt。
+
+最小修法：
+
+first.attempt !== null / outcome.called=true 才 attempts += 1
+strong 同理
+escalations += 1 只在 实际 strong provider invocation 发生 时计数
+
+budget rejection 可以单独记录 rejection，但不能伪装成 provider attempt。
+
+RISKS
+
+这两个问题都不会造成模型无限烧钱，目前实际上偏 fail-closed。
+
+但会造成：
+
+无 ID 任务之间状态串扰；
+没有发生 provider 调用却耗掉 attempt/escalation 配额；
+后续 C2 durable ledger 接入后，内存 escalation state 与真实 ledger 语义不一致。
+
+所以应在进入 C2 前收干净。
+
+TEST
+
+FINAL-3 只需增加：
+
+NULL_OR_MISSING_TASK_ID_CANNOT_SHARE_ESCALATION_STATE
+两个不同任务不得共享 strongFailed
+LOW_COST budget guard reject → provider calls = 0 且 attempts 不增加
+STRONG budget guard reject → strong provider calls = 0 且 strong attempt 不增加
+strong 未实际调用 → escalation count 不增加
+999/999 仍 clamp 2/1
+forged caller escalation 仍 strong=0
+C1 全量 + rsi-* + tsc 全绿
+
+不需要 Schema，不需要 PG。
+
+NEXT
+
+仅授权：
+
+C1 FINAL-3 narrow fix
+
+范围严格限定为：
+
+1. per-task identity collision
+2. real-provider-attempt accounting
+
+完成后若测试成立：
+
+C1 = PASS / CLOSED
+C1_FINAL4_REQUIRED = NO
+
+然后立即授权进入 C2 IMPLEMENTATION：
+
+AiCostLedgerEntry
+
+AiBudgetPolicy
+ledger-derived usage
+AiModelCacheEntry
+tenant/append-only enforcement
+manifest sync
+real PostgreSQL
+budget race protection。
+PRODUCTION
+
+继续保持：
+
+REAL_MODEL_NETWORK = HOLD
+PAID_MODEL_CALLS = HOLD
+EXTERNAL_WRITE = HOLD
+PAYMENT = HOLD
+TRANSPORT = HOLD
+PRODUCTION_CREDENTIALS = HOLD
+PRODUCTION_ENABLEMENT = HOLD
+
+P2_F = HOLD
+P2_G = HOLD
+RUNTIME_WIRING = NONE
+STEP_3_RUNTIME_POLICY_WIRING = NOT_AUTHORIZED
+
+FINAL-3 只允许上述两个窄修，不得扩大 C1 范围。
+```

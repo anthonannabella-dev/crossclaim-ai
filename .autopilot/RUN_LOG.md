@@ -2567,3 +2567,11 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 归档：AI-ARCHITECT-INBOX.md 新增 MSG-20261005-31；compare.mjs → FULL_COPY_OK。
 - 裁决：Necessity Gate = PASS、Cache Identity Contract = PASS、Gateway 对 LEVEL_0/LEVEL_1 咽喉控制 = PASS；Cheap→Strong bounded escalation = REVISE（CHANGE A provenance / CHANGE B hard cap）→ 已按 FINAL-2 落地并送审（e6311195）。
 
+
+## 2026-10-05T16:20Z — C1 FINAL-3（per-task identity + 真实 attempt 计数）完成并送审（实现 HEAD = 79536ca5）
+- 裁决 MSG-20261005-32 = PASS WITH REVISE：CHANGE A provenance = PASS、CHANGE B hard cap 2/1 = PASS；剩 per-task identity 碰撞 + attempt 计数口径 → C1_FINAL3_REQUIRED = YES。
+- CHANGE A：AI-eligible 调用必须提供非空 taskId（缺失/空 → AI_ESCALATION_TASK_IDENTITY_REQUIRED，fail-closed）；内部 key = incidentId::taskId::taskType::promptDigest（消除共享 fallback bucket）。
+- CHANGE B：attempts/escalations 只在真实 provider invocation 时计数（!guardRejected && attempt !== null && called === true）；budget guard 拒绝不计 attempt/escalation。
+- 验证：tsc exit 0；C1 定向 6 文件 / 50 例 PASS；rsi-* 全量 46 文件 / 252 例 PASS；prisma validate valid（未改 Schema）。
+- 归档：AI-ARCHITECT-INBOX.md 新增 MSG-20261005-32（FULL_COPY_OK）；送审：docs/releases/SI-COST-OPTIMIZATION-C1-FINAL3-REQUEST.md（REVIEWED_HEAD = 79536ca5）。
+
