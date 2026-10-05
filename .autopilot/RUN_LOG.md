@@ -1995,3 +1995,20 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
   超大小上限拒绝；关联**跨租户案件被拒**；结果**不含金额/规则/责任字段**（仅登记）且写入审计；
   account provenance 由服务端派生，缺连接上下文/未绑账户 → `PLATFORM_ACCOUNT_REQUIRED`，多账户或含 NULL → fail-closed。
 - 边界：本批未改任何代码；证据层只登记证据，不做金额/责任判定。
+
+## 2026-10-05T03:22:59.722Z — BG-008 Platform write 账本 + Amazon 只读 adapter 证据核对（P2，内部可做）
+- 套件实测（apps/api 本地，退出码 0）：**10 文件 / 97 例全绿** —— `platform-write`(19)、`platform-write-http-db`(14)、
+  `platform-write-ledger-db`(10)、`platform-write-orchestrator-db`(10)、`platform-write-golden-path-db`(5)、
+  `platform-write-adapter-capability`(8)、`platform-write-provider-readiness`(7)、`platform-write-response-contract`(5)、
+  `amazon-sp-read-only-adapter`(10)、`amazon-sp-connector-runner-db`(9)。
+- 写路径**全程 fail-closed**（实测）：未认证 401 且零副作用；跨租户 404（不泄露存在性）且零副作用；缺 Action Guard 装配 →
+  403 `ACTION_GUARD_NOT_CONFIGURED`；缺/不存在/过期/已消费/动作不匹配/绑定不一致的审批 → 各自拒绝且**零 attempt 零消费零投递**；
+  HTTP 层**不存在直接投递路径**（sink 只能由编排在 T1 之后调用）。
+- 账本与幂等（实测）：同幂等键并发 → **恰一个取得执行权**，另一个返回既有链；approval 唯一绑定摘要；T1 内消费写入失败 →
+  **整笔回滚、attempt 无残留**；UNKNOWN 对账只读（write sink 调用次数 = 0）；SUCCEEDED 不可再收敛（CAS mismatch）；
+  绕过服务层直插两条同键 SUCCEEDED → **partial unique index 拦截**。
+- 响应契约（实测）：`platformWriteExecuted` 恒为 false；`providerRef/sinkCalls/externalRef` 等 provider 成功类字段一律不进入响应，
+  出现即拒绝；transport 已开启时契约未定义 → 直接拒绝（需架构方另行裁决）= 与 `TRANSPORT=false` 一致。
+- Provider 就绪（实测）：10 项能力档案逐项有状态与官方来源，未取证项按 fail-closed 记；平台级描述符为**只读**（三能力 false）；
+  即使全局 transport gate 打开，**首个 provider 也不得自动写入**（缺幂等写 → NEEDS_MANUAL，双重门控）；6 项写回前置冻结为代码门槛。
+- 结论：BG-008 验收标准满足，且**实证 External Write 仍被多重门禁关闭**；本地未改任何代码。
