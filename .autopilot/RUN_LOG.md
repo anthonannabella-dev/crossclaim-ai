@@ -2657,3 +2657,10 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - B：删除 provider 名称推断；provenance 只由 server-owned trustedRealProviders 判定；缺省 ⇒ LOCAL_SIMULATION_ONLY ⇒ 生产指标 NOT_YET_MEASURABLE。
 - 验证：tsc exit 0；prisma validate valid；si-cost-c3 = 25/25；si-cost-c3-db（真实 PostgreSQL）= 19/19；回归 50 files / 465 tests PASS。
 - NEXT_EXECUTION_UNIT = 读取 C3 FINAL-3 裁决 → 逐字归档（MSG-20261005-40）→ PASS/CLOSED 则宣布 SI_COST_OPTIMIZATION = PASS / CLOSED 并 recompute SAFE_CONTINUATION_QUEUE；REVISE 则最小集合窄修。
+
+## 2026-10-06T07:30Z —— SI-COST-OPTIMIZATION = PASS / CLOSED（MSG-20261005-40）+ 队列重算
+- 裁决：C3 FINAL-3 CHANGE A（durable Safe Mode → Model Gateway）= PASS；CHANGE B（trusted real-provider provenance）= PASS；C3_IMPLEMENTATION = PASS / CLOSED；C3_FINAL4_REQUIRED = NO；C4_REQUIRED = NO；SI_COST_OPTIMIZATION = PASS / CLOSED。
+- 证据接受：C3 unit 25/25；C3 真实 PostgreSQL 19/19；rsi-* + si-cost-* + architecture-contract 50 files / 465 tests；tsc = 0；prisma validate = valid；无 Schema / migration 变化。
+- 未来生产接线不变量（KEEP，不阻塞）：Safe Mode refs 必须由 server-side invocation context 构造；trustedRealProviders 必须为 server-owned registry。
+- SAFE_CONTINUATION_QUEUE 重算结果：SAFE_CONTINUATION_QUEUE = EMPTY；剩余全部为 HOST_ACTION_REQUIRED（BG-006-production-candidate-preflight:HOST_ACTION_REQUIRED, RSI-RT-02-supervisor-autostart:IMPLEMENTED_PENDING_HOST_VALIDATION）或 HOLD_EXTERNAL（recovery-si-phase2:A_B_C_CLOSED_P2D_PENDING_DESIGN, recovery-si-phase2-remainder-queue:P2_E_PASS_CLOSED, si-rsi-unification-design:PASS_CLOSED）。
+- NEXT_EXECUTION_UNIT = AUTONOMOUS_INTERNAL_TARGET = COMPLETE：无剩余可安全继续的内部单元；等待 HOST_ACTION_REQUIRED / HOLD_EXTERNAL 解禁或新授权

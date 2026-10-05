@@ -6,12 +6,12 @@
   "next_task": "BG-016 单一 Acceptance Head + 四份状态一致 guard（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍 HOST_ACTION_REQUIRED 或 HOLD",
   "send_head": "07b7009",
   "decision_head": "f5e4cc2c",
-  "last_chatgpt_message": "MSG-20261005-39",
+  "last_chatgpt_message": "MSG-20261005-40",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-06T07:00:00.000Z",
+  "updated_at": "2026-10-06T07:30:00.000Z",
   "previous_head": "8064f07",
-  "architect_decision_pending": true,
+  "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "0c35106",
   "last_sent_at": "2026-10-03T09:07:52.875Z",
@@ -50,12 +50,12 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "ACTIVE",
-  "next_execution_unit": "读取 C3 FINAL-3 裁决 → 逐字归档（MSG-20261005-40）→ PASS/CLOSED 则宣布 SI_COST_OPTIMIZATION = PASS / CLOSED 并 recompute SAFE_CONTINUATION_QUEUE；REVISE 则最小集合窄修 → commit/push → 再送审",
+  "next_execution_unit": "AUTONOMOUS_INTERNAL_TARGET = COMPLETE：无剩余可安全继续的内部单元；等待 HOST_ACTION_REQUIRED / HOLD_EXTERNAL 解禁或新授权",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-06T07:00:00.000Z",
+  "last_tick_at": "2026-10-06T07:30:00.000Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "C3 FINAL-3（A/B）完成并送审（实现 HEAD = 2b02ef8c）",
-  "last_action_at": "2026-10-06T07:00:00.000Z",
+  "last_action": "SI_COST_OPTIMIZATION = PASS / CLOSED（MSG-20261005-40，REVIEWED_HEAD = 2b02ef8c）；C4_REQUIRED = NO；SAFE_CONTINUATION_QUEUE recomputed",
+  "last_action_at": "2026-10-06T07:30:00.000Z",
   "next_action": "C2 IMPLEMENTATION（Schema Delta + durable ledger/budget + PG 回归）",
   "current_head": "054ab732",
   "last_completed_head": "054ab732",
@@ -5168,13 +5168,7 @@
   "runner_status": "RUNNING",
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
-  "safe_continuation_queue": [
-    "recovery-si-phase2-d-design（P2-D Action Guard dry-run 设计/实施边界送审，零代码）",
-    "真实 Provider 接入（HOST_ACTION_REQUIRED）",
-    "非生产 staging DATABASE_URL 取证（HOST_ACTION_REQUIRED）",
-    "systemd A–F（HOST_ACTION_REQUIRED）",
-    "Search Console / 域名所有权（HOST_ACTION_REQUIRED）"
-  ],
+  "safe_continuation_queue": [],
   "full_autonomous_internal_execution": "VERIFIED",
   "dispatcher_acceptance": {
     "at": "2026-10-03T14:47:59.226Z",
@@ -5921,7 +5915,7 @@
       "next_task": null
     }
   },
-  "safe_continuation_queue_note": "内部 backлог 已清零；dispatcher 无安全可执行项（hostPending/archPending 均为空）。",
+  "safe_continuation_queue_note": "SAFE_CONTINUATION_QUEUE = EMPTY；剩余全部为 HOST_ACTION_REQUIRED（BG-006-production-candidate-preflight:HOST_ACTION_REQUIRED, RSI-RT-02-supervisor-autostart:IMPLEMENTED_PENDING_HOST_VALIDATION）或 HOLD_EXTERNAL（）。",
   "release_integration": {
     "at": "2026-10-03T22:59:47.170Z",
     "method": "PR #12 merge commit (no force push)",
@@ -8851,7 +8845,7 @@
     "invariant": "ACTION_GUARD_DRY_RUN_ALLOW != EXECUTION_AUTHORIZATION；零审批消费 / 零 executor / 零业务事实写入 / 零外写；L5 永久拒绝"
   },
   "si_cost_optimization": {
-    "status": "C3_FINAL3_SUBMITTED_PENDING_VERDICT",
+    "status": "PASS_CLOSED",
     "priority": "P1",
     "dependency": "SI_RSI_UNIFICATION_PASS_CLOSED",
     "registered_at": "2026-10-05T12:45:00.000Z",
@@ -8913,13 +8907,7 @@
       ],
       "archive": "AI-ARCHITECT-INBOX.md#MSG-20261005-30"
     },
-    "c1": {
-      "implementation_head": "a1ba1dee",
-      "evidence": "docs/releases/SI-COST-OPTIMIZATION-C1-EVIDENCE.md",
-      "audit_request": "docs/releases/SI-COST-OPTIMIZATION-C1-IMPLEMENTATION-AUDIT-REQUEST.md",
-      "scope": "Necessity Gate + Cache Identity Contract + Cheap→Strong 有界升级 + Model Gateway 单咽喉接线（零 Schema）",
-      "tests": "tsc 0；成本相关 4 套件 38/38；全量 rsi-* 46 文件 / 248 例 PASS；prisma validate valid（未改 Schema）"
-    },
+    "c1": "PASS / CLOSED",
     "c1_impl_authorized_at": "MSG-20261005-30",
     "c1_final2": {
       "implementation_head": "e6311195",
@@ -8986,20 +8974,7 @@
       "archive": "AI-ARCHITECT-INBOX.md#MSG-20261005-33"
     },
     "c2_authorized": "YES（MSG-20261005-33）",
-    "c2": {
-      "schema_commit": "92b61b52",
-      "stores_commit": "f099ec4c",
-      "evidence": "docs/releases/SI-COST-OPTIMIZATION-C2-EVIDENCE.md",
-      "audit_request": "docs/releases/SI-COST-OPTIMIZATION-C2-IMPLEMENTATION-AUDIT-REQUEST.md",
-      "deliverables": [
-        "AiCostLedgerEntry（append-only + callId 幂等 + costMicros INTEGER）",
-        "AiBudgetPolicy（durable 配置；无 usage 表；usage 由账本聚合；层级只收紧）",
-        "AiModelCacheEntry（identity 唯一键 + 受控 TTL/GC + identity 不可改写）",
-        "触发器清单同步（required + append-only）",
-        "Budget race 防线（pg_advisory_xact_lock 内 check-then-write）"
-      ],
-      "tests": "tsc 0；C2 DB 10/10；rsi-* + architecture-contract + C2 = 48 文件 / 404 例 PASS；prisma validate valid / 80 migrations"
-    },
+    "c2": "PASS / CLOSED",
     "c2_verdict": {
       "message_id": "MSG-20261005-34",
       "verdict": "PASS WITH REVISE",
@@ -9185,40 +9160,7 @@
       "MSG-20261005-37"
     ],
     "c2_archive_note": "MSG-20261005-35 / -36 为上一执行窗口已消费但未落库的裁决，本窗口按逐字归档补齐；三条均 compare.mjs = FULL_COPY_OK。",
-    "c3": {
-      "implementation_head": "e7467b73",
-      "evidence": "docs/releases/SI-COST-OPTIMIZATION-C3-EVIDENCE.md",
-      "audit_request": "docs/releases/SI-COST-OPTIMIZATION-C3-IMPLEMENTATION-AUDIT-REQUEST.md",
-      "scope": [
-        "cache runtime wiring（接入唯一 rsi-model-router；tenant-safe identity；HIT ⇒ MODEL_CALL_SKIPPED_CACHE_HIT，不产生 provider ledger entry）",
-        "business-value cost policy（价值只来自可信 canonical basis；caller 自报值忽略；UNKNOWN/LOW/MEDIUM → LOW_COST only；HIGH → STRONG eligible）",
-        "Cost Safe Mode（只停 STANDARD_AI；LEVEL_0_RULE / HEALTH_CHECK / CRITICAL_ALERT 恒放行；retryAllowed=false）",
-        "concurrencyLimit enforcement（PostgreSQL advisory-xact-lock slots；跨实例互斥；真实 PG 并发回归）",
-        "admin read-only observability（只读投影；无第二 usage 表；不含敏感内容）",
-        "NOT_YET_MEASURABLE 指标（无可信分母一律不编造）"
-      ],
-      "new_modules": [
-        "si-cost-safe-mode.ts",
-        "si-ai-business-value-policy.ts",
-        "si-model-cache-runtime.ts",
-        "si-budget-concurrency.ts",
-        "si-cost-observability.ts"
-      ],
-      "wiring": [
-        "rsi-model-router.ts（可选端口 costSafeMode / cache / businessValue / concurrency / onCacheSavings；缺省行为不变）",
-        "rsi-model-provider-composition.ts（组合根可注入）"
-      ],
-      "tests": "tsc 0；si-cost-c3 18/18；si-cost-c3-db（真实 PG）8/8；rsi-* + si-cost-* + architecture-contract 50 files / 445 tests PASS",
-      "schema_delta": "NO（无 Schema / 迁移变更）",
-      "concurrency_limit_enforcement": "ENFORCED（C3；PG advisory-lock slots）",
-      "metrics_not_yet_measurable": [
-        "RULE_RESOLVED_RATE",
-        "MODEL_INVOCATION_RATE",
-        "CACHE_HIT_RATE",
-        "AVG_AI_COST_PER_CASE",
-        "AVG_AI_COST_PER_SUCCESSFUL_RECOVERY"
-      ]
-    },
+    "c3": "PASS / CLOSED",
     "c3_verdict": {
       "message_id": "MSG-20261005-38",
       "verdict": "PASS WITH REVISE",
@@ -9309,7 +9251,26 @@
         "B：trustworthy provenance（只认 server-owned trusted provider registry；缺省 ⇒ NOT_YET_MEASURABLE）"
       ],
       "tests": "tsc 0；si-cost-c3 25/25；si-cost-c3-db（真实 PG）19/19；回归 50 files / 465 tests PASS"
-    }
+    },
+    "c3_final3_verdict": {
+      "message_id": "MSG-20261005-40",
+      "verdict": "PASS / CLOSED",
+      "reviewed_head": "2b02ef8c",
+      "pass": [
+        "CHANGE_A_DURABLE_SAFE_MODE_TO_GATEWAY",
+        "CHANGE_B_TRUSTED_REAL_PROVIDER_PROVENANCE"
+      ],
+      "c3_implementation": "PASS / CLOSED",
+      "c3_final4_required": "NO",
+      "si_cost_optimization": "PASS / CLOSED",
+      "c4_required": "NO",
+      "keep_invariants_for_future_production_wiring": [
+        "Safe Mode 的 refs 必须继续由 server-side invocation context 构造，不允许客户端自报 scope",
+        "trustedRealProviders 必须保持 server-owned registry，不得从 HTTP/admin request 参数直接透传"
+      ],
+      "archive": "AI-ARCHITECT-INBOX.md#MSG-20261005-40"
+    },
+    "si_cost_optimization": "PASS / CLOSED"
   },
   "si_rsi_unification": {
     "status": "PASS_CLOSED",
@@ -9388,5 +9349,6 @@
     ]
   },
   "EXECUTION_ACTIVE": false,
-  "HEARTBEAT_INTERVAL_SECONDS": 60
+  "HEARTBEAT_INTERVAL_SECONDS": 60,
+  "safe_continuation_queue_recomputed_at": "2026-10-06T07:30:00.000Z"
 }

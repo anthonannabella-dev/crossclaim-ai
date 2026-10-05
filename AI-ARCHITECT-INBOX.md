@@ -146249,3 +146249,111 @@ STEP_3_RUNTIME_POLICY_WIRING = NOT_AUTHORIZED
 
 结论：四项 FINAL-2 修订中 A/B/C 已关闭；只需把 durable Safe Mode 真正接到 Gateway，以及去掉“provider 名字=真实流量”的假 provenance，即可关闭整个 SI-COST-OPTIMIZATION。
 ```
+
+### [MSG-20261005-40] SI-COST-OPTIMIZATION C3 FINAL-3 — VERDICT = **PASS / CLOSED**（CHANGE A durable Safe Mode → Model Gateway = PASS；CHANGE B trusted provenance = PASS；`C3_IMPLEMENTATION = PASS / CLOSED`；`C3_FINAL4_REQUIRED = NO`；**`SI_COST_OPTIMIZATION = PASS / CLOSED`**；`C4_REQUIRED = NO`）
+
+```text
+DECISION
+
+VERDICT = PASS / CLOSED
+
+已复核 REVIEWED_HEAD = 2b02ef8c，并确认 2b02ef8c → 29d19d6c 仅 docs / 状态 / 送审簿记，无新的业务代码变化。
+
+CHANGE A — durable Safe Mode → Model Gateway = PASS
+CHANGE B — trusted real-provider provenance = PASS
+C3_IMPLEMENTATION = PASS / CLOSED
+C3_FINAL4_REQUIRED = NO
+SI_COST_OPTIMIZATION = PASS / CLOSED
+C4_REQUIRED = NO
+KEEP
+
+正式冻结：
+
+Gateway costSafeMode 支持 async
+provider attempt 前 await costSafeMode
+durable AiBudgetPolicy + AiCostLedgerEntry 实时决定 Safe Mode
+resolver error → fail-closed
+L0 Necessity 路径在 Safe Mode 前完成，零模型、零 token
+cache / business-value / concurrency / Safe Mode 均留在单一 Model Gateway
+production metrics 不得从 provider 名称猜测真实性
+trustedRealProviders 缺省为空
+未命中 trusted registry → NOT_YET_MEASURABLE
+local-sim 只能进入 dev/simulation observability。
+CHANGE
+
+无阻断性 CHANGE。
+
+两个未来生产接线不变量记录为 KEEP，不要求继续 FINAL：
+
+Safe Mode 的 refs 必须继续由 server-side invocation context 构造，不允许客户端自报 scope。
+trustedRealProviders 必须保持 server-owned registry，不得从 HTTP/admin request 参数直接透传。
+
+这两项属于以后 PRODUCTION/RUNTIME WIRING 审计边界，不阻塞本任务关闭。
+
+RISKS
+
+当前 SI-COST-OPTIMIZATION 内部没有剩余 P0/P1 阻断项。
+
+剩余风险均属于未来开闸阶段：
+
+production composition 的真实 tenant/account/incident/task refs 绑定；
+trusted provider registry 的生产来源；
+real provider credential/network；
+paid-call production budget calibration。
+
+这些当前全部 HOLD，因此没有被本批偷偷打开。
+
+TEST
+
+接受当前证据：
+
+C3 unit：25/25 PASS
+C3 real PostgreSQL：19/19 PASS
+rsi-* + si-cost-* + architecture-contract：50 files / 465 PASS
+tsc --noEmit = 0
+Prisma validate = valid
+无 Schema / migration 变化，符合 FINAL-3 范围。
+
+Acceptance = SATISFIED。
+
+NEXT
+
+SI-COST-OPTIMIZATION 不再需要继续开发轮次。
+
+状态应记录：
+
+C1 = PASS / CLOSED
+C2 = PASS / CLOSED
+C3 = PASS / CLOSED
+SI_COST_OPTIMIZATION = PASS / CLOSED
+C3_FINAL4_REQUIRED = NO
+C4_REQUIRED = NO
+
+后续只有在明确授权 Production / Runtime Wiring 时，才重新打开相关实施审计。
+
+PRODUCTION
+
+确认没有越界：
+
+REAL_MODEL_NETWORK = HOLD
+PAID_MODEL_CALLS = HOLD
+EXTERNAL_WRITE = HOLD
+PAYMENT = HOLD
+TRANSPORT = HOLD
+PRODUCTION_CREDENTIALS = HOLD
+PRODUCTION_ENABLEMENT = HOLD
+
+P2_F = HOLD
+P2_G = HOLD
+
+RUNTIME_WIRING = NONE
+STEP_3_RUNTIME_POLICY_WIRING = NOT_AUTHORIZED
+
+SECOND_RUNTIME = FORBIDDEN
+SECOND_POLICY_ENGINE = FORBIDDEN
+SECOND_COST_LEDGER = FORBIDDEN
+SECOND_META_EVIDENCE_STORE = FORBIDDEN
+L5_RELAXATION = FORBIDDEN
+
+最终裁定：SI-COST-OPTIMIZATION 已完成，可以正式 CLOSED，不需要 C4。
+```
