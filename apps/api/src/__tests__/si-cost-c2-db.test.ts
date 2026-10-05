@@ -312,6 +312,49 @@ describe('SI-COST C2 FINAL-2 · 预算 Guard 三项窄修（MSG-20261005-34）',
 
 
 describe('SI-COST C2 · 确定性模型缓存 store', () => {
+  it('C2F4_A1 tenant-scoped refs 缺 organizationId → fail-closed（不得降级为 platform-only）', async () => {
+    await expect(
+      runGuardedAiCostWrite({
+        prisma,
+        refs: { organizationId: null, incidentId: 'inc-orphan' },
+        estimatedCostMicros: 10,
+        entry: { callId: 'c2f4-a-' + randomUUID(), provider: 'p', model: 'm', executionLevel: 'LEVEL_1_LOW_COST', taskType: 'SEMANTIC', result: 'SUCCESS' },
+      }),
+    ).rejects.toThrow(/AI_BUDGET_TENANT_IDENTITY_REQUIRED/);
+    await expect(
+      runGuardedAiCostWrite({
+        prisma,
+        refs: { organizationId: null, taskId: 'task-orphan' },
+        estimatedCostMicros: 10,
+        entry: { callId: 'c2f4-b-' + randomUUID(), provider: 'p', model: 'm', executionLevel: 'LEVEL_1_LOW_COST', taskType: 'SEMANTIC', result: 'SUCCESS' },
+      }),
+    ).rejects.toThrow(/AI_BUDGET_TENANT_IDENTITY_REQUIRED/);
+    expect(await prisma.aiCostLedgerEntry.count({ where: { organizationId: null } })).toBe(0);
+  });
+
+  it('C2F4_A2 platform-only（四 refs 全空）仍然允许', async () => {
+    await upsertAiBudgetPolicy(prisma, { scope: 'PLATFORM', scopeRef: '*', dailyLimitMicros: 1_000 });
+    const outcome = await runGuardedAiCostWrite({
+      prisma,
+      refs: {},
+      estimatedCostMicros: 10,
+      entry: { callId: 'c2f4-p-' + randomUUID(), provider: 'p', model: 'm', executionLevel: 'LEVEL_1_LOW_COST', taskType: 'SEMANTIC', result: 'SUCCESS' },
+    });
+    expect(outcome.written).toBe(true);
+  });
+
+  it('C2F4_B1 resolveEffectiveAiBudget tenant-safe（同 scopeRef 不读别租户 policy）', async () => {
+    await upsertAiBudgetPolicy(prisma, { scope: 'TASK', scopeRef: 'task-shared', organizationId: orgA, dailyLimitMicros: 500 });
+    await upsertAiBudgetPolicy(prisma, { scope: 'TASK', scopeRef: 'task-shared', organizationId: orgB, dailyLimitMicros: 100 });
+    const forA = await resolveEffectiveAiBudget(prisma, { organizationId: orgA, taskId: 'task-shared' });
+    expect(forA.dailyLimitMicros).toBe(500);
+    const forB = await resolveEffectiveAiBudget(prisma, { organizationId: orgB, taskId: 'task-shared' });
+    expect(forB.dailyLimitMicros).toBe(100);
+    await expect(resolveEffectiveAiBudget(prisma, { taskId: 'task-shared' })).rejects.toThrow(
+      /AI_BUDGET_TENANT_IDENTITY_REQUIRED/,
+    );
+  });
+
   it('C2F3_A1 org perIncidentLimit=1000：inc-A 900 / inc-B 900 各自允许，inc-A 再 +200 拒绝', async () => {
     await upsertAiBudgetPolicy(prisma, { scope: 'ORGANIZATION', scopeRef: orgA, organizationId: orgA, perIncidentLimitMicros: 1_000 });
     const write = (incidentId: string, cost: number) =>

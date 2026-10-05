@@ -127,6 +127,10 @@ export async function resolveEffectiveAiBudget(
     taskId?: string | null;
   },
 ): Promise<EffectiveAiBudget> {
+  // C2 FINAL-4 CHANGE A/B：tenant-scoped refs 缺 organizationId → fail-closed（禁止降级为 platform-only）
+  if ((refs.accountId || refs.incidentId || refs.taskId) && !refs.organizationId) {
+    throw new Error('AI_BUDGET_TENANT_IDENTITY_REQUIRED');
+  }
   const keys: Array<{ scope: AiBudgetScopeName; scopeRef: string }> = [{ scope: 'PLATFORM', scopeRef: '*' }];
   if (refs.organizationId) keys.push({ scope: 'ORGANIZATION', scopeRef: refs.organizationId });
   if (refs.accountId) keys.push({ scope: 'ACCOUNT', scopeRef: refs.accountId });
@@ -134,7 +138,14 @@ export async function resolveEffectiveAiBudget(
   if (refs.taskId) keys.push({ scope: 'TASK', scopeRef: refs.taskId });
 
   const rows = await prisma.aiBudgetPolicy.findMany({
-    where: { OR: keys.map((k) => ({ scope: k.scope, scopeRef: k.scopeRef })) },
+    // tenant-safe：非 PLATFORM 必须同时命中同一 organizationId（PLATFORM 用 '' 哨兵）
+    where: {
+      OR: keys.map((k) =>
+        k.scope === 'PLATFORM'
+          ? { scope: k.scope, scopeRef: k.scopeRef, organizationId: '' }
+          : { scope: k.scope, scopeRef: k.scopeRef, organizationId: refs.organizationId as string },
+      ),
+    },
   });
   const pick = (scope: AiBudgetScopeName) => rows.filter((row) => row.scope === scope);
   const sources = rows.map((row) => `${row.scope}:${row.scopeRef}`);
@@ -194,6 +205,10 @@ export async function runGuardedAiCostWrite(input: {
 }): Promise<AiBudgetGuardResult> {
   if (!Number.isInteger(input.estimatedCostMicros) || input.estimatedCostMicros < 0) {
     throw new Error('AI_COST_LEDGER_COST_MICROS_INVALID');
+  }
+  // C2 FINAL-4 CHANGE A：存在 tenant-scoped refs 却缺 organizationId → fail-closed（不得降级为 platform-only）
+  if ((input.refs.accountId || input.refs.incidentId || input.refs.taskId) && !input.refs.organizationId) {
+    throw new Error('AI_BUDGET_TENANT_IDENTITY_REQUIRED');
   }
   const inputTokens = input.entry.inputTokens ?? 0;
   const outputTokens = input.entry.outputTokens ?? 0;
