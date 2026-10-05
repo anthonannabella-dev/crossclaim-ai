@@ -151295,3 +151295,248 @@ PRODUCTION_READY = false
 U3 的可信对象链已经成立；现在只差把 delta 从“target 名字一致”升级为“真正受控的配置字段 + trusted baseline 当前值”。
 ```
 
+### [MSG-20261005-74] PHASE 5 U3 FINAL 裁决 = PASS WITH REVISE / NOT CLOSED（TARGET_SPECIFIC_DELTA_PATH_ALLOWLIST / DELTA_BASELINE_VALUE_BINDING / BASELINE_VALUE_PROVENANCE / PROPOSAL_DIGEST_BINDING = PASS；TARGET_SPECIFIC_DELTA_VALUE_SCHEMA = REVISE：delta.to 仍是任意非空字符串，需按字段类型/范围/枚举校验；PHASE5_U3_FINAL2_REQUIRED = YES）， reviewed ref fc193694
+
+```text
+DECISION
+
+TARGET_SPECIFIC_DELTA_PATH_ALLOWLIST = PASS
+DELTA_BASELINE_VALUE_BINDING = PASS
+BASELINE_VALUE_PROVENANCE = PASS
+PROPOSAL_DIGEST_BINDING = PASS
+TARGET_SPECIFIC_DELTA_VALUE_SCHEMA = REVISE
+PHASE_5_U3 = PASS WITH REVISE / NOT CLOSED
+PHASE5_U3_FINAL2_REQUIRED = YES
+Reviewed HEAD：fc193694
+GitHub Actions：NOT_OBSERVED
+KEEP
+
+这轮两个原阻断点已经真正关闭：
+
+TARGET_DELTA_PATHS 已按 POLICY / GUARD / ROUTER / ACTION_RUNTIME 分区。
+ROUTER 的 killSwitch.disabled 等越界 path 会 fail-closed。
+baseline configValues 来自 server-owned baseline read boundary。
+configValues 已进入：
+snapshot fingerprint
+snapshotDigest
+rollback plan fingerprint
+delta.from 必须严格等于 baselineConfigValues[path]。
+baselineSnapshotDigest 间接把 baseline values 绑定进 rollback plan/proposal 链。
+proposalDigest 已绑定：
+target + path + trusted from + to + rationale。
+proposal provenance / deep-freeze / one-verdict-one-proposal / no execution 都保持成立。
+CHANGE
+
+现在只剩一个很窄的 schema 缺口：
+
+delta.to 仍然只是“非空字符串”
+
+当前实现：
+
+纯文本
+const to = requireText(delta.to)
+
+没有按 path 检查类型、枚举或范围。
+
+因此这些目前仍可能成为可信 proposal：
+
+纯文本
+router.escalationThreshold = "banana"
+policy.retryBudget = "-99999"
+actionRuntime.maxAttempts = "999999999"
+guard.evidenceStrengthRequirement = "DISABLE_ALL_GUARDS"
+
+path 是合法的，from 也来自可信 baseline，但目标值本身无效。
+
+这还没有完全达到：
+
+target-specific delta schema
+
+目前完成的是 target-specific path allowlist，还差 value schema。
+
+RISKS
+
+如果现在直接进入 U4，Canary/Shadow evaluator 就必须处理无意义或危险的配置值。
+
+这会把本应在 proposal contract 层拒绝的问题推给下游，例如：
+
+router.escalationThreshold = abc
+
+甚至可能导致 shadow adapter 解析方式不同，产生误判。
+
+因此建议在 U3 把字段语义收紧，再进入 U4。
+
+TEST
+
+FINAL2 建议增加 server-owned schema，例如：
+
+纯文本
+router.escalationThreshold
+  number, 0..1
+
+router.modelTierPolicy
+  enum allowlist
+
+policy.retryBudget
+  integer, bounded
+
+policy.resolutionWindowHours
+  positive integer, bounded
+
+guard.evidenceStrengthRequirement
+  enum allowlist
+
+actionRuntime.maxAttempts
+  integer, conservative bound
+
+至少测试：
+
+threshold "banana" → REJECT。
+threshold -1 / >1 → REJECT。
+retryBudget 非整数/负数/超上限 → REJECT。
+modelTierPolicy 非允许枚举 → REJECT。
+evidenceStrengthRequirement 非允许枚举 → REJECT。
+maxAttempts 非整数/≤0/超安全上限 → REJECT。
+合法值 → PASS。
+推荐 canonicalize 后再写进 proposal，例如 0.60 → "0.6"，避免同义值产生多个 digest。
+from === to 建议拒绝：
+CONTROLLED_PROPOSAL_DELTA_NOOP
+原 9/9 保持 green。
+NEXT
+
+只做：
+
+P5-U3 FINAL2 — target-specific value schema + canonical delta validation
+
+建议新增：
+
+TARGET_DELTA_SCHEMAS
+
+不要另建第二套 policy engine，只是 U3 的静态 contract validation table。
+
+通过后即可：
+
+TARGET_SPECIFIC_DELTA_SCHEMA = PASS
+PHASE_5_U3 = PASS / CLOSED
+
+然后授权：
+
+P5-U4 — Canary / Shadow Evaluation
+
+最低要求冻结如下。
+
+隔离方式
+
+必须是：
+
+Verified Controlled Config Proposal
+→ Shadow/Canary Overlay
+
+不得把 proposal 写入正式 config SSOT。
+
+必须满足：
+
+baseline 和 proposal overlay 完全隔离；
+同一输入 cohort；
+同一 datasetVersion；
+同一 evaluation window；
+同一 deterministic/read-only tool inputs；
+不产生 External Write / Payment / Claim Submission；
+ACTION_RUNTIME 只能模拟/影子执行，真实执行继续 FORBIDDEN。
+
+指标口径
+
+复用 Phase 4 Offline Evaluation 的正式语义，不另造第二套统计定义：
+
+resolved denominator；
+successRate；
+failure/non-success rate；
+rejectedRate；
+unresolved share；
+human intervention；
+evidence quality。
+
+目标相关补充指标可增加：
+
+Router：routing/escalation 分布、latency、model cost；
+Policy：eligibility/resolution changes；
+Guard：blocked/allowed ratio、false-allow 风险；
+Action Runtime：attempt count / reconcile / error rate。
+
+但不能重新定义 Phase 4 的核心 outcome 口径。
+
+比较方式
+
+同一 cohort：
+
+BASELINE result
+vs
+PROPOSAL SHADOW result
+
+产出 immutable：
+
+CANARY_SHADOW_EVALUATION
+
+至少绑定：
+
+proposalDigest
+rollbackPlanDigest
+baselineSnapshotDigest
+baselineConfigFingerprint
+dataset/cohort identity
+baseline metrics
+proposal metrics
+delta metrics
+evaluationDigest
+recommendation
+
+强制 rollback 条件
+
+出现任一 hard regression：
+
+successRate 下降超过预设阈值；
+unresolved share 上升超过阈值；
+rejection/error rate 超阈值；
+evidence/Guard 安全指标恶化；
+cost/latency 超预算上限；
+evaluation insufficient / provenance mismatch；
+
+必须返回：
+
+ROLLBACK_REQUIRED
+
+并且 rollback identity 必须固定为 U2：
+
+baselineSnapshotDigest + baselineConfigFingerprint
+
+绝不：
+
+latest/default/current.
+
+即使 Canary PASS，也只能得到：
+
+ELIGIBLE_FOR_CONTROLLED_ADOPTION_REVIEW
+
+不能自动 apply / promote / rollout。
+
+PRODUCTION
+
+继续全部 HOLD：
+
+REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing
+
+继续：
+
+SECOND_* = FORBIDDEN
+L5_RELAXATION = FORBIDDEN
+
+保持：
+
+MODEL_GATEWAY_RUNTIME_WIRED = false
+ACTION_RUNTIME_PRODUCTION_ENABLED = false
+META_IMPROVEMENT_INTEGRATED = false
+PRODUCTION_READY = false
+
+U3 的 path/from 两个原问题已经 PASS；只剩 to 的字段类型/范围/枚举校验这一处，修完就可以正式进入 Canary/Shadow。
+```
+
