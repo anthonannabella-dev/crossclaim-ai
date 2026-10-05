@@ -145854,3 +145854,209 @@ STEP_3_RUNTIME_POLICY_WIRING
 
 结论：C2 正式关闭，可以立即进入 C3。
 ```
+
+### [MSG-20261005-38] SI-COST-OPTIMIZATION C3 Implementation Audit — VERDICT = **PASS WITH REVISE**（cache 接线 / identity / HIT 零台账 / PG advisory slot / Safe Mode 豁免 / caller 自报值忽略 / 只读观测 = PASS；4 项窄修 → `C3_FINAL2_REQUIRED = YES`；`C4_REQUIRED = NO`）
+
+```text
+DECISION
+
+VERDICT = PASS WITH REVISE
+
+已核 REVIEWED_HEAD = e7467b73，并确认 e7467b73 → 7bdbbd2a 仅 docs / 状态 / 送审簿记。
+
+C3 主体架构成立，但有 4 个窄正确性缺口。
+
+C3_IMPLEMENTATION = NOT_YET_CLOSED
+SI_COST_OPTIMIZATION = NOT_YET_CLOSED
+C3_FINAL2_REQUIRED = YES
+C4_REQUIRED = NO / NOT_AUTHORIZED
+
+KEEP
+
+以下可直接保留：
+
+cache 位于唯一 rsi-model-router 内部
+Necessity Gate 在 cache 之前
+cache tenant / stale / ruleVersion / schema identity = PASS
+HIT → zero provider / zero fake provider ledger = PASS
+PostgreSQL advisory slot 的跨实例机制 = PASS
+Safe Mode 的 L0 / health / critical alert 豁免设计 = PASS
+Safe Mode retryAllowed=false = PASS
+caller 自报 recovery value 被忽略 = PASS
+observability 只读、无第二 usage truth = PASS
+无真实 provider / payment / external write / production credential 越界。
+CHANGE
+CHANGE A — Business-value 必须真正约束 STRONG escalation
+
+当前 Router 只调用：
+
+businessValue({ requestedTier: 'LOW_COST' })
+
+之后 LOW_COST quality FAIL 可以直接：
+
+decideAiEscalation() → STRONG
+
+升级前没有 business-value STRONG gate。
+
+所以 UNKNOWN / LOW / MEDIUM 价值实际上仍可能调用 STRONG。
+
+修正：
+
+LOW_COST → quality FAIL → businessValue(requestedTier='STRONG') → escalation
+
+只有两道 gate 都允许才能 strong。
+
+另外当前 riskClass 完全没有参与判断，而授权要求是 business value / risk 结合。至少应把代码自身声明的 hard-cap 语义统一，例如：
+
+HIGH + canonical eligible risk → STRONG eligible
+
+其余 → LOW_COST only。
+
+CHANGE B — concurrencyLimit = 0 必须表示零并发，而不是 unlimited
+
+当前：
+
+TypeScript
+row.concurrencyLimit > 0
+
+才进入 scope 列表。
+
+因此 durable policy：
+
+concurrencyLimit = 0
+
+会被过滤掉，最后：
+
+scopes.length === 0 → 直接执行 provider
+
+这是预算旁路。
+
+修正：
+
+null = 未配置
+0 = 禁止任何 STANDARD_AI concurrency
+>0 = N 个 slot
+
+并保持 L0 不受影响。
+
+CHANGE C — Cost Safe Mode 必须使用与 C2 相同的 per-policy-scope usage
+
+readAiCostObservability() 当前先形成最窄：
+
+organization + account + incident + task
+
+usage，然后拿 resolveEffectiveAiBudget() 的父级最紧 limit 来判 Safe Mode。
+
+这会重现 C2 已修过的问题。
+
+例如：
+
+ORG daily = 1000
+inc-A = 900
+inc-B = 100
+查询 inc-B
+
+当前可能用 inc-B 的 100 对比 org 1000 → NORMAL；
+
+实际上 org 已经 1000 → 应 COST_SAFE。
+
+perIncident 也必须：
+
+只统计当前 incident
+无 incident → NOT_APPLICABLE
+
+最小修法：新增 durable Safe Mode resolver，逐 PLATFORM / ORG / ACCOUNT / INCIDENT / TASK policy 用各自 scope usage 检查，直接复用 C2 的作用域语义。
+
+CHANGE D — local-sim 数据不能被呈现成“真实生产指标”
+
+当前没有真实模型流量：
+
+REAL_MODEL_NETWORK = HOLD
+
+但 observability 测试把 local-sim ledger 推出：
+
+LOW_COST_MODEL_RATE = 0.5
+STRONG_MODEL_RATE = 0.5
+
+这与先前硬约束：
+
+无真实模型流量 → NOT_YET_MEASURABLE
+
+不一致。
+
+可以展示：
+
+dev/simulation call counts
+local-sim cost test data
+
+但对产品/生产指标必须：
+
+NOT_YET_MEASURABLE
+
+直到存在可验证的真实 provider traffic。
+
+RISKS
+
+剩余风险都集中在成本控制语义：
+
+低价值任务可绕 business-value gate 升 strong；
+concurrencyLimit=0 反而变成无限制；
+父级预算耗尽时 nested task Safe Mode 可能漏触发；
+local simulation 数据可能被误当成真实成本优化效果。
+
+均不需要重做 C1/C2。
+
+TEST
+
+FINAL-2 最小新增：
+
+UNKNOWN value + cheap FAIL → strong=0
+LOW / MEDIUM + cheap FAIL → strong=0
+HIGH + 满足 canonical risk rule + cheap FAIL → strong ≤ 1
+concurrencyLimit=0 → provider=0
+concurrencyLimit=null → 保持未配置语义
+org daily 已由多个 incident 合计触顶 → 任一 nested incident 查询均 COST_SAFE
+account parent budget 同样不能被 narrow task usage 绕过
+perIncident 无 incident → NOT_APPLICABLE
+仅 local-sim ledger → production efficiency rates = NOT_YET_MEASURABLE
+原 C3 18/18 + PG 8/8 + 全量回归继续绿。
+NEXT
+
+仅授权：
+
+C3 FINAL-2 narrow revision
+
+范围：
+
+A. strong business-value gate
+B. concurrency zero semantics
+C. scope-correct durable Safe Mode
+D. real-vs-simulation metrics provenance
+
+通过后可裁：
+
+C3 = PASS / CLOSED
+SI_COST_OPTIMIZATION = PASS / CLOSED
+C3_FINAL3_REQUIRED = NO
+
+不需要另起 C4。
+
+PRODUCTION
+
+边界继续不变：
+
+REAL_MODEL_NETWORK = HOLD
+PAID_MODEL_CALLS = HOLD
+EXTERNAL_WRITE = HOLD
+PAYMENT = HOLD
+TRANSPORT = HOLD
+PRODUCTION_CREDENTIALS = HOLD
+PRODUCTION_ENABLEMENT = HOLD
+
+P2_F = HOLD
+P2_G = HOLD
+RUNTIME_WIRING = NONE
+STEP_3_RUNTIME_POLICY_WIRING = NOT_AUTHORIZED
+
+结论：C3 的整体方向正确，也没有生产越界；收完这 4 个窄语义问题即可关闭整个 SI-COST-OPTIMIZATION。
+```

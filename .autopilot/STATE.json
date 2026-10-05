@@ -6,12 +6,12 @@
   "next_task": "BG-016 单一 Acceptance Head + 四份状态一致 guard（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍 HOST_ACTION_REQUIRED 或 HOLD",
   "send_head": "07b7009",
   "decision_head": "f5e4cc2c",
-  "last_chatgpt_message": "MSG-20261005-37",
+  "last_chatgpt_message": "MSG-20261005-38",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-06T05:00:00.000Z",
+  "updated_at": "2026-10-06T05:30:00.000Z",
   "previous_head": "8064f07",
-  "architect_decision_pending": true,
+  "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "0c35106",
   "last_sent_at": "2026-10-03T09:07:52.875Z",
@@ -50,12 +50,12 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "ACTIVE",
-  "next_execution_unit": "读取 C3 Implementation Audit 裁决 → 逐字归档（MSG-20261005-38）→ PASS/CLOSED 则宣布 SI_COST_OPTIMIZATION = PASS / CLOSED 并 recompute SAFE_CONTINUATION_QUEUE；REVISE 则最小集合窄修 → commit/push → 再送审",
+  "next_execution_unit": "C3 FINAL-2 narrow revision（A/B/C/D）→ tsc / prisma / 真实 PG / regression → commit + push → C3 FINAL-2 Audit → PASS/CLOSED 则宣布 SI_COST_OPTIMIZATION = PASS / CLOSED 并 recompute SAFE_CONTINUATION_QUEUE",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-06T05:00:00.000Z",
+  "last_tick_at": "2026-10-06T05:30:00.000Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "C3 IMPLEMENTATION 完成并送审（实现 HEAD = e7467b73；5 个新模块 + 2 处接线；tsc 0；C3 18/18 + 真实 PG 8/8；回归 50 files / 445 tests）",
-  "last_action_at": "2026-10-06T05:00:00.000Z",
+  "last_action": "C3 Implementation Audit = PASS WITH REVISE（MSG-20261005-38，REVIEWED_HEAD = e7467b73）：主体架构与边界全 PASS；4 项窄语义修订（A strong business-value gate / B concurrency zero / C scope-correct Safe Mode / D real-vs-simulation metrics）",
+  "last_action_at": "2026-10-06T05:30:00.000Z",
   "next_action": "C2 IMPLEMENTATION（Schema Delta + durable ledger/budget + PG 回归）",
   "current_head": "054ab732",
   "last_completed_head": "054ab732",
@@ -8851,7 +8851,7 @@
     "invariant": "ACTION_GUARD_DRY_RUN_ALLOW != EXECUTION_AUTHORIZATION；零审批消费 / 零 executor / 零业务事实写入 / 零外写；L5 永久拒绝"
   },
   "si_cost_optimization": {
-    "status": "C3_SUBMITTED_PENDING_VERDICT",
+    "status": "C3_FINAL2_REQUIRED",
     "priority": "P1",
     "dependency": "SI_RSI_UNIFICATION_PASS_CLOSED",
     "registered_at": "2026-10-05T12:45:00.000Z",
@@ -9218,6 +9218,50 @@
         "AVG_AI_COST_PER_CASE",
         "AVG_AI_COST_PER_SUCCESSFUL_RECOVERY"
       ]
+    },
+    "c3_verdict": {
+      "message_id": "MSG-20261005-38",
+      "verdict": "PASS WITH REVISE",
+      "reviewed_head": "e7467b73",
+      "pass": [
+        "CACHE_IN_SINGLE_ROUTER",
+        "NECESSITY_GATE_BEFORE_CACHE",
+        "CACHE_TENANT_STALE_RULE_SCHEMA_IDENTITY",
+        "CACHE_HIT_ZERO_PROVIDER_ZERO_FAKE_LEDGER",
+        "PG_ADVISORY_SLOT_CROSS_INSTANCE",
+        "SAFE_MODE_L0_HEALTH_CRITICAL_EXEMPT",
+        "SAFE_MODE_RETRY_ALLOWED_FALSE",
+        "CALLER_VALUE_IGNORED",
+        "OBSERVABILITY_READ_ONLY_NO_SECOND_USAGE_TRUTH",
+        "NO_PRODUCTION_BOUNDARY_VIOLATION"
+      ],
+      "changes": [
+        "CHANGE A：business-value 必须真正约束 STRONG escalation —— 升级前需再经 businessValue(requestedTier=STRONG)，两道 gate 都允许才可 strong；riskClass 必须参与判定（HIGH 价值 + canonical eligible risk → STRONG eligible，其余 → LOW_COST only）",
+        "CHANGE B：concurrencyLimit = 0 必须表示零并发（拒绝），不是 unlimited；null = 未配置；>0 = N 个 slot；且 L0 不受影响",
+        "CHANGE C：Cost Safe Mode 必须使用与 C2 相同的 per-policy-scope usage（不能用最窄 usage 对比父级 limit；perIncident 只统计当前 incident，无 incident → NOT_APPLICABLE）",
+        "CHANGE D：local-sim 数据不得呈现为真实生产指标 —— 仅 local-sim ledger 时生产指标必须 NOT_YET_MEASURABLE，可另行展示 dev/simulation call counts"
+      ],
+      "required_tests": [
+        "UNKNOWN value + cheap FAIL → strong = 0",
+        "LOW / MEDIUM + cheap FAIL → strong = 0",
+        "HIGH + 满足 canonical risk rule + cheap FAIL → strong ≤ 1",
+        "concurrencyLimit = 0 → provider = 0",
+        "concurrencyLimit = null → 保持未配置语义",
+        "org daily 由多个 incident 合计触顶 → 任一 nested incident 查询均 COST_SAFE",
+        "account parent budget 不能被 narrow task usage 绕过",
+        "perIncident 无 incident → NOT_APPLICABLE",
+        "仅 local-sim ledger → production efficiency rates = NOT_YET_MEASURABLE",
+        "原 C3 18/18 + PG 8/8 + 全量回归继续绿"
+      ],
+      "risks": [
+        "低价值任务可绕 business-value gate 升 strong（CHANGE A 收口）",
+        "concurrencyLimit=0 反而变成无限制（CHANGE B 收口）",
+        "父级预算耗尽时 nested task Safe Mode 可能漏触发（CHANGE C 收口）",
+        "local simulation 数据可能被误当成真实成本优化效果（CHANGE D 收口）"
+      ],
+      "c3_final2_required": "YES",
+      "c4_required": "NO / NOT_AUTHORIZED",
+      "archive": "AI-ARCHITECT-INBOX.md#MSG-20261005-38"
     }
   },
   "si_rsi_unification": {
