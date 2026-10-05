@@ -1960,3 +1960,25 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - RBAC / 租户（实测）：OPS 只能访问 System Health，FINANCE / VIEWER 一律拒绝；审计列表与 actorUserId 过滤都受租户约束；
   跨租户记录详情 → NOT_FOUND；Import 视图 L3 白名单只返回原因码/行号/字段名，**无客户数据与金额键**；窗口超限 → INVALID_WINDOW。
 - 边界：本批未改任何代码；READ_ONLY / NO_EXTERNAL_WRITE 保持。
+
+## 2026-10-05T03:12:33.784Z — BACKLOG BG-004-docs-release-evidence-sync
+- BG-004-docs-release-evidence-sync doc-sync=DRIFT autopilot_mode_continuous
+
+## 2026-10-05T03:12:33.794Z — CONTINUOUS u5-doc-sync-guard
+- doc-sync=DRIFT autopilot_mode_recorded
+
+## 2026-10-05T03:12:50.145Z — BACKLOG BG-004-docs-release-evidence-sync
+- BG-004-docs-release-evidence-sync doc-sync=OK
+
+## 2026-10-05T03:12:50.156Z — CONTINUOUS u5-doc-sync-guard
+- doc-sync=OK (4 checks)
+
+## 2026-10-05T03:13:06.937Z — BG-004 文档-发布证据同步守卫（P2，内部可做；**发现并修复真实漂移**）
+- 首次运行 `tools/autopilot/unit-templates/doc-sync.mjs` 与 `tools/autopilot/units/u5-doc-sync-guard.mjs` → **DRIFT**：
+  `autopilot_mode_continuous` / `autopilot_mode_recorded` 失败 —— STATE.json 里**没有** `autopilot_mode` 与 `heartbeat_role` 字段，
+  而 `.autopilot/TASKS.md` 已明确「调度：CONTINUOUS（heartbeat 仅 liveness/watchdog/crash recovery）」。
+- 修复（只补状态、不改任何产品代码）：STATE 增加 `autopilot_mode = "CONTINUOUS"`、`heartbeat_role = "LIVENESS_ONLY"`，
+  并记录来源 `autopilot_mode_source`。
+- 复跑：template → `doc-sync=OK`；u5 → `doc-sync=OK (4 checks)`（README 计数已委托 CI/runtime、API.md 含
+  `/customs-entry-facts/:entryFactId/return-claim-evidence` 与 `/customs-opportunities/:id/start-recovery`、STATE 模式与 heartbeat 角色一致）。
+- 结论：BG-004 验收标准满足（doc-sync 守卫全绿；漂移已按事实修正，未伪造任何声明）。
