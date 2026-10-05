@@ -48,7 +48,6 @@ import {
 } from './rsi-domain-pack';
 import { createProductRecoverySiPack } from './recovery-si-product-composition';
 import type { AppActionGuardDeps } from '../services/action-guard/runtime-guard-composition';
-import type { RuntimeActionGuard } from '../services/action-guard/runtime-guard';
 import type { RecoveryReadPorts } from '../services/intelligence/recovery-read-tools';
 import type { RecoverySiTaskBinding } from './recovery-si-pack';
 
@@ -180,8 +179,7 @@ export async function composeRsiRuntime(input: {
    * 只接受 shared guard 类型（RuntimeActionGuard / AppActionGuardDeps），不接受自定义 guard port。
    */
   productRecoveryPack?: {
-    guard?: RuntimeActionGuard;
-    appActionGuardDeps?: AppActionGuardDeps;
+    appActionGuardDeps: AppActionGuardDeps;
     readPorts: RecoveryReadPorts;
     bind: (task: { id: string; dedupeKey: string; priority: string }) => RecoverySiTaskBinding | null;
   };
@@ -218,10 +216,7 @@ export async function composeRsiRuntime(input: {
     input.productRecoveryPack === undefined
       ? null
       : createProductRecoverySiPack({
-          ...(input.productRecoveryPack.guard === undefined ? {} : { guard: input.productRecoveryPack.guard }),
-          ...(input.productRecoveryPack.appActionGuardDeps === undefined
-            ? {}
-            : { appActionGuardDeps: input.productRecoveryPack.appActionGuardDeps }),
+          appActionGuardDeps: input.productRecoveryPack.appActionGuardDeps,
           readPorts: input.productRecoveryPack.readPorts,
           bind: input.productRecoveryPack.bind as never,
         });
@@ -229,6 +224,14 @@ export async function composeRsiRuntime(input: {
     ...(productPack === null ? [] : [productPack]),
     ...(input.domainPacks ?? []),
   ];
+  // STEP 3 FINAL-5 CHANGE B：Recovery SI 为保留 pack id —— 只能经 productRecoveryPack 组装，
+  // 通用 domainPacks 注入 'recovery-si' 一律拒绝（否则可用自定义 guard 绕过 Shared Action Guard）。
+  const reservedPacks = (input.domainPacks ?? []).filter((pack) => pack.packId === 'recovery-si');
+  if (reservedPacks.length > 0) {
+    throw new Error(
+      'RECOVERY_SI_RESERVED_PACK_ID_REJECTED:recovery-si（Recovery 只能经 productRecoveryPack 组装，禁止经 domainPacks 注入自定义 guard）',
+    );
+  }
   const domainRunner =
     domainPackList.length === 0 ? null : createRsiDomainPackRunner({ packs: domainPackList });
   const controller = attachContinuationToController({
@@ -336,6 +339,10 @@ export const RSI_RUNTIME_COMPOSITION_BOUNDARY = {
   domainCapabilityPacks: 'STATIC_COMPOSITION_ONLY（Recovery SI = domain pack）',
   /** FINAL-4：产品路径的 Recovery SI 只能经唯一 product 组装点（shared guard adapter 固定） */
   productRecoveryPackGuardWiring: 'SHARED_ACTION_GUARD_ADAPTER（FORBIDDEN: caller-supplied guard port）',
+  /** FINAL-5：'recovery-si' 为保留 pack id；经通用 domainPacks 注入一律拒绝 */
+  reservedRecoveryPackIdViaDomainPacks: 'REJECTED（RECOVERY_SI_RESERVED_PACK_ID_REJECTED）',
+  /** FINAL-5：product/domainPack 任一存在即强制 park-for-judge（按最终组装列表判定） */
+  parkForJudgeBasis: 'domainPackList.length > 0',
   secondRuntime: 0,
   domainPackUnmatchedYieldsBlock: true,
   readsCredentials: false,

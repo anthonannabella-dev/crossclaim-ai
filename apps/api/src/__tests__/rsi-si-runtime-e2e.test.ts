@@ -109,7 +109,7 @@ describe('STEP_3G · ONE SI Runtime 端到端（Recovery Pack 作为 domain capa
     expect(seen[0]?.modelCallCount).toBe(0);
     expect(seen[0]?.externalWritePerformed).toBe(false);
     expect(seen[0]?.evidenceRef.startsWith('recovery-si:PLATFORM:')).toBe(true);
-    expect(composition.domainDispatchLog()[0]?.packId).toBe('recovery-si');
+    expect(composition.domainDispatchLog()[0]?.packId).toBe('recovery-si-test');
 
     // 7：Judge —— park-for-judge（跑完只作提案，等待裁决，绝不自动 PASS）
     expect(composition.controller.state().waitingForVerdict).toBe(true);
