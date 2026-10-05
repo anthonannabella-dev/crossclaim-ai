@@ -148362,3 +148362,137 @@ META_IMPROVEMENT_INTEGRATED = false
 PRODUCTION_READY = false
 ```
 
+### [MSG-20261005-56] PHASE 4 U1 FINAL + U2 裁决 = U1 FINAL PASS / U2 LINEAGE_BINDING REVISE · reviewed ref e4258d5d
+
+```text
+
+DECISION
+
+U1 FINAL (a)(b)(c)(d) = PASS
+PHASE4_U1_FINAL_REQUIRED = NO
+U2 当前只能记：LINEAGE_SELF_CONSISTENCY = PASS
+LINEAGE_BINDING = REVISE / NOT YET PASS
+继续授权 U3 / U4 / U5
+Reviewed HEAD：e4258d5d
+
+KEEP
+
+数值/布尔严格类型已落地，不再静默强转。
+humanIntervention 缺失 → null，投影只统计明确 true。
+finalOutcome 已成为 success SSOT，冲突输入会拒绝。
+nested raw-payload 扫描已经进入 builder。
+U1 17/17 的新增语义测试方向正确。
+本次没有新增生产写、Policy/Guard/Router/Action Runtime 修改。
+GITHUB_CI = NOT_OBSERVED 确认成立。
+
+CHANGE
+
+U2 还有 1 个核心语义问题：
+
+当前：
+
+verifyOutcomeLineage(record, lineage)
+
+只是比较：
+
+纯文本
+record.organizationId == lineage.organizationId
+record.taskId         == lineage.taskId
+record.actionRef      == lineage.actionRef
+record.proposalRef    == lineage.proposalRef
+record.evidenceRef    == lineage.evidenceRef
+
+但 record 和 lineage 都可以由同一个 caller 提供。
+
+因此：
+
+纯文本
+actionRef   = fake-action
+proposalRef = fake-proposal
+evidenceRef = fake-evidence
+
+只要两边写成一样，仍然 PASS。
+
+这证明的是声明自洽，不是“这些 refs 确实来自同一条真实执行链”。
+
+另外 buildOutcomeRecord() 中 lineage 还是 optional；不提供 lineage 仍能生成 canonical outcome。
+
+所以目前不能写：
+
+LINEAGE_BINDING = PASS
+
+最小修复：
+
+U2 增加 trusted lineage resolver/port，例如：
+
+纯文本
+resolve({
+  organizationId,
+  taskId,
+  actionRef,
+  proposalRef,
+  evidenceRef
+})
+
+由既有 action/proposal/evidence source / ledger 验证：
+
+三个 ref 都真实存在；
+都属于同 organization；
+都属于同 task；
+proposal → action/evidence 的关联成立；
+caller 不能自己声明“它们属于同链”。
+
+canonical learning record 进入后续 immutable evidence/dataset 前，必须经过这个 trusted binding。
+
+RISKS
+
+还有一个非阻断维护点：
+
+scanRawPayloadKeys() 当前只递归到有限深度（depth > 4 停止）。由于 canonical record 本身只拣白名单字段，深层未知 payload 不会被写入 outcome，所以我不再阻断 U1；但如果合同继续宣称“任意层级出现 raw payload 都拒绝”，后续应改成完整有界遍历/循环检测，而不是固定 4 层。
+
+另外当前 successRate = successCount / recordCount 的口径仍不能直接用于学习评估；U4 必须按你已声明的计划明确 resolved denominator。
+
+TEST
+
+U2 FINAL 至少补：
+
+refs 三者字符串自洽但 ledger 中不存在 → REJECT。
+action/proposal/evidence 分别真实存在，但属于不同 task → REJECT。
+跨 organization → REJECT。
+proposalRef 与 action/evidence 不属于同链 → REJECT。
+trusted resolver 返回完整同链 → PASS。
+不提供可信 lineage binding → 不得进入 learning evidence/dataset 的“verified”路径。
+
+NEXT
+
+继续执行：
+
+U3：learning dataset projection + immutable learning evidence，复用既有 evidence store，禁止第二存储。
+U4：offline evaluation，明确 SUCCESS/FAILURE/PARTIAL/UNKNOWN/MANUAL_REVIEW 分母语义。
+U5：meta-improvement candidate proposal only。
+
+同时把 U2 的 trusted lineage resolver 窄修并入下一批。
+
+冻结原则继续保持：
+
+Learning 可以观察、统计、评估、提出 candidate；不能自动修改 Policy / Guard / Router / Action Runtime，也不能自动 promotion。
+
+PRODUCTION
+
+继续全部 HOLD：
+
+REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing
+
+继续：
+
+SECOND_* = FORBIDDEN
+L5_RELAXATION = FORBIDDEN
+
+以及：
+
+MODEL_GATEWAY_RUNTIME_WIRED = false
+ACTION_RUNTIME_PRODUCTION_ENABLED = false
+META_IMPROVEMENT_INTEGRATED = false
+PRODUCTION_READY = false
+```
+
