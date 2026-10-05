@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-40",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T23:01:02.525Z",
+  "updated_at": "2026-10-05T23:01:37.978Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -52,7 +52,7 @@
   "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
   "next_execution_unit": "PHASE 5 U4 FINAL4 verdict archive + next unit: (1) read verdict (REVIEWED_HEAD = edcbb826, marker [CODEX-PHASE5-U4FINAL4]); (2) write work/stage/verdict-p5u4f4-raw.txt then archive AI-ARCHITECT-INBOX.md (MSG-20261005-81) + compare.mjs FULL_COPY_OK + commit/push; (3) durable state; if REVISE do the narrow fix; if PASS follow auditor NEXT (Controlled Adoption Review contract).",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-05T23:01:02.525Z",
+  "last_tick_at": "2026-10-05T23:01:37.978Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
   "last_action": "PHASE 5 U4 FINAL4 implemented per MSG-20261005-80: server-owned CohortRunSourcePort.read({cohortRef, side}) plus async createVerifiedCohortRun(runSource, lineageLedger, cohortRef, side) which reads actual members, canonicalises taskRefs, rejects duplicates (CANARY_RUN_INPUT_SET_DUPLICATE) and set mismatch (CANARY_RUN_INPUT_SET_MISMATCH), internally produces the Phase 4 evaluation via evaluateVerifiedLearningRecords, and derives inputSetDigest from cohortRefDigest + actualTaskRefs. Caller-injected evaluations into the run are no longer possible. code edcbb826 pushed and submitted (marker [CODEX-PHASE5-U4FINAL4], REVIEWED_HEAD = edcbb826). Local: tsc 0; canary 6/6; PHASE5 10 files / 124 tests PASS; regression 103 files / 1071 tests (only P2E-DB5).",
   "last_action_at": "2026-10-05T23:01:02.525Z",
@@ -5169,7 +5169,7 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "P5U4F4a-1 read U4 FINAL4 verdict (edcbb826) -> write verdict raw -> archive MSG-20261005-81 -> compare FULL_COPY_OK -> commit/push -> durable state",
+    "P5U4F4a-0 (in-flight, expect FINAL5) U4 FINAL4 reviewer confirmed member-level set check + internal Phase 4 evaluation production are in place; the last trust boundary under review is whether CohortRunSourcePort itself is server-owned (vs any caller hand-rolling {read(){...}}). Prepare anticipated fix: add createCohortRunSource(...) with module-private WeakSet provenance + fingerprint + deep-freeze + isVerifiedCohortRunSource, and require it in createVerifiedCohortRun (CANARY_RUN_SOURCE_NOT_VERIFIED) so run sources cannot be forged; keep everything else unchanged. Read/archive the verdict first (MSG-20261005-81).",
     "P5U4F4a-2 if PASS -> Controlled Adoption Review per auditor NEXT",
     "P5U4F4a-3 non-blocking debt: full SHA-256 digests, fingerprint schema upkeep, scanRawPayloadKeys bounded traversal, P2E-DB5 test-isolation"
   ],
@@ -9321,7 +9321,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-05T23:01:02.525Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-05T23:01:37.978Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
