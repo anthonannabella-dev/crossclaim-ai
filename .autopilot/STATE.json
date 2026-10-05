@@ -11,7 +11,7 @@
   "external_write_enabled": false,
   "updated_at": "2026-10-06T08:30:00.000Z",
   "previous_head": "8064f07",
-  "architect_decision_pending": true,
+  "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "0c35106",
   "last_sent_at": "2026-10-03T09:07:52.875Z",
@@ -50,11 +50,11 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
-  "next_execution_unit": "读取 STEP_3_RUNTIME_POLICY_WIRING 裁决 → 逐字归档（MSG-20261005-41）→ PASS/CLOSED 则宣布 CROSSCLAIM_SI_RUNTIME_WIRING = PASS / CLOSED 并 recompute SAFE_CONTINUATION_QUEUE；REVISE 则最小集合窄修 → commit/push → 再送审",
+  "next_execution_unit": "投递 STEP_3_RUNTIME_POLICY_WIRING 送审（docs/releases/SI-RUNTIME-STEP3-WIRING-REQUEST.md，REVIEWED_HEAD = c0b61792）→ 读取裁决 → 逐字归档（MSG-20261005-41）→ PASS/CLOSED 则宣布 CROSSCLAIM_SI_RUNTIME_WIRING = PASS / CLOSED 并 recompute SAFE_CONTINUATION_QUEUE；REVISE 则最小集合窄修 → commit/push → 再送审",
   "automation_status": "CONTINUOUS",
   "last_tick_at": "2026-10-06T08:30:00.000Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "STEP_3_RUNTIME_POLICY_WIRING 接线完成并送审（实现 HEAD = c0b61792）",
+  "last_action": "STEP 3 实现 + 送审包已 commit/push；投递待下一窗口（审核标签页被回收）",
   "last_action_at": "2026-10-06T08:30:00.000Z",
   "next_action": "C2 IMPLEMENTATION（Schema Delta + durable ledger/budget + PG 回归）",
   "current_head": "054ab732",
@@ -9354,7 +9354,7 @@
   "HEARTBEAT_INTERVAL_SECONDS": 60,
   "safe_continuation_queue_recomputed_at": "2026-10-06T07:30:00.000Z",
   "step3_runtime_policy_wiring": {
-    "status": "SUBMITTED_PENDING_VERDICT",
+    "status": "IMPLEMENTED_AWAITING_SUBMIT",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
     "implementation_head": "c0b61792",
     "request": "docs/releases/SI-RUNTIME-STEP3-WIRING-REQUEST.md",
@@ -9371,6 +9371,7 @@
       "customFiling": "L5 永久拒绝未放宽",
       "judgeSelfApproval": "FORBIDDEN（park-for-judge）"
     },
-    "tests": "tsc 0；STEP 3 定向 12/12；回归 75 files / 750 tests PASS；无 Schema/迁移变更"
+    "tests": "tsc 0；STEP 3 定向 12/12；回归 75 files / 750 tests PASS；无 Schema/迁移变更",
+    "submit_note": "送审正文已落库并推送（docs/releases/SI-RUNTIME-STEP3-WIRING-REQUEST.md，REVIEWED_HEAD = c0b61792），但本轮宿主窗口预算耗尽前审核标签页已被回收（in-app browser 无 tab），**尚未投递给 ChatGPT Architect**。下一执行窗口：在 in-app browser 重新打开 https://chatgpt.com/c/6ac385db-cb60-83ec-9754-c7a30633a8c5（或新建同 URL 标签）后投递该正文，再读取裁决 → 归档 MSG-20261005-41。"
   }
 }
