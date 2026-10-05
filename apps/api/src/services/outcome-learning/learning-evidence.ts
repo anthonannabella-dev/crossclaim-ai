@@ -1,25 +1,30 @@
 /**
- * PHASE 4 U3 —— Learning Dataset + Immutable Learning Evidence
+ * PHASE 4 U3 FINAL —— Learning Dataset + Immutable Learning Evidence（接线既有 RSI evidence ledger）
  * ---------------------------------------------------------------
- * 链路（裁决 MSG-20261005-59 NEXT）：canonical outcome → trusted lineage verified → learning projection
- *   → **既有 evidence ledger（append-only）**。
+ * 链路（裁决 MSG-20261005-59/60）：canonical outcome → trusted lineage verified → learning projection
+ *   → **既有 immutable evidence ledger**（`services/autonomy/rsi-evidence-ledger.ts::appendRsiEvidence`）。
  *
  * 硬约束：
+ *   - **不再接受裸 append callback**：learning evidence 只能经正式 adapter 走既有
+ *     `appendRsiEvidence()`，其 EVIDENCE_IMMUTABLE / supersedes / append-only 语义是唯一权威。
  *   - 只复用既有 evidence ledger；**禁止**建立 SECOND_META_EVIDENCE_STORE。
- *   - 只有通过 trusted lineage binding 的记录才可写入（未验证记录显式跳过，绝不静默纳入）。
- *   - immutable evidence 至少绑定：outcomeDigest + lineage refs + dataset/evaluation version + evidence digest。
+ *   - 只有通过 trusted lineage binding 的记录才可写入（未验证记录显式跳过）。
+ *   - immutable evidence 至少绑定：outcomeDigest + lineage refs + dataset version + evidence digest。
  *   - 只观察：不修改 Policy / Guard / Router / Action Runtime；AUTO_PROMOTION = OFF。
  */
 
 import { createHash } from 'node:crypto';
 
+import { appendRsiEvidence, type RsiEvidenceRecord } from '../autonomy/rsi-evidence-ledger';
 import { verifyLearningRecord, type OutcomeLineageLedgerPort } from './outcome-lineage';
 import { projectLearningDataset, type LearningDatasetProjection, type OutcomeRecord } from './outcome-record';
 
 export const LEARNING_DATASET_VERSION = 'learning-dataset/v1';
 
 export const LEARNING_EVIDENCE_BOUNDARY = {
-  store: 'REUSE_EXISTING_EVIDENCE_LEDGER',
+  store: 'REUSE_EXISTING_RSI_EVIDENCE_LEDGER',
+  ledgerOwner: 'services/autonomy/rsi-evidence-ledger.ts::appendRsiEvidence',
+  bareAppendCallback: 'FORBIDDEN',
   secondMetaEvidenceStore: 'FORBIDDEN',
   appendOnly: true,
   verifiedOnly: true,
@@ -39,26 +44,51 @@ export interface LearningEvidenceEntry {
   evidenceDigest: string;
 }
 
-/** 既有 evidence ledger 的 append-only 端口（server-owned composition 注入）。 */
+/** 既有 evidence ledger 的 append-only 端口（由正式 composition 注入）。 */
 export interface LearningEvidenceLedgerPort {
   append(entry: LearningEvidenceEntry): Promise<{ evidenceRef: string }>;
 }
 
+/** 既有 RSI evidence ledger 的读/提交适配端口（server-owned composition 注入）。 */
+export interface RsiEvidenceLedgerStorePort {
+  read(): readonly RsiEvidenceRecord[];
+  commit(records: readonly RsiEvidenceRecord[]): void;
+}
+
 const APP_LEARNING_EVIDENCE_LEDGERS = new WeakSet<LearningEvidenceLedgerPort>();
 
-/** 只读 provenance：只有 factory 产出的 evidence ledger 才可信。 */
+/** 只读 provenance：只有正式 adapter 产出的 evidence ledger 才可信。 */
 export function isAppLearningEvidenceLedger(ledger: LearningEvidenceLedgerPort): boolean {
   return APP_LEARNING_EVIDENCE_LEDGERS.has(ledger);
 }
 
-/** 正式 composition：包装既有 evidence ledger 的 append 能力并登记 provenance。 */
-export function createAppLearningEvidenceLedger(deps: {
-  append: (entry: LearningEvidenceEntry) => Promise<{ evidenceRef: string }>;
-}): LearningEvidenceLedgerPort {
-  if (!deps || typeof deps.append !== 'function') throw new Error('APP_LEARNING_EVIDENCE_MISSING_APPEND');
+/**
+ * 正式 adapter：把 learning evidence 映射为既有 RSI evidence record，
+ * 并经**既有** `appendRsiEvidence()` 追加 —— 重复 evidenceId 由既有 ledger 拒绝（EVIDENCE_IMMUTABLE）。
+ */
+export function createAppLearningEvidenceLedgerFromRsi(
+  store: RsiEvidenceLedgerStorePort,
+): LearningEvidenceLedgerPort {
+  if (!store || typeof store.read !== 'function' || typeof store.commit !== 'function') {
+    throw new Error('APP_LEARNING_EVIDENCE_MISSING_RSI_STORE');
+  }
   const ledger: LearningEvidenceLedgerPort = {
     async append(entry: LearningEvidenceEntry) {
-      return deps.append(entry);
+      const next: RsiEvidenceRecord = {
+        evidenceId: entry.evidenceDigest,
+        kind: 'METRIC_RESULT',
+        subjectRef: 'outcome:' + entry.outcomeDigest,
+        digest: entry.evidenceDigest,
+        recordedAt: new Date().toISOString(),
+        producedBy: 'outcome-learning',
+        supersedesId: null,
+      };
+      const result = appendRsiEvidence(store.read(), next);
+      if (!result.ok) {
+        throw new Error('LEARNING_EVIDENCE_LEDGER_REJECTED:' + result.reason);
+      }
+      store.commit(result.records);
+      return { evidenceRef: next.evidenceId };
     },
   };
   APP_LEARNING_EVIDENCE_LEDGERS.add(ledger);
@@ -67,12 +97,15 @@ export function createAppLearningEvidenceLedger(deps: {
 
 /**
  * 构建 immutable learning evidence 条目：绑定 outcomeDigest + lineage refs + datasetVersion + evidenceDigest。
- * evidenceDigest 由上述字段的稳定序列化计算（不含原始 payload / 凭据）。
+ * datasetVersion 必须 non-empty / non-whitespace。
  */
 export function buildLearningEvidenceEntry(
   record: OutcomeRecord,
   datasetVersion: string = LEARNING_DATASET_VERSION,
 ): LearningEvidenceEntry {
+  if (typeof datasetVersion !== 'string' || datasetVersion.trim() === '') {
+    throw new Error('LEARNING_EVIDENCE_DATASET_VERSION_REQUIRED');
+  }
   const lineageRefs = {
     actionRef: record.actionRef,
     proposalRef: record.proposalRef,
@@ -93,6 +126,7 @@ export function buildLearningEvidenceEntry(
     outcomeDigest: record.digest,
     lineageRefs,
     datasetVersion,
+    // 长期持久化建议保留完整 SHA-256；架构阶段截 16 hex（见裁决 RISKS）
     evidenceDigest: 'learning-evidence:' + createHash('sha256').update(preimage).digest('hex').slice(0, 16),
   };
 }
@@ -133,6 +167,9 @@ export async function appendVerifiedLearningEvidence(
   records: readonly OutcomeRecord[],
   datasetVersion: string = LEARNING_DATASET_VERSION,
 ): Promise<AppendVerifiedEvidenceResult> {
+  if (typeof datasetVersion !== 'string' || datasetVersion.trim() === '') {
+    throw new Error('LEARNING_EVIDENCE_DATASET_VERSION_REQUIRED');
+  }
   if (evidenceLedger === null || evidenceLedger === undefined) {
     throw new Error('APP_LEARNING_EVIDENCE_LEDGER_REQUIRED');
   }
