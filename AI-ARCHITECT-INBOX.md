@@ -146812,3 +146812,83 @@ P2_G = HOLD
 
 本裁决不授权任何生产开闸。
 ```
+
+### [MSG-20261005-47] STEP_3_RUNTIME_POLICY_WIRING FINAL-7 — VERDICT = **PASS / CLOSED**（FINAL-7 = PASS；`STEP_3_RUNTIME_POLICY_WIRING = PASS / CLOSED`；`STEP3_FINAL8_REQUIRED = NO`；Reviewed HEAD = 795f65a5；GITHUB_CI = NOT_OBSERVED（不得写成 CI 已绿）；STEP 3 CLOSED ≠ SI/RSI 生产开闸，全部 HOLD 原样保持）
+
+```text
+DECISION
+
+FINAL-7 = PASS
+STEP_3_RUNTIME_POLICY_WIRING = PASS / CLOSED
+STEP3_FINAL8_REQUIRED = NO
+Reviewed HEAD：795f65a5
+
+KEEP
+
+task:recovery:* 永远优先进入 Recovery domain dispatch。
+caller supplied input.runner 已不能抢占 Recovery task。
+无正式 recovery-si → fail-closed BLOCK。
+正式 productRecoveryPack 存在 → Recovery task 只进入 recovery-si。
+非 Recovery task → caller runner 仍可正常使用。
+FINAL-5/6 的 reserved packId、reserved namespace、Shared Action Guard、park-for-judge 全部保持。
+SECOND_RUNTIME=0、唯一 Policy Core / Action Guard / Control Plane、CUSTOMS L5 BLOCK 保持。
+
+CHANGE
+
+NONE。
+不再要求 FINAL-8。
+
+RISKS
+
+我检查了 795f65a5 实际代码，effectiveRunner 已封住最后一个已识别的 runner 抢占旁路。
+当前 GitHub 上仍没有该 commit 对应的 Actions workflow run，所以：
+STEP_3_CODE_ARCHITECTURE = PASS/CLOSED
+LOCAL_REGRESSION = PASS
+GITHUB_CI = NOT_OBSERVED
+不得把本次 CLOSED 写成“GitHub CI 已绿”。
+MODEL_GATEWAY_RUNTIME_WIRED=false、COST_CORE_RUNTIME_WIRED=false、META_IMPROVEMENT_INTEGRATED=false 是后续能力，不构成 STEP 3 reopening。
+
+TEST
+
+已核实 FINAL-7 三个关键行为：
+
+Recovery + rogue caller runner + 无 product pack → caller runner 0 次。
+Recovery + product pack + rogue caller runner → recovery-si，caller runner 0 次。
+non-Recovery + caller runner → caller runner 正常执行。
+
+结合 FINAL-5/6，当前链路已经形成：
+
+Recovery task
+→ runner mux
+→ reserved Recovery dispatch
+→ productRecoveryPack
+→ Shared Action Guard
+→ Recovery SI Pack
+→ deterministic tool/evidence
+→ proposal
+→ Judge
+→ verdict
+
+NEXT
+
+正式记录：
+
+STEP_3_RUNTIME_POLICY_WIRING = PASS / CLOSED
+
+STEP3_FINAL8_REQUIRED = NO
+
+可以进入下一阶段；不要继续为了 STEP 3 制造 FINAL-8/9 修订循环。
+
+PRODUCTION
+
+全部 HOLD 原样保持：
+
+REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing
+
+并继续：
+
+SECOND_* = FORBIDDEN
+L5_RELAXATION = FORBIDDEN
+
+STEP 3 CLOSED ≠ SI/RSI 已生产开闸。 它表示这一阶段的 SI↔RSI Runtime/Policy/Guard 接线已经闭环。
+```

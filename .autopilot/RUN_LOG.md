@@ -2685,3 +2685,11 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - FINAL-4 仅窄修：唯一 product composition 强制接 createSharedRecoveryGuardAdapterFromAppGuard + real-adapter runtime E2E。
 - 审核渠道：新会话 https://chatgpt.com/c/6ac3b55d-18f4-83ec-97d5-32ffc002ff0a（FINAL-3 送审 + 裁决）。
 - 注意：GitHub 在 692726bf 未返回独立 workflow run，不得表述为 GitHub CI 证明。
+
+## 2026-10-06T12:00Z —— STEP_3_RUNTIME_POLICY_WIRING = PASS / CLOSED（MSG-20261005-47）
+- FINAL-7 = PASS；STEP_3_RUNTIME_POLICY_WIRING = PASS / CLOSED；STEP3_FINAL8_REQUIRED = NO；Reviewed HEAD = 795f65a5。
+- 闭环链路：Recovery task → runner mux → reserved Recovery dispatch → productRecoveryPack → Shared Action Guard → Recovery SI Pack → deterministic tool/evidence → proposal → Judge → verdict。
+- 证据：本地回归 76 files PASS；GITHUB_CI = NOT_OBSERVED（不得写成 CI 已绿）。
+- MODEL_GATEWAY_RUNTIME_WIRED / COST_CORE_RUNTIME_WIRED / META_IMPROVEMENT_INTEGRATED 仍为 false（后续能力，不构成 STEP 3 reopening）。
+- 全部生产边界保持 HOLD；STEP 3 CLOSED ≠ SI/RSI 生产开闸。
+- 待归档：MSG-42（FINAL-2，旧会话干净重抽）、MSG-44（FINAL-4）、MSG-45（FINAL-5，完整重抽）、MSG-46（FINAL-6）。

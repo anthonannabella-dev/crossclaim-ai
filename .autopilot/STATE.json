@@ -50,11 +50,11 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
-  "next_execution_unit": "生成 FINAL-5 送审包 → 右侧会话投递（marker [CODEX-STEP3-FINAL5]）→ 送达三检 → 读取裁决 → PASS 则 STEP_3_RUNTIME_POLICY_WIRING = PASS / CLOSED；同时补归档 FINAL-4 裁决 MSG-20261005-44 与 FINAL-2 裁决 MSG-20261005-42",
+  "next_execution_unit": "STEP 3 已 CLOSED。下一阶段：recompute SAFE_CONTINUATION_QUEUE（新 backlog = 仅剩 HOST_ACTION_REQUIRED：RSI-RT-02 Linux/systemd 实机验证、BG-006 生产候选预检；以及 HOLD_EXTERNAL）→ 若宿主另行授权，按顺序进入 Linux/systemd real-host validation → durable DB reboot validation → real model sidecar → controlled non-production model call；同时补齐 4 笔待归档裁决（MSG-42/44/45/46）",
   "automation_status": "CONTINUOUS",
   "last_tick_at": "2026-10-06T08:30:00.000Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "STEP 3 FINAL-5 A/B/C 全部落地并通过回归",
+  "last_action": "STEP_3_RUNTIME_POLICY_WIRING = PASS / CLOSED（MSG-20261005-47，REVIEWED_HEAD = 795f65a5）",
   "last_action_at": "2026-10-06T08:30:00.000Z",
   "next_action": "C2 IMPLEMENTATION（Schema Delta + durable ledger/budget + PG 回归）",
   "current_head": "054ab732",
@@ -7422,40 +7422,12 @@
   },
   "ci_red_cleared_at": "2026-10-04T09:16:07.985Z",
   "ci_red_cleared_head": "4f02282",
-  "pending_archives": {
-    "status": "EMPTY（2026-10-04 全部归档）",
-    "archived": [
-      {
-        "id": "MSG-20261004-27",
-        "topic": "ZERO evidence / WHOLE_SCHEMA_DIFF_ZERO",
-        "reviewed_head": "90b1f71",
-        "len": 3207,
-        "fnv": "fa4fee5d",
-        "lines": 106,
-        "commit": "1de407e"
-      },
-      {
-        "id": "MSG-20261004-28",
-        "topic": "SEO-3 PUBLIC API SECURITY",
-        "reviewed_head": "3066ac2",
-        "len": 4501,
-        "fnv": "1aef0ed7",
-        "lines": 183,
-        "commit": "本次批次"
-      },
-      {
-        "id": "MSG-20261004-29",
-        "topic": "C18 EXACT-ORDER REPLAY",
-        "reviewed_head": "1950ef8",
-        "len": 3190,
-        "fnv": "064442e4",
-        "lines": 113,
-        "commit": "a2cac8e"
-      }
-    ],
-    "tool": "tools/verification/archive-verdict.mjs（FNV-1a 先校验再落盘 + compare.mjs FULL_COPY_OK）",
-    "note": "抽取坑：非最后一条回复的段尾会带日期分隔标签（如「今天 20:01」），必须先截掉再 trim，否则多 10 字符。"
-  },
+  "pending_archives": [
+    "MSG-20261005-42（FINAL-2，旧会话干净重抽）",
+    "MSG-20261005-44（FINAL-4）",
+    "MSG-20261005-45（FINAL-5，需完整重抽）",
+    "MSG-20261005-46（FINAL-6）"
+  ],
   "report_language": "zh-CN",
   "report_language_note": "宿主指令（2026-10-04）：所有面向宿主的汇报、通知、心跳 message 一律使用中文；代码注释/commit message 维持既有风格（英文为主，中文用于验收注释）。",
   "rsi_control_plane": {
@@ -9354,7 +9326,7 @@
   "HEARTBEAT_INTERVAL_SECONDS": 60,
   "safe_continuation_queue_recomputed_at": "2026-10-06T07:30:00.000Z",
   "step3_runtime_policy_wiring": {
-    "status": "FINAL5_IMPLEMENTED_AWAITING_SUBMIT",
+    "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
     "implementation_head": "c0b61792",
     "request": "docs/releases/SI-RUNTIME-STEP3-FINAL3-REQUEST.md",
@@ -9456,6 +9428,23 @@
         "C product 组装点只接受 AppActionGuardDeps（内部唯一 createAppActionGuard；结构化 guard 实例 FORBIDDEN）"
       ],
       "tests": "tsc 0；STEP3 三套 33/33；回归 76 files / 771 tests PASS"
+    },
+    "final7_verdict": {
+      "message_id": "MSG-20261005-47",
+      "verdict": "PASS / CLOSED",
+      "reviewed_head": "795f65a5",
+      "step3_runtime_policy_wiring": "PASS / CLOSED",
+      "step3_final8_required": "NO",
+      "github_ci": "NOT_OBSERVED（本 commit 无 Actions workflow run；不得表述为 CI 已绿）",
+      "local_regression": "PASS（76 files / 776 tests）",
+      "chain": "Recovery task → runner mux → reserved Recovery dispatch → productRecoveryPack → Shared Action Guard → Recovery SI Pack → deterministic tool/evidence → proposal → Judge → verdict",
+      "still_false": [
+        "MODEL_GATEWAY_RUNTIME_WIRED",
+        "COST_CORE_RUNTIME_WIRED",
+        "META_IMPROVEMENT_INTEGRATED"
+      ],
+      "archive": "AI-ARCHITECT-INBOX.md#MSG-20261005-47"
     }
-  }
+  },
+  "step3_runtime_policy_wiring_closed_at": "2026-10-06T12:00:00.000Z"
 }
