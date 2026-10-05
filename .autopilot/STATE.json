@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261004-16",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T03:30:51.541Z",
+  "updated_at": "2026-10-05T03:42:19.437Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -49,7 +49,7 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-05T03:30:26.585Z",
+  "last_tick_at": "2026-10-05T03:42:19.437Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
   "last_action": "INDEPENDENT FINAL AUDIT = PASS（MSG-20261003-147）；三元闭环成立，内部代码开发阶段正式完成",
   "last_action_at": "2026-10-03T14:17:18.723Z",
@@ -5164,7 +5164,7 @@
   "runner_status": "RUNNING",
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
-  "safe_continuation_queue": "EMPTY（剩余仅：BG-006 HOST+ARCH、BG-010 依赖 BG-011、BG-011 WAITING_FOR_ARCHITECT_VERDICT、RSI-RT-02 HOST_VALIDATION）",
+  "safe_continuation_queue": "EMPTY（仅 BG-006 HOST+ARCH / BG-010 依赖 BG-011 / BG-011 WAITING_FOR_ARCHITECT_VERDICT / RSI-RT-02 HOST_VALIDATION）",
   "full_autonomous_internal_execution": "VERIFIED",
   "dispatcher_acceptance": {
     "at": "2026-10-03T14:47:59.226Z",
@@ -5189,9 +5189,9 @@
   "awaiting_verdict": "EXACT-ORDER REPLAY 证据已送审（comment 5979262070）；shared/staging deploy 解禁待裁决",
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-05T03:31:14.096Z",
-    "head": "d501cf4b",
-    "acceptance_head": "d501cf4b",
+    "computed_at": "2026-10-05T03:42:27.160Z",
+    "head": "80cc5ddd",
+    "acceptance_head": "80cc5ddd",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5342,48 +5342,48 @@
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=d501cf4b ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
+        "evidence": "acceptance_head=80cc5ddd ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
       },
       "L1-05_pg_regression_passed": {
         "status": "UNVERIFIED",
-        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head d501cf4b（且中间存在非簿记变更）"
+        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head 80cc5ddd（且中间存在非簿记变更）"
       },
       "L1-06_fresh_db_migration_passed": {
         "status": "UNVERIFIED",
-        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head d501cf4b（且中间存在非簿记变更）"
+        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head 80cc5ddd（且中间存在非簿记变更）"
       },
       "L1-07_api_typecheck_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head d501cf4b（且中间存在非簿记变更）"
+        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head 80cc5ddd（且中间存在非簿记变更）"
       },
       "L1-08_web_typecheck_build_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head d501cf4b（且中间存在非簿记变更）"
+        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head 80cc5ddd（且中间存在非簿记变更）"
       },
       "L1-09_no_skipped_critical_tests": {
         "status": "UNVERIFIED",
-        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head d501cf4b（且中间存在非簿记变更）"
+        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head 80cc5ddd（且中间存在非簿记变更）"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
         "status": false,
-        "evidence": "dirty entries: 2"
+        "evidence": "dirty entries: 1"
       },
       "L1-11_docs_state_consistent": {
         "status": "UNVERIFIED",
-        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head d501cf4b（且中间存在非簿记变更）"
+        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head 80cc5ddd（且中间存在非簿记变更）"
       },
       "L1-12_schema_invariants_verified": {
         "status": "UNVERIFIED",
-        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head d501cf4b（且中间存在非簿记变更）"
+        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head 80cc5ddd（且中间存在非簿记变更）"
       },
       "L1-13_negative_paths_covered": {
         "status": "UNVERIFIED",
-        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head d501cf4b（且中间存在非簿记变更）"
+        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head 80cc5ddd（且中间存在非簿记变更）"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
         "status": "UNVERIFIED",
-        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head d501cf4b（且中间存在非簿记变更）"
+        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head 80cc5ddd（且中间存在非簿记变更）"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
@@ -7377,13 +7377,13 @@
     "seo3_progress": "CHANGE A/B validator added (86f4289), engine output validation added (eb99c53), validator wired into runPublicSeoChecker (8bf49da), HTTP boundary guard added (4f2cd20); HTTP entry still not registered"
   },
   "CURRENT_HEAD": "ecdae39",
-  "LAST_COMPLETED_UNIT": "BG-012 复核关闭（server.ts 已接线 /customs-entry-facts/:id/recovery-chain，E2E 4/4）+ 诚实修正 BG-008/014/015/018 退回 IMPLEMENTED_PENDING_CI（本批 CI 未出结论）。",
+  "LAST_COMPLETED_UNIT": "CI 归并：BG-008/BG-014/BG-015/BG-018 的 hosted CI 全绿 → 4 项翻 COMPLETED。",
   "NEXT_EXECUTION_UNIT": "等待并消费 BG-011 架构裁决（Lane B），同时继续批量消费 CI 结论；若裁决要求补证据立即执行。",
-  "CI_STATUS": "待结论：e97c4e6(BG-008) / f269920(BG-014) / 5d809039(BG-015,BG-018) / ed7febb(BG-011-doc) / d501cf4b(归并) 全部 in_progress；已绿：69e9d7f(BG-007)、d439453(BG-004)、a893b7f(BG-003)",
+  "CI_STATUS": "BG-008 run 37259235898 / BG-014 run 37259387448 / BG-015·BG-018 run 37259510903 / BG-011-doc run 37259558326 = completed_success；仅 80cc5dd 与 d501cf4b（纯状态提交）在跑",
   "WAITING_FOR_VERDICT": "BG-011-ps04-enum-migration-d1-d3（Audit Pack @5d809039，已唤醒右侧审计会话；等待 verdict，不阻塞 Lane A）",
   "HOST_ACTION_REQUIRED": "①非生产 DATABASE_URL（无真实客户数据）→ RSI staging smoke + migration apply + reboot/reconcile 与 exactly-once 实机验证；②Linux 主机（或指定 CI runner）→ systemd Test A/B/C/D/E/F；③真实 Provider 接入需要宿主注册/申请账号、接受第三方协议、提供 Client ID/Secret 与 POA 等（当前全部 HOLD）；④gh auth login（可选，仅恢复 issue comment 通道）。",
   "HOLD_EXTERNAL": "RSI_MODEL_NETWORK = HOLD / RSI_PAID_MODEL_CALLS = HOLD / REAL_PROVIDER_ADAPTER = OUT_OF_PROCESS_REQUIRED（sidecar 未实现）/ EXTERNAL_WRITE = HOLD / PAYMENT = HOLD / TRANSPORT = HOLD / PRODUCTION_CREDENTIALS = HOLD / PRODUCTION_PUBLIC_CHECKER = HOLD",
-  "LAST_HEARTBEAT_AT": "2026-10-05T03:30:51.541Z",
+  "LAST_HEARTBEAT_AT": "2026-10-05T03:42:19.437Z",
   "ci_red_streak_note": "RESOLVED: three contract/inventory fixes (tenant-trigger whitelist 1b15ab7, append-only whitelist cc13bde, model inventory 82->85 4f02282); 4f02282 is the first green run after the streak.",
   "ci_contract_fix_local_verification": {
     "at": "2026-10-04T08:51:16.135Z",
@@ -7783,9 +7783,10 @@
   },
   "CI_RESULT": "completed_success",
   "CI_RUNS": [
-    "37258444599",
-    "37258553265",
-    "? 32758905383"
+    "37259235898",
+    "37259387448",
+    "37259510903",
+    "37259558326"
   ],
   "rsi_task_generation": {
     "at": "2026-10-05T01:03:08.384Z",
@@ -8103,12 +8104,6 @@
       "arch": true
     },
     {
-      "id": "BG-008-platform-write-amazon-evidence",
-      "status": "IMPLEMENTED_PENDING_CI",
-      "host": false,
-      "arch": false
-    },
-    {
       "id": "BG-010-ps04-phase1-readonly-chain",
       "status": null,
       "host": false,
@@ -8117,24 +8112,6 @@
     {
       "id": "BG-011-ps04-enum-migration-d1-d3",
       "status": "WAITING_FOR_ARCHITECT_VERDICT",
-      "host": false,
-      "arch": false
-    },
-    {
-      "id": "BG-014-ior-qualification-wiring",
-      "status": "IMPLEMENTED_PENDING_CI",
-      "host": false,
-      "arch": false
-    },
-    {
-      "id": "BG-015-ior-full-chain-assembly",
-      "status": "IMPLEMENTED_PENDING_CI",
-      "host": false,
-      "arch": false
-    },
-    {
-      "id": "BG-018-independent-site-internal-closure",
-      "status": "IMPLEMENTED_PENDING_CI",
       "host": false,
       "arch": false
     },
