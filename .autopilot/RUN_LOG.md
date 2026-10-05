@@ -2313,3 +2313,8 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 增 RECOVERY_PERSIST_LINEAGE：businessIdentity = packageDigest，traceBasis = planDigest，planDigest 不取代 packageDigest。
 - 增 RECOVERY_PACKAGE_DELETE_GUARD：应用层禁止删除、DB 触发器必填、迁移状态 PENDING、需同步触发器清单。
 - 测试新增 P2E-G6..G8；未写迁移、未做事务端口接线（RUNTIME_WIRING = NONE）。
+
+## 2026-10-05T08:55Z — P2-E1：RecoveryPackage DELETE guard 迁移 + 触发器清单同步
+- 新增迁移 apps/api/prisma/migrations/20261005040000_recovery_package_delete_guard/migration.sql：cc_no_delete__RecoveryPackage / cc_no_delete__RecoveryPackageArtifact（BEFORE DELETE → 拒绝）。
+- tools/tenant-triggers/append-only-triggers.json 登记两条触发器 + unexpectedPrefixes 增 cc_no_delete__%；既有 tenant / append-only / controlled-mutation 语义不变。
+- 待执行：prisma validate / migrate deploy 兼容性校验 / DELETE guard 实测 / 允许路径回归（P2-E2..E4 同链继续）。
