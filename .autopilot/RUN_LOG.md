@@ -1913,3 +1913,15 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 一致性：`node tools/autopilot/acceptance-consistency.mjs` → `ACCEPTANCE_CONSISTENCY=OK head=734568c open_internal_items=74 areas=21`
   （其中 C2b 校验「Golden Path 缺口必须已登记为 backlog」，当前 gaps=0 因而自动成立）。
 - 结论：BG-017 验收标准满足；矩阵可由生成器随时重算，未引入任何外写/网络/凭据。
+
+## 2026-10-05T02:49:47.113Z — BG-002 Settlement / Billing / Fee-guard 资金真值链只读复核（P1，内部可做）
+- 套件实测（apps/api 本地，退出码 0）：**16 个文件 / 140 例全绿**——
+  `commercial-fee-guard-wiring`(6) · `commercial-fee-policy`(14) · `commercial-fee-policy-cutover`(7) · `fee-compute`(6) ·
+  `fee-eligibility`(3) · `fee-policy-source`(2) · `fee-adjustment-db` · `fee-record-db` · `settlement-record-db` ·
+  `settlement-reversal-db`(10) · `settlement-receipt-snapshot`(12) · `c2-settlement-lineage-db`(3) · `workflow-billing`(6) ·
+  `workflow-billing-db`(5) · `action-guard-billing-draft-http-db` · `recovery-money-view-http-db`。
+- 关键不变量（来自实测用例名，非推断）：`EXPECTED` 只进 expected、`DISPUTED` 单独计数（不被当作已追回）；
+  payout + REVERSAL 不重复冲减（gross/adjustments/net 正确）；币种分桶不相加（USD/EUR 不混算）；
+  Billing 状态机 CAS 并发只放行一个、`DRAFT → PAID` 被拒、`PAID` 缺 paymentReference → 拒绝；
+  越权 401 / VIEWER 403 / 跨租户 404；Settlement↔account lineage 由 DB 约束保证（A 的 Evidence 不能绑 B 的 Settlement）。
+- 边界：本批**未改动任何代码**，只跑只读套件并留证；`NO_REAL_MONEY / NO_AUTOPAY / NO_COLLECTION` 保持，HOLD_EXTERNAL 保持。
