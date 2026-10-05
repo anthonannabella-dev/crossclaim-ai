@@ -144918,3 +144918,178 @@ STEP_3_RUNTIME_POLICY_WIRING = NOT_AUTHORIZED
 
 FINAL-3 只允许上述两个窄修，不得扩大 C1 范围。
 ```
+
+### [MSG-20261005-33] SI-COST-OPTIMIZATION C1 FINAL-3 — VERDICT = **PASS / CLOSED**（CHANGE A/B = PASS；`C1_IMPLEMENTATION = PASS / CLOSED`；`C1_FINAL4_REQUIRED = NO`；C2 实现已授权；含 1 条非阻断 telemetry 注意项）
+
+```text
+DECISION
+
+VERDICT = PASS / CLOSED
+
+对 REVIEWED_HEAD = 79536ca5 实码复核后：
+
+CHANGE A — per-task identity = PASS
+CHANGE B — real provider attempt accounting = PASS
+C1 Necessity Gate = PASS
+Cache Identity Contract = PASS
+Cheap→Strong provenance = PASS
+hard cap 2/1 = PASS
+Gateway single choke point = PASS
+
+并核对 79536ca5 → 9d3ac658：其上仅归档/状态/送审类变更，未发现新的业务代码改变。
+
+C1_IMPLEMENTATION = PASS / CLOSED
+C1_FINAL4_REQUIRED = NO
+
+KEEP
+
+以下边界正式冻结：
+
+AI-eligible 调用缺少有效 taskId → fail-closed
+task state key 使用：
+incidentId + taskId + taskType + promptDigest
+caller 自报 escalation 不具授权效力
+strong 只能由 Gateway 内部：
+LOW_COST → deterministic quality evaluation → bounded escalation
+maxAttempts = 2
+maxEscalations = 1
+Host 不得放大 hard cap
+budget guard rejection 不算 provider attempt
+strong 未真实 invoke → 不增加 attempts / escalations
+strong failure / attempt ceiling 后无 recursive retry。
+CHANGE
+
+无阻断性 CHANGE。
+
+有一个非阻断 C2/C3 telemetry 注意项：
+
+当前 strong 在 budget guard 阶段被拒绝时，最终返回结构仍可能携带：
+
+escalatedToStrong: true
+
+虽然实际上：
+
+strong provider 没调用；
+attempts 没增加；
+escalations 没增加。
+
+这不影响 C1 安全边界，因此不要求 FINAL-4。
+
+但 C2/C3 禁止使用 escalatedToStrong 作为“真实 strong 调用次数/成本”的事实源。
+
+真实 usage 必须只来自 durable ledger 中的真实 provider invocation。
+
+后续可把该字段语义收紧为：
+
+real strong invocation 才 true；或
+明确区分 strongEscalationAuthorized / strongInvocationOccurred
+
+不阻塞 C2 开工。
+
+RISKS
+
+C1 当前没有剩余 P0/P1 阻断风险。
+
+下一阶段主要风险已经转到 C2：
+
+并发预算 race；
+ledger 重复记账；
+restart 后 usage 被清零；
+tenant/account budget 串租户；
+cache 跨 tenant / ruleVersion 错误复用；
+ledger 与 budget usage 形成第二事实源。
+
+这些全部应由 C2 解决。
+
+TEST
+
+本轮证据接受：
+
+C1 定向：6 files / 50 PASS
+RSI 全量：46 files / 252 PASS
+tsc --noEmit = 0
+Prisma：79 migrations up to date
+无 Schema 变化，符合 FINAL-3 授权范围。
+
+C1 testing sufficiency = PASS。
+
+NEXT
+C2 IMPLEMENTATION = AUTHORIZED
+
+授权范围：
+
+1. AiCostLedgerEntry
+
+durable
+append-only
+callId idempotent
+costMicros integer
+tenant isolation
+restart-safe
+
+2. AiBudgetPolicy
+
+durable budget configuration
+PLATFORM → ORGANIZATION → ACCOUNT → INCIDENT/TASK
+不得新增 AiBudgetUsage 第二事实源
+usage 必须由 ledger 聚合
+
+3. AiModelCacheEntry
+
+durable cache
+organization isolation
+full identity binding
+stale = MISS
+ruleVersion mismatch = MISS
+controlled TTL/GC
+
+注意：
+
+AiModelCacheEntry 不是永久 append-only 审计表。允许 TTL/GC；但 key/identity/content 不得原地篡改。
+
+4. DB enforcement
+
+ledger tenant trigger
+ledger append-only trigger
+applicable tenant manifests 同步
+cache tenant isolation
+cache immutable identity/content enforcement
+migrations
+
+5. Budget race protection
+必须证明并发请求不能同时基于相同剩余额度无限越过预算。
+
+需要：
+
+real PostgreSQL concurrency regression
+restart regression
+duplicate callId
+tenant isolation
+hierarchy enforcement
+budget exhausted no retry storm
+cache isolation/stale regression。
+
+C2 完成后单独送：
+
+SI-COST-OPTIMIZATION C2 Implementation Audit
+
+PRODUCTION
+
+继续保持：
+
+REAL_MODEL_NETWORK = HOLD
+PAID_MODEL_CALLS = HOLD
+EXTERNAL_WRITE = HOLD
+PAYMENT = HOLD
+TRANSPORT = HOLD
+PRODUCTION_CREDENTIALS = HOLD
+PRODUCTION_ENABLEMENT = HOLD
+
+P2_F = HOLD
+P2_G = HOLD
+
+RUNTIME_WIRING = NONE
+STEP_3_RUNTIME_POLICY_WIRING = NOT_AUTHORIZED
+
+结论：C1 正式关闭，现在可以直接进入 C2 实现。
+```

@@ -450,7 +450,8 @@ export function createRsiModelRouter(options: {
         }
         taskState.set(taskKey, state);
       }
-      return { ...second.outcome, escalatedToStrong: true };
+      // telemetry（MSG-20261005-33 非阻断注意项）：只有 strong **真实 invoke** 时才标记 escalatedToStrong
+      return strongProviderAttempt ? { ...second.outcome, escalatedToStrong: true } : second.outcome;
     },
   };
 

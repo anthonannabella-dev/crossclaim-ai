@@ -2575,3 +2575,10 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 验证：tsc exit 0；C1 定向 6 文件 / 50 例 PASS；rsi-* 全量 46 文件 / 252 例 PASS；prisma validate valid（未改 Schema）。
 - 归档：AI-ARCHITECT-INBOX.md 新增 MSG-20261005-32（FULL_COPY_OK）；送审：docs/releases/SI-COST-OPTIMIZATION-C1-FINAL3-REQUEST.md（REVIEWED_HEAD = 79536ca5）。
 
+
+## 2026-10-05T16:45Z — C1 = PASS / CLOSED（MSG-20261005-33）+ C2 IMPLEMENTATION 授权
+- 裁决：VERDICT = PASS / CLOSED；CHANGE A（per-task identity）= PASS；CHANGE B（真实 provider attempt 计数）= PASS；Necessity Gate / Cache Identity / Cheap→Strong provenance / hard cap 2/1 / Gateway 单咽喉 = PASS；C1_IMPLEMENTATION = PASS / CLOSED；C1_FINAL4_REQUIRED = NO。
+- 非阻断 telemetry 注意项已修：strong 被 budget guard 拒绝时不再标记 escalatedToStrong（仅真实 strong invocation 才标记）；修后 tsc 0 / C1 定向 6 文件 50 例 / rsi-* 全量 46 文件 252 例 PASS。
+- 归档：AI-ARCHITECT-INBOX.md 新增 MSG-20261005-33（FULL_COPY_OK）。
+- 状态：si-cost-optimization → C2_IMPLEMENTATION_AUTHORIZED；NEXT = C2（AiCostLedgerEntry + AiBudgetPolicy + ledger-derived usage + AiModelCacheEntry + tenant/append-only + manifest sync + real PG + budget race）。
+

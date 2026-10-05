@@ -1977,10 +1977,10 @@
       "required_tests": [],
       "template": "arch-design-request",
       "filters": [],
-      "status": "C1_FINAL3_SUBMITTED_PENDING_VERDICT",
+      "status": "C2_IMPLEMENTATION_AUTHORIZED",
       "implementation_head": "79536ca5",
       "audit_request": "docs/releases/SI-COST-OPTIMIZATION-C1-FINAL3-REQUEST.md",
-      "note": "HOST ADDENDUM：依赖 SI_RSI_UNIFICATION_PASS_CLOSED；统一 Runtime PASS/CLOSED 后自动进入执行队列（P1）。登记内容见 docs/releases/SI-COST-OPTIMIZATION-REGISTRATION.md（含 OPT-1..OPT-7、Acceptance 12 条与边界）。 依赖已解除（SI_RSI_UNIFICATION_PASS_CLOSED @ MSG-20261005-29）：QUEUED → READY_FOR_DESIGN；READY_FOR_DESIGN ≠ AUTO_IMPLEMENTATION_AUTHORIZED（durable ledger / budget / model cache / AI necessity gate 仍需各自设计/实施审计）。",
+      "note": "HOST ADDENDUM：依赖 SI_RSI_UNIFICATION_PASS_CLOSED；统一 Runtime PASS/CLOSED 后自动进入执行队列（P1）。登记内容见 docs/releases/SI-COST-OPTIMIZATION-REGISTRATION.md（含 OPT-1..OPT-7、Acceptance 12 条与边界）。 依赖已解除（SI_RSI_UNIFICATION_PASS_CLOSED @ MSG-20261005-29）：QUEUED → READY_FOR_DESIGN；READY_FOR_DESIGN ≠ AUTO_IMPLEMENTATION_AUTHORIZED（durable ledger / budget / model cache / AI necessity gate 仍需各自设计/实施审计）。 C1 = PASS / CLOSED（MSG-20261005-33，C1_FINAL4_REQUIRED = NO）；C2 IMPLEMENTATION 已授权（AiCostLedgerEntry + AiBudgetPolicy + ledger-derived usage + AiModelCacheEntry + tenant/append-only + manifest sync + real PG + budget race）。",
       "design_verdict": "MSG-20261005-30 = PASS WITH REVISE / APPROVED FOR STAGED IMPLEMENTATION（C1 AUTHORIZED；C2/C3 DESIGN APPROVED, IMPLEMENTATION SUBJECT TO PREVIOUS STAGE PASS）"
     }
   ],
