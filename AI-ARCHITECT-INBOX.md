@@ -153867,3 +153867,238 @@ PRODUCTION_READY = false
 结论：U5 正式 CLOSED，Phase 5 U1–U5 功能链整体正式 CLOSED。现在只补一份 docs-only closure checkpoint，不再继续修 Phase 5 业务代码。
 ```
 
+### [MSG-20261005-84] PHASE 5 CLOSURE CHECKPOINT 裁决 = PASS（PHASE_5_CLOSURE_CHECKPOINT / DOCS_CLOSURE_REGISTRY / U1_U5_FINAL_HEAD_REGISTRY / PHASE5_BOUNDARY_FREEZE = PASS；PHASE_5_CONTROLLED_LEARNING_ADOPTION = PASS / CLOSED；**PHASE_5 = FORMALLY CLOSED**；PHASE5_FUNCTIONAL_REVISION_REQUIRED = NO / PHASE5_CLOSURE_REVISION_REQUIRED = NO；下一步另开 PHASE 6 U1 Controlled Adoption Plan / PLAN_ONLY）， Closure HEAD 88bf3f70
+
+```text
+DECISION
+PHASE_5_CLOSURE_CHECKPOINT = PASS
+DOCS_CLOSURE_REGISTRY = PASS
+U1_U5_FINAL_HEAD_REGISTRY = PASS
+PHASE5_BOUNDARY_FREEZE = PASS
+PHASE_5_CONTROLLED_LEARNING_ADOPTION = PASS / CLOSED
+PHASE_5 = FORMALLY CLOSED
+PHASE5_FUNCTIONAL_REVISION_REQUIRED = NO
+PHASE5_CLOSURE_REVISION_REQUIRED = NO
+Closure HEAD：88bf3f70
+Functional final HEAD：b3629ffc
+GitHub Actions：NOT_OBSERVED
+
+Phase 5 到这里正式结束，不再继续追加 Phase 5 功能单元。
+
+KEEP
+
+Closure 文档已经正确登记：
+
+U1 c96ec7e1 — CLOSED
+U2 b50ca7ab — CLOSED
+U3 9a245254 — CLOSED
+U4 edcbb826 — CLOSED
+U5 b3629ffc — CLOSED
+
+完整可信链、APPROVED/REJECTED 最终语义、U2 rollback anchor、永久 FORBIDDEN 边界以及四项技术债都已归档。
+
+尤其这几项写得正确：
+
+纯文本
+APPROVED
+= APPROVED_FOR_CONTROLLED_ADOPTION_PLANNING
+
+REJECTED
+= REJECTED_NO_CONTROLLED_ADOPTION_PLAN
+
+AUTO_APPLY = FORBIDDEN
+AUTO_PROMOTION = FORBIDDEN
+AUTO_ROLLOUT = FORBIDDEN
+POLICY/GUARD/ROUTER/ACTION_RUNTIME_MUTATION = FORBIDDEN
+
+因此不存在“Phase 5 CLOSED = 已允许自动改系统配置”的歧义。
+
+CHANGE
+
+无阻断修改。
+
+只有一个归档口径建议，不需要重新送审：
+
+从 b3629ffc → 88bf3f70 的整个 closure/归档区间，我实际看到的文件范围是：
+
+docs/releases/...CLOSURE.md
+AI-ARCHITECT-INBOX.md
+.autopilot/STATE.json
+
+没有 apps/** 功能代码变化。
+
+因此以后建议描述为：
+
+CLOSURE / ARCHIVE ONLY — NO FUNCTIONAL CODE CHANGES
+
+比“仅修改 docs/releases 一个文件”更精确。
+
+但 exact 88bf3f70 本身确实是 closure 文档提交，不影响 PASS。
+
+RISKS
+
+Phase 5 CLOSED 仍然只代表：
+
+学习证据 → 离线评估 → 候选 → 审批 → rollback → 配置提案 → same-input shadow canary → controlled adoption review
+
+已经形成可信 contract 闭环。
+
+它不代表：
+
+配置已经自动采用；
+SI 已开始自我修改生产系统；
+Policy/Guard/Router/Action Runtime 可自动写入；
+real model 已接线；
+production rollout 已开放。
+
+这个边界必须继续保持。
+
+TEST
+
+Closure checkpoint 的验收要求已经满足：
+
+U1–U5 final HEAD 准确；
+final verdict 准确；
+U1–U5 均 CLOSED；
+无 apps/** 功能代码变更；
+HOLD/FORBIDDEN 未解锁；
+MODEL_GATEWAY_RUNTIME_WIRED=false
+ACTION_RUNTIME_PRODUCTION_ENABLED=false
+META_IMPROVEMENT_INTEGRATED=false
+PRODUCTION_READY=false
+GitHub CI 没有观察到，因此未误写成 CI SUCCESS。
+
+不需要为 docs-only closure 再跑新一轮功能测试。
+
+NEXT
+
+下一阶段不要直接做 Execution Gate。
+
+我授权新阶段：
+
+PHASE 6 U1 — Controlled Adoption Plan（PLAN_ONLY）
+
+只生成“如何采用”的可信计划，不执行采用。
+
+最低入口必须同时满足：
+
+纯文本
+Verified ControlledAdoptionReviewVerdict
+outcome === APPROVED
+semantics === APPROVED_FOR_CONTROLLED_ADOPTION_PLANNING
+
+并重新绑定：
+
+adoptionReviewVerdictDigest
+canaryEvaluationDigest
+proposalDigest
+candidateDigest
+rollbackPlanDigest
+baselineSnapshotDigest
+baselineConfigFingerprint
+target
+exact allowed path
+trusted from
+schema-valid to
+Plan artifact 最低内容
+
+建议：
+
+CONTROLLED_ADOPTION_PLAN
+
+至少绑定：
+
+planDigest
+reviewVerdictDigest
+proposalDigest
+canaryEvaluationDigest
+rollbackPlanDigest
+target
+path
+from
+to
+expectedBaselineSnapshotDigest
+expectedBaselineConfigFingerprint
+rollbackTarget
+createdAt
+expiresAt
+
+并继续：
+
+provenance + canonical fingerprint + deep-freeze
+
+最重要的 U1 边界
+
+即使 plan 生成成功：
+
+纯文本
+apply = FORBIDDEN
+execute = FORBIDDEN
+promote = FORBIDDEN
+rollout = FORBIDDEN
+configMutation = FORBIDDEN
+
+输出语义只能是：
+
+READY_FOR_CONTROLLED_EXECUTION_GATE_REVIEW
+
+不能是：
+
+APPLIED / DEPLOYED / ACTIVE
+
+stale-baseline 门
+
+这是 Phase 6 必须开始关注的关键点。
+
+计划必须钉住：
+
+纯文本
+baselineSnapshotDigest
++
+baselineConfigFingerprint
+
+以后真正执行前必须重新读取当前正式配置：
+
+纯文本
+current fingerprint === planned expected fingerprint
+
+否则：
+
+STALE_BASELINE → FAIL_CLOSED
+
+禁止把一个几小时前批准的计划直接写入已经变化的系统。
+
+Execution Gate
+
+暂不授权真正的 Controlled Adoption Execution。
+
+先完成并审计 P6-U1 PLAN_ONLY。
+
+等 U1 CLOSED 后，再单独决定是否进入：
+
+P6-U2 Controlled Adoption Execution Gate
+
+并且 U2 仍应该先是 execution authorization contract，而不是直接 production apply。
+
+PRODUCTION
+
+全部继续 HOLD：
+
+REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing
+
+继续：
+
+SECOND_RUNTIME / SECOND_POLICY_ENGINE / SECOND_CONTROL_PLANE / SECOND_MODEL_GATEWAY / SECOND_COST_LEDGER / SECOND_META_EVIDENCE_STORE = FORBIDDEN
+
+L5_RELAXATION = FORBIDDEN
+
+保持：
+
+MODEL_GATEWAY_RUNTIME_WIRED = false
+ACTION_RUNTIME_PRODUCTION_ENABLED = false
+META_IMPROVEMENT_INTEGRATED = false
+PRODUCTION_READY = false
+
+最终裁决：Phase 5 Closure Checkpoint PASS，Phase 5 正式 CLOSED。下一步另开 Phase 6，只授权 U1 Controlled Adoption Plan / PLAN_ONLY，暂不授权真实配置执行。
+```
+
