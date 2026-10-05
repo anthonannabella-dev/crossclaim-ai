@@ -146647,3 +146647,168 @@ L5_RELAXATION = FORBIDDEN
 
 结论：ONE Runtime 和 Recovery Pack integration 已经成立；当前真正阻止 STEP 3 CLOSED 的是 Judge self-consumption 漏洞和 Action Guard 尚未进入实际执行链。
 ```
+
+### [MSG-20261005-43] STEP_3_RUNTIME_POLICY_WIRING FINAL-3 — VERDICT = **PASS WITH REVISE / NOT CLOSED**（CHANGE A = PASS（domainPacks 强制 awaitVerdict=true，不得回退）；CHANGE B = REVISE（Shared Guard adapter 组件 PASS，但「真实进入 ONE SI Runtime 执行链」证据未闭环）；`STEP3_FINAL4_REQUIRED = YES`；FINAL-4 仅窄修：唯一 product composition 强制接 createSharedRecoveryGuardAdapterFromAppGuard + real-adapter runtime E2E）
+
+```text
+DECISION
+
+CHANGE A = PASS
+
+CHANGE B = REVISE
+
+Shared Guard adapter 组件实现本身 PASS
+
+但“真实进入 ONE SI Runtime 执行链”证据仍未闭环
+
+STEP_3_RUNTIME_POLICY_WIRING = PASS WITH REVISE / NOT CLOSED
+
+STEP3_FINAL4_REQUIRED = YES
+
+FINAL-4 仅允许窄修，不扩 scope
+
+KEEP
+
+composeRsiRuntime 对 domainPacks 强制：
+awaitVerdict = true
+——即使宿主传 awaitVerdict:false 也不能绕过 Judge。
+CHANGE A PASS，不得回退。
+
+recovery-guard-adapter.ts：
+
+复用 createAppActionGuard
+
+不创建第二 Guard / Control Plane
+
+exception → DENY + degraded
+
+REQUIRE_APPROVAL → REQUIRES_APPROVAL
+
+unknown/non-ALLOW → DENY
+
+Kill Switch 保持 fail-closed
+
+adapter 本身可保留。
+
+proposal / verdict 分离、SELF_JUDGE_FORBIDDEN、CUSTOMS L5 permanent block、SECOND_RUNTIME=0 等既有边界全部保持。
+
+CHANGE
+
+只需补 1 个真实 wiring 缺口：
+
+当前真实 E2E rsi-si-runtime-e2e.test.ts 仍使用：
+
+guard: ALLOW_GUARD
+
+而不是：
+
+createSharedRecoveryGuardAdapterFromAppGuard(...)
+
+并且当前 createRecoverySiPack() 仍公开接受任意 guard?: RsiRecoveryGuardPort。
+
+因此目前证明的是：
+
+Recovery Pack → injected guard port
+
+以及：
+
+Shared Guard adapter → createAppActionGuard
+
+但尚未证明唯一产品组合链真正是：
+
+composeRsiRuntime
+→ Recovery SI Pack
+→ createSharedRecoveryGuardAdapterFromAppGuard
+→ createAppActionGuard
+→ Control Plane / Kill Switch
+→ ALLOW
+→ deterministic read tool
+
+FINAL-4 最小修订：
+
+增加/明确唯一 product/static composition factory 或唯一宿主组装点，把 Recovery SI 固定接到 createSharedRecoveryGuardAdapterFromAppGuard(...)。
+测试可以继续使用 stub，但产品路径不得靠调用方随意注入 ALLOW guard 绕过 Shared Guard。
+
+增加一个真正 runtime E2E，必须从：
+composeRsiRuntime → Recovery SI → real shared adapter
+跑通，并至少证明：
+
+ALLOW → read tool > 0
+
+DENY → tool = 0
+
+REQUIRE_APPROVAL → tool = 0
+
+Kill Switch → tool = 0
+
+Control Plane unavailable/degraded → tool = 0
+
+除此之外不要扩大 FINAL-4。
+
+RISKS
+
+当前主要剩余风险只有一个：
+
+product host 仍可直接构造 createRecoverySiPack({ guard: arbitraryGuard })。
+
+因此“domain pack 无法绕过 Shared Guard”目前是设计意图 + adapter 能力，还不是产品组合层强不变量。
+
+TEST
+
+已核验代码：
+
+apps/api/src/runtime/rsi-run.ts
+
+apps/api/src/runtime/recovery-si-pack.ts
+
+apps/api/src/runtime/recovery-guard-adapter.ts
+
+apps/api/src/__tests__/rsi-domain-pack-wiring.test.ts
+
+apps/api/src/__tests__/rsi-si-runtime-e2e.test.ts
+
+CHANGE A 的 STEP3F3_A1 与代码实现一致。
+
+CHANGE B 的 B1–B5 可证明 adapter 行为，但现有 ONE SI Runtime E2E 仍使用 ALLOW_GUARD stub，因此不能作为真实 Shared Guard runtime wiring 的最终证据。
+
+报告的 75 files / 765 tests PASS 可接受为本地回归证据；GitHub 在 692726bf 上当前未返回独立 workflow run，因此不把它表述为 GitHub CI 证明。
+
+NEXT
+
+完成上述 FINAL-4 窄修后重新送审。
+
+若：
+
+唯一 product composition 确实强制 Shared Guard adapter；
+
+real-adapter runtime E2E 全绿；
+
+既有 765 tests 无回归；
+
+则可直接：
+
+STEP_3_RUNTIME_POLICY_WIRING = PASS / CLOSED
+STEP3_FINAL5_REQUIRED = NO
+
+不要求在 STEP 3 内提前接：
+
+MODEL_GATEWAY runtime
+
+COST_CORE runtime
+
+META_IMPROVEMENT
+
+这些继续作为后续独立阶段。
+
+PRODUCTION
+
+保持全部 HOLD：
+
+REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT = HOLD
+
+CUSTOMS real filing = HOLD
+P2_F = HOLD
+P2_G = HOLD
+
+本裁决不授权任何生产开闸。
+```

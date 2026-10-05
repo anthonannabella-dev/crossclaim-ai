@@ -11,7 +11,7 @@
   "external_write_enabled": false,
   "updated_at": "2026-10-06T08:30:00.000Z",
   "previous_head": "8064f07",
-  "architect_decision_pending": true,
+  "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "0c35106",
   "last_sent_at": "2026-10-03T09:07:52.875Z",
@@ -50,11 +50,11 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
-  "next_execution_unit": "生成 FINAL-3 audit request → 在新审核会话 https://chatgpt.com/ 投递（marker [CODEX-STEP3-FINAL3]）→ 送达三检 → 读取完整 verdict → 逐字归档 + compare.mjs FULL_COPY_OK → durable state 对账；同时回到旧会话 .../c/6ac385db-... 重新干净抽取 FINAL-2 裁决并归档 MSG-20261005-42",
+  "next_execution_unit": "STEP 3 FINAL-4 窄修（仅两项）：① 唯一 product composition 强制 Recovery SI → createSharedRecoveryGuardAdapterFromAppGuard（禁止调用方注入 ALLOW guard 绕过 Shared Guard）；② real-adapter runtime E2E（composeRsiRuntime → Recovery SI → real shared adapter：ALLOW → read tool > 0；DENY / REQUIRE_APPROVAL / Kill Switch / degraded → tool = 0）→ tsc / 回归 → commit + push → 重新送审（新会话）；同时补归档 FINAL-2 裁决 MSG-20261005-42（回旧会话干净重抽）",
   "automation_status": "CONTINUOUS",
   "last_tick_at": "2026-10-06T08:30:00.000Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "STEP 3 FINAL-3 送审包生成（REVIEWED_HEAD = 692726bf）",
+  "last_action": "STEP 3 FINAL-3 裁决 = PASS WITH REVISE（MSG-20261005-43，CHANGE A PASS / CHANGE B REVISE）→ FINAL-4 窄修授权",
   "last_action_at": "2026-10-06T08:30:00.000Z",
   "next_action": "C2 IMPLEMENTATION（Schema Delta + durable ledger/budget + PG 回归）",
   "current_head": "054ab732",
@@ -3609,8 +3609,8 @@
     "closure_service": "PENDING - closure-db 合成闭环链在**任何层级都没有 account provenance**（无 ClaimItem、opportunity.accountId 亦为 null，因为 detection 夹具的连接未绑定 PlatformAccount）。已实现并回滚的两种派生兜底：case→ClaimItem 与 case→CaseOpportunity→Opportunity.accountId；均无法派生。NEXT: 在 closure-db 的导入/检测夹具中把连接绑定到 seed 的 PlatformAccount，使 opportunity.accountId 落值后再接线（否则该 test/demo 闭环路径只能 fail-closed）。"
   },
   "audit_channel": {
-    "url": "https://chatgpt.com/",
-    "note": "HOST 于 2026-10-05 打开新审核会话（in-app browser tab 10，已 markHandoff）；旧会话 https://chatgpt.com/c/6ac385db-cb60-83ec-9754-c7a30633a8c5 保留 MSG-30..41 归档来源。下一次送审在新会话投递。",
+    "url": "https://chatgpt.com/c/6ac3b55d-18f4-83ec-97d5-32ffc002ff0a",
+    "note": "FINAL-3/FINAL-4 审核会话（HOST 新开）。旧会话 https://chatgpt.com/c/6ac385db-cb60-83ec-9754-c7a30633a8c5 保存 MSG-30..41；FINAL-2 裁决（MSG-20261005-42）仍需回该会话干净重抽后归档。",
     "prior_conversation": "https://chatgpt.com/c/6ac385db-cb60-83ec-9754-c7a30633a8c5"
   },
   "c2_final2_blockers": {
@@ -9354,7 +9354,7 @@
   "HEARTBEAT_INTERVAL_SECONDS": 60,
   "safe_continuation_queue_recomputed_at": "2026-10-06T07:30:00.000Z",
   "step3_runtime_policy_wiring": {
-    "status": "FINAL3_SUBMITTED_PENDING_VERDICT",
+    "status": "FINAL4_REQUIRED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
     "implementation_head": "c0b61792",
     "request": "docs/releases/SI-RUNTIME-STEP3-FINAL3-REQUEST.md",
@@ -9423,6 +9423,22 @@
       "changeA": "domainPacks 强制 park-for-judge（不可被 awaitVerdict:false 绕过）",
       "changeB": "真实 shared Action Guard adapter（reuse createAppActionGuard / createRuntimeActionGuard；无第二 Guard）",
       "tests": "tsc 0；rsi-domain-pack-wiring 22/22；rsi-si-runtime-e2e 5/5；回归 75 files / 765 tests PASS"
+    },
+    "final3_verdict": {
+      "message_id": "MSG-20261005-43",
+      "verdict": "PASS WITH REVISE / NOT CLOSED",
+      "reviewed_head": "692726bf",
+      "change_a": "PASS",
+      "change_b": "REVISE（adapter 组件 PASS；真实 runtime wiring 证据未闭环）",
+      "change": "FINAL-4 仅窄修：① 增加唯一 product/static composition factory（唯一宿主组装点），把 Recovery SI 固定接到 createSharedRecoveryGuardAdapterFromAppGuard(...)，产品路径不得靠调用方注入 ALLOW guard 绕过 Shared Guard；② 增加真正 runtime E2E：composeRsiRuntime → Recovery SI → real shared adapter，证明 ALLOW → read tool > 0；DENY / REQUIRE_APPROVAL / Kill Switch / Control Plane degraded → tool = 0",
+      "note_github_ci": "GitHub 在 692726bf 未返回独立 workflow run —— 不得把它表述为 GitHub CI 证明",
+      "not_in_scope": [
+        "MODEL_GATEWAY runtime",
+        "COST_CORE runtime",
+        "META_IMPROVEMENT（继续作为后续独立阶段）"
+      ],
+      "step3_final4_required": "YES",
+      "archive": "AI-ARCHITECT-INBOX.md#MSG-20261005-43"
     }
   }
 }

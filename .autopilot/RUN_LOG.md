@@ -2679,3 +2679,9 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - B：shared Action Guard/Control Plane dry-run 进入执行链（ALLOW 才执行只读工具）；DENY/REQUIRES_APPROVAL/degraded/kill switch/tenant mismatch → BLOCK + tool 0；CUSTOMS/unmapped → guard 0/tool 0。
 - 验证：tsc 0；新增 9 例；回归 75 files / 759 tests PASS。
 - NEXT = 读取 FINAL-2 裁决 → 归档 MSG-20261005-42 → PASS/CLOSED 则宣布 STEP_3_RUNTIME_POLICY_WIRING = PASS / CLOSED。
+
+## 2026-10-06T11:00Z —— STEP 3 FINAL-3 裁决归档（MSG-20261005-43 = PASS WITH REVISE / NOT CLOSED）
+- CHANGE A = PASS（domainPacks 强制 awaitVerdict=true；不得回退）；CHANGE B = REVISE（adapter 组件 PASS，真实 runtime wiring 证据未闭环）。
+- FINAL-4 仅窄修：唯一 product composition 强制接 createSharedRecoveryGuardAdapterFromAppGuard + real-adapter runtime E2E。
+- 审核渠道：新会话 https://chatgpt.com/c/6ac3b55d-18f4-83ec-97d5-32ffc002ff0a（FINAL-3 送审 + 裁决）。
+- 注意：GitHub 在 692726bf 未返回独立 workflow run，不得表述为 GitHub CI 证明。
