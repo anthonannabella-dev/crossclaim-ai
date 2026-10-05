@@ -751,3 +751,12 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - 已完成（不得重复）：UI-1、UI-2、UI-3、UI-4、UI-5a、UI-5b、UI-6、CA-1。
 - 调度：CONTINUOUS（heartbeat 仅 liveness/watchdog/crash recovery）。
 - 审计：ARCH_REVIEW_REQUIRED 单元完成后自动走 AUDIT-BRIDGE 闭环（不新建协议）。
+
+### RECOVERY SI PHASE 2（MSG-20261005-13 授权：仅 P2-A + P2-B）
+
+- 授权范围：`P2-A = AUTHORIZED_WITH_CONDITIONS`（硬前置 `RECOVERY_OUTCOME_TO_RSI = AGGREGATED_ANONYMIZED_CAPABILITY_SIGNAL_ONLY`）、`P2-B = AUTHORIZED_WITH_CONDITIONS`（READ_ONLY）。
+- 实施：`apps/api/src/services/intelligence/recovery-outcome-signal.ts`、`recovery-read-tools.ts`、`recovery-read-tool-adapters.ts`；测试 `recovery-si-phase2-ab.test.ts`。
+- 证据：`docs/releases/RECOVERY-SI-PHASE2-AB-EVIDENCE.md`（P2-A 泄漏清单 + P2-B 10 条最小证据对照）。
+- 未授权（不得顺带实施）：`P2-C PREPARE Tool`、`P2-D Action Guard handoff（需 D1–D8 单独审）`、`P2-E 持久化（需 Schema Delta 审）`、`P2-F 模型网络/付费（HOLD）`、`P2-G 真实执行（HOLD）`。
+- 运行时接线：`NONE`（本轮不接 route / event loop / rsi:run；`READY_FOR_EXECUTION` 仍非执行许可）。
+- 调度：CONTINUOUS（heartbeat 仅 liveness/watchdog/crash recovery）；一个单元完成后立即取下一个。

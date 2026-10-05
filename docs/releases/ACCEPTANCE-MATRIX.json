@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-10-05T04:52:43.859Z",
-  "acceptance_head": "aadb4a0b",
+  "generated_at": "2026-10-05T05:04:31.270Z",
+  "acceptance_head": "25d0b764",
   "protocol": "docs/releases/FINAL-ACCEPTANCE-PROTOCOL.md",
   "areas": [
     {
@@ -235,7 +235,8 @@
     "RSI-RT-12-deployment-contract-test",
     "RSI-INSP-07-weekly-capability-integration",
     "recovery-si-phase1",
-    "recovery-si-phase2"
+    "recovery-si-phase2",
+    "recovery-si-phase2-ab"
   ],
   "host_action_required": [
     "provider developer/partner account registration",

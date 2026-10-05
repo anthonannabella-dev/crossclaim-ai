@@ -1,6 +1,6 @@
 # Recovery SI Phase 2 —— 设计送审请求（仅设计，零代码改动）
 
-- 分支：`gate/7-commercial-validation`；**REVIEWED_HEAD = `aadb4a0b`**（本文件提交后以 STATE.CURRENT_HEAD 为准）。
+- 分支：`gate/7-commercial-validation`；**REVIEWED_HEAD = `25d0b764`**（真实送审 SHA = `25d0b764c921e90d661adf2f9dd48e0f4aabb02b`；归档见 MSG-20261005-13）（本文件提交后以 STATE.CURRENT_HEAD 为准）。
 - 前置：**MSG-20261005-12 = PASS / CLOSED**（Recovery SI Phase 1 冻结；FNV acc593d5 / 124 行 / FULL_COPY_OK）。
 - 本轮性质：**设计请求，零代码、零 schema、零运行时改动**；提交目的仅为取得 `PHASE2 = SEPARATE_ARCHITECT_APPROVAL_REQUIRED` 所需的架构授权。
 

@@ -2125,3 +2125,12 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 依据 MSG-20261005-12（PHASE2 = SEPARATE_ARCHITECT_APPROVAL_REQUIRED）提交设计请求：docs/releases/RECOVERY-SI-PHASE2-DESIGN-REQUEST.md。
 - 提议分阶段：P2-A SI 决策→RSI Outcome Signal（只读）→ P2-B READ 类 Tool 实接 → P2-C PREPARE 类 → P2-D Action Guard handoff（dry-run）→ P2-E Schema Delta（单独审）→ P2-F 模型网络/付费（HOLD）→ P2-G 真实执行（HOLD）。
 - 本轮零代码、零 schema、零运行时改动；边界声明保持不变。
+
+## 2026-10-05T05:04:18.267Z — Recovery SI Phase 2 A/B 实施（MSG-20261005-13 授权范围内）
+- 裁决逐字归档：AI-ARCHITECT-INBOX.md 新增 [MSG-20261005-13]（FNV 220ab1c8 / 339 行 / FULL_COPY_OK；REVIEWED_HEAD 25d0b764）。
+- P2-A：`recovery-outcome-signal.ts` —— 硬前置 `RECOVERY_OUTCOME_TO_RSI = AGGREGATED_ANONYMIZED_CAPABILITY_SIGNAL_ONLY`；只允许四类匿名聚合能力指标 + 版本引用；禁止客户事实/标识符/客户金额；cohort < 5 不产生信号；违规整条 fail-closed；无 RSI sink → 零写入（RSI incident/task 写入未接线）。
+- P2-B：`recovery-read-tools.ts` + `recovery-read-tool-adapters.ts` —— 三个只读工具（opportunity / evidence / customs authorization readiness）实接现有确定性只读服务；静态 domain→READ 绑定；input schema + tenant context + output schema + 敏感字段扫描；只有已验证 action 才会调用。
+- 最小证据 10 条全覆盖（P2B-01..10）：真实三工具、跨租户拒绝、陈旧不调用、未登记不调用、抛错/畸形输出 fail-closed、invoke counter 只计已验证 READ、DB 写 0、网络调用 0。
+- 测试：recovery-si-phase2-ab 13/13 PASS + Phase 1 回归 22/22 = 35/35 PASS；tsc exit 0。
+- 边界：P2-C/P2-D/P2-E/P2-F/P2-G 未授权；RUNTIME_WIRING = NONE；SCHEMA_DELTA_REQUIRED = NO；EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / REAL_CLAIM_SUBMIT / CUSTOMS_FILING / RSI_MODEL_NETWORK / RSI_PAID_MODEL_CALLS = HOLD；FINAL_ACCEPTANCE_HEAD = 0f7f7ac。
+- 下一步：送审 `Recovery SI Phase 2 A/B Implementation Audit`（独立单元，不并入其它阶段）。

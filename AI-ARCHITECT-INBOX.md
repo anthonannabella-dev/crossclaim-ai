@@ -138697,3 +138697,347 @@ FINAL_ACCEPTANCE_HEAD = 0f7f7ac
 
 结论：不用再送 FINAL-3。Recovery SI Phase 1 可以正式记 CLOSED。下一步如果要把 SI 接入运行时、真正调用 Tool、接 Action Guard 或进入真实执行，必须以 Phase 2 重新送审。
 ```
+
+### [MSG-20261005-13] ARCHITECT VERDICT — Recovery SI Phase 2 设计 = **PASS WITH REVISE**（`REVIEWED_HEAD = 25d0b764`，未使用上一轮缓存）。首批**只授权 P2-A + P2-B**：`P2-A = AUTHORIZED_WITH_CONDITIONS`（硬前置 `RECOVERY_OUTCOME_TO_RSI = AGGREGATED_ANONYMIZED_CAPABILITY_SIGNAL_ONLY` —— 禁止携带 `organizationId / userId / caseId / opportunityRef / claimId / paymentAccountRef / entryNumber / invoice·order·shipment identifiers / raw evidence refs / customer-specific monetary amount` 进入平台级 RSI incident/task/evidence，只允许匿名聚合能力级信号，如 `estimate_error_bucket / authorization_block_rate / evidence_missing_rate / median_time_to_ready`，或 `signal = CUSTOMS_ESTIMATE_CALIBRATION_DRIFT` + `refs = rule-version:v3 / algorithm-version:v2`）；`P2-B = AUTHORIZED_WITH_CONDITIONS`（调用路径必须是 verified RecoveryPlan action → explicit registered READ tool → input schema → tenant context → existing deterministic read service → output schema → sensitive-field scan → return to SI，**禁止** LLM/planner 任意构造 service 名直接调用仓库函数；每个 Tool adapter 必须证明 `READ_ONLY = true / DB_WRITE = false / NETWORK = false / CREDENTIAL_READ = false / TENANT_SCOPED = true`，并继续 `UNKNOWN_TOOL / STALE_STATE / TENANT_MISMATCH = FAIL_CLOSED`；最小验收证据 10 条：真实 Opportunity READ tool、真实 Evidence READ tool、Customs authorization-readiness READ tool、cross-tenant → reject、stale decision → tool 不调用、unregistered tool → tool 不调用、tool throws/malformed → fail-closed、invoke counter 证明只调用被验证 READ action、DB before/after 无业务写入、network/provider call count = 0）。其余分阶段：`P2-C = NOT_YET_AUTHORIZED`（`P2-B = READ_ONLY` 与 `P2-C = INTERNAL_WRITE` 安全等级不同，**不得同批授权**）、`P2-D = DESIGN_APPROVED / IMPLEMENTATION_REQUIRES_SEPARATE_AUDIT`（首版只做 `READY_FOR_EXECUTION → build Guard request → dry-run policy evaluation → ALLOW/DENY/REQUIRES_APPROVAL`，最小证据 D1–D8，关键不变量 `ACTION_GUARD_DRY_RUN_ALLOW != EXECUTION_AUTHORIZATION`）、`P2-E = HOLD_FOR_SCHEMA_DELTA`（RecoveryPlan / DecisionEvidence / execution basis / plan generations / supersede history 均须单独 Schema Delta 审，当前不得提前建表）、`P2-F = HOLD`（`RSI_MODEL_NETWORK / RSI_PAID_MODEL_CALLS = HOLD`，模型永远不能成为 money truth 或权限来源）、`P2-G = HOLD`（`REAL_EXECUTOR / EXTERNAL_WRITE / CUSTOMS_FILING / PAYMENT / REAL_CLAIM_SUBMIT / PRODUCTION_CREDENTIALS = HOLD`，dry-run 通过也绝不自动解锁）、`SECOND_RUNTIME = FORBIDDEN`、`L5_RELAXATION = FORBIDDEN`。非阻塞 bookkeeping：送审文件顶部仍写 `REVIEWED_HEAD = aadb4a0b`，须修正为真实送审 SHA `25d0b764c921e90d661adf2f9dd48e0f4aabb02b`。收口指令：实现 P2-A + P2-B 后**只送一次** Recovery SI Phase 2 A/B Implementation Audit，不得顺带 PREPARE Tool、Action Guard handoff、Schema、模型调用或真实执行。
+
+```text
+ARCHITECT VERDICT：PASS WITH REVISE（批准 P2-A + P2-B，但按更严格边界实施）
+
+我按 REVIEWED_HEAD = 25d0b764c921e90d661adf2f9dd48e0f4aabb02b 重新审了本次 Phase 2 设计，没有沿用上一轮结论。该 commit 确实是设计/状态记录，没有 Recovery SI 运行时代码、Schema 或外部能力变更。
+
+整体分阶段方向正确，但需要先修正 P2-A 的数据边界，并把 P2-C 从 P2-B 完全拆开。
+
+① 分阶段顺序：批准，但首批只授权 P2-A + P2-B
+
+正式裁定：
+
+纯文本
+P2-A = AUTHORIZED_WITH_CONDITIONS
+P2-B = AUTHORIZED_WITH_CONDITIONS
+
+P2-C = NOT_YET_AUTHORIZED
+P2-D = DESIGN_APPROVED / IMPLEMENTATION_REQUIRES_SEPARATE_AUDIT
+P2-E = HOLD_FOR_SCHEMA_DELTA
+P2-F = HOLD
+P2-G = HOLD
+
+执行顺序保持：
+
+纯文本
+P2-A
+→ P2-B
+→ P2-C
+→ P2-D
+
+但 P2-C 不与 P2-B 同批授权。
+
+原因是两者安全等级不同：
+
+READ Tool：只读现有事实；
+PREPARE Tool：可能创建 Claim draft、RecoveryPackage、artifact 等内部业务写入。
+
+即使不 submission，它也已经从 observation 跨到了 mutation。
+
+所以：
+
+纯文本
+P2-B = READ_ONLY
+P2-C = INTERNAL_WRITE
+
+必须分开验收。
+
+P2-A 必须修正：Recovery Outcome 不能直接把客户事实灌进平台级 RSI
+
+这是本设计唯一需要明确修改的地方。
+
+我核了现有 RSI：
+
+rsi-observer 明确“不读客户数据”；
+signal 会进入 incident/task；
+RSI Evidence 也明确不碰客户数据；
+RSI autonomy 状态是系统自改进控制面，不是 tenant 业务数据仓库。
+
+所以 P2-A 不能直接产生类似：
+
+纯文本
+organizationId=xxx
+caseId=xxx
+opportunityId=xxx
+customer recovered=$18,500
+
+再喂进 RSI incident/task/evidence。
+
+否则 Recovery SI 和 RSI 的数据边界被打穿。
+
+P2-A 应改成“匿名、聚合、能力级 Outcome Signal”
+
+允许：
+
+纯文本
+domain = CUSTOMS
+
+metric:
+  estimate_error_bucket = 10-20%
+  authorization_block_rate = 32%
+  evidence_missing_rate = 18%
+  median_time_to_ready = ...
+
+或者：
+
+纯文本
+signal =
+CUSTOMS_ESTIMATE_CALIBRATION_DRIFT
+
+refs =
+rule-version:v3
+algorithm-version:v2
+
+禁止携带：
+
+纯文本
+organizationId
+userId
+caseId
+opportunityRef
+claimId
+paymentAccountRef
+entryNumber
+invoice/order/shipment identifiers
+raw evidence refs
+customer-specific monetary amount
+
+RSI 看到的是：
+
+“Customs estimate algorithm has a systematic calibration problem”
+
+而不是：
+
+“客户 A 的 $18,500 案件出了问题”。
+
+建议固定：
+
+纯文本
+RECOVERY_OUTCOME_TO_RSI =
+AGGREGATED_ANONYMIZED_CAPABILITY_SIGNAL_ONLY
+
+这是 P2-A 的硬前置。
+
+P2-B：只读 Tool 实接可以开始
+
+授权真实调用现有确定性内部只读服务。
+
+但调用路径必须是：
+
+纯文本
+verified RecoveryPlan action
+→ explicit registered READ tool
+→ input schema
+→ tenant context
+→ existing deterministic read service
+→ output schema
+→ sensitive-field scan
+→ return to SI
+
+禁止：
+
+纯文本
+LLM / planner 任意构造 service 名
+→ 直接调用仓库函数
+
+也不能因为 registry 中存在某 tool，就默认说明它是安全只读。
+
+每个 Tool adapter 必须明确证明：
+
+纯文本
+READ_ONLY = true
+DB_WRITE = false
+NETWORK = false
+CREDENTIAL_READ = false
+TENANT_SCOPED = true
+
+并继续：
+
+纯文本
+UNKNOWN_TOOL = FAIL_CLOSED
+STALE_STATE = FAIL_CLOSED
+TENANT_MISMATCH = FAIL_CLOSED
+P2-B 最小验收证据
+
+建议只需要这些：
+
+纯文本
+1. 一个真实 Opportunity READ tool
+2. 一个真实 Evidence READ tool
+3. 一个 Customs authorization-readiness READ tool
+4. cross-tenant → reject
+5. stale decision → tool 不调用
+6. unregistered tool → tool 不调用
+7. tool throws / malformed output → fail-closed
+8. invoke counter 证明只调用被验证的 READ action
+9. DB before/after 无业务写入
+10. network/provider call count = 0
+
+够了。
+
+② P2-D Action Guard dry-run：最小证据集合
+
+P2-D 我同意设计方向，但现在不授权实施；P2-C 先完成后再送一个窄审计。
+
+P2-D 第一版应该只做：
+
+纯文本
+READY_FOR_EXECUTION
+→ build Guard request
+→ dry-run policy evaluation
+→ return ALLOW/DENY/REQUIRES_APPROVAL
+
+而不是：
+
+纯文本
+→ consume approval
+→ executor
+
+最小证据建议固定为 8 条：
+
+纯文本
+D1
+READY decision 必须来自 fresh verified plan；
+tampered/stale decision → Guard 根本不调用。
+
+D2
+organizationId / opportunityRef / action kind /
+toolRef / plan digest 必须绑定成不可变 execution basis。
+
+D3
+tenant mismatch → deny。
+
+D4
+无 approval / 缺 authorization / OWNER gate 缺失
+→ deny / requires approval。
+
+D5
+dry-run 不消费 approval。
+
+D6
+dry-run 不创建：
+Claim submission
+CustomsSubmissionAttempt
+PlatformWriteAttempt
+Payment
+Settlement
+RecoveryLedger
+Billing
+provider request。
+
+D7
+Guard ALLOW 仍然：
+executionAuthorized=false
+executorInvoked=false。
+
+D8
+L5 请求：
+External Write / Payment / Customs Filing /
+Real Claim Submit / credentials
+→ 永久拒绝。
+
+最关键的 invariant：
+
+纯文本
+ACTION_GUARD_DRY_RUN_ALLOW
+!=
+EXECUTION_AUTHORIZATION
+③ P2-E：必须单独 Schema Delta 审
+
+确认：
+
+纯文本
+P2-E = SEPARATE_SCHEMA_DELTA_REQUIRED
+
+如果未来持久化：
+
+RecoveryPlan
+DecisionEvidence
+execution basis
+plan generations
+supersede history
+
+再审：
+
+纯文本
+tenant scope
+append-only / versioning
+digest
+stale semantics
+PII/customer-data boundaries
+retention
+
+当前不要提前建表。
+
+④ P2-F / P2-G：继续 HOLD
+
+确认不变。
+
+纯文本
+P2-F_MODEL_ASSISTANCE = HOLD
+
+RSI_MODEL_NETWORK = HOLD
+RSI_PAID_MODEL_CALLS = HOLD
+
+即使未来开放模型，也只能：
+
+解释；
+建议证据；
+辅助排序/规划；
+
+不能让模型成为 money truth 或权限来源。
+
+P2-G 更明确：
+
+纯文本
+REAL_EXECUTOR = HOLD
+EXTERNAL_WRITE = HOLD
+CUSTOMS_FILING = HOLD
+PAYMENT = HOLD
+REAL_CLAIM_SUBMIT = HOLD
+PRODUCTION_CREDENTIALS = HOLD
+
+P2-D dry-run 通过也绝不自动解锁 P2-G。
+
+一个小的文档一致性问题
+
+送审文件正文顶部仍写：
+
+纯文本
+REVIEWED_HEAD = aadb4a0b
+
+但实际送审 commit 是：
+
+纯文本
+25d0b764c921e90d661adf2f9dd48e0f4aabb02b
+
+我这次实际审的是后者。
+
+这是 pre-submit HEAD 留在文档里的 bookkeeping 问题，不阻塞本设计裁决；下一次审计包请记录真正 code reviewed SHA，避免以后混淆。
+
+最终授权
+纯文本
+RECOVERY_SI_PHASE2_DESIGN = PASS_WITH_REVISE
+
+P2_A_OUTCOME_SIGNAL = AUTHORIZED
+CONDITION =
+ANONYMIZED_AGGREGATED_CAPABILITY_SIGNAL_ONLY
+
+P2_B_READ_TOOL_INVOCATION = AUTHORIZED
+
+P2_C_PREPARE_TOOL = HOLD_PENDING_P2B_ACCEPTANCE
+P2_D_ACTION_GUARD_DRY_RUN = HOLD_PENDING_SEPARATE_AUDIT
+
+P2_E_PERSISTENCE = HOLD_SCHEMA_DELTA
+P2_F_MODEL_ASSISTANCE = HOLD
+P2_G_REAL_EXECUTION = HOLD
+
+SECOND_RUNTIME = FORBIDDEN
+L5_RELAXATION = FORBIDDEN
+
+所以 Codex 现在可以直接实现 P2-A + P2-B。完成后送一次 Recovery SI Phase 2 A/B Implementation Audit；不要顺带做 PREPARE、Action Guard handoff、Schema、模型调用或真实执行。
+```
