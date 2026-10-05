@@ -41,6 +41,11 @@ import {
   parseRsiSignals,
   type RsiGenerationResult,
 } from '../services/autonomy/rsi-task-generator';
+import {
+  createRsiDomainPackRunner,
+  describeRsiRuntimeMembers,
+  type RsiDomainCapabilityPack,
+} from './rsi-domain-pack';
 
 export function parseTaskQueue(raw: string): readonly RsiSafeTask[] {
   try {
@@ -113,6 +118,10 @@ export interface RsiRuntimeComposition {
   reconcileNow(): Promise<RsiReconcilePlan | null>;
   /** RSI-P1-03：本次从信号 artifact 自动生成的任务（未配置或解析失败时为 null）。 */
   taskGeneration(): RsiGenerationResult | null;
+  /** STEP_3：唯一产品运行时成员描述（架构回归用；`SECOND_RUNTIME = 0`）。 */
+  runtimeMembers(): ReturnType<typeof describeRsiRuntimeMembers>;
+  /** STEP_3：domain pack 派发记录（只读审计用）。 */
+  domainDispatchLog(): readonly { taskId: string; packId: string; status: string }[];
   start(): void;
   stop(): void;
 }
@@ -151,6 +160,11 @@ export async function composeRsiRuntime(input: {
     ownerRef: string;
     trigger?: RsiReconcileTrigger;
   };
+  /**
+   * STEP_3（3A）：domain capability pack（例如 Recovery SI）。
+   * 仅在**未显式注入 runner** 时作为唯一 runner 使用；未匹配任务判 BLOCK，绝不 PASS。
+   */
+  domainPacks?: readonly RsiDomainCapabilityPack[];
 }): Promise<RsiRuntimeComposition> {
   let tasks: readonly RsiSafeTask[] = [];
   if (input.tasksPath !== undefined) {
@@ -179,9 +193,14 @@ export async function composeRsiRuntime(input: {
     }
   }
 
+  // STEP_3：domain pack 派发层（不创建第二个 runtime / scheduler）
+  const domainRunner =
+    input.domainPacks === undefined || input.domainPacks.length === 0
+      ? null
+      : createRsiDomainPackRunner({ packs: input.domainPacks });
   const controller = attachContinuationToController({
     tasks,
-    runner: input.runner ?? createUnconfiguredRunner(),
+    runner: input.runner ?? domainRunner ?? createUnconfiguredRunner(),
     // RSI-RT-05：runner 结果只作提案，任务停在等待裁决，由 verdict 收口（REVISE 才会产出修订任务）。
     // 默认 false：没有裁决来源时 park 会让任务永远停在等待裁决；需要时由调用方显式开启。
     awaitVerdict: input.awaitVerdict ?? false,
@@ -237,6 +256,8 @@ export async function composeRsiRuntime(input: {
     publisher,
     verdictWatcher,
     taskGeneration: () => generation,
+    runtimeMembers: () => describeRsiRuntimeMembers(input.domainPacks ?? []),
+    domainDispatchLog: () => domainRunner?.dispatchLog() ?? [],
     async reconcileNow(): Promise<RsiReconcilePlan | null> {
       if (reconcileSpec === undefined) return null;
       return runRsiRestartReconcile({
@@ -271,6 +292,10 @@ export const RSI_RUNTIME_COMPOSITION_BOUNDARY = {
   signalDrivenTaskGeneration: true,
   ownerGatedTasksAutoExecuted: false,
   restartReconcileDefault: 'NOT_CONFIGURED',
+  /** STEP_3：domain capability pack 由同一 runtime 消费（不新建 Recovery runtime） */
+  domainCapabilityPacks: 'STATIC_COMPOSITION_ONLY（Recovery SI = domain pack）',
+  secondRuntime: 0,
+  domainPackUnmatchedYieldsBlock: true,
   readsCredentials: false,
   writesDatabase: false,
   performsExternalWrite: false,
