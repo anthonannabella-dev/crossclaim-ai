@@ -51,6 +51,10 @@ export const CANARY_SHADOW_BOUNDARY = {
     'proposalMetrics',
     'metricDeltas',
     'recommendation',
+    'baselineRunDigest',
+    'proposalRunDigest',
+    'baselineEvaluationDigest',
+    'proposalEvaluationDigest',
     'evaluationDigest',
   ],
   artifactProvenance: 'PROVENANCE_REGISTERED + fingerprint + deep-freeze',
@@ -160,6 +164,94 @@ export function createCohortRef(input: {
   return ref;
 }
 
+/** ruling C：VerifiedCohortRun —— 「exact input set ↔ Phase 4 evaluation」的可信桥接层（不含指标）。 */
+export interface VerifiedCohortRun {
+  kind: 'VERIFIED_COHORT_RUN';
+  runId: string;
+  runDigest: string;
+  side: 'BASELINE' | 'PROPOSAL';
+  cohortRefDigest: string;
+  inputSetDigest: string;
+  datasetVersion: string;
+  evaluationWindow: { from: string; to: string };
+  memberCount: number;
+  evaluationDigest: string;
+  provenance: { source: 'SERVER_OWNED_COHORT_COMPOSITION'; cohortRefId: string };
+}
+
+const VERIFIED_COHORT_RUNS = new WeakSet<VerifiedCohortRun>();
+const VERIFIED_COHORT_RUN_FINGERPRINTS = new WeakMap<VerifiedCohortRun, string>();
+
+const cohortRunFingerprint = (run: VerifiedCohortRun): string =>
+  JSON.stringify({
+    kind: run.kind,
+    runId: run.runId,
+    runDigest: run.runDigest,
+    side: run.side,
+    cohortRefDigest: run.cohortRefDigest,
+    inputSetDigest: run.inputSetDigest,
+    datasetVersion: run.datasetVersion,
+    evaluationWindow: { ...run.evaluationWindow },
+    memberCount: run.memberCount,
+    evaluationDigest: run.evaluationDigest,
+    provenance: { ...run.provenance },
+  });
+
+export function isVerifiedCohortRun(run: VerifiedCohortRun | null | undefined): boolean {
+  if (run === null || run === undefined) return false;
+  if (!VERIFIED_COHORT_RUNS.has(run)) return false;
+  const fingerprint = VERIFIED_COHORT_RUN_FINGERPRINTS.get(run);
+  if (fingerprint === undefined) return false;
+  try {
+    return fingerprint === cohortRunFingerprint(run);
+  } catch {
+    return false;
+  }
+}
+
+/** member-level 桥接：绑定可信输入集与「该侧」Phase 4 evaluation 的身份。 */
+export function createVerifiedCohortRun(
+  cohortRef: CohortRef | null | undefined,
+  evaluation: OfflineEvaluationResult | null | undefined,
+  side: 'BASELINE' | 'PROPOSAL',
+): VerifiedCohortRun {
+  if (!isVerifiedCohortRef(cohortRef)) throw new Error('CANARY_RUN_COHORT_REF_NOT_VERIFIED');
+  const ref = cohortRef as CohortRef;
+  if (!isVerifiedOfflineEvaluation(evaluation)) throw new Error('CANARY_RUN_EVALUATION_NOT_VERIFIED');
+  const evaluationResult = evaluation as OfflineEvaluationResult;
+  if (side !== 'BASELINE' && side !== 'PROPOSAL') throw new Error('CANARY_RUN_SIDE_INVALID');
+  if (ref.datasetVersion !== evaluationResult.datasetVersion) throw new Error('CANARY_RUN_DATASET_MISMATCH');
+  if (ref.cohortSize !== evaluationResult.totalRecords) throw new Error('CANARY_RUN_MEMBER_COUNT_MISMATCH');
+  const runDigest = digest('cohort-run', [
+    CANARY_SHADOW_VERSION,
+    side,
+    ref.cohortRefDigest,
+    ref.datasetVersion,
+    ref.evaluationWindow.from + '~' + ref.evaluationWindow.to,
+    String(ref.cohortSize),
+    evaluationResult.evaluationDigest,
+  ]);
+  const run: VerifiedCohortRun = {
+    kind: 'VERIFIED_COHORT_RUN',
+    runId: 'cohort-run:' + runDigest,
+    runDigest,
+    side,
+    cohortRefDigest: ref.cohortRefDigest,
+    inputSetDigest: ref.cohortRefDigest,
+    datasetVersion: ref.datasetVersion,
+    evaluationWindow: { from: ref.evaluationWindow.from, to: ref.evaluationWindow.to },
+    memberCount: ref.cohortSize,
+    evaluationDigest: evaluationResult.evaluationDigest,
+    provenance: { source: 'SERVER_OWNED_COHORT_COMPOSITION', cohortRefId: ref.cohortRefId },
+  };
+  Object.freeze(run.evaluationWindow);
+  Object.freeze(run.provenance);
+  Object.freeze(run);
+  VERIFIED_COHORT_RUNS.add(run);
+  VERIFIED_COHORT_RUN_FINGERPRINTS.set(run, cohortRunFingerprint(run));
+  return run;
+}
+
 export interface CanaryMetricSnapshot {
   resolvedDenominator: number;
   successRate: number | null;
@@ -191,6 +283,10 @@ export interface CanaryShadowEvaluation {
   baselineSnapshotDigest: string;
   baselineConfigFingerprint: string;
   datasetVersion: string;
+  baselineRunDigest: string;
+  proposalRunDigest: string;
+  baselineEvaluationDigest: string;
+  proposalEvaluationDigest: string;
   cohortId: string;
   cohortDigest: string;
   evaluationWindow: { from: string; to: string };
@@ -246,6 +342,10 @@ const canaryFingerprint = (evaluation: CanaryShadowEvaluation): string =>
     baselineConfigFingerprint: evaluation.baselineConfigFingerprint,
     datasetVersion: evaluation.datasetVersion,
     cohortDigest: evaluation.cohortDigest,
+    baselineRunDigest: evaluation.baselineRunDigest,
+    proposalRunDigest: evaluation.proposalRunDigest,
+    baselineEvaluationDigest: evaluation.baselineEvaluationDigest,
+    proposalEvaluationDigest: evaluation.proposalEvaluationDigest,
     evaluationWindow: { ...evaluation.evaluationWindow },
     baselineMetrics: { ...evaluation.baselineMetrics, byEvidenceQuality: { ...evaluation.baselineMetrics.byEvidenceQuality } },
     proposalMetrics: { ...evaluation.proposalMetrics, byEvidenceQuality: { ...evaluation.proposalMetrics.byEvidenceQuality } },
@@ -283,6 +383,8 @@ export function evaluateCanaryShadow(input: {
   baselineEvaluation: OfflineEvaluationResult | null | undefined;
   proposalEvaluation: OfflineEvaluationResult | null | undefined;
   cohortRef: CohortRef | null | undefined;
+  baselineRun: VerifiedCohortRun | null | undefined;
+  proposalRun: VerifiedCohortRun | null | undefined;
   evaluationWindow: { from: string; to: string } | null | undefined;
 }): CanaryShadowEvaluation {
   if (!isVerifiedControlledConfigProposal(input?.proposal)) {
@@ -317,6 +419,21 @@ export function evaluateCanaryShadow(input: {
   if (!isVerifiedCohortRef(input?.cohortRef)) throw new Error('CANARY_COHORT_REF_NOT_VERIFIED');
   const cohortRef = input.cohortRef as CohortRef;
   if (cohortRef.datasetVersion !== baseline.datasetVersion) throw new Error('CANARY_COHORT_DATASET_MISMATCH');
+  if (!isVerifiedCohortRun(input?.baselineRun) || !isVerifiedCohortRun(input?.proposalRun)) {
+    throw new Error('CANARY_RUN_NOT_VERIFIED');
+  }
+  const baselineRun = input.baselineRun as VerifiedCohortRun;
+  const proposalRun = input.proposalRun as VerifiedCohortRun;
+  if (baselineRun.side !== 'BASELINE' || proposalRun.side !== 'PROPOSAL') throw new Error('CANARY_RUN_SIDE_MISMATCH');
+  if (baselineRun.inputSetDigest !== cohortRef.cohortRefDigest || proposalRun.inputSetDigest !== cohortRef.cohortRefDigest) {
+    throw new Error('CANARY_SAME_COHORT_REQUIRED');
+  }
+  if (baselineRun.memberCount !== baseline.totalRecords || proposalRun.memberCount !== proposed.totalRecords) {
+    throw new Error('CANARY_RUN_MEMBER_COUNT_MISMATCH');
+  }
+  if (baselineRun.evaluationDigest !== baseline.evaluationDigest || proposalRun.evaluationDigest !== proposed.evaluationDigest) {
+    throw new Error('CANARY_RUN_EVALUATION_MISMATCH');
+  }
   if (cohortRef.evaluationWindow.from !== window.from || cohortRef.evaluationWindow.to !== window.to) {
     throw new Error('CANARY_COHORT_WINDOW_MISMATCH');
   }
@@ -370,6 +487,10 @@ export function evaluateCanaryShadow(input: {
     plan.baselineSnapshotDigest,
     plan.baselineConfigFingerprint,
     baseline.datasetVersion,
+    baselineRun.runDigest,
+    proposalRun.runDigest,
+    baselineRun.evaluationDigest,
+    proposalRun.evaluationDigest,
     cohortId,
     cohortDigest,
     cohortRef.taskRefs.join('+'),
@@ -397,6 +518,10 @@ export function evaluateCanaryShadow(input: {
     baselineSnapshotDigest: plan.baselineSnapshotDigest,
     baselineConfigFingerprint: plan.baselineConfigFingerprint,
     datasetVersion: baseline.datasetVersion,
+    baselineRunDigest: baselineRun.runDigest,
+    proposalRunDigest: proposalRun.runDigest,
+    baselineEvaluationDigest: baselineRun.evaluationDigest,
+    proposalEvaluationDigest: proposalRun.evaluationDigest,
     cohortId,
     cohortDigest,
     evaluationWindow: { from: window.from, to: window.to },
