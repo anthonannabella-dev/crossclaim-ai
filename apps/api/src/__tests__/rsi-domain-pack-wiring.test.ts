@@ -26,6 +26,11 @@ import { resolveGuardAction } from '../services/intelligence/recovery-guard-dry-
 import type { RecoveryPlanAction } from '../services/intelligence/recovery-planner';
 import type { RecoveryReadPorts } from '../services/intelligence/recovery-read-tools';
 import type { RsiRecoveryGuardPort } from '../runtime/recovery-si-pack';
+import {
+  RECOVERY_GUARD_ADAPTER_BOUNDARY,
+  createSharedRecoveryGuardAdapter,
+} from '../runtime/recovery-guard-adapter';
+import { createRuntimeActionGuard } from '../services/action-guard/runtime-guard';
 import type { RsiSafeTask } from '../services/autonomy/rsi-continuation-engine';
 
 const repoRoot = path.resolve(process.cwd(), '..', '..');
@@ -302,5 +307,81 @@ describe('STEP_3 FINAL-2 · CHANGE B —— shared Action Guard 进入真实执�
     expect(ev.status).toBe('BLOCK');
     expect(g.calls).toEqual([]);
     expect(ev.guardActions).toEqual([]);
+  });
+});
+
+describe('STEP_3 FINAL-3 · CHANGE B —— 真实 Shared Action Guard adapter（复用共享实现）', () => {
+  const realGuard = (capabilities: unknown) =>
+    createRuntimeActionGuard({
+      capabilities: { async resolve() { return capabilities as never; } },
+    });
+  void realGuard;
+
+  it('STEP3F3_B1 真实共享 Guard 被实际调用，且 adapter 决策与共享决策一致（无第二实现）', async () => {
+    const inner = createRuntimeActionGuard({
+      capabilities: {
+        async resolve() {
+          return { tenantEnabled: true, productionGate: 'SATISFIED', writeEnabled: false } as never;
+        },
+      },
+    });
+    let sharedCalls = 0;
+    const spy = {
+      async evaluate(input: Parameters<typeof inner.evaluate>[0]) {
+        sharedCalls += 1;
+        return inner.evaluate(input);
+      },
+      assertAllowed: inner.assertAllowed.bind(inner),
+    };
+    const adapterGuard = createSharedRecoveryGuardAdapter({ guard: spy });
+    const req = { packId: 'recovery-si', taskId: 't1', organizationId: 'org-1', domain: 'PLATFORM', action: 'evidence.read', opportunityRef: 'opp-1' };
+    const raw = await inner.evaluate({ action: 'evidence.read', actorUserId: 'recovery-si-runtime/v1', organizationId: 'org-1', requestedBy: 'recovery-si' });
+    const mapped = await adapterGuard.evaluate(req);
+    expect(sharedCalls).toBe(1);
+    const expected = raw.decision === 'ALLOW' ? 'ALLOW' : raw.decision === 'REQUIRE_APPROVAL' ? 'REQUIRES_APPROVAL' : 'DENY';
+    expect(mapped.decision).toBe(expected);
+    expect(mapped.reason).toBe(raw.code);
+  });
+
+  it('STEP3F3_B2 共享 Guard 不可用（抛错）→ adapter DENY + degraded → read tool = 0', async () => {
+    const guard = createSharedRecoveryGuardAdapter({
+      guard: { async evaluate() { throw new Error('control-plane-unavailable'); }, async assertAllowed() { throw new Error('x'); } },
+    });
+    const verdict = await guard.evaluate({ packId: 'recovery-si', taskId: 't1', organizationId: 'org-1', domain: 'PLATFORM', action: 'evidence.read', opportunityRef: 'opp-1' });
+    expect(verdict.decision).toBe('DENY');
+    expect(verdict.degraded).toBe(true);
+    expect(RECOVERY_GUARD_ADAPTER_BOUNDARY.onUnavailable).toContain('fail-closed');
+  });
+
+  it('STEP3F3_B3 共享 Guard Kill Switch → adapter DENY + killSwitchActive（tool = 0）', async () => {
+    const guard = createSharedRecoveryGuardAdapter({
+      guard: {
+        async evaluate() { return { decision: 'DENY', code: 'KILL_SWITCH_ACTIVE', action: 'evidence.read', risk: 'READ_ONLY', reasons: ['kill switch active'], requiredGates: [] } as never; },
+        async assertAllowed() { throw new Error('x'); },
+      },
+    });
+    const verdict = await guard.evaluate({ packId: 'recovery-si', taskId: 't1', organizationId: 'org-1', domain: 'PLATFORM', action: 'evidence.read', opportunityRef: 'opp-1' });
+    expect(verdict.decision).toBe('DENY');
+    expect(verdict.killSwitchActive).toBe(true);
+  });
+
+  it('STEP3F3_B4 REQUIRE_APPROVAL → REQUIRES_APPROVAL（tool = 0、保持 HITL 等待）', async () => {
+    const guard = createSharedRecoveryGuardAdapter({
+      guard: {
+        async evaluate() { return { decision: 'REQUIRE_APPROVAL', code: 'HUMAN_APPROVAL_REQUIRED', action: 'evidence.read', risk: 'INTERNAL_WRITE', reasons: [], requiredGates: ['humanApproval'] } as never; },
+        async assertAllowed() { throw new Error('x'); },
+      },
+    });
+    const verdict = await guard.evaluate({ packId: 'recovery-si', taskId: 't1', organizationId: 'org-1', domain: 'PLATFORM', action: 'evidence.read', opportunityRef: 'opp-1' });
+    expect(verdict.decision).toBe('REQUIRES_APPROVAL');
+    expect(RECOVERY_GUARD_ADAPTER_BOUNDARY.onRequireApproval).toContain('toolCallCount = 0');
+  });
+
+  it('STEP3F3_B5 adapter 复用共享实现（唯一 Guard，无第二实现）', () => {
+    const src = fs.readFileSync(path.join(apiSrc, 'runtime', 'recovery-guard-adapter.ts'), 'utf8');
+    expect(src).toContain("from '../services/action-guard/runtime-guard-composition'");
+    expect(src).toContain('createAppActionGuard');
+    expect(RECOVERY_GUARD_ADAPTER_BOUNDARY.secondGuardImplementation).toBe('FORBIDDEN');
+    expect(RECOVERY_GUARD_ADAPTER_BOUNDARY.controlPlaneOwner).toContain('control-plane.ts');
   });
 });

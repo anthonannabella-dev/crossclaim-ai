@@ -50,11 +50,11 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
-  "next_execution_unit": "STEP 3 FINAL-3 CHANGE B：实现真实 Shared Action Guard / Control Plane adapter（替换 fail-closed 默认端口，接入现有 action-guard + control-plane + kill-switch）→ 测试 → 回归 → commit/push → 在新审核会话（https://chatgpt.com/）送审 FINAL-3",
+  "next_execution_unit": "生成 FINAL-3 audit request → 在新审核会话 https://chatgpt.com/ 投递（marker [CODEX-STEP3-FINAL3]）→ 送达三检 → 读取完整 verdict → 逐字归档 + compare.mjs FULL_COPY_OK → durable state 对账；同时回到旧会话 .../c/6ac385db-... 重新干净抽取 FINAL-2 裁决并归档 MSG-20261005-42",
   "automation_status": "CONTINUOUS",
   "last_tick_at": "2026-10-06T08:30:00.000Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "STEP 3 FINAL-3 CHANGE A 落地（awaitVerdict:false 旁路关闭）+ 审核渠道切换为新会话",
+  "last_action": "STEP 3 FINAL-3 CHANGE B 落地（真实 shared Action Guard adapter）",
   "last_action_at": "2026-10-06T08:30:00.000Z",
   "next_action": "C2 IMPLEMENTATION（Schema Delta + durable ledger/budget + PG 回归）",
   "current_head": "054ab732",
@@ -9354,7 +9354,7 @@
   "HEARTBEAT_INTERVAL_SECONDS": 60,
   "safe_continuation_queue_recomputed_at": "2026-10-06T07:30:00.000Z",
   "step3_runtime_policy_wiring": {
-    "status": "FINAL3_IN_PROGRESS",
+    "status": "FINAL3_IMPLEMENTED_AWAITING_SUBMIT",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
     "implementation_head": "c0b61792",
     "request": "docs/releases/SI-RUNTIME-STEP3-WIRING-REQUEST.md",
@@ -9418,6 +9418,11 @@
       "tests": "tsc 0；新增 9 例；回归 75 files / 759 tests PASS"
     },
     "final2_verdict_note": "MSG-20261005-42 待归档：FINAL-2 裁决 = PASS WITH REVISE / STEP3_FINAL3_REQUIRED = YES（A：awaitVerdict:false 旁路；B：真实 Shared Guard adapter 未完成）。注意：work/stage/verdict-step3-f2.txt 的抽取丢了换行，**必须重新干净抽取**后再逐字归档。",
-    "final3_progress": "CHANGE A 已完成（domainPacks 强制 park-for-judge；新增 STEP3F3_A1 测试）；CHANGE B（真实 Shared Action Guard adapter）待完成"
+    "final3_progress": "CHANGE A 已完成（domainPacks 强制 park-for-judge；新增 STEP3F3_A1 测试）；CHANGE B（真实 Shared Action Guard adapter）待完成",
+    "final3": {
+      "changeA": "domainPacks 强制 park-for-judge（不可被 awaitVerdict:false 绕过）",
+      "changeB": "真实 shared Action Guard adapter（reuse createAppActionGuard / createRuntimeActionGuard；无第二 Guard）",
+      "tests": "tsc 0；rsi-domain-pack-wiring 22/22；rsi-si-runtime-e2e 5/5；回归 75 files / 765 tests PASS"
+    }
   }
 }
