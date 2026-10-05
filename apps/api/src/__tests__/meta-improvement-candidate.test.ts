@@ -473,7 +473,7 @@ describe('PHASE 4 U5 FINAL2 —— provenance object integrity（anti-tamper）'
   });
 
   it('P4U5F2_6 set 语义一致：重复 outcome digest 在 U3 manifest 与 U4 evaluation 中都去重，且仍 exact-match', async () => {
-    const dup = record({ finalOutcome: 'FAILURE' });
+    const dup = record({ finalOutcome: 'UNKNOWN', humanIntervention: null });
     const evaluation = await evaluate([dup, dup, record({ finalOutcome: 'SUCCESS' })]);
     expect(evaluation.verifiedOutcomeDigests).toHaveLength(2);
     expect(new Set(evaluation.verifiedOutcomeDigests).size).toBe(evaluation.verifiedOutcomeDigests.length);
@@ -483,5 +483,19 @@ describe('PHASE 4 U5 FINAL2 —— provenance object integrity（anti-tamper）'
     const result = proposeMetaImprovementCandidates({ evaluation, evidenceSet });
     expect(result.insufficientData).toBe(false);
     expect(result.candidates.length).toBeGreaterThan(0);
+  });
+
+  it('P4U5F2_7 duplicate 输入与 dedup 输入 → candidate 完全一致（重复提交不能操纵提案）', async () => {
+    const dup = record({ finalOutcome: 'UNKNOWN', humanIntervention: null });
+    const success = record({ finalOutcome: 'SUCCESS', taskType: 'recovery-b' });
+    const evidenceSet = await verifiedEvidenceSet([dup, success]);
+    const withDupEvaluation = await evaluate([dup, dup, dup, success]);
+    const dedupEvaluation = await evaluate([dup, success]);
+    const withDup = proposeMetaImprovementCandidates({ evaluation: withDupEvaluation, evidenceSet });
+    const deduped = proposeMetaImprovementCandidates({ evaluation: dedupEvaluation, evidenceSet });
+    expect(withDup.candidates.map((c) => c.candidateDigest)).toEqual(
+      deduped.candidates.map((c) => c.candidateDigest),
+    );
+    expect(withDup.candidates.length).toBeGreaterThan(0);
   });
 });

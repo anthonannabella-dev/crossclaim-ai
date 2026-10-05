@@ -331,3 +331,48 @@ describe('PHASE 4 U4 FINAL —— evaluation identity / provenance closure', () 
     expect(changed.verifiedOutcomeSetDigest).not.toBe(result.verifiedOutcomeSetDigest);
   });
 });
+
+describe('PHASE 4 FINAL CLOSURE —— dedupe verified outcomes before offline metrics', () => {
+  it('P4FINAL_1 同一 digest 重复 2 / 10 次 → metrics 只计一次', async () => {
+    const dup = record({ finalOutcome: 'FAILURE' });
+    const success = record({ finalOutcome: 'SUCCESS' });
+    const two = await evaluate([dup, dup, success]);
+    const ten = await evaluate([...Array.from({ length: 10 }, () => dup), success]);
+    expect(two.totalRecords).toBe(2);
+    expect(ten.totalRecords).toBe(2);
+    expect(two.resolved.byOutcome).toEqual({ SUCCESS: 1, FAILURE: 1, REJECTED: 0 });
+    expect(ten.resolved.byOutcome).toEqual(two.resolved.byOutcome);
+    expect(two.resolved.successRate).toBeCloseTo(0.5, 10);
+    expect(ten.resolved.successRate).toBeCloseTo(0.5, 10);
+    expect(ten.resolved.denominator).toBe(2);
+  });
+
+  it('P4FINAL_2 totalRecords === unique digest 数量', async () => {
+    const dup = record({ finalOutcome: 'FAILURE' });
+    const result = await evaluate([dup, dup, dup, record({ finalOutcome: 'SUCCESS' })]);
+    expect(result.totalRecords).toBe(2);
+    expect(result.totalRecords).toBe(result.verifiedOutcomeDigests.length);
+  });
+
+  it('P4FINAL_3 duplicate 输入与 dedup 输入 → evaluationDigest / metrics 完全一致', async () => {
+    const dup = record({ finalOutcome: 'FAILURE' });
+    const success = record({ finalOutcome: 'SUCCESS' });
+    const withDup = await evaluate([dup, dup, dup, success]);
+    const deduped = await evaluate([dup, success]);
+    expect(withDup.evaluationDigest).toBe(deduped.evaluationDigest);
+    expect(withDup.verifiedOutcomeSetDigest).toBe(deduped.verifiedOutcomeSetDigest);
+    expect(withDup.totalRecords).toBe(deduped.totalRecords);
+    expect(withDup.resolved).toEqual(deduped.resolved);
+    expect(withDup.unresolved).toEqual(deduped.unresolved);
+  });
+
+  it('P4FINAL_4 同 digest 但 canonical 内容不同 → fail-closed（OFFLINE_EVALUATION_DUPLICATE_DIGEST_CONFLICT）', async () => {
+    const dup = record({ finalOutcome: 'FAILURE' });
+    const forged = { ...dup, taskType: 'forged' } as OutcomeRecord;
+    await expect(evaluate([dup, forged])).rejects.toThrow(/OFFLINE_EVALUATION_DUPLICATE_DIGEST_CONFLICT/);
+    expect(OFFLINE_EVALUATION_BOUNDARY.duplicateVerifiedOutcome).toContain('DEDUPED_BY_OUTCOME_DIGEST_BEFORE_METRICS');
+    expect(OFFLINE_EVALUATION_BOUNDARY.duplicateDigestConflict).toContain(
+      'OFFLINE_EVALUATION_DUPLICATE_DIGEST_CONFLICT',
+    );
+  });
+});

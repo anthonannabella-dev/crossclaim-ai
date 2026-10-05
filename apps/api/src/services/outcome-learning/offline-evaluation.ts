@@ -43,6 +43,8 @@ export const OFFLINE_EVALUATION_BOUNDARY = {
   unresolvedHandling: 'REPORTED_SEPARATELY',
   unresolvedInSuccessRateDenominator: 'FORBIDDEN',
   forbiddenMetric: 'successCount / allRecords（禁止作为正式质量指标）',
+  duplicateVerifiedOutcome: 'DEDUPED_BY_OUTCOME_DIGEST_BEFORE_METRICS（identity + metrics 同一集合）',
+  duplicateDigestConflict: 'FAIL_CLOSED（OFFLINE_EVALUATION_DUPLICATE_DIGEST_CONFLICT）',
   zeroDenominator: 'NULL_NOT_ZERO（分母为 0 时 successRate = null，不伪造成 0）',
   rateSemantics:
     'failureRate = (FAILURE + REJECTED) / resolved = NON_SUCCESS_RATE（REJECTED 是 failureRate 的子集；failureRate 与 rejectedRate 不互斥，三率相加不为 100%）',
@@ -354,6 +356,34 @@ function evaluateOfflineOutcomesInternal(
  * 先做 U2 trusted lineage binding（U3 学习路径），只有通过 binding 的记录进入评估；
  * 排除项如实登记并参与 evaluationDigest。lineage ledger 缺失或 provenance 不可信 → fail-closed。
  */
+/** canonical 内容键（不含 digest）：用于识别“同 digest 但内容不一致”的伪造记录。 */
+const recordContentKey = (record: OutcomeRecord): string => {
+  const rest: Record<string, unknown> = { ...(record as unknown as Record<string, unknown>) };
+  delete rest.digest;
+  return JSON.stringify(Object.keys(rest).sort().map((key) => [key, rest[key]]));
+};
+
+/**
+ * PHASE 4 FINAL CLOSURE：正式 evaluation 在计算 metrics 前按 OutcomeRecord.digest 去重。
+ * 同 digest 但 canonical 内容不一致 → fail-closed（绝不任选一条）。
+ */
+const dedupeVerifiedRecords = (records: readonly OutcomeRecord[]): OutcomeRecord[] => {
+  const byDigest = new Map<string, { record: OutcomeRecord; contentKey: string }>();
+  for (const record of records) {
+    const digest = typeof record?.digest === 'string' ? record.digest : '';
+    const contentKey = recordContentKey(record);
+    const seen = byDigest.get(digest);
+    if (seen === undefined) {
+      byDigest.set(digest, { record, contentKey });
+      continue;
+    }
+    if (seen.contentKey !== contentKey) {
+      throw new Error('OFFLINE_EVALUATION_DUPLICATE_DIGEST_CONFLICT:' + digest);
+    }
+  }
+  return [...byDigest.values()].map((item) => item.record);
+};
+
 export async function evaluateVerifiedLearningRecords(
   lineageLedger: OutcomeLineageLedgerPort | null | undefined,
   records: readonly OutcomeRecord[] | null | undefined,
@@ -370,7 +400,9 @@ export async function evaluateVerifiedLearningRecords(
   }
   const datasetVersion = requireDatasetVersion(options.datasetVersion ?? 'learning-dataset/v1');
   const verified = await buildVerifiedLearningProjection(lineageLedger, records);
-  const metrics = evaluateOfflineOutcomesInternal(verified.verifiedRecords, { datasetVersion }, verified.excluded);
+  // verified records → dedupe by digest → metrics + identity（totalRecords = uniqueVerifiedRecords.length）
+  const uniqueVerifiedRecords = dedupeVerifiedRecords(verified.verifiedRecords);
+  const metrics = evaluateOfflineOutcomesInternal(uniqueVerifiedRecords, { datasetVersion }, verified.excluded);
   const result: OfflineEvaluationResult = {
     ...metrics,
     provenance: {
