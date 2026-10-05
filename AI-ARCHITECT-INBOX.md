@@ -150554,3 +150554,167 @@ PRODUCTION_READY = false
 这次四个原修订已全部 PASS；只剩 ApprovalVerdict 自身 provenance 这一处，修完即可真正关闭 U1。
 ```
 
+### [MSG-20261005-70] PHASE 5 U1 FINAL2 裁决 = PASS / CLOSED（APPROVAL_VERDICT_PROVENANCE / VERDICT_ANTI_TAMPER / VERDICT_U2_TRUST_GATE = PASS；PHASE_5_U1 = PASS / CLOSED；PHASE5_U1_FINAL3_REQUIRED = NO；NEXT = P5-U2 Rollback Plan Contract，其后 P5-U3 Controlled Config Proposal）， reviewed ref c96ec7e1
+
+```text
+DECISION
+
+APPROVAL_VERDICT_PROVENANCE = PASS
+VERDICT_ANTI_TAMPER = PASS
+VERDICT_U2_TRUST_GATE = PASS
+PHASE_5_U1 = PASS / CLOSED
+PHASE5_U1_FINAL3_REQUIRED = NO
+Reviewed HEAD：c96ec7e1
+GitHub Actions：NOT_OBSERVED
+KEEP
+ApprovalVerdict 现在只能由 decideCandidateReview() 正式路径产生可信 provenance。
+WeakSet + WeakMap canonical fingerprint 覆盖了 U2 下游需要消费的全部 verdict 字段。
+verdict / execution / execution.mutation 已 deep-freeze。
+{...verdict}、手造 APPROVED verdict 均无法通过 isVerifiedApprovalVerdict()。
+正式 REJECTED verdict 也无法被原地改成 APPROVED。
+因此 U2 的唯一可信门可以正式冻结为：
+纯文本
+isVerifiedApprovalVerdict(verdict) === true
+AND
+verdict.outcome === APPROVED
+candidate provenance、ticket provenance、digest-keyed replay/revoke、scope 白名单继续保持 CLOSED。
+无 apply / promote / execute / rollout / mutate 入口。
+CHANGE
+
+U1 无进一步修改。
+
+但下一阶段顺序建议继续按上一轮调整：
+
+不要直接实现 Controlled Config Proposal。
+
+因为你们自己已经要求 Config Proposal 必须绑定：
+
+rollbackPlanRef
+
+那 Rollback Plan 必须先成为一个可信 artifact。
+
+所以正式顺序冻结为：
+
+P5-U2 Rollback Plan Contract
+→ P5-U3 Controlled Config Proposal
+→ P5-U4 Canary / Shadow Evaluation
+
+如果坚持把 Controlled Config Proposal 命名为 U2，则只能先做 schema skeleton，并保持：
+
+ROLLBACK_PLAN_NOT_VERIFIED → BLOCK
+
+不能完成或 CLOSED。
+
+RISKS
+
+当前 U1 已达到 contract/sandbox closure，但不代表生产审批系统完成：
+
+ticket/verdict single-use 状态仍是进程内内存结构；
+生产需要 DB unique constraint / transaction / durable revocation；
+尚未接真实身份系统、OAuth、企业审批系统；
+digest 仍截 16 hex。
+
+这些不重新打开 U1。
+
+selfApproval=FORBIDDEN 当前可解释为“automation/system 不得审批”；尚未证明组织级四眼原则，这也是后续治理能力，不阻断 U1。
+
+TEST
+
+U1 FINAL2 已覆盖关键门：
+
+正式 verdict → provenance true；
+clone → false；
+手造 APPROVED → false；
+REJECTED 原地改 APPROVED → 被 freeze 阻止；
+verdictDigest 篡改 → 阻止；
+execution mutation 篡改 → 阻止；
+nested execution 全冻结；
+原 17 项继续保持；
+本地 candidate-approval 20/20 为 Codex 提供的执行证据；
+exact SHA GitHub Actions 未观察到 run。
+NEXT
+P5-U2 — Rollback Plan Contract
+
+最低要求建议冻结：
+
+Verified APPROVED Verdict
+→ Rollback Plan
+
+Rollback Plan 至少绑定：
+
+verdictDigest
+ticketDigest
+candidateDigest
+evaluationDigest
+evidenceSetDigest
+candidateTarget
+baselineConfigFingerprint
+rollbackTargetFingerprint
+rollbackSteps
+rollbackTrigger
+rollbackPlanDigest
+
+硬约束：
+
+只接受 isVerifiedApprovalVerdict(verdict) === true
+只接受 outcome === APPROVED
+REJECTED → fail-closed
+caller 手造 rollback plan → 不可信
+rollback plan 自身 provenance + fingerprint + deep-freeze
+rollback 必须指向明确 baseline
+不允许 ROLLBACK_TO_LATEST
+不允许模糊“恢复默认值”
+不执行 rollback，只生成 ROLLBACK_PLAN_ONLY
+无 Policy/Guard/Router/Action Runtime mutation
+随后的 P5-U3 — Controlled Config Proposal
+
+届时最低绑定正式冻结为：
+
+verified APPROVED verdict + verified rollback plan
+
+→ Controlled Config Proposal，绑定：
+
+verdictDigest
+ticketDigest
+candidateDigest
+evaluationDigest
+evidenceSetDigest
+baselineConfigFingerprint
+proposedDelta
+rollbackPlanRef / rollbackPlanDigest
+proposalDigest
+
+并必须：
+
+APPROVED only；
+REJECTED 永不生成；
+one verdict → one proposal；
+delta 必须限于 candidate target；
+baseline fingerprint 必须明确；
+verified rollback plan 必须先存在；
+proposal 仍然 PROPOSAL_ONLY；
+不得直接修改 Policy / Guard / Router / Action Runtime。
+PRODUCTION
+
+继续全部 HOLD：
+
+REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing
+
+继续：
+
+SECOND_RUNTIME / SECOND_POLICY_ENGINE / SECOND_CONTROL_PLANE / SECOND_MODEL_GATEWAY / SECOND_COST_LEDGER / SECOND_META_EVIDENCE_STORE = FORBIDDEN
+
+继续：
+
+L5_RELAXATION = FORBIDDEN
+
+保持：
+
+MODEL_GATEWAY_RUNTIME_WIRED = false
+ACTION_RUNTIME_PRODUCTION_ENABLED = false
+META_IMPROVEMENT_INTEGRATED = false
+PRODUCTION_READY = false
+
+U1 现在可以正式 CLOSED。下一步建议先做 P5-U2 Rollback Plan，而不是直接进入 Controlled Config Proposal。
+```
+
