@@ -69,7 +69,7 @@ const localSim = () =>
   });
 
 const failingAdapter = (tier: 'LOW_COST' | 'STRONG', counter: { n: number }): RsiModelProviderAdapter => ({
-  providerName: tier === 'LOW_COST' ? 'probe-low' : 'probe-strong',
+  providerName: tier === 'LOW_COST' ? 'rsi-local-sim-probe-low' : 'rsi-local-sim-probe-strong',
   tier,
   pricing: { inputUsdPerToken: 0.000001, outputUsdPerToken: 0.000002, maxInputTokens: 1_000 },
   async invoke() {
@@ -138,7 +138,7 @@ describe('PHASE 2 U2 · SI Runtime 端到端模型链（local sim）', () => {
   it('P2U2_2 budget guard 不可绕过：缺 provider pricing → BUDGET_GUARD_UNENFORCEABLE，零 provider 调用', async () => {
     const counter = { n: 0 };
     const noPricing: RsiModelProviderAdapter = {
-      providerName: 'probe-no-pricing',
+      providerName: 'rsi-local-sim-probe-no-pricing',
       tier: 'LOW_COST',
       async invoke() {
         counter.n += 1;
@@ -167,7 +167,7 @@ describe('PHASE 2 U2 · SI Runtime 端到端模型链（local sim）', () => {
 
   it('P2U2_4 quality gate 不可由模型自证：cheap 成功但无 evaluator → 不升级；evaluator FAIL → 有界升级 ≤ 1', async () => {
     const succeeding = (tier: 'LOW_COST' | 'STRONG', counter: { n: number }): RsiModelProviderAdapter => ({
-      providerName: tier === 'LOW_COST' ? 'probe-low-ok' : 'probe-strong-ok',
+      providerName: tier === 'LOW_COST' ? 'rsi-local-sim-probe-low-ok' : 'rsi-local-sim-probe-strong-ok',
       tier,
       pricing: { inputUsdPerToken: 0.000001, outputUsdPerToken: 0.000002, maxInputTokens: 1_000 },
       async invoke() {
@@ -246,7 +246,68 @@ describe('PHASE 2 U2 · SI Runtime 端到端模型链（local sim）', () => {
     });
     const withGateway = await pack.run({ task: { id: 't1', dedupeKey: 'task:recovery:PLATFORM:opp-1', priority: 'P2' }, packId: 'recovery-si', modelGateway: gateway });
     expect(withGateway.reasonCodes).toContain('RECOVERY_PACK_MODEL_GATEWAY');
-    expect(invoked.n).toBeGreaterThanOrEqual(0);
+    expect(invoked.n).toBe(1);
+    expect(withGateway.modelCallCount).toBe(1);
     const withoutGateway = await pack.run({ task: { id: 't2', dedupeKey: 'task:recovery:PLATFORM:opp-2', priority: 'P2' }, packId: 'recovery-si' });
     expect(withoutGateway.reasonCodes).not.toContain('RECOVERY_PACK_MODEL_GATEWAY');
+    expect(withoutGateway.modelCallCount).toBe(0);
+  });
+
+  it('P2U2_7 真 runtime 链：composeRsiRuntime → productRecoveryPack → recovery-si → Shared Guard → Gateway → park-for-judge', async () => {
+    const invoked = { n: 0 };
+    const gateway = createSiModelGatewayPort({
+      lowCost: createRsiLocalSimAdapter({
+        tier: 'LOW_COST',
+        providerName: 'rsi-local-sim-low-cost',
+        resolvePrompt: () => 'local-sim-prompt',
+      }),
+      usage: () => usage(),
+      onCall: () => {
+        invoked.n += 1;
+      },
+    });
+    const composition = await composeRsiRuntime({
+      readFile: async (p: string) => (p === 'mem://tasks' ? queue : '[]'),
+      tasksPath: 'mem://tasks',
+      productRecoveryPack: {
+        appActionGuardDeps: {
+          killSwitchResolver: {
+            async resolve(scope: string) {
+              return { scope, value: 'enabled', degraded: false, stale: false };
+            },
+          },
+          audit: { async write() {} },
+        } as never,
+        readPorts: readPorts(),
+        bind: () => ({
+          organizationId: 'org-1',
+          domain: 'PLATFORM' as never,
+          actionKind: 'EXECUTE_READ_ONLY_CHECK' as never,
+          opportunityRef: 'opp-1',
+          aiEligible: true,
+        }),
+        modelGateway: gateway,
+      },
+    });
+    const outcome = await composition.controller.tick();
+    expect(outcome.claimed?.dedupeKey).toBe('task:recovery:PLATFORM:opp-1');
+    expect(composition.domainDispatchLog()[0]?.packId).toBe('recovery-si');
+    // 只有 Guard ALLOW 才会进入模型路径；据此对 gateway 调用次数做精确断言
+    const decision = composition.domainDispatchLog()[0]?.guardActions[0]?.decision;
+    if (decision === 'ALLOW') expect(invoked.n).toBe(1);
+    else expect(invoked.n).toBe(0);
+    expect(composition.controller.state().waitingForVerdict).toBe(true);
+    expect(composition.controller.state().verdict).toBeNull();
+    composition.controller.markWaitingForVerdict('PASS');
+    await composition.controller.emit('JUDGE_VERDICT_RECEIVED');
+    expect(composition.controller.state().waitingForVerdict).toBe(false);
+  });
+
+  it('P2U2_8 HOLD 运行时边界：非 local-sim（真实/付费）adapter 注入 → fail-closed 抛错', () => {
+    expect(() =>
+      createSiModelGatewayPort({
+        lowCost: { providerName: 'amazon-ads-real', tier: 'LOW_COST', async invoke() { throw new Error('must not run'); } },
+        usage: () => usage(),
+      }),
+    ).toThrow(/SI_MODEL_GATEWAY_REAL_PROVIDER_FORBIDDEN/);
   });

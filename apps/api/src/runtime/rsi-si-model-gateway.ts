@@ -21,6 +21,13 @@ import {
 import type { RsiCostUsage, RsiModelCallRequest } from '../services/autonomy/rsi-cost-policy';
 import type { AiEscalationLimits, AiQualityVerdict } from '../services/autonomy/rsi-model-escalation-policy';
 
+export const LOCAL_SIM_ADAPTER_PREFIX = 'rsi-local-sim';
+
+/**
+ * FINAL2 ③：当前阶段（REAL_MODEL_NETWORK / PAID_MODEL_CALLS = HOLD）product gateway 只允许
+ * **local-sim branded** adapter；其它（真实网络 / 付费）adapter 一律 fail-closed 抛错，
+ * 使 HOLD 成为运行时边界而不是声明。
+ */
 export const SI_MODEL_GATEWAY_BOUNDARY = {
   owner: 'services/autonomy/rsi-model-router.ts（唯一 Model Router）',
   secondRouter: 'FORBIDDEN',
@@ -28,6 +35,8 @@ export const SI_MODEL_GATEWAY_BOUNDARY = {
   realProviderNetwork: 'HOLD',
   paidModelCalls: 'HOLD',
   localSimulationAdapterOnly: true,
+  providerCapabilityEnforced: true,
+  realOrPaidAdapter: 'THROW（SI_MODEL_GATEWAY_REAL_PROVIDER_FORBIDDEN）',
   providerFailure: 'fail-closed（由 Gateway 判定）',
   deterministicFirst: true,
 } as const;
@@ -80,7 +89,19 @@ const toResult = (outcome: RsiRouterOutcome): SiModelGatewayInvokeResult => ({
  * 用共享 Gateway 组装 SI capability port。
  * **禁止**在此处新增路由/预算/质量逻辑；任何绕过必须在上层被拒绝。
  */
+const assertLocalSimAdapter = (adapter: RsiModelProviderAdapter, role: string): void => {
+  const name = String(adapter?.providerName ?? '');
+  if (!name.startsWith(LOCAL_SIM_ADAPTER_PREFIX)) {
+    throw new Error(
+      'SI_MODEL_GATEWAY_REAL_PROVIDER_FORBIDDEN:' + role + ':' + name +
+        '（当前阶段 REAL_MODEL_NETWORK / PAID_MODEL_CALLS = HOLD，只允许 local-sim adapter）',
+    );
+  }
+};
+
 export function createSiModelGatewayPort(deps: SiModelGatewayDeps): RsiSiModelGatewayPort {
+  assertLocalSimAdapter(deps.lowCost, 'lowCost');
+  if (deps.strong !== undefined) assertLocalSimAdapter(deps.strong, 'strong');
   const router = createRsiModelRouter({
     lowCost: deps.lowCost,
     ...(deps.strong === undefined ? {} : { strong: deps.strong }),

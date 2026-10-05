@@ -185,6 +185,7 @@ export function createRecoverySiPack(deps: RecoverySiPackDependencies): RsiDomai
       // 缺省（未注入 gateway / 非 AI-eligible）保持 deterministic-first，零模型调用。
       let modelCallCount = 0;
       let gatewayReasonCodes: string[] = [];
+      let gatewayAudit: string[] = [];
       if (modelGateway !== undefined && binding.aiEligible === true) {
         const gatewayResult = await modelGateway.invoke({
           taskType: task.dedupeKey.split(':')[2] ?? 'SEMANTIC',
@@ -207,6 +208,14 @@ export function createRecoverySiPack(deps: RecoverySiPackDependencies): RsiDomai
         } as never);
         modelCallCount = gatewayResult.called ? 1 : 0;
         gatewayReasonCodes = ['RECOVERY_PACK_MODEL_GATEWAY', gatewayResult.reason];
+        // FINAL2 ② ：模型的稳定、非敏感审计字段也进入 evidenceRef（可绑定、可复算）
+        gatewayAudit = [
+          'gateway.called=' + String(gatewayResult.called),
+          'gateway.reason=' + gatewayResult.reason,
+          'gateway.level=' + gatewayResult.level,
+          'gateway.provider=' + String(gatewayResult.provider ?? '-'),
+          'gateway.model=' + String(gatewayResult.model ?? '-'),
+        ];
       }
 
       // ② 确定性只读工具（按 domain 映射；跨租户 / 敏感输出 → BLOCK）
@@ -241,6 +250,7 @@ export function createRecoverySiPack(deps: RecoverySiPackDependencies): RsiDomai
             binding.organizationId,
             binding.opportunityRef,
             guardAction,
+            ...gatewayAudit,
           ].join('|'),
         );
       return {

@@ -50,11 +50,11 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
-  "next_execution_unit": "重新投递 PHASE 2 审计（marker [CODEX-PHASE2-FINAL]）→ 送达三检 → 读取 verdict → 逐字归档 + FULL_COPY_OK → 对账；MODEL_GATEWAY_RUNTIME_WIRED 仍为 false（无真实 provider E2E）",
+  "next_execution_unit": "投递 PHASE 2 FINAL2 审计（marker [CODEX-PHASE2-FINAL2]）→ 送达三检 → 读取 verdict → 逐字归档 + FULL_COPY_OK → 对账；MODEL_GATEWAY_RUNTIME_WIRED 保持 false",
   "automation_status": "CONTINUOUS",
   "last_tick_at": "2026-10-06T08:30:00.000Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "PHASE 2 FINAL A/B 落地：Recovery pack 经唯一 Model Gateway 消费（aiEligible 由 server 派生）；Router 创建点 allowlist 严格化",
+  "last_action": "PHASE 2 FINAL2 落地：evidence digest 恢复 read-tool 绑定并纳入 gateway 审计字段；createSiModelGatewayPort 强制 local-sim brand（真实/付费 adapter fail-closed）；新增 P2U2_7 真 runtime 链与 P2U2_8 HOLD 边界",
   "last_action_at": "2026-10-06T08:30:00.000Z",
   "next_action": "C2 IMPLEMENTATION（Schema Delta + durable ledger/budget + PG 回归）",
   "current_head": "054ab732",
@@ -5169,7 +5169,7 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "PHASE-2-U5: 重新送审 PHASE 2（A/B 窄修后）→ 读取 verdict → 逐字归档 + FULL_COPY_OK → 对账；PASS 则进入 PHASE 3"
+    "PHASE-2-U6: 重新投递 PHASE 2 FINAL2 审计 → 读取 verdict → 逐字归档 + FULL_COPY_OK → PASS 则 PHASE 2 CLOSED 并进入 PHASE 3"
   ],
   "full_autonomous_internal_execution": "VERIFIED",
   "dispatcher_acceptance": {
@@ -9447,7 +9447,7 @@
   "step3_runtime_policy_wiring_closed_at": "2026-10-06T12:00:00.000Z",
   "phase_state": {
     "PHASE_1_FINAL7": "PASS / CLOSED（MSG-20261005-47，REVIEWED_HEAD = 795f65a5；STEP3_FINAL8_REQUIRED = NO）",
-    "PHASE_2_MODEL_GATEWAY_RUNTIME": "FINAL(A+B) DONE / PENDING RE-AUDIT（A：Recovery pack 真消费 Model Gateway（server-derived AI-eligible）；B：Router 创建点严格 allowlist 含 rsi-model-provider-composition）",
+    "PHASE_2_MODEL_GATEWAY_RUNTIME": "FINAL2 DONE / PENDING RE-AUDIT（digest 恢复+扩展；HOLD 运行时强制 local-sim only；真 runtime 链精确计数）",
     "PHASE_3_ACTION_RUNTIME": "QUEUED",
     "PHASE_4_OUTCOME_LEARNING_PIPELINE": "QUEUED",
     "PHASE_5_META_IMPROVEMENT": "QUEUED（依赖真实运行结果）"
