@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-22",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-06T00:40:00.000Z",
+  "updated_at": "2026-10-06T01:10:00.000Z",
   "previous_head": "8064f07",
   "architect_decision_pending": true,
   "blocked_scope": null,
@@ -50,11 +50,11 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "ACTIVE",
-  "next_execution_unit": "C2 FINAL-2 narrow revision（A. scope-correct usage accounting per policy scope；B. canonical hierarchical advisory locks（删除 caller scopeKey，固定顺序 platform→org→account→incident→task）；C. guarded-write integer/idempotency invariants 含 duplicate callId 先识别）+ 裁决要求的 10 条 PG 回归 → 送 C2 FINAL-2 Audit → PASS/CLOSED 后进入 C3",
+  "next_execution_unit": "C2 FINAL-2 裁决 → PASS/CLOSED 后进入 C3 IMPLEMENTATION（缓存运行时接线 + business-value cost policy + Cost Safe Mode + admin 只读可观测 + NOT_YET_MEASURABLE 指标 + CONCURRENCY_LIMIT_ENFORCEMENT）",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-06T00:40:00.000Z",
+  "last_tick_at": "2026-10-06T01:10:00.000Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "C2 Implementation Audit = PASS WITH REVISE（MSG-20261005-34）：主体设计 PASS；预算 Guard 三项窄修（scope 用量 / canonical 层级锁 / guarded-write 不变量与幂等）→ C2_FINAL2_REQUIRED = YES",
+  "last_action": "C2 FINAL-2 完成并送审（1448f9db）：作用域正确用量 + canonical 层级锁 + guarded 不变量/幂等；tsc 0；C2 18/18；48 文件 / 412 例 PASS",
   "last_action_at": "2026-10-06T00:40:00.000Z",
   "next_action": "C2 IMPLEMENTATION（Schema Delta + durable ledger/budget + PG 回归）",
   "current_head": "054ab732",
@@ -5199,9 +5199,9 @@
   "awaiting_verdict": "EXACT-ORDER REPLAY 证据已送审（comment 5979262070）；shared/staging deploy 解禁待裁决",
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-05T12:20:02.217Z",
-    "head": "9c70875d",
-    "acceptance_head": "9c70875d",
+    "computed_at": "2026-10-05T12:30:44.232Z",
+    "head": "1448f9db",
+    "acceptance_head": "1448f9db",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5360,27 +5360,27 @@
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=9c70875d ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
+        "evidence": "acceptance_head=1448f9db ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
       },
       "L1-05_pg_regression_passed": {
         "status": "UNVERIFIED",
-        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head 9c70875d（且中间存在非簿记变更）"
+        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head 1448f9db（且中间存在非簿记变更）"
       },
       "L1-06_fresh_db_migration_passed": {
         "status": "UNVERIFIED",
-        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head 9c70875d（且中间存在非簿记变更）"
+        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head 1448f9db（且中间存在非簿记变更）"
       },
       "L1-07_api_typecheck_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head 9c70875d（且中间存在非簿记变更）"
+        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head 1448f9db（且中间存在非簿记变更）"
       },
       "L1-08_web_typecheck_build_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head 9c70875d（且中间存在非簿记变更）"
+        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head 1448f9db（且中间存在非簿记变更）"
       },
       "L1-09_no_skipped_critical_tests": {
         "status": "UNVERIFIED",
-        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head 9c70875d（且中间存在非簿记变更）"
+        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head 1448f9db（且中间存在非簿记变更）"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
@@ -5389,19 +5389,19 @@
       },
       "L1-11_docs_state_consistent": {
         "status": "UNVERIFIED",
-        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head 9c70875d（且中间存在非簿记变更）"
+        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head 1448f9db（且中间存在非簿记变更）"
       },
       "L1-12_schema_invariants_verified": {
         "status": "UNVERIFIED",
-        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head 9c70875d（且中间存在非簿记变更）"
+        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head 1448f9db（且中间存在非簿记变更）"
       },
       "L1-13_negative_paths_covered": {
         "status": "UNVERIFIED",
-        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head 9c70875d（且中间存在非簿记变更）"
+        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head 1448f9db（且中间存在非簿记变更）"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
         "status": "UNVERIFIED",
-        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head 9c70875d（且中间存在非簿记变更）"
+        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head 1448f9db（且中间存在非簿记变更）"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
@@ -8851,7 +8851,7 @@
     "invariant": "ACTION_GUARD_DRY_RUN_ALLOW != EXECUTION_AUTHORIZATION；零审批消费 / 零 executor / 零业务事实写入 / 零外写；L5 永久拒绝"
   },
   "si_cost_optimization": {
-    "status": "C2_FINAL2_REQUIRED",
+    "status": "C2_FINAL2_SUBMITTED_PENDING_VERDICT",
     "priority": "P1",
     "dependency": "SI_RSI_UNIFICATION_PASS_CLOSED",
     "registered_at": "2026-10-05T12:45:00.000Z",
@@ -9036,6 +9036,17 @@
       "c2_final2_required": "YES",
       "c3_authorized": "NO",
       "archive": "AI-ARCHITECT-INBOX.md#MSG-20261005-34"
+    },
+    "c2_final2": {
+      "implementation_head": "1448f9db",
+      "request": "docs/releases/SI-COST-OPTIMIZATION-C2-FINAL2-REQUEST.md",
+      "migration": "20261005080000_si_cost_c2_final2_checks",
+      "changes": [
+        "A 逐 policy 作用域用量",
+        "B canonical 层级锁（删除 caller scopeKey）",
+        "C guarded 不变量 + DB CHECK + 幂等优先"
+      ],
+      "tests": "migrate 81；tsc 0；C2 18/18；48 文件 / 412 例"
     }
   },
   "si_rsi_unification": {

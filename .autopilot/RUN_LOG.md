@@ -2603,3 +2603,12 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 另：若未实现 concurrency enforcement 必须显式 NOT_YET_WIRED；tokenLimit 需 enforce 或明确留 C3；escalatedToStrong 不得作为真实 strong 调用事实源。
 - NEXT_EXECUTION_UNIT = C2 FINAL-2（A/B/C + 裁决要求 10 条 PG 回归）→ 送审 → PASS/CLOSED 后 C3。
 
+
+## 2026-10-06T01:10Z — C2 FINAL-2 完成并送审（实现 HEAD = 1448f9db）
+- CHANGE A：预算用量改为逐 policy 自身作用域聚合（platform/org/account/incident/task），daily/monthly/perIncident/strong/token 全部按 scope 校验；修复父级预算被跨 incident / 跨 org 绕过。
+- CHANGE B：删除 caller scopeKey；锁由 store 内部 canonical 派生并按固定顺序获取 platform:* → org → account → incident → task（防死锁）。
+- CHANGE C：guarded write 增加不变量校验（cost/tokens integer ≥0、attempt 正整数、limits ≥0）+ 迁移 20261005080000 追加 DB CHECK；幂等优先（已有 callId → 身份校验 → duplicate=true 零新增成本）。
+- 边界：concurrencyLimit = NOT_YET_WIRED；tokenLimit 已 enforce。
+- 验证：migrate deploy 81；tsc 0；C2 套件 10→18 例全绿；rsi-* + architecture-contract + C2 = 48 文件 / 412 例 PASS。
+- 送审：docs/releases/SI-COST-OPTIMIZATION-C2-FINAL2-REQUEST.md（REVIEWED_HEAD = 1448f9db）。
+
