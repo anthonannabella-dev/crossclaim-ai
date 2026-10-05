@@ -2045,3 +2045,10 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - Phase 1 投影：同 resultDigest 幂等 append；`externalWritePerformed` / `autoSubmitAllowed` 由 **DB CHECK 强制为 false**；
   真实 HTTP E2E 跑一次 Phase 1 → 投影自动产生、state 返回 `phase1 != null` 且 `notPersisted=[]`。
 - 结论：BG-018 验收标准满足；未改代码，`NO_DISPUTE_SUBMIT / NO_EXTERNAL_PSP` 保持。
+
+## 2026-10-05T03:27:57.495Z — BG-011 PS04 D1–D3 枚举迁移：Audit Pack 生成 + 送审（Lane B，异步）
+- REVIEWED_HEAD = `5d809039`；耐久记录 `docs/releases/BG-011-PS04-ENUM-MIGRATION-AUDIT-REQUEST.md`。
+- 事实：迁移 `apps/api/prisma/migrations/20261003200000_ps04_enum_d1_d3` 已存在，恰好 5 条 `ALTER TYPE ... ADD VALUE IF NOT EXISTS`，不含 D4、不改其它 Schema。
+- 证据：`architecture-contract` 142/142 PASS（本地）；CI 空库 `prisma migrate deploy` 路径覆盖（此前多次 hosted CI success）。
+- 已请求裁决：①BG-011 是否可记 COMPLETED/CLOSED；②D4 仍不得实施；③如需补证据请列最小集合。
+- 送审不阻塞 Lane A：继续处理无外部依赖的 SAFE 项。
