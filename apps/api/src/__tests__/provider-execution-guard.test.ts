@@ -65,6 +65,16 @@ describe('PHASE 3 U2 —— credential port（opaque ref + 绑定，fail-closed�
     expect(PROVIDER_EXECUTION_BOUNDARY.realCredentials).toContain('ABSENT');
   });
 
+  it('P3U2_2b raw-key 形态（sk-/sk_/pk-/pk_/Bearer）一律 REJECT', async () => {
+    for (const raw of ["sk-test123", "sk_test123", "pk-test", "pk_test", "Bearer xxx", "sk abc"]) {
+      const res = await resolveProviderCredential(port(raw), { providerName: "p", organizationId: "org-1" });
+      expect(res.ok).toBe(false);
+      if (!res.ok) expect(res.reason).toBe('PROVIDER_CREDENTIAL_REF_NOT_OPAQUE');
+    }
+    const ok = await resolveProviderCredential(port('vault:providers/amazon/org-1'), { providerName: 'p', organizationId: 'org-1' });
+    expect(ok.ok).toBe(true);
+  });
+
   it('P3U2_3 port 返回的 providerName 与请求不一致 → PROVIDER_CREDENTIAL_PROVIDER_MISMATCH', async () => {
     const mismatched = await resolveProviderCredential(port('vault:providers/amazon/org-1', { providerName: 'tiktok' }), {
       providerName: 'amazon',

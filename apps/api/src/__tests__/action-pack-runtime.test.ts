@@ -7,7 +7,7 @@
 import { describe, expect, it } from 'vitest';
 
 import { GUARD_ENFORCED_ACTIONS } from '../services/action-guard/guard-enforcement';
-import { createRuntimeActionGuard } from '../services/action-guard/runtime-guard';
+import { createAppActionGuard, isAppActionGuard, staticControlPlaneConfig, type AppActionGuardDeps } from '../services/action-guard/runtime-guard-composition';
 import {
   ACTION_PACK_RUNTIME_BOUNDARY,
   EXTERNAL_WRITE_ACTIONS,
@@ -28,21 +28,25 @@ import {
   type ProviderCredentialPort,
 } from '../services/action-runtime/provider-execution-guard';
 
-const GUARD_CAPS = {
-  tenantEnabled: true,
-  writeEnabled: true,
-  featureEnabled: Object.fromEntries(GUARD_ENFORCED_ACTIONS.map((a) => [a, true])),
-  platformEnablement: Object.fromEntries(GUARD_ENFORCED_ACTIONS.map((a) => [a, true])),
-  productionGate: 'SATISFIED' as const,
-  hostApprovalGranted: true,
-};
-
-/** 真实共享 Action Guard（非 stub）：全部能力满足 → 走 ALLOW 分支 */
-const guardAllow = () =>
-  createRuntimeActionGuard({
-    capabilities: { resolve: async () => GUARD_CAPS },
+/** 正式共享 guard composition 依赖（非 stub）：内部由 createAppActionGuard 构造 */
+const guardAllowDeps = () =>
+  ({
+    config: staticControlPlaneConfig({
+      globalDisabled: false,
+      mode: 'WRITE_ENABLED' as const,
+      productionGate: 'SATISFIED' as const,
+      platformEnabled: Object.fromEntries(GUARD_ENFORCED_ACTIONS.map((a) => [a, true])),
+      tenantFeatureEnabled: Object.fromEntries(GUARD_ENFORCED_ACTIONS.map((a) => [a, true])),
+      hostApprovalGranted: true,
+    }),
+    // 共享 kill-switch 适配器要求严格形状；且 capability source 只在 value === "enabled" 时保持 tenantEnabled=true
+    killSwitchResolver: {
+      async resolve(scope: string) {
+        return { scope, value: 'enabled' as const, degraded: false, stale: false };
+      },
+    },
     audit: { write: () => {} },
-  });
+  }) as unknown as AppActionGuardDeps;
 
 const request = (over: Partial<ProviderInvokeRequest> = {}): ProviderInvokeRequest => ({
   idempotencyKey: 'idem-1',
@@ -94,7 +98,7 @@ const scannable = (evidence: object): Record<string, unknown> => {
 
 const base = (over: Partial<Parameters<typeof runActionPack>[0]> = {}) => ({
   actorUserId: 'user-1',
-  guard: guardAllow(),
+  guardDeps: guardAllowDeps(),
   idempotency: createInMemoryIdempotencyStore(),
   ...over,
 });
@@ -103,13 +107,41 @@ describe('PHASE 3 FINAL U5/U6 —— 授权只来自共享 Action Guard', () => 
   it('P3F_A1 未配置共享 Action Guard → BLOCKED（ACTION_PACK_ACTION_GUARD_NOT_CONFIGURED），invoke = 0', async () => {
     const calls = counting();
     const outcome = await runActionPack({
-      ...base({ guard: null, idempotency: createInMemoryIdempotencyStore() }),
+      ...base({ guardDeps: null, idempotency: createInMemoryIdempotencyStore() }),
       adapter: createMockProviderAdapter({ providerName: 'mock-a', onInvoke: calls.bump }),
       request: request(),
     });
     expect(outcome.allowed).toBe(false);
-    expect(outcome.reason).toBe('ACTION_PACK_ACTION_GUARD_NOT_CONFIGURED');
+    expect(outcome.reason).toBe('ACTION_PACK_ACTION_GUARD_DEPS_REQUIRED');
     expect(calls.count).toBe(0);
+  });
+
+  it('P3F_A1b caller 自写 fake RuntimeActionGuard（恒 ALLOW）不被接受 → BLOCKED，invoke = 0', async () => {
+    const calls = counting();
+    const fakeGuard = {
+      async evaluate() {
+        return { decision: 'ALLOW', code: 'FAKE_ALLOW', action: 'evidence.read', risk: 'READ_ONLY', reasons: [] };
+      },
+      async assertAllowed() {
+        return { decision: 'ALLOW', code: 'FAKE_ALLOW', action: 'evidence.read', risk: 'READ_ONLY', reasons: [] };
+      },
+    };
+    expect(isAppActionGuard(fakeGuard as never)).toBe(false);
+    const spoof = {
+      actorUserId: 'user-1',
+      guard: fakeGuard,
+      idempotency: createInMemoryIdempotencyStore(),
+      adapter: createMockProviderAdapter({ providerName: 'mock-a', onInvoke: calls.bump }),
+      request: request(),
+    } as unknown as Parameters<typeof runActionPack>[0];
+    const outcome = await runActionPack(spoof);
+    expect(outcome.allowed).toBe(false);
+    expect(outcome.reason).toBe('ACTION_PACK_ACTION_GUARD_DEPS_REQUIRED');
+    expect(calls.count).toBe(0);
+  });
+
+  it('P3F_A1c 正式共享 guard composition（createAppActionGuard）具备 provenance', () => {
+    expect(isAppActionGuard(createAppActionGuard(guardAllowDeps()))).toBe(true);
   });
 
   it('P3F_A2 caller 自报 guardDecision="ALLOW" 不能绕过：guard 拒绝即 BLOCKED，invoke = 0', async () => {

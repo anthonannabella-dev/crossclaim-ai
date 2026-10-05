@@ -20,7 +20,7 @@
 
 import { verifyApprovalOrThrow, type ActionGuardApprovalVerifier } from '../action-guard/approval-verifier';
 import { GUARD_ENFORCED_ACTIONS } from '../action-guard/guard-enforcement';
-import type { RuntimeActionGuard } from '../action-guard/runtime-guard';
+import { createAppActionGuard, isAppActionGuard, type AppActionGuardDeps } from '../action-guard/runtime-guard-composition';
 import {
   assertProviderAdapter,
   decideExternalWriteGate,
@@ -43,7 +43,7 @@ import {
 
 export const ACTION_PACK_RUNTIME_BOUNDARY = {
   externalWrite: 'HOLD（外写动作一律 EXTERNAL_WRITE_HOLD，不 invoke provider）',
-  authorization: 'SHARED_ACTION_GUARD（server-owned RuntimeActionGuard 实例；caller 自报 guardDecision 不被接受）',
+  authorization: 'SHARED_ACTION_GUARD_FACTORY（只接受 AppActionGuardDeps；内部经唯一 createAppActionGuard 构造，禁止注入 guard 实例）',
   hitl: 'REQUIRED when guard=REQUIRES_APPROVAL / riskClass=HIGH / owner-gated action（须共享 approval verifier 校验）',
   sandboxProvenance: 'FACTORY_WEAKSET（caller 自报 simulated 无效）',
   exactlyOnce: 'idempotencyKey + fingerprint；同 key 不同 fingerprint → IDEMPOTENCY_KEY_CONFLICT',
@@ -112,8 +112,8 @@ export async function runActionPack(input: {
   request: ProviderInvokeRequest;
   /** 共享 Action Guard 的鉴权主体（server-derived，不接受客户端自报） */
   actorUserId: string;
-  /** server-owned 共享 Action Guard 实例；缺失即 fail-closed */
-  guard: RuntimeActionGuard | null | undefined;
+  /** 共享 Action Guard 的组装依赖（server-owned）；本模块内部经唯一 createAppActionGuard() 构造，禁止注入 guard 实例 */
+  guardDeps: AppActionGuardDeps | null | undefined;
   /** 共享审批校验端口；HITL 命中时缺失即 fail-closed */
   approvalVerifier?: ActionGuardApprovalVerifier | null;
   riskClass?: 'LOW' | 'MEDIUM' | 'HIGH';
@@ -166,9 +166,14 @@ export async function runActionPack(input: {
     return blocked('ACTION_PACK_IDEMPOTENCY_KEY_REQUIRED', 0, null);
   }
 
-  // ⓪ 授权来源：必须是 server-owned 共享 Action Guard；caller 无法自报
-  if (!input.guard || typeof input.guard.evaluate !== 'function') {
-    return blocked('ACTION_PACK_ACTION_GUARD_NOT_CONFIGURED', 0, null);
+  // ⓪ 授权来源：只接受 AppActionGuardDeps，并由本模块内部经唯一 createAppActionGuard() 构造；
+  // caller 不能注入 RuntimeActionGuard 实例（结构型 fake 同样不被接受）。
+  if (!input.guardDeps) {
+    return blocked('ACTION_PACK_ACTION_GUARD_DEPS_REQUIRED', 0, null);
+  }
+  const guard = createAppActionGuard(input.guardDeps);
+  if (!isAppActionGuard(guard)) {
+    return blocked('ACTION_PACK_ACTION_GUARD_PROVENANCE_REQUIRED', 0, null);
   }
 
   // ① adapter 契约
@@ -188,7 +193,7 @@ export async function runActionPack(input: {
   }
 
   // ③ 共享 Action Guard 求值（真实执行链的一环）
-  const guardResult = await input.guard.evaluate({
+  const guardResult = await guard.evaluate({
     action: request.action,
     actorUserId: input.actorUserId,
     organizationId: request.organizationId,

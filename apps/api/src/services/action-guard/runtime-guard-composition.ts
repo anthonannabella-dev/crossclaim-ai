@@ -22,6 +22,13 @@ import type { ActionGuardAuditPort, ActionGuardAuditRecord, RuntimeActionGuard }
 
 export const ACTION_GUARD_AUDIT_ACTOR_REF = 'action-guard-runtime/v1';
 
+/**
+ * PHASE 3 FINAL2: trusted provenance for app-composed guards.
+ * Only guards produced by createAppActionGuard() are registered, so a caller cannot hand a
+ * structural fake RuntimeActionGuard (e.g. one that always returns ALLOW) into a runtime.
+ */
+const APP_ACTION_GUARDS = new WeakSet<RuntimeActionGuard>();
+
 /** Prisma 版审计落地端口（白名单字段写入 AuditLog；不含敏感值） */
 export function createPrismaActionGuardAuditPort(prisma: PrismaClient): ActionGuardAuditPort {
   return {
@@ -81,7 +88,14 @@ export function createAppActionGuard(deps: AppActionGuardDeps): RuntimeActionGua
     config: deps.config,
   });
 
-  return plane.guard;
+  const guard = plane.guard;
+  APP_ACTION_GUARDS.add(guard);
+  return guard;
+}
+
+/** Read-only provenance check: only factory-composed app guards are trusted. */
+export function isAppActionGuard(guard: RuntimeActionGuard): boolean {
+  return APP_ACTION_GUARDS.has(guard);
 }
 
 /** 便捷：由静态配置构造只读配置端口（组合根/测试均可）；缺省即拒绝写入 */

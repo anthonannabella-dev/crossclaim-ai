@@ -39,6 +39,26 @@ export type CredentialResolution =
   | { ok: false; reason: string };
 
 /** 解析凭据引用（fail-closed）：未配置 / 空 ref / 非 opaque → 一律拒绝；绝不返回密钥本体 */
+/** PHASE 3 FINAL2 U2: shapes that are raw keys, never valid credential refs. */
+const RAW_KEY_PATTERNS: readonly RegExp[] = [
+  /^(sk|pk)[-_]/i,
+  /^(sk|pk)\s/i,
+  /^bearer\s/i,
+  /^[A-Za-z0-9_-]{24,}$/,
+];
+
+/** PHASE 3 FINAL2 U2: only an explicit opaque namespace ref (e.g. vault:...) is accepted. */
+const OPAQUE_REF_NAMESPACE = /^[a-z][a-z0-9+._-]*:/i;
+
+function looksLikeRawKey(ref: string): boolean {
+  const v = ref.trim();
+  return RAW_KEY_PATTERNS.some((re) => re.test(v));
+}
+
+function isOpaqueRefNamespace(ref: string): boolean {
+  return OPAQUE_REF_NAMESPACE.test(ref.trim());
+}
+
 export async function resolveProviderCredential(
   port: ProviderCredentialPort | null | undefined,
   input: { providerName: string; organizationId: string },
@@ -51,7 +71,7 @@ export async function resolveProviderCredential(
   if (ref === null || typeof ref.credentialRef !== 'string' || ref.credentialRef.trim() === '') {
     return { ok: false, reason: 'PROVIDER_CREDENTIAL_UNAVAILABLE' };
   }
-  if (/^(sk|pk|Bearer)\s|^[A-Za-z0-9_-]{24,}$/.test(ref.credentialRef.trim())) {
+  if (looksLikeRawKey(ref.credentialRef) || !isOpaqueRefNamespace(ref.credentialRef)) {
     // 形似密钥本体 → 拒绝（必须是不透明引用）
     return { ok: false, reason: 'PROVIDER_CREDENTIAL_REF_NOT_OPAQUE' };
   }
