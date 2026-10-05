@@ -50,11 +50,11 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
-  "next_execution_unit": "STEP 3 已 CLOSED。下一阶段：recompute SAFE_CONTINUATION_QUEUE（新 backlog = 仅剩 HOST_ACTION_REQUIRED：RSI-RT-02 Linux/systemd 实机验证、BG-006 生产候选预检；以及 HOLD_EXTERNAL）→ 若宿主另行授权，按顺序进入 Linux/systemd real-host validation → durable DB reboot validation → real model sidecar → controlled non-production model call；同时补齐 4 笔待归档裁决（MSG-42/44/45/46）",
+  "next_execution_unit": "PHASE 2 U1：把唯一 Model Gateway（rsi-model-router）作为 capability port 接入 ONE SI Runtime 的 domain-pack context —— cheap-first / budget guard / cache / quality gate / bounded strong escalation / fail-closed provider failure / 可审计 usage；用 local simulation adapter 与 contract tests（禁第二 Model Router；REAL_MODEL_NETWORK / PAID_MODEL_CALLS 保持 HOLD）→ code → tests → regression → tsc → commit → push → 按需 audit → durable state",
   "automation_status": "CONTINUOUS",
   "last_tick_at": "2026-10-06T08:30:00.000Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "STEP_3_RUNTIME_POLICY_WIRING = PASS / CLOSED（MSG-20261005-47，REVIEWED_HEAD = 795f65a5）",
+  "last_action": "PHASE 1 已 CLOSED（FINAL-7 = PASS）；启动 PHASE 2 MODEL GATEWAY RUNTIME（180s watchdog 已启用）",
   "last_action_at": "2026-10-06T08:30:00.000Z",
   "next_action": "C2 IMPLEMENTATION（Schema Delta + durable ledger/budget + PG 回归）",
   "current_head": "054ab732",
@@ -5169,7 +5169,7 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "step3-runtime-policy-wiring"
+    "PHASE-2-U1: model gateway port into ONE SI Runtime domain-pack context（复用 rsi-model-router + rsi-model-provider-composition(local sim)；禁止第二 Model Router；contract + E2E）"
   ],
   "full_autonomous_internal_execution": "VERIFIED",
   "dispatcher_acceptance": {
@@ -9444,5 +9444,17 @@
       "archive": "AI-ARCHITECT-INBOX.md#MSG-20261005-47"
     }
   },
-  "step3_runtime_policy_wiring_closed_at": "2026-10-06T12:00:00.000Z"
+  "step3_runtime_policy_wiring_closed_at": "2026-10-06T12:00:00.000Z",
+  "phase_state": {
+    "PHASE_1_FINAL7": "PASS / CLOSED（MSG-20261005-47，REVIEWED_HEAD = 795f65a5；STEP3_FINAL8_REQUIRED = NO）",
+    "PHASE_2_MODEL_GATEWAY_RUNTIME": "ACTIVE（已授权；无真实 key 前 REAL_PROVIDER_ENABLED / MODEL_GATEWAY_RUNTIME_WIRED 必须保持 false）",
+    "PHASE_3_ACTION_RUNTIME": "QUEUED",
+    "PHASE_4_OUTCOME_LEARNING_PIPELINE": "QUEUED",
+    "PHASE_5_META_IMPROVEMENT": "QUEUED（依赖真实运行结果）"
+  },
+  "heartbeat_watchdog": {
+    "interval_seconds": 180,
+    "automation_id": "crossclaim-si-watchdog-180s",
+    "role": "WAKEUP_WATCHDOG_ONLY"
+  }
 }

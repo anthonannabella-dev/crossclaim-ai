@@ -2012,6 +2012,31 @@
       "audit_request": "docs/releases/SI-RUNTIME-STEP3-WIRING-REQUEST.md",
       "note": "Recovery SI 作为 domain capability pack 接入唯一 runtime；SECOND_RUNTIME = 0；Policy Core 仍唯一；guard intent 只能声明。",
       "verdict": "PASS / CLOSED（MSG-20261005-47；STEP3_FINAL8_REQUIRED = NO；GITHUB_CI = NOT_OBSERVED）"
+    },
+    {
+      "id": "phase2-model-gateway-runtime",
+      "priority": "P1",
+      "source_backlog_id": "HOST 2026-10-06 CONTINUOUS AUTONOMOUS EXECUTION (PHASE 2)",
+      "title": "PHASE 2 — Model Gateway Runtime（rsi-model-router 接入 ONE SI Runtime）",
+      "scope": "runtime wiring + local sim + provider adapter contract + tests + E2E",
+      "dependencies": [
+        "step3-runtime-policy-wiring"
+      ],
+      "risk_class": "HIGH",
+      "ARCH_REVIEW_REQUIRED": true,
+      "HOST_ACTION_REQUIRED": false,
+      "HOLD_EXTERNAL": false,
+      "allowed_files": [
+        "apps/api/src/runtime/**",
+        "apps/api/src/services/autonomy/**",
+        "apps/api/src/__tests__/**",
+        "docs/releases/**"
+      ],
+      "boundary": "REAL_MODEL_NETWORK / PAID_MODEL_CALLS = HOLD；禁第二 Model Router；MODEL_GATEWAY_RUNTIME_WIRED 仅在真实 provider E2E 后可为 TRUE",
+      "required_tests": [],
+      "template": "implementation",
+      "filters": [],
+      "status": "ACTIVE"
     }
   ],
   "authorization_note": "MSG-20261003-133 Q3：dispatcher 获授权自动扩 backlog 并执行安全单元（契约/已批准 D1–D3 Schema/append-only 持久化/deterministic normalization/qualification·evidence·package/测试/文档/fixture/只读 HTTP/只读 reconciliation projection）；遇到未批准 Schema、EXTERNAL_WRITE Action Guard、真实 adapter/webhook、submission、真实资金语义写入、生产 credential、收费时必须停该分支并重新送审。 HOST 2026-10-04（CONTINUOUS EXECUTION + CUSTOMS AUTHORIZATION + CHATGPT AUDIT LOOP）：UI-6…UI-8 与 CA-2…CA-6 已登记为可执行队列；Schema/Security/Authorization 边界项自动进入 ChatGPT Audit Loop（AUDIT-BRIDGE.md，不新建协议）。"
