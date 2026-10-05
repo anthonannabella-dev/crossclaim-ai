@@ -144142,3 +144142,180 @@ FINAL_ACCEPTANCE_HEAD = 0f7f7ac
 
 结论：采用 Option A；autopilot 正式划为 dev-scope；Recovery Policy Pack 采用静态 module composition，方向必须是 Pack → Policy Core；本轮不新增跨域 lineage 字段；Step 3 任何真实挂载/接线必须另行送审。当前设计可继续 docs-only 收口，但尚未到整个 SI-RSI Unification PASS/CLOSED。
 ```
+
+### [MSG-20261005-29] SI-RSI Unification FINAL — VERDICT = **PASS / CLOSED**（`SI_RSI_UNIFICATION_V1 = PASS / CLOSED`；U1–U8 全 PASS；`FINAL2_REQUIRED = NO`；`OPTION_B` 仍 NOT_AUTHORIZED）
+
+```text
+DECISION
+ARCHITECT VERDICT = PASS / CLOSED
+
+REVIEWED_HEAD =
+0fe3d6e4c9a7b5eee1d274b0fcdf6a9651f8be46
+
+SI_RSI_UNIFICATION_V1 = PASS / CLOSED
+OPTION_A_LOGICAL_UNIFICATION = CLOSED
+OPTION_B_PHYSICAL_MERGE_RENAME = NOT_AUTHORIZED
+
+FINAL2_REQUIRED = NO
+
+U1–U8 足够，本轮可以正式关闭。
+
+KEEP
+
+独立复核成立：
+
+U1 COMPONENT_REGISTRY = PASS
+U2 SINGLE_OWNER_BOUNDARY = PASS
+U3 AUTOPILOT_DEV_SCOPE = PASS
+U4 PRODUCT_RUNTIME_NO_AUTOPILOT_DEPENDENCY = PASS
+U5 POLICY_PACK_TO_CORE_DIRECTION = PASS
+U6 GUARD_ACTION_THREE_LAYER_SEPARATION = PASS
+U7 P2_E_CLOSED_BOUNDARY_UNCHANGED = PASS
+U8 DOCS_ONLY_NO_RUNTIME_WIRING = PASS
+
+其中我独立确认：
+
+054ab732..0fe3d6e4
+apps/api/** changes = 0
+
+并扫描 exact HEAD：
+
+apps/api/src/runtime/*.ts = 16 files
+autopilot / tools/autopilot / continuous-runner / watchdog.mjs references = 0
+
+Policy 方向仍然是：
+
+Recovery Policy Pack
+→ rsi-policy-engine
+
+Policy Core
+↛ Recovery domain pack
+
+Guard binding 仍留在 Recovery Pack：
+
+RECOVERY_GUARD_ACTION_MAP
+RECOVERY_ACTION_GUARD_MAP
+
+且：
+
+CUSTOMS → null
+CUSTOMS_FILING = L5
+
+没有放宽。
+
+CHANGE
+NONE
+
+仅有一个非阻塞文档计数笔误：
+
+送审正文写：
+
+13 行组件
+
+实际注册表机械计数为：
+
+14 行组件
+
+每一行仍然只有一个 owner，因此不影响 U1/U2，也不需要 FINAL-2。后续编辑文档时顺手把 13 改成 14 即可。
+
+RISKS
+
+以下措辞继续冻结：
+
+ONE CrossClaim SI Runtime
+= 目标架构 / 逻辑统一
+
+!= Recovery SI 已接入 RSI event loop
+
+当前仍是：
+
+RUNTIME_WIRING = NONE
+
+tools/autopilot/**：
+
+PRODUCT_SI_RUNTIME_MEMBER = false
+DEV_SCOPE = true
+
+AUTOPILOT_AS_PRODUCT_RUNTIME_FAILOVER = FORBIDDEN
+PRODUCT_RUNTIME_SPAWNS_AUTOPILOT = FORBIDDEN
+
+产品 runtime 的恢复继续由：
+
+rsi-restart-reconcile
+rsi-controller-continuation
+rsi-verdict-watcher
+
+承担。
+
+跨域 hard lineage 也继续：
+
+CROSS_DOMAIN_HARD_LINEAGE_V1 = NOT_REQUIRED
+P2_E_LINEAGE_WHITELIST_CHANGE = FORBIDDEN
+TEST
+
+本轮是 docs-only 架构收口，因此不要求新增代码测试。
+
+独立核对足以证明：
+
+NO_CODE_CHANGE = PASS
+NO_RENAME = PASS
+NO_MOVE = PASS
+NO_DELETE = PASS
+NO_RUNTIME_WIRING = PASS
+
+GitHub exact commit 的 hosted status/workflow 当前为空，但本轮没有代码实施测试声明需要依赖 hosted CI。
+
+NEXT
+
+确认：
+
+STEP_3_RUNTIME_POLICY_WIRING = NOT_AUTHORIZED
+SEPARATE_ARCH_REVIEW_REQUIRED = YES
+
+也就是说，后续真正把 Recovery domain capability 接入产品 SI Runtime/event loop、composition root 或共享 runtime 调度时，必须另开一个最小接线审计。
+
+本次 PASS/CLOSED 不能自动授权 Step 3。
+
+同时：
+
+SI-COST-OPTIMIZATION:
+QUEUED
+→ READY_FOR_DESIGN
+
+现在可以进入设计阶段。
+
+但：
+
+AUTO_IMPLEMENTATION_AUTHORIZED = FALSE
+
+其中 durable cost ledger、hierarchical budget、model cache、AI necessity gate、cheap→strong quality gate 等仍需单独设计/实施审计。
+
+PRODUCTION
+
+继续冻结：
+
+SECOND_RUNTIME = FORBIDDEN
+SECOND_POLICY_ENGINE = FORBIDDEN
+SECOND_COST_LEDGER = FORBIDDEN
+SECOND_META_EVIDENCE_STORE = FORBIDDEN
+
+L5_RELAXATION = FORBIDDEN
+CUSTOMS_FILING = FORBIDDEN
+
+P2_F = HOLD
+P2_G = HOLD
+
+REAL_MODEL_NETWORK = HOLD
+PAID_MODEL_CALLS = HOLD
+
+EXTERNAL_WRITE = HOLD
+PAYMENT = HOLD
+TRANSPORT = HOLD
+PRODUCTION_CREDENTIALS = HOLD
+PRODUCTION_ENABLEMENT = HOLD
+
+P2_E_V1_OPTION_A = PASS / CLOSED
+FINAL_ACCEPTANCE_HEAD = 0f7f7ac
+
+最终结论：SI-RSI Unification v1 的“逻辑统一”已满足关闭条件，正式 PASS / CLOSED，无需 FINAL-2。Step 3 真实运行时接线仍未授权；SI-COST-OPTIMIZATION 现在仅升级到 READY_FOR_DESIGN。
+```

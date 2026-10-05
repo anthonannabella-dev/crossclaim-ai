@@ -2509,3 +2509,11 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
   仅在 Recovery Pack（U6a），`rsi-policy-engine.ts` 0 命中（U6b），`CUSTOMS: null` 未变（U6c）；
   `git diff --name-only 054ab732..HEAD -- apps/api` → 0 行（U7）；本轮 diff 仅 docs/.autopilot/backlog（无 apps/api、无 rename/move/delete，U8）。
 - 本轮零产品代码改动；`RUNTIME_WIRING = NONE`；`STEP_3_RUNTIME_POLICY_WIRING = NOT_AUTHORIZED`。
+
+## 2026-10-05T13:55Z — SI-RSI Unification = PASS / CLOSED（MSG-20261005-29）+ SI-COST-OPTIMIZATION → READY_FOR_DESIGN
+- 裁决：ARCHITECT VERDICT = PASS / CLOSED；U1-U8 全 PASS；FINAL2_REQUIRED = NO；OPTION_A_LOGICAL_UNIFICATION = CLOSED；OPTION_B = NOT_AUTHORIZED。
+- 架构方独立确认：054ab732..0fe3d6e4 的 apps/api/** 变化 = 0；exact HEAD 扫描 autopilot/continuous-runner/watchdog 引用 = 0；Policy 方向仍为 Recovery Policy Pack → rsi-policy-engine，且 Policy Core 不引用 Recovery domain pack。
+- 归档：AI-ARCHITECT-INBOX.md 新增 MSG-20261005-29；compare.mjs → FULL_COPY_OK（108/108 行）。
+- 状态迁移：si-rsi-unification-design = PASS_CLOSED；si-cost-optimization = QUEUED → READY_FOR_DESIGN（不等于 AUTO_IMPLEMENTATION_AUTHORIZED）。
+- 边界不变：RUNTIME_WIRING = NONE；STEP_3_RUNTIME_POLICY_WIRING = NOT_AUTHORIZED；SECOND_RUNTIME / SECOND_POLICY_ENGINE / SECOND_COST_LEDGER / SECOND_META_EVIDENCE_STORE = FORBIDDEN；L5 不放宽；P2_F / P2_G = HOLD；REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT = HOLD；FINAL_ACCEPTANCE_HEAD = 0f7f7ac。
+
