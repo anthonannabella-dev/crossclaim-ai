@@ -2612,3 +2612,10 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 验证：migrate deploy 81；tsc 0；C2 套件 10→18 例全绿；rsi-* + architecture-contract + C2 = 48 文件 / 412 例 PASS。
 - 送审：docs/releases/SI-COST-OPTIMIZATION-C2-FINAL2-REQUEST.md（REVIEWED_HEAD = 1448f9db）。
 
+
+## 2026-10-06T02:20Z — C2 FINAL-3 完成并送审（实现 HEAD = 56b3207d）
+- A：perIncidentLimitMicros 改为当前 incident 维度聚合（无 incidentId → NOT_APPLICABLE）；B：policy 身份含 tenant（organizationId 非空，PLATFORM='' 哨兵；唯一键 (scope,scopeRef,organizationId)）+ usage 聚合带 organizationId + DB CHECK；service 缺 tenant 绑定 fail-closed。
+- 迁移：20261005090000（tenant binding CHECK）+ 20261005100000（policy identity）；migrate deploy 82。
+- 验证：tsc 0；C2 24/24；rsi-* + architecture-contract + C2 = 48 文件 / 418 例 PASS。
+- 送审：docs/releases/SI-COST-OPTIMIZATION-C2-FINAL3-REQUEST.md（REVIEWED_HEAD = 56b3207d）。
+
