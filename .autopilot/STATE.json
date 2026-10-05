@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-40",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T23:01:37.978Z",
+  "updated_at": "2026-10-05T23:05:08.171Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -50,13 +50,13 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
-  "next_execution_unit": "PHASE 5 U4 FINAL4 verdict archive + next unit: (1) read verdict (REVIEWED_HEAD = edcbb826, marker [CODEX-PHASE5-U4FINAL4]); (2) write work/stage/verdict-p5u4f4-raw.txt then archive AI-ARCHITECT-INBOX.md (MSG-20261005-81) + compare.mjs FULL_COPY_OK + commit/push; (3) durable state; if REVISE do the narrow fix; if PASS follow auditor NEXT (Controlled Adoption Review contract).",
+  "next_execution_unit": "PHASE 5 next unit (Controlled Adoption Review): first read NEXT section of MSG-20261005-81 in AI-ARCHITECT-INBOX.md; implement per that spec; keep all boundaries; then audit + archive (MSG-20261005-82) + durable state.",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-05T23:01:37.978Z",
+  "last_tick_at": "2026-10-05T23:05:08.171Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "PHASE 5 U4 FINAL4 implemented per MSG-20261005-80: server-owned CohortRunSourcePort.read({cohortRef, side}) plus async createVerifiedCohortRun(runSource, lineageLedger, cohortRef, side) which reads actual members, canonicalises taskRefs, rejects duplicates (CANARY_RUN_INPUT_SET_DUPLICATE) and set mismatch (CANARY_RUN_INPUT_SET_MISMATCH), internally produces the Phase 4 evaluation via evaluateVerifiedLearningRecords, and derives inputSetDigest from cohortRefDigest + actualTaskRefs. Caller-injected evaluations into the run are no longer possible. code edcbb826 pushed and submitted (marker [CODEX-PHASE5-U4FINAL4], REVIEWED_HEAD = edcbb826). Local: tsc 0; canary 6/6; PHASE5 10 files / 124 tests PASS; regression 103 files / 1071 tests (only P2E-DB5).",
+  "last_action": "PHASE 5 U4 FINAL4 verdict archived (MSG-20261005-81, FULL_COPY_OK, archive commit 4bb6311e): SAME_COHORT_PROOF / EXACT_INPUT_SET_TO_EVALUATION_BINDING / VERIFIED_COHORT_RUN_PROVENANCE / CANARY_EVALUATION_DIGEST_FULL_BINDING / METRIC_DELTA_REACHABILITY / U2_ROLLBACK_ANCHOR = PASS; PHASE_5_U4 = PASS / CLOSED; PHASE5_U4_FINAL5_REQUIRED = NO. Authorized to proceed to the next phase-5 unit (Controlled Adoption Review).",
   "last_action_at": "2026-10-05T23:01:02.525Z",
-  "next_action": "Read PHASE 5 U4 FINAL4 verdict -> archive (MSG-20261005-81) -> if PASS continue to Controlled Adoption Review.",
+  "next_action": "Read the NEXT section of archived verdict MSG-20261005-81 for the Controlled Adoption Review minimum requirements, then implement it (code -> tests -> regression -> tsc -> commit -> push -> audit -> archive -> durable state).",
   "current_head": "edcbb826",
   "last_completed_head": "edcbb826",
   "reviewed_head": "add99ec3",
@@ -5169,9 +5169,10 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "P5U4F4a-0 (in-flight, expect FINAL5) U4 FINAL4 reviewer confirmed member-level set check + internal Phase 4 evaluation production are in place; the last trust boundary under review is whether CohortRunSourcePort itself is server-owned (vs any caller hand-rolling {read(){...}}). Prepare anticipated fix: add createCohortRunSource(...) with module-private WeakSet provenance + fingerprint + deep-freeze + isVerifiedCohortRunSource, and require it in createVerifiedCohortRun (CANARY_RUN_SOURCE_NOT_VERIFIED) so run sources cannot be forged; keep everything else unchanged. Read/archive the verdict first (MSG-20261005-81).",
-    "P5U4F4a-2 if PASS -> Controlled Adoption Review per auditor NEXT",
-    "P5U4F4a-3 non-blocking debt: full SHA-256 digests, fingerprint schema upkeep, scanRawPayloadKeys bounded traversal, P2E-DB5 test-isolation"
+    "P5U5-1 read MSG-20261005-81 NEXT for Controlled Adoption Review minimum requirements",
+    "P5U5-2 implement + tests + regression + tsc + commit + push",
+    "P5U5-3 audit -> archive (MSG-20261005-82) -> compare FULL_COPY_OK -> durable state",
+    "P5U5-4 non-blocking debt: full SHA-256 digests, fingerprint schema upkeep, scanRawPayloadKeys bounded traversal, P2E-DB5 test-isolation"
   ],
   "full_autonomous_internal_execution": "VERIFIED",
   "dispatcher_acceptance": {
@@ -9321,7 +9322,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-05T23:01:37.978Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-05T23:05:08.171Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -9449,7 +9450,7 @@
     "PHASE_2_MODEL_GATEWAY_RUNTIME": "PASS / CLOSED（MSG-20261005-50；Reviewed HEAD 338f30b4；PHASE2_FINAL5_REQUIRED = NO）",
     "PHASE_3_ACTION_RUNTIME": "PASS / CLOSED（MSG-20261005-54；Reviewed HEAD = fe3c33e9；PHASE3_FINAL4_REQUIRED = NO）",
     "PHASE_4_OUTCOME_LEARNING_PIPELINE": "CLOSED / PASS（MSG-20261005-67）：U1 FINAL / U2 / U3 / U4 / U5 全 CLOSED；含 U4 FINAL、U5 FINAL、U5 FINAL2、PHASE 4 FINAL CLOSURE。",
-    "PHASE_5_META_IMPROVEMENT": "IN PROGRESS: U1/U2/U3 = PASS / CLOSED; U4 = PASS WITH REVISE; U4 FINAL4 = SUBMITTED / AWAITING_VERDICT (edcbb826)."
+    "PHASE_5_META_IMPROVEMENT": "IN PROGRESS: U1/U2/U3/U4 = PASS / CLOSED; NEXT = Controlled Adoption Review (read MSG-20261005-81 NEXT)."
   },
   "heartbeat_watchdog": {
     "interval_seconds": 180,
@@ -9921,7 +9922,7 @@
       "U5"
     ]
   },
-  "archive_head": "d232e7c0",
+  "archive_head": "4bb6311e",
   "phase4_u3_final": {
     "status": "PASS / CLOSED",
     "reviewed_head": "006cc912",
@@ -10867,5 +10868,22 @@
       "delivered": true,
       "expected_message_id": "MSG-20261005-81"
     }
+  },
+  "phase5_u4_final4_verdict": {
+    "message_id": "MSG-20261005-81",
+    "verdict": "PASS / CLOSED",
+    "reviewed_head": "edcbb826",
+    "archive_verified": "FULL_COPY_OK",
+    "archive_head": "4bb6311e",
+    "pass": [
+      "SAME_COHORT_PROOF = PASS",
+      "EXACT_INPUT_SET_TO_EVALUATION_BINDING = PASS",
+      "VERIFIED_COHORT_RUN_PROVENANCE = PASS",
+      "CANARY_EVALUATION_DIGEST_FULL_BINDING = PASS",
+      "METRIC_DELTA_REACHABILITY = PASS",
+      "U2_ROLLBACK_ANCHOR = PASS",
+      "PHASE_5_U4 = PASS / CLOSED"
+    ],
+    "phase5_u4_final5_required": "NO"
   }
 }
