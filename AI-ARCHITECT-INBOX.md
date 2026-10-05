@@ -149478,3 +149478,149 @@ PRODUCTION_READY = false
 U4 正式封板，可以进入 U5。
 ```
 
+### [MSG-20261005-64] PHASE 4 U5 裁决 = PASS WITH REVISE / NOT CLOSED（META_IMPROVEMENT_PROPOSAL_ONLY = PASS / VERIFIED_EVALUATION_GATE = PASS / NO_AUTO_APPLY·NO_MUTATION = PASS；SOURCE_EVIDENCE_PROVENANCE = REVISE / EVIDENCE_EVALUATION_SET_BINDING = REVISE；PHASE4_U5_FINAL_REQUIRED = YES；PHASE 4 尚未收口）， reviewed ref 50a3826d
+
+```text
+DECISION
+
+META_IMPROVEMENT_PROPOSAL_ONLY = PASS
+VERIFIED_EVALUATION_GATE = PASS
+NO_AUTO_APPLY / NO_MUTATION = PASS
+SOURCE_EVIDENCE_PROVENANCE = REVISE
+EVIDENCE_EVALUATION_SET_BINDING = REVISE
+PHASE_4_U5 = PASS WITH REVISE / NOT CLOSED
+PHASE4_U5_FINAL_REQUIRED = YES
+Reviewed HEAD：50a3826d
+PHASE 4 = NOT YET CLOSED
+
+KEEP
+
+U5 正确复用了 isVerifiedOfflineEvaluation()，caller 构造/展开 evaluation 会被拒绝。
+insufficientData / 0 resolved denominator → 零 candidate，正确。
+PROPOSAL_ONLY / requiresApproval=true / autoApply=false 正确。
+Policy / Guard / Router / Action Runtime mutation 全部 FORBIDDEN。
+没有 apply/promote/execute 公开入口。
+candidate 已绑定 evaluationDigest / version / datasetVersion / evidence digests / candidateDigest。
+SECOND_META_EVIDENCE_STORE = FORBIDDEN 保持。
+Exact SHA GitHub Actions：NOT_OBSERVED。
+
+CHANGE
+
+必须做 U5 FINAL，不能把“集合级相等性”当作可接受架构边界。
+
+第一处更关键：当前输入仍是：
+
+TypeScript
+learningEvidence: readonly LearningEvidenceEntry[]
+
+而 LearningEvidenceEntry 可以直接调用公开的：
+
+TypeScript
+buildLearningEvidenceEntry(...)
+
+构造。
+
+本轮测试本身就是这样做的，并没有证明这些 evidence 已经经过 U3：
+
+trusted lineage → appendVerifiedLearningEvidence → existing RSI immutable ledger
+
+所以现在实际上是：
+
+caller-supplied evidence entry + verified evaluation → candidate
+
+还不是：
+
+verified immutable learning evidence → verified evaluation → candidate
+
+第二处：当前 candidate 的：
+
+TypeScript
+sourceEvidence.evidenceRefs
+
+取的是：
+
+TypeScript
+entry.lineageRefs.evidenceRef
+
+这是原始 lineage evidence ref，不是 U3 immutable learning-evidence ledger 真正写入后返回的 evidenceRef。
+
+第三处就是 Codex 已主动指出的集合绑定问题。当前仅检查：
+
+datasetVersion 相同 + evidence.length <= evaluation.totalRecords
+
+不足以证明 evidence 与 evaluation 使用的是同一批 verified outcomes。
+
+RISKS
+
+如果现在直接关闭 U5，会允许这种情况：
+
+evaluation 基于 A/B/C 三条 verified outcomes；
+caller 提供 X/Y 两条格式合法、datasetVersion 相同的伪 learning evidence；
+数量 ≤ evaluation.totalRecords；
+U5 仍生成 candidate。
+
+candidate 虽然绑定了真实 evaluation，但其 sourceEvidence 可以是另一批数据。
+
+因此 Phase 4 证据链尚未闭环。
+
+TEST
+
+U5 FINAL 最小要求：
+
+U3 输出一个 provenance-bearing VerifiedLearningEvidenceSet/Manifest，必须由成功的 immutable ledger append 路径产生；caller 自造对象/展开副本 → REJECT。
+manifest 至少含：
+datasetVersion + sorted outcomeDigests + learningEvidenceRefs + evidenceDigests + evidenceSetDigest。
+learningEvidenceRefs 必须使用 RSI immutable ledger append 实际返回的 ref，不得使用 lineageRefs.evidenceRef 冒充。
+U4 verified evaluation 暴露只读 identity，例如：
+verifiedOutcomeDigests 或 verifiedOutcomeSetDigest。
+U5 要求：
+sorted evidence outcomeDigests === sorted evaluation verifiedOutcomeDigests
+；不相等 → META_CANDIDATE_EVIDENCE_SET_MISMATCH。
+caller 自造 LearningEvidenceEntry，即使 digest/版本/数量看起来正确 → REJECT。
+exact set match + verified evaluation + verified evidence manifest → PASS。
+原 proposal-only / no-mutation 测试保持 green。
+
+NEXT
+
+建议窄做：
+
+PHASE 4 U5 FINAL — verified evidence provenance + exact evaluation-set binding
+
+不需要重做 U5 规则引擎。
+
+完成后如果通过，可直接裁定：
+
+U5 = PASS / CLOSED
+
+并进一步：
+
+PHASE_4_OUTCOME_LEARNING_PIPELINE = PASS / CLOSED
+
+当前状态应记：
+
+U1 = CLOSED
+U2 = CLOSED
+U3 = CLOSED
+U4 = CLOSED
+U5 = NOT CLOSED
+PHASE 4 = NOT CLOSED
+
+PRODUCTION
+
+继续全部 HOLD：
+
+REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing
+
+继续：
+
+SECOND_* = FORBIDDEN
+L5_RELAXATION = FORBIDDEN
+
+保持：
+
+MODEL_GATEWAY_RUNTIME_WIRED = false
+ACTION_RUNTIME_PRODUCTION_ENABLED = false
+META_IMPROVEMENT_INTEGRATED = false
+PRODUCTION_READY = false
+```
+
