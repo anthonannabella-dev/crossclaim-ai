@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "b50ca7ab",
+  "head": "2d4060c6",
   "status": "RECONCILED",
   "current_task": "RSI 生产可执行闭环（7 点收口）：RSI_RUNTIME_READY = PASS；MODEL_PROVIDER_READY = 本地仿真已接线（真实网络/付费 HOLD）；PERSISTENCE_READY = ephemeral 已验证、durable 需宿主非生产 DATABASE_URL；REBOOT_RECONCILE_READY = NOT_IMPLEMENTED（下一单元）；SYSTEMD_VALIDATED = 需宿主 Linux 实机",
   "next_task": "BG-016 单一 Acceptance Head + 四份状态一致 guard（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍 HOST_ACTION_REQUIRED 或 HOLD",
@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-40",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T21:04:16.909Z",
+  "updated_at": "2026-10-05T21:11:55.057Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -50,15 +50,15 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
-  "next_execution_unit": "PHASE 5 U3 — Controlled Config Proposal（审计冻结最低要求）：输入：verified APPROVED verdict（isVerifiedApprovalVerdict === true） + verified rollback plan（isVerifiedRollbackPlan === true）；proposal 至少绑定：verdictDigest / ticketDigest / candidateDigest / evaluationDigest / evidenceSetDigest / baselineConfigFingerprint / proposedDelta / rollbackPlanRef·rollbackPlanDigest / proposalDigest。硬约束：APPROVED only（REJECTED 永不生成 → fail-closed）；one verdict → one proposal（按 verdictDigest 记录）；delta 必须限于 candidate target（target 取自 verified candidate / rollback plan）；baseline fingerprint 必须明确；必须先存在 verified rollback plan；proposal 仍 PROPOSAL_ONLY（不得直接修改 Policy / Guard / Router / Action Runtime，不得自动 apply / promotion / rollout）；proposal 自身 provenance + fingerprint + deep-freeze；模块不导出任何 apply / execute / mutate 入口。流程：code → tests → regression → tsc → commit → push → 送裁决 → 归档（FULL_COPY_OK）→ durable state。边界：REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing = HOLD；SECOND_* = FORBIDDEN；L5_RELAXATION = FORBIDDEN。",
+  "next_execution_unit": "PHASE 5 U3 裁决归档与 U4 进入：(1) 打开右侧审核会话读取 P5-U3 verdict（严格匹配 REVIEWED_HEAD = 2d4060c6，marker [CODEX-PHASE5-U3]）；(2) 先落盘 work/stage/verdict-p5u3-raw.txt → 逐字归档 AI-ARCHITECT-INBOX.md（MSG-20261005-73）→ compare.mjs FULL_COPY_OK → commit + push；(3) durable state；若 REVISE 按最小修法窄修；若 PASS → P5-U4 Canary / Shadow Evaluation（隔离方式、指标口径、与 U4 offline evaluation 的关系、何时必须回滚到 U2 baseline；仍禁止自动 apply / promotion / rollout）；(4) 之后再审 Controlled Adoption；(5) 边界不变：REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing = HOLD；SECOND_* = FORBIDDEN；L5_RELAXATION = FORBIDDEN。",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-05T21:04:16.909Z",
+  "last_tick_at": "2026-10-05T21:11:55.057Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "PHASE 5 U2 FINAL 裁决已读取、原文归档（MSG-20261005-72，compare.mjs = FULL_COPY_OK，归档提交 2f2b2eca）：CANDIDATE_TARGET_BINDING / BASELINE_AUTHORITY / BASELINE_SNAPSHOT_PROVENANCE / ROLLBACK_PLAN_BASELINE_BINDING = PASS；PHASE_5_U2 = PASS / CLOSED；PHASE5_U2_FINAL2_REQUIRED = NO；审计授权进入 P5-U3 Controlled Config Proposal。",
-  "last_action_at": "2026-10-05T20:59:49.558Z",
-  "next_action": "执行 P5-U3 — Controlled Config Proposal（verified APPROVED verdict + verified rollback plan → PROPOSAL_ONLY），随后 U4 Canary/Shadow Evaluation。",
-  "current_head": "b50ca7ab",
-  "last_completed_head": "b50ca7ab",
+  "last_action": "PHASE 5 U3 — Controlled Config Proposal（PROPOSAL_ONLY）已实现、验证、commit + push（2d4060c6），并已送审（marker [CODEX-PHASE5-U3]，REVIEWED_HEAD = 2d4060c6，composer 已清空确认送达）：双门（verified APPROVED verdict + verified rollback plan 且 verdictDigest 互绑）；one verdict → one proposal；delta 必须限于 candidate target；绑定 10 项（含 baselineConfigFingerprint / baselineSnapshotDigest / rollbackPlanDigest / proposalDigest）；proposal 自身 provenance + fingerprint + deep-freeze；execution 全 FORBIDDEN；无任何 apply/execute/rollout/mutate 入口。本地：tsc exit 0；controlled-config-proposal 6/6；PHASE 5 过滤集 9 files / 112 tests PASS；回归集 102 files / 1059 tests（唯一失败 = P2E-DB5）；GITHUB_CI = NOT_OBSERVED。",
+  "last_action_at": "2026-10-05T21:11:55.057Z",
+  "next_action": "读取 PHASE 5 U3 裁决 → 归档（MSG-20261005-73）→ 若 PASS 则 U3 = CLOSED 并进入 P5-U4 Canary/Shadow Evaluation。",
+  "current_head": "2d4060c6",
+  "last_completed_head": "2d4060c6",
   "reviewed_head": "add99ec3",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -5169,11 +5169,10 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "P5U3-1 P5-U3 Controlled Config Proposal：只接受 verified APPROVED verdict + verified rollback plan；绑定 verdict/ticket/candidate/evaluation/evidenceSet/baselineFingerprint/proposedDelta/rollbackPlanRef+digest/proposalDigest；APPROVED only；one verdict → one proposal；delta 限 candidate target；proposal 自身 provenance+fingerprint+deep-freeze；无执行入口",
-    "P5U3-2 P5-U3 tests（verdict/rollback plan 双门；REJECTED 与未验证对象拒绝；delta target 越界拒绝；一 verdict 一 proposal；provenance/anti-tamper；无 apply/promote/mutate 导出）+ regression + tsc + commit + push",
-    "P5U3-3 送 P5-U3 裁决 → 归档（MSG-20261005-73）→ compare.mjs FULL_COPY_OK → durable state",
-    "P5U3-4 随后 U4 Canary/Shadow Evaluation → 再审 Controlled Adoption",
-    "P5U3-5 非阻断债务（持续记录）：三类 digest 完整 SHA-256、各 fingerprint 随结构升级、scanRawPayloadKeys 有界遍历、P2E-DB5 test-isolation debt"
+    "P5U3-1 读取 PHASE 5 U3 裁决（匹配 REVIEWED_HEAD = 2d4060c6）→ 先落盘 verdict-p5u3-raw.txt → 归档 MSG-20261005-73 → compare.mjs FULL_COPY_OK → commit + push → durable state",
+    "P5U3-2 若 PASS → 开 P5-U4 Canary/Shadow Evaluation（按审计最低要求；仍禁止自动 apply/promotion/rollout）",
+    "P5U3-3 之后再审 Controlled Adoption（需审计明确授权）",
+    "P5U3-4 非阻断债务（持续记录）：三类 digest 完整 SHA-256、各 fingerprint 随结构升级、scanRawPayloadKeys 有界遍历、P2E-DB5 test-isolation debt"
   ],
   "full_autonomous_internal_execution": "VERIFIED",
   "dispatcher_acceptance": {
@@ -9323,7 +9322,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-05T21:04:16.909Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-05T21:11:55.057Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -9451,7 +9450,7 @@
     "PHASE_2_MODEL_GATEWAY_RUNTIME": "PASS / CLOSED（MSG-20261005-50；Reviewed HEAD 338f30b4；PHASE2_FINAL5_REQUIRED = NO）",
     "PHASE_3_ACTION_RUNTIME": "PASS / CLOSED（MSG-20261005-54；Reviewed HEAD = fe3c33e9；PHASE3_FINAL4_REQUIRED = NO）",
     "PHASE_4_OUTCOME_LEARNING_PIPELINE": "CLOSED / PASS（MSG-20261005-67）：U1 FINAL / U2 / U3 / U4 / U5 全 CLOSED；含 U4 FINAL、U5 FINAL、U5 FINAL2、PHASE 4 FINAL CLOSURE。",
-    "PHASE_5_META_IMPROVEMENT": "IN PROGRESS：U1 = PASS / CLOSED；U2 = PASS / CLOSED（含 U2 FINAL，MSG-20261005-72）；NEXT = U3 Controlled Config Proposal → U4 Canary/Shadow Evaluation。"
+    "PHASE_5_META_IMPROVEMENT": "IN PROGRESS：U1 = PASS / CLOSED；U2 = PASS / CLOSED；U3 Controlled Config Proposal = SUBMITTED / AWAITING_VERDICT（2d4060c6）；NEXT = U4 Canary/Shadow Evaluation。"
   },
   "heartbeat_watchdog": {
     "interval_seconds": 180,
@@ -10561,5 +10560,27 @@
     "notes": [
       "授权进入 P5-U3 Controlled Config Proposal"
     ]
+  },
+  "phase5_u3": {
+    "status": "SUBMITTED / AWAITING_VERDICT",
+    "reviewed_head": "2d4060c6",
+    "pushed": true,
+    "files": [
+      "apps/api/src/services/outcome-learning/controlled-config-proposal.ts",
+      "apps/api/src/__tests__/controlled-config-proposal.test.ts"
+    ],
+    "local_verification": {
+      "tsc": "PASS (exit 0)",
+      "targeted": "controlled-config-proposal 6/6",
+      "phase5": "9 files / 112 tests PASS",
+      "regression": "102 files / 1059 tests（1058 passed + 1 failed = P2E-DB5 test-isolation debt）",
+      "github_ci": "NOT_OBSERVED"
+    },
+    "submission": {
+      "marker": "[CODEX-PHASE5-U3]",
+      "delivered": true,
+      "composer_empty_verified": true,
+      "expected_message_id": "MSG-20261005-73"
+    }
   }
 }
