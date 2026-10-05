@@ -56,10 +56,42 @@ export interface RsiEvidenceLedgerStorePort {
 }
 
 const APP_LEARNING_EVIDENCE_LEDGERS = new WeakSet<LearningEvidenceLedgerPort>();
+const APP_VERIFIED_LEARNING_EVIDENCE_SETS = new WeakSet<VerifiedLearningEvidenceSet>();
+
+const sortedUnique = (values: readonly string[]): string[] =>
+  Array.from(new Set(values)).sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
 
 /** 只读 provenance：只有正式 adapter 产出的 evidence ledger 才可信。 */
 export function isAppLearningEvidenceLedger(ledger: LearningEvidenceLedgerPort): boolean {
   return APP_LEARNING_EVIDENCE_LEDGERS.has(ledger);
+}
+
+/**
+ * U5 FINAL：provenance-bearing verified learning evidence manifest。
+ * 只能由 appendVerifiedLearningEvidence() 在**成功经既有 immutable ledger 落账**后登记产生；
+ * caller 自造对象 / 展开副本一律不具备 provenance。
+ */
+export interface VerifiedLearningEvidenceSet {
+  kind: 'VERIFIED_LEARNING_EVIDENCE_SET';
+  datasetVersion: string;
+  /** sorted + 去重 */
+  outcomeDigests: readonly string[];
+  /** sorted：**immutable ledger append 实际返回的 ref**（不是 lineageRefs.evidenceRef） */
+  learningEvidenceRefs: readonly string[];
+  evidenceDigests: readonly string[];
+  evidenceSetDigest: string;
+  provenance: {
+    kind: 'RSI_IMMUTABLE_LEDGER_APPEND';
+    ledgerOwner: 'services/autonomy/rsi-evidence-ledger.ts::appendRsiEvidence';
+    verifiedOnly: true;
+  };
+}
+
+/** 只读 provenance：只有成功落账路径产生的 manifest 才为 true。 */
+export function isVerifiedLearningEvidenceSet(
+  set: VerifiedLearningEvidenceSet | null | undefined,
+): boolean {
+  return set !== null && set !== undefined && APP_VERIFIED_LEARNING_EVIDENCE_SETS.has(set);
 }
 
 /**
@@ -153,8 +185,10 @@ export async function buildVerifiedLearningProjection(
 }
 
 export interface AppendVerifiedEvidenceResult {
-  appended: ReadonlyArray<{ outcomeDigest: string; evidenceRef: string }>;
+  appended: ReadonlyArray<{ outcomeDigest: string; evidenceRef: string; evidenceDigest: string }>;
   skipped: ReadonlyArray<{ digest: string; reason: string }>;
+  /** U5 FINAL：由 immutable ledger append 成功路径产生的 provenance-bearing evidence set。 */
+  evidenceSet: VerifiedLearningEvidenceSet;
 }
 
 /**
@@ -176,7 +210,7 @@ export async function appendVerifiedLearningEvidence(
   if (!isAppLearningEvidenceLedger(evidenceLedger)) {
     throw new Error('LEARNING_EVIDENCE_LEDGER_NOT_TRUSTED');
   }
-  const appended: Array<{ outcomeDigest: string; evidenceRef: string }> = [];
+  const appended: Array<{ outcomeDigest: string; evidenceRef: string; evidenceDigest: string }> = [];
   const skipped: Array<{ digest: string; reason: string }> = [];
   for (const record of records) {
     const check = await verifyLearningRecord(lineageLedger, record);
@@ -186,7 +220,38 @@ export async function appendVerifiedLearningEvidence(
     }
     const entry = buildLearningEvidenceEntry(record, datasetVersion);
     const written = await evidenceLedger.append(entry);
-    appended.push({ outcomeDigest: entry.outcomeDigest, evidenceRef: written.evidenceRef });
+    appended.push({
+      outcomeDigest: entry.outcomeDigest,
+      evidenceRef: written.evidenceRef,
+      evidenceDigest: entry.evidenceDigest,
+    });
   }
-  return { appended, skipped };
+  const evidenceSet: VerifiedLearningEvidenceSet = {
+    kind: 'VERIFIED_LEARNING_EVIDENCE_SET',
+    datasetVersion,
+    outcomeDigests: sortedUnique(appended.map((item) => item.outcomeDigest)),
+    learningEvidenceRefs: sortedUnique(appended.map((item) => item.evidenceRef)),
+    evidenceDigests: sortedUnique(appended.map((item) => item.evidenceDigest)),
+    evidenceSetDigest: '',
+    provenance: {
+      kind: 'RSI_IMMUTABLE_LEDGER_APPEND',
+      ledgerOwner: 'services/autonomy/rsi-evidence-ledger.ts::appendRsiEvidence',
+      verifiedOnly: true,
+    },
+  };
+  evidenceSet.evidenceSetDigest =
+    'learning-evidence-set:' +
+    createHash('sha256')
+      .update(
+        [
+          datasetVersion,
+          ...evidenceSet.outcomeDigests,
+          ...evidenceSet.learningEvidenceRefs,
+          ...evidenceSet.evidenceDigests,
+        ].join('|'),
+      )
+      .digest('hex')
+      .slice(0, 16);
+  APP_VERIFIED_LEARNING_EVIDENCE_SETS.add(evidenceSet);
+  return { appended, skipped, evidenceSet };
 }

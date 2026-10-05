@@ -317,4 +317,17 @@ describe('PHASE 4 U4 FINAL —— evaluation identity / provenance closure', () 
     expect(OFFLINE_EVALUATION_BOUNDARY.callerSuppliedEvaluationResult).toContain('FORBIDDEN');
     expect(OFFLINE_EVALUATION_BOUNDARY.verifiedEntry).toContain('evaluateVerifiedLearningRecords');
   });
+
+  it('P4U4F_6 verified evaluation 暴露只读 outcome identity（供 U5 做集合级绑定）', async () => {
+    const records = mixedDataset();
+    const result = await evaluate(records);
+    const expected = records.map((r) => r.digest).sort();
+    expect([...result.verifiedOutcomeDigests]).toEqual(expected);
+    expect(result.verifiedOutcomeSetDigest.startsWith('verified-outcomes:')).toBe(true);
+    expect(result.verifiedOutcomeDigests).toHaveLength(result.totalRecords);
+    const again = await evaluate(mixedDataset());
+    expect(again.verifiedOutcomeSetDigest).toBe(result.verifiedOutcomeSetDigest);
+    const changed = await evaluate([record({ finalOutcome: 'FAILURE' })]);
+    expect(changed.verifiedOutcomeSetDigest).not.toBe(result.verifiedOutcomeSetDigest);
+  });
 });

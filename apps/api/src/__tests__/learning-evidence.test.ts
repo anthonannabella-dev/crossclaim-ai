@@ -14,6 +14,7 @@ import {
   buildVerifiedLearningProjection,
   createAppLearningEvidenceLedgerFromRsi,
   isAppLearningEvidenceLedger,
+  isVerifiedLearningEvidenceSet,
   type LearningEvidenceLedgerPort,
   type RsiEvidenceLedgerStorePort,
 } from '../services/outcome-learning/learning-evidence';
@@ -183,5 +184,41 @@ describe('PHASE 4 U3 FINAL —— 接线既有 RSI immutable evidence ledger', (
     expect(LEARNING_EVIDENCE_BOUNDARY.secondMetaEvidenceStore).toBe('FORBIDDEN');
     expect(LEARNING_EVIDENCE_BOUNDARY.verifiedOnly).toBe(true);
     expect(LEARNING_EVIDENCE_BOUNDARY.autoPromotion).toBe('OFF');
+  });
+
+  it('P4U3F_9 manifest：immutable ledger append 成功后产生 provenance-bearing VerifiedLearningEvidenceSet', async () => {
+    const store = rsiStore();
+    const ledger = createAppLearningEvidenceLedgerFromRsi(store.port);
+    const good = record();
+    const bad = record({ taskId: 'task-x', actionRef: 'action:x', proposalRef: 'proposal:x', evidenceRef: 'evidence:x' });
+    const result = await appendVerifiedLearningEvidence(trustedLineage(), ledger, [good, bad], 'learning-dataset/v9');
+
+    expect(result.appended).toHaveLength(1);
+    expect(result.appended[0]?.evidenceDigest.startsWith('learning-evidence:')).toBe(true);
+    expect(isVerifiedLearningEvidenceSet(result.evidenceSet)).toBe(true);
+    expect(result.evidenceSet.kind).toBe('VERIFIED_LEARNING_EVIDENCE_SET');
+    expect(result.evidenceSet.datasetVersion).toBe('learning-dataset/v9');
+    expect(result.evidenceSet.outcomeDigests).toEqual([good.digest]);
+    expect(result.evidenceSet.evidenceDigests).toEqual([result.appended[0]?.evidenceDigest]);
+    // refs 必须来自 immutable ledger append 实际返回值，而不是 lineageRefs.evidenceRef
+    expect(result.evidenceSet.learningEvidenceRefs).toEqual([result.appended[0]?.evidenceRef]);
+    expect(result.evidenceSet.learningEvidenceRefs[0]).not.toBe('evidence:1');
+    expect(result.evidenceSet.evidenceSetDigest.startsWith('learning-evidence-set:')).toBe(true);
+    expect(result.evidenceSet.provenance.ledgerOwner).toBe('services/autonomy/rsi-evidence-ledger.ts::appendRsiEvidence');
+    expect(store.records).toHaveLength(1);
+
+    // caller 自造 / 展开副本 → 不具 provenance
+    expect(isVerifiedLearningEvidenceSet({ ...result.evidenceSet })).toBe(false);
+    expect(isVerifiedLearningEvidenceSet(null)).toBe(false);
+
+    // 同输入重跑 → evidenceSetDigest 稳定；datasetVersion 变 → 变化
+    const store2 = rsiStore();
+    const ledger2 = createAppLearningEvidenceLedgerFromRsi(store2.port);
+    const again = await appendVerifiedLearningEvidence(trustedLineage(), ledger2, [good, bad], 'learning-dataset/v9');
+    expect(again.evidenceSet.evidenceSetDigest).toBe(result.evidenceSet.evidenceSetDigest);
+    const store3 = rsiStore();
+    const ledger3 = createAppLearningEvidenceLedgerFromRsi(store3.port);
+    const other = await appendVerifiedLearningEvidence(trustedLineage(), ledger3, [good, bad], 'learning-dataset/v10');
+    expect(other.evidenceSet.evidenceSetDigest).not.toBe(result.evidenceSet.evidenceSetDigest);
   });
 });

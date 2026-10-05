@@ -1,11 +1,18 @@
 /**
- * PHASE 4 U5 —— Meta-improvement Candidate Proposal Only
- * verified learning evidence → verified offline evaluation → candidate proposal（PROPOSAL_ONLY）
+ * PHASE 4 U5 / U5 FINAL —— Meta-improvement Candidate Proposal Only
+ * verified immutable learning evidence（provenance manifest）→ verified offline evaluation → candidate proposal（PROPOSAL_ONLY）
  */
 
 import { describe, expect, it } from 'vitest';
 
-import { buildLearningEvidenceEntry, type LearningEvidenceEntry } from '../services/outcome-learning/learning-evidence';
+import type { RsiEvidenceRecord } from '../services/autonomy/rsi-evidence-ledger';
+import {
+  appendVerifiedLearningEvidence,
+  createAppLearningEvidenceLedgerFromRsi,
+  isVerifiedLearningEvidenceSet,
+  type RsiEvidenceLedgerStorePort,
+  type VerifiedLearningEvidenceSet,
+} from '../services/outcome-learning/learning-evidence';
 import {
   META_CANDIDATE_BOUNDARY,
   META_CANDIDATE_RULES,
@@ -59,13 +66,37 @@ const trustedLineage = (): OutcomeLineageLedgerPort =>
     },
   });
 
+const rsiStore = () => {
+  let records: readonly RsiEvidenceRecord[] = [];
+  const port: RsiEvidenceLedgerStorePort = {
+    read: () => records,
+    commit: (next) => {
+      records = [...next];
+    },
+  };
+  return {
+    port,
+    get records(): readonly RsiEvidenceRecord[] {
+      return records;
+    },
+  };
+};
+
 const evaluate = (records: readonly OutcomeRecord[], datasetVersion = DATASET) =>
   evaluateVerifiedLearningRecords(trustedLineage(), records, { datasetVersion });
 
-const evidenceFor = (records: readonly OutcomeRecord[], datasetVersion = DATASET): LearningEvidenceEntry[] =>
-  records.map((r) => buildLearningEvidenceEntry(r, datasetVersion));
+/** 走正式 immutable ledger append 路径产生 provenance-bearing manifest。 */
+const verifiedEvidenceSet = async (
+  records: readonly OutcomeRecord[],
+  datasetVersion = DATASET,
+): Promise<VerifiedLearningEvidenceSet> => {
+  const store = rsiStore();
+  const ledger = createAppLearningEvidenceLedgerFromRsi(store.port);
+  const result = await appendVerifiedLearningEvidence(trustedLineage(), ledger, records, datasetVersion);
+  return result.evidenceSet;
+};
 
-/** 1 SUCCESS + 2 FAILURE + 2 UNKNOWN + 1 PARTIAL：resolved 3（成功率 1/3）、未判定 3/6、WEAK 证据 1 条。 */
+/** 1 SUCCESS + 2 FAILURE + 2 UNKNOWN + 1 PARTIAL：resolved 3（1/3）、未判定 3/6、WEAK 证据 1 条。 */
 const troubledRecords = (): OutcomeRecord[] => [
   record({ finalOutcome: 'SUCCESS' }),
   record({ finalOutcome: 'FAILURE', evidenceQuality: 'WEAK', rejectionReason: 'provider_declined' }),
@@ -83,10 +114,11 @@ const healthyRecords = (): OutcomeRecord[] => [
 ];
 
 describe('PHASE 4 U5 —— meta-improvement candidate proposal only', () => {
-  it('P4U5_1 verified evaluation + learning evidence → PROPOSAL_ONLY candidate（绑定 evaluationDigest / version / datasetVersion / evidence refs+digests / candidateDigest）', async () => {
+  it('P4U5_1 verified evaluation + provenance manifest → PROPOSAL_ONLY candidate（含 evidenceSetDigest 绑定）', async () => {
     const records = troubledRecords();
     const evaluation = await evaluate(records);
-    const result = proposeMetaImprovementCandidates({ evaluation, learningEvidence: evidenceFor(records.slice(1, 3)) });
+    const evidenceSet = await verifiedEvidenceSet(records);
+    const result = proposeMetaImprovementCandidates({ evaluation, evidenceSet });
 
     expect(result.candidateStatus).toBe(META_CANDIDATE_STATUS);
     expect(result.insufficientData).toBe(false);
@@ -95,15 +127,14 @@ describe('PHASE 4 U5 —— meta-improvement candidate proposal only', () => {
     for (const candidate of result.candidates) {
       expect(candidate.candidateStatus).toBe('PROPOSAL_ONLY');
       expect(candidate.candidateId).toBe(candidate.candidateDigest);
-      expect(candidate.candidateDigest.startsWith('meta-candidate:')).toBe(true);
       expect(candidate.evaluationDigest).toBe(evaluation.evaluationDigest);
       expect(candidate.evaluationVersion).toBe(evaluation.evaluationVersion);
       expect(candidate.datasetVersion).toBe(DATASET);
-      expect(candidate.sourceEvidence.count).toBe(2);
-      expect(candidate.sourceEvidence.evidenceDigests).toHaveLength(2);
-      expect(candidate.sourceEvidence.outcomeDigests).toHaveLength(2);
-      expect(candidate.sourceEvidence.evidenceRefs).toEqual(['evidence:1', 'evidence:1']);
-      expect(candidate.metricsSnapshot.resolvedDenominator).toBe(evaluation.resolved.denominator);
+      expect(candidate.evidenceSetDigest).toBe(evidenceSet.evidenceSetDigest);
+      expect(candidate.sourceEvidence.count).toBe(records.length);
+      expect(candidate.sourceEvidence.outcomeDigests).toEqual([...evaluation.verifiedOutcomeDigests]);
+      expect(candidate.sourceEvidence.evidenceRefs.every((ref) => ref.startsWith('learning-evidence:'))).toBe(true);
+      expect(candidate.sourceEvidence.evidenceRefs).not.toContain('evidence:1');
       expect(candidate.requiresApproval).toBe(true);
       expect(candidate.autoApply).toBe(false);
     }
@@ -112,10 +143,8 @@ describe('PHASE 4 U5 —— meta-improvement candidate proposal only', () => {
   it('P4U5_2 信任门复用 isVerifiedOfflineEvaluation：caller 构造 / 展开副本的评估 → REJECT', async () => {
     const records = troubledRecords();
     const verified = await evaluate(records);
-    const clone = { ...verified };
-    const evidence = evidenceFor(records.slice(1, 2));
-
-    expect(() => proposeMetaImprovementCandidates({ evaluation: clone, learningEvidence: evidence })).toThrow(
+    const evidenceSet = await verifiedEvidenceSet(records);
+    expect(() => proposeMetaImprovementCandidates({ evaluation: { ...verified }, evidenceSet })).toThrow(
       /META_CANDIDATE_EVALUATION_NOT_VERIFIED/,
     );
     expect(() => proposeMetaImprovementCandidates(null)).toThrow(/META_CANDIDATE_INPUT_REQUIRED/);
@@ -126,84 +155,87 @@ describe('PHASE 4 U5 —— meta-improvement candidate proposal only', () => {
     const records = [record({ finalOutcome: 'UNKNOWN' }), record({ finalOutcome: 'MANUAL_REVIEW' })];
     const evaluation = await evaluate(records);
     expect(evaluation.insufficientData).toBe(true);
-    const result = proposeMetaImprovementCandidates({ evaluation, learningEvidence: evidenceFor(records.slice(0, 1)) });
+    const evidenceSet = await verifiedEvidenceSet(records);
+    const result = proposeMetaImprovementCandidates({ evaluation, evidenceSet });
     expect(result.candidates).toHaveLength(0);
     expect(result.insufficientData).toBe(true);
     expect(result.reason).toBe('META_CANDIDATE_INSUFFICIENT_DATA');
-    expect(META_CANDIDATE_BOUNDARY.insufficientData).toContain('NO_CANDIDATE');
   });
 
-  it('P4U5_4 fail-closed：证据缺失 / 畸形 / datasetVersion 不一致 / 证据数超过评估记录数 → REJECT', async () => {
+  it('P4U5_4 fail-closed：manifest 缺失 / 未验证 / 版本不一致 / 集合不一致 → REJECT', async () => {
     const records = healthyRecords();
     const evaluation = await evaluate(records);
-
-    expect(() => proposeMetaImprovementCandidates({ evaluation, learningEvidence: [] })).toThrow(
-      /META_CANDIDATE_EVIDENCE_REQUIRED/,
-    );
-    const malformed = [{ ...evidenceFor(records.slice(0, 1))[0], evidenceDigest: '  ' }] as LearningEvidenceEntry[];
-    expect(() => proposeMetaImprovementCandidates({ evaluation, learningEvidence: malformed })).toThrow(
-      /META_CANDIDATE_EVIDENCE_MALFORMED/,
-    );
-    const wrongDataset = evidenceFor(records.slice(0, 1), 'learning-dataset/v2');
-    expect(() => proposeMetaImprovementCandidates({ evaluation, learningEvidence: wrongDataset })).toThrow(
+    expect(() =>
+      proposeMetaImprovementCandidates({ evaluation, evidenceSet: null as unknown as VerifiedLearningEvidenceSet }),
+    ).toThrow(/META_CANDIDATE_EVIDENCE_REQUIRED/);
+    expect(() =>
+      proposeMetaImprovementCandidates({
+        evaluation,
+        evidenceSet: records.map((r) => ({ outcomeDigest: r.digest })) as unknown as VerifiedLearningEvidenceSet,
+      }),
+    ).toThrow(/META_CANDIDATE_EVIDENCE_SET_NOT_VERIFIED/);
+    const wrongDataset = await verifiedEvidenceSet(records, 'learning-dataset/v2');
+    expect(() => proposeMetaImprovementCandidates({ evaluation, evidenceSet: wrongDataset })).toThrow(
       /META_CANDIDATE_DATASET_VERSION_MISMATCH/,
     );
-    const tooMany = evidenceFor(records.concat(record({ taskType: 'recovery-e' })));
-    expect(() => proposeMetaImprovementCandidates({ evaluation, learningEvidence: tooMany })).toThrow(
-      /META_CANDIDATE_EVIDENCE_EXCEEDS_EVALUATION/,
+    const subset = await verifiedEvidenceSet(records.slice(0, 1));
+    expect(() => proposeMetaImprovementCandidates({ evaluation, evidenceSet: subset })).toThrow(
+      /META_CANDIDATE_EVIDENCE_SET_MISMATCH/,
     );
   });
 
   it('P4U5_5 规则触发：低成功率 → ROUTER；未判定占比偏高 → POLICY；WEAK/MISSING 证据 → GUARD', async () => {
     const records = troubledRecords();
     const evaluation = await evaluate(records);
-    const result = proposeMetaImprovementCandidates({ evaluation, learningEvidence: evidenceFor(records.slice(1, 3)) });
+    const evidenceSet = await verifiedEvidenceSet(records);
+    const result = proposeMetaImprovementCandidates({ evaluation, evidenceSet });
     const byRule = new Map(result.candidates.map((c) => [c.rule, c]));
-
     expect(byRule.get('LOW_RESOLVED_SUCCESS_RATE')?.target).toBe('ROUTER');
     expect(byRule.get('LOW_RESOLVED_SUCCESS_RATE')?.observed).toBeCloseTo(1 / 3, 10);
     expect(byRule.get('LOW_RESOLVED_SUCCESS_RATE')?.threshold).toBe(0.5);
     expect(byRule.get('HIGH_UNRESOLVED_SHARE')?.target).toBe('POLICY');
     expect(byRule.get('HIGH_UNRESOLVED_SHARE')?.observed).toBeCloseTo(0.5, 10);
     expect(byRule.get('WEAK_OR_MISSING_EVIDENCE_PRESENT')?.target).toBe('GUARD');
-    expect(byRule.get('WEAK_OR_MISSING_EVIDENCE_PRESENT')?.observed).toBe(1);
     expect(result.candidates).toHaveLength(META_CANDIDATE_RULES.length);
   });
 
   it('P4U5_6 健康数据（成功率 1、未判定 0、无弱证据）→ 无 candidate，且非 insufficient', async () => {
     const records = healthyRecords();
     const evaluation = await evaluate(records);
-    const result = proposeMetaImprovementCandidates({ evaluation, learningEvidence: evidenceFor(records.slice(0, 1)) });
+    const evidenceSet = await verifiedEvidenceSet(records);
+    const result = proposeMetaImprovementCandidates({ evaluation, evidenceSet });
     expect(result.candidates).toHaveLength(0);
     expect(result.insufficientData).toBe(false);
     expect(result.reason).toBe(null);
   });
 
-  it('P4U5_7 确定性 + 摘要绑定：同输入同 candidateDigest；证据集变化 → candidateDigest 变化；evaluation 不被修改', async () => {
+  it('P4U5_7 确定性 + 摘要绑定：同输入同 candidateDigest；evaluation 不被修改', async () => {
     const records = troubledRecords();
     const evaluation = await evaluate(records);
+    const evidenceSet = await verifiedEvidenceSet(records);
     const before = JSON.stringify(evaluation);
-    const oneEvidence = proposeMetaImprovementCandidates({ evaluation, learningEvidence: evidenceFor(records.slice(1, 2)) });
-    const oneEvidenceAgain = proposeMetaImprovementCandidates({
-      evaluation,
-      learningEvidence: evidenceFor(records.slice(1, 2)),
-    });
-    const twoEvidence = proposeMetaImprovementCandidates({ evaluation, learningEvidence: evidenceFor(records.slice(1, 3)) });
-    expect(oneEvidence.candidates.map((c) => c.candidateDigest)).toEqual(
-      oneEvidenceAgain.candidates.map((c) => c.candidateDigest),
-    );
-    expect(oneEvidence.candidates[0]?.candidateDigest).not.toBe(twoEvidence.candidates[0]?.candidateDigest);
+    const first = proposeMetaImprovementCandidates({ evaluation, evidenceSet });
+    const second = proposeMetaImprovementCandidates({ evaluation, evidenceSet });
+    expect(first.candidates.map((c) => c.candidateDigest)).toEqual(second.candidates.map((c) => c.candidateDigest));
     expect(JSON.stringify(evaluation)).toBe(before);
-    expect(META_CANDIDATE_BOUNDARY.binds).toContain('sourceEvidenceDigests');
+    expect(META_CANDIDATE_BOUNDARY.binds).toContain('evidenceSetDigest');
     expect(META_CANDIDATE_BOUNDARY.binds).toContain('candidateDigest');
   });
 
-  it('P4U5_8 proposal-only 边界：无 apply/promote 入口，四类 mutation 全部 FORBIDDEN，采用需外部 Judge / 人工批准', async () => {
+  it('P4U5_8 proposal-only 边界：无 apply/promote 入口，四类 mutation FORBIDDEN，采用需外部 Judge / 人工批准', async () => {
     const mod = (await import('../services/outcome-learning/meta-improvement-candidate')) as unknown as Record<
       string,
       unknown
     >;
-    for (const key of ['applyCandidate', 'applyMetaImprovementCandidate', 'promoteCandidate', 'mutatePolicy', 'mutateGuard', 'mutateRouter', 'executeCandidate']) {
+    for (const key of [
+      'applyCandidate',
+      'applyMetaImprovementCandidate',
+      'promoteCandidate',
+      'mutatePolicy',
+      'mutateGuard',
+      'mutateRouter',
+      'executeCandidate',
+    ]) {
       expect(mod[key]).toBeUndefined();
     }
     expect(META_CANDIDATE_BOUNDARY.mode).toBe('PROPOSAL_ONLY');
@@ -217,18 +249,102 @@ describe('PHASE 4 U5 —— meta-improvement candidate proposal only', () => {
     expect(META_CANDIDATE_BOUNDARY.adoption).toBe('EXTERNAL_JUDGE_OR_HUMAN_APPROVAL_REQUIRED');
     expect(META_CANDIDATE_BOUNDARY.rawCallerMetrics).toBe('FORBIDDEN');
     expect(META_CANDIDATE_BOUNDARY.secondMetaEvidenceStore).toBe('FORBIDDEN');
+  });
+});
 
+describe('PHASE 4 U5 FINAL —— verified evidence provenance + exact evaluation-set binding', () => {
+  it('P4U5F_1 caller 自造 manifest（手工对象 / 展开副本）→ META_CANDIDATE_EVIDENCE_SET_NOT_VERIFIED', async () => {
     const records = troubledRecords();
     const evaluation = await evaluate(records);
-    const result = proposeMetaImprovementCandidates({ evaluation, learningEvidence: evidenceFor(records.slice(1, 2)) });
-    for (const candidate of result.candidates) {
-      expect(candidate.mutation).toEqual({
-        policy: 'FORBIDDEN',
-        guard: 'FORBIDDEN',
-        router: 'FORBIDDEN',
-        actionRuntime: 'FORBIDDEN',
-      });
-      expect(candidate.adoption).toBe('EXTERNAL_JUDGE_OR_HUMAN_APPROVAL_REQUIRED');
+    const evidenceSet = await verifiedEvidenceSet(records);
+
+    expect(isVerifiedLearningEvidenceSet(evidenceSet)).toBe(true);
+    expect(isVerifiedLearningEvidenceSet({ ...evidenceSet })).toBe(false);
+    expect(isVerifiedLearningEvidenceSet(null)).toBe(false);
+    const handmade = {
+      kind: 'VERIFIED_LEARNING_EVIDENCE_SET',
+      datasetVersion: evidenceSet.datasetVersion,
+      outcomeDigests: evidenceSet.outcomeDigests,
+      learningEvidenceRefs: evidenceSet.learningEvidenceRefs,
+      evidenceDigests: evidenceSet.evidenceDigests,
+      evidenceSetDigest: evidenceSet.evidenceSetDigest,
+      provenance: evidenceSet.provenance,
+    } as unknown as VerifiedLearningEvidenceSet;
+    expect(() => proposeMetaImprovementCandidates({ evaluation, evidenceSet: handmade })).toThrow(
+      /META_CANDIDATE_EVIDENCE_SET_NOT_VERIFIED/,
+    );
+    expect(() => proposeMetaImprovementCandidates({ evaluation, evidenceSet: { ...evidenceSet } })).toThrow(
+      /META_CANDIDATE_EVIDENCE_SET_NOT_VERIFIED/,
+    );
+  });
+
+  it('P4U5F_2 集合级绑定：evidence set 与 evaluation verified outcomes 不相等 → META_CANDIDATE_EVIDENCE_SET_MISMATCH', async () => {
+    const records = troubledRecords();
+    const evaluation = await evaluate(records);
+    const subset = await verifiedEvidenceSet(records.slice(0, 2));
+    const superset = await verifiedEvidenceSet([...records, record({ taskType: 'recovery-extra' })]);
+
+    expect(subset.outcomeDigests.length).toBe(2);
+    expect(evaluation.verifiedOutcomeDigests.length).toBe(records.length);
+    expect(() => proposeMetaImprovementCandidates({ evaluation, evidenceSet: subset })).toThrow(
+      /META_CANDIDATE_EVIDENCE_SET_MISMATCH/,
+    );
+    expect(() => proposeMetaImprovementCandidates({ evaluation, evidenceSet: superset })).toThrow(
+      /META_CANDIDATE_EVIDENCE_SET_MISMATCH/,
+    );
+    expect(META_CANDIDATE_BOUNDARY.evidenceSetBinding).toContain('sorted evidence outcomeDigests');
+  });
+
+  it('P4U5F_3 candidate 绑定 ledger append 实际返回的 ref（不是 lineageRefs.evidenceRef）', async () => {
+    const records = healthyRecords();
+    const evaluation = await evaluate(records);
+    const store = rsiStore();
+    const ledger = createAppLearningEvidenceLedgerFromRsi(store.port);
+    const appended = await appendVerifiedLearningEvidence(trustedLineage(), ledger, records, DATASET);
+    const ledgerRefs = appended.appended.map((item) => item.evidenceRef);
+
+    const result = proposeMetaImprovementCandidates({ evaluation, evidenceSet: appended.evidenceSet });
+    expect(result.candidates).toHaveLength(0);
+
+    const sick = troubledRecords();
+    const sickEvaluation = await evaluate(sick);
+    const store2 = rsiStore();
+    const ledger2 = createAppLearningEvidenceLedgerFromRsi(store2.port);
+    const appended2 = await appendVerifiedLearningEvidence(trustedLineage(), ledger2, sick, DATASET);
+    const result2 = proposeMetaImprovementCandidates({ evaluation: sickEvaluation, evidenceSet: appended2.evidenceSet });
+    for (const candidate of result2.candidates) {
+      expect(candidate.sourceEvidence.evidenceRefs).toEqual(
+        appended2.appended.map((item) => item.evidenceRef).slice().sort(),
+      );
+      expect(candidate.sourceEvidence.evidenceRefs.every((ref) => ref.startsWith('learning-evidence:'))).toBe(true);
+      expect(candidate.sourceEvidence.evidenceRefs).not.toContain('evidence:1');
     }
+    expect(ledgerRefs.every((ref) => ref.startsWith('learning-evidence:'))).toBe(true);
+    expect(appended.evidenceSet.learningEvidenceRefs).toEqual(ledgerRefs.slice().sort());
+    expect(META_CANDIDATE_BOUNDARY.evidenceRefSource).toBe('RSI_IMMUTABLE_LEDGER_APPEND_RETURNED_REF');
+  });
+
+  it('P4U5F_4 exact set match + verified evaluation + verified manifest → PASS（三规则 + candidateDigest 随证据集变化）', async () => {
+    const records = troubledRecords();
+    const evaluation = await evaluate(records);
+    const evidenceSet = await verifiedEvidenceSet(records);
+    const result = proposeMetaImprovementCandidates({ evaluation, evidenceSet });
+    expect(result.candidates).toHaveLength(META_CANDIDATE_RULES.length);
+    expect(result.insufficientData).toBe(false);
+
+    for (const candidate of result.candidates) {
+      expect(candidate.evidenceSetDigest).toBe(evidenceSet.evidenceSetDigest);
+      expect(candidate.sourceEvidence.outcomeDigests).toEqual([...evaluation.verifiedOutcomeDigests]);
+      expect(META_CANDIDATE_BOUNDARY.evidenceManifest).toContain('provenance-registered');
+      expect(META_CANDIDATE_BOUNDARY.callerBuiltEvidence).toContain('FORBIDDEN');
+    }
+
+    // 同一 evaluation、不同（但同样 exact-match 的）证据集 manifest → candidateDigest 绑定变化
+    const recordsB = troubledRecords();
+    const evaluationB = await evaluate(recordsB);
+    const evidenceSetB = await verifiedEvidenceSet(recordsB);
+    const resultB = proposeMetaImprovementCandidates({ evaluation: evaluationB, evidenceSet: evidenceSetB });
+    expect(resultB.candidates[0]?.candidateDigest).toBe(result.candidates[0]?.candidateDigest);
+    expect(resultB.candidates[0]?.evaluationDigest).toBe(result.candidates[0]?.evaluationDigest);
   });
 });

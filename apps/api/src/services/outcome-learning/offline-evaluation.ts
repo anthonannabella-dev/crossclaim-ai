@@ -129,6 +129,9 @@ export interface OfflineEvaluationMetrics {
   evaluationVersion: string;
   datasetVersion: string;
   totalRecords: number;
+  /** U5 FINAL：只读 verified outcome 身份（sorted + 去重），供 candidate 做集合级绑定。 */
+  verifiedOutcomeDigests: readonly string[];
+  verifiedOutcomeSetDigest: string;
   resolved: ResolvedBreakdown;
   unresolved: UnresolvedBreakdown;
   unresolvedShareOfAllRecords: number | null;
@@ -242,6 +245,10 @@ function evaluateOfflineOutcomesInternal(
     evaluationVersion: OFFLINE_EVALUATION_VERSION,
     datasetVersion,
     totalRecords,
+    verifiedOutcomeDigests: sortAscending(outcomeDigests),
+    verifiedOutcomeSetDigest:
+      'verified-outcomes:' +
+      createHash('sha256').update(sortAscending(outcomeDigests).join('+')).digest('hex').slice(0, 16),
     resolved: {
       denominatorKind: 'RESOLVED',
       denominator,

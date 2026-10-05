@@ -18,7 +18,7 @@
 
 import { createHash } from 'node:crypto';
 
-import type { LearningEvidenceEntry } from './learning-evidence';
+import { isVerifiedLearningEvidenceSet, type VerifiedLearningEvidenceSet } from './learning-evidence';
 import { isVerifiedOfflineEvaluation, type OfflineEvaluationResult } from './offline-evaluation';
 
 export const META_CANDIDATE_VERSION = 'meta-candidate/v1';
@@ -43,10 +43,14 @@ export const META_CANDIDATE_BOUNDARY = {
     'datasetVersion',
     'sourceEvidenceRefs',
     'sourceEvidenceDigests',
+    'evidenceSetDigest',
     'candidateDigest',
   ],
-  evidenceBinding:
-    'SUPPLIED_LEARNING_EVIDENCE + DATASET_VERSION_CONSISTENCY + EVIDENCE_COUNT_NOT_EXCEEDING_EVALUATED_RECORDS',
+  evidenceBinding: 'EXACT_SET_EQUALITY_WITH_EVALUATION_VERIFIED_OUTCOME_DIGESTS',
+  evidenceSetBinding: 'sorted evidence outcomeDigests === sorted evaluation verifiedOutcomeDigests',
+  evidenceManifest: 'VerifiedLearningEvidenceSet（provenance-registered，只能由 immutable ledger append 成功路径产生）',
+  evidenceRefSource: 'RSI_IMMUTABLE_LEDGER_APPEND_RETURNED_REF',
+  callerBuiltEvidence: 'FORBIDDEN（caller 自造 LearningEvidenceEntry / manifest 展开副本 → REJECT）',
   insufficientData: 'NO_CANDIDATE（分母为 0 不得生成 proposal）',
   observationOnly: true,
   secondMetaEvidenceStore: 'FORBIDDEN',
@@ -113,6 +117,7 @@ export interface MetaImprovementCandidate {
   evaluationDigest: string;
   evaluationVersion: string;
   datasetVersion: string;
+  evidenceSetDigest: string;
   sourceEvidence: MetaCandidateSourceEvidence;
   metricsSnapshot: MetaCandidateMetricsSnapshot;
   candidateDigest: string;
@@ -129,8 +134,8 @@ export interface MetaImprovementCandidate {
 
 export interface MetaCandidateProposalInput {
   evaluation: OfflineEvaluationResult;
-  /** U3 learning evidence entries（source evidence refs/digests）。 */
-  learningEvidence: readonly LearningEvidenceEntry[];
+  /** U3 产出的 provenance-bearing manifest（不得用 caller 自造对象替代）。 */
+  evidenceSet: VerifiedLearningEvidenceSet;
 }
 
 export interface MetaCandidateProposalResult {
@@ -173,32 +178,41 @@ export function proposeMetaImprovementCandidates(
     // 复用 U4 信任门：caller 构造 / 展开副本 / 未验证评估一律拒绝
     throw new Error('META_CANDIDATE_EVALUATION_NOT_VERIFIED');
   }
-  const evidence = input.learningEvidence;
-  if (!Array.isArray(evidence) || evidence.length === 0) {
+  const evidenceSet = input.evidenceSet;
+  if (evidenceSet === null || evidenceSet === undefined) {
     throw new Error('META_CANDIDATE_EVIDENCE_REQUIRED');
   }
-  if (evidence.length > evaluation.totalRecords) {
-    throw new Error('META_CANDIDATE_EVIDENCE_EXCEEDS_EVALUATION');
+  if (!isVerifiedLearningEvidenceSet(evidenceSet)) {
+    // caller 自造 manifest / 展开副本 / 未落账的 evidence entry 一律拒绝
+    throw new Error('META_CANDIDATE_EVIDENCE_SET_NOT_VERIFIED');
   }
-  for (const entry of evidence) {
-    const outcomeDigest = requireText(entry?.outcomeDigest);
-    const evidenceDigest = requireText(entry?.evidenceDigest);
-    const actionRef = requireText(entry?.lineageRefs?.actionRef);
-    const proposalRef = requireText(entry?.lineageRefs?.proposalRef);
-    const evidenceRef = requireText(entry?.lineageRefs?.evidenceRef);
-    if (outcomeDigest === '' || evidenceDigest === '' || actionRef === '' || proposalRef === '' || evidenceRef === '') {
-      throw new Error('META_CANDIDATE_EVIDENCE_MALFORMED');
-    }
-    if (requireText(entry?.datasetVersion) !== evaluation.datasetVersion) {
-      throw new Error('META_CANDIDATE_DATASET_VERSION_MISMATCH');
-    }
+  if (requireText(evidenceSet.datasetVersion) !== evaluation.datasetVersion) {
+    throw new Error('META_CANDIDATE_DATASET_VERSION_MISMATCH');
+  }
+  if (
+    requireText(evidenceSet.evidenceSetDigest) === '' ||
+    !Array.isArray(evidenceSet.outcomeDigests) ||
+    !Array.isArray(evidenceSet.learningEvidenceRefs) ||
+    !Array.isArray(evidenceSet.evidenceDigests) ||
+    evidenceSet.outcomeDigests.length !== evidenceSet.learningEvidenceRefs.length ||
+    evidenceSet.outcomeDigests.length !== evidenceSet.evidenceDigests.length
+  ) {
+    throw new Error('META_CANDIDATE_EVIDENCE_SET_MALFORMED');
+  }
+  const evaluationDigests = sortAscending(evaluation.verifiedOutcomeDigests.map((d) => String(d)));
+  const evidenceOutcomeDigests = sortAscending(evidenceSet.outcomeDigests.map((d) => String(d)));
+  if (
+    evaluationDigests.length !== evidenceOutcomeDigests.length ||
+    evaluationDigests.some((digest, index) => digest !== evidenceOutcomeDigests[index])
+  ) {
+    throw new Error('META_CANDIDATE_EVIDENCE_SET_MISMATCH');
   }
 
   const sourceEvidence: MetaCandidateSourceEvidence = {
-    evidenceRefs: sortAscending(evidence.map((entry) => String(entry.lineageRefs.evidenceRef))),
-    evidenceDigests: sortAscending(evidence.map((entry) => String(entry.evidenceDigest))),
-    outcomeDigests: sortAscending(evidence.map((entry) => String(entry.outcomeDigest))),
-    count: evidence.length,
+    evidenceRefs: sortAscending(evidenceSet.learningEvidenceRefs.map((ref) => String(ref))),
+    evidenceDigests: sortAscending(evidenceSet.evidenceDigests.map((digest) => String(digest))),
+    outcomeDigests: sortAscending(evidenceSet.outcomeDigests.map((digest) => String(digest))),
+    count: evidenceSet.outcomeDigests.length,
   };
 
   if (evaluation.insufficientData) {
@@ -244,6 +258,7 @@ export function proposeMetaImprovementCandidates(
             rule.kind,
             evaluation.evaluationDigest,
             evaluation.datasetVersion,
+            evidenceSet.evidenceSetDigest,
             sourceEvidence.evidenceDigests.join('+'),
             sourceEvidence.outcomeDigests.join('+'),
             String(observed),
@@ -264,6 +279,7 @@ export function proposeMetaImprovementCandidates(
       evaluationDigest: evaluation.evaluationDigest,
       evaluationVersion: evaluation.evaluationVersion,
       datasetVersion: evaluation.datasetVersion,
+      evidenceSetDigest: evidenceSet.evidenceSetDigest,
       sourceEvidence,
       metricsSnapshot,
       candidateDigest,
