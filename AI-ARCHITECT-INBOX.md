@@ -144534,3 +144534,209 @@ local simulation adapter / fake provider / deterministic fixtures / zero externa
 C1 IMPLEMENTATION = AUTHORIZED。
 C2/C3 = DESIGN APPROVED, IMPLEMENTATION SUBJECT TO PREVIOUS STAGE PASS。
 ```
+
+### [MSG-20261005-31] SI-COST-OPTIMIZATION C1 Implementation Audit — VERDICT = **PASS WITH REVISE**（Necessity Gate / Cache Identity / Gateway 咽喉控制 = PASS；Cheap→Strong bounded escalation = REVISE；`C1_FINAL2_REQUIRED = YES`；C2 不提前授权）
+
+```text
+DECISION
+
+VERDICT = PASS WITH REVISE
+
+我复核了 exact code HEAD a1ba1dee，并核对 a1ba1dee → 95745cd7：后者确实只是状态/文档/送审簿记，没有额外业务代码变化。
+
+结论：
+
+Necessity Gate：PASS
+Cache Identity Contract：PASS
+Model Gateway 对 LEVEL_0 / LEVEL_1 的咽喉控制：PASS
+Cheap → Strong bounded escalation：REVISE
+C1_FINAL2_REQUIRED = YES
+C1 IMPLEMENTATION = NOT_YET_CLOSED
+C2 IMPLEMENTATION = NOT YET AUTHORIZED
+
+代码审计点对应提交：a1ba1dee2ee61250935dfaee2ce3fbad75a6bb81。
+
+KEEP
+
+以下全部保留，不需要重做：
+
+RULE_SOLVABLE / HIGH_CONFIDENCE → MODEL_CALL_FORBIDDEN
+UNKNOWN / 缺证据 → FAIL_CLOSED
+caller 的 requiredCapability 不授予模型调用权限
+Level 2 capability 在 Gateway 被钳制为 Level 1
+Cache 七字段 identity
+tenant mismatch → MISS
+rule/schema/prompt/input/capability mismatch → MISS
+stale → MISS
+high-risk stale fallback → FORBIDDEN
+appendOnlyRequired=false / controlledTtlGc=true
+STRONG 失败后不递归
+Judge 本身不能突破 escalation decision
+C1 零 Schema / 零 migration / 零真实 provider network。
+CHANGE
+
+只需要 2 项窄修。
+
+CHANGE A — Strong escalation 授权来源必须不可由 caller 自报
+
+现在 Router 接受：
+
+request.escalation = { quality, state }
+
+随后只要：
+
+quality = FAIL/LOW_CONFIDENCE
++
+attempts/escalations 未触顶
+
+即可直接执行：
+
+runAttempt(options.strong, ...)
+
+这里存在一个关键缺口：
+
+Router 没有证明这个 FAIL / LOW_CONFIDENCE 真的是由此前 LOW_COST 输出经过 schema validation + deterministic quality evaluator产生。
+
+也就是说 caller 虽然不能通过 requiredCapability 直接拿 strong，但目前仍可能通过伪造：
+
+escalation: { quality:'FAIL', state:{attempts:1, escalations:0} }
+
+取得 strong。
+
+因此：
+
+caller-supplied escalation state / quality 只能作为输入信息，不能作为授权凭证。
+
+最小可接受实现：
+
+LOW_COST attempt
+→ schema validation
+→ server-side deterministic quality gate
+→ decideAiEscalation()
+→ strong
+
+strong authorization 必须来自 Gateway 内部可验证的 preceding cheap attempt + deterministic quality result。
+
+不要求 Schema，也不要求持久化。
+
+CHANGE B — 固定 2/1 上限不得被 host 放大
+
+当前：
+
+options.escalationLimits
+
+最终进入：
+
+decideAiEscalation(... limits ...)
+
+理论上 host 可以设置：
+
+maxAttempts > 2
+或
+maxEscalations > 1
+
+这与 C1 已冻结的：
+
+maxAttempts = 2
+maxEscalations = 1
+
+不完全一致。
+
+处理方式二选一即可：
+
+删除可放大的 escalationLimits 注入；或
+clamp：
+
+effectiveMaxAttempts = min(requested, 2)
+
+effectiveMaxEscalations = min(requested, 1)
+
+不得允许任何配置扩大上限。
+
+RISKS
+
+目前唯一真正阻止 CLOSED 的风险就是：
+
+Strong Model authorization provenance。
+
+如果不修，模型等级虽然表面上经过 decideAiEscalation()，实际上 caller 仍能自己提供触发它的 quality/state，因此“strong 只能经确定性 quality gate”尚未完全成立。
+
+Cache、Necessity Gate 与 C2 边界没有发现需要阻断的问题。
+
+TEST
+
+C1 FINAL-2 最少增加以下回归：
+
+CALLER_FORGED_ESCALATION_CANNOT_CALL_STRONG
+没有 preceding LOW_COST attempt → strong = 0
+LOW_COST 输出未通过 server-side deterministic quality evaluation → strong = 0
+LOW_COST + deterministic FAIL → strong = exactly 1
+caller 自报 quality=FAIL 不构成授权
+escalationLimits={maxAttempts:999,maxEscalations:999} → 实际仍 ≤ 2/1
+STRONG FAIL → 不再调用任何 provider
+原 C1 13 例继续全绿
+全量 rsi-* regression 继续全绿
+tsc --noEmit = 0
+
+无需新增 Schema / PG test。
+
+NEXT
+
+下一步只授权：
+
+C1 FINAL-2 narrow revision
+
+范围仅：
+
+A. strong escalation provenance
++
+B. escalation hard-cap 2/1
+
+完成并送 C1 FINAL-2 Audit。
+
+若上述测试全部成立：
+
+C1 = PASS / CLOSED
+
+届时直接授权进入：
+
+C2 IMPLEMENTATION
+
+包括：
+
+AiCostLedgerEntry
++
+AiBudgetPolicy
++
+AiModelCacheEntry
++
+ledger-derived usage
++
+tenant / append-only enforcement
++
+manifest sync
++
+real PostgreSQL regression
++
+budget race protection。
+
+PRODUCTION
+
+边界维持原样：
+
+REAL_MODEL_NETWORK = HOLD
+PAID_MODEL_CALLS = HOLD
+EXTERNAL_WRITE = HOLD
+PAYMENT = HOLD
+TRANSPORT = HOLD
+PRODUCTION_CREDENTIALS = HOLD
+PRODUCTION_ENABLEMENT = HOLD
+
+P2_F = HOLD
+P2_G = HOLD
+
+RUNTIME_WIRING = NONE
+STEP_3_RUNTIME_POLICY_WIRING = NOT_AUTHORIZED
+
+本裁定不授权 C2 提前实施；先完成 C1 FINAL-2。
+```

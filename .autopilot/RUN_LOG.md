@@ -2562,3 +2562,8 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 验证：tsc exit 0；C1 定向 6 文件 / 48 例 PASS；rsi-* 全量 46 文件 / 250 例 PASS；prisma validate valid（未改 Schema）。
 - 送审：docs/releases/SI-COST-OPTIMIZATION-C1-FINAL2-REQUEST.md（REVIEWED_HEAD = e6311195）。
 
+
+## 2026-10-05T15:45Z — C1 Audit 裁决归档（MSG-20261005-31 = PASS WITH REVISE）
+- 归档：AI-ARCHITECT-INBOX.md 新增 MSG-20261005-31；compare.mjs → FULL_COPY_OK。
+- 裁决：Necessity Gate = PASS、Cache Identity Contract = PASS、Gateway 对 LEVEL_0/LEVEL_1 咽喉控制 = PASS；Cheap→Strong bounded escalation = REVISE（CHANGE A provenance / CHANGE B hard cap）→ 已按 FINAL-2 落地并送审（e6311195）。
+
