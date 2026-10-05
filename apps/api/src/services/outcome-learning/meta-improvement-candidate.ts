@@ -153,6 +153,65 @@ const sortAscending = (values: readonly string[]): string[] =>
 const requireText = (value: unknown): string => (typeof value === 'string' && value.trim() !== '' ? value.trim() : '');
 
 /** 只读快照：只复制需要的汇总指标，不保留 evaluation 引用。 */
+const VERIFIED_META_IMPROVEMENT_CANDIDATES = new WeakSet<MetaImprovementCandidate>();
+const VERIFIED_META_IMPROVEMENT_CANDIDATE_FINGERPRINTS = new WeakMap<MetaImprovementCandidate, string>();
+
+/** canonical fingerprint：覆盖审批/采用路径实际消费的所有字段（U1 FINAL anti-tamper）。 */
+const metaCandidateFingerprint = (candidate: MetaImprovementCandidate): string =>
+  JSON.stringify({
+    candidateId: candidate.candidateId,
+    candidateStatus: candidate.candidateStatus,
+    rule: candidate.rule,
+    target: candidate.target,
+    kind: candidate.kind,
+    rationale: candidate.rationale,
+    threshold: candidate.threshold,
+    comparison: candidate.comparison,
+    observed: candidate.observed,
+    evaluationDigest: candidate.evaluationDigest,
+    evaluationVersion: candidate.evaluationVersion,
+    datasetVersion: candidate.datasetVersion,
+    evidenceSetDigest: candidate.evidenceSetDigest,
+    sourceEvidence: {
+      evidenceRefs: [...candidate.sourceEvidence.evidenceRefs],
+      evidenceDigests: [...candidate.sourceEvidence.evidenceDigests],
+      outcomeDigests: [...candidate.sourceEvidence.outcomeDigests],
+      count: candidate.sourceEvidence.count,
+    },
+    metricsSnapshot: { ...candidate.metricsSnapshot },
+    candidateDigest: candidate.candidateDigest,
+    requiresApproval: candidate.requiresApproval,
+    autoApply: candidate.autoApply,
+    adoption: candidate.adoption,
+    mutation: { ...candidate.mutation },
+  });
+
+/** 对象完整性：冻结所有被审批/采用路径消费的字段。 */
+const freezeMetaCandidate = (candidate: MetaImprovementCandidate): void => {
+  Object.freeze(candidate.sourceEvidence.evidenceRefs);
+  Object.freeze(candidate.sourceEvidence.evidenceDigests);
+  Object.freeze(candidate.sourceEvidence.outcomeDigests);
+  Object.freeze(candidate.sourceEvidence);
+  Object.freeze(candidate.metricsSnapshot);
+  Object.freeze(candidate.mutation);
+  Object.freeze(candidate);
+};
+
+/** 只读 provenance：只有 proposeMetaImprovementCandidates() 产出的 candidate 才为 true。 */
+export function isVerifiedMetaImprovementCandidate(
+  candidate: MetaImprovementCandidate | null | undefined,
+): boolean {
+  if (candidate === null || candidate === undefined) return false;
+  if (!VERIFIED_META_IMPROVEMENT_CANDIDATES.has(candidate)) return false;
+  const fingerprint = VERIFIED_META_IMPROVEMENT_CANDIDATE_FINGERPRINTS.get(candidate);
+  if (fingerprint === undefined) return false;
+  try {
+    return fingerprint === metaCandidateFingerprint(candidate);
+  } catch {
+    return false;
+  }
+}
+
 const snapshotMetrics = (evaluation: OfflineEvaluationResult): MetaCandidateMetricsSnapshot => ({
   totalRecords: evaluation.totalRecords,
   resolvedDenominator: evaluation.resolved.denominator,
@@ -266,7 +325,7 @@ export function proposeMetaImprovementCandidates(
         )
         .digest('hex')
         .slice(0, 16);
-    candidates.push({
+    const candidate: MetaImprovementCandidate = {
       candidateId: candidateDigest,
       candidateStatus: META_CANDIDATE_STATUS,
       rule: rule.key,
@@ -292,7 +351,11 @@ export function proposeMetaImprovementCandidates(
         router: 'FORBIDDEN',
         actionRuntime: 'FORBIDDEN',
       },
-    });
+    };
+    freezeMetaCandidate(candidate);
+    VERIFIED_META_IMPROVEMENT_CANDIDATES.add(candidate);
+    VERIFIED_META_IMPROVEMENT_CANDIDATE_FINGERPRINTS.set(candidate, metaCandidateFingerprint(candidate));
+    candidates.push(candidate);
   }
 
   return {

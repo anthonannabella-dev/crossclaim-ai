@@ -18,7 +18,11 @@
 
 import { createHash } from 'node:crypto';
 
-import { META_CANDIDATE_STATUS, type MetaImprovementCandidate } from './meta-improvement-candidate';
+import {
+  META_CANDIDATE_STATUS,
+  isVerifiedMetaImprovementCandidate,
+  type MetaImprovementCandidate,
+} from './meta-improvement-candidate';
 
 export const CANDIDATE_APPROVAL_VERSION = 'candidate-approval/v1';
 
@@ -35,7 +39,10 @@ export const CANDIDATE_APPROVAL_BOUNDARY = {
   bypassExternalJudgeOrHuman: 'FORBIDDEN',
   selfApproval: 'FORBIDDEN（proposer/automation 不得作为 approver）',
   singleUse: true,
-  replayProtection: 'ONE_VERDICT_PER_TICKET',
+  replayProtection: 'ONE_VERDICT_PER_TICKET_DIGEST',
+  ticketProvenance: 'PROVENANCE_REGISTERED（只可由 openCandidateReviewTicket 产生）+ fingerprint + deep-freeze',
+  candidateProvenance: 'PROVENANCE_REGISTERED（只接受 U5 isVerifiedMetaImprovementCandidate === true）',
+  approverScopes: ["META_IMPROVEMENT_PROPOSAL_ONLY"],
   binds: ['candidateDigest', 'evaluationDigest', 'evidenceSetDigest', 'nonce', 'ticketDigest', 'verdictDigest'],
   expiry: 'ENFORCED（expiresAt 必须晚于 requestedAt；过期后不得判决）',
   revocation: 'ENFORCED_ONE_WAY（撤销后不可恢复、不可判决）',
@@ -45,6 +52,9 @@ export const CANDIDATE_APPROVAL_BOUNDARY = {
 
 export const APPROVER_ROLES = ['EXTERNAL_JUDGE', 'HUMAN_OPERATOR'] as const;
 export type ApproverRole = (typeof APPROVER_ROLES)[number];
+
+export const APPROVER_SCOPES = ['META_IMPROVEMENT_PROPOSAL_ONLY'] as const;
+export const REQUIRED_APPROVER_SCOPE = 'META_IMPROVEMENT_PROPOSAL_ONLY' as const;
 
 export const VERDICT_OUTCOMES = ['APPROVED', 'REJECTED'] as const;
 export type VerdictOutcome = (typeof VERDICT_OUTCOMES)[number];
@@ -114,8 +124,50 @@ export interface CandidateRevocation {
   reason: string | null;
 }
 
-const DECIDED_TICKETS = new WeakSet<CandidateReviewTicket>();
-const REVOKED_TICKETS = new WeakSet<CandidateReviewTicket>();
+const DECIDED_TICKET_DIGESTS = new Set<string>();
+const REVOKED_TICKET_DIGESTS = new Set<string>();
+const VERIFIED_CANDIDATE_REVIEW_TICKETS = new WeakSet<CandidateReviewTicket>();
+const VERIFIED_CANDIDATE_REVIEW_TICKET_FINGERPRINTS = new WeakMap<CandidateReviewTicket, string>();
+
+/** canonical fingerprint：覆盖判决/撤销路径实际消费的所有字段（U1 FINAL anti-tamper）。 */
+const ticketFingerprint = (ticket: CandidateReviewTicket): string =>
+  JSON.stringify({
+    kind: ticket.kind,
+    ticketId: ticket.ticketId,
+    ticketDigest: ticket.ticketDigest,
+    status: ticket.status,
+    candidateDigest: ticket.candidateDigest,
+    candidateTarget: ticket.candidateTarget,
+    candidateKind: ticket.candidateKind,
+    evaluationDigest: ticket.evaluationDigest,
+    evidenceSetDigest: ticket.evidenceSetDigest,
+    approverId: ticket.approverId,
+    role: ticket.role,
+    scope: [...ticket.scope],
+    requestedAt: ticket.requestedAt,
+    expiresAt: ticket.expiresAt,
+    nonce: ticket.nonce,
+  });
+
+const freezeTicket = (ticket: CandidateReviewTicket): void => {
+  Object.freeze(ticket.scope);
+  Object.freeze(ticket);
+};
+
+/** 只读 provenance：只有 openCandidateReviewTicket() 产生的 ticket 才为 true。 */
+export function isVerifiedCandidateReviewTicket(
+  ticket: CandidateReviewTicket | null | undefined,
+): boolean {
+  if (ticket === null || ticket === undefined) return false;
+  if (!VERIFIED_CANDIDATE_REVIEW_TICKETS.has(ticket)) return false;
+  const fingerprint = VERIFIED_CANDIDATE_REVIEW_TICKET_FINGERPRINTS.get(ticket);
+  if (fingerprint === undefined) return false;
+  try {
+    return fingerprint === ticketFingerprint(ticket);
+  } catch {
+    return false;
+  }
+}
 
 const requireText = (value: unknown): string => (typeof value === 'string' && value.trim() !== '' ? value.trim() : '');
 
@@ -181,6 +233,12 @@ export function openCandidateReviewTicket(
   }
   const scope = Array.isArray(approver.scope) ? approver.scope.map((item) => requireText(item)).filter((item) => item !== '') : [];
   if (scope.length === 0) throw new Error('APPROVAL_TICKET_SCOPE_REQUIRED');
+  if (
+    !scope.includes(REQUIRED_APPROVER_SCOPE) ||
+    scope.some((item) => !(APPROVER_SCOPES as readonly string[]).includes(item))
+  ) {
+    throw new Error('APPROVAL_TICKET_SCOPE_NOT_ALLOWED:' + scope.join(','));
+  }
   const nonce = requireText(schedule?.nonce);
   if (nonce === '') throw new Error('APPROVAL_TICKET_NONCE_REQUIRED');
   if (!isIsoDate(schedule?.requestedAt) || !isIsoDate(schedule?.expiresAt)) {
@@ -190,6 +248,9 @@ export function openCandidateReviewTicket(
     throw new Error('APPROVAL_TICKET_EXPIRY_INVALID');
   }
 
+  if (!isVerifiedMetaImprovementCandidate(candidate)) {
+    throw new Error('APPROVAL_TICKET_CANDIDATE_NOT_VERIFIED');
+  }
   const ticketDigest = digest('candidate-review', [
     CANDIDATE_APPROVAL_VERSION,
     candidateDigest,
@@ -202,7 +263,7 @@ export function openCandidateReviewTicket(
     schedule.expiresAt,
     nonce,
   ]);
-  return {
+  const ticket: CandidateReviewTicket = {
     kind: 'CANDIDATE_REVIEW_TICKET',
     ticketId: 'candidate-review:' + ticketDigest,
     ticketDigest,
@@ -219,16 +280,30 @@ export function openCandidateReviewTicket(
     expiresAt: schedule.expiresAt,
     nonce,
   };
+  freezeTicket(ticket);
+  VERIFIED_CANDIDATE_REVIEW_TICKETS.add(ticket);
+  VERIFIED_CANDIDATE_REVIEW_TICKET_FINGERPRINTS.set(ticket, ticketFingerprint(ticket));
+  return ticket;
 }
 
 /** 只读：该 ticket 是否已判决（single-use）。 */
 export function isDecidedTicket(ticket: CandidateReviewTicket | null | undefined): boolean {
-  return ticket !== null && ticket !== undefined && DECIDED_TICKETS.has(ticket);
+  return (
+    ticket !== null &&
+    ticket !== undefined &&
+    requireText(ticket.ticketDigest) !== '' &&
+    DECIDED_TICKET_DIGESTS.has(ticket.ticketDigest)
+  );
 }
 
 /** 只读：该 ticket 是否已撤销。 */
 export function isRevokedTicket(ticket: CandidateReviewTicket | null | undefined): boolean {
-  return ticket !== null && ticket !== undefined && REVOKED_TICKETS.has(ticket);
+  return (
+    ticket !== null &&
+    ticket !== undefined &&
+    requireText(ticket.ticketDigest) !== '' &&
+    REVOKED_TICKET_DIGESTS.has(ticket.ticketDigest)
+  );
 }
 
 /** 撤销评审（单向、不可恢复）；撤销后不得判决。 */
@@ -239,12 +314,13 @@ export function revokeCandidateReview(
   if (ticket === null || ticket === undefined || typeof ticket !== 'object' || requireText(ticket.ticketDigest) === '') {
     throw new Error('APPROVAL_TICKET_REQUIRED');
   }
+  if (!isVerifiedCandidateReviewTicket(ticket)) throw new Error('APPROVAL_TICKET_NOT_VERIFIED');
   if (isRevokedTicket(ticket)) throw new Error('APPROVAL_TICKET_ALREADY_REVOKED');
   if (isDecidedTicket(ticket)) throw new Error('APPROVAL_TICKET_ALREADY_DECIDED');
   const revokedBy = requireText(revocation?.revokedBy);
   if (revokedBy === '') throw new Error('APPROVAL_REVOCATION_ACTOR_REQUIRED');
   if (!isIsoDate(revocation?.revokedAt)) throw new Error('APPROVAL_REVOCATION_TIME_INVALID');
-  REVOKED_TICKETS.add(ticket);
+  REVOKED_TICKET_DIGESTS.add(ticket.ticketDigest);
   return {
     kind: 'CANDIDATE_REVIEW_REVOCATION',
     ticketId: ticket.ticketId,
@@ -282,6 +358,7 @@ export function decideCandidateReview(
   ) {
     throw new Error('APPROVAL_TICKET_MALFORMED');
   }
+  if (!isVerifiedCandidateReviewTicket(ticket)) throw new Error('APPROVAL_TICKET_NOT_VERIFIED');
   if (isRevokedTicket(ticket)) throw new Error('APPROVAL_VERDICT_TICKET_REVOKED');
   if (isDecidedTicket(ticket)) throw new Error('APPROVAL_VERDICT_REPLAY_BLOCKED');
   if (!VERDICT_OUTCOMES.includes(decision?.outcome)) throw new Error('APPROVAL_VERDICT_OUTCOME_INVALID');
@@ -309,7 +386,7 @@ export function decideCandidateReview(
     reason ?? '',
   ]);
 
-  DECIDED_TICKETS.add(ticket);
+  DECIDED_TICKET_DIGESTS.add(ticket.ticketDigest);
   return {
     kind: 'APPROVAL_VERDICT',
     verdictId: 'approval-verdict:' + verdictDigest,

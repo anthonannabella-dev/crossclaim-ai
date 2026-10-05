@@ -5,14 +5,18 @@
 
 import { describe, expect, it } from 'vitest';
 
+
 import type { RsiEvidenceRecord } from '../services/autonomy/rsi-evidence-ledger';
 import {
   APPROVER_ROLES,
+  APPROVER_SCOPES,
+  REQUIRED_APPROVER_SCOPE,
   CANDIDATE_APPROVAL_BOUNDARY,
   VERDICT_OUTCOMES,
   decideCandidateReview,
   isDecidedTicket,
   isRevokedTicket,
+  isVerifiedCandidateReviewTicket,
   openCandidateReviewTicket,
   revokeCandidateReview,
   type ApproverIdentity,
@@ -22,7 +26,10 @@ import {
   createAppLearningEvidenceLedgerFromRsi,
   type RsiEvidenceLedgerStorePort,
 } from '../services/outcome-learning/learning-evidence';
-import { proposeMetaImprovementCandidates } from '../services/outcome-learning/meta-improvement-candidate';
+import {
+  isVerifiedMetaImprovementCandidate,
+  proposeMetaImprovementCandidates,
+} from '../services/outcome-learning/meta-improvement-candidate';
 import { evaluateVerifiedLearningRecords } from '../services/outcome-learning/offline-evaluation';
 import { createAppOutcomeLineageLedger, type OutcomeLineageLedgerPort } from '../services/outcome-learning/outcome-lineage';
 import { buildOutcomeRecord, type OutcomeRecord } from '../services/outcome-learning/outcome-record';
@@ -114,10 +121,11 @@ const approver = (over: Partial<ApproverIdentity> = {}): ApproverIdentity => ({
   ...over,
 });
 
+let nonceCounter = 0;
 const schedule = (over: Partial<{ requestedAt: string; expiresAt: string; nonce: string }> = {}) => ({
   requestedAt: '2026-10-05T20:00:00.000Z',
   expiresAt: '2026-10-06T20:00:00.000Z',
-  nonce: 'nonce-1',
+  nonce: 'nonce-' + (nonceCounter += 1),
   ...over,
 });
 
@@ -133,12 +141,15 @@ describe('PHASE 5 U1 —— candidate review + approval verdict contract', () =>
     expect(ticket.approverId).toBe('judge-1');
     expect(ticket.role).toBe('EXTERNAL_JUDGE');
     expect(ticket.scope).toEqual(['META_IMPROVEMENT_PROPOSAL_ONLY']);
-    expect(ticket.nonce).toBe('nonce-1');
+    expect(ticket.nonce).toMatch(/^nonce-\d+$/);
     expect(ticket.ticketId).toBe('candidate-review:' + ticket.ticketDigest);
     expect(isDecidedTicket(ticket)).toBe(false);
     expect(isRevokedTicket(ticket)).toBe(false);
-    const again = openCandidateReviewTicket(await makeCandidate(), approver(), schedule());
-    expect(again.ticketDigest).toBe(ticket.ticketDigest);
+    const fixedNonce = 'nonce-determinism';
+    const first = openCandidateReviewTicket(await makeCandidate(), approver(), schedule({ nonce: fixedNonce }));
+    const again = openCandidateReviewTicket(await makeCandidate(), approver(), schedule({ nonce: fixedNonce }));
+    expect(again.ticketDigest).toBe(first.ticketDigest);
+    expect(again.nonce).toBe(fixedNonce);
   });
 
   it('P5U1_2 fail-closed：candidate 缺失 / 非 PROPOSAL_ONLY / mutation 未全 FORBIDDEN / 绑定缺失 → REJECT', async () => {
@@ -197,7 +208,7 @@ describe('PHASE 5 U1 —— candidate review + approval verdict contract', () =>
     expect(verdict.candidateDigest).toBe(candidate.candidateDigest);
     expect(verdict.evaluationDigest).toBe(candidate.evaluationDigest);
     expect(verdict.evidenceSetDigest).toBe(candidate.evidenceSetDigest);
-    expect(verdict.nonce).toBe('nonce-1');
+    expect(verdict.nonce).toBe(ticket.nonce);
     expect(verdict.reason).toBe('evidence chain verified');
     expect(verdict.execution.autoApply).toBe(false);
     expect(verdict.execution.promotion).toBe('OFF');
@@ -245,7 +256,7 @@ describe('PHASE 5 U1 —— candidate review + approval verdict contract', () =>
         decidedAt: '2026-10-05T21:30:00.000Z',
       }),
     ).toThrow(/APPROVAL_VERDICT_REPLAY_BLOCKED/);
-    expect(CANDIDATE_APPROVAL_BOUNDARY.replayProtection).toBe('ONE_VERDICT_PER_TICKET');
+    expect(CANDIDATE_APPROVAL_BOUNDARY.replayProtection).toBe('ONE_VERDICT_PER_TICKET_DIGEST');
     expect(CANDIDATE_APPROVAL_BOUNDARY.singleUse).toBe(true);
   });
 
@@ -324,7 +335,7 @@ describe('PHASE 5 U1 —— candidate review + approval verdict contract', () =>
       revokeCandidateReview(ticket, { revokedBy: 'host-operator', revokedAt: '2026-10-05T20:40:00.000Z' }),
     ).toThrow(/APPROVAL_TICKET_ALREADY_REVOKED/);
 
-    const decided = openCandidateReviewTicket(candidate, approver(), schedule({ nonce: 'nonce-2' }));
+    const decided = openCandidateReviewTicket(candidate, approver(), schedule({ nonce: 'nonce-decided' }));
     decideCandidateReview(decided, {
       approverId: 'judge-1',
       role: 'EXTERNAL_JUDGE',
@@ -361,5 +372,209 @@ describe('PHASE 5 U1 —— candidate review + approval verdict contract', () =>
     expect(CANDIDATE_APPROVAL_BOUNDARY.adoption).toBe('CONTROLLED_ADOPTION_PROPOSAL_REQUIRED');
     expect(CANDIDATE_APPROVAL_BOUNDARY.binds).toContain('candidateDigest');
     expect(CANDIDATE_APPROVAL_BOUNDARY.binds).toContain('verdictDigest');
+  });
+});
+
+describe('PHASE 5 U1 FINAL —— candidate provenance + ticket integrity + digest-keyed replay', () => {
+  const attemptMutate = (fn: () => void): boolean => {
+    try {
+      fn();
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  it('P5U1F_1 caller 手工构造 candidate → 开票 REJECT；正式 U5 candidate → provenance true', async () => {
+    const real = await makeCandidate();
+    expect(isVerifiedMetaImprovementCandidate(real)).toBe(true);
+    expect(isVerifiedMetaImprovementCandidate({ ...real })).toBe(false);
+    expect(isVerifiedMetaImprovementCandidate(null)).toBe(false);
+    const handmade = {
+      candidateId: 'meta-candidate:forged',
+      candidateStatus: 'PROPOSAL_ONLY',
+      rule: 'LOW_RESOLVED_SUCCESS_RATE',
+      target: 'ROUTER',
+      kind: 'ESCALATE_REVIEW_TIER',
+      rationale: 'forged',
+      threshold: 0.5,
+      comparison: 'resolved.successRate < 0.5',
+      observed: 0.1,
+      evaluationDigest: 'offline-eval:forged',
+      evaluationVersion: 'offline-evaluation/v1',
+      datasetVersion: 'learning-dataset/v1',
+      evidenceSetDigest: 'learning-evidence-set:forged',
+      sourceEvidence: { evidenceRefs: [], evidenceDigests: [], outcomeDigests: [], count: 0 },
+      metricsSnapshot: {},
+      candidateDigest: 'meta-candidate:forged',
+      requiresApproval: true,
+      autoApply: false,
+      adoption: 'EXTERNAL_JUDGE_OR_HUMAN_APPROVAL_REQUIRED',
+      mutation: { policy: 'FORBIDDEN', guard: 'FORBIDDEN', router: 'FORBIDDEN', actionRuntime: 'FORBIDDEN' },
+    } as never;
+    expect(() => openCandidateReviewTicket(handmade, approver(), schedule())).toThrow(
+      /APPROVAL_TICKET_CANDIDATE_NOT_VERIFIED/,
+    );
+    // 正式 candidate 可开票
+    const ticket = openCandidateReviewTicket(real, approver(), schedule());
+    expect(isVerifiedCandidateReviewTicket(ticket)).toBe(true);
+  });
+
+  it('P5U1F_2 正式 candidate 原地篡改 digest / target / kind → 被冻结拒绝；clone 开票 → REJECT', async () => {
+    const real = await makeCandidate();
+    expect(
+      attemptMutate(() => {
+        (real as unknown as { candidateDigest: string }).candidateDigest = 'meta-candidate:tampered';
+      }),
+    ).toBe(false);
+    expect(
+      attemptMutate(() => {
+        (real as unknown as { target: string }).target = 'POLICY';
+      }),
+    ).toBe(false);
+    expect(
+      attemptMutate(() => {
+        (real as unknown as { kind: string }).kind = 'FORGED';
+      }),
+    ).toBe(false);
+    expect(isVerifiedMetaImprovementCandidate(real)).toBe(true);
+    expect(() => openCandidateReviewTicket({ ...real } as never, approver(), schedule())).toThrow(
+      /APPROVAL_TICKET_CANDIDATE_NOT_VERIFIED/,
+    );
+  });
+
+  it('P5U1F_3 caller 手工构造 ticket / {...ticket} → decide REJECT（ticket provenance）', async () => {
+    const candidate = await makeCandidate();
+    const ticket = openCandidateReviewTicket(candidate, approver(), schedule());
+    expect(isVerifiedCandidateReviewTicket(ticket)).toBe(true);
+    const handmade = { ...ticket } as never;
+    expect(isVerifiedCandidateReviewTicket(handmade)).toBe(false);
+    expect(() =>
+      decideCandidateReview(handmade, {
+        approverId: 'judge-1',
+        role: 'EXTERNAL_JUDGE',
+        outcome: 'APPROVED',
+        decidedAt: '2026-10-05T21:00:00.000Z',
+      }),
+    ).toThrow(/APPROVAL_TICKET_NOT_VERIFIED/);
+    expect(() =>
+      decideCandidateReview({ ...ticket } as never, {
+        approverId: 'judge-1',
+        role: 'EXTERNAL_JUDGE',
+        outcome: 'APPROVED',
+        decidedAt: '2026-10-05T21:00:00.000Z',
+      }),
+    ).toThrow(/APPROVAL_TICKET_NOT_VERIFIED/);
+    expect(() =>
+      revokeCandidateReview({ ...ticket } as never, {
+        revokedBy: 'host-operator',
+        revokedAt: '2026-10-05T20:30:00.000Z',
+      }),
+    ).toThrow(/APPROVAL_TICKET_NOT_VERIFIED/);
+  });
+
+  it('P5U1F_4 正式 ticket 原地篡改 candidate / evaluation / evidenceSet / nonce → 被冻结拒绝', async () => {
+    const candidate = await makeCandidate();
+    const ticket = openCandidateReviewTicket(candidate, approver(), schedule());
+    for (const field of [
+      'candidateDigest',
+      'evaluationDigest',
+      'evidenceSetDigest',
+      'nonce',
+    ] as const) {
+      expect(
+        attemptMutate(() => {
+          (ticket as unknown as Record<string, string>)[field] = 'tampered';
+        }),
+      ).toBe(false);
+    }
+    expect(isVerifiedCandidateReviewTicket(ticket)).toBe(true);
+  });
+
+  it('P5U1F_5 digest-keyed replay：APPROVED 后 clone 再判决 → REPLAY_BLOCKED；REVOKED 后 clone 判决 / 再撤销 → REJECT', async () => {
+    const candidate = await makeCandidate();
+    const ticket = openCandidateReviewTicket(candidate, approver(), schedule());
+    decideCandidateReview(ticket, {
+      approverId: 'judge-1',
+      role: 'EXTERNAL_JUDGE',
+      outcome: 'APPROVED',
+      decidedAt: '2026-10-05T21:00:00.000Z',
+    });
+    // 手工构造同 digest 的克隆（结构合法）→ 仍必须被 ticket provenance 拒绝
+    const clone = {
+      ...ticket,
+      scope: [...ticket.scope],
+    } as never;
+    expect(() =>
+      decideCandidateReview(clone, {
+        approverId: 'judge-1',
+        role: 'EXTERNAL_JUDGE',
+        outcome: 'APPROVED',
+        decidedAt: '2026-10-05T21:10:00.000Z',
+      }),
+    ).toThrow(/APPROVAL_TICKET_NOT_VERIFIED/);
+
+    const revokedTicket = openCandidateReviewTicket(candidate, approver(), schedule());
+    revokeCandidateReview(revokedTicket, {
+      revokedBy: 'host-operator',
+      revokedAt: '2026-10-05T20:30:00.000Z',
+    });
+    const revokedClone = { ...revokedTicket, scope: [...revokedTicket.scope] } as never;
+    expect(() =>
+      decideCandidateReview(revokedClone, {
+        approverId: 'judge-1',
+        role: 'EXTERNAL_JUDGE',
+        outcome: 'APPROVED',
+        decidedAt: '2026-10-05T21:00:00.000Z',
+      }),
+    ).toThrow(/APPROVAL_TICKET_NOT_VERIFIED/);
+    expect(isDecidedTicket(ticket)).toBe(true);
+    expect(isRevokedTicket(revokedTicket)).toBe(true);
+  });
+
+  it('P5U1F_6 digest-keyed 状态：即使对象不同，同 ticketDigest 的已判决/已撤销状态仍生效', async () => {
+    const candidate = await makeCandidate();
+    const fixedNonce = 'nonce-digest-key';
+    const a = openCandidateReviewTicket(candidate, approver(), schedule({ nonce: fixedNonce }));
+    const b = openCandidateReviewTicket(candidate, approver(), schedule({ nonce: fixedNonce }));
+    expect(b.ticketDigest).toBe(a.ticketDigest);
+    expect(isVerifiedCandidateReviewTicket(b)).toBe(true);
+    decideCandidateReview(a, {
+      approverId: 'judge-1',
+      role: 'EXTERNAL_JUDGE',
+      outcome: 'APPROVED',
+      decidedAt: '2026-10-05T21:00:00.000Z',
+    });
+    // b 是另一个合法 provenance 对象，但 digest 相同 → 必须 REPLAY_BLOCKED
+    expect(isDecidedTicket(b)).toBe(true);
+    expect(() =>
+      decideCandidateReview(b, {
+        approverId: 'judge-1',
+        role: 'EXTERNAL_JUDGE',
+        outcome: 'REJECTED',
+        decidedAt: '2026-10-05T21:20:00.000Z',
+      }),
+    ).toThrow(/APPROVAL_VERDICT_REPLAY_BLOCKED/);
+    expect(() =>
+      revokeCandidateReview(b, { revokedBy: 'host-operator', revokedAt: '2026-10-05T21:30:00.000Z' }),
+    ).toThrow(/APPROVAL_TICKET_ALREADY_DECIDED/);
+  });
+
+  it('P5U1F_7 scope 白名单：非白名单 scope → REJECT；required scope 必须存在', async () => {
+    const candidate = await makeCandidate();
+    expect(() => openCandidateReviewTicket(candidate, approver({ scope: ['BANANA'] }), schedule())).toThrow(
+      /APPROVAL_TICKET_SCOPE_NOT_ALLOWED/,
+    );
+    expect(() =>
+      openCandidateReviewTicket(candidate, approver({ scope: ['META_IMPROVEMENT_PROPOSAL_ONLY', 'BANANA'] }), schedule()),
+    ).toThrow(/APPROVAL_TICKET_SCOPE_NOT_ALLOWED/);
+    const ticket = openCandidateReviewTicket(
+      candidate,
+      approver({ scope: ['META_IMPROVEMENT_PROPOSAL_ONLY'] }),
+      schedule(),
+    );
+    expect(ticket.scope).toEqual([REQUIRED_APPROVER_SCOPE]);
+    expect(APPROVER_SCOPES).toEqual([REQUIRED_APPROVER_SCOPE]);
+    expect(CANDIDATE_APPROVAL_BOUNDARY.approverScopes).toEqual(['META_IMPROVEMENT_PROPOSAL_ONLY']);
   });
 });
