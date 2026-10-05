@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-40",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T18:56:47.865Z",
+  "updated_at": "2026-10-05T18:58:28.221Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -21,7 +21,7 @@
   "ci_result": "completed_success",
   "fix_pr": "https://github.com/anthonannabella-dev/crossclaim-ai/pull/10",
   "channel_status": "HEALTHY（主审计会话 = https://chatgpt.com/c/6ac385db-cb60-83ec-9754-c7a30633a8c5（HOST 新开；MSG-20261005-30 起）；历史会话 https://chatgpt.com/c/6ac1cdf0-1ec8-83ec-8036-0e66fcf5c6b9 保留 MSG-22..29 逐字归档）",
-  "pending_verdict_unarchived": "PHASE 4 U2 FINAL2（Reviewed HEAD 7f1b7894）—— 已投递，等待裁决",
+  "pending_verdict_unarchived": null,
   "b2_status": "PASS（MSG-20260930-10 工程修复 + MSG-20260930-11 集成 PASS/MERGE APPROVED）",
   "protocol": "DUAL_CHANNEL_WAKEUP（GitHub = 正式总线 / ChatGPT Web = 仅唤醒）",
   "integration_pr": "https://github.com/anthonannabella-dev/crossclaim-ai/pull/11",
@@ -50,13 +50,13 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
-  "next_execution_unit": "PHASE 4 U2 FINAL2 裁决处理：读取右侧审核会话（tab 14）完整 verdict（严格匹配 REVIEWED_HEAD = 7f1b7894）→ 原样逐字归档 AI-ARCHITECT-INBOX.md（MSG-20261005-58）→ compare.mjs 必须 FULL_COPY_OK → durable state 对账。若 LINEAGE_BINDING = PASS / U2 CLOSED → 继续 U3（learning dataset projection + immutable learning evidence，必须接正式 trusted lineage composition、append-only、复用既有 evidence store、禁止第二存储）→ U4（offline evaluation，显式定义 SUCCESS/FAILURE/PARTIAL/UNKNOWN/MANUAL_REVIEW 分母语义）→ U5（meta-improvement candidate proposal only）；若仍 REVISE → 按裁决窄修。",
+  "next_execution_unit": "PHASE 4 U2 FINAL3（窄修）：把可信边界补到 ledger 层，切断“fake ledger → factory → trusted source”洗白链：(1) 新增 `createAppOutcomeLineageLedger(deps)`（接既有 DB/evidence/action/proposal repository），用**模块私有 WeakSet** 登记 provenance，并导出只读 `isAppOutcomeLineageLedger(ledger)`；(2) `createAppOutcomeLineageSource()` 只接受**已登记 provenance 的 ledger**，非 trusted ledger 直接抛错/拒绝；(3) verified 路径（verifyLearningRecord / projectVerifiedLearningRecords）不得接受任意 AppOutcomeLineageDeps —— 要么只接受已登记 provenance 的 ledger，要么提供 `createAppOutcomeLineageVerifier(...)` 作为唯一 app composition root（private provenance → verified pipeline）；(4) 验收：caller 自写 fake ledger（返回全匹配数据）→ REJECT；正式 ledger adapter provenance → PASS；正式 ledger + refs 不存在 → REJECT；正式 ledger + 跨 org/task → REJECT；正式 ledger + proposal linkage 不成立 → REJECT；完整真实同链 → verified PASS；fake ledger 不得通过“先 factory source 再 WeakSet”洗白。约束（裁决 INFO）：U3 immutable verified learning evidence 在该漏洞关闭前**不得**宣称 trusted verified evidence；P2E-DB5 继续是 test-isolation debt，不拉回本阶段。流程：code → tests → regression → tsc → commit → push → 送 PHASE 4 U2 FINAL3 → 送达三检 → 逐字归档 → FULL_COPY_OK → durable state。",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-05T18:56:47.865Z",
+  "last_tick_at": "2026-10-05T18:58:28.221Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "PHASE 4 U2 FINAL2（server-owned lineage composition）已实施并送审：createAppOutcomeLineageSource(deps) + 模块私有 WeakSet provenance；resolveTrustedOutcomeLineage 拒绝非 factory source（OUTCOME_LINEAGE_SOURCE_NOT_TRUSTED）；verified 路径只接受 AppOutcomeLineageDeps；proposalLinked 由 adapter 依据 ledger 关系计算；push 7f1b7894；投递 [CODEX-PHASE4-U2FINAL2]，送达三检通过，等待裁决。回归 92/93 files、946/947 tests（唯一失败 = P2E-DB5 test-isolation debt，单独 20/20 PASS）。",
-  "last_action_at": "2026-10-05T18:56:47.865Z",
-  "next_action": "读取 PHASE 4 U2 FINAL2 裁决 → 逐字归档 + compare.mjs FULL_COPY_OK + durable state 对账",
+  "last_action": "PHASE 4 U2 FINAL2 裁决已读取并原样归档（MSG-20261005-58，compare.mjs = FULL_COPY_OK）：SOURCE_INSTANCE_INJECTION = PASS、proposalLinked adapter 计算 = PASS、LINEAGE_BINDING_CONTRACT = PASS；LINEAGE_BINDING = PASS WITH REVISE / U2 NOT YET CLOSED —— 信任边界下移到 deps.ledger（fake ledger → factory → trusted source 洗白）；U3/U4/U5 继续授权。",
+  "last_action_at": "2026-10-05T18:58:28.221Z",
+  "next_action": "PHASE 4 U2 FINAL3：trusted ledger composition/provenance",
   "current_head": "7f1b7894",
   "last_completed_head": "6cba0639",
   "reviewed_head": "add99ec3",
@@ -5169,11 +5169,12 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "P4I-1 读取 PHASE 4 U2 FINAL2 裁决（tab 14，匹配 Reviewed HEAD 7f1b7894）+ 逐字归档 MSG-20261005-58 + compare.mjs + durable state",
-    "P4I-2 U3 learning dataset projection + immutable learning evidence（接正式 trusted lineage composition；append-only；复用既有 evidence store）",
-    "P4I-3 U4 offline evaluation（显式定义 SUCCESS/FAILURE/PARTIAL/UNKNOWN/MANUAL_REVIEW 分母语义）",
-    "P4I-4 U5 meta-improvement candidate proposal only（AUTO_PROMOTION = OFF，必须经外部 Judge）",
-    "P4I-5 非阻断维护项：scanRawPayloadKeys 改完整有界遍历/循环检测"
+    "P4J-1 U2 FINAL3 trusted ledger composition/provenance（createAppOutcomeLineageLedger + 私有 WeakSet；source 只接受 trusted ledger；verified 路径不接受任意 deps）",
+    "P4J-2 tests（7 条验收：fake ledger REJECT / 正式 ledger PASS / not-found / 跨 org·task / proposal 未关联 / 全链真实 PASS / 不得洗白）→ regression → tsc → commit → push",
+    "P4J-3 送 PHASE 4 U2 FINAL3 → 送达三检 → 逐字归档 MSG-20261005-59 → compare.mjs FULL_COPY_OK → durable state",
+    "P4J-4 U3 learning dataset projection + immutable learning evidence（接正式 trusted 组合；append-only；禁止第二存储；漏洞关闭前不得宣称 trusted verified）",
+    "P4J-5 U4 offline evaluation（显式定义 SUCCESS/FAILURE/PARTIAL/UNKNOWN/MANUAL_REVIEW 分母语义）",
+    "P4J-6 U5 meta-improvement candidate proposal only（AUTO_PROMOTION = OFF，必须经外部 Judge）"
   ],
   "full_autonomous_internal_execution": "VERIFIED",
   "dispatcher_acceptance": {
@@ -9323,7 +9324,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-05T18:56:47.865Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-05T18:58:28.221Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -9813,5 +9814,31 @@
       "regression": "92/93 files、946/947 tests（唯一失败 = P2E-DB5 test-isolation debt，单独 20/20 PASS）",
       "github_ci": "NOT_OBSERVED"
     }
+  },
+  "phase4_u2_final2_verdict": {
+    "message_id": "MSG-20261005-58",
+    "verdict": "PASS WITH REVISE",
+    "reviewed_head": "7f1b7894",
+    "archive_verified": "FULL_COPY_OK",
+    "pass": [
+      "SOURCE_INSTANCE_INJECTION",
+      "proposalLinked adapter 计算",
+      "LINEAGE_BINDING_CONTRACT",
+      "verified/excluded 逻辑",
+      "无第二 Evidence Store"
+    ],
+    "revise": [
+      "LINEAGE_BINDING：信任边界下移到 deps.ledger —— 需 trusted ledger composition/provenance（createAppOutcomeLineageLedger + 私有 WeakSet）"
+    ],
+    "info": [
+      "U3 immutable verified learning evidence 在漏洞关闭前不得宣称 trusted verified evidence",
+      "P2E-DB5 仍为 test-isolation debt"
+    ],
+    "next_label": "PHASE 4 U2 FINAL3（目标 LINEAGE_BINDING = PASS / U2 = PASS / CLOSED）",
+    "authorized_continue": [
+      "U3",
+      "U4",
+      "U5"
+    ]
   }
 }
