@@ -5,13 +5,13 @@
   "current_task": "RSI 生产可执行闭环（7 点收口）：RSI_RUNTIME_READY = PASS；MODEL_PROVIDER_READY = 本地仿真已接线（真实网络/付费 HOLD）；PERSISTENCE_READY = ephemeral 已验证、durable 需宿主非生产 DATABASE_URL；REBOOT_RECONCILE_READY = NOT_IMPLEMENTED（下一单元）；SYSTEMD_VALIDATED = 需宿主 Linux 实机",
   "next_task": "BG-016 单一 Acceptance Head + 四份状态一致 guard（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍 HOST_ACTION_REQUIRED 或 HOLD",
   "send_head": "07b7009",
-  "decision_head": "07b7009",
-  "last_chatgpt_message": "MSG-20261005-22",
+  "decision_head": "f5e4cc2c",
+  "last_chatgpt_message": "MSG-20261005-37",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-06T03:30:00.000Z",
+  "updated_at": "2026-10-06T04:00:00.000Z",
   "previous_head": "8064f07",
-  "architect_decision_pending": true,
+  "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "0c35106",
   "last_sent_at": "2026-10-03T09:07:52.875Z",
@@ -50,12 +50,12 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "ACTIVE",
-  "next_execution_unit": "读取 C2 FINAL-4 裁决 → 归档（MSG-20261005-37）→ PASS/CLOSED 则进入 C3 IMPLEMENTATION（cache runtime wiring + business-value cost policy + Cost Safe Mode + concurrencyLimit enforcement + admin 只读可观测 + NOT_YET_MEASURABLE）；REVISE 则窄修再送",
+  "next_execution_unit": "C3 IMPLEMENTATION：cache runtime wiring + business-value cost policy + Cost Safe Mode + concurrencyLimit enforcement（多实例语义 + 真实 PG 并发回归）+ admin 只读可观测投影 + NOT_YET_MEASURABLE 指标 → tsc / prisma / regression → C3 Implementation Audit → PASS/CLOSED 后宣布 SI_COST_OPTIMIZATION = PASS / CLOSED 并 recompute SAFE_CONTINUATION_QUEUE",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-06T03:30:00.000Z",
+  "last_tick_at": "2026-10-06T04:00:00.000Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "C2 FINAL-4 完成并送审（f5e4cc2c）：tenant identity 入口统一 fail-closed + resolve helper tenant-safe；tsc 0；C2 27/27；394 例回归 PASS",
-  "last_action_at": "2026-10-06T00:40:00.000Z",
+  "last_action": "C2 = PASS / CLOSED（MSG-20261005-37，REVIEWED_HEAD = f5e4cc2c，C2_FINAL5_REQUIRED = NO）；补齐 MSG-20261005-35 / -36 逐字归档（FULL_COPY_OK）；C3 IMPLEMENTATION = AUTHORIZED",
+  "last_action_at": "2026-10-06T04:00:00.000Z",
   "next_action": "C2 IMPLEMENTATION（Schema Delta + durable ledger/budget + PG 回归）",
   "current_head": "054ab732",
   "last_completed_head": "054ab732",
@@ -5199,9 +5199,9 @@
   "awaiting_verdict": "EXACT-ORDER REPLAY 证据已送审（comment 5979262070）；shared/staging deploy 解禁待裁决",
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-05T12:46:13.638Z",
-    "head": "f5e4cc2c",
-    "acceptance_head": "f5e4cc2c",
+    "computed_at": "2026-10-05T12:55:34.593Z",
+    "head": "117f849f",
+    "acceptance_head": "117f849f",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5360,48 +5360,48 @@
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=f5e4cc2c ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
+        "evidence": "acceptance_head=117f849f ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
       },
       "L1-05_pg_regression_passed": {
         "status": "UNVERIFIED",
-        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head f5e4cc2c（且中间存在非簿记变更）"
+        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head 117f849f（且中间存在非簿记变更）"
       },
       "L1-06_fresh_db_migration_passed": {
         "status": "UNVERIFIED",
-        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head f5e4cc2c（且中间存在非簿记变更）"
+        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head 117f849f（且中间存在非簿记变更）"
       },
       "L1-07_api_typecheck_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head f5e4cc2c（且中间存在非簿记变更）"
+        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head 117f849f（且中间存在非簿记变更）"
       },
       "L1-08_web_typecheck_build_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head f5e4cc2c（且中间存在非簿记变更）"
+        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head 117f849f（且中间存在非簿记变更）"
       },
       "L1-09_no_skipped_critical_tests": {
         "status": "UNVERIFIED",
-        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head f5e4cc2c（且中间存在非簿记变更）"
+        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head 117f849f（且中间存在非簿记变更）"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
         "status": false,
-        "evidence": "dirty entries: 3"
+        "evidence": "dirty entries: 2"
       },
       "L1-11_docs_state_consistent": {
         "status": "UNVERIFIED",
-        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head f5e4cc2c（且中间存在非簿记变更）"
+        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head 117f849f（且中间存在非簿记变更）"
       },
       "L1-12_schema_invariants_verified": {
         "status": "UNVERIFIED",
-        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head f5e4cc2c（且中间存在非簿记变更）"
+        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head 117f849f（且中间存在非簿记变更）"
       },
       "L1-13_negative_paths_covered": {
         "status": "UNVERIFIED",
-        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head f5e4cc2c（且中间存在非簿记变更）"
+        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head 117f849f（且中间存在非簿记变更）"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
         "status": "UNVERIFIED",
-        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head f5e4cc2c（且中间存在非簿记变更）"
+        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head 117f849f（且中间存在非簿记变更）"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
@@ -8851,7 +8851,7 @@
     "invariant": "ACTION_GUARD_DRY_RUN_ALLOW != EXECUTION_AUTHORIZATION；零审批消费 / 零 executor / 零业务事实写入 / 零外写；L5 永久拒绝"
   },
   "si_cost_optimization": {
-    "status": "C2_FINAL4_SUBMITTED_PENDING_VERDICT",
+    "status": "C2_PASS_CLOSED",
     "priority": "P1",
     "dependency": "SI_RSI_UNIFICATION_PASS_CLOSED",
     "registered_at": "2026-10-05T12:45:00.000Z",
@@ -9069,7 +9069,122 @@
         "B resolveEffectiveAiBudget tenant-safe + 非 PLATFORM 缺 org fail-closed"
       ],
       "tests": "tsc 0；C2 27/27；rsi-* + architecture-contract 47 文件 / 394 例"
-    }
+    },
+    "c3_authorized": "YES",
+    "c2_closed_at": "2026-10-06T04:00:00.000Z",
+    "c2_final2_verdict": {
+      "message_id": "MSG-20261005-35",
+      "verdict": "PASS WITH REVISE",
+      "reviewed_head": "1448f9db",
+      "pass": [
+        "CHANGE_B_CANONICAL_HIERARCHICAL_LOCKS",
+        "CHANGE_C_INVARIANTS_AND_IDEMPOTENCY",
+        "PLATFORM_ORG_ACCOUNT_CROSS_SCOPE_RACE",
+        "TOKEN_AND_STRONG_CALL_ENFORCEMENT",
+        "DB_CHECK"
+      ],
+      "changes": [
+        "CHANGE A：perIncidentLimitMicros 必须按当前 Incident 聚合（父级 policy 的 per-incident cap 是继承给当前 incident 的上限；无 incidentId → NOT_APPLICABLE，不得拿 org/platform lifetime 代替）",
+        "CHANGE B：非 PLATFORM policy 必须绑定 tenant（lookup + aggregation 均需 organizationId；跨租户不得应用/聚合）"
+      ],
+      "required_tests": [
+        "org perIncident=1000：inc-A=900 / inc-B=900 均 PASS，inc-A 再 +200 → AI_BUDGET_INCIDENT_EXCEEDED",
+        "platform perIncident 按各 incident 独立统计",
+        "ACCOUNT parent policy 的 per-incident cap 只计当前 incident",
+        "org-A 的 ACCOUNT/INCIDENT/TASK policy 不得应用到 org-B",
+        "同 scopeRef 跨 tenant 不得串 usage",
+        "跨租户 ledger rows 不得被 ACCOUNT/INCIDENT/TASK policy 聚合到一起",
+        "原 18/18 PG + 全量回归继续绿"
+      ],
+      "c2_final3_required": "YES",
+      "c3_authorized": "NO",
+      "archive": "AI-ARCHITECT-INBOX.md#MSG-20261005-35"
+    },
+    "c2_final3_verdict": {
+      "message_id": "MSG-20261005-36",
+      "verdict": "PASS WITH REVISE",
+      "reviewed_head": "56b3207d",
+      "pass": [
+        "CHANGE_A_PER_INCIDENT_DIMENSIONAL_ACCOUNTING",
+        "CHANGE_B_POLICY_TENANT_IDENTITY_UNIQUE_KEY_SCOPED_AGGREGATION"
+      ],
+      "changes": [
+        "CHANGE A：tenant-scoped refs 缺 organizationId 必须 fail-closed —— 任一 accountId/incidentId/taskId 存在但 organizationId 为空 → AI_BUDGET_TENANT_IDENTITY_REQUIRED，provider / ledger write 均不得继续；platform-only 仅当四个 refs 全空（或显式 platform identity）",
+        "CHANGE B：resolveEffectiveAiBudget() 也必须 tenant-safe（非 PLATFORM 查找须同命中 organizationId；缺 org → fail-closed）或降为 private，禁止 C3/runtime 复用未 tenant-safe 的公开 helper"
+      ],
+      "required_tests": [
+        "organizationId=null + taskId → AI_BUDGET_TENANT_IDENTITY_REQUIRED",
+        "organizationId=null + incidentId → fail-closed",
+        "organizationId=null + accountId → fail-closed",
+        "上述拒绝均不写 ledger",
+        "resolveEffectiveAiBudget(orgA, task-x) 只返回 org-A policy",
+        "org-B 同名 task-x 不影响 org-A",
+        "platform-only refs 仍可正常读取 PLATFORM policy",
+        "原 24/24 PG + 全量 regression 继续绿"
+      ],
+      "non_blocking_note": "非 PLATFORM policy 缺 tenant 时旧实现是 continue（ignore/fail-open 语义），FINAL-4 已统一为 fail-closed。",
+      "c2_final4_required": "YES",
+      "c3_authorized": "NO",
+      "archive": "AI-ARCHITECT-INBOX.md#MSG-20261005-36"
+    },
+    "c2_final4_verdict": {
+      "message_id": "MSG-20261005-37",
+      "verdict": "PASS / CLOSED",
+      "reviewed_head": "f5e4cc2c",
+      "pass": [
+        "CHANGE_A_TENANT_SCOPED_REFS_REQUIRE_ORGANIZATION_ID_FAIL_CLOSED",
+        "CHANGE_B_RESOLVE_EFFECTIVE_AI_BUDGET_TENANT_SAFE",
+        "PLATFORM_ONLY_PATH_STILL_OK",
+        "ORGANIZATION_ONLY_PATH_STILL_OK",
+        "ACCOUNT_INCIDENT_TASK_CANNOT_DOWNGRADE_BYPASS_TENANT_BUDGET",
+        "FINAL4_NO_SCHEMA_CHANGE_WITHIN_AUTHORIZATION"
+      ],
+      "frozen": [
+        "durable append-only AiCostLedgerEntry",
+        "durable AiBudgetPolicy",
+        "no AiBudgetUsage second source of truth",
+        "usage aggregated from ledger only",
+        "costMicros integer",
+        "tenant-safe hierarchical policy",
+        "PLATFORM → ORGANIZATION → ACCOUNT → INCIDENT/TASK",
+        "per-incident true current-incident accounting",
+        "canonical hierarchical PG locks",
+        "duplicate callId idempotency",
+        "budget race protection",
+        "token limit enforcement",
+        "strong-call limit enforcement",
+        "tenant-safe resolveEffectiveAiBudget()",
+        "AiModelCacheEntry identity isolation + TTL/GC"
+      ],
+      "c2_implementation": "PASS / CLOSED",
+      "c2_final5_required": "NO",
+      "c3_authorized": "YES",
+      "non_blocking": [
+        "CONCURRENCY_LIMIT_ENFORCEMENT 保持 NOT_YET_WIRED → C3（允许，不影响 C2 CLOSED）",
+        "C3 runtime wiring 仅限现有 SI 成本控制内部链路 + local simulation adapter，不等于 STEP_3_RUNTIME_POLICY_WIRING，不授权第二 runtime / 真实 provider 网络 / 生产开闸"
+      ],
+      "c3_risks": [
+        "concurrency enforcement 必须与 durable budget policy 一致（不能仅进程内计数导致多实例失效）",
+        "Cost Safe Mode 不得阻断 LEVEL_0_RULE / health / critical alert",
+        "cache runtime hit 不能绕过 Necessity Gate、budget 或 quality safety",
+        "observability 必须是 ledger/cache/policy 的只读投影，不得产生第二事实源"
+      ],
+      "c3_scope": [
+        "cache runtime wiring（接入唯一 rsi-model-router；tenant-safe identity；stale/ruleVersion/schema/tenant 不符 = MISS；cache hit 不产生假 provider ledger entry）",
+        "business-value cost policy（deterministic-first 不变；caller 不得自行提高模型等级/预算；不引入第二 policy engine）",
+        "Cost Safe Mode（budget exhausted 停止普通 AI 调用；L0/health/critical alert 继续；无 retry storm）",
+        "concurrencyLimit enforcement（多进程/多实例语义；PG advisory lock / durable lease 复用；真实 PG concurrency regression）",
+        "admin read-only observability（cost by tenant/account/incident/task、tokens、strong calls、cache hit/miss、budget remaining、safe-mode；不得新建 usage truth table）",
+        "NOT_YET_MEASURABLE 指标处理（无真实模型流量 → NOT_YET_MEASURABLE，禁止伪造生产指标）"
+      ],
+      "archive": "AI-ARCHITECT-INBOX.md#MSG-20261005-37"
+    },
+    "c2_verdict_archives": [
+      "MSG-20261005-35",
+      "MSG-20261005-36",
+      "MSG-20261005-37"
+    ],
+    "c2_archive_note": "MSG-20261005-35 / -36 为上一执行窗口已消费但未落库的裁决，本窗口按逐字归档补齐；三条均 compare.mjs = FULL_COPY_OK。"
   },
   "si_rsi_unification": {
     "status": "PASS_CLOSED",

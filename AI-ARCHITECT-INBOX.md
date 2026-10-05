@@ -145311,3 +145311,546 @@ STEP_3_RUNTIME_POLICY_WIRING = NOT_AUTHORIZED
 
 所以当前结论：C2 主体设计是对的，但父级预算的真实 enforce/race 语义还需 FINAL-2 收口，暂不进入 C3。
 ```
+
+### [MSG-20261005-35] SI-COST-OPTIMIZATION C2 FINAL-2 — VERDICT = **PASS WITH REVISE**（CHANGE A scope-correct usage = 部分 PASS 仍有 incident 维度缺口；CHANGE B canonical hierarchical locks = PASS；CHANGE C invariants + idempotency = PASS；`C2_FINAL3_REQUIRED = YES`；C3 暂不授权）
+
+```text
+DECISION
+
+VERDICT = PASS WITH REVISE
+
+我复核了 REVIEWED_HEAD = 1448f9db，以及 1448f9db → 42436281。后者确实只有 docs / 状态 / 送审簿记，没有新的业务代码变化。
+
+本轮：
+
+CHANGE A scope-correct usage：部分 PASS，仍有 1 个语义缺口
+CHANGE B canonical hierarchical locks：PASS
+CHANGE C invariants + idempotency：PASS
+Platform / Organization / Account 跨子作用域 race：PASS
+token / strong-call enforcement：PASS
+DB CHECK：PASS
+
+但还有两个与 Acceptance 直接相关的窄问题。
+
+C2_IMPLEMENTATION = NOT_YET_CLOSED
+C2_FINAL3_REQUIRED = YES
+C3 = NOT YET AUTHORIZED
+
+KEEP
+
+以下全部保留：
+
+caller scopeKey 已删除
+canonical lock 顺序：
+platform → org → account → incident → task
+不同 incident 共享 org lock
+不同 org 共享 platform lock
+每层 policy 独立聚合 daily/monthly/token/strong
+duplicate-before-budget-check
+negative cost/token/attempt fail-closed
+DB CHECK
+ledger append-only
+usage 无第二事实源
+cache 与 C2 Schema 不需要再动。
+CHANGE
+CHANGE A — perIncidentLimitMicros 必须按当前 Incident 聚合
+
+当前代码针对每个 policy 构造 scopeWhere 后：
+
+perIncidentLimitMicros
+对比的是：
+
+该 policy scope 的 lifetime cost
+
+例如 ORGANIZATION policy：
+
+perIncidentLimitMicros = 100
+
+现在实际变成近似：
+
+整个 organization 历史累计 AI 成本不能超过 100。
+
+这不是 “per incident”。
+
+设计原文明确要求 usage 从 ledger 按：
+
+日 / 月 / incident 维度
+
+聚合。
+
+正确语义应是：
+
+父级 policy 的 perIncidentLimitMicros 是继承给当前 incident 的上限。
+
+例如：
+
+org policy perIncident = 1000
+incident-A 已花 900
+incident-B 已花 900
+
+两者都可以；
+incident-A 再花 200 才应被拒。
+
+建议：
+
+perIncidentUsage = current incident ledger usage
+
+且保持 tenant/account identity 正确。
+
+若当前调用本身没有 incidentId，应明确该字段 NOT_APPLICABLE，不能拿 org/platform lifetime 代替 incident usage。
+
+CHANGE B — 非 PLATFORM policy 必须绑定 tenant
+
+我进一步核了现有 tenant trigger 实现：
+
+crossclaim_assert_tenant_integrity()
+
+只有在 trigger 传入 (fk_column, ref_table) 参数时才验证引用对象租户。
+
+C2 三张新表的 tenant trigger 没有传任何引用参数。
+
+同时当前 Budget policy 查询只按：
+
+scope + scopeRef
+
+查找 ACCOUNT / INCIDENT / TASK policy，没有同时约束其 organizationId。
+
+因此理论上可形成：
+
+organizationId = org-A
++
+scope = TASK
++
+scopeRef = task-B
+
+然后 org-B 的 task-B 调用也可能命中这个 policy。
+
+这与：
+
+tenant budget isolation
+
+不完全成立。
+
+最小修订要求：
+
+所有非 PLATFORM policy lookup 必须同时验证/绑定 organizationId
+ACCOUNT / INCIDENT / TASK usage aggregation 也必须带 tenant identity，而不是只靠裸 accountId / incidentId / taskId
+增 PG regression：同 scopeRef 或恶意错绑情况下不能跨 tenant 应用/聚合。
+
+实现可以用 service 校验、DB constraint/trigger 或 owner-key 设计；不强制某一种，但必须 fail-closed。
+
+RISKS
+
+目前最大的两个剩余风险都是预算误判，不是烧钱失控：
+
+perIncidentLimit 可能错误变成父 scope lifetime limit，导致正常任务永久被拒；
+子级 Budget policy / usage 缺 tenant binding，可能发生跨租户预算污染或拒绝服务。
+
+canonical locking 本身已经正确，不需要 FINAL-3 再重做。
+
+另外 platform:* 当前每次都锁，会牺牲并发性能，但属于 安全的过度串行化，不阻断 C2 CLOSED。
+
+TEST
+
+FINAL-3 最小增加：
+
+Org perIncidentLimit=1000：
+inc-A=900
+inc-B=900
+两者都 PASS
+inc-A 再 +200 → AI_BUDGET_INCIDENT_EXCEEDED
+Platform perIncidentLimit 同样按各 incident 独立统计
+ACCOUNT parent policy 的 per-incident cap 也只计算当前 incident
+org-A 创建的 ACCOUNT/INCIDENT/TASK policy 不得应用到 org-B
+同名/同值 scopeRef 在不同 tenant 下不得串 usage
+跨租户 ledger rows 不得被 ACCOUNT/INCIDENT/TASK policy 聚合到一起
+原 18/18 PG + 全量回归继续全绿。
+
+不要求修改 cache，不要求真实模型网络。
+
+NEXT
+
+仅授权：
+
+C2 FINAL-3 narrow revision
+
+范围严格为：
+
+A. perIncidentLimitMicros incident-dimensional accounting
+B. Budget policy / usage tenant binding
+
+如果这两项通过：
+
+C2 = PASS / CLOSED
+C2_FINAL4_REQUIRED = NO
+
+之后授权 C3：
+
+cache runtime wiring
+business-value cost policy
+Cost Safe Mode
+concurrencyLimit enforcement
+admin read-only observability
+NOT_YET_MEASURABLE metrics。
+PRODUCTION
+
+继续保持：
+
+REAL_MODEL_NETWORK = HOLD
+PAID_MODEL_CALLS = HOLD
+EXTERNAL_WRITE = HOLD
+PAYMENT = HOLD
+TRANSPORT = HOLD
+PRODUCTION_CREDENTIALS = HOLD
+PRODUCTION_ENABLEMENT = HOLD
+
+P2_F = HOLD
+P2_G = HOLD
+
+RUNTIME_WIRING = NONE
+STEP_3_RUNTIME_POLICY_WIRING = NOT_AUTHORIZED
+
+结论：FINAL-2 已解决父级 race 与 caller lock bypass；现在只需收口 incident 维度和 tenant binding 两个窄问题。
+```
+
+
+### [MSG-20261005-36] SI-COST-OPTIMIZATION C2 FINAL-3 — VERDICT = **PASS WITH REVISE**（CHANGE A perIncident incident-dimensional accounting = PASS；CHANGE B policy tenant identity = PASS；剩 2 处 tenant identity 入口未统一 fail-closed → `C2_FINAL4_REQUIRED = YES`；C3 暂不授权）
+
+```text
+DECISION
+
+VERDICT = PASS WITH REVISE
+
+对 REVIEWED_HEAD = 56b3207d 实码复核后：
+
+CHANGE A — perIncident incident-dimensional accounting = PASS
+CHANGE B — policy tenant identity / unique key / scoped aggregation = PASS
+56b3207d → dd90c4a0：仅 docs / 状态 / 送审簿记，PASS
+
+但 tenant 绑定还有 2 个很窄的残留旁路。
+
+因此：
+
+C2_IMPLEMENTATION = NOT_YET_CLOSED
+C2_FINAL4_REQUIRED = YES
+C3 = NOT YET AUTHORIZED
+
+KEEP
+
+以下全部保留：
+
+perIncidentLimitMicros 现在按当前 incidentId 聚合
+无 incidentId → perIncident NOT_APPLICABLE
+PLATFORM / ORG / ACCOUNT 父级 perIncident cap 均作用于当前 incident
+policy unique identity：
+scope + scopeRef + organizationId
+PLATFORM 使用 organizationId=''
+非 PLATFORM policy DB CHECK
+ACCOUNT / INCIDENT / TASK usage 带 organizationId
+canonical hierarchical locks
+ledger / cache / DB CHECK / duplicate handling 全部保持。
+CHANGE
+CHANGE A — tenant-scoped refs 缺 organizationId 必须 fail-closed
+
+当前 runGuardedAiCostWrite() 仍允许类似：
+
+accountId != null
+或
+incidentId != null
+或
+taskId != null
+
+但：
+
+organizationId = null
+
+此时非 PLATFORM policies 根本不会进入查询，最终只检查 platform budget。
+
+这实际上可以把 tenant-scoped 调用降成 platform-only 路径，绕过：
+
+organization budget
+account budget
+incident budget
+task budget
+
+最小修订：
+
+若存在任一：
+
+accountId || incidentId || taskId
+
+则必须：
+
+organizationId 非空，否则：
+
+AI_BUDGET_TENANT_IDENTITY_REQUIRED
+
+并且 provider / ledger write 均不得继续。
+
+Platform-only task 只能是：
+
+organizationId/accountId/incidentId/taskId 都为空，或另有显式 platform identity。
+
+CHANGE B — resolveEffectiveAiBudget() 也必须 tenant-safe
+
+当前这个 exported helper 仍然：
+
+按：
+
+scope + scopeRef
+
+查找 policy，
+
+没有对 ACCOUNT / INCIDENT / TASK 同时加入：
+
+organizationId = refs.organizationId
+
+所以同 scopeRef 跨 tenant 时，它仍可能读取另一个 tenant 的 policy。
+
+虽然 runGuardedAiCostWrite() 已经改成 tenant-safe 查询，但这个 helper 仍是潜在旁路，尤其 C3 很可能复用它做 Cost Safe Mode / observability。
+
+最小修法二选一：
+
+把 resolveEffectiveAiBudget() 改成与 guarded path 相同的 tenant-aware lookup；推荐
+或将它降为内部/private，不允许 C3/runtime 使用。
+
+并要求：
+
+非 PLATFORM refs 缺 org → fail-closed。
+
+RISKS
+
+现在剩余风险不是当前 race，而是未来 C3/runtime 很容易错误复用这个未 tenant-safe 的 helper。
+
+最危险场景：
+
+task-x 在 org-A 有 100 限额
+org-B 同样有 task-x
+
+tenant-safe guarded path 没问题，但旧 resolveEffectiveAiBudget() 可能同时读到两边 policy。
+
+所以应该在 C2 关闭前把所有公开 budget resolution 语义统一。
+
+另有一个注释问题：
+
+非 PLATFORM policy 若未绑定 tenant → fail-closed 不应用
+
+代码实际是 continue，这是 ignore / fail-open，不是 fail-closed。
+
+迁移后的合法 DB 状态下通常遇不到，但建议一起修正语义或直接移除该不可达分支。
+
+TEST
+
+FINAL-4 最小新增：
+
+organizationId=null + taskId=x → AI_BUDGET_TENANT_IDENTITY_REQUIRED
+organizationId=null + incidentId=x → fail-closed
+organizationId=null + accountId=x → fail-closed
+上述拒绝均不写 ledger
+resolveEffectiveAiBudget(orgA, task-x) 只返回 org-A policy
+org-B 同名 task-x 不影响 org-A
+platform-only refs 仍可正常读取 PLATFORM policy
+原 24/24 PG + 全量 regression 继续绿。
+
+不需要新增 Schema；现有 migration 可保持。
+
+NEXT
+
+仅授权：
+
+C2 FINAL-4 narrow revision
+
+范围只有：
+
+1. tenant-scoped refs require organizationId
+2. resolveEffectiveAiBudget() tenant-safe / eliminate public bypass
+
+通过后：
+
+C2 = PASS / CLOSED
+C2_FINAL5_REQUIRED = NO
+
+然后授权 C3：
+
+cache runtime wiring
+business-value cost policy
+Cost Safe Mode
+concurrencyLimit enforcement
+admin read-only observability
+NOT_YET_MEASURABLE metrics。
+PRODUCTION
+
+继续：
+
+REAL_MODEL_NETWORK = HOLD
+PAID_MODEL_CALLS = HOLD
+EXTERNAL_WRITE = HOLD
+PAYMENT = HOLD
+TRANSPORT = HOLD
+PRODUCTION_CREDENTIALS = HOLD
+PRODUCTION_ENABLEMENT = HOLD
+
+P2_F = HOLD
+P2_G = HOLD
+RUNTIME_WIRING = NONE
+STEP_3_RUNTIME_POLICY_WIRING = NOT_AUTHORIZED
+
+结论：FINAL-3 的 incident 与 tenant 聚合主体已经正确；只剩两个 tenant identity 入口必须统一 fail-closed，收完即可关闭 C2。
+```
+
+
+### [MSG-20261005-37] SI-COST-OPTIMIZATION C2 FINAL-4 — VERDICT = **PASS / CLOSED**（CHANGE A tenant-scoped refs 缺 organizationId fail-closed = PASS；CHANGE B resolveEffectiveAiBudget tenant-safe = PASS；`C2_IMPLEMENTATION = PASS / CLOSED`；`C2_FINAL5_REQUIRED = NO`；C3 IMPLEMENTATION = AUTHORIZED；`CONCURRENCY_LIMIT_ENFORCEMENT = NOT_YET_WIRED` → C3）
+
+```text
+DECISION
+
+VERDICT = PASS / CLOSED
+
+对 REVIEWED_HEAD = f5e4cc2c 实码复核后：
+
+CHANGE A — tenant-scoped refs 缺 organizationId fail-closed = PASS
+CHANGE B — resolveEffectiveAiBudget() tenant-safe = PASS
+platform-only 路径仍正常
+organization-only 路径仍正常
+ACCOUNT / INCIDENT / TASK 不再能降级绕过 tenant budget
+f5e4cc2c → b496d34a 仅 docs / 状态 / 送审簿记
+
+因此：
+
+C2_IMPLEMENTATION = PASS / CLOSED
+C2_FINAL5_REQUIRED = NO
+
+KEEP
+
+正式冻结 C2：
+
+durable append-only AiCostLedgerEntry
+durable AiBudgetPolicy
+无 AiBudgetUsage 第二事实源
+usage 只由 ledger 聚合
+costMicros integer
+tenant-safe hierarchical policy
+PLATFORM → ORGANIZATION → ACCOUNT → INCIDENT/TASK
+per-incident 真正按当前 incident
+canonical hierarchical PG locks
+duplicate callId 幂等
+budget race protection
+token limit enforcement
+strong-call limit enforcement
+tenant-safe resolveEffectiveAiBudget()
+AiModelCacheEntry identity isolation + TTL/GC。
+CHANGE
+
+无 C2 阻断性 CHANGE。
+
+C2 可以结束。
+
+CONCURRENCY_LIMIT_ENFORCEMENT 保持你当前标注：
+
+NOT_YET_WIRED → C3
+
+这是允许的，不影响 C2 CLOSED。
+
+RISKS
+
+C3 主要关注四项：
+
+concurrency enforcement 必须与 durable budget policy 一致，不能靠仅进程内计数导致多实例失效；
+Cost Safe Mode 不得阻断 LEVEL_0_RULE / health / critical alert；
+cache runtime hit 不能绕过 Necessity Gate、budget 或 quality safety；
+observability 必须是 ledger/cache/policy 的只读投影，不得产生第二事实源。
+TEST
+
+接受当前证据：
+
+C2 PG：27/27 PASS
+tsc --noEmit = 0
+migrations up to date
+rsi-* + architecture-contract：47 files / 394 PASS
+FINAL-4 无 Schema 变更符合授权范围。
+
+C2 acceptance = SATISFIED。
+
+NEXT
+C3 IMPLEMENTATION = AUTHORIZED
+
+授权范围：
+
+1. Cache runtime wiring
+
+接入现有唯一 rsi-model-router
+cache lookup 必须在 tenant-safe identity 下
+stale / wrong ruleVersion / wrong schema / wrong tenant = MISS
+cache hit 不得产生假的 provider ledger entry
+cache miss 后才进入正常 Necessity / model path。
+
+2. Business-value cost policy
+
+deterministic-first 不变
+成本与业务价值/风险等级结合
+caller 不得自己提高模型等级或预算
+不引入第二 policy engine。
+
+3. Cost Safe Mode
+
+budget exhausted 后停止普通 AI 调用
+LEVEL_0_RULE 继续
+health check 继续
+critical alert 继续
+不产生 retry storm。
+
+4. concurrencyLimit enforcement
+
+必须支持多进程/多实例语义
+不接受仅本机内存 counter 作为最终 enforcement
+PostgreSQL advisory lock / durable lease 等现有机制优先复用
+要有真实 PG concurrency regression。
+
+5. Admin observability
+只读展示：
+
+cost by tenant / account / incident / task
+tokens
+strong calls
+cache hit/miss
+budget remaining / exhausted
+safe-mode state
+
+不得创建新的 usage truth table。
+
+6. Metrics
+没有真实模型流量时：
+
+NOT_YET_MEASURABLE
+
+禁止制造诸如“节省 90% token”之类的模拟生产指标。
+
+完成后送：
+
+SI-COST-OPTIMIZATION C3 Implementation Audit
+
+PRODUCTION
+
+继续冻结：
+
+REAL_MODEL_NETWORK = HOLD
+PAID_MODEL_CALLS = HOLD
+EXTERNAL_WRITE = HOLD
+PAYMENT = HOLD
+TRANSPORT = HOLD
+PRODUCTION_CREDENTIALS = HOLD
+PRODUCTION_ENABLEMENT = HOLD
+
+P2_F = HOLD
+P2_G = HOLD
+
+这里授权的 C3 runtime wiring 仅限现有 SI 成本控制内部链路 + local simulation adapter。
+
+它不等于：
+
+STEP_3_RUNTIME_POLICY_WIRING
+
+也不授权第二 runtime、真实 provider 网络或生产开闸。
+
+结论：C2 正式关闭，可以立即进入 C3。
+```
