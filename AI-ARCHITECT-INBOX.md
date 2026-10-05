@@ -152491,3 +152491,288 @@ PRODUCTION_READY = false
 这次已经从“错误绑定 outcome”进步到了 outcome-independent cohort，但还差最后一层：必须证明两份 evaluation 真的是 CohortRef 那一批输入，而不是仅仅记录数量相同。
 ```
 
+### [MSG-20261005-79] PHASE 5 U4 FINAL3 设计澄清裁决 = 选 C（不重开 Phase 4、不让 Canary 变成新 runner；新增 VerifiedCohortRun 作为「exact input set ↔ Phase 4 evaluation」的可信桥接层）， reviewed ref n/a（设计裁决，非代码裁决）
+
+```text
+思考了 49s
+ChatGPT 说：
+DECISION
+
+授权 C。
+
+不选 A，不直接选 B。
+
+采用最小口径：
+
+C = VerifiedCohortRun wrapper / server-owned run-source binding
+
+目标是：
+
+Phase 4 保持 CLOSED，不修改其 artifact/schema。
+Canary 不升级成第二个执行器/runner。
+继续直接复用 evaluateVerifiedLearningRecords()。
+在 Phase 5 U4 增加一层，证明“这份 Phase 4 evaluation 确实来自 CohortRef 指定的 exact inputs”。
+
+PHASE5_U4_FINAL3_AUTHORIZED = YES
+
+KEEP
+
+Phase 4：
+
+纯文本
+evaluateVerifiedLearningRecords(
+  trustedLineageLedger,
+  OutcomeRecord[],
+  datasetVersion
+)
+→ Verified OfflineEvaluation
+
+完全不改。
+
+当前 CohortRef 也保留，但建议增加：
+
+纯文本
+inputSetDigest
+
+其中：
+
+纯文本
+inputSetDigest = hash(sorted unique taskRefs)
+
+而：
+
+纯文本
+cohortRefDigest =
+hash(
+  cohortId
+  + datasetVersion
+  + evaluationWindow
+  + inputSetDigest
+)
+
+这样 input identity 与 cohort metadata 分层更清楚。
+
+CHANGE
+
+新增 Canary 专用可信 artifact：
+
+VerifiedCohortRun
+
+建议不要让 caller 直接传：
+
+纯文本
+taskRefs + OutcomeRecords
+
+否则仍可能把 A 的 refs 配到 B 的 records。
+
+应该通过 server-owned read/composition port 构造：
+
+纯文本
+CohortRunSourcePort.read({
+  cohortRef,
+  mode: BASELINE | PROPOSAL_SHADOW
+})
+→ [{ taskRef, outcomeRecord }]
+
+然后：
+
+纯文本
+createVerifiedCohortRun(
+  trustedRunSource,
+  trustedLineageLedger,
+  verifiedCohortRef,
+  mode
+)
+
+内部必须：
+
+isVerifiedCohortRef(ref) === true
+从 server-owned source 按 CohortRef 读取 run members。
+返回的 taskRef：
+non-empty
+unique
+sorted 后 逐项等于 cohortRef.taskRefs
+missing / extra / substituted member 全部 fail-closed。
+datasetVersion/window 与 CohortRef 一致。
+从这些实际返回的 outcomeRecord[] 内部调用：
+纯文本
+evaluateVerifiedLearningRecords(...)
+得到 Phase 4 verified evaluation。
+生成不可伪造：
+纯文本
+VERIFIED_COHORT_RUN
+
+至少绑定：
+
+mode
+cohortRefDigest
+inputSetDigest
+taskRefs
+datasetVersion
+evaluationWindow
+evaluationDigest
+totalRecords
+runDigest
+
+并做：
+
+WeakSet + WeakMap fingerprint + deep-freeze
+
+Canary 入口随之改成
+
+不要再直接接：
+
+纯文本
+baselineEvaluation
+proposalEvaluation
+
+改成：
+
+纯文本
+evaluateCanaryShadow({
+  proposal,
+  rollbackPlan,
+  baselineRun: VerifiedCohortRun,
+  proposalRun: VerifiedCohortRun
+})
+
+必须检查：
+
+纯文本
+baselineRun.mode === BASELINE
+proposalRun.mode === PROPOSAL_SHADOW
+
+baselineRun.cohortRefDigest
+=== proposalRun.cohortRefDigest
+
+baselineRun.inputSetDigest
+=== proposalRun.inputSetDigest
+
+baselineRun.taskRefs
+=== proposalRun.taskRefs
+
+但：
+
+纯文本
+baselineRun.evaluationDigest
+!== proposalRun.evaluationDigest
+
+完全允许。
+
+这正是 Canary 要检测的东西。
+
+RISKS
+为什么不选 A
+
+A 会重新修改已 CLOSED 的 Phase 4 artifact。
+
+虽然技术上能做，但没有必要扩大 blast radius，而且会导致 U2/U3/U4 已经依赖的 Phase 4 identity 全面重审。
+
+为什么不直接选 B
+
+B 如果让 canary-shadow-evaluation.ts 自己负责：
+
+跑 baseline overlay
+跑 proposal overlay
+生产 OutcomeRecords
+再做 evaluation
+
+那 U4 就从“比较层”变成“执行/编排层”。
+
+容易重新引入：
+
+SECOND_RUNTIME / SECOND_POLICY_ENGINE / 第二套 runner
+
+风险。
+
+C 可以借用 B 的“内部调用 Phase 4 evaluator”思路，但把实际 run 输出读取隔离到 server-owned read port。
+
+因此职责仍然清楚：
+
+纯文本
+existing runtime/shadow execution
+→ run output store/read port
+→ VerifiedCohortRun
+→ Phase4 evaluation
+→ Canary compare
+TEST
+
+FINAL3 必须至少覆盖：
+
+CohortRef = [A,B,C,D]。
+Baseline source 返回 [A,B,C,D] → PASS。
+Proposal source 返回 [A,B,C,D]，但 outcome 可不同 → PASS。
+[A,B,C,X]，数量仍为 4 → REJECT。
+[E,F,G,H]，数量仍为 4 → REJECT。
+missing D → REJECT。
+extra E → REJECT。
+[D,C,B,A] → canonicalize 后 PASS。
+duplicate taskRef → REJECT。
+caller 手造/clone VerifiedCohortRun → REJECT。
+baseline/proposal run 必须共享同一 cohortRefDigest + inputSetDigest。
+baseline/proposal outcome 不同，successRate delta 正常可见。
+proposal regression → ROLLBACK_REQUIRED。
+Canary artifact新增并显式保存：
+baselineEvaluationDigest
+proposalEvaluationDigest
+Canary fingerprint 必须绑定两者。
+Canary evaluationDigest preimage 必须绑定两者。
+构造一个核心 Canary metrics 相同，但 Phase 4 evaluationDigest 不同的场景，例如只改变 Phase4 identity 中、Canary snapshot 未展开的字段；最终 Canary digest 必须变化。
+strict window / insufficient rollback / U2 anchor / no execution 原测试保持 green。
+NEXT
+
+FINAL3 成功后的最终链路应是：
+
+纯文本
+Verified CohortRef
+      │
+      ├────────── same exact input set ──────────┐
+      │                                          │
+Server-owned Baseline Run Source     Proposal Shadow Run Source
+      │                                          │
+VerifiedCohortRun(BASELINE)          VerifiedCohortRun(PROPOSAL_SHADOW)
+      │                                          │
+Phase4 Evaluation A                  Phase4 Evaluation B
+      │                                          │
+      └──────── Canary Compare ──────────────────┘
+                         │
+              CANARY_SHADOW_EVALUATION
+
+其中：
+
+纯文本
+same input identity
+different outcome/evaluation identity allowed
+
+这是 U4 最终正确语义。
+
+如果 FINAL3 完成上述条件：
+
+纯文本
+SAME_COHORT_PROOF = PASS
+CANARY_EVALUATION_DIGEST_FULL_BINDING = PASS
+PHASE_5_U4 = PASS / CLOSED
+PHASE5_U4_FINAL4_REQUIRED = NO
+
+然后才授权进入：
+
+P5-U5 Controlled Adoption Review
+
+PRODUCTION
+
+边界全部保持不变：
+
+REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing = HOLD
+
+SECOND_RUNTIME / SECOND_POLICY_ENGINE / SECOND_CONTROL_PLANE / SECOND_MODEL_GATEWAY / SECOND_COST_LEDGER / SECOND_META_EVIDENCE_STORE = FORBIDDEN
+
+L5_RELAXATION = FORBIDDEN
+
+MODEL_GATEWAY_RUNTIME_WIRED = false
+ACTION_RUNTIME_PRODUCTION_ENABLED = false
+META_IMPROVEMENT_INTEGRATED = false
+PRODUCTION_READY = false
+
+结论：选 C。不要重开 Phase 4，也不要让 Canary 变成新的 runner；新增 VerifiedCohortRun 作为“exact input set ↔ Phase4 evaluation”的可信桥接层。
+```
+
