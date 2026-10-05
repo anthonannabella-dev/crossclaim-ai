@@ -2088,3 +2088,10 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 拒付/证据链：`chargeback-recovery-chain` 8 例、`evidence-promotion` 6 例、`evidence-account-scope-db` 3 例（account provenance 服务端派生，
   缺上下文/未绑账户 → `PLATFORM_ACCOUNT_REQUIRED`，多账户或 NULL → fail-closed）与 BG-018 的独立站事实层证据一致。
 - 结论：BG-010 验收标准满足（事实可追溯、lineage 完整、零外调/零 submission、recovered/billable 不自证）；边界 `NO_DISPUTE_SUBMIT / NO_EXTERNAL_PSP` 保持。
+
+## 2026-10-05T04:15:36.902Z — Recovery SI Phase 1 实现与验收
+- 新增 apps/api/src/services/intelligence/ 七个模块（state / tool-registry / prioritizer / planner / verifier / policy / supervisor）。
+- 测试：recovery-si.test.ts 11 例 + recovery-si-e2e.test.ts 5 例 = **16/16 PASS**；tsc exit 0。
+- 跨域 E2E：Carrier/Amazon → PREPARE_PACKAGE + READY_FOR_EXECUTION；Customs → REQUEST_AUTHORIZATION；Independent → REQUEST_EVIDENCE；
+  零外写（工具调用计数 0）、计划确定性、陈旧 snapshot fail-closed、READY_FOR_EXECUTION 带 Action Guard 前置。
+- 未新增 Schema；未接运行时；未用 LLM 参与金额计算。
