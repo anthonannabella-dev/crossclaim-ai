@@ -2619,3 +2619,11 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 验证：tsc 0；C2 24/24；rsi-* + architecture-contract + C2 = 48 文件 / 418 例 PASS。
 - 送审：docs/releases/SI-COST-OPTIMIZATION-C2-FINAL3-REQUEST.md（REVIEWED_HEAD = 56b3207d）。
 
+
+## 2026-10-06T03:10Z — C2 FINAL-4 完成并送审（实现 HEAD = f5e4cc2c）+ HOST standing authorization 落盘
+- A：tenant-scoped refs（account/incident/task）缺 organizationId → AI_BUDGET_TENANT_IDENTITY_REQUIRED（fail-closed，零 provider / 零 ledger）；platform-only 仅四 refs 全空。
+- B：resolveEffectiveAiBudget 改为 tenant-safe（非 PLATFORM 必须命中同 organizationId；缺 org → fail-closed），与 guarded path 语义统一。
+- 验证：tsc 0；C2 27/27；rsi-* + architecture-contract = 47 文件 / 394 例 PASS。
+- HOST standing authorization 已写入 STATE：HOST_STANDING_CONTINUATION_AUTH=ACTIVE / AUTO_CONTINUE_AUTHORIZED_INTERNAL_WORK=true / ASK_HOST_BETWEEN_INTERNAL_UNITS=false / AUDIT_REVISE_LOOP_AUTO_CONTINUE=true / HOST_LIMIT_MEANS_STOP=false / STOP_ONLY_ON_TRUE_HOST_DEPENDENCY_OR_COMPLETE=true / CONTINUATION_REQUIRED=true。
+- 送审：docs/releases/SI-COST-OPTIMIZATION-C2-FINAL4-REQUEST.md（REVIEWED_HEAD = f5e4cc2c）。
+

@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-22",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-06T02:20:00.000Z",
+  "updated_at": "2026-10-06T03:10:00.000Z",
   "previous_head": "8064f07",
   "architect_decision_pending": true,
   "blocked_scope": null,
@@ -50,11 +50,11 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "ACTIVE",
-  "next_execution_unit": "C2 FINAL-3 裁决 → PASS/CLOSED 后进入 C3（cache runtime wiring + business-value policy + Cost Safe Mode + concurrencyLimit enforcement + admin 只读可观测 + NOT_YET_MEASURABLE）",
+  "next_execution_unit": "读取 C2 FINAL-4 裁决 → 归档（MSG-20261005-37）→ PASS/CLOSED 则进入 C3 IMPLEMENTATION（cache runtime wiring + business-value cost policy + Cost Safe Mode + concurrencyLimit enforcement + admin 只读可观测 + NOT_YET_MEASURABLE）；REVISE 则窄修再送",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-06T02:20:00.000Z",
+  "last_tick_at": "2026-10-06T03:10:00.000Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "C2 FINAL-3 完成并送审（56b3207d）：incident 维度 perIncident + tenant 绑定；tsc 0；C2 24/24；418 例回归 PASS",
+  "last_action": "C2 FINAL-4 完成并送审（f5e4cc2c）：tenant identity 入口统一 fail-closed + resolve helper tenant-safe；tsc 0；C2 27/27；394 例回归 PASS",
   "last_action_at": "2026-10-06T00:40:00.000Z",
   "next_action": "C2 IMPLEMENTATION（Schema Delta + durable ledger/budget + PG 回归）",
   "current_head": "054ab732",
@@ -5199,9 +5199,9 @@
   "awaiting_verdict": "EXACT-ORDER REPLAY 证据已送审（comment 5979262070）；shared/staging deploy 解禁待裁决",
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-05T12:37:44.217Z",
-    "head": "56b3207d",
-    "acceptance_head": "56b3207d",
+    "computed_at": "2026-10-05T12:46:13.638Z",
+    "head": "f5e4cc2c",
+    "acceptance_head": "f5e4cc2c",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5360,27 +5360,27 @@
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=56b3207d ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
+        "evidence": "acceptance_head=f5e4cc2c ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
       },
       "L1-05_pg_regression_passed": {
         "status": "UNVERIFIED",
-        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head 56b3207d（且中间存在非簿记变更）"
+        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head f5e4cc2c（且中间存在非簿记变更）"
       },
       "L1-06_fresh_db_migration_passed": {
         "status": "UNVERIFIED",
-        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head 56b3207d（且中间存在非簿记变更）"
+        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head f5e4cc2c（且中间存在非簿记变更）"
       },
       "L1-07_api_typecheck_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head 56b3207d（且中间存在非簿记变更）"
+        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head f5e4cc2c（且中间存在非簿记变更）"
       },
       "L1-08_web_typecheck_build_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head 56b3207d（且中间存在非簿记变更）"
+        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head f5e4cc2c（且中间存在非簿记变更）"
       },
       "L1-09_no_skipped_critical_tests": {
         "status": "UNVERIFIED",
-        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head 56b3207d（且中间存在非簿记变更）"
+        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head f5e4cc2c（且中间存在非簿记变更）"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
@@ -5389,19 +5389,19 @@
       },
       "L1-11_docs_state_consistent": {
         "status": "UNVERIFIED",
-        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head 56b3207d（且中间存在非簿记变更）"
+        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head f5e4cc2c（且中间存在非簿记变更）"
       },
       "L1-12_schema_invariants_verified": {
         "status": "UNVERIFIED",
-        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head 56b3207d（且中间存在非簿记变更）"
+        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head f5e4cc2c（且中间存在非簿记变更）"
       },
       "L1-13_negative_paths_covered": {
         "status": "UNVERIFIED",
-        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head 56b3207d（且中间存在非簿记变更）"
+        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head f5e4cc2c（且中间存在非簿记变更）"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
         "status": "UNVERIFIED",
-        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head 56b3207d（且中间存在非簿记变更）"
+        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head f5e4cc2c（且中间存在非簿记变更）"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
@@ -8851,7 +8851,7 @@
     "invariant": "ACTION_GUARD_DRY_RUN_ALLOW != EXECUTION_AUTHORIZATION；零审批消费 / 零 executor / 零业务事实写入 / 零外写；L5 永久拒绝"
   },
   "si_cost_optimization": {
-    "status": "C2_FINAL3_SUBMITTED_PENDING_VERDICT",
+    "status": "C2_FINAL4_SUBMITTED_PENDING_VERDICT",
     "priority": "P1",
     "dependency": "SI_RSI_UNIFICATION_PASS_CLOSED",
     "registered_at": "2026-10-05T12:45:00.000Z",
@@ -9060,6 +9060,15 @@
         "B policy 身份含 tenant + usage 带 organizationId 约束 + DB CHECK"
       ],
       "tests": "tsc 0；C2 24/24；48 文件 / 418 例"
+    },
+    "c2_final4": {
+      "implementation_head": "f5e4cc2c",
+      "request": "docs/releases/SI-COST-OPTIMIZATION-C2-FINAL4-REQUEST.md",
+      "changes": [
+        "A tenant-scoped refs 缺 org → fail-closed（AI_BUDGET_TENANT_IDENTITY_REQUIRED）",
+        "B resolveEffectiveAiBudget tenant-safe + 非 PLATFORM 缺 org fail-closed"
+      ],
+      "tests": "tsc 0；C2 27/27；rsi-* + architecture-contract 47 文件 / 394 例"
     }
   },
   "si_rsi_unification": {
@@ -9104,5 +9113,12 @@
       "final2_required": "NO",
       "archive": "AI-ARCHITECT-INBOX.md#MSG-20261005-29"
     }
-  }
+  },
+  "HOST_STANDING_CONTINUATION_AUTH": "ACTIVE",
+  "AUTO_CONTINUE_AUTHORIZED_INTERNAL_WORK": true,
+  "ASK_HOST_BETWEEN_INTERNAL_UNITS": false,
+  "AUDIT_REVISE_LOOP_AUTO_CONTINUE": true,
+  "HOST_LIMIT_MEANS_STOP": false,
+  "STOP_ONLY_ON_TRUE_HOST_DEPENDENCY_OR_COMPLETE": true,
+  "CONTINUATION_REQUIRED": true
 }
