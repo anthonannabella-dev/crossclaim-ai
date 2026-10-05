@@ -15,7 +15,13 @@ import {
   isVerifiedControlledConfigProposal,
   type ControlledConfigProposal,
 } from './controlled-config-proposal';
-import { isVerifiedOfflineEvaluation, type OfflineEvaluationResult } from './offline-evaluation';
+import {
+  evaluateVerifiedLearningRecords,
+  isVerifiedOfflineEvaluation,
+  type OfflineEvaluationResult,
+} from './offline-evaluation';
+import type { OutcomeLineageLedgerPort } from './outcome-lineage';
+import type { OutcomeRecord } from './outcome-record';
 import { isVerifiedRollbackPlan, type RollbackPlan } from './rollback-plan';
 
 export const CANARY_SHADOW_VERSION = 'canary-shadow-evaluation/v1';
@@ -210,18 +216,41 @@ export function isVerifiedCohortRun(run: VerifiedCohortRun | null | undefined): 
 }
 
 /** member-level 桥接：绑定可信输入集与「该侧」Phase 4 evaluation 的身份。 */
-export function createVerifiedCohortRun(
+/** server-owned run source：按 cohortRef+side 提供**实际**输入成员（taskRef + outcomeRecord）。 */
+export interface CohortRunSourcePort {
+  read(input: { cohortRef: CohortRef; side: 'BASELINE' | 'PROPOSAL' }): Promise<
+    readonly { taskRef: string; outcomeRecord: OutcomeRecord }[]
+  >;
+}
+
+export async function createVerifiedCohortRun(
+  runSource: CohortRunSourcePort | null | undefined,
+  lineageLedger: OutcomeLineageLedgerPort | null | undefined,
   cohortRef: CohortRef | null | undefined,
-  evaluation: OfflineEvaluationResult | null | undefined,
   side: 'BASELINE' | 'PROPOSAL',
-): VerifiedCohortRun {
+): Promise<VerifiedCohortRun> {
   if (!isVerifiedCohortRef(cohortRef)) throw new Error('CANARY_RUN_COHORT_REF_NOT_VERIFIED');
   const ref = cohortRef as CohortRef;
-  if (!isVerifiedOfflineEvaluation(evaluation)) throw new Error('CANARY_RUN_EVALUATION_NOT_VERIFIED');
-  const evaluationResult = evaluation as OfflineEvaluationResult;
   if (side !== 'BASELINE' && side !== 'PROPOSAL') throw new Error('CANARY_RUN_SIDE_INVALID');
-  if (ref.datasetVersion !== evaluationResult.datasetVersion) throw new Error('CANARY_RUN_DATASET_MISMATCH');
-  if (ref.cohortSize !== evaluationResult.totalRecords) throw new Error('CANARY_RUN_MEMBER_COUNT_MISMATCH');
+  if (runSource === null || runSource === undefined || typeof runSource.read !== 'function') {
+    throw new Error('CANARY_RUN_SOURCE_REQUIRED');
+  }
+  const members = await runSource.read({ cohortRef: ref, side });
+  if (!Array.isArray(members) || members.length === 0) throw new Error('CANARY_RUN_SOURCE_EMPTY');
+  const actualTaskRefs = members.map((m) => requireText(m?.taskRef)).sort();
+  if (actualTaskRefs.some((r) => r === '')) throw new Error('CANARY_RUN_SOURCE_MALFORMED');
+  if (new Set(actualTaskRefs).size !== actualTaskRefs.length) throw new Error('CANARY_RUN_INPUT_SET_DUPLICATE');
+  const expected = [...ref.taskRefs].sort();
+  if (actualTaskRefs.length !== expected.length || actualTaskRefs.some((r, i) => r !== expected[i])) {
+    throw new Error('CANARY_RUN_INPUT_SET_MISMATCH');
+  }
+  // 内部产出 Phase 4 evaluation（caller 不得把任意 evaluation 塞进 run）
+  const evaluationResult = await evaluateVerifiedLearningRecords(
+    lineageLedger,
+    members.map((m) => m.outcomeRecord),
+    { datasetVersion: ref.datasetVersion },
+  );
+  if (evaluationResult.totalRecords !== ref.cohortSize) throw new Error('CANARY_RUN_MEMBER_COUNT_MISMATCH');
   const runDigest = digest('cohort-run', [
     CANARY_SHADOW_VERSION,
     side,
@@ -237,7 +266,7 @@ export function createVerifiedCohortRun(
     runDigest,
     side,
     cohortRefDigest: ref.cohortRefDigest,
-    inputSetDigest: ref.cohortRefDigest,
+    inputSetDigest: digest('cohort-input-set', [ref.cohortRefDigest, actualTaskRefs.join('+')]),
     datasetVersion: ref.datasetVersion,
     evaluationWindow: { from: ref.evaluationWindow.from, to: ref.evaluationWindow.to },
     memberCount: ref.cohortSize,
@@ -425,7 +454,10 @@ export function evaluateCanaryShadow(input: {
   const baselineRun = input.baselineRun as VerifiedCohortRun;
   const proposalRun = input.proposalRun as VerifiedCohortRun;
   if (baselineRun.side !== 'BASELINE' || proposalRun.side !== 'PROPOSAL') throw new Error('CANARY_RUN_SIDE_MISMATCH');
-  if (baselineRun.inputSetDigest !== cohortRef.cohortRefDigest || proposalRun.inputSetDigest !== cohortRef.cohortRefDigest) {
+  if (baselineRun.cohortRefDigest !== cohortRef.cohortRefDigest || proposalRun.cohortRefDigest !== cohortRef.cohortRefDigest) {
+    throw new Error('CANARY_SAME_COHORT_REQUIRED');
+  }
+  if (baselineRun.inputSetDigest !== proposalRun.inputSetDigest) {
     throw new Error('CANARY_SAME_COHORT_REQUIRED');
   }
   if (baselineRun.memberCount !== baseline.totalRecords || proposalRun.memberCount !== proposed.totalRecords) {
