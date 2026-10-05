@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-40",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T21:36:37.820Z",
+  "updated_at": "2026-10-05T21:39:07.989Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -50,13 +50,13 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
-  "next_execution_unit": "PHASE 5 U4 Canary / Shadow Evaluation: read the frozen minimum requirements from the archived verdict MSG-20261005-75 (isolation mode, metric definitions, relation to the U4 offline evaluation, and when rollback to the U2 baseline is mandatory); implement code + tests + regression + tsc + commit + push -> audit -> archive -> durable state. Still forbidden: auto apply / promotion / rollout, Policy/Guard/Router/Action Runtime mutation, REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing = HOLD; SECOND_* = FORBIDDEN; L5_RELAXATION = FORBIDDEN.",
+  "next_execution_unit": "PHASE 5 U4 Canary/Shadow Evaluation: implement canary-shadow-evaluation.ts per frozen spec (shadow/canary contract reusing Phase 4 offline evaluation metrics via evaluateVerifiedLearningRecords; bindings 14 items incl. cohortDigest/evaluationWindow; recommendation tri-state; mandatory rollback triggers with rollback pinned to U2 baselineSnapshotDigest+baselineConfigFingerprint; provenance+fingerprint+deep-freeze; no apply/promote/rollout/mutate) -> tests -> regression -> tsc -> commit -> push -> audit -> archive -> durable state. Boundaries: REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing = HOLD; SECOND_* = FORBIDDEN; L5_RELAXATION = FORBIDDEN.",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-05T21:36:37.820Z",
+  "last_tick_at": "2026-10-05T21:39:07.989Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "PHASE 5 U3 FINAL2 verdict archived (MSG-20261005-75, FULL_COPY_OK, archive commit 9d69ffe5): TARGET_SPECIFIC_DELTA_VALUE_SCHEMA / PATH_ALLOWLIST / DELTA_BASELINE_VALUE_BINDING / PROPOSAL_DIGEST_BINDING = PASS; PHASE_5_U3 = PASS / CLOSED; PHASE5_U3_FINAL3_REQUIRED = NO. Authorized to enter P5-U4 Canary / Shadow Evaluation.",
-  "last_action_at": "2026-10-05T21:36:37.820Z",
-  "next_action": "Execute P5-U4 Canary / Shadow Evaluation per the auditor minimum requirements archived in MSG-20261005-75, then re-evaluate Controlled Adoption.",
+  "last_action": "PHASE 5 U4 frozen minimum requirements read from archived verdict MSG-20261005-75 (canary/shadow spec captured into durable state): shadow/canary only (baseline + proposal overlay dual-track; same cohort/datasetVersion/window; deterministic read-only inputs; external write = 0; payment = 0; real claim submission = 0; ACTION_RUNTIME simulate only; no production config mutation); core outcome metrics MUST reuse Phase 4 semantic (resolved denominator / successRate / failure(=non-success) / rejectedRate / unresolved share / human intervention / evidence quality) - no second metric definition; target-specific auxiliary metrics allowed only as additions; artifact CANARY_SHADOW_EVALUATION binding proposalDigest/verdictDigest/candidateDigest/rollbackPlanDigest/baselineSnapshotDigest/baselineConfigFingerprint/datasetVersion/cohortDigest/evaluationWindow/baselineMetrics/proposalMetrics/metricDeltas/recommendation/evaluationDigest with provenance+fingerprint+deep-freeze; recommendation only in {ELIGIBLE_FOR_CONTROLLED_ADOPTION_REVIEW, ROLLBACK_REQUIRED, INSUFFICIENT_EVIDENCE}; mandatory ROLLBACK_REQUIRED triggers (successRate drop, unresolved share rise, rejection/error degradation, guard/evidence safety degradation, latency/cost over budget, provenance mismatch, insufficient data, window mismatch, target hard safety breach) and rollback must point to U2 baselineSnapshotDigest + baselineConfigFingerprint (never LATEST/DEFAULT/CURRENT/HEAD); canary PASS still cannot deploy - Controlled Adoption Review required.",
+  "last_action_at": "2026-10-05T21:39:07.989Z",
+  "next_action": "Execute P5-U4 Canary / Shadow Evaluation per the frozen spec now recorded in STATE.json (and archived verbatim in MSG-20261005-75).",
   "current_head": "9a245254",
   "last_completed_head": "9a245254",
   "reviewed_head": "add99ec3",
@@ -5169,8 +5169,8 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "P5U4-1 read MSG-20261005-75 NEXT section for U4 minimum requirements; scaffold canary/shadow evaluation contract (isolation, metric denominator, rollback triggers tied to U2 baseline)",
-    "P5U4-2 U4 tests + regression + tsc + commit + push",
+    "P5U4-1 implement canary-shadow-evaluation.ts (shadow/canary only contract; reuse Phase 4 metrics; 14 bindings; tri-state recommendation; mandatory rollback triggers pinned to U2 baseline; provenance/fingerprint/deep-freeze; no execution entries)",
+    "P5U4-2 U4 tests (dual-track isolation/no-second-metric/tri-state/rollback trigger matrix/provenance/anti-tamper/no apply) + regression + tsc + commit + push",
     "P5U4-3 audit U4 -> archive (MSG-20261005-76) -> compare FULL_COPY_OK -> durable state",
     "P5U4-4 afterwards re-evaluate Controlled Adoption (audit authorization required)",
     "P5U4-5 non-blocking debt: full SHA-256 digests, fingerprint schema upkeep, scanRawPayloadKeys bounded traversal, P2E-DB5 test-isolation"
@@ -10673,5 +10673,29 @@
       "PHASE_5_U3 = PASS / CLOSED"
     ],
     "phase5_u3_final3_required": "NO"
+  },
+  "phase5_u4_spec_frozen": {
+    "source": "MSG-20261005-75 NEXT section",
+    "isolation": "baseline+proposal overlay dual-track, same cohort/datasetVersion/window, deterministic read-only, externalWrite=0, payment=0, realClaimSubmission=0, actionRuntime=simulate only, no production config mutation",
+    "metrics": "MUST reuse Phase 4 offline evaluation semantics (resolved denominator, successRate, failure/non-success, rejectedRate, unresolved share, human intervention, evidence quality) - no second metric system",
+    "artifact": "CANARY_SHADOW_EVALUATION with 14 bindings + provenance/fingerprint/deep-freeze",
+    "recommendation": [
+      "ELIGIBLE_FOR_CONTROLLED_ADOPTION_REVIEW",
+      "ROLLBACK_REQUIRED",
+      "INSUFFICIENT_EVIDENCE"
+    ],
+    "rollbackPins": [
+      "baselineSnapshotDigest",
+      "baselineConfigFingerprint"
+    ],
+    "forbidden": [
+      "AUTO_APPLY",
+      "AUTO_PROMOTE",
+      "AUTO_ROLLOUT",
+      "LATEST",
+      "DEFAULT",
+      "CURRENT",
+      "HEAD"
+    ]
   }
 }
