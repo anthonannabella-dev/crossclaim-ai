@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "2ed27f5a",
+  "head": "6cba0639",
   "status": "RECONCILED",
   "current_task": "RSI 生产可执行闭环（7 点收口）：RSI_RUNTIME_READY = PASS；MODEL_PROVIDER_READY = 本地仿真已接线（真实网络/付费 HOLD）；PERSISTENCE_READY = ephemeral 已验证、durable 需宿主非生产 DATABASE_URL；REBOOT_RECONCILE_READY = NOT_IMPLEMENTED（下一单元）；SYSTEMD_VALIDATED = 需宿主 Linux 实机",
   "next_task": "BG-016 单一 Acceptance Head + 四份状态一致 guard（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍 HOST_ACTION_REQUIRED 或 HOLD",
@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-40",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T17:57:01.308Z",
+  "updated_at": "2026-10-05T18:07:00.080Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -21,7 +21,7 @@
   "ci_result": "completed_success",
   "fix_pr": "https://github.com/anthonannabella-dev/crossclaim-ai/pull/10",
   "channel_status": "HEALTHY（主审计会话 = https://chatgpt.com/c/6ac385db-cb60-83ec-9754-c7a30633a8c5（HOST 新开；MSG-20261005-30 起）；历史会话 https://chatgpt.com/c/6ac1cdf0-1ec8-83ec-8036-0e66fcf5c6b9 保留 MSG-22..29 逐字归档）",
-  "pending_verdict_unarchived": null,
+  "pending_verdict_unarchived": "PHASE 3 FINAL（Reviewed HEAD 6cba0639）—— 已投递，等待裁决",
   "b2_status": "PASS（MSG-20260930-10 工程修复 + MSG-20260930-11 集成 PASS/MERGE APPROVED）",
   "protocol": "DUAL_CHANNEL_WAKEUP（GitHub = 正式总线 / ChatGPT Web = 仅唤醒）",
   "integration_pr": "https://github.com/anthonannabella-dev/crossclaim-ai/pull/11",
@@ -50,15 +50,15 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
-  "next_execution_unit": "PHASE 3 FINAL（窄修，勿扩范围）：(1) U1 —— mock/sandbox adapter 改 trusted provenance（factory/registry），Action Runtime 只认 provenance，非 trusted adapter 当前 phase invoke = 0；(2) U2 —— credential ref 增加 tenant/provider binding 校验（provider mismatch → PROVIDER_CREDENTIAL_PROVIDER_MISMATCH；organization mismatch → PROVIDER_CREDENTIAL_TENANT_MISMATCH），fail-closed；(3) U3 —— idempotencyKey 绑定 fingerprint（organizationId + providerName + action + payloadRef/payloadDigest），同 key 不同 fingerprint → IDEMPOTENCY_KEY_CONFLICT；ProviderIdempotencyStore 端口改 async（Promise），内存实现降级为 sandbox 实现；(4) U5/U6 —— Action Pack 真接共享 createAppActionGuard / RuntimeActionGuard + ActionGuardApprovalVerifier + approval target/payload binding，禁止 caller 直接以 guardDecision=ALLOW 绕过；(5) action-guard-enforcement 07 恢复 green（intelligence/** 增动作清单须审批覆盖 —— 只做窄修，不动 P2E DB）。链路：code → tests → regression → tsc → commit → push → PHASE 3 FINAL 送审 → 送达三检 → 逐字归档 → FULL_COPY_OK → durable state 对账。REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT 全部保持 HOLD。",
+  "next_execution_unit": "PHASE 3 FINAL 裁决处理：打开右侧审核会话（tab 14）读取完整 verdict（严格匹配 REVIEWED_HEAD = 6cba0639）→ 原样逐字归档到 AI-ARCHITECT-INBOX.md（MSG-20261005-52）→ node tools/verdict-diff/compare.mjs 必须 FULL_COPY_OK → durable state 对账。若裁决 PASS / CLOSED → 立即按 PHASE 4（OUTCOME / LEARNING DATA PIPELINE）启动 code → tests → regression → tsc → commit → push → audit → durable state；若 PASS WITH REVISE → 按裁决做窄修，不自行 CLOSED。P2E-DB5 属 test-isolation debt，不在 PHASE 3 范围。",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-05T17:57:01.308Z",
+  "last_tick_at": "2026-10-05T18:07:00.080Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "PHASE 3 ACTION RUNTIME U1-U6 送审（Reviewed HEAD add99ec3）→ VERDICT = PASS WITH REVISE / NOT CLOSED；PHASE3_FINAL_REQUIRED = YES；裁决已原样逐字归档 MSG-20261005-51（compare.mjs = FULL_COPY_OK，148/148 行）；push 2ed27f5a。",
-  "last_action_at": "2026-10-05T17:57:01.308Z",
-  "next_action": "PHASE 3 FINAL —— 按裁决做 4 项窄修 + enforcement 07 恢复 green",
-  "current_head": "2ed27f5a",
-  "last_completed_head": "add99ec3",
+  "last_action": "PHASE 3 FINAL 已实施并 push（HEAD 6cba0639）：U1 trusted provenance / U2 credential tenant-provider 绑定 / U3 幂等 fingerprint + async 端口 / U5-U6 真接共享 Action Guard + approval verifier / enforcement 07 恢复 green；已向右侧审核会话投递 PHASE 3 FINAL 送审（marker [CODEX-PHASE3-FINAL]，Reviewed HEAD 6cba0639），送达三检通过，等待裁决。",
+  "last_action_at": "2026-10-05T18:07:00.080Z",
+  "next_action": "读取 PHASE 3 FINAL 裁决 → 逐字归档 + compare.mjs FULL_COPY_OK + durable state 对账",
+  "current_head": "6cba0639",
+  "last_completed_head": "6cba0639",
   "reviewed_head": "add99ec3",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -5169,12 +5169,10 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "P3F-1 U1 trusted provenance（factory/registry；caller 自报 simulated 不得授权；非 trusted adapter invoke=0）",
-    "P3F-2 U2 credential port tenant/provider binding（PROVIDER_CREDENTIAL_PROVIDER_MISMATCH / PROVIDER_CREDENTIAL_TENANT_MISMATCH，fail-closed）",
-    "P3F-3 U3 idempotency fingerprint + IDEMPOTENCY_KEY_CONFLICT + ProviderIdempotencyStore async 端口",
-    "P3F-4 U5/U6 Action Pack 真接共享 Action Guard + approval verifier（caller guardDecision=ALLOW 不得绕过）",
-    "P3F-5 action-guard-enforcement 07 恢复 green（窄修，不动 P2E DB5）",
-    "P3F-6 回归 + tsc + commit/push + PHASE 3 FINAL 送审 + 归档 + durable state 对账"
+    "P3F-7 读取 PHASE 3 FINAL 裁决（tab 14，匹配 Reviewed HEAD 6cba0639）",
+    "P3F-8 逐字归档 + compare.mjs FULL_COPY_OK + durable state 对账",
+    "PHASE4-1 OUTCOME / LEARNING DATA PIPELINE：统一结果采集字段（task type / domain / provider / strategy / model tier / 成本 / latency / evidence quality / action result / rejection reason / recovery amount / success / human intervention / retry-reconcile / final outcome）",
+    "PHASE4-2 采集管线 code → tests → regression → tsc → commit → push → audit → durable state（不自动改生产策略）"
   ],
   "full_autonomous_internal_execution": "VERIFIED",
   "dispatcher_acceptance": {
@@ -9324,7 +9322,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-05T17:57:01.308Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-05T18:07:00.080Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -9560,5 +9558,23 @@
     "regression": "93 files / 938 tests PASS",
     "full": "394 files / 3680 tests，2 failed（均为本单元之前在 HEAD 9eb7dd15 已存在；本单元新增失败 0）",
     "baseline_proof": "临时移出本单元新文件的 HEAD baseline：enforcement 07 offender = 4 条（均在 services/intelligence/**，与本单元无关）；recovery-si-phase2-e-db 单跑 20/20 PASS"
+  },
+  "phase3_final": {
+    "status": "SUBMITTED / AWAITING_VERDICT",
+    "reviewed_head": "6cba0639",
+    "pushed": true,
+    "changes": {
+      "U1": "trusted provenance：provider-adapter-contract 私有 WeakSet + isTrustedSandboxProviderAdapter；caller 自报 simulated 不授权",
+      "U2": "resolveProviderCredential 增加 provider/organization 绑定（PROVIDER_CREDENTIAL_PROVIDER_MISMATCH / PROVIDER_CREDENTIAL_TENANT_MISMATCH）",
+      "U3": "idempotencyKey + fingerprint；同 key 不同 fingerprint → CONFLICT；ProviderIdempotencyStore 改 async（Promise）",
+      "U5_U6": "runActionPack 只接受 server-owned RuntimeActionGuard；REQUIRE_APPROVAL → 共享 verifyApprovalOrThrow + ActionGuardApprovalVerifier",
+      "enforcement07": "recovery-persist-gate / recovery-guard-dry-run 改用 approval-verifier 导出的同源动作常量 → 07 恢复 green"
+    },
+    "local_verification": {
+      "tsc": "PASS（--noEmit exit 0）",
+      "targeted": "action-pack-runtime 17/17；action-guard-enforcement 7/7",
+      "regression": "93 files / 943 tests PASS",
+      "github_ci": "NOT_OBSERVED"
+    }
   }
 }
