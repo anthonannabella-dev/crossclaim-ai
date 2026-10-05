@@ -149362,3 +149362,119 @@ META_IMPROVEMENT_INTEGRATED = false
 PRODUCTION_READY = false
 ```
 
+### [MSG-20261005-63] PHASE 4 U4 FINAL 裁决 = PASS / CLOSED（TRUSTED_OFFLINE_EVALUATION_ARTIFACT = PASS / EVALUATION_IDENTITY = PASS / VERIFIED_ONLY_ENTRY = PASS / RAW_EVALUATOR_BYPASS = CLOSED；PHASE4_U4_FINAL2_REQUIRED = NO；U4 正式封板，授权进入 U5）， reviewed ref 2b300e8e
+
+```text
+
+DECISION
+
+TRUSTED_OFFLINE_EVALUATION_ARTIFACT = PASS
+EVALUATION_IDENTITY = PASS
+VERIFIED_ONLY_ENTRY = PASS
+RAW_EVALUATOR_BYPASS = CLOSED
+PHASE_4_U4 = PASS / CLOSED
+PHASE4_U4_FINAL2_REQUIRED = NO
+Reviewed HEAD：2b300e8e
+授权进入 U5
+
+KEEP
+
+evaluateOfflineOutcomesInternal() 已不导出；正式入口只剩 evaluateVerifiedLearningRecords()。
+正式入口继续要求 U2 provenance-registered lineage ledger；fake ledger fail-closed。
+evaluationDigest 已绑定：
+evaluationVersion + datasetVersion + metrics + sorted verified outcomeDigests + sorted excluded{digest,reason}。
+相同 outcome counts、不同 verified records → digest 不同。
+excluded 数量相同但 digest/reason 不同 → digest 不同。
+正式结果登记模块私有 WeakSet；{...result} 副本不会继承 provenance。
+isVerifiedOfflineEvaluation() 已具备作为 U5 信任门的条件。
+failureRate = NON_SUCCESS_RATE 的语义已明确，不再容易与 rejectedRate 混淆。
+Exact SHA GitHub Actions：NOT_OBSERVED。
+
+CHANGE
+
+U4 无新的阻断修改。
+不需要 FINAL2。
+
+U5 不要重新实现一套 evaluation 信任判断，直接复用：
+
+isVerifiedOfflineEvaluation(evaluation) === true
+
+作为 candidate 构建的必要条件。
+
+RISKS
+
+两个非阻断点继续保留：
+
+evaluationDigest 与 evidenceDigest 当前都截 16 hex；架构阶段可接受，长期持久化建议完整 SHA-256。
+当前 U4 证明的是 verified outcome records 的评估身份；U5 若宣称完整的
+immutable learning evidence → evaluation → candidate
+证据链，candidate 最好同时绑定 U3 learning evidence refs/digests，而不能只绑定汇总指标。
+
+P2E-DB5 继续作为既有 test-isolation debt，不重新打开 U4。
+
+TEST
+
+U4 FINAL 关闭条件已覆盖：
+
+counts 相同 / records 不同 → digest 不同；
+context 改变 → digest 不同；
+excluded 明细改变 → digest 不同；
+raw evaluator 无公开导出；
+fake ledger → REJECT；
+caller clone evaluation → provenance false；
+正式 verified entry → provenance true；
+原 denominator / zero denominator / unresolved exclusion 测试保持 green。
+
+NEXT
+
+正式进入 U5 — Meta-improvement Candidate Proposal Only。
+
+最低要求：
+
+verified learning/outcome evidence
+→ isVerifiedOfflineEvaluation = true
+→ candidate proposal
+
+candidate 至少绑定：
+
+evaluationDigest
+evaluationVersion
+datasetVersion
+source evidence refs/digests
+candidateDigest
+
+并明确：
+
+candidateStatus = PROPOSAL_ONLY
+
+严禁：
+
+candidate → Policy mutation
+candidate → Guard mutation
+candidate → Router mutation
+candidate → Action Runtime mutation
+candidate → automatic promotion
+
+任何真正采用 candidate 的动作必须重新经过外部 Judge / 人工批准边界。
+
+PRODUCTION
+
+继续全部 HOLD：
+
+REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing
+
+继续：
+
+SECOND_* = FORBIDDEN
+L5_RELAXATION = FORBIDDEN
+
+保持：
+
+MODEL_GATEWAY_RUNTIME_WIRED = false
+ACTION_RUNTIME_PRODUCTION_ENABLED = false
+META_IMPROVEMENT_INTEGRATED = false
+PRODUCTION_READY = false
+
+U4 正式封板，可以进入 U5。
+```
+
