@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-40",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T23:51:37.547Z",
+  "updated_at": "2026-10-05T23:58:55.200Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -21,7 +21,7 @@
   "ci_result": "completed_success",
   "fix_pr": "https://github.com/anthonannabella-dev/crossclaim-ai/pull/10",
   "channel_status": "HEALTHY（主审计会话 = https://chatgpt.com/c/6ac385db-cb60-83ec-9754-c7a30633a8c5（HOST 新开；MSG-20261005-30 起）；历史会话 https://chatgpt.com/c/6ac1cdf0-1ec8-83ec-8036-0e66fcf5c6b9 保留 MSG-22..29 逐字归档）",
-  "pending_verdict_unarchived": null,
+  "pending_verdict_unarchived": "MSG-20261005-85",
   "b2_status": "PASS（MSG-20260930-10 工程修复 + MSG-20260930-11 集成 PASS/MERGE APPROVED）",
   "protocol": "DUAL_CHANNEL_WAKEUP（GitHub = 正式总线 / ChatGPT Web = 仅唤醒）",
   "integration_pr": "https://github.com/anthonannabella-dev/crossclaim-ai/pull/11",
@@ -50,13 +50,13 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
-  "next_execution_unit": "PHASE 6 U1 verdict archive + next: (1) read verdict (REVIEWED_HEAD = d84ed40e, marker [CODEX-PHASE6-U1]); (2) extract to work/stage/verdict-p6u1-raw.txt, archive verbatim (MSG-20261005-85) with compare.mjs FULL_COPY_OK, commit/push; (3) durable state; if PASS, queue P6-U2 per the auditor minimum gate (execution authorization contract, not direct production apply).",
+  "next_execution_unit": "Order of operations next tick: (1) git push (retry; verify origin/gate/7-commercial-validation == ae95e5eb); (2) extract + archive the P6-U1 verdict verbatim (MSG-20261005-85) with compare.mjs FULL_COPY_OK + commit/push; (3) submit PHASE 6 U1 FINAL to the audit chat (marker [CODEX-PHASE6-U1FINAL], REVIEWED_HEAD = ae95e5eb) describing the temporal-ordering fix; (4) durable state; then P6-U2 per the auditor NEXT.",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-05T23:51:37.547Z",
+  "last_tick_at": "2026-10-05T23:58:55.200Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "PHASE 6 U1 Controlled Adoption Plan (PLAN_ONLY) implemented per MSG-20261005-84: verified-APPROVED-review gate (semantics APPROVED_FOR_CONTROLLED_ADOPTION_PLANNING), full-chain rebinding (verdict/canary/proposal/rollback digests), delta revalidated against target allowlist + value schema + trusted baseline from, artifact CONTROLLED_ADOPTION_PLAN (14 bindings, provenance+fingerprint+deep-freeze), semantics READY_FOR_CONTROLLED_EXECUTION_GATE_REVIEW, apply/execute/promote/rollout/configMutation FORBIDDEN, stale-baseline gate (STALE_BASELINE fail-closed). code d84ed40e pushed and submitted (marker [CODEX-PHASE6-U1], REVIEWED_HEAD = d84ed40e). Local: tsc 0; controlled-adoption-plan 4/4; PHASE5 filter 10 files / 122 tests PASS; regression 103 files / 1069 tests (only P2E-DB5).",
-  "last_action_at": "2026-10-05T23:50:50.686Z",
-  "next_action": "Read PHASE 6 U1 verdict -> archive (MSG-20261005-85) -> if PASS consider PHASE 6 U2 (Controlled Adoption Execution Gate, authorization contract only) per auditor.",
+  "last_action": "PHASE 6 U1 FINAL (plan temporal ordering: createdAt >= reviewVerdict.decidedAt -> ADOPTION_PLAN_CREATED_BEFORE_VERDICT; temporalOrdering boundary entry + P6U1_3b test) committed locally as ae95e5eb after tsc 0 + targeted 5/5 + PHASE5 filter PASS + regression 1069 passed/1 failed (P2E-DB5). PUSH BLOCKED by GitHub HTTP 500 (retry next tick before anything else; do NOT submit P6-U1 FINAL to the audit until ae95e5eb is on origin).",
+  "last_action_at": "2026-10-05T23:58:55.200Z",
+  "next_action": "Retry git push (origin should receive ae95e5eb), then archive the P6-U1 verdict (MSG-20261005-85) and submit P6-U1 FINAL to the audit chat.",
   "current_head": "d84ed40e",
   "last_completed_head": "d84ed40e",
   "reviewed_head": "add99ec3",
@@ -5169,9 +5169,11 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "P6U1a-1 read P6-U1 verdict (d84ed40e, marker [CODEX-PHASE6-U1]) once complete -> extract to work/stage/verdict-p6u1-raw.txt -> archive MSG-20261005-85 -> compare FULL_COPY_OK -> commit/push -> durable state (as of this tick the reply was still generating; the in-flight note mentions time-binding review)",
-    "P6U1a-2 if PASS -> queue/implement P6-U2 Controlled Adoption Execution Gate per auditor NEXT",
-    "P6U1a-3 non-blocking debt: full SHA-256 digests, fingerprint schema upkeep, scanRawPayloadKeys bounded traversal, P2E-DB5 test-isolation"
+    "P6U1F-1 retry push (ae95e5eb) until origin has it; GitHub was returning HTTP 500",
+    "P6U1F-2 archive P6-U1 verdict (MSG-20261005-85) verbatim + compare FULL_COPY_OK + commit/push",
+    "P6U1F-3 submit P6-U1 FINAL (temporal ordering fix) with REVIEWED_HEAD = ae95e5eb",
+    "P6U1F-4 then P6-U2 Controlled Adoption Execution Gate per auditor minimum gate",
+    "P6U1F-5 non-blocking debt: full SHA-256 digests, fingerprint schema upkeep, scanRawPayloadKeys bounded traversal, P2E-DB5 test-isolation"
   ],
   "full_autonomous_internal_execution": "VERIFIED",
   "dispatcher_acceptance": {
@@ -9321,7 +9323,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-05T23:51:37.547Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-05T23:58:55.200Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -11061,5 +11063,28 @@
       "delivered": true,
       "expected_message_id": "MSG-20261005-85"
     }
+  },
+  "pending_push": {
+    "commits": [
+      "ae95e5eb"
+    ],
+    "reason": "GitHub push returned HTTP 500 Internal Server Error twice (request IDs E5EE:17F2CA:95307D:A8EDBC:6AC4399D, DAD8:2633A:953ECE:A8F8DD:6AC439B0) at 2026-10-05T23:58Z; branch diverged locally by 1 commit (ae95e5eb = PHASE 6 U1 FINAL temporal ordering fix)."
+  },
+  "phase6_u1_verdict": {
+    "message_id": "MSG-20261005-85",
+    "verdict": "PASS WITH REVISE / NOT CLOSED",
+    "reviewed_head": "d84ed40e",
+    "pass": [
+      "APPROVED_REVIEW_GATE = PASS",
+      "FULL_CHAIN_REBINDING = PASS",
+      "DELTA_SCHEMA_AND_TRUSTED_BASELINE_BINDING = PASS",
+      "PLAN_PROVENANCE / ANTI_TAMPER = PASS",
+      "PLAN_ONLY / NO_EXECUTION = PASS",
+      "STALE_BASELINE_CONTRACT = PASS"
+    ],
+    "revise": [
+      "PLAN_TEMPORAL_ORDERING：createdAt 必须 >= reviewVerdict.decidedAt"
+    ],
+    "phase6_u1_final_required": "YES"
   }
 }
