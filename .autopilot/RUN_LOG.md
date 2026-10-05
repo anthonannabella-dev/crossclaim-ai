@@ -2264,3 +2264,9 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 冻结：ACTION_GUARD_DRY_RUN_ALLOW != EXECUTION_AUTHORIZATION；四类 FORBIDDEN 不变；P2_E = HOLD_SCHEMA_DELTA / P2_F = HOLD / P2_G = HOLD；RUNTIME_WIRING = NONE；FINAL_ACCEPTANCE_HEAD = 0f7f7ac。
 - 真实执行必须另开 P2-G（executor identity / approval 真实性 / provider transport / external-write gate / kill switch / reconciliation）；claim.submit 仅是 dry-run 保守分类。
 - 下一执行单元：Phase 2 剩余阶段（P2-E 持久化 / P2-F 模型辅助 / P2-G 真实执行）均需各自架构审计；CUSTOMS 继续 null/HOLD。
+
+## 2026-10-05T06:20Z — Recovery SI Phase 2 剩余阶段预登记（P2-E / P2-F / P2-G 设计边界）
+- 依据：MSG-20261005-21（P2-D v1 = PASS / CLOSED；P2-D CLOSED 不自动解锁后续阶段；真实执行必须另开 P2-G）。
+- 新增 docs/releases/RECOVERY-SI-PHASE2-REMAINDER-QUEUE-REGISTRATION.md（只登记边界与未决问题，零代码、零 Schema）。
+- backlog 增 recovery-si-phase2-remainder-queue = QUEUED_DESIGN_REQUIRED（ARCH_REVIEW_REQUIRED = true，allowed_files 仅 docs/releases/**）。
+- 未变：P2_E = HOLD_SCHEMA_DELTA / P2_F = HOLD / P2_G = HOLD；四类 FORBIDDEN 不变；FINAL_ACCEPTANCE_HEAD = 0f7f7ac。
