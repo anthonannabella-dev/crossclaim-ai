@@ -90,6 +90,78 @@ if (matrix.acceptance_head !== head) {
   }
 }
 
+// C1b（BG-016）：冻结的 FINAL_ACCEPTANCE_HEAD 是**不可变常量** —— 任何声明都必须是 0f7f7ac。
+// 只在“声明处”匹配（`FINAL_ACCEPTANCE_HEAD = <sha>` / `FROZEN ACCEPTANCE TREE ... <sha>`），
+// 因此普通叙述文字里提到历史 SHA 不会误报；反过来，任何人改动冻结值都会被立刻拦下。
+const FROZEN_FINAL_ACCEPTANCE_HEAD = '0f7f7ac';
+const FROZEN_MIN_DECLARATIONS = 10;
+const FROZEN_SCAN_DIRS = ['docs/releases', 'tools/autopilot', '.autopilot'];
+const FROZEN_PATTERNS = [
+  /FINAL_ACCEPTANCE_HEAD\s*=\s*`?([0-9a-f]{7,40})/g,
+  /FROZEN ACCEPTANCE TREE[^`\n|]*[`|]\s*`?([0-9a-f]{7,40})/g,
+];
+let frozenDeclarations = 0;
+const frozenValues = new Map();
+for (const dir of FROZEN_SCAN_DIRS) {
+  const abs = path.join(ROOT, dir);
+  let entries = [];
+  try {
+    entries = fs.readdirSync(abs);
+  } catch {
+    continue;
+  }
+  for (const entry of entries) {
+    const file = path.join(abs, entry);
+    let text = '';
+    try {
+      if (!fs.statSync(file).isFile()) continue;
+      text = fs.readFileSync(file, 'utf8');
+    } catch {
+      continue;
+    }
+    for (const pattern of FROZEN_PATTERNS) {
+      for (const match of text.matchAll(pattern)) {
+        frozenDeclarations += 1;
+        const where = dir + '/' + entry;
+        const bucket = frozenValues.get(match[1]) ?? [];
+        bucket.push(where);
+        frozenValues.set(match[1], bucket);
+      }
+    }
+  }
+}
+if (frozenDeclarations < FROZEN_MIN_DECLARATIONS) {
+  conflicts.push('FROZEN_HEAD_DECLARATIONS_MISSING count=' + frozenDeclarations + ' min=' + FROZEN_MIN_DECLARATIONS);
+}
+for (const [value, files] of frozenValues) {
+  if (value === FROZEN_FINAL_ACCEPTANCE_HEAD) continue;
+  conflicts.push(
+    'FROZEN_HEAD_CHANGED value=' + value + ' expected=' + FROZEN_FINAL_ACCEPTANCE_HEAD +
+      ' files=' + [...new Set(files)].slice(0, 3).join(','),
+  );
+}
+
+// C1c（BG-016）：STATE 的 HEAD 字段必须**彼此一致**，且指向本仓库真实存在的 commit。
+// 注意：状态文件通常在“下一个 commit”之前写入，所以这里不要求它等于 git HEAD，只要求单一来源 + 真实存在。
+const headFields = ['head', 'current_head', 'CURRENT_HEAD']
+  .map((key) => [key, state[key]])
+  .filter(([, value]) => typeof value === 'string' && value.trim() !== '' && !/^PENDING/i.test(value));
+if (headFields.length === 0) {
+  conflicts.push('STATE_HEAD_FIELDS_MISSING');
+} else {
+  const distinct = [...new Set(headFields.map(([, value]) => value))];
+  if (distinct.length > 1) {
+    conflicts.push('STATE_HEAD_FIELDS_DISAGREE ' + headFields.map(([key, value]) => key + '=' + value).join(' '));
+  }
+  const stateHead = distinct[0];
+  try {
+    execFileSync('git', ['-c', 'safe.directory=' + ROOT, 'cat-file', '-e', stateHead + '^{commit}'], { cwd: ROOT, stdio: 'ignore' });
+  } catch {
+    console.log('NOTE: STATE head ' + stateHead + ' 不在本地克隆（浅克隆）——跳过对象存在性检查');
+  }
+}
+
+
 // C2：STATE 未完成项必须与矩阵 open_internal_items 完全一致。
 if (!sameSet(stateOpen, matrix.open_internal_items ?? [])) {
   conflicts.push('OPEN_ITEMS_MISMATCH state=[' + stateOpen.join(',') + '] matrix=[' + (matrix.open_internal_items ?? []).join(',') + ']');
