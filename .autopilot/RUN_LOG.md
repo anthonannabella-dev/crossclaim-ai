@@ -2233,3 +2233,16 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 证据 D1–D10；execution basis 十字段含 guardAction；planDigest = plan-digest/v1 canonical projection + sha256（顺序无关、generatedAt 不敏感）。
 - 测试：recovery-si-phase2-d 10/10 + 回归 51/51 = 61/61 PASS；tsc exit 0。
 - 边界：APPROVAL_CONSUMPTION / EXECUTOR_INVOCATION / BUSINESS_FACT_WRITE / EXTERNAL_ACTION = FORBIDDEN；P2_E/P2_F/P2_G 未授权；FINAL_ACCEPTANCE_HEAD = 0f7f7ac。
+
+## 2026-10-05T05:58Z — Recovery SI P2-D v1 Implementation Audit 裁决归档（MSG-20261005-20 = REVISE，窄范围 FINAL-2）
+- 归档：AI-ARCHITECT-INBOX.md `### [MSG-20261005-20]`，423 行逐字归档；FNV1A_MATCH 72a9ceb3；compare = RESULT: FULL_COPY_OK（缺失 0 / 多出 0）。
+- 裁决：ARCHITECT VERDICT = REVISE（很窄）。REVIEWED_HEAD = 5aaf7389；送审包 commit 24d11970；设计裁决归档 commit 7c3efa11。
+- 必修 A = PASS（静态 RECOVERY_GUARD_ACTION_MAP；ACTION_GUARD_CATALOG = UNCHANGED；CUSTOMS → null 未偷换成 customs.recovery.start）。
+- 必修 B = PASS（capabilities 仅来自 ProductionControlPlane.snapshotFor / evaluateWithoutAudit；degraded → DENY 且零 Guard 调用）。
+- D 项裁定：D1 = REVISE、D2 = PASS、D3 = PASS、D4 = REVISE、D5 = PASS、D6 = PASS、D7 = REVISE、D8 = PASS、D9 = PASS、D10 = PASS。
+- CHANGE D1（verified READY 仍可被伪造）：verifyRecoveryPlan 不对 READY_FOR_EXECUTION 复核 authorizationReady / riskClass / providerApproval / evidenceComplete。最小修法 = P2-D 内部重算 canonical plan（prioritizeOpportunities + planRecovery），仅当 SUPPLIED_READY == CANONICAL_PLANNER_READY（execution-relevant 字段一致）才进 Guard。
+- CHANGE D2（outcome 合同）：所有 outcome 强制补 submitted:false / persisted:false（与 executionAuthorized / executorInvoked / approvalConsumed 并列，无 Schema 变更）。
+- D4 证据：除 degraded → DENY 外，补 1 条真实 ProductionControlPlane + Action Guard 集成测试（claim.submit / 非人工 gate 全满足 / 无 approvalId → REQUIRE_APPROVAL，绝不 ALLOW）。
+- 最小 FINAL-2 证据：F2D-01（authorizationReady=false 篡改成 READY → zero Guard call）、F2D-02（riskClass=HIGH 的 REQUEST_OWNER_APPROVAL 篡改成 READY → zero Guard call）、F2D-03（真实 Control Plane + claim.submit 无 approvalId → REQUIRE_APPROVAL）、F2D-04（Guard ALLOW 仍四个 false + approvalConsumed=false）。
+- 边界冻结：APPROVAL_CONSUMPTION / EXECUTOR_INVOCATION / BUSINESS_FACT_WRITE / EXTERNAL_ACTION = FORBIDDEN；P2_E = HOLD_SCHEMA_DELTA；P2_F / P2_G = HOLD；SCHEMA_DELTA_REQUIRED = NO；RUNTIME_WIRING = NONE；FINAL_ACCEPTANCE_HEAD = 0f7f7ac。
+- 下一执行单元：P2-D v1 FINAL-2（CHANGE D1/D2 + F2D-01..04 实现与取证），完成后送 P2-D FINAL-2 Implementation Audit。P2-D 尚未 CLOSED。

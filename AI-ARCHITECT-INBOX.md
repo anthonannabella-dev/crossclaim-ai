@@ -140989,3 +140989,431 @@ FINAL_ACCEPTANCE_HEAD = 0f7f7ac
 
 Codex 可以开始实现 P2-D dry-run，但必须先按上面两项修正：新增静态 Guard-action 映射 + 复用可信 Production Control Plane；完成后只送 P2-D Implementation Audit，不得进入 P2-E/P2-G。
 ```
+
+### [MSG-20261005-20] Recovery SI P2-D v1（Action Guard dry-run）Implementation Audit — VERDICT = REVISE（必修 A/B = PASS；P2_D_V1 = REVISE / FINAL2_REQUIRED = YES）
+
+```text
+ARCHITECT VERDICT：REVISE（很窄；必修 A/B 已 PASS，但 P2-D v1 暂不能 CLOSED）
+
+本次我按：
+
+纯文本
+实现 REVIEWED_HEAD
+= 5aaf7389bc691ee17f49853c87d36100de9059ce
+
+送审包 commit
+= 24d1197021f7f2e8b81b887e682634fbaf5fd1f5
+
+设计裁决归档 commit
+= 7c3efa11455f9e116192b3c2515bd05978a86d9e
+
+重新审，没有使用上一轮缓存。
+
+① 必修 A / B：可以记 PASS
+
+必修 A：PASS
+
+你现在确实没有复用 RSI policy action 当 Guard action。
+
+静态映射是：
+
+纯文本
+PLATFORM / CARRIER / INDEPENDENT_SITE
+→ claim.submit
+
+CUSTOMS
+→ null
+
+并且 Customs 没有偷换成：
+
+纯文本
+customs.recovery.start
+
+未映射 / 非 allowlist 都在 Guard 前 fail-closed。
+
+我也确认从 79618507 → 5aaf7389 的变更里没有修改 action-guard/action-guard.ts，所以：
+
+纯文本
+ACTION_GUARD_CATALOG = UNCHANGED
+
+成立。
+
+必修 B：PASS
+
+P2-D 代码确实只调用：
+
+纯文本
+ProductionControlPlane.snapshotFor()
+ProductionControlPlane.evaluateWithoutAudit()
+
+并没有自行构造：
+
+纯文本
+capabilities
+
+degraded=true 也在调用 Guard 前直接 DENY。
+
+所以：
+
+纯文本
+MANDATORY_A_STATIC_GUARD_MAPPING = PASS
+MANDATORY_B_TRUSTED_CONTROL_PLANE_PATH = PASS
+但还有 2 个必须补的窄缺口
+CHANGE D1 — “verified READY” 仍可被伪造
+
+这是当前最重要的问题。
+
+runRecoveryGuardDryRun() 当前逻辑是：
+
+纯文本
+prioritize
+→ verifyRecoveryPlan
+→ verifiedActions 中筛 READY_FOR_EXECUTION
+→ Guard
+
+但现有 verifyRecoveryPlan() 并不会对 READY_FOR_EXECUTION 再验证：
+
+纯文本
+authorizationReady === true
+riskClass !== HIGH
+providerApproval === READY
+evidenceComplete === true
+
+它只在：
+
+纯文本
+REQUEST_AUTHORIZATION
+
+时检查 authorization mismatch。
+
+因此存在这种路径：
+
+纯文本
+真实 state：
+authorizationReady = false
+
+planner 原本：
+REQUEST_AUTHORIZATION
+
+篡改 plan：
+proposedAction = READY_FOR_EXECUTION
+
+只要其它字段保持可验证，这条伪造 READY 有机会穿过 verifier。
+
+HIGH-risk 也类似：
+
+纯文本
+planner 原本：
+REQUEST_OWNER_APPROVAL
+
+篡改成：
+READY_FOR_EXECUTION
+
+当前 P2-D 的 D1 只测了：
+
+纯文本
+expectedRecovery 被篡改
+
+没有覆盖这种动作升级篡改。
+
+这与上一轮我明确要求的：
+
+纯文本
+authorization missing
+→ no READY / zero Guard call
+
+owner gate unresolved
+→ no READY / zero Guard call
+
+还没有闭环。
+
+最小修法
+
+不建议大改共享 verifier。
+
+P2-D 内部直接重算一份 canonical plan：
+
+纯文本
+priority = prioritizeOpportunities(state)
+
+canonicalPlan =
+planRecovery({
+  state,
+  ranked: priority.ranked,
+  registry,
+  generatedAt: 任意稳定值
+})
+
+然后只有同时存在于：
+
+纯文本
+canonicalPlan READY_FOR_EXECUTION
++
+verifyRecoveryPlan verified READY_FOR_EXECUTION
+
+的 action 才能进入 Guard。
+
+换句话说：
+
+纯文本
+SUPPLIED_READY
+must equal
+CANONICAL_PLANNER_READY
+
+至少对 execution-relevant 字段一致。
+
+这样可以一次性挡住：
+
+缺 authorization；
+HIGH-risk OWNER gate；
+provider HOLD；
+evidence incomplete；
+PREPARE tool 缺失；
+actionKind 篡改。
+
+这是比重复写一套 readiness if/else 更稳的最小方案。
+
+CHANGE D2 — dry-run outcome 少了两个冻结字段
+
+上一轮裁定明确要求即使 Guard ALLOW，也必须返回：
+
+纯文本
+executionAuthorized = false
+executorInvoked = false
+submitted = false
+persisted = false
+approvalConsumed = false
+
+当前 outcome 只有：
+
+纯文本
+executionAuthorized
+executorInvoked
+approvalConsumed
+
+缺：
+
+纯文本
+submitted
+persisted
+
+虽然代码确实没有 submission/persistence 路径，但这个字段是为了防止以后消费者把：
+
+纯文本
+ALLOW
+
+错误理解成业务状态已经推进。
+
+所以请补：
+
+纯文本
+submitted: false
+persisted: false
+
+到所有 outcome。
+
+这只是合同收口，不需要 Schema。
+
+D4 证据还差一条“真实 Guard 语义”测试
+
+你当前的 D4 实际是：
+
+纯文本
+Control Plane degraded
+→ DENY
+
+这个测试是对的，但它不是上一轮要求的全部 D4。
+
+还需要证明真实 ProductionControlPlane 下：
+
+纯文本
+claim.submit
++
+tenant feature = true
+platform enabled = true
+mode = WRITE_ENABLED
+productionGate = SATISFIED
+kill switch = enabled
+但没有 approvalId
+
+最终一定：
+
+纯文本
+REQUIRE_APPROVAL
+
+而不是 ALLOW。
+
+因为你当前测试里的 controlPlane 是 fixture，可以直接返回：
+
+纯文本
+decision = ALLOW
+
+它不能证明真实 Action Guard 的 approval gate。
+
+只补 1 条真实 Control Plane + Action Guard 集成测试 即可。
+
+同时再补两条：
+
+纯文本
+authorizationReady=false
+→ forged READY
+→ Guard calls = 0
+
+riskClass=HIGH
+→ forged READY
+→ Guard calls = 0
+
+这样就完整了。
+
+当前 D1–D10 裁定
+
+我建议现在记录为：
+
+纯文本
+D1 = REVISE
+D2 = PASS
+D3 = PASS
+D4 = REVISE   // degraded PASS，但 human approval 真实语义未证明
+D5 = PASS
+D6 = PASS
+D7 = REVISE   // 缺 submitted=false / persisted=false
+D8 = PASS
+D9 = PASS
+D10 = PASS
+
+所以：
+
+纯文本
+P2_D_V1_IMPLEMENTATION = REVISE
+P2_D_V1 = NOT_CLOSED
+FINAL2_REQUIRED = YES
+
+但这是一个非常窄的 FINAL-2，不需要重审设计。
+
+最小 FINAL-2 证据，只需 4 条
+纯文本
+F2D-01
+authorizationReady=false
+把 planner 原动作篡改成 READY_FOR_EXECUTION
+→ zero Guard call
+
+F2D-02
+riskClass=HIGH
+把 REQUEST_OWNER_APPROVAL 篡改成 READY_FOR_EXECUTION
+→ zero Guard call
+
+F2D-03
+真实 ProductionControlPlane + claim.submit
+所有非人工 gate 满足、无 approvalId
+→ REQUIRE_APPROVAL
+
+F2D-04
+即使 Guard 返回 ALLOW：
+executionAuthorized=false
+executorInvoked=false
+submitted=false
+persisted=false
+approvalConsumed=false
+
+这 4 条就够。
+
+③ 四类 FORBIDDEN 全部继续成立
+
+确认：
+
+纯文本
+APPROVAL_CONSUMPTION = FORBIDDEN
+EXECUTOR_INVOCATION = FORBIDDEN
+BUSINESS_FACT_WRITE = FORBIDDEN
+EXTERNAL_ACTION = FORBIDDEN
+
+当前模块里也确实没有：
+
+withActionGuard()
+HitlSubmissionBoundary
+verifyApprovalOrThrow()
+executor
+Prisma
+provider transport
+
+所以这些边界没有被破坏。
+
+④ P2-E / P2-F / P2-G 继续独立审批
+
+确认：
+
+纯文本
+P2_E = HOLD_SCHEMA_DELTA
+P2_F = HOLD
+P2_G = HOLD
+
+并且：
+
+纯文本
+P2_D PASS
+!=
+P2_G AUTHORIZED
+
+如果要进入真实执行，必须另开 P2-G，至少重新审：
+
+纯文本
+executor identity
+真实 Guard action → executor mapping
+actor membership / role
+approvalId 真实性
+approval target binding
+approval payload fingerprint
+expiry / revocation / consumed state
+Action Guard approval verifier
+approval consumption 原子性
+idempotency / exactly-once
+provider transport
+external-write gate
+production gate
+kill switch
+real credentials
+reconciliation
+rollback / NEEDS_MANUAL
+
+特别提醒：当前：
+
+纯文本
+PLATFORM / CARRIER / INDEPENDENT_SITE → claim.submit
+
+我只认可它作为 P2-D dry-run 的保守 Guard 分类。
+
+P2-G 不得直接复用这张映射当真实 executor identity。 到真实执行阶段必须按实际 provider/action 重新绑定。
+
+最终状态
+纯文本
+MANDATORY_A = PASS
+MANDATORY_B = PASS
+
+P2_D_V1_IMPLEMENTATION = REVISE
+FINAL2_REQUIRED = YES
+
+SCHEMA_DELTA_REQUIRED = NO
+RUNTIME_WIRING = NONE
+
+APPROVAL_CONSUMPTION = FORBIDDEN
+EXECUTOR_INVOCATION = FORBIDDEN
+BUSINESS_FACT_WRITE = FORBIDDEN
+EXTERNAL_ACTION = FORBIDDEN
+
+P2_E = HOLD_SCHEMA_DELTA
+P2_F = HOLD
+P2_G = HOLD
+
+EXTERNAL_WRITE = HOLD
+PAYMENT = HOLD
+TRANSPORT = HOLD
+PRODUCTION_CREDENTIALS = HOLD
+REAL_CLAIM_SUBMIT = HOLD
+CUSTOMS_FILING = HOLD
+
+FINAL_ACCEPTANCE_HEAD = 0f7f7ac
+
+另外，exact 5aaf7389 的 GitHub hosted status/workflow 当前仍为空，因此 61/61 + tsc exit 0 属于本地归档证据；我独立确认的是 exact HEAD 的实现、测试和变更范围。
+
+结论：不需要重做 P2-D。只补 canonical READY 对齐、submitted/persisted=false，再补上面 4 条 FINAL-2 负例即可 CLOSED。
+```
