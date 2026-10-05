@@ -40,8 +40,15 @@ export const AI_BUSINESS_VALUE_HARD_CAPS = {
   hostMayRaiseThresholds: false,
   callerMayClaimValue: false,
   unknownValueMayUseStrong: false,
+  /** C3 FINAL-2 CHANGE A：strong 必须同时满足 HIGH 价值 + canonical eligible risk */
+  strongRequiresHighValueAndEligibleRisk: true,
+  unknownRiskMayUseStrong: false,
   maxTier: 'STRONG',
 } as const;
+
+/** canonical eligible risk：只有 canonical 分类为 LOW / MEDIUM 才允许 strong（未知 / HIGH → 只允许 LOW_COST） */
+export const AI_BUSINESS_VALUE_ELIGIBLE_RISK_CLASSES = ['LOW', 'MEDIUM'] as const;
+export type AiBusinessValueRiskClass = 'LOW' | 'MEDIUM' | 'HIGH';
 
 export interface AiBusinessValueInput {
   basis: AiTrustedRecoveryBasis | null | undefined;
@@ -58,6 +65,10 @@ export interface AiBusinessValueDecision {
   valueBand: AiBusinessValueBand;
   effectiveRecoveryValueMicros: number | null;
   basisRef: string | null;
+  /** canonical 风险等级（来自 basis，不由 caller 决定）；缺失 → null */
+  riskClass: AiBusinessValueRiskClass | null;
+  /** 该风险等级是否属于 canonical eligible 集合 */
+  riskEligible: boolean;
   reason: string;
   callerValueIgnored: boolean;
   basisTrusted: boolean;
@@ -68,6 +79,7 @@ export const AI_BUSINESS_VALUE_BOUNDARY = {
   source: 'TRUSTED_CANONICAL_RECOVERY_BASIS_ONLY',
   secondPolicyEngine: 'FORBIDDEN',
   unknownValueStrongCall: 'FORBIDDEN（fail-closed）',
+  strongGate: 'BOTH_VALUE_AND_RISK（HIGH 价值 + canonical eligible risk；升级前必须再过一次 gate）',
   hostMayRaiseThresholds: false,
   callerMayRaiseTierOrBudget: false,
   recordsCustomerData: false,
@@ -101,13 +113,13 @@ export function classifyAiBusinessValueBand(valueMicros: number | null): AiBusin
 }
 
 /**
- * 业务价值 → 允许的最高模型等级。
+ * 业务价值 + canonical 风险 → 允许的最高模型等级（C3 FINAL-2 CHANGE A）。
  * 规则（确定性、只收紧不放大）：
- *   UNKNOWN           → maxTier = LOW_COST（strong 禁止）
- *   LOW               → maxTier = LOW_COST
- *   MEDIUM            → maxTier = LOW_COST（medium 价值仍不足以授权 strong）
- *   HIGH + 非 LOW 风险 → maxTier = STRONG
- *   HIGH + LOW 风险    → maxTier = STRONG（高价值 + 低风险 = 最安全升级场景）
+ *   UNKNOWN                    → maxTier = LOW_COST（strong 禁止）
+ *   LOW / MEDIUM               → maxTier = LOW_COST（价值不足以授权 strong）
+ *   HIGH + eligible risk（LOW/MEDIUM） → maxTier = STRONG
+ *   HIGH + risk 未知 / HIGH     → maxTier = LOW_COST（fail-closed：风险不可接受或不可证）
+ * 注意：riskClass 只能来自 canonical basis；caller 无法注入。
  */
 export function decideAiBusinessValueTier(input: AiBusinessValueInput): AiBusinessValueDecision {
   const callerValueIgnored = input.callerClaimedValueMicros !== undefined && input.callerClaimedValueMicros !== null;
@@ -120,6 +132,8 @@ export function decideAiBusinessValueTier(input: AiBusinessValueInput): AiBusine
       valueBand: 'UNKNOWN',
       effectiveRecoveryValueMicros: null,
       basisRef: input.basis?.basisRef ?? null,
+      riskClass: input.basis?.riskClass ?? null,
+      riskEligible: false,
       reason: validated.reason,
       callerValueIgnored,
       basisTrusted: false,
@@ -127,7 +141,10 @@ export function decideAiBusinessValueTier(input: AiBusinessValueInput): AiBusine
   }
   const valueMicros = validated.basis.estimatedRecoveryValueMicros as number;
   const band = classifyAiBusinessValueBand(valueMicros);
-  const stronglyAllowed = band === 'HIGH';
+  const riskClass = (validated.basis.riskClass ?? null) as AiBusinessValueRiskClass | null;
+  const riskEligible =
+    riskClass !== null && (AI_BUSINESS_VALUE_ELIGIBLE_RISK_CLASSES as readonly string[]).includes(riskClass);
+  const stronglyAllowed = band === 'HIGH' && riskEligible;
   return {
     allowed: true,
     maxTier: stronglyAllowed ? 'STRONG' : 'LOW_COST',
@@ -135,7 +152,13 @@ export function decideAiBusinessValueTier(input: AiBusinessValueInput): AiBusine
     valueBand: band,
     effectiveRecoveryValueMicros: valueMicros,
     basisRef: validated.basis.basisRef,
-    reason: stronglyAllowed ? 'AI_BUSINESS_VALUE_HIGH_TIER_STRONG_ELIGIBLE' : 'AI_BUSINESS_VALUE_TIER_LOW_COST_ONLY',
+    riskClass,
+    riskEligible,
+    reason: stronglyAllowed
+      ? 'AI_BUSINESS_VALUE_HIGH_TIER_STRONG_ELIGIBLE'
+      : band === 'HIGH'
+        ? 'AI_BUSINESS_VALUE_HIGH_VALUE_BUT_RISK_NOT_ELIGIBLE'
+        : 'AI_BUSINESS_VALUE_TIER_LOW_COST_ONLY',
     callerValueIgnored,
     basisTrusted: true,
   };

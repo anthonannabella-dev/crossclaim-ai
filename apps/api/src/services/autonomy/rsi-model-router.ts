@@ -577,6 +577,14 @@ export function createRsiModelRouter(options: {
       if (escalation.action !== 'ESCALATE_TO_STRONG') {
         return first.outcome;
       }
+      // C3 FINAL-2 CHANGE A：STRONG 升级必须**再过一道** business-value gate
+      // （价值 + canonical 风险；两道 gate 都允许才可 strong；否则保持 first.outcome，strong = 0）
+      if (options.businessValue) {
+        const strongValue = options.businessValue({ taskType: request.taskType, requestedTier: 'STRONG' });
+        if (!strongValue.allowed || strongValue.maxTier !== 'STRONG') {
+          return first.outcome;
+        }
+      }
       assertJudgeCannotAuthorizeModelCall({ requestedStrongCall: true, escalation });
       const second = await guardedAttempt(
         () => runAttempt(options.strong as RsiModelProviderAdapter, request, 'LEVEL_2_STRONG', 'LEVEL_2_STRONG'),
@@ -644,7 +652,7 @@ export const RSI_MODEL_ROUTER_BOUNDARY = {
   /** C3：Cost Safe Mode（只停 STANDARD_AI；L0 / health / critical alert 豁免；无重试风暴） */
   costSafeMode: 'OPTIONAL_PORT（缺省不启用；SAFE MODE 下拒绝为终局，retryAllowed=false）',
   /** C3：业务价值等级只来自可信 canonical basis（caller 自报值一律忽略） */
-  businessValuePolicy: 'OPTIONAL_PORT（caller 不得提高等级 / 预算）',
+  businessValuePolicy: 'OPTIONAL_PORT（caller 不得提高等级 / 预算；STRONG 升级需再过一道 gate）',
   /** C3：并发槽（host 注入 PostgreSQL advisory-lock slots；多实例互斥） */
   concurrencySlots: 'OPTIONAL_PORT（缺省不启用；跨实例互斥，非进程内计数）',
 } as const;

@@ -105,6 +105,23 @@ export function validateAiCostSafeModeInputs(input: {
 }
 
 /**
+ * 由「已触顶维度」构造判定（账本驱动的 durable resolver 与纯函数判定共用同一构造）。
+ * `exhausted` 为空 → NORMAL；非空 → COST_SAFE。retryAllowed 恒为 false。
+ */
+export function createAiCostSafeModeVerdict(exhaustedDimensions: readonly string[]): AiCostSafeModeVerdict {
+  const dimensionList = Array.from(new Set(exhaustedDimensions)).sort();
+  const state: AiCostSafeModeState = dimensionList.length > 0 ? 'COST_SAFE' : 'NORMAL';
+  return {
+    state,
+    reason: state === 'COST_SAFE' ? 'AI_COST_SAFE_MODE_EXHAUSTED:' + dimensionList.join('+') : 'WITHIN_BUDGET',
+    exhaustedDimensions: dimensionList,
+    standardAiAllowed: state === 'NORMAL',
+    exemptChannelsAlwaysAllowed: AI_COST_SAFE_MODE_EXEMPT_CHANNELS,
+    retryAllowed: false,
+  };
+}
+
+/**
  * 判定当前是否进入 COST_SAFE：
  *   任一日 / 月 / incident / token / strong-call 维度触顶 → COST_SAFE（fail-safe）。
  * 未知 / 非法输入 → 抛错（fail-closed；调用方不得据此继续普通 AI 调用）。
@@ -126,15 +143,7 @@ export function evaluateAiCostSafeMode(input: {
   breached(input.budget.tokenLimit, input.usage.dayTokens, 'TOKEN');
   breached(input.budget.strongCallLimit, input.usage.dayStrongCalls, 'STRONG_CALL');
 
-  const state: AiCostSafeModeState = exhausted.length > 0 ? 'COST_SAFE' : 'NORMAL';
-  return {
-    state,
-    reason: state === 'COST_SAFE' ? 'AI_COST_SAFE_MODE_EXHAUSTED:' + exhausted.join('+') : 'WITHIN_BUDGET',
-    exhaustedDimensions: exhausted,
-    standardAiAllowed: state === 'NORMAL',
-    exemptChannelsAlwaysAllowed: AI_COST_SAFE_MODE_EXEMPT_CHANNELS,
-    retryAllowed: false,
-  };
+  return createAiCostSafeModeVerdict(exhausted);
 }
 
 /**

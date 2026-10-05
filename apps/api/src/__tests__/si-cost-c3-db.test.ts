@@ -23,6 +23,7 @@ import {
   AI_COST_SAFE_MODE_BOUNDARY,
   decideAiCostSafeModeAdmission,
 } from '../services/autonomy/si-cost-safe-mode';
+import { resolveAiCostSafeMode } from '../services/autonomy/si-cost-safe-mode-store';
 import {
   AI_MODEL_CACHE_RUNTIME_BOUNDARY,
   createAiModelCacheRuntime,
@@ -218,8 +219,12 @@ describe('SI-COST C3 · Admin 只读可观测投影（无第二事实源）', ()
     expect(snapshot.cost.strongCallsToday).toBe(1);
     expect(snapshot.cost.tokensToday).toBe(240);
     expect(snapshot.budgetRemaining.dailyMicros).toBe(95_000);
-    expect(snapshot.metrics.LOW_COST_MODEL_RATE).toBe(0.5);
-    expect(snapshot.metrics.STRONG_MODEL_RATE).toBe(0.5);
+    // C3 FINAL-2 CHANGE D：仅 local-sim 流量 → 生产指标必须 NOT_YET_MEASURABLE（dev 计数另行展示）
+    expect(snapshot.provenance.modelTraffic).toBe('LOCAL_SIMULATION_ONLY');
+    expect(snapshot.metrics.LOW_COST_MODEL_RATE).toBe('NOT_YET_MEASURABLE');
+    expect(snapshot.metrics.STRONG_MODEL_RATE).toBe('NOT_YET_MEASURABLE');
+    expect(snapshot.devSimulation.lowCostCallsToday).toBe(1);
+    expect(snapshot.devSimulation.strongCallsToday).toBe(1);
     expect(snapshot.metrics.RULE_RESOLVED_RATE).toBe('NOT_YET_MEASURABLE');
     expect(snapshot.metrics.CACHE_HIT_RATE).toBe('NOT_YET_MEASURABLE');
     expect(snapshot.metrics.AVG_AI_COST_PER_SUCCESSFUL_RECOVERY).toBe('NOT_YET_MEASURABLE');
@@ -288,5 +293,97 @@ describe('SI-COST C3 · cache runtime（tenant-safe identity + 受控 TTL）', (
       expect(hit.savedTokens).toBe(120);
       expect(hit.savedCostMicros).toBe(900);
     }
+  });
+});
+
+describe('SI-COST C3 FINAL-2 · concurrency 0/null 语义 + scope-correct Safe Mode + 指标 provenance', () => {
+  it('C3_F2_B1 concurrencyLimit = 0 → 零并发（拒绝，绝不退化为 unlimited）', async () => {
+    await upsertAiBudgetPolicy(prisma, { scope: 'PLATFORM', scopeRef: '*', concurrencyLimit: 0 });
+    const result = await withAiBudgetConcurrencySlots({
+      prisma,
+      refs: { organizationId: orgA },
+      run: async () => 'never',
+    });
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toBe('AI_BUDGET_CONCURRENCY_EXCEEDED');
+    expect(AI_CONCURRENCY_BOUNDARY.zeroMeans).toContain('DENY_ALL');
+    expect(AI_CONCURRENCY_BOUNDARY.nullMeans).toContain('NOT_CONFIGURED');
+  });
+
+  it('C3_F2_B2 concurrencyLimit = null → 未配置语义（直接执行）', async () => {
+    await upsertAiBudgetPolicy(prisma, { scope: 'PLATFORM', scopeRef: '*', concurrencyLimit: null });
+    const result = await withAiBudgetConcurrencySlots({
+      prisma,
+      refs: { organizationId: orgA },
+      run: async () => 'ran',
+    });
+    expect(result.ok).toBe(true);
+  });
+
+  it('C3_F2_C1 org 日预算被多个 incident 合计触顶 → 任一 nested incident 查询均 COST_SAFE', async () => {
+    await upsertAiBudgetPolicy(prisma, {
+      scope: 'ORGANIZATION',
+      scopeRef: orgA,
+      organizationId: orgA,
+      dailyLimitMicros: 1_000,
+    });
+    await appendAiCostEntry(prisma, costEntry('c3f2-' + randomUUID(), { incidentId: 'inc-A', costMicros: 900 }));
+    await appendAiCostEntry(prisma, costEntry('c3f2-' + randomUUID(), { incidentId: 'inc-B', costMicros: 100 }));
+    const forB = await readAiCostObservability(prisma, { refs: { organizationId: orgA, incidentId: 'inc-B' } });
+    // 窄 usage（inc-B）只有 100，但 org 已 1000 → 必须 COST_SAFE（不得被 narrow usage 绕过）
+    expect(forB.cost.todayMicros).toBe(100);
+    expect(forB.safeMode.state).toBe('COST_SAFE');
+    expect(forB.safeMode.exhaustedDimensions).toContain('DAILY');
+    const forA = await readAiCostObservability(prisma, { refs: { organizationId: orgA, incidentId: 'inc-A' } });
+    expect(forA.safeMode.state).toBe('COST_SAFE');
+  });
+
+  it('C3_F2_C2 account 父级预算不能被 narrow task usage 绕过', async () => {
+    const accountId = 'acct-' + randomUUID();
+    await upsertAiBudgetPolicy(prisma, {
+      scope: 'ACCOUNT',
+      scopeRef: accountId,
+      organizationId: orgA,
+      dailyLimitMicros: 500,
+    });
+    await appendAiCostEntry(
+      prisma,
+      costEntry('c3f2-' + randomUUID(), { accountId, taskId: 'task-1', costMicros: 300 }),
+    );
+    await appendAiCostEntry(
+      prisma,
+      costEntry('c3f2-' + randomUUID(), { accountId, taskId: 'task-2', costMicros: 200 }),
+    );
+    const snapshot = await readAiCostObservability(prisma, {
+      refs: { organizationId: orgA, accountId, taskId: 'task-2' },
+    });
+    expect(snapshot.cost.todayMicros).toBe(200);
+    expect(snapshot.safeMode.state).toBe('COST_SAFE');
+  });
+
+  it('C3_F2_C3 perIncident 无 incidentId → NOT_APPLICABLE（不拿 scope lifetime 代替）', async () => {
+    await upsertAiBudgetPolicy(prisma, {
+      scope: 'ORGANIZATION',
+      scopeRef: orgA,
+      organizationId: orgA,
+      perIncidentLimitMicros: 100,
+    });
+    await appendAiCostEntry(prisma, costEntry('c3f2-' + randomUUID(), { incidentId: 'inc-A', costMicros: 5_000 }));
+    const resolution = await resolveAiCostSafeMode(prisma, { refs: { organizationId: orgA } });
+    expect(resolution.perIncidentDimension).toBe('NOT_APPLICABLE');
+    expect(resolution.verdict.state).toBe('NORMAL');
+  });
+
+  it('C3_F2_D1 存在真实 provider 行 → provenance = REAL_PROVIDER，指标可计算', async () => {
+    await appendAiCostEntry(prisma, costEntry('c3f2-' + randomUUID(), { provider: 'rsi-local-sim-low-cost', costMicros: 100 }));
+    await appendAiCostEntry(
+      prisma,
+      costEntry('c3f2-' + randomUUID(), { provider: 'amazon-ads-readonly', executionLevel: 'LEVEL_2_STRONG', costMicros: 200 }),
+    );
+    const snapshot = await readAiCostObservability(prisma, { refs: { organizationId: orgA } });
+    expect(snapshot.provenance.modelTraffic).toBe('REAL_PROVIDER');
+    expect(snapshot.provenance.realProviderNames).toContain('amazon-ads-readonly');
+    expect(snapshot.metrics.STRONG_MODEL_RATE).toBe(0.5);
+    expect(snapshot.metrics.LOW_COST_MODEL_RATE).toBe(0.5);
   });
 });

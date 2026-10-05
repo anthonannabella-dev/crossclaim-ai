@@ -13,10 +13,12 @@ import {
 } from '../services/autonomy/si-cost-safe-mode';
 import {
   AI_BUSINESS_VALUE_BOUNDARY,
+  AI_BUSINESS_VALUE_HARD_CAPS,
   AI_VALUE_METRIC_NOT_YET_MEASURABLE,
   assertAiBusinessValueTierAllowed,
   computeAiCostRatioMetrics,
   decideAiBusinessValueTier,
+  type AiTrustedRecoveryBasis,
 } from '../services/autonomy/si-ai-business-value-policy';
 import { AI_MODEL_CACHE_RUNTIME_BOUNDARY } from '../services/autonomy/si-model-cache-runtime';
 import {
@@ -185,13 +187,14 @@ describe('C3 · Business-value cost policy（价值只来自可信 basis；calle
     expect(assertAiBusinessValueTierAllowed({ decision, requestedTier: 'STRONG' }).allowed).toBe(false);
   });
 
-  it('C3_BV2 高价值（>= $1000）→ 允许 STRONG；低价值 → 仅 LOW_COST', () => {
+  it('C3_BV2 高价值（>= $1000）**且** canonical eligible risk → 允许 STRONG；低价值 → 仅 LOW_COST', () => {
     const high = decideAiBusinessValueTier({
-      basis: { basisRef: 'recovery-basis:1', estimatedRecoveryValueMicros: 2_000_000_000 },
+      basis: { basisRef: 'recovery-basis:1', estimatedRecoveryValueMicros: 2_000_000_000, riskClass: 'LOW' },
       taskType: 'SEMANTIC',
       requestedTier: 'STRONG',
     });
     expect(high.valueBand).toBe('HIGH');
+    expect(high.riskEligible).toBe(true);
     expect(high.strongAllowed).toBe(true);
     expect(assertAiBusinessValueTierAllowed({ decision: high, requestedTier: 'STRONG' }).allowed).toBe(true);
 
@@ -202,6 +205,23 @@ describe('C3 · Business-value cost policy（价值只来自可信 basis；calle
     });
     expect(low.valueBand).toBe('LOW');
     expect(low.strongAllowed).toBe(false);
+  });
+
+  it('C3_BV2b 高价值但风险不可接受 / 未知 → 只允许 LOW_COST（CHANGE A）', () => {
+    for (const riskClass of ['HIGH', null, undefined] as const) {
+      const decision = decideAiBusinessValueTier({
+        basis: { basisRef: 'recovery-basis:risk', estimatedRecoveryValueMicros: 5_000_000_000, riskClass },
+        taskType: 'SEMANTIC',
+        requestedTier: 'STRONG',
+      });
+      expect(decision.valueBand).toBe('HIGH');
+      expect(decision.riskEligible).toBe(false);
+      expect(decision.strongAllowed).toBe(false);
+      expect(decision.maxTier).toBe('LOW_COST');
+      expect(assertAiBusinessValueTierAllowed({ decision, requestedTier: 'STRONG' }).allowed).toBe(false);
+    }
+    expect(AI_BUSINESS_VALUE_HARD_CAPS.strongRequiresHighValueAndEligibleRisk).toBe(true);
+    expect(AI_BUSINESS_VALUE_HARD_CAPS.unknownRiskMayUseStrong).toBe(false);
   });
 
   it('C3_BV3 caller 自报价值一律忽略（不得据此获得 strong）', () => {
@@ -403,5 +423,61 @@ describe('C3 · 组合根接线（SI 成本控制内部链路 + local sim adapte
     expect(outcome.called).toBe(true);
     expect(composition.ledgerEntries()).toBe(1);
     expect(composition.cacheHits()).toBe(0);
+  });
+});
+
+describe('C3 FINAL-2 · CHANGE A —— STRONG 升级必须再过一道 business-value gate', () => {
+  const valuePort =
+    (basis: AiTrustedRecoveryBasis | null) =>
+    (input: { taskType: string; requestedTier: 'LOW_COST' | 'STRONG' }) => {
+      const decision = decideAiBusinessValueTier({ basis, taskType: input.taskType, requestedTier: input.requestedTier });
+      const verdict = assertAiBusinessValueTierAllowed({ decision, requestedTier: input.requestedTier });
+      return { allowed: verdict.allowed, maxTier: decision.maxTier, reason: verdict.reason };
+    };
+
+  const runEscalation = async (basis: AiTrustedRecoveryBasis | null) => {
+    const cheap = { n: 0 };
+    const strong = { n: 0 };
+    const router = createRsiModelRouter({
+      lowCost: adapter('LOW_COST', false, cheap),
+      strong: adapter('STRONG', true, strong),
+      usage: () => usage(),
+      qualityEvaluator: () => 'FAIL' as const,
+      businessValue: valuePort(basis),
+    });
+    const outcome = await router.outcomeOf(request());
+    return { outcome, cheapCalls: cheap.n, strongCalls: strong.n };
+  };
+
+  it('C3_F2_A1 价值 UNKNOWN + cheap FAIL → strong = 0', async () => {
+    const r = await runEscalation(null);
+    expect(r.cheapCalls).toBe(1);
+    expect(r.strongCalls).toBe(0);
+    expect(r.outcome.called).toBe(true);
+  });
+
+  it('C3_F2_A2 LOW / MEDIUM 价值 + cheap FAIL → strong = 0', async () => {
+    for (const value of [1_000_000, 100_000_000]) {
+      const r = await runEscalation({ basisRef: 'recovery-basis:low', estimatedRecoveryValueMicros: value, riskClass: 'LOW' });
+      expect(r.strongCalls).toBe(0);
+    }
+  });
+
+  it('C3_F2_A3 HIGH 价值 + canonical eligible risk + cheap FAIL → strong = 1（有界升级）', async () => {
+    const r = await runEscalation({
+      basisRef: 'recovery-basis:high',
+      estimatedRecoveryValueMicros: 2_000_000_000,
+      riskClass: 'LOW',
+    });
+    expect(r.strongCalls).toBe(1);
+  });
+
+  it('C3_F2_A4 HIGH 价值但风险不可接受 → strong = 0（fail-closed）', async () => {
+    const r = await runEscalation({
+      basisRef: 'recovery-basis:high-risk',
+      estimatedRecoveryValueMicros: 2_000_000_000,
+      riskClass: 'HIGH',
+    });
+    expect(r.strongCalls).toBe(0);
   });
 });

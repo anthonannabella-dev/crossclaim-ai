@@ -15,7 +15,8 @@ import {
   resolveEffectiveAiBudget,
   type AiBudgetScopeName,
 } from './si-budget-policy-store';
-import { evaluateAiCostSafeMode, type AiCostSafeModeVerdict } from './si-cost-safe-mode';
+import type { AiCostSafeModeVerdict } from './si-cost-safe-mode';
+import { resolveAiCostSafeMode } from './si-cost-safe-mode-store';
 import { AI_VALUE_METRIC_NOT_YET_MEASURABLE } from './si-ai-business-value-policy';
 
 export interface AiCostObservabilityRefs {
@@ -61,6 +62,23 @@ export interface AiCostObservabilitySnapshot {
   topCostIncidences: Array<{ incidentId: string; costMicros: number }>;
   cache: { entries: number; expiredEntries: number };
   safeMode: AiCostSafeModeVerdict;
+  /**
+   * C3 FINAL-2 CHANGE D：指标来源 provenance —— 只有可验证的**真实 provider 流量**才允许
+   * 输出生产效率指标；仅 local-sim 账本时生产指标必须 NOT_YET_MEASURABLE。
+   */
+  provenance: {
+    modelTraffic: 'NO_TRAFFIC' | 'LOCAL_SIMULATION_ONLY' | 'REAL_PROVIDER';
+    rule: string;
+    realProviderNames: readonly string[];
+  };
+  /** dev / simulation 计数（可展示，但**不得**当作生产指标） */
+  devSimulation: {
+    entriesToday: number;
+    todayMicros: number;
+    tokensToday: number;
+    lowCostCallsToday: number;
+    strongCallsToday: number;
+  };
   metrics: AiCostMetricView;
 }
 
@@ -68,6 +86,8 @@ export const AI_COST_OBSERVABILITY_BOUNDARY = {
   readOnly: true,
   writesRows: false,
   secondUsageTable: 'FORBIDDEN（只投影 durable ledger / policy / cache）',
+  safeModeSource: 'DURABLE_PER_POLICY_SCOPE_RESOLVER（与 C2 budget Guard 同一作用域语义）',
+  metricProvenance: 'REAL_PROVIDER_ONLY；LOCAL_SIMULATION_ONLY / NO_TRAFFIC → NOT_YET_MEASURABLE',
   exposesCustomerContent: false,
   exposesPromptOrResponse: false,
   exposesCredentials: false,
@@ -109,7 +129,8 @@ export async function readAiCostObservability(
   const dayStart = startOfUtcDay(now);
   const monthStart = startOfUtcMonth(now);
 
-  const [day, month, incident, dayRows, orgMonth, platformMonth, cacheEntries, cacheExpired, budget] = await Promise.all([
+  const [day, month, incident, dayRows, orgMonth, platformMonth, cacheEntries, cacheExpired, budget, providerRows] =
+    await Promise.all([
     prisma.aiCostLedgerEntry.aggregate({
       where: { ...scopeWhere, createdAt: { gte: dayStart } },
       _sum: { costMicros: true, inputTokens: true, outputTokens: true },
@@ -145,6 +166,11 @@ export async function readAiCostObservability(
       where: { ...(input.refs.organizationId ? { organizationId: input.refs.organizationId } : {}), expiresAt: { lt: now } },
     }),
     resolveEffectiveAiBudget(prisma, input.refs),
+    prisma.aiCostLedgerEntry.findMany({
+      where: { ...scopeWhere, createdAt: { gte: monthStart } },
+      select: { provider: true },
+      distinct: ['provider'],
+    }),
   ]);
 
   const levelCounts = new Map<string, number>();
@@ -169,20 +195,32 @@ export async function readAiCostObservability(
   const tokensToday = (day._sum.inputTokens ?? 0) + (day._sum.outputTokens ?? 0);
   const incidentMicros = incident._sum.costMicros ?? 0;
 
-  const safeMode = evaluateAiCostSafeMode({
-    budget,
-    usage: { dayMicros: todayMicros, monthMicros, incidentMicros, dayTokens: tokensToday, dayStrongCalls: strongCallsToday },
-  });
+  // C3 FINAL-2 CHANGE C：Safe Mode 走 durable per-policy-scope resolver（与 C2 Guard 同语义）
+  const safeMode = (await resolveAiCostSafeMode(prisma, { refs: input.refs, now })).verdict;
+
+  // C3 FINAL-2 CHANGE D：指标来源 provenance（provider 身份约定：rsi-local-sim* = 仿真）
+  const providerNames = providerRows.map((row) => row.provider);
+  const realProviderNames = providerNames.filter((name) => typeof name === 'string' && name.trim() !== '' && !/^rsi-local-sim/i.test(name));
+  const modelTraffic: 'NO_TRAFFIC' | 'LOCAL_SIMULATION_ONLY' | 'REAL_PROVIDER' =
+    providerNames.length === 0 ? 'NO_TRAFFIC' : realProviderNames.length > 0 ? 'REAL_PROVIDER' : 'LOCAL_SIMULATION_ONLY';
 
   const remaining = (limit: number | null, used: number): number | null =>
     typeof limit === 'number' ? Math.max(0, limit - used) : null;
 
   const totalLevelCalls = lowCostCallsToday + strongCallsToday;
+  // 生产效率指标只在存在真实 provider 流量时输出；否则（含 local-sim）一律 NOT_YET_MEASURABLE
+  const productionMeasurable = modelTraffic === 'REAL_PROVIDER';
   const metrics: AiCostMetricView = {
     RULE_RESOLVED_RATE: AI_VALUE_METRIC_NOT_YET_MEASURABLE,
     MODEL_INVOCATION_RATE: AI_VALUE_METRIC_NOT_YET_MEASURABLE,
-    LOW_COST_MODEL_RATE: totalLevelCalls === 0 ? AI_VALUE_METRIC_NOT_YET_MEASURABLE : Number((lowCostCallsToday / totalLevelCalls).toFixed(6)),
-    STRONG_MODEL_RATE: totalLevelCalls === 0 ? AI_VALUE_METRIC_NOT_YET_MEASURABLE : Number((strongCallsToday / totalLevelCalls).toFixed(6)),
+    LOW_COST_MODEL_RATE:
+      productionMeasurable && totalLevelCalls > 0
+        ? Number((lowCostCallsToday / totalLevelCalls).toFixed(6))
+        : AI_VALUE_METRIC_NOT_YET_MEASURABLE,
+    STRONG_MODEL_RATE:
+      productionMeasurable && totalLevelCalls > 0
+        ? Number((strongCallsToday / totalLevelCalls).toFixed(6))
+        : AI_VALUE_METRIC_NOT_YET_MEASURABLE,
     CACHE_HIT_RATE: AI_VALUE_METRIC_NOT_YET_MEASURABLE,
     AVG_AI_COST_PER_CASE: AI_VALUE_METRIC_NOT_YET_MEASURABLE,
     AVG_AI_COST_PER_SUCCESSFUL_RECOVERY: AI_VALUE_METRIC_NOT_YET_MEASURABLE,
@@ -220,6 +258,18 @@ export async function readAiCostObservability(
     })),
     cache: { entries: cacheEntries, expiredEntries: cacheExpired },
     safeMode,
+    provenance: {
+      modelTraffic,
+      rule: 'provider identity：/^rsi-local-sim/i → 仿真；其余 → 真实 provider；无行 → NO_TRAFFIC',
+      realProviderNames,
+    },
+    devSimulation: {
+      entriesToday: day._count._all,
+      todayMicros,
+      tokensToday,
+      lowCostCallsToday,
+      strongCallsToday,
+    },
     metrics,
   };
 }

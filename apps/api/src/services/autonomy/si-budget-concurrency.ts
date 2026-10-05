@@ -40,6 +40,10 @@ export const AI_CONCURRENCY_BOUNDARY = {
   lockOrder: ['platform:*', 'org:<id>', 'account:<id>', 'incident:<id>', 'task:<id>'],
   callerProvidedLockKey: 'FORBIDDEN',
   onExhaustion: 'AI_BUDGET_CONCURRENCY_EXCEEDED（不触达 provider / 不写 ledger / 无重试风暴）',
+  /** C3 FINAL-2 CHANGE B：三种取值语义必须区分，0 绝不能退化成 unlimited */
+  nullMeans: 'NOT_CONFIGURED（不启用并发限制）',
+  zeroMeans: 'DENY_ALL（零并发：任何 STANDARD_AI 并发请求都被拒绝；不是 unlimited）',
+  positiveMeans: 'N_SLOTS（同时最多 N 个并发）',
   level0RuleAffected: false,
 } as const;
 
@@ -75,7 +79,8 @@ export async function listAiBudgetConcurrencyScopes(db: Db, refs: AiBudgetRefs):
   });
   const order: Record<string, number> = { PLATFORM: 0, ORGANIZATION: 1, ACCOUNT: 2, INCIDENT: 3, TASK: 4 };
   return rows
-    .filter((row) => typeof row.concurrencyLimit === 'number' && Number.isInteger(row.concurrencyLimit) && row.concurrencyLimit > 0)
+    // C3 FINAL-2 CHANGE B：`0` 是显式「零并发」配置，必须保留在 scope 列表里（不得被过滤成「未配置」）
+    .filter((row) => typeof row.concurrencyLimit === 'number' && Number.isInteger(row.concurrencyLimit) && row.concurrencyLimit >= 0)
     .filter((row) => row.scope === 'PLATFORM' || row.organizationId === refs.organizationId)
     .map((row) => ({ scope: row.scope as AiBudgetScopeName, scopeRef: row.scopeRef, concurrencyLimit: row.concurrencyLimit as number }))
     .sort((a, b) => (order[a.scope] ?? 9) - (order[b.scope] ?? 9));
@@ -107,7 +112,9 @@ export async function withAiBudgetConcurrencySlots<T>(input: {
       const heldKeys: string[] = [];
       for (const scope of scopes) {
         let acquired = false;
-        for (let slot = 0; slot < scope.concurrencyLimit; slot += 1) {
+        // concurrencyLimit = 0 → 无任何 slot 可占 → 直接拒绝（零并发语义，绝不退化为 unlimited）
+        const slots = Math.max(0, scope.concurrencyLimit);
+        for (let slot = 0; slot < slots; slot += 1) {
           const key = slotKey(scope.scope, scope.scopeRef, slot);
           const rows = await tx.$queryRawUnsafe<{ locked: boolean }[]>(
             'SELECT pg_try_advisory_xact_lock(hashtext($1)) AS locked',
