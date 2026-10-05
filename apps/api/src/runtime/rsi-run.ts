@@ -30,6 +30,12 @@ import type { RsiAdminHealth } from './rsi-admin-snapshot';
 import type { RsiCostLedger } from '../services/autonomy/rsi-cost-ledger';
 import type { RsiCostUsage } from '../services/autonomy/rsi-cost-policy';
 import type { RsiSafeTask } from '../services/autonomy/rsi-continuation-engine';
+import {
+  runRsiRestartReconcile,
+  type RsiReconcilePlan,
+  type RsiReconcileStore,
+  type RsiReconcileTrigger,
+} from './rsi-restart-reconcile';
 
 export function parseTaskQueue(raw: string): readonly RsiSafeTask[] {
   try {
@@ -98,6 +104,8 @@ export interface RsiRuntimeComposition {
   controller: ReturnType<typeof attachContinuationToController>;
   publisher: RsiSnapshotPublisher | null;
   verdictWatcher: RsiVerdictWatcher | null;
+  /** 启动时运行一次重启/接管 reconcile；没有配置 store 时返回 null（NOT_CONFIGURED），不做任何事。 */
+  reconcileNow(): Promise<RsiReconcilePlan | null>;
   start(): void;
   stop(): void;
 }
@@ -122,6 +130,15 @@ export async function composeRsiRuntime(input: {
   };
   /** 配置后：仅当运行时等待裁决时，短轮询 verdict artifact 并驱动续跑。 */
   verdictWatch?: { intervalMs?: number };
+  /**
+   * 可选：进程启动时先做一次 restart/接管 reconcile（lease 恢复 + 去重 + exactly-once）。
+   * 没有 store 时不启用（默认 NOT_CONFIGURED），不会凭空写任何状态。
+   */
+  reconcile?: {
+    store: RsiReconcileStore;
+    ownerRef: string;
+    trigger?: RsiReconcileTrigger;
+  };
 }): Promise<RsiRuntimeComposition> {
   let tasks: readonly RsiSafeTask[] = [];
   if (input.tasksPath !== undefined) {
@@ -183,11 +200,20 @@ export async function composeRsiRuntime(input: {
           intervalMs: input.verdictWatch.intervalMs ?? 15_000,
         });
 
+  const reconcileSpec = input.reconcile;
   return {
     loop,
     controller,
     publisher,
     verdictWatcher,
+    async reconcileNow(): Promise<RsiReconcilePlan | null> {
+      if (reconcileSpec === undefined) return null;
+      return runRsiRestartReconcile({
+        store: reconcileSpec.store,
+        ownerRef: reconcileSpec.ownerRef,
+        trigger: reconcileSpec.trigger ?? 'BOOT',
+      });
+    },
     start: () => {
       loop.start();
       publisher?.start();
@@ -210,6 +236,8 @@ export const RSI_RUNTIME_COMPOSITION_BOUNDARY = {
   verdictPollOnlyWhileWaiting: true,
   parkForJudgeDefault: false,
   verdictValueFromArtifact: true,
+  restartReconcileSupported: true,
+  restartReconcileDefault: 'NOT_CONFIGURED',
   readsCredentials: false,
   writesDatabase: false,
   performsExternalWrite: false,
@@ -228,6 +256,16 @@ if (isDirectRun) {
       runner: await resolveRunnerFromEnv(),
       intervalMs: Number(process.env.RSI_WATCHDOG_INTERVAL_MS ?? 60_000),
     });
+    const reconcile = await composition.reconcileNow();
+    console.log(
+      'RSI_RECONCILE=' +
+        (reconcile === null
+          ? 'NOT_CONFIGURED'
+          : 'expiredLeases=' + reconcile.expiredLeaseIds.length +
+            ' recoveredTasks=' + reconcile.recoveredTaskIds.length +
+            ' heldActiveLeases=' + reconcile.heldActiveLeaseIds.length +
+            ' idempotentNoop=' + reconcile.idempotentNoop),
+    );
     composition.start();
     console.log(
       'RSI_RUN_STARTED eventDriven=true watchdogIntervalMs=' + (process.env.RSI_WATCHDOG_INTERVAL_MS ?? 60_000),

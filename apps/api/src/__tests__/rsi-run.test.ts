@@ -10,6 +10,7 @@ import {
 import { createUnconfiguredRunner } from '../runtime/rsi-task-runner';
 import type { RsiReadFile } from '../runtime/rsi-local-sources';
 import { createRsiCostLedger } from '../services/autonomy/rsi-cost-ledger';
+import { createRsiInMemoryReconcileStore } from '../runtime/rsi-restart-reconcile';
 
 const files = (map: Record<string, string>): RsiReadFile => async (path) => {
   const value = map[path];
@@ -154,5 +155,43 @@ describe('RSI 运行组装入口', () => {
 
     const bare = await composeRsiRuntime({ readFile: files({}), intervalMs: 60_000 });
     expect(bare.verdictWatcher).toBeNull();
+  });
+
+  it('RSI_RUN_RECONCILE_WIRED_WHEN_CONFIGURED：配置后启动前执行一次 reconcile，未配置则为 null', async () => {
+    // 未配置 store：NOT_CONFIGURED，不写任何状态（默认行为不变）
+    const bare = await composeRsiRuntime({ readFile: files({}), intervalMs: 60_000 });
+    expect(await bare.reconcileNow()).toBeNull();
+    expect(RSI_RUNTIME_COMPOSITION_BOUNDARY.restartReconcileDefault).toBe('NOT_CONFIGURED');
+
+    // 配置 store：过期 lease + 卡在 IN_PROGRESS 的任务 → 收敛；第二次运行空操作（exactly-once）
+    const store = createRsiInMemoryReconcileStore({
+      tasks: [{ taskId: 't1', dedupeKey: 'd:t1', status: 'IN_PROGRESS', createdAt: '2026-10-05T00:00:00.000Z' }],
+      leases: [
+        {
+          leaseId: 'l1',
+          taskId: 't1',
+          ownerRef: 'runtime-old',
+          status: 'ACTIVE',
+          acquiredAt: '2026-10-05T00:00:00.000Z',
+          renewedAt: '2026-10-05T00:00:00.000Z',
+          expiresAt: '2026-10-05T00:05:00.000Z',
+        },
+      ],
+    });
+    const runtime = await composeRsiRuntime({
+      readFile: files({}),
+      intervalMs: 60_000,
+      reconcile: { store, ownerRef: 'runtime-new', trigger: 'RESTART' },
+    });
+    const plan = await runtime.reconcileNow();
+    expect(plan).not.toBeNull();
+    expect(plan!.trigger).toBe('RESTART');
+    expect(plan!.expiredLeaseIds).toEqual(['l1']);
+    expect(plan!.recoveredTaskIds).toEqual(['t1']);
+    expect(store.taskSnapshot()[0]?.status).toBe('READY');
+    const again = await runtime.reconcileNow();
+    expect(again!.idempotentNoop).toBe(true);
+    runtime.start();
+    runtime.stop();
   });
 });
