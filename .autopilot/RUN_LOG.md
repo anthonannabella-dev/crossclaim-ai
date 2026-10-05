@@ -2643,3 +2643,11 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 验证：tsc exit 0；prisma validate valid / migrate status up to date（本批无 Schema/迁移变更）；si-cost-c3 = 18/18；si-cost-c3-db（真实 PostgreSQL，含 2 客户端并发限流）= 8/8；rsi-* + si-cost-* + architecture-contract = 50 files / 445 tests PASS。
 - 边界：RUNTIME_WIRING = NONE（C3 接线只限 SI 成本控制内部链路 + local sim adapter，不等于 STEP_3_RUNTIME_POLICY_WIRING）；REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G = HOLD。
 - NEXT_EXECUTION_UNIT = 读取 C3 Implementation Audit 裁决 → 逐字归档（MSG-20261005-38）→ PASS/CLOSED 则宣布 SI_COST_OPTIMIZATION = PASS / CLOSED 并 recompute SAFE_CONTINUATION_QUEUE；REVISE 则最小集合窄修 → commit/push → 再送审。
+
+## 2026-10-06T06:00Z —— C3 FINAL-2（MSG-20261005-38 A/B/C/D）完成并送审（实现 HEAD = 3572ac22）
+- A：STRONG 升级新增第二道 business-value gate（价值 + canonical risk 双 gate）；riskClass 参与判定 —— HIGH 价值 + LOW/MEDIUM 风险才 STRONG eligible，未知/HIGH 风险 → 仅 LOW_COST（fail-closed）；hard cap strongRequiresHighValueAndEligibleRisk=true / unknownRiskMayUseStrong=false。
+- B：concurrencyLimit 三态语义 —— null = NOT_CONFIGURED；0 = DENY_ALL（零并发，不再退化为 unlimited）；>0 = N slot；L0/health/critical alert 不受影响。
+- C：新增 durable resolver si-cost-safe-mode-store#resolveAiCostSafeMode —— 逐 policy 用自己的 scope 聚合 daily/monthly/token/strong；perIncident 只统计当前 incident，无 incident → NOT_APPLICABLE；observability 投影改用该 resolver（不再用最窄 usage 对比父级 limit）。
+- D：observability 增加 provenance（NO_TRAFFIC / LOCAL_SIMULATION_ONLY / REAL_PROVIDER）；生产效率指标只在 REAL_PROVIDER 时输出，仅 local-sim 时一律 NOT_YET_MEASURABLE；保留 devSimulation 计数（明确不得当作生产指标）。
+- 验证：tsc exit 0；prisma validate valid（无 Schema/迁移变更）；si-cost-c3 = 23/23；si-cost-c3-db（真实 PostgreSQL）= 14/14；rsi-* + si-cost-* + architecture-contract = 50 files / 458 tests PASS。
+- NEXT_EXECUTION_UNIT = 读取 C3 FINAL-2 裁决 → 逐字归档（MSG-20261005-39）→ PASS/CLOSED 则宣布 SI_COST_OPTIMIZATION = PASS / CLOSED 并 recompute SAFE_CONTINUATION_QUEUE；REVISE 则最小集合窄修 → commit/push → 再送审。
