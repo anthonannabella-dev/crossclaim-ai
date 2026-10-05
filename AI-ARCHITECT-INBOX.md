@@ -149964,3 +149964,132 @@ PRODUCTION_READY = false
 现在只差 U4 metrics 去重这一处，Phase 4 就可以整体封板。
 ```
 
+### [MSG-20261005-67] PHASE 4 FINAL CLOSURE 裁决 = PASS：EVALUATION_DUPLICATE_INFLATION_GUARD / VERIFIED_OUTCOME_DEDUPE / DUPLICATE_DIGEST_CONFLICT = PASS；U1·U2·U3·U4·U5 = CLOSED；**PHASE_4_OUTCOME_LEARNING_PIPELINE = PASS / CLOSED**；PHASE4_FURTHER_REVISION_REQUIRED = NO；NEXT = PHASE 5 — META IMPROVEMENT（建议首单元 P5-U1 Candidate Review + Approval Verdict Contract）， reviewed ref bf126c0a
+
+```text
+DECISION
+
+EVALUATION_DUPLICATE_INFLATION_GUARD = PASS
+VERIFIED_OUTCOME_DEDUPE = PASS
+DUPLICATE_DIGEST_CONFLICT = FAIL_CLOSED / PASS
+U1 = CLOSED
+U2 = CLOSED
+U3 = CLOSED
+U4 = CLOSED
+U5 = CLOSED
+PHASE_4_OUTCOME_LEARNING_PIPELINE = PASS / CLOSED
+PHASE4_FURTHER_REVISION_REQUIRED = NO
+Reviewed HEAD：bf126c0a
+GitHub Actions：NOT_OBSERVED
+
+KEEP
+
+去重顺序正确：
+
+trusted lineage binding → verified records → dedupe by digest → metrics + identity
+
+metrics 与 identity 现在消费同一 uniqueVerifiedRecords。
+
+totalRecords 已等于 unique verified outcome 数量。
+
+duplicate 2 次、10 次不会再改变 denominator / successRate。
+
+duplicate 与 dedup 输入得到相同 evaluationDigest、verifiedOutcomeSetDigest 和 candidateDigest。
+
+同 digest、不同 canonical 内容直接：
+
+OFFLINE_EVALUATION_DUPLICATE_DIGEST_CONFLICT
+
+没有重新打开 U1–U5 已关闭边界。
+
+CHANGE
+
+无 Phase 4 阻断修改。
+不需要再做 FINAL2 / FINAL3。
+Phase 4 正式封板。
+
+仅保留一个未来维护要求：如果 OutcomeRecord 后续新增复杂嵌套字段，recordContentKey() 的 canonicalization 也要同步升级，避免新字段出现不稳定序列化。当前不阻断 closure。
+
+RISKS
+
+以下均为已知非阻断债务：
+
+evidence / evaluation / evidence-set digest 仍截 16 hex；长期持久化建议完整 SHA-256。
+scanRawPayloadKeys() 固定递归深度。
+P2E-DB5 test-isolation debt。
+本轮仍未观察到 exact SHA 的 GitHub Actions run；本地测试结果属于 Codex 提供的执行证据，不等同独立 CI。
+
+TEST
+
+最终关闭条件已经覆盖：
+
+重复同 digest → 只计一次；
+totalRecords == unique digest count；
+duplicate / dedup → evaluation 完全一致；
+duplicate / dedup → U5 candidate 摘要一致；
+同 digest 内容冲突 → fail-closed；
+原 Phase 4 回归保持 green；
+U3/U4/U5 provenance、anti-tamper、exact-set binding 均保持关闭。
+
+因此 78/78 Phase 4 tests 的这套契约足以支持架构层 closure。
+
+NEXT
+
+PHASE 5 — META IMPROVEMENT 进入条件冻结
+
+固定链路：
+
+Verified Immutable Evidence
+→ Verified Offline Evaluation
+→ PROPOSAL_ONLY Candidate
+→ External Judge / Human Approval
+→ Controlled Adoption Proposal
+
+Phase 5 初始阶段仅允许：
+
+Candidate Review
+Approval / Rejection Verdict
+Controlled Config Proposal
+Rollback Plan
+Canary / Shadow Evaluation
+
+Phase 5 初始阶段明确禁止：
+
+candidate 自动修改 Policy
+candidate 自动修改 Guard
+candidate 自动修改 Router
+candidate 自动修改 Action Runtime
+自动 promotion
+自动 production rollout
+绕过 External Judge / Human Approval
+
+建议 Phase 5 的第一单元从：
+
+P5-U1 Candidate Review + Approval Verdict Contract
+
+开始，先把“谁能批准、批准绑定什么 candidate/evaluation/evidence、批准是否一次性、防 replay、过期/撤销”做严，再讨论 controlled adoption。
+
+PRODUCTION
+
+继续全部 HOLD：
+
+REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing
+
+继续：
+
+SECOND_RUNTIME / SECOND_POLICY_ENGINE / SECOND_CONTROL_PLANE / SECOND_MODEL_GATEWAY / SECOND_COST_LEDGER / SECOND_META_EVIDENCE_STORE = FORBIDDEN
+
+继续：
+
+L5_RELAXATION = FORBIDDEN
+
+保持：
+
+MODEL_GATEWAY_RUNTIME_WIRED = false
+ACTION_RUNTIME_PRODUCTION_ENABLED = false
+META_IMPROVEMENT_INTEGRATED = false
+PRODUCTION_READY = false
+
+PHASE 4 正式 CLOSED，可以进入 PHASE 5。
+```
+
