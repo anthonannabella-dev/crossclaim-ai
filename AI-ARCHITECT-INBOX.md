@@ -138165,3 +138165,344 @@ FINAL_ACCEPTANCE_HEAD = 0f7f7ac
 
 不需要 FINAL-2。Codex 可以直接关闭 BG-011，且不得借此继续实施 D4。
 ```
+
+### [MSG-20261005-11] ARCHITECT VERDICT — Recovery SI Phase 1 = **REVISE**（Phase 1 架构方向 PASS，但暂不能 CLOSED；REVIEWED_HEAD = `97dfb387`，未使用上一轮缓存）。**已 PASS 部分**：`SECOND_RUNTIME = NO` / `RUNTIME_WIRING = NONE` / `TOOL_EXECUTION = ZERO` / `EXTERNAL_WRITE = FALSE` / `L5_RELAXATION = NO` / `REAL_SUBMIT = NO` / `SCHEMA_DELTA_REQUIRED = NO` / `DETERMINISTIC_PLAN = PASS` / `STALE_TOP_LEVEL_SNAPSHOT = PASS`；确认本次 commit 只新增 intelligence 层/测试/文档，无 Prisma schema·migration、未接 `rsi:run`/Event Loop/外部 provider。**三个必修（与送审不变量直接冲突）**：**CHANGE A（最大 blocker）**：`recovery-prioritizer` 把 EUR/GBP/CNY 的 `recoverable.amount` 与 USD 计价的 `providerCostUsd/operationalCostUsd/riskPenaltyUsd` 直接相减（如 `900 EUR − 1 USD − 4 USD = 895 EUR`）是量纲错误，且所有币种进入同一 `ranked.sort(expectedRecoveryValueUsd)` 做跨币种数值比较 → `MULTI_CURRENCY_NO_FX` 只是 reasonCode 而计算并未遵守；最小修法二选一：**A. 无可信 FX 时按 currency 分桶、只在同币种内排序、不生成跨币种 monetary ranking（Phase 1 建议）**，或 B. 仅在存在持久化、带时间戳的可信 FX source 时才统一转 USD；同时 `riskPenaltyUsd` 必须与 recoverable 同币种语义，除非真的经过 FX。**CHANGE B（Verifier 未真正 fail-closed）**：①租户不符只在 `rejected[]` 而未按架构整单拒绝（`halted` 声明了 `TENANT_MISMATCH` 但代码从未返回）→ 需 supervisor/verifier preflight：`state.tenantVerified !== true` 或 `plan.organizationId !== state.organizationId` 或任一 `opportunity.organizationId !== state.organizationId` → 整单 halt `TENANT_MISMATCH`，并**必须补「绕过 builder 直接构造污染 state」的负例**；②每条 `OpportunitySlice.observedAt` 未被校验（state 新鲜但某机会一个月前仍可进 READY）→ 被引用机会的 observedAt 也要纳入 stale/future 检查；③`expectedRecovery` 可被篡改（改成 999999999 仍通过）→ verifier 需同时拿 `PriorityResult` 并校验 `amount === 该机会的 deterministic scored amount`、`currency === 同一 score currency`，否则拒绝 `MONEY_DERIVATION_MISMATCH`。**CHANGE C（执行许可歧义）**：`READY_FOR_EXECUTION → JUDGE_CANDIDATE` 在 `AUTO_JUDGE=true` 下会输出 `allowedForRecoverySi=true`，与顶层 `executionAuthorizedInPhase1=false` 并存易被误用为「可执行」；最小修法：保留 READY 决策标记但最终 decision 必须显式 `executionAuthorized = false`，并最好同时 `allowedForRecoverySi = false` + `reasonCodes += EXECUTION_NOT_AUTHORIZED_IN_PHASE1`（或把字段重命名为 `decisionAllowed`）；不需要删 READY marker、也不需要接 Action Guard。**正式裁定**：①`RECOVERY_SI_PHASE1 = REVISE`，修完 A/B/C 可直接送 **FINAL-2**，不需要重审整体 SI 架构；②`PHASE1_RUNTIME_WIRING = FORBIDDEN`、`PHASE1_TOOL_EXECUTION = FORBIDDEN`、`PHASE2 = SEPARATE_ARCHITECT_APPROVAL_REQUIRED`（Phase 2 才讨论 event loop 接线/tool invocation/Action Guard handoff/persistent plan/model assistance/real executor）；③`SCHEMA_DELTA_REQUIRED = NO`（三个修订全部可在纯 TypeScript 层完成）。**FINAL-2 最小证据集合**：1. EUR+USD 成本不得再出现 `900 EUR − 5 USD = 895 EUR`；2. USD+EUR 两机会在无 FX 时不得跨币种直接比较/统一 EV 排名；3. 直接伪造 cross-tenant `CustomerRecoveryState` → `halted = TENANT_MISMATCH`、`decisions = []`；4. state fresh 但 `opportunity.observedAt` stale/future → fail-closed；5. 篡改 `plan.expectedRecovery` amount/currency → verifier reject；6. `READY_FOR_EXECUTION` 必须 `executionAuthorized = false` 且不能被表达成真实执行许可。**非阻塞归档问题**：在 exact `97dfb387` 上读不到 `RECOVERY-SI-PHASE1-AUDIT-REQUEST.md` 本身，FINAL-2 durable pack 应把送审请求文件也落进仓库。边界继续：`EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / REAL_CLAIM_SUBMIT / CUSTOMS_FILING = HOLD`、`FINAL_ACCEPTANCE_HEAD = 0f7f7ac`。
+
+```text
+ARCHITECT VERDICT：REVISE（Phase 1 架构方向 PASS，但暂不能 CLOSED）
+
+我按 REVIEWED_HEAD = 97dfb38739a1ec5ed3ac982bf2a6f354a8797589 重新审了 7 个 services/intelligence/ 模块、两组测试、Reuse Matrix / Architecture / Evidence，没有使用上一轮缓存。
+
+先给结论：“不建第二套 Runtime、Phase 1 不接运行时、不执行真实 Tool、无 Schema Delta”这三件事都成立。 但当前还有 3 个实现级问题与送审不变量直接冲突，所以 RECOVERY_SI_PHASE1 还不能记 CLOSED。
+
+已经可以 PASS 的部分
+纯文本
+SECOND_RUNTIME = NO / PASS
+RUNTIME_WIRING = NONE / PASS
+TOOL_EXECUTION = ZERO / PASS
+EXTERNAL_WRITE = FALSE / PASS
+L5_RELAXATION = NO / PASS
+REAL_SUBMIT = NO / PASS
+SCHEMA_DELTA_REQUIRED = NO / PASS
+DETERMINISTIC_PLAN = PASS
+STALE_TOP_LEVEL_SNAPSHOT = PASS
+
+我也确认本次 commit 只新增 intelligence 层、测试和文档，没有 Prisma schema/migration，也没有接进 rsi:run、Event Loop 或外部 provider。
+
+CHANGE A — 多币种 EV 目前存在金额单位错误
+
+这是本轮最大的 blocker。
+
+当前 recovery-prioritizer.ts 做的是：
+
+纯文本
+recoverable.amount
+-
+providerCostUsd
+-
+operationalCostUsd
+-
+riskPenaltyUsd
+
+但 recoverable.amount 可以是 EUR/GBP/CNY，而后两个成本明确是 USD。
+
+例如测试里：
+
+纯文本
+900 EUR
+- 1 USD
+- 4 USD
+= 895 EUR
+
+这是量纲错误。
+
+更严重的是，当前所有币种最后进入同一个：
+
+纯文本
+ranked.sort(expectedRecoveryValueUsd)
+
+所以即使不“相加”，仍然在拿：
+
+纯文本
+5000 USD
+900 EUR
+1300 GBP
+
+直接做数值大小比较。
+
+这仍然属于无 FX 来源的跨币种金额比较。
+
+因此当前：
+
+纯文本
+MULTI_CURRENCY_NO_FX
+
+只是 reasonCode，实际计算并没有完全遵守它。
+
+最小修法
+
+二选一即可：
+
+纯文本
+A. 没有可信 FX 时：
+   按 currency 分桶
+   只在同币种内做金额 EV 排序
+   不生成跨币种 monetary ranking
+
+或：
+
+纯文本
+B. 只有存在持久化、带时间戳的可信 FX source 时
+   才统一转换到 USD 后排序
+
+Phase 1 建议选 A，最简单，也不需要 Schema Delta。
+
+同时 riskPenaltyUsd 应改成与 recoverable 同币种的语义，除非真的经过 FX。
+
+CHANGE B — Verifier 现在还没有真正验证“金额 / 租户 / 每条事实时效”
+1. Tenant mismatch 没有按架构定义整单 fail-closed
+
+架构文档写的是：
+
+纯文本
+TENANT_MISMATCH
+→ 整个 plan 拒绝
+
+而当前 verifier 对跨租户 action 只是放进：
+
+纯文本
+rejected[]
+
+然后 supervisor 仍返回：
+
+纯文本
+halted = null
+
+甚至 RecoverySupervisionResult 已声明：
+
+纯文本
+halted:
+  STALE_SNAPSHOT
+  TENANT_MISMATCH
+  null
+
+但代码从未真正返回 TENANT_MISMATCH。
+
+所以必须补 supervisor/verifier preflight：
+
+纯文本
+state.tenantVerified !== true
+或
+plan.organizationId !== state.organizationId
+或
+任一 opportunity.organizationId !== state.organizationId
+
+→ 整单 halt TENANT_MISMATCH
+
+尤其必须补一个绕过 buildCustomerRecoveryState()、直接构造污染 state 的负例。否则 tenant 安全依赖调用方“乖乖先走 builder”。
+
+2. 每条 Opportunity 的 observedAt 没有被校验
+
+OpportunitySlice 专门有：
+
+纯文本
+observedAt
+
+注释也明确说是给 planner/verifier 做陈旧判断。
+
+但当前 verifier 只检查：
+
+纯文本
+state.observedAt
+
+如果：
+
+纯文本
+state.observedAt = 刚刚
+某 opportunity.observedAt = 一个月前
+
+仍可进入 READY。
+
+需要把被引用机会的 observedAt 同样纳入 stale/future 检查。
+
+3. expectedRecovery 可以被篡改
+
+当前 verifier 对金额的验证只有：
+
+纯文本
+action.expectedRecovery != null
+&& slice.recoverable == null
+→ MONEY_NOT_FROM_FACT
+
+所以只要 slice 有一个可信金额，plan 即使被改成：
+
+纯文本
+expectedRecovery = 999999999
+
+也能通过 verifier。
+
+这与：
+
+每一个 SI 判断都必须过 Verifier，无法验证字段 fail-closed
+
+不一致。
+
+最小修法是让 verifier 同时拿到 PriorityResult，并验证：
+
+纯文本
+action.expectedRecovery.amount
+===
+该 opportunity 的 deterministic scored amount
+
+currency
+===
+同一 score currency
+
+被篡改则拒绝：
+
+纯文本
+MONEY_DERIVATION_MISMATCH
+
+或者沿用你们现有稳定码。
+
+CHANGE C — READY_FOR_EXECUTION 现在仍可能输出 allowedForRecoverySi=true
+
+当前映射：
+
+纯文本
+READY_FOR_EXECUTION
+→ JUDGE_CANDIDATE
+
+而现有 RSI 默认：
+
+纯文本
+AUTO_JUDGE = true
+
+所以 policy 很可能给出：
+
+纯文本
+allowedForRecoverySi = true
+
+虽然 supervisor 顶层又写了：
+
+纯文本
+executionAuthorizedInPhase1 = false
+
+但这两个字段并存很容易让未来消费者误用：
+
+纯文本
+READY_FOR_EXECUTION
++
+allowedForRecoverySi=true
+
+看起来像“可以执行”。
+
+而 verifier 里其实已经定义了：
+
+纯文本
+EXECUTION_NOT_AUTHORIZED_IN_PHASE1
+
+却没有实际使用。
+
+最小修法
+
+保留 READY_FOR_EXECUTION 这个决策标记，但其最终 decision 必须显式：
+
+纯文本
+executionAuthorized = false
+
+最好同时：
+
+纯文本
+allowedForRecoverySi = false
+reasonCodes += EXECUTION_NOT_AUTHORIZED_IN_PHASE1
+
+或者把现字段重命名为：
+
+纯文本
+decisionAllowed
+
+避免与“真实执行许可”混淆。
+
+不需要删除 READY marker，也不需要接 Action Guard。
+
+你问的三项正式裁定
+
+① Phase 1 是否可 CLOSED？
+
+现在：
+
+纯文本
+RECOVERY_SI_PHASE1 = REVISE
+
+修完 A/B/C 后可直接送 FINAL-2，不需要重审整体 SI 架构。
+
+② Phase 1 不接 Runtime、不做真实 Tool 执行；Phase 2 另行批准？
+
+同意，而且必须维持。
+
+纯文本
+PHASE1_RUNTIME_WIRING = FORBIDDEN
+PHASE1_TOOL_EXECUTION = FORBIDDEN
+PHASE2 = SEPARATE_ARCHITECT_APPROVAL_REQUIRED
+
+Phase 2 才讨论：
+
+event loop 接线
+tool invocation
+Action Guard handoff
+persistent plan
+model assistance
+real executor
+
+③ SCHEMA_DELTA_REQUIRED = NO？
+
+PASS。
+
+纯文本
+SCHEMA_DELTA_REQUIRED = NO
+
+本轮三个修订全部可以在纯 TypeScript 层完成，不需要新增表。
+
+FINAL-2 最小证据集合
+
+不需要扩大测试，只补这几类：
+
+纯文本
+1. EUR + USD 成本：
+   不得再出现 900 EUR - 5 USD = 895 EUR
+
+2. USD + EUR 两机会：
+   无 FX 时不得按金额跨币种直接比较/统一 EV 排名
+
+3. 直接伪造 cross-tenant CustomerRecoveryState：
+   supervisor → halted TENANT_MISMATCH
+   decisions = []
+
+4. state fresh，但 opportunity.observedAt stale/future：
+   fail-closed
+
+5. 篡改 plan.expectedRecovery amount/currency：
+   verifier reject
+
+6. READY_FOR_EXECUTION：
+   executionAuthorized = false
+   且不能被表达成真实执行许可
+
+这些过了就够。
+
+另外一个非阻塞的归档问题：我在 exact 97dfb387 上能读到 Architecture / Reuse Matrix / Evidence，但没有找到你提到的 RECOVERY-SI-PHASE1-AUDIT-REQUEST.md 本身。不影响这次代码裁决，但后续 FINAL-2 durable pack 最好把送审请求文件也落进仓库。
+
+最终边界继续：
+
+纯文本
+EXTERNAL_WRITE = HOLD
+PAYMENT = HOLD
+TRANSPORT = HOLD
+PRODUCTION_CREDENTIALS = HOLD
+REAL_CLAIM_SUBMIT = HOLD
+CUSTOMS_FILING = HOLD
+FINAL_ACCEPTANCE_HEAD = 0f7f7ac
+
+所以方向不用重做：Recovery SI Phase 1 的架构是成立的；只需修正多币种金额语义、Verifier 真正 fail-closed，以及 READY 标记的执行许可歧义，然后即可关闭。
+```

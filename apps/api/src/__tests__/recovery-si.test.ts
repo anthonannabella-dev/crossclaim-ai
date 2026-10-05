@@ -174,7 +174,9 @@ describe('Recovery SI · prioritizer', () => {
     expect(result.reasonCodes).toContain('MULTI_CURRENCY_NO_FX');
     expect(Object.keys(result.expectedRecoveryByCurrency).sort()).toEqual(['EUR', 'USD']);
     expect(result.expectedRecoveryByCurrency.USD).toBeCloseTo(675, 6);
-    expect(result.expectedRecoveryByCurrency.EUR).toBeCloseTo(895, 6);
+    // CHANGE A（MSG-20261005-11）：EUR 机会不得相减 USD 成本 —— 该切片 riskClass=LOW（罚金 0），
+    // 因此应为 900 EUR 而不是旧的 900 - 1 - 4 = 895 EUR
+    expect(result.expectedRecoveryByCurrency.EUR).toBeCloseTo(900, 6);
   });
 });
 
@@ -264,7 +266,9 @@ describe('Recovery SI · policy（L5 不放宽）', () => {
     expect(decideRecoveryAction('EXECUTE_READ_ONLY_CHECK').allowedForRecoverySi).toBe(true);
     expect(decideRecoveryAction('PREPARE_PACKAGE').allowedForRecoverySi).toBe(true);
     const ready = decideRecoveryAction('READY_FOR_EXECUTION');
-    expect(ready.allowedForRecoverySi).toBe(true);
+    // CHANGE C（MSG-20261005-11）：READY 是决策标记，不是执行许可
+    expect(ready.allowedForRecoverySi).toBe(false);
+    expect(ready.reasonCodes).toContain('EXECUTION_NOT_AUTHORIZED_IN_PHASE1');
     expect(ready.permanentlyForbidden).toBe(false);
     expect(RECOVERY_POLICY_BOUNDARY.readyForExecutionIsExecution).toBe(false);
   });

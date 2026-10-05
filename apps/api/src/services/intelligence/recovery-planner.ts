@@ -102,7 +102,9 @@ export function planRecovery(input: {
 
     const capability = capabilityByDomain.get(slice.domain);
     const expectedRecovery =
-      slice.recoverable === null ? null : { amount: scored.expectedRecoveryValueUsd, currency: slice.recoverable.currency };
+      slice.recoverable === null
+        ? null
+        : { amount: scored.expectedRecoveryValue, currency: scored.currency };
     const base = {
       domain: slice.domain,
       opportunityRef: slice.opportunityRef,

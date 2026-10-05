@@ -16,6 +16,7 @@
 
 import type { CustomerRecoveryState } from './customer-recovery-state';
 import { RECOVERY_ACTION_KINDS, type RecoveryPlan, type RecoveryPlanAction } from './recovery-planner';
+import type { PriorityResult } from './recovery-prioritizer';
 import type { RecoveryToolRegistry } from './recovery-tool-registry';
 
 export type RecoveryVerificationReason =
@@ -28,7 +29,9 @@ export type RecoveryVerificationReason =
   | 'TOOL_ACCESS_FORBIDDEN'
   | 'EVIDENCE_STATE_MISMATCH'
   | 'AUTHORIZATION_STATE_MISMATCH'
-  | 'EXECUTION_NOT_AUTHORIZED_IN_PHASE1';
+  | 'EXECUTION_NOT_AUTHORIZED_IN_PHASE1'
+  | 'STALE_OPPORTUNITY'
+  | 'MONEY_DERIVATION_MISMATCH';
 
 export interface RejectedAction {
   opportunityRef: string;
@@ -44,15 +47,26 @@ export type RecoveryVerificationResult =
       /** Phase 1：`READY_FOR_EXECUTION` 只是决策标记，**从未**被授权执行 */
       executionAuthorizedInPhase1: false;
     }
-  | { ok: false; reason: 'STALE_SNAPSHOT'; rejected: readonly RejectedAction[] };
+  | { ok: false; reason: 'STALE_SNAPSHOT' | 'TENANT_MISMATCH'; rejected: readonly RejectedAction[] };
 
 export function verifyRecoveryPlan(input: {
   plan: RecoveryPlan;
   state: CustomerRecoveryState;
   registry: RecoveryToolRegistry;
+  /** CHANGE B：用于校验 plan 里的 expectedRecovery 是否等于确定性打分结果 */
+  priority?: PriorityResult;
   nowMs: number;
   maxSnapshotAgeMs: number;
 }): RecoveryVerificationResult {
+  // CHANGE B①：租户不变量整单 fail-closed（不依赖调用方先走 builder）
+  const tenantBroken =
+    input.state.tenantVerified !== true ||
+    input.plan.organizationId !== input.state.organizationId ||
+    input.state.opportunities.some((slice) => slice.organizationId !== input.state.organizationId);
+  if (tenantBroken) {
+    return { ok: false, reason: 'TENANT_MISMATCH', rejected: [] };
+  }
+
   const observedMs = Date.parse(input.state.observedAt);
   const stale =
     !Number.isFinite(observedMs) || input.nowMs - observedMs > input.maxSnapshotAgeMs || input.nowMs < observedMs;
@@ -61,6 +75,7 @@ export function verifyRecoveryPlan(input: {
   }
 
   const byRef = new Map(input.state.opportunities.map((slice) => [slice.opportunityRef, slice]));
+  const scoredByRef = new Map((input.priority?.ranked ?? []).map((entry) => [entry.opportunityRef, entry]));
   const verified: RecoveryPlanAction[] = [];
   const rejected: RejectedAction[] = [];
 
@@ -78,6 +93,26 @@ export function verifyRecoveryPlan(input: {
       }
       if (action.expectedRecovery !== null && slice.recoverable === null) {
         reasons.push('MONEY_NOT_FROM_FACT');
+      }
+      // CHANGE B②：被引用机会自身的时效也要校验（stale / future 都 fail-closed）
+      const sliceObservedMs = Date.parse(slice.observedAt);
+      if (
+        !Number.isFinite(sliceObservedMs) ||
+        input.nowMs - sliceObservedMs > input.maxSnapshotAgeMs ||
+        sliceObservedMs > input.nowMs
+      ) {
+        reasons.push('STALE_OPPORTUNITY');
+      }
+      // CHANGE B③：expectedRecovery 必须等于确定性打分结果，防篡改
+      if (action.expectedRecovery !== null) {
+        const scored = scoredByRef.get(action.opportunityRef);
+        if (
+          scored === undefined ||
+          action.expectedRecovery.currency !== scored.currency ||
+          Math.abs(action.expectedRecovery.amount - scored.expectedRecoveryValue) > 1e-6
+        ) {
+          reasons.push('MONEY_DERIVATION_MISMATCH');
+        }
       }
       if (action.proposedAction === 'REQUEST_EVIDENCE' && slice.evidenceComplete && slice.missingEvidence.length === 0) {
         reasons.push('EVIDENCE_STATE_MISMATCH');
@@ -106,7 +141,10 @@ export const RECOVERY_VERIFIER_BOUNDARY = {
   failClosed: true,
   llmSelfAttestation: false,
   staleSnapshotRejected: true,
+  staleOpportunityRejected: true,
   crossTenantRejected: true,
+  crossTenantHaltsWholePlan: true,
   moneyMustComeFromFact: true,
+  moneyDerivationRevalidated: true,
   executionNotAuthorizedInPhase1: true,
 } as const;

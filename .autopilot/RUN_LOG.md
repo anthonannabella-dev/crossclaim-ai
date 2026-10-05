@@ -2101,3 +2101,11 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 送审请求：①Phase 1 是否可记 CLOSED；②Phase 1 不接运行时/不做真实 Tool 执行、Phase 2 需另行批准是否同意；③SCHEMA_DELTA_REQUIRED = NO 是否同意；④如需补证据请列最小集合。
 - 唤醒投递异常（诚实记录）：右侧会话在投放本条 wake 时出现 **5 次重复消息** + 页面显示 `Unknown error`（重试按钮），已清空草稿，未再重复发送；等待裁决，不阻塞其它工作。
 - 说明：耐久记录 + 仓库文件才是权威来源；会话侧异常不影响已提交证据。
+
+## 2026-10-05T04:32:41.256Z — Recovery SI Phase 1：MSG-20261005-11（REVISE）消费 + CHANGE A/B/C 落地
+- 裁决逐字归档：AI-ARCHITECT-INBOX.md 新增 [MSG-20261005-11]（FNV 04f0b0a8 / 336 行 / FULL_COPY_OK；REVIEWED_HEAD 97dfb387）。
+- CHANGE A（多币种）：per-currency 分桶、组间按 currency 升序、USD 成本仅在 USD 机会中相减、riskPenalty 同币种、新增 expectedRecoveryValue/expectedRecoveryValueUsd/rankByCurrency 与 USD_COST_EXCLUDED_NO_FX。
+- CHANGE B（verifier）：租户不变量整单 halt TENANT_MISMATCH；被引用机会 observedAt 纳入 stale/future；expectedRecovery 与 PriorityResult 打分校验（MONEY_DERIVATION_MISMATCH）。
+- CHANGE C（执行许可）：READY_FOR_EXECUTION 的 allowedForRecoverySi=false + EXECUTION_NOT_AUTHORIZED_IN_PHASE1；decision 新增 executionAuthorized=false。
+- 测试：recovery-si 11 + recovery-si-e2e 5 + recovery-si-revise 6 = 22/22 PASS；tsc exit 0。
+- FINAL-2 durable pack：docs/releases/RECOVERY-SI-PHASE1-FINAL2-REQUEST.md（含 6 条最小证据对照）。

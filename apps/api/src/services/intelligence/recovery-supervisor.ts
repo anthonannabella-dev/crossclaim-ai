@@ -22,6 +22,8 @@ export interface RecoveryDecision {
   opportunityRef: string;
   proposedAction: RecoveryPlanAction['proposedAction'];
   allowedForRecoverySi: boolean;
+  /** CHANGE C：Phase 1 恒为 false —— READY_FOR_EXECUTION 不是执行许可 */
+  executionAuthorized: boolean;
   requiresOwnerApproval: boolean;
   reasonCodes: readonly string[];
 }
@@ -73,10 +75,12 @@ export function superviseRecovery(input: {
     plan,
     state: input.state,
     registry: input.registry,
+    priority,
     nowMs: input.nowMs,
     maxSnapshotAgeMs: input.maxSnapshotAgeMs ?? 15 * 60 * 1000,
   });
   if (!verification.ok) {
+    const halted = verification.reason === 'TENANT_MISMATCH' ? ('TENANT_MISMATCH' as const) : ('STALE_SNAPSHOT' as const);
     return {
       organizationId: input.state.organizationId,
       generatedAt: plan.generatedAt,
@@ -85,7 +89,7 @@ export function superviseRecovery(input: {
       priority,
       decisions: [],
       rejected: verification.rejected,
-      halted: 'STALE_SNAPSHOT',
+      halted,
       boundaries,
     };
   }
@@ -99,6 +103,7 @@ export function superviseRecovery(input: {
       opportunityRef: action.opportunityRef,
       proposedAction: action.proposedAction,
       allowedForRecoverySi: policy.allowedForRecoverySi,
+      executionAuthorized: false as const,
       requiresOwnerApproval: policy.requiresOwnerApproval || action.ownerApprovalRequired,
       reasonCodes: [...new Set([...action.reasonCodes, ...policy.reasonCodes])].sort(),
     };

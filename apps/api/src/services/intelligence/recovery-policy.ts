@@ -62,6 +62,18 @@ export function decideRecoveryAction(
     { action: policyAction, ...(options.riskClass === undefined ? {} : { riskClass: options.riskClass }) },
     options.flags === undefined ? {} : { flags: options.flags },
   );
+  // CHANGE C（MSG-20261005-11）：READY_FOR_EXECUTION 只是**决策标记**，
+  // 绝不表达为执行许可 —— 即使底层 policy（JUDGE_CANDIDATE，AUTO_JUDGE 默认 true）放行。
+  if (kind === 'READY_FOR_EXECUTION') {
+    return {
+      kind,
+      allowedForRecoverySi: false,
+      requiresOwnerApproval: true,
+      permanentlyForbidden: false,
+      reasonCodes: [...new Set([...delegated.reasonCodes, 'EXECUTION_NOT_AUTHORIZED_IN_PHASE1'])].sort(),
+      delegated,
+    };
+  }
   return {
     kind,
     allowedForRecoverySi: delegated.allowedForRsi,
@@ -84,6 +96,8 @@ export const RECOVERY_POLICY_BOUNDARY = {
   singlePolicySource: 'services/autonomy/rsi-policy-engine.ts',
   duplicatesPolicyTable: false,
   relaxesL5: false,
+  /** READY_FOR_EXECUTION 不产生 allowedForRecoverySi=true（CHANGE C） */
+  readyForExecutionNeverAllowedForSi: true,
   readyForExecutionIsExecution: false,
   ownerGatedActionsRemainOwnerGated: true,
 } as const;
