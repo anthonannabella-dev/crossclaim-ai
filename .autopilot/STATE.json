@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "9ebe622c",
+  "head": "240f7b28",
   "status": "RECONCILED",
   "current_task": "RSI 生产可执行闭环（7 点收口）：RSI_RUNTIME_READY = PASS；MODEL_PROVIDER_READY = 本地仿真已接线（真实网络/付费 HOLD）；PERSISTENCE_READY = ephemeral 已验证、durable 需宿主非生产 DATABASE_URL；REBOOT_RECONCILE_READY = NOT_IMPLEMENTED（下一单元）；SYSTEMD_VALIDATED = 需宿主 Linux 实机",
   "next_task": "BG-016 单一 Acceptance Head + 四份状态一致 guard（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍 HOST_ACTION_REQUIRED 或 HOLD",
@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-40",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T21:53:41.544Z",
+  "updated_at": "2026-10-05T22:02:06.746Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -50,15 +50,15 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
-  "next_execution_unit": "PHASE 5 U4 FINAL: (1) SAME_COHORT_PROOF - prove baseline/proposal evaluations come from the same cohort via a trusted upstream artifact (e.g. expose verified outcome digest set / cohort digest on the offline evaluation and require canary to verify set equality; mismatch -> fail-closed) instead of caller-declared cohortDigest string; (2) CANARY_EVALUATION_DIGEST_FULL_BINDING - evaluationDigest must bind the full artifact (baselineMetrics + proposalMetrics + metricDeltas fully, not just partial counters); (3) EVALUATION_WINDOW_VALIDATION - require valid ISO dates (Number.isFinite(Date.parse)) and from < to; tests: different cohort -> REJECT, same cohort -> PASS, invalid window strings -> REJECT, any artifact field change -> digest change, original 7 tests green, no apply/execute/mutate preserved; then audit -> archive -> durable state. Boundaries unchanged: REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing = HOLD; SECOND_* = FORBIDDEN; L5_RELAXATION = FORBIDDEN.",
+  "next_execution_unit": "PHASE 5 U4 FINAL verdict archive + next unit: (1) read verdict (REVIEWED_HEAD = 240f7b28, marker [CODEX-PHASE5-U4FINAL]); (2) write work/stage/verdict-p5u4f-raw.txt then archive AI-ARCHITECT-INBOX.md (MSG-20261005-77) + compare.mjs FULL_COPY_OK + commit/push; (3) durable state; if REVISE do the narrow fix; if PASS follow auditor NEXT (Controlled Adoption Review contract) with code -> tests -> regression -> tsc -> commit -> push -> audit -> archive; boundaries unchanged.",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-05T21:53:41.544Z",
+  "last_tick_at": "2026-10-05T22:02:06.746Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "PHASE 5 U4 verdict archived (MSG-20261005-76, FULL_COPY_OK, archive commit f2d1095e): SHADOW_ISOLATION / PHASE4_METRIC_REUSE / CANARY_ARTIFACT_PROVENANCE / U2_ROLLBACK_ANCHOR / NO_AUTO_ADOPTION-NO_EXECUTION = PASS; SAME_COHORT_PROOF / CANARY_EVALUATION_DIGEST_FULL_BINDING / EVALUATION_WINDOW_VALIDATION = REVISE; PHASE5_U4_FINAL_REQUIRED = YES.",
-  "last_action_at": "2026-10-05T21:49:08.045Z",
-  "next_action": "Execute PHASE 5 U4 FINAL (same-cohort proof + full evaluation digest binding + strict window validation), then next phase-5 unit (Controlled Adoption Review).",
-  "current_head": "9ebe622c",
-  "last_completed_head": "9ebe622c",
+  "last_action": "PHASE 5 U4 FINAL implemented: SAME_COHORT_PROOF (both evaluations must share the same verified outcome set; cohortDigest must equal baseline.verifiedOutcomeSetDigest; cohortId is a traceability label), EVALUATION_WINDOW_VALIDATION (finite Date.parse + from<to), insufficient data now maps to ROLLBACK_REQUIRED with insufficientEvidence flag, evaluationDigest binds full baseline/proposal metrics + metricDeltas. code 240f7b28 pushed and submitted (marker [CODEX-PHASE5-U4FINAL], REVIEWED_HEAD = 240f7b28). Local: tsc 0; canary-shadow-evaluation 7/7; PHASE5 10 files / 125 tests PASS; regression 103 files / 1072 tests (only P2E-DB5).",
+  "last_action_at": "2026-10-05T22:02:06.746Z",
+  "next_action": "Read PHASE 5 U4 FINAL verdict -> archive (MSG-20261005-77) -> if PASS continue to Controlled Adoption Review per auditor NEXT.",
+  "current_head": "240f7b28",
+  "last_completed_head": "240f7b28",
   "reviewed_head": "add99ec3",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -5169,11 +5169,9 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "P5U4F-1 U4 FINAL implementation plan (settled): (a) SAME_COHORT_PROOF - require baseline.verifiedOutcomeDigests join === proposal.verifiedOutcomeDigests join else CANARY_SAME_COHORT_REQUIRED, and require cohortDigest === baseline.verifiedOutcomeSetDigest else CANARY_COHORT_DIGEST_MISMATCH (caller-declared cohortId kept for traceability); (b) EVALUATION_WINDOW_VALIDATION - Number.isFinite(Date.parse(from/to)) && to > from else CANARY_EVALUATION_WINDOW_INVALID; (c) insufficient data is a mandatory rollback condition per frozen rule -> recommendation = ROLLBACK_REQUIRED with insufficientEvidence flag; (d) evaluationDigest preimage must include full baselineMetrics + proposalMetrics + metricDeltas (JSON) + cohortId/cohortDigest; (e) REWRITE canary test file wholesale (do NOT string-patch): both sides over the SAME record set (cohortDigest = baseline.verifiedOutcomeSetDigest), ELIGIBLE case, all-UNKNOWN same-cohort case -> ROLLBACK_REQUIRED + insufficientEvidence, invalid window string case, cohort mismatch case (different record sets), provenance/anti-tamper, no execution entries.",
-    "P5U4F-2 U4 FINAL tests (cohort mismatch reject / same cohort pass / invalid window reject / digest full-coverage / original 7 green / no execution) + regression + tsc + commit + push",
-    "P5U4F-3 audit U4 FINAL -> archive (MSG-20261005-77) -> compare FULL_COPY_OK -> durable state",
-    "P5U4F-4 then next phase-5 unit (Controlled Adoption Review) per auditor NEXT",
-    "P5U4F-5 non-blocking debt: full SHA-256 digests, fingerprint schema upkeep, scanRawPayloadKeys bounded traversal, P2E-DB5 test-isolation"
+    "P5U4F-1 read U4 FINAL verdict (240f7b28) -> write verdict raw -> archive MSG-20261005-77 -> compare FULL_COPY_OK -> commit/push -> durable state",
+    "P5U4F-2 if PASS -> open next phase-5 unit (Controlled Adoption Review) per auditor NEXT",
+    "P5U4F-3 non-blocking debt: full SHA-256 digests, fingerprint schema upkeep, scanRawPayloadKeys bounded traversal, P2E-DB5 test-isolation"
   ],
   "full_autonomous_internal_execution": "VERIFIED",
   "dispatcher_acceptance": {
@@ -9323,7 +9321,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-05T21:53:41.544Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-05T22:02:06.746Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -9451,7 +9449,7 @@
     "PHASE_2_MODEL_GATEWAY_RUNTIME": "PASS / CLOSED（MSG-20261005-50；Reviewed HEAD 338f30b4；PHASE2_FINAL5_REQUIRED = NO）",
     "PHASE_3_ACTION_RUNTIME": "PASS / CLOSED（MSG-20261005-54；Reviewed HEAD = fe3c33e9；PHASE3_FINAL4_REQUIRED = NO）",
     "PHASE_4_OUTCOME_LEARNING_PIPELINE": "CLOSED / PASS（MSG-20261005-67）：U1 FINAL / U2 / U3 / U4 / U5 全 CLOSED；含 U4 FINAL、U5 FINAL、U5 FINAL2、PHASE 4 FINAL CLOSURE。",
-    "PHASE_5_META_IMPROVEMENT": "IN PROGRESS: U1/U2/U3 = PASS / CLOSED; U4 = PASS WITH REVISE (MSG-20261005-76), U4 FINAL pending."
+    "PHASE_5_META_IMPROVEMENT": "IN PROGRESS: U1/U2/U3 = PASS / CLOSED; U4 = PASS WITH REVISE, U4 FINAL = SUBMITTED / AWAITING_VERDICT (240f7b28)."
   },
   "heartbeat_watchdog": {
     "interval_seconds": 180,
@@ -10734,5 +10732,22 @@
       "EVALUATION_WINDOW_VALIDATION"
     ],
     "phase5_u4_final_required": "YES"
+  },
+  "phase5_u4_final": {
+    "status": "SUBMITTED / AWAITING_VERDICT",
+    "reviewed_head": "240f7b28",
+    "pushed": true,
+    "local_verification": {
+      "tsc": "PASS",
+      "targeted": "canary-shadow-evaluation 7/7",
+      "phase5": "10 files / 125 tests PASS",
+      "regression": "103 files / 1072 tests (1 failed = P2E-DB5)",
+      "github_ci": "NOT_OBSERVED"
+    },
+    "submission": {
+      "marker": "[CODEX-PHASE5-U4FINAL]",
+      "delivered": true,
+      "expected_message_id": "MSG-20261005-77"
+    }
   }
 }
