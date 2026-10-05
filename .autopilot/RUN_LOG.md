@@ -2346,3 +2346,20 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 新增 apps/api/src/__tests__/recovery-si-phase2-e-db.test.ts（只读取证）：pg_trigger 证明 cc_no_delete__RecoveryPackage / __RecoveryPackageArtifact 已部署且为 BEFORE DELETE；pg_proc 证明函数体仍抛 RECOVERY_PACKAGE_DELETE_FORBIDDEN / RECOVERY_PACKAGE_ARTIFACT_DELETE_FORBIDDEN。
 - 结果：DB 测试 2/2 PASS（exit 0）。
 - 待补（同链继续）：事务回滚 / 幂等重放 / 租户隔离 / lineage 落库反查 的 DB 取证；随后 P2-E5 Implementation Audit。
+
+## 2026-10-05T09:52Z — Recovery SI P2-E DB closure 完成（原子单元落地，实现 HEAD = b5baf381）
+- 新增 `apps/api/src/services/intelligence/recovery-persist-prisma-port.ts`：`prisma.$transaction` 单一事务端口
+  （RecoveryPackage → FileAsset → RecoveryPackageArtifact → AuditLog，任一失败整笔回滚）+ 幂等收敛入口
+  （同键重放 → `P2E_PACKAGE_ALREADY_EXISTS`）+ lineage 落库反查（只读，不重算 digest）。
+- `recovery-persist-gate.ts`：`RECOVERY_PACKAGE_DELETE_GUARD.migrationStatus` PENDING → **APPLIED**（迁移已应用 + 清单已登记）。
+- `recovery-si-phase2-e-db.test.ts` 扩为 **P2E-DB1..DB13**（真实 PostgreSQL）：触发器清单一致性（两份 `DO $$` 校验块直接执行通过）、
+  单一事务落库、原子性回滚（第 4 单元 FK 失败 → 四表全 0）、幂等重放、并发唯一赢家、租户隔离（应用层混批 fail-closed +
+  DB 层跨租户引用拒绝 + 跨租户反查返回 null）、lineage 落库反查、DELETE 行为拒绝。
+- 验证：`tsc --noEmit` exit 0；P2-E 契约 15/15、DB 13/13；P2-E targeted regression **10 文件 / 108 例 PASS**；
+  `prisma validate` valid；`migrate deploy` 79 migrations 无待应用；`migrate status` up to date。
+- 诚实登记：artifact 的 DELETE 由**既有** `cc_append_only__RecoveryPackageArtifact`（tgtype 27）先触发（异常文本 APPEND_ONLY_TABLE）；
+  本批新增的 `cc_no_delete__RecoveryPackageArtifact` 已部署（P2E-DB1 取证）但在该路径上不先触发，不作过度声明。
+- 证据/送审：`docs/releases/RECOVERY-SI-PHASE2-E-EVIDENCE.md`、`docs/releases/RECOVERY-SI-PHASE2-E-IMPLEMENTATION-AUDIT-REQUEST.md`（REVIEWED_HEAD b5baf381）。
+- 边界不变：四类 FORBIDDEN；P2_F = HOLD / P2_G = HOLD；RUNTIME_WIRING = NONE；SCHEMA_DELTA_REQUIRED = NO；
+  FINAL_ACCEPTANCE_HEAD = 0f7f7ac（未动）。
+- 本条目所在提交 = P2-E 送审包**簿记提交**（位于实现提交 `b5baf381` 之上；`STATE.head/current_head/CURRENT_HEAD` 记录实现 HEAD = `b5baf381`）。

@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "7c3efa11",
+  "head": "b5baf381",
   "status": "RECONCILED",
   "current_task": "RSI 生产可执行闭环（7 点收口）：RSI_RUNTIME_READY = PASS；MODEL_PROVIDER_READY = 本地仿真已接线（真实网络/付费 HOLD）；PERSISTENCE_READY = ephemeral 已验证、durable 需宿主非生产 DATABASE_URL；REBOOT_RECONCILE_READY = NOT_IMPLEMENTED（下一单元）；SYSTEMD_VALIDATED = 需宿主 Linux 实机",
   "next_task": "BG-016 单一 Acceptance Head + 四份状态一致 guard（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍 HOST_ACTION_REQUIRED 或 HOLD",
@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-22",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T05:45:30.736Z",
+  "updated_at": "2026-10-05T09:52:00.000Z",
   "previous_head": "8064f07",
   "architect_decision_pending": true,
   "blocked_scope": null,
@@ -48,16 +48,17 @@
   },
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
-  "window_budget": "HOST_LIMIT",
-  "continuous_execution": "DEGRADED_REASON_HOST_WINDOW_LIMIT",
-  "next_execution_unit": "等待 Phase 2 架构授权；期间不启动任何 Phase 2 代码或运行时接线。",
+  "window_budget": "WITHIN_WINDOW",
+  "continuous_execution": "ACTIVE",
+  "next_execution_unit": "P2-E Implementation Audit 已送审（docs/releases/RECOVERY-SI-PHASE2-E-IMPLEMENTATION-AUDIT-REQUEST.md，REVIEWED_HEAD = b5baf381）：等架构方裁决；裁决前不进入 P2-F / P2-G。P2-E 关闭后再做 si-rsi-unification-design（仅 docs/releases/**：inventory + KEEP/REUSE/MERGE/DEPRECATE/DUPLICATE 最小统一方案送审）。",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-05T05:45:05.805Z",
+  "last_tick_at": "2026-10-05T09:52:00.000Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "INDEPENDENT FINAL AUDIT = PASS（MSG-20261003-147）；三元闭环成立，内部代码开发阶段正式完成",
-  "last_action_at": "2026-10-03T14:17:18.723Z",
-  "next_action": "内部自治开发停止；剩余为 Layer 3 外部依赖（需宿主授权）",
-  "current_head": "7c3efa11",
+  "last_action": "RECOVERY SI P2-E DB closure 完成：单一事务端口 + 真实 PostgreSQL 取证 13/13 + 契约 15/15 + targeted regression 108/108 + tsc exit 0；P2-E Implementation Audit 已送审",
+  "last_action_at": "2026-10-05T09:52:00.000Z",
+  "next_action": "等 P2-E Implementation Audit 裁决；裁决前不进入 P2-F / P2-G",
+  "current_head": "b5baf381",
+  "last_completed_head": "b5baf381",
   "reviewed_head": "070daf1",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -5198,9 +5199,9 @@
   "awaiting_verdict": "EXACT-ORDER REPLAY 证据已送审（comment 5979262070）；shared/staging deploy 解禁待裁决",
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-05T09:38:56.106Z",
-    "head": "8603dff3",
-    "acceptance_head": "8603dff3",
+    "computed_at": "2026-10-05T09:53:04.209Z",
+    "head": "4c15b5d0",
+    "acceptance_head": "4c15b5d0",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5358,48 +5359,48 @@
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=8603dff3 ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
+        "evidence": "acceptance_head=4c15b5d0 ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
       },
       "L1-05_pg_regression_passed": {
         "status": "UNVERIFIED",
-        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head 8603dff3（且中间存在非簿记变更）"
+        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head 4c15b5d0（且中间存在非簿记变更）"
       },
       "L1-06_fresh_db_migration_passed": {
         "status": "UNVERIFIED",
-        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head 8603dff3（且中间存在非簿记变更）"
+        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head 4c15b5d0（且中间存在非簿记变更）"
       },
       "L1-07_api_typecheck_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head 8603dff3（且中间存在非簿记变更）"
+        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head 4c15b5d0（且中间存在非簿记变更）"
       },
       "L1-08_web_typecheck_build_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head 8603dff3（且中间存在非簿记变更）"
+        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head 4c15b5d0（且中间存在非簿记变更）"
       },
       "L1-09_no_skipped_critical_tests": {
         "status": "UNVERIFIED",
-        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head 8603dff3（且中间存在非簿记变更）"
+        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head 4c15b5d0（且中间存在非簿记变更）"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
         "status": false,
-        "evidence": "dirty entries: 2"
+        "evidence": "dirty entries: 1"
       },
       "L1-11_docs_state_consistent": {
         "status": "UNVERIFIED",
-        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head 8603dff3（且中间存在非簿记变更）"
+        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head 4c15b5d0（且中间存在非簿记变更）"
       },
       "L1-12_schema_invariants_verified": {
         "status": "UNVERIFIED",
-        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head 8603dff3（且中间存在非簿记变更）"
+        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head 4c15b5d0（且中间存在非簿记变更）"
       },
       "L1-13_negative_paths_covered": {
         "status": "UNVERIFIED",
-        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head 8603dff3（且中间存在非簿记变更）"
+        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head 4c15b5d0（且中间存在非簿记变更）"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
         "status": "UNVERIFIED",
-        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head 8603dff3（且中间存在非簿记变更）"
+        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head 4c15b5d0（且中间存在非簿记变更）"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
@@ -7391,7 +7392,7 @@
     ],
     "seo3_progress": "CHANGE A/B validator added (86f4289), engine output validation added (eb99c53), validator wired into runPublicSeoChecker (8bf49da), HTTP boundary guard added (4f2cd20); HTTP entry still not registered"
   },
-  "CURRENT_HEAD": "7c3efa11",
+  "CURRENT_HEAD": "b5baf381",
   "LAST_COMPLETED_UNIT": "recovery-si-phase2-d-impl（dry-run 实施：静态 Guard 映射 + 可信 Control Plane；D1–D10）",
   "NEXT_EXECUTION_UNIT": "P2-D Implementation Audit 送审 + 归档裁决（P2-E/P2-F/P2-G 仍未授权）",
   "CI_STATUS": "PENDING_THIS_COMMIT",
@@ -8621,7 +8622,7 @@
     "invariant": "ACTION_GUARD_DRY_RUN_ALLOW != EXECUTION_AUTHORIZATION；不消费审批 / 不调用 executor / 零 submission·零 payment·零 provider；L5 永久拒绝"
   },
   "recovery_si_phase2_e": {
-    "status": "REVISE_IMPLEMENTATION_REQUIRED",
+    "status": "IMPLEMENTATION_SUBMITTED_PENDING_VERDICT",
     "verdict": "MSG-20261005-22 = PASS WITH REVISE",
     "option": "A",
     "reviewed_head": "48e6e2a3",
@@ -8632,7 +8633,34 @@
       "lineage 表述",
       "RecoveryPackage DB DELETE guard"
     ],
-    "note": "设计已批（Option A），需按必修修订后送 P2-E Implementation Audit；不得进入 P2-F/P2-G"
+    "note": "设计已批（Option A）；四项必修已实现并送 Implementation Audit；不得进入 P2-F/P2-G",
+    "implementation_head": "b5baf381",
+    "evidence_doc": "docs/releases/RECOVERY-SI-PHASE2-E-EVIDENCE.md",
+    "audit_request": "docs/releases/RECOVERY-SI-PHASE2-E-IMPLEMENTATION-AUDIT-REQUEST.md",
+    "mandatory_closure": {
+      "P2E_1_GUARD_ACTION_CLAIM_PREPARE": "DONE（P2E-G1..G5；requiresP2dAllow=false）",
+      "P2E_2_SINGLE_TRANSACTION": "DONE（recovery-persist-prisma-port.ts；P2E-DB5/DB6/DB7/DB8）",
+      "P2E_3_LINEAGE": "DONE（readRecoveryPackageLineage / readRecoveryPackagePlanDigestFromAudit；P2E-DB12）",
+      "P2E_4_DB_DELETE_GUARD": "DONE（迁移 20261005040000 已应用；P2E-DB1/DB2/DB3/DB4/DB13；migrationStatus=APPLIED）"
+    },
+    "tests": "recovery-si-phase2-e 15/15 + recovery-si-phase2-e-db 13/13（真实 PostgreSQL）+ targeted regression 10 文件 / 108 例 PASS；tsc exit 0",
+    "migration": "20261005040000_recovery_package_delete_guard（prisma validate valid / migrate deploy 79 无待应用 / status up to date）",
+    "boundary": "RUNTIME_WIRING=NONE；SCHEMA_DELTA_REQUIRED=NO；四类 FORBIDDEN 不变；P2_F=HOLD；P2_G=HOLD；FINAL_ACCEPTANCE_HEAD=0f7f7ac",
+    "artifact_delete_note": "artifact DELETE 由既有 append-only 守卫（tgtype 27）先触发（APPEND_ONLY_TABLE）；新增 cc_no_delete__RecoveryPackageArtifact 已部署但不先触发——如实登记，不主张新增 guard 在该路径生效"
+  },
+  "recovery_si_phase2_e_impl_submission": {
+    "submitted_at": "2026-10-05T09:52:00.000Z",
+    "submitted_under_rules": true,
+    "reviewed_head": "b5baf381",
+    "doc": "docs/releases/RECOVERY-SI-PHASE2-E-IMPLEMENTATION-AUDIT-REQUEST.md",
+    "evidence_doc": "docs/releases/RECOVERY-SI-PHASE2-E-EVIDENCE.md",
+    "scope": "P2-E v1 四项必修实现 + 真实 PostgreSQL 取证（P2E-DB1..DB13）：claim.prepare 门禁 / package·artifact·FileAsset·audit 单一事务 / lineage 落库反查 / RecoveryPackage DB DELETE guard",
+    "risk_classification": {
+      "FOUNDATION_REUSED": "既有 RecoveryPackage / RecoveryPackageArtifact / FileAsset / AuditLog 模型与唯一约束、既有纯函数（manifest / canonical JSON / digest / PDF）、既有 action-guard control plane、Recovery SI Phase 1 / P2-A / P2-B / P2-C / P2-D",
+      "NEW_RISK_BOUNDARY": "首次把 SI 生成的 recovery package 真实落库（INTERNAL_WRITE）：幂等 / 事务 / 并发一致性边界变化（单一事务原子性 + DB 层不可删除 + lineage 可反查）",
+      "ARCH_REVIEW_REQUIRED": "YES —— 命中的 R2 触发项：幂等 / 事务 / 并发一致性边界变化（另涉内部写入白名单的审批/HITL 语义冻结）"
+    },
+    "invariant": "APPROVAL_CONSUMPTION / EXECUTOR_INVOCATION / EXTERNAL_ACTION = FORBIDDEN；零网络 / 零凭据 / 零 provider / 零 submission / 零 payment；RUNTIME_WIRING = NONE；SCHEMA_DELTA_REQUIRED = NO；L5 不放宽；不建第二套 Runtime"
   },
   "recovery_si_phase2_d_impl_submission": {
     "submitted_at": "2026-10-05T05:45:05.805Z",
