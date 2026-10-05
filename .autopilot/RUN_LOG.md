@@ -2704,3 +2704,9 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - ③ 唯一阻断：assertLocalSimAdapter 仍允许 adapter 自报 capability.simulated=true 绕过 WeakSet provenance。
 - FINAL4 最小修复：只接受 isRsiLocalSimAdapter(adapter)===true；测试探针改由同一 factory 的受控 test mode 创建。
 - 非阻断：buildRecoverySiEvidenceRef 未被 runtime 直接调用（语义正确，后续消重）。
+
+## 2026-10-06T14:00Z —— PHASE 2 = PASS / CLOSED（MSG-20261005-50）+ PHASE 3 启动登记
+- FINAL4 裁决：③ factory provenance / ① 真 runtime E2E / ② evidence digest / Router strict allowlist 全 PASS；CHANGE = NONE；PHASE2_FINAL5_REQUIRED = NO。
+- 非阻断维护项：digest helper 与 runtime 组装重复实现（后续消重，不得 reopen PHASE 2）；test factory 不得进入 production wiring。
+- 口径：aiEligible = server-owned binding；modelCallCount = Gateway 调用次数；GITHUB_CI = NOT_OBSERVED（只记 LOCAL_REGRESSION = PASS）。
+- PHASE 3 ACTION RUNTIME = AUTHORIZED / NOT_STARTED（provider adapter interface → … → audit/evidence；真实 provider 逐个开闸）。

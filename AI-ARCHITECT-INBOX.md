@@ -147440,3 +147440,113 @@ MODEL_GATEWAY_RUNTIME_WIRED = false
 ACTION_RUNTIME_PRODUCTION_ENABLED = false
 PRODUCTION_READY = false
 ```
+
+### [MSG-20261005-50] PHASE 2 MODEL GATEWAY RUNTIME FINAL4 — VERDICT = **PASS / CLOSED**（③ factory provenance / HOLD 强制 = PASS；① 真 runtime E2E = PASS；② evidence digest = PASS；Router strict allowlist = PASS；`PHASE_2_MODEL_GATEWAY_RUNTIME = PASS / CLOSED`；`PHASE2_FINAL5_REQUIRED = NO`；CHANGE = NONE；Reviewed HEAD = 338f30b4；授权进入 PHASE 3 ACTION RUNTIME；GITHUB_CI = NOT_OBSERVED）
+
+```text
+DECISION
+
+③ factory provenance / HOLD 强制：PASS
+① 真 runtime E2E：PASS
+② evidence digest：PASS
+Router strict allowlist：PASS
+PHASE_2_MODEL_GATEWAY_RUNTIME = PASS / CLOSED
+PHASE2_FINAL5_REQUIRED = NO
+Reviewed HEAD：338f30b4
+授权进入 PHASE 3 ACTION RUNTIME
+
+KEEP
+
+assertLocalSimAdapter() 现在只接受 isRsiLocalSimAdapter(adapter) === true。
+caller 自报 capability.simulated=true 已不能自我授权。
+providerName 伪装同样无效。
+low/strong 两种 adapter 都受相同 provenance gate。
+createRsiLocalSimTestAdapter() 也由同一个私有 WeakSet 登记，且自身无真实网络/凭据路径。
+P2U2_7 的：
+Shared Guard ALLOW → recovery-si → Gateway invoke=1 → proposal → park-for-judge → external verdict
+已成立。
+tool audit + gateway audit 已真正进入 runtime evidence digest。
+
+CHANGE
+
+NONE。
+不再制造 PHASE 2 FINAL5。
+
+RISKS
+
+非阻断维护项只有两个：
+
+buildRecoverySiEvidenceRef() 与 runtime digest 组装仍存在重复实现，后续可消重，但不得 reopen PHASE 2。
+createRsiLocalSimTestAdapter() 位于产品源码树中；它当前没有网络能力，因此不突破 HOLD。后续进入生产组合阶段时，应确保 production wiring 不使用 test factory。
+
+另继续准确记录：
+
+aiEligible = server-owned runtime binding，不是 canonical production eligibility resolver。
+modelCallCount = Gateway 调用次数，不是 provider attempt 数。
+
+TEST
+
+已核实际代码：
+
+self-declared capability adapter → REJECT
+factory low → PASS
+factory strong → PASS
+WeakSet 为模块私有
+Gateway 不再存在 capability fallback
+从 2e9692c0 → 338f30b4 的审计区间主要改动集中于 Gateway、local-sim factory、对应测试与审计记录，没有发现新的第二 Router/旁路。
+
+GITHUB_CI = NOT_OBSERVED，因此只能记：
+
+LOCAL_REGRESSION = PASS
+GITHUB_CI = NOT_OBSERVED
+
+NEXT
+
+现在正式进入 PHASE 3 — ACTION RUNTIME。
+
+授权范围可以按你列出的顺序推进：
+
+provider adapter interface
+→ credential port
+→ external-write gate
+→ idempotency
+→ exactly-once
+→ retry/reconcile
+→ HITL
+→ provider result normalization
+→ sandbox/mock
+→ failure/degraded
+→ audit/evidence
+
+要求继续保持：
+
+每个真实 provider 单独开闸，不得因为 PHASE 3 开始而统一解锁。
+
+PRODUCTION
+
+全部 HOLD 不变：
+
+REAL_MODEL_NETWORK
+PAID_MODEL_CALLS
+EXTERNAL_WRITE
+PAYMENT
+TRANSPORT
+PRODUCTION_CREDENTIALS
+PRODUCTION_ENABLEMENT
+P2_F / P2_G
+CUSTOMS real filing
+
+同时：
+
+SECOND_* = FORBIDDEN
+L5_RELAXATION = FORBIDDEN
+
+并继续保持：
+
+MODEL_GATEWAY_RUNTIME_WIRED = false
+ACTION_RUNTIME_PRODUCTION_ENABLED = false
+META_IMPROVEMENT_INTEGRATED = false
+PRODUCTION_READY = false
+
+PHASE 2 可以正式封板。
+```

@@ -11,7 +11,7 @@
   "external_write_enabled": false,
   "updated_at": "2026-10-06T08:30:00.000Z",
   "previous_head": "8064f07",
-  "architect_decision_pending": true,
+  "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "0c35106",
   "last_sent_at": "2026-10-03T09:07:52.875Z",
@@ -50,11 +50,11 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
-  "next_execution_unit": "PHASE 2 FINAL4（仅一项）：assertLocalSimAdapter 只接受 isRsiLocalSimAdapter(adapter)===true（移除 capability 自报旁路）；由 rsi-local-sim-adapter 提供受控 test-mode factory（同样进 WeakSet）供失败/成功探针；补 2 条测试（非 factory 自报 capability → REJECT；factory low/strong → PASS）→ tsc / 定向 / 回归 → commit + push → 送 PHASE 2 FINAL4",
+  "next_execution_unit": "PHASE 3 U1：provider adapter interface（typed capability metadata、credential port 抽象、external-write gate fail-closed、idempotency key、exactly-once 语义、retry/reconcile 契约、HITL 挂点、provider result normalization、sandbox/mock provider、failure/degraded 路径、audit/evidence 输出）→ code → tests → regression → tsc → commit → push → 审计 → durable state；REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT 全部保持 HOLD",
   "automation_status": "CONTINUOUS",
   "last_tick_at": "2026-10-06T08:30:00.000Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "PHASE 2 FINAL3 裁决归档（MSG-20261005-49）：① ② PASS / ③ REVISE → FINAL4 窄修授权（capability self-authorization loophole）",
+  "last_action": "PHASE 2 = PASS / CLOSED（MSG-20261005-50，Reviewed HEAD 338f30b4）；启动 PHASE 3 ACTION RUNTIME",
   "last_action_at": "2026-10-06T08:30:00.000Z",
   "next_action": "C2 IMPLEMENTATION（Schema Delta + durable ledger/budget + PG 回归）",
   "current_head": "054ab732",
@@ -5169,7 +5169,7 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "PHASE-2-U6: 重新投递 PHASE 2 FINAL2 审计 → 读取 verdict → 逐字归档 + FULL_COPY_OK → PASS 则 PHASE 2 CLOSED 并进入 PHASE 3"
+    "PHASE-3-U1: provider adapter interface（contract + 沙箱/ mock provider + external-write gate fail-closed + 能力元数据；真实 provider 逐个开闸）"
   ],
   "full_autonomous_internal_execution": "VERIFIED",
   "dispatcher_acceptance": {
@@ -9447,8 +9447,8 @@
   "step3_runtime_policy_wiring_closed_at": "2026-10-06T12:00:00.000Z",
   "phase_state": {
     "PHASE_1_FINAL7": "PASS / CLOSED（MSG-20261005-47，REVIEWED_HEAD = 795f65a5；STEP3_FINAL8_REQUIRED = NO）",
-    "PHASE_2_MODEL_GATEWAY_RUNTIME": "FINAL4_REQUIRED（FINAL3：① PASS / ② PASS / ③ REVISE；Reviewed HEAD 2e9692c0）",
-    "PHASE_3_ACTION_RUNTIME": "QUEUED",
+    "PHASE_2_MODEL_GATEWAY_RUNTIME": "PASS / CLOSED（MSG-20261005-50；Reviewed HEAD 338f30b4；PHASE2_FINAL5_REQUIRED = NO）",
+    "PHASE_3_ACTION_RUNTIME": "AUTHORIZED / NOT_STARTED（按 provider adapter interface → credential port → external-write gate → idempotency → exactly-once → retry/reconcile → HITL → provider result normalization → sandbox/mock → failure/degraded → audit/evidence；真实 provider 逐个开闸）",
     "PHASE_4_OUTCOME_LEARNING_PIPELINE": "QUEUED",
     "PHASE_5_META_IMPROVEMENT": "QUEUED（依赖真实运行结果）"
   },
@@ -9492,5 +9492,28 @@
     ],
     "phase2_final4_required": "YES",
     "archive": "AI-ARCHITECT-INBOX.md#MSG-20261005-49"
+  },
+  "phase2_final4_verdict": {
+    "message_id": "MSG-20261005-50",
+    "verdict": "PASS / CLOSED",
+    "reviewed_head": "338f30b4",
+    "pass": [
+      "FACTORY_PROVENANCE_HOLD_ENFORCED",
+      "REAL_RUNTIME_E2E",
+      "EVIDENCE_DIGEST",
+      "ROUTER_STRICT_ALLOWLIST"
+    ],
+    "change": "NONE",
+    "non_blocking": [
+      "buildRecoverySiEvidenceRef() 与 runtime digest 组装仍有重复实现，后续可消重（不得 reopen PHASE 2）",
+      "createRsiLocalSimTestAdapter() 位于产品源码树；当前无网络能力，不突破 HOLD；进生产组合阶段须确保 production wiring 不使用 test factory"
+    ],
+    "accuracy_notes": [
+      "aiEligible = server-owned runtime binding（非 canonical production eligibility resolver）",
+      "modelCallCount = Gateway 调用次数（非 provider attempt 数）",
+      "GITHUB_CI = NOT_OBSERVED → 只记 LOCAL_REGRESSION = PASS"
+    ],
+    "phase2_final5_required": "NO",
+    "archive": "AI-ARCHITECT-INBOX.md#MSG-20261005-50"
   }
 }
