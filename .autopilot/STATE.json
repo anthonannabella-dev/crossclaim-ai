@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-40",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T23:25:06.484Z",
+  "updated_at": "2026-10-05T23:28:47.850Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -50,13 +50,13 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
-  "next_execution_unit": "PHASE 5 U5 FINAL closure: (1) extract+archive the U5 verdict text (MSG-20261005-82) verbatim with compare.mjs FULL_COPY_OK; (2) read the U5 FINAL verdict (marker [CODEX-PHASE5-U5FINAL], REVIEWED_HEAD = b3629ffc) and archive it (MSG-20261005-83) with FULL_COPY_OK; (3) durable state: if PASS -> PHASE_5_META_IMPROVEMENT = CLOSED (U1-U5); (4) add the docs-only Phase 5 closure checkpoint per the auditor wording (no new feature units); boundaries unchanged.",
+  "next_execution_unit": "PHASE 5 closure checkpoint (docs-only, no new feature units): (1) archive the pending U5 verdict verbatim (MSG-20261005-82, reviewed HEAD 766ca18f) with compare.mjs FULL_COPY_OK; (2) write the docs-only Phase 5 closure record (docs/releases/.. or AI-ARCHITECT-INBOX entry) summarising U1-U5 PASS/CLOSED, the REVIEW_ONLY semantics (APPROVED = APPROVED_FOR_CONTROLLED_ADOPTION_PLANNING, REJECTED = REJECTED_NO_CONTROLLED_ADOPTION_PLAN), the unchanged HOLD/FORBIDDEN boundaries and the non-blocking debts (16-hex digests, fingerprint upkeep, scanRawPayloadKeys depth, P2E-DB5); (3) commit + push + durable state (PHASE_5_META_IMPROVEMENT = CLOSED). Read the auditor NEXT wording for the exact checkpoint acceptance criteria.",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-05T23:25:06.484Z",
+  "last_tick_at": "2026-10-05T23:28:47.850Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "PHASE 5 U5 FINAL implemented: verdict semantics now outcome-dependent (APPROVED -> APPROVED_FOR_CONTROLLED_ADOPTION_PLANNING; REJECTED -> REJECTED_NO_CONTROLLED_ADOPTION_PLAN) with the type union and boundary rejectedSemantics updated; code b3629ffc pushed and submitted (marker [CODEX-PHASE5-U5FINAL], REVIEWED_HEAD = b3629ffc). Local: tsc 0; controlled-adoption-review 6/6; PHASE5 10 files / 124 tests PASS; regression 103 files / 1071 tests (only P2E-DB5). NOTE: two verdicts are pending archival - MSG-20261005-82 (U5 verdict, PASS WITH REVISE) and the upcoming U5 FINAL verdict (expect MSG-20261005-83); archive both verbatim with compare.mjs FULL_COPY_OK next tick.",
+  "last_action": "PHASE 5 U5 FINAL verdict archived (MSG-20261005-83, FULL_COPY_OK, archive commit 07f4b86b): REJECTED_VERDICT_SEMANTICS / VERDICT_SEMANTICS_ANTI_TAMPER / CONTROLLED_ADOPTION_REVIEW_CONTRACT = PASS; PHASE_5_U5 = PASS / CLOSED; PHASE5_U5_FINAL2_REQUIRED = NO; PHASE_5_CONTROLLED_LEARNING_ADOPTION = PASS / CLOSED; PHASE5_FUNCTIONAL_REVISION_REQUIRED = NO. Phase 5 is functionally closed (U1-U5 all PASS/CLOSED, still REVIEW_ONLY semantics).",
   "last_action_at": "2026-10-05T23:24:28.898Z",
-  "next_action": "Archive U5 verdict (MSG-20261005-82) and read/archive the U5 FINAL verdict (MSG-20261005-83); then PHASE 5 closure (docs-only closure checkpoint per auditor).",
+  "next_action": "Produce the docs-only PHASE 5 closure checkpoint (per auditor) and archive the still-pending U5 verdict (MSG-20261005-82).",
   "current_head": "b3629ffc",
   "last_completed_head": "b3629ffc",
   "reviewed_head": "add99ec3",
@@ -5169,9 +5169,10 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "P5U5b-1 archive pending verdicts (next tick, do each with receiver->verdict raw file->archive script->compare FULL_COPY_OK->commit/push): (a) U5 verdict MSG-20261005-82 (reviewed HEAD 766ca18f; PASS WITH REVISE, only REJECTED_VERDICT_SEMANTICS); (b) U5 FINAL verdict (marker [CODEX-PHASE5-U5FINAL], REVIEWED_HEAD b3629ffc) - the chat currently still shows the U5 verdict as the last DECISION, so the U5 FINAL reply is likely still generating; re-check next tick and archive both, then record PHASE 5 closure if PASS.",
-    "P5U5b-2 if U5 FINAL = PASS -> record PHASE 5 = CLOSED (U1-U5) and produce the docs-only closure checkpoint per auditor",
-    "P5U5b-3 non-blocking debt: full SHA-256 digests, fingerprint schema upkeep, scanRawPayloadKeys bounded traversal, P2E-DB5 test-isolation"
+    "P5CLOSE-1 archive pending U5 verdict MSG-20261005-82 (766ca18f) verbatim + compare FULL_COPY_OK + commit/push",
+    "P5CLOSE-2 docs-only PHASE 5 closure checkpoint per auditor NEXT (U1-U5 PASS/CLOSED, REVIEW_ONLY semantics, boundaries, debts) + commit/push",
+    "P5CLOSE-3 durable state PHASE_5_META_IMPROVEMENT = CLOSED + phase_state update",
+    "P5CLOSE-4 non-blocking debt: full SHA-256 digests, fingerprint schema upkeep, scanRawPayloadKeys bounded traversal, P2E-DB5 test-isolation"
   ],
   "full_autonomous_internal_execution": "VERIFIED",
   "dispatcher_acceptance": {
@@ -9321,7 +9322,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-05T23:25:06.484Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-05T23:28:47.850Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -9449,7 +9450,7 @@
     "PHASE_2_MODEL_GATEWAY_RUNTIME": "PASS / CLOSED（MSG-20261005-50；Reviewed HEAD 338f30b4；PHASE2_FINAL5_REQUIRED = NO）",
     "PHASE_3_ACTION_RUNTIME": "PASS / CLOSED（MSG-20261005-54；Reviewed HEAD = fe3c33e9；PHASE3_FINAL4_REQUIRED = NO）",
     "PHASE_4_OUTCOME_LEARNING_PIPELINE": "CLOSED / PASS（MSG-20261005-67）：U1 FINAL / U2 / U3 / U4 / U5 全 CLOSED；含 U4 FINAL、U5 FINAL、U5 FINAL2、PHASE 4 FINAL CLOSURE。",
-    "PHASE_5_META_IMPROVEMENT": "IN PROGRESS: U1/U2/U3/U4 = PASS / CLOSED; U5 Controlled Adoption Review = SUBMITTED / AWAITING_VERDICT (766ca18f)."
+    "PHASE_5_META_IMPROVEMENT": "FUNCTIONALLY CLOSED: U1/U2/U3/U4/U5 all PASS / CLOSED (MSG-20261005-83); REVIEW_ONLY semantics retained; docs-only closure checkpoint pending."
   },
   "heartbeat_watchdog": {
     "interval_seconds": 180,
@@ -9921,7 +9922,7 @@
       "U5"
     ]
   },
-  "archive_head": "4bb6311e",
+  "archive_head": "07f4b86b",
   "phase4_u3_final": {
     "status": "PASS / CLOSED",
     "reviewed_head": "006cc912",
@@ -10955,5 +10956,21 @@
       "delivered": true,
       "expected_message_id": "MSG-20261005-83"
     }
+  },
+  "phase5_u5_final_verdict": {
+    "message_id": "MSG-20261005-83",
+    "verdict": "PASS / CLOSED",
+    "reviewed_head": "b3629ffc",
+    "archive_verified": "FULL_COPY_OK",
+    "archive_head": "07f4b86b",
+    "pass": [
+      "REJECTED_VERDICT_SEMANTICS = PASS",
+      "VERDICT_SEMANTICS_ANTI_TAMPER = PASS",
+      "CONTROLLED_ADOPTION_REVIEW_CONTRACT = PASS",
+      "PHASE_5_U5 = PASS / CLOSED",
+      "PHASE_5_CONTROLLED_LEARNING_ADOPTION = PASS / CLOSED"
+    ],
+    "phase5_u5_final2_required": "NO",
+    "phase5_functional_revision_required": "NO"
   }
 }
