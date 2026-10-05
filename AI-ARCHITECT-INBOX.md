@@ -148788,3 +148788,142 @@ META_IMPROVEMENT_INTEGRATED = false
 PRODUCTION_READY = false
 ```
 
+### [MSG-20261005-59] PHASE 4 U2 FINAL3 裁决 = PASS / CLOSED（TRUSTED_LEDGER_PROVENANCE PASS / LINEAGE_BINDING PASS）· reviewed ref 2ae5adc5
+
+```text
+
+DECISION
+
+TRUSTED_LEDGER_PROVENANCE = PASS
+SOURCE_PROVENANCE = PASS
+LINEAGE_BINDING = PASS
+PHASE_4_U2 = PASS / CLOSED
+PHASE4_U2_FINAL4_REQUIRED = NO
+Reviewed HEAD：2ae5adc5
+授权继续 U3 / U4 / U5
+
+KEEP
+
+fake OutcomeLineageLedgerPort 无法直接进入 verified path。
+fake ledger 也无法再通过 createAppOutcomeLineageSource() 洗白。
+ledger/source 两层分别使用私有 WeakSet provenance。
+verified path 现在只接受 provenance-registered ledger。
+proposalLinked 继续由 adapter 根据真实 proposal→action/evidence 关系计算。
+not-found / cross-org / cross-task / unlinked 全部 fail-closed。
+未验证记录继续显式排除，不得进入 U3 immutable learning evidence。
+本次代码范围集中在 lineage 模块与测试，没有发现第二 Evidence Store 或额外执行 runtime。
+GITHUB_CI = NOT_OBSERVED 确认成立。
+
+CHANGE
+
+U2 无新的阻断修改。
+
+这里可以停止继续向 repository 层递归加 WeakSet。
+
+OutcomeLineageRepositoryDeps 属于 server-owned composition root dependency，这一层与此前 AppActionGuardDeps 的信任模型一致；关键约束是：
+
+它只能由服务端 composition root 提供，不得从 HTTP/body/client 数据构造。
+
+只要后续保持这一边界，就不需要制造 FINAL4。
+
+RISKS
+
+当前关闭的是：
+
+LINEAGE_BINDING_ARCHITECTURE = PASS
+
+不是在宣称所有未来真实数据库 repository 都已经完成生产验证。
+
+U3 接真实 immutable learning evidence 时，仍应确认正式 repository adapter 确实读取既有 action/proposal/evidence 数据源，而不是另建影子事实源。
+
+另外两个既有非阻断债务保持：
+
+scanRawPayloadKeys() 固定递归深度；
+P2E-DB5 test-isolation debt。
+
+92/93 files、946/947 tests 的唯一失败仍为已知 P2E-DB5，因此不重新打开 U2。
+
+TEST
+
+本轮验收要求已满足：
+
+fake ledger → REJECT；
+fake ledger → source factory → REJECT；
+trusted ledger provenance → PASS；
+trusted source provenance → PASS；
+refs missing → REJECT；
+cross-org/task → REJECT；
+proposal linkage mismatch → REJECT；
+完整同链 → verified PASS；
+未验证记录 → excluded。
+
+NEXT
+
+正式进入：
+
+U3 — Learning Dataset + Immutable Learning Evidence
+
+要求：
+
+canonical outcome
+→ trusted lineage verified
+→ learning projection
+→ 既有 evidence ledger append-only evidence
+
+禁止建立：
+
+SECOND_META_EVIDENCE_STORE
+
+并且 immutable evidence 至少绑定：
+
+outcomeDigest + lineage refs + dataset/evaluation version + evidence digest
+
+随后：
+
+U4 — Offline Evaluation
+
+必须明确 resolved denominator：
+
+SUCCESS
+FAILURE / REJECTED
+PARTIAL
+UNKNOWN
+MANUAL_REVIEW
+
+不能继续直接使用 successCount / all records 作为正式质量指标。
+
+U5 — Meta-improvement Candidate
+
+只允许：
+
+observe → evaluate → candidate proposal
+
+禁止：
+
+candidate → automatic policy/router/guard/action mutation
+
+所以：
+
+U3 / U4 / U5 全部继续授权。
+
+PRODUCTION
+
+继续全部 HOLD：
+
+REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing
+
+继续：
+
+SECOND_* = FORBIDDEN
+L5_RELAXATION = FORBIDDEN
+
+并保持：
+
+MODEL_GATEWAY_RUNTIME_WIRED = false
+ACTION_RUNTIME_PRODUCTION_ENABLED = false
+META_IMPROVEMENT_INTEGRATED = false
+PRODUCTION_READY = false
+
+U2 正式封板。
+```
+
