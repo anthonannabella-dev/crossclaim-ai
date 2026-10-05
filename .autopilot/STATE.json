@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261004-16",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T02:50:21.249Z",
+  "updated_at": "2026-10-05T02:54:22.883Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -49,7 +49,7 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-05T02:49:47.113Z",
+  "last_tick_at": "2026-10-05T02:54:22.883Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
   "last_action": "INDEPENDENT FINAL AUDIT = PASS（MSG-20261003-147）；三元闭环成立，内部代码开发阶段正式完成",
   "last_action_at": "2026-10-03T14:17:18.723Z",
@@ -5192,9 +5192,9 @@
   "awaiting_verdict": "EXACT-ORDER REPLAY 证据已送审（comment 5979262070）；shared/staging deploy 解禁待裁决",
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-05T02:50:22.100Z",
-    "head": "ecdae39",
-    "acceptance_head": "ecdae39",
+    "computed_at": "2026-10-05T02:54:31.504Z",
+    "head": "b1c00cc",
+    "acceptance_head": "b1c00cc",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5345,48 +5345,48 @@
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=ecdae39 ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
+        "evidence": "acceptance_head=b1c00cc ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
       },
       "L1-05_pg_regression_passed": {
         "status": "UNVERIFIED",
-        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head ecdae39（且中间存在非簿记变更）"
+        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head b1c00cc（且中间存在非簿记变更）"
       },
       "L1-06_fresh_db_migration_passed": {
         "status": "UNVERIFIED",
-        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head ecdae39（且中间存在非簿记变更）"
+        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head b1c00cc（且中间存在非簿记变更）"
       },
       "L1-07_api_typecheck_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head ecdae39（且中间存在非簿记变更）"
+        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head b1c00cc（且中间存在非簿记变更）"
       },
       "L1-08_web_typecheck_build_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head ecdae39（且中间存在非簿记变更）"
+        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head b1c00cc（且中间存在非簿记变更）"
       },
       "L1-09_no_skipped_critical_tests": {
         "status": "UNVERIFIED",
-        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head ecdae39（且中间存在非簿记变更）"
+        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head b1c00cc（且中间存在非簿记变更）"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
         "status": false,
-        "evidence": "dirty entries: 1"
+        "evidence": "dirty entries: 2"
       },
       "L1-11_docs_state_consistent": {
         "status": "UNVERIFIED",
-        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head ecdae39（且中间存在非簿记变更）"
+        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head b1c00cc（且中间存在非簿记变更）"
       },
       "L1-12_schema_invariants_verified": {
         "status": "UNVERIFIED",
-        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head ecdae39（且中间存在非簿记变更）"
+        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head b1c00cc（且中间存在非簿记变更）"
       },
       "L1-13_negative_paths_covered": {
         "status": "UNVERIFIED",
-        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head ecdae39（且中间存在非簿记变更）"
+        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head b1c00cc（且中间存在非簿记变更）"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
         "status": "UNVERIFIED",
-        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head ecdae39（且中间存在非簿记变更）"
+        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head b1c00cc（且中间存在非簿记变更）"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
@@ -6334,7 +6334,7 @@
       "API.md / DOMAIN_MODEL.md / architecture-contract 计数 77 → 79"
     ]
   },
-  "next_execution_unit": "继续 backlog 内部单元：BG-005（Customs G4 证据链复核）→ BG-001（平台只读 adapter 闭环）→ BG-003/BG-004/BG-007/BG-008（只读面与文档一致性）→ BG-014/BG-015（IOR 资格与全链）；BG-011（PS04 枚举迁移）属 Schema Delta，需先送架构审计；BG-010 依赖 BG-011。",
+  "next_execution_unit": "继续 backlog 内部单元：BG-001（平台只读 adapter 闭环）→ BG-003/BG-004/BG-007/BG-008（只读面与文档一致性）→ BG-014/BG-015（IOR 资格与全链）；BG-011（PS04 枚举迁移）属 Schema Delta 需先送审计，BG-010 依赖它。",
   "customer_ui_commercialization": {
     "at": "2026-10-04T01:21:55.949Z",
     "authorization": "MSG-20261004-01（CUSTOMER UI/UX COMMERCIALIZATION — IMPLEMENTATION AUTHORIZED）",
@@ -7380,13 +7380,13 @@
     "seo3_progress": "CHANGE A/B validator added (86f4289), engine output validation added (eb99c53), validator wired into runPublicSeoChecker (8bf49da), HTTP boundary guard added (4f2cd20); HTTP entry still not registered"
   },
   "CURRENT_HEAD": "ecdae39",
-  "LAST_COMPLETED_UNIT": "BG-002 Settlement–Billing–Fee guard 只读复核：16 文件 / 140 例全绿，逐项确认 EXPECTED/DISPUTED 不混、REVERSED 不重复冲减、币种分桶、Billing CAS 并发唯一赢家、越权 401/403/跨租户 404、Settlement↔account lineage DB 约束；未改代码。",
-  "NEXT_EXECUTION_UNIT": "继续 backlog 内部单元：BG-005（Customs G4 证据链复核）→ BG-001（平台只读 adapter 闭环）→ BG-003/BG-004/BG-007/BG-008（只读面与文档一致性）→ BG-014/BG-015（IOR 资格与全链）；BG-011（PS04 枚举迁移）属 Schema Delta，需先送架构审计；BG-010 依赖 BG-011。",
+  "LAST_COMPLETED_UNIT": "BG-005 Customs G4 证据链只读复核：4 文件 / 19 例全绿；确认 qualification 后端强制（409）+ 前端绕过 403、EXACT/PARTIAL 只按匹配部分计入、AMBIGUOUS/NO_MATCH 与篡改事实零计入、401/403/404/200 与跨租户 404 不泄露存在性、读路径不重算。",
+  "NEXT_EXECUTION_UNIT": "继续 backlog 内部单元：BG-001（平台只读 adapter 闭环）→ BG-003/BG-004/BG-007/BG-008（只读面与文档一致性）→ BG-014/BG-015（IOR 资格与全链）；BG-011（PS04 枚举迁移）属 Schema Delta 需先送审计，BG-010 依赖它。",
   "CI_STATUS": "BG-017（8064f07 run 37256124075）= completed_success；BG-002 证据提交 ecdae39 的 CI 仍在跑，跑到即置 COMPLETED",
   "WAITING_FOR_VERDICT": "none —— MSG-20261005-09（RSI Model Router → Provider Adapter 设计 = PASS WITH REVISE）已逐字归档（FNV e1740a41 / 178 行 / FULL_COPY_OK）；真实 Provider 那一轮才需要新的窄审计，本轮不需要。",
   "HOST_ACTION_REQUIRED": "①非生产 DATABASE_URL（无真实客户数据）→ RSI staging smoke + migration apply + reboot/reconcile 与 exactly-once 实机验证；②Linux 主机（或指定 CI runner）→ systemd Test A/B/C/D/E/F；③真实 Provider 接入需要宿主注册/申请账号、接受第三方协议、提供 Client ID/Secret 与 POA 等（当前全部 HOLD）；④gh auth login（可选，仅恢复 issue comment 通道）。",
   "HOLD_EXTERNAL": "RSI_MODEL_NETWORK = HOLD / RSI_PAID_MODEL_CALLS = HOLD / REAL_PROVIDER_ADAPTER = OUT_OF_PROCESS_REQUIRED（sidecar 未实现）/ EXTERNAL_WRITE = HOLD / PAYMENT = HOLD / TRANSPORT = HOLD / PRODUCTION_CREDENTIALS = HOLD / PRODUCTION_PUBLIC_CHECKER = HOLD",
-  "LAST_HEARTBEAT_AT": "2026-10-05T02:50:21.249Z",
+  "LAST_HEARTBEAT_AT": "2026-10-05T02:54:22.883Z",
   "ci_red_streak_note": "RESOLVED: three contract/inventory fixes (tenant-trigger whitelist 1b15ab7, append-only whitelist cc13bde, model inventory 82->85 4f02282); 4f02282 is the first green run after the streak.",
   "ci_contract_fix_local_verification": {
     "at": "2026-10-04T08:51:16.135Z",
@@ -7967,6 +7967,14 @@
       "Settlement↔account lineage DB 约束"
     ],
     "boundary": "NO_REAL_MONEY / NO_AUTOPAY / NO_COLLECTION",
+    "evidence": "RUN_LOG.md",
+    "status": "IMPLEMENTED_PENDING_CI"
+  },
+  "bg005": {
+    "at": "2026-10-05T02:54:22.883Z",
+    "suites": "4 files / 19 tests PASS（本地）",
+    "http_boundary": "401/403/404/200 + 跨租户 404（不泄露存在性）",
+    "read_only": "不重算、零外写",
     "evidence": "RUN_LOG.md",
     "status": "IMPLEMENTED_PENDING_CI"
   }

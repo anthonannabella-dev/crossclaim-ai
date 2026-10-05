@@ -1925,3 +1925,15 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
   Billing 状态机 CAS 并发只放行一个、`DRAFT → PAID` 被拒、`PAID` 缺 paymentReference → 拒绝；
   越权 401 / VIEWER 403 / 跨租户 404；Settlement↔account lineage 由 DB 约束保证（A 的 Evidence 不能绑 B 的 Settlement）。
 - 边界：本批**未改动任何代码**，只跑只读套件并留证；`NO_REAL_MONEY / NO_AUTOPAY / NO_COLLECTION` 保持，HOLD_EXTERNAL 保持。
+
+## 2026-10-05T02:54:22.883Z — BG-005 Customs G4 证据链只读复核（P1，内部可做）
+- 套件实测（apps/api 本地，退出码 0）：**4 文件 / 19 例全绿** —— `customs-return-claim-evidence-db`(8)、
+  `customs-return-claim-evidence-http-e2e-db`(4)、`customs-claim-ready-http`(4)、`customs-return-claim-evidence-view`(3)。
+- 证据链语义（来自实测用例名，非推断）：
+  - 合格 + EXACT 匹配 → READY，confirmed amount **只按已匹配部分**（10×200/10=200）；
+  - PARTIAL 匹配只计入匹配部分（4×200/10=80），**不放大**；AMBIGUOUS / NO_MATCH → NOT_READY 且 confirmed=0；
+  - tapered digest / 事实被篡改 → RECONCILIATION_REQUIRED 且零计入；policyVersion 变化 → 以 latest 判定为准；
+  - qualification 未通过 → 后端强制 NOT_READY（HTTP 409），前端绕过（VIEWER 直调）→ 403。
+- HTTP/租户边界实测：未认证 401 · VIEWER 403（后端强制，前端无法绕过）· OWNER 200（只读、**不重算**）·
+  未知 factId 404 · **跨租户访问 A 的证据对 B 租户返回 404**（不泄露存在性）。
+- 边界：本批未改任何代码；`NO_FILING / NO_EXTERNAL_WRITE` 保持，C18 真实 provider 仍 HOLD。
