@@ -147944,3 +147944,129 @@ META_IMPROVEMENT_INTEGRATED = false
 PRODUCTION_READY = false
 ```
 
+### [MSG-20261005-53] PHASE 3 ACTION RUNTIME FINAL2 裁决（NOT CLOSED / PHASE3_FINAL3_REQUIRED=YES）· reviewed ref b6fce775
+
+```text
+
+DECISION
+
+① Guard instance-injection 消除：PASS
+② raw-key 拒绝补全：PASS WITH REVISE
+PHASE_3_ACTION_RUNTIME = NOT CLOSED
+PHASE3_FINAL3_REQUIRED = YES
+Reviewed HEAD：b6fce775
+
+KEEP
+
+runActionPack() 已不再接受 RuntimeActionGuard 实例，而是内部通过 createAppActionGuard(guardDeps) 构造；fake guard instance 旁路已关闭。
+APP_ACTION_GUARDS WeakSet provenance 成立。
+sk- / sk_ / pk- / pk_ / Bearer / sk 已正确拒绝。
+provider/tenant credential binding、idempotency fingerprint、Shared approval verifier、external-write HOLD 均未回退。
+GITHUB_CI = NOT_OBSERVED 仍正确。
+
+CHANGE
+
+只剩 1 个很窄的 U2 漏洞。
+
+当前 opaque ref 判定：
+
+TypeScript
+const OPAQUE_REF_NAMESPACE = /^[a-z][a-z0-9+._-]*:/i;
+
+这实际上接受任意 URI scheme。
+
+因此这些目前都会通过“opaque namespace”检查：
+
+纯文本
+sk:secret
+pk:secret
+bearer:secret
+https://example.com/key
+file:/secret
+javascript:x
+
+其中至少 sk:secret 明显重新绕过 raw-key 意图；URL 也不应被当成 credential opaque ref。
+
+最小修复：不要接受任意 scheme，改成明确 allowlist，例如当前阶段只接受你们实际使用的：
+
+纯文本
+vault:
+
+若以后确实还有内部 scheme，再逐个加入，例如：
+
+纯文本
+vault:
+provider-credential:
+secret-ref:
+
+不要用泛 URI regex。
+
+补测试：
+
+sk:abc → REJECT
+pk:abc → REJECT
+Bearer:abc → REJECT
+https://... → REJECT
+file:... → REJECT
+vault:providers/amazon/org-1 → PASS
+
+RISKS
+
+Guard 这边本轮可通过。guardDeps 仍然必须保持server-owned composition dependency，不能未来从 HTTP/body/client 参数构造；这是后续接真实 product wiring 时的约束，不需要再次 reopen 本阶段。
+
+U3 继续保持正确口径：
+
+EXACTLY_ONCE_CONTRACT/SANDBOX = PASS
+
+但：
+
+PRODUCTION_DURABLE_EXACTLY_ONCE = NOT YET
+
+这不是当前 FINAL3 blocker。
+
+TEST
+
+FINAL3 只需增加 credential namespace allowlist 负例，并保持：
+
+action-pack-runtime 19/19+
+provider-execution-guard 全绿
+enforcement 07 = 7/7
+93-file regression 全绿
+
+NEXT
+
+只修这一个 namespace allowlist，然后送：
+
+PHASE_3_ACTION_RUNTIME FINAL3
+
+通过后我预期可直接裁定：
+
+U1 = PASS
+U2 = PASS
+U3 = PASS (contract/sandbox)
+U4 = PASS
+U5/U6 = PASS
+PHASE_3_ACTION_RUNTIME = PASS / CLOSED
+PHASE3_FINAL4_REQUIRED = NO
+
+然后进入 PHASE 4 — OUTCOME / LEARNING DATA PIPELINE。
+
+PRODUCTION
+
+全部继续 HOLD：
+
+REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing
+
+继续：
+
+SECOND_* = FORBIDDEN
+L5_RELAXATION = FORBIDDEN
+
+以及：
+
+MODEL_GATEWAY_RUNTIME_WIRED = false
+ACTION_RUNTIME_PRODUCTION_ENABLED = false
+META_IMPROVEMENT_INTEGRATED = false
+PRODUCTION_READY = false
+```
+
