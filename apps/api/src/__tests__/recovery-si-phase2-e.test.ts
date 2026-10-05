@@ -143,11 +143,11 @@ describe('Recovery SI P2-E v1 · 事务 / lineage / DELETE guard 契约（必修
     expect(RECOVERY_PERSIST_LINEAGE.evidenceRefs).toContain('RecoveryPlan');
   });
 
-  it('P2E-G8 DELETE guard：应用层禁止删除，DB 触发器必填且清单需同步（迁移待办）', () => {
+  it('P2E-G8 DELETE guard：应用层禁止删除，DB 触发器必填且清单需同步（迁移已应用）', () => {
     expect(RECOVERY_PACKAGE_DELETE_GUARD.applicationDeleteAllowed).toBe(false);
     expect(RECOVERY_PACKAGE_DELETE_GUARD.dbTriggerRequired).toBe(true);
     expect(RECOVERY_PACKAGE_DELETE_GUARD.triggerManifestSyncRequired).toBe(true);
-    expect(RECOVERY_PACKAGE_DELETE_GUARD.migrationStatus).toBe('PENDING');
+    expect(RECOVERY_PACKAGE_DELETE_GUARD.migrationStatus).toBe('APPLIED');
   });
 });
 

@@ -154,12 +154,13 @@ export const RECOVERY_PERSIST_LINEAGE = {
 
 /**
  * 必修 4：DB 层 DELETE guard —— 应用层不得删除 RecoveryPackage；
- * 真正的拒绝必须由数据库触发器实现（迁移清单同步），本常量只声明要求。
+ * 真正的拒绝由数据库触发器实现（迁移 20261005040000_recovery_package_delete_guard +
+ * tools/tenant-triggers/append-only-triggers.json 清单登记），本常量只声明要求与当前状态。
  */
 export const RECOVERY_PACKAGE_DELETE_GUARD = {
   applicationDeleteAllowed: false,
   dbTriggerRequired: true,
-  migrationStatus: 'PENDING',
+  migrationStatus: 'APPLIED',
   triggerManifestSyncRequired: true,
 } as const;
 
