@@ -2340,3 +2340,9 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - NEXT_EXECUTION_UNIT = P2-E DB closure window：E3 后半（lineage 落库反查）→ E4（prisma validate / migrate deploy / DELETE guard 触发器实测 / 事务回滚 / 幂等重放 / 租户隔离 / lineage 反查 / P2-D+RSI 回归）→ E5（Implementation Audit 送审）；中间除真实 blocker/fail-closed 不停。
 - 已完成的原子单元：P2-E1（迁移+清单同步 c1c23382）、P2-E2（事务端口 8a7cabe6）、P2-E3 前半（lineage 投影 1fe37759）；P2-E 测试 15/15、tsc exit 0。
 - 按指令 §1：该 DB 单元在预检为不可单窗口完成时不做半截实现；按 §4/§5 仅做最小 checkpoint，不再输出长状态报告。
+
+## 2026-10-05T09:40Z — P2-E4（DB 取证第一批）：DELETE guard 触发器实测通过
+- `npx prisma migrate deploy` → exit 0（新迁移 20261005040000_recovery_package_delete_guard 已应用）。
+- 新增 apps/api/src/__tests__/recovery-si-phase2-e-db.test.ts（只读取证）：pg_trigger 证明 cc_no_delete__RecoveryPackage / __RecoveryPackageArtifact 已部署且为 BEFORE DELETE；pg_proc 证明函数体仍抛 RECOVERY_PACKAGE_DELETE_FORBIDDEN / RECOVERY_PACKAGE_ARTIFACT_DELETE_FORBIDDEN。
+- 结果：DB 测试 2/2 PASS（exit 0）。
+- 待补（同链继续）：事务回滚 / 幂等重放 / 租户隔离 / lineage 落库反查 的 DB 取证；随后 P2-E5 Implementation Audit。
