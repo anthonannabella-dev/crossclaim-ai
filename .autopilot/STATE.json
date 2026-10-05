@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261004-16",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T05:45:05.805Z",
+  "updated_at": "2026-10-05T05:45:30.736Z",
   "previous_head": "8064f07",
   "architect_decision_pending": true,
   "blocked_scope": null,
@@ -5195,9 +5195,9 @@
   "awaiting_verdict": "EXACT-ORDER REPLAY 证据已送审（comment 5979262070）；shared/staging deploy 解禁待裁决",
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-05T05:45:06.722Z",
-    "head": "7c3efa11",
-    "acceptance_head": "7c3efa11",
+    "computed_at": "2026-10-05T05:45:31.566Z",
+    "head": "5aaf7389",
+    "acceptance_head": "5aaf7389",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5353,48 +5353,48 @@
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=7c3efa11 ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
+        "evidence": "acceptance_head=5aaf7389 ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
       },
       "L1-05_pg_regression_passed": {
         "status": "UNVERIFIED",
-        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head 7c3efa11（且中间存在非簿记变更）"
+        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head 5aaf7389（且中间存在非簿记变更）"
       },
       "L1-06_fresh_db_migration_passed": {
         "status": "UNVERIFIED",
-        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head 7c3efa11（且中间存在非簿记变更）"
+        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head 5aaf7389（且中间存在非簿记变更）"
       },
       "L1-07_api_typecheck_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head 7c3efa11（且中间存在非簿记变更）"
+        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head 5aaf7389（且中间存在非簿记变更）"
       },
       "L1-08_web_typecheck_build_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head 7c3efa11（且中间存在非簿记变更）"
+        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head 5aaf7389（且中间存在非簿记变更）"
       },
       "L1-09_no_skipped_critical_tests": {
         "status": "UNVERIFIED",
-        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head 7c3efa11（且中间存在非簿记变更）"
+        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head 5aaf7389（且中间存在非簿记变更）"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
         "status": false,
-        "evidence": "dirty entries: 6"
+        "evidence": "dirty entries: 1"
       },
       "L1-11_docs_state_consistent": {
         "status": "UNVERIFIED",
-        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head 7c3efa11（且中间存在非簿记变更）"
+        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head 5aaf7389（且中间存在非簿记变更）"
       },
       "L1-12_schema_invariants_verified": {
         "status": "UNVERIFIED",
-        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head 7c3efa11（且中间存在非簿记变更）"
+        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head 5aaf7389（且中间存在非簿记变更）"
       },
       "L1-13_negative_paths_covered": {
         "status": "UNVERIFIED",
-        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head 7c3efa11（且中间存在非簿记变更）"
+        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head 5aaf7389（且中间存在非簿记变更）"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
         "status": "UNVERIFIED",
-        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head 7c3efa11（且中间存在非簿记变更）"
+        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head 5aaf7389（且中间存在非簿记变更）"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
@@ -7391,7 +7391,7 @@
   "LAST_COMPLETED_UNIT": "recovery-si-phase2-d-impl（dry-run 实施：静态 Guard 映射 + 可信 Control Plane；D1–D10）",
   "NEXT_EXECUTION_UNIT": "P2-D Implementation Audit 送审 + 归档裁决（P2-E/P2-F/P2-G 仍未授权）",
   "CI_STATUS": "PENDING_THIS_COMMIT",
-  "WAITING_FOR_VERDICT": "recovery-si-phase2-d-implementation（SUBMITTED @7c3efa11）",
+  "WAITING_FOR_VERDICT": "recovery-si-phase2-d-implementation（SUBMITTED @5aaf7389）",
   "HOST_ACTION_REQUIRED": [
     "非生产 DATABASE_URL（无真实客户数据）→ RSI staging smoke + prisma migrate deploy + 重启对账 + exactly-once 取证",
     "Linux 宿主机（或 CI runner）→ systemd Test A–F（RSI-RT-02）",
@@ -8533,8 +8533,9 @@
       "module": "apps/api/src/services/intelligence/recovery-guard-dry-run.ts",
       "evidence_doc": "docs/releases/RECOVERY-SI-PHASE2-D-EVIDENCE.md",
       "audit_request": "docs/releases/RECOVERY-SI-PHASE2-D-IMPLEMENTATION-AUDIT-REQUEST.md",
-      "implementation_head": "7c3efa11",
-      "tests": "recovery-si-phase2-d 10/10 + 回归 51/51 = 61/61 PASS；tsc exit 0"
+      "implementation_head": "5aaf7389",
+      "tests": "recovery-si-phase2-d 10/10 + 回归 51/51 = 61/61 PASS；tsc exit 0",
+      "design_verdict_commit": "7c3efa11"
     }
   },
   "recovery_si_phase2_ab_submission": {
@@ -8618,7 +8619,7 @@
   "recovery_si_phase2_d_impl_submission": {
     "submitted_at": "2026-10-05T05:45:05.805Z",
     "submitted_under_rules": true,
-    "reviewed_head": "7c3efa11",
+    "reviewed_head": "5aaf7389",
     "doc": "docs/releases/RECOVERY-SI-PHASE2-D-IMPLEMENTATION-AUDIT-REQUEST.md",
     "scope": "P2-D v1 dry-run：静态 Guard-action 映射（必修 A）+ 可信 ProductionControlPlane（必修 B）+ D1–D10",
     "risk_classification": {

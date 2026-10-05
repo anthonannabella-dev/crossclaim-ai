@@ -1,6 +1,6 @@
 # Recovery SI P2-D v1（Action Guard dry-run）Implementation Audit —— 送审请求
 
-- 分支：`gate/7-commercial-validation`；**REVIEWED_HEAD = `7c3efa11`**（实现提交）
+- 分支：`gate/7-commercial-validation`；**REVIEWED_HEAD = `5aaf7389`**（P2-D dry-run 实现提交：`recovery-guard-dry-run.ts` + `recovery-si-phase2-d.test.ts`；设计裁决提交为 `7c3efa11`，两者已明确区分）
 - 前置：**MSG-20261005-19 = PASS WITH REVISE**（`REVIEWED_HEAD = 79618507`；FNV `50b12347` / 528 行 / `FULL_COPY_OK`），要求「新增静态 Guard-action 映射 + 复用可信 Production Control Plane」后送本次实施审计。
 - 耐久记录：`docs/releases/RECOVERY-SI-PHASE2-D-EVIDENCE.md`
 
