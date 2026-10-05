@@ -163,9 +163,67 @@ export const RECOVERY_PACKAGE_DELETE_GUARD = {
   triggerManifestSyncRequired: true,
 } as const;
 
-if (false) {
-  void RECOVERY_PERSIST_TRANSACTION_UNITS;
-  void RECOVERY_PERSIST_TRANSACTION_FAILURE_POLICY;
-  void RECOVERY_PERSIST_LINEAGE;
-  void RECOVERY_PACKAGE_DELETE_GUARD;
+
+
+/* ------------------------------------------------------------------ *
+ * 必修 2 接线：单一事务端口（P2-E2）
+ * ------------------------------------------------------------------ */
+
+export interface RecoveryPersistUnitWrite {
+  /** 必须是 RECOVERY_PERSIST_TRANSACTION_UNITS 之一 */
+  unit: string;
+  /** 既有 pure functions 产出的 manifest / digest 原样透传，本层不重算 */
+  payload: unknown;
+}
+
+export interface RecoveryPersistTransactionPort {
+  /** 必须在**同一个数据库事务**内写入全部单元；任一失败 → 整体回滚。 */
+  runInTransaction(units: readonly RecoveryPersistUnitWrite[]): Promise<void>;
+}
+
+export interface RecoveryPersistResult {
+  persisted: boolean;
+  code: string;
+  unitsWritten: number;
+  /** planDigest 仅追溯 basis（必修 3） */
+  traceBasis: 'planDigest';
+  businessIdentity: 'packageDigest';
+}
+
+/** 单元集合必须与批准的四个单元完全一致（顺序不限，重复不允许）。 */
+export function assertApprovedTransactionUnits(units: readonly RecoveryPersistUnitWrite[]): void {
+  const got = [...units.map((u) => u.unit)].sort();
+  const want = [...RECOVERY_PERSIST_TRANSACTION_UNITS].sort();
+  if (got.length !== want.length || got.some((u, i) => u !== want[i])) {
+    throw new Error('P2E_TRANSACTION_UNIT_SET_MISMATCH: units must be exactly ' + want.join(', '));
+  }
+}
+
+/**
+ * P2-E2 编排：门禁 ALLOW 才允许进入持久化，且必须整批交给单一事务端口。
+ * 本函数不读库、不建事务本身；它只强制「先门禁、后单事务、整批或全无」。
+ */
+export async function persistRecoveryPackageWithinTransaction(input: {
+  gate: RecoveryPersistGateOutcome;
+  units: readonly RecoveryPersistUnitWrite[];
+  port: RecoveryPersistTransactionPort;
+}): Promise<RecoveryPersistResult> {
+  if (input.gate.decision !== 'ALLOW' || input.gate.guardEvaluated !== true) {
+    return {
+      persisted: false,
+      code: 'P2E_GATE_NOT_ALLOWED',
+      unitsWritten: 0,
+      traceBasis: 'planDigest',
+      businessIdentity: 'packageDigest',
+    };
+  }
+  assertApprovedTransactionUnits(input.units);
+  await input.port.runInTransaction(input.units);
+  return {
+    persisted: true,
+    code: 'P2E_PERSISTED',
+    unitsWritten: input.units.length,
+    traceBasis: 'planDigest',
+    businessIdentity: 'packageDigest',
+  };
 }

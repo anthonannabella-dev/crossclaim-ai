@@ -2318,3 +2318,8 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 新增迁移 apps/api/prisma/migrations/20261005040000_recovery_package_delete_guard/migration.sql：cc_no_delete__RecoveryPackage / cc_no_delete__RecoveryPackageArtifact（BEFORE DELETE → 拒绝）。
 - tools/tenant-triggers/append-only-triggers.json 登记两条触发器 + unexpectedPrefixes 增 cc_no_delete__%；既有 tenant / append-only / controlled-mutation 语义不变。
 - 待执行：prisma validate / migrate deploy 兼容性校验 / DELETE guard 实测 / 允许路径回归（P2-E2..E4 同链继续）。
+
+## 2026-10-05T09:00Z — P2-E2：单一事务端口接线（纯编排 + 测试，无 DB）
+- recovery-persist-gate.ts 增 RecoveryPersistTransactionPort / RecoveryPersistUnitWrite / persistRecoveryPackageWithinTransaction / assertApprovedTransactionUnits。
+- 语义：门禁非 ALLOW → 端口零调用且 persisted=false；单元集合必须与四个批准单元完全一致（否则 fail-closed）；成功 → 整批一次交给端口；端口抛错上抛不吞；返回 businessIdentity=packageDigest / traceBasis=planDigest。
+- 测试新增 P2E-G9..G12；真实 DB 事务与回滚证据仍属 P2-E4。

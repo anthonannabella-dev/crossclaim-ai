@@ -12,6 +12,9 @@ import {
   RECOVERY_PERSIST_LINEAGE,
   RECOVERY_PERSIST_TRANSACTION_FAILURE_POLICY,
   RECOVERY_PERSIST_TRANSACTION_UNITS,
+  persistRecoveryPackageWithinTransaction,
+  type RecoveryPersistGateOutcome,
+  type RecoveryPersistUnitWrite,
 } from '../services/intelligence/recovery-persist-gate';
 
 const ORG = 'org-p2e';
@@ -144,5 +147,70 @@ describe('Recovery SI P2-E v1 · 事务 / lineage / DELETE guard 契约（必修
     expect(RECOVERY_PACKAGE_DELETE_GUARD.dbTriggerRequired).toBe(true);
     expect(RECOVERY_PACKAGE_DELETE_GUARD.triggerManifestSyncRequired).toBe(true);
     expect(RECOVERY_PACKAGE_DELETE_GUARD.migrationStatus).toBe('PENDING');
+  });
+});
+
+
+describe('Recovery SI P2-E v1 · 单一事务端口（P2-E2 必修 2）', () => {
+  const units = () =>
+    RECOVERY_PERSIST_TRANSACTION_UNITS.map((unit) => ({ unit, payload: { digest: 'd-' + unit } }));
+
+  const gateAllow = (over: Partial<RecoveryPersistGateOutcome> = {}): RecoveryPersistGateOutcome => ({
+    decision: 'ALLOW',
+    code: 'ALLOW',
+    reasons: [],
+    guardAction: 'claim.prepare',
+    guardEvaluated: true,
+    persisted: false,
+    transactionRequired: true,
+    dbDeleteGuardRequired: true,
+    approvalConsumed: false,
+    executorInvoked: false,
+    ...over,
+  });
+
+  it('P2E-G9 门禁非 ALLOW → 端口零调用、不持久化', async () => {
+    let calls = 0;
+    const port = { async runInTransaction() { calls += 1; } };
+    const r = await persistRecoveryPackageWithinTransaction({
+      gate: gateAllow({ decision: 'REQUIRES_APPROVAL' }),
+      units: units(),
+      port,
+    });
+    expect(calls).toBe(0);
+    expect(r.persisted).toBe(false);
+    expect(r.code).toBe('P2E_GATE_NOT_ALLOWED');
+    expect(r.unitsWritten).toBe(0);
+  });
+
+  it('P2E-G10 单元集合不符 → fail-closed（端口零调用）', async () => {
+    let calls = 0;
+    const port = { async runInTransaction() { calls += 1; } };
+    await expect(
+      persistRecoveryPackageWithinTransaction({
+        gate: gateAllow(),
+        units: units().slice(0, 3),
+        port,
+      }),
+    ).rejects.toThrow(/P2E_TRANSACTION_UNIT_SET_MISMATCH/);
+    expect(calls).toBe(0);
+  });
+
+  it('P2E-G11 成功路径：整批交给同一事务端口一次，返回 lineage 语义', async () => {
+    const seen: string[] = [];
+    const port = { async runInTransaction(u: readonly RecoveryPersistUnitWrite[]) { seen.push(u.map((x) => x.unit).sort().join(",")); } };
+    const r = await persistRecoveryPackageWithinTransaction({ gate: gateAllow(), units: units(), port });
+    expect(seen).toEqual(['AuditLog,FileAsset,RecoveryPackage,RecoveryPackageArtifact']);
+    expect(r.persisted).toBe(true);
+    expect(r.unitsWritten).toBe(4);
+    expect(r.businessIdentity).toBe('packageDigest');
+    expect(r.traceBasis).toBe('planDigest');
+  });
+
+  it('P2E-G12 端口抛错 → 错误上抛（不吞异常、不返回 persisted）', async () => {
+    const port = { async runInTransaction() { throw new Error('DB_ROLLBACK'); } };
+    await expect(
+      persistRecoveryPackageWithinTransaction({ gate: gateAllow(), units: units(), port }),
+    ).rejects.toThrow(/DB_ROLLBACK/);
   });
 });
