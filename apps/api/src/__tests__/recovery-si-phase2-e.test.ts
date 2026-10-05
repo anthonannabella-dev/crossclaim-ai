@@ -13,6 +13,7 @@ import {
   RECOVERY_PERSIST_TRANSACTION_FAILURE_POLICY,
   RECOVERY_PERSIST_TRANSACTION_UNITS,
   persistRecoveryPackageWithinTransaction,
+  buildRecoveryPackageLineageProjection,
   type RecoveryPersistGateOutcome,
   type RecoveryPersistUnitWrite,
 } from '../services/intelligence/recovery-persist-gate';
@@ -212,5 +213,68 @@ describe('Recovery SI P2-E v1 · 单一事务端口（P2-E2 必修 2）', () => 
     await expect(
       persistRecoveryPackageWithinTransaction({ gate: gateAllow(), units: units(), port }),
     ).rejects.toThrow(/DB_ROLLBACK/);
+  });
+});
+
+
+describe('Recovery SI P2-E v1 · lineage 反查投影（P2-E3 必修 3）', () => {
+  const base = () => ({
+    package: {
+      id: 'pkg-1',
+      organizationId: 'org-1',
+      claimItemId: 'ci-1',
+      packageVersion: 'v1',
+      packageDigest: 'dg-pkg',
+      status: 'GENERATED',
+    },
+    artifacts: [
+      { id: 'art-1', packageId: 'pkg-1', artifactKind: 'PDF', sha256: 's1', fileAssetId: 'fa-1' },
+      { id: 'art-2', packageId: 'pkg-2', artifactKind: 'JSON_MANIFEST', sha256: 's2', fileAssetId: 'fa-9' },
+    ],
+    fileAssets: [
+      { id: 'fa-1', organizationId: 'org-1', storageKey: 'k1' },
+      { id: 'fa-9', organizationId: 'org-other', storageKey: 'k9' },
+    ],
+    auditLogs: [
+      { id: 'log-1', entityId: 'pkg-1', action: 'RECOVERY_PACKAGE_CREATED' },
+      { id: 'log-2', entityId: 'pkg-other', action: 'NOISE' },
+    ],
+    planDigest: 'dg-plan',
+  });
+
+  it('P2E-G13 投影链固定且业务身份为 packageDigest、追溯 basis 为 planDigest', () => {
+    const r = buildRecoveryPackageLineageProjection(base());
+    expect(r.chain).toEqual([
+      'CanonicalSourceFacts',
+      'RecoveryPackage',
+      'RecoveryPackageArtifact',
+      'FileAsset',
+      'packageDigest',
+      'AuditLog',
+    ]);
+    expect(r.businessIdentity).toBe('packageDigest');
+    expect(r.identityValue).toBe('dg-pkg');
+    expect(r.traceBasis).toBe('planDigest');
+    expect(r.planDigest).toBe('dg-plan');
+  });
+
+  it('P2E-G14 tenant isolation：只收本租户 artifact / fileAsset / audit，跨租户引用进 orphan', () => {
+    const r = buildRecoveryPackageLineageProjection(base());
+    expect(r.artifactIds).toEqual(['art-1']);
+    expect(r.fileAssetIds).toEqual(['fa-1']);
+    expect(r.orphanFileAssetIds).toEqual([]);
+    expect(r.auditLogIds).toEqual(['log-1']);
+  });
+
+  it('P2E-G15 artifact 指向别的 package 时不进入本包投影（不产生跨包 lineage）', () => {
+    const input = base();
+    input.artifacts = [
+      { id: 'art-1', packageId: 'pkg-1', artifactKind: 'PDF', sha256: 's1', fileAssetId: 'fa-1' },
+      { id: 'art-x', packageId: 'pkg-1', artifactKind: 'PDF', sha256: 'sx', fileAssetId: 'fa-missing' },
+    ];
+    const r = buildRecoveryPackageLineageProjection(input);
+    expect(r.artifactIds).toEqual(['art-1', 'art-x']);
+    expect(r.fileAssetIds).toEqual(['fa-1']);
+    expect(r.orphanFileAssetIds).toEqual(['fa-missing']);
   });
 });

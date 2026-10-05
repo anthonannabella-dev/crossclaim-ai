@@ -2329,3 +2329,8 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - backlog 增 si-rsi-unification-design = QUEUED_AFTER_P2_E（ARCH_REVIEW_REQUIRED = true，allowed_files 仅 docs/releases/**）。
 - 施工顺序冻结：先完整完成 P2-E（迁移/guard/manifest/transaction port/lineage/验证/Implementation Audit）→ 再做 inventory + KEEP/REUSE/MERGE/DEPRECATE/DUPLICATE + 最小统一方案送审。
 - 硬约束：不得删除现有 RSI 模块、不得大范围 rename/refactor、不回滚已审计的 P2-D/P2-E；不解锁任何真实 External Write / Payment / Production Credential。
+
+## 2026-10-05T09:20Z — P2-E3（前半）：lineage 反查投影（纯函数 + 测试）
+- recovery-persist-gate.ts 增 RECOVERY_LINEAGE_CHAIN（CanonicalSourceFacts → RecoveryPackage → ArterialArtifact → FileAsset → packageDigest → AuditLog）与 buildRecoveryPackageLineageProjection（只整理身份/引用，不读库、不重算 digest）。
+- tenant isolation：只收本租户 artifact/fileAsset/audit；跨租户 fileAsset 引用进 orphanFileAssetIds；跨 package artifact 不进入本包投影。
+- 测试新增 P2E-G13..G15（现共 15 例）；真实 DB lineage 落库与反查证据仍属 P2-E4。

@@ -227,3 +227,84 @@ export async function persistRecoveryPackageWithinTransaction(input: {
     businessIdentity: 'packageDigest',
   };
 }
+
+
+/* ------------------------------------------------------------------ *
+ * 必修 3 接线：lineage 反查投影（P2-E3，纯函数）
+ * ------------------------------------------------------------------ */
+
+export const RECOVERY_LINEAGE_CHAIN = [
+  'CanonicalSourceFacts',
+  'RecoveryPackage',
+  'RecoveryPackageArtifact',
+  'FileAsset',
+  'packageDigest',
+  'AuditLog',
+] as const;
+
+export interface RecoveryLineageInput {
+  package: {
+    id: string;
+    organizationId: string;
+    claimItemId: string;
+    packageVersion: string;
+    packageDigest: string;
+    status: string;
+  };
+  artifacts: readonly { id: string; packageId: string; artifactKind: string; sha256: string; fileAssetId: string | null }[];
+  fileAssets: readonly { id: string; organizationId: string; storageKey: string | null }[];
+  auditLogs: readonly { id: string; entityId: string | null; action: string }[];
+  planDigest: string | null;
+}
+
+export interface RecoveryLineageProjection {
+  chain: readonly string[];
+  organizationId: string;
+  claimItemId: string;
+  packageVersion: string;
+  businessIdentity: 'packageDigest';
+  identityValue: string;
+  traceBasis: 'planDigest';
+  planDigest: string | null;
+  artifactIds: readonly string[];
+  fileAssetIds: readonly string[];
+  auditLogIds: readonly string[];
+  orphanFileAssetIds: readonly string[];
+}
+
+/**
+ * 反查投影：只做身份/引用一致性整理，不读库、不重算 digest。
+ * 跨租户 artifact / fileAsset 一律不进入投影（仅在 orphan 中显式暴露），保证 tenant isolation 可验证。
+ */
+export function buildRecoveryPackageLineageProjection(input: RecoveryLineageInput): RecoveryLineageProjection {
+  const orgId = input.package.organizationId;
+  const artifacts = input.artifacts.filter((a) => a.packageId === input.package.id);
+  const artifactIds = artifacts.map((a) => a.id).sort();
+  const assetIds = new Set(input.fileAssets.filter((f) => f.organizationId === orgId).map((f) => f.id));
+  const fileAssetIds = artifacts
+    .map((a) => a.fileAssetId)
+    .filter((id): id is string => typeof id === 'string' && assetIds.has(id))
+    .sort();
+  const orphanFileAssetIds = artifacts
+    .map((a) => a.fileAssetId)
+    .filter((id): id is string => typeof id === 'string' && !assetIds.has(id))
+    .sort();
+  const auditLogIds = input.auditLogs
+    .filter((l) => l.entityId === input.package.id)
+    .map((l) => l.id)
+    .sort();
+  return {
+    chain: RECOVERY_LINEAGE_CHAIN,
+    organizationId: orgId,
+    claimItemId: input.package.claimItemId,
+    packageVersion: input.package.packageVersion,
+    businessIdentity: 'packageDigest',
+    identityValue: input.package.packageDigest,
+    traceBasis: 'planDigest',
+    planDigest: input.planDigest,
+    artifactIds,
+    fileAssetIds,
+    auditLogIds,
+    orphanFileAssetIds,
+  };
+}
