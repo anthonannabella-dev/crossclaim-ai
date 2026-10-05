@@ -67,6 +67,19 @@ export const P2_E_TRUSTED_GATE_BINDING = {
 } as const;
 
 /**
+ * 必修（MSG-20261005-25 CHANGE E4）：可信 permit 必须与**本次具体写入批次**不可变绑定；
+ * 把合法 permit 复用到别的 tenant / opportunity / package / artifacts / lineage audit 一律 fail-closed。
+ * 全部校验发生在任何 DB 写入之前。
+ */
+export const P2_E_BATCH_PERMIT_BINDING = {
+  permitToBatchImmutableBinding: 'REQUIRED',
+  permitReuseForDifferentTarget: 'FORBIDDEN',
+  callerForgedLineageAudit: 'FORBIDDEN',
+  internalBatchIdentityChecked: true,
+  checksBeforeAnyDbWrite: true,
+} as const;
+
+/**
  * 必修（MSG-20261005-22 + MSG-20261005-23 RISKS）：持久化入口**自己**必须重算 canonical READY。
  * 不得因为上游传入 `ALLOW` 快照就跳过；重算发生在任何 Action Guard 调用与任何 DB 写入之前。
  */
@@ -492,6 +505,131 @@ export function assertApprovedTransactionUnits(units: readonly RecoveryPersistUn
   }
 }
 
+interface BatchPayloadView {
+  organizationId?: unknown;
+  opportunityRef?: unknown;
+  id?: unknown;
+  claimItemId?: unknown;
+  packageDigest?: unknown;
+  packageVersion?: unknown;
+  artifactKind?: unknown;
+  packageId?: unknown;
+  fileAssetId?: unknown;
+  sha256?: unknown;
+  action?: unknown;
+  entityType?: unknown;
+  entityId?: unknown;
+  changes?: unknown;
+}
+
+const asView = (unit: RecoveryPersistUnitWrite): BatchPayloadView => unit.payload as BatchPayloadView;
+
+/**
+ * CHANGE E4：permit ↔ 批次不可变绑定（裁决 12 项硬校验 + 批内 identity 校验）。
+ * 任何不满足 → 抛出对应 fail-closed 错误；调用方（写入口）必须在本函数通过后才进入事务。
+ */
+export function assertRecoveryPersistBatchMatchesPermit(
+  gate: RecoveryPersistGateOutcome,
+  units: readonly RecoveryPersistUnitWrite[],
+): void {
+  if (!isTrustedRecoveryPersistPermit(gate)) {
+    throw new Error('P2E_CALLER_SUPPLIED_GATE_FORBIDDEN: gate must be produced by evaluateRecoveryPersistGate');
+  }
+  const basis = gate.persistedBasis;
+  if (gate.decision !== 'ALLOW' || gate.canonicalReadyVerified !== true || basis === null) {
+    throw new Error('P2E_LINEAGE_REQUIRES_TRUSTED_ALLOW_GATE: permit 未 ALLOW 或缺少 persistedBasis');
+  }
+
+  assertApprovedTransactionUnits(units);
+
+  const packages = units.filter((unit) => unit.unit === 'RecoveryPackage').map(asView);
+  const assets = units.filter((unit) => unit.unit === 'FileAsset').map(asView);
+  const artifacts = units.filter((unit) => unit.unit === 'RecoveryPackageArtifact').map(asView);
+  const audits = units.filter((unit) => unit.unit === 'AuditLog').map(asView);
+  const pkg = packages[0];
+  const jsonAsset = assets.find((asset) => asset.id !== undefined && asset.organizationId !== undefined && (asset as { kind?: unknown }).kind === 'OTHER');
+  const pdfAsset = assets.find((asset) => (asset as { kind?: unknown }).kind === 'PDF');
+  const jsonArtifact = artifacts.find((artifact) => artifact.artifactKind === 'JSON_MANIFEST');
+  const pdfArtifact = artifacts.find((artifact) => artifact.artifactKind === 'PDF');
+  const audit = audits[0];
+  if (!pkg || !jsonAsset || !pdfAsset || !jsonArtifact || !pdfArtifact || !audit) {
+    throw new Error('P2E_TRANSACTION_UNIT_SET_MISMATCH: 批次必须包含 1 package / 2 FileAsset / 2 artifact / 1 AuditLog');
+  }
+
+  // 1) 批内所有单元的 organizationId 必须等于 permit 的 organizationId（防「合法 permit 复用到别的 tenant」）
+  const offendingOrg = units
+    .filter((unit) => asView(unit).organizationId !== basis.organizationId)
+    .map((unit) => unit.unit);
+  if (offendingOrg.length > 0) {
+    throw new Error(
+      'P2E_PERMIT_BATCH_TENANT_MISMATCH: permit organizationId=' +
+        basis.organizationId +
+        ' 与批次单元 [' +
+        offendingOrg.join(',') +
+        '] 不一致',
+    );
+  }
+
+  // 2) package ↔ trusted READY(opportunityRef) 绑定
+  if (pkg.opportunityRef !== basis.opportunityRef) {
+    throw new Error(
+      'P2E_PACKAGE_OPPORTUNITY_BINDING_MISMATCH: package.opportunityRef=' +
+        String(pkg.opportunityRef) +
+        ' != permit.opportunityRef=' +
+        basis.opportunityRef,
+    );
+  }
+  if (typeof pkg.id !== 'string' || pkg.id === '' || typeof pkg.claimItemId !== 'string' || pkg.claimItemId === '') {
+    throw new Error('P2E_BATCH_IDENTITY_MISMATCH: package 缺少 id / claimItemId');
+  }
+
+  // 3) 批内 identity 校验（package ↔ artifacts ↔ FileAsset）
+  const wiredOk =
+    jsonArtifact.packageId === pkg.id &&
+    pdfArtifact.packageId === pkg.id &&
+    jsonArtifact.fileAssetId === jsonAsset.id &&
+    pdfArtifact.fileAssetId === pdfAsset.id;
+  if (!wiredOk) {
+    throw new Error(
+      'P2E_BATCH_IDENTITY_MISMATCH: artifact.packageId / artifact.fileAssetId 与 package / FileAsset 不一致',
+    );
+  }
+  const artifactKindsOk =
+    jsonArtifact.artifactKind === 'JSON_MANIFEST' &&
+    pdfArtifact.artifactKind === 'PDF' &&
+    jsonArtifact.sha256 === jsonAsset.sha256 &&
+    pdfArtifact.sha256 === pdfAsset.sha256;
+  if (!artifactKindsOk) {
+    throw new Error('P2E_BATCH_IDENTITY_MISMATCH: artifact kind / sha256 与对应 FileAsset 不一致');
+  }
+
+  // 4) lineage AuditLog 必须由当前合法 permit 构造（12 项硬校验）
+  const changes = (audit.changes ?? {}) as Record<string, unknown>;
+  const auditProblems: string[] = [];
+  if (audit.action !== RECOVERY_SI_PACKAGE_PERSISTED_ACTION) auditProblems.push('action');
+  if (audit.organizationId !== basis.organizationId) auditProblems.push('organizationId');
+  if (audit.entityType !== 'RecoveryPackage') auditProblems.push('entityType');
+  if (audit.entityId !== pkg.id) auditProblems.push('entityId');
+  if (changes.planDigest !== basis.canonicalPlanDigest) auditProblems.push('changes.planDigest');
+  if (changes.planDigestVersion !== basis.planDigestVersion) auditProblems.push('changes.planDigestVersion');
+  if (changes.basisVersion !== basis.basisVersion) auditProblems.push('changes.basisVersion');
+  if (changes.opportunityRef !== basis.opportunityRef) auditProblems.push('changes.opportunityRef');
+  if (changes.domain !== basis.domain) auditProblems.push('changes.domain');
+  if (changes.guardAction !== P2_E_GUARD_ACTION) auditProblems.push('changes.guardAction');
+  if (changes.packageId !== pkg.id) auditProblems.push('changes.packageId');
+  if (changes.packageVersion !== pkg.packageVersion) auditProblems.push('changes.packageVersion');
+  if (changes.packageDigest !== pkg.packageDigest) auditProblems.push('changes.packageDigest');
+  const whitelistProblems = Object.keys(changes).filter(
+    (key) => !RECOVERY_SI_PACKAGE_LINEAGE_CHANGE_KEYS.includes(key),
+  );
+  if (whitelistProblems.length > 0) auditProblems.push('changes(non-whitelisted)');
+  if (auditProblems.length > 0) {
+    throw new Error(
+      'P2E_LINEAGE_AUDIT_NOT_GATE_BOUND: AuditLog 与当前合法 permit 不一致（' + auditProblems.join(',') + '）',
+    );
+  }
+}
+
 /**
  * P2-E2 编排：门禁 ALLOW 才允许进入持久化，且必须整批交给单一事务端口。
  * 本函数不读库、不建事务本身；它只强制「先门禁、后单事务、整批或全无」。
@@ -515,7 +653,8 @@ export async function persistRecoveryPackageWithinTransaction(input: {
       businessIdentity: 'packageDigest',
     };
   }
-  assertApprovedTransactionUnits(input.units);
+  // CHANGE E4：permit ↔ 批次不可变绑定（在任何 DB 写入之前；含 12 项 lineage 硬校验与批内 identity）
+  assertRecoveryPersistBatchMatchesPermit(input.gate, input.units);
   await input.port.runInTransaction(input.units);
   return {
     persisted: true,

@@ -21,6 +21,7 @@ import {
   RECOVERY_PACKAGE_DELETE_GUARD,
   RECOVERY_PERSIST_TRANSACTION_UNITS,
   RECOVERY_SI_PACKAGE_PERSISTED_ACTION,
+  assertRecoveryPersistBatchMatchesPermit,
   assertRecoverySiPackageLineageChanges,
   isTrustedRecoveryPersistPermit,
   persistRecoveryPackageWithinTransaction,
@@ -46,6 +47,8 @@ export interface RecoveryPackageWritePayload {
   packageVersion: string;
   digestVersion: string;
   packageDigest: string;
+  /** trusted READY 的 opportunityRef（= RecoveryOpportunity.id）；仅用于 permit↔批次绑定校验，不是 DB 列 */
+  opportunityRef: string;
   /** canonical manifest JSON（仅用于写入前重新校验 packageDigest / JSON FileAsset digest；不是 DB 列） */
   canonicalJson: string;
   completenessSnapshot?: unknown;
@@ -197,6 +200,20 @@ export function buildRecoveryPersistUnits(
   }
   if (payloads.pdfArtifact.sha256 !== payloads.pdfFileAsset.sha256) {
     throw new Error('P2E_ARTIFACT_FILEASSET_DIGEST_MISMATCH: PDF artifact != PDF FileAsset digest');
+  }
+  // CHANGE E4：批内 identity 接线（artifact ↔ package ↔ FileAsset）必须自洽
+  if (
+    payloads.jsonArtifact.packageId !== payloads.package.id ||
+    payloads.pdfArtifact.packageId !== payloads.package.id ||
+    payloads.jsonArtifact.fileAssetId !== payloads.jsonFileAsset.id ||
+    payloads.pdfArtifact.fileAssetId !== payloads.pdfFileAsset.id
+  ) {
+    throw new Error(
+      'P2E_BATCH_IDENTITY_MISMATCH: artifact.packageId / artifact.fileAssetId 与 package / FileAsset 不一致',
+    );
+  }
+  if (payloads.auditLog.entityId !== payloads.package.id) {
+    throw new Error('P2E_BATCH_IDENTITY_MISMATCH: AuditLog.entityId 必须等于 RecoveryPackage.id');
   }
   return [
     { unit: 'RecoveryPackage', payload: payloads.package },
@@ -351,6 +368,61 @@ export async function persistRecoveryPackageWithReplayConvergence(input: {
     }
     throw error;
   }
+}
+
+/**
+ * RISKS（MSG-20261005-25）：package.claimItemId 必须真的属于 permit 的 opportunity。
+ * 现有契约下 opportunityRef === RecoveryOpportunity.id（见 recovery-read-tool-adapters：
+ * `opportunityRef: insight.opportunityId`），因此用 DB relation 直接校验；
+ * 查不到或 opportunityId 不一致 → P2E_PACKAGE_OPPORTUNITY_BINDING_MISMATCH（零写入）。
+ */
+export async function assertPackageClaimItemOpportunityBinding(input: {
+  prisma: PrismaClient;
+  organizationId: string;
+  claimItemId: string;
+  opportunityRef: string;
+}): Promise<void> {
+  const claimItem = await input.prisma.claimItem.findFirst({
+    where: { id: input.claimItemId, organizationId: input.organizationId },
+    select: { opportunityId: true },
+  });
+  if (!claimItem || claimItem.opportunityId !== input.opportunityRef) {
+    throw new Error(
+      'P2E_PACKAGE_OPPORTUNITY_BINDING_MISMATCH: claimItem(' +
+        input.claimItemId +
+        ').opportunityId=' +
+        String(claimItem?.opportunityId ?? null) +
+        ' != permit.opportunityRef=' +
+        input.opportunityRef,
+    );
+  }
+}
+
+/**
+ * 生产推荐入口（CHANGE E4 收口）：
+ *   trusted permit → 批次↔permit 绑定校验 → claimItem↔opportunity 绑定校验（只读） → 单一事务落库。
+ * 任一校验失败都在任何 DB 写入之前 fail-closed。
+ */
+export async function persistRecoverySiPackageWithinTransaction(input: {
+  prisma: PrismaClient;
+  gate: RecoveryPersistGateOutcome;
+  units: readonly RecoveryPersistUnitWrite[];
+}): Promise<RecoveryPersistConvergenceResult> {
+  assertRecoveryPersistBatchMatchesPermit(input.gate, input.units);
+  const basis = input.gate.persistedBasis!;
+  const packageUnit = input.units.find((unit) => unit.unit === 'RecoveryPackage')!
+    .payload as RecoveryPackageWritePayload;
+  await assertPackageClaimItemOpportunityBinding({
+    prisma: input.prisma,
+    organizationId: basis.organizationId,
+    claimItemId: packageUnit.claimItemId,
+    opportunityRef: packageUnit.opportunityRef,
+  });
+  return persistRecoveryPackageWithReplayConvergence({
+    gate: input.gate,
+    units: input.units,
+    port: createPrismaRecoveryPersistPort(input.prisma),
+  });
 }
 
 /* ------------------------------------------------------------------ *

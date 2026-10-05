@@ -159,6 +159,56 @@ OTHER_BUSINESS_FACT_WRITE = FORBIDDEN
 EXTERNAL_BUSINESS_WRITE = FORBIDDEN
 ```
 
+## 9.3 MSG-20261005-25（P2-E FINAL-3）修订落地 —— CHANGE E4
+
+裁决：**REVISE**（`CHANGE_E3 = PASS`；`MODULE_PRIVATE_WEAKSET_PERMIT = PASS`、`CALLER_SUPPLIED_ALLOW_GATE = BLOCKED`；
+`CHANGE_E1/E2 = PASS_WITH_ONE_BINDING_GAP`；`FINAL4_REQUIRED = YES`）。
+
+### CHANGE E4 —— trusted permit ↔ 具体写入批次不可变绑定
+
+- 新增 `assertRecoveryPersistBatchMatchesPermit(gate, units)`（`recovery-persist-gate.ts`），在**任何 DB 写入之前**执行：
+  ① 全部 `units.organizationId` 必须等于 `gate.persistedBasis.organizationId`（→ `P2E_PERMIT_BATCH_TENANT_MISMATCH`）；
+  ② `package.opportunityRef` 必须等于 `gate.persistedBasis.opportunityRef`（→ `P2E_PACKAGE_OPPORTUNITY_BINDING_MISMATCH`）；
+  ③ 批内 identity：`jsonArtifact.packageId === pdfArtifact.packageId === package.id`、
+  `jsonArtifact.fileAssetId === jsonAsset.id`、`pdfArtifact.fileAssetId === pdfAsset.id`、
+  artifact kind/sha256 与对应 FileAsset 一致（→ `P2E_BATCH_IDENTITY_MISMATCH`）；
+  ④ lineage AuditLog 12 项硬校验：action / organizationId / entityType / entityId / changes.planDigest /
+  planDigestVersion / basisVersion / opportunityRef / domain / guardAction / packageId / packageVersion / packageDigest
+  必须与可信 permit 完全一致，且 changes 只允许 9 键白名单（→ `P2E_LINEAGE_AUDIT_NOT_GATE_BOUND`）。
+- `persistRecoveryPackageWithinTransaction()` 内部改为调用该函数（不再是「集合相等」即放行）；
+  手工伪造的 `AuditLogWritePayload` 或复用合法 permit 到别的 tenant/opportunity 全部 fail-closed。
+- 新增生产推荐入口 `persistRecoverySiPackageWithinTransaction({ prisma, gate, units })`（`recovery-persist-prisma-port.ts`）：
+  permit↔批次绑定校验 → **claimItem↔opportunity 业务绑定**（只读） → 单一事务落库。
+
+### RISKS 项 —— package.claimItemId ↔ permit.opportunityRef 业务绑定
+
+- 契约确认：`opportunityRef === RecoveryOpportunity.id`（`recovery-read-tool-adapters.ts`：`opportunityRef: insight.opportunityId`），
+  `ClaimItem.opportunityId` 即该 FK；因此本批用 DB relation 直接校验（未猜测语义）。
+- `assertPackageClaimItemOpportunityBinding()`：读 `ClaimItem WHERE id = package.claimItemId AND organizationId = permit.organizationId`，
+  查不到或 `opportunityId !== permit.opportunityRef` → `P2E_PACKAGE_OPPORTUNITY_BINDING_MISMATCH`（零写入）。
+
+### 证据
+
+| 证据 | 断言 | 结果 |
+| --- | --- | --- |
+| P2E-G24（F4E-01 单元级） | 合法 permit + 整批改到 org-other → `P2E_PERMIT_BATCH_TENANT_MISMATCH`，端口零调用 | PASS |
+| P2E-G25（F4E-03 单元级） | 伪造 action / entityId / planDigest / packageDigest / opportunityRef 任一 → `P2E_LINEAGE_AUDIT_NOT_GATE_BOUND`，端口零调用 | PASS |
+| P2E-G26（F4E-04 单元级） | artifact 交叉接线 → `P2E_BATCH_IDENTITY_MISMATCH`，端口零调用 | PASS |
+| P2E-G27 | package.opportunityRef 与 permit 不一致 → `P2E_PACKAGE_OPPORTUNITY_BINDING_MISMATCH` | PASS |
+| P2E-DB17（F4E-01） | 合法 permit + 整批 org-B → `P2E_PERMIT_BATCH_TENANT_MISMATCH`，DB 四表全 0 | PASS |
+| P2E-DB18（F4E-02） | package.claimItem 不属于 permit 的 opportunity（`opportunityId=null`）→ `P2E_PACKAGE_OPPORTUNITY_BINDING_MISMATCH`，四表全 0 | PASS |
+| P2E-DB19（F4E-03） | 手工伪造 lineage planDigest → `P2E_LINEAGE_AUDIT_NOT_GATE_BOUND`，四表全 0 | PASS |
+| P2E-DB20（F4E-04） | artifact fileAssetId 交叉接线 → `P2E_BATCH_IDENTITY_MISMATCH`，四表全 0 | PASS |
+| P2E-DB5/DB7/DB8/DB12/DB13/DB16 | 既有 E3 证据在 E4 之后重跑：2 FileAsset / 2 artifact / 同事务 / 回滚 / 幂等 / 并发 / 租户隔离 / DELETE guard 全部维持 | PASS |
+
+```text
+apps/api npx tsc --noEmit                       → exit 0
+recovery-si-phase2-e.test.ts                    → 27/27 PASS
+recovery-si-phase2-e-db.test.ts                 → 20/20 PASS（真实 PostgreSQL）
+P2-E targeted regression（10 文件）              → 127/127 PASS
+prisma validate / migrate deploy / migrate status → valid / 79 migrations 无待应用 / up to date
+```
+
 ## 9.1 MSG-20261005-23（P2-E Implementation Audit）修订落地
 
 裁决：**REVISE**（`P2_E_V1_OPTION_A = NOT_YET_CLOSED`；`FINAL2_REQUIRED = YES`），范围两项：

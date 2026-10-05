@@ -22,6 +22,8 @@ import {
   RECOVERY_SI_PACKAGE_LINEAGE_CHANGE_KEYS,
   RECOVERY_SI_PACKAGE_PERSISTED_ACTION,
   RECOVERY_PERSIST_TRANSACTION_UNIT_COUNTS,
+  P2_E_BATCH_PERMIT_BINDING,
+  assertRecoveryPersistBatchMatchesPermit,
   evaluateRecoveryPersistGate,
   isTrustedRecoveryPersistPermit,
   RECOVERY_PACKAGE_DELETE_GUARD,
@@ -36,6 +38,7 @@ import {
   type RecoveryPersistUnitWrite,
 } from '../services/intelligence/recovery-persist-gate';
 import { buildRecoverySiPackageLineageAuditLog } from '../services/intelligence/recovery-persist-prisma-port';
+import { sha256Hex } from '../services/recovery/recovery-package';
 
 const ORG = 'org-p2e';
 const P2E_NOW = '2026-10-05T04:00:00.000Z';
@@ -265,15 +268,59 @@ describe('Recovery SI P2-E v1 · 事务 / lineage / DELETE guard 契约（必修
 
 
 describe('Recovery SI P2-E v1 · 单一事务端口 + 可信 gate 绑定（E1 / E3 / 必修 2）', () => {
-  /** 1 package + 2 FileAsset + 2 artifact + 1 audit（MSG-20261005-24 CHANGE E3） */
-  const units = () => [
-    { unit: 'RecoveryPackage', payload: { digest: 'd-package' } },
-    { unit: 'FileAsset', payload: { digest: 'd-json-asset' } },
-    { unit: 'FileAsset', payload: { digest: 'd-pdf-asset' } },
-    { unit: 'RecoveryPackageArtifact', payload: { digest: 'd-json-artifact' } },
-    { unit: 'RecoveryPackageArtifact', payload: { digest: 'd-pdf-artifact' } },
-    { unit: 'AuditLog', payload: { digest: 'd-audit' } },
-  ];
+  /**
+   * 与 permit 完全一致的合法批次（CHANGE E3 六单元 + CHANGE E4 绑定自洽）：
+   * 1 package / 2 FileAsset（JSON=OTHER + PDF）/ 2 artifact（JSON_MANIFEST + PDF）/ 1 gate-bound AuditLog。
+   */
+  const validUnits = (gate: RecoveryPersistGateOutcome): RecoveryPersistUnitWrite[] => {
+    const basis = gate.persistedBasis!;
+    const canonicalJson = '{"packageVersion":"recovery-package/v1","marker":"unit-1"}';
+    const packageDigest = sha256Hex(canonicalJson);
+    const pdfSha = sha256Hex('unit-pdf-bytes');
+    const pkgId = 'pkg-unit-1';
+    const jsonAssetId = 'fa-json-1';
+    const pdfAssetId = 'fa-pdf-1';
+    const audit = buildRecoverySiPackageLineageAuditLog({
+      gate,
+      packageId: pkgId,
+      packageVersion: 'recovery-package/v1',
+      packageDigest,
+    });
+    return [
+      {
+        unit: 'RecoveryPackage',
+        payload: {
+          id: pkgId,
+          organizationId: basis.organizationId,
+          claimItemId: 'ci-unit-1',
+          packageVersion: 'recovery-package/v1',
+          digestVersion: 'v1',
+          packageDigest,
+          opportunityRef: basis.opportunityRef,
+          canonicalJson,
+        },
+      },
+      {
+        unit: 'FileAsset',
+        payload: { id: jsonAssetId, organizationId: basis.organizationId, kind: 'OTHER', storageKey: 'k-json', originalName: 'p.json', sha256: packageDigest },
+      },
+      {
+        unit: 'FileAsset',
+        payload: { id: pdfAssetId, organizationId: basis.organizationId, kind: 'PDF', storageKey: 'k-pdf', originalName: 'p.pdf', sha256: pdfSha },
+      },
+      {
+        unit: 'RecoveryPackageArtifact',
+        payload: { id: 'art-json-1', organizationId: basis.organizationId, packageId: pkgId, artifactKind: 'JSON_MANIFEST', fileAssetId: jsonAssetId, sha256: packageDigest },
+      },
+      {
+        unit: 'RecoveryPackageArtifact',
+        payload: { id: 'art-pdf-1', organizationId: basis.organizationId, packageId: pkgId, artifactKind: 'PDF', fileAssetId: pdfAssetId, sha256: pdfSha },
+      },
+      { unit: 'AuditLog', payload: { ...audit, id: 'audit-unit-1' } },
+    ];
+  };
+
+  const units = (gate: RecoveryPersistGateOutcome) => validUnits(gate);
 
   const allowGate = async (): Promise<RecoveryPersistGateOutcome> => {
     const outcome = await evaluateRecoveryPersistGate({
@@ -300,7 +347,11 @@ describe('Recovery SI P2-E v1 · 单一事务端口 + 可信 gate 绑定（E1 / 
   it('P2E-G9 门禁非 ALLOW → 端口零调用、不持久化', async () => {
     let calls = 0;
     const port = { async runInTransaction() { calls += 1; } };
-    const r = await persistRecoveryPackageWithinTransaction({ gate: await denyGate(), units: units(), port });
+    const r = await persistRecoveryPackageWithinTransaction({
+      gate: await denyGate(),
+      units: units(await allowGate()),
+      port,
+    });
     expect(calls).toBe(0);
     expect(r.persisted).toBe(false);
     expect(r.code).toBe('P2E_GATE_NOT_ALLOWED');
@@ -310,11 +361,12 @@ describe('Recovery SI P2-E v1 · 单一事务端口 + 可信 gate 绑定（E1 / 
   it('P2E-G10 单元集合 / 数量不符 → fail-closed（端口零调用）', async () => {
     let calls = 0;
     const port = { async runInTransaction() { calls += 1; } };
+    const gate = await allowGate();
     await expect(
-      persistRecoveryPackageWithinTransaction({ gate: await allowGate(), units: units().slice(0, 5), port }),
+      persistRecoveryPackageWithinTransaction({ gate, units: units(gate).slice(0, 5), port }),
     ).rejects.toThrow(/P2E_TRANSACTION_UNIT_SET_MISMATCH/);
     await expect(
-      persistRecoveryPackageWithinTransaction({ gate: await allowGate(), units: units().slice(0, 4), port }),
+      persistRecoveryPackageWithinTransaction({ gate, units: units(gate).slice(0, 4), port }),
     ).rejects.toThrow(/P2E_TRANSACTION_UNIT_SET_MISMATCH/);
     expect(calls).toBe(0);
   });
@@ -326,7 +378,8 @@ describe('Recovery SI P2-E v1 · 单一事务端口 + 可信 gate 绑定（E1 / 
         seen.push(u.map((x) => x.unit).sort().join(','));
       },
     };
-    const r = await persistRecoveryPackageWithinTransaction({ gate: await allowGate(), units: units(), port });
+    const gate = await allowGate();
+    const r = await persistRecoveryPackageWithinTransaction({ gate, units: units(gate), port });
     expect(seen).toEqual([
       'AuditLog,FileAsset,FileAsset,RecoveryPackage,RecoveryPackageArtifact,RecoveryPackageArtifact',
     ]);
@@ -338,8 +391,9 @@ describe('Recovery SI P2-E v1 · 单一事务端口 + 可信 gate 绑定（E1 / 
 
   it('P2E-G12 端口抛错 → 错误上抛（不吞异常、不返回 persisted）', async () => {
     const port = { async runInTransaction() { throw new Error('DB_ROLLBACK'); } };
+    const gate = await allowGate();
     await expect(
-      persistRecoveryPackageWithinTransaction({ gate: await allowGate(), units: units(), port }),
+      persistRecoveryPackageWithinTransaction({ gate, units: units(gate), port }),
     ).rejects.toThrow(/DB_ROLLBACK/);
   });
 
@@ -351,9 +405,87 @@ describe('Recovery SI P2-E v1 · 单一事务端口 + 可信 gate 绑定（E1 / 
     const port = { async runInTransaction() { calls += 1; } };
     expect(isTrustedRecoveryPersistPermit(handBuilt)).toBe(false);
     await expect(
-      persistRecoveryPackageWithinTransaction({ gate: handBuilt, units: units(), port }),
+      persistRecoveryPackageWithinTransaction({ gate: handBuilt, units: units(real), port }),
     ).rejects.toThrow(/P2E_CALLER_SUPPLIED_GATE_FORBIDDEN/);
     expect(calls).toBe(0);
+  });
+
+  it('P2E-G24（F4E-01）合法 permit 复用到别的 tenant → PERMIT_BATCH_TENANT_MISMATCH 且零调用', async () => {
+    const gate = await allowGate();
+    const tampered = units(gate).map((unit) => ({
+      ...unit,
+      payload: { ...(unit.payload as Record<string, unknown>), organizationId: 'org-other' },
+    }));
+    expect(() => assertRecoveryPersistBatchMatchesPermit(gate, tampered)).toThrow(
+      /P2E_PERMIT_BATCH_TENANT_MISMATCH/,
+    );
+    let calls = 0;
+    const port = { async runInTransaction() { calls += 1; } };
+    await expect(
+      persistRecoveryPackageWithinTransaction({ gate, units: tampered, port }),
+    ).rejects.toThrow(/P2E_PERMIT_BATCH_TENANT_MISMATCH/);
+    expect(calls).toBe(0);
+  });
+
+  it('P2E-G25（F4E-03）手工伪造 lineage AuditLog → LINEAGE_AUDIT_NOT_GATE_BOUND 且零调用', async () => {
+    const gate = await allowGate();
+    for (const mutate of [
+      (audit: Record<string, unknown>) => ({ ...audit, action: 'recovery.package_generated' }),
+      (audit: Record<string, unknown>) => ({ ...audit, entityId: 'other-package' }),
+      (audit: Record<string, unknown>) => ({ ...audit, changes: { ...(audit.changes as object), planDigest: 'f'.repeat(64) } }),
+      (audit: Record<string, unknown>) => ({ ...audit, changes: { ...(audit.changes as object), packageDigest: 'e'.repeat(64) } }),
+      (audit: Record<string, unknown>) => ({ ...audit, changes: { ...(audit.changes as object), opportunityRef: 'opp-other' } }),
+    ]) {
+      const forged = units(gate).map((unit) =>
+        unit.unit === 'AuditLog' ? { ...unit, payload: mutate(unit.payload as Record<string, unknown>) } : unit,
+      );
+      expect(() => assertRecoveryPersistBatchMatchesPermit(gate, forged)).toThrow(
+        /P2E_LINEAGE_AUDIT_NOT_GATE_BOUND/,
+      );
+    }
+    let calls = 0;
+    const port = { async runInTransaction() { calls += 1; } };
+    const forged = units(gate).map((unit) =>
+      unit.unit === 'AuditLog'
+        ? { ...unit, payload: { ...(unit.payload as Record<string, unknown>), action: 'recovery.package_generated' } }
+        : unit,
+    );
+    await expect(
+      persistRecoveryPackageWithinTransaction({ gate, units: forged, port }),
+    ).rejects.toThrow(/P2E_LINEAGE_AUDIT_NOT_GATE_BOUND/);
+    expect(calls).toBe(0);
+  });
+
+  it('P2E-G26（F4E-04）artifact 交叉接线 → BATCH_IDENTITY_MISMATCH 且零调用', async () => {
+    const gate = await allowGate();
+    const crossWired = units(gate).map((unit) =>
+      unit.unit === 'RecoveryPackageArtifact' &&
+      (unit.payload as { artifactKind?: string }).artifactKind === 'JSON_MANIFEST'
+        ? { ...unit, payload: { ...(unit.payload as Record<string, unknown>), fileAssetId: 'fa-pdf-1' } }
+        : unit,
+    );
+    expect(() => assertRecoveryPersistBatchMatchesPermit(gate, crossWired)).toThrow(
+      /P2E_BATCH_IDENTITY_MISMATCH/,
+    );
+    let calls = 0;
+    const port = { async runInTransaction() { calls += 1; } };
+    await expect(
+      persistRecoveryPackageWithinTransaction({ gate, units: crossWired, port }),
+    ).rejects.toThrow(/P2E_BATCH_IDENTITY_MISMATCH/);
+    expect(calls).toBe(0);
+  });
+
+  it('P2E-G27 package 的 opportunityRef 与 permit 不一致 → PACKAGE_OPPORTUNITY_BINDING_MISMATCH', async () => {
+    const gate = await allowGate();
+    const mismatched = units(gate).map((unit) =>
+      unit.unit === 'RecoveryPackage'
+        ? { ...unit, payload: { ...(unit.payload as Record<string, unknown>), opportunityRef: 'opp-other' } }
+        : unit,
+    );
+    expect(() => assertRecoveryPersistBatchMatchesPermit(gate, mismatched)).toThrow(
+      /P2E_PACKAGE_OPPORTUNITY_BINDING_MISMATCH/,
+    );
+    expect(P2_E_BATCH_PERMIT_BINDING.permitReuseForDifferentTarget).toBe('FORBIDDEN');
   });
 });
 

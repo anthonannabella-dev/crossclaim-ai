@@ -39,13 +39,14 @@ import {
   evaluateRecoveryPersistGate,
   RECOVERY_SI_PACKAGE_PERSISTED_ACTION,
   type RecoveryPersistGateOutcome,
+  type RecoveryPersistTransactionPort,
   type RecoveryPersistUnitWrite,
 } from '../services/intelligence/recovery-persist-gate';
 import {
   buildRecoveryPersistUnits,
   buildRecoverySiPackageLineageAuditLog,
   createPrismaRecoveryPersistPort,
-  persistRecoveryPackageWithReplayConvergence,
+  persistRecoverySiPackageWithinTransaction,
   readRecoveryPackageLineage,
   readRecoveryPackagePlanDigestFromAudit,
   type RecoveryPersistPrismaPayloads,
@@ -81,6 +82,7 @@ interface TenantFixture {
   caseId: string;
   claimItemId: string;
   userId: string;
+  opportunityRef: string;
 }
 
 let orgA: TenantFixture;
@@ -114,10 +116,24 @@ async function seedTenant(tag: string): Promise<TenantFixture> {
       openedAt: new Date('2026-09-01T00:00:00.000Z'),
     },
   });
+  const opportunity = await prisma.recoveryOpportunity.create({
+    data: {
+      id: 'opp-p2e-db-' + tag + '-' + suffix,
+      organizationId,
+      // DB 侧枚举是 LOGISTICS（SI 侧称 CARRIER）；opportunityRef 仍是 RecoveryOpportunity.id
+      domain: 'LOGISTICS',
+      channel: 'AMAZON_OTHER',
+      opportunityType: 'CARRIER_RECOVERY',
+      title: 'P2E DB opportunity ' + tag,
+      currency: 'USD',
+      detectedAt: new Date('2026-09-01T00:00:00.000Z'),
+    },
+  });
   const claim = await prisma.claimItem.create({
     data: {
       organizationId,
       caseId: createdCase.id,
+      opportunityId: opportunity.id,
       platformType: 'AMAZON',
       claimType: 'ORDER_DISCREPANCY',
       platformRef: 'P2E-DB-' + tag.toUpperCase() + '-' + suffix,
@@ -134,18 +150,23 @@ async function seedTenant(tag: string): Promise<TenantFixture> {
     caseId: createdCase.id,
     claimItemId: claim.id,
     userId: owner.id,
+    opportunityRef: opportunity.id,
   };
 }
 
 /** 写入口 canonical READY 重算夹具（参数化 organizationId，因为 DB 租户是随机的） */
-const p2eStateFor = (organizationId: string, observedAt: string): ReturnType<typeof buildCustomerRecoveryState> => {
+const p2eStateFor = (
+  organizationId: string,
+  observedAt: string,
+  opportunityRef: string,
+): ReturnType<typeof buildCustomerRecoveryState> => {
   const capability = (domain: CapabilitySlice['domain']): CapabilitySlice => ({
     domain,
     readOnlyTools: [],
     providerApproval: 'READY',
   });
   const opportunity: OpportunitySlice = {
-    opportunityRef: 'opp-p2e-db',
+    opportunityRef,
     domain: 'CARRIER',
     organizationId,
     recoverable: { amount: 680, currency: 'USD', source: 'CANONICAL_FACT' },
@@ -188,7 +209,7 @@ const P2E_NOW_MS = Date.parse(P2E_OBSERVED_AT);
 
 /** 真实可信 gate（唯一 permit 签发者） */
 async function allowGateFor(tenant: TenantFixture): Promise<RecoveryPersistGateOutcome> {
-  const built = p2eStateFor(tenant.organizationId, P2E_OBSERVED_AT);
+  const built = p2eStateFor(tenant.organizationId, P2E_OBSERVED_AT, tenant.opportunityRef);
   if (!built.ok) throw new Error('fixture tenant mismatch');
   const registry = p2eRegistry();
   const plan = planRecovery({
@@ -226,15 +247,18 @@ function payloads(
     pdfArtifactId?: string;
     pdfArtifactKind?: 'PDF' | 'JSON_MANIFEST';
     pdfArtifactSha256?: string;
+    claimItemId?: string;
+    opportunityRef?: string;
     organizationId?: string;
   } = {},
 ): RecoveryPersistPrismaPayloads {
   // 默认取可信 gate 的租户（保持批内一致，便于构造「同租户但跨租户 ClaimItem」的负例）
   const organizationId = overrides.organizationId ?? gate.persistedBasis!.organizationId;
   const marker = overrides.marker ?? 'p2e-db-package:' + tenant.claimItemId;
+  const claimItemId = overrides.claimItemId ?? tenant.claimItemId;
   const canonicalJson = JSON.stringify({
     packageVersion: RECOVERY_PACKAGE_VERSION,
-    claimItemId: tenant.claimItemId,
+    claimItemId,
     marker,
   });
   const digest = sha256Hex(canonicalJson);
@@ -246,11 +270,12 @@ function payloads(
     package: {
       id: packageId,
       organizationId,
-      claimItemId: tenant.claimItemId,
+      claimItemId,
       caseId: tenant.caseId,
       packageVersion: RECOVERY_PACKAGE_VERSION,
       digestVersion: RECOVERY_PACKAGE_DIGEST_VERSION,
       packageDigest: digest,
+      opportunityRef: overrides.opportunityRef ?? gate.persistedBasis!.opportunityRef,
       canonicalJson,
       completenessSnapshot: ['evidence-1'],
       generatedByUserId: tenant.userId,
@@ -321,6 +346,21 @@ const seedPlan = async () => {
   orgA = await seedTenant('a');
   orgB = await seedTenant('b');
 };
+
+/**
+ * 生产推荐入口（CHANGE E4）：permit ↔ 批次绑定 + claimItem↔opportunity 绑定校验后，再进入单一事务。
+ * 测试里统一走这条路径，避免「手工拼 gate/units 直接落库」。
+ */
+const persistBound = (input: {
+  gate: RecoveryPersistGateOutcome;
+  units: readonly RecoveryPersistUnitWrite[];
+  port?: RecoveryPersistTransactionPort;
+}) =>
+  persistRecoverySiPackageWithinTransaction({
+    prisma,
+    gate: input.gate,
+    units: input.units,
+  });
 
 beforeAll(async () => {
   await prisma.$connect();
@@ -403,7 +443,7 @@ describe('Recovery SI P2-E DB · 单一事务写入 / 原子性 / 幂等（必�
     const payload = payloads(orgA, gate);
     const port = createPrismaRecoveryPersistPort(prisma);
 
-    const result = await persistRecoveryPackageWithReplayConvergence({
+    const result = await persistBound({
       gate,
       units: buildRecoveryPersistUnits(payload),
       port,
@@ -457,7 +497,7 @@ describe('Recovery SI P2-E DB · 单一事务写入 / 原子性 / 幂等（必�
     const port = createPrismaRecoveryPersistPort(prisma);
 
     await expect(
-      persistRecoveryPackageWithReplayConvergence({
+      persistBound({
         gate,
         units: buildRecoveryPersistUnits(failing),
         port,
@@ -483,12 +523,12 @@ describe('Recovery SI P2-E DB · 单一事务写入 / 原子性 / 幂等（必�
     });
     const port = createPrismaRecoveryPersistPort(prisma);
 
-    const r1 = await persistRecoveryPackageWithReplayConvergence({
+    const r1 = await persistBound({
       gate,
       units: buildRecoveryPersistUnits(first),
       port,
     });
-    const r2 = await persistRecoveryPackageWithReplayConvergence({
+    const r2 = await persistBound({
       gate,
       units: buildRecoveryPersistUnits(second),
       port,
@@ -510,7 +550,7 @@ describe('Recovery SI P2-E DB · 单一事务写入 / 原子性 / 幂等（必�
     const port = createPrismaRecoveryPersistPort(prisma);
 
     const attempt = async () =>
-      persistRecoveryPackageWithReplayConvergence({
+      persistBound({
         gate,
         units: buildRecoveryPersistUnits(payloads(orgA, gate, { marker })),
         port,
@@ -535,13 +575,15 @@ describe('Recovery SI P2-E DB · 单一事务写入 / 原子性 / 幂等（必�
         called += 1;
       },
     };
-    const result = await persistRecoveryPackageWithReplayConvergence({
-      gate,
-      units: buildRecoveryPersistUnits(payloads(orgA, await allowGateFor(orgA))),
-      port,
-    });
-    expect(result.persisted).toBe(false);
-    expect(result.code).toBe('P2E_GATE_NOT_ALLOWED');
+    // 生产入口在任何 DB 写入前先要求「trusted + ALLOW + persistedBasis」→ 非 ALLOW 直接 fail-closed
+    // （软返回 `P2E_GATE_NOT_ALLOWED` 的低层路径由 unit 套件 P2E-G9 覆盖）
+    await expect(
+      persistBound({
+        gate,
+        units: buildRecoveryPersistUnits(payloads(orgA, await allowGateFor(orgA))),
+        port,
+      }),
+    ).rejects.toThrow(/P2E_LINEAGE_REQUIRES_TRUSTED_ALLOW_GATE/);
     expect(called).toBe(0);
     expect(await prisma.recoveryPackage.count({ where: { organizationId: orgA.organizationId } })).toBe(0);
   });
@@ -561,8 +603,8 @@ describe('Recovery SI P2-E DB · 租户隔离（必修 2/3）', () => {
           : unit,
     );
     await expect(
-      persistRecoveryPackageWithReplayConvergence({ gate: gateA, units: mixed, port }),
-    ).rejects.toThrow(/P2E_TENANT_MIXED_BATCH/);
+      persistBound({ gate: gateA, units: mixed, port }),
+    ).rejects.toThrow(/P2E_PERMIT_BATCH_TENANT_MISMATCH|P2E_TENANT_MIXED_BATCH/);
     expect(await prisma.recoveryPackage.count({ where: { organizationId: orgA.organizationId } })).toBe(0);
     expect(await prisma.recoveryPackage.count({ where: { organizationId: orgB.organizationId } })).toBe(0);
 
@@ -570,18 +612,20 @@ describe('Recovery SI P2-E DB · 租户隔离（必修 2/3）', () => {
     const crossTenantClaim = payloads(orgA, gateB, {
       marker: sha256Hex('p2e-db-tenant-cross'),
     });
+    // 生产入口在事务前即发现「orgB 的 permit/payload 引用了 orgA 的 ClaimItem」→ fail-closed
+    // （DB 层 tenant 触发器的拒绝路径由 ③ 独立覆盖）
     await expect(
-      persistRecoveryPackageWithReplayConvergence({
+      persistBound({
         gate: gateB,
         units: buildRecoveryPersistUnits(crossTenantClaim),
         port,
       }),
-    ).rejects.toThrow(/cross-tenant reference blocked/);
+    ).rejects.toThrow(/P2E_PACKAGE_OPPORTUNITY_BINDING_MISMATCH|cross-tenant reference blocked/);
     expect(await prisma.recoveryPackage.count({ where: { organizationId: orgB.organizationId } })).toBe(0);
 
     // ③ 真实落库后：orgB 的 artifact 不得引用 orgA 的 package（DB 触发器拒绝）
     const own = payloads(orgA, gateA, { marker: sha256Hex('p2e-db-tenant') });
-    await persistRecoveryPackageWithReplayConvergence({
+    await persistBound({
       gate: gateA,
       units: buildRecoveryPersistUnits(own),
       port,
@@ -603,7 +647,7 @@ describe('Recovery SI P2-E DB · 租户隔离（必修 2/3）', () => {
   it('P2E-DB11 反查受租户约束：跨租户 packageId 反查返回 null', async () => {
     const gateA = await allowGateFor(orgA);
     const own = payloads(orgA, gateA, { marker: sha256Hex('p2e-db-tenant-read') });
-    await persistRecoveryPackageWithReplayConvergence({
+    await persistBound({
       gate: gateA,
       units: buildRecoveryPersistUnits(own),
       port: createPrismaRecoveryPersistPort(prisma),
@@ -629,7 +673,7 @@ describe('Recovery SI P2-E DB · lineage 落库反查（必修 3）', () => {
   it('P2E-DB12 反查链完整：packageDigest 是业务身份，planDigest 仅 trace basis', async () => {
     const gateA = await allowGateFor(orgA);
     const payload = payloads(orgA, gateA, { marker: sha256Hex('p2e-db-lineage') });
-    await persistRecoveryPackageWithReplayConvergence({
+    await persistBound({
       gate: gateA,
       units: buildRecoveryPersistUnits(payload),
       port: createPrismaRecoveryPersistPort(prisma),
@@ -688,7 +732,7 @@ describe('Recovery SI P2-E DB · DELETE guard 行为取证（必修 4，写入�
   it('P2E-DB13 对已落库的 RecoveryPackage / artifact 直接 DELETE 必须被 DB 拒绝且行保留', async () => {
     const gateA = await allowGateFor(orgA);
     const payload = payloads(orgA, gateA, { marker: sha256Hex('p2e-db-delete-guard') });
-    await persistRecoveryPackageWithReplayConvergence({
+    await persistBound({
       gate: gateA,
       units: buildRecoveryPersistUnits(payload),
       port: createPrismaRecoveryPersistPort(prisma),
@@ -717,7 +761,7 @@ describe('Recovery SI P2-E DB · FINAL-2 修订负例（F3E-01 / 02 / 04）', ()
     const forged = JSON.parse(JSON.stringify(gateA)) as RecoveryPersistGateOutcome;
     const payload = payloads(orgA, gateA);
     await expect(
-      persistRecoveryPackageWithReplayConvergence({
+      persistBound({
         gate: forged,
         units: buildRecoveryPersistUnits(payload),
         port: createPrismaRecoveryPersistPort(prisma),
@@ -757,12 +801,102 @@ describe('Recovery SI P2-E DB · FINAL-2 修订负例（F3E-01 / 02 / 04）', ()
       return unit;
     });
     await expect(
-      persistRecoveryPackageWithReplayConvergence({
+      persistBound({
         gate: gateA,
         units,
         port: createPrismaRecoveryPersistPort(prisma),
       }),
     ).rejects.toBeTruthy();
+    expect(await prisma.recoveryPackage.count({ where: { organizationId: orgA.organizationId } })).toBe(0);
+    expect(await prisma.fileAsset.count({ where: { organizationId: orgA.organizationId } })).toBe(0);
+    expect(await prisma.recoveryPackageArtifact.count({ where: { organizationId: orgA.organizationId } })).toBe(0);
+    expect(await prisma.auditLog.count({ where: { organizationId: orgA.organizationId } })).toBe(0);
+  });
+});
+
+
+describe('Recovery SI P2-E DB · FINAL-4 修订负例（permit ↔ 批次不可变绑定）', () => {
+  it('P2E-DB17（F4E-01）合法 permit + 整批属于别的 tenant → PERMIT_BATCH_TENANT_MISMATCH 且零写入', async () => {
+    const gateA = await allowGateFor(orgA);
+    const units = buildRecoveryPersistUnits(payloads(orgA, gateA, { marker: 'p2e-db-f4e-01' })).map((unit) => ({
+      ...unit,
+      payload: { ...(unit.payload as Record<string, unknown>), organizationId: orgB.organizationId },
+    }));
+    await expect(persistBound({ gate: gateA, units })).rejects.toThrow(/P2E_PERMIT_BATCH_TENANT_MISMATCH/);
+    expect(await prisma.recoveryPackage.count({ where: { organizationId: orgB.organizationId } })).toBe(0);
+    expect(await prisma.fileAsset.count({ where: { organizationId: orgB.organizationId } })).toBe(0);
+    expect(await prisma.recoveryPackageArtifact.count({ where: { organizationId: orgB.organizationId } })).toBe(0);
+    expect(await prisma.auditLog.count({ where: { organizationId: orgB.organizationId } })).toBe(0);
+  });
+
+  it('P2E-DB18（F4E-02）package.claimItem 不属于 permit 的 opportunity → PACKAGE_OPPORTUNITY_BINDING_MISMATCH 且零写入', async () => {
+    const gateA = await allowGateFor(orgA);
+    const otherClaim = await prisma.claimItem.create({
+      data: {
+        organizationId: orgA.organizationId,
+        caseId: orgA.caseId,
+        opportunityId: null,
+        platformType: 'AMAZON',
+        claimType: 'ORDER_DISCREPANCY',
+        platformRef: 'P2E-DB-F4E02-' + randomUUID().slice(0, 8),
+        sourceFingerprint: (randomUUID() + randomUUID()).replace(/-/g, '').slice(0, 64),
+        fingerprintVersion: 'v1',
+        occurredAt: new Date('2026-09-02T00:00:00.000Z'),
+        currency: 'USD',
+        status: 'READY_TO_APPEAL',
+        normalizerVersion: 'amazon-sp-normalizer/v1',
+      },
+    });
+    const units = buildRecoveryPersistUnits(
+      payloads(orgA, gateA, { marker: 'p2e-db-f4e-02', claimItemId: otherClaim.id }),
+    );
+    await expect(persistBound({ gate: gateA, units })).rejects.toThrow(
+      /P2E_PACKAGE_OPPORTUNITY_BINDING_MISMATCH/,
+    );
+    expect(await prisma.recoveryPackage.count({ where: { organizationId: orgA.organizationId } })).toBe(0);
+    expect(await prisma.fileAsset.count({ where: { organizationId: orgA.organizationId } })).toBe(0);
+    expect(await prisma.recoveryPackageArtifact.count({ where: { organizationId: orgA.organizationId } })).toBe(0);
+    expect(await prisma.auditLog.count({ where: { organizationId: orgA.organizationId } })).toBe(0);
+  });
+
+  it('P2E-DB19（F4E-03）手工伪造 lineage AuditLog → LINEAGE_AUDIT_NOT_GATE_BOUND 且零写入', async () => {
+    const gateA = await allowGateFor(orgA);
+    const units = buildRecoveryPersistUnits(payloads(orgA, gateA, { marker: 'p2e-db-f4e-03' })).map((unit) =>
+      unit.unit === 'AuditLog'
+        ? {
+            ...unit,
+            payload: {
+              ...(unit.payload as Record<string, unknown>),
+              changes: {
+                ...((unit.payload as { changes?: Record<string, unknown> }).changes ?? {}),
+                planDigest: sha256Hex('forged-plan-digest'),
+              },
+            },
+          }
+        : unit,
+    );
+    await expect(persistBound({ gate: gateA, units })).rejects.toThrow(/P2E_LINEAGE_AUDIT_NOT_GATE_BOUND/);
+    expect(await prisma.recoveryPackage.count({ where: { organizationId: orgA.organizationId } })).toBe(0);
+    expect(await prisma.recoveryPackageArtifact.count({ where: { organizationId: orgA.organizationId } })).toBe(0);
+    expect(await prisma.auditLog.count({ where: { organizationId: orgA.organizationId } })).toBe(0);
+  });
+
+  it('P2E-DB20（F4E-04）artifact 交叉接线（packageId/fileAssetId）→ 事务前 fail-closed 且零写入', async () => {
+    const gateA = await allowGateFor(orgA);
+    const base = payloads(orgA, gateA, { marker: 'p2e-db-f4e-04' });
+    const units = buildRecoveryPersistUnits(base).map((unit) =>
+      unit.unit === 'RecoveryPackageArtifact' &&
+      (unit.payload as { artifactKind?: string }).artifactKind === 'JSON_MANIFEST'
+        ? {
+            ...unit,
+            payload: {
+              ...(unit.payload as Record<string, unknown>),
+              fileAssetId: base.pdfFileAsset.id,
+            },
+          }
+        : unit,
+    );
+    await expect(persistBound({ gate: gateA, units })).rejects.toThrow(/P2E_BATCH_IDENTITY_MISMATCH/);
     expect(await prisma.recoveryPackage.count({ where: { organizationId: orgA.organizationId } })).toBe(0);
     expect(await prisma.fileAsset.count({ where: { organizationId: orgA.organizationId } })).toBe(0);
     expect(await prisma.recoveryPackageArtifact.count({ where: { organizationId: orgA.organizationId } })).toBe(0);
