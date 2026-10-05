@@ -2166,3 +2166,10 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 正式状态：P2_A = PASS、P2_B = PASS、RECOVERY_SI_PHASE2_AB = PASS / CLOSED（41/41 PASS + tsc 0 属本地执行证据）。
 - 冻结边界：RSI_OUTCOME_SINK_RUNTIME_WIRING = NOT_AUTHORIZED；RUNTIME_WIRING = NONE；P2-C/P2-D = NOT_AUTHORIZED；P2-E = HOLD_SCHEMA_DELTA；P2-F/P2-G = HOLD；SECOND_RUNTIME = FORBIDDEN；L5_RELAXATION = FORBIDDEN；FINAL_ACCEPTANCE_HEAD = 0f7f7ac。
 - 下一步：先单独送 P2-C PREPARE 的设计/实施边界（零代码），不得自动进入 P2-D。
+
+## 2026-10-05T05:15:58.894Z — Recovery SI P2-C PREPARE 设计边界送审（REVIEWED_HEAD 83860905，零代码）
+- 依据 MSG-20261005-15「下一步应先单独送 P2-C PREPARE 的设计/实施边界；不要自动进入 P2-D」。
+- 耐久记录：docs/releases/RECOVERY-SI-PHASE2-C-DESIGN-REQUEST.md（选项 A = 确定性包生成零落库（建议）/ 选项 B = 允许既有 append-only 写入，需白名单与可能 Schema Delta）。
+- 不变量：只有 verified action 触发、静态绑定、tenant 双绑定、幂等（packageDigest 收敛）、append-only、零 submission / 零外写 / 零 provider / 零凭据、L5 永久拒绝、不自动进入 P2-D。
+- 最小证据（批 A 时）：P2C-01..08；批 B 时追加写入白名单 / 幂等唯一键 / 并发唯一赢家 / append-only 证据。
+- 本轮零代码、零 Schema、零运行时接线；边界 EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / RSI_MODEL_NETWORK / RSI_PAID_MODEL_CALLS = HOLD；FINAL_ACCEPTANCE_HEAD = 0f7f7ac。
