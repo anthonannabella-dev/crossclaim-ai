@@ -147786,3 +147786,161 @@ META_IMPROVEMENT_INTEGRATED = false
 PRODUCTION_READY = false
 ```
 
+### [MSG-20261005-52] PHASE 3 ACTION RUNTIME FINAL 裁决（PASS WITH REVISE / NOT CLOSED / PHASE3_FINAL2_REQUIRED=YES）· reviewed ref 6cba0639
+
+```text
+
+DECISION
+
+U1 trusted sandbox provenance = PASS
+U2 credential binding = REVISE
+U3 idempotency fingerprint + async port = PASS（sandbox/contract scope）
+U4 retry/reconcile = PASS（策略层）
+U5/U6 Shared Guard + HITL + evidence = REVISE
+enforcement 07 = PASS
+PHASE_3_ACTION_RUNTIME = PASS WITH REVISE / NOT CLOSED
+PHASE3_FINAL2_REQUIRED = YES
+Reviewed HEAD：6cba0639
+
+KEEP
+
+caller 自报 capability.simulated=true 已不能进入 sandbox invoke 路径；WeakSet provenance 生效。
+credential ref 已增加 providerName + organizationId 双绑定。
+idempotency 已绑定 organization/provider/action/payloadRef/payloadDigest，same-key/different-fingerprint → CONFLICT。
+ProviderIdempotencyStore 已异步化，内存实现明确降为 sandbox。
+guardDecision 已从 runActionPack() API 删除。
+approval verifier 已接收 organizationId / action / actorUserId / targetRef，缺失或失败会 fail-closed。
+enforcement 07 的字面量处理属于常量复用，没有看到借此引入 executor 旁路。
+GITHUB_CI = NOT_OBSERVED 继续成立。
+
+CHANGE
+
+只剩 2 个窄修。
+
+1. Shared Action Guard 仍可被结构化 fake 冒充
+
+当前：
+
+TypeScript
+guard: RuntimeActionGuard
+
+RuntimeActionGuard 是结构接口，调用方仍可传：
+
+TypeScript
+{
+  evaluate: async () => ({
+    decision: 'ALLOW',
+    code: 'FAKE_ALLOW',
+    ...
+  })
+}
+
+这样虽然已经不能伪造 guardDecision，却可以直接伪造整个 Guard。
+
+这与此前 Recovery SI 已经修过的 Shared Guard instance-injection 漏洞本质相同。
+
+FINAL2 最小修复：
+
+产品 Action Runtime 组装点不要直接接受 RuntimeActionGuard 实例。
+
+应：
+
+AppActionGuardDeps → 内部 createAppActionGuard() → runActionPack
+
+或者增加与 Shared Guard factory 绑定的不可伪造 provenance。
+
+必须补：
+
+caller 手写 fake RuntimeActionGuard → REJECT
+正式 shared guard composition → PASS
+2. U2 的 raw-key 检测没有真正覆盖 sk-
+
+当前：
+
+TypeScript
+/^(sk|pk|Bearer)\s|^[A-Za-z0-9_-]{24,}$/
+
+这里 sk / pk 后要求的是空白字符，所以：
+
+sk-abc123
+
+不会被第一段拒绝；长度不足 24 时第二段也不会拒绝。
+
+而 P3U2_2 测试标题写了“sk- 前缀”，实际测试没有覆盖 sk-...。
+
+最小修复：
+
+至少明确拒绝：
+
+sk-...
+sk_...
+pk-...
+pk_...
+Bearer ...
+
+更稳妥的是只接受明确 opaque namespace，例如 vault: / 其他受控 ref scheme，而不是靠猜测密钥形状。
+
+RISKS
+
+U3 可以在本阶段记 PASS，但只能表述为：
+
+EXACTLY_ONCE_CONTRACT/SANDBOX = PASS
+
+不能表述：
+
+PRODUCTION_DURABLE_EXACTLY_ONCE = PASS
+
+因为目前仍只有 in-memory 实现，没有 PostgreSQL/Prisma 原子实现接线。由于 ACTION_RUNTIME_PRODUCTION_ENABLED=false，这不需要阻断 PHASE 3 contract/runtime 阶段关闭，但未来真实 provider 开闸前必须有 durable store + DB 并发 E2E。
+
+另外 fingerprint 当前是字符串拼接而非 canonical-hash；本阶段可接受，生产 durable wiring 时建议换 canonical serialization + digest。
+
+P2E-DB5 继续作为 test-isolation debt，不要拉回 PHASE 3 修。
+
+TEST
+
+FINAL2 最少补：
+
+手写 fake RuntimeActionGuard 永远 ALLOW → 不得进入 Action Runtime。
+createAppActionGuard 正式组合 → 正常 Guard 链。
+sk-test123 → credential ref REJECT。
+sk_test123 / pk-test / Bearer xxx → REJECT。
+合法 opaque ref → PASS。
+现有 fingerprint conflict / concurrent winner / approval verifier / external-write HOLD 全部保持 green。
+enforcement 07 保持 7/7。
+
+NEXT
+
+只修上面两个点，再送：
+
+PHASE_3_ACTION_RUNTIME FINAL2
+
+通过后目标裁决：
+
+U1 = PASS
+U2 = PASS
+U3 = PASS
+U4 = PASS
+U5/U6 = PASS
+PHASE_3_ACTION_RUNTIME = PASS / CLOSED
+PHASE3_FINAL3_REQUIRED = NO
+然后授权进入 PHASE 4 — OUTCOME / LEARNING DATA PIPELINE
+
+PRODUCTION
+
+全部继续 HOLD：
+
+REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing
+
+保持：
+
+SECOND_* = FORBIDDEN
+L5_RELAXATION = FORBIDDEN
+
+并继续：
+
+MODEL_GATEWAY_RUNTIME_WIRED = false
+ACTION_RUNTIME_PRODUCTION_ENABLED = false
+META_IMPROVEMENT_INTEGRATED = false
+PRODUCTION_READY = false
+```
+
