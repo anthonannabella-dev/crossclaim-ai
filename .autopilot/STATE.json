@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261004-16",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T04:43:54.912Z",
+  "updated_at": "2026-10-05T04:52:35.392Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -49,7 +49,7 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-05T04:39:20.233Z",
+  "last_tick_at": "2026-10-05T04:52:35.392Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
   "last_action": "INDEPENDENT FINAL AUDIT = PASS（MSG-20261003-147）；三元闭环成立，内部代码开发阶段正式完成",
   "last_action_at": "2026-10-03T14:17:18.723Z",
@@ -5189,9 +5189,9 @@
   "awaiting_verdict": "EXACT-ORDER REPLAY 证据已送审（comment 5979262070）；shared/staging deploy 解禁待裁决",
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-05T04:44:03.552Z",
-    "head": "63b41b28",
-    "acceptance_head": "63b41b28",
+    "computed_at": "2026-10-05T04:52:44.520Z",
+    "head": "aadb4a0b",
+    "acceptance_head": "aadb4a0b",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5275,6 +5275,7 @@
       "RSI-RT-12-deployment-contract-test",
       "RSI-INSP-07-weekly-capability-integration",
       "recovery-si-phase1",
+      "recovery-si-phase2",
       "CHECK:L1-01_safe_continuation_queue_zero",
       "CHECK:L1-02_no_open_internal_items",
       "CHECK:L1-03_no_open_markers",
@@ -5328,12 +5329,12 @@
       "L1-01_safe_continuation_queue_zero": {
         "label": "SAFE_CONTINUATION_QUEUE = 0",
         "status": false,
-        "evidence": "open backlog items: 75"
+        "evidence": "open backlog items: 76"
       },
       "L1-02_no_open_internal_items": {
         "label": "所有 Codex 可独立完成的内部缺口 CLOSED",
         "status": false,
-        "evidence": "open internal: c18-1-provider-integration-matrix,c18-2-provider-dto-schema,c18-3-sandbox-filing-provider,c18-4-provider-webhook-verification,c18-5-provider-idempotency-reconciliation,c18-6-provider-tenant-account-lineage,c18-7-provider-authorization-lifecycle,c18-8-provider-negative-path-e2e,seo-1-gap-audit-and-page-matrix,seo-2-recovery-rule-definition-v1,seo-3-public-checker-calculator,seo-4-recover-routes-and-locales,seo-5-technical-seo,seo-6-indexability-gate,seo-7-analytics-event-contract,seo-8-seo-contract-tests,SEO-4-STAGE-1-recover-route-skeleton,SEO-4-STAGE-2-recover-metadata,SEO-4-STAGE-3-recover-jsonld,SEO-4-STAGE-4-recover-sitemap-robots,SEO-4-STAGE-5-recover-content-internal-links,SEO-4-STAGE-6-seo-contract-tests,SEO-4-STAGE-7-recover-page-plan-facade,SEO-4-STAGE-8-recover-i18n-keys,SEO-4-BOUNDARY-recover-page-datasource,SEO-4-STAGE-9-web-recover-route-skeleton,SEO-4-STAGE-10-static-projection-contract,SEO-4-STAGE-11-static-projection-exporter,SEO-4-STAGE-12-rule-source-and-cli,SEO-4-STAGE-13-web-ssg-from-projection,SEO-4-STAGE-14-web-sitemap-robots,SEO-4-STAGE-15-projection-pipeline-guard,SEO-4-STAGE-16-web-wiring-contract-test,SEO-4-P0-route-shape-vs-canonical-mismatch,SEO-4-P0-projection-carries-canonical-path,RSI-P1-01-lifecycle-contract,RSI-P1-02-readonly-observer,RSI-P1-03-auto-task-generator,RSI-P1-04-builder-judge-separation,RSI-P1-05-immutable-evidence,RSI-P1-06-policy-engine,RSI-P1-07-e2e-demo,RSI-RT-01-runtime-entry,RSI-RT-02-supervisor-autostart,RSI-RT-03-health-state,RSI-RT-04-admin-autonomy-page,RSI-RT-05-kill-switch,RSI-RT-06-state-reconcile,RSI-COST-01-policy-core,RSI-COST-02-model-router-adapter,RSI-COST-03-call-ledger,RSI-COST-04-admin-cost-panel,RSI-COST-05-cost-e2e,RSI-INSP-01-drift-detector,RSI-INSP-02-daily-health-inspection,RSI-INSP-03-weekly-full-review,RSI-INSP-04-golden-fixtures,RSI-INSP-05-production-to-fixture,RSI-CONT-01-continuation-engine,RSI-CONT-02-controller-wiring,RSI-CONT-03-event-sources,RSI-CONT-04-event-loop,RSI-CONT-05-local-sources,RSI-CONT-06-runtime-composition,RSI-RT-07-admin-health-panel,RSI-RT-08-admin-autonomy-page,RSI-RT-09-admin-snapshot-generator,RSI-RT-10-snapshot-publisher,RSI-INSP-06-capability-gap-signal,RSI-RT-11-health-fields,RSI-CONT-07-verdict-watcher,RSI-CONT-08-runtime-e2e,RSI-RT-12-deployment-contract-test,RSI-INSP-07-weekly-capability-integration,recovery-si-phase1"
+        "evidence": "open internal: c18-1-provider-integration-matrix,c18-2-provider-dto-schema,c18-3-sandbox-filing-provider,c18-4-provider-webhook-verification,c18-5-provider-idempotency-reconciliation,c18-6-provider-tenant-account-lineage,c18-7-provider-authorization-lifecycle,c18-8-provider-negative-path-e2e,seo-1-gap-audit-and-page-matrix,seo-2-recovery-rule-definition-v1,seo-3-public-checker-calculator,seo-4-recover-routes-and-locales,seo-5-technical-seo,seo-6-indexability-gate,seo-7-analytics-event-contract,seo-8-seo-contract-tests,SEO-4-STAGE-1-recover-route-skeleton,SEO-4-STAGE-2-recover-metadata,SEO-4-STAGE-3-recover-jsonld,SEO-4-STAGE-4-recover-sitemap-robots,SEO-4-STAGE-5-recover-content-internal-links,SEO-4-STAGE-6-seo-contract-tests,SEO-4-STAGE-7-recover-page-plan-facade,SEO-4-STAGE-8-recover-i18n-keys,SEO-4-BOUNDARY-recover-page-datasource,SEO-4-STAGE-9-web-recover-route-skeleton,SEO-4-STAGE-10-static-projection-contract,SEO-4-STAGE-11-static-projection-exporter,SEO-4-STAGE-12-rule-source-and-cli,SEO-4-STAGE-13-web-ssg-from-projection,SEO-4-STAGE-14-web-sitemap-robots,SEO-4-STAGE-15-projection-pipeline-guard,SEO-4-STAGE-16-web-wiring-contract-test,SEO-4-P0-route-shape-vs-canonical-mismatch,SEO-4-P0-projection-carries-canonical-path,RSI-P1-01-lifecycle-contract,RSI-P1-02-readonly-observer,RSI-P1-03-auto-task-generator,RSI-P1-04-builder-judge-separation,RSI-P1-05-immutable-evidence,RSI-P1-06-policy-engine,RSI-P1-07-e2e-demo,RSI-RT-01-runtime-entry,RSI-RT-02-supervisor-autostart,RSI-RT-03-health-state,RSI-RT-04-admin-autonomy-page,RSI-RT-05-kill-switch,RSI-RT-06-state-reconcile,RSI-COST-01-policy-core,RSI-COST-02-model-router-adapter,RSI-COST-03-call-ledger,RSI-COST-04-admin-cost-panel,RSI-COST-05-cost-e2e,RSI-INSP-01-drift-detector,RSI-INSP-02-daily-health-inspection,RSI-INSP-03-weekly-full-review,RSI-INSP-04-golden-fixtures,RSI-INSP-05-production-to-fixture,RSI-CONT-01-continuation-engine,RSI-CONT-02-controller-wiring,RSI-CONT-03-event-sources,RSI-CONT-04-event-loop,RSI-CONT-05-local-sources,RSI-CONT-06-runtime-composition,RSI-RT-07-admin-health-panel,RSI-RT-08-admin-autonomy-page,RSI-RT-09-admin-snapshot-generator,RSI-RT-10-snapshot-publisher,RSI-INSP-06-capability-gap-signal,RSI-RT-11-health-fields,RSI-CONT-07-verdict-watcher,RSI-CONT-08-runtime-e2e,RSI-RT-12-deployment-contract-test,RSI-INSP-07-weekly-capability-integration,recovery-si-phase1,recovery-si-phase2"
       },
       "L1-03_no_open_markers": {
         "label": "不存在 TODO/IN_PROGRESS/PARTIAL/READY_FOR_REVIEW/WAITING_FOR_VERDICT/未处理 REVISE·BLOCK",
@@ -5343,48 +5344,48 @@
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=63b41b28 ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
+        "evidence": "acceptance_head=aadb4a0b ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
       },
       "L1-05_pg_regression_passed": {
         "status": "UNVERIFIED",
-        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head 63b41b28（且中间存在非簿记变更）"
+        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head aadb4a0b（且中间存在非簿记变更）"
       },
       "L1-06_fresh_db_migration_passed": {
         "status": "UNVERIFIED",
-        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head 63b41b28（且中间存在非簿记变更）"
+        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head aadb4a0b（且中间存在非簿记变更）"
       },
       "L1-07_api_typecheck_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head 63b41b28（且中间存在非簿记变更）"
+        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head aadb4a0b（且中间存在非簿记变更）"
       },
       "L1-08_web_typecheck_build_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head 63b41b28（且中间存在非簿记变更）"
+        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head aadb4a0b（且中间存在非簿记变更）"
       },
       "L1-09_no_skipped_critical_tests": {
         "status": "UNVERIFIED",
-        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head 63b41b28（且中间存在非簿记变更）"
+        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head aadb4a0b（且中间存在非簿记变更）"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
         "status": false,
-        "evidence": "dirty entries: 2"
+        "evidence": "dirty entries: 3"
       },
       "L1-11_docs_state_consistent": {
         "status": "UNVERIFIED",
-        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head 63b41b28（且中间存在非簿记变更）"
+        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head aadb4a0b（且中间存在非簿记变更）"
       },
       "L1-12_schema_invariants_verified": {
         "status": "UNVERIFIED",
-        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head 63b41b28（且中间存在非簿记变更）"
+        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head aadb4a0b（且中间存在非簿记变更）"
       },
       "L1-13_negative_paths_covered": {
         "status": "UNVERIFIED",
-        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head 63b41b28（且中间存在非簿记变更）"
+        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head aadb4a0b（且中间存在非簿记变更）"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
         "status": "UNVERIFIED",
-        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head 63b41b28（且中间存在非簿记变更）"
+        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head aadb4a0b（且中间存在非簿记变更）"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
@@ -6332,7 +6333,7 @@
       "API.md / DOMAIN_MODEL.md / architecture-contract 计数 77 → 79"
     ]
   },
-  "next_execution_unit": "Recovery SI 侧空：Phase 2（runtime loop / tool invocation / Action Guard handoff / persistent plan / model assistance / real executor）须宿主发起并单独送审；其余仍为既有 HOST_ACTION_REQUIRED 与 HOLD 项。",
+  "next_execution_unit": "等待 Phase 2 架构授权；期间不启动任何 Phase 2 代码或运行时接线。",
   "customer_ui_commercialization": {
     "at": "2026-10-04T01:21:55.949Z",
     "authorization": "MSG-20261004-01（CUSTOMER UI/UX COMMERCIALIZATION — IMPLEMENTATION AUTHORIZED）",
@@ -7378,13 +7379,13 @@
     "seo3_progress": "CHANGE A/B validator added (86f4289), engine output validation added (eb99c53), validator wired into runPublicSeoChecker (8bf49da), HTTP boundary guard added (4f2cd20); HTTP entry still not registered"
   },
   "CURRENT_HEAD": "ecdae39",
-  "LAST_COMPLETED_UNIT": "收口补记：Recovery SI Phase 1 = PASS/CLOSED 并补齐 exact 送审 HEAD e88aff39 的 hosted CI 事实（run 37264005696 success）；AUTOPILOT-CLOSURE-REPORT.md 追加 §6。",
-  "NEXT_EXECUTION_UNIT": "Recovery SI 侧空：Phase 2（runtime loop / tool invocation / Action Guard handoff / persistent plan / model assistance / real executor）须宿主发起并单独送审；其余仍为既有 HOST_ACTION_REQUIRED 与 HOLD 项。",
+  "LAST_COMPLETED_UNIT": "Recovery SI Phase 2 设计请求已生成并提交送审（仅设计、零代码）：分阶段 P2-A…P2-G，首版建议只批 P2-A + P2-B 只读；P2-E 需单独 Schema Delta 审，P2-F/G 维持 HOLD。",
+  "NEXT_EXECUTION_UNIT": "等待 Phase 2 架构授权；期间不启动任何 Phase 2 代码或运行时接线。",
   "CI_STATUS": "Recovery SI 全部提交 hosted CI 绿灯：e88aff39 run 37264005696、8a028ad run 37262856913、97dfb38 run 37262739237、977e650 run 37262475546；63b41b28（纯文档/状态）在跑",
-  "WAITING_FOR_VERDICT": "none",
+  "WAITING_FOR_VERDICT": "RECOVERY_SI_PHASE2（设计请求 @aadb4a0b，已送审；等架构授权，不阻塞其它工作）",
   "HOST_ACTION_REQUIRED": "①非生产 DATABASE_URL（无真实客户数据）→ RSI staging smoke + migration apply + reboot/reconcile 与 exactly-once 实机验证；②Linux 主机（或指定 CI runner）→ systemd Test A/B/C/D/E/F；③真实 Provider 接入需要宿主注册/申请账号、接受第三方协议、提供 Client ID/Secret 与 POA 等（当前全部 HOLD）；④gh auth login（可选，仅恢复 issue comment 通道）。",
   "HOLD_EXTERNAL": "RSI_MODEL_NETWORK = HOLD / RSI_PAID_MODEL_CALLS = HOLD / REAL_PROVIDER_ADAPTER = OUT_OF_PROCESS_REQUIRED（sidecar 未实现）/ EXTERNAL_WRITE = HOLD / PAYMENT = HOLD / TRANSPORT = HOLD / PRODUCTION_CREDENTIALS = HOLD / PRODUCTION_PUBLIC_CHECKER = HOLD",
-  "LAST_HEARTBEAT_AT": "2026-10-05T04:43:54.912Z",
+  "LAST_HEARTBEAT_AT": "2026-10-05T04:52:35.392Z",
   "ci_red_streak_note": "RESOLVED: three contract/inventory fixes (tenant-trigger whitelist 1b15ab7, append-only whitelist cc13bde, model inventory 82->85 4f02282); 4f02282 is the first green run after the streak.",
   "ci_contract_fix_local_verification": {
     "at": "2026-10-04T08:51:16.135Z",
@@ -8171,6 +8172,16 @@
       "reviewed_head": "e88aff39"
     },
     "non_blocking_note": "riskPenaltyUsd 未来可改名 riskPenalty/riskPenaltyAmount（不需要重开 Phase 1）",
-    "phase2": "SEPARATE_ARCHITECT_APPROVAL_REQUIRED"
+    "phase2": "SEPARATE_ARCHITECT_APPROVAL_REQUIRED",
+    "phase2_request": "docs/releases/RECOVERY-SI-PHASE2-DESIGN-REQUEST.md",
+    "phase2_stages": [
+      "P2-A SI→RSI Outcome Signal（只读）",
+      "P2-B READ Tool 实接",
+      "P2-C PREPARE Tool",
+      "P2-D Action Guard handoff（dry-run）",
+      "P2-E Schema Delta（单独审）",
+      "P2-F model network/paid（HOLD）",
+      "P2-G real executor（HOLD）"
+    ]
   }
 }

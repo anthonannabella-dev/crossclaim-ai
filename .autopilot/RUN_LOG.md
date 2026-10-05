@@ -2120,3 +2120,8 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 ## 2026-10-05T04:43:54.912Z — 收口补记：Recovery SI Phase 1 CLOSED + CI 事实
 - e88aff39（CHANGE A/B/C，架构方复核 HEAD）hosted CI = completed_success（run 37264005696）；977e650/97dfb38/8a028ad 亦全绿。
 - AUTOPILOT-CLOSURE-REPORT.md 追加 §6：Recovery SI Phase 1 = PASS/CLOSED、Phase 1 冻结项、Phase 2 需单独审、SAFE 队列 EMPTY 说明。
+
+## 2026-10-05T04:52:35.392Z — Recovery SI Phase 2 设计送审（仅设计，零代码）
+- 依据 MSG-20261005-12（PHASE2 = SEPARATE_ARCHITECT_APPROVAL_REQUIRED）提交设计请求：docs/releases/RECOVERY-SI-PHASE2-DESIGN-REQUEST.md。
+- 提议分阶段：P2-A SI 决策→RSI Outcome Signal（只读）→ P2-B READ 类 Tool 实接 → P2-C PREPARE 类 → P2-D Action Guard handoff（dry-run）→ P2-E Schema Delta（单独审）→ P2-F 模型网络/付费（HOLD）→ P2-G 真实执行（HOLD）。
+- 本轮零代码、零 schema、零运行时改动；边界声明保持不变。
