@@ -47,8 +47,12 @@ const RAW_KEY_PATTERNS: readonly RegExp[] = [
   /^[A-Za-z0-9_-]{24,}$/,
 ];
 
-/** PHASE 3 FINAL2 U2: only an explicit opaque namespace ref (e.g. vault:...) is accepted. */
-const OPAQUE_REF_NAMESPACE = /^[a-z][a-z0-9+._-]*:/i;
+/**
+ * PHASE 3 FINAL3 U2: explicit allowlist of credential opaque-ref schemes.
+ * A generic URI regex is NOT acceptable: it would let `sk:secret`, `https://...`, `file:...`,
+ * `javascript:...` through. Add new schemes here one by one if they are really used.
+ */
+const OPAQUE_REF_SCHEMES = ['vault:', 'provider-credential:', 'secret-ref:'] as const;
 
 function looksLikeRawKey(ref: string): boolean {
   const v = ref.trim();
@@ -56,7 +60,8 @@ function looksLikeRawKey(ref: string): boolean {
 }
 
 function isOpaqueRefNamespace(ref: string): boolean {
-  return OPAQUE_REF_NAMESPACE.test(ref.trim());
+  const v = ref.trim().toLowerCase();
+  return OPAQUE_REF_SCHEMES.some((scheme) => v.startsWith(scheme));
 }
 
 export async function resolveProviderCredential(

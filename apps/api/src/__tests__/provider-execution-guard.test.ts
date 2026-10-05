@@ -75,6 +75,16 @@ describe('PHASE 3 U2 —— credential port（opaque ref + 绑定，fail-closed�
     expect(ok.ok).toBe(true);
   });
 
+  it('P3U2_2c opaque ref 只能来自显式 allowlist scheme（泛 URI scheme 一律 REJECT）', async () => {
+    for (const bad of ['sk:abc', 'pk:abc', 'Bearer:abc', 'https://example.com/key', 'file:/secret', 'javascript:x']) {
+      const res = await resolveProviderCredential(port(bad), { providerName: 'p', organizationId: 'org-1' });
+      expect(res.ok).toBe(false);
+      if (!res.ok) expect(res.reason).toBe('PROVIDER_CREDENTIAL_REF_NOT_OPAQUE');
+    }
+    const ok = await resolveProviderCredential(port('vault:providers/amazon/org-1'), { providerName: 'p', organizationId: 'org-1' });
+    expect(ok.ok).toBe(true);
+  });
+
   it('P3U2_3 port 返回的 providerName 与请求不一致 → PROVIDER_CREDENTIAL_PROVIDER_MISMATCH', async () => {
     const mismatched = await resolveProviderCredential(port('vault:providers/amazon/org-1', { providerName: 'tiktok' }), {
       providerName: 'amazon',
