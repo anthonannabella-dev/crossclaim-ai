@@ -38,6 +38,11 @@ const NO_EVIDENCE_TOKENS = new Set(['unconfigured', 'timeout', 'not-allowed', 's
 export function attachContinuationToController(options: {
   tasks: readonly RsiSafeTask[];
   runner: RsiTaskRunner;
+  /**
+   * RSI-RT-05：开启后，runner 返回的结果**只作为提案** —— 任务停在「等待裁决」，
+   * 由 JUDGE_VERDICT_RECEIVED 收口（PASS 完成 / REVISE 插入 P0 修订）。
+   */
+  awaitVerdict?: boolean;
   /** RSI-RT-05：配置后，PASS 还必须通过真实 CI/测试证据校验，否则降级为 BLOCK。 */
   verifyEvidence?: (evidenceRef: string | undefined, claimedAt: Date) => Promise<{ ok: boolean }>;
   now?: () => number;
@@ -64,6 +69,14 @@ export function attachContinuationToController(options: {
       (options.verifyEvidence === undefined || (await options.verifyEvidence(evidenceRef as string, claimedAt)).ok);
     const status: 'PASS' | 'REVISE' | 'BLOCK' =
       result.status === 'PASS' && hasEvidence ? 'PASS' : result.status === 'REVISE' ? 'REVISE' : 'BLOCK';
+    if (options.awaitVerdict === true) {
+      // park-for-judge：不完成，只登记「等待裁决」，裁决到达时才收口。
+      engine.markWaitingForVerdict(status);
+      // 只有在「刚领取普通任务」时才降级为 SILENT；裁决类动作（REVISION / CONSUME_VERDICT）必须保留。
+      const parkAction = outcome.action === 'CONTINUE' ? 'SILENT' : outcome.action;
+      const parkReason = outcome.action === 'CONTINUE' ? 'AWAITING_VERDICT' : outcome.reason;
+      return { ...outcome, action: parkAction, reason: parkReason };
+    }
     engine.completeCurrent(status);
     return outcome;
   };
@@ -88,6 +101,8 @@ export const RSI_CONTROLLER_CONTINUATION_BOUNDARY = {
   blockIsNeverPass: true,
   passRequiresEvidence: true,
   claimedAtForwardedToEvidence: true,
+  parkForJudgeSupported: true,
+  parkForJudgeDefault: false,
   eventsDoNotCompleteInflight: true,
   eventDriven: true,
   watchdogIntervalMs: RSI_CONTINUATION_BOUNDARY.watchdogIntervalMs,
