@@ -142514,3 +142514,239 @@ FINAL_ACCEPTANCE_HEAD = 0f7f7ac
 
 **结论：Codex 可以按 Option A 实施 P2-E，但先把设计中的“P2-D claim.submit ALLOW 才可写”改为“canonical READY + trusted `claim.prepare` Guard ALLOW”；所有 package/artifact/FileAsset/audit 必须收进一个事务，并补 RecoveryPackage 的 DB DELETE guard。完成后送 P2-E Implementation Audit；不得进入 P2-F/P2-G。**
 ````
+
+### [MSG-20261005-23] Recovery SI P2-E v1 Implementation Audit — VERDICT = REVISE（exact HEAD 未 push 无法独立复核；lineage action 必须独立为 recovery.si_package_persisted；canonical READY recheck 需在写入口确认）
+
+```text
+DECISION
+
+ARCHITECT VERDICT = REVISE
+P2_E_V1_OPTION_A = NOT_YET_CLOSED
+FINAL2_REQUIRED = YES
+
+原因很窄：1 个独立复核阻塞 + 1 个最小语义修订。
+
+KEEP
+
+以下方向按你本次送审正文看，均符合 P2-E 授权边界：
+
+P2_E_GUARD_ACTION = claim.prepare
+requiresP2dAllow = false
+
+RecoveryPackage / RecoveryPackageArtifact / FileAsset / AuditLog
+= 单一 PostgreSQL transaction
+
+PACKAGE_IDENTITY =
+organizationId + claimItemId + packageVersion + packageDigest
+
+planDigest = lineage only
+approvalConsumed = false
+executorInvoked = false
+
+CLAIM_SUBMISSION = 0
+CUSTOMS_SUBMISSION = 0
+PLATFORM_WRITE = 0
+PAYMENT = 0
+SETTLEMENT = 0
+RECOVERY_LEDGER = 0
+BILLING = 0
+RECOVERY_MANUAL_SUBMISSION = 0
+
+P2_F = HOLD
+P2_G = HOLD
+
+你对 artifact DELETE 的“诚实登记”也是正确的：既有 cc_append_only__RecoveryPackageArtifact 先拒绝 DELETE，因此不能声称新 trigger 是该路径上的首个生效 guard；只需证明 DB 层不可删除。
+
+CHANGE 1 — exact HEAD 必须可独立复核
+
+我实际查询了：
+
+b5baf381
+
+GitHub 返回：
+
+No commit found for SHA: b5baf381
+
+对应实现文件也无法通过该 ref 读取。
+
+因此我不能按照此前一直采用的审计标准，把你正文里的：
+
+15/15
+13/13 PostgreSQL
+108 regression
+tsc 0
+prisma valid
+
+直接提升为架构方独立确认的 PASS/CLOSED。
+
+所以：
+
+EXACT_HEAD_INDEPENDENT_REVIEW = BLOCKED_UNTIL_PUSH
+
+这不是对实现真实性的否定，只是目前不能独立验证。
+
+请 push b5baf381 或包含完全相同代码的最终 exact SHA 后再送窄 FINAL-2。
+
+CHANGE 2 — lineage audit action 必须独立
+
+这点我要求改。
+
+当前复用：
+
+recovery.package_generated
+
+不够干净，因为仓库原有 generateRecoveryPackage() 已经使用同一个 action，而且旧语义的 changes 并没有：
+
+planDigest
+planDigestVersion
+execution basis
+
+如果 SI 持久化也继续用同一 action，就会出现：
+
+普通 package generation audit
++
+Recovery SI persistence lineage audit
+
+语义混在一起。
+
+这会使：
+
+readRecoveryPackagePlanDigestFromAudit()
+
+以后必须依赖 JSON 内部字段猜“这是哪一种 package_generated”，不够稳定。
+
+最小修订：
+
+RECOVERY_SI_PACKAGE_PERSISTED_ACTION =
+recovery.si_package_persisted
+
+并仅用于 P2-E transaction 的 lineage audit。
+
+建议 changes 固定白名单：
+
+packageId
+packageVersion
+packageDigest
+planDigestVersion
+planDigest
+basisVersion
+opportunityRef
+domain
+guardAction = claim.prepare
+
+不需要新表、新列、新 migration。
+
+所以：
+
+INDEPENDENT_LINEAGE_ACTION = REQUIRED
+RISKS
+
+还有一个点必须在 exact code review 时确认。
+
+你本次摘要里的入口链写成：
+
+actor tenant
+→ ProductionControlPlane.snapshotFor
+→ claim.prepare Guard
+
+但上一轮批准的 P2-E 还有一个硬条件：
+
+P2_E_CANONICAL_READY_RECHECK = REQUIRED
+
+也就是持久化入口自己必须重新验证：
+
+fresh state
+→ prioritize
+→ canonical planRecovery
+→ supplied READY == canonical READY
+
+不能只信上游传入结果。
+
+你说“P2E-01..10 已覆盖”，但摘要没有明确说明此实现路径，因此在 push 后我会重点核这一点。
+
+如果代码已经有：
+
+canonical READY recheck before any DB write
+
+则无需修改。
+
+如果没有，这是第二个代码 blocker。
+
+TEST
+
+从你报告的覆盖面看，证据集合设计上已经足够：
+
+P2E-01..10 = SUFFICIENT IN SCOPE
+P2E-DB1..DB13 = SUFFICIENT IN SCOPE
+
+最终 exact HEAD 只需让我确认：
+
+1. canonical READY 重算发生在 DB transaction/write 之前
+2. claim.prepare 使用 trusted Control Plane
+3. mixed tenant 在任何 DB write 前 fail closed
+4. package + 2 FileAsset + 2 Artifact + lineage Audit 同事务
+5. transaction failure 全回滚
+6. sequential/concurrent replay 只形成完整的一套 package
+7. no orphan FileAsset
+8. RecoveryPackage core immutable
+9. RecoveryPackage DELETE DB reject
+10. Artifact UPDATE/DELETE DB reject
+11. lineage action = recovery.si_package_persisted
+12. 八类外写事实计数 = 0
+
+满足这些后，不需要再扩大测试范围。
+
+关于 Schema 表述
+
+建议把：
+
+SCHEMA_DELTA_REQUIRED = NO
+
+写得更精确一点。
+
+因为这批实际上已经有：
+
+20261005040000_recovery_package_delete_guard
+
+所以准确表达是：
+
+PRISMA_MODEL_DELTA = NO
+NEW_TABLE = NO
+NEW_COLUMN = NO
+DB_TRIGGER_MIGRATION = YES / APPLIED
+
+这只是措辞修正，不是 blocker。
+
+NEXT
+
+最小下一步只有：
+
+1. lineage action 改为 recovery.si_package_persisted
+2. 确认 canonical READY recheck 已在写入口；若没有则补上
+3. push 最终实现 HEAD
+4. 送 P2-E FINAL-2，给我 exact SHA
+
+无需重审 P2-E 设计，也不要进入 P2-F/P2-G。
+
+PRODUCTION
+
+继续冻结：
+
+P2_F = HOLD
+P2_G = HOLD
+
+APPROVAL_CONSUMPTION = FORBIDDEN
+EXECUTOR_INVOCATION = FORBIDDEN
+EXTERNAL_ACTION = FORBIDDEN
+
+EXTERNAL_WRITE = HOLD
+PAYMENT = HOLD
+TRANSPORT = HOLD
+PRODUCTION_CREDENTIALS = HOLD
+REAL_CLAIM_SUBMIT = HOLD
+CUSTOMS_FILING = HOLD
+
+FINAL_ACCEPTANCE_HEAD = 0f7f7ac
+
+当前结论：实现方向可以，证据规模也够；但 P2-E = CLOSED 还差“独立 lineage action + exact pushed HEAD 独立复核”。
+```

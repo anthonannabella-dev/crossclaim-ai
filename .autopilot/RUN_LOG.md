@@ -2363,3 +2363,25 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 边界不变：四类 FORBIDDEN；P2_F = HOLD / P2_G = HOLD；RUNTIME_WIRING = NONE；SCHEMA_DELTA_REQUIRED = NO；
   FINAL_ACCEPTANCE_HEAD = 0f7f7ac（未动）。
 - 本条目所在提交 = P2-E 送审包**簿记提交**（位于实现提交 `b5baf381` 之上；`STATE.head/current_head/CURRENT_HEAD` 记录实现 HEAD = `b5baf381`）。
+
+## 2026-10-05T10:05Z — P2-E Implementation Audit 裁决捕获（MSG-20261005-23 = REVISE，桥路实测可用）
+- 通道：右侧 in-app 浏览器审计会话 `https://chatgpt.com/c/6ac1cdf0-1ec8-83ec-8036-0e66fcf5c6b9`；发送 `[CODEX -> CHATGPT]` 自包含送审；
+  送达三检通过（输入框清空 / 标记成为新用户回合 / 出现「停止」生成按钮），回复完成后从 DOM `[data-message-author-role]` 不可用，
+  改用「包含 `ARCHITECT VERDICT = REVISE` + `FINAL_ACCEPTANCE_HEAD = 0f7f7ac` 的最小 div」提取，得到 3871 字符 / 172 非空行。
+- 提取失败路径（如实记录）：`tab.clipboard.writeText()` 只写浏览器会话剪贴板（系统剪贴板仍是旧内容 872 字符）；
+  原生「复制消息」按钮点击后系统剪贴板亦未更新（非交互会话剪贴板隔离）。因此本轮回退为逐行转写 + `compare.mjs` 行集合校验。
+- 归档：`AI-ARCHITECT-INBOX.md` 新增 `MSG-20261005-23`；`tools/verdict-diff/compare.mjs` → **FULL_COPY_OK**（148/148 行，0 缺失 / 0 多出）。
+- 裁决要点：`ARCHITECT VERDICT = REVISE`、`P2_E_V1_OPTION_A = NOT_YET_CLOSED`、`FINAL2_REQUIRED = YES`；
+  `EXACT_HEAD_INDEPENDENT_REVIEW = BLOCKED_UNTIL_PUSH`；`INDEPENDENT_LINEAGE_ACTION = REQUIRED`；RISKS 要求确认写入口 canonical READY 重算。
+  措辞修正（非 blocker）：`PRISMA_MODEL_DELTA = NO` / `NEW_TABLE = NO` / `NEW_COLUMN = NO` / `DB_TRIGGER_MIGRATION = YES / APPLIED`。
+- 诚实登记：本轮回读为**逐行转写**（非原生复制），compare.mjs 证明的是机械拷贝一致性，不等于抽取零误差；原 DOM 文本与转写文本已逐行核对（0 缺失 / 0 多出）。
+
+## 2026-10-05T10:20Z — P2-E REVISE 两项修订落地（实现 HEAD = 1fcb5244）
+- CHANGE 2：新增独立 lineage action `recovery.si_package_persisted` + 固定 changes 白名单（9 键）+ `assertRecoverySiPackageLineageChanges()`
+  + `buildRecoverySiPackageLineageAuditLog()`；不再复用 `recovery.package_generated`。
+- RISKS 项：新增 `verifyRecoveryPersistCanonicalReady()` 并接入 `evaluateRecoveryPersistGate()`（canonical → Control Plane → Guard 顺序），
+  失败码 `P2E_CANONICAL_RECHECK_INPUT_REQUIRED / TENANT_MISMATCH / STATE_STALE / READY_MISSING / READY_MISMATCH`（全部零 Guard 调用、零 DB 写入）；
+  未改动已 CLOSED 的 P2-D 模块（仅只读复用 `planRecovery` / `prioritizeOpportunities` / `buildRecoveryPlanDigest`）。
+- 测试：P2-E 契约 **22/22**（新增 P2E-G16..G22）、P2-E DB **13/13**、定向回归 **10 文件 / 115 例 PASS**；tsc exit 0；
+  `prisma validate` valid / 79 migrations 无待应用 / `migrate status` up to date。
+- 证据：`docs/releases/RECOVERY-SI-PHASE2-E-EVIDENCE.md` §9.1；送审：`docs/releases/RECOVERY-SI-PHASE2-E-FINAL2-REQUEST.md`（REVIEWED_HEAD = 1fcb5244）。
