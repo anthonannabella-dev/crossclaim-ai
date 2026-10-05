@@ -20,6 +20,8 @@ import { createRsiLocalSimAdapter } from './rsi-local-sim-adapter';
 import {
   createRsiModelRouter,
   type RsiModelProviderAdapter,
+  type RsiModelCachePort,
+  type RsiProviderTier,
 } from './rsi-model-router';
 
 export interface RsiModelProviderComposition {
@@ -27,6 +29,8 @@ export interface RsiModelProviderComposition {
   strong: RsiModelProviderAdapter | null;
   router: ReturnType<typeof createRsiModelRouter>;
   ledgerEntries: () => number;
+  /** C3：cache 命中计数（本组合根内的 dev 观测；**不是** durable 事实源） */
+  cacheHits: () => number;
 }
 
 export function createRsiLocalSimModelProviderComposition(options: {
@@ -37,6 +41,19 @@ export function createRsiLocalSimModelProviderComposition(options: {
   /** 默认 false：仿真阶段只保留低成本通道，强模型升级路径在测试里显式开启 */
   includeStrongAdapter?: boolean;
   resolvePrompt?: (promptRef: string) => string | undefined | Promise<string | undefined>;
+  /** C3：可选 cost-control 端口（缺省不启用 ⇒ 行为与 C1/C2 完全一致） */
+  cache?: RsiModelCachePort;
+  costSafeMode?: (input: { channel: 'STANDARD_AI' }) => {
+    standardAiAllowed: boolean;
+    state: string;
+    reason: string;
+  };
+  businessValue?: (input: { taskType: string; requestedTier: RsiProviderTier }) => {
+    allowed: boolean;
+    maxTier: RsiProviderTier;
+    reason: string;
+  };
+  concurrency?: <T>(run: () => Promise<T>) => Promise<{ ok: true; value: T } | { ok: false; reason: string }>;
 }): RsiModelProviderComposition {
   const now = options.now ?? (() => Date.now());
   const lowCost = createRsiLocalSimAdapter({
@@ -51,6 +68,7 @@ export function createRsiLocalSimModelProviderComposition(options: {
 
   let sequence = 0;
   let entries = 0;
+  let cacheHits = 0;
   const onCall = (record: RsiModelCallRecord): void => {
     entries += 1;
     if (options.ledger === undefined) return;
@@ -70,9 +88,17 @@ export function createRsiLocalSimModelProviderComposition(options: {
     limits: options.limits ?? RSI_BUDGET_DEFAULTS,
     now,
     onCall,
+    ...(options.cache === undefined ? {} : { cache: options.cache }),
+    ...(options.costSafeMode === undefined ? {} : { costSafeMode: options.costSafeMode }),
+    ...(options.businessValue === undefined ? {} : { businessValue: options.businessValue }),
+    ...(options.concurrency === undefined ? {} : { concurrency: options.concurrency }),
+    // C3：cache HIT 只登记 savings 计数，绝不伪造 provider 台账记录（真实成本仍只来自 ledger）
+    onCacheSavings: () => {
+      cacheHits += 1;
+    },
   });
 
-  return { lowCost, strong, router, ledgerEntries: () => entries };
+  return { lowCost, strong, router, ledgerEntries: () => entries, cacheHits: () => cacheHits };
 }
 
 export const RSI_MODEL_PROVIDER_COMPOSITION_BOUNDARY = {
@@ -86,4 +112,7 @@ export const RSI_MODEL_PROVIDER_COMPOSITION_BOUNDARY = {
   payment: false,
   transport: false,
   productionCredentials: 'ABSENT',
+  /** C3：cost-control 端口为可选注入；cache HIT 不产生 provider 台账记录 */
+  costControlPorts: 'OPTIONAL_INJECTED（cache / costSafeMode / businessValue / concurrency）',
+  cacheHitCreatesProviderLedgerEntry: false,
 } as const;

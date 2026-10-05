@@ -35,6 +35,7 @@ import {
   type AiEscalationLimits,
   type AiQualityVerdict,
 } from './rsi-model-escalation-policy';
+import type { AiModelCacheScope } from './si-model-cache-runtime';
 
 export type RsiProviderTier = 'LOW_COST' | 'STRONG';
 
@@ -113,6 +114,29 @@ export interface RsiModelInvocationRequest extends RsiModelCallRequest {
   promptDigest: string;
   maxOutputTokens: number;
   timeoutMs: number;
+  /**
+   * C3：tenant-safe cache identity（host 计算；tenant-safe 判定复用 C1 identity 契约）。
+   * 缺省 / null ⇒ 不查缓存（行为与 C1/C2 完全一致）；identity 非法 ⇒ fail-closed（不降级放行 provider）。
+   */
+  cacheScope?: AiModelCacheScope | null;
+}
+
+/**
+ * C3 —— cache runtime 端口（host 注入；Router 不直接持有 Prisma / 不读环境变量）。
+ * HIT 只返回判定与 savings；**绝不**因此产生 provider ledger entry。
+ */
+export interface RsiModelCachePort {
+  lookup(input: { scope: AiModelCacheScope; highRisk?: boolean }): Promise<
+    | {
+        hit: true;
+        reason: 'HIT';
+        resultDigest: string;
+        savedTokens: number | null;
+        savedCostMicros: number | null;
+        savingsSource: string;
+      }
+    | { hit: false; reason: string }
+  >;
 }
 
 export type RsiRouterRejectionReason =
@@ -128,6 +152,11 @@ export interface RsiRouterOutcome {
   escalatedToStrong?: boolean;
   worstCaseCostUsd?: number;
   remainingUsd?: number;
+  /** C3：cache 命中 ⇒ MODEL_CALL = SKIPPED（called=false，无 provider 调用） */
+  cacheHit?: boolean;
+  savedTokens?: number | null;
+  savedCostMicros?: number | null;
+  savingsSource?: string;
 }
 
 export interface RsiBudgetGuardResult {
@@ -227,6 +256,38 @@ export function createRsiModelRouter(options: {
     tier: RsiProviderTier;
     attempt: RsiProviderAttemptResult;
   }) => AiQualityVerdict;
+  /**
+   * C3：Cost Safe Mode 准入（host 注入；阈值来自 durable policy、用量来自 durable ledger）。
+   * 缺省不启用 ⇒ 行为与 C1/C2 完全一致。SAFE MODE 只停 STANDARD_AI；L0 / health / critical alert 豁免。
+   */
+  costSafeMode?: (input: { channel: 'STANDARD_AI' }) => {
+    standardAiAllowed: boolean;
+    state: string;
+    reason: string;
+  };
+  /**
+   * C3：business-value cost policy（host 注入）。价值只能来自可信 canonical / recovery basis；
+   * caller 自报价值一律被忽略，且不得据此提高模型等级或预算。
+   */
+  businessValue?: (input: { taskType: string; requestedTier: RsiProviderTier }) => {
+    allowed: boolean;
+    maxTier: RsiProviderTier;
+    reason: string;
+  };
+  /** C3：cache runtime（tenant-safe identity；HIT ⇒ MODEL_CALL = SKIPPED，不产生 provider ledger entry） */
+  cache?: RsiModelCachePort;
+  /** C3：cache 命中时登记 savings（真实口径由 host 提供；不可测 → NOT_YET_MEASURABLE） */
+  onCacheSavings?: (savings: {
+    taskType: string;
+    incidentId: string | null;
+    taskId: string | null;
+    savedTokens: number | null;
+    savedCostMicros: number | null;
+    savingsSource: string;
+    resultDigest: string;
+  }) => void;
+  /** C3：并发槽闸门（host 注入 PostgreSQL advisory-lock slots；多实例互斥；缺省不启用） */
+  concurrency?: <T>(run: () => Promise<T>) => Promise<{ ok: true; value: T } | { ok: false; reason: string }>;
   now?: () => number;
   callIdFactory?: () => string;
 }): ModelRouterPort & {
@@ -342,6 +403,24 @@ export function createRsiModelRouter(options: {
     };
   };
 
+  /**
+   * C3：把**单次** provider attempt 放进并发槽（多实例互斥）。
+   * 占不到 slot ⇒ 视为 guard rejection：零 provider 调用、零 ledger 事实、不计 attempt（无重试风暴）。
+   */
+  const guardedAttempt = async (
+    run: () => Promise<{ outcome: RsiRouterOutcome; guardRejected: boolean; attempt: RsiProviderAttemptResult | null }>,
+    level: string,
+  ): Promise<{ outcome: RsiRouterOutcome; guardRejected: boolean; attempt: RsiProviderAttemptResult | null }> => {
+    if (!options.concurrency) return run();
+    const gate = await options.concurrency(run);
+    if (gate.ok) return gate.value;
+    return {
+      guardRejected: true,
+      attempt: null,
+      outcome: { called: false, level, reason: gate.reason, record: null },
+    };
+  };
+
   const routerApi = {
     route,
     async outcomeOf(request: RsiModelCallRequest | RsiModelInvocationRequest): Promise<RsiRouterOutcome> {
@@ -383,6 +462,63 @@ export function createRsiModelRouter(options: {
         return { called: false, level: effectiveLevel, reason: 'INVOCATION_INVALID', record };
       }
 
+      // C3①：Cost Safe Mode 准入（只停 STANDARD_AI；L0 / health / critical alert 由调用方豁免通道放行）
+      if (options.costSafeMode) {
+        const admission = options.costSafeMode({ channel: 'STANDARD_AI' });
+        if (!admission.standardAiAllowed) {
+          return { called: false, level: effectiveLevel, reason: admission.reason, record: null };
+        }
+      }
+
+      // C3②：Deterministic model cache（tenant-safe identity）—— HIT ⇒ MODEL_CALL = SKIPPED
+      // 不产生假 provider ledger entry；savings 交由 host 显式登记（无估算器 ⇒ NOT_YET_MEASURABLE）
+      if (options.cache && request.cacheScope) {
+        let lookup: Awaited<ReturnType<RsiModelCachePort['lookup']>>;
+        try {
+          lookup = await options.cache.lookup({
+            scope: request.cacheScope,
+            highRisk: request.complexity === 'HIGH',
+          });
+        } catch (error) {
+          // identity / tenant 非法 ⇒ fail-closed（绝不降级为「miss 后放行 provider」）
+          return {
+            called: false,
+            level: effectiveLevel,
+            reason: 'AI_MODEL_CACHE_LOOKUP_FAIL_CLOSED:' + (error instanceof Error ? error.message : String(error)),
+            record: null,
+          };
+        }
+        if (lookup.hit) {
+          options.onCacheSavings?.({
+            taskType: request.taskType,
+            incidentId: request.incidentId,
+            taskId: request.taskId,
+            savedTokens: lookup.savedTokens,
+            savedCostMicros: lookup.savedCostMicros,
+            savingsSource: lookup.savingsSource,
+            resultDigest: lookup.resultDigest,
+          });
+          return {
+            called: false,
+            level: effectiveLevel,
+            reason: 'MODEL_CALL_SKIPPED_CACHE_HIT',
+            record: null,
+            cacheHit: true,
+            savedTokens: lookup.savedTokens,
+            savedCostMicros: lookup.savedCostMicros,
+            savingsSource: lookup.savingsSource,
+          };
+        }
+      }
+
+      // C3③：Business-value cost policy（caller 不得提高等级 / 预算；价值只来自可信 basis）
+      if (options.businessValue) {
+        const value = options.businessValue({ taskType: request.taskType, requestedTier: 'LOW_COST' });
+        if (!value.allowed) {
+          return { called: false, level: effectiveLevel, reason: value.reason, record: null };
+        }
+      }
+
       // C1 FINAL-2（CHANGE A）：strong 授权只能来自「preceding LOW_COST attempt + server-side
       // deterministic quality evaluator」。caller 自报 escalation.quality/state 一律被忽略。
       const { effective: escalationLimits } = clampAiEscalationLimits(options.escalationLimits ?? null);
@@ -404,7 +540,10 @@ export function createRsiModelRouter(options: {
       }
 
       // ① 先跑 LOW_COST（cheap 前置 attempt 由 Gateway 自己产生，不接受 caller 声明）
-      const first = await runAttempt(options.lowCost, request, 'LEVEL_1', effectiveLevel);
+      const first = await guardedAttempt(
+        () => runAttempt(options.lowCost, request, 'LEVEL_1', effectiveLevel),
+        effectiveLevel,
+      );
       // C1 FINAL-3 CHANGE B：attempts 只统计**真实 provider attempt**（budget guard 拒绝不算）
       const cheapProviderAttempt = !first.guardRejected && first.attempt !== null && first.outcome.called === true;
       if (cheapProviderAttempt) {
@@ -439,7 +578,10 @@ export function createRsiModelRouter(options: {
         return first.outcome;
       }
       assertJudgeCannotAuthorizeModelCall({ requestedStrongCall: true, escalation });
-      const second = await runAttempt(options.strong, request, 'LEVEL_2_STRONG', 'LEVEL_2_STRONG');
+      const second = await guardedAttempt(
+        () => runAttempt(options.strong as RsiModelProviderAdapter, request, 'LEVEL_2_STRONG', 'LEVEL_2_STRONG'),
+        'LEVEL_2_STRONG',
+      );
       // strong attempt 同样计入 attempts（attempts = 真实 provider attempt 数）
       const strongProviderAttempt = !second.guardRejected && second.attempt !== null && second.outcome.called === true;
       if (strongProviderAttempt) {
@@ -497,4 +639,12 @@ export const RSI_MODEL_ROUTER_BOUNDARY = {
   timeoutMsExplicit: true,
   realProviderNetwork: 'HOLD',
   paidModelCalls: 'HOLD',
+  /** C3：cache runtime（HIT ⇒ MODEL_CALL = SKIPPED；不产生 provider ledger entry） */
+  cacheRuntimeWiring: 'OPTIONAL_PORT（缺省不启用；HIT 不写 provider ledger entry）',
+  /** C3：Cost Safe Mode（只停 STANDARD_AI；L0 / health / critical alert 豁免；无重试风暴） */
+  costSafeMode: 'OPTIONAL_PORT（缺省不启用；SAFE MODE 下拒绝为终局，retryAllowed=false）',
+  /** C3：业务价值等级只来自可信 canonical basis（caller 自报值一律忽略） */
+  businessValuePolicy: 'OPTIONAL_PORT（caller 不得提高等级 / 预算）',
+  /** C3：并发槽（host 注入 PostgreSQL advisory-lock slots；多实例互斥） */
+  concurrencySlots: 'OPTIONAL_PORT（缺省不启用；跨实例互斥，非进程内计数）',
 } as const;

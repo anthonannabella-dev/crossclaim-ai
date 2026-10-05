@@ -48,7 +48,8 @@ export const AI_BUDGET_BOUNDARY = {
   callerProvidedLockKey: 'FORBIDDEN（锁身份由 store 内部 canonical 派生）',
   strongModelCallLimit: 'enforced（executionLevel=LEVEL_2_STRONG 计数）',
   tokenLimit: 'enforced（按 policy scope 聚合 input+output tokens）',
-  concurrencyLimit: 'NOT_YET_WIRED（配置可存；并发上限执行留待 C3）',
+  concurrencyLimit:
+    'ENFORCED（C3：PostgreSQL advisory-lock slots，跨实例互斥；见 si-budget-concurrency.ts；不新增 lease / usage 表）',
 } as const;
 
 const minDefined = (values: readonly (number | null | undefined)[]): number | null => {
