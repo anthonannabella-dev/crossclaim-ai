@@ -228,13 +228,18 @@ export function createRsiLocalSimTestAdapter(options: {
   tier: RsiProviderTier;
   providerName: string;
   behavior?: 'SUCCESS' | 'FAIL';
+  /** true → 不提供 pricing（用于 BUDGET_GUARD_UNENFORCEABLE fail-closed 探针） */
+  omitPricing?: boolean;
+  /** 每次 provider invoke 回调（测试用于精确计数） */
+  onInvoke?: () => void;
 }): RsiModelProviderAdapter {
   const behavior = options.behavior ?? 'SUCCESS';
   const adapter: RsiModelProviderAdapter = {
     providerName: options.providerName,
     tier: options.tier,
-    pricing: RSI_LOCAL_SIM_PRICING,
+    ...(options.omitPricing === true ? {} : { pricing: RSI_LOCAL_SIM_PRICING }),
     async invoke(): Promise<RsiProviderAttemptResult> {
+      options.onInvoke?.();
       if (behavior === 'FAIL') {
         return { ok: false, reason: 'PROVIDER_FAILED', usage: { inputTokens: 0, outputTokens: 0, estimatedCost: 0 }, latencyMs: 1 };
       }
