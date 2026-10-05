@@ -143448,3 +143448,208 @@ FINAL_ACCEPTANCE_HEAD = 0f7f7ac
 
 结论：E3 已完全 PASS；E1/E2 的“可信 permit 本身”也 PASS。现在只剩最后一个边界：必须把这个 permit 与具体 tenant / opportunity / package / artifacts / lineage audit 批次不可变绑定。补这一项后再送窄 FINAL-4。
 ```
+
+### [MSG-20261005-26] Recovery SI P2-E v1 FINAL-4 — VERDICT = REVISE（E4 逻辑 = PASS；剩 CHANGE E5：低层写入口必须 module-private，PUBLIC_WRITE_ENTRY_COUNT = 1）
+
+```text
+DECISION
+
+ARCHITECT VERDICT = REVISE
+
+REVIEWED_HEAD =
+607bf2b2aaba6fe5c1bbabb5f6f07f6a5acb1265
+
+BOOKKEEPING_HEAD =
+abee03812911122b0fb33d352e8f3a43dacf55ee
+
+abee0381 已确认仅 docs/状态/送审簿记，NO_CODE_DRIFT = TRUE。
+
+CHANGE_E4_BATCH_BINDING = PASS
+CLAIMITEM_OPPORTUNITY_BINDING_IMPLEMENTATION = PASS
+
+P2_E_V1_OPTION_A = REVISE
+P2_E_V1 = NOT_CLOSED
+FINAL5_REQUIRED = YES
+KEEP
+
+这次 E4 主体实现已经正确：
+
+permit.organizationId ↔ 全批 units = PASS
+permit.opportunityRef ↔ package.opportunityRef = PASS
+package ↔ JSON/PDF artifact = PASS
+artifact ↔ FileAsset = PASS
+lineage AuditLog ↔ permit/package 12 项硬绑定 = PASS
+
+ClaimItem.organizationId = permit.organizationId
+ClaimItem.opportunityId = permit.opportunityRef
+= PASS
+
+F4E-01..04 的负例覆盖也符合上一轮要求。
+
+因此：
+
+CHANGE_E4_LOGIC = PASS
+CHANGE
+
+还剩最后一个可绕过入口问题。
+
+你新增了正确的生产入口：
+
+persistRecoverySiPackageWithinTransaction()
+
+它确实执行：
+
+permit↔batch
+→ ClaimItem↔opportunity
+→ transaction
+
+但旧的低层写入口仍然公开导出：
+
+persistRecoveryPackageWithinTransaction()
+persistRecoveryPackageWithReplayConvergence()
+createPrismaRecoveryPersistPort()
+
+其中尤其：
+
+createPrismaRecoveryPersistPort(prisma)
+  .runInTransaction(units)
+
+可以直接写：
+
+RecoveryPackage
+FileAsset
+RecoveryPackageArtifact
+AuditLog
+
+而完全不经过 permit、canonical READY、Control Plane、claimItem↔opportunity 校验。
+
+另外：
+
+persistRecoveryPackageWithReplayConvergence()
+
+虽然检查 trusted permit/batch，但不会执行 DB 的：
+
+ClaimItem.opportunityId == permit.opportunityRef
+
+检查。
+
+所以当前状态是：
+
+SAFE_RECOMMENDED_ENTRY = YES
+NON_BYPASSABLE_WRITE_BOUNDARY = NO
+
+这与 E1/E4 的目标仍不一致。
+
+最小修订 E5
+
+建议最简单的做法：
+
+唯一公开的生产写 API：
+persistRecoverySiPackageWithinTransaction()
+
+以下函数改为 module-private：
+
+persistRecoveryPackageWithinTransaction
+persistRecoveryPackageWithReplayConvergence
+createPrismaRecoveryPersistPort
+
+类型可以继续 export；写能力函数不要 export。
+
+如果测试需要低层能力，可以：
+
+同模块内部测试入口
+或专用 test-only module
+
+但生产模块不能暴露可直接跳过安全链的 write capability。
+
+正式要求：
+
+PUBLIC_WRITE_ENTRY_COUNT = 1
+
+PUBLIC_WRITE_ENTRY =
+persistRecoverySiPackageWithinTransaction
+
+RAW_TRANSACTION_PORT_PUBLIC = FORBIDDEN
+LOW_LEVEL_GATE_ONLY_WRITE_PUBLIC = FORBIDDEN
+RISKS
+
+RUNTIME_WIRING = NONE 不能消除这个 blocker。
+
+因为 P2-E 本轮审的是可安全接线的持久化实现边界；如果闭环时还公开一个 raw DB writer，未来任何接线都能绕过刚建立的 canonical/tenant/opportunity/permit 保护。
+
+所以现在：
+
+ClaimItem↔opportunity 校验代码本身 = PASS
+ClaimItem↔opportunity 强制不可绕过 = REVISE
+TEST
+
+现有：
+
+27/27 contract
+20/20 PostgreSQL
+127/127 targeted regression
+tsc 0
+
+为本地归档执行证据；exact 607bf2b2 的 hosted GitHub status/workflow 当前仍为空。
+
+FINAL-5 只需补 2 个证据：
+
+F5E-01
+生产模块对外只有一个 write-capable entry：
+persistRecoverySiPackageWithinTransaction
+F5E-02
+真实 persistence 成功仍必须走：
+trusted permit
+→ batch binding
+→ ClaimItem/opportunity DB binding
+→ transaction
+
+并重跑：
+package=1
+FileAsset=2
+artifact=2
+audit=1
+concurrent replay unchanged
+
+不需要再改 Schema、migration、E1-E4 逻辑。
+
+NEXT
+
+只做：
+
+CHANGE E5 =
+REMOVE PUBLIC LOW-LEVEL WRITE BYPASS
+
+完成后送窄：
+
+RECOVERY SI P2-E FINAL-5
+
+这应该是最后一轮。
+
+PRODUCTION
+
+继续冻结：
+
+P2_F = HOLD
+P2_G = HOLD
+
+APPROVAL_CONSUMPTION = FORBIDDEN
+EXECUTOR_INVOCATION = FORBIDDEN
+
+P2_E_WHITELISTED_INTERNAL_PERSISTENCE = AUTHORIZED
+OTHER_BUSINESS_FACT_WRITE = FORBIDDEN
+EXTERNAL_BUSINESS_WRITE = FORBIDDEN
+EXTERNAL_ACTION = FORBIDDEN
+
+EXTERNAL_WRITE = HOLD
+PAYMENT = HOLD
+TRANSPORT = HOLD
+PRODUCTION_CREDENTIALS = HOLD
+REAL_CLAIM_SUBMIT = HOLD
+CUSTOMS_FILING = HOLD
+
+RUNTIME_WIRING = NONE
+FINAL_ACCEPTANCE_HEAD = 0f7f7ac
+
+结论：E4 逻辑本身已经 PASS。现在唯一剩余问题不是业务校验，而是公开 API 面仍保留低层写入旁路。把 raw port / low-level persistence 入口收成 module-private，只留下 persistRecoverySiPackageWithinTransaction() 作为唯一生产写入口，即可送 FINAL-5。
+```

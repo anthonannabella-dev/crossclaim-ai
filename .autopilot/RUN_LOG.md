@@ -2438,3 +2438,13 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 验证：tsc exit 0；契约 **27/27**（新增 G24..G27）；真实库 **20/20**（新增 DB17..DB20 对应 F4E-01..04，均断言四表全 0）；
   定向回归 **10 文件 / 127 例 PASS**；prisma validate valid / 79 migrations 无待应用 / up to date。
 - 证据：`docs/releases/RECOVERY-SI-PHASE2-E-EVIDENCE.md` §9.3；送审：`docs/releases/RECOVERY-SI-PHASE2-E-FINAL4-REQUEST.md`（REVIEWED_HEAD = 607bf2b2）。
+
+## 2026-10-05T12:05Z — P2-E FINAL-5（CHANGE E5）落地：公开写入口收口（实现 HEAD = 054ab732）
+- 裁决 MSG-20261005-26（FINAL-4 = REVISE）：E4 逻辑 = PASS；唯一剩余 = 公开面仍有可绕过安全链的低层写能力。
+- 收口：`persistRecoveryPackageWithinTransaction` 从 gate 模块移除；`persistRecoveryPackageWithReplayConvergence` / `createPrismaRecoveryPersistPort`
+  私有化；`isRecoveryPackageUniqueViolation` 私有化并收紧（只有 package 身份键命中才算收敛，artifact 唯一键命中必须回滚）。
+- 唯一公开 write-capable 入口：`persistRecoverySiPackageWithinTransaction`；新增 `P2_E_PUBLIC_WRITE_SURFACE` 冻结常量。
+- 证据：P2E-G28 用 namespace import 直接断言公开面（低层写能力/raw port 不可见，只读能力仍在）；DB 成功路径统一走唯一入口，
+  终态 package=1 / FileAsset=2 / artifact=2 / audit=1，并发不变。
+- 验证：tsc exit 0；契约 27/27；真实库 20/20；定向回归 10 文件 / 127 例 PASS；prisma validate valid / 79 migrations 无待应用 / up to date。
+- 送审：`docs/releases/RECOVERY-SI-PHASE2-E-FINAL5-REQUEST.md`（REVIEWED_HEAD = 054ab732）。
