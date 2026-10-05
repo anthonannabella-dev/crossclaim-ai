@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-40",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T18:48:46.684Z",
+  "updated_at": "2026-10-05T18:50:29.121Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -21,7 +21,7 @@
   "ci_result": "completed_success",
   "fix_pr": "https://github.com/anthonannabella-dev/crossclaim-ai/pull/10",
   "channel_status": "HEALTHY（主审计会话 = https://chatgpt.com/c/6ac385db-cb60-83ec-9754-c7a30633a8c5（HOST 新开；MSG-20261005-30 起）；历史会话 https://chatgpt.com/c/6ac1cdf0-1ec8-83ec-8036-0e66fcf5c6b9 保留 MSG-22..29 逐字归档）",
-  "pending_verdict_unarchived": "PHASE 4 U2 FINAL（Reviewed HEAD d84f9004）—— 已投递，等待裁决",
+  "pending_verdict_unarchived": null,
   "b2_status": "PASS（MSG-20260930-10 工程修复 + MSG-20260930-11 集成 PASS/MERGE APPROVED）",
   "protocol": "DUAL_CHANNEL_WAKEUP（GitHub = 正式总线 / ChatGPT Web = 仅唤醒）",
   "integration_pr": "https://github.com/anthonannabella-dev/crossclaim-ai/pull/11",
@@ -50,13 +50,13 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
-  "next_execution_unit": "PHASE 4 U2 FINAL 裁决处理：读取右侧审核会话（tab 14）完整 verdict（严格匹配 REVIEWED_HEAD = d84f9004）→ 原样逐字归档 AI-ARCHITECT-INBOX.md（MSG-20261005-57）→ compare.mjs 必须 FULL_COPY_OK → durable state 对账。若 PASS → 继续 U3（learning dataset projection + immutable learning evidence，复用既有 evidence store、append-only、禁止第二存储）→ U4（offline evaluation，明确 SUCCESS/FAILURE/PARTIAL/UNKNOWN/MANUAL_REVIEW 分母语义）→ U5（meta-improvement candidate proposal only）；若 PASS WITH REVISE → 按裁决窄修。",
+  "next_execution_unit": "PHASE 4 U2 FINAL2：把 lineage source 从 caller 可注入的结构型 port 改为 **server-owned composition**：(1) 新增 `createAppOutcomeLineageSource(deps)`（内部接既有 action/proposal/evidence ledger），用**私有 WeakSet** 登记 provenance 并导出只读 `isAppOutcomeLineageSource(source)`；(2) verified learning path（verifyLearningRecord / projectVerifiedLearningRecords）只接受 `AppOutcomeLineageDeps` 并在内部构造正式 source，**不再直接接受 caller-supplied port 实例**；(3) `proposalLinked` 由正式 adapter 依据已有 action/proposal/evidence 关系**计算**得出，不从上游直接采信 boolean；(4) 验收：caller 手写 fake source（恒返回匹配 fact）→ verified path REJECT；正式 factory source → provenance PASS；正式 source 从 ledger 读不到 refs → REJECT；ledger 中 refs 存在但不同 task/org → REJECT；proposal/action/evidence 未真实关联 → REJECT；全链真实匹配 → verified PASS；未验证记录仍不得进入 U3 immutable learning evidence。流程：code → tests → regression → tsc → commit → push → 送 PHASE 4 U2 FINAL2 → 送达三检 → 逐字归档 → FULL_COPY_OK → durable state。之后继续 U3（learning dataset + immutable learning evidence，只能接正式 trusted lineage composition）、U4、U5。",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-05T18:48:46.684Z",
+  "last_tick_at": "2026-10-05T18:50:29.121Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "PHASE 4 U2 FINAL（trusted lineage resolver）已实施并送审：新增 outcome-lineage.ts（OutcomeLineageSourcePort / resolveTrustedOutcomeLineage / verifyLearningRecord / projectVerifiedLearningRecords，fail-closed 覆盖未配置/异常/不存在/跨租户/跨 task/ref 不同链/proposal 未关联）；push d84f9004；投递 [CODEX-PHASE4-U2FINAL]（Reviewed HEAD d84f9004），送达三检通过，等待裁决。回归实测：92/93 files、946/947 tests；唯一失败为 P2E-DB5（已知 test-isolation debt，单独运行 20/20 PASS）。",
-  "last_action_at": "2026-10-05T18:48:46.684Z",
-  "next_action": "读取 PHASE 4 U2 FINAL 裁决 → 逐字归档 + compare.mjs FULL_COPY_OK + durable state 对账",
+  "last_action": "PHASE 4 U2 FINAL 裁决已读取并原样归档（MSG-20261005-57，compare.mjs = FULL_COPY_OK）：U2 CONTRACT = PASS（fail-closed 规则 / verified-excluded 逻辑正确）；LINEAGE_BINDING = NOT YET PASS —— source port 仍是 caller 可注入的结构型对象（与 Action Guard instance-injection 同类）；需 server-owned composition；已授权继续 U3/U4/U5。",
+  "last_action_at": "2026-10-05T18:50:29.121Z",
+  "next_action": "PHASE 4 U2 FINAL2：server-owned lineage composition（factory provenance）",
   "current_head": "d84f9004",
   "last_completed_head": "6cba0639",
   "reviewed_head": "add99ec3",
@@ -5169,11 +5169,12 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "P4G-1 读取 PHASE 4 U2 FINAL 裁决（tab 14，匹配 Reviewed HEAD d84f9004）+ 逐字归档 MSG-20261005-57 + compare.mjs + durable state",
-    "P4G-2 U3 learning dataset projection + immutable learning evidence（复用既有 evidence store，append-only，禁止第二存储）",
-    "P4G-3 U4 offline evaluation（显式定义 SUCCESS/FAILURE/PARTIAL/UNKNOWN/MANUAL_REVIEW 分母语义）",
-    "P4G-4 U5 meta-improvement candidate proposal only（AUTO_PROMOTION = OFF，必须经外部 Judge）",
-    "P4G-5 非阻断维护项：scanRawPayloadKeys 改完整有界遍历/循环检测"
+    "P4H-1 U2 FINAL2 server-owned lineage composition（createAppOutcomeLineageSource + 私有 WeakSet provenance；verified path 只收 AppOutcomeLineageDeps；proposalLinked 由 adapter 计算）",
+    "P4H-2 tests（7 条验收）→ regression → tsc → commit → push → 送 PHASE 4 U2 FINAL2 → 逐字归档 → compare.mjs → durable state",
+    "P4H-3 U3 learning dataset projection + immutable learning evidence（必须接正式 trusted lineage composition，append-only，复用既有 evidence store）",
+    "P4H-4 U4 offline evaluation（显式定义 SUCCESS/FAILURE/PARTIAL/UNKNOWN/MANUAL_REVIEW 分母语义）",
+    "P4H-5 U5 meta-improvement candidate proposal only（AUTO_PROMOTION = OFF，必须经外部 Judge）",
+    "P4H-6 非阻断维护项：scanRawPayloadKeys 改完整有界遍历/循环检测"
   ],
   "full_autonomous_internal_execution": "VERIFIED",
   "dispatcher_acceptance": {
@@ -9323,7 +9324,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-05T18:48:46.684Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-05T18:50:29.121Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -9775,5 +9776,26 @@
       "regression": "92/93 files、946/947 tests（唯一失败 = P2E-DB5 test-isolation debt，单独 20/20 PASS）",
       "github_ci": "NOT_OBSERVED"
     }
+  },
+  "phase4_u2_final_verdict": {
+    "message_id": "MSG-20261005-57",
+    "verdict": "PASS WITH REVISE",
+    "reviewed_head": "d84f9004",
+    "archive_verified": "FULL_COPY_OK",
+    "pass": [
+      "U2 CONTRACT（fail-closed 规则）",
+      "verified/excluded 逻辑",
+      "selfConsistencyOnly = NOT_SUFFICIENT_FOR_BINDING 口径",
+      "无第二 Evidence Store / 无生产写"
+    ],
+    "revise": [
+      "LINEAGE_BINDING：source port 仍是 caller 可注入的结构型对象 → 需 server-owned composition（factory provenance）；proposalLinked 由正式 adapter 计算"
+    ],
+    "next_label": "PHASE 4 U2 FINAL2（目标 LINEAGE_BINDING = PASS / U2 = PASS / CLOSED）",
+    "authorized_continue": [
+      "U3",
+      "U4",
+      "U5"
+    ]
   }
 }
