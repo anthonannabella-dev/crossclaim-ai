@@ -1950,3 +1950,13 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
   （审计失败 → 状态回滚，无痕变更被拒）；CAS 并发只放行一个；credential rotation 不改变 PlatformAccount identityVersion；
   **未绑定账户的连接不得被激活**（DB 不变量）；轮换只记录形状变化，清空 → NEEDS_AUTH。
 - 边界：本批未改任何代码；READ_ONLY / NO_EXTERNAL_WRITE 保持，真实 Amazon/PAC 凭据仍属 HOST_ACTION_REQUIRED。
+
+## 2026-10-05T03:11:35.092Z — BG-003 Dashboard / Admin / Operations 只读面 + RBAC 复核（P2，内部可做）
+- 套件实测（apps/api 本地，退出码 0）：**12 文件 / 117 例全绿** —— `admin-console`(12)/`-db`(8)、`admin-http-smoke-db`、
+  `admin-imports`(9)/`-db`(8)、`admin-membership`(8)/`-db`、`admin-recovery-review`(11)/`-db`、
+  `operations-dashboard`/`-db`、`payment-admin-http-db`。
+- 只读证明（实测）：Admin Console 三个模块、Import 视图、恢复复核队列均断言「读取前后关键表快照一致」；
+  列表只返回元数据（不含 changes），详情才带 changes；证据只引用 `evidenceId/kind/role/capturedAt` 元数据，深链指向既有审核流程。
+- RBAC / 租户（实测）：OPS 只能访问 System Health，FINANCE / VIEWER 一律拒绝；审计列表与 actorUserId 过滤都受租户约束；
+  跨租户记录详情 → NOT_FOUND；Import 视图 L3 白名单只返回原因码/行号/字段名，**无客户数据与金额键**；窗口超限 → INVALID_WINDOW。
+- 边界：本批未改任何代码；READ_ONLY / NO_EXTERNAL_WRITE 保持。
