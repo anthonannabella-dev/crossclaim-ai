@@ -146357,3 +146357,293 @@ L5_RELAXATION = FORBIDDEN
 
 最终裁定：SI-COST-OPTIMIZATION 已完成，可以正式 CLOSED，不需要 C4。
 ```
+
+### [MSG-20261005-41] STEP_3_RUNTIME_POLICY_WIRING — VERDICT = **PASS WITH REVISE**（3A Runtime Composition / 3B Policy Wiring / 3D Model Gateway(contract-only) / 3F Restart-Reconcile = PASS；3C Guard-Action Wiring = REVISE；3E Evidence-Judge = REVISE；`STEP3_FINAL2_REQUIRED = YES`；两个阻断点 = Judge self-consumption 漏洞 + Action Guard 未进入执行链）
+
+```text
+DECISION
+
+VERDICT = PASS WITH REVISE
+
+已复核 REVIEWED_HEAD = c0b61792，并确认 c0b61792 → 781cc7b1 只有 docs / 状态 / 送审簿记，没有新的业务代码。
+
+STEP 3A Runtime Composition = PASS
+STEP 3B Policy Wiring = PASS
+STEP 3C Guard / Action Wiring = REVISE
+STEP 3D Model Gateway Wiring = PASS AS CONTRACT-ONLY
+STEP 3E Evidence / Judge = REVISE
+STEP 3F Restart / Reconcile = PASS
+
+因此：
+
+STEP_3_RUNTIME_POLICY_WIRING = NOT_YET_CLOSED
+STEP3_FINAL2_REQUIRED = YES
+
+而且目前还不能说：
+
+“只剩架构审计签署”。
+
+还有两个真实运行链阻断点。
+
+KEEP
+
+以下全部成立，保持不动：
+
+ONE CrossClaim SI Runtime
+SECOND_RUNTIME = 0
+Recovery SI = static domain capability pack
+无第二 event loop / scheduler / controller
+Policy Core 唯一
+services/autonomy/** → services/intelligence/** 禁止方向成立
+CUSTOMS L5 继续永久 BLOCK
+unmatched pack → BLOCK
+external-write self-claim → BLOCK
+deterministic Recovery pack modelCallCount=0
+restart/reconcile：
+stale ACTIVE lease 恢复
+PROMOTED 不重放
+二次执行幂等
+tools/autopilot/** 仍为 DEV_SCOPE。
+CHANGE
+CHANGE A — Judge 目前存在真实 self-judge 漏洞
+
+当前 attachContinuationToController() 在 runner 完成后：
+
+TypeScript
+engine.markWaitingForVerdict(status)
+
+这里的 status 就是 runner 自己的 PASS / REVISE / BLOCK。
+
+而 continuation engine 的：
+
+TypeScript
+watchdogTick()
+
+发现：
+
+TypeScript
+waitingForVerdict && verdict !== null
+
+会直接触发：
+
+TypeScript
+JUDGE_VERDICT_RECEIVED
+
+也就是说：
+
+runner 自己返回 PASS
+→ 被写进 verdict
+→ watchdog 可自动把这个 PASS 当 Judge verdict 消费。
+
+这直接违反：
+
+SELF_JUDGE_FORBIDDEN
+
+另外 composeRsiRuntime() 实际代码仍是：
+
+TypeScript
+awaitVerdict: input.awaitVerdict ?? false
+
+所以 domain pack 如果宿主没显式传 true，runner PASS 会直接完成任务，根本不经过 Judge。
+
+最小修复
+runner 结束后只能：
+markWaitingForVerdict(null)
+runner proposal status 单独保存，不得写入 verdict
+只有真实 Judge/verdict adapter 能把 verdict 从 null 改成 PASS/REVISE/BLOCK
+对 domainPacks 路径：
+awaitVerdict 必须默认 true，或直接强制 true
+无 verdict 时 watchdog 只能继续等待，绝不能自动消费 proposal
+
+必须补测试：
+
+runner PASS → 无外部 verdict → 多次 watchdog → 仍 waiting
+runner PASS ≠ final PASS
+外部 PASS 到达 → 才 complete
+REVISE → 才创建 revision
+malformed verdict → 保持等待。
+CHANGE B — Action Guard 当前只是“声明”，并没有进入 Runtime 执行链
+
+Recovery pack 目前：
+
+纯文本
+resolveGuardAction()
+→ guardActions: [{action,...}]
+→ 直接执行 RecoveryReadTool
+
+但没有调用共享：
+
+Action Guard
+Control Plane
+Kill Switch
+HITL
+
+更关键的是 createRsiDomainPackRunner() 最终只向 controller 返回：
+
+纯文本
+status
+evidenceRef
+
+guardActions 在这一层已经被丢弃。
+
+因此当前实际链不是：
+
+纯文本
+intent → shared Action Guard → tool
+
+而是：
+
+纯文本
+intent → action name mapping → read tool
+
+这不足以记：
+
+Action Guard wired / preserved in execution chain
+
+最小修复
+
+不用重做现有 Guard。
+
+在 domain-pack runtime bridge 中增加共享 Guard adapter：
+
+纯文本
+Recovery intent
+→ resolveGuardAction
+→ existing Action Guard / Control Plane dry-run
+→ ALLOW
+→ deterministic read tool
+
+若：
+
+DENY
+REQUIRES_APPROVAL
+degraded control plane
+kill switch
+tenant mismatch
+
+则：
+
+tool 不执行。
+
+CUSTOMS / unmapped action：
+
+继续零 Guard 调用直接 BLOCK。
+
+至少补：
+
+evidence.read → Guard ALLOW → read tool 才执行
+Guard DENY → read calls = 0
+REQUIRES_APPROVAL → read calls = 0
+CUSTOMS null → guard calls = 0 / read calls = 0。
+RISKS
+
+另外两项不要提前写成“已完全 wired”：
+
+Model Gateway / Cost Core
+
+目前 Recovery pack：
+
+modelCallCount = 0
+
+这是正确的 deterministic-first 行为。
+
+但 rsi-run.ts / Recovery pack 当前没有实际注入 rsi-model-router 或 SI Cost Core。
+
+所以可以记：
+
+UNIQUE MODEL GATEWAY / COST CORE OWNERSHIP PRESERVED = PASS
+
+但暂时不能把：
+
+MODEL_GATEWAY_RUNTIME_WIRED = PASS
+
+理解成已经存在 Recovery runtime → Gateway 的实际可调用路径。
+
+如果本阶段完成标准要求“真正 wired”，应增加一个唯一 Gateway capability port 到 domain-pack context；Recovery pack 本轮可保持零调用，但未来模型请求只能通过这个 port。
+
+Meta-Improvement / Judge
+
+当前 STEP 3 E2E 没有真正执行：
+
+rsi-judge-orchestration.ts
+
+也没有把 Recovery pack evidence 追加到：
+
+rsi-evidence-ledger.ts
+
+因此：
+
+owner 没有被复制 = PASS
+
+但：
+
+Meta-Improvement capability integrated = NOT YET PROVEN
+
+不要把它列为已完成条件，除非补一条同 runtime E2E 证明已有 Meta-Improvement path。
+
+TEST
+
+当前 12/12 和 750 regression 可以接受，但 FINAL-2 必须新增：
+
+runner proposal 不能被 watchdog 当 verdict
+domain pack 默认 park-for-judge
+external verdict 是唯一 completion 来源
+shared Action Guard ALLOW / DENY / REQUIRES_APPROVAL 三路
+Guard deny 时 read tool = 0
+L5 Customs = guard 0 / tool 0
+原 STEP 3 + 750 regressions 全绿。
+NEXT
+
+仅授权：
+
+STEP 3 FINAL-2 narrow revision
+
+优先只做两个阻断项：
+
+Judge proposal/verdict separation
+Shared Action Guard bridge
+
+完成后再送：
+
+STEP_3_RUNTIME_POLICY_WIRING FINAL-2
+
+届时若通过，可裁：
+
+STEP_3_RUNTIME_POLICY_WIRING = PASS / CLOSED
+
+至于：
+
+Model Gateway
+Cost Core
+Meta-Improvement
+
+若只是要求唯一 owner + 不可绕过契约，可随 FINAL-2 一并证明关闭；
+
+若要求“真实 runtime capability port 已接通”，则还需在 FINAL-2 同批补极窄 wiring proof。
+
+PRODUCTION
+
+生产边界完全没有被本提交打开：
+
+REAL_MODEL_NETWORK = HOLD
+PAID_MODEL_CALLS = HOLD
+EXTERNAL_WRITE = HOLD
+PAYMENT = HOLD
+TRANSPORT = HOLD
+PRODUCTION_CREDENTIALS = HOLD
+PRODUCTION_ENABLEMENT = HOLD
+
+P2_F = HOLD
+P2_G = HOLD
+CUSTOMS real filing = HOLD
+
+SECOND_RUNTIME = FORBIDDEN
+SECOND_POLICY_ENGINE = FORBIDDEN
+SECOND_CONTROL_PLANE = FORBIDDEN
+SECOND_MODEL_GATEWAY = FORBIDDEN
+SECOND_COST_LEDGER = FORBIDDEN
+SECOND_META_EVIDENCE_STORE = FORBIDDEN
+L5_RELAXATION = FORBIDDEN
+
+结论：ONE Runtime 和 Recovery Pack integration 已经成立；当前真正阻止 STEP 3 CLOSED 的是 Judge self-consumption 漏洞和 Action Guard 尚未进入实际执行链。
+```

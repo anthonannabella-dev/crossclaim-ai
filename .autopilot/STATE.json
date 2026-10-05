@@ -11,7 +11,7 @@
   "external_write_enabled": false,
   "updated_at": "2026-10-06T08:30:00.000Z",
   "previous_head": "8064f07",
-  "architect_decision_pending": true,
+  "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "0c35106",
   "last_sent_at": "2026-10-03T09:07:52.875Z",
@@ -50,11 +50,11 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
-  "next_execution_unit": "重读 STEP 3 完整裁决（严格匹配 REVIEWED_HEAD = c0b61792）→ 逐字归档 MSG-20261005-41 + compare.mjs FULL_COPY_OK → 实现 STEP 3 FINAL-2 两项窄修（3C Guard/Action Wiring、3E Evidence/Judge）→ tsc/regression → commit/push → 再送审",
+  "next_execution_unit": "STEP 3 FINAL-2 窄修（仅两个阻断项）：A Judge proposal/verdict 分离（runner 只写 proposal，markWaitingForVerdict(null)；domainPacks 路径强制 awaitVerdict=true；watchdog 无 verdict 只等待）+ B shared Action Guard bridge（intent → resolveGuardAction → Action Guard / Control Plane dry-run → ALLOW 才执行只读工具；DENY / REQUIRES_APPROVAL / degraded / kill switch / tenant mismatch → tool = 0；CUSTOMS null → guard 0 / tool 0）→ 新增裁决要求的测试 → tsc / regression → commit + push → 再送审（MSG-20261005-42）",
   "automation_status": "CONTINUOUS",
   "last_tick_at": "2026-10-06T08:30:00.000Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "STEP 3 裁决 = PASS WITH REVISE（前半捕获）；完整裁决待重读并归档 MSG-20261005-41",
+  "last_action": "STEP 3 裁决 = PASS WITH REVISE（MSG-20261005-41，REVIEWED_HEAD = c0b61792）；两个阻断项待 FINAL-2 窄修",
   "last_action_at": "2026-10-06T08:30:00.000Z",
   "next_action": "C2 IMPLEMENTATION（Schema Delta + durable ledger/budget + PG 回归）",
   "current_head": "054ab732",
@@ -9372,6 +9372,41 @@
       "judgeSelfApproval": "FORBIDDEN（park-for-judge）"
     },
     "tests": "tsc 0；STEP 3 定向 12/12；回归 75 files / 750 tests PASS；无 Schema/迁移变更",
-    "submit_note": "送审已投递（in-app browser 新标签，REVIEWED_HEAD = c0b61792）；裁决已开始返回：VERDICT = PASS WITH REVISE（3A/3B/3D/3F = PASS；3C Guard/Action Wiring = REVISE；3E Evidence/Judge = REVISE；STEP3_FINAL2_REQUIRED = YES）。**本窗口仅捕获到裁决前段（本轮预算耗尽），完整正文必须下一窗口重新从该标签页读取后再逐字归档**（禁止归档截断文本）。"
+    "submit_note": "送审已投递（in-app browser 新标签，REVIEWED_HEAD = c0b61792）；裁决已开始返回：VERDICT = PASS WITH REVISE（3A/3B/3D/3F = PASS；3C Guard/Action Wiring = REVISE；3E Evidence/Judge = REVISE；STEP3_FINAL2_REQUIRED = YES）。**本窗口仅捕获到裁决前段（本轮预算耗尽），完整正文必须下一窗口重新从该标签页读取后再逐字归档**（禁止归档截断文本）。",
+    "verdict": {
+      "message_id": "MSG-20261005-41",
+      "verdict": "PASS WITH REVISE",
+      "reviewed_head": "c0b61792",
+      "pass": [
+        "3A_RUNTIME_COMPOSITION",
+        "3B_POLICY_WIRING",
+        "3D_MODEL_GATEWAY_CONTRACT_ONLY",
+        "3F_RESTART_RECONCILE"
+      ],
+      "revise": [
+        "3C_GUARD_ACTION_WIRING",
+        "3E_EVIDENCE_JUDGE"
+      ],
+      "blockers": [
+        "CHANGE A：runner proposal 被 watchdog 当作 Judge verdict（违反 SELF_JUDGE_FORBIDDEN）；domainPacks 路径 awaitVerdict 默认 false",
+        "CHANGE B：domain-pack bridge 丢弃 guardActions，未调用共享 Action Guard / Control Plane dry-run"
+      ],
+      "not_authorized_claims": [
+        "MODEL_GATEWAY_RUNTIME_WIRED",
+        "COST_CORE_RUNTIME_WIRED",
+        "META_IMPROVEMENT_INTEGRATED"
+      ],
+      "required_tests": [
+        "runner proposal 不能被 watchdog 当 verdict",
+        "domain pack 默认 park-for-judge",
+        "external verdict 是唯一 completion 来源",
+        "shared Action Guard ALLOW / DENY / REQUIRES_APPROVAL 三路",
+        "Guard deny 时 read tool = 0",
+        "L5 Customs = guard 0 / tool 0",
+        "原 STEP 3 + 750 regressions 全绿"
+      ],
+      "step3_final2_required": "YES",
+      "archive": "AI-ARCHITECT-INBOX.md#MSG-20261005-41"
+    }
   }
 }
