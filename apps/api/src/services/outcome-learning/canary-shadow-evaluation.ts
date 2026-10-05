@@ -30,7 +30,7 @@ export const CANARY_SHADOW_BOUNDARY = {
   actionRuntime: 'SIMULATE_ONLY',
   metricsSource: 'REUSE_PHASE_4_OFFLINE_EVALUATION_SEMANTICS（resolved denominator / successRate / failure·non-success / rejectedRate / unresolved share / human intervention / evidence quality）',
   secondMetricSystem: 'FORBIDDEN',
-  sameCohortProof: 'BOTH_EVALUATIONS_MUST_SHARE_THE_SAME_VERIFIED_OUTCOME_SET（cohortDigest 必须等于 verifiedOutcomeSetDigest，caller 不可自报）',
+  sameCohortProof: 'OUTCOME_INDEPENDENT_TRUSTED_COHORT_REF（两侧必须共享同一个 createCohortRef 产物；cohortSize/datasetVersion/window 必须与两侧 evaluation 一致；不再要求 outcome digest 相同）',
   recommendation: ['ELIGIBLE_FOR_CONTROLLED_ADOPTION_REVIEW', 'ROLLBACK_REQUIRED', 'INSUFFICIENT_EVIDENCE'],
   autoApply: 'FORBIDDEN',
   autoPromote: 'FORBIDDEN',
@@ -71,6 +71,94 @@ export const CANARY_RECOMMENDATIONS = [
   'INSUFFICIENT_EVIDENCE',
 ] as const;
 export type CanaryRecommendation = (typeof CANARY_RECOMMENDATIONS)[number];
+
+/** 与 outcome 无关的可信 cohort 标识（server-owned composition）。 */
+export interface CohortRef {
+  kind: 'COHORT_REF';
+  cohortRefId: string;
+  cohortRefDigest: string;
+  cohortId: string;
+  datasetVersion: string;
+  evaluationWindow: { from: string; to: string };
+  cohortSize: number;
+  taskRefs: readonly string[];
+  provenance: { source: 'SERVER_OWNED_COHORT_COMPOSITION' };
+}
+
+const VERIFIED_COHORT_REFS = new WeakSet<CohortRef>();
+const VERIFIED_COHORT_REF_FINGERPRINTS = new WeakMap<CohortRef, string>();
+
+const cohortRefFingerprint = (ref: CohortRef): string =>
+  JSON.stringify({
+    kind: ref.kind,
+    cohortRefId: ref.cohortRefId,
+    cohortRefDigest: ref.cohortRefDigest,
+    cohortId: ref.cohortId,
+    datasetVersion: ref.datasetVersion,
+    evaluationWindow: { ...ref.evaluationWindow },
+    cohortSize: ref.cohortSize,
+    taskRefs: [...ref.taskRefs],
+  });
+
+export function isVerifiedCohortRef(ref: CohortRef | null | undefined): boolean {
+  if (ref === null || ref === undefined) return false;
+  if (!VERIFIED_COHORT_REFS.has(ref)) return false;
+  const fingerprint = VERIFIED_COHORT_REF_FINGERPRINTS.get(ref);
+  if (fingerprint === undefined) return false;
+  try {
+    return fingerprint === cohortRefFingerprint(ref);
+  } catch {
+    return false;
+  }
+}
+
+/** 由 server-owned composition 生成“与 outcome 无关”的 cohort 标识。 */
+export function createCohortRef(input: {
+  cohortId: string;
+  datasetVersion: string;
+  evaluationWindow: { from: string; to: string } | null | undefined;
+  taskRefs: readonly string[] | null | undefined;
+}): CohortRef {
+  const cohortId = requireText(input?.cohortId);
+  if (cohortId === '') throw new Error('CANARY_COHORT_REQUIRED');
+  const datasetVersion = requireText(input?.datasetVersion);
+  if (datasetVersion === '') throw new Error('CANARY_COHORT_DATASET_REQUIRED');
+  const window = input?.evaluationWindow;
+  const fromMs = window ? Date.parse(window.from) : Number.NaN;
+  const toMs = window ? Date.parse(window.to) : Number.NaN;
+  if (!Number.isFinite(fromMs) || !Number.isFinite(toMs) || toMs <= fromMs) {
+    throw new Error('CANARY_EVALUATION_WINDOW_INVALID');
+  }
+  const taskRefs = (Array.isArray(input?.taskRefs) ? input.taskRefs : []).map((item) => requireText(item)).filter((item) => item !== '');
+  if (taskRefs.length === 0) throw new Error('CANARY_COHORT_TASKS_REQUIRED');
+  const sorted = [...new Set(taskRefs)].sort();
+  const cohortRefDigest = digest('cohort-ref', [
+    CANARY_SHADOW_VERSION,
+    cohortId,
+    datasetVersion,
+    window!.from + '~' + window!.to,
+    String(sorted.length),
+    sorted.join('+'),
+  ]);
+  const ref: CohortRef = {
+    kind: 'COHORT_REF',
+    cohortRefId: 'cohort-ref:' + cohortRefDigest,
+    cohortRefDigest,
+    cohortId,
+    datasetVersion,
+    evaluationWindow: { from: window!.from, to: window!.to },
+    cohortSize: sorted.length,
+    taskRefs: sorted,
+    provenance: { source: 'SERVER_OWNED_COHORT_COMPOSITION' },
+  };
+  Object.freeze(ref.taskRefs);
+  Object.freeze(ref.evaluationWindow);
+  Object.freeze(ref.provenance);
+  Object.freeze(ref);
+  VERIFIED_COHORT_REFS.add(ref);
+  VERIFIED_COHORT_REF_FINGERPRINTS.set(ref, cohortRefFingerprint(ref));
+  return ref;
+}
 
 export interface CanaryMetricSnapshot {
   resolvedDenominator: number;
@@ -194,8 +282,7 @@ export function evaluateCanaryShadow(input: {
   rollbackPlan: RollbackPlan | null | undefined;
   baselineEvaluation: OfflineEvaluationResult | null | undefined;
   proposalEvaluation: OfflineEvaluationResult | null | undefined;
-  cohortId: string;
-  cohortDigest: string;
+  cohortRef: CohortRef | null | undefined;
   evaluationWindow: { from: string; to: string } | null | undefined;
 }): CanaryShadowEvaluation {
   if (!isVerifiedControlledConfigProposal(input?.proposal)) {
@@ -226,15 +313,18 @@ export function evaluateCanaryShadow(input: {
   if (!Number.isFinite(fromMs) || !Number.isFinite(toMs) || toMs <= fromMs) {
     throw new Error('CANARY_EVALUATION_WINDOW_INVALID');
   }
-  const cohortId = requireText(input.cohortId);
-  if (cohortId === '') throw new Error('CANARY_COHORT_REQUIRED');
-  const cohortDigest = requireText(input.cohortDigest);
-  if (cohortDigest === '') throw new Error('CANARY_COHORT_REQUIRED');
-  // SAME_COHORT_PROOF：两侧必须来自同一 verified outcome 集合，且 cohortDigest 必须等于该集合的 trusted identity
-  const baselineCohort = [...baseline.verifiedOutcomeDigests].join("+");
-  const proposalCohort = [...proposed.verifiedOutcomeDigests].join("+");
-  if (baselineCohort !== proposalCohort) throw new Error("CANARY_SAME_COHORT_REQUIRED");
-  if (cohortDigest !== baseline.verifiedOutcomeSetDigest) throw new Error("CANARY_COHORT_DIGEST_MISMATCH");
+  // SAME_COHORT_PROOF（outcome-independent）：两侧共享同一个 trusted CohortRef，且与两侧 evaluation 一致
+  if (!isVerifiedCohortRef(input?.cohortRef)) throw new Error('CANARY_COHORT_REF_NOT_VERIFIED');
+  const cohortRef = input.cohortRef as CohortRef;
+  if (cohortRef.datasetVersion !== baseline.datasetVersion) throw new Error('CANARY_COHORT_DATASET_MISMATCH');
+  if (cohortRef.evaluationWindow.from !== window.from || cohortRef.evaluationWindow.to !== window.to) {
+    throw new Error('CANARY_COHORT_WINDOW_MISMATCH');
+  }
+  if (cohortRef.cohortSize !== baseline.totalRecords || cohortRef.cohortSize !== proposed.totalRecords) {
+    throw new Error('CANARY_COHORT_SIZE_MISMATCH');
+  }
+  const cohortId = cohortRef.cohortId;
+  const cohortDigest = cohortRef.cohortRefDigest;
 
   const baselineMetrics = snapshotOf(baseline);
   const proposalMetrics = snapshotOf(proposed);
@@ -282,6 +372,7 @@ export function evaluateCanaryShadow(input: {
     baseline.datasetVersion,
     cohortId,
     cohortDigest,
+    cohortRef.taskRefs.join('+'),
     JSON.stringify({ ...baselineMetrics, byEvidenceQuality: baselineMetrics.byEvidenceQuality }),
     JSON.stringify({ ...proposalMetrics, byEvidenceQuality: proposalMetrics.byEvidenceQuality }),
     JSON.stringify(metricDeltas),

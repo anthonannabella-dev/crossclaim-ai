@@ -1,5 +1,5 @@
 /**
- * PHASE 5 U4 / U4 FINAL —— Canary / Shadow Evaluation（SHADOW_ONLY）
+ * PHASE 5 U4 FINAL2 —— Canary / Shadow（outcome-independent trusted cohort proof）
  */
 
 import { describe, expect, it } from 'vitest';
@@ -12,8 +12,8 @@ import {
   type ApproverIdentity,
 } from '../services/outcome-learning/candidate-approval';
 import {
-  CANARY_RECOMMENDATIONS,
   CANARY_SHADOW_BOUNDARY,
+  createCohortRef,
   evaluateCanaryShadow,
   isVerifiedCanaryShadowEvaluation,
 } from '../services/outcome-learning/canary-shadow-evaluation';
@@ -40,6 +40,8 @@ import {
 } from '../services/outcome-learning/rollback-plan';
 
 const DATASET = 'learning-dataset/v1';
+const WINDOW = { from: '2026-10-05T22:00:00.000Z', to: '2026-10-05T23:00:00.000Z' };
+const TASK_REFS = ['t0', 't1', 't2', 't3'];
 
 const record = (over: Record<string, unknown> = {}): OutcomeRecord => {
   const res = buildOutcomeRecord({
@@ -90,24 +92,21 @@ let nonce = 0;
 const schedule = () => ({
   requestedAt: '2026-10-05T20:00:00.000Z',
   expiresAt: '2026-10-06T20:00:00.000Z',
-  nonce: 'u4-nonce-' + (nonce += 1),
+  nonce: 'u4f2-nonce-' + (nonce += 1),
 });
 
 const evaluate = (records: readonly OutcomeRecord[]): Promise<OfflineEvaluationResult> =>
   evaluateVerifiedLearningRecords(trustedLineage(), records, { datasetVersion: DATASET });
 
-/** 同一 cohort 的确定性记录集（两侧必须消费同一批）。 */
-const cohort = (): OutcomeRecord[] => [
-  record({ taskType: 'ok-0' }),
-  record({ taskType: 'bad-0', finalOutcome: 'FAILURE', evidenceQuality: 'WEAK', rejectionReason: 'r0' }),
-  record({ taskType: 'bad-1', finalOutcome: 'FAILURE', evidenceQuality: 'WEAK', rejectionReason: 'r1' }),
-  record({ taskType: 'bad-2', finalOutcome: 'FAILURE', evidenceQuality: 'WEAK', rejectionReason: 'r2' }),
+const run = (successCount: number, failureCount: number, suffix: string): OutcomeRecord[] => [
+  ...Array.from({ length: successCount }, (_, i) => record({ taskType: 'ok-' + suffix + i })),
+  ...Array.from({ length: failureCount }, (_, i) =>
+    record({ taskType: 'bad-' + suffix + i, finalOutcome: 'FAILURE', evidenceQuality: 'WEAK', rejectionReason: 'r' + i }),
+  ),
 ];
 
-const unresolvedCohort = (): OutcomeRecord[] => [
-  record({ taskType: 'u-0', finalOutcome: 'UNKNOWN', humanIntervention: null }),
-  record({ taskType: 'u-1', finalOutcome: 'MANUAL_REVIEW', humanIntervention: null }),
-];
+const unresolvedRun = (): OutcomeRecord[] =>
+  Array.from({ length: 4 }, (_, i) => record({ taskType: 'u-' + i, finalOutcome: 'UNKNOWN', humanIntervention: null }));
 
 const proposalCtx = async () => {
   let stored: readonly RsiEvidenceRecord[] = [];
@@ -117,7 +116,7 @@ const proposalCtx = async () => {
       stored = [...next];
     },
   };
-  const records = cohort();
+  const records = run(1, 3, 'ctx');
   const evaluation = await evaluate(records);
   const ledger = createAppLearningEvidenceLedgerFromRsi(store);
   const appended = await appendVerifiedLearningEvidence(trustedLineage(), ledger, records, DATASET);
@@ -147,138 +146,150 @@ const proposalCtx = async () => {
   return { proposal, plan };
 };
 
-const window_ = () => ({ from: '2026-10-05T22:00:00.000Z', to: '2026-10-05T23:00:00.000Z' });
-
-const runOn = async (records: readonly OutcomeRecord[], over: Record<string, unknown> = {}) => {
-  const { proposal, plan } = await proposalCtx();
-  const baselineEvaluation = await evaluate(records);
-  const proposalEvaluation = await evaluate(records);
-  return evaluateCanaryShadow({
-    proposal,
-    rollbackPlan: plan,
-    baselineEvaluation,
-    proposalEvaluation,
+const cohortRef = (over: Record<string, unknown> = {}) =>
+  createCohortRef({
     cohortId: 'cohort-1',
-    cohortDigest: baselineEvaluation.verifiedOutcomeSetDigest,
-    evaluationWindow: window_(),
+    datasetVersion: DATASET,
+    evaluationWindow: WINDOW,
+    taskRefs: TASK_REFS,
     ...over,
   });
-};
 
-describe('PHASE 5 U4 FINAL —— canary / shadow evaluation（same cohort + full digest + strict window）', () => {
-  it('P5U4_1 同一 cohort 双轨 → ELIGIBLE，绑定 14 项且指标复用 Phase 4 semantics', async () => {
-    const records = cohort();
-    const result = await runOn(records);
-    const evaluation = await evaluate(records);
-    expect(result.kind).toBe('CANARY_SHADOW_EVALUATION');
-    expect(CANARY_SHADOW_BOUNDARY.binds).toHaveLength(14);
-    expect(result.datasetVersion).toBe(DATASET);
-    expect(result.cohortId).toBe('cohort-1');
-    expect(result.cohortDigest).toBe(evaluation.verifiedOutcomeSetDigest);
-    expect(result.baselineMetrics.successRate).toBe(evaluation.resolved.successRate);
-    expect(result.proposalMetrics.successRate).toBe(evaluation.resolved.successRate);
-    expect(CANARY_SHADOW_BOUNDARY.secondMetricSystem).toBe('FORBIDDEN');
+describe('PHASE 5 U4 FINAL2 —— outcome-independent cohort proof + full digest binding', () => {
+  it('P5U4_1 同一 cohort（outcome 无关）+ 不同 outcome/指标 → 允许且指标不被抹平', async () => {
+    const { proposal, plan } = await proposalCtx();
+    const baselineEvaluation = await evaluate(run(2, 2, 'base'));
+    const proposalEvaluation = await evaluate(run(3, 1, 'prop'));
+    const result = evaluateCanaryShadow({
+      proposal,
+      rollbackPlan: plan,
+      baselineEvaluation,
+      proposalEvaluation,
+      cohortRef: cohortRef(),
+      evaluationWindow: WINDOW,
+    });
+    expect(result.baselineMetrics.successRate).toBe(baselineEvaluation.resolved.successRate);
+    expect(result.proposalMetrics.successRate).toBe(proposalEvaluation.resolved.successRate);
+    expect(result.metricDeltas.successRateDelta).toBeCloseTo(0.25, 10);
     expect(result.triggers).toHaveLength(0);
-    expect(result.insufficientEvidence).toBe(false);
     expect(result.recommendation).toBe('ELIGIBLE_FOR_CONTROLLED_ADOPTION_REVIEW');
+    expect(result.cohortDigest).toBe(cohortRef().cohortRefDigest);
     expect(isVerifiedCanaryShadowEvaluation(result)).toBe(true);
+    expect(CANARY_SHADOW_BOUNDARY.sameCohortProof).toContain('OUTCOME_INDEPENDENT_TRUSTED_COHORT_REF');
   });
 
-  it('P5U4_2 SAME_COHORT_PROOF：两侧 verified outcome 集合不同 / cohortDigest 不是 trusted identity → REJECT', async () => {
+  it('P5U4_2 metric-delta 回滚重新可达：同 cohort、提案成功率下降 → ROLLBACK_REQUIRED', async () => {
     const { proposal, plan } = await proposalCtx();
-    const cohortEvaluation = await evaluate(cohort());
-    const otherEvaluation = await evaluate(unresolvedCohort());
-    expect(() =>
-      evaluateCanaryShadow({
-        proposal,
-        rollbackPlan: plan,
-        baselineEvaluation: cohortEvaluation,
-        proposalEvaluation: otherEvaluation,
-        cohortId: 'cohort-1',
-        cohortDigest: cohortEvaluation.verifiedOutcomeSetDigest,
-        evaluationWindow: window_(),
-      }),
-    ).toThrow(/CANARY_SAME_COHORT_REQUIRED/);
-    expect(() =>
-      evaluateCanaryShadow({
-        proposal,
-        rollbackPlan: plan,
-        baselineEvaluation: cohortEvaluation,
-        proposalEvaluation: cohortEvaluation,
-        cohortId: 'cohort-1',
-        cohortDigest: 'cohort:caller-declared-fake',
-        evaluationWindow: window_(),
-      }),
-    ).toThrow(/CANARY_COHORT_DIGEST_MISMATCH/);
-    expect(CANARY_SHADOW_BOUNDARY.sameCohortProof).toContain('SAME_VERIFIED_OUTCOME_SET');
+    const result = evaluateCanaryShadow({
+      proposal,
+      rollbackPlan: plan,
+      baselineEvaluation: await evaluate(run(2, 2, 'base')),
+      proposalEvaluation: await evaluate(run(1, 3, 'prop')),
+      cohortRef: cohortRef(),
+      evaluationWindow: WINDOW,
+    });
+    expect(result.triggers).toContain('SUCCESS_RATE_DROP');
+    expect(result.recommendation).toBe('ROLLBACK_REQUIRED');
+    expect(result.rollbackTarget.target).toBe('U2_BASELINE');
+    expect(result.rollbackTarget.baselineSnapshotDigest).toBe(plan.baselineSnapshotDigest);
+    expect(result.execution.apply).toBe('FORBIDDEN');
+    expect(result.execution.requiresControlledAdoptionReview).toBe(true);
   });
 
-  it('P5U4_3 EVALUATION_WINDOW_VALIDATION：非法日期字符串 / from >= to / 缺 window → REJECT', async () => {
+  it('P5U4_3 cohort 证明门：未 provenance 的 ref、规模不一致、window 不一致 → REJECT', async () => {
     const { proposal, plan } = await proposalCtx();
-    const evaluation = await evaluate(cohort());
+    const evaluation = await evaluate(run(2, 2, 'base'));
     const base = {
       proposal,
       rollbackPlan: plan,
       baselineEvaluation: evaluation,
       proposalEvaluation: evaluation,
-      cohortId: 'cohort-1',
-      cohortDigest: evaluation.verifiedOutcomeSetDigest,
+      evaluationWindow: WINDOW,
     };
-    expect(() => evaluateCanaryShadow({ ...base, evaluationWindow: { from: 'nope', to: 'nope' } })).toThrow(
-      /CANARY_EVALUATION_WINDOW_INVALID/,
+    expect(() => evaluateCanaryShadow({ ...base, cohortRef: { ...cohortRef() } as never })).toThrow(
+      /CANARY_COHORT_REF_NOT_VERIFIED/,
+    );
+    expect(() => evaluateCanaryShadow({ ...base, cohortRef: cohortRef({ taskRefs: ['t0', 't1', 't2'] }) })).toThrow(
+      /CANARY_COHORT_SIZE_MISMATCH/,
     );
     expect(() =>
-      evaluateCanaryShadow({ ...base, evaluationWindow: { from: '2026-10-05T23:00:00.000Z', to: '2026-10-05T22:00:00.000Z' } }),
-    ).toThrow(/CANARY_EVALUATION_WINDOW_INVALID/);
-    expect(() => evaluateCanaryShadow({ ...base, evaluationWindow: null })).toThrow(/CANARY_EVALUATION_WINDOW_REQUIRED/);
+      evaluateCanaryShadow({
+        ...base,
+        cohortRef: cohortRef({ evaluationWindow: { from: '2026-10-05T22:30:00.000Z', to: '2026-10-05T23:30:00.000Z' } }),
+      }),
+    ).toThrow(/CANARY_COHORT_WINDOW_MISMATCH/);
   });
 
-  it('P5U4_4 数据不足属于强制回滚条件：同 cohort 全未判定 → ROLLBACK_REQUIRED + insufficientEvidence', async () => {
-    const result = await runOn(unresolvedCohort());
+  it('P5U4_4 window / cohort ref 构造 fail-closed：非法日期、缺任务、缺 window → REJECT', async () => {
+    expect(() => cohortRef({ evaluationWindow: { from: 'nope', to: 'nope' } })).toThrow(/CANARY_EVALUATION_WINDOW_INVALID/);
+    expect(() => cohortRef({ evaluationWindow: null })).toThrow(/CANARY_EVALUATION_WINDOW_INVALID/);
+    expect(() => cohortRef({ taskRefs: [] })).toThrow(/CANARY_COHORT_TASKS_REQUIRED/);
+    expect(() => cohortRef({ cohortId: '   ' })).toThrow(/CANARY_COHORT_REQUIRED/);
+    const { proposal, plan } = await proposalCtx();
+    const evaluation = await evaluate(run(2, 2, 'base'));
+    expect(() =>
+      evaluateCanaryShadow({
+        proposal,
+        rollbackPlan: plan,
+        baselineEvaluation: evaluation,
+        proposalEvaluation: evaluation,
+        cohortRef: cohortRef(),
+        evaluationWindow: { from: '2026-10-05T23:00:00.000Z', to: '2026-10-05T22:00:00.000Z' },
+      }),
+    ).toThrow(/CANARY_EVALUATION_WINDOW_INVALID/);
+  });
+
+  it('P5U4_5 数据不足 → ROLLBACK_REQUIRED + insufficientEvidence（冻结规则）', async () => {
+    const { proposal, plan } = await proposalCtx();
+    const evaluation = await evaluate(unresolvedRun());
+    const result = evaluateCanaryShadow({
+      proposal,
+      rollbackPlan: plan,
+      baselineEvaluation: evaluation,
+      proposalEvaluation: evaluation,
+      cohortRef: cohortRef(),
+      evaluationWindow: WINDOW,
+    });
     expect(result.insufficientEvidence).toBe(true);
     expect(result.triggers).toContain('INSUFFICIENT_EVIDENCE');
     expect(result.recommendation).toBe('ROLLBACK_REQUIRED');
   });
 
-  it('P5U4_5 回滚锚点固定 U2 + 无自动采用：ROLLBACK/ELIGIBLE 都不含 AUTO_APPLY 语义', async () => {
-    const result = await runOn(unresolvedCohort());
-    expect(result.rollbackTarget.baselineSnapshotDigest.startsWith('baseline-snapshot:')).toBe(true);
-    expect(result.rollbackTarget.target).toBe('U2_BASELINE');
-    expect(CANARY_SHADOW_BOUNDARY.forbiddenRollbackTargets).toEqual(['LATEST', 'DEFAULT', 'CURRENT', 'HEAD']);
-    expect(result.execution).toEqual({
-      apply: 'FORBIDDEN',
-      promote: 'FORBIDDEN',
-      rollout: 'FORBIDDEN',
-      productionConfigMutation: 'FORBIDDEN',
-      requiresControlledAdoptionReview: true,
+  it('P5U4_6 evaluationDigest 全字段 + cohort identity 绑定：指标或 cohort 变化 → digest 变化', async () => {
+    const { proposal, plan } = await proposalCtx();
+    const baselineEvaluation = await evaluate(run(2, 2, 'base'));
+    const eligible = evaluateCanaryShadow({
+      proposal,
+      rollbackPlan: plan,
+      baselineEvaluation,
+      proposalEvaluation: await evaluate(run(3, 1, 'prop-a')),
+      cohortRef: cohortRef(),
+      evaluationWindow: WINDOW,
     });
-    expect(CANARY_RECOMMENDATIONS).toEqual([
-      'ELIGIBLE_FOR_CONTROLLED_ADOPTION_REVIEW',
-      'ROLLBACK_REQUIRED',
-      'INSUFFICIENT_EVIDENCE',
-    ]);
+    const differentMetrics = evaluateCanaryShadow({
+      proposal,
+      rollbackPlan: plan,
+      baselineEvaluation,
+      proposalEvaluation: await evaluate(run(1, 3, 'prop-b')),
+      cohortRef: cohortRef(),
+      evaluationWindow: WINDOW,
+    });
+    expect(eligible.evaluationDigest).not.toBe(differentMetrics.evaluationDigest);
+    const otherCohort = cohortRef({ taskRefs: ['x0', 'x1', 'x2', 'x3'] });
+    expect(otherCohort.cohortRefDigest).not.toBe(cohortRef().cohortRefDigest);
   });
 
-  it('P5U4_6 门与 provenance：clone proposal/plan/evaluation → REJECT；clone artifact / 原地篡改 → 不可信', async () => {
+  it('P5U4_7 provenance / anti-tamper / 无执行面', async () => {
     const { proposal, plan } = await proposalCtx();
-    const evaluation = await evaluate(cohort());
-    const base = {
+    const evaluation = await evaluate(run(2, 2, 'base'));
+    const result = evaluateCanaryShadow({
       proposal,
       rollbackPlan: plan,
       baselineEvaluation: evaluation,
       proposalEvaluation: evaluation,
-      cohortId: 'cohort-1',
-      cohortDigest: evaluation.verifiedOutcomeSetDigest,
-      evaluationWindow: window_(),
-    };
-    expect(() => evaluateCanaryShadow({ ...base, proposal: { ...proposal } as never })).toThrow(/CANARY_PROPOSAL_NOT_VERIFIED/);
-    expect(() => evaluateCanaryShadow({ ...base, rollbackPlan: { ...plan } as never })).toThrow(
-      /CANARY_ROLLBACK_PLAN_NOT_VERIFIED/,
-    );
-    expect(() => evaluateCanaryShadow({ ...base, baselineEvaluation: { ...evaluation } as never })).toThrow(
-      /CANARY_EVALUATION_NOT_VERIFIED/,
-    );
-    const result = evaluateCanaryShadow(base);
+      cohortRef: cohortRef(),
+      evaluationWindow: WINDOW,
+    });
     expect(isVerifiedCanaryShadowEvaluation({ ...result })).toBe(false);
     const attempt = (fn: () => void): boolean => {
       try {
@@ -288,24 +299,14 @@ describe('PHASE 5 U4 FINAL —— canary / shadow evaluation（same cohort + ful
         return false;
       }
     };
-    expect(attempt(() => { (result as unknown as { recommendation: string }).recommendation = 'ELIGIBLE_FOR_CONTROLLED_ADOPTION_REVIEW'; })).toBe(false);
+    expect(attempt(() => { (result as unknown as { recommendation: string }).recommendation = 'ROLLBACK_REQUIRED'; })).toBe(false);
     expect(attempt(() => { (result.execution as unknown as { apply: string }).apply = 'ALLOWED'; })).toBe(false);
     expect(isVerifiedCanaryShadowEvaluation(result)).toBe(true);
-  });
-
-  it('P5U4_7 无执行面：不导出 apply / promote / rollout / mutate 入口，Canary PASS 也不能上线', async () => {
     const mod = (await import('../services/outcome-learning/canary-shadow-evaluation')) as unknown as Record<string, unknown>;
     for (const key of ['applyEvaluation', 'promote', 'rollout', 'mutatePolicy', 'executeAdoption', 'autoApply']) {
       expect(mod[key]).toBeUndefined();
     }
     expect(CANARY_SHADOW_BOUNDARY.mode).toBe('SHADOW_ONLY');
-    expect(CANARY_SHADOW_BOUNDARY.productionConfigMutation).toBe('FORBIDDEN');
-    expect(CANARY_SHADOW_BOUNDARY.externalWrite).toBe(0);
-    expect(CANARY_SHADOW_BOUNDARY.payment).toBe(0);
-    expect(CANARY_SHADOW_BOUNDARY.realClaimSubmission).toBe(0);
-    expect(CANARY_SHADOW_BOUNDARY.actionRuntime).toBe('SIMULATE_ONLY');
-    expect(CANARY_SHADOW_BOUNDARY.autoPromote).toBe('FORBIDDEN');
-    expect(CANARY_SHADOW_BOUNDARY.autoRollout).toBe('FORBIDDEN');
     expect(CANARY_SHADOW_BOUNDARY.canaryPassStillCannotDeploy).toBe('CONTROLLED_ADOPTION_REVIEW_REQUIRED');
   });
 });
