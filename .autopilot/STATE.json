@@ -54,7 +54,7 @@
   "automation_status": "CONTINUOUS",
   "last_tick_at": "2026-10-06T08:30:00.000Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "STEP 3 FINAL-3 CHANGE B 落地（真实 shared Action Guard adapter）",
+  "last_action": "STEP 3 FINAL-3 送审包生成（REVIEWED_HEAD = 692726bf）",
   "last_action_at": "2026-10-06T08:30:00.000Z",
   "next_action": "C2 IMPLEMENTATION（Schema Delta + durable ledger/budget + PG 回归）",
   "current_head": "054ab732",
@@ -9354,10 +9354,10 @@
   "HEARTBEAT_INTERVAL_SECONDS": 60,
   "safe_continuation_queue_recomputed_at": "2026-10-06T07:30:00.000Z",
   "step3_runtime_policy_wiring": {
-    "status": "FINAL3_IMPLEMENTED_AWAITING_SUBMIT",
+    "status": "FINAL3_SUBMITTED_PENDING_VERDICT",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
     "implementation_head": "c0b61792",
-    "request": "docs/releases/SI-RUNTIME-STEP3-WIRING-REQUEST.md",
+    "request": "docs/releases/SI-RUNTIME-STEP3-FINAL3-REQUEST.md",
     "evidence": "docs/releases/SI-RUNTIME-STEP3-WIRING-EVIDENCE.md",
     "deliverables": [
       "runtime/rsi-domain-pack.ts（domain capability pack 合同 + 唯一派发层 + runtimeMembers）",
