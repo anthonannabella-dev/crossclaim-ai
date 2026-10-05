@@ -9,9 +9,9 @@
   "last_chatgpt_message": "MSG-20261005-39",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-06T06:30:00.000Z",
+  "updated_at": "2026-10-06T07:00:00.000Z",
   "previous_head": "8064f07",
-  "architect_decision_pending": false,
+  "architect_decision_pending": true,
   "blocked_scope": null,
   "last_send_head": "0c35106",
   "last_sent_at": "2026-10-03T09:07:52.875Z",
@@ -50,12 +50,12 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "ACTIVE",
-  "next_execution_unit": "C3 FINAL-3 narrow revision（1 durable Safe Mode → Model Gateway adapter wiring；2 trustworthy real-provider provenance）→ tsc / prisma / 真实 PG / regression → commit + push → C3 FINAL-3 Audit → PASS/CLOSED 则宣布 SI_COST_OPTIMIZATION = PASS / CLOSED 并 recompute SAFE_CONTINUATION_QUEUE",
+  "next_execution_unit": "读取 C3 FINAL-3 裁决 → 逐字归档（MSG-20261005-40）→ PASS/CLOSED 则宣布 SI_COST_OPTIMIZATION = PASS / CLOSED 并 recompute SAFE_CONTINUATION_QUEUE；REVISE 则最小集合窄修 → commit/push → 再送审",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-06T06:30:00.000Z",
+  "last_tick_at": "2026-10-06T07:00:00.000Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "C3 FINAL-2 裁决 = PASS WITH REVISE（MSG-20261005-39）：A/B/C = PASS；D = REVISE；另 durable Safe Mode 未接 Gateway → C3_FINAL3_REQUIRED",
-  "last_action_at": "2026-10-06T06:30:00.000Z",
+  "last_action": "C3 FINAL-3（A/B）完成并送审（实现 HEAD = 2b02ef8c）",
+  "last_action_at": "2026-10-06T07:00:00.000Z",
   "next_action": "C2 IMPLEMENTATION（Schema Delta + durable ledger/budget + PG 回归）",
   "current_head": "054ab732",
   "last_completed_head": "054ab732",
@@ -8851,7 +8851,7 @@
     "invariant": "ACTION_GUARD_DRY_RUN_ALLOW != EXECUTION_AUTHORIZATION；零审批消费 / 零 executor / 零业务事实写入 / 零外写；L5 永久拒绝"
   },
   "si_cost_optimization": {
-    "status": "C3_FINAL3_REQUIRED",
+    "status": "C3_FINAL3_SUBMITTED_PENDING_VERDICT",
     "priority": "P1",
     "dependency": "SI_RSI_UNIFICATION_PASS_CLOSED",
     "registered_at": "2026-10-05T12:45:00.000Z",
@@ -9300,6 +9300,15 @@
       "c3_final3_required": "YES",
       "c4_required": "NO",
       "archive": "AI-ARCHITECT-INBOX.md#MSG-20261005-39"
+    },
+    "c3_final3": {
+      "implementation_head": "2b02ef8c",
+      "request": "docs/releases/SI-COST-OPTIMIZATION-C3-FINAL3-REQUEST.md",
+      "changes": [
+        "A：durable Safe Mode → Model Gateway（async port + server-side adapter + fail-closed on resolver error；L0 不受影响）",
+        "B：trustworthy provenance（只认 server-owned trusted provider registry；缺省 ⇒ NOT_YET_MEASURABLE）"
+      ],
+      "tests": "tsc 0；si-cost-c3 25/25；si-cost-c3-db（真实 PG）19/19；回归 50 files / 465 tests PASS"
     }
   },
   "si_rsi_unification": {

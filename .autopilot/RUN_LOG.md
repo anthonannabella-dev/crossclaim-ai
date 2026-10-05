@@ -2651,3 +2651,9 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - D：observability 增加 provenance（NO_TRAFFIC / LOCAL_SIMULATION_ONLY / REAL_PROVIDER）；生产效率指标只在 REAL_PROVIDER 时输出，仅 local-sim 时一律 NOT_YET_MEASURABLE；保留 devSimulation 计数（明确不得当作生产指标）。
 - 验证：tsc exit 0；prisma validate valid（无 Schema/迁移变更）；si-cost-c3 = 23/23；si-cost-c3-db（真实 PostgreSQL）= 14/14；rsi-* + si-cost-* + architecture-contract = 50 files / 458 tests PASS。
 - NEXT_EXECUTION_UNIT = 读取 C3 FINAL-2 裁决 → 逐字归档（MSG-20261005-39）→ PASS/CLOSED 则宣布 SI_COST_OPTIMIZATION = PASS / CLOSED 并 recompute SAFE_CONTINUATION_QUEUE；REVISE 则最小集合窄修 → commit/push → 再送审。
+
+## 2026-10-06T07:00Z —— C3 FINAL-3 完成并送审（实现 HEAD = 2b02ef8c）
+- A：costSafeMode port 支持 async；Router 在 provider 调用前 await；新增 server-side adapter createAiCostSafeModeStandardAiPort（refs → resolveAiCostSafeMode → decideAiCostSafeModeAdmission）并接入 local-sim composition；resolver 抛错 → fail-closed（AI_COST_SAFE_MODE_RESOLVER_FAIL_CLOSED）；L0 路径在 Safe Mode 之前返回（port 不被调用）。
+- B：删除 provider 名称推断；provenance 只由 server-owned trustedRealProviders 判定；缺省 ⇒ LOCAL_SIMULATION_ONLY ⇒ 生产指标 NOT_YET_MEASURABLE。
+- 验证：tsc exit 0；prisma validate valid；si-cost-c3 = 25/25；si-cost-c3-db（真实 PostgreSQL）= 19/19；回归 50 files / 465 tests PASS。
+- NEXT_EXECUTION_UNIT = 读取 C3 FINAL-3 裁决 → 逐字归档（MSG-20261005-40）→ PASS/CLOSED 则宣布 SI_COST_OPTIMIZATION = PASS / CLOSED 并 recompute SAFE_CONTINUATION_QUEUE；REVISE 则最小集合窄修。
