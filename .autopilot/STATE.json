@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-40",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T22:44:36.131Z",
+  "updated_at": "2026-10-05T22:47:06.259Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -52,7 +52,7 @@
   "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
   "next_execution_unit": "PHASE 5 U4 FINAL4: read the NEXT/TEST sections of the archived verdict MSG-20261005-80 (AI-ARCHITECT-INBOX.md) for the exact member-level input-set binding requirements, implement them (likely: bind the exact cohort member identity list to each side Phase 4 evaluation, e.g. VerifiedCohortRun carrying memberRefs/memberSetDigest that the trusted composition derived from the same inputs the evaluation consumed, with canary requiring member-level equality across sides), keep both evaluationDigest bindings, re-run tests/regression/tsc, commit, push, audit, archive (MSG-20261005-81), durable state. Boundaries unchanged.",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-05T22:44:36.131Z",
+  "last_tick_at": "2026-10-05T22:47:06.259Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
   "last_action": "PHASE 5 U4 FINAL3 verdict archived (MSG-20261005-80, FULL_COPY_OK, archive commit d232e7c0): CANARY_EVALUATION_DIGEST_FULL_BINDING / VERIFIED_COHORT_RUN_PROVENANCE / RUN_SIDE_BINDING / RUN_EVALUATION_DIGEST_BINDING = PASS; SAME_COHORT_PROOF / EXACT_INPUT_SET_TO_EVALUATION_BINDING = REVISE; PHASE5_U4_FINAL4_REQUIRED = YES. Details in the archived verdict NEXT/TEST sections.",
   "last_action_at": "2026-10-05T22:40:34.332Z",
@@ -5169,8 +5169,8 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "P5U4F4-1 read MSG-20261005-80 NEXT/TEST for exact U4 FINAL4 requirements; implement member-level input-set <-> evaluation binding",
-    "P5U4F4-2 tests + regression + tsc + commit + push",
+    "P5U4F4-1 (exact spec from MSG-20261005-80) U4 FINAL4 = server-owned exact run-member binding: add CohortRunSourcePort.read({cohortRef, side}) -> [{taskRef, outcomeRecord}]; change factory to async createVerifiedCohortRun(runSource, trustedLineageLedger, cohortRef, side) which (1) reads actual members, (2) extracts actualTaskRefs, sorts+uniques, (3) requires actualTaskRefs === cohortRef.taskRefs else CANARY_RUN_INPUT_SET_MISMATCH, (4) internally calls evaluateVerifiedLearningRecords(trustedLineageLedger, actualRecords) to produce the Phase 4 evaluation, (5) wraps exact input set + internally produced evaluation into VerifiedCohortRun (inputSetDigest derives from actualTaskRefs, evaluationDigest from the internally produced evaluation). Callers must no longer pass arbitrary evaluations.",
+    "P5U4F4-2 U4 FINAL4 tests: [A,B,C,D] source + matching ref PASS; shuffled order PASS (canonical); [A,B,C,X] size 4 REJECT; [E,F,G,H] size 4 REJECT; missing REJECT; extra REJECT; duplicate REJECT; same taskRefs both sides with different outcomes PASS (success-rate improvement visible); regression -> ROLLBACK_REQUIRED; cloned run REJECT; existing baseline/proposal evaluationDigest binding tests stay green; then regression + tsc + commit + push + audit + archive (MSG-20261005-81) + durable state",
     "P5U4F4-3 audit U4 FINAL4 -> archive (MSG-20261005-81) -> compare FULL_COPY_OK -> durable state",
     "P5U4F4-4 then Controlled Adoption Review per auditor NEXT",
     "P5U4F4-5 non-blocking debt: full SHA-256 digests, fingerprint schema upkeep, scanRawPayloadKeys bounded traversal, P2E-DB5 test-isolation"
@@ -9323,7 +9323,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-05T22:44:36.131Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-05T22:47:06.259Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
