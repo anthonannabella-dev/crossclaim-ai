@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-40",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T23:40:46.567Z",
+  "updated_at": "2026-10-05T23:43:08.404Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -52,7 +52,7 @@
   "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
   "next_execution_unit": "PHASE 6 U1 Controlled Adoption Plan / PLAN_ONLY: read the NEXT/TEST sections of archived verdict MSG-20261005-84 for the exact minimum requirements; implement a plan-only contract (no apply/execute/rollout, no config mutation; likely binds review verdict + proposal + rollback plan + canary digests and produces an APPROVED_FOR_CONTROLLED_ADOPTION_PLANNING-scoped plan artifact with provenance/fingerprint/deep-freeze); keep every HOLD/FORBIDDEN boundary; then audit + archive (MSG-20261005-85) + durable state.",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-05T23:40:46.567Z",
+  "last_tick_at": "2026-10-05T23:43:08.404Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
   "last_action": "PHASE 5 CLOSURE verdict archived (MSG-20261005-84, FULL_COPY_OK, archive commit ab993ea5): PHASE_5_CLOSURE_CHECKPOINT / DOCS_CLOSURE_REGISTRY / U1_U5_FINAL_HEAD_REGISTRY / PHASE5_BOUNDARY_FREEZE = PASS; PHASE_5_CONTROLLED_LEARNING_ADOPTION = PASS / CLOSED; PHASE_5 = FORMALLY CLOSED; PHASE5_FUNCTIONAL_REVISION_REQUIRED = NO, PHASE5_CLOSURE_REVISION_REQUIRED = NO. Authorized next: PHASE 6 U1 Controlled Adoption Plan / PLAN_ONLY (no real config execution).",
   "last_action_at": "2026-10-05T23:24:28.898Z",
@@ -5169,9 +5169,9 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "P6U1-1 read MSG-20261005-84 NEXT/TEST for PHASE 6 U1 Controlled Adoption Plan (PLAN_ONLY) minimum gate",
-    "P6U1-2 implement plan-only contract + tests + regression + tsc + commit + push",
-    "P6U1-3 audit -> archive (MSG-20261005-85) -> compare FULL_COPY_OK -> durable state",
+    "P6U1-1 implement controlled-adoption-plan.ts (PLAN_ONLY) per MSG-20261005-84 NEXT: verified APPROVED review verdict with APPROVED_FOR_CONTROLLED_ADOPTION_PLANNING gate; rebind verdict/canary/proposal/candidate/rollback/baseline digests + target + exact allowed path + trusted from + schema-valid to (reuse U3 target allowlist + value schema and the trusted baseline value binding); emit CONTROLLED_ADOPTION_PLAN artifact with the 14 bindings + provenance/fingerprint/deep-freeze; semantics READY_FOR_CONTROLLED_EXECUTION_GATE_REVIEW; apply/execute/promote/rollout/configMutation FORBIDDEN; no execution exports",
+    "P6U1-2 tests: gate matrix (non-verified/clone verdict, REJECTED outcome, wrong semantics, mismatched canary/proposal/rollback/baseline digests, path outside allowlist, to outside schema, from not equal to trusted baseline value), plan artifact bindings, provenance/anti-tamper, no execution entries, and the stale-baseline gate helper (live fingerprint !== expected -> STALE_BASELINE) + regression + tsc + commit + push",
+    "P6U1-3 audit P6-U1 -> archive (MSG-20261005-85) -> compare FULL_COPY_OK -> durable state",
     "P6U1-4 non-blocking debt: full SHA-256 digests, fingerprint schema upkeep, scanRawPayloadKeys bounded traversal, P2E-DB5 test-isolation"
   ],
   "full_autonomous_internal_execution": "VERIFIED",
@@ -9322,7 +9322,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-05T23:40:46.567Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-05T23:43:08.404Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -11013,5 +11013,37 @@
       "PHASE_5_CONTROLLED_LEARNING_ADOPTION = PASS / CLOSED"
     ],
     "authorized_next": "PHASE 6 U1 Controlled Adoption Plan / PLAN_ONLY（暂不授权真实配置执行）"
+  },
+  "phase6_u1_spec": {
+    "source": "MSG-20261005-84 NEXT",
+    "entryGate": [
+      "isVerifiedControlledAdoptionReviewVerdict(verdict) === true",
+      "verdict.outcome === APPROVED",
+      "verdict.semantics === APPROVED_FOR_CONTROLLED_ADOPTION_PLANNING"
+    ],
+    "rebind": [
+      "adoptionReviewVerdictDigest",
+      "canaryEvaluationDigest",
+      "proposalDigest",
+      "candidateDigest",
+      "rollbackPlanDigest",
+      "baselineSnapshotDigest",
+      "baselineConfigFingerprint",
+      "target",
+      "exact allowed path",
+      "trusted from",
+      "schema-valid to"
+    ],
+    "artifact": "CONTROLLED_ADOPTION_PLAN binding planDigest/reviewVerdictDigest/proposalDigest/canaryEvaluationDigest/rollbackPlanDigest/target/path/from/to/expectedBaselineSnapshotDigest/expectedBaselineConfigFingerprint/rollbackTarget/createdAt/expiresAt + provenance + canonical fingerprint + deep-freeze",
+    "boundary": [
+      "apply FORBIDDEN",
+      "execute FORBIDDEN",
+      "promote FORBIDDEN",
+      "rollout FORBIDDEN",
+      "configMutation FORBIDDEN"
+    ],
+    "semantics": "READY_FOR_CONTROLLED_EXECUTION_GATE_REVIEW only (never APPLIED/DEPLOYED/ACTIVE)",
+    "staleBaselineGate": "plan pins baselineSnapshotDigest + baselineConfigFingerprint; before any future execution the live fingerprint must equal the planned expected fingerprint else STALE_BASELINE -> FAIL_CLOSED",
+    "next": "P6-U2 Controlled Adoption Execution Gate only after U1 CLOSED and separately authorized (and it should still be an execution-authorization contract, not direct production apply)"
   }
 }
