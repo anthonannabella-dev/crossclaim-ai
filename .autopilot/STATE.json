@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "a8601a81",
+  "head": "fee3ea4d",
   "status": "RECONCILED",
   "current_task": "RSI 生产可执行闭环（7 点收口）：RSI_RUNTIME_READY = PASS；MODEL_PROVIDER_READY = 本地仿真已接线（真实网络/付费 HOLD）；PERSISTENCE_READY = ephemeral 已验证、durable 需宿主非生产 DATABASE_URL；REBOOT_RECONCILE_READY = NOT_IMPLEMENTED（下一单元）；SYSTEMD_VALIDATED = 需宿主 Linux 实机",
   "next_task": "BG-016 单一 Acceptance Head + 四份状态一致 guard（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍 HOST_ACTION_REQUIRED 或 HOLD",
@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-40",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T18:10:43.751Z",
+  "updated_at": "2026-10-05T18:13:59.579Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -50,14 +50,14 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
-  "next_execution_unit": "PHASE 3 FINAL2（窄修，仅 2 项）：(1) U5/U6 —— 消除 Action Guard instance-injection：产品 Action Runtime 组装点不得直接接受 RuntimeActionGuard 实例；改为接受 AppActionGuardDeps 并在内部经唯一 createAppActionGuard() 构造（factory provenance / WeakSet 判定，与 PHASE 2 的 local-sim provenance 同法）；caller 自写 fake RuntimeActionGuard（恒返回 ALLOW）必须 REJECT；正式 shared guard composition 必须 PASS。(2) U2 —— raw-key 拒绝补全：当前正则 /^(sk|pk|Bearer)\\s|^[A-Za-z0-9_-]{24,}$/ 漏掉 sk-abc123；必须明确拒绝 sk-... / sk_... / pk-... / pk_... / Bearer ...（含空格与短串），只接受明确 opaque namespace（vault: 等）的 ref。附带口径修正：U3 只能记 EXACTLY_ONCE_CONTRACT/SANDBOX = PASS，不得记 PRODUCTION_DURABLE_EXACTLY_ONCE = PASS（当前仅 in-memory，无 PostgreSQL/Prisma 原子实现；ACTION_RUNTIME_PRODUCTION_ENABLED 保持 false）。完成后：targeted → regression → tsc → commit → push → 送 PHASE 3 FINAL2 → 送达三检 → 逐字归档 → FULL_COPY_OK → durable state。",
+  "next_execution_unit": "PHASE 3 FINAL2 续做（务必先解决 fixture，避免再次留下红树）：第一步：找到 createAppActionGuard({ config: staticControlPlaneConfig(...), killSwitchResolver, audit }) 能对 'evidence.read'（READ_ONLY）与 'claim.submit'（EXTERNAL_WRITE，需 platformEnablement+productionGate+humanApproval）返回 ALLOW 的配置组合；已知约束：killSwitchResolver 必须返回严格形状 { scope, value: \"disabled\", degraded: false, stale: false }（缺字段会被判 degraded → DENY）；ControlPlaneConfig 字段 = globalDisabled / mode(READ_ONLY|DRY_RUN|MANUAL_REVIEW|WRITE_ENABLED) / productionGate / platformEnabled / tenantFeatureEnabled / hostApprovalGranted；建议直接参照既有已 PASS 的 action-guard-enforcement.test.ts 的 satisfied fixture 与 control-plane capability source 的判定顺序（writeEnabled 如何派生）。第二步：重放 work/p3f2-patch.mjs（U5/U6 guard provenance：只接受 AppActionGuardDeps，内部经唯一 createAppActionGuard 构造，fake guard 不被接受；U2 raw-key 补全：sk-/sk_/pk-/pk_/Bearer 明确拒绝，只接受 vault: 等显式 opaque namespace）。第三步：targeted → regression → tsc → commit → push → 送 PHASE 3 FINAL2 → 送达三检 → 逐字归档 → FULL_COPY_OK → durable state。",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-05T18:10:43.751Z",
+  "last_tick_at": "2026-10-05T18:13:59.579Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "PHASE 3 FINAL 裁决已读取并原样逐字归档（MSG-20261005-52，compare.mjs = FULL_COPY_OK 100/100 行），push a8601a81。裁决：U1 trusted provenance = PASS；U3 idempotency fingerprint + async port = PASS（sandbox/contract scope）；U4 = PASS；enforcement 07 = PASS；U2 credential binding = REVISE；U5/U6 Shared Guard = REVISE；PHASE_3_ACTION_RUNTIME = PASS WITH REVISE / NOT CLOSED；PHASE3_FINAL2_REQUIRED = YES；Reviewed HEAD 6cba0639。",
-  "last_action_at": "2026-10-05T18:10:43.751Z",
-  "next_action": "PHASE 3 FINAL2 —— 只做 2 项窄修",
-  "current_head": "a8601a81",
+  "last_action": "PHASE 3 FINAL2 实施中：2 项窄修的代码补丁已完成且 tsc = 0（guard provenance + raw-key 拒绝补全），但 action-pack-runtime.test.ts 的 app-guard fixture 仍未取得 ALLOW（4 例失败），为避免留下红树已回退工作区到 fee3ea4d；补丁脚本保留在 work/p3f2-patch.mjs（+ p3f2-fix-fixture.mjs / p3f2-mode.mjs），可原样重放。",
+  "last_action_at": "2026-10-05T18:13:59.579Z",
+  "next_action": "PHASE 3 FINAL2（续）—— 先解决 app-guard fixture 得到 ALLOW，再重放补丁并收口",
+  "current_head": "fee3ea4d",
   "last_completed_head": "6cba0639",
   "reviewed_head": "add99ec3",
   "claim_submit_batch": {
@@ -5169,10 +5169,10 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "P3F2-1 U5/U6 消除 guard instance-injection（AppActionGuardDeps → 内部 createAppActionGuard；fake guard REJECT；正式 composition PASS）",
-    "P3F2-2 U2 raw-key 拒绝补全（sk-/sk_/pk-/pk_/Bearer 明确拒绝；只接受 vault: 等 opaque namespace）",
-    "P3F2-3 保持既有 green：fingerprint conflict / concurrent winner / approval verifier 绑定 / external-write HOLD / enforcement 07 7/7",
-    "P3F2-4 tsc + regression + commit/push + PHASE 3 FINAL2 送审 + 逐字归档 + compare.mjs + durable state"
+    "P3F2-1（续）解决 createAppActionGuard fixture → ALLOW（参照 enforcement 测试的 satisfied fixture / capability source 判定）",
+    "P3F2-2 重放 work/p3f2-patch.mjs（guard provenance + raw-key 拒绝补全）并跑 tsc + targeted",
+    "P3F2-3 regression（93 files 基线 943 tests）+ commit + push",
+    "P3F2-4 送 PHASE 3 FINAL2 → 送达三检 → 逐字归档 MSG-20261005-53 → compare.mjs FULL_COPY_OK → durable state"
   ],
   "full_autonomous_internal_execution": "VERIFIED",
   "dispatcher_acceptance": {
@@ -9322,7 +9322,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-05T18:10:43.751Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-05T18:13:59.579Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -9601,5 +9601,20 @@
     "out_of_scope": [
       "P2E-DB5（test-isolation debt）不在 PHASE 3 范围"
     ]
+  },
+  "phase3_final2_progress": {
+    "status": "IN_PROGRESS（工作区已回退到 fee3ea4d，无半成品提交）",
+    "code_patches_ready": [
+      "runtime-guard-composition.ts: APP_ACTION_GUARDS WeakSet + isAppActionGuard()（factory provenance）",
+      "action-pack-runtime.ts: guardDeps: AppActionGuardDeps（禁止注入 guard 实例）+ ACTION_PACK_ACTION_GUARD_DEPS_REQUIRED / _PROVENANCE_REQUIRED",
+      "provider-execution-guard.ts: RAW_KEY_PATTERNS（sk-/sk_/pk-/pk_/Bearer/长随机）+ OPAQUE_REF_NAMESPACE 强制"
+    ],
+    "blocked_on": "action-pack-runtime.test.ts 的 app-guard fixture 尚未得到 ALLOW（4 例失败）；tsc 已 0",
+    "reproducible_scripts": [
+      "work/p3f2-patch.mjs",
+      "work/p3f2-fix-fixture.mjs",
+      "work/p3f2-mode.mjs"
+    ],
+    "accuracy_note": "U3 只能记 EXACTLY_ONCE_CONTRACT/SANDBOX = PASS；不得记 PRODUCTION_DURABLE_EXACTLY_ONCE = PASS"
   }
 }
