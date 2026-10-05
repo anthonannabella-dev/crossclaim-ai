@@ -2152,3 +2152,10 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 最小 FINAL-2 证据 6 条（F2-01..06）全部覆盖：3×2 actions → cohort 3 无信号；双域样本隔离；ref/dedupeKey/reasonCode 编码被拒；篡改 plan 后入口零调用；actor 错配 DB read = 0；输出身份不符被拒。
 - 测试：recovery-si-phase2-ab 19/19 + Phase 1 回归 22/22 = 41/41 PASS；tsc exit 0。
 - 边界：P2-C/P2-D/P2-E/P2-F/P2-G 未授权；RUNTIME_WIRING=NONE；SCHEMA_DELTA_REQUIRED=NO；外部能力全 HOLD；FINAL_ACCEPTANCE_HEAD = 0f7f7ac。
+
+## 2026-10-05T05:12:51.934Z — Recovery SI Phase 2 A/B FINAL-2 送审（REVIEWED_HEAD c04c3c43）
+- 耐久记录：docs/releases/RECOVERY-SI-PHASE2-AB-FINAL2-REQUEST.md（真实代码送审 SHA = c04c3c43）。
+- scope：只修 A1（unique cohort）/ A2（domain-bound samples + 输出封套收紧）/ B1（入口内重新 verify）/ B2（actor tenant + output identity），并补 6 条针对性负例。
+- 证据：docs/releases/RECOVERY-SI-PHASE2-AB-EVIDENCE.md §7（F2-01..06 对照表）；41/41 PASS（19 新例 + 22 Phase 1 回归）、tsc exit 0。
+- 未授权：P2-C PREPARE / P2-D Action Guard handoff / P2-E Schema Delta / P2-F 模型 / P2-G 真实执行；RUNTIME_WIRING = NONE；SCHEMA_DELTA_REQUIRED = NO。
+- 送达验证后立即读取并逐字归档裁决（FNV + FULL_COPY_OK），不等待下一次 heartbeat。
