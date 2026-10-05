@@ -2075,3 +2075,16 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
   OWNER 200（含 `executionKey` 与四个永久 HOLD 字段）；未知 fact / 跨租户 404。
 - 边界确认：该路由只做**内部触发**，不 filing、不外写（与 C18 的 External Write = HOLD 一致）；real provider 仍 HOLD。
 - 结论：BG-012 的「HTTP 内部触发接线」已存在且受 401/403/租户边界保护 → 状态陈旧 → **CLOSED**（无需新的架构审计）。
+
+## 2026-10-05T03:44:23.447Z — BG-010 PS04 Phase 1 独立站/拒付内部只读链复核（P1，BG-011 裁决后解除依赖）
+- 套件实测（apps/api 本地，退出码 0）：**7 文件 / 54 例全绿** —— `payment-activation-readiness`(17)、
+  `payment-activation-readiness-http-db`(5)、`payment-conflict-map`(9)、`payment-admin-http-db`、`chargeback-recovery-chain`(8)、
+  `evidence-promotion`(6)、`evidence-account-scope-db`(3)。
+- 支付激活门（实测）：默认**全冻结** —— currentState 全冻结、`activationReady=false`、provider gate=false、`productionCredentials` 未就位；
+  授权边界 未认证 401 / VIEWER 403 / OWNER 200；webhook secret 由 env 派生、商业接受由 DB 派生，且**一个 fact 不影响无关 fact**；
+  Action Guard / Kill Switch 由注入与真实 resolver 派生。
+- 支付运维端点（实测）：重放原因缺失或不在白名单 → 400 `INVALID_INPUT` 且**零写入**；事件缺 paymentId 上下文 → 409 `PAYMENT_CONTEXT_REQUIRED`
+  （**不猜金额**）；OWNER 合法重放 → 200（attempt#2 成功、账单 ISSUED→PAID、审计齐全）；到期重试 → 200 且 limit 越界被夹取。
+- 拒付/证据链：`chargeback-recovery-chain` 8 例、`evidence-promotion` 6 例、`evidence-account-scope-db` 3 例（account provenance 服务端派生，
+  缺上下文/未绑账户 → `PLATFORM_ACCOUNT_REQUIRED`，多账户或 NULL → fail-closed）与 BG-018 的独立站事实层证据一致。
+- 结论：BG-010 验收标准满足（事实可追溯、lineage 完整、零外调/零 submission、recovered/billable 不自证）；边界 `NO_DISPUTE_SUBMIT / NO_EXTERNAL_PSP` 保持。
