@@ -162,6 +162,10 @@ describe('模型清单一致性（C-0002 CHANGE #1）', () => {
     // CA-4 REVISE D（MSG-20261004-06 批准）：受控状态机 + append-only 事件历史
     'CustomsBrokerAuthorizationSession',
     'CustomsBrokerAuthorizationSessionEvent',
+    // SI-COST-OPTIMIZATION C2（MSG-20261005-33 授权）：AI 成本账本 / 分级预算配置 / 模型缓存
+    'AiCostLedgerEntry',
+    'AiBudgetPolicy',
+    'AiModelCacheEntry',
   ];
   const JOIN_MODELS = [
     'CaseEvidence',
@@ -176,7 +180,7 @@ describe('模型清单一致性（C-0002 CHANGE #1）', () => {
 
 
   it(`核心模型恰好 ${CORE.length} 个`, () => {
-    expect(CORE).toHaveLength(73);
+    expect(CORE).toHaveLength(76);
     for (const name of CORE) expect(modelBlock(name), `缺少核心模型 ${name}`).not.toBe('');
   });
 
@@ -184,8 +188,8 @@ describe('模型清单一致性（C-0002 CHANGE #1）', () => {
     for (const name of JOIN_MODELS) expect(modelBlock(name), `缺少联结模型 ${name}`).not.toBe('');
   });
 
-  it('模型总数为 93（79 core + 6 join + 8 RSI 平台级）—— 与 README/DOMAIN_MODEL 表述一致', () => {
-    expect(modelNames()).toHaveLength(93);
+  it('模型总数为 96（82 core + 6 join + 8 RSI 平台级）—— 与 README/DOMAIN_MODEL 表述一致', () => {
+    expect(modelNames()).toHaveLength(96);
   });
 });
 

@@ -3396,3 +3396,87 @@ model AutonomyLease {
 
   @@index([status, expiresAt])
 }
+
+// ============================================================
+// SI-COST-OPTIMIZATION C2（MSG-20261005-33 授权）
+// AI 成本账本（append-only 事实）/ 分级预算配置（durable；usage 不落库）/ 模型缓存（受控 TTL）
+// ============================================================
+
+enum AiBudgetScope {
+  PLATFORM
+  ORGANIZATION
+  ACCOUNT
+  INCIDENT
+  TASK
+}
+
+/// AI 成本事实（append-only）：只记录身份/计数/成本/结果；禁止 raw prompt / 模型输出 / 凭据 / 客户敏感 payload
+model AiCostLedgerEntry {
+  id             String   @id @default(uuid())
+  /// 幂等调用身份（同一逻辑调用恒定；重复写入不产生第二条事实）
+  callId         String
+  incidentId     String?
+  taskId         String?
+  organizationId String?
+  accountId      String?
+  provider       String
+  model          String
+  executionLevel String
+  taskType       String
+  inputTokens    Int      @default(0)
+  outputTokens   Int      @default(0)
+  /// 整数微单位（1 USD = 1_000_000 micros；避免浮点误差）
+  costMicros     Int      @default(0)
+  latencyMs      Int      @default(0)
+  result         String
+  attemptNo      Int      @default(1)
+  createdAt      DateTime @default(now())
+
+  @@unique([callId])
+  @@index([organizationId, createdAt])
+  @@index([incidentId, createdAt])
+  @@index([taskId, createdAt])
+}
+
+/// 分级预算**配置**（durable）：PLATFORM → ORGANIZATION → ACCOUNT → INCIDENT/TASK；子级只能收紧
+/// 注意：usage 不在此表（AiBudgetUsage = FORBIDDEN）；用量永远由 AiCostLedgerEntry 聚合
+model AiBudgetPolicy {
+  id                     String        @id @default(uuid())
+  scope                  AiBudgetScope
+  /// PLATFORM='*'；其余为对应实体 id
+  scopeRef               String
+  /// ORGANIZATION/ACCOUNT/INCIDENT/TASK 时必填（PLATFORM 为 null）
+  organizationId         String?
+  dailyLimitMicros       Int?
+  monthlyLimitMicros     Int?
+  perIncidentLimitMicros Int?
+  strongCallLimit        Int?
+  tokenLimit             Int?
+  concurrencyLimit       Int?
+  createdAt              DateTime      @default(now())
+  updatedAt              DateTime      @updatedAt
+
+  @@unique([scope, scopeRef])
+  @@index([organizationId])
+}
+
+/// 确定性模型缓存（可丢弃派生数据；受控 TTL/GC；**非** append-only）
+/// identity 列不可原地改写；organizationId='' 表示 platform 级（保证唯一键确定性）
+model AiModelCacheEntry {
+  id             String    @id @default(uuid())
+  taskType       String
+  promptDigest   String
+  inputDigest    String
+  ruleVersion    String
+  schemaVersion  String
+  capabilityTier String
+  organizationId String    @default("")
+  resultDigest   String
+  createdAt      DateTime  @default(now())
+  expiresAt      DateTime
+  lastServedAt   DateTime?
+
+  @@unique([taskType, promptDigest, inputDigest, ruleVersion, schemaVersion, capabilityTier, organizationId])
+  @@index([organizationId, expiresAt])
+  @@index([expiresAt])
+}
