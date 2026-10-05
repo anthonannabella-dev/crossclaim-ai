@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261004-16",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T03:25:15.494Z",
+  "updated_at": "2026-10-05T03:27:10.467Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -49,7 +49,7 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-05T03:25:15.494Z",
+  "last_tick_at": "2026-10-05T03:27:10.467Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
   "last_action": "INDEPENDENT FINAL AUDIT = PASS（MSG-20261003-147）；三元闭环成立，内部代码开发阶段正式完成",
   "last_action_at": "2026-10-03T14:17:18.723Z",
@@ -5164,7 +5164,7 @@
   "runner_status": "RUNNING",
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
-  "safe_continuation_queue": "NOT_EMPTY（BG-015 / BG-018 / BG-011 审计送审 / 其余无外部依赖项）",
+  "safe_continuation_queue": "NOT_EMPTY（BG-011 审计送审 + CI 归并 + 其它无外部依赖项）",
   "full_autonomous_internal_execution": "VERIFIED",
   "dispatcher_acceptance": {
     "at": "2026-10-03T14:47:59.226Z",
@@ -5189,9 +5189,9 @@
   "awaiting_verdict": "EXACT-ORDER REPLAY 证据已送审（comment 5979262070）；shared/staging deploy 解禁待裁决",
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-05T03:25:26.102Z",
-    "head": "e97c4e6",
-    "acceptance_head": "e97c4e6",
+    "computed_at": "2026-10-05T03:27:18.596Z",
+    "head": "f269920",
+    "acceptance_head": "f269920",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5342,48 +5342,48 @@
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=e97c4e6 ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
+        "evidence": "acceptance_head=f269920 ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
       },
       "L1-05_pg_regression_passed": {
         "status": "UNVERIFIED",
-        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head e97c4e6（且中间存在非簿记变更）"
+        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head f269920（且中间存在非簿记变更）"
       },
       "L1-06_fresh_db_migration_passed": {
         "status": "UNVERIFIED",
-        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head e97c4e6（且中间存在非簿记变更）"
+        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head f269920（且中间存在非簿记变更）"
       },
       "L1-07_api_typecheck_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head e97c4e6（且中间存在非簿记变更）"
+        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head f269920（且中间存在非簿记变更）"
       },
       "L1-08_web_typecheck_build_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head e97c4e6（且中间存在非簿记变更）"
+        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head f269920（且中间存在非簿记变更）"
       },
       "L1-09_no_skipped_critical_tests": {
         "status": "UNVERIFIED",
-        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head e97c4e6（且中间存在非簿记变更）"
+        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head f269920（且中间存在非簿记变更）"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
         "status": false,
-        "evidence": "dirty entries: 3"
+        "evidence": "dirty entries: 2"
       },
       "L1-11_docs_state_consistent": {
         "status": "UNVERIFIED",
-        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head e97c4e6（且中间存在非簿记变更）"
+        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head f269920（且中间存在非簿记变更）"
       },
       "L1-12_schema_invariants_verified": {
         "status": "UNVERIFIED",
-        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head e97c4e6（且中间存在非簿记变更）"
+        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head f269920（且中间存在非簿记变更）"
       },
       "L1-13_negative_paths_covered": {
         "status": "UNVERIFIED",
-        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head e97c4e6（且中间存在非簿记变更）"
+        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head f269920（且中间存在非簿记变更）"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
         "status": "UNVERIFIED",
-        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head e97c4e6（且中间存在非簿记变更）"
+        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head f269920（且中间存在非簿记变更）"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
@@ -6331,7 +6331,7 @@
       "API.md / DOMAIN_MODEL.md / architecture-contract 计数 77 → 79"
     ]
   },
-  "next_execution_unit": "BG-015 Enterprise IOR 全链装配（fail-closed 零外写）→ BG-018 独立站内部闭环 → BG-011 架构审计送审后继续其它 SAFE 项。",
+  "next_execution_unit": "BG-011 PS04 枚举迁移：生成架构审计请求并唤醒右侧审计会话（Lane B），送审后立即回到 Lane A 继续其它 SAFE 项；随后消费 BG-003/004/007/008/014/015/018 的 CI 结论。",
   "customer_ui_commercialization": {
     "at": "2026-10-04T01:21:55.949Z",
     "authorization": "MSG-20261004-01（CUSTOMER UI/UX COMMERCIALIZATION — IMPLEMENTATION AUTHORIZED）",
@@ -7377,13 +7377,13 @@
     "seo3_progress": "CHANGE A/B validator added (86f4289), engine output validation added (eb99c53), validator wired into runPublicSeoChecker (8bf49da), HTTP boundary guard added (4f2cd20); HTTP entry still not registered"
   },
   "CURRENT_HEAD": "ecdae39",
-  "LAST_COMPLETED_UNIT": "BG-014 Enterprise IOR readiness 接入既有 Qualification 复核：4 文件 / 43 例全绿（复用既有 Gate、只读投影不重算、403/400/404 边界）；同时按 CI 归并把 BG-003/BG-004 翻 COMPLETED，并持久化新的调度模式。",
-  "NEXT_EXECUTION_UNIT": "BG-015 Enterprise IOR 全链装配（fail-closed 零外写）→ BG-018 独立站内部闭环 → BG-011 架构审计送审后继续其它 SAFE 项。",
+  "LAST_COMPLETED_UNIT": "BG-015 IOR 全链装配复核（9 文件 / 74 例；autoSubmitAllowed 恒 false、少缴方向 NOT_READY、跨租户 FACT_NOT_FOUND、401/403/200/404）+ BG-018 独立站内部闭环复核（6 文件 / 34 例；WON≠到账、VERIFIED+evidence 才五态成立、append-only、DB CHECK 强制 externalWritePerformed/autoSubmitAllowed=false）。",
+  "NEXT_EXECUTION_UNIT": "BG-011 PS04 枚举迁移：生成架构审计请求并唤醒右侧审计会话（Lane B），送审后立即回到 Lane A 继续其它 SAFE 项；随后消费 BG-003/004/007/008/014/015/018 的 CI 结论。",
   "CI_STATUS": "BG-003（a893b7f run 37258444599）与 BG-004（d439453 run 37258553265）= completed_success → 已翻 COMPLETED；BG-007（69e9d7f）、BG-008（e97c4e6）、BG-014（本批）在跑，落地即批量翻转",
   "WAITING_FOR_VERDICT": "none —— MSG-20261005-09（RSI Model Router → Provider Adapter 设计 = PASS WITH REVISE）已逐字归档（FNV e1740a41 / 178 行 / FULL_COPY_OK）；真实 Provider 那一轮才需要新的窄审计，本轮不需要。",
   "HOST_ACTION_REQUIRED": "①非生产 DATABASE_URL（无真实客户数据）→ RSI staging smoke + migration apply + reboot/reconcile 与 exactly-once 实机验证；②Linux 主机（或指定 CI runner）→ systemd Test A/B/C/D/E/F；③真实 Provider 接入需要宿主注册/申请账号、接受第三方协议、提供 Client ID/Secret 与 POA 等（当前全部 HOLD）；④gh auth login（可选，仅恢复 issue comment 通道）。",
   "HOLD_EXTERNAL": "RSI_MODEL_NETWORK = HOLD / RSI_PAID_MODEL_CALLS = HOLD / REAL_PROVIDER_ADAPTER = OUT_OF_PROCESS_REQUIRED（sidecar 未实现）/ EXTERNAL_WRITE = HOLD / PAYMENT = HOLD / TRANSPORT = HOLD / PRODUCTION_CREDENTIALS = HOLD / PRODUCTION_PUBLIC_CHECKER = HOLD",
-  "LAST_HEARTBEAT_AT": "2026-10-05T03:25:15.494Z",
+  "LAST_HEARTBEAT_AT": "2026-10-05T03:27:10.467Z",
   "ci_red_streak_note": "RESOLVED: three contract/inventory fixes (tenant-trigger whitelist 1b15ab7, append-only whitelist cc13bde, model inventory 82->85 4f02282); 4f02282 is the first green run after the streak.",
   "ci_contract_fix_local_verification": {
     "at": "2026-10-04T08:51:16.135Z",
@@ -8028,12 +8028,10 @@
   "scheduling_mode_doc": "docs/releases/AUTOPILOT-SCHEDULING-MODE.md",
   "continue_required": true,
   "lane_a": {
-    "current": "BG-014-evidence-done",
+    "current": "BG-015/BG-018 evidence done",
     "queue": [
-      "BG-015-ior-full-chain-assembly",
-      "BG-018-independent-site-internal-closure",
-      "BG-010-ps04-phase1-readonly-chain(BLOCKED_BY_BG-011)",
-      "BG-011-ps04-enum-migration(AUDIT_PENDING)"
+      "BG-011-audit-request(Lane B submit)",
+      "其它无外部依赖 backlog"
     ]
   },
   "lane_b": {
@@ -8051,6 +8049,28 @@
     "suites": "4 files / 43 tests PASS（本地）",
     "reuse": "IOR readiness 走既有 Qualification/Economics Gate；platform-qualification-read 只读不重算",
     "boundary": "VIEWER 403 / 空 ID 400 / 未知账户 404 / 跨租户 404",
+    "evidence": "RUN_LOG.md",
+    "status": "IMPLEMENTED_PENDING_CI"
+  },
+  "bg015": {
+    "at": "2026-10-05T03:27:10.467Z",
+    "suites": "9 files / 74 tests PASS（本地）",
+    "auto_submit_allowed": "false（代码级 readonly，非运行时开关）",
+    "invariants": [
+      "任一环节不明确→NOT_READY",
+      "少缴方向→estimate 空",
+      "跨租户 FACT_NOT_FOUND",
+      "IOR 事实 DB 不变量（POA VERIFIED 需 evidence、iorRights 三态）"
+    ],
+    "evidence": "RUN_LOG.md",
+    "status": "IMPLEMENTED_PENDING_CI"
+  },
+  "bg018": {
+    "at": "2026-10-05T03:27:10.467Z",
+    "suites": "6 files / 34 tests PASS（本地）",
+    "won_not_settled": "WON 不等于到账；UNVERIFIED 不算 recovered",
+    "append_only": "UPDATE/DELETE 拒绝；DB CHECK 强制 autoSubmitAllowed=false",
+    "convergence": "与 chargeback-recovery-flow 同源，无第二套规则",
     "evidence": "RUN_LOG.md",
     "status": "IMPLEMENTED_PENDING_CI"
   }

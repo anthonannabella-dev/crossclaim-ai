@@ -2020,3 +2020,28 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
   （status/reasonCodes/policy/computedAt）**原样返回、只读不重算**」，INDETERMINATE / NOT_QUALIFIED 原样展示（不美化）；
   RBAC/参数/租户边界：VIEWER 403、空 ID 400、未知账户 404、跨租户 404。
 - 边界：本批未改任何代码；真实 IOR 材料/POA 仍属 HOST_ACTION_REQUIRED。
+
+## 2026-10-05T03:27:10.467Z — BG-015 Enterprise IOR 全链装配复核（P1，内部可做）
+- 套件实测（apps/api 本地，退出码 0）：**9 文件 / 74 例全绿** —— `enterprise-ior-layer`(16)、`customs-ior-facts-db`、
+  `customs-recovery-chain-service-db`(4)、`customs-recovery-chain-http`(4)、`customs-recovery-chain-http-e2e-db`(4)、
+  `customs-claim-ready-package`(8)、`customs-broker-authorization-session`(10)/`-db`、`customs-sandbox-filing-provider`(9)。
+- `autoSubmitAllowed` 全文核对：`apps/api/src/services/customs/enterprise-ior/ior-recovery-chain.ts` 声明
+  `readonly autoSubmitAllowed: false` 且模块注释明确「不调用任何外部系统」——**恒 false，不是运行时开关**。
+- 全链语义（实测）：READY package + 四类投影各 append 一条；重算（更晚 computedAt）→ 追加历史、旧投影仍在、latest 指向新记录；
+  少缴方向 → package NOT_READY 且估算为空；事实不存在/跨租户 → `FACT_NOT_FOUND`（不泄漏存在性）；
+  IOR 事实层 DB 不变量：Broker POA `VERIFIED` 必须带 evidence 且 source ≠ NONE、scope/过期窗口非法即拒绝、`iorRights` 仅三态（自由文本拒绝）、org 隔离；
+  HTTP：未认证 401 / FINANCE·VIEWER 403（不得触发重算）/ OWNER 200（含 executionKey 与四个永久 HOLD 字段）/ 未知或跨租户 404。
+- 结论：BG-015 验收标准满足（任一环节不明确 → 对应 stage 不 READY、`claimPackageReady=false`、`autoSubmitAllowed=false`）；未改代码。
+
+## 2026-10-05T03:27:10.467Z — BG-018 Independent-site 内部闭环复核（P1，内部可做）
+- 套件实测（apps/api 本地，退出码 0）：**6 文件 / 34 例全绿** —— `independent-site-internal-closure`、`chargeback-recovery-chain`(8)、
+  `independent-site-facts-db`(8)、`independent-site-state-read`、`ps04-phase1-projection`(3)、`independent-site-phase1-runtime-http-e2e-db`(1)。
+- 「WON ≠ 到账」实测：仅 handoff → `submitted=true`，其余四态全 false；WON 但无 VERIFIED settlement → `won=true` 而 settled/recovered/billable 仍 false；
+  UNVERIFIED settlement 不算 recovered；只有 VERIFIED + evidence + amount>0 且已 WON 才五态同时为 true（15% 费用与发票草稿成立）；
+  判定与 `chargeback-recovery-flow` 同源收敛（**不产生第二套规则**）。
+- 事实层 DB 不变量（实测）：并发不同 executionKey → exactly one root；同 executionKey 重放或二次提交 → 唯一约束拒绝；
+  跨租户 lineage 一律拒绝；**append-only（UPDATE/DELETE 拒绝）**；凭据防线（PAN-like / 纯数字账号 / 自由文本 secret → DB CHECK 拒绝）；
+  response source 白名单与负金额拒绝；settlement `VERIFIED` 必须带 evidence 且 amount>0；corrected 事实追加历史（latest 由 observedAt/id 推导）。
+- Phase 1 投影：同 resultDigest 幂等 append；`externalWritePerformed` / `autoSubmitAllowed` 由 **DB CHECK 强制为 false**；
+  真实 HTTP E2E 跑一次 Phase 1 → 投影自动产生、state 返回 `phase1 != null` 且 `notPersisted=[]`。
+- 结论：BG-018 验收标准满足；未改代码，`NO_DISPUTE_SUBMIT / NO_EXTERNAL_PSP` 保持。
