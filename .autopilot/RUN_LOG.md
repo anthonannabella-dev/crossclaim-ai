@@ -2290,3 +2290,9 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 已确认必修 1：P2_E_GUARD_ACTION = claim.prepare（不得用 P2-D claim.submit ALLOW 作为写入前提）；链路 = fresh state → canonical READY alignment → verified P2-C preview/facts → trusted ProductionControlPlane → evaluate(claim.prepare) → ALLOW → persistence transaction。
 - 待读正文：必修 2（事务原子性）、必修 3（lineage 表述）与第 ②③④⑤ 条裁定；未读到前不开始实现。
 - 边界不变：P2_E = HOLD_SCHEMA_DELTA / P2_F = HOLD / P2_G = HOLD；FINAL_ACCEPTANCE_HEAD = 0f7f7ac。
+
+## 2026-10-05T07:55Z — Recovery SI P2-E 设计裁决 = PASS WITH REVISE（MSG-20261005-22 归档）
+- 归档方式：ChatGPT 原生「复制」按钮导出 markdown 原文（此前 createElement/Blob/Range 与 has-text locator 均不可用；getByRole + 剪贴板为可行路径）。
+- 裁决：P2_E_V1_OPTION = A；P2_E_OPTION_A = AUTHORIZED_WITH_CONDITIONS；P2_E_OPTION_B = NOT_AUTHORIZED；REVIEWED_HEAD = 48e6e2a3。
+- 必修：①入口门禁改为 canonical READY + trusted claim.prepare Guard ALLOW（不得用 P2-D claim.submit ALLOW）；②package / artifact / FileAsset / audit 必须收进单一事务；③lineage 表述修订；④补 RecoveryPackage 的 DB DELETE guard。
+- 完成后送 P2-E Implementation Audit；不得进入 P2-F / P2-G。SCHEMA_DELTA 以裁决正文为准（本行不臆测）。

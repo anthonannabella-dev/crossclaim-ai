@@ -80,7 +80,9 @@ if (!inbox.endsWith('\n')) inbox += '\n';
 if (inbox.includes(msgId)) {
   console.log('ARCHIVE_ALREADY_PRESENT ' + msgId + '（跳过追加，仍将运行比对）');
 } else {
-  const fence = '```';
+  // 外层围栏必须长于正文内最长的反引号串，否则 markdown 原文里的 ``` 会提前闭合围栏。
+  const longestRun = (verdict.match(/`+/g) ?? ['']).reduce((m, s) => Math.max(m, s.length), 0);
+  const fence = '`'.repeat(Math.max(3, longestRun + 1));
   inbox = inbox.replace(/\n+$/, '\n') + `\n${heading}\n\n${fence}text\n${verdict}\n${fence}\n`;
   fs.writeFileSync(INBOX, inbox, 'utf8');
   console.log('ARCHIVED ' + msgId + '（' + verdict.split('\n').length + ' 行）');

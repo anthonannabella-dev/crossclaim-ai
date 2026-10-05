@@ -141678,3 +141678,839 @@ FINAL_ACCEPTANCE_HEAD = 0f7f7ac
 
 结论：P2-D v1 dry-run 到这里可以正式 PASS / CLOSED，不用 FINAL-3。若继续开发，下一阶段不能直接执行，应另行选择并送审 P2-E、P2-F 或 P2-G；真实执行必须走 P2-G 独立架构审计。
 ```
+
+### [MSG-20261005-22] Recovery SI P2-E 持久化设计/实施边界 — VERDICT = PASS WITH REVISE（Option A 授权；必修：入口门禁改 claim.prepare + 收进单一事务 + lineage 表述 + RecoveryPackage DB DELETE guard）
+
+````text
+**ARCHITECT VERDICT：PASS WITH REVISE（批准 P2-E v1 采用 Option A，但必须修正入口门禁、事务原子性与 lineage 表述）**
+
+我按 **REVIEWED_HEAD = `48e6e2a38faaa5e5fdda41fd5db0e262ec5c7e45`** 重新审了 P2-E 设计，并独立核了现有 `RecoveryPackage` schema、持久化服务、tenant/append-only triggers 与 `claim.prepare`。没有使用上一轮缓存。
+
+### ① P2-E v1：选择 Option A
+
+正式裁定：
+
+```text
+P2_E_V1_OPTION = A
+P2_E_OPTION_A = AUTHORIZED_WITH_CONDITIONS
+P2_E_OPTION_B = NOT_AUTHORIZED
+```
+
+不应再建第二套 SI package 表。
+
+现有仓库已经有：
+
+```text
+RecoveryPackage
+RecoveryPackageArtifact
+FileAsset
+AuditLog
+```
+
+以及：
+
+```text
+UNIQUE (
+  organizationId,
+  claimItemId,
+  packageVersion,
+  packageDigest
+)
+
+UNIQUE (
+  organizationId,
+  packageId,
+  artifactKind,
+  sha256
+)
+```
+
+tenant trigger、artifact append-only trigger、RecoveryPackage controlled-mutation trigger也都已经存在。
+
+所以新建另一套表只会产生：
+
+```text
+双写
+双 lineage
+迁移
+状态同步
+```
+
+没有合理收益。
+
+---
+
+# 但设计里的入口门禁必须改
+
+当前写的是：
+
+```text
+只有 P2-D ALLOW
+→ 才允许 P2-E 写入
+```
+
+**这个不能批准。**
+
+因为 P2-D 的 READY dry-run 对 PLATFORM/CARRIER/INDEPENDENT_SITE 使用的是：
+
+```text
+claim.submit
+```
+
+而真实 Control Plane 下：
+
+```text
+claim.submit
++ 无 approvalId
+→ REQUIRE_APPROVAL
+```
+
+这是 P2-D 刚刚验证通过的正确行为。
+
+如果 P2-E 要求：
+
+```text
+P2-D claim.submit = ALLOW
+```
+
+那么包的内部持久化反而必须先取得“真实提交审批”，把内部 preparation 错绑到了 external submission 门上。
+
+### P2-E 正确入口
+
+应改成：
+
+```text
+fresh state
+→ canonical READY alignment
+→ verified P2-C package preview / deterministic facts
+→ trusted ProductionControlPlane
+→ evaluate claim.prepare
+→ ALLOW
+→ persistence transaction
+```
+
+也就是：
+
+```text
+P2_E_GUARD_ACTION = claim.prepare
+```
+
+而不是：
+
+```text
+P2_E_GUARD_ACTION = claim.submit
+```
+
+同时：
+
+```text
+P2_D_DRY_RUN_RESULT
+```
+
+可以作为审计参考，但**不能作为 P2-E 写权限本身**。
+
+更稳妥的是 P2-E 在写边界内部再次：
+
+```text
+prioritize
+→ planRecovery
+→ canonical READY alignment
+```
+
+不要信任上一步传进来的 `ALLOW` 快照。
+
+正式冻结：
+
+```text
+P2_D_CLAIM_SUBMIT_ALLOW_AS_P2E_WRITE_AUTHORITY = FORBIDDEN
+
+P2_E_CANONICAL_READY_RECHECK = REQUIRED
+P2_E_CLAIM_PREPARE_GUARD = REQUIRED
+TRUSTED_CONTROL_PLANE = REQUIRED
+SI_SELF_SUPPLIED_CAPABILITIES = FORBIDDEN
+```
+
+---
+
+# ② `claim.prepare` Claim DRAFT mutation：不纳入 P2-E v1
+
+你问的第一项，我裁定：
+
+```text
+CLAIM_PREPARE_DRAFT_MUTATION = OUT_OF_SCOPE
+```
+
+P2-E v1 只允许：
+
+```text
+RecoveryPackage
+RecoveryPackageArtifact
+FileAsset
+AuditLog
+```
+
+不要顺手调用：
+
+```text
+prepareClaimDraft()
+```
+
+因为它会：
+
+- 创建或 UPDATE `Claim`;
+- 写 `aiDraftText`;
+- 有独立案件锁、Claim 行锁、RBAC/CAS；
+- 是另一套业务生命周期。
+
+P2-E 本轮目标只是：
+
+> 把已经验证完成的 deterministic recovery package 持久化。
+
+不是：
+
+> 顺便改 Claim 工作流。
+
+所以两者继续解耦。
+
+---
+
+# ③ OWNER approval：创建 package 不需要
+
+裁定：
+
+```text
+P2_E_PACKAGE_CREATE_OWNER_APPROVAL_REQUIRED = NO
+```
+
+原因是它仍是：
+
+```text
+INTERNAL_WRITE
+```
+
+不是 submission、payment、filing 或 provider write。
+
+现有 Action Guard 也已经明确：
+
+```text
+claim.prepare
+risk = INTERNAL_WRITE
+humanApproval = not required
+```
+
+但“不需要 OWNER approval”不等于无门禁。
+
+必须满足：
+
+```text
+canonical READY
+tenant binding
+claim.prepare Guard ALLOW
+trusted Control Plane
+kill switch
+tenant feature
+active write mode for INTERNAL_WRITE
+```
+
+---
+
+## 但 SUPERSEDED / WITHDRAWN 要更严格
+
+P2-E v1 **不要让 SI 自动做 terminal lifecycle transition**。
+
+建议：
+
+```text
+PACKAGE_CREATE = system/internal allowed
+
+SUPERSEDED
+WITHDRAWN
+= explicit OWNER/ADMIN action only
+```
+
+同时要求：
+
+```text
+claim.prepare Guard ALLOW
++
+active OWNER/ADMIN identity
++
+reason required
++
+CAS
+```
+
+但这里不需要建立新的 HITL `approvalId` 消费机制。
+
+所以：
+
+```text
+PACKAGE_TERMINAL_TRANSITION_HITL_APPROVAL_ID = NOT_REQUIRED
+PACKAGE_TERMINAL_TRANSITION_OWNER_OR_ADMIN_ACTOR = REQUIRED
+```
+
+系统 reconcile 可以：
+
+```text
+propose supersede
+```
+
+不能：
+
+```text
+automatically supersede
+```
+
+至少 v1 如此。
+
+---
+
+# ④ 幂等键：现有 package key 正确，不要增加 approvalId unique
+
+Package 身份继续：
+
+```text
+organizationId
++ claimItemId
++ packageVersion
++ packageDigest
+```
+
+正确。
+
+```text
+planDigest
+```
+
+只是 lineage，不是 package identity。
+
+所以：
+
+```text
+PACKAGE_IDEMPOTENCY_KEY =
+(orgId, claimItemId, packageVersion, packageDigest)
+
+PLAN_DIGEST_AS_PACKAGE_IDENTITY = NO
+```
+
+也**不要**新增：
+
+```text
+UNIQUE (organizationId, approvalId)
+```
+
+到 RecoveryPackage。
+
+原因是 P2-E 根本不应接收或消费 submission approval。
+
+`(organizationId, approvalId)` 的唯一性属于现有：
+
+```text
+RecoveryManualSubmission
+```
+
+以及未来 P2-G 的真实执行语义。
+
+正式：
+
+```text
+P2_E_APPROVAL_ID = NOT_PART_OF_IDEMPOTENCY
+P2_E_APPROVAL_CONSUMPTION = FORBIDDEN
+```
+
+---
+
+# ⑤ 当前 `persistPackageArtifacts()` 不能直接原样作为最终 P2-E transaction
+
+这是实现时必须修的一处。
+
+现在现有代码大致是：
+
+```text
+FileAsset.create
+→ RecoveryPackageArtifact.create
+
+FileAsset.create
+→ RecoveryPackageArtifact.create
+```
+
+而且没有覆盖整个“两份 artifacts”的统一 transaction。
+
+并发时虽然 Artifact 有 unique constraint，但：
+
+```text
+FileAsset
+```
+
+本身没有：
+
+```text
+UNIQUE(storageKey)
+UNIQUE(sha256)
+```
+
+所以如果直接复用当前函数，不能强证明：
+
+> loser transaction 不留下孤儿 FileAsset。
+
+### P2-E v1 必须建立一个原子事务边界
+
+建议：
+
+```text
+BEGIN
+
+advisory xact lock(package-idempotency-key)
+
+re-read tenant + canonical source/basis
+
+find/create RecoveryPackage
+
+ensure JSON FileAsset + Artifact
+ensure PDF FileAsset + Artifact
+
+write lineage AuditLog
+
+COMMIT
+```
+
+所有：
+
+```text
+RecoveryPackage
+FileAsset
+RecoveryPackageArtifact
+AuditLog
+```
+
+必须在**同一个 PostgreSQL transaction**。
+
+若任一步失败：
+
+```text
+ROLLBACK ALL
+```
+
+这样才能真正满足：
+
+```text
+NO_ORPHAN_FILE_ASSET = TRUE
+NO_PARTIAL_ARTIFACT_SET = TRUE
+```
+
+不要采用：
+
+```text
+先 generateRecoveryPackage()
+commit
+再 persistPackageArtifacts()
+```
+
+作为 P2-E 的最终 exactly-once 路径。
+
+---
+
+# ⑥ append-only 定义需要精确修正
+
+不能说：
+
+```text
+RecoveryPackage 全表 append-only
+```
+
+因为仓库事实不是这样。
+
+当前 DB 已经明确：
+
+```text
+RecoveryPackageArtifact
+= true append-only
+
+RecoveryPackage
+= immutable core
+  + controlled lifecycle mutation
+```
+
+RecoveryPackage 允许修改：
+
+```text
+status
+supersededByPackageId
+transitionReason
+transitionActorUserId
+updatedAt
+```
+
+其它核心字段 DB trigger 拒绝。
+
+所以正式定义：
+
+```text
+RecoveryPackage =
+IMMUTABLE_CORE + CONTROLLED_CAS_LIFECYCLE
+
+RecoveryPackageArtifact =
+APPEND_ONLY
+```
+
+这是正确语义。
+
+---
+
+## 但还发现一个 DB 小洞：RecoveryPackage DELETE 没有数据库 guard
+
+现有：
+
+```text
+cc_recoverypackage_controlled_mutation
+```
+
+是：
+
+```text
+BEFORE UPDATE
+```
+
+不是：
+
+```text
+BEFORE UPDATE OR DELETE
+```
+
+所以如果 P2E-04 要求：
+
+> no delete 有 DB-level 双证据
+
+当前数据库还不能证明 `RecoveryPackage DELETE` 被硬拒绝。
+
+因此我授权一个**极窄 trigger-only migration**：
+
+```text
+RecoveryPackage BEFORE DELETE → reject
+```
+
+例如单独：
+
+```text
+cc_delete_forbidden__RecoveryPackage
+```
+
+并登记到：
+
+```text
+tools/tenant-triggers/append-only-triggers.json
+```
+
+这不是新表/新列。
+
+因此：
+
+```text
+NEW_TABLE = NO
+NEW_COLUMN = NO
+PRISMA_MODEL_DELTA = NO
+
+TRIGGER_ONLY_MIGRATION = REQUIRED
+```
+
+`required-triggers.json` 已经包含 RecoveryPackage / Artifact / FileAsset 的 tenant triggers，不需要重复新增；但 fresh/upgrade DB 都必须验证。
+
+---
+
+# ⑦ lineage：Option A v1 只能承诺 Audit lineage，不能声称 RecoveryPlan 已落库
+
+这是第二个需要收紧的表述。
+
+现有 `RecoveryPackage` 没有：
+
+```text
+planDigest
+decisionEvidenceId
+recoveryPlanId
+```
+
+仓库里也没有可直接复用的 RecoveryPlan / DecisionEvidence 持久化实体。
+
+所以在**零新列/零新表**的 Option A 下，v1 正确做法是：
+
+同一 transaction 写一个白名单 `AuditLog`：
+
+```text
+action = recovery.si_package_persisted
+
+changes = {
+  planDigestVersion,
+  planDigest,
+  basisVersion,
+  opportunityRef,
+  domain,
+  packageId,
+  packageDigest,
+  packageVersion
+}
+```
+
+这样可以做到：
+
+```text
+package
+→ audit lineage
+→ planDigest / execution basis
+```
+
+但不能说：
+
+```text
+RecoveryPlan entity persisted = yes
+DecisionEvidence entity persisted = yes
+```
+
+所以正式拆开：
+
+```text
+P2_E_V1_AUDIT_LINEAGE = AUTHORIZED
+RECOVERY_PLAN_ENTITY_PERSISTENCE = NOT_IMPLEMENTED
+DECISION_EVIDENCE_ENTITY_PERSISTENCE = NOT_IMPLEMENTED
+```
+
+如果以后真要持久化完整 RecoveryPlan / DecisionEvidence，再单独做 Schema Delta。
+
+---
+
+# ⑧ manifest/digest “原样落库”可以，但必须重新验证
+
+设计中的：
+
+> pure functions 产出的 manifest 与 digest 原样落库，不重新计算
+
+需要改成：
+
+> **不允许第二套计算算法，但写入边界必须重新验证 canonical digest。**
+
+即：
+
+```text
+P2-C preview
+→ validatePreparedRecoveryPackagePreview()
+→ computePackageDigest(manifest) == preview.packageDigest
+→ canonicalJson == serializeCanonicalManifest(manifest)
+→ pdfDigest verification
+→ persist
+```
+
+这是 re-validation，不是重新发明 money/package truth。
+
+正式：
+
+```text
+ALTERNATE_PACKAGE_CALCULATION = FORBIDDEN
+DETERMINISTIC_REVALIDATION_BEFORE_WRITE = REQUIRED
+```
+
+---
+
+# ⑨ 写失败语义：不要使用 NEEDS_MANUAL 作为普通 DB 失败终态
+
+本阶段没有 provider side effect。
+
+因此数据库失败的正确行为是：
+
+```text
+transaction failure
+→ rollback
+→ explicit error
+→ safe retry using same package identity
+```
+
+如果客户端在 COMMIT 时断线导致“不知道是否 commit”：
+
+```text
+read back by unique package key
+→ package + required artifacts complete
+   => return existing success
+→ not found
+   => retry
+```
+
+不应因为普通数据库超时就生成：
+
+```text
+NEEDS_MANUAL
+```
+
+`NEEDS_MANUAL` 更适合：
+
+```text
+unknown provider response
+external side effect uncertainty
+```
+
+本阶段没有这些。
+
+仅当检测到**历史数据不变量已经坏掉**，比如：
+
+```text
+package exists
+but artifact set is irreparably inconsistent
+```
+
+才可以：
+
+```text
+PERSISTENCE_INVARIANT_BROKEN
+→ fail closed
+→ operator repair
+```
+
+但不要新增业务状态枚举。
+
+---
+
+# ⑩ P2E-01..10：基本够，但需要改写三项
+
+建议最终验收：
+
+```text
+P2E-01
+canonical READY 不成立
+或 claim.prepare trusted Control Plane != ALLOW
+→ zero writes
+
+P2E-02
+tenant / actor-org / ClaimItem / package / FileAsset lineage 任一跨租户
+→ zero writes / DB reject
+
+P2E-03
+same package key sequential + concurrent replay
+→ exactly 1 RecoveryPackage
+→ exactly 1 JSON artifact
+→ exactly 1 PDF artifact
+→ no orphan FileAsset
+→ one complete transaction
+
+P2E-04
+RecoveryPackage immutable core DB trigger
++ RecoveryPackage DELETE DB reject
++ RecoveryPackageArtifact UPDATE/DELETE reject
+
+P2E-05
+package → AuditLog → planDigestVersion / planDigest / execution basis
+可反查
+但不得声称完整 RecoveryPlan entity persisted
+
+P2E-06
+Claim submission
+CustomsSubmissionAttempt
+PlatformWriteAttempt
+Payment
+Settlement
+RecoveryLedger
+Billing
+RecoveryManualSubmission
+= 0
+
+P2E-07
+provider/network = 0
+credential read = 0
+
+P2E-08
+package creation does not auto-supersede
+OWNER/ADMIN explicit SUPERSEDED/WITHDRAWN
+合法 CAS pass
+非法/terminal rollback rejected
+
+P2E-09
+real PostgreSQL:
+fresh migrate deploy
+upgrade migrate deploy
+prisma validate
+tenant trigger inventory
+append-only trigger inventory
+new RecoveryPackage DELETE trigger present
+
+P2E-10
+transaction failure → full rollback
+ambiguous commit → unique-key read-back/retry
+no partial package/artifact/file/audit
+no ordinary NEEDS_MANUAL
+```
+
+这 10 条已经够，不需要再加 P2E-11。
+
+---
+
+# 最终设计授权
+
+```text
+RECOVERY_SI_P2_E_DESIGN = PASS_WITH_REVISE
+
+OPTION_A = APPROVED
+OPTION_B = NOT_AUTHORIZED
+
+RecoveryPackage = REUSE
+RecoveryPackageArtifact = REUSE
+FileAsset = REUSE
+AuditLog = REUSE
+
+CLAIM_DRAFT_MUTATION = OUT_OF_SCOPE
+
+PACKAGE_CREATE_OWNER_APPROVAL = NOT_REQUIRED
+TERMINAL_LIFECYCLE_OWNER_OR_ADMIN = REQUIRED
+
+P2_E_GUARD_ACTION = claim.prepare
+P2_D_claim.submit_ALLOW_AS_WRITE_AUTHORITY = FORBIDDEN
+
+P2_E_APPROVAL_ID = NOT_USED
+P2_E_APPROVAL_CONSUMPTION = FORBIDDEN
+
+PACKAGE_IDENTITY =
+organizationId
++ claimItemId
++ packageVersion
++ packageDigest
+
+PLAN_DIGEST = LINEAGE_ONLY
+```
+
+数据库：
+
+```text
+NEW_TABLE = NO
+NEW_COLUMN = NO
+PRISMA_MODEL_DELTA = NO
+
+TRIGGER_ONLY_MIGRATION = REQUIRED
+RecoveryPackage DELETE = FORBIDDEN_AT_DB
+```
+
+原子性：
+
+```text
+PACKAGE
++ FILE_ASSETS
++ ARTIFACTS
++ LINEAGE_AUDIT
+= ONE_DB_TRANSACTION
+```
+
+后续仍然：
+
+```text
+P2_F = HOLD
+P2_G = HOLD
+
+EXTERNAL_WRITE = HOLD
+PAYMENT = HOLD
+TRANSPORT = HOLD
+PRODUCTION_CREDENTIALS = HOLD
+REAL_CLAIM_SUBMIT = HOLD
+CUSTOMS_FILING = HOLD
+
+EXECUTOR_INVOCATION = FORBIDDEN
+EXTERNAL_ACTION = FORBIDDEN
+
+FINAL_ACCEPTANCE_HEAD = 0f7f7ac
+```
+
+**结论：Codex 可以按 Option A 实施 P2-E，但先把设计中的“P2-D claim.submit ALLOW 才可写”改为“canonical READY + trusted `claim.prepare` Guard ALLOW”；所有 package/artifact/FileAsset/audit 必须收进一个事务，并补 RecoveryPackage 的 DB DELETE guard。完成后送 P2-E Implementation Audit；不得进入 P2-F/P2-G。**
+````

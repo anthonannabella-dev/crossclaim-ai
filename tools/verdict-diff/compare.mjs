@@ -51,10 +51,12 @@ function readArchiveBody(archivePath, selector) {
   if (!target) throw new Error(`归档里找不到匹配段落: ${selector ?? '(最后一条 MSG)'}`);
   const next = headings.find((item) => item.index > target.index);
   const seg = lines.slice(target.index, next ? next.index : lines.length);
-  const textIdx = seg.findIndex((line) => line.trim() === `${FENCE}text`);
+  const openIdx = seg.findIndex((line) => /^`{3,}text$/.test(line.trim()));
+  const openFence = openIdx >= 0 ? seg[openIdx].trim().replace(/text$/, "") : FENCE;
+  const textIdx = openIdx;
   if (textIdx < 0) throw new Error('该段落没有 ```text 代码块，无法比对');
   let body = seg.slice(textIdx + 1);
-  const closeIdx = body.findIndex((line) => line.trim() === FENCE);
+  const closeIdx = body.findIndex((line) => line.trim() === openFence);
   if (closeIdx >= 0) body = body.slice(0, closeIdx);
   return { heading: target.line.trim(), lines: normalize(body.join('\n')) };
 }
