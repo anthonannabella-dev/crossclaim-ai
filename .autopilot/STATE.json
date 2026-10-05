@@ -11,7 +11,7 @@
   "external_write_enabled": false,
   "updated_at": "2026-10-06T08:30:00.000Z",
   "previous_head": "8064f07",
-  "architect_decision_pending": false,
+  "architect_decision_pending": true,
   "blocked_scope": null,
   "last_send_head": "0c35106",
   "last_sent_at": "2026-10-03T09:07:52.875Z",
@@ -50,11 +50,11 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
-  "next_execution_unit": "STEP 3 FINAL-4 窄修（仅两项）：① 唯一 product composition 强制 Recovery SI → createSharedRecoveryGuardAdapterFromAppGuard（禁止调用方注入 ALLOW guard 绕过 Shared Guard）；② real-adapter runtime E2E（composeRsiRuntime → Recovery SI → real shared adapter：ALLOW → read tool > 0；DENY / REQUIRE_APPROVAL / Kill Switch / degraded → tool = 0）→ tsc / 回归 → commit + push → 重新送审（新会话）；同时补归档 FINAL-2 裁决 MSG-20261005-42（回旧会话干净重抽）",
+  "next_execution_unit": "读取 STEP 3 FINAL-4 裁决 → 逐字归档 → PASS 则 STEP_3_RUNTIME_POLICY_WIRING = PASS / CLOSED；REVISE 则最小窄修 → 再送审；并补归档 FINAL-2 裁决 MSG-20261005-42（旧会话干净重抽）",
   "automation_status": "CONTINUOUS",
   "last_tick_at": "2026-10-06T08:30:00.000Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "STEP 3 FINAL-3 裁决 = PASS WITH REVISE（MSG-20261005-43，CHANGE A PASS / CHANGE B REVISE）→ FINAL-4 窄修授权",
+  "last_action": "STEP 3 FINAL-4 实现并送审（REVIEWED_HEAD = adcab905）",
   "last_action_at": "2026-10-06T08:30:00.000Z",
   "next_action": "C2 IMPLEMENTATION（Schema Delta + durable ledger/budget + PG 回归）",
   "current_head": "054ab732",
@@ -9354,7 +9354,7 @@
   "HEARTBEAT_INTERVAL_SECONDS": 60,
   "safe_continuation_queue_recomputed_at": "2026-10-06T07:30:00.000Z",
   "step3_runtime_policy_wiring": {
-    "status": "FINAL4_REQUIRED",
+    "status": "FINAL4_SUBMITTED_PENDING_VERDICT",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
     "implementation_head": "c0b61792",
     "request": "docs/releases/SI-RUNTIME-STEP3-FINAL3-REQUEST.md",
@@ -9439,6 +9439,15 @@
       ],
       "step3_final4_required": "YES",
       "archive": "AI-ARCHITECT-INBOX.md#MSG-20261005-43"
+    },
+    "final4": {
+      "implementation_head": "adcab905",
+      "request": "docs/releases/SI-RUNTIME-STEP3-FINAL4-REQUEST.md",
+      "changes": [
+        "唯一 product 组装点 createProductRecoverySiPack（只接受 RuntimeActionGuard / AppActionGuardDeps；自定义 guard port = FORBIDDEN）",
+        "composeRsiRuntime.productRecoveryPack + real-adapter runtime E2E（ALLOW → tool>0；审计缺失/degraded → tool=0）"
+      ],
+      "tests": "tsc 0；real-guard E2E 4/4；回归 76 files / 769 tests PASS"
     }
   }
 }
