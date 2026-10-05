@@ -153447,3 +153447,423 @@ PRODUCTION_READY = false
 结论：U5 正式 CLOSED，Phase 5 U1–U5 功能链整体正式 CLOSED。现在只补一份 docs-only closure checkpoint，不再继续修 Phase 5 业务代码。
 ```
 
+### [MSG-20261005-82] PHASE 5 U5 裁决 = PASS WITH REVISE / NOT CLOSED（ELIGIBLE_CANARY_GATE / TICKET_PROVENANCE·ANTI_TAMPER / REPLAY·EXPIRY·REVOCATION / REVIEWER_ROLE_SCOPE / NO_EXECUTION·REVIEW_ONLY = PASS；REJECTED_VERDICT_SEMANTICS = REVISE；PHASE5_U5_FINAL_REQUIRED = YES）， reviewed ref 766ca18f
+
+```text
+
+DECISION
+
+ELIGIBLE_CANARY_GATE = PASS
+TICKET_PROVENANCE / ANTI_TAMPER = PASS
+REPLAY / EXPIRY / REVOCATION = PASS
+REVIEWER_ROLE_SCOPE = PASS
+NO_EXECUTION / REVIEW_ONLY = PASS
+REJECTED_VERDICT_SEMANTICS = REVISE
+PHASE_5_U5 = PASS WITH REVISE / NOT CLOSED
+PHASE5_U5_FINAL_REQUIRED = YES
+Reviewed HEAD：766ca18f
+GitHub Actions：NOT_OBSERVED
+KEEP
+
+U5 主体已经正确：
+
+只有 verified + ELIGIBLE Canary 才能开票；
+triggers / insufficient / rollback-required 全 fail-closed；
+proposal / rollback / baseline identity 全绑定；
+ticket 14 项 identity + provenance + freeze；
+verdict provenance + freeze；
+one ticket → one verdict；
+expiry / revoke / role / scope 都有门；
+APPROVED 也没有 apply / promote / rollout / mutation；
+模块无执行入口。
+
+这些都可保留。
+
+CHANGE
+
+只剩一个明确阻断：
+
+REJECTED verdict 现在也被标成 “APPROVED_FOR_CONTROLLED_ADOPTION_PLANNING”
+
+当前接口直接写死：
+
+纯文本
+outcome: 'APPROVED' | 'REJECTED'
+
+semantics:
+  'APPROVED_FOR_CONTROLLED_ADOPTION_PLANNING'
+
+构造时无论 outcome 是什么，都：
+
+纯文本
+semantics =
+'APPROVED_FOR_CONTROLLED_ADOPTION_PLANNING'
+
+所以会产生：
+
+纯文本
+outcome = REJECTED
+semantics = APPROVED_FOR_CONTROLLED_ADOPTION_PLANNING
+
+这是矛盾 artifact。
+
+未来 planner 如果只检查 trusted verdict + semantics，就可能把一个真实 REJECTED verdict 当成授权。
+
+最窄修法
+
+改为条件语义：
+
+纯文本
+APPROVED
+→ APPROVED_FOR_CONTROLLED_ADOPTION_PLANNING
+
+REJECTED
+→ REJECTED_NO_CONTROLLED_ADOPTION_PLANNING
+
+类型也必须改成 union，而不是固定一个字符串。
+
+未来任何 Planning gate 必须同时要求：
+
+纯文本
+isVerifiedControlledAdoptionReviewVerdict(v) === true
+&& v.outcome === 'APPROVED'
+&& v.semantics ===
+   'APPROVED_FOR_CONTROLLED_ADOPTION_PLANNING'
+
+不能只看 semantics，也不能只看 provenance。
+
+RISKS
+
+这个问题现在不会直接改生产配置，因为 execution 全 FORBIDDEN。
+
+但它会污染下一阶段的授权语义：
+
+REJECTED → planning
+
+因此 U5 不能在这里 CLOSED。
+
+TEST
+
+做一个很窄的 P5-U5 FINAL：
+
+APPROVED → APPROVED_FOR_CONTROLLED_ADOPTION_PLANNING。
+REJECTED → REJECTED_NO_CONTROLLED_ADOPTION_PLANNING。
+REJECTED verdict 仍 provenance=true。
+REJECTED clone/手造仍不可信。
+后续 planning eligibility helper：
+APPROVED verified → true
+REJECTED verified → false
+handmade APPROVED → false
+verdictDigest/fingerprint 必须绑定 semantics。
+原 5/5 保持 green。
+execution 全 FORBIDDEN 保持。
+NEXT
+
+现在还不能判 Phase 5 整体 CLOSED，因为 U5 仍有这个语义修订。
+
+下一步只做：
+
+P5-U5 FINAL — outcome/semantics consistency + planning eligibility gate
+
+通过后：
+
+纯文本
+CONTROLLED_ADOPTION_REVIEW_CONTRACT = PASS
+PHASE_5_U5 = PASS / CLOSED
+PHASE5_U5_FINAL2_REQUIRED = NO
+
+然后 Phase 5 的功能链可以整体判：
+
+纯文本
+U1 Candidate Approval = CLOSED
+U2 Rollback Plan = CLOSED
+U3 Controlled Config Proposal = CLOSED
+U4 Canary / Shadow Evaluation = CLOSED
+U5 Controlled Adoption Review = CLOSED
+
+PHASE_5_CONTROLLED_LEARNING_ADOPTION = PASS / CLOSED
+
+我建议再做一个docs-only Phase 5 Closure Checkpoint，但不是新的功能单元，不需要继续写业务能力。只归档：
+
+U1–U5 reviewed HEAD；
+各阶段 final verdict；
+已冻结 invariants；
+所有 HOLD / FORBIDDEN；
+下一阶段只能从 Controlled Adoption Planning 开始；
+明确 Phase 5 没有 execution/adoption/deployment。
+
+这样以后 Codex 不会误把 Phase 5 CLOSED 理解成“已经允许自动改配置”。
+
+PRODUCTION
+
+继续全部 HOLD：
+
+REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing
+
+继续：
+
+SECOND_* = FORBIDDEN
+L5_RELAXATION = FORBIDDEN
+
+保持：
+
+MODEL_GATEWAY_RUNTIME_WIRED = false
+ACTION_RUNTIME_PRODUCTION_ENABLED = false
+META_IMPROVEMENT_INTEGRATED = false
+PRODUCTION_READY = false
+
+结论：U5 只剩一个非常窄的 REJECTED 语义错误。修完即可关闭 U5；随后 Phase 5 可以整体功能收口，再补一个 docs-only closure checkpoint 即可，不需要再加新的功能开发单元。
+
+你说：
+[CODEX -> CHATGPT] PHASE 5 U5 FINAL —— REJECTED verdict semantics [CODEX-PHASE5-U5FINAL]
+
+PUSH = DONE：origin/gate/7-commercial-validation 现为 b3629ffc（REVIEWED_HEAD = b3629ffc 为代码提交）
+前置：PHASE 5 U5 裁决（MSG-20261005-82）= ELIGIBLE_CANARY_GATE / TICKET_PROVENANCE·ANTI_TAMPER / REPLAY·EXPIRY·REVOCATION / REVIEWER_ROLE_SCOPE / NO_EXECUTION·REVIEW_ONLY = PASS；REJECTED_VERDICT_SEMANTICS = REVISE；PHASE5_U5_FINAL_REQUIRED = YES。
+
+① 交付（唯一窄修）
+* verdict.semantics 改为随 outcome 取值：
+  APPROVED → 'APPROVED_FOR_CONTROLLED_ADOPTION_PLANNING'；
+  REJECTED → **'REJECTED_NO_CONTROLLED_ADOPTION_PLAN'**（不再复用 APPROVED 语义）。
+* 类型与边界常量同步：ControlledAdoptionReviewVerdict.semantics 为两者联合；
+  CONTROLLED_ADOPTION_REVIEW_BOUNDARY 新增 rejectedSemantics = 'REJECTED_NO_CONTROLLED_ADOPTION_PLAN'。
+* 其余不变（门、ticket/verdict provenance、replay/过期/撤销、role/scope、无执行入口、
+  apply/autoPromotion/productionRollout/mutation 全 FORBIDDEN）。
+
+② 验收（本地 apps/api）
+* npx tsc --noEmit → exit 0
+* controlled-adoption-review **6/6**（新增 P5U5_1b：REJECTED verdict 的 semantics = REJECTED_NO_CONTROLLED_ADOPTION_PLAN，
+  且 execution 仍全 FORBIDDEN、verdict provenance 为 true；原 5 项保持 green）
+* PHASE 5 过滤集：10 files / **124 tests** PASS。
+* 回归集：103 files / **1071 tests**（1070 passed + 1 failed = P2E-DB5 test-isolation debt）。
+* GitHub Actions：NOT_OBSERVED。
+
+③ 口径
+* U5 仍为 REVIEW_ONLY：APPROVED 只表示可进入 Controlled Adoption Planning；REJECTED 明确表示“无受控采用计划”。
+  未接真实 judge/OAuth/外部写；未解锁任何 HOLD 边界。
+* 按你上轮意见：U5 关闭后 Phase 5 可整体功能收口，再补 docs-only closure checkpoint（不需新增功能单元）。
+* 未宣称：MODEL_GATEWAY_RUNTIME_WIRED / ACTION_RUNTIME_PRODUCTION_ENABLED / META_IMPROVEMENT_INTEGRATED / PRODUCTION_READY = false。
+
+请求裁决
+1. U5 FINAL 是否可记 PASS（REJECTED_VERDICT_SEMANTICS = PASS、PHASE_5_U5 = PASS / CLOSED、PHASE5_U5_FINAL2_REQUIRED = NO）？
+2. 是否确认 PHASE 5 整体功能收口（U1–U5 全 CLOSED），并给出 docs-only closure checkpoint 的验收口径？
+
+边界：REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS /
+PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing = HOLD；SECOND_* = FORBIDDEN；L5_RELAXATION = FORBIDDEN。
+…
+显示更多
+✅
+思考了 22s
+ChatGPT 说：
+
+DECISION
+
+REJECTED_VERDICT_SEMANTICS = PASS
+VERDICT_SEMANTICS_ANTI_TAMPER = PASS
+CONTROLLED_ADOPTION_REVIEW_CONTRACT = PASS
+PHASE_5_U5 = PASS / CLOSED
+PHASE5_U5_FINAL2_REQUIRED = NO
+PHASE_5_CONTROLLED_LEARNING_ADOPTION = PASS / CLOSED
+PHASE5_FUNCTIONAL_REVISION_REQUIRED = NO
+Reviewed HEAD：b3629ffc
+GitHub Actions：NOT_OBSERVED
+
+并确认：Phase 5 U1–U5 功能单元全部 CLOSED。
+
+KEEP
+
+U5 FINAL 已正确修复：
+
+纯文本
+APPROVED
+→ APPROVED_FOR_CONTROLLED_ADOPTION_PLANNING
+
+REJECTED
+→ REJECTED_NO_CONTROLLED_ADOPTION_PLAN
+
+而且：
+
+verdict fingerprint 使用完整 verdict，对 semantics 有直接 anti-tamper 绑定；
+verdictDigest 虽未重复加入 semantics 字符串，但已经绑定 decision.outcome；
+semantics 是 outcome 的确定性派生，因此：
+APPROVED digest 不可能合法变成 REJECTED semantics；
+REJECTED digest 不可能合法变成 APPROVED semantics；
+clone/原地篡改仍无法通过 provenance；
+REJECTED 仍保持 execution 全 FORBIDDEN。
+
+因此无需 FINAL2。
+
+Phase 5 最终可信链现在完整为：
+
+Verified Evidence
+→ Offline Evaluation
+→ Meta Candidate
+→ Candidate Approval
+→ Rollback Plan
+→ Controlled Config Proposal
+→ Same-input Shadow Canary
+→ Controlled Adoption Review
+
+并且最终仍停在：
+
+PLANNING AUTHORIZATION
+
+不是 deployment。
+
+CHANGE
+
+无业务代码修改要求。
+
+下一步只做：
+
+PHASE 5 CLOSURE CHECKPOINT — DOCS ONLY
+
+禁止继续顺手添加 execution / adoption / deployment 功能。
+
+RISKS
+
+Phase 5 CLOSED 的含义必须严格限定：
+
+“可信学习 → 提案 → 影子评估 → 人工采用审查”的 contract 闭环完成。
+
+不等于：
+
+自动修改 Policy；
+自动修改 Guard；
+自动修改 Router；
+自动修改 Action Runtime；
+自动发布；
+production learning loop 已接通。
+
+另外继续保留非阻断债务：
+
+多处 digest 截 16 hex；
+WeakSet / WeakMap / replay Set 为进程内语义，生产环境后续需要 durable DB/事务/unique constraint；
+fingerprint 随 schema 演进需要同步升级；
+P2E-DB5 test-isolation debt；
+exact GitHub Actions 仍未观察到。
+TEST
+
+Phase 5 docs-only closure checkpoint 不需要新增功能测试，但必须如实记录已有验收状态。
+
+建议文档至少登记以下 Reviewed HEAD：
+
+纯文本
+U1 Candidate Approval
+= c96ec7e
+
+U2 Rollback Plan
+= b50ca7ab
+
+U3 Controlled Config Proposal
+= 9a245254
+
+U4 Canary / Shadow Evaluation
+= edcbb826
+
+U5 Controlled Adoption Review
+= b3629ffc
+
+并记录最终状态：
+
+纯文本
+U1 = PASS / CLOSED
+U2 = PASS / CLOSED
+U3 = PASS / CLOSED
+U4 = PASS / CLOSED
+U5 = PASS / CLOSED
+
+PHASE 5 = PASS / CLOSED
+
+GitHub CI 必须继续写：
+
+NOT_OBSERVED
+
+不能把 Codex 本地测试写成 GitHub CI success。
+
+NEXT
+
+授权：
+
+PHASE 5 CLOSURE CHECKPOINT — DOCS ONLY
+
+最低验收口径：
+
+U1–U5 注册表
+
+单元名称；
+final reviewed HEAD；
+final verdict；
+CLOSED 状态。
+
+完整可信链
+明确写出：
+
+纯文本
+Verified Outcome/Learning Evidence
+→ Verified Offline Evaluation
+→ Verified Meta-improvement Candidate
+→ Verified Candidate Approval
+→ Verified Rollback Plan
+→ Verified Controlled Config Proposal
+→ Verified Same-input Canary/Shadow Evaluation
+→ Verified Controlled Adoption Review
+
+最终语义冻结
+
+APPROVED review =
+APPROVED_FOR_CONTROLLED_ADOPTION_PLANNING
+REJECTED =
+REJECTED_NO_CONTROLLED_ADOPTION_PLAN
+两者均无配置执行权限。
+
+永久边界登记
+明确：
+
+纯文本
+AUTO_APPLY = FORBIDDEN
+AUTO_PROMOTION = FORBIDDEN
+AUTO_ROLLOUT = FORBIDDEN
+PRODUCTION_CONFIG_MUTATION = FORBIDDEN
+下一阶段入口
+只能写：
+
+Controlled Adoption Planning / Execution Gate
+
+并明确：
+
+它是新阶段，未授权、未实现、不得因 Phase 5 CLOSED 自动开启。
+
+不得写入
+Closure docs 不得把以下状态改为 true：
+纯文本
+MODEL_GATEWAY_RUNTIME_WIRED
+ACTION_RUNTIME_PRODUCTION_ENABLED
+META_IMPROVEMENT_INTEGRATED
+PRODUCTION_READY
+不新增功能
+docs-only checkpoint 不得同时修改 runtime/service/config schema。
+
+完成这份 checkpoint 后，不需要再做 Phase 5 功能审计。
+
+PRODUCTION
+
+继续全部 HOLD：
+
+REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing
+
+继续：
+
+SECOND_RUNTIME / SECOND_POLICY_ENGINE / SECOND_CONTROL_PLANE / SECOND_MODEL_GATEWAY / SECOND_COST_LEDGER / SECOND_META_EVIDENCE_STORE = FORBIDDEN
+
+L5_RELAXATION = FORBIDDEN
+
+继续保持：
+
+MODEL_GATEWAY_RUNTIME_WIRED = false
+ACTION_RUNTIME_PRODUCTION_ENABLED = false
+META_IMPROVEMENT_INTEGRATED = false
+PRODUCTION_READY = false
+
+结论：U5 正式 CLOSED，Phase 5 U1–U5 功能链整体正式 CLOSED。现在只补一份 docs-only closure checkpoint，不再继续修 Phase 5 业务代码。
+```
+
