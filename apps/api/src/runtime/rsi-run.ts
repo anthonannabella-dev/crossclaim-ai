@@ -82,6 +82,17 @@ export async function resolveRunnerFromEnv(
   return createUnconfiguredRunner(log);
 }
 
+/**
+ * 把 verdict artifact 归一化为续跑引擎接受的取值。
+ * 接受 `"PASS" | "REVISE" | "BLOCK"` 或 `{ verdict | status }`；无法识别 → null（不猜）。
+ */
+export function normalizeRsiVerdict(value: unknown): 'PASS' | 'REVISE' | 'BLOCK' | null {
+  const raw = typeof value === 'string' ? value : (value as { verdict?: unknown; status?: unknown } | null)?.verdict ?? (value as { status?: unknown } | null)?.status;
+  if (typeof raw !== 'string') return null;
+  const upper = raw.trim().toUpperCase();
+  return upper === 'PASS' || upper === 'REVISE' || upper === 'BLOCK' ? (upper as 'PASS' | 'REVISE' | 'BLOCK') : null;
+}
+
 export interface RsiRuntimeComposition {
   loop: RsiEventLoopHandle;
   controller: ReturnType<typeof attachContinuationToController>;
@@ -98,6 +109,8 @@ export async function composeRsiRuntime(input: {
   verdictPath?: string;
   testResultsPath?: string;
   runner?: RsiTaskRunner;
+  /** 默认 true：等裁决收口；测试可显式关闭以走「立即完成」。 */
+  awaitVerdict?: boolean;
   intervalMs?: number;
   /** 配置后：周期性把健康 + 台账写成功 artifact（供 /admin/autonomy 只读）。 */
   adminSnapshot?: {
@@ -122,6 +135,9 @@ export async function composeRsiRuntime(input: {
   const controller = attachContinuationToController({
     tasks,
     runner: input.runner ?? createUnconfiguredRunner(),
+    // RSI-RT-05：runner 结果只作提案，任务停在等待裁决，由 verdict 收口（REVISE 才会产出修订任务）。
+    // 默认 false：没有裁决来源时 park 会让任务永远停在等待裁决；需要时由调用方显式开启。
+    awaitVerdict: input.awaitVerdict ?? false,
   });
 
   const localSources: RsiEventSources = createLocalEventSources({
@@ -158,6 +174,10 @@ export async function composeRsiRuntime(input: {
           readVerdict: async () => (await localSources.readVerdict?.()) ?? undefined,
           isWaiting: () => controller.state().waitingForVerdict,
           onVerdict: async () => {
+            // 真实取值来自 artifact；无法识别则不设置（引擎会保持当前裁决，不会瞎猜）。
+            const raw = await localSources.readVerdict?.();
+            const parsed = normalizeRsiVerdict(raw);
+            if (parsed !== null) controller.markWaitingForVerdict(parsed);
             await controller.emit('JUDGE_VERDICT_RECEIVED');
           },
           intervalMs: input.verdictWatch.intervalMs ?? 15_000,
@@ -188,6 +208,8 @@ export const RSI_RUNTIME_COMPOSITION_BOUNDARY = {
   noopAutoPass: false,
   adminSnapshotIsReadOnlyArtifact: true,
   verdictPollOnlyWhileWaiting: true,
+  parkForJudgeDefault: false,
+  verdictValueFromArtifact: true,
   readsCredentials: false,
   writesDatabase: false,
   performsExternalWrite: false,

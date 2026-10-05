@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261004-16",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T12:50:00.000Z",
+  "updated_at": "2026-10-05T13:05:00.000Z",
   "previous_head": "3c5fac6",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -5192,9 +5192,9 @@
   "awaiting_verdict": "EXACT-ORDER REPLAY 证据已送审（comment 5979262070）；shared/staging deploy 解禁待裁决",
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-05T00:08:25.679Z",
-    "head": "9efa831",
-    "acceptance_head": "9efa831",
+    "computed_at": "2026-10-05T00:13:34.603Z",
+    "head": "17f33ab",
+    "acceptance_head": "17f33ab",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5345,27 +5345,27 @@
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=9efa831 ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
+        "evidence": "acceptance_head=17f33ab ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
       },
       "L1-05_pg_regression_passed": {
         "status": "UNVERIFIED",
-        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head 9efa831（且中间存在非簿记变更）"
+        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head 17f33ab（且中间存在非簿记变更）"
       },
       "L1-06_fresh_db_migration_passed": {
         "status": "UNVERIFIED",
-        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head 9efa831（且中间存在非簿记变更）"
+        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head 17f33ab（且中间存在非簿记变更）"
       },
       "L1-07_api_typecheck_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head 9efa831（且中间存在非簿记变更）"
+        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head 17f33ab（且中间存在非簿记变更）"
       },
       "L1-08_web_typecheck_build_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head 9efa831（且中间存在非簿记变更）"
+        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head 17f33ab（且中间存在非簿记变更）"
       },
       "L1-09_no_skipped_critical_tests": {
         "status": "UNVERIFIED",
-        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head 9efa831（且中间存在非簿记变更）"
+        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head 17f33ab（且中间存在非簿记变更）"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
@@ -5374,19 +5374,19 @@
       },
       "L1-11_docs_state_consistent": {
         "status": "UNVERIFIED",
-        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head 9efa831（且中间存在非簿记变更）"
+        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head 17f33ab（且中间存在非簿记变更）"
       },
       "L1-12_schema_invariants_verified": {
         "status": "UNVERIFIED",
-        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head 9efa831（且中间存在非簿记变更）"
+        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head 17f33ab（且中间存在非簿记变更）"
       },
       "L1-13_negative_paths_covered": {
         "status": "UNVERIFIED",
-        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head 9efa831（且中间存在非簿记变更）"
+        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head 17f33ab（且中间存在非簿记变更）"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
         "status": "UNVERIFIED",
-        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head 9efa831（且中间存在非簿记变更）"
+        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head 17f33ab（且中间存在非簿记变更）"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
@@ -6334,7 +6334,7 @@
       "API.md / DOMAIN_MODEL.md / architecture-contract 计数 77 → 79"
     ]
   },
-  "next_execution_unit": "①项目专用执行器默认实现（跑目标测试并产出 evidenceRef）；②rsi-run 接线：verdict artifact → markWaitingForVerdict(verdict) 的真实取值；随后第 2 点（Model Router → 真实 Provider Adapter，先送审计）",
+  "next_execution_unit": "①项目专用执行器默认实现（跑目标测试并产出 evidenceRef），并据此在宿主启用 awaitVerdict；②第 2 点（Model Router → 真实 Provider Adapter）先送审计",
   "customer_ui_commercialization": {
     "at": "2026-10-04T01:21:55.949Z",
     "authorization": "MSG-20261004-01（CUSTOMER UI/UX COMMERCIALIZATION — IMPLEMENTATION AUTHORIZED）",
@@ -7380,9 +7380,9 @@
     "seo3_progress": "CHANGE A/B validator added (86f4289), engine output validation added (eb99c53), validator wired into runPublicSeoChecker (8bf49da), HTTP boundary guard added (4f2cd20); HTTP entry still not registered"
   },
   "CURRENT_HEAD": "293f55e",
-  "LAST_COMPLETED_UNIT": "RSI-RT-05 park-for-judge：新增 awaitVerdict 模式 —— runner 结果只作提案，任务停在「等待裁决」（worker 仍 RUNNING、不完成）；JUDGE_VERDICT_RECEIVED 收口：PASS → 完成并领取下一个、REVISE → 插入 P0 修订任务并**当次**领取（延迟 <5s）；修正 dispatch 不得吞掉 REVISION/CONSUME_VERDICT 动作；新增 3 例测试",
-  "NEXT_EXECUTION_UNIT": "①项目专用执行器默认实现（跑目标测试并产出 evidenceRef）；②rsi-run 接线：verdict artifact → markWaitingForVerdict(verdict) 的真实取值；随后第 2 点（Model Router → 真实 Provider Adapter，先送审计）",
-  "CI_STATUS": "本批提交后由托管 CI 复核；本地：apps/api tsc 0 / 续跑相关 4 套件 13 例全过",
+  "LAST_COMPLETED_UNIT": "RSI-RT-05 收口：rsi:run 把 verdict artifact 的**真实取值**接进引擎 —— 新增 normalizeRsiVerdict（接受 \"PASS|REVISE|BLOCK\" 或 {verdict|status}，无法识别即 null 不猜）+ verdictWatcher.onVerdict 先 markWaitingForVerdict(parsed) 再 emit；park-for-judge 改为**显式开启**（默认 false，避免没有裁决来源时任务永远停在等待裁决）；新增 3 例测试",
+  "NEXT_EXECUTION_UNIT": "①项目专用执行器默认实现（跑目标测试并产出 evidenceRef），并据此在宿主启用 awaitVerdict；②第 2 点（Model Router → 真实 Provider Adapter）先送审计",
+  "CI_STATUS": "本批提交后由托管 CI 复核；本地：apps/api tsc 0 / run+verdict+park+runtime 5 套件 16 例全过",
   "WAITING_FOR_VERDICT": "none（本批无待裁决项）",
   "HOST_ACTION_REQUIRED": [
     "provider developer/partner account registration",
@@ -7397,7 +7397,7 @@
     "non-production staging DATABASE_URL + 确认该 shared 库是否承载真实客户数据（执行已授权的 staging migrate deploy 前需要）"
   ],
   "HOLD_EXTERNAL": true,
-  "LAST_HEARTBEAT_AT": "2026-10-05T12:50:00.000Z",
+  "LAST_HEARTBEAT_AT": "2026-10-05T13:05:00.000Z",
   "ci_red_streak_note": "RESOLVED: three contract/inventory fixes (tenant-trigger whitelist 1b15ab7, append-only whitelist cc13bde, model inventory 82->85 4f02282); 4f02282 is the first green run after the streak.",
   "ci_contract_fix_local_verification": {
     "at": "2026-10-04T08:51:16.135Z",
@@ -7720,6 +7720,8 @@
     "full_loop_e2e": "PASS（事件→task→runner→CI 证据→完成/裁决→next）",
     "park_for_judge": "IMPLEMENTED（awaitVerdict；默认关闭）",
     "event_names": "CI_COMPLETED / TEST_COMPLETED / TASK_COMPLETED / JUDGE_VERDICT_RECEIVED / …",
-    "revise_closes_loop": "PASS（REVISE → P0 修订任务当次领取）"
+    "revise_closes_loop": "PASS（REVISE → P0 修订任务当次领取）",
+    "verdict_value_from_artifact": "WIRED（normalizeRsiVerdict + markWaitingForVerdict）",
+    "park_for_judge_default": "false（opt-in；同步记录原因：无裁决来源时会卡死）"
   }
 }
