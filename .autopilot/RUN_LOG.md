@@ -2196,3 +2196,10 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - CHANGE C3：新增统一 validatePreparedRecoveryPackagePreview()（工厂与入口共用；检查 kind/版本/digest 重算/canonical JSON/布尔边界/敏感内容），敏感扫描同时扫 key 与字符串值（Bearer / X-Amz-Signature / token / api_key / sk- / JWT / IBAN / 卡号样式）。
 - 最小证据 F2C-01..04 全部覆盖；测试 recovery-si-phase2-c 10/10 + 回归 50/50 = 60/60 PASS；tsc exit 0。
 - 边界：P2-D/P2-E/P2-F/P2-G 未授权；RUNTIME_WIRING = NONE；SCHEMA_DELTA_REQUIRED = NO；FINAL_ACCEPTANCE_HEAD = 0f7f7ac。
+
+## 2026-10-05T05:28:48.044Z — Recovery SI P2-C FINAL-2 送审（REVIEWED_HEAD 180ccb67）
+- 耐久记录：docs/releases/RECOVERY-SI-PHASE2-C-FINAL2-REQUEST.md（真实代码送审 SHA = 180ccb67）。
+- scope：仅 C1（可信 PREPARE registry）/ C2（fact 身份 + money 绑定）/ C3（统一 preview validator + key/值敏感扫描）+ F2C-01..04 负例。
+- 证据：docs/releases/RECOVERY-SI-PHASE2-C-EVIDENCE.md §8；60/60 PASS、tsc exit 0。
+- 请求裁定：C1/C2/C3 是否 PASS、P2C_05/06/07 是否翻转、P2C_01..09 是否整体 PASS、Option A 是否 CLOSED；P2-D/P2-E/P2-F/P2-G 是否继续各自单独送审。
+- 送达验证后立即读取并逐字归档裁决（FNV + FULL_COPY_OK），不等待下一次 heartbeat。
