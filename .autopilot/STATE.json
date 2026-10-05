@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-40",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T23:38:00.072Z",
+  "updated_at": "2026-10-05T23:40:46.567Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -50,13 +50,13 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
-  "next_execution_unit": "PHASE 5 closure verdict: (1) read verdict; (2) extract to work/stage/verdict-p5close-raw.txt and archive verbatim (MSG-20261005-84) with compare.mjs FULL_COPY_OK + commit/push; (3) durable state: PHASE_5_META_IMPROVEMENT = CLOSED (formal) if PASS; (4) if the auditor authorizes a further unit (e.g. plan-only Controlled Adoption Plan / Execution Gate) queue it per its minimum gate; boundaries unchanged.",
+  "next_execution_unit": "PHASE 6 U1 Controlled Adoption Plan / PLAN_ONLY: read the NEXT/TEST sections of archived verdict MSG-20261005-84 for the exact minimum requirements; implement a plan-only contract (no apply/execute/rollout, no config mutation; likely binds review verdict + proposal + rollback plan + canary digests and produces an APPROVED_FOR_CONTROLLED_ADOPTION_PLANNING-scoped plan artifact with provenance/fingerprint/deep-freeze); keep every HOLD/FORBIDDEN boundary; then audit + archive (MSG-20261005-85) + durable state.",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-05T23:38:00.072Z",
+  "last_tick_at": "2026-10-05T23:40:46.567Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "PHASE 5 CLOSURE CHECKPOINT (docs-only) delivered and submitted: docs/releases/SI-RUNTIME-PHASE5-CONTROLLED-LEARNING-ADOPTION-CLOSURE.md updated to the MSG-20261005-83 acceptance criteria (U1-U5 registry with final reviewed HEADs + verdicts + CLOSED, full 8-link trust chain, semantics freeze, permanent boundary registry), commit 88bf3f70; submission marker [CODEX-PHASE5-CLOSURE] delivered to the audit chat.",
+  "last_action": "PHASE 5 CLOSURE verdict archived (MSG-20261005-84, FULL_COPY_OK, archive commit ab993ea5): PHASE_5_CLOSURE_CHECKPOINT / DOCS_CLOSURE_REGISTRY / U1_U5_FINAL_HEAD_REGISTRY / PHASE5_BOUNDARY_FREEZE = PASS; PHASE_5_CONTROLLED_LEARNING_ADOPTION = PASS / CLOSED; PHASE_5 = FORMALLY CLOSED; PHASE5_FUNCTIONAL_REVISION_REQUIRED = NO, PHASE5_CLOSURE_REVISION_REQUIRED = NO. Authorized next: PHASE 6 U1 Controlled Adoption Plan / PLAN_ONLY (no real config execution).",
   "last_action_at": "2026-10-05T23:24:28.898Z",
-  "next_action": "Read the closure checkpoint verdict (marker [CODEX-PHASE5-CLOSURE], REVIEWED_HEAD = 88bf3f70) -> archive (MSG-20261005-84) -> record PHASE 5 = CLOSED if PASS; otherwise apply the narrow doc fix.",
+  "next_action": "Open PHASE 6 U1 Controlled Adoption Plan (PLAN_ONLY): read the auditor NEXT/TEST for the exact minimum gate, then implement (code -> tests -> regression -> tsc -> commit -> push -> audit -> archive -> durable state).",
   "current_head": "88bf3f70",
   "last_completed_head": "88bf3f70",
   "reviewed_head": "add99ec3",
@@ -5169,9 +5169,10 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "CLOSE-1 read PHASE 5 closure verdict (88bf3f70) -> archive MSG-20261005-84 -> compare FULL_COPY_OK -> commit/push -> durable state",
-    "CLOSE-2 if PASS -> PHASE 5 = CLOSED (formal); await/act on any authorized next unit",
-    "CLOSE-3 non-blocking debt: full SHA-256 digests, fingerprint schema upkeep, scanRawPayloadKeys bounded traversal, P2E-DB5 test-isolation"
+    "P6U1-1 read MSG-20261005-84 NEXT/TEST for PHASE 6 U1 Controlled Adoption Plan (PLAN_ONLY) minimum gate",
+    "P6U1-2 implement plan-only contract + tests + regression + tsc + commit + push",
+    "P6U1-3 audit -> archive (MSG-20261005-85) -> compare FULL_COPY_OK -> durable state",
+    "P6U1-4 non-blocking debt: full SHA-256 digests, fingerprint schema upkeep, scanRawPayloadKeys bounded traversal, P2E-DB5 test-isolation"
   ],
   "full_autonomous_internal_execution": "VERIFIED",
   "dispatcher_acceptance": {
@@ -9321,7 +9322,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-05T23:38:00.072Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-05T23:40:46.567Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -9449,7 +9450,8 @@
     "PHASE_2_MODEL_GATEWAY_RUNTIME": "PASS / CLOSED（MSG-20261005-50；Reviewed HEAD 338f30b4；PHASE2_FINAL5_REQUIRED = NO）",
     "PHASE_3_ACTION_RUNTIME": "PASS / CLOSED（MSG-20261005-54；Reviewed HEAD = fe3c33e9；PHASE3_FINAL4_REQUIRED = NO）",
     "PHASE_4_OUTCOME_LEARNING_PIPELINE": "CLOSED / PASS（MSG-20261005-67）：U1 FINAL / U2 / U3 / U4 / U5 全 CLOSED；含 U4 FINAL、U5 FINAL、U5 FINAL2、PHASE 4 FINAL CLOSURE。",
-    "PHASE_5_META_IMPROVEMENT": "CLOSED (functional): U1/U2/U3/U4/U5 PASS / CLOSED; closure checkpoint docs/releases/SI-RUNTIME-PHASE5-CONTROLLED-LEARNING-ADOPTION-CLOSURE.md @83ab346c; archive index MSG-65..83 complete."
+    "PHASE_5_META_IMPROVEMENT": "FORMALLY CLOSED (MSG-20261005-84): U1-U5 PASS / CLOSED; closure checkpoint PASS; archive index MSG-65..84.",
+    "PHASE_6_CONTROLLED_ADOPTION": "OPEN / NOT STARTED: authorized U1 Controlled Adoption Plan / PLAN_ONLY (no real config execution)."
   },
   "heartbeat_watchdog": {
     "interval_seconds": 180,
@@ -9921,7 +9923,7 @@
       "U5"
     ]
   },
-  "archive_head": "eb0dfbd6",
+  "archive_head": "ab993ea5",
   "phase4_u3_final": {
     "status": "PASS / CLOSED",
     "reviewed_head": "006cc912",
@@ -10996,5 +10998,20 @@
     "revise": [
       "REJECTED_VERDICT_SEMANTICS（已由 MSG-20261005-83 修复并封板）"
     ]
+  },
+  "phase5_closure_verdict": {
+    "message_id": "MSG-20261005-84",
+    "verdict": "PASS（PHASE_5 = FORMALLY CLOSED）",
+    "closure_head": "88bf3f70",
+    "archive_verified": "FULL_COPY_OK",
+    "archive_head": "ab993ea5",
+    "pass": [
+      "PHASE_5_CLOSURE_CHECKPOINT = PASS",
+      "DOCS_CLOSURE_REGISTRY = PASS",
+      "U1_U5_FINAL_HEAD_REGISTRY = PASS",
+      "PHASE5_BOUNDARY_FREEZE = PASS",
+      "PHASE_5_CONTROLLED_LEARNING_ADOPTION = PASS / CLOSED"
+    ],
+    "authorized_next": "PHASE 6 U1 Controlled Adoption Plan / PLAN_ONLY（暂不授权真实配置执行）"
   }
 }
