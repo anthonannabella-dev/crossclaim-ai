@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-40",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T20:59:49.558Z",
+  "updated_at": "2026-10-05T21:04:16.909Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -50,13 +50,13 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
-  "next_execution_unit": "PHASE 5 U2 FINAL 裁决归档与 U3 进入：(1) 打开右侧审核会话读取 U2 FINAL verdict（严格匹配 REVIEWED_HEAD = b50ca7ab，marker [CODEX-PHASE5-U2FINAL]）；(2) 先落盘 work/stage/verdict-p5u2f-raw.txt → 逐字归档 AI-ARCHITECT-INBOX.md（MSG-20261005-72）→ compare.mjs FULL_COPY_OK → commit + push；(3) durable state；若 REVISE 按最小修法窄修；若 PASS → P5-U3 Controlled Config Proposal（verified APPROVED verdict + verified rollback plan → proposal；APPROVED only；REJECTED 永不生成；one verdict → one proposal；绑定 verdictDigest/ticketDigest/candidateDigest/evaluationDigest/evidenceSetDigest/baselineConfigFingerprint/proposedDelta/rollbackPlanRef·rollbackPlanDigest/proposalDigest；delta 限 candidate target；proposal 仍 PROPOSAL_ONLY；不得直接修改 Policy / Guard / Router / Action Runtime）；(4) 之后 U4 Canary/Shadow Evaluation；(5) 边界不变：REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing = HOLD；SECOND_* = FORBIDDEN；L5_RELAXATION = FORBIDDEN。",
+  "next_execution_unit": "PHASE 5 U3 — Controlled Config Proposal（审计冻结最低要求）：输入：verified APPROVED verdict（isVerifiedApprovalVerdict === true） + verified rollback plan（isVerifiedRollbackPlan === true）；proposal 至少绑定：verdictDigest / ticketDigest / candidateDigest / evaluationDigest / evidenceSetDigest / baselineConfigFingerprint / proposedDelta / rollbackPlanRef·rollbackPlanDigest / proposalDigest。硬约束：APPROVED only（REJECTED 永不生成 → fail-closed）；one verdict → one proposal（按 verdictDigest 记录）；delta 必须限于 candidate target（target 取自 verified candidate / rollback plan）；baseline fingerprint 必须明确；必须先存在 verified rollback plan；proposal 仍 PROPOSAL_ONLY（不得直接修改 Policy / Guard / Router / Action Runtime，不得自动 apply / promotion / rollout）；proposal 自身 provenance + fingerprint + deep-freeze；模块不导出任何 apply / execute / mutate 入口。流程：code → tests → regression → tsc → commit → push → 送裁决 → 归档（FULL_COPY_OK）→ durable state。边界：REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing = HOLD；SECOND_* = FORBIDDEN；L5_RELAXATION = FORBIDDEN。",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-05T20:59:49.558Z",
+  "last_tick_at": "2026-10-05T21:04:16.909Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "PHASE 5 U2 FINAL（trusted target binding + trusted baseline snapshot）已实现、验证、commit + push（b50ca7ab），并已送审（marker [CODEX-PHASE5-U2FINAL]，REVIEWED_HEAD = b50ca7ab，composer 已清空确认送达）：createRollbackPlan(verdict, candidate, baseline, {steps,trigger})：candidate 必须 provenance 且 digest 等于 verdict.candidateDigest；target 取自 candidate.target；baseline 只能来自 captureBaselineConfigSnapshot（server-owned store + provenance + fingerprint + deep-freeze）；plan 的 baseline/rollback fingerprint 均由 snapshot 派生，新增 baselineSnapshotDigest（binds 12 项）。本地：tsc exit 0；rollback-plan 8/8；PHASE 5 过滤集 8 files / 106 tests PASS；回归集 101 files / 1053 tests（唯一失败 = P2E-DB5）；GITHUB_CI = NOT_OBSERVED。",
+  "last_action": "PHASE 5 U2 FINAL 裁决已读取、原文归档（MSG-20261005-72，compare.mjs = FULL_COPY_OK，归档提交 2f2b2eca）：CANDIDATE_TARGET_BINDING / BASELINE_AUTHORITY / BASELINE_SNAPSHOT_PROVENANCE / ROLLBACK_PLAN_BASELINE_BINDING = PASS；PHASE_5_U2 = PASS / CLOSED；PHASE5_U2_FINAL2_REQUIRED = NO；审计授权进入 P5-U3 Controlled Config Proposal。",
   "last_action_at": "2026-10-05T20:59:49.558Z",
-  "next_action": "读取 PHASE 5 U2 FINAL 裁决 → 归档（MSG-20261005-72）→ 若 PASS 则 U2 = CLOSED 并进入 U3 Controlled Config Proposal。",
+  "next_action": "执行 P5-U3 — Controlled Config Proposal（verified APPROVED verdict + verified rollback plan → PROPOSAL_ONLY），随后 U4 Canary/Shadow Evaluation。",
   "current_head": "b50ca7ab",
   "last_completed_head": "b50ca7ab",
   "reviewed_head": "add99ec3",
@@ -5169,10 +5169,11 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "P5U2F-1 读取 PHASE 5 U2 FINAL 裁决（匹配 REVIEWED_HEAD = b50ca7ab）→ 先落盘 verdict-p5u2f-raw.txt → 归档 MSG-20261005-72 → compare.mjs FULL_COPY_OK → commit + push → durable state",
-    "P5U2F-2 若 PASS → 开 P5-U3 Controlled Config Proposal（APPROVED only；一 verdict 一 proposal；必须有 verified rollback plan；delta 限 candidate target；proposal 仍 PROPOSAL_ONLY）",
-    "P5U2F-3 之后 U4 Canary/Shadow Evaluation → 再审 Controlled Adoption",
-    "P5U2F-4 非阻断债务（持续记录）：三类 digest 完整 SHA-256、各 fingerprint 随结构升级、scanRawPayloadKeys 有界遍历、P2E-DB5 test-isolation debt"
+    "P5U3-1 P5-U3 Controlled Config Proposal：只接受 verified APPROVED verdict + verified rollback plan；绑定 verdict/ticket/candidate/evaluation/evidenceSet/baselineFingerprint/proposedDelta/rollbackPlanRef+digest/proposalDigest；APPROVED only；one verdict → one proposal；delta 限 candidate target；proposal 自身 provenance+fingerprint+deep-freeze；无执行入口",
+    "P5U3-2 P5-U3 tests（verdict/rollback plan 双门；REJECTED 与未验证对象拒绝；delta target 越界拒绝；一 verdict 一 proposal；provenance/anti-tamper；无 apply/promote/mutate 导出）+ regression + tsc + commit + push",
+    "P5U3-3 送 P5-U3 裁决 → 归档（MSG-20261005-73）→ compare.mjs FULL_COPY_OK → durable state",
+    "P5U3-4 随后 U4 Canary/Shadow Evaluation → 再审 Controlled Adoption",
+    "P5U3-5 非阻断债务（持续记录）：三类 digest 完整 SHA-256、各 fingerprint 随结构升级、scanRawPayloadKeys 有界遍历、P2E-DB5 test-isolation debt"
   ],
   "full_autonomous_internal_execution": "VERIFIED",
   "dispatcher_acceptance": {
@@ -9322,7 +9323,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-05T20:59:49.558Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-05T21:04:16.909Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -9450,7 +9451,7 @@
     "PHASE_2_MODEL_GATEWAY_RUNTIME": "PASS / CLOSED（MSG-20261005-50；Reviewed HEAD 338f30b4；PHASE2_FINAL5_REQUIRED = NO）",
     "PHASE_3_ACTION_RUNTIME": "PASS / CLOSED（MSG-20261005-54；Reviewed HEAD = fe3c33e9；PHASE3_FINAL4_REQUIRED = NO）",
     "PHASE_4_OUTCOME_LEARNING_PIPELINE": "CLOSED / PASS（MSG-20261005-67）：U1 FINAL / U2 / U3 / U4 / U5 全 CLOSED；含 U4 FINAL、U5 FINAL、U5 FINAL2、PHASE 4 FINAL CLOSURE。",
-    "PHASE_5_META_IMPROVEMENT": "IN PROGRESS：U1 = PASS / CLOSED；U2 = PASS WITH REVISE，U2 FINAL = SUBMITTED / AWAITING_VERDICT（b50ca7ab）；NEXT = U3 Controlled Config Proposal → U4 Canary/Shadow Evaluation。"
+    "PHASE_5_META_IMPROVEMENT": "IN PROGRESS：U1 = PASS / CLOSED；U2 = PASS / CLOSED（含 U2 FINAL，MSG-20261005-72）；NEXT = U3 Controlled Config Proposal → U4 Canary/Shadow Evaluation。"
   },
   "heartbeat_watchdog": {
     "interval_seconds": 180,
@@ -9922,7 +9923,7 @@
       "U5"
     ]
   },
-  "archive_head": "a6a93bb0",
+  "archive_head": "2f2b2eca",
   "phase4_u3_final": {
     "status": "PASS / CLOSED",
     "reviewed_head": "006cc912",
@@ -10542,5 +10543,23 @@
       "composer_empty_verified": true,
       "expected_message_id": "MSG-20261005-72"
     }
+  },
+  "phase5_u2_final_verdict": {
+    "message_id": "MSG-20261005-72",
+    "verdict": "PASS / CLOSED",
+    "reviewed_head": "b50ca7ab",
+    "archive_verified": "FULL_COPY_OK",
+    "archive_head": "2f2b2eca",
+    "pass": [
+      "CANDIDATE_TARGET_BINDING = PASS",
+      "BASELINE_AUTHORITY = PASS",
+      "BASELINE_SNAPSHOT_PROVENANCE = PASS",
+      "ROLLBACK_PLAN_BASELINE_BINDING = PASS",
+      "PHASE_5_U2 = PASS / CLOSED"
+    ],
+    "phase5_u2_final2_required": "NO",
+    "notes": [
+      "授权进入 P5-U3 Controlled Config Proposal"
+    ]
   }
 }
