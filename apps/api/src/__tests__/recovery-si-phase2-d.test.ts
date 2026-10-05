@@ -25,6 +25,7 @@ import {
 } from '../services/intelligence/recovery-guard-dry-run';
 import { createRecoveryToolRegistry, type RecoveryToolRegistry } from '../services/intelligence/recovery-tool-registry';
 import { evaluateActionGuard, type ActionGuardResult } from '../services/action-guard/action-guard';
+import { createProductionControlPlane } from '../services/action-guard/control-plane';
 import type { ControlPlaneSnapshot } from '../services/action-guard/control-plane';
 
 const NOW = '2026-10-05T04:00:00.000Z';
@@ -274,6 +275,144 @@ describe('Recovery SI P2-D v1 · Action Guard dry-run', () => {
     for (const name of Object.values(RECOVERY_GUARD_ACTION_MAP)) {
       if (name === null) continue;
       expect(RECOVERY_ALLOWED_GUARD_ACTIONS).toContain(name);
+    }
+  });
+});
+
+describe('Recovery SI P2-D v1 FINAL-2（MSG-20261005-20：F2D-01..04）', () => {
+  const realPlane = () =>
+    createProductionControlPlane({
+      killSwitch: {
+        async resolve(scope, organizationId) {
+          return { scope, value: 'enabled' as const, degraded: false, organizationId };
+        },
+      },
+      config: {
+        read: () => ({
+          globalDisabled: false,
+          mode: 'WRITE_ENABLED' as const,
+          productionGate: 'SATISFIED' as const,
+          platformEnabled: { 'claim.submit': true },
+          tenantFeatureEnabled: { 'claim.submit': true },
+          hostApprovalGranted: true,
+        }),
+      },
+    });
+
+  const forgeReady = (
+    plan: ReturnType<typeof planFor>,
+    opportunityRef: string,
+  ): ReturnType<typeof planFor> => ({
+    ...plan,
+    actions: plan.actions.map((action) =>
+      action.opportunityRef === opportunityRef
+        ? { ...action, proposedAction: 'READY_FOR_EXECUTION' as const }
+        : action,
+    ),
+  });
+
+  it('F2D-01 authorizationReady=false 的动作被篡改成 READY_FOR_EXECUTION → zero Guard call', async () => {
+    const state = stateWith([opportunity({ opportunityRef: 'opp-f2d-01', authorizationReady: false })]);
+    const reg = registry();
+    const canonical = planFor(state, reg);
+    const canonicalAction = canonical.actions.find((action) => action.opportunityRef === 'opp-f2d-01');
+    expect(canonicalAction).toBeDefined();
+    expect(canonicalAction?.proposedAction).not.toBe('READY_FOR_EXECUTION');
+
+    const cp = controlPlane({ decision: 'ALLOW' });
+    const run = await runRecoveryGuardDryRun({
+      state,
+      plan: forgeReady(canonical, 'opp-f2d-01'),
+      registry: reg,
+      controlPlane: cp.port,
+      actorUserId: 'user-1',
+      actorOrganizationId: ORG,
+      nowMs: NOW_MS,
+    });
+
+    expect(cp.calls()).toBe(0);
+    if (run.ok) {
+      expect(run.guardCallCount).toBe(0);
+      expect(run.outcomes.some((outcome) => outcome.guardEvaluated)).toBe(false);
+    }
+    expect(JSON.stringify(run.outcomes)).not.toContain('"decision":"ALLOW"');
+  });
+
+  it('F2D-02 riskClass=HIGH 的 REQUEST_OWNER_APPROVAL 被篡改成 READY_FOR_EXECUTION → zero Guard call', async () => {
+    const state = stateWith([opportunity({ opportunityRef: 'opp-f2d-02', riskClass: 'HIGH' })]);
+    const reg = registry();
+    const canonical = planFor(state, reg);
+    const canonicalAction = canonical.actions.find((action) => action.opportunityRef === 'opp-f2d-02');
+    expect(canonicalAction).toBeDefined();
+    expect(canonicalAction?.proposedAction).not.toBe('READY_FOR_EXECUTION');
+    expect(canonicalAction?.ownerApprovalRequired).toBe(true);
+
+    const cp = controlPlane({ decision: 'ALLOW' });
+    const run = await runRecoveryGuardDryRun({
+      state,
+      plan: forgeReady(canonical, 'opp-f2d-02'),
+      registry: reg,
+      controlPlane: cp.port,
+      actorUserId: 'user-1',
+      actorOrganizationId: ORG,
+      nowMs: NOW_MS,
+    });
+
+    expect(cp.calls()).toBe(0);
+    if (run.ok) expect(run.guardCallCount).toBe(0);
+    expect(JSON.stringify(run.outcomes)).not.toContain('"decision":"ALLOW"');
+  });
+
+  it('F2D-03 真实 ProductionControlPlane（非人工 gate 全满足、无 approvalId）→ REQUIRE_APPROVAL', async () => {
+    const state = stateWith([opportunity({ opportunityRef: 'opp-f2d-03' })]);
+    const reg = registry();
+    const plan = planFor(state, reg);
+    expect(plan.actions.some((action) => action.proposedAction === 'READY_FOR_EXECUTION')).toBe(true);
+
+    const plane = realPlane();
+    const run = await runRecoveryGuardDryRun({
+      state,
+      plan,
+      registry: reg,
+      controlPlane: plane,
+      actorUserId: 'user-1',
+      actorOrganizationId: ORG,
+      nowMs: NOW_MS,
+    });
+
+    expect(run.ok).toBe(true);
+    if (!run.ok) throw new Error('unreachable');
+    expect(run.guardCallCount).toBe(1);
+    const outcome = run.outcomes.find((entry) => entry.opportunityRef === 'opp-f2d-03');
+    expect(outcome?.guardEvaluated).toBe(true);
+    expect(outcome?.decision).toBe('REQUIRES_APPROVAL');
+  });
+
+  it('F2D-04 即使 Guard 返回 ALLOW，执行许可仍全为 false（submitted / persisted 冻结）', async () => {
+    const state = stateWith([opportunity({ opportunityRef: 'opp-f2d-04' })]);
+    const reg = registry();
+    const plan = planFor(state, reg);
+    const cp = controlPlane({ decision: 'ALLOW' });
+    const run = await runRecoveryGuardDryRun({
+      state,
+      plan,
+      registry: reg,
+      controlPlane: cp.port,
+      actorUserId: 'user-1',
+      actorOrganizationId: ORG,
+      nowMs: NOW_MS,
+    });
+
+    expect(run.ok).toBe(true);
+    if (!run.ok) throw new Error('unreachable');
+    const allowed = run.outcomes.filter((outcome) => outcome.decision === 'ALLOW');
+    expect(allowed.length).toBeGreaterThan(0);
+    for (const outcome of allowed) {
+      expect(outcome.executionAuthorized).toBe(false);
+      expect(outcome.executorInvoked).toBe(false);
+      expect(outcome.submitted).toBe(false);
+      expect(outcome.persisted).toBe(false);
+      expect(outcome.approvalConsumed).toBe(false);
     }
   });
 });

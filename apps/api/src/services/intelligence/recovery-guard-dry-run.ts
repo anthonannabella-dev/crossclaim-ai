@@ -23,6 +23,7 @@
 import type { CustomerRecoveryState, RecoveryDomain } from './customer-recovery-state';
 import { prioritizeOpportunities } from './recovery-prioritizer';
 import type { RecoveryActionKind, RecoveryPlan, RecoveryPlanAction } from './recovery-planner';
+import { planRecovery } from './recovery-planner';
 import type { RecoveryToolRegistry } from './recovery-tool-registry';
 import { verifyRecoveryPlan } from './recovery-verifier';
 import type { ProductionControlPlane, ControlPlaneSnapshot } from '../action-guard/control-plane';
@@ -143,6 +144,8 @@ export interface RecoveryGuardDryRunOutcome {
   reasons: readonly string[];
   executionAuthorized: false;
   executorInvoked: false;
+  submitted: false;
+  persisted: false;
   approvalConsumed: false;
   guardEvaluated: boolean;
   basis: RecoveryExecutionBasis | null;
@@ -200,6 +203,41 @@ export async function runRecoveryGuardDryRun(input: {
   const verifiedActions = verification.ok ? verification.verifiedActions : [];
   const planDigest = buildRecoveryPlanDigest({ plan: input.plan, verifiedActions });
 
+  // CHANGE D1（MSG-20261005-20）：supplied READY 必须等于内部重算的 canonical planner READY。
+  // 只读重算（同 state / 同 ranked / 同 registry），不读取 input.plan 的任何字段，因此
+  // authorizationReady / riskClass / providerApproval / evidenceComplete / PREPARE tool 篡改，
+  // 以及 actionKind 升级（REQUEST_AUTHORIZATION|REQUEST_OWNER_APPROVAL|WAIT_PROVIDER → READY_FOR_EXECUTION）
+  // 都在这里 fail-closed，且不调用 Action Guard。
+  const canonicalPlan = planRecovery({
+    state: input.state,
+    ranked: priority.ranked,
+    registry: input.registry,
+    generatedAt: input.state.observedAt,
+  });
+  const canonicalReady = new Map<string, RecoveryPlanAction>();
+  for (const canonicalAction of canonicalPlan.actions) {
+    if (canonicalAction.proposedAction === 'READY_FOR_EXECUTION') {
+      canonicalReady.set(canonicalAction.opportunityRef, canonicalAction);
+    }
+  }
+  const executionIdentity = (action: RecoveryPlanAction): string =>
+    stableStringify({
+      domain: action.domain,
+      opportunityRef: action.opportunityRef,
+      proposedAction: action.proposedAction,
+      toolRef: action.toolRef,
+      executionMode: action.executionMode,
+      authorizationRequired: action.authorizationRequired,
+      ownerApprovalRequired: action.ownerApprovalRequired,
+      expectedRecovery:
+        action.expectedRecovery === null
+          ? null
+          : {
+              amount: canonicalDecimal(action.expectedRecovery.amount),
+              currency: action.expectedRecovery.currency.trim().toUpperCase(),
+            },
+    });
+
   const outcomes: RecoveryGuardDryRunOutcome[] = [];
   let guardCallCount = 0;
 
@@ -212,6 +250,8 @@ export async function runRecoveryGuardDryRun(input: {
       guardAction,
       executionAuthorized: false as const,
       executorInvoked: false as const,
+      submitted: false as const,
+      persisted: false as const,
       approvalConsumed: false as const,
     };
     const basis: RecoveryExecutionBasis = {
@@ -246,6 +286,24 @@ export async function runRecoveryGuardDryRun(input: {
         decision: 'DENY',
         code: 'GUARD_ACTION_NOT_ALLOWLISTED',
         reasons: ['静态映射引用了非白名单 action → fail-closed'],
+        guardEvaluated: false,
+        basis,
+      });
+      continue;
+    }
+
+    const canonicalReadyAction = canonicalReady.get(action.opportunityRef);
+    if (
+      canonicalReadyAction === undefined ||
+      executionIdentity(canonicalReadyAction) !== executionIdentity(action)
+    ) {
+      outcomes.push({
+        ...base,
+        decision: 'DENY',
+        code: 'CANONICAL_READY_MISMATCH',
+        reasons: [
+          'supplied READY_FOR_EXECUTION 与内部重算 canonical plan 的 READY 不一致（授权 / OWNER gate / provider / evidence / 工具 / 金额篡改）→ fail-closed，且不调用 Action Guard',
+        ],
         guardEvaluated: false,
         basis,
       });
@@ -304,6 +362,7 @@ export const RECOVERY_GUARD_DRY_RUN_BOUNDARY = {
   capabilitiesSource: 'ProductionControlPlane.snapshotFor',
   guardEvaluationEntry: 'ProductionControlPlane.evaluateWithoutAudit',
   controlPlaneDegradedFailsClosed: true,
+  canonicalReadyAlignment: 'supplied READY_FOR_EXECUTION must equal internally recomputed canonical planner READY (execution-relevant fields)',
   approvalVerificationOwner: 'existing approval verifier / HITL channel',
   networkCalls: 0,
   credentialReads: 0,
