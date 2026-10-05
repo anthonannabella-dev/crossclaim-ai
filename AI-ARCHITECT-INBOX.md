@@ -149190,3 +149190,175 @@ PRODUCTION_READY = false
 U3 正式封板。
 ```
 
+### [MSG-20261005-62] PHASE 4 U4 裁决 = PASS WITH REVISE / NOT CLOSED（DENOMINATOR_SEMANTICS = PASS：resolved 分母 / 未判定排除 / 分母 0 → null / verified 入口；待闭合 = evaluationDigest 绑定不完整 + raw evaluator 公开旁路；PHASE4_U4_FINAL_REQUIRED = YES；U5 继续授权但只能基于 verified evaluation）， reviewed ref 48d05b15
+
+```text
+
+DECISION
+
+OFFLINE_EVALUATION_DENOMINATOR = PASS
+UNRESOLVED_EXCLUSION = PASS
+ZERO_DENOMINATOR = PASS
+VERIFIED_LINEAGE_ENTRY = PASS
+PHASE_4_U4 = PASS WITH REVISE / NOT CLOSED
+PHASE4_U4_FINAL_REQUIRED = YES
+Reviewed HEAD：48d05b15
+U5 继续授权，但只能基于 U4 的 verified evaluation 路径
+
+KEEP
+
+正式分母已经正确固定为：
+
+SUCCESS + FAILURE + REJECTED
+
+PARTIAL / MANUAL_REVIEW / UNKNOWN 单独报告，不进入 success-rate denominator。
+
+分母为 0 时 successRate/failureRate/rejectedRate = null，不会伪造 0 或 NaN。
+
+caller 自写 lineage ledger 无法进入 verified evaluation。
+
+未通过 trusted lineage 的记录会进入 excluded，且不参与分母。
+
+successCount / allRecords 没有作为正式指标暴露。
+
+offline / no network / no model call / no write / no auto-promotion 边界正确。
+
+Exact SHA 对应 GitHub Actions：未观测到 run。
+
+CHANGE
+
+1. evaluationDigest 绑定不完整
+
+当前 digest preimage 主要绑定：
+
+纯文本
+evaluationVersion
+datasetVersion
+totalRecords
+SUCCESS count
+FAILURE count
+REJECTED count
+PARTIAL count
+MANUAL_REVIEW count
+UNKNOWN count
+excluded.length
+
+因此两批完全不同的 verified records，只要 outcome 数量相同，就可能得到同一个 evaluationDigest。
+
+例如：
+
+provider / domain 改变；
+evidenceQuality 改变；
+humanIntervention 改变；
+recoveryAmount 改变；
+record digest 全部改变；
+excluded 的 digest/reason 改变但数量相同；
+
+都可能不改变 evaluationDigest。
+
+但这个 digest 已准备给 U5 candidate 绑定，因此必须至少绑定：
+
+datasetVersion + evaluationVersion + sorted verified outcomeDigests + sorted excluded{digest,reason} + metric result
+
+否则 U5 无法证明“这个 candidate 是基于哪一批学习证据评估出来的”。
+
+2. verified-only 还有一个公开旁路
+
+当前仍公开：
+
+TypeScript
+export function evaluateOfflineOutcomes(...)
+
+它可以直接接任意 OutcomeRecord[]，完全不经过 U2 trusted lineage。
+
+而边界常量又声明：
+
+verifiedOnly = true
+
+两者不完全一致。
+
+最小方案二选一：
+
+推荐：把纯 evaluator 改成 module-internal，外部唯一正式入口是 evaluateVerifiedLearningRecords()；
+或明确区分：
+evaluateOfflineOutcomesUnsafe/Internal
+正式 U5 只允许消费带 provenance 的 verified evaluation。
+
+不能让 U5 直接拿 caller 构造的 OfflineEvaluationResult。
+
+RISKS
+
+当前可以正式关闭的是：
+
+DENOMINATOR_SEMANTICS = PASS
+
+还不能关闭：
+
+TRUSTED_OFFLINE_EVALUATION_ARTIFACT = PASS
+
+因为目前同一个 digest 不唯一对应同一批 verified evidence，而且 raw evaluator 仍能绕过 verified path。
+
+另外 failureRate 当前定义为：
+
+(FAILURE + REJECTED) / resolved
+
+同时又有独立 rejectedRate。
+
+这不是错误，因为定义已经公开，但建议在 UI/报告里把它叫 nonSuccessRate 或明确说明 REJECTED 是 failureRate 的子集，避免以后误认为三率互斥相加为 100%。
+
+TEST
+
+U4 FINAL 至少新增：
+
+outcome counts 相同，但不同 record digests → evaluationDigest 必须不同。
+context/evidenceQuality/domain 改变 → digest 应变化，或明确这些字段不属于 evaluation identity。
+excluded count 相同但 excluded digest/reason 不同 → digest 必须不同。
+caller 直接构造未经 verified 的 records → 不得生成“正式 verified evaluation”。
+U5 candidate 只能绑定 verified evaluation provenance。
+原 9/9 保持 green。
+
+NEXT
+
+授权继续 U5 — Meta-improvement Candidate Proposal Only。
+
+但 U5 必须保持：
+
+verified learning evidence
+→ verified offline evaluation
+→ candidate proposal
+
+禁止：
+
+raw caller metrics → candidate
+
+更禁止：
+
+candidate → automatic Policy / Guard / Router / Action Runtime mutation
+
+同时并行做窄修：
+
+PHASE 4 U4 FINAL — evaluation identity/provenance closure
+
+通过后：
+
+U4 = PASS / CLOSED
+
+PRODUCTION
+
+继续全部 HOLD：
+
+REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing
+
+继续：
+
+SECOND_* = FORBIDDEN
+L5_RELAXATION = FORBIDDEN
+
+保持：
+
+MODEL_GATEWAY_RUNTIME_WIRED = false
+ACTION_RUNTIME_PRODUCTION_ENABLED = false
+META_IMPROVEMENT_INTEGRATED = false
+PRODUCTION_READY = false
+```
+
