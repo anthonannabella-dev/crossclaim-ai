@@ -2517,3 +2517,14 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 状态迁移：si-rsi-unification-design = PASS_CLOSED；si-cost-optimization = QUEUED → READY_FOR_DESIGN（不等于 AUTO_IMPLEMENTATION_AUTHORIZED）。
 - 边界不变：RUNTIME_WIRING = NONE；STEP_3_RUNTIME_POLICY_WIRING = NOT_AUTHORIZED；SECOND_RUNTIME / SECOND_POLICY_ENGINE / SECOND_COST_LEDGER / SECOND_META_EVIDENCE_STORE = FORBIDDEN；L5 不放宽；P2_F / P2_G = HOLD；REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT = HOLD；FINAL_ACCEPTANCE_HEAD = 0f7f7ac。
 
+## 2026-10-05T14:10Z — SI-COST-OPTIMIZATION 设计/实施边界送审（C1/C2/C3 分期；另一审计会话）
+- HOST 开启新审计会话（`https://chatgpt.com/` 空会话；旧会话 `6ac1cdf0-…` 保留为历史，含 MSG-22..29 全部逐字归档）；
+  STATE.channel_status 已更新。
+- 新增 `docs/releases/SI-COST-OPTIMIZATION-DESIGN-REQUEST.md`：总原则（DETERMINISTIC FIRST → AI ONLY WHEN NEEDED）+
+  C1（零 Schema：Necessity Gate / cache identity / cheap→strong quality gate）/ C2（durable ledger + hierarchical budget）/
+  C3（business-value policy + admin observability）+ 5 项待裁定分岔（ledger 存储 A/B、预算存储 A/B（建议账本聚合）、
+  cache 存储 A/B、Necessity Gate 强制点（建议 Model Gateway 咽喉）、预算强制点）+ Acceptance 12 条 + 指标 NOT_YET_MEASURABLE 规则 + 边界。
+- 状态迁移：si-cost-optimization READY_FOR_DESIGN → `DESIGN_SUBMITTED_PENDING_VERDICT`（仍不等于实施授权）。
+- 未授权项继续 HOLD：REAL_MODEL_NETWORK / PAID_MODEL_CALLS（v1 仅本地仿真 adapter）/ EXTERNAL_WRITE / PAYMENT /
+  TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT；P2_F = HOLD / P2_G = HOLD。
+
