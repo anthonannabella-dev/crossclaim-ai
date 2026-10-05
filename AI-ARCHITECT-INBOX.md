@@ -139318,3 +139318,186 @@ FINAL_ACCEPTANCE_HEAD = 0f7f7ac
 
 结论：只修 A1/A2/B1/B2，并补 6 个针对性负例，然后送 Recovery SI Phase 2 A/B FINAL-2。不要顺带进入 P2-C 或 P2-D。
 ```
+
+### [MSG-20261005-15] ARCHITECT VERDICT — Recovery SI Phase 2 A/B FINAL-2 = **PASS / CLOSED**（`REVIEWED_HEAD = c04c3c43`，未使用上一轮缓存）。① **A1 / A2 = PASS**：`CHANGE_A1_UNIQUE_COHORT = PASS`（cohort = unique opportunityRef count；同一机会产生 `PREPARE_PACKAGE` + `READY_FOR_EXECUTION` 只计 1 个 cohort member，授权阻塞率 / 证据缺失率分母同步按 unique opportunity）、`CHANGE_A2_DOMAIN_BOUND_OUTCOME_SAMPLES = PASS`（`estimateErrorSamplesByDomain` / `timeToReadySamplesMsByDomain` 真正隔离，CUSTOMS 样本不再进入 CARRIER / PLATFORM）、`P2_A_OUTPUT_ENVELOPE = PASS`（`refs = rule-version:* | algorithm-version:* only`；`signal` / `reasonCodes` 固定 enum；`dedupeKey` 固定 pattern；`summary` 固定 server pattern）。② **B1 / B2 = PASS**：`CHANGE_B1_VERIFY_AT_INVOCATION_BOUNDARY = PASS`（`runRecoveryReadTools()` 不再接收外部 verification，改为 `current state → prioritizeOpportunities() → verifyRecoveryPlan(current plan) → only verified actions → READ tool`，「先 verify Plan A 再改 plan」的旧 verification 已无法复用）、`CHANGE_B2_ACTOR_TENANT_BINDING = PASS`（`input.organizationId == actor.organizationId` 在任何 Prisma read **之前**校验）、`CHANGE_B2_OUTPUT_IDENTITY_BINDING = PASS`（`output.opportunityRef == requested opportunityRef`，否则 `OUTPUT_IDENTITY_REJECTED` 且 `output = null`）。③ **六条 FINAL-2 证据足够、不需要 FINAL-3**：F2-01 unique cohort / F2-02 cross-domain sample isolation / F2-03 output-envelope leakage / F2-04 stale verification + modified plan / F2-05 actor tenant mismatch before DB / F2-06 output identity mismatch；正式状态 `P2_A = PASS`、`P2_B = PASS`、`RECOVERY_SI_PHASE2_AB = PASS / CLOSED`（19/19 Phase2-AB + 22/22 Phase1 regression = 41/41 与 tsc 0 属本地执行证据；`c04c3c43` hosted status 仍为空，架构方独立确认的是代码与测试实现本身）。④ **后续边界冻结**：`publishRecoveryOutcomeSignals()` 预留可注入 sink 接口，但 `RSI_OUTCOME_SINK_RUNTIME_WIRING = NOT_AUTHORIZED` —— 不得因为函数存在就把 Recovery Outcome Signal 直接接到 RSI incident/task persistence，真正接 sink 须归入后续 runtime/internal-write 阶段验收。⑤ **P2-C～P2-G 继续维持未授权**：`P2_C_PREPARE = NOT_AUTHORIZED`、`P2_D_ACTION_GUARD_DRY_RUN = NOT_AUTHORIZED`、`P2_E_PERSISTENCE = HOLD_SCHEMA_DELTA`、`P2_F_MODEL_ASSISTANCE = HOLD`、`P2_G_REAL_EXECUTION = HOLD`、`RUNTIME_WIRING = NONE`、`SCHEMA_DELTA_REQUIRED = NO`（仅当前 A/B 范围）、`EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / REAL_CLAIM_SUBMIT / CUSTOMS_FILING / RSI_MODEL_NETWORK / RSI_PAID_MODEL_CALLS = HOLD`、`SECOND_RUNTIME = FORBIDDEN`、`L5_RELAXATION = FORBIDDEN`、`FINAL_ACCEPTANCE_HEAD = 0f7f7ac`。结论：P2-A + P2-B 正式 **PASS / CLOSED**，不需要 FINAL-3；下一步如要继续，应先单独送 **P2-C PREPARE 的设计/实施边界**，不得自动进入 P2-D。
+
+```text
+ARCHITECT VERDICT：PASS / CLOSED
+
+我按 REVIEWED_HEAD = c04c3c43854f6a90371a90cf7989cb3dcc34f74c 重新复核了 FINAL-2，没有使用上一轮缓存。A1/A2/B1/B2 都已经真正落到运行边界。
+
+① A1 / A2：PASS
+
+A1 已正确改成：
+
+纯文本
+cohort = unique opportunityRef count
+
+同一机会产生：
+
+纯文本
+PREPARE_PACKAGE
++
+READY_FOR_EXECUTION
+
+只计 1 个 cohort member。授权阻塞率、证据缺失率的分母也同步采用 unique opportunity，关闭了原先“action 数虚高匿名集合”的问题。
+
+A2 也已正确隔离：
+
+纯文本
+estimateErrorSamplesByDomain
+timeToReadySamplesMsByDomain
+
+CUSTOMS 的样本不会再进入 CARRIER/PLATFORM。
+
+输出封套现在也足够严格：
+
+纯文本
+refs = rule-version:* | algorithm-version:* only
+signal = fixed enum
+reasonCodes = fixed enum
+dedupeKey = fixed pattern
+summary = fixed server pattern
+
+所以：
+
+纯文本
+CHANGE_A1_UNIQUE_COHORT = PASS
+CHANGE_A2_DOMAIN_BOUND_OUTCOME_SAMPLES = PASS
+P2_A_OUTPUT_ENVELOPE = PASS
+② B1 / B2：PASS
+
+B1 已真正消除旧 verification TOCTOU。
+
+runRecoveryReadTools() 现在不再接收外部 verification，而是内部重新执行：
+
+纯文本
+current state
+→ prioritizeOpportunities()
+→ verifyRecoveryPlan(current plan)
+→ only verified actions
+→ READ tool
+
+因此：
+
+纯文本
+Plan A verified
+→ plan 被修改
+→ 旧 verification
+
+已无法复用。
+
+B2 两道 identity gate 也实际存在：
+
+纯文本
+input.organizationId
+==
+actor.organizationId
+
+在任何 Prisma read 之前校验；不一致直接 fail-closed。
+
+以及：
+
+纯文本
+output.opportunityRef
+==
+requested opportunityRef
+
+否则：
+
+纯文本
+OUTPUT_IDENTITY_REJECTED
+output = null
+
+因此：
+
+纯文本
+CHANGE_B1_VERIFY_AT_INVOCATION_BOUNDARY = PASS
+CHANGE_B2_ACTOR_TENANT_BINDING = PASS
+CHANGE_B2_OUTPUT_IDENTITY_BINDING = PASS
+③ 六条 FINAL-2 证据足够
+
+六个针对性负例正好覆盖上一轮 blocker：
+
+纯文本
+F2-01 unique cohort
+F2-02 cross-domain sample isolation
+F2-03 output-envelope leakage
+F2-04 stale verification / modified plan
+F2-05 actor tenant mismatch before DB
+F2-06 output identity mismatch
+
+不需要再增加 FINAL-3。
+
+正式状态：
+
+纯文本
+P2_A = PASS
+P2_B = PASS
+
+RECOVERY_SI_PHASE2_AB = PASS
+RECOVERY_SI_PHASE2_AB = CLOSED
+
+送审记录的：
+
+纯文本
+19/19 Phase2-AB
+22/22 Phase1 regression
+41/41 total
+tsc exit 0
+
+属于本地执行证据；exact c04c3c43 的 GitHub hosted status/workflow 目前仍为空。我独立确认的是代码及测试实现本身。
+
+一个后续边界要冻结清楚
+
+publishRecoveryOutcomeSignals() 已预留可注入 sink 的接口；这不阻塞本轮 PASS，因为当前没有 RSI runtime sink wiring。
+
+但以后不能因为这个函数已经存在，就直接把：
+
+纯文本
+Recovery Outcome Signal
+→ RSI incident/task persistence
+
+接起来。
+
+继续明确：
+
+纯文本
+RSI_OUTCOME_SINK_RUNTIME_WIRING = NOT_AUTHORIZED
+
+真正接 RSI sink 时，应归入后续 runtime/internal-write 阶段验收。
+
+④ P2-C～P2-G 继续维持未授权
+
+确认：
+
+纯文本
+P2_C_PREPARE = NOT_AUTHORIZED
+P2_D_ACTION_GUARD_DRY_RUN = NOT_AUTHORIZED
+
+P2_E_PERSISTENCE = HOLD_SCHEMA_DELTA
+P2_F_MODEL_ASSISTANCE = HOLD
+P2_G_REAL_EXECUTION = HOLD
+
+并继续：
+
+纯文本
+RUNTIME_WIRING = NONE
+SCHEMA_DELTA_REQUIRED = NO   // 仅当前 A/B 范围
+
+EXTERNAL_WRITE = HOLD
+PAYMENT = HOLD
+TRANSPORT = HOLD
+PRODUCTION_CREDENTIALS = HOLD
+REAL_CLAIM_SUBMIT = HOLD
+CUSTOMS_FILING = HOLD
+RSI_MODEL_NETWORK = HOLD
+RSI_PAID_MODEL_CALLS = HOLD
+
+SECOND_RUNTIME = FORBIDDEN
+L5_RELAXATION = FORBIDDEN
+
+FINAL_ACCEPTANCE_HEAD = 0f7f7ac
+
+结论：P2-A + P2-B 到这里可以正式 PASS / CLOSED，不需要 FINAL-3。下一步如要继续，应先单独送 P2-C PREPARE 的设计/实施边界；不要自动进入 P2-D。
+```

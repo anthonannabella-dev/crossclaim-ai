@@ -766,3 +766,9 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - 必须项：`CHANGE_A1_UNIQUE_COHORT`（cohort = unique opportunityRef）、`CHANGE_A2_DOMAIN_BOUND_OUTCOME_SAMPLES`（按域隔离样本 + 输出封套收紧）、`CHANGE_B1_VERIFY_AT_INVOCATION_BOUNDARY`（入口内重新 verify）、`CHANGE_B2_ACTOR_AND_OUTPUT_IDENTITY_BINDING`（actor tenant + output identity）。
 - 证据：`docs/releases/RECOVERY-SI-PHASE2-AB-EVIDENCE.md` §7（含 F2-01..06 对照表）。
 - 仍未授权：P2-C PREPARE / P2-D Action Guard handoff / P2-E Schema Delta / P2-F 模型 / P2-G 真实执行；RUNTIME_WIRING = NONE。
+
+### RECOVERY SI PHASE 2 A/B = PASS / CLOSED（MSG-20261005-15）
+
+- P2-A（匿名聚合能力信号）+ P2-B（只读 Tool 实接）正式 CLOSED；不需要 FINAL-3。
+- 下一单元：**P2-C PREPARE Tool 设计/实施边界送审（设计先行、零代码）**；不得自动进入 P2-D。
+- 冻结：`RSI_OUTCOME_SINK_RUNTIME_WIRING = NOT_AUTHORIZED`、`RUNTIME_WIRING = NONE`、`P2-D/P2-E/P2-F/P2-G` 未授权、外部能力全 HOLD。

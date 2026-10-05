@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-10-05T05:12:52.140Z",
-  "acceptance_head": "c04c3c43",
+  "generated_at": "2026-10-05T05:15:46.296Z",
+  "acceptance_head": "e3e7bc7d",
   "protocol": "docs/releases/FINAL-ACCEPTANCE-PROTOCOL.md",
   "areas": [
     {
@@ -236,7 +236,8 @@
     "RSI-INSP-07-weekly-capability-integration",
     "recovery-si-phase1",
     "recovery-si-phase2",
-    "recovery-si-phase2-ab"
+    "recovery-si-phase2-ab",
+    "recovery-si-phase2-c-design"
   ],
   "host_action_required": [
     "provider developer/partner account registration",

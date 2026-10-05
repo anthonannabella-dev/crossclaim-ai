@@ -2159,3 +2159,10 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 证据：docs/releases/RECOVERY-SI-PHASE2-AB-EVIDENCE.md §7（F2-01..06 对照表）；41/41 PASS（19 新例 + 22 Phase 1 回归）、tsc exit 0。
 - 未授权：P2-C PREPARE / P2-D Action Guard handoff / P2-E Schema Delta / P2-F 模型 / P2-G 真实执行；RUNTIME_WIRING = NONE；SCHEMA_DELTA_REQUIRED = NO。
 - 送达验证后立即读取并逐字归档裁决（FNV + FULL_COPY_OK），不等待下一次 heartbeat。
+
+## 2026-10-05T05:15:46.087Z — Recovery SI Phase 2 A/B FINAL-2 = PASS / CLOSED（MSG-20261005-15）
+- 裁决逐字归档：AI-ARCHITECT-INBOX.md 新增 [MSG-20261005-15]（FNV b741dcca / 178 行 / FULL_COPY_OK；REVIEWED_HEAD c04c3c43）。
+- A1/A2/输出封套 与 B1/B2 全部 PASS；六条 F2-01..06 证据被认定充分，FINAL3_REQUIRED = NO。
+- 正式状态：P2_A = PASS、P2_B = PASS、RECOVERY_SI_PHASE2_AB = PASS / CLOSED（41/41 PASS + tsc 0 属本地执行证据）。
+- 冻结边界：RSI_OUTCOME_SINK_RUNTIME_WIRING = NOT_AUTHORIZED；RUNTIME_WIRING = NONE；P2-C/P2-D = NOT_AUTHORIZED；P2-E = HOLD_SCHEMA_DELTA；P2-F/P2-G = HOLD；SECOND_RUNTIME = FORBIDDEN；L5_RELAXATION = FORBIDDEN；FINAL_ACCEPTANCE_HEAD = 0f7f7ac。
+- 下一步：先单独送 P2-C PREPARE 的设计/实施边界（零代码），不得自动进入 P2-D。
