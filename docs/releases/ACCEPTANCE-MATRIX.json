@@ -1,6 +1,6 @@
 {
-  "generated_at": "2026-10-05T08:54:05.263Z",
-  "acceptance_head": "c1c23382",
+  "generated_at": "2026-10-05T09:10:23.767Z",
+  "acceptance_head": "8a7cabe6",
   "protocol": "docs/releases/FINAL-ACCEPTANCE-PROTOCOL.md",
   "areas": [
     {
@@ -239,7 +239,8 @@
     "recovery-si-phase2-ab",
     "recovery-si-phase2-c-design",
     "recovery-si-phase2-d-design",
-    "recovery-si-phase2-remainder-queue"
+    "recovery-si-phase2-remainder-queue",
+    "si-rsi-unification-design"
   ],
   "host_action_required": [
     "provider developer/partner account registration",

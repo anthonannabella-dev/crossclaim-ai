@@ -2323,3 +2323,9 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - recovery-persist-gate.ts 增 RecoveryPersistTransactionPort / RecoveryPersistUnitWrite / persistRecoveryPackageWithinTransaction / assertApprovedTransactionUnits。
 - 语义：门禁非 ALLOW → 端口零调用且 persisted=false；单元集合必须与四个批准单元完全一致（否则 fail-closed）；成功 → 整批一次交给端口；端口抛错上抛不吞；返回 businessIdentity=packageDigest / traceBasis=planDigest。
 - 测试新增 P2E-G9..G12；真实 DB 事务与回滚证据仍属 P2-E4。
+
+## 2026-10-05T09:12Z — HOST 架构指令（冻结）：UNIFY RSI + SI（登记，不打断 P2-E）
+- 新增 docs/releases/SI-RSI-UNIFICATION-DIRECTIVE.md：单一顶层 CrossClaim SI Runtime；RSI 下沉为 SI 内 Meta-Improvement Capability；Recovery SI 接入既有 Runtime；ONE CONTROL PLANE；L1–L5 分层；验收标准见 §9。
+- backlog 增 si-rsi-unification-design = QUEUED_AFTER_P2_E（ARCH_REVIEW_REQUIRED = true，allowed_files 仅 docs/releases/**）。
+- 施工顺序冻结：先完整完成 P2-E（迁移/guard/manifest/transaction port/lineage/验证/Implementation Audit）→ 再做 inventory + KEEP/REUSE/MERGE/DEPRECATE/DUPLICATE + 最小统一方案送审。
+- 硬约束：不得删除现有 RSI 模块、不得大范围 rename/refactor、不回滚已审计的 P2-D/P2-E；不解锁任何真实 External Write / Payment / Production Credential。
