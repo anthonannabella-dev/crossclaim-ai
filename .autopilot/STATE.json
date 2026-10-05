@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-40",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T19:04:42.433Z",
+  "updated_at": "2026-10-05T19:05:46.958Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -21,7 +21,7 @@
   "ci_result": "completed_success",
   "fix_pr": "https://github.com/anthonannabella-dev/crossclaim-ai/pull/10",
   "channel_status": "HEALTHY（主审计会话 = https://chatgpt.com/c/6ac385db-cb60-83ec-9754-c7a30633a8c5（HOST 新开；MSG-20261005-30 起）；历史会话 https://chatgpt.com/c/6ac1cdf0-1ec8-83ec-8036-0e66fcf5c6b9 保留 MSG-22..29 逐字归档）",
-  "pending_verdict_unarchived": "PHASE 4 U2 FINAL3（Reviewed HEAD 2ae5adc5）—— 已投递，等待裁决",
+  "pending_verdict_unarchived": null,
   "b2_status": "PASS（MSG-20260930-10 工程修复 + MSG-20260930-11 集成 PASS/MERGE APPROVED）",
   "protocol": "DUAL_CHANNEL_WAKEUP（GitHub = 正式总线 / ChatGPT Web = 仅唤醒）",
   "integration_pr": "https://github.com/anthonannabella-dev/crossclaim-ai/pull/11",
@@ -50,13 +50,13 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
-  "next_execution_unit": "PHASE 4 U2 FINAL3 裁决处理：读取右侧审核会话（tab 14）完整 verdict（严格匹配 REVIEWED_HEAD = 2ae5adc5）→ 原样逐字归档 AI-ARCHITECT-INBOX.md（MSG-20261005-59）→ compare.mjs 必须 FULL_COPY_OK → durable state 对账。若 LINEAGE_BINDING = PASS / U2 CLOSED → 继续 U3（learning dataset projection + immutable learning evidence，只接正式 trusted ledger/source、append-only、复用既有 evidence store、禁止第二存储）→ U4（offline evaluation，显式定义 SUCCESS/FAILURE/PARTIAL/UNKNOWN/MANUAL_REVIEW 分母语义）→ U5（meta-improvement candidate proposal only）；若仍 REVISE → 按裁决继续窄修（注意：U3 在漏洞关闭前不得宣称 trusted verified evidence）。",
+  "next_execution_unit": "PHASE 4 U3 —— Learning Dataset + Immutable Learning Evidence（按裁决 NEXT 要求）：链路 canonical outcome → trusted lineage verified → learning projection → **既有 evidence ledger append-only evidence**；禁止建立 SECOND_META_EVIDENCE_STORE；immutable evidence 至少绑定 outcomeDigest + lineage refs + dataset/evaluation version + evidence digest；只能接正式 trusted ledger/source（U2 已 CLOSED），未过 binding 的记录不得进入 verified path。随后 U4 —— Offline Evaluation：必须明确 resolved denominator（SUCCESS / FAILURE·REJECTED / PARTIAL / UNKNOWN / MANUAL_REVIEW），不得继续用 successCount / all records 作为正式质量指标；U5 —— Meta-improvement Candidate：只允许 observe → evaluate → candidate proposal，禁止 candidate → automatic policy/router/guard/action mutation；AUTO_PROMOTION = OFF。流程：code → tests → regression → tsc → commit → push → 送审 → 送达三检 → 逐字归档 → FULL_COPY_OK → durable state。边界不变：REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT = HOLD；SECOND_* = FORBIDDEN；L5_RELAXATION = FORBIDDEN；四项 false 标志保持。",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-05T19:04:42.433Z",
+  "last_tick_at": "2026-10-05T19:05:46.958Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "PHASE 4 U2 FINAL3（trusted ledger provenance）已实施并送审：createAppOutcomeLineageLedger(repos) + 模块私有 WeakSet；createAppOutcomeLineageSource 只接受 trusted ledger（否则 APP_OUTCOME_LINEAGE_LEDGER_NOT_TRUSTED，切断 fake ledger 洗白链）；verified 路径只接受 ledger（缺失 → APP_OUTCOME_LINEAGE_LEDGER_REQUIRED；非 trusted → OUTCOME_LINEAGE_LEDGER_NOT_TRUSTED）；push 2ae5adc5；投递 [CODEX-PHASE4-U2FINAL3]，送达三检通过，等待裁决。回归 92/93 files、946/947 tests（唯一失败 = P2E-DB5 test-isolation debt，单独 20/20 PASS）。",
-  "last_action_at": "2026-10-05T19:04:42.433Z",
-  "next_action": "读取 PHASE 4 U2 FINAL3 裁决 → 逐字归档 + compare.mjs FULL_COPY_OK + durable state 对账",
+  "last_action": "PHASE 4 U2 FINAL3 裁决已读取并原样归档（MSG-20261005-59，compare.mjs = FULL_COPY_OK）：TRUSTED_LEDGER_PROVENANCE = PASS、SOURCE_PROVENANCE = PASS、LINEAGE_BINDING = PASS；PHASE_4_U2 = PASS / CLOSED；PHASE4_U2_FINAL4_REQUIRED = NO；U3/U4/U5 继续授权。",
+  "last_action_at": "2026-10-05T19:05:46.958Z",
+  "next_action": "PHASE 4 U3：Learning Dataset + Immutable Learning Evidence",
   "current_head": "2ae5adc5",
   "last_completed_head": "6cba0639",
   "reviewed_head": "add99ec3",
@@ -5169,11 +5169,11 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "P4K-1 读取 PHASE 4 U2 FINAL3 裁决（tab 14，匹配 Reviewed HEAD 2ae5adc5）+ 逐字归档 MSG-20261005-59 + compare.mjs + durable state",
-    "P4K-2 U3 learning dataset projection + immutable learning evidence（只接正式 trusted ledger/source；append-only；复用既有 evidence store）",
-    "P4K-3 U4 offline evaluation（显式定义 SUCCESS/FAILURE/PARTIAL/UNKNOWN/MANUAL_REVIEW 分母语义）",
-    "P4K-4 U5 meta-improvement candidate proposal only（AUTO_PROMOTION = OFF，必须经外部 Judge）",
-    "P4K-5 非阻断维护项：scanRawPayloadKeys 改完整有界遍历/循环检测"
+    "P4L-1 U3 learning dataset + immutable learning evidence（接正式 trusted ledger/source；append-only 复用既有 evidence ledger；禁止第二存储；绑定 outcomeDigest+lineage refs+dataset version+evidence digest）",
+    "P4L-2 U3 tests → regression → tsc → commit → push → 送审 → 逐字归档 → compare.mjs → durable state",
+    "P4L-3 U4 offline evaluation（显式 resolved denominator：SUCCESS / FAILURE·REJECTED / PARTIAL / UNKNOWN / MANUAL_REVIEW）",
+    "P4L-4 U5 meta-improvement candidate proposal only（observe → evaluate → candidate；禁止自动改 policy/router/guard/action；AUTO_PROMOTION = OFF）",
+    "P4L-5 非阻断维护项：scanRawPayloadKeys 改完整有界遍历/循环检测"
   ],
   "full_autonomous_internal_execution": "VERIFIED",
   "dispatcher_acceptance": {
@@ -9323,7 +9323,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-05T19:04:42.433Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-05T19:05:46.958Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -9450,7 +9450,7 @@
     "PHASE_1_FINAL7": "PASS / CLOSED（MSG-20261005-47，REVIEWED_HEAD = 795f65a5；STEP3_FINAL8_REQUIRED = NO）",
     "PHASE_2_MODEL_GATEWAY_RUNTIME": "PASS / CLOSED（MSG-20261005-50；Reviewed HEAD 338f30b4；PHASE2_FINAL5_REQUIRED = NO）",
     "PHASE_3_ACTION_RUNTIME": "PASS / CLOSED（MSG-20261005-54；Reviewed HEAD = fe3c33e9；PHASE3_FINAL4_REQUIRED = NO）",
-    "PHASE_4_OUTCOME_LEARNING_PIPELINE": "AUTHORIZED / STARTING（PHASE 3 CLOSED 后自动进入；只观察不改策略）",
+    "PHASE_4_OUTCOME_LEARNING_PIPELINE": "IN PROGRESS（U1 FINAL = PASS；U2 = PASS / CLOSED；NEXT = U3 → U4 → U5）",
     "PHASE_5_META_IMPROVEMENT": "QUEUED（需真实运行结果）"
   },
   "heartbeat_watchdog": {
@@ -9856,5 +9856,29 @@
       "regression": "92/93 files、946/947 tests（唯一失败 = P2E-DB5 test-isolation debt，单独 20/20 PASS）",
       "github_ci": "NOT_OBSERVED"
     }
+  },
+  "phase4_u2_final3_verdict": {
+    "message_id": "MSG-20261005-59",
+    "verdict": "PASS / CLOSED",
+    "reviewed_head": "2ae5adc5",
+    "archive_verified": "FULL_COPY_OK",
+    "pass": [
+      "TRUSTED_LEDGER_PROVENANCE",
+      "SOURCE_PROVENANCE",
+      "LINEAGE_BINDING",
+      "proposalLinked adapter 计算",
+      "verified/excluded 逻辑"
+    ],
+    "phase4_u2_final4_required": "NO",
+    "notes": [
+      "无需继续向 repository 层递归加 WeakSet：OutcomeLineageRepositoryDeps 属 server-owned composition root dependency，与此前 AppActionGuardDeps 信任模型一致；只能由服务端 composition root 提供，不得从 HTTP/body/client 构造",
+      "U3 接真实 immutable learning evidence 时仍须确认正式 repository adapter 确实读取既有 action/proposal/evidence 数据源，而不是另建影子事实源",
+      "非阻断债务：scanRawPayloadKeys 固定递归深度；P2E-DB5 test-isolation debt"
+    ],
+    "authorized_continue": [
+      "U3",
+      "U4",
+      "U5"
+    ]
   }
 }
