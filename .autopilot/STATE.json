@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "766ca18f",
+  "head": "b3629ffc",
   "status": "RECONCILED",
   "current_task": "RSI 生产可执行闭环（7 点收口）：RSI_RUNTIME_READY = PASS；MODEL_PROVIDER_READY = 本地仿真已接线（真实网络/付费 HOLD）；PERSISTENCE_READY = ephemeral 已验证、durable 需宿主非生产 DATABASE_URL；REBOOT_RECONCILE_READY = NOT_IMPLEMENTED（下一单元）；SYSTEMD_VALIDATED = 需宿主 Linux 实机",
   "next_task": "BG-016 单一 Acceptance Head + 四份状态一致 guard（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍 HOST_ACTION_REQUIRED 或 HOLD",
@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-40",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T23:17:15.114Z",
+  "updated_at": "2026-10-05T23:24:28.898Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -21,7 +21,7 @@
   "ci_result": "completed_success",
   "fix_pr": "https://github.com/anthonannabella-dev/crossclaim-ai/pull/10",
   "channel_status": "HEALTHY（主审计会话 = https://chatgpt.com/c/6ac385db-cb60-83ec-9754-c7a30633a8c5（HOST 新开；MSG-20261005-30 起）；历史会话 https://chatgpt.com/c/6ac1cdf0-1ec8-83ec-8036-0e66fcf5c6b9 保留 MSG-22..29 逐字归档）",
-  "pending_verdict_unarchived": null,
+  "pending_verdict_unarchived": "MSG-20261005-82",
   "b2_status": "PASS（MSG-20260930-10 工程修复 + MSG-20260930-11 集成 PASS/MERGE APPROVED）",
   "protocol": "DUAL_CHANNEL_WAKEUP（GitHub = 正式总线 / ChatGPT Web = 仅唤醒）",
   "integration_pr": "https://github.com/anthonannabella-dev/crossclaim-ai/pull/11",
@@ -50,15 +50,15 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
-  "next_execution_unit": "PHASE 5 U5 verdict archive + closure: (1) read verdict (REVIEWED_HEAD = 766ca18f, marker [CODEX-PHASE5-U5]); (2) write work/stage/verdict-p5u5-raw.txt then archive AI-ARCHITECT-INBOX.md (MSG-20261005-82) + compare.mjs FULL_COPY_OK + commit/push; (3) durable state; if PASS and the auditor confirms phase closure, record PHASE_5_META_IMPROVEMENT = CLOSED and follow the auditor NEXT for the next phase/unit.",
+  "next_execution_unit": "PHASE 5 U5 FINAL closure: (1) extract+archive the U5 verdict text (MSG-20261005-82) verbatim with compare.mjs FULL_COPY_OK; (2) read the U5 FINAL verdict (marker [CODEX-PHASE5-U5FINAL], REVIEWED_HEAD = b3629ffc) and archive it (MSG-20261005-83) with FULL_COPY_OK; (3) durable state: if PASS -> PHASE_5_META_IMPROVEMENT = CLOSED (U1-U5); (4) add the docs-only Phase 5 closure checkpoint per the auditor wording (no new feature units); boundaries unchanged.",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-05T23:17:15.114Z",
+  "last_tick_at": "2026-10-05T23:24:28.898Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "PHASE 5 U5 Controlled Adoption Review implemented per MSG-20261005-81 frozen gate: eligible-canary + proposal + rollback-plan input gate (no ROLLBACK_REQUIRED / INSUFFICIENT_EVIDENCE / provenance-proposal-rollback mismatch); CONTROLLED_ADOPTION_REVIEW_TICKET with 14 bindings and exact scope, provenance+fingerprint+deep-freeze; verdict APPROVED/REJECTED bound to ticket/canary/proposal/rollback digests + reviewerId/role/scope/decidedAt/reason; one-ticket-one-verdict digest-keyed replay, expiry, one-way revocation, roles EXTERNAL_JUDGE/HUMAN_OPERATOR; APPROVED means APPROVED_FOR_CONTROLLED_ADOPTION_PLANNING only (apply/autoPromotion/productionRollout/mutation all FORBIDDEN, no execution exports). code 766ca18f pushed and submitted (marker [CODEX-PHASE5-U5], REVIEWED_HEAD = 766ca18f). Local: tsc 0; controlled-adoption-review 5/5; PHASE5 10 files / 123 tests PASS; regression 103 files / 1070 tests (only P2E-DB5).",
-  "last_action_at": "2026-10-05T23:16:08.184Z",
-  "next_action": "Read PHASE 5 U5 verdict -> archive (MSG-20261005-82) -> if PASS consider PHASE 5 closure (U1-U5) and next phase per auditor.",
-  "current_head": "766ca18f",
-  "last_completed_head": "766ca18f",
+  "last_action": "PHASE 5 U5 FINAL implemented: verdict semantics now outcome-dependent (APPROVED -> APPROVED_FOR_CONTROLLED_ADOPTION_PLANNING; REJECTED -> REJECTED_NO_CONTROLLED_ADOPTION_PLAN) with the type union and boundary rejectedSemantics updated; code b3629ffc pushed and submitted (marker [CODEX-PHASE5-U5FINAL], REVIEWED_HEAD = b3629ffc). Local: tsc 0; controlled-adoption-review 6/6; PHASE5 10 files / 124 tests PASS; regression 103 files / 1071 tests (only P2E-DB5). NOTE: two verdicts are pending archival - MSG-20261005-82 (U5 verdict, PASS WITH REVISE) and the upcoming U5 FINAL verdict (expect MSG-20261005-83); archive both verbatim with compare.mjs FULL_COPY_OK next tick.",
+  "last_action_at": "2026-10-05T23:24:28.898Z",
+  "next_action": "Archive U5 verdict (MSG-20261005-82) and read/archive the U5 FINAL verdict (MSG-20261005-83); then PHASE 5 closure (docs-only closure checkpoint per auditor).",
+  "current_head": "b3629ffc",
+  "last_completed_head": "b3629ffc",
   "reviewed_head": "add99ec3",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -5169,9 +5169,9 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "P5U5a-0 (verdict received, REVISE) U5 verdict (REVIEWED_HEAD 766ca18f) = PASS WITH REVISE / NOT CLOSED: ELIGIBLE_CANARY_GATE / TICKET_PROVENANCE-ANTI_TAMPER / REPLAY-EXPIRY-REVOCATION / REVIEWER_ROLE_SCOPE / NO_EXECUTION-REVIEW_ONLY = PASS; REJECTED_VERDICT_SEMANTICS = REVISE; PHASE5_U5_FINAL_REQUIRED = YES. Narrow fix: verdict semantics must be outcome-dependent (APPROVED -> APPROVED_FOR_CONTROLLED_ADOPTION_PLANNING; REJECTED -> REJECTED_NO_CONTROLLED_ADOPTION_PLAN or the auditor wording from the archived CHANGE section) + tests for both outcomes; then U5 = CLOSED and Phase 5 can functionally close with a docs-only closure checkpoint (no new feature unit).",
-    "P5U5a-2 if PASS and phase closure confirmed -> record PHASE 5 = CLOSED; else follow auditor NEXT",
-    "P5U5a-3 non-blocking debt: full SHA-256 digests, fingerprint schema upkeep, scanRawPayloadKeys bounded traversal, P2E-DB5 test-isolation"
+    "P5U5b-1 archive U5 verdict MSG-20261005-82 + U5 FINAL verdict MSG-20261005-83 verbatim (compare.mjs FULL_COPY_OK) + commit/push",
+    "P5U5b-2 if U5 FINAL = PASS -> record PHASE 5 = CLOSED (U1-U5) and produce the docs-only closure checkpoint per auditor",
+    "P5U5b-3 non-blocking debt: full SHA-256 digests, fingerprint schema upkeep, scanRawPayloadKeys bounded traversal, P2E-DB5 test-isolation"
   ],
   "full_autonomous_internal_execution": "VERIFIED",
   "dispatcher_acceptance": {
@@ -9321,7 +9321,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-05T23:17:15.114Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-05T23:24:28.898Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -10937,6 +10937,23 @@
       "marker": "[CODEX-PHASE5-U5]",
       "delivered": true,
       "expected_message_id": "MSG-20261005-82"
+    }
+  },
+  "phase5_u5_final": {
+    "status": "SUBMITTED / AWAITING_VERDICT",
+    "reviewed_head": "b3629ffc",
+    "pushed": true,
+    "local_verification": {
+      "tsc": "PASS",
+      "targeted": "controlled-adoption-review 6/6",
+      "phase5": "10 files / 124 tests PASS",
+      "regression": "103 files / 1071 tests (1 failed = P2E-DB5)",
+      "github_ci": "NOT_OBSERVED"
+    },
+    "submission": {
+      "marker": "[CODEX-PHASE5-U5FINAL]",
+      "delivered": true,
+      "expected_message_id": "MSG-20261005-83"
     }
   }
 }
