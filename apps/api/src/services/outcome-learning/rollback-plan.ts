@@ -10,6 +10,10 @@
 import { createHash } from 'node:crypto';
 
 import { isVerifiedApprovalVerdict, type ApprovalVerdict } from './candidate-approval';
+import {
+  isVerifiedMetaImprovementCandidate,
+  type MetaImprovementCandidate,
+} from './meta-improvement-candidate';
 
 export const ROLLBACK_PLAN_VERSION = 'rollback-plan/v1';
 
@@ -25,7 +29,9 @@ export const ROLLBACK_PLAN_BOUNDARY = {
   verdictGate: 'isVerifiedApprovalVerdict(verdict) === true && outcome === APPROVED',
   rejectedVerdict: 'FAIL_CLOSED',
   callerBuiltPlan: 'FORBIDDEN（plan 自身 provenance + fingerprint + deep-freeze）',
-  baseline: 'EXPLICIT_FINGERPRINT_REQUIRED；rollbackTargetFingerprint 必须等于 baselineConfigFingerprint；禁 ROLLBACK_TO_LATEST / 模糊默认值',
+  baseline: 'TRUSTED_SNAPSHOT_REQUIRED（server-owned read boundary；caller 自造 baseline → REJECT）；rollbackTargetFingerprint 由 snapshot 派生并等于 baselineConfigFingerprint；禁 ROLLBACK_TO_LATEST / 模糊默认值',
+  candidateTargetBinding: 'FROM_VERIFIED_APPROVED_CANDIDATE（candidate.candidateDigest === verdict.candidateDigest；caller 不得自填 target）',
+  baselineSnapshot: 'PROVENANCE_REGISTERED + fingerprint + deep-freeze（captureBaselineConfigSnapshot）',
   binds: [
     'verdictDigest',
     'ticketDigest',
@@ -34,6 +40,7 @@ export const ROLLBACK_PLAN_BOUNDARY = {
     'evidenceSetDigest',
     'candidateTarget',
     'baselineConfigFingerprint',
+    'baselineSnapshotDigest',
     'rollbackTargetFingerprint',
     'rollbackSteps',
     'rollbackTrigger',
@@ -56,15 +63,104 @@ export type RollbackTrigger = (typeof ROLLBACK_TRIGGERS)[number];
 /** 禁止作为 baseline / rollback 目标的模糊值。 */
 export const FORBIDDEN_ROLLBACK_TARGETS = ['ROLLBACK_TO_LATEST', 'LATEST', 'RESTORE_DEFAULTS', 'DEFAULTS', 'HEAD'] as const;
 
+/** server-owned baseline 读取边界（target → 当前配置指纹）；由 composition root 注入。 */
+export interface BaselineConfigStorePort {
+  read(target: MetaCandidateTargetName): Promise<{ configFingerprint: string; capturedAt: string } | null>;
+}
+
+export interface BaselineConfigSnapshot {
+  kind: 'BASELINE_CONFIG_SNAPSHOT';
+  snapshotId: string;
+  snapshotDigest: string;
+  candidateTarget: MetaCandidateTargetName;
+  configFingerprint: string;
+  capturedAt: string;
+  provenance: { source: 'SERVER_OWNED_CONFIG_READ_BOUNDARY'; store: BaselineConfigStorePort };
+}
+
+const VERIFIED_BASELINE_SNAPSHOTS = new WeakSet<BaselineConfigSnapshot>();
+const VERIFIED_BASELINE_SNAPSHOT_FINGERPRINTS = new WeakMap<BaselineConfigSnapshot, string>();
+
+const baselineSnapshotFingerprint = (snapshot: BaselineConfigSnapshot): string =>
+  JSON.stringify({
+    kind: snapshot.kind,
+    snapshotId: snapshot.snapshotId,
+    snapshotDigest: snapshot.snapshotDigest,
+    candidateTarget: snapshot.candidateTarget,
+    configFingerprint: snapshot.configFingerprint,
+    capturedAt: snapshot.capturedAt,
+  });
+
+/** 只读 provenance：只有 captureBaselineConfigSnapshot() 产出的 snapshot 才为 true。 */
+export function isVerifiedBaselineConfigSnapshot(
+  snapshot: BaselineConfigSnapshot | null | undefined,
+): boolean {
+  if (snapshot === null || snapshot === undefined) return false;
+  if (!VERIFIED_BASELINE_SNAPSHOTS.has(snapshot)) return false;
+  const fingerprint = VERIFIED_BASELINE_SNAPSHOT_FINGERPRINTS.get(snapshot);
+  if (fingerprint === undefined) return false;
+  try {
+    return fingerprint === baselineSnapshotFingerprint(snapshot);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * 从 server-owned store 读取 target 当前配置并形成可信 baseline snapshot。
+ * 读不到配置 / 指纹为空 / store 非法 → fail-closed（U2 FINAL：baseline 不再由 caller 声明）。
+ */
+export async function captureBaselineConfigSnapshot(
+  store: BaselineConfigStorePort | null | undefined,
+  target: string,
+): Promise<BaselineConfigSnapshot> {
+  if (store === null || store === undefined || typeof store.read !== 'function') {
+    throw new Error('ROLLBACK_PLAN_BASELINE_STORE_REQUIRED');
+  }
+  const candidateTarget = requireText(target);
+  if (!(META_CANDIDATE_TARGETS as readonly string[]).includes(candidateTarget)) {
+    throw new Error('ROLLBACK_PLAN_TARGET_INVALID:' + candidateTarget);
+  }
+  const read = await store.read(candidateTarget as MetaCandidateTargetName);
+  if (read === null || read === undefined) {
+    throw new Error('ROLLBACK_PLAN_BASELINE_NOT_FOUND:' + candidateTarget);
+  }
+  const configFingerprint = requireText(read.configFingerprint);
+  const capturedAt = requireText(read.capturedAt);
+  if (configFingerprint === '' || capturedAt === '') {
+    throw new Error('ROLLBACK_PLAN_BASELINE_MALFORMED:' + candidateTarget);
+  }
+  if ((FORBIDDEN_ROLLBACK_TARGETS as readonly string[]).includes(configFingerprint.toUpperCase())) {
+    throw new Error('ROLLBACK_PLAN_BASELINE_FORBIDDEN:' + configFingerprint);
+  }
+  const snapshotDigest = digest('baseline-snapshot', [
+    ROLLBACK_PLAN_VERSION,
+    candidateTarget,
+    configFingerprint,
+    capturedAt,
+  ]);
+  const snapshot: BaselineConfigSnapshot = {
+    kind: 'BASELINE_CONFIG_SNAPSHOT',
+    snapshotId: 'baseline-snapshot:' + snapshotDigest,
+    snapshotDigest,
+    candidateTarget: candidateTarget as MetaCandidateTargetName,
+    configFingerprint,
+    capturedAt,
+    provenance: { source: 'SERVER_OWNED_CONFIG_READ_BOUNDARY', store },
+  };
+  Object.freeze(snapshot.provenance);
+  Object.freeze(snapshot);
+  VERIFIED_BASELINE_SNAPSHOTS.add(snapshot);
+  VERIFIED_BASELINE_SNAPSHOT_FINGERPRINTS.set(snapshot, baselineSnapshotFingerprint(snapshot));
+  return snapshot;
+}
+
 export interface RollbackStep {
   order: number;
   action: string;
 }
 
 export interface RollbackPlanInput {
-  candidateTarget: string;
-  baselineConfigFingerprint: string;
-  rollbackTargetFingerprint: string;
   rollbackSteps: readonly RollbackStep[];
   rollbackTrigger: string;
 }
@@ -81,6 +177,7 @@ export interface RollbackPlan {
   evidenceSetDigest: string;
   candidateTarget: MetaCandidateTargetName;
   baselineConfigFingerprint: string;
+  baselineSnapshotDigest: string;
   rollbackTargetFingerprint: string;
   rollbackSteps: readonly RollbackStep[];
   rollbackTrigger: RollbackTrigger;
@@ -108,6 +205,7 @@ const rollbackPlanFingerprint = (plan: RollbackPlan): string =>
     evidenceSetDigest: plan.evidenceSetDigest,
     candidateTarget: plan.candidateTarget,
     baselineConfigFingerprint: plan.baselineConfigFingerprint,
+    baselineSnapshotDigest: plan.baselineSnapshotDigest,
     rollbackTargetFingerprint: plan.rollbackTargetFingerprint,
     rollbackSteps: plan.rollbackSteps.map((step) => ({ order: step.order, action: step.action })),
     rollbackTrigger: plan.rollbackTrigger,
@@ -134,6 +232,8 @@ export function isVerifiedRollbackPlan(plan: RollbackPlan | null | undefined): b
  */
 export function createRollbackPlan(
   verdict: ApprovalVerdict | null | undefined,
+  candidate: MetaImprovementCandidate | null | undefined,
+  baseline: BaselineConfigSnapshot | null | undefined,
   input: RollbackPlanInput | null | undefined,
 ): RollbackPlan {
   if (!isVerifiedApprovalVerdict(verdict)) {
@@ -146,23 +246,30 @@ export function createRollbackPlan(
     throw new Error('ROLLBACK_PLAN_INPUT_REQUIRED');
   }
 
-  const candidateTarget = requireText(input.candidateTarget);
+  if (!isVerifiedMetaImprovementCandidate(candidate)) {
+    throw new Error('ROLLBACK_PLAN_CANDIDATE_NOT_VERIFIED');
+  }
+  if (requireText(candidate?.candidateDigest) !== verdict.candidateDigest) {
+    throw new Error('ROLLBACK_PLAN_CANDIDATE_MISMATCH');
+  }
+  const candidateTarget = requireText(candidate?.target);
   if (!(META_CANDIDATE_TARGETS as readonly string[]).includes(candidateTarget)) {
     throw new Error('ROLLBACK_PLAN_TARGET_INVALID:' + candidateTarget);
   }
-  const baselineConfigFingerprint = requireText(input.baselineConfigFingerprint);
+  if (!isVerifiedBaselineConfigSnapshot(baseline)) {
+    throw new Error('ROLLBACK_PLAN_BASELINE_NOT_VERIFIED');
+  }
+  const baselineSnapshot: BaselineConfigSnapshot = baseline as BaselineConfigSnapshot;
+  if (baselineSnapshot.candidateTarget !== candidateTarget) {
+    throw new Error('ROLLBACK_PLAN_BASELINE_TARGET_MISMATCH:' + baselineSnapshot.candidateTarget);
+  }
+  const baselineConfigFingerprint = requireText(baselineSnapshot.configFingerprint);
   if (baselineConfigFingerprint === '') throw new Error('ROLLBACK_PLAN_BASELINE_REQUIRED');
   if ((FORBIDDEN_ROLLBACK_TARGETS as readonly string[]).includes(baselineConfigFingerprint.toUpperCase())) {
     throw new Error('ROLLBACK_PLAN_BASELINE_FORBIDDEN:' + baselineConfigFingerprint);
   }
-  const rollbackTargetFingerprint = requireText(input.rollbackTargetFingerprint);
-  if (rollbackTargetFingerprint === '') throw new Error('ROLLBACK_PLAN_TARGET_FINGERPRINT_REQUIRED');
-  if ((FORBIDDEN_ROLLBACK_TARGETS as readonly string[]).includes(rollbackTargetFingerprint.toUpperCase())) {
-    throw new Error('ROLLBACK_PLAN_TARGET_FINGERPRINT_FORBIDDEN:' + rollbackTargetFingerprint);
-  }
-  if (rollbackTargetFingerprint !== baselineConfigFingerprint) {
-    throw new Error('ROLLBACK_PLAN_TARGET_MUST_EQUAL_BASELINE');
-  }
+  // rollback 目标由 trusted snapshot 派生（caller 不得指定），并必须等于 baseline
+  const rollbackTargetFingerprint = baselineConfigFingerprint;
   const rollbackTrigger = requireText(input.rollbackTrigger) as RollbackTrigger;
   if (!(ROLLBACK_TRIGGERS as readonly string[]).includes(rollbackTrigger)) {
     throw new Error('ROLLBACK_PLAN_TRIGGER_INVALID:' + rollbackTrigger);
@@ -188,6 +295,7 @@ export function createRollbackPlan(
     verdict.evidenceSetDigest,
     candidateTarget,
     baselineConfigFingerprint,
+    baselineSnapshot.snapshotDigest,
     rollbackTargetFingerprint,
     rollbackSteps.map((step) => step.order + ':' + step.action).join('+'),
     rollbackTrigger,
@@ -205,9 +313,9 @@ export function createRollbackPlan(
     evidenceSetDigest: verdict.evidenceSetDigest,
     candidateTarget: candidateTarget as MetaCandidateTargetName,
     baselineConfigFingerprint,
+    baselineSnapshotDigest: baselineSnapshot.snapshotDigest,
     rollbackTargetFingerprint,
-    rollbackSteps,
-    rollbackTrigger,
+    rollbackSteps,    rollbackTrigger,
     execution: { executeRollback: 'FORBIDDEN', autoApply: false, requiresHumanApproval: true },
   };
   Object.freeze(plan.execution);
