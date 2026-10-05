@@ -153019,3 +153019,216 @@ PRODUCTION_READY = false
 这轮把 evaluation identity binding 做完了，但成员级 cohort binding 仍然只是“同数量 + 同 CohortRef 标签”。FINAL4 只需补上 server-owned actual run members → exact taskRefs → 内部 Phase 4 evaluation 这一条链，就可以真正封板 U4。
 ```
 
+### [MSG-20261005-81] PHASE 5 U4 FINAL4 裁决 = PASS / CLOSED（SAME_COHORT_PROOF / EXACT_INPUT_SET_TO_EVALUATION_BINDING / VERIFIED_COHORT_RUN_PROVENANCE / CANARY_EVALUATION_DIGEST_FULL_BINDING / METRIC_DELTA_REACHABILITY / U2_ROLLBACK_ANCHOR = PASS；PHASE_5_U4 = PASS / CLOSED；PHASE5_U4_FINAL5_REQUIRED = NO；授权进入 Controlled Adoption Review）， reviewed ref edcbb826
+
+```text
+DECISION
+
+SAME_COHORT_PROOF = PASS
+EXACT_INPUT_SET_TO_EVALUATION_BINDING = PASS
+VERIFIED_COHORT_RUN_PROVENANCE = PASS
+CANARY_EVALUATION_DIGEST_FULL_BINDING = PASS
+METRIC_DELTA_REACHABILITY = PASS
+U2_ROLLBACK_ANCHOR = PASS
+PHASE_5_U4 = PASS / CLOSED
+PHASE5_U4_FINAL5_REQUIRED = NO
+Reviewed HEAD：edcbb826
+GitHub Actions：NOT_OBSERVED
+KEEP
+
+FINAL4 已把最后一个核心旁路关闭：
+
+CohortRunSourcePort.read() 提供实际 {taskRef, outcomeRecord} 成员；
+actual taskRefs 会 canonicalize 后与 CohortRef.taskRefs 逐项比较；
+等量不同成员、missing、extra、duplicate 都 fail-closed；
+caller 已不能把任意 OfflineEvaluation 直接包装成 trusted run；
+Phase 4 evaluation 由这些实际 records 内部调用 evaluateVerifiedLearningRecords() 生成；
+baseline/proposal 可以使用相同 exact input set，同时产生不同 outcome；
+metric improvement / regression 都重新真实可达；
+两侧 evaluationDigest、runDigest 已进入 Canary artifact / fingerprint / final digest；
+rollback 仍固定 U2 baseline；
+no apply / promote / rollout / mutate。
+
+CohortRunSourcePort 作为 server-owned composition-root dependency 可以接受；与此前 BaselineConfigStorePort / repository port 一样，不需要递归给每个内部 read port 再套 WeakSet。前提继续冻结：不得从 HTTP/request body 注入 runSource。
+
+CHANGE
+
+无 U4 阻断修改。
+
+生产接线时只需保持：
+
+CohortRunSourcePort 必须由服务端 composition root 创建，并接真实 shadow-run/result store；不能把它变成用户输入或插件可自报的 adapter。
+
+这是 production wiring 约束，不重新打开 U4。
+
+RISKS
+
+保留非阻断债务：
+
+digest 截 16 hex；
+fingerprint/schema evolution；
+P2E-DB5 test isolation；
+exact GitHub Actions 未观察到；
+当前 run-source 是 contract 层抽象，尚未声明真实生产 shadow provider 已接线。
+
+因此：
+
+CANARY CONTRACT CLOSED ≠ PRODUCTION CANARY ENABLED
+
+TEST
+
+当前覆盖足以封板：
+
+exact [A,B,C,D] → PASS；
+reorder → PASS；
+[A,B,C,X] → REJECT；
+completely different same-size set → REJECT；
+missing / extra / duplicate → REJECT；
+same input set + different outcomes → PASS；
+improvement delta 可见；
+regression → ROLLBACK_REQUIRED；
+run clone / side mismatch → REJECT；
+evaluation internally produced from actual run records；
+evaluation/run digests fully bound；
+insufficient → rollback；
+invalid window → reject；
+artifact anti-tamper；
+no execution surface。
+
+Codex 的 124 Phase 5 tests PASS 属于本地执行证据；exact SHA 无 GitHub Actions run。
+
+NEXT
+
+授权进入 P5-U5 — Controlled Adoption Review。
+
+最低门冻结如下：
+
+输入信任门
+
+必须同时满足：
+
+isVerifiedCanaryShadowEvaluation(canary) === true
+canary.recommendation === ELIGIBLE_FOR_CONTROLLED_ADOPTION_REVIEW
+canary.insufficientEvidence === false
+canary.triggers.length === 0
+verified Controlled Config Proposal
+proposal.proposalDigest === canary.proposalDigest
+verified Rollback Plan
+rollbackPlan.rollbackPlanDigest === canary.rollbackPlanDigest
+rollback baseline identity 与 Canary 完全一致。
+
+以下一律不得进入 review：
+
+ROLLBACK_REQUIRED
+INSUFFICIENT_EVIDENCE
+provenance mismatch
+proposal mismatch
+rollback mismatch
+Review Ticket
+
+建议新增可信：
+
+CONTROLLED_ADOPTION_REVIEW_TICKET
+
+至少绑定：
+
+canaryEvaluationDigest
+proposalDigest
+candidateDigest
+verdictDigest
+rollbackPlanDigest
+baselineSnapshotDigest
+baselineConfigFingerprint
+cohortDigest
+baselineEvaluationDigest
+proposalEvaluationDigest
+requestedAt
+expiresAt
+nonce
+reviewer scope
+
+scope 必须是精确：
+
+CONTROLLED_ADOPTION_REVIEW
+
+ticket 自身：
+
+provenance + fingerprint + deep-freeze
+
+Adoption Review Verdict
+
+只允许：
+
+APPROVED
+REJECTED
+
+并绑定：
+
+ticketDigest
+canaryEvaluationDigest
+proposalDigest
+rollbackPlanDigest
+reviewerId
+role
+scope
+decidedAt
+reason
+verdictDigest
+
+verdict 同样：
+
+private provenance + fingerprint + deep-freeze
+
+clone/手造 APPROVED 必须不可信。
+
+Replay / 权限
+one review ticket → one final verdict；
+digest-keyed replay guard；
+expired/revoked ticket fail-closed；
+reviewer scope 精确匹配；
+建议 role 仅允许 EXTERNAL_JUDGE / HUMAN_OPERATOR。
+最重要边界
+
+即使 U5 verdict = APPROVED：
+
+仍不得修改配置。
+
+U5 只能表示：
+
+APPROVED_FOR_CONTROLLED_ADOPTION_PLANNING
+
+不能表示：
+
+APPLIED / PROMOTED / DEPLOYED
+
+必须继续：
+
+apply = FORBIDDEN
+autoPromotion = FORBIDDEN
+productionRollout = FORBIDDEN
+Policy / Guard / Router / Action Runtime mutation = FORBIDDEN
+
+后续若继续，应该再单独做 Controlled Adoption Plan / Execution Gate，而不是让 U5 直接执行。
+
+PRODUCTION
+
+继续全部 HOLD：
+
+REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing
+
+继续：
+
+SECOND_RUNTIME / SECOND_POLICY_ENGINE / SECOND_CONTROL_PLANE / SECOND_MODEL_GATEWAY / SECOND_COST_LEDGER / SECOND_META_EVIDENCE_STORE = FORBIDDEN
+
+L5_RELAXATION = FORBIDDEN
+
+保持：
+
+MODEL_GATEWAY_RUNTIME_WIRED = false
+ACTION_RUNTIME_PRODUCTION_ENABLED = false
+META_IMPROVEMENT_INTEGRATED = false
+PRODUCTION_READY = false
+
+U4 可以正式 CLOSED。现在已经具备“同一真实输入集 → baseline/proposal 两轨 → Phase 4 verified evaluation → Canary 可审计比较”的完整可信链，授权进入 Controlled Adoption Review。
+```
+
