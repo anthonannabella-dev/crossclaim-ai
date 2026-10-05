@@ -148643,3 +148643,148 @@ META_IMPROVEMENT_INTEGRATED = false
 PRODUCTION_READY = false
 ```
 
+### [MSG-20261005-58] PHASE 4 U2 FINAL2 裁决 = PASS WITH REVISE（SOURCE_INSTANCE_INJECTION PASS / LINEAGE_BINDING 仍 NOT CLOSED）· reviewed ref 7f1b7894
+
+```text
+
+DECISION
+
+SOURCE_INSTANCE_INJECTION = PASS
+proposalLinked adapter 计算 = PASS
+LINEAGE_BINDING_CONTRACT = PASS
+LINEAGE_BINDING = PASS WITH REVISE / NOT CLOSED
+U2 = NOT YET CLOSED
+Reviewed HEAD：7f1b7894
+U3 / U4 / U5 继续授权
+
+KEEP
+
+caller 手写 OutcomeLineageSourcePort 已被 WeakSet provenance 挡住。
+proposalLinked 不再信任上游 boolean，而是根据 proposal→action/evidence 关系计算。
+verified 路径会排除未验证记录。
+org/task/not-found/proposal-unlinked 均 fail-closed。
+没有第二 Evidence Store。
+GITHUB_CI = NOT_OBSERVED 确认成立。
+
+CHANGE
+
+还剩一个信任边界旁路，只是从 source 下移到了 deps.ledger。
+
+当前：
+
+TypeScript
+verifyLearningRecord(
+  deps: AppOutcomeLineageDeps,
+  record
+)
+
+而：
+
+TypeScript
+interface AppOutcomeLineageDeps {
+  ledger: OutcomeLineageLedgerPort;
+}
+
+仍然是 caller 可构造的结构对象。
+
+因此可以手写：
+
+TypeScript
+const fakeDeps = {
+  ledger: {
+    loadAction: async () => ({ organizationId: 'org-1', taskId: 'task-1' }),
+    loadProposal: async () => ({
+      organizationId: 'org-1',
+      taskId: 'task-1',
+      actionRef: 'action:1',
+      evidenceRef: 'evidence:1'
+    }),
+    loadEvidence: async () => ({ organizationId: 'org-1', taskId: 'task-1' })
+  }
+}
+
+然后内部：
+
+fake ledger → createAppOutcomeLineageSource() → WeakSet trusted source → verified=true
+
+所以目前“source 是 factory 创建的”成立，但factory 输入本身还没有可信 provenance。
+
+最小收口
+
+不要让 verified path 接受任意 AppOutcomeLineageDeps。
+
+需要一个真正的 app composition root，例如：
+
+existing DB/evidence/action/proposal repositories
+→ createAppOutcomeLineageVerifier(...)
+→ private provenance
+→ verified pipeline
+
+或者给正式 ledger adapter 本身加 provenance：
+
+createAppOutcomeLineageLedger(...)
+→ 私有 WeakSet
+→ createAppOutcomeLineageSource() 只接受 trusted ledger
+
+必须做到：
+
+caller 自写 fake ledger → REJECT。
+
+而不是：
+
+fake ledger → factory → trusted source。
+
+RISKS
+
+这不是 U3/U4/U5 的阻断项，但 U3 immutable verified learning evidence 不得在这个漏洞未关时宣称“trusted verified evidence”。
+
+P2E-DB5 继续保持 test-isolation debt，不属于本次。
+
+TEST
+
+U2 FINAL3 至少增加：
+
+caller 自写 fake ledger，返回全匹配数据 → REJECT。
+正式 ledger adapter provenance → PASS。
+正式 ledger + refs 不存在 → REJECT。
+正式 ledger + cross-org/task → REJECT。
+正式 ledger + proposal linkage 不成立 → REJECT。
+完整真实同链 → verified PASS。
+fake ledger 不能通过“先 factory source 再 WeakSet”洗白。
+
+NEXT
+
+继续：
+
+U3 dataset + immutable learning evidence
+U4 offline evaluation
+U5 meta-improvement candidate proposal only
+
+同时做一个很窄的：
+
+PHASE 4 U2 FINAL3 — trusted ledger composition/provenance
+
+通过后可记：
+
+LINEAGE_BINDING = PASS
+U2 = PASS / CLOSED
+
+PRODUCTION
+
+全部继续 HOLD：
+
+REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing
+
+继续：
+
+SECOND_* = FORBIDDEN
+L5_RELAXATION = FORBIDDEN
+
+以及：
+
+MODEL_GATEWAY_RUNTIME_WIRED = false
+ACTION_RUNTIME_PRODUCTION_ENABLED = false
+META_IMPROVEMENT_INTEGRATED = false
+PRODUCTION_READY = false
+```
+
