@@ -153232,3 +153232,218 @@ PRODUCTION_READY = false
 U4 可以正式 CLOSED。现在已经具备“同一真实输入集 → baseline/proposal 两轨 → Phase 4 verified evaluation → Canary 可审计比较”的完整可信链，授权进入 Controlled Adoption Review。
 ```
 
+### [MSG-20261005-83] PHASE 5 U5 FINAL 裁决 = PASS / CLOSED（REJECTED_VERDICT_SEMANTICS / VERDICT_SEMANTICS_ANTI_TAMPER / CONTROLLED_ADOPTION_REVIEW_CONTRACT = PASS；PHASE_5_U5 = PASS / CLOSED；PHASE5_U5_FINAL2_REQUIRED = NO；**PHASE_5_CONTROLLED_LEARNING_ADOPTION = PASS / CLOSED**；PHASE5_FUNCTIONAL_REVISION_REQUIRED = NO）， reviewed ref b3629ffc
+
+```text
+DECISION
+
+REJECTED_VERDICT_SEMANTICS = PASS
+VERDICT_SEMANTICS_ANTI_TAMPER = PASS
+CONTROLLED_ADOPTION_REVIEW_CONTRACT = PASS
+PHASE_5_U5 = PASS / CLOSED
+PHASE5_U5_FINAL2_REQUIRED = NO
+PHASE_5_CONTROLLED_LEARNING_ADOPTION = PASS / CLOSED
+PHASE5_FUNCTIONAL_REVISION_REQUIRED = NO
+Reviewed HEAD：b3629ffc
+GitHub Actions：NOT_OBSERVED
+
+并确认：Phase 5 U1–U5 功能单元全部 CLOSED。
+
+KEEP
+
+U5 FINAL 已正确修复：
+
+纯文本
+APPROVED
+→ APPROVED_FOR_CONTROLLED_ADOPTION_PLANNING
+
+REJECTED
+→ REJECTED_NO_CONTROLLED_ADOPTION_PLAN
+
+而且：
+
+verdict fingerprint 使用完整 verdict，对 semantics 有直接 anti-tamper 绑定；
+verdictDigest 虽未重复加入 semantics 字符串，但已经绑定 decision.outcome；
+semantics 是 outcome 的确定性派生，因此：
+APPROVED digest 不可能合法变成 REJECTED semantics；
+REJECTED digest 不可能合法变成 APPROVED semantics；
+clone/原地篡改仍无法通过 provenance；
+REJECTED 仍保持 execution 全 FORBIDDEN。
+
+因此无需 FINAL2。
+
+Phase 5 最终可信链现在完整为：
+
+Verified Evidence
+→ Offline Evaluation
+→ Meta Candidate
+→ Candidate Approval
+→ Rollback Plan
+→ Controlled Config Proposal
+→ Same-input Shadow Canary
+→ Controlled Adoption Review
+
+并且最终仍停在：
+
+PLANNING AUTHORIZATION
+
+不是 deployment。
+
+CHANGE
+
+无业务代码修改要求。
+
+下一步只做：
+
+PHASE 5 CLOSURE CHECKPOINT — DOCS ONLY
+
+禁止继续顺手添加 execution / adoption / deployment 功能。
+
+RISKS
+
+Phase 5 CLOSED 的含义必须严格限定：
+
+“可信学习 → 提案 → 影子评估 → 人工采用审查”的 contract 闭环完成。
+
+不等于：
+
+自动修改 Policy；
+自动修改 Guard；
+自动修改 Router；
+自动修改 Action Runtime；
+自动发布；
+production learning loop 已接通。
+
+另外继续保留非阻断债务：
+
+多处 digest 截 16 hex；
+WeakSet / WeakMap / replay Set 为进程内语义，生产环境后续需要 durable DB/事务/unique constraint；
+fingerprint 随 schema 演进需要同步升级；
+P2E-DB5 test-isolation debt；
+exact GitHub Actions 仍未观察到。
+TEST
+
+Phase 5 docs-only closure checkpoint 不需要新增功能测试，但必须如实记录已有验收状态。
+
+建议文档至少登记以下 Reviewed HEAD：
+
+纯文本
+U1 Candidate Approval
+= c96ec7e
+
+U2 Rollback Plan
+= b50ca7ab
+
+U3 Controlled Config Proposal
+= 9a245254
+
+U4 Canary / Shadow Evaluation
+= edcbb826
+
+U5 Controlled Adoption Review
+= b3629ffc
+
+并记录最终状态：
+
+纯文本
+U1 = PASS / CLOSED
+U2 = PASS / CLOSED
+U3 = PASS / CLOSED
+U4 = PASS / CLOSED
+U5 = PASS / CLOSED
+
+PHASE 5 = PASS / CLOSED
+
+GitHub CI 必须继续写：
+
+NOT_OBSERVED
+
+不能把 Codex 本地测试写成 GitHub CI success。
+
+NEXT
+
+授权：
+
+PHASE 5 CLOSURE CHECKPOINT — DOCS ONLY
+
+最低验收口径：
+
+U1–U5 注册表
+
+单元名称；
+final reviewed HEAD；
+final verdict；
+CLOSED 状态。
+
+完整可信链
+明确写出：
+
+纯文本
+Verified Outcome/Learning Evidence
+→ Verified Offline Evaluation
+→ Verified Meta-improvement Candidate
+→ Verified Candidate Approval
+→ Verified Rollback Plan
+→ Verified Controlled Config Proposal
+→ Verified Same-input Canary/Shadow Evaluation
+→ Verified Controlled Adoption Review
+
+最终语义冻结
+
+APPROVED review =
+APPROVED_FOR_CONTROLLED_ADOPTION_PLANNING
+REJECTED =
+REJECTED_NO_CONTROLLED_ADOPTION_PLAN
+两者均无配置执行权限。
+
+永久边界登记
+明确：
+
+纯文本
+AUTO_APPLY = FORBIDDEN
+AUTO_PROMOTION = FORBIDDEN
+AUTO_ROLLOUT = FORBIDDEN
+PRODUCTION_CONFIG_MUTATION = FORBIDDEN
+下一阶段入口
+只能写：
+
+Controlled Adoption Planning / Execution Gate
+
+并明确：
+
+它是新阶段，未授权、未实现、不得因 Phase 5 CLOSED 自动开启。
+
+不得写入
+Closure docs 不得把以下状态改为 true：
+纯文本
+MODEL_GATEWAY_RUNTIME_WIRED
+ACTION_RUNTIME_PRODUCTION_ENABLED
+META_IMPROVEMENT_INTEGRATED
+PRODUCTION_READY
+不新增功能
+docs-only checkpoint 不得同时修改 runtime/service/config schema。
+
+完成这份 checkpoint 后，不需要再做 Phase 5 功能审计。
+
+PRODUCTION
+
+继续全部 HOLD：
+
+REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing
+
+继续：
+
+SECOND_RUNTIME / SECOND_POLICY_ENGINE / SECOND_CONTROL_PLANE / SECOND_MODEL_GATEWAY / SECOND_COST_LEDGER / SECOND_META_EVIDENCE_STORE = FORBIDDEN
+
+L5_RELAXATION = FORBIDDEN
+
+继续保持：
+
+MODEL_GATEWAY_RUNTIME_WIRED = false
+ACTION_RUNTIME_PRODUCTION_ENABLED = false
+META_IMPROVEMENT_INTEGRATED = false
+PRODUCTION_READY = false
+
+结论：U5 正式 CLOSED，Phase 5 U1–U5 功能链整体正式 CLOSED。现在只补一份 docs-only closure checkpoint，不再继续修 Phase 5 业务代码。
+```
+
