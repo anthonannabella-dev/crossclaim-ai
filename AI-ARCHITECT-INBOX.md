@@ -147304,3 +147304,139 @@ MODEL_GATEWAY_RUNTIME_WIRED = false
 ACTION_RUNTIME_PRODUCTION_ENABLED = false
 PRODUCTION_READY = false
 ```
+
+### [MSG-20261005-49] PHASE 2 MODEL GATEWAY RUNTIME FINAL3 — VERDICT = **NOT CLOSED / ③ REVISE**（① 确定性 ALLOW runtime E2E = PASS；② evidence digest（gatewayAudit + tool=<name>:ok=<state>，P2U2_9 敏感性）= PASS；③ factory provenance = REVISE —— assertLocalSimAdapter 仍允许 adapter 自报 capability.simulated=true 绕过 WeakSet；最小修复：只接受 isRsiLocalSimAdapter(adapter) === true；测试探针须由同一 factory 注册；`PHASE2_FINAL4_REQUIRED = YES`）
+
+```text
+DECISION
+
+① 确定性 ALLOW runtime E2E：PASS
+② evidence digest：PASS
+③ factory provenance / HOLD 强制：REVISE
+PHASE_2_MODEL_GATEWAY_RUNTIME = NOT CLOSED
+PHASE2_FINAL4_REQUIRED = YES
+Reviewed HEAD：2e9692c0
+
+KEEP
+
+P2U2_7 已删除 if/else 放宽，实际使用共享 createAppActionGuard，并无条件断言：
+ALLOW → Gateway invoke=1 → recovery-si → proposal → park-for-judge → external verdict。这部分闭环。
+runtime 的真实 evidence digest 现在确实包含：
+gatewayAudit
+tool=<name>:ok=<state>
+P2U2_9 证明 tool/gateway audit 变化会改变 digest 输入，方向正确。
+WeakSet factory provenance 本身正确。
+Router strict allowlist 继续 PASS。
+GITHUB_CI = NOT_OBSERVED 仍正确。
+
+CHANGE
+
+仅剩 1 个实质阻断点。
+
+当前 assertLocalSimAdapter()：
+
+纯文本
+if (isRsiLocalSimAdapter(adapter)) return;
+
+if (
+  capability.simulated === true &&
+  capability.network !== true &&
+  capability.paid !== true
+) return;
+
+这意味着任意非 factory adapter 仍可写：
+
+纯文本
+capability = {
+  simulated: true,
+  network: false,
+  paid: false
+}
+
+然后绕过 WeakSet provenance。
+
+所以现在：
+
+provenance = FACTORY_WEAKSET
+
+与实际代码并不完全一致；WeakSet 后面仍存在 self-declared capability bypass。
+
+最小修复：
+
+PHASE 2 product Gateway 当前 HOLD 状态下：
+
+createSiModelGatewayPort()
+
+只接受：
+
+isRsiLocalSimAdapter(adapter) === true
+
+否则统一：
+
+SI_MODEL_GATEWAY_REAL_PROVIDER_FORBIDDEN
+
+不要允许 adapter 自己通过 capability.simulated=true 给自己授权。
+
+测试需要失败/success probe 时，可以让 rsi-local-sim-adapter 提供受控的 deterministic test mode / fixture factory，但这些实例也必须由同一 factory 注册进 WeakSet；不要恢复 caller 自报 capability。
+
+RISKS
+
+② 有一个非阻断维护问题：
+
+buildRecoverySiEvidenceRef() 当前没有被 runtime 直接调用；runtime 又手写了一遍相同 digest 输入。
+
+现在语义是正确的，所以我不因此阻断 PHASE 2，但后续最好让 runtime 调用这个 helper，避免测试函数与真实路径将来漂移。
+
+另外该 helper 名字叫 EvidenceRef，实际返回的是 digest preimage 字符串，而真正 runtime 又做 digest12()；命名可以以后整理，不必继续扩大 FINAL4。
+
+TEST
+
+FINAL4 最少补 2 条：
+
+非 factory adapter：
+
+纯文本
+providerName = arbitrary
+capability = { simulated:true, network:false, paid:false }
+
+→ 必须 REJECT
+
+factory low/strong：
+→ PASS
+
+原有必须继续保持：
+
+P2U2_7 Shared Guard ALLOW
+Gateway invoke exactly 1
+P2U2_9 tool/gateway digest sensitivity
+spoofed provider name rejection
+全回归绿
+
+NEXT
+
+只修这个 capability self-authorization loophole。
+
+通过后可直接记：
+
+① = PASS
+② = PASS
+③ = PASS
+PHASE_2_MODEL_GATEWAY_RUNTIME = PASS / CLOSED
+PHASE2_FINAL5_REQUIRED = NO
+
+然后授权进入 PHASE 3 ACTION RUNTIME。
+
+PRODUCTION
+
+全部继续 HOLD：
+
+REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing
+
+并保持：
+
+SECOND_* = FORBIDDEN
+L5_RELAXATION = FORBIDDEN
+MODEL_GATEWAY_RUNTIME_WIRED = false
+ACTION_RUNTIME_PRODUCTION_ENABLED = false
+PRODUCTION_READY = false
+```

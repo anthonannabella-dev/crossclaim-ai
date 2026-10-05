@@ -50,11 +50,11 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
-  "next_execution_unit": "PHASE 2 FINAL3（仅三项）：① P2U2_7 改用确定性 ALLOW guard fixture 并直接断言（Gateway invoke=1、packId=recovery-si、proposal 非空、waitingForVerdict=true、external verdict 才完成）② evidence digest 真正恢复 read-tool invocation audit（tool=<name>:ok=<state>）+ 提取纯函数并测试 digest 敏感性③ local-sim provenance 改为 factory WeakSet（导出只读 isRsiLocalSimAdapter；伪装名必须 REJECT；strong 同样校验）→ tsc / 回归 → commit + push → 再次送审 PHASE 2 FINAL3",
+  "next_execution_unit": "PHASE 2 FINAL4（仅一项）：assertLocalSimAdapter 只接受 isRsiLocalSimAdapter(adapter)===true（移除 capability 自报旁路）；由 rsi-local-sim-adapter 提供受控 test-mode factory（同样进 WeakSet）供失败/成功探针；补 2 条测试（非 factory 自报 capability → REJECT；factory low/strong → PASS）→ tsc / 定向 / 回归 → commit + push → 送 PHASE 2 FINAL4",
   "automation_status": "CONTINUOUS",
   "last_tick_at": "2026-10-06T08:30:00.000Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "PHASE 2 FINAL2 裁决归档（MSG-20261005-48）：①②③ 全 REVISE → FINAL3 窄修授权",
+  "last_action": "PHASE 2 FINAL3 裁决归档（MSG-20261005-49）：① ② PASS / ③ REVISE → FINAL4 窄修授权（capability self-authorization loophole）",
   "last_action_at": "2026-10-06T08:30:00.000Z",
   "next_action": "C2 IMPLEMENTATION（Schema Delta + durable ledger/budget + PG 回归）",
   "current_head": "054ab732",
@@ -9447,7 +9447,7 @@
   "step3_runtime_policy_wiring_closed_at": "2026-10-06T12:00:00.000Z",
   "phase_state": {
     "PHASE_1_FINAL7": "PASS / CLOSED（MSG-20261005-47，REVIEWED_HEAD = 795f65a5；STEP3_FINAL8_REQUIRED = NO）",
-    "PHASE_2_MODEL_GATEWAY_RUNTIME": "FINAL3_REQUIRED（FINAL2 裁决 ①②③ 全 REVISE；Reviewed HEAD d89b42dc，暂不进入 PHASE 3）",
+    "PHASE_2_MODEL_GATEWAY_RUNTIME": "FINAL4_REQUIRED（FINAL3：① PASS / ② PASS / ③ REVISE；Reviewed HEAD 2e9692c0）",
     "PHASE_3_ACTION_RUNTIME": "QUEUED",
     "PHASE_4_OUTCOME_LEARNING_PIPELINE": "QUEUED",
     "PHASE_5_META_IMPROVEMENT": "QUEUED（依赖真实运行结果）"
@@ -9478,5 +9478,19 @@
     "note_aiEligible": "aiEligible 仍只是 server-owned binding 字段，不宣称 canonical production eligibility resolver",
     "phase2_final3_required": "YES",
     "archive": "AI-ARCHITECT-INBOX.md#MSG-20261005-48"
+  },
+  "phase2_final3_verdict": {
+    "message_id": "MSG-20261005-49",
+    "verdict": "NOT CLOSED / ① PASS · ② PASS · ③ REVISE",
+    "reviewed_head": "2e9692c0",
+    "change": "③ assertLocalSimAdapter 只接受 isRsiLocalSimAdapter(adapter) === true；不得允许 adapter 自报 capability.simulated=true 授权；测试需要失败/成功探针时由 rsi-local-sim-adapter 提供受控 test mode factory（同样注册进 WeakSet）",
+    "non_blocking_note": "buildRecoverySiEvidenceRef() 目前未被 runtime 直接调用（runtime 手写同样输入）；语义正确，不阻断，后续建议让 runtime 调用 helper 以避免漂移；helper 命名（返回的是 digest preimage）可后续整理",
+    "required_tests_final4": [
+      "非 factory adapter + 自报 capability={simulated:true,network:false,paid:false} → REJECT",
+      "factory low / strong → PASS",
+      "P2U2_7 ALLOW→invoke=1、P2U2_9 digest 敏感性、伪装名 REJECT、全回归保持绿"
+    ],
+    "phase2_final4_required": "YES",
+    "archive": "AI-ARCHITECT-INBOX.md#MSG-20261005-49"
   }
 }

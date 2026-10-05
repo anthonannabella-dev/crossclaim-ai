@@ -2699,3 +2699,8 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - ② read-tool invocation audit 实际仍未回到 evidence digest（送审表述与代码不符）→ 必须真正恢复并提取纯函数测试。
 - ③ local-sim 前缀可伪装 → 必须以 factory provenance（WeakSet + 只读 isRsiLocalSimAdapter）判定。
 - 保持：B（Router strict allowlist）PASS；GITHUB_CI = NOT_OBSERVED；modelCallCount 语义 = Gateway 调用次数。
+
+## 2026-10-06T13:30Z —— PHASE 2 FINAL3 裁决归档（MSG-20261005-49：① PASS / ② PASS / ③ REVISE）
+- ③ 唯一阻断：assertLocalSimAdapter 仍允许 adapter 自报 capability.simulated=true 绕过 WeakSet provenance。
+- FINAL4 最小修复：只接受 isRsiLocalSimAdapter(adapter)===true；测试探针改由同一 factory 的受控 test mode 创建。
+- 非阻断：buildRecoverySiEvidenceRef 未被 runtime 直接调用（语义正确，后续消重）。
