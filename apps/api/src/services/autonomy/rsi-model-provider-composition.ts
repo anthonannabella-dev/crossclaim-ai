@@ -19,6 +19,7 @@ import type { RsiCostLedger } from './rsi-cost-ledger';
 import { createRsiLocalSimAdapter } from './rsi-local-sim-adapter';
 import {
   createRsiModelRouter,
+  type RsiCostSafeModePort,
   type RsiModelProviderAdapter,
   type RsiModelCachePort,
   type RsiProviderTier,
@@ -43,11 +44,8 @@ export function createRsiLocalSimModelProviderComposition(options: {
   resolvePrompt?: (promptRef: string) => string | undefined | Promise<string | undefined>;
   /** C3：可选 cost-control 端口（缺省不启用 ⇒ 行为与 C1/C2 完全一致） */
   cache?: RsiModelCachePort;
-  costSafeMode?: (input: { channel: 'STANDARD_AI' }) => {
-    standardAiAllowed: boolean;
-    state: string;
-    reason: string;
-  };
+  /** C3 FINAL-3：支持 async（可直接注入 durable Safe Mode adapter） */
+  costSafeMode?: RsiCostSafeModePort;
   businessValue?: (input: { taskType: string; requestedTier: RsiProviderTier }) => {
     allowed: boolean;
     maxTier: RsiProviderTier;

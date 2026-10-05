@@ -19,7 +19,11 @@
 
 import type { PrismaClient } from '@prisma/client';
 
-import { createAiCostSafeModeVerdict, type AiCostSafeModeVerdict } from './si-cost-safe-mode';
+import {
+  createAiCostSafeModeVerdict,
+  decideAiCostSafeModeAdmission,
+  type AiCostSafeModeVerdict,
+} from './si-cost-safe-mode';
 import type { AiBudgetScopeName } from './si-budget-policy-store';
 
 export interface AiCostSafeModeRefs {
@@ -50,6 +54,42 @@ export const AI_COST_SAFE_MODE_STORE_BOUNDARY = {
   readOnly: true,
   level0RuleAffected: false,
 } as const;
+
+/** Router 需要的 STANDARD_AI 准入形状（与 rsi-model-router 的 `costSafeMode` port 结构一致） */
+export interface AiCostSafeModeStandardAiAdmission {
+  standardAiAllowed: boolean;
+  state: string;
+  reason: string;
+}
+
+/**
+ * C3 FINAL-3（CHANGE A）—— **server-side adapter**：把 durable policy + ledger 的真正判定
+ * 接到 Model Gateway（`rsi-model-router` 的 `costSafeMode` port）调用前。
+ *
+ * 语义：
+ *   - 每次 provider 调用前，实时读取 durable `AiBudgetPolicy` + durable `AiCostLedgerEntry`；
+ *   - resolver 抛错（例如 tenant identity 缺失）→ **fail-closed**（拒绝 STANDARD_AI），绝不 fail-open；
+ *   - 只影响 STANDARD_AI；LEVEL_0_RULE / health / critical alert 由通道语义豁免。
+ */
+export function createAiCostSafeModeStandardAiPort(
+  prisma: PrismaClient,
+  refs: AiCostSafeModeRefs,
+): () => Promise<AiCostSafeModeStandardAiAdmission> {
+  return async () => {
+    try {
+      const resolution = await resolveAiCostSafeMode(prisma, { refs });
+      const admission = decideAiCostSafeModeAdmission({ verdict: resolution.verdict, channel: 'STANDARD_AI' });
+      return { standardAiAllowed: admission.allowed, state: admission.state, reason: admission.reason };
+    } catch (error) {
+      return {
+        standardAiAllowed: false,
+        state: 'COST_SAFE',
+        reason:
+          'AI_COST_SAFE_MODE_RESOLVER_FAIL_CLOSED:' + (error instanceof Error ? error.message : String(error)),
+      };
+    }
+  };
+}
 
 const startOfUtcDay = (now: Date): Date =>
   new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));

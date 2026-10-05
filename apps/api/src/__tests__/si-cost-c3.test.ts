@@ -481,3 +481,44 @@ describe('C3 FINAL-2 · CHANGE A —— STRONG 升级必须再过一道 business
     expect(r.strongCalls).toBe(0);
   });
 });
+
+describe('C3 FINAL-3 · Safe Mode port 支持 async（durable resolver 接入）+ L0 豁免', () => {
+  it('C3_F3_1 async port：拒绝 → provider 0；放行 → provider 1', async () => {
+    const provider = { n: 0 };
+    let deny = true;
+    const router = createRsiModelRouter({
+      lowCost: adapter('LOW_COST', true, provider),
+      usage: () => usage(),
+      costSafeMode: async () =>
+        deny
+          ? { standardAiAllowed: false, state: 'COST_SAFE', reason: 'AI_COST_SAFE_MODE:DAILY' }
+          : { standardAiAllowed: true, state: 'NORMAL', reason: 'WITHIN_BUDGET' },
+    });
+    const denied = await router.outcomeOf(request());
+    expect(denied.called).toBe(false);
+    expect(denied.reason).toBe('AI_COST_SAFE_MODE:DAILY');
+    expect(provider.n).toBe(0);
+    deny = false;
+    const allowed = await router.outcomeOf(request());
+    expect(allowed.called).toBe(true);
+    expect(provider.n).toBe(1);
+  });
+
+  it('C3_F3_2 L0（RULE_SOLVABLE）不经过 Safe Mode port（规则路径零模型、零 token）', async () => {
+    const provider = { n: 0 };
+    let portCalls = 0;
+    const router = createRsiModelRouter({
+      lowCost: adapter('LOW_COST', true, provider),
+      usage: () => usage(),
+      costSafeMode: async () => {
+        portCalls += 1;
+        return { standardAiAllowed: false, state: 'COST_SAFE', reason: 'AI_COST_SAFE_MODE:DAILY' };
+      },
+    });
+    const outcome = await router.outcomeOf(request({ necessity: evidence('RULE_SOLVABLE') }));
+    expect(outcome.level).toBe('LEVEL_0_RULE');
+    expect(outcome.called).toBe(false);
+    expect(portCalls).toBe(0);
+    expect(provider.n).toBe(0);
+  });
+});

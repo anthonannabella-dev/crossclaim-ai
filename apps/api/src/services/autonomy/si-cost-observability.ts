@@ -121,7 +121,16 @@ const ledgerScopeWhere = (refs: AiCostObservabilityRefs) => ({
  */
 export async function readAiCostObservability(
   prisma: PrismaClient,
-  input: { refs: AiCostObservabilityRefs; now?: Date; topIncidentLimit?: number },
+  input: {
+    refs: AiCostObservabilityRefs;
+    now?: Date;
+    topIncidentLimit?: number;
+    /**
+     * C3 FINAL-3 CHANGE B：server-owned trusted provider registry（显式 provenance predicate）。
+     * **不得**由 ledger 的 provider 名称推断真实性；缺省为空 ⇒ 生产指标恒 NOT_YET_MEASURABLE。
+     */
+    trustedRealProviders?: readonly string[];
+  },
 ): Promise<AiCostObservabilitySnapshot> {
   const now = input.now ?? new Date();
   const refs = normalizeRefs(input.refs);
@@ -198,9 +207,12 @@ export async function readAiCostObservability(
   // C3 FINAL-2 CHANGE C：Safe Mode 走 durable per-policy-scope resolver（与 C2 Guard 同语义）
   const safeMode = (await resolveAiCostSafeMode(prisma, { refs: input.refs, now })).verdict;
 
-  // C3 FINAL-2 CHANGE D：指标来源 provenance（provider 身份约定：rsi-local-sim* = 仿真）
+  // C3 FINAL-3 CHANGE B：provenance 只由 server-owned trusted registry 判定（不由 provider 名称推断）
   const providerNames = providerRows.map((row) => row.provider);
-  const realProviderNames = providerNames.filter((name) => typeof name === 'string' && name.trim() !== '' && !/^rsi-local-sim/i.test(name));
+  const trusted = input.trustedRealProviders ?? [];
+  const realProviderNames = providerNames.filter(
+    (name) => typeof name === 'string' && trusted.includes(name),
+  );
   const modelTraffic: 'NO_TRAFFIC' | 'LOCAL_SIMULATION_ONLY' | 'REAL_PROVIDER' =
     providerNames.length === 0 ? 'NO_TRAFFIC' : realProviderNames.length > 0 ? 'REAL_PROVIDER' : 'LOCAL_SIMULATION_ONLY';
 
@@ -260,7 +272,9 @@ export async function readAiCostObservability(
     safeMode,
     provenance: {
       modelTraffic,
-      rule: 'provider identity：/^rsi-local-sim/i → 仿真；其余 → 真实 provider；无行 → NO_TRAFFIC',
+      rule:
+        'PROVENANCE_PREDICATE_ONLY：仅当 ledger provider ∈ server-owned trustedRealProviders 才计 REAL_PROVIDER；' +
+        '缺省 trustedRealProviders 为空 ⇒ LOCAL_SIMULATION_ONLY / NO_TRAFFIC ⇒ 生产指标 NOT_YET_MEASURABLE（不得由名称推断）',
       realProviderNames,
     },
     devSimulation: {

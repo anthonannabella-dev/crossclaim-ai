@@ -23,7 +23,11 @@ import {
   AI_COST_SAFE_MODE_BOUNDARY,
   decideAiCostSafeModeAdmission,
 } from '../services/autonomy/si-cost-safe-mode';
-import { resolveAiCostSafeMode } from '../services/autonomy/si-cost-safe-mode-store';
+import {
+  createAiCostSafeModeStandardAiPort,
+  resolveAiCostSafeMode,
+} from '../services/autonomy/si-cost-safe-mode-store';
+import { createRsiLocalSimModelProviderComposition } from '../services/autonomy/rsi-model-provider-composition';
 import {
   AI_MODEL_CACHE_RUNTIME_BOUNDARY,
   createAiModelCacheRuntime,
@@ -374,16 +378,105 @@ describe('SI-COST C3 FINAL-2 · concurrency 0/null 语义 + scope-correct Safe M
     expect(resolution.verdict.state).toBe('NORMAL');
   });
 
-  it('C3_F2_D1 存在真实 provider 行 → provenance = REAL_PROVIDER，指标可计算', async () => {
+  it('C3_F3_B1 仅凭 provider 名称不得令 production metrics measurable', async () => {
+    await appendAiCostEntry(prisma, costEntry('c3f2-' + randomUUID(), { provider: 'rsi-local-sim-low-cost', costMicros: 100 }));
+    await appendAiCostEntry(
+      prisma,
+      costEntry('c3f2-' + randomUUID(), { provider: 'fake-real-provider', executionLevel: 'LEVEL_2_STRONG', costMicros: 200 }),
+    );
+    const snapshot = await readAiCostObservability(prisma, { refs: { organizationId: orgA } });
+    expect(snapshot.provenance.modelTraffic).toBe('LOCAL_SIMULATION_ONLY');
+    expect(snapshot.provenance.realProviderNames).toHaveLength(0);
+    expect(snapshot.metrics.STRONG_MODEL_RATE).toBe('NOT_YET_MEASURABLE');
+    expect(snapshot.metrics.LOW_COST_MODEL_RATE).toBe('NOT_YET_MEASURABLE');
+  });
+
+  it('C3_F3_B2 只有 server-owned trusted registry 命中才可计 REAL_PROVIDER', async () => {
     await appendAiCostEntry(prisma, costEntry('c3f2-' + randomUUID(), { provider: 'rsi-local-sim-low-cost', costMicros: 100 }));
     await appendAiCostEntry(
       prisma,
       costEntry('c3f2-' + randomUUID(), { provider: 'amazon-ads-readonly', executionLevel: 'LEVEL_2_STRONG', costMicros: 200 }),
     );
-    const snapshot = await readAiCostObservability(prisma, { refs: { organizationId: orgA } });
+    const snapshot = await readAiCostObservability(prisma, {
+      refs: { organizationId: orgA },
+      trustedRealProviders: ['amazon-ads-readonly'],
+    });
     expect(snapshot.provenance.modelTraffic).toBe('REAL_PROVIDER');
     expect(snapshot.provenance.realProviderNames).toContain('amazon-ads-readonly');
     expect(snapshot.metrics.STRONG_MODEL_RATE).toBe(0.5);
     expect(snapshot.metrics.LOW_COST_MODEL_RATE).toBe(0.5);
+  });
+});
+
+describe('SI-COST C3 FINAL-3 · durable Safe Mode 真正接到 Model Gateway（local-sim composition）', () => {
+  const runComposition = async (refs: { organizationId?: string | null; accountId?: string | null; incidentId?: string | null; taskId?: string | null }) => {
+    const composition = createRsiLocalSimModelProviderComposition({
+      usage: () => ({
+        spentToday: 0,
+        spentThisMonth: 0,
+        incidentSpent: 0,
+        incidentAttempts: 0,
+        incidentCandidates: 0,
+        incidentLlmCalls: 0,
+        incidentTokens: 0,
+        incidentElapsedMinutes: 0,
+        strongCallsForTask: 0,
+      }),
+      resolvePrompt: () => 'local-sim-prompt',
+      costSafeMode: createAiCostSafeModeStandardAiPort(prisma, refs),
+    });
+    const outcome = await composition.router.outcomeOf({
+      taskType: 'SEMANTIC',
+      complexity: 'LOW',
+      maxCost: 0.5,
+      latencyRequirementMs: 5_000,
+      requiredCapability: 'SEMANTIC_UNDERSTANDING',
+      incidentId: refs.incidentId ?? 'inc-1',
+      taskId: 'task-1',
+      promptRef: 'prompt:task-1',
+      promptDigest: 'c'.repeat(64),
+      maxOutputTokens: 256,
+      timeoutMs: 5_000,
+      necessity: { outcome: 'AMBIGUOUS', ruleVersion: 'rule/v1', schemaVersion: 'schema/v1', inputDigest: 'a'.repeat(64) },
+    });
+    return { outcome, providerEntries: composition.ledgerEntries() };
+  };
+
+  it('C3_F3_A1 durable org 预算耗尽 → Router provider 调用 = 0', async () => {
+    await upsertAiBudgetPolicy(prisma, { scope: 'ORGANIZATION', scopeRef: orgA, organizationId: orgA, dailyLimitMicros: 500 });
+    await appendAiCostEntry(prisma, costEntry('c3f3-' + randomUUID(), { costMicros: 500 }));
+    const run = await runComposition({ organizationId: orgA });
+    expect(run.outcome.called).toBe(false);
+    expect(run.outcome.reason).toContain('AI_COST_SAFE_MODE');
+    expect(run.providerEntries).toBe(0);
+  });
+
+  it('C3_F3_A2 durable account 预算耗尽 → Router provider 调用 = 0', async () => {
+    const accountId = 'acct-' + randomUUID();
+    await upsertAiBudgetPolicy(prisma, {
+      scope: 'ACCOUNT',
+      scopeRef: accountId,
+      organizationId: orgA,
+      dailyLimitMicros: 100,
+    });
+    await appendAiCostEntry(prisma, costEntry('c3f3-' + randomUUID(), { accountId, costMicros: 100 }));
+    const run = await runComposition({ organizationId: orgA, accountId });
+    expect(run.outcome.called).toBe(false);
+    expect(run.outcome.reason).toContain('AI_COST_SAFE_MODE');
+    expect(run.providerEntries).toBe(0);
+  });
+
+  it('C3_F3_A3 durable Safe Mode NORMAL → Router 正常执行', async () => {
+    await upsertAiBudgetPolicy(prisma, { scope: 'ORGANIZATION', scopeRef: orgA, organizationId: orgA, dailyLimitMicros: 10_000_000 });
+    const run = await runComposition({ organizationId: orgA });
+    expect(run.outcome.called).toBe(true);
+    expect(run.providerEntries).toBe(1);
+  });
+
+  it('C3_F3_A4 durable resolver 抛错（tenant 缺失）→ fail-closed，provider = 0', async () => {
+    const run = await runComposition({ organizationId: null, incidentId: 'inc-1' });
+    expect(run.outcome.called).toBe(false);
+    expect(run.outcome.reason).toContain('AI_COST_SAFE_MODE');
+    expect(run.providerEntries).toBe(0);
   });
 });

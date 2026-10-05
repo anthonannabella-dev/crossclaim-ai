@@ -125,6 +125,17 @@ export interface RsiModelInvocationRequest extends RsiModelCallRequest {
  * C3 —— cache runtime 端口（host 注入；Router 不直接持有 Prisma / 不读环境变量）。
  * HIT 只返回判定与 savings；**绝不**因此产生 provider ledger entry。
  */
+/** C3 FINAL-3：Safe Mode 准入结果（durable resolver 也可异步提供） */
+export interface RsiCostSafeModeAdmission {
+  standardAiAllowed: boolean;
+  state: string;
+  reason: string;
+}
+/** C3 FINAL-3：Safe Mode port（支持 async —— host 在 provider 调用前读取 durable policy + ledger） */
+export type RsiCostSafeModePort = (
+  input: { channel: 'STANDARD_AI' },
+) => RsiCostSafeModeAdmission | Promise<RsiCostSafeModeAdmission>;
+
 export interface RsiModelCachePort {
   lookup(input: { scope: AiModelCacheScope; highRisk?: boolean }): Promise<
     | {
@@ -260,11 +271,7 @@ export function createRsiModelRouter(options: {
    * C3：Cost Safe Mode 准入（host 注入；阈值来自 durable policy、用量来自 durable ledger）。
    * 缺省不启用 ⇒ 行为与 C1/C2 完全一致。SAFE MODE 只停 STANDARD_AI；L0 / health / critical alert 豁免。
    */
-  costSafeMode?: (input: { channel: 'STANDARD_AI' }) => {
-    standardAiAllowed: boolean;
-    state: string;
-    reason: string;
-  };
+  costSafeMode?: RsiCostSafeModePort;
   /**
    * C3：business-value cost policy（host 注入）。价值只能来自可信 canonical / recovery basis；
    * caller 自报价值一律被忽略，且不得据此提高模型等级或预算。
@@ -464,7 +471,8 @@ export function createRsiModelRouter(options: {
 
       // C3①：Cost Safe Mode 准入（只停 STANDARD_AI；L0 / health / critical alert 由调用方豁免通道放行）
       if (options.costSafeMode) {
-        const admission = options.costSafeMode({ channel: 'STANDARD_AI' });
+        // C3 FINAL-3 CHANGE A：port 支持 async（host 在调用前读取 durable policy + ledger）
+        const admission = await options.costSafeMode({ channel: 'STANDARD_AI' });
         if (!admission.standardAiAllowed) {
           return { called: false, level: effectiveLevel, reason: admission.reason, record: null };
         }
