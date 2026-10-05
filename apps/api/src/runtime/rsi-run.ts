@@ -46,6 +46,11 @@ import {
   describeRsiRuntimeMembers,
   type RsiDomainCapabilityPack,
 } from './rsi-domain-pack';
+import { createProductRecoverySiPack } from './recovery-si-product-composition';
+import type { AppActionGuardDeps } from '../services/action-guard/runtime-guard-composition';
+import type { RuntimeActionGuard } from '../services/action-guard/runtime-guard';
+import type { RecoveryReadPorts } from '../services/intelligence/recovery-read-tools';
+import type { RecoverySiTaskBinding } from './recovery-si-pack';
 
 export function parseTaskQueue(raw: string): readonly RsiSafeTask[] {
   try {
@@ -121,7 +126,12 @@ export interface RsiRuntimeComposition {
   /** STEP_3：唯一产品运行时成员描述（架构回归用；`SECOND_RUNTIME = 0`）。 */
   runtimeMembers(): ReturnType<typeof describeRsiRuntimeMembers>;
   /** STEP_3：domain pack 派发记录（只读审计用）。 */
-  domainDispatchLog(): readonly { taskId: string; packId: string; status: string }[];
+  domainDispatchLog(): readonly {
+    taskId: string;
+    packId: string;
+    status: string;
+    guardActions: readonly { action: string; decision: string }[];
+  }[];
   start(): void;
   stop(): void;
 }
@@ -165,6 +175,16 @@ export async function composeRsiRuntime(input: {
    * 仅在**未显式注入 runner** 时作为唯一 runner 使用；未匹配任务判 BLOCK，绝不 PASS。
    */
   domainPacks?: readonly RsiDomainCapabilityPack[];
+  /**
+   * STEP 3 FINAL-4：**唯一 product 组装点** —— Recovery SI 固定接 shared guard adapter；
+   * 只接受 shared guard 类型（RuntimeActionGuard / AppActionGuardDeps），不接受自定义 guard port。
+   */
+  productRecoveryPack?: {
+    guard?: RuntimeActionGuard;
+    appActionGuardDeps?: AppActionGuardDeps;
+    readPorts: RecoveryReadPorts;
+    bind: (task: { id: string; dedupeKey: string; priority: string }) => RecoverySiTaskBinding | null;
+  };
 }): Promise<RsiRuntimeComposition> {
   let tasks: readonly RsiSafeTask[] = [];
   if (input.tasksPath !== undefined) {
@@ -194,10 +214,23 @@ export async function composeRsiRuntime(input: {
   }
 
   // STEP_3：domain pack 派发层（不创建第二个 runtime / scheduler）
-  const domainRunner =
-    input.domainPacks === undefined || input.domainPacks.length === 0
+  const productPack =
+    input.productRecoveryPack === undefined
       ? null
-      : createRsiDomainPackRunner({ packs: input.domainPacks });
+      : createProductRecoverySiPack({
+          ...(input.productRecoveryPack.guard === undefined ? {} : { guard: input.productRecoveryPack.guard }),
+          ...(input.productRecoveryPack.appActionGuardDeps === undefined
+            ? {}
+            : { appActionGuardDeps: input.productRecoveryPack.appActionGuardDeps }),
+          readPorts: input.productRecoveryPack.readPorts,
+          bind: input.productRecoveryPack.bind as never,
+        });
+  const domainPackList = [
+    ...(productPack === null ? [] : [productPack]),
+    ...(input.domainPacks ?? []),
+  ];
+  const domainRunner =
+    domainPackList.length === 0 ? null : createRsiDomainPackRunner({ packs: domainPackList });
   const controller = attachContinuationToController({
     tasks,
     runner: input.runner ?? domainRunner ?? createUnconfiguredRunner(),
@@ -261,7 +294,7 @@ export async function composeRsiRuntime(input: {
     publisher,
     verdictWatcher,
     taskGeneration: () => generation,
-    runtimeMembers: () => describeRsiRuntimeMembers(input.domainPacks ?? []),
+    runtimeMembers: () => describeRsiRuntimeMembers(domainPackList),
     domainDispatchLog: () => domainRunner?.dispatchLog() ?? [],
     async reconcileNow(): Promise<RsiReconcilePlan | null> {
       if (reconcileSpec === undefined) return null;
@@ -301,6 +334,8 @@ export const RSI_RUNTIME_COMPOSITION_BOUNDARY = {
   restartReconcileDefault: 'NOT_CONFIGURED',
   /** STEP_3：domain capability pack 由同一 runtime 消费（不新建 Recovery runtime） */
   domainCapabilityPacks: 'STATIC_COMPOSITION_ONLY（Recovery SI = domain pack）',
+  /** FINAL-4：产品路径的 Recovery SI 只能经唯一 product 组装点（shared guard adapter 固定） */
+  productRecoveryPackGuardWiring: 'SHARED_ACTION_GUARD_ADAPTER（FORBIDDEN: caller-supplied guard port）',
   secondRuntime: 0,
   domainPackUnmatchedYieldsBlock: true,
   readsCredentials: false,
