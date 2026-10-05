@@ -1903,3 +1903,13 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 边界核对：模块内 **无** `prisma.*.create/update/delete/upsert/createMany/updateMany/deleteMany` 调用；
   `CARRIER_SETTLEMENT_BOUNDARY = { readOnly: true, createsSettlementFact: false, upgradesCarrierTextToReceived: false, moneyWrite: false, billable: false, appliesFxConversion: false, requiresSettlementEvidenceForReceived: true }`。
 - 结论：BG-009 验收标准全部满足（READ_ONLY / NO_MONEY_WRITE / NO_FX）；真实银行/结算证据仍属外部数据 → `HOLD_EXTERNAL` 保持。
+
+## 2026-10-05T02:37:10.194Z — BG-017 Layer 2 四域 Golden Path Matrix 证据（P0，内部可做）
+- 生成器实测：`node tools/autopilot/golden-path-matrix.mjs --write` → `{"gaps":0,"gapIds":[]}`；
+  四域 12 轴全部 COVERED：platform 12/12（13 个域测试文件 / 18 个 web 文件）、logistics_carrier 12/12（17/3）、
+  customs 12/12（50/15）、independent_site 12/12（6/3）→ 合计 **48/48 格 COVERED，无 GAP**。
+- 判定依据是**真实存在的证据文件名**（测试/前端文件），不是自评：矩阵 JSON 内每格都列出 evidence 文件列表。
+- 确定性：重跑生成器前后对 `domains+gap` 做 sha256 比对 = 一致（`b19b67a5…6006fa`），只有 `generated_at` 变化。
+- 一致性：`node tools/autopilot/acceptance-consistency.mjs` → `ACCEPTANCE_CONSISTENCY=OK head=734568c open_internal_items=74 areas=21`
+  （其中 C2b 校验「Golden Path 缺口必须已登记为 backlog」，当前 gaps=0 因而自动成立）。
+- 结论：BG-017 验收标准满足；矩阵可由生成器随时重算，未引入任何外写/网络/凭据。
