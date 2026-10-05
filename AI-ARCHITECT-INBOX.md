@@ -139501,3 +139501,323 @@ FINAL_ACCEPTANCE_HEAD = 0f7f7ac
 
 结论：P2-A + P2-B 到这里可以正式 PASS / CLOSED，不需要 FINAL-3。下一步如要继续，应先单独送 P2-C PREPARE 的设计/实施边界；不要自动进入 P2-D。
 ```
+
+### [MSG-20261005-16] ARCHITECT VERDICT — Recovery SI P2-C PREPARE 设计 = **PASS WITH REVISE**（`REVIEWED_HEAD = 565b9813`，未使用上一轮缓存）。正式授权：`P2_C_V1 = AUTHORIZED_WITH_CONDITIONS`、`P2_C_OPTION = A`、`P2_C_PERSISTENCE = FORBIDDEN`、`P2_C_EXTERNAL_WRITE = FORBIDDEN`。① v1 必须**复用现有纯函数** `buildRecoveryManifest() / serializeCanonicalManifest() / computePackageDigest() / renderManifestPdf()`（确定性计算），并**禁止调用** `generateRecoveryPackage() / persistPackageArtifacts() / transitionRecoveryPackage()`（会写 RecoveryPackage / FileAsset / AuditLog）以及任何 `claim.prepare` 的 DB mutation 路径；路径固定为 `verified PREPARE action → tenant-scoped persisted facts → buildRecoveryManifest() → canonical JSON → packageDigest → optional in-memory PDF → return prepared package preview`，到此停止；返回对象**不得命名成数据库实体** `RecoveryPackage`（建议 `PreparedRecoveryPackage` / `RecoveryPackagePreview` / `RecoveryPackageCandidate`），且必须显式 `persisted = false`、`submitted = false`、`executionAuthorized = false`。② 幂等语义修正：纯函数模式不要求「并发唯一赢家」，`P2C-04` 改为 **DETERMINISTIC_CONVERGENCE**（`same canonical business input → same canonical manifest → same packageDigest → same deterministic PDF bytes/digest`，DB writes = 0）；DB idempotency key / unique constraint / exactly-once 属 B/P2-E；若未来进入 B，沿用现有 `organizationId + claimItemId + packageVersion + packageDigest` 身份，`planDigest` 只作输入追溯 / verification basis。③ `P2_C_OWNER_APPROVAL_REQUIRED = NO`（纯计算 + 零落库 + 零外写 + 零 submission + 零资金），但不得放宽既有 tenant access / RBAC / verified plan action / fresh facts，`READY_FOR_EXECUTION` 仍非执行许可。④ 最小验收集：`P2C-01 verified action only`、`P2C-02 unregistered PREPARE fail-closed`、`P2C-03 tenant / actor mismatch`、`P2C-04 deterministic same input → same digest`、`P2C-05 forbidden business writes = 0`、`P2C-06 network/provider/credential = 0`、`P2C-07 output schema / identity / sensitive boundary`、`P2C-08 L5 denied + no execution authorization`、**新增 `P2C-09 persistence APIs are unreachable from P2-C`**（因纯函数与持久化函数同模块，极易 import 错）。⑤ 敏感数据边界：`P2_C_CUSTOMER_FACTS_INTERNAL = ALLOWED`（包内可含 claimItemId / caseId / normalizedRefs / evidenceId / amount·currency），但 `P2_C_TO_RSI_OUTCOME_SIGNAL = FORBIDDEN`、`P2_C_TO_MODEL_NETWORK = FORBIDDEN`，且仍禁 credential / token / raw provider payload / storage key / signed URL / bank·card secrets。⑥ 内部写入禁令：`DATABASE_PERSISTENCE / RECOVERY_PACKAGE_DB_CREATE / FILE_ASSET_CREATE / CLAIM_DRAFT_DB_MUTATION / AUDIT_LOG_WRITE = FORBIDDEN`；若未来要落库，直接并入 `P2-E Schema/Persistence Audit`（existing RecoveryPackage semantics / unique constraint / AuditLog / artifact persistence / FileAsset / supersede·withdraw lifecycle / plan·decision lineage），不得偷偷开启 B。⑦ 边界继续：`P2_D = NOT_AUTHORIZED`、`P2_E = HOLD_SCHEMA_DELTA`、`P2_F = HOLD`、`P2_G = HOLD`、`RSI_OUTCOME_SINK_RUNTIME_WIRING = NOT_AUTHORIZED`、`EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / REAL_CLAIM_SUBMIT / CUSTOMS_FILING / RSI_MODEL_NETWORK / RSI_PAID_MODEL_CALLS = HOLD`、`SECOND_RUNTIME = FORBIDDEN`、`L5_RELAXATION = FORBIDDEN`、`FINAL_ACCEPTANCE_HEAD = 0f7f7ac`。⑧ bookkeeping：设计文件正文仍写 `REVIEWED_HEAD = 83860905`，真实送审 commit = `565b9813`（实施审计包须使用真实 implementation SHA）。收口指令：可实施 **P2-C Option A（仅确定性内存包生成）**，完成后送 **P2-C Implementation Audit**；不得调用任何现有 RecoveryPackage 持久化 API，也不得顺带进入 P2-D。
+
+```text
+ARCHITECT VERDICT：PASS WITH REVISE（批准 P2-C v1 采用选项 A）
+
+我按实际送审 commit 565b98136c997cea56b3a2cfe05f7e0a8de93c7d 重新审了本轮设计，并核了现有 recovery-package.ts / Action Guard。没有使用上一轮缓存。
+
+先给正式授权：
+
+纯文本
+P2_C_V1 = AUTHORIZED_WITH_CONDITIONS
+P2_C_OPTION = A
+P2_C_PERSISTENCE = FORBIDDEN
+P2_C_EXTERNAL_WRITE = FORBIDDEN
+① v1 选 A，且应直接复用现有纯函数
+
+仓库里已经有非常合适的底座：
+
+纯文本
+buildRecoveryManifest()
+serializeCanonicalManifest()
+computePackageDigest()
+renderManifestPdf()
+
+这些都是确定性计算，可以直接复用。
+
+但同一个文件里还有：
+
+纯文本
+generateRecoveryPackage()
+persistPackageArtifacts()
+transitionRecoveryPackage()
+
+这些会写 RecoveryPackage / FileAsset / AuditLog 或更新生命周期，P2-C v1 全部禁止调用。
+
+同样，任何会创建/更新 Claim DRAFT 的 claim.prepare 持久化服务也不属于本次授权。
+
+因此 v1 应是：
+
+纯文本
+verified PREPARE action
+→ tenant-scoped persisted facts
+→ buildRecoveryManifest()
+→ canonical JSON
+→ packageDigest
+→ optional in-memory PDF
+→ return prepared package preview
+
+到这里停止。
+
+建议不要把返回对象命名成数据库实体 RecoveryPackage，避免以后误用。可以叫：
+
+纯文本
+PreparedRecoveryPackage
+RecoveryPackagePreview
+RecoveryPackageCandidate
+
+它必须明确：
+
+纯文本
+persisted = false
+submitted = false
+executionAuthorized = false
+② A 模式下，“幂等”语义需要小修订
+
+你文档写：
+
+同键并发两次 → 只产生一个包
+
+对于纯函数、零持久化模式，这个说法不准确。
+
+两个并发调用当然可能各自生成一个内存对象；真正需要保证的是：
+
+纯文本
+same canonical business input
+→ same canonical manifest
+→ same packageDigest
+→ same deterministic PDF bytes/digest
+
+所以 P2C-04 应改成：
+
+纯文本
+DETERMINISTIC_CONVERGENCE = PASS
+
+same input
+→ same packageDigest
+
+DB writes = 0
+
+而不是要求“并发唯一赢家”。
+
+唯一赢家 / unique constraint / exactly-once persistence 是 B/P2-E 才需要解决的问题。
+
+因此当前无需定义数据库 idempotency key。
+
+如果以后进入 B，我建议继续沿用现有数据库身份：
+
+纯文本
+organizationId
++ claimItemId
++ packageVersion
++ packageDigest
+
+因为仓库当前 RecoveryPackage 已经是这个唯一性语义。
+
+不需要在 P2-C A 重新发明：
+
+纯文本
+organizationId + opportunityRef + actionKind + planDigest
+
+作为最终 package DB identity。
+
+planDigest 可以作为输入追溯/verification basis，但不应该取代 canonical package digest 成为业务包身份。
+
+③ P2-C A 不需要 OWNER approval 前置
+
+不要求。
+
+原因很简单：
+
+纯文本
+纯计算
++ 零落库
++ 零外写
++ 零 submission
++ 零资金
+
+没有产生不可逆业务事实。
+
+所以：
+
+纯文本
+P2_C_OWNER_APPROVAL_REQUIRED = NO
+
+但这不意味着放宽现有权限。
+
+仍然必须：
+
+纯文本
+tenant access
+existing RBAC
+verified plan action
+fresh facts
+
+如果输入事实本身需要某种既有权限才能读取，就继续走原有 RBAC。
+
+同时：
+
+纯文本
+READY_FOR_EXECUTION
+
+仍不能因为 PREPARE 成功就变成执行许可。
+
+④ 最小证据集合基本足够，但改 P2C-04，并补一个非常重要的源码边界测试
+
+你列的 P2C-01～08 可以保留，其中 P2C-04 改成上面的“确定性收敛”。
+
+我只再增加 1 条最小证据：
+
+纯文本
+P2C-09
+P2-C implementation 不得调用：
+
+generateRecoveryPackage
+persistPackageArtifacts
+transitionRecoveryPackage
+claim.prepare 的 DB mutation 路径
+
+且不得调用：
+prisma.*
+FileAsset persistence
+AuditLog persistence
+
+原因是现有 recovery-package.ts 纯函数和持久化函数在同一个模块里，非常容易 import 错。
+
+这条测试很有价值。
+
+因此最终建议的验收集：
+
+纯文本
+P2C-01 verified action only
+P2C-02 unregistered PREPARE fail-closed
+P2C-03 tenant / actor mismatch
+P2C-04 deterministic same input → same digest
+P2C-05 forbidden business writes = 0
+P2C-06 network/provider/credential = 0
+P2C-07 output schema / identity / sensitive boundary
+P2C-08 L5 denied + no execution authorization
+P2C-09 persistence APIs are unreachable from P2-C
+
+这就够了。
+
+一个需要明确的敏感数据边界
+
+P2-C 的 package 本身当然可能合法包含：
+
+纯文本
+claimItemId
+caseId
+normalizedRefs
+evidenceId
+amount/currency
+
+因为它是在租户内部生成客户追回包。
+
+这些不需要像 P2-A Outcome Signal 那样匿名化。
+
+但是必须保证：
+
+纯文本
+P2-C package data
+!=
+RSI Outcome Signal
+!=
+Model prompt
+
+即：
+
+纯文本
+P2_C_CUSTOMER_FACTS_INTERNAL = ALLOWED
+P2_C_TO_RSI_OUTCOME_SIGNAL = FORBIDDEN
+P2_C_TO_MODEL_NETWORK = FORBIDDEN
+
+同时仍禁止：
+
+纯文本
+credential
+token
+raw provider payload
+storage key
+signed URL
+bank/card secrets
+⑤ P2-D / E / F / G 必须继续分别送审
+
+确认。
+
+纯文本
+P2_D_ACTION_GUARD = NOT_AUTHORIZED
+P2_E_PERSISTENCE = HOLD_SCHEMA_DELTA
+P2_F_MODEL_ASSISTANCE = HOLD
+P2_G_REAL_EXECUTION = HOLD
+
+特别是：
+
+P2-C PASS 不得自动进入 P2-D。
+
+即使 PREPARE 最后返回：
+
+纯文本
+READY_FOR_EXECUTION
+
+也继续：
+
+纯文本
+executionAuthorized = false
+executorInvoked = false
+B 将来怎么处理
+
+如果未来决定把准备包正式落库，我不建议单独偷偷开启 B。
+
+直接并入 P2-E Schema/Persistence Audit 最干净，因为仓库已经存在 RecoveryPackage 持久化体系，需要一起审：
+
+纯文本
+existing RecoveryPackage semantics
+unique constraint
+AuditLog
+artifact persistence
+FileAsset
+supersede/withdraw lifecycle
+plan/decision lineage
+
+届时再决定是否复用现有表，不需要现在提前扩大授权。
+
+最终裁定
+纯文本
+RECOVERY_SI_P2_C_DESIGN = PASS_WITH_REVISE
+
+OPTION_A = APPROVED
+OPTION_B = NOT_AUTHORIZED
+
+PURE_DETERMINISTIC_PREPARE = AUTHORIZED
+IN_MEMORY_CANONICAL_MANIFEST = AUTHORIZED
+IN_MEMORY_PACKAGE_DIGEST = AUTHORIZED
+IN_MEMORY_PDF_DERIVATION = AUTHORIZED
+
+DATABASE_PERSISTENCE = FORBIDDEN
+RECOVERY_PACKAGE_DB_CREATE = FORBIDDEN
+FILE_ASSET_CREATE = FORBIDDEN
+CLAIM_DRAFT_DB_MUTATION = FORBIDDEN
+AUDIT_LOG_WRITE = FORBIDDEN
+
+OWNER_APPROVAL_FOR_P2C_A = NOT_REQUIRED
+
+外部边界全部继续：
+
+纯文本
+P2_D = NOT_AUTHORIZED
+P2_E = HOLD_SCHEMA_DELTA
+P2_F = HOLD
+P2_G = HOLD
+
+RSI_OUTCOME_SINK_RUNTIME_WIRING = NOT_AUTHORIZED
+EXTERNAL_WRITE = HOLD
+PAYMENT = HOLD
+TRANSPORT = HOLD
+PRODUCTION_CREDENTIALS = HOLD
+REAL_CLAIM_SUBMIT = HOLD
+CUSTOMS_FILING = HOLD
+RSI_MODEL_NETWORK = HOLD
+RSI_PAID_MODEL_CALLS = HOLD
+
+SECOND_RUNTIME = FORBIDDEN
+L5_RELAXATION = FORBIDDEN
+FINAL_ACCEPTANCE_HEAD = 0f7f7ac
+
+另有一个纯 bookkeeping 问题：设计文件正文仍写 REVIEWED_HEAD = 83860905，而本次真正送审 commit 是 565b9813...；不阻塞授权，但实施审计包应使用真实 implementation SHA。
+
+Codex 现在可以实施 P2-C Option A，只做确定性内存包生成；完成后送 P2-C Implementation Audit。不得调用现有任何 RecoveryPackage 持久化 API，也不得顺带进入 P2-D。
+```

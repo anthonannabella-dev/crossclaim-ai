@@ -2173,3 +2173,11 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 不变量：只有 verified action 触发、静态绑定、tenant 双绑定、幂等（packageDigest 收敛）、append-only、零 submission / 零外写 / 零 provider / 零凭据、L5 永久拒绝、不自动进入 P2-D。
 - 最小证据（批 A 时）：P2C-01..08；批 B 时追加写入白名单 / 幂等唯一键 / 并发唯一赢家 / append-only 证据。
 - 本轮零代码、零 Schema、零运行时接线；边界 EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / RSI_MODEL_NETWORK / RSI_PAID_MODEL_CALLS = HOLD；FINAL_ACCEPTANCE_HEAD = 0f7f7ac。
+
+## 2026-10-05T05:22:29.680Z — Recovery SI P2-C Option A 实现（MSG-20261005-16 授权）
+- 裁决逐字归档：AI-ARCHITECT-INBOX.md 新增 [MSG-20261005-16]（FNV fee1c080 / 315 行 / FULL_COPY_OK；REVIEWED_HEAD 565b9813）。
+- 实现：apps/api/src/services/intelligence/recovery-package-preview.ts —— 静态 domain→PREPARE 绑定、逐 domain PREPARE 工具、入口内重新 prioritize + verifyRecoveryPlan、三角 tenant 校验、fact source 注入。
+- 复用既有纯函数：buildRecoveryManifest / serializeCanonicalManifest / computePackageDigest / renderManifestPdf / sha256Hex；零落库、零外写、零 submission、零 provider、零凭据。
+- 禁止 API（未 import、未调用）：generateRecoveryPackage / persistPackageArtifacts / transitionRecoveryPackage / claim.prepare DB mutation / prisma.*。
+- 证据：docs/releases/RECOVERY-SI-PHASE2-C-EVIDENCE.md（P2C-01..09 对照）；测试 recovery-si-phase2-c 6/6 + 回归 41/41 = 47/47 PASS；tsc exit 0。
+- 边界：P2-D/P2-E/P2-F/P2-G 未授权；RSI_OUTCOME_SINK_RUNTIME_WIRING = NOT_AUTHORIZED；RUNTIME_WIRING = NONE；FINAL_ACCEPTANCE_HEAD = 0f7f7ac。
