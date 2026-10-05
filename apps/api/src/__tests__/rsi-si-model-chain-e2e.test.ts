@@ -141,7 +141,7 @@ describe('PHASE 2 U2 · SI Runtime 端到端模型链（local sim）', () => {
     const counter = { n: 0 };
     const noPricing: RsiModelProviderAdapter = {
       capability: { simulated: true },
-      capability: { simulated: true }, providerName: 'probe-no-pricing',
+      providerName: 'probe-no-pricing',
       tier: 'LOW_COST',
       async invoke() {
         counter.n += 1;
