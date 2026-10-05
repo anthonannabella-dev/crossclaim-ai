@@ -148496,3 +148496,150 @@ META_IMPROVEMENT_INTEGRATED = false
 PRODUCTION_READY = false
 ```
 
+### [MSG-20261005-57] PHASE 4 U2 FINAL 裁决 = PASS WITH REVISE（LINEAGE_BINDING_CONTRACT PASS / LINEAGE_BINDING NOT YET）· reviewed ref d84f9004
+
+```text
+
+DECISION
+
+U2 trusted lineage resolver：PASS WITH REVISE
+LINEAGE_BINDING_CONTRACT = PASS
+LINEAGE_BINDING = NOT YET PASS
+Reviewed HEAD：d84f9004
+继续授权 U3 / U4 / U5
+但 U2 还需要一个 FINAL 窄修。
+
+KEEP
+
+organization/task/action/proposal/evidence 五项 mismatch 已 fail-closed。
+ledger missing / exception / not-found 均拒绝。
+未验证记录会从 verified dataset 路径显式排除，并保留 {digest, reason}。
+selfConsistencyOnly = NOT_SUFFICIENT_FOR_BINDING 的口径正确。
+没有第二 Evidence Store，也没有生产写路径。
+P2E-DB5 继续作为既有 test-isolation debt，不拉回本阶段。
+GITHUB_CI = NOT_OBSERVED。
+
+CHANGE
+
+目前最大问题仍是：
+
+TypeScript
+resolveTrustedOutcomeLineage(
+  port: OutcomeLineageSourcePort,
+  record
+)
+
+这个 port 仍然是结构型可注入对象。
+
+测试里本身就证明了这一点：
+
+TypeScript
+const port = (...) => ({
+  async resolve() {
+    return fact(...)
+  }
+})
+
+因此 caller 完全可以提供：
+
+纯文本
+fakePort.resolve() =>
+  返回与 record 完全一致的 fact
+  proposalLinked = true
+
+然后获得 verified=true。
+
+也就是说，目前只是把 caller 自报字符串升级成了 caller 自报“可信端口”。
+
+这和前面 Action Guard instance-injection 的问题本质一致。
+
+最小修复
+
+不要让 verified learning path 直接接受任意 OutcomeLineageSourcePort 实例。
+
+改成 server-owned composition，例如：
+
+纯文本
+createAppOutcomeLineageSource(deps)
+        ↓
+existing action/proposal/evidence ledger
+        ↓
+trusted provenance
+
+然后：
+
+用私有 WeakSet / factory provenance；
+或者 verified pipeline 只接受 AppOutcomeLineageDeps，内部自行创建正式 resolver；
+不能直接接受 caller-supplied port instance。
+
+而且 proposalLinked 最好由正式 adapter 根据已有 action/proposal/evidence 关系计算出来，不要从上游直接信一个 boolean。
+
+RISKS
+
+现在可以记：
+
+U2 CONTRACT = PASS
+
+因为 fail-closed 规则和 verified/excluded 逻辑本身没问题。
+
+但还不能记：
+
+TRUSTED_LEDGER_BINDING = PASS
+
+因为本次提交范围只有：
+
+outcome-lineage.ts
+outcome-lineage.test.ts
+
+没有看到真正接入现有 ledger 的正式 adapter/composition。
+
+另一个非阻断债务继续存在：scanRawPayloadKeys() 固定递归深度；由于 canonical 白名单阻止深层未知字段进入 record，不阻断当前阶段。
+
+TEST
+
+U2 FINAL 至少增加：
+
+caller 手写 fake OutcomeLineageSourcePort、永远返回匹配 fact → verified path REJECT。
+正式 factory 创建的 lineage source → provenance PASS。
+正式 source 从既有 ledger 读不到 refs → REJECT。
+ledger 中 refs 存在但不同 task/org → REJECT。
+proposal/action/evidence 未真实关联 → REJECT。
+全链真实匹配 → verified PASS。
+未验证记录仍不能进入 U3 immutable learning evidence。
+
+NEXT
+
+继续做：
+
+U3 learning dataset + immutable learning evidence；
+U4 offline evaluation；
+U5 meta-improvement candidate proposal only。
+
+但 U3 的“immutable verified learning evidence”只能接 正式 trusted lineage composition，不能基于当前任意 port 实例直接封板。
+
+U2 下一次送：
+
+PHASE 4 U2 FINAL2
+
+目标：
+
+LINEAGE_BINDING = PASS
+U2 = PASS / CLOSED
+
+PRODUCTION
+
+继续：
+
+REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing = HOLD
+
+SECOND_* = FORBIDDEN
+L5_RELAXATION = FORBIDDEN
+
+并保持：
+
+MODEL_GATEWAY_RUNTIME_WIRED = false
+ACTION_RUNTIME_PRODUCTION_ENABLED = false
+META_IMPROVEMENT_INTEGRATED = false
+PRODUCTION_READY = false
+```
+
