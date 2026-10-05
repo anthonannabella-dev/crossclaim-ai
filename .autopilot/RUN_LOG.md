@@ -2544,3 +2544,13 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 归档：`AI-ARCHITECT-INBOX.md` 新增 `MSG-20261005-30`；`compare.mjs` → **FULL_COPY_OK**（142/142 行，0 缺失 / 0 多出）。
 - 通道：主审计会话切换到 HOST 新会话 `https://chatgpt.com/c/6ac385db-cb60-83ec-9754-c7a30633a8c5`（历史 `6ac1cdf0-…` 保留 MSG-22..29）。
 
+
+## 2026-10-05T15:10Z — C1 IMPLEMENTATION 完成并送审（实现 HEAD = a1ba1dee）
+- 新增三个契约模块：rsi-ai-necessity-gate.ts（RULE_SOLVABLE / HIGH_CONFIDENCE → FORBIDDEN；AMBIGUOUS / SEMANTIC_REQUIRED → 仅 LEVEL_1；UNKNOWN / 证据缺失或畸形 → FAIL_CLOSED；caller 能力声明不构成权限）、rsi-model-cache-identity.ts（7 字段 canonical key + 各类 MISS + 跨租户 MISS + 高风险 stale FORBIDDEN）、rsi-model-escalation-policy.ts（PASS → STOP_PASS；FAIL/LOW_CONFIDENCE → 一次有界升级；maxAttempts=2/maxEscalations=1；judge 授权被忽略）。
+- Model Gateway 单咽喉：rsi-model-router.outcomeOf 先过 Necessity Gate；cost policy 的 LEVEL_2 钳制为 LEVEL_1；strong 仅经有界升级合同；gate 拒绝/失败路径零 provider 调用、零台账记录。
+- RsiModelCallRequest 增加必需 necessity 与可选 escalation（caller 不能用 requiredCapability 直接换调用权）。
+- 测试：新增 rsi-cost-c1.test.ts（13 例，覆盖 14 条 C1 ACCEPTANCE）；更新 rsi-cost-e2e / rsi-model-router / rsi-local-sim-adapter 夹具与两段式升级断言。
+- 验证：tsc --noEmit exit 0；成本相关 4 套件 38/38 PASS；全量 rsi-* 回归 46 文件 / 248 例 PASS；prisma validate valid / 79 migrations up to date（未改 Schema）。
+- 证据：docs/releases/SI-COST-OPTIMIZATION-C1-EVIDENCE.md；送审：docs/releases/SI-COST-OPTIMIZATION-C1-IMPLEMENTATION-AUDIT-REQUEST.md（REVIEWED_HEAD = a1ba1dee）。
+- 边界不变：REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT = HOLD；P2_F / P2_G = HOLD；RUNTIME_WIRING = NONE。
+
