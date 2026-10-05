@@ -14,6 +14,8 @@ import {
 import {
   CONTROLLED_PROPOSAL_BOUNDARY,
   TARGET_DELTA_PATHS,
+  TARGET_DELTA_VALUE_SCHEMA,
+  isValidDeltaValue,
   createControlledConfigProposal,
   isVerifiedControlledConfigProposal,
 } from '../services/outcome-learning/controlled-config-proposal';
@@ -276,5 +278,50 @@ describe('PHASE 5 U3 FINAL —— target-specific delta allowlist + baseline val
     expect(isVerifiedControlledConfigProposal(proposal)).toBe(true);
     expect(CONTROLLED_PROPOSAL_BOUNDARY.deltaPath).toContain('TARGET_SPECIFIC_ALLOWLIST');
     expect(CONTROLLED_PROPOSAL_BOUNDARY.deltaFrom).toContain('MUST_EQUAL_BASELINE_SNAPSHOT_VALUE');
+  });
+});
+
+describe('PHASE 5 U3 FINAL2 —— target-specific delta value schema（类型/范围/枚举）', () => {
+  it('P5U3G_1 类型与范围：非数值 / 超范围 / 非整数 → REJECT', async () => {
+    const c = await ctx();
+    const plan = await planFor(c);
+    expect(() => createControlledConfigProposal(c.verdict, plan, { proposedDelta: delta({ to: 'abc' }) })).toThrow(
+      /CONTROLLED_PROPOSAL_DELTA_VALUE_INVALID:ROUTER:router.escalationThreshold/,
+    );
+    expect(() => createControlledConfigProposal(c.verdict, plan, { proposedDelta: delta({ to: '1.50' }) })).toThrow(
+      /CONTROLLED_PROPOSAL_DELTA_VALUE_INVALID/,
+    );
+    expect(() => createControlledConfigProposal(c.verdict, plan, { proposedDelta: delta({ to: '-0.10' }) })).toThrow(
+      /CONTROLLED_PROPOSAL_DELTA_VALUE_INVALID/,
+    );
+    expect(isValidDeltaValue('router.escalationThreshold', '0.75')).toBe(true);
+    expect(isValidDeltaValue('router.escalationThreshold', '2')).toBe(false);
+    expect(isValidDeltaValue('policy.retryBudget', '2.5')).toBe(false);
+  });
+
+  it('P5U3G_2 枚举字段：枚举外取值 → REJECT；合法枚举 → PASS', async () => {
+    const c = await ctx();
+    const plan = await planFor(c);
+    expect(() =>
+      createControlledConfigProposal(c.verdict, plan, {
+        proposedDelta: delta({ path: 'router.modelTierPolicy', from: 'balanced', to: 'ULTRA' }),
+      }),
+    ).toThrow(/CONTROLLED_PROPOSAL_DELTA_VALUE_INVALID/);
+    expect(isValidDeltaValue('router.modelTierPolicy', 'PREMIUM')).toBe(true);
+    expect(isValidDeltaValue('guard.evidenceStrengthRequirement', 'ANYTHING')).toBe(false);
+    expect(TARGET_DELTA_VALUE_SCHEMA['router.escalationThreshold']).toEqual({
+      kind: 'NUMBER_RANGE',
+      min: 0,
+      max: 1,
+    });
+  });
+
+  it('P5U3G_3 合法取值 → PASS，并保留 baseline/allowlist/provenance 全套约束', async () => {
+    const c = await ctx();
+    const plan = await planFor(c);
+    const proposal = createControlledConfigProposal(c.verdict, plan, { proposedDelta: delta({ to: '0.75' }) });
+    expect(proposal.proposedDelta.to).toBe('0.75');
+    expect(isVerifiedControlledConfigProposal(proposal)).toBe(true);
+    expect(CONTROLLED_PROPOSAL_BOUNDARY.deltaValue).toContain('TARGET_SPECIFIC_VALUE_SCHEMA');
   });
 });

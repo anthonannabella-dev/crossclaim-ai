@@ -24,6 +24,7 @@ export const CONTROLLED_PROPOSAL_BOUNDARY = {
   deltaTarget: 'MUST_EQUAL_CANDIDATE_TARGET（取自 verified rollback plan）',
   deltaPath: 'TARGET_SPECIFIC_ALLOWLIST（TARGET_DELTA_PATHS；越界 fail-closed）',
   deltaFrom: 'MUST_EQUAL_BASELINE_SNAPSHOT_VALUE（delta.from 必须等于 trusted snapshot 中该字段当前值）',
+  deltaValue: 'TARGET_SPECIFIC_VALUE_SCHEMA（类型/范围/枚举；越界或类型不符 fail-closed）',
   apply: 'FORBIDDEN',
   autoPromotion: 'OFF',
   autoRollout: 'FORBIDDEN',
@@ -55,6 +56,32 @@ export const TARGET_DELTA_PATHS = {
   ACTION_RUNTIME: ['actionRuntime.maxAttempts'],
 } as const;
 export type DeltaTargetName = keyof typeof TARGET_DELTA_PATHS;
+
+/** 每个受控字段的取值 schema（类型 / 范围 / 枚举）；越界或类型不符一律 fail-closed。 */
+export const TARGET_DELTA_VALUE_SCHEMA = {
+  'policy.retryBudget': { kind: 'INTEGER_RANGE', min: 1, max: 10 },
+  'policy.resolutionWindowHours': { kind: 'INTEGER_RANGE', min: 1, max: 168 },
+  'guard.evidenceStrengthRequirement': { kind: 'ENUM', values: ['WEAK', 'STANDARD', 'STRONG'] },
+  'router.escalationThreshold': { kind: 'NUMBER_RANGE', min: 0, max: 1 },
+  'router.modelTierPolicy': { kind: 'ENUM', values: ['ECONOMY', 'BALANCED', 'PREMIUM'] },
+  'actionRuntime.maxAttempts': { kind: 'INTEGER_RANGE', min: 1, max: 5 },
+} as const;
+export type DeltaPathName = keyof typeof TARGET_DELTA_VALUE_SCHEMA;
+
+/** 字段级取值校验（类型/范围/枚举）。 */
+export function isValidDeltaValue(path: string, value: string): boolean {
+  const schema = (TARGET_DELTA_VALUE_SCHEMA as Record<string, { kind: string; min?: number; max?: number; values?: readonly string[] }>)[path];
+  if (schema === undefined) return false;
+  if (schema.kind === 'ENUM') {
+    return (schema.values ?? []).includes(value);
+  }
+  const text = value.trim();
+  if (text === '') return false;
+  const num = Number(text);
+  if (!Number.isFinite(num)) return false;
+  if (schema.kind === 'INTEGER_RANGE' && !Number.isInteger(num)) return false;
+  return num >= (schema.min ?? Number.NEGATIVE_INFINITY) && num <= (schema.max ?? Number.POSITIVE_INFINITY);
+}
 
 export interface ProposedDelta {
   target: string;
@@ -180,6 +207,9 @@ export function createControlledConfigProposal(
   const baselineValue = plan.baselineConfigValues[path];
   if (baselineValue === undefined || baselineValue !== from) {
     throw new Error('CONTROLLED_PROPOSAL_DELTA_FROM_NOT_IN_BASELINE:' + target + ':' + path);
+  }
+  if (!isValidDeltaValue(path, to)) {
+    throw new Error('CONTROLLED_PROPOSAL_DELTA_VALUE_INVALID:' + target + ':' + path);
   }
 
   const proposalDigest = digest('controlled-proposal', [
