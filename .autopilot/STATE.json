@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "2ae5adc5",
+  "head": "e90de9c0",
   "status": "RECONCILED",
   "current_task": "RSI 生产可执行闭环（7 点收口）：RSI_RUNTIME_READY = PASS；MODEL_PROVIDER_READY = 本地仿真已接线（真实网络/付费 HOLD）；PERSISTENCE_READY = ephemeral 已验证、durable 需宿主非生产 DATABASE_URL；REBOOT_RECONCILE_READY = NOT_IMPLEMENTED（下一单元）；SYSTEMD_VALIDATED = 需宿主 Linux 实机",
   "next_task": "BG-016 单一 Acceptance Head + 四份状态一致 guard（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍 HOST_ACTION_REQUIRED 或 HOLD",
@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-40",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T19:05:46.958Z",
+  "updated_at": "2026-10-05T19:14:14.360Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -21,7 +21,7 @@
   "ci_result": "completed_success",
   "fix_pr": "https://github.com/anthonannabella-dev/crossclaim-ai/pull/10",
   "channel_status": "HEALTHY（主审计会话 = https://chatgpt.com/c/6ac385db-cb60-83ec-9754-c7a30633a8c5（HOST 新开；MSG-20261005-30 起）；历史会话 https://chatgpt.com/c/6ac1cdf0-1ec8-83ec-8036-0e66fcf5c6b9 保留 MSG-22..29 逐字归档）",
-  "pending_verdict_unarchived": null,
+  "pending_verdict_unarchived": "PHASE 4 U3（Reviewed HEAD e90de9c0）—— 已投递，等待裁决",
   "b2_status": "PASS（MSG-20260930-10 工程修复 + MSG-20260930-11 集成 PASS/MERGE APPROVED）",
   "protocol": "DUAL_CHANNEL_WAKEUP（GitHub = 正式总线 / ChatGPT Web = 仅唤醒）",
   "integration_pr": "https://github.com/anthonannabella-dev/crossclaim-ai/pull/11",
@@ -50,14 +50,14 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
-  "next_execution_unit": "PHASE 4 U3 —— Learning Dataset + Immutable Learning Evidence（按裁决 NEXT 要求）：链路 canonical outcome → trusted lineage verified → learning projection → **既有 evidence ledger append-only evidence**；禁止建立 SECOND_META_EVIDENCE_STORE；immutable evidence 至少绑定 outcomeDigest + lineage refs + dataset/evaluation version + evidence digest；只能接正式 trusted ledger/source（U2 已 CLOSED），未过 binding 的记录不得进入 verified path。随后 U4 —— Offline Evaluation：必须明确 resolved denominator（SUCCESS / FAILURE·REJECTED / PARTIAL / UNKNOWN / MANUAL_REVIEW），不得继续用 successCount / all records 作为正式质量指标；U5 —— Meta-improvement Candidate：只允许 observe → evaluate → candidate proposal，禁止 candidate → automatic policy/router/guard/action mutation；AUTO_PROMOTION = OFF。流程：code → tests → regression → tsc → commit → push → 送审 → 送达三检 → 逐字归档 → FULL_COPY_OK → durable state。边界不变：REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT = HOLD；SECOND_* = FORBIDDEN；L5_RELAXATION = FORBIDDEN；四项 false 标志保持。",
+  "next_execution_unit": "PHASE 4 U3 裁决处理：读取右侧审核会话（tab 14）完整 verdict（严格匹配 REVIEWED_HEAD = e90de9c0）→ 原样逐字归档 AI-ARCHITECT-INBOX.md（MSG-20261005-60）→ compare.mjs 必须 FULL_COPY_OK → durable state 对账。若 PASS → U4 offline evaluation（显式 resolved denominator：SUCCESS / FAILURE·REJECTED / PARTIAL / UNKNOWN / MANUAL_REVIEW；不得继续用 successCount/all records 作为正式质量指标）→ U5 meta-improvement candidate proposal only（observe → evaluate → candidate，禁止自动改 policy/router/guard/action，AUTO_PROMOTION = OFF）；若 PASS WITH REVISE → 按裁决窄修。",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-05T19:05:46.958Z",
+  "last_tick_at": "2026-10-05T19:14:14.360Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "PHASE 4 U2 FINAL3 裁决已读取并原样归档（MSG-20261005-59，compare.mjs = FULL_COPY_OK）：TRUSTED_LEDGER_PROVENANCE = PASS、SOURCE_PROVENANCE = PASS、LINEAGE_BINDING = PASS；PHASE_4_U2 = PASS / CLOSED；PHASE4_U2_FINAL4_REQUIRED = NO；U3/U4/U5 继续授权。",
-  "last_action_at": "2026-10-05T19:05:46.958Z",
-  "next_action": "PHASE 4 U3：Learning Dataset + Immutable Learning Evidence",
-  "current_head": "2ae5adc5",
+  "last_action": "PHASE 4 U3 已实施并送审：learning-evidence.ts（verified-only / append-only / 复用既有 evidence ledger）；immutable evidence 绑定 outcomeDigest + lineage refs + datasetVersion + evidenceDigest；skipped 显式记录未验证数据；fake/缺失 ledger fail-closed；push e90de9c0；投递 [CODEX-PHASE4-U3]，三检通过，等待裁决。回归 92/93 files、946/947 tests（唯一失败 = P2E-DB5 test-isolation debt，单独 20/20 PASS）。",
+  "last_action_at": "2026-10-05T19:14:14.360Z",
+  "next_action": "读取 PHASE 4 U3 裁决 → 逐字归档 + compare.mjs FULL_COPY_OK + durable state 对账",
+  "current_head": "e90de9c0",
   "last_completed_head": "6cba0639",
   "reviewed_head": "add99ec3",
   "claim_submit_batch": {
@@ -5169,11 +5169,11 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "P4L-1 U3 learning dataset + immutable learning evidence（接正式 trusted ledger/source；append-only 复用既有 evidence ledger；禁止第二存储；绑定 outcomeDigest+lineage refs+dataset version+evidence digest）",
-    "P4L-2 U3 tests → regression → tsc → commit → push → 送审 → 逐字归档 → compare.mjs → durable state",
-    "P4L-3 U4 offline evaluation（显式 resolved denominator：SUCCESS / FAILURE·REJECTED / PARTIAL / UNKNOWN / MANUAL_REVIEW）",
-    "P4L-4 U5 meta-improvement candidate proposal only（observe → evaluate → candidate；禁止自动改 policy/router/guard/action；AUTO_PROMOTION = OFF）",
-    "P4L-5 非阻断维护项：scanRawPayloadKeys 改完整有界遍历/循环检测"
+    "P4M-1 读取 PHASE 4 U3 裁决（tab 14，匹配 Reviewed HEAD e90de9c0）+ 逐字归档 MSG-20261005-60 + compare.mjs + durable state",
+    "P4M-2 U4 offline evaluation（显式 resolved denominator：SUCCESS / FAILURE·REJECTED / PARTIAL / UNKNOWN / MANUAL_REVIEW）",
+    "P4M-3 U4 tests → regression → tsc → commit → push → 送审 → 逐字归档 → compare.mjs → durable state",
+    "P4M-4 U5 meta-improvement candidate proposal only（observe → evaluate → candidate；禁止自动改 policy/router/guard/action；AUTO_PROMOTION = OFF）",
+    "P4M-5 非阻断维护项：scanRawPayloadKeys 改完整有界遍历/循环检测"
   ],
   "full_autonomous_internal_execution": "VERIFIED",
   "dispatcher_acceptance": {
@@ -9323,7 +9323,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-05T19:05:46.958Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-05T19:14:14.360Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -9880,5 +9880,21 @@
       "U4",
       "U5"
     ]
+  },
+  "phase4_u3": {
+    "status": "SUBMITTED / AWAITING_VERDICT",
+    "reviewed_head": "e90de9c0",
+    "pushed": true,
+    "files": [
+      "apps/api/src/services/outcome-learning/learning-evidence.ts",
+      "apps/api/src/__tests__/learning-evidence.test.ts"
+    ],
+    "local_verification": {
+      "tsc": "PASS",
+      "targeted": "learning-evidence 6/6 + outcome-learning 17/17 + outcome-lineage 7/7",
+      "regression": "92/93 files、946/947 tests（唯一失败 = P2E-DB5 test-isolation debt，单独 20/20 PASS）",
+      "github_ci": "NOT_OBSERVED"
+    },
+    "accuracy_note": "contract/architecture 层；正式 repository adapter 是否读既有数据源（非影子事实源）在接真实数据时仍需确认"
   }
 }
