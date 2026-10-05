@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-05T01:43:38.994Z",
+  "generated_at": "2026-10-05T01:44:00.277Z",
   "rule": "COVERED 需存在命名证据文件；否则 GAP",
   "domains": [
     {
