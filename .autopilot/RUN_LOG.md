@@ -2052,3 +2052,26 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 证据：`architecture-contract` 142/142 PASS（本地）；CI 空库 `prisma migrate deploy` 路径覆盖（此前多次 hosted CI success）。
 - 已请求裁决：①BG-011 是否可记 COMPLETED/CLOSED；②D4 仍不得实施；③如需补证据请列最小集合。
 - 送审不阻塞 Lane A：继续处理无外部依赖的 SAFE 项。
+
+## 2026-10-05T03:30:07.285Z — Lane A 连续推进：SEO-4 P0 路由形状收口 + RSI 展示/健康/开关/Fixture 项复核
+- **SEO-4-P0-route-shape-vs-canonical-mismatch**：`apps/api/src/services/seo/seo-technical.ts:51` 现为
+  `return \`${localePathSegment(input.locale)}/recover/${slug}\`` —— 与 MSG-20261005-03 的 OPTION_A 一致；
+  套件 `seo-canonical-route-shape.test.ts` **4/4 PASS**（CANONICAL_SHAPE_IS_SLUG_BASED / CANONICAL_SELF_REFERENCES /
+  HREFLANG_SAME_SHAPE_AND_REACHABLE_ONLY / NO_PLATFORM_SEGMENT_IN_URL）→ 状态陈旧，实际已解决 → **CLOSED**。
+- **RSI-RT-03 health-state**：`rsi-runtime-config.ts`（RSI_HEALTH_STATES + deriveHealthState）与 `rsi-controller.ts` /health 载荷已实现，
+  `rsi-runtime-config`(5) 与 `rsi-controller`(4) 套件通过 → COMPLETED。
+- **RSI-RT-04 admin autonomy page / RSI-RT-07 health panel / RSI-COST-04 cost panel**：`apps/web/app/admin/autonomy/page.tsx`
+  （`loadRsiAdminSnapshot()` + 快照缺失 fail-closed）+ `health-panel.tsx` + `cost-panel.tsx`（纯展示、i18n key、不读 DB/不调模型/不外写）；
+  对应 API 侧 `rsi-admin-snapshot`(3) 与 `rsi-admin-snapshot-publisher`(3) 通过 → COMPLETED。
+- **RSI-RT-05 kill-switch**：`RSI_PAUSED` 语义（暂停新 incident/candidate/patch/promotion、不删审计）+ `canRsiToggleKillSwitch()` 恒 false
+  （OWNER-gated）+ `apps/web/app/admin/kill-switch` 页面 → COMPLETED。
+- **RSI-INSP-04 golden fixtures**：`rsi-golden-fixtures.ts` + `rsi-fixture-pipeline.ts` + 套件（3+4 例）通过 → COMPLETED。
+- 说明：以上均为**代码/文件级 + 套件级证据**；真实进程内的端到端展示仍依赖宿主 Linux 实机（RSI-RT-02 = HOST_ACTION_REQUIRED）。
+
+## 2026-10-05T03:30:26.585Z — Lane A：BG-012 Customs G4 HTTP 内部触发接线复核（原标 ARCH；实为已落地）
+- 代码证据：`apps/api/src/server.ts:106` 提供 `customsRecoveryChain?: { run(args:{organizationId,entryFactId}) }` 依赖，
+  且路由白名单正则（server.ts:142）已包含 `/customs-entry-facts/:id/recovery-chain` —— 即内部触发路由**已接线**。
+- 套件证据：`customs-recovery-chain-http-e2e-db.test.ts` **4/4 PASS** —— 未认证 401；FINANCE/VIEWER 403（后端强制，不得触发重算）；
+  OWNER 200（含 `executionKey` 与四个永久 HOLD 字段）；未知 fact / 跨租户 404。
+- 边界确认：该路由只做**内部触发**，不 filing、不外写（与 C18 的 External Write = HOLD 一致）；real provider 仍 HOLD。
+- 结论：BG-012 的「HTTP 内部触发接线」已存在且受 401/403/租户边界保护 → 状态陈旧 → **CLOSED**（无需新的架构审计）。
