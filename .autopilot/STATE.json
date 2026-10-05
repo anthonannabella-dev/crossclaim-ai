@@ -11,7 +11,7 @@
   "external_write_enabled": false,
   "updated_at": "2026-10-06T08:30:00.000Z",
   "previous_head": "8064f07",
-  "architect_decision_pending": false,
+  "architect_decision_pending": true,
   "blocked_scope": null,
   "last_send_head": "0c35106",
   "last_sent_at": "2026-10-03T09:07:52.875Z",
@@ -50,11 +50,11 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
-  "next_execution_unit": "STEP 3 FINAL-2 窄修（仅两个阻断项）：A Judge proposal/verdict 分离（runner 只写 proposal，markWaitingForVerdict(null)；domainPacks 路径强制 awaitVerdict=true；watchdog 无 verdict 只等待）+ B shared Action Guard bridge（intent → resolveGuardAction → Action Guard / Control Plane dry-run → ALLOW 才执行只读工具；DENY / REQUIRES_APPROVAL / degraded / kill switch / tenant mismatch → tool = 0；CUSTOMS null → guard 0 / tool 0）→ 新增裁决要求的测试 → tsc / regression → commit + push → 再送审（MSG-20261005-42）",
+  "next_execution_unit": "读取 STEP 3 FINAL-2 裁决 → 逐字归档（MSG-20261005-42）→ PASS/CLOSED 则宣布 STEP_3_RUNTIME_POLICY_WIRING = PASS / CLOSED 并 recompute SAFE_CONTINUATION_QUEUE；REVISE 则最小集合窄修 → commit/push → 再送审",
   "automation_status": "CONTINUOUS",
   "last_tick_at": "2026-10-06T08:30:00.000Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "STEP 3 裁决 = PASS WITH REVISE（MSG-20261005-41，REVIEWED_HEAD = c0b61792）；两个阻断项待 FINAL-2 窄修",
+  "last_action": "STEP 3 FINAL-2（A+B）实现并送审（REVIEWED_HEAD = ca23b1df）",
   "last_action_at": "2026-10-06T08:30:00.000Z",
   "next_action": "C2 IMPLEMENTATION（Schema Delta + durable ledger/budget + PG 回归）",
   "current_head": "054ab732",
@@ -9354,7 +9354,7 @@
   "HEARTBEAT_INTERVAL_SECONDS": 60,
   "safe_continuation_queue_recomputed_at": "2026-10-06T07:30:00.000Z",
   "step3_runtime_policy_wiring": {
-    "status": "FINAL2_REQUIRED",
+    "status": "FINAL2_SUBMITTED_PENDING_VERDICT",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
     "implementation_head": "c0b61792",
     "request": "docs/releases/SI-RUNTIME-STEP3-WIRING-REQUEST.md",
@@ -9407,6 +9407,15 @@
       ],
       "step3_final2_required": "YES",
       "archive": "AI-ARCHITECT-INBOX.md#MSG-20261005-41"
+    },
+    "final2": {
+      "implementation_head": "ca23b1df",
+      "request": "docs/releases/SI-RUNTIME-STEP3-FINAL2-REQUEST.md",
+      "changes": [
+        "A proposal/verdict 分离（markWaitingForVerdict(null) + proposal() 访问器 + domainPacks 强制 park-for-judge）",
+        "B shared Action Guard bridge（ALLOW 才执行只读工具；DENY/REQUIRES_APPROVAL/degraded/kill switch/tenant mismatch → BLOCK + tool 0；CUSTOMS/unmapped → guard 0/tool 0）"
+      ],
+      "tests": "tsc 0；新增 9 例；回归 75 files / 759 tests PASS"
     }
   }
 }

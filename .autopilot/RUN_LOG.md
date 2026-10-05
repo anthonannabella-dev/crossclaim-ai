@@ -2673,3 +2673,9 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 3E/3F/3G：Judge 保持 SELF_JUDGE_FORBIDDEN + park-for-judge；restart/reconcile E2E（过期 lease 恢复、终止态不重放、二次幂等）；3G 十条 E2E 全绿。
 - 验证：tsc exit 0；STEP 3 定向 12/12；rsi-* + si-cost-* + recovery-* + architecture-contract = 75 files / 750 tests PASS；无 Schema/迁移变更。
 - NEXT_EXECUTION_UNIT = 读取 STEP_3_RUNTIME_POLICY_WIRING 裁决 → 逐字归档（MSG-20261005-41）→ PASS/CLOSED 则宣布 CROSSCLAIM_SI_RUNTIME_WIRING = PASS / CLOSED 并 recompute SAFE_CONTINUATION_QUEUE；REVISE 则最小集合窄修 → commit/push → 再送审。
+
+## 2026-10-06T09:30Z —— STEP 3 FINAL-2（A/B）完成并送审（实现 HEAD = ca23b1df）
+- A：runner 只写 proposal，markWaitingForVerdict(null)；domainPacks 强制 park-for-judge；watchdog 只能消费真实 external verdict。
+- B：shared Action Guard/Control Plane dry-run 进入执行链（ALLOW 才执行只读工具）；DENY/REQUIRES_APPROVAL/degraded/kill switch/tenant mismatch → BLOCK + tool 0；CUSTOMS/unmapped → guard 0/tool 0。
+- 验证：tsc 0；新增 9 例；回归 75 files / 759 tests PASS。
+- NEXT = 读取 FINAL-2 裁决 → 归档 MSG-20261005-42 → PASS/CLOSED 则宣布 STEP_3_RUNTIME_POLICY_WIRING = PASS / CLOSED。
