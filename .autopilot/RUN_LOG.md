@@ -2302,3 +2302,8 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 四项必修：①入口门禁 P2_E_GUARD_ACTION = claim.prepare（不得用 P2-D claim.submit ALLOW）；②package/artifact/FileAsset/audit 单一事务原子性；③lineage 表述（planDigest 仅追溯 basis）；④RecoveryPackage DB DELETE guard。
 - 实施顺序与 P2E-01..10 证据映射已更新；实现完成后送 P2-E Implementation Audit，不得进入 P2-F/P2-G。
 - 边界不变：四类 FORBIDDEN；P2_F = HOLD；P2_G = HOLD；FINAL_ACCEPTANCE_HEAD = 0f7f7ac。
+
+## 2026-10-05T08:25Z — P2-E v1 必修 1 落地（持久化入口门禁，纯判定，无 DB）
+- 新增 apps/api/src/services/intelligence/recovery-persist-gate.ts：P2_E_GUARD_ACTION = claim.prepare；claim.submit / platform.write / appeal.submit 列入 P2_E_FORBIDDEN_GUARD_ACTIONS；capabilities 只来自可信 Control Plane；outcome 恒定 persisted=false / transactionRequired=true / dbDeleteGuardRequired=true / approvalConsumed=false / executorInvoked=false。
+- 新增测试 apps/api/src/__tests__/recovery-si-phase2-e.test.ts（P2E-G1..G5）。
+- 本切片不含 Schema / 迁移 / 事务化 / DELETE guard / lineage（必修 2/3/4 仍待做）；RUNTIME_WIRING = NONE。
