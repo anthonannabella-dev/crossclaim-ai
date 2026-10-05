@@ -2278,3 +2278,9 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 建议最小证据 P2E-01..10（含真实 PostgreSQL 迁移与触发器清单、失败语义与补偿）。
 - 本轮零代码、零 Schema、零迁移、零运行时接线；P2_F / P2_G 继续 HOLD，真实执行必须另开 P2-G。
 - 状态：等待 P2-E 设计裁决（送审唤醒待下一窗口发出）。
+
+## 2026-10-05T07:30Z — 审计裁决捕获限制记录 + P2-E 裁决归档游标
+- 新增 docs/releases/AUDIT-CAPTURE-LIMITATION-AND-P2E-VERDICT-CURSOR.md：记录 harness 禁用 createElement/Blob/Range、locator 复制按钮命中 0、可达性树每次回传约 10k tokens 的实测结论。
+- P2-E 裁决：PASS WITH REVISE（Option A 授权 / 入口门禁必须改 claim.prepare / 另有事务原子性与 lineage 必修）；REVIEWED_HEAD 48e6e2a3；总 10521 字符 / 731 行 / FNV e2516425。
+- 已落盘 chunk 1（第 1–59 行）；下一段起点第 60 行；拼接后必须通过 10521/731/e2516425 校验才允许写入 AI-ARCHITECT-INBOX（避免截断入库）。
+- 阻塞：等待宿主选择（粘贴全文 / 批准 SUMMARY_NON_VERBATIM 例外 / 继续 60 行分段捕获）。未获批准前不写 AI-ARCHITECT-INBOX。
