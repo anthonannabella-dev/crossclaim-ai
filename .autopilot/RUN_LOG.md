@@ -2134,3 +2134,10 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 测试：recovery-si-phase2-ab 13/13 PASS + Phase 1 回归 22/22 = 35/35 PASS；tsc exit 0。
 - 边界：P2-C/P2-D/P2-E/P2-F/P2-G 未授权；RUNTIME_WIRING = NONE；SCHEMA_DELTA_REQUIRED = NO；EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / REAL_CLAIM_SUBMIT / CUSTOMS_FILING / RSI_MODEL_NETWORK / RSI_PAID_MODEL_CALLS = HOLD；FINAL_ACCEPTANCE_HEAD = 0f7f7ac。
 - 下一步：送审 `Recovery SI Phase 2 A/B Implementation Audit`（独立单元，不并入其它阶段）。
+
+## 2026-10-05T05:04:57.897Z — Recovery SI Phase 2 A/B Implementation Audit 送审（REVIEWED_HEAD f1f6607d）
+- 耐久记录：docs/releases/RECOVERY-SI-PHASE2-AB-AUDIT-REQUEST.md（真实代码送审 SHA = f1f6607d，不再是 pre-submit HEAD）。
+- scope：仅 P2-A（匿名聚合能力信号，硬前置 AGGREGATED_ANONYMIZED_CAPABILITY_SIGNAL_ONLY）+ P2-B（三个只读工具实接现有确定性只读服务）；10 条最小证据全覆盖。
+- 不变量：只读（DB 写 0 / 网络 0 / 凭据 0）、tenant fail-closed、未登记/非 READ/陈旧一律不调用、不建第二套 Runtime、L5 不放宽。
+- 未做（等待各自授权）：P2-C PREPARE Tool、P2-D Action Guard handoff（需 D1–D8）、P2-E Schema Delta、P2-F 模型、P2-G 真实执行；RUNTIME_WIRING = NONE。
+- 送达验证后立即读取裁决并逐字归档（FNV + FULL_COPY_OK），不等待下一次 heartbeat。
