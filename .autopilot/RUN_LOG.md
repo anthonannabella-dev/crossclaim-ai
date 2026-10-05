@@ -2218,3 +2218,11 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 复用既有 evaluateActionGuard（纯函数、fail-closed、唯一动作目录）；不改 catalog、不改审批/HITL 语义、不消费审批、不调用 executor。
 - 最小证据 D1–D8（fresh verified plan / 不可变 execution basis / tenant mismatch / approval 缺失 / 不消费审批 / 不创建业务事实 / Guard ALLOW 仍非执行授权 / L5 永久拒绝）。
 - 边界：P2-E/P2-F/P2-G 未授权；RUNTIME_WIRING = NONE；SCHEMA_DELTA_REQUIRED = NO；外部能力全 HOLD；FINAL_ACCEPTANCE_HEAD = 0f7f7ac。
+
+## 2026-10-05T05:37:49.692Z — Recovery SI P2-D 设计裁决 = PASS WITH REVISE（MSG-20261005-19）
+- 裁决逐字归档：AI-ARCHITECT-INBOX.md 新增 [MSG-20261005-19]（FNV 50b12347 / 528 行 / FULL_COPY_OK；冻结基线 79618507 / 设计请求 11bcd5ca）。
+- 授权：P2_D_V1_IMPLEMENTATION = AUTHORIZED_WITH_CONDITIONS；P2_D_DRY_RUN_ONLY = AUTHORIZED；APPROVAL_CONSUMPTION / EXECUTOR_INVOCATION / BUSINESS_FACT_WRITE / EXTERNAL_ACTION = FORBIDDEN。
+- 必修 A：新增静态 Guard-action 映射（只引用现有 ACTION_GUARD_CATALOG；NO_DYNAMIC_ACTION_NAME / NO_MODEL_GENERATED_ACTION / NO_FALLBACK_GUESS / UNMAPPED → DENY 且零 Guard 调用；basis 增 guardAction；CUSTOMS_FILING 继续 L5 永久拒绝）。
+- 必修 B：复用可信 ProductionControlPlane（snapshotFor / evaluateWithoutAudit），SI_SELF_SUPPLIED_CAPABILITIES = FORBIDDEN。
+- 证据扩为 D1–D10（D9 mapping/Control Plane truth；D10 planDigest 性质）；planDigest 采用 canonical projection + sha256，排除 generatedAt/objective/UI 字段。
+- 下一步：实施 P2-D dry-run → 送 P2-D Implementation Audit；不得进入 P2-E / P2-G。

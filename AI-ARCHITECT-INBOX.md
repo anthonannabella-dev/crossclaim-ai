@@ -140456,3 +140456,536 @@ FINAL_ACCEPTANCE_HEAD = 0f7f7ac
 
 结论：P2-C Option A 到这里正式 CLOSED，不需要 FINAL-3。下一步如果继续，应单独送 P2-D Action Guard dry-run 设计/实施边界；不能自动开始。
 ```
+
+### [MSG-20261005-19] ARCHITECT VERDICT — Recovery SI P2-D Action Guard dry-run 设计 = **PASS WITH REVISE**（冻结代码基线 `REVIEWED_HEAD = 79618507`；P2-D 设计请求提交 `11bcd5ca`；未使用上一轮缓存）。① **P2-D v1 批准，但严格限制在 dry-run**：`RECOVERY_SI_P2_D_DESIGN = PASS_WITH_REVISE`、`P2_D_V1_IMPLEMENTATION = AUTHORIZED_WITH_CONDITIONS`、`P2_D_DRY_RUN_ONLY = AUTHORIZED`、`APPROVAL_CONSUMPTION / EXECUTOR_INVOCATION / BUSINESS_FACT_WRITE / EXTERNAL_ACTION = FORBIDDEN`；允许链路只能是 `fresh verified READY_FOR_EXECUTION → immutable execution basis → trusted Control Plane capability snapshot → existing Action Guard dry-run evaluation → ALLOW / DENY / REQUIRE_APPROVAL → STOP`，绝不能继续到 `approval consume → executor → submission → provider → payment`。② **必修 A —— 不能复用 `RECOVERY_ACTION_TO_POLICY_ACTION` 当 Guard action**：该映射属于 RSI **Policy Engine**（`READY_FOR_EXECUTION → JUDGE_CANDIDATE`、其余 `OBSERVE_STATE` / `PROPOSE_PATCH`），根本不属于 `ACTION_GUARD_CATALOG`；必须新增**静态、独立、只引用现有 Action Guard Catalog 的映射**（`Recovery execution intent → existing ACTION_GUARD_CATALOG action`），要求 `NO_DYNAMIC_ACTION_NAME`、`NO_MODEL_GENERATED_ACTION`、`NO_FALLBACK_GUESS`、`UNMAPPED → DENY / no Guard call`；`execution basis` 必须新增 `guardAction`。特别地，`CUSTOMS_FILING` 当前**没有**等价 catalog action，**绝不能偷换成** `customs.recovery.start`（后者只是 `INTERNAL_WRITE` 的内部准备动作、不等于报关/申报）；Customs Filing 继续 `decideRecoveryExecutionRequest("CUSTOMS_FILING") → L5 permanentlyForbidden → zero Guard invocation`。③ **必修 B —— 不要让 SI 自己构造 Guard capabilities**：`evaluateActionGuard({ capabilities: SI 自拼布尔值 })` **不批准**；必须复用既有只读路径 `ProductionControlPlane.snapshotFor(organizationId)` / `ProductionControlPlane.evaluateWithoutAudit(...)`（其本身不写 Action Guard audit），由它复用 Kill Switch / tenant feature / platform enablement / production gate / writeEnabled / host approval；capabilities 必须来自现有可信 Control Plane，不能来自 planner / model / SI decision 自证 → `SI_SELF_SUPPLIED_CAPABILITIES = FORBIDDEN`。④ **最小证据扩为 D1–D10**：D1–D8 保留，另加 `D9 Guard action mapping / Control Plane truth`（unmapped execution intent → fail-closed 且 Guard call = 0；SI 不能传入自造 capabilities；Control Plane degraded / missing state → DENY；dry-run 结果 == 现有 Control Plane / Action Guard 判定结果）与 `D10 planDigest`（同一 canonical plan → 相同 digest；object key/order 差异 → digest 不变；任一 execution-relevant 字段修改 → digest 改变；`digestVersion` 改变 → identity 改变）。⑤ **execution basis 最终字段**：`basisVersion / organizationId / opportunityRef / domain / recoveryActionKind / toolRef / guardAction / snapshotObservedAt / planDigestVersion / planDigest`；`recoveryActionKind = READY_FOR_EXECUTION`；`toolRef` 仍只是准备阶段 provenance、**不是**未来 executor identity（`executorRef` 留待 P2-G 另行绑定）；actor 作为 request context（`actorUserId` / `actorOrganizationId`）并验证 `plan.organizationId = state.organizationId = actorOrganizationId = guardRequest.organizationId`，但 actor 不塞进 `planDigest`。⑥ **planDigest 定义**：不存在可直接复用的旧 plan digest，采用 canonical projection + SHA-256：`RECOVERY_PLAN_DIGEST_VERSION = "v1"`，projection 至少包括 `version / organizationId / snapshotObservedAt` 与 `verifiedActions[]`（`domain / opportunityRef / proposedAction / toolRef / prerequisites(sorted) / reasonCodes(sorted) / authorizationRequired / ownerApprovalRequired / expectedRecovery{amount(canonical decimal), currency(uppercase)} / executionMode`），actions 按 `domain·opportunityRef·proposedAction·toolRef` 稳定排序，`planDigest = sha256(canonicalStableJson(projection))`；**不纳入** `generatedAt`、`objective`、UI/展示字段。⑦ **Approval / Authorization / OWNER gate 语义拆开**：`evaluateActionGuard()` 只判断 `approvalId` 是否非空，**不会**验证 approval 是否真实存在 / 属当前 tenant / 已撤销 / 过期 / 绑定当前 payload / approver 是否 OWNER·ADMIN / executor role 是否有效（真正验证在既有 approval verifier / HITL 通道）。结论：Codex **可以开始实现 P2-D dry-run**，但必须先按上述两项修正（新增静态 Guard-action 映射 + 复用可信 Production Control Plane）；完成后**只送 P2-D Implementation Audit**，不得进入 P2-E / P2-G。
+
+```text
+ARCHITECT VERDICT：PASS WITH REVISE
+
+本次我按两层事实重新审：
+
+纯文本
+冻结代码基线 REVIEWED_HEAD
+= 79618507fd4429dd2374801b91fbe734d222e182
+
+P2-D 设计请求提交
+= 11bcd5ca3b2ce8387ce43a96120e90606b1b1587
+
+没有使用上一轮缓存。整体上 P2-D v1 的 dry-run only 可以批准实施，但设计里有两个语义需要先修正：Recovery Policy action 不能直接当 Action Guard action；Guard capability 也不能由 SI 自己拼。
+
+① P2-D v1 批准，但严格限制在 dry-run
+
+正式授权：
+
+纯文本
+RECOVERY_SI_P2_D_DESIGN = PASS_WITH_REVISE
+
+P2_D_V1_IMPLEMENTATION = AUTHORIZED_WITH_CONDITIONS
+P2_D_DRY_RUN_ONLY = AUTHORIZED
+
+APPROVAL_CONSUMPTION = FORBIDDEN
+EXECUTOR_INVOCATION = FORBIDDEN
+BUSINESS_FACT_WRITE = FORBIDDEN
+EXTERNAL_ACTION = FORBIDDEN
+
+允许的链路只能是：
+
+纯文本
+fresh verified READY_FOR_EXECUTION
+→ immutable execution basis
+→ trusted Control Plane capability snapshot
+→ existing Action Guard dry-run evaluation
+→ ALLOW / DENY / REQUIRE_APPROVAL
+→ STOP
+
+绝不能继续到：
+
+纯文本
+approval consume
+→ executor
+→ submission
+→ provider
+→ payment
+必修 A：不能复用 RECOVERY_ACTION_TO_POLICY_ACTION 当 Guard action
+
+当前 recovery-policy.ts 的映射是：
+
+纯文本
+READY_FOR_EXECUTION
+→ JUDGE_CANDIDATE
+
+其它则是：
+
+纯文本
+OBSERVE_STATE
+PROPOSE_PATCH
+
+这些属于 RSI Policy Engine，根本不属于：
+
+纯文本
+ACTION_GUARD_CATALOG
+
+所以这句话：
+
+动作→Guard action 映射沿用既有 recovery-policy
+
+需要修正。
+
+必须新增一个静态、独立、只引用现有 Action Guard Catalog 的映射，例如概念上：
+
+纯文本
+Recovery execution intent
+→ existing ACTION_GUARD_CATALOG action
+
+要求：
+
+纯文本
+NO_DYNAMIC_ACTION_NAME
+NO_MODEL_GENERATED_ACTION
+NO_FALLBACK_GUESS
+UNMAPPED → DENY / no Guard call
+
+并且 execution basis 必须新增：
+
+纯文本
+guardAction
+
+特别是 Customs：
+
+纯文本
+CUSTOMS_FILING
+
+当前并没有一个等价的 Action Guard catalog action。
+
+因此绝不能把它偷换成：
+
+纯文本
+customs.recovery.start
+
+后者只是 INTERNAL_WRITE 的内部准备动作，不等于报关/申报。
+
+Customs Filing 继续：
+
+纯文本
+decideRecoveryExecutionRequest("CUSTOMS_FILING")
+→ L5 permanentlyForbidden
+→ zero Guard invocation
+必修 B：不要让 SI 自己构造 Guard capabilities
+
+直接：
+
+纯文本
+evaluateActionGuard({
+  capabilities: SI自己拼的布尔值
+})
+
+不批准。
+
+仓库已经有现成、正确的只读路径：
+
+纯文本
+ProductionControlPlane
+  .snapshotFor(organizationId)
+
+ProductionControlPlane
+  .evaluateWithoutAudit(...)
+
+它会复用：
+
+纯文本
+Kill Switch
+tenant feature
+platform enablement
+production gate
+writeEnabled
+host approval
+
+而且 evaluateWithoutAudit() 本身不会写 Action Guard audit。
+
+所以 P2-D 应优先复用：
+
+纯文本
+ProductionControlPlane.evaluateWithoutAudit()
+
+或者等价地：
+
+纯文本
+trusted capability source
+→ evaluateActionGuard()
+
+但 capabilities 必须来自现有可信 Control Plane，不能来自 planner / model / SI decision 自证。
+
+纯文本
+SI_SELF_SUPPLIED_CAPABILITIES = FORBIDDEN
+② D1–D8 基本足够，追加 2 个最小证据
+
+原来的 D1–D8 保留。
+
+我只要求再补：
+
+纯文本
+D9  Guard action mapping / Control Plane truth
+    - unmapped execution intent → fail-closed、Guard call = 0
+    - SI 不能传入自造 capabilities
+    - Control Plane degraded / missing state → DENY
+    - dry-run 结果 == 现有 Control Plane / Action Guard 判定结果
+
+D10 planDigest
+    - 同一 canonical plan → 相同 digest
+    - object key/order 差异 → digest 不变
+    - 任一 execution-relevant 字段修改 → digest 改变
+    - digestVersion 改变 → identity 改变
+
+因此最终最小集合：
+
+纯文本
+D1–D10
+
+就够，不需要更多。
+
+③ execution basis：现有字段方向对，但需要增加 4 个字段
+
+建议最终定义：
+
+纯文本
+basisVersion
+organizationId
+opportunityRef
+domain
+recoveryActionKind
+toolRef
+guardAction
+snapshotObservedAt
+planDigestVersion
+planDigest
+
+其中：
+
+纯文本
+recoveryActionKind = READY_FOR_EXECUTION
+
+toolRef 仍然只是准备阶段来源/provenance，不是未来 executor identity。
+
+未来 P2-G 真有 executor 时，再独立增加：
+
+纯文本
+executorRef
+
+现在不要提前绑定。
+
+actor 则作为 request context：
+
+纯文本
+actorUserId
+actorOrganizationId
+
+并验证：
+
+纯文本
+plan.organizationId
+=
+state.organizationId
+=
+actorOrganizationId
+=
+guardRequest.organizationId
+
+但 actor 不需要塞进 planDigest。
+
+planDigest：选择 canonical projection + SHA-256，不存在可直接复用的旧 plan digest
+
+我检查了仓库，目前没有现成：
+
+纯文本
+planDigest
+
+标准。
+
+仓库已有 fingerprint/digest 风格是一致的：
+
+版本化 + 白名单字段 + canonicalize + SHA-256
+
+所以选择你给的 方案 A，但不是简单：
+
+纯文本
+sha256(JSON.stringify(plan))
+
+应该定义：
+
+纯文本
+RECOVERY_PLAN_DIGEST_VERSION = "v1"
+
+canonical projection 至少包括：
+
+纯文本
+version
+organizationId
+snapshotObservedAt
+
+verifiedActions[]
+  domain
+  opportunityRef
+  proposedAction
+  toolRef
+  prerequisites       // sorted
+  reasonCodes         // sorted
+  authorizationRequired
+  ownerApprovalRequired
+  expectedRecovery
+    amount            // canonical decimal
+    currency          // uppercase
+  executionMode
+
+actions 再按稳定键排序，例如：
+
+纯文本
+domain
+opportunityRef
+proposedAction
+toolRef
+
+然后：
+
+纯文本
+planDigest =
+sha256(canonicalStableJson(projection))
+
+建议不把 generatedAt 纳入 digest。
+
+因为它只是计划生成时钟，同一个 snapshot 重新计算不应该仅因墙上时间变化就生成新的 execution identity。
+
+同理不要放：
+
+纯文本
+objective
+UI text
+展示字段
+
+这些不是权限依据。
+
+④ Approval / Authorization / OWNER gate 语义需要这样拆开
+
+这里非常重要。
+
+evaluateActionGuard() 对审批只知道：
+
+纯文本
+approvalId 是否非空
+
+它不会验证：
+
+approval 是否真实存在；
+是否属于当前 tenant；
+是否已撤销；
+是否过期；
+是否绑定当前 payload；
+approver 是否 OWNER/ADMIN；
+executor role 是否有效。
+
+这些真正的验证在：
+
+纯文本
+ActionGuardApprovalVerifier
+HITL verifier
+
+里。
+
+而 P2-D 本轮明确：
+
+纯文本
+不得进入 approval verification / consumption / execution
+
+所以 v1 最安全的规则是：
+
+纯文本
+P2_D_ACCEPTS_APPROVAL_ID = NO
+
+即 dry-run 永远不把未经验证的 approvalId 塞进 Guard。
+
+因此需要 human approval 的 Guard action：
+
+纯文本
+other gates ready
++
+approvalId absent
+→ REQUIRE_APPROVAL
+
+这才是真实含义。
+
+而：
+
+纯文本
+authorizationReady = false
+
+或：
+
+纯文本
+HIGH risk / owner gate unresolved
+
+本来就不应该产生 verified READY_FOR_EXECUTION。
+
+这些场景应该：
+
+纯文本
+verifier/planner fail
+→ Guard call count = 0
+
+而不是让 Action Guard 假装验证它们。
+
+所以 D4 调整成：
+
+纯文本
+authorization missing
+→ no READY / zero Guard call
+
+owner gate unresolved
+→ no READY / zero Guard call
+
+human approval required by Guard
+→ REQUIRE_APPROVAL
+
+不要声称 P2-D v1 已验证 OWNER 身份。
+
+⑤ ALLOW 的准确含义
+
+即使已有 Control Plane 真的返回：
+
+纯文本
+ALLOW
+
+P2-D 输出也必须强制附加：
+
+纯文本
+executionAuthorized = false
+executorInvoked = false
+submitted = false
+persisted = false
+approvalConsumed = false
+
+也就是：
+
+纯文本
+ACTION_GUARD_DRY_RUN_ALLOW
+=
+"在当前只读快照下，Guard policy 没有阻止"
+
+!=
+
+"可以执行"
+
+这一点继续冻结。
+
+⑥ 明确禁止的副作用
+
+确认：
+
+纯文本
+approval consume = 0
+Claim submission = 0
+CustomsSubmissionAttempt = 0
+PlatformWriteAttempt = 0
+Payment = 0
+Settlement = 0
+RecoveryLedger = 0
+Billing = 0
+provider request = 0
+
+executor invocation = 0
+network/provider = 0
+credential read = 0
+
+P2-D 本身不应使用：
+
+纯文本
+withActionGuard()
+guard.assertAllowed()
+HitlSubmissionBoundary
+verifyApprovalOrThrow()
+
+因为这些已经开始靠近执行边界。
+
+P2-D 只允许：
+
+纯文本
+evaluateWithoutAudit()
+
+/ 等价纯 dry-run evaluation。
+
+⑦ P2-E / P2-F / P2-G 继续全部 HOLD
+
+确认：
+
+纯文本
+P2_E_PERSISTENCE = HOLD_SCHEMA_DELTA
+P2_F_MODEL_ASSISTANCE = HOLD
+P2_G_REAL_EXECUTION = HOLD
+
+并继续：
+
+纯文本
+P2_D_PASS
+!=
+P2_E_AUTHORIZED
+
+P2_D_PASS
+!=
+P2_G_AUTHORIZED
+
+P2-D 实现完成后仍必须送：
+
+纯文本
+Recovery SI P2-D Implementation Audit
+
+才能 CLOSED。
+
+最终授权状态
+纯文本
+RECOVERY_SI_P2_D_DESIGN = PASS_WITH_REVISE
+
+P2_D_DRY_RUN_ONLY = AUTHORIZED
+P2_D_IMPLEMENTATION = AUTHORIZED_WITH_CONDITIONS
+
+TRUSTED_CONTROL_PLANE_SNAPSHOT = REQUIRED
+SI_SELF_SUPPLIED_CAPABILITIES = FORBIDDEN
+
+STATIC_RECOVERY_TO_GUARD_MAPPING = REQUIRED
+RECOVERY_POLICY_ACTION_AS_GUARD_ACTION = FORBIDDEN
+UNMAPPED_GUARD_ACTION = FAIL_CLOSED
+
+RECOVERY_PLAN_DIGEST_V1 = REQUIRED
+RAW_JSON_STRINGIFY_PLAN_DIGEST = FORBIDDEN
+
+P2_D_ACCEPTS_APPROVAL_ID = NO
+APPROVAL_VERIFICATION = NOT_IN_P2_D
+APPROVAL_CONSUMPTION = FORBIDDEN
+
+EXECUTOR_INVOCATION = FORBIDDEN
+BUSINESS_FACT_WRITE = FORBIDDEN
+EXTERNAL_ACTION = FORBIDDEN
+
+SCHEMA_DELTA_REQUIRED = NO
+RUNTIME_EXECUTION_WIRING = NONE
+
+边界保持：
+
+纯文本
+P2_E = HOLD_SCHEMA_DELTA
+P2_F = HOLD
+P2_G = HOLD
+
+EXTERNAL_WRITE = HOLD
+PAYMENT = HOLD
+TRANSPORT = HOLD
+PRODUCTION_CREDENTIALS = HOLD
+REAL_CLAIM_SUBMIT = HOLD
+CUSTOMS_FILING = HOLD
+RSI_MODEL_NETWORK = HOLD
+RSI_PAID_MODEL_CALLS = HOLD
+
+SECOND_RUNTIME = FORBIDDEN
+L5_RELAXATION = FORBIDDEN
+
+FINAL_ACCEPTANCE_HEAD = 0f7f7ac
+
+Codex 可以开始实现 P2-D dry-run，但必须先按上面两项修正：新增静态 Guard-action 映射 + 复用可信 Production Control Plane；完成后只送 P2-D Implementation Audit，不得进入 P2-E/P2-G。
+```
