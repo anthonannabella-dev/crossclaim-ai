@@ -351,4 +351,105 @@ describe('C1 · Model Gateway 单咽喉（router 级证据）', () => {
     expect(AI_ESCALATION_BOUNDARY.hostMayRaiseHardCaps).toBe(false);
     expect(AI_ESCALATION_BOUNDARY.escalationAuthorizationProvenance).toContain('SERVER_SIDE_DETERMINISTIC_EVALUATOR_ONLY');
   });
+
+  it('C1_FINAL3_TASK_IDENTITY_REQUIRED_AND_NOT_SHARED（FINAL-3 CHANGE A）', async () => {
+    const low = { n: 0 };
+    const strong = { n: 0 };
+    const router = createRsiModelRouter({
+      lowCost: adapter('LOW_COST', false, low),
+      strong: adapter('STRONG', true, strong),
+      usage: () => usage(),
+    });
+    // ① 缺少 taskId（null）→ fail-closed，且不共享 fallback key、不触达 provider
+    const noTaskId = { ...routerRequest('COMPLEX_FIX', 'COMPLEX_CODE_FIX', evidence('SEMANTIC_REQUIRED')), taskId: null };
+    const first = await router.outcomeOf(noTaskId);
+    expect(first.called).toBe(false);
+    expect(first.reason).toBe('AI_ESCALATION_TASK_IDENTITY_REQUIRED');
+    const second = await router.outcomeOf(noTaskId);
+    expect(second.reason).toBe('AI_ESCALATION_TASK_IDENTITY_REQUIRED');
+    expect(low.n).toBe(0);
+    expect(strong.n).toBe(0);
+
+    // ② 不同 task 之间不得共享 strongFailed：task-A strong 失败后，task-B 仍可正常升级一次
+    const lowA = { n: 0 };
+    const strongFail = { n: 0 };
+    const strongOk = { n: 0 };
+    const perTask = createRsiModelRouter({
+      lowCost: adapter('LOW_COST', false, lowA),
+      strong: adapter('STRONG', false, strongFail),
+      usage: () => usage(),
+    });
+    const taskA = await perTask.outcomeOf(routerRequest('COMPLEX_FIX', 'COMPLEX_CODE_FIX', evidence('SEMANTIC_REQUIRED')));
+    expect(taskA.escalatedToStrong).toBe(true);
+    expect(strongFail.n).toBe(1);
+    const taskA2 = await perTask.outcomeOf(routerRequest('COMPLEX_FIX', 'COMPLEX_CODE_FIX', evidence('SEMANTIC_REQUIRED')));
+    expect(taskA2.called).toBe(false);
+
+    const other = createRsiModelRouter({
+      lowCost: adapter('LOW_COST', false, { n: 0 }),
+      strong: adapter('STRONG', true, strongOk),
+      usage: () => usage(),
+    });
+    const taskB = await other.outcomeOf({
+      ...routerRequest('COMPLEX_FIX', 'COMPLEX_CODE_FIX', evidence('SEMANTIC_REQUIRED')),
+      taskId: 'task-B',
+    });
+    expect(taskB.escalatedToStrong).toBe(true);
+    expect(strongOk.n).toBe(1);
+  });
+
+  it('C1_FINAL3_ATTEMPTS_COUNT_ONLY_REAL_PROVIDER_ATTEMPTS（FINAL-3 CHANGE B）', async () => {
+    const low = { n: 0 };
+    const strong = { n: 0 };
+    // LOW_COST budget guard 拒绝（不可证明最坏费用）→ provider 0 次调用，attempts 不增加
+    const unprovable = {
+      ...adapter('LOW_COST', true, low),
+      pricing: undefined,
+    } as unknown as ReturnType<typeof adapter>;
+    const router = createRsiModelRouter({
+      lowCost: unprovable,
+      strong: adapter('STRONG', true, strong),
+      usage: () => usage(),
+    });
+    const rejected = await router.outcomeOf(routerRequest('COMPLEX_FIX', 'COMPLEX_CODE_FIX', evidence('SEMANTIC_REQUIRED')));
+    expect(rejected.called).toBe(false);
+    expect(rejected.reason).toBe('BUDGET_GUARD_UNENFORCEABLE');
+    expect(low.n).toBe(0);
+    expect(strong.n).toBe(0);
+
+    // guard 拒绝未耗尽 attempts：换成可证明定价后，同一 task 仍可正常走 cheap→strong 各一次
+    const okLow = { n: 0 };
+    const okStrong = { n: 0 };
+    const okRouter = createRsiModelRouter({
+      lowCost: adapter('LOW_COST', false, okLow),
+      strong: adapter('STRONG', true, okStrong),
+      usage: () => usage(),
+    });
+    await okRouter.outcomeOf(routerRequest('COMPLEX_FIX', 'COMPLEX_CODE_FIX', evidence('SEMANTIC_REQUIRED')));
+    expect(okLow.n).toBe(1);
+    expect(okStrong.n).toBe(1);
+
+    // STRONG budget guard 拒绝（定价不可证明）→ strong provider 0 次调用，escalation 不计数
+    const okLow2 = { n: 0 };
+    const unprovableStrongCalls = { n: 0 };
+    const strongUnprovable = {
+      ...adapter('STRONG', true, unprovableStrongCalls),
+      pricing: undefined,
+    } as unknown as ReturnType<typeof adapter>;
+    const router2 = createRsiModelRouter({
+      lowCost: adapter('LOW_COST', false, okLow2),
+      strong: strongUnprovable,
+      usage: () => usage(),
+    });
+    const strongRejected = await router2.outcomeOf(routerRequest('COMPLEX_FIX', 'COMPLEX_CODE_FIX', evidence('SEMANTIC_REQUIRED')));
+    expect(strongRejected.called).toBe(false);
+    expect(strongRejected.reason).toBe('BUDGET_GUARD_UNENFORCEABLE');
+    expect(unprovableStrongCalls.n).toBe(0);
+    // strong 未实际调用 → escalation 未计数：下一次调用仍允许一次升级尝试（仍是 guard 拒绝，不烧钱）
+    const again = await router2.outcomeOf(routerRequest('COMPLEX_FIX', 'COMPLEX_CODE_FIX', evidence('SEMANTIC_REQUIRED')));
+    expect(unprovableStrongCalls.n).toBe(0);
+    // strong 未实际调用 → escalation 未计数（不会因 MAX_ESCALATIONS / STOP_FAILED 被误阻断）
+    expect(again.reason).not.toBe('AI_ESCALATION_MAX_ESCALATIONS');
+    expect(again.reason).not.toBe('AI_ESCALATION_STOP_FAILED');
+  });
 });

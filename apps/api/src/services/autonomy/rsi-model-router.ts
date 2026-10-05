@@ -386,7 +386,15 @@ export function createRsiModelRouter(options: {
       // C1 FINAL-2（CHANGE A）：strong 授权只能来自「preceding LOW_COST attempt + server-side
       // deterministic quality evaluator」。caller 自报 escalation.quality/state 一律被忽略。
       const { effective: escalationLimits } = clampAiEscalationLimits(options.escalationLimits ?? null);
-      const taskKey = (request.incidentId ?? '-') + '::' + (request.taskId ?? '-');
+      // C1 FINAL-3 CHANGE A：AI-eligible 调用必须有**稳定、不可伪造**的 per-task 身份。
+      // 缺少 taskId（或为空）→ fail-closed，绝不落入共享 fallback key；
+      // 同时把 taskType + promptDigest 纳入 key，避免同一 taskId 复用不同任务时状态串扰。
+      const taskId = typeof request.taskId === 'string' ? request.taskId.trim() : '';
+      if (taskId === '') {
+        return { called: false, level: effectiveLevel, reason: 'AI_ESCALATION_TASK_IDENTITY_REQUIRED', record: null };
+      }
+      const taskKey =
+        (request.incidentId ?? '-') + '::' + taskId + '::' + request.taskType + '::' + request.promptDigest;
       const state = taskState.get(taskKey) ?? { attempts: 0, escalations: 0, strongFailed: false };
       if (state.strongFailed) {
         return { called: false, level: 'LEVEL_2_STRONG', reason: 'AI_ESCALATION_STOP_FAILED', record: null };
@@ -397,8 +405,12 @@ export function createRsiModelRouter(options: {
 
       // ① 先跑 LOW_COST（cheap 前置 attempt 由 Gateway 自己产生，不接受 caller 声明）
       const first = await runAttempt(options.lowCost, request, 'LEVEL_1', effectiveLevel);
-      state.attempts += 1;
-      taskState.set(taskKey, state);
+      // C1 FINAL-3 CHANGE B：attempts 只统计**真实 provider attempt**（budget guard 拒绝不算）
+      const cheapProviderAttempt = !first.guardRejected && first.attempt !== null && first.outcome.called === true;
+      if (cheapProviderAttempt) {
+        state.attempts += 1;
+        taskState.set(taskKey, state);
+      }
 
       if (options.strong === undefined || first.guardRejected) {
         return first.outcome;
@@ -429,12 +441,15 @@ export function createRsiModelRouter(options: {
       assertJudgeCannotAuthorizeModelCall({ requestedStrongCall: true, escalation });
       const second = await runAttempt(options.strong, request, 'LEVEL_2_STRONG', 'LEVEL_2_STRONG');
       // strong attempt 同样计入 attempts（attempts = 真实 provider attempt 数）
-      state.attempts += 1;
-      state.escalations += 1;
-      if (second.outcome.record?.result !== 'SUCCESS') {
-        state.strongFailed = true;
+      const strongProviderAttempt = !second.guardRejected && second.attempt !== null && second.outcome.called === true;
+      if (strongProviderAttempt) {
+        state.attempts += 1;
+        state.escalations += 1;
+        if (second.outcome.record?.result !== 'SUCCESS') {
+          state.strongFailed = true;
+        }
+        taskState.set(taskKey, state);
       }
-      taskState.set(taskKey, state);
       return { ...second.outcome, escalatedToStrong: true };
     },
   };

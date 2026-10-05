@@ -126,3 +126,45 @@ C1 定向（rsi-cost-c1 + rsi-cost-e2e + rsi-cost-ledger + rsi-cost-policy + rsi
 rsi-* 全量回归（46 文件）                                             → 46 files / 250 tests PASS
 prisma validate / migrate status                                     → valid / 79 migrations up to date（未改 Schema）
 ```
+
+## 7. FINAL-3 修订（MSG-20261005-32 = PASS WITH REVISE；CHANGE A / B）
+
+裁决：`CHANGE A provenance = PASS`、`CHANGE B hard cap 2/1 = PASS`；剩两个**状态正确性**窄缺口
+（per-task identity 碰撞 / attempt 计数口径）→ `C1_FINAL3_REQUIRED = YES`。
+
+### CHANGE A —— taskState key 必须真正 per-task（已落地）
+
+```text
+AI-eligible 调用必须提供**非空 taskId**；缺失/空 → fail-closed（AI_ESCALATION_TASK_IDENTITY_REQUIRED），
+  不落入共享 fallback key、不触达 provider；
+内部 key = incidentId + '::' + taskId + '::' + taskType + '::' + promptDigest
+  （即使 taskId 被复用，不同任务类型/prompt 也不会共享 attempts / escalations / strongFailed）
+```
+
+### CHANGE B —— attempts 只统计真实 provider attempt（已落地）
+
+```text
+cheap：仅当 !guardRejected && attempt !== null && outcome.called === true → attempts += 1
+strong：仅当实际发生 provider invocation → attempts += 1 且 escalations += 1（失败时才置 strongFailed）
+budget guard 拒绝（BUDGET_GUARD_UNENFORCEABLE / BUDGET_EXCEEDED）不计 attempt、不计 escalation
+```
+
+### FINAL-3 回归（裁决要求 8 条）
+
+| 要求 | 证据（`rsi-cost-c1.test.ts`） |
+| --- | --- |
+| NULL_OR_MISSING_TASK_ID_CANNOT_SHARE_ESCALATION_STATE | `C1_FINAL3_TASK_IDENTITY_REQUIRED_AND_NOT_SHARED` ①（taskId=null 两次调用均 `AI_ESCALATION_TASK_IDENTITY_REQUIRED`，provider 计数 0） |
+| 两个不同任务不得共享 strongFailed | 同上 ②（task-A strong 失败后 task-A 再调用被阻断；task-B 仍可升级一次 → strongOk = 1） |
+| LOW_COST budget guard reject → provider calls = 0 且 attempts 不增加 | `C1_FINAL3_ATTEMPTS_COUNT_ONLY_REAL_PROVIDER_ATTEMPTS` ①（pricing 缺失 → BUDGET_GUARD_UNENFORCEABLE，provider 0 次）并证明后续同一 task 仍可 cheap→strong 各一次（说明未消耗 attempts） |
+| STRONG budget guard reject → strong provider calls = 0 且 strong attempt 不增加 | 同上 ②（strong pricing 缺失 → strong provider 0 次；后续调用不被 MAX_ESCALATIONS / STOP_FAILED 误阻断） |
+| strong 未实际调用 → escalation count 不增加 | 同上 ②（escalations 未计数，未触发 MAX_ESCALATIONS） |
+| 999/999 仍 clamp 2/1 | `C1_FINAL2_ESCALATION_LIMITS_CANNOT_BE_RAISED_BY_HOST` |
+| forged caller escalation 仍 strong=0 | `C1_FINAL2_CALLER_FORGED_ESCALATION_CANNOT_CALL_STRONG` |
+| C1 全量 + rsi-* + tsc 全绿 | 见下 |
+
+```text
+apps/api npx tsc --noEmit                       → exit 0
+C1 定向（6 文件）                                → 6 files / 50 tests PASS
+rsi-* 全量回归（46 文件）                        → 46 files / 252 tests PASS
+prisma validate / migrate status                → valid / 79 migrations up to date（未改 Schema）
+```
