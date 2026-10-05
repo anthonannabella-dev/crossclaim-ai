@@ -219,3 +219,35 @@ export const RSI_LOCAL_SIM_ADAPTER_BOUNDARY = {
   outputFilter: 'REQUIRED',
   budgetGuardBeforeCall: true,
 } as const;
+
+/**
+ * FINAL4：受控 **test-mode factory** —— 供测试构造确定性失败/成功探针；
+ * 其返回的实例同样登记进 WeakSet provenance，因此不构成 caller 自报 capability 的旁路。
+ */
+export function createRsiLocalSimTestAdapter(options: {
+  tier: RsiProviderTier;
+  providerName: string;
+  behavior?: 'SUCCESS' | 'FAIL';
+}): RsiModelProviderAdapter {
+  const behavior = options.behavior ?? 'SUCCESS';
+  const adapter: RsiModelProviderAdapter = {
+    providerName: options.providerName,
+    tier: options.tier,
+    pricing: RSI_LOCAL_SIM_PRICING,
+    async invoke(): Promise<RsiProviderAttemptResult> {
+      if (behavior === 'FAIL') {
+        return { ok: false, reason: 'PROVIDER_FAILED', usage: { inputTokens: 0, outputTokens: 0, estimatedCost: 0 }, latencyMs: 1 };
+      }
+      return {
+        ok: true,
+        modelId: 'rsi-local-sim-test-model',
+        outputRef: 'sim:test',
+        outputDigest: 'd'.repeat(64),
+        usage: { inputTokens: 10, outputTokens: 5, estimatedCost: 0.001 },
+        latencyMs: 1,
+      };
+    },
+  };
+  LOCAL_SIM_FACTORY_INSTANCES.add(adapter as unknown as object);
+  return adapter;
+}
