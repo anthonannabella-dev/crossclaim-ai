@@ -137818,3 +137818,186 @@ Hosted GitHub status/workflow 在 exact HEAD 上仍为空，因此 tsc 0 / 24 fi
 
 结论：不用再送 FINAL-3。PUBLIC ENGINE IMPLEMENTATION 到这里可以正式 PASS / CLOSED。后面只有“真实规则出现后的注册审计”，不是继续改 engine 架构。
 ```
+
+### [MSG-20261005-09] ARCHITECT VERDICT — RSI Model Router → 真实 Provider Adapter 设计 = **PASS WITH REVISE**（reviewed HEAD = `070daf1`）。方向正确，本轮只授权零网络零费用的本地/仿真 Adapter：`LOCAL_SIM_ADAPTER_IMPLEMENTATION = AUTHORIZED`、`ROUTER_TO_SIM_ADAPTER_WIRING = AUTHORIZED`、`OUTPUT_SCHEMA_VALIDATION / INPUT_SENSITIVE_DATA_FILTER / OUTPUT_SENSITIVE_DATA_FILTER = REQUIRED`。①端口形状基本通过但必须**收敛现有接口**而非新建第二套：仓库已有 `RsiModelProviderAdapter` 且 `RsiProviderResult` 含 `output?: string`，实施时直接替换/升级，禁止新旧并存；`timeoutMs` 必须显式进入 invocation（Runner timeout 不能取消已发出的 HTTP 请求）；`maxRetries` 不作为入参 —— **一次 invoke = 恰好一次 provider attempt**，SDK 自动重试必须关闭，重试只由 supervisor 发起且必须重新做预算检查；invocation 至少携带 `callId` / `taskKind` / `promptRef` / `promptDigest` / `tier` / `timeoutMs` / `budget.remainingUsd` / `budget.maxUsdThisCall` / `maxOutputTokens`（callId 供 ledger/dedupe，promptDigest 防止同一 ref 内容悄悄改变）。②预算必须真熔断：调用前证明 `estimatedWorstCaseCost <= 剩余日/月/incident 预算`，否则**不调用** → `BUDGET_EXCEEDED` → ledger 记 `REJECTED`；真实 Adapter 还必须用 `maxOutputTokens` 或等价 Provider 参数把预算变成**可执行硬上限**，无法限制最坏费用即 `BUDGET_GUARD_UNENFORCEABLE` fail-closed，禁止「先调用再看花了多少」。③凭据：`LOCAL_SIM_ADAPTER = IN_PROCESS_ALLOWED`，`REAL_PROVIDER_ADAPTER = OUT_OF_PROCESS_REQUIRED`（独立 sidecar / 本地代理 / 最小权限进程，provider key 只在 sidecar，须做 host allowlist，不得成为任意 HTTP 代理）；RSI runtime 环境不得出现 `OPENAI_API_KEY` / `ANTHROPIC_API_KEY`。④真实模型调用走**独立 Gate**：`RSI_MODEL_NETWORK = HOLD`、`RSI_PAID_MODEL_CALLS = HOLD`，不得因将来启用 LLM 而 `TRANSPORT=true`。⑤过滤是输入+输出双向前置：`promptRef → resolve immutable prompt → input schema validation → secret/PII/customer-data scan → budget gate → provider → output schema validation → secret/PII scan → normalized output → outputRef + digest`，任一步失败 fail-closed；provider raw response 不得落日志/artifact/DB，但过滤后的规范化内部结果可按 RSI 既有 Candidate/Evidence 规则保存；结果结构建议 discriminated union（`SUCCESS → modelId + outputRef + outputDigest + usage`；`FAILURE → reason + usage?`），失败调用已产生费用时 `usage` 不得强制为 null 且必须进 ledger。边界保持：`EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT = HOLD`。真实 Provider 之后只需一次很窄的审计：sidecar 凭据隔离、真实网络 allowlist、预算硬上限、SDK retry=0、输入输出过滤，以及一次受控的非生产小额调用证据。
+
+```text
+ARCHITECT VERDICT：PASS WITH REVISE
+
+我按 reviewed HEAD = 070daf1d688995d1ef2bb772f2f23a8155f8ed4f 重新审了设计，并核了现有 rsi-model-router.ts / rsi-cost-policy.ts / rsi-cost-ledger.ts。方向正确，可以开始本地/仿真 Adapter，但真实 Provider 前需要把几个边界先钉死。
+
+端口形状基本通过，但要收敛现有接口，而不是新建第二套。 仓库现在已经存在 RsiModelProviderAdapter，而且 RsiProviderResult 还有 output?: string。实施时应直接替换/升级这套 contract，禁止旧、新两套并存。timeoutMs 应显式进入 invocation；不能只依赖 Runner timeout，因为 Runner 超时并不能保证已经发出的 HTTP 请求立即取消。maxRetries 不需要作为入参，裁定为 Adapter 每次 invoke = 恰好一次 provider attempt，SDK 自动重试必须关闭，重试只由 supervisor 发起，并重新做预算检查。
+
+建议最终形状至少包含：
+
+纯文本
+callId
+taskKind
+promptRef
+promptDigest
+tier
+timeoutMs
+budget.remainingUsd
+budget.maxUsdThisCall
+maxOutputTokens
+
+callId 用于 ledger/dedupe；promptDigest 防止同一个 ref 背后内容悄悄改变；maxOutputTokens 是费用硬上限的一部分。
+
+当前预算层还有一个必须补的真实熔断。 现有 decideRsiModelCall() 会检查“已经花了多少”，但没有真正证明：
+纯文本
+本次最大可能费用
+<=
+剩余日预算
+<=
+剩余月预算
+<=
+剩余 incident 预算
+
+因此不能只把：
+
+纯文本
+remainingUsd / maxUsdThisCall
+
+传给 Adapter 当提示。
+
+必须做到：
+
+纯文本
+estimatedWorstCaseCost > remaining
+→ 不调用 adapter
+→ BUDGET_EXCEEDED
+→ ledger 记 REJECTED
+
+而真实 Adapter 还必须通过 maxOutputTokens 或等价 Provider 参数把该预算变成实际可执行的硬上限。如果某 Provider 无法限制最坏费用：
+
+纯文本
+BUDGET_GUARD_UNENFORCEABLE
+→ fail-closed
+
+不能“先调用再看花了多少”。
+
+凭据隔离：本地仿真可以同进程；真实 Provider 不接受“同进程但声称 RSI 不持有凭据”。 如果 API Key 存在同一个 Node 进程的 env 或内存里，那么从安全边界上讲，RSI 进程就是持有凭据。
+
+所以裁定：
+
+纯文本
+LOCAL_SIM_ADAPTER
+= IN_PROCESS_ALLOWED
+
+REAL_PROVIDER_ADAPTER
+= OUT_OF_PROCESS_REQUIRED
+
+真实 Provider 推荐独立 sidecar / 本地代理 / 独立最小权限进程：
+
+纯文本
+RSI Controller
+    ↓ local IPC / loopback
+Model Adapter Sidecar
+    ↓ provider API key only here
+LLM Provider
+
+RSI runtime 环境里不得出现 OPENAI_API_KEY / ANTHROPIC_API_KEY / ...。
+
+Sidecar 还应做 host allowlist，只允许访问指定模型 Provider，不能成为任意 HTTP 代理。
+
+真实模型网络调用应使用单独 Gate，不要解开现有 TRANSPORT。
+
+模型调用本身确实是外部网络/数据外发，但它不是 CrossClaim 的 Amazon/Broker/Payment Provider Transport。
+
+建议独立：
+
+纯文本
+RSI_MODEL_NETWORK = HOLD
+RSI_PAID_MODEL_CALLS = HOLD
+
+不要因为以后启用 LLM：
+
+纯文本
+TRANSPORT=true
+
+否则会错误解锁业务 Provider 边界。
+
+本轮裁定明确：
+
+纯文本
+LOCAL_SIMULATION = AUTHORIZED
+REAL_MODEL_NETWORK = HOLD
+PAID_MODEL_CALL = HOLD
+输入和输出 schema + 敏感内容过滤都是通过前置，不只是输出。 promptRef 自身没有 PII，并不代表它指向的 prompt 没有 PII。
+
+所以真实调用链必须是：
+
+纯文本
+promptRef
+↓
+resolve immutable prompt
+↓
+input schema validation
+↓
+secret / PII / customer-data scan
+↓
+budget gate
+↓
+provider
+↓
+output schema validation
+↓
+secret / PII scan
+↓
+normalized output
+↓
+outputRef + digest
+
+任一步失败都 fail-closed。
+
+Provider raw response 不得落日志、artifact、DB。但通过 schema 与敏感内容过滤后的规范化内部结果，可以按 RSI 既有 Candidate/Evidence 规则保存；不能要求系统永远不保存任何模型结果，否则后面的 patch/judge 没有可消费内容。
+
+还有一个结果结构建议：不要长期使用大量 nullable 字段：
+
+纯文本
+ok: boolean
+modelId: string | null
+usage: ... | null
+reason?: ...
+
+最好实现时改为 discriminated union：
+
+纯文本
+SUCCESS
+→ modelId + outputRef + outputDigest + usage
+
+FAILURE
+→ reason + usage?
+
+因为失败调用也可能已经产生 token/费用，所以 ok=false 时 usage 不能被强制视为 null；发生费用就必须进入 ledger。
+
+本轮正式授权范围
+纯文本
+RSI_MODEL_PROVIDER_ADAPTER_DESIGN = PASS_WITH_REVISE
+
+LOCAL_SIM_ADAPTER_IMPLEMENTATION = AUTHORIZED
+ROUTER_TO_SIM_ADAPTER_WIRING = AUTHORIZED
+OUTPUT_SCHEMA_VALIDATION = REQUIRED
+INPUT_SENSITIVE_DATA_FILTER = REQUIRED
+OUTPUT_SENSITIVE_DATA_FILTER = REQUIRED
+
+ADAPTER_INTERNAL_RETRY = FORBIDDEN
+SUPERVISOR_RETRY = ALLOWED_WITH_FRESH_BUDGET_CHECK
+TIMEOUT_MS = REQUIRED
+
+IN_PROCESS_REAL_PROVIDER_CREDENTIALS = NOT_AUTHORIZED
+REAL_PROVIDER_SIDECAR = REQUIRED
+
+RSI_MODEL_NETWORK = HOLD
+RSI_PAID_MODEL_CALLS = HOLD
+
+EXTERNAL_WRITE = HOLD
+PAYMENT = HOLD
+TRANSPORT = HOLD
+PRODUCTION_CREDENTIALS = HOLD
+PRODUCTION_ENABLEMENT = HOLD
+
+所以第⑤点我同意：下一步先做零网络、零费用的本地仿真 Adapter，把 router、预算拒绝、timeout、ledger、schema/filter 全链跑通。真实 Provider Adapter 之后单独做一次很窄的审计即可。
+
+真实 Provider 那一轮不用重新审 RSI 架构，只需重点审：sidecar 凭据隔离、真实网络 allowlist、预算硬上限、SDK retry=0、输入输出过滤，以及一次受控的非生产小额调用证据。
+```
