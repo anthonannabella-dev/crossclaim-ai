@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-40",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T22:02:38.607Z",
+  "updated_at": "2026-10-05T22:06:11.818Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -50,13 +50,13 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
-  "next_execution_unit": "PHASE 5 U4 FINAL verdict archive + next unit: (1) read verdict (REVIEWED_HEAD = 240f7b28, marker [CODEX-PHASE5-U4FINAL]); (2) write work/stage/verdict-p5u4f-raw.txt then archive AI-ARCHITECT-INBOX.md (MSG-20261005-77) + compare.mjs FULL_COPY_OK + commit/push; (3) durable state; if REVISE do the narrow fix; if PASS follow auditor NEXT (Controlled Adoption Review contract) with code -> tests -> regression -> tsc -> commit -> push -> audit -> archive; boundaries unchanged.",
+  "next_execution_unit": "PHASE 5 U4 FINAL2: (1) make the cohort identity outcome-independent (e.g. trusted cohort manifest/ref or cohortSetDigest derived from task/cohort ids, not from OutcomeRecord.digest) and require both sides to share it while allowing different outcome digests and metrics; (2) cohortDigest must equal that trusted cohort identity; (3) CANARY_EVALUATION_DIGEST_FULL_BINDING must bind cohort identity + full baselineMetrics + full proposalMetrics + metricDeltas; (4) tests: same cohort + different outcomes/metrics -> allowed and can trigger metric-delta rollback; different cohort identity -> REJECT; cohortDigest not trusted -> REJECT; invalid window -> REJECT; insufficient data -> ROLLBACK_REQUIRED + insufficientEvidence; digest changes with cohort identity and with any metrics/deltas field; provenance/anti-tamper and no execution entries preserved; then audit -> archive -> durable state. Boundaries unchanged.",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-05T22:02:38.607Z",
+  "last_tick_at": "2026-10-05T22:06:11.818Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "PHASE 5 U4 FINAL implemented: SAME_COHORT_PROOF (both evaluations must share the same verified outcome set; cohortDigest must equal baseline.verifiedOutcomeSetDigest; cohortId is a traceability label), EVALUATION_WINDOW_VALIDATION (finite Date.parse + from<to), insufficient data now maps to ROLLBACK_REQUIRED with insufficientEvidence flag, evaluationDigest binds full baseline/proposal metrics + metricDeltas. code 240f7b28 pushed and submitted (marker [CODEX-PHASE5-U4FINAL], REVIEWED_HEAD = 240f7b28). Local: tsc 0; canary-shadow-evaluation 7/7; PHASE5 10 files / 125 tests PASS; regression 103 files / 1072 tests (only P2E-DB5).",
+  "last_action": "PHASE 5 U4 FINAL verdict archived (MSG-20261005-77, FULL_COPY_OK, archive commit f88a116f): SHADOW_ISOLATION / PHASE4_METRIC_REUSE / EVALUATION_WINDOW_VALIDATION / INSUFFICIENT_EVIDENCE_ROLLBACK / U2_ROLLBACK_ANCHOR = PASS; SAME_COHORT_PROOF / CANARY_EVALUATION_DIGEST_FULL_BINDING = REVISE (cohort identity must be outcome-independent; full digest must bind cohort identity + both metrics + metricDeltas); PHASE5_U4_FINAL2_REQUIRED = YES.",
   "last_action_at": "2026-10-05T22:02:06.746Z",
-  "next_action": "Read PHASE 5 U4 FINAL verdict -> archive (MSG-20261005-77) -> if PASS continue to Controlled Adoption Review per auditor NEXT.",
+  "next_action": "Execute PHASE 5 U4 FINAL2 (outcome-independent cohort proof + full digest binding incl. cohort identity), then next unit (Controlled Adoption Review).",
   "current_head": "240f7b28",
   "last_completed_head": "240f7b28",
   "reviewed_head": "add99ec3",
@@ -5169,9 +5169,11 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "P5U4F2-0 (in-flight note) U4 FINAL reviewer found a structural flaw to fix next: binding same-cohort to identical verifiedOutcomeDigests also forces identical outcomes (OutcomeRecord.digest includes the final outcome), so canary can never see real metric deltas. Planned fix: introduce a cohort identity independent of outcomes - e.g. require a trusted cohort manifest/ref (task/cohort ids) or expose an outcome-independent cohortSetDigest on the offline evaluation, and require both sides to share that while allowing different outcomes/metrics; keep cohortDigest == trusted cohort identity, keep strict window, keep full-digest binding, keep insufficient-data => ROLLBACK_REQUIRED, and re-add reachable metric-delta tests (successRate drop / unresolved rise) that no longer collide with the cohort proof.",
-    "P5U4F-2 if PASS -> open next phase-5 unit (Controlled Adoption Review) per auditor NEXT",
-    "P5U4F-3 non-blocking debt: full SHA-256 digests, fingerprint schema upkeep, scanRawPayloadKeys bounded traversal, P2E-DB5 test-isolation"
+    "P5U4F2-1 U4 FINAL2: outcome-independent cohort proof (trusted cohort identity) + full digest binding incl. cohort identity + reachable metric-delta rollback tests",
+    "P5U4F2-2 U4 FINAL2 tests + regression + tsc + commit + push",
+    "P5U4F2-3 audit U4 FINAL2 -> archive (MSG-20261005-78) -> compare FULL_COPY_OK -> durable state",
+    "P5U4F2-4 then next phase-5 unit (Controlled Adoption Review) per auditor NEXT",
+    "P5U4F2-5 non-blocking debt: full SHA-256 digests, fingerprint schema upkeep, scanRawPayloadKeys bounded traversal, P2E-DB5 test-isolation"
   ],
   "full_autonomous_internal_execution": "VERIFIED",
   "dispatcher_acceptance": {
@@ -9321,7 +9323,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-05T22:02:38.607Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-05T22:06:11.818Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -9449,7 +9451,7 @@
     "PHASE_2_MODEL_GATEWAY_RUNTIME": "PASS / CLOSED（MSG-20261005-50；Reviewed HEAD 338f30b4；PHASE2_FINAL5_REQUIRED = NO）",
     "PHASE_3_ACTION_RUNTIME": "PASS / CLOSED（MSG-20261005-54；Reviewed HEAD = fe3c33e9；PHASE3_FINAL4_REQUIRED = NO）",
     "PHASE_4_OUTCOME_LEARNING_PIPELINE": "CLOSED / PASS（MSG-20261005-67）：U1 FINAL / U2 / U3 / U4 / U5 全 CLOSED；含 U4 FINAL、U5 FINAL、U5 FINAL2、PHASE 4 FINAL CLOSURE。",
-    "PHASE_5_META_IMPROVEMENT": "IN PROGRESS: U1/U2/U3 = PASS / CLOSED; U4 = PASS WITH REVISE, U4 FINAL = SUBMITTED / AWAITING_VERDICT (240f7b28)."
+    "PHASE_5_META_IMPROVEMENT": "IN PROGRESS: U1/U2/U3 = PASS / CLOSED; U4 = PASS WITH REVISE (U4 FINAL verdict MSG-20261005-77), U4 FINAL2 pending."
   },
   "heartbeat_watchdog": {
     "interval_seconds": 180,
@@ -9921,7 +9923,7 @@
       "U5"
     ]
   },
-  "archive_head": "f2d1095e",
+  "archive_head": "f88a116f",
   "phase4_u3_final": {
     "status": "PASS / CLOSED",
     "reviewed_head": "006cc912",
@@ -10749,5 +10751,24 @@
       "delivered": true,
       "expected_message_id": "MSG-20261005-77"
     }
+  },
+  "phase5_u4_final_verdict": {
+    "message_id": "MSG-20261005-77",
+    "verdict": "PASS WITH REVISE / NOT CLOSED",
+    "reviewed_head": "240f7b28",
+    "archive_verified": "FULL_COPY_OK",
+    "archive_head": "f88a116f",
+    "pass": [
+      "SHADOW_ISOLATION = PASS",
+      "PHASE4_METRIC_REUSE = PASS",
+      "EVALUATION_WINDOW_VALIDATION = PASS",
+      "INSUFFICIENT_EVIDENCE_ROLLBACK = PASS",
+      "U2_ROLLBACK_ANCHOR = PASS"
+    ],
+    "revise": [
+      "SAME_COHORT_PROOF (must be outcome-independent)",
+      "CANARY_EVALUATION_DIGEST_FULL_BINDING (must bind cohort identity + both metrics + metricDeltas)"
+    ],
+    "phase5_u4_final2_required": "YES"
   }
 }
