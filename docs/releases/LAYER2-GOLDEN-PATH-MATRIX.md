@@ -1,6 +1,6 @@
 # LAYER 2 — GOLDEN PATH MATRIX（自动生成，请勿手改）
 
-- 生成时间：2026-10-05T05:31:25.169Z
+- 生成时间：2026-10-05T05:32:55.579Z
 - 机器可读：`docs/releases/LAYER2-GOLDEN-PATH-MATRIX.json`；生成器：`tools/autopilot/golden-path-matrix.mjs`
 - 判定规则：**COVERED 必须存在命名证据文件**（测试/前端）；否则 GAP，并自动登记为 backlog。
 - 依据：MSG-20261003-135 CHANGE C（禁止用「专项测试很多」替代完整矩阵）。

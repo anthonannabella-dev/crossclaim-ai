@@ -2211,3 +2211,10 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 后续：P2_D_ACTION_GUARD_HANDOFF = NOT_AUTHORIZED（P2-C CLOSED ≠ P2-D AUTHORIZED）；P2_E = HOLD_SCHEMA_DELTA；P2_F/P2_G = HOLD；Option B 并入 P2-E。
 - 边界：RUNTIME_WIRING = NONE；SCHEMA_DELTA_REQUIRED = NO；RSI_OUTCOME_SINK_RUNTIME_WIRING = NOT_AUTHORIZED；外部能力全 HOLD；FINAL_ACCEPTANCE_HEAD = 0f7f7ac。
 - 下一单元：P2-D Action Guard dry-run 设计/实施边界送审（零代码，单独送审，不得自动开始）。
+
+## 2026-10-05T05:32:55.171Z — Recovery SI P2-D Action Guard dry-run 设计边界送审（REVIEWED_HEAD 79618507，零代码）
+- 依据 MSG-20261005-18：P2-D 必须单独送审、不能自动开始。
+- 耐久记录：docs/releases/RECOVERY-SI-PHASE2-D-DESIGN-REQUEST.md（dry-run only：READY_FOR_EXECUTION → build Guard request → evaluateActionGuard → ALLOW/DENY/REQUIRES_APPROVAL）。
+- 复用既有 evaluateActionGuard（纯函数、fail-closed、唯一动作目录）；不改 catalog、不改审批/HITL 语义、不消费审批、不调用 executor。
+- 最小证据 D1–D8（fresh verified plan / 不可变 execution basis / tenant mismatch / approval 缺失 / 不消费审批 / 不创建业务事实 / Guard ALLOW 仍非执行授权 / L5 永久拒绝）。
+- 边界：P2-E/P2-F/P2-G 未授权；RUNTIME_WIRING = NONE；SCHEMA_DELTA_REQUIRED = NO；外部能力全 HOLD；FINAL_ACCEPTANCE_HEAD = 0f7f7ac。
