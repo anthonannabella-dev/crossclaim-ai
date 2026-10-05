@@ -3445,8 +3445,8 @@ model AiBudgetPolicy {
   scope                  AiBudgetScope
   /// PLATFORM='*'；其余为对应实体 id
   scopeRef               String
-  /// ORGANIZATION/ACCOUNT/INCIDENT/TASK 时必填（PLATFORM 为 null）
-  organizationId         String?
+  /// 非 PLATFORM 必填；PLATFORM 用 '' 哨兵（保证同 scopeRef 跨 tenant 各自独立）
+  organizationId         String        @default("")
   dailyLimitMicros       Int?
   monthlyLimitMicros     Int?
   perIncidentLimitMicros Int?
@@ -3456,7 +3456,7 @@ model AiBudgetPolicy {
   createdAt              DateTime      @default(now())
   updatedAt              DateTime      @updatedAt
 
-  @@unique([scope, scopeRef])
+  @@unique([scope, scopeRef, organizationId])
   @@index([organizationId])
 }
 

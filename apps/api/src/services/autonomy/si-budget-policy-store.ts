@@ -74,12 +74,25 @@ export async function upsertAiBudgetPolicy(
       throw new Error('AI_BUDGET_LIMIT_INVALID:' + field);
     }
   }
+  // C2 FINAL-3 CHANGE B：非 PLATFORM policy 必须绑定 tenant（service fail-closed；DB 另有 CHECK）
+  if (policy.scope !== 'PLATFORM' && (!policy.organizationId || policy.organizationId.trim() === '')) {
+    throw new Error('AI_BUDGET_POLICY_TENANT_REQUIRED:' + policy.scope);
+  }
+  if (policy.scope === 'ORGANIZATION' && policy.organizationId !== policy.scopeRef) {
+    throw new Error('AI_BUDGET_POLICY_SCOPE_REF_MISMATCH:ORGANIZATION');
+  }
   const row = await prisma.aiBudgetPolicy.upsert({
-    where: { scope_scopeRef: { scope: policy.scope, scopeRef: policy.scopeRef } },
+    where: {
+      scope_scopeRef_organizationId: {
+        scope: policy.scope,
+        scopeRef: policy.scopeRef,
+        organizationId: policy.organizationId ?? '',
+      },
+    },
     create: {
       scope: policy.scope,
       scopeRef: policy.scopeRef,
-      organizationId: policy.organizationId ?? null,
+      organizationId: policy.organizationId ?? '',
       dailyLimitMicros: policy.dailyLimitMicros ?? null,
       monthlyLimitMicros: policy.monthlyLimitMicros ?? null,
       perIncidentLimitMicros: policy.perIncidentLimitMicros ?? null,
@@ -88,7 +101,7 @@ export async function upsertAiBudgetPolicy(
       concurrencyLimit: policy.concurrencyLimit ?? null,
     },
     update: {
-      organizationId: policy.organizationId ?? null,
+      organizationId: policy.organizationId ?? '',
       dailyLimitMicros: policy.dailyLimitMicros ?? null,
       monthlyLimitMicros: policy.monthlyLimitMicros ?? null,
       perIncidentLimitMicros: policy.perIncidentLimitMicros ?? null,
@@ -219,25 +232,52 @@ export async function runGuardedAiCostWrite(input: {
     const policies = await tx.aiBudgetPolicy.findMany({
       where: {
         OR: [
-          { scope: 'PLATFORM', scopeRef: '*' },
-          ...(input.refs.organizationId ? [{ scope: 'ORGANIZATION', scopeRef: input.refs.organizationId }] : []),
-          ...(input.refs.accountId ? [{ scope: 'ACCOUNT', scopeRef: input.refs.accountId }] : []),
-          ...(input.refs.incidentId ? [{ scope: 'INCIDENT', scopeRef: input.refs.incidentId }] : []),
-          ...(input.refs.taskId ? [{ scope: 'TASK', scopeRef: input.refs.taskId }] : []),
+          { scope: 'PLATFORM', scopeRef: '*', organizationId: '' },
+          // C2 FINAL-3 CHANGE B：非 PLATFORM policy 必须同时绑定同一 organizationId（防跨租户串用）
+          ...(input.refs.organizationId
+            ? [
+                { scope: 'ORGANIZATION', scopeRef: input.refs.organizationId, organizationId: input.refs.organizationId },
+                ...(input.refs.accountId
+                  ? [{ scope: 'ACCOUNT', scopeRef: input.refs.accountId, organizationId: input.refs.organizationId }]
+                  : []),
+                ...(input.refs.incidentId
+                  ? [{ scope: 'INCIDENT', scopeRef: input.refs.incidentId, organizationId: input.refs.organizationId }]
+                  : []),
+                ...(input.refs.taskId
+                  ? [{ scope: 'TASK', scopeRef: input.refs.taskId, organizationId: input.refs.organizationId }]
+                  : []),
+              ]
+            : []),
         ] as never,
       },
     });
+    // 当前 incident 维度用量（CHANGE A）：父级 policy 的 perIncidentLimitMicros 只针对**当前 incident**
+    let incidentUsageMicros = 0;
+    if (input.refs.incidentId) {
+      const incidentAgg = await tx.aiCostLedgerEntry.aggregate({
+        where: {
+          incidentId: input.refs.incidentId,
+          ...(input.refs.organizationId ? { organizationId: input.refs.organizationId } : {}),
+        },
+        _sum: { costMicros: true },
+      });
+      incidentUsageMicros = incidentAgg._sum.costMicros ?? 0;
+    }
     let observedUsageMicros = 0;
     for (const policy of policies) {
+      // 非 PLATFORM policy 若未绑定 tenant（历史数据）→ fail-closed 不应用
+      if (policy.scope !== 'PLATFORM' && (!policy.organizationId || policy.organizationId !== input.refs.organizationId)) {
+        continue;
+      }
       const scopeWhere =
         policy.scope === 'ORGANIZATION'
           ? { organizationId: policy.scopeRef }
           : policy.scope === 'ACCOUNT'
-            ? { accountId: policy.scopeRef }
+            ? { accountId: policy.scopeRef, organizationId: policy.organizationId }
             : policy.scope === 'INCIDENT'
-              ? { incidentId: policy.scopeRef }
+              ? { incidentId: policy.scopeRef, organizationId: policy.organizationId }
               : policy.scope === 'TASK'
-                ? { taskId: policy.scopeRef }
+                ? { taskId: policy.scopeRef, organizationId: policy.organizationId }
                 : {};
       const day = await tx.aiCostLedgerEntry.aggregate({
         where: { ...scopeWhere, createdAt: { gte: startOfUtcDay(now) } },
@@ -247,21 +287,19 @@ export async function runGuardedAiCostWrite(input: {
         where: { ...scopeWhere, createdAt: { gte: startOfUtcMonth(now) } },
         _sum: { costMicros: true },
       });
-      const lifetime = await tx.aiCostLedgerEntry.aggregate({
-        where: scopeWhere,
-        _sum: { costMicros: true },
-      });
       observedUsageMicros = Math.max(observedUsageMicros, day._sum.costMicros ?? 0);
       const nextDay = (day._sum.costMicros ?? 0) + input.estimatedCostMicros;
       const nextMonth = (month._sum.costMicros ?? 0) + input.estimatedCostMicros;
-      const nextLifetime = (lifetime._sum.costMicros ?? 0) + input.estimatedCostMicros;
       const nextTokens = (day._sum.inputTokens ?? 0) + (day._sum.outputTokens ?? 0) + inputTokens + outputTokens;
       const checks: Array<[number | null, number, string]> = [
         [policy.dailyLimitMicros, nextDay, 'AI_BUDGET_DAILY_EXCEEDED'],
         [policy.monthlyLimitMicros, nextMonth, 'AI_BUDGET_MONTHLY_EXCEEDED'],
-        [policy.perIncidentLimitMicros, nextLifetime, 'AI_BUDGET_INCIDENT_EXCEEDED'],
         [policy.tokenLimit, nextTokens, 'AI_BUDGET_TOKEN_EXCEEDED'],
       ];
+      // perIncident：按当前 incident 聚合（无 incidentId → NOT_APPLICABLE，不用父 scope lifetime 代替）
+      if (policy.perIncidentLimitMicros !== null && input.refs.incidentId) {
+        checks.push([policy.perIncidentLimitMicros, incidentUsageMicros + input.estimatedCostMicros, 'AI_BUDGET_INCIDENT_EXCEEDED']);
+      }
       if (input.requestedStrongCall && policy.strongCallLimit !== null) {
         const strongCalls = await tx.aiCostLedgerEntry.count({
           where: { ...scopeWhere, executionLevel: 'LEVEL_2_STRONG', createdAt: { gte: startOfUtcDay(now) } },
