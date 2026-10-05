@@ -138506,3 +138506,194 @@ FINAL_ACCEPTANCE_HEAD = 0f7f7ac
 
 所以方向不用重做：Recovery SI Phase 1 的架构是成立的；只需修正多币种金额语义、Verifier 真正 fail-closed，以及 READY 标记的执行许可歧义，然后即可关闭。
 ```
+
+### [MSG-20261005-12] ARCHITECT VERDICT — Recovery SI Phase 1 FINAL-2 = **PASS / CLOSED**（代码送审 HEAD = `e88aff39`，未使用上一轮缓存）。CHANGE A/B/C 全部 PASS：`CHANGE_A_MULTI_CURRENCY = PASS`（currency 分桶 → 同币种内按 EV 排序 → 不按金额跨币种比较 → 组间仅按 currency 稳定排序；USD 成本只在 recoverable 为 USD 时参与，非 USD 不再出现 900 EUR − 1 USD − 4 USD；`expectedRecoveryByCurrency` 亦按币种隔离）、`CHANGE_B_VERIFIER_FAIL_CLOSED = PASS`（tenantVerified/organizationId 不匹配 → 整单 halt `TENANT_MISMATCH` 且 `decisions=[]`；每个被引用 opportunity 的 `observedAt` 独立做 stale/future 检查；`expectedRecovery` 与 `PriorityResult` 确定性结果重新比对，amount/currency 不符即 `MONEY_DERIVATION_MISMATCH`；stale opportunity 采用「该 opportunity 的 action fail-closed」粒度，裁决明确**可以接受**且不扩大权限）、`CHANGE_C_READY_NOT_EXECUTION = PASS`（`READY_FOR_EXECUTION` ≠ execution authorization；`allowedForRecoverySi=false`、`executionAuthorized=false`、`requiresOwnerApproval=true`、`reasonCodes += EXECUTION_NOT_AUTHORIZED_IN_PHASE1`；即使底层 RSI `JUDGE_CANDIDATE` policy 放行也会在 SI 层收紧）。**六条最小证据 = SUFFICIENT**（`ADDITIONAL_PHASE1_TESTS_REQUIRED = NO`、`FINAL3_REQUIRED = NO`；22/22 + tsc 0 属本地归档证据，hosted status 为空故不声称 CI 已独立验证，但不阻塞 CLOSED）。**非阻塞命名建议**：`riskPenaltyUsd` 对非 USD 已非 USD 概念，未来可改名 `riskPenalty` / `riskPenaltyAmount`，**不需要**为此重开 Phase 1。`SCHEMA_DELTA_REQUIRED = NO`（97dfb387→e88aff39 无 Prisma schema/migration）；`PHASE1_RUNTIME_WIRING / PHASE1_TOOL_EXECUTION = FORBIDDEN`，Phase 1 停在 state→prioritize→plan→verify→policy→decision，不得继续 decision→runtime loop→invoke tool→external action（属 Phase 2，须单独审）。最终冻结：`RECOVERY_SI_REUSE_ARCHITECTURE = PASS`、`RECOVERY_SI_PHASE1 = PASS / CLOSED`、`SECOND_RUNTIME = NO`、`RUNTIME_WIRING = NONE`、`TOOL_EXECUTION = ZERO`、`READY_FOR_EXECUTION_IS_PERMISSION = FALSE`、`EXECUTION_AUTHORIZED_IN_PHASE1 = FALSE`、`PHASE2 = SEPARATE_ARCHITECT_APPROVAL_REQUIRED`；外部边界 `EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / REAL_CLAIM_SUBMIT / CUSTOMS_FILING = HOLD`、`FINAL_ACCEPTANCE_HEAD = 0f7f7ac`。
+
+```text
+ARCHITECT VERDICT：PASS / CLOSED
+
+我按 代码送审 HEAD = e88aff39327062918955edd7092d198bbf35deda 重新复核了 FINAL-2，没有使用上一轮缓存。
+
+① CHANGE A / B / C：全部 PASS
+纯文本
+CHANGE_A_MULTI_CURRENCY = PASS
+CHANGE_B_VERIFIER_FAIL_CLOSED = PASS
+CHANGE_C_READY_NOT_EXECUTION = PASS
+
+RECOVERY_SI_PHASE1 = PASS
+RECOVERY_SI_PHASE1 = CLOSED
+
+CHANGE A 已关闭上一轮的量纲错误。现在确实是：
+
+纯文本
+currency 分桶
+→ 同币种内部按 EV 排序
+→ 不按金额跨币种比较
+→ 组间仅按 currency 稳定排序
+
+而 USD 成本只在 recoverable 本身是 USD 时参与计算。非 USD 不再出现：
+
+纯文本
+900 EUR - 1 USD - 4 USD
+
+这种错误。
+
+expectedRecoveryByCurrency 也仍按币种隔离，没有跨币种相加。
+
+有一个非阻塞命名问题：riskPenaltyUsd 对非 USD 机会实际上已经不是 USD 概念，而当前代码对非 USD 将该字段置 0、同时在 expectedRecoveryValue 内按本币扣风险比例。逻辑是安全的，只是字段名以后有机会可改成 riskPenalty / riskPenaltyAmount，不需要为此重开 Phase 1。
+
+CHANGE B 已真正进入 verifier/supervisor 出口：
+
+纯文本
+tenantVerified=false
+或 plan.organizationId mismatch
+或任一 opportunity.organizationId mismatch
+
+→ TENANT_MISMATCH
+→ 整单 halt
+→ decisions=[]
+
+这点符合上一轮要求。
+
+每个被引用 opportunity 的 observedAt 现在也会独立检查 stale/future；陈旧机会的 action 不会进入 verified decisions。
+
+expectedRecovery 也不再仅靠“存在可信 money”判断，而是与 PriorityResult 的确定性结果重新比对：
+
+纯文本
+amount mismatch
+或 currency mismatch
+→ MONEY_DERIVATION_MISMATCH
+
+所以 plan 被篡改不能穿过 verifier。
+
+这里 stale opportunity 采用的是该 opportunity action fail-closed，而不是整份客户计划 halt；这个粒度可以接受，因为其他独立、仍然新鲜的 opportunity 不需要被一个过期机会一起拖死，而且不会扩大任何权限。
+
+CHANGE C 已消除最危险的语义歧义：
+
+纯文本
+READY_FOR_EXECUTION
+≠ execution authorization
+
+现在：
+
+纯文本
+allowedForRecoverySi = false
+executionAuthorized = false
+requiresOwnerApproval = true
+reasonCodes += EXECUTION_NOT_AUTHORIZED_IN_PHASE1
+
+即使底层 RSI JUDGE_CANDIDATE policy 本身可放行，也会在 Recovery SI 层被收紧。
+
+因此：
+
+纯文本
+READY_FOR_EXECUTION
+
+现在只是：
+
+“从决策角度可以进入未来执行门”
+
+而不是：
+
+“SI 获得执行权”。
+
+这一点可以 CLOSED。
+
+② 六条最小证据：足够
+
+你上一轮被要求补的六类反例都已经有针对性测试：
+
+纯文本
+1. EUR 不减 USD 成本
+2. USD/EUR 无 FX 不跨币种金额排名
+3. forged cross-tenant state → 整单 halt
+4. stale opportunity → reject
+5. expectedRecovery 篡改 → reject
+6. READY 双执行许可字段均 false
+
+所以：
+
+纯文本
+FINAL2_MINIMUM_EVIDENCE = SUFFICIENT
+ADDITIONAL_PHASE1_TESTS_REQUIRED = NO
+FINAL3_REQUIRED = NO
+
+你报告的：
+
+纯文本
+22/22 PASS
+tsc exit 0
+
+是本轮归档的本地执行证据。
+
+我这次在 exact HEAD 上独立确认的是实现和测试代码；GitHub hosted combined status/workflow 仍为空，因此我不把“e88aff39 hosted CI 已绿”写成事实。
+
+但这不阻塞 Phase 1 架构/实现 CLOSED。
+
+③ Schema 与 Phase 1 禁区继续成立
+
+确认：
+
+纯文本
+SCHEMA_DELTA_REQUIRED = NO
+
+97dfb387 → e88aff39 的变更范围里没有 Prisma schema 或 migration。
+
+所以 Phase 1 不需要持久化 Recovery Plan / Decision Evidence。
+
+同时继续：
+
+纯文本
+PHASE1_RUNTIME_WIRING = FORBIDDEN
+PHASE1_TOOL_EXECUTION = FORBIDDEN
+
+也就是 Phase 1 到这里停：
+
+纯文本
+state
+→ prioritize
+→ plan
+→ verify
+→ policy
+→ decision
+
+不能继续变成：
+
+纯文本
+decision
+→ runtime loop
+→ invoke tool
+→ external action
+
+后者属于 Phase 2，必须单独审。
+
+最终冻结状态
+纯文本
+RECOVERY_SI_REUSE_ARCHITECTURE = PASS
+RECOVERY_SI_PHASE1 = PASS / CLOSED
+
+SECOND_RUNTIME = NO
+RUNTIME_WIRING = NONE
+TOOL_EXECUTION = ZERO
+
+SCHEMA_DELTA_REQUIRED = NO
+
+READY_FOR_EXECUTION_IS_PERMISSION = FALSE
+EXECUTION_AUTHORIZED_IN_PHASE1 = FALSE
+
+PHASE2 = SEPARATE_ARCHITECT_APPROVAL_REQUIRED
+
+外部边界继续：
+
+纯文本
+EXTERNAL_WRITE = HOLD
+PAYMENT = HOLD
+TRANSPORT = HOLD
+PRODUCTION_CREDENTIALS = HOLD
+REAL_CLAIM_SUBMIT = HOLD
+CUSTOMS_FILING = HOLD
+
+FINAL_ACCEPTANCE_HEAD = 0f7f7ac
+
+结论：不用再送 FINAL-3。Recovery SI Phase 1 可以正式记 CLOSED。下一步如果要把 SI 接入运行时、真正调用 Tool、接 Action Guard 或进入真实执行，必须以 Phase 2 重新送审。
+```
