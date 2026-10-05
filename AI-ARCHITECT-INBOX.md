@@ -148189,3 +148189,176 @@ PRODUCTION_READY = false
 PHASE 3 正式封板。
 ```
 
+### [MSG-20261005-55] PHASE 4 U1 裁决 = PASS WITH REVISE / NOT CLOSED（PHASE4_U1_FINAL_REQUIRED=YES）· reviewed ref 5510401f
+
+```text
+
+DECISION
+
+PHASE 4 U1 = PASS WITH REVISE / NOT CLOSED
+PHASE4_U1_FINAL_REQUIRED = YES
+Reviewed HEAD：5510401f
+授权继续 U2 / U3 / U4 / U5
+但 PHASE 4 最终关闭前必须收口 U1 的 4 个窄点
+
+KEEP
+
+canonical outcome 的 16 维结构成立。
+actionRef / proposalRef / evidenceRef 必填，适合作为 U2 lineage 强化的底座。
+projectLearningDataset() 当前是纯函数，没有存储写入、Policy/Guard/Router/Action Runtime 修改。
+observationOnly=true / autoPolicyMutation=FORBIDDEN / autoPromotion=OFF 正确。
+本次代码区间只新增 outcome-learning 模块、测试及记录，没有发现第二 Meta Evidence Store 或生产写路径。
+GITHUB_CI = NOT_OBSERVED 确认仍成立。
+
+CHANGE
+
+1. “fail-closed”仍存在静默类型转换
+
+当前：
+
+TypeScript
+Number(v)
+
+会让 "42.5" 变成 42.5；
+
+同时：
+
+TypeScript
+"true" → true
+"false" → false
+
+这与代码声称的“任何违规拒绝、不静默清洗”不一致。
+
+Canonical learning labels 应严格：
+
+number 字段只接受真正的 number
+boolean 字段只接受真正的 boolean
+字符串形式 → REJECT
+2. 缺失 humanIntervention 被错误标成 false
+
+当前：
+
+TypeScript
+humanIntervention: humanIntervention === true
+
+所以：
+
+undefined / null → false
+
+这会把“未知有没有人工介入”变成“确定没有人工介入”，直接污染训练/评估标签。
+
+改成：
+
+boolean | null
+
+缺失 → null/UNKNOWN，投影只统计明确 true。
+
+3. success 与 finalOutcome 可以自相矛盾
+
+目前下面这种记录能通过：
+
+纯文本
+success = true
+finalOutcome = FAILURE
+
+而 dataset 的 successCount 又依据 finalOutcome，不是 success。
+
+这样同一个 canonical outcome 会拥有两套冲突的“成功”真相。
+
+必须二选一：
+
+推荐：finalOutcome 为 SSOT，success 派生
+或者保留两者，但强制一致性校验。
+
+至少：
+
+SUCCESS → success=true
+FAILURE/REJECTED → success=false
+UNKNOWN/MANUAL_REVIEW → 建议 success=null
+PARTIAL 明确定义，不要猜
+4. raw-payload 检查目前只扫顶层
+
+当前：
+
+TypeScript
+Object.keys(input)
+
+所以：
+
+纯文本
+metadata: {
+  payload: ...
+}
+
+不会触发 OUTCOME_RECORD_RAW_PAYLOAD_FORBIDDEN。
+
+虽然最后 canonical 对象没有复制该字段，但这不符合“输入出现 raw payload 即拒绝”的合同。
+
+改成递归 key scan，与 credential scan 一样 fail-closed。
+
+RISKS
+
+U2 正好应该解决目前 lineage 的另一个限制：U1 现在只证明三个 ref 非空，还没有证明：
+
+actionRef ↔ proposalRef ↔ evidenceRef ↔ organization/task
+
+真的属于同一条执行链。
+
+所以当前只能记：
+
+LINEAGE_PRESENCE = PASS
+
+不能记：
+
+LINEAGE_BINDING = PASS
+
+另外 successRate = successCount / recordCount 会把 UNKNOWN / MANUAL_REVIEW / PARTIAL 放进分母。这个不阻断 U1，但 U4 offline evaluation 必须明确指标定义，避免把“尚未有结论”当失败样本稀释成功率。
+
+TEST
+
+U1 FINAL 最少新增：
+
+"1.23" numeric string → REJECT。
+"true" / "false" → REJECT。
+缺 humanIntervention → null/UNKNOWN，不得变 false。
+success=true + finalOutcome=FAILURE → REJECT。
+success=false + finalOutcome=SUCCESS → REJECT。
+nested { metadata:{ payload:'x' } } → REJECT。
+原 9 条保持 green。
+
+NEXT
+
+允许继续：
+
+U2：真实 lineage binding / tenant-task-action-proposal-evidence 一致性。
+U3：learning dataset projection + immutable learning evidence；只能复用既有 evidence ledger。
+U4：offline evaluation，定义清楚样本分母、UNKNOWN/PARTIAL/MANUAL_REVIEW 语义。
+U5：meta-improvement candidate proposal only。
+
+同时把上述 U1 窄修并入下一批，不必停住整个 PHASE 4。
+
+关键冻结规则：
+
+Outcome/Learning → 可以观察、评估、提出 candidate
+
+但：
+
+不得自动修改 Policy / Guard / Router / Action Runtime；不得自行 promotion。
+
+PRODUCTION
+
+继续保持：
+
+REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing = HOLD
+
+SECOND_* = FORBIDDEN
+L5_RELAXATION = FORBIDDEN
+
+以及：
+
+MODEL_GATEWAY_RUNTIME_WIRED = false
+ACTION_RUNTIME_PRODUCTION_ENABLED = false
+META_IMPROVEMENT_INTEGRATED = false
+PRODUCTION_READY = false
+```
+
