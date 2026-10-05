@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261004-16",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T01:56:37.147Z",
+  "updated_at": "2026-10-05T02:07:57.548Z",
   "previous_head": "191afaa",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -5192,9 +5192,9 @@
   "awaiting_verdict": "EXACT-ORDER REPLAY 证据已送审（comment 5979262070）；shared/staging deploy 解禁待裁决",
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-05T01:57:02.019Z",
-    "head": "191afaa",
-    "acceptance_head": "191afaa",
+    "computed_at": "2026-10-05T02:08:04.789Z",
+    "head": "dfb5f08",
+    "acceptance_head": "dfb5f08",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5345,48 +5345,48 @@
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=191afaa ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
+        "evidence": "acceptance_head=dfb5f08 ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
       },
       "L1-05_pg_regression_passed": {
         "status": "UNVERIFIED",
-        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head 191afaa（且中间存在非簿记变更）"
+        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head dfb5f08（且中间存在非簿记变更）"
       },
       "L1-06_fresh_db_migration_passed": {
         "status": "UNVERIFIED",
-        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head 191afaa（且中间存在非簿记变更）"
+        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head dfb5f08（且中间存在非簿记变更）"
       },
       "L1-07_api_typecheck_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head 191afaa（且中间存在非簿记变更）"
+        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head dfb5f08（且中间存在非簿记变更）"
       },
       "L1-08_web_typecheck_build_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head 191afaa（且中间存在非簿记变更）"
+        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head dfb5f08（且中间存在非簿记变更）"
       },
       "L1-09_no_skipped_critical_tests": {
         "status": "UNVERIFIED",
-        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head 191afaa（且中间存在非簿记变更）"
+        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head dfb5f08（且中间存在非簿记变更）"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
         "status": false,
-        "evidence": "dirty entries: 4"
+        "evidence": "dirty entries: 1"
       },
       "L1-11_docs_state_consistent": {
         "status": "UNVERIFIED",
-        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head 191afaa（且中间存在非簿记变更）"
+        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head dfb5f08（且中间存在非簿记变更）"
       },
       "L1-12_schema_invariants_verified": {
         "status": "UNVERIFIED",
-        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head 191afaa（且中间存在非簿记变更）"
+        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head dfb5f08（且中间存在非簿记变更）"
       },
       "L1-13_negative_paths_covered": {
         "status": "UNVERIFIED",
-        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head 191afaa（且中间存在非簿记变更）"
+        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head dfb5f08（且中间存在非簿记变更）"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
         "status": "UNVERIFIED",
-        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head 191afaa（且中间存在非簿记变更）"
+        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head dfb5f08（且中间存在非簿记变更）"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
@@ -7382,11 +7382,11 @@
   "CURRENT_HEAD": "PENDING_THIS_COMMIT",
   "LAST_COMPLETED_UNIT": "RSI-P1-07 端到端闭环 demo：POLICY_GENERATE → GENERATE(去重/OWNER保护/敏感fail-closed) → CLAIM → RUN(注入 runner，BLOCK 如实反映) → EVIDENCE → JUDGE(独立/自判禁止) → RECORD(append-only) → POLICY_PROMOTE(仅 LOW+显式开启可自动提升)；transcript 证明零外写/零网络/不落库。",
   "NEXT_EXECUTION_UNIT": "无需外部账号的 RSI 内部单元已全部落地（P1-01…P1-07、RT-01…RT-12、COST-01…COST-05、INSP-01…INSP-07）；下一步为 BG-016 单一 Acceptance Head 一致性 guard，其余为 HOST_ACTION_REQUIRED。",
-  "CI_STATUS": "RSI-P1-04（88b8272/3129da6，run 37250793865 / 37250819492）与 RSI-P1-05（1fae507，run 37251649884）hosted CI = completed_success；9a6e0cb（仅状态文件）仍在跑；本地 tsc exit 0，新增套件 10+11 例全过；门禁 api-contract / audit-coverage / autopilot-rules 全 OK",
+  "CI_STATUS": "RSI-P1-06 Policy Engine hosted CI = completed_success（0bc5934 run 37252557596 / 191afaa run 37252580801）；RSI-P1-07（dfb5f08 run 37253431454）仍在跑，跑到即回写 backlog；门禁 api-contract / audit-coverage / autopilot-rules 全 OK",
   "WAITING_FOR_VERDICT": "none —— MSG-20261005-09（RSI Model Router → Provider Adapter 设计 = PASS WITH REVISE）已逐字归档（FNV e1740a41 / 178 行 / FULL_COPY_OK）；真实 Provider 那一轮才需要新的窄审计，本轮不需要。",
   "HOST_ACTION_REQUIRED": "①非生产 DATABASE_URL（无真实客户数据）→ RSI staging smoke + migration apply + reboot/reconcile 与 exactly-once 实机验证；②Linux 主机（或指定 CI runner）→ systemd Test A/B/C/D/E/F；③真实 Provider 接入需要宿主注册/申请账号、接受第三方协议、提供 Client ID/Secret 与 POA 等（当前全部 HOLD）；④gh auth login（可选，仅恢复 issue comment 通道）。",
   "HOLD_EXTERNAL": "RSI_MODEL_NETWORK = HOLD / RSI_PAID_MODEL_CALLS = HOLD / REAL_PROVIDER_ADAPTER = OUT_OF_PROCESS_REQUIRED（sidecar 未实现）/ EXTERNAL_WRITE = HOLD / PAYMENT = HOLD / TRANSPORT = HOLD / PRODUCTION_CREDENTIALS = HOLD / PRODUCTION_PUBLIC_CHECKER = HOLD",
-  "LAST_HEARTBEAT_AT": "2026-10-05T01:56:37.147Z",
+  "LAST_HEARTBEAT_AT": "2026-10-05T02:07:57.548Z",
   "ci_red_streak_note": "RESOLVED: three contract/inventory fixes (tenant-trigger whitelist 1b15ab7, append-only whitelist cc13bde, model inventory 82->85 4f02282); 4f02282 is the first green run after the streak.",
   "ci_contract_fix_local_verification": {
     "at": "2026-10-04T08:51:16.135Z",
@@ -7786,9 +7786,8 @@
   },
   "CI_RESULT": "completed_success",
   "CI_RUNS": [
-    "37250793865",
-    "37250819492",
-    "37251649884"
+    "37252557596",
+    "37252580801"
   ],
   "rsi_task_generation": {
     "at": "2026-10-05T01:03:08.384Z",
