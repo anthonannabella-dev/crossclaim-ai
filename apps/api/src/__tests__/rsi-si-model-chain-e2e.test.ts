@@ -18,7 +18,10 @@ import { describe, expect, it } from 'vitest';
 
 import { composeRsiRuntime } from '../runtime/rsi-run';
 import { createSiModelGatewayPort, SI_MODEL_GATEWAY_BOUNDARY } from '../runtime/rsi-si-model-gateway';
-import { createAppActionGuard } from '../services/action-guard/runtime-guard-composition';
+import {
+  createAppActionGuard,
+  staticControlPlaneConfig,
+} from '../services/action-guard/runtime-guard-composition';
 import { buildRecoverySiEvidenceRef, createRecoverySiPack } from '../runtime/recovery-si-pack';
 import { isRsiLocalSimAdapter } from '../services/autonomy/rsi-local-sim-adapter';
 import { createRsiLocalSimAdapter } from '../services/autonomy/rsi-local-sim-adapter';
@@ -257,7 +260,7 @@ describe('PHASE 2 U2 · SI Runtime 端到端模型链（local sim）', () => {
     expect(withoutGateway.modelCallCount).toBe(0);
   });
 
-  it('P2U2_7 真 runtime 链：composeRsiRuntime → productRecoveryPack → recovery-si → Shared Guard → Gateway → park-for-judge', async () => {
+  it('P2U2_7 真 runtime 链（确定性 ALLOW fixture）：recovery-si → Shared Guard ALLOW → Gateway invoke=1 → park-for-judge', async () => {
     const invoked = { n: 0 };
     const gateway = createSiModelGatewayPort({
       lowCost: createRsiLocalSimAdapter({
@@ -275,6 +278,7 @@ describe('PHASE 2 U2 · SI Runtime 端到端模型链（local sim）', () => {
       tasksPath: 'mem://tasks',
       productRecoveryPack: {
         appActionGuardDeps: {
+          config: staticControlPlaneConfig({ mode: 'READ_ONLY', productionGate: 'SATISFIED' } as never),
           killSwitchResolver: {
             async resolve(scope: string) {
               return { scope, value: 'enabled', degraded: false, stale: false };
@@ -296,17 +300,15 @@ describe('PHASE 2 U2 · SI Runtime 端到端模型链（local sim）', () => {
     const outcome = await composition.controller.tick();
     expect(outcome.claimed?.dedupeKey).toBe('task:recovery:PLATFORM:opp-1');
     expect(composition.domainDispatchLog()[0]?.packId).toBe('recovery-si');
-    // 只有 Guard ALLOW 才会进入模型路径；据此对 gateway 调用次数做精确断言
-    const decision = composition.domainDispatchLog()[0]?.guardActions[0]?.decision;
-    if (decision === 'ALLOW') expect(invoked.n).toBe(1);
-    else expect(invoked.n).toBe(0);
+    expect(composition.domainDispatchLog()[0]?.guardActions[0]?.decision).toBe('ALLOW');
+    expect(invoked.n).toBe(1);
+    expect(composition.controller.proposal()).not.toBeNull();
     expect(composition.controller.state().waitingForVerdict).toBe(true);
     expect(composition.controller.state().verdict).toBeNull();
     composition.controller.markWaitingForVerdict('PASS');
     await composition.controller.emit('JUDGE_VERDICT_RECEIVED');
     expect(composition.controller.state().waitingForVerdict).toBe(false);
   });
-
   it('P2U2_8 HOLD 运行时边界：非 local-sim（真实/付费）adapter 注入 → fail-closed 抛错', () => {
     expect(() =>
       createSiModelGatewayPort({
