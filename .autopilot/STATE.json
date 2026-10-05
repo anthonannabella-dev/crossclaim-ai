@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "50a3826d",
+  "head": "efe93df4",
   "status": "RECONCILED",
   "current_task": "RSI 生产可执行闭环（7 点收口）：RSI_RUNTIME_READY = PASS；MODEL_PROVIDER_READY = 本地仿真已接线（真实网络/付费 HOLD）；PERSISTENCE_READY = ephemeral 已验证、durable 需宿主非生产 DATABASE_URL；REBOOT_RECONCILE_READY = NOT_IMPLEMENTED（下一单元）；SYSTEMD_VALIDATED = 需宿主 Linux 实机",
   "next_task": "BG-016 单一 Acceptance Head + 四份状态一致 guard（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍 HOST_ACTION_REQUIRED 或 HOLD",
@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-40",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T19:47:17.180Z",
+  "updated_at": "2026-10-05T19:56:13.549Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -50,15 +50,15 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
-  "next_execution_unit": "PHASE 4 U5 裁决归档与 PHASE 4 收口：(1) 打开右侧审核会话读取 U5 verdict（严格匹配 REVIEWED_HEAD = 50a3826d，marker [CODEX-PHASE4-U5]）；(2) 先落盘 work/stage/verdict-p4q-raw.txt，再逐字归档 AI-ARCHITECT-INBOX.md（MSG-20261005-64）+ compare.mjs FULL_COPY_OK + commit + push；(3) 若审计要求 U5 FINAL（例如 candidate 与 evaluation verified 集合的集合级相等性证明），按窄修执行 code → tests → regression → tsc → commit → push → 送裁决 → 归档；(4) 若 PHASE 4 收口，则 durable state 记 PHASE 4 = CLOSED，并按下一 phase（PHASE 5 META IMPROVEMENT 或审计指定单元）继续；(5) 未解锁边界不变：REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing = HOLD；SECOND_* = FORBIDDEN；L5_RELAXATION = FORBIDDEN；META_IMPROVEMENT_INTEGRATED / PRODUCTION_READY 等均不得在无真实 E2E 证据时宣称。",
+  "next_execution_unit": "PHASE 4 U5 FINAL 裁决归档与 PHASE 4 收口：(1) 打开右侧审核会话读取 U5 FINAL verdict（严格匹配 REVIEWED_HEAD = efe93df4，marker [CODEX-PHASE4-U5FINAL]）；(2) 先落盘 work/stage/verdict-p4r-final-raw.txt → 逐字归档 AI-ARCHITECT-INBOX.md（MSG-20261005-65）→ compare.mjs FULL_COPY_OK → commit + push；(3) durable state：phase4_u5_final_verdict + phase_state.PHASE_4_OUTCOME_LEARNING_PIPELINE = CLOSED（若 PASS），并登记 PHASE 4 收口桶（U1 FINAL / U2 / U3 / U4 / U5）；(4) 若审计给出 PHASE 5 进入条件，按 next_execution_unit 继续（code → tests → regression → tsc → commit → push → 送裁决 → 归档）；(5) 未解锁边界不变：REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing = HOLD；SECOND_* = FORBIDDEN；L5_RELAXATION = FORBIDDEN。",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-05T19:47:17.180Z",
+  "last_tick_at": "2026-10-05T19:56:13.549Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "PHASE 4 U4 FINAL 裁决已读取、原文归档（MSG-20261005-63，compare.mjs = FULL_COPY_OK，归档提交 871d030f）＝ PASS / CLOSED：TRUSTED_OFFLINE_EVALUATION_ARTIFACT / EVALUATION_IDENTITY / VERIFIED_ONLY_ENTRY = PASS，RAW_EVALUATOR_BYPASS = CLOSED，PHASE4_U4_FINAL2_REQUIRED = NO，U4 正式封板。随后按授权完成 U5（meta-improvement candidate proposal only）：50a3826d 已 push，marker [CODEX-PHASE4-U5] 已确认送达审计会话。U5 复用 isVerifiedOfflineEvaluation 作为信任门；candidate 绑定 evaluationDigest / evaluationVersion / datasetVersion / source evidence refs+digests / candidateDigest；candidateStatus = PROPOSAL_ONLY；0 分母零 candidate；无任何 apply/promote/mutate 入口（四类 mutation = FORBIDDEN）。",
-  "last_action_at": "2026-10-05T19:47:17.180Z",
-  "next_action": "读取 PHASE 4 U5 裁决 → 归档（MSG-20261005-64）→ PHASE 4 收口判定 → durable state。",
-  "current_head": "50a3826d",
-  "last_completed_head": "50a3826d",
+  "last_action": "PHASE 4 U5 裁决已读取、原文归档（MSG-20261005-64，compare.mjs = FULL_COPY_OK，归档提交 39490c9b）＝ PASS WITH REVISE / NOT CLOSED：META_IMPROVEMENT_PROPOSAL_ONLY / VERIFIED_EVALUATION_GATE / NO_AUTO_APPLY·NO_MUTATION = PASS；SOURCE_EVIDENCE_PROVENANCE / EVIDENCE_EVALUATION_SET_BINDING = REVISE；PHASE4_U5_FINAL_REQUIRED = YES（不得把集合级相等性当作可接受边界）。已按裁决完成并送审 U5 FINAL（code = efe93df4，marker [CODEX-PHASE4-U5FINAL]）：U3 产出 provenance-bearing VerifiedLearningEvidenceSet（refs 取 immutable ledger append 实际返回值）；U4 暴露只读 verifiedOutcomeDigests / verifiedOutcomeSetDigest；U5 改为精确集合相等（sorted evidence outcomeDigests === sorted evaluation verifiedOutcomeDigests），否则 META_CANDIDATE_EVIDENCE_SET_MISMATCH。",
+  "last_action_at": "2026-10-05T19:56:13.549Z",
+  "next_action": "读取 PHASE 4 U5 FINAL 裁决 → 归档（MSG-20261005-65）→ 若 PASS 则 PHASE 4 = CLOSED。",
+  "current_head": "efe93df4",
+  "last_completed_head": "efe93df4",
   "reviewed_head": "add99ec3",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -5169,10 +5169,10 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "P4Q-1 读取 PHASE 4 U5 裁决（匹配 REVIEWED_HEAD = 50a3826d，marker [CODEX-PHASE4-U5]）→ 先落盘 verdict-p4q-raw.txt → 归档 MSG-20261005-64 → compare.mjs FULL_COPY_OK → commit + push → durable state",
-    "P4Q-2 若需 U5 FINAL：按裁决窄修（例如 evaluation verified 集合级绑定）+ tests + regression + tsc + commit + push + 送裁决 + 归档",
-    "P4Q-3 PHASE 4 收口对账：phase_state.PHASE_4_OUTCOME_LEARNING_PIPELINE = CLOSED（U1 FINAL / U2 / U3 / U4 / U5）",
-    "P4Q-4 非阻断债务（持续记录）：scanRawPayloadKeys 有界遍历/循环检测、evidenceDigest 与 evaluationDigest 完整 SHA-256、P2E-DB5 test-isolation debt"
+    "P4R-1 读取 PHASE 4 U5 FINAL 裁决（匹配 REVIEWED_HEAD = efe93df4）→ 先落盘 verdict-p4r-final-raw.txt → 归档 MSG-20261005-65 → compare.mjs FULL_COPY_OK → commit + push → durable state",
+    "P4R-2 PHASE 4 收口对账（若 PASS）：phase_state.PHASE_4_OUTCOME_LEARNING_PIPELINE = CLOSED，phases 记录 U1 FINAL / U2 / U3 / U4 / U5",
+    "P4R-3 按 PHASE 5 进入条件继续（meta improvement 观察面 / 或审计指定下一单元）",
+    "P4R-4 非阻断债务（持续记录）：scanRawPayloadKeys 有界遍历、三类 digest 完整 SHA-256、P2E-DB5 test-isolation debt"
   ],
   "full_autonomous_internal_execution": "VERIFIED",
   "dispatcher_acceptance": {
@@ -9322,7 +9322,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-05T19:47:17.180Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-05T19:56:13.549Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -9449,7 +9449,7 @@
     "PHASE_1_FINAL7": "PASS / CLOSED（MSG-20261005-47，REVIEWED_HEAD = 795f65a5；STEP3_FINAL8_REQUIRED = NO）",
     "PHASE_2_MODEL_GATEWAY_RUNTIME": "PASS / CLOSED（MSG-20261005-50；Reviewed HEAD 338f30b4；PHASE2_FINAL5_REQUIRED = NO）",
     "PHASE_3_ACTION_RUNTIME": "PASS / CLOSED（MSG-20261005-54；Reviewed HEAD = fe3c33e9；PHASE3_FINAL4_REQUIRED = NO）",
-    "PHASE_4_OUTCOME_LEARNING_PIPELINE": "IN PROGRESS / 待 U5 裁决：U1 FINAL = PASS；U2 = PASS / CLOSED；U3 = PASS / CLOSED；U4 = PASS / CLOSED（含 U4 FINAL，MSG-20261005-63）；U5 = SUBMITTED / AWAITING_VERDICT（50a3826d）。",
+    "PHASE_4_OUTCOME_LEARNING_PIPELINE": "IN PROGRESS / 待 U5 FINAL 裁决：U1 FINAL = PASS；U2 = PASS / CLOSED；U3 = PASS / CLOSED；U4 = PASS / CLOSED；U5 = PASS WITH REVISE（proposal-only PASS；证据来源/集合绑定 REVISE），U5 FINAL = SUBMITTED / AWAITING_VERDICT（efe93df4）。",
     "PHASE_5_META_IMPROVEMENT": "QUEUED（需真实运行结果）"
   },
   "heartbeat_watchdog": {
@@ -9922,7 +9922,7 @@
       "U5"
     ]
   },
-  "archive_head": "871d030f",
+  "archive_head": "39490c9b",
   "phase4_u3_final": {
     "status": "PASS / CLOSED",
     "reviewed_head": "006cc912",
@@ -10115,5 +10115,63 @@
       "expected_message_id": "MSG-20261005-64"
     },
     "accuracy_note": "source evidence 绑定 = 调用方提供的 U3 learning evidence + datasetVersion 一致性 + 证据数不超过评估记录数；U4 结果未导出 verified outcomeDigest 列表，故本单元不宣称“与 evaluation 内部 verified 集合的集合相等性”。"
+  },
+  "phase4_u5_verdict": {
+    "message_id": "MSG-20261005-64",
+    "verdict": "PASS WITH REVISE / NOT CLOSED",
+    "reviewed_head": "50a3826d",
+    "archive_verified": "FULL_COPY_OK",
+    "archive_head": "39490c9b",
+    "pass": [
+      "META_IMPROVEMENT_PROPOSAL_ONLY = PASS",
+      "VERIFIED_EVALUATION_GATE = PASS（复用 isVerifiedOfflineEvaluation；caller 副本被拒）",
+      "NO_AUTO_APPLY / NO_MUTATION = PASS",
+      "PROPOSAL_ONLY / requiresApproval / autoApply=false 正确",
+      "candidate 已绑定 evaluationDigest / version / datasetVersion / evidence digests / candidateDigest"
+    ],
+    "revise": [
+      "SOURCE_EVIDENCE_PROVENANCE：输入 learningEvidence: LearningEvidenceEntry[] 可由公开 buildLearningEvidenceEntry() 构造，未证明经过 U3 trusted lineage → appendVerifiedLearningEvidence → RSI immutable ledger",
+      "sourceEvidence.evidenceRefs 取 lineageRefs.evidenceRef 而非 immutable ledger append 实际返回的 ref",
+      "EVIDENCE_EVALUATION_SET_BINDING：需 sorted evidence outcomeDigests === sorted evaluation verifiedOutcomeDigests"
+    ],
+    "phase4_u5_final_required": "YES",
+    "notes": [
+      "不得把集合级相等性当作可接受架构边界",
+      "U4 需暴露只读 identity（verifiedOutcomeDigests / verifiedOutcomeSetDigest）",
+      "状态记录：U1/U2/U3/U4 = CLOSED；U5 = NOT CLOSED；PHASE 4 = NOT CLOSED",
+      "非阻断：三类 digest 截 16 hex；P2E-DB5 test-isolation debt"
+    ]
+  },
+  "phase4_u5_final": {
+    "status": "SUBMITTED / AWAITING_VERDICT",
+    "reviewed_head": "efe93df4",
+    "pushed": true,
+    "files": [
+      "apps/api/src/services/outcome-learning/learning-evidence.ts",
+      "apps/api/src/services/outcome-learning/offline-evaluation.ts",
+      "apps/api/src/services/outcome-learning/meta-improvement-candidate.ts",
+      "apps/api/src/__tests__/learning-evidence.test.ts",
+      "apps/api/src/__tests__/offline-evaluation.test.ts",
+      "apps/api/src/__tests__/meta-improvement-candidate.test.ts"
+    ],
+    "changes": [
+      "U3：appendVerifiedLearningEvidence 返回 provenance-bearing VerifiedLearningEvidenceSet（outcomeDigests / learningEvidenceRefs(ledger 返回) / evidenceDigests / evidenceSetDigest）+ 私有 WeakSet + isVerifiedLearningEvidenceSet",
+      "U4：OfflineEvaluationMetrics 新增只读 verifiedOutcomeDigests + verifiedOutcomeSetDigest",
+      "U5：输入改为 evidenceSet manifest；精确集合相等校验 → META_CANDIDATE_EVIDENCE_SET_MISMATCH；candidate 新增 evidenceSetDigest 绑定",
+      "U5 边界：evidenceRefSource = RSI_IMMUTABLE_LEDGER_APPEND_RETURNED_REF / callerBuiltEvidence = FORBIDDEN / evidenceBinding = EXACT_SET_EQUALITY"
+    ],
+    "local_verification": {
+      "tsc": "PASS (exit 0)",
+      "targeted": "meta-improvement-candidate 12/12（P4U5_1..8 + P4U5F_1..4）; learning-evidence 9/9; offline-evaluation 15/15",
+      "phase4": "6 files / 67 tests PASS",
+      "regression": "99 files / 1014 tests（唯一失败 = P2E-DB5 test-isolation debt，单独运行 20/20 PASS）",
+      "github_ci": "NOT_OBSERVED"
+    },
+    "submission": {
+      "marker": "[CODEX-PHASE4-U5FINAL]",
+      "delivered": true,
+      "composer_empty_verified": true,
+      "expected_message_id": "MSG-20261005-65"
+    }
   }
 }
