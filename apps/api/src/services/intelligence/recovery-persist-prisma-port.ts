@@ -20,6 +20,8 @@ import type { PrismaClient } from '@prisma/client';
 import {
   RECOVERY_PACKAGE_DELETE_GUARD,
   RECOVERY_PERSIST_TRANSACTION_UNITS,
+  RECOVERY_SI_PACKAGE_PERSISTED_ACTION,
+  assertRecoverySiPackageLineageChanges,
   persistRecoveryPackageWithinTransaction,
   buildRecoveryPackageLineageProjection,
   type RecoveryLineageProjection,
@@ -89,6 +91,52 @@ export interface RecoveryPersistPrismaPayloads {
   fileAsset: FileAssetWritePayload;
   artifact: RecoveryPackageArtifactWritePayload;
   auditLog: AuditLogWritePayload;
+}
+
+export interface RecoverySiPackageLineageAuditInput {
+  organizationId: string;
+  packageId: string;
+  packageVersion: string;
+  packageDigest: string;
+  planDigestVersion: string;
+  planDigest: string;
+  basisVersion: string;
+  opportunityRef: string;
+  domain: string;
+  /** 固定为 claim.prepare（P2-E 唯一门禁） */
+  guardAction?: string;
+  actorUserId?: string | null;
+}
+
+/**
+ * 必修（MSG-20261005-23 CHANGE 2）：lineage 审计使用**独立** action
+ * `recovery.si_package_persisted`，并且 changes 只允许白名单键；多键 → fail-closed。
+ */
+export function buildRecoverySiPackageLineageAuditLog(
+  input: RecoverySiPackageLineageAuditInput,
+): AuditLogWritePayload {
+  const changes = {
+    packageId: input.packageId,
+    packageVersion: input.packageVersion,
+    packageDigest: input.packageDigest,
+    planDigestVersion: input.planDigestVersion,
+    planDigest: input.planDigest,
+    basisVersion: input.basisVersion,
+    opportunityRef: input.opportunityRef,
+    domain: input.domain,
+    guardAction: input.guardAction ?? 'claim.prepare',
+  };
+  assertRecoverySiPackageLineageChanges(changes as unknown as Record<string, unknown>);
+  return {
+    organizationId: input.organizationId,
+    actorType: input.actorUserId ? 'USER' : 'SYSTEM',
+    actorUserId: input.actorUserId ?? null,
+    actorRef: input.actorUserId ? null : 'recovery-si',
+    action: RECOVERY_SI_PACKAGE_PERSISTED_ACTION,
+    entityType: 'RecoveryPackage',
+    entityId: input.packageId,
+    changes,
+  };
 }
 
 /**

@@ -104,11 +104,57 @@ npx prisma migrate status → Database schema is up to date!（exit 0）
 
 ```text
 apps/api npx tsc --noEmit                                        → exit 0
-recovery-si-phase2-e.test.ts（契约）                              → 15/15 PASS
+recovery-si-phase2-e.test.ts（契约）                              → 22/22 PASS
 recovery-si-phase2-e-db.test.ts（DB 取证）                        → 13/13 PASS
-P2-E targeted regression（10 文件 / 108 例；含 Phase1 / P2-AB / P2-C / P2-D /
-  recovery-manual-package(+db) 交叉回归）                          → 10 files / 108 tests PASS
+P2-E targeted regression（10 文件 / 115 例；含 Phase1 / P2-AB / P2-C / P2-D /
+  recovery-manual-package(+db) 交叉回归）                          → 10 files / 115 tests PASS
 prisma validate / migrate deploy / migrate status                → valid / no pending / up to date
+```
+
+## 9.1 MSG-20261005-23（P2-E Implementation Audit）修订落地
+
+裁决：**REVISE**（`P2_E_V1_OPTION_A = NOT_YET_CLOSED`；`FINAL2_REQUIRED = YES`），范围两项：
+
+### CHANGE 1 —— exact HEAD 必须可独立复核
+
+- 本批核实：`b5baf381` 当时**未 push**，GitHub 返回 `No commit found for SHA: b5baf381`，架构方无法独立读取 exact implementation HEAD。
+- 处置：本修订完成后 push 最终实现 HEAD，并只送窄 FINAL-2（见
+  `docs/releases/RECOVERY-SI-PHASE2-E-FINAL2-REQUEST.md`）。`EXACT_HEAD_INDEPENDENT_REVIEW = BLOCKED_UNTIL_PUSH`。
+
+### CHANGE 2 —— lineage audit action 必须独立
+
+- 新增 `RECOVERY_SI_PACKAGE_PERSISTED_ACTION = 'recovery.si_package_persisted'`（`recovery-persist-gate.ts`），
+  **仅**用于 P2-E transaction 的 lineage 审计；不再复用既有 `recovery.package_generated`。
+- 新增固定白名单 `RECOVERY_SI_PACKAGE_LINEAGE_CHANGE_KEYS`（9 键：packageId / packageVersion / packageDigest /
+  planDigestVersion / planDigest / basisVersion / opportunityRef / domain / guardAction）+
+  `assertRecoverySiPackageLineageChanges()`（多键 → `RECOVERY_SI_LINEAGE_CHANGES_NOT_WHITELISTED` fail-closed）。
+- 新增 `buildRecoverySiPackageLineageAuditLog()`（`recovery-persist-prisma-port.ts`）统一构造 lineage 审计单元。
+- 证据：P2E-G22（action 独立 + 白名单 fail-closed）；P2E-DB12 改为只认独立 action 反查 planDigest，
+  并断言用 `recovery.package_generated` 反查返回 `null`（语义不再混用）。
+
+### RISKS 项（写入口 canonical READY 重算）—— 已落地
+
+- 新增 `verifyRecoveryPersistCanonicalReady()`：`fresh state → prioritizeOpportunities → planRecovery（canonical）
+  → supplied READY 必须等于 canonical planner READY 的 execution-relevant 身份`；
+  在**任何 Action Guard 调用与任何 DB 写入之前**执行；缺失输入即 fail-closed。
+- `evaluateRecoveryPersistGate()` 新增 `canonical` 输入与 outcome 字段
+  （`canonicalReadyVerified` / `canonicalPlanDigest` / `lineageAction`）；`P2_E_CANONICAL_RECHECK_BOUNDARY.trustsUpstreamAllowSnapshot = false`。
+- 失败码：`P2E_CANONICAL_RECHECK_INPUT_REQUIRED` / `P2E_CANONICAL_TENANT_MISMATCH` / `P2E_CANONICAL_STATE_STALE` /
+  `P2E_CANONICAL_READY_MISSING` / `P2E_CANONICAL_READY_MISMATCH`（全部零 Guard 调用、零 DB 写入）。
+- 证据：P2E-G16（缺输入）/G17（authorizationReady=false 伪造 READY）/G18（HIGH-risk OWNER gate 伪造 READY）/
+  G19（金额篡改）/G20（陈旧 state）/G21（对齐成立 → 给出 canonicalPlanDigest）。
+- 实现方式：P2-E 模块内独立实现同语义投影，**不改动**已 CLOSED 的 P2-D 模块（`recovery-guard-dry-run.ts` 仅只读复用其
+  `planRecovery` / `prioritizeOpportunities` / `buildRecoveryPlanDigest`）。
+
+### 措辞修正（非 blocker）
+
+本批实际包含 trigger-only 迁移，因此表述精确化为：
+
+```text
+PRISMA_MODEL_DELTA = NO
+NEW_TABLE = NO
+NEW_COLUMN = NO
+DB_TRIGGER_MIGRATION = YES / APPLIED（20261005040000_recovery_package_delete_guard）
 ```
 
 ## 9. 边界（本批未动）

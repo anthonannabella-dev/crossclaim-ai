@@ -16,6 +16,11 @@
 
 import type { ProductionControlPlane } from '../action-guard/control-plane';
 import type { ActionGuardResult } from '../action-guard/action-guard';
+import type { CustomerRecoveryState } from './customer-recovery-state';
+import { prioritizeOpportunities } from './recovery-prioritizer';
+import { planRecovery, type RecoveryPlanAction } from './recovery-planner';
+import type { RecoveryToolRegistry } from './recovery-tool-registry';
+import { buildRecoveryPlanDigest } from './recovery-guard-dry-run';
 
 /** 必修 1：P2-E 唯一的 Guard action；出现 claim.submit 即视为配置错误。 */
 export const P2_E_GUARD_ACTION = 'claim.prepare' as const;
@@ -28,12 +33,167 @@ export const P2_E_PERSIST_GATE_BOUNDARY = {
   requiresP2dAllow: false,
   transactionRequired: true,
   dbDeleteGuardRequired: true,
+  canonicalReadyRecheckRequired: true,
   approvalConsumption: 'FORBIDDEN',
   executorInvocation: 'FORBIDDEN',
   businessFactWrite: 'DRY_RUN_ONLY',
   externalAction: 'FORBIDDEN',
   runtimeWiring: 'NONE',
 } as const;
+
+/**
+ * 必修（MSG-20261005-22 + MSG-20261005-23 RISKS）：持久化入口**自己**必须重算 canonical READY。
+ * 不得因为上游传入 `ALLOW` 快照就跳过；重算发生在任何 Action Guard 调用与任何 DB 写入之前。
+ */
+export const P2_E_CANONICAL_RECHECK_BOUNDARY = {
+  canonicalReadyRecheckRequired: true,
+  recheckBeforeGuardCall: true,
+  recheckBeforeAnyDbWrite: true,
+  trustsUpstreamAllowSnapshot: false,
+  suppliedReadyMustEqualCanonicalPlannerReady: true,
+  staleStatePolicy: 'DENY',
+  tenantPolicy: 'DENY',
+} as const;
+
+/**
+ * 必修（MSG-20261005-23 CHANGE 2）：lineage 审计必须使用**独立** action，
+ * 不得复用既有 `recovery.package_generated`（否则两种语义混在同一个 action 里）。
+ */
+export const RECOVERY_SI_PACKAGE_PERSISTED_ACTION = 'recovery.si_package_persisted' as const;
+
+/** lineage 审计 changes 的固定白名单（多键即 fail-closed） */
+export const RECOVERY_SI_PACKAGE_LINEAGE_CHANGE_KEYS: readonly string[] = [
+  'packageId',
+  'packageVersion',
+  'packageDigest',
+  'planDigestVersion',
+  'planDigest',
+  'basisVersion',
+  'opportunityRef',
+  'domain',
+  'guardAction',
+];
+
+export function assertRecoverySiPackageLineageChanges(changes: Record<string, unknown>): void {
+  const extra = Object.keys(changes).filter((key) => !RECOVERY_SI_PACKAGE_LINEAGE_CHANGE_KEYS.includes(key));
+  if (extra.length > 0) {
+    throw new Error('RECOVERY_SI_LINEAGE_CHANGES_NOT_WHITELISTED: ' + extra.sort().join(','));
+  }
+}
+
+const stableStringify = (value: unknown): string => {
+  if (value === null || typeof value !== 'object') return JSON.stringify(value);
+  if (Array.isArray(value)) return '[' + value.map((item) => stableStringify(item)).join(',') + ']';
+  const entries = Object.entries(value as Record<string, unknown>)
+    .filter(([, nested]) => nested !== undefined)
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  return '{' + entries.map(([key, nested]) => JSON.stringify(key) + ':' + stableStringify(nested)).join(',') + '}';
+};
+
+const canonicalDecimal = (value: number | null | undefined): string | null =>
+  value === null || value === undefined ? null : Number(value).toFixed(4);
+
+/** 与 P2-D CHANGE D1 相同的 execution-relevant 身份投影（本模块独立实现，不改动已 CLOSED 的 P2-D 模块）。 */
+const executionIdentity = (action: RecoveryPlanAction): string =>
+  stableStringify({
+    domain: action.domain,
+    opportunityRef: action.opportunityRef,
+    proposedAction: action.proposedAction,
+    toolRef: action.toolRef,
+    executionMode: action.executionMode,
+    authorizationRequired: action.authorizationRequired,
+    ownerApprovalRequired: action.ownerApprovalRequired,
+    expectedRecovery:
+      action.expectedRecovery === null
+        ? null
+        : {
+            amount: canonicalDecimal(action.expectedRecovery.amount),
+            currency: action.expectedRecovery.currency.trim().toUpperCase(),
+          },
+  });
+
+export interface RecoveryPersistCanonicalInput {
+  /** fresh state（必须 tenantVerified） */
+  state: CustomerRecoveryState;
+  registry: RecoveryToolRegistry;
+  /** 上游声称 READY_FOR_EXECUTION 的 action（写入请求依据） */
+  suppliedReadyActions: readonly RecoveryPlanAction[];
+  nowMs: number;
+  maxSnapshotAgeMs?: number;
+}
+
+export type RecoveryPersistCanonicalCheck =
+  | { ok: true; canonicalPlanDigest: string; canonicalReadyCount: number }
+  | { ok: false; code: string; reasons: readonly string[] };
+
+/**
+ * canonical READY 重算（写入口硬前置）：
+ *   fresh state → prioritize → canonical planRecovery → supplied READY 必须等于 canonical planner READY
+ * 任一不成立 → fail-closed，且**不调用** Action Guard、不触库。
+ */
+export function verifyRecoveryPersistCanonicalReady(input: RecoveryPersistCanonicalInput): RecoveryPersistCanonicalCheck {
+  const { state } = input;
+  const maxAgeMs = input.maxSnapshotAgeMs ?? 15 * 60 * 1000;
+
+  if (
+    state.tenantVerified !== true ||
+    state.opportunities.some((slice) => slice.organizationId !== state.organizationId)
+  ) {
+    return {
+      ok: false,
+      code: 'P2E_CANONICAL_TENANT_MISMATCH',
+      reasons: ['canonical 重算前置：state 未通过租户校验 → fail-closed（不调用 Action Guard）'],
+    };
+  }
+
+  const observedMs = Date.parse(state.observedAt);
+  if (!Number.isFinite(observedMs) || input.nowMs - observedMs > maxAgeMs || observedMs > input.nowMs) {
+    return {
+      ok: false,
+      code: 'P2E_CANONICAL_STATE_STALE',
+      reasons: ['canonical 重算前置：state 陈旧或时间倒置 → fail-closed（不调用 Action Guard）'],
+    };
+  }
+
+  if (input.suppliedReadyActions.length === 0) {
+    return {
+      ok: false,
+      code: 'P2E_CANONICAL_READY_MISSING',
+      reasons: ['没有提供任何 READY_FOR_EXECUTION action → fail-closed（不允许在无可验证依据时写入）'],
+    };
+  }
+
+  const priority = prioritizeOpportunities(state);
+  const canonicalPlan = planRecovery({
+    state,
+    ranked: priority.ranked,
+    registry: input.registry,
+    generatedAt: state.observedAt,
+  });
+  const canonicalReady = new Map<string, RecoveryPlanAction>();
+  for (const action of canonicalPlan.actions) {
+    if (action.proposedAction === 'READY_FOR_EXECUTION') canonicalReady.set(action.opportunityRef, action);
+  }
+
+  for (const supplied of input.suppliedReadyActions) {
+    const canonical = canonicalReady.get(supplied.opportunityRef);
+    if (supplied.proposedAction !== 'READY_FOR_EXECUTION' || canonical === undefined || executionIdentity(canonical) !== executionIdentity(supplied)) {
+      return {
+        ok: false,
+        code: 'P2E_CANONICAL_READY_MISMATCH',
+        reasons: [
+          'supplied READY_FOR_EXECUTION 与内部重算 canonical planner READY 不一致（授权 / OWNER gate / provider / evidence / 工具 / 金额 / actionKind 篡改）→ fail-closed（不调用 Action Guard）',
+        ],
+      };
+    }
+  }
+
+  return {
+    ok: true,
+    canonicalPlanDigest: buildRecoveryPlanDigest({ plan: canonicalPlan, verifiedActions: [...canonicalReady.values()] }),
+    canonicalReadyCount: canonicalReady.size,
+  };
+}
 
 export type RecoveryPersistGateDecision = 'ALLOW' | 'DENY' | 'REQUIRES_APPROVAL';
 
@@ -43,6 +203,12 @@ export interface RecoveryPersistGateOutcome {
   reasons: readonly string[];
   guardAction: string | null;
   guardEvaluated: boolean;
+  /** canonical READY 重算是否通过（写入口硬前置） */
+  canonicalReadyVerified: boolean;
+  /** 重算出的 canonical planDigest（仅作 lineage trace basis；写入失败时为 null） */
+  canonicalPlanDigest: string | null;
+  /** lineage 审计必须使用的独立 action（MSG-20261005-23 CHANGE 2） */
+  lineageAction: string;
   /** 恒为 false：门禁通过 ≠ 已持久化。 */
   persisted: false;
   /** 恒为 true：ALLOW 之后必须走单一事务（必修 2）。 */
@@ -69,9 +235,14 @@ export async function evaluateRecoveryPersistGate(input: {
   actorUserId: string;
   actorOrganizationId: string;
   controlPlane: Pick<ProductionControlPlane, 'snapshotFor' | 'evaluateWithoutAudit'>;
+  /** 必修：写入口 canonical READY 重算输入（缺失即 fail-closed，不得跳过） */
+  canonical?: RecoveryPersistCanonicalInput;
 }): Promise<RecoveryPersistGateOutcome> {
   const base = {
     guardAction: P2_E_GUARD_ACTION as string | null,
+    canonicalReadyVerified: false,
+    canonicalPlanDigest: null as string | null,
+    lineageAction: RECOVERY_SI_PACKAGE_PERSISTED_ACTION as string,
     persisted: false as const,
     transactionRequired: true as const,
     dbDeleteGuardRequired: true as const,
@@ -94,6 +265,36 @@ export async function evaluateRecoveryPersistGate(input: {
       decision: 'DENY',
       code: 'P2E_GUARD_ACTION_FORBIDDEN',
       reasons: ['静态配置引用了被禁止的 external submission action → fail-closed'],
+      guardEvaluated: false,
+    };
+  }
+
+  // 必修（MSG-20261005-22 / MSG-20261005-23 RISKS）：写入口自己重算 canonical READY。
+  if (!input.canonical) {
+    return {
+      ...base,
+      decision: 'DENY',
+      code: 'P2E_CANONICAL_RECHECK_INPUT_REQUIRED',
+      reasons: ['缺少 canonical READY 重算输入（state / registry / suppliedReadyActions）→ fail-closed，且不调用 Action Guard'],
+      guardEvaluated: false,
+    };
+  }
+  if (input.canonical.state.organizationId !== input.organizationId) {
+    return {
+      ...base,
+      decision: 'DENY',
+      code: 'P2E_CANONICAL_TENANT_MISMATCH',
+      reasons: ['canonical state 租户与目标租户不一致 → fail-closed，且不调用 Action Guard'],
+      guardEvaluated: false,
+    };
+  }
+  const canonicalCheck = verifyRecoveryPersistCanonicalReady(input.canonical);
+  if (!canonicalCheck.ok) {
+    return {
+      ...base,
+      decision: 'DENY',
+      code: canonicalCheck.code,
+      reasons: canonicalCheck.reasons,
       guardEvaluated: false,
     };
   }
@@ -125,6 +326,8 @@ export async function evaluateRecoveryPersistGate(input: {
     code: result.code,
     reasons: result.reasons,
     guardEvaluated: true,
+    canonicalReadyVerified: true,
+    canonicalPlanDigest: canonicalCheck.canonicalPlanDigest,
   };
 }
 

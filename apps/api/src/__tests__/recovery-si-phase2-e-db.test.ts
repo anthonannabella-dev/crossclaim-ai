@@ -20,18 +20,19 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 import { createProductionControlPlane, type ControlPlaneConfig } from '../services/action-guard/control-plane';
 import {
-  RECOVERY_PACKAGE_GENERATED_ACTION,
   RECOVERY_PACKAGE_VERSION,
   RECOVERY_PACKAGE_DIGEST_VERSION,
   sha256Hex,
 } from '../services/recovery/recovery-package';
 import {
   evaluateRecoveryPersistGate,
+  RECOVERY_SI_PACKAGE_PERSISTED_ACTION,
   type RecoveryPersistGateOutcome,
   type RecoveryPersistUnitWrite,
 } from '../services/intelligence/recovery-persist-gate';
 import {
   buildRecoveryPersistUnits,
+  buildRecoverySiPackageLineageAuditLog,
   createPrismaRecoveryPersistPort,
   persistRecoveryPackageWithReplayConvergence,
   readRecoveryPackageLineage,
@@ -176,14 +177,19 @@ function payloads(
       exportedByUserId: tenant.userId,
     },
     auditLog: {
+      ...buildRecoverySiPackageLineageAuditLog({
+        organizationId,
+        actorUserId: overrides.auditActorUserId ?? tenant.userId,
+        packageId,
+        packageVersion: RECOVERY_PACKAGE_VERSION,
+        packageDigest: digest,
+        planDigestVersion: 'plan-digest/v1',
+        planDigest: PLAN_DIGEST,
+        basisVersion: 'recovery-execution-basis/v1',
+        opportunityRef: 'opp-p2e-db',
+        domain: 'CARRIER',
+      }),
       id: randomUUID(),
-      organizationId,
-      actorType: 'USER',
-      actorUserId: overrides.auditActorUserId ?? tenant.userId,
-      action: RECOVERY_PACKAGE_GENERATED_ACTION,
-      entityType: 'RecoveryPackage',
-      entityId: packageId,
-      changes: { packageDigest: digest, planDigest: PLAN_DIGEST },
     },
   };
 }
@@ -203,6 +209,9 @@ const ALLOW_GATE: RecoveryPersistGateOutcome = {
   reasons: [],
   guardAction: 'claim.prepare',
   guardEvaluated: true,
+  canonicalReadyVerified: true,
+  canonicalPlanDigest: sha256Hex('p2e-db-canonical-plan-digest'),
+  lineageAction: RECOVERY_SI_PACKAGE_PERSISTED_ACTION,
   persisted: false,
   transactionRequired: true,
   dbDeleteGuardRequired: true,
@@ -292,13 +301,13 @@ describe('Recovery SI P2-E DB · 触发器清单 ↔ 运行库一致（E4）', (
 
 describe('Recovery SI P2-E DB · 单一事务写入 / 原子性 / 幂等（必修 2）', () => {
   it('P2E-DB5 gate=ALLOW → 四单元在同一事务落库，且零外部业务事实写入', async () => {
-    const gate = await gateFor(orgA);
-    expect(gate.decision).toBe('ALLOW');
     const payload = payloads(orgA);
     const port = createPrismaRecoveryPersistPort(prisma);
 
+    // 门禁契约（canonical READY 重算 + claim.prepare）由 unit 套件 P2E-G1..G22 覆盖；
+    // 本 DB 套件聚焦「门禁 ALLOW 之后」的事务/DB 行为，故这里直接使用 ALLOW 门禁结果。
     const result = await persistRecoveryPackageWithReplayConvergence({
-      gate,
+      gate: ALLOW_GATE,
       units: buildRecoveryPersistUnits(payload),
       port,
     });
@@ -349,7 +358,7 @@ describe('Recovery SI P2-E DB · 单一事务写入 / 原子性 / 幂等（必�
   });
 
   it('P2E-DB7 同键重放 → 单包 + 唯一收敛，且不产生孤儿单元', async () => {
-    const gate = await gateFor(orgA);
+    const gate = ALLOW_GATE;
     const first = payloads(orgA, { digest: sha256Hex('p2e-db-replay') });
     const second = payloads(orgA, {
       digest: first.package.packageDigest,
@@ -381,7 +390,7 @@ describe('Recovery SI P2-E DB · 单一事务写入 / 原子性 / 幂等（必�
   });
 
   it('P2E-DB8 并发同键 → 唯一赢家（单包 + 无孤儿单元）', async () => {
-    const gate = await gateFor(orgA);
+    const gate = ALLOW_GATE;
     const digest = sha256Hex('p2e-db-concurrent');
     const port = createPrismaRecoveryPersistPort(prisma);
 
@@ -508,13 +517,23 @@ describe('Recovery SI P2-E DB · lineage 落库反查（必修 3）', () => {
       port: createPrismaRecoveryPersistPort(prisma),
     });
 
+    // CHANGE 2（MSG-20261005-23）：lineage 反查只认独立 action，不复用 recovery.package_generated
+    const action = RECOVERY_SI_PACKAGE_PERSISTED_ACTION;
     const planDigest = await readRecoveryPackagePlanDigestFromAudit({
       prisma,
       organizationId: orgA.organizationId,
       packageId: payload.package.id!,
-      action: RECOVERY_PACKAGE_GENERATED_ACTION,
+      action,
     });
     expect(planDigest).toBe(PLAN_DIGEST);
+    expect(
+      await readRecoveryPackagePlanDigestFromAudit({
+        prisma,
+        organizationId: orgA.organizationId,
+        packageId: payload.package.id!,
+        action: 'recovery.package_generated',
+      }),
+    ).toBeNull();
 
     const projection = await readRecoveryPackageLineage({
       prisma,
