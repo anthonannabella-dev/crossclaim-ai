@@ -2012,3 +2012,11 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - Provider 就绪（实测）：10 项能力档案逐项有状态与官方来源，未取证项按 fail-closed 记；平台级描述符为**只读**（三能力 false）；
   即使全局 transport gate 打开，**首个 provider 也不得自动写入**（缺幂等写 → NEEDS_MANUAL，双重门控）；6 项写回前置冻结为代码门槛。
 - 结论：BG-008 验收标准满足，且**实证 External Write 仍被多重门禁关闭**；本地未改任何代码。
+
+## 2026-10-05T03:25:15.494Z — BG-014 Enterprise IOR readiness 接入既有 Qualification / Economics Gate（P1，内部可做）
+- 套件实测（apps/api 本地，退出码 0）：**4 文件 / 43 例全绿** —— `customer-qualification-gate`(17)、`enterprise-ior-layer`(16)、
+  `enterprise-trust-claims`(7)、`platform-qualification-read`(3)。
+- 复用而非新建第二套：IOR readiness 输入走既有 Qualification 判定；`platform-qualification-read` 实测「真实读取持久化判定
+  （status/reasonCodes/policy/computedAt）**原样返回、只读不重算**」，INDETERMINATE / NOT_QUALIFIED 原样展示（不美化）；
+  RBAC/参数/租户边界：VIEWER 403、空 ID 400、未知账户 404、跨租户 404。
+- 边界：本批未改任何代码；真实 IOR 材料/POA 仍属 HOST_ACTION_REQUIRED。
