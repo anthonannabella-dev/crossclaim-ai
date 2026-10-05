@@ -209,6 +209,45 @@ P2-E targeted regression（10 文件）              → 127/127 PASS
 prisma validate / migrate deploy / migrate status → valid / 79 migrations 无待应用 / up to date
 ```
 
+## 9.4 MSG-20261005-26（P2-E FINAL-4）修订落地 —— CHANGE E5
+
+裁决：**REVISE**（E4 逻辑本身 = PASS；唯一剩余问题：公开 API 面仍保留可绕过安全链的低层写能力）。
+
+### CHANGE E5 —— 移除公开低层写入旁路（PUBLIC_WRITE_ENTRY_COUNT = 1）
+
+- 生产模块唯一公开 write-capable 入口：`persistRecoverySiPackageWithinTransaction({ prisma, gate, units })`
+  （内部顺序：trusted permit → 批次↔permit 绑定 → ClaimItem↔opportunity DB 绑定 → 单一事务）；
+- 以下三个低层 write 能力改为 **module-private**（不再 export）：
+
+```text
+persistRecoveryPackageWithinTransaction   → 已从 recovery-persist-gate.ts 移除（编排下沉为 port 模块私有实现）
+persistRecoveryPackageWithReplayConvergence → 私有化为 persistWithReplayConvergence
+createPrismaRecoveryPersistPort            → 私有化为 createPersistPort（原名不再出现在公开面）
+```
+
+- 新增常量 `P2_E_PUBLIC_WRITE_SURFACE = { publicWriteEntryCount: 1, publicWriteEntry: 'persistRecoverySiPackageWithinTransaction',
+  rawTransactionPortPublic: 'FORBIDDEN', lowLevelGateOnlyWritePublic: 'FORBIDDEN' }`。
+- 唯一键收敛判定收紧：只有 **package 身份键**（organizationId+claimItemId+packageVersion+packageDigest）命中才视为收敛；
+  artifact 唯一键命中（organizationId+packageId+artifactKind+sha256）必须回滚上抛（避免把半批写入误判为「已收敛」）。
+- 只读能力全部保留（`readRecoveryPackageLineage` / `readRecoveryPackagePlanDigestFromAudit` /
+  `assertPackageClaimItemOpportunityBinding` / `buildRecoveryPersistUnits`），收口不削弱证据能力。
+
+### 证据
+
+| 证据 | 断言 | 结果 |
+| --- | --- | --- |
+| P2E-G28（F5E-01） | 用 namespace import 直接检查公开面：`persistRecoverySiPackageWithinTransaction` 存在；`persistRecoveryPackageWithReplayConvergence` / `createPrismaRecoveryPersistPort` / `isRecoveryPackageUniqueViolation` 不在 port 导出中；`persistRecoveryPackageWithinTransaction` 不在 gate 导出中；只读能力仍在 | PASS |
+| P2E-G9/G10/G23/G24/G25/G26/G27 | 收口后契约断言改走 `assertRecoveryPersistBatchMatchesPermit`（非 ALLOW / 计数不符 / 伪造 permit / permit 复用 / 伪造 lineage / 交叉接线 / opportunityRef 不一致全部 fail-closed） | PASS |
+| P2E-DB5..DB20（F5E-02） | 全部成功路径只能经唯一生产入口：trusted permit → batch binding → ClaimItem/opportunity DB binding → transaction；终态 package=1 / FileAsset=2 / artifact=2 / audit=1；并发重放、租户隔离、DELETE guard、回滚语义不变 | PASS |
+
+```text
+apps/api npx tsc --noEmit                       → exit 0
+recovery-si-phase2-e.test.ts                    → 27/27 PASS
+recovery-si-phase2-e-db.test.ts                 → 20/20 PASS（真实 PostgreSQL）
+P2-E targeted regression（10 文件）              → 127/127 PASS
+prisma validate / migrate deploy / migrate status → valid / 79 migrations 无待应用 / up to date
+```
+
 ## 9.1 MSG-20261005-23（P2-E Implementation Audit）修订落地
 
 裁决：**REVISE**（`P2_E_V1_OPTION_A = NOT_YET_CLOSED`；`FINAL2_REQUIRED = YES`），范围两项：

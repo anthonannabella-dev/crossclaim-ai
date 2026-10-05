@@ -45,7 +45,6 @@ import {
 import {
   buildRecoveryPersistUnits,
   buildRecoverySiPackageLineageAuditLog,
-  createPrismaRecoveryPersistPort,
   persistRecoverySiPackageWithinTransaction,
   readRecoveryPackageLineage,
   readRecoveryPackagePlanDigestFromAudit,
@@ -441,12 +440,10 @@ describe('Recovery SI P2-E DB · 单一事务写入 / 原子性 / 幂等（必�
   it('P2E-DB5 真实 gate=ALLOW → 六单元在同一事务落库（JSON+PDF），且零外部业务事实写入', async () => {
     const gate = await allowGateFor(orgA);
     const payload = payloads(orgA, gate);
-    const port = createPrismaRecoveryPersistPort(prisma);
 
     const result = await persistBound({
       gate,
       units: buildRecoveryPersistUnits(payload),
-      port,
     });
 
     expect(result.persisted).toBe(true);
@@ -494,13 +491,11 @@ describe('Recovery SI P2-E DB · 单一事务写入 / 原子性 / 幂等（必�
   it('P2E-DB6 任一单元失败 → 整笔回滚（无孤儿 package / fileAsset / artifact / audit）', async () => {
     const gate = await allowGateFor(orgA);
     const failing = payloads(orgA, gate, { auditActorUserId: randomUUID() });
-    const port = createPrismaRecoveryPersistPort(prisma);
 
     await expect(
       persistBound({
         gate,
         units: buildRecoveryPersistUnits(failing),
-        port,
       }),
     ).rejects.toBeTruthy();
 
@@ -521,17 +516,14 @@ describe('Recovery SI P2-E DB · 单一事务写入 / 原子性 / 幂等（必�
       artifactId: randomUUID(),
       pdfArtifactId: randomUUID(),
     });
-    const port = createPrismaRecoveryPersistPort(prisma);
 
     const r1 = await persistBound({
       gate,
       units: buildRecoveryPersistUnits(first),
-      port,
     });
     const r2 = await persistBound({
       gate,
       units: buildRecoveryPersistUnits(second),
-      port,
     });
 
     expect(r1.persisted).toBe(true);
@@ -547,13 +539,11 @@ describe('Recovery SI P2-E DB · 单一事务写入 / 原子性 / 幂等（必�
   it('P2E-DB8 并发同键 → 唯一赢家（单包 + 无孤儿单元）', async () => {
     const gate = await allowGateFor(orgA);
     const marker = sha256Hex('p2e-db-concurrent');
-    const port = createPrismaRecoveryPersistPort(prisma);
 
     const attempt = async () =>
       persistBound({
         gate,
         units: buildRecoveryPersistUnits(payloads(orgA, gate, { marker })),
-        port,
       });
 
     const settled = await Promise.allSettled([attempt(), attempt()]);
@@ -569,19 +559,15 @@ describe('Recovery SI P2-E DB · 单一事务写入 / 原子性 / 幂等（必�
 
   it('P2E-DB9 gate 非 ALLOW → 端口零调用、DB 零写入', async () => {
     const gate = await gateFor(orgA, { globalDisabled: true });
+    const unitsForDeniedAttempt = buildRecoveryPersistUnits(payloads(orgA, await allowGateFor(orgA)));
     let called = 0;
-    const port = {
-      async runInTransaction(_units: readonly RecoveryPersistUnitWrite[]) {
-        called += 1;
-      },
-    };
     // 生产入口在任何 DB 写入前先要求「trusted + ALLOW + persistedBasis」→ 非 ALLOW 直接 fail-closed
     // （软返回 `P2E_GATE_NOT_ALLOWED` 的低层路径由 unit 套件 P2E-G9 覆盖）
     await expect(
       persistBound({
         gate,
-        units: buildRecoveryPersistUnits(payloads(orgA, await allowGateFor(orgA))),
-        port,
+        units: unitsForDeniedAttempt,
+        port: { async runInTransaction() { called += 1; } },
       }),
     ).rejects.toThrow(/P2E_LINEAGE_REQUIRES_TRUSTED_ALLOW_GATE/);
     expect(called).toBe(0);
@@ -591,7 +577,6 @@ describe('Recovery SI P2-E DB · 单一事务写入 / 原子性 / 幂等（必�
 
 describe('Recovery SI P2-E DB · 租户隔离（必修 2/3）', () => {
   it('P2E-DB10 跨租户混批 fail-closed（应用层）+ DB 层跨租户引用被租户触发器拒绝', async () => {
-    const port = createPrismaRecoveryPersistPort(prisma);
     const gateA = await allowGateFor(orgA);
     const gateB = await allowGateFor(orgB);
 
@@ -603,7 +588,7 @@ describe('Recovery SI P2-E DB · 租户隔离（必修 2/3）', () => {
           : unit,
     );
     await expect(
-      persistBound({ gate: gateA, units: mixed, port }),
+      persistBound({ gate: gateA, units: mixed }),
     ).rejects.toThrow(/P2E_PERMIT_BATCH_TENANT_MISMATCH|P2E_TENANT_MIXED_BATCH/);
     expect(await prisma.recoveryPackage.count({ where: { organizationId: orgA.organizationId } })).toBe(0);
     expect(await prisma.recoveryPackage.count({ where: { organizationId: orgB.organizationId } })).toBe(0);
@@ -618,7 +603,6 @@ describe('Recovery SI P2-E DB · 租户隔离（必修 2/3）', () => {
       persistBound({
         gate: gateB,
         units: buildRecoveryPersistUnits(crossTenantClaim),
-        port,
       }),
     ).rejects.toThrow(/P2E_PACKAGE_OPPORTUNITY_BINDING_MISMATCH|cross-tenant reference blocked/);
     expect(await prisma.recoveryPackage.count({ where: { organizationId: orgB.organizationId } })).toBe(0);
@@ -628,7 +612,6 @@ describe('Recovery SI P2-E DB · 租户隔离（必修 2/3）', () => {
     await persistBound({
       gate: gateA,
       units: buildRecoveryPersistUnits(own),
-      port,
     });
     await expect(
       prisma.recoveryPackageArtifact.create({
@@ -650,7 +633,6 @@ describe('Recovery SI P2-E DB · 租户隔离（必修 2/3）', () => {
     await persistBound({
       gate: gateA,
       units: buildRecoveryPersistUnits(own),
-      port: createPrismaRecoveryPersistPort(prisma),
     });
     expect(
       await readRecoveryPackageLineage({
@@ -676,7 +658,6 @@ describe('Recovery SI P2-E DB · lineage 落库反查（必修 3）', () => {
     await persistBound({
       gate: gateA,
       units: buildRecoveryPersistUnits(payload),
-      port: createPrismaRecoveryPersistPort(prisma),
     });
 
     // CHANGE 2（MSG-20261005-23）：lineage 反查只认独立 action，不复用 recovery.package_generated
@@ -735,7 +716,6 @@ describe('Recovery SI P2-E DB · DELETE guard 行为取证（必修 4，写入�
     await persistBound({
       gate: gateA,
       units: buildRecoveryPersistUnits(payload),
-      port: createPrismaRecoveryPersistPort(prisma),
     });
 
     // RecoveryPackage：删除由本批新增的 cc_no_delete__RecoveryPackage 拒绝
@@ -764,7 +744,6 @@ describe('Recovery SI P2-E DB · FINAL-2 修订负例（F3E-01 / 02 / 04）', ()
       persistBound({
         gate: forged,
         units: buildRecoveryPersistUnits(payload),
-        port: createPrismaRecoveryPersistPort(prisma),
       }),
     ).rejects.toThrow(/P2E_CALLER_SUPPLIED_GATE_FORBIDDEN/);
     expect(await prisma.recoveryPackage.count({ where: { organizationId: orgA.organizationId } })).toBe(0);
@@ -804,7 +783,6 @@ describe('Recovery SI P2-E DB · FINAL-2 修订负例（F3E-01 / 02 / 04）', ()
       persistBound({
         gate: gateA,
         units,
-        port: createPrismaRecoveryPersistPort(prisma),
       }),
     ).rejects.toBeTruthy();
     expect(await prisma.recoveryPackage.count({ where: { organizationId: orgA.organizationId } })).toBe(0);

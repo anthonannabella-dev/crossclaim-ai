@@ -24,7 +24,6 @@ import {
   assertRecoveryPersistBatchMatchesPermit,
   assertRecoverySiPackageLineageChanges,
   isTrustedRecoveryPersistPermit,
-  persistRecoveryPackageWithinTransaction,
   buildRecoveryPackageLineageProjection,
   type RecoveryLineageProjection,
   type RecoveryPersistGateOutcome,
@@ -253,7 +252,7 @@ const artifactData = (artifact: RecoveryPackageArtifactWritePayload) => ({
  * 单一事务端口：把六个批准单元收进同一个 prisma.$transaction（MSG-20261005-24 CHANGE E3）。
  * 写入顺序 = RecoveryPackage → JSON FileAsset → PDF FileAsset → JSON_MANIFEST artifact → PDF artifact → lineage AuditLog。
  */
-export function createPrismaRecoveryPersistPort(prisma: PrismaClient): RecoveryPersistTransactionPort {
+function createPersistPort(prisma: PrismaClient): RecoveryPersistTransactionPort {
   return {
     async runInTransaction(units: readonly RecoveryPersistUnitWrite[]): Promise<void> {
       assertRecoveryPersistTenantCoherence(units);
@@ -330,12 +329,22 @@ export function createPrismaRecoveryPersistPort(prisma: PrismaClient): RecoveryP
 
 const UNIQUE_VIOLATION = 'P2002';
 
-/** 唯一约束命中（同 (organizationId, claimItemId, packageVersion, packageDigest) 第二次写入）。 */
-export function isRecoveryPackageUniqueViolation(error: unknown): boolean {
+/**
+ * 唯一约束命中且**确实是 package 身份键**（organizationId+claimItemId+packageVersion+packageDigest）。
+ * artifact 唯一键（organizationId+packageId+artifactKind+sha256）命中不得被当作收敛，必须回滚上抛。
+ */
+function isPackageUniqueViolation(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;
   const code = (error as { code?: unknown }).code;
-  if (code === UNIQUE_VIOLATION) return true;
-  return String((error as { message?: unknown }).message ?? '').includes('Unique constraint');
+  if (code !== UNIQUE_VIOLATION) {
+    return String((error as { message?: unknown }).message ?? '').includes('claimItemId_packageVersion_packageDigest');
+  }
+  const target = (error as { meta?: { target?: unknown } }).meta?.target;
+  if (Array.isArray(target)) {
+    const columns = target.map((entry) => String(entry));
+    return columns.includes('claimItemId') && columns.includes('packageDigest');
+  }
+  return String((error as { message?: unknown }).message ?? '').includes('claimItemId');
 }
 
 export interface RecoveryPersistConvergenceResult extends RecoveryPersistResult {
@@ -347,16 +356,28 @@ export interface RecoveryPersistConvergenceResult extends RecoveryPersistResult 
  * 幂等重放入口：第一次 P2E_PERSISTED；同键第二次 -> P2E_PACKAGE_ALREADY_EXISTS（converged）。
  * 说明：唯一性由 DB 唯一约束承担（RecoveryPackage @@unique），失败方整笔事务回滚。
  */
-export async function persistRecoveryPackageWithReplayConvergence(input: {
+/**
+ * 模块私有：permit/批次绑定 → 单一事务；唯一键命中（package 身份键）→ 收敛。
+ * CHANGE E5：不再 export（生产模块不得暴露可绕过安全链的 write capability）。
+ */
+async function persistWithReplayConvergence(input: {
   gate: RecoveryPersistGateOutcome;
   units: readonly RecoveryPersistUnitWrite[];
   port: RecoveryPersistTransactionPort;
 }): Promise<RecoveryPersistConvergenceResult> {
   try {
-    const result = await persistRecoveryPackageWithinTransaction(input);
-    return { ...result, converged: false };
+    assertRecoveryPersistBatchMatchesPermit(input.gate, input.units);
+    await input.port.runInTransaction(input.units);
+    return {
+      persisted: true,
+      code: 'P2E_PERSISTED',
+      unitsWritten: input.units.length,
+      traceBasis: 'planDigest',
+      businessIdentity: 'packageDigest',
+      converged: false,
+    };
   } catch (error) {
-    if (isRecoveryPackageUniqueViolation(error)) {
+    if (isPackageUniqueViolation(error)) {
       return {
         persisted: false,
         code: 'P2E_PACKAGE_ALREADY_EXISTS',
@@ -402,6 +423,9 @@ export async function assertPackageClaimItemOpportunityBinding(input: {
  * 生产推荐入口（CHANGE E4 收口）：
  *   trusted permit → 批次↔permit 绑定校验 → claimItem↔opportunity 绑定校验（只读） → 单一事务落库。
  * 任一校验失败都在任何 DB 写入之前 fail-closed。
+ *
+ * CHANGE E5（MSG-20261005-26）：这是生产模块**唯一**公开的 write-capable 入口
+ * （`PUBLIC_WRITE_ENTRY_COUNT = 1`）；raw transaction port 与低层 gate-only 写入函数均为 module-private。
  */
 export async function persistRecoverySiPackageWithinTransaction(input: {
   prisma: PrismaClient;
@@ -418,10 +442,10 @@ export async function persistRecoverySiPackageWithinTransaction(input: {
     claimItemId: packageUnit.claimItemId,
     opportunityRef: packageUnit.opportunityRef,
   });
-  return persistRecoveryPackageWithReplayConvergence({
+  return persistWithReplayConvergence({
     gate: input.gate,
     units: input.units,
-    port: createPrismaRecoveryPersistPort(input.prisma),
+    port: createPersistPort(input.prisma),
   });
 }
 

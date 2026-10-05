@@ -634,36 +634,17 @@ export function assertRecoveryPersistBatchMatchesPermit(
  * P2-E2 编排：门禁 ALLOW 才允许进入持久化，且必须整批交给单一事务端口。
  * 本函数不读库、不建事务本身；它只强制「先门禁、后单事务、整批或全无」。
  */
-export async function persistRecoveryPackageWithinTransaction(input: {
-  gate: RecoveryPersistGateOutcome;
-  units: readonly RecoveryPersistUnitWrite[];
-  port: RecoveryPersistTransactionPort;
-}): Promise<RecoveryPersistResult> {
-  if (!isTrustedRecoveryPersistPermit(input.gate)) {
-    throw new Error(
-      'P2E_CALLER_SUPPLIED_GATE_FORBIDDEN: gate must be produced by evaluateRecoveryPersistGate (trusted gate→write binding)',
-    );
-  }
-  if (input.gate.decision !== 'ALLOW' || input.gate.guardEvaluated !== true) {
-    return {
-      persisted: false,
-      code: 'P2E_GATE_NOT_ALLOWED',
-      unitsWritten: 0,
-      traceBasis: 'planDigest',
-      businessIdentity: 'packageDigest',
-    };
-  }
-  // CHANGE E4：permit ↔ 批次不可变绑定（在任何 DB 写入之前；含 12 项 lineage 硬校验与批内 identity）
-  assertRecoveryPersistBatchMatchesPermit(input.gate, input.units);
-  await input.port.runInTransaction(input.units);
-  return {
-    persisted: true,
-    code: 'P2E_PERSISTED',
-    unitsWritten: input.units.length,
-    traceBasis: 'planDigest',
-    businessIdentity: 'packageDigest',
-  };
-}
+/**
+ * CHANGE E5（MSG-20261005-26 裁决）：本模块不再导出任何 write-capable 入口。
+ * 唯一生产写入口是 `persistRecoverySiPackageWithinTransaction()`（recovery-persist-prisma-port.ts），
+ * 它必须先通过 `assertRecoveryPersistBatchMatchesPermit()` 与 ClaimItem↔opportunity DB 绑定校验。
+ */
+export const P2_E_PUBLIC_WRITE_SURFACE = {
+  publicWriteEntryCount: 1,
+  publicWriteEntry: 'persistRecoverySiPackageWithinTransaction',
+  rawTransactionPortPublic: 'FORBIDDEN',
+  lowLevelGateOnlyWritePublic: 'FORBIDDEN',
+} as const;
 
 
 /* ------------------------------------------------------------------ *
