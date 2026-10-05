@@ -1,6 +1,6 @@
 {
-  "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。 MAPPING UPDATE（2026-10-05）：seo-4 / seo-5 已按 MSG-20261005-03 完成；seo-2 / seo-3 仍 IN_PROGRESS（等 PUBLIC API SECURITY AUDIT，公开 HTTP = HOLD）。 MAPPING UPDATE（2026-10-05，第二轮）：seo-6 / seo-7 依代码与测试证据标记 COMPLETED；seo-8 保持 IN_PROGRESS（公开 HTTP 合同受 SEO-3 审计门禁）。 MAPPING UPDATE（2026-10-05，第三轮）：seo-8 公开面合同测试定稿（含真实 HTTP 集成验收）；seo-2 / seo-3 仍 IN_PROGRESS（等 PUBLIC API SECURITY AUDIT 最终裁决）。",
-  "updatedAt": "2026-10-05T08:05:00.000Z",
+  "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。 MAPPING UPDATE（2026-10-05）：seo-4 / seo-5 已按 MSG-20261005-03 完成；seo-2 / seo-3 仍 IN_PROGRESS（等 PUBLIC API SECURITY AUDIT，公开 HTTP = HOLD）。 MAPPING UPDATE（2026-10-05，第二轮）：seo-6 / seo-7 依代码与测试证据标记 COMPLETED；seo-8 保持 IN_PROGRESS（公开 HTTP 合同受 SEO-3 审计门禁）。 MAPPING UPDATE（2026-10-05，第三轮）：seo-8 公开面合同测试定稿（含真实 HTTP 集成验收）；seo-2 / seo-3 仍 IN_PROGRESS（等 PUBLIC API SECURITY AUDIT 最终裁决）。 MAPPING UPDATE（2026-10-05，第四轮）：RSI-RT-06（migration SQL PASS + restart reconcile 落地）与 RSI-COST-02/03/05（Provider Adapter contract v2 + 本地仿真 adapter + 台账 + 成本 E2E A–F）标记 COMPLETED；RSI-P1-03（signal → incident/task 自动生成）标记 IMPLEMENTED_PENDING_CI（等 hosted CI）。真实 Provider 网络与付费调用仍 HOLD。",
+  "updatedAt": "2026-10-05T01:02:37.187Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -1327,7 +1327,7 @@
       "title": "RSI Phase-1：signal → incident → task 自动生成 + 同 signal 去重",
       "scope": "RSI Phase-1（离线/沙箱）：只读观察 + 自动建任务 + 受控 patch + 确定性验证 + 独立 Judge；无外部写",
       "acceptance_criteria": "对应纯函数/编排落地并有命名用例；api tsc 0；不新增 schema/migration（如需另送 Schema Delta 审计）",
-      "status": "READY"
+      "status": "IMPLEMENTED_PENDING_CI"
     },
     {
       "id": "RSI-P1-04-builder-judge-separation",
@@ -1433,7 +1433,7 @@
       "title": "RSI 状态持久化与 reboot reconcile（不重复 incident/candidate/promotion）",
       "scope": "需要 Postgres 表 + lease；新增表属 Schema Delta，须先送审再落 migration",
       "acceptance_criteria": "Test C/F 在真实 PG 上通过；同一任务 reboot 后不重复创建",
-      "status": "BLOCKED_ON_SCHEMA_DELTA_AUDIT"
+      "status": "COMPLETED"
     },
     {
       "id": "RSI-COST-01-policy-core",
@@ -1456,7 +1456,7 @@
       "title": "Model Router 适配（DeepSeek/Qwen 低成本→强模型升级；凭据只在 Router 侧）",
       "scope": "RSI 长期运行但不得持续消耗 token：确定性优先、分级、预算与熔断",
       "acceptance_criteria": "对应实现/用例落地；api tsc 0；不新增 schema（如需另送 Schema Delta）",
-      "status": "IMPLEMENTED_PENDING_CI",
+      "status": "COMPLETED",
       "implementation_head": "(this commit)",
       "artifacts": [
         "apps/api/src/services/autonomy/rsi-model-router.ts",
@@ -1472,7 +1472,7 @@
       "title": "AI 调用记录台账（incident/task/provider/model/tokens/cost/latency/result/retry；禁 secret）",
       "scope": "RSI 长期运行但不得持续消耗 token：确定性优先、分级、预算与熔断",
       "acceptance_criteria": "对应实现/用例落地；api tsc 0；不新增 schema（如需另送 Schema Delta）",
-      "status": "IMPLEMENTED_PENDING_CI",
+      "status": "COMPLETED",
       "implementation_head": "(this commit)",
       "artifacts": [
         "apps/api/src/services/autonomy/rsi-cost-ledger.ts",
@@ -1504,7 +1504,7 @@
       "title": "成本 E2E Test A–E（规则零 LLM / low-cost / 升级 strong / 预算熔断 / 熔断不递归）",
       "scope": "RSI 长期运行但不得持续消耗 token：确定性优先、分级、预算与熔断",
       "acceptance_criteria": "对应实现/用例落地；api tsc 0；不新增 schema（如需另送 Schema Delta）",
-      "status": "IMPLEMENTED_PENDING_CI",
+      "status": "COMPLETED",
       "implementation_head": "(this commit)",
       "artifacts": [
         "apps/api/src/__tests__/rsi-cost-e2e.test.ts"

@@ -194,4 +194,40 @@ describe('RSI 运行组装入口', () => {
     runtime.start();
     runtime.stop();
   });
+
+  it('RSI_RUN_SIGNAL_DRIVEN_TASKS：signals artifact → 自动生成任务并入队，重复信号不重复生成', async () => {
+    const signals = JSON.stringify([
+      { kind: 'CI_FAIL', dedupeKey: 'CI_FAIL:head-x:run-7', summary: 'CI failed on head-x (run 7)', refs: ['run:7'], riskClass: 'MEDIUM' },
+      { kind: 'CI_FAIL', dedupeKey: 'CI_FAIL:head-y:run-8', summary: 'hot path broke', refs: ['run:8'], riskClass: 'HIGH' },
+    ]);
+    const runtime = await composeRsiRuntime({
+      readFile: files({ '/signals.json': signals }),
+      signalsPath: '/signals.json',
+      intervalMs: 60_000,
+    });
+    const generation = runtime.taskGeneration();
+    expect(generation).not.toBeNull();
+    expect(generation!.tasks).toHaveLength(1);
+    expect(generation!.ownerGatedTasks).toHaveLength(1); // HIGH 风险只登记，不入自动队列
+    expect(runtime.controller.state().queueLength).toBe(1);
+
+    // 同一信号第二次启动：队列里已有同 dedupeKey → 只记 duplicate，不重复入队
+    const tasksArtifact = JSON.stringify([
+      { id: generation!.tasks[0]!.id, priority: generation!.tasks[0]!.priority, dedupeKey: generation!.tasks[0]!.dedupeKey },
+    ]);
+    const again = await composeRsiRuntime({
+      readFile: files({ '/signals.json': signals, '/tasks.json': tasksArtifact }),
+      tasksPath: '/tasks.json',
+      signalsPath: '/signals.json',
+      intervalMs: 60_000,
+    });
+    expect(again.taskGeneration()!.tasks).toHaveLength(0);
+    expect(again.taskGeneration()!.duplicates).toEqual(['CI_FAIL:head-x:run-7']);
+    expect(again.controller.state().queueLength).toBe(1);
+
+    const bare = await composeRsiRuntime({ readFile: files({}), intervalMs: 60_000 });
+    expect(bare.taskGeneration()).toBeNull();
+    runtime.start();
+    runtime.stop();
+  });
 });

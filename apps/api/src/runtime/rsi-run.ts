@@ -36,6 +36,11 @@ import {
   type RsiReconcileStore,
   type RsiReconcileTrigger,
 } from './rsi-restart-reconcile';
+import {
+  generateRsiWork,
+  parseRsiSignals,
+  type RsiGenerationResult,
+} from '../services/autonomy/rsi-task-generator';
 
 export function parseTaskQueue(raw: string): readonly RsiSafeTask[] {
   try {
@@ -106,6 +111,8 @@ export interface RsiRuntimeComposition {
   verdictWatcher: RsiVerdictWatcher | null;
   /** 启动时运行一次重启/接管 reconcile；没有配置 store 时返回 null（NOT_CONFIGURED），不做任何事。 */
   reconcileNow(): Promise<RsiReconcilePlan | null>;
+  /** RSI-P1-03：本次从信号 artifact 自动生成的任务（未配置或解析失败时为 null）。 */
+  taskGeneration(): RsiGenerationResult | null;
   start(): void;
   stop(): void;
 }
@@ -131,6 +138,11 @@ export async function composeRsiRuntime(input: {
   /** 配置后：仅当运行时等待裁决时，短轮询 verdict artifact 并驱动续跑。 */
   verdictWatch?: { intervalMs?: number };
   /**
+   * 可选：信号 artifact（RSI-P1-03 signal → incident/task）。缺失或畸形时**不生成任何任务**，
+   * 绝不为了“有产出”而编造任务；OWNER 级（riskClass=HIGH）信号只登记，不进自动队列。
+   */
+  signalsPath?: string;
+  /**
    * 可选：进程启动时先做一次 restart/接管 reconcile（lease 恢复 + 去重 + exactly-once）。
    * 没有 store 时不启用（默认 NOT_CONFIGURED），不会凭空写任何状态。
    */
@@ -146,6 +158,24 @@ export async function composeRsiRuntime(input: {
       tasks = parseTaskQueue(await input.readFile(input.tasksPath));
     } catch {
       tasks = []; // 缺失即空队列（静默）
+    }
+  }
+
+  // RSI-P1-03：信号 artifact → 自动生成 incident/task（同因只建一次；OWNER 级只登记不自动执行）
+  let generation: RsiGenerationResult | null = null;
+  if (input.signalsPath !== undefined) {
+    try {
+      const signals = parseRsiSignals(await input.readFile(input.signalsPath));
+      const known = tasks.flatMap((task) => [task.dedupeKey, `incident:${task.dedupeKey.replace(/^task:/, '')}`]);
+      generation = generateRsiWork({ signals, knownDedupeKeys: known });
+      const merged = [...tasks];
+      for (const task of generation.tasks) {
+        if (merged.some((existing) => existing.dedupeKey === task.dedupeKey)) continue;
+        merged.push({ id: task.id, priority: task.priority, dedupeKey: task.dedupeKey });
+      }
+      tasks = merged;
+    } catch {
+      generation = null; // artifact 缺失/畸形 → fail-closed，不编造任务
     }
   }
 
@@ -206,6 +236,7 @@ export async function composeRsiRuntime(input: {
     controller,
     publisher,
     verdictWatcher,
+    taskGeneration: () => generation,
     async reconcileNow(): Promise<RsiReconcilePlan | null> {
       if (reconcileSpec === undefined) return null;
       return runRsiRestartReconcile({
@@ -237,6 +268,8 @@ export const RSI_RUNTIME_COMPOSITION_BOUNDARY = {
   parkForJudgeDefault: false,
   verdictValueFromArtifact: true,
   restartReconcileSupported: true,
+  signalDrivenTaskGeneration: true,
+  ownerGatedTasksAutoExecuted: false,
   restartReconcileDefault: 'NOT_CONFIGURED',
   readsCredentials: false,
   writesDatabase: false,
@@ -250,6 +283,7 @@ if (isDirectRun) {
     const composition = await composeRsiRuntime({
       readFile: async (path) => fsPromises.readFile(path, 'utf8'),
       tasksPath: process.env.RSI_TASKS_PATH,
+      signalsPath: process.env.RSI_SIGNALS_PATH,
       ciResultsPath: process.env.RSI_CI_RESULTS_PATH,
       verdictPath: process.env.RSI_VERDICT_PATH,
       testResultsPath: process.env.RSI_TEST_RESULTS_PATH,
@@ -265,6 +299,16 @@ if (isDirectRun) {
             ' recoveredTasks=' + reconcile.recoveredTaskIds.length +
             ' heldActiveLeases=' + reconcile.heldActiveLeaseIds.length +
             ' idempotentNoop=' + reconcile.idempotentNoop),
+    );
+    const generated = composition.taskGeneration();
+    console.log(
+      'RSI_TASK_GENERATION=' +
+        (generated === null
+          ? 'NOT_CONFIGURED'
+          : 'tasks=' + generated.tasks.length +
+            ' ownerGated=' + generated.ownerGatedTasks.length +
+            ' duplicates=' + generated.duplicates.length +
+            ' truncated=' + generated.truncated),
     );
     composition.start();
     console.log(
