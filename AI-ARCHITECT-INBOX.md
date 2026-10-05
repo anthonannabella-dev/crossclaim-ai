@@ -140201,3 +140201,258 @@ SCHEMA_DELTA_REQUIRED = NO
 
 结论：只修 C1（可信 PREPARE registry）、C2（fact→opportunity/money identity binding）、C3（完整 output + string-value 敏感扫描），补上面 4 个负例，再送 P2-C FINAL-2。
 ```
+
+### [MSG-20261005-18] ARCHITECT VERDICT — Recovery SI P2-C（Option A）FINAL-2 = **PASS / CLOSED**（`REVIEWED_HEAD = 180ccb67`，未使用上一轮缓存）。① **C1 / C2 / C3 全部 PASS**：`CHANGE_C1_TRUSTED_PREPARE_REGISTRY = PASS`（调用边界从泛型 `RecoveryToolRegistry` 收窄为专用 `RecoveryPrepareRegistry`；入口先查模块内 `WeakSet` 品牌，伪造同名同结构 registry 在任何 invoke 之前即返回 `UNTRUSTED_PREPARE_REGISTRY`，关闭「同名 PREPARE tool 偷做 DB/network side effect」缺口）、`CHANGE_C2_FACT_IDENTITY_AND_MONEY_BINDING = PASS`（fact source 返回 `{ opportunityRef, fact }`，生成 manifest 前依次绑定 `requested opportunityRef = loaded opportunityRef`、`requested organizationId = fact.organizationId`、`verified recoverable.currency = fact.currency`、`verified recoverable.amount = fact.recoverableAmount`，错误分别 fail-closed 到 `FACT_IDENTITY_MISMATCH` / `TENANT_MISMATCH:FACTS` / `FACT_PLAN_MISMATCH`，形成 `verified opportunity → bound persisted facts → deterministic package preview` 而不是两套脱节的 money truth）、`CHANGE_C3_SHARED_PREVIEW_VALIDATOR = PASS`（统一 `validatePreparedRecoveryPackagePreview()` 同时用于工厂工具出口与 `prepareRecoveryPackages()` 最终出口，检查 `kind / opportunityRef / persisted=false / submitted=false / executionAuthorized=false / executorInvoked=false / packageVersion / digestVersion / packageDigest 格式与 manifest 重算 / canonicalJson == canonical(manifest) / pdfDigest 格式 / pdfBytes > 0 / 敏感内容`；敏感扫描由只看 key 升级为 **key + string value**，覆盖 Bearer、signed URL 参数、token、API key、JWT-like、IBAN-like、卡号样式）。② **证据充分**：`F2C-01..04` 正好覆盖上轮三个 blocker（伪造带副作用 registry → 零调用；`opp-A` 请求/`opp-B` facts → reject；300 USD verified / 900 EUR facts → reject；合法字段塞 signed URL / Bearer → reject），`P2C_01..09` 全部翻为 **PASS**；`RECOVERY_SI_P2_C_OPTION_A = PASS / CLOSED`、`FINAL3_REQUIRED = NO`（10/10 + 回归 50/50 = 60/60 与 tsc 0 属本地归档证据，exact `180ccb67` hosted status 仍为空）。③ **持久化边界继续冻结**：生产模块仍未触达 `generateRecoveryPackage() / persistPackageArtifacts() / transitionRecoveryPackage() / @prisma/client / prisma.* / claim.prepare DB mutation`，继续 `P2_C_PERSISTENCE / P2_C_EXTERNAL_WRITE = FORBIDDEN`、`databasePersistence / recoveryPackageDbCreate / fileAssetCreate / claimDraftDbMutation / auditLogWrite = false`；P2-C 的准确能力是 `verified facts → canonical manifest → packageDigest → in-memory PDF derivation → validated preview`，**不是落库材料包，更不是可提交材料包**。④ **后续边界**：`P2_D_ACTION_GUARD_HANDOFF = NOT_AUTHORIZED`（`P2-C CLOSED ≠ P2-D AUTHORIZED`；preview 返回后仍必须保持 `executionAuthorized / executorInvoked / submitted / persisted = false`，不得自动进入 Action Guard）、`P2_E_PERSISTENCE = HOLD_SCHEMA_DELTA`、`P2_F_MODEL_ASSISTANCE = HOLD`、`P2_G_REAL_EXECUTION = HOLD`；`P2_C_OPTION_B = NOT_AUTHORIZED`，未来落库必须并入 **P2-E Schema/Persistence Audit** 一起审（RecoveryPackage / RecoveryPackageArtifact / FileAsset / AuditLog / package uniqueness·idempotency / CAS lifecycle / SUPERSEDED·WITHDRAWN / RecoveryPlan·DecisionEvidence lineage），不能复用本轮 Option A 授权。⑤ 最终冻结：`PURE_DETERMINISTIC_PREPARE / TRUSTED_PREPARE_REGISTRY / FACT_OPPORTUNITY_BINDING / FACT_MONEY_BINDING / SHARED_OUTPUT_VALIDATION / SENSITIVE_VALUE_SCAN = PASS`；`RUNTIME_WIRING = NONE`、`SCHEMA_DELTA_REQUIRED = NO`、`RSI_OUTCOME_SINK_RUNTIME_WIRING = NOT_AUTHORIZED`、`EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / REAL_CLAIM_SUBMIT / CUSTOMS_FILING / RSI_MODEL_NETWORK / RSI_PAID_MODEL_CALLS = HOLD`、`SECOND_RUNTIME / L5_RELAXATION = FORBIDDEN`、`FINAL_ACCEPTANCE_HEAD = 0f7f7ac`。结论：P2-C Option A 正式 CLOSED，不需要 FINAL-3；下一步如要继续，应单独送 **P2-D Action Guard dry-run 设计/实施边界**，不能自动开始。
+
+```text
+ARCHITECT VERDICT：PASS / CLOSED
+
+我按 REVIEWED_HEAD = 180ccb67a16bad3a719b49cf48df06378a656488 重新复核了 FINAL-2，没有使用上一轮缓存。
+
+① C1 / C2 / C3：全部 PASS
+纯文本
+CHANGE_C1_TRUSTED_PREPARE_REGISTRY = PASS
+CHANGE_C2_FACT_IDENTITY_AND_MONEY_BINDING = PASS
+CHANGE_C3_SHARED_PREVIEW_VALIDATOR = PASS
+
+P2C_05 = PASS
+P2C_06 = PASS
+P2C_07 = PASS
+
+C1 已真正把调用边界从泛型 RecoveryToolRegistry 收窄成专用 RecoveryPrepareRegistry。执行入口首先检查模块内 WeakSet 品牌，伪造一个名字、结构、工具都完全一样的 registry 仍会在任何 invoke 之前返回：
+
+纯文本
+UNTRUSTED_PREPARE_REGISTRY
+
+因此之前“同名 PREPARE tool 偷做 DB/network side effect”的缺口已经关闭。
+
+C2 也符合上一轮要求。现在 fact source 明确返回：
+
+纯文本
+{
+  opportunityRef,
+  fact
+}
+
+并在生成 manifest 之前依次绑定：
+
+纯文本
+requested opportunityRef
+= loaded opportunityRef
+
+requested organizationId
+= fact.organizationId
+
+verified recoverable.currency
+= fact.currency
+
+verified recoverable.amount
+= fact.recoverableAmount
+
+错误分别 fail-closed 到：
+
+纯文本
+FACT_IDENTITY_MISMATCH
+TENANT_MISMATCH:FACTS
+FACT_PLAN_MISMATCH
+
+所以当前已经形成：
+
+纯文本
+verified opportunity
+→ bound persisted facts
+→ deterministic package preview
+
+而不是两套脱节的 money truth。
+
+C3 也已经真正落在两个出口：
+
+纯文本
+factory tool output
+→ validatePreparedRecoveryPackagePreview()
+
+prepareRecoveryPackages() final output
+→ validatePreparedRecoveryPackagePreview()
+
+统一 validator 实际检查：
+
+纯文本
+kind
+opportunityRef
+persisted=false
+submitted=false
+executionAuthorized=false
+executorInvoked=false
+packageVersion
+digestVersion
+packageDigest format + manifest recomputation
+canonicalJson == canonical(manifest)
+pdfDigest format
+pdfBytes > 0
+sensitive content
+
+而敏感扫描也已经从只看 key 升级为 key + string value，覆盖 Bearer、signed URL 参数、token、API key、JWT-like、IBAN-like、卡号样式。
+
+② F2C-01..04 足够，P2C-01..09 可以整体 PASS
+
+新增 4 条正好覆盖上轮三个 blocker：
+
+纯文本
+F2C-01 forged side-effect registry → zero invocation
+F2C-02 opp-A request / opp-B facts → reject
+F2C-03 300 USD verified / 900 EUR facts → reject
+F2C-04 signed URL / Bearer in legal fields → reject
+
+所以：
+
+纯文本
+P2C_01 = PASS
+P2C_02 = PASS
+P2C_03 = PASS
+P2C_04 = PASS
+P2C_05 = PASS
+P2C_06 = PASS
+P2C_07 = PASS
+P2C_08 = PASS
+P2C_09 = PASS
+
+最终：
+
+纯文本
+RECOVERY_SI_P2_C_OPTION_A = PASS
+RECOVERY_SI_P2_C_OPTION_A = CLOSED
+FINAL3_REQUIRED = NO
+
+你报告的：
+
+纯文本
+recovery-si-phase2-c 10/10
+regression 50/50
+total 60/60
+tsc exit 0
+
+属于本地执行证据；exact 180ccb67 的 hosted GitHub status/workflow 仍为空。我独立确认的是 exact HEAD 上的代码与测试实现。
+
+③ 持久化边界继续冻结
+
+我确认当前 P2-C 生产模块仍没有触达：
+
+纯文本
+generateRecoveryPackage()
+persistPackageArtifacts()
+transitionRecoveryPackage()
+@prisma/client
+prisma.*
+claim.prepare DB mutation
+
+因此继续：
+
+纯文本
+P2_C_PERSISTENCE = FORBIDDEN
+P2_C_EXTERNAL_WRITE = FORBIDDEN
+
+databasePersistence = false
+recoveryPackageDbCreate = false
+fileAssetCreate = false
+claimDraftDbMutation = false
+auditLogWrite = false
+
+当前 P2-C 的准确能力就是：
+
+纯文本
+verified facts
+→ canonical manifest
+→ packageDigest
+→ in-memory PDF derivation
+→ validated preview
+
+不是落库材料包，更不是可提交材料包。
+
+④ P2-D / P2-E / P2-F / P2-G 继续全部独立审批
+
+确认：
+
+纯文本
+P2_D_ACTION_GUARD_HANDOFF = NOT_AUTHORIZED
+P2_E_PERSISTENCE = HOLD_SCHEMA_DELTA
+P2_F_MODEL_ASSISTANCE = HOLD
+P2_G_REAL_EXECUTION = HOLD
+
+尤其：
+
+纯文本
+P2-C CLOSED
+≠ P2-D AUTHORIZED
+
+P2-C 成功返回 preview 后仍然必须保持：
+
+纯文本
+executionAuthorized = false
+executorInvoked = false
+submitted = false
+persisted = false
+
+不得自动进入 Action Guard。
+
+⑤ Option B 仍然并入 P2-E
+
+继续确认：
+
+纯文本
+P2_C_OPTION_B = NOT_AUTHORIZED
+
+OPTION_B
+→ P2-E Schema/Persistence Audit
+
+因为一旦要落库，就必须一起审现有：
+
+纯文本
+RecoveryPackage
+RecoveryPackageArtifact
+FileAsset
+AuditLog
+package uniqueness/idempotency
+CAS lifecycle
+SUPERSEDED/WITHDRAWN
+RecoveryPlan / DecisionEvidence lineage
+
+不能复用本轮 Option A 的授权。
+
+最终冻结状态
+纯文本
+RECOVERY_SI_P2_C_OPTION_A = PASS / CLOSED
+
+PURE_DETERMINISTIC_PREPARE = PASS
+TRUSTED_PREPARE_REGISTRY = PASS
+FACT_OPPORTUNITY_BINDING = PASS
+FACT_MONEY_BINDING = PASS
+SHARED_OUTPUT_VALIDATION = PASS
+SENSITIVE_VALUE_SCAN = PASS
+
+P2_C_PERSISTENCE = FORBIDDEN
+P2_C_EXTERNAL_WRITE = FORBIDDEN
+
+RUNTIME_WIRING = NONE
+SCHEMA_DELTA_REQUIRED = NO
+
+P2_D = NOT_AUTHORIZED
+P2_E = HOLD_SCHEMA_DELTA
+P2_F = HOLD
+P2_G = HOLD
+
+RSI_OUTCOME_SINK_RUNTIME_WIRING = NOT_AUTHORIZED
+EXTERNAL_WRITE = HOLD
+PAYMENT = HOLD
+TRANSPORT = HOLD
+PRODUCTION_CREDENTIALS = HOLD
+REAL_CLAIM_SUBMIT = HOLD
+CUSTOMS_FILING = HOLD
+RSI_MODEL_NETWORK = HOLD
+RSI_PAID_MODEL_CALLS = HOLD
+
+SECOND_RUNTIME = FORBIDDEN
+L5_RELAXATION = FORBIDDEN
+FINAL_ACCEPTANCE_HEAD = 0f7f7ac
+
+结论：P2-C Option A 到这里正式 CLOSED，不需要 FINAL-3。下一步如果继续，应单独送 P2-D Action Guard dry-run 设计/实施边界；不能自动开始。
+```

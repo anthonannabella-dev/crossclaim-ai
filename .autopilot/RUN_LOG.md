@@ -2203,3 +2203,11 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 证据：docs/releases/RECOVERY-SI-PHASE2-C-EVIDENCE.md §8；60/60 PASS、tsc exit 0。
 - 请求裁定：C1/C2/C3 是否 PASS、P2C_05/06/07 是否翻转、P2C_01..09 是否整体 PASS、Option A 是否 CLOSED；P2-D/P2-E/P2-F/P2-G 是否继续各自单独送审。
 - 送达验证后立即读取并逐字归档裁决（FNV + FULL_COPY_OK），不等待下一次 heartbeat。
+
+## 2026-10-05T05:31:24.787Z — Recovery SI P2-C（Option A）FINAL-2 = PASS / CLOSED（MSG-20261005-18）
+- 裁决逐字归档：AI-ARCHITECT-INBOX.md 新增 [MSG-20261005-18]（FNV ecca84bf / 250 行 / FULL_COPY_OK；REVIEWED_HEAD 180ccb67）。
+- C1/C2/C3 全部 PASS，P2C_01..09 全部翻为 PASS，F2C-01..04 证据充分；RECOVERY_SI_P2_C_OPTION_A = PASS / CLOSED，FINAL3_REQUIRED = NO。
+- 持久化边界继续冻结：P2_C_PERSISTENCE / P2_C_EXTERNAL_WRITE = FORBIDDEN；模块未触达三个持久化 API、@prisma/client、claim.prepare DB mutation；当前能力止于 validated in-memory preview。
+- 后续：P2_D_ACTION_GUARD_HANDOFF = NOT_AUTHORIZED（P2-C CLOSED ≠ P2-D AUTHORIZED）；P2_E = HOLD_SCHEMA_DELTA；P2_F/P2_G = HOLD；Option B 并入 P2-E。
+- 边界：RUNTIME_WIRING = NONE；SCHEMA_DELTA_REQUIRED = NO；RSI_OUTCOME_SINK_RUNTIME_WIRING = NOT_AUTHORIZED；外部能力全 HOLD；FINAL_ACCEPTANCE_HEAD = 0f7f7ac。
+- 下一单元：P2-D Action Guard dry-run 设计/实施边界送审（零代码，单独送审，不得自动开始）。

@@ -772,3 +772,9 @@ CrossClaim AI = **跨境资金损耗 Recovery OS**（四类 Recovery：Platform 
 - P2-A（匿名聚合能力信号）+ P2-B（只读 Tool 实接）正式 CLOSED；不需要 FINAL-3。
 - 下一单元：**P2-C PREPARE Tool 设计/实施边界送审（设计先行、零代码）**；不得自动进入 P2-D。
 - 冻结：`RSI_OUTCOME_SINK_RUNTIME_WIRING = NOT_AUTHORIZED`、`RUNTIME_WIRING = NONE`、`P2-D/P2-E/P2-F/P2-G` 未授权、外部能力全 HOLD。
+
+### RECOVERY SI PHASE 2 A/B/C = PASS / CLOSED（MSG-20261005-15 / -18）
+
+- P2-A（匿名聚合能力信号）+ P2-B（只读 Tool 实接）+ P2-C Option A（确定性内存包预览）= 全部 PASS / CLOSED。
+- 下一单元：**P2-D Action Guard dry-run 设计/实施边界送审（设计先行、零代码）**；`P2-C CLOSED ≠ P2-D AUTHORIZED`，不得自动开始。
+- 冻结：`P2_C_PERSISTENCE / P2_C_EXTERNAL_WRITE / P2_C_OPTION_B = FORBIDDEN`、`RUNTIME_WIRING = NONE`、`P2-E/P2-F/P2-G` 未授权、外部能力全 HOLD。
