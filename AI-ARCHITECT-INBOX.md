@@ -149810,3 +149810,157 @@ PRODUCTION_READY = false
 现在离 Phase 4 整体封板只差这个 anti-tamper provenance 窄修。
 ```
 
+### [MSG-20261005-66] PHASE 4 U5 FINAL2 裁决 = PROVENANCE_OBJECT_INTEGRITY / ANTI_TAMPER / DEEPLY_FROZEN_PROVENANCE_OBJECTS / U3·U4 SET_IDENTITY_SEMANTICS = PASS；EVALUATION_DUPLICATE_INFLATION_GUARD = REVISE；PHASE_4_U5 = PASS / CLOSED；PHASE4_U5_FINAL3_REQUIRED = NO；PHASE_4_OUTCOME_LEARNING_PIPELINE = PASS WITH REVISE / NOT CLOSED；NEXT = PHASE 4 FINAL CLOSURE（dedupe verified outcomes before offline metrics）， reviewed ref c46f6758
+
+```text
+DECISION
+
+PROVENANCE_OBJECT_INTEGRITY = PASS
+ANTI_TAMPER = PASS
+DEEPLY_FROZEN_PROVENANCE_OBJECTS = PASS
+U3/U4_SET_IDENTITY_SEMANTICS = PASS
+EVALUATION_DUPLICATE_INFLATION_GUARD = REVISE
+PHASE_4_U5 = PASS / CLOSED
+PHASE4_U5_FINAL3_REQUIRED = NO
+PHASE_4_OUTCOME_LEARNING_PIPELINE = PASS WITH REVISE / NOT CLOSED
+Reviewed HEAD：c46f6758
+GitHub Actions：NOT_OBSERVED
+
+KEEP
+
+U3 manifest 已是 WeakMap fingerprint + deep-freeze 双保险。
+U4 evaluation 同样完成 WeakMap fingerprint + deep-freeze。
+fingerprint 覆盖了 U5 真正消费的字段。
+clone / spread / 手工重建失去 provenance。
+原对象篡改被 freeze 阻断；若异常绕过，fingerprint 仍会拒绝。
+U3/U4 的 outcome identity 都已统一成 sortedUnique。
+因此上一轮唯一的 anti-tamper 漏洞已经正式关闭。
+U5 proposal-only / no mutation / no auto-apply 已满足，U5 本身可 CLOSED。
+
+CHANGE
+
+现在只剩一个新暴露出的 Phase 4 管线级问题，位置在 U4，而不是 U5：
+
+当前 U4 的 identity 使用去重集合：
+
+纯文本
+verifiedOutcomeDigests = sortedUnique(outcomeDigests)
+
+但 metrics 仍然逐条遍历原始 records：
+
+纯文本
+for record of records
+  byOutcome[...] += 1
+
+totalRecords = records.length
+
+所以同一条 verified outcome 重复传入，可以：
+
+identity 里只出现一次；
+U3 immutable evidence 只需要一条；
+exact-set binding 仍 PASS；
+但 successRate / denominator 会被重复记录放大或压低。
+
+你们新增的 P4U5F2_6 实际已经证明了这个状态：
+
+evaluation([dup, dup, success])
+
+可以与：
+
+evidenceSet([dup, success])
+
+做 exact-match。
+
+这意味着 caller 虽然不能伪造 record，却可以通过重复提交同一个合法 verified record操纵评估指标。
+
+最小修复
+
+U4 正式 evaluation 在计算 metrics 前，必须按 OutcomeRecord.digest 去重。
+
+推荐：
+
+verified records → dedupe by digest → metrics + identity
+
+并明确：
+
+totalRecords = uniqueVerifiedRecords.length
+
+如果发现同 digest 但内容不一致，则 fail-closed，而不是任选一条。
+
+RISKS
+
+这是当前最后一个真正影响 candidate 正确性的点。
+
+例如一条 FAILURE 重复 10 次：
+
+真实证据集合仍只有一个 FAILURE evidence，但 success-rate denominator 可以被重复 FAILURE 人为拉低，从而错误触发：
+
+LOW_RESOLVED_SUCCESS_RATE → ROUTER proposal
+
+所以现在还不宜宣布整个 Phase 4 CLOSED。
+
+这是很窄的收口项，不需要重开 U1–U5 架构。
+
+TEST
+
+建议最终补 4 个测试即可：
+
+同一 digest 重复 2/10 次 → metrics 只计一次。
+totalRecords 等于 unique digest 数量。
+duplicate 输入与 dedup 输入 → evaluationDigest / metrics / candidate 完全一致。
+同 digest 但 canonical 内容不同 → fail-closed，例如 OFFLINE_EVALUATION_DUPLICATE_DIGEST_CONFLICT。
+
+原 73 个 Phase 4 tests 保持 green。
+
+NEXT
+
+只做：
+
+PHASE 4 FINAL CLOSURE — dedupe verified outcomes before offline metrics
+
+不需要 U5 FINAL3。
+
+通过后即可直接宣布：
+
+U1 = CLOSED
+U2 = CLOSED
+U3 = CLOSED
+U4 = CLOSED
+U5 = CLOSED
+PHASE_4_OUTCOME_LEARNING_PIPELINE = PASS / CLOSED
+
+然后进入 PHASE 5 — Meta Improvement，进入条件冻结为：
+
+Verified Immutable Evidence
+→ Verified Offline Evaluation
+→ PROPOSAL_ONLY Candidate
+→ External Judge / Human Approval
+→ Controlled Adoption Proposal
+
+Phase 5 初始仅允许：
+
+candidate review / approval verdict / controlled config proposal / rollback plan / canary-shadow evaluation
+
+禁止直接自动应用。
+
+PRODUCTION
+
+继续全部 HOLD：
+
+REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing
+
+继续：
+
+SECOND_* = FORBIDDEN
+L5_RELAXATION = FORBIDDEN
+
+保持：
+
+MODEL_GATEWAY_RUNTIME_WIRED = false
+ACTION_RUNTIME_PRODUCTION_ENABLED = false
+META_IMPROVEMENT_INTEGRATED = false
+PRODUCTION_READY = false
+
+现在只差 U4 metrics 去重这一处，Phase 4 就可以整体封板。
+```
+
