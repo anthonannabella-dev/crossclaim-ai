@@ -147550,3 +147550,239 @@ PRODUCTION_READY = false
 
 PHASE 2 可以正式封板。
 ```
+### [MSG-20261005-51] PHASE 3 ACTION RUNTIME U1-U6 送审裁决（PASS WITH REVISE / NOT CLOSED / PHASE3_FINAL_REQUIRED=YES）· reviewed ref add99ec3
+
+```text
+
+DECISION
+
+U1 = REVISE
+U2 = REVISE
+U3 = REVISE
+U4 = PASS（策略层）
+U5/U6 = REVISE
+EXTERNAL_WRITE_ACTIONS = GUARD_ENFORCED_ACTIONS ∪ {customs.filing}：可暂时 KEEP，但不能称严格“单一事实来源”
+PHASE_3_ACTION_RUNTIME = PASS WITH REVISE / NOT CLOSED
+PHASE3_FINAL_REQUIRED = YES
+Reviewed HEAD：add99ec3
+
+KEEP
+
+decideExternalWriteGate() 当前始终最终落到 EXTERNAL_WRITE_HOLD，真实外写没有被打开。
+normalizeProviderResult() 未知/畸形结果 → UNKNOWN，fail-closed 方向正确。
+retry/reconcile 策略本身正确：
+success → STOP
+confirmed no-side-effect failure → bounded retry
+UNKNOWN / side-effect uncertain → MANUAL_REVIEW
+sandbox mock、结构化 evidence、无原始 payload/response 的方向可以保留。
+GITHUB_CI = NOT_OBSERVED 确认无对应 Actions run。
+
+CHANGE
+
+有 4 个真正阻断 PHASE 3 CLOSED 的点。
+
+1. U1：simulated capability 仍可由 caller 自报
+
+当前 ProviderAdapter 是结构型：
+
+TypeScript
+capability: { simulated: true }
+
+任何自定义 adapter 都能这样声明，然后在 invoke() 里实际联网。
+
+而 runActionPack() 对非外写动作存在：
+
+TypeScript
+adapter.capability.simulated === true
+
+即可进入 sandbox 演练路径并最终 adapter.invoke()。
+
+所以这与 PHASE 2 曾经修掉的 capability self-authorization 是同类旁路。
+
+必须改为 trusted provenance：
+
+mock/sandbox adapter 由受信 factory / registry 创建；
+Action Runtime 只认 provenance，不认 caller 自报 simulated=true；
+非 trusted adapter 当前阶段 invoke 必须为 0。
+2. U2：credential ref 没有 tenant/provider binding 校验
+
+resolveProviderCredential() 当前检查了：
+
+ref 是否存在；
+是否看起来像 raw key。
+
+但没有验证 port 返回：
+
+TypeScript
+ref.providerName === input.providerName
+ref.organizationId === input.organizationId
+
+因此错误租户或错误 provider 的 opaque ref 仍可能被接受。
+
+最小修复：
+
+纯文本
+provider mismatch → PROVIDER_CREDENTIAL_PROVIDER_MISMATCH
+organization mismatch → PROVIDER_CREDENTIAL_TENANT_MISMATCH
+
+两者均 fail-closed。
+
+3. U3：当前还不是可关闭的 exactly-once
+
+有两个问题。
+
+A. idempotencyKey 没绑定不可变请求。
+
+现在：
+
+same key + 不同 org/action/payloadDigest
+
+也会直接变成 DUPLICATE_REPLAY。
+
+这必须改成绑定 fingerprint，至少包含：
+
+纯文本
+organizationId
+providerName
+action
+payloadRef/payloadDigest
+
+同 key + fingerprint 不同：
+
+IDEMPOTENCY_KEY_CONFLICT
+
+不得返回已有成功结果。
+
+B. ProviderIdempotencyStore 是同步接口。
+
+现在：
+
+TypeScript
+begin(): IdempotencyBegin
+complete(): ProviderExecutionRecord
+
+这无法自然落到真实 PostgreSQL/Prisma 原子实现。
+
+应改成可持久化端口，例如：
+
+纯文本
+begin(): Promise<...>
+complete(): Promise<...>
+
+并规定 begin 必须是 DB/事务级原子唯一赢家。
+
+内存版本可继续作为 sandbox 实现。
+
+4. U5：Shared Action Guard / HITL 仍未真正进入执行链
+
+这是当前最大的执行级问题。
+
+runActionPack() 直接接受 caller：
+
+TypeScript
+guardDecision: 'ALLOW'
+approvalRef: 'anything'
+
+随后只是检查字符串。
+
+所以它现在并没有执行：
+
+Shared Action Guard → server-side approval verifier → Action Pack
+
+也就是说所谓 HITL 目前只是caller-supplied result。
+
+虽然 EXTERNAL_WRITE_HOLD 目前挡住了真实外写，所以今天不会产生生产副作用，但如果以后开闸，这会直接成为授权旁路。
+
+最小修复应复用现有：
+
+createAppActionGuard / RuntimeActionGuard
+ActionGuardApprovalVerifier
+approval target/payload binding
+
+让 Action Pack 接受依赖/端口，而不是接受 guardDecision='ALLOW' 这种结果值。
+
+RISKS
+
+关于你提到的两个全量失败：
+
+action-guard-enforcement 07：要求本 PHASE 一并窄修。
+
+原因：它虽然是既有失败，但恰好属于本阶段的 Action Guard / external action coverage 范围。Phase 3 要关闭时，不应留下这类 guard enforcement offender。
+
+不一定要大改 services/intelligence/**；可以逐个确认：
+
+真旁路 → 接 Guard；
+只是枚举/映射字面量 → 加严格、显式的静态例外。
+
+但最终这条测试应恢复 green。
+
+P2E-DB5 并发 DB 隔离失败：不要求纳入 PHASE 3。
+
+它与本次 Action Runtime 架构无直接因果，且单文件 20/20 PASS。单独登记为 test-isolation debt 即可，不要因此扩大 PHASE 3。
+
+另外：
+
+GUARD_ENFORCED_ACTIONS ∪ {customs.filing} 是合理的临时保守集合，但 {customs.filing} 仍是第二个本地来源，因此不能叫严格 SSOT。后续最好把 external-write / HITL 属性提升到共享 Action Catalog，再由 Action Guard 和 Action Runtime共同派生。
+
+TEST
+
+PHASE 3 FINAL 至少新增：
+
+fake adapter 自报 simulated=true + invoke 会联网的探针 → REJECT / invoke=0。
+trusted mock factory → PASS。
+credential provider mismatch → BLOCK。
+credential organization mismatch → BLOCK。
+same idempotency key + same fingerprint → replay。
+same key + different payload/action/org/provider → IDEMPOTENCY_KEY_CONFLICT。
+两个并发 begin() → exactly one winner。
+caller 不能直接传 guardDecision=ALLOW 绕过 Shared Guard。
+fake/nonexistent approvalRef → approval verifier 拒绝、invoke=0。
+action-guard-enforcement 07 恢复 green。
+
+NEXT
+
+只做上述窄修，不要去修 P2E DB 隔离。
+
+通过后再送：
+
+PHASE_3_ACTION_RUNTIME FINAL
+
+目标裁决：
+
+纯文本
+U1 = PASS
+U2 = PASS
+U3 = PASS
+U4 = PASS
+U5/U6 = PASS
+PHASE_3_ACTION_RUNTIME = PASS / CLOSED
+PHASE3_FINAL2_REQUIRED = NO
+
+之后再进入下一阶段。
+
+PRODUCTION
+
+全部保持：
+
+REAL_MODEL_NETWORK = HOLD
+PAID_MODEL_CALLS = HOLD
+EXTERNAL_WRITE = HOLD
+PAYMENT = HOLD
+TRANSPORT = HOLD
+PRODUCTION_CREDENTIALS = HOLD
+PRODUCTION_ENABLEMENT = HOLD
+CUSTOMS real filing = HOLD
+
+以及：
+
+SECOND_* = FORBIDDEN
+L5_RELAXATION = FORBIDDEN
+
+继续：
+
+MODEL_GATEWAY_RUNTIME_WIRED = false
+ACTION_RUNTIME_PRODUCTION_ENABLED = false
+META_IMPROVEMENT_INTEGRATED = false
+PRODUCTION_READY = false
+```
+
