@@ -1,16 +1,16 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "c95346f",
+  "head": "88b8272",
   "status": "RECONCILED",
   "current_task": "RSI 生产可执行闭环（7 点收口）：RSI_RUNTIME_READY = PASS；MODEL_PROVIDER_READY = 本地仿真已接线（真实网络/付费 HOLD）；PERSISTENCE_READY = ephemeral 已验证、durable 需宿主非生产 DATABASE_URL；REBOOT_RECONCILE_READY = NOT_IMPLEMENTED（下一单元）；SYSTEMD_VALIDATED = 需宿主 Linux 实机",
-  "next_task": "RSI-P1-04 Builder/Judge 隔离编排（内部可做，无外部账号）；PERSISTENCE 与 SYSTEMD 仍为 HOST_ACTION_REQUIRED",
+  "next_task": "RSI-P1-05 不可变证据（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍为 HOST_ACTION_REQUIRED 或 HOLD",
   "send_head": "07b7009",
   "decision_head": "07b7009",
   "last_chatgpt_message": "MSG-20261004-16",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T01:14:12.526Z",
-  "previous_head": "0881855",
+  "updated_at": "2026-10-05T01:16:44.817Z",
+  "previous_head": "af799ed",
   "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "0c35106",
@@ -49,12 +49,12 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-05T01:03:08.384Z",
+  "last_tick_at": "2026-10-05T01:16:44.817Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
   "last_action": "INDEPENDENT FINAL AUDIT = PASS（MSG-20261003-147）；三元闭环成立，内部代码开发阶段正式完成",
   "last_action_at": "2026-10-03T14:17:18.723Z",
   "next_action": "内部自治开发停止；剩余为 Layer 3 外部依赖（需宿主授权）",
-  "current_head": "c95346f",
+  "current_head": "88b8272",
   "reviewed_head": "070daf1",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -5192,9 +5192,9 @@
   "awaiting_verdict": "EXACT-ORDER REPLAY 证据已送审（comment 5979262070）；shared/staging deploy 解禁待裁决",
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-05T01:16:28.364Z",
-    "head": "af799ed",
-    "acceptance_head": "af799ed",
+    "computed_at": "2026-10-05T01:16:53.918Z",
+    "head": "88b8272",
+    "acceptance_head": "88b8272",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5286,7 +5286,6 @@
       "CHECK:L1-07_api_typecheck_passed",
       "CHECK:L1-08_web_typecheck_build_passed",
       "CHECK:L1-09_no_skipped_critical_tests",
-      "CHECK:L1-10_git_working_tree_clean",
       "CHECK:L1-11_docs_state_consistent",
       "CHECK:L1-12_schema_invariants_verified",
       "CHECK:L1-13_negative_paths_covered",
@@ -5345,48 +5344,48 @@
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=af799ed ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
+        "evidence": "acceptance_head=88b8272 ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
       },
       "L1-05_pg_regression_passed": {
         "status": "UNVERIFIED",
-        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head af799ed（且中间存在非簿记变更）"
+        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head 88b8272（且中间存在非簿记变更）"
       },
       "L1-06_fresh_db_migration_passed": {
         "status": "UNVERIFIED",
-        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head af799ed（且中间存在非簿记变更）"
+        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head 88b8272（且中间存在非簿记变更）"
       },
       "L1-07_api_typecheck_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head af799ed（且中间存在非簿记变更）"
+        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head 88b8272（且中间存在非簿记变更）"
       },
       "L1-08_web_typecheck_build_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head af799ed（且中间存在非簿记变更）"
+        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head 88b8272（且中间存在非簿记变更）"
       },
       "L1-09_no_skipped_critical_tests": {
         "status": "UNVERIFIED",
-        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head af799ed（且中间存在非簿记变更）"
+        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head 88b8272（且中间存在非簿记变更）"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
-        "status": false,
-        "evidence": "dirty entries: 4"
+        "status": true,
+        "evidence": "porcelain empty"
       },
       "L1-11_docs_state_consistent": {
         "status": "UNVERIFIED",
-        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head af799ed（且中间存在非簿记变更）"
+        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head 88b8272（且中间存在非簿记变更）"
       },
       "L1-12_schema_invariants_verified": {
         "status": "UNVERIFIED",
-        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head af799ed（且中间存在非簿记变更）"
+        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head 88b8272（且中间存在非簿记变更）"
       },
       "L1-13_negative_paths_covered": {
         "status": "UNVERIFIED",
-        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head af799ed（且中间存在非簿记变更）"
+        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head 88b8272（且中间存在非簿记变更）"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
         "status": "UNVERIFIED",
-        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head af799ed（且中间存在非簿记变更）"
+        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head 88b8272（且中间存在非簿记变更）"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
@@ -6334,7 +6333,7 @@
       "API.md / DOMAIN_MODEL.md / architecture-contract 计数 77 → 79"
     ]
   },
-  "next_execution_unit": "RSI-P1-04 Builder/Judge 隔离编排（确定性测试 + replay/benchmark → 独立 Judge，禁止自我批准）→ RSI-P1-05 不可变证据 → RSI-P1-06 Policy Engine（L0–L5 + 永久 OWNER 硬禁清单）；随后 BG-016 单一 Acceptance Head 一致性 guard。",
+  "next_execution_unit": "RSI-P1-05 不可变证据（evaluation evidence 追加式契约 + supersedes，不覆盖历史）→ RSI-P1-06 Policy Engine（L0–L5 + 永久 OWNER 硬禁清单）→ RSI-P1-07 端到端 demo（一条脱敏信号走完整闭环）；随后 BG-016 单一 Acceptance Head 一致性 guard。",
   "customer_ui_commercialization": {
     "at": "2026-10-04T01:21:55.949Z",
     "authorization": "MSG-20261004-01（CUSTOMER UI/UX COMMERCIALIZATION — IMPLEMENTATION AUTHORIZED）",
@@ -7379,14 +7378,14 @@
     ],
     "seo3_progress": "CHANGE A/B validator added (86f4289), engine output validation added (eb99c53), validator wired into runPublicSeoChecker (8bf49da), HTTP boundary guard added (4f2cd20); HTTP entry still not registered"
   },
-  "CURRENT_HEAD": "c95346f",
-  "LAST_COMPLETED_UNIT": "RSI-P1-03 signal → incident/task 自动生成：稳定 id（sha256 派生，跨重启不变）+ 已知键/批内去重 + HIGH 风险只登记不自动执行 + 敏感信号 fail-closed + 单轮限流（3/硬上限 10）+ rsi-run 接线（signalsPath → 合并队列，taskGeneration() 可审计）；生成任务可被续跑引擎立刻领取。",
-  "NEXT_EXECUTION_UNIT": "RSI-P1-04 Builder/Judge 隔离编排（确定性测试 + replay/benchmark → 独立 Judge，禁止自我批准）→ RSI-P1-05 不可变证据 → RSI-P1-06 Policy Engine（L0–L5 + 永久 OWNER 硬禁清单）；随后 BG-016 单一 Acceptance Head 一致性 guard。",
+  "CURRENT_HEAD": "88b8272",
+  "LAST_COMPLETED_UNIT": "RSI-P1-04 Builder/Judge 隔离编排：judgeCandidate（自判禁止 SELF_JUDGE_FORBIDDEN、风险分级必需证据 LOW/MEDIUM/HIGH、自证证据不算、失败/未结论拒绝、reasonCodes 稳定）+ recordPromotionDecision（dedupeKey 唯一 → DECISION_IMMUTABLE）；autoPromoted 恒 false，autoPromoteEligible 复用 canAutoPromote（默认 OFF）。",
+  "NEXT_EXECUTION_UNIT": "RSI-P1-05 不可变证据（evaluation evidence 追加式契约 + supersedes，不覆盖历史）→ RSI-P1-06 Policy Engine（L0–L5 + 永久 OWNER 硬禁清单）→ RSI-P1-07 端到端 demo（一条脱敏信号走完整闭环）；随后 BG-016 单一 Acceptance Head 一致性 guard。",
   "CI_STATUS": "HEAD c95346f hosted CI = completed_success（run 37249876844；含 RSI-P1-03 全部改动；同批次 37dfc3f run 37249844156 亦等绿）；apps/api tsc exit 0；rsi-task-generator 10 例 + rsi-run 7 例全过；门禁 api-contract / audit-coverage / autopilot-rules 全 OK",
   "WAITING_FOR_VERDICT": "none —— MSG-20261005-09（RSI Model Router → Provider Adapter 设计 = PASS WITH REVISE）已逐字归档（FNV e1740a41 / 178 行 / FULL_COPY_OK）；真实 Provider 那一轮才需要新的窄审计，本轮不需要。",
   "HOST_ACTION_REQUIRED": "①非生产 DATABASE_URL（无真实客户数据）→ RSI staging smoke + migration apply + reboot/reconcile 与 exactly-once 实机验证；②Linux 主机（或指定 CI runner）→ systemd Test A/B/C/D/E/F；③真实 Provider 接入需要宿主注册/申请账号、接受第三方协议、提供 Client ID/Secret 与 POA 等（当前全部 HOLD）；④gh auth login（可选，仅恢复 issue comment 通道）。",
   "HOLD_EXTERNAL": "RSI_MODEL_NETWORK = HOLD / RSI_PAID_MODEL_CALLS = HOLD / REAL_PROVIDER_ADAPTER = OUT_OF_PROCESS_REQUIRED（sidecar 未实现）/ EXTERNAL_WRITE = HOLD / PAYMENT = HOLD / TRANSPORT = HOLD / PRODUCTION_CREDENTIALS = HOLD / PRODUCTION_PUBLIC_CHECKER = HOLD",
-  "LAST_HEARTBEAT_AT": "2026-10-05T01:14:12.526Z",
+  "LAST_HEARTBEAT_AT": "2026-10-05T01:16:44.817Z",
   "ci_red_streak_note": "RESOLVED: three contract/inventory fixes (tenant-trigger whitelist 1b15ab7, append-only whitelist cc13bde, model inventory 82->85 4f02282); 4f02282 is the first green run after the streak.",
   "ci_contract_fix_local_verification": {
     "at": "2026-10-04T08:51:16.135Z",
@@ -7676,7 +7675,7 @@
     "duty_difference_registration": "HOLD_UNTIL_CALCULATION_SEMANTICS_CONFIRMED",
     "first_registration_recipe": "TEST-ONLY RuleVersion row → parseRecoveryRuleDefinition → createSeoPublicEngineRegistry([engine]) → createSeoPublicCheckerPorts → runPublicSeoChecker；首次注册时补 createEligibilitySeoPublicEngine() adapter + integration test，无需重做 engine design audit"
   },
-  "SAFE_CONTINUATION_QUEUE": "NOT_EMPTY：RSI-P1-04 / P1-05 / P1-06 / P1-07（backlog READY，纯内部）+ BG-016 单一 Acceptance Head 一致性 guard；其余为 HOST_ACTION_REQUIRED（非生产 DB / Linux systemd / 真实 Provider 凭据）。",
+  "SAFE_CONTINUATION_QUEUE": "NOT_EMPTY：RSI-P1-05 / P1-06 / P1-07（纯内部）+ BG-016 单一 Acceptance Head 一致性 guard；其余为 HOST_ACTION_REQUIRED（非生产 DB / Linux systemd / 真实 Provider 凭据）或 HOLD。",
   "rsi_runtime": {
     "runner_noop_autopass": "REMOVED",
     "runner_default": "BLOCK（未配置执行器绝不 PASS）",
@@ -7804,5 +7803,43 @@
       "backlog": "RSI-P1-03 = IMPLEMENTED_PENDING_CI；RSI-RT-06 / RSI-COST-02/03/05 = COMPLETED"
     },
     "ci": "completed_success（run 37249876844）"
+  },
+  "rsi_judge_orchestration": {
+    "at": "2026-10-05T01:16:44.817Z",
+    "commit": "88b8272",
+    "doc": "docs/releases/RSI-P1-04-JUDGE-ORCHESTRATION.md",
+    "module": "apps/api/src/services/autonomy/rsi-judge-orchestration.ts",
+    "separation": "SELF_JUDGE_FORBIDDEN（builderRef === judgeRef 或任一为空）",
+    "required_evidence": {
+      "LOW": [
+        "TEST"
+      ],
+      "MEDIUM": [
+        "TEST",
+        "REPLAY"
+      ],
+      "HIGH": [
+        "TEST",
+        "REPLAY",
+        "BENCHMARK",
+        "SECURITY",
+        "POLICY"
+      ]
+    },
+    "reason_codes": [
+      "SELF_JUDGE_FORBIDDEN",
+      "EVIDENCE_MISSING:<KIND>",
+      "SELF_PRODUCED_EVIDENCE:<KIND>",
+      "EVIDENCE_FAILED:<KIND>",
+      "EVIDENCE_NOT_CONCLUDED:<KIND>"
+    ],
+    "auto_apply": "NEVER（autoPromoted 恒 false；autoPromoteEligible 默认 false，HIGH 永不自动升级）",
+    "append_only": "dedupeKey 唯一 → 重复记录 DECISION_IMMUTABLE",
+    "evidence": {
+      "tsc": "exit 0",
+      "tests": "rsi-judge-orchestration 10/10 + rsi-lifecycle 5/5",
+      "gates": "api-contract / audit-coverage / autopilot-rules 全 OK",
+      "backlog": "RSI-P1-04 = IMPLEMENTED_PENDING_CI"
+    }
   }
 }
