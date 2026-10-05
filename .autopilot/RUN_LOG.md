@@ -1982,3 +1982,16 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 复跑：template → `doc-sync=OK`；u5 → `doc-sync=OK (4 checks)`（README 计数已委托 CI/runtime、API.md 含
   `/customs-entry-facts/:entryFactId/return-claim-evidence` 与 `/customs-opportunities/:id/start-recovery`、STATE 模式与 heartbeat 角色一致）。
 - 结论：BG-004 验收标准满足（doc-sync 守卫全绿；漂移已按事实修正，未伪造任何声明）。
+
+## 2026-10-05T03:18:04.284Z — BG-007 证据层 / Canonical 事实 / POD 证据包复核（P2，内部可做）
+- 套件实测（apps/api 本地，退出码 0）：**11 文件 / 74 例全绿** —— `canonical-fact-db`(4)、`canonical-parity`(3)、
+  `canonical-parity-db`(2)、`canonical-shadow-db`(2)、`canonical-derive`(4)、`evidence-promotion`(6)、
+  `evidence-account-scope-db`(3)、`pod-evidence`(5)、`carrier-evidence-bundle`、`carrier-invoice-pod-read`、
+  `action-guard-evidence-read-http-db`。
+- Canonical 事实层（实测）：同一事实来自两个来源且金额一致 → `ACTIVE` 且 `sourceCount=2`；金额不一致 → `CONFLICT` +
+  逐条审计且**两条原始行都保留**；重复导入同一文件 → 原始行/事实/来源联结**都不重复**；shadow 路径只用 ACTIVE 事实评估、
+  只写影子表、**不产生 Opportunity**，并与旧路径黄金数字完全一致；事实变 CONFLICT 后 shadow 报 MISMATCH。
+- 证据包（实测）：POD 上传 PDF/PNG/JPEG 落 `FileAsset` + `EvidenceArtifact(kind=POD)`；其它格式**拒绝且不落任何资产**；
+  超大小上限拒绝；关联**跨租户案件被拒**；结果**不含金额/规则/责任字段**（仅登记）且写入审计；
+  account provenance 由服务端派生，缺连接上下文/未绑账户 → `PLATFORM_ACCOUNT_REQUIRED`，多账户或含 NULL → fail-closed。
+- 边界：本批未改任何代码；证据层只登记证据，不做金额/责任判定。
