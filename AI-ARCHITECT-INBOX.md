@@ -146892,3 +146892,261 @@ L5_RELAXATION = FORBIDDEN
 
 STEP 3 CLOSED ≠ SI/RSI 已生产开闸。 它表示这一阶段的 SI↔RSI Runtime/Policy/Guard 接线已经闭环。
 ```
+
+### [MSG-20261005-44] STEP_3_RUNTIME_POLICY_WIRING FINAL-4 — VERDICT = **PASS WITH REVISE / NOT CLOSED**（唯一 product 组装点 = REVISE；real-adapter runtime E2E = PASS；`STEP3_FINAL5_REQUIRED = YES`；FINAL-5 只需 A/B/C 三项旁路封堵）
+
+```text
+DECISION
+
+STEP_3_RUNTIME_POLICY_WIRING = PASS WITH REVISE / NOT CLOSED
+
+STEP3_FINAL5_REQUIRED = YES
+
+基于 REVIEWED_HEAD = adcab905 重新核验；a7f47b96 相比它只有 state/docs/backlog 变化，没有额外代码修复。
+
+唯一 product 组装点：REVISE
+real-adapter runtime E2E：PASS（限其声明的 ALLOW/DENY/degraded → tool 行为）
+STEP 3：NOT CLOSED
+只需要一个很窄的 FINAL-5。
+KEEP
+createProductRecoverySiPack → createSharedRecoveryGuardAdapter → RuntimeActionGuard → deterministic read tool 链路真实存在。
+ALLOW → read tool > 0：PASS。
+audit 缺失导致 ALLOW 降级 DENY → tool = 0：PASS。
+capabilities unavailable → fail-closed → tool = 0：PASS。
+SECOND_RUNTIME = 0、单 controller/event-loop 架构保持。
+FINAL-3 已通过的 proposal/verdict 分离不回退。
+CUSTOMS L5、外写、Payment、Transport、生产凭据等 HOLD 不变。
+CHANGE
+A — 修复 productRecoveryPack 的 Judge 旁路【阻断 CLOSED】
+
+当前 rsi-run.ts 实际代码是：
+
+TypeScript
+awaitVerdict:
+  input.domainPacks !== undefined && input.domainPacks.length > 0
+    ? true
+    : (input.awaitVerdict ?? false)
+
+因此：
+
+TypeScript
+productRecoveryPack: {...},
+domainPacks: undefined,
+awaitVerdict: false
+
+不会强制 park-for-judge。
+
+这与 FINAL-4 声称的：
+
+productRecoveryPack 存在时同样强制 park-for-judge
+
+不一致。
+
+最小修复：
+
+TypeScript
+awaitVerdict:
+  domainPackList.length > 0
+    ? true
+    : (input.awaitVerdict ?? false)
+
+并增加真实回归：
+
+productRecoveryPack + awaitVerdict:false → waitingForVerdict=true + verdict=null + proposal=PASS。
+
+B — 真正封死 Recovery 的旧 domainPacks 入口【阻断 CLOSED】
+
+目前 composeRsiRuntime 仍公开：
+
+TypeScript
+domainPacks?: readonly RsiDomainCapabilityPack[];
+
+而 createRecoverySiPack() 仍然公开，并允许：
+
+TypeScript
+guard?: RsiRecoveryGuardPort
+
+所以调用方仍可以：
+
+TypeScript
+domainPacks: [
+  createRecoverySiPack({
+    ...,
+    guard: CUSTOM_ALWAYS_ALLOW_GUARD
+  })
+]
+
+完全绕过新的 createProductRecoverySiPack()。
+
+因此现在是：
+
+新增了唯一“推荐安全入口”，但没有形成唯一“可执行产品入口”。
+
+最小修复：在 composeRsiRuntime 对通用 domainPacks 保留 reserved pack ID：
+
+TypeScript
+pack.packId === 'recovery-si'
+
+一律拒绝，Recovery 只能来自 productRecoveryPack。
+
+增加测试：
+
+domainPacks:[rogueRecoveryPack] → composition rejected/fail-closed。
+
+C — 不要允许结构化 RuntimeActionGuard 冒充 shared guard【建议与 B 同批修】
+
+RuntimeActionGuard 是 TypeScript interface，属于结构类型。任何调用方都可以手写：
+
+TypeScript
+{
+  evaluate: async () => ALLOW,
+  assertAllowed: async () => ALLOW
+}
+
+然后传入：
+
+TypeScript
+createProductRecoverySiPack({ guard: fakeGuard, ... })
+
+所以“只接受 RuntimeActionGuard 类型”并不能证明它来自项目唯一 Shared Guard。
+
+最干净的最小方案：product 组装点删除 guard?: RuntimeActionGuard，只接受 appActionGuardDeps，内部唯一调用 createAppActionGuard()。
+
+这样才能真正满足：
+
+SECOND_GUARD_IMPLEMENTATION = FORBIDDEN。
+
+RISKS
+
+现在若直接 CLOSED，有两个真实架构风险：
+
+product Recovery 可以不等 Judge 就完成；
+Recovery 仍可经通用 domainPacks + custom guard 绕开 Shared Action Guard。
+
+所以不能因为 769 tests PASS 就 CLOSED；现有 FINAL-4 测试恰好没有覆盖这两个旁路。
+
+TEST
+
+FINAL-5 只需新增/修改三类断言：
+
+productRecoveryPack + awaitVerdict:false → 必须 park-for-judge
+domainPacks 直接注入 packId='recovery-si' → 必须拒绝
+product composition 无法注入手写/第二套 guard；只能由 shared AppActionGuardDeps → createAppActionGuard 构造
+
+原 76 files / 769 tests 保持全绿，并跑新增测试即可。
+
+NEXT
+
+FINAL-5 只做上述 A/B/C，不扩大 scope。
+
+完成后若：
+
+三个旁路全部关闭；
+现有测试无回退；
+新测试证明 product Recovery 必经 Shared Guard + Judge；
+
+则我预期可以直接裁：
+
+STEP_3_RUNTIME_POLICY_WIRING = PASS / CLOSED
+STEP3_FINAL6_REQUIRED = NO
+
+PRODUCTION
+
+继续保持：
+
+REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT = HOLD
+
+MODEL_GATEWAY_RUNTIME_WIRED = false
+COST_CORE_RUNTIME_WIRED = false
+META_IMPROVEMENT_INTEGRATED = false
+
+本裁决不授权任何生产开闸。
+```
+
+### [MSG-20261005-45] STEP_3_RUNTIME_POLICY_WIRING FINAL-5 — VERDICT = **PASS WITH REVISE / NOT CLOSED**（A = PASS（domainPacks 强制 park-for-judge）；C = PASS（product 组装点只接受 AppActionGuardDeps）；B = REVISE（保留 pack id 只保护名字，未保护 Recovery 路由语义）；`STEP3_FINAL6_REQUIRED = YES`）
+
+```text
+DECISION
+
+A = PASS
+B = REVISE
+C = PASS
+STEP_3_RUNTIME_POLICY_WIRING = PASS WITH REVISE / NOT CLOSED
+STEP3_FINAL6_REQUIRED = YES
+
+我已直接核对 GitHub 31a584df 的实际实现。A 的 domainPackList.length > 0 强制 park-for-judge 已成立；C 的 product composition 也确实只接受 AppActionGuardDeps，内部走 createAppActionGuard()。
+
+KEEP
+
+A：保留现实现。productRecoveryPack + awaitVerdict:false 已无法绕过 Judge。
+C：保留现实现。禁止 caller 直接注入 RuntimeActionGuard / RsiRecoveryGuardPort 的产品路径成立。
+SECOND_RUNTIME=0、Shared Action Guard、CUSTOMS L5 BLOCK、零外写等边界继续保持。
+
+CHANGE
+
+仅剩 1 个最小阻断点：B 目前只保护了名字，没有保护 Recovery 路由语义。
+
+当前代码只拒绝：
+
+domainPacks[].packId === 'recovery-si'
+
+但是通用 pack 仍可这样做：
+
+packId = 'rogue-pack'
+domain = 'other'
+matches(task:recovery:...) = true
+
+createRsiDomainPackRunner() 会按 matches() 选择它，因此它仍可以消费 Recovery task。也就是说：
+
+Recovery 只能经 productRecoveryPack 组装
+
+目前还没有被代码完全证明。
+
+最小修复：在唯一 domain dispatch 层增加 Recovery namespace 保留路由：
+
+task.dedupeKey.startsWith('task:recovery:')
+
+只能由：
+
+packId === 'recovery-si'
+
+消费；没有正式 product Recovery pack 时直接 BLOCK，不得 fallback 给其他 generic pack。
+
+RISKS
+
+这是最后一个实质性旁路。不是第二 runtime 问题，也不是 Guard 本身的问题，而是 generic pack 可冒充 Recovery handler。
+
+因此现在直接 CLOSED 会留下一个真实语义漏洞。
+
+TEST
+
+FINAL-6 最少补 2 条：
+
+packId='rogue-recovery' / 任意 domain / matches(recovery task)=true
+→ BLOCK
+→ rogue run() 调用次数必须 0
+
+productRecoveryPack + rogue generic pack 同时存在
+→ recovery task 必须只进入正式 recovery-si
+→ Shared Action Guard 仍被调用
+→ rogue run() = 0
+
+原 771 tests 保持全绿即可。
+
+NEXT
+
+完成上述单点修复后：
+
+STEP_3_RUNTIME_POLICY_WIRING = PASS / CLOSED
+STEP3_FINAL7_REQUIRED = NO
+
+不需要再扩 FINAL-6 范围，不要顺手重构其他 Runtime / Guard / Policy。
+
+PRODUCTION
+
+全部 HOLD 保持不变：
+
+REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing
+
+均不得因 STEP 3 closure 自动解锁。
+```
