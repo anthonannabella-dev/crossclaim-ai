@@ -1891,3 +1891,15 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 ## 2026-10-04T06:01:14.998Z — SEO P3 启动（TRACK C，与 C18 并行）
 - SEO-1：gap audit + 首批 28 页候选矩阵（docs/releases/SEO-P3-GAP-AUDIT.md）；默认 NOINDEX，通过 indexability gate 才 INDEX。
 - 队列：SEO-2..SEO-8 已登记进 SAFE_CONTINUATION_QUEUE（与 C18 并行，互不阻塞）；SEO-2/SEO-3 需架构审计。
+
+## 2026-10-05T02:25:17.848Z — BG-009 Carrier → Settlement 只读对账证据（P0，内部可做）
+- 套件：`apps/api/src/__tests__/carrier-settlement-reconciliation-readonly.test.ts` → **7/7 PASS**（apps/api 本地实测，退出码 0）。
+- 语义核对（逐条对齐 BG-009 验收标准）：
+  - 有结算证据且金额一致 → `MATCHED`（仍**不创建** Settlement 事实、**不可计费**）；
+  - `APPROVED` / `PAID` 但无结算证据 → `AWAITING_SETTLEMENT_EVIDENCE`（**绝不视为已到账**）；
+  - 金额不一致 → `DISCREPANCY`；`DENIED` 无证据 → 不可计费标记；
+  - 币种不一致 → `INDETERMINATE`（**不做 FX**）；未知 carrier 状态 → `INDETERMINATE`；
+  - 跨租户结算证据 → 拒绝 `CROSS_TENANT_LINEAGE`；缺 `providerReference` lineage → `MISSING_REFERENCE_LINEAGE`（不猜测到账）。
+- 边界核对：模块内 **无** `prisma.*.create/update/delete/upsert/createMany/updateMany/deleteMany` 调用；
+  `CARRIER_SETTLEMENT_BOUNDARY = { readOnly: true, createsSettlementFact: false, upgradesCarrierTextToReceived: false, moneyWrite: false, billable: false, appliesFxConversion: false, requiresSettlementEvidenceForReceived: true }`。
+- 结论：BG-009 验收标准全部满足（READ_ONLY / NO_MONEY_WRITE / NO_FX）；真实银行/结算证据仍属外部数据 → `HOLD_EXTERNAL` 保持。
