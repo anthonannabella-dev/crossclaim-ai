@@ -19,7 +19,8 @@ import { describe, expect, it } from 'vitest';
 import { composeRsiRuntime } from '../runtime/rsi-run';
 import { createSiModelGatewayPort, SI_MODEL_GATEWAY_BOUNDARY } from '../runtime/rsi-si-model-gateway';
 import { createAppActionGuard } from '../services/action-guard/runtime-guard-composition';
-import { createRecoverySiPack } from '../runtime/recovery-si-pack';
+import { buildRecoverySiEvidenceRef, createRecoverySiPack } from '../runtime/recovery-si-pack';
+import { isRsiLocalSimAdapter } from '../services/autonomy/rsi-local-sim-adapter';
 import { createRsiLocalSimAdapter } from '../services/autonomy/rsi-local-sim-adapter';
 import type { RsiCostUsage, RsiModelCallRequest } from '../services/autonomy/rsi-cost-policy';
 import type { RsiModelProviderAdapter } from '../services/autonomy/rsi-model-router';
@@ -69,7 +70,8 @@ const localSim = () =>
   });
 
 const failingAdapter = (tier: 'LOW_COST' | 'STRONG', counter: { n: number }): RsiModelProviderAdapter => ({
-  providerName: tier === 'LOW_COST' ? 'rsi-local-sim-probe-low' : 'rsi-local-sim-probe-strong',
+  capability: { simulated: true },
+  providerName: tier === 'LOW_COST' ? 'probe-low' : 'probe-strong',
   tier,
   pricing: { inputUsdPerToken: 0.000001, outputUsdPerToken: 0.000002, maxInputTokens: 1_000 },
   async invoke() {
@@ -138,7 +140,8 @@ describe('PHASE 2 U2 · SI Runtime 端到端模型链（local sim）', () => {
   it('P2U2_2 budget guard 不可绕过：缺 provider pricing → BUDGET_GUARD_UNENFORCEABLE，零 provider 调用', async () => {
     const counter = { n: 0 };
     const noPricing: RsiModelProviderAdapter = {
-      providerName: 'rsi-local-sim-probe-no-pricing',
+      capability: { simulated: true },
+      capability: { simulated: true }, providerName: 'probe-no-pricing',
       tier: 'LOW_COST',
       async invoke() {
         counter.n += 1;
@@ -167,7 +170,8 @@ describe('PHASE 2 U2 · SI Runtime 端到端模型链（local sim）', () => {
 
   it('P2U2_4 quality gate 不可由模型自证：cheap 成功但无 evaluator → 不升级；evaluator FAIL → 有界升级 ≤ 1', async () => {
     const succeeding = (tier: 'LOW_COST' | 'STRONG', counter: { n: number }): RsiModelProviderAdapter => ({
-      providerName: tier === 'LOW_COST' ? 'rsi-local-sim-probe-low-ok' : 'rsi-local-sim-probe-strong-ok',
+      capability: { simulated: true },
+      providerName: tier === 'LOW_COST' ? 'probe-low-ok' : 'probe-strong-ok',
       tier,
       pricing: { inputUsdPerToken: 0.000001, outputUsdPerToken: 0.000002, maxInputTokens: 1_000 },
       async invoke() {
@@ -310,4 +314,33 @@ describe('PHASE 2 U2 · SI Runtime 端到端模型链（local sim）', () => {
         usage: () => usage(),
       }),
     ).toThrow(/SI_MODEL_GATEWAY_REAL_PROVIDER_FORBIDDEN/);
+  });
+
+  it('P2U2_9 evidence digest 敏感性：tool audit / gateway audit 任一变化 → evidenceRef 变化', () => {
+    const base = {
+      taskId: 't1',
+      dedupeKey: 'task:recovery:PLATFORM:opp-1',
+      organizationId: 'org-1',
+      opportunityRef: 'opp-1',
+      guardAction: 'evidence.read',
+      gatewayAudit: ['gateway.called=true', 'gateway.reason=CALLED'],
+      toolAudit: ['tool=recovery.opportunity.read:ok=true'],
+    };
+    const ref = buildRecoverySiEvidenceRef(base);
+    expect(ref).toContain('tool=recovery.opportunity.read:ok=true');
+    expect(buildRecoverySiEvidenceRef({ ...base, toolAudit: ['tool=recovery.evidence.read:ok=true'] })).not.toBe(ref);
+    expect(buildRecoverySiEvidenceRef({ ...base, gatewayAudit: ['gateway.called=false'] })).not.toBe(ref);
+  });
+
+  it('P2U2_10 local-sim provenance：factory PASS；伪装名 / fake REJECT；strong 同样校验', () => {
+    const factoryLow = createRsiLocalSimAdapter({ tier: 'LOW_COST', providerName: 'rsi-local-sim-low-cost', resolvePrompt: () => 'p' });
+    expect(isRsiLocalSimAdapter(factoryLow)).toBe(true);
+    expect(() => createSiModelGatewayPort({ lowCost: factoryLow, usage: () => usage() })).not.toThrow();
+    const spoofed = { providerName: 'rsi-local-sim-openai-real', tier: 'LOW_COST' as const, async invoke() { throw new Error('x'); } };
+    expect(isRsiLocalSimAdapter(spoofed)).toBe(false);
+    expect(() => createSiModelGatewayPort({ lowCost: spoofed, usage: () => usage() })).toThrow(/SI_MODEL_GATEWAY_REAL_PROVIDER_FORBIDDEN/);
+    const fakeStrong = { providerName: 'amazon-real', tier: 'STRONG' as const, async invoke() { throw new Error('x'); } };
+    expect(() => createSiModelGatewayPort({ lowCost: factoryLow, strong: fakeStrong, usage: () => usage() })).toThrow(/SI_MODEL_GATEWAY_REAL_PROVIDER_FORBIDDEN/);
+    const factoryStrong = createRsiLocalSimAdapter({ tier: 'STRONG', providerName: 'rsi-local-sim-strong', resolvePrompt: () => 'p' });
+    expect(() => createSiModelGatewayPort({ lowCost: factoryLow, strong: factoryStrong, usage: () => usage() })).not.toThrow();
   });

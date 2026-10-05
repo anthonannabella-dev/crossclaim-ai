@@ -83,6 +83,14 @@ export interface RsiLocalSimAdapterOptions {
   now?: () => number;
 }
 
+/** FINAL3 ③：不可伪造的运行时 provenance —— 只有本工厂创建的实例会被登记（不看 providerName） */
+const LOCAL_SIM_FACTORY_INSTANCES = new WeakSet<object>();
+
+/** 只读判定：该 adapter 是否由唯一 local-sim 工厂创建 */
+export function isRsiLocalSimAdapter(adapter: unknown): boolean {
+  return typeof adapter === 'object' && adapter !== null && LOCAL_SIM_FACTORY_INSTANCES.has(adapter as object);
+}
+
 export function createRsiLocalSimAdapter(options: RsiLocalSimAdapterOptions = {}): RsiModelProviderAdapter {
   const tier: RsiProviderTier = options.tier ?? 'LOW_COST';
   const providerName = options.providerName ?? RSI_LOCAL_SIM_PROVIDER_NAME;
@@ -101,7 +109,7 @@ export function createRsiLocalSimAdapter(options: RsiLocalSimAdapterOptions = {}
     usage?: RsiProviderUsage,
   ): RsiProviderAttemptResult => ({ ok: false, reason, usage, latencyMs });
 
-  return {
+  const adapter: RsiModelProviderAdapter = {
     providerName,
     tier,
     pricing,
@@ -193,6 +201,8 @@ export function createRsiLocalSimAdapter(options: RsiLocalSimAdapterOptions = {}
       };
     },
   };
+  LOCAL_SIM_FACTORY_INSTANCES.add(adapter as unknown as object);
+  return adapter;
 }
 
 export const RSI_LOCAL_SIM_ADAPTER_BOUNDARY = {

@@ -20,6 +20,7 @@ import {
 } from '../services/autonomy/rsi-model-router';
 import type { RsiCostUsage, RsiModelCallRequest } from '../services/autonomy/rsi-cost-policy';
 import type { AiEscalationLimits, AiQualityVerdict } from '../services/autonomy/rsi-model-escalation-policy';
+import { isRsiLocalSimAdapter } from '../services/autonomy/rsi-local-sim-adapter';
 
 export const LOCAL_SIM_ADAPTER_PREFIX = 'rsi-local-sim';
 
@@ -37,6 +38,7 @@ export const SI_MODEL_GATEWAY_BOUNDARY = {
   localSimulationAdapterOnly: true,
   providerCapabilityEnforced: true,
   realOrPaidAdapter: 'THROW（SI_MODEL_GATEWAY_REAL_PROVIDER_FORBIDDEN）',
+  provenance: 'FACTORY_WEAKSET（isRsiLocalSimAdapter；providerName 不作为依据）',
   providerFailure: 'fail-closed（由 Gateway 判定）',
   deterministicFirst: true,
 } as const;
@@ -90,13 +92,14 @@ const toResult = (outcome: RsiRouterOutcome): SiModelGatewayInvokeResult => ({
  * **禁止**在此处新增路由/预算/质量逻辑；任何绕过必须在上层被拒绝。
  */
 const assertLocalSimAdapter = (adapter: RsiModelProviderAdapter, role: string): void => {
-  const name = String(adapter?.providerName ?? '');
-  if (!name.startsWith(LOCAL_SIM_ADAPTER_PREFIX)) {
-    throw new Error(
-      'SI_MODEL_GATEWAY_REAL_PROVIDER_FORBIDDEN:' + role + ':' + name +
-        '（当前阶段 REAL_MODEL_NETWORK / PAID_MODEL_CALLS = HOLD，只允许 local-sim adapter）',
-    );
-  }
+  // FINAL3 ③：以 factory provenance 为准（providerName 可伪装，不作依据）；
+  // 非 factory 实例必须显式声明 simulated，且不得声明 network / paid。
+  const capability = (adapter as unknown as { capability?: { simulated?: boolean; network?: boolean; paid?: boolean } })?.capability;
+  if (isRsiLocalSimAdapter(adapter)) return;
+  if (capability?.simulated === true && capability.network !== true && capability.paid !== true) return;
+  throw new Error(
+    'SI_MODEL_GATEWAY_REAL_PROVIDER_FORBIDDEN:' + role + '（REAL_MODEL_NETWORK / PAID_MODEL_CALLS = HOLD：只接受 factory 创建的 local-sim adapter，或显式 simulated 且非 network/paid 的 adapter）',
+  );
 };
 
 export function createSiModelGatewayPort(deps: SiModelGatewayDeps): RsiSiModelGatewayPort {

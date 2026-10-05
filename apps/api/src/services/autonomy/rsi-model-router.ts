@@ -105,6 +105,8 @@ export interface RsiModelProviderAdapter {
   readonly tier: RsiProviderTier;
   /** 缺失即视为不可证明最坏费用 → fail-closed */
   readonly pricing?: RsiProviderPricing;
+  /** FINAL3：provider capability metadata（network/paid 必须显式声明；local-sim 为 simulated） */
+  readonly capability?: { simulated?: boolean; network?: boolean; paid?: boolean };
   invoke(invocation: RsiModelInvocation): Promise<RsiProviderAttemptResult>;
 }
 

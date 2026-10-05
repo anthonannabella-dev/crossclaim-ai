@@ -106,6 +106,22 @@ export function createFailClosedRecoveryGuardPort(reason = 'RECOVERY_GUARD_NOT_W
     },
   };
 }
+/**
+ * FINAL3 ②：evidence digest 的**纯函数**（可单测）——确定性只读工具 audit 与模型（Gateway）audit
+ * 任一变化都会改变 evidenceRef。
+ */
+export function buildRecoverySiEvidenceRef(parts: {
+  taskId: string;
+  dedupeKey: string;
+  organizationId: string;
+  opportunityRef: string;
+  guardAction: string;
+  gatewayAudit: readonly string[];
+  toolAudit: readonly string[];
+}): string {
+  return [parts.taskId, parts.dedupeKey, parts.organizationId, parts.opportunityRef, parts.guardAction, ...parts.gatewayAudit, ...parts.toolAudit].join('|');
+}
+
 const digest12 = (value: string): string => createHash('sha256').update(value, 'utf8').digest('hex').slice(0, 12);
 
 const block = (reasonCodes: readonly string[], extra: Partial<RsiDomainPackEvidence> = {}): RsiDomainPackEvidence => ({
@@ -251,6 +267,7 @@ export function createRecoverySiPack(deps: RecoverySiPackDependencies): RsiDomai
             binding.opportunityRef,
             guardAction,
             ...gatewayAudit,
+            ...invocations.map((i) => 'tool=' + i.tool + ':ok=' + String(i.ok)),
           ].join('|'),
         );
       return {
