@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-22",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-06T03:10:00.000Z",
+  "updated_at": "2026-10-06T03:30:00.000Z",
   "previous_head": "8064f07",
   "architect_decision_pending": true,
   "blocked_scope": null,
@@ -52,7 +52,7 @@
   "continuous_execution": "ACTIVE",
   "next_execution_unit": "读取 C2 FINAL-4 裁决 → 归档（MSG-20261005-37）→ PASS/CLOSED 则进入 C3 IMPLEMENTATION（cache runtime wiring + business-value cost policy + Cost Safe Mode + concurrencyLimit enforcement + admin 只读可观测 + NOT_YET_MEASURABLE）；REVISE 则窄修再送",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-06T03:10:00.000Z",
+  "last_tick_at": "2026-10-06T03:30:00.000Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
   "last_action": "C2 FINAL-4 完成并送审（f5e4cc2c）：tenant identity 入口统一 fail-closed + resolve helper tenant-safe；tsc 0；C2 27/27；394 例回归 PASS",
   "last_action_at": "2026-10-06T00:40:00.000Z",
@@ -9120,5 +9120,33 @@
   "AUDIT_REVISE_LOOP_AUTO_CONTINUE": true,
   "HOST_LIMIT_MEANS_STOP": false,
   "STOP_ONLY_ON_TRUE_HOST_DEPENDENCY_OR_COMPLETE": true,
-  "CONTINUATION_REQUIRED": true
+  "CONTINUATION_REQUIRED": true,
+  "heartbeat": {
+    "automation_id": "crossclaim-ai-bridge-5min",
+    "name": "crossclaim-si-watchdog-1min",
+    "kind": "heartbeat",
+    "role": "WAKEUP_WATCHDOG_ONLY",
+    "status": "ACTIVE",
+    "rrule": "FREQ=MINUTELY;INTERVAL=1",
+    "interval_seconds": 60,
+    "target_thread_id": "01a10b70-753f-7603-abde-9901ce56feac",
+    "enabled_at": "2026-10-06T03:30:00.000Z",
+    "wake_conditions": [
+      "HOST_STANDING_CONTINUATION_AUTH=ACTIVE",
+      "CONTINUATION_REQUIRED=YES",
+      "SAFE_CONTINUATION_QUEUE != EMPTY",
+      "EXECUTION_ACTIVE=FALSE",
+      "no TRUE HOST_ACTION_REQUIRED"
+    ],
+    "wake_payload": "CONTINUE FROM DURABLE STATE（AUTHORITATIVE_HEAD / NEXT_EXECUTION_UNIT / CURRENT_VERDICT_STATE / SAFE_CONTINUATION_QUEUE / ACTIVE_HOLDS）",
+    "forbidden": [
+      "self_replanning",
+      "duplicate_tasks",
+      "concurrent_repo_mutation",
+      "second_worker_when_EXECUTION_ACTIVE",
+      "heartbeat_as_normal_scheduler"
+    ]
+  },
+  "EXECUTION_ACTIVE": false,
+  "HEARTBEAT_INTERVAL_SECONDS": 60
 }

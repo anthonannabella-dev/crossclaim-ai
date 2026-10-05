@@ -2627,3 +2627,11 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - HOST standing authorization 已写入 STATE：HOST_STANDING_CONTINUATION_AUTH=ACTIVE / AUTO_CONTINUE_AUTHORIZED_INTERNAL_WORK=true / ASK_HOST_BETWEEN_INTERNAL_UNITS=false / AUDIT_REVISE_LOOP_AUTO_CONTINUE=true / HOST_LIMIT_MEANS_STOP=false / STOP_ONLY_ON_TRUE_HOST_DEPENDENCY_OR_COMPLETE=true / CONTINUATION_REQUIRED=true。
 - 送审：docs/releases/SI-COST-OPTIMIZATION-C2-FINAL4-REQUEST.md（REVIEWED_HEAD = f5e4cc2c）。
 
+
+## 2026-10-06T03:30Z — HOST 指令：启用 heartbeat 作为 wake-up watchdog（60s，仅兜底）
+- 现有 automation crossclaim-ai-bridge-5min 已更新：name = crossclaim-si-watchdog-1min；kind = heartbeat；status = ACTIVE；rrule = FREQ=MINUTELY;INTERVAL=1（60s）；target_thread_id = 01a10b70-753f-7603-abde-9901ce56feac（当前会话，已自动绑定）。
+- 语义：仅当 HOST_STANDING_CONTINUATION_AUTH=ACTIVE 且 CONTINUATION_REQUIRED=YES 且 SAFE_CONTINUATION_QUEUE != EMPTY 且 EXECUTION_ACTIVE=FALSE 且无真实 HOST_ACTION_REQUIRED 时，发送最小恢复唤醒（CONTINUE FROM DURABLE STATE：AUTHORITATIVE_HEAD / NEXT_EXECUTION_UNIT / CURRENT_VERDICT_STATE / SAFE_CONTINUATION_QUEUE / ACTIVE_HOLDS）。
+- 禁止：自行重新规划、创建重复任务、与执行中的 Builder 并发改仓库、在 EXECUTION_ACTIVE=TRUE 时启动第二实例、把 heartbeat 当正常调度器。
+- STATE 已写入 heartbeat{} 配置 + EXECUTION_ACTIVE=false + HEARTBEAT_INTERVAL_SECONDS=60 + CONTINUATION_REQUIRED=true。
+- 正常模式仍为：task complete → recompute SAFE_CONTINUATION_QUEUE → select next → execute immediately（不等待 heartbeat）。
+
