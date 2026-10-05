@@ -2246,3 +2246,13 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 最小 FINAL-2 证据：F2D-01（authorizationReady=false 篡改成 READY → zero Guard call）、F2D-02（riskClass=HIGH 的 REQUEST_OWNER_APPROVAL 篡改成 READY → zero Guard call）、F2D-03（真实 Control Plane + claim.submit 无 approvalId → REQUIRE_APPROVAL）、F2D-04（Guard ALLOW 仍四个 false + approvalConsumed=false）。
 - 边界冻结：APPROVAL_CONSUMPTION / EXECUTOR_INVOCATION / BUSINESS_FACT_WRITE / EXTERNAL_ACTION = FORBIDDEN；P2_E = HOLD_SCHEMA_DELTA；P2_F / P2_G = HOLD；SCHEMA_DELTA_REQUIRED = NO；RUNTIME_WIRING = NONE；FINAL_ACCEPTANCE_HEAD = 0f7f7ac。
 - 下一执行单元：P2-D v1 FINAL-2（CHANGE D1/D2 + F2D-01..04 实现与取证），完成后送 P2-D FINAL-2 Implementation Audit。P2-D 尚未 CLOSED。
+
+## 2026-10-05T05:56Z — Recovery SI P2-D v1 FINAL-2 送审（CHANGE D1/D2 + F2D-01..04；REVIEWED_HEAD 638c9561）
+- CHANGE D1：执行入口在任何 Guard 调用前重算 canonical plan（prioritizeOpportunities + planRecovery），要求 supplied READY_FOR_EXECUTION == canonical planner READY 的 execution-relevant identity，否则 DENY / CANONICAL_READY_MISMATCH 且零 Guard 调用。
+- CHANGE D2：outcome 恒定补 submitted=false / persisted=false；BOUNDARY 增 canonicalReadyAlignment。
+- F2D-01 authorizationReady=false 篡改成 READY → zero Guard call；F2D-02 riskClass=HIGH 的 REQUEST_OWNER_APPROVAL 篡改成 READY → zero Guard call。
+- F2D-03 真实 createProductionControlPlane（kill switch enabled / WRITE_ENABLED / productionGate SATISFIED / platform+tenant feature 开启 / 无 approvalId）→ guardEvaluated=true、guardCallCount=1、REQUIRES_APPROVAL。
+- F2D-04 Guard ALLOW 时 executionAuthorized/executorInvoked/submitted/persisted/approvalConsumed 全 false。
+- 证据：tsc exit 0；recovery-si-phase2-d 14/14；回归 recovery-si* + action-guard* = 70/70（7 files）。
+- 边界：无 Schema / 无迁移 / 无 Prisma / 无网络 / 无凭据 / ACTION_GUARD_CATALOG 未改 / RUNTIME_WIRING = NONE；P2_E = HOLD_SCHEMA_DELTA；P2_F / P2_G = HOLD；FINAL_ACCEPTANCE_HEAD = 0f7f7ac。
+- 状态：P2_D_V1_IMPLEMENTATION = FINAL2_SUBMITTED_WAITING_VERDICT；下一动作 = 读取 FINAL-2 裁决并逐字归档（不阻塞其它 SAFE 单元）。

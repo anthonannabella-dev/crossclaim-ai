@@ -1896,7 +1896,7 @@
       "required_tests": [],
       "template": "arch-design-request",
       "filters": [],
-      "status": "REVISE_FINAL2_REQUIRED",
+      "status": "FINAL2_SUBMITTED_WAITING_VERDICT",
       "implementation_head": "7c3efa11",
       "audit_request": "docs/releases/RECOVERY-SI-PHASE2-D-IMPLEMENTATION-AUDIT-REQUEST.md",
       "note": "MSG-20261005-19 = PASS WITH REVISE（必修 A/B + D1–D10）；可实施 dry-run，完成后送 Implementation Audit。"
