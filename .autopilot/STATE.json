@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "95733930",
+  "head": "607bf2b2",
   "status": "RECONCILED",
   "current_task": "RSI 生产可执行闭环（7 点收口）：RSI_RUNTIME_READY = PASS；MODEL_PROVIDER_READY = 本地仿真已接线（真实网络/付费 HOLD）；PERSISTENCE_READY = ephemeral 已验证、durable 需宿主非生产 DATABASE_URL；REBOOT_RECONCILE_READY = NOT_IMPLEMENTED（下一单元）；SYSTEMD_VALIDATED = 需宿主 Linux 实机",
   "next_task": "BG-016 单一 Acceptance Head + 四份状态一致 guard（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍 HOST_ACTION_REQUIRED 或 HOLD",
@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-22",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T11:35:00.000Z",
+  "updated_at": "2026-10-05T11:50:00.000Z",
   "previous_head": "8064f07",
   "architect_decision_pending": true,
   "blocked_scope": null,
@@ -50,15 +50,15 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "ACTIVE",
-  "next_execution_unit": "P2-E FINAL-4：permit ↔ 写入批次不可变绑定（MSG-20261005-25 CHANGE E1/E2 binding gap）。要求：units.organizationId === gate.persistedBasis.organizationId；AuditLog 必须由该 gate 构造；package ↔ opportunityRef ↔ trusted READY 完整绑定；复用合法 permit 到错误 target 必须 fail-closed。完成并自检后送窄 FINAL-4；P2_F / P2_G 继续 HOLD。",
+  "next_execution_unit": "P2-E FINAL-4 已送审（docs/releases/RECOVERY-SI-PHASE2-E-FINAL4-REQUEST.md，REVIEWED_HEAD = 607bf2b2）：等架构方 FINAL-4 裁决；裁决前不进入 P2-F / P2-G。P2-E 关闭后立即进入 si-rsi-unification-design（仅 docs/releases/**：repo-wide inventory + KEEP/REUSE/MERGE/DEPRECATE/DUPLICATE + 最小统一方案送审）。",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-05T11:35:00.000Z",
+  "last_tick_at": "2026-10-05T11:50:00.000Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "P2-E FINAL-3 = REVISE（MSG-20261005-25，FULL_COPY_OK 254/254）已捕获：CHANGE_E3 = PASS、WeakSet permit 不可伪造 = PASS；剩 permit ↔ 具体写入批次不可变绑定（E1/E2 binding gap）→ 窄 FINAL-4",
-  "last_action_at": "2026-10-05T11:35:00.000Z",
-  "next_action": "实现 P2-E FINAL-4（permit ↔ 批次绑定）后送窄 FINAL-4；裁决前不进入 P2-F / P2-G",
-  "current_head": "95733930",
-  "last_completed_head": "95733930",
+  "last_action": "P2-E FINAL-4（CHANGE E4）已落地：permit ↔ 精确批次不可变绑定（12 项硬校验 + 批内 identity）+ claimItem↔opportunity 业务绑定；契约 27/27 + DB 20/20 + 回归 127/127 + tsc 0；已送审",
+  "last_action_at": "2026-10-05T11:50:00.000Z",
+  "next_action": "等 P2-E FINAL-4 裁决；裁决前不进入 P2-F / P2-G",
+  "current_head": "607bf2b2",
+  "last_completed_head": "607bf2b2",
   "reviewed_head": "070daf1",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -5199,9 +5199,9 @@
   "awaiting_verdict": "EXACT-ORDER REPLAY 证据已送审（comment 5979262070）；shared/staging deploy 解禁待裁决",
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-05T10:23:24.624Z",
-    "head": "08613af1",
-    "acceptance_head": "08613af1",
+    "computed_at": "2026-10-05T10:39:22.724Z",
+    "head": "607bf2b2",
+    "acceptance_head": "607bf2b2",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5359,27 +5359,27 @@
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=08613af1 ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
+        "evidence": "acceptance_head=607bf2b2 ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
       },
       "L1-05_pg_regression_passed": {
         "status": "UNVERIFIED",
-        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head 08613af1（且中间存在非簿记变更）"
+        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head 607bf2b2（且中间存在非簿记变更）"
       },
       "L1-06_fresh_db_migration_passed": {
         "status": "UNVERIFIED",
-        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head 08613af1（且中间存在非簿记变更）"
+        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head 607bf2b2（且中间存在非簿记变更）"
       },
       "L1-07_api_typecheck_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head 08613af1（且中间存在非簿记变更）"
+        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head 607bf2b2（且中间存在非簿记变更）"
       },
       "L1-08_web_typecheck_build_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head 08613af1（且中间存在非簿记变更）"
+        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head 607bf2b2（且中间存在非簿记变更）"
       },
       "L1-09_no_skipped_critical_tests": {
         "status": "UNVERIFIED",
-        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head 08613af1（且中间存在非簿记变更）"
+        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head 607bf2b2（且中间存在非簿记变更）"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
@@ -5388,19 +5388,19 @@
       },
       "L1-11_docs_state_consistent": {
         "status": "UNVERIFIED",
-        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head 08613af1（且中间存在非簿记变更）"
+        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head 607bf2b2（且中间存在非簿记变更）"
       },
       "L1-12_schema_invariants_verified": {
         "status": "UNVERIFIED",
-        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head 08613af1（且中间存在非簿记变更）"
+        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head 607bf2b2（且中间存在非簿记变更）"
       },
       "L1-13_negative_paths_covered": {
         "status": "UNVERIFIED",
-        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head 08613af1（且中间存在非簿记变更）"
+        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head 607bf2b2（且中间存在非簿记变更）"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
         "status": "UNVERIFIED",
-        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head 08613af1（且中间存在非簿记变更）"
+        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head 607bf2b2（且中间存在非簿记变更）"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
@@ -7392,7 +7392,7 @@
     ],
     "seo3_progress": "CHANGE A/B validator added (86f4289), engine output validation added (eb99c53), validator wired into runPublicSeoChecker (8bf49da), HTTP boundary guard added (4f2cd20); HTTP entry still not registered"
   },
-  "CURRENT_HEAD": "95733930",
+  "CURRENT_HEAD": "607bf2b2",
   "LAST_COMPLETED_UNIT": "recovery-si-phase2-d-impl（dry-run 实施：静态 Guard 映射 + 可信 Control Plane；D1–D10）",
   "NEXT_EXECUTION_UNIT": "P2-D Implementation Audit 送审 + 归档裁决（P2-E/P2-F/P2-G 仍未授权）",
   "CI_STATUS": "PENDING_THIS_COMMIT",
@@ -8622,7 +8622,7 @@
     "invariant": "ACTION_GUARD_DRY_RUN_ALLOW != EXECUTION_AUTHORIZATION；不消费审批 / 不调用 executor / 零 submission·零 payment·零 provider；L5 永久拒绝"
   },
   "recovery_si_phase2_e": {
-    "status": "FINAL3_REVISE_FINAL4_REQUIRED",
+    "status": "FINAL4_SUBMITTED_PENDING_VERDICT",
     "verdict": "MSG-20261005-22 = PASS WITH REVISE",
     "option": "A",
     "reviewed_head": "48e6e2a3",
@@ -8634,11 +8634,12 @@
       "RecoveryPackage DB DELETE guard"
     ],
     "note": "设计已批（Option A）；四项必修已实现；MSG-20261005-23 = REVISE（CHANGE 2 + canonical 重算）与 MSG-20261005-24 = REVISE（E1 可信 gate 绑定 / E2 lineage 绑定 gate digest / E3 JSON+PDF 双 artifact + RISKS 措辞）均已落地并送 FINAL-3；不得进入 P2-F/P2-G",
-    "implementation_head": "95733930",
+    "implementation_head": "607bf2b2",
     "reviewed_head_history": [
       "b5baf381",
       "1fcb5244",
-      "95733930"
+      "95733930",
+      "607bf2b2"
     ],
     "verdict_history": {
       "MSG-20261005-23": {
@@ -8701,6 +8702,13 @@
       "archive": "AI-ARCHITECT-INBOX.md#MSG-20261005-25",
       "archive_check": "FULL_COPY_OK（254/254 行）"
     },
+    "final4_request": "docs/releases/RECOVERY-SI-PHASE2-E-FINAL4-REQUEST.md",
+    "final4_head": "607bf2b2",
+    "final4_revised": {
+      "PERMIT_TO_BATCH_IMMUTABLE_BINDING": "DONE（assertRecoveryPersistBatchMatchesPermit：12 项 lineage 硬校验 + 批内 identity；P2E-G24/G25/G26 + P2E-DB17/DB19/DB20）",
+      "PACKAGE_CLAIMITEM_TO_PERMIT_OPPORTUNITY_BINDING": "DONE（opportunityRef === RecoveryOpportunity.id；ClaimItem.opportunityId 直接校验；P2E-DB18）",
+      "PRODUCTION_ENTRY": "persistRecoverySiPackageWithinTransaction({ prisma, gate, units })"
+    },
     "final2_revised": {
       "INDEPENDENT_LINEAGE_ACTION": "DONE（recovery.si_package_persisted + 9 键白名单；P2E-G22 / P2E-DB12）",
       "CANONICAL_READY_RECHECK_AT_WRITE_BOUNDARY": "DONE（verifyRecoveryPersistCanonicalReady；canonical → Control Plane → Guard；P2E-G16..G21）",
@@ -8761,6 +8769,20 @@
       "ARCH_REVIEW_REQUIRED": "YES —— 命中的 R2 触发项：幂等 / 事务 / 并发一致性边界变化"
     },
     "invariant": "APPROVAL_CONSUMPTION / EXECUTOR_INVOCATION = FORBIDDEN；OTHER_BUSINESS_FACT_WRITE / EXTERNAL_BUSINESS_WRITE / EXTERNAL_ACTION = FORBIDDEN；RUNTIME_WIRING = NONE；L5 不放宽；不建第二套 Runtime"
+  },
+  "recovery_si_phase2_e_final4_submission": {
+    "submitted_at": "2026-10-05T11:50:00.000Z",
+    "submitted_under_rules": true,
+    "reviewed_head": "607bf2b2",
+    "doc": "docs/releases/RECOVERY-SI-PHASE2-E-FINAL4-REQUEST.md",
+    "evidence_doc": "docs/releases/RECOVERY-SI-PHASE2-E-EVIDENCE.md",
+    "scope": "CHANGE E4：trusted permit ↔ 精确写入批次不可变绑定（12 项硬校验 + 批内 identity）+ RISKS：package.claimItemId ↔ permit.opportunityRef 业务绑定",
+    "risk_classification": {
+      "FOUNDATION_REUSED": "既有 RecoveryPackage / RecoveryPackageArtifact / FileAsset / AuditLog 与唯一约束、既有纯函数、既有 action-guard control plane、Recovery SI Phase 1 / P2-A..P2-D（只读复用 planRecovery / prioritizeOpportunities / buildRecoveryPlanDigest）",
+      "NEW_RISK_BOUNDARY": "幂等 / 事务 / 并发一致性边界变化：可信 permit 与具体写入批次不可变绑定（含 lineage 审计与业务 lineage claimItem↔opportunity），复用合法 permit 到错误 target 一律 fail-closed",
+      "ARCH_REVIEW_REQUIRED": "YES —— 命中的 R2 触发项：幂等 / 事务 / 并发一致性边界变化"
+    },
+    "invariant": "APPROVAL_CONSUMPTION / EXECUTOR_INVOCATION = FORBIDDEN；OTHER_BUSINESS_FACT_WRITE / EXTERNAL_BUSINESS_WRITE / EXTERNAL_ACTION = FORBIDDEN；RUNTIME_WIRING = NONE；PRISMA_MODEL_DELTA = NO；L5 不放宽；不建第二套 Runtime"
   },
   "recovery_si_phase2_d_impl_submission": {
     "submitted_at": "2026-10-05T05:45:05.805Z",

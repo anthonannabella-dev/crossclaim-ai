@@ -2427,3 +2427,14 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
   `AuditLog` 必须由该 gate 构造（不得由调用方另造）；`package ↔ opportunityRef ↔ trusted READY` 完整绑定；
   复用合法 permit 到错误 target 必须 fail-closed。
 - 本窗口在此 checkpoint 收口（未开始 FINAL-4 实现），保留既有冻结边界。
+
+## 2026-10-05T11:50Z — P2-E FINAL-4（CHANGE E4）落地（实现 HEAD = 607bf2b2）
+- 新增 `assertRecoveryPersistBatchMatchesPermit(gate, units)`：任何 DB 写入前执行 12 项 lineage 硬校验 + 批内 identity 校验
+  （① units.organizationId === permit.organizationId；② package.opportunityRef === permit.opportunityRef；
+   ③ artifact.packageId/fileAssetId ↔ package/FileAsset；④ AuditLog action/org/entityType/entityId/changes 全量与 permit 一致 + 9 键白名单）。
+- 写入口必须先通过该函数；新增生产入口 `persistRecoverySiPackageWithinTransaction({ prisma, gate, units })`：
+  permit↔批次绑定 → claimItem↔opportunity 业务绑定（P2E_PACKAGE_OPPORTUNITY_BINDING_MISMATCH，只读、事务前）→ 单一事务落库。
+- RISKS：确认 `opportunityRef === RecoveryOpportunity.id`（recovery-read-tool-adapters.ts），用 `ClaimItem.opportunityId` 直接校验，未猜测语义。
+- 验证：tsc exit 0；契约 **27/27**（新增 G24..G27）；真实库 **20/20**（新增 DB17..DB20 对应 F4E-01..04，均断言四表全 0）；
+  定向回归 **10 文件 / 127 例 PASS**；prisma validate valid / 79 migrations 无待应用 / up to date。
+- 证据：`docs/releases/RECOVERY-SI-PHASE2-E-EVIDENCE.md` §9.3；送审：`docs/releases/RECOVERY-SI-PHASE2-E-FINAL4-REQUEST.md`（REVIEWED_HEAD = 607bf2b2）。
