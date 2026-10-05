@@ -1,16 +1,16 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "17fda50",
+  "head": "d81816e",
   "status": "RECONCILED",
-  "current_task": "C18 离线骨架完成（C18-1…C18-8）；下一步 SEO-3 公开只读 Checker/Calculator（PUBLIC API SECURITY AUDIT）+ C18 INTERNAL FINAL 送审",
-  "next_task": "SEO-3 公开只读 Checker/Calculator（public API security boundary，需审计）",
+  "current_task": "RSI 生产可执行闭环（7 点收口）：RSI_RUNTIME_READY = PASS；MODEL_PROVIDER_READY = 本地仿真已接线（真实网络/付费 HOLD）；PERSISTENCE_READY = ephemeral 已验证、durable 需宿主非生产 DATABASE_URL；REBOOT_RECONCILE_READY = NOT_IMPLEMENTED（下一单元）；SYSTEMD_VALIDATED = 需宿主 Linux 实机",
+  "next_task": "RSI-RT-06 reboot/restart reconcile + lease 恢复 + 去重 + exactly-once（内部可做）；真实 Provider Adapter 仍 HOLD",
   "send_head": "07b7009",
   "decision_head": "07b7009",
   "last_chatgpt_message": "MSG-20261004-16",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T13:40:00.000Z",
-  "previous_head": "3c5fac6",
+  "updated_at": "2026-10-05T00:41:25.995Z",
+  "previous_head": "070daf1",
   "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "0c35106",
@@ -49,13 +49,13 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-03T14:11:19.420Z",
+  "last_tick_at": "2026-10-05T00:41:25.995Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
   "last_action": "INDEPENDENT FINAL AUDIT = PASS（MSG-20261003-147）；三元闭环成立，内部代码开发阶段正式完成",
   "last_action_at": "2026-10-03T14:17:18.723Z",
   "next_action": "内部自治开发停止；剩余为 Layer 3 外部依赖（需宿主授权）",
-  "current_head": "1950ef8",
-  "reviewed_head": "24e27c8",
+  "current_head": "d81816e",
+  "reviewed_head": "070daf1",
   "claim_submit_batch": {
     "verdict": "PASS",
     "message_id": "MSG-20261001-07",
@@ -5192,9 +5192,9 @@
   "awaiting_verdict": "EXACT-ORDER REPLAY 证据已送审（comment 5979262070）；shared/staging deploy 解禁待裁决",
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-05T00:40:52.312Z",
-    "head": "070daf1",
-    "acceptance_head": "070daf1",
+    "computed_at": "2026-10-05T00:41:56.848Z",
+    "head": "d81816e",
+    "acceptance_head": "d81816e",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5286,7 +5286,6 @@
       "CHECK:L1-07_api_typecheck_passed",
       "CHECK:L1-08_web_typecheck_build_passed",
       "CHECK:L1-09_no_skipped_critical_tests",
-      "CHECK:L1-10_git_working_tree_clean",
       "CHECK:L1-11_docs_state_consistent",
       "CHECK:L1-12_schema_invariants_verified",
       "CHECK:L1-13_negative_paths_covered",
@@ -5345,48 +5344,48 @@
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=070daf1 ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
+        "evidence": "acceptance_head=d81816e ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
       },
       "L1-05_pg_regression_passed": {
         "status": "UNVERIFIED",
-        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head 070daf1（且中间存在非簿记变更）"
+        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head d81816e（且中间存在非簿记变更）"
       },
       "L1-06_fresh_db_migration_passed": {
         "status": "UNVERIFIED",
-        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head 070daf1（且中间存在非簿记变更）"
+        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head d81816e（且中间存在非簿记变更）"
       },
       "L1-07_api_typecheck_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head 070daf1（且中间存在非簿记变更）"
+        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head d81816e（且中间存在非簿记变更）"
       },
       "L1-08_web_typecheck_build_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head 070daf1（且中间存在非簿记变更）"
+        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head d81816e（且中间存在非簿记变更）"
       },
       "L1-09_no_skipped_critical_tests": {
         "status": "UNVERIFIED",
-        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head 070daf1（且中间存在非簿记变更）"
+        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head d81816e（且中间存在非簿记变更）"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
-        "status": false,
-        "evidence": "dirty entries: 10"
+        "status": true,
+        "evidence": "porcelain empty"
       },
       "L1-11_docs_state_consistent": {
         "status": "UNVERIFIED",
-        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head 070daf1（且中间存在非簿记变更）"
+        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head d81816e（且中间存在非簿记变更）"
       },
       "L1-12_schema_invariants_verified": {
         "status": "UNVERIFIED",
-        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head 070daf1（且中间存在非簿记变更）"
+        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head d81816e（且中间存在非簿记变更）"
       },
       "L1-13_negative_paths_covered": {
         "status": "UNVERIFIED",
-        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head 070daf1（且中间存在非簿记变更）"
+        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head d81816e（且中间存在非簿记变更）"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
         "status": "UNVERIFIED",
-        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head 070daf1（且中间存在非簿记变更）"
+        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head d81816e（且中间存在非簿记变更）"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
@@ -6334,7 +6333,7 @@
       "API.md / DOMAIN_MODEL.md / architecture-contract 计数 77 → 79"
     ]
   },
-  "next_execution_unit": "①第 2 点（Model Router → 真实 Provider Adapter）设计送审计；②PERSISTENCE/REBOOT_RECONCILE/SYSTEMD 三项等宿主（非生产 DATABASE_URL / Linux 机器）",
+  "next_execution_unit": "RSI-RT-06 状态持久化收口：reboot/restart reconcile + lease 恢复 + 去重 + exactly-once 验收（仓库内可做，不需要外部账号）；随后才是真实 Provider sidecar 的窄审计。",
   "customer_ui_commercialization": {
     "at": "2026-10-04T01:21:55.949Z",
     "authorization": "MSG-20261004-01（CUSTOMER UI/UX COMMERCIALIZATION — IMPLEMENTATION AUTHORIZED）",
@@ -7379,25 +7378,14 @@
     ],
     "seo3_progress": "CHANGE A/B validator added (86f4289), engine output validation added (eb99c53), validator wired into runPublicSeoChecker (8bf49da), HTTP boundary guard added (4f2cd20); HTTP entry still not registered"
   },
-  "CURRENT_HEAD": "293f55e",
-  "LAST_COMPLETED_UNIT": "RSI 运行时本地自举证据（RSI_RUNTIME_READY）：rsi:run 真实跑通 —— 看门狗领取 boot-1 → 真实命令执行器跑 vitest 目标测试 → exit=0 → status=PASS（摘要证据 3fdec35b658c）；同批第一次用 npx 因 Windows .cmd shim + shell:false 判 BLOCK（未伪造成功），已记录；产出 docs/releases/RSI-RUNTIME-BOOTSTRAP-EVIDENCE.md",
-  "NEXT_EXECUTION_UNIT": "①第 2 点（Model Router → 真实 Provider Adapter）设计送审计；②PERSISTENCE/REBOOT_RECONCILE/SYSTEMD 三项等宿主（非生产 DATABASE_URL / Linux 机器）",
-  "CI_STATUS": "本批提交后由托管 CI 复核；本地：apps/api tsc 0；全部 RSI 套件（含一次性库用例另跑）通过",
-  "WAITING_FOR_VERDICT": "none（本批无待裁决项）",
-  "HOST_ACTION_REQUIRED": [
-    "provider developer/partner account registration",
-    "third-party commercial agreement acceptance",
-    "company/KYC/IOR/broker materials",
-    "production client id/secret + webhook signing key",
-    "real POA signing",
-    "any provider fee",
-    "enable real external write",
-    "real customs filing / refund / money movement",
-    "Search Console verification / domain ownership（SEO 页面转 INDEX 前需要）",
-    "non-production staging DATABASE_URL + 确认该 shared 库是否承载真实客户数据（执行已授权的 staging migrate deploy 前需要）"
-  ],
-  "HOLD_EXTERNAL": true,
-  "LAST_HEARTBEAT_AT": "2026-10-05T13:40:00.000Z",
+  "CURRENT_HEAD": "d81816e",
+  "LAST_COMPLETED_UNIT": "RSI Model Provider Adapter contract v2 + 本地仿真 adapter（零网络零费用）：判别式联合结果、timeoutMs 显式入参、一次 invoke = 一次 attempt、调用前最坏费用熔断（BUDGET_EXCEEDED / BUDGET_GUARD_UNENFORCEABLE + REJECTED 进台账）、输入输出双向 schema 校验与敏感数据过滤、Router→adapter→ledger 组合根。MSG-20261005-09 = PASS WITH REVISE 的授权范围全部落地。",
+  "NEXT_EXECUTION_UNIT": "RSI-RT-06 状态持久化收口：reboot/restart reconcile + lease 恢复 + 去重 + exactly-once 验收（仓库内可做，不需要外部账号）；随后才是真实 Provider sidecar 的窄审计。",
+  "CI_STATUS": "HEAD d81816e 已推送 gate/7-commercial-validation；apps/api tsc exit 0；rsi-model-router 9 / rsi-cost-e2e 6 / rsi-adapter-safety 8 / rsi-local-sim-adapter 10 = 33 例全过；其余 rsi-* 通过；rsi-persistence-db 本地因缺 AutonomyIncident 表失败（既有 HOST_ACTION_REQUIRED，非本批改动）；门禁 api-contract / audit-coverage / autopilot-rules 全 OK",
+  "WAITING_FOR_VERDICT": "none —— MSG-20261005-09（RSI Model Router → Provider Adapter 设计 = PASS WITH REVISE）已逐字归档（FNV e1740a41 / 178 行 / FULL_COPY_OK）；真实 Provider 那一轮才需要新的窄审计，本轮不需要。",
+  "HOST_ACTION_REQUIRED": "①非生产 DATABASE_URL（无真实客户数据）→ RSI staging smoke + migration apply + reconcile/exactly-once 实机验证；②Linux 主机（或 CI runner）→ systemd Test A/B/C/D/E/F；③gh auth login（可选，仅恢复 issue comment 审计通道）。",
+  "HOLD_EXTERNAL": "RSI_MODEL_NETWORK = HOLD / RSI_PAID_MODEL_CALLS = HOLD / REAL_PROVIDER_ADAPTER = OUT_OF_PROCESS_REQUIRED（sidecar 未实现）/ EXTERNAL_WRITE = HOLD / PAYMENT = HOLD / TRANSPORT = HOLD / PRODUCTION_CREDENTIALS = HOLD / PRODUCTION_PUBLIC_CHECKER = HOLD",
+  "LAST_HEARTBEAT_AT": "2026-10-05T00:41:25.995Z",
   "ci_red_streak_note": "RESOLVED: three contract/inventory fixes (tenant-trigger whitelist 1b15ab7, append-only whitelist cc13bde, model inventory 82->85 4f02282); 4f02282 is the first green run after the streak.",
   "ci_contract_fix_local_verification": {
     "at": "2026-10-04T08:51:16.135Z",
@@ -7470,7 +7458,8 @@
       "RSI-P1-02-readonly-observer",
       "RSI-RT-flags-and-kill-switch",
       "RSI-RT-01-runtime-entry",
-      "RSI-RT-02-supervisor-policy"
+      "RSI-RT-02-supervisor-policy",
+      "RSI-MP-01-provider-adapter-contract-v2"
     ],
     "runtime_task": "RSI Runtime / Autonomous Maintenance Runtime（5 个单元已登记 READY）"
   },
@@ -7686,7 +7675,7 @@
     "duty_difference_registration": "HOLD_UNTIL_CALCULATION_SEMANTICS_CONFIRMED",
     "first_registration_recipe": "TEST-ONLY RuleVersion row → parseRecoveryRuleDefinition → createSeoPublicEngineRegistry([engine]) → createSeoPublicCheckerPorts → runPublicSeoChecker；首次注册时补 createEligibilitySeoPublicEngine() adapter + integration test，无需重做 engine design audit"
   },
-  "SAFE_CONTINUATION_QUEUE": "EMPTY（内部工作已清空；剩余项均为 HOST_ACTION_REQUIRED / REAL_CREDENTIAL_REQUIRED / SEARCH-CONSOLE-DOMAIN / 外部基础设施）",
+  "SAFE_CONTINUATION_QUEUE": "NOT_EMPTY：RSI-RT-06 reboot/restart reconcile + lease 恢复 + 去重 + exactly-once（内部可做，不需外部账号）；其余为 HOST_ACTION_REQUIRED（非生产 DB / Linux systemd）。",
   "rsi_runtime": {
     "runner_noop_autopass": "REMOVED",
     "runner_default": "BLOCK（未配置执行器绝不 PASS）",
@@ -7705,10 +7694,10 @@
       "psql"
     ],
     "RSI_RUNTIME_READY": "PASS（本地自举：看门狗 → 真实执行 → 退出码判定 → 摘要证据）",
-    "MODEL_PROVIDER_READY": "NOT_STARTED",
-    "PERSISTENCE_READY": "MIGRATION_VERIFIED_ON_EPHEMERAL；durable 非生产库应 = HOST_ACTION_REQUIRED（需宿主 DATABASE_URL）",
-    "REBOOT_RECONCILE_READY": "NOT_IMPLEMENTED",
-    "SYSTEMD_VALIDATED": "NOT_VALIDATED（宿主 Linux 实机）",
+    "MODEL_PROVIDER_READY": "LOCAL_SIM_ADAPTER_LANDED（contract v2 + ROUTER_TO_SIM_ADAPTER_WIRING + 预算熔断 + 输入输出过滤 + 台账）；REAL_PROVIDER = HOLD",
+    "PERSISTENCE_READY": "MIGRATION_VERIFIED_ON_EPHEMERAL；durable 非生产库 = HOST_ACTION_REQUIRED（需宿主 DATABASE_URL）",
+    "REBOOT_RECONCILE_READY": "NOT_IMPLEMENTED（下一执行单元）",
+    "SYSTEMD_VALIDATED": "NOT_VALIDATED（需宿主 Linux 实机）",
     "noop_autopass": "REMOVED（runner 层）",
     "event_autocomplete_inflight": "REMOVED（引擎层）",
     "block_coerced_to_pass": "REMOVED（wrapper 层）",
@@ -7726,5 +7715,46 @@
     "project_executor": "LANDED（rsi-project-executor.ts；产出 test:<digest> 证据 + 可选 artifact）",
     "bootstrap_evidence": "docs/releases/RSI-RUNTIME-BOOTSTRAP-EVIDENCE.md",
     "windows_cmd_shim_note": "npx/npm 是 .cmd shim，shell:false 下无法 spawn → 执行器判 BLOCK（正确）；Linux 不受影响"
+  },
+  "rsi_model_provider": {
+    "at": "2026-10-05T00:41:25.995Z",
+    "contract": "v2（判别式联合；一次 invoke = 恰好一次 attempt；timeoutMs 显式；无 adapter 内重试）",
+    "authorization": "MSG-20261005-09 = PASS_WITH_REVISE（reviewed HEAD 070daf1）",
+    "archived_as": "MSG-20261005-09",
+    "archive_integrity": {
+      "len": 3650,
+      "lines": 178,
+      "fnv": "e1740a41",
+      "compare": "FULL_COPY_OK"
+    },
+    "LOCAL_SIM_ADAPTER_IMPLEMENTATION": "LANDED（apps/api/src/services/autonomy/rsi-local-sim-adapter.ts；零网络零凭据）",
+    "ROUTER_TO_SIM_ADAPTER_WIRING": "LANDED（apps/api/src/services/autonomy/rsi-model-provider-composition.ts）",
+    "OUTPUT_SCHEMA_VALIDATION": "ENFORCED（严格字段集合 + 类型 + 长度；不合法 → OUTPUT_SCHEMA_INVALID）",
+    "INPUT_SENSITIVE_DATA_FILTER": "ENFORCED（resolve immutable prompt → promptDigest 校验 → 扫描）",
+    "OUTPUT_SENSITIVE_DATA_FILTER": "ENFORCED（schema 通过后再扫描；命中即 fail-closed）",
+    "BUDGET_GUARD": "BEFORE_CALL（estimatedWorstCaseCost <= 剩余日/月/incident/本次上限，否则不调用 + ledger REJECTED）",
+    "BUDGET_GUARD_UNENFORCEABLE": "FAIL_CLOSED（无 pricing / maxOutputTokens 非法 / worstCase > maxUsdThisCall）",
+    "ADAPTER_INTERNAL_RETRY": "FORBIDDEN（retryCount 恒 0；重试只由 supervisor 发起并重新过预算）",
+    "RAW_PROVIDER_RESPONSE": "NOT_PERSISTED（只回 outputRef + outputDigest + usage + 失败原因）",
+    "RSI_MODEL_NETWORK": "HOLD",
+    "RSI_PAID_MODEL_CALLS": "HOLD",
+    "REAL_PROVIDER_ADAPTER": "OUT_OF_PROCESS_REQUIRED（sidecar 未实现，未解开 TRANSPORT）",
+    "runtime_wiring": "默认不进 rsi:run 执行路径；规则级信号仍为 LEVEL_0，不产生任何模型调用",
+    "evidence": {
+      "tsc": "exit 0",
+      "tests": "rsi-model-router 9 + rsi-cost-e2e 6 + rsi-adapter-safety 8 + rsi-local-sim-adapter 10 = 33/33 PASS",
+      "other_rsi_suites": "通过（仅 rsi-persistence-db 因本地缺 AutonomyIncident 表失败，属既有 HOST_ACTION_REQUIRED）",
+      "gates": "api-contract / audit-coverage / autopilot-rules 全 OK",
+      "commit": "d81816e",
+      "doc": "docs/releases/RSI-MODEL-PROVIDER-ADAPTER-IMPLEMENTATION.md"
+    },
+    "next_audit_requirements": [
+      "sidecar 凭据隔离（RSI runtime env 不含 OPENAI_API_KEY / ANTHROPIC_API_KEY）",
+      "sidecar host allowlist（不得成为任意 HTTP 代理）",
+      "预算硬上限（maxOutputTokens 或等价 provider 参数）+ 证据",
+      "SDK retry = 0 证据",
+      "真实调用链上的输入/输出过滤证据",
+      "一次受控非生产小额调用证据（usage + outputDigest，不含原始响应）"
+    ]
   }
 }
