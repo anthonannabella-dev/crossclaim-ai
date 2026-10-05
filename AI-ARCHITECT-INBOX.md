@@ -138001,3 +138001,167 @@ PRODUCTION_ENABLEMENT = HOLD
 
 真实 Provider 那一轮不用重新审 RSI 架构，只需重点审：sidecar 凭据隔离、真实网络 allowlist、预算硬上限、SDK retry=0、输入输出过滤，以及一次受控的非生产小额调用证据。
 ```
+
+### [MSG-20261005-10] ARCHITECT VERDICT — BG-011 PS04 D1–D3 枚举迁移 = **PASS / CLOSED**（REVIEWED_HEAD = `5d809039`，未使用上一轮缓存）。①独立确认 `apps/api/prisma/migrations/20261003200000_ps04_enum_d1_d3/migration.sql` **只有 5 条纯加法**（全部 `ALTER TYPE ... ADD VALUE IF NOT EXISTS`）：`RecoveryDomain += INDEPENDENT_SITE`、`Channel += SHOPIFY / STRIPE / PAYPAL`、`RouteTarget += PAYMENT_PROCESSOR`；**没有**新表 / 新列 / 新索引 / 数据回填 / enum 删除重命名 / D4 内容 → `BG-011 = COMPLETED`、`BG-011 = CLOSED`、`D1 = PASS`、`D2 = PASS`、`D3 = PASS`，且 `schema.prisma` 已包含这些目标值与 migration 方向一致。②**D4 仍然未批准，不能顺带实施**：原 MSG-20261003-133 裁决明确 `D4 = NOT_APPROVED`，先复用现有 `claimDeadline` / `deadlineSource` / Claim status / Appeal status，只有证明表达能力不足后才能另送 Schema Delta；已核当前 Claim / Appeal schema 无 `disputeStage` 一类字段 → `D4 = HOLD`、`D4_IMPLEMENTATION = FORBIDDEN_WITHOUT_NEW_ARCHITECT_REVIEW`。③一个容易误判但已查清的点：`Channel.PAYMENT_PROCESSOR` **不是** BG-011 的 D4，它来自后续 `20261004073500_non_c18_schema_history_reconciliation`（修复 schema.prisma 已声明但历史 migration 未添加的 drift），BG-011 自身严格只有 D1–D3。④证据要求：`MIGRATION_SCOPE / SCHEMA_ALIGNMENT / D4_ABSENT / NO_DATA_MIGRATION = PASS`；`architecture-contract 142/142` 属本地执行证据，exact HEAD 上 hosted status 为空故不声称已独立验证，但**不因此保持 OPEN**；`MIGRATE_STATUS_OUTPUT = OPTIONAL`、`FRESH_DB_REPLAY_LOG = OPTIONAL`（若内部 Closure Protocol 要求 fresh DB 证据，最小补 `prisma migrate deploy → success` + `prisma migrate status → Database schema is up to date` 并归档为运行证据，不需要再送架构复审）。⑤不需要 FINAL-2；Codex 可直接关闭 BG-011，且**不得借此继续实施 D4**；边界保持 `EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS = HOLD`、`FINAL_ACCEPTANCE_HEAD = 0f7f7ac`。
+
+```text
+ARCHITECT VERDICT：PASS / CLOSED
+
+我按 REVIEWED_HEAD = 5d80903980854da17f015f6ea3d141ead12c34f2 重新核了本次 BG-011，不使用上一轮缓存。
+
+① BG-011 可以记 COMPLETED / CLOSED
+
+我独立确认迁移：
+
+apps/api/prisma/migrations/20261003200000_ps04_enum_d1_d3/migration.sql
+
+确实只有这 5 条纯加法：
+
+纯文本
+RecoveryDomain += INDEPENDENT_SITE
+
+Channel += SHOPIFY
+Channel += STRIPE
+Channel += PAYPAL
+
+RouteTarget += PAYMENT_PROCESSOR
+
+全部采用：
+
+SQL
+ALTER TYPE ... ADD VALUE IF NOT EXISTS
+
+没有：
+
+新表
+新列
+新索引
+数据回填
+enum 删除/重命名
+D4 内容
+
+因此：
+
+纯文本
+BG-011 = COMPLETED
+BG-011 = CLOSED
+
+D1 = PASS
+D2 = PASS
+D3 = PASS
+
+当前 schema.prisma 也已经包含这些目标值，与 migration 方向一致。
+
+② D4 仍然未批准，不能顺带实施
+
+确认。
+
+我重新找到了原始 MSG-20261003-133 裁决。D4 指的是额外争议生命周期 Schema，例如可选 disputeStage 一类字段。
+
+原裁决明确：
+
+纯文本
+D4 = NOT_APPROVED
+
+先复用现有：
+
+纯文本
+claimDeadline
+deadlineSource
+Claim status
+Appeal status
+
+只有证明表达能力不足后，才能另送 Schema Delta。
+
+我也核了当前 Claim / Appeal schema，没有看到 disputeStage 这类 D4 字段。
+
+因此：
+
+纯文本
+D4 = HOLD
+D4_IMPLEMENTATION = FORBIDDEN_WITHOUT_NEW_ARCHITECT_REVIEW
+一个容易误判但已查清的点
+
+当前 Channel 里确实还有：
+
+纯文本
+PAYMENT_PROCESSOR
+
+但它不是 BG-011 的 D4。
+
+它来自后续：
+
+纯文本
+20261004073500_non_c18_schema_history_reconciliation
+
+该 migration 明确是修复：
+
+纯文本
+schema.prisma 已声明
+但历史 migration 未添加
+
+的 schema-history drift。
+
+因此不能把：
+
+纯文本
+Channel.PAYMENT_PROCESSOR
+
+误判成 PS04 D4。
+
+BG-011 自身仍然严格只有 D1–D3。
+
+③ 是否还必须补 migrate status / 空库回放？
+
+不阻塞 CLOSED。
+
+当前我直接确认的是：
+
+纯文本
+MIGRATION_SCOPE = PASS
+SCHEMA_ALIGNMENT = PASS
+D4_ABSENT = PASS
+NO_DATA_MIGRATION = PASS
+
+你报告的：
+
+纯文本
+architecture-contract 142/142
+
+属于本地执行证据；而 exact reviewed HEAD 上 GitHub hosted status/workflow 返回为空，所以我不能把“当前 HEAD 的 hosted CI success”说成已独立验证。
+
+但对 BG-011 这个窄任务，我不要求因此继续保持 OPEN。
+
+所以：
+
+纯文本
+MIGRATE_STATUS_OUTPUT = OPTIONAL
+FRESH_DB_REPLAY_LOG = OPTIONAL
+
+如果你们内部 Closure Protocol 强制要求“每个 migration 单元都必须带 fresh DB runtime evidence”，最小补一条就够：
+
+纯文本
+prisma migrate deploy
+→ success
+
+prisma migrate status
+→ Database schema is up to date
+
+不需要再送架构复审，仅归档为运行证据即可。
+
+最终状态
+纯文本
+BG-011 = PASS / COMPLETED / CLOSED
+
+PS04_D1_D3_ENUM_MIGRATION = CLOSED
+D4 = NOT_APPROVED / HOLD
+
+EXTERNAL_WRITE = HOLD
+PAYMENT = HOLD
+TRANSPORT = HOLD
+PRODUCTION_CREDENTIALS = HOLD
+
+FINAL_ACCEPTANCE_HEAD = 0f7f7ac
+
+不需要 FINAL-2。Codex 可以直接关闭 BG-011，且不得借此继续实施 D4。
+```
