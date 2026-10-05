@@ -179,6 +179,8 @@ export async function composeRsiRuntime(input: {
    * 只接受 shared guard 类型（RuntimeActionGuard / AppActionGuardDeps），不接受自定义 guard port。
    */
   productRecoveryPack?: {
+    /** PHASE 2：唯一 Model Gateway port（host 用共享 Gateway 组装；缺省 = 不用模型） */
+    modelGateway?: import("./rsi-si-model-gateway").RsiSiModelGatewayPort;
     appActionGuardDeps: AppActionGuardDeps;
     readPorts: RecoveryReadPorts;
     bind: (task: { id: string; dedupeKey: string; priority: string }) => RecoverySiTaskBinding | null;
@@ -220,6 +222,9 @@ export async function composeRsiRuntime(input: {
           readPorts: input.productRecoveryPack.readPorts,
           bind: input.productRecoveryPack.bind as never,
         });
+  const siModelGateway =
+    input.productRecoveryPack?.modelGateway ??
+    (input.domainPacks === undefined ? undefined : undefined);
   const domainPackList = [
     ...(productPack === null ? [] : [productPack]),
     ...(input.domainPacks ?? []),
@@ -233,7 +238,12 @@ export async function composeRsiRuntime(input: {
     );
   }
   const domainRunner =
-    domainPackList.length === 0 ? null : createRsiDomainPackRunner({ packs: domainPackList });
+    domainPackList.length === 0
+      ? null
+      : createRsiDomainPackRunner({
+          packs: domainPackList,
+          ...(siModelGateway === undefined ? {} : { modelGateway: siModelGateway }),
+        });
   // STEP 3 FINAL-7：唯一 runner mux —— Recovery 任务**永远**走 Recovery domain dispatch（保留路由），
   // 不得被 caller supplied input.runner 抢占；无正式 Recovery pack → BLOCK（不 fallback 给 caller runner）。
   const isRecoveryTask = (task: { dedupeKey: string }): boolean => task.dedupeKey.startsWith('task:recovery:');
@@ -353,6 +363,8 @@ export const RSI_RUNTIME_COMPOSITION_BOUNDARY = {
   domainCapabilityPacks: 'STATIC_COMPOSITION_ONLY（Recovery SI = domain pack）',
   /** FINAL-4：产品路径的 Recovery SI 只能经唯一 product 组装点（shared guard adapter 固定） */
   productRecoveryPackGuardWiring: 'SHARED_ACTION_GUARD_ADAPTER（FORBIDDEN: caller-supplied guard port）',
+  /** PHASE 2：SI Runtime 唯一模型入口 = 共享 Gateway capability port（缺省 = deterministic-first 不用模型） */
+  siModelGatewayWiring: 'OPTIONAL_PORT（owner = rsi-model-router；SECOND_MODEL_ROUTER = FORBIDDEN）',
   /** FINAL-7：唯一 runner mux —— Recovery namespace 永远走 domain dispatch，不接受 caller runner 抢占 */
   runnerMux: 'RECOVERY_PRIORITY（task:recovery:* → domain dispatch only；caller runner 仅用于非 Recovery 任务）',
   /** FINAL-5：'recovery-si' 为保留 pack id；经通用 domainPacks 注入一律拒绝 */

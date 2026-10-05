@@ -22,6 +22,8 @@ import type { RsiEvidenceRunner, RsiRunnerStatus } from './rsi-task-runner';
 export interface RsiDomainPackContext {
   task: RsiSafeTask;
   packId: string;
+  /** PHASE 2：唯一 Model Gateway capability port（缺省 = 本次调用不使用模型，deterministic-first） */
+  modelGateway?: import('./rsi-si-model-gateway').RsiSiModelGatewayPort;
 }
 
 export interface RsiDomainPackGuardAction {
@@ -78,6 +80,8 @@ export interface RsiDomainPackRunner extends RsiEvidenceRunner {
  */
 export function createRsiDomainPackRunner(input: {
   packs: readonly RsiDomainCapabilityPack[];
+  /** PHASE 2：唯一 Model Gateway port（由 host 用共享 Gateway 组装后注入） */
+  modelGateway?: import('./rsi-si-model-gateway').RsiSiModelGatewayPort;
   log?: (line: string) => void;
 }): RsiDomainPackRunner {
   const dispatched: { taskId: string; packId: string; status: RsiRunnerStatus; guardActions: readonly RsiDomainPackGuardAction[] }[] = [];
@@ -111,7 +115,11 @@ export function createRsiDomainPackRunner(input: {
         dispatched.push({ taskId: task.id, packId: '(unmatched)', status: 'BLOCK', guardActions: [] });
         return { status: 'BLOCK', evidenceRef: 'domain-pack:unmatched' };
       }
-      const evidence = await pack.run({ task, packId: pack.packId });
+      const evidence = await pack.run({
+        task,
+        packId: pack.packId,
+        ...(input.modelGateway === undefined ? {} : { modelGateway: input.modelGateway }),
+      });
       if (evidence.externalWritePerformed !== false) {
         input.log?.(`RSI_DOMAIN_PACK_EXTERNAL_WRITE_REFUSED task=${task.id} pack=${pack.packId} -> BLOCK`);
         dispatched.push({ taskId: task.id, packId: pack.packId, status: 'BLOCK', guardActions: evidence.guardActions });
