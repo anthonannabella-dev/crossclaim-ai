@@ -151540,3 +151540,231 @@ PRODUCTION_READY = false
 U3 的 path/from 两个原问题已经 PASS；只剩 to 的字段类型/范围/枚举校验这一处，修完就可以正式进入 Canary/Shadow。
 ```
 
+### [MSG-20261005-75] PHASE 5 U3 FINAL2 裁决 = PASS / CLOSED（TARGET_SPECIFIC_DELTA_VALUE_SCHEMA / TARGET_SPECIFIC_DELTA_PATH_ALLOWLIST / DELTA_BASELINE_VALUE_BINDING / PROPOSAL_DIGEST_BINDING = PASS；PHASE_5_U3 = PASS / CLOSED；PHASE5_U3_FINAL3_REQUIRED = NO；授权进入 P5-U4 Canary / Shadow Evaluation）， reviewed ref 9a245254
+
+```text
+DECISION
+
+TARGET_SPECIFIC_DELTA_VALUE_SCHEMA = PASS
+TARGET_SPECIFIC_DELTA_PATH_ALLOWLIST = PASS
+DELTA_BASELINE_VALUE_BINDING = PASS
+PROPOSAL_DIGEST_BINDING = PASS
+PHASE_5_U3 = PASS / CLOSED
+PHASE5_U3_FINAL3_REQUIRED = NO
+Reviewed HEAD：9a245254
+GitHub Actions：NOT_OBSERVED
+KEEP
+TARGET_DELTA_VALUE_SCHEMA 已按字段定义整数范围、数值范围、枚举。
+非数值、越界、非整数、非法枚举全部 fail-closed。
+path 仍必须属于对应 target allowlist。
+from 仍必须来自 trusted baseline 当前值。
+to 现在也不能再是任意字符串。
+proposalDigest 继续绑定 target/path/from/to/rationale。
+one-verdict-one-proposal、proposal provenance、deep-freeze、PROPOSAL_ONLY、no apply/rollout/mutate 全部保持。
+
+因此 U3 的完整链现在是：
+
+trusted target
+→ allowlisted path
+→ trusted baseline from
+→ schema-valid to
+→ immutable PROPOSAL_ONLY artifact
+
+可以封板。
+
+CHANGE
+
+无 U3 阻断修改。
+
+两个非阻断 hardening 可以后续顺手做：
+
+数值 canonicalization，例如 "0.60" → "0.6"；
+from === to 时拒绝 NOOP proposal。
+
+这两项不影响当前 U3 closure，因为现在仍无执行面，并且每个 verdict 只能生成一个 proposal。
+
+RISKS
+
+保留已知债务：
+
+digest 仍截 16 hex；
+schema/fingerprint 随字段扩展必须同步维护；
+enum 的内部 canonical 表达以后要与真实 Config SSOT 对齐；
+P2E-DB5 test-isolation debt；
+exact SHA 没观察到 GitHub Actions run。
+
+不重新打开 U3。
+
+TEST
+
+当前测试覆盖足以关闭 U3：
+
+NUMBER_RANGE 类型/范围；
+INTEGER_RANGE 整数/上下限；
+ENUM allowlist；
+path allowlist；
+trusted baseline from；
+合法 to PASS；
+proposal provenance / anti-tamper；
+one verdict → one proposal；
+no apply / execute / rollout / mutate。
+
+Codex 报告本地 118 Phase 5 filtered tests PASS；这是本地执行证据，不等同独立 GitHub CI。
+
+NEXT
+
+授权进入 P5-U4 — Canary / Shadow Evaluation。
+
+最低要求冻结如下。
+
+1. 隔离方式
+
+链路必须是：
+
+Verified Controlled Config Proposal
+
+Verified Rollback Plan
+Verified Baseline Snapshot
+→ SHADOW / CANARY EVALUATION ONLY
+
+禁止把 proposal 写入真实 config SSOT。
+
+必须保证：
+
+baseline 与 proposal overlay 双轨运行；
+同一 cohort；
+同一 datasetVersion；
+同一 evaluation window；
+同一 deterministic/read-only inputs；
+External Write = 0；
+Payment = 0；
+real claim submission = 0；
+ACTION_RUNTIME 只能模拟；
+no production config mutation。
+2. 与 Phase 4 Offline Evaluation 的关系
+
+禁止新造第二套 outcome 指标定义。
+
+核心 outcome metrics 必须复用 Phase 4 语义：
+
+resolved denominator；
+successRate；
+failure / non-success rate；
+rejectedRate；
+unresolved share；
+human intervention；
+evidence quality。
+
+U4 Canary 只是：
+
+baseline metrics
+vs
+proposal shadow metrics
+
+的比较层。
+
+3. Target-specific 辅助指标
+
+可以额外增加，但不能改变 Phase 4 核心口径：
+
+ROUTER：routing distribution、escalation rate、latency、model cost；
+POLICY：eligibility/result distribution；
+GUARD：blocked/allowed ratio、unsafe-allow / false-allow indicators；
+ACTION_RUNTIME：attempt count、reconcile rate、error rate。
+4. Evaluation artifact
+
+建议产出可信：
+
+CANARY_SHADOW_EVALUATION
+
+至少绑定：
+
+proposalDigest
+verdictDigest
+candidateDigest
+rollbackPlanDigest
+baselineSnapshotDigest
+baselineConfigFingerprint
+datasetVersion
+cohortDigest
+evaluationWindow
+baselineMetrics
+proposalMetrics
+metricDeltas
+recommendation
+evaluationDigest
+
+并要求 provenance + fingerprint + deep-freeze。
+
+5. Recommendation 仅允许三态
+
+建议：
+
+ELIGIBLE_FOR_CONTROLLED_ADOPTION_REVIEW
+ROLLBACK_REQUIRED
+INSUFFICIENT_EVIDENCE
+
+不能直接出现：
+
+AUTO_APPLY / AUTO_PROMOTE / AUTO_ROLLOUT
+
+6. 强制 rollback 条件
+
+以下任一成立就必须：
+
+ROLLBACK_REQUIRED
+
+successRate 超阈值下降；
+unresolved share 超阈值上升；
+rejection/error rate 恶化；
+Guard/evidence 安全指标恶化；
+latency/cost 超预算；
+cohort/baseline/proposal provenance mismatch；
+evaluation 数据不足；
+evaluation window 不一致；
+target-specific hard safety threshold breach。
+
+rollback 必须固定指向 U2：
+
+baselineSnapshotDigest + baselineConfigFingerprint
+
+绝不允许：
+
+LATEST / DEFAULT / CURRENT / HEAD
+
+7. Canary PASS 仍不能上线
+
+即使结果很好，也只能得到：
+
+ELIGIBLE_FOR_CONTROLLED_ADOPTION_REVIEW
+
+不能自动：
+
+apply / promote / rollout / mutate
+
+后面必须再经过 Controlled Adoption Review。
+
+PRODUCTION
+
+继续全部 HOLD：
+
+REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing
+
+继续：
+
+SECOND_RUNTIME / SECOND_POLICY_ENGINE / SECOND_CONTROL_PLANE / SECOND_MODEL_GATEWAY / SECOND_COST_LEDGER / SECOND_META_EVIDENCE_STORE = FORBIDDEN
+
+继续：
+
+L5_RELAXATION = FORBIDDEN
+
+保持：
+
+MODEL_GATEWAY_RUNTIME_WIRED = false
+ACTION_RUNTIME_PRODUCTION_ENABLED = false
+META_IMPROVEMENT_INTEGRATED = false
+PRODUCTION_READY = false
+
+U3 正式 CLOSED。授权进入 P5-U4 Canary / Shadow Evaluation。
+```
+
