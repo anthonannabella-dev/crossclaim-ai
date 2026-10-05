@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "e157588a",
+  "head": "194dc9dc",
   "status": "RECONCILED",
   "current_task": "RSI 生产可执行闭环（7 点收口）：RSI_RUNTIME_READY = PASS；MODEL_PROVIDER_READY = 本地仿真已接线（真实网络/付费 HOLD）；PERSISTENCE_READY = ephemeral 已验证、durable 需宿主非生产 DATABASE_URL；REBOOT_RECONCILE_READY = NOT_IMPLEMENTED（下一单元）；SYSTEMD_VALIDATED = 需宿主 Linux 实机",
   "next_task": "BG-016 单一 Acceptance Head + 四份状态一致 guard（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍 HOST_ACTION_REQUIRED 或 HOLD",
@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-40",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T20:20:37.650Z",
+  "updated_at": "2026-10-05T20:29:23.272Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -50,15 +50,15 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
-  "next_execution_unit": "PHASE 5 U1 裁决归档与后续单元：(1) 打开右侧审核会话读取 P5-U1 verdict（严格匹配 REVIEWED_HEAD = e157588a，marker [CODEX-PHASE5-U1]）；(2) 先落盘 work/stage/verdict-p5u1-raw.txt → 逐字归档 AI-ARCHITECT-INBOX.md（MSG-20261005-68）→ compare.mjs FULL_COPY_OK → commit + push；(3) durable state；若为 REVISE，按其最小修法做窄修（code → tests → regression → tsc → commit → push → 送裁决 → 归档）；(4) 若 PASS，按审计给定顺序继续 PHASE 5 下一单元（候选：Controlled Config Proposal / Rollback Plan / Canary·Shadow Evaluation），仍严格禁止自动修改 Policy / Guard / Router / Action Runtime、自动 promotion / rollout、绕过 External Judge / Human Approval；(5) 边界不变：REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing = HOLD；SECOND_* = FORBIDDEN；L5_RELAXATION = FORBIDDEN。",
+  "next_execution_unit": "PHASE 5 U1 FINAL 裁决归档与 U2 进入：(1) 打开右侧审核会话读取 U1 FINAL verdict（严格匹配 REVIEWED_HEAD = 194dc9dc，marker [CODEX-PHASE5-U1FINAL]）；(2) 先落盘 work/stage/verdict-p5u1f-raw.txt → 逐字归档 AI-ARCHITECT-INBOX.md（MSG-20261005-69）→ compare.mjs FULL_COPY_OK → commit + push；(3) durable state；若 REVISE 按其最小修法窄修；若 PASS → P5-U2 Controlled Config Proposal（最低要求：APPROVED verdict only（REJECTED 绝不生成）；一 verdict 一 proposal；绑定 verdictDigest/ticketDigest/candidateDigest/evaluationDigest/evidenceSetDigest/baselineConfigFingerprint/proposedDelta/proposalDigest/rollbackPlanRef；delta 限 candidate target；不直接修改 Policy/Guard/Router/Action Runtime；必须先有 rollback plan）；(4) 之后 U3 Rollback Plan → U4 Canary/Shadow Evaluation；(5) 边界不变：REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing = HOLD；SECOND_* = FORBIDDEN；L5_RELAXATION = FORBIDDEN。",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-05T20:20:37.650Z",
+  "last_tick_at": "2026-10-05T20:29:23.272Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "PHASE 5 已开：按审计冻结的进入条件完成首单元 P5-U1（Candidate Review + Approval Verdict Contract），code = e157588a 已 push，marker [CODEX-PHASE5-U1] 已确认送达审计会话。交付内容：openCandidateReviewTicket（绑定 candidateDigest + evaluationDigest + evidenceSetDigest + approver 身份/角色/scope + nonce + 有效期，确定性 ticketDigest；自动化身份不得批准，candidate 必须 PROPOSAL_ONLY 且 mutation 全 FORBIDDEN）；decideCandidateReview（single-use + 防 replay、过期、时间序、approver 一致、outcome 枚举；verdict execution 全 FORBIDDEN + adoption = CONTROLLED_ADOPTION_PROPOSAL_REQUIRED）；revokeCandidateReview（单向不可逆）；无任何 apply/promote/execute 入口。本地：tsc exit 0；candidate-approval 10/10；PHASE 5 过滤集 7 files / 88 tests PASS；回归集 100 files / 1035 tests（唯一失败 = P2E-DB5 test-isolation debt，单独运行 20/20 PASS）；GITHUB_CI = NOT_OBSERVED。",
-  "last_action_at": "2026-10-05T20:20:37.650Z",
-  "next_action": "读取 PHASE 5 U1 裁决 → 归档（MSG-20261005-68）→ 按裁决继续 PHASE 5 下一单元。",
-  "current_head": "e157588a",
-  "last_completed_head": "e157588a",
+  "last_action": "PHASE 5 U1 裁决已读取、原文归档（MSG-20261005-68，compare.mjs = FULL_COPY_OK，归档提交 f241193d）：REVIEW_VERDICT_ONLY_BOUNDARY / APPROVER_ROLE_GATE / EXPIRY·REVOKE_DIRECTION / NO_APPLY·NO_PROMOTE·NO_MUTATION = PASS；CANDIDATE_PROVENANCE / TICKET_PROVENANCE_INTEGRITY / REPLAY_BY_TICKET_DIGEST / APPROVER_SCOPE_ENFORCEMENT = REVISE；PHASE5_U1_FINAL_REQUIRED = YES。已按裁决完成并送审 U1 FINAL（code = 194dc9dc，marker [CODEX-PHASE5-U1FINAL]）：U5 candidate 变 provenance-bearing（WeakMap fingerprint + deep-freeze + isVerifiedMetaImprovementCandidate）；ticket 同样 provenance + fingerprint + deep-freeze（isVerifiedCandidateReviewTicket）；replay/撤销改为 per-ticketDigest（Set<string>）；scope 白名单 APPROVER_SCOPES = [META_IMPROVEMENT_PROPOSAL_ONLY]。",
+  "last_action_at": "2026-10-05T20:29:23.272Z",
+  "next_action": "读取 PHASE 5 U1 FINAL 裁决 → 归档（MSG-20261005-69）→ 若 PASS 则 U1 = CLOSED 并进入 U2 Controlled Config Proposal。",
+  "current_head": "194dc9dc",
+  "last_completed_head": "194dc9dc",
   "reviewed_head": "add99ec3",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -5169,10 +5169,10 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "P5U1-1 读取 PHASE 5 U1 裁决（匹配 REVIEWED_HEAD = e157588a）→ 先落盘 verdict-p5u1-raw.txt → 归档 MSG-20261005-68 → compare.mjs FULL_COPY_OK → commit + push → durable state",
-    "P5U1-2 若 REVISE → 按最小修法窄修 candidate-approval（tests + regression + tsc + commit + push + 送裁决 + 归档）",
-    "P5U1-3 若 PASS → 开 PHASE 5 下一单元（按审计 NEXT：Controlled Config Proposal / Rollback Plan / Canary·Shadow Evaluation）",
-    "P5U1-4 非阻断债务（持续记录）：三类 digest 完整 SHA-256、recordContentKey canonicalization、scanRawPayloadKeys 有界遍历、P2E-DB5 test-isolation debt"
+    "P5U1F-1 读取 PHASE 5 U1 FINAL 裁决（匹配 REVIEWED_HEAD = 194dc9dc）→ 先落盘 verdict-p5u1f-raw.txt → 归档 MSG-20261005-69 → compare.mjs FULL_COPY_OK → commit + push → durable state",
+    "P5U1F-2 若 REVISE → 窄修（tests + regression + tsc + commit + push + 送裁决 + 归档）",
+    "P5U1F-3 若 PASS → 开 P5-U2 Controlled Config Proposal（APPROVED verdict only；一 verdict 一 proposal；必须绑定 baseline config fingerprint + proposed delta + rollbackPlanRef；不直接改 Policy/Guard/Router/Action Runtime）",
+    "P5U1F-4 非阻断债务（持续记录）：三类 digest 完整 SHA-256、各 fingerprint 随结构升级、scanRawPayloadKeys 有界遍历、P2E-DB5 test-isolation debt"
   ],
   "full_autonomous_internal_execution": "VERIFIED",
   "dispatcher_acceptance": {
@@ -9322,7 +9322,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-05T20:20:37.650Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-05T20:29:23.272Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -9450,7 +9450,7 @@
     "PHASE_2_MODEL_GATEWAY_RUNTIME": "PASS / CLOSED（MSG-20261005-50；Reviewed HEAD 338f30b4；PHASE2_FINAL5_REQUIRED = NO）",
     "PHASE_3_ACTION_RUNTIME": "PASS / CLOSED（MSG-20261005-54；Reviewed HEAD = fe3c33e9；PHASE3_FINAL4_REQUIRED = NO）",
     "PHASE_4_OUTCOME_LEARNING_PIPELINE": "CLOSED / PASS（MSG-20261005-67）：U1 FINAL / U2 / U3 / U4 / U5 全 CLOSED；含 U4 FINAL、U5 FINAL、U5 FINAL2、PHASE 4 FINAL CLOSURE。",
-    "PHASE_5_META_IMPROVEMENT": "IN PROGRESS：进入条件已冻结；U1 Candidate Review + Approval Verdict Contract = SUBMITTED / AWAITING_VERDICT（e157588a）。"
+    "PHASE_5_META_IMPROVEMENT": "IN PROGRESS：U1 = PASS WITH REVISE（MSG-20261005-68），U1 FINAL = SUBMITTED / AWAITING_VERDICT（194dc9dc）；NEXT = U2 Controlled Config Proposal → U3 Rollback Plan → U4 Canary/Shadow Evaluation。"
   },
   "heartbeat_watchdog": {
     "interval_seconds": 180,
@@ -9922,7 +9922,7 @@
       "U5"
     ]
   },
-  "archive_head": "624d71d6",
+  "archive_head": "f241193d",
   "phase4_u3_final": {
     "status": "PASS / CLOSED",
     "reviewed_head": "006cc912",
@@ -10352,6 +10352,61 @@
       "delivered": true,
       "composer_empty_verified": true,
       "expected_message_id": "MSG-20261005-68"
+    }
+  },
+  "phase5_u1_verdict": {
+    "message_id": "MSG-20261005-68",
+    "verdict": "PASS WITH REVISE / NOT CLOSED",
+    "reviewed_head": "e157588a",
+    "archive_verified": "FULL_COPY_OK",
+    "archive_head": "f241193d",
+    "pass": [
+      "REVIEW_VERDICT_ONLY_BOUNDARY = PASS",
+      "APPROVER_ROLE_GATE = PASS",
+      "EXPIRY / REVOKE_DIRECTION = PASS",
+      "NO_APPLY / NO_PROMOTE / NO_MUTATION = PASS"
+    ],
+    "revise": [
+      "CANDIDATE_PROVENANCE：caller 可手工伪造 PROPOSAL_ONLY candidate（需 provenance-bearing + isVerifiedMetaImprovementCandidate）",
+      "TICKET_PROVENANCE_INTEGRITY：手造 ticket 可拿 APPROVED（需 ticket provenance + fingerprint + deep-freeze）",
+      "REPLAY_BY_TICKET_DIGEST：WeakSet 只挡同一对象，{...ticket} 可绕过（需按 ticketDigest 记状态）",
+      "APPROVER_SCOPE_ENFORCEMENT：scope 只检查非空（需固定白名单 META_IMPROVEMENT_PROPOSAL_ONLY）"
+    ],
+    "phase5_u1_final_required": "YES",
+    "notes": [
+      "U1 FINAL 通过后才可作为 Controlled Adoption Proposal 的可信前置",
+      "顺序冻结：U1 FINAL → U2 Controlled Config Proposal → U3 Rollback Plan → U4 Canary/Shadow Evaluation → 再审 Controlled Adoption"
+    ]
+  },
+  "phase5_u1_final": {
+    "status": "SUBMITTED / AWAITING_VERDICT",
+    "reviewed_head": "194dc9dc",
+    "pushed": true,
+    "files": [
+      "apps/api/src/services/outcome-learning/meta-improvement-candidate.ts",
+      "apps/api/src/services/outcome-learning/candidate-approval.ts",
+      "apps/api/src/__tests__/candidate-approval.test.ts"
+    ],
+    "changes": [
+      "U5 candidate provenance：WeakSet + WeakMap canonical fingerprint + deep-freeze + isVerifiedMetaImprovementCandidate()",
+      "openCandidateReviewTicket：结构化检查后 fail-closed（APPROVAL_TICKET_CANDIDATE_NOT_VERIFIED）",
+      "ticket provenance：WeakSet + WeakMap fingerprint + deep-freeze + isVerifiedCandidateReviewTicket()；decide/revoke 首行校验（APPROVAL_TICKET_NOT_VERIFIED）",
+      "replay/撤销 per-ticketDigest（DECIDED_TICKET_DIGESTS / REVOKED_TICKET_DIGESTS，Set<string>）",
+      "scope 白名单 APPROVER_SCOPES / REQUIRED_APPROVER_SCOPE（APPROVAL_TICKET_SCOPE_NOT_ALLOWED）",
+      "新增 P5U1F_1..7 测试（手工 candidate/ticket、clone、原地篡改、digest-keyed replay、scope 白名单）"
+    ],
+    "local_verification": {
+      "tsc": "PASS (exit 0)",
+      "targeted": "candidate-approval 17/17（原 10 + P5U1F_1..7）",
+      "phase5": "7 files / 95 tests PASS",
+      "regression": "100 files / 1042 tests（1041 passed + 1 failed = P2E-DB5 test-isolation debt，单独运行 20/20 PASS）",
+      "github_ci": "NOT_OBSERVED"
+    },
+    "submission": {
+      "marker": "[CODEX-PHASE5-U1FINAL]",
+      "delivered": true,
+      "composer_empty_verified": true,
+      "expected_message_id": "MSG-20261005-69"
     }
   }
 }
