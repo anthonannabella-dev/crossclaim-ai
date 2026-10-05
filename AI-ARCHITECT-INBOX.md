@@ -148927,3 +148927,143 @@ PRODUCTION_READY = false
 U2 正式封板。
 ```
 
+### [MSG-20261005-60] PHASE 4 U3 裁决 = PASS WITH REVISE / NOT CLOSED（核心链路 PASS / IMMUTABLE EVIDENCE LEDGER 未接线）· reviewed ref e90de9c0
+
+```text
+
+DECISION
+
+U3 核心链路 canonical outcome → trusted lineage verified → projection：PASS
+四项绑定 outcomeDigest + lineageRefs + datasetVersion + evidenceDigest：PASS
+verified-only：PASS
+IMMUTABLE / APPEND_ONLY EVIDENCE LEDGER = REVISE
+PHASE_4_U3 = PASS WITH REVISE / NOT CLOSED
+PHASE4_U3_FINAL_REQUIRED = YES
+Reviewed HEAD：e90de9c0
+U4 / U5 继续授权
+
+KEEP
+
+未通过 U2 trusted lineage 的记录不会写入 evidence，且会显式进入 skipped。
+projection 只消费 verified records。
+evidence digest 会随 outcome / lineage / dataset version 改变。
+fake LearningEvidenceLedgerPort 实例会被 provenance 拒绝。
+没有建立第二 Meta Evidence Store。
+AUTO_PROMOTION = OFF / autoPolicyMutation = FORBIDDEN 正确。
+GITHUB_CI = NOT_OBSERVED 确认成立。
+
+CHANGE
+
+当前最大的剩余问题是：并没有真正复用仓库已有的 immutable evidence ledger。
+
+仓库已经存在：
+
+apps/api/src/services/autonomy/rsi-evidence-ledger.ts
+
+其中 appendRsiEvidence() 真正执行：
+
+duplicate evidenceId → EVIDENCE_IMMUTABLE
+append-only
+supersedes 校验
+no overwrite
+ledger integrity
+
+但 U3 当前：
+
+TypeScript
+createAppLearningEvidenceLedger({
+  append: arbitraryCallback
+})
+
+只是把任意 append() callback 包装后登记进 WeakSet。
+
+也就是说：
+
+arbitrary append → factory → trusted learning ledger
+
+仍然可以发生。
+
+因此目前：
+
+store = REUSE_EXISTING_EVIDENCE_LEDGER
+
+只是声明，实际提交没有 import / adapter / wiring 到 rsi-evidence-ledger.ts。
+
+最小修复：
+
+新增正式 adapter，明确接入既有 appendRsiEvidence() / existing RSI evidence ledger composition；
+learning entry 映射为既有 evidence record；
+factory 不再接受裸 append callback；
+duplicate learning evidence 必须由现有 immutable ledger 拒绝，而不是允许再次 append。
+
+另外补一个窄校验：
+
+datasetVersion 必须是 non-empty / non-whitespace；空版本不得生成 immutable evidence。
+
+RISKS
+
+当前可记：
+
+LEARNING_EVIDENCE_CONTRACT = PASS
+
+但还不能记：
+
+IMMUTABLE_EVIDENCE_LEDGER_WIRING = PASS
+
+因为现有测试里的 collecting() 本身就是任意数组 push()，它只能证明“调用了 append”，不能证明 immutable ledger 语义。
+
+另一个生产前建议：evidenceDigest 目前 SHA-256 截 16 hex。架构阶段可接受，但真正长期持久化证据建议保留完整 SHA-256。
+
+P2E-DB5 继续视为既有 test-isolation debt，不阻断 U3。
+
+TEST
+
+U3 FINAL 至少增加：
+
+正式 adapter 确实调用既有 RSI evidence ledger。
+caller 自写 arbitrary append() 无法被 factory 洗白。
+同一 evidenceId/evidenceDigest 重复写 → EVIDENCE_IMMUTABLE / 明确 idempotent outcome。
+不同 outcome → 可追加新 evidence。
+原记录不可覆盖/删除。
+datasetVersion="" / " " → REJECT。
+unverified lineage → 零 evidence 写入。
+现有 U3 6/6 保持 green。
+
+NEXT
+
+继续执行：
+
+U4 — Offline Evaluation
+明确 resolved denominator；
+UNKNOWN / PARTIAL / MANUAL_REVIEW 不得混入成功率分母而无定义。
+U5 — Meta-improvement Candidate
+只生成 proposal；
+不得自动改 Policy / Guard / Router / Action Runtime。
+
+同时做窄修：
+
+PHASE 4 U3 FINAL — wire learning evidence to existing RSI immutable evidence ledger
+
+通过后即可：
+
+U3 = PASS / CLOSED
+
+PRODUCTION
+
+继续全部 HOLD：
+
+REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing
+
+继续：
+
+SECOND_* = FORBIDDEN
+L5_RELAXATION = FORBIDDEN
+
+以及：
+
+MODEL_GATEWAY_RUNTIME_WIRED = false
+ACTION_RUNTIME_PRODUCTION_ENABLED = false
+META_IMPROVEMENT_INTEGRATED = false
+PRODUCTION_READY = false
+```
+
