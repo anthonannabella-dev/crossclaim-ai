@@ -31,7 +31,7 @@ const testRecoveryPack = (deps: Parameters<typeof createRecoverySiPack>[0]) => (
 const SIGNALS = JSON.stringify([
   {
     kind: 'TEST_FAILURE',
-    dedupeKey: 'recovery:PLATFORM:opp-1',
+    dedupeKey: 'recoveryX:PLATFORM:opp-1',
     summary: 'recovery read-only check requested',
     refs: ['run:1'],
     riskClass: 'LOW',
@@ -66,7 +66,7 @@ const readPorts = (calls: string[]): RecoveryReadPorts => ({
 });
 
 const bind: RecoverySiPackDependencies['bind'] = (t) => {
-  const match = /^task:recovery:([A-Z_]+):(.+)$/.exec(t.dedupeKey);
+  const match = /^task:recoveryX:([A-Z_]+):(.+)$/.exec(t.dedupeKey);
   if (match === null) return null;
   return {
     organizationId: 'org-1',
@@ -107,11 +107,11 @@ describe('STEP_3G · ONE SI Runtime 端到端（Recovery Pack 作为 domain capa
     // 1 + 2：Recovery signal 进入唯一 runtime → 生成 task
     const generation = composition.taskGeneration();
     expect(generation).not.toBeNull();
-    expect(generation?.tasks.map((t) => t.dedupeKey)).toEqual(['task:recovery:PLATFORM:opp-1']);
+    expect(generation?.tasks.map((t) => t.dedupeKey)).toEqual(['task:recoveryX:PLATFORM:opp-1']);
 
     // 3 + 4 + 5 + 6：Policy Core → Recovery Pack → 确定性只读工具 → 证据
     const dispatched = await composition.controller.tick();
-    expect(dispatched.claimed?.dedupeKey).toBe('task:recovery:PLATFORM:opp-1');
+    expect(dispatched.claimed?.dedupeKey).toBe('task:recoveryX:PLATFORM:opp-1');
     expect(readCalls.length).toBeGreaterThan(0);
     expect(seen).toHaveLength(1);
     expect(seen[0]?.status).toBe('PASS');
@@ -187,7 +187,7 @@ describe('STEP_3 FINAL-2 · CHANGE A —— proposal 与 Judge verdict 分离', 
       domainPacks: [pack],
     });
     const first = await composition.controller.tick();
-    expect(first.claimed?.dedupeKey).toBe('task:recovery:PLATFORM:opp-1');
+    expect(first.claimed?.dedupeKey).toBe('task:recoveryX:PLATFORM:opp-1');
     expect(composition.controller.state().waitingForVerdict).toBe(true);
     expect(composition.controller.state().verdict).toBeNull();
     expect(composition.controller.proposal()?.status).toBe('PASS');
@@ -211,7 +211,7 @@ describe('STEP_3 FINAL-2 · CHANGE A —— proposal 与 Judge verdict 分离', 
 describe('STEP_3 FINAL-3 · CHANGE A —— domainPacks 不可被 awaitVerdict:false 绕过', () => {
   it('STEP3F3_A1 显式 awaitVerdict:false + domainPacks → 仍 park-for-judge，不自证完成', async () => {
     const pack = testRecoveryPack({ readPorts: readPorts([]), bind, guard: ALLOW_GUARD });
-    const queue = JSON.stringify([{ id: 'task-1', dedupeKey: 'task:recovery:PLATFORM:opp-1', priority: 'P2' }]);
+    const queue = JSON.stringify([{ id: 'task-1', dedupeKey: 'task:recoveryX:PLATFORM:opp-1', priority: 'P2' }]);
     const composition = await composeRsiRuntime({
       readFile: async (p: string) => (p === 'mem://tasks' ? queue : '[]'),
       tasksPath: 'mem://tasks',
@@ -219,7 +219,7 @@ describe('STEP_3 FINAL-3 · CHANGE A —— domainPacks 不可被 awaitVerdict:f
       awaitVerdict: false,
     });
     const outcome = await composition.controller.tick();
-    expect(outcome.claimed?.dedupeKey).toBe('task:recovery:PLATFORM:opp-1');
+    expect(outcome.claimed?.dedupeKey).toBe('task:recoveryX:PLATFORM:opp-1');
     expect(composition.controller.state().waitingForVerdict).toBe(true);
     expect(composition.controller.state().verdict).toBeNull();
     expect(composition.controller.proposal()?.status).toBe('PASS');

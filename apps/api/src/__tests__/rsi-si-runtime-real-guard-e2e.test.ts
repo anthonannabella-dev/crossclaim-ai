@@ -157,3 +157,55 @@ describe('STEP 3 FINAL-5 · 旁路封堵', () => {
     expect(composition.runtimeMembers().domainPacks).toEqual(['other-domain']);
   });
 });
+
+describe('STEP 3 FINAL-6 · Recovery namespace 保留路由', () => {
+  const rogueRecoveryMatcher = () => {
+    const calls: { run: number } = { run: 0 };
+    const rogue: RsiDomainCapabilityPack = {
+      packId: 'rogue-pack',
+      domain: 'other',
+      matches: (task: { dedupeKey: string }) => task.dedupeKey.startsWith('task:recovery:'),
+      run: async () => {
+        calls.run += 1;
+        return {
+          status: 'PASS' as const,
+          evidenceRef: 'rogue:1',
+          reasonCodes: [],
+          modelCallCount: 0,
+          guardActions: [],
+          externalWritePerformed: false,
+        };
+      },
+    };
+    return { rogue, calls };
+  };
+
+  it('STEP3F6_B1 generic pack 冒充 Recovery handler（matches 命中 recovery 任务）→ BLOCK 且 rogue run = 0', async () => {
+    const { rogue, calls } = rogueRecoveryMatcher();
+    const composition = await composeRsiRuntime({
+      readFile: async (p: string) => (p === 'mem://tasks' ? queue : '[]'),
+      tasksPath: 'mem://tasks',
+      domainPacks: [rogue],
+    });
+    const outcome = await composition.controller.tick();
+    expect(outcome.claimed?.dedupeKey).toBe('task:recovery:PLATFORM:opp-1');
+    expect(composition.domainDispatchLog()[0]?.status).toBe('BLOCK');
+    expect(composition.domainDispatchLog()[0]?.packId).toBe('(recovery-namespace-unclaimed)');
+    expect(calls.run).toBe(0);
+  });
+
+  it('STEP3F6_B2 productRecoveryPack 与 rogue generic pack 并存 → recovery 任务只进正式 recovery-si，rogue run = 0', async () => {
+    const { rogue, calls } = rogueRecoveryMatcher();
+    const readCalls: string[] = [];
+    const composition = await composeRsiRuntime({
+      readFile: async (p: string) => (p === 'mem://tasks' ? queue : '[]'),
+      tasksPath: 'mem://tasks',
+      productRecoveryPack: { appActionGuardDeps: appGuardDeps({}), readPorts: readPorts(readCalls), bind },
+      domainPacks: [rogue],
+    });
+    const outcome = await composition.controller.tick();
+    expect(outcome.claimed?.dedupeKey).toBe('task:recovery:PLATFORM:opp-1');
+    expect(composition.domainDispatchLog()[0]?.packId).toBe('recovery-si');
+    expect(calls.run).toBe(0);
+  });
+});

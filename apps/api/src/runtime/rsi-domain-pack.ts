@@ -42,6 +42,10 @@ export interface RsiDomainPackEvidence {
   externalWritePerformed: boolean;
 }
 
+/** FINAL-6：Recovery 保留 namespace —— 只有保留 pack id 能消费该 namespace 的任务 */
+export const RECOVERY_TASK_DEDUPE_PREFIX = 'task:recovery:';
+export const RECOVERY_RESERVED_PACK_ID = 'recovery-si';
+
 export interface RsiDomainCapabilityPack {
   readonly packId: string;
   readonly domain: string;
@@ -55,6 +59,8 @@ export const RSI_DOMAIN_PACK_BOUNDARY = {
   createsSecondPolicyEngine: false,
   dynamicSelfRegistration: 'FORBIDDEN（静态组合；runtime mutable registry 禁止）',
   unmatchedTask: 'BLOCK（fail-closed；绝不 PASS）',
+  /** FINAL-6：'task:recovery:' namespace 为保留路由，只允许 reserved pack（recovery-si）消费 */
+  recoveryNamespace: 'RESERVED（generic pack 不得消费；无正式 pack → BLOCK，不 fallback）',
   packSelfGrantedExternalWrite: 'BLOCK（声明 externalWritePerformed=true 即降级）',
   guardDecisionOwner: 'services/action-guard（pack 只能声明 intent）',
   policyOwner: 'services/autonomy/rsi-policy-engine（唯一 Policy Core）',
@@ -78,7 +84,28 @@ export function createRsiDomainPackRunner(input: {
   return {
     dispatchLog: () => dispatched,
     async run(task: RsiSafeTask) {
-      const pack = input.packs.find((candidate) => candidate.matches(task));
+      // STEP 3 FINAL-6 CHANGE B：Recovery namespace 保留路由 ——
+      // 该 namespace 的任务只能由保留 pack（recovery-si）消费；否则 BLOCK，绝不 fallback 给 generic pack。
+      const isRecoveryNamespace = task.dedupeKey.startsWith(RECOVERY_TASK_DEDUPE_PREFIX);
+      const pack = isRecoveryNamespace
+        ? input.packs.find(
+            (candidate) => candidate.packId === RECOVERY_RESERVED_PACK_ID && candidate.matches(task),
+          )
+        : input.packs.find((candidate) => candidate.matches(task));
+      if (isRecoveryNamespace && pack === undefined) {
+        input.log?.(
+          'RSI_DOMAIN_PACK_RECOVERY_NAMESPACE_RESERVED task=' +
+            task.id +
+            ' -> BLOCK（Recovery 任务只能由 reserved pack 消费）',
+        );
+        dispatched.push({
+          taskId: task.id,
+          packId: '(recovery-namespace-unclaimed)',
+          status: 'BLOCK',
+          guardActions: [],
+        });
+        return { status: 'BLOCK', evidenceRef: 'domain-pack:recovery-namespace-unclaimed' };
+      }
       if (pack === undefined) {
         input.log?.(`RSI_DOMAIN_PACK_UNMATCHED task=${task.id} -> BLOCK`);
         dispatched.push({ taskId: task.id, packId: '(unmatched)', status: 'BLOCK', guardActions: [] });
