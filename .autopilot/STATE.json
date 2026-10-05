@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-40",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T20:13:57.486Z",
+  "updated_at": "2026-10-05T20:15:08.185Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -50,13 +50,13 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
-  "next_execution_unit": "PHASE 4 FINAL CLOSURE 裁决归档与 PHASE 4 收口：(1) 打开右侧审核会话读取 verdict（严格匹配 REVIEWED_HEAD = bf126c0a，marker [CODEX-PHASE4-FINALCLOSURE]）；(2) 先落盘 work/stage/verdict-p4r3-raw.txt → 逐字归档 AI-ARCHITECT-INBOX.md（MSG-20261005-67）→ compare.mjs FULL_COPY_OK → commit + push；(3) durable state：phase4_final_closure_verdict + phase_state.PHASE_4_OUTCOME_LEARNING_PIPELINE = CLOSED（若 PASS）并记录 U1–U5 全 CLOSED；(4) 按审计冻结的 PHASE 5 进入条件开下一单元（Verified Immutable Evidence → Verified Offline Evaluation → PROPOSAL_ONLY Candidate → External Judge / Human Approval → Controlled Adoption Proposal；初始仅 candidate review / approval verdict / controlled config proposal / rollback plan / canary·shadow evaluation，禁止直接自动应用）；(5) 未解锁边界不变：REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing = HOLD；SECOND_* = FORBIDDEN；L5_RELAXATION = FORBIDDEN。",
+  "next_execution_unit": "PHASE 5 — META IMPROVEMENT / P5-U1 Candidate Review + Approval Verdict Contract（审计建议首单元）：固定链路（冻结）：Verified Immutable Evidence → Verified Offline Evaluation → PROPOSAL_ONLY Candidate → External Judge / Human Approval → Controlled Adoption Proposal。P5-U1 目标：把“谁能批准、批准绑定什么 candidate/evaluation/evidence、批准是否一次性、防 replay、过期/撤销”做严 —— 即 candidate review 记录 + approval/rejection verdict 契约（绑定 candidateDigest + evaluationDigest + evidenceSetDigest；一次性 nonce/replay 防护；expiresAt / revokedAt；approver 身份与 scope；禁止自动应用）。Phase 5 初始仅允许：Candidate Review / Approval·Rejection Verdict / Controlled Config Proposal / Rollback Plan / Canary·Shadow Evaluation；明确禁止：candidate 自动修改 Policy/Guard/Router/Action Runtime、自动 promotion、自动 production rollout、绕过 External Judge / Human Approval。流程：code → tests → regression → tsc → commit → push → 送裁决 → 归档（FULL_COPY_OK）→ durable state。边界（HOLD/FORBIDDEN，不得解锁）：REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing = HOLD；SECOND_RUNTIME / SECOND_POLICY_ENGINE / SECOND_CONTROL_PLANE / SECOND_MODEL_GATEWAY / SECOND_COST_LEDGER / SECOND_META_EVIDENCE_STORE = FORBIDDEN；L5_RELAXATION = FORBIDDEN。",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-05T20:13:57.486Z",
+  "last_tick_at": "2026-10-05T20:15:08.185Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "PHASE 4 U5 FINAL2 裁决已读取、原文归档（MSG-20261005-66，compare.mjs = FULL_COPY_OK，归档提交 dca3840e）：PROVENANCE_OBJECT_INTEGRITY / ANTI_TAMPER / DEEPLY_FROZEN_PROVENANCE_OBJECTS / U3·U4_SET_IDENTITY_SEMANTICS = PASS；PHASE_4_U5 = PASS / CLOSED；PHASE4_U5_FINAL3_REQUIRED = NO；EVALUATION_DUPLICATE_INFLATION_GUARD = REVISE；PHASE_4_OUTCOME_LEARNING_PIPELINE = PASS WITH REVISE / NOT CLOSED。已按裁决完成 PHASE 4 FINAL CLOSURE（code = bf126c0a，marker [CODEX-PHASE4-FINALCLOSURE]）：正式 evaluation 在 metrics 之前按 OutcomeRecord.digest 去重（identity 与 metrics 同一集合，totalRecords = unique 数），同 digest 但内容不一致 → OFFLINE_EVALUATION_DUPLICATE_DIGEST_CONFLICT（fail-closed）。",
-  "last_action_at": "2026-10-05T20:13:57.486Z",
-  "next_action": "读取 PHASE 4 FINAL CLOSURE 裁决 → 归档（MSG-20261005-67）→ 若 PASS 则 U1–U5 = CLOSED、PHASE 4 = CLOSED，随后按冻结条件开 PHASE 5。",
+  "last_action": "PHASE 4 FINAL CLOSURE 裁决已读取、原文归档（MSG-20261005-67，compare.mjs = FULL_COPY_OK，归档提交 624d71d6）：EVALUATION_DUPLICATE_INFLATION_GUARD / VERIFIED_OUTCOME_DEDUPE / DUPLICATE_DIGEST_CONFLICT = PASS；U1 / U2 / U3 / U4 / U5 = CLOSED；PHASE_4_OUTCOME_LEARNING_PIPELINE = **PASS / CLOSED**；PHASE4_FURTHER_REVISION_REQUIRED = NO。审计确认：去重顺序正确（trusted lineage binding → verified records → dedupe by digest → metrics + identity），metrics 与 identity 消费同一 uniqueVerifiedRecords，duplicate 与 dedup 输入得到相同 evaluationDigest / verifiedOutcomeSetDigest / candidateDigest。",
+  "last_action_at": "2026-10-05T20:15:08.185Z",
+  "next_action": "开 PHASE 5 — META IMPROVEMENT 首单元 P5-U1（Candidate Review + Approval Verdict Contract）。",
   "current_head": "bf126c0a",
   "last_completed_head": "bf126c0a",
   "reviewed_head": "add99ec3",
@@ -5169,10 +5169,11 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "P4R3-1 读取 PHASE 4 FINAL CLOSURE 裁决（匹配 REVIEWED_HEAD = bf126c0a）→ 先落盘 verdict-p4r3-raw.txt → 归档 MSG-20261005-67 → compare.mjs FULL_COPY_OK → commit + push → durable state",
-    "P4R3-2 PHASE 4 收口对账（若 PASS）：U1 / U2 / U3 / U4 / U5 = CLOSED；phase_state.PHASE_4_OUTCOME_LEARNING_PIPELINE = PASS / CLOSED",
-    "P4R3-3 按冻结进入条件开 PHASE 5 — Meta Improvement 第一单元（设计/沙箱层：candidate review → approval verdict → controlled config proposal → rollback plan → canary·shadow evaluation；禁止自动应用）",
-    "P4R3-4 非阻断债务（持续记录）：三类 digest 完整 SHA-256、scanRawPayloadKeys 有界遍历、P2E-DB5 test-isolation debt"
+    "P5U1-1 P5-U1 Candidate Review + Approval Verdict Contract：candidate review 记录 + approval/rejection verdict（绑定 candidateDigest + evaluationDigest + evidenceSetDigest；approver 身份/scope；一次性 nonce 防 replay；expiresAt/revokedAt；只产出判决，不执行变更）",
+    "P5U1-2 P5-U1 tests（绑定/一次性/防 replay/过期撤销/越权批准/无 approve 即无 adoption）+ regression + tsc + commit + push",
+    "P5U1-3 送 PHASE 5 U1 裁决 → 归档（MSG-20261005-68）→ compare.mjs FULL_COPY_OK → durable state",
+    "P5U1-4 后续候选单元（按审计 NEXT）：Controlled Config Proposal / Rollback Plan / Canary·Shadow Evaluation（仍禁止自动应用）",
+    "P5U1-5 维护债务（非阻断）：三类 digest 完整 SHA-256、recordContentKey canonicalization 随 OutcomeRecord 结构升级、scanRawPayloadKeys 有界遍历、P2E-DB5 test-isolation debt"
   ],
   "full_autonomous_internal_execution": "VERIFIED",
   "dispatcher_acceptance": {
@@ -9322,7 +9323,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-05T20:13:57.486Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-05T20:15:08.185Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -9449,8 +9450,8 @@
     "PHASE_1_FINAL7": "PASS / CLOSED（MSG-20261005-47，REVIEWED_HEAD = 795f65a5；STEP3_FINAL8_REQUIRED = NO）",
     "PHASE_2_MODEL_GATEWAY_RUNTIME": "PASS / CLOSED（MSG-20261005-50；Reviewed HEAD 338f30b4；PHASE2_FINAL5_REQUIRED = NO）",
     "PHASE_3_ACTION_RUNTIME": "PASS / CLOSED（MSG-20261005-54；Reviewed HEAD = fe3c33e9；PHASE3_FINAL4_REQUIRED = NO）",
-    "PHASE_4_OUTCOME_LEARNING_PIPELINE": "IN PROGRESS / 待 FINAL CLOSURE 裁决：U1 FINAL / U2 / U3 / U4 / U5 = PASS / CLOSED（U5 于 MSG-20261005-66 关闭）；FINAL CLOSURE（U4 metrics 去重）= SUBMITTED / AWAITING_VERDICT（bf126c0a）。",
-    "PHASE_5_META_IMPROVEMENT": "QUEUED（需真实运行结果）"
+    "PHASE_4_OUTCOME_LEARNING_PIPELINE": "CLOSED / PASS（MSG-20261005-67）：U1 FINAL / U2 / U3 / U4 / U5 全 CLOSED；含 U4 FINAL、U5 FINAL、U5 FINAL2、PHASE 4 FINAL CLOSURE。",
+    "PHASE_5_META_IMPROVEMENT": "OPEN / NOT STARTED：进入条件已冻结（verified evidence → verified evaluation → PROPOSAL_ONLY candidate → External Judge / Human Approval → Controlled Adoption Proposal）；NEXT = P5-U1 Candidate Review + Approval Verdict Contract。"
   },
   "heartbeat_watchdog": {
     "interval_seconds": 180,
@@ -9922,7 +9923,7 @@
       "U5"
     ]
   },
-  "archive_head": "dca3840e",
+  "archive_head": "624d71d6",
   "phase4_u3_final": {
     "status": "PASS / CLOSED",
     "reviewed_head": "006cc912",
@@ -10277,5 +10278,51 @@
       "composer_empty_verified": true,
       "expected_message_id": "MSG-20261005-67"
     }
+  },
+  "phase4_final_closure_verdict": {
+    "message_id": "MSG-20261005-67",
+    "verdict": "PASS / PHASE 4 CLOSED",
+    "reviewed_head": "bf126c0a",
+    "archive_verified": "FULL_COPY_OK",
+    "archive_head": "624d71d6",
+    "pass": [
+      "EVALUATION_DUPLICATE_INFLATION_GUARD = PASS",
+      "VERIFIED_OUTCOME_DEDUPE = PASS",
+      "DUPLICATE_DIGEST_CONFLICT = FAIL_CLOSED / PASS",
+      "U1 = CLOSED / U2 = CLOSED / U3 = CLOSED / U4 = CLOSED / U5 = CLOSED",
+      "PHASE_4_OUTCOME_LEARNING_PIPELINE = PASS / CLOSED"
+    ],
+    "phase4_further_revision_required": "NO",
+    "maintenance_notes": [
+      "若 OutcomeRecord 后续新增复杂嵌套字段，recordContentKey() 的 canonicalization 需同步升级（非阻断）",
+      "三类 digest 截 16 hex（长期持久化建议完整 SHA-256）；scanRawPayloadKeys 固定递归深度；P2E-DB5 test-isolation debt"
+    ]
+  },
+  "phase5_entry_conditions": {
+    "chain": [
+      "Verified Immutable Evidence",
+      "Verified Offline Evaluation",
+      "PROPOSAL_ONLY Candidate",
+      "External Judge / Human Approval",
+      "Controlled Adoption Proposal"
+    ],
+    "allowed_initial": [
+      "Candidate Review",
+      "Approval / Rejection Verdict",
+      "Controlled Config Proposal",
+      "Rollback Plan",
+      "Canary / Shadow Evaluation"
+    ],
+    "forbidden_initial": [
+      "candidate 自动修改 Policy",
+      "candidate 自动修改 Guard",
+      "candidate 自动修改 Router",
+      "candidate 自动修改 Action Runtime",
+      "自动 promotion",
+      "自动 production rollout",
+      "绕过 External Judge / Human Approval"
+    ],
+    "suggested_first_unit": "P5-U1 Candidate Review + Approval Verdict Contract",
+    "frozen_at": "2026-10-05T20:15:08.185Z"
   }
 }
