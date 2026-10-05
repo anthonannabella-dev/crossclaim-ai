@@ -2582,3 +2582,10 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 归档：AI-ARCHITECT-INBOX.md 新增 MSG-20261005-33（FULL_COPY_OK）。
 - 状态：si-cost-optimization → C2_IMPLEMENTATION_AUTHORIZED；NEXT = C2（AiCostLedgerEntry + AiBudgetPolicy + ledger-derived usage + AiModelCacheEntry + tenant/append-only + manifest sync + real PG + budget race）。
 
+
+## 2026-10-06T00:05Z — C2 IMPLEMENTATION 完成并送审（代码 HEAD = f099ec4c）
+- C2-a（92b61b52）：Schema 93→96（AiCostLedgerEntry / AiBudgetPolicy / AiModelCacheEntry）+ 迁移 20261005070000（含 tenant 基线/归属不可变/账本 append-only/缓存 identity 不可改写）+ 两份触发器清单同步；prisma validate valid / migrate deploy 80 / 清单校验 OK / architecture-contract 142 例 PASS。
+- C2-b（f099ec4c）：si-cost-ledger-store（幂等 append + 账本聚合）/ si-budget-policy-store（durable 配置 + 层级只收紧 + advisory 锁内 check-then-write）/ si-model-cache-store（C1 identity 判定 + 受控 TTL-RGC）；真实 PG 取证 10 例 PASS（幂等 / append-only / 重启不归零 / tenant 隔离 / 层级只收紧 / 无 usage 表 / 超预算拒绝 / 并发 5→2 恰好 2 条 / 缓存 HIT 与 MISS / GC + identity 不可改写）。
+- 验证：tsc exit 0；rsi-* + architecture-contract + si-cost-c2-db = 48 文件 / 404 例 PASS。
+- 送审：docs/releases/SI-COST-OPTIMIZATION-C2-IMPLEMENTATION-AUDIT-REQUEST.md（REVIEWED_HEAD = f099ec4c）；证据：docs/releases/SI-COST-OPTIMIZATION-C2-EVIDENCE.md。
+
