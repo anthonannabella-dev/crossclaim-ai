@@ -42,8 +42,13 @@ export const AI_BUDGET_BOUNDARY = {
   policyDurable: true,
   hierarchy: ['PLATFORM', 'ORGANIZATION', 'ACCOUNT', 'INCIDENT', 'TASK'],
   childMayLoosenParent: false,
-  raceProtection: 'PG_ADVISORY_XACT_LOCK_PER_SCOPE_KEY + 锁内重新聚合用量',
+  raceProtection:
+    'CANONICAL_HIERARCHICAL_ADVISORY_LOCKS（platform:* → org:<id> → account:<id> → incident:<id> → task:<id>，固定顺序防死锁）+ 锁内逐 policy 重新聚合用量',
+  usageAccounting: 'PER_POLICY_SCOPE（每个 policy 用自己的作用域聚合，不用最窄 scopeWhere）',
+  callerProvidedLockKey: 'FORBIDDEN（锁身份由 store 内部 canonical 派生）',
   strongModelCallLimit: 'enforced（executionLevel=LEVEL_2_STRONG 计数）',
+  tokenLimit: 'enforced（按 policy scope 聚合 input+output tokens）',
+  concurrencyLimit: 'NOT_YET_WIRED（配置可存；并发上限执行留待 C3）',
 } as const;
 
 const minDefined = (values: readonly (number | null | undefined)[]): number | null => {
@@ -56,6 +61,19 @@ export async function upsertAiBudgetPolicy(
   prisma: PrismaClient,
   policy: AiBudgetPolicyInput,
 ): Promise<{ id: string }> {
+  for (const [field, value] of Object.entries({
+    dailyLimitMicros: policy.dailyLimitMicros,
+    monthlyLimitMicros: policy.monthlyLimitMicros,
+    perIncidentLimitMicros: policy.perIncidentLimitMicros,
+    strongCallLimit: policy.strongCallLimit,
+    tokenLimit: policy.tokenLimit,
+    concurrencyLimit: policy.concurrencyLimit,
+  })) {
+    if (value === undefined || value === null) continue;
+    if (!Number.isInteger(value) || value < 0) {
+      throw new Error('AI_BUDGET_LIMIT_INVALID:' + field);
+    }
+  }
   const row = await prisma.aiBudgetPolicy.upsert({
     where: { scope_scopeRef: { scope: policy.scope, scopeRef: policy.scopeRef } },
     create: {
@@ -131,14 +149,14 @@ const startOfUtcDay = (now: Date): Date =>
 const startOfUtcMonth = (now: Date): Date => new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
 
 /**
- * Budget race 防线：在**同一事务 + 同一把 advisory 锁**内完成
- *   读用量（账本聚合）→ 与有效预算比较 → 写入事实。
- * 并发调用同一 scopeKey 时被串行化，因此不会出现「都看到没超支然后一起越界」。
+ * Budget race 防线（C2 FINAL-2 CHANGE A/B/C）：
+ *   ① 锁身份由 store 内部 canonical 派生（platform:* → org → account → incident → task，固定顺序）；
+ *   ② 每个 policy 用**自己的作用域**聚合 usage（daily/monthly/incident/strong/token）；
+ *   ③ 先识别已有 callId（幂等重放 → duplicate=true，零新增成本，不误报 exceeded）；
+ *   ④ 逐 policy 校验通过后才写事实（同一事务）。
  */
 export async function runGuardedAiCostWrite(input: {
   prisma: PrismaClient;
-  /** 稳定的作用域键（用于 advisory lock，例如 org:xxx|inc:yyy） */
-  scopeKey: string;
   refs: {
     organizationId?: string | null;
     accountId?: string | null;
@@ -161,60 +179,99 @@ export async function runGuardedAiCostWrite(input: {
   };
   now?: Date;
 }): Promise<AiBudgetGuardResult> {
+  if (!Number.isInteger(input.estimatedCostMicros) || input.estimatedCostMicros < 0) {
+    throw new Error('AI_COST_LEDGER_COST_MICROS_INVALID');
+  }
+  const inputTokens = input.entry.inputTokens ?? 0;
+  const outputTokens = input.entry.outputTokens ?? 0;
+  const attemptNo = input.entry.attemptNo ?? 1;
+  if (!Number.isInteger(inputTokens) || inputTokens < 0) throw new Error('AI_COST_LEDGER_INPUT_TOKENS_INVALID');
+  if (!Number.isInteger(outputTokens) || outputTokens < 0) throw new Error('AI_COST_LEDGER_OUTPUT_TOKENS_INVALID');
+  if (!Number.isInteger(attemptNo) || attemptNo <= 0) throw new Error('AI_COST_LEDGER_ATTEMPT_INVALID');
+
   const now = input.now ?? new Date();
   return input.prisma.$transaction(async (tx) => {
-    // ① 作用域级 advisory 事务锁（PG_ADVISORY_XACT_LOCK 在事务结束自动释放）
-    await tx.$executeRawUnsafe('SELECT pg_advisory_xact_lock(hashtext($1))', input.scopeKey);
-
-    // ② 有效预算（层级取最紧）
-    const effective = await resolveEffectiveAiBudget(tx as Db, input.refs);
-
-    // ③ 用量（唯一来源 = 账本聚合）
-    const scopeWhere = {
-      ...(input.refs.organizationId ? { organizationId: input.refs.organizationId } : {}),
-      ...(input.refs.accountId ? { accountId: input.refs.accountId } : {}),
-      ...(input.refs.incidentId ? { incidentId: input.refs.incidentId } : {}),
-      ...(input.refs.taskId ? { taskId: input.refs.taskId } : {}),
-    };
-    const dayAgg = await tx.aiCostLedgerEntry.aggregate({
-      where: { ...scopeWhere, createdAt: { gte: startOfUtcDay(now) } },
-      _sum: { costMicros: true },
-    });
-    const monthAgg = await tx.aiCostLedgerEntry.aggregate({
-      where: { ...scopeWhere, createdAt: { gte: startOfUtcMonth(now) } },
-      _sum: { costMicros: true },
-    });
-    const incidentAgg = input.refs.incidentId
-      ? await tx.aiCostLedgerEntry.aggregate({ where: scopeWhere, _sum: { costMicros: true } })
-      : null;
-    const strongCalls =
-      input.refs.taskId && input.requestedStrongCall
-        ? await tx.aiCostLedgerEntry.count({
-            where: { ...scopeWhere, executionLevel: 'LEVEL_2_STRONG' },
-          })
-        : 0;
-
-    const nextDayMicros = (dayAgg._sum.costMicros ?? 0) + input.estimatedCostMicros;
-    const nextMonthMicros = (monthAgg._sum.costMicros ?? 0) + input.estimatedCostMicros;
-    const nextIncidentMicros = (incidentAgg?._sum.costMicros ?? 0) + input.estimatedCostMicros;
-
-    const checks: Array<[number | null, number, string]> = [
-      [effective.dailyLimitMicros, nextDayMicros, 'AI_BUDGET_DAILY_EXCEEDED'],
-      [effective.monthlyLimitMicros, nextMonthMicros, 'AI_BUDGET_MONTHLY_EXCEEDED'],
-      [effective.perIncidentLimitMicros, nextIncidentMicros, 'AI_BUDGET_INCIDENT_EXCEEDED'],
-    ];
-    if (input.requestedStrongCall && effective.strongCallLimit !== null && strongCalls + 1 > effective.strongCallLimit) {
-      checks.push([effective.strongCallLimit, strongCalls + 1, 'AI_BUDGET_STRONG_CALL_EXCEEDED']);
+    // ① canonical 层级锁（固定顺序；caller 不提供锁身份）
+    const lockKeys = ['platform:*'];
+    if (input.refs.organizationId) lockKeys.push('org:' + input.refs.organizationId);
+    if (input.refs.accountId) lockKeys.push('account:' + input.refs.accountId);
+    if (input.refs.incidentId) lockKeys.push('incident:' + input.refs.incidentId);
+    if (input.refs.taskId) lockKeys.push('task:' + input.refs.taskId);
+    for (const key of lockKeys) {
+      await tx.$executeRawUnsafe('SELECT pg_advisory_xact_lock(hashtext($1))', key);
     }
-    for (const [limit, next, reason] of checks) {
-      if (limit !== null && next > limit) {
-        return {
-          written: false,
-          duplicate: false,
-          reason,
-          usageMicros: next - input.estimatedCostMicros,
-          limitMicros: limit,
-        };
+
+    // ③ 幂等优先：已有 callId → 校验不可变身份后返回 duplicate（零新增成本，不误报 exceeded）
+    const existing = await tx.aiCostLedgerEntry.findUnique({ where: { callId: input.entry.callId } });
+    if (existing) {
+      const sameIdentity =
+        existing.organizationId === (input.refs.organizationId ?? null) &&
+        existing.incidentId === (input.refs.incidentId ?? null) &&
+        existing.taskId === (input.refs.taskId ?? null) &&
+        existing.accountId === (input.refs.accountId ?? null) &&
+        existing.taskType === input.entry.taskType &&
+        existing.executionLevel === input.entry.executionLevel;
+      if (!sameIdentity) throw new Error('AI_COST_LEDGER_CALL_ID_IDENTITY_CONFLICT');
+      return { written: false, duplicate: true, reason: 'AI_COST_LEDGER_DUPLICATE_CALL_ID', usageMicros: 0, limitMicros: null };
+    }
+
+    // ② 逐 policy 用**自己的作用域**聚合用量并校验
+    const policies = await tx.aiBudgetPolicy.findMany({
+      where: {
+        OR: [
+          { scope: 'PLATFORM', scopeRef: '*' },
+          ...(input.refs.organizationId ? [{ scope: 'ORGANIZATION', scopeRef: input.refs.organizationId }] : []),
+          ...(input.refs.accountId ? [{ scope: 'ACCOUNT', scopeRef: input.refs.accountId }] : []),
+          ...(input.refs.incidentId ? [{ scope: 'INCIDENT', scopeRef: input.refs.incidentId }] : []),
+          ...(input.refs.taskId ? [{ scope: 'TASK', scopeRef: input.refs.taskId }] : []),
+        ] as never,
+      },
+    });
+    let observedUsageMicros = 0;
+    for (const policy of policies) {
+      const scopeWhere =
+        policy.scope === 'ORGANIZATION'
+          ? { organizationId: policy.scopeRef }
+          : policy.scope === 'ACCOUNT'
+            ? { accountId: policy.scopeRef }
+            : policy.scope === 'INCIDENT'
+              ? { incidentId: policy.scopeRef }
+              : policy.scope === 'TASK'
+                ? { taskId: policy.scopeRef }
+                : {};
+      const day = await tx.aiCostLedgerEntry.aggregate({
+        where: { ...scopeWhere, createdAt: { gte: startOfUtcDay(now) } },
+        _sum: { costMicros: true, inputTokens: true, outputTokens: true },
+      });
+      const month = await tx.aiCostLedgerEntry.aggregate({
+        where: { ...scopeWhere, createdAt: { gte: startOfUtcMonth(now) } },
+        _sum: { costMicros: true },
+      });
+      const lifetime = await tx.aiCostLedgerEntry.aggregate({
+        where: scopeWhere,
+        _sum: { costMicros: true },
+      });
+      observedUsageMicros = Math.max(observedUsageMicros, day._sum.costMicros ?? 0);
+      const nextDay = (day._sum.costMicros ?? 0) + input.estimatedCostMicros;
+      const nextMonth = (month._sum.costMicros ?? 0) + input.estimatedCostMicros;
+      const nextLifetime = (lifetime._sum.costMicros ?? 0) + input.estimatedCostMicros;
+      const nextTokens = (day._sum.inputTokens ?? 0) + (day._sum.outputTokens ?? 0) + inputTokens + outputTokens;
+      const checks: Array<[number | null, number, string]> = [
+        [policy.dailyLimitMicros, nextDay, 'AI_BUDGET_DAILY_EXCEEDED'],
+        [policy.monthlyLimitMicros, nextMonth, 'AI_BUDGET_MONTHLY_EXCEEDED'],
+        [policy.perIncidentLimitMicros, nextLifetime, 'AI_BUDGET_INCIDENT_EXCEEDED'],
+        [policy.tokenLimit, nextTokens, 'AI_BUDGET_TOKEN_EXCEEDED'],
+      ];
+      if (input.requestedStrongCall && policy.strongCallLimit !== null) {
+        const strongCalls = await tx.aiCostLedgerEntry.count({
+          where: { ...scopeWhere, executionLevel: 'LEVEL_2_STRONG', createdAt: { gte: startOfUtcDay(now) } },
+        });
+        checks.push([policy.strongCallLimit, strongCalls + 1, 'AI_BUDGET_STRONG_CALL_EXCEEDED']);
+      }
+      for (const [limit, next, reason] of checks) {
+        if (limit !== null && next > limit) {
+          return { written: false, duplicate: false, reason, usageMicros: observedUsageMicros, limitMicros: limit };
+        }
       }
     }
 
@@ -231,20 +288,20 @@ export async function runGuardedAiCostWrite(input: {
           model: input.entry.model,
           executionLevel: input.entry.executionLevel,
           taskType: input.entry.taskType,
-          inputTokens: input.entry.inputTokens ?? 0,
-          outputTokens: input.entry.outputTokens ?? 0,
+          inputTokens,
+          outputTokens,
           costMicros: input.estimatedCostMicros,
           latencyMs: input.entry.latencyMs ?? 0,
           result: input.entry.result,
-          attemptNo: input.entry.attemptNo ?? 1,
+          attemptNo,
         },
       });
     } catch (error) {
       if (!!error && typeof error === 'object' && (error as { code?: unknown }).code === 'P2002') {
-        return { written: false, duplicate: true, reason: 'AI_COST_LEDGER_DUPLICATE_CALL_ID', usageMicros: nextDayMicros - input.estimatedCostMicros, limitMicros: null };
+        return { written: false, duplicate: true, reason: 'AI_COST_LEDGER_DUPLICATE_CALL_ID', usageMicros: observedUsageMicros, limitMicros: null };
       }
       throw error;
     }
-    return { written: true, duplicate: false, reason: 'WITHIN_BUDGET', usageMicros: nextDayMicros, limitMicros: effective.dailyLimitMicros };
+    return { written: true, duplicate: false, reason: 'WITHIN_BUDGET', usageMicros: observedUsageMicros + input.estimatedCostMicros, limitMicros: null };
   });
 }

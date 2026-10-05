@@ -138,10 +138,8 @@ describe('SI-COST C2 · 分级预算（配置 durable；usage 仅由账本聚合
 
   it('C2_DB7 超预算 → 拒绝写入（账本不新增事实）', async () => {
     await upsertAiBudgetPolicy(prisma, { scope: 'ORGANIZATION', scopeRef: orgA, organizationId: orgA, dailyLimitMicros: 5_000 });
-    const scopeKey = 'org:' + orgA;
     const ok = await runGuardedAiCostWrite({
       prisma,
-      scopeKey,
       refs: { organizationId: orgA, incidentId: 'inc-1' },
       estimatedCostMicros: 3_000,
       entry: { callId: 'c2-guard-' + randomUUID(), provider: 'p', model: 'm', executionLevel: 'LEVEL_1_LOW_COST', taskType: 'SEMANTIC', result: 'SUCCESS' },
@@ -149,7 +147,6 @@ describe('SI-COST C2 · 分级预算（配置 durable；usage 仅由账本聚合
     expect(ok.written).toBe(true);
     const denied = await runGuardedAiCostWrite({
       prisma,
-      scopeKey,
       refs: { organizationId: orgA, incidentId: 'inc-1' },
       estimatedCostMicros: 3_000,
       entry: { callId: 'c2-guard-' + randomUUID(), provider: 'p', model: 'm', executionLevel: 'LEVEL_1_LOW_COST', taskType: 'SEMANTIC', result: 'SUCCESS' },
@@ -161,12 +158,10 @@ describe('SI-COST C2 · 分级预算（配置 durable；usage 仅由账本聚合
 
   it('C2_DB8 Budget race 防线：并发 5 次、限额只允许 2 次 → 恰好写入 2 条（不无限超支）', async () => {
     await upsertAiBudgetPolicy(prisma, { scope: 'ORGANIZATION', scopeRef: orgA, organizationId: orgA, dailyLimitMicros: 2_500 });
-    const scopeKey = 'org:' + orgA;
     const attempts = await Promise.all(
       Array.from({ length: 5 }, () =>
         runGuardedAiCostWrite({
           prisma,
-          scopeKey,
           refs: { organizationId: orgA, incidentId: 'inc-race' },
           estimatedCostMicros: 1_000,
           entry: { callId: 'c2-race-' + randomUUID(), provider: 'p', model: 'm', executionLevel: 'LEVEL_1_LOW_COST', taskType: 'SEMANTIC', result: 'SUCCESS' },
@@ -181,6 +176,140 @@ describe('SI-COST C2 · 分级预算（配置 durable；usage 仅由账本聚合
     expect(usage.entries).toBe(2);
   });
 });
+
+describe('SI-COST C2 FINAL-2 · 预算 Guard 三项窄修（MSG-20261005-34）', () => {
+  it('C2F2_A1 org daily 限额跨 incident 共享（inc-a 3000 后 inc-b 3000 → 拒绝）', async () => {
+    await upsertAiBudgetPolicy(prisma, { scope: 'ORGANIZATION', scopeRef: orgA, organizationId: orgA, dailyLimitMicros: 5_000 });
+    const write = (incidentId: string) =>
+      runGuardedAiCostWrite({
+        prisma,
+        refs: { organizationId: orgA, incidentId },
+        estimatedCostMicros: 3_000,
+        entry: { callId: 'c2f2-' + randomUUID(), provider: 'p', model: 'm', executionLevel: 'LEVEL_1_LOW_COST', taskType: 'SEMANTIC', result: 'SUCCESS' },
+      });
+    expect((await write('inc-a')).written).toBe(true);
+    const second = await write('inc-b');
+    expect(second.written).toBe(false);
+    expect(second.reason).toBe('AI_BUDGET_DAILY_EXCEEDED');
+    expect((await aggregateAiCostUsage(prisma, { organizationId: orgA })).totalMicros).toBe(3_000);
+  });
+
+  it('C2F2_A2 platform 限额跨 organization（并发合计不突破）', async () => {
+    await upsertAiBudgetPolicy(prisma, { scope: 'PLATFORM', scopeRef: '*', dailyLimitMicros: 2_500 });
+    const attempts = await Promise.all(
+      [orgA, orgB, orgA, orgB].map((organizationId) =>
+        runGuardedAiCostWrite({
+          prisma,
+          refs: { organizationId, incidentId: 'inc-' + organizationId.slice(0, 6) },
+          estimatedCostMicros: 1_000,
+          entry: { callId: 'c2f2-p-' + randomUUID(), provider: 'p', model: 'm', executionLevel: 'LEVEL_1_LOW_COST', taskType: 'SEMANTIC', result: 'SUCCESS' },
+        }),
+      ),
+    );
+    expect(attempts.filter((a) => a.written).length).toBe(2);
+    expect(attempts.filter((a) => !a.written).every((a) => a.reason === 'AI_BUDGET_DAILY_EXCEEDED')).toBe(true);
+  });
+
+  it('C2F2_A3 account 限额跨 incident 共享 account usage', async () => {
+    await upsertAiBudgetPolicy(prisma, { scope: 'ACCOUNT', scopeRef: 'acct-1', organizationId: orgA, dailyLimitMicros: 2_000 });
+    const write = (incidentId: string) =>
+      runGuardedAiCostWrite({
+        prisma,
+        refs: { organizationId: orgA, accountId: 'acct-1', incidentId },
+        estimatedCostMicros: 1_000,
+        entry: { callId: 'c2f2-acc-' + randomUUID(), provider: 'p', model: 'm', executionLevel: 'LEVEL_1_LOW_COST', taskType: 'SEMANTIC', result: 'SUCCESS' },
+      });
+    const first = await write('inc-1');
+    const second = await write('inc-2');
+    const third = await write('inc-3');
+    expect(first.written).toBe(true);
+    expect(second.written).toBe(true);
+    expect(third.written).toBe(false);
+    expect(third.reason).toBe('AI_BUDGET_DAILY_EXCEEDED');
+  });
+
+  it('C2F2_B1 跨 incident 并发共享 org 预算 → 恰好允许预算范围内数量（canonical 层级锁；无 caller scopeKey）', async () => {
+    await upsertAiBudgetPolicy(prisma, { scope: 'ORGANIZATION', scopeRef: orgA, organizationId: orgA, dailyLimitMicros: 2_000 });
+    const attempts = await Promise.all(
+      ['inc-1', 'inc-2', 'inc-3', 'inc-4'].map((incidentId) =>
+        runGuardedAiCostWrite({
+          prisma,
+          refs: { organizationId: orgA, incidentId },
+          estimatedCostMicros: 1_000,
+          entry: { callId: 'c2f2-lock-' + randomUUID(), provider: 'p', model: 'm', executionLevel: 'LEVEL_1_LOW_COST', taskType: 'SEMANTIC', result: 'SUCCESS' },
+        }),
+      ),
+    );
+    expect(attempts.filter((a) => a.written).length).toBe(2);
+    expect((await aggregateAiCostUsage(prisma, { organizationId: orgA })).totalMicros).toBe(2_000);
+  });
+
+  it('C2F2_C1 负成本 / 非法 attempt → service fail-closed + DB CHECK 拒绝', async () => {
+    await expect(
+      runGuardedAiCostWrite({
+        prisma,
+        refs: { organizationId: orgA },
+        estimatedCostMicros: -1,
+        entry: { callId: 'c2f2-neg-' + randomUUID(), provider: 'p', model: 'm', executionLevel: 'LEVEL_1_LOW_COST', taskType: 'SEMANTIC', result: 'SUCCESS' },
+      }),
+    ).rejects.toThrow(/AI_COST_LEDGER_COST_MICROS_INVALID/);
+    await expect(
+      prisma.$executeRawUnsafe(
+        'INSERT INTO "AiCostLedgerEntry" ("id","callId","provider","model","executionLevel","taskType","result","costMicros") VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
+        randomUUID(), 'c2f2-dbneg-' + randomUUID(), 'p', 'm', 'LEVEL_1_LOW_COST', 'SEMANTIC', 'SUCCESS', -5,
+      ),
+    ).rejects.toThrow(/costMicros_nonneg|check constraint/i);
+  });
+
+  it('C2F2_C2 预算已满时 replay 同一 callId → duplicate=true（不误报 exceeded）', async () => {
+    await upsertAiBudgetPolicy(prisma, { scope: 'ORGANIZATION', scopeRef: orgA, organizationId: orgA, dailyLimitMicros: 1_000 });
+    const callId = 'c2f2-replay-' + randomUUID();
+    const write = () =>
+      runGuardedAiCostWrite({
+        prisma,
+        refs: { organizationId: orgA, incidentId: 'inc-r' },
+        estimatedCostMicros: 1_000,
+        entry: { callId, provider: 'p', model: 'm', executionLevel: 'LEVEL_1_LOW_COST', taskType: 'SEMANTIC', result: 'SUCCESS' },
+      });
+    expect((await write()).written).toBe(true);
+    const replay = await write();
+    expect(replay.duplicate).toBe(true);
+    expect(replay.reason).toBe('AI_COST_LEDGER_DUPLICATE_CALL_ID');
+    expect((await aggregateAiCostUsage(prisma, { organizationId: orgA })).totalMicros).toBe(1_000);
+  });
+
+  it('C2F2_C3 strong-call 限额按 policy scope 统计', async () => {
+    await upsertAiBudgetPolicy(prisma, { scope: 'TASK', scopeRef: 'task-strong', organizationId: orgA, strongCallLimit: 1 });
+    const writeStrong = () =>
+      runGuardedAiCostWrite({
+        prisma,
+        refs: { organizationId: orgA, taskId: 'task-strong' },
+        estimatedCostMicros: 100,
+        requestedStrongCall: true,
+        entry: { callId: 'c2f2-strong-' + randomUUID(), provider: 'p', model: 'strong', executionLevel: 'LEVEL_2_STRONG', taskType: 'SEMANTIC', result: 'SUCCESS' },
+      });
+    expect((await writeStrong()).written).toBe(true);
+    const second = await writeStrong();
+    expect(second.written).toBe(false);
+    expect(second.reason).toBe('AI_BUDGET_STRONG_CALL_EXCEEDED');
+  });
+
+  it('C2F2_C4 token 限额按 policy scope enforce', async () => {
+    await upsertAiBudgetPolicy(prisma, { scope: 'ORGANIZATION', scopeRef: orgA, organizationId: orgA, tokenLimit: 150 });
+    const write = () =>
+      runGuardedAiCostWrite({
+        prisma,
+        refs: { organizationId: orgA, incidentId: 'inc-tok' },
+        estimatedCostMicros: 10,
+        entry: { callId: 'c2f2-tok-' + randomUUID(), provider: 'p', model: 'm', executionLevel: 'LEVEL_1_LOW_COST', taskType: 'SEMANTIC', inputTokens: 100, outputTokens: 0, result: 'SUCCESS' },
+      });
+    expect((await write()).written).toBe(true);
+    const denied = await write();
+    expect(denied.written).toBe(false);
+    expect(denied.reason).toBe('AI_BUDGET_TOKEN_EXCEEDED');
+  });
+});
+
 
 describe('SI-COST C2 · 确定性模型缓存 store', () => {
   const identity = (over: Record<string, unknown> = {}) => ({
