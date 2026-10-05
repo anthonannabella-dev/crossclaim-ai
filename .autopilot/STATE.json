@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "88bf3f70",
+  "head": "d84ed40e",
   "status": "RECONCILED",
   "current_task": "RSI 生产可执行闭环（7 点收口）：RSI_RUNTIME_READY = PASS；MODEL_PROVIDER_READY = 本地仿真已接线（真实网络/付费 HOLD）；PERSISTENCE_READY = ephemeral 已验证、durable 需宿主非生产 DATABASE_URL；REBOOT_RECONCILE_READY = NOT_IMPLEMENTED（下一单元）；SYSTEMD_VALIDATED = 需宿主 Linux 实机",
   "next_task": "BG-016 单一 Acceptance Head + 四份状态一致 guard（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍 HOST_ACTION_REQUIRED 或 HOLD",
@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-40",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T23:43:08.404Z",
+  "updated_at": "2026-10-05T23:50:50.686Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -50,15 +50,15 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
-  "next_execution_unit": "PHASE 6 U1 Controlled Adoption Plan / PLAN_ONLY: read the NEXT/TEST sections of archived verdict MSG-20261005-84 for the exact minimum requirements; implement a plan-only contract (no apply/execute/rollout, no config mutation; likely binds review verdict + proposal + rollback plan + canary digests and produces an APPROVED_FOR_CONTROLLED_ADOPTION_PLANNING-scoped plan artifact with provenance/fingerprint/deep-freeze); keep every HOLD/FORBIDDEN boundary; then audit + archive (MSG-20261005-85) + durable state.",
+  "next_execution_unit": "PHASE 6 U1 verdict archive + next: (1) read verdict (REVIEWED_HEAD = d84ed40e, marker [CODEX-PHASE6-U1]); (2) extract to work/stage/verdict-p6u1-raw.txt, archive verbatim (MSG-20261005-85) with compare.mjs FULL_COPY_OK, commit/push; (3) durable state; if PASS, queue P6-U2 per the auditor minimum gate (execution authorization contract, not direct production apply).",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-05T23:43:08.404Z",
+  "last_tick_at": "2026-10-05T23:50:50.686Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "PHASE 5 CLOSURE verdict archived (MSG-20261005-84, FULL_COPY_OK, archive commit ab993ea5): PHASE_5_CLOSURE_CHECKPOINT / DOCS_CLOSURE_REGISTRY / U1_U5_FINAL_HEAD_REGISTRY / PHASE5_BOUNDARY_FREEZE = PASS; PHASE_5_CONTROLLED_LEARNING_ADOPTION = PASS / CLOSED; PHASE_5 = FORMALLY CLOSED; PHASE5_FUNCTIONAL_REVISION_REQUIRED = NO, PHASE5_CLOSURE_REVISION_REQUIRED = NO. Authorized next: PHASE 6 U1 Controlled Adoption Plan / PLAN_ONLY (no real config execution).",
-  "last_action_at": "2026-10-05T23:24:28.898Z",
-  "next_action": "Open PHASE 6 U1 Controlled Adoption Plan (PLAN_ONLY): read the auditor NEXT/TEST for the exact minimum gate, then implement (code -> tests -> regression -> tsc -> commit -> push -> audit -> archive -> durable state).",
-  "current_head": "88bf3f70",
-  "last_completed_head": "88bf3f70",
+  "last_action": "PHASE 6 U1 Controlled Adoption Plan (PLAN_ONLY) implemented per MSG-20261005-84: verified-APPROVED-review gate (semantics APPROVED_FOR_CONTROLLED_ADOPTION_PLANNING), full-chain rebinding (verdict/canary/proposal/rollback digests), delta revalidated against target allowlist + value schema + trusted baseline from, artifact CONTROLLED_ADOPTION_PLAN (14 bindings, provenance+fingerprint+deep-freeze), semantics READY_FOR_CONTROLLED_EXECUTION_GATE_REVIEW, apply/execute/promote/rollout/configMutation FORBIDDEN, stale-baseline gate (STALE_BASELINE fail-closed). code d84ed40e pushed and submitted (marker [CODEX-PHASE6-U1], REVIEWED_HEAD = d84ed40e). Local: tsc 0; controlled-adoption-plan 4/4; PHASE5 filter 10 files / 122 tests PASS; regression 103 files / 1069 tests (only P2E-DB5).",
+  "last_action_at": "2026-10-05T23:50:50.686Z",
+  "next_action": "Read PHASE 6 U1 verdict -> archive (MSG-20261005-85) -> if PASS consider PHASE 6 U2 (Controlled Adoption Execution Gate, authorization contract only) per auditor.",
+  "current_head": "d84ed40e",
+  "last_completed_head": "d84ed40e",
   "reviewed_head": "add99ec3",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -5169,10 +5169,9 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "P6U1-1 implement controlled-adoption-plan.ts (PLAN_ONLY) per MSG-20261005-84 NEXT: verified APPROVED review verdict with APPROVED_FOR_CONTROLLED_ADOPTION_PLANNING gate; rebind verdict/canary/proposal/candidate/rollback/baseline digests + target + exact allowed path + trusted from + schema-valid to (reuse U3 target allowlist + value schema and the trusted baseline value binding); emit CONTROLLED_ADOPTION_PLAN artifact with the 14 bindings + provenance/fingerprint/deep-freeze; semantics READY_FOR_CONTROLLED_EXECUTION_GATE_REVIEW; apply/execute/promote/rollout/configMutation FORBIDDEN; no execution exports",
-    "P6U1-2 tests: gate matrix (non-verified/clone verdict, REJECTED outcome, wrong semantics, mismatched canary/proposal/rollback/baseline digests, path outside allowlist, to outside schema, from not equal to trusted baseline value), plan artifact bindings, provenance/anti-tamper, no execution entries, and the stale-baseline gate helper (live fingerprint !== expected -> STALE_BASELINE) + regression + tsc + commit + push",
-    "P6U1-3 audit P6-U1 -> archive (MSG-20261005-85) -> compare FULL_COPY_OK -> durable state",
-    "P6U1-4 non-blocking debt: full SHA-256 digests, fingerprint schema upkeep, scanRawPayloadKeys bounded traversal, P2E-DB5 test-isolation"
+    "P6U1a-1 read P6-U1 verdict (d84ed40e) -> archive MSG-20261005-85 -> compare FULL_COPY_OK -> commit/push -> durable state",
+    "P6U1a-2 if PASS -> queue/implement P6-U2 Controlled Adoption Execution Gate per auditor NEXT",
+    "P6U1a-3 non-blocking debt: full SHA-256 digests, fingerprint schema upkeep, scanRawPayloadKeys bounded traversal, P2E-DB5 test-isolation"
   ],
   "full_autonomous_internal_execution": "VERIFIED",
   "dispatcher_acceptance": {
@@ -9322,7 +9321,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-05T23:43:08.404Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-05T23:50:50.686Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -9451,7 +9450,7 @@
     "PHASE_3_ACTION_RUNTIME": "PASS / CLOSED（MSG-20261005-54；Reviewed HEAD = fe3c33e9；PHASE3_FINAL4_REQUIRED = NO）",
     "PHASE_4_OUTCOME_LEARNING_PIPELINE": "CLOSED / PASS（MSG-20261005-67）：U1 FINAL / U2 / U3 / U4 / U5 全 CLOSED；含 U4 FINAL、U5 FINAL、U5 FINAL2、PHASE 4 FINAL CLOSURE。",
     "PHASE_5_META_IMPROVEMENT": "FORMALLY CLOSED (MSG-20261005-84): U1-U5 PASS / CLOSED; closure checkpoint PASS; archive index MSG-65..84.",
-    "PHASE_6_CONTROLLED_ADOPTION": "OPEN / NOT STARTED: authorized U1 Controlled Adoption Plan / PLAN_ONLY (no real config execution)."
+    "PHASE_6_CONTROLLED_ADOPTION": "IN PROGRESS: U1 Controlled Adoption Plan (PLAN_ONLY) = SUBMITTED / AWAITING_VERDICT (d84ed40e)."
   },
   "heartbeat_watchdog": {
     "interval_seconds": 180,
@@ -11045,5 +11044,22 @@
     "semantics": "READY_FOR_CONTROLLED_EXECUTION_GATE_REVIEW only (never APPLIED/DEPLOYED/ACTIVE)",
     "staleBaselineGate": "plan pins baselineSnapshotDigest + baselineConfigFingerprint; before any future execution the live fingerprint must equal the planned expected fingerprint else STALE_BASELINE -> FAIL_CLOSED",
     "next": "P6-U2 Controlled Adoption Execution Gate only after U1 CLOSED and separately authorized (and it should still be an execution-authorization contract, not direct production apply)"
+  },
+  "phase6_u1": {
+    "status": "SUBMITTED / AWAITING_VERDICT",
+    "reviewed_head": "d84ed40e",
+    "pushed": true,
+    "local_verification": {
+      "tsc": "PASS",
+      "targeted": "controlled-adoption-plan 4/4",
+      "phase5": "10 files / 122 tests PASS",
+      "regression": "103 files / 1069 tests (1 failed = P2E-DB5)",
+      "github_ci": "NOT_OBSERVED"
+    },
+    "submission": {
+      "marker": "[CODEX-PHASE6-U1]",
+      "delivered": true,
+      "expected_message_id": "MSG-20261005-85"
+    }
   }
 }
