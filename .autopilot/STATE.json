@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-40",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T20:45:01.389Z",
+  "updated_at": "2026-10-05T20:49:26.502Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -50,13 +50,13 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
-  "next_execution_unit": "PHASE 5 U2 裁决归档与 U3 进入：(1) 打开右侧审核会话读取 P5-U2 verdict（严格匹配 REVIEWED_HEAD = 8e205b19，marker [CODEX-PHASE5-U2]）；(2) 先落盘 work/stage/verdict-p5u2-raw.txt → 逐字归档 AI-ARCHITECT-INBOX.md（MSG-20261005-71）→ compare.mjs FULL_COPY_OK → commit + push；(3) durable state；若 REVISE 按最小修法窄修；若 PASS → P5-U3 Controlled Config Proposal（verified APPROVED verdict + verified rollback plan → proposal；APPROVED only；REJECTED 永不生成；one verdict → one proposal；绑定 verdictDigest/ticketDigest/candidateDigest/evaluationDigest/evidenceSetDigest/baselineConfigFingerprint/proposedDelta/rollbackPlanRef·rollbackPlanDigest/proposalDigest；delta 限 candidate target；proposal 仍 PROPOSAL_ONLY；不得直接修改 Policy / Guard / Router / Action Runtime）；(4) 之后 U4 Canary/Shadow Evaluation；(5) 边界不变：REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing = HOLD；SECOND_* = FORBIDDEN；L5_RELAXATION = FORBIDDEN。",
+  "next_execution_unit": "PHASE 5 U2 FINAL — trusted target binding + trusted baseline snapshot：(1) target 绑定：createRollbackPlan 改为接收 verified candidate（isVerifiedMetaImprovementCandidate === true）并校验 candidate.candidateDigest === verdict.candidateDigest（否则 fail-closed）；plan.candidateTarget 取 candidate.target，不再接受 caller 自填（ROUTER candidate + caller 填 POLICY → REJECT）；(2) baseline 权威：新增 server-owned BaselineConfigStorePort（read(target) → {configFingerprint, capturedAt}）与 captureBaselineConfigSnapshot（provenance + fingerprint + deep-freeze + isVerifiedBaselineConfigSnapshot）；createRollbackPlan 只接受 verified snapshot，且 snapshot.candidateTarget 必须等于 candidate.target，plan.baselineConfigFingerprint / rollbackTargetFingerprint 均由 snapshot 派生（caller 不得指定）；(3) tests：target 绑定与 ROUTER→POLICY 拒绝、caller 自造 baseline 拒绝、snapshot target 不匹配拒绝、fingerprint 由 snapshot 派生、rollback === baseline、原 7/7 保持 green、no execute/apply/mutate 保持；(4) 随后 U3 Controlled Config Proposal（APPROVED only；一 verdict 一 proposal；必须已有 verified rollback plan；delta 限 candidate target；proposal 仍 PROPOSAL_ONLY）；(5) 边界不变：REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing = HOLD；SECOND_* = FORBIDDEN；L5_RELAXATION = FORBIDDEN。",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-05T20:45:01.389Z",
+  "last_tick_at": "2026-10-05T20:49:26.502Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "PHASE 5 U2 — Rollback Plan Contract 已实现、验证、commit + push（8e205b19），并已送审计会话等待裁决（marker [CODEX-PHASE5-U2]，REVIEWED_HEAD = 8e205b19，composer 已清空确认送达）：只接受 isVerifiedApprovalVerdict(verdict) === true 且 outcome === APPROVED（REJECTED fail-closed）；plan 绑定 11 项；baseline 必须明确且 rollbackTargetFingerprint === baselineConfigFingerprint（禁 ROLLBACK_TO_LATEST / 模糊默认值）；plan 自带 provenance + fingerprint + deep-freeze；只生成 ROLLBACK_PLAN_ONLY，无任何执行入口。本地：tsc exit 0；rollback-plan 7/7；PHASE 5 过滤集 8 files / 105 tests PASS；回归集 101 files / 1052 tests（唯一失败 = P2E-DB5 test-isolation debt）；GITHUB_CI = NOT_OBSERVED。",
+  "last_action": "PHASE 5 U2 裁决已读取、原文归档（MSG-20261005-71，compare.mjs = FULL_COPY_OK，归档提交 a6a93bb0）：VERIFIED_APPROVED_VERDICT_GATE / ROLLBACK_PLAN_PROVENANCE / ROLLBACK_PLAN_ANTI_TAMPER / ROLLBACK_EXECUTION_BOUNDARY = PASS；CANDIDATE_TARGET_BINDING / BASELINE_AUTHORITY = REVISE；PHASE5_U2_FINAL_REQUIRED = YES。U2 FINAL 要求：rollback target 必须来自可信 approved candidate（二选一：verdict 绑定 candidateTarget/candidateKind，或 createRollbackPlan 同时接收 verified candidate 且 candidate.candidateDigest === verdict.candidateDigest）；baseline 必须来自 trusted baseline snapshot/read boundary（caller 自造 → REJECT；snapshot target 必须等于 candidate target；plan.baselineConfigFingerprint 由 snapshot 派生）。",
   "last_action_at": "2026-10-05T20:45:01.389Z",
-  "next_action": "读取 PHASE 5 U2 裁决 → 归档（MSG-20261005-71）→ 若 PASS 则 U2 = CLOSED 并进入 P5-U3 Controlled Config Proposal。",
+  "next_action": "执行 PHASE 5 U2 FINAL（trusted target binding + trusted baseline snapshot），随后 U3 Controlled Config Proposal。",
   "current_head": "8e205b19",
   "last_completed_head": "8e205b19",
   "reviewed_head": "add99ec3",
@@ -5169,10 +5169,11 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "P5U2-1 读取 PHASE 5 U2 裁决（匹配 REVIEWED_HEAD = 8e205b19）→ 先落盘 verdict-p5u2-raw.txt → 归档 MSG-20261005-71 → compare.mjs FULL_COPY_OK → commit + push → durable state",
-    "P5U2-2 若 PASS → 开 P5-U3 Controlled Config Proposal（verified APPROVED verdict + verified rollback plan；一 verdict 一 proposal；delta 限 candidate target；proposal 仍 PROPOSAL_ONLY）",
-    "P5U2-3 之后 U4 Canary/Shadow Evaluation → 再审 Controlled Adoption",
-    "P5U2-4 非阻断债务（持续记录）：三类 digest 完整 SHA-256、各 fingerprint 随结构升级、scanRawPayloadKeys 有界遍历、P2E-DB5 test-isolation debt"
+    "P5U2F-1 U2 FINAL：createRollbackPlan 接收 verified candidate（digest 必须等于 verdict.candidateDigest），plan.candidateTarget 取 candidate.target；新增 trusted BaselineConfigSnapshot（server-owned store + provenance + fingerprint + deep-freeze），baseline/rollback fingerprint 均由 snapshot 派生",
+    "P5U2F-2 U2 FINAL tests（target 绑定/ROUTER→POLICY 拒绝/自造 baseline 拒绝/snapshot target 不匹配/派生 fingerprint/rollback===baseline/原 7 项 green）+ regression + tsc + commit + push",
+    "P5U2F-3 送 U2 FINAL 裁决 → 归档（MSG-20261005-72）→ compare.mjs FULL_COPY_OK → durable state",
+    "P5U2F-4 随后 U3 Controlled Config Proposal（APPROVED only；一 verdict 一 proposal；必须有 verified rollback plan；delta 限 candidate target；proposal 仍 PROPOSAL_ONLY）",
+    "P5U2F-5 非阻断债务（持续记录）：三类 digest 完整 SHA-256、各 fingerprint 随结构升级、scanRawPayloadKeys 有界遍历、P2E-DB5 test-isolation debt"
   ],
   "full_autonomous_internal_execution": "VERIFIED",
   "dispatcher_acceptance": {
@@ -9322,7 +9323,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-05T20:45:01.389Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-05T20:49:26.502Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -9450,7 +9451,7 @@
     "PHASE_2_MODEL_GATEWAY_RUNTIME": "PASS / CLOSED（MSG-20261005-50；Reviewed HEAD 338f30b4；PHASE2_FINAL5_REQUIRED = NO）",
     "PHASE_3_ACTION_RUNTIME": "PASS / CLOSED（MSG-20261005-54；Reviewed HEAD = fe3c33e9；PHASE3_FINAL4_REQUIRED = NO）",
     "PHASE_4_OUTCOME_LEARNING_PIPELINE": "CLOSED / PASS（MSG-20261005-67）：U1 FINAL / U2 / U3 / U4 / U5 全 CLOSED；含 U4 FINAL、U5 FINAL、U5 FINAL2、PHASE 4 FINAL CLOSURE。",
-    "PHASE_5_META_IMPROVEMENT": "IN PROGRESS：U1 = PASS / CLOSED；U2 Rollback Plan Contract = SUBMITTED / AWAITING_VERDICT（8e205b19）；NEXT = U3 Controlled Config Proposal → U4 Canary/Shadow Evaluation。"
+    "PHASE_5_META_IMPROVEMENT": "IN PROGRESS：U1 = PASS / CLOSED；U2 = PASS WITH REVISE（MSG-20261005-71），U2 FINAL（trusted target binding + trusted baseline snapshot）待执行；NEXT = U3 Controlled Config Proposal → U4 Canary/Shadow Evaluation。"
   },
   "heartbeat_watchdog": {
     "interval_seconds": 180,
@@ -9922,7 +9923,7 @@
       "U5"
     ]
   },
-  "archive_head": "7f5770dd",
+  "archive_head": "a6a93bb0",
   "phase4_u3_final": {
     "status": "PASS / CLOSED",
     "reviewed_head": "006cc912",
@@ -10499,5 +10500,26 @@
       "composer_empty_verified": true,
       "expected_message_id": "MSG-20261005-71"
     }
+  },
+  "phase5_u2_verdict": {
+    "message_id": "MSG-20261005-71",
+    "verdict": "PASS WITH REVISE / NOT CLOSED",
+    "reviewed_head": "8e205b19",
+    "archive_verified": "FULL_COPY_OK",
+    "archive_head": "a6a93bb0",
+    "pass": [
+      "VERIFIED_APPROVED_VERDICT_GATE = PASS",
+      "ROLLBACK_PLAN_PROVENANCE = PASS",
+      "ROLLBACK_PLAN_ANTI_TAMPER = PASS",
+      "ROLLBACK_EXECUTION_BOUNDARY = PASS"
+    ],
+    "revise": [
+      "CANDIDATE_TARGET_BINDING：candidateTarget 仍由 caller 自填（verdict 未锁定 target），获批 ROUTER 可被填成 POLICY/GUARD",
+      "BASELINE_AUTHORITY：baseline 只是 caller 声明字符串，缺 trusted config snapshot / read boundary"
+    ],
+    "phase5_u2_final_required": "YES",
+    "notes": [
+      "对象 provenance 已足够；本次要补的是“业务来源绑定”"
+    ]
   }
 }
