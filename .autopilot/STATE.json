@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-40",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T21:46:56.661Z",
+  "updated_at": "2026-10-05T21:49:08.045Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -50,13 +50,13 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
-  "next_execution_unit": "PHASE 5 U4 verdict archive + next unit: (1) read verdict (REVIEWED_HEAD = 9ebe622c, marker [CODEX-PHASE5-U4]); (2) write work/stage/verdict-p5u4-raw.txt then archive AI-ARCHITECT-INBOX.md (MSG-20261005-76) + compare.mjs FULL_COPY_OK + commit/push; (3) durable state; if REVISE do the narrow fix; if PASS follow the auditor NEXT (likely Controlled Adoption Review contract) with code -> tests -> regression -> tsc -> commit -> push -> audit -> archive; boundaries unchanged.",
+  "next_execution_unit": "PHASE 5 U4 FINAL: (1) SAME_COHORT_PROOF - prove baseline/proposal evaluations come from the same cohort via a trusted upstream artifact (e.g. expose verified outcome digest set / cohort digest on the offline evaluation and require canary to verify set equality; mismatch -> fail-closed) instead of caller-declared cohortDigest string; (2) CANARY_EVALUATION_DIGEST_FULL_BINDING - evaluationDigest must bind the full artifact (baselineMetrics + proposalMetrics + metricDeltas fully, not just partial counters); (3) EVALUATION_WINDOW_VALIDATION - require valid ISO dates (Number.isFinite(Date.parse)) and from < to; tests: different cohort -> REJECT, same cohort -> PASS, invalid window strings -> REJECT, any artifact field change -> digest change, original 7 tests green, no apply/execute/mutate preserved; then audit -> archive -> durable state. Boundaries unchanged: REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing = HOLD; SECOND_* = FORBIDDEN; L5_RELAXATION = FORBIDDEN.",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-05T21:46:56.661Z",
+  "last_tick_at": "2026-10-05T21:49:08.045Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "PHASE 5 U4 Canary/Shadow Evaluation implemented per frozen spec (SHADOW_ONLY dual-track; Phase 4 metrics reused, no second metric system; CANARY_SHADOW_EVALUATION artifact with 14 bindings + provenance/fingerprint/deep-freeze; tri-state recommendation; mandatory rollback triggers with rollback pinned to U2 baselineSnapshotDigest+baselineConfigFingerprint; no apply/promote/rollout/mutate). code 9ebe622c pushed and submitted (marker [CODEX-PHASE5-U4], REVIEWED_HEAD = 9ebe622c). Local: tsc 0; canary-shadow-evaluation 7/7; PHASE5 10 files / 125 tests PASS; regression 103 files / 1072 tests (only P2E-DB5).",
-  "last_action_at": "2026-10-05T21:46:56.661Z",
-  "next_action": "Read PHASE 5 U4 verdict -> archive (MSG-20261005-76) -> if PASS continue to the next phase-5 unit per auditor NEXT.",
+  "last_action": "PHASE 5 U4 verdict archived (MSG-20261005-76, FULL_COPY_OK, archive commit f2d1095e): SHADOW_ISOLATION / PHASE4_METRIC_REUSE / CANARY_ARTIFACT_PROVENANCE / U2_ROLLBACK_ANCHOR / NO_AUTO_ADOPTION-NO_EXECUTION = PASS; SAME_COHORT_PROOF / CANARY_EVALUATION_DIGEST_FULL_BINDING / EVALUATION_WINDOW_VALIDATION = REVISE; PHASE5_U4_FINAL_REQUIRED = YES.",
+  "last_action_at": "2026-10-05T21:49:08.045Z",
+  "next_action": "Execute PHASE 5 U4 FINAL (same-cohort proof + full evaluation digest binding + strict window validation), then next phase-5 unit (Controlled Adoption Review).",
   "current_head": "9ebe622c",
   "last_completed_head": "9ebe622c",
   "reviewed_head": "add99ec3",
@@ -5169,9 +5169,11 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "P5U4-1 read U4 verdict (9ebe622c) -> write verdict raw -> archive MSG-20261005-76 -> compare FULL_COPY_OK -> commit/push -> durable state",
-    "P5U4-2 if PASS -> open the next phase-5 unit per auditor NEXT (Controlled Adoption Review contract)",
-    "P5U4-3 non-blocking debt: full SHA-256 digests, fingerprint schema upkeep, scanRawPayloadKeys bounded traversal, P2E-DB5 test-isolation"
+    "P5U4F-1 U4 FINAL: same-cohort proof via trusted evaluation cohort identity + full evaluationDigest binding + strict window validation",
+    "P5U4F-2 U4 FINAL tests (cohort mismatch reject / same cohort pass / invalid window reject / digest full-coverage / original 7 green / no execution) + regression + tsc + commit + push",
+    "P5U4F-3 audit U4 FINAL -> archive (MSG-20261005-77) -> compare FULL_COPY_OK -> durable state",
+    "P5U4F-4 then next phase-5 unit (Controlled Adoption Review) per auditor NEXT",
+    "P5U4F-5 non-blocking debt: full SHA-256 digests, fingerprint schema upkeep, scanRawPayloadKeys bounded traversal, P2E-DB5 test-isolation"
   ],
   "full_autonomous_internal_execution": "VERIFIED",
   "dispatcher_acceptance": {
@@ -9321,7 +9323,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-05T21:46:56.661Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-05T21:49:08.045Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -9449,7 +9451,7 @@
     "PHASE_2_MODEL_GATEWAY_RUNTIME": "PASS / CLOSED（MSG-20261005-50；Reviewed HEAD 338f30b4；PHASE2_FINAL5_REQUIRED = NO）",
     "PHASE_3_ACTION_RUNTIME": "PASS / CLOSED（MSG-20261005-54；Reviewed HEAD = fe3c33e9；PHASE3_FINAL4_REQUIRED = NO）",
     "PHASE_4_OUTCOME_LEARNING_PIPELINE": "CLOSED / PASS（MSG-20261005-67）：U1 FINAL / U2 / U3 / U4 / U5 全 CLOSED；含 U4 FINAL、U5 FINAL、U5 FINAL2、PHASE 4 FINAL CLOSURE。",
-    "PHASE_5_META_IMPROVEMENT": "IN PROGRESS: U1 / U2 / U3 = PASS / CLOSED; U4 Canary/Shadow = SUBMITTED / AWAITING_VERDICT (9ebe622c)."
+    "PHASE_5_META_IMPROVEMENT": "IN PROGRESS: U1/U2/U3 = PASS / CLOSED; U4 = PASS WITH REVISE (MSG-20261005-76), U4 FINAL pending."
   },
   "heartbeat_watchdog": {
     "interval_seconds": 180,
@@ -9921,7 +9923,7 @@
       "U5"
     ]
   },
-  "archive_head": "9d69ffe5",
+  "archive_head": "f2d1095e",
   "phase4_u3_final": {
     "status": "PASS / CLOSED",
     "reviewed_head": "006cc912",
@@ -10712,5 +10714,25 @@
       "delivered": true,
       "expected_message_id": "MSG-20261005-76"
     }
+  },
+  "phase5_u4_verdict": {
+    "message_id": "MSG-20261005-76",
+    "verdict": "PASS WITH REVISE / NOT CLOSED",
+    "reviewed_head": "9ebe622c",
+    "archive_verified": "FULL_COPY_OK",
+    "archive_head": "f2d1095e",
+    "pass": [
+      "SHADOW_ISOLATION = PASS",
+      "PHASE4_METRIC_REUSE = PASS",
+      "CANARY_ARTIFACT_PROVENANCE = PASS",
+      "U2_ROLLBACK_ANCHOR = PASS",
+      "NO_AUTO_ADOPTION / NO_EXECUTION = PASS"
+    ],
+    "revise": [
+      "SAME_COHORT_PROOF",
+      "CANARY_EVALUATION_DIGEST_FULL_BINDING",
+      "EVALUATION_WINDOW_VALIDATION"
+    ],
+    "phase5_u4_final_required": "YES"
   }
 }
