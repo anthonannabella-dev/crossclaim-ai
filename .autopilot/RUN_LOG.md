@@ -2476,3 +2476,13 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - STATE 新增 `si_cost_optimization`（REGISTERED_QUEUED + activation_rule + scope_summary + boundary）。
 - 明确：本任务**不打断**当前的 `si-rsi-unification-design`；统一 Runtime PASS/CLOSED 后自动进入执行队列（P1）。
 - 未授权项继续 HOLD：REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / PRODUCTION_CREDENTIALS / P2-G。
+
+## 2026-10-05T13:00Z — SI-RSI Unification：repo-wide 盘点 + 设计/实施边界送审包（零代码）
+- 新增 `docs/releases/SI-RSI-UNIFICATION-INVENTORY.md`：机械盘点（RSI 能力层 20 文件 / RSI 运行层 14 / RSI 测试 46 /
+  Recovery SI 14 / 共享地基 7 / autopilot 28）+ 概念级归属表（动作目录 / 策略 L0–L5 / 控制面 / Kill Switch / 模型网关 /
+  成本核心 / 证据审计 / Judge / 持续执行 / 只读工具 / 持久化写入口）+ KEEP/REUSE/MERGE/DEPRECATE/DUPLICATE 分类 + 目标形态。
+- 新增 `docs/releases/SI-RSI-UNIFICATION-DESIGN-REQUEST.md`：最小统一方案 Option A（注册表 + 命名下沉 + owner 声明，零代码移动）
+  + Step 1..5 + 4 项开放问题（Option A/B、autopilot 是否 dev-scope、Policy Pack 挂载形态、跨域 lineage 最小字段）+ 边界 + 风险分级。
+- 明确不做：NO_CODE_CHANGE / NO_RENAME / NO_MOVE / NO_DELETE / NO_RUNTIME_WIRING；SECOND_RUNTIME / SECOND_POLICY_ENGINE /
+  SECOND_COST_LEDGER / SECOND_EVIDENCE_STORE = FORBIDDEN；P2-E 已关闭边界不动。
+- 状态：等架构方对统一方案的裁决（Option A/B 与 4 项开放问题）；裁决后按 Step 1（注册表，docs-only）继续。

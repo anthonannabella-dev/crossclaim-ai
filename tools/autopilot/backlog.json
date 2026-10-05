@@ -1949,10 +1949,11 @@
       "required_tests": [],
       "template": "arch-design-request",
       "filters": [],
-      "status": "ACTIVE_INVENTORY_PHASE",
+      "status": "DESIGN_SUBMITTED_PENDING_VERDICT",
       "implementation_head": null,
-      "audit_request": "docs/releases/SI-RSI-UNIFICATION-DIRECTIVE.md",
-      "note": "单一顶层 CrossClaim SI Runtime；RSI 下沉为 Meta-Improvement Capability；Recovery SI 作为领域能力接入既有 Runtime；ONE CONTROL PLANE + L1–L5 权限分层保持不变；高风险动作继续 fail-closed。 P2-E 已 PASS / CLOSED（MSG-20261005-27），依赖解除；按冻结顺序执行 repo-wide inventory → KEEP/REUSE/MERGE/DEPRECATE/DUPLICATE → 最小统一方案 → Architecture Audit。仅 docs/releases/**。"
+      "audit_request": "docs/releases/SI-RSI-UNIFICATION-DESIGN-REQUEST.md",
+      "note": "单一顶层 CrossClaim SI Runtime；RSI 下沉为 Meta-Improvement Capability；Recovery SI 作为领域能力接入既有 Runtime；ONE CONTROL PLANE + L1–L5 权限分层保持不变；高风险动作继续 fail-closed。 P2-E 已 PASS / CLOSED（MSG-20261005-27），依赖解除；按冻结顺序执行 repo-wide inventory → KEEP/REUSE/MERGE/DEPRECATE/DUPLICATE → 最小统一方案 → Architecture Audit。仅 docs/releases/**。 2026-10-05：repo-wide 盘点 + 设计/实施边界送审包已提交（零代码；建议 Option A 逻辑统一）。",
+      "evidence": "docs/releases/SI-RSI-UNIFICATION-INVENTORY.md"
     },
     {
       "id": "si-cost-optimization",
