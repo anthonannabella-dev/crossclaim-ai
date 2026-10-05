@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-40",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T19:14:14.360Z",
+  "updated_at": "2026-10-05T19:16:15.232Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -21,7 +21,7 @@
   "ci_result": "completed_success",
   "fix_pr": "https://github.com/anthonannabella-dev/crossclaim-ai/pull/10",
   "channel_status": "HEALTHY（主审计会话 = https://chatgpt.com/c/6ac385db-cb60-83ec-9754-c7a30633a8c5（HOST 新开；MSG-20261005-30 起）；历史会话 https://chatgpt.com/c/6ac1cdf0-1ec8-83ec-8036-0e66fcf5c6b9 保留 MSG-22..29 逐字归档）",
-  "pending_verdict_unarchived": "PHASE 4 U3（Reviewed HEAD e90de9c0）—— 已投递，等待裁决",
+  "pending_verdict_unarchived": null,
   "b2_status": "PASS（MSG-20260930-10 工程修复 + MSG-20260930-11 集成 PASS/MERGE APPROVED）",
   "protocol": "DUAL_CHANNEL_WAKEUP（GitHub = 正式总线 / ChatGPT Web = 仅唤醒）",
   "integration_pr": "https://github.com/anthonannabella-dev/crossclaim-ai/pull/11",
@@ -50,13 +50,13 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
-  "next_execution_unit": "PHASE 4 U3 裁决处理：读取右侧审核会话（tab 14）完整 verdict（严格匹配 REVIEWED_HEAD = e90de9c0）→ 原样逐字归档 AI-ARCHITECT-INBOX.md（MSG-20261005-60）→ compare.mjs 必须 FULL_COPY_OK → durable state 对账。若 PASS → U4 offline evaluation（显式 resolved denominator：SUCCESS / FAILURE·REJECTED / PARTIAL / UNKNOWN / MANUAL_REVIEW；不得继续用 successCount/all records 作为正式质量指标）→ U5 meta-improvement candidate proposal only（observe → evaluate → candidate，禁止自动改 policy/router/guard/action，AUTO_PROMOTION = OFF）；若 PASS WITH REVISE → 按裁决窄修。",
+  "next_execution_unit": "PHASE 4 U3 FINAL（窄修）：(1) 先读 apps/api/src/services/autonomy/rsi-evidence-ledger.ts，确认 appendRsiEvidence() 的输入/输出契约与 EVIDENCE_IMMUTABLE / supersedes / append-only 语义；(2) 新增正式 adapter：learning entry 映射为既有 evidence record，并调用既有 appendRsiEvidence()（复用既有 composition，**不建第二 lable/存储**）；(3) createAppLearningEvidenceLedger 不再接受裸 append callback —— 只接受既有 ledger/正式 composition，或改由新 adapter 唯一构造；(4) 重复 learning evidence 必须由既有 immutable ledger 拒绝（EVIDENCE_IMMUTABLE / 明确 idempotent outcome），而不是允许再次 append；(5) 窄校验：datasetVersion 必须 non-empty / non-whitespace，空版本不得生成 immutable evidence；(6) 验收（裁决 TEST）：正式 adapter 确实调用既有 RSI ledger；caller 自写 arbitrary append 不能被 factory 洗白；同 evidenceId/evidenceDigest 重复写 → EVIDENCE_IMMUTABLE / 幂等；不同 outcome 可追加；原记录不可覆盖/删除；datasetVersion 空 → REJECT；unverified lineage → 零 evidence 写入；原 U3 6/6 保持 green。注意事项（裁决 RISKS）：当前只能记 LEARNING_EVIDENCE_CONTRACT = PASS，接线完成前不得记 IMMUTABLE_EVIDENCE_LEDGER_WIRING = PASS；evidenceDigest 目前截 16 hex 架构阶段可接受，长期持久化建议保留完整 SHA-256；P2E-DB5 仍为 test-isolation debt。流程：code → tests → regression → tsc → commit → push → 送 PHASE 4 U3 FINAL → 送达三检 → 逐字归档 → FULL_COPY_OK → durable state。",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-05T19:14:14.360Z",
+  "last_tick_at": "2026-10-05T19:16:15.232Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "PHASE 4 U3 已实施并送审：learning-evidence.ts（verified-only / append-only / 复用既有 evidence ledger）；immutable evidence 绑定 outcomeDigest + lineage refs + datasetVersion + evidenceDigest；skipped 显式记录未验证数据；fake/缺失 ledger fail-closed；push e90de9c0；投递 [CODEX-PHASE4-U3]，三检通过，等待裁决。回归 92/93 files、946/947 tests（唯一失败 = P2E-DB5 test-isolation debt，单独 20/20 PASS）。",
-  "last_action_at": "2026-10-05T19:14:14.360Z",
-  "next_action": "读取 PHASE 4 U3 裁决 → 逐字归档 + compare.mjs FULL_COPY_OK + durable state 对账",
+  "last_action": "PHASE 4 U3 裁决已读取并原样归档（MSG-20261005-60，compare.mjs = FULL_COPY_OK）：核心链路 / 四项绑定 / verified-only = PASS；IMMUTABLE / APPEND_ONLY EVIDENCE LEDGER = REVISE —— 必须真正接线既有 services/autonomy/rsi-evidence-ledger.ts（appendRsiEvidence），当前 createAppLearningEvidenceLedger({append}) 只是包装任意 callback，属契约声明而非实际接线；PHASE_4_U3 = PASS WITH REVISE / NOT CLOSED；PHASE4_U3_FINAL_REQUIRED = YES；U4/U5 继续授权。",
+  "last_action_at": "2026-10-05T19:16:15.232Z",
+  "next_action": "PHASE 4 U3 FINAL：把 learning evidence 接到既有 RSI immutable evidence ledger",
   "current_head": "e90de9c0",
   "last_completed_head": "6cba0639",
   "reviewed_head": "add99ec3",
@@ -5169,11 +5169,12 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "P4M-1 读取 PHASE 4 U3 裁决（tab 14，匹配 Reviewed HEAD e90de9c0）+ 逐字归档 MSG-20261005-60 + compare.mjs + durable state",
-    "P4M-2 U4 offline evaluation（显式 resolved denominator：SUCCESS / FAILURE·REJECTED / PARTIAL / UNKNOWN / MANUAL_REVIEW）",
-    "P4M-3 U4 tests → regression → tsc → commit → push → 送审 → 逐字归档 → compare.mjs → durable state",
-    "P4M-4 U5 meta-improvement candidate proposal only（observe → evaluate → candidate；禁止自动改 policy/router/guard/action；AUTO_PROMOTION = OFF）",
-    "P4M-5 非阻断维护项：scanRawPayloadKeys 改完整有界遍历/循环检测"
+    "P4N-1 读 rsi-evidence-ledger.ts（appendRsiEvidence 契约）并设计 learning→evidence 映射",
+    "P4N-2 实现正式 adapter（复用既有 RSI immutable evidence ledger；factory 不再接受裸 append callback；重复写由既有 ledger 拒绝；datasetVersion 非空校验）",
+    "P4N-3 U3 FINAL tests（8 条）→ regression → tsc → commit → push",
+    "P4N-4 送 PHASE 4 U3 FINAL → 送达三检 → 逐字归档 MSG-20261005-61 → compare.mjs FULL_COPY_OK → durable state",
+    "P4N-5 U4 offline evaluation（显式 resolved denominator：SUCCESS / FAILURE·REJECTED / PARTIAL / UNKNOWN / MANUAL_REVIEW）",
+    "P4N-6 U5 meta-improvement candidate proposal only（observe → evaluate → candidate；禁止自动改 policy/router/guard/action；AUTO_PROMOTION = OFF）"
   ],
   "full_autonomous_internal_execution": "VERIFIED",
   "dispatcher_acceptance": {
@@ -9323,7 +9324,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-05T19:14:14.360Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-05T19:16:15.232Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -9896,5 +9897,31 @@
       "github_ci": "NOT_OBSERVED"
     },
     "accuracy_note": "contract/architecture 层；正式 repository adapter 是否读既有数据源（非影子事实源）在接真实数据时仍需确认"
+  },
+  "phase4_u3_verdict": {
+    "message_id": "MSG-20261005-60",
+    "verdict": "PASS WITH REVISE / NOT CLOSED",
+    "reviewed_head": "e90de9c0",
+    "archive_verified": "FULL_COPY_OK",
+    "pass": [
+      "canonical→verified→projection 链路",
+      "四项绑定（outcomeDigest+lineageRefs+datasetVersion+evidenceDigest）",
+      "verified-only",
+      "无第二 Meta Evidence Store",
+      "AUTO_PROMOTION = OFF"
+    ],
+    "revise": [
+      "IMMUTABLE / APPEND_ONLY EVIDENCE LEDGER 未接线：需 adapter 复用 services/autonomy/rsi-evidence-ledger.ts 的 appendRsiEvidence()"
+    ],
+    "phase4_u3_final_required": "YES",
+    "notes": [
+      "接线前只能记 LEARNING_EVIDENCE_CONTRACT = PASS；不得记 IMMUTABLE_EVIDENCE_LEDGER_WIRING = PASS",
+      "evidenceDigest 截 16 hex 架构阶段可接受；长期持久化建议完整 SHA-256",
+      "P2E-DB5 仍为 test-isolation debt"
+    ],
+    "authorized_continue": [
+      "U4",
+      "U5"
+    ]
   }
 }
