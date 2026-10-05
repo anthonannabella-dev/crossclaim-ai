@@ -150369,3 +150369,188 @@ PRODUCTION_READY = false
 U1 方向正确，但必须先封住 candidate provenance、ticket provenance 和 clone replay 三个口子，再进入 U2。
 ```
 
+### [MSG-20261005-69] PHASE 5 U1 FINAL 裁决 = PASS WITH REVISE / NOT CLOSED（CANDIDATE_PROVENANCE / TICKET_PROVENANCE_INTEGRITY / REPLAY_BY_TICKET_DIGEST / APPROVER_SCOPE_ENFORCEMENT / REVIEW_VERDICT_ONLY_BOUNDARY = PASS；APPROVAL_VERDICT_PROVENANCE = REVISE：ApprovalVerdict 仍是普通可构造/可修改对象；PHASE5_U1_FINAL2_REQUIRED = YES；修完即可真正关闭 U1）， reviewed ref 194dc9dc
+
+```text
+DECISION
+
+CANDIDATE_PROVENANCE = PASS
+TICKET_PROVENANCE_INTEGRITY = PASS
+REPLAY_BY_TICKET_DIGEST = PASS
+APPROVER_SCOPE_ENFORCEMENT = PASS
+REVIEW_VERDICT_ONLY_BOUNDARY = PASS
+APPROVAL_VERDICT_PROVENANCE = REVISE
+PHASE_5_U1 = PASS WITH REVISE / NOT CLOSED
+PHASE5_U1_FINAL2_REQUIRED = YES
+Reviewed HEAD：194dc9dc
+GitHub Actions：NOT_OBSERVED
+KEEP
+
+这次四个原阻断点已经全部关闭：
+
+U5 candidate 已有 WeakSet + WeakMap fingerprint + deep-freeze；
+手造 / clone candidate 不能开 ticket；
+ticket 只有 openCandidateReviewTicket() 正式路径能产生可信 provenance；
+ticket clone / 手造对象不能 decide/revoke；
+replay/revoke 已从对象 identity 升级为 ticketDigest；
+两个不同正式 ticket 对象只要 digest 相同，第二次 verdict 仍会被挡；
+scope 已从“非空”升级为白名单 META_IMPROVEMENT_PROPOSAL_ONLY；
+no apply / promote / execute / mutation 继续成立。
+CHANGE
+
+还差一个非常窄、但进入 U2 前必须关闭的问题：
+
+ApprovalVerdict 自身没有 provenance
+
+当前 decideCandidateReview() 最后直接返回普通对象：
+
+TypeScript
+return {
+  kind: 'APPROVAL_VERDICT',
+  outcome: decision.outcome,
+  verdictDigest,
+  ...
+}
+
+没有：
+
+private provenance registration；
+fingerprint；
+deep-freeze；
+isVerifiedApprovalVerdict()。
+
+因此下一阶段如果只检查：
+
+纯文本
+verdict.outcome === APPROVED
+
+caller 仍可以手工构造一个：
+
+纯文本
+APPROVAL_VERDICT
+outcome = APPROVED
+arbitrary verdictDigest/ticketDigest/...
+
+送进 Controlled Config Proposal。
+
+甚至真实 REJECTED verdict 也可以被复制成普通对象后把 outcome 改成 APPROVED。
+
+所以 U1 作为“Approval Verdict Contract”还差最后这一层。
+
+RISKS
+
+当前 ticket 的批准过程已经可信，但批准结果作为跨模块输入还不可信。
+
+换句话说现在是：
+
+trusted ticket → trusted decision process → untrusted returned verdict object
+
+而 U2 需要：
+
+trusted APPROVED verdict → controlled proposal
+
+这条链还差最后一跳。
+
+另外，当前 selfApproval = FORBIDDEN 可以保留为边界意图，但不要升级成“四眼原则已证明”。目前没有 proposerId/requesterId 与 approverId 的人员级 separation-of-duties 绑定；这不阻断 U1 当前目标。
+
+TEST
+
+U1 FINAL2 最少补：
+
+正式 decideCandidateReview() 返回 verdict → isVerifiedApprovalVerdict=true。
+
+{...verdict} → false。
+
+手工构造同字段 APPROVED verdict → false。
+
+正式 verdict 原地修改：
+
+outcome
+candidateDigest
+ticketDigest
+verdictDigest
+execution
+
+全部不可修改 / provenance 失效。
+
+deep-freeze 覆盖 execution、execution.mutation、顶层 verdict。
+
+fingerprint 覆盖 verdict 全部下游消费字段。
+
+U2 前置信任门测试：
+isVerifiedApprovalVerdict(verdict) && verdict.outcome === 'APPROVED'
+才允许继续。
+
+REJECTED 正式 verdict 即使有 provenance，也不得进入 Controlled Adoption Proposal。
+
+NEXT
+
+先做唯一窄修：
+
+PHASE 5 U1 FINAL2 — Approval Verdict Provenance Closure
+
+通过后即可：
+
+PHASE_5_U1 = PASS / CLOSED
+
+然后正式进入 Controlled Adoption。
+
+不过下一阶段顺序建议稍微调整，避免依赖倒置：
+
+U2 Rollback Plan → U3 Controlled Config Proposal → U4 Canary/Shadow Evaluation
+
+原因是你给 Controlled Config Proposal 的最低要求里已经要求：
+
+rollbackPlanRef
+
+如果 rollback plan 尚未生成，U2 proposal 无法真实绑定它。
+
+推荐冻结成：
+
+Verified APPROVED Verdict
+→ Rollback Plan
+→ Controlled Config Proposal
+→ Canary/Shadow Evaluation
+→ 后续再审 Controlled Adoption
+
+Controlled Config Proposal 最低绑定：
+
+verdictDigest
+ticketDigest
+candidateDigest
+evaluationDigest
+evidenceSetDigest
+baselineConfigFingerprint
+proposedDelta
+rollbackPlanRef
+proposalDigest
+
+并且：
+
+only verified APPROVED verdict；
+REJECTED 永远不得生成；
+proposal delta 只能作用于 candidate target；
+one verdict → one controlled proposal；
+仍然 proposal only；
+不直接修改 Policy / Guard / Router / Action Runtime。
+PRODUCTION
+
+继续全部 HOLD：
+
+REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing
+
+继续：
+
+SECOND_* = FORBIDDEN
+L5_RELAXATION = FORBIDDEN
+
+保持：
+
+MODEL_GATEWAY_RUNTIME_WIRED = false
+ACTION_RUNTIME_PRODUCTION_ENABLED = false
+META_IMPROVEMENT_INTEGRATED = false
+PRODUCTION_READY = false
+
+这次四个原修订已全部 PASS；只剩 ApprovalVerdict 自身 provenance 这一处，修完即可真正关闭 U1。
+```
+
