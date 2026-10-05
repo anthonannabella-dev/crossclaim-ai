@@ -5192,9 +5192,9 @@
   "awaiting_verdict": "EXACT-ORDER REPLAY 证据已送审（comment 5979262070）；shared/staging deploy 解禁待裁决",
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-05T01:14:21.783Z",
-    "head": "c95346f",
-    "acceptance_head": "c95346f",
+    "computed_at": "2026-10-05T01:16:28.364Z",
+    "head": "af799ed",
+    "acceptance_head": "af799ed",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5345,48 +5345,48 @@
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=c95346f ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
+        "evidence": "acceptance_head=af799ed ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
       },
       "L1-05_pg_regression_passed": {
         "status": "UNVERIFIED",
-        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head c95346f（且中间存在非簿记变更）"
+        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head af799ed（且中间存在非簿记变更）"
       },
       "L1-06_fresh_db_migration_passed": {
         "status": "UNVERIFIED",
-        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head c95346f（且中间存在非簿记变更）"
+        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head af799ed（且中间存在非簿记变更）"
       },
       "L1-07_api_typecheck_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head c95346f（且中间存在非簿记变更）"
+        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head af799ed（且中间存在非簿记变更）"
       },
       "L1-08_web_typecheck_build_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head c95346f（且中间存在非簿记变更）"
+        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head af799ed（且中间存在非簿记变更）"
       },
       "L1-09_no_skipped_critical_tests": {
         "status": "UNVERIFIED",
-        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head c95346f（且中间存在非簿记变更）"
+        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head af799ed（且中间存在非簿记变更）"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
         "status": false,
-        "evidence": "dirty entries: 1"
+        "evidence": "dirty entries: 4"
       },
       "L1-11_docs_state_consistent": {
         "status": "UNVERIFIED",
-        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head c95346f（且中间存在非簿记变更）"
+        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head af799ed（且中间存在非簿记变更）"
       },
       "L1-12_schema_invariants_verified": {
         "status": "UNVERIFIED",
-        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head c95346f（且中间存在非簿记变更）"
+        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head af799ed（且中间存在非簿记变更）"
       },
       "L1-13_negative_paths_covered": {
         "status": "UNVERIFIED",
-        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head c95346f（且中间存在非簿记变更）"
+        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head af799ed（且中间存在非簿记变更）"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
         "status": "UNVERIFIED",
-        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head c95346f（且中间存在非簿记变更）"
+        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head af799ed（且中间存在非簿记变更）"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",

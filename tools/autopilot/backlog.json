@@ -1,6 +1,6 @@
 {
-  "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。 MAPPING UPDATE（2026-10-05）：seo-4 / seo-5 已按 MSG-20261005-03 完成；seo-2 / seo-3 仍 IN_PROGRESS（等 PUBLIC API SECURITY AUDIT，公开 HTTP = HOLD）。 MAPPING UPDATE（2026-10-05，第二轮）：seo-6 / seo-7 依代码与测试证据标记 COMPLETED；seo-8 保持 IN_PROGRESS（公开 HTTP 合同受 SEO-3 审计门禁）。 MAPPING UPDATE（2026-10-05，第三轮）：seo-8 公开面合同测试定稿（含真实 HTTP 集成验收）；seo-2 / seo-3 仍 IN_PROGRESS（等 PUBLIC API SECURITY AUDIT 最终裁决）。 MAPPING UPDATE（2026-10-05，第四轮）：RSI-RT-06（migration SQL PASS + restart reconcile 落地）与 RSI-COST-02/03/05（Provider Adapter contract v2 + 本地仿真 adapter + 台账 + 成本 E2E A–F）标记 COMPLETED；RSI-P1-03（signal → incident/task 自动生成）标记 IMPLEMENTED_PENDING_CI（等 hosted CI）。真实 Provider 网络与付费调用仍 HOLD。 MAPPING UPDATE（2026-10-05，第五轮）：RSI-P1-03（signal → incident/task 自动生成）hosted CI 绿灯（run 37249876844 @ c95346f），标记 COMPLETED。",
-  "updatedAt": "2026-10-05T01:14:12.526Z",
+  "note": "GLOBAL BACKLOG DISPATCHER 权威 backlog：由 MASTER GAP CLOSURE 差集 + TASKS.md + 已批准路线派生。 MAPPING UPDATE（2026-10-05）：seo-4 / seo-5 已按 MSG-20261005-03 完成；seo-2 / seo-3 仍 IN_PROGRESS（等 PUBLIC API SECURITY AUDIT，公开 HTTP = HOLD）。 MAPPING UPDATE（2026-10-05，第二轮）：seo-6 / seo-7 依代码与测试证据标记 COMPLETED；seo-8 保持 IN_PROGRESS（公开 HTTP 合同受 SEO-3 审计门禁）。 MAPPING UPDATE（2026-10-05，第三轮）：seo-8 公开面合同测试定稿（含真实 HTTP 集成验收）；seo-2 / seo-3 仍 IN_PROGRESS（等 PUBLIC API SECURITY AUDIT 最终裁决）。 MAPPING UPDATE（2026-10-05，第四轮）：RSI-RT-06（migration SQL PASS + restart reconcile 落地）与 RSI-COST-02/03/05（Provider Adapter contract v2 + 本地仿真 adapter + 台账 + 成本 E2E A–F）标记 COMPLETED；RSI-P1-03（signal → incident/task 自动生成）标记 IMPLEMENTED_PENDING_CI（等 hosted CI）。真实 Provider 网络与付费调用仍 HOLD。 MAPPING UPDATE（2026-10-05，第五轮）：RSI-P1-03（signal → incident/task 自动生成）hosted CI 绿灯（run 37249876844 @ c95346f），标记 COMPLETED。 MAPPING UPDATE（2026-10-05，第六轮）：RSI-P1-04 Builder/Judge 隔离编排落地（自判禁止 + 独立证据 + 风险分级必需证据 + append-only decision），标记 IMPLEMENTED_PENDING_CI。",
+  "updatedAt": "2026-10-05T01:16:16.969Z",
   "selection_order": [
     "P0/P1 未关闭缺口",
     "当前 Gate 未关闭项",
@@ -1336,7 +1336,7 @@
       "title": "RSI Phase-1：Builder/Judge 隔离编排（确定性测试 + replay/benchmark → 独立 Judge）",
       "scope": "RSI Phase-1（离线/沙箱）：只读观察 + 自动建任务 + 受控 patch + 确定性验证 + 独立 Judge；无外部写",
       "acceptance_criteria": "对应纯函数/编排落地并有命名用例；api tsc 0；不新增 schema/migration（如需另送 Schema Delta 审计）",
-      "status": "READY"
+      "status": "IMPLEMENTED_PENDING_CI"
     },
     {
       "id": "RSI-P1-05-immutable-evidence",
