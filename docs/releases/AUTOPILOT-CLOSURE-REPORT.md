@@ -53,3 +53,11 @@ FINAL_ACCEPTANCE_HEAD = 0f7f7ac
 
 内部代码/测试/CI/架构裁决四条线均已收口；AUTOPILOT 进入 **HOST_ACTION_REQUIRED 待命**状态：
 只有宿主提供上述外部条件后才会继续推进，期间不再需要 heartbeat 触发新单元。
+
+## 6. 追加收口：Recovery SI Phase 1（2026-10-05T04:43:54.912Z）
+
+- **RECOVERY_SI_PHASE1 = PASS / CLOSED**（MSG-20261005-12；FNV acc593d5 / 124 行 / FULL_COPY_OK）；CHANGE A/B/C 全部 PASS，六条最小证据 SUFFICIENT，`ADDITIONAL_PHASE1_TESTS_REQUIRED = NO`、`FINAL3_REQUIRED = NO`。
+- **补上架构方当时无法独立确认的一项事实**：exact 送审 HEAD `e88aff39` 的 hosted CI = **completed_success**（run 37264005696；同批 977e650 / 97dfb38 / 8a028ad 亦全绿）。
+- Phase 1 冻结：`SECOND_RUNTIME = NO` / `RUNTIME_WIRING = NONE` / `TOOL_EXECUTION = ZERO` / `SCHEMA_DELTA_REQUIRED = NO` / `READY_FOR_EXECUTION_IS_PERMISSION = FALSE` / `EXECUTION_AUTHORIZED_IN_PHASE1 = FALSE`。
+- **Phase 2 = SEPARATE_ARCHITECT_APPROVAL_REQUIRED**：runtime loop / tool invocation / Action Guard handoff / persistent plan / model assistance / real executor 均需宿主发起并单独送审。
+- 当前 `SAFE_CONTINUATION_QUEUE = EMPTY`：内部可执行单元（含 Recovery SI Phase 1）全部 COMPLETED/CLOSED；剩余 = §3 的 HOST_ACTION_REQUIRED 清单 + Phase 2 待批准。
