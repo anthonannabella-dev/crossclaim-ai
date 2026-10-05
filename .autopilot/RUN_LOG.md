@@ -2407,3 +2407,23 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 验证：tsc exit 0；P2-E 契约 **23/23**；P2-E DB **16/16**；定向回归 **10 文件 / 119 例 PASS**；
   prisma validate valid / 79 migrations 无待应用 / up to date。
 - 证据：`docs/releases/RECOVERY-SI-PHASE2-E-EVIDENCE.md` §9.2；送审：`docs/releases/RECOVERY-SI-PHASE2-E-FINAL3-REQUEST.md`（REVIEWED_HEAD = 95733930）。
+
+## 2026-10-05T11:25Z — P2-E FINAL-3 裁决捕获（MSG-20261005-25 = REVISE；E3 = PASS，剩 permit↔批次绑定）
+- 通道：同一右侧审计会话；FINAL-3 送审送达三检通过；回复完成后用「包含 `DECISION` + `ARCHITECT VERDICT` +
+  `FINAL_ACCEPTANCE_HEAD` + `95733930` 的**最小** div」提取（首轮误取到 MSG-23 容器，已按 95733930 过滤纠正），
+  5600 字符 / 254 非空行；经 cua REPL `node:fs.writeFileSync` 直接写盘。
+- 归档：`AI-ARCHITECT-INBOX.md` 新增 `MSG-20261005-25`；`compare.mjs` → **FULL_COPY_OK**（254/254 行，0 缺失 / 0 多出）。
+- 裁决要点：`CHANGE_E3 = PASS`（JSON+PDF 双 artifact 同事务）；`MODULE_PRIVATE_WEAKSET_PERMIT = PASS`、
+  `CALLER_SUPPLIED_ALLOW_GATE = BLOCKED`；但 `CHANGE_E1 = PASS_WITH_ONE_BINDING_GAP`、`CHANGE_E2 = PASS_WITH_ONE_BINDING_GAP`：
+  **permit 尚未与「本次具体写入批次」不可变绑定**（units.organizationId 必须等于 gate.persistedBasis.organizationId；
+  AuditLog 必须就是该 gate 构造的 lineage audit；package ↔ opportunityRef ↔ trusted READY 需完整绑定）。
+  架构方给出的错误路径示例：取得 org-A 的真实 trusted ALLOW permit 后，构造整批 org-B 单元（批内 tenant coherence 通过，
+  因为 `assertRecoveryPersistTenantCoherence()` 只检查批内一致，不比对 permit）。`FINAL4_REQUIRED = YES`（窄 FINAL-4）。
+- 边界与既有 PASS 结论不变（canonical READY recheck / claim.prepare trusted Control Plane / lineage action + 9 键白名单 /
+  DELETE guard / 事务回滚 / 并发收敛全部维持 PASS）。
+
+## 2026-10-05T11:35Z — NEXT_EXECUTION_UNIT = P2-E FINAL-4（permit ↔ 写入批次不可变绑定）
+- 要求（来自 MSG-20261005-25）：`units.organizationId === gate.persistedBasis.organizationId`；
+  `AuditLog` 必须由该 gate 构造（不得由调用方另造）；`package ↔ opportunityRef ↔ trusted READY` 完整绑定；
+  复用合法 permit 到错误 target 必须 fail-closed。
+- 本窗口在此 checkpoint 收口（未开始 FINAL-4 实现），保留既有冻结边界。

@@ -143065,3 +143065,386 @@ FINAL_ACCEPTANCE_HEAD = 0f7f7ac
 
 结论：CHANGE 2 与 canonical READY 风险修复本身已经 PASS；P2-E 尚差“门禁不可伪造 + lineage 与可信 gate 绑定 + JSON/PDF 双 artifact 完整原子落库”三项，补完即可做窄 FINAL-3。
 ```
+
+### [MSG-20261005-25] Recovery SI P2-E v1 FINAL-3 — VERDICT = REVISE（E3 = PASS；E1/E2 可信 permit 本身 = PASS，但 permit 尚未与具体写入批次不可变绑定 → 窄 FINAL-4）
+
+```text
+DECISION
+
+ARCHITECT VERDICT = REVISE
+
+REVIEWED_HEAD =
+9573393093d099cd634c2980dac5f77ffe2736af
+
+BOOKKEEPING_HEAD =
+08613af1c8660ec6dc7ab2fedf74185d55707188
+
+已独立确认：
+
+08613af1 = docs / 状态 / 送审簿记
+NO_CODE_DRIFT = TRUE
+
+本轮裁定：
+
+CHANGE_E1 = PASS_WITH_ONE_BINDING_GAP
+CHANGE_E2 = PASS_WITH_ONE_BINDING_GAP
+CHANGE_E3 = PASS
+
+P2_E_V1_OPTION_A = REVISE
+P2_E_V1 = NOT_CLOSED
+FINAL4_REQUIRED = YES
+KEEP
+
+以下不用再改：
+
+MODULE_PRIVATE_WEAKSET_PERMIT = PASS
+CALLER_SUPPLIED_ALLOW_GATE = BLOCKED
+
+canonical READY recheck = PASS
+claim.prepare trusted Control Plane = PASS
+
+lineage action =
+recovery.si_package_persisted = PASS
+
+lineage 9-key whitelist = PASS
+
+claimedPlanDigest mismatch = FAIL_CLOSED
+
+JSON_MANIFEST + PDF = PASS
+FileAsset = 2
+RecoveryPackageArtifact = 2
+
+package + 2 files + 2 artifacts + audit
+= SAME_PRISMA_TRANSACTION
+
+transaction rollback = PASS
+concurrent replay convergence = PASS
+
+RecoveryPackage DELETE DB guard = PASS
+Artifact UPDATE/DELETE DB guard = PASS
+
+E3 可以正式记：
+
+CHANGE_E3 = PASS
+CHANGE
+
+还剩一个核心问题：
+
+trusted permit 已不可伪造，但 permit 还没有不可绕过地绑定到“本次具体写入批次”。
+
+当前生产入口仍是：
+
+persistRecoveryPackageWithinTransaction({
+  gate,
+  units,
+  port
+})
+
+其中：
+
+gate = trusted
+units = caller supplied
+
+代码目前没有要求：
+
+units.organizationId
+==
+gate.persistedBasis.organizationId
+
+也没有强制：
+
+AuditLog
+必须就是由该 gate 构造的 lineage audit
+
+更没有完整绑定：
+
+package
+↔ opportunityRef
+↔ trusted READY
+真实可形成的错误路径
+
+理论上当前可以：
+
+获得 org-A 的真实 trusted ALLOW permit
+
+然后构造一整批：
+package org-B
+fileAssets org-B
+artifacts org-B
+audit org-B
+
+批内 tenant coherence = PASS
+
+因为现有：
+
+assertRecoveryPersistTenantCoherence()
+
+只检查units 彼此一致，不检查：
+
+units organizationId
+==
+trusted permit organizationId
+
+这不是伪造 permit，而是复用合法 permit 到错误 target。
+
+因此：
+
+TRUSTED_GATE = PASS
+TRUSTED_GATE_TO_WRITE_TARGET_BINDING = REVISE
+CHANGE E4 — permit ↔ batch immutable binding
+
+最小修复：
+
+在进入 port 之前新增：
+
+assertRecoveryPersistBatchMatchesPermit(gate, units)
+
+至少硬校验：
+
+1.
+all units.organizationId
+==
+gate.persistedBasis.organizationId
+
+2.
+AuditLog.action
+==
+recovery.si_package_persisted
+
+3.
+AuditLog.organizationId
+==
+gate.persistedBasis.organizationId
+
+4.
+AuditLog.entityType
+==
+RecoveryPackage
+
+5.
+AuditLog.entityId
+==
+RecoveryPackage.id
+
+6.
+audit changes.planDigest
+==
+gate.persistedBasis.canonicalPlanDigest
+
+7.
+audit changes.planDigestVersion
+==
+gate.persistedBasis.planDigestVersion
+
+8.
+audit changes.basisVersion
+==
+gate.persistedBasis.basisVersion
+
+9.
+audit changes.opportunityRef
+==
+gate.persistedBasis.opportunityRef
+
+10.
+audit changes.domain
+==
+gate.persistedBasis.domain
+
+11.
+audit changes.guardAction
+==
+claim.prepare
+
+12.
+audit changes.packageId/packageVersion/packageDigest
+==
+本批 RecoveryPackage
+
+还必须校验 batch 内部 identity：
+
+JSON artifact.packageId
+==
+PDF artifact.packageId
+==
+RecoveryPackage.id
+
+JSON artifact.fileAssetId
+==
+JSON FileAsset.id
+
+PDF artifact.fileAssetId
+==
+PDF FileAsset.id
+
+Audit.entityId
+==
+RecoveryPackage.id
+
+这些必须发生在任何 DB write 前。
+
+RISKS
+
+还有一个业务 lineage 风险需要一起关掉，但不要求新表。
+
+当前 trusted basis 有：
+
+opportunityRef
+
+而 RecoveryPackage 有：
+
+claimItemId
+
+但当前持久化边界没有证明：
+
+这个 claimItem
+确实属于 permit 中的 opportunity
+
+而 schema 已存在：
+
+ClaimItem.opportunityId
+
+所以如果你们的 opportunityRef 契约就是 RecoveryOpportunity.id，建议在同一事务写入前读取：
+
+ClaimItem
+WHERE
+  id = package.claimItemId
+  AND organizationId = permit.organizationId
+  AND opportunityId = permit.opportunityRef
+
+找不到：
+
+P2E_PACKAGE_OPPORTUNITY_BINDING_MISMATCH
+→ rollback / zero writes
+
+如果当前 opportunityRef 不是 RecoveryOpportunity.id，则不要猜。
+
+那就必须从 P2-C 的可信 fact/preview lineage 带入一个 server-derived：
+
+claimItemId ↔ opportunityRef
+
+binding，再由 P2-E 校验。
+
+正式要求只有一句：
+
+PACKAGE_CLAIMITEM_TO_PERMIT_OPPORTUNITY_BINDING = REQUIRED
+
+具体用 DB relation 还是 P2-C trusted lineage，由现有契约决定。
+
+E2 的具体问题
+
+buildRecoverySiPackageLineageAuditLog() 本身现在是安全的。
+
+这部分：
+
+gate → persistedBasis → AuditLog
+
+可以记 PASS。
+
+问题是事务入口仍允许 caller 直接提交任意：
+
+AuditLogWritePayload
+
+而没有要求它一定来自：
+
+buildRecoverySiPackageLineageAuditLog()
+
+所以：
+
+E2_BUILDER = PASS
+E2_WRITE_BOUNDARY_ENFORCEMENT = REVISE
+
+不需要再改 lineage builder。
+
+只要写入口重新验证 audit 内容与 trusted permit 完全一致即可。
+
+TEST
+
+当前：
+
+23/23 contract
+16/16 real DB
+119/119 targeted regression
+tsc = 0
+
+属于本地归档执行证据。
+
+我已独立确认 exact HEAD 的实现代码；GitHub hosted status/workflow 当前仍为空。
+
+FINAL-4 只需补 4 条：
+
+F4E-01
+trusted org-A permit
++ 全部 units 都是 org-B
+→ P2E_PERMIT_BATCH_TENANT_MISMATCH
+→ port calls = 0
+→ DB writes = 0
+F4E-02
+trusted permit for opportunity A
++ package/claimItem 属于 opportunity B
+→ fail-closed
+→ zero writes
+F4E-03
+合法 permit
++ 手工伪造 lineage AuditLog
+  action / entityId / packageDigest /
+  planDigest / opportunityRef 任一不一致
+→ fail-closed
+→ zero writes
+F4E-04
+artifact packageId/fileAssetId cross-wire
+→ fail-closed before transaction
+或 DB transaction rollback
+→ package/file/assets/artifacts/audit 全 0
+
+不需要再重跑设计审计。
+
+NEXT
+
+只做一个收口单元：
+
+CHANGE E4 =
+TRUSTED PERMIT ↔ EXACT WRITE BATCH BINDING
+
+建议实现顺序：
+
+gate permit
+→ validate exact batch against permit
+→ validate package↔opportunity lineage
+→ validate internal package/artifact/file/audit identity
+→ prisma transaction
+
+完成后送：
+
+RECOVERY SI P2-E FINAL-4
+
+如果上述 4 个负例通过，预计不需要 FINAL-5。
+
+PRODUCTION
+
+继续冻结：
+
+P2_F = HOLD
+P2_G = HOLD
+
+APPROVAL_CONSUMPTION = FORBIDDEN
+EXECUTOR_INVOCATION = FORBIDDEN
+
+P2_E_WHITELISTED_INTERNAL_PERSISTENCE = AUTHORIZED
+
+OTHER_BUSINESS_FACT_WRITE = FORBIDDEN
+EXTERNAL_BUSINESS_WRITE = FORBIDDEN
+EXTERNAL_ACTION = FORBIDDEN
+
+EXTERNAL_WRITE = HOLD
+PAYMENT = HOLD
+TRANSPORT = HOLD
+PRODUCTION_CREDENTIALS = HOLD
+REAL_CLAIM_SUBMIT = HOLD
+CUSTOMS_FILING = HOLD
+
+RUNTIME_WIRING = NONE
+FINAL_ACCEPTANCE_HEAD = 0f7f7ac
+
+结论：E3 已完全 PASS；E1/E2 的“可信 permit 本身”也 PASS。现在只剩最后一个边界：必须把这个 permit 与具体 tenant / opportunity / package / artifacts / lineage audit 批次不可变绑定。补这一项后再送窄 FINAL-4。
+```
