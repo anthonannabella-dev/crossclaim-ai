@@ -1922,11 +1922,11 @@
       "required_tests": [],
       "template": "arch-design-request",
       "filters": [],
-    "status": "P2_E_FINAL5_SUBMITTED_PENDING_VERDICT",
-    "implementation_head": "054ab732",
-    "audit_request": "docs/releases/RECOVERY-SI-PHASE2-E-FINAL5-REQUEST.md",
-    "next_unit": "P2-E FINAL-5 裁决（预计最后一轮）；PASS/CLOSED 后立即进入 si-rsi-unification-design（仅 docs/releases/**）",
-    "note": "MSG-20261005-22：P2-E v1 设计 = PASS WITH REVISE，Option A 授权（Option B = NOT_AUTHORIZED）。四项必修已实现并送 P2-E Implementation Audit（REVIEWED_HEAD = b5baf381；证据 docs/releases/RECOVERY-SI-PHASE2-E-EVIDENCE.md；真实库 13/13 + 契约 15/15 + targeted regression 108/108 + tsc exit 0）。入口门禁 P2_E_GUARD_ACTION = claim.prepare（不得用 P2-D claim.submit ALLOW）、package/artifact/FileAsset/audit 单一事务、lineage 表述、RecoveryPackage DB DELETE guard（迁移已应用 + 清单已登记）。P2_F = HOLD、P2_G = HOLD。"
+      "status": "P2_E_PASS_CLOSED",
+      "implementation_head": "054ab732",
+      "audit_request": "docs/releases/RECOVERY-SI-PHASE2-E-FINAL5-REQUEST.md",
+      "next_unit": "si-rsi-unification-design（依赖已解除；仅 docs/releases/**）",
+      "note": "MSG-20261005-22：P2-E v1 设计 = PASS WITH REVISE，Option A 授权（Option B = NOT_AUTHORIZED）。四项必修已实现并送 P2-E Implementation Audit（REVIEWED_HEAD = b5baf381；证据 docs/releases/RECOVERY-SI-PHASE2-E-EVIDENCE.md；真实库 13/13 + 契约 15/15 + targeted regression 108/108 + tsc exit 0）。入口门禁 P2_E_GUARD_ACTION = claim.prepare（不得用 P2-D claim.submit ALLOW）、package/artifact/FileAsset/audit 单一事务、lineage 表述、RecoveryPackage DB DELETE guard（迁移已应用 + 清单已登记）。P2_F = HOLD、P2_G = HOLD。"
     },
     {
       "id": "si-rsi-unification-design",
@@ -1949,10 +1949,10 @@
       "required_tests": [],
       "template": "arch-design-request",
       "filters": [],
-      "status": "QUEUED_AFTER_P2_E",
+      "status": "ACTIVE_INVENTORY_PHASE",
       "implementation_head": null,
       "audit_request": "docs/releases/SI-RSI-UNIFICATION-DIRECTIVE.md",
-      "note": "单一顶层 CrossClaim SI Runtime；RSI 下沉为 Meta-Improvement Capability；Recovery SI 作为领域能力接入既有 Runtime；ONE CONTROL PLANE + L1–L5 权限分层保持不变；高风险动作继续 fail-closed。"
+      "note": "单一顶层 CrossClaim SI Runtime；RSI 下沉为 Meta-Improvement Capability；Recovery SI 作为领域能力接入既有 Runtime；ONE CONTROL PLANE + L1–L5 权限分层保持不变；高风险动作继续 fail-closed。 P2-E 已 PASS / CLOSED（MSG-20261005-27），依赖解除；按冻结顺序执行 repo-wide inventory → KEEP/REUSE/MERGE/DEPRECATE/DUPLICATE → 最小统一方案 → Architecture Audit。仅 docs/releases/**。"
     }
   ],
   "authorization_note": "MSG-20261003-133 Q3：dispatcher 获授权自动扩 backlog 并执行安全单元（契约/已批准 D1–D3 Schema/append-only 持久化/deterministic normalization/qualification·evidence·package/测试/文档/fixture/只读 HTTP/只读 reconciliation projection）；遇到未批准 Schema、EXTERNAL_WRITE Action Guard、真实 adapter/webhook、submission、真实资金语义写入、生产 credential、收费时必须停该分支并重新送审。 HOST 2026-10-04（CONTINUOUS EXECUTION + CUSTOMS AUTHORIZATION + CHATGPT AUDIT LOOP）：UI-6…UI-8 与 CA-2…CA-6 已登记为可执行队列；Schema/Security/Authorization 边界项自动进入 ChatGPT Audit Loop（AUDIT-BRIDGE.md，不新建协议）。"

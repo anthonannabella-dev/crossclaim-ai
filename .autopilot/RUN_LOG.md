@@ -2448,3 +2448,21 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
   终态 package=1 / FileAsset=2 / artifact=2 / audit=1，并发不变。
 - 验证：tsc exit 0；契约 27/27；真实库 20/20；定向回归 10 文件 / 127 例 PASS；prisma validate valid / 79 migrations 无待应用 / up to date。
 - 送审：`docs/releases/RECOVERY-SI-PHASE2-E-FINAL5-REQUEST.md`（REVIEWED_HEAD = 054ab732）。
+
+## 2026-10-05T12:25Z — P2-E **PASS / CLOSED**（MSG-20261005-27；实现 HEAD = 054ab732）
+- 裁决：`ARCHITECT VERDICT = PASS / CLOSED`、`CHANGE_E5 = PASS`、`P2_E_V1_OPTION_A = PASS / CLOSED`、`FINAL6_REQUIRED = NO`；
+  架构方独立确认 exact `054ab732` 的公开 API 面（`createPersistPort` / `persistWithReplayConvergence` / `isPackageUniqueViolation`
+  module-private；gate 模块已移除低层写函数；唯一 DB write-capable API = `persistRecoverySiPackageWithinTransaction`），
+  并确认簿记提交 `dfa701ab` 无代码漂移。
+- 归档：`AI-ARCHITECT-INBOX.md` 新增 `MSG-20261005-27`；`compare.mjs` → **FULL_COPY_OK**（105/105 行，0 缺失 / 0 多出）。
+- 收敛记录（P2-E 五轮闭环）：MSG-23（Implementation Audit = REVISE）→ MSG-24（FINAL-2 = REVISE）→ MSG-25（FINAL-3 = REVISE）
+  → MSG-26（FINAL-4 = REVISE）→ MSG-27（FINAL-5 = PASS / CLOSED）；全部逐字归档且 `FULL_COPY_OK`。
+- 边界不变：P2_F = HOLD / P2_G = HOLD（P2-E CLOSED 不自动授权）；`P2_E_WHITELISTED_INTERNAL_PERSISTENCE = AUTHORIZED`；
+  OTHER_BUSINESS_FACT_WRITE / EXTERNAL_BUSINESS_WRITE / EXTERNAL_ACTION = FORBIDDEN；FINAL_ACCEPTANCE_HEAD = 0f7f7ac。
+
+## 2026-10-05T12:30Z — NEXT_EXECUTION_UNIT = si-rsi-unification-design（P2-E 依赖解除）
+- backlog `si-rsi-unification-design`：`QUEUED_AFTER_P2_E` → **ACTIVE**（allowed_files 仅 `docs/releases/**`，ARCH_REVIEW_REQUIRED = true）。
+- 目标：RSI capabilities + Recovery SI → ONE CrossClaim SI Runtime；顺序 = repo-wide inventory
+  → RSI / Recovery SI / autopilot / runtime / scheduler / judge / policy / kill switch 盘点
+  → KEEP / REUSE / MERGE / DEPRECATE / DUPLICATE 分类 → 最小统一方案 → Architecture Audit → 消费 verdict → REVISE 循环 → PASS。
+- 本窗口在此 checkpoint 收口（下一窗口立即从 inventory 继续；不含任何代码/运行时接线）。

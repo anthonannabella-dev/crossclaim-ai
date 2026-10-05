@@ -143653,3 +143653,168 @@ FINAL_ACCEPTANCE_HEAD = 0f7f7ac
 
 结论：E4 逻辑本身已经 PASS。现在唯一剩余问题不是业务校验，而是公开 API 面仍保留低层写入旁路。把 raw port / low-level persistence 入口收成 module-private，只留下 persistRecoverySiPackageWithinTransaction() 作为唯一生产写入口，即可送 FINAL-5。
 ```
+
+### [MSG-20261005-27] Recovery SI P2-E v1 FINAL-5 — VERDICT = **PASS / CLOSED**（CHANGE E5 = PASS；`P2_E_V1_OPTION_A = PASS / CLOSED`；`FINAL6_REQUIRED = NO`）
+
+```text
+DECISION
+ARCHITECT VERDICT = PASS / CLOSED
+
+REVIEWED_HEAD =
+054ab73246395473eaf64398b1c92d9ac924d042
+
+BOOKKEEPING_HEAD =
+dfa701ab94e7a1922c4f5ab8f572d3ac07956a3
+
+CHANGE_E5 = PASS
+P2_E_V1_OPTION_A = PASS / CLOSED
+FINAL6_REQUIRED = NO
+
+dfa701ab 已独立确认仅 docs / 状态 / 送审簿记，NO_CODE_DRIFT = TRUE。
+
+KEEP
+
+CHANGE E5 已完整成立：
+
+PUBLIC_WRITE_ENTRY_COUNT = 1
+
+PUBLIC_WRITE_ENTRY =
+persistRecoverySiPackageWithinTransaction
+
+机械核对 exact HEAD 的实际导出面：
+
+createPersistPort
+= module-private
+
+persistWithReplayConvergence
+= module-private
+
+isPackageUniqueViolation
+= module-private
+
+persistRecoveryPackageWithinTransaction
+= 已从 gate module 移除
+
+唯一导出的 DB write-capable API：
+
+persistRecoverySiPackageWithinTransaction()
+
+其强制链路为：
+
+trusted WeakSet permit
+→ exact permit↔batch binding
+→ ClaimItem.organizationId binding
+→ ClaimItem.opportunityId == permit.opportunityRef
+→ package/artifact/FileAsset/audit identity binding
+→ single prisma.$transaction
+
+因此上一轮的低层公开旁路已关闭。
+
+CHANGE
+NONE
+
+不要求 FINAL-6。
+
+RISKS
+
+唯一键收敛修订也可记 PASS。
+
+isPackageUniqueViolation() 已不再把任意 P2002 都视为 package replay；只有 RecoveryPackage 身份键语义：
+
+organizationId
++ claimItemId
++ packageVersion
++ packageDigest
+
+才进入：
+
+P2E_PACKAGE_ALREADY_EXISTS
+
+artifact 唯一冲突继续上抛并依赖事务回滚，不会伪装成成功收敛。
+
+公开的：
+
+isTrustedRecoveryPersistPermit()
+
+不构成旁路，因为模块外只能查询 WeakSet membership，不能向私有 WeakSet 注入对象。
+
+TEST
+
+F5E-01 / F5E-02 足够。
+
+F5E-01 = PASS
+唯一 production write API 已由实际 module namespace / export surface 证明
+
+F5E-02 = PASS
+真实 PostgreSQL 成功路径继续经过完整安全链
+
+保留此前已验证的不变量：
+
+RecoveryPackage = 1
+FileAsset = 2
+RecoveryPackageArtifact = 2
+  JSON_MANIFEST
+  PDF
+AuditLog = 1
+
+concurrent replay = single winner
+no orphan FileAsset
+transaction rollback = all-or-nothing
+tenant isolation = maintained
+DELETE guard = maintained
+lineage = trusted permit bound
+
+本地归档验证：
+
+recovery-si-phase2-e = 27/27
+recovery-si-phase2-e-db = 20/20
+targeted regression = 127/127
+tsc --noEmit = exit 0
+prisma validate = valid
+migrate deploy = 79 / up to date
+
+exact 054ab732 的 GitHub hosted status/workflow 当前仍为空，所以以上测试数字仍属于本地归档证据；本次独立确认的是 exact HEAD 的代码、公开 API 面与实现边界。
+
+NEXT
+RECOVERY_SI_P2_E_V1 = CLOSED
+
+不应再继续 P2-E FINAL 修订。
+
+后续若推进：
+
+P2_F → 单独设计/实施审计
+或
+P2_G → 单独真实执行架构审计
+
+P2-E CLOSED 不自动授权任何一个。
+
+PRODUCTION
+
+继续冻结：
+
+P2_F = HOLD
+P2_G = HOLD
+
+APPROVAL_CONSUMPTION = FORBIDDEN
+EXECUTOR_INVOCATION = FORBIDDEN
+
+P2_E_WHITELISTED_INTERNAL_PERSISTENCE = AUTHORIZED
+
+OTHER_BUSINESS_FACT_WRITE = FORBIDDEN
+EXTERNAL_BUSINESS_WRITE = FORBIDDEN
+EXTERNAL_ACTION = FORBIDDEN
+
+EXTERNAL_WRITE = HOLD
+PAYMENT = HOLD
+TRANSPORT = HOLD
+PRODUCTION_CREDENTIALS = HOLD
+REAL_CLAIM_SUBMIT = HOLD
+CUSTOMS_FILING = HOLD
+
+RUNTIME_WIRING = NONE
+FINAL_ACCEPTANCE_HEAD = 0f7f7ac
+
+真实 claim/provider/customs/payment 执行仍必须另开 P2-G，重新审 executor identity、approval 真实性与消费、external-write gate、provider transport、credentials、幂等与 reconciliation。
+
+最终结论：P2-E Option A 到 054ab732 已满足关闭条件，正式 PASS / CLOSED，无需 FINAL-6。
+```
