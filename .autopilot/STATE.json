@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "efe93df4",
+  "head": "c46f6758",
   "status": "RECONCILED",
   "current_task": "RSI 生产可执行闭环（7 点收口）：RSI_RUNTIME_READY = PASS；MODEL_PROVIDER_READY = 本地仿真已接线（真实网络/付费 HOLD）；PERSISTENCE_READY = ephemeral 已验证、durable 需宿主非生产 DATABASE_URL；REBOOT_RECONCILE_READY = NOT_IMPLEMENTED（下一单元）；SYSTEMD_VALIDATED = 需宿主 Linux 实机",
   "next_task": "BG-016 单一 Acceptance Head + 四份状态一致 guard（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍 HOST_ACTION_REQUIRED 或 HOLD",
@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-40",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T19:56:13.549Z",
+  "updated_at": "2026-10-05T20:06:32.356Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -50,15 +50,15 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
-  "next_execution_unit": "PHASE 4 U5 FINAL 裁决归档与 PHASE 4 收口：(1) 打开右侧审核会话读取 U5 FINAL verdict（严格匹配 REVIEWED_HEAD = efe93df4，marker [CODEX-PHASE4-U5FINAL]）；(2) 先落盘 work/stage/verdict-p4r-final-raw.txt → 逐字归档 AI-ARCHITECT-INBOX.md（MSG-20261005-65）→ compare.mjs FULL_COPY_OK → commit + push；(3) durable state：phase4_u5_final_verdict + phase_state.PHASE_4_OUTCOME_LEARNING_PIPELINE = CLOSED（若 PASS），并登记 PHASE 4 收口桶（U1 FINAL / U2 / U3 / U4 / U5）；(4) 若审计给出 PHASE 5 进入条件，按 next_execution_unit 继续（code → tests → regression → tsc → commit → push → 送裁决 → 归档）；(5) 未解锁边界不变：REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing = HOLD；SECOND_* = FORBIDDEN；L5_RELAXATION = FORBIDDEN。",
+  "next_execution_unit": "PHASE 4 U5 FINAL2 裁决归档与 PHASE 4 收口：(1) 打开右侧审核会话读取 U5 FINAL2 verdict（严格匹配 REVIEWED_HEAD = c46f6758，marker [CODEX-PHASE4-U5FINAL2]）；(2) 先落盘 work/stage/verdict-p4r2-final-raw.txt → 逐字归档 AI-ARCHITECT-INBOX.md（MSG-20261005-66）→ compare.mjs FULL_COPY_OK → commit + push；(3) durable state：phase4_u5_final2_verdict + phase_state.PHASE_4_OUTCOME_LEARNING_PIPELINE = CLOSED（若 PASS）；(4) 若审计冻结 PHASE 5 — Meta Improvement 进入条件，则按该条件开 PHASE 5 设计/沙箱层单元（仅 candidate review / approval verdict / controlled config proposal / rollback plan / canary·shadow evaluation；不得自动修改 Policy / Guard / Router / Action Runtime）；(5) 未解锁边界不变：REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing = HOLD；SECOND_* = FORBIDDEN；L5_RELAXATION = FORBIDDEN。",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-05T19:56:13.549Z",
+  "last_tick_at": "2026-10-05T20:06:32.356Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "PHASE 4 U5 裁决已读取、原文归档（MSG-20261005-64，compare.mjs = FULL_COPY_OK，归档提交 39490c9b）＝ PASS WITH REVISE / NOT CLOSED：META_IMPROVEMENT_PROPOSAL_ONLY / VERIFIED_EVALUATION_GATE / NO_AUTO_APPLY·NO_MUTATION = PASS；SOURCE_EVIDENCE_PROVENANCE / EVIDENCE_EVALUATION_SET_BINDING = REVISE；PHASE4_U5_FINAL_REQUIRED = YES（不得把集合级相等性当作可接受边界）。已按裁决完成并送审 U5 FINAL（code = efe93df4，marker [CODEX-PHASE4-U5FINAL]）：U3 产出 provenance-bearing VerifiedLearningEvidenceSet（refs 取 immutable ledger append 实际返回值）；U4 暴露只读 verifiedOutcomeDigests / verifiedOutcomeSetDigest；U5 改为精确集合相等（sorted evidence outcomeDigests === sorted evaluation verifiedOutcomeDigests），否则 META_CANDIDATE_EVIDENCE_SET_MISMATCH。",
-  "last_action_at": "2026-10-05T19:56:13.549Z",
-  "next_action": "读取 PHASE 4 U5 FINAL 裁决 → 归档（MSG-20261005-65）→ 若 PASS 则 PHASE 4 = CLOSED。",
-  "current_head": "efe93df4",
-  "last_completed_head": "efe93df4",
+  "last_action": "PHASE 4 U5 FINAL 裁决已读取、原文归档（MSG-20261005-65，compare.mjs = FULL_COPY_OK，归档提交 ad745d1c）＝ PASS WITH REVISE / NOT CLOSED：SOURCE_EVIDENCE_PROVENANCE / EVIDENCE_EVALUATION_SET_BINDING / LEDGER_RETURNED_EVIDENCE_REFS / META_IMPROVEMENT_PROPOSAL_ONLY = PASS；PROVENANCE_OBJECT_INTEGRITY = REVISE（WeakSet 只证来源、不证未被篡改）；PHASE4_U5_FINAL2_REQUIRED = YES；PHASE_4_OUTCOME_LEARNING_PIPELINE = NOT YET CLOSED。已按裁决完成并送审 U5 FINAL2（code = c46f6758，marker [CODEX-PHASE4-U5FINAL2]）：U3/U4 双机制落地 —— WeakMap canonical fingerprint（创建时登记、校验时重算，覆盖 U5 实际消费的全部字段）+ deep-freeze（顶层 + 数组 + maps + provenance）；并把 U4 verifiedOutcomeDigests 改为 sortedUnique（set 语义，与 U3 manifest 一致）。",
+  "last_action_at": "2026-10-05T20:06:32.356Z",
+  "next_action": "读取 PHASE 4 U5 FINAL2 裁决 → 归档（MSG-20261005-66）→ 若 PASS 则 U5 = CLOSED 且 PHASE 4 = CLOSED，随后按 PHASE 5 进入条件继续。",
+  "current_head": "c46f6758",
+  "last_completed_head": "c46f6758",
   "reviewed_head": "add99ec3",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -5169,10 +5169,10 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "P4R-1 读取 PHASE 4 U5 FINAL 裁决（匹配 REVIEWED_HEAD = efe93df4）→ 先落盘 verdict-p4r-final-raw.txt → 归档 MSG-20261005-65 → compare.mjs FULL_COPY_OK → commit + push → durable state",
-    "P4R-2 PHASE 4 收口对账（若 PASS）：phase_state.PHASE_4_OUTCOME_LEARNING_PIPELINE = CLOSED，phases 记录 U1 FINAL / U2 / U3 / U4 / U5",
-    "P4R-3 按 PHASE 5 进入条件继续（meta improvement 观察面 / 或审计指定下一单元）",
-    "P4R-4 非阻断债务（持续记录）：scanRawPayloadKeys 有界遍历、三类 digest 完整 SHA-256、P2E-DB5 test-isolation debt"
+    "P4R2-1 读取 PHASE 4 U5 FINAL2 裁决（匹配 REVIEWED_HEAD = c46f6758）→ 先落盘 verdict-p4r2-final-raw.txt → 归档 MSG-20261005-66 → compare.mjs FULL_COPY_OK → commit + push → durable state",
+    "P4R2-2 PHASE 4 收口对账（若 PASS）：phase_state.PHASE_4_OUTCOME_LEARNING_PIPELINE = CLOSED；记录 U1 FINAL / U2 / U3 / U4 / U5 全 CLOSED",
+    "P4R2-3 按审计冻结的 PHASE 5 进入条件开下一单元（verified evidence → verified evaluation → PROPOSAL_ONLY candidate → External Judge / Human Approval → controlled adoption 讨论）",
+    "P4R2-4 非阻断债务（持续记录）：三类 digest 完整 SHA-256、scanRawPayloadKeys 有界遍历、P2E-DB5 test-isolation debt"
   ],
   "full_autonomous_internal_execution": "VERIFIED",
   "dispatcher_acceptance": {
@@ -9322,7 +9322,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-05T19:56:13.549Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-05T20:06:32.356Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -9449,7 +9449,7 @@
     "PHASE_1_FINAL7": "PASS / CLOSED（MSG-20261005-47，REVIEWED_HEAD = 795f65a5；STEP3_FINAL8_REQUIRED = NO）",
     "PHASE_2_MODEL_GATEWAY_RUNTIME": "PASS / CLOSED（MSG-20261005-50；Reviewed HEAD 338f30b4；PHASE2_FINAL5_REQUIRED = NO）",
     "PHASE_3_ACTION_RUNTIME": "PASS / CLOSED（MSG-20261005-54；Reviewed HEAD = fe3c33e9；PHASE3_FINAL4_REQUIRED = NO）",
-    "PHASE_4_OUTCOME_LEARNING_PIPELINE": "IN PROGRESS / 待 U5 FINAL 裁决：U1 FINAL = PASS；U2 = PASS / CLOSED；U3 = PASS / CLOSED；U4 = PASS / CLOSED；U5 = PASS WITH REVISE（proposal-only PASS；证据来源/集合绑定 REVISE），U5 FINAL = SUBMITTED / AWAITING_VERDICT（efe93df4）。",
+    "PHASE_4_OUTCOME_LEARNING_PIPELINE": "IN PROGRESS / 待 U5 FINAL2 裁决：U1 FINAL / U2 / U3 / U4 = PASS / CLOSED；U5 = PASS WITH REVISE（provenance object integrity 待闭合），U5 FINAL = PASS WITH REVISE，U5 FINAL2 = SUBMITTED / AWAITING_VERDICT（c46f6758）。",
     "PHASE_5_META_IMPROVEMENT": "QUEUED（需真实运行结果）"
   },
   "heartbeat_watchdog": {
@@ -9922,7 +9922,7 @@
       "U5"
     ]
   },
-  "archive_head": "39490c9b",
+  "archive_head": "ad745d1c",
   "phase4_u3_final": {
     "status": "PASS / CLOSED",
     "reviewed_head": "006cc912",
@@ -10172,6 +10172,58 @@
       "delivered": true,
       "composer_empty_verified": true,
       "expected_message_id": "MSG-20261005-65"
+    }
+  },
+  "phase4_u5_final_verdict": {
+    "message_id": "MSG-20261005-65",
+    "verdict": "PASS WITH REVISE / NOT CLOSED",
+    "reviewed_head": "efe93df4",
+    "archive_verified": "FULL_COPY_OK",
+    "archive_head": "ad745d1c",
+    "pass": [
+      "SOURCE_EVIDENCE_PROVENANCE = PASS",
+      "EVIDENCE_EVALUATION_SET_BINDING = PASS",
+      "LEDGER_RETURNED_EVIDENCE_REFS = PASS",
+      "META_IMPROVEMENT_PROPOSAL_ONLY = PASS"
+    ],
+    "revise": [
+      "PROVENANCE_OBJECT_INTEGRITY：WeakSet 只证明“对象来源”，不证明“对象没被修改”；readonly 只是编译期约束，可原地改写带 provenance 的对象后仍通过校验"
+    ],
+    "phase4_u5_final2_required": "YES",
+    "notes": [
+      "最小修法二选一（推荐 WeakMap fingerprint / 或 deep-freeze；仅冻结顶层不够，fingerprint 必须覆盖 U5 实际消费的所有字段）",
+      "顺手统一：U3 用 sortedUnique（set），U4 用 sortAscending（未去重）却注释写“sorted + 去重”，需语义一致",
+      "PHASE_4_OUTCOME_LEARNING_PIPELINE = NOT YET CLOSED"
+    ]
+  },
+  "phase4_u5_final2": {
+    "status": "SUBMITTED / AWAITING_VERDICT",
+    "reviewed_head": "c46f6758",
+    "pushed": true,
+    "files": [
+      "apps/api/src/services/outcome-learning/learning-evidence.ts",
+      "apps/api/src/services/outcome-learning/offline-evaluation.ts",
+      "apps/api/src/__tests__/meta-improvement-candidate.test.ts"
+    ],
+    "changes": [
+      "U3：WeakMap<manifest, canonical fingerprint>（覆盖 kind/datasetVersion/outcomeDigests/learningEvidenceRefs/evidenceDigests/evidenceSetDigest/provenance）+ isVerifiedLearningEvidenceSet 重算比较",
+      "U4：WeakMap<evaluation, canonical fingerprint>（覆盖 resolved/unresolved/context/excluded/verifiedOutcomeDigests/verifiedOutcomeSetDigest/provenance 等全部被消费字段）+ isVerifiedOfflineEvaluation 重算比较",
+      "U3/U4 deep-freeze：顶层 + 数组 + byOutcome/byEvidenceQuality/byDomain maps + provenance（仅顶层不够）",
+      "U4 verifiedOutcomeDigests 改为 sortedUnique（set 语义），与 U3 manifest 一致；preimage 同步去重",
+      "新增 P4U5F2_1..6 测试：原地篡改被拒（冻结）/ 克隆副本 provenance REJECT / 未修改 PASS / 冻结覆盖清单 / 重复 digest set 语义一致且仍 exact-match"
+    ],
+    "local_verification": {
+      "tsc": "PASS (exit 0)",
+      "targeted": "meta-improvement-candidate 18/18（P4U5_1..8 + P4U5F_1..4 + P4U5F2_1..6）",
+      "phase4": "6 files / 73 tests PASS",
+      "regression": "99 files / 1020 tests（唯一失败 = P2E-DB5 test-isolation debt，单独运行 20/20 PASS）",
+      "github_ci": "NOT_OBSERVED"
+    },
+    "submission": {
+      "marker": "[CODEX-PHASE4-U5FINAL2]",
+      "delivered": true,
+      "composer_empty_verified": true,
+      "expected_message_id": "MSG-20261005-66"
     }
   }
 }
