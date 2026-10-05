@@ -38,8 +38,14 @@ import type { RsiDomainCapabilityPack, RsiDomainPackEvidence } from './rsi-domai
 
 export const RECOVERY_SI_PACK_ID = 'recovery-si';
 
+/**
+ * PHASE 2 FINAL（MSG-20261005-48 CHANGE A）：
+ * `aiEligible` 必须是 **server-derived**（由 canonical 确定性判定产出，不接受客户端自报）。
+ * 仅当为 true 且注入 modelGateway 时，pack 才会经唯一 Model Gateway 调用模型；否则 deterministic-first。
+ */
 export interface RecoverySiTaskBinding {
   organizationId: string;
+  aiEligible?: boolean;
   domain: RecoveryDomain;
   actionKind: RecoveryActionKind;
   opportunityRef: string;
@@ -120,7 +126,7 @@ export function createRecoverySiPack(deps: RecoverySiPackDependencies): RsiDomai
     packId: RECOVERY_SI_PACK_ID,
     domain: 'recovery',
     matches: (task) => deps.bind(task) !== null,
-    async run({ task }): Promise<RsiDomainPackEvidence> {
+    async run({ task, modelGateway }): Promise<RsiDomainPackEvidence> {
       const binding = deps.bind(task);
       if (binding === null) return block(['RECOVERY_PACK_UNBOUND_TASK']);
 
@@ -175,6 +181,34 @@ export function createRecoverySiPack(deps: RecoverySiPackDependencies): RsiDomai
         });
       }
 
+      // ①.5 PHASE 2 FINAL：仅 server-derived AI-eligible 任务经唯一 Model Gateway 消费模型；
+      // 缺省（未注入 gateway / 非 AI-eligible）保持 deterministic-first，零模型调用。
+      let modelCallCount = 0;
+      let gatewayReasonCodes: string[] = [];
+      if (modelGateway !== undefined && binding.aiEligible === true) {
+        const gatewayResult = await modelGateway.invoke({
+          taskType: task.dedupeKey.split(':')[2] ?? 'SEMANTIC',
+          complexity: 'LOW',
+          maxCost: 0.5,
+          latencyRequirementMs: 5_000,
+          requiredCapability: 'SEMANTIC_UNDERSTANDING',
+          incidentId: task.dedupeKey,
+          taskId: task.id,
+          promptRef: `recovery-si:${task.id}`,
+          promptDigest: 'c'.repeat(64),
+          maxOutputTokens: 256,
+          timeoutMs: 5_000,
+          necessity: {
+            outcome: 'AMBIGUOUS',
+            ruleVersion: binding.domain + '/v1',
+            schemaVersion: 'schema/v1',
+            inputDigest: 'a'.repeat(64),
+          },
+        } as never);
+        modelCallCount = gatewayResult.called ? 1 : 0;
+        gatewayReasonCodes = ['RECOVERY_PACK_MODEL_GATEWAY', gatewayResult.reason];
+      }
+
       // ② 确定性只读工具（按 domain 映射；跨租户 / 敏感输出 → BLOCK）
       const tools = RECOVERY_DOMAIN_READ_TOOL[binding.domain];
       const invocations: { tool: string; ok: boolean; reason: string | null }[] = [];
@@ -201,13 +235,19 @@ export function createRecoverySiPack(deps: RecoverySiPackDependencies): RsiDomai
         binding.domain +
         ':' +
         digest12(
-          [task.id, task.dedupeKey, binding.organizationId, binding.opportunityRef, guardAction, ...invocations.map((i) => i.tool)].join('|'),
+          [
+            task.id,
+            task.dedupeKey,
+            binding.organizationId,
+            binding.opportunityRef,
+            guardAction,
+          ].join('|'),
         );
       return {
         status: 'PASS',
         evidenceRef,
-        reasonCodes: ['RECOVERY_PACK_READ_ONLY_OK', ...policy.reasonCodes],
-        modelCallCount: 0,
+        reasonCodes: ['RECOVERY_PACK_READ_ONLY_OK', ...policy.reasonCodes, ...gatewayReasonCodes],
+        modelCallCount,
         guardActions: [{ action: guardAction, decision: 'ALLOW' }],
         externalWritePerformed: false,
       };

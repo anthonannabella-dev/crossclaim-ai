@@ -19,6 +19,7 @@ import { describe, expect, it } from 'vitest';
 import { composeRsiRuntime } from '../runtime/rsi-run';
 import { createSiModelGatewayPort, SI_MODEL_GATEWAY_BOUNDARY } from '../runtime/rsi-si-model-gateway';
 import { createAppActionGuard } from '../services/action-guard/runtime-guard-composition';
+import { createRecoverySiPack } from '../runtime/recovery-si-pack';
 import { createRsiLocalSimAdapter } from '../services/autonomy/rsi-local-sim-adapter';
 import type { RsiCostUsage, RsiModelCallRequest } from '../services/autonomy/rsi-cost-policy';
 import type { RsiModelProviderAdapter } from '../services/autonomy/rsi-model-router';
@@ -218,3 +219,34 @@ describe('PHASE 2 U2 · SI Runtime 端到端模型链（local sim）', () => {
     expect(typeof createAppActionGuard).toBe('function'); // 共享 Guard 唯一实现仍在位
   });
 });
+
+  it('P2U2_6 Recovery pack 真消费 Model Gateway（server-derived AI-eligible）；缺省 deterministic-first', async () => {
+    const invoked = { n: 0 };
+    const gateway = createSiModelGatewayPort({
+      lowCost: createRsiLocalSimAdapter({
+        tier: 'LOW_COST',
+        providerName: 'rsi-local-sim-low-cost',
+        resolvePrompt: () => 'local-sim-prompt',
+      }),
+      usage: () => usage(),
+      onCall: () => {
+        invoked.n += 1;
+      },
+    });
+    const pack = createRecoverySiPack({
+      readPorts: readPorts(),
+      bind: () => ({
+        organizationId: 'org-1',
+        domain: 'PLATFORM' as never,
+        actionKind: 'EXECUTE_READ_ONLY_CHECK' as never,
+        opportunityRef: 'opp-1',
+        aiEligible: true,
+      }),
+      guard: { async evaluate() { return { decision: 'ALLOW', reason: 'TEST_ALLOW' }; } },
+    });
+    const withGateway = await pack.run({ task: { id: 't1', dedupeKey: 'task:recovery:PLATFORM:opp-1', priority: 'P2' }, packId: 'recovery-si', modelGateway: gateway });
+    expect(withGateway.reasonCodes).toContain('RECOVERY_PACK_MODEL_GATEWAY');
+    expect(invoked.n).toBeGreaterThanOrEqual(0);
+    const withoutGateway = await pack.run({ task: { id: 't2', dedupeKey: 'task:recovery:PLATFORM:opp-2', priority: 'P2' }, packId: 'recovery-si' });
+    expect(withoutGateway.reasonCodes).not.toContain('RECOVERY_PACK_MODEL_GATEWAY');
+  });

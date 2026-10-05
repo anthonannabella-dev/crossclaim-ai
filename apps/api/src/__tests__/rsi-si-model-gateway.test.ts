@@ -96,7 +96,7 @@ describe('PHASE 2 U1 · SI Model Gateway capability port', () => {
     expect(RSI_RUNTIME_COMPOSITION_BOUNDARY.siModelGatewayWiring).toContain('SECOND_MODEL_ROUTER = FORBIDDEN');
   });
 
-  it('P2U1_3 架构回归：产品代码只有唯一 Model Router owner（无第二 Router）', () => {
+  it('P2U1_3 P2U1_3_ALLOWLIST：产品代码 Router 创建点严格 allowlist（无第二 Router）', () => {
     const walk = (dir: string): string[] => {
       const out: string[] = [];
       for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -108,11 +108,14 @@ describe('PHASE 2 U1 · SI Model Gateway capability port', () => {
     };
     const srcRoot = path.join(repoRoot, 'apps', 'api', 'src');
     const creators = walk(srcRoot)
-      .filter((file) => !file.includes(`${path.sep}__tests__${path.sep}`))
+      .filter((file) => !file.includes(path.sep + '__tests__' + path.sep))
       .filter((file) => /createRsiModelRouter\(/.test(fs.readFileSync(file, 'utf8')))
-      .map((file) => path.relative(repoRoot, file).replace(/\\/g, '/'));
-    expect(creators).toContain('apps/api/src/services/autonomy/rsi-model-router.ts');
-    expect(creators).toContain('apps/api/src/runtime/rsi-si-model-gateway.ts');
-    expect(creators.every((f) => !/second|router2|model-router-2/.test(f))).toBe(true);
+      .map((file) => path.relative(repoRoot, file).split(path.sep).join('/'))
+      .sort();
+    expect(creators).toEqual([
+      'apps/api/src/runtime/rsi-si-model-gateway.ts',
+      'apps/api/src/services/autonomy/rsi-model-provider-composition.ts',
+      'apps/api/src/services/autonomy/rsi-model-router.ts',
+    ]);
   });
 });
