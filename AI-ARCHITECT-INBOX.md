@@ -152776,3 +152776,246 @@ PRODUCTION_READY = false
 结论：选 C。不要重开 Phase 4，也不要让 Canary 变成新的 runner；新增 VerifiedCohortRun 作为“exact input set ↔ Phase4 evaluation”的可信桥接层。
 ```
 
+### [MSG-20261005-80] PHASE 5 U4 FINAL3 裁决 = PASS WITH REVISE / NOT CLOSED（CANARY_EVALUATION_DIGEST_FULL_BINDING / VERIFIED_COHORT_RUN_PROVENANCE / RUN_SIDE_BINDING / RUN_EVALUATION_DIGEST_BINDING = PASS；SAME_COHORT_PROOF / EXACT_INPUT_SET_TO_EVALUATION_BINDING = REVISE；PHASE5_U4_FINAL4_REQUIRED = YES）， reviewed ref 4f4ae0ed
+
+```text
+DECISION
+
+CANARY_EVALUATION_DIGEST_FULL_BINDING = PASS
+VERIFIED_COHORT_RUN_PROVENANCE = PASS
+RUN_SIDE_BINDING = PASS
+RUN_EVALUATION_DIGEST_BINDING = PASS
+SAME_COHORT_PROOF = REVISE
+EXACT_INPUT_SET_TO_EVALUATION_BINDING = REVISE
+PHASE_5_U4 = PASS WITH REVISE / NOT CLOSED
+PHASE5_U4_FINAL4_REQUIRED = YES
+Reviewed HEAD：4f4ae0ed
+GitHub Actions：NOT_OBSERVED
+KEEP
+
+这轮有一半已经真正闭合：
+
+VerifiedCohortRun 有 WeakSet + WeakMap provenance / fingerprint / freeze。
+BASELINE / PROPOSAL side 门成立。
+run 与对应 Phase 4 evaluationDigest 已绑定。
+Canary artifact 已显式增加：
+baselineRunDigest
+proposalRunDigest
+baselineEvaluationDigest
+proposalEvaluationDigest
+上述字段已进入 Canary fingerprint 和最终 evaluationDigest。
+
+所以：
+
+CANARY_EVALUATION_DIGEST_FULL_BINDING = PASS
+
+这一项不用再改。
+
+CHANGE
+关键阻断仍然存在：VerifiedCohortRun 没有证明 evaluation 真的是这些 taskRefs 跑出来的
+
+当前构造函数实际是：
+
+纯文本
+createVerifiedCohortRun(
+  cohortRef,
+  evaluation,
+  side
+)
+
+它只验证：
+
+纯文本
+cohortRef.datasetVersion === evaluation.datasetVersion
+cohortRef.cohortSize === evaluation.totalRecords
+
+然后直接：
+
+纯文本
+inputSetDigest = cohortRef.cohortRefDigest
+evaluationDigest = evaluation.evaluationDigest
+
+这里不存在任何一步证明：
+
+纯文本
+evaluation 的真实输入成员
+===
+cohortRef.taskRefs
+
+也就是说，VerifiedCohortRun 目前只是把两个已经存在的 artifact 放进同一个包装对象，并没有建立成员级因果绑定。
+
+当前测试本身已经证明旁路仍存在
+
+你们的 CohortRef：
+
+纯文本
+TASK_REFS = [t0,t1,t2,t3]
+
+但 baseline evaluation 来自：
+
+纯文本
+run(..., "base")
+
+proposal evaluation 来自：
+
+纯文本
+run(..., "prop")
+
+这些记录的 taskType 等输入身份并不是 t0/t1/t2/t3。
+
+只因为：
+
+纯文本
+totalRecords === 4
+
+就可以生成 verified runs。
+
+因此现在仍然允许：
+
+纯文本
+CohortRef = [A,B,C,D]
+
+Baseline evaluation 实际来自 [E,F,G,H]
+Proposal evaluation 实际来自 [I,J,K,L]
+
+两边都是 4 条
+→ createVerifiedCohortRun PASS
+
+这不是 member-level binding。
+
+RISKS
+
+当前 inputSetDigest 这个名字会造成较强的安全错觉：
+
+纯文本
+inputSetDigest = cohortRef.cohortRefDigest
+
+它证明的其实是：
+
+“run 声称关联这个 CohortRef”
+
+而不是：
+
+“evaluation 确实由这个 CohortRef 的 exact input set 产生”。
+
+如果现在进入 Controlled Adoption Review，U5 会信任一个仍可能比较不同输入样本的 Canary。
+
+因此不能 CLOSED。
+
+TEST
+
+FINAL4 不需要再改 Phase 4，也不需要再改 Canary 指标。
+
+只补上一轮裁决 C 中被漏掉的 server-owned run source：
+
+纯文本
+CohortRunSourcePort.read({
+  cohortRef,
+  side
+})
+→ [
+  { taskRef, outcomeRecord },
+  ...
+]
+
+然后把：
+
+纯文本
+createVerifiedCohortRun(cohortRef, evaluation, side)
+
+改成类似：
+
+纯文本
+createVerifiedCohortRun(
+  runSource,
+  trustedLineageLedger,
+  cohortRef,
+  side
+)
+
+内部流程必须是：
+
+纯文本
+1. 从 runSource 读取实际成员
+2. 提取 actualTaskRefs
+3. sort + unique
+4. actualTaskRefs === cohortRef.taskRefs
+5. 不相同 → CANARY_RUN_INPUT_SET_MISMATCH
+6. 用这些实际 outcomeRecords
+   内部调用 evaluateVerifiedLearningRecords()
+7. 将产生的 Phase4 evaluation 与 exact input set 一次性封装成 VerifiedCohortRun
+
+也就是说，不要再让 caller 把任意 evaluation 参数塞进 VerifiedCohortRun。
+
+最低测试：
+
+CohortRef [A,B,C,D] + source [A,B,C,D] → PASS。
+顺序 [D,C,B,A] → canonical 后 PASS。
+[A,B,C,X]，数量仍 4 → REJECT。
+[E,F,G,H]，数量仍 4 → REJECT。
+missing → REJECT。
+extra → REJECT。
+duplicate → REJECT。
+baseline/proposal exact same taskRefs，但 Outcome 不同 → PASS。
+success-rate improvement 可见。
+regression → ROLLBACK_REQUIRED。
+verified run clone → REJECT。
+baselineEvaluationDigest / proposalEvaluationDigest 当前 binding 测试继续 green。
+NEXT
+
+只做：
+
+P5-U4 FINAL4 — server-owned exact run-member binding
+
+最终正确入口应该收敛成：
+
+纯文本
+Verified CohortRef
+        ↓
+Server-owned Run Source
+        ↓
+actual {taskRef, OutcomeRecord}[]
+        ↓ exact-set equality
+VerifiedCohortRun
+        ↓
+internally produced Phase4 evaluation
+
+而不是：
+
+纯文本
+CohortRef + arbitrary existing evaluation
+→ trusted wrapper
+
+FINAL4 完成后，如果 exact member binding 成立，我会直接给：
+
+纯文本
+SAME_COHORT_PROOF = PASS
+EXACT_INPUT_SET_TO_EVALUATION_BINDING = PASS
+CANARY_EVALUATION_DIGEST_FULL_BINDING = PASS
+PHASE_5_U4 = PASS / CLOSED
+PHASE5_U4_FINAL5_REQUIRED = NO
+
+然后授权进入 P5-U5 Controlled Adoption Review。
+
+PRODUCTION
+
+继续全部 HOLD：
+
+REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing
+
+继续：
+
+SECOND_RUNTIME / SECOND_POLICY_ENGINE / SECOND_CONTROL_PLANE / SECOND_MODEL_GATEWAY / SECOND_COST_LEDGER / SECOND_META_EVIDENCE_STORE = FORBIDDEN
+
+L5_RELAXATION = FORBIDDEN
+
+保持：
+
+MODEL_GATEWAY_RUNTIME_WIRED = false
+ACTION_RUNTIME_PRODUCTION_ENABLED = false
+META_IMPROVEMENT_INTEGRATED = false
+PRODUCTION_READY = false
+
+这轮把 evaluation identity binding 做完了，但成员级 cohort binding 仍然只是“同数量 + 同 CohortRef 标签”。FINAL4 只需补上 server-owned actual run members → exact taskRefs → 内部 Phase 4 evaluation 这一条链，就可以真正封板 U4。
+```
+
