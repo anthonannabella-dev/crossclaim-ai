@@ -35,14 +35,14 @@ const compose = (completedAt: string) =>
 describe('RSI 证据新鲜度端到端', () => {
   it('STALE_EVIDENCE_BLOCKS：runner 报 PASS 但证据早于 claim → BLOCK（不是完成）', async () => {
     const controller = compose('2026-10-05T09:00:00.000Z'); // 一小时前
-    const outcome = await controller.emit('CI_RESULT');
+    const outcome = await controller.emit('CI_COMPLETED');
     expect(outcome.claimed?.id).toBe('A');
     expect(controller.state().blockedCount).toBe(1);
   });
 
   it('FRESH_EVIDENCE_COMPLETES：claim 之后的成功证据 → 任务完成（blockedCount 保持 0）', async () => {
     const controller = compose('2026-10-05T10:01:00.000Z');
-    const outcome = await controller.emit('CI_RESULT');
+    const outcome = await controller.emit('CI_COMPLETED');
     expect(outcome.claimed?.id).toBe('A');
     expect(controller.state().blockedCount).toBe(0);
   });
