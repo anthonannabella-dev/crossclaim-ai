@@ -27,6 +27,13 @@ import {
   type RsiModelCallRecord,
   type RsiModelCallRequest,
 } from './rsi-cost-policy';
+import { evaluateAiNecessity } from './rsi-ai-necessity-gate';
+import {
+  AI_ESCALATION_DEFAULTS,
+  assertJudgeCannotAuthorizeModelCall,
+  decideAiEscalation,
+  type AiEscalationLimits,
+} from './rsi-model-escalation-policy';
 
 export type RsiProviderTier = 'LOW_COST' | 'STRONG';
 
@@ -207,6 +214,8 @@ export function createRsiModelRouter(options: {
   /** 每次调用（含失败与拒绝）都会回调；满足 ledger 的 append-only 记录要求 */
   onCall?: (record: RsiModelCallRecord) => void;
   limits?: RsiBudgetLimits;
+  /** C1：有界升级上限（默认 maxAttempts=2 / maxEscalations=1；不得被调用方放大） */
+  escalationLimits?: AiEscalationLimits;
   now?: () => number;
   callIdFactory?: () => string;
 }): ModelRouterPort & {
@@ -318,6 +327,19 @@ export function createRsiModelRouter(options: {
   const routerApi = {
     route,
     async outcomeOf(request: RsiModelCallRequest | RsiModelInvocationRequest): Promise<RsiRouterOutcome> {
+      // C1（MSG-20261005-30）：AI Necessity Gate —— 唯一咽喉，无旁路。
+      // caller 仅声明 requiredCapability 不构成模型调用权；RULE_SOLVABLE / HIGH_CONFIDENCE → 禁止；
+      // UNKNOWN / 无证据 → fail-closed；AMBIGUOUS / SEMANTIC_REQUIRED → 只允许 LEVEL_1。
+      const necessity = evaluateAiNecessity({
+        taskType: request.taskType,
+        requiredCapability: request.requiredCapability,
+        evidence: request.necessity ?? null,
+      });
+      if (necessity.decision !== 'LEVEL_1_ELIGIBLE') {
+        // 与既有约定一致：确定性处理/拒绝路径不写 provider 调用记录（零 token、零成本）。
+        return { called: false, level: 'LEVEL_0_RULE', reason: necessity.reason, record: null };
+      }
+
       const decision = decideRsiModelCall({
         signalKind: request.taskType,
         requiredCapabilities: [request.requiredCapability],
@@ -333,26 +355,33 @@ export function createRsiModelRouter(options: {
         return { called: false, level: decision.level, reason: 'RULE_ENGINE', record: null };
       }
 
+      // C1：gate 只放行 LEVEL_1；cost policy 声明的 LEVEL_2 在此被钳制为 LEVEL_1（strong 仅经有界升级）
+      const effectiveLevel: 'LEVEL_1_LOW_COST' = 'LEVEL_1_LOW_COST';
+
       // invocation 必需字段缺失 → fail-closed，不调用 adapter
       if (!isInvocationReady(request)) {
-        const adapter = decision.level === 'LEVEL_2_STRONG' && options.strong !== undefined ? options.strong : options.lowCost;
-        const record = rejectRecord(adapter, request, 'INVOCATION');
+        const record = rejectRecord(options.lowCost, request, 'INVOCATION');
         emit(record);
-        return { called: false, level: decision.level, reason: 'INVOCATION_INVALID', record };
+        return { called: false, level: effectiveLevel, reason: 'INVOCATION_INVALID', record };
       }
 
-      if (decision.level === 'LEVEL_1_LOW_COST') {
-        return (await runAttempt(options.lowCost, request, 'LEVEL_1', decision.level)).outcome;
+      // C1：cheap → strong 必须经过 quality gate 且有界（LLM Judge 不得授权再次调用）
+      const escalationRequest = request.escalation ?? null;
+      if (options.strong === undefined || escalationRequest === null) {
+        return (await runAttempt(options.lowCost, request, 'LEVEL_1', effectiveLevel)).outcome;
       }
-
-      // LEVEL_2：先试低成本；预算拒绝或失败后再决定是否升级强模型
-      if (options.strong === undefined) {
-        return (await runAttempt(options.lowCost, request, 'LEVEL_2_FALLBACK', decision.level)).outcome;
+      const escalation = decideAiEscalation({
+        currentTier: 'LOW_COST',
+        quality: escalationRequest.quality,
+        state: escalationRequest.state,
+        limits: options.escalationLimits ?? AI_ESCALATION_DEFAULTS,
+      });
+      if (escalation.action !== 'ESCALATE_TO_STRONG') {
+        // 不允许升级（含 quality=PASS / 触顶 / judge 授权被忽略）→ 只跑一次 LOW_COST，绝不调用 strong
+        return (await runAttempt(options.lowCost, request, 'LEVEL_1', effectiveLevel)).outcome;
       }
-      const first = await runAttempt(options.lowCost, request, 'LEVEL_2_PROBE', decision.level);
-      if (first.guardRejected) return first.outcome;
-      if (first.outcome.record?.result === 'SUCCESS') return first.outcome;
-      const second = await runAttempt(options.strong, request, 'LEVEL_2_STRONG', decision.level);
+      assertJudgeCannotAuthorizeModelCall({ requestedStrongCall: true, escalation });
+      const second = await runAttempt(options.strong, request, 'LEVEL_2_STRONG', 'LEVEL_2_STRONG');
       return { ...second.outcome, escalatedToStrong: true };
     },
   };

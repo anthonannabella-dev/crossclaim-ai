@@ -82,6 +82,11 @@ const request = (
   requiredCapability: capability,
   incidentId: 'inc-e2e',
   taskId: 'task-e2e',
+  // C1：确定性证据（规则级信号带 RULE_SOLVABLE；语义/复杂任务带 SEMANTIC_REQUIRED）
+  necessity:
+    capability === 'NONE' || taskType === 'HEALTH_CHECK' || taskType === 'CI_FAIL'
+      ? { outcome: 'RULE_SOLVABLE' as const, ruleVersion: 'rule/v1', schemaVersion: 'schema/v1', inputDigest: 'a'.repeat(64) }
+      : { outcome: 'SEMANTIC_REQUIRED' as const, ruleVersion: 'rule/v1', schemaVersion: 'schema/v1', inputDigest: 'b'.repeat(64) },
   promptRef: 'prompt:task-e2e',
   promptDigest: 'c'.repeat(64),
   maxOutputTokens: 200,
@@ -139,8 +144,15 @@ describe('RSI 成本控制 E2E', () => {
       strong: adapter('STRONG', { succeeded: true, cost: 0.05 }, strong),
       usage: () => usage(),
     });
-    const outcome = await router.outcomeOf(request('COMPLEX_FIX', 'COMPLEX_CODE_FIX'));
+    // C1：LOW_COST 先跑（attempt 1）→ quality FAIL → 一次受控升级 → STRONG
+    const probe = await router.outcomeOf(request('COMPLEX_FIX', 'COMPLEX_CODE_FIX'));
+    expect(probe.record?.provider).toBe('provider-lowcost');
     expect(low.n).toBe(1);
+    expect(strong.n).toBe(0);
+    const outcome = await router.outcomeOf({
+      ...request('COMPLEX_FIX', 'COMPLEX_CODE_FIX'),
+      escalation: { quality: 'FAIL' as const, state: { attempts: 1, escalations: 0 } },
+    });
     expect(strong.n).toBe(1);
     expect(outcome.escalatedToStrong).toBe(true);
     expect(outcome.record?.provider).toBe('provider-strong');

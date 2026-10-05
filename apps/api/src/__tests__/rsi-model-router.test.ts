@@ -94,6 +94,11 @@ const request = (
   requiredCapability: capability,
   incidentId: 'inc-1',
   taskId: 'task-1',
+  // C1：确定性证据（caller 能力声明不构成模型调用权）
+  necessity:
+    capability === 'NONE'
+      ? { outcome: 'RULE_SOLVABLE' as const, ruleVersion: 'rule/v1', schemaVersion: 'schema/v1', inputDigest: 'a'.repeat(64) }
+      : { outcome: 'SEMANTIC_REQUIRED' as const, ruleVersion: 'rule/v1', schemaVersion: 'schema/v1', inputDigest: 'b'.repeat(64) },
   promptRef: 'prompt:task-1',
   promptDigest: 'f'.repeat(64),
   maxOutputTokens: 200,
@@ -132,7 +137,15 @@ describe('RSI Model Router', () => {
       strong: adapter('STRONG', true, strongCalls),
       usage: () => usage(),
     });
-    const complex = await failing.outcomeOf({ ...request('COMPLEX_CODE_FIX'), taskType: 'COMPLEX_FIX' });
+    // C1：strong 只能经有界升级合同（LOW_COST 先跑并失败 → quality FAIL → 一次受控升级）
+    const complexRequest = { ...request('COMPLEX_CODE_FIX'), taskType: 'COMPLEX_FIX' };
+    const cheap = await failing.outcomeOf(complexRequest);
+    expect(cheap.called).toBe(true);
+    expect(cheap.record?.provider).toBe('provider-lowcost');
+    const complex = await failing.outcomeOf({
+      ...complexRequest,
+      escalation: { quality: 'FAIL' as const, state: { attempts: 1, escalations: 0 } },
+    });
     expect(complex.escalatedToStrong).toBe(true);
     expect(complex.record?.provider).toBe('provider-strong');
   });

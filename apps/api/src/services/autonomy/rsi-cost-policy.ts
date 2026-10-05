@@ -12,6 +12,9 @@
  *     AUTONOMY_BUDGET_EXHAUSTED 并停止递归。
  */
 
+import type { AiDeterministicEvidence } from './rsi-ai-necessity-gate';
+import type { AiEscalationState, AiQualityVerdict } from './rsi-model-escalation-policy';
+
 export const RSI_EXECUTION_LEVELS = ['LEVEL_0_RULE', 'LEVEL_1_LOW_COST', 'LEVEL_2_STRONG'] as const;
 export type RsiExecutionLevel = (typeof RSI_EXECUTION_LEVELS)[number];
 
@@ -182,6 +185,16 @@ export interface RsiModelCallRequest {
   /** 审计关联字段（不含任何客户数据/secret）。 */
   incidentId: string | null;
   taskId: string | null;
+  /**
+   * C1（MSG-20261005-30）：确定性证据。**必需字段**；`null` 表示无证据 → AI Necessity Gate fail-closed。
+   * caller 仅声明 requiredCapability 不构成模型调用权限。
+   */
+  necessity: AiDeterministicEvidence | null;
+  /**
+   * C1：可选的受控升级请求。只有该合同批准时才可能使用 STRONG tier；
+   * 未提供 → 只允许 LOW_COST（strong 不会自动启用）。
+   */
+  escalation?: { quality: AiQualityVerdict; state: AiEscalationState } | null;
 }
 
 export interface ModelRouterPort {
