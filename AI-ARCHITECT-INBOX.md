@@ -143818,3 +143818,327 @@ FINAL_ACCEPTANCE_HEAD = 0f7f7ac
 
 最终结论：P2-E Option A 到 054ab732 已满足关闭条件，正式 PASS / CLOSED，无需 FINAL-6。
 ```
+
+### [MSG-20261005-28] SI-RSI Unification 设计 — VERDICT = **PASS WITH REVISE**（`OPTION_A_LOGICAL_UNIFICATION = APPROVED`；`OPTION_B = NOT_AUTHORIZED`；`SI_RSI_UNIFICATION_V1 = NOT_YET_CLOSED`；4 项 docs-only 修订 + U1–U8）
+
+```text
+DECISION
+ARCHITECT VERDICT = PASS WITH REVISE
+
+REVIEWED_HEAD =
+cdbcf830c051eb7980182d657ec18de79c9a0e72
+
+OPTION_A_LOGICAL_UNIFICATION = APPROVED
+OPTION_B_PHYSICAL_MERGE_RENAME = NOT_AUTHORIZED
+
+SI_RSI_UNIFICATION_DESIGN = APPROVED_WITH_CONDITIONS
+SI_RSI_UNIFICATION_V1 = NOT_YET_CLOSED
+
+NO_CODE_CHANGE = MAINTAIN
+NO_RENAME = MAINTAIN
+NO_MOVE = MAINTAIN
+NO_DELETE = MAINTAIN
+RUNTIME_WIRING = NONE
+
+本次 exact commit 已确认只有 docs/状态/盘点变化，没有产品代码变化。
+
+KEEP
+
+以下 owner 划分可以保留：
+
+ONE Action Catalog / Enforcement
+= action-guard/action-guard
+
+ONE Control Plane
+= action-guard/control-plane
+
+ONE Policy Core
+= services/autonomy/rsi-policy-engine
+
+ONE Kill Switch source
+= operations/kill-switch(+resolver)
+  + action-guard adapter
+
+ONE Model Gateway
+= rsi-model-router + provider-composition/local-sim
+
+ONE Cost Core
+= rsi-cost-ledger + rsi-cost-policy
+
+ONE Judge orchestration
+= rsi-judge-orchestration
+
+Recovery domain capability pack
+= services/intelligence/**
+
+P2-E persistence boundary
+= KEEP / CLOSED / DO NOT MODIFY
+
+平台级 meta evidence 与客户域业务事实继续语义分域也是正确的：
+
+META_EVIDENCE = rsi-evidence-ledger
+CUSTOMER_BUSINESS_FACTS = existing DB entities + AuditLog
+
+NO_DOUBLE_WRITE
+NO_SECOND_META_EVIDENCE_LEDGER
+CHANGE
+1. tools/autopilot/** 正式定义为 dev-scope：批准
+
+但需要修正文案：
+
+tools/autopilot/**
+PRODUCT_SI_RUNTIME_MEMBER = false
+DEV_SCOPE = true
+
+它可以继续负责：
+
+开发期 runner crash
+开发期 stale heartbeat
+开发期 lost wake-up
+开发 backlog / audit orchestration
+
+但不得成为产品 SI Runtime 的故障接管层。
+
+产品侧 crash/restart/lost-event 恢复已经有：
+
+runtime/rsi-restart-reconcile
+runtime/rsi-controller-continuation
+runtime/rsi-verdict-watcher
+
+因此正式冻结：
+
+AUTOPILOT_AS_PRODUCT_RUNTIME_FAILOVER = FORBIDDEN
+PRODUCT_RUNTIME_SPAWNS_AUTOPILOT = FORBIDDEN
+2. Recovery Policy Pack：选 module dependency，但修正依赖方向
+
+不建议 v1 引入动态 registry。
+
+当前代码已经是正确形态：
+
+recovery-policy.ts
+→ import decideRsiPolicyAction()
+→ rsi-policy-engine
+
+所以采用：
+
+POLICY_PACK_MOUNT = STATIC_MODULE_COMPOSITION
+
+但不能写成：
+
+Policy Core imports Recovery Pack
+
+正确依赖方向必须是：
+
+Recovery Policy Pack
+        ↓
+ONE Policy Core
+
+或者由上层 composition root 同时组合两者。
+
+正式：
+
+POLICY_CORE_DEPENDS_ON_DOMAIN_PACK = FORBIDDEN
+DOMAIN_PACK_DEPENDS_ON_POLICY_CORE = ALLOWED
+DYNAMIC_SELF_REGISTRATION = FORBIDDEN
+RUNTIME_MUTABLE_POLICY_REGISTRY = FORBIDDEN
+
+如果以后真的出现多个 domain packs，需要统一 registry，再单独审一个静态、编译期、fail-closed registry。
+
+3. Guard-Action Binding 继续留在 Recovery Pack
+
+不要把：
+
+RECOVERY_GUARD_ACTION_MAP
+RECOVERY_ACTION_GUARD_MAP
+
+塞入 rsi-policy-engine.ts。
+
+它们属于：
+
+Recovery intent
+→ existing ACTION_GUARD_CATALOG action
+
+是 domain binding，不是 L0-L5 policy table。
+
+因此：
+
+POLICY_LEVEL_OWNER = rsi-policy-engine
+RECOVERY_INTENT_MAPPING_OWNER = Recovery Pack
+ACTION_CATALOG_OWNER = action-guard
+
+三层保持分离。
+
+4. 跨域 lineage：v1 暂不增加字段
+
+本轮我不要求修改 P2-E 或 RSI evidence schema。
+
+原因是当前：
+
+rsi-evidence-ledger
+
+仍是纯函数/in-memory contract，并明确：
+
+writesDatabase = false
+storesRawOutput = false
+不碰客户数据
+
+现在建立“客户业务事实 → 非 durable meta evidence”的硬 lineage，反而会产生重启后无法兑现的引用。
+
+因此：
+
+CROSS_DOMAIN_HARD_LINEAGE_V1 = NOT_REQUIRED
+P2_E_LINEAGE_WHITELIST_CHANGE = FORBIDDEN
+
+未来只有当某条平台 meta evidence 真正被用于客户域业务决策时，再建立单向引用：
+
+customer-domain AuditLog
+→ platform meta evidence
+
+不要反向把客户 ID 写进平台 evidence ledger。
+
+未来最小字段建议：
+
+lineageVersion
+metaEvidenceId
+metaEvidenceKind
+metaEvidenceDigest
+consumerEntityType
+consumerEntityId
+decisionBasisDigest
+
+organizationId 由客户域 AuditLog 自身 tenant 字段提供，不需要重复塞入 meta ledger。
+
+而且应使用新的独立 AuditLog action，不得修改已 CLOSED 的：
+
+recovery.si_package_persisted
+
+9-key whitelist。
+
+RISKS
+
+一个命名风险需要冻结：
+
+原 RSI runtime
+→ Meta-Improvement Capability
+
+本轮只能是架构命名/文档语义。
+
+不得因此改：
+
+RSI_* env vars
+runtime/rsi-* filenames
+DB names
+API names
+existing audited identifiers
+
+否则会把“逻辑统一”变成大范围迁移。
+
+另一个重要定义：
+
+ONE CrossClaim SI Runtime
+
+现在只是目标架构/逻辑归属，不能描述成“Recovery SI 已经实际跑进 rsi event loop”。
+
+当前仍然：
+
+RUNTIME_WIRING = NONE
+TEST
+
+本次 docs-only 设计通过后的最小收口证据建议：
+
+U1
+SI-RUNTIME-COMPONENT-REGISTRY.md 存在
+每个组件恰好一个 owner
+
+U2
+control plane / policy core / kill switch /
+model gateway / cost core
+不得出现第二 owner
+
+U3
+tools/autopilot/**
+productRuntimeMember=false
+devScope=true
+
+U4
+apps/api 产品 runtime 不 import / spawn tools/autopilot
+
+U5
+Recovery Policy Pack → Policy Core
+且 Policy Core 不反向 import services/intelligence
+
+U6
+Recovery Guard-action binding 仍只引用现有 ACTION_GUARD_CATALOG
+CUSTOMS_FILING 不放宽
+
+U7
+P2-E exact closed boundary 无代码变化
+
+U8
+本轮 git diff 无 runtime wiring / rename / move / delete
+
+这组足够，不需要额外代码测试。
+
+NEXT
+
+先完成 docs-only 收口：
+
+1. 创建 docs/releases/SI-RUNTIME-COMPONENT-REGISTRY.md
+
+2. 在设计文档修正：
+   - autopilot = dev-only recovery，不是 product-runtime fallback
+   - Policy Pack 依赖方向 = pack → core
+   - dynamic registry = not v1
+   - cross-domain hard lineage = deferred
+   - ONE Runtime 当前只是 logical architecture，runtime wiring 尚未发生
+
+3. 补 U1-U8 证据
+
+4. 送 SI-RSI-UNIFICATION FINAL（docs-only）
+
+Step 3 域策略/运行时挂载仍必须单独送审。
+
+STEP_3_RUNTIME_POLICY_WIRING = NOT_AUTHORIZED
+SEPARATE_ARCH_REVIEW_REQUIRED = YES
+SI-COST-OPTIMIZATION
+
+本任务真正 PASS / CLOSED 后，可以把：
+
+SI-COST-OPTIMIZATION
+QUEUED
+→ READY_FOR_DESIGN
+
+但不能解释为：
+
+AUTO_IMPLEMENTATION_AUTHORIZED
+
+因为其中 durable ledger、budget、model cache、AI necessity gate 都可能涉及新的 DB/运行时边界，仍需自己的设计/实施审计。
+
+PRODUCTION
+
+继续冻结：
+
+SECOND_RUNTIME = FORBIDDEN
+SECOND_POLICY_ENGINE = FORBIDDEN
+SECOND_COST_LEDGER = FORBIDDEN
+SECOND_META_EVIDENCE_STORE = FORBIDDEN
+
+L5_RELAXATION = FORBIDDEN
+CUSTOMS_FILING = FORBIDDEN
+
+P2_F = HOLD
+P2_G = HOLD
+
+REAL_MODEL_NETWORK = HOLD
+PAID_MODEL_CALLS = HOLD
+EXTERNAL_WRITE = HOLD
+PAYMENT = HOLD
+TRANSPORT = HOLD
+PRODUCTION_CREDENTIALS = HOLD
+PRODUCTION_ENABLEMENT = HOLD
+
+P2_E_V1_OPTION_A = PASS / CLOSED
+FINAL_ACCEPTANCE_HEAD = 0f7f7ac
+
+结论：采用 Option A；autopilot 正式划为 dev-scope；Recovery Policy Pack 采用静态 module composition，方向必须是 Pack → Policy Core；本轮不新增跨域 lineage 字段；Step 3 任何真实挂载/接线必须另行送审。当前设计可继续 docs-only 收口，但尚未到整个 SI-RSI Unification PASS/CLOSED。
+```

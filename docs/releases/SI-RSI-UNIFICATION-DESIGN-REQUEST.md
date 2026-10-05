@@ -78,3 +78,62 @@ NEW_RISK_BOUNDARY：运行时归属与边界收敛（单一 control plane / poli
   owner 声明与反向校验）；后续 Step 3 域策略挂载会触及共享策略核心的调用面
 ARCH_REVIEW_REQUIRED：YES —— 安全边界变化（统一运行时的控制面/策略核心/kill switch 归属）+ 运行时接线边界
 ```
+
+## 7. REVISE 修订落地（MSG-20261005-28 = PASS WITH REVISE）
+
+裁决：`OPTION_A_LOGICAL_UNIFICATION = APPROVED`、`OPTION_B_PHYSICAL_MERGE_RENAME = NOT_AUTHORIZED`、
+`SI_RSI_UNIFICATION_DESIGN = APPROVED_WITH_CONDITIONS`、`SI_RSI_UNIFICATION_V1 = NOT_YET_CLOSED`。四项修订 + 命名风险已落地：
+
+### 7.1 autopilot = dev-scope（不是产品运行时故障接管层）
+
+```text
+tools/autopilot/**：PRODUCT_SI_RUNTIME_MEMBER = false / DEV_SCOPE = true
+AUTOPILOT_AS_PRODUCT_RUNTIME_FAILOVER = FORBIDDEN
+PRODUCT_RUNTIME_SPAWNS_AUTOPILOT = FORBIDDEN
+产品侧恢复由 runtime/rsi-restart-reconcile / rsi-controller-continuation / rsi-verdict-watcher 自身承担
+```
+
+### 7.2 Recovery Policy Pack 挂载 = 静态 module composition（方向 Pack → Core）
+
+```text
+POLICY_PACK_MOUNT = STATIC_MODULE_COMPOSITION
+POLICY_CORE_DEPENDS_ON_DOMAIN_PACK = FORBIDDEN
+DOMAIN_PACK_DEPENDS_ON_POLICY_CORE = ALLOWED
+DYNAMIC_SELF_REGISTRATION = FORBIDDEN
+RUNTIME_MUTABLE_POLICY_REGISTRY = FORBIDDEN
+（v1 不引入动态 registry；未来多 domain pack 时的静态/编译期/fail-closed registry 需单独审）
+```
+
+### 7.3 Guard-Action Binding 继续留在 Recovery Pack（三层分离）
+
+```text
+POLICY_LEVEL_OWNER            = rsi-policy-engine（L0–L5）
+RECOVERY_INTENT_MAPPING_OWNER = Recovery Pack（RECOVERY_GUARD_ACTION_MAP / RECOVERY_ACTION_GUARD_MAP）
+ACTION_CATALOG_OWNER          = action-guard（唯一 catalog）
+不得把两个 MAP 塞入 rsi-policy-engine.ts；CUSTOMS_FILING 继续 L5 永久拒绝（映射仍为 null）
+```
+
+### 7.4 跨域 hard lineage：v1 不加字段
+
+```text
+CROSS_DOMAIN_HARD_LINEAGE_V1 = NOT_REQUIRED
+P2_E_LINEAGE_WHITELIST_CHANGE = FORBIDDEN
+未来（当平台 meta evidence 真正被用于客户域决策时）：单向 customer-domain AuditLog → platform meta evidence，
+  使用新的独立 AuditLog action，最小字段 = lineageVersion / metaEvidenceId / metaEvidenceKind /
+  metaEvidenceDigest / consumerEntityType / consumerEntityId / decisionBasisDigest
+```
+
+### 7.5 命名风险冻结（RISKS）
+
+```text
+「原 RSI runtime → Meta-Improvement Capability」只是架构命名 / 文档语义；
+不得因此修改 RSI_* env vars / runtime/rsi-* 文件名 / DB 名 / API 名 / 既有已审计标识符。
+ONE CrossClaim SI Runtime 目前只是**目标架构与逻辑归属**；RUNTIME_WIRING = NONE（Recovery SI 尚未实际跑进 rsi event loop）。
+```
+
+### 7.6 Step 3 门禁
+
+```text
+STEP_3_RUNTIME_POLICY_WIRING = NOT_AUTHORIZED
+SEPARATE_ARCH_REVIEW_REQUIRED = YES
+```

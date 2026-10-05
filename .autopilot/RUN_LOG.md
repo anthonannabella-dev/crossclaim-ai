@@ -2486,3 +2486,26 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - 明确不做：NO_CODE_CHANGE / NO_RENAME / NO_MOVE / NO_DELETE / NO_RUNTIME_WIRING；SECOND_RUNTIME / SECOND_POLICY_ENGINE /
   SECOND_COST_LEDGER / SECOND_EVIDENCE_STORE = FORBIDDEN；P2-E 已关闭边界不动。
 - 状态：等架构方对统一方案的裁决（Option A/B 与 4 项开放问题）；裁决后按 Step 1（注册表，docs-only）继续。
+
+## 2026-10-05T13:20Z — SI-RSI Unification 设计裁决捕获（MSG-20261005-28 = PASS WITH REVISE）
+- 裁决：`OPTION_A_LOGICAL_UNIFICATION = APPROVED`、`OPTION_B_PHYSICAL_MERGE_RENAME = NOT_AUTHORIZED`、
+  `SI_RSI_UNIFICATION_DESIGN = APPROVED_WITH_CONDITIONS`、`SI_RSI_UNIFICATION_V1 = NOT_YET_CLOSED`。
+- 四项修订：① autopilot = dev-scope（`AUTOPILOT_AS_PRODUCT_RUNTIME_FAILOVER = FORBIDDEN` /
+  `PRODUCT_RUNTIME_SPAWNS_AUTOPILOT = FORBIDDEN`）；② Policy Pack = `STATIC_MODULE_COMPOSITION`，方向必须 Pack → Core
+  （`POLICY_CORE_DEPENDS_ON_DOMAIN_PACK = FORBIDDEN`、`DYNAMIC_SELF_REGISTRATION` / `RUNTIME_MUTABLE_POLICY_REGISTRY = FORBIDDEN`）；
+  ③ Guard-Action Binding 继续留在 Recovery Pack（三层分离）；④ 跨域 hard lineage v1 不加字段
+  （`CROSS_DOMAIN_HARD_LINEAGE_V1 = NOT_REQUIRED`、`P2_E_LINEAGE_WHITELIST_CHANGE = FORBIDDEN`）。
+- RISKS 冻结：命名下沉仅为架构/文档语义，不得改 `RSI_*` env vars / `runtime/rsi-*` 文件名 / DB·API 名 / 既有审计标识符；
+  ONE Runtime 目前只是逻辑归属，`RUNTIME_WIRING = NONE`。`STEP_3_RUNTIME_POLICY_WIRING = NOT_AUTHORIZED`。
+- 归档：`AI-ARCHITECT-INBOX.md` 新增 `MSG-20261005-28`；`compare.mjs` → **FULL_COPY_OK**（207/207 行，0 缺失 / 0 多出）。
+
+## 2026-10-05T13:35Z — SI-RSI Unification FINAL（docs-only 收口）+ U1–U8 证据
+- 新增 `docs/releases/SI-RUNTIME-COMPONENT-REGISTRY.md`（唯一 owner 表 / 依赖方向 / dev-scope / 三层分离 / 跨域边界 / 门禁状态）。
+- 修订 `docs/releases/SI-RSI-UNIFICATION-DESIGN-REQUEST.md`：新增 §7「REVISE 修订落地」（四项修订 + 命名风险 + Step 3 门禁）。
+- 新增 `docs/releases/SI-RSI-UNIFICATION-FINAL-REQUEST.md`：U1–U8 逐条证据 + 措辞冻结 + 请求裁决。
+- 机械证据（本轮实测）：`rg -n "autopilot" apps/api/src` → 0 命中（U4）；
+  `rsi-policy-engine.ts` 不引用 `services/intelligence|recovery-policy|recovery-persist`（U5a=0）且
+  `recovery-policy.ts` import `rsi-policy-engine`（U5b 命中）；`RECOVERY_GUARD_ACTION_MAP`/`RECOVERY_ACTION_GUARD_MAP`
+  仅在 Recovery Pack（U6a），`rsi-policy-engine.ts` 0 命中（U6b），`CUSTOMS: null` 未变（U6c）；
+  `git diff --name-only 054ab732..HEAD -- apps/api` → 0 行（U7）；本轮 diff 仅 docs/.autopilot/backlog（无 apps/api、无 rename/move/delete，U8）。
+- 本轮零产品代码改动；`RUNTIME_WIRING = NONE`；`STEP_3_RUNTIME_POLICY_WIRING = NOT_AUTHORIZED`。
