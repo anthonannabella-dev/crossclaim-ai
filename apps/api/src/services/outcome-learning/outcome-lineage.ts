@@ -13,8 +13,10 @@
 import type { OutcomeRecord } from './outcome-record';
 
 export const OUTCOME_LINEAGE_BOUNDARY = {
-  trustedSource: 'SERVER_OWNED_COMPOSITION（createAppOutcomeLineageSource + 私有 WeakSet provenance）',
+  trustedLedger: 'SERVER_OWNED_COMPOSITION（createAppOutcomeLineageLedger + 私有 WeakSet provenance）',
+  trustedSource: 'SERVER_OWNED_COMPOSITION（createAppOutcomeLineageSource 只接受 trusted ledger）',
   callerSuppliedPort: 'FORBIDDEN_FOR_VERIFIED_PATH',
+  callerSuppliedLedger: 'FORBIDDEN（fake ledger → factory → trusted source 洗白不可行）',
   selfConsistencyOnly: 'NOT_SUFFICIENT_FOR_BINDING',
   proposalLinked: 'COMPUTED_BY_ADAPTER（不采信上游 boolean）',
   unverifiedPath: 'FORBIDDEN_FOR_LEARNING_EVIDENCE',
@@ -39,11 +41,18 @@ export interface LineageEvidenceFact {
   taskId: string;
 }
 
-/** 由正式 composition 注入的 ledger 只读端口。 */
+/** 既有 repository 的最小只读接口（正式 composition 的输入）。 */
 export interface OutcomeLineageLedgerPort {
   loadAction(actionRef: string): Promise<LineageActionFact | null>;
   loadProposal(proposalRef: string): Promise<LineageProposalFact | null>;
   loadEvidence(evidenceRef: string): Promise<LineageEvidenceFact | null>;
+}
+
+/** 正式 ledger adapter 的 repository 依赖（只能由 app composition root 提供）。 */
+export interface OutcomeLineageRepositoryDeps {
+  actions: { findRef(ref: string): Promise<LineageActionFact | null> };
+  proposals: { findRef(ref: string): Promise<LineageProposalFact | null> };
+  evidence: { findRef(ref: string): Promise<LineageEvidenceFact | null> };
 }
 
 export interface AppOutcomeLineageDeps {
@@ -75,12 +84,41 @@ export interface OutcomeLineageSourcePort {
 export type LineageResolution = { ok: true; fact: OutcomeLineageFact } | { ok: false; reason: string };
 export type LearningRecordVerification = { verified: true } | { verified: false; reason: string };
 
-/** 正式 composition 产出的 source（模块私有 provenance）。 */
+/** 正式 composition 产出的 source / ledger（模块私有 provenance）。 */
 const APP_OUTCOME_LINEAGE_SOURCES = new WeakSet<OutcomeLineageSourcePort>();
+const APP_OUTCOME_LINEAGE_LEDGERS = new WeakSet<OutcomeLineageLedgerPort>();
 
 /** 只读 provenance：只有 factory 产出的 source 才可信。 */
 export function isAppOutcomeLineageSource(source: OutcomeLineageSourcePort): boolean {
   return APP_OUTCOME_LINEAGE_SOURCES.has(source);
+}
+
+/** 只读 provenance：只有 factory 产出的 ledger adapter 才可信。 */
+export function isAppOutcomeLineageLedger(ledger: OutcomeLineageLedgerPort): boolean {
+  return APP_OUTCOME_LINEAGE_LEDGERS.has(ledger);
+}
+
+/**
+ * 正式 ledger composition：把既有 action/proposal/evidence repository 包成 ledger adapter，
+ * 并登记进模块私有 WeakSet。caller 自写 fake ledger 不会进入该 WeakSet，因此无法被 source 采纳。
+ */
+export function createAppOutcomeLineageLedger(deps: OutcomeLineageRepositoryDeps): OutcomeLineageLedgerPort {
+  if (!deps || !deps.actions || !deps.proposals || !deps.evidence) {
+    throw new Error('APP_OUTCOME_LINEAGE_MISSING_REPOSITORY');
+  }
+  const ledger: OutcomeLineageLedgerPort = {
+    async loadAction(actionRef: string) {
+      return deps.actions.findRef(actionRef);
+    },
+    async loadProposal(proposalRef: string) {
+      return deps.proposals.findRef(proposalRef);
+    },
+    async loadEvidence(evidenceRef: string) {
+      return deps.evidence.findRef(evidenceRef);
+    },
+  };
+  APP_OUTCOME_LINEAGE_LEDGERS.add(ledger);
+  return ledger;
 }
 
 const MISMATCH = 'MISMATCH';
@@ -91,6 +129,7 @@ const MISMATCH = 'MISMATCH';
  */
 export function createAppOutcomeLineageSource(deps: AppOutcomeLineageDeps): OutcomeLineageSourcePort {
   if (!deps || !deps.ledger) throw new Error('APP_OUTCOME_LINEAGE_MISSING_LEDGER');
+  if (!isAppOutcomeLineageLedger(deps.ledger)) throw new Error('APP_OUTCOME_LINEAGE_LEDGER_NOT_TRUSTED');
   const { ledger } = deps;
 
   const source: OutcomeLineageSourcePort = {
@@ -167,15 +206,18 @@ export async function resolveTrustedOutcomeLineage(
  * 不接受 caller 传入的 port 实例。
  */
 export async function verifyLearningRecord(
-  deps: AppOutcomeLineageDeps | null | undefined,
+  ledger: OutcomeLineageLedgerPort | null | undefined,
   record: OutcomeRecord,
 ): Promise<LearningRecordVerification> {
-  if (deps === null || deps === undefined) return { verified: false, reason: 'APP_OUTCOME_LINEAGE_DEPS_REQUIRED' };
+  if (ledger === null || ledger === undefined) return { verified: false, reason: 'APP_OUTCOME_LINEAGE_LEDGER_REQUIRED' };
+  if (!isAppOutcomeLineageLedger(ledger)) {
+    return { verified: false, reason: 'OUTCOME_LINEAGE_LEDGER_NOT_TRUSTED' };
+  }
   let source: OutcomeLineageSourcePort;
   try {
-    source = createAppOutcomeLineageSource(deps);
+    source = createAppOutcomeLineageSource({ ledger });
   } catch {
-    return { verified: false, reason: 'APP_OUTCOME_LINEAGE_MISSING_LEDGER' };
+    return { verified: false, reason: 'APP_OUTCOME_LINEAGE_LEDGER_NOT_TRUSTED' };
   }
   const resolved = await resolveTrustedOutcomeLineage(source, record);
   return resolved.ok ? { verified: true } : { verified: false, reason: resolved.reason };
@@ -188,13 +230,13 @@ export interface VerifiedDatasetProjection {
 
 /** verified 路径：只有通过 trusted binding 的记录才可进入学习证据/数据集。 */
 export async function projectVerifiedLearningRecords(
-  deps: AppOutcomeLineageDeps | null | undefined,
+  ledger: OutcomeLineageLedgerPort | null | undefined,
   records: readonly OutcomeRecord[],
 ): Promise<VerifiedDatasetProjection> {
   const verifiedRecords: OutcomeRecord[] = [];
   const excluded: Array<{ digest: string; reason: string }> = [];
   for (const record of records) {
-    const check = await verifyLearningRecord(deps, record);
+    const check = await verifyLearningRecord(ledger, record);
     if (check.verified) verifiedRecords.push(record);
     else excluded.push({ digest: record.digest, reason: check.reason });
   }
