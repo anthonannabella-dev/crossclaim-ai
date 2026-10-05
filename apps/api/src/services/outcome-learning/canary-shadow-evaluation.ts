@@ -30,6 +30,7 @@ export const CANARY_SHADOW_BOUNDARY = {
   actionRuntime: 'SIMULATE_ONLY',
   metricsSource: 'REUSE_PHASE_4_OFFLINE_EVALUATION_SEMANTICS（resolved denominator / successRate / failure·non-success / rejectedRate / unresolved share / human intervention / evidence quality）',
   secondMetricSystem: 'FORBIDDEN',
+  sameCohortProof: 'BOTH_EVALUATIONS_MUST_SHARE_THE_SAME_VERIFIED_OUTCOME_SET（cohortDigest 必须等于 verifiedOutcomeSetDigest，caller 不可自报）',
   recommendation: ['ELIGIBLE_FOR_CONTROLLED_ADOPTION_REVIEW', 'ROLLBACK_REQUIRED', 'INSUFFICIENT_EVIDENCE'],
   autoApply: 'FORBIDDEN',
   autoPromote: 'FORBIDDEN',
@@ -102,12 +103,14 @@ export interface CanaryShadowEvaluation {
   baselineSnapshotDigest: string;
   baselineConfigFingerprint: string;
   datasetVersion: string;
+  cohortId: string;
   cohortDigest: string;
   evaluationWindow: { from: string; to: string };
   baselineMetrics: CanaryMetricSnapshot;
   proposalMetrics: CanaryMetricSnapshot;
   metricDeltas: CanaryMetricDeltas;
   triggers: readonly string[];
+  insufficientEvidence: boolean;
   recommendation: CanaryRecommendation;
   rollbackTarget: { baselineSnapshotDigest: string; baselineConfigFingerprint: string; target: 'U2_BASELINE' };
   execution: {
@@ -160,6 +163,7 @@ const canaryFingerprint = (evaluation: CanaryShadowEvaluation): string =>
     proposalMetrics: { ...evaluation.proposalMetrics, byEvidenceQuality: { ...evaluation.proposalMetrics.byEvidenceQuality } },
     metricDeltas: { ...evaluation.metricDeltas },
     triggers: [...evaluation.triggers],
+    insufficientEvidence: evaluation.insufficientEvidence,
     recommendation: evaluation.recommendation,
     rollbackTarget: { ...evaluation.rollbackTarget },
     execution: { ...evaluation.execution },
@@ -190,6 +194,7 @@ export function evaluateCanaryShadow(input: {
   rollbackPlan: RollbackPlan | null | undefined;
   baselineEvaluation: OfflineEvaluationResult | null | undefined;
   proposalEvaluation: OfflineEvaluationResult | null | undefined;
+  cohortId: string;
   cohortDigest: string;
   evaluationWindow: { from: string; to: string } | null | undefined;
 }): CanaryShadowEvaluation {
@@ -216,11 +221,20 @@ export function evaluateCanaryShadow(input: {
   if (window === null || window === undefined || requireText(window.from) === '' || requireText(window.to) === '') {
     throw new Error('CANARY_EVALUATION_WINDOW_REQUIRED');
   }
-  if (Date.parse(window.to) <= Date.parse(window.from)) {
+  const fromMs = Date.parse(window.from);
+  const toMs = Date.parse(window.to);
+  if (!Number.isFinite(fromMs) || !Number.isFinite(toMs) || toMs <= fromMs) {
     throw new Error('CANARY_EVALUATION_WINDOW_INVALID');
   }
+  const cohortId = requireText(input.cohortId);
+  if (cohortId === '') throw new Error('CANARY_COHORT_REQUIRED');
   const cohortDigest = requireText(input.cohortDigest);
   if (cohortDigest === '') throw new Error('CANARY_COHORT_REQUIRED');
+  // SAME_COHORT_PROOF：两侧必须来自同一 verified outcome 集合，且 cohortDigest 必须等于该集合的 trusted identity
+  const baselineCohort = [...baseline.verifiedOutcomeDigests].join("+");
+  const proposalCohort = [...proposed.verifiedOutcomeDigests].join("+");
+  if (baselineCohort !== proposalCohort) throw new Error("CANARY_SAME_COHORT_REQUIRED");
+  if (cohortDigest !== baseline.verifiedOutcomeSetDigest) throw new Error("CANARY_COHORT_DIGEST_MISMATCH");
 
   const baselineMetrics = snapshotOf(baseline);
   const proposalMetrics = snapshotOf(proposed);
@@ -253,11 +267,9 @@ export function evaluateCanaryShadow(input: {
     }
   }
 
-  const recommendation: CanaryRecommendation = triggers.includes('INSUFFICIENT_EVIDENCE')
-    ? 'INSUFFICIENT_EVIDENCE'
-    : triggers.length > 0
-      ? 'ROLLBACK_REQUIRED'
-      : 'ELIGIBLE_FOR_CONTROLLED_ADOPTION_REVIEW';
+  const insufficientEvidence = triggers.includes('INSUFFICIENT_EVIDENCE');
+  // 冻结规则：数据不足属于强制回滚条件 → 一律 ROLLBACK_REQUIRED（同时以 insufficientEvidence 标注）
+  const recommendation: CanaryRecommendation = triggers.length > 0 ? 'ROLLBACK_REQUIRED' : 'ELIGIBLE_FOR_CONTROLLED_ADOPTION_REVIEW';
 
   const evaluationDigest = digest('canary-shadow', [
     CANARY_SHADOW_VERSION,
@@ -268,7 +280,11 @@ export function evaluateCanaryShadow(input: {
     plan.baselineSnapshotDigest,
     plan.baselineConfigFingerprint,
     baseline.datasetVersion,
+    cohortId,
     cohortDigest,
+    JSON.stringify({ ...baselineMetrics, byEvidenceQuality: baselineMetrics.byEvidenceQuality }),
+    JSON.stringify({ ...proposalMetrics, byEvidenceQuality: proposalMetrics.byEvidenceQuality }),
+    JSON.stringify(metricDeltas),
     window.from + '~' + window.to,
     String(baselineMetrics.resolvedDenominator),
     String(proposalMetrics.resolvedDenominator),
@@ -290,12 +306,14 @@ export function evaluateCanaryShadow(input: {
     baselineSnapshotDigest: plan.baselineSnapshotDigest,
     baselineConfigFingerprint: plan.baselineConfigFingerprint,
     datasetVersion: baseline.datasetVersion,
+    cohortId,
     cohortDigest,
     evaluationWindow: { from: window.from, to: window.to },
     baselineMetrics,
     proposalMetrics,
     metricDeltas,
     triggers,
+    insufficientEvidence,
     recommendation,
     rollbackTarget: {
       baselineSnapshotDigest: plan.baselineSnapshotDigest,
