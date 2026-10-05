@@ -18,9 +18,12 @@ import {
   P2_E_GUARD_ACTION,
   P2_E_CANONICAL_RECHECK_BOUNDARY,
   P2_E_PERSIST_GATE_BOUNDARY,
+  P2_E_TRUSTED_GATE_BINDING,
   RECOVERY_SI_PACKAGE_LINEAGE_CHANGE_KEYS,
   RECOVERY_SI_PACKAGE_PERSISTED_ACTION,
+  RECOVERY_PERSIST_TRANSACTION_UNIT_COUNTS,
   evaluateRecoveryPersistGate,
+  isTrustedRecoveryPersistPermit,
   RECOVERY_PACKAGE_DELETE_GUARD,
   RECOVERY_PERSIST_LINEAGE,
   RECOVERY_PERSIST_TRANSACTION_FAILURE_POLICY,
@@ -236,6 +239,12 @@ describe('Recovery SI P2-E v1 · 事务 / lineage / DELETE guard 契约（必修
       'FileAsset',
       'AuditLog',
     ]);
+    expect(RECOVERY_PERSIST_TRANSACTION_UNIT_COUNTS).toEqual({
+      RecoveryPackage: 1,
+      FileAsset: 2,
+      RecoveryPackageArtifact: 2,
+      AuditLog: 1,
+    });
     expect(RECOVERY_PERSIST_TRANSACTION_FAILURE_POLICY).toBe('ROLLBACK_ALL');
   });
 
@@ -255,61 +264,74 @@ describe('Recovery SI P2-E v1 · 事务 / lineage / DELETE guard 契约（必修
 });
 
 
-describe('Recovery SI P2-E v1 · 单一事务端口（P2-E2 必修 2）', () => {
-  const units = () =>
-    RECOVERY_PERSIST_TRANSACTION_UNITS.map((unit) => ({ unit, payload: { digest: 'd-' + unit } }));
+describe('Recovery SI P2-E v1 · 单一事务端口 + 可信 gate 绑定（E1 / E3 / 必修 2）', () => {
+  /** 1 package + 2 FileAsset + 2 artifact + 1 audit（MSG-20261005-24 CHANGE E3） */
+  const units = () => [
+    { unit: 'RecoveryPackage', payload: { digest: 'd-package' } },
+    { unit: 'FileAsset', payload: { digest: 'd-json-asset' } },
+    { unit: 'FileAsset', payload: { digest: 'd-pdf-asset' } },
+    { unit: 'RecoveryPackageArtifact', payload: { digest: 'd-json-artifact' } },
+    { unit: 'RecoveryPackageArtifact', payload: { digest: 'd-pdf-artifact' } },
+    { unit: 'AuditLog', payload: { digest: 'd-audit' } },
+  ];
 
-  const gateAllow = (over: Partial<RecoveryPersistGateOutcome> = {}): RecoveryPersistGateOutcome => ({
-    decision: 'ALLOW',
-    code: 'ALLOW',
-    reasons: [],
-    guardAction: 'claim.prepare',
-    guardEvaluated: true,
-    canonicalReadyVerified: true,
-    canonicalPlanDigest: 'digest-fixture',
-    lineageAction: RECOVERY_SI_PACKAGE_PERSISTED_ACTION,
-    persisted: false,
-    transactionRequired: true,
-    dbDeleteGuardRequired: true,
-    approvalConsumed: false,
-    executorInvoked: false,
-    ...over,
-  });
+  const allowGate = async (): Promise<RecoveryPersistGateOutcome> => {
+    const outcome = await evaluateRecoveryPersistGate({
+      organizationId: ORG,
+      actorUserId: 'user-1',
+      actorOrganizationId: ORG,
+      controlPlane: plane({}),
+      canonical: canonicalFixture(),
+    });
+    expect(outcome.decision).toBe('ALLOW');
+    expect(isTrustedRecoveryPersistPermit(outcome)).toBe(true);
+    return outcome;
+  };
+
+  /** 真实门禁签发的非 ALLOW 结果（缺 canonical 输入 → DENY） */
+  const denyGate = async (): Promise<RecoveryPersistGateOutcome> =>
+    evaluateRecoveryPersistGate({
+      organizationId: ORG,
+      actorUserId: 'user-1',
+      actorOrganizationId: ORG,
+      controlPlane: plane({}),
+    });
 
   it('P2E-G9 门禁非 ALLOW → 端口零调用、不持久化', async () => {
     let calls = 0;
     const port = { async runInTransaction() { calls += 1; } };
-    const r = await persistRecoveryPackageWithinTransaction({
-      gate: gateAllow({ decision: 'REQUIRES_APPROVAL' }),
-      units: units(),
-      port,
-    });
+    const r = await persistRecoveryPackageWithinTransaction({ gate: await denyGate(), units: units(), port });
     expect(calls).toBe(0);
     expect(r.persisted).toBe(false);
     expect(r.code).toBe('P2E_GATE_NOT_ALLOWED');
     expect(r.unitsWritten).toBe(0);
   });
 
-  it('P2E-G10 单元集合不符 → fail-closed（端口零调用）', async () => {
+  it('P2E-G10 单元集合 / 数量不符 → fail-closed（端口零调用）', async () => {
     let calls = 0;
     const port = { async runInTransaction() { calls += 1; } };
     await expect(
-      persistRecoveryPackageWithinTransaction({
-        gate: gateAllow(),
-        units: units().slice(0, 3),
-        port,
-      }),
+      persistRecoveryPackageWithinTransaction({ gate: await allowGate(), units: units().slice(0, 5), port }),
+    ).rejects.toThrow(/P2E_TRANSACTION_UNIT_SET_MISMATCH/);
+    await expect(
+      persistRecoveryPackageWithinTransaction({ gate: await allowGate(), units: units().slice(0, 4), port }),
     ).rejects.toThrow(/P2E_TRANSACTION_UNIT_SET_MISMATCH/);
     expect(calls).toBe(0);
   });
 
-  it('P2E-G11 成功路径：整批交给同一事务端口一次，返回 lineage 语义', async () => {
+  it('P2E-G11 成功路径：6 单元整批交给同一事务端口一次，返回 lineage 语义', async () => {
     const seen: string[] = [];
-    const port = { async runInTransaction(u: readonly RecoveryPersistUnitWrite[]) { seen.push(u.map((x) => x.unit).sort().join(",")); } };
-    const r = await persistRecoveryPackageWithinTransaction({ gate: gateAllow(), units: units(), port });
-    expect(seen).toEqual(['AuditLog,FileAsset,RecoveryPackage,RecoveryPackageArtifact']);
+    const port = {
+      async runInTransaction(u: readonly RecoveryPersistUnitWrite[]) {
+        seen.push(u.map((x) => x.unit).sort().join(','));
+      },
+    };
+    const r = await persistRecoveryPackageWithinTransaction({ gate: await allowGate(), units: units(), port });
+    expect(seen).toEqual([
+      'AuditLog,FileAsset,FileAsset,RecoveryPackage,RecoveryPackageArtifact,RecoveryPackageArtifact',
+    ]);
     expect(r.persisted).toBe(true);
-    expect(r.unitsWritten).toBe(4);
+    expect(r.unitsWritten).toBe(6);
     expect(r.businessIdentity).toBe('packageDigest');
     expect(r.traceBasis).toBe('planDigest');
   });
@@ -317,8 +339,21 @@ describe('Recovery SI P2-E v1 · 单一事务端口（P2-E2 必修 2）', () => 
   it('P2E-G12 端口抛错 → 错误上抛（不吞异常、不返回 persisted）', async () => {
     const port = { async runInTransaction() { throw new Error('DB_ROLLBACK'); } };
     await expect(
-      persistRecoveryPackageWithinTransaction({ gate: gateAllow(), units: units(), port }),
+      persistRecoveryPackageWithinTransaction({ gate: await allowGate(), units: units(), port }),
     ).rejects.toThrow(/DB_ROLLBACK/);
+  });
+
+  it('P2E-G23 手工伪造 ALLOW gate → 拒绝（CALLER_SUPPLIED_ALLOW_GATE = FORBIDDEN）', async () => {
+    const real = await allowGate();
+    // 结构完全相同的「手工对象」：JSON 往返后不再是 WeakSet 中的 permit 对象
+    const handBuilt = JSON.parse(JSON.stringify(real)) as RecoveryPersistGateOutcome;
+    let calls = 0;
+    const port = { async runInTransaction() { calls += 1; } };
+    expect(isTrustedRecoveryPersistPermit(handBuilt)).toBe(false);
+    await expect(
+      persistRecoveryPackageWithinTransaction({ gate: handBuilt, units: units(), port }),
+    ).rejects.toThrow(/P2E_CALLER_SUPPLIED_GATE_FORBIDDEN/);
+    expect(calls).toBe(0);
   });
 });
 
@@ -502,8 +537,9 @@ describe('Recovery SI P2-E v1 · 写入口 canonical READY 重算（MSG-20261005
 
 
 describe('Recovery SI P2-E v1 · 独立 lineage audit action（MSG-20261005-23 CHANGE 2）', () => {
-  it('P2E-G22 action 独立且 changes 白名单 fail-closed', () => {
+  it('P2E-G22 action 独立、changes 白名单 fail-closed、digest 绑定可信 gate（E2）', async () => {
     expect(RECOVERY_SI_PACKAGE_PERSISTED_ACTION).toBe('recovery.si_package_persisted');
+    expect(P2_E_TRUSTED_GATE_BINDING.callerSuppliedAllowGate).toBe('FORBIDDEN');
     expect(RECOVERY_SI_PACKAGE_LINEAGE_CHANGE_KEYS).toEqual([
       'packageId',
       'packageVersion',
@@ -520,25 +556,58 @@ describe('Recovery SI P2-E v1 · 独立 lineage audit action（MSG-20261005-23 C
       /RECOVERY_SI_LINEAGE_CHANGES_NOT_WHITELISTED/,
     );
 
-    const audit = buildRecoverySiPackageLineageAuditLog({
+    const gate = await evaluateRecoveryPersistGate({
       organizationId: ORG,
+      actorUserId: 'user-1',
+      actorOrganizationId: ORG,
+      controlPlane: plane({}),
+      canonical: canonicalFixture(),
+    });
+    expect(gate.decision).toBe('ALLOW');
+    expect(gate.persistedBasis?.canonicalPlanDigest).toMatch(/^[0-9a-f]{64}$/);
+
+    const audit = buildRecoverySiPackageLineageAuditLog({
+      gate,
       packageId: 'pkg-1',
       packageVersion: 'recovery-package/v1',
       packageDigest: 'a'.repeat(64),
-      planDigestVersion: 'plan-digest/v1',
-      planDigest: 'b'.repeat(64),
-      basisVersion: 'recovery-execution-basis/v1',
-      opportunityRef: 'opp-1',
-      domain: 'CARRIER',
     });
     expect(audit.action).toBe('recovery.si_package_persisted');
     expect(audit.entityType).toBe('RecoveryPackage');
     expect(audit.entityId).toBe('pkg-1');
     expect(audit.actorType).toBe('SYSTEM');
     expect(audit.actorUserId).toBeNull();
+    expect(audit.organizationId).toBe(ORG);
     expect(Object.keys(audit.changes as Record<string, unknown>).sort()).toEqual(
       [...RECOVERY_SI_PACKAGE_LINEAGE_CHANGE_KEYS].sort(),
     );
     expect((audit.changes as { guardAction?: string }).guardAction).toBe('claim.prepare');
+    // planDigest 一律来自可信 gate（调用方声明的 digest 必须与之一致）
+    expect((audit.changes as { planDigest?: string }).planDigest).toBe(gate.persistedBasis!.canonicalPlanDigest);
+    expect((audit.changes as { opportunityRef?: string }).opportunityRef).toBe(
+      gate.persistedBasis!.opportunityRef,
+    );
+
+    // F3E-02（unit 级）：声明一个不同 digest → fail-closed
+    expect(() =>
+      buildRecoverySiPackageLineageAuditLog({
+        gate,
+        packageId: 'pkg-1',
+        packageVersion: 'recovery-package/v1',
+        packageDigest: 'a'.repeat(64),
+        claimedPlanDigest: 'b'.repeat(64),
+      }),
+    ).toThrow(/P2E_LINEAGE_DIGEST_MISMATCH/);
+
+    // 手工伪造 gate → 拒绝
+    const handBuilt = JSON.parse(JSON.stringify(gate)) as typeof gate;
+    expect(() =>
+      buildRecoverySiPackageLineageAuditLog({
+        gate: handBuilt,
+        packageId: 'pkg-1',
+        packageVersion: 'recovery-package/v1',
+        packageDigest: 'a'.repeat(64),
+      }),
+    ).toThrow(/P2E_CALLER_SUPPLIED_GATE_FORBIDDEN/);
   });
 });

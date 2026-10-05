@@ -104,11 +104,59 @@ npx prisma migrate status → Database schema is up to date!（exit 0）
 
 ```text
 apps/api npx tsc --noEmit                                        → exit 0
-recovery-si-phase2-e.test.ts（契约）                              → 22/22 PASS
-recovery-si-phase2-e-db.test.ts（DB 取证）                        → 13/13 PASS
-P2-E targeted regression（10 文件 / 115 例；含 Phase1 / P2-AB / P2-C / P2-D /
-  recovery-manual-package(+db) 交叉回归）                          → 10 files / 115 tests PASS
+recovery-si-phase2-e.test.ts（契约）                              → 23/23 PASS
+recovery-si-phase2-e-db.test.ts（DB 取证）                        → 16/16 PASS
+P2-E targeted regression（10 文件 / 119 例；含 Phase1 / P2-AB / P2-C / P2-D /
+  recovery-manual-package(+db) 交叉回归）                          → 10 files / 119 tests PASS
 prisma validate / migrate deploy / migrate status                → valid / no pending / up to date
+```
+
+## 9.2 MSG-20261005-24（P2-E FINAL-2）修订落地
+
+裁决：**REVISE**（CHANGE 2 与 canonical READY recheck 记 PASS；剩三项窄 blocker；`FINAL3_REQUIRED = YES` 窄 FINAL-3）。
+
+### CHANGE E1 —— 门禁与写入口不可绕过绑定
+
+- `evaluateRecoveryPersistGate` 成为**唯一 permit 签发者**：返回值登记进模块私有 `WeakSet`；
+  `isTrustedRecoveryPersistPermit()` 供写入侧校验；`persistRecoveryPackageWithinTransaction()` 对非 permit 对象直接
+  `P2E_CALLER_SUPPLIED_GATE_FORBIDDEN`（手工构造 / JSON 往返的 ALLOW 对象一律无效，端口零调用）。
+- `P2_E_TRUSTED_GATE_BINDING = { callerSuppliedAllowGate: 'FORBIDDEN', trustedGateToWriteBinding: 'REQUIRED',
+  permitIssuer: 'evaluateRecoveryPersistGate', mechanism: 'MODULE_PRIVATE_WEAKSET_BRAND' }`。
+- 证据：P2E-G23（手工伪造 ALLOW gate → 拒绝 + 零端口调用）；P2E-DB14（F3E-01：伪造 gate → 拒绝 + 四表全 0）。
+
+### CHANGE E2 —— lineage 绑定可信 gate 的 planDigest
+
+- `buildRecoverySiPackageLineageAuditLog({ gate, ... })` 的 `planDigest / planDigestVersion / basisVersion /
+  opportunityRef / domain / guardAction / organizationId` **全部取自 gate.persistedBasis**（不来自调用参数）；
+  调用方若声明 `claimedPlanDigest` 且与 `gate.persistedBasis.canonicalPlanDigest` 不一致 →
+  `P2E_LINEAGE_DIGEST_MISMATCH`（fail-closed，零写入）。
+- 新增门禁字段 `persistedBasis`（仅 ALLOW 且 canonical 重算通过时非空）；canonical 重算新增基数校验
+  `P2E_CANONICAL_READY_CARDINALITY_INVALID`（P2-E 每次只持久化一个包 ⇒ 必须恰好 1 个 READY action）。
+- 证据：P2E-G22（含 digest 不一致负例 + 伪造 gate 负例）；P2E-DB12（反查 digest == gate.canonicalPlanDigest）；
+  P2E-DB15（F3E-02：digest 不一致 → 拒绝 + 零写入）。
+
+### CHANGE E3 —— JSON manifest + PDF 双 artifact 原子持久化
+
+- 事务单元数量固定为 `1 RecoveryPackage + 2 FileAsset（JSON/OTHER + PDF）+ 2 RecoveryPackageArtifact
+  （JSON_MANIFEST + PDF）+ 1 lineage AuditLog`（`RECOVERY_PERSIST_TRANSACTION_UNIT_COUNTS`）；
+  `assertApprovedTransactionUnits()` 由「集合相等」升级为「集合 + 数量相等」。
+- 写入前重新校验确定性绑定：`sha256(canonicalJson) === packageDigest === JSON FileAsset.sha256`；
+  `PDF artifact.sha256 === PDF FileAsset.sha256`；缺一即 fail-closed
+  （`P2E_PACKAGE_DIGEST_MISMATCH` / `P2E_JSON_FILE_ASSET_DIGEST_MISMATCH` / `P2E_ARTIFACT_KIND_SET_MISMATCH` /
+  `P2E_ARTIFACT_FILEASSET_DIGEST_MISMATCH`）。
+- 说明：`FileKind` 枚举无 JSON 值，JSON manifest 以 `kind = OTHER` + `mimeType = application/json` 落库；
+  artifact 侧仍是 `JSON_MANIFEST` + `PDF`（canonical 事实载体 + derivative）。
+- 证据：P2E-DB5 / DB7 / DB8 / DB12（各 2 FileAsset / 2 artifact，kind 恰好 JSON_MANIFEST + PDF）；P2E-DB16
+  （F3E-04：第二条 artifact 唯一约束失败 → 四表全 0 回滚）。
+
+### 措辞修正（RISKS 项）
+
+`P2_E_PERSIST_GATE_BOUNDARY` 不再写 `BUSINESS_FACT_WRITE = DRY_RUN_ONLY`（与事实不符），改为：
+
+```text
+P2_E_WHITELISTED_INTERNAL_PERSISTENCE = AUTHORIZED（RecoveryPackage / RecoveryPackageArtifact / FileAsset / AuditLog）
+OTHER_BUSINESS_FACT_WRITE = FORBIDDEN
+EXTERNAL_BUSINESS_WRITE = FORBIDDEN
 ```
 
 ## 9.1 MSG-20261005-23（P2-E Implementation Audit）修订落地

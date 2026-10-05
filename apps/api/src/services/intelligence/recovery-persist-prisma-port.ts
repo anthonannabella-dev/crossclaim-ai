@@ -22,6 +22,7 @@ import {
   RECOVERY_PERSIST_TRANSACTION_UNITS,
   RECOVERY_SI_PACKAGE_PERSISTED_ACTION,
   assertRecoverySiPackageLineageChanges,
+  isTrustedRecoveryPersistPermit,
   persistRecoveryPackageWithinTransaction,
   buildRecoveryPackageLineageProjection,
   type RecoveryLineageProjection,
@@ -30,6 +31,7 @@ import {
   type RecoveryPersistTransactionPort,
   type RecoveryPersistUnitWrite,
 } from './recovery-persist-gate';
+import { sha256Hex } from '../recovery/recovery-package';
 
 /** 与 schema 枚举一致的字面量联合（避免测试运行期依赖生成类型的具体形态）。 */
 export type RecoveryPackageArtifactKindName = 'PDF' | 'JSON_MANIFEST';
@@ -44,6 +46,8 @@ export interface RecoveryPackageWritePayload {
   packageVersion: string;
   digestVersion: string;
   packageDigest: string;
+  /** canonical manifest JSON（仅用于写入前重新校验 packageDigest / JSON FileAsset digest；不是 DB 列） */
+  canonicalJson: string;
   completenessSnapshot?: unknown;
   generatedByUserId?: string | null;
   generatedAt?: Date;
@@ -88,47 +92,57 @@ export interface AuditLogWritePayload {
 
 export interface RecoveryPersistPrismaPayloads {
   package: RecoveryPackageWritePayload;
-  fileAsset: FileAssetWritePayload;
-  artifact: RecoveryPackageArtifactWritePayload;
+  jsonFileAsset: FileAssetWritePayload;
+  pdfFileAsset: FileAssetWritePayload;
+  jsonArtifact: RecoveryPackageArtifactWritePayload;
+  pdfArtifact: RecoveryPackageArtifactWritePayload;
   auditLog: AuditLogWritePayload;
 }
 
 export interface RecoverySiPackageLineageAuditInput {
-  organizationId: string;
+  /** 可信门禁结果（唯一 permit 签发者 evaluateRecoveryPersistGate 产生） */
+  gate: RecoveryPersistGateOutcome;
   packageId: string;
   packageVersion: string;
   packageDigest: string;
-  planDigestVersion: string;
-  planDigest: string;
-  basisVersion: string;
-  opportunityRef: string;
-  domain: string;
-  /** 固定为 claim.prepare（P2-E 唯一门禁） */
-  guardAction?: string;
+  /** 调用方若声明 digest，必须与可信 gate 的 canonicalPlanDigest 一致，否则 fail-closed */
+  claimedPlanDigest?: string;
   actorUserId?: string | null;
 }
 
 /**
- * 必修（MSG-20261005-23 CHANGE 2）：lineage 审计使用**独立** action
- * `recovery.si_package_persisted`，并且 changes 只允许白名单键；多键 → fail-closed。
+ * 必修（MSG-20261005-23 CHANGE 2 + MSG-20261005-24 CHANGE E2）：
+ * lineage 审计使用**独立** action `recovery.si_package_persisted`；
+ * planDigest / opportunityRef / domain / 版本号一律取自**可信 gate**（persistedBasis），
+ * 不接受调用参数覆盖；changes 只允许白名单键；多键 → fail-closed。
  */
 export function buildRecoverySiPackageLineageAuditLog(
   input: RecoverySiPackageLineageAuditInput,
 ): AuditLogWritePayload {
+  if (!isTrustedRecoveryPersistPermit(input.gate)) {
+    throw new Error('P2E_CALLER_SUPPLIED_GATE_FORBIDDEN: lineage audit requires a trusted gate permit');
+  }
+  const basis = input.gate.persistedBasis;
+  if (input.gate.decision !== 'ALLOW' || input.gate.canonicalReadyVerified !== true || basis === null) {
+    throw new Error('P2E_LINEAGE_REQUIRES_TRUSTED_ALLOW_GATE: gate 未 ALLOW 或缺少 persistedBasis → fail-closed');
+  }
+  if (input.claimedPlanDigest !== undefined && input.claimedPlanDigest !== basis.canonicalPlanDigest) {
+    throw new Error('P2E_LINEAGE_DIGEST_MISMATCH: claimed planDigest != trusted gate canonicalPlanDigest');
+  }
   const changes = {
     packageId: input.packageId,
     packageVersion: input.packageVersion,
     packageDigest: input.packageDigest,
-    planDigestVersion: input.planDigestVersion,
-    planDigest: input.planDigest,
-    basisVersion: input.basisVersion,
-    opportunityRef: input.opportunityRef,
-    domain: input.domain,
-    guardAction: input.guardAction ?? 'claim.prepare',
+    planDigestVersion: basis.planDigestVersion,
+    planDigest: basis.canonicalPlanDigest,
+    basisVersion: basis.basisVersion,
+    opportunityRef: basis.opportunityRef,
+    domain: basis.domain,
+    guardAction: basis.guardAction,
   };
   assertRecoverySiPackageLineageChanges(changes as unknown as Record<string, unknown>);
   return {
-    organizationId: input.organizationId,
+    organizationId: basis.organizationId,
     actorType: input.actorUserId ? 'USER' : 'SYSTEM',
     actorUserId: input.actorUserId ?? null,
     actorRef: input.actorUserId ? null : 'recovery-si',
@@ -159,35 +173,103 @@ export function assertRecoveryPersistTenantCoherence(units: readonly RecoveryPer
   }
 }
 
-/** 把四个单元 payload 组装成标准批（顺序固定，便于编排与取证）。 */
+/**
+ * 把六个批准单元组装成标准批（MSG-20261005-24 CHANGE E3）：
+ * RecoveryPackage → JSON FileAsset → PDF FileAsset → JSON_MANIFEST artifact → PDF artifact → lineage AuditLog。
+ * 写入前重新校验确定性绑定（设计裁决 ⑧ DETERMINISTIC_REVALIDATION_BEFORE_WRITE）：
+ *   sha256(canonicalJson) === packageDigest === JSON FileAsset.sha256；PDF artifact.sha256 === PDF FileAsset.sha256。
+ */
 export function buildRecoveryPersistUnits(
   payloads: RecoveryPersistPrismaPayloads,
 ): RecoveryPersistUnitWrite[] {
+  const expectedPackageDigest = sha256Hex(payloads.package.canonicalJson);
+  if (payloads.package.packageDigest !== expectedPackageDigest) {
+    throw new Error('P2E_PACKAGE_DIGEST_MISMATCH: packageDigest != sha256(canonicalJson)');
+  }
+  if (payloads.jsonFileAsset.sha256 !== expectedPackageDigest) {
+    throw new Error('P2E_JSON_FILE_ASSET_DIGEST_MISMATCH: JSON FileAsset.sha256 != sha256(canonicalJson)');
+  }
+  if (payloads.jsonArtifact.artifactKind !== 'JSON_MANIFEST' || payloads.pdfArtifact.artifactKind !== 'PDF') {
+    throw new Error('P2E_ARTIFACT_KIND_SET_MISMATCH: artifacts must be exactly JSON_MANIFEST + PDF');
+  }
+  if (payloads.jsonArtifact.sha256 !== payloads.jsonFileAsset.sha256) {
+    throw new Error('P2E_ARTIFACT_FILEASSET_DIGEST_MISMATCH: JSON_MANIFEST artifact != JSON FileAsset digest');
+  }
+  if (payloads.pdfArtifact.sha256 !== payloads.pdfFileAsset.sha256) {
+    throw new Error('P2E_ARTIFACT_FILEASSET_DIGEST_MISMATCH: PDF artifact != PDF FileAsset digest');
+  }
   return [
     { unit: 'RecoveryPackage', payload: payloads.package },
-    { unit: 'FileAsset', payload: payloads.fileAsset },
-    { unit: 'RecoveryPackageArtifact', payload: payloads.artifact },
+    { unit: 'FileAsset', payload: payloads.jsonFileAsset },
+    { unit: 'FileAsset', payload: payloads.pdfFileAsset },
+    { unit: 'RecoveryPackageArtifact', payload: payloads.jsonArtifact },
+    { unit: 'RecoveryPackageArtifact', payload: payloads.pdfArtifact },
     { unit: 'AuditLog', payload: payloads.auditLog },
   ];
 }
 
+const fileAssetData = (asset: FileAssetWritePayload) => ({
+  ...(asset.id ? { id: asset.id } : {}),
+  organizationId: asset.organizationId,
+  kind: asset.kind,
+  storageKey: asset.storageKey,
+  originalName: asset.originalName,
+  mimeType: asset.mimeType ?? null,
+  sizeBytes: asset.sizeBytes ?? null,
+  sha256: asset.sha256 ?? null,
+  uploadedBy: asset.uploadedBy ?? null,
+  sourceRef: asset.sourceRef ?? null,
+});
+
+const artifactData = (artifact: RecoveryPackageArtifactWritePayload) => ({
+  ...(artifact.id ? { id: artifact.id } : {}),
+  organizationId: artifact.organizationId,
+  packageId: artifact.packageId,
+  artifactKind: artifact.artifactKind,
+  fileAssetId: artifact.fileAssetId,
+  sha256: artifact.sha256,
+  exportedByUserId: artifact.exportedByUserId ?? null,
+  ...(artifact.exportedAt ? { exportedAt: artifact.exportedAt } : {}),
+});
+
 /**
- * 单一事务端口：把四个单元收进同一个 prisma.$transaction。
- * 写入顺序 = RecoveryPackage -> FileAsset -> RecoveryPackageArtifact -> AuditLog
- * （artifact 的外键同时指向 package 与 FileAsset，故排在两者之后）。
+ * 单一事务端口：把六个批准单元收进同一个 prisma.$transaction（MSG-20261005-24 CHANGE E3）。
+ * 写入顺序 = RecoveryPackage → JSON FileAsset → PDF FileAsset → JSON_MANIFEST artifact → PDF artifact → lineage AuditLog。
  */
 export function createPrismaRecoveryPersistPort(prisma: PrismaClient): RecoveryPersistTransactionPort {
   return {
     async runInTransaction(units: readonly RecoveryPersistUnitWrite[]): Promise<void> {
       assertRecoveryPersistTenantCoherence(units);
-      const byUnit = new Map(units.map((u) => [u.unit, u.payload] as const));
-      const pkg = byUnit.get('RecoveryPackage') as RecoveryPackageWritePayload | undefined;
-      const asset = byUnit.get('FileAsset') as FileAssetWritePayload | undefined;
-      const artifact = byUnit.get('RecoveryPackageArtifact') as RecoveryPackageArtifactWritePayload | undefined;
-      const auditLog = byUnit.get('AuditLog') as AuditLogWritePayload | undefined;
-      if (!pkg || !asset || !artifact || !auditLog) {
-        throw new Error('P2E_TRANSACTION_UNIT_SET_MISMATCH: 缺少四个批准单元之一');
+      const byUnit = new Map<string, unknown[]>();
+      for (const unit of units) {
+        const bucket = byUnit.get(unit.unit) ?? [];
+        bucket.push(unit.payload);
+        byUnit.set(unit.unit, bucket);
       }
+      const packages = (byUnit.get('RecoveryPackage') ?? []) as RecoveryPackageWritePayload[];
+      const assets = (byUnit.get('FileAsset') ?? []) as FileAssetWritePayload[];
+      const artifacts = (byUnit.get('RecoveryPackageArtifact') ?? []) as RecoveryPackageArtifactWritePayload[];
+      const auditLogs = (byUnit.get('AuditLog') ?? []) as AuditLogWritePayload[];
+      const jsonAssets = assets.filter((asset) => asset.kind === 'OTHER');
+      const pdfAssets = assets.filter((asset) => asset.kind === 'PDF');
+      const jsonArtifact = artifacts.find((artifact) => artifact.artifactKind === 'JSON_MANIFEST');
+      const pdfArtifact = artifacts.find((artifact) => artifact.artifactKind === 'PDF');
+      if (
+        packages.length !== 1 ||
+        assets.length !== 2 ||
+        jsonAssets.length !== 1 ||
+        pdfAssets.length !== 1 ||
+        artifacts.length !== 2 ||
+        !jsonArtifact ||
+        !pdfArtifact ||
+        auditLogs.length !== 1
+      ) {
+        throw new Error(
+          'P2E_TRANSACTION_UNIT_SET_MISMATCH: expected 1 RecoveryPackage / 2 FileAsset(JSON+PDF) / 2 RecoveryPackageArtifact(JSON_MANIFEST+PDF) / 1 AuditLog',
+        );
+      }
+      const pkg = packages[0];
+      const auditLog = auditLogs[0];
 
       await prisma.$transaction(async (tx) => {
         await tx.recoveryPackage.create({
@@ -205,33 +287,11 @@ export function createPrismaRecoveryPersistPort(prisma: PrismaClient): RecoveryP
           },
         });
 
-        await tx.fileAsset.create({
-          data: {
-            ...(asset.id ? { id: asset.id } : {}),
-            organizationId: asset.organizationId,
-            kind: asset.kind,
-            storageKey: asset.storageKey,
-            originalName: asset.originalName,
-            mimeType: asset.mimeType ?? null,
-            sizeBytes: asset.sizeBytes ?? null,
-            sha256: asset.sha256 ?? null,
-            uploadedBy: asset.uploadedBy ?? null,
-            sourceRef: asset.sourceRef ?? null,
-          },
-        });
-
-        await tx.recoveryPackageArtifact.create({
-          data: {
-            ...(artifact.id ? { id: artifact.id } : {}),
-            organizationId: artifact.organizationId,
-            packageId: artifact.packageId,
-            artifactKind: artifact.artifactKind,
-            fileAssetId: artifact.fileAssetId,
-            sha256: artifact.sha256,
-            exportedByUserId: artifact.exportedByUserId ?? null,
-            ...(artifact.exportedAt ? { exportedAt: artifact.exportedAt } : {}),
-          },
-        });
+        // JSON_MANIFEST（canonical 事实载体）与 PDF（derivative）两份资产/产物同事务落库
+        await tx.fileAsset.create({ data: fileAssetData(jsonAssets[0]) });
+        await tx.fileAsset.create({ data: fileAssetData(pdfAssets[0]) });
+        await tx.recoveryPackageArtifact.create({ data: artifactData(jsonArtifact) });
+        await tx.recoveryPackageArtifact.create({ data: artifactData(pdfArtifact) });
 
         await tx.auditLog.create({
           data: {

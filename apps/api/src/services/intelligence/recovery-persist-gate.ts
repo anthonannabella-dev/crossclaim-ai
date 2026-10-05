@@ -20,7 +20,11 @@ import type { CustomerRecoveryState } from './customer-recovery-state';
 import { prioritizeOpportunities } from './recovery-prioritizer';
 import { planRecovery, type RecoveryPlanAction } from './recovery-planner';
 import type { RecoveryToolRegistry } from './recovery-tool-registry';
-import { buildRecoveryPlanDigest } from './recovery-guard-dry-run';
+import {
+  RECOVERY_EXECUTION_BASIS_VERSION,
+  RECOVERY_PLAN_DIGEST_VERSION,
+  buildRecoveryPlanDigest,
+} from './recovery-guard-dry-run';
 
 /** 必修 1：P2-E 唯一的 Guard action；出现 claim.submit 即视为配置错误。 */
 export const P2_E_GUARD_ACTION = 'claim.prepare' as const;
@@ -36,9 +40,30 @@ export const P2_E_PERSIST_GATE_BOUNDARY = {
   canonicalReadyRecheckRequired: true,
   approvalConsumption: 'FORBIDDEN',
   executorInvocation: 'FORBIDDEN',
-  businessFactWrite: 'DRY_RUN_ONLY',
+  // MSG-20261005-24 RISKS：P2-E 已实际写入四个白名单单元，表述必须与事实一致。
+  businessFactWrite: 'WHITELISTED_INTERNAL_PERSISTENCE',
+  p2eWhitelistedInternalPersistence: 'AUTHORIZED',
+  otherBusinessFactWrite: 'FORBIDDEN',
+  externalBusinessWrite: 'FORBIDDEN',
   externalAction: 'FORBIDDEN',
   runtimeWiring: 'NONE',
+} as const;
+
+/**
+ * 必修（MSG-20261005-24 CHANGE E1）：写入只能由**真实门禁**的结果驱动。
+ * 手工构造的 ALLOW 对象不得解锁持久化（caller_supplied_allow_gate = FORBIDDEN）。
+ */
+const TRUSTED_PERSIST_PERMITS = new WeakSet<object>();
+
+export function isTrustedRecoveryPersistPermit(value: unknown): boolean {
+  return typeof value === 'object' && value !== null && TRUSTED_PERSIST_PERMITS.has(value as object);
+}
+
+export const P2_E_TRUSTED_GATE_BINDING = {
+  callerSuppliedAllowGate: 'FORBIDDEN',
+  trustedGateToWriteBinding: 'REQUIRED',
+  permitIssuer: 'evaluateRecoveryPersistGate',
+  mechanism: 'MODULE_PRIVATE_WEAKSET_BRAND',
 } as const;
 
 /**
@@ -162,6 +187,13 @@ export function verifyRecoveryPersistCanonicalReady(input: RecoveryPersistCanoni
       reasons: ['没有提供任何 READY_FOR_EXECUTION action → fail-closed（不允许在无可验证依据时写入）'],
     };
   }
+  if (input.suppliedReadyActions.length !== 1) {
+    return {
+      ok: false,
+      code: 'P2E_CANONICAL_READY_CARDINALITY_INVALID',
+      reasons: ['P2-E 每次调用只持久化一个材料包，因此必须恰好 1 个 READY_FOR_EXECUTION action → fail-closed'],
+    };
+  }
 
   const priority = prioritizeOpportunities(state);
   const canonicalPlan = planRecovery({
@@ -209,6 +241,16 @@ export interface RecoveryPersistGateOutcome {
   canonicalPlanDigest: string | null;
   /** lineage 审计必须使用的独立 action（MSG-20261005-23 CHANGE 2） */
   lineageAction: string;
+  /** ALLOW 时给出本次写入的 lineage 依据（全部来自可信 gate，不来自调用参数）：MSG-20261005-24 CHANGE E2 */
+  persistedBasis: {
+    organizationId: string;
+    opportunityRef: string;
+    domain: string;
+    guardAction: string;
+    planDigestVersion: string;
+    basisVersion: string;
+    canonicalPlanDigest: string;
+  } | null;
   /** 恒为 false：门禁通过 ≠ 已持久化。 */
   persisted: false;
   /** 恒为 true：ALLOW 之后必须走单一事务（必修 2）。 */
@@ -230,7 +272,7 @@ const decideFromGuard = (result: ActionGuardResult): RecoveryPersistGateDecision
  * 纯判定：给定租户与 actor，通过可信 ProductionControlPlane 评估 `claim.prepare`。
  * 不接收 capabilities（必须来自 Control Plane），不接收 approvalId（P2-E 不消费审批）。
  */
-export async function evaluateRecoveryPersistGate(input: {
+async function evaluateRecoveryPersistGateBare(input: {
   organizationId: string;
   actorUserId: string;
   actorOrganizationId: string;
@@ -243,6 +285,7 @@ export async function evaluateRecoveryPersistGate(input: {
     canonicalReadyVerified: false,
     canonicalPlanDigest: null as string | null,
     lineageAction: RECOVERY_SI_PACKAGE_PERSISTED_ACTION as string,
+    persistedBasis: null as RecoveryPersistGateOutcome['persistedBasis'],
     persisted: false as const,
     transactionRequired: true as const,
     dbDeleteGuardRequired: true as const,
@@ -328,7 +371,32 @@ export async function evaluateRecoveryPersistGate(input: {
     guardEvaluated: true,
     canonicalReadyVerified: true,
     canonicalPlanDigest: canonicalCheck.canonicalPlanDigest,
+    persistedBasis: {
+      organizationId: input.organizationId,
+      opportunityRef: input.canonical.suppliedReadyActions[0].opportunityRef,
+      domain: input.canonical.suppliedReadyActions[0].domain,
+      guardAction: P2_E_GUARD_ACTION,
+      planDigestVersion: RECOVERY_PLAN_DIGEST_VERSION,
+      basisVersion: RECOVERY_EXECUTION_BASIS_VERSION,
+      canonicalPlanDigest: canonicalCheck.canonicalPlanDigest,
+    },
   };
+}
+
+/**
+ * 唯一 permit 签发者（MSG-20261005-24 CHANGE E1）：只有本函数返回的对象会被登记为可信 permit；
+ * 手工构造的 outcome 对象无法通过 `isTrustedRecoveryPersistPermit()`。
+ */
+export async function evaluateRecoveryPersistGate(input: {
+  organizationId: string;
+  actorUserId: string;
+  actorOrganizationId: string;
+  controlPlane: Pick<ProductionControlPlane, 'snapshotFor' | 'evaluateWithoutAudit'>;
+  canonical?: RecoveryPersistCanonicalInput;
+}): Promise<RecoveryPersistGateOutcome> {
+  const outcome = await evaluateRecoveryPersistGateBare(input);
+  TRUSTED_PERSIST_PERMITS.add(outcome);
+  return outcome;
 }
 
 
@@ -341,6 +409,17 @@ export const RECOVERY_PERSIST_TRANSACTION_UNITS: readonly string[] = [
   'FileAsset',
   'AuditLog',
 ];
+
+/**
+ * 必修（MSG-20261005-24 CHANGE E3）：批准的单元**数量**——
+ * 1 RecoveryPackage + 2 FileAsset（JSON manifest + PDF）+ 2 RecoveryPackageArtifact（JSON_MANIFEST + PDF）+ 1 lineage AuditLog。
+ */
+export const RECOVERY_PERSIST_TRANSACTION_UNIT_COUNTS: Readonly<Record<string, number>> = {
+  RecoveryPackage: 1,
+  FileAsset: 2,
+  RecoveryPackageArtifact: 2,
+  AuditLog: 1,
+};
 export const RECOVERY_PERSIST_TRANSACTION_FAILURE_POLICY = 'ROLLBACK_ALL' as const;
 
 /**
@@ -396,10 +475,20 @@ export interface RecoveryPersistResult {
 
 /** 单元集合必须与批准的四个单元完全一致（顺序不限，重复不允许）。 */
 export function assertApprovedTransactionUnits(units: readonly RecoveryPersistUnitWrite[]): void {
-  const got = [...units.map((u) => u.unit)].sort();
-  const want = [...RECOVERY_PERSIST_TRANSACTION_UNITS].sort();
-  if (got.length !== want.length || got.some((u, i) => u !== want[i])) {
-    throw new Error('P2E_TRANSACTION_UNIT_SET_MISMATCH: units must be exactly ' + want.join(', '));
+  const got = new Map<string, number>();
+  for (const unit of units) got.set(unit.unit, (got.get(unit.unit) ?? 0) + 1);
+  const want = RECOVERY_PERSIST_TRANSACTION_UNIT_COUNTS;
+  const gotKeys = [...got.keys()].sort();
+  const wantKeys = Object.keys(want).sort();
+  const mismatched =
+    gotKeys.length !== wantKeys.length ||
+    gotKeys.some((key, index) => key !== wantKeys[index]) ||
+    gotKeys.some((key) => got.get(key) !== want[key]);
+  if (mismatched) {
+    throw new Error(
+      'P2E_TRANSACTION_UNIT_SET_MISMATCH: units must be exactly ' +
+        wantKeys.map((key) => key + 'x' + want[key]).join(', '),
+    );
   }
 }
 
@@ -412,6 +501,11 @@ export async function persistRecoveryPackageWithinTransaction(input: {
   units: readonly RecoveryPersistUnitWrite[];
   port: RecoveryPersistTransactionPort;
 }): Promise<RecoveryPersistResult> {
+  if (!isTrustedRecoveryPersistPermit(input.gate)) {
+    throw new Error(
+      'P2E_CALLER_SUPPLIED_GATE_FORBIDDEN: gate must be produced by evaluateRecoveryPersistGate (trusted gate→write binding)',
+    );
+  }
   if (input.gate.decision !== 'ALLOW' || input.gate.guardEvaluated !== true) {
     return {
       persisted: false,
