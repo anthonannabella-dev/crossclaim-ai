@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "054ab732",
+  "head": "2ed27f5a",
   "status": "RECONCILED",
   "current_task": "RSI 生产可执行闭环（7 点收口）：RSI_RUNTIME_READY = PASS；MODEL_PROVIDER_READY = 本地仿真已接线（真实网络/付费 HOLD）；PERSISTENCE_READY = ephemeral 已验证、durable 需宿主非生产 DATABASE_URL；REBOOT_RECONCILE_READY = NOT_IMPLEMENTED（下一单元）；SYSTEMD_VALIDATED = 需宿主 Linux 实机",
   "next_task": "BG-016 单一 Acceptance Head + 四份状态一致 guard（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍 HOST_ACTION_REQUIRED 或 HOLD",
@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-40",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-06T08:30:00.000Z",
+  "updated_at": "2026-10-05T17:57:01.308Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -50,16 +50,16 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
-  "next_execution_unit": "PHASE 3 U1：provider adapter interface（typed capability metadata、credential port 抽象、external-write gate fail-closed、idempotency key、exactly-once 语义、retry/reconcile 契约、HITL 挂点、provider result normalization、sandbox/mock provider、failure/degraded 路径、audit/evidence 输出）→ code → tests → regression → tsc → commit → push → 审计 → durable state；REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT 全部保持 HOLD",
+  "next_execution_unit": "PHASE 3 FINAL（窄修，勿扩范围）：(1) U1 —— mock/sandbox adapter 改 trusted provenance（factory/registry），Action Runtime 只认 provenance，非 trusted adapter 当前 phase invoke = 0；(2) U2 —— credential ref 增加 tenant/provider binding 校验（provider mismatch → PROVIDER_CREDENTIAL_PROVIDER_MISMATCH；organization mismatch → PROVIDER_CREDENTIAL_TENANT_MISMATCH），fail-closed；(3) U3 —— idempotencyKey 绑定 fingerprint（organizationId + providerName + action + payloadRef/payloadDigest），同 key 不同 fingerprint → IDEMPOTENCY_KEY_CONFLICT；ProviderIdempotencyStore 端口改 async（Promise），内存实现降级为 sandbox 实现；(4) U5/U6 —— Action Pack 真接共享 createAppActionGuard / RuntimeActionGuard + ActionGuardApprovalVerifier + approval target/payload binding，禁止 caller 直接以 guardDecision=ALLOW 绕过；(5) action-guard-enforcement 07 恢复 green（intelligence/** 增动作清单须审批覆盖 —— 只做窄修，不动 P2E DB）。链路：code → tests → regression → tsc → commit → push → PHASE 3 FINAL 送审 → 送达三检 → 逐字归档 → FULL_COPY_OK → durable state 对账。REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT 全部保持 HOLD。",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-06T08:30:00.000Z",
+  "last_tick_at": "2026-10-05T17:57:01.308Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "PHASE 2 = PASS / CLOSED（MSG-20261005-50，Reviewed HEAD 338f30b4）；启动 PHASE 3 ACTION RUNTIME",
-  "last_action_at": "2026-10-06T08:30:00.000Z",
-  "next_action": "C2 IMPLEMENTATION（Schema Delta + durable ledger/budget + PG 回归）",
-  "current_head": "054ab732",
-  "last_completed_head": "054ab732",
-  "reviewed_head": "070daf1",
+  "last_action": "PHASE 3 ACTION RUNTIME U1-U6 送审（Reviewed HEAD add99ec3）→ VERDICT = PASS WITH REVISE / NOT CLOSED；PHASE3_FINAL_REQUIRED = YES；裁决已原样逐字归档 MSG-20261005-51（compare.mjs = FULL_COPY_OK，148/148 行）；push 2ed27f5a。",
+  "last_action_at": "2026-10-05T17:57:01.308Z",
+  "next_action": "PHASE 3 FINAL —— 按裁决做 4 项窄修 + enforcement 07 恢复 green",
+  "current_head": "2ed27f5a",
+  "last_completed_head": "add99ec3",
+  "reviewed_head": "add99ec3",
   "claim_submit_batch": {
     "verdict": "PASS",
     "message_id": "MSG-20261001-07",
@@ -5169,7 +5169,12 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "PHASE-3-U1: provider adapter interface（contract + 沙箱/ mock provider + external-write gate fail-closed + 能力元数据；真实 provider 逐个开闸）"
+    "P3F-1 U1 trusted provenance（factory/registry；caller 自报 simulated 不得授权；非 trusted adapter invoke=0）",
+    "P3F-2 U2 credential port tenant/provider binding（PROVIDER_CREDENTIAL_PROVIDER_MISMATCH / PROVIDER_CREDENTIAL_TENANT_MISMATCH，fail-closed）",
+    "P3F-3 U3 idempotency fingerprint + IDEMPOTENCY_KEY_CONFLICT + ProviderIdempotencyStore async 端口",
+    "P3F-4 U5/U6 Action Pack 真接共享 Action Guard + approval verifier（caller guardDecision=ALLOW 不得绕过）",
+    "P3F-5 action-guard-enforcement 07 恢复 green（窄修，不动 P2E DB5）",
+    "P3F-6 回归 + tsc + commit/push + PHASE 3 FINAL 送审 + 归档 + durable state 对账"
   ],
   "full_autonomous_internal_execution": "VERIFIED",
   "dispatcher_acceptance": {
@@ -7422,10 +7427,7 @@
   },
   "ci_red_cleared_at": "2026-10-04T09:16:07.985Z",
   "ci_red_cleared_head": "4f02282",
-  "pending_archives": [
-    "MSG-20261005-42（FINAL-2，旧会话干净重抽）",
-    "MSG-20261005-46（FINAL-6）"
-  ],
+  "pending_archives": [],
   "report_language": "zh-CN",
   "report_language_note": "宿主指令（2026-10-04）：所有面向宿主的汇报、通知、心跳 message 一律使用中文；代码注释/commit message 维持既有风格（英文为主，中文用于验收注释）。",
   "rsi_control_plane": {
@@ -9322,7 +9324,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-06T07:30:00.000Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-05T17:57:01.308Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -9448,9 +9450,9 @@
   "phase_state": {
     "PHASE_1_FINAL7": "PASS / CLOSED（MSG-20261005-47，REVIEWED_HEAD = 795f65a5；STEP3_FINAL8_REQUIRED = NO）",
     "PHASE_2_MODEL_GATEWAY_RUNTIME": "PASS / CLOSED（MSG-20261005-50；Reviewed HEAD 338f30b4；PHASE2_FINAL5_REQUIRED = NO）",
-    "PHASE_3_ACTION_RUNTIME": "AUTHORIZED / NOT_STARTED（按 provider adapter interface → credential port → external-write gate → idempotency → exactly-once → retry/reconcile → HITL → provider result normalization → sandbox/mock → failure/degraded → audit/evidence；真实 provider 逐个开闸）",
-    "PHASE_4_OUTCOME_LEARNING_PIPELINE": "QUEUED",
-    "PHASE_5_META_IMPROVEMENT": "QUEUED（依赖真实运行结果）"
+    "PHASE_3_ACTION_RUNTIME": "PASS WITH REVISE / NOT CLOSED（MSG-20261005-51；Reviewed HEAD = add99ec3；PHASE3_FINAL_REQUIRED = YES；4 个阻断点：U1 / U2 / U3 / U5+U6）",
+    "PHASE_4_OUTCOME_LEARNING_PIPELINE": "QUEUED（PHASE 3 未 CLOSED 前不启动）",
+    "PHASE_5_META_IMPROVEMENT": "QUEUED（需真实运行结果）"
   },
   "heartbeat_watchdog": {
     "interval_seconds": 180,
@@ -9515,5 +9517,48 @@
     ],
     "phase2_final5_required": "NO",
     "archive": "AI-ARCHITECT-INBOX.md#MSG-20261005-50"
+  },
+  "phase3_action_runtime": {
+    "status": "PASS WITH REVISE / NOT CLOSED",
+    "message_id": "MSG-20261005-51",
+    "reviewed_head": "add99ec3",
+    "push_head": "2ed27f5a",
+    "request_doc": "docs/releases/PHASE3-ACTION-RUNTIME-REQUEST.md",
+    "archive_verified": "FULL_COPY_OK（148/148 行，0 缺失 / 0 多余）",
+    "units": {
+      "U1_provider_adapter_contract": "REVISE（simulated capability 可由 caller 自报 → 必须改 trusted provenance）",
+      "U2_credential_port": "REVISE（缺 provider/organization binding 校验）",
+      "U3_idempotency": "REVISE（key 未绑定 fingerprint；端口非 async/可持久化）",
+      "U4_retry_reconcile": "PASS（策略层）",
+      "U5_U6_action_pack": "REVISE（HITL/Shared Action Guard 未真正进入执行链，caller 可自报 guardDecision=ALLOW）"
+    },
+    "keep": [
+      "decideExternalWriteGate() 当前始终落到 EXTERNAL_WRITE_HOLD（真实外写未打开）",
+      "normalizeProviderResult() 未知/畸形 → UNKNOWN（fail-closed）",
+      "retry/reconcile 策略正确（success→STOP；confirmed no-side-effect failure→bounded retry；UNKNOWN→MANUAL_REVIEW）",
+      "sandbox mock / 结构化 evidence / 无原始 payload-response 的方向保留",
+      "GITHUB_CI = NOT_OBSERVED 确认无对应 Actions run"
+    ],
+    "required_changes": [
+      "U1：mock/sandbox adapter 必须 trusted provenance（factory/registry）；Action Runtime 只认 provenance；非 trusted adapter 当前 phase invoke = 0",
+      "U2：credential ref 增加 providerName / organizationId 与请求一致性校验，fail-closed（PROVIDER_CREDENTIAL_PROVIDER_MISMATCH / PROVIDER_CREDENTIAL_TENANT_MISMATCH）",
+      "U3A：idempotencyKey 绑定 fingerprint（organizationId/providerName/action/payloadRef+payloadDigest），同 key 不同 fingerprint → IDEMPOTENCY_KEY_CONFLICT",
+      "U3B：ProviderIdempotencyStore 改异步端口（begin/complete → Promise），内存实现作为 sandbox 实现，保留替换为 DB/持久化原子“唯一赢家”的接口",
+      "U5/U6：Action Pack 接共享 createAppActionGuard / RuntimeActionGuard + ActionGuardApprovalVerifier + approval target/payload binding；不得由 caller 直接 guardDecision=ALLOW 绕过",
+      "action-guard-enforcement 07 恢复 green：intelligence/** 的动作清单须纳入 Action Guard 审批覆盖（窄修）"
+    ],
+    "out_of_scope": [
+      "P2E-DB5（DB 隔离失败）本阶段不做，仅记为 test-isolation debt（该文件单独 20/20 PASS）",
+      "EXTERNAL_WRITE_ACTIONS = GUARD_ENFORCED_ACTIONS ∪ {customs.filing} 可暂时 KEEP，但不得称为严格 SSOT；后续应建共享 Action Catalog（Action Guard 与 Action Runtime 同源）"
+    ],
+    "next_label": "PHASE_3_ACTION_RUNTIME FINAL（目标：U1..U6 = PASS，PHASE_3_ACTION_RUNTIME = PASS / CLOSED，PHASE3_FINAL2_REQUIRED = NO）",
+    "github_ci": "NOT_OBSERVED"
+  },
+  "local_verification_phase3_u5u6": {
+    "tsc": "PASS（--noEmit exit 0）",
+    "targeted": "action-pack-runtime 16/16 PASS；provider-adapter-contract 7/7；provider-execution-guard 8/8",
+    "regression": "93 files / 938 tests PASS",
+    "full": "394 files / 3680 tests，2 failed（均为本单元之前在 HEAD 9eb7dd15 已存在；本单元新增失败 0）",
+    "baseline_proof": "临时移出本单元新文件的 HEAD baseline：enforcement 07 offender = 4 条（均在 services/intelligence/**，与本单元无关）；recovery-si-phase2-e-db 单跑 20/20 PASS"
   }
 }
