@@ -151084,3 +151084,214 @@ PRODUCTION_READY = false
 U2 可以正式 CLOSED，授权进入 P5-U3 Controlled Config Proposal。
 ```
 
+### [MSG-20261005-73] PHASE 5 U3 裁决 = PASS WITH REVISE / NOT CLOSED（VERIFIED_APPROVED_VERDICT_GATE / VERIFIED_ROLLBACK_PLAN_GATE / ONE_VERDICT_ONE_PROPOSAL / PROPOSAL_PROVENANCE·ANTI_TAMPER / NO_APPLY·NO_ROLLOUT·NO_MUTATION = PASS；TARGET_SPECIFIC_DELTA_SCHEMA / DELTA_BASELINE_VALUE_BINDING = REVISE；PHASE5_U3_FINAL_REQUIRED = YES）， reviewed ref 2d4060c6
+
+```text
+DECISION
+
+VERIFIED_APPROVED_VERDICT_GATE = PASS
+VERIFIED_ROLLBACK_PLAN_GATE = PASS
+ONE_VERDICT_ONE_PROPOSAL = PASS
+PROPOSAL_PROVENANCE / ANTI_TAMPER = PASS
+NO_APPLY / NO_ROLLOUT / NO_MUTATION = PASS
+TARGET_SPECIFIC_DELTA_SCHEMA = REVISE
+DELTA_BASELINE_VALUE_BINDING = REVISE
+PHASE_5_U3 = PASS WITH REVISE / NOT CLOSED
+PHASE5_U3_FINAL_REQUIRED = YES
+Reviewed HEAD：2d4060c6
+GitHub Actions：NOT_OBSERVED
+KEEP
+
+这些已经成立：
+
+verified APPROVED verdict only；
+verified rollback plan only；
+rollback plan 必须绑定同一个 verdict；
+one verdictDigest → one proposal；
+proposal 绑定 baseline snapshot / rollback plan digest；
+proposal 自身 WeakSet + WeakMap fingerprint + deep-freeze；
+REJECTED 永不生成 proposal；
+PROPOSAL_ONLY；
+没有 apply / execute / rollout / mutate / promote 入口。
+CHANGE
+1. 当前不是 target-specific allowlist，只是 target 名称相等
+
+目前实际校验只有：
+
+纯文本
+delta.target === plan.candidateTarget
+
+但：
+
+纯文本
+delta.path
+delta.from
+delta.to
+
+都是任意非空字符串。
+
+所以真实 ROUTER candidate 仍可提交：
+
+纯文本
+target = ROUTER
+path = controlPlane.killSwitch
+
+或者其他并非 Router 可调配置的路径。
+
+这没有达到上一轮已经冻结的：
+
+target-specific allowlist schema
+
+最低必须有类似：
+
+纯文本
+ROUTER -> [router.escalationThreshold, ...]
+POLICY -> [...]
+GUARD  -> [...]
+ACTION_RUNTIME -> [...]
+
+不在该 target 白名单的 path：
+
+CONTROLLED_PROPOSAL_DELTA_PATH_NOT_ALLOWED
+
+2. from 目前也是 caller 自证
+
+虽然 proposal 绑定了可信：
+
+baselineConfigFingerprint + baselineSnapshotDigest
+
+但：
+
+纯文本
+proposedDelta.from
+
+没有证明它真的是该 baseline 上这个 path 的当前值。
+
+因此可以出现：
+
+纯文本
+trusted baseline fingerprint = X
+path = router.escalationThreshold
+from = fake-value
+to = 0.60
+
+然后生成一个 provenance 完全真实的 proposal。
+
+U3 必须做到：
+
+from 来自 trusted baseline，而不是 caller 声明。
+
+推荐窄修：
+
+让 U2 的 BaselineConfigSnapshot 增加只包含允许配置字段的 immutable projection，并纳入：
+
+snapshotDigest
+snapshot fingerprint
+
+例如：
+
+纯文本
+configProjection = {
+  "router.escalationThreshold": "0.50"
+}
+
+U3 中：
+
+纯文本
+from = baseline.configProjection[path]
+
+caller 只提供：
+
+path + to + rationale
+
+不要再允许 caller 提供 from。
+
+这样链路才是：
+
+trusted baseline → allowed path current value → proposed new value
+
+RISKS
+
+当前最危险的不是执行——执行仍然被封死。
+
+而是生成一个形式可信但语义越界的 proposal。
+
+一旦 U4 Canary/Shadow 信任 U3 proposal provenance，就可能把越界 path 当成正式候选配置来评估。
+
+因此必须在 U4 前关闭。
+
+TEST
+
+U3 FINAL 至少补：
+
+ROUTER + allowlisted Router path → PASS。
+ROUTER + Policy/Guard/ControlPlane path → REJECT。
+POLICY/GUARD 分别只能使用自己的 allowlist。
+ACTION_RUNTIME 当前仅允许明确 proposal-safe fields；敏感执行开关必须禁止。
+caller 不再能够指定 from。
+proposal.from 必须等于 trusted baseline projection 中对应值。
+baseline 无该 path → fail-closed。
+baseline projection clone/伪造仍无法进入。
+proposalDigest 必须绑定 canonical allowed path + trusted from + to + rationale。
+原 6 项继续 green。
+NEXT
+
+只做：
+
+P5-U3 FINAL — target-specific delta allowlist + trusted baseline value binding
+
+通过后可：
+
+CONTROLLED_PROPOSAL_CONTRACT = PASS
+PHASE_5_U3 = PASS / CLOSED
+
+然后授权：
+
+P5-U4 — Canary / Shadow Evaluation
+
+最低要求先冻结为：
+
+Verified Controlled Config Proposal
+
+Verified Baseline Snapshot
+→ isolated shadow/canary evaluation
+
+要求：
+
+不修改正式 Policy / Guard / Router / Action Runtime；
+baseline 与 proposal 使用同一数据集/同一 evaluation window；
+复用 Phase 4 的 resolved denominator 口径；
+明确比较：
+success rate
+unresolved share
+error/rejection rate
+human intervention
+evidence quality
+latency/cost（若该 target 影响）
+任何 hard regression → ROLLBACK_REQUIRED
+rollback 必须回到 U2 的：
+baselineSnapshotDigest / baselineConfigFingerprint
+不允许 “rollback to latest/default”
+Canary result 自身 provenance + fingerprint + freeze；
+Canary PASS 也不代表自动 adoption，仍需下一道 controlled adoption approval。
+PRODUCTION
+
+继续全部 HOLD：
+
+REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing
+
+继续：
+
+SECOND_* = FORBIDDEN
+L5_RELAXATION = FORBIDDEN
+
+保持：
+
+MODEL_GATEWAY_RUNTIME_WIRED = false
+ACTION_RUNTIME_PRODUCTION_ENABLED = false
+META_IMPROVEMENT_INTEGRATED = false
+PRODUCTION_READY = false
+
+U3 的可信对象链已经成立；现在只差把 delta 从“target 名字一致”升级为“真正受控的配置字段 + trusted baseline 当前值”。
+```
+
