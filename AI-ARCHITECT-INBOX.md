@@ -151768,3 +151768,237 @@ PRODUCTION_READY = false
 U3 正式 CLOSED。授权进入 P5-U4 Canary / Shadow Evaluation。
 ```
 
+### [MSG-20261005-76] PHASE 5 U4 裁决 = PASS WITH REVISE / NOT CLOSED（SHADOW_ISOLATION / PHASE4_METRIC_REUSE / CANARY_ARTIFACT_PROVENANCE / U2_ROLLBACK_ANCHOR / NO_AUTO_ADOPTION·NO_EXECUTION = PASS；SAME_COHORT_PROOF / CANARY_EVALUATION_DIGEST_FULL_BINDING / EVALUATION_WINDOW_VALIDATION = REVISE；PHASE5_U4_FINAL_REQUIRED = YES）， reviewed ref 9ebe622c
+
+```text
+DECISION
+
+SHADOW_ISOLATION = PASS
+PHASE4_METRIC_REUSE = PASS
+CANARY_ARTIFACT_PROVENANCE = PASS
+U2_ROLLBACK_ANCHOR = PASS
+NO_AUTO_ADOPTION / NO_EXECUTION = PASS
+SAME_COHORT_PROOF = REVISE
+CANARY_EVALUATION_DIGEST_FULL_BINDING = REVISE
+EVALUATION_WINDOW_VALIDATION = REVISE
+PHASE_5_U4 = PASS WITH REVISE / NOT CLOSED
+PHASE5_U4_FINAL_REQUIRED = YES
+Reviewed HEAD：9ebe622c
+GitHub Actions：NOT_OBSERVED
+KEEP
+
+U4 主体方向正确：
+
+SHADOW_ONLY
+production config mutation = FORBIDDEN
+External Write / Payment / real claim = 0
+ACTION_RUNTIME = SIMULATE_ONLY
+baseline/proposal core metrics直接复用 Phase 4 verified offline evaluation
+verified proposal + verified rollback plan 双门成立
+rollback 锚定：
+baselineSnapshotDigest + baselineConfigFingerprint
+recommendation 不存在 AUTO_APPLY / AUTO_PROMOTE / AUTO_ROLLOUT
+artifact 有 WeakSet + WeakMap fingerprint + deep-freeze
+Canary PASS 仍要求 Controlled Adoption Review
+CHANGE
+1. 最大阻断：没有真正证明“同一 cohort”
+
+现在只检查：
+
+cohortDigest 是 caller 提供的非空字符串。
+
+但没有证明 baseline/proposal evaluation 真的是同一批输入。
+
+而且你自己的 P5U4_1 已经直接证明这个旁路：
+
+纯文本
+baselineEvaluation = dataset(2 success, 2 failure)
+proposalEvaluation = dataset(3 success, 1 failure)
+cohortDigest = "cohort:v1"
+
+两套 OutcomeRecords 实际不同，却能得到：
+
+ELIGIBLE_FOR_CONTROLLED_ADOPTION_REVIEW
+
+所以当前实际上是：
+
+caller says same cohort
+
+而不是：
+
+system proves same cohort
+
+必须改成可信 VerifiedCanaryCohort / paired-run manifest。
+
+建议：
+
+server-owned cohort read boundary
+→ VerifiedCanaryCohort
+
+至少绑定：
+
+datasetVersion
+stableInputRefs
+evaluationWindow
+cohortDigest
+
+并做 provenance + fingerprint + freeze。
+
+baseline/proposal 两轨必须各自证明：
+
+exact same stableInputRefs，无 missing / extra。
+
+2. evaluationDigest 没有完整绑定 Canary 内容
+
+当前 Canary artifact fingerprint 是完整的，但 durable evaluationDigest preimage 只覆盖了一部分：
+
+denominators
+successRateDelta
+unresolvedShareDelta
+triggers
+recommendation
+
+没有完整直接绑定：
+
+baseline/proposal Phase4 evaluationDigest
+rejectedRate delta
+human intervention delta
+evidence-quality metrics
+其它完整 metrics
+
+最简单的修复不是重复 hash 全部字段，而是直接加入：
+
+baselineEvaluationDigest
+proposalEvaluationDigest
+
+因为 Phase 4 evaluationDigest 已经绑定各自完整 verified evaluation。
+
+建议 artifact 也显式保存这两个字段。
+
+3. evaluationWindow 非法日期可能漏过
+
+目前：
+
+纯文本
+Date.parse(to) <= Date.parse(from)
+
+如果传：
+
+纯文本
+from = "abc"
+to = "xyz"
+
+两边都是 NaN，比较结果为 false，可能通过。
+
+必须先：
+
+纯文本
+Number.isFinite(Date.parse(from))
+Number.isFinite(Date.parse(to))
+
+再判断 from < to。
+
+4. 数据不足语义需要固定
+
+上一轮冻结文本把 evaluation 数据不足列入必须回到 U2 baseline 的条件。
+
+当前返回：
+
+INSUFFICIENT_EVIDENCE
+
+这个三态本身可以保留，但必须明确：
+
+纯文本
+INSUFFICIENT_EVIDENCE
+=> adoptionEligible = false
+=> MUST_REMAIN_ON_U2_BASELINE
+
+不能被 U5 当作“既不是 rollback 也不是失败”的中性状态。
+
+不必强行把名称改成 ROLLBACK_REQUIRED，但安全效果必须等价。
+
+RISKS
+
+当前最大的实际风险是比较了不同样本：
+
+纯文本
+baseline cohort A
+vs
+proposal cohort B
+
+然后把样本差异误认为配置改进，最终输出：
+
+ELIGIBLE_FOR_CONTROLLED_ADOPTION_REVIEW
+
+这会直接污染后续 U5，所以 U4 暂时不能 CLOSED。
+
+TEST
+
+U4 FINAL 最低补：
+
+verified cohort manifest 才能进入。
+caller 手造 / clone cohort → REJECT。
+baseline/proposal exact same stable input set → PASS。
+missing one member → REJECT。
+extra one member → REJECT。
+completely different cohort + same caller string → REJECT。
+Canary artifact绑定 baselineEvaluationDigest + proposalEvaluationDigest。
+改任一 Phase4 evaluation → Canary evaluationDigest 必须变化。
+invalid date / NaN date → REJECT。
+insufficient → INSUFFICIENT_EVIDENCE + MUST_REMAIN_ON_U2_BASELINE + adoption blocked。
+原 7/7 保持 green。
+NEXT
+
+只做：
+
+P5-U4 FINAL — verified paired cohort + full evaluation binding + strict window validation
+
+建议最终链：
+
+Verified Canary Cohort
+→ 同一输入集合运行：
+
+U2 Baseline
+vs
+U3 Proposal Shadow Overlay
+
+→ 两份 Verified Phase4 Offline Evaluation
+
+→ CANARY_SHADOW_EVALUATION
+
+U4 FINAL PASS 后，我授权进入：
+
+P5-U5 — Controlled Adoption Review
+
+U5 最低门届时应是：
+
+isVerifiedCanaryShadowEvaluation === true
+且只能接受：
+
+ELIGIBLE_FOR_CONTROLLED_ADOPTION_REVIEW
+
+ROLLBACK_REQUIRED 和 INSUFFICIENT_EVIDENCE 均必须 fail-closed。
+
+U5 仍然只允许 review/verdict，不能真正 apply。
+
+PRODUCTION
+
+继续全部 HOLD：
+
+REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing
+
+继续：
+
+SECOND_* = FORBIDDEN
+L5_RELAXATION = FORBIDDEN
+
+保持：
+
+MODEL_GATEWAY_RUNTIME_WIRED = false
+ACTION_RUNTIME_PRODUCTION_ENABLED = false
+META_IMPROVEMENT_INTEGRATED = false
+PRODUCTION_READY = false
+
+U4 的隔离、指标和 rollback 设计已经正确；现在真正需要封住的是“同一 cohort 证明”。当前测试本身已经暴露不同 cohort 可以被判 ELIGIBLE，因此必须 FINAL 修复后才能进入 U5。
+```
+
