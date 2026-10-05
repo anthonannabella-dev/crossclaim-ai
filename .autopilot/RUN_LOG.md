@@ -2635,3 +2635,11 @@ Production Enablement / 真实外写 / 资金 / 客户提交 / 生产凭据：�
 - STATE 已写入 heartbeat{} 配置 + EXECUTION_ACTIVE=false + HEARTBEAT_INTERVAL_SECONDS=60 + CONTINUATION_REQUIRED=true。
 - 正常模式仍为：task complete → recompute SAFE_CONTINUATION_QUEUE → select next → execute immediately（不等待 heartbeat）。
 
+
+## 2026-10-06T05:00Z —— C3 IMPLEMENTATION 完成并送审（实现 HEAD = e7467b73）
+- 授权：MSG-20261005-37（C2 = PASS / CLOSED；C3 IMPLEMENTATION = AUTHORIZED，6 项范围：cache runtime wiring / business-value cost policy / Cost Safe Mode / concurrencyLimit enforcement / admin 只读可观测 / NOT_YET_MEASURABLE）。
+- 新增模块：si-cost-safe-mode（只停 STANDARD_AI；L0/health/critical alert 豁免；retryAllowed=false）/ si-ai-business-value-policy（价值只来自可信 canonical basis；caller 自报值忽略；UNKNOWN→LOW_COST only）/ si-model-cache-runtime（tenant-safe identity；HIT ⇒ MODEL_CALL_SKIPPED_CACHE_HIT，不产生 provider ledger entry）/ si-budget-concurrency（PostgreSQL advisory-xact-lock slots 跨实例互斥，不新增 lease/usage 表）/ si-cost-observability（只读投影，无第二 usage 表，敏感内容不暴露）。
+- 接线：rsi-model-router 新增可选端口 costSafeMode / cache / businessValue / concurrency / onCacheSavings（缺省不启用 ⇒ 行为与 C1/C2 完全一致）；rsi-model-provider-composition 组合根可注入（仅 SI 成本控制内部链路 + local sim adapter）。
+- 验证：tsc exit 0；prisma validate valid / migrate status up to date（本批无 Schema/迁移变更）；si-cost-c3 = 18/18；si-cost-c3-db（真实 PostgreSQL，含 2 客户端并发限流）= 8/8；rsi-* + si-cost-* + architecture-contract = 50 files / 445 tests PASS。
+- 边界：RUNTIME_WIRING = NONE（C3 接线只限 SI 成本控制内部链路 + local sim adapter，不等于 STEP_3_RUNTIME_POLICY_WIRING）；REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G = HOLD。
+- NEXT_EXECUTION_UNIT = 读取 C3 Implementation Audit 裁决 → 逐字归档（MSG-20261005-38）→ PASS/CLOSED 则宣布 SI_COST_OPTIMIZATION = PASS / CLOSED 并 recompute SAFE_CONTINUATION_QUEUE；REVISE 则最小集合窄修 → commit/push → 再送审。

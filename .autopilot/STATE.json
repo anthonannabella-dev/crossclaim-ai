@@ -9,9 +9,9 @@
   "last_chatgpt_message": "MSG-20261005-37",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-06T04:00:00.000Z",
+  "updated_at": "2026-10-06T05:00:00.000Z",
   "previous_head": "8064f07",
-  "architect_decision_pending": false,
+  "architect_decision_pending": true,
   "blocked_scope": null,
   "last_send_head": "0c35106",
   "last_sent_at": "2026-10-03T09:07:52.875Z",
@@ -50,12 +50,12 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "ACTIVE",
-  "next_execution_unit": "C3 IMPLEMENTATION：cache runtime wiring + business-value cost policy + Cost Safe Mode + concurrencyLimit enforcement（多实例语义 + 真实 PG 并发回归）+ admin 只读可观测投影 + NOT_YET_MEASURABLE 指标 → tsc / prisma / regression → C3 Implementation Audit → PASS/CLOSED 后宣布 SI_COST_OPTIMIZATION = PASS / CLOSED 并 recompute SAFE_CONTINUATION_QUEUE",
+  "next_execution_unit": "读取 C3 Implementation Audit 裁决 → 逐字归档（MSG-20261005-38）→ PASS/CLOSED 则宣布 SI_COST_OPTIMIZATION = PASS / CLOSED 并 recompute SAFE_CONTINUATION_QUEUE；REVISE 则最小集合窄修 → commit/push → 再送审",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-06T04:00:00.000Z",
+  "last_tick_at": "2026-10-06T05:00:00.000Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "C2 = PASS / CLOSED（MSG-20261005-37，REVIEWED_HEAD = f5e4cc2c，C2_FINAL5_REQUIRED = NO）；补齐 MSG-20261005-35 / -36 逐字归档（FULL_COPY_OK）；C3 IMPLEMENTATION = AUTHORIZED",
-  "last_action_at": "2026-10-06T04:00:00.000Z",
+  "last_action": "C3 IMPLEMENTATION 完成并送审（实现 HEAD = e7467b73；5 个新模块 + 2 处接线；tsc 0；C3 18/18 + 真实 PG 8/8；回归 50 files / 445 tests）",
+  "last_action_at": "2026-10-06T05:00:00.000Z",
   "next_action": "C2 IMPLEMENTATION（Schema Delta + durable ledger/budget + PG 回归）",
   "current_head": "054ab732",
   "last_completed_head": "054ab732",
@@ -5199,9 +5199,9 @@
   "awaiting_verdict": "EXACT-ORDER REPLAY 证据已送审（comment 5979262070）；shared/staging deploy 解禁待裁决",
   "dispatcher_authorization": "AUTHORIZED（限定范围，见 backlog.json.authorization_note）",
   "final_status": {
-    "computed_at": "2026-10-05T12:55:34.593Z",
-    "head": "117f849f",
-    "acceptance_head": "117f849f",
+    "computed_at": "2026-10-05T13:03:35.072Z",
+    "head": "e7467b73",
+    "acceptance_head": "e7467b73",
     "protocol_layer1_items": 14,
     "CODE_COMPLETE": "NO",
     "INTEGRATION_COMPLETE": "NO",
@@ -5360,48 +5360,48 @@
       "L1-04_full_ci_success_on_head": {
         "label": "最新 HEAD 全量 CI SUCCESS",
         "status": false,
-        "evidence": "acceptance_head=117f849f ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
+        "evidence": "acceptance_head=e7467b73 ci_head=8f32fce ci=GREEN on completed heads (5cc8864, 15f6dbc success; 5c81195, 39e42e9 in progress) run=37143524364"
       },
       "L1-05_pg_regression_passed": {
         "status": "UNVERIFIED",
-        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head 117f849f（且中间存在非簿记变更）"
+        "evidence": "pg_regression recorded at fd4c675 ≠ acceptance head e7467b73（且中间存在非簿记变更）"
       },
       "L1-06_fresh_db_migration_passed": {
         "status": "UNVERIFIED",
-        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head 117f849f（且中间存在非簿记变更）"
+        "evidence": "fresh_db_migration recorded at bd87ffb ≠ acceptance head e7467b73（且中间存在非簿记变更）"
       },
       "L1-07_api_typecheck_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head 117f849f（且中间存在非簿记变更）"
+        "evidence": "typecheck_api recorded at bd87ffb ≠ acceptance head e7467b73（且中间存在非簿记变更）"
       },
       "L1-08_web_typecheck_build_passed": {
         "status": "UNVERIFIED",
-        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head 117f849f（且中间存在非簿记变更）"
+        "evidence": "typecheck_web recorded at bd87ffb ≠ acceptance head e7467b73（且中间存在非簿记变更）"
       },
       "L1-09_no_skipped_critical_tests": {
         "status": "UNVERIFIED",
-        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head 117f849f（且中间存在非簿记变更）"
+        "evidence": "tests_no_skipped recorded at bd87ffb ≠ acceptance head e7467b73（且中间存在非簿记变更）"
       },
       "L1-10_git_working_tree_clean": {
         "label": "git status clean（无静默豁免）",
         "status": false,
-        "evidence": "dirty entries: 2"
+        "evidence": "dirty entries: 4"
       },
       "L1-11_docs_state_consistent": {
         "status": "UNVERIFIED",
-        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head 117f849f（且中间存在非簿记变更）"
+        "evidence": "docs_sync recorded at bd87ffb ≠ acceptance head e7467b73（且中间存在非簿记变更）"
       },
       "L1-12_schema_invariants_verified": {
         "status": "UNVERIFIED",
-        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head 117f849f（且中间存在非簿记变更）"
+        "evidence": "schema_invariants recorded at bd87ffb ≠ acceptance head e7467b73（且中间存在非簿记变更）"
       },
       "L1-13_negative_paths_covered": {
         "status": "UNVERIFIED",
-        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head 117f849f（且中间存在非簿记变更）"
+        "evidence": "negative_paths recorded at bd87ffb ≠ acceptance head e7467b73（且中间存在非簿记变更）"
       },
       "L1-14_real_pg_e2e_not_mock_only": {
         "status": "UNVERIFIED",
-        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head 117f849f（且中间存在非簿记变更）"
+        "evidence": "pg_e2e_real recorded at bd87ffb ≠ acceptance head e7467b73（且中间存在非簿记变更）"
       }
     },
     "AUTONOMOUS_INTERNAL_WORK": "RUNNING",
@@ -8851,7 +8851,7 @@
     "invariant": "ACTION_GUARD_DRY_RUN_ALLOW != EXECUTION_AUTHORIZATION；零审批消费 / 零 executor / 零业务事实写入 / 零外写；L5 永久拒绝"
   },
   "si_cost_optimization": {
-    "status": "C2_PASS_CLOSED",
+    "status": "C3_SUBMITTED_PENDING_VERDICT",
     "priority": "P1",
     "dependency": "SI_RSI_UNIFICATION_PASS_CLOSED",
     "registered_at": "2026-10-05T12:45:00.000Z",
@@ -9184,7 +9184,41 @@
       "MSG-20261005-36",
       "MSG-20261005-37"
     ],
-    "c2_archive_note": "MSG-20261005-35 / -36 为上一执行窗口已消费但未落库的裁决，本窗口按逐字归档补齐；三条均 compare.mjs = FULL_COPY_OK。"
+    "c2_archive_note": "MSG-20261005-35 / -36 为上一执行窗口已消费但未落库的裁决，本窗口按逐字归档补齐；三条均 compare.mjs = FULL_COPY_OK。",
+    "c3": {
+      "implementation_head": "e7467b73",
+      "evidence": "docs/releases/SI-COST-OPTIMIZATION-C3-EVIDENCE.md",
+      "audit_request": "docs/releases/SI-COST-OPTIMIZATION-C3-IMPLEMENTATION-AUDIT-REQUEST.md",
+      "scope": [
+        "cache runtime wiring（接入唯一 rsi-model-router；tenant-safe identity；HIT ⇒ MODEL_CALL_SKIPPED_CACHE_HIT，不产生 provider ledger entry）",
+        "business-value cost policy（价值只来自可信 canonical basis；caller 自报值忽略；UNKNOWN/LOW/MEDIUM → LOW_COST only；HIGH → STRONG eligible）",
+        "Cost Safe Mode（只停 STANDARD_AI；LEVEL_0_RULE / HEALTH_CHECK / CRITICAL_ALERT 恒放行；retryAllowed=false）",
+        "concurrencyLimit enforcement（PostgreSQL advisory-xact-lock slots；跨实例互斥；真实 PG 并发回归）",
+        "admin read-only observability（只读投影；无第二 usage 表；不含敏感内容）",
+        "NOT_YET_MEASURABLE 指标（无可信分母一律不编造）"
+      ],
+      "new_modules": [
+        "si-cost-safe-mode.ts",
+        "si-ai-business-value-policy.ts",
+        "si-model-cache-runtime.ts",
+        "si-budget-concurrency.ts",
+        "si-cost-observability.ts"
+      ],
+      "wiring": [
+        "rsi-model-router.ts（可选端口 costSafeMode / cache / businessValue / concurrency / onCacheSavings；缺省行为不变）",
+        "rsi-model-provider-composition.ts（组合根可注入）"
+      ],
+      "tests": "tsc 0；si-cost-c3 18/18；si-cost-c3-db（真实 PG）8/8；rsi-* + si-cost-* + architecture-contract 50 files / 445 tests PASS",
+      "schema_delta": "NO（无 Schema / 迁移变更）",
+      "concurrency_limit_enforcement": "ENFORCED（C3；PG advisory-lock slots）",
+      "metrics_not_yet_measurable": [
+        "RULE_RESOLVED_RATE",
+        "MODEL_INVOCATION_RATE",
+        "CACHE_HIT_RATE",
+        "AVG_AI_COST_PER_CASE",
+        "AVG_AI_COST_PER_SUCCESSFUL_RECOVERY"
+      ]
+    }
   },
   "si_rsi_unification": {
     "status": "PASS_CLOSED",
