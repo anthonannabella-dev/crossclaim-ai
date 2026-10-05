@@ -152002,3 +152002,253 @@ PRODUCTION_READY = false
 U4 的隔离、指标和 rollback 设计已经正确；现在真正需要封住的是“同一 cohort 证明”。当前测试本身已经暴露不同 cohort 可以被判 ELIGIBLE，因此必须 FINAL 修复后才能进入 U5。
 ```
 
+### [MSG-20261005-77] PHASE 5 U4 FINAL 裁决 = PASS WITH REVISE / NOT CLOSED（SHADOW_ISOLATION / PHASE4_METRIC_REUSE / EVALUATION_WINDOW_VALIDATION / INSUFFICIENT_EVIDENCE_ROLLBACK / U2_ROLLBACK_ANCHOR = PASS；SAME_COHORT_PROOF / CANARY_EVALUATION_DIGEST_FULL_BINDING = REVISE；PHASE5_U4_FINAL2_REQUIRED = YES）， reviewed ref 240f7b28
+
+```text
+DECISION
+
+SHADOW_ISOLATION = PASS
+PHASE4_METRIC_REUSE = PASS
+EVALUATION_WINDOW_VALIDATION = PASS
+INSUFFICIENT_EVIDENCE_ROLLBACK = PASS
+U2_ROLLBACK_ANCHOR = PASS
+SAME_COHORT_PROOF = REVISE
+CANARY_EVALUATION_DIGEST_FULL_BINDING = REVISE
+PHASE_5_U4 = PASS WITH REVISE / NOT CLOSED
+PHASE5_U4_FINAL2_REQUIRED = YES
+Reviewed HEAD：240f7b28
+GitHub Actions：NOT_OBSERVED
+KEEP
+
+这轮有两项已经真正关闭：
+
+非法日期现在用 Number.isFinite(Date.parse(...)) 拦截，window 校验 PASS。
+数据不足现在：
+INSUFFICIENT_EVIDENCE trigger
+→ ROLLBACK_REQUIRED
+→ 固定回 U2_BASELINE，PASS。
+SHADOW_ONLY、无 production mutation、无 apply/promote/rollout 继续成立。
+Phase 4 metrics 仍直接复用，没有第二套 denominator。
+Canary artifact provenance / freeze 保持正确。
+CHANGE
+1. same-cohort proof 绑定错了对象：现在证明的是“同输出”，不是“同输入”
+
+当前：
+
+纯文本
+baseline.verifiedOutcomeDigests
+===
+proposal.verifiedOutcomeDigests
+
+但 OutcomeRecord.digest 明确包含：
+
+finalOutcome
+provider
+evidenceQuality
+recoveryAmount
+humanIntervention
+以及其它 outcome 字段
+
+所以如果 Router proposal 真让同一任务从：
+
+FAILURE → SUCCESS
+
+那么 Outcome digest 必然变化。
+
+当前 U4 就会先报：
+
+CANARY_SAME_COHORT_REQUIRED
+
+而不是计算：
+
+successRate improved
+
+因此现在真实 Canary 的：
+
+successRate delta
+rejectedRate delta
+unresolved delta
+human intervention delta
+
+在“同 cohort”门下实际上被结构性冻结了。
+
+正确模型
+
+必须证明：
+
+same input cohort
+
+而不是：
+
+same output outcome set
+
+建议新增可信：
+
+VerifiedCanaryCohortManifest
+
+至少绑定：
+
+datasetVersion
+stableInputRefs[]
+inputSetDigest
+evaluationWindow
+cohortId
+provenance + fingerprint + freeze
+
+stable identity 应来自运行前，例如：
+
+organizationId + taskId / sourceInputRef
+
+不能包含 finalOutcome / recoveryAmount / evidenceQuality 这些运行结果。
+
+Baseline 和 Proposal 两轨都必须证明：
+
+inputSetDigest === cohortManifest.inputSetDigest
+
+这样才允许：
+
+纯文本
+same inputs
++
+different outputs
+=
+meaningful canary comparison
+2. Canary evaluationDigest 仍未完整绑定两份 Phase 4 evaluation identity
+
+现在加入了完整：
+
+baselineMetrics JSON
+proposalMetrics JSON
+metricDeltas JSON
+
+这比上一版明显更好。
+
+但还没有直接绑定：
+
+baselineEvaluation.evaluationDigest
+proposalEvaluation.evaluationDigest
+
+因此两份 Phase 4 evaluation 若在：
+
+excluded records
+evaluation provenance
+其它已进入 Phase4 evaluationDigest、但不进入 Canary metric snapshot 的内容
+
+发生变化，Canary digest 可能仍然一样。
+
+直接增加两个字段最干净：
+
+纯文本
+baselineEvaluationDigest
+proposalEvaluationDigest
+
+同时：
+
+存入 Canary artifact；
+进入 Canary fingerprint；
+进入 Canary evaluationDigest preimage。
+
+不要复制 Phase 4 全套 identity 逻辑。
+
+RISKS
+
+当前代码会产生一个很严重的假象：
+
+“same cohort 已经证明，所以 Canary 很安全。”
+
+实际上是：
+
+“只有结果完全相同的两组 evaluation 才被允许比较。”
+
+这意味着当前 ELIGIBLE_FOR_CONTROLLED_ADOPTION_REVIEW 很容易出现，因为正常样例的 baseline/proposal 本来就是同一份 evaluation。
+
+而真正 proposal 改善或恶化结果时，反而会在 cohort gate 被拒绝。
+
+因此还不能进入 Controlled Adoption Review。
+
+TEST
+
+U4 FINAL2 至少补：
+
+同一个 VerifiedCanaryCohortManifest。
+baseline/proposal 使用完全相同 stable input refs。
+允许同一个 task：
+baseline = FAILURE，
+proposal = SUCCESS。
+上述场景不得触发 SAME_COHORT_REQUIRED。
+应正常得到 positive successRate delta。
+同 input set，但 proposal 恶化 → ROLLBACK_REQUIRED。
+missing input → REJECT。
+extra input → REJECT。
+different input set → REJECT。
+caller 手造/clone cohort manifest → REJECT。
+artifact 增加：
+baselineEvaluationDigest
+proposalEvaluationDigest。
+任一 Phase4 evaluationDigest 变化 → Canary evaluationDigest 必须变化。
+当前 strict window / insufficient rollback tests 保持 green。
+NEXT
+
+只做：
+
+P5-U4 FINAL2 — verified input cohort manifest + Phase4 evaluation identity binding
+
+推荐最终链：
+
+纯文本
+VerifiedCanaryCohortManifest
+        │
+        ├─ baseline run ──> Verified Phase4 Evaluation A
+        │
+        └─ proposal shadow run ──> Verified Phase4 Evaluation B
+
+两轨：
+
+same inputSetDigest
+
+但允许：
+
+different outcomeDigests / different metrics
+
+然后：
+
+A vs B
+→ CANARY_SHADOW_EVALUATION
+
+只有这样 metric regression trigger 才真正有意义。
+
+U4 FINAL2 PASS 后，再授权：
+
+P5-U5 Controlled Adoption Review
+
+U5 只允许：
+
+verified Canary
++
+recommendation === ELIGIBLE_FOR_CONTROLLED_ADOPTION_REVIEW
+
+进入 review。
+
+ROLLBACK_REQUIRED、数据不足、cohort mismatch 全部不得进入。
+
+PRODUCTION
+
+继续全部 HOLD：
+
+REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing
+
+继续：
+
+SECOND_* = FORBIDDEN
+L5_RELAXATION = FORBIDDEN
+
+保持：
+
+MODEL_GATEWAY_RUNTIME_WIRED = false
+ACTION_RUNTIME_PRODUCTION_ENABLED = false
+META_IMPROVEMENT_INTEGRATED = false
+PRODUCTION_READY = false
+
+这轮不是小问题：现在的 same-cohort proof 会让真实 Canary 差异无法出现。先把“同输入”与“不同输出”分开，U4 才能真正 CLOSED。
+```
+
