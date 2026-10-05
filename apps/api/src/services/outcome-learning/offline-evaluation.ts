@@ -1,17 +1,18 @@
 /**
- * PHASE 4 U4 —— Offline Evaluation（显式 resolved denominator）
+ * PHASE 4 U4 FINAL —— Offline Evaluation（显式 resolved denominator + 评估身份/来源闭合）
  * ---------------------------------------------------------------
- * 依据审计 NEXT（MSG-20261005-61）：
- *   - 必须显式定义正式评估分母：resolved = SUCCESS + FAILURE + REJECTED；
- *   - PARTIAL / MANUAL_REVIEW / UNKNOWN **单独报告**，不得默认进入 success-rate 分母；
- *   - 不得继续把 `successCount / allRecords` 当作正式质量指标；
- *   - 评估只消费 U3 的 **verified-only** 学习证据/记录；未过 trusted lineage binding 的记录不得进入评估。
+ * 依据审计 NEXT（MSG-20261005-62）：
+ *   (1) evaluationDigest 必须绑定 datasetVersion + evaluationVersion + sorted verified outcomeDigests
+ *       + sorted excluded{digest,reason} + metric result —— 同一 digest 必须唯一对应同一批 verified 证据；
+ *   (2) 删除“公开旁路”：纯 evaluator 改为 **module-internal**，外部唯一正式入口是
+ *       `evaluateVerifiedLearningRecords()`，其结果带 provenance（U5 candidate 只能绑定带 provenance 的评估）。
  *
- * 硬约束：
- *   - 纯离线、确定性、**无网络**（REAL_MODEL_NETWORK / PAID_MODEL_CALLS = HOLD）；
- *   - 只读投影，不写任何存储，不建立第二 Meta Evidence Store；
- *   - 只观察：不修改 Policy / Guard / Router / Action Runtime；AUTO_PROMOTION = OFF；
- *   - 分母为 0 时返回 `null`（defined = false），不返回 0 或 NaN 冒充“成功率”。
+ * 口径（MSG-20261005-61 前置已确认）：
+ *   resolved = SUCCESS + FAILURE + REJECTED；PARTIAL / MANUAL_REVIEW / UNKNOWN 单独报告，不入分母；
+ *   分母为 0 → successRate = null（不伪造成 0/NaN）；禁止 successCount / allRecords 作为正式指标。
+ *
+ * 硬约束：纯离线、确定性、无网络、无真实模型调用、只读零写入、无第二 Meta Evidence Store；
+ * 不修改 Policy / Guard / Router / Action Runtime；AUTO_PROMOTION = OFF。
  */
 
 import { createHash } from 'node:crypto';
@@ -43,7 +44,15 @@ export const OFFLINE_EVALUATION_BOUNDARY = {
   unresolvedInSuccessRateDenominator: 'FORBIDDEN',
   forbiddenMetric: 'successCount / allRecords（禁止作为正式质量指标）',
   zeroDenominator: 'NULL_NOT_ZERO（分母为 0 时 successRate = null，不伪造成 0）',
+  rateSemantics:
+    'failureRate = (FAILURE + REJECTED) / resolved = NON_SUCCESS_RATE（REJECTED 是 failureRate 的子集；failureRate 与 rejectedRate 不互斥，三率相加不为 100%）',
   verifiedOnly: true,
+  rawEvaluator: 'MODULE_INTERNAL（不导出；正式入口仅 evaluateVerifiedLearningRecords）',
+  verifiedEntry: 'evaluateVerifiedLearningRecords（先做 U2 trusted lineage binding）',
+  evaluationIdentity:
+    'evaluationVersion + datasetVersion + sorted verified outcomeDigests + sorted excluded{digest,reason} + metric result',
+  contextInIdentity: 'IMPLIED_BY_VERIFIED_OUTCOME_DIGESTS（provider/domain/evidenceQuality/humanIntervention/recoveryAmount 变化 → outcome digest 变化 → evaluationDigest 变化）',
+  callerSuppliedEvaluationResult: 'FORBIDDEN（无 provenance 的评估结果不得进入 U5 candidate）',
   secondMetaEvidenceStore: 'FORBIDDEN',
   productionWrite: 'HOLD',
 } as const;
@@ -62,7 +71,12 @@ export const OFFLINE_METRIC_DEFINITIONS = [
   },
   {
     key: 'failureRate',
-    definition: 'failureCount / resolvedDenominator（FAILURE + REJECTED）',
+    definition: '（FAILURE + REJECTED）/ resolvedDenominator = NON_SUCCESS_RATE',
+    denominator: 'RESOLVED（分母为 0 → null）',
+  },
+  {
+    key: 'rejectedRate',
+    definition: 'REJECTED / resolvedDenominator（REJECTED ⊂ failureRate，两率不互斥）',
     denominator: 'RESOLVED（分母为 0 → null）',
   },
   {
@@ -73,12 +87,14 @@ export const OFFLINE_METRIC_DEFINITIONS = [
 ] as const;
 
 /** 禁止作为正式指标的键（保留在契约里，便于审计核对未实现）。 */
-export const OFFLINE_FORBIDDEN_METRIC_KEYS = ['successRateOverAllRecords', 'overallSuccessRate', 'successCountOverAllRecords'] as const;
+export const OFFLINE_FORBIDDEN_METRIC_KEYS = [
+  'successRateOverAllRecords',
+  'overallSuccessRate',
+  'successCountOverAllRecords',
+] as const;
 
 export interface OfflineEvaluationOptions {
   datasetVersion?: string;
-  /** U2/U3 路径中未通过 trusted binding 而被排除的记录（仅如实登记，不参与任何分母）。 */
-  excluded?: ReadonlyArray<{ digest: string; reason: string }>;
 }
 
 export interface ResolvedBreakdown {
@@ -90,6 +106,7 @@ export interface ResolvedBreakdown {
   failureCount: number;
   rejectedCount: number;
   successRate: number | null;
+  /** NON_SUCCESS_RATE：(FAILURE + REJECTED) / resolved；REJECTED 是其子集（见 rejectedRate）。 */
   failureRate: number | null;
   rejectedRate: number | null;
 }
@@ -100,7 +117,15 @@ export interface UnresolvedBreakdown {
   byOutcome: Record<UnresolvedOutcome, number>;
 }
 
-export interface OfflineEvaluationResult {
+export interface OfflineEvaluationProvenance {
+  kind: 'VERIFIED_OFFLINE_EVALUATION';
+  ledgerProvenance: 'SERVER_OWNED_COMPOSITION';
+  verifiedOnly: true;
+  evaluationVersion: string;
+  datasetVersion: string;
+}
+
+export interface OfflineEvaluationMetrics {
   evaluationVersion: string;
   datasetVersion: string;
   totalRecords: number;
@@ -116,7 +141,20 @@ export interface OfflineEvaluationResult {
   };
   excludedCount: number;
   excluded: ReadonlyArray<{ digest: string; reason: string }>;
+  /** 绑定 evaluationVersion + datasetVersion + sorted verified outcomeDigests + sorted excluded + metric result。 */
   evaluationDigest: string;
+}
+
+export interface OfflineEvaluationResult extends OfflineEvaluationMetrics {
+  /** 仅由正式 verified 入口产生的评估结果才带 provenance。 */
+  provenance: OfflineEvaluationProvenance;
+}
+
+const VERIFIED_OFFLINE_EVALUATIONS = new WeakSet<OfflineEvaluationResult>();
+
+/** 只读 provenance：只有 evaluateVerifiedLearningRecords() 产出的评估才为 true。 */
+export function isVerifiedOfflineEvaluation(result: OfflineEvaluationResult | null | undefined): boolean {
+  return result !== null && result !== undefined && VERIFIED_OFFLINE_EVALUATIONS.has(result);
 }
 
 const bump = (map: Record<string, number>, key: string): void => {
@@ -126,28 +164,34 @@ const bump = (map: Record<string, number>, key: string): void => {
 const zeroResolved = (): Record<ResolvedOutcome, number> => ({ SUCCESS: 0, FAILURE: 0, REJECTED: 0 });
 const zeroUnresolved = (): Record<UnresolvedOutcome, number> => ({ PARTIAL: 0, MANUAL_REVIEW: 0, UNKNOWN: 0 });
 
-/**
- * 离线评估（纯函数、确定性）。
- * 只接受 canonical OutcomeRecord（且调用方应按 verified-only 口径传入）；
- * 任何未知 finalOutcome / 空 datasetVersion / 非数组输入 → fail-closed。
- */
-export function evaluateOfflineOutcomes(
-  records: readonly OutcomeRecord[] | null | undefined,
-  options: OfflineEvaluationOptions = {},
-): OfflineEvaluationResult {
-  if (!Array.isArray(records)) {
-    throw new Error('OFFLINE_EVALUATION_RECORDS_REQUIRED');
-  }
-  const datasetVersion = options.datasetVersion ?? 'learning-dataset/v1';
+const requireDatasetVersion = (datasetVersion: string): string => {
   if (typeof datasetVersion !== 'string' || datasetVersion.trim() === '') {
     throw new Error('OFFLINE_EVALUATION_DATASET_VERSION_REQUIRED');
   }
-  const excluded = Array.isArray(options.excluded) ? options.excluded : [];
+  return datasetVersion;
+};
+
+const sortAscending = (values: readonly string[]): string[] => [...values].sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+
+/**
+ * **module-internal**：纯 evaluator（不导出）。
+ * 只接受已验证记录；未知 finalOutcome / 空 datasetVersion / 非数组输入 → fail-closed。
+ */
+function evaluateOfflineOutcomesInternal(
+  records: readonly OutcomeRecord[],
+  options: OfflineEvaluationOptions,
+  excluded: ReadonlyArray<{ digest: string; reason: string }>,
+): OfflineEvaluationMetrics {
+  if (!Array.isArray(records)) {
+    throw new Error('OFFLINE_EVALUATION_RECORDS_REQUIRED');
+  }
+  const datasetVersion = requireDatasetVersion(options.datasetVersion ?? 'learning-dataset/v1');
 
   const byOutcome = zeroResolved();
   const unresolvedByOutcome = zeroUnresolved();
   const byEvidenceQuality: Record<string, number> = {};
   const byDomain: Record<string, number> = {};
+  const outcomeDigests: string[] = [];
   let humanInterventionCount = 0;
 
   for (const record of records) {
@@ -160,6 +204,7 @@ export function evaluateOfflineOutcomes(
     } else {
       unresolvedByOutcome[finalOutcome as UnresolvedOutcome] += 1;
     }
+    outcomeDigests.push(String(record.digest));
     bump(byEvidenceQuality, record.evidenceQuality);
     bump(byDomain, record.domain);
     if (record.humanIntervention === true) humanInterventionCount += 1;
@@ -172,7 +217,28 @@ export function evaluateOfflineOutcomes(
   const totalRecords = records.length;
   const defined = denominator > 0;
 
-  const result: OfflineEvaluationResult = {
+  // 评估身份：metric result + sorted verified outcomeDigests + sorted excluded{digest,reason}
+  const metricResult = [
+    'total=' + String(totalRecords),
+    'success=' + String(successCount),
+    'failure=' + String(byOutcome.FAILURE),
+    'rejected=' + String(byOutcome.REJECTED),
+    'partial=' + String(unresolvedByOutcome.PARTIAL),
+    'manual=' + String(unresolvedByOutcome.MANUAL_REVIEW),
+    'unknown=' + String(unresolvedByOutcome.UNKNOWN),
+    'resolved=' + String(denominator),
+    'unresolved=' + String(unresolvedCount),
+  ].join(',');
+  const preimage = [
+    OFFLINE_EVALUATION_VERSION,
+    datasetVersion,
+    metricResult,
+    'verified=' + sortAscending(outcomeDigests).join('+'),
+    'excluded=' +
+      sortAscending(excluded.map((item) => String(item.digest) + ':' + String(item.reason))).join('+'),
+  ].join('|');
+
+  return {
     evaluationVersion: OFFLINE_EVALUATION_VERSION,
     datasetVersion,
     totalRecords,
@@ -198,29 +264,14 @@ export function evaluateOfflineOutcomes(
     context: { humanInterventionCount, byEvidenceQuality, byDomain },
     excludedCount: excluded.length,
     excluded: [...excluded],
-    evaluationDigest: '',
+    evaluationDigest: 'offline-eval:' + createHash('sha256').update(preimage).digest('hex').slice(0, 16),
   };
-
-  const preimage = [
-    OFFLINE_EVALUATION_VERSION,
-    datasetVersion,
-    String(totalRecords),
-    String(successCount),
-    String(byOutcome.FAILURE),
-    String(byOutcome.REJECTED),
-    String(unresolvedByOutcome.PARTIAL),
-    String(unresolvedByOutcome.MANUAL_REVIEW),
-    String(unresolvedByOutcome.UNKNOWN),
-    String(excluded.length),
-  ].join('|');
-  result.evaluationDigest = 'offline-eval:' + createHash('sha256').update(preimage).digest('hex').slice(0, 16);
-  return result;
 }
 
 /**
- * verified-only 评估入口：先做 U2 trusted lineage binding（U3 学习路径），
- * 只有通过 binding 的记录进入评估；排除项如实登记。
- * lineage ledger 缺失或 provenance 不可信 → fail-closed（不评估、不返回 0 分母结果）。
+ * **唯一正式入口**：verified-only 离线评估。
+ * 先做 U2 trusted lineage binding（U3 学习路径），只有通过 binding 的记录进入评估；
+ * 排除项如实登记并参与 evaluationDigest。lineage ledger 缺失或 provenance 不可信 → fail-closed。
  */
 export async function evaluateVerifiedLearningRecords(
   lineageLedger: OutcomeLineageLedgerPort | null | undefined,
@@ -236,6 +287,19 @@ export async function evaluateVerifiedLearningRecords(
   if (!Array.isArray(records)) {
     throw new Error('OFFLINE_EVALUATION_RECORDS_REQUIRED');
   }
+  const datasetVersion = requireDatasetVersion(options.datasetVersion ?? 'learning-dataset/v1');
   const verified = await buildVerifiedLearningProjection(lineageLedger, records);
-  return evaluateOfflineOutcomes(verified.verifiedRecords, { ...options, excluded: verified.excluded });
+  const metrics = evaluateOfflineOutcomesInternal(verified.verifiedRecords, { datasetVersion }, verified.excluded);
+  const result: OfflineEvaluationResult = {
+    ...metrics,
+    provenance: {
+      kind: 'VERIFIED_OFFLINE_EVALUATION',
+      ledgerProvenance: 'SERVER_OWNED_COMPOSITION',
+      verifiedOnly: true,
+      evaluationVersion: OFFLINE_EVALUATION_VERSION,
+      datasetVersion,
+    },
+  };
+  VERIFIED_OFFLINE_EVALUATIONS.add(result);
+  return result;
 }
