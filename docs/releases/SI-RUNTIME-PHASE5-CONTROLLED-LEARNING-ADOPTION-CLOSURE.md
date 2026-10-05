@@ -5,15 +5,30 @@
 
 ## 1. 单元封板
 
-| 单元 | 内容 | 裁决 |
-|---|---|---|
-| P5-U1 | Candidate Review + Approval Verdict Contract（含 U1 FINAL / FINAL2） | PASS / CLOSED（MSG-20261005-66 / -70） |
-| P5-U2 | Rollback Plan Contract（含 U2 FINAL） | PASS / CLOSED（MSG-20261005-72） |
-| P5-U3 | Controlled Config Proposal（含 U3 FINAL / FINAL2） | PASS / CLOSED（MSG-20261005-75） |
-| P5-U4 | Canary / Shadow Evaluation（含 U4 FINAL…FINAL4） | PASS / CLOSED（MSG-20261005-81） |
-| P5-U5 | Controlled Adoption Review（含 U5 FINAL） | PASS / CLOSED（MSG-20261005-83） |
+| 单元 | 单元名称 | final reviewed HEAD | final verdict | 状态 |
+|---|---|---|---|---|
+| P5-U1 | Candidate Review + Approval Verdict Contract | `c96ec7e1` | PASS / CLOSED（MSG-20261005-70；PHASE5_U1_FINAL3_REQUIRED = NO） | CLOSED |
+| P5-U2 | Rollback Plan Contract | `b50ca7ab` | PASS / CLOSED（MSG-20261005-72；PHASE5_U2_FINAL2_REQUIRED = NO） | CLOSED |
+| P5-U3 | Controlled Config Proposal | `9a245254` | PASS / CLOSED（MSG-20261005-75；PHASE5_U3_FINAL3_REQUIRED = NO） | CLOSED |
+| P5-U4 | Canary / Shadow Evaluation | `edcbb826` | PASS / CLOSED（MSG-20261005-81；PHASE5_U4_FINAL5_REQUIRED = NO） | CLOSED |
+| P5-U5 | Controlled Adoption Review | `b3629ffc` | PASS / CLOSED（MSG-20261005-83；PHASE5_U5_FINAL2_REQUIRED = NO） | CLOSED |
 
 整体：**PHASE_5_CONTROLLED_LEARNING_ADOPTION = PASS / CLOSED**；`PHASE5_FUNCTIONAL_REVISION_REQUIRED = NO`。
+
+## 1b. 完整可信链（逐段已封板）
+
+```
+Verified Outcome / Learning Evidence            （PHASE 4：U3 learning evidence + RSI immutable ledger）
+  → Verified Offline Evaluation                 （PHASE 4：U4 offline evaluation，resolved denominator）
+  → Verified Meta-improvement Candidate         （PHASE 5 U1 之前的 PROPOSAL_ONLY candidate，provenance + fingerprint）
+  → Verified Candidate Approval                 （PHASE 5 U1 candidate review + approval verdict）
+  → Verified Rollback Plan                      （PHASE 5 U2，锚定 U2/U4 baseline snapshot）
+  → Verified Controlled Config Proposal         （PHASE 5 U3，target allowlist + 字段 value schema + from 绑定 trusted baseline）
+  → Verified Same-input Canary / Shadow Eval    （PHASE 5 U4，CohortRunSourcePort + VerifiedCohortRun 成员级绑定）
+  → Verified Controlled Adoption Review         （PHASE 5 U5，ELIGIBLE-only 门 + ticket/verdict provenance）
+```
+
+链上每一段都以 provenance + canonical fingerprint + deep-freeze 与 digest 绑定；任一段缺失或不一致一律 fail-closed。
 
 ## 2. 代码资产（apps/api/src/services/outcome-learning/）
 
@@ -30,6 +45,20 @@
 - `APPROVED` = `APPROVED_FOR_CONTROLLED_ADOPTION_PLANNING`；`REJECTED` = `REJECTED_NO_CONTROLLED_ADOPTION_PLAN`。
 - `apply` / `autoPromotion` / `productionRollout` / Policy·Guard·Router·Action Runtime mutation = **FORBIDDEN**。
 - 真正的执行需另立 **Controlled Adoption Plan / Execution Gate** 单元（本轮不做）。
+
+### 永久边界登记
+
+```
+AUTO_APPLY    = FORBIDDEN
+AUTO_PROMOTION = FORBIDDEN
+AUTO_ROLLOUT  = FORBIDDEN
+POLICY_MUTATION = FORBIDDEN
+GUARD_MUTATION = FORBIDDEN
+ROUTER_MUTATION = FORBIDDEN
+ACTION_RUNTIME_MUTATION = FORBIDDEN
+APPROVED review = APPROVED_FOR_CONTROLLED_ADOPTION_PLANNING（无配置执行权限）
+REJECTED review = REJECTED_NO_CONTROLLED_ADOPTION_PLAN（无配置执行权限）
+```
 
 ## 4. 未解锁边界（HOLD / FORBIDDEN）
 
