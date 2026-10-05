@@ -149067,3 +149067,126 @@ META_IMPROVEMENT_INTEGRATED = false
 PRODUCTION_READY = false
 ```
 
+### [MSG-20261005-61] PHASE 4 U3 FINAL 裁决 = PASS / CLOSED（IMMUTABLE_EVIDENCE_LEDGER_WIRING = PASS / VERIFIED_ONLY = PASS / APPEND_ONLY = PASS / EXISTING_RSI_LEDGER_REUSE = PASS；PHASE4_U3_FINAL2_REQUIRED = NO；无 U3 阻断修改，U4/U5 继续授权）， reviewed ref 006cc912
+
+```text
+
+DECISION
+
+IMMUTABLE_EVIDENCE_LEDGER_WIRING = PASS
+VERIFIED_ONLY = PASS
+APPEND_ONLY = PASS
+EXISTING_RSI_LEDGER_REUSE = PASS
+PHASE_4_U3 = PASS / CLOSED
+PHASE4_U3_FINAL2_REQUIRED = NO
+Reviewed HEAD：006cc912
+授权继续 U4 / U5
+
+KEEP
+
+已确认 learning-evidence.ts 直接 import 并调用既有：
+services/autonomy/rsi-evidence-ledger.ts::appendRsiEvidence()
+duplicate evidence 由原账本返回 EVIDENCE_IMMUTABLE，不是 U3 自己模拟。
+原来的裸 createAppLearningEvidenceLedger({append}) 已删除。
+Learning evidence 映射到既有 RsiEvidenceRecord：
+kind = METRIC_RESULT
+evidenceId = evidenceDigest
+subjectRef = outcome:<outcomeDigest>
+producedBy = outcome-learning
+supersedesId = null
+datasetVersion 空/空白已 fail-closed。
+unverified lineage 保持零写入。
+没有第二 Meta Evidence Store。
+Exact SHA 对应 GitHub Actions：仍未观测到 run。
+
+CHANGE
+
+无 U3 阻断修改。
+不需要 U3 FINAL2。
+
+RsiEvidenceLedgerStorePort { read, commit } 可以作为 server-owned composition root dependency 保留；不要继续无限向下加 provenance。
+
+但未来正式 composition 必须保证它只由服务端创建，不得来自 HTTP/body/client。
+
+RISKS
+
+U3 当前关闭的是：
+
+ARCHITECTURE / CONTRACT IMMUTABILITY = PASS
+
+不是：
+
+PRODUCTION_DURABLE_ATOMIC_LEDGER = PASS
+
+因为现在 read() → appendRsiEvidence() → commit() 的真实数据库持久化、跨进程并发、事务原子性尚未在本单元证明。
+
+这属于 production persistence wiring，不应重新打开 U3。
+
+保留两个非阻断债务：
+
+evidenceDigest 当前 SHA-256 截 16 hex；长期持久化建议完整 SHA-256。
+P2E-DB5 test-isolation debt。
+
+TEST
+
+本轮关键验收已覆盖：
+
+正式 adapter → 真实 appendRsiEvidence()；
+duplicate → EVIDENCE_IMMUTABLE；
+duplicate 后账本仍只有 1 条；
+不同 outcome 可 append 新 evidence；
+旧 evidence 不覆盖/删除；
+fake learning ledger → REJECT；
+空 datasetVersion → 零写入；
+unverified lineage → 零写入；
+verified-only 正常路径 → PASS。
+
+因此 92/93、946/947 中唯一 P2E-DB5 既有隔离问题不阻断 U3 closure。
+
+NEXT
+
+进入 U4 — Offline Evaluation。
+
+必须明确正式评估分母，建议至少拆开：
+
+resolved = SUCCESS + FAILURE + REJECTED
+
+并分别报告：
+
+PARTIAL
+MANUAL_REVIEW
+UNKNOWN
+
+不要让后三类默认进入 success-rate 分母。
+
+随后 U5 — Meta-improvement Candidate Proposal：
+
+允许：
+
+verified evidence → offline evaluation → candidate proposal
+
+禁止：
+
+candidate → 自动修改 Policy / Guard / Router / Action Runtime
+
+PRODUCTION
+
+继续全部 HOLD：
+
+REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing
+
+继续：
+
+SECOND_* = FORBIDDEN
+L5_RELAXATION = FORBIDDEN
+
+保持：
+
+MODEL_GATEWAY_RUNTIME_WIRED = false
+ACTION_RUNTIME_PRODUCTION_ENABLED = false
+META_IMPROVEMENT_INTEGRATED = false
+PRODUCTION_READY = false
+
+U3 正式封板。
+```
+
