@@ -65,7 +65,7 @@ TEST_EVIDENCE             = standing-authorization 19/19（覆盖验收 1–12�
 | 11 | 并发·重复执行保持 exactly-once | ⑪ | 判定稳定 + wiringDigest 一致 + executionPerformed=false |
 | 12 | authorization version change 后旧执行权不能继续使用 | ⑫ | 旧版本 DENY（VERSION_STALE）；对齐新版本后 SATISFIED |
 
-## 5. SA-3（已完成）：接入既有 approval-verifier / guard-enforcement
+## 5. SA-3（已完成，head `9e46cbe5`）：接入既有 approval-verifier / guard-enforcement
 
 * `approval-verifier.ts`：`verifyApprovalOrThrow` 新增**可选** `standingAuthorization` 参数（既有调用方不传 → 行为完全不变）：
   - `decision=ALLOW` 且 `authorizedBy=STANDING_AUTHORIZATION` 且 `satisfiedGates` **仅含 humanApproval** 且 `action` 匹配 → 放行并标记 `authorizedBy='STANDING_AUTHORIZATION'`；
