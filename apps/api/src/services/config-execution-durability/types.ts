@@ -74,6 +74,7 @@ export interface ReservationView {
   authorizationVerdictDigest: string;
   authorizationTicketDigest: string;
   status: ConfigExecutionReservationState;
+  baselineConfigFingerprint: string;
   executionAttempt: number;
   ownerRef: string | null;
   leaseId: string | null;

@@ -8,3 +8,4 @@ export * from './reservation';
 export * from './lease';
 export * from './recovery';
 export * from './production-current-config-adapter';
+export * from './prisma-durable-store';
