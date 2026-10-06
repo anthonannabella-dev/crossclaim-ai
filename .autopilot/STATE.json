@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "490bef12",
+  "head": "44f07162",
   "status": "RECONCILED",
   "current_task": "RSI 生产可执行闭环（7 点收口）：RSI_RUNTIME_READY = PASS；MODEL_PROVIDER_READY = 本地仿真已接线（真实网络/付费 HOLD）；PERSISTENCE_READY = ephemeral 已验证、durable 需宿主非生产 DATABASE_URL；REBOOT_RECONCILE_READY = NOT_IMPLEMENTED（下一单元）；SYSTEMD_VALIDATED = 需宿主 Linux 实机",
   "next_task": "BG-016 单一 Acceptance Head + 四份状态一致 guard（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍 HOST_ACTION_REQUIRED 或 HOLD",
@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-96",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-06T09:09:24.507Z",
+  "updated_at": "2026-10-06T09:17:26.619Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -49,17 +49,17 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
-  "continuous_execution": "COMPLETE（Standing Authorization SA-1…SA-4 全部 CLOSED 并 push；SAFE_CONTINUATION_QUEUE = []）",
-  "next_execution_unit": "无（队列为空）。后续如需「逐调用点默认启用低风险自动执行」或调整高金额阈值，须 HOST / 架构另行授权。",
+  "continuous_execution": "RUNNING（Standing Authorization SA-1…SA-3b 完成并 push；SA-4b / FE-1 / BE-1 / REL-1 / FINAL 待执行）",
+  "next_execution_unit": "SA-4b —— 全量验证横扫（regression + tsc + prisma validate + 定向安全套件）+ 报告与矩阵更新。",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-06T09:09:24.507Z",
-  "state": "STANDING_AUTHORIZATION_COMPLETE_AWAITING_HOST",
-  "last_action": "完成 Standing Authorization SA-4（490bef12）：全量回归 441 文件 / 4442 tests → 4440 passed + 2 failed（两个失败均为既有 DB 套件并行隔离 flake：recovery-si-phase2-e-db P2E-DB5 单独 20/20、customs-entry-fact-store-db G8 单独 7/7；均未被本程序改动）；更新回报（§5 SA-3 接线 + §6 全量回归证据 + 返回值）与 CURRENT-SI-RSI-STATUS 能力矩阵（补 STANDING_AUTHORIZATION=YES(v1) / LOW_RISK_AUTONOMY=PARTIAL）。SA-1…SA-4 全部 CLOSED，队列清空。",
-  "last_action_at": "2026-10-06T09:09:24.507Z",
-  "next_action": "保持安静：仅在 HOST 下发新授权或出现真实 HOST_ACTION_REQUIRED 时恢复执行。",
-  "current_head": "490bef12",
-  "last_completed_head": "490bef12",
-  "reviewed_head": "490bef12",
+  "last_tick_at": "2026-10-06T09:17:26.619Z",
+  "state": "CONTINUOUS_AUTOPILOT_RUNNING",
+  "last_action": "完成并 push SA-3b（44f07162）：新增 standing-authorization-resolver（无授权/撤销/过期/不匹配 → 声明自动执行时 DENY、未声明时 null；超范围/高金额/受监管/证据冲突/无历史置信度 → REQUIRE_APPROVAL；有效授权+TIER_1+gate 全满足 → ALLOW），并把可选判定透传接入真实入口 hitl-submission（workflow/http-routes 6 处 + recovery/http-request）与 action-pack-runtime（RSI 执行链）；未提供参数时行为完全不变。测试 14/14 + 5/5，SA-3b 回归 307/307，tsc 0。同时出具授权持久化最小 Schema Delta 审计请求（未实施），如实标注\"授权记录暂无持久化表\"这一剩余缺口。",
+  "last_action_at": "2026-10-06T09:17:26.619Z",
+  "next_action": "跑全量 vitest、api tsc、prisma validate 与 action-guard/tenant-isolation/concurrency/SI-RSI/SA 定向套件；更新两份文档并记录 exact HEAD 与 test counts。",
+  "current_head": "44f07162",
+  "last_completed_head": "44f07162",
+  "reviewed_head": "44f07162",
   "claim_submit_batch": {
     "verdict": "PASS",
     "message_id": "MSG-20261001-07",
@@ -5168,7 +5168,13 @@
   "runner_status": "RUNNING",
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
-  "safe_continuation_queue": [],
+  "safe_continuation_queue": [
+    "SA-4b 全量 regression + tsc + prisma validate + architecture/tenant isolation/action guard/approval/concurrency 相关测试；更新 STANDING-AUTHORIZATION-V1-REPORT.md 与 CURRENT-SI-RSI-STATUS.md；给出 exact HEAD / test counts / remaining HOLD。",
+    "FE-1 前端产品化增量审计：确认 UI-1…UI-8 仍 CLOSED 且后端接线无漂移（Shell/Dashboard、Opportunities、Accounts·Connections、Case pipeline、Claim Package、Money·Billing·Plan、Customs、Loading/Error/Empty/A11y/i18n）；校验 CUSTOMER_UI_HARDCODED_STRING_COUNT=0、5 locale key parity、submitted≠won≠settled≠recovered≠billable、HOLD 如实表达；跑 web tsc / web build / UI render checks。",
+    "BE-1 后端增量缺口审计：SI/RSI、Standing Authorization、Action Guard/HITL、CanonicalFact/Evidence/Opportunity、Case/Claim/Appeal、Customs/Duty、Provider/Carrier/Platform adapters、Settlement/Ledger/Fee/Billing、OAuth/Connection lineage、multi-platform·account、audit/idempotency/transaction/concurrency/tenant isolation、kill switch/external write gates；B1 Fastify 若仍 DESIGN ONLY 不重写 Node HTTP；B2 只补真实接入必需缺口；B3 复用 Carrier Queue；B4–B10 GAP ANALYSIS。",
+    "REL-1 main 与 gate/7 divergence 处置：查明 main 独有 commit 5a340bc0 内容、判断保留/移植、生成安全 integration plan；合并前跑 fresh DB/migrations/prisma validate/api tsc/web tsc/web build/full regression/security negative/tenant isolation/concurrency/SI-RSI/SA/Customs golden path；全绿后建立 release/integration HEAD。",
+    "FINAL 输出最终状态报告（FRONTEND_PRODUCTIZATION / BACKEND_PRODUCTIZATION / SI_RSI_INTEGRATION / STANDING_AUTHORIZATION / CUSTOMS_DUTY_RECOVERY / REAL_PROVIDER_INTEGRATION / REAL_EXTERNAL_WRITE / PAYMENT_AUTOPAY / B1_FASTIFY / B2_INTEGRATION_FOUNDATION / B4_B10_GAP_STATUS / MAIN_DIVERGENCE_RESOLUTION / FULL_REGRESSION / WEB_BUILD / API_TSC / WEB_TSC / FINAL_RELEASE_HEAD / PRODUCTION_READY / HOST_ACTION_REQUIRED）。"
+  ],
   "full_autonomous_internal_execution": "VERIFIED",
   "dispatcher_acceptance": {
     "at": "2026-10-03T14:47:59.226Z",
@@ -9307,7 +9313,7 @@
   "AUDIT_REVISE_LOOP_AUTO_CONTINUE": true,
   "HOST_LIMIT_MEANS_STOP": false,
   "STOP_ONLY_ON_TRUE_HOST_DEPENDENCY_OR_COMPLETE": true,
-  "CONTINUATION_REQUIRED": false,
+  "CONTINUATION_REQUIRED": true,
   "heartbeat": {
     "automation_id": "crossclaim-ai-bridge-5min",
     "name": "crossclaim-si-watchdog-1min",
@@ -9336,7 +9342,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-06T09:09:24.507Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-06T09:17:26.619Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -11639,12 +11645,11 @@
   },
   "phase6_prod_durability": "PASS / CLOSED（durability / concurrency / recovery / audit substrate；production mutation 仍 NOT AUTHORIZED）",
   "active_program": {
-    "id": "STANDING-AUTHORIZATION-RISK-TIERED-EXECUTION",
+    "id": "PRODUCTIZATION-RELEASE-INTEGRATION",
     "authorized_at": "2026-10-06",
     "branch": "gate/7-commercial-validation",
-    "current_unit": null,
-    "status": "COMPLETE",
-    "baseline_head": "834e99e8",
+    "current_unit": "SA-4b",
+    "status": "RUNNING",
     "report": "docs/releases/STANDING-AUTHORIZATION-V1-REPORT.md"
   },
   "program_progress": {
@@ -11976,6 +11981,18 @@
       "evidence": {
         "files": "docs/releases/STANDING-AUTHORIZATION-V1-REPORT.md（§6 全量回归证据 + SA-3 接线 + 返回值）+ docs/releases/CURRENT-SI-RSI-STATUS.md（补 STANDING_AUTHORIZATION / LOW_RISK_AUTONOMY 行）",
         "tests": "全量 441 文件 / 4442 tests → 4440 passed + 2 failed（recovery-si-phase2-e-db P2E-DB5 单独 20/20 PASS；customs-entry-fact-store-db G8 单独 7/7 PASS；两者均为既有并行隔离 flake、未被本程序改动）；tsc 0"
+      }
+    },
+    "SA-3b": {
+      "name": "授权判定解析器 + 真实调用点接线（hitl-submission / action-pack-runtime 可选透传）",
+      "status": "DONE / PUSHED",
+      "head": "44f07162",
+      "evidence": {
+        "files": "services/standing-authorization/standing-authorization-resolver.ts（新增）+ services/action-guard/hitl-submission.ts + services/action-runtime/action-pack-runtime.ts（各 +8 行可选透传）+ 两个新测试套件 + STANDING-AUTHORIZATION-PERSISTENCE-DELTA-REQUEST.md（未实施）",
+        "tests": "standing-authorization-resolver 14/14 + standing-authorization-callsite-wiring 5/5 + 既有 SA 套件（19/19、10/10）；SA-3b 回归 32 文件 / 307 tests PASS；tsc 0",
+        "coverage": "hitl-submission 边界（被 workflow/http-routes 6 处 + recovery/http-request 使用）覆盖 claim.submit / appeal.submit / recovery.manual_submit 等受保护提交；action-pack-runtime 覆盖 RSI Action Pack 执行链",
+        "semantics": "未提供 standingAuthorization 时行为完全不变；声明自动执行但授权缺失/撤销/过期/不匹配 → DENY；超范围/高金额/受监管/证据冲突/无历史置信度 → REQUIRE_APPROVAL（回退 HITL）；有效授权 + TIER_1 + gate 全满足 → ALLOW(authorizedBy=STANDING_AUTHORIZATION)；越权 satisfiedGates → OVERREACH 且零副作用",
+        "gap": "授权记录无持久化表（调用方注入 loadAuthorization 端口）→ 已出最小 Schema Delta 审计请求，未实施"
       }
     }
   },
