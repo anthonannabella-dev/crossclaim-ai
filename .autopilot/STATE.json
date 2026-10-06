@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "456149db",
+  "head": "e7cde93f",
   "status": "RECONCILED",
   "current_task": "RSI 生产可执行闭环（7 点收口）：RSI_RUNTIME_READY = PASS；MODEL_PROVIDER_READY = 本地仿真已接线（真实网络/付费 HOLD）；PERSISTENCE_READY = ephemeral 已验证、durable 需宿主非生产 DATABASE_URL；REBOOT_RECONCILE_READY = NOT_IMPLEMENTED（下一单元）；SYSTEMD_VALIDATED = 需宿主 Linux 实机",
   "next_task": "BG-016 单一 Acceptance Head + 四份状态一致 guard（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍 HOST_ACTION_REQUIRED 或 HOLD",
@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-96",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-06T07:12:58.767Z",
+  "updated_at": "2026-10-06T07:43:17.934Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -49,17 +49,17 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
-  "continuous_execution": "COMPLETE（A 部分 A-S1…A-S10 + B 部分 B-S2…B-S12 全部完成并 push；SAFE_CONTINUATION_QUEUE = []）",
-  "next_execution_unit": "无（队列为空）。后续如需推进 UK/EU Rule Pack、真实 provider/broker 写入、生产启用等，须 HOST 另行授权（均当前 HOLD）。",
+  "continuous_execution": "RUNNING（SI/RSI GAP-CLOSURE：A 完成并 push；B/C/D/E 待执行）",
+  "next_execution_unit": "B —— RSI-REBOOT-DURABLE-RECONCILE FINAL。",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-06T07:12:58.767Z",
-  "state": "PROGRAM_COMPLETE_AWAITING_HOST",
-  "last_action": "完成并 push B-S12（456149db）：全链 PG E2E（真实库证据 → B-S5 证据链 → B-S6 匹配 → B-S7 规则包/期限 → B-S8 Drawback 路由 → B-S9 报关 15 门槛 → B-S10 Claim-Ready vNext → B-S11 成功费资格）9/9；长期安全断言（跨 tenant/account 隔离、全链不改证据、OCR≠Truth、9801/9802≠drawback）；顺带修复证据键抽取（补 hts、修正 invoiceNo 截断与误匹配）；出具最终回报 docs/releases/CUSTOMS-DUTY-RECOVERY-FINAL-REPORT.md。全量回归 4343/4344（唯一失败为既有 isolation debt）、tsc 0。A/B 两部分全部交付，队列清空。",
-  "last_action_at": "2026-10-06T07:12:58.767Z",
-  "next_action": "保持安静：仅在 HOST 下发新授权或出现真实 HOST_ACTION_REQUIRED 时恢复执行。",
-  "current_head": "456149db",
-  "last_completed_head": "456149db",
-  "reviewed_head": "456149db",
+  "last_tick_at": "2026-10-06T07:43:17.934Z",
+  "state": "CONTINUOUS_AUTOPILOT_RUNNING",
+  "last_action": "完成并 push SI/RSI GAP-CLOSURE 步骤 A（e7cde93f，docs-only）：新建唯一现行状态件 docs/releases/CURRENT-SI-RSI-STATUS.md（含能力矩阵与证据绑定；未完成能力一律不写 PASS），并给 47 份含过期状态陈述的历史文档加 HISTORICAL_SNAPSHOT / SUPERSEDED_BY=c0b61792 横幅（仅前置、原文未改写、历史裁决未删除）。",
+  "last_action_at": "2026-10-06T07:43:17.934Z",
+  "next_action": "先审计既有 RSI 持久化与 reconcile，再最小实现并绑定 exact HEAD + tests。",
+  "current_head": "e7cde93f",
+  "last_completed_head": "e7cde93f",
+  "reviewed_head": "e7cde93f",
   "claim_submit_batch": {
     "verdict": "PASS",
     "message_id": "MSG-20261001-07",
@@ -5168,7 +5168,12 @@
   "runner_status": "RUNNING",
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
-  "safe_continuation_queue": [],
+  "safe_continuation_queue": [
+    "B RSI-REBOOT-DURABLE-RECONCILE FINAL（Incident/Task/Candidate/Evaluation/Promotion/Rollback/Lease durable SSOT；reboot 不重复；stale lease recovery + lease fencing；exactly-one logical continuation；repeated startup 幂等；duplicate event 幂等；crash-mid-transition 可恢复；Builder/Judge 分离；immutable evidence；Test C/F 闭环；systemd 实机 = HOST_ACTION_REQUIRED 而非自证）。",
+    "C EXPERIENCE MEMORY v1（结构化/可审计/可回滚/server-derived；tenant·account·provider·domain scoped；append-only raw experience；ruleVersion/窗口/source count/confidence/source refs；FACT/AGGREGATE/HEURISTIC；LOW_SAMPLE→ADVISORY|FAIL_CLOSED、CONFLICT→禁自动学习、STALE→DOWNWEIGHT|IGNORE；只影响 recommendation/ranking/confidence/planning）。",
+    "D META LEARNING / CONTROLLED IMPROVEMENT v1（Outcome→Experience→Proposal→Candidate→Replay→Benchmark→Security/Policy Eval→Independent Judge→Guard→Sandbox Adoption→Observation→Regression Detection→Rollback；无 verifiable reward/KPI 不得自动 promote；不得改/绕唯一 Policy Core·Guard·Action Catalog、不得自行扩权/关 Kill Switch/开 Payment·Customs Filing）。",
+    "E RECOVERY SIMULATION v1（Recovery Decision Simulator：≥2–3 方案对比 SUBMIT_NOW/COLLECT_MORE_EVIDENCE/HUMAN_OR_BROKER_REVIEW/DEFER；输出 expectedRecovery/successProbability/calibratedConfidence/expectedCost/expectedTime/downsideRisk/requiredEvidence/policy·guard constraints/sourceExperienceRefs；默认 externalActionPerformed=false；经验不足 → fallback 确定性 Rule/Policy；禁止 LLM 编造概率与金额）。"
+  ],
   "full_autonomous_internal_execution": "VERIFIED",
   "dispatcher_acceptance": {
     "at": "2026-10-03T14:47:59.226Z",
@@ -9307,7 +9312,7 @@
   "AUDIT_REVISE_LOOP_AUTO_CONTINUE": true,
   "HOST_LIMIT_MEANS_STOP": false,
   "STOP_ONLY_ON_TRUE_HOST_DEPENDENCY_OR_COMPLETE": true,
-  "CONTINUATION_REQUIRED": false,
+  "CONTINUATION_REQUIRED": true,
   "heartbeat": {
     "automation_id": "crossclaim-ai-bridge-5min",
     "name": "crossclaim-si-watchdog-1min",
@@ -9336,7 +9341,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-06T07:12:58.767Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-06T07:43:17.934Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -11639,18 +11644,20 @@
   },
   "phase6_prod_durability": "PASS / CLOSED（durability / concurrency / recovery / audit substrate；production mutation 仍 NOT AUTHORIZED）",
   "active_program": {
-    "id": "PROVIDER-FOLLOWUP-INTELLIGENCE + CUSTOMS-DUTY-CLOSURE",
+    "id": "SI-RSI-GAP-CLOSURE",
     "authorized_at": "2026-10-06",
     "branch": "gate/7-commercial-validation",
-    "transport": "PLATFORM_WRITE_TRANSPORT_ENABLED = false",
-    "boundaries": [
-      "REAL PLATFORM WRITE / REAL BROKER·ABI·CBP WRITE = HOLD",
-      "PRODUCTION CREDENTIALS = HOLD / ABSENT",
-      "AUTO_PAYMENT / 自动扣佣 = HOLD",
-      "Browser Automation 不作为生产 fallback；不存 Seller Center 账号密码/Cookie/Session；不绕 CAPTCHA/MFA",
-      "OCR / LLM 不得直接写 Canonical Truth；LLM 不得决定 eligibility / 金额 / successFeeEligible",
-      "不用单一 SUBMITTED 混淆「内部准备完成」与「平台已收到」"
-    ]
+    "order": [
+      "A",
+      "B",
+      "C",
+      "D",
+      "E"
+    ],
+    "current_unit": "B",
+    "status": "RUNNING",
+    "baseline_head": "cdd95258",
+    "current_status_doc": "docs/releases/CURRENT-SI-RSI-STATUS.md"
   },
   "program_progress": {
     "A-S1": {
@@ -11864,6 +11871,16 @@
         "files": "apps/api/src/__tests__/customs-duty-recovery-chain-e2e-db.test.ts（新增 9/9）、apps/api/src/services/provider-support/prisma-evidence-source.ts（补 hts / 修正 invoiceNo 抽取）、docs/releases/CUSTOMS-DUTY-RECOVERY-FINAL-REPORT.md（最终回报）",
         "tests": "本 slice 9/9；全量回归 435 文件 / 4344 tests → 4343 passed + 1 failed = recovery-si-phase2-e-db P2E-DB5（既有 isolation debt，单独运行 20/20 PASS）；tsc 0",
         "report": "docs/releases/CUSTOMS-DUTY-RECOVERY-FINAL-REPORT.md（含 IMPLEMENTED_FILES / SCHEMA_DELTA / MIGRATIONS / TEST_COUNTS / 边界核对表 / 10 条长期安全不变量 / FINAL_VERDICT）"
+      }
+    },
+    "SI-RSI-A": {
+      "name": "DOC-STATE-RECONCILIATION（docs-only）：唯一 CURRENT SI/RSI STATUS + 47 份历史文档 HISTORICAL_SNAPSHOT/SUPERSEDED_BY 横幅",
+      "status": "DONE / PUSHED",
+      "head": "e7cde93f",
+      "evidence": {
+        "files": "docs/releases/CURRENT-SI-RSI-STATUS.md（新增，唯一现行状态件）+ 47 份历史 SI/RSI 文档前置横幅（仅前置，原文未改写）",
+        "tests": "docs-only（无代码变更、无 tsc/测试影响）",
+        "status_matrix": "SI_RUNTIME_WIRED=YES / RECOVERY_SI_PACK_WIRED=YES / REASONING_MODEL_GATEWAY=PARTIAL / CONTROLLED_RSI_READY=PARTIAL / LONG_HORIZON_RUNTIME=PARTIAL / RSI_REBOOT_RECONCILE=PARTIAL / OPERATIONAL_MEMORY=PARTIAL / EXPERIENCE_MEMORY=NO / META_LEARNING=PARTIAL / RECOVERY_SIMULATION=NO / REAL_MODEL_RUNTIME=HOLD_EXTERNAL / REAL_PROVIDER_RUNTIME=HOLD_EXTERNAL / EXTERNAL_ACTION_RUNTIME=HOLD_EXTERNAL / PRODUCTION_READY=NO"
       }
     }
   },
