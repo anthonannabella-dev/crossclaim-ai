@@ -10,6 +10,10 @@
 
 export const CONFIG_EXECUTION_DURABILITY_VERSION = 'controlled-config-execution-durability/v1';
 
+// recovery basis 保留 sentinel：migration 对无法证明历史 liveConfigVersion 的既有行回填该值；
+// 该值**不是**版本号，绝不能参与 version 比较，也不得被新 reservation 采用。
+export const RECOVERY_BASIS_UNKNOWN_VERSION = 'UNKNOWN';
+
 // 环境：NO PRODUCTION ENABLEMENT —— 生产环境在本单元不被接受。
 export const CONFIG_EXECUTION_ENVIRONMENTS = ['SANDBOX'] as const;
 export type ConfigExecutionEnvironment = (typeof CONFIG_EXECUTION_ENVIRONMENTS)[number];

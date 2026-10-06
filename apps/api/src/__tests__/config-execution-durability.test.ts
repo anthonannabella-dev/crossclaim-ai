@@ -8,6 +8,7 @@ import * as durability from '../services/config-execution-durability';
 import {
   CONFIG_EXECUTION_RESULT_CODE_STATUS,
   CONFIG_EXECUTION_RESULT_SEMANTICS,
+  RECOVERY_BASIS_UNKNOWN_VERSION,
   ConfigExecutionDurabilityError,
   assertConfigExecutionEnvironment,
   assertConfigExecutionTransition,
@@ -540,6 +541,50 @@ describe('P6-PROD-U1 FINAL2 · durable recovery basis（纯决策层）', () => 
         now: NOW,
       }),
     ).toThrow(/preConfigVersion/);
+  });
+
+  it('FINAL3：保留 sentinel UNKNOWN 不得被新 reservation 采用（拒绝创建）', () => {
+    expect(() =>
+      planReservation({
+        basis: basis({ preConfigVersion: RECOVERY_BASIS_UNKNOWN_VERSION }),
+        idempotencyKey: 'idem-1',
+        now: NOW,
+      }),
+    ).toThrow(/UNKNOWN/);
+  });
+
+  it('FINAL3：历史 UNKNOWN basis 一律 fail-closed（不得 SAFE_TO_RETRY / RECOVERED_COMMITTED）', () => {
+    const view = reservation({ preConfigVersion: RECOVERY_BASIS_UNKNOWN_VERSION });
+    const targetLike = classifyStrandedExecution({
+      status: 'EXECUTING',
+      lease: {
+        ownerRef: 'legacy',
+        leaseId: 'legacy-lease',
+        acquiredAt: new Date(NOW.getTime() - 60_000),
+        renewedAt: new Date(NOW.getTime() - 60_000),
+        expiresAt: new Date(NOW.getTime() - 1_000),
+      },
+      reservationExpiresAt: new Date(NOW.getTime() + 60_000),
+      now: NOW,
+      observation: { configFingerprint: 'post'.padEnd(64, '0'), version: 'cfg-2', pathValue: '0.85' },
+      expected: expectedFromReservation(view),
+    });
+    expect(targetLike).toMatchObject({ kind: 'NEEDS_RECONCILIATION', reason: 'RECOVERY_BASIS_INCOMPLETE' });
+    const preLike = classifyStrandedExecution({
+      status: 'EXECUTING',
+      lease: {
+        ownerRef: 'legacy',
+        leaseId: 'legacy-lease',
+        acquiredAt: new Date(NOW.getTime() - 60_000),
+        renewedAt: new Date(NOW.getTime() - 60_000),
+        expiresAt: new Date(NOW.getTime() - 1_000),
+      },
+      reservationExpiresAt: new Date(NOW.getTime() + 60_000),
+      now: NOW,
+      observation: { configFingerprint: 'f'.repeat(64), version: 'cfg-1', pathValue: '0.80' },
+      expected: expectedFromReservation(view),
+    });
+    expect(preLike).toMatchObject({ kind: 'NEEDS_RECONCILIATION', reason: 'RECOVERY_BASIS_INCOMPLETE' });
   });
 
   it('expectedFromReservation 完全由 durable 行重建（不看 caller 输入）', () => {

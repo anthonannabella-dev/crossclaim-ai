@@ -5,7 +5,11 @@
 //   · 观测到仍是 pre 值且 version 未变 → SAFE_TO_RETRY（无副作用证据，可重新取得 lease）
 //   · 观测到目标值但 version 未变 / 其它漂移 → NEEDS_RECONCILIATION（证据不足）
 
-import { isConfigExecutionTerminalState, type ConfigExecutionReservationState } from './state-machine';
+import {
+  RECOVERY_BASIS_UNKNOWN_VERSION,
+  isConfigExecutionTerminalState,
+  type ConfigExecutionReservationState,
+} from './state-machine';
 import {
   isLeaseActive,
 } from './lease';
@@ -74,6 +78,16 @@ export function classifyStrandedExecution(input: {
 
   if (isConfigExecutionTerminalState(status)) {
     return { kind: 'NOOP', reason: 'ALREADY_TERMINAL', status };
+  }
+
+  // 保留 sentinel：历史行（migration 回填 'UNKNOWN'）的 recovery basis 不完整 → 一律 fail-closed。
+  // 该值绝不参与 version 比较，因此不可能出现 SAFE_TO_RETRY / RECOVERED_COMMITTED。
+  if (expected.preConfigVersion === RECOVERY_BASIS_UNKNOWN_VERSION) {
+    return {
+      kind: 'NEEDS_RECONCILIATION',
+      reason: 'RECOVERY_BASIS_INCOMPLETE',
+      post: null,
+    };
   }
 
   if (status === 'RESERVED') {

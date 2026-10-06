@@ -33,6 +33,7 @@ import {
   type ConfigExecutionBasis,
   type PlannedReservation,
   type ReconciliationAction,
+  RECOVERY_BASIS_UNKNOWN_VERSION,
 } from '../services/config-execution-durability';
 
 const prisma = new PrismaClient();
@@ -744,6 +745,134 @@ describe('P6-PROD-U1 FINAL2 · durable recovery basis SSOT', () => {
     expect(row.status).toBe('EXECUTING');
     expect(await prisma.controlledConfigExecutionResult.count()).toBe(0);
     expect(await prisma.controlledConfigExecutionEvent.count({ where: { kind: 'STARTUP_RECONCILED' } })).toBe(0);
+  });
+});
+
+// ============================================================
+// FINAL3（MSG-20261005-95 LEGACY_UNKNOWN_PRE_VERSION_HANDLING）—— 保留 sentinel 'UNKNOWN' 一律 fail-closed
+// ============================================================
+describe('P6-PROD-U1 FINAL3 · legacy UNKNOWN recovery basis', () => {
+  /** 模拟 migration 回填的历史行：preConfigVersion = 'UNKNOWN'（无法再证明 liveConfigVersion）。 */
+  async function insertLegacyReservation(tag: string, status: 'RESERVED' | 'EXECUTING') {
+    const plan = planned(tag);
+    const executing = status === 'EXECUTING';
+    const row = await prisma.controlledConfigExecutionReservation.create({
+      data: {
+        reservationKey: plan.reservationKey,
+        immutableBasisDigest: plan.immutableBasisDigest,
+        authorizationVerdictDigest: plan.authorizationVerdictDigest,
+        authorizationTicketDigest: plan.authorizationTicketDigest,
+        planDigest: plan.planDigest,
+        candidateDigest: plan.candidateDigest,
+        proposalDigest: plan.proposalDigest,
+        controlledAdoptionDigest: plan.controlledAdoptionDigest,
+        rollbackPlanDigest: plan.rollbackPlanDigest,
+        baselineSnapshotDigest: plan.baselineSnapshotDigest,
+        baselineConfigFingerprint: plan.baselineConfigFingerprint,
+        preConfigVersion: RECOVERY_BASIS_UNKNOWN_VERSION,
+        environment: plan.environment,
+        executionMode: plan.executionMode,
+        target: plan.target,
+        configPath: plan.configPath,
+        fromValue: plan.fromValue,
+        toValue: plan.toValue,
+        idempotencyKey: plan.idempotencyKey,
+        idempotencyPayloadDigest: plan.idempotencyPayloadDigest,
+        status,
+        executionAttempt: executing ? 1 : 0,
+        ownerRef: executing ? 'legacy-worker' : null,
+        leaseId: executing ? 'legacy-lease' : null,
+        leaseAcquiredAt: executing ? new Date(NOW.getTime() - 300_000) : null,
+        leaseRenewedAt: executing ? new Date(NOW.getTime() - 300_000) : null,
+        leaseExpiresAt: executing ? new Date(NOW.getTime() - 1_000) : null,
+        reservationExpiresAt: plan.reservationExpiresAt,
+        reservedAt: NOW,
+        createdAt: NOW,
+        updatedAt: NOW,
+      },
+    });
+    return { plan, reservationId: row.id };
+  }
+
+  it('PGU-31 保留 sentinel 不得被新 reservation 采用（UNKNOWN → 拒绝创建）', () => {
+    expect(() =>
+      planReservation({
+        basis: basis('pgu31', { preConfigVersion: RECOVERY_BASIS_UNKNOWN_VERSION }),
+        idempotencyKey: 'idem-pgu31',
+        now: NOW,
+      }),
+    ).toThrow(/UNKNOWN/);
+  });
+
+  it('PGU-32 历史 UNKNOWN + path=to + version 前进 + 指纹变化 → 不得 RECOVERED_COMMITTED', async () => {
+    const { plan, reservationId } = await insertLegacyReservation('pgu32', 'EXECUTING');
+    const run = await runStartupReconciliation(prisma, {
+      now: LATER,
+      observe: () => ({
+        configFingerprint: 'post'.padEnd(64, '0'),
+        version: 'cfg-2',
+        pathValue: plan.toValue,
+      }),
+      reconciledBy: 'reconciler',
+    });
+    const row = await prisma.controlledConfigExecutionReservation.findUniqueOrThrow({
+      where: { id: reservationId },
+    });
+    expect(row.status).toBe('NEEDS_RECONCILIATION');
+    const result = await prisma.controlledConfigExecutionResult.findUniqueOrThrow({
+      where: { reservationId },
+    });
+    expect(result.resultCode).toBe('NEEDS_RECONCILIATION');
+    expect(result.postConfigVersion).toBeNull();
+    expect(run.summary.terminalized).toBe(1);
+  });
+
+  it('PGU-33 历史 UNKNOWN + path=from → 不得 SAFE_TO_RETRY（零 reclaim）', async () => {
+    const { plan, reservationId } = await insertLegacyReservation('pgu33', 'EXECUTING');
+    const run = await runStartupReconciliation(prisma, {
+      now: LATER,
+      observe: () => ({
+        configFingerprint: plan.baselineConfigFingerprint,
+        version: 'cfg-1',
+        pathValue: plan.fromValue,
+      }),
+      reconciledBy: 'reconciler',
+    });
+    expect(run.summary.reclaimed).toBe(0);
+    expect(
+      await prisma.controlledConfigExecutionEvent.count({ where: { kind: 'STARTUP_RECONCILED' } }),
+    ).toBe(0);
+    const row = await prisma.controlledConfigExecutionReservation.findUniqueOrThrow({
+      where: { id: reservationId },
+    });
+    expect(row.status).toBe('NEEDS_RECONCILIATION');
+  });
+
+  it('PGU-34 历史 UNKNOWN（RESERVED，从未 claim）→ 零写收敛，绝不自动成功/自动重试', async () => {
+    const { reservationId } = await insertLegacyReservation('pgu34', 'RESERVED');
+    const run = await runStartupReconciliation(prisma, {
+      now: LATER,
+      observe: () => ({
+        configFingerprint: 'post'.padEnd(64, '0'),
+        version: 'cfg-2',
+        pathValue: '0.85',
+      }),
+      reconciledBy: 'reconciler',
+    });
+    expect(run.summary.reclaimed).toBe(0);
+    const row = await prisma.controlledConfigExecutionReservation.findUniqueOrThrow({
+      where: { id: reservationId },
+    });
+    // 从未 claim 的行只能零写收敛为 CANCELLED（不自动成功、不进入 EXECUTING 终态族）
+    expect(row.status).toBe('CANCELLED');
+    const result = await prisma.controlledConfigExecutionResult.findUniqueOrThrow({
+      where: { reservationId },
+    });
+    expect(result.resultCode).toBe('CANCELLED');
+    expect(result.postConfigFingerprint).toBeNull();
+    expect(
+      await prisma.controlledConfigExecutionEvent.count({ where: { kind: 'STARTUP_RECONCILED' } }),
+    ).toBe(0);
   });
 });
 

@@ -7,6 +7,7 @@ import {
   CONFIG_EXECUTION_OUTBOX_TOPICS,
   CONFIG_EXECUTION_RESULT_CODE_STATUS,
   CONFIG_EXECUTION_RESULT_SEMANTICS,
+  RECOVERY_BASIS_UNKNOWN_VERSION,
   assertConfigExecutionEnvironment,
   type ConfigExecutionEvidenceSource,
   type ConfigExecutionReservationState,
@@ -54,11 +55,12 @@ export function planReservation(input: {
       `只接受 ${CONFIG_EXECUTION_MODES.join('/')}，收到 ${input.basis.executionMode}`,
     );
   }
-  // recovery 依据必须完整冻结：preConfigVersion 缺失 → 不得创建 reservation
-  if ((input.basis.preConfigVersion ?? '').trim().length === 0) {
+  // recovery 依据必须完整冻结：preConfigVersion 缺失或为保留 sentinel → 不得创建 reservation
+  const preVersion = (input.basis.preConfigVersion ?? '').trim();
+  if (preVersion.length === 0 || preVersion === RECOVERY_BASIS_UNKNOWN_VERSION) {
     throw new ConfigExecutionOperationError(
       'CONFIG_EXECUTION_RECOVERY_BASIS_INCOMPLETE',
-      'preConfigVersion 必须非空（recovery 依据必须可仅凭 durable reservation 重建）',
+      `preConfigVersion 必须是一个已知版本（不得为空白，也不得为保留值 ${RECOVERY_BASIS_UNKNOWN_VERSION}）`,
     );
   }
 

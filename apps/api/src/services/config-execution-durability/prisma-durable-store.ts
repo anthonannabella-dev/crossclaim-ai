@@ -652,11 +652,16 @@ export async function runReconciliationActions(
         : action.kind === 'REVIEW'
           ? 'MANUAL_REVIEW'
           : action.resultCode;
+    // 从未被 claim 过的行（status = RESERVED）不可能进入 EXECUTING 终态族：
+    // 这类行（含 migration 回填 basis 的历史行）不自动恢复、不自动成功，只能零写收敛为 CANCELLED，
+    // 由人工/后续单元处置；绝不允许 SAFE_TO_RETRY / RECOVERED_COMMITTED 语义。
+    const unclaimed = reservation.status === 'RESERVED';
+    const effectiveResultCode = unclaimed ? 'CANCELLED' : resultCode;
     const evidenceSource =
-      action.kind === 'TERMINALIZE' && action.resultCode === 'RECOVERED_COMMITTED'
+      !unclaimed && action.kind === 'TERMINALIZE' && action.resultCode === 'RECOVERED_COMMITTED'
         ? 'READBACK_RECOVERY'
         : 'STARTUP_RECONCILIATION';
-    const post = action.kind === 'TERMINALIZE' ? action.post : null;
+    const post = !unclaimed && action.kind === 'TERMINALIZE' ? action.post : null;
     const outcome = await terminalizeExecution(prisma, {
       reservationId: reservation.id,
       expectedLeaseId: null,
@@ -665,7 +670,7 @@ export async function runReconciliationActions(
       result: {
         reservationId: reservation.id,
         executionId: `reconcile:${reservation.id}:${action.kind}`,
-        resultCode,
+        resultCode: effectiveResultCode,
         preConfigFingerprint: reservation.baselineConfigFingerprint,
         preConfigVersion: expected.preConfigVersion,
         postConfigFingerprint: post ? post.fingerprint : null,
@@ -680,7 +685,7 @@ export async function runReconciliationActions(
     if (outcome.kind === 'TERMINALIZED') summary.terminalized += 1;
     else if (outcome.kind === 'ALREADY_TERMINAL') summary.noop += 1;
     else if (outcome.kind === 'LEASE_FENCE_CHANGED') summary.fenceChanged += 1;
-    if (outcome.kind === 'TERMINALIZED' && action.kind === 'CANCEL') summary.cancelled += 1;
+    if (outcome.kind === 'TERMINALIZED' && (action.kind === 'CANCEL' || unclaimed)) summary.cancelled += 1;
     if (outcome.kind === 'TERMINALIZED' && action.kind === 'REVIEW') summary.reviewed += 1;
   }
   return summary;
