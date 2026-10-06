@@ -651,6 +651,11 @@ describe('PHASE 6 U3 —— controlled config execution (SANDBOX ONLY)', () => {
     const first = await call();
     expect(first.status).toBe('NEEDS_RECONCILIATION');
     expect(first.semantics).toBe('SANDBOX_CONFIG_MUTATION_NEEDS_RECONCILIATION');
+    // CAS_EXCEPTION_POST_STATE_EVIDENCE：post-state 未知，必须为 null（不得沿用 pre-state）
+    expect(first.postConfigFingerprint).toBeNull();
+    expect(first.postConfigVersion).toBeNull();
+    expect(first.preConfigFingerprint).toBe(BASELINE_FINGERPRINT);
+    expect(first.preConfigVersion).toBe(BASELINE_VERSION);
     expect(isVerifiedControlledConfigExecutionResult(first)).toBe(true);
     const second = await call();
     expect(second.resultDigest).toBe(first.resultDigest);
@@ -692,5 +697,29 @@ describe('PHASE 6 U3 —— controlled config execution (SANDBOX ONLY)', () => {
     ]);
     expect(digests.size).toBe(4);
     expect(CONTROLLED_CONFIG_EXECUTION_BOUNDARY.semanticsByStatus.COMMITTED).toBe('SANDBOX_CONFIG_MUTATION_COMMITTED');
+  });
+
+  it('P6U3F3_1 UNKNOWN_POST_STATE：CAS 抛异常 → post identity null；CONFLICT 保留 pre identity；CAS 成功 + read-back 失败保留 CAS post identity', async () => {
+    // CAS throw → post-state UNKNOWN
+    const thrown = await runExecution({
+      storeState: { value: '0.50', fingerprint: BASELINE_FINGERPRINT, version: BASELINE_VERSION, casThrow: true },
+    });
+    expect(thrown.result.status).toBe('NEEDS_RECONCILIATION');
+    expect(thrown.result.postConfigFingerprint).toBeNull();
+    expect(thrown.result.postConfigVersion).toBeNull();
+    // CONFLICT（明确零写）→ 保留 pre identity
+    const conflict = await runExecution({
+      storeState: { value: '0.50', fingerprint: BASELINE_FINGERPRINT, version: BASELINE_VERSION, cas: 'VERSION_CONFLICT' },
+    });
+    expect(conflict.result.status).toBe('CONFLICT');
+    expect(conflict.result.preConfigVersion).toBe(BASELINE_VERSION);
+    expect(conflict.result.postConfigVersion).toBe(BASELINE_VERSION);
+    // CAS 成功 + read-back 失败 → 至少保留 CAS 返回的 post identity
+    const readBackFail = await runExecution({
+      storeState: { value: '0.50', fingerprint: BASELINE_FINGERPRINT, version: BASELINE_VERSION, readBackThrow: true },
+    });
+    expect(readBackFail.result.status).toBe('NEEDS_RECONCILIATION');
+    expect(readBackFail.result.postConfigVersion).toBe(POST_VERSION);
+    expect(readBackFail.result.postConfigFingerprint).toBe(POST_FINGERPRINT);
   });
 });

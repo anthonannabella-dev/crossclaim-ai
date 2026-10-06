@@ -429,7 +429,9 @@ export async function executeControlledConfigMutation(input: {
       nextValue: to,
     });
   } catch {
-    const unknown = buildResult('NEEDS_RECONCILIATION', { fingerprint: preFingerprint, version: preVersion });
+    // CAS_EXCEPTION_POST_STATE_EVIDENCE：CAS 可能未执行、也可能已提交但响应丢失，
+    // 因此 post-state 必须保持 UNKNOWN（null），不得沿用 pre-state 造成“确认未改变”的误导。
+    const unknown = buildResult('NEEDS_RECONCILIATION', { fingerprint: null, version: null });
     ledger.put(unknown);
     return unknown;
   }
