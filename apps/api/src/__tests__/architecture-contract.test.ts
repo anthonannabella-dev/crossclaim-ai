@@ -166,6 +166,10 @@ describe('模型清单一致性（C-0002 CHANGE #1）', () => {
     'AiCostLedgerEntry',
     'AiBudgetPolicy',
     'AiModelCacheEntry',
+    // PROVIDER FOLLOW-UP INTELLIGENCE / P1（HOST 2026-10-06 授权）：Provider Submission Scheduler（tenant-owned）
+    'ProviderSubmissionIntent',
+    'ProviderSubmissionEvent',
+    'ProviderRateWindow',
   ];
   const JOIN_MODELS = [
     'CaseEvidence',
@@ -180,7 +184,7 @@ describe('模型清单一致性（C-0002 CHANGE #1）', () => {
 
 
   it(`核心模型恰好 ${CORE.length} 个`, () => {
-    expect(CORE).toHaveLength(76);
+    expect(CORE).toHaveLength(79);
     for (const name of CORE) expect(modelBlock(name), `缺少核心模型 ${name}`).not.toBe('');
   });
 
@@ -204,8 +208,8 @@ describe('模型清单一致性（C-0002 CHANGE #1）', () => {
     }
   });
 
-  it('模型总数为 101（96 + 5 耐久执行底座）—— 与 README/DOMAIN_MODEL 表述一致', () => {
-    expect(modelNames()).toHaveLength(101);
+  it('模型总数为 104（96 + 5 耐久执行底座 + 3 Provider Scheduler）—— 与 README/DOMAIN_MODEL 表述一致', () => {
+    expect(modelNames()).toHaveLength(104);
   });
 });
 
@@ -214,6 +218,10 @@ describe('模型清单一致性（C-0002 CHANGE #1）', () => {
 // ============================================================
 describe('租户归属（C-0002 CHANGE #2）', () => {
   const TENANT_OWNED = [
+    // PROVIDER FOLLOW-UP INTELLIGENCE / P1：队列 / 调度证据 / 限流窗口均为 tenant-owned
+    'ProviderSubmissionIntent',
+    'ProviderSubmissionEvent',
+    'ProviderRateWindow',
     'SourceConnection',
     'FileAsset',
     'ImportBatch',

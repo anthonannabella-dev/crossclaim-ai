@@ -3626,3 +3626,90 @@ model ControlledConfigExecutionDelivery {
   @@unique([outboxId, consumerRef])
   @@index([consumerRef, consumedAt])
 }
+
+// ============================================================
+// PROVIDER FOLLOW-UP INTELLIGENCE / P1（HOST 2026-10-06 授权）—— Provider Submission Scheduler
+// tenant-owned durable 队列 + append-only 调度证据 + durable provider-aware 限流窗口。
+// 边界：transport 恒为 FALSE；本组表只承载「准备就绪 / 限流 / 等待 / 人工」决策，不发起任何真实平台写。
+// ============================================================
+
+/// durable provider submission 队列项（一次 intent 一条；同 org 幂等键唯一）
+model ProviderSubmissionIntent {
+  id                String   @id @default(uuid())
+  organizationId    String
+  platformAccountId String
+  platform          String
+  operation         String
+  /// credential / connection lineage（平台账号连接身份，不是裸凭据）
+  connectionRef     String
+  caseRef           String?
+  claimRef          String?
+  idempotencyKey    String
+  payloadDigest     String
+  basisDigest       String
+  /// 决策时使用的 provider policy 身份（审计用；策略缺失时不得派发）
+  policyProfileId   String?
+  priority          Int      @default(0)
+  state             String   @default("QUEUED")
+  attemptCount      Int      @default(0)
+  availableAt       DateTime @default(now())
+  retryAfterAt      DateTime?
+  cooldownUntil     DateTime?
+  lastOutcome       String?
+  lastReason        String?
+  ownerRef          String?
+  leaseId           String?
+  leaseAcquiredAt   DateTime?
+  leaseExpiresAt    DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  events ProviderSubmissionEvent[]
+
+  @@unique([organizationId, idempotencyKey])
+  @@unique([organizationId, id])
+  @@index([state, availableAt])
+  @@index([organizationId, platformAccountId, state])
+  @@index([organizationId, platform, operation, state])
+}
+
+/// append-only 调度证据（决策 / lease / provider 响应分类 / 死信）
+model ProviderSubmissionEvent {
+  id                   String   @id @default(uuid())
+  organizationId       String
+  intentId             String
+  seq                  Int
+  kind                 String
+  fromState            String?
+  toState              String?
+  decision             String?
+  reason               String?
+  providerResponseKind String?
+  policyDigest         String?
+  ownerRef             String?
+  leaseId              String?
+  detail               String?
+  occurredAt           DateTime @default(now())
+
+  intent ProviderSubmissionIntent @relation(fields: [intentId], references: [id], onDelete: Restrict)
+
+  @@unique([intentId, seq])
+  @@unique([organizationId, id])
+  @@index([organizationId, occurredAt])
+}
+
+/// durable provider-aware 限流窗口（account / operation / connection 维度；窗口即事实）
+model ProviderRateWindow {
+  id             String   @id @default(uuid())
+  organizationId String
+  /// 维度复合键（org|platform|account|operation|connection 的组合，由策略声明）
+  scopeKey       String
+  windowStart    DateTime
+  windowMs       Int
+  count          Int      @default(0)
+  updatedAt      DateTime @updatedAt
+
+  @@unique([organizationId, scopeKey, windowStart])
+  @@unique([organizationId, id])
+  @@index([organizationId, scopeKey, windowStart])
+}
