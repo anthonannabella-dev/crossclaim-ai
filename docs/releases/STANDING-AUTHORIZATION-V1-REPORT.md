@@ -65,7 +65,7 @@ TEST_EVIDENCE             = standing-authorization 19/19（覆盖验收 1–12�
 | 11 | 并发·重复执行保持 exactly-once | ⑪ | 判定稳定 + wiringDigest 一致 + executionPerformed=false |
 | 12 | authorization version change 后旧执行权不能继续使用 | ⑫ | 旧版本 DENY（VERSION_STALE）；对齐新版本后 SATISFIED |
 
-## 5. SA-3（已完成，head `9e46cbe5`）：接入既有 approval-verifier / guard-enforcement
+## 5. SA-3（已完成）：接入既有 approval-verifier / guard-enforcement
 
 * `approval-verifier.ts`：`verifyApprovalOrThrow` 新增**可选** `standingAuthorization` 参数（既有调用方不传 → 行为完全不变）：
   - `decision=ALLOW` 且 `authorizedBy=STANDING_AUTHORIZATION` 且 `satisfiedGates` **仅含 humanApproval** 且 `action` 匹配 → 放行并标记 `authorizedBy='STANDING_AUTHORIZATION'`；
@@ -75,10 +75,25 @@ TEST_EVIDENCE             = standing-authorization 19/19（覆盖验收 1–12�
 * `guard-enforcement.ts`：`withActionGuard` 新增同名可选参数并透传 —— 生产受保护动作（`guard-enforcement` 是统一执行助手）可逐调用点以授权替代一次性审批；未提供时行为与既有完全一致；放行路径仍需审计端口（缺失即拒绝）。
 * 测试：`standing-authorization-verifier-wiring` **10/10**（含 `withActionGuard` 放行恰好执行一次 / 越权零副作用 / 未提供授权时保持既有 fail-closed）。
 
-## 6. 尚未完成 / 边界
+## 6. SA-4（已完成）：全量回归 + 状态矩阵
 
-* **SA-4（next）**：全量回归 + 更新本报告（exact HEAD / test evidence / remaining host action）+ 在 `CURRENT-SI-RSI-STATUS.md` 补 STANDING_AUTHORIZATION 行。
-* 逐调用点「默认开启」：本次是**可选接入**（未提供 `standingAuthorization` 即保持既有行为）。若要默认启用，需要按调用点评估风险分级上下文（amount/provider/domain/evidence/experience）后再切换。
+* 全量 `npx vitest run`：**441 文件 / 4442 tests → 4440 passed + 2 failed**；两个失败均为**既有 DB 套件的并行隔离 flake**（`recovery-si-phase2-e-db` P2E-DB5 单独运行 20/20 PASS；`customs-entry-fact-store-db` 单独运行 7/7 PASS），二者均**未被本程序改动**（最近提交分别为历史 G8 / P2-E 单元），与本程序改动无关。
+* `CURRENT-SI-RSI-STATUS.md` 已补两行：`STANDING_AUTHORIZATION = YES(v1)`、`LOW_RISK_AUTONOMY = PARTIAL（政策与判定层就绪；逐调用点默认启用待评估）`。
+* `tsc --noEmit` = exit 0（SA-1/SA-2、SA-3 两轮均验证）。
+
+### 6.1 TEST_EVIDENCE（全量）
+
+| 项目 | 结果 |
+|---|---|
+| 全量 `npx vitest run` | **441 文件 / 4442 tests → 4440 passed + 2 failed**：`recovery-si-phase2-e-db` P2E-DB5（单独 20/20 PASS）与 `customs-entry-fact-store-db` G8（单独 7/7 PASS）—— 均为既有并行隔离 flake，未被本程序改动 |
+| 本程序新增套件 | `standing-authorization` **19/19**（验收 1–12）· `standing-authorization-verifier-wiring` **10/10**（接线与 fail-closed） |
+| SA-3 回归子集 | 32 文件 / **464 tests PASS**（action-guard 全量含 kill-switch / composition / audit-db + SA + architecture-contract 157） |
+| SA-1/SA-2 宽域回归 | 86 文件 / **828 tests PASS** |
+
+## 7. 尚未完成 / 边界
+
+* 逐调用点「默认开启」：本次是**可选接入**（未提供 `standingAuthorization` 即保持既有"每次审批"）。若要默认启用，需要按调用点评估风险分级上下文（amount / provider / domain / evidence / experience）后再逐点切换。
+* 高金额阈值调整（如需要）→ 独立 Policy / Product Review；本程序默认 **KEEP**。
 * 生产边界不变：`REAL_PROVIDER_WRITE` / `CUSTOMS_FILING` / `PAYMENT` / `AUTO_COMMISSION_CHARGE` /
   `PRODUCTION_CREDENTIALS` / `PRODUCTION_ENABLEMENT` = **HOLD**；Standing Authorization **不**开启任何真实外写。
 * 高金额阈值调整（如需要）→ 独立 Policy / Product Review；本程序默认 **KEEP**。
