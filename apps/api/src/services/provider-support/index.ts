@@ -13,3 +13,4 @@ export * from './ocr-provider';
 export * from './document-classifier';
 export * from './field-extraction';
 export * from './document-ingestion';
+export * from './follow-up-package';
