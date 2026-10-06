@@ -50,6 +50,13 @@ export interface HitlSubmissionInput<T> {
     basisReference?: unknown;
     evidenceArtifactId?: unknown;
   };
+  /** SA-3b: optional standing-authorization alternative (wiring-layer decision only). */
+  standingAuthorization?: {
+    decision: 'ALLOW' | 'REQUIRE_APPROVAL' | 'DENY';
+    authorizedBy: 'ONE_TIME_APPROVAL' | 'STANDING_AUTHORIZATION' | 'NONE';
+    satisfiedGates: readonly string[];
+    action: string;
+  } | null;
   /** 真实业务动作；仅在守卫与审批校验全部通过后调用一次 */
   perform: (decision: ActionGuardResult) => Promise<T> | T;
 }
@@ -81,6 +88,7 @@ export function createHitlSubmissionBoundary(deps: HitlSubmissionBoundaryDeps): 
       return withActionGuard({
         guard: deps.guard,
         input: guardInput,
+        standingAuthorization: input.standingAuthorization ?? null,
         approvals,
         approvalTargetRef: input.targetRef,
         approvalPayload: input.payload,

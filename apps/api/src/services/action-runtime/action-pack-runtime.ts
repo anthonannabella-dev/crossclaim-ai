@@ -116,6 +116,13 @@ export async function runActionPack(input: {
   guardDeps: AppActionGuardDeps | null | undefined;
   /** 共享审批校验端口；HITL 命中时缺失即 fail-closed */
   approvalVerifier?: ActionGuardApprovalVerifier | null;
+  /** SA-3b: optional standing-authorization alternative (wiring-layer decision only). */
+  standingAuthorization?: {
+    decision: 'ALLOW' | 'REQUIRE_APPROVAL' | 'DENY';
+    authorizedBy: 'ONE_TIME_APPROVAL' | 'STANDING_AUTHORIZATION' | 'NONE';
+    satisfiedGates: readonly string[];
+    action: string;
+  } | null;
   riskClass?: 'LOW' | 'MEDIUM' | 'HIGH';
   transportEnabled?: boolean;
   approvalRef?: string | null;
@@ -217,6 +224,7 @@ export async function runActionPack(input: {
     try {
       await verifyApprovalOrThrow({
         verifier: input.approvalVerifier ?? undefined,
+        standingAuthorization: input.standingAuthorization ?? null,
         query: {
           approvalId,
           organizationId: request.organizationId,

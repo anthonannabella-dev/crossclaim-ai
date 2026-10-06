@@ -90,6 +90,19 @@ TEST_EVIDENCE             = standing-authorization 19/19（覆盖验收 1–12�
 | SA-3 回归子集 | 32 文件 / **464 tests PASS**（action-guard 全量含 kill-switch / composition / audit-db + SA + architecture-contract 157） |
 | SA-1/SA-2 宽域回归 | 86 文件 / **828 tests PASS** |
 
+## 6b. SA-3b（已完成）：真实调用点接线
+
+* 新增 `services/standing-authorization/standing-authorization-resolver.ts`：把「持久化授权 + 风险分级 + 非可绕过 gate 快照 + 既有 Guard 判定」组合成**调用点唯一来源**的判定，输出与 `verifyApprovalOrThrow` 的 `standingAuthorization` 参数同构：
+  - 无授权 → 未声明自动执行时返回 `null`（**既有一次性审批路径零影响**）；声明自动执行 → `DENY`；
+  - 授权被撤销 / 过期 / 未生效 / 篡改 / 身份·范围不匹配 → 声明自动执行 `DENY`，未声明 `null`（不阻断合法的人工审批）；
+  - 授权有效但超范围 / 超金额 / 受监管 / 证据冲突 / 无历史置信度 → `REQUIRE_APPROVAL`（回退 HITL）；
+  - 授权有效 + TIER_0/TIER_1 + 非可绕过 gate 全满足 → `ALLOW（authorizedBy=STANDING_AUTHORIZATION）`。
+* 真实入口接入（均为**可选**参数，未提供即行为不变）：
+  - `services/action-guard/hitl-submission.ts`（`createHitlSubmissionBoundary`）—— 该边界被 `services/workflow/http-routes.ts` 的 6 处与 `services/recovery/http-request.ts` 使用，覆盖 claim.submit / appeal.submit / recovery.manual_submit 等受保护提交；
+  - `services/action-runtime/action-pack-runtime.ts`（`runActionPack`）—— RSI Action Pack 执行链（platform.write / claim.submit 等经同一共享 verifier 的动作）。
+* 持久化缺口（**未实施**）：授权记录目前无表，调用方通过注入 `loadAuthorization` 端口取得；因此「客户一次授权 → 进程重启后续用」需要 Schema Delta：`docs/releases/STANDING-AUTHORIZATION-PERSISTENCE-DELTA-REQUEST.md`（1 表、追加式版本、撤销留痕、租户隔离；**REQUEST ONLY**）。
+* 测试：`standing-authorization-resolver` **14/14** + `standing-authorization-callsite-wiring` **5/5**（HITL 边界：授权放行恰好执行一次 / 授权 DENY 零副作用 / 越权 OVERREACH 零副作用 / 未提供授权时行为不变）+ 既有 SA/action-guard 套件；SA-3b 回归 **32 文件 / 307 tests PASS**。
+
 ## 7. 尚未完成 / 边界
 
 * 逐调用点「默认开启」：本次是**可选接入**（未提供 `standingAuthorization` 即保持既有"每次审批"）。若要默认启用，需要按调用点评估风险分级上下文（amount / provider / domain / evidence / experience）后再逐点切换。
