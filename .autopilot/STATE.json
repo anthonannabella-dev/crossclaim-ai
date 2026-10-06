@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "cce666d6",
+  "head": "a15169a4",
   "status": "RECONCILED",
   "current_task": "RSI 生产可执行闭环（7 点收口）：RSI_RUNTIME_READY = PASS；MODEL_PROVIDER_READY = 本地仿真已接线（真实网络/付费 HOLD）；PERSISTENCE_READY = ephemeral 已验证、durable 需宿主非生产 DATABASE_URL；REBOOT_RECONCILE_READY = NOT_IMPLEMENTED（下一单元）；SYSTEMD_VALIDATED = 需宿主 Linux 实机",
   "next_task": "BG-016 单一 Acceptance Head + 四份状态一致 guard（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍 HOST_ACTION_REQUIRED 或 HOLD",
@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-96",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-06T09:46:40.660Z",
+  "updated_at": "2026-10-06T09:48:49.310Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -49,17 +49,17 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
-  "continuous_execution": "RUNNING（SA-1…SA-4b、FE-1 完成并 push；BE-1 / REL-1 / FINAL 待执行）",
-  "next_execution_unit": "BE-1 —— 后端增量缺口审计（B1–B10 GAP ANALYSIS，不重写稳定代码）。",
+  "continuous_execution": "RUNNING（SA-1…SA-4b、FE-1、BE-1 完成并 push；REL-1 / FINAL 待执行）",
+  "next_execution_unit": "REL-1 —— main 与 gate/7 divergence 处置（查明 main 独有 commit 5a340bc0、安全 integration plan、合并前全门禁）。",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-06T09:46:40.660Z",
+  "last_tick_at": "2026-10-06T09:48:49.310Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "完成 FE-1（cce666d6）：复跑前端全部门禁 —— i18n OK（5 语言 / 644 键 / 13 状态码 / 客户硬编码 0）、UI 渲染验收 81/81、web typecheck exit 0、web build exit 0（Next.js 15）；并做 web→API 接线漂移检查（web 引用 15 个 /api 路径全部匹配 API 路由，唯一未匹配为 rewrite 源模式，非真实调用）；确认 UI-1…UI-8 仍 CLOSED（引用 CUSTOMER-PRODUCT-BASELINE）、HOLD 文案断言仍在、未改前端代码。判定 FRONTEND_PRODUCTIZATION = PASS。",
-  "last_action_at": "2026-10-06T09:46:40.660Z",
-  "next_action": "按 HOST 列出的后端能力面逐项扫描现有实现与测试证据，产出 B1–B10 gap 状态（已有即复用 / 缺失且对上线有价值才实施），禁止第二事实源。",
-  "current_head": "cce666d6",
-  "last_completed_head": "cce666d6",
-  "reviewed_head": "cce666d6",
+  "last_action": "完成 BE-1（a15169a4）：按 HOST 列出的后端能力面逐项扫描并给出 B1–B10 GAP ANALYSIS（纯审计、无代码改动）——B1 Fastify = DESIGN_ONLY 且按要求不重写 Node HTTP；B2 = PARTIAL（registry/契约/能力/凭据边界已有；OAuthAuthorizationSession / ConnectionSyncState / SecretVault 未一等建模，其中 SecretVault 在无生产凭据前 HOLD_EXTERNAL）；B3/B4/B10 = IMPLEMENTED（只读契约/投影 API）；B5/B6/B7/B8/B9 = PARTIAL 并逐项给出缺口与「是否值得实施」判断（明确不新建双路径引擎、不新增第二事实源）；确认 4000+ 回归基线未破坏，api tsc 0、prisma validate valid。判定 BACKEND_PRODUCTIZATION = PASS。",
+  "last_action_at": "2026-10-06T09:48:49.310Z",
+  "next_action": "先查明 main 独有 commit 内容与是否已在 gate/7 体现，再产出无 force-push、不丢 main 提交的 integration plan；随后跑合并前全门禁（fresh DB/migrations/prisma validate/api tsc/web tsc/web build/full regression/security negative/tenant isolation/concurrency/SI-RSI/SA/Customs golden path），全绿才建 release/integration HEAD。",
+  "current_head": "a15169a4",
+  "last_completed_head": "a15169a4",
+  "reviewed_head": "a15169a4",
   "claim_submit_batch": {
     "verdict": "PASS",
     "message_id": "MSG-20261001-07",
@@ -5169,7 +5169,6 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "BE-1 后端增量缺口审计：SI/RSI、Standing Authorization、Action Guard/HITL、CanonicalFact/Evidence/Opportunity、Case/Claim/Appeal、Customs/Duty、Provider/Carrier/Platform adapters、Settlement/Ledger/Fee/Billing、OAuth/Connection lineage、multi-platform·account、audit/idempotency/transaction/concurrency/tenant isolation、kill switch/external write gates；B1 Fastify 若仍 DESIGN ONLY 不重写 Node HTTP；B2 只补真实接入必需缺口；B3 复用 Carrier Queue；B4–B10 GAP ANALYSIS。",
     "REL-1 main 与 gate/7 divergence 处置：查明 main 独有 commit 5a340bc0 内容、判断保留/移植、生成安全 integration plan；合并前跑 fresh DB/migrations/prisma validate/api tsc/web tsc/web build/full regression/security negative/tenant isolation/concurrency/SI-RSI/SA/Customs golden path；全绿后建立 release/integration HEAD。",
     "FINAL 输出最终状态报告（FRONTEND_PRODUCTIZATION / BACKEND_PRODUCTIZATION / SI_RSI_INTEGRATION / STANDING_AUTHORIZATION / CUSTOMS_DUTY_RECOVERY / REAL_PROVIDER_INTEGRATION / REAL_EXTERNAL_WRITE / PAYMENT_AUTOPAY / B1_FASTIFY / B2_INTEGRATION_FOUNDATION / B4_B10_GAP_STATUS / MAIN_DIVERGENCE_RESOLUTION / FULL_REGRESSION / WEB_BUILD / API_TSC / WEB_TSC / FINAL_RELEASE_HEAD / PRODUCTION_READY / HOST_ACTION_REQUIRED）。"
   ],
@@ -9340,7 +9339,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-06T09:46:40.660Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-06T09:48:49.310Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -11646,7 +11645,7 @@
     "id": "PRODUCTIZATION-RELEASE-INTEGRATION",
     "authorized_at": "2026-10-06",
     "branch": "gate/7-commercial-validation",
-    "current_unit": "BE-1",
+    "current_unit": "REL-1",
     "status": "RUNNING",
     "report": "docs/releases/STANDING-AUTHORIZATION-V1-REPORT.md"
   },
@@ -12021,6 +12020,28 @@
         },
         "boundary": "未改前端代码；UI 未伪造业务状态（persisted/server-derived）；External Write / Payment / Production HOLD 如实表达；submitted≠won≠settled≠recovered≠billable 由既有渲染断言保证",
         "verdict": "FRONTEND_PRODUCTIZATION = PASS"
+      }
+    },
+    "BE-1": {
+      "name": "后端增量缺口审计（B1–B10 GAP ANALYSIS，不重写稳定代码、不建第二事实源）",
+      "status": "DONE / PUSHED",
+      "head": "a15169a4",
+      "evidence": {
+        "report": "docs/releases/BACKEND-PRODUCTIZATION-GAP-ANALYSIS.md",
+        "verdict": {
+          "BACKEND_PRODUCTIZATION": "PASS（审计完成；无强制迁移、无第二事实源、4000+ 基线未破坏）",
+          "B1_FASTIFY": "DESIGN_ONLY（按 HOST 要求不为技术栈重写 Node HTTP）",
+          "B2_INTEGRATION_FOUNDATION": "PARTIAL（registry/契约/能力与凭据边界已有；OAuthAuthorizationSession / ConnectionSyncState / SecretVault 未一等建模）",
+          "B3": "IMPLEMENTED（契约与只读能力）/ HOLD_EXTERNAL（真实网络凭据）",
+          "B4": "IMPLEMENTED（invoice/POD/rate/SLA 只读契约）",
+          "B5": "PARTIAL（CanonicalFact + customs-entry 已有；shipment/v1 以 kind 承载，不新增事实源）",
+          "B6": "PARTIAL/已覆盖（RouteTarget + RecoveryRoute；不新建双路径引擎）",
+          "B7": "PARTIAL（7501/invoice/POD/分类已实现；C88 与中国报关单需新增 jurisdiction rule pack）",
+          "B8": "PARTIAL（受控执行域 outbox + PG 验证；通用 AsyncJob 未建，须复用既有 outbox 语义）",
+          "B9": "PARTIAL（capability 词汇/交接边界/claim-ready vNext 已有；统一 SubmissionAdapter 接口未建，DIRECT_API=HOLD）",
+          "B10": "IMPLEMENTED（投影 API + Web 页面；FE-1 已复核 15/15 路径匹配）"
+        },
+        "baseline": "443 文件 / 4461 tests（4460 pass + 1 既有隔离 flake）；api tsc 0；prisma validate valid（88 migrations up to date）"
       }
     }
   },
