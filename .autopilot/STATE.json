@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "0b28ab52",
+  "head": "1fa2821d",
   "status": "RECONCILED",
   "current_task": "RSI 生产可执行闭环（7 点收口）：RSI_RUNTIME_READY = PASS；MODEL_PROVIDER_READY = 本地仿真已接线（真实网络/付费 HOLD）；PERSISTENCE_READY = ephemeral 已验证、durable 需宿主非生产 DATABASE_URL；REBOOT_RECONCILE_READY = NOT_IMPLEMENTED（下一单元）；SYSTEMD_VALIDATED = 需宿主 Linux 实机",
   "next_task": "BG-016 单一 Acceptance Head + 四份状态一致 guard（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍 HOST_ACTION_REQUIRED 或 HOLD",
@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-96",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-06T07:53:09.453Z",
+  "updated_at": "2026-10-06T07:56:09.619Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -49,17 +49,17 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
-  "continuous_execution": "RUNNING（SI/RSI GAP-CLOSURE：A、B、C 完成并 push；D/E 待执行）",
-  "next_execution_unit": "D —— META LEARNING / CONTROLLED IMPROVEMENT v1。",
+  "continuous_execution": "RUNNING（SI/RSI GAP-CLOSURE：A、B、C、D 完成并 push；E 待执行）",
+  "next_execution_unit": "E —— RECOVERY SIMULATION / Lightweight Recovery Decision Simulator v1。",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-06T07:53:09.453Z",
+  "last_tick_at": "2026-10-06T07:56:09.619Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "完成并 push SI/RSI GAP-CLOSURE 单元 C（0b28ab52）：实现 Experience Memory v1（端口 + 纯函数，无 schema 变更）—— FACT/AGGREGATE/HEURISTIC；tenant/account/provider/domain 四维 scope；强制 server-derived；append-only 端口；ruleVersion/时间窗口/sourceCount/confidence/sourceRefs；凭据与原始 provider payload 拒收；LOW_SAMPLE→ADVISORY|FAIL_CLOSED、CONFLICT→NO_AUTOMATIC_LEARNING、STALE→DOWNWEIGHTED|IGNORED（全量过期 → IGNORED）；只允许影响 recommendation/ranking/confidence/planning，不授予任何 External Write；覆盖六类 v1 查询。持久化表未实施，改为最小 Schema Delta 审计请求（docs/releases/EXPERIENCE-MEMORY-V1-SCHEMA-DELTA-REQUEST.md）。unit 22/22、回归 494/494、tsc 0。",
-  "last_action_at": "2026-10-06T07:53:09.453Z",
-  "next_action": "先审计既有 outcome-learning / Phase5 controlled adoption 链，再最小接线 Experience Memory → Proposal→…→Sandbox Adoption→Observation→Rollback，保持 META_IMPROVEMENT_INTEGRATED=false 直到端到端验证通过。",
-  "current_head": "0b28ab52",
-  "last_completed_head": "0b28ab52",
-  "reviewed_head": "0b28ab52",
+  "last_action": "完成并 push SI/RSI GAP-CLOSURE 单元 D（1fa2821d）：新增 meta-learning-orchestrator（纯函数闸门，无写入）——把既有 outcome-learning 链固化为 12 段顺序闸门（缺段/乱序/失败/digest 非法一律 BLOCKED）；强制 verifiable reward（无证据、Δ 低于 minDeltaBp、样本 0 → BLOCKED_BY_REWARD）；Experience 为 FAIL_CLOSED/NO_AUTOMATIC_LEARNING/IGNORED → BLOCKED_BY_EXPERIENCE；Builder≠Judge；Guard 必须允许；采用仅限 SANDBOX 且需回滚计划前置；观测回归 → REGRESSION_DETECTED_ROLLBACK_REQUIRED / ROLLED_BACK；禁止能力（POLICY_CORE_MUTATION / SECOND_GUARD_IMPLEMENTATION / ACTION_CATALOG_BYPASS / KILL_SWITCH_CHANGE / PERMISSION_EXPANSION / PAYMENT_ENABLEMENT / CUSTOMS_FILING_ENABLEMENT / PRODUCTION_CREDENTIAL_ACCESS / AUTO_PRODUCTION_*）请求即抛错。META_IMPROVEMENT_INTEGRATED 保持 false 并写明依据。unit 20/20、回归 542/542、tsc 0、无 schema 变更。",
+  "last_action_at": "2026-10-06T07:56:09.619Z",
+  "next_action": "实现 Recovery Decision Simulator（≥2–3 方案对比；输出 expectedRecovery/successProbability/calibratedConfidence/expectedCost/expectedTime/downsideRisk/requiredEvidence/policy·guard constraints/sourceExperienceRefs；默认 externalActionPerformed=false；经验不足 → fallback 确定性 Rule/Policy；禁止编造概率与金额）。",
+  "current_head": "1fa2821d",
+  "last_completed_head": "1fa2821d",
+  "reviewed_head": "1fa2821d",
   "claim_submit_batch": {
     "verdict": "PASS",
     "message_id": "MSG-20261001-07",
@@ -5169,7 +5169,6 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "D META LEARNING / CONTROLLED IMPROVEMENT v1（Outcome→Experience→Proposal→Candidate→Replay→Benchmark→Security/Policy Eval→Independent Judge→Guard→Sandbox Adoption→Observation→Regression Detection→Rollback；无 verifiable reward/KPI 不得自动 promote；不得改/绕唯一 Policy Core·Guard·Action Catalog、不得自行扩权/关 Kill Switch/开 Payment·Customs Filing）。",
     "E RECOVERY SIMULATION v1（Recovery Decision Simulator：≥2–3 方案对比 SUBMIT_NOW/COLLECT_MORE_EVIDENCE/HUMAN_OR_BROKER_REVIEW/DEFER；输出 expectedRecovery/successProbability/calibratedConfidence/expectedCost/expectedTime/downsideRisk/requiredEvidence/policy·guard constraints/sourceExperienceRefs；默认 externalActionPerformed=false；经验不足 → fallback 确定性 Rule/Policy；禁止 LLM 编造概率与金额）。"
   ],
   "full_autonomous_internal_execution": "VERIFIED",
@@ -9339,7 +9338,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-06T07:53:09.453Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-06T07:56:09.619Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -11652,7 +11651,7 @@
       "D",
       "E"
     ],
-    "current_unit": "D",
+    "current_unit": "E",
     "status": "RUNNING",
     "baseline_head": "cdd95258",
     "current_status_doc": "docs/releases/CURRENT-SI-RSI-STATUS.md"
@@ -11914,6 +11913,23 @@
           "allowedUses": "recommendation / ranking / confidence / planning（externalWriteGranted=false）"
         },
         "schemaDelta": "REQUEST ONLY（未新增表 / 未新增 migration / 未改 Production Schema）"
+      }
+    },
+    "SI-RSI-D": {
+      "name": "META LEARNING / CONTROLLED IMPROVEMENT v1（12 段端到端闸门 + verifiable reward 强制 + SANDBOX-only + 禁止能力 fail-closed）",
+      "status": "DONE / PUSHED",
+      "head": "1fa2821d",
+      "evidence": {
+        "files": "apps/api/src/services/meta-learning/meta-learning-orchestrator.ts（新增）+ apps/api/src/__tests__/meta-learning-orchestrator.test.ts（20 例）；status doc 更新",
+        "tests": "meta-learning-orchestrator 20/20；回归 57 文件 / 542 tests PASS；tsc 0",
+        "audit": "先审计 outcome-learning/*（learning-evidence / offline-evaluation / meta-improvement-candidate / candidate-approval / rollback-plan / controlled-*）——链上各段已存在且为 planning-only；真实缺口是「缺少把链串成可判定闸门」，本单元只补编排与判定，不重造任何一段",
+        "outputs": {
+          "META_IMPROVEMENT_INTEGRATED": "false（保持；端到端证据目前为各段证据+digest，尚未由真实上游模块产出全链并经架构审计）",
+          "AUTO_PRODUCTION_PROMOTION": "false",
+          "AUTO_PRODUCTION_ROLLOUT": "false",
+          "AUTO_PRODUCTION_ROLLBACK": "false"
+        },
+        "boundary": "orchestratesOnly=true、executesAdoption=false、externalWritePerformed=false、productionAdoptionAllowed=false、requiresVerifiableReward=true、requiresIndependentJudge=true、requiresSandboxScope=true、requiresRollbackPlanBeforeAdoption=true"
       }
     }
   },
