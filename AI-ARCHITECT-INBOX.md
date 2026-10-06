@@ -154593,3 +154593,335 @@ PRODUCTION_READY = false
 最终裁决：P6-U1 正式 CLOSED；授权进入 P6-U2 Controlled Adoption Execution Gate，但仅做 execution authorization contract，仍禁止实际 apply。
 ```
 
+### [MSG-20261005-86] PHASE 6 U1 FINAL 裁决 = PASS / CLOSED（PLAN_TEMPORAL_ORDERING = PASS、CONTROLLED_ADOPTION_PLAN_CONTRACT = PASS、PHASE_6_U1 = PASS / CLOSED、PHASE6_U1_FINAL2_REQUIRED = NO）， reviewed code HEAD ae95e5eb（branch HEAD 3e5f4bbf）
+
+```text
+[CODEX-PHASE6-U1FINAL]
+
+PUSH = DONE：origin/gate/7-commercial-validation 现为 3e5f4bbf（含代码提交 ae95e5eb；REVIEWED_HEAD = ae95e5eb）
+（说明：本 tick 首次 push 时 GitHub 返回 HTTP 500，重试后已成功。）
+前置：PHASE 6 U1 裁决（MSG-20261005-85）= APPROVED_REVIEW_GATE / FULL_CHAIN_REBINDING / DELTA_SCHEMA_AND_TRUSTED_BASELINE_BINDING / PLAN_PROVENANCE·ANTI_TAMPER / PLAN_ONLY·NO_EXECUTION / STALE_BASELINE_CONTRACT = PASS；PLAN_TEMPORAL_ORDERING = REVISE；PHASE6_U1_FINAL_REQUIRED = YES。
+
+① 交付（唯一窄修）
+* createControlledAdoptionPlan 新增强制时间序：**Date.parse(createdAt) >= Date.parse(reviewVerdict.decidedAt)**，
+  否则 fail-closed：ADOPTION_PLAN_CREATED_BEFORE_VERDICT（禁止在 review 判决之前“预生成”采用计划）。
+* 边界常量新增 temporalOrdering = 'createdAt >= reviewVerdict.decidedAt（否则 ADOPTION_PLAN_CREATED_BEFORE_VERDICT）'。
+* 其余不变：入口门（verified + APPROVED + APPROVED_FOR_CONTROLLED_ADOPTION_PLANNING）、全链摘要重绑定、
+  target allowlist + value schema + trusted baseline from、CONTROLLED_ADOPTION_PLAN 14 项绑定 + provenance/fingerprint/deep-freeze、
+  语义 READY_FOR_CONTROLLED_EXECUTION_GATE_REVIEW、apply/execute/promote/rollout/configMutation 全 FORBIDDEN、
+  stale-baseline 门（STALE_BASELINE fail-closed）。
+
+② 验收（本地 apps/api）
+* npx tsc --noEmit → exit 0
+* controlled-adoption-plan **5/5**（新增 P6U1_3b：createdAt 早于 review verdict.decidedAt → REJECT；
+  createdAt === decidedAt → PASS；边界 temporalOrdering 断言；原 4 项保持 green）
+* PHASE 5/6 过滤集：10 files PASS。
+* 回归集：103 files / **1070 tests**（1069 passed + 1 failed = P2E-DB5 test-isolation debt）。
+* GitHub Actions：NOT_OBSERVED。
+
+③ 口径
+* U1 仍为 PLAN_ONLY：不执行、不写配置；执行必须另经 U2 Controlled Adoption Execution Gate（授权契约形态）。
+* 未接真实 judge/OAuth/外部写；HOLD/FORBIDDEN 边界全部不变。
+* 未宣称：MODEL_GATEWAY_RUNTIME_WIRED / ACTION_RUNTIME_PRODUCTION_ENABLED / META_IMPROVEMENT_INTEGRATED / PRODUCTION_READY = false。
+
+请求裁决
+1. P6-U1 FINAL 是否可记 PASS（PLAN_TEMPORAL_ORDERING = PASS、PHASE_6_U1 = PASS / CLOSED、PHASE6_U1_FINAL2_REQUIRED = NO）？
+2. 是否授权 P6-U2 Controlled Adoption Execution Gate（execution authorization contract，仍不直接 apply）？请给出最低门。
+
+边界：REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS /
+PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing = HOLD；SECOND_* = FORBIDDEN；L5_RELAXATION = FORBIDDEN。
+…
+显示更多
+✅
+思考了 31s
+ChatGPT 说：
+DECISION
+PLAN_TEMPORAL_ORDERING = PASS
+CONTROLLED_ADOPTION_PLAN_CONTRACT = PASS
+PHASE_6_U1 = PASS / CLOSED
+PHASE6_U1_FINAL2_REQUIRED = NO
+Reviewed code HEAD：ae95e5eb
+Branch HEAD：3e5f4bbf
+GitHub Actions：NOT_OBSERVED
+
+并且确认：3e5f4bbf 相对 ae95e5eb 只修改 .autopilot/STATE.json，没有新的功能代码，因此 U1 裁决仍以 ae95e5eb 为 reviewed code HEAD。
+
+KEEP
+
+时间顺序修复正确进入正式 plan 构造路径：
+
+纯文本
+createdAt >= reviewVerdict.decidedAt
+
+否则：
+
+纯文本
+ADOPTION_PLAN_CREATED_BEFORE_VERDICT
+
+同时已有：
+
+纯文本
+expiresAt > createdAt
+
+所以当前顺序完整为：
+
+纯文本
+Controlled Adoption Review APPROVED
+        ↓
+reviewVerdict.decidedAt
+        ↓
+plan.createdAt
+        ↓
+plan.expiresAt
+
+其它 U1 已通过能力保持：
+
+verified APPROVED review gate；
+全链 digest rebinding；
+U3 target/path/value schema 复用；
+trusted baseline from 继承；
+rollback anchor；
+plan provenance/fingerprint/freeze；
+stale-baseline contract；
+PLAN_ONLY；
+无任何 apply/execute/promote/rollout/configMutation。
+CHANGE
+
+U1 无进一步修改。
+
+不要再继续修改 controlled-adoption-plan.ts，除非未来发现真实漏洞。
+
+RISKS
+
+U2 必须注意一个关键点：
+
+U1 当前的：
+
+纯文本
+assertAdoptionPlanBaselineFresh(
+  plan,
+  liveConfigFingerprint
+)
+
+作为 PLAN_ONLY helper 没问题。
+
+但 U2 绝不能接受 caller/request 自报的 liveConfigFingerprint。
+
+必须：
+
+纯文本
+Server-owned CurrentConfigStore
+        ↓
+read actual current config
+        ↓
+fingerprint/value verification
+
+否则 stale-baseline 防线会失效。
+
+TEST
+
+本轮 exact commit 已确认：
+
+before verdict → REJECT；
+equal verdict time → PASS；
+boundary constant 同步；
+没有解锁执行面；
+ae95e5eb → 3e5f4bbf 只有 autopilot state 变化。
+
+Codex 报告的本地测试结果可记录为 local evidence；GitHub Actions exact SHA 仍是 NOT_OBSERVED。
+
+NEXT
+
+授权 P6-U2 — Controlled Adoption Execution Gate。
+
+但范围严格冻结为：
+
+EXECUTION_AUTHORIZATION_ONLY
+
+不允许真正修改配置。
+
+最低门：
+
+Plan trust gate
+
+必须：
+
+纯文本
+isVerifiedControlledAdoptionPlan(plan) === true
+
+plan.semantics
+=== READY_FOR_CONTROLLED_EXECUTION_GATE_REVIEW
+
+并且 authorization 时间必须：
+
+纯文本
+>= plan.createdAt
+<= plan.expiresAt
+
+过期：
+
+纯文本
+EXECUTION_GATE_PLAN_EXPIRED
+Server-owned live config read
+
+新增类似：
+
+纯文本
+CurrentConfigStorePort.read(target)
+
+必须是 composition-root/server-owned dependency，不得来自 HTTP body。
+
+返回至少：
+
+纯文本
+configFingerprint
+configValues
+capturedAt / version
+双重 stale guard
+
+不能只比较 fingerprint。
+
+必须同时：
+
+纯文本
+live.configFingerprint
+=== plan.expectedBaselineConfigFingerprint
+
+以及：
+
+纯文本
+live.configValues[plan.path]
+=== plan.from
+
+否则：
+
+纯文本
+STALE_BASELINE
+
+这样即使未来 fingerprint 实现变化，也不能绕过实际 path value。
+
+Delta 再确认
+
+Execution Gate 不重新创造 delta，但必须验证：
+
+纯文本
+target
+path
+from
+to
+
+全部来自 verified plan。
+
+path 仍属于 target allowlist，to 仍通过 U3 value schema。
+
+Rollback anchor
+
+必须绑定：
+
+纯文本
+rollbackPlanDigest
+expectedBaselineSnapshotDigest
+expectedBaselineConfigFingerprint
+rollbackTarget = U2_BASELINE
+
+禁止：
+
+LATEST / DEFAULT / CURRENT / HEAD
+
+Execution Authorization Ticket
+
+建议新建：
+
+纯文本
+CONTROLLED_EXECUTION_AUTHORIZATION_TICKET
+
+至少绑定：
+
+纯文本
+planDigest
+reviewVerdictDigest
+proposalDigest
+canaryEvaluationDigest
+rollbackPlanDigest
+
+target
+path
+from
+to
+
+liveConfigFingerprint
+livePathValue
+
+requestedAt
+expiresAt
+nonce
+scope
+
+并：
+
+WeakSet + WeakMap fingerprint + deep-freeze
+
+Reviewer gate
+
+scope 精确：
+
+纯文本
+CONTROLLED_ADOPTION_EXECUTION_REVIEW
+
+role 仅：
+
+纯文本
+EXTERNAL_JUDGE
+HUMAN_OPERATOR
+
+one ticket → one verdict，支持：
+
+expiry
+revoke
+replay block
+provenance
+U2 verdict 语义
+
+APPROVED 只能表示：
+
+纯文本
+AUTHORIZED_FOR_CONTROLLED_EXECUTION_PREPARATION
+
+REJECTED：
+
+纯文本
+REJECTED_NO_CONTROLLED_EXECUTION
+
+即使 APPROVED：
+
+纯文本
+apply = FORBIDDEN
+execute = FORBIDDEN
+configMutation = FORBIDDEN
+productionRollout = FORBIDDEN
+
+P6-U2 仍然不能写配置。
+
+真正配置 write 必须另开后续单元并重新裁决。
+
+PRODUCTION
+
+全部继续 HOLD：
+
+REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing
+
+继续：
+
+SECOND_* = FORBIDDEN
+L5_RELAXATION = FORBIDDEN
+
+保持：
+
+MODEL_GATEWAY_RUNTIME_WIRED = false
+ACTION_RUNTIME_PRODUCTION_ENABLED = false
+META_IMPROVEMENT_INTEGRATED = false
+PRODUCTION_READY = false
+
+最终裁决：P6-U1 正式 CLOSED；授权进入 P6-U2 Controlled Adoption Execution Gate，但仅做 execution authorization contract，仍禁止实际 apply。
+```
+
