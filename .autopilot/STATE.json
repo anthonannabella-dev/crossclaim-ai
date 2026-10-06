@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "d84ed40e",
+  "head": "ae95e5eb",
   "status": "RECONCILED",
   "current_task": "RSI 生产可执行闭环（7 点收口）：RSI_RUNTIME_READY = PASS；MODEL_PROVIDER_READY = 本地仿真已接线（真实网络/付费 HOLD）；PERSISTENCE_READY = ephemeral 已验证、durable 需宿主非生产 DATABASE_URL；REBOOT_RECONCILE_READY = NOT_IMPLEMENTED（下一单元）；SYSTEMD_VALIDATED = 需宿主 Linux 实机",
   "next_task": "BG-016 单一 Acceptance Head + 四份状态一致 guard（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍 HOST_ACTION_REQUIRED 或 HOLD",
@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-40",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-05T23:58:55.200Z",
+  "updated_at": "2026-10-06T00:00:20.094Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -50,15 +50,15 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
-  "next_execution_unit": "Order of operations next tick: (1) git push (retry; verify origin/gate/7-commercial-validation == ae95e5eb); (2) extract + archive the P6-U1 verdict verbatim (MSG-20261005-85) with compare.mjs FULL_COPY_OK + commit/push; (3) submit PHASE 6 U1 FINAL to the audit chat (marker [CODEX-PHASE6-U1FINAL], REVIEWED_HEAD = ae95e5eb) describing the temporal-ordering fix; (4) durable state; then P6-U2 per the auditor NEXT.",
+  "next_execution_unit": "Next tick: (1) extract + archive the P6-U1 verdict verbatim (MSG-20261005-85) with compare.mjs FULL_COPY_OK; (2) read the P6-U1 FINAL verdict (marker [CODEX-PHASE6-U1FINAL], REVIEWED_HEAD = ae95e5eb) and archive it (MSG-20261005-86) with FULL_COPY_OK; (3) durable state; (4) if PASS -> P6-U2 Controlled Adoption Execution Gate (authorization contract only) per the auditor NEXT.",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-05T23:58:55.200Z",
+  "last_tick_at": "2026-10-06T00:00:20.094Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "PHASE 6 U1 FINAL (plan temporal ordering: createdAt >= reviewVerdict.decidedAt -> ADOPTION_PLAN_CREATED_BEFORE_VERDICT; temporalOrdering boundary entry + P6U1_3b test) committed locally as ae95e5eb after tsc 0 + targeted 5/5 + PHASE5 filter PASS + regression 1069 passed/1 failed (P2E-DB5). PUSH BLOCKED by GitHub HTTP 500 (retry next tick before anything else; do NOT submit P6-U1 FINAL to the audit until ae95e5eb is on origin).",
-  "last_action_at": "2026-10-05T23:58:55.200Z",
-  "next_action": "Retry git push (origin should receive ae95e5eb), then archive the P6-U1 verdict (MSG-20261005-85) and submit P6-U1 FINAL to the audit chat.",
-  "current_head": "d84ed40e",
-  "last_completed_head": "d84ed40e",
+  "last_action": "Push retry succeeded (origin now 3e5f4bbf including code ae95e5eb). PHASE 6 U1 FINAL submitted to the audit chat: plan temporal ordering enforced (createdAt >= reviewVerdict.decidedAt else ADOPTION_PLAN_CREATED_BEFORE_VERDICT) + boundary temporalOrdering + P6U1_3b test; local tsc 0, targeted 5/5, filter PASS, regression 1069 passed/1 failed (P2E-DB5). Marker [CODEX-PHASE6-U1FINAL], REVIEWED_HEAD = ae95e5eb.",
+  "last_action_at": "2026-10-06T00:00:20.094Z",
+  "next_action": "Archive the P6-U1 verdict (MSG-20261005-85) and read/archive the P6-U1 FINAL verdict (expect MSG-20261005-86); if PASS, queue/implement P6-U2 per the auditor minimum gate.",
+  "current_head": "ae95e5eb",
+  "last_completed_head": "ae95e5eb",
   "reviewed_head": "add99ec3",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -5169,10 +5169,9 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "P6U1F-1 retry push (ae95e5eb) until origin has it; GitHub was returning HTTP 500",
     "P6U1F-2 archive P6-U1 verdict (MSG-20261005-85) verbatim + compare FULL_COPY_OK + commit/push",
-    "P6U1F-3 submit P6-U1 FINAL (temporal ordering fix) with REVIEWED_HEAD = ae95e5eb",
-    "P6U1F-4 then P6-U2 Controlled Adoption Execution Gate per auditor minimum gate",
+    "P6U1F-3 read + archive P6-U1 FINAL verdict (MSG-20261005-86) + durable state",
+    "P6U1F-4 if PASS -> P6-U2 Controlled Adoption Execution Gate per auditor minimum gate",
     "P6U1F-5 non-blocking debt: full SHA-256 digests, fingerprint schema upkeep, scanRawPayloadKeys bounded traversal, P2E-DB5 test-isolation"
   ],
   "full_autonomous_internal_execution": "VERIFIED",
@@ -9323,7 +9322,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-05T23:58:55.200Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-06T00:00:20.094Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -11064,12 +11063,7 @@
       "expected_message_id": "MSG-20261005-85"
     }
   },
-  "pending_push": {
-    "commits": [
-      "ae95e5eb"
-    ],
-    "reason": "GitHub push returned HTTP 500 Internal Server Error twice (request IDs E5EE:17F2CA:95307D:A8EDBC:6AC4399D, DAD8:2633A:953ECE:A8F8DD:6AC439B0) at 2026-10-05T23:58Z; branch diverged locally by 1 commit (ae95e5eb = PHASE 6 U1 FINAL temporal ordering fix)."
-  },
+  "pending_push": null,
   "phase6_u1_verdict": {
     "message_id": "MSG-20261005-85",
     "verdict": "PASS WITH REVISE / NOT CLOSED",
@@ -11086,5 +11080,21 @@
       "PLAN_TEMPORAL_ORDERING：createdAt 必须 >= reviewVerdict.decidedAt"
     ],
     "phase6_u1_final_required": "YES"
+  },
+  "phase6_u1_final": {
+    "status": "SUBMITTED / AWAITING_VERDICT",
+    "reviewed_head": "ae95e5eb",
+    "pushed": true,
+    "local_verification": {
+      "tsc": "PASS",
+      "targeted": "controlled-adoption-plan 5/5",
+      "regression": "103 files / 1070 tests (1 failed = P2E-DB5)",
+      "github_ci": "NOT_OBSERVED"
+    },
+    "submission": {
+      "marker": "[CODEX-PHASE6-U1FINAL]",
+      "delivered": true,
+      "expected_message_id": "MSG-20261005-86"
+    }
   }
 }
