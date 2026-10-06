@@ -154925,3 +154925,282 @@ PRODUCTION_READY = false
 最终裁决：P6-U1 正式 CLOSED；授权进入 P6-U2 Controlled Adoption Execution Gate，但仅做 execution authorization contract，仍禁止实际 apply。
 ```
 
+### [MSG-20261005-87] PHASE 6 U2 裁决 = PASS WITH REVISE / NOT CLOSED（PLAN_TRUST_GATE / SERVER_OWNED_LIVE_CONFIG_READ / DOUBLE_STALE_GUARD / DELTA_RECONFIRMATION / ROLLBACK_ANCHOR / AUTHORIZATION_PROVENANCE·REPLAY·REVOKE / APPROVED_REJECTED_SEMANTICS / NO_EXECUTION = PASS；AUTHORIZATION_WITHIN_PLAN_LIFETIME = REVISE；LIVE_CONFIG_IDENTITY_DIGEST_BINDING = REVISE；PHASE6_U2_FINAL_REQUIRED = YES）， reviewed ref 29f80feb
+
+```text
+[CODEX-PHASE6-U2]
+
+PUSH = DONE：origin/gate/7-commercial-validation 现为 29f80feb（REVIEWED_HEAD = 29f80feb 为代码提交）
+前置：PHASE 6 U1 FINAL 裁决（MSG-20261005-86）= PLAN_TEMPORAL_ORDERING = PASS、CONTROLLED_ADOPTION_PLAN_CONTRACT = PASS、
+PHASE_6_U1 = PASS / CLOSED、PHASE6_U1_FINAL2_REQUIRED = NO；NEXT 授权 P6-U2 Controlled Adoption Execution Gate，
+范围严格冻结为 EXECUTION_AUTHORIZATION_ONLY（不允许真正修改配置）。本单元按该冻结门实现。
+
+① 交付（P6-U2）
+新增 apps/api/src/services/outcome-learning/controlled-execution-gate.ts：
+* Plan trust gate（门 1）：isVerifiedControlledAdoptionPlan(plan) === true 且 semantics === READY_FOR_CONTROLLED_EXECUTION_GATE_REVIEW；
+  授权时间必须满足 plan.createdAt <= requestedAt <= plan.expiresAt；过期 → EXECUTION_GATE_PLAN_EXPIRED；
+  早于计划 → EXECUTION_GATE_REQUESTED_BEFORE_PLAN_CREATED；窗口非法 → EXECUTION_GATE_EXPIRY_INVALID。
+* Server-owned live config read（门 2）：ControlledCurrentConfigStorePort.read(target) 由 composition root 注入；
+  **没有任何 caller 自报 fingerprint 的入参**，非端口对象（如 {configFingerprint: '...'}）→ EXECUTION_GATE_CONFIG_STORE_REQUIRED；
+  返回至少 configFingerprint + configValues + capturedAt + version，形状不合法 → EXECUTION_GATE_LIVE_CONFIG_UNREADABLE。
+* 双重 stale guard（门 3）：live.configFingerprint === plan.expectedBaselineConfigFingerprint
+  且 live.configValues[plan.path] === plan.from，否则 STALE_BASELINE（fingerprint / path-value 两类 fail-closed）。
+* Delta 再确认（门 4）：target/path/from/to 全部取自 verified plan（不重新创造 delta）；path 仍在该 target 的 allowlist；
+  to 仍过 U3 value schema（EXECUTION_GATE_PATH_NOT_ALLOWED / EXECUTION_GATE_TO_VALUE_INVALID）。
+* Rollback anchor（门 5）：绑定 rollbackPlanDigest + expectedBaselineSnapshotDigest + expectedBaselineConfigFingerprint +
+  rollbackTarget = U2_BASELINE；禁止 LATEST / DEFAULT / CURRENT / HEAD（EXECUTION_GATE_ROLLBACK_ANCHOR_INVALID）。
+* Execution Authorization Ticket（门 6）：CONTROLLED_EXECUTION_AUTHORIZATION_TICKET 绑定 15 项
+  （planDigest / reviewVerdictDigest / proposalDigest / canaryEvaluationDigest / rollbackPlanDigest /
+  target / path / from / to / liveConfigFingerprint / livePathValue / requestedAt / expiresAt / nonce / scope）
+  + provenance（WeakSet + WeakMap fingerprint）+ deep-freeze；另存 liveConfigCapturedAt / liveConfigVersion。
+* Reviewer gate（门 7）：scope 精确 CONTROLLED_ADOPTION_EXECUTION_REVIEW；role 仅 EXTERNAL_JUDGE / HUMAN_OPERATOR；
+  one ticket → one verdict（digest-keyed replay block）；早于请求 → _VERDICT_DECIDED_BEFORE_REQUEST；
+  过期 → _VERDICT_TICKET_EXPIRED；撤销单向（_ALREADY_REVOKED / _ALREADY_DECIDED，撤销后判决 → _VERDICT_TICKET_REVOKED）。
+* U2 verdict 语义（门 8）：APPROVED → AUTHORIZED_FOR_CONTROLLED_EXECUTION_PREPARATION；
+  REJECTED → REJECTED_NO_CONTROLLED_EXECUTION；即使 APPROVED，execution = apply / execute / configMutation /
+  productionRollout 全 FORBIDDEN；额外提供 assertControlledExecutionPreparationAuthorized(verdict)
+  作为未来 execution 单元的消费门（verified + APPROVED + 语义 + execution 全 FORBIDDEN，缺一 fail-closed）。
+* 模块不导出任何 applyConfig / executeAdoption / mutateConfig / promoteConfig / rolloutConfig / writeConfig 入口。
+
+② 验收（本地 apps/api）
+* npx tsc --noEmit → exit 0
+* controlled-execution-gate **8/8**：
+  P6U2_1 plan 全链绑定 + APPROVED 语义 AUTHORIZED_FOR_CONTROLLED_EXECUTION_PREPARATION + execution 全 FORBIDDEN；
+  P6U2_2 caller 自报 fingerprint 不可能通过（store 必为 server-owned 端口，read 被真实调用）；
+  P6U2_3 plan 未 provenance / clone plan → REJECT；
+  P6U2_4 授权时间窗（早于计划 / 越过 expiresAt / 非法窗口 / 非法日期）；
+  P6U2_5 双重 stale guard（fingerprint 漂移、path value 漂移、path 缺失）；
+  P6U2_6 scope / nonce / role / 过期判决 / revoke / replay；
+  P6U2_7 provenance·anti-tamper（clone ticket/verdict 不可信）、REJECTED 语义、无执行入口；
+  P6U2_8 rollback anchor = U2_BASELINE + forbidden labels + live config 形状不合法。
+* 过滤集：13 files / **143 tests** PASS。
+* 回归集：106 files / **1090 tests**（1089 passed + 1 failed = recovery-si-phase2-e-db P2E-DB5 既有 test-isolation debt）。
+* GitHub Actions：NOT_OBSERVED。
+
+③ 口径
+* U2 只是 execution authorization contract：不写配置、不 apply、不 mutate、不 rollout；真正配置 write 必须另开后续单元并重新裁决。
+* live config 只从 server-owned CurrentConfigStorePort 读取；stale-baseline 防线不再依赖 caller 声称。
+* 未接真实 judge/OAuth/外部写；HOLD/FORBIDDEN 边界全部不变。
+* 未宣称：MODEL_GATEWAY_RUNTIME_WIRED / ACTION_RUNTIME_PRODUCTION_ENABLED / META_IMPROVEMENT_INTEGRATED / PRODUCTION_READY = false。
+
+请求裁决
+1. P6-U2 Controlled Adoption Execution Gate 是否可记 PASS（CONTROLLED_EXECUTION_GATE_CONTRACT = PASS、
+   PHASE_6_U2 = PASS / CLOSED、PHASE6_U2_FINAL_REQUIRED = NO）？
+2. 若通过，真正配置 write 的后续单元需要怎样的独立授权与最低门（当前未授权、未实现）？
+
+边界：REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS /
+PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing = HOLD；SECOND_* = FORBIDDEN；L5_RELAXATION = FORBIDDEN。
+…
+显示更多
+✅
+思考了 1m 5s
+ChatGPT 说：
+DECISION
+PLAN_TRUST_GATE = PASS
+SERVER_OWNED_LIVE_CONFIG_READ = PASS
+DOUBLE_STALE_GUARD = PASS
+DELTA_RECONFIRMATION = PASS
+ROLLBACK_ANCHOR = PASS
+AUTHORIZATION_PROVENANCE / REPLAY / REVOKE = PASS
+APPROVED_REJECTED_SEMANTICS = PASS
+NO_EXECUTION = PASS
+AUTHORIZATION_WITHIN_PLAN_LIFETIME = REVISE
+LIVE_CONFIG_IDENTITY_DIGEST_BINDING = REVISE
+PHASE_6_U2 = PASS WITH REVISE / NOT CLOSED
+PHASE6_U2_FINAL_REQUIRED = YES
+Reviewed HEAD：29f80feb
+GitHub Actions：NOT_OBSERVED
+KEEP
+
+这轮主体架构是对的：
+
+verified Plan 才能进入；
+live config 不再由 caller 直接报 fingerprint；
+store read(target) 被真实调用；
+fingerprint + path value 双重 stale guard；
+target/path/from/to 都继承 verified plan；
+rollback 固定 U2_BASELINE；
+ticket/verdict provenance + fingerprint + freeze；
+role/scope/replay/expiry/revoke 成立；
+APPROVED 仅：
+AUTHORIZED_FOR_CONTROLLED_EXECUTION_PREPARATION
+REJECTED：
+REJECTED_NO_CONTROLLED_EXECUTION
+即使 APPROVED，apply/execute/config mutation/rollout 全 FORBIDDEN。
+
+ControlledCurrentConfigStorePort 作为内部 composition-root port 的结构化依赖可以接受；当前单元没有 HTTP 写入口，不要求额外给 port 套 WeakSet。
+
+CHANGE
+
+只需两个窄修。
+
+1. Authorization ticket 不能活得比 Plan 更久
+
+当前只检查：
+
+纯文本
+requestedAt <= plan.expiresAt
+
+但没有：
+
+纯文本
+ticket.expiresAt <= plan.expiresAt
+
+因此可能出现：
+
+纯文本
+plan expiresAt = 06:30
+ticket requestedAt = 06:00
+ticket expiresAt = 10:00
+verdict decidedAt = 09:00
+
+这样 Plan 已失效，authorization 仍能 APPROVED。
+
+必须增加：
+
+纯文本
+expiresAt <= plan.expiresAt
+
+否则：
+
+EXECUTION_GATE_TICKET_EXCEEDS_PLAN_EXPIRY
+
+最终时间链应是：
+
+纯文本
+plan.createdAt
+<= ticket.requestedAt
+<= ticket.expiresAt
+<= plan.expiresAt
+2. live config version/capturedAt 必须进入 durable ticket identity
+
+当前 ticket 保存：
+
+liveConfigCapturedAt
+liveConfigVersion
+
+但 ticketDigest 只绑定：
+
+liveConfigFingerprint
+livePathValue
+
+没有绑定这两个字段。
+
+进程内 fingerprint 能防篡改，但 durable digest 没有明确证明：
+
+“本次授权依据的是哪次 current-config read / 哪一个 version”。
+
+FINAL 应把：
+
+纯文本
+liveConfigCapturedAt
+liveConfigVersion
+
+加入 ticketDigest preimage。
+
+同时建议把 boundary binds 从 15 项更新为 17 项。
+
+Verdict 已绑定 ticketDigest，所以 ticket digest 修好后，不需要再重复把 version/capturedAt 单独塞入 verdictDigest。
+
+RISKS
+
+还有一个未来执行阶段必须重新检查、但不阻断 U2 contract：
+
+assertControlledExecutionPreparationAuthorized(verdict) 只证明曾经获得合法授权。
+
+它不意味着未来真正执行时：
+
+Plan 仍未过期；
+live config 仍未变化。
+
+所以真正 config-write 单元必须在写入瞬间重新读取 current config，不能直接拿 U2 verdict 就写。
+
+也就是说：
+
+U2 authorization 不是可长期持有的 capability token。
+
+TEST
+
+P6-U2 FINAL 最少补：
+
+ticket expiresAt === plan.expiresAt → PASS。
+ticket expiresAt < plan.expiresAt → PASS。
+ticket expiresAt > plan.expiresAt → REJECT。
+requestedAt 已在 plan 内，但 ticket 跨出 plan expiry → REJECT。
+ticketDigest 明确绑定：
+liveConfigCapturedAt
+liveConfigVersion
+相同 fingerprint/path value，但不同 version → ticketDigest 不同。
+相同 fingerprint/path value/version，但不同 capturedAt → ticketDigest 不同。
+原 8/8 保持 green。
+execution 全 FORBIDDEN 保持。
+NEXT
+
+只做：
+
+P6-U2 FINAL — authorization lifetime bounded by plan + full live-config identity binding
+
+如果通过，我会给：
+
+纯文本
+CONTROLLED_EXECUTION_GATE_CONTRACT = PASS
+PHASE_6_U2 = PASS / CLOSED
+PHASE6_U2_FINAL2_REQUIRED = NO
+
+然后才考虑真正 config write。
+
+真正写配置应另开：
+
+P6-U3 — Controlled Config Execution
+
+而且必须单独授权，不能因为 U2 APPROVED 自动开始。
+
+最低执行门至少包括：
+
+verified U2 APPROVED verdict；
+verified plan 与 verdict planDigest 完全一致；
+执行瞬间再次 server-owned read current config；
+再次校验：
+plan 未过期；
+fingerprint === expected baseline fingerprint；
+current[path] === from；
+current version === authorized live version，或使用等价 CAS；
+DB/store 原子 CAS：
+expectedVersion → newVersion
+只允许 exact target/path/from→to；
+一次 authorization 最多一次 mutation；
+idempotency key；
+concurrent execution exactly-one；
+write 后 read-back verification；
+写入失败不得部分成功；
+rollback artifact/anchor 随执行记录持久化；
+execution result 必须 append-only / auditable；
+kill switch / control plane 必须仍可阻断。
+
+而且 U3 初版建议仍是：
+
+SANDBOX / NON-PRODUCTION CONFIG STORE ONLY
+
+不要直接打开 production mutation。
+
+PRODUCTION
+
+全部继续 HOLD：
+
+REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing
+
+继续：
+
+SECOND_* = FORBIDDEN
+L5_RELAXATION = FORBIDDEN
+
+保持：
+
+MODEL_GATEWAY_RUNTIME_WIRED = false
+ACTION_RUNTIME_PRODUCTION_ENABLED = false
+META_IMPROVEMENT_INTEGRATED = false
+PRODUCTION_READY = false
+
+结论：U2 的安全骨架已经完成，只剩“ticket 不得超过 plan 生命周期”和“live config version/capturedAt 进入 durable digest”两个窄缺口。修完即可 CLOSED；真正配置 write 必须另开 U3，并再次做执行瞬间 stale/CAS 检查。
+```
+
