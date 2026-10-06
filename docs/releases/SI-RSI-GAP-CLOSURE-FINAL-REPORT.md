@@ -17,7 +17,7 @@
 | **B** | RSI-REBOOT-DURABLE-RECONCILE FINAL | `9eb30b6d` | 新增 `rsi-reboot-reconcile-db.test.ts` **10/10**（真实 PostgreSQL）；RSI 全量回归 52 文件 / **315 tests PASS** |
 | **C** | EXPERIENCE MEMORY v1 | `0b28ab52` | 新增 `services/experience-memory/experience-memory.ts` + `experience-memory.test.ts` **22/22**；回归 54 文件 / **494 tests PASS**；持久化表 = 未实施的 Schema Delta 请求 |
 | **D** | META LEARNING / CONTROLLED IMPROVEMENT v1 | `1fa2821d` | 新增 `services/meta-learning/meta-learning-orchestrator.ts` + `meta-learning-orchestrator.test.ts` **20/20**；回归 57 文件 / **542 tests PASS** |
-| **E** | RECOVERY SIMULATION v1 | `RSI-RSI-E-HEAD` | 新增 `services/recovery-simulation/recovery-decision-simulator.ts` + `recovery-decision-simulator.test.ts` **17/17** |
+| **E** | RECOVERY SIMULATION v1 | `b92b9efc` | 新增 `services/recovery-simulation/recovery-decision-simulator.ts` + `recovery-decision-simulator.test.ts` **17/17** |
 
 全量回归（`npx vitest run`，本程序收口时）：见 §4。
 `tsc --noEmit`：每个单元均 **exit 0**。GitHub Actions：**NOT_OBSERVED**（不声称 CI 绿）。
@@ -39,7 +39,7 @@
 | `OPERATIONAL_MEMORY` | **PARTIAL** | cost ledger / daily inspection / weekly review / golden fixtures 已存在；**operational persistence ≠ Experience Memory** |
 | `EXPERIENCE_MEMORY` | **YES**（v1 端口实现） | `0b28ab52`；`experience-memory` 22/22；持久化表 = `EXPERIENCE_MEMORY_SCHEMA_DELTA = REQUEST ONLY`（未实施） |
 | `META_LEARNING` | **PARTIAL** | `1fa2821d`（12 段端到端闸门 + verifiable reward 强制 + SANDBOX-only）；**`META_IMPROVEMENT_INTEGRATED = false`**（真实全链证据待架构审计） |
-| `RECOVERY_SIMULATION` | **YES**（v1） | `RSI-RSI-E-HEAD`；`recovery-decision-simulator` 17/17；模拟不执行、无数值编造 |
+| `RECOVERY_SIMULATION` | **YES**（v1） | `b92b9efc`；`recovery-decision-simulator` 17/17；模拟不执行、无数值编造 |
 | `REAL_MODEL_RUNTIME` | **HOLD_EXTERNAL** | `REAL_MODEL_NETWORK` / `PAID_MODEL_CALLS = HOLD`；仅本地模拟 adapter |
 | `REAL_PROVIDER_RUNTIME` | **HOLD_EXTERNAL** | Amazon / TikTok / Walmart / Shopify / UPS / FedEx / DHL / Customs Provider / PSP 全部走逐 Provider Gate；无生产凭据 |
 | `EXTERNAL_ACTION_RUNTIME` | **HOLD_EXTERNAL** | `PLATFORM_WRITE_TRANSPORT_ENABLED=false`；External Write / Payment / Customs Filing / Transport = HOLD |
@@ -49,7 +49,7 @@
 ## 3. HOST 要求的返回字段
 
 ```
-CURRENT_HEAD              = <本回报所在 commit>
+CURRENT_HEAD              = b92b9efc
 RSI_REBOOT_RECONCILE      = PASS（本机真实 PostgreSQL 取证；9eb30b6d）
                               SYSTEMD_RUNTIME_VALIDATION = HOST_ACTION_REQUIRED（Linux/systemd 实机未伪造）
 EXPERIENCE_MEMORY_V1      = YES（端口实现 + 22/22；持久化表待 Schema Delta 裁定）
