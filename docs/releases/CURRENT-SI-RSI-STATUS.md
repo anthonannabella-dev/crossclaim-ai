@@ -19,8 +19,8 @@ BRANCH = `gate/7-commercial-validation`
 | `REASONING_MODEL_GATEWAY` | **PARTIAL** | `6e98e66e` → `dcccd89d` → `d89b42dc` → `25ad94ea` | 唯一 Model Gateway capability port 已接入（禁第二 Model Router）；**本地模拟可用**，真实网络 / 付费模型 = `HOLD_EXTERNAL`。测试 `rsi-si-model-gateway`、`rsi-si-model-chain-e2e`、`rsi-local-sim-adapter`、`rsi-model-router` |
 | `CONTROLLED_RSI_READY` | **PARTIAL** | PHASE 5 收口 `b3629ffc`（MSG-20261005-83） | controlled learning 采用链（candidate → approval → rollback plan → controlled config proposal → canary/shadow → adoption review）全为 `PROPOSAL_ONLY / SHADOW_ONLY / ROLLBACK_PLAN_ONLY`，**无自动执行入口**；`CONTROLLED_RSI` 的“可控性”已具备，生产采用未启用 |
 | `LONG_HORIZON_RUNTIME` | **PARTIAL** | `b1ac2323`（P6-PROD-U1 FINAL3）+ 既有 continuation/event loop | continuation、event loop、lease、lease fencing、outbox、multi-worker、startup reconciliation、durable recovery basis 已有并闭合；**RSI 自身的 reboot-safe 收敛**仍见下一行 |
-| `RSI_REBOOT_RECONCILE` | **PARTIAL（本程序 B 的目标）** | 既有：`rsi-restart-reconcile.ts` / `rsi-reconcile-prisma-store.ts` | 已实现 lease 过期/回收 + 任务 requeue（带状态前置条件，重复执行 0 行更新），测试 `rsi-restart-reconcile`、`rsi-persistence-db`；但 backlog `RSI-RT-06-state-reconcile` 仍标 `BLOCKED_ON_SCHEMA_DELTA_AUDIT`，且缺 reboot E2E（Test C/F）、duplicate-event 幂等与 crash-mid-transition 的端到端取证 → B 单元收口 |
-| `DURABLE_RSI_REBOOT_RECOVERY` | **PARTIAL** | 同上 | Incident / Task / Lease 已有持久化；Candidate / Evaluation / Promotion / Rollback 的 durable SSOT 与「reboot 不重复」需 B 单元逐项证明 |
+| `RSI_REBOOT_RECONCILE` | **PASS**（本机 PG 取证；systemd 实机另计） | `RSI-RSI-B-HEAD` | 见 §3.1：`rsi-reboot-reconcile-db` **10/10**（reboot 不重复 / stale lease recovery / lease fencing / exactly-one continuation / repeated startup 幂等 / duplicate event 幂等 / crash-mid-transition）；`RSI_REBOOT_RECONCILE = PASS`、`SYSTEMD_RUNTIME_VALIDATION = HOST_ACTION_REQUIRED` |
+| `DURABLE_RSI_REBOOT_RECOVERY` | **PASS**（本机 PG 取证） | `RSI-RSI-B-HEAD` | `DURABLE_RSI_STATE = PASS`；`DUPLICATE_AFTER_REBOOT = ZERO`；Incident/Task/Candidate/EvaluationRun/PromotionDecision/RollbackRecord/Lease 八张表为 durable SSOT（`rsi-persistence-db` 8/8 + `rsi-reboot-reconcile-db` 10/10） |
 | `OPERATIONAL_MEMORY` | **PARTIAL** | 既有 cost ledger / daily-weekly inspection / fixtures | `rsi-cost-ledger`、`rsi-daily-inspection`、`rsi-weekly-review`、`rsi-golden-fixtures` 存在；**operational persistence ≠ Experience Memory**（见下） |
 | `EXPERIENCE_MEMORY` | **NO（本程序 C 的目标）** | — | 当前无结构化 Experience Memory（FACT/AGGREGATE/HEURISTIC、ruleVersion、时间窗口、source count、confidence、append-only raw experience） |
 | `META_LEARNING` / `META_IMPROVEMENT` | **PARTIAL（本程序 D 的目标）** | 链上各段 HEAD 见 `docs/releases/SI-RUNTIME-PHASE5-CONTROLLED-LEARNING-ADOPTION-CLOSURE.md` | Outcome→Learning Evidence→Offline Evaluation→Meta-improvement Candidate→Approval→Rollback Plan→Controlled Proposal→Canary/Shadow→Adoption Review 已封板（planning-only）；**`META_IMPROVEMENT_INTEGRATED = false`**（缺 Experience Memory 驱动与端到端 sandbox adoption + observation + regression detection + rollback 的完整验证） |
@@ -52,7 +52,7 @@ BRANCH = `gate/7-commercial-validation`
 | 单元 | 内容 | 状态 |
 |---|---|---|
 | A | DOC-STATE-RECONCILIATION（docs-only） | **CLOSED**（本文件 + 47 份历史文档横幅） |
-| B | RSI-REBOOT-DURABLE-RECONCILE FINAL | PENDING |
+| B | RSI-REBOOT-DURABLE-RECONCILE FINAL | **CLOSED（本机 PG 取证 + exact HEAD/tests；systemd 实机 = HOST_ACTION_REQUIRED）** |
 | C | EXPERIENCE MEMORY v1 | PENDING |
 | D | META LEARNING / CONTROLLED IMPROVEMENT v1 | PENDING |
 | E | RECOVERY SIMULATION v1 | PENDING |
@@ -60,6 +60,31 @@ BRANCH = `gate/7-commercial-validation`
 ---
 
 ## 4. 硬边界（本程序期间不得解锁）
+
+### 3.1 B 单元闭合证据（RSI-REBOOT-DURABLE-RECONCILE FINAL）
+
+```
+RSI_REBOOT_RECONCILE = PASS          （本机真实 PostgreSQL 取证）
+SYSTEMD_RUNTIME_VALIDATION = HOST_ACTION_REQUIRED   （Linux/systemd 实机验证不得伪造）
+DURABLE_RSI_STATE = PASS
+DUPLICATE_AFTER_REBOOT = ZERO
+```
+
+* EXACT_HEAD：`RSI-RSI-B-HEAD`（含 `apps/api/src/__tests__/rsi-reboot-reconcile-db.test.ts`）
+* TEST_EVIDENCE：
+  - `rsi-reboot-reconcile-db` **10/10**（新增）：B1 dedupeKey 唯一（incident/task/candidate/promotion 同因不重复建）·
+    B2 stale ACTIVE lease → EXPIRED 且任务回 READY · B3 连续重启第二次起 `idempotentNoop=true` 且行数不变 ·
+    B4 crash-mid-transition（IN_PROGRESS 无 lease）→ 回 READY · B5 未过期 ACTIVE lease 被 held（fencing，不抢不偷）·
+    B6 多次 reconcile 后每 dedupeKey 仍只有 1 个未终态任务 · B7 duplicate event 被唯一约束挡住 ·
+    B8 Builder/Judge 同 actor 被 `RSI_BUILDER_JUDGE_SAME_ACTOR` 拒绝 · B9 证据表 append-only
+    （`RSI_EVIDENCE_APPEND_ONLY`）· B10 reconcile 边界（不建任务/不删任务/不读凭据/无网络/无外部写/无支付/无传输）
+  - `rsi-persistence-db` 8/8（既有）：Schema 级不变量（UNIQUE(dedupeKey) / CHECK 状态 / append-only / Judge 分离 / 平台级无租户列）
+  - `rsi-restart-reconcile` 10/10（既有）：收敛计划的纯函数契约
+  - RSI 全量回归：**52 文件 / 315 tests 全部 PASS**
+* 说明：`rsi-restart-reconcile.ts` 只做**状态收敛**（先释放过期 lease，再把 IN_PROGRESS 任务放回 READY），
+  两条写路径均带状态前置条件（`status='ACTIVE'` / `status='IN_PROGRESS'`），因此重复执行 = 0 行更新 —— 这是幂等的机制保证。
+
+---
 
 `EXTERNAL_WRITE` / `PAYMENT` / `CUSTOMS_FILING` / `PRODUCTION_CREDENTIALS` / `PRODUCTION_ENABLEMENT` /
 `REAL_MODEL_NETWORK` / `PAID_MODEL_CALLS` / `TRANSPORT` / `P2_F` / `P2_G` = **HOLD**；
