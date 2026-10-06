@@ -155654,3 +155654,377 @@ PRODUCTION_READY = false
 最终裁决：P6-U2 正式 CLOSED。授权另开 P6-U3，但只允许 SANDBOX / NON-PRODUCTION 的原子 CAS 配置写入；production config write 仍未授权。
 ```
 
+### [MSG-20261005-89] PHASE 6 U3 裁决 = PASS WITH REVISE / NOT CLOSED（TRIPLE_TRUST_ENTRY / SANDBOX_ONLY_BOUNDARY / EXECUTION_TIME_GATE / ATOMIC_CAS / EXACT_DELTA_ONLY / KILL_SWITCH_BOUNDARY = PASS；LIVE_VERSION_NOOP_GATE = REVISE；RESERVATION_TERMINALIZATION = REVISE；POST_WRITE_RECONCILIATION_DURABILITY = REVISE；PHASE6_U3_FINAL_REQUIRED = YES）， reviewed ref 08a35f4b
+
+```text
+[CODEX-PHASE6-U3]
+
+PUSH = DONE：origin/gate/7-commercial-validation 现为 08a35f4b（REVIEWED_HEAD = 08a35f4b 为代码提交）
+前置：PHASE 6 U2 FINAL 裁决（MSG-20261005-88）= AUTHORIZATION_WITHIN_PLAN_LIFETIME / LIVE_CONFIG_IDENTITY_DIGEST_BINDING /
+CONTROLLED_EXECUTION_GATE_CONTRACT = PASS，PHASE_6_U2 = PASS / CLOSED，PHASE6_U2_FINAL2_REQUIRED = NO；
+NEXT 授权 P6-U3 Controlled Config Execution，首版范围冻结为 SANDBOX / NON_PRODUCTION_CONFIG_WRITE_ONLY。
+
+① 交付（P6-U3）
+新增 apps/api/src/services/outcome-learning/controlled-config-execution.ts（按你给的 12 点门逐条落地）：
+* 1 三重可信入口：verified plan + verified authorization ticket + verified authorization verdict；
+  verdict.outcome === APPROVED、verdict.semantics === AUTHORIZED_FOR_CONTROLLED_EXECUTION_PREPARATION、
+  verdict.ticketDigest === ticket.ticketDigest、verdict.planDigest === plan.planDigest、ticket.planDigest === plan.planDigest；
+  clone / handmade / 任一 mismatch 一律 fail-closed（零写）。
+* 2 执行时间门：verdict.decidedAt <= executedAt <= min(ticket.expiresAt, plan.expiresAt)；
+  早于授权 → CONFIG_EXECUTION_BEFORE_AUTHORIZATION；越过 → CONFIG_EXECUTION_AUTHORIZATION_EXPIRED。
+* 3 执行瞬间 server-owned 重读：current.configFingerprint 必须同时等于 plan.expectedBaselineConfigFingerprint 与
+  ticket.liveConfigFingerprint；current.configValues[path] === plan.from；current.version === ticket.liveConfigVersion；
+  任一变化 → STALE_EXECUTION_BASELINE（零写）。目标值已生效 → NOOP_ALREADY_APPLIED（零写）。
+* 4 原子 CAS 硬门：store.compareAndSwap({target, expectedVersion: ticket.liveConfigVersion,
+  expectedPathValue: plan.from, path: plan.path, nextValue: plan.to})；失败 → CONFIG_EXECUTION_CONFLICT（零副作用）；
+  未采用 read→if ok→普通 write 的 TOCTOU 写法。
+* 5 exact delta only：target/path/from/to 全部取自 verified plan；不接受 caller 重新提交 delta，
+  无 multi-path / JSON blob patch。
+* 6 一次授权最多一次 mutation：durable ControlledConfigExecutionLedgerPort.reserve(...)（authorizationVerdictDigest /
+  authorizationTicketDigest 唯一；生产实现需 DB UNIQUE），另附 sandbox in-memory 参考实现。
+* 7 idempotency：同 idempotencyKey + 同授权 → 返回既有 execution result（不再写）；异键 → IDEMPOTENCY_KEY_CONFLICT；
+  空白键 → CONFIG_EXECUTION_IDEMPOTENCY_KEY_REQUIRED。
+* 8 写后 read-back：new[path] === plan.to 且 new.version !== pre.version → COMMITTED；
+  写返回成功但 read-back 不一致 → NEEDS_RECONCILIATION（绝不标记 COMMITTED，也不盲目重写）。
+* 9 CONTROLLED_CONFIG_EXECUTION_RESULT 绑定 16 项（executionId / planDigest / authorizationTicketDigest /
+  authorizationVerdictDigest / rollbackPlanDigest / target / path / from / to / preConfigFingerprint / preConfigVersion /
+  postConfigFingerprint / postConfigVersion / executedAt / status / idempotencyKey）+ provenance + fingerprint + durable persistence；
+  status 仅允许 COMMITTED / NOOP_ALREADY_APPLIED / CONFLICT / NEEDS_RECONCILIATION / FAILED_ZERO_WRITE。
+* 10 rollback anchor 随执行记录持久化（rollbackPlanDigest + baselineSnapshotDigest + baselineConfigFingerprint + U2_BASELINE）；
+  首版**不自动 rollback**。
+* 11 kill switch / control plane：environment 必须 SANDBOX（否则 CONFIG_EXECUTION_PRODUCTION_FORBIDDEN）、
+  globalDisabled → CONFIG_EXECUTION_KILL_SWITCH_ENGAGED、未 enable → CONFIG_EXECUTION_NOT_ENABLED。
+* 12 首版禁止：production config store / rollout / multi-node production propagation / real provider action / payment /
+  external writes / Policy·Guard·Router·ActionRuntime production mutation；成功语义唯一 = SANDBOX_CONFIG_MUTATION_COMMITTED，
+  禁止 PRODUCTION_APPLIED / DEPLOYED / ROLLED_OUT；模块不导出任何 rollout / promote / production apply 入口。
+
+② 验收（本地 apps/api）
+* npx tsc --noEmit → exit 0
+* controlled-config-execution **10/10**：
+  P6U3_1 sandbox CAS 成功 → COMMITTED，16 项绑定 + provenance + 落账，CAS 只调用 1 次；
+  P6U3_2 三重入口 fail-closed（clone plan/ticket/verdict、跨链 mismatch）；
+  P6U3_3 执行时间门（早于授权 / 越过窗口 / 非法时间）；
+  P6U3_4 kill switch（PRODUCTION 环境 / globalDisabled / 未 enable）；
+  P6U3_5 执行瞬间重读三重漂移（fingerprint / path value / version）→ STALE_EXECUTION_BASELINE 且零写；
+  P6U3_6 原子 CAS 冲突（VERSION_CONFLICT / PATH_VALUE_CONFLICT）→ CONFIG_EXECUTION_CONFLICT 且零副作用；
+  P6U3_7 一次授权一次 mutation + idempotency（同键复用结果、CAS 恒为 1 次、异键冲突、空白键拒绝）；
+  P6U3_8 写后 read-back 不一致 → NEEDS_RECONCILIATION；
+  P6U3_9 目标值已生效 → NOOP_ALREADY_APPLIED（零写）；
+  P6U3_10 边界与无越权入口（生产/rollout 相关函数不导出，result 冻结不可篡改）。
+* 过滤集：14 files / **155 tests** PASS。
+* 回归集：107 files / **1102 tests**（1101 passed + 1 failed = recovery-si-phase2-e-db P2E-DB5 既有 test-isolation debt）。
+* GitHub Actions：NOT_OBSERVED。
+
+③ 口径
+* U3 只写 sandbox / non-production 配置存储；production mutation 仍未授权、未实现。
+* ledger 的“一次授权最多一次 mutation”在当前实现由端口承担：进程内参考实现用 Set，生产实现必须落 DB UNIQUE 约束
+  （与 platform.write 的既有做法一致）。
+* 未接真实 provider / payment / external write；HOLD/FORBIDDEN 边界全部不变。
+* 未宣称：MODEL_GATEWAY_RUNTIME_WIRED / ACTION_RUNTIME_PRODUCTION_ENABLED / META_IMPROVEMENT_INTEGRATED / PRODUCTION_READY = false。
+
+请求裁决
+1. P6-U3 Controlled Config Execution（SANDBOX only）是否可记 PASS（SANDBOX_CONFIG_EXECUTION_CONTRACT = PASS、
+   PHASE_6_U3 = PASS / CLOSED、PHASE6_U3_FINAL_REQUIRED = NO）？
+2. 若通过，production config store 的后续单元（若将来要开）需要怎样的独立授权与最低门？当前明确保持未授权。
+
+边界：REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS /
+PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing = HOLD；SECOND_* = FORBIDDEN；L5_RELAXATION = FORBIDDEN。
+…
+显示更多
+思考了 1m 27s
+ChatGPT 说：
+DECISION
+TRIPLE_TRUST_ENTRY = PASS
+SANDBOX_ONLY_BOUNDARY = PASS
+EXECUTION_TIME_GATE = PASS
+ATOMIC_CAS = PASS
+EXACT_DELTA_ONLY = PASS
+KILL_SWITCH_BOUNDARY = PASS
+LIVE_VERSION_NOOP_GATE = REVISE
+RESERVATION_TERMINALIZATION = REVISE
+POST_WRITE_RECONCILIATION_DURABILITY = REVISE
+PHASE_6_U3 = PASS WITH REVISE / NOT CLOSED
+PHASE6_U3_FINAL_REQUIRED = YES
+Reviewed HEAD：08a35f4b
+GitHub Actions：NOT_OBSERVED
+KEEP
+
+核心方向是正确的：
+
+plan + authorization ticket + authorization verdict 三重 verified；
+digest 三者闭合；
+sandbox 环境硬门；
+执行时重新读取 current config；
+原子 compareAndSwap()，没有 read→普通 write 的 TOCTOU；
+exact target/path/from/to 来自 verified plan；
+authorization 一次性 reservation；
+CAS 成功后 read-back；
+production mutation / rollout / auto rollback 全部禁止。
+
+这些都保留。
+
+CHANGE
+1. NOOP_ALREADY_APPLIED 现在能绕过 version stale gate
+
+当前顺序是：
+
+纯文本
+fingerprint check
+↓
+if current[path] === to
+    → NOOP_ALREADY_APPLIED
+↓
+path === from check
+↓
+version === ticket.liveConfigVersion check
+
+所以如果：
+
+纯文本
+current[path] = to
+current.version != authorized version
+
+会直接返回 NOOP，而不会触发：
+
+STALE_EXECUTION_BASELINE:version
+
+这违背 U2 已经明确绑定的 live config version。
+
+必须改成先完整验证 identity：
+
+纯文本
+fingerprint
++
+version
+
+之后才判断 NOOP。
+
+也就是：
+
+纯文本
+current.version !== ticket.liveConfigVersion
+→ STALE_EXECUTION_BASELINE
+
+然后才允许判断
+current[path] === to
+→ NOOP_ALREADY_APPLIED
+2. reservation 会出现“孤儿占位”
+
+当前：
+
+纯文本
+ledger.reserve()
+↓
+live read
+↓
+stale check
+↓
+CAS
+
+如果 reserve 成功后发生：
+
+stale baseline；
+live read error；
+CAS conflict；
+
+代码直接 throw。
+
+但是 reservation 已经存在，没有 result 被 ledger.put()。
+
+下一次同授权重试会变成：
+
+ALREADY_RESERVED / CONFIG_EXECUTION_ALREADY_EXECUTED
+
+但实际上可能一次 mutation 都没有发生，也没有 durable execution result。
+
+这和当前声明：
+
+durable / append-only / auditable execution result
+
+不一致。
+
+最窄修法
+
+把所有纯只读 preflight 放到 reservation 前：
+
+纯文本
+trust gates
+time gates
+sandbox gates
+live re-read
+fingerprint/version/path validation
+↓
+reserve
+↓
+NOOP or CAS
+
+然后一旦 reserve = RESERVED，之后每条路径必须最终产生一个 durable terminal result。
+
+3. CAS conflict / post-write read failure 必须有 durable terminal result
+
+你定义了：
+
+纯文本
+CONFLICT
+FAILED_ZERO_WRITE
+NEEDS_RECONCILIATION
+
+但当前实际上：
+
+CAS conflict → throw，没有 CONFLICT result；
+多数 zero-write failure → throw，没有 FAILED_ZERO_WRITE；
+更严重：CAS 已成功后，如果第二次 store.read() 抛错或返回 malformed 数据，函数会直接 throw。
+
+最后一种意味着：
+
+纯文本
+配置可能已经写成功
++
+ledger 没有结果
++
+reservation 已占用
+
+这是执行系统里最危险的 unknown-outcome 状态。
+
+FINAL 必须保证
+
+CAS 返回失败：
+
+纯文本
+persist CONFLICT
+→ 不再 CAS
+
+CAS 成功之后，任何 read-back：
+
+exception
+malformed result
+value mismatch
+version mismatch
+
+都必须：
+
+纯文本
+persist NEEDS_RECONCILIATION
+
+绝不能再次尝试 CAS，也不能只 throw 丢失执行记录。
+
+RISKS
+
+当前最危险场景：
+
+纯文本
+reserve = success
+CAS = success
+process/read-back error
+↓
+配置实际已经改了
+但没有 execution result
+↓
+retry
+↓
+ALREADY_RESERVED
+
+系统既不能确认 committed，也不能安全重试。
+
+这必须在 sandbox 阶段解决，不能推迟到 production。
+
+另外，生产阶段未来还必须解决“CAS 成功后进程立即崩溃、尚未来得及写 ledger”的 crash gap；但这是 production durable transaction/outbox 层的问题，可以不阻断当前 sandbox U3。
+
+TEST
+
+P6-U3 FINAL 至少补：
+
+current version 漂移 + value 已等于 to
+→ STALE_EXECUTION_BASELINE
+→ 不能 NOOP。
+preflight stale 失败后，同 authorization 不应留下 orphan reservation。
+CAS VERSION_CONFLICT
+→ durable CONFLICT result。
+CAS PATH_VALUE_CONFLICT
+→ durable CONFLICT result。
+相同 idempotency key 重试 conflict
+→ 返回原 CONFLICT result，不再次 CAS。
+CAS 成功 + read-back throw
+→ NEEDS_RECONCILIATION persisted。
+CAS 成功 + malformed read-back
+→ NEEDS_RECONCILIATION persisted。
+CAS 成功 + value/version mismatch
+→ NEEDS_RECONCILIATION，保持现有行为。
+NEEDS_RECONCILIATION 重试不得再次 CAS。
+successful COMMITTED / NOOP 现有测试保持。
+execution result provenance/freeze 保持。
+production 环境仍零写。
+NEXT
+
+只授权：
+
+P6-U3 FINAL — terminal execution ledger + NOOP version gate + post-CAS unknown-outcome reconciliation
+
+推荐执行顺序收敛成：
+
+纯文本
+Verified authorization chain
+        ↓
+Time / Sandbox / Kill-switch
+        ↓
+Server-owned live re-read
+        ↓
+Fingerprint + Version + Path checks
+        ↓
+Determine NOOP eligibility
+        ↓
+Durable reserve
+        ↓
+   ┌────┴─────┐
+ NOOP          CAS
+   ↓            ↓
+persist       conflict
+result          ↓
+             persist CONFLICT
+                │
+             success
+                ↓
+             read-back
+                ↓
+       COMMITTED / NEEDS_RECONCILIATION
+                ↓
+             persist result
+
+通过后可判：
+
+纯文本
+SANDBOX_CONFIG_EXECUTION_CONTRACT = PASS
+PHASE_6_U3 = PASS / CLOSED
+PHASE6_U3_FINAL2_REQUIRED = NO
+PRODUCTION
+
+现在仍不授权 production config write。
+
+未来 production 单元至少还需要另外解决：
+
+DB durable UNIQUE reservation；
+reservation/finalize 状态机；
+crash recovery；
+CAS 与 execution ledger 的事务/outbox 一致性；
+multi-worker concurrency E2E；
+durable idempotency；
+startup reconciliation；
+production Control Plane / Kill Switch；
+real production config store adapter；
+rollback execution 独立授权。
+
+现有边界继续全部 HOLD / FORBIDDEN：
+
+REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing = HOLD
+
+SECOND_* = FORBIDDEN
+L5_RELAXATION = FORBIDDEN
+
+MODEL_GATEWAY_RUNTIME_WIRED = false
+ACTION_RUNTIME_PRODUCTION_ENABLED = false
+META_IMPROVEMENT_INTEGRATED = false
+PRODUCTION_READY = false
+
+结论：U3 还不能 CLOSED。CAS 本身做对了，但 reservation/result 状态机还有三个执行级缺口。把“reserve 后每条路径都有 durable terminal result”闭合后，sandbox execution 才真正可信。
+```
+
