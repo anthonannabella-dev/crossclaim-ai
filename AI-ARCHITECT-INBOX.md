@@ -156272,3 +156272,208 @@ production rollout/propagation。
 结论：本轮三项修复中的 NOOP、preflight、CAS-return/read-back 已通过，但还剩 CAS 直接抛异常的 unknown-outcome，以及失败结果仍标成 COMMITTED 的语义漏洞。再做一个很窄的 FINAL2 即可封板 U3。
 ```
 
+### [MSG-20261005-91] PHASE 6 U3 FINAL2 裁决 = PASS WITH REVISE / NOT CLOSED（CAS_EXCEPTION_TERMINALIZATION / EXECUTION_RESULT_SEMANTICS = PASS；CAS_EXCEPTION_POST_STATE_EVIDENCE = REVISE；PHASE6_U3_FINAL3_REQUIRED = YES）， reviewed ref 6252f71e
+
+```text
+[CODEX-PHASE6-U3FINAL2]
+
+PUSH = DONE：origin/gate/7-commercial-validation 现为 6252f71e（REVIEWED_HEAD = 6252f71e 为代码提交）
+前置：PHASE 6 U3 FINAL 裁决（MSG-20261005-90）= LIVE_VERSION_NOOP_GATE / PREFLIGHT_BEFORE_RESERVATION /
+CAS_RETURN_CONFLICT_DURABILITY / READBACK_UNKNOWN_OUTCOME_DURABILITY = PASS；CAS_EXCEPTION_TERMINALIZATION = REVISE；
+EXECUTION_RESULT_SEMANTICS = REVISE；PHASE6_U3_FINAL2_REQUIRED = YES。本单元只做这两项窄修。
+
+① 交付（P6-U3 FINAL2，唯一改动 = controlled-config-execution）
+* 窄修 1（CAS_EXCEPTION_TERMINALIZATION）：await store.compareAndSwap(...) 包入 try/catch；抛异常
+  （network timeout / adapter exception / connection reset 等）时 mutation 结果**未知**，因此持久化并返回
+  status = NEEDS_RECONCILIATION 的 CONTROLLED_CONFIG_EXECUTION_RESULT —— 不记 CONFLICT、不留 orphan reservation，
+  同 idempotencyKey 重试直接返回同一 reconciliation result，且 CAS 不再被调用。
+* 窄修 2（EXECUTION_RESULT_SEMANTICS）：新增 CONTROLLED_CONFIG_EXECUTION_STATUS_SEMANTICS，semantics 随 status 取值：
+  COMMITTED → SANDBOX_CONFIG_MUTATION_COMMITTED；NOOP_ALREADY_APPLIED → SANDBOX_CONFIG_ALREADY_APPLIED_NO_WRITE；
+  CONFLICT → SANDBOX_CONFIG_MUTATION_CONFLICT_NO_WRITE；NEEDS_RECONCILIATION → SANDBOX_CONFIG_MUTATION_NEEDS_RECONCILIATION；
+  FAILED_ZERO_WRITE → SANDBOX_CONFIG_MUTATION_FAILED_ZERO_WRITE。semantics 同时进入 resultDigest preimage，
+  因此下游即便只做 verified result + semantics === SANDBOX_CONFIG_MUTATION_COMMITTED 也不会把失败/未知结果误当成功。
+* 其余不变：三重可信入口 + digest 三者闭合、只读 preflight 前移（失败零 reservation）、sandbox-only 硬门、
+  exact delta only、原子 compareAndSwap、CAS 返回 ok:false → durable CONFLICT（不再 CAS）、
+  CAS 成功后 read-back 异常/malformed/不一致 → durable NEEDS_RECONCILIATION、rollback anchor 随记录持久化（首版不自动 rollback）、
+  productionMutation / autoRollback 全 FORBIDDEN、模块不导出任何 rollout / promote / production apply 入口。
+
+② 验收（本地 apps/api）
+* npx tsc --noEmit → exit 0
+* controlled-config-execution **16/16**（新增 2 项 FINAL2 用例，原 14 项保持 green）：
+  P6U3F2_1 compareAndSwap 抛异常 → durable NEEDS_RECONCILIATION（semantics = SANDBOX_CONFIG_MUTATION_NEEDS_RECONCILIATION），
+  同键重试返回同一 resultDigest 且 CAS 调用次数保持 1；
+  P6U3F2_2 五种 status → semantics 映射逐一断言；COMMITTED / NOOP / CONFLICT / NEEDS_RECONCILIATION 四个 resultDigest 互不相同
+  （digest 绑定 status/semantics）。
+* 过滤集：14 files / **161 tests** PASS（含 controlled-execution-gate 10/10）。
+* 回归集：107 files / **1108 tests**（1107 passed + 1 failed = recovery-si-phase2-e-db P2E-DB5 既有 test-isolation debt）。
+* GitHub Actions：NOT_OBSERVED。
+
+③ 口径
+* U3 仍为 SANDBOX / NON_PRODUCTION_CONFIG_WRITE_ONLY；production config write / rollout / auto rollback 未授权、未实现。
+* production 侧的 crash-recovery / durable UNIQUE reservation / outbox 一致性等仍留待未来独立单元（你已列出），本 sandbox 单元不处理，也不因此放开 production。
+* 未接真实 provider / payment / external write；HOLD/FORBIDDEN 边界全部不变。
+* 未宣称：MODEL_GATEWAY_RUNTIME_WIRED / ACTION_RUNTIME_PRODUCTION_ENABLED / META_IMPROVEMENT_INTEGRATED / PRODUCTION_READY = false。
+
+请求裁决
+1. P6-U3 FINAL2 是否可记 PASS（CAS_EXCEPTION_TERMINALIZATION = PASS、EXECUTION_RESULT_SEMANTICS = PASS、
+   SANDBOX_CONFIG_EXECUTION_CONTRACT = PASS、PHASE_6_U3 = PASS / CLOSED、PHASE6_U3_FINAL3_REQUIRED = NO）？
+2. 是否确认 Phase 6 当前链可登记为 U1/U2/U3 全 CLOSED（production mutation 继续未授权）？
+
+边界：REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS /
+PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing = HOLD；SECOND_* = FORBIDDEN；L5_RELAXATION = FORBIDDEN。
+…
+显示更多
+思考了 28s
+ChatGPT 说：
+DECISION
+CAS_EXCEPTION_TERMINALIZATION = PASS
+EXECUTION_RESULT_SEMANTICS = PASS
+CAS_EXCEPTION_POST_STATE_EVIDENCE = REVISE
+PHASE_6_U3 = PASS WITH REVISE / NOT CLOSED
+PHASE6_U3_FINAL3_REQUIRED = YES
+Reviewed HEAD：6252f71e
+GitHub Actions：NOT_OBSERVED
+
+因此现在还不能登记 Phase 6 U1/U2/U3 全 CLOSED。U1、U2 已 CLOSED；U3 只剩最后一个非常窄的证据语义问题。
+
+KEEP
+
+本轮两项修复都正确：
+
+compareAndSwap() 直接 throw 已变成 durable NEEDS_RECONCILIATION；
+同 idempotencyKey 重试不再重复 CAS；
+status 与 semantics 已一一对应；
+semantics 已进入 resultDigest；
+CONFLICT / NEEDS_RECONCILIATION / NOOP 不再携带 COMMITTED 语义。
+
+这些全部保留。
+
+CHANGE
+
+唯一剩余问题：
+
+CAS exception 时，post-state 明明未知，却写成了 pre-state
+
+当前代码：
+
+纯文本
+catch {
+  buildResult(
+    NEEDS_RECONCILIATION,
+    {
+      fingerprint: preFingerprint,
+      version: preVersion
+    }
+  )
+}
+
+于是 durable result 会变成：
+
+纯文本
+status = NEEDS_RECONCILIATION
+
+preConfigVersion = cfg-1
+postConfigVersion = cfg-1
+
+但 CAS throw 的真实含义是：
+
+CAS 可能没执行，也可能已经执行成功，只是响应丢失。
+
+因此此时没有任何证据证明 post state 仍是 pre state。
+
+最窄修复：
+
+纯文本
+CAS exception
+→ NEEDS_RECONCILIATION
+→ postConfigFingerprint = null
+→ postConfigVersion = null
+
+这样 artifact 才准确表达：
+
+post-state UNKNOWN
+
+而不是暗示“确认未改变”。
+
+注意：CAS 明确返回 ok:false 的 CONFLICT 可以继续使用 pre fingerprint/version，因为此路径契约明确表示零写。
+
+CAS 返回 ok:true、随后 read-back 失败时，也可以继续保留 CAS 返回的 post version/fingerprint，因为至少存在 provider/CAS success response。
+
+RISKS
+
+如果现在封板，下游 reconciliation 逻辑可能看到：
+
+纯文本
+NEEDS_RECONCILIATION
+postVersion === preVersion
+
+误判断为：
+
+“配置大概率没写成功。”
+
+实际上 CAS exception 正是不能判断是否已写成功的场景。
+
+这是证据真实性问题，所以建议在 sandbox 阶段直接修掉。
+
+TEST
+
+只补一个 P6-U3 FINAL3：
+
+CAS throw → NEEDS_RECONCILIATION
+postConfigFingerprint === null
+postConfigVersion === null
+resultDigest 应绑定这两个 null/empty post identity
+同键重试返回相同 resultDigest
+CAS 仍只调用 1 次
+CAS ok:false → CONFLICT 且可保持 pre identity
+CAS success + read-back throw → NEEDS_RECONCILIATION，可保留 CAS 返回的 post identity
+原 16/16 全部保持 green
+NEXT
+
+只做：
+
+P6-U3 FINAL3 — unknown CAS post-state must remain UNKNOWN
+
+通过后即可：
+
+纯文本
+SANDBOX_CONFIG_EXECUTION_CONTRACT = PASS
+PHASE_6_U3 = PASS / CLOSED
+PHASE6_U3_FINAL4_REQUIRED = NO
+
+然后可正式登记：
+
+纯文本
+P6-U1 Controlled Adoption Plan = CLOSED
+P6-U2 Execution Authorization Gate = CLOSED
+P6-U3 Sandbox Controlled Config Execution = CLOSED
+
+PHASE 6 CURRENT CHAIN = CLOSED
+PRODUCTION
+
+production config write 继续未授权。
+
+即使 FINAL3 通过，也只表示：
+
+sandbox controlled config execution contract closed
+
+不表示 production mutation readiness。
+
+继续：
+
+REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing = HOLD
+
+SECOND_* = FORBIDDEN
+
+L5_RELAXATION = FORBIDDEN
+
+并保持：
+
+MODEL_GATEWAY_RUNTIME_WIRED = false
+ACTION_RUNTIME_PRODUCTION_ENABLED = false
+META_IMPROVEMENT_INTEGRATED = false
+PRODUCTION_READY = false
+
+结论：FINAL2 已经把执行状态机基本闭合，只差 CAS exception 时把未知 post-state 错写成 pre-state。改成 postConfigFingerprint/postConfigVersion = null 后，U3 就可以正式 CLOSED。
+```
+
