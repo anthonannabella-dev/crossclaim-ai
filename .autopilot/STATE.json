@@ -1,17 +1,17 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "ae95e5eb",
+  "head": "29f80feb",
   "status": "RECONCILED",
   "current_task": "RSI 生产可执行闭环（7 点收口）：RSI_RUNTIME_READY = PASS；MODEL_PROVIDER_READY = 本地仿真已接线（真实网络/付费 HOLD）；PERSISTENCE_READY = ephemeral 已验证、durable 需宿主非生产 DATABASE_URL；REBOOT_RECONCILE_READY = NOT_IMPLEMENTED（下一单元）；SYSTEMD_VALIDATED = 需宿主 Linux 实机",
   "next_task": "BG-016 单一 Acceptance Head + 四份状态一致 guard（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍 HOST_ACTION_REQUIRED 或 HOLD",
   "send_head": "07b7009",
   "decision_head": "f5e4cc2c",
-  "last_chatgpt_message": "MSG-20261005-40",
+  "last_chatgpt_message": "MSG-20261005-86",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-06T00:00:20.094Z",
+  "updated_at": "2026-10-06T00:12:13.766Z",
   "previous_head": "8064f07",
-  "architect_decision_pending": false,
+  "architect_decision_pending": true,
   "blocked_scope": null,
   "last_send_head": "0c35106",
   "last_sent_at": "2026-10-03T09:07:52.875Z",
@@ -21,7 +21,7 @@
   "ci_result": "completed_success",
   "fix_pr": "https://github.com/anthonannabella-dev/crossclaim-ai/pull/10",
   "channel_status": "HEALTHY（主审计会话 = https://chatgpt.com/c/6ac385db-cb60-83ec-9754-c7a30633a8c5（HOST 新开；MSG-20261005-30 起）；历史会话 https://chatgpt.com/c/6ac1cdf0-1ec8-83ec-8036-0e66fcf5c6b9 保留 MSG-22..29 逐字归档）",
-  "pending_verdict_unarchived": "MSG-20261005-85",
+  "pending_verdict_unarchived": null,
   "b2_status": "PASS（MSG-20260930-10 工程修复 + MSG-20260930-11 集成 PASS/MERGE APPROVED）",
   "protocol": "DUAL_CHANNEL_WAKEUP（GitHub = 正式总线 / ChatGPT Web = 仅唤醒）",
   "integration_pr": "https://github.com/anthonannabella-dev/crossclaim-ai/pull/11",
@@ -49,17 +49,17 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
-  "continuous_execution": "COMPLETE（AUTONOMOUS_INTERNAL_TARGET = COMPLETE；SAFE_CONTINUATION_QUEUE = EMPTY）",
-  "next_execution_unit": "Next tick: (1) extract + archive the P6-U1 verdict verbatim (MSG-20261005-85) with compare.mjs FULL_COPY_OK; (2) read the P6-U1 FINAL verdict (marker [CODEX-PHASE6-U1FINAL], REVIEWED_HEAD = ae95e5eb) and archive it (MSG-20261005-86) with FULL_COPY_OK; (3) durable state; (4) if PASS -> P6-U2 Controlled Adoption Execution Gate (authorization contract only) per the auditor NEXT.",
+  "continuous_execution": "RUNNING（PHASE 6 U2 submitted; awaiting verdict）",
+  "next_execution_unit": "Next tick: read the P6-U2 verdict (marker [CODEX-PHASE6-U2], REVIEWED_HEAD = 29f80feb) from the audit chat, archive it verbatim (compare.mjs FULL_COPY_OK), then update durable state; if PASS -> PHASE_6_U2 CLOSED and the real config-write unit remains NOT AUTHORIZED until separately ruled.",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-06T00:00:20.094Z",
+  "last_tick_at": "2026-10-06T00:12:13.766Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "Push retry succeeded (origin now 3e5f4bbf including code ae95e5eb). PHASE 6 U1 FINAL submitted to the audit chat: plan temporal ordering enforced (createdAt >= reviewVerdict.decidedAt else ADOPTION_PLAN_CREATED_BEFORE_VERDICT) + boundary temporalOrdering + P6U1_3b test; local tsc 0, targeted 5/5, filter PASS, regression 1069 passed/1 failed (P2E-DB5). Marker [CODEX-PHASE6-U1FINAL], REVIEWED_HEAD = ae95e5eb.",
-  "last_action_at": "2026-10-06T00:00:20.094Z",
-  "next_action": "Archive the P6-U1 verdict (MSG-20261005-85) and read/archive the P6-U1 FINAL verdict (expect MSG-20261005-86); if PASS, queue/implement P6-U2 per the auditor minimum gate.",
-  "current_head": "ae95e5eb",
-  "last_completed_head": "ae95e5eb",
-  "reviewed_head": "add99ec3",
+  "last_action": "Archived PHASE 6 U1 FINAL verdict (MSG-20261005-86) with compare.mjs FULL_COPY_OK (commit f47c0973); implemented and pushed P6-U2 Controlled Adoption Execution Gate (EXECUTION_AUTHORIZATION_ONLY) at 29f80feb (tsc 0, targeted 8/8, filtered 143 PASS, regression 1089 passed/1 failed = P2E-DB5); submitted marker [CODEX-PHASE6-U2] REVIEWED_HEAD=29f80feb to the audit chat (composer empty + marker + head verified in DOM).",
+  "last_action_at": "2026-10-06T00:12:13.766Z",
+  "next_action": "Read/archive the P6-U2 verdict (expect MSG-20261005-87); if PASS, record PHASE_6_U2 = PASS / CLOSED and wait for an explicit ruling before any real config write unit.",
+  "current_head": "29f80feb",
+  "last_completed_head": "29f80feb",
+  "reviewed_head": "29f80feb",
   "claim_submit_batch": {
     "verdict": "PASS",
     "message_id": "MSG-20261001-07",
@@ -11047,7 +11047,7 @@
     "next": "P6-U2 Controlled Adoption Execution Gate only after U1 CLOSED and separately authorized (and it should still be an execution-authorization contract, not direct production apply)"
   },
   "phase6_u1": {
-    "status": "SUBMITTED / AWAITING_VERDICT",
+    "status": "PASS / CLOSED",
     "reviewed_head": "d84ed40e",
     "pushed": true,
     "local_verification": {
@@ -11061,7 +11061,8 @@
       "marker": "[CODEX-PHASE6-U1]",
       "delivered": true,
       "expected_message_id": "MSG-20261005-85"
-    }
+    },
+    "closed_at": "2026-10-06T00:12:13.766Z"
   },
   "pending_push": null,
   "phase6_u1_verdict": {
@@ -11095,6 +11096,59 @@
       "marker": "[CODEX-PHASE6-U1FINAL]",
       "delivered": true,
       "expected_message_id": "MSG-20261005-86"
+    }
+  },
+  "phase6_u1_final_verdict": {
+    "message_id": "MSG-20261005-86",
+    "verdict": "PASS / CLOSED",
+    "reviewed_code_head": "ae95e5eb",
+    "branch_head": "3e5f4bbf",
+    "archive_verified": "FULL_COPY_OK",
+    "archive_head": "f47c0973",
+    "github_ci": "NOT_OBSERVED",
+    "pass": [
+      "PLAN_TEMPORAL_ORDERING = PASS",
+      "CONTROLLED_ADOPTION_PLAN_CONTRACT = PASS",
+      "PHASE_6_U1 = PASS / CLOSED",
+      "PHASE6_U1_FINAL2_REQUIRED = NO"
+    ],
+    "notes": [
+      "架构方确认 3e5f4bbf 相对 ae95e5eb 只修改 .autopilot/STATE.json，无新功能代码",
+      "授权进入 P6-U2 Controlled Adoption Execution Gate，范围冻结 EXECUTION_AUTHORIZATION_ONLY"
+    ]
+  },
+  "phase6_u2": {
+    "status": "SUBMITTED / AWAITING_VERDICT",
+    "unit": "Controlled Adoption Execution Gate（EXECUTION_AUTHORIZATION_ONLY）",
+    "reviewed_head": "29f80feb",
+    "pushed": true,
+    "files": [
+      "apps/api/src/services/outcome-learning/controlled-execution-gate.ts",
+      "apps/api/src/__tests__/controlled-execution-gate.test.ts"
+    ],
+    "gates": {
+      "planTrust": "verified plan + semantics READY_FOR_CONTROLLED_EXECUTION_GATE_REVIEW + plan.createdAt <= requestedAt <= plan.expiresAt",
+      "liveConfigSource": "ControlledCurrentConfigStorePort（server-owned；无 caller 自报 fingerprint 入参）",
+      "staleGuard": "double：live.configFingerprint === plan.expectedBaselineConfigFingerprint 且 live.configValues[path] === plan.from → 否则 STALE_BASELINE",
+      "deltaReconfirmation": "target/path/from/to 取自 verified plan；path ∈ target allowlist；to 过 U3 schema",
+      "rollbackAnchor": "rollbackPlanDigest + expectedBaselineSnapshotDigest + expectedBaselineConfigFingerprint + rollbackTarget=U2_BASELINE；禁止 LATEST/DEFAULT/CURRENT/HEAD",
+      "ticket": "CONTROLLED_EXECUTION_AUTHORIZATION_TICKET 15 项绑定 + WeakSet/WeakMap provenance + deep-freeze",
+      "reviewer": "scope=CONTROLLED_ADOPTION_EXECUTION_REVIEW；role=EXTERNAL_JUDGE/HUMAN_OPERATOR；expiry+revoke+replay",
+      "semantics": "APPROVED → AUTHORIZED_FOR_CONTROLLED_EXECUTION_PREPARATION；REJECTED → REJECTED_NO_CONTROLLED_EXECUTION",
+      "execution": "apply / execute / configMutation / productionRollout 全 FORBIDDEN；无执行入口导出"
+    },
+    "local_verification": {
+      "tsc": "PASS (exit 0)",
+      "targeted": "controlled-execution-gate 8/8",
+      "filtered": "13 files / 143 tests PASS",
+      "regression": "106 files / 1090 tests（1089 passed + 1 failed = recovery-si-phase2-e-db P2E-DB5 既有 test-isolation debt）",
+      "github_ci": "NOT_OBSERVED"
+    },
+    "submission": {
+      "marker": "[CODEX-PHASE6-U2]",
+      "delivered": true,
+      "composer_empty_verified": true,
+      "expected_message_id": "MSG-20261005-87"
     }
   }
 }
