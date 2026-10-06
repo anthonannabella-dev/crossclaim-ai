@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-88",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-06T00:28:30.140Z",
+  "updated_at": "2026-10-06T00:29:18.125Z",
   "previous_head": "8064f07",
   "architect_decision_pending": true,
   "blocked_scope": null,
@@ -50,9 +50,9 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "RUNNING（PHASE 6 U3 submitted; awaiting verdict）",
-  "next_execution_unit": "Next tick: read the P6-U3 verdict (marker [CODEX-PHASE6-U3], REVIEWED_HEAD = 08a35f4b) from the audit chat, archive it verbatim (compare.mjs FULL_COPY_OK), then update durable state; if PASS -> PHASE_6_U3 = PASS / CLOSED. production config write / auto-rollback remain NOT AUTHORIZED.",
+  "next_execution_unit": "Next tick: re-read the audit chat for the P6-U3 verdict (marker [CODEX-PHASE6-U3], REVIEWED_HEAD = 08a35f4b). The reviewer was still generating at last check and had already flagged two provisional blockers (ledger reservation leaking on failure paths; NOOP checked before version). Archive the FINAL verdict verbatim (compare.mjs FULL_COPY_OK), then apply its REVISE list as one narrow fix, verify, commit, push, resubmit.",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-06T00:28:30.140Z",
+  "last_tick_at": "2026-10-06T00:29:18.125Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
   "last_action": "Archived PHASE 6 U2 FINAL verdict (MSG-20261005-88, PASS / CLOSED) with compare.mjs FULL_COPY_OK (commit 82e97bc5); implemented and pushed P6-U3 Controlled Config Execution (SANDBOX only) at 08a35f4b (tsc 0, targeted 10/10, filtered 155 PASS, regression 1101 passed/1 failed = P2E-DB5); submitted marker [CODEX-PHASE6-U3] REVIEWED_HEAD=08a35f4b to the audit chat (composer empty + marker + head verified in DOM).",
   "last_action_at": "2026-10-06T00:28:30.140Z",
@@ -11281,5 +11281,16 @@
       "composer_empty_verified": true,
       "expected_message_id": "MSG-20261005-89"
     }
+  },
+  "phase6_u3_pending_findings": {
+    "status": "PROVISIONAL（审核会话仍在生成，尚未产出最终 verdict；不得据此改代码或归档）",
+    "observed_at": "2026-10-06T00:29:18.125Z",
+    "reviewer_in_progress": true,
+    "findings": [
+      "ledger reservation 发生在 live re-read / CAS 之前：stale 或 CONFLICT 抛错后 reservation 残留、无 durable result，授权被永久占位（需 release/terminal 语义，失败路径零占位）",
+      "NOOP_ALREADY_APPLIED 分支在 version 校验之前返回：可绕过 U2 已绑定的 liveConfigVersion（需先校验 version/fingerprint 再判 NOOP）",
+      "待确认：CONFLICT / FAILED_ZERO_WRITE 状态实际是否从未生成，以及 ledger 端口能否表达“释放/终结 reservation”"
+    ],
+    "rule": "下一 tick 必须先读取并逐字归档最终 verdict（严格匹配 REVIEWED_HEAD = 08a35f4b 或其后之代码 HEAD），再按 verdict 的 REVISE 清单一次性窄修；不得提前改动。"
   }
 }
