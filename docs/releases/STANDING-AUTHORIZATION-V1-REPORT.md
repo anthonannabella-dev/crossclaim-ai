@@ -44,7 +44,7 @@ LOW_RISK_AUTONOMY_READY   = YES（政策与判定层就绪；TIER_1 可在授权
 HIGH_VALUE_HITL           = KEEP（>1,000 → OWNER/ADMIN；≥10,000 → ADMIN）
 CUSTOMS_POA_BOUNDARY      = KEEP（SA ≠ Broker POA；15-gate readiness 不变）
 PRODUCTION_EXTERNAL_WRITE = HOLD
-CURRENT_HEAD              = STANDING-AUTH-HEAD
+CURRENT_HEAD              = 22962b73
 TEST_EVIDENCE             = standing-authorization 19/19（覆盖验收 1–12）+ action-guard-approval-verifier 9/9 + architecture-contract 157/157；tsc exit 0
 ```
 
