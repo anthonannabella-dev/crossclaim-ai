@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "8920c429",
+  "head": "027fc30b",
   "status": "RECONCILED",
   "current_task": "RSI 生产可执行闭环（7 点收口）：RSI_RUNTIME_READY = PASS；MODEL_PROVIDER_READY = 本地仿真已接线（真实网络/付费 HOLD）；PERSISTENCE_READY = ephemeral 已验证、durable 需宿主非生产 DATABASE_URL；REBOOT_RECONCILE_READY = NOT_IMPLEMENTED（下一单元）；SYSTEMD_VALIDATED = 需宿主 Linux 实机",
   "next_task": "BG-016 单一 Acceptance Head + 四份状态一致 guard（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍 HOST_ACTION_REQUIRED 或 HOLD",
@@ -9,9 +9,9 @@
   "last_chatgpt_message": "MSG-20261005-92",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-06T00:59:45.036Z",
+  "updated_at": "2026-10-06T02:20:14.534Z",
   "previous_head": "8064f07",
-  "architect_decision_pending": false,
+  "architect_decision_pending": true,
   "blocked_scope": null,
   "last_send_head": "0c35106",
   "last_sent_at": "2026-10-03T09:07:52.875Z",
@@ -21,7 +21,13 @@
   "ci_result": "completed_success",
   "fix_pr": "https://github.com/anthonannabella-dev/crossclaim-ai/pull/10",
   "channel_status": "HEALTHY（主审计会话 = https://chatgpt.com/c/6ac385db-cb60-83ec-9754-c7a30633a8c5（HOST 新开；MSG-20261005-30 起）；历史会话 https://chatgpt.com/c/6ac1cdf0-1ec8-83ec-8036-0e66fcf5c6b9 保留 MSG-22..29 逐字归档）",
-  "pending_verdict_unarchived": null,
+  "pending_verdict_unarchived": {
+    "marker": "[CODEX-P6PROD-U1]",
+    "reviewed_head": "027fc30b",
+    "expected_message_id": "MSG-20261005-93",
+    "submitted_at": "2026-10-06T02:20:14.534Z",
+    "channel": "https://chatgpt.com/c/6ac3bcd0-7818-83ec-8f92-44289fe8df67"
+  },
   "b2_status": "PASS（MSG-20260930-10 工程修复 + MSG-20260930-11 集成 PASS/MERGE APPROVED）",
   "protocol": "DUAL_CHANNEL_WAKEUP（GitHub = 正式总线 / ChatGPT Web = 仅唤醒）",
   "integration_pr": "https://github.com/anthonannabella-dev/crossclaim-ai/pull/11",
@@ -49,17 +55,17 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
-  "continuous_execution": "IDLE / SAFE_CONTINUATION_QUEUE_EMPTY（PHASE 6 当前链 CLOSED；生产 enablement 需宿主新授权）",
-  "next_execution_unit": "NONE（可自动执行的安全单元队列为空）。下一步若继续，必须由宿主单独授权新单元，例如 P6-PROD-U1 — Production Config Execution Durability / NO PRODUCTION ENABLEMENT（DB-backed reservation、UNIQUE(verdictDigest)/UNIQUE(ticketDigest)、durable idempotency、RESERVED→EXECUTING→terminal 状态机、crash recovery、startup reconciliation、CAS/ledger 一致性、transactional outbox、multi-worker E2E、stale-lease recovery；production current-config adapter 保持 read-only，production mutation 开关保持 false）。",
+  "continuous_execution": "RUNNING（P6-PROD-U1 已三切片 push 并送审 027fc30b；等待裁决）",
+  "next_execution_unit": "Next tick：读取 P6-PROD-U1 裁决（marker [CODEX-P6PROD-U1]，REVIEWED_HEAD = 027fc30b）→ 逐字归档 + compare.mjs FULL_COPY_OK → durable state；REVISE 则立即最小修订并继续 FINAL2/FINAL3…；PASS 则登记 P6-PROD-U1 = PASS / CLOSED。production config write / rollout / auto rollback 仍 NOT AUTHORIZED。",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-06T00:59:45.036Z",
+  "last_tick_at": "2026-10-06T02:20:14.534Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "读取并逐字归档 PHASE 6 U3 FINAL3 裁决（MSG-20261005-92，reviewed HEAD 8920c429）——compare.mjs = FULL_COPY_OK，归档提交 5cafb8e5 已 push；据此登记 PHASE_6_U3 = PASS / CLOSED、P6-U1/U2/U3 全 CLOSED、PHASE_6_CURRENT_CHAIN = PASS / CLOSED，production config write 仍 NOT AUTHORIZED。",
-  "last_action_at": "2026-10-06T00:59:45.036Z",
-  "next_action": "等待宿主授权新的独立单元；不启动任何 production config mutation / rollout / auto rollback。",
-  "current_head": "8920c429",
-  "last_completed_head": "8920c429",
-  "reviewed_head": "8920c429",
+  "last_action": "按 HOST AUTHORIZATION 2026-10-06 执行 P6-PROD-U1：S1 耐久 schema/migration/触发器（f3a4b77d）、S2 决策核（6885f6a3）、S3 Prisma durable store + 真实 PostgreSQL 15/15 并发/崩溃恢复验收（d009ff6f）、fixture 同步（027fc30b）；tsc 0；全量回归 410 files / 3899 tests（仅 P2E-DB5 既有隔离债）；已送审 [CODEX-P6PROD-U1]（composer empty + marker + head 已在 DOM 验证）。",
+  "last_action_at": "2026-10-06T02:20:14.534Z",
+  "next_action": "读/归档 P6-PROD-U1 裁决；按 verdict 迭代修订直到 PASS/CLOSED。不得启动任何生产配置写入（需 HOST 再次单独授权）。",
+  "current_head": "027fc30b",
+  "last_completed_head": "027fc30b",
+  "reviewed_head": "027fc30b",
   "claim_submit_batch": {
     "verdict": "PASS",
     "message_id": "MSG-20261001-07",
@@ -5168,7 +5174,11 @@
   "runner_status": "RUNNING",
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
-  "safe_continuation_queue": [],
+  "safe_continuation_queue": [
+    "P6PROD-1 读取 P6-PROD-U1 裁决（[CODEX-P6PROD-U1]，REVIEWED_HEAD = 027fc30b）→ 逐字归档 AI-ARCHITECT-INBOX.md → compare.mjs FULL_COPY_OK → durable state 对账。",
+    "P6PROD-2 若 verdict = REVISE：立即做最小修订 → targeted/DB/regression/tsc → commit → push → 重新送审（FINAL2/FINAL3…），不等 HOST 说“继续”。",
+    "P6PROD-3 若 verdict = PASS：登记 P6-PROD-U1 = PASS / CLOSED 并评估是否还有本授权范围内的安全单元（production mutation 仍 NOT AUTHORIZED，须再次单独授权）。"
+  ],
   "full_autonomous_internal_execution": "VERIFIED",
   "dispatcher_acceptance": {
     "at": "2026-10-03T14:47:59.226Z",
@@ -9288,7 +9298,7 @@
   "AUDIT_REVISE_LOOP_AUTO_CONTINUE": true,
   "HOST_LIMIT_MEANS_STOP": false,
   "STOP_ONLY_ON_TRUE_HOST_DEPENDENCY_OR_COMPLETE": true,
-  "CONTINUATION_REQUIRED": false,
+  "CONTINUATION_REQUIRED": true,
   "heartbeat": {
     "automation_id": "crossclaim-ai-bridge-5min",
     "name": "crossclaim-si-watchdog-1min",
@@ -9317,7 +9327,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-06T00:59:45.036Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-06T02:20:14.534Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -11450,5 +11460,67 @@
   },
   "phase6_current_chain": "PASS / CLOSED（P6-U1 / P6-U2 / P6-U3 全 CLOSED；production config write / rollout / auto rollback 仍 NOT AUTHORIZED）",
   "phase6_current_chain_closed_at": "2026-10-06T00:59:45.036Z",
-  "production_config_write": "NOT AUTHORIZED"
+  "production_config_write": "NOT AUTHORIZED",
+  "p6prod_u1": {
+    "status": "SUBMITTED / AWAITING_VERDICT",
+    "unit": "P6-PROD-U1 — Production Config Execution Durability（NO PRODUCTION ENABLEMENT）",
+    "authorization": "HOST AUTHORIZATION 2026-10-06",
+    "reviewed_head": "027fc30b",
+    "pushed": true,
+    "slices": {
+      "S1": {
+        "head": "f3a4b77d",
+        "scope": "schema / migration / 触发器 / 清单登记（5 张平台级耐久表）"
+      },
+      "S2": {
+        "head": "6885f6a3",
+        "scope": "纯决策核（reservation / lease / recovery / outbox / 只读 current-config 适配器）"
+      },
+      "S3": {
+        "head": "d009ff6f",
+        "scope": "Prisma durable store + 真实 PostgreSQL 并发 / 崩溃恢复验收"
+      },
+      "fixture_sync": {
+        "head": "027fc30b",
+        "scope": "单测 fixture 同步 ReservationView 新增字段"
+      }
+    },
+    "deliverables": [
+      "DB-backed reservation / execution ownership（ownerRef / leaseId / acquiredAt·renewedAt·expiresAt / executionAttempt / immutableBasisDigest）",
+      "Strong dedupe：UNIQUE(authorizationVerdictDigest) + UNIQUE(authorizationTicketDigest) + UNIQUE(idempotencyKey) + UNIQUE(reservationKey)",
+      "Durable 状态机 RESERVED → EXECUTING → terminal；非法跳转 / terminal 再迁移 / identity 改写 fail-closed（DB 触发器）",
+      "Crash recovery 分类：RECOVERED_COMMITTED / SAFE_TO_RETRY / NEEDS_RECONCILIATION（unknown → post identity UNKNOWN）/ CANCEL / MANUAL_REVIEW",
+      "Startup reconciliation（幂等；重复执行不产生第二条终态）",
+      "CAS + ledger 一致性（终态 + 结果 + outbox 同一事务，关闭 split-brain 窗口）",
+      "Transactional outbox + 消费者幂等交付账本",
+      "Multi-worker 并发：两条独立连接竞争 → exactly one execution authority",
+      "Lease / stale-lease recovery（确定性 takeover + 审计事件）",
+      "Production current-config adapter：严格 READ ONLY（无 write/apply/promote/rollout/rollback 导出）"
+    ],
+    "local_verification": {
+      "prisma_validate": "OK",
+      "migrate": "deploy 83 → 84 migrations；migrate status = up to date",
+      "trigger_checklists": "tenant-integrity + append-only 两份 CI 清单校验 SQL 在真实库通过",
+      "targeted_db": "config-execution-durability-db 15/15",
+      "targeted_unit": "config-execution-durability 26/26；schema-contract 13/13；architecture-contract 143/143",
+      "tsc": "PASS (exit 0)",
+      "full_suite": "410 files / 3899 tests（3898 passed + 1 failed = P2E-DB5 既有 test-isolation debt）",
+      "github_ci": "NOT_OBSERVED"
+    },
+    "submission": {
+      "marker": "[CODEX-P6PROD-U1]",
+      "delivered": true,
+      "composer_empty_verified": true,
+      "expected_message_id": "MSG-20261005-93"
+    },
+    "boundaries": {
+      "PRODUCTION_ENABLED": false,
+      "PRODUCTION_CONFIG_MUTATION": false,
+      "AUTO_PROMOTION": false,
+      "AUTO_ROLLOUT": false,
+      "AUTO_PRODUCTION_ROLLBACK": false,
+      "production_config_write": "NOT AUTHORIZED"
+    }
+  },
+  "production_enablement": "HOLD"
 }
