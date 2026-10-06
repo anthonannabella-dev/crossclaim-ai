@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-94",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-06T04:39:21.988Z",
+  "updated_at": "2026-10-06T04:42:26.689Z",
   "previous_head": "8064f07",
   "architect_decision_pending": true,
   "blocked_scope": null,
@@ -27,7 +27,7 @@
     "expected_message_id": "MSG-20261005-96",
     "submitted_at": "2026-10-06T04:39:21.988Z",
     "channel": "https://chatgpt.com/c/6ac3bcd0-7818-83ec-8f92-44289fe8df67",
-    "note": "FINAL3 已投递（截图确认消息在会话中）；随后该会话返回 “Unknown error / 重试”，再 reload 后 in-app browser 标签变为空白/不可访问 → 裁决读取顺延到下一 tick 重试。"
+    "note": "FINAL3 已投递（截图确认）；审核会话随后 Unknown error，in-app browser 现整个 ChatGPT 应用停留在 “请稍候…”（新标签同样）→ HOST_ACTION_REQUIRED，裁决读取待通道恢复后自动重试。"
   },
   "b2_status": "PASS（MSG-20260930-10 工程修复 + MSG-20260930-11 集成 PASS/MERGE APPROVED）",
   "protocol": "DUAL_CHANNEL_WAKEUP（GitHub = 正式总线 / ChatGPT Web = 仅唤醒）",
@@ -56,14 +56,14 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
-  "continuous_execution": "RUNNING（P6-PROD-U1 FINAL3 已送审 b1ac2323；审核会话表面异常，下一 tick 重试读取）",
-  "next_execution_unit": "Next tick：重新打开审核会话读取 P6-PROD-U1 FINAL3 裁决（marker [CODEX-P6PROD-U1FINAL3]，REVIEWED_HEAD = b1ac2323）→ 逐字归档 + compare.mjs FULL_COPY_OK → durable state；PASS 则登记 P6-PROD-U1 = PASS / CLOSED 并输出 Closure Report。",
+  "continuous_execution": "BLOCKED_ON_HOST_ACTION（P6-PROD-U1 FINAL3 已送审 b1ac2323；审核通道不可用，等待宿主恢复）",
+  "next_execution_unit": "等待审核通道恢复（in-app browser 的 ChatGPT 会话可用）后读取 FINAL3 裁决；代码保持在 b1ac2323 冻结，不启动新单元。",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-06T04:39:21.988Z",
+  "last_tick_at": "2026-10-06T04:42:26.689Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "归档 P6-PROD-U1 FINAL2 裁决（MSG-20261005-95 = PASS WITH REVISE / LEGACY_UNKNOWN，FULL_COPY_OK，4f1ed12b）；按该 REVISE 完成 FINAL3 并 push b1ac2323（'UNKNOWN' 保留 sentinel + 新 reservation 拒绝该值 + 历史 UNKNOWN 一律 NEEDS_RECONCILIATION/RECOVERY_BASIS_INCOMPLETE + 从未 claim 行只零写 CANCELLED）；targeted db 35/35、unit 34/34、schema 13/13、tsc 0、全量回归 3926 passed + 1 failed（P2E-DB5）；FINAL3 已投递（截图确认在会话中），但审核会话随后返回 Unknown error 且 in-app browser 标签变空白 → 裁决读取顺延下一 tick。",
-  "last_action_at": "2026-10-06T04:39:21.988Z",
-  "next_action": "读/归档 FINAL3 裁决并按 verdict 收口；production config write / rollout / auto rollback 仍 NOT AUTHORIZED。",
+  "last_action": "尝试读取 P6-PROD-U1 FINAL3 裁决：会话与根路径均停留在 “请稍候…”（新标签同样）、CDP 替代通道不可用 → 记录 HOST_ACTION_REQUIRED（AUDIT_CHANNEL_UNAVAILABLE）并停止本 tick 的仓库改动（工作树 clean）。",
+  "last_action_at": "2026-10-06T04:42:26.689Z",
+  "next_action": "通道恢复 → 读取并归档 FINAL3 裁决；如宿主直接粘贴裁决正文，可直接归档并继续。",
   "current_head": "b1ac2323",
   "last_completed_head": "b1ac2323",
   "reviewed_head": "b1ac2323",
@@ -5176,10 +5176,9 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "P6PROD-H1 重新打开审核会话（https://chatgpt.com/c/6ac3bcd0-7818-83ec-8f92-44289fe8df67）读取 P6-PROD-U1 FINAL3 裁决（marker [CODEX-P6PROD-U1FINAL3]，REVIEWED_HEAD = b1ac2323）→ 逐字归档 + compare.mjs FULL_COPY_OK → durable state。",
-    "P6PROD-H2 若 FINAL3 = PASS：登记 P6-PROD-U1 = PASS / CLOSED（FINAL_NEXT_REQUIRED = NO），并按 HOST 停止条件输出 Closure Report；production mutation 仍 NOT AUTHORIZED。",
-    "P6PROD-H3 若 FINAL3 = REVISE：立即最小修订 → targeted/DB/regression/tsc → commit/push → FINAL4。",
-    "P6PROD-H4 若审核会话表面持续不可用（空白/无权访问），记为真实 HOST_ACTION_REQUIRED（需宿主刷新/重新登录 in-app browser 会话）后再继续。"
+    "P6PROD-H1（受阻于 HOST_ACTION_REQUIRED：AUDIT_CHANNEL_UNAVAILABLE）通道恢复后重新打开审核会话读取 P6-PROD-U1 FINAL3 裁决（[CODEX-P6PROD-U1FINAL3]，REVIEWED_HEAD = b1ac2323）→ 逐字归档 + compare.mjs FULL_COPY_OK → durable state。",
+    "P6PROD-H2 FINAL3 = PASS → 登记 P6-PROD-U1 = PASS / CLOSED（FINAL_NEXT_REQUIRED = NO）并按 HOST 停止条件输出 Closure Report。",
+    "P6PROD-H3 FINAL3 = REVISE → 立即最小修订 → targeted/DB/regression/tsc → commit/push → FINAL4。"
   ],
   "full_autonomous_internal_execution": "VERIFIED",
   "dispatcher_acceptance": {
@@ -7404,14 +7403,20 @@
   "NEXT_EXECUTION_UNIT": "P2-D Implementation Audit 送审 + 归档裁决（P2-E/P2-F/P2-G 仍未授权）",
   "CI_STATUS": "PENDING_THIS_COMMIT",
   "WAITING_FOR_VERDICT": "recovery-si-phase2-d-implementation（SUBMITTED @5aaf7389）",
-  "HOST_ACTION_REQUIRED": [
-    "非生产 DATABASE_URL（无真实客户数据）→ RSI staging smoke + prisma migrate deploy + 重启对账 + exactly-once 取证",
-    "Linux 宿主机（或 CI runner）→ systemd Test A–F（RSI-RT-02）",
-    "真实报关 Provider：注册/申请开发者账号、接受第三方协议、提交公司/KYC/IOR/Broker 材料、提供生产 Client ID/Secret、签署真实 POA、支付费用",
-    "生产公开 Checker：共享/边缘原子限流（Redis check-and-consume 或 CDN/API Gateway）后启用",
-    "Search Console / 域名所有权",
-    "可选：gh auth login 恢复 GitHub issue comment 审计通道"
-  ],
+  "HOST_ACTION_REQUIRED": {
+    "kind": "AUDIT_CHANNEL_UNAVAILABLE",
+    "detected_at": "2026-10-06T04:42:26.689Z",
+    "what_is_blocked": "P6-PROD-U1 FINAL3 裁决读取（marker [CODEX-P6PROD-U1FINAL3]，REVIEWED_HEAD = b1ac2323）",
+    "evidence": [
+      "FINAL3 已投递并截图确认消息出现在审核会话中（composer 已清空、marker 与 reviewed head 均在 DOM 内）。",
+      "随后该会话返回 “Unknown error / 重试”；点击重试后 in-app browser 标签丢失会话内容。",
+      "重新打开同一会话 URL：页面长期停留在 “请稍候…”（body 为空）；reload 与刷新均无效。",
+      "新建一个 in-app browser 标签访问同一 URL（以及 https://chatgpt.com/ 根路径）同样停留在 “请稍候…”，说明是该 in-app browser 的 ChatGPT 会话/应用层不可用，而不是单个会话损坏。",
+      "本地未发现可用替代通道：自动化 Chrome 的 CDP(9222) 未运行（CDP_DOWN）。"
+    ],
+    "precise_dependency": "需要宿主侧操作：在 in-app browser 内刷新/重新登录 ChatGPT（或重启 Codex 应用的浏览器会话），恢复后可继续读取 FINAL3 裁决；也可直接把裁决正文粘贴给本线程。",
+    "safe_work_remaining": "none（代码冻结在 b1ac2323 等待裁决；不启动任何新单元以免与审核中的 head 不一致）。"
+  },
   "HOLD_EXTERNAL": [
     "EXTERNAL_WRITE",
     "PAYMENT",
@@ -9329,7 +9334,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-06T04:39:21.988Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-06T04:42:26.689Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
