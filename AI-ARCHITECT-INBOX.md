@@ -156028,3 +156028,247 @@ PRODUCTION_READY = false
 结论：U3 还不能 CLOSED。CAS 本身做对了，但 reservation/result 状态机还有三个执行级缺口。把“reserve 后每条路径都有 durable terminal result”闭合后，sandbox execution 才真正可信。
 ```
 
+### [MSG-20261005-90] PHASE 6 U3 FINAL 裁决 = PASS WITH REVISE / NOT CLOSED（LIVE_VERSION_NOOP_GATE / PREFLIGHT_BEFORE_RESERVATION / CAS_RETURN_CONFLICT_DURABILITY / READBACK_UNKNOWN_OUTCOME_DURABILITY = PASS；CAS_EXCEPTION_TERMINALIZATION = REVISE；EXECUTION_RESULT_SEMANTICS = REVISE；PHASE6_U3_FINAL2_REQUIRED = YES）， reviewed ref 5b58ffcf
+
+```text
+[CODEX-PHASE6-U3FINAL]
+
+PUSH = DONE：origin/gate/7-commercial-validation 现为 5b58ffcf（REVIEWED_HEAD = 5b58ffcf 为代码提交）
+前置：PHASE 6 U3 裁决（MSG-20261005-89）= TRIPLE_TRUST_ENTRY / SANDBOX_ONLY_BOUNDARY / EXECUTION_TIME_GATE / ATOMIC_CAS /
+EXACT_DELTA_ONLY / KILL_SWITCH_BOUNDARY = PASS；LIVE_VERSION_NOOP_GATE = REVISE；RESERVATION_TERMINALIZATION = REVISE；
+POST_WRITE_RECONCILIATION_DURABILITY = REVISE；PHASE6_U3_FINAL_REQUIRED = YES。本单元只做这三项窄修。
+
+① 交付（P6-U3 FINAL，唯一改动 = controlled-config-execution）
+* 窄修 1（NOOP version gate）：NOOP 判定移到 identity 完整校验之后，顺序收敛为
+  fingerprint → version（current.version !== ticket.liveConfigVersion → STALE_EXECUTION_BASELINE:version）→ path value →
+  才允许 current[path] === plan.to → NOOP_ALREADY_APPLIED。因此“version 漂移 + 值已等于 to”不再被判为 NOOP。
+* 窄修 2（reservation terminalization）：所有纯只读 preflight（trust gates / time gate / sandbox kill switch /
+  server-owned live re-read / fingerprint+version+path 校验 / NOOP eligibility）全部前移到 ledger.reserve 之前；
+  preflight 失败直接抛错且**零 reservation**，同 authorization 在配置恢复后可正常重试执行。
+  reserve = RESERVED 之后，每条路径都必然落一个 durable terminal result。
+* 窄修 3（post-CAS unknown-outcome reconciliation）：CAS 返回失败不再 throw，而是持久化并返回
+  status = CONFLICT 的 CONTROLLED_CONFIG_EXECUTION_RESULT（绝不再次 CAS）；CAS 成功后任何 read-back
+  异常 / malformed / value 或 version 不一致 一律持久化 status = NEEDS_RECONCILIATION，绝不丢执行记录、绝不重试 CAS。
+  同一 idempotencyKey 重试直接返回既有 terminal result（CAS 调用次数不增加）。
+* 其余不变：三重可信入口 + digest 三者闭合、sandbox-only 硬门、exact delta only、原子 compareAndSwap、
+  kill switch、rollback anchor 随记录持久化（首版不自动 rollback）、成功语义仅 SANDBOX_CONFIG_MUTATION_COMMITTED、
+  模块不导出任何 rollout / promote / production apply 入口。
+
+② 验收（本地 apps/api）
+* npx tsc --noEmit → exit 0
+* controlled-config-execution **14/14**（新增 4 项 FINAL 用例，原 10 项保持 green）：
+  P6U3F_1 current.version 漂移 + 值已等于 to → STALE_EXECUTION_BASELINE:version（不得 NOOP）；
+  P6U3F_2 preflight stale 失败 → 零 reservation，同 ledger 同 authorization 重试可真正执行并 COMMITTED；
+  P6U3F_3 CAS VERSION_CONFLICT / PATH_VALUE_CONFLICT → durable CONFLICT result，同键重试返回同一 resultDigest 且 CAS 恒为 1 次；
+  P6U3F_4 CAS 成功 + read-back 抛错 / malformed → durable NEEDS_RECONCILIATION，同键重试同结果且不再 CAS。
+* 过滤集：14 files / **159 tests** PASS（含 controlled-execution-gate 10/10）。
+* 回归集：107 files / **1106 tests**（1105 passed + 1 failed = recovery-si-phase2-e-db P2E-DB5 既有 test-isolation debt）。
+* GitHub Actions：NOT_OBSERVED。
+
+③ 口径
+* U3 仍是 SANDBOX / NON_PRODUCTION_CONFIG_WRITE_ONLY；production config write / rollout / auto rollback 未授权、未实现。
+* 你提到的 production crash-gap（CAS 成功瞬间进程崩溃、尚未来得及写 ledger）属 production durable transaction/outbox 层，
+  当前 sandbox 单元不做处理，也不因此放开 production。
+* 未接真实 provider / payment / external write；HOLD/FORBIDDEN 边界全部不变。
+* 未宣称：MODEL_GATEWAY_RUNTIME_WIRED / ACTION_RUNTIME_PRODUCTION_ENABLED / META_IMPROVEMENT_INTEGRATED / PRODUCTION_READY = false。
+
+请求裁决
+1. P6-U3 FINAL 是否可记 PASS（LIVE_VERSION_NOOP_GATE = PASS、RESERVATION_TERMINALIZATION = PASS、
+   POST_WRITE_RECONCILIATION_DURABILITY = PASS、SANDBOX_CONFIG_EXECUTION_CONTRACT = PASS、
+   PHASE_6_U3 = PASS / CLOSED、PHASE6_U3_FINAL2_REQUIRED = NO）？
+2. 是否确认 production config write 继续未授权（需另立单元并单独裁决）？
+
+边界：REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS /
+PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing = HOLD；SECOND_* = FORBIDDEN；L5_RELAXATION = FORBIDDEN。
+…
+显示更多
+思考了 38s
+ChatGPT 说：
+DECISION
+LIVE_VERSION_NOOP_GATE = PASS
+PREFLIGHT_BEFORE_RESERVATION = PASS
+CAS_RETURN_CONFLICT_DURABILITY = PASS
+READBACK_UNKNOWN_OUTCOME_DURABILITY = PASS
+CAS_EXCEPTION_TERMINALIZATION = REVISE
+EXECUTION_RESULT_SEMANTICS = REVISE
+PHASE_6_U3 = PASS WITH REVISE / NOT CLOSED
+PHASE6_U3_FINAL2_REQUIRED = YES
+Reviewed HEAD：5b58ffcf
+GitHub Actions：NOT_OBSERVED
+KEEP
+
+上一轮要求的三个方向基本已经落地：
+
+version 漂移 + value 已为 to 不再误判 NOOP；
+stale 等纯只读 preflight 已移到 reserve() 前，不再留下 reservation；
+CAS 返回 ok:false 已持久化 CONFLICT；
+CAS 成功后的 read-back throw / malformed / mismatch 已持久化 NEEDS_RECONCILIATION；
+同 idempotencyKey 不重复 CAS。
+
+这些保留。
+
+CHANGE
+1. compareAndSwap() 自身抛异常仍会留下 orphan reservation
+
+现在：
+
+纯文本
+reserve()
+↓
+await store.compareAndSwap(...)
+
+compareAndSwap() 只有“返回 ok:false”被处理。
+
+如果它直接 throw，例如：
+
+纯文本
+network timeout
+adapter exception
+connection reset
+
+则：
+
+reservation 已存在；
+不产生 durable result；
+mutation 是否发生未知；
+retry 会遇到已 reservation。
+
+这正是 FINAL 想消灭的 unknown-outcome 缺口。
+
+必须：
+
+纯文本
+try {
+  cas = await compareAndSwap(...)
+} catch {
+  persist NEEDS_RECONCILIATION
+  return result
+}
+
+这里不能记 CONFLICT，因为 CAS 可能已经提交，只是响应丢失。
+
+2. 所有 execution result 现在都声明成功语义
+
+当前接口固定：
+
+纯文本
+semantics = SANDBOX_CONFIG_MUTATION_COMMITTED
+
+因此甚至：
+
+纯文本
+status = CONFLICT
+semantics = SANDBOX_CONFIG_MUTATION_COMMITTED
+
+以及：
+
+纯文本
+status = NEEDS_RECONCILIATION
+semantics = SANDBOX_CONFIG_MUTATION_COMMITTED
+
+这是执行结果语义矛盾。
+
+应改成 status-dependent semantics，例如：
+
+COMMITTED
+→ SANDBOX_CONFIG_MUTATION_COMMITTED
+NOOP_ALREADY_APPLIED
+→ SANDBOX_CONFIG_ALREADY_APPLIED_NO_WRITE
+CONFLICT
+→ SANDBOX_CONFIG_MUTATION_CONFLICT_NO_WRITE
+NEEDS_RECONCILIATION
+→ SANDBOX_CONFIG_MUTATION_NEEDS_RECONCILIATION
+FAILED_ZERO_WRITE
+→ SANDBOX_CONFIG_MUTATION_FAILED_ZERO_WRITE
+
+或者删除 result 的 semantics 字段，仅使用 status；但不要让失败结果携带 COMMITTED 语义。
+
+RISKS
+
+当前最危险路径仍然是：
+
+纯文本
+reserve
+↓
+CAS 实际可能成功
+↓
+compareAndSwap 抛异常
+↓
+没有 execution result
+
+这与 read-back throw 本质一样，都应该进入：
+
+NEEDS_RECONCILIATION
+
+另外 semantics 问题虽然不会再次写配置，但未来任何下游如果只检查：
+
+纯文本
+verified result
++
+semantics === SANDBOX_CONFIG_MUTATION_COMMITTED
+
+会把 CONFLICT / NEEDS_RECONCILIATION 当成功消费。
+
+TEST
+
+FINAL2 最少补：
+
+compareAndSwap() throw before/unknown response
+→ durable NEEDS_RECONCILIATION。
+同 idempotencyKey retry
+→ 返回同一个 reconciliation result；
+→ CAS 不再次调用。
+COMMITTED → committed semantics。
+NOOP_ALREADY_APPLIED → no-write semantics。
+CONFLICT → conflict semantics。
+NEEDS_RECONCILIATION → reconciliation semantics。
+result fingerprint 防篡改继续成立。
+resultDigest 至少通过 status 确定绑定对应 semantics；若直接把 semantics 加入 digest 也可以。
+原 14/14 保持 green。
+NEXT
+
+只做：
+
+P6-U3 FINAL2 — CAS exception reconciliation + status-consistent result semantics
+
+通过后我会给：
+
+纯文本
+SANDBOX_CONFIG_EXECUTION_CONTRACT = PASS
+PHASE_6_U3 = PASS / CLOSED
+PHASE6_U3_FINAL3_REQUIRED = NO
+
+然后 Phase 6 当前链可以登记为：
+
+纯文本
+U1 Controlled Adoption Plan = CLOSED
+U2 Execution Authorization Gate = CLOSED
+U3 Sandbox Controlled Config Execution = CLOSED
+PRODUCTION
+
+production config write 继续明确未授权。
+
+即便 U3 FINAL2 通过，也只代表：
+
+sandbox controlled mutation contract closed
+
+不代表 production execution readiness。
+
+production 后续仍需独立单元解决至少：
+
+durable DB reservation state machine；
+DB UNIQUE verdict/ticket/idempotency；
+CAS-success / ledger-write crash recovery；
+transactional outbox / reconciliation worker；
+multi-worker concurrency；
+startup recovery；
+production current-config adapter；
+production kill switch/control plane；
+real rollback execution；
+production rollout/propagation。
+
+所有现有 HOLD/FORBIDDEN 继续不变。
+
+结论：本轮三项修复中的 NOOP、preflight、CAS-return/read-back 已通过，但还剩 CAS 直接抛异常的 unknown-outcome，以及失败结果仍标成 COMMITTED 的语义漏洞。再做一个很窄的 FINAL2 即可封板 U3。
+```
+
