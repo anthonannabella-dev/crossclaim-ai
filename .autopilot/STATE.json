@@ -6,12 +6,12 @@
   "next_task": "BG-016 单一 Acceptance Head + 四份状态一致 guard（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍 HOST_ACTION_REQUIRED 或 HOLD",
   "send_head": "07b7009",
   "decision_head": "f5e4cc2c",
-  "last_chatgpt_message": "MSG-20261005-94",
+  "last_chatgpt_message": "MSG-20261005-96",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-06T04:46:07.465Z",
+  "updated_at": "2026-10-06T04:47:38.107Z",
   "previous_head": "8064f07",
-  "architect_decision_pending": true,
+  "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "0c35106",
   "last_sent_at": "2026-10-03T09:07:52.875Z",
@@ -21,14 +21,7 @@
   "ci_result": "completed_success",
   "fix_pr": "https://github.com/anthonannabella-dev/crossclaim-ai/pull/10",
   "channel_status": "HEALTHY（主审计会话 = https://chatgpt.com/c/6ac385db-cb60-83ec-9754-c7a30633a8c5（HOST 新开；MSG-20261005-30 起）；历史会话 https://chatgpt.com/c/6ac1cdf0-1ec8-83ec-8036-0e66fcf5c6b9 保留 MSG-22..29 逐字归档）",
-  "pending_verdict_unarchived": {
-    "marker": "[CODEX-P6PROD-U1FINAL3]",
-    "reviewed_head": "b1ac2323",
-    "expected_message_id": "MSG-20261005-96",
-    "submitted_at": "2026-10-06T04:46:07.465Z",
-    "channel": "https://chatgpt.com/c/6ac3bcd0-7818-83ec-8f92-44289fe8df67",
-    "note": "通道已恢复（in-app browser 右侧面板新标签成功加载会话）。此前的 “Unknown error” 实为发送失败：复查会话尾部确认 FINAL3 从未落库（最后一条仍是 FINAL2 裁决）。本轮已重新投递 FINAL3 并验证：composer 为空 + marker 出现在非编辑区（会话内）+ 页面显示 “ChatGPT 正在回应”。"
-  },
+  "pending_verdict_unarchived": null,
   "b2_status": "PASS（MSG-20260930-10 工程修复 + MSG-20260930-11 集成 PASS/MERGE APPROVED）",
   "protocol": "DUAL_CHANNEL_WAKEUP（GitHub = 正式总线 / ChatGPT Web = 仅唤醒）",
   "integration_pr": "https://github.com/anthonannabella-dev/crossclaim-ai/pull/11",
@@ -56,14 +49,14 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
-  "continuous_execution": "RUNNING（P6-PROD-U1 FINAL3 已重新投递并验证；等待裁决）",
-  "next_execution_unit": "Next tick：读取 P6-PROD-U1 FINAL3 裁决（marker [CODEX-P6PROD-U1FINAL3]，REVIEWED_HEAD = b1ac2323）→ 逐字归档 + compare.mjs FULL_COPY_OK → durable state；PASS 则登记 P6-PROD-U1 = PASS / CLOSED 并输出 Closure Report。",
+  "continuous_execution": "STOPPED_BY_HOST_CONDITIONS（P6-PROD-U1 = PASS / CLOSED；队列为空；watchdog 删除）",
+  "next_execution_unit": "NONE（需 HOST 单独授权新单元，例如 P6-PROD-U2 真实生产配置写入）",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-06T04:46:07.465Z",
-  "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "按宿主指示在右侧面板自行打开 ChatGPT（新标签）：会话恢复加载，复查发现此前 FINAL3 实际**未投递**（会话尾部仍是 FINAL2 裁决），遂重新投递并验证（composer 空 + marker 在会话消息区 + “ChatGPT 正在回应”）；同时清除 HOST_ACTION_REQUIRED（通道恢复）。",
-  "last_action_at": "2026-10-06T04:46:07.465Z",
-  "next_action": "读/归档 FINAL3 裁决并按 verdict 收口；production config write / rollout / auto rollback 仍 NOT AUTHORIZED。",
+  "last_tick_at": "2026-10-06T04:47:38.107Z",
+  "state": "CLOSED",
+  "last_action": "P6-PROD-U1 FINAL3 裁决（MSG-20261005-96 = PASS / CLOSED，exact code HEAD b1ac2323）已逐字归档（FULL_COPY_OK，888be428）；登记 P6-PROD-U1 = PASS / CLOSED、PRODUCTION_DURABILITY_COMPLETE = true、prod enablement 仍 HOLD，并写入 closure_report。",
+  "last_action_at": "2026-10-06T04:47:38.107Z",
+  "next_action": "无（autopilot 已完成本授权范围；若宿主授权 P6-PROD-U2 再重新规划）",
   "current_head": "b1ac2323",
   "last_completed_head": "b1ac2323",
   "reviewed_head": "b1ac2323",
@@ -5175,11 +5168,7 @@
   "runner_status": "RUNNING",
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
-  "safe_continuation_queue": [
-    "P6PROD-H1 读取 P6-PROD-U1 FINAL3 裁决（[CODEX-P6PROD-U1FINAL3]，REVIEWED_HEAD = b1ac2323）→ 逐字归档 AI-ARCHITECT-INBOX.md → compare.mjs FULL_COPY_OK → durable state。",
-    "P6PROD-H2 FINAL3 = PASS → 登记 P6-PROD-U1 = PASS / CLOSED（FINAL_NEXT_REQUIRED = NO）并按 HOST 停止条件输出 Closure Report。",
-    "P6PROD-H3 FINAL3 = REVISE → 立即最小修订 → targeted/DB/regression/tsc → commit/push → FINAL4。"
-  ],
+  "safe_continuation_queue": [],
   "full_autonomous_internal_execution": "VERIFIED",
   "dispatcher_acceptance": {
     "at": "2026-10-03T14:47:59.226Z",
@@ -5926,7 +5915,7 @@
       "next_task": null
     }
   },
-  "safe_continuation_queue_note": "空：PHASE 6 当前链（U1/U2/U3）已全部 CLOSED，生产配置写入 / rollout / auto rollback 属未授权范围；若宿主另行授权下一单元（例如 P6-PROD-U1 durability foundation），再重新计算队列。",
+  "safe_continuation_queue_note": "空：HOST 授权范围内（P6-PROD-U1 / NO PRODUCTION ENABLEMENT）已全部 PASS / CLOSED；production mutation 需 HOST 再次单独授权。",
   "release_integration": {
     "at": "2026-10-03T22:59:47.170Z",
     "method": "PR #12 merge commit (no force push)",
@@ -8122,7 +8111,33 @@
       ]
     }
   },
-  "closure_report": "docs/releases/AUTOPILOT-CLOSURE-REPORT.md",
+  "closure_report": {
+    "generated_at": "2026-10-06T04:47:38.107Z",
+    "INTERNAL_SI_RSI_COMPLETE": true,
+    "AUTO_LEARNING_COMPLETE": true,
+    "CONTROLLED_ADOPTION_COMPLETE": true,
+    "PRODUCTION_DURABILITY_COMPLETE": true,
+    "PRODUCTION_ENABLEMENT": "HOLD（NOT AUTHORIZED）",
+    "REAL_PROVIDER_ENABLEMENT": "HOLD",
+    "REAL_CREDENTIALS": "HOLD",
+    "EXTERNAL_WRITE": "HOLD",
+    "boundaries": {
+      "PRODUCTION_ENABLED": false,
+      "PRODUCTION_CONFIG_MUTATION": false,
+      "AUTO_PROMOTION": false,
+      "AUTO_ROLLOUT": false,
+      "AUTO_PRODUCTION_ROLLBACK": false,
+      "MODEL_GATEWAY_RUNTIME_WIRED": false,
+      "ACTION_RUNTIME_PRODUCTION_ENABLED": false,
+      "META_IMPROVEMENT_INTEGRATED": false,
+      "PRODUCTION_READY": false
+    },
+    "open_debt": [
+      "P2E-DB5 既有 test-isolation debt（单跑通过）",
+      "GitHub Actions 对 exact SHA = NOT_OBSERVED（本地证据）",
+      "future P6-PROD-U2（真实 production config write / rollout / auto rollback）需单独授权，未启动"
+    ]
+  },
   "recovery_si": {
     "authorized_at": "2026-10-05T04:12:08.276Z",
     "source": "HOST《CrossClaim Recovery SI Control Layer》",
@@ -9292,7 +9307,7 @@
   "AUDIT_REVISE_LOOP_AUTO_CONTINUE": true,
   "HOST_LIMIT_MEANS_STOP": false,
   "STOP_ONLY_ON_TRUE_HOST_DEPENDENCY_OR_COMPLETE": true,
-  "CONTINUATION_REQUIRED": true,
+  "CONTINUATION_REQUIRED": false,
   "heartbeat": {
     "automation_id": "crossclaim-ai-bridge-5min",
     "name": "crossclaim-si-watchdog-1min",
@@ -9321,7 +9336,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-06T04:46:07.465Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-06T04:47:38.107Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -11456,64 +11471,17 @@
   "phase6_current_chain_closed_at": "2026-10-06T00:59:45.036Z",
   "production_config_write": "NOT AUTHORIZED",
   "p6prod_u1": {
-    "status": "SUBMITTED / AWAITING_VERDICT",
+    "status": "PASS / CLOSED",
     "unit": "P6-PROD-U1 — Production Config Execution Durability（NO PRODUCTION ENABLEMENT）",
-    "authorization": "HOST AUTHORIZATION 2026-10-06",
-    "reviewed_head": "027fc30b",
-    "pushed": true,
-    "slices": {
-      "S1": {
-        "head": "f3a4b77d",
-        "scope": "schema / migration / 触发器 / 清单登记（5 张平台级耐久表）"
-      },
-      "S2": {
-        "head": "6885f6a3",
-        "scope": "纯决策核（reservation / lease / recovery / outbox / 只读 current-config 适配器）"
-      },
-      "S3": {
-        "head": "d009ff6f",
-        "scope": "Prisma durable store + 真实 PostgreSQL 并发 / 崩溃恢复验收"
-      },
-      "fixture_sync": {
-        "head": "027fc30b",
-        "scope": "单测 fixture 同步 ReservationView 新增字段"
-      }
-    },
-    "deliverables": [
-      "DB-backed reservation / execution ownership（ownerRef / leaseId / acquiredAt·renewedAt·expiresAt / executionAttempt / immutableBasisDigest）",
-      "Strong dedupe：UNIQUE(authorizationVerdictDigest) + UNIQUE(authorizationTicketDigest) + UNIQUE(idempotencyKey) + UNIQUE(reservationKey)",
-      "Durable 状态机 RESERVED → EXECUTING → terminal；非法跳转 / terminal 再迁移 / identity 改写 fail-closed（DB 触发器）",
-      "Crash recovery 分类：RECOVERED_COMMITTED / SAFE_TO_RETRY / NEEDS_RECONCILIATION（unknown → post identity UNKNOWN）/ CANCEL / MANUAL_REVIEW",
-      "Startup reconciliation（幂等；重复执行不产生第二条终态）",
-      "CAS + ledger 一致性（终态 + 结果 + outbox 同一事务，关闭 split-brain 窗口）",
-      "Transactional outbox + 消费者幂等交付账本",
-      "Multi-worker 并发：两条独立连接竞争 → exactly one execution authority",
-      "Lease / stale-lease recovery（确定性 takeover + 审计事件）",
-      "Production current-config adapter：严格 READ ONLY（无 write/apply/promote/rollout/rollback 导出）"
-    ],
-    "local_verification": {
-      "prisma_validate": "OK",
-      "migrate": "deploy 83 → 84 migrations；migrate status = up to date",
-      "trigger_checklists": "tenant-integrity + append-only 两份 CI 清单校验 SQL 在真实库通过",
-      "targeted_db": "config-execution-durability-db 15/15",
-      "targeted_unit": "config-execution-durability 26/26；schema-contract 13/13；architecture-contract 143/143",
-      "tsc": "PASS (exit 0)",
-      "full_suite": "410 files / 3899 tests（3898 passed + 1 failed = P2E-DB5 既有 test-isolation debt）",
-      "github_ci": "NOT_OBSERVED"
-    },
-    "submission": {
-      "marker": "[CODEX-P6PROD-U1]",
-      "delivered": true,
-      "composer_empty_verified": true,
-      "expected_message_id": "MSG-20261005-93"
-    },
-    "boundaries": {
-      "PRODUCTION_ENABLED": false,
-      "PRODUCTION_CONFIG_MUTATION": false,
-      "AUTO_PROMOTION": false,
-      "AUTO_ROLLOUT": false,
-      "AUTO_PRODUCTION_ROLLBACK": false,
-      "production_config_write": "NOT AUTHORIZED"
+    "code_head": "b1ac2323",
+    "closed_at": "2026-10-06T04:47:38.107Z",
+    "chain": {
+      "S1": "f3a4b77d",
+      "S2": "6885f6a3",
+      "S3": "d009ff6f",
+      "FINAL": "b33652f8",
+      "FINAL2": "f78e88ad",
+      "FINAL3": "b1ac2323"
     }
   },
   "production_enablement": "HOLD",
@@ -11638,5 +11606,36 @@
       "expected_message_id": "MSG-20261005-96",
       "panel_tab": "in-app browser 右侧面板新标签（已 markHandoff 保持）— 用户要求我在右侧自行打开 ChatGPT 后恢复"
     }
-  }
+  },
+  "p6prod_u1_final3_verdict": {
+    "message_id": "MSG-20261005-96",
+    "verdict": "PASS / CLOSED",
+    "reviewed_code_head": "b1ac2323",
+    "archive_verified": "FULL_COPY_OK",
+    "archive_head": "888be428",
+    "github_ci": "NOT_OBSERVED",
+    "pass": [
+      "DURABLE_RECOVERY_BASIS = PASS",
+      "LEGACY_UNKNOWN_PRE_VERSION_HANDLING = PASS",
+      "DURABLE_RESERVATION_OWNERSHIP = PASS",
+      "STRONG_DEDUPE = PASS",
+      "DURABLE_STATE_MACHINE = PASS",
+      "CRASH_RECOVERY = PASS",
+      "STARTUP_RECONCILIATION = PASS",
+      "CAS_LEDGER_CONSISTENCY = PASS",
+      "TRANSACTIONAL_OUTBOX = PASS",
+      "MULTI_WORKER_CONCURRENCY = PASS",
+      "LEASE_STALE_RECOVERY = PASS",
+      "READ_ONLY_PRODUCTION_ADAPTER = PASS"
+    ],
+    "p6prod_u1": "PASS / CLOSED",
+    "final4_required": "NO",
+    "notes": [
+      "保留 sentinel 'UNKNOWN' 与历史 UNKNOWN 行 fail-closed 均被确认；从未 claim 的历史行 RESERVED → CANCELLED 零写收敛被接受（未授予执行权、post identity null、无 STARTUP_RECONCILED 证据）。",
+      "production mutation 继续 NOT AUTHORIZED；P6-PROD-U1 CLOSED 只代表 durability/concurrency/crash-recovery/audit substrate 封板。",
+      "审核方口径：local evidence 可登记（DB 35/35、pure 34/34、schema 13/13、全量 3926 passed + 1 既有 isolation debt），但 exact SHA GitHub Actions = NOT_OBSERVED，不得写成 CI green。",
+      "审核方 NEXT：不要继续自动打开 production mutation；未来进入真实生产配置写入必须另开并重新授权（例如 P6-PROD-U2）。"
+    ]
+  },
+  "phase6_prod_durability": "PASS / CLOSED（durability / concurrency / recovery / audit substrate；production mutation 仍 NOT AUTHORIZED）"
 }
