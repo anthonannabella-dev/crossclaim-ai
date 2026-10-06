@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "71035890",
+  "head": "3c37ed14",
   "status": "RECONCILED",
   "current_task": "RSI 生产可执行闭环（7 点收口）：RSI_RUNTIME_READY = PASS；MODEL_PROVIDER_READY = 本地仿真已接线（真实网络/付费 HOLD）；PERSISTENCE_READY = ephemeral 已验证、durable 需宿主非生产 DATABASE_URL；REBOOT_RECONCILE_READY = NOT_IMPLEMENTED（下一单元）；SYSTEMD_VALIDATED = 需宿主 Linux 实机",
   "next_task": "BG-016 单一 Acceptance Head + 四份状态一致 guard（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍 HOST_ACTION_REQUIRED 或 HOLD",
@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-96",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-06T06:19:06.315Z",
+  "updated_at": "2026-10-06T06:21:18.906Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -49,17 +49,17 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
-  "continuous_execution": "RUNNING（A-S1…A-S10 + B-S2、B-S3 完成并 push；队列剩余 9 项）",
-  "next_execution_unit": "Next tick：队列队首 B-S4 —— OCR trust boundary + candidate → Canonical/Customs Fact reconciliation（跨源冲突 → CONFLICT；禁 last-write-wins）。",
+  "continuous_execution": "RUNNING（A-S1…A-S10 + B-S2…B-S4 完成并 push；队列剩余 8 项）",
+  "next_execution_unit": "Next tick：队列队首 B-S5 —— 通用 Evidence Resolver 接入 Customs（Entry/EntryLine/Invoice/POD/Return/Export/Destruction/Carrier/Broker）。",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-06T06:19:06.315Z",
+  "last_tick_at": "2026-10-06T06:21:18.906Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "完成并 push B-S3 CBP 7501 候选字段抽取（71035890）：13 类字段 + 行项目解析（rawValue/normalizedValue/page/bbox/confidence/sourceKind/provider/sourceDigest/lineNumber 全可回溯）；无效日期/不可规范化 → 拒绝而非猜测；关键字段缺失或低置信 → QUARANTINED/HITL；跨页异值 → CROSS_SOURCE_CONFLICT 且全部保留（禁 last-write-wins）；结果恒为 customTruthEligible=false/canonicalWriteAllowed=false。unit 17/17、回归 233/233、tsc 0。",
-  "last_action_at": "2026-10-06T06:19:06.315Z",
+  "last_action": "完成并 push B-S4（3c37ed14）：OCR trust boundary + 候选→Customs Fact 对账五态判定（AGREED/CONFLICT/OCR_ONLY/LOW_CONFIDENCE/MISSING）；只有非 OCR 且达阈值的来源才能支撑 AGREED，OCR 永不独占（即使多份 OCR 一致）；跨源冲突全量保留 distinctValues 与 sources 并标 LAST_WRITE_WINS_FORBIDDEN，OCR 不得破平局；规范化失败的候选不参与取值但仍留痕；本模块不写任何 Canonical/Truth（assertReconciliationDidNotWriteTruth fail-closed）；提供 listPromotableFields 供后续单元使用。unit 19/19、回归 265/265、tsc 0。",
+  "last_action_at": "2026-10-06T06:21:18.906Z",
   "next_action": "继续自动推进：每 slice 独立 commit/test/push/checkpoint。",
-  "current_head": "71035890",
-  "last_completed_head": "71035890",
-  "reviewed_head": "71035890",
+  "current_head": "3c37ed14",
+  "last_completed_head": "3c37ed14",
+  "reviewed_head": "3c37ed14",
   "claim_submit_batch": {
     "verdict": "PASS",
     "message_id": "MSG-20261001-07",
@@ -5169,7 +5169,6 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "B-S4 OCR trust boundary + candidate → Canonical/Customs Fact reconciliation（跨源冲突 → CONFLICT；禁 last-write-wins）。",
     "B-S5 通用 Evidence Resolver 接入 Customs（Entry/EntryLine/Invoice/POD/Return/Export/Destruction/Carrier/Broker）。",
     "B-S6 Import ↔ Export/Return/Destruction 全链 E2E（EXACT/PARTIAL/AMBIGUOUS/NO_MATCH + tenant/account/HTS/currency/jurisdiction 一致性）。",
     "B-S7 US Customs Rule Pack v1（rules/customs/us/：remedy taxonomy/eligibility/deadlines/required evidence/calculation/routing/exclusion/limitation；DUPLICATE_DUTY/RATE_OVERPAYMENT/MISSED_EXCLUSION/DRAWBACK_CANDIDATE/PSC/PROTEST/CLASSIFICATION_CORRECTION/BROKER_REVIEW；9801/9802 ≠ drawback）。",
@@ -9346,7 +9345,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-06T06:19:06.315Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-06T06:21:18.906Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -11779,6 +11778,16 @@
         "files": "services/provider-support/customs-7501-extraction.ts + index.ts；无 schema 变更、无迁移",
         "tests": "customs-7501-extraction 17/17（13 字段与规范化含无效日期拒绝、可回溯元数据、来源分级置信、行项目解析、缺关键字段、OCR 低置信 → QUARANTINED、跨页冲突全保留、无候选 fail-closed、边界断言、摘要确定性）；回归 233/233；tsc 0",
         "boundary": "candidateOnly=true、customsTruthEligible=false、canonicalWriteAllowed=false、lowConfidenceQuarantines=true、ocrDownweighted=true、lastWriteWinsForbidden=true"
+      }
+    },
+    "B-S4": {
+      "name": "OCR trust boundary + 候选 → Customs Fact 对账（跨源冲突 → CONFLICT；禁 last-write-wins）",
+      "status": "DONE / PUSHED",
+      "head": "3c37ed14",
+      "evidence": {
+        "files": "services/provider-support/customs-fact-reconciliation.ts + index.ts；无 schema 变更、无迁移",
+        "tests": "customs-fact-reconciliation 19/19（五态 AGREED/CONFLICT/OCR_ONLY/LOW_CONFIDENCE/MISSING、OCR 永不独占、OCR 不破平局、多来源一致、规范化失败候选处理、来源信任序、可采纳清单、边界断言、摘要确定性）；回归 265/265；tsc 0",
+        "boundary": "canonicalWritePerformed=false、customsTruthEligible=false、ocrNeverSufficientAlone=true、crossSourceConflictAutoResolved=false、promotionRequiresHumanApproval=true"
       }
     }
   }
