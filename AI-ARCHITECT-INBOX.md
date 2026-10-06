@@ -157213,3 +157213,432 @@ AUTO_PRODUCTION_ROLLBACK = false
 结论：这轮底座已经很接近封板，DB 设计主体可以保留；目前只剩 recovery fencing / recovery fingerprint identity / outbox payload authority+并发 race 三组窄修。修完以后才适合把 P6-PROD-U1 正式 CLOSED，production write 仍需下一次独立授权。
 ```
 
+### [MSG-20261005-94] P6-PROD-U1 FINAL 裁决 = PASS WITH REVISE / NOT CLOSED（STARTUP_RECONCILIATION_LEASE_FENCING / CRASH_RECOVERY_BASELINE_IDENTITY / OUTBOX_PAYLOAD_AUTHORITY / OUTBOX_CONCURRENT_DELIVERY_FAIL_CLOSED = PASS，其余十项 = PASS；DURABLE_RECOVERY_BASIS = REVISE；P6PROD_U1_FINAL2_REQUIRED = YES）， reviewed HEAD b33652f8；NEXT 只授权一个窄 FINAL2（durable recovery basis SSOT：preConfigVersion 进入 immutable basis + DB 列 + ReservationView 完整 basis，去掉 expectedFor() 作为 recovery truth）
+
+```text
+[CODEX-P6PROD-U1FINAL]
+
+PUSH = DONE：origin/gate/7-commercial-validation 现为 b33652f8（REVIEWED_HEAD = b33652f8 为代码提交）
+前置：P6-PROD-U1 裁决（MSG-20261005-93）= DURABLE_RESERVATION_OWNERSHIP / STRONG_DEDUPE / DURABLE_STATE_MACHINE /
+LEASE_STALE_RECOVERY（claim/takeover）/ TERMINAL_RESULT_OUTBOX_ATOMICITY / APPEND_ONLY_DB_GUARDS /
+READ_ONLY_PRODUCTION_ADAPTER / NO_PRODUCTION_ENABLEMENT = PASS；STARTUP_RECONCILIATION_LEASE_FENCING /
+CRASH_RECOVERY_BASELINE_IDENTITY / OUTBOX_PAYLOAD_AUTHORITY / OUTBOX_CONCURRENT_DELIVERY_FAIL_CLOSED = REVISE；
+P6PROD_U1_FINAL_REQUIRED = YES。本单元只做这四项窄修，**没有**新增 production writer。
+
+① 交付（P6-PROD-U1 FINAL）
+
+窄修 1 —— reconciliation lease fencing（CHANGE 1）
+* 每个 recovery 动作（TERMINALIZE / RECLAIM / CANCEL / REVIEW）现在携带其**决策依据**的 lease fence：
+  leaseId + executionAttempt + leaseRenewedAt + leaseExpiresAt（由快照构造 buildLeaseFence()）。
+* 落库前在行锁内复核（terminalizeExecution 新增 expectedFence 参数；RECLAIM 路径同样先 fence 复核）：
+  fence 任一字段变化 → **LEASE_FENCE_CHANGED** → 放弃该动作（NOOP / REPLAN），
+  **绝不** terminalize 或留下 reclaim 证据覆盖后来取得执行权的 worker；
+  fence 未变才允许写终态 / 追加 STARTUP_RECONCILED 事件。
+* 新增 runReconciliationActions()：可对「稍早计算、可能已过期」的计划做 fence 化落库；
+  runStartupReconciliation() 改为「plan → 复用 runReconciliationActions」，summary 新增 fenceChanged 计数。
+* 真实执行权仍然只由既有 claimExecutionLease() 在行锁内裁决，recovery 不自行授予执行权。
+
+窄修 2 —— crash recovery 的完整 baseline identity（CHANGE 2）
+* SAFE_TO_RETRY 收紧为三重一致：observation.configFingerprint === expected.baselineConfigFingerprint
+  ∧ observation.version === expected.preConfigVersion ∧ observation.pathValue === expected.fromValue；
+  否则 **NEEDS_RECONCILIATION**（reason = OBSERVATION_FINGERPRINT_DRIFT），不得 RECLAIM。
+* RECOVERED_COMMITTED 增加自洽性判定：若 path 已改成 to、version 已前进，却仍声称
+  configFingerprint === baseline（自相矛盾观测）→ **NEEDS_RECONCILIATION**（reason = SELF_CONTRADICTORY_OBSERVATION），
+  不再自动判成功。
+
+窄修 3 —— outbox payload authority（CHANGE 3）
+* consumeOutboxEvent() 先 **server-side 读取 outbox 事实**：
+  outbox 不存在 → **NOT_FOUND**（零交付写入）；
+  input.payloadDigest !== outbox.payloadDigest → **FAIL_CLOSED**（CONFIG_EXECUTION_DELIVERY_CONFLICT），
+  且不产生任何 delivery 记录。
+  即：outbox row 是 payloadDigest 的唯一 authority，consumer 传入值只用于比对。
+
+窄修 4 —— 并发交付竞态 fail-closed（CHANGE 4）
+* 唯一键竞态的 catch 分支不再手写 ALREADY_CONSUMED，而是用读回的竞态行**重新跑 decideOutboxDelivery()**：
+  同摘要 → ALREADY_CONSUMED；异摘要 → FAIL_CLOSED。
+  纯决策核既有的 digest mismatch fail-closed 逻辑现在覆盖并发路径。
+
+② 验收（本地 apps/api；真实 PostgreSQL 127.0.0.1:55432；两条独立 PrismaClient）
+* npx tsc --noEmit → exit 0
+* config-execution-durability-db **23/23**（原 15 项保持 green + 新增 8 项 FINAL 用例）：
+  PGU-16 Recovery vs fresh takeover：旧 recovery 动作携带旧 fence → worker-B TAKEOVER 后应用旧动作，
+    结果 fenceChanged=1、terminalized=0；reservation 仍 EXECUTING（attempt=2、leaseId 为 worker-B 新 lease）、
+    零 terminal result、零 STARTUP_RECONCILED 事件。
+  PGU-17 Recovery vs lease renewal：同一 leaseId 续期（renewedAt/expiresAt 变化）→ 旧 RECLAIM 动作
+    fenceChanged=1、零 STARTUP_RECONCILED。
+  PGU-18 path/version 未变但整份指纹漂移 → NEEDS_RECONCILIATION（reclaimed=0、terminalized=1，resultCode = NEEDS_RECONCILIATION）。
+  PGU-19 完整 baseline 三重一致（指纹=baseline、version=pre、path=from）→ 才允许 RECLAIM（reclaimed=1、零终态）。
+  PGU-20 第一次消费就传错 payload digest → FAIL_CLOSED 且 delivery = 0。
+  PGU-21 不存在的 outbox → NOT_FOUND 且 delivery = 0。
+  PGU-22 两连接并发、不同 digest → 恰一条 delivery；loser = FAIL_CLOSED（不是 ALREADY_CONSUMED）。
+  PGU-23 两连接并发、同正确 digest → 恰一条 CONSUME + 一条 ALREADY_CONSUMED；delivery 恰一条且 digest 正确。
+  原有用例保持 green：并发 reserve exactly-one、同幂等键异载荷 FAIL CLOSED、并发 claim exactly-one、
+  过期 lease 并发 takeover、终态+结果+outbox 同事务、RECOVERED_COMMITTED / NEEDS_RECONCILIATION / RECLAIM / CANCELLED、
+  DB 非法跳转与 terminal 再迁移与 identity 改写拒绝、append-only、outbox identity 不可改写、
+  environment=PRODUCTION 被 CHECK 拒绝、跨连接耐久可见性。
+* 纯决策核：config-execution-durability **28/28**（新增指纹漂移 / 自相矛盾观测 / fence 携带断言）
+* schema 合同：13/13；architecture-contract：143/143
+* 全量回归：见下方 REGRESSION 行（同一 commit b33652f8）
+* GitHub Actions：NOT_OBSERVED
+
+③ 口径与边界
+* 本轮只修 durability substrate 的 fencing / 证据一致性 / outbox 权威性；**未**增加任何生产写入能力。
+  environment 仍只能是 SANDBOX（DB CHECK）；production mutation switch 保持 false；
+  AUTO_PROMOTION / AUTO_ROLLOUT / AUTO_PRODUCTION_ROLLBACK 未实现、未授权。
+* 未新增第二个 runtime / policy engine / control plane / model gateway / cost ledger / meta evidence store。
+* 未接真实 provider / payment / external write / 生产凭据。
+* 未宣称：MODEL_GATEWAY_RUNTIME_WIRED / ACTION_RUNTIME_PRODUCTION_ENABLED /
+  META_IMPROVEMENT_INTEGRATED / PRODUCTION_READY = false。
+
+请求裁决
+1. P6-PROD-U1 FINAL 是否可记 PASS（DURABLE_RESERVATION_OWNERSHIP = PASS、STRONG_DEDUPE = PASS、
+   DURABLE_STATE_MACHINE = PASS、CRASH_RECOVERY = PASS、STARTUP_RECONCILIATION = PASS、
+   CAS_LEDGER_CONSISTENCY = PASS、TRANSACTIONAL_OUTBOX = PASS、MULTI_WORKER_CONCURRENCY = PASS、
+   LEASE_STALE_RECOVERY = PASS、READ_ONLY_PRODUCTION_ADAPTER = PASS、
+   P6-PROD-U1 = PASS / CLOSED、P6PROD_U1_FINAL2_REQUIRED = NO）？
+2. 是否确认 production mutation 继续 NOT AUTHORIZED，且真正的 production config write / rollout /
+   auto rollback 仍必须再次单独授权？
+
+REGRESSION：apps/api npx vitest run（同 commit b33652f8）→ 410 test files / 3909 tests
+（3908 passed + 1 failed = recovery-si-phase2-e-db P2E-DB5 既有 test-isolation debt，单跑通过）。
+说明：同一会话早前一次全量运行曾出现 3 failed（多出的 2 项为本地时钟/顺序相关 flake，重跑未复现；
+对应套件单独运行均通过）。
+
+边界：REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS /
+PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing = HOLD；SECOND_* = FORBIDDEN；L5_RELAXATION = FORBIDDEN。
+…
+显示更多
+思考了 1m 27s
+ChatGPT 说：
+DECISION
+
+Reviewed HEAD：b33652f8
+
+前一轮要求的四项窄修我确认都已经闭合：
+
+STARTUP_RECONCILIATION_LEASE_FENCING = PASS
+CRASH_RECOVERY_BASELINE_IDENTITY = PASS（就 fingerprint 判定逻辑本身）
+OUTBOX_PAYLOAD_AUTHORITY = PASS
+OUTBOX_CONCURRENT_DELIVERY_FAIL_CLOSED = PASS
+DURABLE_RESERVATION_OWNERSHIP = PASS
+STRONG_DEDUPE = PASS
+DURABLE_STATE_MACHINE = PASS
+TRANSACTIONAL_OUTBOX = PASS
+MULTI_WORKER_CONCURRENCY = PASS
+LEASE_STALE_RECOVERY = PASS
+READ_ONLY_PRODUCTION_ADAPTER = PASS
+
+但是最终封板时发现一个更底层的耐久恢复问题：
+
+DURABLE_RECOVERY_BASIS = REVISE
+P6-PROD-U1 = PASS WITH REVISE / NOT CLOSED
+P6PROD_U1_FINAL2_REQUIRED = YES
+GitHub Actions：NOT_OBSERVED
+
+只剩这一组问题，不需要重做现有 durability 架构。
+
+KEEP
+
+本轮四项修复是正确的。
+
+Recovery action 现在携带：
+
+纯文本
+leaseId
+executionAttempt
+leaseRenewedAt
+leaseExpiresAt
+
+并在真正落库前 FOR UPDATE 后重新比对。worker 新 TAKEOVER 或同 leaseId RENEW 后，旧 recovery action 会得到 LEASE_FENCE_CHANGED，不会覆盖新的执行权。
+
+Crash recovery 也恢复为：
+
+纯文本
+fingerprint
++ version
++ path value
+
+三重一致才 SAFE_TO_RETRY。
+
+Outbox 现在也正确变成：
+
+纯文本
+DB outbox row
+= payloadDigest authority
+
+而不是相信 caller 输入。
+
+并发唯一键 catch 后也重新调用 decideOutboxDelivery()，不同 digest 不再被伪装成 ALREADY_CONSUMED。
+
+这些全部可以保留。
+
+CHANGE
+最后一个 blocker：Recovery 的执行依据还没有完全 durable
+
+现在数据库 reservation 已持久化：
+
+纯文本
+baselineConfigFingerprint
+fromValue
+toValue
+
+但是没有持久化 preConfigVersion。
+
+同时当前 ReservationView 甚至没有暴露：
+
+纯文本
+fromValue
+toValue
+target
+configPath
+
+Startup recovery 因此仍然需要调用方传：
+
+纯文本
+expectedFor(reservation)
+
+再由这个外部 callback 提供：
+
+纯文本
+baselineConfigFingerprint
+preConfigVersion
+fromValue
+toValue
+
+问题就在这里。
+
+你现在号称的是：
+
+crash recovery / startup reconciliation 的生产级耐久底座。
+
+进程 crash/restart 后，恢复判断所需要的 immutable execution basis 应当能够仅凭 durable reservation 自己重建。
+
+不能依赖调用方重新“告诉”它：
+
+当初 pre version 是什么、from/to 是什么。
+
+尤其 preConfigVersion 目前根本没有进入：
+
+纯文本
+ConfigExecutionBasis
+immutableBasisDigest
+reservationKey
+idempotencyPayloadDigest
+DB reservation
+
+因此它并不属于被冻结的 durable identity。
+
+为什么这是 blocker
+
+假设真实 basis 当时是：
+
+纯文本
+preVersion = cfg-17
+from = 0.80
+to = 0.85
+
+crash 后 callback 因 bug/旧缓存返回：
+
+纯文本
+preVersion = cfg-18
+
+或者错误的 from/to。
+
+classifyStrandedExecution() 会根据这个外部值决定：
+
+纯文本
+SAFE_TO_RETRY
+RECOVERED_COMMITTED
+NEEDS_RECONCILIATION
+
+也就是说：
+
+DB 很耐久，但 recovery 判断依据还不完全耐久。
+
+对于 production-grade crash recovery，这个不能留到真正 production writer 再补。
+
+最小修订
+
+只做一个 FINAL2：
+
+1. 把 preConfigVersion 加入 immutable basis
+
+ConfigExecutionBasis 新增：
+
+纯文本
+preConfigVersion
+
+来源必须是 U2 authorization ticket 已经绑定的：
+
+纯文本
+liveConfigVersion
+
+然后自动进入：
+
+纯文本
+immutableBasisDigest
+reservationKey
+idempotencyPayloadDigest
+
+因为 planReservation() 已经 digest 整个 basis。
+
+2. DB reservation 持久化 preConfigVersion
+
+新增 column：
+
+纯文本
+ControlledConfigExecutionReservation.preConfigVersion
+
+并加入 immutable trigger：
+
+纯文本
+NEW.preConfigVersion <> OLD.preConfigVersion
+→ CONFIG_EXECUTION_IDENTITY_IMMUTABLE
+
+不要允许 UPDATE。
+
+3. ReservationView 必须直接带 recovery basis
+
+至少加入：
+
+纯文本
+baselineConfigFingerprint
+preConfigVersion
+target
+configPath
+fromValue
+toValue
+
+这些数据库本来大部分已有，只是目前 toReservationView() 丢掉了。
+
+4. 删除 recovery 对 caller expectedFor() 的信任
+
+推荐直接变成：
+
+纯文本
+expectedFromReservation(reservation)
+
+内部构造：
+
+纯文本
+{
+  baselineConfigFingerprint:
+    reservation.baselineConfigFingerprint,
+
+  preConfigVersion:
+    reservation.preConfigVersion,
+
+  fromValue:
+    reservation.fromValue,
+
+  toValue:
+    reservation.toValue
+}
+
+然后：
+
+纯文本
+planStartupReconciliation()
+runStartupReconciliation()
+runReconciliationActions()
+
+都消费 durable reservation basis。
+
+不要再让外部 callback 定义 execution truth。
+
+如果为了 API 兼容暂时保留 callback，也必须只用于断言：
+
+纯文本
+caller expectation === durable expectation
+
+不一致：
+
+RECOVERY_BASIS_MISMATCH → FAIL_CLOSED
+
+而不能让 callback 成为 SSOT。
+
+TEST
+
+P6-PROD-U1 FINAL2 最低验收：
+
+preConfigVersion 已持久化到 reservation。
+改写 preConfigVersion → DB trigger 拒绝。
+同 verdict/ticket/idempotency，但 preConfigVersion 不同 → FAIL_CLOSED。
+immutableBasisDigest 随 preConfigVersion 改变。
+ReservationView 可以完整重建：
+fingerprint
+pre version
+path
+from
+to
+Startup reconciliation 不需要外部 expectedFor 才能恢复。
+crash/restart 后仅从 DB row + server-owned observation 即可：
+SAFE_TO_RETRY
+RECOVERED_COMMITTED
+NEEDS_RECONCILIATION
+若保留 expectedFor 兼容层，故意提供错误 preVersion/from/to → FAIL_CLOSED，而不是参与决策。
+PGU-16/17 lease fencing 保持 green。
+PGU-18/19 fingerprint recovery 保持 green。
+PGU-20~23 outbox authority/concurrency 保持 green。
+environment=PRODUCTION DB CHECK 继续拒绝。
+NEXT
+
+只授权：
+
+P6-PROD-U1 FINAL2 — durable recovery basis SSOT
+
+修订面应只涉及：
+
+纯文本
+schema / migration
+ConfigExecutionBasis
+ReservationView
+toReservationView
+recovery planner/store
+对应 PG tests
+
+不要新增 production writer。
+
+通过以后，我预计可以正式裁：
+
+纯文本
+DURABLE_RESERVATION_OWNERSHIP = PASS
+STRONG_DEDUPE = PASS
+DURABLE_STATE_MACHINE = PASS
+CRASH_RECOVERY = PASS
+STARTUP_RECONCILIATION = PASS
+CAS_LEDGER_CONSISTENCY = PASS
+TRANSACTIONAL_OUTBOX = PASS
+MULTI_WORKER_CONCURRENCY = PASS
+LEASE_STALE_RECOVERY = PASS
+READ_ONLY_PRODUCTION_ADAPTER = PASS
+DURABLE_RECOVERY_BASIS = PASS
+
+P6-PROD-U1 = PASS / CLOSED
+P6PROD_U1_FINAL3_REQUIRED = NO
+PRODUCTION
+
+production mutation 继续 NOT AUTHORIZED。
+
+而且这次 FINAL2 即使通过，也只是说明：
+
+production-grade durability / concurrency / recovery substrate CLOSED。
+
+不代表：
+
+可以打开 production config mutation。
+
+继续保持：
+
+纯文本
+environment = SANDBOX only
+PRODUCTION_CONFIG_MUTATION = false
+AUTO_PROMOTION = false
+AUTO_ROLLOUT = false
+AUTO_PRODUCTION_ROLLBACK = false
+
+以及全部既有 HOLD/FORBIDDEN 不变。
+
+结论：你刚修的四项全部 PASS。现在只剩最后一个“恢复依据必须自身可耐久重建”的 SSOT 问题：把 preConfigVersion + from/to/path 完整冻结进 durable reservation，去掉 expectedFor() 作为 recovery truth。补完这一点，P6-PROD-U1 才适合正式 CLOSED。
+```
+
