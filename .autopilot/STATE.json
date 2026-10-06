@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "22962b73",
+  "head": "9e46cbe5",
   "status": "RECONCILED",
   "current_task": "RSI 生产可执行闭环（7 点收口）：RSI_RUNTIME_READY = PASS；MODEL_PROVIDER_READY = 本地仿真已接线（真实网络/付费 HOLD）；PERSISTENCE_READY = ephemeral 已验证、durable 需宿主非生产 DATABASE_URL；REBOOT_RECONCILE_READY = NOT_IMPLEMENTED（下一单元）；SYSTEMD_VALIDATED = 需宿主 Linux 实机",
   "next_task": "BG-016 单一 Acceptance Head + 四份状态一致 guard（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍 HOST_ACTION_REQUIRED 或 HOLD",
@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-96",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-06T08:34:19.914Z",
+  "updated_at": "2026-10-06T08:45:37.200Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -49,17 +49,17 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
-  "continuous_execution": "RUNNING（Standing Authorization：SA-1/SA-2 完成并 push；SA-3/SA-4 待执行）",
-  "next_execution_unit": "SA-3 —— 把 standing authorization 判定接入既有 approval-verifier 调用点。",
+  "continuous_execution": "RUNNING（Standing Authorization：SA-1/SA-2、SA-3 完成并 push；SA-4 待执行）",
+  "next_execution_unit": "SA-4 —— 全量回归 + 更新报告与 CURRENT-SI-RSI-STATUS 能力矩阵。",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-06T08:34:19.914Z",
+  "last_tick_at": "2026-10-06T08:45:37.200Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "完成并 push Standing Authorization SA-1/SA-2（22962b73）：先审计确认既有 Action Guard/approval-verifier 已存在且未改动（未建第二套 approval/guard）；新增 standing-authorization（server-derived/versioned/revocable/scope digest）、risk-tier-policy（TIER 0–3，11 维度，受监管恒 TIER_3）、action-guard-wiring（一次性审批 OR 有效授权；授权仅满足 humanApproval；8 项非可绕过 gate 未满足即 DENY）。HOST 验收 1–12 全部有测试覆盖（19/19）：无授权→REQUIRE_APPROVAL、撤销/过期→DENY、超金额/超 action→REQUIRE_APPROVAL、account·provider 不匹配→DENY、高金额不可绕过、Customs SA≠POA 且受监管走 TIER_3、Production Gate=false 即使授权有效也 DENY、重复判定稳定无副作用、版本变更后旧执行权失效。宽域回归 828/828、tsc 0、无 schema 变更。",
-  "last_action_at": "2026-10-06T08:34:19.914Z",
-  "next_action": "先审计 verifyApprovalOrThrow 的调用点（claim.submit / appeal.submit / platform.write / recovery.manual_submit 等），再逐点最小接线并补回归。",
-  "current_head": "22962b73",
-  "last_completed_head": "22962b73",
-  "reviewed_head": "22962b73",
+  "last_action": "完成并 push SA-3（9e46cbe5）：把 standing authorization 判定接入既有 verifyApprovalOrThrow（可选参数，既有调用方零改动）与 withActionGuard（生产统一执行助手透传）—— 仅当 wiring 层判定为 ALLOW + authorizedBy=STANDING_AUTHORIZATION + satisfiedGates 仅含 humanApproval + 动作匹配时放行并标记来源；越权 → OVERREACH、动作不匹配 → ACTION_MISMATCH、DENY（撤销/过期/不匹配）→ DENIED 且不回退、REQUIRE_APPROVAL（超范围/高金额）→ 回退一次性审批。测试 10/10，回归 464/464，tsc 0，无 schema 变更。",
+  "last_action_at": "2026-10-06T08:45:37.200Z",
+  "next_action": "跑全量 vitest；更新 STANDING-AUTHORIZATION-V1-REPORT（exact HEAD / test evidence / remaining host action）并在 CURRENT-SI-RSI-STATUS.md 补 STANDING_AUTHORIZATION 行。",
+  "current_head": "9e46cbe5",
+  "last_completed_head": "9e46cbe5",
+  "reviewed_head": "9e46cbe5",
   "claim_submit_batch": {
     "verdict": "PASS",
     "message_id": "MSG-20261001-07",
@@ -5169,7 +5169,6 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "SA-3 把 standing authorization 判定接入既有 verifyApprovalOrThrow 的调用点（逐调用点接线；一次性 approvalId 语义保留；越权/超范围/高金额/非可绕过 gate 一律 fail-closed），并补 HTTP/服务层回归。",
     "SA-4 全量回归 + 更新 STANDING-AUTHORIZATION-V1-REPORT（含 exact HEAD/test evidence/remaining host action），并把 CURRENT-SI-RSI-STATUS.md 的能力矩阵补一行 STANDING_AUTHORIZATION。"
   ],
   "full_autonomous_internal_execution": "VERIFIED",
@@ -9339,7 +9338,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-06T08:34:19.914Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-06T08:45:37.200Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -11645,7 +11644,7 @@
     "id": "STANDING-AUTHORIZATION-RISK-TIERED-EXECUTION",
     "authorized_at": "2026-10-06",
     "branch": "gate/7-commercial-validation",
-    "current_unit": "SA-3",
+    "current_unit": "SA-4",
     "status": "RUNNING",
     "baseline_head": "834e99e8",
     "report": "docs/releases/STANDING-AUTHORIZATION-V1-REPORT.md"
@@ -11959,6 +11958,17 @@
           "PRODUCTION_EXTERNAL_WRITE": "HOLD"
         },
         "boundary": "externalWritePerformed=false、executionPerformed=false、createsSecondGuard=false、standingAuthorizationSatisfiesOnly=[humanApproval]、nonBypassableGates=8 项"
+      }
+    },
+    "SA-3": {
+      "name": "Standing Authorization 接入既有 approval-verifier / guard-enforcement（可选替代一次性审批；fail-closed）",
+      "status": "DONE / PUSHED",
+      "head": "9e46cbe5",
+      "evidence": {
+        "files": "apps/api/src/services/action-guard/approval-verifier.ts（+47 行，可选参数与四条 fail-closed 分支）、apps/api/src/services/action-guard/guard-enforcement.ts（+9 行，透传）、apps/api/src/__tests__/standing-authorization-verifier-wiring.test.ts（10 例）",
+        "tests": "standing-authorization-verifier-wiring 10/10（含 withActionGuard 放行恰好一次 / 越权零副作用 / 未提供授权时保持既有 fail-closed）+ 回归 32 文件 / 464 tests PASS（action-guard 全量 + SA + architecture-contract）；tsc 0",
+        "semantics": "ALLOW+STANDING_AUTHORIZATION+仅 humanApproval+动作匹配 → 放行并标记 authorizedBy；越权 → OVERREACH；动作不匹配 → ACTION_MISMATCH；DENY → DENIED（不回退）；REQUIRE_APPROVAL → 回退一次性 approvalId；未提供参数 → 行为与既有完全一致",
+        "boundary": "未提供 standingAuthorization 即零行为变化；越权/不匹配/DENY 一律 fail-closed；work 不执行（零副作用）"
       }
     }
   },
