@@ -156679,3 +156679,537 @@ PRODUCTION_READY = false
 最终裁决：P6-U3 FINAL3 PASS / CLOSED；Phase 6 当前 U1→U2→U3 链正式 CLOSED。到这里已经具备“受控学习 → 计划 → 授权 → sandbox 原子配置执行”的完整闭环，但 production mutation 仍明确未授权。
 ```
 
+### [MSG-20261005-93] P6-PROD-U1 裁决 = PASS WITH REVISE / NOT CLOSED（DURABLE_RESERVATION_OWNERSHIP / STRONG_DEDUPE / DURABLE_STATE_MACHINE / TERMINAL_RESULT_OUTBOX_ATOMICITY / APPEND_ONLY_DB_GUARDS / READ_ONLY_PRODUCTION_ADAPTER / NO_PRODUCTION_ENABLEMENT = PASS；STARTUP_RECONCILIATION_LEASE_FENCING / CRASH_RECOVERY_BASELINE_IDENTITY / OUTBOX_PAYLOAD_AUTHORITY / OUTBOX_CONCURRENT_DELIVERY_FAIL_CLOSED = REVISE；P6PROD_U1_FINAL_REQUIRED = YES）， reviewed HEAD 027fc30b；NEXT 只授权一个窄 FINAL（reconciliation lease fencing + full baseline identity + authoritative/concurrent outbox delivery）
+
+```text
+[CODEX-P6PROD-U1]
+
+PUSH = DONE：origin/gate/7-commercial-validation 现为 027fc30b（REVIEWED_HEAD = 027fc30b 为代码提交）
+前置：HOST AUTHORIZATION 2026-10-06 —— 授权 P6-PROD-U1，但明确 **NO PRODUCTION ENABLEMENT**：
+只建设生产级耐久 / 并发 / 恢复 / 审计底座，不允许真正修改生产配置。
+
+本轮按三个切片交付（每片都独立 commit + push）：
+  S1 = f3a4b77d（schema / migration / 触发器 / 清单登记）
+  S2 = 6885f6a3（纯决策核）
+  S3 = d009ff6f（Prisma durable store + 真实 PostgreSQL 验收）
+  收尾 fixture 同步 = 027fc30b
+
+① 交付
+
+S1 —— 五张**平台级**耐久表（无 organizationId / tenantId / customerId，不是第二个 runtime / 第二个控制面）：
+  * ControlledConfigExecutionReservation：durable reservation / execution ownership / lease
+    （ownerRef / leaseId / leaseAcquiredAt / leaseRenewedAt / leaseExpiresAt / executionAttempt /
+     immutableBasisDigest / reservationExpiresAt / status / terminalAt / terminalCode）
+  * ControlledConfigExecutionEvent：append-only 事件历史（seq 唯一；不得 UPDATE 覆盖成「最后一次状态」）
+  * ControlledConfigExecutionResult：append-only 终态结果（每次 reserve 至多一条）
+  * ControlledConfigExecutionOutbox：transactional outbox（eventKey 唯一；payload/digest 不可原地改写）
+  * ControlledConfigExecutionDelivery：append-only 消费者交付账本（UNIQUE(outboxId, consumerRef)）
+  硬约束：UNIQUE(authorizationVerdictDigest) / UNIQUE(authorizationTicketDigest) / UNIQUE(idempotencyKey)
+  / UNIQUE(reservationKey)；状态机 RESERVED → EXECUTING → terminal，非法跳转 / terminal 再迁移 /
+  identity 原地改写一律由 cc_config_execution_status_transition fail-closed；
+  resultCode → semantics 由 DB CHECK 单源强制（失败 / 未知结果不得携带 COMMITTED 语义）；
+  post identity 只能「完整已知」或「完整 UNKNOWN」；NO PRODUCTION ENABLEMENT：environment CHECK 只允许 SANDBOX。
+
+S2 —— 决策核（apps/api/src/services/config-execution-durability/，纯函数、无 IO、无进程内状态）：
+  * reservation 身份确定性（reservationKey / immutableBasisDigest / idempotencyPayloadDigest）；
+    重复 reservation：同依据 → 幂等复用；同幂等键异载荷 / 同授权异依据 → FAIL CLOSED
+  * lease：ACQUIRE / RENEW / LEASE_HELD / TAKEOVER（过期或缺失 lease → 新 lease 身份 + attempt 递增）/
+    RESERVATION_EXPIRED / TERMINAL_NOOP —— 有效 lease 不得被抢；reservation 窗口过期不得开跑
+  * crash recovery 分类：观测不可用 → NEEDS_RECONCILIATION（post = UNKNOWN）；目标值已生效且 version 前进 →
+    RECOVERED_COMMITTED（有证据的恢复，不重放 CAS）；仍是 pre 值且 version 未变 → SAFE_TO_RETRY；
+    目标值但 version 未变 / 其它漂移 → NEEDS_RECONCILIATION；**禁止 blind retry**
+  * startup reconciliation 计划（纯函数，确定性排序）；终态结果 / outbox / 消费者幂等判定
+  * production current-config adapter：**严格只读**（read / fingerprint / compare / drift / snapshot），
+    模块不导出任何 write / apply / promote / rollout / rollback 入口（测试逐个核对导出名）
+
+S3 —— durable store（Prisma + PostgreSQL）：
+  * reserveDurableExecution：单事务插 reservation + RESERVED 事件；UNIQUE 冲突读回既有记录判定（绝不 silent overwrite）
+  * claimExecutionLease：SELECT ... FOR UPDATE 行锁内裁决（ACQUIRE / RENEW / LEASE_HELD / TAKEOVER /
+    RESERVATION_EXPIRED / TERMINAL_NOOP）
+  * terminalizeExecution：**状态 + append-only 结果 + outbox 同一事务**写入（关闭「状态落库但事件丢失」窗口）；
+    重复收敛幂等
+  * runStartupReconciliation：恢复分类落库（RECOVERED_COMMITTED / SAFE_TO_RETRY / NEEDS_RECONCILIATION /
+    CANCEL / MANUAL_REVIEW），重复执行不产生第二条终态
+  * outbox：readUndispatchedOutbox / markOutboxDispatched（仅投递记账）/ consumeOutboxEvent（消费者幂等）
+
+② 验收（本地 apps/api；真实 PostgreSQL 127.0.0.1:55432；两条独立 PrismaClient = 两条独立连接，非 mock）
+  * prisma validate = OK；migrate deploy 83 → 84；migrate status = up to date
+  * tenant-integrity / append-only 两份 CI 清单校验 SQL 在真实库上直接通过（新增 6 条守卫已登记）
+  * 真实并发 / 恢复：config-execution-durability-db **15/15**
+      PGU-1 并发 reserve → exactly one（只产生一条 RESERVED 事件）
+      PGU-2 同 idempotencyKey 异载荷 → FAIL CLOSED 且无第二条执行、原记录未被改写
+      PGU-3 并发 claim → exactly one execution authority，loser 只能读既有状态
+      PGU-4 过期 lease 并发 takeover → 恰好一个接管 + 一个 LEASE_HELD（attempt 1 → 2）
+      PGU-5 终态 + 结果 + outbox 同事务落库；重复收敛幂等
+      PGU-6 read-back 证明已提交 → RECOVERED_COMMITTED（evidenceSource = READBACK_RECOVERY，不重放 CAS）
+      PGU-7 观测不可用 → NEEDS_RECONCILIATION 且 post identity = UNKNOWN（不得回填 pre）
+      PGU-11 仍是 pre → RECLAIM（保留 EXECUTING 待 worker 重新取 lease）
+      PGU-12 RESERVED 超期 → CANCELLED（零写终态 + 事件）
+      PGU-8/13 DB 触发器：非法跳转（RESERVED→SUCCEEDED）/ terminal 再迁移 / identity 改写 / 事件·结果·交付
+        append-only / outbox identity 不可改写（仅允许 dispatchedAt·dispatchAttempts）
+      PGU-9 消费者幂等：重复消费 → ALREADY_CONSUMED（只有一条交付）；载荷摘要不一致 → FAIL_CLOSED
+      PGU-10 environment=PRODUCTION 被数据库 CHECK 拒绝
+      PGU-14 跨连接耐久可见性（连接 A 建、连接 B 读并 claim）；PGU-15 不同 verdict/ticket 无串扰
+  * 纯决策核：config-execution-durability **26/26**；schema 合同：13/13；architecture-contract 143/143
+  * tsc --noEmit → exit 0
+  * 全量回归：**410 files / 3899 tests（3898 passed + 1 failed = recovery-si-phase2-e-db P2E-DB5 既有
+    test-isolation debt，单跑通过）**
+  * GitHub Actions：NOT_OBSERVED
+
+③ 口径与边界
+  * 本轮**没有**任何生产配置写入：environment 只能是 SANDBOX（DB CHECK 强制）；production mutation switch
+    保持 false；自动 rollout / 自动 rollback 未实现、未授权。
+  * 未新增第二个 runtime / policy engine / control plane / model gateway / cost ledger / meta evidence store；
+    PHASE 1–6 已 CLOSED 单元未被重开或改写。
+  * production current-config adapter 只读；未接真实 provider / payment / external write / 生产凭据。
+  * 未宣称：MODEL_GATEWAY_RUNTIME_WIRED / ACTION_RUNTIME_PRODUCTION_ENABLED /
+    META_IMPROVEMENT_INTEGRATED / PRODUCTION_READY = false。
+
+请求裁决
+1. P6-PROD-U1 是否可记 PASS（DURABLE_RESERVATION_OWNERSHIP = PASS、STRONG_DEDUPE = PASS、
+   DURABLE_STATE_MACHINE = PASS、CRASH_RECOVERY = PASS、STARTUP_RECONCILIATION = PASS、
+   CAS_LEDGER_CONSISTENCY = PASS、TRANSACTIONAL_OUTBOX = PASS、MULTI_WORKER_CONCURRENCY = PASS、
+   LEASE_STALE_RECOVERY = PASS、READ_ONLY_PRODUCTION_ADAPTER = PASS，
+   P6-PROD-U1 = PASS / CLOSED、P6PROD_U1_FINAL_REQUIRED = NO）？
+2. 若仍需 REVISE，请给出最小修订面；若 PASS，请确认 production mutation 继续 NOT AUTHORIZED，
+   且下一单元（真实生产配置写入 / rollout / auto rollback）必须再次单独授权。
+
+边界：REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS /
+PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing = HOLD；SECOND_* = FORBIDDEN；L5_RELAXATION = FORBIDDEN。
+…
+显示更多
+思考了 2m 57s
+ChatGPT 说：
+DECISION
+
+Reviewed HEAD：027fc30b
+
+DURABLE_RESERVATION_OWNERSHIP = PASS
+STRONG_DEDUPE = PASS
+DURABLE_STATE_MACHINE = PASS
+LEASE_STALE_RECOVERY = PASS（claim/takeover 本身）
+TERMINAL_RESULT_OUTBOX_ATOMICITY = PASS
+APPEND_ONLY_DB_GUARDS = PASS
+READ_ONLY_PRODUCTION_ADAPTER = PASS
+NO_PRODUCTION_ENABLEMENT = PASS
+STARTUP_RECONCILIATION_LEASE_FENCING = REVISE
+CRASH_RECOVERY_BASELINE_IDENTITY = REVISE
+OUTBOX_PAYLOAD_AUTHORITY = REVISE
+OUTBOX_CONCURRENT_DELIVERY_FAIL_CLOSED = REVISE
+MULTI_WORKER_CONCURRENCY = PASS WITH REVISE
+CRASH_RECOVERY = PASS WITH REVISE
+TRANSACTIONAL_OUTBOX = PASS WITH REVISE
+P6-PROD-U1 = PASS WITH REVISE / NOT CLOSED
+P6PROD_U1_FINAL_REQUIRED = YES
+GitHub Actions：NOT_OBSERVED
+
+这轮不是推倒重做。五张表、DB 状态机、UNIQUE、append-only、lease、result+outbox 同事务这些底座是成立的。剩下是 3 组窄的并发/恢复完整性问题。
+
+KEEP
+
+数据库层这次做得是真实的，不只是 TypeScript contract：
+
+UNIQUE(authorizationVerdictDigest)
+UNIQUE(authorizationTicketDigest)
+UNIQUE(idempotencyKey)
+UNIQUE(reservationKey)
+environment DB CHECK 只接受 SANDBOX
+非法状态迁移 DB trigger fail-closed
+terminal 状态不可再次迁移
+reservation immutable identity 不可 UPDATE
+event/result/delivery append-only
+outbox payload identity 不可原地修改
+resultCode ↔ semantics 有 DB CHECK
+post identity 要么完整 known，要么完整 UNKNOWN
+
+terminalizeExecution() 中：
+
+reservation terminal state + result + outbox + event
+
+确实在同一个 Prisma transaction 中完成，这个可以 PASS。
+
+claimExecutionLease() 使用 SELECT ... FOR UPDATE，ACQUIRE / RENEW / TAKEOVER 的基础方向也正确。
+
+Production current-config adapter 目前也确实只有 read/compare/fingerprint/drift/snapshot，没有 production write 入口。
+
+CHANGE 1 — Startup reconciliation 存在 lease fencing race
+
+这是当前最大的 blocker。
+
+现在流程大致是：
+
+纯文本
+listNonTerminalReservations()
+↓
+根据快照判断旧 lease 已过期
+↓
+生成 TERMINALIZE / RECLAIM action
+↓
+期间另一个 worker 可能 claim/takeover
+↓
+terminalizeExecution(... expectedLeaseId: null)
+
+terminalizeExecution() 虽然重新 FOR UPDATE，但 startup reconciliation 传的是：
+
+纯文本
+expectedLeaseId: null
+
+所以它不会验证：
+
+我做 recovery 判断时看到的，还是当前这一个 lease 吗？
+
+可能出现：
+
+纯文本
+旧 worker lease 过期
+       ↓
+reconciler 读到旧快照
+       ↓
+worker-B TAKEOVER，获得新的有效执行权
+       ↓
+reconciler 用旧观测 terminalize
+       ↓
+worker-B 的新 lease 被旧 recovery 结果覆盖
+
+这是生产级并发 fencing 缺口。
+
+最小修法
+
+Recovery action 必须携带其决策依据的 lease fence，至少：
+
+纯文本
+expectedLeaseId
+expectedLeaseRenewedAt / expectedLeaseExpiresAt
+executionAttempt
+
+因为仅 leaseId 还不够：同一个 worker RENEW 时可能保持相同 leaseId，但 lease 已经变新。
+
+在真正 terminalize 前，row lock 内必须验证：
+
+纯文本
+current.status
+current.leaseId
+current.executionAttempt
+current.leaseRenewedAt / leaseExpiresAt
+
+仍等于 recovery snapshot。
+
+任何变化：
+
+纯文本
+RECONCILIATION_LEASE_FENCE_CHANGED
+→ NOOP / REPLAN
+
+绝不能继续 terminalize。
+
+RECLAIM 路径也一样。现在它锁行后只是追加 STARTUP_RECONCILED 事件，没有重新裁决当前 lease 是否已经被续期/接管。
+
+建议 recovery 不自己宣称已经 reclaim；真正执行权仍交给现有的：
+
+纯文本
+claimExecutionLease()
+
+去 row-lock 裁决。
+
+CHANGE 2 — SAFE_TO_RETRY 没检查 baseline fingerprint
+
+代码已经暴露出这个缺口：
+
+ExecutionExpectation 有：
+
+纯文本
+baselineConfigFingerprint
+preConfigVersion
+fromValue
+toValue
+
+但 classifyStrandedExecution() 的 SAFE_TO_RETRY 实际只检查：
+
+纯文本
+pathValue === fromValue
+&& version === preConfigVersion
+
+完全没用 baselineConfigFingerprint。
+
+因此可能：
+
+纯文本
+path 仍然 = from
+version 看起来没变
+但是整个 configFingerprint 已漂移
+
+却被判断：
+
+SAFE_TO_RETRY
+
+这会绕过此前 U3 已经建立的：
+
+fingerprint + version + path value 三重 stale identity。
+
+必须收紧
+
+SAFE_TO_RETRY 至少要求：
+
+纯文本
+observation.configFingerprint
+=== expected.baselineConfigFingerprint
+
+&& observation.version
+=== expected.preConfigVersion
+
+&& observation.pathValue
+=== expected.fromValue
+
+否则：
+
+NEEDS_RECONCILIATION
+
+建议 RECOVERED_COMMITTED 也保持证据一致性：
+
+纯文本
+path === to
+version advanced
+fingerprint != baseline fingerprint
+
+如果：
+
+纯文本
+path 已改变
+version 已前进
+但 fingerprint 仍声称等于 baseline
+
+这是自相矛盾的 observation，应进入：
+
+NEEDS_RECONCILIATION
+
+而不是自动 RECOVERED_COMMITTED。
+
+CHANGE 3 — Outbox 第一次消费可以接受错误 payloadDigest
+
+这是另一个明确漏洞。
+
+当前 consumeOutboxEvent() 首先只查：
+
+纯文本
+ControlledConfigExecutionDelivery
+
+如果还没有 delivery：
+
+纯文本
+decideOutboxDelivery(null, input)
+→ CONSUME
+
+它没有先读取真实 outbox row 来证明：
+
+纯文本
+input.payloadDigest === outbox.payloadDigest
+
+所以第一次调用就可以：
+
+纯文本
+真实 outbox digest = ABC
+caller 提供 digest = MALICIOUS_XYZ
+↓
+现有 delivery = null
+↓
+CONSUME
+
+然后错误 digest 被落进 delivery ledger。
+
+现有 PGU-9 只测试：
+
+先用正确 digest 消费；
+然后再用错误 digest；
+因为已有 delivery，所以 FAIL_CLOSED。
+
+这没有覆盖“第一次就是错误 digest”。
+
+最小修法
+
+consumeOutboxEvent() 必须先 server-side 读取 outbox：
+
+纯文本
+outbox = findUnique(outboxId)
+
+if missing
+→ FAIL_CLOSED / NOT_FOUND
+
+if input.payloadDigest !== outbox.payloadDigest
+→ CONFIG_EXECUTION_DELIVERY_CONFLICT
+
+之后才能进入 consumer idempotency。
+
+换句话说：
+
+outbox row 是 payloadDigest 的 authority，consumer input 不是。
+
+CHANGE 4 — concurrent delivery race 的 catch 分支漏掉 digest 重验
+
+还有一个同模块的并发问题。
+
+当前：
+
+纯文本
+先 find delivery → none
+↓
+create
+↓
+unique violation
+↓
+read raced delivery
+↓
+直接 ALREADY_CONSUMED
+
+catch 分支读回 raced row 后没有重新比较：
+
+纯文本
+raced.payloadDigest === input.payloadDigest
+
+因此两个连接并发：
+
+纯文本
+connection A: digest=A
+connection B: digest=B
+same outbox + same consumer
+
+一个赢得 INSERT 后，另一个可能得到：
+
+ALREADY_CONSUMED
+
+而不是：
+
+FAIL_CLOSED
+
+最小修法
+
+unique-race catch 内：
+
+纯文本
+const raced = read existing delivery
+
+return decideOutboxDelivery(
+  { id: raced.id, payloadDigest: raced.payloadDigest },
+  input
+)
+
+不要手写：
+
+纯文本
+return ALREADY_CONSUMED
+
+这样纯决策核原本已有的 digest mismatch fail-closed 逻辑才能真正覆盖并发路径。
+
+TEST
+
+P6-PROD-U1 FINAL 我要求至少新增这些真实 PostgreSQL 用例：
+
+Recovery vs fresh takeover race
+
+reconciler 基于 expired lease 生成动作；
+worker-B 在动作落库前 TAKEOVER；
+old reconciliation 不得 terminalize 新 lease。
+
+Recovery vs lease renewal race
+
+snapshot 时 lease 即将/已经被认为 stale；
+worker 原 leaseId 执行 RENEW；
+recovery 必须检测 lease fence 改变并放弃旧 action。
+
+SAFE_TO_RETRY fingerprint drift
+
+纯文本
+path = from
+version = preVersion
+fingerprint != baselineFingerprint
+
+→ NEEDS_RECONCILIATION
+→ 不得 RECLAIM。
+
+正常完整 baseline：
+
+纯文本
+fingerprint = baseline
+version = pre
+path = from
+
+→ SAFE_TO_RETRY。
+
+第一次消费就传错误 payload digest
+→ FAIL_CLOSED
+→ delivery count = 0。
+
+两条独立 Prisma connection 并发同：
+
+纯文本
+outboxId
+consumerRef
+
+但不同 payload digest：
+
+最多一条 delivery；
+loser 必须 FAIL_CLOSED
+不得 ALREADY_CONSUMED 掩盖 digest conflict。
+
+两连接相同正确 digest 并发
+→ one CONSUME + one ALREADY_CONSUMED
+→ delivery exactly one。
+
+原有：
+
+reserve exactly-one
+lease takeover
+result+outbox transaction
+append-only
+environment SANDBOX CHECK
+
+必须全部保持 green。
+
+NEXT
+
+只授权一个窄 FINAL：
+
+P6-PROD-U1 FINAL — reconciliation lease fencing + full baseline identity + authoritative/concurrent outbox delivery
+
+不增加 production writer。
+
+如果上述三组问题闭合，预期可裁：
+
+纯文本
+DURABLE_RESERVATION_OWNERSHIP = PASS
+STRONG_DEDUPE = PASS
+DURABLE_STATE_MACHINE = PASS
+CRASH_RECOVERY = PASS
+STARTUP_RECONCILIATION = PASS
+CAS_LEDGER_CONSISTENCY = PASS
+TRANSACTIONAL_OUTBOX = PASS
+MULTI_WORKER_CONCURRENCY = PASS
+LEASE_STALE_RECOVERY = PASS
+READ_ONLY_PRODUCTION_ADAPTER = PASS
+
+P6-PROD-U1 = PASS / CLOSED
+P6PROD_U1_FINAL2_REQUIRED = NO
+PRODUCTION
+
+production mutation 继续 NOT AUTHORIZED。
+
+这个结论与本次 REVISE 无关，即便 FINAL 通过，也只能证明：
+
+production-grade durability substrate 已准备好。
+
+仍不代表：
+
+production config write 可以开启。
+
+继续保持：
+
+environment = SANDBOX only
+PRODUCTION_CONFIG_MUTATION = false
+AUTO_PROMOTION = false
+AUTO_ROLLOUT = false
+AUTO_PRODUCTION_ROLLBACK = false
+
+以及全部原 HOLD/FORBIDDEN 不变。
+
+结论：这轮底座已经很接近封板，DB 设计主体可以保留；目前只剩 recovery fencing / recovery fingerprint identity / outbox payload authority+并发 race 三组窄修。修完以后才适合把 P6-PROD-U1 正式 CLOSED，production write 仍需下一次独立授权。
+```
+
