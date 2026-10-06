@@ -32,6 +32,7 @@ import { createControlledConfigProposal } from '../services/outcome-learning/con
 import {
   CONTROLLED_CONFIG_EXECUTION_BOUNDARY,
   CONTROLLED_CONFIG_EXECUTION_SEMANTICS,
+  CONTROLLED_CONFIG_EXECUTION_STATUS_SEMANTICS,
   createSandboxConfigExecutionLedger,
   executeControlledConfigMutation,
   isVerifiedControlledConfigExecutionResult,
@@ -251,6 +252,7 @@ interface StoreState {
   readBackThrow?: boolean;
   readBackMalformed?: boolean;
   cas?: 'OK' | 'VERSION_CONFLICT' | 'PATH_VALUE_CONFLICT';
+  casThrow?: boolean;
 }
 
 const executionStore = (state: StoreState) => {
@@ -276,6 +278,7 @@ const executionStore = (state: StoreState) => {
     },
     async compareAndSwap() {
       counters.casCalls += 1;
+      if (state.casThrow === true) throw new Error('SIMULATED_CAS_TIMEOUT');
       if (state.cas === 'VERSION_CONFLICT') return { ok: false, reason: 'VERSION_CONFLICT' };
       if (state.cas === 'PATH_VALUE_CONFLICT') return { ok: false, reason: 'PATH_VALUE_CONFLICT' };
       value = '0.75';
@@ -623,5 +626,71 @@ describe('PHASE 6 U3 —— controlled config execution (SANDBOX ONLY)', () => {
       expect(second.resultDigest).toBe(first.resultDigest);
       expect(io.counters.casCalls).toBe(1);
     }
+  });
+
+  it('P6U3F2_1 CAS_EXCEPTION_TERMINALIZATION：compareAndSwap 抛异常 → durable NEEDS_RECONCILIATION（非 CONFLICT），重试同结果且不再 CAS', async () => {
+    const c = await chain();
+    const ledger = createSandboxConfigExecutionLedger();
+    const io = executionStore({
+      value: '0.50',
+      fingerprint: BASELINE_FINGERPRINT,
+      version: BASELINE_VERSION,
+      casThrow: true,
+    });
+    const call = () =>
+      executeControlledConfigMutation({
+        plan: c.plan,
+        ticket: c.authorizationTicket,
+        verdict: c.authorizationVerdict,
+        configStore: io.store,
+        ledger,
+        gate: switches(),
+        executedAt: EXECUTED_AT,
+        idempotencyKey: 'idem-cas-throw',
+      });
+    const first = await call();
+    expect(first.status).toBe('NEEDS_RECONCILIATION');
+    expect(first.semantics).toBe('SANDBOX_CONFIG_MUTATION_NEEDS_RECONCILIATION');
+    expect(isVerifiedControlledConfigExecutionResult(first)).toBe(true);
+    const second = await call();
+    expect(second.resultDigest).toBe(first.resultDigest);
+    expect(io.counters.casCalls).toBe(1);
+  });
+
+  it('P6U3F2_2 EXECUTION_RESULT_SEMANTICS：semantics 随 status 取值且进入 resultDigest', async () => {
+    expect(CONTROLLED_CONFIG_EXECUTION_STATUS_SEMANTICS).toEqual({
+      COMMITTED: 'SANDBOX_CONFIG_MUTATION_COMMITTED',
+      NOOP_ALREADY_APPLIED: 'SANDBOX_CONFIG_ALREADY_APPLIED_NO_WRITE',
+      CONFLICT: 'SANDBOX_CONFIG_MUTATION_CONFLICT_NO_WRITE',
+      NEEDS_RECONCILIATION: 'SANDBOX_CONFIG_MUTATION_NEEDS_RECONCILIATION',
+      FAILED_ZERO_WRITE: 'SANDBOX_CONFIG_MUTATION_FAILED_ZERO_WRITE',
+    });
+    const committed = await runExecution();
+    expect(committed.result.status).toBe('COMMITTED');
+    expect(committed.result.semantics).toBe('SANDBOX_CONFIG_MUTATION_COMMITTED');
+    const noop = await runExecution({
+      storeState: { value: '0.75', fingerprint: BASELINE_FINGERPRINT, version: BASELINE_VERSION },
+    });
+    expect(noop.result.status).toBe('NOOP_ALREADY_APPLIED');
+    expect(noop.result.semantics).toBe('SANDBOX_CONFIG_ALREADY_APPLIED_NO_WRITE');
+    const conflict = await runExecution({
+      storeState: { value: '0.50', fingerprint: BASELINE_FINGERPRINT, version: BASELINE_VERSION, cas: 'VERSION_CONFLICT' },
+    });
+    expect(conflict.result.status).toBe('CONFLICT');
+    expect(conflict.result.semantics).toBe('SANDBOX_CONFIG_MUTATION_CONFLICT_NO_WRITE');
+    const reconcile = await runExecution({
+      storeState: { value: '0.50', fingerprint: BASELINE_FINGERPRINT, version: BASELINE_VERSION, readBackValue: '0.50' },
+    });
+    expect(reconcile.result.status).toBe('NEEDS_RECONCILIATION');
+    expect(reconcile.result.semantics).toBe('SANDBOX_CONFIG_MUTATION_NEEDS_RECONCILIATION');
+    // digest 绑定 status/semantics：不同 status 的 resultDigest 必不相同
+    const digests = new Set([
+      committed.result.resultDigest,
+      noop.result.resultDigest,
+      conflict.result.resultDigest,
+      reconcile.result.resultDigest,
+    ]);
+    expect(digests.size).toBe(4);
+    expect(CONTROLLED_CONFIG_EXECUTION_BOUNDARY.semanticsByStatus.COMMITTED).toBe('SANDBOX_CONFIG_MUTATION_COMMITTED');
   });
 });

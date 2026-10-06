@@ -40,10 +40,22 @@ export const CONTROLLED_CONFIG_EXECUTION_STATUSES = [
   'FAILED_ZERO_WRITE',
 ] as const;
 
+/** semantics 必须随 status 取值：失败/未知结果绝不能携带 COMMITTED 语义。 */
+export const CONTROLLED_CONFIG_EXECUTION_STATUS_SEMANTICS = {
+  COMMITTED: 'SANDBOX_CONFIG_MUTATION_COMMITTED',
+  NOOP_ALREADY_APPLIED: 'SANDBOX_CONFIG_ALREADY_APPLIED_NO_WRITE',
+  CONFLICT: 'SANDBOX_CONFIG_MUTATION_CONFLICT_NO_WRITE',
+  NEEDS_RECONCILIATION: 'SANDBOX_CONFIG_MUTATION_NEEDS_RECONCILIATION',
+  FAILED_ZERO_WRITE: 'SANDBOX_CONFIG_MUTATION_FAILED_ZERO_WRITE',
+} as const;
+export type ControlledConfigExecutionSemantics =
+  (typeof CONTROLLED_CONFIG_EXECUTION_STATUS_SEMANTICS)[keyof typeof CONTROLLED_CONFIG_EXECUTION_STATUS_SEMANTICS];
+
 export const CONTROLLED_CONFIG_EXECUTION_BOUNDARY = {
   scope: 'SANDBOX / NON_PRODUCTION_CONFIG_WRITE_ONLY',
   environment: CONTROLLED_CONFIG_EXECUTION_ENVIRONMENT,
   successSemantics: CONTROLLED_CONFIG_EXECUTION_SEMANTICS,
+  semanticsByStatus: CONTROLLED_CONFIG_EXECUTION_STATUS_SEMANTICS,
   entryGate:
     'verified plan + verified authorization ticket + verified authorization verdict（digest 三者闭合；clone/handmade/mismatch fail-closed）',
   executionWindow:
@@ -93,7 +105,7 @@ export type ControlledConfigExecutionStatus = (typeof CONTROLLED_CONFIG_EXECUTIO
 export interface ControlledConfigExecutionResult {
   kind: 'CONTROLLED_CONFIG_EXECUTION_RESULT';
   mode: 'SANDBOX_WRITE_ONLY';
-  semantics: typeof CONTROLLED_CONFIG_EXECUTION_SEMANTICS;
+  semantics: ControlledConfigExecutionSemantics;
   executionId: string;
   resultDigest: string;
   planDigest: string;
@@ -346,12 +358,13 @@ export async function executeControlledConfigMutation(input: {
       post.version ?? '',
       executedAt,
       status,
+      CONTROLLED_CONFIG_EXECUTION_STATUS_SEMANTICS[status],
       idempotencyKey,
     ]);
     const result: ControlledConfigExecutionResult = {
       kind: 'CONTROLLED_CONFIG_EXECUTION_RESULT',
       mode: 'SANDBOX_WRITE_ONLY',
-      semantics: CONTROLLED_CONFIG_EXECUTION_SEMANTICS,
+      semantics: CONTROLLED_CONFIG_EXECUTION_STATUS_SEMANTICS[status],
       executionId,
       resultDigest,
       planDigest: plan.planDigest,
@@ -405,13 +418,21 @@ export async function executeControlledConfigMutation(input: {
   }
 
   // 4) 原子 CAS 硬门；失败 = durable CONFLICT（绝不再次 CAS）
-  const cas = await store.compareAndSwap({
-    target,
-    expectedVersion: preVersion,
-    expectedPathValue: from,
-    path,
-    nextValue: to,
-  });
+  // CAS_EXCEPTION_TERMINALIZATION：CAS 自身抛异常时 mutation 结果未知，必须落真 NEEDS_RECONCILIATION（不能记 CONFLICT）
+  let cas: ControlledConfigCasOutcome | null = null;
+  try {
+    cas = await store.compareAndSwap({
+      target,
+      expectedVersion: preVersion,
+      expectedPathValue: from,
+      path,
+      nextValue: to,
+    });
+  } catch {
+    const unknown = buildResult('NEEDS_RECONCILIATION', { fingerprint: preFingerprint, version: preVersion });
+    ledger.put(unknown);
+    return unknown;
+  }
   if (cas === null || cas === undefined || cas.ok !== true) {
     const conflict = buildResult('CONFLICT', { fingerprint: preFingerprint, version: preVersion });
     ledger.put(conflict);
