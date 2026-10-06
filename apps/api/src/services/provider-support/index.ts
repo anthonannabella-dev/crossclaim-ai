@@ -6,3 +6,5 @@ export * from './case-facts';
 export * from './prisma-case-fact-store';
 export * from './case-response-intelligence';
 export * from './prisma-interpretation-store';
+export * from './evidence-resolver';
+export * from './prisma-evidence-source';
