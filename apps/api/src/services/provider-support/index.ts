@@ -17,3 +17,4 @@ export * from './follow-up-package';
 export * from './recovery-case-lifecycle';
 export * from './customer-recovery-status';
 export * from './customs-document-classification';
+export * from './customs-7501-extraction';
