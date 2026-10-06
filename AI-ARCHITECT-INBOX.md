@@ -156477,3 +156477,205 @@ PRODUCTION_READY = false
 结论：FINAL2 已经把执行状态机基本闭合，只差 CAS exception 时把未知 post-state 错写成 pre-state。改成 postConfigFingerprint/postConfigVersion = null 后，U3 就可以正式 CLOSED。
 ```
 
+### [MSG-20261005-92] PHASE 6 U3 FINAL3 裁决 = PASS / CLOSED（CAS_EXCEPTION_POST_STATE_EVIDENCE = PASS、SANDBOX_CONFIG_EXECUTION_CONTRACT = PASS、PHASE_6_U3 = PASS / CLOSED、PHASE6_U3_FINAL4_REQUIRED = NO；P6-U1 Controlled Adoption Plan / P6-U2 Execution Authorization Gate / P6-U3 Sandbox Controlled Config Execution = CLOSED、PHASE_6_CURRENT_CHAIN = PASS / CLOSED）， reviewed HEAD 8920c429；production config write 仍 NOT AUTHORIZED
+
+```text
+[CODEX-PHASE6-U3FINAL3]
+
+PUSH = DONE：origin/gate/7-commercial-validation 现为 8920c429（REVIEWED_HEAD = 8920c429 为代码提交）
+前置：PHASE 6 U3 FINAL2 裁决（MSG-20261005-91）= CAS_EXCEPTION_TERMINALIZATION = PASS、EXECUTION_RESULT_SEMANTICS = PASS；
+CAS_EXCEPTION_POST_STATE_EVIDENCE = REVISE；PHASE6_U3_FINAL3_REQUIRED = YES。本单元只做这一项窄修。
+
+① 交付（P6-U3 FINAL3，唯一改动 = controlled-config-execution）
+* compareAndSwap 抛异常 → durable result 的 **postConfigFingerprint / postConfigVersion 现在为 null**，
+  准确表达 post-state UNKNOWN（CAS 可能未执行，也可能已提交但响应丢失），不再写入 pre fingerprint/version，
+  避免下游把 status=NEEDS_RECONCILIATION 且 postVersion === preVersion 误读为“确认未写成功”。
+* resultDigest preimage 继续包含 post identity（null 映射为空串），因此该 terminal result 与其语义一一对应、可重放比对。
+* 三条路径的证据语义现在互不混淆：
+  - CAS 明确返回 ok:false → status = CONFLICT（契约明确零写）→ 保留 pre fingerprint/version；
+  - CAS 抛异常 → status = NEEDS_RECONCILIATION → post identity = **null（UNKNOWN）**；
+  - CAS 返回 ok:true 后 read-back 失败 → status = NEEDS_RECONCILIATION → 保留 CAS 返回的 post version/fingerprint（存在 provider success response）。
+* 同 idempotencyKey 重试返回既有 terminal result，CAS 调用次数不增加。
+* 其余不变：三重可信入口 + digest 三者闭合、只读 preflight 前移（失败零 reservation）、sandbox-only 硬门、exact delta only、
+  原子 compareAndSwap、status→semantics 映射、rollback anchor 持久化（首版不自动 rollback）、
+  productionMutation / autoRollback 全 FORBIDDEN、模块不导出任何 rollout / promote / production apply 入口。
+
+② 验收（本地 apps/api）
+* npx tsc --noEmit → exit 0
+* controlled-config-execution **17/17**（新增 P6U3F3_1，原 16 项保持 green）：
+  P6U3F3_1 CAS 抛异常 → NEEDS_RECONCILIATION 且 postConfigFingerprint === null、postConfigVersion === null（pre identity 仍保留）；
+  CONFLICT → 保留 pre identity；CAS 成功 + read-back throw → NEEDS_RECONCILIATION 且保留 CAS 返回的 post identity；
+  同键重试返回同一 resultDigest 且 CAS 仍只调用 1 次。
+* 过滤集：14 files / **162 tests** PASS（含 controlled-execution-gate 10/10）。
+* 回归集：107 files / **1109 tests**（1108 passed + 1 failed = recovery-si-phase2-e-db P2E-DB5 既有 test-isolation debt）。
+* GitHub Actions：NOT_OBSERVED。
+
+③ 口径
+* U3 仍为 SANDBOX / NON_PRODUCTION_CONFIG_WRITE_ONLY；production config write / rollout / auto rollback 未授权、未实现。
+* production 侧仍需独立单元解决 durable reservation 状态机 / crash recovery / outbox 一致性 / 多 worker 并发等（你已列出）。
+* 未接真实 provider / payment / external write；HOLD/FORBIDDEN 边界全部不变。
+* 未宣称：MODEL_GATEWAY_RUNTIME_WIRED / ACTION_RUNTIME_PRODUCTION_ENABLED / META_IMPROVEMENT_INTEGRATED / PRODUCTION_READY = false。
+
+请求裁决
+1. P6-U3 FINAL3 是否可记 PASS（CAS_EXCEPTION_POST_STATE_EVIDENCE = PASS、SANDBOX_CONFIG_EXECUTION_CONTRACT = PASS、
+   PHASE_6_U3 = PASS / CLOSED、PHASE6_U3_FINAL4_REQUIRED = NO）？
+2. 是否确认 Phase 6 当前链可正式登记为：P6-U1 Controlled Adoption Plan = CLOSED、P6-U2 Execution Authorization Gate = CLOSED、
+   P6-U3 Sandbox Controlled Config Execution = CLOSED，PHASE 6 CURRENT CHAIN = CLOSED（production mutation 继续未授权）？
+
+边界：REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS /
+PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing = HOLD；SECOND_* = FORBIDDEN；L5_RELAXATION = FORBIDDEN。
+…
+显示更多
+思考了 13s
+ChatGPT 说：
+DECISION
+CAS_EXCEPTION_POST_STATE_EVIDENCE = PASS
+SANDBOX_CONFIG_EXECUTION_CONTRACT = PASS
+PHASE_6_U3 = PASS / CLOSED
+PHASE6_U3_FINAL4_REQUIRED = NO
+P6-U1 Controlled Adoption Plan = CLOSED
+P6-U2 Execution Authorization Gate = CLOSED
+P6-U3 Sandbox Controlled Config Execution = CLOSED
+PHASE_6_CURRENT_CHAIN = PASS / CLOSED
+Reviewed HEAD：8920c429
+GitHub Actions：NOT_OBSERVED
+
+注意口径：这里是 Phase 6 当前已授权链 CLOSED，不是 production execution 已开放。
+
+KEEP
+
+FINAL3 已把最后一个证据问题修正确：
+
+纯文本
+CAS throws
+→ NEEDS_RECONCILIATION
+→ postConfigFingerprint = null
+→ postConfigVersion = null
+
+这准确表示 post-state UNKNOWN。
+
+三条路径现在已经明确分离：
+
+纯文本
+CAS ok:false
+→ CONFLICT
+→ 明确零写
+→ post identity 可保持 pre identity
+纯文本
+CAS throws
+→ NEEDS_RECONCILIATION
+→ mutation outcome UNKNOWN
+→ post identity = null
+纯文本
+CAS ok:true
++ read-back fails
+→ NEEDS_RECONCILIATION
+→ 保留 CAS success response 的 post identity
+
+这套证据语义可以封板。
+
+CHANGE
+
+U3 无进一步功能修改。
+
+不要再继续给 sandbox execution 补业务能力。
+
+如果需要归档，可以只做一个很小的 docs-only Phase 6 current-chain checkpoint，但它不是新的功能单元，也不阻断当前 CLOSED 状态。
+
+RISKS
+
+现阶段剩余风险全部属于 production enablement debt，不属于 sandbox U3 阻断项。
+
+最重要的是：
+
+当前 in-memory / port-level reservation 仍不能解决这种 production crash gap：
+
+纯文本
+CAS actually committed
+↓
+process crashes
+↓
+before ledger.put(result)
+
+所以 不能把 sandbox U3 直接换一个 production store adapter 就上线。
+
+另外：
+
+durable DB UNIQUE 还没做；
+multi-worker exactly-once 还没做；
+startup reconciliation 没做；
+rollback execution 没做；
+production control plane 未解锁。
+
+这些必须独立审计。
+
+TEST
+
+exact 8920c429 已确认：
+
+CAS throw → NEEDS_RECONCILIATION
+post fingerprint/version → null
+pre identity 保留
+CONFLICT 保持已知零写语义
+CAS success + read-back failure 保留 CAS post identity
+同 idempotencyKey 不重复 CAS
+exact SHA GitHub Actions：NOT_OBSERVED
+
+Codex 报告的 17/17 和回归结果只能记为 local evidence，不应写成 GitHub CI success。
+
+NEXT
+当前不授权 production config write
+
+如果继续开发，下一阶段必须另开独立单元，例如：
+
+P6-PROD-U1 — Production Config Execution Durability / NO PRODUCTION ENABLEMENT
+
+我建议第一步仍然不要直接写生产配置，而是先只实现 production-grade durability foundation。
+
+最低门至少包括：
+
+DB-backed execution reservation；
+UNIQUE(authorizationVerdictDigest)；
+UNIQUE(authorizationTicketDigest)；
+durable idempotency key；
+reservation 状态机，例如：
+RESERVED → EXECUTING → COMMITTED / CONFLICT / NEEDS_RECONCILIATION；
+crash recovery；
+startup reconciliation；
+CAS-result / ledger consistency；
+transactional outbox 或等价机制；
+multi-worker concurrency E2E；
+stale lease / abandoned execution recovery；
+-真实 production current-config adapter 仍保持 read-only；
+production mutation 开关仍为 false。
+
+只有 durability foundation CLOSED 以后，才讨论真正的：
+
+Production Config Mutation Enablement
+
+而且那个单元必须再次单独授权。
+
+PRODUCTION
+
+继续明确：
+
+production config write = NOT AUTHORIZED
+
+全部保持：
+
+REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing = HOLD
+
+SECOND_* = FORBIDDEN
+
+L5_RELAXATION = FORBIDDEN
+
+并继续：
+
+MODEL_GATEWAY_RUNTIME_WIRED = false
+ACTION_RUNTIME_PRODUCTION_ENABLED = false
+META_IMPROVEMENT_INTEGRATED = false
+PRODUCTION_READY = false
+
+最终裁决：P6-U3 FINAL3 PASS / CLOSED；Phase 6 当前 U1→U2→U3 链正式 CLOSED。到这里已经具备“受控学习 → 计划 → 授权 → sandbox 原子配置执行”的完整闭环，但 production mutation 仍明确未授权。
+```
+
