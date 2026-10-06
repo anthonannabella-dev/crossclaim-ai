@@ -44,7 +44,7 @@ LOW_RISK_AUTONOMY_READY   = YES（政策与判定层就绪；TIER_1 可在授权
 HIGH_VALUE_HITL           = KEEP（>1,000 → OWNER/ADMIN；≥10,000 → ADMIN）
 CUSTOMS_POA_BOUNDARY      = KEEP（SA ≠ Broker POA；15-gate readiness 不变）
 PRODUCTION_EXTERNAL_WRITE = HOLD
-CURRENT_HEAD              = 22962b73
+CURRENT_HEAD              = STANDING-AUTH-HEAD
 TEST_EVIDENCE             = standing-authorization 19/19（覆盖验收 1–12）+ action-guard-approval-verifier 9/9 + architecture-contract 157/157；tsc exit 0
 ```
 
@@ -65,11 +65,20 @@ TEST_EVIDENCE             = standing-authorization 19/19（覆盖验收 1–12�
 | 11 | 并发·重复执行保持 exactly-once | ⑪ | 判定稳定 + wiringDigest 一致 + executionPerformed=false |
 | 12 | authorization version change 后旧执行权不能继续使用 | ⑫ | 旧版本 DENY（VERSION_STALE）；对齐新版本后 SATISFIED |
 
-## 5. 尚未完成 / 边界
+## 5. SA-3（已完成）：接入既有 approval-verifier / guard-enforcement
 
-* **SA-3（next）**：把本判定层接入既有 `verifyApprovalOrThrow` 的**调用点**（当前层已可用，但既有 HTTP/服务调用点仍只认 `approvalId`）——
-  需要逐调用点接线，保持 fail-closed 与一次性审批兼容。
-* **SA-4（next）**：全量回归 + 最终回报更新。
+* `approval-verifier.ts`：`verifyApprovalOrThrow` 新增**可选** `standingAuthorization` 参数（既有调用方不传 → 行为完全不变）：
+  - `decision=ALLOW` 且 `authorizedBy=STANDING_AUTHORIZATION` 且 `satisfiedGates` **仅含 humanApproval** 且 `action` 匹配 → 放行并标记 `authorizedBy='STANDING_AUTHORIZATION'`；
+  - 越权（`satisfiedGates` 含非可绕过 gate）→ `ACTION_GUARD_STANDING_AUTHORIZATION_OVERREACH`；
+  - 动作不匹配 → `..._ACTION_MISMATCH`；判定 `DENY`（撤销/过期/不匹配）→ `..._DENIED`（**不回退**到审批路径）；
+  - 判定 `REQUIRE_APPROVAL`（超范围/高金额）→ 回退到一次性 `approvalId` 路径（verifier 缺失 → `VERIFIER_MISSING`）。
+* `guard-enforcement.ts`：`withActionGuard` 新增同名可选参数并透传 —— 生产受保护动作（`guard-enforcement` 是统一执行助手）可逐调用点以授权替代一次性审批；未提供时行为与既有完全一致；放行路径仍需审计端口（缺失即拒绝）。
+* 测试：`standing-authorization-verifier-wiring` **10/10**（含 `withActionGuard` 放行恰好执行一次 / 越权零副作用 / 未提供授权时保持既有 fail-closed）。
+
+## 6. 尚未完成 / 边界
+
+* **SA-4（next）**：全量回归 + 更新本报告（exact HEAD / test evidence / remaining host action）+ 在 `CURRENT-SI-RSI-STATUS.md` 补 STANDING_AUTHORIZATION 行。
+* 逐调用点「默认开启」：本次是**可选接入**（未提供 `standingAuthorization` 即保持既有行为）。若要默认启用，需要按调用点评估风险分级上下文（amount/provider/domain/evidence/experience）后再切换。
 * 生产边界不变：`REAL_PROVIDER_WRITE` / `CUSTOMS_FILING` / `PAYMENT` / `AUTO_COMMISSION_CHARGE` /
   `PRODUCTION_CREDENTIALS` / `PRODUCTION_ENABLEMENT` = **HOLD**；Standing Authorization **不**开启任何真实外写。
 * 高金额阈值调整（如需要）→ 独立 Policy / Product Review；本程序默认 **KEEP**。

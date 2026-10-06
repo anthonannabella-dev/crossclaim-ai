@@ -57,11 +57,19 @@ export interface WithActionGuardOptions<T> {
     basisReference?: unknown;
     evidenceArtifactId?: unknown;
   };
+  /** SA-3: optional Standing Authorization alternative (wiring-layer decision only; absent = unchanged behaviour). */
+  standingAuthorization?: {
+    decision: 'ALLOW' | 'REQUIRE_APPROVAL' | 'DENY';
+    authorizedBy: 'ONE_TIME_APPROVAL' | 'STANDING_AUTHORIZATION' | 'NONE';
+    satisfiedGates: readonly string[];
+    action: string;
+  } | null;
 }
 
 export async function withActionGuard<T>(options: WithActionGuardOptions<T>): Promise<T> {
   const { guard, input, work, approvals, approvalTargetRef, approvalPayload, audit, operationId } =
     options ?? ({} as WithActionGuardOptions<T>);
+  const standingAuthorization = (options ?? ({} as WithActionGuardOptions<T>)).standingAuthorization ?? null;
   if (!guard?.assertAllowed) throw new Error('ACTION_GUARD_MISSING_RUNTIME_GUARD');
   if (typeof work !== 'function') throw new Error('ACTION_GUARD_MISSING_WORK_FUNCTION');
 
@@ -71,6 +79,7 @@ export async function withActionGuard<T>(options: WithActionGuardOptions<T>): Pr
     try {
       await verifyApprovalOrThrow({
       verifier: approvals,
+      standingAuthorization,
       query: {
         approvalId: String(input?.approvalId ?? ''),
         organizationId: String(input?.organizationId ?? ''),

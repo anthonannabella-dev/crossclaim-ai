@@ -107,6 +107,8 @@ export interface ActionGuardApprovalQuery {
 
 export interface ActionGuardApprovalDecision {
   valid: boolean;
+  /** SA-3：本次放行由「一次性审批」还是「有效 Standing Authorization」满足（默认 ONE_TIME_APPROVAL） */
+  authorizedBy?: 'ONE_TIME_APPROVAL' | 'STANDING_AUTHORIZATION';
   /** 该审批已被消费；valid=true 表示允许进入"幂等返回既有结果"分支（不是新的执行授权） */
   consumed?: boolean;
   reason?: ApprovalReasonCode;
@@ -154,8 +156,51 @@ export function actionRequiresHumanApproval(action: string): boolean {
 export async function verifyApprovalOrThrow(params: {
   verifier?: ActionGuardApprovalVerifier;
   query: ActionGuardApprovalQuery;
+  /**
+   * SA-3：可选的 Standing Authorization 替代路径。
+   * 只接受 **action-guard-wiring 的 evaluateAutonomousExecution** 产出的判定
+   * （decision=ALLOW 且 authorizedBy=STANDING_AUTHORIZATION，且 satisfiedGates 仅含 humanApproval）。
+   * 任何越权（含非可绕过 gate）、动作不匹配、判定非 ALLOW → fail-closed 抛错。
+   */
+  standingAuthorization?: {
+    decision: 'ALLOW' | 'REQUIRE_APPROVAL' | 'DENY';
+    authorizedBy: 'ONE_TIME_APPROVAL' | 'STANDING_AUTHORIZATION' | 'NONE';
+    satisfiedGates: readonly string[];
+    action: string;
+  } | null;
 }): Promise<ActionGuardApprovalDecision> {
-  const { verifier, query } = params;
+  const { verifier, query, standingAuthorization } = params;
+
+  if (standingAuthorization) {
+    if (
+      standingAuthorization.decision === 'ALLOW' &&
+      standingAuthorization.authorizedBy === 'STANDING_AUTHORIZATION'
+    ) {
+      const overreach = standingAuthorization.satisfiedGates.filter((gate) => gate !== 'humanApproval');
+      if (overreach.length > 0) {
+        throw new ActionGuardApprovalVerificationError({
+          code: 'ACTION_GUARD_STANDING_AUTHORIZATION_OVERREACH',
+          approvalId: query.approvalId,
+          action: query.action,
+        });
+      }
+      if (standingAuthorization.action !== query.action) {
+        throw new ActionGuardApprovalVerificationError({
+          code: 'ACTION_GUARD_STANDING_AUTHORIZATION_ACTION_MISMATCH',
+          approvalId: query.approvalId,
+          action: query.action,
+        });
+      }
+      return { valid: true, authorizedBy: 'STANDING_AUTHORIZATION' };
+    }
+    if (standingAuthorization.decision === 'DENY') {
+      throw new ActionGuardApprovalVerificationError({
+        code: 'ACTION_GUARD_STANDING_AUTHORIZATION_DENIED',
+        approvalId: query.approvalId,
+        action: query.action,
+      });
+    }
+  }
   if (!verifier) {
     throw new ActionGuardApprovalVerificationError({
       code: 'ACTION_GUARD_APPROVAL_VERIFIER_MISSING',
