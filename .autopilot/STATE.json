@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "c115ea9a",
+  "head": "266c2dd9",
   "status": "RECONCILED",
   "current_task": "RSI 生产可执行闭环（7 点收口）：RSI_RUNTIME_READY = PASS；MODEL_PROVIDER_READY = 本地仿真已接线（真实网络/付费 HOLD）；PERSISTENCE_READY = ephemeral 已验证、durable 需宿主非生产 DATABASE_URL；REBOOT_RECONCILE_READY = NOT_IMPLEMENTED（下一单元）；SYSTEMD_VALIDATED = 需宿主 Linux 实机",
   "next_task": "BG-016 单一 Acceptance Head + 四份状态一致 guard（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍 HOST_ACTION_REQUIRED 或 HOLD",
@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-96",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-06T05:23:30.278Z",
+  "updated_at": "2026-10-06T05:27:30.404Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -49,17 +49,17 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
-  "continuous_execution": "RUNNING（A-S1…A-S4 完成并 push；队列剩余 17 项）",
-  "next_execution_unit": "Next tick：队列队首 A-S5 —— General Evidence Resolver（FOUND/PARTIAL/MISSING/CONFLICT/AMBIGUOUS/LOW_CONFIDENCE；禁跨 tenant/account；返回 refs/facts/lineage/missing/conflicts/confidence；CONFLICT → HITL）。",
+  "continuous_execution": "RUNNING（A-S1…A-S5 完成并 push；队列剩余 16 项）",
+  "next_execution_unit": "Next tick：队列队首 A-S6 —— DocumentIngestionPort + PDF native text 优先 + OCR fallback（CSV/XLSX/JSON → PDF native → OCR；OCR 不得直接成为 Canonical Truth；只建 port + mock fixture，不接收费 OCR）。",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-06T05:23:30.278Z",
+  "last_tick_at": "2026-10-06T05:27:30.404Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "完成并 push A-S4 Case Response Intelligence（c115ea9a）：16 类分类 + 需求/建议单源映射 + advisory-only 解读事实（append-only、同输入幂等、跨归属 fail-closed），低置信与 prompt injection 强制人工复核；测试全绿（unit 8/8、PG 5/5、architecture 157/157、tsc 0、清单双通过）。",
-  "last_action_at": "2026-10-06T05:23:30.278Z",
+  "last_action": "完成并 push A-S5 General Evidence Resolver（266c2dd9）：六态判定（FOUND/PARTIAL/MISSING/CONFLICT/AMBIGUOUS/LOW_CONFIDENCE）、跨 tenant·account 纵深过滤（rejectedForScope）、CONFLICT 交 HITL、只读 Prisma 证据端口（查询层隔离 + best-effort 键抽取 + lineage/sourceRef）；unit 14/14、PG 4/4、tsc 0。",
+  "last_action_at": "2026-10-06T05:27:30.404Z",
   "next_action": "按队列连续推进；每 slice 独立 commit/test/push/checkpoint。",
-  "current_head": "c115ea9a",
-  "last_completed_head": "c115ea9a",
-  "reviewed_head": "c115ea9a",
+  "current_head": "266c2dd9",
+  "last_completed_head": "266c2dd9",
+  "reviewed_head": "266c2dd9",
   "claim_submit_batch": {
     "verdict": "PASS",
     "message_id": "MSG-20261001-07",
@@ -5169,7 +5169,6 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "A-S5 General Evidence Resolver（FOUND/PARTIAL/MISSING/CONFLICT/AMBIGUOUS/LOW_CONFIDENCE；禁跨 tenant/account；CONFLICT → HITL）。",
     "A-S6/B-S1 DocumentIngestionPort + PDF native text 优先 + OCR fallback port（本地/mock fixture；OCR 不得直接成为 Canonical Truth；不接收费 OCR）。",
     "A-S7 Follow-up Package（draft only；external write 仍 FALSE）。",
     "A-S8 Recovery Case Lifecycle projection（先审计现有事实模型，不新建重复状态机）。",
@@ -9354,7 +9353,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-06T05:23:30.278Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-06T05:27:30.404Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -11706,6 +11705,15 @@
       "evidence": {
         "migration": "20261006170000_provider_case_interpretation（1 张 tenant-owned append-only 表 + 清单同步）",
         "tests": "provider-response-intelligence 8/8；PG 5/5；既有 provider 套件全绿；architecture 157/157；tsc 0；清单双通过"
+      }
+    },
+    "A-S5": {
+      "name": "General Evidence Resolver（六态判定 / tenant-account 隔离 / CONFLICT→HITL）",
+      "status": "DONE / PUSHED",
+      "head": "266c2dd9",
+      "evidence": {
+        "files": "services/provider-support/{evidence-resolver,prisma-evidence-source}.ts（无 schema 变更）",
+        "tests": "evidence-resolver 14/14；evidence-resolver-db 4/4；既有 provider 套件全绿；tsc 0"
       }
     }
   }
