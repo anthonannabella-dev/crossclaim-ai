@@ -225,6 +225,7 @@ export function buildTerminalOutboxEvent(input: {
 export type DeliveryDecision =
   | { kind: 'CONSUME'; deliveryKey: string; payloadDigest: string; consumedAt: Date }
   | { kind: 'ALREADY_CONSUMED'; deliveryId: string }
+  | { kind: 'NOT_FOUND' }
   | { kind: 'FAIL_CLOSED'; code: 'CONFIG_EXECUTION_DELIVERY_CONFLICT'; message: string };
 
 /** 消费者幂等：同一 outbox 事件同一消费者至多一次；载荷摘要不一致 → FAIL CLOSED。 */

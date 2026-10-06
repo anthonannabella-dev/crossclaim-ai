@@ -18,10 +18,12 @@ import { PrismaClient } from '@prisma/client';
 import { afterAll, beforeEach, describe, expect, it } from 'vitest';
 
 import {
+  runReconciliationActions,
   claimExecutionLease,
   consumeOutboxEvent,
   findByVerdictDigest,
   listNonTerminalReservations,
+  planStartupReconciliation,
   markOutboxDispatched,
   planReservation,
   readUndispatchedOutbox,
@@ -30,6 +32,7 @@ import {
   terminalizeExecution,
   type ConfigExecutionBasis,
   type PlannedReservation,
+  type ReconciliationAction,
 } from '../services/config-execution-durability';
 
 const prisma = new PrismaClient();
@@ -586,5 +589,276 @@ describe('P6-PROD-U1 真实 PostgreSQL · DB 级 fail-closed 守卫', () => {
     const randomTag = randomUUID().slice(0, 8);
     expect(await findByVerdictDigest(prisma, `missing-${randomTag}`)).toBeNull();
     expect(await prisma.controlledConfigExecutionReservation.count()).toBe(2);
+  });
+});
+
+// ============================================================
+// FINAL（MSG-20261005-93 REVISE）—— lease fencing / baseline identity / outbox authority
+// ============================================================
+describe('P6-PROD-U1 FINAL · reconciliation lease fencing', () => {
+  async function stranded(tag: string) {
+    const plan = planned(tag);
+    const reserved = await reserveDurableExecution(prisma, { plan, now: NOW });
+    if (reserved.kind !== 'CREATED') throw new Error('reserve 失败');
+    const acquired = await claimExecutionLease(prisma, {
+      reservationId: reserved.reservationId,
+      ownerRef: 'worker-A',
+      now: NOW,
+      leaseTtlMs: 1,
+    });
+    if (acquired.kind !== 'ACQUIRED') throw new Error('claim 失败');
+    return { plan, reservationId: reserved.reservationId };
+  }
+
+  const observeCommitted = (plan: PlannedReservation) => () => ({
+    configFingerprint: 'post'.padEnd(64, '0'),
+    version: 'cfg-2',
+    pathValue: plan.toValue,
+  });
+
+  it('PGU-16 旧 recovery 动作不得 terminalize 新 lease（fresh takeover 后 fence 已变）', async () => {
+    const { plan, reservationId } = await stranded('pgu16');
+    await new Promise((resolve) => setTimeout(resolve, 30));
+
+    const snapshot = (await listNonTerminalReservations(prisma)).filter((r) => r.id === reservationId);
+    const staleActions = planStartupReconciliation({
+      reservations: snapshot,
+      now: LATER,
+      observe: observeCommitted(plan),
+      expectedFor: () => expectationOf(plan),
+    });
+    expect(staleActions[0]).toMatchObject({ kind: 'TERMINALIZE', status: 'SUCCEEDED' });
+
+    // 期间 worker-B 取得新的有效执行权
+    const takeover = await claimExecutionLease(workerB, {
+      reservationId,
+      ownerRef: 'worker-B',
+      now: LATER,
+    });
+    expect(takeover.kind).toBe('TAKEOVER');
+
+    const summary = await runReconciliationActions(prisma, {
+      actions: staleActions,
+      reservations: snapshot,
+      now: LATER,
+      expectedFor: () => expectationOf(plan),
+      reconciledBy: 'reconciler',
+    });
+    expect(summary.fenceChanged).toBe(1);
+    expect(summary.terminalized).toBe(0);
+
+    const row = await prisma.controlledConfigExecutionReservation.findUniqueOrThrow({
+      where: { id: reservationId },
+    });
+    expect(row.status).toBe('EXECUTING');
+    expect(row.leaseId).toBe((takeover as { leaseId: string }).leaseId);
+    expect(row.executionAttempt).toBe(2);
+    expect(await prisma.controlledConfigExecutionResult.count()).toBe(0);
+    expect(await prisma.controlledConfigExecutionEvent.count({ where: { kind: 'STARTUP_RECONCILED' } })).toBe(0);
+  });
+
+  it('PGU-17 旧 RECLAIM 动作在 lease 续期后必须放弃（同一 leaseId，但续期/到期已变）', async () => {
+    const plan = planned('pgu17');
+    const reserved = await reserveDurableExecution(prisma, { plan, now: NOW });
+    if (reserved.kind !== 'CREATED') throw new Error('reserve 失败');
+    const acquired = await claimExecutionLease(prisma, {
+      reservationId: reserved.reservationId,
+      ownerRef: 'worker-A',
+      now: NOW,
+      leaseTtlMs: 10 * 60 * 1000,
+    });
+    if (acquired.kind !== 'ACQUIRED') throw new Error('claim 失败');
+
+    const before = await prisma.controlledConfigExecutionReservation.findUniqueOrThrow({
+      where: { id: reserved.reservationId },
+    });
+    // recovery 决策依据（快照）——旧 RECLAIM 动作携带此刻的 lease fence
+    const staleAction: ReconciliationAction = {
+      reservationId: reserved.reservationId,
+      kind: 'RECLAIM',
+      reason: 'SAFE_TO_RETRY',
+      fence: {
+        leaseId: before.leaseId,
+        executionAttempt: before.executionAttempt,
+        leaseRenewedAt: before.leaseRenewedAt ? before.leaseRenewedAt.toISOString() : null,
+        leaseExpiresAt: before.leaseExpiresAt ? before.leaseExpiresAt.toISOString() : null,
+      },
+    };
+
+    // 原 worker 用**同一 leaseId** 续期：身份不变，但 renewedAt / expiresAt 已变
+    // 注：这里用 SOON（NOW + 1s），保证 lease 仍在有效期内 —— 只有有效 lease 才走 RENEW。
+    const SOON = new Date(NOW.getTime() + 1000);
+    const renewed = await claimExecutionLease(prisma, {
+      reservationId: reserved.reservationId,
+      ownerRef: 'worker-A',
+      now: SOON,
+    });
+    expect(renewed.kind).toBe('RENEWED');
+    const after = await prisma.controlledConfigExecutionReservation.findUniqueOrThrow({
+      where: { id: reserved.reservationId },
+    });
+    expect(after.leaseId).toBe(before.leaseId);
+    expect(after.leaseExpiresAt?.toISOString()).not.toBe(before.leaseExpiresAt?.toISOString());
+
+    const summary = await runReconciliationActions(prisma, {
+      actions: [staleAction],
+      now: SOON,
+      expectedFor: () => expectationOf(plan),
+      reconciledBy: 'reconciler',
+    });
+    expect(summary.fenceChanged).toBe(1);
+    expect(summary.reclaimed).toBe(0);
+    expect(await prisma.controlledConfigExecutionEvent.count({ where: { kind: 'STARTUP_RECONCILED' } })).toBe(0);
+  });
+});
+
+describe('P6-PROD-U1 FINAL · crash recovery baseline identity', () => {
+  async function strandedForEnd(tag: string) {
+    const plan = planned(tag);
+    const reserved = await reserveDurableExecution(prisma, { plan, now: NOW });
+    if (reserved.kind !== 'CREATED') throw new Error('reserve 失败');
+    const acquired = await claimExecutionLease(prisma, {
+      reservationId: reserved.reservationId,
+      ownerRef: 'worker-A',
+      now: NOW,
+      leaseTtlMs: 1,
+    });
+    if (acquired.kind !== 'ACQUIRED') throw new Error('claim 失败');
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    return { plan, reservationId: reserved.reservationId };
+  }
+
+  it('PGU-18 path/version 未变但整份指纹漂移 → NEEDS_RECONCILIATION（不得 RECLAIM）', async () => {
+    const { plan, reservationId } = await strandedForEnd('pgu18');
+    const run = await runStartupReconciliation(prisma, {
+      now: LATER,
+      observe: () => ({
+        configFingerprint: 'drifted'.padEnd(64, '0'),
+        version: 'cfg-1',
+        pathValue: plan.fromValue,
+      }),
+      expectedFor: () => expectationOf(plan),
+      reconciledBy: 'reconciler',
+    });
+    expect(run.summary.reclaimed).toBe(0);
+    expect(run.summary.terminalized).toBe(1);
+    const row = await prisma.controlledConfigExecutionReservation.findUniqueOrThrow({
+      where: { id: reservationId },
+    });
+    expect(row.status).toBe('NEEDS_RECONCILIATION');
+    const result = await prisma.controlledConfigExecutionResult.findUniqueOrThrow({
+      where: { reservationId },
+    });
+    expect(result.resultCode).toBe('NEEDS_RECONCILIATION');
+  });
+
+  it('PGU-19 完整 baseline（指纹 = baseline、version = pre、path = from）→ 才允许 RECLAIM', async () => {
+    const { plan, reservationId } = await strandedForEnd('pgu19');
+    const run = await runStartupReconciliation(prisma, {
+      now: LATER,
+      observe: () => ({
+        configFingerprint: plan.baselineConfigFingerprint,
+        version: 'cfg-1',
+        pathValue: plan.fromValue,
+      }),
+      expectedFor: () => expectationOf(plan),
+      reconciledBy: 'reconciler',
+    });
+    expect(run.summary.reclaimed).toBe(1);
+    expect(run.summary.terminalized).toBe(0);
+    const row = await prisma.controlledConfigExecutionReservation.findUniqueOrThrow({
+      where: { id: reservationId },
+    });
+    expect(row.status).toBe('EXECUTING');
+    expect(await prisma.controlledConfigExecutionResult.count()).toBe(0);
+  });
+});
+
+describe('P6-PROD-U1 FINAL · outbox payload authority / concurrent delivery', () => {
+  async function terminalOutbox(tag: string) {
+    const plan = planned(tag);
+    const reserved = await reserveDurableExecution(prisma, { plan, now: NOW });
+    if (reserved.kind !== 'CREATED') throw new Error('reserve 失败');
+    const acquired = await claimExecutionLease(prisma, {
+      reservationId: reserved.reservationId,
+      ownerRef: 'worker-A',
+      now: NOW,
+    });
+    if (acquired.kind !== 'ACQUIRED') throw new Error('claim 失败');
+    await terminalizeExecution(prisma, {
+      reservationId: reserved.reservationId,
+      expectedLeaseId: acquired.leaseId,
+      result: resultInput(plan, reserved.reservationId, {}),
+      now: NOW,
+    });
+    const [event] = await readUndispatchedOutbox(prisma);
+    return event;
+  }
+
+  it('PGU-20 第一次消费就传错 payload digest → FAIL_CLOSED 且 delivery = 0（outbox 是 authority）', async () => {
+    const event = await terminalOutbox('pgu20');
+    const decision = await consumeOutboxEvent(prisma, {
+      outboxId: event.id,
+      consumerRef: 'projection-worker',
+      payloadDigest: 'MALICIOUS_XYZ',
+      now: NOW,
+    });
+    expect(decision.kind).toBe('FAIL_CLOSED');
+    expect(await prisma.controlledConfigExecutionDelivery.count()).toBe(0);
+  });
+
+  it('PGU-21 不存在的 outbox → NOT_FOUND（不得静默写入交付账本）', async () => {
+    const decision = await consumeOutboxEvent(workerB, {
+      outboxId: '00000000-0000-0000-0000-000000000000',
+      consumerRef: 'projection-worker',
+      payloadDigest: 'x'.repeat(64),
+      now: NOW,
+    });
+    expect(decision.kind).toBe('NOT_FOUND');
+    expect(await prisma.controlledConfigExecutionDelivery.count()).toBe(0);
+  });
+
+  it('PGU-22 两连接并发（不同 digest）→ 最多一条 delivery，loser 必须 FAIL_CLOSED', async () => {
+    const event = await terminalOutbox('pgu22');
+    const [a, b] = await Promise.all([
+      consumeOutboxEvent(prisma, {
+        outboxId: event.id,
+        consumerRef: 'projection-worker',
+        payloadDigest: event.payloadDigest,
+        now: NOW,
+      }),
+      consumeOutboxEvent(workerB, {
+        outboxId: event.id,
+        consumerRef: 'projection-worker',
+        payloadDigest: 'different-digest',
+        now: NOW,
+      }),
+    ]);
+    const kinds = [a.kind, b.kind].sort();
+    expect(kinds).toEqual(['CONSUME', 'FAIL_CLOSED']);
+    expect(await prisma.controlledConfigExecutionDelivery.count()).toBe(1);
+  });
+
+  it('PGU-23 两连接并发（同正确 digest）→ 恰一条 CONSUME + 一条 ALREADY_CONSUMED，delivery 恰一条', async () => {
+    const event = await terminalOutbox('pgu23');
+    const [a, b] = await Promise.all([
+      consumeOutboxEvent(prisma, {
+        outboxId: event.id,
+        consumerRef: 'projection-worker',
+        payloadDigest: event.payloadDigest,
+        now: NOW,
+      }),
+      consumeOutboxEvent(workerB, {
+        outboxId: event.id,
+        consumerRef: 'projection-worker',
+        payloadDigest: event.payloadDigest,
+        now: NOW,
+      }),
+    ]);
+    const kinds = [a.kind, b.kind].sort();
+    expect(kinds).toEqual(['ALREADY_CONSUMED', 'CONSUME']);
+    expect(await prisma.controlledConfigExecutionDelivery.count()).toBe(1);
+    const delivery = await prisma.controlledConfigExecutionDelivery.findFirstOrThrow();
+    expect(delivery.payloadDigest).toBe(event.payloadDigest);
   });
 });

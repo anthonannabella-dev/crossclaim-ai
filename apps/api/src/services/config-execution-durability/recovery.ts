@@ -9,7 +9,7 @@ import { isConfigExecutionTerminalState, type ConfigExecutionReservationState } 
 import {
   isLeaseActive,
 } from './lease';
-import type { LeaseView, ObservationView, ReservationView } from './types';
+import type { LeaseFence, LeaseView, ObservationView, ReservationView } from './types';
 
 export interface ExecutionExpectation {
   baselineConfigFingerprint: string;
@@ -29,6 +29,16 @@ export type StrandedClassification =
       post: { fingerprint: string; version: string } | null;
     }
   | { kind: 'MANUAL_REVIEW'; reason: string };
+
+/** 从快照构造 lease fence（recovery 动作必须携带它，落库前在行锁内复核）。 */
+export function buildLeaseFence(reservation: ReservationView): LeaseFence {
+  return {
+    leaseId: reservation.leaseId,
+    executionAttempt: reservation.executionAttempt,
+    leaseRenewedAt: reservation.leaseRenewedAt ? reservation.leaseRenewedAt.toISOString() : null,
+    leaseExpiresAt: reservation.leaseExpiresAt ? reservation.leaseExpiresAt.toISOString() : null,
+  };
+}
 
 export function classifyStrandedExecution(input: {
   status: ConfigExecutionReservationState;
@@ -67,11 +77,29 @@ export function classifyStrandedExecution(input: {
   const valueIsTarget = observation.pathValue === expected.toValue;
   const valueIsPre = observation.pathValue === expected.fromValue;
   const versionAdvanced = observation.version !== expected.preConfigVersion;
+  const fingerprintMatchesBaseline =
+    observation.configFingerprint === expected.baselineConfigFingerprint;
 
+  // 证据必须自洽：值已改成 to、version 前进，却仍声称指纹等于 baseline → 矛盾观测，不得自动成功。
   if (valueIsTarget && versionAdvanced) {
+    if (fingerprintMatchesBaseline) {
+      return {
+        kind: 'NEEDS_RECONCILIATION',
+        reason: 'SELF_CONTRADICTORY_OBSERVATION',
+        post,
+      };
+    }
     return { kind: 'RECOVERED_COMMITTED', post };
   }
+  // 值仍是 from、version 未变：必须同时证明整份配置指纹仍等于 baseline 才允许安全重试。
   if (valueIsPre && !versionAdvanced) {
+    if (!fingerprintMatchesBaseline) {
+      return {
+        kind: 'NEEDS_RECONCILIATION',
+        reason: 'OBSERVATION_FINGERPRINT_DRIFT',
+        post,
+      };
+    }
     return { kind: 'SAFE_TO_RETRY', reason: 'BASELINE_UNCHANGED' };
   }
   if (valueIsTarget && !versionAdvanced) {
@@ -89,8 +117,8 @@ export function classifyStrandedExecution(input: {
 }
 
 export type ReconciliationAction =
-  | { reservationId: string; kind: 'NOOP'; reason: string }
-  | { reservationId: string; kind: 'CANCEL'; reason: 'RESERVATION_EXPIRED' }
+  | { reservationId: string; kind: 'NOOP'; reason: string; fence: LeaseFence }
+  | { reservationId: string; kind: 'CANCEL'; reason: 'RESERVATION_EXPIRED'; fence: LeaseFence }
   | {
       reservationId: string;
       kind: 'TERMINALIZE';
@@ -98,9 +126,16 @@ export type ReconciliationAction =
       resultCode: 'RECOVERED_COMMITTED' | 'NEEDS_RECONCILIATION' | 'MANUAL_REVIEW';
       post: { fingerprint: string; version: string } | null;
       reason: string;
+      fence: LeaseFence;
     }
-  | { reservationId: string; kind: 'RECLAIM'; reason: 'SAFE_TO_RETRY' }
-  | { reservationId: string; kind: 'REVIEW'; status: 'MANUAL_REVIEW'; reason: string };
+  | { reservationId: string; kind: 'RECLAIM'; reason: 'SAFE_TO_RETRY'; fence: LeaseFence }
+  | {
+      reservationId: string;
+      kind: 'REVIEW';
+      status: 'MANUAL_REVIEW';
+      reason: string;
+      fence: LeaseFence;
+    };
 
 /**
  * 启动对账计划：对所有非终态 reservation 产出确定性动作。
@@ -115,6 +150,7 @@ export function planStartupReconciliation(input: {
   const actions: ReconciliationAction[] = [];
   const ordered = [...input.reservations].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   for (const reservation of ordered) {
+    const fence = buildLeaseFence(reservation);
     const lease: LeaseView = {
       ownerRef: reservation.ownerRef,
       leaseId: reservation.leaseId,
@@ -132,13 +168,19 @@ export function planStartupReconciliation(input: {
     });
     switch (classification.kind) {
       case 'NOOP':
-        actions.push({ reservationId: reservation.id, kind: 'NOOP', reason: classification.reason });
+        actions.push({
+          reservationId: reservation.id,
+          kind: 'NOOP',
+          reason: classification.reason,
+          fence,
+        });
         break;
       case 'CANCEL_EXPIRED_RESERVATION':
         actions.push({
           reservationId: reservation.id,
           kind: 'CANCEL',
           reason: 'RESERVATION_EXPIRED',
+          fence,
         });
         break;
       case 'RECOVERED_COMMITTED':
@@ -149,10 +191,16 @@ export function planStartupReconciliation(input: {
           resultCode: 'RECOVERED_COMMITTED',
           post: classification.post,
           reason: 'READBACK_PROVES_COMMITTED',
+          fence,
         });
         break;
       case 'SAFE_TO_RETRY':
-        actions.push({ reservationId: reservation.id, kind: 'RECLAIM', reason: 'SAFE_TO_RETRY' });
+        actions.push({
+          reservationId: reservation.id,
+          kind: 'RECLAIM',
+          reason: 'SAFE_TO_RETRY',
+          fence,
+        });
         break;
       case 'NEEDS_RECONCILIATION':
         actions.push({
@@ -162,6 +210,7 @@ export function planStartupReconciliation(input: {
           resultCode: 'NEEDS_RECONCILIATION',
           post: classification.post,
           reason: classification.reason,
+          fence,
         });
         break;
       case 'MANUAL_REVIEW':
@@ -170,6 +219,7 @@ export function planStartupReconciliation(input: {
           kind: 'REVIEW',
           status: 'MANUAL_REVIEW',
           reason: classification.reason,
+          fence,
         });
         break;
     }

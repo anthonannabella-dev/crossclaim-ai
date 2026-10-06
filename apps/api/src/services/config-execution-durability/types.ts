@@ -20,6 +20,7 @@ export const CONFIG_EXECUTION_OPERATION_CODES = [
   'CONFIG_EXECUTION_LEASE_ID_REUSE',
   'CONFIG_EXECUTION_OBSERVATION_REQUIRED',
   'CONFIG_EXECUTION_DELIVERY_CONFLICT',
+  'CONFIG_EXECUTION_OUTBOX_NOT_FOUND',
   'CONFIG_EXECUTION_RESULT_CODE_UNKNOWN',
   'CONFIG_EXECUTION_RESULT_POST_IDENTITY_PARTIAL',
   'CONFIG_EXECUTION_RESULT_ZERO_WRITE_VIOLATION',
@@ -96,6 +97,15 @@ export interface ObservationView {
   configFingerprint: string;
   version: string;
   pathValue: string;
+}
+
+// reconciliation / recovery 决策依据的 lease fence：
+// 只有「决策时看到的那个 lease」仍然成立，旧动作才允许落库（否则必须 NOOP / REPLAN）。
+export interface LeaseFence {
+  leaseId: string | null;
+  executionAttempt: number;
+  leaseRenewedAt: string | null;
+  leaseExpiresAt: string | null;
 }
 
 export interface TerminalResultRecord {

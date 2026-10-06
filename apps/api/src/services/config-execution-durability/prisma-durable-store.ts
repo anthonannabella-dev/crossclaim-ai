@@ -26,6 +26,7 @@ import {
 } from './state-machine';
 import type {
   DurabilityEvent,
+  LeaseFence,
   ObservationView,
   PlannedReservation,
   ReservationView,
@@ -80,6 +81,26 @@ export function toReservationView(row: ReservationRow): ReservationView {
     leaseExpiresAt: row.leaseExpiresAt,
     reservationExpiresAt: row.reservationExpiresAt,
   };
+}
+
+/** 行内 lease fence（recovery 落库前复核用）。 */
+export function leaseFenceOf(row: ReservationRow): LeaseFence {
+  return {
+    leaseId: row.leaseId,
+    executionAttempt: row.executionAttempt,
+    leaseRenewedAt: row.leaseRenewedAt ? row.leaseRenewedAt.toISOString() : null,
+    leaseExpiresAt: row.leaseExpiresAt ? row.leaseExpiresAt.toISOString() : null,
+  };
+}
+
+export function leaseFenceMatches(row: ReservationRow, fence: LeaseFence): boolean {
+  const current = leaseFenceOf(row);
+  return (
+    current.leaseId === fence.leaseId &&
+    current.executionAttempt === fence.executionAttempt &&
+    current.leaseRenewedAt === fence.leaseRenewedAt &&
+    current.leaseExpiresAt === fence.leaseExpiresAt
+  );
 }
 
 async function nextEventSeq(tx: Tx, reservationId: string): Promise<number> {
@@ -390,6 +411,7 @@ export type TerminalizeOutcome =
   | { kind: 'TERMINALIZED'; result: TerminalResultRecord; outboxId: string }
   | { kind: 'ALREADY_TERMINAL'; result: TerminalResultRecord | null }
   | { kind: 'LEASE_MISMATCH'; ownerRef: string | null; leaseId: string | null }
+  | { kind: 'LEASE_FENCE_CHANGED'; current: LeaseFence }
   | { kind: 'NOT_FOUND' };
 
 /**
@@ -401,6 +423,8 @@ export async function terminalizeExecution(
   input: {
     reservationId: string;
     expectedLeaseId: string | null;
+    /** recovery / reconciliation 必须携带决策时的 lease fence；落库前在行锁内复核。 */
+    expectedFence?: LeaseFence | null;
     result: TerminalResultInput;
     now: Date;
   },
@@ -417,6 +441,10 @@ export async function terminalizeExecution(
         where: { reservationId },
       });
       return { kind: 'ALREADY_TERMINAL', result: (existing as TerminalResultRecord | null) ?? null };
+    }
+    if (input.expectedFence && !leaseFenceMatches(row, input.expectedFence)) {
+      // 决策依据（lease 身份 / attempt / 续期 / 到期）已经变化：绝不 terminalize 新的执行。
+      return { kind: 'LEASE_FENCE_CHANGED', current: leaseFenceOf(row) };
     }
     if (expectedLeaseId !== null && row.leaseId !== expectedLeaseId) {
       return { kind: 'LEASE_MISMATCH', ownerRef: row.ownerRef, leaseId: row.leaseId };
@@ -500,6 +528,8 @@ export interface ReconciliationSummary {
   terminalized: number;
   reclaimed: number;
   reviewed: number;
+  /** 决策依据的 lease fence 已变化（被续期 / 被 takeover / attempt 前进）→ 放弃旧动作。 */
+  fenceChanged: number;
 }
 
 /**
@@ -523,14 +553,43 @@ export async function runStartupReconciliation(
     observe: input.observe,
     expectedFor: input.expectedFor,
   });
+  const summary = await runReconciliationActions(prisma, {
+    actions,
+    reservations,
+    now: input.now,
+    expectedFor: input.expectedFor,
+    reconciledBy: input.reconciledBy,
+  });
+  return { summary, actions };
+}
+
+/**
+ * 把（可能是稍早计算的）recovery 动作落库。
+ * 每个动作必须携带其决策时的 lease fence：行锁内 fence 不匹配 → 放弃该动作（NOOP/REPLAN），
+ * 绝不覆盖后来取得执行权的 worker。
+ */
+export async function runReconciliationActions(
+  prisma: PrismaClient,
+  input: {
+    actions: ReturnType<typeof planStartupReconciliation>;
+    now: Date;
+    expectedFor: (reservation: ReservationView) => ExecutionExpectation;
+    reconciledBy: string;
+    /** 可显式提供快照（测试用）；缺省时按 reservationId 现读。 */
+    reservations?: ReservationView[];
+  },
+): Promise<ReconciliationSummary> {
+  const reservations =
+    input.reservations ?? (await listNonTerminalReservations(prisma, 1000));
   const summary: ReconciliationSummary = {
     noop: 0,
     cancelled: 0,
     terminalized: 0,
     reclaimed: 0,
     reviewed: 0,
+    fenceChanged: 0,
   };
-  for (const action of actions) {
+  for (const action of input.actions) {
     const reservation = reservations.find((item) => item.id === action.reservationId);
     if (!reservation) continue;
     const expected = input.expectedFor(reservation);
@@ -539,8 +598,11 @@ export async function runStartupReconciliation(
       continue;
     }
     if (action.kind === 'RECLAIM') {
-      await prisma.$transaction(async (tx) => {
-        await lockReservation(tx, reservation.id);
+      const applied = await prisma.$transaction(async (tx) => {
+        const row = await lockReservation(tx, reservation.id);
+        if (!row) return false;
+        // 只读决策已过期：lease 被续期 / 被接管 / attempt 前进 → 不得留下 reclaim 证据
+        if (!leaseFenceMatches(row, action.fence)) return false;
         await appendEvent(
           tx,
           reservation.id,
@@ -555,8 +617,10 @@ export async function runStartupReconciliation(
           },
           input.now,
         );
+        return true;
       });
-      summary.reclaimed += 1;
+      if (applied) summary.reclaimed += 1;
+      else summary.fenceChanged += 1;
       continue;
     }
     const resultCode =
@@ -573,6 +637,7 @@ export async function runStartupReconciliation(
     const outcome = await terminalizeExecution(prisma, {
       reservationId: reservation.id,
       expectedLeaseId: null,
+      expectedFence: action.fence,
       now: input.now,
       result: {
         reservationId: reservation.id,
@@ -591,10 +656,11 @@ export async function runStartupReconciliation(
     });
     if (outcome.kind === 'TERMINALIZED') summary.terminalized += 1;
     else if (outcome.kind === 'ALREADY_TERMINAL') summary.noop += 1;
-    if (action.kind === 'CANCEL') summary.cancelled += 1;
-    if (action.kind === 'REVIEW') summary.reviewed += 1;
+    else if (outcome.kind === 'LEASE_FENCE_CHANGED') summary.fenceChanged += 1;
+    if (outcome.kind === 'TERMINALIZED' && action.kind === 'CANCEL') summary.cancelled += 1;
+    if (outcome.kind === 'TERMINALIZED' && action.kind === 'REVIEW') summary.reviewed += 1;
   }
-  return { summary, actions };
+  return summary;
 }
 
 export async function readUndispatchedOutbox(
@@ -625,6 +691,20 @@ export async function consumeOutboxEvent(
   prisma: PrismaClient,
   input: { outboxId: string; consumerRef: string; payloadDigest: string; now: Date },
 ): Promise<DeliveryDecision> {
+  // outbox row 才是 payloadDigest 的 authority；consumer 传入的摘要只能用于比对。
+  const outbox = await prisma.controlledConfigExecutionOutbox.findUnique({
+    where: { id: input.outboxId },
+    select: { payloadDigest: true },
+  });
+  if (!outbox) return { kind: 'NOT_FOUND' };
+  if (outbox.payloadDigest !== input.payloadDigest) {
+    return {
+      kind: 'FAIL_CLOSED',
+      code: 'CONFIG_EXECUTION_DELIVERY_CONFLICT',
+      message: '消费者提供的 payloadDigest 与 outbox 事实不一致',
+    };
+  }
+
   const existing = await prisma.controlledConfigExecutionDelivery.findUnique({
     where: { outboxId_consumerRef: { outboxId: input.outboxId, consumerRef: input.consumerRef } },
   });
@@ -649,7 +729,9 @@ export async function consumeOutboxEvent(
     const raced = await prisma.controlledConfigExecutionDelivery.findUnique({
       where: { outboxId_consumerRef: { outboxId: input.outboxId, consumerRef: input.consumerRef } },
     });
-    return { kind: 'ALREADY_CONSUMED', deliveryId: raced?.id ?? 'unknown' };
+    if (!raced) throw error;
+    // 并发落库后的竞态行同样要跑一遍决策：同摘要 → ALREADY_CONSUMED；异摘要 → FAIL CLOSED。
+    return decideOutboxDelivery({ id: raced.id, payloadDigest: raced.payloadDigest }, input);
   }
 }
 

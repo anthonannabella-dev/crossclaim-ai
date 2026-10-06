@@ -340,6 +340,30 @@ describe('P6-PROD-U1 crash recovery 分类（禁止 blind retry）', () => {
     if (drift.kind === 'NEEDS_RECONCILIATION') expect(drift.reason).toBe('OBSERVED_DRIFT');
   });
 
+  it('FINAL 收紧：path/version 未变但整份指纹漂移 → NEEDS_RECONCILIATION（不得 SAFE_TO_RETRY）', () => {
+    const decision = classify({
+      configFingerprint: 'drifted'.padEnd(64, '0'),
+      version: 'cfg-1',
+      pathValue: '0.80',
+    });
+    expect(decision.kind).toBe('NEEDS_RECONCILIATION');
+    if (decision.kind === 'NEEDS_RECONCILIATION') {
+      expect(decision.reason).toBe('OBSERVATION_FINGERPRINT_DRIFT');
+    }
+  });
+
+  it('FINAL 收紧：值已为 to 且 version 前进，却仍声称指纹等于 baseline → 自相矛盾观测，不得自动成功', () => {
+    const decision = classify({
+      configFingerprint: 'f'.repeat(64),
+      version: 'cfg-2',
+      pathValue: '0.85',
+    });
+    expect(decision.kind).toBe('NEEDS_RECONCILIATION');
+    if (decision.kind === 'NEEDS_RECONCILIATION') {
+      expect(decision.reason).toBe('SELF_CONTRADICTORY_OBSERVATION');
+    }
+  });
+
   it('RESERVED 超期 → 取消（零写）；RESERVED 未超期 → 等待 worker', () => {
     const expired = classifyStrandedExecution({
       status: 'RESERVED',
@@ -434,6 +458,10 @@ describe('P6-PROD-U1 startup reconciliation（幂等 + 覆盖全部异常态）'
     expect(byId.get('r-stranded')).toMatchObject({
       kind: 'RECLAIM',
       reason: 'SAFE_TO_RETRY',
+    });
+    // FINAL：每个 recovery 动作都必须携带其决策依据的 lease fence
+    expect(byId.get('r-stranded')).toMatchObject({
+      fence: { leaseId: 'lease-A', executionAttempt: 1 },
     });
     expect(byId.get('r-orphan')).toMatchObject({
       kind: 'TERMINALIZE',
