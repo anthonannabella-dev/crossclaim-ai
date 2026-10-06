@@ -21,6 +21,8 @@ export const CONFIG_EXECUTION_OPERATION_CODES = [
   'CONFIG_EXECUTION_OBSERVATION_REQUIRED',
   'CONFIG_EXECUTION_DELIVERY_CONFLICT',
   'CONFIG_EXECUTION_OUTBOX_NOT_FOUND',
+  'CONFIG_EXECUTION_RECOVERY_BASIS_INCOMPLETE',
+  'CONFIG_EXECUTION_RECOVERY_BASIS_MISMATCH',
   'CONFIG_EXECUTION_RESULT_CODE_UNKNOWN',
   'CONFIG_EXECUTION_RESULT_POST_IDENTITY_PARTIAL',
   'CONFIG_EXECUTION_RESULT_ZERO_WRITE_VIOLATION',
@@ -48,6 +50,8 @@ export interface ConfigExecutionBasis {
   rollbackPlanDigest: string;
   baselineSnapshotDigest: string;
   baselineConfigFingerprint: string;
+  /** recovery 依据：U2 authorization ticket 绑定的 liveConfigVersion（进入 immutable basis 摘要） */
+  preConfigVersion: string;
   environment: string;
   executionMode: string;
   target: string;
@@ -76,6 +80,11 @@ export interface ReservationView {
   authorizationTicketDigest: string;
   status: ConfigExecutionReservationState;
   baselineConfigFingerprint: string;
+  preConfigVersion: string;
+  target: string;
+  configPath: string;
+  fromValue: string;
+  toValue: string;
   executionAttempt: number;
   ownerRef: string | null;
   leaseId: string | null;

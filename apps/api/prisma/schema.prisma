@@ -3507,6 +3507,8 @@ model ControlledConfigExecutionReservation {
   rollbackPlanDigest          String
   baselineSnapshotDigest      String
   baselineConfigFingerprint   String
+  /// recovery 依据：U2 authorization ticket 绑定的 liveConfigVersion（不可原地改写）
+  preConfigVersion            String
   environment                 String   @default("SANDBOX")
   executionMode               String   @default("SANDBOX_WRITE_ONLY")
   target                      String

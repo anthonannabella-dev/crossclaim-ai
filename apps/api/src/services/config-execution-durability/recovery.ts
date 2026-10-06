@@ -18,6 +18,28 @@ export interface ExecutionExpectation {
   toValue: string;
 }
 
+/**
+ * durable recovery basis 的**唯一**来源：直接由 reservation 行重建。
+ * 进程 crash / 重启后不得依赖 caller 重新提供 pre version / from / to。
+ */
+export function expectedFromReservation(reservation: ReservationView): ExecutionExpectation {
+  return {
+    baselineConfigFingerprint: reservation.baselineConfigFingerprint,
+    preConfigVersion: reservation.preConfigVersion,
+    fromValue: reservation.fromValue,
+    toValue: reservation.toValue,
+  };
+}
+
+export function sameExecutionExpectation(a: ExecutionExpectation, b: ExecutionExpectation): boolean {
+  return (
+    a.baselineConfigFingerprint === b.baselineConfigFingerprint &&
+    a.preConfigVersion === b.preConfigVersion &&
+    a.fromValue === b.fromValue &&
+    a.toValue === b.toValue
+  );
+}
+
 export type StrandedClassification =
   | { kind: 'NOOP'; reason: string; status: ConfigExecutionReservationState }
   | { kind: 'CANCEL_EXPIRED_RESERVATION'; status: 'RESERVED' }
@@ -145,12 +167,30 @@ export function planStartupReconciliation(input: {
   reservations: ReservationView[];
   now: Date;
   observe: (reservation: ReservationView) => ObservationView | null;
-  expectedFor: (reservation: ReservationView) => ExecutionExpectation;
+  /**
+   * 兼容层：只用于**断言** caller 的期望与 durable basis 一致，绝不作为 recovery truth。
+   * 不一致 → FAIL_CLOSED（RECOVERY_BASIS_MISMATCH），不参与 SAFE_TO_RETRY / RECOVERED_COMMITTED 判定。
+   */
+  assertExpectedFor?: (reservation: ReservationView) => ExecutionExpectation;
 }): ReconciliationAction[] {
   const actions: ReconciliationAction[] = [];
   const ordered = [...input.reservations].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
   for (const reservation of ordered) {
     const fence = buildLeaseFence(reservation);
+    const durableExpectation = expectedFromReservation(reservation);
+    if (input.assertExpectedFor) {
+      const claimed = input.assertExpectedFor(reservation);
+      if (!sameExecutionExpectation(claimed, durableExpectation)) {
+        actions.push({
+          reservationId: reservation.id,
+          kind: 'REVIEW',
+          status: 'MANUAL_REVIEW',
+          reason: 'RECOVERY_BASIS_MISMATCH',
+          fence,
+        });
+        continue;
+      }
+    }
     const lease: LeaseView = {
       ownerRef: reservation.ownerRef,
       leaseId: reservation.leaseId,
@@ -164,7 +204,7 @@ export function planStartupReconciliation(input: {
       reservationExpiresAt: reservation.reservationExpiresAt,
       now: input.now,
       observation: input.observe(reservation),
-      expected: input.expectedFor(reservation),
+      expected: durableExpectation,
     });
     switch (classification.kind) {
       case 'NOOP':

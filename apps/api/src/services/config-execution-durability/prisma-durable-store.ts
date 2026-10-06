@@ -18,7 +18,11 @@ import {
   type TerminalResultInput,
 } from './reservation';
 import { planLeaseClaim } from './lease';
-import { planStartupReconciliation, type ExecutionExpectation } from './recovery';
+import {
+  expectedFromReservation,
+  planStartupReconciliation,
+  type ExecutionExpectation,
+} from './recovery';
 import {
   assertConfigExecutionTransition,
   type ConfigExecutionEventKind,
@@ -53,6 +57,11 @@ type ReservationRow = {
   authorizationTicketDigest: string;
   status: string;
   baselineConfigFingerprint: string;
+  preConfigVersion: string;
+  target: string;
+  configPath: string;
+  fromValue: string;
+  toValue: string;
   executionAttempt: number;
   ownerRef: string | null;
   leaseId: string | null;
@@ -73,6 +82,11 @@ export function toReservationView(row: ReservationRow): ReservationView {
     authorizationTicketDigest: row.authorizationTicketDigest,
     status: row.status as ConfigExecutionReservationState,
     baselineConfigFingerprint: row.baselineConfigFingerprint,
+    preConfigVersion: row.preConfigVersion,
+    target: row.target,
+    configPath: row.configPath,
+    fromValue: row.fromValue,
+    toValue: row.toValue,
     executionAttempt: row.executionAttempt,
     ownerRef: row.ownerRef,
     leaseId: row.leaseId,
@@ -202,6 +216,7 @@ export async function reserveDurableExecution(
           rollbackPlanDigest: plan.rollbackPlanDigest,
           baselineSnapshotDigest: plan.baselineSnapshotDigest,
           baselineConfigFingerprint: plan.baselineConfigFingerprint,
+          preConfigVersion: plan.preConfigVersion,
           environment: plan.environment,
           executionMode: plan.executionMode,
           target: plan.target,
@@ -530,6 +545,8 @@ export interface ReconciliationSummary {
   reviewed: number;
   /** 决策依据的 lease fence 已变化（被续期 / 被 takeover / attempt 前进）→ 放弃旧动作。 */
   fenceChanged: number;
+  /** caller 断言与 durable recovery basis 不一致 → FAIL_CLOSED（不 terminalize / 不 reclaim）。 */
+  basisMismatch: number;
 }
 
 /**
@@ -541,9 +558,10 @@ export async function runStartupReconciliation(
   input: {
     now: Date;
     observe: (reservation: ReservationView) => ObservationView | null;
-    expectedFor: (reservation: ReservationView) => ExecutionExpectation;
     reconciledBy: string;
     limit?: number;
+    /** 兼容层：只断言 caller 期望与 durable basis 一致；不一致 → RECOVERY_BASIS_MISMATCH（fail-closed）。 */
+    assertExpectedFor?: (reservation: ReservationView) => ExecutionExpectation;
   },
 ): Promise<{ summary: ReconciliationSummary; actions: ReturnType<typeof planStartupReconciliation> }> {
   const reservations = await listNonTerminalReservations(prisma, input.limit ?? 100);
@@ -551,13 +569,12 @@ export async function runStartupReconciliation(
     reservations,
     now: input.now,
     observe: input.observe,
-    expectedFor: input.expectedFor,
+    assertExpectedFor: input.assertExpectedFor,
   });
   const summary = await runReconciliationActions(prisma, {
     actions,
     reservations,
     now: input.now,
-    expectedFor: input.expectedFor,
     reconciledBy: input.reconciledBy,
   });
   return { summary, actions };
@@ -573,7 +590,6 @@ export async function runReconciliationActions(
   input: {
     actions: ReturnType<typeof planStartupReconciliation>;
     now: Date;
-    expectedFor: (reservation: ReservationView) => ExecutionExpectation;
     reconciledBy: string;
     /** 可显式提供快照（测试用）；缺省时按 reservationId 现读。 */
     reservations?: ReservationView[];
@@ -588,13 +604,20 @@ export async function runReconciliationActions(
     reclaimed: 0,
     reviewed: 0,
     fenceChanged: 0,
+    basisMismatch: 0,
   };
   for (const action of input.actions) {
     const reservation = reservations.find((item) => item.id === action.reservationId);
     if (!reservation) continue;
-    const expected = input.expectedFor(reservation);
+    // recovery 依据的唯一来源是 durable reservation 自身（不信任 caller 传入值）
+    const expected = expectedFromReservation(reservation);
     if (action.kind === 'NOOP') {
       summary.noop += 1;
+      continue;
+    }
+    // 兼容层断言与 durable basis 不一致：FAIL_CLOSED，绝不落任何终态/reclaim 证据
+    if (action.kind === 'REVIEW' && action.reason === 'RECOVERY_BASIS_MISMATCH') {
+      summary.basisMismatch += 1;
       continue;
     }
     if (action.kind === 'RECLAIM') {

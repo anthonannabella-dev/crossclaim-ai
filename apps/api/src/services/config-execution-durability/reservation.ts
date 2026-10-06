@@ -54,6 +54,13 @@ export function planReservation(input: {
       `只接受 ${CONFIG_EXECUTION_MODES.join('/')}，收到 ${input.basis.executionMode}`,
     );
   }
+  // recovery 依据必须完整冻结：preConfigVersion 缺失 → 不得创建 reservation
+  if ((input.basis.preConfigVersion ?? '').trim().length === 0) {
+    throw new ConfigExecutionOperationError(
+      'CONFIG_EXECUTION_RECOVERY_BASIS_INCOMPLETE',
+      'preConfigVersion 必须非空（recovery 依据必须可仅凭 durable reservation 重建）',
+    );
+  }
 
   const immutableBasisDigest = digestOf({ ...input.basis });
   const reservationKey = sha256Hex(

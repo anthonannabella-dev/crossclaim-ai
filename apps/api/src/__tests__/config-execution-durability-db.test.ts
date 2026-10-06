@@ -54,6 +54,7 @@ function basis(tag: string, overrides: Partial<ConfigExecutionBasis> = {}): Conf
     rollbackPlanDigest: seed('rollback'),
     baselineSnapshotDigest: seed('baseline'),
     baselineConfigFingerprint: seed('fingerprint'),
+    preConfigVersion: 'cfg-1',
     environment: 'SANDBOX',
     executionMode: 'SANDBOX_WRITE_ONLY',
     target: 'sandbox-config',
@@ -71,13 +72,6 @@ function planned(tag: string, overrides: Partial<ConfigExecutionBasis> = {}): Pl
     now: NOW,
   });
 }
-
-const expectationOf = (plan: PlannedReservation) => ({
-  baselineConfigFingerprint: plan.baselineConfigFingerprint,
-  preConfigVersion: 'cfg-1',
-  fromValue: plan.fromValue,
-  toValue: plan.toValue,
-});
 
 function resultInput(plan: PlannedReservation, reservationId: string, overrides: Record<string, unknown>) {
   return {
@@ -325,7 +319,6 @@ describe('P6-PROD-U1 真实 PostgreSQL · crash recovery / startup reconciliatio
     const first = await runStartupReconciliation(prisma, {
       now,
       observe: () => ({ configFingerprint: 'post'.padEnd(64, '0'), version: 'cfg-2', pathValue: plan.toValue }),
-      expectedFor: () => expectationOf(plan),
       reconciledBy: 'reconcile-worker-1',
     });
     expect(first.summary.terminalized).toBe(1);
@@ -344,7 +337,6 @@ describe('P6-PROD-U1 真实 PostgreSQL · crash recovery / startup reconciliatio
     const second = await runStartupReconciliation(prisma, {
       now,
       observe: () => ({ configFingerprint: 'post'.padEnd(64, '0'), version: 'cfg-2', pathValue: plan.toValue }),
-      expectedFor: () => expectationOf(plan),
       reconciledBy: 'reconcile-worker-2',
     });
     expect(second.summary).toMatchObject({ noop: 0, terminalized: 0, cancelled: 0, reclaimed: 0 });
@@ -353,12 +345,11 @@ describe('P6-PROD-U1 真实 PostgreSQL · crash recovery / startup reconciliatio
   });
 
   it('PGU-7 观测不可用 → NEEDS_RECONCILIATION 且 post identity = UNKNOWN（不得回填 pre）', async () => {
-    const { plan, reservationId } = await strandedWithExpiredLease('pgu7');
+    const { reservationId } = await strandedWithExpiredLease('pgu7');
     const now = LATER;
     const run = await runStartupReconciliation(prisma, {
       now,
       observe: () => null,
-      expectedFor: () => expectationOf(plan),
       reconciledBy: 'reconcile-worker-1',
     });
     expect(run.summary.terminalized).toBe(1);
@@ -384,7 +375,6 @@ describe('P6-PROD-U1 真实 PostgreSQL · crash recovery / startup reconciliatio
         version: 'cfg-1',
         pathValue: plan.fromValue,
       }),
-      expectedFor: () => expectationOf(plan),
       reconciledBy: 'reconcile-worker-1',
     });
     expect(run.summary.reclaimed).toBe(1);
@@ -412,7 +402,6 @@ describe('P6-PROD-U1 真实 PostgreSQL · crash recovery / startup reconciliatio
     const run = await runStartupReconciliation(prisma, {
       now: LATER,
       observe: () => null,
-      expectedFor: () => expectationOf(plan),
       reconciledBy: 'reconcile-worker-1',
     });
     expect(run.summary.cancelled).toBe(1);
@@ -550,6 +539,7 @@ describe('P6-PROD-U1 真实 PostgreSQL · DB 级 fail-closed 守卫', () => {
           rollbackPlanDigest: plan.rollbackPlanDigest,
           baselineSnapshotDigest: plan.baselineSnapshotDigest,
           baselineConfigFingerprint: plan.baselineConfigFingerprint,
+          preConfigVersion: plan.preConfigVersion,
           environment: 'PRODUCTION',
           executionMode: plan.executionMode,
           target: plan.target,
@@ -593,6 +583,171 @@ describe('P6-PROD-U1 真实 PostgreSQL · DB 级 fail-closed 守卫', () => {
 });
 
 // ============================================================
+// FINAL2（MSG-20261005-94 DURABLE_RECOVERY_BASIS）—— recovery 依据必须自身可耐久重建
+// ============================================================
+describe('P6-PROD-U1 FINAL2 · durable recovery basis SSOT', () => {
+  async function strandedForRecovery(tag: string, preVersion = 'cfg-1') {
+    const plan = planned(tag, { preConfigVersion: preVersion });
+    const reserved = await reserveDurableExecution(prisma, { plan, now: NOW });
+    if (reserved.kind !== 'CREATED') throw new Error('reserve 失败');
+    const acquired = await claimExecutionLease(prisma, {
+      reservationId: reserved.reservationId,
+      ownerRef: 'worker-A',
+      now: NOW,
+      leaseTtlMs: 1,
+    });
+    if (acquired.kind !== 'ACQUIRED') throw new Error('claim 失败');
+    await new Promise((resolve) => setTimeout(resolve, 30));
+    return { plan, reservationId: reserved.reservationId };
+  }
+
+  it('PGU-24 preConfigVersion 已持久化到 reservation（recovery basis 冻结）', async () => {
+    const { plan, reservationId } = await strandedForRecovery('pgu24', 'cfg-17');
+    const row = await prisma.controlledConfigExecutionReservation.findUniqueOrThrow({
+      where: { id: reservationId },
+    });
+    expect(row.preConfigVersion).toBe('cfg-17');
+    expect(row.fromValue).toBe(plan.fromValue);
+    expect(row.toValue).toBe(plan.toValue);
+    expect(row.target).toBe(plan.target);
+    expect(row.configPath).toBe(plan.configPath);
+  });
+
+  it('PGU-25 改写 preConfigVersion → DB 身份不可改写触发器拒绝', async () => {
+    const { reservationId } = await strandedForRecovery('pgu25');
+    await expect(
+      prisma.$executeRawUnsafe(
+        'UPDATE "ControlledConfigExecutionReservation" SET "preConfigVersion" = $1 WHERE "id" = $2',
+        'cfg-999',
+        reservationId,
+      ),
+    ).rejects.toThrow(/CONFIG_EXECUTION_IDENTITY_IMMUTABLE/);
+  });
+
+  it('PGU-26 同 verdict/ticket 身份但 preConfigVersion 不同 → FAIL_CLOSED（无第二条执行）', async () => {
+    const first = planned('pgu26', { preConfigVersion: 'cfg-1' });
+    const created = await reserveDurableExecution(prisma, { plan: first, now: NOW });
+    expect(created.kind).toBe('CREATED');
+
+    // 同 verdict/ticket（同身份），但 basis 里的 preConfigVersion 被换成别的值
+    const tampered = planReservation({
+      basis: basis('pgu26', { preConfigVersion: 'cfg-2' }),
+      idempotencyKey: first.idempotencyKey,
+      now: NOW,
+    });
+    const outcome = await reserveDurableExecution(prisma, { plan: tampered, now: NOW });
+    expect(outcome.kind).toBe('FAIL_CLOSED');
+    expect(await prisma.controlledConfigExecutionReservation.count()).toBe(1);
+    const row = await prisma.controlledConfigExecutionReservation.findFirstOrThrow();
+    expect(row.preConfigVersion).toBe('cfg-1');
+  });
+
+  it('PGU-28 ReservationView 可独立重建完整 recovery basis（无需 caller 输入）', async () => {
+    const { plan, reservationId } = await strandedForRecovery('pgu28', 'cfg-17');
+    const views = await listNonTerminalReservations(prisma);
+    const view = views.find((item) => item.id === reservationId);
+    expect(view).toBeTruthy();
+    expect(view).toMatchObject({
+      baselineConfigFingerprint: plan.baselineConfigFingerprint,
+      preConfigVersion: 'cfg-17',
+      fromValue: plan.fromValue,
+      toValue: plan.toValue,
+      target: plan.target,
+      configPath: plan.configPath,
+    });
+  });
+
+  it('PGU-29a 仅凭 DB 行 + 观测即可 SAFE_TO_RETRY（无 expectedFor）', async () => {
+    const { plan, reservationId } = await strandedForRecovery('pgu29a');
+    const run = await runStartupReconciliation(prisma, {
+      now: LATER,
+      observe: () => ({
+        configFingerprint: plan.baselineConfigFingerprint,
+        version: plan.preConfigVersion,
+        pathValue: plan.fromValue,
+      }),
+      reconciledBy: 'reconciler',
+    });
+    expect(run.summary.reclaimed).toBe(1);
+    expect(run.summary.terminalized).toBe(0);
+    expect(
+      (
+        await prisma.controlledConfigExecutionReservation.findUniqueOrThrow({
+          where: { id: reservationId },
+        })
+      ).status,
+    ).toBe('EXECUTING');
+  });
+
+  it('PGU-29b 仅凭 DB 行 + 观测即可 RECOVERED_COMMITTED（无 expectedFor）', async () => {
+    const { plan, reservationId } = await strandedForRecovery('pgu29b');
+    const run = await runStartupReconciliation(prisma, {
+      now: LATER,
+      observe: () => ({
+        configFingerprint: 'post'.padEnd(64, '0'),
+        version: 'cfg-9',
+        pathValue: plan.toValue,
+      }),
+      reconciledBy: 'reconciler',
+    });
+    expect(run.summary.terminalized).toBe(1);
+    expect(
+      (
+        await prisma.controlledConfigExecutionReservation.findUniqueOrThrow({
+          where: { id: reservationId },
+        })
+      ).status,
+    ).toBe('SUCCEEDED');
+  });
+
+  it('PGU-29c 仅凭 DB 行 + 观测不可用即可 NEEDS_RECONCILIATION（无 expectedFor）', async () => {
+    const { reservationId } = await strandedForRecovery('pgu29c');
+    const run = await runStartupReconciliation(prisma, {
+      now: LATER,
+      observe: () => null,
+      reconciledBy: 'reconciler',
+    });
+    expect(run.summary.terminalized).toBe(1);
+    expect(
+      (
+        await prisma.controlledConfigExecutionReservation.findUniqueOrThrow({
+          where: { id: reservationId },
+        })
+      ).status,
+    ).toBe('NEEDS_RECONCILIATION');
+  });
+
+  it('PGU-30 保留兼容层时：caller 断言与 durable basis 不一致 → FAIL_CLOSED（不 terminalize / 不 reclaim）', async () => {
+    const { plan, reservationId } = await strandedForRecovery('pgu30');
+    const run = await runStartupReconciliation(prisma, {
+      now: LATER,
+      observe: () => ({
+        configFingerprint: plan.baselineConfigFingerprint,
+        version: plan.preConfigVersion,
+        pathValue: plan.fromValue,
+      }),
+      assertExpectedFor: () => ({
+        baselineConfigFingerprint: plan.baselineConfigFingerprint,
+        preConfigVersion: 'cfg-WRONG',
+        fromValue: plan.fromValue,
+        toValue: plan.toValue,
+      }),
+      reconciledBy: 'reconciler',
+    });
+    expect(run.summary.reclaimed).toBe(0);
+    expect(run.summary.terminalized).toBe(0);
+    expect(run.summary.basisMismatch).toBe(1);
+    expect(run.actions[0]).toMatchObject({ kind: 'REVIEW', reason: 'RECOVERY_BASIS_MISMATCH' });
+    const row = await prisma.controlledConfigExecutionReservation.findUniqueOrThrow({
+      where: { id: reservationId },
+    });
+    expect(row.status).toBe('EXECUTING');
+    expect(await prisma.controlledConfigExecutionResult.count()).toBe(0);
+    expect(await prisma.controlledConfigExecutionEvent.count({ where: { kind: 'STARTUP_RECONCILED' } })).toBe(0);
+  });
+});
+
+// ============================================================
 // FINAL（MSG-20261005-93 REVISE）—— lease fencing / baseline identity / outbox authority
 // ============================================================
 describe('P6-PROD-U1 FINAL · reconciliation lease fencing', () => {
@@ -625,7 +780,6 @@ describe('P6-PROD-U1 FINAL · reconciliation lease fencing', () => {
       reservations: snapshot,
       now: LATER,
       observe: observeCommitted(plan),
-      expectedFor: () => expectationOf(plan),
     });
     expect(staleActions[0]).toMatchObject({ kind: 'TERMINALIZE', status: 'SUCCEEDED' });
 
@@ -641,7 +795,6 @@ describe('P6-PROD-U1 FINAL · reconciliation lease fencing', () => {
       actions: staleActions,
       reservations: snapshot,
       now: LATER,
-      expectedFor: () => expectationOf(plan),
       reconciledBy: 'reconciler',
     });
     expect(summary.fenceChanged).toBe(1);
@@ -703,7 +856,6 @@ describe('P6-PROD-U1 FINAL · reconciliation lease fencing', () => {
     const summary = await runReconciliationActions(prisma, {
       actions: [staleAction],
       now: SOON,
-      expectedFor: () => expectationOf(plan),
       reconciledBy: 'reconciler',
     });
     expect(summary.fenceChanged).toBe(1);
@@ -737,7 +889,6 @@ describe('P6-PROD-U1 FINAL · crash recovery baseline identity', () => {
         version: 'cfg-1',
         pathValue: plan.fromValue,
       }),
-      expectedFor: () => expectationOf(plan),
       reconciledBy: 'reconciler',
     });
     expect(run.summary.reclaimed).toBe(0);
@@ -761,7 +912,6 @@ describe('P6-PROD-U1 FINAL · crash recovery baseline identity', () => {
         version: 'cfg-1',
         pathValue: plan.fromValue,
       }),
-      expectedFor: () => expectationOf(plan),
       reconciledBy: 'reconciler',
     });
     expect(run.summary.reclaimed).toBe(1);

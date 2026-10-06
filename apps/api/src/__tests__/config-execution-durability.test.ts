@@ -21,6 +21,7 @@ import {
   buildTerminalResult,
   computeConfigFingerprint,
   detectConfigDrift,
+  expectedFromReservation,
   planLeaseClaim,
   planReservation,
   planStartupReconciliation,
@@ -42,6 +43,7 @@ function basis(overrides: Partial<ConfigExecutionBasis> = {}): ConfigExecutionBa
     rollbackPlanDigest: 'b'.repeat(64),
     baselineSnapshotDigest: 's'.repeat(64),
     baselineConfigFingerprint: 'f'.repeat(64),
+    preConfigVersion: 'cfg-1',
     environment: 'SANDBOX',
     executionMode: 'SANDBOX_WRITE_ONLY',
     target: 'sandbox-config',
@@ -63,6 +65,11 @@ function reservation(overrides: Partial<ReservationView> = {}): ReservationView 
     authorizationTicketDigest: 't'.repeat(64),
     status: 'RESERVED',
     baselineConfigFingerprint: 'f'.repeat(64),
+    preConfigVersion: 'cfg-1',
+    target: 'sandbox-config',
+    configPath: 'outcomeLearning.autoAdoptThreshold',
+    fromValue: '0.80',
+    toValue: '0.85',
     executionAttempt: 0,
     ownerRef: null,
     leaseId: null,
@@ -446,7 +453,6 @@ describe('P6-PROD-U1 startup reconciliation（幂等 + 覆盖全部异常态）'
         reservations: [...rows.values()].map((row) => row.view),
         now: NOW,
         observe: (view) => observations[view.id] ?? null,
-        expectedFor: () => expectation,
       });
 
     const first = runPlan();
@@ -499,7 +505,6 @@ describe('P6-PROD-U1 startup reconciliation（幂等 + 覆盖全部异常态）'
       reservations: [stranded],
       now: NOW,
       observe: () => ({ configFingerprint: 'p'.repeat(64), version: 'cfg-2', pathValue: '0.85' }),
-      expectedFor: () => expectation,
     });
     expect(actions).toHaveLength(1);
     expect(actions[0]).toMatchObject({
@@ -507,6 +512,69 @@ describe('P6-PROD-U1 startup reconciliation（幂等 + 覆盖全部异常态）'
       status: 'SUCCEEDED',
       resultCode: 'RECOVERED_COMMITTED',
     });
+  });
+});
+
+describe('P6-PROD-U1 FINAL2 · durable recovery basis（纯决策层）', () => {
+  it('preConfigVersion 进入 immutable basis：不同 pre version → 不同 basis digest / reservationKey / payload digest', () => {
+    const a = planReservation({
+      basis: basis({ preConfigVersion: 'cfg-1' }),
+      idempotencyKey: 'idem-1',
+      now: NOW,
+    });
+    const b = planReservation({
+      basis: basis({ preConfigVersion: 'cfg-2' }),
+      idempotencyKey: 'idem-1',
+      now: NOW,
+    });
+    expect(a.immutableBasisDigest).not.toBe(b.immutableBasisDigest);
+    expect(a.reservationKey).not.toBe(b.reservationKey);
+    expect(a.idempotencyPayloadDigest).not.toBe(b.idempotencyPayloadDigest);
+  });
+
+  it('preConfigVersion 缺失 → 拒绝创建 reservation（recovery 依据必须完整）', () => {
+    expect(() =>
+      planReservation({
+        basis: basis({ preConfigVersion: '   ' }),
+        idempotencyKey: 'idem-1',
+        now: NOW,
+      }),
+    ).toThrow(/preConfigVersion/);
+  });
+
+  it('expectedFromReservation 完全由 durable 行重建（不看 caller 输入）', () => {
+    const view = reservation({
+      baselineConfigFingerprint: 'b'.repeat(64),
+      preConfigVersion: 'cfg-7',
+      fromValue: '0.11',
+      toValue: '0.22',
+    });
+    expect(expectedFromReservation(view)).toEqual({
+      baselineConfigFingerprint: 'b'.repeat(64),
+      preConfigVersion: 'cfg-7',
+      fromValue: '0.11',
+      toValue: '0.22',
+    });
+  });
+
+  it('assertExpectedFor 与 durable basis 不一致 → REVIEW / RECOVERY_BASIS_MISMATCH（不参与恢复判定）', () => {
+    const views = [reservation({ id: 'r-mismatch' })];
+    const actions = planStartupReconciliation({
+      reservations: views,
+      now: NOW,
+      observe: () => ({
+        configFingerprint: 'f'.repeat(64),
+        version: 'cfg-1',
+        pathValue: '0.80',
+      }),
+      assertExpectedFor: () => ({
+        baselineConfigFingerprint: 'f'.repeat(64),
+        preConfigVersion: 'cfg-WRONG',
+        fromValue: '0.80',
+        toValue: '0.85',
+      }),
+    });
+    expect(actions[0]).toMatchObject({ kind: 'REVIEW', reason: 'RECOVERY_BASIS_MISMATCH' });
   });
 });
 
