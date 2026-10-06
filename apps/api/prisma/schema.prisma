@@ -3713,3 +3713,92 @@ model ProviderRateWindow {
   @@unique([organizationId, id])
   @@index([organizationId, scopeKey, windowStart])
 }
+
+// ============================================================
+// PROVIDER FOLLOW-UP INTELLIGENCE / P3（HOST 2026-10-06 授权）—— Provider case / contact 事实层与投影
+// tenant-owned：原始 provider 事实 append-only（不可改写、不可删除），canonical projection 仅由事实派生。
+// 边界：本组只承载读取事实与派生投影；不含任何写平台能力、不存凭据。
+// ============================================================
+
+/// provider case 原始事实快照（append-only；同一快照重复写入 → 幂等复用）
+model ProviderCaseFact {
+  id                String   @id @default(uuid())
+  organizationId    String
+  platformAccountId String
+  platform          String
+  providerCaseId    String
+  /// 归一化 case 快照的内容摘要（与 org/account/case 组成唯一键，保证同快照只落一条）
+  factDigest        String
+  status            String
+  subject           String?
+  providerCreatedAt DateTime?
+  providerUpdatedAt DateTime?
+  lastContactAt     DateTime?
+  contactKinds      String
+  attachmentCount   Int      @default(0)
+  adapterId         String
+  adapterVersion    String
+  credentialRef     String
+  connectionRef     String?
+  fetchedAt         DateTime
+  /// 归一化快照（JSON 文本；不含凭据内容）
+  snapshot          String
+  recordedAt        DateTime @default(now())
+
+  @@unique([organizationId, platformAccountId, providerCaseId, factDigest])
+  @@unique([organizationId, id])
+  @@index([organizationId, platformAccountId, providerCaseId, recordedAt])
+}
+
+/// provider contact（case 沟通记录）原始事实（append-only）
+model ProviderContactFact {
+  id                String   @id @default(uuid())
+  organizationId    String
+  platformAccountId String
+  platform          String
+  providerCaseId    String
+  contactId         String
+  factDigest        String
+  kind              String
+  direction         String
+  occurredAt        DateTime
+  bodyText          String?
+  bodyDigest        String?
+  /// 附件引用数组的 JSON 文本（仅引用，不含内容）
+  attachments       String
+  attachmentCount   Int      @default(0)
+  adapterId         String
+  adapterVersion    String
+  credentialRef     String
+  connectionRef     String?
+  fetchedAt         DateTime
+  recordedAt        DateTime @default(now())
+
+  @@unique([organizationId, platformAccountId, providerCaseId, contactId, factDigest])
+  @@unique([organizationId, id])
+  @@index([organizationId, platformAccountId, providerCaseId, occurredAt])
+}
+
+/// case 的 canonical projection（只由 append-only 事实派生；身份不可改写）
+model ProviderCaseProjection {
+  id                String   @id @default(uuid())
+  organizationId    String
+  platformAccountId String
+  platform          String
+  providerCaseId    String
+  status            String
+  subject           String?
+  lastContactAt     DateTime?
+  contactCount      Int      @default(0)
+  attachmentCount   Int      @default(0)
+  contactKinds      String
+  /// 派生代数：每次事实推进 +1（历史由 append-only 事实保留）
+  generation        Int      @default(0)
+  lastFactDigest    String
+  firstFactAt       DateTime
+  lastFactAt        DateTime
+  updatedAt         DateTime @updatedAt
+
+  @@unique([organizationId, platformAccountId, providerCaseId])
+  @@unique([organizationId, id])
+}

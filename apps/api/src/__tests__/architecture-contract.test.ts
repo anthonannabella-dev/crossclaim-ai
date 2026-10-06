@@ -170,6 +170,10 @@ describe('模型清单一致性（C-0002 CHANGE #1）', () => {
     'ProviderSubmissionIntent',
     'ProviderSubmissionEvent',
     'ProviderRateWindow',
+    // PROVIDER FOLLOW-UP INTELLIGENCE / P3：事实层与投影同样 tenant-owned
+    'ProviderCaseFact',
+    'ProviderContactFact',
+    'ProviderCaseProjection',
   ];
   const JOIN_MODELS = [
     'CaseEvidence',
@@ -184,7 +188,7 @@ describe('模型清单一致性（C-0002 CHANGE #1）', () => {
 
 
   it(`核心模型恰好 ${CORE.length} 个`, () => {
-    expect(CORE).toHaveLength(79);
+    expect(CORE).toHaveLength(82);
     for (const name of CORE) expect(modelBlock(name), `缺少核心模型 ${name}`).not.toBe('');
   });
 
@@ -208,8 +212,8 @@ describe('模型清单一致性（C-0002 CHANGE #1）', () => {
     }
   });
 
-  it('模型总数为 104（96 + 5 耐久执行底座 + 3 Provider Scheduler）—— 与 README/DOMAIN_MODEL 表述一致', () => {
-    expect(modelNames()).toHaveLength(104);
+  it('模型总数为 107（96 + 5 耐久底座 + 3 Scheduler + 3 Provider 事实层）—— 与 README/DOMAIN_MODEL 表述一致', () => {
+    expect(modelNames()).toHaveLength(107);
   });
 });
 
@@ -222,6 +226,10 @@ describe('租户归属（C-0002 CHANGE #2）', () => {
     'ProviderSubmissionIntent',
     'ProviderSubmissionEvent',
     'ProviderRateWindow',
+    // PROVIDER FOLLOW-UP INTELLIGENCE / P3：事实层与投影同样 tenant-owned
+    'ProviderCaseFact',
+    'ProviderContactFact',
+    'ProviderCaseProjection',
     'SourceConnection',
     'FileAsset',
     'ImportBatch',

@@ -2,3 +2,5 @@
 export * from './provider-case';
 export * from './amazon-support-read';
 export * from './fixtures';
+export * from './case-facts';
+export * from './prisma-case-fact-store';
