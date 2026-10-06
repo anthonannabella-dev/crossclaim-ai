@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "fe2b8205",
+  "head": "5d98e829",
   "status": "RECONCILED",
   "current_task": "RSI 生产可执行闭环（7 点收口）：RSI_RUNTIME_READY = PASS；MODEL_PROVIDER_READY = 本地仿真已接线（真实网络/付费 HOLD）；PERSISTENCE_READY = ephemeral 已验证、durable 需宿主非生产 DATABASE_URL；REBOOT_RECONCILE_READY = NOT_IMPLEMENTED（下一单元）；SYSTEMD_VALIDATED = 需宿主 Linux 实机",
   "next_task": "BG-016 单一 Acceptance Head + 四份状态一致 guard（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍 HOST_ACTION_REQUIRED 或 HOLD",
@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-96",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-06T05:11:07.583Z",
+  "updated_at": "2026-10-06T05:14:40.836Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -49,17 +49,17 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
-  "continuous_execution": "RUNNING（PROVIDER FOLLOW-UP P1 A-S1 已 push；队列含 A-S2…A-S10 与 B-S2…B-S12）",
-  "next_execution_unit": "Next tick：执行队列队首 A-S2 —— Amazon Support API 只读 adapter（AmazonSupportReadPort / ProviderCase / ProviderContact / ProviderAttachmentRef；fixture + contract tests；transport/credential 仍 HOLD）。",
+  "continuous_execution": "RUNNING（A-S1 / A-S2 已完成并 push；队列剩余 19 项）",
+  "next_execution_unit": "Next tick：队列队首 A-S3 —— Provider case fact / contact normalization（append-only raw fact + canonical projection + provenance；tenant/account isolation）。",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-06T05:11:07.583Z",
+  "last_tick_at": "2026-10-06T05:14:40.836Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "HOST 授权两项连续计划（PROVIDER FOLLOW-UP INTELLIGENCE / CUSTOMS CLOSURE）；重建 180s watchdog；完成并 push A-S1 Provider Submission Scheduler Core（fe2b8205）：3 张 tenant-owned durable 表 + provider-aware 策略/限流窗口/lease/exactly-once/UNKNOWN→只读对账 + 测试（unit 14/14、PG 12/12、architecture 149/149、tsc 0、清单双通过）。",
-  "last_action_at": "2026-10-06T05:11:07.583Z",
-  "next_action": "按队列连续推进；每个 slice 独立 commit/test/push/checkpoint；不引入真实外部写或凭据。",
-  "current_head": "fe2b8205",
-  "last_completed_head": "fe2b8205",
-  "reviewed_head": "fe2b8205",
+  "last_action": "完成并 push A-S2 Amazon Support 只读 adapter（5d98e829）：统一 ProviderCase/ProviderContact/ProviderAttachmentRef、注入式只读 transport + fixture、分页/失败语义/凭据掩码/归属隔离，14/14 通过、tsc 0。",
+  "last_action_at": "2026-10-06T05:14:40.836Z",
+  "next_action": "按队列连续推进；每 slice 独立 commit/test/push/checkpoint。",
+  "current_head": "5d98e829",
+  "last_completed_head": "5d98e829",
+  "reviewed_head": "5d98e829",
   "claim_submit_batch": {
     "verdict": "PASS",
     "message_id": "MSG-20261001-07",
@@ -5169,7 +5169,6 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "A-S2 Amazon Support API **只读** adapter：AmazonSupportReadPort / AmazonSupportCaseAdapter（listCases/getCase/listContacts/status/attachment metadata），统一 ProviderCase / ProviderContact / ProviderAttachmentRef；fixture + official-contract tests；真实 credential/transport 仍 HOLD。",
     "A-S3 Provider case fact / contact normalization（append-only raw fact + canonical projection + provenance；tenant/account isolation）。",
     "A-S4 Case Response Intelligence：ProviderContactFact → CaseResponseInterpretation → RequiredEvidence[] → RecommendedNextAction；LLM 只做分类/抽取/建议；低置信 → NEEDS_MANUAL_REVIEW；prompt injection 不得获得执行能力。",
     "A-S5 General Evidence Resolver（FOUND/PARTIAL/MISSING/CONFLICT/AMBIGUOUS/LOW_CONFIDENCE；禁跨 tenant/account；CONFLICT → HITL）。",
@@ -9357,7 +9356,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-06T05:11:07.583Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-06T05:14:40.836Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -11681,6 +11680,16 @@
       "evidence": {
         "migration": "20261006150000_provider_submission_scheduler（3 张 tenant-owned 表 + 触发器/清单同步）",
         "tests": "scheduler unit 14/14；scheduler PG 12/12；architecture-contract 149/149；tsc 0；tenant/append-only 清单双通过"
+      }
+    },
+    "A-S2": {
+      "name": "Amazon Support API 只读 adapter（ProviderCase / ProviderContact / ProviderAttachmentRef）",
+      "status": "DONE / PUSHED",
+      "head": "5d98e829",
+      "evidence": {
+        "files": "services/provider-support/{provider-case,amazon-support-read,fixtures,index}.ts",
+        "tests": "amazon-support-read 14/14；tsc 0；无 DB / 无网络（fixture transport）",
+        "boundary": "只读 4 入口；无 create/reply/upload；scope 必填；account 隔离；凭据不进日志"
       }
     }
   }
