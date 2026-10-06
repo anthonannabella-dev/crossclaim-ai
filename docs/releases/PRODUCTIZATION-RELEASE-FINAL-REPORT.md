@@ -25,7 +25,9 @@ FULL_REGRESSION           = 443 files / 4461 tests → 4460 passed + 1 failed（
 WEB_BUILD                 = PASS（next build exit 0）
 API_TSC                   = PASS（tsc --noEmit exit 0；prisma validate valid，88 migrations）
 WEB_TSC                   = PASS（tsc --noEmit exit 0）
-FINAL_RELEASE_HEAD        = f7ffd859（release/integration-20261006 的 merge 提交；其代码树与 gate/7 完全一致）
+FINAL_RELEASE_HEAD        = e3405a05（release/integration-20261006 的最终 merge 提交；已包含本报告与 REL-1 计划）
+                            首版候选 f7ffd859（merge main 后的 release 树，与 gate/7 文件树一致）
+                            gate/7 主线 HEAD = 42161550（本报告所在提交）
 PRODUCTION_READY          = NO
 HOST_ACTION_REQUIRED      = YES（见 §4：均为外部/架构决策项，不阻塞内部能力）
 ```
