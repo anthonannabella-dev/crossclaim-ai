@@ -9,9 +9,9 @@
   "last_chatgpt_message": "MSG-20261005-93",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-06T02:30:32.713Z",
+  "updated_at": "2026-10-06T03:16:29.596Z",
   "previous_head": "8064f07",
-  "architect_decision_pending": false,
+  "architect_decision_pending": true,
   "blocked_scope": null,
   "last_send_head": "0c35106",
   "last_sent_at": "2026-10-03T09:07:52.875Z",
@@ -21,7 +21,13 @@
   "ci_result": "completed_success",
   "fix_pr": "https://github.com/anthonannabella-dev/crossclaim-ai/pull/10",
   "channel_status": "HEALTHY（主审计会话 = https://chatgpt.com/c/6ac385db-cb60-83ec-9754-c7a30633a8c5（HOST 新开；MSG-20261005-30 起）；历史会话 https://chatgpt.com/c/6ac1cdf0-1ec8-83ec-8036-0e66fcf5c6b9 保留 MSG-22..29 逐字归档）",
-  "pending_verdict_unarchived": null,
+  "pending_verdict_unarchived": {
+    "marker": "[CODEX-P6PROD-U1FINAL]",
+    "reviewed_head": "b33652f8",
+    "expected_message_id": "MSG-20261005-94",
+    "submitted_at": "2026-10-06T03:16:29.596Z",
+    "channel": "https://chatgpt.com/c/6ac3bcd0-7818-83ec-8f92-44289fe8df67"
+  },
   "b2_status": "PASS（MSG-20260930-10 工程修复 + MSG-20260930-11 集成 PASS/MERGE APPROVED）",
   "protocol": "DUAL_CHANNEL_WAKEUP（GitHub = 正式总线 / ChatGPT Web = 仅唤醒）",
   "integration_pr": "https://github.com/anthonannabella-dev/crossclaim-ai/pull/11",
@@ -49,14 +55,14 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
-  "continuous_execution": "RUNNING（P6-PROD-U1 FINAL 已 push b33652f8；回归中，随后送审）",
-  "next_execution_unit": "Next tick：若 EXECUTION_ACTIVE=TRUE 则不动仓库；回归与送审完成后改为读取 P6-PROD-U1 FINAL 裁决（marker [CODEX-P6PROD-U1FINAL]，REVIEWED_HEAD = b33652f8）→ 逐字归档 + compare.mjs FULL_COPY_OK → durable state。",
+  "continuous_execution": "RUNNING（P6-PROD-U1 FINAL 已送审 b33652f8；等待裁决）",
+  "next_execution_unit": "Next tick：读取 P6-PROD-U1 FINAL 裁决（marker [CODEX-P6PROD-U1FINAL]，REVIEWED_HEAD = b33652f8）→ 逐字归档 + compare.mjs FULL_COPY_OK → durable state；PASS 则登记 P6-PROD-U1 = PASS / CLOSED，REVISE 则继续最小修订。",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-06T02:30:32.713Z",
+  "last_tick_at": "2026-10-06T03:16:29.596Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "归档 P6-PROD-U1 裁决（MSG-20261005-93，FULL_COPY_OK，103cae1d）；按四项 REVISE 完成窄修（lease fencing / baseline identity / outbox authority / 并发交付 fail-closed）并 push b33652f8；targeted db 23/23、unit 28/28、schema 13/13、architecture 143/143、tsc 0。",
-  "last_action_at": "2026-10-06T02:30:32.713Z",
-  "next_action": "完成全量回归并送审 FINAL；production mutation 继续 NOT AUTHORIZED。",
+  "last_action": "归档 P6-PROD-U1 裁决（MSG-20261005-93 = PASS WITH REVISE，FULL_COPY_OK，103cae1d）；按四项 REVISE 完成 FINAL 窄修（lease fencing / baseline identity / outbox authority / 并发交付 fail-closed）并 push b33652f8；targeted db 23/23、unit 28/28、schema 13/13、architecture 143/143、tsc 0；全量回归 410 files / 3909 tests（3908 passed + 1 failed = P2E-DB5）；已送审 [CODEX-P6PROD-U1FINAL]（composer empty + marker + head 已在 DOM 验证）。",
+  "last_action_at": "2026-10-06T03:16:29.596Z",
+  "next_action": "读/归档 FINAL 裁决并按 verdict 收口；production config write / rollout / auto rollback 仍 NOT AUTHORIZED。",
   "current_head": "b33652f8",
   "last_completed_head": "b33652f8",
   "reviewed_head": "b33652f8",
@@ -5169,9 +5175,9 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "P6PROD-F1 全量回归（apps/api npx vitest run）→ 记录 file/test 数与唯一已知失败（P2E-DB5 隔离债）。",
-    "P6PROD-F2 送审 P6-PROD-U1 FINAL（marker [CODEX-P6PROD-U1FINAL]，REVIEWED_HEAD = b33652f8）→ 等 verdict。",
-    "P6PROD-F3 读取 FINAL 裁决 → 逐字归档 + compare.mjs FULL_COPY_OK → durable state；REVISE 则继续最小修订，PASS 则登记 P6-PROD-U1 = PASS / CLOSED。"
+    "P6PROD-F3 读取 P6-PROD-U1 FINAL 裁决（[CODEX-P6PROD-U1FINAL]，REVIEWED_HEAD = b33652f8）→ 逐字归档 AI-ARCHITECT-INBOX.md → compare.mjs FULL_COPY_OK → durable state 对账。",
+    "P6PROD-F4 若 FINAL = PASS：登记 P6-PROD-U1 = PASS / CLOSED（FINAL_NEXT_REQUIRED = NO）；production mutation 仍 NOT AUTHORIZED，下一单元须 HOST 再次单独授权。",
+    "P6PROD-F5 若 FINAL = REVISE：立即最小修订 → targeted/DB/regression/tsc → commit/push → 继续 FINAL2。"
   ],
   "full_autonomous_internal_execution": "VERIFIED",
   "dispatcher_acceptance": {
@@ -9319,9 +9325,9 @@
       "heartbeat_as_normal_scheduler"
     ]
   },
-  "EXECUTION_ACTIVE": true,
+  "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-06T02:30:32.713Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-06T03:16:29.596Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -11543,7 +11549,7 @@
     "phase6_prod_u1_final_required": "YES"
   },
   "p6prod_u1_final": {
-    "status": "PUSHED / REGRESSION_RUNNING",
+    "status": "SUBMITTED / AWAITING_VERDICT",
     "reviewed_head": "b33652f8",
     "pushed": true,
     "fixes": [
@@ -11556,8 +11562,14 @@
       "tsc": "PASS (exit 0)",
       "targeted_db": "config-execution-durability-db 23/23（新增 PGU-16…23）",
       "targeted_unit": "config-execution-durability 28/28；schema-contract 13/13；architecture-contract 143/143",
-      "regression": "RUNNING",
+      "regression": "410 test files / 3909 tests（3908 passed + 1 failed = P2E-DB5 既有 isolation debt；另一次全量运行的 2 项额外失败未能复现）",
       "github_ci": "NOT_OBSERVED"
+    },
+    "submission": {
+      "marker": "[CODEX-P6PROD-U1FINAL]",
+      "delivered": true,
+      "composer_empty_verified": true,
+      "expected_message_id": "MSG-20261005-94"
     }
   }
 }
