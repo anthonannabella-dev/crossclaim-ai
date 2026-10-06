@@ -81,14 +81,26 @@ TEST_EVIDENCE             = standing-authorization 19/19（覆盖验收 1–12�
 * `CURRENT-SI-RSI-STATUS.md` 已补两行：`STANDING_AUTHORIZATION = YES(v1)`、`LOW_RISK_AUTONOMY = PARTIAL（政策与判定层就绪；逐调用点默认启用待评估）`。
 * `tsc --noEmit` = exit 0（SA-1/SA-2、SA-3 两轮均验证）。
 
-### 6.1 TEST_EVIDENCE（全量）
+### 6.1 TEST_EVIDENCE（SA-4b，exact HEAD 见 commit）
 
 | 项目 | 结果 |
 |---|---|
-| 全量 `npx vitest run` | **441 文件 / 4442 tests → 4440 passed + 2 failed**：`recovery-si-phase2-e-db` P2E-DB5（单独 20/20 PASS）与 `customs-entry-fact-store-db` G8（单独 7/7 PASS）—— 均为既有并行隔离 flake，未被本程序改动 |
-| 本程序新增套件 | `standing-authorization` **19/19**（验收 1–12）· `standing-authorization-verifier-wiring` **10/10**（接线与 fail-closed） |
-| SA-3 回归子集 | 32 文件 / **464 tests PASS**（action-guard 全量含 kill-switch / composition / audit-db + SA + architecture-contract 157） |
+| `api tsc --noEmit` | **exit 0** |
+| `prisma validate` | **valid**（88 migrations found；`prisma migrate status` = Database schema is up to date） |
+| 定向安全横扫 | **9 文件 / 231 tests PASS**：architecture-contract（157）· tenant-isolation · b2-tenant-ownership-behavior-db · action-guard-hitl-concurrency-db（HITL 原子消费/恰一次/并发首提/成功后撤销）· action-guard-hitl-r3-race-db · standing-authorization（19/19）· standing-authorization-verifier-wiring（10/10）· standing-authorization-resolver（14/14）· standing-authorization-callsite-wiring（5/5）· customs-duty-recovery-chain-e2e-db（Customs golden path） |
+| 全量 `npx vitest run` | **443 文件 / 4461 tests → 4460 passed + 1 failed**：仅 `recovery-si-phase2-e-db` P2E-DB5（既有并行隔离 flake，**单独运行 20/20 PASS**；同一套件在上一轮全量中亦为唯一失败；本轮 `customs-entry-fact-store-db` G8 未复现，进一步佐证其为本跑批次 flake） |
+| 本程序新增套件合计 | `standing-authorization` 19 + `…-verifier-wiring` 10 + `…-resolver` 14 + `…-callsite-wiring` 5 = **48 tests** |
+| SA-3 / SA-3b 回归子集 | 各 32 文件（464 / 307 tests）PASS |
 | SA-1/SA-2 宽域回归 | 86 文件 / **828 tests PASS** |
+
+### 6.2 全量回归结果
+
+| 字段 | 值 |
+|---|---|
+| FULL_REGRESSION | **4460 / 4461 PASS**（唯一失败为既有 `recovery-si-phase2-e-db` P2E-DB5 隔离 flake，单独运行通过） |
+| API_TSC | PASS（exit 0） |
+| PRISMA_VALIDATE | PASS（schema valid；88 migrations up to date） |
+| 无 schema delta | 本程序未新增表 / 未新增 migration（授权持久化与 Experience Memory 持久化均为 REQUEST ONLY） |
 
 ## 6b. SA-3b（已完成）：真实调用点接线
 
