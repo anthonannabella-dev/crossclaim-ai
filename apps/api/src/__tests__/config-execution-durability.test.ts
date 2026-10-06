@@ -62,6 +62,7 @@ function reservation(overrides: Partial<ReservationView> = {}): ReservationView 
     authorizationVerdictDigest: 'v'.repeat(64),
     authorizationTicketDigest: 't'.repeat(64),
     status: 'RESERVED',
+    baselineConfigFingerprint: 'f'.repeat(64),
     executionAttempt: 0,
     ownerRef: null,
     leaseId: null,
