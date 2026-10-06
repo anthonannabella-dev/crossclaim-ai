@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "1fa2821d",
+  "head": "b92b9efc",
   "status": "RECONCILED",
   "current_task": "RSI 生产可执行闭环（7 点收口）：RSI_RUNTIME_READY = PASS；MODEL_PROVIDER_READY = 本地仿真已接线（真实网络/付费 HOLD）；PERSISTENCE_READY = ephemeral 已验证、durable 需宿主非生产 DATABASE_URL；REBOOT_RECONCILE_READY = NOT_IMPLEMENTED（下一单元）；SYSTEMD_VALIDATED = 需宿主 Linux 实机",
   "next_task": "BG-016 单一 Acceptance Head + 四份状态一致 guard（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍 HOST_ACTION_REQUIRED 或 HOLD",
@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-96",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-06T07:56:09.619Z",
+  "updated_at": "2026-10-06T08:21:07.294Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -49,17 +49,17 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
-  "continuous_execution": "RUNNING（SI/RSI GAP-CLOSURE：A、B、C、D 完成并 push；E 待执行）",
-  "next_execution_unit": "E —— RECOVERY SIMULATION / Lightweight Recovery Decision Simulator v1。",
+  "continuous_execution": "COMPLETE（SI/RSI GAP-CLOSURE：A、B、C、D、E 全部 CLOSED 并 push；SAFE_CONTINUATION_QUEUE = []）",
+  "next_execution_unit": "无（队列为空）。后续推进 SYSTEMD_RUNTIME_VALIDATION / Experience Memory Schema Delta / META_IMPROVEMENT_INTEGRATED / 生产采用均需 HOST 另行授权。",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-06T07:56:09.619Z",
-  "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "完成并 push SI/RSI GAP-CLOSURE 单元 D（1fa2821d）：新增 meta-learning-orchestrator（纯函数闸门，无写入）——把既有 outcome-learning 链固化为 12 段顺序闸门（缺段/乱序/失败/digest 非法一律 BLOCKED）；强制 verifiable reward（无证据、Δ 低于 minDeltaBp、样本 0 → BLOCKED_BY_REWARD）；Experience 为 FAIL_CLOSED/NO_AUTOMATIC_LEARNING/IGNORED → BLOCKED_BY_EXPERIENCE；Builder≠Judge；Guard 必须允许；采用仅限 SANDBOX 且需回滚计划前置；观测回归 → REGRESSION_DETECTED_ROLLBACK_REQUIRED / ROLLED_BACK；禁止能力（POLICY_CORE_MUTATION / SECOND_GUARD_IMPLEMENTATION / ACTION_CATALOG_BYPASS / KILL_SWITCH_CHANGE / PERMISSION_EXPANSION / PAYMENT_ENABLEMENT / CUSTOMS_FILING_ENABLEMENT / PRODUCTION_CREDENTIAL_ACCESS / AUTO_PRODUCTION_*）请求即抛错。META_IMPROVEMENT_INTEGRATED 保持 false 并写明依据。unit 20/20、回归 542/542、tsc 0、无 schema 变更。",
-  "last_action_at": "2026-10-06T07:56:09.619Z",
-  "next_action": "实现 Recovery Decision Simulator（≥2–3 方案对比；输出 expectedRecovery/successProbability/calibratedConfidence/expectedCost/expectedTime/downsideRisk/requiredEvidence/policy·guard constraints/sourceExperienceRefs；默认 externalActionPerformed=false；经验不足 → fallback 确定性 Rule/Policy；禁止编造概率与金额）。",
-  "current_head": "1fa2821d",
-  "last_completed_head": "1fa2821d",
-  "reviewed_head": "1fa2821d",
+  "last_tick_at": "2026-10-06T08:21:07.294Z",
+  "state": "SI_RSI_GAP_CLOSURE_COMPLETE_AWAITING_HOST",
+  "last_action": "完成并 push SI/RSI GAP-CLOSURE 单元 E（b92b9efc）：Recovery Decision Simulator v1（4 方案对比 SUBMIT_NOW / COLLECT_MORE_EVIDENCE / HUMAN_OR_BROKER_REVIEW / DEFER；按期望净值择优且成本可抵消高成功率；Experience 不足 → 确定性 Rule/Policy 回退且所有数值为 null；金额/成本未知不猜；模拟不执行、不写事实、非 World Model、无 LLM 决策）；并输出最终回报 docs/releases/SI-RSI-GAP-CLOSURE-FINAL-REPORT.md（含 CURRENT SI/RSI CAPABILITY MATRIX 与 A–E 台账+exact HEAD+证据）。全量回归 4412/4413（唯一失败为既有 isolation debt）、tsc 0、无 schema 变更。A–E 全部 CLOSED，队列清空。",
+  "last_action_at": "2026-10-06T08:21:07.294Z",
+  "next_action": "保持安静：仅在 HOST 下发新授权或出现真实 HOST_ACTION_REQUIRED 时恢复执行。",
+  "current_head": "b92b9efc",
+  "last_completed_head": "b92b9efc",
+  "reviewed_head": "b92b9efc",
   "claim_submit_batch": {
     "verdict": "PASS",
     "message_id": "MSG-20261001-07",
@@ -5168,9 +5168,7 @@
   "runner_status": "RUNNING",
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
-  "safe_continuation_queue": [
-    "E RECOVERY SIMULATION v1（Recovery Decision Simulator：≥2–3 方案对比 SUBMIT_NOW/COLLECT_MORE_EVIDENCE/HUMAN_OR_BROKER_REVIEW/DEFER；输出 expectedRecovery/successProbability/calibratedConfidence/expectedCost/expectedTime/downsideRisk/requiredEvidence/policy·guard constraints/sourceExperienceRefs；默认 externalActionPerformed=false；经验不足 → fallback 确定性 Rule/Policy；禁止 LLM 编造概率与金额）。"
-  ],
+  "safe_continuation_queue": [],
   "full_autonomous_internal_execution": "VERIFIED",
   "dispatcher_acceptance": {
     "at": "2026-10-03T14:47:59.226Z",
@@ -9309,7 +9307,7 @@
   "AUDIT_REVISE_LOOP_AUTO_CONTINUE": true,
   "HOST_LIMIT_MEANS_STOP": false,
   "STOP_ONLY_ON_TRUE_HOST_DEPENDENCY_OR_COMPLETE": true,
-  "CONTINUATION_REQUIRED": true,
+  "CONTINUATION_REQUIRED": false,
   "heartbeat": {
     "automation_id": "crossclaim-ai-bridge-5min",
     "name": "crossclaim-si-watchdog-1min",
@@ -9338,7 +9336,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-06T07:56:09.619Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-06T08:21:07.294Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -11651,8 +11649,8 @@
       "D",
       "E"
     ],
-    "current_unit": "E",
-    "status": "RUNNING",
+    "current_unit": null,
+    "status": "COMPLETE",
     "baseline_head": "cdd95258",
     "current_status_doc": "docs/releases/CURRENT-SI-RSI-STATUS.md"
   },
@@ -11931,6 +11929,21 @@
         },
         "boundary": "orchestratesOnly=true、executesAdoption=false、externalWritePerformed=false、productionAdoptionAllowed=false、requiresVerifiableReward=true、requiresIndependentJudge=true、requiresSandboxScope=true、requiresRollbackPlanBeforeAdoption=true"
       }
+    },
+    "SI-RSI-E": {
+      "name": "RECOVERY SIMULATION v1（Recovery Decision Simulator：4 方案对比 / 期望净值择优 / 经验不足 → 确定性回退 / 无数值编造）",
+      "status": "DONE / PUSHED",
+      "head": "b92b9efc",
+      "evidence": {
+        "files": "apps/api/src/services/recovery-simulation/recovery-decision-simulator.ts（新增）+ apps/api/src/__tests__/recovery-decision-simulator.test.ts（17 例）；docs/releases/{CURRENT-SI-RSI-STATUS.md, SI-RSI-GAP-CLOSURE-FINAL-REPORT.md} 更新",
+        "tests": "recovery-decision-simulator 17/17；全量回归 439 文件 / 4413 tests → 4412 passed + 1 failed（唯一失败为既有 recovery-si-phase2-e-db P2E-DB5 isolation debt，单独运行 20/20 PASS）；tsc 0",
+        "outputs": {
+          "RECOVERY_SIMULATION_V1": "YES（17/17）",
+          "externalActionPerformed": "false",
+          "worldModelComplete": "false",
+          "insufficientExperienceFallback": "DETERMINISTIC_RULE_OR_POLICY（数值一律 null）"
+        }
+      }
     }
   },
   "program_final_report": "docs/releases/CUSTOMS-DUTY-RECOVERY-FINAL-REPORT.md",
@@ -11944,5 +11957,62 @@
     "github_ci": "NOT_OBSERVED",
     "production_ready": "NO（生产启用相关能力全部 HOLD）",
     "final_next_required": "YES（需 HOST 授权新方向）"
+  },
+  "si_rsi_gap_closure": {
+    "current_head": "b92b9efc",
+    "baseline_head": "cdd95258",
+    "capability_matrix_doc": "docs/releases/SI-RSI-GAP-CLOSURE-FINAL-REPORT.md",
+    "current_status_doc": "docs/releases/CURRENT-SI-RSI-STATUS.md",
+    "units": {
+      "A": {
+        "head": "e7cde93f",
+        "status": "CLOSED"
+      },
+      "B": {
+        "head": "9eb30b6d",
+        "status": "CLOSED"
+      },
+      "C": {
+        "head": "0b28ab52",
+        "status": "CLOSED"
+      },
+      "D": {
+        "head": "1fa2821d",
+        "status": "CLOSED"
+      },
+      "E": {
+        "head": "b92b9efc",
+        "status": "CLOSED"
+      }
+    },
+    "returns": {
+      "RSI_REBOOT_RECONCILE": "PASS（本机 PG；SYSTEMD_RUNTIME_VALIDATION = HOST_ACTION_REQUIRED）",
+      "DURABLE_RSI_STATE": "PASS",
+      "DUPLICATE_AFTER_REBOOT": "ZERO",
+      "EXPERIENCE_MEMORY_V1": "YES（端口实现；持久化表 = Schema Delta REQUEST ONLY）",
+      "META_IMPROVEMENT_INTEGRATED": false,
+      "RECOVERY_SIMULATION_V1": "YES",
+      "REAL_MODEL_RUNTIME": "HOLD_EXTERNAL",
+      "EXTERNAL_ACTION_RUNTIME": "HOLD_EXTERNAL",
+      "PRODUCTION_READY": "NO"
+    },
+    "remaining_host_action_required": [
+      "SYSTEMD_RUNTIME_VALIDATION（Linux/systemd 实机；未伪造）",
+      "EXPERIENCE_MEMORY_SCHEMA_DELTA 裁定（是否实施 1 表持久化）",
+      "META_IMPROVEMENT_INTEGRATED 的真实全链证据 + 架构审计",
+      "如需生产采用（CONTROLLED_RSI → 生产）需新授权"
+    ],
+    "remaining_hold_external": [
+      "EXTERNAL_WRITE",
+      "PAYMENT",
+      "CUSTOMS_FILING",
+      "PRODUCTION_CREDENTIALS",
+      "PRODUCTION_ENABLEMENT",
+      "REAL_MODEL_NETWORK",
+      "PAID_MODEL_CALLS",
+      "TRANSPORT",
+      "P2_F",
+      "P2_G"
+    ]
   }
 }
