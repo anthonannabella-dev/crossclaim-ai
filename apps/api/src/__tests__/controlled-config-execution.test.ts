@@ -248,6 +248,8 @@ interface StoreState {
   version: string;
   readBackValue?: string;
   readBackVersion?: string;
+  readBackThrow?: boolean;
+  readBackMalformed?: boolean;
   cas?: 'OK' | 'VERSION_CONFLICT' | 'PATH_VALUE_CONFLICT';
 }
 
@@ -260,6 +262,11 @@ const executionStore = (state: StoreState) => {
     async read() {
       counters.reads += 1;
       const afterCas = counters.casCalls > 0;
+      if (afterCas && state.readBackThrow === true) throw new Error('SIMULATED_READ_BACK_FAILURE');
+      if (afterCas && state.readBackMalformed === true) {
+        const malformedValues: Record<string, string> = {};
+        return { configFingerprint: '', configValues: malformedValues, capturedAt: 'nope', version: '' };
+      }
       return {
         configFingerprint: afterCas ? state.readBackVersion !== undefined ? POST_FINGERPRINT : fingerprint : fingerprint,
         configValues: { [PATH]: afterCas ? (state.readBackValue ?? value) : value, 'router.modelTierPolicy': 'balanced' },
@@ -420,23 +427,25 @@ describe('PHASE 6 U3 —— controlled config execution (SANDBOX ONLY)', () => {
   });
 
   it('P6U3_6 原子 CAS 是硬门：冲突 → CONFIG_EXECUTION_CONFLICT，零副作用', async () => {
-    await expect(
-      runExecution({ storeState: { value: '0.50', fingerprint: BASELINE_FINGERPRINT, version: BASELINE_VERSION, cas: 'VERSION_CONFLICT' } }),
-    ).rejects.toThrow(/CONFIG_EXECUTION_CONFLICT:VERSION_CONFLICT/);
+    const versionConflict = await runExecution({
+      storeState: { value: '0.50', fingerprint: BASELINE_FINGERPRINT, version: BASELINE_VERSION, cas: 'VERSION_CONFLICT' },
+    });
+    expect(versionConflict.result.status).toBe('CONFLICT');
+    expect(versionConflict.io.counters.casCalls).toBe(1);
+    expect(versionConflict.io.state().value).toBe('0.50');
     const io = executionStore({ value: '0.50', fingerprint: BASELINE_FINGERPRINT, version: BASELINE_VERSION, cas: 'PATH_VALUE_CONFLICT' });
     const c = await chain();
-    await expect(
-      executeControlledConfigMutation({
-        plan: c.plan,
-        ticket: c.authorizationTicket,
-        verdict: c.authorizationVerdict,
-        configStore: io.store,
-        ledger: createSandboxConfigExecutionLedger(),
-        gate: switches(),
-        executedAt: EXECUTED_AT,
-        idempotencyKey: 'idem-conflict',
-      }),
-    ).rejects.toThrow(/CONFIG_EXECUTION_CONFLICT:PATH_VALUE_CONFLICT/);
+    const pathConflict = await executeControlledConfigMutation({
+      plan: c.plan,
+      ticket: c.authorizationTicket,
+      verdict: c.authorizationVerdict,
+      configStore: io.store,
+      ledger: createSandboxConfigExecutionLedger(),
+      gate: switches(),
+      executedAt: EXECUTED_AT,
+      idempotencyKey: 'idem-conflict',
+    });
+    expect(pathConflict.status).toBe('CONFLICT');
     expect(io.state().value).toBe('0.50');
     expect(CONTROLLED_CONFIG_EXECUTION_BOUNDARY.atomicCas).toContain('CONFIG_EXECUTION_CONFLICT');
   });
@@ -521,5 +530,98 @@ describe('PHASE 6 U3 —— controlled config execution (SANDBOX ONLY)', () => {
     };
     const { result } = await runExecution();
     expect(attempt(() => { (result as unknown as { to: string }).to = '0.99'; })).toBe(false);
+  });
+
+  it('P6U3F_1 LIVE_VERSION_NOOP_GATE：version 漂移但值已等于 to → STALE_EXECUTION_BASELINE（不得 NOOP）', async () => {
+    await expect(
+      runExecution({ storeState: { value: '0.75', fingerprint: BASELINE_FINGERPRINT, version: 'cfg-9' } }),
+    ).rejects.toThrow(/STALE_EXECUTION_BASELINE:version/);
+  });
+
+  it('P6U3F_2 RESERVATION_TERMINALIZATION：preflight stale 失败不留 orphan reservation（同授权可重试成功）', async () => {
+    const c = await chain();
+    const ledger = createSandboxConfigExecutionLedger();
+    const stale = executionStore({ value: '0.90', fingerprint: BASELINE_FINGERPRINT, version: BASELINE_VERSION });
+    await expect(
+      executeControlledConfigMutation({
+        plan: c.plan,
+        ticket: c.authorizationTicket,
+        verdict: c.authorizationVerdict,
+        configStore: stale.store,
+        ledger,
+        gate: switches(),
+        executedAt: EXECUTED_AT,
+        idempotencyKey: 'idem-preflight',
+      }),
+    ).rejects.toThrow(/STALE_EXECUTION_BASELINE:path-value/);
+    expect(stale.counters.casCalls).toBe(0);
+    // 同 authorization + 同 ledger 重试（配置已恢复）→ 必须能真正执行，证明未被 orphan reservation 占位
+    const healthy = executionStore({ value: '0.50', fingerprint: BASELINE_FINGERPRINT, version: BASELINE_VERSION });
+    const retry = await executeControlledConfigMutation({
+      plan: c.plan,
+      ticket: c.authorizationTicket,
+      verdict: c.authorizationVerdict,
+      configStore: healthy.store,
+      ledger,
+      gate: switches(),
+      executedAt: EXECUTED_AT,
+      idempotencyKey: 'idem-preflight',
+    });
+    expect(retry.status).toBe('COMMITTED');
+    expect(healthy.counters.casCalls).toBe(1);
+  });
+
+  it('P6U3F_3 POST_WRITE_RECONCILIATION_DURABILITY：CAS 冲突 -> durable CONFLICT 且重试返回同一结果、不再 CAS', async () => {
+    const c = await chain();
+    const ledger = createSandboxConfigExecutionLedger();
+    const io = executionStore({ value: '0.50', fingerprint: BASELINE_FINGERPRINT, version: BASELINE_VERSION, cas: 'VERSION_CONFLICT' });
+    const call = () =>
+      executeControlledConfigMutation({
+        plan: c.plan,
+        ticket: c.authorizationTicket,
+        verdict: c.authorizationVerdict,
+        configStore: io.store,
+        ledger,
+        gate: switches(),
+        executedAt: EXECUTED_AT,
+        idempotencyKey: 'idem-conflict-durable',
+      });
+    const first = await call();
+    expect(first.status).toBe('CONFLICT');
+    expect(isVerifiedControlledConfigExecutionResult(first)).toBe(true);
+    const second = await call();
+    expect(second.status).toBe('CONFLICT');
+    expect(second.resultDigest).toBe(first.resultDigest);
+    expect(io.counters.casCalls).toBe(1);
+  });
+
+  it('P6U3F_4 CAS 成功但 read-back 抛错 / malformed → durable NEEDS_RECONCILIATION，且重试不再 CAS', async () => {
+    for (const mode of [{ readBackThrow: true }, { readBackMalformed: true }] as const) {
+      const c = await chain();
+      const ledger = createSandboxConfigExecutionLedger();
+      const io = executionStore({
+        value: '0.50',
+        fingerprint: BASELINE_FINGERPRINT,
+        version: BASELINE_VERSION,
+        ...mode,
+      });
+      const call = () =>
+        executeControlledConfigMutation({
+          plan: c.plan,
+          ticket: c.authorizationTicket,
+          verdict: c.authorizationVerdict,
+          configStore: io.store,
+          ledger,
+          gate: switches(),
+          executedAt: EXECUTED_AT,
+          idempotencyKey: 'idem-unknown-outcome',
+        });
+      const first = await call();
+      expect(first.status).toBe('NEEDS_RECONCILIATION');
+      expect(isVerifiedControlledConfigExecutionResult(first)).toBe(true);
+      const second = await call();
+      expect(second.resultDigest).toBe(first.resultDigest);
+      expect(io.counters.casCalls).toBe(1);
+    }
   });
 });

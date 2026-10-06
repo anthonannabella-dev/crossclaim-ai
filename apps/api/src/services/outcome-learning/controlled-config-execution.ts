@@ -301,40 +301,29 @@ export async function executeControlledConfigMutation(input: {
   const from = requireText(plan.from);
   const to = requireText(plan.to);
 
-  // 6) 一次授权最多一次 mutation：先在 durable ledger 预留
   const executionId = 'controlled-config-execution:' + digest('controlled-config-execution', [
     verdict.verdictDigest,
     ticket.ticketDigest,
     plan.planDigest,
     idempotencyKey,
   ]);
-  const reservation = ledger.reserve({
-    verdictDigest: verdict.verdictDigest,
-    ticketDigest: ticket.ticketDigest,
-    executionId,
-    idempotencyKey,
-  });
-  if (reservation !== 'RESERVED') throw new Error('CONFIG_EXECUTION_ALREADY_EXECUTED:' + executionId);
 
-  // 3) 执行瞬间 server-owned 重读
+  // 3) 只读 preflight（全部在 reserve 之前；失败则不留 reservation）
   const pre = assertLiveShape(await store.read(target), target);
   const preFingerprint = requireText(pre.configFingerprint);
   const preVersion = requireText(pre.version);
   if (preFingerprint !== requireText(plan.expectedBaselineConfigFingerprint) || preFingerprint !== requireText(ticket.liveConfigFingerprint)) {
     throw new Error('STALE_EXECUTION_BASELINE:fingerprint:' + preFingerprint);
   }
-  // 目标值已生效 → NOOP_ALREADY_APPLIED（零写；不重复 mutation）
-  if (requireText(pre.configValues[path]) === to) {
-    const noop = buildResult('NOOP_ALREADY_APPLIED', { fingerprint: preFingerprint, version: preVersion });
-    ledger.put(noop);
-    return noop;
-  }
-  if (requireText(pre.configValues[path]) !== from) {
-    throw new Error('STALE_EXECUTION_BASELINE:path-value:' + path + ':' + requireText(pre.configValues[path]) + '!=' + from);
-  }
+  // LIVE_VERSION_NOOP_GATE：先完整校验 identity（fingerprint + version），再判定 NOOP
   if (preVersion !== requireText(ticket.liveConfigVersion)) {
     throw new Error('STALE_EXECUTION_BASELINE:version:' + preVersion + '!=' + requireText(ticket.liveConfigVersion));
   }
+  const preValue = requireText(pre.configValues[path]);
+  if (preValue !== from && preValue !== to) {
+    throw new Error('STALE_EXECUTION_BASELINE:path-value:' + path + ':' + preValue + '!=' + from);
+  }
+  const noopEligible = preValue === to;
 
   function buildResult(
     status: ControlledConfigExecutionStatus,
@@ -399,7 +388,23 @@ export async function executeControlledConfigMutation(input: {
     return result;
   }
 
-  // 4) 原子 CAS 硬门
+  // 6) 一次授权最多一次 mutation：preflight 通过后才预留；此后每条路径都必须落一个 durable terminal result
+  const reservation = ledger.reserve({
+    verdictDigest: verdict.verdictDigest,
+    ticketDigest: ticket.ticketDigest,
+    executionId,
+    idempotencyKey,
+  });
+  if (reservation !== 'RESERVED') throw new Error('CONFIG_EXECUTION_ALREADY_EXECUTED:' + executionId);
+
+  // 目标值已生效 → NOOP_ALREADY_APPLIED（零写，但仍落 durable result）
+  if (noopEligible) {
+    const noop = buildResult('NOOP_ALREADY_APPLIED', { fingerprint: preFingerprint, version: preVersion });
+    ledger.put(noop);
+    return noop;
+  }
+
+  // 4) 原子 CAS 硬门；失败 = durable CONFLICT（绝不再次 CAS）
   const cas = await store.compareAndSwap({
     target,
     expectedVersion: preVersion,
@@ -408,18 +413,26 @@ export async function executeControlledConfigMutation(input: {
     nextValue: to,
   });
   if (cas === null || cas === undefined || cas.ok !== true) {
-    const reason = cas !== null && cas !== undefined && cas.ok === false ? cas.reason : 'UNKNOWN';
-    throw new Error('CONFIG_EXECUTION_CONFLICT:' + reason);
+    const conflict = buildResult('CONFLICT', { fingerprint: preFingerprint, version: preVersion });
+    ledger.put(conflict);
+    return conflict;
   }
 
-  // 8) 写后 read-back
-  const post = assertLiveShape(await store.read(target), target);
-  const postVersion = requireText(post.version);
-  const postValue = requireText(post.configValues[path]);
-  const consistent = postValue === to && postVersion !== preVersion;
+  // 8) 写后 read-back：任何异常 / malformed / 不一致 → durable NEEDS_RECONCILIATION（绝不丢记录）
+  let postFingerprint: string | null = requireText(cas.configFingerprint) || null;
+  let postVersion: string | null = requireText(cas.version) || null;
+  let consistent = false;
+  try {
+    const post = assertLiveShape(await store.read(target), target);
+    postFingerprint = requireText(post.configFingerprint) || postFingerprint;
+    postVersion = requireText(post.version) || postVersion;
+    consistent = requireText(post.configValues[path]) === to && requireText(post.version) !== preVersion;
+  } catch {
+    consistent = false;
+  }
   const result = buildResult(consistent ? 'COMMITTED' : 'NEEDS_RECONCILIATION', {
-    fingerprint: requireText(post.configFingerprint) || requireText(cas.configFingerprint) || null,
-    version: postVersion || requireText(cas.version) || null,
+    fingerprint: postFingerprint,
+    version: postVersion,
   });
 
   // 9) durable persistence
