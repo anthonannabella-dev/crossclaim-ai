@@ -1,3 +1,11 @@
+> **[HISTORICAL_SNAPSHOT]** 本文是历史审计 / 证据快照，原文保留不改写（历史裁决不删除）。
+> 其中关于 `RUNTIME_WIRING` / `STEP_3_RUNTIME_POLICY_WIRING` / `RSI_OUTCOME_SINK_RUNTIME_WIRING`
+> 的**当时状态**已被后续实现取代：SUPERSEDED_BY=c0b61792（STEP_3_RUNTIME_POLICY_WIRING：
+> Recovery SI 作为 domain capability pack 接入 ONE CrossClaim SI Runtime；后续 FINAL-2..6 与 PHASE 2
+> 见 ca23b1df / adcab905 / ca298187 / 5f9ce46f / 6e98e66e）。
+> 唯一**现行**状态请以 `docs/releases/CURRENT-SI-RSI-STATUS.md` 为准
+> （SUPERSEDED_BY=cdd95258 为该状态件的基线 HEAD）。
+
 # SI-COST-OPTIMIZATION C1 —— 实施证据（零 Schema 契约层）
 
 > 授权：MSG-20261005-30（`C1 IMPLEMENTATION = AUTHORIZED`；3.1=A / 3.2=B / 3.3=A（存储入 C2）/ 3.4=A / 3.5=A）
