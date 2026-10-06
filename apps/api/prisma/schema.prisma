@@ -3480,3 +3480,147 @@ model AiModelCacheEntry {
   @@index([organizationId, expiresAt])
   @@index([expiresAt])
 }
+
+// ============================================================
+// P6-PROD-U1（HOST AUTHORIZATION 2026-10-06）—— Controlled Config Execution Durability
+// 生产级**耐久执行底座**（reservation / ownership / lease / 状态机 / append-only 事件 /
+// 终态结果 / transactional outbox / 消费者交付账本）。
+// 边界：NO PRODUCTION ENABLEMENT —— environment 只允许 SANDBOX，production mutation switch 保持 false；
+//   平台级模型（无 organizationId / tenantId / customerId），与 RSI 平台级自治表同一治理口径。
+// 本组表不构成第二个 runtime / 第二个控制面：只承载受控配置执行的耐久状态与证据。
+// ============================================================
+
+/// durable reservation / execution ownership —— 一次授权最多一次 committed mutation 的耐久身份
+/// 可变列仅限 status / lease / attempt / terminal 指针；identity 与 immutable basis 由触发器冻结。
+model ControlledConfigExecutionReservation {
+  id                          String   @id @default(uuid())
+  /// 确定性 reservation 身份（verdict + ticket + plan + executionMode 的摘要）
+  reservationKey              String   @unique
+  /// 不可变执行依据摘要（lease 之前冻结；任何 basis 字段原地改动都会被触发器拒绝）
+  immutableBasisDigest        String
+  authorizationVerdictDigest  String   @unique
+  authorizationTicketDigest   String   @unique
+  planDigest                  String
+  candidateDigest             String
+  proposalDigest              String
+  controlledAdoptionDigest    String
+  rollbackPlanDigest          String
+  baselineSnapshotDigest      String
+  baselineConfigFingerprint   String
+  environment                 String   @default("SANDBOX")
+  executionMode               String   @default("SANDBOX_WRITE_ONLY")
+  target                      String
+  configPath                  String
+  fromValue                   String
+  toValue                     String
+  idempotencyKey              String   @unique
+  /// 同 idempotencyKey 但不可变载荷不一致 → FAIL CLOSED（禁止 silent overwrite）
+  idempotencyPayloadDigest    String
+  status                      String   @default("RESERVED")
+  executionAttempt            Int      @default(0)
+  ownerRef                    String?
+  leaseId                     String?
+  leaseAcquiredAt             DateTime?
+  leaseRenewedAt              DateTime?
+  leaseExpiresAt              DateTime?
+  reservationExpiresAt        DateTime
+  reservedAt                  DateTime @default(now())
+  startedAt                   DateTime?
+  terminalAt                  DateTime?
+  terminalCode                String?
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
+
+  events ControlledConfigExecutionEvent[]
+  result ControlledConfigExecutionResult?
+  outbox ControlledConfigExecutionOutbox[]
+
+  @@index([status, leaseExpiresAt])
+  @@index([status, reservationExpiresAt])
+  @@index([environment, status])
+}
+
+/// append-only 事件历史 —— 执行证据不得被 UPDATE 覆盖成「最后一次状态」
+model ControlledConfigExecutionEvent {
+  id             String   @id @default(uuid())
+  reservationId  String
+  seq            Int
+  kind           String
+  fromStatus     String?
+  toStatus       String?
+  ownerRef       String?
+  leaseId        String?
+  evidenceDigest String?
+  /// 结构化补充（JSON 文本；禁止凭据 / 客户敏感 payload / raw 模型输出）
+  detail         String?
+  occurredAt     DateTime @default(now())
+
+  reservation ControlledConfigExecutionReservation @relation(fields: [reservationId], references: [id], onDelete: Restrict)
+
+  @@unique([reservationId, seq])
+  @@index([reservationId, occurredAt])
+}
+
+/// append-only 终态结果证据（每次 reserve 至多一条；reservation 侧为唯一外键）
+model ControlledConfigExecutionResult {
+  id                    String   @id @default(uuid())
+  reservationId         String   @unique
+  executionId           String
+  status                String
+  resultCode            String
+  semantics             String
+  preConfigFingerprint  String
+  preConfigVersion      String
+  /// CAS 异常等 unknown-outcome 场景必须为 null（post-state UNKNOWN），不得回填 pre identity
+  postConfigFingerprint String?
+  postConfigVersion     String?
+  idempotencyKey        String
+  resultDigest          String
+  provenanceDigest      String
+  evidenceSource        String
+  /// 由对账 / 恢复写入时记录的执行者（人工或 reconciliation worker）
+  reconciledBy          String?
+  recordedAt            DateTime @default(now())
+
+  reservation ControlledConfigExecutionReservation @relation(fields: [reservationId], references: [id], onDelete: Restrict)
+
+  @@index([status, recordedAt])
+  @@index([resultCode, recordedAt])
+}
+
+/// transactional outbox —— 关闭「DB commit 成功但事件丢失」与「事件发出但状态未落库」两类窗口
+model ControlledConfigExecutionOutbox {
+  id               String   @id @default(uuid())
+  reservationId    String
+  topic            String
+  /// 事件级幂等键（确定性；重复写入不产生第二条事件）
+  eventKey         String   @unique
+  payloadDigest    String
+  /// 事件载荷（JSON 文本；禁止凭据 / 客户敏感 payload / raw 模型输出）
+  payload          String
+  createdAt        DateTime @default(now())
+  dispatchedAt     DateTime?
+  dispatchAttempts Int      @default(0)
+
+  reservation ControlledConfigExecutionReservation @relation(fields: [reservationId], references: [id], onDelete: Restrict)
+  deliveries  ControlledConfigExecutionDelivery[]
+
+  @@index([dispatchedAt, createdAt])
+  @@index([reservationId, createdAt])
+}
+
+/// append-only 消费者交付账本 —— 消费者幂等（同一 outbox 事件同一消费者至多一次）
+model ControlledConfigExecutionDelivery {
+  id            String   @id @default(uuid())
+  outboxId      String
+  consumerRef   String
+  /// 交付级幂等键（确定性：outboxId + consumerRef）
+  deliveryKey   String   @unique
+  payloadDigest String
+  consumedAt    DateTime @default(now())
+
+  outbox ControlledConfigExecutionOutbox @relation(fields: [outboxId], references: [id], onDelete: Restrict)
+
+  @@unique([outboxId, consumerRef])
+  @@index([consumerRef, consumedAt])
+}

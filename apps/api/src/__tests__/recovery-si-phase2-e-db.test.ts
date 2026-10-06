@@ -423,12 +423,13 @@ describe('Recovery SI P2-E DB · 触发器清单 ↔ 运行库一致（E4）', (
     }
   });
 
-  it('P2E-DB4 清单真源已登记两条 DELETE guard（名称 + 表 + tgtype=11）', async () => {
+  it('P2E-DB4 清单真源已登记全部 DELETE guard（名称 + 表 + tgtype=11；含 P6-PROD-U1 reservation）', async () => {
     const manifest = JSON.parse(
       fs.readFileSync(path.join(REPO_ROOT, 'tools', 'tenant-triggers', 'append-only-triggers.json'), 'utf8'),
     ) as { triggers: { name: string; table: string; tgtype: number }[]; unexpectedPrefixes: string[] };
     const guards = manifest.triggers.filter((t) => t.name.startsWith('cc_no_delete__'));
     expect(guards.map((t) => [t.name, t.table, t.tgtype]).sort()).toEqual([
+      ['cc_no_delete__ControlledConfigExecutionReservation', 'ControlledConfigExecutionReservation', 11],
       ['cc_no_delete__RecoveryPackage', 'RecoveryPackage', 11],
       ['cc_no_delete__RecoveryPackageArtifact', 'RecoveryPackageArtifact', 11],
     ]);

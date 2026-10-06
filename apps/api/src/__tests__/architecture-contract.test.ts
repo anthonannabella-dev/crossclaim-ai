@@ -188,8 +188,24 @@ describe('模型清单一致性（C-0002 CHANGE #1）', () => {
     for (const name of JOIN_MODELS) expect(modelBlock(name), `缺少联结模型 ${name}`).not.toBe('');
   });
 
-  it('模型总数为 96（82 core + 6 join + 8 RSI 平台级）—— 与 README/DOMAIN_MODEL 表述一致', () => {
-    expect(modelNames()).toHaveLength(96);
+  // P6-PROD-U1（HOST AUTHORIZATION 2026-10-06）：受控配置执行的耐久执行底座
+  // 平台级（非租户表、非第二个 runtime / 第二个控制面）；NO PRODUCTION ENABLEMENT。
+  const DURABILITY_PLATFORM_MODELS = [
+    'ControlledConfigExecutionReservation',
+    'ControlledConfigExecutionEvent',
+    'ControlledConfigExecutionResult',
+    'ControlledConfigExecutionOutbox',
+    'ControlledConfigExecutionDelivery',
+  ];
+
+  it(`耐久执行底座模型 ${DURABILITY_PLATFORM_MODELS.length} 个`, () => {
+    for (const name of DURABILITY_PLATFORM_MODELS) {
+      expect(modelBlock(name), `缺少耐久执行底座模型 ${name}`).not.toBe('');
+    }
+  });
+
+  it('模型总数为 101（96 + 5 耐久执行底座）—— 与 README/DOMAIN_MODEL 表述一致', () => {
+    expect(modelNames()).toHaveLength(101);
   });
 });
 
