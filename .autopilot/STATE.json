@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "0f319be7",
+  "head": "1379fb22",
   "status": "RECONCILED",
   "current_task": "RSI 生产可执行闭环（7 点收口）：RSI_RUNTIME_READY = PASS；MODEL_PROVIDER_READY = 本地仿真已接线（真实网络/付费 HOLD）；PERSISTENCE_READY = ephemeral 已验证、durable 需宿主非生产 DATABASE_URL；REBOOT_RECONCILE_READY = NOT_IMPLEMENTED（下一单元）；SYSTEMD_VALIDATED = 需宿主 Linux 实机",
   "next_task": "BG-016 单一 Acceptance Head + 四份状态一致 guard（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍 HOST_ACTION_REQUIRED 或 HOLD",
@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-96",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-06T05:34:33.908Z",
+  "updated_at": "2026-10-06T05:37:38.327Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -49,17 +49,17 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
-  "continuous_execution": "RUNNING（A-S1…A-S6 完成并 push；队列剩余 15 项）",
-  "next_execution_unit": "Next tick：队列队首 A-S7 —— Follow-up Package（draft only；external write 仍 FALSE；不真实提交到平台）。",
+  "continuous_execution": "RUNNING（A-S1…A-S7 完成并 push；队列剩余 14 项）",
+  "next_execution_unit": "Next tick：队列队首 A-S8 —— Recovery Case Lifecycle projection（先审计现有事实模型，不新建重复状态机）。",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-06T05:34:33.908Z",
+  "last_tick_at": "2026-10-06T05:37:38.327Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "完成并 push A-S6 / B-S1 DocumentIngestionPort（0f319be7）：摄取优先级 STRUCTURED > NATIVE_TEXT > OCR_DERIVED；有 PDF 原生文本层时完全不调用 OCR（spy 断言调用次数 0）；扫描件/图片才回退 OCR（sourceKind=OCR_DERIVED 且必须人工复核）；关键字段低置信 → QUARANTINED/LOW_CONFIDENCE_CRITICAL_FIELDS；同字段异值 → CROSS_SOURCE_CONFLICT 且全部候选保留（禁 last-write-wins）；OCR 置信硬上限 9900 + assertOcrCandidateNotCanonical 禁止 OCR 成为事实；默认 OCR 实现 fail-closed（真实/收费 OCR = HOLD）。unit 31/31、回归 220/220、tsc 0。",
-  "last_action_at": "2026-10-06T05:34:33.908Z",
+  "last_action": "完成并 push A-S7 Follow-up Package（1379fb22）：只装配草稿（无 transport/发送出口），附件仅引用已存在证据 id；high-value（>1000 USD → OWNER、≥10000 → ADMIN）HITL 不可绕过（显式绕过 fail-closed）；证据 CONFLICT/AMBIGUOUS 与人工复核判定 → BLOCKED；provider 注入原文不回显；草稿越权/凭据/超长 → BLOCKED；跨 tenant·account 拼接 → FOLLOW_UP_SCOPE_MISMATCH。unit 25/25、回归 246/246、tsc 0。",
+  "last_action_at": "2026-10-06T05:37:38.327Z",
   "next_action": "继续自动推进：每 slice 独立 commit/test/push/checkpoint。",
-  "current_head": "0f319be7",
-  "last_completed_head": "0f319be7",
-  "reviewed_head": "0f319be7",
+  "current_head": "1379fb22",
+  "last_completed_head": "1379fb22",
+  "reviewed_head": "1379fb22",
   "claim_submit_batch": {
     "verdict": "PASS",
     "message_id": "MSG-20261001-07",
@@ -5169,7 +5169,6 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "A-S7 Follow-up Package（draft only；external write 仍 FALSE）。",
     "A-S8 Recovery Case Lifecycle projection（先审计现有事实模型，不新建重复状态机）。",
     "A-S9 UI/API projection contract（区分「内部准备」/「已发送」/「平台 ACK」/「缺料」/「批准」/「到账」/「对账」）。",
     "A-S10 PG E2E（Amazon Case → NEED_POD → EvidenceResolver FOUND/MISSING → follow-up/manual）+ full regression + security assertions。",
@@ -9352,7 +9351,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-06T05:34:33.908Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-06T05:37:38.327Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -11723,6 +11722,16 @@
         "files": "services/provider-support/{document-types,ocr-provider,document-classifier,field-extraction,document-ingestion}.ts + index.ts；无 schema 变更、无迁移",
         "tests": "document-ingestion 31/31（含「原生文本层 → OCR 调用次数 0」spy 断言、扫描件 OCR 回退、关键字段低置信 QUARANTINED、同字段异值 CROSS_SOURCE_CONFLICT 且两值并存、OCR 置信硬上限 9900、摘要确定性）；回归 220/220（architecture 157/157、scheduler 14/14、amazon-support-read 14/14、evidence-resolver 14/14、response-intelligence 8/8、case-facts 8/8、pod-evidence 5/5）；tsc 0",
         "boundary": "只出端口与纯函数；真实/收费 OCR = HOLD_EXTERNAL（默认实现调用即 fail-closed）；不落盘、不写库、不推送"
+      }
+    },
+    "A-S7": {
+      "name": "Follow-up Package（只出草稿；external write FALSE；high-value HITL 不可绕过）",
+      "status": "DONE / PUSHED",
+      "head": "1379fb22",
+      "evidence": {
+        "files": "services/provider-support/follow-up-package.ts + index.ts；无 schema 变更、无迁移",
+        "tests": "follow-up-package 25/25（DRAFT 只读、附件仅既有证据 id、全 FOUND → NOT_REQUIRED、1500 USD → OWNER、25000 USD → ADMIN、显式绕过 HITL 抛错、CONFLICT/AMBIGUOUS → BLOCKED、低置信 interpretation → BLOCKED、provider 注入原文不回显、越权/凭据草稿 → BLOCKED、跨 tenant·account → SCOPE_MISMATCH、摘要确定性、模块无发送入口）；回归 246/246（architecture 157/157、document-ingestion 31/31、scheduler 14/14、amazon-support-read 14/14、evidence-resolver 14/14、response-intelligence 8/8、case-facts 8/8）；tsc 0",
+        "boundary": "无 transport、无发送/提交/上传出口；draftOnly=true、externalWrite=false、transportEnabled=false、grantsExecutionRights=false；requestBypassHighValueHitl=true 一律 fail-closed"
       }
     }
   }
