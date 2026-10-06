@@ -8,3 +8,8 @@ export * from './case-response-intelligence';
 export * from './prisma-interpretation-store';
 export * from './evidence-resolver';
 export * from './prisma-evidence-source';
+export * from './document-types';
+export * from './ocr-provider';
+export * from './document-classifier';
+export * from './field-extraction';
+export * from './document-ingestion';
