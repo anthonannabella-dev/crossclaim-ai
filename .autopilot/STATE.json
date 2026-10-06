@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "9e46cbe5",
+  "head": "490bef12",
   "status": "RECONCILED",
   "current_task": "RSI 生产可执行闭环（7 点收口）：RSI_RUNTIME_READY = PASS；MODEL_PROVIDER_READY = 本地仿真已接线（真实网络/付费 HOLD）；PERSISTENCE_READY = ephemeral 已验证、durable 需宿主非生产 DATABASE_URL；REBOOT_RECONCILE_READY = NOT_IMPLEMENTED（下一单元）；SYSTEMD_VALIDATED = 需宿主 Linux 实机",
   "next_task": "BG-016 单一 Acceptance Head + 四份状态一致 guard（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍 HOST_ACTION_REQUIRED 或 HOLD",
@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-96",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-06T08:45:37.200Z",
+  "updated_at": "2026-10-06T09:09:24.507Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -49,17 +49,17 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
-  "continuous_execution": "RUNNING（Standing Authorization：SA-1/SA-2、SA-3 完成并 push；SA-4 待执行）",
-  "next_execution_unit": "SA-4 —— 全量回归 + 更新报告与 CURRENT-SI-RSI-STATUS 能力矩阵。",
+  "continuous_execution": "COMPLETE（Standing Authorization SA-1…SA-4 全部 CLOSED 并 push；SAFE_CONTINUATION_QUEUE = []）",
+  "next_execution_unit": "无（队列为空）。后续如需「逐调用点默认启用低风险自动执行」或调整高金额阈值，须 HOST / 架构另行授权。",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-06T08:45:37.200Z",
-  "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "完成并 push SA-3（9e46cbe5）：把 standing authorization 判定接入既有 verifyApprovalOrThrow（可选参数，既有调用方零改动）与 withActionGuard（生产统一执行助手透传）—— 仅当 wiring 层判定为 ALLOW + authorizedBy=STANDING_AUTHORIZATION + satisfiedGates 仅含 humanApproval + 动作匹配时放行并标记来源；越权 → OVERREACH、动作不匹配 → ACTION_MISMATCH、DENY（撤销/过期/不匹配）→ DENIED 且不回退、REQUIRE_APPROVAL（超范围/高金额）→ 回退一次性审批。测试 10/10，回归 464/464，tsc 0，无 schema 变更。",
-  "last_action_at": "2026-10-06T08:45:37.200Z",
-  "next_action": "跑全量 vitest；更新 STANDING-AUTHORIZATION-V1-REPORT（exact HEAD / test evidence / remaining host action）并在 CURRENT-SI-RSI-STATUS.md 补 STANDING_AUTHORIZATION 行。",
-  "current_head": "9e46cbe5",
-  "last_completed_head": "9e46cbe5",
-  "reviewed_head": "9e46cbe5",
+  "last_tick_at": "2026-10-06T09:09:24.507Z",
+  "state": "STANDING_AUTHORIZATION_COMPLETE_AWAITING_HOST",
+  "last_action": "完成 Standing Authorization SA-4（490bef12）：全量回归 441 文件 / 4442 tests → 4440 passed + 2 failed（两个失败均为既有 DB 套件并行隔离 flake：recovery-si-phase2-e-db P2E-DB5 单独 20/20、customs-entry-fact-store-db G8 单独 7/7；均未被本程序改动）；更新回报（§5 SA-3 接线 + §6 全量回归证据 + 返回值）与 CURRENT-SI-RSI-STATUS 能力矩阵（补 STANDING_AUTHORIZATION=YES(v1) / LOW_RISK_AUTONOMY=PARTIAL）。SA-1…SA-4 全部 CLOSED，队列清空。",
+  "last_action_at": "2026-10-06T09:09:24.507Z",
+  "next_action": "保持安静：仅在 HOST 下发新授权或出现真实 HOST_ACTION_REQUIRED 时恢复执行。",
+  "current_head": "490bef12",
+  "last_completed_head": "490bef12",
+  "reviewed_head": "490bef12",
   "claim_submit_batch": {
     "verdict": "PASS",
     "message_id": "MSG-20261001-07",
@@ -5168,9 +5168,7 @@
   "runner_status": "RUNNING",
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
-  "safe_continuation_queue": [
-    "SA-4 全量回归 + 更新 STANDING-AUTHORIZATION-V1-REPORT（含 exact HEAD/test evidence/remaining host action），并把 CURRENT-SI-RSI-STATUS.md 的能力矩阵补一行 STANDING_AUTHORIZATION。"
-  ],
+  "safe_continuation_queue": [],
   "full_autonomous_internal_execution": "VERIFIED",
   "dispatcher_acceptance": {
     "at": "2026-10-03T14:47:59.226Z",
@@ -9309,7 +9307,7 @@
   "AUDIT_REVISE_LOOP_AUTO_CONTINUE": true,
   "HOST_LIMIT_MEANS_STOP": false,
   "STOP_ONLY_ON_TRUE_HOST_DEPENDENCY_OR_COMPLETE": true,
-  "CONTINUATION_REQUIRED": true,
+  "CONTINUATION_REQUIRED": false,
   "heartbeat": {
     "automation_id": "crossclaim-ai-bridge-5min",
     "name": "crossclaim-si-watchdog-1min",
@@ -9338,7 +9336,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-06T08:45:37.200Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-06T09:09:24.507Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -11644,8 +11642,8 @@
     "id": "STANDING-AUTHORIZATION-RISK-TIERED-EXECUTION",
     "authorized_at": "2026-10-06",
     "branch": "gate/7-commercial-validation",
-    "current_unit": "SA-4",
-    "status": "RUNNING",
+    "current_unit": null,
+    "status": "COMPLETE",
     "baseline_head": "834e99e8",
     "report": "docs/releases/STANDING-AUTHORIZATION-V1-REPORT.md"
   },
@@ -11970,6 +11968,15 @@
         "semantics": "ALLOW+STANDING_AUTHORIZATION+仅 humanApproval+动作匹配 → 放行并标记 authorizedBy；越权 → OVERREACH；动作不匹配 → ACTION_MISMATCH；DENY → DENIED（不回退）；REQUIRE_APPROVAL → 回退一次性 approvalId；未提供参数 → 行为与既有完全一致",
         "boundary": "未提供 standingAuthorization 即零行为变化；越权/不匹配/DENY 一律 fail-closed；work 不执行（零副作用）"
       }
+    },
+    "SA-4": {
+      "name": "全量回归 + 报告/能力矩阵更新",
+      "status": "DONE / PUSHED",
+      "head": "490bef12",
+      "evidence": {
+        "files": "docs/releases/STANDING-AUTHORIZATION-V1-REPORT.md（§6 全量回归证据 + SA-3 接线 + 返回值）+ docs/releases/CURRENT-SI-RSI-STATUS.md（补 STANDING_AUTHORIZATION / LOW_RISK_AUTONOMY 行）",
+        "tests": "全量 441 文件 / 4442 tests → 4440 passed + 2 failed（recovery-si-phase2-e-db P2E-DB5 单独 20/20 PASS；customs-entry-fact-store-db G8 单独 7/7 PASS；两者均为既有并行隔离 flake、未被本程序改动）；tsc 0"
+      }
     }
   },
   "program_final_report": "docs/releases/CUSTOMS-DUTY-RECOVERY-FINAL-REPORT.md",
@@ -12036,6 +12043,55 @@
       "PRODUCTION_ENABLEMENT",
       "REAL_MODEL_NETWORK",
       "PAID_MODEL_CALLS",
+      "TRANSPORT",
+      "P2_F",
+      "P2_G"
+    ]
+  },
+  "standing_authorization": {
+    "current_head": "490bef12",
+    "baseline_head": "834e99e8",
+    "report": "docs/releases/STANDING-AUTHORIZATION-V1-REPORT.md",
+    "units": {
+      "SA-1/SA-2": {
+        "head": "22962b73",
+        "status": "CLOSED"
+      },
+      "SA-3": {
+        "head": "9e46cbe5",
+        "status": "CLOSED"
+      },
+      "SA-4": {
+        "head": "490bef12",
+        "status": "CLOSED"
+      }
+    },
+    "returns": {
+      "STANDING_AUTHORIZATION": "YES（v1：server-derived / versioned / revocable / auditable / tenant·account scoped / scope digest）",
+      "RISK_TIER_POLICY": "YES（TIER 0–3；11 维度；受监管恒 TIER_3）",
+      "ACTION_GUARD_WIRING": "YES（verifyApprovalOrThrow / withActionGuard 接入；一次性审批 OR 有效授权；授权仅满足 humanApproval）",
+      "LOW_RISK_AUTONOMY_READY": "YES（政策与判定层；逐调用点默认启用待评估）",
+      "HIGH_VALUE_HITL": "KEEP",
+      "CUSTOMS_POA_BOUNDARY": "KEEP（SA ≠ Broker POA；15-gate readiness 不变）",
+      "PRODUCTION_EXTERNAL_WRITE": "HOLD",
+      "CURRENT_HEAD": "490bef12",
+      "TEST_EVIDENCE": "standing-authorization 19/19（验收 1–12）+ standing-authorization-verifier-wiring 10/10 + 全量 4440/4442（2 个既有隔离 flake）；tsc 0"
+    },
+    "remaining_host_action_required": [
+      "逐调用点「默认启用」低风险自动执行（需按调用点评估 amount/provider/domain/evidence/experience 上下文）",
+      "高金额阈值调整（如需）→ 独立 Policy / Product Review",
+      "（承前）Linux/systemd 实机验证；Experience Memory 持久化 Schema Delta 裁定；META_IMPROVEMENT_INTEGRATED 真实全链证据"
+    ],
+    "remaining_hold_external": [
+      "REAL_PROVIDER_WRITE",
+      "CUSTOMS_FILING",
+      "PAYMENT",
+      "AUTO_COMMISSION_CHARGE",
+      "PRODUCTION_CREDENTIALS",
+      "PRODUCTION_ENABLEMENT",
+      "REAL_MODEL_NETWORK",
+      "PAID_MODEL_CALLS",
+      "EXTERNAL_WRITE",
       "TRANSPORT",
       "P2_F",
       "P2_G"
