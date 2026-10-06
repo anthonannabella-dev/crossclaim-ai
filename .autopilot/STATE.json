@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "a15169a4",
+  "head": "42161550",
   "status": "RECONCILED",
   "current_task": "RSI 生产可执行闭环（7 点收口）：RSI_RUNTIME_READY = PASS；MODEL_PROVIDER_READY = 本地仿真已接线（真实网络/付费 HOLD）；PERSISTENCE_READY = ephemeral 已验证、durable 需宿主非生产 DATABASE_URL；REBOOT_RECONCILE_READY = NOT_IMPLEMENTED（下一单元）；SYSTEMD_VALIDATED = 需宿主 Linux 实机",
   "next_task": "BG-016 单一 Acceptance Head + 四份状态一致 guard（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍 HOST_ACTION_REQUIRED 或 HOLD",
@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-96",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-06T09:48:49.310Z",
+  "updated_at": "2026-10-06T09:55:01.250Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -49,17 +49,17 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
-  "continuous_execution": "RUNNING（SA-1…SA-4b、FE-1、BE-1 完成并 push；REL-1 / FINAL 待执行）",
-  "next_execution_unit": "REL-1 —— main 与 gate/7 divergence 处置（查明 main 独有 commit 5a340bc0、安全 integration plan、合并前全门禁）。",
+  "continuous_execution": "COMPLETE（SA-1…SA-4b / FE-1 / BE-1 / REL-1 / FINAL 全部完成并 push）",
+  "next_execution_unit": "无（队列为空）。后续推进 main、Schema Delta、systemd 实机验证、真实 provider/付费能力均需 HOST 授权。",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-06T09:48:49.310Z",
-  "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "完成 BE-1（a15169a4）：按 HOST 列出的后端能力面逐项扫描并给出 B1–B10 GAP ANALYSIS（纯审计、无代码改动）——B1 Fastify = DESIGN_ONLY 且按要求不重写 Node HTTP；B2 = PARTIAL（registry/契约/能力/凭据边界已有；OAuthAuthorizationSession / ConnectionSyncState / SecretVault 未一等建模，其中 SecretVault 在无生产凭据前 HOLD_EXTERNAL）；B3/B4/B10 = IMPLEMENTED（只读契约/投影 API）；B5/B6/B7/B8/B9 = PARTIAL 并逐项给出缺口与「是否值得实施」判断（明确不新建双路径引擎、不新增第二事实源）；确认 4000+ 回归基线未破坏，api tsc 0、prisma validate valid。判定 BACKEND_PRODUCTIZATION = PASS。",
-  "last_action_at": "2026-10-06T09:48:49.310Z",
-  "next_action": "先查明 main 独有 commit 内容与是否已在 gate/7 体现，再产出无 force-push、不丢 main 提交的 integration plan；随后跑合并前全门禁（fresh DB/migrations/prisma validate/api tsc/web tsc/web build/full regression/security negative/tenant isolation/concurrency/SI-RSI/SA/Customs golden path），全绿才建 release/integration HEAD。",
-  "current_head": "a15169a4",
-  "last_completed_head": "a15169a4",
-  "reviewed_head": "a15169a4",
+  "last_tick_at": "2026-10-06T09:55:01.250Z",
+  "state": "PRODUCTIZATION_RELEASE_CLOSED_AWAITING_HOST",
+  "last_action": "完成 REL-1 与 FINAL（gate/7 = 42161550；release/integration-20261006 = e3405a05）：查明 main 独有提交 5a340bc0 不含 gate/7 未包含内容（three-dot diff 为空、0f7f7ac 已是 gate/7 祖先、main 非 gate/7 祖先）；新建 release/integration 分支并 merge main（保留其历史、非 force push、main 未改动）；合并前后跑全门禁（api tsc 0 / prisma validate valid / fresh DB migrate deploy 88 migrations 全成功 / 定向安全 227 / 全量 4460+1 既有 flake / web tsc 0 / web build 0 / i18n 0 硬编码 / UI render 81）；输出最终状态报告（FRONTEND/BACKEND/SI-RSI/SA/CUSTOMS = PASS；REAL_PROVIDER_INTEGRATION = NO；REAL_EXTERNAL_WRITE / PAYMENT_AUTOPAY = HOLD；B1 = DESIGN_ONLY；B2 = PARTIAL；PRODUCTION_READY = NO）。",
+  "last_action_at": "2026-10-06T09:55:01.250Z",
+  "next_action": "保持安静：仅在 HOST 下发新授权或出现真实 HOST_ACTION_REQUIRED 时恢复执行。",
+  "current_head": "42161550",
+  "last_completed_head": "42161550",
+  "reviewed_head": "42161550",
   "claim_submit_batch": {
     "verdict": "PASS",
     "message_id": "MSG-20261001-07",
@@ -5168,10 +5168,7 @@
   "runner_status": "RUNNING",
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
-  "safe_continuation_queue": [
-    "REL-1 main 与 gate/7 divergence 处置：查明 main 独有 commit 5a340bc0 内容、判断保留/移植、生成安全 integration plan；合并前跑 fresh DB/migrations/prisma validate/api tsc/web tsc/web build/full regression/security negative/tenant isolation/concurrency/SI-RSI/SA/Customs golden path；全绿后建立 release/integration HEAD。",
-    "FINAL 输出最终状态报告（FRONTEND_PRODUCTIZATION / BACKEND_PRODUCTIZATION / SI_RSI_INTEGRATION / STANDING_AUTHORIZATION / CUSTOMS_DUTY_RECOVERY / REAL_PROVIDER_INTEGRATION / REAL_EXTERNAL_WRITE / PAYMENT_AUTOPAY / B1_FASTIFY / B2_INTEGRATION_FOUNDATION / B4_B10_GAP_STATUS / MAIN_DIVERGENCE_RESOLUTION / FULL_REGRESSION / WEB_BUILD / API_TSC / WEB_TSC / FINAL_RELEASE_HEAD / PRODUCTION_READY / HOST_ACTION_REQUIRED）。"
-  ],
+  "safe_continuation_queue": [],
   "full_autonomous_internal_execution": "VERIFIED",
   "dispatcher_acceptance": {
     "at": "2026-10-03T14:47:59.226Z",
@@ -9310,7 +9307,7 @@
   "AUDIT_REVISE_LOOP_AUTO_CONTINUE": true,
   "HOST_LIMIT_MEANS_STOP": false,
   "STOP_ONLY_ON_TRUE_HOST_DEPENDENCY_OR_COMPLETE": true,
-  "CONTINUATION_REQUIRED": true,
+  "CONTINUATION_REQUIRED": false,
   "heartbeat": {
     "automation_id": "crossclaim-ai-bridge-5min",
     "name": "crossclaim-si-watchdog-1min",
@@ -9339,7 +9336,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-06T09:48:49.310Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-06T09:55:01.250Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -11645,8 +11642,8 @@
     "id": "PRODUCTIZATION-RELEASE-INTEGRATION",
     "authorized_at": "2026-10-06",
     "branch": "gate/7-commercial-validation",
-    "current_unit": "REL-1",
-    "status": "RUNNING",
+    "current_unit": null,
+    "status": "COMPLETE",
     "report": "docs/releases/STANDING-AUTHORIZATION-V1-REPORT.md"
   },
   "program_progress": {
@@ -12043,6 +12040,30 @@
         },
         "baseline": "443 文件 / 4461 tests（4460 pass + 1 既有隔离 flake）；api tsc 0；prisma validate valid（88 migrations up to date）"
       }
+    },
+    "REL-1": {
+      "name": "main ↔ gate/7 divergence 处置 + 安全 integration plan + 合并前全门禁",
+      "status": "DONE / PUSHED",
+      "head": "3baaf5ba",
+      "evidence": {
+        "divergence": "main 独有 1 提交 5a340bc0（parents 16b47a24 + a6ba5e8a），标题 release: integrate gate/7 into main (FINAL_ACCEPTANCE_HEAD 0f7f7ac)；merge-base=a6ba5e8a；git diff origin/gate/7...origin/main 为空 → main 无 gate/7 未包含内容；0f7f7ac 是 gate/7 祖先；main 不是 gate/7 祖先（需正常 merge，非 force）",
+        "actions": "新建 release/integration-20261006 = gate/7 → merge origin/main（保留 5a340bc0 及其祖先，非 force push）→ 校验文件树与 gate/7 一致（diff 为空）→ 推送新分支（origin/main 未改动，仍为 5a340bc0）；随后把 FINAL 文档再次 merge 进该分支",
+        "gates": "api tsc 0；prisma validate valid；fresh DB（crossclaim_relcheck）prisma migrate deploy 全部成功（88 migrations）；定向安全横扫 227/227（SA 四套件 + action-guard approval + HITL concurrency + tenant isolation + architecture 157 + customs golden path）；全量 443 文件 / 4461 tests → 4460 passed + 1 failed（既有 P2E-DB5 隔离 flake）；web tsc 0；web build 0；i18n OK（5 语言/644 键/硬编码 0）；UI render 81/81",
+        "heads": {
+          "integration_first": "f7ffd859",
+          "integration_final": "e3405a05",
+          "gate7": "42161550",
+          "main_untouched": "5a340bc0"
+        }
+      }
+    },
+    "FINAL": {
+      "name": "产品化 + release integration 最终状态报告",
+      "status": "DONE / PUSHED",
+      "head": "42161550",
+      "evidence": {
+        "report": "docs/releases/PRODUCTIZATION-RELEASE-FINAL-REPORT.md"
+      }
     }
   },
   "program_final_report": "docs/releases/CUSTOMS-DUTY-RECOVERY-FINAL-REPORT.md",
@@ -12148,6 +12169,44 @@
       "高金额阈值调整（如需）→ 独立 Policy / Product Review",
       "（承前）Linux/systemd 实机验证；Experience Memory 持久化 Schema Delta 裁定；META_IMPROVEMENT_INTEGRATED 真实全链证据"
     ],
+    "remaining_hold_external": [
+      "REAL_PROVIDER_WRITE",
+      "CUSTOMS_FILING",
+      "PAYMENT",
+      "AUTO_COMMISSION_CHARGE",
+      "PRODUCTION_CREDENTIALS",
+      "PRODUCTION_ENABLEMENT",
+      "REAL_MODEL_NETWORK",
+      "PAID_MODEL_CALLS",
+      "EXTERNAL_WRITE",
+      "TRANSPORT",
+      "P2_F",
+      "P2_G"
+    ]
+  },
+  "productization_release": {
+    "final_report": "docs/releases/PRODUCTIZATION-RELEASE-FINAL-REPORT.md",
+    "fields": {
+      "FRONTEND_PRODUCTIZATION": "PASS",
+      "BACKEND_PRODUCTIZATION": "PASS",
+      "SI_RSI_INTEGRATION": "PASS",
+      "STANDING_AUTHORIZATION": "PASS",
+      "CUSTOMS_DUTY_RECOVERY": "PASS",
+      "REAL_PROVIDER_INTEGRATION": "NO",
+      "REAL_EXTERNAL_WRITE": "HOLD",
+      "PAYMENT_AUTOPAY": "HOLD",
+      "B1_FASTIFY": "DESIGN_ONLY",
+      "B2_INTEGRATION_FOUNDATION": "PARTIAL",
+      "B4_B10_GAP_STATUS": "B3/B4/B10 IMPLEMENTED（只读/投影）；B5/B6/B7/B8/B9 PARTIAL（详见 BACKEND-PRODUCTIZATION-GAP-ANALYSIS.md）",
+      "MAIN_DIVERGENCE_RESOLUTION": "main 独有 1 提交且不含 gate/7 未含内容；已在新分支 merge main 保留历史；main 未改动、无 force push",
+      "FULL_REGRESSION": "443 files / 4461 tests → 4460 passed + 1 failed（既有 P2E-DB5 隔离 flake）",
+      "WEB_BUILD": "PASS",
+      "API_TSC": "PASS",
+      "WEB_TSC": "PASS",
+      "FINAL_RELEASE_HEAD": "e3405a05（release/integration-20261006）；gate/7 = 42161550",
+      "PRODUCTION_READY": "NO",
+      "HOST_ACTION_REQUIRED": "YES —— ① main 推进方式（--no-ff / --ff-only）② Standing Authorization 持久化 Schema Delta ③ Experience Memory 持久化 Schema Delta ④ Linux/systemd 实机验证 ⑤ 真实 provider 凭据 / 收费 OCR / 真实外写 / 支付开通（HOLD 项）"
+    },
     "remaining_hold_external": [
       "REAL_PROVIDER_WRITE",
       "CUSTOMS_FILING",
