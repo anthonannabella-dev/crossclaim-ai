@@ -223,6 +223,8 @@ export interface RecoveryCaseLifecycleProjection {
   blockers: string[];
   reasons: string[];
   omittedBecauseUnverified: string[];
+  /** 结构化缺口（A-S9 客户可见状态契约直接消费；不再从 reasons 文本解析） */
+  missingEvidenceKinds: string[];
   observedAt: string;
   projectionDigest: string;
 }
@@ -489,6 +491,7 @@ export function projectRecoveryCaseLifecycle(input: {
     blockers: uniqueSorted(blockers),
     reasons: uniqueSorted(reasons),
     omittedBecauseUnverified: uniqueSorted(omitted),
+    missingEvidenceKinds: missing,
     observedAt: input.observedAt.toISOString(),
   };
 
