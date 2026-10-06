@@ -186,7 +186,7 @@ export function deriveCustomerVisibleState(lifecycle: RecoveryCaseLifecycleProje
               ? 'APPROVAL_REQUIRED'
               : stage === 'PACKAGE_EXPORTED'
                 ? 'READY_INTERNAL'
-                : stage === 'EVIDENCE_INCOMPLETE'
+                : stage === 'EVIDENCE_INCOMPLETE' || stage === 'FOLLOW_UP_DRAFTED'
                   ? // 只有确实列出缺口时才说「缺料」，否则退回「正在准备」（避免误导）
                     lifecycle.missingEvidenceKinds.length > 0
                     ? 'EVIDENCE_NEEDED'
