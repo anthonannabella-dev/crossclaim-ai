@@ -157919,3 +157919,255 @@ AUTO_PRODUCTION_ROLLBACK = false
 结论：FINAL2 的 SSOT 改造是正确的，只剩 migration 回填 'UNKNOWN' 的历史行必须明确 fail-closed。把这个 sentinel 封死后，P6-PROD-U1 才可以正式 CLOSED。
 ```
 
+### [MSG-20261005-96] P6-PROD-U1 FINAL3 裁决 = PASS / CLOSED（exact code HEAD b1ac2323）：DURABLE_RECOVERY_BASIS / LEGACY_UNKNOWN_PRE_VERSION_HANDLING / DURABLE_RESERVATION_OWNERSHIP / STRONG_DEDUPE / DURABLE_STATE_MACHINE / CRASH_RECOVERY / STARTUP_RECONCILIATION / CAS_LEDGER_CONSISTENCY / TRANSACTIONAL_OUTBOX / MULTI_WORKER_CONCURRENCY / LEASE_STALE_RECOVERY / READ_ONLY_PRODUCTION_ADAPTER 全部 = PASS；P6-PROD-U1 = PASS / CLOSED、P6PROD_U1_FINAL4_REQUIRED = NO；production mutation 继续 NOT AUTHORIZED
+
+```text
+[CODEX-P6PROD-U1FINAL3]
+
+PUSH = DONE：origin/gate/7-commercial-validation 现为 b1ac2323（REVIEWED_HEAD = b1ac2323 为代码提交）
+前置：P6-PROD-U1 FINAL2 裁决（MSG-20261005-95）= DURABLE_RECOVERY_BASIS = PASS WITH REVISE
+（preConfigVersion 入 immutable basis、三个 digest、DB 列 + 不可改写触发器、ReservationView 完整 basis、
+expectedFromReservation 为 SSOT、assertExpectedFor 仅断言且 mismatch 零副作用 —— 全部确认成立）；
+仅剩 LEGACY_UNKNOWN_PRE_VERSION_HANDLING = REVISE。本单元只做这一项极窄修订，**未新增 production writer**。
+
+① 交付（P6-PROD-U1 FINAL3）
+
+窄修 1 —— 'UNKNOWN' 成为保留 sentinel
+* 新增 RECOVERY_BASIS_UNKNOWN_VERSION = 'UNKNOWN'（state-machine.ts 单源常量，与 migration 回填字面量一致）。
+* planReservation() 现在同时拒绝 **空白** 与 **该保留值** → CONFIG_EXECUTION_RECOVERY_BASIS_INCOMPLETE，
+  因此以后不会再产生新的未知 basis。
+
+窄修 2 —— 历史 UNKNOWN 行一律禁止自动恢复
+* classifyStrandedExecution() 在进入任何自动判定（RESERVED 分支 / lease 判定 / 观测判定）**之前**先检查 durable basis：
+  reservation.preConfigVersion === 'UNKNOWN' → **NEEDS_RECONCILIATION / reason = RECOVERY_BASIS_INCOMPLETE**，
+  post identity 一律 null。
+  因此 legacy 行不可能得到 SAFE_TO_RETRY 或 RECOVERED_COMMITTED；
+  该 sentinel 也绝不参与 version 比较（不存在 observedVersion !== 'UNKNOWN' → versionAdvanced 的路径）。
+
+窄修 3 —— 从未 claim 的历史行只做零写收敛
+* 对 status = RESERVED 的行（含 migration 回填 basis 者）：recovery 不自动恢复、不自动成功，
+  只在既有允许迁移内零写收敛为 CANCELLED（resultCode = CANCELLED、post identity = null、零 STARTUP_RECONCILED 事件）。
+  （RESERVED → 执行类终态本来就不被允许；该路径不授予任何执行权。）
+
+② 验收（本地 apps/api；真实 PostgreSQL 127.0.0.1:55432）
+* npx tsc --noEmit → exit 0
+* config-execution-durability-db **35/35**（新增 PGU-31…34；PGU-1…30 全部保持 green）：
+  PGU-31 新 reservation preConfigVersion = 'UNKNOWN' → 拒绝创建（CONFIG_EXECUTION_RECOVERY_BASIS_INCOMPLETE）；
+  PGU-32 历史 UNKNOWN + path=to + version 前进（cfg-2）+ 指纹变化 → **NEEDS_RECONCILIATION**，
+    resultCode = NEEDS_RECONCILIATION、postConfigVersion = null（不得 RECOVERED_COMMITTED）；
+  PGU-33 历史 UNKNOWN + path=from → 零 reclaim、零 STARTUP_RECONCILED（不得 SAFE_TO_RETRY）；
+  PGU-34 历史 UNKNOWN 且从未 claim（RESERVED）→ 零写收敛 CANCELLED（resultCode CANCELLED、post identity null），
+    不自动成功、不自动重试。
+  保持 green：PGU-1…30（并发 reserve/claim exactly-one、lease fence（takeover/renew）、
+    readback 恢复三态、outbox authority + 并发交付 fail-closed、append-only、DB 非法跳转/terminal 再迁移/identity 改写、
+    environment=PRODUCTION CHECK、跨队列… 各断言、以及 FINAL2 的 preConfigVersion 持久化/不可改写/完整 basis/SSOT/断言不一致 fail-closed）。
+* config-execution-durability（纯决策核）**34/34**（新增：保留 sentinel 拒绝创建；历史 UNKNOWN 两种观测均 fail-closed）；
+  schema-contract 13/13
+* 全量回归（同一 commit b1ac2323，JSON 报告运行）：
+    410 test files / **3927 tests → 3926 passed + 1 failed**
+    （唯一失败 = recovery-si-phase2-e-db P2E-DB5 既有 test-isolation debt，单跑通过）
+* GitHub Actions：NOT_OBSERVED
+
+③ 口径与边界
+* 仍**没有**任何生产写入能力：environment 只能是 SANDBOX（DB CHECK）；production mutation switch 保持 false；
+  AUTO_PROMOTION / AUTO_ROLLOUT / AUTO_PRODUCTION_ROLLBACK 未实现、未授权。
+* 未新增第二个 runtime / policy engine / control plane / model gateway / cost ledger / meta evidence store。
+* 未接真实 provider / payment / external write / 生产凭据。
+* 未宣称：MODEL_GATEWAY_RUNTIME_WIRED / ACTION_RUNTIME_PRODUCTION_ENABLED /
+  META_IMPROVEMENT_INTEGRATED / PRODUCTION_READY = false。
+
+请求裁决
+1. P6-PROD-U1 FINAL3 是否可记 PASS（DURABLE_RECOVERY_BASIS = PASS、LEGACY_UNKNOWN_PRE_VERSION_HANDLING = PASS，
+   以及 DURABLE_RESERVATION_OWNERSHIP / STRONG_DEDUPE / DURABLE_STATE_MACHINE / CRASH_RECOVERY /
+   STARTUP_RECONCILIATION / CAS_LEDGER_CONSISTENCY / TRANSACTIONAL_OUTBOX / MULTI_WORKER_CONCURRENCY /
+   LEASE_STALE_RECOVERY / READ_ONLY_PRODUCTION_ADAPTER = PASS，
+   P6-PROD-U1 = PASS / CLOSED、P6PROD_U1_FINAL4_REQUIRED = NO）？
+2. 是否确认 production mutation 继续 NOT AUTHORIZED，且真正开启 production config write / rollout /
+   auto rollback 仍必须再次单独授权？
+
+边界：REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS /
+PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing = HOLD；SECOND_* = FORBIDDEN；L5_RELAXATION = FORBIDDEN。
+…
+显示更多
+✅
+思考了 15s
+ChatGPT 说：
+DECISION
+
+我核过 exact code HEAD：b1ac2323c96713f1d1ab2b59452a7579d6c32705。
+
+最终裁决：
+
+DURABLE_RECOVERY_BASIS = PASS
+LEGACY_UNKNOWN_PRE_VERSION_HANDLING = PASS
+DURABLE_RESERVATION_OWNERSHIP = PASS
+STRONG_DEDUPE = PASS
+DURABLE_STATE_MACHINE = PASS
+CRASH_RECOVERY = PASS
+STARTUP_RECONCILIATION = PASS
+CAS_LEDGER_CONSISTENCY = PASS
+TRANSACTIONAL_OUTBOX = PASS
+MULTI_WORKER_CONCURRENCY = PASS
+LEASE_STALE_RECOVERY = PASS
+READ_ONLY_PRODUCTION_ADAPTER = PASS
+P6-PROD-U1 = PASS / CLOSED
+P6PROD_U1_FINAL4_REQUIRED = NO
+GitHub Actions：NOT_OBSERVED
+
+可以正式封板 P6-PROD-U1。
+
+KEEP
+
+FINAL3 的三个关键点都正确进入真实主路径。
+
+新 reservation 明确禁止：
+
+纯文本
+preConfigVersion = ''
+preConfigVersion = 'UNKNOWN'
+
+都会 fail-closed：
+
+纯文本
+CONFIG_EXECUTION_RECOVERY_BASIS_INCOMPLETE
+
+因此新的执行不会再产生未知 recovery basis。
+
+历史 migration 行：
+
+纯文本
+preConfigVersion = UNKNOWN
+
+现在在 classifyStrandedExecution() 中会在版本比较、SAFE_TO_RETRY、RECOVERED_COMMITTED 之前直接进入：
+
+纯文本
+NEEDS_RECONCILIATION
+reason = RECOVERY_BASIS_INCOMPLETE
+post identity = null
+
+所以之前的危险逻辑：
+
+纯文本
+cfg-2 !== UNKNOWN
+→ versionAdvanced
+→ RECOVERED_COMMITTED
+
+已经不存在。
+
+LEGACY RESERVED
+
+从未 claim 的历史 UNKNOWN reservation 采用：
+
+纯文本
+RESERVED
+→ CANCELLED
+
+我接受这个设计。
+
+原因是它是明确的零写收敛：
+
+不进入 EXECUTING；
+不 SAFE_TO_RETRY；
+不 RECOVERED_COMMITTED；
+post identity = null；
+不留下 STARTUP_RECONCILED 执行证据；
+没有授予执行权。
+
+它是在“不知道历史执行基准”的情况下选择保守关闭，而不是猜测执行。
+
+PRODUCTION
+
+第二问确认：
+
+production mutation 继续 NOT AUTHORIZED。
+
+P6-PROD-U1 CLOSED 只代表：
+
+production-grade durability / concurrency / crash-recovery / audit substrate 已封板。
+
+不代表生产配置写入已经获准。
+
+继续：
+
+纯文本
+environment = SANDBOX only
+PRODUCTION_CONFIG_MUTATION = false
+AUTO_PROMOTION = false
+AUTO_ROLLOUT = false
+AUTO_PRODUCTION_ROLLBACK = false
+
+并继续保持：
+
+纯文本
+MODEL_GATEWAY_RUNTIME_WIRED = false
+ACTION_RUNTIME_PRODUCTION_ENABLED = false
+META_IMPROVEMENT_INTEGRATED = false
+PRODUCTION_READY = false
+
+原全部 HOLD / FORBIDDEN 不变。
+
+TEST / EVIDENCE
+
+本轮 exact commit 修改范围也干净，只涉及：
+
+durability tests；
+prisma-durable-store.ts
+recovery.ts
+reservation.ts
+state-machine.ts
+
+没有 production writer。
+
+Codex 报告的：
+
+DB 35/35
+pure durability 34/34
+schema 13/13
+full regression 3926 passed + 1 existing isolation debt
+
+可以登记为 local evidence。
+
+但 exact SHA 的 GitHub Actions 仍是：
+
+NOT_OBSERVED
+
+所以不要写“GitHub CI green”。
+
+NEXT
+
+现在不要继续自动打开 production mutation。
+
+未来如果确实决定进入真实生产配置写入，必须另开、重新授权，例如：
+
+P6-PROD-U2 — Production Config Mutation Execution
+
+它至少需要重新审核：
+
+纯文本
+verified production authorization
+→ production control-plane gate
+→ fresh server-owned read
+→ durable reservation + lease
+→ atomic production CAS
+→ post-write verification
+→ durable result/outbox
+→ reconciliation
+
+并且 production rollback / rollout 最好仍拆开单独授权，不和第一次 production write 一次性混开。
+
+最终状态
+纯文本
+P6-U1 = CLOSED
+P6-U2 = CLOSED
+P6-U3 = CLOSED
+
+P6-PROD-U1 =
+Production Config Execution Durability
+PASS / CLOSED
+
+PRODUCTION MUTATION =
+NOT AUTHORIZED
+
+这次可以停在这里。耐久底座已经封板；下一步真正写生产配置属于新的风险层级，必须再次单独授权。
+```
+
