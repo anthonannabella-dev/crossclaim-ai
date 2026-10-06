@@ -4,3 +4,5 @@ export * from './amazon-support-read';
 export * from './fixtures';
 export * from './case-facts';
 export * from './prisma-case-fact-store';
+export * from './case-response-intelligence';
+export * from './prisma-interpretation-store';

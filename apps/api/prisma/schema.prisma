@@ -3802,3 +3802,37 @@ model ProviderCaseProjection {
   @@unique([organizationId, platformAccountId, providerCaseId])
   @@unique([organizationId, id])
 }
+
+// ============================================================
+// PROVIDER FOLLOW-UP INTELLIGENCE / P3（slice A-S4；HOST 2026-10-06 授权）
+// Provider case 回复解读（AI advisory only；append-only；与 Provider Truth 严格分层）
+// ============================================================
+
+/// AI 对 provider 回复的解读（advisory only；append-only；绝不含金额/eligibility 真值）
+model ProviderCaseResponseInterpretation {
+  id                    String   @id @default(uuid())
+  organizationId        String
+  platformAccountId     String
+  platform              String
+  providerCaseId        String
+  sourceContactId       String
+  sourceBodyDigest      String?
+  classification        String
+  confidenceBp          Int
+  requiredEvidence      String
+  extractedRequirements String
+  recommendedNextAction String
+  disposition           String
+  dispositionReasons    String
+  injectionSuspected    Boolean  @default(false)
+  model                 String
+  promptVersion         String
+  classifierVersion     String
+  interpretationDigest  String
+  createdAt             DateTime
+  recordedAt            DateTime @default(now())
+
+  @@unique([organizationId, platformAccountId, sourceContactId, classifierVersion, model, promptVersion])
+  @@unique([organizationId, id])
+  @@index([organizationId, platformAccountId, providerCaseId, recordedAt])
+}

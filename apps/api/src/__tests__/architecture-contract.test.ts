@@ -174,6 +174,8 @@ describe('模型清单一致性（C-0002 CHANGE #1）', () => {
     'ProviderCaseFact',
     'ProviderContactFact',
     'ProviderCaseProjection',
+    // slice A-S4：AI 回复解读（advisory only；append-only）
+    'ProviderCaseResponseInterpretation',
   ];
   const JOIN_MODELS = [
     'CaseEvidence',
@@ -188,7 +190,7 @@ describe('模型清单一致性（C-0002 CHANGE #1）', () => {
 
 
   it(`核心模型恰好 ${CORE.length} 个`, () => {
-    expect(CORE).toHaveLength(82);
+    expect(CORE).toHaveLength(83);
     for (const name of CORE) expect(modelBlock(name), `缺少核心模型 ${name}`).not.toBe('');
   });
 
@@ -212,8 +214,8 @@ describe('模型清单一致性（C-0002 CHANGE #1）', () => {
     }
   });
 
-  it('模型总数为 107（96 + 5 耐久底座 + 3 Scheduler + 3 Provider 事实层）—— 与 README/DOMAIN_MODEL 表述一致', () => {
-    expect(modelNames()).toHaveLength(107);
+  it('模型总数为 108（96 + 5 耐久底座 + 3 Scheduler + 3 Provider 事实层 + 1 AI 解读）—— 与 README/DOMAIN_MODEL 表述一致', () => {
+    expect(modelNames()).toHaveLength(108);
   });
 });
 
@@ -230,6 +232,8 @@ describe('租户归属（C-0002 CHANGE #2）', () => {
     'ProviderCaseFact',
     'ProviderContactFact',
     'ProviderCaseProjection',
+    // slice A-S4：AI 解读事实同样 tenant-owned
+    'ProviderCaseResponseInterpretation',
     'SourceConnection',
     'FileAsset',
     'ImportBatch',
