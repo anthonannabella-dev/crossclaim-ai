@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "b389e00d",
+  "head": "28d66afc",
   "status": "RECONCILED",
   "current_task": "RSI 生产可执行闭环（7 点收口）：RSI_RUNTIME_READY = PASS；MODEL_PROVIDER_READY = 本地仿真已接线（真实网络/付费 HOLD）；PERSISTENCE_READY = ephemeral 已验证、durable 需宿主非生产 DATABASE_URL；REBOOT_RECONCILE_READY = NOT_IMPLEMENTED（下一单元）；SYSTEMD_VALIDATED = 需宿主 Linux 实机",
   "next_task": "BG-016 单一 Acceptance Head + 四份状态一致 guard（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍 HOST_ACTION_REQUIRED 或 HOLD",
@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-96",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-06T06:41:33.807Z",
+  "updated_at": "2026-10-06T06:44:45.266Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -49,17 +49,17 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
-  "continuous_execution": "RUNNING（A-S1…A-S10 + B-S2…B-S10 完成并 push；队列剩余 2 项）",
-  "next_execution_unit": "Next tick：队列队首 B-S11 —— Refund → Settlement → Success Fee guard 回归（只有 PROVIDER_VERIFIED/AUTHORITY_VERIFIED 且经 reconciliation 才 billable）。",
+  "continuous_execution": "RUNNING（A-S1…A-S10 + B-S2…B-S11 完成并 push；队列剩余 1 项：B-S12 全量 E2E/安全回归 + 最终回报）",
+  "next_execution_unit": "Next tick：队列队首（最后一项）B-S12 —— full PG E2E / security regression / 最终回报（IMPLEMENTED_FILES / SCHEMA_DELTA / MIGRATIONS / TEST_COUNTS / … / FINAL_VERDICT）。",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-06T06:41:33.807Z",
+  "last_tick_at": "2026-10-06T06:44:45.266Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "完成并 push B-S10（b389e00d）：Claim-Ready Package vNext 包络（不重写既有装配器）——先重新断言内层包非执行语义（申报/提交/计费/估算任一被破坏即拒绝装配），再接入 Customs high-value HITL（>1000 → OWNER、≥10000 → ADMIN、不可绕过、REVIEWER 不能替代），三态处置 BLOCKED_BY_GAPS / NEEDS_HUMAN_APPROVAL / CLAIM_READY_FOR_HANDOFF；明确不伪称 3PL 对账已完成（输入声称即 fail-closed，包内字段恒为未发生）。unit 16/16、回归 390/390、tsc 0。",
-  "last_action_at": "2026-10-06T06:41:33.807Z",
-  "next_action": "继续自动推进：每 slice 独立 commit/test/push/checkpoint。",
-  "current_head": "b389e00d",
-  "last_completed_head": "b389e00d",
-  "reviewed_head": "b389e00d",
+  "last_action": "完成并 push B-S11（28d66afc）：先审计既有 fee guard/linkage，发现四处缺口（运行时未校验来源级别、未校验确认与对账严格性、无争议/冲正表达、无幂等），新增 evaluateCustomsSuccessFeeGuard 严格层（VERIFIED 来源 + CONFIRMED + RECONCILED 才 BILLABLE；PARTIAL/未开始 → NEEDS_RECONCILIATION；DISPUTED/REVERSED → 不可计费且已有费用须冲回；同一 settlement 只计一次；estimate 与 client 费率拒绝），金额仍由既有 fee guard 计算并与既有 linkage happy-path 一致；不扣款、不收款、不自动扣佣。unit 18/18、回归 408/408、tsc 0。",
+  "last_action_at": "2026-10-06T06:44:45.266Z",
+  "next_action": "继续自动推进：B-S12 完成后出具最终回报（含全量回归与边界清单）。",
+  "current_head": "28d66afc",
+  "last_completed_head": "28d66afc",
+  "reviewed_head": "28d66afc",
   "claim_submit_batch": {
     "verdict": "PASS",
     "message_id": "MSG-20261001-07",
@@ -5169,7 +5169,6 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "B-S11 Refund → Settlement → Success Fee guard 回归（只有 PROVIDER_VERIFIED/AUTHORITY_VERIFIED 且经 reconciliation 才 billable）。",
     "B-S12 full PG E2E / security regression / 最终回报（IMPLEMENTED_FILES / SCHEMA_DELTA / MIGRATIONS / TEST_COUNTS / … / FINAL_VERDICT）。"
   ],
   "full_autonomous_internal_execution": "VERIFIED",
@@ -9339,7 +9338,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-06T06:41:33.807Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-06T06:44:45.266Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -11846,6 +11845,17 @@
         "tests": "claim-ready-package-vnext 16/16（内层包非执行语义再断言、HITL 1000/10000 双阈值、REVIEWER 不可替代 OWNER/ADMIN、绕过 fail-closed、三态处置、伪称 3PL fail-closed、边界断言、摘要确定性）；回归 390/390；tsc 0",
         "reuse": "复用既有 customs-claim-ready-package（确定性装配器，未重写）与 A 部分 follow-up-package 的 HITL 阈值/角色常量",
         "boundary": "estimateOnly=true、billable=false、filingPerformed=false、submissionPerformed=false、transportEnabled=false、allowsAutoFiling=false、productionCredentials=ABSENT、computesRecoverableAmount=false"
+      }
+    },
+    "B-S11": {
+      "name": "Refund → Settlement → Success Fee guard 严格化与回归（只有 PROVIDER_VERIFIED/AUTHORITY_VERIFIED 且经 reconciliation 才 billable）",
+      "status": "DONE / PUSHED",
+      "head": "28d66afc",
+      "evidence": {
+        "files": "apps/api/src/services/customs/customs-success-fee-guard.ts + apps/api/src/__tests__/customs-success-fee-guard.test.ts；无 schema 变更、无迁移",
+        "tests": "customs-success-fee-guard 18/18（严格来源级别、CONFIRMED、RECONCILED 才可计费；PARTIAL/NOT_STARTED → NEEDS_RECONCILIATION；DISPUTED/REVERSED → 不可计费且已有费用须冲回；同一 settlement 幂等；estimate 与 client 费率拒绝；既有 fee guard 金额兜底并与既有 linkage happy-path 一致；边界断言 5 类非法；摘要确定性）；回归 408/408；tsc 0",
+        "gap_closed": "既有 fee guard 未在运行时校验来源级别与 reconciliation 严格性（PARTIAL 亦可计费）、无冲正/争议表达、无同一 settlement 幂等 —— 本 slice 全部补齐",
+        "boundary": "autoChargePerformed=false、paymentCollectionPerformed=false、autopayEnabled=false、externalPaymentWrite=false、productionCredentials=ABSENT"
       }
     }
   }
