@@ -1,8 +1,12 @@
 // PROVIDER FOLLOW-UP INTELLIGENCE / P4（slice A-S5）—— 只读 Prisma 证据来源端口
 // ---------------------------------------------------------------------------
 // 在**查询层**就按 organization + platformAccount 过滤（EvidenceArtifact.accountId 为 null 的 org 级证据也纳入，
-// 但因为没有可核对键，只会落到 LOW_CONFIDENCE，不会被当作 FOUND）。
-// 只读：不创建 / 不修改任何证据；键值抽取为 best-effort（无法核对时明确落到人工复核）。
+// 但因为没有可核对键只会落到 LOW_CONFIDENCE，不会被判成 FOUND）。
+// 只读：不创建 / 不修改任何证据；值得抽取为 best-effort，无法核对时明确落到人工复核。
+//
+// B-S12 变更（如实记录）：ENTRY_LINE 需求要求 `hts` 键，而本端口此前未抽取 HTS，
+// 导致真实库里「HTS 写在描述里的 entry summary」永远无法满足 ENTRY_LINE（只能 LOW_CONFIDENCE）。
+// 现补充 `hts` 强模式（仅匹配 `1234.56` / `1234.56.78` 形式），与 B-S5 需求目录保持一致。
 
 import type { PrismaClient } from '@prisma/client';
 
@@ -14,17 +18,21 @@ import {
   type EvidenceSourcePort,
 } from './evidence-resolver';
 
-export const EVIDENCE_KEY_EXTRACTION_VERSION = 'evidence-key-extraction/v1';
+export const EVIDENCE_KEY_EXTRACTION_VERSION = 'evidence-key-extraction/v2';
 
 const KEY_PATTERNS: ReadonlyArray<{ key: EvidenceQueryKey; pattern: RegExp }> = [
   { key: 'trackingNumber', pattern: /\b(?:1Z[0-9A-Z]{10,}|[A-Z]{2}\d{9}[A-Z]{2}|\d{12,22})\b/g },
   { key: 'orderId', pattern: /\b\d{3}-\d{7}-\d{7}\b/g },
-  { key: 'invoiceNo', pattern: /\b(?:INV|FACT|BILL)[-_ ]?[A-Z0-9]{4,}\b/gi },
+  // 发票号常含内部连字符（INV-2026-0001）：整体捕获，且要求前缀后紧跟数字，
+  // 避免把普通单词 "invoice" 当成发票号（旧模式会先匹配到 "invoice" 并把它当值）。
+  { key: 'invoiceNo', pattern: /\b(?:INV|FACT|BILL)[-_ ]?\d[A-Z0-9._-]{3,}\b/gi },
   { key: 'entryNumber', pattern: /\b[A-Z]{3}[- ]?\d{6,}[- ]?\d?\b/g },
+  // B-S12：HTS / HS code（B-S5 的 ENTRY_LINE 需求依赖此键）
+  { key: 'hts', pattern: /\b\d{4}\.\d{2}(?:\.\d{2,4})?\b/g },
   { key: 'shipmentId', pattern: /\b(?:SHP|SHIP)[-_ ]?[A-Z0-9]{5,}\b/gi },
 ];
 
-/** best-effort 键抽取：只从 title/description 文本中取可核对的强模式；抽不到就留空。 */
+/** best-effort 键抽取：只从 title/description 文本抽取可核对的强模式（抽不到就不写）。 */
 export function extractEvidenceKeyValues(
   text: string,
   wanted: readonly EvidenceQueryKey[],
@@ -51,7 +59,7 @@ export function createPrismaEvidenceSource(prisma: PrismaClient): EvidenceSource
       const rows = await prisma.evidenceArtifact.findMany({
         where: {
           organizationId: scope.organizationId,
-          // 查询层即隔离：本 account 或 org 级（accountId = null）
+          // 查询点即隔离：本 account + org 级（accountId = null）
           OR: [{ accountId: scope.platformAccountId }, { accountId: null }],
           kind: { in: acceptableKinds as never },
         },
