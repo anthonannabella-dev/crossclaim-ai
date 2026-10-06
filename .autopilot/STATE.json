@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "d2f76581",
+  "head": "e6e2e6a7",
   "status": "RECONCILED",
   "current_task": "RSI 生产可执行闭环（7 点收口）：RSI_RUNTIME_READY = PASS；MODEL_PROVIDER_READY = 本地仿真已接线（真实网络/付费 HOLD）；PERSISTENCE_READY = ephemeral 已验证、durable 需宿主非生产 DATABASE_URL；REBOOT_RECONCILE_READY = NOT_IMPLEMENTED（下一单元）；SYSTEMD_VALIDATED = 需宿主 Linux 实机",
   "next_task": "BG-016 单一 Acceptance Head + 四份状态一致 guard（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍 HOST_ACTION_REQUIRED 或 HOLD",
@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-96",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-06T05:41:54.391Z",
+  "updated_at": "2026-10-06T05:45:11.474Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -49,17 +49,17 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
-  "continuous_execution": "RUNNING（A-S1…A-S8 完成并 push；队列剩余 13 项）",
-  "next_execution_unit": "Next tick：队列队首 A-S9 —— UI/API projection contract（区分「内部准备」/「已发送」/「平台 ACK」/「缺料」/「批准」/「到账」/「对账」）。",
+  "continuous_execution": "RUNNING（A-S1…A-S9 完成并 push；队列剩余 12 项）",
+  "next_execution_unit": "Next tick：队列队首 A-S10 —— PG E2E（Amazon Case → NEED_POD → EvidenceResolver FOUND/MISSING → follow-up/manual）+ full regression + security assertions。",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-06T05:41:54.391Z",
+  "last_tick_at": "2026-10-06T05:45:11.474Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "完成并 push A-S8 Recovery Case Lifecycle 只读投影（d2f76581）：先审计既有事实模型（13 阶段全部可复用，未新增状态机/表/枚举），再以纯函数派生阶段 + stageHistory 依据；核心安全不变量 = 「内部准备完成」（RecoveryPackage EXPORTED + 必要审批）与「平台已收到」（acknowledgement 来源 ∈ {PROVIDER_VERIFIED, AUTHORITY_VERIFIED}）严格分离，USER_RECORDED/UNVERIFIED 只进 omittedBecauseUnverified；结算未经验证来源确认时金额为 null 而非 0。unit 31/31、回归 302/302、tsc 0。",
-  "last_action_at": "2026-10-06T05:41:54.391Z",
+  "last_action": "完成并 push A-S9 Customer UX/API projection contract（e6e2e6a7）：把 A-S8 生命周期投影翻译为客户可见状态（缺料/内部准备中/内部准备完成/等待审批/已提交/平台已受理/已到账/已对账/已结束），READY_INTERNAL 与 SENT 严格分离；PLATFORM_ACKNOWLEDGED 必须有 PROVIDER_VERIFIED/AUTHORITY_VERIFIED 来源；未确认金额不得显示为已到账（固定 NO_PAYMENT_CONFIRMED_YET）；客户文案拦截栈/SQL/ORM/凭据泄漏。unit 26/26、回归 328/328、tsc 0。",
+  "last_action_at": "2026-10-06T05:45:11.474Z",
   "next_action": "继续自动推进：每 slice 独立 commit/test/push/checkpoint。",
-  "current_head": "d2f76581",
-  "last_completed_head": "d2f76581",
-  "reviewed_head": "d2f76581",
+  "current_head": "e6e2e6a7",
+  "last_completed_head": "e6e2e6a7",
+  "reviewed_head": "e6e2e6a7",
   "claim_submit_batch": {
     "verdict": "PASS",
     "message_id": "MSG-20261001-07",
@@ -5169,7 +5169,6 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "A-S9 UI/API projection contract（区分「内部准备」/「已发送」/「平台 ACK」/「缺料」/「批准」/「到账」/「对账」）。",
     "A-S10 PG E2E（Amazon Case → NEED_POD → EvidenceResolver FOUND/MISSING → follow-up/manual）+ full regression + security assertions。",
     "B-S2 Customs 文档分类（CBP_7501/28/29、ACE/Broker entry record、duty payment、invoice、packing list、return/export/destruction、POD、POA、ruling、exclusion、refund evidence、OTHER）。",
     "B-S3 CBP 7501 candidate field extraction（rawValue/normalizedValue/page/bbox/confidence/source digest；关键字段低置信 → QUARANTINE/HITL）。",
@@ -9350,7 +9349,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-06T05:41:54.391Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-06T05:45:11.474Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -11742,6 +11741,16 @@
         "files": "services/provider-support/recovery-case-lifecycle.ts + index.ts；无 schema 变更、无迁移",
         "tests": "recovery-case-lifecycle 31/31（13 阶段派生、WITHDRAWN/SUPERSEDED 不推进、分离不变量 internalReady≠providerReceived、UNVERIFIED/USER_RECORDED 不得升级、assertLifecycleSeparation fail-closed、settledAmountUsd 未验证为 null 不是 0、各类阻断、阶段来源审计齐全、跨 tenant → TENANT_MISMATCH、stageHistory 有依据、摘要确定性）；回归 302/302；tsc 0",
         "boundary": "derivedOnly=true、mutatesFacts=false、recomputesMoneyTruth=false、providerReceiptRequiresVerifiedSource=true；模块无状态迁移/写库入口"
+      }
+    },
+    "A-S9": {
+      "name": "Customer UX / API projection contract（区分内部准备 / 已提交 / 平台 ACK / 缺料 / 审批 / 到账 / 对账）",
+      "status": "DONE / PUSHED",
+      "head": "e6e2e6a7",
+      "evidence": {
+        "files": "services/provider-support/customer-recovery-status.ts + index.ts；A-S8 投影新增结构化字段 missingEvidenceKinds（仅结构化、无行为变更）；无 schema 变更、无迁移",
+        "tests": "customer-recovery-status 26/26（10 个客户可见状态映射、READY_INTERNAL≠SENT、一致性断言 6 类非法组合 fail-closed、未验证来源不得显示平台受理、未确认金额不呈现为已到账、文案泄漏拦截、跨 tenant → TENANT_MISMATCH、摘要确定性）；回归 328/328；tsc 0",
+        "boundary": "readOnly=true、sendsNotifications=false、mutatesFacts=false、singleSubmittedStatusForbidden=true、settlementIsNeverEstimated=true；模块无通知/写库入口"
       }
     }
   }
