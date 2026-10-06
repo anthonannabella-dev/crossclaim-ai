@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "28d66afc",
+  "head": "456149db",
   "status": "RECONCILED",
   "current_task": "RSI 生产可执行闭环（7 点收口）：RSI_RUNTIME_READY = PASS；MODEL_PROVIDER_READY = 本地仿真已接线（真实网络/付费 HOLD）；PERSISTENCE_READY = ephemeral 已验证、durable 需宿主非生产 DATABASE_URL；REBOOT_RECONCILE_READY = NOT_IMPLEMENTED（下一单元）；SYSTEMD_VALIDATED = 需宿主 Linux 实机",
   "next_task": "BG-016 单一 Acceptance Head + 四份状态一致 guard（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍 HOST_ACTION_REQUIRED 或 HOLD",
@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-96",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-06T06:44:45.266Z",
+  "updated_at": "2026-10-06T07:12:58.767Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -49,17 +49,17 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
-  "continuous_execution": "RUNNING（A-S1…A-S10 + B-S2…B-S11 完成并 push；队列剩余 1 项：B-S12 全量 E2E/安全回归 + 最终回报）",
-  "next_execution_unit": "Next tick：队列队首（最后一项）B-S12 —— full PG E2E / security regression / 最终回报（IMPLEMENTED_FILES / SCHEMA_DELTA / MIGRATIONS / TEST_COUNTS / … / FINAL_VERDICT）。",
+  "continuous_execution": "COMPLETE（A 部分 A-S1…A-S10 + B 部分 B-S2…B-S12 全部完成并 push；SAFE_CONTINUATION_QUEUE = []）",
+  "next_execution_unit": "无（队列为空）。后续如需推进 UK/EU Rule Pack、真实 provider/broker 写入、生产启用等，须 HOST 另行授权（均当前 HOLD）。",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-06T06:44:45.266Z",
-  "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "完成并 push B-S11（28d66afc）：先审计既有 fee guard/linkage，发现四处缺口（运行时未校验来源级别、未校验确认与对账严格性、无争议/冲正表达、无幂等），新增 evaluateCustomsSuccessFeeGuard 严格层（VERIFIED 来源 + CONFIRMED + RECONCILED 才 BILLABLE；PARTIAL/未开始 → NEEDS_RECONCILIATION；DISPUTED/REVERSED → 不可计费且已有费用须冲回；同一 settlement 只计一次；estimate 与 client 费率拒绝），金额仍由既有 fee guard 计算并与既有 linkage happy-path 一致；不扣款、不收款、不自动扣佣。unit 18/18、回归 408/408、tsc 0。",
-  "last_action_at": "2026-10-06T06:44:45.266Z",
-  "next_action": "继续自动推进：B-S12 完成后出具最终回报（含全量回归与边界清单）。",
-  "current_head": "28d66afc",
-  "last_completed_head": "28d66afc",
-  "reviewed_head": "28d66afc",
+  "last_tick_at": "2026-10-06T07:12:58.767Z",
+  "state": "PROGRAM_COMPLETE_AWAITING_HOST",
+  "last_action": "完成并 push B-S12（456149db）：全链 PG E2E（真实库证据 → B-S5 证据链 → B-S6 匹配 → B-S7 规则包/期限 → B-S8 Drawback 路由 → B-S9 报关 15 门槛 → B-S10 Claim-Ready vNext → B-S11 成功费资格）9/9；长期安全断言（跨 tenant/account 隔离、全链不改证据、OCR≠Truth、9801/9802≠drawback）；顺带修复证据键抽取（补 hts、修正 invoiceNo 截断与误匹配）；出具最终回报 docs/releases/CUSTOMS-DUTY-RECOVERY-FINAL-REPORT.md。全量回归 4343/4344（唯一失败为既有 isolation debt）、tsc 0。A/B 两部分全部交付，队列清空。",
+  "last_action_at": "2026-10-06T07:12:58.767Z",
+  "next_action": "保持安静：仅在 HOST 下发新授权或出现真实 HOST_ACTION_REQUIRED 时恢复执行。",
+  "current_head": "456149db",
+  "last_completed_head": "456149db",
+  "reviewed_head": "456149db",
   "claim_submit_batch": {
     "verdict": "PASS",
     "message_id": "MSG-20261001-07",
@@ -5168,9 +5168,7 @@
   "runner_status": "RUNNING",
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
-  "safe_continuation_queue": [
-    "B-S12 full PG E2E / security regression / 最终回报（IMPLEMENTED_FILES / SCHEMA_DELTA / MIGRATIONS / TEST_COUNTS / … / FINAL_VERDICT）。"
-  ],
+  "safe_continuation_queue": [],
   "full_autonomous_internal_execution": "VERIFIED",
   "dispatcher_acceptance": {
     "at": "2026-10-03T14:47:59.226Z",
@@ -9309,7 +9307,7 @@
   "AUDIT_REVISE_LOOP_AUTO_CONTINUE": true,
   "HOST_LIMIT_MEANS_STOP": false,
   "STOP_ONLY_ON_TRUE_HOST_DEPENDENCY_OR_COMPLETE": true,
-  "CONTINUATION_REQUIRED": true,
+  "CONTINUATION_REQUIRED": false,
   "heartbeat": {
     "automation_id": "crossclaim-ai-bridge-5min",
     "name": "crossclaim-si-watchdog-1min",
@@ -9338,7 +9336,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-06T06:44:45.266Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-06T07:12:58.767Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -11857,6 +11855,28 @@
         "gap_closed": "既有 fee guard 未在运行时校验来源级别与 reconciliation 严格性（PARTIAL 亦可计费）、无冲正/争议表达、无同一 settlement 幂等 —— 本 slice 全部补齐",
         "boundary": "autoChargePerformed=false、paymentCollectionPerformed=false、autopayEnabled=false、externalPaymentWrite=false、productionCredentials=ABSENT"
       }
+    },
+    "B-S12": {
+      "name": "全链 PG E2E + 长期安全断言 + 最终回报（A/B 两部分收官）",
+      "status": "DONE / PUSHED",
+      "head": "456149db",
+      "evidence": {
+        "files": "apps/api/src/__tests__/customs-duty-recovery-chain-e2e-db.test.ts（新增 9/9）、apps/api/src/services/provider-support/prisma-evidence-source.ts（补 hts / 修正 invoiceNo 抽取）、docs/releases/CUSTOMS-DUTY-RECOVERY-FINAL-REPORT.md（最终回报）",
+        "tests": "本 slice 9/9；全量回归 435 文件 / 4344 tests → 4343 passed + 1 failed = recovery-si-phase2-e-db P2E-DB5（既有 isolation debt，单独运行 20/20 PASS）；tsc 0",
+        "report": "docs/releases/CUSTOMS-DUTY-RECOVERY-FINAL-REPORT.md（含 IMPLEMENTED_FILES / SCHEMA_DELTA / MIGRATIONS / TEST_COUNTS / 边界核对表 / 10 条长期安全不变量 / FINAL_VERDICT）"
+      }
     }
+  },
+  "program_final_report": "docs/releases/CUSTOMS-DUTY-RECOVERY-FINAL-REPORT.md",
+  "program_final_verdict": {
+    "provider_followup_p1_p10": "COMPLETE / PUSHED",
+    "customs_duty_recovery_p1_p18": "COMPLETE / PUSHED",
+    "schema_delta": "NONE（B 部分全为只读/纯函数；A 部分早期 3 个迁移已应用）",
+    "migrations": "NONE（本程序 B 部分）",
+    "tsc": "PASS",
+    "full_regression": "4343 / 4344 PASS（唯一失败为既有 recovery-si-phase2-e-db P2E-DB5 isolation debt，单独运行通过）",
+    "github_ci": "NOT_OBSERVED",
+    "production_ready": "NO（生产启用相关能力全部 HOLD）",
+    "final_next_required": "YES（需 HOST 授权新方向）"
   }
 }

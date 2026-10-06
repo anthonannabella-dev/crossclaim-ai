@@ -37,7 +37,7 @@
 | B-S9 | Broker/ABI/Filing readiness（15 项门槛 + POA 复用 + RFI 草稿） | `ca223828` |
 | B-S10 | Claim-Ready Package vNext + Customs high-value HITL（不伪称 3PL） | `b389e00d` |
 | B-S11 | Refund → Settlement → Success Fee guard 严格化（VERIFIED + CONFIRMED + RECONCILED 才 billable） | `28d66afc` |
-| B-S12 | 全链 PG E2E + 长期安全断言 + 本最终回报 | `<本次 commit>` |
+| B-S12 | 全链 PG E2E + 长期安全断言 + 本最终回报 | `456149db` |
 
 ---
 
