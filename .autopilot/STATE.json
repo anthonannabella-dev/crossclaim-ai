@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "9eb30b6d",
+  "head": "0b28ab52",
   "status": "RECONCILED",
   "current_task": "RSI 生产可执行闭环（7 点收口）：RSI_RUNTIME_READY = PASS；MODEL_PROVIDER_READY = 本地仿真已接线（真实网络/付费 HOLD）；PERSISTENCE_READY = ephemeral 已验证、durable 需宿主非生产 DATABASE_URL；REBOOT_RECONCILE_READY = NOT_IMPLEMENTED（下一单元）；SYSTEMD_VALIDATED = 需宿主 Linux 实机",
   "next_task": "BG-016 单一 Acceptance Head + 四份状态一致 guard（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍 HOST_ACTION_REQUIRED 或 HOLD",
@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-96",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-06T07:48:16.712Z",
+  "updated_at": "2026-10-06T07:53:09.453Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -49,17 +49,17 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
-  "continuous_execution": "RUNNING（SI/RSI GAP-CLOSURE：A、B 完成并 push；C/D/E 待执行）",
-  "next_execution_unit": "C —— EXPERIENCE MEMORY v1。",
+  "continuous_execution": "RUNNING（SI/RSI GAP-CLOSURE：A、B、C 完成并 push；D/E 待执行）",
+  "next_execution_unit": "D —— META LEARNING / CONTROLLED IMPROVEMENT v1。",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-06T07:48:16.712Z",
+  "last_tick_at": "2026-10-06T07:53:09.453Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "完成并 push SI/RSI GAP-CLOSURE 单元 B（9eb30b6d）：以真实 PostgreSQL 补齐 RSI reboot durable reconcile 的 Test C/F 取证（10/10）—— dedupeKey 唯一（reboot 不重复建 incident/task/candidate/promotion）、过期 ACTIVE lease → EXPIRED 并把任务回 READY、未过期 ACTIVE lease 被 held（lease fencing，不抢不偷）、exactly-one logical continuation、连续重启第二次起 idempotentNoop 且行数不变、duplicate event 被唯一约束挡住、crash-mid-transition（IN_PROGRESS 无 lease）可恢复、Builder/Judge 同 actor 拒绝、证据表 append-only；输出 RSI_REBOOT_RECONCILE=PASS / DURABLE_RSI_STATE=PASS / DUPLICATE_AFTER_REBOOT=ZERO / SYSTEMD_RUNTIME_VALIDATION=HOST_ACTION_REQUIRED，并写回唯一状态件。RSI 回归 315/315、tsc 0。",
-  "last_action_at": "2026-10-06T07:48:16.712Z",
-  "next_action": "先审计既有 outcome-learning / operational memory，再最小实现 Experience Memory v1（结构化、append-only、LOW_SAMPLE/CONFLICT/STALE 安全规则）。",
-  "current_head": "9eb30b6d",
-  "last_completed_head": "9eb30b6d",
-  "reviewed_head": "9eb30b6d",
+  "last_action": "完成并 push SI/RSI GAP-CLOSURE 单元 C（0b28ab52）：实现 Experience Memory v1（端口 + 纯函数，无 schema 变更）—— FACT/AGGREGATE/HEURISTIC；tenant/account/provider/domain 四维 scope；强制 server-derived；append-only 端口；ruleVersion/时间窗口/sourceCount/confidence/sourceRefs；凭据与原始 provider payload 拒收；LOW_SAMPLE→ADVISORY|FAIL_CLOSED、CONFLICT→NO_AUTOMATIC_LEARNING、STALE→DOWNWEIGHTED|IGNORED（全量过期 → IGNORED）；只允许影响 recommendation/ranking/confidence/planning，不授予任何 External Write；覆盖六类 v1 查询。持久化表未实施，改为最小 Schema Delta 审计请求（docs/releases/EXPERIENCE-MEMORY-V1-SCHEMA-DELTA-REQUEST.md）。unit 22/22、回归 494/494、tsc 0。",
+  "last_action_at": "2026-10-06T07:53:09.453Z",
+  "next_action": "先审计既有 outcome-learning / Phase5 controlled adoption 链，再最小接线 Experience Memory → Proposal→…→Sandbox Adoption→Observation→Rollback，保持 META_IMPROVEMENT_INTEGRATED=false 直到端到端验证通过。",
+  "current_head": "0b28ab52",
+  "last_completed_head": "0b28ab52",
+  "reviewed_head": "0b28ab52",
   "claim_submit_batch": {
     "verdict": "PASS",
     "message_id": "MSG-20261001-07",
@@ -5169,7 +5169,6 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "C EXPERIENCE MEMORY v1（结构化/可审计/可回滚/server-derived；tenant·account·provider·domain scoped；append-only raw experience；ruleVersion/窗口/source count/confidence/source refs；FACT/AGGREGATE/HEURISTIC；LOW_SAMPLE→ADVISORY|FAIL_CLOSED、CONFLICT→禁自动学习、STALE→DOWNWEIGHT|IGNORE；只影响 recommendation/ranking/confidence/planning）。",
     "D META LEARNING / CONTROLLED IMPROVEMENT v1（Outcome→Experience→Proposal→Candidate→Replay→Benchmark→Security/Policy Eval→Independent Judge→Guard→Sandbox Adoption→Observation→Regression Detection→Rollback；无 verifiable reward/KPI 不得自动 promote；不得改/绕唯一 Policy Core·Guard·Action Catalog、不得自行扩权/关 Kill Switch/开 Payment·Customs Filing）。",
     "E RECOVERY SIMULATION v1（Recovery Decision Simulator：≥2–3 方案对比 SUBMIT_NOW/COLLECT_MORE_EVIDENCE/HUMAN_OR_BROKER_REVIEW/DEFER；输出 expectedRecovery/successProbability/calibratedConfidence/expectedCost/expectedTime/downsideRisk/requiredEvidence/policy·guard constraints/sourceExperienceRefs；默认 externalActionPerformed=false；经验不足 → fallback 确定性 Rule/Policy；禁止 LLM 编造概率与金额）。"
   ],
@@ -9340,7 +9339,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-06T07:48:16.712Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-06T07:53:09.453Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -11653,7 +11652,7 @@
       "D",
       "E"
     ],
-    "current_unit": "C",
+    "current_unit": "D",
     "status": "RUNNING",
     "baseline_head": "cdd95258",
     "current_status_doc": "docs/releases/CURRENT-SI-RSI-STATUS.md"
@@ -11896,6 +11895,25 @@
           "DUPLICATE_AFTER_REBOOT": "ZERO"
         },
         "boundary": "reconcile 仅状态收敛：createsTasks=false / deletesTasks=false / readsCredentials=false / performsNetworkCalls=false / externalWrite=false / payment=false / transport=false"
+      }
+    },
+    "SI-RSI-C": {
+      "name": "EXPERIENCE MEMORY v1（结构化 / server-derived / append-only；FACT·AGGREGATE·HEURISTIC；LOW_SAMPLE·CONFLICT·STALE 安全规则）",
+      "status": "DONE / PUSHED",
+      "head": "0b28ab52",
+      "evidence": {
+        "files": "apps/api/src/services/experience-memory/experience-memory.ts（新增）+ apps/api/src/__tests__/experience-memory.test.ts（22 例）+ docs/releases/EXPERIENCE-MEMORY-V1-SCHEMA-DELTA-REQUEST.md（最小 Schema Delta 审计请求，未实施）",
+        "tests": "experience-memory 22/22；回归 54 文件 / 494 tests PASS（含 RSI 全量 + architecture-contract + RSI reboot PG）；tsc 0",
+        "safety": {
+          "serverDerivedOnly": true,
+          "appendOnly": true,
+          "forbiddenContentBlocked": "token/secret/password/cookie/api key/private key/rawPayload 全部拒收",
+          "lowSample": "ADVISORY / FAIL_CLOSED（置信封顶 4000，强制人工复核）",
+          "conflict": "NO_AUTOMATIC_LEARNING（RECOVERED≥2 且 REJECTED≥2，置信封顶 2000）",
+          "stale": "DOWNWEIGHTED（封顶 5000）/ 全量过期 → IGNORED（ALL_RECORDS_STALE）",
+          "allowedUses": "recommendation / ranking / confidence / planning（externalWriteGranted=false）"
+        },
+        "schemaDelta": "REQUEST ONLY（未新增表 / 未新增 migration / 未改 Production Schema）"
       }
     }
   },
