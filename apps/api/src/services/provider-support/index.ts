@@ -16,3 +16,4 @@ export * from './document-ingestion';
 export * from './follow-up-package';
 export * from './recovery-case-lifecycle';
 export * from './customer-recovery-status';
+export * from './customs-document-classification';
