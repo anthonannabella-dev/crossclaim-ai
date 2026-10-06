@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "c9f29a53",
+  "head": "bf31f997",
   "status": "RECONCILED",
   "current_task": "RSI 生产可执行闭环（7 点收口）：RSI_RUNTIME_READY = PASS；MODEL_PROVIDER_READY = 本地仿真已接线（真实网络/付费 HOLD）；PERSISTENCE_READY = ephemeral 已验证、durable 需宿主非生产 DATABASE_URL；REBOOT_RECONCILE_READY = NOT_IMPLEMENTED（下一单元）；SYSTEMD_VALIDATED = 需宿主 Linux 实机",
   "next_task": "BG-016 单一 Acceptance Head + 四份状态一致 guard（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍 HOST_ACTION_REQUIRED 或 HOLD",
@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-96",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-06T06:32:41.710Z",
+  "updated_at": "2026-10-06T06:35:36.486Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -49,17 +49,17 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
-  "continuous_execution": "RUNNING（A-S1…A-S10 + B-S2…B-S7 完成并 push；队列剩余 5 项）",
-  "next_execution_unit": "Next tick：队列队首 B-S8 —— Drawback candidate route（fail-closed；最高只到 CLAIM_READY）。",
+  "continuous_execution": "RUNNING（A-S1…A-S10 + B-S2…B-S8 完成并 push；队列剩余 4 项）",
+  "next_execution_unit": "Next tick：队列队首 B-S9 —— Broker/ABI/Filing provider readiness（15 项门槛逐项证明；缺一 → NEEDS_MANUAL/BROKER_HANDOFF）+ POA/authorization 复用规则 + RFI 补件准备（不真实 respond）。",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-06T06:32:41.710Z",
+  "last_tick_at": "2026-10-06T06:35:36.486Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "完成并 push B-S7（c9f29a53）：US Jurisdiction Rule Pack v1 —— 版本化只读规则包（ruleSetId=customs-us / v1 / jurisdiction=US / legalBasis 6 条 / lastVerified=null），8 类恢复候选映射到既有 remedy 路由词表（DUPLICATE_DUTY、RATE_OVERPAYMENT、MISSED_EXCLUSION、DRAWBACK_CANDIDATE、PSC、PROTEST、CLASSIFICATION_CORRECTION、BROKER_REVIEW），每类含必需/可选证据（引用 B-S5 需求 id）、期限政策、路由与限制；v1 期限政策全部 UNVERIFIED → 对外一律 INDETERMINATE（并给出 nominal 计算供法务核验），缺锚点/未知辖区/未知候选均 fail-closed；9801/9802 明确不是 drawback（声明 + 断言）；resolveJurisdictionRulePack(非 US)=null。unit 18/18、A+B 回归 457/457、tsc 0。",
-  "last_action_at": "2026-10-06T06:32:41.710Z",
+  "last_action": "完成并 push B-S8（bf31f997）：Drawback 专门路径 fail-closed —— 四态（NOT_CANDIDATE / NEEDS_EVIDENCE / NEEDS_MANUAL_REVIEW / CLAIM_READY）；9801·9802 直接 NOT_CANDIDATE；默认使用 B-S7 未核验期限政策 → 一律 INDETERMINATE，只有调用方提供 LEGAL_VERIFIED 政策且窗口有效才可能 CLAIM_READY；证据链非 COMPLETE 或匹配非 EXACT → NEEDS_EVIDENCE，冲突/歧义/无规则包 → NEEDS_MANUAL_REVIEW；永不计算金额（NOT_PERFORMED / null）、不计费、不申报（requestFiling fail-closed）。unit 16/16、回归 333/333、tsc 0。",
+  "last_action_at": "2026-10-06T06:35:36.486Z",
   "next_action": "继续自动推进：每 slice 独立 commit/test/push/checkpoint。",
-  "current_head": "c9f29a53",
-  "last_completed_head": "c9f29a53",
-  "reviewed_head": "c9f29a53",
+  "current_head": "bf31f997",
+  "last_completed_head": "bf31f997",
+  "reviewed_head": "bf31f997",
   "claim_submit_batch": {
     "verdict": "PASS",
     "message_id": "MSG-20261001-07",
@@ -5169,7 +5169,6 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "B-S8 Drawback candidate route（fail-closed；最高只到 CLAIM_READY）。",
     "B-S9 Broker/ABI/Filing provider readiness（15 项门槛逐项证明；缺一 → NEEDS_MANUAL/BROKER_HANDOFF）+ POA/authorization 复用规则 + RFI 补件准备（不真实 respond）。",
     "B-S10 Claim-Ready Package vNext（estimateOnly=true / billable=false / filingPerformed=false）+ Customs high-value HITL 接入。",
     "B-S11 Refund → Settlement → Success Fee guard 回归（只有 PROVIDER_VERIFIED/AUTHORITY_VERIFIED 且经 reconciliation 才 billable）。",
@@ -9342,7 +9341,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-06T06:32:41.710Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-06T06:35:36.486Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -11816,6 +11815,17 @@
         "tests": "us-rule-pack-v1 18/18（元数据与版本化、opaque legalBasis、jurisdiction 解析 fail-closed、8 类候选→既有 route 映射、证据需求引用 B-S5、路由不自动申报、期限政策 UNVERIFIED → INDETERMINATE + nominal 计算且与既有引擎一致、缺锚点/未知辖区/未知候选、9801·9802 ≠ drawback、制度边界断言、确定性）；A+B 全切片回归 457/457；tsc 0",
         "reuse": "复用 CUSTOMS_REMEDY_ROUTES（remedy 词表）、evaluateRemedyDeadline（期限引擎）、CUSTOMS_EVIDENCE_REQUIREMENT_IDS（B-S5 需求 id）、isOpaqueRecoveryRef（引用约束）——未新建重复词表/引擎",
         "boundary": "readOnly=true、decidesEligibility=false、computesRecoverableAmount=false、determinesSuccessFeeEligibility=false、autoFilingAllowed=false、unverifiedDeadlineIsIndeterminate=true"
+      }
+    },
+    "B-S8": {
+      "name": "Drawback 专门路径（fail-closed；最高只到 CLAIM_READY）",
+      "status": "DONE / PUSHED",
+      "head": "bf31f997",
+      "evidence": {
+        "files": "apps/api/src/services/customs/drawback/drawback-candidate-route.ts + apps/api/src/__tests__/drawback-candidate-route.test.ts；无 schema 变更、无迁移",
+        "tests": "drawback-candidate-route 16/16（四态路由、9801·9802 → NOT_CANDIDATE、未核验期限不得 CLAIM_READY、LEGAL_VERIFIED 政策才放行、证据链/匹配门禁、冲突与歧义 → NEEDS_MANUAL_REVIEW、从不计算金额与计费、requestFiling fail-closed、边界断言、确定性摘要）；回归 333/333；tsc 0",
+        "reuse": "复用 B-S7 规则包（resolveJurisdictionRulePack / evaluateUsRemedyDeadline）与既有 evaluateRemedyDeadline 期限引擎；不新写计算逻辑",
+        "boundary": "maxDisposition=CLAIM_READY、autoFilingAllowed=false、filingPerformed=false、billable=false、estimateOnly=true、amountComputation=NOT_PERFORMED、estimatedRecoverableAmountUsd=null、llmDecided=false"
       }
     }
   }
