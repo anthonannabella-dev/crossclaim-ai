@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "e6e2e6a7",
+  "head": "18e4b18e",
   "status": "RECONCILED",
   "current_task": "RSI 生产可执行闭环（7 点收口）：RSI_RUNTIME_READY = PASS；MODEL_PROVIDER_READY = 本地仿真已接线（真实网络/付费 HOLD）；PERSISTENCE_READY = ephemeral 已验证、durable 需宿主非生产 DATABASE_URL；REBOOT_RECONCILE_READY = NOT_IMPLEMENTED（下一单元）；SYSTEMD_VALIDATED = 需宿主 Linux 实机",
   "next_task": "BG-016 单一 Acceptance Head + 四份状态一致 guard（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍 HOST_ACTION_REQUIRED 或 HOLD",
@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-96",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-06T05:45:11.474Z",
+  "updated_at": "2026-10-06T06:12:20.052Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -49,17 +49,17 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
-  "continuous_execution": "RUNNING（A-S1…A-S9 完成并 push；队列剩余 12 项）",
-  "next_execution_unit": "Next tick：队列队首 A-S10 —— PG E2E（Amazon Case → NEED_POD → EvidenceResolver FOUND/MISSING → follow-up/manual）+ full regression + security assertions。",
+  "continuous_execution": "RUNNING（A 部分 A-S1…A-S10 完成并 push；队列剩余 11 项，全部为 B 部分 Customs/Duty Recovery）",
+  "next_execution_unit": "Next tick：队列队首 B-S2 —— Customs 文档分类（CBP_7501/28/29、ACE/Broker entry record、duty payment、invoice、packing list、return/export/destruction、POD、POA、ruling、exclusion、refund evidence、OTHER）。",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-06T05:45:11.474Z",
+  "last_tick_at": "2026-10-06T06:12:20.052Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "完成并 push A-S9 Customer UX/API projection contract（e6e2e6a7）：把 A-S8 生命周期投影翻译为客户可见状态（缺料/内部准备中/内部准备完成/等待审批/已提交/平台已受理/已到账/已对账/已结束），READY_INTERNAL 与 SENT 严格分离；PLATFORM_ACKNOWLEDGED 必须有 PROVIDER_VERIFIED/AUTHORITY_VERIFIED 来源；未确认金额不得显示为已到账（固定 NO_PAYMENT_CONFIRMED_YET）；客户文案拦截栈/SQL/ORM/凭据泄漏。unit 26/26、回归 328/328、tsc 0。",
-  "last_action_at": "2026-10-06T05:45:11.474Z",
+  "last_action": "完成并 push A-S10（18e4b18e）：真实 PostgreSQL 端到端（只读 Amazon Support fixture → append-only facts → projection → NEED_POD 解释 → Prisma 只读证据解析 FOUND/MISSING → Follow-up 草稿包 → 生命周期/客户可见状态投影）+ 长期安全断言（tenant/account 隔离、只读边界 fail-closed、全链不修改证据、AI 不覆盖 provider truth、模块无写入口）；同批修正 A-S9 的 FOLLOW_UP_DRAFTED 缺料判定。E2E 13/13、provider 套件 154/154、全量 4152/4153（唯一失败为既有 P2E-DB5 isolation debt，单独运行通过）、tsc 0。",
+  "last_action_at": "2026-10-06T06:12:20.052Z",
   "next_action": "继续自动推进：每 slice 独立 commit/test/push/checkpoint。",
-  "current_head": "e6e2e6a7",
-  "last_completed_head": "e6e2e6a7",
-  "reviewed_head": "e6e2e6a7",
+  "current_head": "18e4b18e",
+  "last_completed_head": "18e4b18e",
+  "reviewed_head": "18e4b18e",
   "claim_submit_batch": {
     "verdict": "PASS",
     "message_id": "MSG-20261001-07",
@@ -5169,7 +5169,6 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "A-S10 PG E2E（Amazon Case → NEED_POD → EvidenceResolver FOUND/MISSING → follow-up/manual）+ full regression + security assertions。",
     "B-S2 Customs 文档分类（CBP_7501/28/29、ACE/Broker entry record、duty payment、invoice、packing list、return/export/destruction、POD、POA、ruling、exclusion、refund evidence、OTHER）。",
     "B-S3 CBP 7501 candidate field extraction（rawValue/normalizedValue/page/bbox/confidence/source digest；关键字段低置信 → QUARANTINE/HITL）。",
     "B-S4 OCR trust boundary + candidate → Canonical/Customs Fact reconciliation（跨源冲突 → CONFLICT；禁 last-write-wins）。",
@@ -9349,7 +9348,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-06T05:45:11.474Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-06T06:12:20.052Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -11751,6 +11750,17 @@
         "files": "services/provider-support/customer-recovery-status.ts + index.ts；A-S8 投影新增结构化字段 missingEvidenceKinds（仅结构化、无行为变更）；无 schema 变更、无迁移",
         "tests": "customer-recovery-status 26/26（10 个客户可见状态映射、READY_INTERNAL≠SENT、一致性断言 6 类非法组合 fail-closed、未验证来源不得显示平台受理、未确认金额不呈现为已到账、文案泄漏拦截、跨 tenant → TENANT_MISMATCH、摘要确定性）；回归 328/328；tsc 0",
         "boundary": "readOnly=true、sendsNotifications=false、mutatesFacts=false、singleSubmittedStatusForbidden=true、settlementIsNeverEstimated=true；模块无通知/写库入口"
+      }
+    },
+    "A-S10": {
+      "name": "PG E2E（Amazon Case → NEED_POD → EvidenceResolver FOUND/MISSING → follow-up/manual）+ full regression + security assertions",
+      "status": "DONE / PUSHED",
+      "head": "18e4b18e",
+      "evidence": {
+        "files": "apps/api/src/__tests__/provider-followup-e2e-db.test.ts（新增）；customer-recovery-status.ts（FOLLOW_UP_DRAFTED 缺料判定修正）；无 schema 变更、无迁移",
+        "tests": "provider-followup-e2e-db 13/13（8 项 E2E：只读 adapter→facts→projection→NEED_POD 解释→FOUND/MISSING→草稿包→生命周期→客户状态、高价值 OWNER 审批与绕过 fail-closed；5 项长期安全断言：tenant/account 隔离、只读边界、全链不改证据、AI 不越权、无写/通知导出入口）",
+        "regression": "provider 套件 154/154；全量 424 文件 / 4153 tests → 4152 passed + 1 failed = recovery-si-phase2-e-db P2E-DB5（既有 isolation debt，单独运行 20/20 PASS）",
+        "github_ci": "NOT_OBSERVED"
       }
     }
   }
