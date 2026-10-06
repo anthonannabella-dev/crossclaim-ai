@@ -1,15 +1,15 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "c5e5f1a3",
+  "head": "08a35f4b",
   "status": "RECONCILED",
   "current_task": "RSI 生产可执行闭环（7 点收口）：RSI_RUNTIME_READY = PASS；MODEL_PROVIDER_READY = 本地仿真已接线（真实网络/付费 HOLD）；PERSISTENCE_READY = ephemeral 已验证、durable 需宿主非生产 DATABASE_URL；REBOOT_RECONCILE_READY = NOT_IMPLEMENTED（下一单元）；SYSTEMD_VALIDATED = 需宿主 Linux 实机",
   "next_task": "BG-016 单一 Acceptance Head + 四份状态一致 guard（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍 HOST_ACTION_REQUIRED 或 HOLD",
   "send_head": "07b7009",
   "decision_head": "f5e4cc2c",
-  "last_chatgpt_message": "MSG-20261005-87",
+  "last_chatgpt_message": "MSG-20261005-88",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-06T00:19:14.274Z",
+  "updated_at": "2026-10-06T00:28:30.140Z",
   "previous_head": "8064f07",
   "architect_decision_pending": true,
   "blocked_scope": null,
@@ -49,17 +49,17 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
-  "continuous_execution": "RUNNING（PHASE 6 U2 FINAL submitted; awaiting verdict）",
-  "next_execution_unit": "Next tick: read the P6-U2 FINAL verdict (marker [CODEX-PHASE6-U2FINAL], REVIEWED_HEAD = c5e5f1a3) from the audit chat, archive it verbatim (compare.mjs FULL_COPY_OK), then update durable state; if PASS -> PHASE_6_U2 = PASS / CLOSED. P6-U3 remains NOT AUTHORIZED until the auditor explicitly rules on its minimum gate.",
+  "continuous_execution": "RUNNING（PHASE 6 U3 submitted; awaiting verdict）",
+  "next_execution_unit": "Next tick: read the P6-U3 verdict (marker [CODEX-PHASE6-U3], REVIEWED_HEAD = 08a35f4b) from the audit chat, archive it verbatim (compare.mjs FULL_COPY_OK), then update durable state; if PASS -> PHASE_6_U3 = PASS / CLOSED. production config write / auto-rollback remain NOT AUTHORIZED.",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-06T00:19:14.274Z",
+  "last_tick_at": "2026-10-06T00:28:30.140Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "Archived PHASE 6 U2 verdict (MSG-20261005-87) with compare.mjs FULL_COPY_OK (commit 3d4ea363); implemented the two narrow fixes and pushed P6-U2 FINAL at c5e5f1a3 (tsc 0, targeted 10/10, filtered 145 PASS, regression 1091 passed/1 failed = P2E-DB5); submitted marker [CODEX-PHASE6-U2FINAL] REVIEWED_HEAD=c5e5f1a3 to the audit chat (composer empty + marker + head verified in DOM).",
-  "last_action_at": "2026-10-06T00:19:14.274Z",
-  "next_action": "Read/archive the P6-U2 FINAL verdict (expect MSG-20261005-88); if PASS, record PHASE_6_U2 = PASS / CLOSED. Do not start P6-U3 (real config write) without an explicit separate authorization.",
-  "current_head": "c5e5f1a3",
-  "last_completed_head": "c5e5f1a3",
-  "reviewed_head": "c5e5f1a3",
+  "last_action": "Archived PHASE 6 U2 FINAL verdict (MSG-20261005-88, PASS / CLOSED) with compare.mjs FULL_COPY_OK (commit 82e97bc5); implemented and pushed P6-U3 Controlled Config Execution (SANDBOX only) at 08a35f4b (tsc 0, targeted 10/10, filtered 155 PASS, regression 1101 passed/1 failed = P2E-DB5); submitted marker [CODEX-PHASE6-U3] REVIEWED_HEAD=08a35f4b to the audit chat (composer empty + marker + head verified in DOM).",
+  "last_action_at": "2026-10-06T00:28:30.140Z",
+  "next_action": "Read/archive the P6-U3 verdict (expect MSG-20261005-89); if PASS, record PHASE_6_U3 = PASS / CLOSED. Do not start any production config mutation or auto-rollback unit without an explicit separate authorization.",
+  "current_head": "08a35f4b",
+  "last_completed_head": "08a35f4b",
+  "reviewed_head": "08a35f4b",
   "claim_submit_batch": {
     "verdict": "PASS",
     "message_id": "MSG-20261001-07",
@@ -11179,7 +11179,7 @@
     ]
   },
   "phase6_u2_final": {
-    "status": "SUBMITTED / AWAITING_VERDICT",
+    "status": "PASS / CLOSED",
     "reviewed_head": "c5e5f1a3",
     "pushed": true,
     "files": [
@@ -11202,7 +11202,8 @@
       "delivered": true,
       "composer_empty_verified": true,
       "expected_message_id": "MSG-20261005-88"
-    }
+    },
+    "closed_at": "2026-10-06T00:28:30.140Z"
   },
   "phase6_u3_spec": {
     "source": "MSG-20261005-87 NEXT（未授权，未被本 tick 开启）",
@@ -11225,5 +11226,60 @@
       "execution result 必须 append-only / auditable",
       "kill switch / control plane 必须仍可阻断"
     ]
+  },
+  "phase6_u2_final_verdict": {
+    "message_id": "MSG-20261005-88",
+    "verdict": "PASS / CLOSED",
+    "reviewed_head": "c5e5f1a3",
+    "archive_verified": "FULL_COPY_OK",
+    "archive_head": "82e97bc5",
+    "github_ci": "NOT_OBSERVED",
+    "pass": [
+      "AUTHORIZATION_WITHIN_PLAN_LIFETIME = PASS",
+      "LIVE_CONFIG_IDENTITY_DIGEST_BINDING = PASS",
+      "CONTROLLED_EXECUTION_GATE_CONTRACT = PASS",
+      "PHASE_6_U2 = PASS / CLOSED",
+      "PHASE6_U2_FINAL2_REQUIRED = NO"
+    ],
+    "notes": [
+      "U2 authorization 不是可长期持有的 capability token；U3 必须同时要求 verified plan + ticket + verdict，且 digest 三者闭合"
+    ]
+  },
+  "phase6_u3": {
+    "status": "SUBMITTED / AWAITING_VERDICT",
+    "unit": "Controlled Config Execution（SANDBOX / NON_PRODUCTION_CONFIG_WRITE_ONLY）",
+    "reviewed_head": "08a35f4b",
+    "pushed": true,
+    "files": [
+      "apps/api/src/services/outcome-learning/controlled-config-execution.ts",
+      "apps/api/src/__tests__/controlled-config-execution.test.ts"
+    ],
+    "gates": {
+      "entry": "verified plan + ticket + verdict（digest 三者闭合；clone/handmade/mismatch fail-closed）",
+      "executionWindow": "verdict.decidedAt <= executedAt <= min(ticket.expiresAt, plan.expiresAt)",
+      "liveReread": "执行瞬间 server-owned read；fingerprint 双等 + path value === plan.from + version === ticket.liveConfigVersion，否则 STALE_EXECUTION_BASELINE",
+      "atomicCas": "store.compareAndSwap(expectedVersion, expectedPathValue, path, nextValue)；失败 = CONFIG_EXECUTION_CONFLICT（零副作用）",
+      "exactDelta": "target/path/from/to 全部取自 verified plan",
+      "oneMutation": "durable execution ledger reserve（verdict/ticket digest 唯一；生产需 DB UNIQUE）",
+      "idempotency": "同键同授权复用既有 result；异键 IDEMPOTENCY_KEY_CONFLICT",
+      "readBack": "new[path] === plan.to 且 version 变化 → COMMITTED；否则 NEEDS_RECONCILIATION",
+      "resultArtifact": "CONTROLLED_CONFIG_EXECUTION_RESULT 16 项绑定 + provenance + fingerprint + durable persistence",
+      "rollbackAnchor": "rollbackPlanDigest + baselineSnapshotDigest + baselineConfigFingerprint + U2_BASELINE（首版不自动 rollback）",
+      "killSwitch": "environment 必须 SANDBOX；globalDisabled / 未 enable 一律 fail-closed",
+      "semantics": "SANDBOX_CONFIG_MUTATION_COMMITTED（禁止 PRODUCTION_APPLIED / DEPLOYED / ROLLED_OUT）"
+    },
+    "local_verification": {
+      "tsc": "PASS (exit 0)",
+      "targeted": "controlled-config-execution 10/10",
+      "filtered": "14 files / 155 tests PASS",
+      "regression": "107 files / 1102 tests（1101 passed + 1 failed = recovery-si-phase2-e-db P2E-DB5 既有 test-isolation debt）",
+      "github_ci": "NOT_OBSERVED"
+    },
+    "submission": {
+      "marker": "[CODEX-PHASE6-U3]",
+      "delivered": true,
+      "composer_empty_verified": true,
+      "expected_message_id": "MSG-20261005-89"
+    }
   }
 }
