@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "18e4b18e",
+  "head": "3936aa0f",
   "status": "RECONCILED",
   "current_task": "RSI 生产可执行闭环（7 点收口）：RSI_RUNTIME_READY = PASS；MODEL_PROVIDER_READY = 本地仿真已接线（真实网络/付费 HOLD）；PERSISTENCE_READY = ephemeral 已验证、durable 需宿主非生产 DATABASE_URL；REBOOT_RECONCILE_READY = NOT_IMPLEMENTED（下一单元）；SYSTEMD_VALIDATED = 需宿主 Linux 实机",
   "next_task": "BG-016 单一 Acceptance Head + 四份状态一致 guard（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍 HOST_ACTION_REQUIRED 或 HOLD",
@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-96",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-06T06:12:20.052Z",
+  "updated_at": "2026-10-06T06:16:39.639Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -49,17 +49,17 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
-  "continuous_execution": "RUNNING（A 部分 A-S1…A-S10 完成并 push；队列剩余 11 项，全部为 B 部分 Customs/Duty Recovery）",
-  "next_execution_unit": "Next tick：队列队首 B-S2 —— Customs 文档分类（CBP_7501/28/29、ACE/Broker entry record、duty payment、invoice、packing list、return/export/destruction、POD、POA、ruling、exclusion、refund evidence、OTHER）。",
+  "continuous_execution": "RUNNING（A-S1…A-S10 + B-S2 完成并 push；队列剩余 10 项）",
+  "next_execution_unit": "Next tick：队列队首 B-S3 —— CBP 7501 candidate field extraction（rawValue/normalizedValue/page/bbox/confidence/source digest；关键字段低置信 → QUARANTINE/HITL）。",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-06T06:12:20.052Z",
+  "last_tick_at": "2026-10-06T06:16:39.639Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "完成并 push A-S10（18e4b18e）：真实 PostgreSQL 端到端（只读 Amazon Support fixture → append-only facts → projection → NEED_POD 解释 → Prisma 只读证据解析 FOUND/MISSING → Follow-up 草稿包 → 生命周期/客户可见状态投影）+ 长期安全断言（tenant/account 隔离、只读边界 fail-closed、全链不修改证据、AI 不覆盖 provider truth、模块无写入口）；同批修正 A-S9 的 FOLLOW_UP_DRAFTED 缺料判定。E2E 13/13、provider 套件 154/154、全量 4152/4153（唯一失败为既有 P2E-DB5 isolation debt，单独运行通过）、tsc 0。",
-  "last_action_at": "2026-10-06T06:12:20.052Z",
+  "last_action": "完成并 push B-S2 Customs 文档分类（3936aa0f）：19 类文档规则化分类（required 为必要条件，fail-closed），7501 优先于 ACE/Broker、ACE 需专属锚点避免误判 broker 记录；证据不足 → OTHER，冲突 → AMBIGUOUS 且置信封顶 5000；OCR 文本一律 ≤6000 并强制人工复核；9801/9802 明确标注「≠ drawback」；分类恒为 customsTruthEligible=false / canDecideEligibility=false。unit 28/28、回归 229/229、tsc 0。",
+  "last_action_at": "2026-10-06T06:16:39.639Z",
   "next_action": "继续自动推进：每 slice 独立 commit/test/push/checkpoint。",
-  "current_head": "18e4b18e",
-  "last_completed_head": "18e4b18e",
-  "reviewed_head": "18e4b18e",
+  "current_head": "3936aa0f",
+  "last_completed_head": "3936aa0f",
+  "reviewed_head": "3936aa0f",
   "claim_submit_batch": {
     "verdict": "PASS",
     "message_id": "MSG-20261001-07",
@@ -5169,7 +5169,6 @@
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
   "safe_continuation_queue": [
-    "B-S2 Customs 文档分类（CBP_7501/28/29、ACE/Broker entry record、duty payment、invoice、packing list、return/export/destruction、POD、POA、ruling、exclusion、refund evidence、OTHER）。",
     "B-S3 CBP 7501 candidate field extraction（rawValue/normalizedValue/page/bbox/confidence/source digest；关键字段低置信 → QUARANTINE/HITL）。",
     "B-S4 OCR trust boundary + candidate → Canonical/Customs Fact reconciliation（跨源冲突 → CONFLICT；禁 last-write-wins）。",
     "B-S5 通用 Evidence Resolver 接入 Customs（Entry/EntryLine/Invoice/POD/Return/Export/Destruction/Carrier/Broker）。",
@@ -9348,7 +9347,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-06T06:12:20.052Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-06T06:16:39.639Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -11761,6 +11760,16 @@
         "tests": "provider-followup-e2e-db 13/13（8 项 E2E：只读 adapter→facts→projection→NEED_POD 解释→FOUND/MISSING→草稿包→生命周期→客户状态、高价值 OWNER 审批与绕过 fail-closed；5 项长期安全断言：tenant/account 隔离、只读边界、全链不改证据、AI 不越权、无写/通知导出入口）",
         "regression": "provider 套件 154/154；全量 424 文件 / 4153 tests → 4152 passed + 1 failed = recovery-si-phase2-e-db P2E-DB5（既有 isolation debt，单独运行 20/20 PASS）",
         "github_ci": "NOT_OBSERVED"
+      }
+    },
+    "B-S2": {
+      "name": "Customs 文档分类（19 类；required 必要条件 fail-closed；9801/9802 ≠ drawback）",
+      "status": "DONE / PUSHED",
+      "head": "3936aa0f",
+      "evidence": {
+        "files": "services/provider-support/customs-document-classification.ts + index.ts；无 schema 变更、无迁移",
+        "tests": "customs-document-classification 28/28（19 类识别、7501 优先于 ACE/Broker、ACE 需专属锚点、证据不足 → OTHER、冲突 → AMBIGUOUS 封顶 5000、OCR ≤6000 + 人工复核、9801/9802 ≠ drawback 三例、制度边界断言、摘要确定性）；回归 229/229（architecture 157、document-ingestion 31、provider-followup-e2e-db 13）；tsc 0",
+        "boundary": "classificationOnly=true、customsTruthEligible=false、canDecideEligibility=false、extractsFields=false、writesCanonicalTruth=false、computesRecoverableAmount=false"
       }
     }
   }
