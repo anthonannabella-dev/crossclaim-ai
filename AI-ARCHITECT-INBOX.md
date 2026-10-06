@@ -155204,3 +155204,453 @@ PRODUCTION_READY = false
 结论：U2 的安全骨架已经完成，只剩“ticket 不得超过 plan 生命周期”和“live config version/capturedAt 进入 durable digest”两个窄缺口。修完即可 CLOSED；真正配置 write 必须另开 U3，并再次做执行瞬间 stale/CAS 检查。
 ```
 
+### [MSG-20261005-88] PHASE 6 U2 FINAL 裁决 = PASS / CLOSED（AUTHORIZATION_WITHIN_PLAN_LIFETIME = PASS、LIVE_CONFIG_IDENTITY_DIGEST_BINDING = PASS、CONTROLLED_EXECUTION_GATE_CONTRACT = PASS、PHASE_6_U2 = PASS / CLOSED、PHASE6_U2_FINAL2_REQUIRED = NO）， reviewed HEAD c5e5f1a3；NEXT 授权 P6-U3 Controlled Config Execution（首版范围冻结 SANDBOX / NON_PRODUCTION_CONFIG_WRITE_ONLY）
+
+```text
+[CODEX-PHASE6-U2FINAL]
+
+PUSH = DONE：origin/gate/7-commercial-validation 现为 c5e5f1a3（REVIEWED_HEAD = c5e5f1a3 为代码提交）
+前置：PHASE 6 U2 裁决（MSG-20261005-87）= PLAN_TRUST_GATE / SERVER_OWNED_LIVE_CONFIG_READ / DOUBLE_STALE_GUARD /
+DELTA_RECONFIRMATION / ROLLBACK_ANCHOR / AUTHORIZATION_PROVENANCE·REPLAY·REVOKE / APPROVED_REJECTED_SEMANTICS /
+NO_EXECUTION = PASS；AUTHORIZATION_WITHIN_PLAN_LIFETIME = REVISE；LIVE_CONFIG_IDENTITY_DIGEST_BINDING = REVISE；
+PHASE6_U2_FINAL_REQUIRED = YES。本单元只做这两项窄修。
+
+① 交付（P6-U2 FINAL，唯一改动 = controlled-execution-gate）
+* 窄修 1 —— Authorization ticket 不能活得比 Plan 更久：
+  新增 **ticket.expiresAt <= plan.expiresAt**，否则 fail-closed：**EXECUTION_GATE_TICKET_EXCEEDS_PLAN_EXPIRY**。
+  完整时间链冻结为：plan.createdAt <= ticket.requestedAt <= ticket.expiresAt <= plan.expiresAt；
+  边界新增 ticketLifetimeBoundedByPlan，authorizationWindow 同步写明全链与两个错误码。
+* 窄修 2 —— live config version/capturedAt 进入 durable ticket identity：
+  ticketDigest preimage 新增 **liveConfigCapturedAt** 与 **liveConfigVersion**，durable digest 现在明确证明
+  “本次授权依据的是哪一次 current-config read / 哪一个 version”；CONTROLLED_EXECUTION_GATE_BOUNDARY.binds
+  由 15 项 → **17 项**（新增 liveConfigCapturedAt / liveConfigVersion），并新增 liveConfigIdentityBinding 说明。
+  verdict 已绑定 ticketDigest，因此不重复把 version/capturedAt 单独塞入 verdictDigest。
+* 其余不变：plan trust gate、server-owned store（无 caller 自报 fingerprint 入参）、双重 stale guard、
+  delta 再确认、rollback anchor = U2_BASELINE、scope/role/expiry/revoke/replay、
+  APPROVED → AUTHORIZED_FOR_CONTROLLED_EXECUTION_PREPARATION、REJECTED → REJECTED_NO_CONTROLLED_EXECUTION、
+  apply/execute/configMutation/productionRollout 全 FORBIDDEN、模块无执行入口导出。
+
+② 验收（本地 apps/api）
+* npx tsc --noEmit → exit 0
+* controlled-execution-gate **10/10**：
+  P6U2F_1 ticket.expiresAt === plan.expiresAt → PASS；expiresAt < plan.expiresAt → PASS；
+  expiresAt > plan.expiresAt → REJECT（EXECUTION_GATE_TICKET_EXCEEDS_PLAN_EXPIRY）；
+  requestedAt 已在 plan 内但 ticket 跨出 plan expiry → REJECT；
+  P6U2F_2 相同 fingerprint/path value 但不同 version → ticketDigest 不同；
+  相同 fingerprint/path value/version 但不同 capturedAt → ticketDigest 不同；binds = 17；
+  原 8 项（含 P6U2_1..8）保持 green，execution 仍全 FORBIDDEN。
+* 过滤集：13 files / **145 tests** PASS。
+* 回归集：106 files / **1092 tests**（1091 passed + 1 failed = recovery-si-phase2-e-db P2E-DB5 既有 test-isolation debt）。
+* GitHub Actions：NOT_OBSERVED。
+
+③ 口径
+* U2 仍是 EXECUTION_AUTHORIZATION_ONLY：不写配置、不 apply、不 mutate、不 rollout；
+  并且 U2 授权**不是**可长期持有的 capability token（execute 阶段必须重新读 current config）。
+* 未接真实 judge/OAuth/外部写；HOLD/FORBIDDEN 边界全部不变。
+* 未宣称：MODEL_GATEWAY_RUNTIME_WIRED / ACTION_RUNTIME_PRODUCTION_ENABLED / META_IMPROVEMENT_INTEGRATED / PRODUCTION_READY = false。
+
+请求裁决
+1. P6-U2 FINAL 是否可记 PASS（AUTHORIZATION_WITHIN_PLAN_LIFETIME = PASS、
+   LIVE_CONFIG_IDENTITY_DIGEST_BINDING = PASS、CONTROLLED_EXECUTION_GATE_CONTRACT = PASS、
+   PHASE_6_U2 = PASS / CLOSED、PHASE6_U2_FINAL2_REQUIRED = NO）？
+2. 是否确认后续真正配置 write 必须另开 P6-U3 并单独授权（当前未授权、未实现）？请给出 U3 的最终最低执行门与首版范围。
+
+边界：REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS /
+PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing = HOLD；SECOND_* = FORBIDDEN；L5_RELAXATION = FORBIDDEN。
+…
+显示更多
+✅
+思考了 20s
+ChatGPT 说：
+DECISION
+AUTHORIZATION_WITHIN_PLAN_LIFETIME = PASS
+LIVE_CONFIG_IDENTITY_DIGEST_BINDING = PASS
+CONTROLLED_EXECUTION_GATE_CONTRACT = PASS
+PHASE_6_U2 = PASS / CLOSED
+PHASE6_U2_FINAL2_REQUIRED = NO
+Reviewed HEAD：c5e5f1a3
+GitHub Actions：NOT_OBSERVED
+
+确认：真正 config write 必须另开 P6-U3，单独授权。U2 的 APPROVED 绝不能直接触发 mutation。
+
+KEEP
+
+两项窄修均正确进入主路径：
+
+纯文本
+plan.createdAt
+<= ticket.requestedAt
+<  ticket.expiresAt
+<= plan.expiresAt
+
+跨越 plan expiry 现在明确：
+
+EXECUTION_GATE_TICKET_EXCEEDS_PLAN_EXPIRY
+
+同时 ticket durable identity 已加入：
+
+liveConfigFingerprint
+livePathValue
+liveConfigCapturedAt
+liveConfigVersion
+
+因此 U2 已真正记录：
+
+本次 authorization 是依据哪一次 live-config read、哪一个配置版本做出的。
+
+verdict 绑定 ticketDigest，无需重复展开这两个字段。
+
+Execution 面仍然：
+
+apply / execute / configMutation / productionRollout = FORBIDDEN
+
+所以 U2 可正式 CLOSED。
+
+CHANGE
+
+U2 无进一步修改。
+
+不要在 controlled-execution-gate.ts 内顺手增加 write。
+
+真正写配置必须是独立模块、独立审计单元。
+
+RISKS
+
+U3 最重要的原则是：
+
+U2 授权只能证明“当时允许准备执行”，不能证明“执行这一刻配置仍然没变”。
+
+因此不能：
+
+纯文本
+U2 APPROVED
+→ 直接 write(plan.to)
+
+必须重新：
+
+纯文本
+read current config
+→ compare authorized identity
+→ atomic CAS
+→ write
+→ read-back
+
+另外，U3 不能只消费 verdict。
+
+因为真正执行还需要 U2 ticket 中的：
+
+liveConfigVersion
+liveConfigCapturedAt
+liveConfigFingerprint
+livePathValue
+
+所以 U3 应同时要求：
+
+verified U2 ticket + verified U2 verdict + verified plan
+
+并要求三者 digest 完全闭合。
+
+TEST
+
+本次 exact commit 已确认：
+
+expiresAt === plan.expiresAt → PASS
+< plan.expiresAt → PASS
+> plan.expiresAt → REJECT
+requestedAt 在 plan 内但 ticket 跨出 → REJECT
+version 改变 → ticketDigest 改变
+capturedAt 改变 → ticketDigest 改变
+binds = 17
+无新增执行入口
+
+本地 10/10 可作为 Codex local evidence；exact SHA GitHub Actions 仍为 NOT_OBSERVED。
+
+NEXT
+
+我授权下一单元：
+
+P6-U3 — Controlled Config Execution
+
+但首版范围冻结为：
+
+SANDBOX / NON_PRODUCTION_CONFIG_WRITE_ONLY
+
+不是 production apply。
+
+1. 三重可信入口
+
+U3 必须同时接受：
+
+纯文本
+Verified ControlledAdoptionPlan
++
+Verified ControlledExecutionAuthorizationTicket
++
+Verified ControlledExecutionAuthorizationVerdict
+
+并要求：
+
+纯文本
+verdict.outcome === APPROVED
+verdict.semantics === AUTHORIZED_FOR_CONTROLLED_EXECUTION_PREPARATION
+verdict.ticketDigest === ticket.ticketDigest
+verdict.planDigest === plan.planDigest
+ticket.planDigest === plan.planDigest
+
+任何 clone/handmade/mismatch → fail-closed。
+
+2. 执行时间门
+
+执行时间必须同时不晚于：
+
+纯文本
+ticket.expiresAt
+plan.expiresAt
+
+并且：
+
+纯文本
+executedAt >= verdict.decidedAt
+
+建议错误：
+
+CONFIG_EXECUTION_AUTHORIZATION_EXPIRED
+CONFIG_EXECUTION_BEFORE_AUTHORIZATION
+3. 执行瞬间重新读取 current config
+
+U3 必须再次通过 server-owned store：
+
+纯文本
+read(plan.target)
+
+然后同时验证：
+
+纯文本
+current.configFingerprint
+=== plan.expectedBaselineConfigFingerprint
+
+current.configValues[path]
+=== plan.from
+
+current.version
+=== ticket.liveConfigVersion
+
+并建议要求：
+
+纯文本
+current.configFingerprint
+=== ticket.liveConfigFingerprint
+
+任何变化：
+
+STALE_EXECUTION_BASELINE
+
+禁止写。
+
+4. 原子 CAS 是硬门
+
+不要实现：
+
+纯文本
+read
+→ if ok
+→ 普通 write
+
+因为存在 TOCTOU。
+
+必须使用类似：
+
+纯文本
+compareAndSwap({
+  target,
+  expectedVersion: ticket.liveConfigVersion,
+  expectedPathValue: plan.from,
+  path: plan.path,
+  nextValue: plan.to
+})
+
+底层必须原子化。
+
+CAS 失败：
+
+CONFIG_EXECUTION_CONFLICT
+
+零副作用。
+
+5. Exact delta only
+
+U3 不允许 caller 重新提交：
+
+target
+path
+from
+to
+
+全部必须从 verified plan 读取。
+
+只执行：
+
+纯文本
+plan.target
+plan.path
+plan.from
+→ plan.to
+
+禁止 arbitrary mutation / multi-path patch / JSON blob patch。
+
+6. 一次授权最多一次 mutation
+
+这次不能只用进程内 Set。
+
+因为已经进入真实 mutation 语义，至少要有持久化 execution ledger / repository：
+
+纯文本
+authorizationTicketDigest UNIQUE
+或
+authorizationVerdictDigest UNIQUE
+
+确保：
+
+one approved authorization → at most one committed mutation
+
+并发两个 worker：
+
+纯文本
+exactly one COMMITTED
+other → ALREADY_EXECUTED / CONFLICT
+7. Idempotency
+
+需要固定：
+
+executionId / idempotencyKey
+
+重复相同请求：
+
+已成功 → 返回已有 execution result；
+payload 不同 → IDEMPOTENCY_KEY_CONFLICT；
+不得第二次写配置。
+8. 写后 read-back
+
+CAS 成功后必须 server-owned read-back：
+
+纯文本
+new[path] === plan.to
+new.version != old.version
+
+并计算/读取新的 fingerprint。
+
+如果 write 返回 success 但 read-back 不一致：
+
+不得标记 SUCCESS。
+
+进入：
+
+NEEDS_RECONCILIATION
+
+而不是盲目重写。
+
+9. Execution Result artifact
+
+新增可信：
+
+CONTROLLED_CONFIG_EXECUTION_RESULT
+
+至少绑定：
+
+executionId
+planDigest
+authorizationTicketDigest
+authorizationVerdictDigest
+rollbackPlanDigest
+target/path/from/to
+preConfigFingerprint
+preConfigVersion
+postConfigFingerprint
+postConfigVersion
+executedAt
+status
+idempotencyKey
+
+状态建议只允许：
+
+纯文本
+COMMITTED
+NOOP_ALREADY_APPLIED
+CONFLICT
+NEEDS_RECONCILIATION
+FAILED_ZERO_WRITE
+
+并：
+
+provenance + fingerprint + durable persistence
+
+10. Rollback anchor 必须伴随执行
+
+Execution record 必须继续携带：
+
+rollbackPlanDigest
+baselineSnapshotDigest
+baselineConfigFingerprint
+U2_BASELINE
+
+但 首版 U3 不要自动 rollback。
+
+自动 rollback 应另立单元。
+
+11. Kill Switch / Control Plane
+
+在真正 CAS 前必须最后检查：
+
+纯文本
+globalDisabled
+productionGate
+target/platform feature gate
+execution enablement
+
+首版因为是 sandbox，应明确：
+
+纯文本
+environment = SANDBOX
+productionMutation = FORBIDDEN
+12. U3 首版禁止事项
+
+即使 U3 PASS，仍禁止：
+
+production config store；
+rollout；
+multi-node production propagation；
+real provider action；
+payment；
+external writes；
+Policy/Guard/Router/ActionRuntime 的 production mutation。
+
+U3 首版成功语义只能是：
+
+SANDBOX_CONFIG_MUTATION_COMMITTED
+
+不能写：
+
+PRODUCTION_APPLIED / DEPLOYED / ROLLED_OUT
+
+PRODUCTION
+
+继续全部 HOLD：
+
+REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / PAYMENT / TRANSPORT / PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / P2_F / P2_G / CUSTOMS real filing
+
+继续：
+
+SECOND_RUNTIME / SECOND_POLICY_ENGINE / SECOND_CONTROL_PLANE / SECOND_MODEL_GATEWAY / SECOND_COST_LEDGER / SECOND_META_EVIDENCE_STORE = FORBIDDEN
+
+L5_RELAXATION = FORBIDDEN
+
+保持：
+
+MODEL_GATEWAY_RUNTIME_WIRED = false
+ACTION_RUNTIME_PRODUCTION_ENABLED = false
+META_IMPROVEMENT_INTEGRATED = false
+PRODUCTION_READY = false
+
+最终裁决：P6-U2 正式 CLOSED。授权另开 P6-U3，但只允许 SANDBOX / NON-PRODUCTION 的原子 CAS 配置写入；production config write 仍未授权。
+```
+
