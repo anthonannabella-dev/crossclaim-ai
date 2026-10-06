@@ -35,7 +35,10 @@ export const CONTROLLED_EXECUTION_GATE_BOUNDARY = {
   mode: 'EXECUTION_AUTHORIZATION_ONLY',
   planTrustGate:
     'isVerifiedControlledAdoptionPlan(plan) === true && plan.semantics === READY_FOR_CONTROLLED_EXECUTION_GATE_REVIEW',
-  authorizationWindow: 'plan.createdAt <= requestedAt <= plan.expiresAt（过期 → EXECUTION_GATE_PLAN_EXPIRED）',
+  authorizationWindow:
+    'plan.createdAt <= requestedAt <= expiresAt <= plan.expiresAt（过期 → EXECUTION_GATE_PLAN_EXPIRED；ticket 跨出 plan 生命周期 → EXECUTION_GATE_TICKET_EXCEEDS_PLAN_EXPIRY）',
+  ticketLifetimeBoundedByPlan:
+    'ticket.expiresAt <= plan.expiresAt（否则 EXECUTION_GATE_TICKET_EXCEEDS_PLAN_EXPIRY）',
   liveConfigSource: 'SERVER_OWNED_CURRENT_CONFIG_STORE（CUA：不得来自 HTTP body / caller 自报）',
   liveConfigReadShape: 'configFingerprint + configValues + capturedAt + version',
   staleGuard: 'double：live.configFingerprint === plan.expectedBaselineConfigFingerprint 且 live.configValues[plan.path] === plan.from（否则 STALE_BASELINE）',
@@ -65,11 +68,15 @@ export const CONTROLLED_EXECUTION_GATE_BOUNDARY = {
     'to',
     'liveConfigFingerprint',
     'livePathValue',
+    'liveConfigCapturedAt',
+    'liveConfigVersion',
     'requestedAt',
     'expiresAt',
     'nonce',
     'scope',
   ],
+  liveConfigIdentityBinding:
+    'ticketDigest preimage 绑定 liveConfigFingerprint + livePathValue + liveConfigCapturedAt + liveConfigVersion（durable 证明“依据的是哪次 read / 哪个 version”）',
   ticketProvenance: 'PROVENANCE_REGISTERED + fingerprint + deep-freeze',
   verdictProvenance: 'PROVENANCE_REGISTERED + fingerprint + deep-freeze（clone / 手造 APPROVED 不可信）',
   productionWrite: 'HOLD（真正写配置必须另开后续 execution 单元并重新裁决）',
@@ -244,9 +251,12 @@ export async function openControlledExecutionAuthorizationTicket(input: {
   // 时间窗：授权时间必须落在 plan 有效期内
   if (!isIso(input.requestedAt) || !isIso(input.expiresAt)) throw new Error('EXECUTION_GATE_SCHEDULE_INVALID');
   const requestedMs = Date.parse(input.requestedAt);
-  if (Date.parse(input.expiresAt) <= requestedMs) throw new Error('EXECUTION_GATE_EXPIRY_INVALID');
+  const expiresMs = Date.parse(input.expiresAt);
+  if (expiresMs <= requestedMs) throw new Error('EXECUTION_GATE_EXPIRY_INVALID');
   if (requestedMs < Date.parse(plan.createdAt)) throw new Error('EXECUTION_GATE_REQUESTED_BEFORE_PLAN_CREATED');
   if (requestedMs > Date.parse(plan.expiresAt)) throw new Error('EXECUTION_GATE_PLAN_EXPIRED');
+  // AUTHORIZATION_WITHIN_PLAN_LIFETIME：授权不能活得比 Plan 更久（窄修 1）
+  if (expiresMs > Date.parse(plan.expiresAt)) throw new Error('EXECUTION_GATE_TICKET_EXCEEDS_PLAN_EXPIRY');
 
   // 4) Delta 再确认（不重新创造 delta，只复核 verified plan 的值仍合法）
   const target = requireText(plan.target);
@@ -312,6 +322,9 @@ export async function openControlledExecutionAuthorizationTicket(input: {
     to,
     liveFingerprint,
     livePathValue,
+    // LIVE_CONFIG_IDENTITY_DIGEST_BINDING：durable digest 必须证明依据的是哪一次 current-config read / 哪个 version（窄修 2）
+    live.capturedAt,
+    requireText(live.version),
     input.requestedAt,
     input.expiresAt,
     nonce,

@@ -270,7 +270,7 @@ describe('PHASE 6 U2 —— controlled adoption execution gate (EXECUTION_AUTHOR
     expect(verdict.execution.productionRollout).toBe('FORBIDDEN');
     expect(isVerifiedControlledExecutionAuthorizationVerdict(verdict)).toBe(true);
     expect(assertControlledExecutionPreparationAuthorized(verdict).planDigest).toBe(f.plan.planDigest);
-    expect(CONTROLLED_EXECUTION_GATE_BOUNDARY.binds).toHaveLength(15);
+    expect(CONTROLLED_EXECUTION_GATE_BOUNDARY.binds).toHaveLength(17);
     expect(CONTROLLED_EXECUTION_GATE_BOUNDARY.mode).toBe('EXECUTION_AUTHORIZATION_ONLY');
   });
 
@@ -483,5 +483,80 @@ describe('PHASE 6 U2 —— controlled adoption execution gate (EXECUTION_AUTHOR
     ).rejects.toThrow(/EXECUTION_GATE_LIVE_CONFIG_UNREADABLE/);
     expect(CONTROLLED_EXECUTION_GATE_BOUNDARY.forbiddenRollbackLabels).toEqual(['LATEST', 'DEFAULT', 'CURRENT', 'HEAD']);
     expect(CONTROLLED_EXECUTION_GATE_BOUNDARY.rollbackAnchor).toContain('U2_BASELINE');
+  });
+
+  it('P6U2F_1 授权生命周期不得超过 plan：expiresAt <= plan.expiresAt，否则 TICKET_EXCEEDS_PLAN_EXPIRY', async () => {
+    const f = await planFixture();
+    const base = { plan: f.plan, configStore: liveStore(), reviewerScope: CONTROLLED_EXECUTION_GATE_SCOPE };
+    // ticket.expiresAt === plan.expiresAt → PASS
+    const equalTicket = await openControlledExecutionAuthorizationTicket({
+      ...base,
+      requestedAt: '2026-10-06T02:00:00.000Z',
+      expiresAt: f.plan.expiresAt,
+      nonce: 'p6u2f-equal',
+    });
+    expect(equalTicket.expiresAt).toBe(f.plan.expiresAt);
+    expect(isVerifiedControlledExecutionAuthorizationTicket(equalTicket)).toBe(true);
+    // ticket.expiresAt < plan.expiresAt → PASS
+    const insideTicket = await openControlledExecutionAuthorizationTicket({
+      ...base,
+      requestedAt: '2026-10-06T02:00:00.000Z',
+      expiresAt: '2026-10-06T05:00:00.000Z',
+      nonce: 'p6u2f-inside',
+    });
+    expect(isVerifiedControlledExecutionAuthorizationTicket(insideTicket)).toBe(true);
+    // requestedAt 已在 plan 内，但 ticket 跨出 plan expiry → REJECT
+    await expect(
+      openControlledExecutionAuthorizationTicket({
+        ...base,
+        requestedAt: '2026-10-06T06:00:00.000Z',
+        expiresAt: '2026-10-06T10:00:00.000Z',
+        nonce: 'p6u2f-crossing',
+      }),
+    ).rejects.toThrow(/EXECUTION_GATE_TICKET_EXCEEDS_PLAN_EXPIRY/);
+    await expect(
+      openControlledExecutionAuthorizationTicket({
+        ...base,
+        requestedAt: '2026-10-06T02:00:00.000Z',
+        expiresAt: '2026-10-06T07:00:00.000Z',
+        nonce: 'p6u2f-crossing-2',
+      }),
+    ).rejects.toThrow(/EXECUTION_GATE_TICKET_EXCEEDS_PLAN_EXPIRY/);
+    expect(CONTROLLED_EXECUTION_GATE_BOUNDARY.ticketLifetimeBoundedByPlan).toContain(
+      'EXECUTION_GATE_TICKET_EXCEEDS_PLAN_EXPIRY',
+    );
+    expect(CONTROLLED_EXECUTION_GATE_BOUNDARY.authorizationWindow).toContain(
+      'plan.createdAt <= requestedAt <= expiresAt <= plan.expiresAt',
+    );
+  });
+
+  it('P6U2F_2 live config identity 进入 durable ticketDigest：version / capturedAt 变化 → digest 不同', async () => {
+    const f = await planFixture();
+    const open = (configStore: ControlledCurrentConfigStorePort, nonce: string) =>
+      openControlledExecutionAuthorizationTicket({
+        plan: f.plan,
+        configStore,
+        reviewerScope: CONTROLLED_EXECUTION_GATE_SCOPE,
+        requestedAt: '2026-10-06T01:00:00.000Z',
+        expiresAt: '2026-10-06T03:00:00.000Z',
+        nonce,
+      });
+    const a = await open(liveStore(), 'p6u2f-identity-a');
+    const b = await open(liveStore(), 'p6u2f-identity-b');
+    // 同一 read 身份 + 同一 nonce → 同 digest
+    const aAgain = await open(liveStore(), 'p6u2f-identity-a');
+    expect(aAgain.ticketDigest).toBe(a.ticketDigest);
+    // 相同 fingerprint/path value，但不同 version → ticketDigest 不同
+    const otherVersion = await open(liveStore({ version: 'cfg-2' }), 'p6u2f-identity-a');
+    expect(otherVersion.liveConfigVersion).toBe('cfg-2');
+    expect(otherVersion.ticketDigest).not.toBe(a.ticketDigest);
+    // 相同 fingerprint/path value/version，但不同 capturedAt → ticketDigest 不同
+    const otherCapturedAt = await open(liveStore({ capturedAt: '2026-10-06T00:58:00.000Z' }), 'p6u2f-identity-a');
+    expect(otherCapturedAt.ticketDigest).not.toBe(a.ticketDigest);
+    expect(b.ticketDigest).not.toBe(a.ticketDigest);
+    expect(CONTROLLED_EXECUTION_GATE_BOUNDARY.binds).toHaveLength(17);
+    expect(CONTROLLED_EXECUTION_GATE_BOUNDARY.binds).toContain('liveConfigCapturedAt');
+    expect(CONTROLLED_EXECUTION_GATE_BOUNDARY.binds).toContain('liveConfigVersion');
+    expect(CONTROLLED_EXECUTION_GATE_BOUNDARY.liveConfigIdentityBinding).toContain('ticketDigest');
   });
 });
