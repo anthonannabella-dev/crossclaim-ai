@@ -6,12 +6,12 @@
   "next_task": "BG-016 单一 Acceptance Head + 四份状态一致 guard（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍 HOST_ACTION_REQUIRED 或 HOLD",
   "send_head": "07b7009",
   "decision_head": "f5e4cc2c",
-  "last_chatgpt_message": "MSG-20261005-91",
+  "last_chatgpt_message": "MSG-20261005-92",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-06T00:56:38.341Z",
+  "updated_at": "2026-10-06T00:59:45.036Z",
   "previous_head": "8064f07",
-  "architect_decision_pending": true,
+  "architect_decision_pending": false,
   "blocked_scope": null,
   "last_send_head": "0c35106",
   "last_sent_at": "2026-10-03T09:07:52.875Z",
@@ -49,14 +49,14 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
-  "continuous_execution": "RUNNING（PHASE 6 U3 FINAL3 submitted; awaiting verdict）",
-  "next_execution_unit": "Next tick: read the P6-U3 FINAL3 verdict (marker [CODEX-PHASE6-U3FINAL3], REVIEWED_HEAD = 8920c429) from the audit chat, archive it verbatim (compare.mjs FULL_COPY_OK), then reconcile durable state; if PASS -> PHASE_6_U3 = PASS / CLOSED and PHASE 6 CURRENT CHAIN (U1/U2/U3) = CLOSED. production config write / rollout / auto rollback remain NOT AUTHORIZED.",
+  "continuous_execution": "IDLE / SAFE_CONTINUATION_QUEUE_EMPTY（PHASE 6 当前链 CLOSED；生产 enablement 需宿主新授权）",
+  "next_execution_unit": "NONE（可自动执行的安全单元队列为空）。下一步若继续，必须由宿主单独授权新单元，例如 P6-PROD-U1 — Production Config Execution Durability / NO PRODUCTION ENABLEMENT（DB-backed reservation、UNIQUE(verdictDigest)/UNIQUE(ticketDigest)、durable idempotency、RESERVED→EXECUTING→terminal 状态机、crash recovery、startup reconciliation、CAS/ledger 一致性、transactional outbox、multi-worker E2E、stale-lease recovery；production current-config adapter 保持 read-only，production mutation 开关保持 false）。",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-06T00:56:38.341Z",
+  "last_tick_at": "2026-10-06T00:59:45.036Z",
   "state": "CONTINUOUS_AUTOPILOT_RUNNING",
-  "last_action": "Archived PHASE 6 U3 FINAL2 verdict (MSG-20261005-91) with FULL_COPY_OK (commit 85cf63c2); implemented the CAS post-state evidence fix and pushed P6-U3 FINAL3 at 8920c429 (tsc 0, targeted 17/17, filtered 162 PASS, regression 1108 passed/1 failed = P2E-DB5); submitted marker [CODEX-PHASE6-U3FINAL3] REVIEWED_HEAD=8920c429 (composer empty + marker + head verified in DOM).",
-  "last_action_at": "2026-10-06T00:56:38.341Z",
-  "next_action": "Read/archive the P6-U3 FINAL3 verdict (expect MSG-20261005-92); if PASS, record PHASE_6_U3 = PASS / CLOSED and the Phase 6 current chain as CLOSED. Do not start any production config mutation, rollout, or auto-rollback unit without explicit separate authorization.",
+  "last_action": "读取并逐字归档 PHASE 6 U3 FINAL3 裁决（MSG-20261005-92，reviewed HEAD 8920c429）——compare.mjs = FULL_COPY_OK，归档提交 5cafb8e5 已 push；据此登记 PHASE_6_U3 = PASS / CLOSED、P6-U1/U2/U3 全 CLOSED、PHASE_6_CURRENT_CHAIN = PASS / CLOSED，production config write 仍 NOT AUTHORIZED。",
+  "last_action_at": "2026-10-06T00:59:45.036Z",
+  "next_action": "等待宿主授权新的独立单元；不启动任何 production config mutation / rollout / auto rollback。",
   "current_head": "8920c429",
   "last_completed_head": "8920c429",
   "reviewed_head": "8920c429",
@@ -5168,12 +5168,7 @@
   "runner_status": "RUNNING",
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
-  "safe_continuation_queue": [
-    "P6U1F-2 archive P6-U1 verdict (MSG-20261005-85) verbatim + compare FULL_COPY_OK + commit/push",
-    "P6U1F-3 read + archive P6-U1 FINAL verdict (MSG-20261005-86) + durable state",
-    "P6U1F-4 if PASS -> P6-U2 Controlled Adoption Execution Gate per auditor minimum gate",
-    "P6U1F-5 non-blocking debt: full SHA-256 digests, fingerprint schema upkeep, scanRawPayloadKeys bounded traversal, P2E-DB5 test-isolation"
-  ],
+  "safe_continuation_queue": [],
   "full_autonomous_internal_execution": "VERIFIED",
   "dispatcher_acceptance": {
     "at": "2026-10-03T14:47:59.226Z",
@@ -5920,7 +5915,7 @@
       "next_task": null
     }
   },
-  "safe_continuation_queue_note": "SAFE_CONTINUATION_QUEUE = EMPTY；剩余全部为 HOST_ACTION_REQUIRED（BG-006-production-candidate-preflight:HOST_ACTION_REQUIRED, RSI-RT-02-supervisor-autostart:IMPLEMENTED_PENDING_HOST_VALIDATION）或 HOLD_EXTERNAL（）。",
+  "safe_continuation_queue_note": "空：PHASE 6 当前链（U1/U2/U3）已全部 CLOSED，生产配置写入 / rollout / auto rollback 属未授权范围；若宿主另行授权下一单元（例如 P6-PROD-U1 durability foundation），再重新计算队列。",
   "release_integration": {
     "at": "2026-10-03T22:59:47.170Z",
     "method": "PR #12 merge commit (no force push)",
@@ -9293,7 +9288,7 @@
   "AUDIT_REVISE_LOOP_AUTO_CONTINUE": true,
   "HOST_LIMIT_MEANS_STOP": false,
   "STOP_ONLY_ON_TRUE_HOST_DEPENDENCY_OR_COMPLETE": true,
-  "CONTINUATION_REQUIRED": true,
+  "CONTINUATION_REQUIRED": false,
   "heartbeat": {
     "automation_id": "crossclaim-ai-bridge-5min",
     "name": "crossclaim-si-watchdog-1min",
@@ -9322,7 +9317,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-06T00:00:20.094Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-06T00:59:45.036Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -9451,7 +9446,8 @@
     "PHASE_3_ACTION_RUNTIME": "PASS / CLOSED（MSG-20261005-54；Reviewed HEAD = fe3c33e9；PHASE3_FINAL4_REQUIRED = NO）",
     "PHASE_4_OUTCOME_LEARNING_PIPELINE": "CLOSED / PASS（MSG-20261005-67）：U1 FINAL / U2 / U3 / U4 / U5 全 CLOSED；含 U4 FINAL、U5 FINAL、U5 FINAL2、PHASE 4 FINAL CLOSURE。",
     "PHASE_5_META_IMPROVEMENT": "FORMALLY CLOSED (MSG-20261005-84): U1-U5 PASS / CLOSED; closure checkpoint PASS; archive index MSG-65..84.",
-    "PHASE_6_CONTROLLED_ADOPTION": "IN PROGRESS: U1 Controlled Adoption Plan (PLAN_ONLY) = SUBMITTED / AWAITING_VERDICT (d84ed40e)."
+    "PHASE_6_CONTROLLED_ADOPTION": "IN PROGRESS: U1 Controlled Adoption Plan (PLAN_ONLY) = SUBMITTED / AWAITING_VERDICT (d84ed40e).",
+    "PHASE_6_CONTROLLED_ADOPTION_CHAIN": "PASS / CLOSED（U1 计划 → U2 授权门 → U3 sandbox 原子 CAS 配置执行；生产变更仍未授权）"
   },
   "heartbeat_watchdog": {
     "interval_seconds": 180,
@@ -11246,9 +11242,9 @@
     ]
   },
   "phase6_u3": {
-    "status": "SUBMITTED / AWAITING_VERDICT",
+    "status": "PASS / CLOSED",
     "unit": "Controlled Config Execution（SANDBOX / NON_PRODUCTION_CONFIG_WRITE_ONLY）",
-    "reviewed_head": "08a35f4b",
+    "reviewed_head": "8920c429",
     "pushed": true,
     "files": [
       "apps/api/src/services/outcome-learning/controlled-config-execution.ts",
@@ -11280,7 +11276,8 @@
       "delivered": true,
       "composer_empty_verified": true,
       "expected_message_id": "MSG-20261005-89"
-    }
+    },
+    "closed_at": "2026-10-06T00:59:45.036Z"
   },
   "phase6_u3_pending_findings": {
     "status": "RESOLVED_IN_U3_FINAL（两项临时发现均已按 MSG-89 三项 REVISE 修复）",
@@ -11400,7 +11397,7 @@
     "phase6_u3_final3_required": "YES"
   },
   "phase6_u3_final3": {
-    "status": "SUBMITTED / AWAITING_VERDICT",
+    "status": "PASS / CLOSED",
     "reviewed_head": "8920c429",
     "pushed": true,
     "files": [
@@ -11422,6 +11419,36 @@
       "delivered": true,
       "composer_empty_verified": true,
       "expected_message_id": "MSG-20261005-92"
-    }
-  }
+    },
+    "closed_at": "2026-10-06T00:59:45.036Z"
+  },
+  "head_after_archive": "5cafb8e5",
+  "phase6_u3_final3_verdict": {
+    "message_id": "MSG-20261005-92",
+    "verdict": "PASS / CLOSED",
+    "reviewed_head": "8920c429",
+    "archive_verified": "FULL_COPY_OK",
+    "archive_head": "5cafb8e5",
+    "github_ci": "NOT_OBSERVED",
+    "pass": [
+      "CAS_EXCEPTION_POST_STATE_EVIDENCE = PASS",
+      "SANDBOX_CONFIG_EXECUTION_CONTRACT = PASS",
+      "PHASE_6_U3 = PASS / CLOSED",
+      "PHASE6_U3_FINAL4_REQUIRED = NO",
+      "P6-U1 Controlled Adoption Plan = CLOSED",
+      "P6-U2 Execution Authorization Gate = CLOSED",
+      "P6-U3 Sandbox Controlled Config Execution = CLOSED",
+      "PHASE_6_CURRENT_CHAIN = PASS / CLOSED"
+    ],
+    "notes": [
+      "三条证据语义被明确背书：CAS ok:false → CONFLICT 保留 pre identity；CAS throws → NEEDS_RECONCILIATION 且 post identity = null（UNKNOWN）；CAS ok:true + read-back 失败 → NEEDS_RECONCILIATION 保留 CAS 返回的 post identity。",
+      "U3 不再需要任何功能修改；docs-only Phase 6 current-chain checkpoint 允许但不要求，不阻断 CLOSED。",
+      "production config write = NOT AUTHORIZED：即便 FINAL3 PASS 也只代表 sandbox controlled mutation contract closed，不代表 production execution readiness。",
+      "本单元 local evidence 只能是 17/17 + 回归 1109（1108 passed / 1 failed = P2E-DB5）；exact SHA GitHub Actions = NOT_OBSERVED，不得写成 CI success。",
+      "production 后续（若将来授权）须另立 P6-PROD-U1 Production Config Execution Durability：DB-backed reservation + UNIQUE(verdictDigest)/UNIQUE(ticketDigest) + durable idempotency + RESERVED→EXECUTING→terminal 状态机 + crash recovery + startup reconciliation + CAS/ledger 一致性 + transactional outbox + multi-worker E2E + stale-lease recovery；且 production current-config adapter 仍只读、production mutation 开关仍为 false。"
+    ]
+  },
+  "phase6_current_chain": "PASS / CLOSED（P6-U1 / P6-U2 / P6-U3 全 CLOSED；production config write / rollout / auto rollback 仍 NOT AUTHORIZED）",
+  "phase6_current_chain_closed_at": "2026-10-06T00:59:45.036Z",
+  "production_config_write": "NOT AUTHORIZED"
 }
