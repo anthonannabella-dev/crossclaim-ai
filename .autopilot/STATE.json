@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "b1ac2323",
+  "head": "fe2b8205",
   "status": "RECONCILED",
   "current_task": "RSI 生产可执行闭环（7 点收口）：RSI_RUNTIME_READY = PASS；MODEL_PROVIDER_READY = 本地仿真已接线（真实网络/付费 HOLD）；PERSISTENCE_READY = ephemeral 已验证、durable 需宿主非生产 DATABASE_URL；REBOOT_RECONCILE_READY = NOT_IMPLEMENTED（下一单元）；SYSTEMD_VALIDATED = 需宿主 Linux 实机",
   "next_task": "BG-016 单一 Acceptance Head + 四份状态一致 guard（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍 HOST_ACTION_REQUIRED 或 HOLD",
@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-96",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-06T04:47:38.107Z",
+  "updated_at": "2026-10-06T05:11:07.583Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -49,17 +49,17 @@
   "claim_submit_route": "f22e4a6（POST /cases/:id/claim/submit：fail-closed + hitl-submission + recordSubmission + NEEDS_MANUAL/零外写；tsc PASS、prisma validate valid）",
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
-  "continuous_execution": "STOPPED_BY_HOST_CONDITIONS（P6-PROD-U1 = PASS / CLOSED；队列为空；watchdog 删除）",
-  "next_execution_unit": "NONE（需 HOST 单独授权新单元，例如 P6-PROD-U2 真实生产配置写入）",
+  "continuous_execution": "RUNNING（PROVIDER FOLLOW-UP P1 A-S1 已 push；队列含 A-S2…A-S10 与 B-S2…B-S12）",
+  "next_execution_unit": "Next tick：执行队列队首 A-S2 —— Amazon Support API 只读 adapter（AmazonSupportReadPort / ProviderCase / ProviderContact / ProviderAttachmentRef；fixture + contract tests；transport/credential 仍 HOLD）。",
   "automation_status": "CONTINUOUS",
-  "last_tick_at": "2026-10-06T04:47:38.107Z",
-  "state": "CLOSED",
-  "last_action": "P6-PROD-U1 FINAL3 裁决（MSG-20261005-96 = PASS / CLOSED，exact code HEAD b1ac2323）已逐字归档（FULL_COPY_OK，888be428）；登记 P6-PROD-U1 = PASS / CLOSED、PRODUCTION_DURABILITY_COMPLETE = true、prod enablement 仍 HOLD，并写入 closure_report。",
-  "last_action_at": "2026-10-06T04:47:38.107Z",
-  "next_action": "无（autopilot 已完成本授权范围；若宿主授权 P6-PROD-U2 再重新规划）",
-  "current_head": "b1ac2323",
-  "last_completed_head": "b1ac2323",
-  "reviewed_head": "b1ac2323",
+  "last_tick_at": "2026-10-06T05:11:07.583Z",
+  "state": "CONTINUOUS_AUTOPILOT_RUNNING",
+  "last_action": "HOST 授权两项连续计划（PROVIDER FOLLOW-UP INTELLIGENCE / CUSTOMS CLOSURE）；重建 180s watchdog；完成并 push A-S1 Provider Submission Scheduler Core（fe2b8205）：3 张 tenant-owned durable 表 + provider-aware 策略/限流窗口/lease/exactly-once/UNKNOWN→只读对账 + 测试（unit 14/14、PG 12/12、architecture 149/149、tsc 0、清单双通过）。",
+  "last_action_at": "2026-10-06T05:11:07.583Z",
+  "next_action": "按队列连续推进；每个 slice 独立 commit/test/push/checkpoint；不引入真实外部写或凭据。",
+  "current_head": "fe2b8205",
+  "last_completed_head": "fe2b8205",
+  "reviewed_head": "fe2b8205",
   "claim_submit_batch": {
     "verdict": "PASS",
     "message_id": "MSG-20261001-07",
@@ -5168,7 +5168,28 @@
   "runner_status": "RUNNING",
   "global_backlog_dispatcher": "VERIFIED",
   "static_unit_dependency": "REMOVED",
-  "safe_continuation_queue": [],
+  "safe_continuation_queue": [
+    "A-S2 Amazon Support API **只读** adapter：AmazonSupportReadPort / AmazonSupportCaseAdapter（listCases/getCase/listContacts/status/attachment metadata），统一 ProviderCase / ProviderContact / ProviderAttachmentRef；fixture + official-contract tests；真实 credential/transport 仍 HOLD。",
+    "A-S3 Provider case fact / contact normalization（append-only raw fact + canonical projection + provenance；tenant/account isolation）。",
+    "A-S4 Case Response Intelligence：ProviderContactFact → CaseResponseInterpretation → RequiredEvidence[] → RecommendedNextAction；LLM 只做分类/抽取/建议；低置信 → NEEDS_MANUAL_REVIEW；prompt injection 不得获得执行能力。",
+    "A-S5 General Evidence Resolver（FOUND/PARTIAL/MISSING/CONFLICT/AMBIGUOUS/LOW_CONFIDENCE；禁跨 tenant/account；CONFLICT → HITL）。",
+    "A-S6/B-S1 DocumentIngestionPort + PDF native text 优先 + OCR fallback port（本地/mock fixture；OCR 不得直接成为 Canonical Truth；不接收费 OCR）。",
+    "A-S7 Follow-up Package（draft only；external write 仍 FALSE）。",
+    "A-S8 Recovery Case Lifecycle projection（先审计现有事实模型，不新建重复状态机）。",
+    "A-S9 UI/API projection contract（区分「内部准备」/「已发送」/「平台 ACK」/「缺料」/「批准」/「到账」/「对账」）。",
+    "A-S10 PG E2E（Amazon Case → NEED_POD → EvidenceResolver FOUND/MISSING → follow-up/manual）+ full regression + security assertions。",
+    "B-S2 Customs 文档分类（CBP_7501/28/29、ACE/Broker entry record、duty payment、invoice、packing list、return/export/destruction、POD、POA、ruling、exclusion、refund evidence、OTHER）。",
+    "B-S3 CBP 7501 candidate field extraction（rawValue/normalizedValue/page/bbox/confidence/source digest；关键字段低置信 → QUARANTINE/HITL）。",
+    "B-S4 OCR trust boundary + candidate → Canonical/Customs Fact reconciliation（跨源冲突 → CONFLICT；禁 last-write-wins）。",
+    "B-S5 通用 Evidence Resolver 接入 Customs（Entry/EntryLine/Invoice/POD/Return/Export/Destruction/Carrier/Broker）。",
+    "B-S6 Import ↔ Export/Return/Destruction 全链 E2E（EXACT/PARTIAL/AMBIGUOUS/NO_MATCH + tenant/account/HTS/currency/jurisdiction 一致性）。",
+    "B-S7 US Customs Rule Pack v1（rules/customs/us/：remedy taxonomy/eligibility/deadlines/required evidence/calculation/routing/exclusion/limitation；DUPLICATE_DUTY/RATE_OVERPAYMENT/MISSED_EXCLUSION/DRAWBACK_CANDIDATE/PSC/PROTEST/CLASSIFICATION_CORRECTION/BROKER_REVIEW；9801/9802 ≠ drawback）。",
+    "B-S8 Drawback candidate route（fail-closed；最高只到 CLAIM_READY）。",
+    "B-S9 Broker/ABI/Filing provider readiness（15 项门槛逐项证明；缺一 → NEEDS_MANUAL/BROKER_HANDOFF）+ POA/authorization 复用规则 + RFI 补件准备（不真实 respond）。",
+    "B-S10 Claim-Ready Package vNext（estimateOnly=true / billable=false / filingPerformed=false）+ Customs high-value HITL 接入。",
+    "B-S11 Refund → Settlement → Success Fee guard 回归（只有 PROVIDER_VERIFIED/AUTHORITY_VERIFIED 且经 reconciliation 才 billable）。",
+    "B-S12 full PG E2E / security regression / 最终回报（IMPLEMENTED_FILES / SCHEMA_DELTA / MIGRATIONS / TEST_COUNTS / … / FINAL_VERDICT）。"
+  ],
   "full_autonomous_internal_execution": "VERIFIED",
   "dispatcher_acceptance": {
     "at": "2026-10-03T14:47:59.226Z",
@@ -9307,7 +9328,7 @@
   "AUDIT_REVISE_LOOP_AUTO_CONTINUE": true,
   "HOST_LIMIT_MEANS_STOP": false,
   "STOP_ONLY_ON_TRUE_HOST_DEPENDENCY_OR_COMPLETE": true,
-  "CONTINUATION_REQUIRED": false,
+  "CONTINUATION_REQUIRED": true,
   "heartbeat": {
     "automation_id": "crossclaim-ai-bridge-5min",
     "name": "crossclaim-si-watchdog-1min",
@@ -9336,7 +9357,7 @@
   },
   "EXECUTION_ACTIVE": false,
   "HEARTBEAT_INTERVAL_SECONDS": 60,
-  "safe_continuation_queue_recomputed_at": "2026-10-06T04:47:38.107Z",
+  "safe_continuation_queue_recomputed_at": "2026-10-06T05:11:07.583Z",
   "step3_runtime_policy_wiring": {
     "status": "PASS_CLOSED",
     "authorized_by": "HOST AUTHORIZATION — STEP 3: CROSSCLAIM SI RUNTIME / POLICY WIRING",
@@ -11637,5 +11658,30 @@
       "审核方 NEXT：不要继续自动打开 production mutation；未来进入真实生产配置写入必须另开并重新授权（例如 P6-PROD-U2）。"
     ]
   },
-  "phase6_prod_durability": "PASS / CLOSED（durability / concurrency / recovery / audit substrate；production mutation 仍 NOT AUTHORIZED）"
+  "phase6_prod_durability": "PASS / CLOSED（durability / concurrency / recovery / audit substrate；production mutation 仍 NOT AUTHORIZED）",
+  "active_program": {
+    "id": "PROVIDER-FOLLOWUP-INTELLIGENCE + CUSTOMS-DUTY-CLOSURE",
+    "authorized_at": "2026-10-06",
+    "branch": "gate/7-commercial-validation",
+    "transport": "PLATFORM_WRITE_TRANSPORT_ENABLED = false",
+    "boundaries": [
+      "REAL PLATFORM WRITE / REAL BROKER·ABI·CBP WRITE = HOLD",
+      "PRODUCTION CREDENTIALS = HOLD / ABSENT",
+      "AUTO_PAYMENT / 自动扣佣 = HOLD",
+      "Browser Automation 不作为生产 fallback；不存 Seller Center 账号密码/Cookie/Session；不绕 CAPTCHA/MFA",
+      "OCR / LLM 不得直接写 Canonical Truth；LLM 不得决定 eligibility / 金额 / successFeeEligible",
+      "不用单一 SUBMITTED 混淆「内部准备完成」与「平台已收到」"
+    ]
+  },
+  "program_progress": {
+    "A-S1": {
+      "name": "Provider Submission Scheduler Core",
+      "status": "DONE / PUSHED",
+      "head": "fe2b8205",
+      "evidence": {
+        "migration": "20261006150000_provider_submission_scheduler（3 张 tenant-owned 表 + 触发器/清单同步）",
+        "tests": "scheduler unit 14/14；scheduler PG 12/12；architecture-contract 149/149；tsc 0；tenant/append-only 清单双通过"
+      }
+    }
+  }
 }
