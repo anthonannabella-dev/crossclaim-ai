@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "406d0433",
+  "head": "e504f35a",
   "status": "RECONCILED",
   "current_task": "RSI 生产可执行闭环（7 点收口）：RSI_RUNTIME_READY = PASS；MODEL_PROVIDER_READY = 本地仿真已接线（真实网络/付费 HOLD）；PERSISTENCE_READY = ephemeral 已验证、durable 需宿主非生产 DATABASE_URL；REBOOT_RECONCILE_READY = NOT_IMPLEMENTED（下一单元）；SYSTEMD_VALIDATED = 需宿主 Linux 实机",
   "next_task": "BG-016 单一 Acceptance Head + 四份状态一致 guard（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍 HOST_ACTION_REQUIRED 或 HOLD",
@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-96",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-07T04:24:40.568Z",
+  "updated_at": "2026-10-07T04:28:20.229Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -50,15 +50,15 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "IN_PROGRESS（P0 CLOSED / P1–P9 排队）",
-  "next_execution_unit": "P2 — Goal → 现有 ONE SI Runtime 适配（接线真实 createRsiDomainPackRunner；禁止第二 runtime；不得抢占 task:recovery:*；不得绕过 Recovery routing / Action Guard / Standing Authorization / HITL）",
+  "next_execution_unit": "P3 — 最小 Goal 持久化（AgentGoal / AgentGoalRun = Customer Intent + Execution Projection；不是 Opportunity/Case/Claim/Evidence/Money/Settlement 的 SSOT；Schema Delta 先最小审计）",
   "automation_status": "CONTINUOUS",
   "last_tick_at": "2026-10-06T09:55:01.250Z",
   "state": "AGENT_EXPERIENCE_LAYER_IN_PROGRESS",
-  "last_action": "P1 CLOSED（406d0433）：Agent Goal Domain 薄层落地 —— goal-contract / goal-schema / goal-compiler（确定性，0 模型调用）/ goal-validator（server truth + 白名单 + 拒绝 tenant·action·service 注入）/ goal-capability-resolver（复用 ACTION_GUARD_CATALOG；Production Gate·Kill Switch·POA 可 fail-closed）/ goal-task-planner（task:recovery:* 幂等）/ goal-runtime-adapter（只转发既有 runner，SECOND_RUNTIME=0）；agent-goal 29/29，api tsc exit 0。",
-  "last_action_at": "2026-10-07T04:24:40.568Z",
-  "next_action": "按队列推进 P2 → P9（每单元独立 commit/push/checkpoint）。",
-  "current_head": "406d0433",
-  "last_completed_head": "406d0433",
+  "last_action": "P2 CLOSED（e504f35a）：Goal → 既有 ONE SI Runtime 接线 —— goal-runtime-binding 只把计划并入既有任务队列（entryPoint=existing-task-queue、callsRunnerDirectly=false、admissionOnly=true）；集成回归用真实 composeRsiRuntime 证明 recovery 任务派发到保留 pack recovery-si 且 caller runner 调用为 0、经 domainPacks 注入 recovery-si 被拒、SECOND_RUNTIME=0；wiring 7/7、定向回归 69/69、api tsc 0。",
+  "last_action_at": "2026-10-07T04:28:20.229Z",
+  "next_action": "按队列推进 P3 → P9（每单元独立 commit/push/checkpoint）。",
+  "current_head": "e504f35a",
+  "last_completed_head": "e504f35a",
   "reviewed_head": "42161550",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -12225,7 +12225,7 @@
   "agent_experience_layer": {
     "authorization": "HOST 2026-10-07 AGENT EXPERIENCE LAYER + DURABLE AUTHORIZATION + GOAL ORCHESTRATION",
     "baseline_head": "96a26c29",
-    "program_head": "406d0433",
+    "program_head": "e504f35a",
     "branch": "gate/7-commercial-validation",
     "units": {
       "P0": {
@@ -12274,10 +12274,27 @@
           "GOAL_TASK_NAMESPACE": "task:recovery:*（保留路由，幂等）",
           "SECOND_RUNTIME": "0"
         }
+      },
+      "P2": {
+        "name": "GOAL → 既有 ONE SI Runtime 接线（binding 走既有任务队列）",
+        "status": "CLOSED / PUSHED",
+        "head": "e504f35a",
+        "report": "docs/releases/AGENT-GOAL-RUNTIME-P2-REPORT.md",
+        "files": [
+          "apps/api/src/services/agent-goal/goal-runtime-binding.ts",
+          "apps/api/src/__tests__/agent-goal-runtime-wiring.test.ts"
+        ],
+        "tests": "agent-goal-runtime-wiring 7/7（真实 composeRsiRuntime）；定向回归 69/69（agent-goal 29 + wiring 7 + rsi-domain-pack-wiring 22 + rsi-si-runtime-real-guard-e2e 11）；api tsc exit 0；无 schema/migration",
+        "returns": {
+          "GOAL_RUNTIME_WIRING": "PASS（既有任务队列入口；不直接调用 runner）",
+          "RECOVERY_NAMESPACE_HIJACK": "REJECTED（domainPacks 注入 recovery-si → RESERVED_PACK_ID_REJECTED）",
+          "CALLER_RUNNER_CANNOT_STEAL_RECOVERY": "CONFIRMED（callerCalls = 0）",
+          "ADMISSION_IS_NOT_EXECUTION": "ENFORCED",
+          "SECOND_RUNTIME": "0"
+        }
       }
     },
     "safe_continuation_queue": [
-      "P2 — Goal → 现有 ONE SI Runtime 适配（禁止第二 runtime；不得抢占 task:recovery:*；不得绕过 Recovery routing / Action Guard / Standing Authorization / HITL）",
       "P3 — 最小 Goal 持久化（AgentGoal / AgentGoalRun：Customer Intent + Execution Projection，不是任何 SSOT）",
       "P4 — 首页升级 AI Recovery Manager / Goal Console（保留既有 Dashboard 全部内容）",
       "P5 — TaskCenter 升级 Needs Your Attention（复用 apps/web/app/components/ui/task-center.tsx）",

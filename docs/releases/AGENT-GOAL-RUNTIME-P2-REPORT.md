@@ -1,7 +1,7 @@
 # GOAL → 现有 ONE SI RUNTIME 接线（P2）—— 交付与证据
 
 授权：HOST 2026-10-07「AGENT EXPERIENCE LAYER + DURABLE AUTHORIZATION + GOAL ORCHESTRATION」P2。
-`EXACT_HEAD = AGENT-GOAL-P2-HEAD`（基线 `19521738`）
+`EXACT_HEAD = e504f35a`（基线 `19521738`）
 
 结论：**P2 = CLOSED**。Goal 计划经**既有任务队列**进入既有 ONE SI Runtime；
 未新增任何 runtime / scheduler / event loop / workflow engine / guard / policy engine。
