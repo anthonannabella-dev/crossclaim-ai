@@ -1,6 +1,6 @@
 {
   "gate": "Gate 7 / P2（Commercial C10–C11 fee guard + Customs C17 redesign / C21 HTTP）",
-  "head": "a316749a",
+  "head": "25bf985b",
   "status": "RECONCILED",
   "current_task": "RSI 生产可执行闭环（7 点收口）：RSI_RUNTIME_READY = PASS；MODEL_PROVIDER_READY = 本地仿真已接线（真实网络/付费 HOLD）；PERSISTENCE_READY = ephemeral 已验证、durable 需宿主非生产 DATABASE_URL；REBOOT_RECONCILE_READY = NOT_IMPLEMENTED（下一单元）；SYSTEMD_VALIDATED = 需宿主 Linux 实机",
   "next_task": "BG-016 单一 Acceptance Head + 四份状态一致 guard（内部可做）；PERSISTENCE / SYSTEMD / 真实 Provider 仍 HOST_ACTION_REQUIRED 或 HOLD",
@@ -9,7 +9,7 @@
   "last_chatgpt_message": "MSG-20261005-96",
   "production_enabled": false,
   "external_write_enabled": false,
-  "updated_at": "2026-10-07T06:18:47.978Z",
+  "updated_at": "2026-10-07T06:24:39.559Z",
   "previous_head": "8064f07",
   "architect_decision_pending": false,
   "blocked_scope": null,
@@ -50,15 +50,15 @@
   "claim_submit_status": "READY_FOR_REVIEW（HEAD 0745c33 / CI 36790488457 5-5 / API 1341 / Issue #2 comment 5921507920）",
   "window_budget": "WITHIN_WINDOW",
   "continuous_execution": "IN_PROGRESS（P0 CLOSED / P1–P9 排队）",
-  "next_execution_unit": "AEL FINAL2 — single runtime admission surface + durable OAuth transition CAS + complete non-bypassable gate proof",
+  "next_execution_unit": "AEL FINAL2 / C2 —— durable OAuth transition CAS",
   "automation_status": "CONTINUOUS",
   "last_tick_at": "2026-10-06T09:55:01.250Z",
-  "state": "AGENT_EXPERIENCE_LAYER_FINAL2_REQUIRED",
-  "last_action": "FINAL AUDIT 裁决已收到并逐字归档（MSG-20261007-01 = PASS WITH REVISE / NOT CLOSED；FULL_COPY_OK 198 行；reviewed code HEAD 299b008a）。三条窄修：C1 关闭 Goal direct-runner 旁路（移除 goal-runtime-adapter 导出 + 架构契约断言）；C2 OAuth 成功必须经 CONSUMED 的原子 CAS + binding 冲突检测 + connectionId/resumeGoalId 血缘校验；C3 non-bypassable gate 对 UNKNOWN/缺失一律 DENY（不得因 undefined 通过）。KEEP 项全部 PASS，无第二 Runtime/Scheduler/Guard，CAPABILITY_LOSS=0，PRODUCTION_READY=NO。",
-  "last_action_at": "2026-10-07T06:18:47.978Z",
-  "next_action": "立即实施三条 CHANGE（最小修订）→ 定向测试 + api tsc + 相关回归 → commit/push → 向同一会话发简短复审请求。",
-  "current_head": "a316749a",
-  "last_completed_head": "a316749a",
+  "state": "AGENT_EXPERIENCE_LAYER_FINAL2_IN_PROGRESS",
+  "last_action": "AEL FINAL2 / C1 CLOSED（25bf985b）：关闭 Goal direct-runner 旁路 —— barrel 不再导出 goal-runtime-adapter（标注 INTERNAL/TEST-ONLY，断言改由 goal-runtime-binding 提供）；P2 测试只认可 createGoalRuntimeBinding() 为产品执行准入；architecture-contract 新增 3 条断言。architecture-contract 170/170、agent-goal 29/29、agent-goal-runtime-wiring 7/7、api tsc 0。C2（OAuth durable transition CAS）与 C3（gate 缺失/UNKNOWN → DENY）待做。",
+  "last_action_at": "2026-10-07T06:24:39.559Z",
+  "next_action": "下一 tick 立即实施 C2，然后再做 C3 与复审送审。",
+  "current_head": "25bf985b",
+  "last_completed_head": "25bf985b",
   "reviewed_head": "42161550",
   "claim_submit_batch": {
     "verdict": "PASS",
@@ -12505,11 +12505,35 @@
           "C2 durable OAuth transition CAS：succeedOAuthAuthorizationSession 必须要求 current.status === CONSUMED 并用原子 CAS(WHERE id AND organizationId AND status=CONSUMED)；SUCCEEDED 重入仅当 connectionId+credentialRef 完全相同才幂等，不同 binding → OAUTH_SESSION_BINDING_CONFLICT；terminal success 不可改写；补 connectionId 必须存在于同 organizationId 的 SourceConnection；resumeGoalId 非空时校验 AgentGoal.organizationId === session.organizationId；修正把旁路固定下来的 PG-P9-3 测试",
           "C3 complete non-bypassable gate proof：按 action + guard.requiredGates 计算 required non-bypassable gates，每个都必须有 server-owned explicit SATISFIED proof；缺失/UNKNOWN → DENY（至少 production gate / kill switch / tenant-account isolation 不得因 undefined 通过）；新增 NON_BYPASSABLE_GATE_SNAPSHOT_INCOMPLETE 与 missing-field 测试"
         ]
+      },
+      "AEL-FINAL2": {
+        "name": "AEL FINAL2 —— 按 MSG-20261007-01 的三条 CHANGE 最小修订",
+        "status": "IN_PROGRESS（C1 CLOSED；C2 / C3 待做）",
+        "head": "25bf985b",
+        "verdictRef": "AI-ARCHITECT-INBOX.md ### [MSG-20261007-01]",
+        "changes": {
+          "C1": {
+            "name": "single runtime admission surface（关闭 Goal direct-runner 旁路）",
+            "status": "CLOSED / PUSHED",
+            "head": "25bf985b",
+            "evidence": "agent-goal/index.ts 移除 goal-runtime-adapter 导出；adapter 标注 INTERNAL/TEST-ONLY 并改由 goal-runtime-binding 提供断言；P2 测试只认可 createGoalRuntimeBinding()；architecture-contract +3 断言（barrel 不得导出 adapter / 产品代码不得 runtime.run·RsiEvidenceRunner / adapter 自述 INTERNAL-TEST-ONLY）；architecture-contract 170/170、agent-goal 29/29、runtime-wiring 7/7；api tsc 0"
+          },
+          "C2": {
+            "name": "durable OAuth transition CAS（成功必须经 CONSUMED + 原子 CAS + binding 冲突 + connection·goal 血缘）",
+            "status": "NOT_STARTED"
+          },
+          "C3": {
+            "name": "complete non-bypassable gate proof（缺失/UNKNOWN → DENY）",
+            "status": "NOT_STARTED"
+          }
+        }
       }
     },
     "safe_continuation_queue": [
-      "AEL FINAL2 — single runtime admission surface + durable OAuth transition CAS + complete non-bypassable gate proof（按 MSG-20261007-01 的三条 CHANGE 最小修订；修完跑定向测试 + api tsc + 相关回归，commit/push 后向同一会话发简短复审请求）",
-      "FINAL — 等待 AEL FINAL2 复审裁决（PASS → 最终 closure 并删除 watchdog；REVISE/FAIL → 继续最小修订）"
+      "AEL FINAL2 / C2 —— durable OAuth transition CAS：succeedOAuthAuthorizationSession 必须要求 status=CONSUMED 且原子 CAS；SUCCEEDED 重入仅当 connectionId+credentialRef 相同才幂等，不同 binding → OAUTH_SESSION_BINDING_CONFLICT；connectionId 必须同租户 SourceConnection；resumeGoalId 非空时校验同租户 AgentGoal；补状态迁移 DB 触发器；修正把旁路固定下来的 PG-P9-3 测试并补缺失用例",
+      "AEL FINAL2 / C3 —— complete non-bypassable gate proof：collectBlockingGates 按 action+requiredGates 要求显式 SATISFIED 证明，缺失/UNKNOWN → DENY（至少 productionGate / killSwitch / tenantAccountIsolation），新增 NON_BYPASSABLE_GATE_SNAPSHOT_INCOMPLETE 与 missing-field 测试，并修正在宽松 gate 快照上断言 ALLOW 的既有测试",
+      "AEL FINAL2 收口 —— 定向测试 + api tsc + 相关回归 → commit/push → 向同一会话发简短复审请求（指向 docs/releases/FINAL-AUDIT-PACKAGE.md + 新 exact HEAD）",
+      "FINAL —— 等待 AEL FINAL2 复审裁决（PASS → 最终 closure 并删除 watchdog；REVISE/FAIL → 继续最小修订）"
     ],
     "hard_boundaries": [
       "REAL_PROVIDER_WRITE",
