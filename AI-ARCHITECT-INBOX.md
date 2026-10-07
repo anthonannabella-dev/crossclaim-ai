@@ -158671,3 +158671,1828 @@ L5_RELAXATION
 
 最终裁决：AEL FINAL2 = PASS / CLOSED。三条上一轮 CHANGE 已全部闭合；可以停止继续修 AEL 本身。下一步若要接真实 provider、外部写、支付或 production enablement，必须进入新的独立授权/审计单元。
 ```
+
+### [MSG-20261007-03] CUSTOMER-UX-SANDBOX-E2E 终审裁决 = PASS WITH REVISE / NOT CLOSED（首登/注册/验证/登录/导航/Goal 记录/连接创建/刷新重登/无 API 诚实停机 = 达到可用水平；但仍有三段未闭环：Goal → ONE SI Runtime、Goal → Authorization → Resume same Goal、/connections 创建后工程字段再现；另 mobile overflow 断言名不符实），reviewed HEAD 494a0926；建议窄 FINAL2（post-create jargon cleanup + real Goal runtime sandbox admission + authorization→same-goal resume E2E）；PRODUCTION_READY = NO、全部 HOLD/FORBIDDEN 不变
+
+```text
+VERDICT: PASS WITH REVISE
+
+REVIEWED_HEAD: 494a09260a26f74ab52bb79894734c88268cc2e9
+
+逐项裁决：
+
+纯文本
+CUSTOMER_USABILITY          = REVISE
+FIRST_RUN_GUIDANCE          = PASS
+SANDBOX_END_TO_END          = REVISE
+NO_API_FAIL_CLOSED          = PASS
+AUTHORIZATION_RESUME        = REVISE
+EXTERNAL_BOUNDARY_HONESTY   = PASS
+SECURITY_BOUNDARY           = PASS
+PRODUCTION_GATE             = PASS
+
+CUSTOMER-UX-SANDBOX-E2E
+FINAL ACCEPTANCE            = PASS WITH REVISE / NOT CLOSED
+已确认 PASS 的部分
+
+FIRST_RUN_GUIDANCE = PASS。 实际浏览器脚本确实走了未登录首页 → 注册 → sandbox 邮件验证 → 登录 → 首页 → Goal Console → connections；journey-summary.json 也确实是 38/38。注册后不再卡死，未验证邮箱不发 session，登录页有注册链接。
+
+NO_API_FAIL_CLOSED / EXTERNAL_BOUNDARY_HONESTY = PASS。 未接真实 provider、报关、支付时，界面和服务端没有伪造“已经提交/已经扣款”。/auth/signup 邮件发送也是 best-effort，生产出口没开时返回 delivered=false，不会假装发送成功。
+
+SECURITY_BOUNDARY = PASS。 acceptance server 位于 apps/api/acceptance/；API tsconfig 只包含 src/**/*.ts，不会进入生产构建。生产 self-signup 仍需 signupEnabled === true 才开放。没有看到本单元新增第二 runtime / guard / policy / ledger。
+
+PRODUCTION_GATE = PASS。
+
+纯文本
+REAL_EXTERNAL_EXECUTION = NOT_EXECUTED
+PRODUCTION_READY = NO
+
+成立。
+
+CHANGE 1 — CUSTOMER_USABILITY 仍有客户路径技术信息泄漏
+
+验收报告称：
+
+默认视图无内部枚举与 credentialRef。
+
+但实际 connection-manager.tsx 在连接创建后的默认卡片里仍直接显示：
+
+纯文本
+类型 → item.kind
+
+即客户会看到诸如：
+
+纯文本
+FILE_UPLOAD
+API
+
+而且“新凭据引用 / 更新引用”的输入控件也是默认常驻，并没有全部收进高级区。
+
+更直接的是本次真实 journey-summary.json 自己记录了 /connections：
+
+纯文本
+连接管理仅限 OWNER / ADMIN（当前角色：OWNER）
+
+说明 UX-4 所称的 OWNER / ADMIN 客户术语清理没有真正覆盖该页面。
+
+字典中也仍有客户可见的：
+
+纯文本
+外部通道 HOLD
+外部提交仍处于 HOLD
+支付状态仍处于 HOLD
+
+因此：
+
+CUSTOMER_VISIBLE_TECHNICAL_JARGON = 0 目前不能成立。
+
+最小修改：
+
+默认连接卡隐藏 raw item.kind；
+credentialRef 编辑能力移到“高级信息”，或者改成客户动作“重新连接/更新授权”；
+OWNER/ADMIN/OPS 改成客户语言，如“组织管理员”；
+客户默认文案不显示字面量 HOLD，改成“尚未开放/尚未接入”。
+
+并补浏览器断言：创建连接之后再次扫描这些术语，而不是只在创建前扫描。
+
+CHANGE 2 — SANDBOX_END_TO_END 没有真正跑到 ONE SI Runtime
+
+浏览器 E2E 目前验证的是：
+
+纯文本
+输入目标
+→ POST /agent-goals
+→ “已记录”
+→ 手工进入 /connections
+→ 建一个连接
+
+但实际 /agent-goals HTTP 入口明确仍是：
+
+纯文本
+编译
+→ 校验
+→ 持久化
+→ plan preview
+→ 零执行
+
+它没有把该客户 Goal 经：
+
+纯文本
+createGoalRuntimeBinding()
+→ existing task queue
+→ claim / lease
+→ ONE SI Runtime
+
+真正跑起来。
+
+所以目前可以说：
+
+“Goal 记录 E2E = PASS”
+
+但还不能说：
+
+“客户 Goal → 内部自动化执行 E2E = PASS”。
+
+四域 74 个 HTTP+PG 测试本身可以保留为 PASS；这里缺的是客户入口与现有 ONE SI Runtime 之间最后一段真实接线验收。
+
+最小修订不需要开启任何外部写：
+
+纯文本
+浏览器提交 goal
+→ 同一 goalId
+→ existing queue admission
+→ ONE SI Runtime 认领
+→ 只读/准备类 task 产生 run projection
+→ externalWritePerformed = false
+
+这样才是真正的 sandbox customer E2E。
+
+CHANGE 3 — AUTHORIZATION_RESUME 当前没有真正闭环
+
+这是本轮最重要的功能缺口。
+
+首页确实会为：
+
+纯文本
+goal.status === PROPOSED
+
+生成：
+
+这个目标需要你授权
+完成授权后，CrossClaim 会继续执行原来的目标
+
+CTA：
+
+纯文本
+/authorizations
+
+但实际 /authorizations 页面目前只是：
+
+授权列表 + 撤销。
+
+没有“创建/完成自动追回授权”的客户流程。
+
+而空状态还明确写着：
+
+自动追回授权需要通过条款同意流程开通；当前流程尚未开放，因此这里暂时为空。
+
+所以真实客户当前路径是：
+
+纯文本
+Goal 等待授权
+→ 点击“去授权”
+→ 进入一个不能完成授权的页面
+
+此外，虽然 OAuth durable session 已持久化：
+
+纯文本
+resumeGoalId
+
+但实际代码只是写着：
+
+供上层恢复原目标
+
+我没有看到 OAuth SUCCEEDED 之后真正把该 resumeGoalId：
+
+纯文本
+PROPOSED → ADMITTED
+
+或重新进入 GoalRuntimeBinding 的实际 wiring。
+
+本轮所谓：
+
+刷新 / 登出重登后继续原任务
+
+浏览器实际只断言了：
+
+纯文本
+connection 仍然存在
+
+没有断言原 goal 被授权后恢复执行。
+
+所以：
+
+AUTHORIZATION_RESUME = REVISE
+
+不能用 connection persistence 代替 authorization resume。
+
+最小闭环应证明：
+
+纯文本
+创建 goal A
+→ A 出现在 Needs Your Attention
+→ 完成 sandbox authorization
+→ 授权事实与 A / tenant 正确绑定
+→ A 自动继续，而不是重新创建 goal B
+→ A 进入 ADMITTED/RUNNING 或产生对应 run
+→ 重复 callback / refresh 不产生第二次执行
+
+如果真实 OAuth/条款流程仍必须 HOLD，可以用 acceptance-only sandbox authorization provider 完成这条验证，但必须复用真实 durable authorization + goal resume 代码；不能只在测试脚本里直接改 DB 假装恢复。
+
+额外测试质量问题
+
+不是独立 blocker，但建议这次顺手修：
+
+当前：
+
+纯文本
+mobile.home.no.horizontal.overflow
+
+实际断言只是：
+
+JavaScript
+mBody.length > 0
+
+它没有检测横向溢出。
+
+应该改为真实 DOM 几何：
+
+纯文本
+document.documentElement.scrollWidth
+<= document.documentElement.clientWidth
+
+否则这个 PASS 名称与实际证明不一致。
+
+RISKS
+
+当前主要风险不是安全越权，而是客户看到的承诺超过实际闭环：
+
+UI 说“完成授权后继续原目标”，但客户目前无法在该页面完成授权；
+resumeGoalId 有 durable lineage，但还没看到真正的 resume execution wiring；
+Goal Console 目前真实完成的是“记录目标”，不是浏览器层面的 ONE SI Runtime E2E；
+技术术语清理存在 acceptance blind spot——测试只检查连接创建前，创建后工程字段重新出现。
+
+另外 exact HEAD：
+
+GitHub Actions = NOT_OBSERVED
+
+因此：
+
+38/38 browser
+74/74 四域
+4550/4551 API
+UI 138/138
+
+只能继续记为 仓库中的 local/Codex acceptance evidence，不能写成 GitHub CI green。
+
+PRODUCTION
+
+确认继续：
+
+纯文本
+PRODUCTION_READY = NO
+REAL_VALIDATION_COMPLETE = NO
+REAL_EXTERNAL_EXECUTION = NOT_EXECUTED
+
+全部 HOLD 不变：
+
+纯文本
+REAL_PROVIDER_WRITE
+CUSTOMS_FILING
+PAYMENT
+AUTO_COMMISSION_CHARGE
+PRODUCTION_CREDENTIALS
+PRODUCTION_ENABLEMENT
+REAL_MODEL_NETWORK
+PAID_MODEL_CALLS
+EXTERNAL_WRITE
+TRANSPORT
+P2_F
+P2_G
+
+全部既有 FORBIDDEN 不变。
+
+最终结论
+
+这轮已经证明：第一次访问、注册、验证、登录、基础导航、Goal 记录、连接创建、刷新重登、无 API 诚实停机都达到了可用水平。
+
+但还不能 CLOSED，因为“客户可用”的核心承诺中还有两段没有真正闭环：
+
+纯文本
+Goal → ONE SI Runtime
+Goal → Authorization → Resume same Goal
+
+再加上 /connections 的残余工程术语。
+
+建议只做一个窄的 CUSTOMER-UX FINAL2：
+
+post-create jargon cleanup + real Goal runtime sandbox admission + authorization→same-goal resume E2E。
+
+做完这三项，再送终审即可。
+```
+
+### [MSG-20261007-04] CUSTOMER-UX FINAL2 复审裁决 = PASS WITH REVISE / NOT CLOSED（CUSTOMER_USABILITY / FIRST_RUN_GUIDANCE / NO_API_FAIL_CLOSED / EXTERNAL_BOUNDARY_HONESTY / PRODUCTION_GATE = PASS；SANDBOX_END_TO_END / AUTHORIZATION_RESUME / SECURITY_BOUNDARY = REVISE），reviewed HEAD eca33732；FINAL3 只修三点：①acceptance runtime driver 必须真正驱动既有 controller claim（禁止把 queue 内容伪装成 claimed；未 claim 则不得创建 AgentGoalRun）②runtime→AgentGoalRun 需 task→durable Goal plan lineage（不一致 GOAL_RUNTIME_LINEAGE_MISMATCH fail closed）③授权范围必须 server-owned：provider 取自 PlatformAccount.platform 并与 Goal provider/domain 匹配（Amazon Goal + UPS account → SCOPE_MISMATCH），补同租户跨 provider / 错域账户 / 跨租户 / 匹配 provider 的 PG 回归；非阻断登记项：createJsonTaskQueuePort 为 JSON read-modify-write，production enablement 前需 durable/atomic 准入；PRODUCTION_READY = NO、全部 HOLD/FORBIDDEN 不变
+
+```text
+VERDICT: PASS WITH REVISE
+
+REVIEWED_HEAD: eca33732dbc9a8a96dcacdbe73f42fa29b40904b
+
+逐项重裁：
+
+纯文本
+CUSTOMER_USABILITY          = PASS
+SANDBOX_END_TO_END          = REVISE
+AUTHORIZATION_RESUME        = REVISE
+FIRST_RUN_GUIDANCE          = PASS
+NO_API_FAIL_CLOSED          = PASS
+EXTERNAL_BOUNDARY_HONESTY   = PASS
+SECURITY_BOUNDARY           = REVISE
+PRODUCTION_GATE             = PASS
+
+CUSTOMER-UX-SANDBOX-E2E
+FINAL ACCEPTANCE            = PASS WITH REVISE / NOT CLOSED
+已 CLOSED：CUSTOMER_USABILITY
+
+上一轮 CHANGE 1 已经闭合。
+
+实际代码确认：
+
+纯文本
+默认连接卡：
+raw kind             → 已移除
+credentialRef 编辑    → 已移入高级信息
+OWNER / ADMIN / OPS  → 已映射为客户语言
+HOLD 字面量           → 客户默认文案已清理
+
+最新浏览器旅程也增加了 post-create 扫描，不再只检查创建前。
+
+移动端 overflow 也从上一版无效的：
+
+纯文本
+body.length > 0
+
+改成真实：
+
+纯文本
+scrollWidth <= clientWidth
+
+所以：
+
+CUSTOMER_USABILITY = PASS
+
+CHANGE 1 — 现在的 ONE SI Runtime E2E 仍没有真正证明 runtime claim
+
+这是 FINAL2 最大的剩余问题。
+
+acceptance 路由当前：
+
+纯文本
+composeRsiRuntime()
+→ runtime.loop.pollOnce()
+
+但 pollOnce() 的真实职责是读取：
+
+纯文本
+CI
+tests
+verdict
+
+等事件源。
+
+没有事件时，它明确：
+
+纯文本
+return []
+
+并不会因为 task queue 里有 Goal task 就自动 claim。
+
+而你本轮最新真实证据自己显示：
+
+纯文本
+runtimeOutcomes = 0
+runStatus = BLOCKED
+
+因此实际情况是：
+
+纯文本
+Goal task 已入 queue
+↓
+pollOnce() 没产生任何 runtime outcome
+↓
+acceptance 路由自己读取 queue
+↓
+把 queue 中全部 dedupeKey 当成 claimed
+↓
+手工调用 recordGoalRunFromRuntime()
+
+对应代码：
+
+纯文本
+const claimed = queued.map(task => task.dedupeKey)
+
+这不是 runtime claim evidence。
+
+而浏览器断言：
+
+纯文本
+runtime.claimed.and.projected
+
+实际只要求：
+
+纯文本
+typeof runId === 'string'
+
+所以这个测试名称比实际证明更强。
+
+最小修订
+
+acceptance driver 必须真正驱动 controller，例如：
+
+纯文本
+runtime.controller.tick()
+
+或注入真实 event 后：
+
+纯文本
+controller.emit(...)
+
+然后必须只使用runtime 返回的真实 outcome.claimed。
+
+禁止：
+
+纯文本
+queue contents
+→ 直接伪装成 claimed
+
+如果 runtime 没 claim：
+
+纯文本
+claimed === null
+→ 不得创建 AgentGoalRun
+→ acceptance FAIL
+
+对于 task:recovery:* 还要注意：现有 FINAL-7 规则明确规定 recovery namespace 不会调用 caller supplied runner。
+
+没有正式 Recovery product pack 时会：
+
+纯文本
+BLOCK
+
+所以当前：
+
+纯文本
+runner: { run() => PASS }
+
+实际上不能证明 Recovery task 被这个 runner 执行。
+
+最小验收可以接受：
+
+纯文本
+actual runtime claim
+→ Recovery mux
+→ BLOCK（因为 product pack 未注入）
+→ 真实 BLOCKED projection
+
+如果你要证明 read-only recovery 真执行，则需要在 acceptance 中装配真正的 productRecoveryPack + Shared Action Guard，仍然保持所有 external-write gates 关闭。
+
+CHANGE 2 — runtime → AgentGoalRun 缺可信 lineage
+
+recordGoalRunFromRuntime() 当前接受：
+
+纯文本
+organizationId
+goalId
+outcome.claimed[]
+outcome.completed[]
+outcome.blocked[]
+
+但没有证明：
+
+这些 runtime task 真的是这个 goal 生成的 task。
+
+调用方只要传一个 goalId 和任意 claimed 数组，就能给该 goal 生成 run projection。
+
+当前 acceptance 正好就在这么做：
+
+纯文本
+queue 中任务
++
+body.goalId
+→ recordGoalRunFromRuntime()
+
+应该收紧为：
+
+纯文本
+Durable Goal
+→ deterministic plan
+→ expected task dedupeKeys
+
+actual runtime claimed task
+→ 必须属于 expected task set
+
+不一致：
+
+纯文本
+GOAL_RUNTIME_LINEAGE_MISMATCH
+→ fail closed
+→ 不创建 AgentGoalRun
+
+然后浏览器应真正验证：
+
+纯文本
+Goal A
+→ authorization
+→ admission
+→ runtime claims A's task
+→ AgentGoalRun.goalId === Goal A
+→ exactly one run
+→ 不存在 Goal B
+
+这做完后：
+
+SANDBOX_END_TO_END 才能 PASS。
+
+CHANGE 3 — Amazon Goal 当前可以被 UPS 授权推进
+
+这是本轮最重要的 SECURITY_BOUNDARY 问题。
+
+浏览器真实旅程：
+
+纯文本
+Goal A:
+“帮我把 Amazon 上可以追回的钱找回来”
+
+但接下来建立的连接是：
+
+纯文本
+CARRIER_BILL
+→ UPS
+
+acceptance sandbox provider 随后从这个连接派生：
+
+纯文本
+PlatformAccount.platform = UPS
+StandingAuthorization.provider = UPS
+
+然后把：
+
+纯文本
+provider = UPS
+platformAccountId = UPS account
+
+交给：
+
+纯文本
+POST /agent-goals/:amazonGoal/admit
+
+而 admission 成功了。
+
+也就是说当前实际上证明的是：
+
+纯文本
+Amazon Goal
++
+UPS Authorization
+→ ADMITTED
+
+而不是：
+
+纯文本
+Amazon Goal
++
+Amazon Authorization
+→ ADMITTED
+
+根因有两个。
+
+产品 goal-admission-http.ts 从客户端 body 接受：
+
+纯文本
+platformAccountId
+provider
+
+虽然它检查 platformAccountId 属于当前 tenant，但没有检查：
+
+纯文本
+provider === PlatformAccount.platform
+
+Standing Authorization store 本身也以：
+
+纯文本
+organizationId
+platformAccountId
+provider
+
+为 scope，并没有在这里证明 provider 与 PlatformAccount.platform 一致。
+
+更重要的是 admission 没证明：
+
+纯文本
+account/provider
+
+与 Goal 本身的 provider/domain 意图相匹配。
+
+最小修订
+
+产品 admission 必须把 provider 改为 server-owned truth。
+
+例如读取：
+
+纯文本
+PlatformAccount {
+  id
+  platform
+}
+
+然后：
+
+纯文本
+provider = account.platform
+
+客户端 provider 最好直接删掉；若为了兼容保留，只能作为 assertion：
+
+纯文本
+client.provider !== account.platform
+→ PROVIDER_SCOPE_MISMATCH
+→ fail closed
+
+还需要把 Goal scope 和 Account scope 做一次匹配。
+
+至少本例必须做到：
+
+纯文本
+Amazon Goal
++ UPS account
+→ DENIED / SCOPE_MISMATCH
+
+而：
+
+纯文本
+Amazon Goal
++ Amazon account
++ matching durable Standing Authorization
+→ 可继续 admission
+
+新增真实 PG 回归至少覆盖：
+
+纯文本
+same tenant / wrong provider
+same tenant / wrong domain account
+cross tenant
+matching provider
+
+当前 GA-6 只验证跨 tenant，还没有验证同 tenant 跨 provider。
+
+AUTHORIZATION_RESUME
+
+这一项相比上一轮已经前进很多。
+
+现在确实已经有真实：
+
+纯文本
+Goal A
+→ durable Standing Authorization
+→ POST /agent-goals/A/admit
+→ Goal A: PROPOSED → ADMITTED
+
+而且没有创建 Goal B。
+
+所以“授权之后恢复的是原 goal”这一半是真实的。
+
+但是你请求的口径包含：
+
+纯文本
+ADMITTED/RUNNING + AgentGoalRun
+
+其中 AgentGoalRun 当前仍来自前面所述的 synthetic runtime projection。
+
+因此：
+
+AUTHORIZATION_RESUME = REVISE
+
+不是授权 store 有问题，而是：
+
+authorization → same Goal admission 已 PASS；same Goal → actual runtime claim → trusted run projection 还没闭合。
+
+其余 PASS
+
+FIRST_RUN_GUIDANCE = PASS
+
+注册 → sandbox 邮件验证 → 登录 → 首页 → Goal Console 的浏览器路径依然成立。
+
+NO_API_FAIL_CLOSED = PASS
+
+真实 provider/filing/payment 未接入时仍明确停机，没有 fake success。
+
+EXTERNAL_BOUNDARY_HONESTY = PASS
+
+最新 run 页面也没有宣称“已真实提交 / 已报关 / 已扣款”。
+
+PRODUCTION_GATE = PASS
+
+acceptance-only 路由仍在：
+
+纯文本
+apps/api/acceptance/
+
+没有加入 production server。
+
+确认继续：
+
+纯文本
+REAL_EXTERNAL_EXECUTION = NOT_EXECUTED
+REAL_VALIDATION_COMPLETE = NO
+PRODUCTION_READY = NO
+CHANGES
+
+FINAL3 不需要再动 UI 大结构，也不需要重做 Standing Authorization。
+
+只修三个很窄的点：
+
+纯文本
+1. acceptance runtime driver
+   pollOnce(fake proof)
+   → actual controller claim outcome
+
+2. runtime → goal projection lineage
+   caller-supplied claimed[]
+   → actual claimed task must belong to durable Goal plan
+
+3. goal authorization scope lineage
+   client provider / arbitrary tenant account
+   → server-derived PlatformAccount.platform
+   → must match Goal provider/domain
+
+修完后浏览器链应该变成真正的：
+
+纯文本
+Amazon Goal A
+→ Amazon sandbox connection/account
+→ durable Amazon Standing Authorization
+→ product admission
+→ existing queue
+→ ONE SI Runtime ACTUALLY claims A's task
+→ actual outcome
+→ verified AgentGoalRun(A)
+→ repeat = no second run
+→ refresh = same Goal A
+
+这样我才会给：
+
+纯文本
+SANDBOX_END_TO_END   = PASS
+AUTHORIZATION_RESUME = PASS
+SECURITY_BOUNDARY    = PASS
+
+VERDICT              = PASS / CLOSED
+RISKS
+
+另外有两个非本轮最终 blocker、但建议登记的后续风险。
+
+createJsonTaskQueuePort() 是 JSON 文件的 read-modify-write，目前没有跨 worker lock/CAS；真实多 worker admission 可能发生 lost update。因为 PRODUCTION_READY=NO，我不把它作为这次 sandbox acceptance 的阻断项，但 production enablement 前必须换成 durable/atomic queue admission 或证明单 writer。
+
+另外 exact HEAD eca33732：
+
+GitHub Actions = NOT_OBSERVED
+
+所以：
+
+纯文本
+browser 55/55
+goal-admission 7/7
+352 targeted
+4557/4558 full API
+
+仍只能记为 local/Codex evidence，不能记“GitHub CI green”。
+
+最终裁决
+
+CUSTOMER-UX FINAL2 仍是 PASS WITH REVISE / NOT CLOSED。
+
+这次 UI 问题已经修完；剩下的不是“大改”，而是把最后一段证据从“看起来像 runtime 跑过”改成真实 runtime claim + task→goal lineage，同时封住 Amazon Goal 被 UPS 授权这个 scope 错配。修完这三点，就适合正式封板 CUSTOMER-UX-SANDBOX-E2E。
+```
+
+### [MSG-20261007-05] CUSTOMER-UX FINAL3 复审裁决 = PASS WITH REVISE / NOT CLOSED（真实 runtime claim = PASS、task→goal lineage = PASS、same-goal resume = PASS；SECURITY_BOUNDARY = REVISE：provider-specific Goal scope 尚未冻结进 deterministic goal identity —— Amazon Goal + 任意 PLATFORM account（如 Walmart）仍可准入），reviewed HEAD 020ff317；FINAL4 只做一件极窄修订：把 provider/平台意图冻结进确定性 goal identity 并在 admission 做 provider-level 匹配 + 补 Amazon→Walmart fail-closed 回归（浏览器探针从 UPS 改为/增加 Walmart account）；非阻断项：createJsonTaskQueuePort 的跨 worker 原子性（production enablement 前必须 A/B 二选一）、GitHub Actions = NOT_OBSERVED；PRODUCTION_READY = NO、全部 HOLD/FORBIDDEN 不变
+
+```text
+VERDICT: PASS WITH REVISE
+
+REVIEWED_HEAD: 020ff3172b3e076a892c2c53f85f8bce49eb0dfb
+
+逐项裁决：
+
+纯文本
+CUSTOMER_USABILITY          = PASS
+SANDBOX_END_TO_END          = PASS
+AUTHORIZATION_RESUME        = PASS
+FIRST_RUN_GUIDANCE          = PASS
+NO_API_FAIL_CLOSED          = PASS
+EXTERNAL_BOUNDARY_HONESTY   = PASS
+SECURITY_BOUNDARY           = REVISE
+PRODUCTION_GATE             = PASS
+
+CUSTOMER-UX-SANDBOX-E2E
+FINAL ACCEPTANCE            = PASS WITH REVISE / NOT CLOSED
+
+这轮相比 FINAL2 已经基本闭合。上一轮三个问题中的前两个——真实 runtime claim、runtime→Goal lineage——现在可以正式 PASS。只剩一个很窄的 provider-specific scope 问题。
+
+已 CLOSED：真实 ONE SI Runtime claim
+
+这一项修正确实成立。
+
+acceptance 现在不再：
+
+纯文本
+queue contents → 假装 claimed
+
+而是真正：
+
+纯文本
+composeRsiRuntime()
+→ runtime.controller.tick()
+→ outcome.claimed
+
+并且：
+
+纯文本
+outcome.claimed === null
+→ 409 RUNTIME_DID_NOT_CLAIM
+→ 不创建 AgentGoalRun
+
+最新浏览器证据也显示真实的：
+
+纯文本
+runtimeClaimed = task:recovery:PLATFORM:...
+runtimeProposal = BLOCK
+runStatus = BLOCKED
+
+这与现有 FINAL-7 安全语义完全一致：
+
+task:recovery:* 在没有正式 Recovery product pack 时不能被 caller runner 抢走，因而真实 BLOCK，而不是假 PASS。
+
+所以：
+
+SANDBOX_END_TO_END = PASS
+
+这里的 PASS 是：
+
+Goal → product admission → existing queue → ONE SI Runtime actual claim → honest BLOCKED projection
+
+不是“真实 provider 已执行”。
+
+已 CLOSED：runtime → Goal lineage
+
+recordGoalRunFromRuntime() 现在会在创建 AgentGoalRun 之前：
+
+纯文本
+load durable Goal
+→ deterministic compile
+→ validate
+→ plan
+→ expected task dedupeKeys
+
+然后检查：
+
+纯文本
+claimed
+completed
+blocked
+
+所有 key 都必须属于该 Goal 的 deterministic plan。
+
+否则：
+
+纯文本
+GOAL_RUNTIME_LINEAGE_MISMATCH
+→ throw
+→ zero projection
+
+GA-10 也覆盖了这个负向路径。
+
+所以之前的：
+
+caller 可以拿任意 runtime outcome 塞给任意 goalId
+
+这个问题已经闭合。
+
+已 CLOSED：AUTHORIZATION_RESUME
+
+这次可以记 PASS。
+
+实际链路已经做到：
+
+纯文本
+Goal A
+→ PROPOSED
+→ durable Standing Authorization
+→ POST /agent-goals/A/admit
+→ ADMITTED
+→ existing queue
+→ actual runtime claim
+→ AgentGoalRun(A)
+
+并且：
+
+没有创建 Goal B；
+重复 admission 不重复入队；
+重复 runtime 调用 created=false；
+授权待办消失；
+run 页面仍诚实显示没有真实外部写。
+
+因此：
+
+AUTHORIZATION_RESUME = PASS
+
+唯一 CHANGE — provider-specific Goal scope 还没有完全绑定
+
+当前 FINAL3 封住的是：
+
+纯文本
+Amazon Goal + UPS account
+→ GOAL_SCOPE_MISMATCH
+
+这很好。
+
+同时 provider 也改成 server-owned：
+
+纯文本
+PlatformAccount.platform
+→ serverProvider
+
+客户端 provider 只作为 assertion，这也正确。
+
+但目前 Goal 编译层对：
+
+纯文本
+Amazon
+Walmart
+TikTok
+
+全部只保留：
+
+纯文本
+domain = PLATFORM
+
+goalDomainOfPlatform() 也只做：
+
+纯文本
+AMAZON  → PLATFORM
+WALMART → PLATFORM
+TIKTOK  → PLATFORM
+
+然后 admission 判断：
+
+纯文本
+accountDomain ∈ goal.domains
+
+所以仍存在：
+
+纯文本
+“帮我把 Amazon 上可以追回的钱找回来”
++
+Walmart PlatformAccount
+→ accountDomain = PLATFORM
+→ goalDomain = PLATFORM
+→ scope check passes
+
+也就是说：
+
+跨域已经封住，但同域跨 provider 还没有封住。
+
+上一轮要求的是：
+
+provider/account 必须与 Goal provider/domain 意图匹配。
+
+现在只完成了其中 domain 部分。
+
+最小修订面
+
+不用改 Runtime、Authorization Store 或 UI。
+
+只需要给 Goal scope 增加一个可选的 provider/channel specificity。
+
+例如 deterministic compiler 从原始 intent 提取：
+
+纯文本
+AMAZON
+WALMART
+TIKTOK
+SHOPIFY
+UPS
+...
+
+变成：
+
+纯文本
+goal.providerScopes = ['AMAZON']
+
+或等价字段。
+
+然后把它纳入：
+
+纯文本
+validated goal
+goalDigest
+normalizedGoal
+
+admission 增加：
+
+纯文本
+如果 Goal 有明确 providerScope：
+serverProvider 必须属于 providerScope
+否则 → GOAL_PROVIDER_SCOPE_MISMATCH
+
+如果 Goal 只是：
+
+“帮我看看平台上有没有可以追回的钱”
+
+没有指定 Amazon/Walmart，那么只做 domain match 就可以。
+
+也就是说：
+
+纯文本
+explicit provider goal
+→ exact provider match
+
+generic domain goal
+→ domain-level match
+
+这最符合用户意图，也不会把多平台 Goal 错误锁死。
+
+必补测试
+
+建议只补 4 个：
+
+纯文本
+1. Amazon Goal + Amazon account
+   → PASS
+
+2. Amazon Goal + Walmart account
+   → GOAL_PROVIDER_SCOPE_MISMATCH
+
+3. Amazon Goal + UPS account
+   → GOAL_SCOPE_MISMATCH（现有保持）
+
+4. 泛 PLATFORM Goal + Walmart account
+   → 允许走 domain-level admission
+
+最好再让浏览器负向 probe 从现在的 UPS 改成或增加：
+
+纯文本
+Amazon Goal + Walmart account
+
+因为这正是当前漏网场景。
+
+RISKS
+
+其余我只保留两个非阻断风险。
+
+第一，createJsonTaskQueuePort() 仍是 JSON 文件 read-modify-write，没有跨 worker CAS/lock。这个你已经登记了；在 production enablement 前必须换 durable/atomic admission 或证明 single writer。本次 sandbox acceptance 不阻断。
+
+第二，exact HEAD 的：
+
+GitHub Actions = NOT_OBSERVED
+
+因此：
+
+纯文本
+Browser 58/58
+goal-admission 10/10
+targeted 355
+api tsc 0
+
+仍应记为 local/Codex evidence，不能写成 GitHub CI green。
+
+PRODUCTION
+
+继续确认：
+
+纯文本
+REAL_EXTERNAL_EXECUTION  = NOT_EXECUTED
+REAL_VALIDATION_COMPLETE = NO
+PRODUCTION_READY         = NO
+
+全部 HOLD 不变：
+
+纯文本
+REAL_PROVIDER_WRITE
+CUSTOMS_FILING
+PAYMENT
+AUTO_COMMISSION_CHARGE
+PRODUCTION_CREDENTIALS
+PRODUCTION_ENABLEMENT
+REAL_MODEL_NETWORK
+PAID_MODEL_CALLS
+EXTERNAL_WRITE
+TRANSPORT
+P2_F
+P2_G
+
+全部既有 FORBIDDEN 不变，包括 SECOND_* 与 L5_RELAXATION。
+
+最终结论
+
+FINAL3 已经把前两轮最重要的“伪 runtime E2E”问题真正修掉了：
+
+真实 claim = PASS
+task→goal lineage = PASS
+same-goal resume = PASS
+
+现在只差最后一个很窄的：
+
+Amazon Goal ≠ 任意 PLATFORM Account
+
+把 provider-specific Goal scope 冻结进 deterministic goal identity，并补 Amazon→Walmart fail-closed 后，我预计即可：
+
+纯文本
+SECURITY_BOUNDARY = PASS
+VERDICT = PASS / CLOSED
+FINAL4_REQUIRED = NO
+
+目前仍是 PASS WITH REVISE / NOT CLOSED。
+```
+
+### [MSG-20261007-06] CUSTOMER-UX FINAL4 复审裁决 = PASS WITH REVISE / NOT CLOSED（FINAL4 的 provider-specific goal scope 目标已 PASS —— Amazon Goal + Walmart account fail-closed 成立；CUSTOMER_USABILITY / SANDBOX_END_TO_END / AUTHORIZATION_RESUME / FIRST_RUN_GUIDANCE / NO_API_FAIL_CLOSED / EXTERNAL_BOUNDARY_HONESTY / PRODUCTION_GATE = PASS；SECURITY_BOUNDARY = REVISE），reviewed HEAD 4443d3d4；FINAL5 只做三项极窄收口：①runtime→goal lineage 必须回到 **exact deterministic task membership**（`expectedTasks.has(key)`，digest token 不能替代 exact membership）②完整重建 durable goal identity（使 exact membership 可判定）③统一 canonical provider→domain 映射（如 Shopify 等）；并在新 exact HEAD 重跑完整 API regression；非阻断项：createJsonTaskQueuePort 跨 worker 原子性（production enablement 前必须解决）、GitHub Actions = NOT_OBSERVED；PRODUCTION_READY = NO、全部 HOLD/FORBIDDEN 不变
+
+```text
+VERDICT: PASS WITH REVISE
+
+REVIEWED_HEAD: 4443d3d4a47d1de4a1f7ab62a3178fb6b40600e4
+
+逐项重裁：
+
+纯文本
+CUSTOMER_USABILITY          = PASS
+SANDBOX_END_TO_END          = PASS
+AUTHORIZATION_RESUME        = PASS
+FIRST_RUN_GUIDANCE          = PASS
+NO_API_FAIL_CLOSED          = PASS
+EXTERNAL_BOUNDARY_HONESTY   = PASS
+SECURITY_BOUNDARY           = REVISE
+PRODUCTION_GATE             = PASS
+
+CUSTOMER-UX-SANDBOX-E2E
+FINAL ACCEPTANCE            = PASS WITH REVISE / NOT CLOSED
+
+FINAL4 要解决的 Amazon Goal + Walmart Account 问题本身已经修对了；但复核 actual code 时发现 runtime lineage 在 FINAL4 又被放宽了一层，因此还不能正式 CLOSED。
+
+已确认：provider-specific Goal scope = PASS
+
+这一轮核心修订是真的落到了 identity，不只是 admission 临时判断。
+
+现在：
+
+纯文本
+Amazon intent
+→ providers = ["AMAZON"]
+
+Walmart intent
+→ providers = ["WALMART"]
+
+providers 已进入：
+
+纯文本
+draft
+→ schema
+→ validator whitelist
+→ sort/dedupe
+→ goalDigest
+→ normalizedGoal
+→ customer interpretation
+
+GA-12 也验证：
+
+纯文本
+Amazon goalDigest ≠ Walmart goalDigest
+
+Admission 使用：
+
+纯文本
+PlatformAccount.platform
+
+作为 server-owned provider，并且：
+
+纯文本
+goal.providers.length > 0
+→ serverProvider 必须命中 goal.providers
+
+所以现在：
+
+纯文本
+Amazon Goal + Walmart account
+→ GOAL_SCOPE_MISMATCH
+→ DENIED
+→ zero admission
+
+GA-11 与浏览器 security.provider.mismatch.denied 都覆盖到了。
+
+因此上一轮那个 provider-specific blocker：
+
+PASS / CLOSED。
+
+唯一主要 blocker：runtime→goal lineage 被 FINAL4 弱化
+
+FINAL3 的正确语义是：
+
+纯文本
+runtime task
+必须属于 deterministic Goal plan 的 expected task set
+
+但 FINAL4 当前代码变成了：
+
+TypeScript
+if (goalScopeToken !== null)
+  return !key.includes(goalScopeToken);
+
+也就是说，只要：
+
+以 task:recovery: 开头；
+字符串里包含该 Goal digest 前 24 位；
+
+就被认为属于这个 Goal。
+
+这不等价于：
+
+纯文本
+expectedTasks.has(key)
+
+例如理论上这样的 task：
+
+纯文本
+task:recovery:CUSTOMS:not-real-task:<GOAL_DIGEST_PREFIX>
+
+对一个 PLATFORM Goal 来说并不是它的 deterministic plan task，但当前检查可能通过。
+
+所以当前约束实际是：
+
+纯文本
+“包含 Goal token”
+
+而不是：
+
+纯文本
+“这个 task 就是该 Goal planner 生成的任务”
+
+这是 lineage fail-closed 的下降。
+
+更具体的问题
+
+代码其实已经重建了：
+
+TypeScript
+const expectedTasks = new Set(
+  lineagePlan.tasks.map(task => task.dedupeKey)
+);
+
+但只要 storedDigest 存在，就不使用这个 exact set。
+
+这是没有必要的放宽。
+
+CHANGE 1 — 恢复 exact task membership
+
+建议最小修改：
+
+TypeScript
+const alien = claimedKeys.filter(
+  key => !expectedTasks.has(key)
+);
+
+如果还想保留 digest check，可以作为额外检查：
+
+纯文本
+startsWith(task:recovery:)
+AND
+contains/has expected goal scope token
+AND
+expectedTasks.has(key)
+
+但绝不能用 digest substring 替代 exact plan membership。
+
+必须覆盖：
+
+纯文本
+正确 Goal task
+→ PASS
+
+另一 Goal task
+→ GOAL_RUNTIME_LINEAGE_MISMATCH
+
+错误 domain + 正确 digest token
+→ GOAL_RUNTIME_LINEAGE_MISMATCH
+
+任意伪造 suffix + 正确 digest token
+→ GOAL_RUNTIME_LINEAGE_MISMATCH
+
+且全部零 projection。
+
+CHANGE 2 — durable Goal 重建还漏了 approvalThreshold
+
+这里也是 lineage 收紧时顺手必须修的小问题。
+
+FINAL4 从 durable normalizedGoal 重建时写的是：
+
+TypeScript
+approvalThreshold: null
+
+但原始 durable record 实际已经保存：
+
+纯文本
+approvalThreshold
+
+而 approvalThreshold 又参与 goalDigest。
+
+因此有金额偏好的 Goal，例如：
+
+纯文本
+“Amazon 超过 $1000 的每次问我”
+
+原始 digest 可能包含 threshold，但 runtime lineage 重建时人为丢成 null。
+
+这也是为什么现在很难安全使用 expectedTasks。
+
+应该直接使用：
+
+TypeScript
+approvalThreshold:
+  stored.approvalThreshold ?? null
+
+然后增加：
+
+纯文本
+reconstructed goalDigest
+===
+stored goalDigest
+
+不一致：
+
+纯文本
+GOAL_RUNTIME_LINEAGE_MISMATCH
+→ zero projection
+
+这样 runtime lineage 才真正以 durable Goal identity 为 SSOT。
+
+另一个需要同步修正的小映射问题
+
+不属于越权漏洞，但建议跟 FINAL5 一次收口。
+
+现在 provider/domain 映射有不一致：
+
+Compiler：
+
+纯文本
+SHOPIFY → PLATFORM
+
+Admission：
+
+纯文本
+SHOPIFY → INDEPENDENT_SITE
+
+于是：
+
+纯文本
+“帮我追回 Shopify 的钱”
+→ Goal domain PLATFORM
+→ provider SHOPIFY
+
+正确 Shopify account
+→ accountDomain INDEPENDENT_SITE
+→ GOAL_SCOPE_MISMATCH
+
+会把合法客户请求错误拒绝。
+
+类似需要检查：
+
+纯文本
+STRIPE / PAYPAL → INDEPENDENT_SITE
+INSURANCE       → LOGISTICS
+CBP / ABI       → CUSTOMS
+TIKTOK / TIKTOK_SHOP alias
+
+建议不要继续维护两张独立映射表。
+
+做一个唯一 canonical map：
+
+纯文本
+provider
+→ canonicalProvider
+→ recoveryDomain
+
+Compiler 和 admission 共同复用。
+
+例如：
+
+纯文本
+SHOPIFY → INDEPENDENT_SITE
+STRIPE  → INDEPENDENT_SITE
+PAYPAL  → INDEPENDENT_SITE
+
+UPS / FEDEX / DHL / INSURANCE
+→ LOGISTICS
+
+CBP / ABI
+→ CUSTOMS
+
+AMAZON / WALMART / TIKTOK / EBAY
+→ PLATFORM
+
+这属于 correctness hardening；由于已经影响正确 Shopify Goal 的准入，我建议本次一起修掉，不留到 production。
+
+已确认继续 PASS 的项目
+SANDBOX_END_TO_END = PASS
+
+现在确实是：
+
+纯文本
+Goal
+→ durable authorization
+→ product admission
+→ existing queue
+→ runtime.controller.tick()
+→ actual outcome.claimed
+→ honest BLOCK proposal
+→ BLOCKED run projection
+
+不再使用 queue 内容伪造 claim。
+
+AUTHORIZATION_RESUME = PASS
+
+同一个 Goal A：
+
+纯文本
+PROPOSED
+→ authorization
+→ ADMITTED
+→ actual runtime claim
+→ AgentGoalRun(A)
+
+重复 admission/runtime 不创建第二次执行。
+
+CUSTOMER_USABILITY = PASS
+
+创建后技术字段清理、角色客户化、credentialRef 高级折叠、mobile overflow 等保持成立。
+
+PRODUCTION_GATE = PASS
+
+没有 production writer 或真实外部执行被打开。
+
+TEST
+
+FINAL5 最少补：
+
+纯文本
+1. exact planned dedupeKey
+   → run projection allowed
+
+2. wrong-domain task + correct goalDigest prefix
+   → GOAL_RUNTIME_LINEAGE_MISMATCH
+
+3. arbitrary fake task + correct goalDigest prefix
+   → GOAL_RUNTIME_LINEAGE_MISMATCH
+
+4. another Goal 的真实 task
+   → GOAL_RUNTIME_LINEAGE_MISMATCH
+
+5. Goal 带 approvalThreshold
+   → durable reconstruction digest === stored digest
+   → 自己的 task 正常通过
+
+6. Shopify Goal + Shopify account
+   → 不因 domain mapping 冲突被拒绝
+
+7. Amazon Goal + Walmart account
+   → 继续 DENIED
+RISKS
+
+一个证据口径需要修正：
+
+你报告中的 API 全量：
+
+纯文本
+4560 / 4561
+
+标明运行在 HEAD 020ff317。
+
+但 FINAL4 exact HEAD 是：
+
+纯文本
+4443d3d4
+
+因此它不能作为 FINAL4 exact-head 全量回归证据。
+
+当前：
+
+纯文本
+FINAL4 targeted 305 tests
+api tsc = 0
+browser 59/59
+goal admission 12/12
+
+可以记 local evidence。
+
+GitHub Actions 对 4443d3d4 仍然：
+
+NOT_OBSERVED
+
+建议 FINAL5 修完后，在新的 exact HEAD 再跑一次完整 API regression，避免继续引用旧 HEAD。
+
+另外已有非阻断 production debt 继续成立：
+
+纯文本
+createJsonTaskQueuePort
+= JSON read-modify-write
+= no cross-worker CAS/lock
+
+production enablement 前必须解决。
+
+PRODUCTION
+
+继续确认：
+
+纯文本
+REAL_EXTERNAL_EXECUTION  = NOT_EXECUTED
+REAL_VALIDATION_COMPLETE = NO
+PRODUCTION_READY         = NO
+
+全部 HOLD / FORBIDDEN 不变。
+
+SECOND_RUNTIME / SECOND_SCHEDULER / SECOND_GUARD / SECOND_POLICY_ENGINE / SECOND_CONTROL_PLANE / SECOND_MODEL_GATEWAY / SECOND_COST_LEDGER / SECOND_META_EVIDENCE_STORE = 0
+
+L5_RELAXATION = FORBIDDEN
+
+最终裁决
+
+Amazon → Walmart 这个 FINAL4 目标已经 PASS。
+
+现在只剩很窄的收口：
+
+CUSTOMER-UX FINAL5 — exact runtime task membership + complete durable goal reconstruction + canonical provider-domain mapping
+
+其中真正的安全 blocker 是第一项：
+
+Goal digest token 不能替代 exact deterministic task membership。
+
+把 exact expectedTasks.has(key) 恢复、完整重建 durable identity，并把 Shopify 等 provider-domain 映射统一后，我预计即可正式给：
+
+纯文本
+SECURITY_BOUNDARY = PASS
+VERDICT = PASS / CLOSED
+FINAL6_REQUIRED = NO
+
+目前仍是 PASS WITH REVISE / NOT CLOSED。
+```
+
+### [MSG-20261007-07] CUSTOMER-UX FINAL5 复审裁决 = PASS / CLOSED（SECURITY_BOUNDARY 三项全部闭合；FINAL6_REQUIRED = NO）
+
+```text
+SECURITY_BOUNDARY: PASS
+
+VERDICT: PASS / CLOSED
+
+REVIEWED_CODE_HEAD: b71ae5d7db47af9819bd59afa5988ce716c829b1
+REVIEWED_PACKAGE_HEAD: fbd785db39b444d98fb01d055e782a5f4ddf3617
+
+b71ae5d7 → fbd785db 之间只有验收文档变化，没有后续业务代码变化。因此功能裁决以 b71ae5d7 为代码锚点、fbd785db 为最终封包锚点。
+
+逐项最终状态：
+
+纯文本
+CUSTOMER_USABILITY          = PASS
+SANDBOX_END_TO_END          = PASS
+AUTHORIZATION_RESUME        = PASS
+FIRST_RUN_GUIDANCE          = PASS
+NO_API_FAIL_CLOSED          = PASS
+EXTERNAL_BOUNDARY_HONESTY   = PASS
+SECURITY_BOUNDARY           = PASS
+PRODUCTION_GATE             = PASS
+
+CUSTOMER-UX-SANDBOX-E2E
+FINAL ACCEPTANCE            = PASS / CLOSED
+
+FINAL6_REQUIRED             = NO
+三项 FINAL5 修订均已 CLOSED
+
+1. Exact deterministic task membership = PASS
+
+recordGoalRunFromRuntime() 已恢复真正的：
+
+TypeScript
+expectedTasks.has(key)
+
+并同时要求 task:recovery: namespace。
+
+FINAL4 的危险逻辑：
+
+纯文本
+只要包含 goal digest token 就接受
+
+已经删除。
+
+因此现在：
+
+纯文本
+计划内 exact task               → 接受
+伪造 suffix + 正确 digest       → 拒绝
+错误 domain + 正确 digest       → 拒绝
+另一个 Goal 的真实 task         → 拒绝
+
+全部在创建 AgentGoalRun 之前 fail-closed。
+
+GA-17 与现有 GA-10 对上了。
+
+2. Durable Goal identity reconstruction = PASS
+
+现在 runtime lineage 重建确实包括：
+
+纯文本
+goalType
+domains
+providers
+timeRange
+executionMode
+approvalThreshold
+
+特别是上一轮漏掉的：
+
+TypeScript
+approvalThreshold:
+  stored.approvalThreshold ?? null
+
+已经恢复。
+
+随后还会执行：
+
+纯文本
+reconstructed goalDigest
+===
+durable stored goalDigest
+
+不一致直接：
+
+纯文本
+GOAL_RUNTIME_LINEAGE_MISMATCH
+
+不会再继续 projection。
+
+GA-18 还确认了两层：
+
+DB AGENT_GOAL_IDENTITY_IMMUTABLE 阻止原地改写 normalizedGoal；
+带 $1000 approvalThreshold 的 Goal 能重建同一 identity 并接受自己的 exact task。
+
+所以 durable Goal 已经可以作为 runtime lineage SSOT。
+
+3. Canonical provider→domain mapping = PASS
+
+现在存在唯一：
+
+纯文本
+GOAL_PROVIDER_DOMAINS
+
+compiler 与 admission 都引用这一份映射，不再维护两套独立判断。
+
+例如实际代码：
+
+纯文本
+AMAZON             → PLATFORM
+WALMART            → PLATFORM
+TIKTOK             → PLATFORM
+EBAY               → PLATFORM
+SHOPIFY            → PLATFORM
+STRIPE / PAYPAL    → INDEPENDENT_SITE
+UPS / FEDEX / DHL  → LOGISTICS
+FREIGHT_FORWARDER  → LOGISTICS
+INSURANCE          → LOGISTICS
+CBP / ABI          → CUSTOMS
+
+另外 admission aliases 也归一后再进入同一表，未知 provider 仍 fail-closed。
+
+关键安全语义维持：
+
+纯文本
+Amazon Goal + Amazon Account
+→ ADMITTED
+
+Amazon Goal + Walmart Account
+→ GOAL_SCOPE_MISMATCH
+
+Amazon Goal + UPS Account
+→ GOAL_SCOPE_MISMATCH
+
+generic PLATFORM Goal + Walmart
+→ 可走 domain-level admission
+
+因此上一轮唯一 SECURITY_BOUNDARY blocker 已经闭合。
+
+CHANGES
+
+无阻断性 CHANGE。
+
+这轮不需要 FINAL6。
+
+不要继续为了本验收单元修改已经稳定的 Goal / Authorization / Runtime 代码。
+
+RISKS
+
+有两项仍需登记，但都不阻断当前 sandbox customer acceptance。
+
+第一，已知 production debt 仍存在：
+
+纯文本
+createJsonTaskQueuePort()
+= JSON read-modify-write
+= 无跨 worker lock/CAS
+
+所以 production enablement 前必须：
+
+替换成 durable/atomic queue admission；或
+有可证明的 single-writer deployment invariant。
+
+这不是当前 sandbox CLOSED 的 blocker，但是真实生产前置条件。
+
+第二，provider-domain taxonomy 现在已经“单源一致”，但 SHOPIFY → PLATFORM 是一个产品域建模选择。它现在不会再因为 compiler/admission 不一致而误拒；不过如果后续你希望 Shopify 的 recovery 工作严格归入 INDEPENDENT_SITE 域，应作为单独的业务域建模变更统一修改 canonical map 与相关 planner/tests，不要在本次封板后零散修改。
+
+TEST / EVIDENCE
+
+我确认的代码级证据包括：
+
+纯文本
+GA-13 Amazon→Amazon              = allowed
+GA-14 Shopify canonical mapping  = allowed
+GA-15 Amazon→UPS                 = denied
+GA-16 generic PLATFORM→Walmart   = allowed
+GA-17 forged task membership     = denied
+GA-18 durable threshold identity = preserved
+
+Codex/local evidence：
+
+纯文本
+goal-admission-db        18/18
+agent-goal               50/50
+targeted                 352 + 233 PASS
+browser                  59/59
+api/web tsc              0 / 0
+next build               0
+UI render                138/138
+i18n                     5 locales / 839 keys / 0 hardcodes
+prisma validate          valid
+API full regression      4568/4569
+
+唯一 full-regression failure 仍是既有 P2E-DB5 parallel test-isolation debt，单跑通过。
+
+GitHub Actions 对 final package head：
+
+NOT_OBSERVED
+
+所以仍不要写成 “GitHub CI green”；应写 local/Codex regression evidence。
+
+PRODUCTION
+
+最终再次确认：
+
+纯文本
+REAL_EXTERNAL_EXECUTION  = NOT_EXECUTED
+REAL_VALIDATION_COMPLETE = NO
+PRODUCTION_READY         = NO
+
+全部 HOLD 保持不变，包括：
+
+纯文本
+REAL_PROVIDER_WRITE
+CUSTOMS_FILING
+PAYMENT
+AUTO_COMMISSION_CHARGE
+PRODUCTION_CREDENTIALS
+PRODUCTION_ENABLEMENT
+REAL_MODEL_NETWORK
+PAID_MODEL_CALLS
+EXTERNAL_WRITE
+TRANSPORT
+P2_F
+P2_G
+
+全部既有 FORBIDDEN 不变：
+
+纯文本
+SECOND_RUNTIME
+SECOND_SCHEDULER
+SECOND_GUARD
+SECOND_POLICY_ENGINE
+SECOND_CONTROL_PLANE
+SECOND_MODEL_GATEWAY
+SECOND_COST_LEDGER
+SECOND_META_EVIDENCE_STORE
+L5_RELAXATION
+
+SECOND_* = 0 保持。
+
+最终裁决：CUSTOMER-UX-SANDBOX-E2E = PASS / CLOSED。
+
+这条链现在已经真实证明了：
+
+纯文本
+首次访问
+→ 注册/验证/登录
+→ 自然语言 Goal
+→ server-owned provider/account scope
+→ durable authorization
+→ product admission
+→ existing queue
+→ ONE SI Runtime actual claim
+→ exact task↔Goal lineage
+→ honest BLOCKED/run projection
+→ same-goal resume
+→ 重放不产生第二次执行
+→ 零真实外部写
+
+可以停止继续修这个验收单元。下一步若进入真实 API/provider 或 production enablement，应开启新的独立授权与验收单元。
+```

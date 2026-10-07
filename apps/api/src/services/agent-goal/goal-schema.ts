@@ -17,6 +17,7 @@ export const GOAL_DRAFT_ALLOWED_KEYS = {
   root: [
     'goalType',
     'domains',
+    'providers',
     'timeRange',
     'executionMode',
     'approvalThreshold',
@@ -155,6 +156,11 @@ export function checkGoalDraftShape(draft: unknown): GoalShapeCheck {
   if (!('domains' in draft)) return fail('MISSING_FIELD', 'domains');
   const domains = checkStringArray(draft.domains, 'domains');
   if (!domains.ok) return domains;
+  // FINAL4：providers 是编译器产出的 provider 意图（白名单 + 字符串数组；取值合法性由 validator 决定）
+  if (draft.providers !== undefined) {
+    const providers = checkStringArray(draft.providers, 'providers');
+    if (!providers.ok) return providers;
+  }
   if (!('timeRange' in draft)) return fail('MISSING_FIELD', 'timeRange');
   if (!('executionMode' in draft)) return fail('MISSING_FIELD', 'executionMode');
   if (typeof draft.executionMode !== 'string') return fail('WRONG_TYPE', 'executionMode');

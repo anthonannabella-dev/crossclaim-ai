@@ -185,6 +185,7 @@ export async function handleAgentGoalRequest(
     normalizedGoal: {
       goalType: goal.goalType,
       domains: goal.domains,
+      providers: goal.providers,
       timeRange: goal.timeRange,
       executionMode: goal.executionMode,
       approvalThreshold: goal.approvalThresholdPreference,
@@ -212,6 +213,7 @@ export async function handleAgentGoalRequest(
     interpretation: {
       goalType: goal.goalType,
       domains: goal.domains,
+      providers: goal.providers,
       timeRange: goal.timeRange,
       executionMode: goal.executionMode,
       approvalThreshold: goal.approvalThresholdPreference,

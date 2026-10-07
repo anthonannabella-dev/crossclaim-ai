@@ -17,6 +17,8 @@ import {
   GOAL_APPROVAL_CURRENCIES,
   GOAL_DOMAINS,
   GOAL_EXECUTION_MODES,
+  GOAL_PROVIDERS,
+  type GoalProvider,
   GOAL_MAX_MONTHS,
   GOAL_TIME_RANGE_KINDS,
   GOAL_TYPES,
@@ -133,9 +135,20 @@ export function validateAgentGoalDraft(input: {
     approvalThreshold = { currency: approvalThreshold.currency, amount: approvalThreshold.amount };
   }
 
+  // FINAL4：provider 意图是白名单内的确定性事实，并冻结进 goal identity（digest 的一部分）
+  const providers = [
+    ...new Set((Array.isArray(draft.providers) ? draft.providers : []).map((p) => String(p).toUpperCase())),
+  ].sort() as GoalProvider[];
+  for (const provider of providers) {
+    if (!(GOAL_PROVIDERS as readonly string[]).includes(provider)) {
+      throw new AgentGoalError('GOAL_MALFORMED', '未知 provider 意图：' + provider);
+    }
+  }
+
   const goalDigest = digestOf({
     version: AGENT_GOAL_VERSION,
     goalType: draft.goalType,
+    providers,
     domains,
     timeRange,
     executionMode: draft.executionMode,
@@ -151,6 +164,7 @@ export function validateAgentGoalDraft(input: {
     actorUserId: input.context.actorUserId,
     goalType: draft.goalType,
     domains,
+    providers,
     timeRange,
     executionMode: draft.executionMode,
     approvalThresholdPreference: approvalThreshold,

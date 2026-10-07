@@ -24,6 +24,24 @@ async function apiGet<T>(path: string): Promise<{ ok: boolean; status: number; b
   return { ok: true, status: response.status, body: (await response.json()) as T };
 }
 
+/** 客户语言：角色码 → 客户可读名称（未知码原样显示，不做猜测）。 */
+function roleLabel(t: Awaited<ReturnType<typeof getServerMessages>>, code: string): string {
+  const table = t.common as unknown as Record<string, string>;
+  const key =
+    code === 'OWNER'
+      ? 'roleOwner'
+      : code === 'ADMIN'
+        ? 'roleAdmin'
+        : code === 'OPS'
+          ? 'roleOps'
+          : code === 'FINANCE'
+            ? 'roleFinance'
+            : code === 'VIEWER'
+              ? 'roleViewer'
+              : '';
+  return key === '' ? code : (table[key] ?? code);
+}
+
 export default async function ConnectionsPage() {
   const t = await getServerMessages();
   const me = await apiGet<Me>('/auth/me');
@@ -46,7 +64,7 @@ export default async function ConnectionsPage() {
       <section className="rounded-lg border bg-white p-6">
         <h1 className="text-xl font-semibold">{t.connectionsPage.title}</h1>
         <p className="mt-2 text-sm text-slate-600">
-          {t.connectionsPage.description.replace('{role}', me.body.role)}
+          {t.connectionsPage.description.replace('{role}', roleLabel(t, me.body.role))}
         </p>
         <Link href="/" className="mt-4 inline-block text-sm text-slate-600 underline">
           {t.common.backToDashboard}
