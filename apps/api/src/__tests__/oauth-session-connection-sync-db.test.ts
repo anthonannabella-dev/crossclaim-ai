@@ -25,6 +25,7 @@ import {
   succeedOAuthAuthorizationSession,
 } from '../services/connect/prisma-oauth-session-store';
 import { resolveProviderContract } from '../services/connect/provider-integration-contract';
+import { persistAgentGoal } from '../services/agent-goal';
 
 const prisma = new PrismaClient();
 const NOW = new Date('2026-10-07T06:00:00.000Z');
@@ -37,7 +38,7 @@ const CALLBACK = CONTRACT?.callbackPath ?? '/connect/callback';
 
 async function truncate(): Promise<void> {
   await prisma.$executeRawUnsafe(
-    'TRUNCATE "ConnectionSyncState", "OAuthAuthorizationSession" RESTART IDENTITY CASCADE',
+    'TRUNCATE "ConnectionSyncState", "OAuthAuthorizationSession", "AgentGoalRun", "AgentGoal" RESTART IDENTITY CASCADE',
   );
 }
 
@@ -85,6 +86,16 @@ afterAll(async () => {
 
 describe('P9 · OAuthAuthorizationSession（durable / 一次性 / 恢复原目标）', () => {
   it('PG-P9-1 发起会话：只落 state 摘要（不落原始 state），保留 resumeGoalId，一次性消费', async () => {
+    // AEL-FINAL2 / C2：resumeGoalId 必须是同租户既有 AgentGoal（durable lineage，不是自由字符串）
+    const resumeGoalId = (
+      await persistAgentGoal(prisma, {
+        organizationId: ORG,
+        createdBy: USER,
+        rawUserIntent: 'recover my Amazon reimbursements',
+        normalizedGoal: { goalType: 'DISCOVER_AND_RECOVER', domains: ['PLATFORM'] },
+        now: NOW,
+      })
+    ).goalId;
     const issued = await initiateOAuthAuthorizationSession(
       prisma,
       {
@@ -93,21 +104,21 @@ describe('P9 · OAuthAuthorizationSession（durable / 一次性 / 恢复原目�
         provider: 'AMAZON',
         callbackPath: CALLBACK,
         redirectTarget: '/connections',
-        resumeGoalId: 'agentgoal-resume-1',
+        resumeGoalId: resumeGoalId,
         now: NOW,
       },
       { randomBytes: () => Buffer.alloc(32, 7) },
     );
     expect(issued.productionAuthorizationEnabled).toBe(false);
     expect(issued.bindExecuted).toBe(false);
-    expect(issued.resumeGoalId).toBe('agentgoal-resume-1');
+    expect(issued.resumeGoalId).toBe(resumeGoalId);
 
     const rows = await prisma.oAuthAuthorizationSession.findMany();
     expect(rows).toHaveLength(1);
     expect(rows[0].stateDigest).toHaveLength(64);
     expect(rows[0].stateDigest).not.toBe(issued.state);
     expect(JSON.stringify(rows[0])).not.toContain(issued.state);
-    expect(rows[0].resumeGoalId).toBe('agentgoal-resume-1');
+    expect(rows[0].resumeGoalId).toBe(resumeGoalId);
     expect(rows[0].status).toBe('PENDING');
 
     const store = createPrismaOAuthStateStore(prisma, { now: () => NOW });
@@ -151,16 +162,30 @@ describe('P9 · OAuthAuthorizationSession（durable / 一次性 / 恢复原目�
   });
 
   it('PG-P9-3 callback 成功：绑定连接与 credentialRef，保留 resumeGoalId；失败不得转成功', async () => {
+    // AEL-FINAL2 / C2：resumeGoalId 必须是同租户既有 AgentGoal（durable lineage，不是自由字符串）
+    const resumeGoalId = (
+      await persistAgentGoal(prisma, {
+        organizationId: ORG,
+        createdBy: USER,
+        rawUserIntent: 'recover my Amazon reimbursements',
+        normalizedGoal: { goalType: 'DISCOVER_AND_RECOVER', domains: ['PLATFORM'] },
+        now: NOW,
+      })
+    ).goalId;
     const issued = await initiateOAuthAuthorizationSession(prisma, {
       organizationId: ORG,
       userId: USER,
       provider: 'AMAZON',
       callbackPath: CALLBACK,
       redirectTarget: '/connections',
-      resumeGoalId: 'agentgoal-resume-2',
+      resumeGoalId: resumeGoalId,
       now: NOW,
     });
     const connectionId = await seedConnection(ORG, 'p9-conn-a');
+
+    // AEL-FINAL2 / C2：成功必须先经一次性消费（PENDING → CONSUMED）
+    const takeStore = createPrismaOAuthStateStore(prisma, { now: () => NOW });
+    expect((await takeStore.take(issued.state))?.provider).toBe('AMAZON');
 
     const succeeded = await succeedOAuthAuthorizationSession(prisma, {
       organizationId: ORG,
@@ -172,7 +197,7 @@ describe('P9 · OAuthAuthorizationSession（durable / 一次性 / 恢复原目�
     expect(succeeded.status).toBe('SUCCEEDED');
     expect(succeeded.connectionId).toBe(connectionId);
     expect(succeeded.credentialRef).toBe('cred-ref-p9');
-    expect(succeeded.resumeGoalId).toBe('agentgoal-resume-2');
+    expect(succeeded.resumeGoalId).toBe(resumeGoalId);
 
     // 幂等：重复成功调用保持 SUCCEEDED
     const again = await succeedOAuthAuthorizationSession(prisma, {
@@ -323,3 +348,168 @@ describe('P9 · ConnectionSyncState（检查点投影，不是第二事实源）
   });
 });
 
+describe('AEL FINAL2 / C2 · durable OAuth transition CAS', () => {
+  it('PG-P9-7 PENDING 不得直接转 SUCCEEDED（必须先经一次性消费）', async () => {
+    const issued = await initiateOAuthAuthorizationSession(prisma, {
+      organizationId: ORG,
+      userId: USER,
+      provider: 'AMAZON',
+      callbackPath: CALLBACK,
+      redirectTarget: '/connections',
+      now: NOW,
+    });
+    const connectionId = await seedConnection(ORG, 'p9-conn-cas1');
+    await expect(
+      succeedOAuthAuthorizationSession(prisma, {
+        organizationId: ORG,
+        sessionId: issued.sessionId,
+        connectionId,
+        credentialRef: 'cred-cas1',
+        now: NOW,
+      }),
+    ).rejects.toMatchObject({ code: 'OAUTH_SESSION_INVALID_TRANSITION' });
+
+    const after = await loadOAuthAuthorizationSession(prisma, { organizationId: ORG, sessionId: issued.sessionId });
+    expect(after?.status).toBe('PENDING');
+    expect(after?.connectionId).toBeNull();
+  });
+
+  it('PG-P9-8 SUCCEEDED 绑定冲突：同一连接但不同 credentialRef → BINDING_CONFLICT，终态不可改写', async () => {
+    const issued = await initiateOAuthAuthorizationSession(prisma, {
+      organizationId: ORG,
+      userId: USER,
+      provider: 'AMAZON',
+      callbackPath: CALLBACK,
+      redirectTarget: '/connections',
+      now: NOW,
+    });
+    const connectionId = await seedConnection(ORG, 'p9-conn-cas2');
+    const store = createPrismaOAuthStateStore(prisma, { now: () => NOW });
+    await store.take(issued.state);
+    const first = await succeedOAuthAuthorizationSession(prisma, {
+      organizationId: ORG,
+      sessionId: issued.sessionId,
+      connectionId,
+      credentialRef: 'cred-cas2-a',
+      now: NOW,
+    });
+    expect(first.status).toBe('SUCCEEDED');
+
+    // 相同 binding → 幂等
+    const replay = await succeedOAuthAuthorizationSession(prisma, {
+      organizationId: ORG,
+      sessionId: issued.sessionId,
+      connectionId,
+      credentialRef: 'cred-cas2-a',
+      now: NOW,
+    });
+    expect(replay.status).toBe('SUCCEEDED');
+
+    // 不同 binding → 冲突
+    await expect(
+      succeedOAuthAuthorizationSession(prisma, {
+        organizationId: ORG,
+        sessionId: issued.sessionId,
+        connectionId,
+        credentialRef: 'cred-cas2-b',
+        now: NOW,
+      }),
+    ).rejects.toMatchObject({ code: 'OAUTH_SESSION_BINDING_CONFLICT' });
+    const stored = await loadOAuthAuthorizationSession(prisma, { organizationId: ORG, sessionId: issued.sessionId });
+    expect(stored?.credentialRef).toBe('cred-cas2-a');
+  });
+
+  it('PG-P9-9 connectionId 必须属于同租户（跨租户连接 → CONNECTION_NOT_FOUND）', async () => {
+    const issued = await initiateOAuthAuthorizationSession(prisma, {
+      organizationId: ORG,
+      userId: USER,
+      provider: 'AMAZON',
+      callbackPath: CALLBACK,
+      redirectTarget: '/connections',
+      now: NOW,
+    });
+    const foreignConnection = await seedConnection(ORG_B, 'p9-conn-cas3');
+    const store = createPrismaOAuthStateStore(prisma, { now: () => NOW });
+    await store.take(issued.state);
+    await expect(
+      succeedOAuthAuthorizationSession(prisma, {
+        organizationId: ORG,
+        sessionId: issued.sessionId,
+        connectionId: foreignConnection,
+        credentialRef: 'cred-cas3',
+        now: NOW,
+      }),
+    ).rejects.toMatchObject({ code: 'OAUTH_SESSION_CONNECTION_NOT_FOUND' });
+  });
+
+  it('PG-P9-10 resumeGoalId 必须是同租户既有 AgentGoal（否则 GOAL_NOT_FOUND）', async () => {
+    const foreignGoal = await persistAgentGoal(prisma, {
+      organizationId: ORG_B,
+      createdBy: USER,
+      rawUserIntent: 'check recoverable money',
+      normalizedGoal: { goalType: 'DISCOVER_AND_RECOVER', domains: ['PLATFORM'] },
+      now: NOW,
+    });
+    await expect(
+      initiateOAuthAuthorizationSession(prisma, {
+        organizationId: ORG,
+        userId: USER,
+        provider: 'AMAZON',
+        callbackPath: CALLBACK,
+        redirectTarget: '/connections',
+        resumeGoalId: foreignGoal.goalId,
+        now: NOW,
+      }),
+    ).rejects.toMatchObject({ code: 'OAUTH_SESSION_GOAL_NOT_FOUND' });
+
+    const ownGoal = await persistAgentGoal(prisma, {
+      organizationId: ORG,
+      createdBy: USER,
+      rawUserIntent: 'check recoverable money',
+      normalizedGoal: { goalType: 'DISCOVER_AND_RECOVER', domains: ['PLATFORM'] },
+      now: NOW,
+    });
+    const issued = await initiateOAuthAuthorizationSession(prisma, {
+      organizationId: ORG,
+      userId: USER,
+      provider: 'AMAZON',
+      callbackPath: CALLBACK,
+      redirectTarget: '/connections',
+      resumeGoalId: ownGoal.goalId,
+      now: NOW,
+    });
+    expect(issued.resumeGoalId).toBe(ownGoal.goalId);
+  });
+
+  it('PG-P9-11 数据库级状态机守卫：PENDING → SUCCEEDED 被触发器拒绝；终态绑定不可改写', async () => {
+    const issued = await initiateOAuthAuthorizationSession(prisma, {
+      organizationId: ORG,
+      userId: USER,
+      provider: 'AMAZON',
+      callbackPath: CALLBACK,
+      redirectTarget: '/connections',
+      now: NOW,
+    });
+    await expect(
+      prisma.$executeRawUnsafe(
+        `UPDATE "OAuthAuthorizationSession" SET "status" = 'SUCCEEDED', "consumedAt" = now() WHERE "id" = '${issued.sessionId}'`,
+      ),
+    ).rejects.toThrow(/OAUTH_SESSION_INVALID_TRANSITION/);
+
+    const connectionId = await seedConnection(ORG, 'p9-conn-cas4');
+    const store = createPrismaOAuthStateStore(prisma, { now: () => NOW });
+    await store.take(issued.state);
+    await succeedOAuthAuthorizationSession(prisma, {
+      organizationId: ORG,
+      sessionId: issued.sessionId,
+      connectionId,
+      credentialRef: 'cred-cas4',
+      now: NOW,
+    });
+    await expect(
+      prisma.$executeRawUnsafe(
+        `UPDATE "OAuthAuthorizationSession" SET "credentialRef" = 'rewritten' WHERE "id" = '${issued.sessionId}'`,
+      ),
+    ).rejects.toThrow(/OAUTH_SESSION_BINDING_IMMUTABLE/);
+  });
+});

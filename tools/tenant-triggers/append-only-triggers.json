@@ -427,6 +427,12 @@
       "semantics": "BEFORE UPDATE → 会话身份（org/user/provider/stateDigest/callbackPath/redirectTarget/窗口）不可改写；status/consumedAt/connectionId/credentialRef 可推进。P9 oauth session"
     },
     {
+      "name": "cc_oauth_session_transition__OAuthAuthorizationSession",
+      "table": "OAuthAuthorizationSession",
+      "tgtype": 19,
+      "semantics": "BEFORE UPDATE → 状态机守卫（PENDING→CONSUMED；PENDING→FAILED；CONSUMED→SUCCEEDED|FAILED；终态不可再迁移；终态绑定不可改写）。AEL-FINAL2 / C2"
+    },
+    {
       "name": "cc_connection_sync_identity__ConnectionSyncState",
       "table": "ConnectionSyncState",
       "tgtype": 19,
@@ -453,6 +459,7 @@
     "cc_agent_goal_identity__%",
     "cc_agent_goal_run_identity__%",
     "cc_oauth_session_identity__%",
+    "cc_oauth_session_transition__%",
     "cc_connection_sync_identity__%"
   ]
 }

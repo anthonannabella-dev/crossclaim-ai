@@ -31,7 +31,11 @@ export type OAuthSessionStoreErrorCode =
   | 'OAUTH_SESSION_NOT_FOUND'
   | 'OAUTH_SESSION_INVALID_TRANSITION'
   | 'OAUTH_SESSION_UNKNOWN_PROVIDER'
-  | 'OAUTH_SESSION_CALLBACK_PATH_NOT_ALLOWED';
+  | 'OAUTH_SESSION_CALLBACK_PATH_NOT_ALLOWED'
+  // AEL-FINAL2（MSG-20261007-01 CHANGE 2）：绑定冲突 / 血缘缺失
+  | 'OAUTH_SESSION_BINDING_CONFLICT'
+  | 'OAUTH_SESSION_CONNECTION_NOT_FOUND'
+  | 'OAUTH_SESSION_GOAL_NOT_FOUND';
 
 export class OAuthSessionStoreError extends Error {
   readonly code: OAuthSessionStoreErrorCode;
@@ -138,6 +142,19 @@ export async function initiateOAuthAuthorizationSession(
     throw new OAuthSessionStoreError('OAUTH_SESSION_CALLBACK_PATH_NOT_ALLOWED', '回调路径不在 provider 契约内。');
   }
   const now = input.now ?? new Date();
+  // AEL-FINAL2（CHANGE 2）：resumeGoalId 必须是**同租户**的既有 AgentGoal（durable lineage，不是自由字符串）
+  if (input.resumeGoalId !== undefined && input.resumeGoalId !== null && input.resumeGoalId !== '') {
+    const resumeGoal = await prisma.agentGoal.findFirst({
+      where: { organizationId: input.organizationId, id: input.resumeGoalId },
+      select: { id: true },
+    });
+    if (resumeGoal === null) {
+      throw new OAuthSessionStoreError(
+        'OAUTH_SESSION_GOAL_NOT_FOUND',
+        'resumeGoalId 指向的目标不存在或不属于该租户。',
+      );
+    }
+  }
   let captured: OAuthStateRecord | null = null;
   const issued = await issueOAuthState(
     {
@@ -267,6 +284,14 @@ export async function listOAuthAuthorizationSessions(
 }
 
 /** 回调成功：记录已验证连接与凭据引用，并保留 `resumeGoalId` 供上层恢复原目标 */
+/**
+ * 回调成功（AEL-FINAL2 / MSG-20261007-01 CHANGE 2）：
+ *   * 必须先经一次性 `take()`（PENDING → CONSUMED）—— **PENDING 不得直接转 SUCCEEDED**；
+ *   * 用原子 CAS `WHERE id AND organizationId AND status='CONSUMED'` 抢占终态；
+ *   * `connectionId` 必须存在于**同租户** SourceConnection（血缘，不是自由字符串）；
+ *   * SUCCEEDED 重入仅在 `connectionId` + `credentialRef` 完全相同时幂等，否则 BINDING_CONFLICT；
+ *   * 终态不可改写。
+ */
 export async function succeedOAuthAuthorizationSession(
   prisma: PrismaClient,
   input: {
@@ -281,23 +306,73 @@ export async function succeedOAuthAuthorizationSession(
     where: { organizationId: input.organizationId, id: input.sessionId },
   });
   if (row === null) throw new OAuthSessionStoreError('OAUTH_SESSION_NOT_FOUND', '会话不存在（或不属于该租户）。');
-  if (row.status === 'SUCCEEDED') return toView(row);
-  if (row.status === 'FAILED') {
-    throw new OAuthSessionStoreError('OAUTH_SESSION_INVALID_TRANSITION', '已失败的会话不得转为成功。');
+
+  // 连接血缘：必须存在且属于同一租户
+  const connection = await prisma.sourceConnection.findFirst({
+    where: { organizationId: input.organizationId, id: input.connectionId },
+    select: { id: true },
+  });
+  if (connection === null) {
+    throw new OAuthSessionStoreError(
+      'OAUTH_SESSION_CONNECTION_NOT_FOUND',
+      'connectionId 不存在或不属于该租户。',
+    );
   }
-  const updated = await prisma.oAuthAuthorizationSession.update({
-    where: { id: input.sessionId },
+
+  const sameBinding = (candidate: {
+    connectionId: string | null;
+    credentialRef: string | null;
+  }): boolean =>
+    candidate.connectionId === input.connectionId && candidate.credentialRef === input.credentialRef;
+
+  if (row.status === 'SUCCEEDED') {
+    if (sameBinding(row)) return toView(row);
+    throw new OAuthSessionStoreError(
+      'OAUTH_SESSION_BINDING_CONFLICT',
+      '会话已成功绑定到另一个 connection / credentialRef，禁止改写终态。',
+    );
+  }
+  if (row.status !== 'CONSUMED') {
+    // PENDING（未消费）或 FAILED（终态）都不得转成功
+    throw new OAuthSessionStoreError(
+      'OAUTH_SESSION_INVALID_TRANSITION',
+      row.status === 'PENDING'
+        ? '会话必须先经一次性消费（PENDING → CONSUMED）才能转成功。'
+        : '已失败的会话不得转为成功。',
+    );
+  }
+
+  const cas = await prisma.oAuthAuthorizationSession.updateMany({
+    where: { id: input.sessionId, organizationId: input.organizationId, status: 'CONSUMED' },
     data: {
       status: 'SUCCEEDED',
       connectionId: input.connectionId,
       credentialRef: input.credentialRef,
-      consumedAt: row.consumedAt ?? input.now,
       updatedAt: input.now,
     },
   });
+  if (cas.count !== 1) {
+    const after = await prisma.oAuthAuthorizationSession.findFirst({
+      where: { organizationId: input.organizationId, id: input.sessionId },
+    });
+    if (after !== null && after.status === 'SUCCEEDED') {
+      if (sameBinding(after)) return toView(after);
+      throw new OAuthSessionStoreError(
+        'OAUTH_SESSION_BINDING_CONFLICT',
+        '并发成功写入绑定了另一个 connection / credentialRef。',
+      );
+    }
+    throw new OAuthSessionStoreError('OAUTH_SESSION_INVALID_TRANSITION', '并发状态已变化，未能取得成功终态。');
+  }
+
+  const updated = await prisma.oAuthAuthorizationSession.findFirst({
+    where: { organizationId: input.organizationId, id: input.sessionId },
+  });
+  if (updated === null) throw new OAuthSessionStoreError('OAUTH_SESSION_NOT_FOUND', '会话在 CAS 后消失。');
   return toView(updated);
 }
 
+/** 失败终态：PENDING / CONSUMED 均可（原子 CAS），已成功不得转失败，重复失败幂等 */
 export async function failOAuthAuthorizationSession(
   prisma: PrismaClient,
   input: { organizationId: string; sessionId: string; reason: string; now: Date },
@@ -309,8 +384,14 @@ export async function failOAuthAuthorizationSession(
   if (row.status === 'SUCCEEDED') {
     throw new OAuthSessionStoreError('OAUTH_SESSION_INVALID_TRANSITION', '已成功的会话不得转为失败。');
   }
-  const updated = await prisma.oAuthAuthorizationSession.update({
-    where: { id: input.sessionId },
+  if (row.status === 'FAILED') return toView(row);
+
+  const cas = await prisma.oAuthAuthorizationSession.updateMany({
+    where: {
+      id: input.sessionId,
+      organizationId: input.organizationId,
+      status: row.status,
+    },
     data: {
       status: 'FAILED',
       failureReason: input.reason.slice(0, 200),
@@ -318,6 +399,17 @@ export async function failOAuthAuthorizationSession(
       updatedAt: input.now,
     },
   });
+  if (cas.count !== 1) {
+    const after = await prisma.oAuthAuthorizationSession.findFirst({
+      where: { organizationId: input.organizationId, id: input.sessionId },
+    });
+    if (after !== null && after.status === 'FAILED') return toView(after);
+    throw new OAuthSessionStoreError('OAUTH_SESSION_INVALID_TRANSITION', '并发状态已变化，未能取得失败终态。');
+  }
+  const updated = await prisma.oAuthAuthorizationSession.findFirst({
+    where: { organizationId: input.organizationId, id: input.sessionId },
+  });
+  if (updated === null) throw new OAuthSessionStoreError('OAUTH_SESSION_NOT_FOUND', '会话在 CAS 后消失。');
   return toView(updated);
 }
 
