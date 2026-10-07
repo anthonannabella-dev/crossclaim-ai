@@ -549,6 +549,8 @@ const zhCN = {
     networkError: '网络异常，请稍后重试。',
   },
   connectionsPage: {
+    summaryError: "当前连接有问题，暂时无法继续",
+    summaryUnknown: "状态待确认，暂时不会继续",
     summaryLabel: "CrossClaim 能否继续工作",
     summaryCanContinue: "可以继续自动处理",
     summaryNeedsReauth: "需要你重新授权后才会继续",

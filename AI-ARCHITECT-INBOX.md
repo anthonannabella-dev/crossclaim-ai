@@ -160496,3 +160496,383 @@ SECOND_* = 0 保持。
 
 可以停止继续修这个验收单元。下一步若进入真实 API/provider 或 production enablement，应开启新的独立授权与验收单元。
 ```
+
+### [MSG-20261007-08] CUSTOMER-UI-PRODUCTIZATION-V2 FINAL 独立审计 = PASS WITH REVISE / NOT CLOSED（ACTIVE_RECOVERY_UX + CONNECTIONS_UX 两项 REVISE）
+
+```text
+VERDICT: PASS WITH REVISE / NOT CLOSED
+
+REVIEWED_HEAD: ca5678dde7b107aebba95b3e8366548bfc939833
+P12_EVIDENCE_HEAD: 9c9f324d16903c557b63f41fd55109f336351366
+CHANNEL_DOC_HEAD: 80a6f706f444648ac8ec0b7ece93c41af21ecb7f
+
+独立复核后，我认为这轮 UI 产品化方向整体成立，且没有能力丢失、没有后端/runtime/authorization 语义改动、没有前端金额重算。但发现两个客户语义问题，需要一个很窄的 FINAL2 才适合正式 CLOSED。
+
+纯文本
+CUSTOMER_SIMPLICITY                  = PASS
+GOAL_FIRST_UX                        = PASS
+MONEY_FIRST_UX                       = PASS
+NEEDS_ATTENTION_MODEL                = PASS
+ACTIVE_RECOVERY_UX                   = REVISE
+NAVIGATION_SIMPLICITY                = PASS
+CUSTOMER_LANGUAGE                    = PASS
+ENGINEERING_FIELD_ISOLATION          = PASS
+AUTHORIZATION_UX                     = PASS
+CONNECTIONS_UX                       = REVISE
+CAPABILITY_PRESERVATION              = PASS
+MOBILE_USABILITY                     = PASS
+ACCESSIBILITY                        = PASS
+I18N                                 = PASS
+RUNTIME_FREEZE                       = PASS
+AUTHORIZATION_FREEZE                 = PASS
+NO_SECOND_TRUTH_SOURCE               = PASS
+NO_FRONTEND_FINANCIAL_RECOMPUTATION  = PASS
+
+CUSTOMER-UI-PRODUCTIZATION-V2        = PASS WITH REVISE / NOT CLOSED
+已确认的核心 PASS
+
+从基线 e0e4a8a1 到 ca5678dd，实际代码 diff 没有任何 apps/api/** 或 Prisma 改动。改动集中在 apps/web/**、i18n guard、docs/reports。因此：
+
+纯文本
+RUNTIME_FREEZE       = PASS
+AUTHORIZATION_FREEZE = PASS
+
+成立。
+
+金额链也很干净。四张首页卡直接消费 /recovery-money.organization.byCurrency：
+
+纯文本
+可追回  → bucket.discovered
+追回中  → bucket.expected
+已到账  → bucket.recovered
+
+均保持后端字符串原样，没有 Number()、FX、跨币种 sum 或重新推导财务状态。后端本身才负责 Decimal 聚合和 currency bucket。
+
+因此：
+
+NO_FRONTEND_FINANCIAL_RECOMPUTATION = PASS
+
+以及：
+
+MONEY_FIRST_UX = PASS
+
+P1/P2 的层级也是真实落地：
+
+纯文本
+Goal Hero
+→ 黄金指标
+→ Active Recovery
+→ Needs Attention
+→ 更多详情
+
+Goal 结果区不再显示 domain code、task namespace、任务计数等工程信息。
+
+导航实际只做重新分层，没有删原 route；/recoveries 还补掉了原来的死链。因此：
+
+CAPABILITY_PRESERVATION = PASS
+NAVIGATION_SIMPLICITY = PASS
+
+授权中心也只做 presentation：
+
+纯文本
+真实 /standing-authorizations
+→ 客户语言 action label
+→ 审计字段折叠
+→ revoke 入口保持
+
+没有改 scope、授权版本、resolver 或撤销语义。
+
+CHANGE 1 — Active Recovery 会把“已经结束的 Case”当作正在进行
+
+这是当前最明确的问题。
+
+首页现在：
+
+TypeScript
+buildActiveFlows({
+  goals: goals.body?.items,
+  cases: money.body?.cases
+})
+
+Goal 有过滤：
+
+纯文本
+ADMITTED / RUNNING
+
+才进入 Active Recovery。
+
+但 Case 现在只检查：
+
+纯文本
+statusLabel 非空
+
+就进入：
+
+CrossClaim 正在帮你做什么
+
+问题是我核了真实 /recovery-money API，它返回的是最多 100 个全量 Case，其中可能包含：
+
+纯文本
+DISCOVERED
+IN_PROGRESS
+APPROVED
+PARTIALLY_RECOVERED
+RECOVERED
+DISPUTED
+REVERSED
+
+所以：
+
+纯文本
+RECOVERED case
+→ statusLabel = 已追回
+→ 当前会进入 Active Recovery
+
+也就是客户可能看到：
+
+CrossClaim 正在帮你做什么
+某案件 — 已追回
+
+这在语义上已经结束，不应该继续出现在“正在做什么”。
+
+而且 /recoveries 页面复用了同一个 buildActiveFlows()，所以两个页面同时受影响。
+
+最小修改
+
+把 Case 的真实 status 一起传进来，并明确 active allowlist，例如：
+
+纯文本
+DISCOVERED
+IN_PROGRESS
+APPROVED
+PARTIALLY_RECOVERED
+DISPUTED
+
+才进入 Active Recovery。
+
+至少：
+
+纯文本
+RECOVERED
+
+必须排除。
+
+REVERSED 建议进入待处理/异常类体验，而不是笼统显示为“正在帮你做”。
+
+不要根据 statusLabel 文案猜状态。
+
+补三条断言即可：
+
+纯文本
+IN_PROGRESS case → visible
+RECOVERED case   → absent
+只有终态 case     → Active Recovery empty state
+
+因此当前：
+
+ACTIVE_RECOVERY_UX = REVISE
+
+CHANGE 2 — Connection ERROR 被错误说成“需要重新授权”
+
+目前连接主视图的：
+
+TypeScript
+continueLabel(code)
+
+是：
+
+纯文本
+ACTIVE  → 可以继续自动处理
+PAUSED  → 已暂停
+REVOKED → 已停止
+default → 需要你重新授权后才会继续
+
+因此：
+
+纯文本
+ERROR
+未知状态
+
+都会显示：
+
+需要你重新授权后才会继续
+
+但后端真实连接状态机明确：
+
+纯文本
+ERROR
+→ ACTIVE / PAUSED / NEEDS_AUTH / REVOKED
+
+而且 ERROR 可以来自：
+
+纯文本
+markConnectionError(message)
+
+例如同步失败、provider error、数据问题，不等价于 authentication expired。
+
+也就是说现在可能发生：
+
+纯文本
+真实事实：同步失败
+客户主视图：需要重新授权
+
+这会误导客户采取错误动作。
+
+最小修改
+
+应该区分：
+
+纯文本
+NEEDS_AUTH
+→ 需要重新授权后继续
+
+ERROR
+→ 当前连接有问题，暂时无法继续 / 请查看详细信息或重新连接
+
+UNKNOWN
+→ 状态待确认，暂时不会继续
+
+PAUSED
+→ 已暂停
+
+REVOKED
+→ 已停止
+
+ACTIVE
+→ 可以继续
+
+不要把未知状态强制解释成 auth failure。
+
+已有 lastErrorNotice：
+
+最近一次同步没有成功
+
+可以继续保留，原始 error 仍放折叠详情。
+
+补：
+
+纯文本
+NEEDS_AUTH → reauthorization wording
+ERROR      → 不出现“重新授权”
+UNKNOWN    → 不出现“重新授权”
+
+因此：
+
+CONNECTIONS_UX = REVISE
+
+NEEDS ATTENTION
+
+这一项我仍给 PASS。
+
+首页只有 tasks.length > 0 才渲染区域，来源也都是既有事实：
+
+纯文本
+/recovery-states
+/accounts connection state
+/agent-goals
+
+没有新建第二套持久待办表，也没有把金额或 runtime projection伪装成人工任务。
+
+后续若进一步产品化，可以让后端直接输出统一 needsAttention projection，减少前端派生；但这不是当前单元 blocker。
+
+ACCESSIBILITY
+
+给 PASS，但要限定口径。
+
+现有证据确实覆盖：
+
+7 个关键页面恰好一个 h1
+无横向溢出
+页面存在 label/aria/nav
+Tab 后焦点离开 body
+mobile 390×844
+
+所以这个单元的 accessibility smoke 可以 PASS。
+
+但这不是 WCAG 2.2 AA 完整认证，没有证明：
+
+纯文本
+color contrast
+完整键盘操作链
+screen reader announcement
+focus order
+modal focus trap
+error association
+ARIA role correctness
+
+不要在发布材料中把它写成“WCAG fully compliant”。
+
+EVIDENCE
+
+P12 的浏览器证据确实存在于后续证据提交：
+
+纯文本
+103 / 103 PASS
+desktop 1440×900
+mobile 390×844
+
+并确认了：
+
+Hero 顺序；
+Goal 结果客户语言；
+授权能力/边界区；
+connections 五问；
+post-create 无 raw enum；
+/recoveries 可用；
+mobile 页面；
+basic a11y；
+无 console error / uncaught exception。
+
+但是 exact 代码 HEAD 是 ca5678dd，P12 evidence 是其 descendant 9c9f324d。
+
+这个锚点关系是正常的，只需要文档中明确分开：
+
+纯文本
+REVIEWED_CODE_HEAD = ca5678dd
+EVIDENCE_HEAD      = 9c9f324d
+
+GitHub Actions 对 ca5678dd：
+
+NOT_OBSERVED
+
+因此 103/103、183/183、881 keys、build 0 都应继续称为 local/Codex evidence，不能写“GitHub CI green”。
+
+RISKS
+
+除上述两个需修项外，我只保留两个非阻断风险。
+
+第一，连接页的 kind/domain/channel/status/credentialRef 仍能在“详细信息”中看到。这不违反 ENGINEERING_FIELD_ISOLATION，因为需求本来就是隔离而非删除。但后续面向普通客户时，可以再考虑基于角色隐藏这层。
+
+第二，首页仍有不少旧能力放在“更多详情”里，所以“更简单”主要是默认信息架构收敛，而不是删除复杂能力。这恰好是正确方向，不应继续为了“看起来更简单”而删已有能力。
+
+FINAL
+
+我建议只发一个很窄的：
+
+CUSTOMER-UI-PRODUCTIZATION-V2 FINAL2 — active case semantics + connection continuation semantics
+
+不要再动导航、授权中心、金额、Runtime 或后端。
+
+修完这两处，我预计可以直接裁：
+
+纯文本
+ACTIVE_RECOVERY_UX = PASS
+CONNECTIONS_UX     = PASS
+
+ALL OTHER ITEMS    = PASS
+
+VERDICT            = PASS / CLOSED
+FINAL3_REQUIRED    = NO
+
+并继续保持：
+
+纯文本
+REAL_EXTERNAL_EXECUTION = NOT_EXECUTED
+REAL_VALIDATION_COMPLETE = NO
+PRODUCTION_READY = NO
+SECOND_RUNTIME = 0
+SECOND_SCHEDULER = 0
+SECOND_GUARD = 0
+
+全部现有 HOLD / FORBIDDEN 不变。
+```

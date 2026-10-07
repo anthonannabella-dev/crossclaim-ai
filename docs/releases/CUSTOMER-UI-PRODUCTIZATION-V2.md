@@ -27,7 +27,8 @@
 | P10 Mobile / a11y | DONE | 7 条关键路由的 h1/溢出/aria 健康检查 + 键盘焦点 + 移动端新增页面验证 |
 | P11 i18n 终扫 | DONE | parity PASS / 0 硬编码 / raw enum 回落清零（新增 check-i18n 静态 guard）+ 未知状态客户语言回落 |
 | P12 全客户旅程回归 | DONE | 103 项真实浏览器旅程 + next build + api/web tsc + UI render + i18n 全绿；能力保全与 runtime freeze 证据见下 |
-| CUSTOMER-UI-PRODUCTIZATION-V2-FINAL | QUEUED | 独立审计单元（不复用上一轮 CLOSED 状态） |
+| CUSTOMER-UI-PRODUCTIZATION-V2-FINAL | PASS WITH REVISE (MSG-20261007-08) | 18 项中 16 PASS；ACTIVE_RECOVERY_UX / CONNECTIONS_UX = REVISE |
+| CUSTOMER-UI-PRODUCTIZATION-V2-FINAL2 | SUBMITTED FOR RE-REVIEW | 最小修订：Active Case 语义 + 连接「能否继续」语义；等待外部裁决 |
 
 ## P1–P4 变更（首批）
 
@@ -334,4 +335,116 @@ SECOND_RUNTIME = 0 / SECOND_SCHEDULER = 0 / SECOND_GUARD = 0；全部 HOLD / FOR
   `https://chatgpt.com/c/6ac3bcd0-7818-83ec-8f92-44289fe8df67`。
 * 按安全规则，未对该崩溃页面做任何绕过（不重载、不换标签、不走 CDP）：等待宿主重载 / 重新打开该标签页后，
   再按 chatgpt-web-audit-bridge 流程投递 FINAL 审计请求。
-* 在此之前：`CUSTOMER-UI-PRODUCTIZATION-V2-FINAL` 保持 PENDING，watchdog 保持运行，**不自行宣布 CLOSED**。
+* 此后宿主重新打开了该审计标签页（`重新打开了 ChatGPT`），通道恢复；FINAL 审计请求已按 bridge 流程投递、生成结束、逐字归档并取得裁决（见下节）。
+* 在外部裁决 PASS / CLOSED 之前：`CUSTOMER-UI-PRODUCTIZATION-V2-FINAL` 保持 PENDING、watchdog 保持运行，**不自行宣布 CLOSED**。
+
+## FINAL 审计（外部独立裁决）
+
+自包含验收包（本文件 + exact HEAD + 证据目录 + 全量测试结果）经 `chatgpt-web-audit-bridge` 流程送入右侧独立
+ChatGPT 审计会话 `https://chatgpt.com/c/6ac3bcd0-7818-83ec-8f92-44289fe8df67`
+（投递校验：composer 清空 → 标记作为**新的用户轮**出现 → 出现「正在思考 / 正在回应」指示；生成结束后再读取）。
+
+**锚点（裁决明确要求分开记录）**
+
+| 名称 | 值 |
+| --- | --- |
+| `REVIEWED_CODE_HEAD` | `ca5678dd` |
+| `P12_EVIDENCE_HEAD` | `9c9f324d` |
+| `CHANNEL_DOC_HEAD` | `80a6f706` |
+
+**裁决归档（逐字，未改写）**
+
+* MSG-ID：`MSG-20261007-08`
+* 归档：`AI-ARCHITECT-INBOX.md`；FNV-1a `f3f226c8`；`FULL_COPY_OK`（248 行）；原文零改写。
+* 结论：**PASS WITH REVISE / NOT CLOSED** —— 18 项门禁中 16 项 PASS，2 项 REVISE。
+
+| 门禁项 | 裁决 |
+| --- | --- |
+| CAPABILITY_PRESERVATION / NAVIGATION_SIMPLICITY | PASS |
+| ENGINEERING_FIELD_ISOLATION | PASS |
+| NO_FRONTEND_FINANCIAL_RECOMPUTATION | PASS（四张卡直接消费 `/recovery-money.organization.byCurrency`，无 `Number()`/FX/跨币种求和） |
+| RUNTIME_FREEZE / AUTHORIZATION_FREEZE | PASS（`apps/api` + `prisma` 零 diff） |
+| NEEDS_ATTENTION_MODEL | PASS（未新建第二套待办表；建议未来由后端直出统一投影，非本单元 blocker） |
+| ACCESSIBILITY | PASS（**smoke 口径**：h1 / 无横向溢出 / label·aria / 键盘焦点 / mobile 390×844；裁决明确这**不是** WCAG 2.2 AA 完整认证） |
+| EVIDENCE | PASS（本地 / Codex evidence；GitHub Actions 对 `ca5678dd` = `NOT_OBSERVED`，**不得表述为 CI green**） |
+| ACTIVE_RECOVERY_UX | **REVISE** |
+| CONNECTIONS_UX | **REVISE** |
+
+裁决指定的修订范围（原文）：只发一个很窄的
+`CUSTOMER-UI-PRODUCTIZATION-V2 FINAL2 — active case semantics + connection continuation semantics`，
+「不要再动导航、授权中心、金额、Runtime 或后端」。
+
+## FINAL2 修订（最小修订面）
+
+本批次 diff 仅限 `apps/web/**`（呈现层）、验收脚本与报告；`apps/api/**` 与 `prisma/**` **仍为零改动**
+（`git diff --name-only e0e4a8a1..HEAD -- apps/api prisma` 为空），因此 Runtime freeze / Authorization freeze
+与全部 API contract、persistence truth、queue 幂等语义保持裁决时的状态。
+
+### CHANGE 1 — ACTIVE_RECOVERY_UX：已结束的 Case 不再被当成「正在做」
+
+* `apps/web/app/lib/dashboard-view.ts`
+  * `ActiveFlowCaseItem` 增加后端原始 `status: string`（**不再让前端从 `statusLabel` 文案猜状态**）。
+  * 新增 `ACTIVE_CASE_STATUSES = ['DISCOVERED','IN_PROGRESS','APPROVED','PARTIALLY_RECOVERED','DISPUTED']`。
+  * `buildActiveFlows()` 的 case 分支改为**先按 raw status allowlist 过滤**，再检查 `statusLabel` 非空；
+    `RECOVERED`（已追回）与 `REVERSED`（已冲正）等终态一律不进入「CrossClaim 正在帮你做什么」。
+* `apps/web/app/recoveries/page.tsx`：`RecoveryCaseItem` 类型补 `status`，与 `/recovery-money` 已返回的持久化
+  `CaseMoneyView.status` 对齐（`apps/api/src/services/workflow/recovery-money-view.ts` 本就在响应中返回该字段；
+  前端只读取既有事实，**未新增事实源**）。
+* 首页与 `/recoveries` 复用同一个 `buildActiveFlows()`，两处同时修正（裁决指出两页同受影响）。
+
+### CHANGE 2 — CONNECTIONS_UX：ERROR / 未知状态不再被说成「需要重新授权」
+
+* 新增 `apps/web/app/lib/connection-view.ts`：`connectionContinueLabel(status, labels)` 显式分派
+  `ACTIVE / PAUSED / REVOKED / NEEDS_AUTH / ERROR / default(unknown)`。
+  * `ERROR` → 「当前连接有问题，暂时无法继续」
+  * 未知状态 → 「状态待确认，暂时不会继续」
+  * `NEEDS_AUTH` → 保留「需要你重新授权后才会继续」
+* `apps/web/app/components/connection-manager.tsx`：删除原本地 `continueLabel` helper（其 `default` 把 ERROR 与未知
+  一律说成「需要重新授权」），改用上述纯函数。
+* 5 语言字典（zh-CN / en-US / ja / es / de）新增 `connectionsPage.summaryError` / `summaryUnknown`；parity 保持全键对齐。
+* 语义依据（裁决原文）：后端 `ERROR` 可由 `markConnectionError(message)` 产生（同步失败 / provider error / 数据问题），
+  **不等价于 authentication expired**；`lastErrorNotice`（「最近一次同步没有成功」）与折叠内的原始 error 串保留不变。
+* 未改后端连接状态机、未改 `/connections` contract、未改任何 gate。
+
+### 裁决点名的断言（渲染级、确定性、可复跑）
+
+`apps/web/scripts/ui-check-entry.tsx` 新增：
+
+| 断言 | 覆盖 |
+| --- | --- |
+| `final2.active.case.in.progress.visible` | `IN_PROGRESS` case → 可见 |
+| `final2.active.case.recovered.absent` | `RECOVERED` case → 不出现 |
+| `final2.active.case.reversed.absent` | `REVERSED` case → 不出现 |
+| `final2.active.case.terminal.empty.state` | 只有终态 case → Active Recovery 空状态 |
+| `final2.conn.needs.auth.wording` | `NEEDS_AUTH` → 保留「重新授权」措辞 |
+| `final2.conn.error.no.reauth` | `ERROR` → 不出现「重新授权」 |
+| `final2.conn.unknown.no.reauth` | 未知状态 → 不出现「重新授权」 |
+| `final2.conn.error.unknown.copy.present` | `ERROR` / 未知各自命中专属客户文案 |
+| `final2.conn.rendered.reauth.once` | 三条真实渲染行里「重新授权」只出现 1 次（仅 NEEDS_AUTH 行） |
+| `final2.conn.rendered.error.copy` / `final2.conn.rendered.unknown.copy` | 渲染输出确实包含 ERROR / 未知文案（非只测纯函数） |
+
+### FINAL2 回归证据
+
+| 项 | 结果 |
+| --- | --- |
+| web tsc | 0 |
+| api tsc | 0（`apps/api` 本批次零改动） |
+| UI render check | **194/194 OK**（FINAL2 新增 10 项断言） |
+| i18n | OK：5 语言 / **883** 键 parity / 客户硬编码 **0** / `RAW_ENUM_FALLBACK_HITS=0` |
+| 真实浏览器客户旅程（desktop 1440×900 + mobile 390×844） | **103/103 PASS** |
+| 浏览器证据目录 | `reports/acceptance/2026-10-07T16-51-31-307Z/` |
+| 能力保全（vs 封板基线 `e0e4a8a1`） | `git diff --name-only e0e4a8a1..HEAD -- apps/api prisma` = 空 |
+| 路由清单 | 与 P12 一致：32 个 `page.tsx`，移除 0 个，无新增/删除 |
+
+### 边界（不变）
+
+`REAL_EXTERNAL_EXECUTION = NOT_EXECUTED`；`REAL_VALIDATION_COMPLETE = NO`；`PRODUCTION_READY = NO`；
+`SECOND_RUNTIME = 0` / `SECOND_SCHEDULER = 0` / `SECOND_GUARD = 0` / `SECOND_POLICY_ENGINE = 0` /
+`SECOND_CONTROL_PLANE = 0`；全部 HOLD（REAL_PROVIDER_WRITE / CUSTOMS_FILING / PAYMENT / AUTO_COMMISSION_CHARGE /
+PRODUCTION_CREDENTIALS / PRODUCTION_ENABLEMENT / REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / TRANSPORT）
+与 FORBIDDEN（含 L5_RELAXATION）不变。
+
+### 状态
+
+`CUSTOMER-UI-PRODUCTIZATION-V2-FINAL2` = 已提交复审，等待外部裁决。
+在外部裁决 PASS / CLOSED 之前，本单元**不自行宣布 CLOSED**。

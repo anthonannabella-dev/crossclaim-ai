@@ -550,6 +550,8 @@ const enUS: Messages = {
     networkError: 'Network error, please retry.',
   },
   connectionsPage: {
+    summaryError: "This connection has a problem right now, so it cannot continue",
+    summaryUnknown: "Status being confirmed; it will not continue yet",
     summaryLabel: "Can CrossClaim keep working?",
     summaryCanContinue: "Yes, it keeps processing automatically",
     summaryNeedsReauth: "Not until you reconnect and authorize again",

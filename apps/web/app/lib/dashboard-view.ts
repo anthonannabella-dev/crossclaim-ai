@@ -481,8 +481,22 @@ export interface ActiveFlowGoalItem {
 export interface ActiveFlowCaseItem {
   caseId: string;
   title: string;
+  /** 后端持久化的 CaseStatus（raw code；**不得**用 statusLabel 文案猜状态） */
+  status: string;
   statusLabel: string;
 }
+
+/**
+ * FINAL2 / CHANGE 1：只有真正“进行中”的追回任务才进入 Active Recovery。
+ * RECOVERED（已追回）与 REVERSED（已冲正）属于终态，不得再显示为“正在帮你做”。
+ */
+export const ACTIVE_CASE_STATUSES: readonly string[] = [
+  'DISCOVERED',
+  'IN_PROGRESS',
+  'APPROVED',
+  'PARTIALLY_RECOVERED',
+  'DISPUTED',
+];
 
 /**
  * CUSTOMER-UI-PRODUCTIZATION-V2 / P3：CrossClaim 正在帮你做什么。
@@ -511,6 +525,7 @@ export function buildActiveFlows(
     });
   }
   for (const item of input.cases ?? []) {
+    if (!ACTIVE_CASE_STATUSES.includes(item.status)) continue;
     if (typeof item.statusLabel !== 'string' || item.statusLabel.trim() === '') continue;
     flows.push({
       id: 'case:' + item.caseId,

@@ -549,6 +549,8 @@ const ja: Messages = {
     networkError: 'ネットワークエラーです。しばらくして再試行してください。',
   },
   connectionsPage: {
+    summaryError: "現在この接続に問題があるため続行できません",
+    summaryUnknown: "状態を確認中です。まだ続行しません",
     summaryLabel: "CrossClaim は続行できますか？",
     summaryCanContinue: "はい、自動処理を継続できます",
     summaryNeedsReauth: "再接続と承認が完了するまで続行できません",

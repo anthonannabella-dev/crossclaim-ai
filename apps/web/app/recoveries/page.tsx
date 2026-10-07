@@ -10,6 +10,7 @@ const API_BASE = process.env.CROSSCLAIM_API_URL ?? 'http://127.0.0.1:3000';
 interface RecoveryCaseItem {
   caseId: string;
   title: string;
+  status: string;
   statusLabel: string;
 }
 

@@ -552,6 +552,8 @@ const de: Messages = {
     networkError: 'Netzwerkfehler, bitte später erneut versuchen.',
   },
   connectionsPage: {
+    summaryError: "Diese Verbindung hat derzeit ein Problem und kann nicht fortfahren",
+    summaryUnknown: "Status wird geprüft; es geht noch nicht weiter",
     summaryLabel: "Kann CrossClaim weiterarbeiten?",
     summaryCanContinue: "Ja, die Verarbeitung läuft automatisch weiter",
     summaryNeedsReauth: "Erst nach erneuter Verbindung und Freigabe",

@@ -551,6 +551,8 @@ const es: Messages = {
     networkError: 'Error de red, inténtelo más tarde.',
   },
   connectionsPage: {
+    summaryError: "Esta conexión tiene un problema ahora mismo y no puede continuar",
+    summaryUnknown: "Estado por confirmar; aún no continuará",
     summaryLabel: "¿Puede CrossClaim seguir trabajando?",
     summaryCanContinue: "Sí, sigue procesando automáticamente",
     summaryNeedsReauth: "No hasta que vuelvas a conectar y autorizar",

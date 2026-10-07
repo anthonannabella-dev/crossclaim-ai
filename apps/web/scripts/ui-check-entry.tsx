@@ -11,6 +11,7 @@ import ConnectionManager, { type ConnectionItem } from '../app/components/connec
 import AccountManagementView from '../app/accounts/account-management-view';
 import RecoveryPipeline from '../app/components/ui/recovery-pipeline';
 import { buildRecoveryPipeline, caseStatusLabel, pipelineStateLabel } from '../app/lib/case-view';
+import { connectionContinueLabel } from '../app/lib/connection-view';
 import ClaimPackageView from '../app/cases/[id]/claim-package/claim-package-view';
 import RecoveryMoneyView from '../app/money/recovery-money-view';
 import InlineNotice from '../app/components/ui/inline-notice';
@@ -502,7 +503,7 @@ const activeFlows = buildActiveFlows(
       { goalId: 'goal-1', status: 'RUNNING', intent: '帮我追回 Amazon 上可以追回的钱' },
       { goalId: 'goal-2', status: 'PROPOSED', intent: '不应出现在正在处理列表' },
     ],
-    cases: [{ caseId: 'case-1', title: '物流赔付', statusLabel: '追回中' }],
+    cases: [{ caseId: 'case-1', title: '物流赔付', status: 'IN_PROGRESS', statusLabel: '追回中' }],
   },
   zhCN,
 );
@@ -763,6 +764,47 @@ check('p11.status.unknown.customer.language', zhCN.status.UNKNOWN === '状态待
 check('p11.role.other.exists', zhCN.common.roleOther.length > 0 && enUS.common.roleOther.length > 0);
 check('p11.case.status.unknown.fallback', !caseStatusLabel('SOMETHING_NEW', zhCN).includes('SOMETHING_NEW'));
 check('p11.case.status.unknown.fallback.en', !caseStatusLabel('SOMETHING_NEW', enUS).includes('SOMETHING_NEW'));
+
+// CUSTOMER-UI-PRODUCTIZATION-V2 FINAL2 (MSG-20261007-08) / CHANGE 1：
+// Active Recovery 只显示真正「进行中」的 case；终态（RECOVERED/REVERSED）不得出现。
+check('final2.active.case.in.progress.visible', activeFlows.some((flow) => flow.id === 'case:case-1'));
+const recoveredFlows = buildActiveFlows(
+  {
+    goals: [],
+    cases: [{ caseId: 'case-2', title: '已追回任务', status: 'RECOVERED', statusLabel: '已追回' }],
+  },
+  zhCN,
+);
+check('final2.active.case.recovered.absent', recoveredFlows.length === 0);
+check('final2.active.case.reversed.absent', buildActiveFlows({ cases: [{ caseId: 'case-3', title: '已冲正', status: 'REVERSED', statusLabel: '已冲正' }] }, zhCN).length === 0);
+check(
+  'final2.active.case.terminal.empty.state',
+  render(<ActiveRecovery flows={recoveredFlows} labels={zhCN.activeRecovery} />).includes(zhCN.activeRecovery.empty),
+);
+
+// CUSTOMER-UI-PRODUCTIZATION-V2 FINAL2 (MSG-20261007-08) / CHANGE 2：
+// 连接「能否继续」语义：ERROR（同步失败/provider error）与未知状态都不得说成「需要重新授权」。
+check('final2.conn.needs.auth.wording', connectionContinueLabel('NEEDS_AUTH', zhCN.connectionsPage).includes('重新授权'));
+check('final2.conn.error.no.reauth', !connectionContinueLabel('ERROR', zhCN.connectionsPage).includes('重新授权'));
+check('final2.conn.unknown.no.reauth', !connectionContinueLabel('SOMETHING_NEW', zhCN.connectionsPage).includes('重新授权'));
+check(
+  'final2.conn.error.unknown.copy.present',
+  connectionContinueLabel('ERROR', zhCN.connectionsPage) === zhCN.connectionsPage.summaryError &&
+    connectionContinueLabel('SOMETHING_NEW', zhCN.connectionsPage) === zhCN.connectionsPage.summaryUnknown,
+);
+const connWordingHtml = render(
+  <ConnectionManager
+    items={[
+      { id: 'w-needs-auth', label: 'NeedsAuth', kind: 'API', domain: 'PLATFORM', channel: 'AMAZON_FBA', status: 'NEEDS_AUTH', hasCredentialRef: false, platform: 'AMAZON', lastError: null },
+      { id: 'w-error', label: 'ErrorConn', kind: 'API', domain: 'PLATFORM', channel: 'AMAZON_FBA', status: 'ERROR', hasCredentialRef: true, platform: 'AMAZON', lastError: 'sync failed' },
+      { id: 'w-unknown', label: 'UnknownConn', kind: 'API', domain: 'PLATFORM', channel: 'AMAZON_FBA', status: 'SOMETHING_NEW', hasCredentialRef: true, platform: 'AMAZON', lastError: null },
+    ]}
+    t={zhCN}
+  />,
+);
+check('final2.conn.rendered.reauth.once', connWordingHtml.split(zhCN.connectionsPage.summaryNeedsReauth).length - 1 === 1);
+check('final2.conn.rendered.error.copy', connWordingHtml.includes(zhCN.connectionsPage.summaryError));
+check('final2.conn.rendered.unknown.copy', connWordingHtml.includes(zhCN.connectionsPage.summaryUnknown));
 check('nav.primary.count', buildCustomerNav(zhCN)[0].items.length === 5);
 
 // AGENT EXPERIENCE LAYER / P9：按需授权（目标等待授权 → Needs Your Attention → 去授权后继续原目标）

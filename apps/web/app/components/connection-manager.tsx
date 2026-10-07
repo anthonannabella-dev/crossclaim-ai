@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 
 import type { Messages } from '../../i18n/dictionaries/zh-CN';
+import { connectionContinueLabel } from '../lib/connection-view';
 import StatusBadge from './ui/status-badge';
 import type { BadgeTone } from './ui/status-badge';
 
@@ -86,20 +87,6 @@ export default function ConnectionManager({ items, t }: { items: ConnectionItem[
     }
   };
 
-  /** P9：CrossClaim 能否继续工作（由既有连接状态派生，未知状态回落到「需要重新授权」）。 */
-  const continueLabel = (code: string): string => {
-    const table = copy as unknown as Record<string, string>;
-    switch (code) {
-      case 'ACTIVE':
-        return table.summaryCanContinue ?? t.status.UNKNOWN;
-      case 'PAUSED':
-        return table.summaryPaused ?? t.status.UNKNOWN;
-      case 'REVOKED':
-        return table.summaryStopped ?? t.status.UNKNOWN;
-      default:
-        return table.summaryNeedsReauth ?? t.status.UNKNOWN;
-    }
-  };
 
   /** 客户语言：渠道码 → 客户可读名称（未知码原样显示，不做猜测）。 */
   const channelLabel = (code: string): string => {
@@ -227,7 +214,7 @@ export default function ConnectionManager({ items, t }: { items: ConnectionItem[
                 <dl className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
                   <div>
                     <dt className="text-slate-500">{copy.summaryLabel}</dt>
-                    <dd className="mt-0.5 font-medium text-slate-800">{continueLabel(item.status)}</dd>
+                    <dd className="mt-0.5 font-medium text-slate-800">{connectionContinueLabel(item.status, copy)}</dd>
                   </div>
                   <div>
                     <dt className="text-slate-500">{copy.lastSyncLabel}</dt>
