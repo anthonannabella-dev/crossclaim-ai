@@ -139,6 +139,114 @@ export async function runJourney(input) {
   check('goal.no.internal.jargon', !/task:recovery|policy engine|model router|runner internals/i.test(body), '');
   await shot(page, '04-goal-recorded');
 
+  /* ---------------- 5b. 授权 → 原目标恢复（CHANGE 2 / CHANGE 3） ---------------- */
+  const goalList = await page.evaluate(async () => {
+    const r = await fetch('/api/agent-goals');
+    return { status: r.status, body: await r.json().catch(() => null) };
+  });
+  const goals = Array.isArray(goalList.body) ? goalList.body : (goalList.body?.items ?? []);
+  const goalId = goals.length > 0 ? goals[0].goalId : null;
+  check('goal.id.available', typeof goalId === 'string' && goalId !== '', JSON.stringify(goalList).slice(0, 160));
+  check(
+    'goal.needs.authorization.visible',
+    body.includes('这个目标需要你授权') || body.includes('需要授权'),
+    '首页未提示该目标需要授权',
+  );
+
+  // 客户在 /connections 里建立采集连接（客户语言向导；账户/提供方血缘由服务端推导）
+  const scopeLabel = 'Acceptance bills ' + Date.now();
+  await open(page, webBase + '/connections');
+  await page.locator('select:has(option[value="CARRIER_BILL"])').selectOption('CARRIER_BILL');
+  await page.locator('form input').first().fill(scopeLabel);
+  await page.getByRole('button', { name: '创建连接' }).click();
+  await page.waitForFunction((label) => document.body.innerText.includes(label), scopeLabel, { timeout: 20000 });
+  const connectionList = await page.evaluate(async () => {
+    const r = await fetch('/api/connections');
+    return { status: r.status, body: await r.json().catch(() => null) };
+  });
+  const items = connectionList.body?.items ?? [];
+  const scopeConnection = items.find((item) => item.label === scopeLabel) ?? null;
+  check('goal.scope.connection.created', scopeConnection !== null, JSON.stringify(connectionList).slice(0, 160));
+
+  // sandbox authorization provider：只模拟外部授权结果，durable authorization 走真实 store
+  const authResult = await page.evaluate(async (payload) => {
+    const r = await fetch('/api/acceptance/sandbox-authorization', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return { status: r.status, body: await r.json().catch(() => null) };
+  }, { goalId, connectionId: scopeConnection?.id ?? '' });
+  check('authorization.sandbox.completed', authResult.status === 201, JSON.stringify(authResult).slice(0, 200));
+  const authorizedAccountId = authResult.body?.platformAccountId ?? '';
+  const authorizedProvider = authResult.body?.provider ?? '';
+  check('authorization.durable.store.bound', typeof authorizedAccountId === 'string' && authorizedAccountId !== '', '');
+
+  // 真实准入（产品路由）+ 既有 ONE SI Runtime 认领（acceptance 驱动既有 runtime）
+  const admit = await page.evaluate(async (payload) => {
+    const r = await fetch(`/api/agent-goals/${encodeURIComponent(payload.goalId)}/admit`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ platformAccountId: payload.platformAccountId, provider: payload.provider }),
+    });
+    return { status: r.status, body: await r.json().catch(() => null) };
+  }, { goalId, platformAccountId: authorizedAccountId, provider: authorizedProvider });
+  check('goal.admitted.to.existing.queue', admit.status === 200 && admit.body?.kind === 'ADMITTED', JSON.stringify(admit).slice(0, 240));
+  check('admission.external.write.false', admit.body?.externalActionPerformed === false && admit.body?.admissionOnly === true, '');
+  const runtimeRun = await page.evaluate(async (payload) => {
+    const r = await fetch('/api/acceptance/run-si-runtime', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return { status: r.status, body: await r.json().catch(() => null) };
+  }, { goalId });
+  check('runtime.claimed.and.projected', runtimeRun.status === 200 && typeof runtimeRun.body?.runId === 'string', JSON.stringify(runtimeRun).slice(0, 240));
+  check('runtime.external.write.false', runtimeRun.body?.externalWritePerformed === false, '');
+
+  // 幂等：重复准入 / 重复 callback（runtime 重跑）/ 刷新，都不得产生第二次执行
+  const admitAgain = await page.evaluate(async (payload) => {
+    const r = await fetch(`/api/agent-goals/${encodeURIComponent(payload.goalId)}/admit`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ platformAccountId: payload.platformAccountId, provider: payload.provider }),
+    });
+    return { status: r.status, body: await r.json().catch(() => null) };
+  }, { goalId, platformAccountId: authorizedAccountId, provider: authorizedProvider });
+  check(
+    'admission.idempotent.no.second.execution',
+    admitAgain.status === 200 &&
+      (admitAgain.body?.kind === 'ALREADY_ADMITTED' || admitAgain.body?.admitted?.length === 0),
+    JSON.stringify(admitAgain).slice(0, 200),
+  );
+  const runAgain = await page.evaluate(async (payload) => {
+    const r = await fetch('/api/acceptance/run-si-runtime', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return { status: r.status, body: await r.json().catch(() => null) };
+  }, { goalId });
+  check('runtime.replay.no.second.run', runAgain.body?.created === false, JSON.stringify(runAgain).slice(0, 200));
+
+  // 客户可见：Needs Your Attention 的授权待办消失 + Agent Run 页面看到 run projection
+  await open(page, webBase + '/');
+  const homeAfter = await text(page);
+  check('needsAttention.authorization.cleared', !homeAfter.includes('这个目标需要你授权'), '授权完成后首页仍在要求授权');
+  await open(page, webBase + '/recoveries/runs/' + encodeURIComponent(goalId));
+  const runPage = await text(page);
+  check(
+    'agentRun.page.shows.projection',
+    /运行|执行|进行|已完成|待处理|准备/.test(runPage),
+    runPage.slice(0, 160),
+  );
+  check(
+    'agentRun.no.external.write.claim',
+    !/已真实提交|已报关|已扣款|已向平台提交/.test(runPage),
+    'run 页面出现真实外部写声明',
+  );
+  await shot(page, '08-goal-authorized-run');
+
   /* ---------------- 6. 连接向导（客户语言） ---------------- */
   await open(page, webBase + '/connections');
   body = await text(page);

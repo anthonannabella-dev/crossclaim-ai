@@ -167,8 +167,47 @@ async function main(): Promise<void> {
 
       if (pathname === '/acceptance/sandbox-authorization' && req.method === 'POST') {
         const goalId = typeof body.goalId === 'string' ? body.goalId : '';
-        const platformAccountId = typeof body.platformAccountId === 'string' ? body.platformAccountId : '';
-        const provider = typeof body.provider === 'string' ? body.provider.toUpperCase() : '';
+        const connectionId = typeof body.connectionId === 'string' ? body.connectionId : '';
+        let platformAccountId = typeof body.platformAccountId === 'string' ? body.platformAccountId : '';
+        let provider = typeof body.provider === 'string' ? body.provider.toUpperCase() : '';
+        // 允许只给 connectionId：账户/提供方由服务端从真实连接血缘推导（客户端不得自报）
+        if (connectionId !== '') {
+          const connection = await prisma.sourceConnection.findFirst({
+            where: { organizationId: session.organizationId, id: connectionId },
+            select: {
+              platformAccountId: true,
+              channel: true,
+              platformAccount: { select: { platform: true } },
+            },
+          });
+          if (connection === null) {
+            sendJson(res, 404, { error: 'CONNECTION_NOT_FOUND' });
+            return;
+          }
+          if (connection.platformAccountId === null) {
+            // sandbox：外部 provider 侧账户在本机不存在，由 sandbox 建一个真实 PlatformAccount 并绑定
+            // （只补「外部账户」这一事实，不替换任何授权/准入/运行时语义）
+            const platform = String(provider || connection.channel || 'OTHER').toUpperCase();
+            const account = await prisma.platformAccount.create({
+              data: {
+                organizationId: session.organizationId,
+                platform,
+                externalAccountId: 'sandbox-' + connectionId,
+                displayName: 'Sandbox account (' + platform + ')',
+              },
+              select: { id: true },
+            });
+            await prisma.sourceConnection.update({
+              where: { id: connectionId },
+              data: { platformAccountId: account.id },
+            });
+            platformAccountId = account.id;
+            provider = platform;
+          } else {
+            platformAccountId = connection.platformAccountId;
+            provider = String(connection.platformAccount?.platform ?? provider).toUpperCase();
+          }
+        }
         const goal = await loadAgentGoal(prisma, { organizationId: session.organizationId, goalId });
         if (goal === null) {
           sendJson(res, 404, { error: 'GOAL_NOT_FOUND' });
@@ -237,7 +276,9 @@ async function main(): Promise<void> {
           authorizationId: persisted.authorizationId,
           allowedActionTypes,
           requiredAuthorizationAction: required,
-          provider: 'SANDBOX_ACCEPTANCE_SINK',
+          platformAccountId,
+          provider,
+          externalProvider: 'SANDBOX_ACCEPTANCE_SINK',
           realDurableStore: true,
           externalAuthorizationPerformed: false,
         });
