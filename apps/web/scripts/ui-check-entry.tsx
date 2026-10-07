@@ -37,6 +37,7 @@ import {
 } from '../app/lib/dashboard-view';
 import enUS from '../i18n/dictionaries/en-US';import GoalConsole from '../app/components/ui/goal-console';
 import AgentRunViewComponent from '../app/recoveries/runs/[id]/agent-run-view';
+import AuthorizationList from '../app/authorizations/authorization-list';
 import RecoveryHeadlineCards from '../app/components/ui/recovery-headline-cards';
 import zhCN from '../i18n/dictionaries/zh-CN';
 import { buildAgentRunView } from '../app/lib/agent-run-view';
@@ -579,6 +580,58 @@ const agentRunSummaryHtml = render(<AgentRunViewComponent view={agentRunWithSumm
 check('agent.run.results.rendered', agentRunSummaryHtml.includes('37') && agentRunSummaryHtml.includes('USD 18,420.00'));
 check('agent.run.no.cross.currency', agentRunWithSummary.results.filter((row) => row.key.startsWith('estimated:')).length === 1);
 check('agent.run.activity.timeline', agentRunSummaryHtml.includes(zhCN.agentRun.activityGoalRecorded) && agentRunSummaryHtml.includes(zhCN.agentRun.activityRunStarted));
+
+// AGENT EXPERIENCE LAYER / P7：授权管理面（只读 + 撤销，状态全部来自后端）
+const authItem = {
+  authorizationId: 'sa-p7-demo',
+  provider: 'AMAZON',
+  platformAccountId: 'acct-p7-1',
+  allowedActionTypes: ['claim.prepare', 'recovery.manual_submit'],
+  monetaryLimitUsd: 1000,
+  currency: 'USD',
+  domain: 'PLATFORM',
+  jurisdiction: 'US',
+  effectiveAt: '2026-10-01T00:00:00.000Z',
+  expiresAt: '2027-10-01T00:00:00.000Z',
+  authorizationVersion: 1,
+  termsPolicyVersion: 'terms/v1',
+  revocationState: 'ACTIVE',
+  revokedAt: null as string | null,
+  revokedBy: null as string | null,
+  revocationReason: null as string | null,
+  scopeDigest: 'ab'.repeat(32),
+  createdAt: '2026-10-01T00:00:00.000Z',
+};
+const authHtml = render(<AuthorizationList items={[authItem]} t={zhCN} />);
+check('auth.page.limit', authHtml.includes('USD 1000'));
+check('auth.page.action.label', authHtml.includes(zhCN.authorizationPage.actionRecoveryManualSubmit));
+check('auth.page.status.active', authHtml.includes(zhCN.authorizationPage.statusActive));
+check('auth.page.automation.on', authHtml.includes(zhCN.authorizationPage.automationOn));
+check('auth.page.revoke.cta', authHtml.includes(zhCN.authorizationPage.revokeCta));
+check('auth.page.scope.digest.advanced', authHtml.includes(zhCN.authorizationPage.scopeRefLabel) && authHtml.includes(authItem.scopeDigest));
+check('auth.page.boundary.note', authHtml.includes(zhCN.authorizationPage.boundaryNote));
+check('auth.page.hold.note', authHtml.includes(zhCN.authorizationPage.holdNote));
+check('auth.page.no.code.as.main.copy', !authHtml.split(zhCN.authorizationPage.advancedLabel)[0].includes('recovery.manual_submit'));
+check('auth.page.no.scope.editing', !authHtml.includes('name="allowedActionTypes"') && !authHtml.includes('name="monetaryLimitUsd"'));
+
+const revokedAuthHtml = render(
+  <AuthorizationList
+    items={[
+      {
+        ...authItem,
+        revocationState: 'REVOKED',
+        revokedAt: '2026-10-07T00:00:00.000Z',
+        revokedBy: 'user-1',
+        revocationReason: 'customer revoked',
+      },
+    ]}
+    t={zhCN}
+  />,
+);
+check('auth.page.revoked.note', revokedAuthHtml.includes('customer revoked'));
+check('auth.page.revoked.no.cta', !revokedAuthHtml.includes(zhCN.authorizationPage.revokeCta));
+const emptyAuthHtml = render(<AuthorizationList items={[]} t={zhCN} />);
+check('auth.page.empty.honest', emptyAuthHtml.includes(zhCN.authorizationPage.emptyHint));
 
 console.log(results.join('\n'));
 if (failures.length > 0) {
