@@ -300,3 +300,55 @@ SECOND_MODEL_GATEWAY / SECOND_COST_LEDGER / SECOND_META_EVIDENCE_STORE / L5_RELA
 **本单元仍未 CLOSED** —— 需把本报告 + 新 exact HEAD 再次提交右侧独立 ChatGPT 重裁
 （CUSTOMER_USABILITY / SANDBOX_END_TO_END / AUTHORIZATION_RESUME / FIRST_RUN_GUIDANCE / NO_API_FAIL_CLOSED /
 EXTERNAL_BOUNDARY_HONESTY / SECURITY_BOUNDARY / PRODUCTION_GATE），拿到 PASS / CLOSED 才关闭。
+
+---
+
+## 13. FINAL3 修订记录（按独立终审 MSG-20261007-04）
+
+裁决 MSG-20261007-04 = **PASS WITH REVISE / NOT CLOSED**（逐字归档；FNV1A_MATCH 55b23190 + FULL_COPY_OK 315 行一致）：
+CUSTOMER_USABILITY / FIRST_RUN_GUIDANCE / NO_API_FAIL_CLOSED / EXTERNAL_BOUNDARY_HONESTY / PRODUCTION_GATE = PASS；
+SANDBOX_END_TO_END / AUTHORIZATION_RESUME / SECURITY_BOUNDARY = REVISE。本轮按下述三点最小修订。
+
+### 13.1 真实 runtime claim（不再用 queue 内容冒充 claimed）
+
+acceptance 驱动改为 **真正驱动既有 controller**：
+
+```
+composeRsiRuntime({ tasksPath })   // 既有 ONE SI Runtime
+→ runtime.controller.tick()        // 真实 claim；claimed 只取 outcome.claimed
+→ 未 claim ⇒ 409 RUNTIME_DID_NOT_CLAIM，且不创建 AgentGoalRun
+→ proposal=BLOCK ⇒ 真实 BLOCKED 投影（FINAL-7：task:recovery:* 不接受 caller-supplied runner）
+```
+
+### 13.2 runtime → AgentGoalRun 可信 lineage
+
+`recordGoalRunFromRuntime()` 先用**确定性 compiler/validator/planner** 重建该 durable Goal 的计划，
+claimed/completed/blocked 任一 dedupeKey 不属于该计划 → `GOAL_RUNTIME_LINEAGE_MISMATCH` fail closed，零投影。
+
+### 13.3 授权范围 server-owned（封住 Amazon Goal + UPS 授权）
+
+* `admitAgentGoal()` 从 `PlatformAccount.platform` 推导 provider；客户端 provider 只作断言，
+  不一致 → `PROVIDER_SCOPE_MISMATCH`；
+* 新增 `goalDomainOfPlatform()`：AMAZON/WALMART/TIKTOK → PLATFORM、UPS/FEDEX/DHL/货代 → LOGISTICS、
+  CBP/报关 → CUSTOMS、SHOPIFY/STRIPE/PAYPAL → INDEPENDENT_SITE，未知平台 fail closed；
+  账户域必须 ∈ Goal 域，否则 `GOAL_SCOPE_MISMATCH` → DENIED；
+* `POST /agent-goals/:id/admit` 不再要求客户端 provider；
+* sandbox 新增 `POST /acceptance/sandbox-account`（真实 PlatformAccount 行，仅补外部 provider 侧账户事实）；
+  授权动作集合排序 + 以账户为稳定 authorizationId（重复调用幂等）。
+
+### 13.4 FINAL3 证据
+
+| 项 | 结果 |
+| --- | --- |
+| 客户浏览器 E2E | **58/58 PASS**（含 `security.scope.mismatch.denied`：Amazon Goal + UPS 账户 → 403 DENIED/GOAL_SCOPE_MISMATCH；真实 runtime claim + BLOCKED 投影；重复准入/重复 runtime 不产生第二次执行；Needs Your Attention 授权待办消失；/recoveries/runs/:id 无假外写声明） |
+| goal-admission-db（真实 PG） | **10/10 PASS**（新增 GA-8 同租户错域 → GOAL_SCOPE_MISMATCH；GA-9 客户端 provider 与账户不符 → PROVIDER_SCOPE_MISMATCH；GA-10 runtime claim 与计划不符 → GOAL_RUNTIME_LINEAGE_MISMATCH 且零投影） |
+| api tsc | 0 |
+
+### 13.5 已登记的非阻断风险（裁决明确不作为本轮 blocker）
+
+`createJsonTaskQueuePort()` 目前是 JSON 文件 read-modify-write，无跨 worker lock/CAS；
+production enablement 前必须替换为 durable/atomic 准入（或证明单 writer）。
+
+**本单元仍未 CLOSED** —— 需把本报告 + 新 exact HEAD 再次提交右侧独立 ChatGPT 重裁
+（CUSTOMER_USABILITY / SANDBOX_END_TO_END / AUTHORIZATION_RESUME / FIRST_RUN_GUIDANCE / NO_API_FAIL_CLOSED /
+EXTERNAL_BOUNDARY_HONESTY / SECURITY_BOUNDARY / PRODUCTION_GATE），拿到 PASS / CLOSED 才关闭。
