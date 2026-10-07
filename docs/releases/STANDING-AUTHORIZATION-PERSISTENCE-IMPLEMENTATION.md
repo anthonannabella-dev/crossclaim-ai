@@ -6,6 +6,8 @@
 结论：**APPROVED_BY_HOST_DIRECTIVE → IMPLEMENTED**。按最小增量实施 1 表，无新增枚举，
 不建第二套 approval / authorization / guard，不授予任何 External Write。
 
+`EXACT_HEAD = 0a710d8b`（本单元实现提交；基线 `96a26c29`）
+
 ---
 
 ## 1. 为什么（真实缺口）
