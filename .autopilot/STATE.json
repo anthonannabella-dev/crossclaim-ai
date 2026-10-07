@@ -12637,5 +12637,41 @@
       "Linux/systemd 实机验证（SYSTEMD_RUNTIME_VALIDATION）",
       "main 推进方式（--no-ff / --ff-only）"
     ]
-  }
+  },
+  "customer_acceptance_unit": {
+    "unit": "CUSTOMER-UX-SANDBOX-E2E-FINAL-ACCEPTANCE",
+    "branch": "acceptance/customer-sandbox-e2e",
+    "status": "FINAL5_SUBMITTED_AWAITING_EXTERNAL_VERDICT",
+    "exact_head": "fbd785db39b444d98fb01d055e782a5f4ddf3617",
+    "durable_report": "docs/releases/CUSTOMER-UX-SANDBOX-E2E-FINAL-ACCEPTANCE.md#15",
+    "code_heads": {
+      "final5_1": "837d404c",
+      "final5_2": "b71ae5d7",
+      "report": "fbd785db"
+    },
+    "evidence": {
+      "browser_e2e": "59/59",
+      "goal_admission_db": "18/18",
+      "agent_goal_suites": "50/50",
+      "full_api_regression": "4568/4569 (only pre-existing P2E-DB5 parallel-isolation flake; solo 20/20)",
+      "api_tsc": 0,
+      "web_tsc": 0,
+      "next_build": 0,
+      "ui_render": "138/138",
+      "i18n": "839 keys / 0 hardcoded",
+      "prisma_validate": "valid"
+    },
+    "boundaries": {
+      "REAL_EXTERNAL_EXECUTION": "NOT_EXECUTED",
+      "REAL_VALIDATION_COMPLETE": "NO",
+      "PRODUCTION_READY": "NO",
+      "SECOND_RUNTIME": 0,
+      "SECOND_SCHEDULER": 0,
+      "SECOND_GUARD": 0
+    },
+    "audit_channel": "https://chatgpt.com/c/6ac3bcd0-7818-83ec-8f92-44289fe8df67",
+    "audit_request_msg": "[CODEX-CUSTOMER-UX-FINAL5]",
+    "note": "P0-P9 + AEL FINAL2 CLOSED; CUSTOMER-UX unit awaiting external re-audit verdict (MSG-20261007-06 = PASS WITH REVISE / NOT CLOSED; FINAL5 addresses the 3 SECURITY_BOUNDARY items). Do NOT claim PROGRAM COMPLETE until CUSTOMER_ACCEPTANCE = PASS / CLOSED."
+  },
+  "customer_acceptance_unit_at": "2026-10-07T14:13:32.111Z"
 }
