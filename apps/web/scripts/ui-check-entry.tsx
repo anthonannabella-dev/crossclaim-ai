@@ -11,6 +11,7 @@ import ConnectionManager, { type ConnectionItem } from '../app/components/connec
 import AccountManagementView from '../app/accounts/account-management-view';
 import RecoveryPipeline from '../app/components/ui/recovery-pipeline';
 import { buildRecoveryPipeline, caseStatusLabel, pipelineStateLabel } from '../app/lib/case-view';
+import { connectionContinueLabel } from '../app/lib/connection-view';
 import ClaimPackageView from '../app/cases/[id]/claim-package/claim-package-view';
 import RecoveryMoneyView from '../app/money/recovery-money-view';
 import InlineNotice from '../app/components/ui/inline-notice';
@@ -30,6 +31,7 @@ import {
   buildTaskKindLabels,
   mergeNeedsAttention,
   buildAuthorizationTasks,
+  buildActiveFlows,
   TASK_KINDS,
   selectPrimaryCta,
   type AccountsResponse,
@@ -37,10 +39,14 @@ import {
   type OpportunityApiItem,
   type RecoveryStateItem,
 } from '../app/lib/dashboard-view';
-import enUS from '../i18n/dictionaries/en-US';import GoalConsole from '../app/components/ui/goal-console';
+import enUS from '../i18n/dictionaries/en-US';
+import de from '../i18n/dictionaries/de';
+import ja from '../i18n/dictionaries/ja';
+import es from '../i18n/dictionaries/es';import GoalConsole from '../app/components/ui/goal-console';
 import AgentRunViewComponent from '../app/recoveries/runs/[id]/agent-run-view';
 import AuthorizationList from '../app/authorizations/authorization-list';
 import RecoveryHeadlineCards from '../app/components/ui/recovery-headline-cards';
+import ActiveRecovery from '../app/components/ui/active-recovery';
 import zhCN from '../i18n/dictionaries/zh-CN';
 import { buildAgentRunView } from '../app/lib/agent-run-view';
 
@@ -470,7 +476,10 @@ check('a11y.notice.tone.classes', alertHtml.includes('border-red-200') && status
 // AGENT EXPERIENCE LAYER / P4：Goal Console + 四张核心结果卡
 const goalConsoleHtml = render(<GoalConsole labels={zhCN.goalConsole} />);
 check('goal.console.title', goalConsoleHtml.includes(zhCN.goalConsole.title));
-check('goal.console.suggestions', goalConsoleHtml.includes(zhCN.goalConsole.suggestion1) && goalConsoleHtml.includes(zhCN.goalConsole.suggestion5));
+check('goal.console.suggestions', goalConsoleHtml.includes(zhCN.goalConsole.suggestion1) && goalConsoleHtml.includes(zhCN.goalConsole.suggestion4));
+check('goal.console.max.four.suggestions', goalConsoleHtml.split('rounded-full border border-slate-300 bg-white px-3 py-1').length - 1 === 4);
+check('goal.console.no.raw.domain.code', !goalConsoleHtml.includes('PLATFORM') && !goalConsoleHtml.includes('INDEPENDENT_SITE'));
+check('goal.console.no.task.count', !goalConsoleHtml.includes('已生成') && !goalConsoleHtml.includes('执行任务'));
 check('goal.console.submit', goalConsoleHtml.includes(zhCN.goalConsole.submit));
 check('goal.console.no.fake.execution', !goalConsoleHtml.includes('已提交') && !goalConsoleHtml.includes('执行完成'));
 check('goal.console.en.parity', render(<GoalConsole labels={enUS.goalConsole} />).includes(enUS.goalConsole.title));
@@ -486,6 +495,26 @@ check('headline.per.currency.raw', headlineHtml.includes('USD') && headlineHtml.
 check('headline.needs.attention.count', headlineHtml.includes('>3<'));
 check('headline.no.cross.currency.sum', !headlineHtml.includes('8760.00') && !headlineCards.some((card) => card.values.length > 1));
 check('headline.per.currency.note', headlineHtml.includes(zhCN.goalConsole.perCurrencyNote));
+
+// CUSTOMER-UI-PRODUCTIZATION-V2 / P3：Active Recovery（只消费已有事实 + 客户语言）
+const activeFlows = buildActiveFlows(
+  {
+    goals: [
+      { goalId: 'goal-1', status: 'RUNNING', intent: '帮我追回 Amazon 上可以追回的钱' },
+      { goalId: 'goal-2', status: 'PROPOSED', intent: '不应出现在正在处理列表' },
+    ],
+    cases: [{ caseId: 'case-1', title: '物流赔付', status: 'IN_PROGRESS', statusLabel: '追回中' }],
+  },
+  zhCN,
+);
+const activeRecoveryHtml = render(<ActiveRecovery flows={activeFlows} labels={zhCN.activeRecovery} />);
+check('active.recovery.title', activeRecoveryHtml.includes(zhCN.activeRecovery.title));
+check('active.recovery.goal.flow', activeFlows.some((flow) => flow.title.includes('Amazon')));
+check('active.recovery.case.flow', activeRecoveryHtml.includes('物流赔付'));
+check('active.recovery.max.five', activeFlows.length <= 5);
+check('active.recovery.no.raw.status', !activeRecoveryHtml.includes('RUNNING') && !activeRecoveryHtml.includes('ADMITTED'));
+check('active.recovery.no.namespace', !activeRecoveryHtml.includes('task:recovery'));
+check('active.recovery.empty.copy', render(<ActiveRecovery flows={[]} labels={zhCN.activeRecovery} />).includes(zhCN.activeRecovery.empty));
 
 // AGENT EXPERIENCE LAYER / P5：Needs Your Attention（单一待办中心，类别可承载）
 const connAccounts: AccountsResponse = {
@@ -665,6 +694,117 @@ check(
   'nav.no.route.removed',
   REQUIRED_HREFS.every((href) => shellHtml.includes('href="' + href + '"')),
 );
+// CUSTOMER-UI-PRODUCTIZATION-V2 / P5：一级 5 项 + 更多 / 高级 顺序与 HOST 指令一致
+const navModel = buildCustomerNav(zhCN);
+check('nav.v2.primary.order', navModel[0]!.items.map((item) => item.href).join(',') === '/,/recoveries,/money,/#customer-tasks,/connections');
+check('nav.v2.more.order', navModel[1]!.items.map((item) => item.href).join(',') === '/opportunities,/cases,/customs,/upload,/accounts');
+check('nav.v2.advanced.order', navModel[2]!.items.map((item) => item.href).join(',') === '/authorizations,/billing,/plan');
+check('nav.v2.no.admin.entries', !navModel.some((group) => group.items.some((item) => item.href.startsWith('/admin') || item.href.startsWith('/operations'))));
+check('nav.v2.recoveries.route.page', zhCN.recoveriesPage.pageTitle.length > 0);
+
+// CUSTOMER-UI-PRODUCTIZATION-V2 / P6：Opportunity / Case 客户语言降级（内部模型不变）
+check('p6.cases.title', zhCN.casesPage.title === '追回任务');
+check('p6.cases.description.mentions.materials', zhCN.casesPage.description.includes('支持材料'));
+check('p6.caseDetail.evidence.customer.language', zhCN.caseDetail.evidence === '支持材料');
+check('p6.caseDetail.claim.customer.language', zhCN.caseDetail.claimText.includes('提交材料'));
+check(
+  'p6.caseDetail.no.internal.role.codes',
+  !/OWNER|ADMIN|OPS/.test(zhCN.caseDetail.claimText + zhCN.caseDetail.claimDenied),
+);
+check(
+  'p6.caseDetail.need.action.copy',
+  zhCN.caseDetail.needActionTitle.length > 0 && zhCN.caseDetail.needActionNone.length > 0,
+);
+check('p6.caseDetail.details.label', zhCN.caseDetail.detailsTitle === '处理详情');
+check('p6.opportunities.customer.verb', zhCN.opportunitiesPage.createCase === '开始追回');
+check(
+  'p6.opportunities.no.engineering.wording',
+  !/工程字段|技术字段/.test(zhCN.opportunitiesPage.advancedFilters + zhCN.opportunitiesPage.advancedHint),
+);
+check(
+  'p6.en.parity',
+  enUS.casesPage.title === 'Recovery tasks' &&
+    enUS.caseDetail.evidence === 'Supporting materials' &&
+    enUS.caseDetail.claimText.includes('Submission materials'),
+);
+
+// CUSTOMER-UI-PRODUCTIZATION-V2 / P7：授权中心产品化（先能力、后边界、再列表与撤销）
+check('p7.authz.capabilities.title', zhCN.authorizationPage.capabilitiesTitle === 'CrossClaim 可以替你做什么');
+check('p7.authz.capabilities.copy', zhCN.authorizationPage.capability1.includes('读取') && zhCN.authorizationPage.capability5.includes('自动'));
+check('p7.authz.always.ask.title', zhCN.authorizationPage.alwaysAskTitle === '以下情况仍会先问你');
+check('p7.authz.always.ask.customs.poa', zhCN.authorizationPage.alwaysAsk3.includes('POA'));
+check('p7.authz.revoke.kept', authHtml.includes(zhCN.authorizationPage.revokeCta));
+const authMainCopy = authHtml.split(zhCN.authorizationPage.advancedLabel)[0] ?? '';
+check('p7.authz.no.uuid.or.digest.in.main', !/[0-9a-f]{8}-[0-9a-f]{4}|[0-9a-f]{32}/i.test(authMainCopy));
+check('p7.authz.account.ref.in.details', authHtml.includes(zhCN.authorizationPage.accountRefLabel));
+check(
+  'p7.authz.en.parity',
+  enUS.authorizationPage.capabilitiesTitle.includes('CrossClaim') && enUS.authorizationPage.alwaysAskTitle.length > 0,
+);
+
+// CUSTOMER-UI-PRODUCTIZATION-V2 / P8：工程字段措辞清零（5 语言字典级 guard）
+const BANNED_ENGINEERING_PHRASES = ['工程字段', '技术字段', 'engineering fields', 'technikfelder', '技術項目', 'campos técnicos'];
+const allDictionaryText = JSON.stringify([zhCN, enUS, de, ja, es]).toLowerCase();
+check(
+  'p8.no.engineering.wording',
+  !BANNED_ENGINEERING_PHRASES.some((phrase) => allDictionaryText.includes(phrase.toLowerCase())),
+);
+check('p8.advanced.labels.renamed', zhCN.authorizationPage.advancedLabel === '授权详情' && zhCN.dashboardPage.opportunityAdvancedFields === '详细信息');
+check('p8.en.advanced.labels.renamed', enUS.authorizationPage.advancedLabel === 'Authorization details' && enUS.dashboardPage.opportunityAdvancedFields === 'Details');
+
+// CUSTOMER-UI-PRODUCTIZATION-V2 / P9：连接页五问（客户语言）
+check('p9.connections.summary.copy', zhCN.connectionsPage.summaryLabel.includes('CrossClaim') && zhCN.connectionsPage.summaryCanContinue.length > 0);
+check('p9.connections.reauth.copy', zhCN.connectionsPage.summaryNeedsReauth.includes('重新授权'));
+check('p9.connections.lastSync.copy', zhCN.connectionsPage.lastSyncLabel.length > 0 && zhCN.connectionsPage.lastSyncNever.length > 0);
+check('p9.connections.lastError.customer.copy', !/code|error/i.test(zhCN.connectionsPage.lastErrorNotice));
+check('p9.en.parity', enUS.connectionsPage.summaryLabel.includes('CrossClaim') && enUS.connectionsPage.lastSyncLabel.length > 0);
+
+// CUSTOMER-UI-PRODUCTIZATION-V2 / P11：未知状态使用安全的客户语言回落（不得回落 raw enum）
+check('p11.status.unknown.customer.language', zhCN.status.UNKNOWN === '状态待确认' && enUS.status.UNKNOWN === 'Status being confirmed');
+check('p11.role.other.exists', zhCN.common.roleOther.length > 0 && enUS.common.roleOther.length > 0);
+check('p11.case.status.unknown.fallback', !caseStatusLabel('SOMETHING_NEW', zhCN).includes('SOMETHING_NEW'));
+check('p11.case.status.unknown.fallback.en', !caseStatusLabel('SOMETHING_NEW', enUS).includes('SOMETHING_NEW'));
+
+// CUSTOMER-UI-PRODUCTIZATION-V2 FINAL2 (MSG-20261007-08) / CHANGE 1：
+// Active Recovery 只显示真正「进行中」的 case；终态（RECOVERED/REVERSED）不得出现。
+check('final2.active.case.in.progress.visible', activeFlows.some((flow) => flow.id === 'case:case-1'));
+const recoveredFlows = buildActiveFlows(
+  {
+    goals: [],
+    cases: [{ caseId: 'case-2', title: '已追回任务', status: 'RECOVERED', statusLabel: '已追回' }],
+  },
+  zhCN,
+);
+check('final2.active.case.recovered.absent', recoveredFlows.length === 0);
+check('final2.active.case.reversed.absent', buildActiveFlows({ cases: [{ caseId: 'case-3', title: '已冲正', status: 'REVERSED', statusLabel: '已冲正' }] }, zhCN).length === 0);
+check(
+  'final2.active.case.terminal.empty.state',
+  render(<ActiveRecovery flows={recoveredFlows} labels={zhCN.activeRecovery} />).includes(zhCN.activeRecovery.empty),
+);
+
+// CUSTOMER-UI-PRODUCTIZATION-V2 FINAL2 (MSG-20261007-08) / CHANGE 2：
+// 连接「能否继续」语义：ERROR（同步失败/provider error）与未知状态都不得说成「需要重新授权」。
+check('final2.conn.needs.auth.wording', connectionContinueLabel('NEEDS_AUTH', zhCN.connectionsPage).includes('重新授权'));
+check('final2.conn.error.no.reauth', !connectionContinueLabel('ERROR', zhCN.connectionsPage).includes('重新授权'));
+check('final2.conn.unknown.no.reauth', !connectionContinueLabel('SOMETHING_NEW', zhCN.connectionsPage).includes('重新授权'));
+check(
+  'final2.conn.error.unknown.copy.present',
+  connectionContinueLabel('ERROR', zhCN.connectionsPage) === zhCN.connectionsPage.summaryError &&
+    connectionContinueLabel('SOMETHING_NEW', zhCN.connectionsPage) === zhCN.connectionsPage.summaryUnknown,
+);
+const connWordingHtml = render(
+  <ConnectionManager
+    items={[
+      { id: 'w-needs-auth', label: 'NeedsAuth', kind: 'API', domain: 'PLATFORM', channel: 'AMAZON_FBA', status: 'NEEDS_AUTH', hasCredentialRef: false, platform: 'AMAZON', lastError: null },
+      { id: 'w-error', label: 'ErrorConn', kind: 'API', domain: 'PLATFORM', channel: 'AMAZON_FBA', status: 'ERROR', hasCredentialRef: true, platform: 'AMAZON', lastError: 'sync failed' },
+      { id: 'w-unknown', label: 'UnknownConn', kind: 'API', domain: 'PLATFORM', channel: 'AMAZON_FBA', status: 'SOMETHING_NEW', hasCredentialRef: true, platform: 'AMAZON', lastError: null },
+    ]}
+    t={zhCN}
+  />,
+);
+check('final2.conn.rendered.reauth.once', connWordingHtml.split(zhCN.connectionsPage.summaryNeedsReauth).length - 1 === 1);
+check('final2.conn.rendered.error.copy', connWordingHtml.includes(zhCN.connectionsPage.summaryError));
+check('final2.conn.rendered.unknown.copy', connWordingHtml.includes(zhCN.connectionsPage.summaryUnknown));
 check('nav.primary.count', buildCustomerNav(zhCN)[0].items.length === 5);
 
 // AGENT EXPERIENCE LAYER / P9：按需授权（目标等待授权 → Needs Your Attention → 去授权后继续原目标）

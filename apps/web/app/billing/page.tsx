@@ -62,7 +62,7 @@ export default async function BillingPage() {
   const billing = await apiGet<{ items: BillingItem[] }>('/billing');
   const statusLabel = (code: string): string => {
     const table = t.billingStatus as unknown as Record<string, string>;
-    return table[code] ?? code;
+    return table[code] ?? t.status.UNKNOWN;
   };
 
   return (

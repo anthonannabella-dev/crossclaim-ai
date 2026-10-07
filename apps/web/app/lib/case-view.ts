@@ -113,5 +113,5 @@ export function pipelineStateLabel(state: PipelineStageState, t: Messages): stri
 /** CaseStatus → 客户语言（字典键；缺失时回落到原始码，不伪造状态含义）。 */
 export function caseStatusLabel(code: string, t: Messages): string {
   const table = t.caseStatus as unknown as Record<string, string>;
-  return table[code] ?? code;
+  return table[code] ?? t.status.UNKNOWN;
 }

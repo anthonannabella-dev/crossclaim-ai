@@ -106,6 +106,7 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
     t,
   );
   const submitted = claimBody ? claimBody.status !== 'DRAFT' : false;
+  const currentStage = pipeline.find((stage) => stage.state === 'CURRENT') ?? pipeline[pipeline.length - 1];
 
   return (
     <div className="space-y-6">
@@ -123,7 +124,7 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
           </div>
           <StatusBadge tone="neutral">{caseStatusLabel(body.status, t)}</StatusBadge>
         </div>
-        <dl className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <dl className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-2">
           <div>
             <dt className="text-xs text-slate-500">{t.casesPage.colClaimed}</dt>
             <dd className="mt-0.5 text-sm font-semibold text-slate-900">
@@ -136,22 +137,9 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
               {body.recoveredAmount ?? '—'} {body.currency}
             </dd>
           </div>
-          <div>
-            <dt className="text-xs text-slate-500">{t.caseDetail.claimRounds}</dt>
-            <dd className="mt-0.5 text-sm font-semibold text-slate-900">{body.claims.length}</dd>
-          </div>
-          <div>
-            <dt className="text-xs text-slate-500">{t.caseDetail.evidence}</dt>
-            <dd className="mt-0.5 text-sm font-semibold text-slate-900">{evidenceItems.length}</dd>
-          </div>
         </dl>
       </section>
 
-      {!submitted ? (
-        <InlineNotice tone="warn" title={t.casePipeline.submissionTitle}>
-          {t.casePipeline.submissionHold}
-        </InlineNotice>
-      ) : null}
 
       <SectionCard>
         <RecoveryPipeline
@@ -165,6 +153,26 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
             BLOCKED: pipelineStateLabel('BLOCKED', t),
           }}
         />
+      </SectionCard>
+
+      <SectionCard title={t.activeRecovery.title}>
+        <p className="text-sm text-slate-700">
+          {currentStage ? currentStage.label : t.caseDetail.claimDraft}
+          {currentStage?.hint ? ' · ' + currentStage.hint : ''}
+        </p>
+        <p className="mt-2 text-xs text-slate-500">
+          {claimBody ? (claimBody.isFinal ? t.caseDetail.claimFinal : t.caseDetail.claimDraft) : t.caseDetail.noEvidence}
+        </p>
+      </SectionCard>
+
+      <SectionCard title={t.caseDetail.needActionTitle}>
+        {!submitted ? (
+          <InlineNotice tone="warn" title={t.casePipeline.submissionTitle}>
+            {t.casePipeline.submissionHold}
+          </InlineNotice>
+        ) : (
+          <p className="text-sm text-slate-700">{t.caseDetail.needActionNone}</p>
+        )}
       </SectionCard>
 
       <SectionCard title={t.caseDetail.claimText}>
@@ -181,7 +189,7 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
               {claimBody.sections.join('\n')}
             </pre>
             <details className="mt-3 text-[11px] text-slate-500">
-              <summary className="cursor-pointer">{t.dashboardPage.opportunityAdvanced}</summary>
+              <summary className="cursor-pointer">{t.caseDetail.detailsTitle}</summary>
               <ul className="mt-1 space-y-0.5 font-mono">
                 <li>round={claimBody.round}</li>
                 <li>version={claimBody.version}</li>
@@ -205,10 +213,13 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
                 <div className="flex flex-wrap items-start justify-between gap-2">
                   <div>
                     <p className="text-sm font-medium text-slate-900">{item.title}</p>
-                    <p className="mt-0.5 text-xs text-slate-500">
-                      {item.kind}
-                      {item.role ? ' · ' + item.role : ''}
-                    </p>
+                    <details className="mt-0.5 text-[11px] text-slate-500">
+                      <summary className="cursor-pointer">{t.caseDetail.detailsTitle}</summary>
+                      <p className="mt-1">
+                        {item.kind}
+                        {item.role ? ' · ' + item.role : ''}
+                      </p>
+                    </details>
                   </div>
                   <StatusBadge tone={item.hasFile ? 'ok' : 'neutral'}>
                     {item.hasFile ? t.caseDetail.hasFile : t.caseDetail.noFile}
@@ -228,6 +239,15 @@ export default async function CaseDetailPage({ params }: { params: Promise<{ id:
         ) : (
           <p className="text-sm text-red-600">{t.common.loadFailed}</p>
         )}
+      </SectionCard>
+
+      <SectionCard title={t.caseDetail.recentTitle}>
+        <ul className="space-y-1 text-sm text-slate-700">
+          <li>
+            {claimBody ? (claimBody.isFinal ? t.caseDetail.claimFinal : t.caseDetail.claimDraft) : t.caseDetail.noEvidence}
+          </li>
+          <li className="text-xs text-slate-500">{claimBody ? formatDateTime(claimBody.generatedAt, { locale }) : '—'}</li>
+        </ul>
       </SectionCard>
 
       <SectionCard title={t.caseDetail.appealPackage}>

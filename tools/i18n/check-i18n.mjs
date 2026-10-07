@@ -154,6 +154,24 @@ for (const file of CUSTOMER_FILES) {
 }
 console.log('HARDCODED_CUSTOMER_STRINGS=' + hardcodeCount + (hardcodeFiles.length ? ' :: ' + hardcodeFiles.slice(0, 12).join(' ') : ''));
 
+// 6) raw enum fallback guard（CUSTOMER-UI-PRODUCTIZATION-V2 / P11）：
+//    客户视图不得把 raw backend enum / 状态码作为回落文案（必须回落到本地化客户语言）。
+const RAW_ENUM_FALLBACK = /\?\?\s*code\b|return code;/;
+const rawFallbackFiles = [];
+for (const file of CUSTOMER_FILES) {
+  const source = fs.readFileSync(path.join(ROOT, file), 'utf8').replace(/\r\n/g, '\n');
+  const lines = source.split('\n');
+  for (const [index, line] of lines.entries()) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith('*') || trimmed.startsWith('//') || trimmed.startsWith('/*')) continue;
+    if (RAW_ENUM_FALLBACK.test(line)) rawFallbackFiles.push(file + ':' + (index + 1));
+  }
+}
+if (rawFallbackFiles.length > 0) {
+  FAILURES.push('RAW_ENUM_FALLBACK ' + rawFallbackFiles.slice(0, 8).join(' '));
+}
+console.log('RAW_ENUM_FALLBACK_HITS=' + rawFallbackFiles.length);
+
 // 棘轮（ratchet）：硬编码不得增加；迁移后请下调 baseline。
 const BASELINE_FILE = path.join(ROOT, 'tools/i18n/hardcode-baseline.json');
 const baseline = fs.existsSync(BASELINE_FILE) ? JSON.parse(fs.readFileSync(BASELINE_FILE, 'utf8')) : { customerHardcodedStrings: hardcodeCount };

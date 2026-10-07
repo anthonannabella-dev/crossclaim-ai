@@ -95,7 +95,7 @@ export default function OpportunityList({ t }: { t: Messages }) {
 
   const statusLabel = (code: string): string => {
     const table = t.status as unknown as Record<string, string>;
-    return table[code] ?? code;
+    return table[code] ?? t.status.UNKNOWN;
   };
 
   return (

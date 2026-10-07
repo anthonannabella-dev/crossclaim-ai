@@ -5,17 +5,19 @@ import { formatDateTime } from '../i18n/business-language';
 import { getServerLocale, getServerMessages } from '../i18n/server';
 import OpportunityActions from './components/opportunity-actions';
 import OpportunityCard from './components/opportunity-card';
+import ActiveRecovery from './components/ui/active-recovery';
 import InlineNotice from './components/ui/inline-notice';
 import GoalConsole from './components/ui/goal-console';
 import RecoveryHeadlineCards from './components/ui/recovery-headline-cards';
 import PlatformCard from './components/ui/platform-card';
 import SecurityStrip from './components/ui/security-strip';
 import SectionCard from './components/ui/section-card';
-import StatusBadge from './components/ui/status-badge';
 import SummaryCards from './components/ui/summary-cards';
 import TaskCenter from './components/ui/task-center';
 import {
-  buildCurrencySummaries,  buildHeadlineCards,
+  buildCurrencySummaries,
+  buildHeadlineCards,
+  buildActiveFlows,
   buildOpportunityView,
   buildPlatformCards,
   buildTasks,
@@ -122,6 +124,9 @@ export default async function DashboardPage() {
   // P4 headline cards: amounts come verbatim from /recovery-money per currency (no client-side math)
   const headlineCards = buildHeadlineCards(money.body?.organization.byCurrency, tasks.length, t);
 
+  // P3 active recovery: derived from existing goals + cases only (no new truth source)
+  const activeFlows = buildActiveFlows({ goals: goals.body?.items, cases: money.body?.cases }, t);
+
   const connectedAccounts = (accounts.body?.platforms ?? []).reduce(
     (total, group) =>
       total +
@@ -139,219 +144,230 @@ export default async function DashboardPage() {
   );
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-10">
+      {/* P1 — AI Goal Hero: the single primary entry on the home page. */}
       <GoalConsole labels={t.goalConsole} />
 
+      {/* P2 — four golden metrics: money first, strictly from persisted backend facts. */}
       <RecoveryHeadlineCards cards={headlineCards} note={t.goalConsole.perCurrencyNote} />
 
-      <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-8">
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">{t.customerShell.brandNote}</p>
-        <h1 className="mt-2 text-2xl font-semibold text-slate-900 sm:text-3xl">{t.dashboardPage.heroTitle}</h1>
-        <p className="mt-3 max-w-3xl text-sm text-slate-600">{t.dashboardPage.heroSubtitle}</p>
-        <p className="mt-2 max-w-3xl text-sm text-slate-500">{t.dashboardPage.valueProp}</p>
-        <div className="mt-5 flex flex-wrap items-center gap-3">
-          <Link
-            href={cta.href}
-            className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
-          >
-            {cta.label}
-          </Link>
-          <Link
-            href="/money"
-            className="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
-          >
-            {t.dashboardPage.moneyLink}
-          </Link>
-          <StatusBadge tone="neutral">{t.common.role + ' ' + me.body.role}</StatusBadge>
-        </div>
-      </section>
+      {/* P3 — what CrossClaim is working on (3–5 most relevant active flows). */}
+      <ActiveRecovery flows={activeFlows} labels={t.activeRecovery} />
 
-      <InlineNotice tone="warn" title={t.dashboardPage.submissionHoldTitle}>
-        {t.dashboardPage.submissionHoldBody}
-      </InlineNotice>
-
-      <SectionCard
-        title={t.dashboardPage.metricsTitle}
-        subtitle={t.dashboardPage.metricsSubtitle}
-        actions={
-          <Link href="/money" className="text-sm text-slate-500 underline hover:text-slate-800">
-            {t.dashboardPage.moneyLink}
-          </Link>
-        }
-      >
-        {money.ok && money.body ? (
-          <SummaryCards
-            summaries={summaries}
-            currencyLabel={t.dashboardPage.currencyLabel}
-            emptyTitle={t.dashboardPage.metricsEmpty}
-            emptyBody={t.dashboardPage.metricsEmptyBody}
-            emptyAction={{ label: t.dashboardPage.ctaConnect, href: '/connections' }}
-            holdNote={t.dashboardPage.paymentsHold}
-            link={{ label: t.dashboardPage.moneyLink, href: '/money' }}
-          />
-        ) : (
-          <InlineNotice tone="danger" title={t.dashboardPage.loadFailedTitle}>
-            {t.dashboardPage.loadFailedBody}
-          </InlineNotice>
-        )}
-      </SectionCard>
-
-      <SectionCard id="customer-tasks" title={t.dashboardPage.tasksTitle} subtitle={t.dashboardPage.tasksSubtitle}>
-        {recoveryStates.ok ? (
-          <TaskCenter
-            tasks={tasks}
-            labels={{
-              title: t.dashboardPage.tasksTitle,
-              impact: t.dashboardPage.taskImpact,
-              why: t.dashboardPage.taskWhyUser,
-              empty: t.dashboardPage.tasksEmpty,
-              kindLabels: buildTaskKindLabels(t),
-            }}
-          />
-        ) : (
-          <InlineNotice tone="danger" title={t.dashboardPage.loadFailedTitle}>
-            {t.dashboardPage.loadFailedBody}
-          </InlineNotice>
-        )}
-      </SectionCard>
-
-      <SectionCard title={t.dashboardPage.platformsTitle} subtitle={t.dashboardPage.platformsSubtitle}>
-        {accounts.ok ? (
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {platforms.map((card) => (
-              <PlatformCard
-                key={card.key}
-                card={card}
-                labels={{
-                  accounts: t.dashboardPage.platformAccounts,
-                  lastSync: t.dashboardPage.platformLastSync,
-                  never: t.dashboardPage.platformNever,
-                  advanced: t.dashboardPage.platformAdvanced,
-                  advancedEmpty: t.dashboardPage.platformAdvancedEmpty,
-                }}
-              />
-            ))}
+      {/* P4 — needs your attention: only rendered when real human work exists. */}
+      {tasks.length > 0 ? (
+        <section id="customer-tasks" className="space-y-3">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900">{t.dashboardPage.tasksTitle}</h2>
+            <p className="mt-1 text-sm text-slate-600">{t.dashboardPage.tasksSubtitle}</p>
           </div>
-        ) : (
-          <InlineNotice tone="danger" title={t.dashboardPage.loadFailedTitle}>
-            {t.dashboardPage.loadFailedBody}
-          </InlineNotice>
-        )}
-      </SectionCard>
+          {recoveryStates.ok || accounts.ok || goals.ok ? (
+            <TaskCenter
+              tasks={tasks}
+              labels={{
+                title: t.dashboardPage.tasksTitle,
+                impact: t.dashboardPage.taskImpact,
+                why: t.dashboardPage.taskWhyUser,
+                empty: t.dashboardPage.tasksEmpty,
+                kindLabels: buildTaskKindLabels(t),
+              }}
+            />
+          ) : (
+            <InlineNotice tone="danger" title={t.dashboardPage.loadFailedTitle}>
+              {t.dashboardPage.loadFailedBody}
+            </InlineNotice>
+          )}
+        </section>
+      ) : null}
 
-      <SectionCard
-        title={t.dashboardPage.opportunitiesTitle}
-        subtitle={t.dashboardPage.opportunitiesSubtitle}
-        actions={
-          <>
-            <a href="/api/opportunities/insights.csv" className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50">
-              {t.dashboard.exportCsv}
-            </a>
-            <Link href="/opportunities" className="text-sm text-slate-500 underline hover:text-slate-800">
-              {t.dashboardPage.opportunitiesMore}
+      {/* Secondary: platform coverage, opportunities, imports and security notes stay
+          fully reachable — one level down, without competing with the hero. */}
+      <section aria-label={t.dashboardPage.moreDetailsTitle} className="space-y-4 border-t border-slate-200 pt-8">
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="text-lg font-semibold text-slate-900">{t.dashboardPage.moreDetailsTitle}</h2>
+            <p className="mt-1 text-sm text-slate-600">{t.dashboardPage.moreDetailsSubtitle}</p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              href={cta.href}
+              className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800"
+            >
+              {cta.label}
             </Link>
-          </>
-        }
-      >
-        {opportunities.ok && opportunityViews.length > 0 ? (
-          <div className="grid gap-3 lg:grid-cols-2">
-            {opportunityViews.map((view) => (
-              <OpportunityCard
-                key={view.id}
-                view={view}
-                labels={{
-                  estimated: t.dashboardPage.opportunityEstimated,
-                  confidence: t.dashboardPage.opportunityConfidence,
-                  deadline: t.dashboardPage.opportunityDeadline,
-                  noDeadline: t.dashboardPage.opportunityNoDeadline,
-                  nextStep: t.dashboardPage.opportunityNextStep,
-                  openDetails: t.dashboardPage.opportunityAdvanced,
-                  advanced: t.dashboardPage.opportunityAdvancedFields,
-                  createCase: t.dashboardPage.opportunityCreateCase,
-                  unattributed: t.opportunitiesPage.unattributed,
-                }}
-                actions={
-                  view.canReview ? (
-                    <OpportunityActions
-                      opportunityId={view.id}
-                      labels={{
-                        qualify: t.dashboard.reviewQualify,
-                        reject: t.dashboard.reviewReject,
-                        reasonLabel: t.dashboard.rejectReason,
-                        reasons: t.dashboard.rejectReasons as unknown as Record<string, string>,
-                        requestFailed: t.common.requestFailed,
-                        networkError: t.common.networkError,
-                      }}
-                    />
-                  ) : null
-                }
-              />
-            ))}
+            <Link
+              href="/money"
+              className="rounded-lg border border-slate-300 px-4 py-2 text-sm text-slate-700 hover:bg-slate-50"
+            >
+              {t.dashboardPage.moneyLink}
+            </Link>
           </div>
-        ) : opportunities.ok ? (
-          <InlineNotice tone="info" title={t.dashboardPage.opportunitiesEmpty}>
-            {t.dashboardPage.opportunitiesEmptyBody}
-          </InlineNotice>
-        ) : (
-          <InlineNotice tone="danger" title={t.dashboardPage.loadFailedTitle}>
-            {t.dashboardPage.loadFailedBody}
-          </InlineNotice>
-        )}
-      </SectionCard>
+        </div>
 
-      <SectionCard
-        title={t.dashboardPage.importsTitle}
-        actions={
-          <Link href="/upload" className="text-sm text-slate-500 underline hover:text-slate-800">
-            {t.dashboardPage.importsCta}
-          </Link>
-        }
-      >
-        {imports.ok && imports.body && imports.body.items.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead className="text-left text-slate-500">
-                <tr>
-                  <th className="py-2">{t.dashboard.colBatch}</th>
-                  <th>{t.dashboard.colStatus}</th>
-                  <th>{t.dashboard.colRowsTotal}</th>
-                  <th>{t.dashboard.colRowsOk}</th>
-                  <th>{t.dashboard.colRowsFailed}</th>
-                  <th>{t.dashboard.colStartedAt}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {imports.body.items.slice(0, 5).map((item) => (
-                  <tr key={item.id} className="border-t border-slate-100">
-                    <td className="py-2 font-mono text-xs">{item.id.slice(0, 8)}…</td>
-                    <td>{item.status}</td>
-                    <td>{item.rowsTotal}</td>
-                    <td>{item.rowsOk}</td>
-                    <td>{item.rowsFailed}</td>
-                    <td className="text-slate-500">{formatDateTime(item.startedAt, { locale })}</td>
+        <SectionCard
+          title={t.dashboardPage.metricsTitle}
+          subtitle={t.dashboardPage.metricsSubtitle}
+          actions={
+            <Link href="/money" className="text-sm text-slate-500 underline hover:text-slate-800">
+              {t.dashboardPage.moneyLink}
+            </Link>
+          }
+        >
+          {money.ok && money.body ? (
+            <SummaryCards
+              summaries={summaries}
+              currencyLabel={t.dashboardPage.currencyLabel}
+              emptyTitle={t.dashboardPage.metricsEmpty}
+              emptyBody={t.dashboardPage.metricsEmptyBody}
+              emptyAction={{ label: t.dashboardPage.ctaConnect, href: '/connections' }}
+              holdNote={t.dashboardPage.paymentsHold}
+              link={{ label: t.dashboardPage.moneyLink, href: '/money' }}
+            />
+          ) : (
+            <InlineNotice tone="danger" title={t.dashboardPage.loadFailedTitle}>
+              {t.dashboardPage.loadFailedBody}
+            </InlineNotice>
+          )}
+        </SectionCard>
+
+        <SectionCard title={t.dashboardPage.platformsTitle} subtitle={t.dashboardPage.platformsSubtitle}>
+          {accounts.ok ? (
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {platforms.map((card) => (
+                <PlatformCard
+                  key={card.key}
+                  card={card}
+                  labels={{
+                    accounts: t.dashboardPage.platformAccounts,
+                    lastSync: t.dashboardPage.platformLastSync,
+                    never: t.dashboardPage.platformNever,
+                    advanced: t.dashboardPage.platformAdvanced,
+                    advancedEmpty: t.dashboardPage.platformAdvancedEmpty,
+                  }}
+                />
+              ))}
+            </div>
+          ) : (
+            <InlineNotice tone="danger" title={t.dashboardPage.loadFailedTitle}>
+              {t.dashboardPage.loadFailedBody}
+            </InlineNotice>
+          )}
+        </SectionCard>
+
+        <SectionCard
+          title={t.dashboardPage.opportunitiesTitle}
+          subtitle={t.dashboardPage.opportunitiesSubtitle}
+          actions={
+            <>
+              <a href="/api/opportunities/insights.csv" className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs text-slate-700 hover:bg-slate-50">
+                {t.dashboard.exportCsv}
+              </a>
+              <Link href="/opportunities" className="text-sm text-slate-500 underline hover:text-slate-800">
+                {t.dashboardPage.opportunitiesMore}
+              </Link>
+            </>
+          }
+        >
+          {opportunities.ok && opportunityViews.length > 0 ? (
+            <div className="grid gap-3 lg:grid-cols-2">
+              {opportunityViews.map((view) => (
+                <OpportunityCard
+                  key={view.id}
+                  view={view}
+                  labels={{
+                    estimated: t.dashboardPage.opportunityEstimated,
+                    confidence: t.dashboardPage.opportunityConfidence,
+                    deadline: t.dashboardPage.opportunityDeadline,
+                    noDeadline: t.dashboardPage.opportunityNoDeadline,
+                    nextStep: t.dashboardPage.opportunityNextStep,
+                    openDetails: t.dashboardPage.opportunityAdvanced,
+                    advanced: t.dashboardPage.opportunityAdvancedFields,
+                    createCase: t.dashboardPage.opportunityCreateCase,
+                    unattributed: t.opportunitiesPage.unattributed,
+                  }}
+                  actions={
+                    view.canReview ? (
+                      <OpportunityActions
+                        opportunityId={view.id}
+                        labels={{
+                          qualify: t.dashboard.reviewQualify,
+                          reject: t.dashboard.reviewReject,
+                          reasonLabel: t.dashboard.rejectReason,
+                          reasons: t.dashboard.rejectReasons as unknown as Record<string, string>,
+                          requestFailed: t.common.requestFailed,
+                          networkError: t.common.networkError,
+                        }}
+                      />
+                    ) : null
+                  }
+                />
+              ))}
+            </div>
+          ) : opportunities.ok ? (
+            <InlineNotice tone="info" title={t.dashboardPage.opportunitiesEmpty}>
+              {t.dashboardPage.opportunitiesEmptyBody}
+            </InlineNotice>
+          ) : (
+            <InlineNotice tone="danger" title={t.dashboardPage.loadFailedTitle}>
+              {t.dashboardPage.loadFailedBody}
+            </InlineNotice>
+          )}
+        </SectionCard>
+
+        <SectionCard
+          title={t.dashboardPage.importsTitle}
+          actions={
+            <Link href="/upload" className="text-sm text-slate-500 underline hover:text-slate-800">
+              {t.dashboardPage.importsCta}
+            </Link>
+          }
+        >
+          {imports.ok && imports.body && imports.body.items.length > 0 ? (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="text-left text-slate-500">
+                  <tr>
+                    <th className="py-2">{t.dashboard.colBatch}</th>
+                    <th>{t.dashboard.colStatus}</th>
+                    <th>{t.dashboard.colRowsTotal}</th>
+                    <th>{t.dashboard.colRowsOk}</th>
+                    <th>{t.dashboard.colRowsFailed}</th>
+                    <th>{t.dashboard.colStartedAt}</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        ) : (
-          <InlineNotice tone="info" title={t.dashboardPage.importsEmpty}>
-            {t.dashboardPage.importsEmptyBody}
-          </InlineNotice>
-        )}
-      </SectionCard>
+                </thead>
+                <tbody>
+                  {imports.body.items.slice(0, 5).map((item) => (
+                    <tr key={item.id} className="border-t border-slate-100">
+                      <td className="py-2 font-mono text-xs">{item.id.slice(0, 8)}…</td>
+                      <td>{item.status}</td>
+                      <td>{item.rowsTotal}</td>
+                      <td>{item.rowsOk}</td>
+                      <td>{item.rowsFailed}</td>
+                      <td className="text-slate-500">{formatDateTime(item.startedAt, { locale })}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : (
+            <InlineNotice tone="info" title={t.dashboardPage.importsEmpty}>
+              {t.dashboardPage.importsEmptyBody}
+            </InlineNotice>
+          )}
+        </SectionCard>
 
-      <SecurityStrip
-        title={t.dashboardPage.securityTitle}
-        points={[
-          t.dashboardPage.security1,
-          t.dashboardPage.security2,
-          t.dashboardPage.security3,
-          t.dashboardPage.security4,
-          t.dashboardPage.security5,
-          t.dashboardPage.security6,
-        ]}
-      />
+        <SecurityStrip
+          title={t.dashboardPage.securityTitle}
+          points={[
+            t.dashboardPage.security1,
+            t.dashboardPage.security2,
+            t.dashboardPage.security3,
+            t.dashboardPage.security4,
+            t.dashboardPage.security5,
+            t.dashboardPage.security6,
+          ]}
+        />
+      </section>
     </div>
   );
 }

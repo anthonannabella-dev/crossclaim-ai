@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useState, type FormEvent } from 'react';
 
 import type { Messages } from '../../i18n/dictionaries/zh-CN';
+import { connectionContinueLabel } from '../lib/connection-view';
 import StatusBadge from './ui/status-badge';
 import type { BadgeTone } from './ui/status-badge';
 
@@ -44,6 +45,8 @@ export interface ConnectionItem {
   hasCredentialRef: boolean;
   platform: string | null;
   lastError: string | null;
+  /** P9：后端已有的最近同步时间（缺失时以「暂无同步记录」如实展示） */
+  lastSyncAt?: string | null;
 }
 
 /**
@@ -70,19 +73,20 @@ export default function ConnectionManager({ items, t }: { items: ConnectionItem[
     const table = copy as unknown as Record<string, string>;
     switch (code) {
       case 'ACTIVE':
-        return table.statusActive ?? code;
+        return table.statusActive ?? t.status.UNKNOWN;
       case 'PAUSED':
-        return table.statusPaused ?? code;
+        return table.statusPaused ?? t.status.UNKNOWN;
       case 'REVOKED':
-        return table.statusRevoked ?? code;
+        return table.statusRevoked ?? t.status.UNKNOWN;
       case 'ERROR':
-        return table.statusError ?? code;
+        return table.statusError ?? t.status.UNKNOWN;
       case 'NEEDS_AUTH':
-        return table.statusNeedsAuth ?? code;
+        return table.statusNeedsAuth ?? t.status.UNKNOWN;
       default:
-        return code;
+        return t.status.UNKNOWN;
     }
   };
+
 
   /** 客户语言：渠道码 → 客户可读名称（未知码原样显示，不做猜测）。 */
   const channelLabel = (code: string): string => {
@@ -91,7 +95,7 @@ export default function ConnectionManager({ items, t }: { items: ConnectionItem[
       .split('_')
       .map((word) => (word === '' ? '' : word[0] + word.slice(1).toLowerCase()))
       .join('');
-    return table['channel' + suffix] ?? code;
+    return table['channel' + suffix] ?? table.channelOther ?? t.status.UNKNOWN;
   };
 
   /** 向导：选择「想连接什么」→ 自动推导内部 kind / domain / channel。 */
@@ -205,13 +209,17 @@ export default function ConnectionManager({ items, t }: { items: ConnectionItem[
                   <StatusBadge tone={statusTone(item.status)}>{statusLabel(item.status)}</StatusBadge>
                 </div>
 
-                {item.lastError ? <p className="mt-2 text-xs text-red-600">{item.lastError}</p> : null}
+                {item.lastError ? <p className="mt-2 text-xs text-amber-700">{copy.lastErrorNotice}</p> : null}
 
-                <dl className="mt-3 grid grid-cols-2 gap-3 text-xs">
+                <dl className="mt-3 grid gap-2 text-xs sm:grid-cols-2">
                   <div>
-                    <dt className="text-slate-500">{copy.colCredentialRef}</dt>
-                    <dd className="mt-0.5 font-medium text-slate-800">
-                      {item.hasCredentialRef ? copy.configured : copy.notConfigured}
+                    <dt className="text-slate-500">{copy.summaryLabel}</dt>
+                    <dd className="mt-0.5 font-medium text-slate-800">{connectionContinueLabel(item.status, copy)}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-slate-500">{copy.lastSyncLabel}</dt>
+                    <dd className="mt-0.5 text-slate-800">
+                      {item.lastSyncAt ? String(item.lastSyncAt).slice(0, 10) : copy.lastSyncNever}
                     </dd>
                   </div>
                 </dl>
@@ -267,6 +275,9 @@ export default function ConnectionManager({ items, t }: { items: ConnectionItem[
                       </button>
                     </div>
                   ) : null}
+                  <p className="mt-2">
+                    {copy.colCredentialRef}: {item.hasCredentialRef ? copy.configured : copy.notConfigured}
+                  </p>
                   <ul className="mt-1 space-y-0.5 font-mono">
                     <li>kind={item.kind}</li>
                     <li>domain={item.domain}</li>
@@ -274,6 +285,8 @@ export default function ConnectionManager({ items, t }: { items: ConnectionItem[
                     <li>status={item.status}</li>
                     <li>platform={item.platform ?? '-'}</li>
                     <li>credentialRef={item.hasCredentialRef ? 'SET' : 'UNSET'}</li>
+                    <li>lastSyncAt={item.lastSyncAt ?? '-'}</li>
+                    <li>lastError={item.lastError ?? '-'}</li>
                   </ul>
                 </details>
               </li>

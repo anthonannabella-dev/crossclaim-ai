@@ -2,6 +2,7 @@ import { cookies } from 'next/headers';
 import Link from 'next/link';
 
 import { getServerMessages } from '../../i18n/server';
+import { caseStatusLabel } from '../lib/case-view';
 
 const API_BASE = process.env.CROSSCLAIM_API_URL ?? 'http://127.0.0.1:3000';
 
@@ -77,7 +78,6 @@ export default async function CasesPage() {
                   <th>{t.casesPage.colStatus}</th>
                   <th>{t.casesPage.colClaimed}</th>
                   <th>{t.casesPage.colRecovered}</th>
-                  <th>{t.casesPage.colRounds}</th>
                   <th />
                 </tr>
               </thead>
@@ -86,14 +86,13 @@ export default async function CasesPage() {
                   <tr key={item.id} className="border-t">
                     <td className="py-2 font-mono text-xs">{item.caseNo}</td>
                     <td>{item.title}</td>
-                    <td>{item.status}</td>
+                    <td>{caseStatusLabel(item.status, t)}</td>
                     <td>
                       {item.claimedAmount ?? '—'} {item.currency}
                     </td>
                     <td>
                       {item.recoveredAmount ?? '—'} {item.currency}
                     </td>
-                    <td>{item.claimRounds}</td>
                     <td>
                       <Link href={`/cases/${item.id}`} className="text-slate-600 underline">
                         {t.casesPage.detail}

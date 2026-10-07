@@ -120,7 +120,48 @@ export async function runJourney(input) {
   check('home.needsAttention.visible', body.includes('需要你处理'), '');
   check('home.platformCards.visible', body.includes('平台与渠道覆盖'), '');
   check('home.currencyRule.visible', body.includes('按币种分别展示'), '');
+  // CUSTOMER-UI-PRODUCTIZATION-V2 / P1–P4
+  check('home.hero.title', body.includes('今天想让 CrossClaim 帮你追回什么？'), '');
+  check('home.hero.before.metrics', body.indexOf('今天想让 CrossClaim 帮你追回什么？') < body.indexOf('可追回'), 'hero 必须在金额之前');
+  check('home.activeRecovery.visible', body.includes('CrossClaim 正在帮你做什么'), '');
+  check('home.no.engineer.jargon', !body.includes('工程字段') && !body.includes('技术字段'), '');
+  check('home.no.role.code', !body.includes('OWNER') && !body.includes('ADMIN'), '首页出现内部角色码');
+
+  /* ---------------- 4b. 追回进度（一级导航 route 真实可达，客户语言） ---------------- */
+  await open(page, webBase + '/recoveries');
+  const recoveriesBody = await text(page);
+  check('recoveries.page.title', recoveriesBody.includes('追回进度'), recoveriesBody.slice(0, 120));
+  check('recoveries.page.capability', recoveriesBody.includes('CrossClaim 正在帮你做什么'), '');
+  check(
+    'recoveries.no.raw.engineering',
+    !/PLATFORM|LOGISTICS|CUSTOMS|INDEPENDENT_SITE|task:recovery|ADMITTED|RUNNING/.test(recoveriesBody),
+    recoveriesBody.slice(0, 160),
+  );
+  await open(page, webBase + '/');
   await shot(page, '03-home-first-run');
+
+  /* ---------------- 4c. 追回任务 / 追回机会（P6 客户语言） ---------------- */
+  await open(page, webBase + '/cases');
+  const casesBody = await text(page);
+  check('cases.page.customer.language', casesBody.includes('追回任务'), casesBody.slice(0, 120));
+  check(
+    'cases.page.no.engineering.columns',
+    !/Claim 轮次|OWNER|ADMIN|OPS/.test(casesBody),
+    casesBody.slice(0, 160),
+  );
+  await open(page, webBase + '/opportunities');
+  const opportunitiesBody = await text(page);
+  check('opportunities.page.customer.language', opportunitiesBody.includes('可追回机会'), '');
+  check('opportunities.page.no.engineering.wording', !/工程字段|技术字段/.test(opportunitiesBody), '');
+  await open(page, webBase + '/');
+
+  /* ---------------- 4d. 授权中心（P7 产品化） ---------------- */
+  await open(page, webBase + '/authorizations');
+  const authPageBody = await text(page);
+  check('authorizations.capabilities.visible', authPageBody.includes('CrossClaim 可以替你做什么'), authPageBody.slice(0, 120));
+  check('authorizations.always.ask.visible', authPageBody.includes('以下情况仍会先问你'), '');
+  check('authorizations.no.raw.audit.in.main', !/[0-9a-f]{32}/i.test(authPageBody.split('以下情况仍会先问你')[0] ?? ''), '');
+  await open(page, webBase + '/');
 
   /* ---------------- 5. 自然语言目标（真实提交） ---------------- */
   const goalInput = page.getByLabel('今天想让 CrossClaim 帮你追回什么？');
@@ -129,13 +170,22 @@ export async function runJourney(input) {
   await page.waitForFunction(
     () => {
       const t = document.body.innerText;
-      return t.includes('已记录') || t.includes('暂时无法') || t.includes('请求失败') || t.includes('不支持');
+      return t.includes('已开始检查') || t.includes('已记录') || t.includes('暂时无法') || t.includes('请求失败') || t.includes('不支持');
     },
     null,
     { timeout: 20000 },
   );
   body = await text(page);
-  check('goal.recorded', body.includes('已记录'), body.slice(0, 200));
+  check('goal.recorded', body.includes('已开始检查') || body.includes('已记录'), body.slice(0, 200));
+  // CUSTOMER-UI-PRODUCTIZATION-V2 / P1：结果区只出现客户语言，不出现 domain code / 任务计数 / 工程措辞。
+  const goalPanel = body.includes('已开始检查')
+    ? body.slice(body.indexOf('已开始检查'), body.indexOf('已开始检查') + 400)
+    : '';
+  check(
+    'goal.result.customer.language',
+    !/PLATFORM|LOGISTICS|CUSTOMS|INDEPENDENT_SITE|已生成|条执行任务|工程字段|技术字段/.test(goalPanel),
+    goalPanel.slice(0, 160),
+  );
   check('goal.no.internal.jargon', !/task:recovery|policy engine|model router|runner internals/i.test(body), '');
   await shot(page, '04-goal-recorded');
 
@@ -319,6 +369,14 @@ export async function runJourney(input) {
   await open(page, webBase + '/connections');
   body = await text(page);
   check('connections.wizard.present', body.includes('你想连接什么？'), body.slice(0, 200));
+  // CUSTOMER-UI-PRODUCTIZATION-V2 / P9：客户主视图只答五问，raw binding 只在「详细信息」折叠内
+  check('connections.can.continue.visible', body.includes('CrossClaim 能否继续工作'), '');
+  check('connections.lastSync.visible', body.includes('最近同步'), '');
+  check(
+    'connections.primary.no.raw.binding',
+    !/credentialRef=|kind=|domain=|status=/.test(body.split('详细信息')[0] ?? ''),
+    body.slice(0, 160),
+  );
   check('connections.wizard.customerLanguage', body.includes('上传承运商账单'), '');
   check(
     'connections.raw.enums.not.primary',
@@ -412,6 +470,41 @@ export async function runJourney(input) {
   const mAuth = await mPage.innerText('body');
   check('mobile.authorizations.visible', mAuth.includes('自动追回授权'), mAuth.slice(0, 140));
   await mPage.screenshot({ path: path.join(outDir, 'm3-mobile-authorizations.png'), fullPage: true });
+
+  /* P10：移动端新增页面（390×844） */
+  await open(mPage, webBase + '/recoveries');
+  const mRecoveries = await mPage.innerText('body');
+  check('mobile.recoveries.visible', mRecoveries.includes('追回进度'), mRecoveries.slice(0, 120));
+  await open(mPage, webBase + '/cases');
+  const mCases = await mPage.innerText('body');
+  check('mobile.cases.visible', mCases.includes('追回任务'), mCases.slice(0, 120));
+  const mobileCaseGeometry = await mPage.evaluate(() => ({
+    scrollWidth: document.documentElement.scrollWidth,
+    clientWidth: document.documentElement.clientWidth,
+  }));
+  check(
+    'mobile.cases.no.horizontal.overflow',
+    mobileCaseGeometry.scrollWidth <= mobileCaseGeometry.clientWidth + 1,
+    mobileCaseGeometry.scrollWidth + '/' + mobileCaseGeometry.clientWidth,
+  );
+
+  /* ---------------- 8b. Desktop a11y / 页面健康（P10，1440×900） ---------------- */
+  for (const route of ['/', '/recoveries', '/cases', '/opportunities', '/authorizations', '/connections', '/money']) {
+    await open(page, webBase + route);
+    const health = await page.evaluate(() => ({
+      h1: document.querySelectorAll('h1').length,
+      labelled: document.querySelectorAll('[aria-label], [aria-labelledby], nav, form input').length,
+      scrollWidth: document.documentElement.scrollWidth,
+      clientWidth: document.documentElement.clientWidth,
+    }));
+    check('a11y.' + route + '.single.h1', health.h1 === 1, 'h1=' + health.h1);
+    check('a11y.' + route + '.no.horizontal.overflow', health.scrollWidth <= health.clientWidth + 1, health.scrollWidth + '/' + health.clientWidth);
+    check('a11y.' + route + '.labels.present', health.labelled > 0, String(health.labelled));
+  }
+  await open(page, webBase + '/');
+  await page.keyboard.press('Tab');
+  const focusMoved = await page.evaluate(() => document.activeElement !== null && document.activeElement.tagName !== 'BODY');
+  check('a11y.keyboard.focus.moves', focusMoved, '');
 
   /* ---------------- 9. 页面健康 ---------------- */
   const benign = [/favicon/i, /Download the React DevTools/i, /404 \(Not Found\)/i];

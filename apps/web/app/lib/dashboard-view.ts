@@ -465,6 +465,78 @@ export function buildOpportunityView(item: OpportunityApiItem, t: Messages): Opp
 // Needs your attention 展示的是**计数**（来自既有 recovery-states），不是金额。
 // ============================================================
 
+export interface ActiveFlowView {
+  id: string;
+  title: string;
+  detail: string;
+  href: string;
+}
+
+export interface ActiveFlowGoalItem {
+  goalId: string;
+  status: string;
+  intent: string;
+}
+
+export interface ActiveFlowCaseItem {
+  caseId: string;
+  title: string;
+  /** 后端持久化的 CaseStatus（raw code；**不得**用 statusLabel 文案猜状态） */
+  status: string;
+  statusLabel: string;
+}
+
+/**
+ * FINAL2 / CHANGE 1：只有真正“进行中”的追回任务才进入 Active Recovery。
+ * RECOVERED（已追回）与 REVERSED（已冲正）属于终态，不得再显示为“正在帮你做”。
+ */
+export const ACTIVE_CASE_STATUSES: readonly string[] = [
+  'DISCOVERED',
+  'IN_PROGRESS',
+  'APPROVED',
+  'PARTIALLY_RECOVERED',
+  'DISPUTED',
+];
+
+/**
+ * CUSTOMER-UI-PRODUCTIZATION-V2 / P3：CrossClaim 正在帮你做什么。
+ * 只把**已有后端事实**翻译成客户语言：
+ *   - goal 的 ADMITTED / RUNNING（客户自己的目标文本 + 由状态派生的业务语言）；
+ *   - 已有 case 的后端标签（statusLabel 由服务端给出，前端不翻译状态码）。
+ * 不新增事实源、不做金额计算、不展示 task namespace / queue id / provider 内部状态。
+ */
+export function buildActiveFlows(
+  input: {
+    goals?: ActiveFlowGoalItem[] | null;
+    cases?: ActiveFlowCaseItem[] | null;
+    limit?: number;
+  },
+  t: Messages,
+): ActiveFlowView[] {
+  const limit = input.limit ?? 5;
+  const flows: ActiveFlowView[] = [];
+  for (const goal of input.goals ?? []) {
+    if (goal.status !== 'ADMITTED' && goal.status !== 'RUNNING') continue;
+    flows.push({
+      id: 'goal:' + goal.goalId,
+      title: goal.intent,
+      detail: goal.status === 'RUNNING' ? t.activeRecovery.goalRunningDetail : t.activeRecovery.goalAdmittedDetail,
+      href: '/money',
+    });
+  }
+  for (const item of input.cases ?? []) {
+    if (!ACTIVE_CASE_STATUSES.includes(item.status)) continue;
+    if (typeof item.statusLabel !== 'string' || item.statusLabel.trim() === '') continue;
+    flows.push({
+      id: 'case:' + item.caseId,
+      title: item.title,
+      detail: item.statusLabel,
+      href: '/cases/' + item.caseId,
+    });
+  }
+  return flows.slice(0, limit);
+}
+
 export type HeadlineCardKey = 'recoverable' | 'inRecovery' | 'recovered' | 'needsAttention';
 
 export interface HeadlineCardValue {

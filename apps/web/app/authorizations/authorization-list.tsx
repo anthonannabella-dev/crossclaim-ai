@@ -74,7 +74,6 @@ export default function AuthorizationList({ items, t }: { items: AuthorizationIt
               <div className="flex flex-wrap items-start justify-between gap-2">
                 <div>
                   <p className="text-sm font-semibold text-slate-900">{item.provider}</p>
-                  <p className="text-xs text-slate-500">{item.platformAccountId}</p>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   <StatusBadge tone={active ? 'ok' : 'neutral'}>{statusLabel}</StatusBadge>
@@ -103,12 +102,7 @@ export default function AuthorizationList({ items, t }: { items: AuthorizationIt
                     {item.allowedActionTypes.map((action) => actionLabel(action, labels)).join(' · ')}
                   </dd>
                 </div>
-                <div>
-                  <dt className="text-xs text-slate-500">{labels.versionLabel}</dt>
-                  <dd className="text-slate-900">
-                    v{item.authorizationVersion} · {item.termsPolicyVersion}
-                  </dd>
-                </div>
+
               </dl>
 
               {item.revocationState !== 'ACTIVE' ? (
@@ -126,6 +120,12 @@ export default function AuthorizationList({ items, t }: { items: AuthorizationIt
                 </p>
                 <p className="mt-1 break-all">
                   {labels.rawActionsLabel}: {item.allowedActionTypes.join(', ')}
+                </p>
+                <p className="mt-1 break-all">
+                  {labels.accountRefLabel}: {item.platformAccountId}
+                </p>
+                <p className="mt-1">
+                  {labels.versionLabel}: v{item.authorizationVersion} · {item.termsPolicyVersion}
                 </p>
                 <p className="mt-1">{labels.modifyUnavailable}</p>
               </details>
