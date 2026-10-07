@@ -120,6 +120,12 @@ export async function runJourney(input) {
   check('home.needsAttention.visible', body.includes('需要你处理'), '');
   check('home.platformCards.visible', body.includes('平台与渠道覆盖'), '');
   check('home.currencyRule.visible', body.includes('按币种分别展示'), '');
+  // CUSTOMER-UI-PRODUCTIZATION-V2 / P1–P4
+  check('home.hero.title', body.includes('今天想让 CrossClaim 帮你追回什么？'), '');
+  check('home.hero.before.metrics', body.indexOf('今天想让 CrossClaim 帮你追回什么？') < body.indexOf('可追回'), 'hero 必须在金额之前');
+  check('home.activeRecovery.visible', body.includes('CrossClaim 正在帮你做什么'), '');
+  check('home.no.engineer.jargon', !body.includes('工程字段') && !body.includes('技术字段'), '');
+  check('home.no.role.code', !body.includes('OWNER') && !body.includes('ADMIN'), '首页出现内部角色码');
   await shot(page, '03-home-first-run');
 
   /* ---------------- 5. 自然语言目标（真实提交） ---------------- */
@@ -129,13 +135,22 @@ export async function runJourney(input) {
   await page.waitForFunction(
     () => {
       const t = document.body.innerText;
-      return t.includes('已记录') || t.includes('暂时无法') || t.includes('请求失败') || t.includes('不支持');
+      return t.includes('已开始检查') || t.includes('已记录') || t.includes('暂时无法') || t.includes('请求失败') || t.includes('不支持');
     },
     null,
     { timeout: 20000 },
   );
   body = await text(page);
-  check('goal.recorded', body.includes('已记录'), body.slice(0, 200));
+  check('goal.recorded', body.includes('已开始检查') || body.includes('已记录'), body.slice(0, 200));
+  // CUSTOMER-UI-PRODUCTIZATION-V2 / P1：结果区只出现客户语言，不出现 domain code / 任务计数 / 工程措辞。
+  const goalPanel = body.includes('已开始检查')
+    ? body.slice(body.indexOf('已开始检查'), body.indexOf('已开始检查') + 400)
+    : '';
+  check(
+    'goal.result.customer.language',
+    !/PLATFORM|LOGISTICS|CUSTOMS|INDEPENDENT_SITE|已生成|条执行任务|工程字段|技术字段/.test(goalPanel),
+    goalPanel.slice(0, 160),
+  );
   check('goal.no.internal.jargon', !/task:recovery|policy engine|model router|runner internals/i.test(body), '');
   await shot(page, '04-goal-recorded');
 

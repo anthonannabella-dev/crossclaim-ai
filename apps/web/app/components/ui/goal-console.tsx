@@ -12,12 +12,16 @@ export interface GoalConsoleLabels {
   suggestion2: string;
   suggestion3: string;
   suggestion4: string;
-  suggestion5: string;
   busy: string;
   recordedTitle: string;
   recordedBody: string;
   planDomains: string;
-  planTasks: string;
+  scopePlatform: string;
+  scopeLogistics: string;
+  scopeCustoms: string;
+  scopeIndependentSite: string;
+  scopeOther: string;
+  startedLink: string;
   statusNote: string;
   unsupported: string;
   injection: string;
@@ -39,18 +43,19 @@ interface GoalRecorded {
 }
 
 /**
- * AGENT EXPERIENCE LAYER / P4：Goal Console（AI Recovery Manager）。
- * 只把客户目标文本交给服务端理解并记录 —— **前端不做任何业务判定**，也不声称已执行：
- * 服务端返回 executionPerformed=false，界面据此只展示「已记录 + 已生成计划 + 当前 HOLD」。
+ * CUSTOMER-UI-PRODUCTIZATION-V2 / P1：AI Goal Hero。
+ * 首页唯一主入口：用客户自己的话描述目标。
+ * 只把文本交给服务端理解并记录 —— 前端不做任何业务判定，也不声称已执行；
+ * 结果区只出现客户语言（业务范围），**不出现 domain / task namespace / 任务计数**。
  */
 export default function GoalConsole({ labels }: { labels: GoalConsoleLabels }) {
-  const suggestions = [
-    labels.suggestion1,
-    labels.suggestion2,
-    labels.suggestion3,
-    labels.suggestion4,
-    labels.suggestion5,
-  ];
+  const suggestions = [labels.suggestion1, labels.suggestion2, labels.suggestion3, labels.suggestion4];
+  const scopeNames: Record<string, string> = {
+    PLATFORM: labels.scopePlatform,
+    LOGISTICS: labels.scopeLogistics,
+    CUSTOMS: labels.scopeCustoms,
+    INDEPENDENT_SITE: labels.scopeIndependentSite,
+  };
   const [intent, setIntent] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -85,11 +90,18 @@ export default function GoalConsole({ labels }: { labels: GoalConsoleLabels }) {
     }
   }
 
+  const scopes =
+    recorded === null
+      ? []
+      : Array.from(new Set(recorded.interpretation.domains.map((domain) => scopeNames[domain] ?? labels.scopeOther)));
+
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm sm:p-8">
-      <h1 className="text-xl font-semibold text-slate-900 sm:text-2xl">{labels.title}</h1>
-      <p className="mt-2 max-w-3xl text-sm text-slate-600">{labels.subtitle}</p>
-      <div className="mt-4 flex flex-col gap-2 sm:flex-row">
+    <section className="rounded-2xl bg-slate-50 p-6 sm:p-10">
+      <h1 id="ai-goal-hero" className="max-w-3xl text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
+        {labels.title}
+      </h1>
+      <p className="mt-3 max-w-2xl text-sm text-slate-600 sm:text-base">{labels.subtitle}</p>
+      <div className="mt-6 flex flex-col gap-2 sm:flex-row">
         <input
           value={intent}
           onChange={(event) => setIntent(event.target.value)}
@@ -98,26 +110,26 @@ export default function GoalConsole({ labels }: { labels: GoalConsoleLabels }) {
           }}
           placeholder={labels.placeholder}
           aria-label={labels.title}
-          className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-900 sm:flex-1"
+          className="w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-base text-slate-900 sm:flex-1"
         />
         <button
           type="button"
           onClick={() => void submit()}
           disabled={busy || intent.trim() === ''}
-          className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+          className="rounded-xl bg-slate-900 px-5 py-3 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
         >
           {busy ? labels.busy : labels.submit}
         </button>
       </div>
 
-      <p className="mt-4 text-xs font-semibold uppercase tracking-wide text-slate-400">{labels.suggestedTitle}</p>
+      <p className="mt-6 text-xs font-semibold uppercase tracking-wide text-slate-400">{labels.suggestedTitle}</p>
       <div className="mt-2 flex flex-wrap gap-2">
         {suggestions.map((suggestion) => (
           <button
             key={suggestion}
             type="button"
             onClick={() => setIntent(suggestion)}
-            className="rounded-full border border-slate-300 px-3 py-1 text-xs text-slate-700 hover:bg-slate-50"
+            className="rounded-full border border-slate-300 bg-white px-3 py-1 text-xs text-slate-700 hover:bg-slate-100"
           >
             {suggestion}
           </button>
@@ -125,21 +137,27 @@ export default function GoalConsole({ labels }: { labels: GoalConsoleLabels }) {
       </div>
 
       {error ? (
-        <p role="alert" className="mt-4 rounded-lg border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+        <p role="alert" className="mt-5 rounded-xl border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-900">
           {error}
         </p>
       ) : null}
 
       {recorded ? (
-        <div className="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4">
+        <div className="mt-6 rounded-xl border border-slate-200 bg-white p-4">
           <p className="text-sm font-semibold text-slate-900">{labels.recordedTitle}</p>
-          <p className="mt-1 text-sm text-slate-600">{labels.recordedBody}</p>
-          <p className="mt-2 text-xs text-slate-500">{labels.planDomains}</p>
-          <p className="text-sm text-slate-800">{recorded.interpretation.domains.join(' / ')}</p>
-          <p className="mt-2 text-sm text-slate-800">
-            {labels.planTasks.replace('{count}', String(recorded.plan.tasks.length))}
-          </p>
-          <p className="mt-2 text-xs text-slate-500">{labels.statusNote}</p>
+          <p className="mt-1 max-w-2xl text-sm text-slate-600">{labels.recordedBody}</p>
+          <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-slate-400">{labels.planDomains}</p>
+          <ul className="mt-2 flex flex-wrap gap-2">
+            {scopes.map((scope) => (
+              <li key={scope} className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700">
+                {scope}
+              </li>
+            ))}
+          </ul>
+          <p className="mt-3 text-xs text-slate-500">{labels.statusNote}</p>
+          <a href="#customer-tasks" className="mt-3 inline-block text-xs text-slate-600 underline hover:text-slate-900">
+            {labels.startedLink}
+          </a>
         </div>
       ) : null}
     </section>

@@ -30,6 +30,7 @@ import {
   buildTaskKindLabels,
   mergeNeedsAttention,
   buildAuthorizationTasks,
+  buildActiveFlows,
   TASK_KINDS,
   selectPrimaryCta,
   type AccountsResponse,
@@ -41,6 +42,7 @@ import enUS from '../i18n/dictionaries/en-US';import GoalConsole from '../app/co
 import AgentRunViewComponent from '../app/recoveries/runs/[id]/agent-run-view';
 import AuthorizationList from '../app/authorizations/authorization-list';
 import RecoveryHeadlineCards from '../app/components/ui/recovery-headline-cards';
+import ActiveRecovery from '../app/components/ui/active-recovery';
 import zhCN from '../i18n/dictionaries/zh-CN';
 import { buildAgentRunView } from '../app/lib/agent-run-view';
 
@@ -470,7 +472,10 @@ check('a11y.notice.tone.classes', alertHtml.includes('border-red-200') && status
 // AGENT EXPERIENCE LAYER / P4：Goal Console + 四张核心结果卡
 const goalConsoleHtml = render(<GoalConsole labels={zhCN.goalConsole} />);
 check('goal.console.title', goalConsoleHtml.includes(zhCN.goalConsole.title));
-check('goal.console.suggestions', goalConsoleHtml.includes(zhCN.goalConsole.suggestion1) && goalConsoleHtml.includes(zhCN.goalConsole.suggestion5));
+check('goal.console.suggestions', goalConsoleHtml.includes(zhCN.goalConsole.suggestion1) && goalConsoleHtml.includes(zhCN.goalConsole.suggestion4));
+check('goal.console.max.four.suggestions', goalConsoleHtml.split('rounded-full border border-slate-300 bg-white px-3 py-1').length - 1 === 4);
+check('goal.console.no.raw.domain.code', !goalConsoleHtml.includes('PLATFORM') && !goalConsoleHtml.includes('INDEPENDENT_SITE'));
+check('goal.console.no.task.count', !goalConsoleHtml.includes('已生成') && !goalConsoleHtml.includes('执行任务'));
 check('goal.console.submit', goalConsoleHtml.includes(zhCN.goalConsole.submit));
 check('goal.console.no.fake.execution', !goalConsoleHtml.includes('已提交') && !goalConsoleHtml.includes('执行完成'));
 check('goal.console.en.parity', render(<GoalConsole labels={enUS.goalConsole} />).includes(enUS.goalConsole.title));
@@ -486,6 +491,26 @@ check('headline.per.currency.raw', headlineHtml.includes('USD') && headlineHtml.
 check('headline.needs.attention.count', headlineHtml.includes('>3<'));
 check('headline.no.cross.currency.sum', !headlineHtml.includes('8760.00') && !headlineCards.some((card) => card.values.length > 1));
 check('headline.per.currency.note', headlineHtml.includes(zhCN.goalConsole.perCurrencyNote));
+
+// CUSTOMER-UI-PRODUCTIZATION-V2 / P3：Active Recovery（只消费已有事实 + 客户语言）
+const activeFlows = buildActiveFlows(
+  {
+    goals: [
+      { goalId: 'goal-1', status: 'RUNNING', intent: '帮我追回 Amazon 上可以追回的钱' },
+      { goalId: 'goal-2', status: 'PROPOSED', intent: '不应出现在正在处理列表' },
+    ],
+    cases: [{ caseId: 'case-1', title: '物流赔付', statusLabel: '追回中' }],
+  },
+  zhCN,
+);
+const activeRecoveryHtml = render(<ActiveRecovery flows={activeFlows} labels={zhCN.activeRecovery} />);
+check('active.recovery.title', activeRecoveryHtml.includes(zhCN.activeRecovery.title));
+check('active.recovery.goal.flow', activeFlows.some((flow) => flow.title.includes('Amazon')));
+check('active.recovery.case.flow', activeRecoveryHtml.includes('物流赔付'));
+check('active.recovery.max.five', activeFlows.length <= 5);
+check('active.recovery.no.raw.status', !activeRecoveryHtml.includes('RUNNING') && !activeRecoveryHtml.includes('ADMITTED'));
+check('active.recovery.no.namespace', !activeRecoveryHtml.includes('task:recovery'));
+check('active.recovery.empty.copy', render(<ActiveRecovery flows={[]} labels={zhCN.activeRecovery} />).includes(zhCN.activeRecovery.empty));
 
 // AGENT EXPERIENCE LAYER / P5：Needs Your Attention（单一待办中心，类别可承载）
 const connAccounts: AccountsResponse = {
