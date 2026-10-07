@@ -195,6 +195,36 @@ export async function runJourney(input) {
     JSON.stringify(negativeAuth).slice(0, 240),
   );
 
+  // 负向（SECURITY_BOUNDARY / FINAL4）：Amazon Goal + Walmart 账户（同域不同 provider）→ 必须拒绝
+  const consoleErrorsBeforeWalmart = consoleErrors.length;
+  const walmartProbe = await page.evaluate(async (payload) => {
+    const account = await fetch('/api/acceptance/sandbox-account', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ platform: 'WALMART' }),
+    });
+    const created = await account.json().catch(() => null);
+    const auth = await fetch('/api/acceptance/sandbox-authorization', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ goalId: payload.goalId, platformAccountId: created?.platformAccountId }),
+    });
+    if (auth.status !== 201) return { status: auth.status, body: await auth.json().catch(() => null) };
+    const admit = await fetch('/api/agent-goals/' + encodeURIComponent(payload.goalId) + '/admit', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ platformAccountId: created?.platformAccountId }),
+    });
+    return { status: admit.status, body: await admit.json().catch(() => null) };
+  }, { goalId });
+  consoleErrors.splice(consoleErrorsBeforeWalmart); // 预期 403（负向探针），不计入控制台断言
+  check(
+    'security.provider.mismatch.denied',
+    walmartProbe.body?.kind === 'DENIED' &&
+      (walmartProbe.body?.reasonCodes ?? []).includes('GOAL_SCOPE_MISMATCH'),
+    JSON.stringify(walmartProbe).slice(0, 240),
+  );
+
   // sandbox 外部账户：Amazon（真实 PlatformAccount 行，仅补外部事实）
   const sandboxAccount = await page.evaluate(async () => {
     const r = await fetch('/api/acceptance/sandbox-account', {

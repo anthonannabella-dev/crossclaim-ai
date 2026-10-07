@@ -58,11 +58,27 @@ async function seedAccount(organizationId: string, label: string): Promise<strin
 }
 
 async function seedGoal(organizationId: string): Promise<string> {
+  // 与 HTTP 入口一致：durable goal 记录含 providers + goalDigest（确定性 identity）
+  const compiled = compileAgentGoal({ text: INTENT });
+  if (!compiled.ok) throw new Error("intent must compile");
+  const validated = validateAgentGoalDraft({
+    draft: compiled.draft,
+    context: { organizationId, actorUserId: USER, now: NOW },
+  });
   const persisted = await persistAgentGoal(prisma, {
     organizationId,
     createdBy: USER,
     rawUserIntent: INTENT,
-    normalizedGoal: { goalType: 'DISCOVER_AND_RECOVER', domains: ['PLATFORM'] },
+    normalizedGoal: {
+      goalType: validated.goalType,
+      domains: validated.domains,
+      providers: validated.providers,
+      timeRange: validated.timeRange,
+      executionMode: validated.executionMode,
+      approvalThreshold: validated.approvalThresholdPreference,
+      policyVersion: validated.policyVersion,
+      goalDigest: validated.goalDigest,
+    },
     now: NOW,
   });
   return persisted.goalId;
@@ -321,6 +337,45 @@ describe('CUSTOMER-UX FINAL2 · Goal admission（真实 PostgreSQL）', () => {
       }),
     ).rejects.toMatchObject({ code: 'GOAL_RUNTIME_LINEAGE_MISMATCH' });
     expect(await listAgentGoalRuns(prisma, { organizationId: ORG, goalId })).toEqual([]);
+  });
+  it('GA-11 FINAL4：Amazon Goal + Walmart 账户（同域不同 provider）→ DENIED / GOAL_SCOPE_MISMATCH，零入队', async () => {
+    const goalId = await seedGoal(ORG);
+    const walmart = await prisma.platformAccount.create({
+      data: { organizationId: ORG, platform: 'WALMART', externalAccountId: 'walmart-ga11', displayName: 'Walmart' },
+      select: { id: true },
+    });
+    // 真实 durable 授权存在，但 provider 与 Goal 意图不一致 → 仍必须拒绝
+    await grantAuthorization(ORG, walmart.id, planFor());
+    const result = await admitAgentGoal(
+      prisma,
+      { organizationId: ORG, goalId, platformAccountId: walmart.id, now: NOW },
+      deps(),
+    );
+    expect(result.kind).toBe('DENIED');
+    expect(result.reasonCodes).toContain('GOAL_SCOPE_MISMATCH');
+    expect(result.admitted).toEqual([]);
+    expect(fs.existsSync(tasksPath)).toBe(false);
+  });
+
+  it('GA-12 FINAL4：provider 意图冻结进 deterministic goal identity（Amazon ≠ Walmart digest）', () => {
+    const amazon = compileAgentGoal({ text: INTENT });
+    const walmart = compileAgentGoal({ text: '帮我把 Walmart 上可以追回的钱找回来' });
+    expect(amazon.ok).toBe(true);
+    expect(walmart.ok).toBe(true);
+    if (!amazon.ok || !walmart.ok) return;
+    expect(amazon.draft.providers).toEqual(['AMAZON']);
+    expect(walmart.draft.providers).toEqual(['WALMART']);
+    const amazonGoal = validateAgentGoalDraft({
+      draft: amazon.draft,
+      context: { organizationId: ORG, actorUserId: USER, now: NOW },
+    });
+    const walmartGoal = validateAgentGoalDraft({
+      draft: walmart.draft,
+      context: { organizationId: ORG, actorUserId: USER, now: NOW },
+    });
+    expect(amazonGoal.providers).toEqual(['AMAZON']);
+    expect(walmartGoal.providers).toEqual(['WALMART']);
+    expect(amazonGoal.goalDigest).not.toBe(walmartGoal.goalDigest);
   });
   it('GA-7 非可绕过 gate / 高风险动作不被准入放行（external write = HOLD）', () => {
     const plan = planFor();

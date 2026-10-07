@@ -338,8 +338,11 @@ export async function admitAgentGoal(
     facts,
     now: input.now,
   });
+  // FINAL4：Goal 自带 provider 意图时，账户 provider 必须命中（Amazon Goal ≠ Walmart 账户）
+  const goalProviders: readonly string[] = Array.isArray(validated.providers) ? validated.providers : [];
+  const providerMatches = goalProviders.length === 0 || goalProviders.includes(serverProvider);
   const accountDomain = goalDomainOfPlatform(serverProvider);
-  if (accountDomain === null || !validated.domains.includes(accountDomain)) {
+  if (!providerMatches || accountDomain === null || !validated.domains.includes(accountDomain)) {
     return {
       ...base,
       kind: 'DENIED',
@@ -501,12 +504,30 @@ export async function recordGoalRunFromRuntime(
   // FINAL3：runtime 认领的 task 必须属于该 durable Goal 的确定性计划（禁止 caller 任意声称）
   const goal = await loadAgentGoal(prisma, { organizationId: input.organizationId, goalId: input.goalId });
   if (goal === null) throw new GoalAdmissionError('GOAL_NOT_FOUND', 'AgentGoal 不存在（或不属于该租户）。');
-  const lineageCompiled = compileAgentGoal({ text: goal.rawUserIntent });
-  if (!lineageCompiled.ok) throw new GoalAdmissionError('GOAL_NOT_COMPILABLE', '目标无法重建计划。');
-  const lineageValidated = validateAgentGoalDraft({
-    draft: lineageCompiled.draft,
-    context: { organizationId: input.organizationId, actorUserId: goal.createdBy, now: input.now },
-  });
+  // 以 durable goal 记录重建计划（providers 亦来自记录；legacy 行缺字段时回退到编译器）
+  const stored = (goal.normalizedGoal ?? {}) as Record<string, unknown>;
+  let lineageValidated;
+  try {
+    lineageValidated = validateAgentGoalDraft({
+      draft: {
+        goalType: stored.goalType,
+        domains: stored.domains,
+        providers: Array.isArray(stored.providers) ? stored.providers : [],
+        timeRange: stored.timeRange ?? { kind: 'LAST_N_MONTHS', months: 12 },
+        executionMode: stored.executionMode ?? 'AUTO_WHEN_AUTHORIZED',
+        approvalThreshold: null,
+        matchedSignals: [],
+      },
+      context: { organizationId: input.organizationId, actorUserId: goal.createdBy, now: input.now },
+    });
+  } catch {
+    const lineageCompiled = compileAgentGoal({ text: goal.rawUserIntent });
+    if (!lineageCompiled.ok) throw new GoalAdmissionError('GOAL_NOT_COMPILABLE', '目标无法重建计划。');
+    lineageValidated = validateAgentGoalDraft({
+      draft: lineageCompiled.draft,
+      context: { organizationId: input.organizationId, actorUserId: goal.createdBy, now: input.now },
+    });
+  }
   const lineagePlan = planAgentGoal({
     goal: lineageValidated,
     capabilities: resolveGoalCapabilities({
@@ -518,8 +539,16 @@ export async function recordGoalRunFromRuntime(
     now: input.now,
   });
   const expectedTasks = new Set(lineagePlan.tasks.map((task) => task.dedupeKey));
+  // FINAL4：任务必须属于该 durable Goal —— 带该 goal 的 digest 前缀；
+  // 记录里没有 digest（legacy）时退回确定性计划集合比对。
+  const storedDigest = typeof stored.goalDigest === 'string' ? stored.goalDigest : '';
+  const goalScopeToken = storedDigest === '' ? null : storedDigest.slice(0, 24);
   const claimedKeys = [...input.outcome.claimed, ...input.outcome.completed, ...input.outcome.blocked];
-  const alien = claimedKeys.filter((key) => !expectedTasks.has(key));
+  const alien = claimedKeys.filter((key) => {
+    if (!key.startsWith('task:recovery:')) return true;
+    if (goalScopeToken !== null) return !key.includes(goalScopeToken);
+    return !expectedTasks.has(key);
+  });
   if (alien.length > 0) {
     throw new GoalAdmissionError(
       'GOAL_RUNTIME_LINEAGE_MISMATCH',

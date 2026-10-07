@@ -95,6 +95,8 @@ function shutdown() {
 async function main() {
   mkdirSync(OUT_DIR, { recursive: true });
   if (existsSync(OUTBOX)) rmSync(OUTBOX, { force: true });
+  const tasksFile = path.join(REPO_ROOT, 'reports', 'acceptance', 'rsi-tasks.json');
+  if (existsSync(tasksFile)) rmSync(tasksFile, { force: true });
 
   const tsxCli = path.join(API_ROOT, 'node_modules', 'tsx', 'dist', 'cli.mjs');
   const nextCli = path.join(WEB_ROOT, 'node_modules', 'next', 'dist', 'bin', 'next');

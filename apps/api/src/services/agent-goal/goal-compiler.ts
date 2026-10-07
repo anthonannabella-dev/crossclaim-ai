@@ -15,6 +15,7 @@ import {
   type AgentGoalDraft,
   type GoalApprovalCurrency,
   type GoalDomain,
+  type GoalProvider,
   type GoalExecutionMode,
   type GoalTimeRange,
   type GoalType,
@@ -33,6 +34,23 @@ export type GoalCompileResult =
   | { readonly ok: false; readonly reason: GoalCompileFailureReason; readonly detail: string; readonly modelCallCount: 0 };
 
 /** 域信号：只使用既有 `RecoveryDomain` 词汇 + 平台/渠道别名 */
+/** FINAL4：provider/平台意图信号（确定性；无模型调用） */
+const PROVIDER_SIGNALS: ReadonlyArray<{ provider: GoalProvider; patterns: readonly RegExp[] }> = [
+  { provider: 'AMAZON', patterns: [/amazon/i, /fba/i, /亚马逊/] },
+  { provider: 'WALMART', patterns: [/walmart/i, /沃尔玛/] },
+  { provider: 'TIKTOK', patterns: [/tiktok/i, /抖音/] },
+  { provider: 'EBAY', patterns: [/ebay/i] },
+  { provider: 'SHOPIFY', patterns: [/shopify/i] },
+  { provider: 'STRIPE', patterns: [/stripe/i] },
+  { provider: 'PAYPAL', patterns: [/paypal/i] },
+  { provider: 'UPS', patterns: [/\bups\b/i] },
+  { provider: 'FEDEX', patterns: [/fedex/i, /联邦快递/] },
+  { provider: 'DHL', patterns: [/\bdhl\b/i] },
+  { provider: 'FREIGHT_FORWARDER', patterns: [/freight/i, /货代/] },
+  { provider: 'INSURANCE', patterns: [/insurance/i, /保险/] },
+  { provider: 'CBP', patterns: [/\bcbp\b/i] },
+];
+
 const DOMAIN_SIGNALS: ReadonlyArray<{ domain: GoalDomain; patterns: readonly RegExp[] }> = [
   {
     domain: 'PLATFORM',
@@ -110,6 +128,14 @@ function resolveDomains(text: string): { domains: GoalDomain[]; signals: string[
   return { domains, signals };
 }
 
+function resolveProviders(text: string): GoalProvider[] {
+  const providers: GoalProvider[] = [];
+  for (const entry of PROVIDER_SIGNALS) {
+    if (entry.patterns.some((pattern) => pattern.test(text))) providers.push(entry.provider as GoalProvider);
+  }
+  return providers.sort();
+}
+
 function resolveTimeRange(text: string): { timeRange: GoalTimeRange; signal: string | null } {
   const months = MONTHS_SIGNAL.exec(text);
   if (months) {
@@ -160,6 +186,7 @@ export function compileAgentGoal(input: { text: string }): GoalCompileResult {
   }
 
   const { domains, signals } = resolveDomains(text);
+  const providers = resolveProviders(text);
   const { timeRange, signal: timeSignal } = resolveTimeRange(text);
   const { threshold, signal: thresholdSignal } = resolveApprovalThreshold(text);
   const wantsAttention = ATTENTION_SIGNAL.test(text);
@@ -203,6 +230,7 @@ export function compileAgentGoal(input: { text: string }): GoalCompileResult {
   const draft: AgentGoalDraft = {
     goalType,
     domains,
+    providers,
     timeRange,
     executionMode,
     approvalThreshold: threshold,

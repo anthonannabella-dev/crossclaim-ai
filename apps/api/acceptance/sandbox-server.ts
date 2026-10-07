@@ -340,6 +340,13 @@ async function main(): Promise<void> {
         } finally {
           runtime.loop.stop();
         }
+        // FINAL4：claim 到的 task 必须带该 goal 的 digest —— 否则不视为本 goal 的执行
+        const goalRow = await loadAgentGoal(prisma, { organizationId: session.organizationId, goalId });
+        const goalDigest = String(((goalRow?.normalizedGoal ?? {}) as { goalDigest?: unknown }).goalDigest ?? '');
+        if (claimedKey !== null && goalDigest !== '' && !claimedKey.includes(goalDigest.slice(0, 24))) {
+          sendJson(res, 409, { error: 'RUNTIME_CLAIMED_OTHER_GOAL', claimed: claimedKey });
+          return;
+        }
         if (claimedKey === null) {
           sendJson(res, 409, { error: 'RUNTIME_DID_NOT_CLAIM', queuedTasks: queued.length });
           return;
