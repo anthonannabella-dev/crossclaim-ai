@@ -22,7 +22,7 @@
 | P5 Navigation simplification | DONE | 一级 5 项客户语言对齐 + `/recoveries` 真实路由 + 更多/高级顺序按 HOST 指令 |
 | P6 Opportunity / Case 客户语言 | DONE | 追回机会 / 追回任务 / 提交材料 / 支持材料；案件详情按 HOST 顺序重排，raw 字段折叠进「处理详情」 |
 | P7 Authorization UX | DONE | 「CrossClaim 可以替你做什么」+「以下情况仍会先问你」+ 撤销入口保留；账户引用 / 版本折叠进「授权详情」 |
-| P8 工程字段隔离 | QUEUED | 主 UI 去除「工程字段 / 技术字段」措辞，技术标识移入 Support/Admin diagnostics |
+| P8 工程字段隔离 | DONE | 5 语言「工程/技术字段」措辞清零（字典级 guard）；深层详情统一为「详细信息 / 授权详情」 |
 | P9 Connections 简化 | QUEUED | 客户主视图只答：连了什么 / 是否正常 / 最近同步 / 是否要重新授权 |
 | P10 Mobile / a11y | QUEUED | 390×844 首屏 Goal + Money + Needs Attention 优先 |
 | P11 i18n parity + hardcode scan | 持续 | 每个单元都跑；P1–P4 已加入 5 语言并 0 硬编码 |
@@ -99,6 +99,30 @@
 | 浏览器客户旅程（真实 Edge + HTTP + PostgreSQL；desktop 1440×900 + mobile 390×844） | **65/65 PASS**（新增：hero-first、Hero 在金额之前、Active Recovery 可见、无「工程字段/技术字段」、首页无内部角色码、目标结果区无 raw code / 任务计数） |
 | 浏览器证据目录 | `reports/acceptance/2026-10-07T15-52-05-717Z/` |
 | api tsc | 0（本轮未改 `apps/api`） |
+
+### 批次 5（P8）
+
+**工程字段隔离（客户主视图清零）**
+
+| 门禁项 | 结果 |
+| --- | --- |
+| 「工程字段」| 0（5 语言字典 + 渲染 guard） |
+| 「技术字段」/ Technical fields / Technikfelder / 技術項目 / campos técnicos | 0 |
+| raw digest / raw policy version（客户主文案）| 0（授权卡主文案已无 UUID 与 digest；`scopeDigest`、`termsPolicyVersion` 只在「授权详情」折叠内） |
+| 深层详情统一命名 | 详细信息 / 授权详情（`authorizationPage.advancedLabel` = 授权详情；`opportunityAdvanced(Fields)` = 详细信息） |
+
+实现方式：`apps/web/i18n/dictionaries/*.ts` 全量扫描 + 按 key 语义改名（大小写不敏感），
+并在 `ui-check-entry.tsx` 增加 5 语言字典级 guard（`p8.no.engineering.wording` / `p8.advanced.labels.renamed`），
+防止后续新增文案重新引入该措辞。诊断视图与 RBAC 未改动；未触碰任何后端契约。
+
+| 项 | 结果 |
+| --- | --- |
+| web tsc | 0 |
+| i18n | OK：5 语言 / 872 键 parity / 客户硬编码 **0** |
+| UI render check | **174/174 OK**（新增 3 项：字典无工程措辞、advancedLabel = 授权详情、opportunityAdvancedFields = 详细信息） |
+| 浏览器客户旅程 | **75/75 PASS** |
+| 浏览器证据目录 | `reports/acceptance/2026-10-07T16-15-39-193Z/` |
+| 修正记录 | 首轮 sweep 后残留 `es.opportunityAdvancedFields = "Campos técnicos"` 与 `en.opportunityAdvancedFields = "Technical fields"`（大小写/同义词未命中），已用大小写不敏感 + key 语义改名收干净并复跑全绿 |
 
 ### 批次 4（P7）
 

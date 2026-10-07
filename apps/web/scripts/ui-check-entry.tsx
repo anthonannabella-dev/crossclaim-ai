@@ -38,7 +38,10 @@ import {
   type OpportunityApiItem,
   type RecoveryStateItem,
 } from '../app/lib/dashboard-view';
-import enUS from '../i18n/dictionaries/en-US';import GoalConsole from '../app/components/ui/goal-console';
+import enUS from '../i18n/dictionaries/en-US';
+import de from '../i18n/dictionaries/de';
+import ja from '../i18n/dictionaries/ja';
+import es from '../i18n/dictionaries/es';import GoalConsole from '../app/components/ui/goal-console';
 import AgentRunViewComponent from '../app/recoveries/runs/[id]/agent-run-view';
 import AuthorizationList from '../app/authorizations/authorization-list';
 import RecoveryHeadlineCards from '../app/components/ui/recovery-headline-cards';
@@ -737,6 +740,16 @@ check(
   'p7.authz.en.parity',
   enUS.authorizationPage.capabilitiesTitle.includes('CrossClaim') && enUS.authorizationPage.alwaysAskTitle.length > 0,
 );
+
+// CUSTOMER-UI-PRODUCTIZATION-V2 / P8：工程字段措辞清零（5 语言字典级 guard）
+const BANNED_ENGINEERING_PHRASES = ['工程字段', '技术字段', 'engineering fields', 'technikfelder', '技術項目', 'campos técnicos'];
+const allDictionaryText = JSON.stringify([zhCN, enUS, de, ja, es]).toLowerCase();
+check(
+  'p8.no.engineering.wording',
+  !BANNED_ENGINEERING_PHRASES.some((phrase) => allDictionaryText.includes(phrase.toLowerCase())),
+);
+check('p8.advanced.labels.renamed', zhCN.authorizationPage.advancedLabel === '授权详情' && zhCN.dashboardPage.opportunityAdvancedFields === '详细信息');
+check('p8.en.advanced.labels.renamed', enUS.authorizationPage.advancedLabel === 'Authorization details' && enUS.dashboardPage.opportunityAdvancedFields === 'Details');
 check('nav.primary.count', buildCustomerNav(zhCN)[0].items.length === 5);
 
 // AGENT EXPERIENCE LAYER / P9：按需授权（目标等待授权 → Needs Your Attention → 去授权后继续原目标）
