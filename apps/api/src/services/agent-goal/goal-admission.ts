@@ -23,6 +23,7 @@ import {
   type StandingAuthorizationRecord,
   type StandingAuthorizationRequest,
 } from '../standing-authorization/standing-authorization';
+import { GOAL_PROVIDER_DOMAINS } from './goal-contract';
 import { compileAgentGoal } from './goal-compiler';
 import { defaultGoalCapabilityFacts } from './http-request';
 import { resolveGoalCapabilities, type GoalCapabilityFacts } from './goal-capability-resolver';
@@ -48,11 +49,12 @@ export const GOAL_ADMISSION_PATH_SUFFIX = '/admit';
  */
 export function goalDomainOfPlatform(platform: string): 'PLATFORM' | 'LOGISTICS' | 'CUSTOMS' | 'INDEPENDENT_SITE' | null {
   const value = platform.trim().toUpperCase();
-  if (['AMAZON', 'WALMART', 'TIKTOK', 'TIKTOK_SHOP', 'EBAY'].includes(value)) return 'PLATFORM';
-  if (['UPS', 'FEDEX', 'DHL', 'FREIGHT_FORWARDER', 'INSURANCE', 'CARRIER'].includes(value)) return 'LOGISTICS';
-  if (['CBP', 'CUSTOMS', 'CUSTOMS_BROKER', 'ABI'].includes(value)) return 'CUSTOMS';
-  if (['SHOPIFY', 'STRIPE', 'PAYPAL', 'INDEPENDENT_SITE'].includes(value)) return 'INDEPENDENT_SITE';
-  return null;
+  // FINAL5：以 goal-contract 的 canonical 映射为准（compiler 的域推断同源），别名只做归一。
+  const alias: Record<string, string> = { TIKTOK_SHOP: 'TIKTOK', CARRIER: 'FREIGHT_FORWARDER', CUSTOMS_BROKER: 'CBP' };
+  const canonical = (alias[value] ?? value) as keyof typeof GOAL_PROVIDER_DOMAINS;
+  return Object.prototype.hasOwnProperty.call(GOAL_PROVIDER_DOMAINS, canonical)
+    ? GOAL_PROVIDER_DOMAINS[canonical]
+    : null;
 }
 
 /** 只有这些 requiredGates 允许由 Standing Authorization（TIER_1 低风险）满足；其余一律不可绕过 */
@@ -541,12 +543,9 @@ export async function recordGoalRunFromRuntime(
   const expectedTasks = new Set(lineagePlan.tasks.map((task) => task.dedupeKey));
   // FINAL4：任务必须属于该 durable Goal —— 带该 goal 的 digest 前缀；
   // 记录里没有 digest（legacy）时退回确定性计划集合比对。
-  const storedDigest = typeof stored.goalDigest === 'string' ? stored.goalDigest : '';
-  const goalScopeToken = storedDigest === '' ? null : storedDigest.slice(0, 24);
   const claimedKeys = [...input.outcome.claimed, ...input.outcome.completed, ...input.outcome.blocked];
   const alien = claimedKeys.filter((key) => {
     if (!key.startsWith('task:recovery:')) return true;
-    if (goalScopeToken !== null) return !key.includes(goalScopeToken);
     return !expectedTasks.has(key);
   });
   if (alien.length > 0) {

@@ -1,5 +1,5 @@
 {
-  "generatedAt": "2026-10-07T12:38:50.088Z",
+  "generatedAt": "2026-10-07T13:27:35.879Z",
   "webBase": "http://127.0.0.1:3011",
   "apiBase": "http://127.0.0.1:3100",
   "checks": [
@@ -116,7 +116,7 @@
     {
       "name": "goal.id.available",
       "ok": true,
-      "detail": "{\"status\":200,\"body\":{\"items\":[{\"goalId\":\"agentgoal-08e3d48b501a4ca4d8ab41d3\",\"status\":\"PROPOSED\",\"intent\":\"帮我把 Amazon 上可以追回的钱找回来\",\"interpretation\":{\"domains\":["
+      "detail": "{\"status\":200,\"body\":{\"items\":[{\"goalId\":\"agentgoal-e180b339efccf688f42713ea\",\"status\":\"PROPOSED\",\"intent\":\"帮我把 Amazon 上可以追回的钱找回来\",\"interpretation\":{\"domains\":["
     },
     {
       "name": "goal.needs.authorization.visible",
@@ -126,7 +126,7 @@
     {
       "name": "goal.scope.connection.created",
       "ok": true,
-      "detail": "{\"status\":200,\"body\":{\"items\":[{\"id\":\"65e55f74-ae9f-4b3b-88a2-55e0e010fecd\",\"label\":\"Acceptance bills 1791376698783\",\"kind\":\"FILE_UPLOAD\",\"domain\":\"LOGISTICS\",\""
+      "detail": "{\"status\":200,\"body\":{\"items\":[{\"id\":\"068f9add-26f4-4e36-9c26-b4a2960e89a7\",\"label\":\"Acceptance bills 1791379624678\",\"kind\":\"FILE_UPLOAD\",\"domain\":\"LOGISTICS\",\""
     },
     {
       "name": "security.scope.mismatch.probe.noise.expected",
@@ -136,17 +136,22 @@
     {
       "name": "security.scope.mismatch.denied",
       "ok": true,
-      "detail": "{\"status\":403,\"body\":{\"version\":\"agent-goal-admission/v1\",\"organizationId\":\"44db4251-4c12-41ab-bace-6639ec1c6ab8\",\"executedBy\":\"ONE_SI_RUNTIME\",\"admissionOnly\":true,\"externalActionPerformed\":false,\"createdRuntime\":false,\"createdAt\":\"2026-10"
+      "detail": "{\"status\":403,\"body\":{\"version\":\"agent-goal-admission/v1\",\"organizationId\":\"ae81195b-0980-4c5a-b516-2aec98dba086\",\"executedBy\":\"ONE_SI_RUNTIME\",\"admissionOnly\":true,\"externalActionPerformed\":false,\"createdRuntime\":false,\"createdAt\":\"2026-10"
+    },
+    {
+      "name": "security.provider.mismatch.denied",
+      "ok": true,
+      "detail": "{\"status\":403,\"body\":{\"version\":\"agent-goal-admission/v1\",\"organizationId\":\"ae81195b-0980-4c5a-b516-2aec98dba086\",\"executedBy\":\"ONE_SI_RUNTIME\",\"admissionOnly\":true,\"externalActionPerformed\":false,\"createdRuntime\":false,\"createdAt\":\"2026-10"
     },
     {
       "name": "sandbox.amazon.account.ready",
       "ok": true,
-      "detail": "{\"status\":201,\"body\":{\"platformAccountId\":\"ace7fba0-c595-427d-a668-0f69eecfb6d6\",\"platform\":\"AMAZON\",\"sandbox\":true}}"
+      "detail": "{\"status\":201,\"body\":{\"platformAccountId\":\"b41c8d45-eed1-441b-bbeb-073d2e3f5f9f\",\"platform\":\"AMAZON\",\"sandbox\":true}}"
     },
     {
       "name": "authorization.sandbox.completed",
       "ok": true,
-      "detail": "{\"status\":201,\"body\":{\"kind\":\"APPENDED\",\"authorizationId\":\"sa-sandbox-ace7fba0-c595-427d-a668-0f69eecfb6d6\",\"allowedActionTypes\":[\"evidence.read\"],\"requiredAuthorizationAction\":\"evidence.read\",\"platfo"
+      "detail": "{\"status\":201,\"body\":{\"kind\":\"APPENDED\",\"authorizationId\":\"sa-sandbox-b41c8d45-eed1-441b-bbeb-073d2e3f5f9f\",\"allowedActionTypes\":[\"evidence.read\"],\"requiredAuthorizationAction\":\"evidence.read\",\"platfo"
     },
     {
       "name": "authorization.durable.store.bound",
@@ -156,7 +161,7 @@
     {
       "name": "goal.admitted.to.existing.queue",
       "ok": true,
-      "detail": "{\"status\":200,\"body\":{\"version\":\"agent-goal-admission/v1\",\"organizationId\":\"44db4251-4c12-41ab-bace-6639ec1c6ab8\",\"executedBy\":\"ONE_SI_RUNTIME\",\"admissionOnly\":true,\"externalActionPerformed\":false,\"createdRuntime\":false,\"createdAt\":\"2026-10"
+      "detail": "{\"status\":200,\"body\":{\"version\":\"agent-goal-admission/v1\",\"organizationId\":\"ae81195b-0980-4c5a-b516-2aec98dba086\",\"executedBy\":\"ONE_SI_RUNTIME\",\"admissionOnly\":true,\"externalActionPerformed\":false,\"createdRuntime\":false,\"createdAt\":\"2026-10"
     },
     {
       "name": "admission.external.write.false",
@@ -166,7 +171,7 @@
     {
       "name": "runtime.claimed.and.projected",
       "ok": true,
-      "detail": "{\"status\":200,\"body\":{\"runId\":\"9dd7921c-55ae-469f-b0d0-03edf21c9847\",\"runStatus\":\"BLOCKED\",\"created\":true,\"executedBy\":\"ONE_SI_RUNTIME\",\"runtimeOwner\":\"apps/api/src/runtime/rsi-run.ts\",\"queuedTasks\":1,\"runtimeClaimed\":\"task:recovery:PLATFOR"
+      "detail": "{\"status\":200,\"body\":{\"runId\":\"b48112e6-2e89-4030-8000-fdd65a16cb43\",\"runStatus\":\"BLOCKED\",\"created\":true,\"executedBy\":\"ONE_SI_RUNTIME\",\"runtimeOwner\":\"apps/api/src/runtime/rsi-run.ts\",\"queuedTasks\":1,\"runtimeClaimed\":\"task:recovery:PLATFOR"
     },
     {
       "name": "runtime.external.write.false",
@@ -176,12 +181,12 @@
     {
       "name": "admission.idempotent.no.second.execution",
       "ok": true,
-      "detail": "{\"status\":200,\"body\":{\"version\":\"agent-goal-admission/v1\",\"organizationId\":\"44db4251-4c12-41ab-bace-6639ec1c6ab8\",\"executedBy\":\"ONE_SI_RUNTIME\",\"admissionOnly\":true,\"externalActionPerformed\":false,\"cr"
+      "detail": "{\"status\":200,\"body\":{\"version\":\"agent-goal-admission/v1\",\"organizationId\":\"ae81195b-0980-4c5a-b516-2aec98dba086\",\"executedBy\":\"ONE_SI_RUNTIME\",\"admissionOnly\":true,\"externalActionPerformed\":false,\"cr"
     },
     {
       "name": "runtime.replay.no.second.run",
       "ok": true,
-      "detail": "{\"status\":200,\"body\":{\"runId\":\"9dd7921c-55ae-469f-b0d0-03edf21c9847\",\"runStatus\":\"BLOCKED\",\"created\":false,\"executedBy\":\"ONE_SI_RUNTIME\",\"runtimeOwner\":\"apps/api/src/runtime/rsi-run.ts\",\"queuedTasks\":"
+      "detail": "{\"status\":200,\"body\":{\"runId\":\"b48112e6-2e89-4030-8000-fdd65a16cb43\",\"runStatus\":\"BLOCKED\",\"created\":false,\"executedBy\":\"ONE_SI_RUNTIME\",\"runtimeOwner\":\"apps/api/src/runtime/rsi-run.ts\",\"queuedTasks\":"
     },
     {
       "name": "needsAttention.authorization.cleared",
@@ -294,8 +299,11 @@
       "detail": ""
     }
   ],
-  "passed": 58,
+  "passed": 59,
   "failed": 0,
   "consoleErrors": [],
-  "pageErrors": []
+  "pageErrors": [],
+  "runId": "2026-10-07T13-26-38-956Z",
+  "email": "acceptance.customer+1791379605437@example.com",
+  "outDir": "D:\\crossclaim-ai\\reports\\acceptance\\2026-10-07T13-26-38-956Z"
 }

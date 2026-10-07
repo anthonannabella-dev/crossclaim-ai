@@ -85,6 +85,27 @@ export const GOAL_PROVIDERS = [
 ] as const;
 export type GoalProvider = (typeof GOAL_PROVIDERS)[number];
 
+/**
+ * FINAL5：canonical provider → Goal 域 映射（**单源**；compiler 的域推断与 admission 的 scope 匹配必须一致）。
+ * 未列出的 provider 一律 null → fail closed（不猜测）。
+ */
+export const GOAL_PROVIDER_DOMAINS: Record<GoalProvider, 'PLATFORM' | 'LOGISTICS' | 'CUSTOMS' | 'INDEPENDENT_SITE'> = {
+  AMAZON: 'PLATFORM',
+  WALMART: 'PLATFORM',
+  TIKTOK: 'PLATFORM',
+  EBAY: 'PLATFORM',
+  SHOPIFY: 'PLATFORM',
+  STRIPE: 'INDEPENDENT_SITE',
+  PAYPAL: 'INDEPENDENT_SITE',
+  UPS: 'LOGISTICS',
+  FEDEX: 'LOGISTICS',
+  DHL: 'LOGISTICS',
+  FREIGHT_FORWARDER: 'LOGISTICS',
+  INSURANCE: 'LOGISTICS',
+  CBP: 'CUSTOMS',
+  ABI: 'CUSTOMS',
+};
+
 export interface AgentGoalDraft {
   readonly goalType: GoalType;
   /** FINAL4：Goal 明确提到的 provider（为空 = 未指定，退回 domain 级匹配） */

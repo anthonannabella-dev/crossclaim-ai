@@ -10,6 +10,7 @@
 //   * 文本中出现动作目录名 / 工具名 / 越权指令 → `GOAL_INJECTION_SUSPECTED`（拒绝）。
 
 import { ACTION_GUARD_CATALOG } from '../action-guard/action-guard';
+import { GOAL_PROVIDER_DOMAINS } from './goal-contract';
 import {
   GOAL_MAX_INTENT_LENGTH,
   type AgentGoalDraft,
@@ -187,6 +188,11 @@ export function compileAgentGoal(input: { text: string }): GoalCompileResult {
 
   const { domains, signals } = resolveDomains(text);
   const providers = resolveProviders(text);
+  // FINAL5：provider 意图决定域（canonical 映射同源），避免“Shopify 归 PLATFORM / admission 归 INDEPENDENT_SITE”这类不一致
+  for (const provider of providers) {
+    const mapped = GOAL_PROVIDER_DOMAINS[provider as keyof typeof GOAL_PROVIDER_DOMAINS];
+    if (mapped !== undefined && !domains.includes(mapped)) domains.push(mapped);
+  }
   const { timeRange, signal: timeSignal } = resolveTimeRange(text);
   const { threshold, signal: thresholdSignal } = resolveApprovalThreshold(text);
   const wantsAttention = ATTENTION_SIGNAL.test(text);
