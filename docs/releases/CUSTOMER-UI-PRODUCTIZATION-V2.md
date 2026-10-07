@@ -26,7 +26,7 @@
 | P9 Connections 简化 | DONE | 卡片主视图回答五问（含「CrossClaim 能否继续工作」与「最近同步」）；credentialRef / raw 字段与原始错误下沉到「详细信息」 |
 | P10 Mobile / a11y | DONE | 7 条关键路由的 h1/溢出/aria 健康检查 + 键盘焦点 + 移动端新增页面验证 |
 | P11 i18n 终扫 | DONE | parity PASS / 0 硬编码 / raw enum 回落清零（新增 check-i18n 静态 guard）+ 未知状态客户语言回落 |
-| P12 全客户旅程回归 | QUEUED | 每批次跑真实浏览器旅程 |
+| P12 全客户旅程回归 | DONE | 103 项真实浏览器旅程 + next build + api/web tsc + UI render + i18n 全绿；能力保全与 runtime freeze 证据见下 |
 | CUSTOMER-UI-PRODUCTIZATION-V2-FINAL | QUEUED | 独立审计单元（不复用上一轮 CLOSED 状态） |
 
 ## P1–P4 变更（首批）
@@ -99,6 +99,61 @@
 | 浏览器客户旅程（真实 Edge + HTTP + PostgreSQL；desktop 1440×900 + mobile 390×844） | **65/65 PASS**（新增：hero-first、Hero 在金额之前、Active Recovery 可见、无「工程字段/技术字段」、首页无内部角色码、目标结果区无 raw code / 任务计数） |
 | 浏览器证据目录 | `reports/acceptance/2026-10-07T15-52-05-717Z/` |
 | api tsc | 0（本轮未改 `apps/api`） |
+
+### 批次 9（P12）
+
+**P12 全量回归（exact code HEAD `ca5678dd`）**
+
+| 项 | 结果 |
+| --- | --- |
+| 真实浏览器客户旅程（desktop 1440×900 + mobile 390×844） | **103/103 PASS** |
+| api tsc | 0 |
+| web tsc | 0 |
+| next build | exit 0 |
+| UI render check | 183/183 OK |
+| i18n | 5 语言 / 881 键 parity / 客户硬编码 0 / RAW_ENUM_FALLBACK_HITS=0 |
+| 浏览器证据目录 | `reports/acceptance/2026-10-07T16-34-26-796Z/` |
+
+**HOST §十二 P12 十八项旅程覆盖映射**
+
+| # | 旅程项 | 覆盖断言 |
+| --- | --- | --- |
+| 1 | 未登录入口 | `firstRun.*` |
+| 2 | 注册 | `signup.*`（含 sandbox 邮件验证） |
+| 3 | 登录 | `login.*` |
+| 4 | Goal 创建 | `goal.recorded` / `goal.result.customer.language` / `goal.id.available` |
+| 5 | 黄金指标 | `home.hero.before.metrics` / `headline.*`（UI render） |
+| 6 | Active Recovery | `home.activeRecovery.visible` / `recoveries.page.capability` |
+| 7 | Needs Attention | `home.needsAttention.visible` / `goal.needs.authorization.visible` / `needsAttention.authorization.cleared` |
+| 8 | Connections | `connections.*` / `mobile.connections.wizard` |
+| 9 | Opportunity | `opportunities.page.customer.language` |
+| 10 | Case | `cases.page.customer.language` / `cases.page.no.engineering.columns` |
+| 11 | Authorization | `authorizations.capabilities.visible` / `authorizations.always.ask.visible` / `mobile.authorizations.visible` |
+| 12 | Customs | `authz.customs.reuse.link`（UI render）+ 客户导航「关税追回」 |
+| 13 | Money | `a11y./money.*` / `home.currencyRule.visible` |
+| 14 | Mobile navigation | `mobile.*`（首页 / 连接 / 授权 / 追回进度 / 追回任务 + 无横向溢出） |
+| 15 | Advanced progressive disclosure | `nav.v2.*`（一级 5 项 + 更多 + 高级）+ `/recoveries` 真实路由 |
+| 16 | 授权撤销 | `auth.page.revoke.cta`（UI render）+ `auth.page.revoked.*` |
+| 17 | 无 raw engineering exposure | `home.no.engineer.jargon` / `recoveries.no.raw.engineering` / `connections.primary.no.raw.binding` / `connections.raw.enums.not.primary` / `goal.result.customer.language` |
+| 18 | 无 capability loss | `nav.no.route.removed`（12 个既有 href 全在）+ 路由清单回归（下） |
+
+**能力保全证据（vs 封板基线 `e0e4a8a1`）**
+
+* 改动范围只有：`apps/web/**`、`tools/i18n/check-i18n.mjs`、`docs/**`、`reports/acceptance/**`；
+  `apps/api/**` 与 `prisma/**` **零改动**（`git diff --name-only e0e4a8a1..HEAD -- apps/api prisma` 为空）——
+  即 API contract / persistence truth / queue 与幂等语义 / Action Guard / Goal identity / Standing Authorization 语义未被触碰。
+* 路由清单：基线 31 个 `page.tsx` → 现在 32 个；**移除 0 个**，新增 1 个 `apps/web/app/recoveries/page.tsx`（修复一级导航原本 404 的「追回进度」）。
+* 一级导航 12 个既有 href 全部保留（`nav.no.route.removed` 断言）；`/admin*`、`/operations` 继续不进入客户导航（`nav.v2.no.admin.entries`）。
+* 金额仍逐币种原样展示：`headline.*` / `home.currencyRule.visible` / `recovery-money` 明细未改动；新增的 Active Recovery 视图模型不做任何金额计算，也不新增事实源。
+* 浏览器旅程仍覆盖真实链路：`goal.admitted.to.existing.queue` → `runtime.claimed.and.projected`（ONE SI Runtime 真实认领）→ `runtime.replay.no.second.run` → `admission.external.write.false`。
+
+**Runtime / Authorization freeze**
+
+* `SECOND_RUNTIME = 0` / `SECOND_SCHEDULER = 0` / `SECOND_GUARD = 0`（本单元只改 web 呈现层；watchdog 是 Codex 开发任务 continuation，不进入产品 runtime）。
+* Standing Authorization 语义与 resolver 未改（授权页只改客户表达；撤销入口与后端真实撤销能力保留）。
+* 全部 HOLD 不变：REAL_PROVIDER_WRITE / CUSTOMS_FILING / PAYMENT / AUTO_COMMISSION_CHARGE / PRODUCTION_CREDENTIALS /
+  PRODUCTION_ENABLEMENT / REAL_MODEL_NETWORK / PAID_MODEL_CALLS / EXTERNAL_WRITE / TRANSPORT。
+* REAL_EXTERNAL_EXECUTION = NOT_EXECUTED；REAL_VALIDATION_COMPLETE = NO；PRODUCTION_READY = NO。
 
 ### 批次 8（P11）
 
@@ -266,6 +321,7 @@ SECOND_RUNTIME = 0 / SECOND_SCHEDULER = 0 / SECOND_GUARD = 0；全部 HOLD / FOR
 
 ## 下一批
 
-P6 → P7 → P8 → P9 → P10 → P11 → P12 → CUSTOMER-UI-PRODUCTIZATION-V2-FINAL。
-每个单元同样执行：IMPLEMENT → STATIC CHECK → web tsc → UI render check → i18n check →
-真实浏览器客户旅程 → 定向回归 → commit → push → 更新本记录。
+**CUSTOMER-UI-PRODUCTIZATION-V2-FINAL**：把本记录 + exact HEAD + 证据目录 + 全量测试结果作为自包含验收包，
+送入右侧独立 ChatGPT 审计通道（chatgpt-web-audit-bridge：先 durable 记录，再简短唤醒并校验送达，
+裁决逐字归档 `tools/verification/archive-verdict.mjs` + `FULL_COPY_OK`）。
+不复用上一轮 CUSTOMER ACCEPTANCE 的 CLOSED 作为本轮证据；未获外部 PASS / CLOSED 前不自行宣布完成。
